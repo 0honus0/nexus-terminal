@@ -1,0 +1,3176 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<meta name="color-scheme" content="light dark" />
+		<meta name="description" content="星枢终端工作区界面设计：单层边界、连接栏、会话标签、终端画布与上下文面板。" />
+		<title>星枢终端 · 终端工作区</title>
+		<style>
+			:root {
+				color-scheme: light;
+				--page: #eaedf7;
+				--surface: #ffffff;
+				--surface-soft: #f6f7fb;
+				--surface-raised: #fbfbfe;
+				--field: #f3f4f9;
+				--ink: #17182b;
+				--ink-soft: #43465b;
+				--muted: #76798c;
+				--line: rgba(28, 30, 58, 0.1);
+				--line-strong: rgba(28, 30, 58, 0.17);
+				--accent: #8b5cf6;
+				--accent-strong: #7242dc;
+				--accent-2: #d8679b;
+				--accent-soft: rgba(139, 92, 246, 0.1);
+				--accent-border: rgba(139, 92, 246, 0.24);
+				--success: #16865a;
+				--success-soft: rgba(22, 134, 90, 0.1);
+				--warning: #a26c16;
+				--warning-soft: rgba(185, 124, 25, 0.12);
+				--danger: #c43f5a;
+				--danger-soft: rgba(196, 63, 90, 0.1);
+				--terminal: #111319;
+				--terminal-raised: #151722;
+				--terminal-line: rgba(255, 255, 255, 0.075);
+				--terminal-ink: #d8d8e2;
+				--terminal-muted: #7f8296;
+				--terminal-green: #4fd39b;
+				--terminal-cyan: #5bbcf7;
+				--terminal-yellow: #e9c46a;
+				--terminal-pink: #eb84ab;
+				--terminal-purple: #b59aff;
+				--nav-shadow: 0 18px 48px -34px rgba(24, 25, 64, 0.46), 0 4px 14px -10px rgba(24, 25, 64, 0.15);
+				--shell-shadow: 0 34px 90px -58px rgba(29, 24, 76, 0.56);
+			}
+
+			html[data-theme='dark'] {
+				color-scheme: dark;
+				--page: #080910;
+				--surface: #12131e;
+				--surface-soft: #0f1018;
+				--surface-raised: #181925;
+				--field: #10111a;
+				--ink: #f4f1ff;
+				--ink-soft: #d4d0e3;
+				--muted: #9293a7;
+				--line: rgba(255, 255, 255, 0.09);
+				--line-strong: rgba(255, 255, 255, 0.16);
+				--accent: #a483ff;
+				--accent-strong: #c0a9ff;
+				--accent-2: #ef83af;
+				--accent-soft: rgba(164, 131, 255, 0.13);
+				--accent-border: rgba(164, 131, 255, 0.27);
+				--success: #55d6a0;
+				--success-soft: rgba(85, 214, 160, 0.1);
+				--warning: #efbd68;
+				--warning-soft: rgba(239, 189, 104, 0.11);
+				--danger: #ff7f98;
+				--danger-soft: rgba(255, 127, 152, 0.1);
+				--terminal: #0b0c12;
+				--terminal-raised: #12141d;
+				--terminal-line: rgba(255, 255, 255, 0.07);
+				--nav-shadow: 0 22px 56px -34px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(255, 255, 255, 0.025);
+				--shell-shadow: 0 38px 90px -52px rgba(0, 0, 0, 0.9);
+			}
+
+			* {
+				box-sizing: border-box;
+			}
+
+			html {
+				min-height: 100%;
+				background: var(--page);
+			}
+
+			body {
+				min-height: 100svh;
+				margin: 0;
+				color: var(--ink);
+				font-family:
+					-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC',
+					'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
+				background:
+					radial-gradient(52rem 36rem at 8% -9%, rgba(115, 146, 255, 0.16), transparent 68%),
+					radial-gradient(44rem 32rem at 100% 4%, rgba(218, 103, 155, 0.12), transparent 66%), var(--page);
+				-webkit-font-smoothing: antialiased;
+				text-rendering: optimizeLegibility;
+			}
+
+			body::before {
+				position: fixed;
+				inset: 0;
+				z-index: -1;
+				content: '';
+				pointer-events: none;
+				background-image:
+					linear-gradient(rgba(255, 255, 255, 0.13) 1px, transparent 1px),
+					linear-gradient(90deg, rgba(255, 255, 255, 0.13) 1px, transparent 1px);
+				background-size: 52px 52px;
+				mask-image: radial-gradient(circle at 48% 8%, black, transparent 72%);
+				opacity: 0.26;
+			}
+
+			button,
+			input {
+				color: inherit;
+				font: inherit;
+			}
+
+			button {
+				padding: 0;
+				cursor: pointer;
+				background: none;
+				border: 0;
+			}
+
+			a {
+				color: inherit;
+				text-decoration: none;
+			}
+
+			svg {
+				display: block;
+			}
+
+			[hidden] {
+				display: none !important;
+			}
+
+			:focus-visible {
+				outline: 2px solid var(--accent);
+				outline-offset: 2px;
+			}
+
+			.sr-only {
+				position: absolute;
+				width: 1px;
+				height: 1px;
+				overflow: hidden;
+				margin: -1px;
+				padding: 0;
+				white-space: nowrap;
+				border: 0;
+				clip: rect(0 0 0 0);
+				clip-path: inset(50%);
+			}
+
+			.skip-link {
+				position: fixed;
+				top: 8px;
+				left: 8px;
+				z-index: 100;
+				padding: 9px 13px;
+				color: #fff;
+				font-size: 12px;
+				background: var(--accent-strong);
+				border-radius: 9px;
+				transform: translateY(-160%);
+			}
+
+			.skip-link:focus {
+				transform: translateY(0);
+			}
+
+			.nav-shell {
+				position: sticky;
+				top: 0;
+				z-index: 60;
+				padding: 14px 20px 0;
+			}
+
+			.topbar {
+				position: relative;
+				display: flex;
+				width: min(1560px, 100%);
+				height: 68px;
+				align-items: center;
+				gap: 18px;
+				margin-inline: auto;
+				padding: 7px 9px 7px 12px;
+				background: color-mix(in srgb, var(--surface) 89%, transparent);
+				border: 1px solid var(--line-strong);
+				border-radius: 21px;
+				box-shadow: var(--nav-shadow);
+				backdrop-filter: blur(22px) saturate(160%);
+			}
+
+			.brand {
+				display: flex;
+				flex: 0 0 auto;
+				align-items: center;
+				gap: 10px;
+				border-radius: 13px;
+			}
+
+			.brand-mark {
+				display: grid;
+				width: 42px;
+				height: 42px;
+				flex: 0 0 auto;
+				place-items: center;
+				background: linear-gradient(145deg, #f0ebff, #f8f2fb);
+				border: 1px solid var(--line-strong);
+				border-radius: 13px;
+			}
+
+			html[data-theme='dark'] .brand-mark {
+				background: linear-gradient(145deg, #1c1b2b, #161521);
+			}
+
+			.brand-mark svg {
+				width: 29px;
+				height: 29px;
+			}
+
+			.brand-copy strong,
+			.brand-copy small {
+				display: block;
+			}
+
+			.brand-copy strong {
+				font-size: 14px;
+				font-weight: 720;
+				letter-spacing: 0.025em;
+			}
+
+			.brand-copy small {
+				margin-top: 2px;
+				color: var(--muted);
+				font-size: 7px;
+				font-weight: 680;
+				letter-spacing: 0.15em;
+			}
+
+			.nav-frame {
+				display: flex;
+				min-width: 0;
+				flex: 1;
+				align-items: center;
+				justify-content: center;
+			}
+
+			.main-nav {
+				display: flex;
+				align-items: center;
+				gap: 3px;
+			}
+
+			.nav-item {
+				display: inline-flex;
+				height: 42px;
+				align-items: center;
+				gap: 7px;
+				padding: 0 13px;
+				color: var(--muted);
+				font-size: 11px;
+				font-weight: 580;
+				border: 1px solid transparent;
+				border-radius: 11px;
+				transition:
+					color 140ms ease,
+					background 140ms ease,
+					border-color 140ms ease;
+			}
+
+			.nav-item svg {
+				width: 16px;
+				height: 16px;
+				flex: 0 0 auto;
+			}
+
+			.nav-item:hover {
+				color: var(--ink);
+				background: var(--field);
+			}
+
+			.nav-item[aria-current='page'] {
+				color: var(--accent-strong);
+				background: var(--accent-soft);
+				border-color: var(--accent-border);
+			}
+
+			.tools {
+				display: flex;
+				flex: 0 0 auto;
+				align-items: center;
+				gap: 8px;
+			}
+
+			.tool-button,
+			.mobile-trigger {
+				display: grid;
+				width: 40px;
+				height: 40px;
+				place-items: center;
+				color: var(--muted);
+				background: transparent;
+				border: 1px solid transparent;
+				border-radius: 11px;
+			}
+
+			.tool-button:hover,
+			.mobile-trigger:hover {
+				color: var(--ink);
+				background: var(--field);
+				border-color: var(--line);
+			}
+
+			.tool-button svg,
+			.mobile-trigger svg {
+				width: 17px;
+				height: 17px;
+			}
+
+			.tool-button .icon-moon,
+			html[data-theme='dark'] .tool-button .icon-sun {
+				display: none;
+			}
+
+			html[data-theme='dark'] .tool-button .icon-moon {
+				display: block;
+			}
+
+			.toolbar-line {
+				width: 1px;
+				height: 24px;
+				background: var(--line);
+			}
+
+			.account-wrap {
+				position: relative;
+			}
+
+			.account-button {
+				display: flex;
+				height: 42px;
+				align-items: center;
+				gap: 8px;
+				padding: 4px 9px 4px 4px;
+				color: var(--ink-soft);
+				font-size: 11px;
+				font-weight: 620;
+				border: 1px solid transparent;
+				border-radius: 12px;
+			}
+
+			.account-button:hover,
+			.account-button[aria-expanded='true'] {
+				background: var(--field);
+				border-color: var(--line);
+			}
+
+			.avatar {
+				display: grid;
+				width: 32px;
+				height: 32px;
+				place-items: center;
+				color: #fff;
+				font-size: 12px;
+				font-weight: 700;
+				background: linear-gradient(145deg, #8b5cf6, #d8679b);
+				border-radius: 10px;
+			}
+
+			.account-chevron {
+				width: 13px;
+				height: 13px;
+				color: var(--muted);
+			}
+
+			.account-menu {
+				position: absolute;
+				top: calc(100% + 10px);
+				right: 0;
+				z-index: 80;
+				width: 230px;
+				padding: 7px;
+				background: var(--surface);
+				border: 1px solid var(--line-strong);
+				border-radius: 14px;
+				box-shadow: 0 24px 54px -28px rgba(20, 21, 50, 0.6);
+			}
+
+			.account-head {
+				display: flex;
+				align-items: center;
+				gap: 10px;
+				padding: 8px 9px 10px;
+			}
+
+			.account-head strong,
+			.account-head span {
+				display: block;
+			}
+
+			.account-head strong {
+				font-size: 11px;
+			}
+
+			.account-head span span {
+				margin-top: 2px;
+				color: var(--muted);
+				font-size: 8px;
+			}
+
+			.menu-link {
+				display: flex;
+				width: 100%;
+				height: 36px;
+				align-items: center;
+				gap: 9px;
+				padding: 0 9px;
+				color: var(--ink-soft);
+				font-size: 10px;
+				text-align: left;
+				border-radius: 9px;
+			}
+
+			.menu-link svg {
+				width: 14px;
+				height: 14px;
+			}
+
+			.menu-link:hover {
+				background: var(--field);
+			}
+
+			.menu-link.danger {
+				color: var(--danger);
+			}
+
+			.menu-separator {
+				height: 1px;
+				margin: 5px 4px;
+				background: var(--line);
+			}
+
+			.mobile-trigger,
+			.mobile-sheet {
+				display: none;
+			}
+
+			.workspace-page {
+				width: min(1560px, calc(100% - 32px));
+				height: calc(100dvh - 108px);
+				min-height: 620px;
+				margin: 14px auto 18px;
+			}
+
+			.workspace-shell {
+				position: relative;
+				display: flex;
+				height: 100%;
+				min-height: 0;
+				overflow: hidden;
+				flex-direction: column;
+				background: var(--surface);
+				border: 1px solid var(--line-strong);
+				border-radius: 23px;
+				box-shadow: var(--shell-shadow);
+			}
+
+			.session-bar {
+				display: flex;
+				height: 48px;
+				flex: 0 0 auto;
+				align-items: stretch;
+				background: color-mix(in srgb, var(--surface) 93%, transparent);
+				border-bottom: 1px solid var(--line);
+			}
+
+			.session-tabs {
+				display: flex;
+				min-width: 0;
+				flex: 1;
+				align-items: stretch;
+				overflow-x: auto;
+				scrollbar-width: none;
+			}
+
+			.session-tabs::-webkit-scrollbar {
+				display: none;
+			}
+
+			.session-tab {
+				position: relative;
+				display: flex;
+				min-width: 150px;
+				max-width: 220px;
+				align-items: center;
+				gap: 8px;
+				padding: 0 10px 0 12px;
+				color: var(--muted);
+				font-size: 10.5px;
+				border-right: 1px solid var(--line);
+			}
+
+			.session-tab::after {
+				position: absolute;
+				right: 10px;
+				bottom: 0;
+				left: 10px;
+				height: 2px;
+				content: '';
+				background: var(--accent);
+				border-radius: 99px 99px 0 0;
+				opacity: 0;
+			}
+
+			.session-tab:hover {
+				color: var(--ink);
+				background: color-mix(in srgb, var(--field) 70%, transparent);
+			}
+
+			.session-tab[aria-selected='true'] {
+				color: var(--ink);
+				background: color-mix(in srgb, var(--accent-soft) 72%, transparent);
+			}
+
+			.session-tab[aria-selected='true']::after {
+				opacity: 1;
+			}
+
+			.session-tab .state-dot {
+				width: 7px;
+				height: 7px;
+				flex: 0 0 auto;
+				background: var(--success);
+				border-radius: 50%;
+				box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 10%, transparent);
+			}
+
+			.session-tab .state-dot.warning {
+				background: var(--warning);
+				box-shadow: 0 0 0 4px color-mix(in srgb, var(--warning) 11%, transparent);
+			}
+
+			.session-tab .state-dot.muted {
+				background: var(--muted);
+				box-shadow: none;
+			}
+
+			.session-tab-name {
+				overflow: hidden;
+				flex: 1;
+				text-overflow: ellipsis;
+				white-space: nowrap;
+			}
+
+			.tab-close {
+				display: grid;
+				width: 20px;
+				height: 20px;
+				flex: 0 0 auto;
+				place-items: center;
+				color: var(--muted);
+				border-radius: 6px;
+				opacity: 0;
+			}
+
+			.session-tab:hover .tab-close,
+			.session-tab[aria-selected='true'] .tab-close {
+				opacity: 1;
+			}
+
+			.tab-close:hover {
+				color: var(--ink);
+				background: var(--field);
+			}
+
+			.tab-close svg {
+				width: 12px;
+				height: 12px;
+			}
+
+			.session-bar-button {
+				display: grid;
+				width: 44px;
+				flex: 0 0 auto;
+				place-items: center;
+				color: var(--muted);
+				border-left: 1px solid var(--line);
+			}
+
+			.session-bar-button:hover {
+				color: var(--ink);
+				background: var(--field);
+			}
+
+			.session-bar-button svg {
+				width: 16px;
+				height: 16px;
+			}
+
+			.session-actions {
+				display: flex;
+				flex: 0 0 auto;
+				align-items: stretch;
+				border-left: 1px solid var(--line);
+			}
+
+			.progress-button {
+				position: relative;
+			}
+
+			.progress-count {
+				position: absolute;
+				top: 7px;
+				right: 7px;
+				display: grid;
+				min-width: 14px;
+				height: 14px;
+				place-items: center;
+				padding: 0 3px;
+				color: #fff;
+				font-size: 7px;
+				font-weight: 720;
+				background: var(--accent-2);
+				border-radius: 999px;
+			}
+
+			.session-menu-mobile {
+				display: grid;
+				width: 46px;
+				flex: 0 0 auto;
+				place-items: center;
+				color: var(--muted);
+				border-right: 1px solid var(--line);
+			}
+
+			.session-menu-mobile:hover {
+				color: var(--ink);
+				background: var(--field);
+			}
+
+			.session-menu-mobile svg {
+				width: 17px;
+				height: 17px;
+			}
+
+			.workspace-grid {
+				display: grid;
+				min-height: 0;
+				flex: 1;
+				grid-template-columns: minmax(0, 1fr);
+				overflow: hidden;
+			}
+
+			.workspace-shell.context-hidden .workspace-grid {
+				grid-template-columns: minmax(0, 1fr);
+			}
+
+			.connections-panel {
+				position: absolute;
+				top: 0;
+				bottom: 0;
+				left: 0;
+				z-index: 42;
+				display: flex;
+				width: min(292px, 88vw);
+				min-width: 0;
+				min-height: 0;
+				flex-direction: column;
+				background: color-mix(in srgb, var(--surface-soft) 64%, var(--surface));
+				border-right: 1px solid var(--line-strong);
+				box-shadow: 22px 0 50px -38px rgba(0, 0, 0, 0.62);
+				visibility: hidden;
+				transform: translateX(-100%);
+				transition:
+					transform 180ms ease,
+					visibility 180ms ease;
+			}
+
+			.workspace-shell.connections-open .connections-panel {
+				visibility: visible;
+				transform: translateX(0);
+			}
+
+			.panel-head {
+				display: flex;
+				height: 46px;
+				flex: 0 0 auto;
+				align-items: center;
+				justify-content: space-between;
+				gap: 10px;
+				padding: 0 14px;
+				border-bottom: 1px solid var(--line);
+			}
+
+			.panel-head-main {
+				display: flex;
+				min-width: 0;
+				align-items: center;
+				gap: 8px;
+			}
+
+			.panel-title-copy {
+				display: flex;
+				min-width: 0;
+				flex-direction: column;
+				gap: 2px;
+			}
+
+			.panel-title-copy .panel-count {
+				overflow: hidden;
+				font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+				text-overflow: ellipsis;
+				white-space: nowrap;
+			}
+
+			.panel-head strong {
+				font-size: 11.5px;
+				font-weight: 680;
+			}
+
+			.panel-count {
+				color: var(--muted);
+				font-size: 8.5px;
+				font-variant-numeric: tabular-nums;
+			}
+
+			.icon-button {
+				display: grid;
+				width: 30px;
+				height: 30px;
+				flex: 0 0 auto;
+				place-items: center;
+				color: var(--muted);
+				border-radius: 8px;
+			}
+
+			.icon-button:hover {
+				color: var(--ink);
+				background: var(--field);
+			}
+
+			.icon-button svg {
+				width: 15px;
+				height: 15px;
+			}
+
+			.mobile-panel-close {
+				display: grid;
+			}
+
+			.connection-search {
+				position: relative;
+				padding: 10px 12px;
+			}
+
+			.connection-search svg {
+				position: absolute;
+				top: 21px;
+				left: 23px;
+				width: 14px;
+				height: 14px;
+				color: var(--muted);
+				pointer-events: none;
+			}
+
+			.connection-search input {
+				width: 100%;
+				height: 34px;
+				padding: 0 10px 0 32px;
+				color: var(--ink);
+				font-size: 10px;
+				background: var(--field);
+				border: 1px solid transparent;
+				border-radius: 9px;
+				outline: none;
+			}
+
+			.connection-search input:focus {
+				background: var(--surface);
+				border-color: var(--accent-border);
+				box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 9%, transparent);
+			}
+
+			.connection-search input::placeholder {
+				color: var(--muted);
+			}
+
+			.connection-scroll {
+				min-height: 0;
+				flex: 1;
+				overflow-y: auto;
+				padding: 0 8px 10px;
+				scrollbar-width: thin;
+				scrollbar-color: var(--line-strong) transparent;
+			}
+
+			.connection-group + .connection-group {
+				margin-top: 9px;
+			}
+
+			.connection-group-label {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				padding: 7px 8px 5px;
+				color: var(--muted);
+				font-size: 8px;
+				font-weight: 720;
+				letter-spacing: 0.12em;
+				text-transform: uppercase;
+			}
+
+			.connection-group-label::after {
+				height: 1px;
+				flex: 1;
+				content: '';
+				background: linear-gradient(90deg, var(--line), transparent);
+			}
+
+			.connection-row {
+				position: relative;
+				display: flex;
+				width: 100%;
+				min-width: 0;
+				align-items: center;
+				gap: 9px;
+				padding: 8px 9px;
+				text-align: left;
+				border-radius: 9px;
+			}
+
+			.connection-row::before {
+				position: absolute;
+				top: 10px;
+				bottom: 10px;
+				left: -8px;
+				width: 2px;
+				content: '';
+				background: var(--accent);
+				border-radius: 0 99px 99px 0;
+				opacity: 0;
+			}
+
+			.connection-row:hover {
+				background: var(--field);
+			}
+
+			.connection-row[aria-current='true'] {
+				background: color-mix(in srgb, var(--accent-soft) 76%, var(--surface));
+			}
+
+			.connection-row[aria-current='true']::before {
+				opacity: 1;
+			}
+
+			.connection-icon {
+				display: grid;
+				width: 30px;
+				height: 30px;
+				flex: 0 0 auto;
+				place-items: center;
+				color: var(--accent-strong);
+				background: color-mix(in srgb, var(--accent-soft) 82%, transparent);
+				border-radius: 8px;
+			}
+
+			.connection-icon.database {
+				color: var(--warning);
+				background: var(--warning-soft);
+			}
+
+			.connection-icon svg {
+				width: 15px;
+				height: 15px;
+			}
+
+			.connection-copy {
+				min-width: 0;
+				flex: 1;
+			}
+
+			.connection-copy strong,
+			.connection-copy small {
+				display: block;
+				overflow: hidden;
+				text-overflow: ellipsis;
+				white-space: nowrap;
+			}
+
+			.connection-copy strong {
+				font-size: 10px;
+				font-weight: 640;
+			}
+
+			.connection-copy small {
+				margin-top: 2px;
+				color: var(--muted);
+				font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+				font-size: 8px;
+			}
+
+			.connection-state {
+				width: 6px;
+				height: 6px;
+				flex: 0 0 auto;
+				background: var(--success);
+				border-radius: 50%;
+			}
+
+			.connection-state.warning {
+				background: var(--warning);
+			}
+
+			.connection-state.muted {
+				background: var(--muted);
+			}
+
+			.connections-footer {
+				flex: 0 0 auto;
+				padding: 8px 10px 10px;
+				border-top: 1px solid var(--line);
+			}
+
+			.add-connection {
+				display: flex;
+				width: 100%;
+				height: 34px;
+				align-items: center;
+				justify-content: center;
+				gap: 7px;
+				color: var(--accent-strong);
+				font-size: 9px;
+				font-weight: 640;
+				background: color-mix(in srgb, var(--accent-soft) 58%, transparent);
+				border-radius: 8px;
+			}
+
+			.add-connection:hover {
+				background: color-mix(in srgb, var(--accent-soft) 90%, transparent);
+			}
+
+			.add-connection svg {
+				width: 13px;
+				height: 13px;
+			}
+
+			.terminal-stack {
+				display: flex;
+				min-width: 0;
+				min-height: 0;
+				flex-direction: column;
+				overflow: hidden;
+				background: var(--terminal);
+			}
+
+			.terminal-head {
+				display: flex;
+				height: 48px;
+				flex: 0 0 auto;
+				align-items: center;
+				justify-content: space-between;
+				gap: 12px;
+				padding: 0 10px 0 14px;
+				color: var(--terminal-ink);
+				background: var(--terminal-raised);
+				border-bottom: 1px solid var(--terminal-line);
+			}
+
+			.terminal-identity {
+				display: flex;
+				min-width: 0;
+				align-items: center;
+				gap: 9px;
+			}
+
+			.terminal-mark {
+				display: grid;
+				width: 26px;
+				height: 26px;
+				flex: 0 0 auto;
+				place-items: center;
+				color: var(--terminal-purple);
+				background: rgba(181, 154, 255, 0.1);
+				border-radius: 7px;
+			}
+
+			.terminal-mark svg {
+				width: 15px;
+				height: 15px;
+			}
+
+			.terminal-title {
+				min-width: 0;
+			}
+
+			.terminal-title strong,
+			.terminal-title small {
+				display: block;
+			}
+
+			.terminal-title strong {
+				overflow: hidden;
+				font-size: 10.5px;
+				font-weight: 680;
+				letter-spacing: 0.01em;
+				text-overflow: ellipsis;
+				white-space: nowrap;
+			}
+
+			.terminal-title small {
+				overflow: hidden;
+				margin-top: 2px;
+				color: var(--terminal-muted);
+				font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+				font-size: 8px;
+				text-overflow: ellipsis;
+				white-space: nowrap;
+			}
+
+			.terminal-actions {
+				display: flex;
+				flex: 0 0 auto;
+				align-items: center;
+				gap: 2px;
+			}
+
+			.terminal-icon-button {
+				display: grid;
+				width: 32px;
+				height: 32px;
+				place-items: center;
+				color: var(--terminal-muted);
+				border-radius: 7px;
+			}
+
+			.terminal-icon-button:hover {
+				color: var(--terminal-ink);
+				background: rgba(255, 255, 255, 0.065);
+			}
+
+			.terminal-icon-button svg {
+				width: 15px;
+				height: 15px;
+			}
+
+			.terminal-stage {
+				min-height: 0;
+				flex: 1;
+				overflow: auto;
+				padding: 16px 20px 14px;
+				scrollbar-width: thin;
+				scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+			}
+
+			.terminal-lines {
+				margin: 0;
+				color: var(--terminal-ink);
+				font-family:
+					'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'DejaVu Sans Mono', monospace;
+				font-size: clamp(11px, 0.82vw, 12.5px);
+				line-height: 1.68;
+				overflow-wrap: anywhere;
+				tab-size: 4;
+			}
+
+			.term-line {
+				min-height: 1.68em;
+				white-space: pre-wrap;
+			}
+
+			.term-muted {
+				color: var(--terminal-muted);
+			}
+
+			.term-green {
+				color: var(--terminal-green);
+			}
+
+			.term-cyan {
+				color: var(--terminal-cyan);
+			}
+
+			.term-yellow {
+				color: var(--terminal-yellow);
+			}
+
+			.term-pink {
+				color: var(--terminal-pink);
+			}
+
+			.term-purple {
+				color: var(--terminal-purple);
+			}
+
+			.term-prompt {
+				color: var(--terminal-green);
+				font-weight: 650;
+			}
+
+			.term-path {
+				color: var(--terminal-cyan);
+			}
+
+			.term-cursor {
+				display: inline-block;
+				width: 7px;
+				height: 1.08em;
+				margin-left: 1px;
+				vertical-align: -0.16em;
+				background: var(--terminal-ink);
+				animation: cursor-blink 1.05s steps(1) infinite;
+			}
+
+			@keyframes cursor-blink {
+				0%,
+				52% {
+					opacity: 1;
+				}
+				53%,
+				100% {
+					opacity: 0;
+				}
+			}
+
+			.command-row {
+				display: flex;
+				min-height: 52px;
+				flex: 0 0 auto;
+				align-items: center;
+				gap: 8px;
+				padding: 7px 9px 7px 14px;
+				background: var(--terminal-raised);
+				border-top: 1px solid var(--terminal-line);
+			}
+
+			.command-prompt {
+				flex: 0 0 auto;
+				color: var(--terminal-green);
+				font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+				font-size: 16px;
+				font-weight: 700;
+			}
+
+			.command-input {
+				width: 100%;
+				min-width: 0;
+				height: 34px;
+				flex: 1;
+				padding: 0 10px;
+				color: var(--terminal-ink);
+				font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+				font-size: 10.5px;
+				background: rgba(255, 255, 255, 0.045);
+				border: 1px solid transparent;
+				border-radius: 8px;
+				outline: none;
+			}
+
+			.command-input:focus {
+				background: rgba(255, 255, 255, 0.058);
+				border-color: rgba(181, 154, 255, 0.34);
+				box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+			}
+
+			.command-input::placeholder {
+				color: var(--terminal-muted);
+			}
+
+			.command-tools {
+				display: flex;
+				flex: 0 0 auto;
+				align-items: center;
+				gap: 1px;
+			}
+
+			.command-tool {
+				display: grid;
+				width: 32px;
+				height: 32px;
+				place-items: center;
+				color: var(--terminal-muted);
+				border-radius: 7px;
+			}
+
+			.command-tool:hover {
+				color: var(--terminal-ink);
+				background: rgba(255, 255, 255, 0.065);
+			}
+
+			.command-tool svg {
+				width: 15px;
+				height: 15px;
+			}
+
+			.command-send {
+				display: grid;
+				width: 34px;
+				height: 34px;
+				place-items: center;
+				color: #fff;
+				background: linear-gradient(135deg, #8054f2, #b45cc5 60%, #df719e);
+				border-radius: 8px;
+				box-shadow: 0 8px 18px -14px rgba(139, 92, 246, 0.9);
+			}
+
+			.command-send:hover {
+				filter: brightness(1.05);
+			}
+
+			.command-send svg {
+				width: 15px;
+				height: 15px;
+			}
+
+			.terminal-statusbar {
+				display: flex;
+				height: 28px;
+				flex: 0 0 auto;
+				align-items: center;
+				justify-content: space-between;
+				gap: 12px;
+				padding: 0 13px;
+				color: var(--terminal-muted);
+				font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+				font-size: 8px;
+				background: var(--terminal-raised);
+				border-top: 1px solid var(--terminal-line);
+			}
+
+			.status-group {
+				display: flex;
+				min-width: 0;
+				align-items: center;
+				gap: 12px;
+			}
+
+			.status-item {
+				display: inline-flex;
+				align-items: center;
+				gap: 5px;
+				white-space: nowrap;
+			}
+
+			.status-dot {
+				width: 5px;
+				height: 5px;
+				background: var(--terminal-green);
+				border-radius: 50%;
+				box-shadow: 0 0 0 3px rgba(79, 211, 155, 0.1);
+			}
+
+			.context-panel {
+				position: absolute;
+				top: 0;
+				right: 0;
+				bottom: 0;
+				z-index: 42;
+				display: flex;
+				width: min(292px, 88vw);
+				min-width: 0;
+				min-height: 0;
+				flex-direction: column;
+				background: color-mix(in srgb, var(--surface-soft) 70%, var(--surface));
+				border-left: 1px solid var(--line-strong);
+				box-shadow: -22px 0 50px -38px rgba(0, 0, 0, 0.62);
+				visibility: hidden;
+				transform: translateX(100%);
+				transition:
+					transform 180ms ease,
+					visibility 180ms ease;
+			}
+
+			.workspace-shell.context-open .context-panel {
+				visibility: visible;
+				transform: translateX(0);
+			}
+
+			.file-list {
+				min-height: 0;
+				flex: 1;
+				overflow-y: auto;
+				padding: 6px 8px 8px;
+			}
+
+			.file-row {
+				display: flex;
+				width: 100%;
+				min-width: 0;
+				align-items: center;
+				gap: 9px;
+				padding: 7px 6px;
+				color: var(--ink-soft);
+				text-align: left;
+				border-radius: 7px;
+			}
+
+			.file-row:hover {
+				color: var(--ink);
+				background: var(--field);
+				border-radius: 7px;
+			}
+
+			.file-icon {
+				display: grid;
+				width: 22px;
+				height: 22px;
+				flex: 0 0 auto;
+				place-items: center;
+				color: var(--accent-strong);
+			}
+
+			.file-icon.folder {
+				color: var(--warning);
+			}
+
+			.file-icon svg {
+				width: 15px;
+				height: 15px;
+			}
+
+			.file-copy {
+				min-width: 0;
+				flex: 1;
+			}
+
+			.file-copy strong,
+			.file-copy small {
+				display: block;
+				overflow: hidden;
+				text-overflow: ellipsis;
+				white-space: nowrap;
+			}
+
+			.file-copy strong {
+				font-size: 9.5px;
+				font-weight: 600;
+			}
+
+			.file-copy small {
+				margin-top: 2px;
+				color: var(--muted);
+				font-size: 7.5px;
+			}
+
+			.file-size {
+				flex: 0 0 auto;
+				color: var(--muted);
+				font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+				font-size: 7.5px;
+			}
+
+			.context-footer {
+				display: flex;
+				height: 32px;
+				flex: 0 0 auto;
+				align-items: center;
+				justify-content: space-between;
+				padding: 0 13px;
+				color: var(--muted);
+				font-size: 7px;
+				border-top: 1px solid var(--line);
+			}
+
+			.panel-scrim {
+				position: absolute;
+				inset: 0;
+				z-index: 35;
+				display: none;
+				background: rgba(10, 11, 19, 0.4);
+				backdrop-filter: blur(2px);
+			}
+
+			.workspace-shell.connections-open .panel-scrim,
+			.workspace-shell.context-open .panel-scrim {
+				display: block;
+			}
+
+			.toast {
+				position: fixed;
+				right: 20px;
+				bottom: 20px;
+				z-index: 110;
+				display: flex;
+				max-width: min(390px, calc(100vw - 32px));
+				align-items: center;
+				gap: 9px;
+				padding: 11px 14px;
+				color: var(--ink-soft);
+				font-size: 10px;
+				background: color-mix(in srgb, var(--surface) 97%, transparent);
+				border: 1px solid var(--line-strong);
+				border-radius: 12px;
+				box-shadow: 0 22px 50px -30px rgba(20, 21, 50, 0.58);
+				backdrop-filter: blur(16px);
+				opacity: 0;
+				transform: translateY(10px);
+				pointer-events: none;
+				transition:
+					opacity 160ms ease,
+					transform 160ms ease;
+			}
+
+			.toast.visible {
+				opacity: 1;
+				transform: translateY(0);
+			}
+
+			.toast svg {
+				width: 14px;
+				height: 14px;
+				flex: 0 0 auto;
+				color: var(--success);
+			}
+
+			@media (max-width: 1280px) {
+				.nav-item {
+					width: 42px;
+					justify-content: center;
+					padding: 0;
+				}
+
+				.nav-item span {
+					display: none;
+				}
+
+				.workspace-grid {
+					grid-template-columns: minmax(0, 1fr);
+				}
+
+				.workspace-shell.context-hidden .workspace-grid {
+					grid-template-columns: minmax(0, 1fr);
+				}
+			}
+
+			@media (max-width: 1180px) {
+				.workspace-grid,
+				.workspace-shell.context-hidden .workspace-grid {
+					grid-template-columns: minmax(0, 1fr);
+				}
+
+				.context-panel {
+					position: absolute;
+					top: 0;
+					right: 0;
+					bottom: 0;
+					z-index: 42;
+					width: min(330px, 88vw);
+					box-shadow: -22px 0 50px -38px rgba(0, 0, 0, 0.62);
+					visibility: hidden;
+					transform: translateX(100%);
+					transition:
+						transform 180ms ease,
+						visibility 180ms ease;
+				}
+
+				.workspace-shell.context-open .context-panel {
+					visibility: visible;
+					transform: translateX(0);
+				}
+
+				.workspace-shell.context-open .panel-scrim,
+				.workspace-shell.connections-open .panel-scrim {
+					display: block;
+				}
+
+				.context-panel .mobile-panel-close {
+					display: grid;
+				}
+			}
+
+			@media (max-width: 960px) {
+				.nav-shell {
+					padding: 10px 12px 0;
+				}
+
+				.topbar {
+					height: 62px;
+					padding: 6px 7px 6px 10px;
+					border-radius: 18px;
+				}
+
+				.main-nav {
+					display: none;
+				}
+
+				.mobile-trigger {
+					display: grid;
+					width: 38px;
+					height: 38px;
+				}
+
+				.account-name,
+				.account-chevron,
+				.toolbar-line {
+					display: none;
+				}
+
+				.account-button {
+					padding: 3px;
+				}
+
+				.nav-frame {
+					justify-content: flex-end;
+				}
+
+				.mobile-sheet {
+					display: grid;
+					gap: 4px;
+					margin: 8px auto 0;
+					padding: 10px;
+					background: color-mix(in srgb, var(--surface) 96%, transparent);
+					border: 1px solid var(--line-strong);
+					border-radius: 17px;
+					box-shadow: 0 22px 50px -34px rgba(20, 21, 50, 0.58);
+				}
+
+				.mobile-sheet .nav-item {
+					width: 100%;
+					justify-content: flex-start;
+					padding: 0 12px;
+				}
+
+				.workspace-page {
+					width: calc(100% - 24px);
+					height: calc(100dvh - 92px);
+					min-height: 560px;
+					margin-top: 10px;
+				}
+
+				.workspace-shell {
+					border-radius: 19px;
+				}
+
+				.workspace-grid,
+				.workspace-shell.context-hidden .workspace-grid {
+					grid-template-columns: minmax(0, 1fr);
+				}
+
+				.session-menu-mobile {
+					display: grid;
+					width: 46px;
+					flex: 0 0 auto;
+					place-items: center;
+					color: var(--muted);
+					border-right: 1px solid var(--line);
+				}
+
+				.session-menu-mobile:hover {
+					color: var(--ink);
+					background: var(--field);
+				}
+
+				.session-menu-mobile svg {
+					width: 17px;
+					height: 17px;
+				}
+
+				.session-tab {
+					min-width: 150px;
+				}
+
+				.session-actions .desktop-action {
+					display: none;
+				}
+
+				.connections-panel {
+					position: absolute;
+					top: 0;
+					bottom: 0;
+					left: 0;
+					z-index: 42;
+					width: min(308px, 88vw);
+					border-right: 1px solid var(--line-strong);
+					box-shadow: 22px 0 50px -38px rgba(0, 0, 0, 0.62);
+					visibility: hidden;
+					transform: translateX(-100%);
+					transition:
+						transform 180ms ease,
+						visibility 180ms ease;
+				}
+
+				.workspace-shell.connections-open .connections-panel {
+					visibility: visible;
+					transform: translateX(0);
+				}
+
+				.connections-panel .mobile-panel-close {
+					display: grid;
+				}
+
+				.terminal-stage {
+					padding: 14px 14px 12px;
+				}
+
+				.terminal-lines {
+					font-size: 11.5px;
+				}
+			}
+
+			@media (max-width: 760px) {
+				.brand-copy small {
+					display: none;
+				}
+
+				.session-bar-button {
+					width: 42px;
+				}
+
+				.session-tab {
+					min-width: 138px;
+					padding-inline: 10px;
+				}
+
+				.terminal-head {
+					padding-inline: 10px 7px;
+				}
+
+				.terminal-title small {
+					max-width: 44vw;
+				}
+
+				.terminal-actions .desktop-only {
+					display: none;
+				}
+
+				.command-row {
+					min-height: 50px;
+					gap: 6px;
+					padding-inline: 10px 8px;
+				}
+
+				.command-tools .secondary-tool {
+					display: none;
+				}
+
+				.terminal-statusbar {
+					height: 25px;
+				}
+
+				.status-group.center {
+					display: none;
+				}
+
+				.toast {
+					right: 12px;
+					bottom: 12px;
+				}
+			}
+
+			@media (max-width: 480px) {
+				.nav-shell {
+					padding-inline: 8px;
+				}
+
+				.workspace-page {
+					width: calc(100% - 16px);
+					height: calc(100dvh - 86px);
+					min-height: 520px;
+				}
+
+				.brand-copy {
+					display: none;
+				}
+
+				.session-bar {
+					height: 46px;
+				}
+
+				.session-tab {
+					min-width: 126px;
+				}
+
+				.session-tab .tab-close {
+					display: none;
+				}
+
+				.terminal-head {
+					height: 45px;
+				}
+
+				.terminal-mark {
+					width: 24px;
+					height: 24px;
+				}
+
+				.terminal-title small {
+					max-width: 38vw;
+				}
+
+				.terminal-actions .wide-action {
+					display: none;
+				}
+
+				.terminal-stage {
+					padding: 12px 11px 10px;
+				}
+
+				.terminal-lines {
+					font-size: 10.5px;
+					line-height: 1.62;
+				}
+
+				.command-input {
+					font-size: 10px;
+				}
+
+				.command-tools .grid-tool {
+					display: none;
+				}
+
+				.status-group.right .status-item:nth-child(2) {
+					display: none;
+				}
+
+				.context-panel,
+				.connections-panel {
+					width: min(302px, 92vw);
+				}
+			}
+
+			@media (max-width: 360px) {
+				.tool-button {
+					width: 36px;
+					height: 36px;
+				}
+
+				.avatar {
+					width: 30px;
+					height: 30px;
+				}
+
+				.session-tab {
+					min-width: 118px;
+				}
+
+				.terminal-actions .narrow-action {
+					display: none;
+				}
+
+				.terminal-title small {
+					max-width: 31vw;
+				}
+
+				.command-prompt {
+					display: none;
+				}
+			}
+
+			@media (prefers-reduced-motion: reduce) {
+				*,
+				*::before,
+				*::after {
+					scroll-behavior: auto !important;
+					transition-duration: 0.01ms !important;
+					animation-duration: 0.01ms !important;
+					animation-iteration-count: 1 !important;
+				}
+			}
+		</style>
+		<link rel="stylesheet" href="shared/nav.css" />
+	</head>
+	<body>
+		<a class="skip-link" href="#workspace-shell">跳到终端工作区</a>
+		<header class="nav-shell">
+			<div class="topbar">
+				<a class="brand" href="#dashboard" aria-label="星枢终端首页">
+					<span class="brand-mark" aria-hidden="true">
+						<svg viewBox="0 0 48 48" fill="none">
+							<defs>
+								<linearGradient id="brand-gradient" x1="8" y1="6" x2="40" y2="43">
+									<stop stop-color="#7c54e8" />
+									<stop offset="0.56" stop-color="#b35fc9" />
+									<stop offset="1" stop-color="#e5799e" />
+								</linearGradient>
+							</defs>
+							<path
+								d="M24 4.8c1.4 7.5 4.8 12.4 10.7 14.8-5.9 2.4-9.3 7.4-10.7 14.9-1.4-7.5-4.8-12.5-10.7-14.9C19.2 17.2 22.6 12.3 24 4.8Z"
+								fill="url(#brand-gradient)"
+							/>
+							<path
+								d="M35.4 29.2c.7 3.7 2.4 6.1 5.2 7.4-2.8 1.3-4.5 3.7-5.2 7.4-.7-3.7-2.4-6.1-5.2-7.4 2.8-1.3 4.5-3.7 5.2-7.4Z"
+								fill="url(#brand-gradient)"
+								opacity="0.72"
+							/>
+						</svg>
+					</span>
+					<span class="brand-copy"><strong>星枢终端</strong><small>NEXUS TERMINAL</small></span>
+				</a>
+
+				<div class="nav-frame">
+					<nav class="main-nav" aria-label="主导航">
+						<a class="nav-item" href="#dashboard"
+							><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+								<rect
+									x="4"
+									y="4"
+									width="6"
+									height="6"
+									rx="1.4"
+									stroke="currentColor"
+									stroke-width="1.7"
+								/>
+								<rect
+									x="14"
+									y="4"
+									width="6"
+									height="6"
+									rx="1.4"
+									stroke="currentColor"
+									stroke-width="1.7"
+								/>
+								<rect
+									x="4"
+									y="14"
+									width="6"
+									height="6"
+									rx="1.4"
+									stroke="currentColor"
+									stroke-width="1.7"
+								/>
+								<rect
+									x="14"
+									y="14"
+									width="6"
+									height="6"
+									rx="1.4"
+									stroke="currentColor"
+									stroke-width="1.7"
+								/></svg
+							><span>仪表盘</span></a
+						>
+						<a class="nav-item" href="#terminal" aria-current="page"
+							><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+								<rect
+									x="4"
+									y="4.5"
+									width="16"
+									height="15"
+									rx="2.3"
+									stroke="currentColor"
+									stroke-width="1.7"
+								/>
+								<path
+									d="m7.5 9.2 2.4 2.1-2.4 2.1M11.8 13.6h4.7"
+									stroke="currentColor"
+									stroke-width="1.7"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/></svg
+							><span>终端</span></a
+						>
+						<a class="nav-item" href="#connections"
+							><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+								<rect
+									x="4"
+									y="4.5"
+									width="7"
+									height="6"
+									rx="1.6"
+									stroke="currentColor"
+									stroke-width="1.7"
+								/>
+								<rect
+									x="13"
+									y="13.5"
+									width="7"
+									height="6"
+									rx="1.6"
+									stroke="currentColor"
+									stroke-width="1.7"
+								/>
+								<path
+									d="M11 7.5h2a4 4 0 0 1 4 4v2M13 16.5h-2a4 4 0 0 1-4-4v-2"
+									stroke="currentColor"
+									stroke-width="1.7"
+									stroke-linecap="round"
+								/></svg
+							><span>连接管理</span></a
+						>
+						<a class="nav-item" href="#proxies"
+							><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+								<path
+									d="M5 8h12M14 5l3 3-3 3M19 16H7M10 13l-3 3 3 3"
+									stroke="currentColor"
+									stroke-width="1.7"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/></svg
+							><span>代理管理</span></a
+						>
+						<a class="nav-item" href="#notifications"
+							><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+								<path
+									d="M6.8 10a5.2 5.2 0 1 1 10.4 0c0 4 1.8 5.2 1.8 5.2H5S6.8 14 6.8 10Z"
+									stroke="currentColor"
+									stroke-width="1.7"
+									stroke-linejoin="round"
+								/>
+								<path
+									d="M10 18.2a2.1 2.1 0 0 0 4 0"
+									stroke="currentColor"
+									stroke-width="1.7"
+									stroke-linecap="round"
+								/></svg
+							><span>通知管理</span></a
+						>
+						<a class="nav-item" href="#audit"
+							><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+								<path
+									d="M6 4.5h9l3 3v12H6z"
+									stroke="currentColor"
+									stroke-width="1.7"
+									stroke-linejoin="round"
+								/>
+								<path
+									d="M9 8.5h5M9 11.5h6M9 14.5h6M9 17.5h3.8"
+									stroke="currentColor"
+									stroke-width="1.7"
+									stroke-linecap="round"
+								/></svg
+							><span>审计日志</span></a
+						>
+						<a class="nav-item" href="#settings"
+							><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+								<path
+									d="M4 7h8M17 7h3M4 17h3M12 17h8M4 12h5M14 12h6"
+									stroke="currentColor"
+									stroke-width="1.7"
+									stroke-linecap="round"
+								/>
+								<circle cx="14.5" cy="7" r="2.2" stroke="currentColor" stroke-width="1.7" />
+								<circle cx="9.5" cy="17" r="2.2" stroke="currentColor" stroke-width="1.7" />
+								<circle cx="11.5" cy="12" r="2.2" stroke="currentColor" stroke-width="1.7" /></svg
+							><span>设置</span></a
+						>
+					</nav>
+				</div>
+
+				<div class="tools">
+					<button class="tool-button" id="theme-toggle" type="button" aria-label="切换深色主题">
+						<svg class="icon-sun" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+							<circle cx="12" cy="12" r="3.6" stroke="currentColor" stroke-width="1.7" />
+							<path
+								d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"
+								stroke="currentColor"
+								stroke-width="1.7"
+								stroke-linecap="round"
+							/>
+						</svg>
+						<svg class="icon-moon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+							<path
+								d="M20 14.8A8 8 0 0 1 9.2 4 8.2 8.2 0 1 0 20 14.8Z"
+								stroke="currentColor"
+								stroke-width="1.7"
+								stroke-linejoin="round"
+							/>
+						</svg>
+					</button>
+					<span class="toolbar-line" aria-hidden="true"></span>
+					<div class="account-wrap">
+						<button
+							class="account-button"
+							id="account-toggle"
+							type="button"
+							aria-label="打开账户菜单"
+							aria-haspopup="menu"
+							aria-controls="account-menu"
+							aria-expanded="false"
+						>
+							<span class="avatar" aria-hidden="true">H</span>
+							<span class="account-name">honus</span>
+							<svg class="account-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+								<path
+									d="m7 9.5 5 5 5-5"
+									stroke="currentColor"
+									stroke-width="1.8"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
+							</svg>
+						</button>
+						<div class="account-menu" id="account-menu" role="menu" hidden>
+							<div class="account-head">
+								<span class="avatar" aria-hidden="true">H</span
+								><span><strong>honus</strong><span>管理员 · 已安全登录</span></span>
+							</div>
+							<button class="menu-link" type="button" role="menuitem">
+								<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+									<circle cx="12" cy="8" r="3.4" stroke="currentColor" stroke-width="1.7" />
+									<path
+										d="M5 20c.6-4 3-6 7-6s6.4 2 7 6"
+										stroke="currentColor"
+										stroke-width="1.7"
+										stroke-linecap="round"
+									/></svg
+								>账户设置
+							</button>
+							<button class="menu-link" type="button" role="menuitem">
+								<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+									<path
+										d="M4 7h8M17 7h3M4 17h3M12 17h8M4 12h5M14 12h6"
+										stroke="currentColor"
+										stroke-width="1.7"
+										stroke-linecap="round"
+									/>
+									<circle cx="14.5" cy="7" r="2.2" stroke="currentColor" stroke-width="1.7" /></svg
+								>外观与偏好
+							</button>
+							<div class="menu-separator"></div>
+							<button class="menu-link danger" type="button" role="menuitem">
+								<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+									<path
+										d="M10 5H6.5A1.5 1.5 0 0 0 5 6.5v11A1.5 1.5 0 0 0 6.5 19H10M14 8l4 4-4 4M9 12h9"
+										stroke="currentColor"
+										stroke-width="1.7"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									/></svg
+								>退出登录
+							</button>
+						</div>
+					</div>
+					<button
+						class="mobile-trigger"
+						id="mobile-toggle"
+						type="button"
+						aria-label="打开导航菜单"
+						aria-controls="mobile-sheet"
+						aria-expanded="false"
+					>
+						<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+							<path
+								d="M4 7h16M4 12h16M4 17h16"
+								stroke="currentColor"
+								stroke-width="1.8"
+								stroke-linecap="round"
+							/>
+						</svg>
+					</button>
+				</div>
+			</div>
+
+			<nav class="mobile-sheet" id="mobile-sheet" aria-label="移动导航" hidden>
+				<a class="nav-item" href="#dashboard"
+					><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+						<rect x="4" y="4" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.7" />
+						<rect x="14" y="4" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.7" />
+						<rect x="4" y="14" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.7" />
+						<rect
+							x="14"
+							y="14"
+							width="6"
+							height="6"
+							rx="1.4"
+							stroke="currentColor"
+							stroke-width="1.7"
+						/></svg
+					><span>仪表盘</span></a
+				>
+				<a class="nav-item" href="#terminal" aria-current="page"
+					><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+						<rect x="4" y="4.5" width="16" height="15" rx="2.3" stroke="currentColor" stroke-width="1.7" />
+						<path
+							d="m7.5 9.2 2.4 2.1-2.4 2.1M11.8 13.6h4.7"
+							stroke="currentColor"
+							stroke-width="1.7"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						/></svg
+					><span>终端</span></a
+				>
+				<a class="nav-item" href="#connections"
+					><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+						<rect x="4" y="4.5" width="7" height="6" rx="1.6" stroke="currentColor" stroke-width="1.7" />
+						<rect x="13" y="13.5" width="7" height="6" rx="1.6" stroke="currentColor" stroke-width="1.7" />
+						<path
+							d="M11 7.5h2a4 4 0 0 1 4 4v2M13 16.5h-2a4 4 0 0 1-4-4v-2"
+							stroke="currentColor"
+							stroke-width="1.7"
+							stroke-linecap="round"
+						/></svg
+					><span>连接管理</span></a
+				>
+				<a class="nav-item" href="#proxies"
+					><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+						<path
+							d="M5 8h12M14 5l3 3-3 3M19 16H7M10 13l-3 3 3 3"
+							stroke="currentColor"
+							stroke-width="1.7"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						/></svg
+					><span>代理管理</span></a
+				>
+				<a class="nav-item" href="#notifications"
+					><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+						<path
+							d="M6.8 10a5.2 5.2 0 1 1 10.4 0c0 4 1.8 5.2 1.8 5.2H5S6.8 14 6.8 10Z"
+							stroke="currentColor"
+							stroke-width="1.7"
+							stroke-linejoin="round"
+						/>
+						<path
+							d="M10 18.2a2.1 2.1 0 0 0 4 0"
+							stroke="currentColor"
+							stroke-width="1.7"
+							stroke-linecap="round"
+						/></svg
+					><span>通知管理</span></a
+				>
+				<a class="nav-item" href="#audit"
+					><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+						<path d="M6 4.5h9l3 3v12H6z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" />
+						<path
+							d="M9 8.5h5M9 11.5h6M9 14.5h6M9 17.5h3.8"
+							stroke="currentColor"
+							stroke-width="1.7"
+							stroke-linecap="round"
+						/></svg
+					><span>审计日志</span></a
+				>
+				<a class="nav-item" href="#settings"
+					><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+						<path
+							d="M4 7h8M17 7h3M4 17h3M12 17h8M4 12h5M14 12h6"
+							stroke="currentColor"
+							stroke-width="1.7"
+							stroke-linecap="round"
+						/>
+						<circle cx="14.5" cy="7" r="2.2" stroke="currentColor" stroke-width="1.7" />
+						<circle cx="9.5" cy="17" r="2.2" stroke="currentColor" stroke-width="1.7" />
+						<circle cx="11.5" cy="12" r="2.2" stroke="currentColor" stroke-width="1.7" /></svg
+					><span>设置</span></a
+				>
+			</nav>
+		</header>
+
+		<main class="workspace-page">
+			<section class="workspace-shell" id="workspace-shell" aria-label="终端工作区">
+				<div class="session-bar">
+					<button
+						class="session-menu-mobile"
+						type="button"
+						aria-label="打开连接列表"
+						data-action="toggle-connections"
+					>
+						<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+							<path
+								d="M4 7h16M4 12h10M4 17h13"
+								stroke="currentColor"
+								stroke-width="1.7"
+								stroke-linecap="round"
+							/>
+						</svg>
+					</button>
+					<div class="session-tabs" role="tablist" aria-label="终端会话">
+						<button
+							class="session-tab"
+							type="button"
+							role="tab"
+							aria-selected="true"
+							data-session-name="prod-web-01"
+							data-session-host="honus@prod-web-01: ~/srv/nexus"
+							data-session-ip="10.24.8.11"
+						>
+							<span class="state-dot"></span><span class="session-tab-name">prod-web-01</span
+							><span class="tab-close" aria-hidden="true"
+								><svg viewBox="0 0 24 24" fill="none">
+									<path
+										d="m7 7 10 10M17 7 7 17"
+										stroke="currentColor"
+										stroke-width="1.8"
+										stroke-linecap="round"
+									/></svg
+							></span>
+						</button>
+						<button
+							class="session-tab"
+							type="button"
+							role="tab"
+							aria-selected="false"
+							data-session-name="staging-db"
+							data-session-host="honus@staging-db: /var/lib/postgresql"
+							data-session-ip="10.24.9.32"
+						>
+							<span class="state-dot warning"></span><span class="session-tab-name">staging-db</span
+							><span class="tab-close" aria-hidden="true"
+								><svg viewBox="0 0 24 24" fill="none">
+									<path
+										d="m7 7 10 10M17 7 7 17"
+										stroke="currentColor"
+										stroke-width="1.8"
+										stroke-linecap="round"
+									/></svg
+							></span>
+						</button>
+						<button
+							class="session-tab"
+							type="button"
+							role="tab"
+							aria-selected="false"
+							data-session-name="edge-router"
+							data-session-host="admin@edge-router: /etc/nginx"
+							data-session-ip="172.18.0.4"
+						>
+							<span class="state-dot muted"></span><span class="session-tab-name">edge-router</span
+							><span class="tab-close" aria-hidden="true"
+								><svg viewBox="0 0 24 24" fill="none">
+									<path
+										d="m7 7 10 10M17 7 7 17"
+										stroke="currentColor"
+										stroke-width="1.8"
+										stroke-linecap="round"
+									/></svg
+							></span>
+						</button>
+					</div>
+					<button
+						class="session-bar-button"
+						type="button"
+						aria-label="新建终端会话"
+						data-action="new-session"
+					>
+						<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+							<path
+								d="M12 5v14M5 12h14"
+								stroke="currentColor"
+								stroke-width="1.8"
+								stroke-linecap="round"
+							/>
+						</svg>
+					</button>
+					<div class="session-actions">
+						<button
+							class="session-bar-button progress-button"
+							type="button"
+							aria-label="传输任务"
+							data-action="progress"
+						>
+							<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+								<path
+									d="M5 6h14M5 12h9M5 18h12"
+									stroke="currentColor"
+									stroke-width="1.7"
+									stroke-linecap="round"
+								/>
+								<path
+									d="m16 16 2 2 3-4"
+									stroke="currentColor"
+									stroke-width="1.7"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/></svg
+							><span class="progress-count">2</span>
+						</button>
+						<button
+							class="session-bar-button desktop-action"
+							type="button"
+							aria-label="挂起会话"
+							data-action="suspend"
+						>
+							<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+								<circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.7" />
+								<path
+									d="M10 9v6M14 9v6"
+									stroke="currentColor"
+									stroke-width="1.8"
+									stroke-linecap="round"
+								/>
+							</svg>
+						</button>
+						<button
+							class="session-bar-button"
+							type="button"
+							aria-label="打开文件面板"
+							data-action="toggle-context"
+						>
+							<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+								<rect
+									x="4"
+									y="4.5"
+									width="16"
+									height="15"
+									rx="2.2"
+									stroke="currentColor"
+									stroke-width="1.7"
+								/>
+								<path
+									d="M14.5 4.5v15M7.5 8h4M7.5 11h4M7.5 14h3"
+									stroke="currentColor"
+									stroke-width="1.7"
+									stroke-linecap="round"
+								/>
+							</svg>
+						</button>
+					</div>
+				</div>
+
+				<div class="workspace-grid">
+					<aside class="connections-panel" id="connections-panel" aria-label="连接列表">
+						<header class="panel-head">
+							<div class="panel-head-main">
+								<strong>连接</strong><span class="panel-count">5 个 SSH</span>
+							</div>
+							<div class="panel-head-main">
+								<button
+									class="icon-button"
+									type="button"
+									aria-label="添加连接"
+									data-action="new-session"
+								>
+									<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+										<path
+											d="M12 5v14M5 12h14"
+											stroke="currentColor"
+											stroke-width="1.8"
+											stroke-linecap="round"
+										/>
+									</svg></button
+								><button
+									class="icon-button mobile-panel-close"
+									type="button"
+									aria-label="关闭连接列表"
+									data-action="close-panels"
+								>
+									<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+										<path
+											d="m7 7 10 10M17 7 7 17"
+											stroke="currentColor"
+											stroke-width="1.8"
+											stroke-linecap="round"
+										/>
+									</svg>
+								</button>
+							</div>
+						</header>
+						<div class="connection-search">
+							<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+								<circle cx="10.5" cy="10.5" r="5.5" stroke="currentColor" stroke-width="1.7" />
+								<path
+									d="m15 15 4 4"
+									stroke="currentColor"
+									stroke-width="1.7"
+									stroke-linecap="round"
+								/></svg
+							><input type="search" placeholder="搜索名称、主机或标签" aria-label="搜索连接" />
+						</div>
+						<div class="connection-scroll">
+							<section class="connection-group">
+								<div class="connection-group-label">最近</div>
+								<button
+									class="connection-row"
+									type="button"
+									aria-current="true"
+									data-session-name="prod-web-01"
+									data-session-host="honus@prod-web-01: ~/srv/nexus"
+									data-session-ip="10.24.8.11"
+								>
+									<span class="connection-icon"
+										><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+											<rect
+												x="4"
+												y="5"
+												width="16"
+												height="12"
+												rx="2"
+												stroke="currentColor"
+												stroke-width="1.7"
+											/>
+											<path
+												d="M8 21h8M12 17v4M7.3 9.2l2.3 2.1-2.3 2.1M11.4 13.4h4.8"
+												stroke="currentColor"
+												stroke-width="1.7"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+											/></svg></span
+									><span class="connection-copy"
+										><strong>prod-web-01</strong><small>honus@10.24.8.11 · 22</small></span
+									><span class="connection-state"></span>
+								</button>
+								<button
+									class="connection-row"
+									type="button"
+									data-session-name="staging-db"
+									data-session-host="honus@staging-db: /var/lib/postgresql"
+									data-session-ip="10.24.9.32"
+								>
+									<span class="connection-icon database"
+										><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+											<ellipse
+												cx="12"
+												cy="6"
+												rx="7"
+												ry="3"
+												stroke="currentColor"
+												stroke-width="1.7"
+											/>
+											<path
+												d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"
+												stroke="currentColor"
+												stroke-width="1.7"
+											/></svg></span
+									><span class="connection-copy"
+										><strong>staging-db</strong><small>honus@10.24.9.32 · 5432</small></span
+									><span class="connection-state warning"></span>
+								</button>
+								<button
+									class="connection-row"
+									type="button"
+									data-session-name="edge-router"
+									data-session-host="admin@edge-router: /etc/nginx"
+									data-session-ip="172.18.0.4"
+								>
+									<span class="connection-icon"
+										><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+											<path
+												d="M5 8h12M14 5l3 3-3 3M19 16H7M10 13l-3 3 3 3"
+												stroke="currentColor"
+												stroke-width="1.7"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+											/></svg></span
+									><span class="connection-copy"
+										><strong>edge-router</strong><small>admin@172.18.0.4 · 22</small></span
+									><span class="connection-state muted"></span>
+								</button>
+							</section>
+							<section class="connection-group">
+								<div class="connection-group-label">生产环境</div>
+								<button
+									class="connection-row"
+									type="button"
+									data-session-name="prod-worker-02"
+									data-session-host="honus@prod-worker-02: /srv/queue"
+									data-session-ip="10.24.8.26"
+								>
+									<span class="connection-icon"
+										><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+											<rect
+												x="4"
+												y="5"
+												width="16"
+												height="12"
+												rx="2"
+												stroke="currentColor"
+												stroke-width="1.7"
+											/>
+											<path
+												d="M8 21h8M12 17v4M7.3 9.2l2.3 2.1-2.3 2.1M11.4 13.4h4.8"
+												stroke="currentColor"
+												stroke-width="1.7"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+											/></svg></span
+									><span class="connection-copy"
+										><strong>prod-worker-02</strong><small>honus@10.24.8.26 · 22</small></span
+									><span class="connection-state"></span>
+								</button>
+							</section>
+							<section class="connection-group">
+								<div class="connection-group-label">数据库</div>
+								<button
+									class="connection-row"
+									type="button"
+									data-session-name="core-postgres"
+									data-session-host="dba@core-postgres: /var/lib/postgresql"
+									data-session-ip="10.24.16.5"
+								>
+									<span class="connection-icon database"
+										><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+											<ellipse
+												cx="12"
+												cy="6"
+												rx="7"
+												ry="3"
+												stroke="currentColor"
+												stroke-width="1.7"
+											/>
+											<path
+												d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"
+												stroke="currentColor"
+												stroke-width="1.7"
+											/></svg></span
+									><span class="connection-copy"
+										><strong>core-postgres</strong><small>dba@10.24.16.5 · 5432</small></span
+									><span class="connection-state"></span>
+								</button>
+							</section>
+						</div>
+						<footer class="connections-footer">
+							<button class="add-connection" type="button" data-action="new-session">
+								<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+									<path
+										d="M12 5v14M5 12h14"
+										stroke="currentColor"
+										stroke-width="1.8"
+										stroke-linecap="round"
+									/></svg
+								>打开连接管理器
+							</button>
+						</footer>
+					</aside>
+
+					<section class="terminal-stack" aria-label="当前终端">
+						<header class="terminal-head">
+							<div class="terminal-identity">
+								<span class="terminal-mark"
+									><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+										<rect
+											x="4"
+											y="4.5"
+											width="16"
+											height="15"
+											rx="2.3"
+											stroke="currentColor"
+											stroke-width="1.7"
+										/>
+										<path
+											d="m7.5 9.2 2.4 2.1-2.4 2.1M11.8 13.6h4.7"
+											stroke="currentColor"
+											stroke-width="1.7"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										/></svg
+								></span>
+								<div class="terminal-title">
+									<strong id="terminal-session-name">prod-web-01</strong
+									><small id="terminal-session-label">honus@prod-web-01: ~/srv/nexus</small>
+								</div>
+							</div>
+							<div class="terminal-actions">
+								<button
+									class="terminal-icon-button wide-action"
+									type="button"
+									aria-label="搜索终端"
+									data-action="search"
+								>
+									<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+										<circle cx="10.5" cy="10.5" r="5.5" stroke="currentColor" stroke-width="1.7" />
+										<path
+											d="m15 15 4 4"
+											stroke="currentColor"
+											stroke-width="1.7"
+											stroke-linecap="round"
+										/>
+									</svg>
+								</button>
+								<button
+									class="terminal-icon-button wide-action"
+									type="button"
+									aria-label="复制选中内容"
+									data-action="copy"
+								>
+									<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+										<rect
+											x="8"
+											y="8"
+											width="11"
+											height="11"
+											rx="1.8"
+											stroke="currentColor"
+											stroke-width="1.7"
+										/>
+										<path
+											d="M16 8V5H5v11h3"
+											stroke="currentColor"
+											stroke-width="1.7"
+											stroke-linejoin="round"
+										/>
+									</svg>
+								</button>
+								<button
+									class="terminal-icon-button narrow-action"
+									type="button"
+									aria-label="清空终端"
+									data-action="clear"
+								>
+									<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+										<path
+											d="M5 7h14M9 7V4.5h6V7M7.5 7l.7 13h7.6l.7-13M10 11v5M14 11v5"
+											stroke="currentColor"
+											stroke-width="1.7"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										/>
+									</svg>
+								</button>
+								<button
+									class="terminal-icon-button"
+									type="button"
+									aria-label="终端设置"
+									data-action="terminal-settings"
+								>
+									<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+										<path
+											d="M4 7h8M17 7h3M4 17h3M12 17h8M4 12h5M14 12h6"
+											stroke="currentColor"
+											stroke-width="1.7"
+											stroke-linecap="round"
+										/>
+										<circle cx="14.5" cy="7" r="2.2" stroke="currentColor" stroke-width="1.7" />
+										<circle cx="9.5" cy="17" r="2.2" stroke="currentColor" stroke-width="1.7" />
+										<circle cx="11.5" cy="12" r="2.2" stroke="currentColor" stroke-width="1.7" />
+									</svg>
+								</button>
+							</div>
+						</header>
+
+						<div class="terminal-stage" id="terminal-stage">
+							<div class="terminal-lines" id="terminal-lines"></div>
+						</div>
+
+						<form class="command-row" id="command-form">
+							<span class="command-prompt" aria-hidden="true">❯</span>
+							<input
+								class="command-input"
+								id="command-input"
+								type="text"
+								placeholder="输入命令并以 Enter 发送"
+								autocomplete="off"
+								spellcheck="false"
+								aria-label="命令输入"
+							/>
+							<div class="command-tools">
+								<button
+									class="command-tool secondary-tool"
+									type="button"
+									aria-label="快捷指令"
+									data-action="quick-commands"
+								>
+									<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+										<path
+											d="M13 3 5 14h6l-1 7 8-11h-6l1-7Z"
+											stroke="currentColor"
+											stroke-width="1.7"
+											stroke-linejoin="round"
+										/>
+									</svg>
+								</button>
+								<button
+									class="command-tool secondary-tool"
+									type="button"
+									aria-label="文件管理器"
+									data-action="toggle-context"
+								>
+									<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+										<path
+											d="M4 6.5h6l2 2h8v10H4z"
+											stroke="currentColor"
+											stroke-width="1.7"
+											stroke-linejoin="round"
+										/>
+										<path
+											d="M8 12h8M8 15h5"
+											stroke="currentColor"
+											stroke-width="1.7"
+											stroke-linecap="round"
+										/>
+									</svg>
+								</button>
+								<button
+									class="command-tool grid-tool"
+									type="button"
+									aria-label="打开布局设置"
+									data-action="layout"
+								>
+									<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+										<rect
+											x="4"
+											y="4"
+											width="6"
+											height="6"
+											rx="1.2"
+											stroke="currentColor"
+											stroke-width="1.7"
+										/>
+										<rect
+											x="14"
+											y="4"
+											width="6"
+											height="6"
+											rx="1.2"
+											stroke="currentColor"
+											stroke-width="1.7"
+										/>
+										<rect
+											x="4"
+											y="14"
+											width="6"
+											height="6"
+											rx="1.2"
+											stroke="currentColor"
+											stroke-width="1.7"
+										/>
+										<rect
+											x="14"
+											y="14"
+											width="6"
+											height="6"
+											rx="1.2"
+											stroke="currentColor"
+											stroke-width="1.7"
+										/>
+									</svg>
+								</button>
+								<button class="command-send" type="submit" aria-label="发送命令">
+									<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+										<path
+											d="m4 12 15-7-4.5 14L11 13l-7-1Z"
+											stroke="currentColor"
+											stroke-width="1.7"
+											stroke-linejoin="round"
+										/>
+									</svg>
+								</button>
+							</div>
+						</form>
+
+						<footer class="terminal-statusbar">
+							<div class="status-group">
+								<span class="status-item"
+									><span class="status-dot"></span><span id="connection-status">已连接</span></span
+								><span class="status-item" id="connection-latency">24 ms</span>
+							</div>
+							<div class="status-group center">
+								<span class="status-item">SSH</span><span class="status-item">AES-256-GCM</span
+								><span class="status-item" id="connection-ip">10.24.8.11</span>
+							</div>
+							<div class="status-group right">
+								<span class="status-item">UTF-8</span><span class="status-item">zsh</span
+								><span class="status-item">132 × 38</span>
+							</div>
+						</footer>
+					</section>
+
+					<aside class="context-panel" id="context-panel" aria-label="文件面板">
+						<header class="panel-head">
+							<div class="panel-title-copy">
+								<strong>文件</strong><span class="panel-count">/srv/nexus</span>
+							</div>
+							<div class="panel-head-main">
+								<button class="icon-button" type="button" aria-label="上传文件" data-action="upload">
+									<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+										<path
+											d="M12 16V4M8 8l4-4 4 4M5 20h14"
+											stroke="currentColor"
+											stroke-width="1.7"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										/>
+									</svg></button
+								><button
+									class="icon-button"
+									type="button"
+									aria-label="刷新文件列表"
+									data-action="refresh-files"
+								>
+									<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+										<path
+											d="M20 11a8 8 0 1 0-2.2 6M20 4v7h-7"
+											stroke="currentColor"
+											stroke-width="1.7"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										/>
+									</svg></button
+								><button
+									class="icon-button mobile-panel-close"
+									type="button"
+									aria-label="关闭文件面板"
+									data-action="close-panels"
+								>
+									<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+										<path
+											d="m7 7 10 10M17 7 7 17"
+											stroke="currentColor"
+											stroke-width="1.8"
+											stroke-linecap="round"
+										/>
+									</svg>
+								</button>
+							</div>
+						</header>
+						<div class="file-list">
+							<button class="file-row" type="button">
+								<span class="file-icon folder"
+									><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+										<path
+											d="M4 6.5h6l2 2h8v10H4z"
+											stroke="currentColor"
+											stroke-width="1.7"
+											stroke-linejoin="round"
+										/></svg></span
+								><span class="file-copy"><strong>src</strong><small>今天 10:18</small></span
+								><span class="file-size">12 项</span>
+							</button>
+							<button class="file-row" type="button">
+								<span class="file-icon folder"
+									><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+										<path
+											d="M4 6.5h6l2 2h8v10H4z"
+											stroke="currentColor"
+											stroke-width="1.7"
+											stroke-linejoin="round"
+										/></svg></span
+								><span class="file-copy"><strong>deploy</strong><small>昨天 18:42</small></span
+								><span class="file-size">8 项</span>
+							</button>
+							<button class="file-row" type="button">
+								<span class="file-icon"
+									><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+										<path
+											d="M6 3.5h8l4 4v13H6z"
+											stroke="currentColor"
+											stroke-width="1.7"
+											stroke-linejoin="round"
+										/>
+										<path
+											d="M14 3.5v4h4"
+											stroke="currentColor"
+											stroke-width="1.7"
+											stroke-linejoin="round"
+										/></svg></span
+								><span class="file-copy"
+									><strong>docker-compose.yml</strong><small>2 小时前 · YAML</small></span
+								><span class="file-size">3.8 KB</span>
+							</button>
+							<button class="file-row" type="button">
+								<span class="file-icon"
+									><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+										<path
+											d="M6 3.5h8l4 4v13H6z"
+											stroke="currentColor"
+											stroke-width="1.7"
+											stroke-linejoin="round"
+										/>
+										<path
+											d="M14 3.5v4h4M9 12h6M9 15h5"
+											stroke="currentColor"
+											stroke-width="1.7"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										/></svg></span
+								><span class="file-copy"
+									><strong>.env.example</strong><small>昨天 16:07 · ENV</small></span
+								><span class="file-size">1.2 KB</span>
+							</button>
+							<button class="file-row" type="button">
+								<span class="file-icon"
+									><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+										<path
+											d="M6 3.5h8l4 4v13H6z"
+											stroke="currentColor"
+											stroke-width="1.7"
+											stroke-linejoin="round"
+										/>
+										<path
+											d="M14 3.5v4h4"
+											stroke="currentColor"
+											stroke-width="1.7"
+											stroke-linejoin="round"
+										/></svg></span
+								><span class="file-copy"
+									><strong>README.md</strong><small>10 月 16 日 · Markdown</small></span
+								><span class="file-size">6.4 KB</span>
+							</button>
+							<button class="file-row" type="button">
+								<span class="file-icon"
+									><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+										<path
+											d="M6 3.5h8l4 4v13H6z"
+											stroke="currentColor"
+											stroke-width="1.7"
+											stroke-linejoin="round"
+										/>
+										<path
+											d="M9 12h6M9 15h4"
+											stroke="currentColor"
+											stroke-width="1.7"
+											stroke-linecap="round"
+										/></svg></span
+								><span class="file-copy"
+									><strong>package.json</strong><small>10 月 15 日 · JSON</small></span
+								><span class="file-size">2.1 KB</span>
+							</button>
+						</div>
+						<footer class="context-footer"><span>2 个目录 · 4 个文件</span><span>已同步</span></footer>
+					</aside>
+				</div>
+				<button class="panel-scrim" type="button" aria-label="关闭侧边面板" data-action="close-panels"></button>
+			</section>
+		</main>
+
+		<div class="toast" id="toast" role="status" aria-live="polite">
+			<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+				<circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.7" />
+				<path
+					d="m8.4 12 2.3 2.2 4.9-5"
+					stroke="currentColor"
+					stroke-width="1.7"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				/></svg
+			><span id="toast-copy"></span>
+		</div>
+
+		<script>
+			(() => {
+				'use strict';
+
+				const $ = (selector, root = document) => root.querySelector(selector);
+				const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+				const root = document.documentElement;
+				const shell = $('#workspace-shell');
+				const terminalStage = $('#terminal-stage');
+				const terminalLines = $('#terminal-lines');
+				const commandForm = $('#command-form');
+				const commandInput = $('#command-input');
+				const sessionTabs = $('.session-tabs');
+				const sessionName = $('#terminal-session-name');
+				const sessionLabel = $('#terminal-session-label');
+				const connectionIp = $('#connection-ip');
+				const accountToggle = $('#account-toggle');
+				const accountMenu = $('#account-menu');
+				const mobileToggle = $('#mobile-toggle');
+				const mobileSheet = $('#mobile-sheet');
+				const toast = $('#toast');
+				const toastCopy = $('#toast-copy');
+				let toastTimer;
+
+				terminalLines.innerHTML = [
+					'<div class="term-line term-muted">Last login: Mon Oct 20 10:42:17 2026 from 192.168.1.8</div>',
+					'<div class="term-line"><span class="term-prompt">honus@prod-web-01</span><span class="term-muted">:</span><span class="term-path">~/srv/nexus</span><span class="term-muted">$</span> uptime</div>',
+					'<div class="term-line"> 10:43:21 up 18 days,  3:12,  2 users,  load average: 0.32, 0.28, 0.24</div>',
+					'<div class="term-line">&nbsp;</div>',
+					'<div class="term-line"><span class="term-prompt">honus@prod-web-01</span><span class="term-muted">:</span><span class="term-path">~/srv/nexus</span><span class="term-muted">$</span> docker compose ps</div>',
+					'<div class="term-line term-muted">NAME                IMAGE                         STATUS                  PORTS</div>',
+					'<div class="term-line"><span class="term-green">nexus-api</span>           ghcr.io/honus/api:1.0.2      <span class="term-green">Up 18 days (healthy)</span>   127.0.0.1:8787-&gt;8787/tcp</div>',
+					'<div class="term-line"><span class="term-green">nexus-web</span>           ghcr.io/honus/web:1.0.2      <span class="term-green">Up 18 days (healthy)</span>   127.0.0.1:9998-&gt;80/tcp</div>',
+					'<div class="term-line"><span class="term-yellow">nexus-redis</span>         redis:7.4-alpine             <span class="term-green">Up 18 days (healthy)</span>   6379/tcp</div>',
+					'<div class="term-line">&nbsp;</div>',
+					'<div class="term-line"><span class="term-prompt">honus@prod-web-01</span><span class="term-muted">:</span><span class="term-path">~/srv/nexus</span><span class="term-muted">$</span> git status --short</div>',
+					'<div class="term-line"> <span class="term-pink">M</span> src/server.ts</div>',
+					'<div class="term-line"><span class="term-pink">??</span> .env.local</div>',
+					'<div class="term-line">&nbsp;</div>',
+					'<div class="term-line"><span class="term-prompt">honus@prod-web-01</span><span class="term-muted">:</span><span class="term-path">~/srv/nexus</span><span class="term-muted">$</span> <span class="term-cursor" aria-hidden="true"></span></div>',
+				].join('');
+
+				function showToast(message) {
+					window.clearTimeout(toastTimer);
+					toastCopy.textContent = message;
+					toast.classList.add('visible');
+					toastTimer = window.setTimeout(() => toast.classList.remove('visible'), 2600);
+				}
+
+				function closePanels() {
+					shell.classList.remove('connections-open', 'context-open');
+				}
+
+				function closeMenus() {
+					accountMenu.hidden = true;
+					accountToggle.setAttribute('aria-expanded', 'false');
+					mobileSheet.hidden = true;
+					mobileToggle.setAttribute('aria-expanded', 'false');
+				}
+
+				function toggleContextPanel() {
+					const open = !shell.classList.contains('context-open');
+					closePanels();
+					shell.classList.toggle('context-open', open);
+				}
+
+				function toggleConnectionsPanel() {
+					const open = !shell.classList.contains('connections-open');
+					closePanels();
+					shell.classList.toggle('connections-open', open);
+				}
+
+				function selectSession(button) {
+					for (const tab of $$('.session-tab')) {
+						tab.setAttribute('aria-selected', String(tab === button));
+					}
+					sessionName.textContent = button.dataset.sessionName || 'prod-web-01';
+					sessionLabel.textContent = button.dataset.sessionHost || 'honus@prod-web-01: ~/srv/nexus';
+					connectionIp.textContent = button.dataset.sessionIp || '10.24.8.11';
+					for (const row of $$('.connection-row')) {
+						row.setAttribute(
+							'aria-current',
+							String(row.dataset.sessionName === button.dataset.sessionName),
+						);
+					}
+					showToast(`已切换到 ${button.dataset.sessionName}`);
+				}
+
+				function closeSession(tab) {
+					const tabs = $$('.session-tab');
+					if (tabs.length === 1) {
+						showToast('至少保留一个终端会话');
+						return;
+					}
+					const wasSelected = tab.getAttribute('aria-selected') === 'true';
+					const index = tabs.indexOf(tab);
+					const name = tab.dataset.sessionName;
+					tab.remove();
+					if (wasSelected) {
+						const remaining = $$('.session-tab');
+						selectSession(remaining[Math.min(index, remaining.length - 1)]);
+					}
+					showToast(`已关闭会话 ${name}`);
+				}
+
+				function bindSessionTab(tab) {
+					tab.addEventListener('click', () => selectSession(tab));
+					const close = $('.tab-close', tab);
+					if (close) {
+						close.addEventListener('click', (event) => {
+							event.stopPropagation();
+							closeSession(tab);
+						});
+					}
+				}
+
+				function createSessionTab(row) {
+					const tab = document.createElement('button');
+					tab.className = 'session-tab';
+					tab.type = 'button';
+					tab.setAttribute('role', 'tab');
+					tab.setAttribute('aria-selected', 'false');
+					tab.dataset.sessionName = row.dataset.sessionName;
+					tab.dataset.sessionHost = row.dataset.sessionHost;
+					tab.dataset.sessionIp = row.dataset.sessionIp;
+					tab.innerHTML =
+						'<span class="state-dot"></span><span class="session-tab-name"></span><span class="tab-close" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="m7 7 10 10M17 7 7 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>';
+					$('.session-tab-name', tab).textContent = row.dataset.sessionName;
+					sessionTabs.append(tab);
+					bindSessionTab(tab);
+					tab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+					return tab;
+				}
+
+				function selectConnection(row) {
+					const name = row.dataset.sessionName;
+					const tab = $$('.session-tab').find((item) => item.dataset.sessionName === name);
+					if (tab) selectSession(tab);
+					else {
+						for (const item of $$('.connection-row'))
+							item.setAttribute('aria-current', String(item === row));
+						selectSession(createSessionTab(row));
+					}
+					closePanels();
+				}
+
+				function appendCommand(command) {
+					const prompt = document.createElement('div');
+					prompt.className = 'term-line';
+					const promptParts = [sessionLabel.textContent.split(':')[0], ':', '~/srv/nexus', '$ '];
+					const promptClasses = ['term-prompt', 'term-muted', 'term-path', 'term-muted'];
+					promptParts.forEach((text, index) => {
+						const span = document.createElement('span');
+						span.className = promptClasses[index];
+						span.textContent = text;
+						prompt.append(span);
+					});
+					prompt.append(document.createTextNode(command));
+					terminalLines.append(prompt);
+
+					const output = document.createElement('div');
+					output.className = 'term-line term-muted';
+					output.textContent = `zsh: command queued · ${command}`;
+					terminalLines.append(output);
+
+					const nextPrompt = document.createElement('div');
+					nextPrompt.className = 'term-line';
+					nextPrompt.innerHTML =
+						'<span class="term-prompt">honus@prod-web-01</span><span class="term-muted">:</span><span class="term-path">~/srv/nexus</span><span class="term-muted">$</span> <span class="term-cursor" aria-hidden="true"></span>';
+					terminalLines.append(nextPrompt);
+					terminalStage.scrollTop = terminalStage.scrollHeight;
+				}
+
+				$('#theme-toggle').addEventListener('click', () => {
+					root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+					$('#theme-toggle').setAttribute(
+						'aria-label',
+						root.dataset.theme === 'dark' ? '切换浅色主题' : '切换深色主题',
+					);
+				});
+
+				accountToggle.addEventListener('click', (event) => {
+					event.stopPropagation();
+					const open = accountMenu.hidden;
+					closeMenus();
+					accountMenu.hidden = !open;
+					accountToggle.setAttribute('aria-expanded', String(open));
+				});
+
+				mobileToggle.addEventListener('click', (event) => {
+					event.stopPropagation();
+					const open = mobileSheet.hidden;
+					closeMenus();
+					mobileSheet.hidden = !open;
+					mobileToggle.setAttribute('aria-expanded', String(open));
+				});
+
+				document.addEventListener('click', (event) => {
+					if (!event.target.closest('.account-wrap')) {
+						accountMenu.hidden = true;
+						accountToggle.setAttribute('aria-expanded', 'false');
+					}
+					if (!event.target.closest('#mobile-toggle') && !event.target.closest('#mobile-sheet')) {
+						mobileSheet.hidden = true;
+						mobileToggle.setAttribute('aria-expanded', 'false');
+					}
+				});
+
+				for (const tab of $$('.session-tab')) bindSessionTab(tab);
+				for (const row of $$('.connection-row')) row.addEventListener('click', () => selectConnection(row));
+
+				for (const button of $$('[data-action]')) {
+					button.addEventListener('click', (event) => {
+						const action = button.dataset.action;
+						if (action === 'toggle-connections') {
+							event.stopPropagation();
+							toggleConnectionsPanel();
+						} else if (action === 'toggle-context') {
+							event.stopPropagation();
+							toggleContextPanel();
+						} else if (action === 'close-panels') closePanels();
+						else if (action === 'new-session') {
+							showToast('从连接列表选择一个主机开始新会话（设计稿演示）');
+							if (window.matchMedia('(max-width: 960px)').matches) {
+								closePanels();
+								shell.classList.add('connections-open');
+							}
+						} else if (action === 'progress') showToast('2 个传输任务正在运行（设计稿演示）');
+						else if (action === 'suspend') showToast('会话已标记为可挂起（设计稿演示）');
+						else if (action === 'search') {
+							commandInput.focus();
+							showToast('终端搜索已聚焦到命令输入（设计稿演示）');
+						} else if (action === 'copy') showToast('已复制当前选区（设计稿演示）');
+						else if (action === 'clear') {
+							terminalLines.innerHTML =
+								'<div class="term-line term-muted">Terminal cleared · 10:44:08</div><div class="term-line"><span class="term-prompt">honus@prod-web-01</span><span class="term-muted">:</span><span class="term-path">~/srv/nexus</span><span class="term-muted">$</span> <span class="term-cursor" aria-hidden="true"></span></div>';
+							showToast('终端输出已清空（设计稿演示）');
+						} else if (action === 'terminal-settings') showToast('终端外观设置已打开（设计稿演示）');
+						else if (action === 'quick-commands') showToast('快捷指令面板已打开（设计稿演示）');
+						else if (action === 'layout') showToast('布局配置已打开（设计稿演示）');
+						else if (action === 'upload') showToast('文件上传入口已打开（设计稿演示）');
+						else if (action === 'refresh-files') showToast('文件列表已重新读取（设计稿演示）');
+					});
+				}
+
+				commandForm.addEventListener('submit', (event) => {
+					event.preventDefault();
+					const command = commandInput.value.trim();
+					if (!command) return;
+					appendCommand(command);
+					commandInput.value = '';
+				});
+
+				document.addEventListener('keydown', (event) => {
+					if (event.key !== 'Escape') return;
+					closePanels();
+					closeMenus();
+				});
+
+				window.addEventListener('resize', closePanels);
+			})();
+		</script>
+		<script src="shared/nav.js"></script>
+	</body>
+</html>
