@@ -1,6 +1,6 @@
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
-import { getTestAppearance, updateTestAppearance } from '../../support/appearance';
+import { getTestAppearance, selectAppearanceSection, updateTestAppearance } from '../../support/appearance';
 import { listTestThemes, removeTestTheme } from '../../support/themes';
 import { readTerminalThemeView } from '../../../../packages/shared/src/preferences/themes/http-codec';
 import { step } from '../../support/steps';
@@ -32,21 +32,21 @@ test('custom terminal theme UI creates, edits, applies, persists, and deletes a 
 		for (const width of [1280, 640, 360]) {
 			await page.setViewportSize({ width, height: 900 });
 			for (const name of ['UI Styles', 'Terminal Styles', 'Background', 'Other Settings']) {
-				await customizer.getByRole('tab', { name, exact: true }).click();
+				await selectAppearanceSection(customizer, name);
 				const main = customizer.locator('main');
 				await expect
 					.poll(() => main.evaluate((element) => element.scrollWidth - element.clientWidth))
 					.toBeLessThanOrEqual(1);
 				await expect(
 					customizer.locator(
-						'button:not([role="tab"]):not([data-ui="button"]):not([data-ui="checkbox"]):not([data-ui="switch"]):not([role="combobox"]):not([data-ui="input"] .ui-input__number-button)',
+						'button:not([role="tab"]):not([data-ui="button"]):not([data-ui="checkbox"]):not([data-ui="switch"]):not([role="combobox"]):not([aria-haspopup="listbox"]):not([data-ui="input"] .ui-input__number-button)',
 					),
 				).toHaveCount(0);
 				await expect(main.locator('input:not([type="file"]):not([data-no-highlight])')).toHaveCount(0);
 			}
 		}
 		await page.setViewportSize({ width: 1280, height: 900 });
-		await customizer.getByRole('tab', { name: 'Terminal Styles', exact: true }).click();
+		await selectAppearanceSection(customizer, 'Terminal Styles');
 		await expect(customizer.getByRole('button', { name: 'New Theme', exact: true })).toBeVisible();
 		const themePanel = customizer.locator('[data-terminal-theme-panel]');
 		await expect(themePanel.locator('[data-ui="select"]')).toHaveCount(1);
@@ -170,7 +170,7 @@ test('custom terminal theme UI creates, edits, applies, persists, and deletes a 
 			const reloadedCustomizer = page
 				.getByRole('heading', { name: 'Appearance Customizer', exact: true })
 				.locator('../..');
-			await reloadedCustomizer.getByRole('tab', { name: 'Terminal Styles', exact: true }).click();
+			await selectAppearanceSection(reloadedCustomizer, 'Terminal Styles');
 			await reloadedCustomizer.getByPlaceholder('Search theme name...', { exact: true }).fill(EDITED_THEME_NAME);
 			const reloadedRow = reloadedCustomizer
 				.getByRole('listitem')
