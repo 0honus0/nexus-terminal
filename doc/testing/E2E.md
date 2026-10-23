@@ -1,5 +1,13 @@
 # Nexus Terminal E2E
 
+## 多目标发送初始离线回归（2026-10-23，待远程）
+
+重新核对原部分成功行为后，将初始离线目标被工具预检中止判为产品回归。第七批仅在成功预检之后修改目标地址，覆盖的是配置变化窗口，不能替代初始离线回归；本批恢复第二目标从创建起使用可信但不可达端口，真实转发工具检查一次并严格断言 HTTP 503 / connection_unavailable。保留原正常目标成功、离线目标失败、部分完成、实际 rsync 方法、错误详情、源文件及目标文件断言。
+
+前端 remote-tools 返回 ready/deferred/cancelled，仅传输只读检查的具名网络不可达可 deferred，由原后台任务结算各目标；不是工具检查成功。归档仅接受 ready，取消、信任/权限拒绝、通用检查失败、安装失败和未知结果仍停止。沿 SSH2 原生错误 → MachineConnectionFailure → Remote Model → Shared/HTTP → 前端准备 → 两个实际消费者复核取消、资源清理与最终派发；没有变更 UI 模板或样式。
+
+两轮调用链复审完成，根 check、双端 build、相关五份 E2E 源码静态类型及全量格式通过，日志 `/tmp/nexus-e2e-transfer-{check,build,test-types,format}.log`；最终文档另做格式及 diff 检查。本轮不运行本地行为或 E2E，恢复的初始离线场景仍待远程。当前运行 `40004822130` / `1e8497e0` 不包含本批前端修复；其质量门禁失败为 doc/PLAN.md 格式，不将依赖 ssh2 可选原生扩展编译警告判为最终失败原因，原日志 `/tmp/nexus-e2e-40004822130-quality.log`。
+
 ## SSH 启动回显独立解析（2026-10-23，待远程）
 
 远程 `40001250164` / `9aa53b96` 最终 420 通过、38 失败、1 超时，质量与 Docker smoke 通过；八组原日志 `/tmp/nexus-e2e-40001250164-shard{1..8}.log`，最终清单 `/tmp/nexus-e2e-40001250164-cases.json`。新失败集中于 currentDirectory/changeDirectory、挂起恢复及日志压缩；这是产品解析问题，不能通过删除这些断言处理。新增 eager 初始化让缺陷在普通输入前稳定触发：NativeShellIntegration 只有先收到 stdout 的 `stty -echo` 才识别 setup marker，而 SSH 夹具 Bash 通过独立 stderr 回显；真实关闭回显的 shell 同样不能依赖该前提。

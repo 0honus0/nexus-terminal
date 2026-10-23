@@ -3,13 +3,9 @@ import path from 'node:path';
 import { readServerTransferPage } from '../../../../packages/shared/src/remote/transfers/server-codec';
 import { readRemoteFileOpenResponse } from '../../../../packages/shared/src/remote/files/http-codec';
 import {
-	readRemoteToolCheck,
 	readRemoteToolCheckRequest,
+	readRemoteToolError,
 } from '../../../../packages/shared/src/remote/tools/http-codec';
-import {
-	readConnectionMutation,
-	readConnectionView,
-} from '../../../../packages/shared/src/targets/connections/http-codec';
 import { E2E_URLS } from '../../support/test-env';
 import { expect, test, type BrowserContext, type Locator, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
@@ -390,8 +386,8 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 	});
 	const sourceConnectionId = await ensureTestSshConnection(context.request);
 	await trustTestSshHostKey(context.request, E2E_SSH.transferTargetPort);
-	// The second target becomes unreachable after its real tool preflight.
-	// Its new endpoint is trusted so admission succeeds and the task records the failure.
+	// Trust is deliberate even for the offline target: this case must create
+	// a task whose connection fails, rather than fail admission for missing trust.
 	await trustTestSshHostKey(context.request, 1);
 	const destinationPath = path.resolve(__dirname, '../../.tmp/ssh-root/server-transfer-e2e');
 	const specialDirectoryName = '目录\n选择\t\'"$;[]';
@@ -431,7 +427,7 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 						name: failedTargetName,
 						type: 'SSH',
 						host: E2E_SSH.host,
-						port: E2E_SSH.transferTargetPort,
+						port: 1,
 						username: E2E_SSH.username,
 						notes: null,
 						route: 'direct',
@@ -446,37 +442,14 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 	});
 	expect(failedTargetResponse.status()).toBe(200);
 	const failedTargetConnectionId = readTestConnectionImportId(await failedTargetResponse.json());
-	let targetBecameUnavailable = false;
+	let unavailableTargetChecks = 0;
 	await page.route('**/api/v1/remote/tools/check', async (route) => {
 		const input = readRemoteToolCheckRequest(route.request().postDataJSON());
 		const response = await route.fetch({ maxRetries: 0 });
-		if (
-			!targetBecameUnavailable &&
-			input.kind === 'transfer' &&
-			input.side === 'target' &&
-			input.targetId === failedTargetConnectionId
-		) {
-			expect(response.status()).toBe(200);
-			const checked = readRemoteToolCheck(await response.json());
-			expect(checked.targetId).toBe(failedTargetConnectionId);
-			expect(checked.missing).toEqual([]);
-			// Change only this test-owned target after a successful preflight. The
-			// actual task must resolve current facts and fail this target independently.
-			const before = await context.request.get(`/api/v1/targets/connections/${failedTargetConnectionId}`);
-			expect(before.status()).toBe(200);
-			const snapshot = readConnectionView(await before.json());
-			const changed = await context.request.put(`/api/v1/targets/connections/${failedTargetConnectionId}`, {
-				headers: { Origin: E2E_URLS.frontendOrigin },
-				data: { version: snapshot.version, changes: { port: 1 } },
-			});
-			expect(changed.status()).toBe(200);
-			const mutation = readConnectionMutation(await changed.json());
-			expect(mutation.status).toBe('updated');
-			if (mutation.status !== 'updated') throw new Error('Test target endpoint was not updated');
-			expect(mutation.value.id).toBe(failedTargetConnectionId);
-			expect(mutation.value.port).toBe(1);
-			expect(mutation.value.version).toBe(snapshot.version + 1);
-			targetBecameUnavailable = true;
+		if (input.kind === 'transfer' && input.side === 'target' && input.targetId === failedTargetConnectionId) {
+			expect(response.status()).toBe(503);
+			expect(readRemoteToolError(await response.json()).code).toBe('connection_unavailable');
+			unavailableTargetChecks += 1;
 		}
 		await route.fulfill({ response });
 	});
@@ -600,7 +573,7 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 				await expect(trustConfirmation).toBeVisible();
 				await trustConfirmation.getByRole('button', { name: 'Confirm', exact: true }).click();
 				await expect(modal).toBeHidden();
-				expect(targetBecameUnavailable).toBe(true);
+				expect(unavailableTargetChecks).toBe(1);
 				releaseInitialTransferList?.();
 				releaseInitialTransferList = undefined;
 			},

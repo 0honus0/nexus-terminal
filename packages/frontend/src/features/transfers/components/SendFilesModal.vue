@@ -279,7 +279,7 @@
 				return;
 			for (const peerId of command.connectionIds) {
 				if (
-					!(await toolInstaller.ensure(
+					(await toolInstaller.prepare(
 						{
 							kind: 'transfer',
 							targetId: command.sourceConnectionId,
@@ -288,12 +288,12 @@
 							method: command.transferMethod,
 						},
 						signal,
-					))
+					)) === 'cancelled'
 				) {
 					return;
 				}
 				if (
-					!(await toolInstaller.ensure(
+					(await toolInstaller.prepare(
 						{
 							kind: 'transfer',
 							targetId: peerId,
@@ -302,7 +302,7 @@
 							method: command.transferMethod,
 						},
 						signal,
-					))
+					)) === 'cancelled'
 				) {
 					return;
 				}

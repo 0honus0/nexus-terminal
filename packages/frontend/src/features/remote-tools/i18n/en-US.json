@@ -17,6 +17,7 @@
       "unsupported": "Required tools are missing and no supported package manager or privilege method is available. Install them manually.",
       "authentication_failed": "sudo authentication or permission was denied. Check the password and sudo configuration.",
       "installation_failed": "Installation failed or tools are still unavailable. Check the server's repositories and package manager.",
+      "connection_unavailable": "The server could not be reached. Check its address and network connection.",
       "unavailable": "Unable to check or install remote tools. Check the connection.",
       "operation_unknown": "The installation result is unconfirmed. Check the server before attempting another installation.",
       "limit_exceeded": "Too many tool requests. Please try again later.",

@@ -17,6 +17,7 @@
       "unsupported": "远端缺少所需工具，但没有可用的软件包管理器或提权方式，请手动安装。",
       "authentication_failed": "sudo 认证失败或没有提权权限，请核对密码及 sudo 配置后重试。",
       "installation_failed": "安装未完成或工具仍不可用，请检查远端软件源与包管理器后重试。",
+      "connection_unavailable": "无法连接服务器，请检查地址及网络连接。",
       "unavailable": "暂时无法检查或安装远端工具，请检查连接。",
       "operation_unknown": "安装结果尚未确认，请检查服务器上的安装状态，勿重复安装。",
       "limit_exceeded": "当前安装请求较多，请稍后重试。",

@@ -3,7 +3,7 @@ import { useI18n } from 'vue-i18n';
 import { useFeedback } from '@/shared/feedback/public';
 import { useAuthenticatedViewScope } from '@/shared/session/public';
 import { remoteToolApi } from '../api/tool-api';
-import { ToolInstallFailure, type ToolRequirement, type ToolOffer } from '../model/tool-types';
+import { ToolInstallFailure, type ToolRequirement, type ToolOffer, type ToolPreparation } from '../model/tool-types';
 
 export function useRemoteTools() {
 	const { t } = useI18n();
@@ -24,23 +24,38 @@ export function useRemoteTools() {
 		}
 	}
 
-	async function ensure(input: ToolRequirement, external: AbortSignal): Promise<boolean> {
+	async function prepare(input: ToolRequirement, external: AbortSignal): Promise<ToolPreparation> {
 		if (pending) {
-			return false;
+			return 'cancelled';
 		}
 		const permission = scope.capture();
 		const signal = AbortSignal.any([permission, external]);
 		if (signal.aborted) {
-			return false;
+			return 'cancelled';
 		}
 		pending = true;
 		try {
-			const checked = await remoteToolApi.check(input, signal);
+			let checked: ToolOffer;
+			try {
+				checked = await remoteToolApi.check(input, signal);
+			} catch (cause) {
+				// Only a confirmed network rejection during the read-only check
+				// can be deferred to the transfer task's per-target result.
+				if (
+					!signal.aborted &&
+					input.kind === 'transfer' &&
+					cause instanceof ToolInstallFailure &&
+					cause.code === 'connection_unavailable'
+				) {
+					return 'deferred';
+				}
+				throw cause;
+			}
 			if (signal.aborted) {
-				return false;
+				return 'cancelled';
 			}
 			if (!checked.missing.length) {
-				return true;
+				return 'ready';
 			}
 			if (!checked.planId) {
 				throw new ToolInstallFailure('unsupported');
@@ -62,18 +77,18 @@ export function useRemoteTools() {
 				}
 			});
 			if (password === null || signal.aborted) {
-				return false;
+				return 'cancelled';
 			}
 			busy.value = true;
 			await remoteToolApi.install(checked, password, signal);
-			return !signal.aborted;
+			return signal.aborted ? 'cancelled' : 'ready';
 		} catch (cause) {
 			if (!signal.aborted) {
 				feedback.notifyError(
 					t('remoteTools.errors.' + (cause instanceof ToolInstallFailure ? cause.code : 'unavailable')),
 				);
 			}
-			return false;
+			return 'cancelled';
 		} finally {
 			offer.value = null;
 			busy.value = false;
@@ -82,5 +97,5 @@ export function useRemoteTools() {
 		}
 	}
 
-	return { offer, busy, ensure, approve, cancel };
+	return { offer, busy, prepare, approve, cancel };
 }

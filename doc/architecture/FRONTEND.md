@@ -10,6 +10,8 @@
 
 ### 通用远端依赖确认
 
+准备结果由 remote-tools 的 ToolPreparation 区分 ready、deferred、cancelled。只有传输的只读检查收到具名 connection_unavailable（HTTP 503）才返回 deferred，SendFilesModal 保留原后台逐目标结算；并不伪造工具就绪。安装阶段的同类错误、权限/信任/其它失败和未知仍 cancelled，归档消费者仅接受 ready。取消和身份撤销继续沿原 signal 收尾，不修改 UI。
+
 `WorkspacePage` 通过 `visible` 传递会话显隐；`WorkspaceSessionSurface` 禁用隐式属性继承，将 `$attrs` 和 `v-show` 显式绑定到真实会话容器。定位、预显示和可访问属性不依赖组件根节点数量，新增浮层不能破坏终端标签隔离；UiModal 继续使用原 Teleport。
 
 `features/remote-tools` 持有独立应用要求/offer、严格 Shared HTTP 转换、`useRemoteTools` 意图生命周期与复用 `RemoteToolInstallDialog`。真实消费者为 SendFilesModal 和 WorkspaceSessionSurface 的 archive 派发前路径；复用既有 UiModal/FormField/Input/Button，不重设计页面。密码仅在弹窗短期存在，确认、失效及关闭清除，不写 store/storage/logger；确认等待监听与 session/view AbortSignal 一同收尾。安装中禁用关闭和重复确认；只有真实安装回执关联原 target 且视图有效才能派发原操作，失败 Toast，未知不自动重试。未执行本地交互验收。

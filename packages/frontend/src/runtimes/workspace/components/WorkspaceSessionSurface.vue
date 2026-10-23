@@ -1149,10 +1149,10 @@
 				}
 			}
 			if (
-				!(await toolInstaller.ensure(
+				(await toolInstaller.prepare(
 					{ kind: 'tools', targetId: requestContext.session.connection.id, tools },
 					requestContext.permission,
-				)) ||
+				)) !== 'ready' ||
 				!isArchiveViewCurrent(requestContext) ||
 				submissionGeneration !== archivePromptGeneration
 			) {

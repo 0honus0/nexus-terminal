@@ -32,6 +32,9 @@ async function request<T>(
 		let code;
 		try {
 			code = readRemoteToolError(response.body).code;
+			if (code === 'connection_unavailable' && response.status !== 503) {
+				throw new Error('Unexpected tool connection failure status');
+			}
 		} catch (cause) {
 			throw new ToolInstallFailure(action === 'install' ? 'operation_unknown' : 'protocol_failure', { cause });
 		}
