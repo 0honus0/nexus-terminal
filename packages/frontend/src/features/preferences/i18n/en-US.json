@@ -116,12 +116,12 @@
       "showQuickCommandTagsTitle": "Show Quick Command Tags",
       "showQuickCommandTagsLabel": "Show tags in quick command list",
       "showQuickCommandTagsDescription": "Disable to hide tags in the quick command list and exclude them from search.",
-      "commandBarButtons": {
-        "title": "Command bar buttons",
-        "clear": "Clear terminal",
-        "focusSwitch": "Focus switcher",
-        "editor": "Editor",
-        "search": "Terminal search"
+      "workspaceTabButtons": {
+        "title": "Terminal top-right actions",
+        "suspendedSessions": "Suspended sessions",
+        "headerToggle": "Header visibility",
+        "progress": "Transfer progress",
+        "layoutConfigurator": "Layout settings"
       },
       "quickCommandsCollapsibleSearchTitle": "Quick Command Search",
       "quickCommandsCollapsibleSearchLabel": "Collapse the search box into a search button by default",
@@ -162,9 +162,7 @@
         "commands": "Terminal & commands",
         "commandsHint": "Terminal interaction, command panels, tags, and display density.",
         "monitoring": "Dashboard & monitoring",
-        "monitoringHint": "Local/remote resource cards, refresh intervals, status monitor, and Docker.",
-        "advanced": "Layout & advanced",
-        "advancedHint": "Low-frequency workspace layout controls."
+        "monitoringHint": "Local/remote resource cards, refresh intervals, status monitor, and Docker."
       }
     },
     "statusMonitorShowIp": {
@@ -223,9 +221,6 @@
       "effective": "Effective: sample interval {status}s · host cache TTL / overview refresh {host}s",
       "status": "Sampling interval (seconds)",
       "host": "Host cache TTL / overview refresh (seconds)",
-      "statusShort": "Sample",
-      "hostShort": "Cache",
-      "refreshShort": "Refresh",
       "secondsUnit": "s",
       "refresh": "Reload and review without writing",
       "feedback": {

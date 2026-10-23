@@ -13,9 +13,6 @@
 			quickCommandsGrouped?: boolean;
 			showFileManagerButton?: boolean;
 			showEditorButton?: boolean;
-			showClearButton?: boolean;
-			showFocusSwitchButton?: boolean;
-			showSearchButton?: boolean;
 			ready?: boolean;
 			modelValue?: string;
 			terminalSearchOpen?: boolean;
@@ -31,9 +28,6 @@
 			quickCommandsGrouped: true,
 			showFileManagerButton: false,
 			showEditorButton: true,
-			showClearButton: true,
-			showFocusSwitchButton: true,
-			showSearchButton: true,
 			ready: true,
 			terminalSearchOpen: false,
 			terminalSearchTerm: '',
@@ -300,7 +294,6 @@
 
 			<div v-if="mobile" class="mobile-command-controls">
 				<button
-					v-if="showClearButton"
 					type="button"
 					class="command-bar-button"
 					:title="t('commandInputBar.clearTerminal')"
@@ -344,7 +337,6 @@
 					></i>
 				</button>
 				<button
-					v-if="showSearchButton || terminalSearchOpen"
 					type="button"
 					class="command-bar-button"
 					:class="{ 'is-active': terminalSearchOpen }"
@@ -449,7 +441,6 @@
 				</template>
 				<template v-else>
 					<button
-						v-if="showClearButton"
 						type="button"
 						class="command-bar-button command-bar-secondary"
 						:title="t('commandInputBar.clearTerminal')"
@@ -459,7 +450,6 @@
 						<i class="fas fa-eraser" aria-hidden="true"></i>
 					</button>
 					<button
-						v-if="showFocusSwitchButton"
 						type="button"
 						class="command-bar-button command-bar-secondary"
 						:title="t('commandInputBar.configureFocusSwitch')"
@@ -489,7 +479,6 @@
 						<i class="fas fa-edit" aria-hidden="true"></i>
 					</button>
 					<button
-						v-if="showSearchButton"
 						type="button"
 						class="command-bar-button command-search-toggle"
 						:title="t('commandInputBar.openSearch')"

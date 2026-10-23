@@ -20,7 +20,7 @@
 	import { useMonitoringConfiguration } from '../composables/use-monitoring-configuration';
 	import type { UserPreferences } from '../model/preferences-types';
 
-	type GroupId = 'files' | 'commands' | 'monitoring' | 'layout';
+	type GroupId = 'files' | 'commands' | 'monitoring';
 
 	const { t } = useI18n();
 	const feedback = useFeedback();
@@ -58,10 +58,10 @@
 		'commandInputSyncTarget',
 		'showConnectionTags',
 		'showQuickCommandTags',
-		'showCommandBarClear',
-		'showCommandBarFocusSwitch',
-		'showCommandBarEditor',
-		'showCommandBarSearch',
+		'showWorkspaceSuspendedSessions',
+		'showWorkspaceHeaderToggle',
+		'showWorkspaceProgress',
+		'showWorkspaceLayoutConfigurator',
 		'quickCommandsCollapsibleSearch',
 		'quickCommandsCompactMode',
 		'terminalScrollbackLimit',
@@ -76,7 +76,6 @@
 		'dockerStatusIntervalSeconds',
 		'dockerDefaultExpand',
 	] as const satisfies readonly (keyof UserPreferences)[];
-	const layoutKeys = ['layoutLocked', 'navBarVisible'] as const satisfies readonly (keyof UserPreferences)[];
 
 	const isDirty = (keys: readonly (keyof UserPreferences)[]) =>
 		keys.some((key) => !structurallyEqual(form[key], baseline.value[key]));
@@ -84,7 +83,6 @@
 	const filesDirty = computed(() => isDirty(fileKeys));
 	const commandsDirty = computed(() => isDirty(commandKeys));
 	const monitoringDirty = computed(() => isDirty(monitoringKeys));
-	const layoutDirty = computed(() => isDirty(layoutKeys));
 	const monitoringCoreDirty = computed(() => {
 		const snapshot = monitoringCore.snapshot.value;
 		const draft = monitoringCore.draft.value;
@@ -345,49 +343,53 @@
 				</template>
 				<form id="workspace-commands-form" @submit.prevent="saveGroup('commands', commandKeys)">
 					<div class="workspace-preferences__grid">
-						<div class="workspace-preferences__command-buttons">
+						<div class="workspace-preferences__tab-buttons">
 							<strong class="workspace-preferences__section-label">
-								{{ t('settings.workspace.commandBarButtons.title') }}
+								{{ t('settings.workspace.workspaceTabButtons.title') }}
 							</strong>
-							<div class="workspace-preferences__command-button-grid">
-								<label class="workspace-preferences__toggle" for="showCommandBarClear">
+							<div class="workspace-preferences__tab-button-grid">
+								<label class="workspace-preferences__toggle" for="showWorkspaceSuspendedSessions">
 									<UiCheckbox
-										id="showCommandBarClear"
-										v-model="form.showCommandBarClear"
+										id="showWorkspaceSuspendedSessions"
+										v-model="form.showWorkspaceSuspendedSessions"
 										:disabled="savingGroup !== null || needsRefresh || loading"
 									/>
 									<span>
-										<strong>{{ t('settings.workspace.commandBarButtons.clear') }}</strong>
+										<strong>{{
+											t('settings.workspace.workspaceTabButtons.suspendedSessions')
+										}}</strong>
 									</span>
 								</label>
-								<label class="workspace-preferences__toggle" for="showCommandBarFocusSwitch">
+								<label class="workspace-preferences__toggle" for="showWorkspaceHeaderToggle">
 									<UiCheckbox
-										id="showCommandBarFocusSwitch"
-										v-model="form.showCommandBarFocusSwitch"
+										id="showWorkspaceHeaderToggle"
+										v-model="form.showWorkspaceHeaderToggle"
 										:disabled="savingGroup !== null || needsRefresh || loading"
 									/>
 									<span>
-										<strong>{{ t('settings.workspace.commandBarButtons.focusSwitch') }}</strong>
+										<strong>{{ t('settings.workspace.workspaceTabButtons.headerToggle') }}</strong>
 									</span>
 								</label>
-								<label class="workspace-preferences__toggle" for="showCommandBarEditor">
+								<label class="workspace-preferences__toggle" for="showWorkspaceProgress">
 									<UiCheckbox
-										id="showCommandBarEditor"
-										v-model="form.showCommandBarEditor"
+										id="showWorkspaceProgress"
+										v-model="form.showWorkspaceProgress"
 										:disabled="savingGroup !== null || needsRefresh || loading"
 									/>
 									<span>
-										<strong>{{ t('settings.workspace.commandBarButtons.editor') }}</strong>
+										<strong>{{ t('settings.workspace.workspaceTabButtons.progress') }}</strong>
 									</span>
 								</label>
-								<label class="workspace-preferences__toggle" for="showCommandBarSearch">
+								<label class="workspace-preferences__toggle" for="showWorkspaceLayoutConfigurator">
 									<UiCheckbox
-										id="showCommandBarSearch"
-										v-model="form.showCommandBarSearch"
+										id="showWorkspaceLayoutConfigurator"
+										v-model="form.showWorkspaceLayoutConfigurator"
 										:disabled="savingGroup !== null || needsRefresh || loading"
 									/>
 									<span>
-										<strong>{{ t('settings.workspace.commandBarButtons.search') }}</strong>
+										<strong>{{
+											t('settings.workspace.workspaceTabButtons.layoutConfigurator')
+										}}</strong>
 									</span>
 								</label>
 							</div>
@@ -536,7 +538,6 @@
 								<strong>{{ t('settings.dashboardResources.localLabel') }}</strong>
 							</label>
 							<div v-if="monitoringCore.draft.value" class="workspace-preferences__monitor-interval">
-								<span>{{ t('settings.monitoring.statusShort') }}</span>
 								<UiNumberInput
 									v-model="monitoringStatusInterval"
 									class="workspace-preferences__monitor-input"
@@ -563,7 +564,6 @@
 								<strong>{{ t('settings.dashboardResources.remoteLabel') }}</strong>
 							</label>
 							<div v-if="monitoringCore.draft.value" class="workspace-preferences__monitor-interval">
-								<span>{{ t('settings.monitoring.hostShort') }}</span>
 								<UiNumberInput
 									v-model="monitoringHostInterval"
 									class="workspace-preferences__monitor-input"
@@ -580,16 +580,6 @@
 							</div>
 						</div>
 						<div class="workspace-preferences__monitor-card">
-							<label class="workspace-preferences__monitor-toggle" for="showStatusMonitorIpAddress">
-								<UiCheckbox
-									id="showStatusMonitorIpAddress"
-									v-model="form.showStatusMonitorIpAddress"
-									:disabled="monitoringBusy"
-								/>
-								<strong>{{ t('settings.statusMonitorShowIp.enableLabel') }}</strong>
-							</label>
-						</div>
-						<div class="workspace-preferences__monitor-card">
 							<label class="workspace-preferences__monitor-toggle" for="dockerDefaultExpand">
 								<UiCheckbox
 									id="dockerDefaultExpand"
@@ -599,7 +589,6 @@
 								<strong>{{ t('settings.docker.defaultExpandLabel') }}</strong>
 							</label>
 							<div class="workspace-preferences__monitor-interval">
-								<span>{{ t('settings.monitoring.refreshShort') }}</span>
 								<UiNumberInput
 									id="dockerStatusIntervalSeconds"
 									v-model="form.dockerStatusIntervalSeconds"
@@ -615,51 +604,16 @@
 								/>
 							</div>
 						</div>
-					</div>
-				</form>
-			</UiSettingsGroup>
-
-			<UiSettingsGroup
-				:title="t('settings.workspace.groups.advanced')"
-				icon="fa-solid fa-sliders"
-				tone="primary"
-				compact
-			>
-				<template #actions>
-					<UiButton
-						type="submit"
-						form="workspace-layout-form"
-						:appearance="layoutDirty ? 'solid' : 'soft'"
-						:tone="layoutDirty ? 'primary' : 'neutral'"
-						:disabled="!layoutDirty"
-						:loading="savingGroup === 'layout'"
-						>{{ t('common.save') }}</UiButton
-					>
-				</template>
-				<form id="workspace-layout-form" @submit.prevent="saveGroup('layout', layoutKeys)">
-					<div class="workspace-preferences__grid">
-						<label class="workspace-preferences__toggle" for="layoutLocked">
-							<UiCheckbox
-								id="layoutLocked"
-								v-model="form.layoutLocked"
-								:disabled="savingGroup !== null || needsRefresh || loading"
-							/>
-							<span>
-								<strong>{{ t('settings.workspace.layoutLockLabel') }}</strong>
-								<small>{{ t('settings.workspace.layoutLockDescription') }}</small>
-							</span>
-						</label>
-						<label class="workspace-preferences__toggle" for="navBarVisible">
-							<UiCheckbox
-								id="navBarVisible"
-								v-model="form.navBarVisible"
-								:disabled="savingGroup !== null || needsRefresh || loading"
-							/>
-							<span>
-								<strong>{{ t('settings.workspace.navBarVisibleLabel') }}</strong>
-								<small>{{ t('settings.workspace.navBarVisibleDescription') }}</small>
-							</span>
-						</label>
+						<div class="workspace-preferences__monitor-card">
+							<label class="workspace-preferences__monitor-toggle" for="showStatusMonitorIpAddress">
+								<UiCheckbox
+									id="showStatusMonitorIpAddress"
+									v-model="form.showStatusMonitorIpAddress"
+									:disabled="monitoringBusy"
+								/>
+								<strong>{{ t('settings.statusMonitorShowIp.enableLabel') }}</strong>
+							</label>
+						</div>
 					</div>
 				</form>
 			</UiSettingsGroup>
@@ -710,7 +664,7 @@
 		gap: 12px;
 	}
 
-	.workspace-preferences__command-buttons {
+	.workspace-preferences__tab-buttons {
 		display: grid;
 		min-width: 0;
 		grid-column: 1 / -1;
@@ -724,13 +678,13 @@
 		letter-spacing: 0.04em;
 	}
 
-	.workspace-preferences__command-button-grid {
+	.workspace-preferences__tab-button-grid {
 		display: grid;
 		grid-template-columns: repeat(4, minmax(0, 1fr));
 		gap: 8px;
 	}
 
-	.workspace-preferences__command-button-grid .workspace-preferences__toggle {
+	.workspace-preferences__tab-button-grid .workspace-preferences__toggle {
 		align-items: center;
 		padding: 9px 10px;
 	}
@@ -772,10 +726,6 @@
 		display: flex;
 		flex: 0 0 auto;
 		align-items: center;
-		gap: 7px;
-		color: var(--text-color-secondary);
-		font-size: 10px;
-		white-space: nowrap;
 	}
 
 	.workspace-preferences__monitor-input {
@@ -815,20 +765,19 @@
 	}
 
 	@media (max-width: 900px) {
-		.workspace-preferences__command-button-grid {
+		.workspace-preferences__tab-button-grid {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
 	}
 
-	@media (max-width: 480px) {
+	@media (max-width: 340px) {
 		.workspace-preferences__monitor-card {
-			flex-wrap: wrap;
-			gap: 8px 12px;
+			gap: 6px 8px;
+			padding-inline: 8px;
 		}
 
-		.workspace-preferences__monitor-interval {
-			width: 100%;
-			justify-content: flex-end;
+		.workspace-preferences__monitor-input {
+			width: 100px;
 		}
 	}
 </style>

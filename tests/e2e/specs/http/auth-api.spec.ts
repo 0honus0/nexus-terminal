@@ -83,10 +83,10 @@ test.describe('authenticated HTTP API', () => {
 			preferences.showConnectionTags = false;
 			preferences.showQuickCommandTags = false;
 			preferences.showStatusMonitorIpAddress = true;
-			preferences.showCommandBarClear = false;
-			preferences.showCommandBarFocusSwitch = false;
-			preferences.showCommandBarEditor = false;
-			preferences.showCommandBarSearch = false;
+			preferences.showWorkspaceSuspendedSessions = false;
+			preferences.showWorkspaceHeaderToggle = false;
+			preferences.showWorkspaceProgress = false;
+			preferences.showWorkspaceLayoutConfigurator = false;
 		});
 		const response = await request.get('/api/v1/settings/preferences');
 		expect(response.ok()).toBeTruthy();
@@ -96,10 +96,10 @@ test.describe('authenticated HTTP API', () => {
 			showConnectionTags: false,
 			showQuickCommandTags: false,
 			showStatusMonitorIpAddress: true,
-			showCommandBarClear: false,
-			showCommandBarFocusSwitch: false,
-			showCommandBarEditor: false,
-			showCommandBarSearch: false,
+			showWorkspaceSuspendedSessions: false,
+			showWorkspaceHeaderToggle: false,
+			showWorkspaceProgress: false,
+			showWorkspaceLayoutConfigurator: false,
 		});
 		for (const path of [
 			'nav-bar-visibility',

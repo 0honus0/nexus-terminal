@@ -45,10 +45,10 @@ export function validatePresentation(value: PresentationData): void {
 		typeof prefs.showPopupFileEditor !== 'boolean' ||
 		typeof prefs.shareFileEditorTabs !== 'boolean' ||
 		typeof prefs.showPopupFileManager !== 'boolean' ||
-		typeof prefs.showCommandBarClear !== 'boolean' ||
-		typeof prefs.showCommandBarFocusSwitch !== 'boolean' ||
-		typeof prefs.showCommandBarEditor !== 'boolean' ||
-		typeof prefs.showCommandBarSearch !== 'boolean' ||
+		typeof prefs.showWorkspaceSuspendedSessions !== 'boolean' ||
+		typeof prefs.showWorkspaceHeaderToggle !== 'boolean' ||
+		typeof prefs.showWorkspaceProgress !== 'boolean' ||
+		typeof prefs.showWorkspaceLayoutConfigurator !== 'boolean' ||
 		typeof prefs.dockerDefaultExpand !== 'boolean' ||
 		!number(prefs.statusMonitorScale, 0.65, 1.6) ||
 		typeof prefs.dashboardShowLocalResources !== 'boolean' ||

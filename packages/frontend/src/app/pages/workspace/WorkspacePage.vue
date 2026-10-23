@@ -340,11 +340,6 @@
 			})),
 	);
 	const progressDisplaySources = hiddenProgressSources;
-	const progressDisplayTaskCount = computed(
-		() =>
-			progressDisplaySources.value.reduce((count, source) => count + source.tasks.length, 0) +
-			serverTransfers.progressTasks.value.length,
-	);
 
 	const setProgressVisible = (sessionId: string, visible: boolean) => {
 		progressVisibility.value = { ...progressVisibility.value, [sessionId]: visible };
@@ -1190,7 +1185,10 @@
 			:active-id="registry.activeId.value"
 			:mobile="device.isMobile.value"
 			:nav-bar-visible="preferences.values.value.navBarVisible"
-			:progress-task-count="progressDisplayTaskCount"
+			:show-workspace-suspended-sessions="preferences.values.value.showWorkspaceSuspendedSessions"
+			:show-workspace-header-toggle="preferences.values.value.showWorkspaceHeaderToggle"
+			:show-workspace-progress="preferences.values.value.showWorkspaceProgress"
+			:show-workspace-layout-configurator="preferences.values.value.showWorkspaceLayoutConfigurator"
 			@activate="activateSession"
 			@close="closeSession"
 			@close-others="closeOtherSessions"
@@ -1282,10 +1280,6 @@
 				"
 				:show-popup-file-editor="preferences.values.value.showPopupFileEditor"
 				:show-popup-file-manager="preferences.values.value.showPopupFileManager"
-				:show-command-bar-clear="preferences.values.value.showCommandBarClear"
-				:show-command-bar-focus-switch="preferences.values.value.showCommandBarFocusSwitch"
-				:show-command-bar-editor="preferences.values.value.showCommandBarEditor"
-				:show-command-bar-search="preferences.values.value.showCommandBarSearch"
 				:file-manager-confirm-delete="preferences.values.value.fileManagerShowDeleteConfirmation"
 				:quick-commands-collapsible-search="preferences.values.value.quickCommandsCollapsibleSearch"
 				:quick-commands-compact-mode="preferences.values.value.quickCommandsCompactMode"

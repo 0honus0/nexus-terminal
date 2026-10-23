@@ -48,9 +48,6 @@
 		commandDraft: string;
 		commandInputSyncTarget?: UserPreferences['commandInputSyncTarget'];
 		quickCommandsGrouped?: boolean;
-		showCommandBarClear?: boolean;
-		showCommandBarEditor?: boolean;
-		showCommandBarSearch?: boolean;
 		commandReady?: boolean;
 		terminalSearchOpen?: boolean;
 		terminalSearchTerm?: string;
@@ -133,10 +130,8 @@
 			:model-value="commandDraft"
 			:command-input-sync-target="commandInputSyncTarget"
 			:quick-commands-grouped="quickCommandsGrouped"
-			:show-file-manager-button="false"
-			:show-clear-button="showCommandBarClear"
-			:show-editor-button="showCommandBarEditor"
-			:show-search-button="showCommandBarSearch"
+			:show-file-manager-button="true"
+			:show-editor-button="true"
 			:ready="commandReady"
 			:terminal-search-open="terminalSearchOpen"
 			:terminal-search-term="terminalSearchTerm"

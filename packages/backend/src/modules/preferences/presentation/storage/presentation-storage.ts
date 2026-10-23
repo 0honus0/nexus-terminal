@@ -12,10 +12,10 @@ export interface StoredPresentationPreferences {
 	showPopupFileEditor: boolean;
 	shareFileEditorTabs: boolean;
 	showPopupFileManager: boolean;
-	showCommandBarClear: boolean;
-	showCommandBarFocusSwitch: boolean;
-	showCommandBarEditor: boolean;
-	showCommandBarSearch: boolean;
+	showWorkspaceSuspendedSessions: boolean;
+	showWorkspaceHeaderToggle: boolean;
+	showWorkspaceProgress: boolean;
+	showWorkspaceLayoutConfigurator: boolean;
 	dockerStatusIntervalSeconds: number;
 	dockerDefaultExpand: boolean;
 	statusMonitorScale: number;

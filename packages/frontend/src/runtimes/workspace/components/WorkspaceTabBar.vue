@@ -12,9 +12,19 @@
 			activeId: string | null;
 			mobile?: boolean;
 			navBarVisible?: boolean;
-			progressTaskCount?: number;
+			showWorkspaceSuspendedSessions?: boolean;
+			showWorkspaceHeaderToggle?: boolean;
+			showWorkspaceProgress?: boolean;
+			showWorkspaceLayoutConfigurator?: boolean;
 		}>(),
-		{ mobile: false, navBarVisible: true, progressTaskCount: 0 },
+		{
+			mobile: false,
+			navBarVisible: true,
+			showWorkspaceSuspendedSessions: true,
+			showWorkspaceHeaderToggle: true,
+			showWorkspaceProgress: true,
+			showWorkspaceLayoutConfigurator: true,
+		},
 	);
 	const emit = defineEmits<{
 		activate: [id: string];
@@ -221,6 +231,7 @@
 
 			<div class="ml-auto flex h-full shrink-0 items-center">
 				<button
+					v-if="props.showWorkspaceSuspendedSessions"
 					type="button"
 					class="flex h-full items-center justify-center border-l border-border px-3 text-text-secondary transition-colors hover:bg-border hover:text-foreground"
 					:title="t('suspendedSshSessions.modalTitle')"
@@ -230,6 +241,7 @@
 					<i class="fas fa-pause-circle text-sm" aria-hidden="true"></i>
 				</button>
 				<button
+					v-if="props.showWorkspaceHeaderToggle"
 					type="button"
 					class="flex h-full items-center justify-center border-l border-border px-3 text-text-secondary transition-colors duration-150 hover:bg-border hover:text-foreground"
 					:title="t(props.navBarVisible ? 'header.hide' : 'header.show')"
@@ -242,7 +254,7 @@
 					></i>
 				</button>
 				<button
-					v-if="props.progressTaskCount > 0"
+					v-if="props.showWorkspaceProgress"
 					type="button"
 					class="relative flex h-full items-center justify-center border-l border-border px-3 text-text-secondary transition-colors duration-150 hover:bg-border hover:text-foreground"
 					:title="t('terminalTabBar.progressDisplay')"
@@ -252,7 +264,7 @@
 					<i class="fas fa-tasks text-sm" aria-hidden="true"></i>
 				</button>
 				<button
-					v-if="!props.mobile"
+					v-if="props.showWorkspaceLayoutConfigurator && !props.mobile"
 					type="button"
 					class="flex h-full items-center justify-center border-l border-border px-3 text-text-secondary transition-colors duration-150 hover:bg-border hover:text-foreground"
 					:title="t('layout.configure')"

@@ -150,6 +150,7 @@ function columnWidths(input: unknown): Record<string, number> {
 }
 
 function readStoredPresentationPreferences(input: unknown): StoredPresentationPreferences {
+	// Keep legacy command-bar keys readable for existing rows; they are not projected or written again.
 	const value = objectWithDefaults(
 		input,
 		[
@@ -159,6 +160,10 @@ function readStoredPresentationPreferences(input: unknown): StoredPresentationPr
 			'showPopupFileEditor',
 			'shareFileEditorTabs',
 			'showPopupFileManager',
+			'showWorkspaceSuspendedSessions',
+			'showWorkspaceHeaderToggle',
+			'showWorkspaceProgress',
+			'showWorkspaceLayoutConfigurator',
 			'showCommandBarClear',
 			'showCommandBarFocusSwitch',
 			'showCommandBarEditor',
@@ -192,6 +197,10 @@ function readStoredPresentationPreferences(input: unknown): StoredPresentationPr
 			'showQuickCommandTags',
 		],
 		{
+			showWorkspaceSuspendedSessions: true,
+			showWorkspaceHeaderToggle: true,
+			showWorkspaceProgress: true,
+			showWorkspaceLayoutConfigurator: true,
 			showCommandBarClear: true,
 			showCommandBarFocusSwitch: true,
 			showCommandBarEditor: true,
@@ -211,10 +220,10 @@ function readStoredPresentationPreferences(input: unknown): StoredPresentationPr
 		showPopupFileEditor: boolean(value.showPopupFileEditor),
 		shareFileEditorTabs: boolean(value.shareFileEditorTabs),
 		showPopupFileManager: boolean(value.showPopupFileManager),
-		showCommandBarClear: boolean(value.showCommandBarClear),
-		showCommandBarFocusSwitch: boolean(value.showCommandBarFocusSwitch),
-		showCommandBarEditor: boolean(value.showCommandBarEditor),
-		showCommandBarSearch: boolean(value.showCommandBarSearch),
+		showWorkspaceSuspendedSessions: boolean(value.showWorkspaceSuspendedSessions),
+		showWorkspaceHeaderToggle: boolean(value.showWorkspaceHeaderToggle),
+		showWorkspaceProgress: boolean(value.showWorkspaceProgress),
+		showWorkspaceLayoutConfigurator: boolean(value.showWorkspaceLayoutConfigurator),
 		dockerStatusIntervalSeconds: integer(value.dockerStatusIntervalSeconds, 1, 86400),
 		dockerDefaultExpand: boolean(value.dockerDefaultExpand),
 		statusMonitorScale: number(value.statusMonitorScale, 0.65, 1.6),

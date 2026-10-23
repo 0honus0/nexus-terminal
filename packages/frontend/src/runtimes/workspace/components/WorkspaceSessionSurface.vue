@@ -124,10 +124,6 @@
 		sharedEditorSession?: FileEditorSessionController;
 		showPopupFileEditor?: boolean;
 		showPopupFileManager?: boolean;
-		showCommandBarClear?: boolean;
-		showCommandBarFocusSwitch?: boolean;
-		showCommandBarEditor?: boolean;
-		showCommandBarSearch?: boolean;
 		fileManagerConfirmDelete?: boolean;
 		quickCommandsCollapsibleSearch?: boolean;
 		quickCommandsCompactMode?: boolean;
@@ -1400,10 +1396,6 @@
 				:preview-session="previewSession"
 				:popup-documents="showPopupFileEditor"
 				:popup-file-manager="showPopupFileManager"
-				:show-command-bar-clear="showCommandBarClear"
-				:show-command-bar-focus-switch="showCommandBarFocusSwitch"
-				:show-command-bar-editor="showCommandBarEditor"
-				:show-command-bar-search="showCommandBarSearch"
 				:file-manager-confirm-delete="fileManagerConfirmDelete"
 				:quick-commands-collapsible-search="quickCommandsCollapsibleSearch"
 				:quick-commands-compact-mode="quickCommandsCompactMode"
@@ -1489,10 +1481,6 @@
 				:preview-session="previewSession"
 				:popup-documents="showPopupFileEditor"
 				:popup-file-manager="showPopupFileManager"
-				:show-command-bar-clear="showCommandBarClear"
-				:show-command-bar-focus-switch="showCommandBarFocusSwitch"
-				:show-command-bar-editor="showCommandBarEditor"
-				:show-command-bar-search="showCommandBarSearch"
 				:file-manager-confirm-delete="fileManagerConfirmDelete"
 				:quick-commands-collapsible-search="quickCommandsCollapsibleSearch"
 				:quick-commands-compact-mode="quickCommandsCompactMode"
@@ -1597,10 +1585,6 @@
 				:preview-session="previewSession"
 				:popup-documents="showPopupFileEditor"
 				:popup-file-manager="showPopupFileManager"
-				:show-command-bar-clear="showCommandBarClear"
-				:show-command-bar-focus-switch="showCommandBarFocusSwitch"
-				:show-command-bar-editor="showCommandBarEditor"
-				:show-command-bar-search="showCommandBarSearch"
 				:file-manager-confirm-delete="fileManagerConfirmDelete"
 				:quick-commands-collapsible-search="quickCommandsCollapsibleSearch"
 				:quick-commands-compact-mode="quickCommandsCompactMode"
@@ -1698,9 +1682,6 @@
 			:command-draft="session.commandDraft.value"
 			:command-input-sync-target="commandInputSyncTarget"
 			:quick-commands-grouped="showQuickCommandTags"
-			:show-command-bar-clear="showCommandBarClear"
-			:show-command-bar-editor="showCommandBarEditor"
-			:show-command-bar-search="showCommandBarSearch"
 			:command-ready="session.state.value === 'connected'"
 			:terminal-search-open="session.terminalState.searchOpen.value"
 			:terminal-search-term="session.terminalState.searchTerm.value"

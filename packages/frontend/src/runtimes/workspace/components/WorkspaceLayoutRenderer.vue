@@ -92,10 +92,6 @@
 		previewSession?: FilePreviewSessionController;
 		popupDocuments?: boolean;
 		popupFileManager?: boolean;
-		showCommandBarClear?: boolean;
-		showCommandBarFocusSwitch?: boolean;
-		showCommandBarEditor?: boolean;
-		showCommandBarSearch?: boolean;
 		fileManagerConfirmDelete?: boolean;
 		quickCommandsCollapsibleSearch?: boolean;
 		quickCommandsCompactMode?: boolean;
@@ -323,10 +319,6 @@
 				:preview-session="previewSession"
 				:popup-documents="popupDocuments"
 				:popup-file-manager="popupFileManager"
-				:show-command-bar-clear="showCommandBarClear"
-				:show-command-bar-focus-switch="showCommandBarFocusSwitch"
-				:show-command-bar-editor="showCommandBarEditor"
-				:show-command-bar-search="showCommandBarSearch"
 				:file-manager-confirm-delete="fileManagerConfirmDelete"
 				:quick-commands-collapsible-search="quickCommandsCollapsibleSearch"
 				:quick-commands-compact-mode="quickCommandsCompactMode"
@@ -429,10 +421,7 @@
 				:command-input-sync-target="commandInputSyncTarget"
 				:quick-commands-grouped="showQuickCommandTags"
 				:show-file-manager-button="popupFileManager"
-				:show-clear-button="showCommandBarClear"
-				:show-focus-switch-button="showCommandBarFocusSwitch"
-				:show-editor-button="popupDocuments && showCommandBarEditor"
-				:show-search-button="showCommandBarSearch"
+				:show-editor-button="popupDocuments"
 				:ready="session.state.value === 'connected'"
 				:terminal-search-open="session.terminalState.searchOpen.value"
 				:terminal-search-term="session.terminalState.searchTerm.value"

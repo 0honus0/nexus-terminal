@@ -116,12 +116,12 @@
       "showQuickCommandTagsTitle": "显示快捷指令标签",
       "showQuickCommandTagsLabel": "在快捷指令列表中显示标签",
       "showQuickCommandTagsDescription": "关闭后将隐藏快捷指令列表中的标签，并从搜索中排除标签。",
-      "commandBarButtons": {
-        "title": "命令栏按钮",
-        "clear": "清空终端",
-        "focusSwitch": "焦点切换",
-        "editor": "编辑器",
-        "search": "终端搜索"
+      "workspaceTabButtons": {
+        "title": "终端右上角按钮",
+        "suspendedSessions": "挂起会话",
+        "headerToggle": "顶栏显隐",
+        "progress": "进度传输",
+        "layoutConfigurator": "配置布局"
       },
       "quickCommandsCollapsibleSearchTitle": "快捷指令搜索框",
       "quickCommandsCollapsibleSearchLabel": "默认将搜索框折叠为搜索按钮",
@@ -162,9 +162,7 @@
         "commands": "终端与指令",
         "commandsHint": "终端交互、指令面板、标签和显示密度。",
         "monitoring": "首页与监控",
-        "monitoringHint": "本机/远程资源、刷新间隔、状态监控和 Docker。",
-        "advanced": "布局与高级设置",
-        "advancedHint": "低频使用的工作区布局控制，默认收起。"
+        "monitoringHint": "本机/远程资源、刷新间隔、状态监控和 Docker。"
       }
     },
     "statusMonitorShowIp": {
@@ -223,9 +221,6 @@
       "effective": "当前生效：采样间隔 {status} 秒 · 主机缓存 TTL / 概览刷新 {host} 秒",
       "status": "监控采样间隔（秒）",
       "host": "主机缓存 TTL / 概览刷新（秒）",
-      "statusShort": "采样",
-      "hostShort": "缓存",
-      "refreshShort": "刷新",
       "secondsUnit": "秒",
       "refresh": "只读重新加载并核对",
       "feedback": {

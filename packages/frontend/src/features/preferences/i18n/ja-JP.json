@@ -116,12 +116,12 @@
       "showQuickCommandTagsTitle": "クイックコマンドタグを表示",
       "showQuickCommandTagsLabel": "クイックコマンドリストにタグを表示",
       "showQuickCommandTagsDescription": "無効にすると、クイックコマンドリストのタグが非表示になり、検索から除外されます。",
-      "commandBarButtons": {
-        "title": "コマンドバーのボタン",
-        "clear": "ターミナルをクリア",
-        "focusSwitch": "フォーカス切替",
-        "editor": "エディター",
-        "search": "ターミナル検索"
+      "workspaceTabButtons": {
+        "title": "ターミナル右上のボタン",
+        "suspendedSessions": "保留セッション",
+        "headerToggle": "ヘッダー表示",
+        "progress": "進捗転送",
+        "layoutConfigurator": "レイアウト設定"
       },
       "quickCommandsCollapsibleSearchTitle": "クイックコマンド検索",
       "quickCommandsCollapsibleSearchLabel": "検索ボックスを既定で検索ボタンに折りたたむ",
@@ -162,9 +162,7 @@
         "commands": "ターミナルとコマンド",
         "commandsHint": "ターミナル操作、コマンドパネル、タグ、表示密度。",
         "monitoring": "ダッシュボードと監視",
-        "monitoringHint": "ローカル/リモートリソース、更新間隔、状態監視、Docker。",
-        "advanced": "レイアウトと詳細設定",
-        "advancedHint": "利用頻度の低いワークスペースのレイアウト設定。"
+        "monitoringHint": "ローカル/リモートリソース、更新間隔、状態監視、Docker。"
       }
     },
     "statusMonitorShowIp": {
@@ -223,9 +221,6 @@
       "effective": "現在有効：測定間隔 {status}秒 · ホストキャッシュTTL／概要更新 {host}秒",
       "status": "測定間隔（秒）",
       "host": "ホストキャッシュTTL／概要更新（秒）",
-      "statusShort": "測定",
-      "hostShort": "キャッシュ",
-      "refreshShort": "更新",
       "secondsUnit": "秒",
       "refresh": "読み取り専用で再読込して確認",
       "feedback": {
