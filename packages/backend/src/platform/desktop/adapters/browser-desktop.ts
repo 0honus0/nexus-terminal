@@ -12,6 +12,8 @@ import {
 import { encodeCleanPathResponse, readCleanPathRequest } from './rdcleanpath.js';
 
 const MAX_QUEUED_BYTES = 4 * 1024 * 1024;
+const SEND_HIGH_WATER_BYTES = 64 * 1024;
+const SEND_LOW_WATER_BYTES = 16 * 1024;
 const HANDSHAKE_TIMEOUT_MS = 20_000;
 const CLOSE_TIMEOUT_MS = 10_000;
 
@@ -374,13 +376,20 @@ class BrowserDesktopPeer implements DesktopTransportPeer {
 	}
 
 	private forward(socket: net.Socket): void {
+		let paused = false;
 		socket.on('data', (bytes: Buffer) => {
 			if (this.closing) {
 				return;
 			}
-			socket.pause();
-			void this.send(bytes).then(() => {
-				if (!this.closing) {
+			// Keep the byte stream moving until the real outbound buffer needs backpressure.
+			const task = this.send(bytes);
+			if (this.ws.bufferedAmount >= SEND_HIGH_WATER_BYTES) {
+				paused = true;
+				socket.pause();
+			}
+			void task.then(() => {
+				if (paused && !this.closing && this.ws.bufferedAmount <= SEND_LOW_WATER_BYTES) {
+					paused = false;
 					socket.resume();
 				}
 			}, this.stop);

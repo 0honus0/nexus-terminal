@@ -20,6 +20,10 @@ import {
 
 type RdpSession = Awaited<ReturnType<InstanceType<typeof Backend.SessionBuilder>['connect']>>;
 
+const POINTER_INTERVAL_MS = 16;
+// Allow surrogate-pair press/releases and a pointer within Fast-Path's 255-event count.
+const TEXT_BATCH_CHARACTERS = 32;
+
 let initialization: Promise<void> | null = null;
 
 function initialize(): Promise<void> {
@@ -62,6 +66,8 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 	let compositionTime = 0;
 	let touch: ReturnType<typeof attachDesktopTouch> | null = null;
 	let timer: ReturnType<typeof setTimeout> | null = null;
+	let pointerTimer: ReturnType<typeof setTimeout> | null = null;
+	let pendingPointer: { x: number; y: number } | null = null;
 
 	const fail = (cause: unknown) => {
 		if (!closed) {
@@ -75,18 +81,35 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 		}
 	};
 
-	const apply = (create: () => ReturnType<typeof Backend.DeviceEvent.keyPressed>[]) => {
+	const apply = (create: () => ReturnType<typeof Backend.DeviceEvent.keyPressed>[]): boolean => {
+		if (pointerTimer !== null) {
+			clearTimeout(pointerTimer);
+			pointerTimer = null;
+		}
+		const pointer = pendingPointer;
+		pendingPointer = null;
 		if (closed || !session) {
-			return;
+			return false;
 		}
 		try {
 			const transaction = new Backend.InputTransaction();
+			if (pointer) {
+				transaction.addEvent(Backend.DeviceEvent.mouseMove(pointer.x, pointer.y));
+			}
 			for (const event of create()) {
 				transaction.addEvent(event);
 			}
 			session.applyInputs(transaction);
+			return true;
 		} catch (cause) {
 			inputFailure(cause);
+			return false;
+		}
+	};
+
+	const flushPointer = () => {
+		if (pendingPointer) {
+			apply(() => []);
 		}
 	};
 
@@ -97,16 +120,35 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 		if (new TextEncoder().encode(text).byteLength > 65536) {
 			throw new RemoteDesktopFailure('input_failed', 'not_dispatched');
 		}
+		let batch: string[] = [];
+
+		const submit = () => {
+			const characters = batch;
+			batch = [];
+			return apply(() =>
+				characters.flatMap((character) => {
+					if (character === '\n' || character === '\r' || character === '\t') {
+						const code = character === '\t' ? 0x0f : 0x1c;
+						return [Backend.DeviceEvent.keyPressed(code), Backend.DeviceEvent.keyReleased(code)];
+					}
+					return [
+						Backend.DeviceEvent.unicodePressed(character),
+						Backend.DeviceEvent.unicodeReleased(character),
+					];
+				}),
+			);
+		};
+
 		for (const character of text) {
-			if (character === '\n' || character === '\r' || character === '\t') {
-				const code = character === '\t' ? 0x0f : 0x1c;
-				apply(() => [Backend.DeviceEvent.keyPressed(code), Backend.DeviceEvent.keyReleased(code)]);
-			} else {
-				apply(() => [
-					Backend.DeviceEvent.unicodePressed(character),
-					Backend.DeviceEvent.unicodeReleased(character),
-				]);
+			batch.push(character);
+			if (batch.length === TEXT_BATCH_CHARACTERS) {
+				if (!submit()) {
+					return;
+				}
 			}
+		}
+		if (batch.length) {
+			submit();
 		}
 	};
 
@@ -187,6 +229,7 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 	};
 
 	const release = () => {
+		flushPointer();
 		pressedKeys.clear();
 		pressedButtons.clear();
 		try {
@@ -230,7 +273,12 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 				Math.round(((event.clientY - rect.top) * canvas.height) / Math.max(1, rect.height)),
 			),
 		);
-		apply(() => [Backend.DeviceEvent.mouseMove(pointerX, pointerY)]);
+		pendingPointer = { x: pointerX, y: pointerY };
+		if (event.type === 'mousemove') {
+			// Retain the latest position; keys/buttons flush it first without waiting for this timer.
+			pointerTimer ??= setTimeout(flushPointer, POINTER_INTERVAL_MS);
+			return;
+		}
 		if (event.type === 'mousedown') {
 			focus();
 			pressedButtons.add(event.button);
@@ -238,6 +286,7 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 		}
 		if (event.type === 'mouseup') {
 			releaseButton(event);
+			flushPointer();
 		}
 	};
 
@@ -257,6 +306,7 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 		if (closed || !session) {
 			return;
 		}
+		flushPointer();
 		try {
 			session.resize(
 				display.width,

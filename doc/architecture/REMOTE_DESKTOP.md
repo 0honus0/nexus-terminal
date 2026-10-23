@@ -60,7 +60,7 @@ Targets 在同一只读事务取得连接版本与密码密文；RDP/VNC 只接�
 
 bind 在异步授权前登记 WS 监听，避免 SDK 第一帧丢失；授权完成前只做有界缓冲，不连接 TCP。RDP CleanPath 中客户端 destination 仅解码而不参与目标选择，连接始终使用票据对应的受信 Targets 地址。DER 限 128 KiB，X224 有界解析；只接受 SSL/HYBRID/HYBRID_EX，TLS 最低 1.2。当前延续原 ignore-certificate 行为，不验证目标证书链；部署需自行保障目标网络可信，不宣传为远端身份已验证。
 
-WS 单二进制帧最多 2 MiB，私有待写队列最多 4 MiB。TCP 写阻塞暂停 WS，WS send 回调完成前暂停 TCP；超量或异常关闭原桥，不截断协议数据。TCP/TLS socket、初始化、队列消费、WS send 回调及 WS 真正关闭全部收敛后才通知退役，不以 terminate 调用代替释放。
+WS 单二进制帧最多 2 MiB，私有待写队列最多 4 MiB。TCP 写阻塞暂停 WS；远端到浏览器方向按 WS 实际 bufferedAmount 控制背压，达到 64 KiB 高水位暂停 TCP，send 完成回调确认降至 16 KiB 低水位后恢复，避免逐块暂停；水位属于技术调度参数，不替代原 4 MiB 发送缓冲拒绝与关闭保护。并行排队的 send 保持 WS 原字节顺序并逐个追踪，超量或异常关闭原桥，不丢弃、合并或重放 RDP 协议数据。TCP/TLS socket、初始化、队列消费、全部 WS send 回调及 WS 真正关闭全部收敛后才通知退役，不以 terminate 调用代替释放。该透明桥调度同时适用于 VNC。
 
 ## 7. 生命周期与失败
 
@@ -71,6 +71,8 @@ WS 单二进制帧最多 2 MiB，私有待写队列最多 4 MiB。TCP 写阻塞�
 IronRDP SDK 没有取消 pending connect 的 API；前端保留其晚结果 owner，晚连接成功后 shutdown 并运行收尾，run 结束及剪贴板任务收敛后释放 WASM session。30 秒 UI 等待不声称 SDK 实际结束；vendor 日志关闭，不输出凭据。noVNC disconnect 与本地监听释放不证明远端程序终止。
 
 键鼠、原生触控、剪贴板监听与 timer 绑定原实例；切模式取消原手势，失焦/关闭释放 RDP 按键。剪贴板纯文本最多 1 MiB；浏览器权限拒绝不阻断桌面。批量文本输入最多 64 KiB UTF-8，超量整次拒绝，不发送部分文本。RDP 动态尺寸通过 display-control；DPI 换算为 SDK 的 100–500% 缩放提示，初始协商仍受 SDK/远端能力限制。音视频、文件通道等 SDK 能力未作为本版产品承诺。
+
+RDP Adapter 的输入事务按完整字符计数，每批最多 32 字符（按下/释放成对），不加等待计时；普通键立即派发。仅连续 mousemove 合并为约 16ms 内最新坐标，所有按键、按钮与滚轮事务先携带尚未提交的坐标，避免点击/键盘越过之前的指针移动；blur、切文本输入与 close 在 releaseAllInputs 前刷新并清理指针 timer，动态 resize 前也先提交旧坐标。输入事务不重试，某批失败停止后续文本，不把未知结果当作未发送而重放；保留原 IME 去重、修饰键集合与 64 KiB 预检。类型与状态留当前 Adapter，不新增 Shared 字段或全局队列；WASM 解码/绘制仍在原 SDK，本轮不承诺消除 RTT 或主线程解码成本。
 
 ## 8. 当前能力与验收
 
