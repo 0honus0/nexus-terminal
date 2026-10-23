@@ -3,6 +3,7 @@ import {
 	SUSPENDED_SESSION_ID_PATTERN,
 	SUSPENDED_SESSION_STATUSES,
 	SUSPENDED_OWNERSHIP_STATES,
+	SUSPENDED_REMOVAL_DISPOSITIONS,
 	SUSPENDED_HTTP_ERROR_CODES,
 	SUSPENDED_CATALOG_MAX_ENTRIES,
 	SUSPENDED_CATALOG_MAX_JSON_BYTES,
@@ -15,6 +16,7 @@ import type {
 	SuspendedSessionRenameResponse,
 	SuspendedSessionTerminatedResponse,
 	SuspendedSessionRemovedResponse,
+	SuspendedSessionRemovalResponse,
 	SuspendedSessionHttpError,
 } from './http.js';
 import { isWellFormedFileText } from '../files/text-codec.js';
@@ -200,6 +202,15 @@ export function readSuspendedSessionRemoved(value: unknown): SuspendedSessionRem
 		return reject();
 	}
 	return { message: row.message };
+}
+
+export function readSuspendedSessionRemoval(value: unknown): SuspendedSessionRemovalResponse {
+	budget(value, SUSPENDED_MANAGEMENT_MAX_JSON_BYTES);
+	const row = object(value, ['suspendedSessionId', 'disposition']);
+	return {
+		suspendedSessionId: readSuspendedSessionId(row.suspendedSessionId),
+		disposition: choice(row.disposition, SUSPENDED_REMOVAL_DISPOSITIONS),
+	};
 }
 
 export function readSuspendedSessionError(value: unknown): SuspendedSessionHttpError {

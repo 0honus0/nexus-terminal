@@ -15,6 +15,10 @@ export const SUSPENDED_OWNERSHIP_STATES = ['available', 'resuming', 'attached'] 
 
 export type SuspendedOwnershipState = (typeof SUSPENDED_OWNERSHIP_STATES)[number];
 
+export const SUSPENDED_REMOVAL_DISPOSITIONS = ['unmarked', 'terminated', 'removed'] as const;
+
+export type SuspendedRemovalDisposition = (typeof SUSPENDED_REMOVAL_DISPOSITIONS)[number];
+
 export const SUSPENDED_SESSION_ID_PATTERN = /^[A-Za-z0-9_-]{8,128}$/u;
 
 /** Full catalog envelope, independent of private task admission quotas. */

@@ -3,6 +3,7 @@ import type {
 	SuspendedSessionStatus,
 	SuspendedOwnershipState,
 	SuspendedHttpErrorCode,
+	SuspendedRemovalDisposition,
 } from '@nexus-terminal/shared/remote/suspend/values';
 import type { RequestOutcome, HttpRequestFailureCode } from '@/client/http/request-failure';
 import type { ComputedRef, Ref } from 'vue';
@@ -64,7 +65,7 @@ export interface SuspendedSessionsController {
 	startSync(): void;
 	stopSync(): void;
 	rename(session: SuspendedSession, name: string, signal?: AbortSignal): Promise<string>;
-	remove(session: SuspendedSession, signal?: AbortSignal): Promise<void>;
+	remove(session: SuspendedSession, signal?: AbortSignal): Promise<SuspendedRemovalDisposition>;
 	exportLog(id: string, signal?: AbortSignal): Promise<string>;
 }
 

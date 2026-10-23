@@ -29,7 +29,7 @@
   "sshSuspend": {
     "prompts": {
       "confirmTakeover": "会话“{name}”当前由另一台设备使用。是否接管同一个 SSH 会话？原设备将被断开。",
-      "confirmRemove": "确认移除会话“{name}”？活动会话会被终止。"
+      "confirmRemove": "确认移除挂起会话“{name}”？正在使用的终端只取消挂起并保持连接，无人使用的后台会话将被终止。"
     },
     "notifications": {
       "markedForSuspendInfo": "会话 {id} 已标记为挂起。关闭标签页时，该会话将被挂起。",
@@ -43,6 +43,7 @@
       "terminatedSuccess": "已成功终止挂起的会话 \"{name}\"。",
       "terminateError": "终止挂起的会话失败: {error}",
       "entryRemovedSuccess": "已成功移除挂起的会话条目 \"{name}\"。",
+      "attachedEntryRemovedSuccess": "已取消会话 \"{name}\" 的挂起，正在使用的终端保持连接。",
       "entryRemovedError": "移除挂起的会话条目失败: {error}",
       "nameEditedSuccess": "已挂起会话名称已更新为 \"{name}\"。",
       "nameEditedError": "编辑已挂起会话名称失败: {error}",

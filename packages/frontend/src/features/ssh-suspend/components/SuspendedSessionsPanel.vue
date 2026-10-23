@@ -157,15 +157,17 @@
 			if (!confirmed || owner.signal.aborted || viewController !== owner) {
 				return;
 			}
-			await data.remove(session, owner.signal);
+			const disposition = await data.remove(session, owner.signal);
 			if (owner.signal.aborted || viewController !== owner) {
 				return;
 			}
 			feedback.notifySuccess(
 				t(
-					session.status === 'active'
+					disposition === 'terminated'
 						? 'sshSuspend.notifications.terminatedSuccess'
-						: 'sshSuspend.notifications.entryRemovedSuccess',
+						: disposition === 'unmarked'
+							? 'sshSuspend.notifications.attachedEntryRemovedSuccess'
+							: 'sshSuspend.notifications.entryRemovedSuccess',
 					{ name },
 				),
 			);

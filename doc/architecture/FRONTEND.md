@@ -6,6 +6,17 @@
 
 ## 1. 职责与范围
 
+### 挂起目录安全移除
+
+1. 职责：目录移除只表达用户移除意图，是否取消挂起或终止由后端当前附着事实决定，不根据旧 `status` 派发终止。
+2. 位置：`features/ssh-suspend` 的 API/store/组件消费安全移除回执，`runtimes/workspace/session` 持有原终端的挂起标记与续租。
+3. 依赖：feature 不导入 runtime；后端经原附件的 `suspend.unmarked` 事件通知 runtime，目录仍使用独立 WS 快照。
+4. 类型：Shared suspend 拥有移除 disposition 和取消标记事件；HTTP 严格核对返回的会话 ID，事件解码并核对本地会话 ID/所有权 generation。
+5. 入口：目录的移除按钮统一调用 `DELETE /api/v1/ssh-suspend/remove/:id`；原显式终止与断开条目接口不作为降级重试路径。
+6. 并发：事件先清除本地挂起标记、时间、续租与历史入口，再由目录快照收敛；晚到的标记/恢复回执不能重新挂起已取消的同一记录。
+7. 生命周期：取消挂起不关闭 socket、SSH/PTY 或关联 Files；清理失败仍保留未知结果围栏，不自动改为终止。原终端关闭后按普通 Workspace 生命周期处理。
+8. 验收：同设备、跨设备删除使用中记录后，目录无“待关闭”替身、原 PTY/PID 和输入输出不变；后台挂起终止与断开条目清理仍有效。行为按 D17 留远程 Actions，静态不能替代验收。
+
 Frontend展示产品状态并驱动用例，服务端事实不在浏览器重建为另一份权威。正式认证、Targets、Workspace/Files/传输/挂起/监控/Docker/桌面、个人设置、审计通知、备份诊断、外观及Agent管理／Host／运行界面源码均已消费Shared；前端源码没有旧Protocol依赖或新旧响应兼容层。源码适配与部署切换、静态与行为验收分别判断；D17 远程 Actions 已通过，D16 外部范围仍未验；精确基线见 E2E。
 
 ## 2. 子功能与目录

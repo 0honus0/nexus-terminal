@@ -1,5 +1,13 @@
 # Nexus Terminal E2E
 
+## 使用中终端的挂起目录移除（2026-10-23）
+
+本批按用户确认修改：移除仍附着的挂起记录只取消挂起，不关闭原 SSH/PTY；后台无人使用时才终止。新增安全移除 HTTP 回执和原附件 `suspend.unmarked` 事件，正式目录不再根据旧 `status` 选择终止接口；取消事件同时清除本地挂起标记、续租及历史入口，避免重新出现“待关闭”替身。准备提交或恢复中的记录返回冲突，不自动终止。
+
+按 D17 未新增或运行本地行为/E2E；待远程验证同设备与跨设备移除使用中记录、原 PID/输入输出不变、目录及本地标记同步、后来打开的终端不受影响、后台终止、断开条目移除、准备/恢复/重复移除竞争和未知清理围栏。不继承此前 Actions 或 UI CDP 结果。
+
+源码复审确认：安全移除由后端读取当前附着事实，准备/恢复状态拒绝；并发取消共用原清理 Promise，取消期间不能重新取得挂起所有权；日志/checkpoint 失败保持未知，不降级终止。前端按 ID/generation 清除原标记，晚到回执不能重新挂起已取消记录；“取消挂起”动作不再切换为“重新挂起”，旧 UI 点击不影响新状态。根 `pnpm run check`、双端 `pnpm run build`、目标 ESLint/Prettier 和 `git diff --check` 通过，证据 `/tmp/nexus-suspend-remove-final2-{check,build}.log`、`/tmp/nexus-suspend-remove-eslint.log`、`/tmp/nexus-suspend-remove-target-format.log`。全量格式检查在并行修改的 `BackupSettingsPanel.vue`、`FileManager.vue`、`SuspendedSessionsPanel.vue` 样式处失败，未调整这些无关格式；日志 `/tmp/nexus-suspend-remove-format-final.log`。构建保留原有大 chunk 警告；未提交、推送或重启。
+
 ## 远程 Actions 修复第三批（2026-10-22）
 
 第二批被测 SHA `b010273fbdb0552c3557c6c30323df59817b6cb1`，[39827272148](https://github.com/0honus0/nexus-terminal/actions/runs/39827272148)。Agent 的真实 SSH 部署、修复、文件生命周期与搜索原失败场景已通过；分片 4 普通组 56 项通过，但随后特殊工具组的桌面夹具重启失败，不能记作该分片通过。

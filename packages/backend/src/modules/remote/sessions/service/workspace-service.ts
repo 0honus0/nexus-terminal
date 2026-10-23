@@ -1,6 +1,7 @@
 import type {
 	SuspendedRevocationReason,
 	SuspendedTerminationReason,
+	SuspendedRemovalDisposition,
 } from '@nexus-terminal/shared/remote/suspend/values';
 import type { WorkspaceMachineTaskScope } from '../model/workspace-types.js';
 import {
@@ -74,6 +75,7 @@ interface SuspendedMark {
 	leaseExpiresAt: number | null;
 	checkpoint: WorkspaceCheckpoint | null;
 	viewport: WorkspaceViewport;
+	unmarking: Promise<void> | null;
 }
 
 interface PendingSuspendedResume {
@@ -142,6 +144,7 @@ interface WorkspaceRecord {
 	outputListeners: Set<(item: WorkspaceOutput) => void>;
 	closedListeners: Set<(reason: SessionCloseReason) => void>;
 	revokedListeners: Set<(suspendedId: string, generation: number, reason: SuspendedRevocationReason) => void>;
+	unmarkedListeners: Set<(suspendedId: string, generation: number) => void>;
 	directoryListeners: Set<(event: WorkspaceDirectoryEvent) => void>;
 	input: InputChunk[];
 	inputBytes: number;
@@ -457,6 +460,7 @@ export class WorkspaceService {
 			outputListeners: new Set(),
 			closedListeners: new Set(),
 			revokedListeners: new Set(),
+			unmarkedListeners: new Set(),
 			directoryListeners: new Set(),
 			input: [],
 			inputBytes: 0,
@@ -921,7 +925,7 @@ export class WorkspaceService {
 		}
 		if (record.suspend) {
 			const existing = record.suspend;
-			if (!existing.recording || existing.failure !== null) {
+			if (!existing.recording || existing.unmarking || existing.failure !== null) {
 				throw new WorkspaceFailure('operation_unknown');
 			}
 			if (initialBuffer && existing.checkpoint) {
@@ -969,6 +973,7 @@ export class WorkspaceService {
 			leaseExpiresAt: Date.now() + 45_000,
 			checkpoint: this.logs.createCheckpoint(initialBuffer, record.viewport),
 			viewport: { ...record.viewport },
+			unmarking: null,
 		};
 		record.suspend = mark;
 		this.suspended.set(mark.id, record);
@@ -994,7 +999,12 @@ export class WorkspaceService {
 	): Promise<void> {
 		await this.markSuspend(token, id, attachmentId, initialBuffer);
 		const record = this.record(id);
-		if (record.phase !== 'attached' || record.attachmentId !== attachmentId || !record.suspend) {
+		if (
+			record.phase !== 'attached' ||
+			record.attachmentId !== attachmentId ||
+			!record.suspend ||
+			record.suspend.unmarking
+		) {
 			throw new WorkspaceFailure('not_found');
 		}
 		const mark = record.suspend;
@@ -1070,6 +1080,23 @@ export class WorkspaceService {
 		if (record.phase !== 'attached' || record.attachmentId !== attachmentId) {
 			throw new WorkspaceFailure('not_found');
 		}
+		await this.clearSuspendedMark(record, mark);
+	}
+
+	private clearSuspendedMark(record: WorkspaceRecord, mark: SuspendedMark): Promise<void> {
+		if (mark.unmarking) {
+			return mark.unmarking;
+		}
+		const task = Promise.resolve().then(() => this.clearSuspendedMarkOwned(record, mark));
+		mark.unmarking = task;
+		return this.track(task);
+	}
+
+	private async clearSuspendedMarkOwned(record: WorkspaceRecord, mark: SuspendedMark): Promise<void> {
+		const history = this.logs;
+		if (!history || record.suspend !== mark || !mark.recording || mark.failure !== null) {
+			throw new WorkspaceFailure('operation_unknown');
+		}
 		mark.recording = false;
 		if (mark.prepared) {
 			mark.prepared = false;
@@ -1079,19 +1106,28 @@ export class WorkspaceService {
 		try {
 			await this.settleExports(mark.id);
 			await history.delete(mark.id);
+			await mark.checkpoint?.dispose();
 		} catch (error) {
 			const failure = new RemoteResourceCleanupFailure([error]);
 			this.recordFailure(failure);
 			mark.failure = failure;
 			throw new WorkspaceFailure('operation_unknown', { cause: failure });
 		}
-		if (record.suspend === mark) {
-			await mark.checkpoint?.dispose();
+		if (record.suspend === mark && record.phase !== 'closing' && record.phase !== 'cleanup_unknown') {
 			record.suspend = null;
 			this.suspended.delete(mark.id);
 			record.historyCursor = null;
+			for (const listener of record.unmarkedListeners) {
+				try {
+					listener(mark.id, mark.generation);
+				} catch (cause) {
+					this.recordFailure(cause);
+				}
+			}
 			this.publishSuspendedCatalogChanged(record.userId);
+			return;
 		}
+		throw new WorkspaceFailure('operation_unknown');
 	}
 
 	/** Prepared suspended resume does not transfer the PTY yet. The old
@@ -1115,6 +1151,7 @@ export class WorkspaceService {
 			!mark ||
 			record.userId !== userId ||
 			!mark.recording ||
+			mark.unmarking ||
 			mark.failure !== null ||
 			!record.shellId ||
 			!this.shells.get(record.shellId)
@@ -1582,6 +1619,34 @@ export class WorkspaceService {
 			return true;
 		}
 		return this.removeTombstone(userId, suspendedId);
+	}
+
+	async removeSuspended(token: string | null, suspendedId: string): Promise<SuspendedRemovalDisposition | null> {
+		const userId = await this.identity(token);
+		const record = this.suspended.get(suspendedId);
+		if (!record || record.userId !== userId || !record.suspend) {
+			return (await this.removeTombstone(userId, suspendedId)) ? 'removed' : null;
+		}
+		const mark = record.suspend;
+		if (mark.unmarking) {
+			await mark.unmarking;
+			return 'unmarked';
+		}
+		if (mark.prepared) {
+			throw new WorkspaceFailure('conflict');
+		}
+		if (record.phase === 'attached') {
+			if (!record.attachmentId || !this.hasCurrentSuspendedLease(record)) {
+				throw new WorkspaceFailure('conflict');
+			}
+			await this.clearSuspendedMark(record, mark);
+			return 'unmarked';
+		}
+		if (record.phase !== 'suspended') {
+			throw new WorkspaceFailure('conflict');
+		}
+		await this.closeRecord(record);
+		return 'terminated';
 	}
 
 	async removeDisconnectedSuspended(token: string | null, suspendedId: string): Promise<boolean> {
@@ -2053,6 +2118,7 @@ export class WorkspaceService {
 		record.directoryListeners.clear();
 		record.fileListeners.clear();
 		record.revokedListeners.clear();
+		record.unmarkedListeners.clear();
 		record.pauseByConsumer = false;
 		const mark = record.suspend;
 		const retained = mark !== null && mark.recording && mark.failure === null;
@@ -2215,6 +2281,19 @@ export class WorkspaceService {
 		}
 		record.directoryListeners.add(listener);
 		return () => record.directoryListeners.delete(listener);
+	}
+
+	onSuspensionUnmarked(
+		id: string,
+		attachmentId: string,
+		listener: (suspendedId: string, generation: number) => void,
+	): () => void {
+		const record = this.record(id);
+		if (record.attachmentId !== attachmentId) {
+			throw new WorkspaceFailure('not_found');
+		}
+		record.unmarkedListeners.add(listener);
+		return () => record.unmarkedListeners.delete(listener);
 	}
 
 	onFileState(id: string, attachmentId: string, listener: (state: WorkspaceFileState) => void): () => void {
@@ -2502,6 +2581,7 @@ export class WorkspaceService {
 		}
 		record.closedListeners.clear();
 		record.revokedListeners.clear();
+		record.unmarkedListeners.clear();
 		record.outputListeners.clear();
 		record.directoryListeners.clear();
 		record.fileListeners.clear();

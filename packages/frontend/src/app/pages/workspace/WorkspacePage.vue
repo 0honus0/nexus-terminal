@@ -655,7 +655,7 @@
 		await flushed;
 	};
 
-	const toggleSuspendMark = async (id: string) => {
+	const toggleSuspendMark = async (id: string, intent: 'toggle' | 'unmark' = 'toggle') => {
 		const signal = pageScope.signal;
 		if (!isPageCurrent(signal)) return;
 		const session = registry.sessions.get(id);
@@ -670,6 +670,7 @@
 		const isCurrent = () => isPageCurrent(signal) && registry.sessions.get(id) === session;
 
 		const unmarking = session.markedForSuspend.value;
+		if (intent === 'unmark' && !unmarking) return;
 		try {
 			if (unmarking) {
 				await session.unmarkSuspend();
@@ -698,6 +699,8 @@
 			);
 		}
 	};
+
+	const unmarkSuspended = (id: string) => toggleSuspendMark(id, 'unmark');
 
 	const resumeSuspended = async (
 		suspended: SuspendedSession,
@@ -1228,7 +1231,7 @@
 			@open-many="openConnections"
 			@resume="resumeSuspended"
 			@resume-marked="resumeMarkedSession"
-			@unmark="toggleSuspendMark"
+			@unmark="unmarkSuspended"
 			@back="connectionPickerVisible = false"
 		/>
 
@@ -1301,7 +1304,7 @@
 				@command="(command, all) => sendCommand(session, command, all)"
 				@resume-suspended="resumeSuspended"
 				@resume-marked-suspended="resumeMarkedSession"
-				@unmark-suspended="toggleSuspendMark"
+				@unmark-suspended="unmarkSuspended"
 				@file-clipboard-set="(operation, entries) => setFileClipboard(session, operation, entries)"
 				@file-clipboard-paste="(destination) => pasteFileClipboard(session, destination)"
 				@server-transfer-started="progressDisplayVisible = true"
@@ -1341,7 +1344,7 @@
 			@close="suspendedVisible = false"
 			@resume="resumeSuspended"
 			@resume-marked="resumeMarkedSession"
-			@unmark="toggleSuspendMark"
+			@unmark="unmarkSuspended"
 		/>
 	</main>
 </template>

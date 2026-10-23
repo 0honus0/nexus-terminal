@@ -1,5 +1,6 @@
 import type { SuspendedAutoTermination } from '../model/suspended-session-types';
 import { computed, ref, shallowRef } from 'vue';
+import type { SuspendedRemovalDisposition } from '@nexus-terminal/shared/remote/suspend/values';
 import { defineStore, storeToRefs } from 'pinia';
 import { registerAuthenticatedSessionReset } from '@/shared/session/public';
 import { suspendedSessionsApi } from '../api/suspended-sessions-api';
@@ -221,14 +222,10 @@ export const useSuspendedSessionsStore = defineStore('suspended-sessions', () =>
 		);
 	}
 
-	function remove(session: SuspendedSession, signal?: AbortSignal): Promise<void> {
-		const active = session.status === 'active';
+	function remove(session: SuspendedSession, signal?: AbortSignal): Promise<SuspendedRemovalDisposition> {
 		return mutation(
 			session,
-			(token) =>
-				active
-					? suspendedSessionsApi.terminate(session.id, token)
-					: suspendedSessionsApi.removeDisconnected(session.id, token),
+			(token) => suspendedSessionsApi.remove(session.id, token),
 			() => removeSuspendedSessionFromCatalog(session.id),
 			signal,
 		);

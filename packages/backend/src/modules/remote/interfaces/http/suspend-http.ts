@@ -83,6 +83,17 @@ export function createSuspendHttpRoutes(workspaces: WorkspaceService): HttpRoute
 			}
 			ctx.send(200, catalog);
 		}),
+		route('DELETE', '/remove/:suspendSessionId', async (ctx) => {
+			const suspendedSessionId = requireId(ctx);
+			const disposition = await workspaces.removeSuspended(
+				ctx.cookie(ACCESS_SESSION_COOKIE_NAME),
+				suspendedSessionId,
+			);
+			if (disposition === null) {
+				throw new WorkspaceFailure('not_found');
+			}
+			ctx.send(200, { suspendedSessionId, disposition });
+		}),
 		route('DELETE', '/terminate/:suspendSessionId', async (ctx) => {
 			const id = requireId(ctx);
 			const removed = await workspaces.terminateSuspended(ctx.cookie(ACCESS_SESSION_COOKIE_NAME), id);

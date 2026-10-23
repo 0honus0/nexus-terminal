@@ -68,6 +68,11 @@ export interface WorkspaceSuspendRevokedEvent {
 	reason: SuspendedRevocationReason;
 }
 
+export interface WorkspaceSuspendUnmarkedEvent {
+	suspendedSessionId: string;
+	generation: number;
+}
+
 export interface WorkspaceSuspendRequests {
 	'suspend.mark': WorkspaceSuspendMarkRequest;
 	'suspend.prepare': WorkspaceSuspendMarkRequest;
@@ -103,4 +108,5 @@ export interface WorkspaceSuspendResponses {
 export interface WorkspaceSuspendEvents {
 	'suspend.autoTerminated': WorkspaceSuspendAutoTerminatedEvent;
 	'suspend.revoked': WorkspaceSuspendRevokedEvent;
+	'suspend.unmarked': WorkspaceSuspendUnmarkedEvent;
 }

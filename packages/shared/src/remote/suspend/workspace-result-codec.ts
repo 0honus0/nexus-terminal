@@ -14,6 +14,7 @@ import type {
 	WorkspaceSuspendHistoryResetResponse,
 	WorkspaceSuspendAutoTerminatedEvent,
 	WorkspaceSuspendRevokedEvent,
+	WorkspaceSuspendUnmarkedEvent,
 } from './workspace.js';
 
 export class InvalidWorkspaceSuspendResult extends Error {
@@ -136,5 +137,13 @@ export function readWorkspaceSuspendRevoked(value: unknown): WorkspaceSuspendRev
 		suspendedSessionId: readSuspendedSessionId(row.suspendedSessionId),
 		generation: positive(row.generation),
 		reason: choice(row.reason, SUSPENDED_REVOCATION_REASONS),
+	};
+}
+
+export function readWorkspaceSuspendUnmarked(value: unknown): WorkspaceSuspendUnmarkedEvent {
+	const row = object(value, ['suspendedSessionId', 'generation']);
+	return {
+		suspendedSessionId: readSuspendedSessionId(row.suspendedSessionId),
+		generation: positive(row.generation),
 	};
 }

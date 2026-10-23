@@ -95,6 +95,7 @@ export class WorkspaceRuntimeSession {
 	private suspendMutation?: Promise<unknown>;
 	private suspendedResumeIntent?: { id: string; takeover: boolean };
 	private suspendedSessionId?: string;
+	private lastUnmarkedSuspendedSessionId?: string;
 	private ownershipGeneration?: number;
 	private leaseExpiresAt?: number;
 	private leaseDeadline?: number;
@@ -219,6 +220,19 @@ export class WorkspaceRuntimeSession {
 			this.socket.on('suspend.autoTerminated', (event) =>
 				options.onSuspendedAutoTerminated?.(toSuspendedAutoTermination(event)),
 			),
+			this.socket.on('suspend.unmarked', (event) => {
+				if (this.disposed || this.closing) return;
+				if (
+					event.suspendedSessionId === this.suspendedSessionId &&
+					this.ownershipGeneration !== undefined &&
+					event.generation !== this.ownershipGeneration
+				) {
+					return;
+				}
+				this.lastUnmarkedSuspendedSessionId = event.suspendedSessionId;
+				if (event.suspendedSessionId !== this.suspendedSessionId) return;
+				this.clearSuspendedState();
+			}),
 			this.socket.on('suspend.revoked', (event) => {
 				if (
 					this.disposed ||
@@ -618,15 +632,17 @@ export class WorkspaceRuntimeSession {
 			this.assertConnectionGeneration(generation);
 			// ACK can release queued live output. Keep the already accumulated offset.
 			this.commitAttachment(result, request);
-			this.markedForSuspend.value = true;
-			this.markedForSuspendAt.value = markedAt ?? new Date().toISOString();
+			if (this.lastUnmarkedSuspendedSessionId !== suspendedSessionId) {
+				this.markedForSuspend.value = true;
+				this.markedForSuspendAt.value = markedAt ?? new Date().toISOString();
+			}
 			await this.adapters.workspaceConnected();
 			this.assertConnectionActive();
 			this.assertConnectionGeneration(generation);
 			if (!this.socket.connected) {
 				throw new WorkspaceSuspendFailure('remote_unavailable', 'unknown');
 			}
-			this.adapters.terminal.setPreviousOutputAvailable?.(result.historyAvailable);
+			this.adapters.terminal.setPreviousOutputAvailable?.(this.markedForSuspend.value && result.historyAvailable);
 			this.adapters.terminal.completeResume?.();
 			this.hasConnected.value = true;
 			this.terminalEnded = false;
@@ -688,6 +704,9 @@ export class WorkspaceRuntimeSession {
 			const result = await this.adapters.suspend.mark(this.id, terminalSnapshot);
 			this.assertConnectionActive();
 			this.assertConnectionGeneration(generation);
+			if (this.lastUnmarkedSuspendedSessionId === result.suspendedSessionId) {
+				throw new WorkspaceSuspendFailure('conflict', 'confirmed');
+			}
 			this.suspendedSessionId = result.suspendedSessionId;
 			this.ownershipGeneration = undefined;
 			this.leaseExpiresAt = undefined;
@@ -719,16 +738,21 @@ export class WorkspaceRuntimeSession {
 			await this.adapters.suspend.unmark(this.id);
 			this.assertConnectionActive();
 			this.assertConnectionGeneration(generation);
-			this.clearSuspendOwnerHeartbeat();
-			this.markedForSuspend.value = false;
-			this.markedForSuspendAt.value = null;
-			this.suspendedSessionId = undefined;
-			this.ownershipGeneration = undefined;
-			this.leaseExpiresAt = undefined;
+			this.clearSuspendedState();
 		} catch (cause) {
 			this.handleSuspendMutationFailure(cause, generation);
 			throw cause;
 		}
+	}
+
+	private clearSuspendedState(): void {
+		this.clearSuspendOwnerHeartbeat();
+		this.markedForSuspend.value = false;
+		this.markedForSuspendAt.value = null;
+		this.suspendedSessionId = undefined;
+		this.ownershipGeneration = undefined;
+		this.leaseExpiresAt = undefined;
+		this.adapters.terminal.setPreviousOutputAvailable?.(false);
 	}
 
 	private handleSuspendMutationFailure(cause: unknown, generation: number): void {
@@ -1091,6 +1115,7 @@ export class WorkspaceRuntimeSession {
 
 	private startSuspendOwnerHeartbeat(): void {
 		this.clearSuspendOwnerHeartbeat();
+		if (!this.markedForSuspend.value) return;
 		const generation = this.heartbeatGeneration;
 		const lifecycle = this.lifecycleGeneration;
 		const controller = new AbortController();

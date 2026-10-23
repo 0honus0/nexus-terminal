@@ -3,8 +3,7 @@ import {
 	readSuspendedSessionCatalog,
 	readSuspendedSessionRename,
 	readSuspendedSessionRenameResponse,
-	readSuspendedSessionTerminated,
-	readSuspendedSessionRemoved,
+	readSuspendedSessionRemoval,
 	readSuspendedSessionError,
 } from '@nexus-terminal/shared/remote/suspend/http-codec';
 import {
@@ -12,6 +11,7 @@ import {
 	SUSPENDED_MANAGEMENT_MAX_JSON_BYTES,
 	SUSPENDED_LOG_MAX_BYTES,
 	suspendedHttpErrorStatus,
+	type SuspendedRemovalDisposition,
 } from '@nexus-terminal/shared/remote/suspend/values';
 import { requestJson } from '@/client/http/json-client';
 import { HttpRequestFailure } from '@/client/http/request-failure';
@@ -177,12 +177,21 @@ export const suspendedSessionsApi = {
 		);
 	},
 
-	async terminate(sessionId: string, signal?: AbortSignal): Promise<void> {
-		await request('DELETE', '/terminate/' + id(sessionId), readSuspendedSessionTerminated, signal);
-	},
-
-	async removeDisconnected(sessionId: string, signal?: AbortSignal): Promise<void> {
-		await request('DELETE', '/entry/' + id(sessionId), readSuspendedSessionRemoved, signal);
+	async remove(sessionId: string, signal?: AbortSignal): Promise<SuspendedRemovalDisposition> {
+		const expectedId = id(sessionId);
+		const result = await request(
+			'DELETE',
+			'/remove/' + expectedId,
+			(value) => {
+				const response = readSuspendedSessionRemoval(value);
+				if (response.suspendedSessionId !== expectedId) {
+					throw new Error('Inconsistent suspended removal');
+				}
+				return response;
+			},
+			signal,
+		);
+		return result.disposition;
 	},
 
 	async rename(sessionId: string, customName: string, signal?: AbortSignal): Promise<string> {

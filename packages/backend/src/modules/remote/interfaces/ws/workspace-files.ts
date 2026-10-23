@@ -1011,6 +1011,7 @@ class WorkspaceFilesSession {
 			this.terminalOff.push(this.bindDirectoryEvents(id, attachmentId));
 			this.terminalOff.push(this.bindFileState(id, attachmentId));
 			this.terminalOff.push(this.bindSuspendRevoked(id, attachmentId));
+			this.terminalOff.push(this.bindSuspendUnmarked(id, attachmentId));
 			this.startIdentityPoll(id, attachmentId);
 			this.queueTerminal(delivered.replay);
 			replaying = false;
@@ -1138,6 +1139,12 @@ class WorkspaceFilesSession {
 		});
 	}
 
+	private bindSuspendUnmarked(id: string, attachmentId: string): () => void {
+		return this.workspaces.onSuspensionUnmarked(id, attachmentId, (suspendedSessionId, generation) => {
+			this.sendEvent('suspend.unmarked', { suspendedSessionId, generation });
+		});
+	}
+
 	private bindSuspendRevoked(id: string, attachmentId: string): () => void {
 		return this.workspaces.onSuspensionRevoked(id, attachmentId, (suspendedSessionId, generation, reason) => {
 			this.sendEvent('suspend.revoked', {
@@ -1172,6 +1179,7 @@ class WorkspaceFilesSession {
 			subscriptions.push(this.bindDirectoryEvents(id, attachmentId));
 			subscriptions.push(this.bindFileState(id, attachmentId));
 			subscriptions.push(this.bindSuspendRevoked(id, attachmentId));
+			subscriptions.push(this.bindSuspendUnmarked(id, attachmentId));
 			this.startIdentityPoll(id, attachmentId);
 			this.terminalOff.push(...subscriptions);
 			// Register the listener first, snapshot the retained journal second:

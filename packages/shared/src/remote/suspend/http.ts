@@ -33,6 +33,11 @@ export interface SuspendedSessionRemovedResponse {
 	message: 'Disconnected suspended entry removed.';
 }
 
+export interface SuspendedSessionRemovalResponse {
+	suspendedSessionId: string;
+	disposition: import('./values.js').SuspendedRemovalDisposition;
+}
+
 export interface SuspendedSessionHttpError {
 	code: import('./values.js').SuspendedHttpErrorCode;
 }

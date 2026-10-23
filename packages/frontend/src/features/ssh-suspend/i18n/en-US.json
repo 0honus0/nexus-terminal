@@ -29,7 +29,7 @@
   "sshSuspend": {
     "prompts": {
       "confirmTakeover": "Session \"{name}\" is currently owned by another device. Take over this same SSH session? The existing owner will be disconnected.",
-      "confirmRemove": "Remove session \"{name}\"? An active session will be terminated."
+      "confirmRemove": "Remove suspended session \"{name}\"? A terminal in use stays connected and is only unmarked. An unused background session will be terminated."
     },
     "notifications": {
       "markedForSuspendInfo": "Session {id} is marked for suspend. It will be suspended when the tab closes or the application exits.",
@@ -43,6 +43,7 @@
       "terminatedSuccess": "Suspended session \"{name}\" terminated successfully.",
       "terminateError": "Failed to terminate suspended session: {error}",
       "entryRemovedSuccess": "Suspended session entry \"{name}\" removed successfully.",
+      "attachedEntryRemovedSuccess": "Session \"{name}\" is no longer suspended. The terminal in use stays connected.",
       "entryRemovedError": "Failed to remove suspended session entry: {error}",
       "nameEditedSuccess": "Suspended session name updated to \"{name}\".",
       "nameEditedError": "Failed to edit suspended session name: {error}",

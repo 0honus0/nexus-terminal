@@ -7,6 +7,7 @@ import type {
 import {
 	readWorkspaceSuspendAutoTerminated,
 	readWorkspaceSuspendRevoked,
+	readWorkspaceSuspendUnmarked,
 } from '@nexus-terminal/shared/remote/suspend/workspace-result-codec';
 import type {
 	WorkspaceUploadRequests,
@@ -114,6 +115,8 @@ function readKnownEvent(type: string, payload: unknown): unknown {
 			return readWorkspaceSuspendAutoTerminated(payload);
 		case 'suspend.revoked':
 			return readWorkspaceSuspendRevoked(payload);
+		case 'suspend.unmarked':
+			return readWorkspaceSuspendUnmarked(payload);
 		case 'filesystem.ready':
 			return readWorkspaceFileReady(payload);
 		case 'filesystem.error':
