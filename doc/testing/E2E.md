@@ -13,6 +13,12 @@
 
 本轮根 `pnpm run check`、双端 `pnpm run build`、夹具 `node --check`、目标 Prettier 与 diff 检查通过，日志 `/tmp/nexus-e2e-backend-{check,build,format}.log`。全量格式的 ESLint 通过，Prettier 初报本轮 PLAN 和并行 WorkspaceSessionSurface.vue，PLAN 已整理并通过目标格式，不修改该 UI，全量格式不记为通过；构建保留既有大 chunk 警告。按 D17 未新增或执行本地行为、浏览器或 E2E，也未启动 xrdp 或连接真实桌面。原始八组日志 `/tmp/nexus-e2e-shard{1..8}-raw.log`，shard 3 诊断下载于 `/tmp/nexus-e2e-39830123543-shard3`。按 D18 单独提交推送服务端夹具修复和本轮文档；前端与其它未提交实现不纳入。不以源码分析和语法检查代替修复后的远程通过。
 
+修复提交 `798e204f2a547213652874dca3792bfd42a194f0` 已推送；远程 [39920261630](https://github.com/0honus0/nexus-terminal/actions/runs/39920261630) 已结束：448 个唯一场景通过、9 个失败，失败重试也未通过，无整轮通过结论。质量门禁、runner 和 Docker smoke 成功；HTTP 50、Auth 6、WebSocket 4、SSH 191 个完成记录均 passed。第 1/2 组成功，第 3–8 组仍有失败，原始日志 `/tmp/nexus-e2e-39920261630-shard{1..8}.log`，新 shard 3 诊断 `/tmp/nexus-e2e-39920261630-shard3`。
+
+RDP 计数修复的远程证据：Connections、Dashboard、Workspace 三个打开及认证步骤初次与重试均通过，宽屏 DPI 场景直接通过，移动 RDP 也越过认证计数。主 RDP 场景在浏览器文本到远端剪贴板的真实内容核对成功后，失败于 `remoteFrames.some(Buffer.isBuffer)`；远端到浏览器剪贴板与全屏断言因此尚未执行，不能宣称整个场景通过。后端 BrowserDesktopPeer 拒绝非 binary 入帧并以 binary 发送，不为观察断言改传输行为；浏览器观察链的具体原因仍待前端专项定位，未修改该测试。
+
+移动 RDP 首次失败在键盘文本未进入远端 input，重试中真实文本核对通过后同样失败于帧观察断言；首次输入的偶发问题归属尚未确认，保留待查，不冒充已修或简单归为后端。其余七个前端失败与原轮相同，均保留原测试。用户本轮限定后端、前端仍在修改，故不继续改前端源码、UI 或浏览器交互；没有确认需要修改产品后端的新增失败。本轮服务端夹具修复已远程验证原失败消失，其余九项单独承接。
+
 ## 明显安全漏洞审核（2026-10-23）
 
 基线为 `dev` / `d0301766` 加当前未提交工作区。按用户范围检查外部入口和实现缺陷，不把已接受的应用内权限与能力设计作为漏洞，不改变 UI。源码检查覆盖 HTTP/WS 来源和身份、因素验证、下载响应、插件隔离与包路径/签名、MCP 网络边界、原生命令参数及日志出口；这是有限源码审核，不是完整渗透测试或全部分支验收。
