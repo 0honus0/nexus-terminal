@@ -2,9 +2,22 @@
 
 当前验收基线：后端重构、正式前端 Shared 适配及远程八组回归已收口，具体 SHA、覆盖与仍未验证的外部/扩大故障范围统一见 [E2E](../testing/E2E.md#当前验收基线)，后续任务见 [PLAN](../PLAN.md)。下文 B/F 阶段名仅定位设计来源；原阶段的静态或有限行为证据不扩大为当前全量保证，历史“待 B10/F1”不表示重启已完成迁移。
 
+当前设计同时记录本地未提交实现；新增目录选择、依赖安装和基础组件接入不自动纳入上述历史验收基线。产品行为见 [USAGE](../USAGE.md)，源码、静态检查和待验范围分别见 [PLAN](../PLAN.md) 与 testing。
+
 本文约束新后端及后续功能的放置和依赖。开发前由 [AGENTS](../AGENTS.md) 读取 [人工规则](../rules/HUMAN.md)、[工程经验](../rules/ENGINEERING.md) 与 [编码规范](../rules/CODE_STYLE.md)。按 [模块模板](MODULE_TEMPLATE.md) 维护下面八个章节，不复制人工规则和编码列表。
 
 ## 1. 职责与范围
+
+### 远端工具安装
+
+1. **职责与范围**：Remote tools 管理用户确认的远端依赖安装，供传输与归档预检消费。仅安装服务器固定白名单工具，不开放任意命令、包名或仓库配置。
+2. **子功能与目录**：`remote/tools/{service,model}` 持计划、授权和应用能力；`platform/tools` 持包管理器检测、固定包映射、提权认证及技术执行。HTTP 仍归 Remote interfaces。
+3. **依赖方向**：HTTP → tools Service → tools Model → machines Model / Platform；Service 复用原 MachineMutationService，安装与文件、Docker、Agent 远端突变按真实 endpoint 互斥。
+4. **类型与转换**：Shared remote/tools 定义有限工具、包管理器、提权方式、安全检查/安装契约；独立应用对象归 tools/model，技术对象归 Platform；HTTP 与 Model 分别白名单投影。sudo 密码仅写入 SSH stdin，不进入命令参数、持久化、公开结果或日志。
+5. **入口与安装**：认证 POST `/api/v1/remote/tools/check` 只读检测并签发短期计划；POST `/api/v1/remote/tools/install` 绑定原计划及原登录确认安装。register 安装并纳入 quiesce/close。
+6. **数据、事务与并发**：计划只在内存有效五分钟，绑定目标指纹、会话摘要及缺失工具；消费后不能重放安装。实际安装先取得持久机器突变 claim 并事务复查身份，再复查配置及工具。重启不恢复执行；未知 claim 保留至人工恢复。
+7. **生命周期与失败**：Service 追踪全操作至 SSH 关闭及 claim 结算，包命令输出有界消费。断连、超时和取消不证明远端安装停止，派发后无确定退出保持 unknown，不自动重试。认证失败发生于包命令之前，可重新检查再确认；安装退出后仍重新查找工具。前端原操作仅在依赖确认可用且原视图身份有效时派发。
+8. **当前能力与验收**：实现进度见 PLAN；root、sudo 免密/密码、apt/dnf/yum/apk/zypper/pacman 支持在固定映射范围内，无管理员权限或未知系统明确拒绝。保留原生归档能力要求与并发窗口，不承诺包管理器事务回滚。行为验收遵守 D17。
 
 ### B9 Targets 导入补齐（源码收口，行为待 B10）
 
@@ -54,6 +67,8 @@ Access 统一拥有初始管理员、密码身份认证、token 摘要会话、�
 
 ### B3.2 资源观测与 Docker
 
+Linux 采集唯一实现为 `platform/system/adapters/posix-status.ts`，由 Remote register 安装到 ObservationModel。一次命令导出 `LC_ALL=C`，按段读取 `/proc/meminfo`、`/proc/loadavg`、CPU/网络内核事实及 df；不解析 free/uptime 的可翻译标签。内存优先 MemAvailable，缺失时按 MemFree + Buffers + Cached + SReclaimable − Shmem 估算并夹取到总量；应用容量为 MiB、磁盘为 KiB、网速为 bytes/s。远端内存当前按 MiB 四舍五入，不承诺与 free -m 截断值逐整数一致；缺失必需内核数据明确采集失败，无非 Linux 回退。本机 System 使用 Node OS API 与 /proc/meminfo，不依赖本地化 shell 输出。
+
 Remote 的 monitoring 子功能负责普通 Workspace 状态订阅、Docker 查询/控制和后台 SSH 资源采样；不执行任意用户命令、不复制 Workspace registry。System 负责本机状态。cwd 已归 sessions，快捷命令/命令历史已归 Preferences commands/history。SSH/Agent 可分别消费通用 Linux/Docker 技术能力，不能复用普通用户权限和活跃会话。
 
 RemoteObservationService.run 不设普通观测的全局任务数量上限；tasks 只追踪真实在途和清理未确认的任务，不以数量拒绝第9个或更多已接纳 Workspace 的采样、Docker及后台采样操作。原45秒期限、授权、取消和停机等待保留；Dashboard请求级并发、输出容量及Agent机器操作预算保持各自owner政策，移除观测计数不承诺无限服务器资源。状态订阅由 startStatus 串行采样；遇到具名 RemoteResourceCleanupFailure 时先停止原订阅，再交付 operation_unknown，禁止定时重建 SSH 累积未释放任务。stop 继续追踪本轮真实结算后清除 collector baseline；run 与 Workspace 的未确认任务及停机失败证据不删除、不重置。普通读取失败仍可按周期重试；Shared及前端契约不变。
@@ -70,14 +85,15 @@ Remote 的普通 SSH Workspace 是一条持续存在的交互式 shell，而非 
 
 当前唯一后端为 `packages/backend`（原 backend-next），包名为 `@nexus-terminal/backend`，入口为 `dist/main.js`。宿主版本读取本包交付的 `package.json`，Backend包版本与产品版本同步，不依赖仓库根路径。旧 Backend 已移出工作树；功能追溯使用 `05e140d2:packages/backend` 或 Git 历史，不能恢复运行时兼容层。源码归一不代表统一 E2E 已验收；现有未验范围仍由实施方案与 testing 承接。
 
-| 一级模块    | 业务 owner                                                    | 当前边界                                                                                                                                                                                                                     |
-| ----------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Access      | 账号、认证、会话与访问策略                                    | B4.1 增量实现管理员、密码、摘要会话、可信来源、IP 策略和 CAPTCHA；源码/架构复审已收口，B4.2 因素源码/静态已收口、行为待 B10；Preferences 已提供核心持久安装快照，执行配置及审计/通知已接线，外围集成已由 B8 接线，行为待 B10 |
-| Targets     | 连接配置、凭据、Proxy、SSH Key、Tag、目标解析与 Host Key 信任 | 已有 SSH/RDP/VNC 定义和基础管理；RDP/VNC 定义不等于运行能力                                                                                                                                                                  |
-| Remote      | 普通用户终端、文件与其他远程用例                              | PTY/Workspace/Files/传输/终端挂起恢复及 B3.3 桌面源码已接线；正式浏览器桌面操作与其他真实行为仍待 B10                                                                                                                        |
-| Preferences | 核心安装快照、用户偏好与命令/路径数据                         | 核心配置CAS/加密/重启快照；个人偏好、布局、命令/标签、历史与收藏HTTP已接线；日志/审计/通知归独立 Operations；正式前端 F1。                                                                                                   |
-| System      | 本机资源状态                                                  | 已有认证状态 HTTP、Service/Model 与 Node 技术 Adapter；诊断同时供管理员 HTTP 与受治理 Agent 工具消费。                                                                                                                       |
-| Agent       | scope、Run、Provider与后续治理                                | 已有完整主状态/步骤、执行owner、恢复和DEV审计；governed 原执行链、App/目标治理、工具审批、上下文/预算已有源码；外围能力 B8 与恢复 B9 已源码接线、正式前端 F1、行为 B10                                                       |
+| 一级模块    | 业务 owner                                                    | 当前边界                                                                                                                  |
+| ----------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Access      | 账号、认证、会话与访问策略                                    | 管理员初始化、密码、TOTP/Passkey、来源/IP/CAPTCHA、会话与撤销；正式前端已接入 Shared，真实硬件和故障组合按 testing 区分。 |
+| Targets     | 连接配置、凭据、Proxy、SSH Key、Tag、目标解析与 Host Key 信任 | 管理、导入、测试输入、最近连接及 SSH/RDP/VNC 可信目标解析；实际连接归 Remote。                                            |
+| Remote      | 普通用户终端、文件与远程用例                                  | Workspace/Files/传输/挂起 WS/监控/Docker、浏览器 RDP/VNC 桥及确认后的依赖安装；当前未验范围分别记录。                     |
+| Preferences | 核心安装配置、个人偏好、布局及命令/路径数据                   | 核心 CAS、按消费者热更新与冷配置、个人完整偏好及目录数据；正式前端消费独立版本，不混用授权或写入。                        |
+| System      | 本机状态、备份恢复与诊断                                      | 本机成功缓存、全局在线恢复、进程及模块资源诊断；数据库 Worker 独立指标，不以逻辑字节冒充完整内存归因。                    |
+| Agent       | App/Run、Provider、工具、治理及集成                           | 正式管理与 Host/Run 已接 Shared；Subagent 继承主 Agent 限制，记忆候选在对话侧栏审核，插件从仓库安装。                     |
+| Operations  | 日志、审计与通知                                              | Pino 后端日志、动态日志级别、有限审计与通知投递；不归 Preferences 或 System 复制实现。                                    |
 
 本机状态已有独立 System owner；Preferences 已接入核心持久设置；Operations 已持有 notifications/audit/logging，System 已提供宿主诊断；后续能力按真实业务所有权实施；Agent 的 Provider/调度/Tool/授权/审批/Job/Artifact/Memory/集成归 Agent 子功能，不复制技术底座。
 
@@ -1430,7 +1446,7 @@ HTTP → Service → Model → Remote machines 与 Platform transfers；跨模�
 
 ### 4. 类型与转换
 
-Shared `remote/transfers/server-{values,model,http,codec}` 持有有限值、完整安全任务及五入口契约；后端应用对象独立归 `transfers/model/*-types`。HTTP、Model、前端 mapper 均逐字段投影；主机密钥 pin、密码和私钥只在后端可信转换与技术 Adapter 间短暂存在。
+Shared `remote/transfers/server-{values,model,http,codec}` 持有有限值、完整安全任务及五入口契约；目标目录可为根目录，源项仍禁止根目录，Native Adapter 不为根目标重复追加斜线，路径空白保持原值；后端应用对象独立归 `transfers/model/*-types`。HTTP、Model、前端 mapper 均逐字段投影；主机密钥 pin、密码和私钥只在后端可信转换与技术 Adapter 间短暂存在。
 
 ### 5. 入口与安装
 

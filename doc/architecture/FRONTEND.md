@@ -2,9 +2,26 @@
 
 当前验收基线：后端重构、正式前端 Shared 适配及远程八组回归已收口，具体 SHA、覆盖与仍未验证的外部/扩大故障范围统一见 [E2E](../testing/E2E.md#当前验收基线)，后续任务见 [PLAN](../PLAN.md)。下文 B/F 阶段名仅定位设计来源；原阶段的静态或有限行为证据不扩大为当前全量保证，历史“待 B10/F1”不表示重启已完成迁移。
 
+当前设计同时记录本地未提交实现；新增目录选择、依赖安装和基础组件接入不自动纳入上述历史验收基线。产品行为见 [USAGE](../USAGE.md)，源码、静态检查和待验范围分别见 [PLAN](../PLAN.md) 与 testing。
+
 本文按 [模块模板](MODULE_TEMPLATE.md) 维护功能、运行时与界面的职责，开发前读取 [AGENTS](../AGENTS.md)、[人工规则](../rules/HUMAN.md)、[工程经验](../rules/ENGINEERING.md) 及 [编码规范](../rules/CODE_STYLE.md)。产品行为以 [USAGE](../USAGE.md) 为准。
 
 ## 1. 职责与范围
+
+### 通用远端依赖确认
+
+`features/remote-tools` 持有独立应用要求/offer、严格 Shared HTTP 转换、`useRemoteTools` 意图生命周期与复用 `RemoteToolInstallDialog`。真实消费者为 SendFilesModal 和 WorkspaceSessionSurface 的 archive 派发前路径；复用既有 UiModal/FormField/Input/Button，不重设计页面。密码仅在弹窗短期存在，确认、失效及关闭清除，不写 store/storage/logger；确认等待监听与 session/view AbortSignal 一同收尾。安装中禁用关闭和重复确认；只有真实安装回执关联原 target 且视图有效才能派发原操作，失败 Toast，未知不自动重试。未执行本地交互验收。
+
+### 服务器发送的目录选择
+
+1. **职责与范围**：目标目录仅浏览选择，不提供手动输入；Transfers 保留后台多目标直传和共同目标路径，选择器只读，不创建目录或代替发送时授权。
+2. **子功能与目录**：Filesystem 的 directory-browser API/model、选择器 composable/component 管独立文件资源；Transfers 的 server-transfer-directory 管上次选择的浏览器持久化，SendFilesModal 管参考目标及共同路径。
+3. **依赖方向**：Transfers 经 Filesystem public 使用选择器，Filesystem 不引用 Workspace 或 Transfers；正式同源 Remote Files HTTP 复用 client/http 和 Shared codec，不复用 DEV transport。
+4. **类型与转换**：Shared 拥有原 Remote Files wire，独立 DirectoryResource/DirectoryEntry 归 Filesystem model，API 严格解码并核对 targetId、白名单转换名称和路径。持久值按用户、连接 ID、创建时间及配置版本绑定，不存凭据；无效值忽略。
+5. **入口与安装**：原目标路径区域展示所选路径和选择按钮，多目标可选浏览服务器，路径明确共用于所有已选目标；选择器复用现有 overlay、按钮、加载及 Toast。
+6. **数据、事务与并发**：无后端持久化或发送字段变化；Shared 仅放开根目录作为目标（源项仍禁止根目录），Native Adapter 为根目标保留单个尾斜线，所选路径不 trim。每个选择器实例只持有一个独立 SFTP 资源，导航串行，stat 确认目录后展示目标，完整列表取得后才发布子目录；列表失败不伪报空目录，已确认的目录仍可选择；闲置一分钟后在下一次导航时先释放并重新开启资源，不新增轮询。继承 Remote Files 的 200 条/48 KiB 元数据和 4096-byte 路径预算，不截断伪报完整；本地记忆 best-effort，不构成远端存在或写入许可。
+7. **生命周期与失败**：关闭、切目标、隐藏或注销停止新导航、取消读取，等待原开启/读取任务后释放具体资源；开启回执丢失无法定位时依赖后端原空闲回收，不把取消当作释放确认；晚结果不更新界面或记忆。取消不改原选择；记忆目录不存在时提示并只读退回根目录，权限、主机信任和清理失败走安全 Toast，不自动信任或重放发送。
+8. **当前能力与验收**：实现及静态证据归 PLAN/testing；既有发送 E2E 同步目录选择、记忆和多目标真实传输。D17 下不执行本地行为测试，不将编译作为 SFTP/关闭收敛验收。
 
 ### 挂起目录安全移除
 
@@ -20,6 +37,25 @@
 Frontend展示产品状态并驱动用例，服务端事实不在浏览器重建为另一份权威。正式认证、Targets、Workspace/Files/传输/挂起/监控/Docker/桌面、个人设置、审计通知、备份诊断、外观及Agent管理／Host／运行界面源码均已消费Shared；前端源码没有旧Protocol依赖或新旧响应兼容层。源码适配与部署切换、静态与行为验收分别判断；D17 远程 Actions 已通过，D16 外部范围仍未验；精确基线见 E2E。
 
 ## 2. 子功能与目录
+
+### 基础组件与响应式呈现
+
+1. **职责与范围**：自研组件统一控件、主题、密度、反馈与叠层；业务状态、授权、CAS 和未知结果保护仍归 feature/runtime，不引入完整第三方管理 UI 框架替代现有设计。
+2. **子功能与目录**：`foundation/ui` 定义组件和 `uiTypes`，由 `index.ts` 精确导出；`app/styles/tokens.css` 持主题变量，`uiGen2.css` 和 `uiCatalog.css` 持共用样式，经 `global.css` 安装。功能专用布局保留在所属 feature/runtime。
+3. **依赖方向**：app/feature/runtime → foundation；组件不导入认证、业务 Store 或 Backend。全局通知由 `shared/feedback` 持有，基础内联提示不代替操作结果通知。
+4. **类型与转换**：密度 `compact/default/comfortable/touch`、色调 `neutral/primary/success/warning/danger`、外观 `solid/soft/ghost/glass` 与表面 `plain/raised/inset/glass` 唯一归 `uiTypes.ts`，只用于前端表现，不进入 Shared 业务协议。
+5. **入口与安装**：业务从 `@/foundation/ui` 使用组件；DEV 路由 `/__ui` 展示样例，正式构建不安装此路由。Monaco、CodeMirror、xterm、noVNC 和 IronRDP 保留各自编辑/终端/桌面能力及 Adapter。
+6. **数据、事务与并发**：基础组件接收 props、发出用户意图，不保存远端实体或自动提交；表单草稿、数字有效性、分页及选择关联由实际编辑 owner 核对。伸缩面板只改变布局，不因此重建会话。
+7. **生命周期与失败**：overlay/focus/resize 复用既有交互 owner；列表、加载与空态保留最后确认数据及真实状态。字段校验和必要说明使用内联提示；操作失败、冲突及网络失败使用全局 Toast，关闭不解除原写入围栏。
+8. **当前能力与验收**：下表列当前导出及实际接入范围；响应式按视口和 pane 可用空间共同处理，长文本可换行、局部滚动，紧凑控件保留触控热区和可访问名称。当前工作区的组件接入不代表所有页面、视口或交互均已验收，具体证据见 testing。
+
+| 能力       | 当前组件 / 消费者                                                                                                                                                              |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 输入与选择 | UiInput、UiTextarea、UiNumberInput、UiSearchInput、UiSelect、UiTokenInput、UiSegmentedControl、UiCheckbox、UiSwitch、UiSlider                                                  |
+| 布局与列表 | UiSurface、UiSettingsGroup、UiManagementCard、UiListToolbar、UiTable、UiPagination、UiScrollArea、UiResizeHandle                                                               |
+| 动作与表单 | UiButton、UiActionGroup、UiFormField、UiFormActions                                                                                                                            |
+| 叠层与状态 | UiDialog、UiModal、UiOverlayPanel、UiPopover、UiContextMenu/Item、UiTooltip、UiInfoHint、UiConfirmationPanel、UiBadge、UiEmptyState、UiLoadingState、UiSpinner、UiInlineNotice |
+| 编辑器查找 | FileEditorSearchBar 持统一输入和导航表现，FileEditor 协调当前文档，Monaco/CodeMirror Adapter 提供匹配与定位；预览保留独立 PreviewSearchBar                                     |
 
 | 位置                         | 职责                                                |
 | ---------------------------- | --------------------------------------------------- |
@@ -42,6 +78,8 @@ Host Key管理归features/connections：model/host-key-types拥有独立Summary/
 Connections的应用Summary/Draft/Controller/回执归model/connection-types，wire转换归connection-mapper；connections-api严格消费Shared并核对ID、原版本+1、导入回执数量/唯一ID，connection-test-api独立消费Remote测试安全状态。Store唯一拥有会话/revision围栏与服务端连接列表投影，lastConnectedAt直接消费服务端毫秒/null，不保留本地最近记录或markConnected写入，use-connection-editor持编辑快照/安全凭据版本和独立保存，use-connection-management持批量/确认/测试/导出，connection-script是无副作用解析。创建复用单项import事务，不拼接两次写入；import可创建的Tags/Proxy/Key通过已有公开能力刷新目录，读取失败不改变原提交类别。跨功能只消费Connections public的应用类型和窄Store能力，不公开裸transport。批量编辑器延续旧版端口／身份／高级分区卡片，高级组默认折叠；配置与凭据模式仍按新接口各自提交，UI 折叠不改变各连接原版本与串行失败语义。
 
 Workspace复制/移动/归档的完整传输职责归 runtimes/workspace/adapters/transfer-adapters；capabilityAdapters只装配上传及该适配器。各任务只保留路径、原附件能力、进度、确认状态与期限，不缓存归档密码。应用请求/任务/失败仍唯一归 features/transfers/model/transfer-types，复用失败统一为TransferFailure；独立服务器HTTP任务归server-transfers-api、server-transfer-types/mapper及serverTransfers.store：Shared wire严格解码后转独立应用对象，不借用Workspace任务授权。
+
+后台服务器传输的按需刷新仍由 `serverTransfers.store` 单独持有：工作区激活只读列表一次，只有 queued/in-progress/cancelling 安排下一次单次 timer，完整读取结算后才重新计时；空列表或只有终态不创建 timer。发送成功接入同一调度，提交未知仅做一次只读核对并保留原写入围栏。停用/注销撤销调度，旧 epoch 的结算不能重启；generation 继续保护读取与写入竞争。既有进度 UI、Shared 类型和严格 mapper 不变，当前不提供空闲页面跨设备任务变化推送；独立用户级 WS 需要另行设计授权、快照与断线恢复，不能借用 Workspace 附件权限。
 
 正式Agent的Registry消费归`api/registry-api`与`api/management-request`；后者复用`client/http/json-client`，只持有Agent安全失败与协议预算，不持有认证状态。`model/registry-types`拥有独立应用对象，`registry-mapper`逐字段投影并将秒转为毫秒；状态卡片`settings/ModelRegistrySettings`独立安装在设置页，不依赖旧聚合settings加载成功。Provider编辑器的模型建议也经此入口；旧Registry Envelope/CSRF和Provider管理写接口已删除，不新增新协议到旧响应的兼容包装。Host/SDK已消费当前Shared Provider/模型目录，行为单列验收。
 
@@ -90,9 +128,9 @@ descriptor声明的消息容量与真实前端RPC预算同源；父桥在请求�
 
 通用操作结果由 Feedback 的 useFeedbackMessage 从业务 owner 状态投影到全局 NotificationHost；已识别的网络 cause 不再发布第二份业务错误，原 unknown/refreshRequired 状态保留。通知可携带有稳定范围 key 的具名只读 action，同文案但恢复范围不同的通知不互相替换 action；按钮禁用仍依赖原 owner；关闭通知不改变原状态。useSettingsReloadNotifications 将待核对源聚合为带“重新读取”的常驻 Toast，根卸载后不发布晚结果；各源继续持有原版本及恢复方法，离开后取消注册，不自动重放写入。字段校验、安全确认及实际业务状态不迁移为通用结果 Toast。
 
-Workspace连接事实仍唯一归RuntimeSession.state；LayoutRenderer与SessionSurface将connected/connecting投影给内嵌/浮窗FileManager，LayoutRenderer及SessionSurface→MobileTools同样传入StatusMonitor，connected为组件必填输入。连接中仅渲染紧凑加载行，idle/error/disconnected面板内容留白、不发布旧目录/指标，Files操作scope暂停并撤销旧意图。RuntimeSession在建连失败后保留原因并停止自动派发，foreground自动恢复不越过waitingForRetry；显式重试仍重新核对主机信任与所有权。TerminalView只消费原失败文字，剥离控制字符、限制1000字符后红色输出，与任意键重试提示间空一行；禁用输入时重试键不走远端输入。所有权未知继续原恢复UI，不显示可任意键重试。已连接后的真实文件及采样错误保留原安全映射。中英日文案由各feature持有，无Shared/HTTP变更。
+Workspace连接事实仍唯一归RuntimeSession.state；LayoutRenderer与SessionSurface将connected/connecting投影给内嵌/浮窗FileManager，LayoutRenderer及SessionSurface→MobileTools同样传入StatusMonitor，connected为组件必填输入。Files 连接中显示紧凑加载行，StatusMonitor 连接中或首轮采样显示标题和五张骨架卡；idle/error/disconnected面板内容留白、不发布旧目录/指标，Files操作scope暂停并撤销旧意图。RuntimeSession在建连失败后保留原因并停止自动派发，foreground自动恢复不越过waitingForRetry；显式重试仍重新核对主机信任与所有权。TerminalView只消费原失败文字，剥离控制字符、限制1000字符后红色输出，与任意键重试提示间空一行；禁用输入时重试键不走远端输入。所有权未知继续原恢复UI，不显示可任意键重试。已连接后的真实文件及采样错误保留原安全映射。中英日文案由各feature持有，无Shared/HTTP变更。
 
-HTTP network-failure持有单一应用安装回调和具名cause分类，JSON/binary/Axios transport仅报告非主动取消的传输失败；App/main通过Feedback安装统一网络Toast，不让client依赖feature或UI。Feedback对当前可见的同类同文案去重，并对错误保留15秒短期去重窗口，错误默认常驻、成功/信息/警告仍3秒；关闭通知不解除原业务围栏；去重窗口过后，后续失败可再次提示。Agent目录取消自绘浮层、共享操作反馈及连接/偏好/外观的已识别网络失败不重复提示；写入unknown/refreshRequired与原cause/outcome保留，业务拒绝仍使用原安全反馈。NotificationHost使用按内容收缩、最大340px的仪表盘卡片材质，关闭按钮保留44px点按区且窄屏不溢出，不自动重试任何写入，不把网络恢复当作原操作成功。
+HTTP network-failure持有单一应用安装回调和具名cause分类，JSON/binary/Axios transport仅报告非主动取消的传输失败；App/main通过Feedback安装统一网络Toast，不让client依赖feature或UI。Feedback对当前可见的同类同文案去重，并对错误保留15秒短期去重窗口，错误默认常驻、成功/信息/警告仍3秒；关闭通知不解除原业务围栏；去重窗口过后，后续失败可再次提示。Agent目录取消自绘浮层、共享操作反馈及连接/偏好/外观的已识别网络失败不重复提示；写入unknown/refreshRequired与原cause/outcome保留，业务拒绝仍使用原安全反馈。NotificationHost 使用同侧等宽的主题卡片，桌面 288px、手机左右各留 20px，标题/右上关闭、正文、底部确认行纵向排列，无左侧状态图标；无业务动作时“知道了”关闭，业务恢复动作不自动关闭。关闭按钮保留向外扩展的透明点按区且窄屏不溢出，不自动重试任何写入，不把网络恢复当作原操作成功。
 
 app 装配 feature/runtime；feature 通过窄公开能力消费 runtime 和 foundation。跨功能通过公开入口/明确能力，不深层引用私有组件、Store 或实现。foundation 不反向依赖业务。新 Shared 契约按 [SHARED](SHARED.md) 消费，不在前端手写同义 DTO。
 
@@ -228,13 +266,13 @@ F1-A/B源码已覆盖正式setup/password/status/logout、TOTP/Passkey登录、�
 
 commands/history/favorites 已接正式 API、Store 和 Workspace 实际消费者，边界及恢复见下方“Workspace 个人目录契约”。命令和路径仍由前端通过 HTTP 记录，不新增后端 Workspace 自动记录。presentation现已将旧混合 settings 写入拆成核心 policy 与个人完整 preferences，布局/焦点/侧栏共享用户版本，写入带 CAS，未保存 version=0；transport 从 unknown 解码，controller 逐字段转 UI 状态，核对真实显示生效。个人目录、核心配置和presentation分别持有自己的版本及转换，行为证据也分别记录。
 
-## B8 后续消费范围（后端部分源码接线，前端未施工）
+## 外围能力的正式消费者
 
 正式备份与宿主诊断已消费Shared和新Access，会话、全局恢复围栏及当前验收见下方“System 备份、恢复与宿主诊断”。生产切换单独授权。
 
 外观、终端主题、背景及HTML库已破坏性迁到Shared，正式App/Workspace/设置面板消费唯一Appearance Store；原版本、预览及当前验收见下方“外观、终端主题与HTML库迁移设计”。库改名作为另存副本，原条目独立删除。
 
-Agent 后续须分别消费 integrations 的 MCP/ACP 管理、Browser target 设置与任务状态，以及 plugins 的安装/可信发布者/catalog、SDK/RPC、跨 App intents 和有限 Artifact 读取。静态可读不等于 App/RPC 获授权，发现工具不等于可执行。SDK 的版本/操作身份、iframe 及订阅归属也属于迁移范围，不能只替换 plugin-api 的 DTO import。
+正式 Agent 已消费 integrations 的 MCP/ACP 管理、Browser target 设置与任务状态，以及 plugins 的仓库安装、可信发布者、SDK/RPC、跨 App intents 和有限 Artifact 读取。市场只提供仓库下载，不提供本地插件包上传；默认官方来源与第三方仓库共用同一验签及确认安装链。App/RPC 的权限、SDK 版本与操作身份、iframe 和订阅生命周期仍分别由实际 owner 核对，目录可读或工具发现不等于执行授权。
 
 Backup API已消费system/backups完整输入/回执/错误，二进制和multipart独立预算；全局恢复结果与明确重载归Backup Store和App装配，见下方当前设计。
 
@@ -411,9 +449,9 @@ Shared 唯一定义 channel/event/status、完整 wire 请求/响应和容量。
 
 ## System 备份、恢复与宿主诊断
 
-正式 `BackupSettingsPanel` 的原生导入 file input 自己承担可见的主题边框、圆角、裁剪和键盘焦点，不能只依赖不可见的外层控件。测试直接验证 native input 的 computed styles；不改变导入协议、认证与 global restore fence。
-
 宿主诊断通过现有管理员 API 严格读取 prom-client（官方后继包 `@prometheus-io/client`） 汇总的进程与模块资源。Shared 有限模块/指标/单位/状态经 diagnostic-mapper 白名单转本地对象；HostDiagnosticsPanel 保留原六项概览与布局，新增内部折叠的进程指标和各模块响应式资源卡片，不新增计时器或调试控制。只计数的模块明确标注内存未计量，失败/未接入不补零；不合计不同资源字节或从 RSS 反推模块占用。进程概览的堆/外部内存/ArrayBuffer/GC 限主线程，数据库组独立展示主库 Worker 的堆/外部内存/ArrayBuffer 与排队及执行操作；通过原有限指标列表渲染，不增加 UI 控件。各线程 ArrayBuffer 包含于对应 external、Worker 不含 SQLite 原生页缓存、GC 按诊断实例累计等口径在三语文案明确。后台一秒成功缓存不替代页面 scope/身份撤销，隐藏及身份失效仍丢弃晚结果并走原 Toast。
+
+正式 `BackupSettingsPanel` 的原生导入 file input 自己承担可见的主题边框、圆角、裁剪和键盘焦点，不能只依赖不可见的外层控件。测试直接验证 native input 的 computed styles；不改变导入协议、认证与 global restore fence。
 
 ### 1. 职责与范围
 

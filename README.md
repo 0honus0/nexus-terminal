@@ -30,7 +30,9 @@ Agent 的 File/Shell/ACP 工具通过明确授权的 SSH 连接执行，Browser 
 
 ## 功能
 
-浏览器中的 SSH / SFTP / RDP / VNC 远程连接工具，支持终端、文件管理、在线编辑、远程桌面、安全认证、移动端和界面定制。
+浏览器中的 SSH / SFTP / RDP / VNC 远程连接工具，支持终端挂起与跨设备目录同步、文件管理与在线编辑、跨服务器传输、经确认的远端依赖安装、Agent 与插件市场、安全认证、模块资源诊断、移动端和界面定制。RDP / VNC 使用浏览器 SDK 与后端认证桥，无需 guacd；远端依赖安装仅在用户确认后执行。
+
+本文功能概览对应当前源码，已发布与已验证范围见 [使用说明](./doc/USAGE.md) 和 [验证记录](./doc/testing/E2E.md)。
 
 ## 功能截图
 
@@ -67,12 +69,13 @@ Agent 的 File/Shell/ACP 工具通过明确授权的 SSH 连接执行，Browser 
 ## 工程文档
 
 - [实际软件需求与使用](./doc/USAGE.md)
-- [开发规则与 Agent 架构](./doc/AGENTS.md)
+- [开发入口与规则](./doc/AGENTS.md)
 - [Frontend 架构](./doc/architecture/FRONTEND.md)
 - [Backend 架构](./doc/architecture/BACKEND.md)
-- [部署、包管理与构建边界](./doc/DEPLOYMENT.md#包管理与构建边界)
-- [Agent 架构](./doc/AGENTS.md)
-- [远程桌面网关架构](./doc/architecture/REMOTE_DESKTOP.md)
+- [构建与开发](./doc/DEPLOYMENT.md#构建与开发)
+- [Shared 契约设计](./doc/architecture/SHARED.md)
+- [当前实施计划](./doc/PLAN.md)
+- [浏览器远程桌面架构](./doc/architecture/REMOTE_DESKTOP.md)
 - [E2E 测试与诊断](./doc/testing/E2E.md)
 
 ## License

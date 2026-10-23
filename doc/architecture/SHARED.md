@@ -2,6 +2,8 @@
 
 当前验收基线：后端重构、正式前端 Shared 适配及远程八组回归已收口，具体 SHA、覆盖与仍未验证的外部/扩大故障范围统一见 [E2E](../testing/E2E.md#当前验收基线)，后续任务见 [PLAN](../PLAN.md)。下文 B/F 阶段名仅定位设计来源；原阶段的静态或有限行为证据不扩大为当前全量保证，历史“待 B10/F1”不表示重启已完成迁移。
 
+当前设计同时记录本地未提交实现；新增目录选择、依赖安装和基础组件接入不自动纳入上述历史验收基线。产品行为见 [USAGE](../USAGE.md)，源码、静态检查和待验范围分别见 [PLAN](../PLAN.md) 与 testing。
+
 本文按 [模块模板](MODULE_TEMPLATE.md) 定义双端契约职责。人工约束见 [HUMAN](../rules/HUMAN.md)，开发入口见 [AGENTS](../AGENTS.md)。
 
 ## 1. 职责与范围
@@ -17,6 +19,10 @@ B4.1 Access 的双端范围是管理员初始化、密码登录、明确的认�
 B7.1 核心设置的 GET/PUT、CAPTCHA 专项 PUT、安全视图、secret keep/clear/replace、CAS 与 saved/effective 激活状态归 Shared preferences/configuration；公开 CAPTCHA 读取复用 Access 契约。后端生产者及正式CAPTCHA/IP/采样配置面板的Preferences transport/mapper已消费；Dashboard消费启动生效监控投影。公开CAPTCHA读取不替代管理快照，其他Preferences正式消费者已接Shared，本轮完整行为仍待远程回归。
 
 ## 2. 子功能与目录
+
+### 远端依赖契约
+
+`remote/tools/{values,model,http,http-codec}` 精确导出有限工具/包管理器/提权/安全失败、检测与安装对象和严格 unknown 解码。检查以 tools 或 transfer 联合表达；transfer 由后端根据真实对端凭据决定 sshpass。安装只接短期 planId 与可选单行密码，不接 shell/任意包名。完整请求 64 KiB、响应 16 KiB、密码 8192 UTF-8 bytes，包含 JSON 最坏转义余量；计划 ID、目标及缺失工具关联由 codec/客户端分别核对。内部指纹、会话摘要、机器句柄和计划 registry 不公开。remote/mutations 的来源增加 tools，实际后端围栏和前端恢复面板共同消费。
 
 `agent/tools/{values,model,http,http-codec}.ts` 持有有限状态、安全 Tool 审计对象（含modelStepIndex）、单项路径、事件分页和严格 unknown 解码，提供精确包出口。实际消费者为新后端 HTTP/public 和应用/存储基础值；正式前端native-audit-api及实际界面已消费。参数、结果正文、providerCallId、私密摘要及持久预算留 Backend runs。事件游标使用状态 revision，不使用 operationRevision；默认 50、最多 100 项，完整 JSON 响应最多 128 KiB。codec 校验目标 ID/version 成对、修订/时间关系及同工具事件顺序；持有请求上下文的消费者还须核对 App/Run/Tool、after/limit 和空页游标。
 
@@ -133,7 +139,7 @@ B3.2 真实消费者为新后端 Workspace status/Docker 和 system 三条 HTTP�
 
 Agent 六个状态 HTTP 已接入 Shared 的请求、路径、幂等 header、分页 query、成功联合及安全错误；后端 public 只保留可信身份输入、能力和后端结果语义。正式features/agent/api和DEV next均消费Shared codec与容量；正式Host还消费Scope原生工作区。行为验收单列，不以源码接入等同通过。
 
-步骤状态/事件/stop与tool_calls基础取值、400步审计容量及累计正文容量（2 MiB）唯一归 Run 子域 values.ts，Shared codec、Backend应用和存储均消费它；Platform仍保有独立技术上限。B5.2 只读模型步骤审计新增 Run 子域现有 `model.ts/http.ts/http-codec.ts` 中的 `AgentRunStepView`、`AgentRunStepEventView`、严格 stepIndex 1–400 路径和事件分页；仅暴露状态、序号、用量、UTF-8 文本字节数、安全失败分类，**不导出 `textDelta` 或冻结模型/凭据**。Backend-next Service/Model/Storage 保留独立类型，经注册和 HTTP 逐字段白名单投影。隔离开发页 API/Controller 是实际 Shared 解码消费者，正式 F1 仍未迁；100 条每页的小型元数据响应须服从现有 32 KiB 完整 JSON 预算，正文/流式输出需要另定可审核协议，不能把这个审计响应上限擅自提高。
+步骤状态/事件/stop与tool_calls基础取值、400步审计容量及累计正文容量（2 MiB）唯一归 Run 子域 values.ts，Shared codec、Backend应用和存储均消费它；Platform仍保有独立技术上限。B5.2 只读模型步骤审计新增 Run 子域现有 `model.ts/http.ts/http-codec.ts` 中的 `AgentRunStepView`、`AgentRunStepEventView`、严格 stepIndex 1–400 路径和事件分页；仅暴露状态、序号、用量、UTF-8 文本字节数、安全失败分类，**不导出 `textDelta` 或冻结模型/凭据**。Backend Service/Model/Storage 保留独立类型，经注册和 HTTP 逐字段白名单投影。正式 native-audit-api/mapper 与只读审计界面以及隔离 DEV Controller 均已消费步骤/事件契约；100 条每页的小型元数据响应须服从现有 32 KiB 完整 JSON 预算，正文/流式输出需要另定可审核协议，不能把这个审计响应上限擅自提高。
 
 Agent Provider 列表新增纯 `readAgentProviderListResponse`，基于既有 ProviderView 严格 decoder 检查完整 8 MiB 上限及唯一 Provider ID；隔离 `agent/next` 使用它读取 `GET /ai/providers` 的配置候选，最终 Run 创建仍由原 `runs/http-codec` 验证非可选 `model` 三字段及 128 KiB 请求预算。Shared 不代替 Provider 当前版本、观察冲突和 Run 同事务冻结决策；正式 F1 尚未切换。
 
@@ -185,19 +191,19 @@ transfers HTTP/WS 请求及任务事件已由新后端消费；基础格式、�
 
 核对范围从所有实际功能和端点开始，不仅扫描 Shared 现有目录。每个切片证明 values/model/http/events 的适用归属、实际消费者、编解码和边界投影完整；没有事件协议不预建 events。
 
-Shared check/build、Backend-next check/build、适用消费者编译及对应格式检查通过后才收口源码阶段，真实行为仍独立验收。Remote Files B1 的历史隔离 fixture 仅证明其记录基线，不覆盖 R1 对旧 WS、编码、批量/递归、技术失败边界的修改；R1 按阶段决定不运行行为测试，真实 SSH/SFTP、旧 Workspace Files 全链路与浏览器行为统一留 B10/F1。Agent 实际消费者与具体收口见 [实施方案](../PLAN.md)。
+Shared check/build、Backend check/build、适用消费者编译及对应格式检查通过后才收口源码阶段，真实行为仍独立验收。Remote Files B1 的历史隔离 fixture 仅证明其记录基线，不覆盖 R1 对旧 WS、编码、批量/递归、技术失败边界的修改；R1 按阶段决定不运行行为测试，真实 SSH/SFTP、旧 Workspace Files 全链路与浏览器行为统一留 B10/F1。Agent 实际消费者与具体收口见 [实施方案](../PLAN.md)。
 
 传输 codec 不使用对象断言、String 强制转换或数组断言通过验证；字符串按 UTF-8 字节检查，有限值严格匹配，数组逐项与可选字段显式投影。upload 单帧 1 MiB、路径 4096 bytes、task ID 512 bytes、单批 prepare 20k 目录、copy/archive 64 sources 归 values；服务端资源名额/缓存和每 Workspace 总配额仍私有。
 
 Suspend 的 snapshot 原文 4 MiB、最坏转义及完整 JSON 预算 24 MiB + 16 KiB、history 页 256 KiB 与 name 长度归 `remote/suspend/values.ts`；完整 wire 上限由真实 WS 路由 opt-in，并受 Platform 技术上限容纳。普通控制消息仍消费 Workspace 的 1 MiB，不因 snapshot 扩大所有用例范围。
 
-### B6.1 Agent 治理协议（静态源码，正式双端未迁移）
+### Agent 治理协议与正式双端消费者
 
 `shared/src/agent/governance/{values,model,http,http-codec}.ts` 与 `packages/shared/package.json` exports 统一定义 capability 与 ssh-target grant 的有限取值、policy revision、执行策略覆盖、审批 `requested/approved/denied/expired/superseded`、严格请求及响应解码；不为尚无生产者的工具事件增设虚构 WS 类型。HTTP identity/userId 由 Access session 产生，Shared 中的 `AgentApprovalResolveRequest` 或 Grant JSON **不是**后端批准/持有的授权事实。
 
-完整 API 成功响应的 `AgentGrantView`、`AgentExecutionPolicyView`、`AgentApprovalView` 和审批列表有对应解码函数；`http.ts` 定义具名 App/Run/审批 path、resolve header 及响应；路径 App/Run/审批 ID 采用 UUID，版本原始数值、有限枚举原始字符串及所有字段白名单严格核对，未知/空缺/错型及状态与决议/消费字段矛盾拒绝；消费时间须不早于决议且严格早于截止，持久 decoder 使用相同时间关系。toolName/toolVersion 分别最多 256 UTF-8 bytes、summary 2048、feedback 2000，均引用 values 唯一常量。目标 ID 上限 256/项、单 ID 128 UTF-8 bytes，普通 JSON 16 KiB、grants 写入 JSON 512 KiB、完整治理响应 JSON 8 MiB（均计序列化及转义）；成功和安全错误走实际后端 HTTP mapper。存储态、Trusted AuthorizationFact、SQLite 事务和实际 Approval waiter 不属于 Shared。新后端当前只生成这些 HTTP 响应；**正式前端仍由 F1 迁移**，不能因存在 codec 就声称双端已经通过验证。
+完整 API 成功响应的 `AgentGrantView`、`AgentExecutionPolicyView`、`AgentApprovalView` 和审批列表有对应解码函数；`http.ts` 定义具名 App/Run/审批 path、resolve header 及响应；路径 App/Run/审批 ID 采用 UUID，版本原始数值、有限枚举原始字符串及所有字段白名单严格核对，未知/空缺/错型及状态与决议/消费字段矛盾拒绝；消费时间须不早于决议且严格早于截止，持久 decoder 使用相同时间关系。toolName/toolVersion 分别最多 256 UTF-8 bytes、summary 2048、feedback 2000，均引用 values 唯一常量。目标 ID 上限 256/项、单 ID 128 UTF-8 bytes，普通 JSON 16 KiB、grants 写入 JSON 512 KiB、完整治理响应 JSON 8 MiB（均计序列化及转义）；成功和安全错误走实际后端 HTTP mapper。存储态、Trusted AuthorizationFact、SQLite 事务和实际 Approval waiter 不属于 Shared。后端治理 HTTP 为生产者，正式前端 AppGovernanceEditor、原生审批与审计通过各自 API/mapper 消费；SDK/RPC 使用相应严格边界，不借用后端授权事实。源码已接通不等于全部治理故障组合通过行为验收，当前范围见 testing。
 
-Agent file_inspect/patch/move/delete 的模型私有命令、树节点及内容指纹只有后端消费者，分别归 tools/model、Remote machines/model 与 files/model；不为其建立无人消费的 Shared DTO。已有治理基础值与公开审批/审计仍由 Shared 唯一持有，F1 消费公开对象而不借用后端计划。
+Agent file_inspect/patch/move/delete 的模型私有命令、树节点及内容指纹只有后端消费者，分别归 tools/model、Remote machines/model 与 files/model；不为其建立无人消费的 Shared DTO。已有治理基础值与公开审批/审计仍由 Shared 唯一持有，正式前端消费公开对象而不借用后端计划。
 
 ### B6.2D 协作契约边界
 
@@ -296,7 +302,7 @@ Connections的TargetCredentialView/readCredentialView持有connectionId/version�
 
 ### 独立后台服务器传输
 
-remote/transfers/server-values唯一持有auto/rsync/scp、父/子有限状态、安全失败及完整编码容量；server-model/http定义安全任务、输入、分页和取消受理，server-codec严格解码并核对源名称/路径/嵌套、目标集合、完整父子对应、进度/状态/时间及游标。最多64目标、256源、乘积1024；完整输入128KiB、单任务1MiB、每页8项。时间为Unix毫秒，queued受理与终态分开，unknown有独立状态；取消accepted不表达远端停止。Backend真实五HTTP与Frontend正式transport均消费精确包出口。Service私有并发、任务历史、会话digest、pin、公钥、凭据及持久claim不进入Shared；双端对象在各自边界显式转换，不能直接当应用状态。
+remote/transfers/server-values唯一持有auto/rsync/scp、父/子有限状态、安全失败及完整编码容量；server-model/http定义安全任务、输入、分页和取消受理，server-codec严格解码并核对源名称/路径/嵌套、目标集合、完整父子对应、进度/状态/时间及游标。源项禁止根目录，目标目录允许根目录；目录选择保留路径空白，不通过 trim 改写真实名称。最多64目标、256源、乘积1024；完整输入128KiB、单任务1MiB、每页8项。时间为Unix毫秒，queued受理与终态分开，unknown有独立状态；取消accepted不表达远端停止。Backend真实五HTTP与Frontend正式transport均消费精确包出口。Service私有并发、任务历史、会话digest、pin、公钥、凭据及持久claim不进入Shared；双端对象在各自边界显式转换，不能直接当应用状态。
 
 ### 挂起管理 HTTP
 

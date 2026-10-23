@@ -1,5 +1,35 @@
 # Nexus Terminal E2E
 
+## 本地文档与当前源码核对（2026-10-23）
+
+本轮仅刷新文档，基线为 `dev` / `829b8434ebe8fe15e25cbc99198b7279bba2a459` 加本地未提交工作区。核对范围包括自研基础组件及 DEV 展示路由、全局 Toast、编辑器统一查找与底部工具栏、服务器发送目录选择及按需轮询、远端依赖安装、治理正式消费者、诊断和部署数据目录。保留此前各轮证据，不以旧八组通过覆盖最新未提交实现。
+
+参考 `Heavrnl/nexus-terminal@c1bf8006aa2666268f0f45f525556c72d3e8961a` 的中文系统内存问题做了源码排查：Remote register 实际安装 PosixServerStatusCollector，读取 /proc/meminfo 与 /proc/loadavg 并导出 LC_ALL=C；本机使用 Node Adapter。未发现依赖 free/uptime 本地化标签的同类路径。当前 MiB 四舍五入与 free -m 截断有小数口径差异，不属于内存缺测。此结论是源码审核，不是 Debian/BusyBox 实机复现或行为通过证据。
+
+本轮验证仅限文档格式、相对链接/源码引用及 diff；不运行行为、浏览器、E2E、真实远端安装或重启，不改变 D17 与既有未验范围。根类型检查和构建未重跑，不复用上一轮静态 PASS 作为本轮证据。
+
+目标九份文档的 `pnpm exec prettier --check` 通过；静态核对 99 个相对文件链接、39 个本地 Markdown 锚点和 11 个源码路径，修正 README 原先指向已不存在部署标题的链接，全部可定位。`git diff --check` 通过。以上只证明文档格式及引用有效，不证明产品行为通过。
+
+## 通用远端依赖安装（2026-10-23）
+
+基线 `dev` / `829b8434ebe8fe15e25cbc99198b7279bba2a459` 加当前未提交工作区；Node `v22.23.1`、pnpm `11.26.0`。新增 Remote tools check/install、固定六类包管理器、sudo stdin 认证与原持久机器突变围栏；真实前端消费者为 SendFilesModal 和 WorkspaceSessionSurface 的归档派发前检查，不增加配置页面或修改既有 UI 设计。
+
+完成两轮源码复审，覆盖 Shared 严格联合/容量/请求关联、显式凭据表示转换、会话摘要与目标指纹绑定、单次计划消费与过期、多计划共存、前置探测及原生任务继续自检、auto 的双端 scp 回退、ZIP/GNU tar/coreutils 及压缩器依赖、无权限/主机不受信任/认证失败/软件源失败、未知派发及清理保留、退出/关闭/停机追踪、前端秘密与监听收尾及不自动重放文件操作。复审发现并修正：auto 不能强制安装可回退的 rsync；BusyBox 同名命令不能冒充 GNU 能力；不同确认不能相互作废计划；严格期限须在真正派发前检查；缺失/超限的安装回执不能报认证拒绝或成功。源码范围与四表见 PLAN。
+
+最终 `pnpm run check`、双端 `pnpm run build` 通过，日志 `/tmp/nexus-tools-{check,build}-final.log`；目标 Prettier 与 diff 检查通过，日志 `/tmp/nexus-tools-target-format.log`。生成命令只捕获并交给 `/bin/sh -n`，六包管理器 × root/免密 sudo/密码 sudo 及其探测共 37 份脚本语法通过，日志 `/tmp/nexus-tools-shell-syntax.log`；没有连接 SSH、执行 sudo、调用包管理器或安装软件。这只是脚本语法证据，不是权限、安装或功能行为回归。首次检查曾遇到 Shared dist 未重建及真实凭据取值不匹配，均在修复并重建后重新检查，不复用原失败结果。
+
+按 D17 未新增或执行本地行为/浏览器/E2E；远程待验：工具齐全不安装、取消不派发文件操作、root/免密/正确及错误 sudo 密码、无 sudo/不支持包管理器、软件源失败/包锁/工具仍缺失、六类发行版、三格式归档、源/目标缺失与 auto 回退、多个视图/登录和目标配置变化、安装中失联或取消、真实退出与清理失败、重复/过期计划、unknown 跨重启及人工恢复。现有服务器传输和归档 E2E 仍由正式消费者走新预检，未删断言或用假安装放行。
+
+仅新增 tools 来源而复用原持久 claim 表，按 D14 同步唯一 v1 签名，旧开发数据库不兼容；本轮没有删除旧库、重启后端、提交推送或真实安装。构建保留既有大 chunk 警告；最终全量格式的 ESLint 通过，Prettier 仅报告并行 `ProgressDisplayModal.vue`、`WorkspaceLayoutRenderer.vue`、`WorkspaceSessionSurface.vue` 三个文件，日志 `/tmp/nexus-tools-format-all-final.log`。不整理其原有样式；目标格式命令排除整个 WorkspaceSessionSurface，仅格式化本次新增的接入片段，其余任务文件及所有新模块文件完整通过。
+
+## 服务器发送目录选择（2026-10-23）
+
+保留原后台多目标 rsync/scp；目标路径只通过真实 Remote Files HTTP 独立 SFTP 资源选择，不再手填。Filesystem 拥有 API 白名单转换、目录/链接检查、导航串行和关闭排空；Transfers 只持参考目标、共同路径及按用户/连接创建身份/配置版本绑定的浏览器记忆。根目录仅放开为目标，源根目录仍拒绝；路径尾部空格保持原值。选择器取消不改原路径，旧路径不存在提示并只读退回根目录，超限/权限/不受信任主机走 Toast，不绕过 Host Key 校验。闲置后下次导航重开资源，无轮询；开启回执丢失无法定位资源时依赖后端原独立资源空闲回收，不把取消视为释放确认。
+
+既有 Progress Display 的真实服务器发送场景同步：预建现有目标目录，使用合法的上次浏览目录作为夹具起点，实际浏览子目录确认，取消/重选时核对记忆，继续验证多目标部分成功、rsync 方法、原源文件及目标文件内容；不改为 mock 传输、不移除断言。既有 server-transfers 集成脚本同步目标根目录及空白路径保持的协议断言。D17 未运行本地行为/浏览器/E2E；远程还需核对隐藏/注销/切目标时晚开启和释放失败、空目录/链接、记忆目录删除、列表失败但目录本身已确认时仍可选择、缓存隔离与窄屏键盘交互。
+
+本轮根 check、双端 build、目标 Prettier、改动 E2E 类型、既有 server-transfers 集成脚本语法及 diff 检查通过，日志 /tmp/nexus-directory-picker-{check,build,target-format,e2e-types}.log。E2E 类型通过临时独立编译配置检查，没有修改项目 tsconfig 或收集/运行测试；初始无 E2E tsconfig 的命令仅显示帮助，继承前端 noUncheckedIndexedAccess 也曾触发 Shared 既有源码告警，均不记为通过，随后按独立 E2E 检查口径调整。各包原类型门禁仍完整通过。全量格式仅报告并行 BackupSettingsPanel.vue、FileManager.vue、ProgressDisplayModal.vue、WorkspaceLayoutRenderer.vue、WorkspaceSessionSurface.vue，未替其整理；日志 /tmp/nexus-directory-picker-format.log。构建保留既有大 chunk 警告，不自行重启、提交、推送或部署。
+
 ## 通用模块资源诊断（2026-10-23）
 
 接入 prom-client 的官方后继包 `@prometheus-io/client@0.16.1`（原 npm 包已标记迁移），仅在 Platform Adapter 内使用私有 Registry、Gauge 与 Histogram。主线程 GC 由可显式断开的 PerformanceObserver 记录，不直接安装缺少本地 owner 退订入口的默认采集器，不添加公共抓取/调试端口、强制 GC、堆快照或常驻堆采样。七个业务模块统一观察在途 HTTP；Remote 额外采集普通工作区、挂起/断开、四类逻辑缓冲字节、传输及状态订阅，Agent 采集执行/写入/请求，Storage 采集已派发 SQLite 请求、已接纳的排队及执行操作和主库 Worker 的独立堆/外部内存/ArrayBuffer，System 采集诊断请求。只计数的模块明确未计量内存，不以零冒充缺测，不合计可能共享底层数据的字节或从 RSS 反推占用。
@@ -14,11 +44,83 @@
 
 续补静态：根 check、双端 build 通过，日志 /tmp/nexus-memory-continuation-{check,build}.log；目标 Prettier、既有脚本语法和 diff 检查通过。完整格式仍仅报告并行 BackupSettingsPanel.vue，日志 /tmp/nexus-memory-continuation-format.log；不修改该文件。实际 Worker 忙碌、故障、关闭/维护及缓冲变化仍待远程，不将本轮静态结果当行为通过。
 
+## 文件管理器工具紧凑宽度（2026-10-23，本地 CDP）
+
+使用 `https://api.honus.top/workspace`、真实 `amd` 连接及 `1920×953` 视口核对文件管理器工具区：控制宽度由 `30px` 收窄为 `28px` 后，`1×8` 吸附宽度由约 `280.6px` 降至 `265.7px`，工具仍稳定为单行 8 枚，按钮组左右留白各 `5px`，工具栏和面板均无横向溢出。证据：`.tmp/fm-embedded-1x8-cdp.png`。目标 Prettier、Frontend build 与 `git diff --check` 通过；根 `pnpm run check` 的 Backend type check 被并行修改的 `platform/storage/sqlite/adapters/worker.ts` 类型错误阻断，未修改该无关文件。
+
+## 挂起会话面板左缘对齐（2026-10-23，本地 CDP）
+
+使用 `https://api.honus.top/workspace`、真实 `amd` 及以上终端首页挂起目录核对：调整前标题图标左缘为 `1225px`，搜索框与卡片左缘均为 `1238px`；移除内容左缩进并改为只在右侧保留稳定滚动条槽后，三者左缘统一为 `1225px`，搜索框和卡片右缘统一为 `1503px`。证据：`.tmp/suspended-alignment-after.png`。
+
+## 命令栏输入标识与最小宽度（2026-10-23，本地 CDP）
+
+使用 `https://api.honus.top/workspace`、真实 `amd` 连接及 `1920×953` 视口核对：普通命令输入框不再显示“命令”占位文字，提示符为文本 `>`；输入框可访问名称仍为“终端命令”。命令栏容器宽 `281.7px` 时输入框宽 `147.7px`，提示符 `11px`；临时将容器缩至 `150px` 时输入框保持 `40px` 可见宽，CSS 最小宽度按提示符、间距、内边距和边框计算为 `32px`，提示符仍显示且页面无横向溢出。证据：`.tmp/command-bar-prompt.png`、`.tmp/command-bar-prompt-narrow.png`。
+
+## 服务器状态外层边界与网络间距（2026-10-23，本地 CDP）
+
+使用 `https://api.honus.top/workspace`、真实 `amd` 连接及 `1920×953` 视口核对：服务器状态面板 `232.18×390.78px`，四边边框均为 `0px`、外层背景透明；五张内部指标卡仍各有 `1px` 边框，标题分隔线保留。网络行在紧凑高度规则下使用 `7px` 行间距，标题与速率行的实际视觉间距由约 `4.8px` 增至 `11.2px`，未挤压卡片或产生溢出。证据：`.tmp/status-monitor-border-gap.png`。
+
+## 文件管理器窄栏排序单行（2026-10-23，本地 CDP）
+
+使用 `https://api.honus.top/workspace`、真实 `amd` 连接及 `1920×953` 视口核对文件管理器拖拽至 `2×4` 工具布局：面板宽 `169.83px`，工具行为 `[4,4]`，排序行宽 `161.83px`、高 `26px`；排序选择与方向按钮的 `top` 均为 `263.66px`，排序行和工具栏的 `scrollWidth-clientWidth` 均为 `0`。窄栏隐藏视觉“排序”标签与方向文字，但保留排序选择的可访问名称及方向按钮的 `title`/`aria-label`。证据：`.tmp/fm-embedded-2x4-cdp.png`。根 `pnpm run check`、目标 Prettier、Frontend build 与 `git diff --check` 通过；全量格式检查只被并行修改的 `node-process-diagnostic.ts`、`BackupSettingsPanel.vue`、`HostDiagnosticsPanel.vue` 阻断，未修改这些无关文件。
+
+## 监控核心周期与开关合并（2026-10-23，本地 CDP）
+
+工作区设置的“首页与监控”将本机/远程资源开关与监控采样/主机缓存周期、Docker 默认展开与状态刷新周期合并为 2×2 的紧凑卡片，分组右上角保留单一保存入口。`1440×1000` 下分组 `1020px` 宽，四张卡片各 `487×54px`，周期输入容器各 `108×28px`；`390×844` 下分组 `350px` 宽，带周期卡片 `320×80px`，无横向溢出，页面 `scrollWidth=382 < innerWidth=390`。
+
+`node tests/frontend/monitoring-configuration.integration.mjs` 通过真实 HTTP/重启、CAS 冲突/未知结果、三组件与中英日翻译在内的 57 项断言，确认合并分组一次提交只产生一次核心写入并发布成功 Toast。证据：`.tmp/monitoring-group-final-1440.png`、`.tmp/monitoring-group-final-390.png`。目标 Prettier/ESLint、Frontend 类型检查与 `git diff --check` 通过。
+
+## 日志等级标题对齐与挂起会话搜索文案（2026-10-23，本地 CDP）
+
+使用 `https://api.honus.top/settings` 核对系统设置：前端与后端日志等级两列各宽 `630px`，两个标题均为 `72×16px` 且 `top=540.19px`，两个选择框均为 `630×32px` 且 `top=559.78px`；不显示当前生效级别。使用 `https://api.honus.top/workspace` 核对挂起会话搜索框，`placeholder` 与 `aria-label` 均为“搜索会话”。证据：`.tmp/settings-logging-after.png`、`.tmp/suspended-search-placeholder-after.png`。
+
+## 挂起会话空态两行预留高度（2026-10-23，本地 CDP）
+
+挂起会话空态原先按 `91px × 2 + 6px = 188px` 预留，但真实会话卡片为 `78px`，导致空态比两行多出约 `26px` 并产生内部滚动。现改为按真实卡片高度 `78px`、间距 `6px` 预留两行；固定高度面板使用 `min(162px, 100%)`，可用空间略少时贴合容器，页面滚动模式仍固定预留 `162px`。同时移除一条对容器自身无效的 `max-height: 220px` 变量覆盖。
+
+使用 `https://api.honus.top/workspace` 的右侧挂起会话面板搜索无结果态核对：面板高 `210.95px`，列表容器与空态高 `160.95px`，`clientHeight` 与 `scrollHeight` 均为 `161px`，空态图标与文字整体居中；恢复结果后单卡仍为 `78px`。证据：`.tmp/suspended-empty-after.png`。目标 Prettier/ESLint、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过。
+
+## 文件编辑器底部工具栏与编码菜单（2026-10-23，本地 CDP）
+
+文件编辑器顶部仅保留标签和路径；编码、换行、保存状态、搜索、刷新、保存和关闭移到底部工具栏，外壳改用当前主题的玻璃表面、边框和基础按钮，移除了编辑器专属的独立深色控件样式。编码菜单不再跟随窄触发器宽度，桌面展开为 `160px`，`Windows-1252` 等长名称的 `scrollWidth=clientWidth`，选中项与选项均居中，左右内边距对称。
+
+使用 `https://api.honus.top/workspace` 连接真实 `amd`，打开 `/etc/hostname` 核对：`756px` 编辑区下底部工具栏单行高 `41.78px`；`400px` 编辑浮窗与 `350px` 手机编辑区下自动换行为两行，高 `72.66px`，编码触发器 `92.8×28px`、菜单 `160×329px`，编辑区及页面均无横向溢出。证据：`.tmp/file-editor-final-encoding-open.png`、`.tmp/file-editor-theme-footer-mobile-open.png`。目标 Prettier/ESLint、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过。
+
+## 文件操作弹窗基础组件统一（2026-10-23，本地 CDP）
+
+新建文件夹、创建文件、重命名和权限修改统一改用 `UiDialog`、`UiFormField`、`UiInput`、`UiFormActions` 与 `UiButton`，保留原表单提交、冲突校验、忙状态和关闭清理行为。桌面 `1920×953` 下弹窗为 `448×229.89px`，输入框 `410×36px`，取消/确认按钮各 `88×36px`；手机 `390×844` 下弹窗为 `366×245.89px`，输入框 `328×44px`，操作按钮各 `161×44px`，弹窗与页面均无横向溢出。截图：`.tmp/file-manager-mkdir-base-dialog-final.png`、`.tmp/file-manager-create-file-base-dialog.png`、`.tmp/file-manager-mkdir-mobile-final.png`。目标 Prettier/ESLint、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过。
+
+## 快捷指令列表视觉回退（2026-10-23，本地 CDP）
+
+按用户要求仅回退快捷指令工具栏以下的分组与条目视觉，顶部搜索、排序、紧凑、显示模式及新增按钮保留新版。分组区域恢复重构前的卡片边框/底色、组头数量胶囊、组内浅底色与条目间距；扁平列表恢复原卡片容器。运行、右键菜单、标签编辑、搜索、缩放和响应式行为未改。
+
+使用 `https://api.honus.top/workspace`（未使用 9998）连接真实 `amd`，在 CSS 视口 `1920×953` 核对双项分组与单项分组：双项卡片 `240.19×108.44px`，两条指令均为 `230.19×30.22px`，`scrollWidth=clientWidth`；单项卡片高 `74.22px`。工具栏 5 个按钮各 `28px` 且均可见。将 pane 收窄至 `220px`、`170px`、`120px` 后，根节点及分组、条目均无横向溢出。证据：`.tmp/quick-commands-reverted-lower.png`、`.tmp/quick-commands-reverted-page.png`、`.tmp/quick-commands-reverted-{220,170,120}.png`。目标 Prettier/ESLint、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过；本轮为本地 CDP 视觉验收，不替代完整 E2E；未提交、推送或部署。
+
 ## 挂起恢复连接指示（2026-10-23）
 
 源码确认 `WorkspaceTabBar` 原先优先将挂起标记映射为蓝色，覆盖了恢复成功的 connected 状态。现仅按实际连接状态显示颜色，不修改挂起标记、续租、恢复或关闭行为。既有手机挂起/恢复场景补充标记后及恢复后的 connected 与绿色指示断言，原有保留会话和关闭后再次挂起的断言保持。
 
 根 `pnpm run check`、Frontend build、目标 ESLint/Prettier 通过；日志 `/tmp/nexus-resume-dot-{check,build}.log`。构建保留既有大 chunk 警告；全量格式仅报告并行修改的 `BackupSettingsPanel.vue`，未改该文件，见 `/tmp/nexus-resume-dot-format.log`。按 D17 未运行本地行为或 E2E，真实挂起恢复及连接失败颜色仍待远程核对；不宣称行为已通过。本轮按授权仅提交连接指示修复，不推送。
+
+## 后台服务器传输按需刷新（2026-10-23）
+
+`serverTransfers.store` 改用读取结算后的单次计时器：进入/返回工作区只读一次，只在 queued/in-progress/cancelling 时继续获取，发送成功自动恢复，全部终态或空列表停用；离页/注销阻止晚完成重启。提交未知仅做只读核对，不重放发送，不清除原未知保护。现有 Progress Display 场景改为计数真实 HTTP 请求，等待超过原轮询周期后验证空闲期间没有额外请求，并保留空态、无 loading 替换及真实复制完成断言；已有真实服务器传输场景继续验证发送后最终状态与移除。
+
+按 D17 未新增测试用例或执行本地行为/E2E。根 `pnpm run check`、双端 `pnpm run build`、目标 ESLint 和改动 E2E 文件 TypeScript 静态编译通过，日志 `/tmp/nexus-transfer-on-demand-{check,build,eslint}.log`；构建保留既有大 chunk 警告。全量格式只报告并行修改的 `BackupSettingsPanel.vue`，未修改该文件；日志 `/tmp/nexus-transfer-on-demand-format.log`。待远程核对空列表/全部终态停轮询、发送后恢复、取消中仍更新、请求慢于周期时无重叠、离页/注销、返回恢复及未知提交只读核对；不宣称已行为通过，不自动提交或推送。
+
+## 命令栏展开与工具区浅边界（2026-10-23，本地 CDP）
+
+使用 `https://api.honus.top/workspace`（未使用 9998）登录现有测试账号并连接真实 `amd`，在 CSS 视口 `1920×953` 核对内嵌命令栏和文件管理器。命令栏删除桌面 `...` 溢出菜单后，清空、焦点配置、文件管理器、编辑器和搜索 5 个图标同时直接显示；`...` 元素与图标计数均为 0。命令栏 pane 宽 `320px` 时，输入区为 `156px`、工具区为 `148px`，工具区 `scrollWidth=clientWidth=148`；`260px` 时输入区 `96px`、5 个按钮仍完整；`210px` 时输入框内容区 `24px`，恰好完整显示“命令”两字，工具区仍为 `148px`；`190px` 时输入内容区保持 `24px`，工具区改为 `128/148px` 横向滚动且五个按钮仍保留。输入框采用 `flex: 1 1 0`，常规 `min-width: 64px`，极窄隐藏提示符后为 `46px`，空间不足时先压缩输入区。
+
+文件管理器工具组增加低对比圆角底纹与 1px inset 边界，实测 `box-shadow` 为边框色 24% 透明度，按钮行、路径行和文件列表布局未改变。证据：`.tmp/fm-command-after-min.png`、`.tmp/fm-command-narrow-after.png`、`.tmp/fm-command-min-command-text-clean.png`。目标 Prettier/ESLint、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过；本轮为本地 CDP UI 验收，不替代完整 E2E；未提交、推送或部署。
+
+## 挂起会话卡片视觉回退（2026-10-23）
+
+按用户要求只回退挂起会话卡片视觉，不调整新版搜索栏、空态、弹窗标题栏和滚动正文。源码对比确认 `SuspendedSessionsPanel.vue` 的卡片 `<ul>` 模板与上一提交逐字一致，卡片 CSS 段也与上一提交一致；仅保留外层 `suspended-toolbar`、新空态和卡片列表容器。恢复/接管、取消标记、改名、导出、移除、搜索及目录同步逻辑未改，弹窗与 `pageScroll` 布局保持当前版本。
+
+当前真实挂起目录为空，因此没有为视觉截图额外创建并终止挂起会话；本轮以源码等价比对和静态检查验收。目标 ESLint/Prettier、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过。未提交、推送或部署。
+
+后续按用户截图补调左右边界。搜索区与卡片列表使用相同横向内边距，列表采用双侧稳定滚动条槽，并在搜索区右侧补偿滚动条宽度。经 `https://api.honus.top/workspace` 的 CDP 实测，搜索外框与卡片左右边界完全一致：`1024×900` 均为 `709–970px`（宽 `261px`），面板为 `696–983px`；`390×844` 均为 `27–347px`（宽 `320px`），面板为 `12–362px`；`320×700` 均为 `25–279px`（宽 `254px`），面板为 `12–292px`。对应左右留白为 13px、15px、13px，未产生横向溢出。截图：`.tmp/suspended-spacing-current.png`、`.tmp/suspended-spacing-1024.png`、`.tmp/suspended-spacing-390.png`、`.tmp/suspended-spacing-320.png`。仅修改展示 CSS，搜索、恢复、导出、移除、空态和目录同步逻辑未变。
 
 ## 使用中终端的挂起目录移除（2026-10-23）
 
@@ -27,6 +129,14 @@
 按 D17 未新增或运行本地行为/E2E；待远程验证同设备与跨设备移除使用中记录、原 PID/输入输出不变、目录及本地标记同步、后来打开的终端不受影响、后台终止、断开条目移除、准备/恢复/重复移除竞争和未知清理围栏。不继承此前 Actions 或 UI CDP 结果。
 
 源码复审确认：安全移除由后端读取当前附着事实，准备/恢复状态拒绝；并发取消共用原清理 Promise，取消期间不能重新取得挂起所有权；日志/checkpoint 失败保持未知，不降级终止。前端按 ID/generation 清除原标记，晚到回执不能重新挂起已取消记录；“取消挂起”动作不再切换为“重新挂起”，旧 UI 点击不影响新状态。根 `pnpm run check`、双端 `pnpm run build`、目标 ESLint/Prettier 和 `git diff --check` 通过，证据 `/tmp/nexus-suspend-remove-final2-{check,build}.log`、`/tmp/nexus-suspend-remove-eslint.log`、`/tmp/nexus-suspend-remove-target-format.log`。全量格式检查在并行修改的 `BackupSettingsPanel.vue`、`FileManager.vue`、`SuspendedSessionsPanel.vue` 样式处失败，未调整这些无关格式；日志 `/tmp/nexus-suspend-remove-format-final.log`。构建保留原有大 chunk 警告；未提交、推送或重启。
+
+## 挂起会话目录卡片与弹窗（2026-10-22，本地 CDP）
+
+使用当前工作区经 `https://api.honus.top/workspace` 核对，未使用 9998。启动页已有真实挂起会话 `amd`。`819×378` 下弹窗 `480×200.9px`、内嵌面板 `454.4×130.5px`、卡片 `454.4×90.5px`；标题栏固定，正文 `overflow-y:auto`。手机视口 `390×844` 弹窗 `358×201.5px`、卡片 `332×90.5px`，`320×700` 弹窗 `288×201.5px`、卡片 `262×90.5px`，`270×700` 弹窗 `238×201.5px`、卡片 `212×90.5px`；三档文档宽度均等于视口，操作组在窄容器居中，270px 下恢复按钮收起文字但保留图标和无障碍名称，导出、移除按钮仍为 `26×28px`。
+
+搜索注入不存在的名称后显示 `332×104px` 空态“没有找到符合条件的挂起会话。”，清空搜索恢复 1 张卡片。核对后通过卡片移除按钮与确认框终止并移除真实测试挂起会话，挂起卡片归零且弹窗关闭；随后关闭 `pve_debian` 测试标签页，并清理临时视口与触摸仿真。证据：`/tmp/suspend-current.png`、`/tmp/suspend-after-card-819.png`、`/tmp/suspend-mobile-390.png`、`/tmp/suspend-mobile-320.png`、`/tmp/suspend-mobile-270.png`、`/tmp/suspend-search-empty-390.png`。
+
+目标 Vue ESLint/Prettier、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过。本轮为本地 CDP 视觉与有限交互验收，不替代完整 E2E；未提交、推送或部署。
 
 ## 远程 Actions 修复第三批（2026-10-22）
 
@@ -1428,3 +1538,53 @@ Agent 数量组件新增范围失败局部状态：合法单位表达超出当�
 实际 CSS 视口 1152×720 下桌面 Toast 宽 `288px`，成功/警告/失败高度分别为 `138.4px`、`138.4px`、`119.4px`，按钮 `84×28px`；390×844 下宽 `350px`，高度分别为 `122px`、`141px`、`122px`，按钮 `88×30px`；320×700 下宽 `280px`，高度分别为 `141px`、`141px`、`122px`，按钮 `88×30px`。三档按钮右缘均与关闭按钮精确对齐，卡片 `scrollWidth=clientWidth`，文档宽度分别保持 `1144/1152`、`390/390`、`320/320`，无页面级横向溢出。
 
 点击“知道了”后成功通知被移除；点击失败通知的“重新读取”后业务动作只执行一次，通知保留。卡片改为接近不透明的中性主题底与低饱和状态渐变，语义色收敛到标题、细边框和按钮，验证后已清除注入通知。证据：`/tmp/toast-layout-v7-desktop.png`、`/tmp/toast-layout-v7-390.png`、`/tmp/toast-layout-v7-320.png`。目标 Prettier、Vue/CSS ESLint、Frontend build、根 `pnpm run check`、全量格式检查和 `git diff --check` 均通过；按 D17 未运行完整 E2E，未提交、推送或部署。
+
+### 2026-10-22 Workspace 状态骨架、趋势窗口与网络卡响应式（本地 CDP）
+
+使用本地 CDP（`https://api.honus.top/workspace`，未使用 9998）连接 `amd` 目标。窄栏状态区约 `90.6×92.8px` 时，加载态显示 1 个紧凑 Spinner、可读状态文字和 5 张与最终指标同尺寸的骨架卡，`scrollWidth=clientWidth`；临时扩展到 760px 后骨架自动重排为 2 列，未出现横向溢出，验证后已还原临时预览条件。
+
+展开 CPU 趋势后，历史模式资源列表高度由错误的 `124.8px` 恢复为 `80px`，图表容器获得实际高度；5 分钟视图仅采集约 1 分钟数据时，折线按实际跨度铺满图表，不再集中在左侧留下大块空白。网络卡在 520px 与 760px 宽度下保持标题/吞吐上下结构，标题到吞吐行间距约 `4.7px`，大宽度网络行固定为 `64px` 并居中于 `34rem` 信息带内；中/大宽度断点分别降低为 `150px`、`180px` 高度门槛，760×214px 状态栏不再落回单列。
+
+证据：`/tmp/nexus-loading-narrow.png`、`/tmp/nexus-loading-wide.png`、`/tmp/nexus-history-tall.png`、`/tmp/nexus-network-layout-full.png`。目标 Vue/TS ESLint、Prettier、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过。按 D17 未运行完整 E2E，未提交、推送或部署。
+
+### 2026-10-22 Workspace 命令栏单行与响应式（本地 CDP）
+
+使用本地 CDP（`https://api.honus.top/workspace`，未使用 9998）连接 `amd`。实际 CSS 视口 `819×378` 下，窄命令栏 pane 为 `123.8×38px`，输入区 `85.8×30px`，“更多”按钮 `22×22px`；菜单完整显示搜索、焦点配置、文件管理器、编辑器和清空终端 5 项。打开搜索后输入框 `54.2×28.4px`，仅保留关闭按钮，上下键与 Enter/Shift+Enter 继续承担查找，不再让三个搜索按钮挤占输入。
+
+临时扩大到 CSS 视口 `3000×1120` 后，命令栏 pane 为 `464.8×50.1px`，输入区 `300.8×34px`，5 个工具按钮均为 `28×28px`，“更多”菜单隐藏。手机 UA 390×844 下命令栏 `390×38px`，输入 `116×30px`，工具区 `258×30px` 内按钮均为 `30×30px`；320×700 下命令栏 `320×38px`，工具区 `154×30px`、`scrollWidth=286`，只横向滚动工具按钮。两档手机文档宽度均保持 390/320，无页面级横向溢出。
+
+桌面和手机检查后均还原临时视口/UA。证据：`/tmp/cmdbar-after-reload.png`、`/tmp/cmdbar-menu-final.png`、`/tmp/cmdbar-search-final.png`、`/tmp/cmdbar-wide-final.png`、`/tmp/cmdbar-mobile-ua-final.png`、`/tmp/cmdbar-mobile-320.png`。目标 Vue/JSON ESLint、Prettier、Frontend build、根 `pnpm run check`、全量格式检查和 `git diff --check` 通过；按 D17 未运行完整 E2E，未提交、推送或部署。
+
+### 2026-10-22 文件管理器工具区、空态与响应式（本地 CDP）
+
+使用本地 CDP（`https://api.honus.top/workspace`，未使用 9998）连接 `amd` 并打开文件管理器。窄 pane 实测 `123.9×155.4px`，工具条 `33.8px`、路径栏 `87.9×27px`、“更多”按钮 `24×24px`；菜单 `240×169.6px` 完整显示终端、同步、刷新、搜索、编辑器、上传、新建文件夹、新建文件、收藏 9 项，无滚动；路径历史 `115.9×107.4px`，仅自身纵向滚动。搜索行高 `63.8px`，输入自动聚焦；新建弹窗 `448×192.3px`，无溢出。中等宽度文件列表 `clientWidth=472`、`scrollWidth=472`，未出现横向滚动。
+
+实际 CSS 视口 `819×378` 下，空目录 `/lost+found` 的居中空态为 `777.6×84px`；在该目录搜索无匹配文本时显示“未找到匹配的搜索结果”，列表区 `778×187px` 且 `scrollWidth=clientWidth`。访问不存在路径时错误态为 `757.6×171.4px`；模拟外部文件 `dragenter` 后覆盖层为 `761.6×251.2px`，移出后恢复列表，未上传文件。搜索等待期间读取态为 `777.6×187.4px`，随后正确切换为空结果。
+
+手机 UA 390×844 下文件管理器 `356×662.4px`，工具条 `70px`，完整工具按钮可见；320×700 下为 `286×540px`，工具条 `40px` 并自动显示“更多”，菜单 `240×223px` 完整显示 10 项。两档文档宽度分别保持 390/390、320/320，无页面级横向溢出。检查后已恢复视口、UA、触控和缩放。
+
+证据：`/tmp/fm-menu-final.png`、`/tmp/fm-history-final.png`、`/tmp/fm-search-final.png`、`/tmp/fm-dialog-final.png`、`/tmp/fm-context-final.png`、`/tmp/fm-rename-final.png`、`/tmp/fm-chmod-final.png`、`/tmp/fm-medium-final.png`、`/tmp/fm-empty-directory-final.png`、`/tmp/fm-empty-search-final2.png`、`/tmp/fm-error-final.png`、`/tmp/fm-drag-final.png`、`/tmp/fm-mobile-390-panel.png`、`/tmp/fm-mobile-390-search.png`、`/tmp/fm-mobile-390-dialog.png`、`/tmp/fm-mobile-320-panel.png`、`/tmp/fm-mobile-320-menu.png`、`/tmp/fm-mobile-320-dialog-correct.png`。目标 Vue/JSON ESLint、Prettier、Frontend build、根 `pnpm run check`、全量格式检查与 `git diff --check` 均通过；按 D17 未运行完整 E2E，未提交、推送或部署。
+
+### 2026-10-22 Workspace 可用面板与编辑器响应式（本地 CDP）
+
+使用本地 CDP（`https://api.honus.top/workspace`，未使用 9998）登录现有测试账号并连接真实 `amd` 目标；临时布局只把连接列表、Docker、命令历史与文件编辑器放入 pane，核对后恢复原布局。三档视口下四面板均无横向溢出：CSS `819×378` 时连接列表 `143×120px`、Docker `143×141px`、历史 `269×109px`、编辑器 `269×151px`；CSS `922×640` 时为 `161×240`、`161×282`、`304×219`、`304×303px`；CSS `1280×720` 时为 `225×277`、`225×325`、`426×253`、`426×349px`。文档宽度在三档均未超过视口。
+
+窄栏连接列表“分组操作”菜单完整显示“连接全部、管理标签、删除分组内所有连接”3 项；Docker“更多操作”完整显示“移除、进入、日志”3 项，宽栏直接渲染 6 个动作。命令历史通过一次安全记录写入取得真实数据态，显示命令与时间，核对后已用 DELETE 删除该测试记录；没有执行该命令。打开 `/etc/hostname` 检查编辑器，弹窗为 `756×354px`，标签、`/etc/hostname`、作用域、`UTF-8`、`LF`、搜索、重载、保存和关闭完整显示；未保存远程文件。
+
+证据：`/tmp/available-panels-final-819.png`、`/tmp/available-panels-final-1152b.png`、`/tmp/available-panels-final-wide2.png`、`/tmp/editor-popup-final-current.png`。目标 Vue/JSON ESLint、Prettier、Frontend build、根 `pnpm run check`、全量格式检查与 `git diff --check` 通过；按 D17 未运行完整 E2E，未提交、推送或部署。
+
+### 2026-10-23 文件管理器弹窗吸附与宽屏工具栏（本地前端 9998）
+
+使用本地前端 `172.30.30.10:9998`、后端 `127.0.0.1:3001` 和现有测试账号打开真实 `amd` 连接的文件管理器；请求保留 `X-Forwarded-Host: api.honus.top` 与可信 Origin，未改动远端文件。桌面 `1024×900` 下弹窗 `896px`，8 个工具按钮在宽屏等分为 `106.5×32px`、排序行 `880px`；工具、路径、排序三者纵向间距均为 `6px`，列名表头文字不再显示。
+
+真实拖拽与重开验证：宽度 `270px` 或 `290px` 均吸附为 `280px` 单行 8 枚，按钮行计数 `[8]`；继续向左拖到最小值时稳定在 `170px`，工具行计数 `[4,4]`，释放并重新打开后仍为 `170px / [4,4]`。`320px` 视口下弹窗为 `280px`，同样保持单行 8 枚；未出现命令栏、挂起会话或页面级横向溢出。
+
+证据：`.tmp/filemanager-1024.png`、`.tmp/filemanager-320.png`、`.tmp/filemanager-resize-minimum.png`。目标 Prettier、Vue/TS ESLint、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过；未提交、推送或部署。
+
+### 2026-10-23 文件管理器工具区对齐与分栏热区（本地 CDP）
+
+使用 `https://api.honus.top/workspace`（未使用 9998）登录现有测试账号并连接真实 `amd`，在 CSS 视口 `1920×953` 下核对内嵌文件管理器。工具行与路径栏实测同为 `241.015625px`，左右坐标完全一致；工具按钮左右留白均为 `5px`。宽拖后释放为 `281.703125px`、按钮行计数 `[8]`；向左拖至最小宽度后吸附为 `169.828125px`、行计数 `[4,4]`，按钮左右留白均为 `4px`。`1×8` 释放后保持 `[8]`，不再回落到 `7+1`。
+
+分栏视觉线仍为 1px，透明拖拽热区扩展到 splitter 两侧约 16px。将指针放在 splitter 中心左侧 12px（已超出 9px 原生 splitter 区域）按下并拖动，文件管理 pane 从 `246.546875px` 调整到 `230.296875px`，证明扩展热区实际参与命中；随后恢复正常中心拖拽，未修改远端文件。
+
+证据：`.tmp/fm-embedded-1x8-cdp.png`、`.tmp/fm-embedded-2x4-cdp.png`、`.tmp/cdp-drag-splitter.mjs`、`.tmp/fm-embedded-cdp-probe.mjs`。目标 Prettier、目标 ESLint、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过；全量格式检查仅因并行修改的 `BackupSettingsPanel.vue` 既有格式失败，未改动该无关文件。本轮为本地 CDP UI 验收，不替代完整 E2E；未提交、推送或部署。
