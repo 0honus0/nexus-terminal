@@ -1,5 +1,18 @@
 # Nexus Terminal E2E
 
+## 远程 E2E 后端范围修复（2026-10-23）
+
+本轮按用户要求先处理后端与服务端夹具，不改正在重构的前端源码、UI 或浏览器测试交互。读取远程 [39830123543](https://github.com/0honus0/nexus-terminal/actions/runs/39830123543) 的八组原始 job 日志，被测 SHA 为 `8f10e54166cf322d4362f1e35fd865cdf6a96c08`；当前本地基线为 `00ec5bfb` 加未提交工作区。原轮质量与 Docker smoke 通过，日志中 HTTP 50、Auth 6、WebSocket 4、SSH 191 个完成记录均为 passed；没有在这些分组确认后端失败，不将这些旧 SHA 记录扩大为当前后端全量通过。
+
+原轮共有 10 个唯一失败场景（每个重试仍失败），其中 3 个 RDP 场景在 `authenticateTestRdp` 的认证计数失败：期望递增 1，实际递增 2。服务端夹具按字符串总出现次数统计；xrdp 0.9 的 `xrdp_wm_log_msg` 先写 DEBUG，再由 `add_string_to_logwindow` 写同文 INFO，因此一次成功重复计算。上游源码核对：`neutrinolabs/xrdp@v0.9.21.1` / `v0.9.24` 的 `xrdp/xrdp_wm.c`，成功调用见 `vnc/vnc.c`；runner 基于 Debian bookworm 的 xrdp。修复仅在 test-desktop-server.mjs 统计完整 INFO 成功消息，不调整客户端严格加一断言、不触发额外连接、不伪造认证成功。产品后端、Shared 与 USAGE 远程桌面行为不变。
+
+| 原失败场景                                                                                                   | 处理范围                                                                                                 |
+| ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| RDP settings/clipboard/fullscreen、wide RDP DPI、mobile RDP touch                                            | 服务端认证计数转换已修，后续真实输入、剪贴板、全屏和触控仍须远程验收；原失败没有到达的断言不能记为通过。 |
+| Agent host 两项、preset plugin 审计入口、ACP denied/cancelled 两项、performance settings、SSH key management | 七项均失败于前端控件定位、校验提示或浮层遮挡，按用户本轮范围留待前端完成后处理，不修改或跳过用例。       |
+
+本轮根 `pnpm run check`、双端 `pnpm run build`、夹具 `node --check`、目标 Prettier 与 diff 检查通过，日志 `/tmp/nexus-e2e-backend-{check,build,format}.log`。全量格式的 ESLint 通过，Prettier 初报本轮 PLAN 和并行 WorkspaceSessionSurface.vue，PLAN 已整理并通过目标格式，不修改该 UI，全量格式不记为通过；构建保留既有大 chunk 警告。按 D17 未新增或执行本地行为、浏览器或 E2E，也未启动 xrdp 或连接真实桌面。原始八组日志 `/tmp/nexus-e2e-shard{1..8}-raw.log`，shard 3 诊断下载于 `/tmp/nexus-e2e-39830123543-shard3`。按 D18 单独提交推送服务端夹具修复和本轮文档；前端与其它未提交实现不纳入。不以源码分析和语法检查代替修复后的远程通过。
+
 ## 明显安全漏洞审核（2026-10-23）
 
 基线为 `dev` / `d0301766` 加当前未提交工作区。按用户范围检查外部入口和实现缺陷，不把已接受的应用内权限与能力设计作为漏洞，不改变 UI。源码检查覆盖 HTTP/WS 来源和身份、因素验证、下载响应、插件隔离与包路径/签名、MCP 网络边界、原生命令参数及日志出口；这是有限源码审核，不是完整渗透测试或全部分支验收。
