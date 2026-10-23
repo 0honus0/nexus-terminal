@@ -1,5 +1,11 @@
 # Nexus Terminal E2E
 
+## 挂起恢复连接指示（2026-10-23）
+
+源码确认 `WorkspaceTabBar` 原先优先将挂起标记映射为蓝色，覆盖了恢复成功的 connected 状态。现仅按实际连接状态显示颜色，不修改挂起标记、续租、恢复或关闭行为。既有手机挂起/恢复场景补充标记后及恢复后的 connected 与绿色指示断言，原有保留会话和关闭后再次挂起的断言保持。
+
+根 `pnpm run check`、Frontend build、目标 ESLint/Prettier 通过；日志 `/tmp/nexus-resume-dot-{check,build}.log`。构建保留既有大 chunk 警告；全量格式仅报告并行修改的 `BackupSettingsPanel.vue`，未改该文件，见 `/tmp/nexus-resume-dot-format.log`。按 D17 未运行本地行为或 E2E，真实挂起恢复及连接失败颜色仍待远程核对；不宣称行为已通过。本轮按授权仅提交连接指示修复，不推送。
+
 ## 使用中终端的挂起目录移除（2026-10-23）
 
 本批按用户确认修改：移除仍附着的挂起记录只取消挂起，不关闭原 SSH/PTY；后台无人使用时才终止。新增安全移除 HTTP 回执和原附件 `suspend.unmarked` 事件，正式目录不再根据旧 `status` 选择终止接口；取消事件同时清除本地挂起标记、续租及历史入口，避免重新出现“待关闭”替身。准备提交或恢复中的记录返回冲突，不自动终止。
