@@ -3,7 +3,7 @@
 	import { useRouter } from 'vue-router';
 	import { useI18n } from 'vue-i18n';
 	import { authErrorKey } from '../model/auth-errors';
-	import { UiButton, UiCheckbox, UiFormField, UiInput } from '@/foundation/ui';
+	import { UiButton, UiCheckbox, UiFormField, UiInlineNotice, UiInput } from '@/foundation/ui';
 	import { useAuthSession } from '../composables/useAuthSession';
 	import type { PasskeyLoginInput } from '../model/auth-types';
 
@@ -158,9 +158,12 @@
 			</section>
 
 			<section class="auth-panel" aria-labelledby="login-title">
-				<button
+				<UiButton
 					class="auth-theme-toggle"
 					type="button"
+					appearance="ghost"
+					density="compact"
+					icon-only
 					:aria-label="t(isDark ? 'auth.login.themeToLight' : 'auth.login.themeToDark')"
 					@click="theme = isDark ? 'light' : 'dark'"
 				>
@@ -181,7 +184,7 @@
 							stroke-linejoin="round"
 						/>
 					</svg>
-				</button>
+				</UiButton>
 				<div class="auth-card">
 					<div class="auth-mobile-mark">
 						<img src="@/assets/logo-small.png" :alt="t('projectName')" />
@@ -253,9 +256,12 @@
 											</svg>
 										</template>
 									</UiInput>
-									<button
+									<UiButton
 										class="login-password-toggle"
 										type="button"
+										appearance="ghost"
+										density="compact"
+										icon-only
 										:aria-label="
 											t(showPassword ? 'auth.login.hidePassword' : 'auth.login.showPassword')
 										"
@@ -279,7 +285,7 @@
 											/>
 											<circle cx="12" cy="12" r="2.3" stroke="currentColor" stroke-width="1.6" />
 										</svg>
-									</button>
+									</UiButton>
 								</div>
 							</UiFormField>
 
@@ -319,7 +325,9 @@
 
 						<slot v-if="!pendingSecondFactor" name="security" />
 
-						<p v-if="error" class="login-error" role="alert">{{ error }}</p>
+						<UiInlineNotice v-if="error" class="login-error" tone="danger" compact>{{
+							error
+						}}</UiInlineNotice>
 
 						<UiButton
 							class="login-submit"
@@ -328,10 +336,9 @@
 							tone="primary"
 							density="comfortable"
 							block
+							:loading="isBusy"
 							:disabled="isBusy || captchaBlocked"
-							:aria-busy="isBusy || undefined"
 						>
-							<span v-if="isBusy" class="login-button-spinner" aria-hidden="true"></span>
 							<span>{{
 								isBusy
 									? t('auth.login.loggingIn')
@@ -815,14 +822,9 @@
 
 	.login-error {
 		margin: -4px 0 0;
-		padding: 9px 11px;
-		color: var(--auth-danger);
+		--status-error-color: var(--auth-danger);
 		font-size: 11px;
-		line-height: 1.55;
 		text-align: left;
-		background: color-mix(in srgb, var(--auth-danger) 8%, transparent);
-		border: 1px solid color-mix(in srgb, var(--auth-danger) 22%, transparent);
-		border-radius: 10px;
 	}
 
 	.login-submit.ui-button.ui-button--solid[data-tone='primary'] {
@@ -857,19 +859,11 @@
 		opacity: 0.66;
 	}
 
-	.login-button-spinner {
+	.login-submit :deep(.ui-button__spinner) {
 		width: 16px;
 		height: 16px;
 		border: 2px solid rgb(255 255 255 / 35%);
 		border-top-color: #fff;
-		border-radius: 50%;
-		animation: login-spin 700ms linear infinite;
-	}
-
-	@keyframes login-spin {
-		to {
-			transform: rotate(360deg);
-		}
 	}
 
 	.login-divider {
@@ -1328,7 +1322,7 @@
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		.login-button-spinner {
+		.login-submit :deep(.ui-button__spinner) {
 			animation-duration: 1.4s;
 		}
 	}

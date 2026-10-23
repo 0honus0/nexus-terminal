@@ -2,6 +2,7 @@
 	import { onBeforeUnmount, ref, watchEffect } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import FilePreviewDialog from './FilePreviewDialog.vue';
+	import { UiSpinner } from '@/foundation/ui';
 	import type { FilePreviewSessionController } from '../composables/useFilePreviewTabs';
 	import type { PreviewFile } from '../model/preview';
 
@@ -50,7 +51,7 @@
 	>
 		<div class="relative flex h-full min-h-[18rem] items-center justify-center overflow-auto bg-black/80 p-4">
 			<div v-if="loading && !failed" class="file-image-preview-status" aria-live="polite">
-				<i class="fas fa-spinner fa-spin" aria-hidden="true"></i>
+				<UiSpinner />
 				<span>{{ t('fileManager.preview.loading') }}</span>
 			</div>
 			<div v-if="failed" class="file-image-preview-status" role="alert">

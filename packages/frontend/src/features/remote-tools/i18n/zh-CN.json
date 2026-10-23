@@ -1,0 +1,27 @@
+{
+  "remoteTools": {
+    "title": "安装所需工具",
+    "confirm": "服务器 {target} 缺少 {tools}。是否使用 {manager} 安装后继续？",
+    "notice": "将从服务器已配置的软件源安装。安装可能需要几分钟；认证密码仅用于本次安装，不会保存。",
+    "password": "sudo 认证密码",
+    "install": "安装并继续",
+    "installing": "正在安装并验证工具，请稍候…",
+    "errors": {
+      "invalid_input": "安装参数或认证密码格式无效。",
+      "unauthenticated": "登录已失效，请重新登录。",
+      "forbidden": "当前账号没有安装权限。",
+      "not_found": "未找到服务器连接。",
+      "host_key_untrusted": "服务器主机密钥尚未受信任，请先连接该服务器并核对主机指纹。",
+      "stale_plan": "服务器或安装计划已变化，请重新发起操作。",
+      "conflict": "服务器有其他操作正在执行或结果尚未确认，请稍后重试。",
+      "unsupported": "远端缺少所需工具，但没有可用的软件包管理器或提权方式，请手动安装。",
+      "authentication_failed": "sudo 认证失败或没有提权权限，请核对密码及 sudo 配置后重试。",
+      "installation_failed": "安装未完成或工具仍不可用，请检查远端软件源与包管理器后重试。",
+      "unavailable": "暂时无法检查或安装远端工具，请检查连接。",
+      "operation_unknown": "安装结果尚未确认，请检查服务器上的安装状态，勿重复安装。",
+      "limit_exceeded": "当前安装请求较多，请稍后重试。",
+      "shutting_down": "服务正在停止，请稍后重试。",
+      "protocol_failure": "工具检测响应无效，请刷新后重试。"
+    }
+  }
+}

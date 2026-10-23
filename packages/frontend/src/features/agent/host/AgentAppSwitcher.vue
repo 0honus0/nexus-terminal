@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiInput } from '@/foundation/ui';
+	import { UiButton, UiSearchInput } from '@/foundation/ui';
 	import type { HostApp } from '../model/host-types';
 
 	const props = defineProps<{ apps: HostApp[]; activeAppId: string | null }>();
@@ -200,19 +200,15 @@
 				</div>
 
 				<div v-if="candidateApps.length > 4" class="border-b border-border/45 p-2">
-					<UiInput
+					<UiSearchInput
 						v-model="query"
-						type="search"
 						density="compact"
 						class="w-full"
 						:placeholder="$t('agent.hub.searchApps')"
 						:aria-label="$t('agent.hub.searchApps')"
+						:clear-label="$t('common.clear')"
 						autofocus
-					>
-						<template #leading>
-							<i class="fa-solid fa-magnifying-glass text-[10px]" aria-hidden="true"></i>
-						</template>
-					</UiInput>
+					/>
 				</div>
 
 				<div class="max-h-64 overflow-y-auto p-1.5 space-y-1">

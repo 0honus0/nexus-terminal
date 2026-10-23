@@ -199,14 +199,16 @@
 						>
 							<i class="fas fa-grip-vertical shrink-0 text-text-secondary" aria-hidden="true"></i>
 							<span class="min-w-0 flex-1 truncate">{{ t(`focusSwitcher.input.${id}`) }}</span>
-							<button
-								type="button"
+							<UiButton
+								appearance="ghost"
+								density="compact"
+								icon-only
 								class="focus-action"
 								:title="t('focusSwitcher.configuredSequence')"
 								@click="setEnabled(id, true)"
 							>
 								<i class="fas fa-plus" aria-hidden="true"></i>
-							</button>
+							</UiButton>
 						</li>
 						<li v-if="!availableTargets.length" class="p-4 text-center text-sm italic text-text-secondary">
 							{{ t('focusSwitcher.allInputsConfigured') }}
@@ -238,24 +240,42 @@
 						>
 							<i class="fas fa-grip-vertical shrink-0 text-text-secondary" aria-hidden="true"></i>
 							<span class="min-w-0 flex-1 truncate">{{ t(`focusSwitcher.input.${id}`) }}</span>
-							<button type="button" class="focus-action" :disabled="index === 0" @click="move(id, -1)">
+							<UiButton
+								appearance="ghost"
+								density="compact"
+								icon-only
+								class="focus-action"
+								:disabled="index === 0"
+								:title="t('focusSwitcher.moveUp')"
+								:aria-label="t('focusSwitcher.moveUp')"
+								@click="move(id, -1)"
+							>
 								<i class="fas fa-arrow-up" aria-hidden="true"></i>
-							</button>
-							<button
-								type="button"
+							</UiButton>
+							<UiButton
+								appearance="ghost"
+								density="compact"
+								icon-only
 								class="focus-action"
 								:disabled="index === draft.sequence.length - 1"
+								:title="t('focusSwitcher.moveDown')"
+								:aria-label="t('focusSwitcher.moveDown')"
 								@click="move(id, 1)"
 							>
 								<i class="fas fa-arrow-down" aria-hidden="true"></i>
-							</button>
-							<button
-								type="button"
-								class="focus-action focus-action--danger"
+							</UiButton>
+							<UiButton
+								appearance="ghost"
+								tone="danger"
+								density="compact"
+								icon-only
+								class="focus-action"
+								:title="t('common.remove')"
+								:aria-label="t('common.remove')"
 								@click="setEnabled(id, false)"
 							>
-								×
-							</button>
+								<i class="fas fa-times" aria-hidden="true"></i>
+							</UiButton>
 						</li>
 						<li v-if="!draft.sequence.length" class="p-4 text-center text-sm italic text-text-secondary">
 							{{ t('focusSwitcher.dragHere') }}
@@ -309,28 +329,9 @@
 
 <style scoped>
 	.focus-action {
-		display: inline-flex;
-		width: 1.5rem;
-		height: 1.5rem;
+		--ui-control-height: 1.5rem;
+		--ui-control-radius: 0.25rem;
 		flex: 0 0 1.5rem;
-		align-items: center;
-		justify-content: center;
-		border-radius: 0.25rem;
-		color: var(--text-color-secondary);
-		transition:
-			background-color 0.15s ease,
-			color 0.15s ease;
-	}
-	.focus-action:hover:not(:disabled) {
-		background: var(--border-color);
-		color: var(--text-color);
-	}
-	.focus-action:disabled {
-		cursor: not-allowed;
-		opacity: 0.3;
-	}
-	.focus-action--danger:hover:not(:disabled) {
-		background: color-mix(in srgb, var(--status-error-color) 12%, transparent);
-		color: var(--status-error-color);
+		font-size: 0.72rem;
 	}
 </style>

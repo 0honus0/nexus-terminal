@@ -1,7 +1,16 @@
 <script setup lang="ts">
 	import { computed, reactive, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiFormField, UiInput, UiSelect, UiSurface, UiTextarea } from '@/foundation/ui';
+	import {
+		UiButton,
+		UiEmptyState,
+		UiFormField,
+		UiInlineNotice,
+		UiInput,
+		UiSelect,
+		UiSurface,
+		UiTextarea,
+	} from '@/foundation/ui';
 	import { useFeedback } from '@/shared/feedback/public';
 	import { themeApi } from '../api/theme-api';
 	import type { TerminalTheme } from '../model/appearance-types';
@@ -239,8 +248,13 @@
 				<AppearancePresetToolbar v-model="search" :placeholder="t('styleCustomizer.searchThemePlaceholder')" />
 
 				<ul class="m-0 max-h-[320px] list-none space-y-2 overflow-y-auto p-0.5">
-					<li v-if="filteredThemes.length === 0" class="p-4 text-center italic text-text-secondary">
-						{{ t('styleCustomizer.noThemesFound') }}
+					<li v-if="filteredThemes.length === 0">
+						<UiEmptyState
+							compact
+							:bordered="false"
+							icon="fa-solid fa-palette"
+							:title="t('styleCustomizer.noThemesFound')"
+						/>
 					</li>
 					<li
 						v-for="theme in filteredThemes"
@@ -344,12 +358,9 @@
 						@focus="rawThemeEditing = true"
 						@blur="finishRawThemeEditing"
 					/>
-					<p
-						v-if="themeParseError"
-						class="mt-2 rounded border border-error/30 bg-error/10 px-3 py-2 text-sm text-error"
-					>
+					<UiInlineNotice v-if="themeParseError" class="mt-2" tone="danger" compact>
 						{{ themeParseError }}
-					</p>
+					</UiInlineNotice>
 				</UiFormField>
 
 				<div class="mt-4 flex justify-end gap-2 border-t border-border pt-4">

@@ -91,6 +91,8 @@ export interface MachineCommandResult {
 }
 
 export interface MachineExecuteOptions {
+	/** Optional one-shot stdin; never included in command text or diagnostics. */
+	readonly stdin?: string;
 	readonly timeoutMs: number;
 	readonly maxOutputBytes: number;
 	readonly signal?: AbortSignal;

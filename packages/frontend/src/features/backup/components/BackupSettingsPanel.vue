@@ -167,13 +167,8 @@
 							:loading="backup.busy"
 							:disabled="!exportPassword || backup.busy || backup.blocked"
 						>
-							<template #leading
-								><i
-									:class="backup.busy ? 'fas fa-spinner fa-spin' : 'fas fa-download'"
-									aria-hidden="true"
-								></i
-							></template>
-							{{ backup.busy ? t('common.loading') : t('settings.backup.export') }}
+							<template #leading><i class="fas fa-download" aria-hidden="true"></i></template>
+							{{ t('settings.backup.export') }}
 						</UiButton>
 					</div>
 				</form>
@@ -229,13 +224,8 @@
 							:loading="backup.busy"
 							:disabled="!importFile || backup.busy || backup.blocked"
 						>
-							<template #leading
-								><i
-									:class="backup.busy ? 'fas fa-spinner fa-spin' : 'fas fa-upload'"
-									aria-hidden="true"
-								></i
-							></template>
-							{{ backup.busy ? t('common.loading') : t('settings.backup.import') }}
+							<template #leading><i class="fas fa-upload" aria-hidden="true"></i></template>
+							{{ t('settings.backup.import') }}
 						</UiButton>
 					</div>
 				</form>

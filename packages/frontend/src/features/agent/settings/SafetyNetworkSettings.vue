@@ -1,7 +1,17 @@
 <script setup lang="ts">
 	import { computed, onActivated, onMounted, ref, toRaw } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiCheckbox, UiInfoHint, UiInput } from '@/foundation/ui';
+	import {
+		UiBadge,
+		UiButton,
+		UiCheckbox,
+		UiEmptyState,
+		UiLoadingState,
+		UiInfoHint,
+		UiInlineNotice,
+		UiInput,
+		UiSearchInput,
+	} from '@/foundation/ui';
 	import { useConnections } from '@/features/connections/public';
 	import { AGENT_DENYLIST_MAX_TARGETS } from '@nexus-terminal/shared/agent/governance/values';
 	import { getAgentDenylist, saveAgentDenylist } from '../api/app-management-api';
@@ -158,21 +168,14 @@
 			<div>
 				<div class="flex flex-wrap items-center gap-2.5">
 					<h3 class="text-sm font-semibold text-foreground">{{ t('agent.settings.safety.title') }}</h3>
-					<span
-						class="rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-all"
-						:class="
-							draft.connectionIds.length > 0
-								? 'border-error/30 bg-error/10 font-semibold text-error'
-								: 'border-success/30 bg-success/10 text-success'
-						"
-					>
+					<UiBadge :tone="draft.connectionIds.length > 0 ? 'danger' : 'success'" density="compact">
 						{{
 							t('agent.settings.safety.blockedCount', {
 								blocked: draft.connectionIds.length,
 								total: allConnections.length,
 							})
 						}}
-					</span>
+					</UiBadge>
 					<UiInfoHint :text="safetyHint" />
 				</div>
 			</div>
@@ -201,32 +204,28 @@
 		</div>
 
 		<div v-if="expanded" class="space-y-4 border-t border-border p-4 sm:p-5">
-			<div
-				v-if="operation.refreshRequired.value"
-				class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning/25 bg-warning/5 px-3 py-2 text-xs text-warning"
-			>
-				<UiButton
-					v-if="operation.refreshRequired.value || operation.notice.value === 'failed'"
-					type="button"
-					appearance="soft"
-					:disabled="operation.busy.value"
-					@click="load"
-					>{{ t('agent.settings.appManagement.readDenylist') }}</UiButton
-				>
-			</div>
+			<UiInlineNotice v-if="operation.refreshRequired.value" tone="warning" compact>
+				{{ t('agent.settings.appManagement.refreshRequired') }}
+				<template #actions>
+					<UiButton
+						type="button"
+						appearance="soft"
+						density="compact"
+						:disabled="operation.busy.value"
+						@click="load"
+						>{{ t('agent.settings.appManagement.readDenylist') }}</UiButton
+					>
+				</template>
+			</UiInlineNotice>
 
 			<div class="flex flex-col justify-between gap-2.5 sm:flex-row sm:items-center">
-				<UiInput
+				<UiSearchInput
 					v-model="searchQuery"
-					type="search"
 					class="max-w-md flex-1"
 					:placeholder="t('agent.settings.safety.searchConnections')"
 					:aria-label="t('agent.settings.safety.searchConnections')"
-				>
-					<template #leading>
-						<i class="fa-solid fa-magnifying-glass text-xs" aria-hidden="true"></i>
-					</template>
-				</UiInput>
+					:clear-label="t('common.clear')"
+				/>
 				<div v-if="filteredConnections.length > 0" class="flex items-center gap-2">
 					<UiButton
 						appearance="soft"
@@ -251,26 +250,30 @@
 				</div>
 			</div>
 
-			<div
+			<UiLoadingState
 				v-if="!connections.loaded.value && connections.busy.value"
-				class="py-8 text-center text-xs text-text-secondary"
-			>
-				<i class="fa-solid fa-circle-notch fa-spin mb-2 text-lg text-primary" aria-hidden="true"></i>
-				<div>{{ t('agent.settings.safety.loadingConnections') }}</div>
-			</div>
-			<div
+				class="py-4"
+				compact
+				:bordered="false"
+				:title="t('agent.settings.safety.loadingConnections')"
+			/>
+			<UiInlineNotice
 				v-else-if="directoryOperation.notice.value || directoryOperation.refreshRequired.value"
-				class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning/25 bg-warning/5 px-3 py-2 text-xs text-warning"
+				tone="warning"
+				compact
 			>
-				<span>{{ t('agent.settings.appManagement.targetsFailed') }}</span>
-				<UiButton
-					type="button"
-					appearance="soft"
-					:disabled="directoryOperation.busy.value"
-					@click="loadTargets"
-					>{{ t('agent.settings.appManagement.readTargets') }}</UiButton
-				>
-			</div>
+				{{ t('agent.settings.appManagement.targetsFailed') }}
+				<template #actions>
+					<UiButton
+						type="button"
+						appearance="soft"
+						density="compact"
+						:disabled="directoryOperation.busy.value"
+						@click="loadTargets"
+						>{{ t('agent.settings.appManagement.readTargets') }}</UiButton
+					>
+				</template>
+			</UiInlineNotice>
 			<div
 				v-else
 				class="grid max-h-[26rem] grid-cols-1 gap-2 overflow-y-auto rounded-xl border border-border bg-background/50 p-2.5 pr-2 md:grid-cols-2"
@@ -327,73 +330,72 @@
 									>{{ connection.username }}@</span
 								>
 								<span>{{ connection.host }}:{{ connection.port }}</span>
-								<span
-									class="rounded border border-border/70 bg-card/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-text-secondary"
-									>{{ connection.type }}</span
-								>
+								<UiBadge class="shrink-0 uppercase" appearance="ghost" density="compact">{{
+									connection.type
+								}}</UiBadge>
 							</div>
 						</div>
 					</div>
-					<span
+					<UiBadge
 						v-if="draft.connectionIds.includes(connection.id)"
-						class="inline-flex shrink-0 items-center gap-1 rounded-md border border-error/30 bg-error/15 px-1.5 py-1 text-[10px] font-semibold text-error shadow-2xs lg:px-2 lg:text-[11px]"
+						class="shrink-0 font-semibold"
+						tone="danger"
+						density="compact"
 					>
 						<i class="fa-solid fa-ban text-[9px]" aria-hidden="true"></i>
 						<span class="hidden sm:inline">{{ t('agent.settings.safety.blockedBadge') }}</span>
-					</span>
-					<span
-						v-else
-						class="inline-flex shrink-0 items-center gap-1 rounded-md border border-success/25 bg-success/10 px-1.5 py-1 text-[10px] font-medium text-success lg:px-2 lg:text-[11px]"
-					>
+					</UiBadge>
+					<UiBadge v-else class="shrink-0" tone="success" density="compact">
 						<i class="fa-solid fa-check text-[9px]" aria-hidden="true"></i>
 						<span class="hidden sm:inline">{{ t('agent.settings.safety.allowedBadge') }}</span>
-					</span>
+					</UiBadge>
 				</div>
-				<p v-if="!filteredConnections.length" class="py-6 text-center text-xs text-text-secondary">
-					{{ t('agent.settings.safety.noSearchResults', { query: searchQuery }) }}
-				</p>
+				<UiEmptyState
+					v-if="!filteredConnections.length"
+					class="col-span-full"
+					compact
+					:bordered="false"
+					icon="fa-solid fa-magnifying-glass"
+					:title="t('agent.settings.safety.noSearchResults', { query: searchQuery })"
+				/>
 			</div>
 
-			<div
-				v-if="orphanIds.length > 0"
-				class="rounded-xl border border-warning/30 bg-warning/5 px-3 py-2.5 text-xs text-warning"
-			>
-				<div class="flex flex-wrap items-center justify-between gap-2">
-					<div class="flex min-w-0 items-center gap-2">
-						<i
-							class="fa-solid fa-triangle-exclamation shrink-0 text-xs text-warning"
-							aria-hidden="true"
-						></i>
-						<span>{{ t('agent.settings.safety.orphanIdsCount', { count: orphanIds.length }) }}</span>
-					</div>
-					<button
+			<UiInlineNotice v-if="orphanIds.length > 0" tone="warning" compact>
+				<span>{{ t('agent.settings.safety.orphanIdsCount', { count: orphanIds.length }) }}</span>
+				<template #actions>
+					<UiButton
 						type="button"
-						class="cursor-pointer text-[11px] underline decoration-warning/45 underline-offset-2 hover:no-underline"
+						appearance="ghost"
+						tone="warning"
+						density="compact"
 						:disabled="blocked"
 						@click="orphanIds.forEach(removeOrphanId)"
 					>
 						{{ t('agent.settings.safety.clearOrphanIds') }}
-					</button>
-				</div>
+					</UiButton>
+				</template>
 				<details class="mt-2 border-t border-warning/20 pt-2">
 					<summary class="cursor-pointer text-[10px] text-text-secondary">
 						{{ t('agent.settings.safety.technicalDetails') }}
 					</summary>
 					<div class="mt-1.5 flex flex-wrap gap-1">
-						<button
+						<UiButton
 							v-for="id in orphanIds"
 							:key="id"
 							type="button"
-							class="inline-flex cursor-pointer items-center gap-1 rounded border border-warning/30 bg-warning/15 px-1.5 py-0.5 font-mono text-[11px] hover:bg-warning/25"
+							appearance="ghost"
+							tone="warning"
+							density="compact"
+							class="font-mono"
 							:title="t('agent.settings.safety.removeOrphanId')"
 							@click="removeOrphanId(id)"
 						>
 							<span>#{{ id }}</span>
 							<i class="fa-solid fa-xmark text-[8px]" aria-hidden="true"></i>
-						</button>
+						</UiButton>
 					</div>
 				</details>
-			</div>
+			</UiInlineNotice>
 
 			<div class="space-y-3 border-t border-border pt-4">
 				<div class="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
@@ -407,15 +409,16 @@
 						<span class="text-[11px] text-text-secondary">{{
 							t('agent.settings.safety.commonReasons')
 						}}</span>
-						<button
+						<UiButton
 							v-for="preset in reasonPresets"
 							:key="preset"
 							type="button"
-							class="cursor-pointer rounded-md border border-border bg-card px-2 py-0.5 text-[11px] text-text-secondary shadow-2xs transition-all hover:border-primary/40 hover:text-primary"
+							appearance="ghost"
+							density="compact"
 							@click="draft.reason = preset"
 						>
 							{{ preset }}
-						</button>
+						</UiButton>
 					</div>
 				</div>
 				<div class="flex flex-col items-stretch gap-2.5 sm:flex-row sm:items-center">

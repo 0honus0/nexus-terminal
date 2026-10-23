@@ -155,7 +155,7 @@ export function readServerTransferInput(value: unknown): ServerTransferInput {
 		sourceConnectionId,
 		connectionIds,
 		sourceItems,
-		remoteTargetPath: path(input.remoteTargetPath),
+		remoteTargetPath: input.remoteTargetPath === '/' ? '/' : path(input.remoteTargetPath),
 		transferMethod: choice(input.transferMethod, SERVER_TRANSFER_METHODS),
 	};
 }

@@ -39,7 +39,8 @@
     "origins": {
       "files": "文件",
       "docker": "Docker",
-      "agent": "Agent"
+      "agent": "Agent",
+      "tools": "工具安装"
     },
     "states": {
       "held": "持有中",

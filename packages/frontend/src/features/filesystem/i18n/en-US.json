@@ -1,5 +1,13 @@
 {
   "fileManager": {
+    "directoryPicker": {
+      "title": "Select destination directory",
+      "select": "Use this directory",
+      "root": "Root directory",
+      "empty": "No subdirectories to browse",
+      "unavailable": "Directory contents not loaded. Refresh or return to root to retry. A confirmed directory can still be selected.",
+      "notDirectory": "The selected location is not a directory."
+    },
     "modalTitle": "File Manager",
     "resizePopup": "Resize file manager window",
     "currentPath": "Current Path",
@@ -139,6 +147,10 @@
       "permissions": "Permissions",
       "modified": "Modified",
       "time": "Time"
+    },
+    "sort": {
+      "ascending": "Ascending",
+      "descending": "Descending"
     },
     "uploadStatus": {
       "cancelled": "Cancelled",

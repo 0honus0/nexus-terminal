@@ -5,12 +5,14 @@
 		UiBadge,
 		UiButton,
 		UiCheckbox,
+		UiEmptyState,
+		UiLoadingState,
 		UiFormField,
 		UiInput,
 		UiModal,
+		UiNumberInput,
 		UiSelect,
 		UiSlider,
-		UiSpinner,
 		UiSurface,
 		UiSwitch,
 		UiTextarea,
@@ -518,9 +520,7 @@
 								t('styleCustomizer.addNewTheme')
 							}}</UiButton>
 						</AppearancePresetToolbar>
-						<div v-if="loadingLocal" class="p-4 text-center text-text-secondary">
-							{{ t('common.loading') }}
-						</div>
+						<UiLoadingState v-if="loadingLocal" compact :bordered="false" :title="t('common.loading')" />
 						<ul
 							v-else-if="filteredLocalThemes.length"
 							class="m-0 max-h-[320px] list-none space-y-2 overflow-y-auto p-0.5"
@@ -563,16 +563,17 @@
 								</div>
 							</li>
 						</ul>
-						<div
+						<UiEmptyState
 							v-else
-							class="rounded-md border border-dashed border-border p-4 text-center italic text-text-secondary"
-						>
-							{{
+							compact
+							:bordered="false"
+							icon="fa-solid fa-palette"
+							:title="
 								localSearch
 									? t('styleCustomizer.noMatchingLocalPresetsFound')
 									: t('styleCustomizer.noLocalPresetsFound')
-							}}
-						</div>
+							"
+						/>
 					</div>
 
 					<div v-else>
@@ -588,11 +589,10 @@
 								}}</UiButton>
 								<UiButton
 									density="compact"
+									:loading="loadingRemote"
 									:disabled="!remoteRepositoryUrl || loadingRemote"
 									@click="loadRemoteThemes"
-									>{{
-										loadingRemote ? t('common.loading') : t('styleCustomizer.loadRemoteThemes')
-									}}</UiButton
+									>{{ t('styleCustomizer.loadRemoteThemes') }}</UiButton
 								>
 							</div>
 						</UiFormField>
@@ -625,24 +625,26 @@
 								</div>
 							</li>
 						</ul>
-						<div
+						<UiEmptyState
 							v-else
-							class="rounded-md border border-dashed border-border p-4 text-center italic text-text-secondary"
-						>
-							{{
+							compact
+							:bordered="false"
+							icon="fa-solid fa-cloud-arrow-down"
+							:title="
 								remoteSearch
 									? t('styleCustomizer.noMatchingRemotePresetsFound')
 									: t('styleCustomizer.noRemotePresetsFound')
-							}}
-						</div>
+							"
+						/>
 					</div>
 				</template>
-				<div
+				<UiEmptyState
 					v-else
-					class="rounded-md border border-dashed border-border/50 p-4 text-center italic text-text-secondary"
-				>
-					{{ t('styleCustomizer.terminalBgDisabled') }}
-				</div>
+					compact
+					:bordered="false"
+					icon="fa-solid fa-image-slash"
+					:title="t('styleCustomizer.terminalBgDisabled')"
+				/>
 
 				<UiModal
 					:visible="presetEditorVisible"
@@ -740,7 +742,7 @@
 							{{ t('styleCustomizer.enableTextStroke') }}
 						</label>
 						<UiFormField :label="t('styleCustomizer.textStrokeWidth')">
-							<UiInput v-model="form.terminalTextStrokeWidth" type="number" />
+							<UiNumberInput v-model="form.terminalTextStrokeWidth" />
 						</UiFormField>
 						<UiFormField :label="t('styleCustomizer.textStrokeColor')">
 							<UiInput v-model="form.terminalTextStrokeColor" />
@@ -755,13 +757,13 @@
 						</label>
 						<div class="grid gap-2 sm:grid-cols-3">
 							<UiFormField :label="t('styleCustomizer.textShadowOffsetX')">
-								<UiInput v-model="form.terminalTextShadowOffsetX" type="number" />
+								<UiNumberInput v-model="form.terminalTextShadowOffsetX" />
 							</UiFormField>
 							<UiFormField :label="t('styleCustomizer.textShadowOffsetY')">
-								<UiInput v-model="form.terminalTextShadowOffsetY" type="number" />
+								<UiNumberInput v-model="form.terminalTextShadowOffsetY" />
 							</UiFormField>
 							<UiFormField :label="t('styleCustomizer.textShadowBlur')">
-								<UiInput v-model="form.terminalTextShadowBlur" type="number" />
+								<UiNumberInput v-model="form.terminalTextShadowBlur" />
 							</UiFormField>
 						</div>
 						<UiFormField :label="t('styleCustomizer.textShadowColor')">
@@ -785,8 +787,8 @@
 							v-model="localSearch"
 							:placeholder="t('styleCustomizer.searchLocalThemesPlaceholder')"
 						/>
-						<UiSpinner v-if="loadingLocal" />
-						<ul v-else class="divide-y divide-border">
+						<UiLoadingState v-if="loadingLocal" compact :bordered="false" :title="t('common.loading')" />
+						<ul v-else-if="filteredLocalThemes.length" class="divide-y divide-border">
 							<li
 								v-for="theme in filteredLocalThemes"
 								:key="theme.name"
@@ -816,14 +818,18 @@
 									{{ t('common.delete') }}
 								</UiButton>
 							</li>
-							<li v-if="!filteredLocalThemes.length" class="py-4 text-sm text-text-secondary">
-								{{
-									localSearch
-										? t('styleCustomizer.noMatchingLocalPresetsFound')
-										: t('styleCustomizer.noLocalPresetsFound')
-								}}
-							</li>
 						</ul>
+						<UiEmptyState
+							v-else
+							compact
+							:bordered="false"
+							icon="fa-solid fa-palette"
+							:title="
+								localSearch
+									? t('styleCustomizer.noMatchingLocalPresetsFound')
+									: t('styleCustomizer.noLocalPresetsFound')
+							"
+						/>
 					</UiSurface>
 
 					<UiSurface surface="inset" class="min-w-0 space-y-3 p-3">
@@ -850,8 +856,8 @@
 							v-model="remoteSearch"
 							:placeholder="t('styleCustomizer.searchRemoteThemesPlaceholder')"
 						/>
-						<UiSpinner v-if="loadingRemote" />
-						<ul v-else class="divide-y divide-border">
+						<UiLoadingState v-if="loadingRemote" compact :bordered="false" :title="t('common.loading')" />
+						<ul v-else-if="filteredRemoteThemes.length" class="divide-y divide-border">
 							<li
 								v-for="theme in filteredRemoteThemes"
 								:key="theme.name"
@@ -866,14 +872,18 @@
 									{{ t('styleCustomizer.applyButton') }}
 								</UiButton>
 							</li>
-							<li v-if="!filteredRemoteThemes.length" class="py-4 text-sm text-text-secondary">
-								{{
-									remoteSearch
-										? t('styleCustomizer.noMatchingRemotePresetsFound')
-										: t('styleCustomizer.noRemotePresetsFound')
-								}}
-							</li>
 						</ul>
+						<UiEmptyState
+							v-else
+							compact
+							:bordered="false"
+							icon="fa-solid fa-cloud-arrow-down"
+							:title="
+								remoteSearch
+									? t('styleCustomizer.noMatchingRemotePresetsFound')
+									: t('styleCustomizer.noRemotePresetsFound')
+							"
+						/>
 					</UiSurface>
 				</div>
 

@@ -72,7 +72,7 @@ export interface MonitoringConfigurationController {
 	feedback: Readonly<Ref<MonitoringFeedback | null>>;
 	canSave: ComputedRef<boolean>;
 	refresh(): Promise<void>;
-	save(): Promise<void>;
+	save(): Promise<boolean>;
 	activate(): void;
 	deactivate(): void;
 	dispose(): void;

@@ -7,7 +7,7 @@
       "selectFiles": "Choose files (any type)"
     },
     "start": {
-      "title": "Connections & sessions",
+      "title": "New session",
       "description": "Resume a suspended session or choose a connection to open a terminal.",
       "connections": "Start a connection",
       "back": "Back to terminal"
@@ -78,8 +78,9 @@
     "emptyContainer": "Empty container"
   },
   "commandInputBar": {
-    "desktopPlaceholder": "Command",
-    "placeholder": "Enter command and press Enter to send...",
+    "commandLabel": "Terminal command",
+    "searchLabel": "Search in terminal",
+    "moreActions": "More command actions",
     "searchPlaceholder": "Search in terminal...",
     "openSearch": "Open terminal search",
     "closeSearch": "Close terminal search",

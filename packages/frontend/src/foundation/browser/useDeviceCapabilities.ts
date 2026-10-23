@@ -37,9 +37,9 @@ export function useDeviceCapabilities(): DeviceCapabilities {
 		isNarrowViewport.value = narrowQuery?.matches ?? false;
 	};
 
-	// Full mobile Workspace mode preserves the reachable legacy product classification.
-	// Touch/coarse/narrow capabilities remain independent signals for feature-local affordances.
-	const isMobile = computed(() => mobileUserAgent.value);
+	// A narrow desktop viewport needs the same single-column workspace treatment as a
+	// phone; relying on UA alone collapses every tool into unusable columns at 390px.
+	const isMobile = computed(() => mobileUserAgent.value || isNarrowViewport.value);
 	const supportsTouchInteraction = computed(() => hasTouch.value || hasCoarsePointer.value);
 
 	onMounted(() => {

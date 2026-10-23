@@ -71,6 +71,10 @@ import { ServerTransferService } from './transfers/service/server-transfer-servi
 import { NativeServerTransfer } from '../../platform/transfers/adapters/native-transfer.js';
 import type { ResourceCollector } from '../../platform/system/resource-diagnostic.js';
 import { createServerTransferRoutes } from './interfaces/http/server-transfer-http.js';
+import { RemoteToolModel } from './tools/model/tool-model.js';
+import { RemoteToolService } from './tools/service/tool-service.js';
+import { PosixToolInstaller } from '../../platform/tools/adapters/posix-tool-installer.js';
+import { createRemoteToolRoutes } from './interfaces/http/tool-http.js';
 
 interface RemoteRegistrationOptions {
 	events: OperationsEvents;
@@ -132,6 +136,11 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 	const mutations = new MachineMutationService(mutationModel);
 	const recovery = new MutationRecoveryService(mutationModel, mutations.ownerId, options.access, options.events);
 	const machines = new RemoteMachineModel(options.resolver, options.ssh, options.verifyHostKey, options.hostKeys);
+	const tools = new RemoteToolService(
+		options.access,
+		new RemoteToolModel(machines, options.resolver, new PosixToolInstaller(), new SecureSessionTokens()),
+		mutations,
+	);
 	const serverTransfers = new ServerTransferService(
 		options.access,
 		new ServerTransferModel(
@@ -282,6 +291,7 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 		},
 
 		httpRoutes: () => [
+			...createRemoteToolRoutes(tools),
 			...createServerTransferRoutes(serverTransfers),
 			...createMutationHttpRoutes(recovery),
 			...createConnectionTestRoutes(connectionTests),
@@ -302,6 +312,7 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 		],
 
 		quiesce: () => {
+			tools.quiesce();
 			serverTransfers.quiesce();
 			connectionTests.quiesce();
 			recovery.quiesce();
@@ -322,6 +333,7 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 				return closePromise;
 			}
 			closePromise = Promise.resolve().then(async () => {
+				tools.quiesce();
 				serverTransfers.quiesce();
 				connectionTests.quiesce();
 				recovery.quiesce();
@@ -337,6 +349,7 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 				files.quiesce();
 				// Start independent owners together; a slow owner cannot block release of the others.
 				const actual = Promise.allSettled([
+					Promise.resolve().then(() => tools.close()),
 					Promise.resolve().then(() => serverTransfers.close()),
 					Promise.resolve().then(() => connectionTests.close()),
 					Promise.resolve().then(() => recovery.close()),

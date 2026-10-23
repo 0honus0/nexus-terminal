@@ -92,6 +92,10 @@ test('preferences load workspace values from the Shared presentation contract', 
 		value.navBarVisible = true;
 		value.showConnectionTags = false;
 		value.showQuickCommandTags = false;
+		value.showCommandBarClear = false;
+		value.showCommandBarFocusSwitch = false;
+		value.showCommandBarEditor = false;
+		value.showCommandBarSearch = false;
 	});
 	const retiredRequests: string[] = [];
 	page.on('request', (request) => {
@@ -108,6 +112,10 @@ test('preferences load workspace values from the Shared presentation contract', 
 		await expect(page.locator('#showPopupFileManager')).toBeChecked();
 		await expect(page.locator('#showConnectionTags')).not.toBeChecked();
 		await expect(page.locator('#showQuickCommandTags')).not.toBeChecked();
+		await expect(page.locator('#showCommandBarClear')).not.toBeChecked();
+		await expect(page.locator('#showCommandBarFocusSwitch')).not.toBeChecked();
+		await expect(page.locator('#showCommandBarEditor')).not.toBeChecked();
+		await expect(page.locator('#showCommandBarSearch')).not.toBeChecked();
 		expect(retiredRequests).toEqual([]);
 	} finally {
 		await updateUiPreferences(context.request, (value) => {
@@ -116,6 +124,10 @@ test('preferences load workspace values from the Shared presentation contract', 
 			value.navBarVisible = original.navBarVisible;
 			value.showConnectionTags = original.showConnectionTags;
 			value.showQuickCommandTags = original.showQuickCommandTags;
+			value.showCommandBarClear = original.showCommandBarClear;
+			value.showCommandBarFocusSwitch = original.showCommandBarFocusSwitch;
+			value.showCommandBarEditor = original.showCommandBarEditor;
+			value.showCommandBarSearch = original.showCommandBarSearch;
 		});
 	}
 });

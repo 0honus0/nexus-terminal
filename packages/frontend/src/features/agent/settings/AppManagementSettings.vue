@@ -1,7 +1,15 @@
 <script setup lang="ts">
 	import { computed, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiEmptyState, UiFormActions, UiInfoHint, UiModal } from '@/foundation/ui';
+	import {
+		UiBadge,
+		UiButton,
+		UiEmptyState,
+		UiFormActions,
+		UiInfoHint,
+		UiInlineNotice,
+		UiModal,
+	} from '@/foundation/ui';
 	import type { useAppManagement } from '../composables/use-app-management';
 	import type { usePluginManagement } from '../composables/use-plugin-management';
 	import type { ManagedApp } from '../model/app-management-types';
@@ -105,11 +113,10 @@
 					<UiInfoHint :text="t('agent.settings.apps.description')" />
 				</div>
 			</div>
-			<span
-				class="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-text-secondary shadow-2xs"
-				><span class="h-1.5 w-1.5 rounded-full bg-success"></span
-				>{{ t('agent.settings.apps.enabledCount', { enabled: enabledCount, total: apps.length }) }}</span
-			>
+			<UiBadge appearance="ghost">
+				<span class="h-1.5 w-1.5 rounded-full bg-success"></span>
+				{{ t('agent.settings.apps.enabledCount', { enabled: enabledCount, total: apps.length }) }}
+			</UiBadge>
 		</div>
 		<div :class="embedded ? 'space-y-1' : 'space-y-4 p-4 sm:p-5'">
 			<UiButton
@@ -263,13 +270,12 @@
 		@close="uninstallAppId = ''"
 	>
 		<div class="space-y-4">
-			<div class="flex items-center gap-3 rounded-xl border border-error/20 bg-error/5 p-3">
-				<i class="fa-solid fa-triangle-exclamation text-error" aria-hidden="true"></i>
+			<UiInlineNotice tone="danger" compact>
 				<div>
 					<p class="text-sm font-semibold">{{ uninstallApp?.name }}</p>
 					<p class="font-mono text-xs text-text-secondary">v{{ uninstallApp?.definitionVersion }}</p>
 				</div>
-			</div>
+			</UiInlineNotice>
 			<p class="text-xs leading-relaxed text-text-secondary">
 				{{
 					t('agent.settings.apps.uninstallConfirmPrompt', {
@@ -297,17 +303,11 @@
 					type="button"
 					appearance="solid"
 					tone="danger"
+					:loading="props.plugins.operation.busy.value"
 					:disabled="blocked || uninstallApp?.enabled"
 					@click="confirmUninstall()"
 				>
-					<i
-						:class="
-							props.plugins.operation.busy.value
-								? 'fa-solid fa-circle-notch fa-spin'
-								: 'fa-regular fa-trash-can'
-						"
-						aria-hidden="true"
-					></i>
+					<i class="fa-regular fa-trash-can" aria-hidden="true"></i>
 					{{
 						t(
 							uninstallInstallation?.status === 'draining'

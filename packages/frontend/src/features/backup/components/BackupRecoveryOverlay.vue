@@ -1,6 +1,6 @@
 <script setup lang="ts">
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiModal, UiSpinner } from '@/foundation/ui';
+	import { UiButton, UiInlineLoading, UiModal } from '@/foundation/ui';
 	import { useBackupStore } from '../store/backup.store';
 	const { t } = useI18n();
 	const backup = useBackupStore();
@@ -20,10 +20,11 @@
 		:z-index="10000"
 	>
 		<div class="space-y-4" role="status" data-backup-recovery>
-			<template v-if="backup.state.status === 'restoring'"
-				><UiSpinner />
-				<p>{{ t('settings.backup.restoring') }}</p></template
-			>
+			<UiInlineLoading
+				v-if="backup.state.status === 'restoring'"
+				density="default"
+				:label="t('settings.backup.restoring')"
+			/>
 			<template v-else-if="backup.state.status === 'restored'">
 				<p>
 					{{

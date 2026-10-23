@@ -21,7 +21,11 @@ function failureNotice(cause: unknown, writing: boolean): string {
 }
 
 /** Owns one independently versioned editor's request, failure fence and view lifetime. */
-export function useAgentManagementOperation(onRevoke?: (reason: ViewRevocation) => void, available?: () => boolean) {
+export function useAgentManagementOperation(
+	onRevoke?: (reason: ViewRevocation) => void,
+	available?: () => boolean,
+	options: { retainOnView?: boolean } = {},
+) {
 	const busy = ref(false);
 	const refreshRequired = ref(true);
 	const notice = ref('');
@@ -41,6 +45,7 @@ export function useAgentManagementOperation(onRevoke?: (reason: ViewRevocation) 
 	let backgroundRequest: AbortController | null = null;
 	const scope = useAuthenticatedViewScope({
 		available,
+		retainOnView: options.retainOnView,
 
 		onRevoke(reason) {
 			generation += 1;

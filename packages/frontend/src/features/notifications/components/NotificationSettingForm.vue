@@ -7,7 +7,7 @@
 		NOTIFICATION_MAX_HEADERS,
 		type NotificationChannel,
 	} from '@nexus-terminal/shared/operations/notifications/values';
-	import { UiButton, UiCheckbox, UiFormField, UiInput, UiSelect, UiTextarea } from '@/foundation/ui';
+	import { UiButton, UiCheckbox, UiFormField, UiInput, UiNumberInput, UiSelect, UiTextarea } from '@/foundation/ui';
 	import { useAuthenticatedViewScope } from '@/shared/session/public';
 	import { useNotificationsStore } from '../store/notifications.store';
 	import { notificationFailureKey } from '../model/notification-failure';
@@ -388,13 +388,7 @@
 					/></UiFormField>
 					<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 						<UiFormField :label="t('settings.notifications.form.smtpPort')" for-id="notification-port"
-							><UiInput
-								id="notification-port"
-								v-model="form.port"
-								type="number"
-								min="1"
-								max="65535"
-								required
+							><UiNumberInput id="notification-port" v-model="form.port" min="1" max="65535" required
 						/></UiFormField>
 						<label class="flex items-end pb-2 text-sm"
 							><UiCheckbox v-model="form.secure" class="mr-2" />{{

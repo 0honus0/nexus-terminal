@@ -125,7 +125,7 @@ test('profiles real large-directory navigation and sort while retaining bounded 
 	const input = manager.locator('.file-manager-path-input input');
 	const list = activeFileManagerList(page);
 	const rows = list.locator('tbody tr[data-file-path]');
-	const header = manager.getByRole('columnheader').filter({ hasText: 'Name' }).first();
+	const nameSortButton = manager.locator('.file-manager-name-sort');
 	const cdp = await context.newCDPSession(page);
 	await cdp.send('Network.enable');
 	const listingRequests = new Map<string, number>();
@@ -171,10 +171,7 @@ test('profiles real large-directory navigation and sort while retaining bounded 
 				const renderedRows = await rows.count();
 				expect(renderedRows).toBeLessThan(200);
 				const sortMs = await manager.evaluate(async (element, count) => {
-					const header = [...element.querySelectorAll('th')].find((item) =>
-						item.textContent?.includes('Name'),
-					)!;
-					const button = header.querySelector('button')!;
+					const button = element.querySelector('.file-manager-name-sort')!;
 					const start = performance.now();
 					await new Promise<void>((resolve) => {
 						const observer = new MutationObserver(() => {
@@ -189,7 +186,7 @@ test('profiles real large-directory navigation and sort while retaining bounded 
 					return performance.now() - start;
 				}, count);
 				await expect(rows.first()).toHaveAttribute('data-filename', `文件-${count - 1}.txt`);
-				await header.locator('button').click();
+				await nameSortButton.click();
 				await expect(rows.first()).toHaveAttribute('data-filename', '文件-0.txt');
 				await list.evaluate((element) => {
 					element.scrollTop = element.scrollHeight;

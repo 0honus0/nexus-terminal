@@ -2,12 +2,16 @@
 	import { computed, onActivated, onMounted, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import {
+		UiBadge,
 		UiButton,
+		UiEmptyState,
 		UiFormActions,
 		UiFormField,
 		UiInfoHint,
+		UiInlineNotice,
 		UiInput,
 		UiModal,
+		UiSegmentedControl,
 		UiSelect,
 		UiSwitch,
 		UiTextarea,
@@ -43,6 +47,11 @@
 		discover,
 		toggle,
 	} = useAppIntegrations(props.appId, () => props.active);
+
+	const integrationKindOptions = computed<Array<{ value: 'mcp' | 'acp'; label: string }>>(() => [
+		{ value: 'mcp', label: 'MCP' },
+		{ value: 'acp', label: 'ACP' },
+	]);
 
 	const copiedUrl = ref('');
 	const discoveryOpen = ref(false);
@@ -132,15 +141,12 @@
 					appearance="soft"
 					tone="neutral"
 					icon-only
+					:loading="operation.busy.value"
 					:disabled="operation.busy.value"
 					:aria-label="t('agent.settings.integrationManagement.reload')"
 					@click="load"
 				>
-					<i
-						class="fa-solid fa-arrows-rotate text-xs"
-						:class="{ 'fa-spin': operation.busy.value }"
-						aria-hidden="true"
-					></i>
+					<i class="fa-solid fa-arrows-rotate text-xs" aria-hidden="true"></i>
 				</UiButton>
 				<UiButton
 					v-if="pendingCreate"
@@ -167,9 +173,9 @@
 			v-if="items.length || needsReload || operation.refreshRequired.value || pendingCreate"
 			:class="embedded ? 'space-y-1' : 'space-y-3 p-4 sm:p-5'"
 		>
-			<p v-if="pendingCreate" class="text-xs text-warning">
+			<UiInlineNotice v-if="pendingCreate" tone="warning" compact>
 				{{ t('agent.settings.integrationManagement.pending') }}
-			</p>
+			</UiInlineNotice>
 			<UiButton
 				v-if="operation.refreshRequired.value || needsReload || operation.notice.value === 'failed'"
 				type="button"
@@ -203,19 +209,10 @@
 									<h4 class="break-words text-sm font-semibold text-foreground">
 										{{ item.configuration.name }}
 									</h4>
-									<span
-										class="rounded-full border border-border px-2.5 py-0.5 text-[11px] text-text-secondary"
-									>
+									<UiBadge appearance="ghost" density="compact">
 										{{ item.configuration.kind.toUpperCase() }}
-									</span>
-									<span
-										class="rounded-full border px-2.5 py-0.5 text-[11px] font-medium"
-										:class="
-											item.enabled
-												? 'border-success/30 bg-success/10 text-success'
-												: 'border-border text-text-secondary'
-										"
-									>
+									</UiBadge>
+									<UiBadge :tone="item.enabled ? 'success' : 'neutral'" density="compact">
 										{{
 											t(
 												item.enabled
@@ -223,7 +220,7 @@
 													: 'agent.settings.providers.disabled',
 											)
 										}}
-									</span>
+									</UiBadge>
 								</div>
 
 								<button
@@ -332,10 +329,14 @@
 				</article>
 			</fieldset>
 		</div>
-		<div v-else class="border-t border-border/30 py-7 text-center text-xs text-text-secondary">
-			<i class="fa-solid fa-plug mb-2 block text-sm text-text-secondary/60" aria-hidden="true"></i>
-			{{ t('agent.settings.integrationManagement.empty') }}
-		</div>
+		<UiEmptyState
+			v-else
+			class="border-t border-border/30"
+			compact
+			:bordered="false"
+			icon="fa-solid fa-plug"
+			:title="t('agent.settings.integrationManagement.empty')"
+		/>
 	</section>
 	<UiModal
 		:visible="active && discoveryOpen && discovery !== null"
@@ -454,18 +455,24 @@
 			<h3 class="mb-5 shrink-0 text-lg font-semibold">
 				{{ original ? t('common.edit') : t('agent.settings.integrationManagement.create') }}
 			</h3>
-			<p v-if="pendingCreate" role="status" class="mb-4 rounded-xl bg-warning/10 p-3 text-sm text-warning">
+			<UiInlineNotice v-if="pendingCreate" class="mb-4" tone="warning">
 				{{ t('agent.settings.integrationManagement.pending') }}
-			</p>
-			<div
-				v-if="operation.refreshRequired.value || needsReload"
-				class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-header/25 p-3"
-			>
-				<span class="text-xs text-text-secondary">{{ t('agent.settings.integrationManagement.reload') }}</span>
-				<UiButton type="button" appearance="soft" tone="neutral" :disabled="operation.busy.value" @click="load">
-					{{ t('agent.settings.integrationManagement.reload') }}
-				</UiButton>
-			</div>
+			</UiInlineNotice>
+			<UiInlineNotice v-if="operation.refreshRequired.value || needsReload" class="mb-4" tone="warning" compact>
+				{{ t('agent.settings.integrationManagement.reload') }}
+				<template #actions>
+					<UiButton
+						type="button"
+						appearance="soft"
+						tone="warning"
+						density="compact"
+						:disabled="operation.busy.value"
+						@click="load"
+					>
+						{{ t('agent.settings.integrationManagement.reload') }}
+					</UiButton>
+				</template>
+			</UiInlineNotice>
 			<fieldset
 				:disabled="blocked || pendingCreate"
 				class="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-y-contain pr-1 sm:pr-3"
@@ -476,26 +483,12 @@
 						<label class="mb-1 block text-sm font-medium text-text-secondary">{{
 							t('agent.settings.integrationManagement.kind')
 						}}</label>
-						<div class="integration-form__segmented flex rounded-lg p-1">
-							<button
-								type="button"
-								class="integration-form__segment flex-1 px-3 py-2 text-sm font-medium focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-								:class="{ 'is-active': draft.kind === 'mcp' }"
-								:disabled="original !== null"
-								@click="draft.kind = 'mcp'"
-							>
-								MCP
-							</button>
-							<button
-								type="button"
-								class="integration-form__segment flex-1 px-3 py-2 text-sm font-medium focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-								:class="{ 'is-active': draft.kind === 'acp' }"
-								:disabled="original !== null"
-								@click="draft.kind = 'acp'"
-							>
-								ACP
-							</button>
-						</div>
+						<UiSegmentedControl
+							v-model="draft.kind"
+							:options="integrationKindOptions"
+							:disabled="original !== null"
+							:label="t('agent.settings.integrationManagement.kind')"
+						/>
 					</div>
 					<UiFormField :label="t('agent.settings.appManagement.name')" for-id="integration-name">
 						<UiInput id="integration-name" v-model="draft.name" autocomplete="off" />
@@ -668,34 +661,6 @@
 		border-radius: 999px;
 		background: color-mix(in srgb, var(--link-active-color) 72%, transparent);
 		content: '';
-	}
-
-	.integration-form__segmented {
-		gap: 0.25rem;
-		border: 1px solid color-mix(in srgb, var(--border-color) 56%, transparent);
-		background: color-mix(in srgb, var(--header-bg-color) 56%, var(--app-bg-color));
-		box-shadow: inset 0 1px 2px color-mix(in srgb, var(--text-color) 5%, transparent);
-	}
-
-	.integration-form__segment {
-		margin: 0;
-		border: 0 !important;
-		border-radius: 0.5rem !important;
-		background: transparent !important;
-		color: var(--text-color-secondary) !important;
-	}
-
-	.integration-form__segment:hover {
-		background: color-mix(in srgb, var(--card-bg-color) 76%, var(--app-bg-color)) !important;
-		color: var(--text-color) !important;
-	}
-
-	.integration-form__segment.is-active {
-		background: color-mix(in srgb, var(--link-active-color) 16%, var(--card-bg-color)) !important;
-		color: var(--link-active-color) !important;
-		box-shadow:
-			0 1px 2px color-mix(in srgb, var(--text-color) 8%, transparent),
-			inset 0 0 0 1px color-mix(in srgb, var(--link-active-color) 24%, transparent);
 	}
 
 	.integration-form__footer {

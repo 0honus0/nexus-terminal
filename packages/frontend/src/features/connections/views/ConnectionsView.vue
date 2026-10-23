@@ -13,7 +13,18 @@
 		stringStorageCodec,
 		writeStoredValue,
 	} from '@/foundation/browser';
-	import { UiActionGroup, UiButton, UiInput, UiPopover, UiSelect, UiSwitch } from '@/foundation/ui';
+	import {
+		UiActionGroup,
+		UiBadge,
+		UiButton,
+		UiEmptyState,
+		UiLoadingState,
+		UiPopover,
+		UiSearchInput,
+		UiSelect,
+		UiSpinner,
+		UiSwitch,
+	} from '@/foundation/ui';
 	import { useFeedback } from '@/shared/feedback/public';
 	import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
 	import { preloadWorkspaceTerminalSurface } from '@/runtimes/workspace/public';
@@ -374,16 +385,14 @@
 				</header>
 
 				<div class="catalog-toolbar">
-					<UiInput
+					<UiSearchInput
 						v-model="search"
-						type="search"
 						density="comfortable"
 						class="connections-search"
 						:placeholder="t('dashboard.searchConnectionsPlaceholder')"
 						:aria-label="t('common.search')"
-					>
-						<template #leading><i class="fas fa-magnifying-glass" aria-hidden="true"></i></template>
-					</UiInput>
+						:clear-label="t('common.clear')"
+					/>
 
 					<div class="connections-tags">
 						<UiSelect
@@ -542,16 +551,25 @@
 									c.name || c.host
 								}}</strong>
 								<div class="connection-badges connection-badges--inline">
-									<span class="connection-protocol">{{ c.type }}</span>
-									<span
+									<UiBadge class="connection-protocol" appearance="ghost" density="compact">{{
+										c.type
+									}}</UiBadge>
+									<UiBadge
 										v-for="name in tagNames(c).slice(0, 3)"
 										:key="name"
 										class="connection-tag"
+										tone="primary"
+										appearance="soft"
+										density="compact"
 										:title="name"
-										>{{ name }}</span
+										>{{ name }}</UiBadge
 									>
-									<span v-if="tagNames(c).length > 3" class="connection-tag connection-tag--more"
-										>+{{ tagNames(c).length - 3 }}</span
+									<UiBadge
+										v-if="tagNames(c).length > 3"
+										class="connection-tag connection-tag--more"
+										appearance="ghost"
+										density="compact"
+										>+{{ tagNames(c).length - 3 }}</UiBadge
 									>
 								</div>
 							</div>
@@ -582,15 +600,11 @@
 												: 'connection-meta__item--error'
 									"
 								>
+									<UiSpinner v-if="testing.has(c.id)" density="compact" />
 									<i
-										:class="[
-											'fas',
-											testing.has(c.id)
-												? 'fa-spinner fa-spin'
-												: testResults.get(c.id)?.success
-													? 'fa-circle-check'
-													: 'fa-circle-xmark',
-										]"
+										v-else
+										class="fas"
+										:class="testResults.get(c.id)?.success ? 'fa-circle-check' : 'fa-circle-xmark'"
 										aria-hidden="true"
 									></i>
 									<span v-if="testing.has(c.id)">{{ t('connections.actions.testing') }}</span>
@@ -605,16 +619,25 @@
 						</div>
 
 						<div class="connection-badges connection-badges--rail">
-							<span class="connection-protocol">{{ c.type }}</span>
-							<span
+							<UiBadge class="connection-protocol" appearance="ghost" density="compact">{{
+								c.type
+							}}</UiBadge>
+							<UiBadge
 								v-for="name in tagNames(c).slice(0, 3)"
 								:key="name"
 								class="connection-tag"
+								tone="primary"
+								appearance="soft"
+								density="compact"
 								:title="name"
-								>{{ name }}</span
+								>{{ name }}</UiBadge
 							>
-							<span v-if="tagNames(c).length > 3" class="connection-tag connection-tag--more"
-								>+{{ tagNames(c).length - 3 }}</span
+							<UiBadge
+								v-if="tagNames(c).length > 3"
+								class="connection-tag connection-tag--more"
+								appearance="ghost"
+								density="compact"
+								>+{{ tagNames(c).length - 3 }}</UiBadge
 							>
 						</div>
 
@@ -625,16 +648,14 @@
 								class="row-action row-action--test"
 								density="comfortable"
 								:disabled="batch || testing.has(c.id)"
+								:loading="testing.has(c.id)"
 								appearance="ghost"
 								tone="primary"
 								:aria-label="t('connections.actions.test')"
 								:title="t('connections.actions.test')"
 								@click.stop="test(c)"
 							>
-								<i
-									:class="['fas', testing.has(c.id) ? 'fa-spinner fa-spin' : 'fa-flask']"
-									aria-hidden="true"
-								/>
+								<i class="fas fa-flask" aria-hidden="true" />
 								<span class="row-action__label">{{ t('connections.actions.test') }}</span>
 							</UiButton>
 							<UiButton
@@ -679,23 +700,32 @@
 					</li>
 				</ul>
 
-				<div v-else class="connection-empty">
-					<span class="connection-empty__icon" aria-hidden="true"><i class="fas fa-link-slash"></i></span>
-					<p v-if="loading">{{ t('common.loading') }}</p>
-					<p v-else-if="search">{{ t('dashboard.noConnectionsMatchSearch') }}</p>
-					<p v-else-if="tagId !== ''">{{ t('dashboard.noConnectionsWithTag') }}</p>
-					<p v-else>{{ t('connections.noConnections') }}</p>
-					<UiButton
-						v-if="!loading && !search && tagId === ''"
-						type="button"
-						appearance="soft"
-						tone="primary"
-						@click="openAdd"
-					>
-						<i class="fas fa-plus" aria-hidden="true" />
-						{{ t('connections.addFirstConnection') }}
-					</UiButton>
-				</div>
+				<UiLoadingState
+					v-else-if="loading"
+					class="connection-empty"
+					:bordered="false"
+					:title="t('common.loading')"
+				/>
+				<UiEmptyState
+					v-else
+					class="connection-empty"
+					:bordered="false"
+					icon="fas fa-link-slash"
+					:title="
+						search
+							? t('dashboard.noConnectionsMatchSearch')
+							: tagId !== ''
+								? t('dashboard.noConnectionsWithTag')
+								: t('connections.noConnections')
+					"
+				>
+					<template v-if="!search && tagId === ''" #action>
+						<UiButton type="button" appearance="soft" tone="primary" @click="openAdd">
+							<i class="fas fa-plus" aria-hidden="true" />
+							{{ t('connections.addFirstConnection') }}
+						</UiButton>
+					</template>
+				</UiEmptyState>
 			</section>
 		</div>
 
@@ -994,22 +1024,6 @@
 		font-size: 10px;
 	}
 
-	.connections-notice {
-		padding: 10px 16px;
-		border-bottom: 1px solid var(--connections-line);
-		font-size: 12px;
-	}
-
-	.connections-notice--warning {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 10px;
-		border-color: color-mix(in srgb, var(--status-warning-color) 24%, transparent);
-		background: color-mix(in srgb, var(--status-warning-color) 9%, transparent);
-		color: var(--status-warning-color);
-	}
-
 	.batch-bar {
 		display: flex;
 		align-items: center;
@@ -1172,46 +1186,21 @@
 
 	.connection-protocol,
 	.connection-tag {
-		display: inline-flex;
 		max-width: 8rem;
 		flex: 0 0 auto;
-		align-items: center;
-		justify-content: center;
-		padding: 3px 10px;
-		border-radius: 999px;
-		font-size: 11px;
-		font-weight: 620;
-		line-height: 1.4;
-		letter-spacing: 0.02em;
 	}
 
 	.connection-badges--inline .connection-protocol,
 	.connection-badges--inline .connection-tag {
 		max-width: 7rem;
-		padding: 1px 6px;
-		font-size: 8.5px;
-		font-weight: 650;
-		line-height: 1.55;
-		letter-spacing: 0.03em;
-	}
-
-	.connection-protocol {
-		background: color-mix(in srgb, var(--text-color) 6%, transparent);
-		color: var(--text-color-secondary);
 	}
 
 	.connection-tag {
 		overflow: hidden;
-		border: 1px solid color-mix(in srgb, var(--link-active-color) 14%, var(--connections-line));
-		background: color-mix(in srgb, var(--link-active-color) 7%, transparent);
-		color: var(--link-active-color);
 		text-overflow: ellipsis;
-		white-space: nowrap;
 	}
 
 	.connection-tag--more {
-		border-color: var(--connections-line);
-		background: transparent;
 		color: var(--text-color-secondary);
 	}
 
@@ -1314,28 +1303,7 @@
 	}
 
 	.connection-empty {
-		display: flex;
 		min-height: 260px;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 10px;
-		padding: 28px;
-		color: var(--text-color-secondary);
-		font-size: 12px;
-		text-align: center;
-	}
-
-	.connection-empty__icon {
-		display: grid;
-		width: 42px;
-		height: 42px;
-		place-items: center;
-		border: 1px solid var(--connections-line);
-		border-radius: 13px;
-		background: color-mix(in srgb, var(--input-bg-color) 66%, transparent);
-		color: var(--text-color-secondary);
-		font-size: 15px;
 	}
 
 	@media (max-width: 900px) {

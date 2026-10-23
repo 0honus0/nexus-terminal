@@ -4,7 +4,7 @@ export async function initializeMachineMutations(tx: SqlExecutor): Promise<void>
 	await tx.exec(`CREATE TABLE remote_machine_mutation_claims (
 		id TEXT PRIMARY KEY,
 		owner_id TEXT NOT NULL,
-		origin TEXT NOT NULL CHECK(origin IN ('files','docker','agent')),
+		origin TEXT NOT NULL CHECK(origin IN ('files','docker','agent','tools')),
 		targets_json TEXT NOT NULL,
 		resource_count INTEGER NOT NULL CHECK(resource_count IN (1,2)),
 		state TEXT NOT NULL CHECK(state IN ('held','blocked','released')),

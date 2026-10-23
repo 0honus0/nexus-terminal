@@ -11,7 +11,7 @@ import { initializeSnapshotRestoreSchema } from '../platform/storage/sqlite/adap
 export const applicationMigrations: readonly SchemaMigration[] = [
 	{
 		version: 1,
-		signature: 'backend-next-v1-initial-20261022-inherited-agent-limits-browser-desktop',
+		signature: 'backend-next-v1-initial-20261023-remote-tool-installer',
 
 		async apply(tx) {
 			await targetMigrations[0].apply(tx);

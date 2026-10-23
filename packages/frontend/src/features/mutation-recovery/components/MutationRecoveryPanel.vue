@@ -7,6 +7,7 @@
 		UiCheckbox,
 		UiEmptyState,
 		UiFormField,
+		UiInlineNotice,
 		UiInput,
 		UiSelect,
 		UiSettingsGroup,
@@ -240,10 +241,9 @@
 		</template>
 
 		<div class="mutation-recovery">
-			<div class="mutation-recovery__notice">
-				<i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
-				<span>{{ t('mutationRecovery.warning') }}</span>
-			</div>
+			<UiInlineNotice class="mutation-recovery__notice" tone="warning" compact>
+				{{ t('mutationRecovery.warning') }}
+			</UiInlineNotice>
 			<section class="mutation-recovery__queue">
 				<div class="mutation-recovery__section-head">
 					<div>
@@ -465,24 +465,7 @@
 	}
 
 	.mutation-recovery__notice {
-		display: flex;
-		gap: 10px;
-		align-items: flex-start;
-		padding: 11px 13px;
-		border-radius: 11px;
-		background: color-mix(in srgb, var(--status-warning-color) 10%, transparent);
-		color: color-mix(in srgb, var(--status-warning-color) 78%, var(--text-color));
-		font-size: 12px;
-		line-height: 1.55;
-	}
-
-	.mutation-recovery__notice--error {
-		background: color-mix(in srgb, var(--status-error-color) 9%, transparent);
-		color: var(--status-error-color);
-	}
-
-	.mutation-recovery__notice > i {
-		margin-top: 2px;
+		width: 100%;
 	}
 
 	.mutation-recovery__queue {

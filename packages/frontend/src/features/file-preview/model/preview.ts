@@ -14,6 +14,7 @@ export type PreviewError =
 export interface PreviewTab {
 	id: string;
 	scopeId?: string;
+	scopeLabel?: string;
 	path: string;
 	name: string;
 	kind: PreviewKind;

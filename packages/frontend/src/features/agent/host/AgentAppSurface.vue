@@ -1,6 +1,6 @@
 <script setup lang="ts">
 	import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-	import { UiButton, UiCheckbox } from '@/foundation/ui';
+	import { UiButton, UiCheckbox, UiEmptyState, UiLoadingState, UiInlineNotice } from '@/foundation/ui';
 	import { useI18n } from 'vue-i18n';
 	import { useNativeRuns } from '../composables/use-native-runs';
 	import { isNativeRunActive, nativeModelKey } from '../model/native-run-rules';
@@ -359,18 +359,16 @@
 			</header>
 			<!-- The transcript owns scrolling; the composer stays docked above the bottom edge. -->
 			<div class="relative z-10 flex min-h-0 flex-1 flex-col gap-3 p-3 sm:p-4">
-				<div
+				<UiInlineNotice
 					v-if="!executionEnabled"
-					role="status"
-					class="agent-session-notice mx-auto w-full max-w-3xl rounded-lg border border-warning/25 bg-warning/[0.055] px-3 py-2 text-[11px] leading-4 text-warning"
+					class="agent-session-notice mx-auto w-full max-w-3xl"
+					tone="warning"
+					compact
 				>
 					{{ t('agent.nativeRun.executionDisabled') }}
-				</div>
-				<section
-					v-if="pending"
-					class="agent-unknown-panel space-y-2.5 rounded-xl border border-warning/30 bg-warning/[0.055] p-3"
-				>
-					<p class="text-xs font-medium text-warning">{{ t('agent.nativeRun.unknown') }}</p>
+				</UiInlineNotice>
+				<UiInlineNotice v-if="pending" class="agent-unknown-panel space-y-2.5" tone="warning">
+					<p class="text-xs font-medium">{{ t('agent.nativeRun.unknown') }}</p>
 					<details class="rounded-lg bg-background/45 p-2 text-xs text-text-secondary">
 						<summary class="cursor-pointer select-none">
 							{{ t('agent.nativeRun.technicalDetails') }}
@@ -412,15 +410,14 @@
 					>
 						{{ t('agent.nativeThreads.abandon') }}
 					</UiButton>
-				</section>
-				<div
+				</UiInlineNotice>
+				<UiLoadingState
 					v-else-if="operation.busy.value || !scope"
-					class="flex flex-1 items-center justify-center gap-2 text-xs text-text-secondary"
-					role="status"
-				>
-					<i class="fa-solid fa-circle-notch fa-spin text-[11px]" aria-hidden="true"></i>
-					{{ t('agent.operations.loading') }}
-				</div>
+					class="flex-1"
+					compact
+					:bordered="false"
+					:title="t('agent.operations.loading')"
+				/>
 				<section v-if="thread" class="flex min-h-0 flex-1 flex-col gap-3">
 					<p v-if="olderHidden" role="status" class="text-xs">{{ t('agent.nativeRun.windowed') }}</p>
 					<div
@@ -697,12 +694,13 @@
 																>{{ connection.name }}</label
 															>
 														</div>
-														<p
+														<UiEmptyState
 															v-if="connections.length === 0"
-															class="rounded-lg bg-background/50 px-2.5 py-3 text-[11px] text-text-secondary"
-														>
-															{{ t('agent.operations.noTargets') }}
-														</p>
+															compact
+															:bordered="false"
+															icon="fa-solid fa-server"
+															:title="t('agent.operations.noTargets')"
+														/>
 													</div>
 												</fieldset>
 											</template>

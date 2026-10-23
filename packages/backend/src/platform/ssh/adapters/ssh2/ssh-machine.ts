@@ -300,6 +300,9 @@ class ConnectedMachine implements MachineConnection {
 	}
 
 	async execute(command: string, options: MachineExecuteOptions): Promise<MachineCommandResult> {
+		if (options.stdin !== undefined && Buffer.byteLength(options.stdin, 'utf8') > 64 * 1024) {
+			throw new MachineDispatchFailure('not_started');
+		}
 		if (
 			!Number.isSafeInteger(options.maxOutputBytes) ||
 			options.maxOutputBytes < 1 ||
@@ -367,6 +370,9 @@ class ConnectedMachine implements MachineConnection {
 			abortCommand();
 		}
 		try {
+			if (options.stdin !== undefined) {
+				channel.writable.end(options.stdin);
+			}
 			const outcome = await channel.outcome;
 			return {
 				outcome,

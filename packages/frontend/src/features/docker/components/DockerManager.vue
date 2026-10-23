@@ -1,7 +1,16 @@
 <script setup lang="ts">
 	import type { DockerSessionController } from '../model/docker-types';
-	import { computed, onMounted, onActivated, onDeactivated, onBeforeUnmount, watch } from 'vue';
+	import { computed, onMounted, onActivated, onDeactivated, onBeforeUnmount, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
+	import {
+		UiBadge,
+		UiButton,
+		UiContextMenu,
+		UiContextMenuItem,
+		UiEmptyState,
+		UiLoadingState,
+		type UiTone,
+	} from '@/foundation/ui';
 	import { useFeedback } from '@/shared/feedback/public';
 	import { useDocker } from '../composables/useDocker';
 	import { DockerFailure, type DockerAction, type DockerContainer } from '../model/docker-types';
@@ -41,6 +50,7 @@
 
 	const deactivate = (): void => {
 		active = false;
+		actionContext.value = null;
 		confirmation.abort();
 	};
 
@@ -51,6 +61,7 @@
 	watch(
 		() => props.connectionState,
 		() => {
+			actionContext.value = null;
 			confirmation.abort();
 			confirmation = new AbortController();
 		},
@@ -113,479 +124,659 @@
 		);
 	};
 
-	const stateBadgeClass = (state: string) => {
-		if (state === 'running') {
-			return 'bg-green-500 text-white';
-		}
-		if (state === 'exited' || state === 'dead') {
-			return 'bg-red-500 text-white';
-		}
-		if (state === 'paused') {
-			return 'bg-yellow-500 text-gray-800';
-		}
-		if (state === 'restarting') {
-			return 'bg-blue-500 text-white';
-		}
-		return 'bg-gray-500 text-white';
+	const stateTone = (state: string): UiTone => {
+		if (state === 'running') return 'success';
+		if (state === 'exited' || state === 'dead') return 'danger';
+		if (state === 'paused') return 'warning';
+		if (state === 'restarting') return 'primary';
+		return 'neutral';
+	};
+
+	const actionContext = ref<{ container: DockerContainer; x: number; y: number } | null>(null);
+
+	const openActionContext = (event: MouseEvent, container: DockerContainer) => {
+		const rect = (event.currentTarget as HTMLElement | null)?.getBoundingClientRect();
+		actionContext.value = {
+			container,
+			x: rect?.right ?? event.clientX,
+			y: (rect?.bottom ?? event.clientY) + 4,
+		};
+	};
+
+	const runFromActionContext = (action: 'remove' | 'enter' | 'logs') => {
+		const container = actionContext.value?.container;
+		actionContext.value = null;
+		if (!container) return;
+		if (action === 'remove') void run(container, 'remove');
+		else terminalCommand(container, action);
 	};
 </script>
 
 <template>
-	<section class="docker-manager flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground">
-		<div v-if="connecting" class="docker-state">
-			<i class="fas fa-spinner fa-spin mb-3 text-4xl" aria-hidden="true"></i>
-			<p class="mb-1 mt-2 font-medium">{{ t('dockerManager.waitingForSsh') }}</p>
-			<small v-if="connectionMessage" class="text-xs text-text-disabled">{{ connectionMessage }}</small>
-		</div>
-		<div v-else-if="connectionState === 'disconnected'" class="docker-state">
-			<i class="fas fa-unlink mb-3 text-4xl" aria-hidden="true"></i>
-			<p class="mb-1 mt-2 font-medium">{{ t('dockerManager.error.sshDisconnected') }}</p>
-			<small v-if="connectionMessage" class="text-xs text-text-disabled">{{ connectionMessage }}</small>
-		</div>
-		<div v-else-if="connectionState === 'error'" class="docker-state">
-			<i class="fas fa-exclamation-circle mb-2 text-3xl text-red-500" aria-hidden="true"></i>
-			<p class="mb-1 mt-2 font-medium">{{ t('dockerManager.error.sshError') }}</p>
-			<small v-if="connectionMessage" class="text-xs">{{ connectionMessage }}</small>
-		</div>
-		<div v-else-if="docker.loading.value && !docker.containers.value.length" class="docker-state">
-			<i class="fas fa-spinner fa-spin mb-3 text-4xl" aria-hidden="true"></i>
-			<span>{{ t('dockerManager.loading') }}</span>
-		</div>
-		<div v-else-if="docker.error.value" class="docker-state">
-			<i class="fas fa-exclamation-triangle mb-2 text-3xl text-red-500" aria-hidden="true"></i>
-			<p class="mb-1 mt-2 font-medium">{{ t('dockerManager.error.fetchFailed') }}</p>
-			<small class="text-xs">{{ t('dockerManager.failures.' + docker.error.value) }}</small>
-			<button
-				type="button"
-				class="mt-3 underline"
-				:disabled="docker.loading.value || docker.commandPending.value"
-				@click="docker.reconcile()"
-			>
-				{{ t('dockerManager.reconcile') }}
-			</button>
-		</div>
-		<div v-else-if="!docker.available.value" class="docker-state">
-			<i class="fab fa-docker mb-3 text-4xl" aria-hidden="true"></i>
-			<p class="mb-1 mt-2 font-medium">{{ t('dockerManager.notAvailable') }}</p>
-			<small class="text-xs text-text-disabled">{{ t('dockerManager.installHintRemote') }}</small>
+	<section class="docker-manager flex h-full min-h-0 flex-col overflow-hidden text-foreground">
+		<UiLoadingState
+			v-if="connecting"
+			class="docker-empty"
+			:bordered="false"
+			:title="t('dockerManager.waitingForSsh')"
+			:description="connectionMessage || undefined"
+		/>
+		<UiEmptyState
+			v-else-if="connectionState === 'disconnected'"
+			class="docker-empty"
+			icon="fas fa-link-slash"
+			:title="t('dockerManager.error.sshDisconnected')"
+			:description="connectionMessage || undefined"
+			:bordered="false"
+		/>
+		<UiEmptyState
+			v-else-if="connectionState === 'error'"
+			class="docker-empty"
+			icon="fas fa-triangle-exclamation"
+			:title="t('dockerManager.error.sshError')"
+			:description="connectionMessage || undefined"
+			:bordered="false"
+		/>
+		<UiLoadingState
+			v-else-if="docker.loading.value && !docker.containers.value.length"
+			class="docker-empty"
+			:bordered="false"
+			:title="t('dockerManager.loading')"
+		/>
+		<UiEmptyState
+			v-else-if="docker.error.value"
+			class="docker-empty"
+			icon="fas fa-triangle-exclamation"
+			:title="t('dockerManager.error.fetchFailed')"
+			:description="t('dockerManager.failures.' + docker.error.value)"
+			:bordered="false"
+		>
+			<template #action>
+				<UiButton
+					type="button"
+					appearance="soft"
+					density="compact"
+					:disabled="docker.loading.value || docker.commandPending.value"
+					@click="docker.reconcile()"
+				>
+					<i class="fas fa-rotate" aria-hidden="true"></i>
+					{{ t('dockerManager.reconcile') }}
+				</UiButton>
+			</template>
+		</UiEmptyState>
+		<UiEmptyState
+			v-else-if="!docker.available.value"
+			class="docker-empty"
+			icon="fab fa-docker"
+			:title="t('dockerManager.notAvailable')"
+			:description="t('dockerManager.installHintRemote')"
+			:bordered="false"
+		/>
+		<UiEmptyState
+			v-else-if="!docker.containers.value.length"
+			class="docker-empty"
+			icon="fas fa-cube"
+			:title="t('dockerManager.noContainers')"
+			:bordered="false"
+		/>
+
+		<div v-else class="docker-content-area min-h-0 flex-1 overflow-y-auto">
+			<ul class="docker-list">
+				<li
+					v-for="container in docker.containers.value"
+					:key="container.id"
+					:data-docker-id="container.id"
+					class="docker-container"
+					:class="{ 'docker-container--expanded': docker.expandedContainerIds.value.has(container.id) }"
+				>
+					<div class="docker-summary">
+						<button
+							type="button"
+							class="docker-toggle docker-touch-target"
+							:aria-expanded="docker.expandedContainerIds.value.has(container.id)"
+							:aria-controls="`docker-details-${container.id}`"
+							:aria-label="
+								docker.expandedContainerIds.value.has(container.id)
+									? t('common.collapse')
+									: t('common.expand')
+							"
+							:title="
+								docker.expandedContainerIds.value.has(container.id)
+									? t('common.collapse')
+									: t('common.expand')
+							"
+							@click="docker.toggleExpand(container.id)"
+						>
+							<i
+								:class="[
+									'fas',
+									docker.expandedContainerIds.value.has(container.id)
+										? 'fa-chevron-down'
+										: 'fa-chevron-right',
+								]"
+								aria-hidden="true"
+							></i>
+						</button>
+
+						<div class="docker-identity">
+							<span class="docker-name" :title="container.names.join(', ') || container.id">
+								{{ container.names.join(', ') || container.id.slice(0, 12) }}
+							</span>
+							<span class="docker-image" :title="container.image">{{ container.image }}</span>
+						</div>
+
+						<UiBadge class="docker-status" :tone="stateTone(container.state)" density="compact">
+							{{ container.status }}
+						</UiBadge>
+
+						<div v-if="ports(container)" class="docker-ports">
+							<span class="docker-ports__label">{{ t('dockerManager.header.ports') }}</span>
+							<code>{{ ports(container) }}</code>
+						</div>
+
+						<div class="docker-actions">
+							<UiButton
+								type="button"
+								appearance="ghost"
+								tone="success"
+								density="compact"
+								icon-only
+								class="docker-action docker-touch-target"
+								:disabled="actionsDisabled || container.state === 'running'"
+								:title="t('dockerManager.action.start')"
+								:aria-label="t('dockerManager.action.start')"
+								@click="run(container, 'start')"
+							>
+								<i class="fas fa-play" aria-hidden="true"></i>
+							</UiButton>
+							<UiButton
+								type="button"
+								appearance="ghost"
+								tone="warning"
+								density="compact"
+								icon-only
+								class="docker-action docker-touch-target"
+								:disabled="actionsDisabled || container.state !== 'running'"
+								:title="t('dockerManager.action.stop')"
+								:aria-label="t('dockerManager.action.stop')"
+								@click="run(container, 'stop')"
+							>
+								<i class="fas fa-stop" aria-hidden="true"></i>
+							</UiButton>
+							<UiButton
+								type="button"
+								appearance="ghost"
+								tone="primary"
+								density="compact"
+								icon-only
+								class="docker-action docker-touch-target"
+								:disabled="actionsDisabled || container.state !== 'running'"
+								:title="t('dockerManager.action.restart')"
+								:aria-label="t('dockerManager.action.restart')"
+								@click="run(container, 'restart')"
+							>
+								<i class="fas fa-rotate-right" aria-hidden="true"></i>
+							</UiButton>
+							<UiButton
+								type="button"
+								appearance="ghost"
+								tone="danger"
+								density="compact"
+								icon-only
+								class="docker-action docker-action--secondary docker-touch-target"
+								:disabled="actionsDisabled"
+								:title="t('dockerManager.action.remove')"
+								:aria-label="t('dockerManager.action.remove')"
+								@click="run(container, 'remove')"
+							>
+								<i class="fas fa-trash-alt" aria-hidden="true"></i>
+							</UiButton>
+							<UiButton
+								type="button"
+								appearance="ghost"
+								tone="primary"
+								density="compact"
+								icon-only
+								class="docker-action docker-action--secondary docker-touch-target"
+								:disabled="actionsDisabled"
+								:title="t('dockerManager.action.enter')"
+								:aria-label="t('dockerManager.action.enter')"
+								@click="terminalCommand(container, 'enter')"
+							>
+								<i class="fas fa-terminal" aria-hidden="true"></i>
+							</UiButton>
+							<UiButton
+								type="button"
+								appearance="ghost"
+								density="compact"
+								icon-only
+								class="docker-action docker-action--secondary docker-touch-target"
+								:disabled="actionsDisabled"
+								:title="t('dockerManager.action.logs')"
+								:aria-label="t('dockerManager.action.logs')"
+								@click="terminalCommand(container, 'logs')"
+							>
+								<i class="fas fa-file-lines" aria-hidden="true"></i>
+							</UiButton>
+							<UiButton
+								type="button"
+								appearance="ghost"
+								density="compact"
+								icon-only
+								class="docker-action docker-action-more docker-touch-target"
+								:disabled="actionsDisabled"
+								:title="t('dockerManager.moreActions')"
+								:aria-label="t('dockerManager.moreActions')"
+								@click="openActionContext($event, container)"
+							>
+								<i class="fas fa-ellipsis-vertical" aria-hidden="true"></i>
+							</UiButton>
+						</div>
+					</div>
+
+					<div
+						v-if="docker.expandedContainerIds.value.has(container.id)"
+						:id="`docker-details-${container.id}`"
+						class="docker-details"
+					>
+						<dl v-if="container.stats" class="docker-stats-grid">
+							<div class="docker-stat">
+								<dt>{{ t('dockerManager.stats.cpu') }}</dt>
+								<dd>{{ container.stats.cpuPercent }}</dd>
+							</div>
+							<div class="docker-stat">
+								<dt>{{ t('dockerManager.stats.memory') }}</dt>
+								<dd>{{ container.stats.memoryUsage }} ({{ container.stats.memoryPercent }})</dd>
+							</div>
+							<div class="docker-stat">
+								<dt>{{ t('dockerManager.stats.netIO') }}</dt>
+								<dd>{{ container.stats.networkIo }}</dd>
+							</div>
+							<div class="docker-stat">
+								<dt>{{ t('dockerManager.stats.blockIO') }}</dt>
+								<dd>{{ container.stats.blockIo }}</dd>
+							</div>
+							<div class="docker-stat">
+								<dt>{{ t('dockerManager.stats.pids') }}</dt>
+								<dd>{{ container.stats.pids }}</dd>
+							</div>
+						</dl>
+						<p v-else class="docker-stat-empty">{{ t('dockerManager.stats.noData') }}</p>
+					</div>
+				</li>
+			</ul>
 		</div>
 
-		<div v-else-if="!docker.containers.value.length" class="docker-state">
-			<span>{{ t('dockerManager.noContainers') }}</span>
-		</div>
-
-		<div v-else class="docker-content-area min-h-0 flex-1 overflow-auto">
-			<table class="docker-table w-full border-collapse text-sm">
-				<thead class="docker-head">
-					<tr class="bg-header">
-						<th class="w-8 border-b border-border px-2 py-2"></th>
-						<th
-							class="border-b border-border px-3 py-2 text-left font-medium uppercase tracking-wider text-text-secondary"
-						>
-							{{ t('dockerManager.header.name') }}
-						</th>
-						<th
-							class="border-b border-border px-3 py-2 text-left font-medium uppercase tracking-wider text-text-secondary"
-						>
-							{{ t('dockerManager.header.image') }}
-						</th>
-						<th
-							class="border-b border-border px-3 py-2 text-left font-medium uppercase tracking-wider text-text-secondary"
-						>
-							{{ t('dockerManager.header.status') }}
-						</th>
-						<th
-							class="border-b border-border px-3 py-2 text-left font-medium uppercase tracking-wider text-text-secondary"
-						>
-							{{ t('dockerManager.header.ports') }}
-						</th>
-						<th
-							class="border-b border-border px-3 py-2 text-left font-medium uppercase tracking-wider text-text-secondary"
-						>
-							{{ t('dockerManager.header.actions') }}
-						</th>
-					</tr>
-				</thead>
-				<tbody class="docker-body">
-					<template v-for="container in docker.containers.value" :key="container.id">
-						<tr
-							class="docker-row relative mb-4 rounded border border-border bg-background p-3 shadow-sm transition-colors duration-150 hover:bg-header/30"
-							:class="{ expanded: docker.expandedContainerIds.value.has(container.id) }"
-						>
-							<td
-								class="docker-expand-cell w-8 border-b border-border px-2 py-2 text-center align-middle"
-							>
-								<button
-									type="button"
-									class="p-1 text-xs text-text-secondary transition-colors duration-150 hover:text-foreground"
-									:title="
-										docker.expandedContainerIds.value.has(container.id)
-											? t('common.collapse')
-											: t('common.expand')
-									"
-									:aria-label="
-										docker.expandedContainerIds.value.has(container.id)
-											? t('common.collapse')
-											: t('common.expand')
-									"
-									@click="docker.toggleExpand(container.id)"
-								>
-									<i
-										:class="[
-											'fas',
-											docker.expandedContainerIds.value.has(container.id)
-												? 'fa-chevron-down'
-												: 'fa-chevron-right',
-										]"
-										aria-hidden="true"
-									></i>
-								</button>
-							</td>
-
-							<td
-								class="docker-cell border-b border-border px-3 py-2 text-right align-middle"
-								:data-label="t('dockerManager.header.name')"
-							>
-								<span class="break-all font-medium">{{
-									container.names.join(', ') || container.id.slice(0, 12)
-								}}</span>
-							</td>
-							<td
-								class="docker-cell break-all border-b border-border px-3 py-2 text-right align-middle"
-								:data-label="t('dockerManager.header.image')"
-							>
-								{{ container.image }}
-							</td>
-							<td
-								class="docker-cell border-b border-border px-3 py-2 text-right align-middle"
-								:data-label="t('dockerManager.header.status')"
-							>
-								<span
-									class="inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium"
-									:class="stateBadgeClass(container.state)"
-								>
-									{{ container.status }}
-								</span>
-							</td>
-							<td
-								class="docker-cell break-all border-b border-border px-3 py-2 text-right text-xs align-middle"
-								:data-label="t('dockerManager.header.ports')"
-							>
-								{{ ports(container) || 'N/A' }}
-							</td>
-							<td
-								class="docker-cell docker-actions-cell border-b border-border px-3 py-2 text-right align-middle"
-								:data-label="t('dockerManager.header.actions')"
-							>
-								<div class="docker-actions flex flex-wrap gap-2 pt-2">
-									<button
-										type="button"
-										class="docker-action docker-touch-target hover:text-green-500"
-										:disabled="actionsDisabled || container.state === 'running'"
-										:title="t('dockerManager.action.start')"
-										:aria-label="t('dockerManager.action.start')"
-										@click="run(container, 'start')"
-									>
-										<i class="fas fa-play" aria-hidden="true"></i>
-									</button>
-									<button
-										type="button"
-										class="docker-action docker-touch-target hover:text-yellow-500"
-										:disabled="actionsDisabled || container.state !== 'running'"
-										:title="t('dockerManager.action.stop')"
-										:aria-label="t('dockerManager.action.stop')"
-										@click="run(container, 'stop')"
-									>
-										<i class="fas fa-stop" aria-hidden="true"></i>
-									</button>
-									<button
-										type="button"
-										class="docker-action docker-touch-target hover:text-blue-500"
-										:disabled="container.state !== 'running'"
-										:title="t('dockerManager.action.restart')"
-										:aria-label="t('dockerManager.action.restart')"
-										@click="run(container, 'restart')"
-									>
-										<i class="fas fa-sync-alt" aria-hidden="true"></i>
-									</button>
-									<button
-										type="button"
-										class="docker-action docker-touch-target hover:text-red-500"
-										:disabled="actionsDisabled"
-										:title="t('dockerManager.action.remove')"
-										:aria-label="t('dockerManager.action.remove')"
-										@click="run(container, 'remove')"
-									>
-										<i class="fas fa-trash-alt" aria-hidden="true"></i>
-									</button>
-									<button
-										type="button"
-										class="docker-action docker-touch-target hover:text-blue-400"
-										:disabled="actionsDisabled"
-										:title="t('dockerManager.action.enter')"
-										:aria-label="t('dockerManager.action.enter')"
-										@click="terminalCommand(container, 'enter')"
-									>
-										<i class="fas fa-terminal" aria-hidden="true"></i>
-									</button>
-									<button
-										type="button"
-										class="docker-action docker-touch-target hover:text-gray-400"
-										:disabled="actionsDisabled"
-										:title="t('dockerManager.action.logs')"
-										:aria-label="t('dockerManager.action.logs')"
-										@click="terminalCommand(container, 'logs')"
-									>
-										<i class="fas fa-file-alt" aria-hidden="true"></i>
-									</button>
-								</div>
-							</td>
-
-							<td class="docker-card-expand-cell">
-								<div v-if="!docker.expandedContainerIds.value.has(container.id)">
-									<button
-										type="button"
-										class="docker-card-toggle docker-touch-target"
-										:aria-label="t('common.expand')"
-										@click="docker.toggleExpand(container.id)"
-									>
-										<i class="fas fa-chevron-down" aria-hidden="true"></i>
-										<span>{{ t('common.expand') }}</span>
-									</button>
-								</div>
-								<div v-else class="docker-card-details rounded-b bg-header/30">
-									<div class="p-4">
-										<dl
-											v-if="container.stats"
-											class="docker-stats-grid grid grid-cols-[max-content_auto] gap-x-4 gap-y-2 text-xs"
-										>
-											<dt class="font-medium text-text-secondary">
-												{{ t('dockerManager.stats.cpu') }}
-											</dt>
-											<dd class="font-mono">{{ container.stats.cpuPercent }}</dd>
-											<dt class="font-medium text-text-secondary">
-												{{ t('dockerManager.stats.memory') }}
-											</dt>
-											<dd class="font-mono">
-												{{ container.stats.memoryUsage }} ({{ container.stats.memoryPercent }})
-											</dd>
-											<dt class="font-medium text-text-secondary">
-												{{ t('dockerManager.stats.netIO') }}
-											</dt>
-											<dd class="font-mono">{{ container.stats.networkIo }}</dd>
-											<dt class="font-medium text-text-secondary">
-												{{ t('dockerManager.stats.blockIO') }}
-											</dt>
-											<dd class="font-mono">{{ container.stats.blockIo }}</dd>
-											<dt class="font-medium text-text-secondary">
-												{{ t('dockerManager.stats.pids') }}
-											</dt>
-											<dd class="font-mono">{{ container.stats.pids }}</dd>
-										</dl>
-										<p v-else class="py-2 text-center text-xs italic text-text-secondary">
-											{{ t('dockerManager.stats.noData') }}
-										</p>
-									</div>
-									<button
-										type="button"
-										class="docker-card-toggle docker-touch-target border-t border-border"
-										:aria-label="t('common.collapse')"
-										@click="docker.toggleExpand(container.id)"
-									>
-										<i class="fas fa-chevron-up" aria-hidden="true"></i>
-										<span>{{ t('common.collapse') }}</span>
-									</button>
-								</div>
-							</td>
-						</tr>
-
-						<tr v-if="docker.expandedContainerIds.value.has(container.id)" class="docker-detail-row">
-							<td colspan="6" class="border-b border-border bg-header/30 p-4">
-								<dl
-									v-if="container.stats"
-									class="docker-stats-grid grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-2 text-xs"
-								>
-									<dt class="font-medium text-text-secondary">{{ t('dockerManager.stats.cpu') }}</dt>
-									<dd class="font-mono">{{ container.stats.cpuPercent }}</dd>
-									<dt class="font-medium text-text-secondary">
-										{{ t('dockerManager.stats.memory') }}
-									</dt>
-									<dd class="font-mono">
-										{{ container.stats.memoryUsage }} ({{ container.stats.memoryPercent }})
-									</dd>
-									<dt class="font-medium text-text-secondary">
-										{{ t('dockerManager.stats.netIO') }}
-									</dt>
-									<dd class="font-mono">{{ container.stats.networkIo }}</dd>
-									<dt class="font-medium text-text-secondary">
-										{{ t('dockerManager.stats.blockIO') }}
-									</dt>
-									<dd class="font-mono">{{ container.stats.blockIo }}</dd>
-									<dt class="font-medium text-text-secondary">{{ t('dockerManager.stats.pids') }}</dt>
-									<dd class="font-mono">{{ container.stats.pids }}</dd>
-								</dl>
-								<p v-else class="py-2 text-center text-xs italic text-text-secondary">
-									{{ t('dockerManager.stats.noData') }}
-								</p>
-							</td>
-						</tr>
-					</template>
-				</tbody>
-			</table>
-		</div>
+		<UiContextMenu
+			v-if="actionContext"
+			:visible="true"
+			:x="actionContext.x"
+			:y="actionContext.y"
+			:width="190"
+			@close="actionContext = null"
+		>
+			<UiContextMenuItem tone="danger" @click="runFromActionContext('remove')">
+				<i class="fas fa-trash-alt" aria-hidden="true"></i>
+				<span>{{ t('dockerManager.action.remove') }}</span>
+			</UiContextMenuItem>
+			<UiContextMenuItem @click="runFromActionContext('enter')">
+				<i class="fas fa-terminal" aria-hidden="true"></i>
+				<span>{{ t('dockerManager.action.enter') }}</span>
+			</UiContextMenuItem>
+			<UiContextMenuItem @click="runFromActionContext('logs')">
+				<i class="fas fa-file-lines" aria-hidden="true"></i>
+				<span>{{ t('dockerManager.action.logs') }}</span>
+			</UiContextMenuItem>
+		</UiContextMenu>
 	</section>
 </template>
 
 <style scoped>
 	.docker-manager {
 		container-name: docker-manager-pane;
-		container-type: inline-size;
+		container-type: size;
+		background: color-mix(in srgb, var(--app-bg-color) 94%, transparent);
 	}
 
-	.docker-state {
-		height: 100%;
-		min-height: 8rem;
-		display: flex;
-		flex: 1 1 auto;
-		flex-direction: column;
-		align-items: center;
+	.docker-empty {
+		width: 100%;
+		margin: auto;
 		justify-content: center;
-		padding: 1rem;
-		color: var(--text-color-secondary);
-		text-align: center;
+		padding: 0.75rem;
+		background: transparent;
 	}
 
-	.docker-state small {
-		max-width: 80%;
+	.docker-empty :deep(.ui-empty-state__icon) {
+		width: 32px;
+		height: 32px;
+		border: 0;
+		background: color-mix(in srgb, var(--text-color) 6%, transparent);
+		color: var(--text-color-secondary);
+		font-size: 13px;
+	}
+
+	.docker-empty :deep(.ui-empty-state__title) {
+		font-size: 0.75rem;
+		font-weight: 600;
+	}
+
+	.docker-empty :deep(.ui-empty-state__description) {
+		max-width: 20rem;
+		color: var(--text-color-secondary);
+		font-size: 0.65rem;
+	}
+
+	.docker-empty :deep(.ui-empty-state__action) {
+		margin-top: 0.15rem;
+	}
+
+	.docker-content-area {
+		min-height: 0;
+		flex: 1 1 auto;
+		overflow-y: auto;
+		padding: 0.45rem 0.5rem 0.7rem 0.6rem;
+		scrollbar-gutter: stable;
+	}
+
+	.docker-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.docker-container {
+		min-width: 0;
+		overflow: hidden;
+		border: 1px solid color-mix(in srgb, var(--border-color) 36%, transparent);
+		border-radius: 0.65rem;
+		background: color-mix(in srgb, var(--card-bg-color) 24%, transparent);
+		box-shadow: inset 0 1px 0 color-mix(in srgb, white 5%, transparent);
+		transition:
+			border-color 0.16s ease,
+			background-color 0.16s ease;
+	}
+
+	.docker-container:hover,
+	.docker-container--expanded {
+		border-color: color-mix(in srgb, var(--link-active-color) 28%, var(--border-color));
+		background: color-mix(in srgb, var(--card-bg-color) 34%, transparent);
+	}
+
+	.docker-summary {
+		display: grid;
+		grid-template-areas:
+			'toggle identity status'
+			'ports ports ports'
+			'actions actions actions';
+		grid-template-columns: auto minmax(0, 1fr) auto;
+		align-items: center;
+		gap: 0.3rem 0.45rem;
+		padding: 0.42rem 0.45rem 0.35rem 0.28rem;
+	}
+
+	.docker-toggle {
+		display: grid;
+		grid-area: toggle;
+		width: 1.35rem;
+		height: 1.6rem;
+		place-items: center;
+		align-self: start;
+		padding: 0;
+		border: 0;
+		border-radius: 0.35rem;
+		background: transparent;
+		color: var(--text-color-secondary);
+		font-size: 0.62rem;
+		cursor: pointer;
+		transition:
+			background-color 0.15s ease,
+			color 0.15s ease;
+	}
+
+	.docker-toggle:hover,
+	.docker-toggle:focus-visible {
+		background: color-mix(in srgb, var(--text-color) 7%, transparent);
+		color: var(--text-color);
+		outline: none;
+	}
+
+	.docker-identity {
+		display: flex;
+		grid-area: identity;
+		min-width: 0;
+		flex-direction: column;
+		gap: 0.05rem;
+	}
+
+	.docker-name,
+	.docker-image {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.docker-name {
+		color: var(--text-color);
+		font-size: 0.75rem;
+		font-weight: 600;
+		line-height: 1.35;
+	}
+
+	.docker-image {
+		color: var(--text-color-secondary);
+		font-family: var(--font-family-monospace);
+		font-size: 0.6rem;
+		line-height: 1.3;
+		opacity: 0.78;
+	}
+
+	.docker-status {
+		grid-area: status;
+		max-width: 7.5rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.docker-ports {
+		display: flex;
+		grid-area: ports;
+		min-width: 0;
+		align-items: baseline;
+		gap: 0.3rem;
+		color: var(--text-color-secondary);
+		font-size: 0.6rem;
+	}
+
+	.docker-ports__label {
+		flex: none;
+		font-weight: 600;
+		opacity: 0.72;
+	}
+
+	.docker-ports code {
+		min-width: 0;
+		overflow: hidden;
+		color: var(--text-color-secondary);
+		font-family: var(--font-family-monospace);
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.docker-actions {
-		justify-content: flex-start;
+		display: grid;
+		grid-area: actions;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: 0.12rem 0.2rem;
+		padding-top: 0.25rem;
+		border-top: 1px solid color-mix(in srgb, var(--border-color) 24%, transparent);
 	}
 
 	.docker-action {
-		padding: 0.125rem;
-		border: 0;
-		border-radius: 0.25rem;
-		color: var(--text-color-secondary);
-		background: transparent;
-		font-size: 1rem;
-		line-height: 1;
-		transition: color 0.15s ease;
+		width: 100%;
+		max-width: 2.25rem;
+		height: 1.72rem;
+		justify-self: center;
+		--ui-control-padding-inline: 0;
+		font-size: 0.68rem;
 	}
 
-	.docker-action:disabled {
-		color: var(--text-color-disabled, color-mix(in srgb, var(--text-color-secondary) 45%, transparent));
-		cursor: not-allowed;
-	}
-
-	.docker-card-expand-cell {
+	.docker-action--secondary {
 		display: none;
 	}
 
-	@container docker-manager-pane (max-width: 600px) {
-		.docker-content-area {
-			padding: 1rem;
+	.docker-action[data-ui='button']:disabled {
+		background: transparent;
+		box-shadow: none;
+		opacity: 0.32;
+	}
+
+	.docker-action-more {
+		display: flex;
+	}
+
+	.docker-details {
+		padding: 0.35rem 0.45rem 0.48rem;
+		border-top: 1px solid color-mix(in srgb, var(--border-color) 24%, transparent);
+		background: color-mix(in srgb, var(--app-bg-color) 24%, transparent);
+	}
+
+	.docker-stats-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 0.25rem 0.35rem;
+		margin: 0;
+		padding: 0;
+	}
+
+	.docker-stat {
+		min-width: 0;
+		padding: 0.28rem 0.38rem;
+		border-radius: 0.38rem;
+		background: color-mix(in srgb, var(--text-color) 3.5%, transparent);
+	}
+
+	.docker-stat dt {
+		margin: 0;
+		color: var(--text-color-secondary);
+		font-size: 0.56rem;
+		font-weight: 600;
+		line-height: 1.25;
+		opacity: 0.78;
+	}
+
+	.docker-stat dd {
+		min-width: 0;
+		margin: 0.09rem 0 0;
+		overflow-wrap: anywhere;
+		color: var(--text-color);
+		font-family: var(--font-family-monospace);
+		font-size: 0.63rem;
+		line-height: 1.35;
+	}
+
+	.docker-stat-empty {
+		margin: 0;
+		padding: 0.55rem;
+		color: var(--text-color-secondary);
+		font-size: 0.65rem;
+		text-align: center;
+	}
+
+	@container docker-manager-pane (min-width: 480px) {
+		.docker-summary {
+			grid-template-areas: 'toggle identity status ports actions';
+			grid-template-columns: auto minmax(0, 1.35fr) auto minmax(4.5rem, 0.8fr) auto;
+			gap: 0.4rem 0.7rem;
+			padding: 0.45rem 0.55rem 0.45rem 0.3rem;
 		}
 
-		.docker-table,
-		.docker-body {
-			display: block;
-			width: 100%;
-		}
-
-		.docker-head {
-			display: none;
-		}
-
-		.docker-row {
-			display: block;
-			margin-bottom: 1rem;
-			overflow: hidden;
-			border-radius: 0.25rem;
-		}
-
-		.docker-row > .docker-cell {
-			position: relative;
-			display: block;
-			min-width: 0;
-			padding-left: 50%;
-			border-bottom: 1px dashed color-mix(in srgb, var(--border-color) 65%, transparent);
-			text-align: right;
-		}
-
-		.docker-row > .docker-cell::before {
-			content: attr(data-label);
-			position: absolute;
-			left: 0.75rem;
-			width: calc(50% - 1.5rem);
-			min-width: 0;
-			padding-right: 0.625rem;
-			overflow: hidden;
-			color: var(--text-color-secondary);
-			font-weight: 600;
-			text-align: left;
-			text-overflow: ellipsis;
-			white-space: nowrap;
-		}
-
-		.docker-expand-cell {
-			display: none;
-		}
-
-		.docker-actions-cell {
-			padding-left: 0.75rem !important;
-			border-bottom: 0;
-		}
-
-		.docker-actions-cell::before {
-			display: none;
+		.docker-toggle {
+			align-self: center;
 		}
 
 		.docker-actions {
-			justify-content: flex-end;
-			padding-top: 0.5rem;
-		}
-
-		.docker-card-expand-cell {
-			display: block;
-			width: 100%;
-			padding: 0;
-			margin-top: 0.75rem;
-			border-top: 1px solid var(--border-color);
-		}
-
-		.docker-card-toggle {
-			width: 100%;
-			height: 2.5rem;
 			display: flex;
 			align-items: center;
-			justify-content: center;
-			gap: 0.375rem;
-			border: 0;
-			border-radius: 0 0 0.25rem 0.25rem;
-			color: var(--text-color-secondary);
-			background: transparent;
-			font-size: 0.875rem;
-			transition:
-				color 0.15s ease,
-				background 0.15s ease;
+			gap: 0.08rem;
+			padding-top: 0;
+			border-top: 0;
 		}
 
-		.docker-card-toggle:hover {
-			color: var(--text-color);
-			background: color-mix(in srgb, var(--header-bg-color) 50%, transparent);
+		.docker-action--secondary {
+			display: flex;
 		}
 
-		.docker-detail-row {
+		.docker-action-more {
+			display: none;
+		}
+
+		.docker-action {
+			width: 1.75rem;
+			height: 1.6rem;
+			flex: 0 0 1.75rem;
+		}
+
+		.docker-stats-grid {
+			grid-template-columns: repeat(5, minmax(0, 1fr));
+		}
+	}
+
+	@container docker-manager-pane (max-width: 200px) {
+		.docker-summary {
+			grid-template-areas:
+				'toggle identity'
+				'toggle status'
+				'ports ports'
+				'actions actions';
+			grid-template-columns: auto minmax(0, 1fr);
+		}
+
+		.docker-status {
+			justify-self: start;
+			max-width: 100%;
+		}
+
+		.docker-empty {
+			padding: 0.4rem;
+		}
+
+		.docker-empty :deep(.ui-empty-state__icon) {
+			width: 26px;
+			height: 26px;
+			font-size: 11px;
+		}
+
+		.docker-empty :deep(.ui-empty-state__description) {
+			display: none;
+		}
+
+		.docker-ports__label {
+			display: none;
+		}
+	}
+
+	@container docker-manager-pane (max-height: 220px) {
+		.docker-content-area {
+			padding-top: 0.25rem;
+		}
+
+		.docker-empty {
+			padding-block: 0.35rem;
+		}
+
+		.docker-empty :deep(.ui-empty-state__description) {
 			display: none;
 		}
 	}
 
 	@media (pointer: coarse) {
 		.docker-touch-target {
-			min-height: 44px;
-			min-width: 44px;
+			min-width: 38px;
+			min-height: 38px;
 		}
 	}
 </style>

@@ -2,12 +2,14 @@
 	import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import {
+		UiBadge,
 		UiButton,
 		UiCheckbox,
 		UiEmptyState,
 		UiFormActions,
 		UiFormField,
 		UiInfoHint,
+		UiInlineNotice,
 		UiInput,
 		UiModal,
 		UiResizeHandle,
@@ -611,18 +613,7 @@
 						<div class="min-w-0 flex-1">
 							<div class="flex flex-wrap items-center gap-2">
 								<h4 class="text-sm font-bold tracking-tight text-foreground">{{ provider.name }}</h4>
-								<span
-									class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium"
-									:class="
-										provider.enabled
-											? 'border-success/30 bg-success/10 text-success'
-											: 'border-border bg-header text-text-secondary'
-									"
-								>
-									<span
-										class="h-1.5 w-1.5 rounded-full"
-										:class="provider.enabled ? 'bg-success' : 'bg-text-secondary/60'"
-									></span>
+								<UiBadge :tone="provider.enabled ? 'success' : 'neutral'" density="compact" dot>
 									{{
 										t(
 											provider.enabled
@@ -630,9 +621,8 @@
 												: 'agent.settings.providerManagement.disabled',
 										)
 									}}
-								</span>
-								<span
-									class="inline-flex items-center gap-1 rounded-md border border-border/70 bg-background/80 px-2 py-0.5 text-[11px] text-text-secondary"
+								</UiBadge>
+								<UiBadge appearance="ghost" density="compact"
 									><i class="fa-solid fa-key text-[9px] text-primary/75" aria-hidden="true"></i
 									>{{
 										t(
@@ -640,7 +630,7 @@
 												? 'agent.settings.providers.credentialStored'
 												: 'agent.settings.providers.noCredential',
 										)
-									}}</span
+									}}</UiBadge
 								>
 							</div>
 							<button
@@ -760,9 +750,9 @@
 					>
 						<i class="fa-solid fa-layer-group text-[10px] text-text-secondary/65" aria-hidden="true"></i>
 						<span>{{ t('agent.settings.providers.configuredModels') }}</span>
-						<span class="rounded-full border border-border/60 bg-card px-2 py-0.5 font-mono text-[10px]">{{
+						<UiBadge appearance="ghost" density="compact" class="font-mono">{{
 							provider.models.length
-						}}</span>
+						}}</UiBadge>
 						<i
 							class="fa-solid fa-chevron-down ml-auto text-[9px] transition-transform group-open:rotate-180"
 							aria-hidden="true"
@@ -842,14 +832,14 @@
 					</div>
 					<p class="text-xs text-text-secondary">{{ t('agent.settings.providers.testModalDesc') }}</p>
 				</div>
-				<div
-					v-if="refreshRequired"
-					class="space-y-2 rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-warning"
-				>
-					<UiButton type="button" :disabled="busy" @click="load">{{
-						t('agent.settings.providerManagement.read')
-					}}</UiButton>
-				</div>
+				<UiInlineNotice v-if="refreshRequired" tone="warning" compact>
+					{{ t('agent.settings.providerManagement.refreshRequired') }}
+					<template #actions>
+						<UiButton type="button" density="compact" :disabled="busy" @click="load">{{
+							t('agent.settings.providerManagement.read')
+						}}</UiButton>
+					</template>
+				</UiInlineNotice>
 				<div class="configured-models-pane space-y-3">
 					<article
 						v-for="model in testingProvider.models"
@@ -864,34 +854,23 @@
 								type="button"
 								appearance="soft"
 								density="compact"
+								:loading="busy && testingModelId === model.id"
 								:disabled="blocked || draft !== null || !testingProvider.enabled"
 								@click="testModel(testingProvider, model.id)"
-								><i
-									:class="
-										busy && testingModelId === model.id
-											? 'fa-solid fa-circle-notch fa-spin'
-											: 'fa-solid fa-vial'
-									"
-									class="text-[10px]"
-									aria-hidden="true"
-								></i
+								><i class="fa-solid fa-vial text-[10px]" aria-hidden="true"></i
 								>{{ t('agent.settings.providerManagement.test') }}</UiButton
 							>
 						</div>
-						<div class="mt-2 flex flex-wrap gap-1.5 text-[11px]">
-							<span
-								class="rounded-md border border-border/60 bg-header/35 px-2 py-0.5 font-mono text-text-secondary"
-								>{{ t('agent.settings.providers.contextShort', { value: model.contextWindow }) }}</span
-							>
-							<span
-								class="rounded-md border border-border/60 bg-header/35 px-2 py-0.5 font-mono text-text-secondary"
-								>{{ t('agent.settings.providers.outputShort', { value: model.maxOutputTokens }) }}</span
-							>
-							<span
-								v-if="model.supportsTools"
-								class="rounded-md border border-primary/20 bg-primary/10 px-2 py-0.5 text-primary"
-								>{{ t('agent.settings.providers.toolCapable') }}</span
-							>
+						<div class="mt-2 flex flex-wrap gap-1.5">
+							<UiBadge appearance="ghost" density="compact" class="font-mono">
+								{{ t('agent.settings.providers.contextShort', { value: model.contextWindow }) }}
+							</UiBadge>
+							<UiBadge appearance="ghost" density="compact" class="font-mono">
+								{{ t('agent.settings.providers.outputShort', { value: model.maxOutputTokens }) }}
+							</UiBadge>
+							<UiBadge v-if="model.supportsTools" tone="primary" density="compact">
+								{{ t('agent.settings.providers.toolCapable') }}
+							</UiBadge>
 						</div>
 						<details class="mt-2 text-[11px] text-text-secondary">
 							<summary class="cursor-pointer">
@@ -971,15 +950,14 @@
 			<p class="mb-4 text-xs leading-relaxed text-text-secondary">
 				{{ t('agent.settings.providers.modalDescription') }}
 			</p>
-			<div
-				v-if="refreshRequired"
-				role="alert"
-				class="mb-3 space-y-2 rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-warning"
-			>
-				<UiButton type="button" :disabled="busy" @click="load">{{
-					t('agent.settings.providerManagement.read')
-				}}</UiButton>
-			</div>
+			<UiInlineNotice v-if="refreshRequired" class="mb-3" tone="warning" compact>
+				{{ t('agent.settings.providerManagement.refreshRequired') }}
+				<template #actions>
+					<UiButton type="button" density="compact" :disabled="busy" @click="load">{{
+						t('agent.settings.providerManagement.read')
+					}}</UiButton>
+				</template>
+			</UiInlineNotice>
 			<form v-if="draft" id="provider-editor" class="space-y-4" @submit.prevent="saveProvider">
 				<fieldset :disabled="blocked" class="min-w-0 space-y-4">
 					<section class="space-y-3 rounded-xl bg-header/20 p-3.5 sm:p-4">
@@ -1099,8 +1077,8 @@
 							<h4 class="flex items-center gap-2 text-xs font-semibold text-foreground">
 								<i class="fa-solid fa-brain text-[11px] text-primary" aria-hidden="true"></i>
 								{{ t('agent.settings.providers.configuredModels') }}
-								<span class="rounded-full bg-card px-2 py-0.5 font-mono text-[10px] text-text-secondary"
-									>{{ draft.models.length }} / {{ AGENT_PROVIDER_MODEL_LIMIT }}</span
+								<UiBadge appearance="ghost" density="compact" class="font-mono"
+									>{{ draft.models.length }} / {{ AGENT_PROVIDER_MODEL_LIMIT }}</UiBadge
 								>
 							</h4>
 							<UiButton
@@ -1178,9 +1156,9 @@
 					<h4 class="text-xs font-semibold text-foreground">
 						{{ t('agent.settings.providers.discoveredModels') }}
 					</h4>
-					<span class="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">{{
+					<UiBadge tone="primary" appearance="ghost" density="compact">{{
 						t('agent.settings.providers.discoveryCount', { count: discovered.length })
-					}}</span>
+					}}</UiBadge>
 				</div>
 				<UiFormField :label="t('agent.settings.providerManagement.filter')" for-id="discovered-model-filter">
 					<UiInput id="discovered-model-filter" v-model="query" autocomplete="off" />

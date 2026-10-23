@@ -1,7 +1,16 @@
 <script setup lang="ts">
 	import { computed } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiFormField, UiInput, UiSettingsGroup, UiSwitch, UiTable, UiTextarea } from '@/foundation/ui';
+	import {
+		UiButton,
+		UiEmptyState,
+		UiFormField,
+		UiNumberInput,
+		UiSettingsGroup,
+		UiSwitch,
+		UiTable,
+		UiTextarea,
+	} from '@/foundation/ui';
 	import { useSettingsReloadSource } from '@/shared/feedback/public';
 	import { useSecurityConfiguration } from '../composables/use-security-configuration';
 	import { useIpBlacklist } from '../composables/use-ip-blacklist';
@@ -123,10 +132,9 @@
 							for-id="maxLoginAttempts"
 							class="min-w-[150px] flex-1"
 						>
-							<UiInput
+							<UiNumberInput
 								id="maxLoginAttempts"
 								v-model="policy.maxLoginAttempts"
-								type="number"
 								min="1"
 								:disabled="loading || needsRefresh"
 							/>
@@ -136,10 +144,9 @@
 							for-id="loginBanDuration"
 							class="min-w-[150px] flex-1"
 						>
-							<UiInput
+							<UiNumberInput
 								id="loginBanDuration"
 								v-model="policy.loginBanDuration"
-								type="number"
 								min="1"
 								:disabled="loading || needsRefresh"
 							/>
@@ -199,9 +206,13 @@
 						</div>
 					</div>
 				</template>
-				<div v-else class="rounded-xl bg-header/20 p-4 text-center text-sm text-text-secondary">
-					{{ t('common.disabled') }}
-				</div>
+				<UiEmptyState
+					v-else
+					compact
+					:bordered="false"
+					icon="fa-solid fa-shield-halved"
+					:title="t('common.disabled')"
+				/>
 			</UiSettingsGroup>
 		</div>
 	</div>

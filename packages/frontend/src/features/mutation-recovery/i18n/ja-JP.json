@@ -39,7 +39,8 @@
     "origins": {
       "files": "ファイル",
       "docker": "Docker",
-      "agent": "Agent"
+      "agent": "Agent",
+      "tools": "ツールのインストール"
     },
     "states": {
       "held": "保持中",

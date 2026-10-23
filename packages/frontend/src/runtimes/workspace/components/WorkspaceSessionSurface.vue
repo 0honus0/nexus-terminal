@@ -18,7 +18,9 @@
 	import {
 		UiButton,
 		UiCheckbox,
+		UiFormActions,
 		UiFormField,
+		UiInlineNotice,
 		UiInput,
 		UiModal,
 		UiOverlayPanel,
@@ -29,6 +31,8 @@
 	import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
 	import { useAuthenticatedViewScope } from '@/shared/session/public';
 	import { RuntimeErrorBoundary, useFeedback } from '@/shared/feedback/public';
+	import { useRemoteTools, RemoteToolInstallDialog } from '@/features/remote-tools/public';
+	import type { RemoteTool } from '@nexus-terminal/shared/remote/tools/values';
 	import { loadFilePreview, previewKindFor } from '@/features/file-preview/public';
 	import { loadFileEditor, type FileEditorSessionController } from '@/features/file-editor/public';
 	import {
@@ -62,6 +66,7 @@
 	import WorkspaceMobileTools from './WorkspaceMobileTools.vue';
 
 	const FilePreview = defineAsyncComponent(loadFilePreview);
+	const toolInstaller = useRemoteTools();
 	const FileEditor = defineAsyncComponent(loadFileEditor);
 	const FileManager = defineAsyncComponent(loadFileManager);
 	const ProgressCenter = defineAsyncComponent(loadProgressCenter);
@@ -119,6 +124,10 @@
 		sharedEditorSession?: FileEditorSessionController;
 		showPopupFileEditor?: boolean;
 		showPopupFileManager?: boolean;
+		showCommandBarClear?: boolean;
+		showCommandBarFocusSwitch?: boolean;
+		showCommandBarEditor?: boolean;
+		showCommandBarSearch?: boolean;
 		fileManagerConfirmDelete?: boolean;
 		quickCommandsCollapsibleSearch?: boolean;
 		quickCommandsCompactMode?: boolean;
@@ -182,8 +191,13 @@
 	});
 	const FILE_MANAGER_POPUP_SIZE_KEY = 'nexus.file-manager.desktop-popup-size';
 	const FILE_MANAGER_POPUP_DEFAULT_WIDTH = 896;
-	const FILE_MANAGER_POPUP_MIN_WIDTH = 360;
+	const FILE_MANAGER_POPUP_MIN_WIDTH = 170;
 	const FILE_MANAGER_POPUP_MIN_HEIGHT = 320;
+	const FILE_MANAGER_POPUP_ACTION_SIZE = 30;
+	const FILE_MANAGER_POPUP_ACTION_GAP = 4;
+	const FILE_MANAGER_POPUP_TOOLBAR_INLINE_PADDING = 10;
+	const FILE_MANAGER_POPUP_FRAME_WIDTH = 2;
+	const FILE_MANAGER_POPUP_SNAP_DISTANCE = 18;
 
 	const fileManagerPopupAvailableWidth = () => Math.max(1, window.innerWidth - 32);
 
@@ -194,6 +208,32 @@
 
 	const fileManagerPopupResponsiveMinHeight = () =>
 		Math.min(FILE_MANAGER_POPUP_MIN_HEIGHT, fileManagerPopupAvailableHeight());
+
+	const fileManagerPopupSingleRowWidth = () => {
+		const actionCount = 7 + (props.showPopupFileEditor ? 1 : 0);
+		return (
+			actionCount * FILE_MANAGER_POPUP_ACTION_SIZE +
+			(actionCount - 1) * FILE_MANAGER_POPUP_ACTION_GAP +
+			FILE_MANAGER_POPUP_TOOLBAR_INLINE_PADDING +
+			FILE_MANAGER_POPUP_FRAME_WIDTH
+		);
+	};
+
+	const snapFileManagerPopupWidth = (width: number) => {
+		const twoByFourWidth = Math.max(
+			FILE_MANAGER_POPUP_MIN_WIDTH,
+			4 * FILE_MANAGER_POPUP_ACTION_SIZE +
+				3 * FILE_MANAGER_POPUP_ACTION_GAP +
+				FILE_MANAGER_POPUP_TOOLBAR_INLINE_PADDING +
+				FILE_MANAGER_POPUP_FRAME_WIDTH,
+		);
+		const singleRowWidth = fileManagerPopupSingleRowWidth();
+		return (
+			[twoByFourWidth, singleRowWidth].find(
+				(candidate) => Math.abs(width - candidate) <= FILE_MANAGER_POPUP_SNAP_DISTANCE,
+			) ?? width
+		);
+	};
 
 	const defaultFileManagerPopupSize = () => ({
 		width: Math.min(FILE_MANAGER_POPUP_DEFAULT_WIDTH, fileManagerPopupAvailableWidth()),
@@ -539,6 +579,7 @@
 		// bottom-right corner follows the resize handle rather than moving at half speed.
 		widthMultiplier: 2,
 		heightMultiplier: 2,
+		widthSnap: snapFileManagerPopupWidth,
 	});
 	const editorPopupSizing = usePersistentResizablePanel({
 		storageKey: EDITOR_POPUP_SIZE_KEY,
@@ -623,7 +664,7 @@
 	);
 	const documentPopupPanelClass = computed(() =>
 		documentMode.value === 'editor'
-			? `flex min-h-0 flex-col overflow-hidden !max-h-none !max-w-none !border-0 !bg-[#2d2d2d] !text-[#f0f0f0]${
+			? `flex min-h-0 flex-col overflow-hidden !max-h-none !max-w-none !border-0 !bg-transparent !text-foreground${
 					props.mobile ? ' !rounded-xl !shadow-2xl' : ''
 				}`
 			: 'flex min-h-0 flex-col overflow-hidden !max-h-none !max-w-none',
@@ -1120,6 +1161,40 @@
 		if (!isArchiveViewCurrent(requestContext)) {
 			return;
 		}
+		let format: ArchiveCompressionFormat | null = requestContext.format;
+		if (requestContext.kind === 'decompress') {
+			const source = requestContext.entries[0]?.path.toLowerCase() ?? '';
+			if (source.endsWith('.zip')) {
+				format = 'zip';
+			} else if (/\.(tar\.gz|tgz)$/u.test(source)) {
+				format = 'tar.gz';
+			} else if (/\.(tar\.bz2|tbz2)$/u.test(source)) {
+				format = 'tar.bz2';
+			} else {
+				format = null;
+			}
+		}
+		if (format !== null) {
+			let tools: RemoteTool[];
+			if (format === 'zip') {
+				tools = requestContext.kind === 'compress' ? ['zip'] : ['unzip', 'zipinfo', 'od', 'grep', 'cp', 'ln'];
+			} else {
+				tools = ['tar', format === 'tar.gz' ? 'gzip' : 'bzip2'];
+				if (requestContext.kind === 'decompress') {
+					tools.push('cp', 'ln', 'od');
+				}
+			}
+			if (
+				!(await toolInstaller.ensure(
+					{ kind: 'tools', targetId: requestContext.session.connection.id, tools },
+					requestContext.permission,
+				)) ||
+				!isArchiveViewCurrent(requestContext) ||
+				submissionGeneration !== archivePromptGeneration
+			) {
+				return;
+			}
+		}
 		const taskId = await requestContext.session.transferController.archive({
 			kind: requestContext.kind,
 			sources: requestContext.entries.map((entry) => ({ scopeId: requestContext.session.id, path: entry.path })),
@@ -1250,6 +1325,14 @@
 		:class="mobile ? 'flex-col' : 'flex-row'"
 		@pointerdown.capture="handleSurfacePointerDown"
 	>
+		<!-- Keep one DOM root so WorkspacePage's v-show and positioning reach this session. -->
+		<RemoteToolInstallDialog
+			:offer="toolInstaller.offer.value"
+			:busy="toolInstaller.busy.value"
+			:target-name="session.connection.name || session.connection.host"
+			@approve="toolInstaller.approve"
+			@cancel="toolInstaller.cancel"
+		/>
 		<nav
 			v-if="!mobile && sidebars.left.length"
 			data-workspace-sidebar
@@ -1317,6 +1400,10 @@
 				:preview-session="previewSession"
 				:popup-documents="showPopupFileEditor"
 				:popup-file-manager="showPopupFileManager"
+				:show-command-bar-clear="showCommandBarClear"
+				:show-command-bar-focus-switch="showCommandBarFocusSwitch"
+				:show-command-bar-editor="showCommandBarEditor"
+				:show-command-bar-search="showCommandBarSearch"
 				:file-manager-confirm-delete="fileManagerConfirmDelete"
 				:quick-commands-collapsible-search="quickCommandsCollapsibleSearch"
 				:quick-commands-compact-mode="quickCommandsCompactMode"
@@ -1402,6 +1489,10 @@
 				:preview-session="previewSession"
 				:popup-documents="showPopupFileEditor"
 				:popup-file-manager="showPopupFileManager"
+				:show-command-bar-clear="showCommandBarClear"
+				:show-command-bar-focus-switch="showCommandBarFocusSwitch"
+				:show-command-bar-editor="showCommandBarEditor"
+				:show-command-bar-search="showCommandBarSearch"
 				:file-manager-confirm-delete="fileManagerConfirmDelete"
 				:quick-commands-collapsible-search="quickCommandsCollapsibleSearch"
 				:quick-commands-compact-mode="quickCommandsCompactMode"
@@ -1506,6 +1597,10 @@
 				:preview-session="previewSession"
 				:popup-documents="showPopupFileEditor"
 				:popup-file-manager="showPopupFileManager"
+				:show-command-bar-clear="showCommandBarClear"
+				:show-command-bar-focus-switch="showCommandBarFocusSwitch"
+				:show-command-bar-editor="showCommandBarEditor"
+				:show-command-bar-search="showCommandBarSearch"
 				:file-manager-confirm-delete="fileManagerConfirmDelete"
 				:quick-commands-collapsible-search="quickCommandsCollapsibleSearch"
 				:quick-commands-compact-mode="quickCommandsCompactMode"
@@ -1603,6 +1698,9 @@
 			:command-draft="session.commandDraft.value"
 			:command-input-sync-target="commandInputSyncTarget"
 			:quick-commands-grouped="showQuickCommandTags"
+			:show-command-bar-clear="showCommandBarClear"
+			:show-command-bar-editor="showCommandBarEditor"
+			:show-command-bar-search="showCommandBarSearch"
 			:command-ready="session.state.value === 'connected'"
 			:terminal-search-open="session.terminalState.searchOpen.value"
 			:terminal-search-term="session.terminalState.searchTerm.value"
@@ -1698,13 +1796,13 @@
 			:aria-label="t('fileManager.modalTitle')"
 			@close="fileManagerPopupVisible = false"
 		>
-			<div class="flex shrink-0 items-center justify-between border-b border-border bg-header p-3">
-				<h2 class="text-lg font-semibold text-foreground">
+			<div class="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-header p-3">
+				<h2 class="min-w-0 truncate text-lg font-semibold text-foreground">
 					{{ t('fileManager.modalTitle') }} ({{ editorScopeLabel }})
 				</h2>
 				<button
 					type="button"
-					class="text-text-secondary transition-colors hover:text-foreground"
+					class="shrink-0 text-text-secondary transition-colors hover:text-foreground"
 					:title="t('common.close')"
 					:aria-label="t('common.close')"
 					@click="fileManagerPopupVisible = false"
@@ -1826,6 +1924,8 @@
 						class="min-h-0 flex-1"
 						:source="session.adapters.preview"
 						:scope-id="session.id"
+						:scope-label="editorScopeLabel"
+						:show-scope-label="showEditorScopeLabel"
 						:session="previewSession"
 						:spreadsheet-rows-per-page="spreadsheetRowsPerPage"
 						:spreadsheet-max-columns="spreadsheetMaxColumns"
@@ -1878,74 +1978,66 @@
 							}}
 						</p>
 					</div>
-					<button
+					<UiButton
 						type="button"
-						class="shrink-0 text-text-secondary hover:text-foreground"
+						appearance="ghost"
+						icon-only
 						:aria-label="t('fileManager.modals.buttons.close')"
+						:title="t('fileManager.modals.buttons.close')"
 						@click="() => closeArchiveDialog()"
 					>
 						<span aria-hidden="true">×</span>
-					</button>
+					</UiButton>
 				</div>
 
 				<div class="space-y-4">
-					<label class="block">
-						<span class="mb-1 block text-sm font-medium text-text-secondary">{{
-							t('fileManager.archivePassword.password')
-						}}</span>
-						<input
+					<UiFormField :label="t('fileManager.archivePassword.password')" for-id="archive-password-required">
+						<UiInput
+							id="archive-password-required"
 							v-model="archivePassword"
 							:type="archiveShowPassword ? 'text' : 'password'"
 							:autocomplete="archiveDialog.kind === 'compress' ? 'new-password' : 'current-password'"
-							class="w-full rounded-md border border-border bg-input px-3 py-2 text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
 						/>
-					</label>
+					</UiFormField>
 
-					<label v-if="archiveDialog.kind === 'compress'" class="block">
-						<span class="mb-1 block text-sm font-medium text-text-secondary">{{
-							t('fileManager.archivePassword.confirmPassword')
-						}}</span>
-						<input
+					<UiFormField
+						v-if="archiveDialog.kind === 'compress'"
+						:label="t('fileManager.archivePassword.confirmPassword')"
+						for-id="archive-password-required-confirm"
+					>
+						<UiInput
+							id="archive-password-required-confirm"
 							v-model="archiveConfirmPassword"
 							:type="archiveShowPassword ? 'text' : 'password'"
 							autocomplete="new-password"
-							class="w-full rounded-md border border-border bg-input px-3 py-2 text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
 						/>
-					</label>
+					</UiFormField>
 
 					<label class="flex cursor-pointer select-none items-center gap-2 text-sm text-text-secondary">
-						<input v-model="archiveShowPassword" type="checkbox" class="accent-primary" />
+						<UiCheckbox v-model="archiveShowPassword" />
 						{{ t('fileManager.archivePassword.showPassword') }}
 					</label>
 
-					<p v-if="archivePasswordError" class="text-sm text-error" role="alert">
+					<UiInlineNotice v-if="archivePasswordError" tone="danger" compact>
 						{{ archivePasswordError }}
-					</p>
+					</UiInlineNotice>
 					<p class="text-xs text-text-secondary">
 						{{ t('fileManager.archivePassword.compatibilityNotice') }}
 					</p>
 				</div>
 
-				<div class="mt-6 flex justify-end gap-3">
-					<button
-						type="button"
-						class="rounded-md border border-border px-4 py-2 text-text-secondary hover:bg-border"
-						@click="() => closeArchiveDialog()"
-					>
+				<UiFormActions class="mt-6">
+					<UiButton type="button" @click="() => closeArchiveDialog()">
 						{{ t('fileManager.modals.buttons.cancel') }}
-					</button>
-					<button
-						type="submit"
-						:disabled="archivePasswordInvalid"
-						class="rounded-md bg-primary px-4 py-2 text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
-					>
+					</UiButton>
+					<UiButton type="submit" appearance="solid" tone="primary" :disabled="archivePasswordInvalid">
 						{{
 							archiveDialog.kind === 'compress'
 								? t('fileManager.archivePassword.create')
 								: t('fileManager.archivePassword.extract')
 						}}
-					</button>
-				</div>
+					</UiButton>
+				</UiFormActions>
 			</form>
 		</UiOverlayPanel>
 
@@ -2021,9 +2113,9 @@
 				<label v-if="archivePasswordAvailable" class="flex items-center gap-2 text-sm text-text-secondary">
 					<UiCheckbox v-model="archiveShowPassword" />{{ t('fileManager.archivePassword.showPassword') }}
 				</label>
-				<p v-if="archivePasswordError" class="text-sm text-error" role="alert">
+				<UiInlineNotice v-if="archivePasswordError" tone="danger" compact>
 					{{ archivePasswordError }}
-				</p>
+				</UiInlineNotice>
 				<p v-if="archivePasswordAvailable" class="text-xs text-text-secondary">
 					{{ t('fileManager.archivePassword.compatibilityNotice') }}
 				</p>

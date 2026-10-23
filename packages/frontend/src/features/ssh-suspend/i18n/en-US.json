@@ -1,7 +1,7 @@
 {
   "suspendedSshSessions": {
     "modalTitle": "Suspended SSH Sessions",
-    "searchPlaceholder": "Search sessions (name, connection name)",
+    "searchPlaceholder": "Search sessions",
     "loading": "Loading suspended sessions...",
     "noResults": "No suspended sessions found matching your criteria.",
     "tooltip": {

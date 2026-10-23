@@ -311,15 +311,14 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
 	});
 
 	await step('Name sorting toggles between ascending and descending order', async () => {
-		const nameHeader = manager(page).getByRole('columnheader').filter({ hasText: 'Name' }).first();
-		const nameSortButton = nameHeader.locator('button');
-		if (!(await nameHeader.innerText()).includes('▲')) await nameSortButton.click();
-		await expect(nameHeader).toContainText('▲');
+		const nameSortButton = manager(page).locator('.file-manager-name-sort');
+		if (!(await nameSortButton.getAttribute('aria-label'))?.includes('Ascending')) await nameSortButton.click();
+		await expect(nameSortButton).toHaveAttribute('aria-label', /Ascending/);
 		const ascending = await visibleFilenames(page);
 		expect(ascending.indexOf('copy-source.txt')).toBeLessThan(ascending.indexOf('seed.txt'));
 
 		await nameSortButton.click();
-		await expect(nameHeader).toContainText('▼');
+		await expect(nameSortButton).toHaveAttribute('aria-label', /Descending/);
 		const descending = await visibleFilenames(page);
 		expect(descending.indexOf('seed.txt')).toBeLessThan(descending.indexOf('copy-source.txt'));
 	});
@@ -603,8 +602,7 @@ test('refreshes and sorts a long remote list while keeping a long filename actio
 
 	const fileManager = manager(page);
 	const list = activeFileManagerList(page);
-	const nameHeader = fileManager.getByRole('columnheader').filter({ hasText: 'Name' }).first();
-	const nameSortButton = nameHeader.locator('button');
+	const nameSortButton = fileManager.locator('.file-manager-name-sort');
 
 	await step('real directory navigation returns to the root before refreshing external changes', async () => {
 		await row(page, 'folder-seed').click();
@@ -631,7 +629,7 @@ test('refreshes and sorts a long remote list while keeping a long filename actio
 			await expect.poll(() => list.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
 			await nameSortButton.click();
 			await nameSortButton.click();
-			await expect(nameHeader).toContainText('▲');
+			await expect(nameSortButton).toHaveAttribute('aria-label', /Ascending/);
 
 			await list.evaluate((element) => {
 				element.scrollTop = element.scrollHeight;

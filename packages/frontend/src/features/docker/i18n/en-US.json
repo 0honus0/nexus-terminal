@@ -31,6 +31,7 @@
       "removeConfirm": "Remove {name}?"
     },
     "waitingForSsh": "Waiting for SSH connection...",
+    "moreActions": "More actions",
     "stats": {
       "noData": "No stats data available.",
       "cpu": "CPU %",

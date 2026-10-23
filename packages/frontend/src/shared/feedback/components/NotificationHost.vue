@@ -52,15 +52,18 @@
 			>
 				<div class="ui-notification__header">
 					<strong class="ui-notification__title">{{ titleFor(notification.kind) }}</strong>
-					<button
+					<UiButton
 						type="button"
+						appearance="ghost"
+						density="compact"
+						icon-only
 						class="ui-notification__close"
 						:aria-label="t('feedback.close')"
 						:title="t('feedback.close')"
 						@click="store.remove(notification.id)"
 					>
 						<i class="fas fa-xmark" aria-hidden="true"></i>
-					</button>
+					</UiButton>
 				</div>
 				<p class="ui-notification__message">{{ notification.message }}</p>
 				<div class="ui-notification__action-row">

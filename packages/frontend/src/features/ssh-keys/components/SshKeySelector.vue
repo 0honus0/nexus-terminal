@@ -2,7 +2,7 @@
 	import { useFeedbackMessage } from '@/shared/feedback/public';
 	import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiSelect, UiButton } from '@/foundation/ui';
+	import { UiSelect, UiButton, UiInlineLoading } from '@/foundation/ui';
 	import { useAuthSession } from '@/features/auth/public';
 	import { targetErrorKey } from '@/client/targets/target-types';
 	import { useSshKeys } from '../composables/useSshKeys';
@@ -95,15 +95,18 @@
 				<option :value="null">{{ t('sshKeys.selector.selectPlaceholder') }}</option>
 				<option v-for="key in keys.keys.value" :key="key.id" :value="key.id">{{ key.name }}</option>
 			</UiSelect>
-			<button
+			<UiButton
 				type="button"
-				class="shrink-0 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-text-secondary hover:bg-border disabled:opacity-50"
+				appearance="soft"
+				icon-only
+				class="shrink-0"
 				:disabled="loading || keys.busy.value"
 				:title="t('sshKeys.selector.manageKeysTitle')"
+				:aria-label="t('sshKeys.selector.manageKeysTitle')"
 				@click="manage = true"
 			>
 				<i class="fas fa-cog" aria-hidden="true" />
-			</button>
+			</UiButton>
 			<UiButton
 				v-if="!loading && (loadError || keys.needsRefresh.value)"
 				:disabled="loading || keys.busy.value"
@@ -111,7 +114,7 @@
 				>{{ t('sshKeys.refresh') }}</UiButton
 			>
 		</div>
-		<div v-if="loading" class="text-xs text-text-secondary">{{ t('sshKeys.selector.loadingKeys') }}</div>
+		<UiInlineLoading v-if="loading" class="text-xs" :label="t('sshKeys.selector.loadingKeys')" />
 		<SshKeyManagementModal v-model="manage" />
 	</div>
 </template>

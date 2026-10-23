@@ -1,4 +1,6 @@
 <script setup lang="ts">
+	import UiEmptyState from './UiEmptyState.vue';
+
 	defineProps<{
 		empty?: boolean;
 		emptyText?: string;
@@ -15,6 +17,14 @@
 				<slot />
 			</tbody>
 		</table>
+		<UiEmptyState
+			v-else-if="!$slots.empty"
+			class="ui-table__empty"
+			dense
+			:bordered="false"
+			icon="fa-regular fa-table"
+			:title="emptyText"
+		/>
 		<div v-else class="ui-table__empty px-4 py-10 text-center text-sm text-text-secondary">
 			<slot name="empty">{{ emptyText }}</slot>
 		</div>

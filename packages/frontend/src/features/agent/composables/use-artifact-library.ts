@@ -39,33 +39,45 @@ export function useArtifactLibrary(available: () => boolean) {
 	const cleanupUnknown = ref(false);
 	let revision = 0;
 	const downloadUrls = new Map<string, ReturnType<typeof setTimeout>>();
-	const operation = useAgentManagementOperation(() => {
-		revision += 1;
-		filters.value = newFilters();
-		items.value = [];
-		needsReload.value = true;
-		offset.value = 0;
-		nextOffset.value = null;
-		deleteTarget.value = null;
-		uploadFile.value = null;
-		uploadRecord.value = null;
-		uploadUnknown.value = false;
-		uploadAcknowledged.value = false;
-		cleanupResult.value = null;
-		cleanupUnknown.value = false;
-		for (const [url, timer] of downloadUrls) {
-			clearTimeout(timer);
-			URL.revokeObjectURL(url);
-		}
-		downloadUrls.clear();
-	}, available);
-	const appOperation = useAgentManagementOperation(() => {
-		apps.value = [];
-	}, available);
-	const storageOperation = useAgentManagementOperation(() => {
-		storage.value = null;
-		statsRequired.value = true;
-	}, available);
+	const operation = useAgentManagementOperation(
+		() => {
+			revision += 1;
+			filters.value = newFilters();
+			items.value = [];
+			needsReload.value = true;
+			offset.value = 0;
+			nextOffset.value = null;
+			deleteTarget.value = null;
+			uploadFile.value = null;
+			uploadRecord.value = null;
+			uploadUnknown.value = false;
+			uploadAcknowledged.value = false;
+			cleanupResult.value = null;
+			cleanupUnknown.value = false;
+			for (const [url, timer] of downloadUrls) {
+				clearTimeout(timer);
+				URL.revokeObjectURL(url);
+			}
+			downloadUrls.clear();
+		},
+		available,
+		{ retainOnView: true },
+	);
+	const appOperation = useAgentManagementOperation(
+		() => {
+			apps.value = [];
+		},
+		available,
+		{ retainOnView: true },
+	);
+	const storageOperation = useAgentManagementOperation(
+		() => {
+			storage.value = null;
+			statsRequired.value = true;
+		},
+		available,
+		{ retainOnView: true },
+	);
 	const blocked = computed(() => operation.busy.value || operation.refreshRequired.value || needsReload.value);
 
 	function invalidate(): void {

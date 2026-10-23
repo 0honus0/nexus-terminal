@@ -2,7 +2,7 @@
 	import { useFeedbackMessage } from '@/shared/feedback/public';
 	import { computed, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiCheckbox, UiInput } from '@/foundation/ui';
+	import { UiButton, UiCheckbox, UiSearchInput } from '@/foundation/ui';
 	import AgentConfigPopover from './AgentConfigPopover.vue';
 	import { RecycleScroller } from 'vue-virtual-scroller';
 	import type { ManagedArtifact } from '../model/artifact-types';
@@ -135,13 +135,13 @@
 		<template #panel>
 			<div class="flex h-[340px] min-h-0 flex-col">
 				<div class="flex shrink-0 items-center gap-1.5 border-b border-border/50 pb-2.5">
-					<UiInput
+					<UiSearchInput
 						v-model="query"
-						type="search"
 						density="compact"
 						class="min-w-0 flex-1"
 						:placeholder="$t('agent.attachments.search')"
 						:aria-label="$t('agent.attachments.search')"
+						:clear-label="$t('common.clear')"
 						@keydown.enter.prevent="load()"
 					/>
 					<UiButton density="compact" appearance="soft" :disabled="busy" @click="load()">

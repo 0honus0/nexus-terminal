@@ -5,9 +5,17 @@
 			title?: string;
 			description?: string;
 			dense?: boolean;
+			compact?: boolean;
 			bordered?: boolean;
 		}>(),
-		{ icon: 'fa-solid fa-inbox', title: '', description: '', dense: false, bordered: true },
+		{
+			icon: 'fa-solid fa-inbox',
+			title: '',
+			description: '',
+			dense: false,
+			compact: false,
+			bordered: true,
+		},
 	);
 </script>
 
@@ -17,9 +25,12 @@
 		data-ui-gen="2"
 		class="ui-empty-state"
 		:data-dense="dense ? 'true' : 'false'"
+		:data-compact="compact ? 'true' : undefined"
 		:data-bordered="bordered ? 'true' : 'false'"
 	>
-		<span class="ui-empty-state__icon"><i :class="icon" aria-hidden="true"></i></span>
+		<span class="ui-empty-state__icon"
+			><slot name="icon"><i :class="icon" aria-hidden="true"></i></slot
+		></span>
 		<div class="ui-empty-state__body">
 			<p v-if="title" class="ui-empty-state__title">{{ title }}</p>
 			<p v-if="description" class="ui-empty-state__description">{{ description }}</p>

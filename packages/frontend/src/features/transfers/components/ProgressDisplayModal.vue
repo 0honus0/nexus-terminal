@@ -7,7 +7,7 @@
 	import { useI18n } from 'vue-i18n';
 	import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
 	import { useDraggablePosition } from '@/foundation/interaction';
-	import { UiOverlayPanel } from '@/foundation/ui';
+	import { UiButton, UiEmptyState, UiLoadingState, UiInlineNotice, UiOverlayPanel, UiSpinner } from '@/foundation/ui';
 	import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
 	import type { ProgressSource, TransferTask } from '../model/transfer-types';
 	import { transferTaskErrorDescriptor, transferTaskWarningDescriptor } from '../presentation-transfer-message';
@@ -204,12 +204,11 @@
 	};
 
 	const statusClasses = (status: ServerTransferTaskStatus | ServerTransferItemStatus) => ({
-		'bg-green-100 text-green-700': status === 'completed',
-		'bg-red-100 text-red-700': status === 'failed',
-		'bg-yellow-100 text-yellow-700':
-			status === 'partially-completed' || status === 'queued' || status === 'cancelling',
-		'bg-blue-100 text-blue-700': status === 'in-progress' || status === 'connecting' || status === 'transferring',
-		'bg-gray-100 text-gray-700': status === 'cancelled',
+		'server-status--success': status === 'completed',
+		'server-status--danger': status === 'failed',
+		'server-status--warning': status === 'partially-completed' || status === 'queued' || status === 'cancelling',
+		'server-status--active': status === 'in-progress' || status === 'connecting' || status === 'transferring',
+		'server-status--muted': status === 'cancelled',
 	});
 
 	const formatDate = (value: number): string => {
@@ -234,7 +233,7 @@
 		:z-index="1100"
 		:close-on-escape="true"
 		preset="standard-modal"
-		panel-class="!h-[min(80dvh,46rem)] !max-w-6xl !p-0"
+		panel-class="!w-[min(46rem,calc(100vw-2rem))] !max-w-none !max-h-[min(80dvh,46rem)] !p-0"
 		:panel-style="panelStyle"
 		role="dialog"
 		:aria-modal="true"
@@ -245,30 +244,33 @@
 			v-if="visible"
 			ref="panelContent"
 			data-progress-display-placement="overlay"
-			class="progress-display-overlay flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground"
+			class="progress-display-overlay flex min-h-0 flex-col overflow-hidden text-foreground"
 		>
-			<div
-				class="transfer-progress-panel mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-hidden bg-background"
-			>
+			<div class="transfer-progress-panel mx-auto flex min-h-0 w-full flex-1 flex-col overflow-hidden">
 				<div
-					class="transfer-progress-header relative flex-shrink-0 px-4 py-3 sm:px-6"
+					class="transfer-progress-header grid flex-shrink-0 grid-cols-[1.75rem_minmax(0,1fr)_1.75rem] items-center gap-2 px-4 py-3 sm:px-5"
 					:class="!mobile ? (drag.dragging.value ? 'cursor-grabbing select-none' : 'cursor-move') : ''"
 					@pointerdown="drag.startDragging"
 				>
-					<h3 class="m-0 text-center text-lg font-semibold">{{ t('progressCenter.title') }}</h3>
-					<button
-						type="button"
-						class="absolute right-3 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded text-text-secondary hover:bg-border/60 hover:text-foreground"
+					<span class="h-7 w-7" aria-hidden="true"></span>
+					<h3 class="m-0 min-w-0 truncate text-center text-lg font-semibold">
+						{{ t('progressCenter.title') }}
+					</h3>
+					<UiButton
+						appearance="ghost"
+						density="compact"
+						icon-only
+						class="justify-self-end"
 						:title="t('progressCenter.hide')"
 						:aria-label="t('progressCenter.hide')"
 						@click.stop="emit('close')"
 					>
 						<i class="fas fa-minus" aria-hidden="true"></i>
-					</button>
+					</UiButton>
 				</div>
 
 				<div
-					class="progress-display-content custom-scrollbar min-h-0 flex-grow space-y-4 overflow-y-auto px-4 pr-4 sm:px-6 sm:pr-8"
+					class="progress-display-content custom-scrollbar min-h-0 flex-grow space-y-5 overflow-y-auto px-4 py-4 sm:px-5"
 				>
 					<section class="space-y-3">
 						<div class="flex items-center justify-between gap-3">
@@ -285,12 +287,12 @@
 							</span>
 						</div>
 
-						<div
+						<UiEmptyState
 							v-if="!sources.length"
-							class="rounded border border-dashed border-border px-3 py-5 text-center text-xs text-text-secondary"
-						>
-							{{ t('progressCenter.empty') }}
-						</div>
+							dense
+							icon="fas fa-list-check"
+							:title="t('progressCenter.empty')"
+						/>
 
 						<div v-else class="hidden-progress-source-grid">
 							<article v-for="source in sources" :key="source.id" class="hidden-progress-source-card">
@@ -310,23 +312,26 @@
 										</div>
 									</div>
 									<div class="flex shrink-0 items-center gap-1.5">
-										<button
+										<UiButton
 											v-if="source.restorable !== false"
-											type="button"
-											class="rounded border border-border px-2 py-1 text-[11px] hover:border-primary hover:text-primary"
+											appearance="soft"
+											density="compact"
+											class="text-[11px]"
 											@click="emit('restore', source.id)"
 										>
-											<i class="fas fa-window-restore mr-1" aria-hidden="true"></i
-											>{{ t('progressCenter.restore') }}
-										</button>
-										<button
+											<i class="fas fa-window-restore" aria-hidden="true"></i>
+											{{ t('progressCenter.restore') }}
+										</UiButton>
+										<UiButton
 											v-if="activeCount(source) > 0"
-											type="button"
-											class="rounded border border-red-300 bg-red-50 px-2 py-1 text-[11px] text-red-700 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-300"
+											appearance="soft"
+											tone="danger"
+											density="compact"
+											class="text-[11px]"
 											@click="emit('cancelAll', source.id)"
 										>
 											{{ t('progressCenter.cancelAll') }} ({{ activeCount(source) }})
-										</button>
+										</UiButton>
 									</div>
 								</div>
 
@@ -346,10 +351,12 @@
 											<span class="shrink-0 text-[11px] text-text-secondary">{{
 												t(`progressCenter.status.${task.status}`)
 											}}</span>
-											<button
+											<UiButton
 												v-if="!done(task.status)"
-												type="button"
-												class="shrink-0 rounded border border-red-300 bg-red-50 px-1.5 py-0.5 text-[11px] text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-red-950/30 dark:text-red-300"
+												appearance="soft"
+												tone="danger"
+												density="compact"
+												class="shrink-0 text-[11px]"
 												:disabled="task.status === 'cancelling'"
 												@click="emit('cancel', source.id, task.id)"
 											>
@@ -358,30 +365,32 @@
 														? t('progressCenter.cancelling')
 														: t('common.cancel')
 												}}
-											</button>
-											<button
+											</UiButton>
+											<UiButton
 												v-else
-												type="button"
-												class="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-text-secondary hover:bg-border/60"
+												appearance="ghost"
+												density="compact"
+												icon-only
+												class="shrink-0"
 												:aria-label="t('common.remove')"
 												@click="emit('remove', source.id, task.id)"
 											>
 												<i class="fas fa-times" aria-hidden="true"></i>
-											</button>
+											</UiButton>
 										</div>
 
 										<div class="mt-1.5 flex items-center gap-2">
 											<div
-												class="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-border"
+												class="server-progress-track h-1.5 min-w-0 flex-1"
 												role="progressbar"
 												aria-valuemin="0"
 												aria-valuemax="100"
 												:aria-valuenow="Math.round(normalizedProgress(task))"
 											>
-												<div
-													class="h-full rounded-full bg-primary"
-													:style="{ width: `${normalizedProgress(task)}%` }"
-												></div>
+												<span
+													class="server-progress-value"
+													:style="{ transform: `scaleX(${normalizedProgress(task) / 100})` }"
+												></span>
 											</div>
 											<span
 												class="w-11 shrink-0 text-right text-[11px] tabular-nums text-text-secondary"
@@ -404,29 +413,35 @@
 						</div>
 					</section>
 
-					<section class="space-y-3 border-t border-border pt-4">
-						<h4 class="mb-3 mt-0 text-sm font-semibold">{{ t('progressCenter.serverTransfers') }}</h4>
+					<section class="space-y-3 border-t border-[var(--ui-hairline)] pt-5">
+						<h4 class="progress-section-title mb-3 mt-0 text-sm font-semibold">
+							{{ t('progressCenter.serverTransfers') }}
+						</h4>
 
-						<div
+						<UiLoadingState
 							v-if="serverTransfersLoading && !serverTransfers.length"
-							class="py-10 text-center text-text-secondary"
-						>
-							<i class="fas fa-spinner fa-spin mb-2 text-2xl text-primary" aria-hidden="true"></i>
-							<div>{{ t('transferProgressModal.loading') }}</div>
-						</div>
-						<div v-else-if="serverTransfersError" class="rounded-md bg-red-50 p-4 text-center text-red-500">
-							<p class="font-semibold">{{ t('transferProgressModal.errorLoadingTitle') }}</p>
-							<p>{{ t('transferProgressModal.errorLoading', { error: t(serverTransfersError) }) }}</p>
-						</div>
-						<div v-else-if="!serverTransfers.length" class="py-10 text-center text-text-secondary">
-							<i class="far fa-file-lines mb-2 text-4xl text-gray-400" aria-hidden="true"></i>
-							<div>{{ t('transferProgressModal.noTasks') }}</div>
-						</div>
+							class="py-8"
+							compact
+							:bordered="false"
+							:title="t('transferProgressModal.loading')"
+						/>
+						<UiInlineNotice v-else-if="serverTransfersError" tone="danger">
+							<strong>{{ t('transferProgressModal.errorLoadingTitle') }}</strong>
+							<p class="m-0">
+								{{ t('transferProgressModal.errorLoading', { error: t(serverTransfersError) }) }}
+							</p>
+						</UiInlineNotice>
+						<UiEmptyState
+							v-else-if="!serverTransfers.length"
+							dense
+							icon="far fa-file-lines"
+							:title="t('transferProgressModal.noTasks')"
+						/>
 						<div v-else class="space-y-3">
 							<article
 								v-for="task in displayedServerTransfers"
 								:key="task.taskId"
-								class="rounded-lg border border-border bg-background-alt p-3 shadow-sm transition-shadow hover:shadow-md"
+								class="server-transfer-card"
 							>
 								<div class="mb-2 flex items-start justify-between gap-3">
 									<div class="min-w-0">
@@ -439,28 +454,20 @@
 										</span>
 									</div>
 									<div class="flex shrink-0 items-center gap-2">
-										<span
-											:class="[
-												'rounded-full px-2.5 py-1 text-xs font-semibold',
-												statusClasses(task.status),
-											]"
-										>
+										<span :class="['server-status', statusClasses(task.status)]">
 											{{ statusLabel(task.status) }}
 										</span>
-										<button
+										<UiButton
 											v-if="
 												serverTaskCancellable(task.status) ||
 												serverTaskFinal(task.status) ||
 												task.status === 'cancelling'
 											"
-											type="button"
 											:disabled="task.status === 'cancelling'"
-											:class="[
-												'rounded-md px-2 py-0.5 text-xs text-white transition-colors focus:outline-none focus:ring-2 disabled:cursor-not-allowed disabled:opacity-50',
-												serverTaskFinal(task.status)
-													? 'bg-gray-500 hover:bg-gray-600 focus:ring-gray-400'
-													: 'bg-red-500 hover:bg-red-600 focus:ring-red-400',
-											]"
+											:appearance="serverTaskFinal(task.status) ? 'soft' : 'solid'"
+											:tone="serverTaskFinal(task.status) ? 'neutral' : 'danger'"
+											density="compact"
+											class="text-xs"
 											:title="
 												serverTaskFinal(task.status)
 													? t('transferProgressModal.removeTaskTooltip')
@@ -472,11 +479,11 @@
 													: emit('cancel', 'server-transfers', task.taskId)
 											"
 										>
-											<i
+											<UiSpinner
 												v-if="task.status === 'cancelling'"
-												class="fas fa-spinner fa-spin mr-1"
-												aria-hidden="true"
-											></i>
+												class="mr-1"
+												density="compact"
+											/>
 											{{
 												task.status === 'cancelling'
 													? t('transferProgressModal.cancellingButton')
@@ -484,7 +491,7 @@
 														? t('transferProgressModal.removeButton')
 														: t('transferProgressModal.cancelButton')
 											}}
-										</button>
+										</UiButton>
 									</div>
 								</div>
 
@@ -494,16 +501,18 @@
 										<span>{{ task.overallProgress }}%</span>
 									</div>
 									<div
-										class="h-1.5 w-full overflow-hidden rounded-full bg-border"
+										class="server-progress-track"
 										role="progressbar"
 										aria-valuemin="0"
 										aria-valuemax="100"
 										:aria-valuenow="Math.round(task.overallProgress)"
 									>
-										<div
-											class="h-1.5 rounded-full bg-primary"
-											:style="{ width: `${Math.max(0, Math.min(100, task.overallProgress))}%` }"
-										></div>
+										<span
+											class="server-progress-value"
+											:style="{
+												transform: `scaleX(${Math.max(0, Math.min(100, task.overallProgress)) / 100})`,
+											}"
+										></span>
 									</div>
 								</div>
 
@@ -523,7 +532,7 @@
 										<li
 											v-for="subTask in task.subTasks"
 											:key="subTask.subTaskId"
-											class="rounded border border-border bg-background p-1.5 text-xs"
+											class="server-subtask-row text-xs"
 										>
 											<p>
 												<strong>{{ t('transferProgressModal.subTask.source') }}:</strong>
@@ -535,12 +544,7 @@
 											</p>
 											<div class="flex flex-wrap items-center gap-1">
 												<strong>{{ t('transferProgressModal.subTask.status') }}:</strong>
-												<span
-													:class="[
-														'rounded-full px-2 py-0.5 text-xs font-semibold',
-														statusClasses(subTask.status),
-													]"
-												>
+												<span :class="['server-status', statusClasses(subTask.status)]">
 													{{ statusLabel(subTask.status) }}
 												</span>
 												<span
@@ -559,7 +563,7 @@
 													(subTask.status === 'failed' || subTask.status === 'unknown') &&
 													subTask.error
 												"
-												class="text-red-600"
+												class="text-error"
 											>
 												<strong>{{ t('transferProgressModal.subTask.error') }}:</strong>
 												{{ t('serverTransferErrors.' + subTask.error) }}
@@ -578,13 +582,9 @@
 				<div
 					class="mt-auto flex flex-shrink-0 items-center justify-end border-t border-border px-4 py-4 sm:px-6"
 				>
-					<button
-						type="button"
-						class="rounded-md bg-button px-4 py-2 text-button-text shadow-sm transition hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
-						@click="emit('close')"
-					>
+					<UiButton appearance="solid" tone="primary" @click="emit('close')">
 						{{ t('common.close') }}
-					</button>
+					</UiButton>
 				</div>
 			</div>
 		</section>
@@ -596,16 +596,16 @@
 		max-height: min(80dvh, 46rem);
 	}
 	.transfer-progress-header {
-		border-bottom: 1px solid var(--border-color);
-		background: linear-gradient(
-			135deg,
-			color-mix(in srgb, var(--link-active-color, #007bff) 10%, transparent),
-			transparent
-		);
+		border-bottom: 1px solid var(--ui-hairline);
+		background: color-mix(in srgb, var(--header-bg-color) 36%, transparent);
 	}
 	.progress-display-content {
-		margin-bottom: 1rem;
-		padding-top: 1rem;
+		scrollbar-gutter: stable;
+	}
+	.progress-section-title {
+		color: var(--text-color);
+		font-size: 0.78rem;
+		letter-spacing: 0.01em;
 	}
 	.hidden-progress-source-grid {
 		display: grid;
@@ -617,31 +617,104 @@
 		width: 100%;
 		min-width: 0;
 		overflow: hidden;
-		border: 1px solid var(--border-color);
-		border-radius: 10px;
-		background: color-mix(in srgb, var(--app-bg-color) 96%, var(--header-bg-color));
-		box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+		border: 1px solid var(--ui-hairline);
+		border-radius: 14px;
+		background: color-mix(in srgb, var(--card-bg-color) 40%, transparent);
+		box-shadow: var(--ui-glass-highlight);
 	}
 	.hidden-progress-source-header {
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		padding: 9px 10px;
-		border-bottom: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
-		background: color-mix(in srgb, var(--header-bg-color) 88%, transparent);
+		padding: 10px 11px;
+		border-bottom: 1px solid var(--ui-hairline);
+		background: color-mix(in srgb, var(--header-bg-color) 28%, transparent);
 	}
 	.hidden-progress-source-list {
 		width: 100%;
 		max-height: 260px;
 		overflow-y: auto;
-		padding: 4px 10px 7px;
+		padding: 2px 11px 6px;
 	}
 	.hidden-progress-task-row {
-		padding: 7px 0;
-		border-bottom: 1px solid color-mix(in srgb, var(--border-color) 65%, transparent);
+		padding: 9px 0;
+		border-bottom: 1px solid var(--ui-hairline);
 	}
 	.hidden-progress-task-row:last-child {
 		border-bottom: 0;
+	}
+	.server-transfer-card {
+		display: grid;
+		gap: 10px;
+		padding: 12px;
+		border: 1px solid var(--ui-hairline);
+		border-radius: 14px;
+		background: color-mix(in srgb, var(--card-bg-color) 40%, transparent);
+		box-shadow: var(--ui-glass-highlight);
+	}
+	.server-status {
+		display: inline-flex;
+		min-height: 20px;
+		align-items: center;
+		border: 1px solid transparent;
+		border-radius: 999px;
+		padding: 0.12rem 0.48rem;
+		font-size: 0.66rem;
+		font-weight: 650;
+		line-height: 1;
+		white-space: nowrap;
+	}
+	.server-status--success {
+		border-color: color-mix(in srgb, var(--status-success-color) 30%, transparent);
+		background: color-mix(in srgb, var(--status-success-color) 12%, transparent);
+		color: color-mix(in srgb, var(--status-success-color) 76%, var(--text-color));
+	}
+	.server-status--danger {
+		border-color: color-mix(in srgb, var(--status-error-color) 30%, transparent);
+		background: color-mix(in srgb, var(--status-error-color) 12%, transparent);
+		color: color-mix(in srgb, var(--status-error-color) 78%, var(--text-color));
+	}
+	.server-status--warning {
+		border-color: color-mix(in srgb, var(--status-warning-color) 32%, transparent);
+		background: color-mix(in srgb, var(--status-warning-color) 13%, transparent);
+		color: color-mix(in srgb, var(--status-warning-color) 72%, var(--text-color));
+	}
+	.server-status--active {
+		border-color: color-mix(in srgb, var(--link-active-color) 30%, transparent);
+		background: color-mix(in srgb, var(--link-active-color) 11%, transparent);
+		color: color-mix(in srgb, var(--link-active-color) 78%, var(--text-color));
+	}
+	.server-status--muted {
+		border-color: var(--ui-hairline);
+		background: var(--ui-fill-soft);
+		color: var(--text-color-secondary);
+	}
+	.server-progress-track {
+		position: relative;
+		width: 100%;
+		height: 6px;
+		overflow: hidden;
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--border-color) 58%, transparent);
+		box-shadow: inset 0 1px 1px rgb(0 0 0 / 8%);
+	}
+	.server-progress-value {
+		position: absolute;
+		inset: 0;
+		border-radius: inherit;
+		transform-origin: left center;
+		background-image: linear-gradient(
+			90deg,
+			var(--link-active-color),
+			color-mix(in srgb, var(--link-active-color) 58%, white)
+		);
+		transition: transform 180ms ease;
+	}
+	.server-subtask-row {
+		border: 1px solid var(--ui-hairline);
+		border-radius: 10px;
+		background: var(--ui-fill-soft);
+		padding: 8px 9px;
 	}
 	.custom-scrollbar::-webkit-scrollbar {
 		width: 6px;
@@ -665,6 +738,9 @@
 		.progress-display-overlay .hidden-progress-source-header {
 			align-items: flex-start;
 			flex-wrap: wrap;
+		}
+		.server-transfer-card {
+			padding: 10px;
 		}
 	}
 </style>

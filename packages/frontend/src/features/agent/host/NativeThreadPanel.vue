@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { computed, onBeforeUnmount, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiInput } from '@/foundation/ui';
+	import { UiButton, UiEmptyState, UiInlineNotice, UiSearchInput } from '@/foundation/ui';
 	import { createNativeThreadApi } from '../api/native-thread-api';
 	import { useNativeThreads } from '../composables/use-native-threads';
 	import type { NativeThread } from '../model/native-thread-types';
@@ -21,7 +21,8 @@
 		() => props.active,
 		(value) => emit('select', value),
 	);
-	const { items, nextCursor, title, selected, pending, pendingDelete, inspected, deleteInspected, busy } = editor;
+	const { items, nextCursor, title, selected, loaded, pending, pendingDelete, inspected, deleteInspected, busy } =
+		editor;
 	const query = ref('');
 	const scroller = ref<HTMLElement | null>(null);
 	const confirmingDeleteId = ref<string | null>(null);
@@ -121,7 +122,7 @@
 	watch(
 		() => props.active,
 		(value) => {
-			if (value && props.autoLoad) void editor.refresh();
+			if (value && props.autoLoad && (!loaded.value || editor.refreshRequired.value)) void editor.refresh();
 		},
 		{ immediate: true },
 	);
@@ -172,29 +173,14 @@
 		</div>
 
 		<div class="shrink-0 border-b border-border/40 px-2.5 py-2">
-			<UiInput
+			<UiSearchInput
 				v-model="query"
-				type="search"
 				density="compact"
-				trailing-interactive
 				class="w-full"
 				:placeholder="t('agent.operations.searchThreads')"
 				:aria-label="t('agent.operations.searchThreads')"
-			>
-				<template #leading>
-					<i class="fa-solid fa-magnifying-glass text-[10px]" aria-hidden="true"></i>
-				</template>
-				<template v-if="query" #trailing>
-					<button
-						type="button"
-						:aria-label="t('agent.operations.clearSearch')"
-						class="ui-focusable flex h-5 w-5 items-center justify-center rounded-md text-[10px] text-text-secondary hover:bg-header hover:text-foreground"
-						@click="query = ''"
-					>
-						<i class="fa-solid fa-xmark" aria-hidden="true"></i>
-					</button>
-				</template>
-			</UiInput>
+				:clear-label="t('agent.operations.clearSearch')"
+			/>
 		</div>
 
 		<div ref="scroller" class="min-h-0 flex-1 overflow-y-auto px-2 py-1.5" @scroll.passive="handleScroll">
@@ -264,20 +250,19 @@
 				</UiButton>
 			</div>
 
-			<div
+			<UiEmptyState
 				v-if="visibleItems.length === 0"
-				class="flex flex-col items-center justify-center rounded-xl bg-background/50 px-3 py-8 text-center"
-			>
-				<div class="flex h-8 w-8 items-center justify-center rounded-full bg-header text-text-secondary/60">
-					<i class="fa-regular fa-comment-dots text-xs" aria-hidden="true"></i>
-				</div>
-				<p class="mt-2 text-xs text-text-secondary">{{ t('agent.operations.noThreadsFound') }}</p>
-			</div>
+				class="py-4"
+				compact
+				:bordered="false"
+				icon="fa-regular fa-comment-dots"
+				:title="t('agent.operations.noThreadsFound')"
+			/>
 		</div>
 
 		<div v-if="pending || pendingDelete" class="shrink-0 border-t border-border/45 p-2.5">
-			<template v-if="pending">
-				<p class="text-[11px] leading-4 text-warning" role="status">{{ t('agent.nativeThreads.unknown') }}</p>
+			<UiInlineNotice v-if="pending" tone="warning" compact>
+				<p class="leading-4">{{ t('agent.nativeThreads.unknown') }}</p>
 				<details class="mt-1 text-[10px] text-text-secondary">
 					<summary class="cursor-pointer select-none">{{ t('agent.nativeRun.technicalDetails') }}</summary>
 					<code class="mt-1 block break-all">{{ pending.operationId }}</code>
@@ -303,9 +288,9 @@
 						{{ t('agent.nativeThreads.abandon') }}
 					</UiButton>
 				</div>
-			</template>
-			<template v-else-if="pendingDelete">
-				<p class="text-[11px] leading-4 text-warning" role="status">
+			</UiInlineNotice>
+			<UiInlineNotice v-else-if="pendingDelete" tone="warning" compact>
+				<p class="leading-4">
 					{{ t('agent.nativeThreads.deleteUnknown') }}
 				</p>
 				<details class="mt-1 text-[10px] text-text-secondary">
@@ -333,7 +318,7 @@
 						{{ t('agent.nativeThreads.abandon') }}
 					</UiButton>
 				</div>
-			</template>
+			</UiInlineNotice>
 		</div>
 	</section>
 </template>

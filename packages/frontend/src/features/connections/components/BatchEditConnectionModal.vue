@@ -2,7 +2,16 @@
 	import { computed, onBeforeUnmount, onDeactivated, ref, watch } from 'vue';
 	import { useAuthSession } from '@/features/auth/public';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiCheckbox, UiFormField, UiInput, UiModal, UiSelect, UiTextarea } from '@/foundation/ui';
+	import {
+		UiButton,
+		UiCheckbox,
+		UiFormField,
+		UiInlineNotice,
+		UiInput,
+		UiModal,
+		UiSelect,
+		UiTextarea,
+	} from '@/foundation/ui';
 	import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
 	import { targetErrorKey } from '@/client/targets/target-types';
 	import { readConnectionChanges, readCredentialInput } from '@nexus-terminal/shared/targets/connections/http-codec';
@@ -226,9 +235,7 @@
 						></UiFormField
 					>
 				</section>
-				<p v-if="error" class="connection-batch__error" role="alert">
-					{{ error }}
-				</p>
+				<UiInlineNotice v-if="error" tone="danger">{{ error }}</UiInlineNotice>
 			</fieldset>
 			<footer class="connection-batch__footer">
 				<UiButton type="button" @click="emit('close')">{{ t('common.cancel') }}</UiButton>

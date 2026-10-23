@@ -1,6 +1,7 @@
 <script setup lang="ts">
 	import { computed } from 'vue';
 	import { useI18n } from 'vue-i18n';
+	import { UiBadge, type UiTone } from '@/foundation/ui';
 	import { auditContextKey, auditEventVisual } from '../model/auditPresentation';
 	import type { AuditEntry } from '../model/audit-types';
 
@@ -45,16 +46,16 @@
 		const code = props.log.statusCode;
 		if (code === null) return null;
 		if (code >= 200 && code < 300) {
-			return { code, tone: 'success', label: t('auditLog.httpStatus.success') };
+			return { code, tone: 'success' as UiTone, label: t('auditLog.httpStatus.success') };
 		}
 		if (code >= 300 && code < 400) {
-			return { code, tone: 'redirect', label: t('auditLog.httpStatus.redirect') };
+			return { code, tone: 'primary' as UiTone, label: t('auditLog.httpStatus.redirect') };
 		}
 		if (code === 401 || code === 403) {
-			return { code, tone: 'warning', label: t('auditLog.httpStatus.unauthorized') };
+			return { code, tone: 'warning' as UiTone, label: t('auditLog.httpStatus.unauthorized') };
 		}
-		if (code >= 400) return { code, tone: 'danger', label: t('auditLog.httpStatus.failed') };
-		return { code, tone: 'neutral', label: t('auditLog.httpStatus.recorded') };
+		if (code >= 400) return { code, tone: 'danger' as UiTone, label: t('auditLog.httpStatus.failed') };
+		return { code, tone: 'neutral' as UiTone, label: t('auditLog.httpStatus.recorded') };
 	});
 </script>
 
@@ -77,16 +78,20 @@
 		<div class="audit-row__content">
 			<div class="audit-row__heading">
 				<strong class="audit-row__action">{{ action }}</strong>
-				<span v-if="scope" class="audit-row__scope">{{ scope }}</span>
-				<span
+				<UiBadge v-if="scope" class="audit-row__scope" appearance="ghost" density="compact">{{
+					scope
+				}}</UiBadge>
+				<UiBadge
 					v-if="httpStatus"
 					class="audit-row__status"
-					:data-tone="httpStatus.tone"
+					appearance="ghost"
+					density="compact"
+					:tone="httpStatus.tone"
 					:title="`HTTP ${httpStatus.code} · ${httpStatus.label}`"
 				>
 					<strong>{{ httpStatus.code }}</strong>
 					<span>{{ httpStatus.label }}</span>
-				</span>
+				</UiBadge>
 				<span class="audit-row__mobile-time">
 					<i class="fa-regular fa-clock" aria-hidden="true"></i>
 					{{ dayLabel }} · {{ timeLabel }}
@@ -232,58 +237,17 @@
 	}
 
 	.audit-row__scope {
-		display: inline-flex;
-		flex: 0 0 auto;
-		align-items: center;
-		padding: 1px 6px;
-		border-radius: 999px;
 		background: color-mix(in srgb, var(--audit-kind-color) 8%, transparent);
 		color: color-mix(in srgb, var(--audit-kind-color) 76%, var(--text-color));
-		font-size: 9px;
-		font-weight: 650;
-		line-height: 1.55;
 	}
 
 	.audit-row__status {
-		display: inline-flex;
-		min-height: 21px;
-		flex: 0 0 auto;
-		align-items: center;
-		gap: 5px;
 		margin-left: auto;
-		padding: 2px 8px;
-		border-radius: 999px;
-		background: color-mix(in srgb, var(--text-color) 5%, transparent);
-		color: var(--text-color-secondary);
-		font-size: 9px;
-		font-weight: 620;
-		line-height: 1.4;
-		white-space: nowrap;
 	}
 
 	.audit-row__status strong {
 		font-size: 10px;
 		font-variant-numeric: tabular-nums;
-	}
-
-	.audit-row__status[data-tone='success'] {
-		background: color-mix(in srgb, var(--status-success-color) 10%, transparent);
-		color: var(--status-success-color);
-	}
-
-	.audit-row__status[data-tone='warning'] {
-		background: color-mix(in srgb, var(--status-warning-color) 11%, transparent);
-		color: var(--status-warning-color);
-	}
-
-	.audit-row__status[data-tone='danger'] {
-		background: color-mix(in srgb, var(--status-error-color) 10%, transparent);
-		color: var(--status-error-color);
-	}
-
-	.audit-row__status[data-tone='redirect'] {
-		background: color-mix(in srgb, #5f7cfa 9%, transparent);
-		color: color-mix(in srgb, #5f7cfa 78%, var(--text-color));
 	}
 
 	.audit-row__meta {

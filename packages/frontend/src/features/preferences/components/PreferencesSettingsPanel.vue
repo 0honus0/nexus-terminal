@@ -1,7 +1,15 @@
 <script setup lang="ts">
 	import { computed, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiCheckbox, UiFormField, UiInput, UiSelect, UiSettingsGroup } from '@/foundation/ui';
+	import {
+		UiButton,
+		UiCheckbox,
+		UiLoadingState,
+		UiFormField,
+		UiNumberInput,
+		UiSelect,
+		UiSettingsGroup,
+	} from '@/foundation/ui';
 	import { useFeedback, useSettingsReloadSource } from '@/shared/feedback/public';
 	import { BackendLoggingPanel, useBackendLogging } from '@/features/logging/public';
 	import MonitoringConfigurationPanel from './MonitoringConfigurationPanel.vue';
@@ -140,9 +148,7 @@
 
 		<MonitoringConfigurationPanel v-if="props.section !== 'system'" class="m-6" />
 
-		<div v-if="loading" class="p-4 text-center text-text-secondary">
-			{{ t('common.loading') }}
-		</div>
+		<UiLoadingState v-if="loading" compact :bordered="false" :title="t('common.loading')" />
 
 		<fieldset v-else-if="props.section === 'system'" :disabled="needsRefresh || editor.saving.value">
 			<div class="ui-settings-groups">
@@ -583,10 +589,9 @@
 					"
 				>
 					<UiFormField :label="t('settings.terminalScrollback.limitLabel')" for-id="terminalScrollbackLimit">
-						<UiInput
+						<UiNumberInput
 							id="terminalScrollbackLimit"
 							v-model="form.terminalScrollbackLimit"
-							type="number"
 							min="0"
 							max="100000"
 							step="1"
@@ -626,10 +631,9 @@
 							:label="t('settings.workspace.spreadsheetPreviewLimits.rowsLabel')"
 							for-id="spreadsheetPreviewRowsPerPage"
 						>
-							<UiInput
+							<UiNumberInput
 								id="spreadsheetPreviewRowsPerPage"
 								v-model="form.spreadsheetPreviewRowsPerPage"
-								type="number"
 								min="10"
 								max="2000"
 								step="1"
@@ -640,10 +644,9 @@
 							:label="t('settings.workspace.spreadsheetPreviewLimits.columnsLabel')"
 							for-id="spreadsheetPreviewMaxColumns"
 						>
-							<UiInput
+							<UiNumberInput
 								id="spreadsheetPreviewMaxColumns"
 								v-model="form.spreadsheetPreviewMaxColumns"
-								type="number"
 								min="5"
 								max="200"
 								step="1"
@@ -861,10 +864,9 @@
 						:label="t('settings.docker.refreshIntervalLabel')"
 						for-id="dockerStatusIntervalSeconds"
 					>
-						<UiInput
+						<UiNumberInput
 							id="dockerStatusIntervalSeconds"
 							v-model="form.dockerStatusIntervalSeconds"
-							type="number"
 							min="1"
 							step="1"
 							:disabled="savingSection !== null"

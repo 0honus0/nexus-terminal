@@ -36,6 +36,33 @@ function object(input: unknown, keys?: readonly string[]): Record<string, unknow
 	return result;
 }
 
+function objectWithDefaults(
+	input: unknown,
+	keys: readonly string[],
+	defaults: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+	if (input === null || typeof input !== 'object' || Array.isArray(input)) {
+		throw new CorruptPresentationRecord();
+	}
+	if (Object.keys(input).some((key) => !keys.includes(key))) {
+		throw new CorruptPresentationRecord();
+	}
+	const provided: Record<string, unknown> = {};
+	for (const [key, value] of Object.entries(input)) {
+		Object.defineProperty(provided, key, { value, enumerable: true });
+	}
+	const result: Record<string, unknown> = {};
+	for (const key of keys) {
+		const hasValue = Object.prototype.hasOwnProperty.call(input, key);
+		const value = hasValue ? provided[key] : defaults[key];
+		if (!hasValue && !Object.prototype.hasOwnProperty.call(defaults, key)) {
+			throw new CorruptPresentationRecord();
+		}
+		Object.defineProperty(result, key, { value, enumerable: true });
+	}
+	return result;
+}
+
 function integer(value: unknown, min: number, max = Number.MAX_SAFE_INTEGER): number {
 	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < min || value > max) {
 		throw new CorruptPresentationRecord();
@@ -120,41 +147,54 @@ function columnWidths(input: unknown): Record<string, number> {
 }
 
 function readStoredPresentationPreferences(input: unknown): StoredPresentationPreferences {
-	const value = object(input, [
-		'language',
-		'frontendLogLevel',
-		'timezone',
-		'showPopupFileEditor',
-		'shareFileEditorTabs',
-		'showPopupFileManager',
-		'dockerStatusIntervalSeconds',
-		'dockerDefaultExpand',
-		'statusMonitorScale',
-		'dashboardShowLocalResources',
-		'dashboardShowRemoteResources',
-		'workspaceSidebarPersistent',
-		'terminalScrollbackLimit',
-		'showStatusMonitorIpAddress',
-		'commandInputSyncTarget',
-		'quickCommandsCollapsibleSearch',
-		'quickCommandsCompactMode',
-		'quickCommandRowSizeMultiplier',
-		'terminalRightClickCopyPaste',
-		'layoutLocked',
-		'navBarVisible',
-		'fileManagerShowDeleteConfirmation',
-		'sidebarPaneWidths',
-		'fileManagerRowSizeMultiplier',
-		'fileManagerColWidths',
-		'spreadsheetPreviewRowsPerPage',
-		'spreadsheetPreviewMaxColumns',
-		'rdpModalWidth',
-		'rdpModalHeight',
-		'vncModalWidth',
-		'vncModalHeight',
-		'showConnectionTags',
-		'showQuickCommandTags',
-	]);
+	const value = objectWithDefaults(
+		input,
+		[
+			'language',
+			'frontendLogLevel',
+			'timezone',
+			'showPopupFileEditor',
+			'shareFileEditorTabs',
+			'showPopupFileManager',
+			'showCommandBarClear',
+			'showCommandBarFocusSwitch',
+			'showCommandBarEditor',
+			'showCommandBarSearch',
+			'dockerStatusIntervalSeconds',
+			'dockerDefaultExpand',
+			'statusMonitorScale',
+			'dashboardShowLocalResources',
+			'dashboardShowRemoteResources',
+			'workspaceSidebarPersistent',
+			'terminalScrollbackLimit',
+			'showStatusMonitorIpAddress',
+			'commandInputSyncTarget',
+			'quickCommandsCollapsibleSearch',
+			'quickCommandsCompactMode',
+			'quickCommandRowSizeMultiplier',
+			'terminalRightClickCopyPaste',
+			'layoutLocked',
+			'navBarVisible',
+			'fileManagerShowDeleteConfirmation',
+			'sidebarPaneWidths',
+			'fileManagerRowSizeMultiplier',
+			'fileManagerColWidths',
+			'spreadsheetPreviewRowsPerPage',
+			'spreadsheetPreviewMaxColumns',
+			'rdpModalWidth',
+			'rdpModalHeight',
+			'vncModalWidth',
+			'vncModalHeight',
+			'showConnectionTags',
+			'showQuickCommandTags',
+		],
+		{
+			showCommandBarClear: true,
+			showCommandBarFocusSwitch: true,
+			showCommandBarEditor: true,
+			showCommandBarSearch: true,
+		},
+	);
 	const timezone = text(value.timezone, 64, true);
 	try {
 		new Intl.DateTimeFormat('en', { timeZone: timezone });
@@ -168,6 +208,10 @@ function readStoredPresentationPreferences(input: unknown): StoredPresentationPr
 		showPopupFileEditor: boolean(value.showPopupFileEditor),
 		shareFileEditorTabs: boolean(value.shareFileEditorTabs),
 		showPopupFileManager: boolean(value.showPopupFileManager),
+		showCommandBarClear: boolean(value.showCommandBarClear),
+		showCommandBarFocusSwitch: boolean(value.showCommandBarFocusSwitch),
+		showCommandBarEditor: boolean(value.showCommandBarEditor),
+		showCommandBarSearch: boolean(value.showCommandBarSearch),
 		dockerStatusIntervalSeconds: integer(value.dockerStatusIntervalSeconds, 1, 86400),
 		dockerDefaultExpand: boolean(value.dockerDefaultExpand),
 		statusMonitorScale: number(value.statusMonitorScale, 0.65, 1.6),

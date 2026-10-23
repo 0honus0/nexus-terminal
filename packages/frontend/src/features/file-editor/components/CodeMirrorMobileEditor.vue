@@ -1,7 +1,19 @@
 <script setup lang="ts">
 	import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
-	import { Compartment, EditorState, type ChangeSpec, type Extension } from '@codemirror/state';
-	import { EditorView, drawSelection, dropCursor, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view';
+	import { Compartment, EditorSelection, EditorState, type ChangeSpec, type Extension } from '@codemirror/state';
+	import {
+		Decoration,
+		EditorView,
+		MatchDecorator,
+		ViewPlugin,
+		type DecorationSet,
+		type ViewUpdate,
+		drawSelection,
+		dropCursor,
+		highlightActiveLine,
+		keymap,
+		lineNumbers,
+	} from '@codemirror/view';
 	import { defaultKeymap, history, historyKeymap, toggleComment } from '@codemirror/commands';
 	import {
 		bracketMatching,
@@ -13,9 +25,10 @@
 		LanguageDescription,
 	} from '@codemirror/language';
 	import { autocompletion, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
-	import { highlightSelectionMatches, openSearchPanel, search, searchKeymap } from '@codemirror/search';
+	import { SearchQuery, highlightSelectionMatches, search, searchKeymap } from '@codemirror/search';
 	import { vscodeDark } from '@uiw/codemirror-theme-vscode';
 	import { languages } from '@codemirror/language-data';
+	import type { EditorSearchController, EditorSearchState } from '../model/editor';
 
 	interface CommentTokens {
 		line?: string;
@@ -164,6 +177,7 @@
 	const languageCompartment = new Compartment();
 	const presentationCompartment = new Compartment();
 	const editableCompartment = new Compartment();
+	const searchCompartment = new Compartment();
 	let view: EditorView | undefined;
 	let mounted = false;
 	let syncing = false;
@@ -171,6 +185,94 @@
 	let languageGeneration = 0;
 	let pinchStartDistance = 0;
 	let pinchStartFontSize = props.fontSize;
+	const SEARCH_MATCH_LIMIT = 10_000;
+	let searchQuery = '';
+	let searchMatches: Array<{ from: number; to: number }> = [];
+	let searchIndex = -1;
+
+	const searchState = (): EditorSearchState => ({
+		current: searchMatches.length > 0 ? searchIndex + 1 : 0,
+		total: searchMatches.length,
+	});
+
+	const searchHighlightExtension = (query: string): Extension => {
+		if (!query) return [];
+		const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+		const decorator = new MatchDecorator({
+			regexp: new RegExp(escaped, 'giu'),
+			decoration: Decoration.mark({ class: 'file-editor-search-match' }),
+		});
+		return ViewPlugin.fromClass(
+			class {
+				decorations: DecorationSet;
+
+				constructor(activeView: EditorView) {
+					this.decorations = decorator.createDeco(activeView);
+				}
+
+				update(update: ViewUpdate) {
+					this.decorations = decorator.updateDeco(update, this.decorations);
+				}
+			},
+			{ decorations: (instance) => instance.decorations },
+		);
+	};
+
+	const selectSearchMatch = (index: number): void => {
+		const activeView = view;
+		const match = searchMatches[index];
+		if (!activeView || !match) return;
+		searchIndex = index;
+		activeView.dispatch({
+			selection: EditorSelection.single(match.from, match.to),
+			effects: EditorView.scrollIntoView(match.to, { y: 'center' }),
+		});
+	};
+
+	const setSearchQuery = (query: string): EditorSearchState => {
+		const activeView = view;
+		searchQuery = query;
+		searchMatches = [];
+		searchIndex = -1;
+		if (!activeView || !query) {
+			if (activeView) activeView.dispatch({ effects: searchCompartment.reconfigure([]) });
+			return searchState();
+		}
+		activeView.dispatch({ effects: searchCompartment.reconfigure(searchHighlightExtension(query)) });
+		const cursor = new SearchQuery({ search: query, caseSensitive: false, literal: true }).getCursor(
+			activeView.state,
+		);
+		for (let next = cursor.next(); !next.done; next = cursor.next()) {
+			searchMatches.push(next.value);
+			if (searchMatches.length >= SEARCH_MATCH_LIMIT) break;
+		}
+		if (searchMatches.length === 0) return searchState();
+		const selectionFrom = activeView.state.selection.main.from;
+		const nextIndex = searchMatches.findIndex((match) => match.from >= selectionFrom);
+		selectSearchMatch(nextIndex >= 0 ? nextIndex : 0);
+		return searchState();
+	};
+
+	const findNextSearch = (query: string): EditorSearchState => {
+		if (query !== searchQuery || (searchMatches.length === 0 && query)) return setSearchQuery(query);
+		if (searchMatches.length === 0) return searchState();
+		selectSearchMatch((searchIndex + 1) % searchMatches.length);
+		return searchState();
+	};
+
+	const findPreviousSearch = (query: string): EditorSearchState => {
+		if (query !== searchQuery || (searchMatches.length === 0 && query)) return setSearchQuery(query);
+		if (searchMatches.length === 0) return searchState();
+		selectSearchMatch((searchIndex - 1 + searchMatches.length) % searchMatches.length);
+		return searchState();
+	};
+
+	const clearSearch = (): void => {
+		searchQuery = '';
+		searchMatches = [];
+		searchIndex = -1;
+		view?.dispatch({ effects: searchCompartment.reconfigure([]) });
+	};
 
 	const presentationExtension = (): Extension =>
 		EditorView.theme({
@@ -227,6 +329,7 @@
 					languageCompartment.of(initialLanguage),
 					presentationCompartment.of(presentationExtension()),
 					editableCompartment.of(EditorView.editable.of(!props.readOnly)),
+					searchCompartment.of([]),
 					vscodeDark,
 					lineNumbers(),
 					EditorView.lineWrapping,
@@ -344,12 +447,13 @@
 	defineExpose({
 		focus: () => view?.focus(),
 
-		openSearch: () => {
-			if (view) openSearchPanel(view);
-		},
+		setSearchQuery,
+		findNextSearch,
+		findPreviousSearch,
+		clearSearch,
 
 		toggleComment: () => (view ? toggleEditorComment(view) : false),
-	});
+	} satisfies EditorSearchController & { focus: () => void; toggleComment: () => boolean });
 </script>
 
 <template>
@@ -385,6 +489,12 @@
 
 	.codemirror-mobile-editor-container :deep(.cm-content) {
 		min-height: 100%;
+	}
+
+	.codemirror-mobile-editor-container :deep(.file-editor-search-match) {
+		border-radius: 2px;
+		background: color-mix(in srgb, var(--editor-accent, #bd8cff) 34%, transparent);
+		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--editor-accent, #bd8cff) 46%, transparent);
 	}
 
 	.codemirror-mobile-editor-container :deep(.cm-gutters) {

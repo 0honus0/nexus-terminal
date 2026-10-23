@@ -4,6 +4,7 @@
 	import { useI18n } from 'vue-i18n';
 	import { authErrorKey, LoginView, type PasskeyLoginInput } from '@/features/auth/public';
 	import { LoginCaptchaChallenge, useLoginSecurity } from '@/features/security/public';
+	import { UiInlineNotice } from '@/foundation/ui';
 
 	const router = useRouter();
 	const { t } = useI18n();
@@ -63,7 +64,7 @@
 				:feedback="captchaFeedback"
 				@token="handleCaptchaToken"
 			/>
-			<p v-if="passkeyError" class="mt-2 text-center text-sm text-error" role="alert">{{ passkeyError }}</p>
+			<UiInlineNotice v-if="passkeyError" class="mt-2" tone="danger" compact>{{ passkeyError }}</UiInlineNotice>
 		</template>
 	</LoginView>
 </template>

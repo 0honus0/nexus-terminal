@@ -2,7 +2,7 @@
 	import { filesystemFailureMessage } from '@/features/filesystem/public';
 	import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiSpinner } from '@/foundation/ui';
+	import { UiButton, UiEmptyState, UiInlineLoading, UiInlineNotice, UiSpinner } from '@/foundation/ui';
 	import { useFeedback } from '@/shared/feedback/public';
 	import ImagePreview from './ImagePreview.vue';
 	import FilePreviewDialog from './FilePreviewDialog.vue';
@@ -44,6 +44,8 @@
 	const props = defineProps<{
 		source: FilePreviewSource;
 		scopeId?: string;
+		scopeLabel?: string;
+		showScopeLabel?: boolean;
 		session?: FilePreviewSessionController;
 		spreadsheetRowsPerPage?: number;
 		spreadsheetMaxColumns?: number;
@@ -69,7 +71,12 @@
 		return filesystemFailureMessage(tab.error.message, t);
 	};
 
-	const open = (path: string) => preview.open(path, { scopeId: props.scopeId, source: props.source });
+	const open = (path: string) =>
+		preview.open(path, {
+			scopeId: props.scopeId,
+			scopeLabel: props.showScopeLabel ? props.scopeLabel : undefined,
+			source: props.source,
+		});
 
 	const retry = async (tab: (typeof preview.tabs.value)[number]): Promise<void> => {
 		try {
@@ -118,30 +125,21 @@
 					@close="emit('hide')"
 				>
 					<div class="flex h-full min-h-[18rem] items-center justify-center p-6">
-						<div
-							class="flex max-w-xl flex-col items-center gap-4 rounded-md border border-error/40 bg-error/10 p-5 text-center text-sm text-error"
-							role="alert"
-						>
-							<i class="fas fa-triangle-exclamation text-lg" aria-hidden="true"></i>
-							<div class="space-y-1">
-								<p>{{ t('fileManager.preview.loadFailed') }}</p>
-								<p class="break-words text-xs opacity-80">{{ previewError(tab) }}</p>
-							</div>
-							<button
-								type="button"
-								class="inline-flex min-h-11 items-center gap-2 rounded-md border border-error/50 px-3 py-2 text-sm hover:bg-error/10 focus:outline-none focus:ring-1 focus:ring-error disabled:cursor-wait disabled:opacity-60"
-								:disabled="tab.refreshing"
-								:aria-busy="tab.refreshing"
-								@click="retry(tab)"
-							>
-								<i
-									class="fas fa-rotate"
-									:class="tab.refreshing ? 'fa-spin' : ''"
-									aria-hidden="true"
-								></i>
-								<span>{{ t('common.retry') }}</span>
-							</button>
-						</div>
+						<UiInlineNotice class="max-w-xl" tone="danger">
+							<p class="m-0">{{ t('fileManager.preview.loadFailed') }}</p>
+							<p class="mt-1 break-words text-xs opacity-80">{{ previewError(tab) }}</p>
+							<template #actions>
+								<UiButton
+									appearance="soft"
+									tone="danger"
+									density="compact"
+									:loading="tab.refreshing"
+									@click="retry(tab)"
+								>
+									{{ t('common.retry') }}
+								</UiButton>
+							</template>
+						</UiInlineNotice>
 					</div>
 				</FilePreviewDialog>
 				<template v-else-if="tab.file">
@@ -205,14 +203,11 @@
 			:aria-label="t('fileManager.preview.loading')"
 			@click.self="cancelLoading(false)"
 		>
-			<div
-				class="flex items-center gap-3 rounded-md border border-white/20 bg-[#141414] px-4 py-3 text-white shadow-xl"
-			>
-				<i class="fas fa-spinner fa-spin" aria-hidden="true"></i>
-				<span>{{ t('fileManager.preview.loading') }}</span>
+			<div class="file-preview-loading-card ui-loading-shimmer">
+				<UiInlineLoading density="default" :label="t('fileManager.preview.loading')" />
 				<button
 					type="button"
-					class="ml-1 flex h-11 w-11 items-center justify-center text-2xl leading-none hover:text-white/70 focus:outline-none focus:ring-1 focus:ring-white/70"
+					class="flex h-11 w-11 items-center justify-center text-2xl leading-none hover:text-white/70 focus:outline-none focus:ring-1 focus:ring-white/70"
 					:aria-label="t('fileManager.preview.close')"
 					:title="t('fileManager.preview.close')"
 					@click="cancelLoading(true)"
@@ -221,8 +216,32 @@
 				</button>
 			</div>
 		</div>
-		<div v-if="!preview.tabs.value.length" class="grid h-full place-items-center text-text-secondary">
-			{{ t('fileManager.preview.openFiles') }}
-		</div>
+		<UiEmptyState
+			v-if="!preview.tabs.value.length"
+			class="h-full"
+			compact
+			:bordered="false"
+			icon="fa-regular fa-file-lines"
+			:title="t('fileManager.preview.openFiles')"
+		/>
 	</section>
 </template>
+
+<style scoped>
+	.file-preview-loading-card {
+		--ui-text: #fff;
+		--ui-text-muted: rgb(255 255 255 / 74%);
+		--ui-tone-accent: #fff;
+		display: flex;
+		min-width: min(22rem, calc(100vw - 2rem));
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 0.7rem 0.85rem 0.7rem 1rem;
+		border: 1px solid rgb(255 255 255 / 18%);
+		border-radius: 0.75rem;
+		background: linear-gradient(135deg, rgb(255 255 255 / 7%), transparent 62%), rgb(20 20 20 / 92%);
+		box-shadow: 0 18px 42px -26px rgb(0 0 0 / 78%);
+		color: #fff;
+	}
+</style>

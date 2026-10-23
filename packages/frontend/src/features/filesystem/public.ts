@@ -1,5 +1,7 @@
 export const loadFileManager = () => import('./components/FileManager.vue');
 
+export const loadRemoteDirectoryPicker = () => import('./components/RemoteDirectoryPicker.vue');
+
 export { default as FilesystemCatalogModal } from './components/FilesystemCatalogModal.vue';
 
 export { useFilesystemCatalog } from './composables/useFilesystemCatalog';

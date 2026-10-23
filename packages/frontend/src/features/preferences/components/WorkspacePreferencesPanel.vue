@@ -2,10 +2,22 @@
 	import { computed, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { structurallyEqual } from '@/foundation/data';
-	import { UiButton, UiCheckbox, UiFormField, UiInput, UiSelect, UiSettingsGroup } from '@/foundation/ui';
+	import {
+		UiButton,
+		UiCheckbox,
+		UiLoadingState,
+		UiFormField,
+		UiNumberInput,
+		UiSelect,
+		UiSettingsGroup,
+	} from '@/foundation/ui';
 	import { useFeedback, useSettingsReloadSource } from '@/shared/feedback/public';
-	import MonitoringConfigurationPanel from './MonitoringConfigurationPanel.vue';
+	import {
+		SETTINGS_MONITORING_MAX_SECONDS,
+		SETTINGS_MONITORING_MIN_SECONDS,
+	} from '@nexus-terminal/shared/preferences/configuration/values';
 	import { usePreferencesEditor } from '../composables/use-preferences-editor';
+	import { useMonitoringConfiguration } from '../composables/use-monitoring-configuration';
 	import type { UserPreferences } from '../model/preferences-types';
 
 	type GroupId = 'files' | 'commands' | 'monitoring' | 'layout';
@@ -14,13 +26,22 @@
 	const feedback = useFeedback();
 	const emit = defineEmits<{ saved: [preferences: UserPreferences] }>();
 	const editor = usePreferencesEditor(t);
+	const monitoringCore = useMonitoringConfiguration({ notify: false });
 	const { form, baseline, loading, loadError, needsRefresh, preferences } = editor;
 	useSettingsReloadSource({
 		id: 'preferences-workspace',
 
-		pending: () => !loading.value && (needsRefresh.value || Boolean(loadError.value)),
+		pending: () =>
+			(!loading.value && (needsRefresh.value || Boolean(loadError.value))) ||
+			(!monitoringCore.loading.value && monitoringCore.needsRefresh.value),
 
-		reload: editor.refresh,
+		reload: async () => {
+			const requests: Promise<unknown>[] = [];
+			if (!loading.value && (needsRefresh.value || loadError.value)) requests.push(editor.refresh());
+			if (!monitoringCore.loading.value && monitoringCore.needsRefresh.value)
+				requests.push(monitoringCore.refresh());
+			await Promise.allSettled(requests);
+		},
 	});
 	const savingGroup = ref<GroupId | null>(null);
 
@@ -37,6 +58,10 @@
 		'commandInputSyncTarget',
 		'showConnectionTags',
 		'showQuickCommandTags',
+		'showCommandBarClear',
+		'showCommandBarFocusSwitch',
+		'showCommandBarEditor',
+		'showCommandBarSearch',
 		'quickCommandsCollapsibleSearch',
 		'quickCommandsCompactMode',
 		'terminalScrollbackLimit',
@@ -60,6 +85,56 @@
 	const commandsDirty = computed(() => isDirty(commandKeys));
 	const monitoringDirty = computed(() => isDirty(monitoringKeys));
 	const layoutDirty = computed(() => isDirty(layoutKeys));
+	const monitoringCoreDirty = computed(() => {
+		const snapshot = monitoringCore.snapshot.value;
+		const draft = monitoringCore.draft.value;
+		return Boolean(
+			snapshot &&
+			draft &&
+			(snapshot.statusIntervalSeconds !== draft.statusIntervalSeconds ||
+				snapshot.hostIntervalSeconds !== draft.hostIntervalSeconds),
+		);
+	});
+	const monitoringBusy = computed(() => savingGroup.value !== null || needsRefresh.value || loading.value);
+	const monitoringCoreBusy = computed(
+		() => monitoringBusy.value || monitoringCore.loading.value || monitoringCore.needsRefresh.value,
+	);
+	const monitoringGroupDirty = computed(() => monitoringDirty.value || monitoringCoreDirty.value);
+	const monitoringGroupValid = computed(
+		() =>
+			!monitoringCoreDirty.value ||
+			Boolean(
+				monitoringCore.draft.value &&
+				Number.isSafeInteger(monitoringCore.draft.value.statusIntervalSeconds) &&
+				monitoringCore.draft.value.statusIntervalSeconds >= SETTINGS_MONITORING_MIN_SECONDS &&
+				monitoringCore.draft.value.statusIntervalSeconds <= SETTINGS_MONITORING_MAX_SECONDS &&
+				Number.isSafeInteger(monitoringCore.draft.value.hostIntervalSeconds) &&
+				monitoringCore.draft.value.hostIntervalSeconds >= SETTINGS_MONITORING_MIN_SECONDS &&
+				monitoringCore.draft.value.hostIntervalSeconds <= SETTINGS_MONITORING_MAX_SECONDS,
+			),
+	);
+	const canSaveMonitoringPreferences = computed(() => monitoringDirty.value && !needsRefresh.value && !loading.value);
+	const monitoringGroupCanSave = computed(
+		() =>
+			savingGroup.value === null &&
+			monitoringGroupDirty.value &&
+			monitoringGroupValid.value &&
+			(monitoringCore.canSave.value || canSaveMonitoringPreferences.value),
+	);
+	const monitoringStatusInterval = computed({
+		get: () => monitoringCore.draft.value?.statusIntervalSeconds ?? null,
+
+		set: (value: string | number | null) => {
+			if (monitoringCore.draft.value) monitoringCore.draft.value.statusIntervalSeconds = Number(value);
+		},
+	});
+	const monitoringHostInterval = computed({
+		get: () => monitoringCore.draft.value?.hostIntervalSeconds ?? null,
+
+		set: (value: string | number | null) => {
+			if (monitoringCore.draft.value) monitoringCore.draft.value.hostIntervalSeconds = Number(value);
+		},
+	});
 
 	const patchFor = (keys: readonly (keyof UserPreferences)[]): Partial<UserPreferences> => {
 		const patch: Partial<UserPreferences> = {};
@@ -116,11 +191,53 @@
 			if (editor.view.isCurrent(signal)) savingGroup.value = null;
 		}
 	};
+
+	const saveMonitoringGroup = async (): Promise<void> => {
+		const signal = editor.view.capture();
+		if (signal.aborted || !monitoringGroupCanSave.value) return;
+		const patch = patchFor(monitoringKeys);
+		const validationError = validatePatch(patch);
+		if (validationError) {
+			feedback.notifyError(validationError);
+			return;
+		}
+
+		savingGroup.value = 'monitoring';
+		try {
+			const saveCore = monitoringCore.canSave.value;
+			const savePreferences = canSaveMonitoringPreferences.value;
+			if (saveCore && !(await monitoringCore.save())) {
+				if (!editor.view.isCurrent(signal)) return;
+				const failure = monitoringCore.feedback.value;
+				feedback.notifyError(
+					t('settings.monitoring.feedback.' + (failure && failure !== 'saved' ? failure : 'request_failed')),
+				);
+				return;
+			}
+			if (savePreferences) {
+				if (!(await editor.save(patch))) return;
+				emit('saved', { ...preferences.values.value });
+			}
+			if (!editor.view.isCurrent(signal)) return;
+			feedback.notifySuccess(
+				saveCore ? t('settings.monitoring.feedback.saved') : t('settings.preferences.saved'),
+			);
+		} catch (cause) {
+			if (!editor.view.isCurrent(signal)) return;
+			feedback.notifyError(
+				t('settings.preferences.saveFailed', {
+					error: cause instanceof Error ? cause.message : String(cause),
+				}),
+			);
+		} finally {
+			if (editor.view.isCurrent(signal)) savingGroup.value = null;
+		}
+	};
 </script>
 
 <template>
 	<section class="workspace-preferences settings-surface min-w-0">
-		<div v-if="loading" class="p-6 text-center text-sm text-text-secondary">{{ t('common.loading') }}</div>
+		<UiLoadingState v-if="loading" compact :bordered="false" :title="t('common.loading')" />
 		<div v-else class="ui-settings-groups">
 			<UiSettingsGroup :title="t('settings.workspace.groups.files')" icon="fa-solid fa-folder-tree" tone="info">
 				<template #actions>
@@ -184,10 +301,9 @@
 								:label="t('settings.workspace.spreadsheetPreviewLimits.rowsLabel')"
 								for-id="spreadsheetPreviewRowsPerPage"
 							>
-								<UiInput
+								<UiNumberInput
 									id="spreadsheetPreviewRowsPerPage"
 									v-model="form.spreadsheetPreviewRowsPerPage"
-									type="number"
 									min="10"
 									max="2000"
 									step="1"
@@ -198,10 +314,9 @@
 								:label="t('settings.workspace.spreadsheetPreviewLimits.columnsLabel')"
 								for-id="spreadsheetPreviewMaxColumns"
 							>
-								<UiInput
+								<UiNumberInput
 									id="spreadsheetPreviewMaxColumns"
 									v-model="form.spreadsheetPreviewMaxColumns"
-									type="number"
 									min="5"
 									max="200"
 									step="1"
@@ -230,6 +345,53 @@
 				</template>
 				<form id="workspace-commands-form" @submit.prevent="saveGroup('commands', commandKeys)">
 					<div class="workspace-preferences__grid">
+						<div class="workspace-preferences__command-buttons">
+							<strong class="workspace-preferences__section-label">
+								{{ t('settings.workspace.commandBarButtons.title') }}
+							</strong>
+							<div class="workspace-preferences__command-button-grid">
+								<label class="workspace-preferences__toggle" for="showCommandBarClear">
+									<UiCheckbox
+										id="showCommandBarClear"
+										v-model="form.showCommandBarClear"
+										:disabled="savingGroup !== null || needsRefresh || loading"
+									/>
+									<span>
+										<strong>{{ t('settings.workspace.commandBarButtons.clear') }}</strong>
+									</span>
+								</label>
+								<label class="workspace-preferences__toggle" for="showCommandBarFocusSwitch">
+									<UiCheckbox
+										id="showCommandBarFocusSwitch"
+										v-model="form.showCommandBarFocusSwitch"
+										:disabled="savingGroup !== null || needsRefresh || loading"
+									/>
+									<span>
+										<strong>{{ t('settings.workspace.commandBarButtons.focusSwitch') }}</strong>
+									</span>
+								</label>
+								<label class="workspace-preferences__toggle" for="showCommandBarEditor">
+									<UiCheckbox
+										id="showCommandBarEditor"
+										v-model="form.showCommandBarEditor"
+										:disabled="savingGroup !== null || needsRefresh || loading"
+									/>
+									<span>
+										<strong>{{ t('settings.workspace.commandBarButtons.editor') }}</strong>
+									</span>
+								</label>
+								<label class="workspace-preferences__toggle" for="showCommandBarSearch">
+									<UiCheckbox
+										id="showCommandBarSearch"
+										v-model="form.showCommandBarSearch"
+										:disabled="savingGroup !== null || needsRefresh || loading"
+									/>
+									<span>
+										<strong>{{ t('settings.workspace.commandBarButtons.search') }}</strong>
+									</span>
+								</label>
+							</div>
+						</div>
 						<label class="workspace-preferences__toggle" for="workspaceSidebarPersistent">
 							<UiCheckbox
 								id="workspaceSidebarPersistent"
@@ -319,10 +481,9 @@
 							:label="t('settings.terminalScrollback.limitLabel')"
 							for-id="terminalScrollbackLimit"
 						>
-							<UiInput
+							<UiNumberInput
 								id="terminalScrollbackLimit"
 								v-model="form.terminalScrollbackLimit"
-								type="number"
 								min="0"
 								max="100000"
 								step="1"
@@ -338,87 +499,125 @@
 				:title="t('settings.workspace.groups.monitoring')"
 				icon="fa-solid fa-gauge-high"
 				tone="success"
+				data-monitoring-configuration
 			>
+				<template #description>
+					<span v-if="monitoringCore.snapshot.value">
+						{{
+							t('settings.monitoring.effective', {
+								status: monitoringCore.snapshot.value.effectiveMonitoring.statusIntervalSeconds,
+								host: monitoringCore.snapshot.value.effectiveMonitoring.hostIntervalSeconds,
+							})
+						}}
+					</span>
+				</template>
 				<template #actions>
 					<UiButton
 						type="submit"
 						form="workspace-monitoring-form"
-						:appearance="monitoringDirty ? 'solid' : 'soft'"
-						:tone="monitoringDirty ? 'primary' : 'neutral'"
-						:disabled="!monitoringDirty"
-						:loading="savingGroup === 'monitoring'"
+						:appearance="monitoringGroupCanSave ? 'solid' : 'soft'"
+						:tone="monitoringGroupCanSave ? 'primary' : 'neutral'"
+						:disabled="!monitoringGroupCanSave"
+						:loading="savingGroup === 'monitoring' || monitoringCore.loading.value"
+						data-monitoring-save
 						>{{ t('common.save') }}</UiButton
 					>
 				</template>
-				<form
-					id="workspace-monitoring-form"
-					class="mt-4"
-					@submit.prevent="saveGroup('monitoring', monitoringKeys)"
-				>
-					<div class="workspace-preferences__grid">
-						<label class="workspace-preferences__toggle" for="dashboardShowLocalResources">
-							<UiCheckbox
-								id="dashboardShowLocalResources"
-								v-model="form.dashboardShowLocalResources"
-								:aria-label="t('settings.dashboardResources.localLabel')"
-								:disabled="savingGroup !== null || needsRefresh || loading"
-							/>
-							<span
-								><strong>{{ t('settings.dashboardResources.localLabel') }}</strong></span
-							>
-						</label>
-						<label class="workspace-preferences__toggle" for="dashboardShowRemoteResources">
-							<UiCheckbox
-								id="dashboardShowRemoteResources"
-								v-model="form.dashboardShowRemoteResources"
-								:aria-label="t('settings.dashboardResources.remoteLabel')"
-								:disabled="savingGroup !== null || needsRefresh || loading"
-							/>
-							<span
-								><strong>{{ t('settings.dashboardResources.remoteLabel') }}</strong></span
-							>
-						</label>
-						<label class="workspace-preferences__toggle" for="showStatusMonitorIpAddress">
-							<UiCheckbox
-								id="showStatusMonitorIpAddress"
-								v-model="form.showStatusMonitorIpAddress"
-								:disabled="savingGroup !== null || needsRefresh || loading"
-							/>
-							<span
-								><strong>{{ t('settings.statusMonitorShowIp.enableLabel') }}</strong></span
-							>
-						</label>
-						<label class="workspace-preferences__toggle" for="dockerDefaultExpand">
-							<UiCheckbox
-								id="dockerDefaultExpand"
-								v-model="form.dockerDefaultExpand"
-								:disabled="savingGroup !== null || needsRefresh || loading"
-							/>
-							<span
-								><strong>{{ t('settings.docker.defaultExpandLabel') }}</strong></span
-							>
-						</label>
-						<div class="workspace-preferences__field-grid">
-							<UiFormField
-								:label="t('settings.docker.refreshIntervalLabel')"
-								for-id="dockerStatusIntervalSeconds"
-							>
-								<UiInput
+				<form id="workspace-monitoring-form" @submit.prevent="saveMonitoringGroup">
+					<div class="workspace-preferences__monitor-grid">
+						<div class="workspace-preferences__monitor-card">
+							<label class="workspace-preferences__monitor-toggle" for="dashboardShowLocalResources">
+								<UiCheckbox
+									id="dashboardShowLocalResources"
+									v-model="form.dashboardShowLocalResources"
+									:aria-label="t('settings.dashboardResources.localLabel')"
+									:disabled="monitoringBusy"
+								/>
+								<strong>{{ t('settings.dashboardResources.localLabel') }}</strong>
+							</label>
+							<div v-if="monitoringCore.draft.value" class="workspace-preferences__monitor-interval">
+								<span>{{ t('settings.monitoring.statusShort') }}</span>
+								<UiNumberInput
+									v-model="monitoringStatusInterval"
+									class="workspace-preferences__monitor-input"
+									:aria-label="t('settings.monitoring.status')"
+									icon="fa-regular fa-clock"
+									:unit="t('settings.monitoring.secondsUnit')"
+									density="compact"
+									:min="SETTINGS_MONITORING_MIN_SECONDS"
+									:max="SETTINGS_MONITORING_MAX_SECONDS"
+									step="1"
+									:disabled="monitoringCoreBusy"
+									data-monitoring-status
+								/>
+							</div>
+						</div>
+						<div class="workspace-preferences__monitor-card">
+							<label class="workspace-preferences__monitor-toggle" for="dashboardShowRemoteResources">
+								<UiCheckbox
+									id="dashboardShowRemoteResources"
+									v-model="form.dashboardShowRemoteResources"
+									:aria-label="t('settings.dashboardResources.remoteLabel')"
+									:disabled="monitoringBusy"
+								/>
+								<strong>{{ t('settings.dashboardResources.remoteLabel') }}</strong>
+							</label>
+							<div v-if="monitoringCore.draft.value" class="workspace-preferences__monitor-interval">
+								<span>{{ t('settings.monitoring.hostShort') }}</span>
+								<UiNumberInput
+									v-model="monitoringHostInterval"
+									class="workspace-preferences__monitor-input"
+									:aria-label="t('settings.monitoring.host')"
+									icon="fa-regular fa-clock"
+									:unit="t('settings.monitoring.secondsUnit')"
+									density="compact"
+									:min="SETTINGS_MONITORING_MIN_SECONDS"
+									:max="SETTINGS_MONITORING_MAX_SECONDS"
+									step="1"
+									:disabled="monitoringCoreBusy"
+									data-monitoring-host
+								/>
+							</div>
+						</div>
+						<div class="workspace-preferences__monitor-card">
+							<label class="workspace-preferences__monitor-toggle" for="showStatusMonitorIpAddress">
+								<UiCheckbox
+									id="showStatusMonitorIpAddress"
+									v-model="form.showStatusMonitorIpAddress"
+									:disabled="monitoringBusy"
+								/>
+								<strong>{{ t('settings.statusMonitorShowIp.enableLabel') }}</strong>
+							</label>
+						</div>
+						<div class="workspace-preferences__monitor-card">
+							<label class="workspace-preferences__monitor-toggle" for="dockerDefaultExpand">
+								<UiCheckbox
+									id="dockerDefaultExpand"
+									v-model="form.dockerDefaultExpand"
+									:disabled="monitoringBusy"
+								/>
+								<strong>{{ t('settings.docker.defaultExpandLabel') }}</strong>
+							</label>
+							<div class="workspace-preferences__monitor-interval">
+								<span>{{ t('settings.monitoring.refreshShort') }}</span>
+								<UiNumberInput
 									id="dockerStatusIntervalSeconds"
 									v-model="form.dockerStatusIntervalSeconds"
-									type="number"
+									class="workspace-preferences__monitor-input"
+									:aria-label="t('settings.docker.refreshIntervalLabel')"
+									icon="fa-regular fa-clock"
+									:unit="t('settings.monitoring.secondsUnit')"
+									density="compact"
 									min="1"
 									max="86400"
 									step="1"
-									:disabled="savingGroup !== null || needsRefresh || loading"
+									:disabled="monitoringBusy"
 								/>
-							</UiFormField>
+							</div>
 						</div>
 					</div>
 				</form>
 			</UiSettingsGroup>
-
-			<MonitoringConfigurationPanel />
 
 			<UiSettingsGroup
 				:title="t('settings.workspace.groups.advanced')"
@@ -511,6 +710,86 @@
 		gap: 12px;
 	}
 
+	.workspace-preferences__command-buttons {
+		display: grid;
+		min-width: 0;
+		grid-column: 1 / -1;
+		gap: 8px;
+	}
+
+	.workspace-preferences__section-label {
+		color: var(--text-color-secondary);
+		font-size: 11px;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+	}
+
+	.workspace-preferences__command-button-grid {
+		display: grid;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: 8px;
+	}
+
+	.workspace-preferences__command-button-grid .workspace-preferences__toggle {
+		align-items: center;
+		padding: 9px 10px;
+	}
+
+	.workspace-preferences__monitor-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 10px;
+	}
+
+	.workspace-preferences__monitor-card {
+		display: flex;
+		min-width: 0;
+		align-items: center;
+		justify-content: space-between;
+		gap: 14px;
+		min-height: 54px;
+		padding: 10px 12px;
+		border-radius: 12px;
+		background: color-mix(in srgb, var(--card-bg-color) 54%, transparent);
+	}
+
+	.workspace-preferences__monitor-toggle {
+		display: flex;
+		min-width: 0;
+		align-items: center;
+		gap: 10px;
+		cursor: pointer;
+	}
+
+	.workspace-preferences__monitor-toggle strong {
+		color: var(--text-color);
+		font-size: 12px;
+		font-weight: 600;
+		line-height: 1.45;
+	}
+
+	.workspace-preferences__monitor-interval {
+		display: flex;
+		flex: 0 0 auto;
+		align-items: center;
+		gap: 7px;
+		color: var(--text-color-secondary);
+		font-size: 10px;
+		white-space: nowrap;
+	}
+
+	.workspace-preferences__monitor-input {
+		width: 108px;
+	}
+
+	.workspace-preferences__interval-field {
+		align-self: start;
+	}
+
+	.workspace-preferences__interval-input {
+		width: min(100%, 16rem);
+	}
+
 	.workspace-preferences__hint {
 		margin-top: 5px;
 		color: var(--text-color-secondary);
@@ -529,8 +808,27 @@
 
 	@media (max-width: 760px) {
 		.workspace-preferences__grid,
-		.workspace-preferences__field-grid {
+		.workspace-preferences__field-grid,
+		.workspace-preferences__monitor-grid {
 			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+
+	@media (max-width: 900px) {
+		.workspace-preferences__command-button-grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+	}
+
+	@media (max-width: 480px) {
+		.workspace-preferences__monitor-card {
+			flex-wrap: wrap;
+			gap: 8px 12px;
+		}
+
+		.workspace-preferences__monitor-interval {
+			width: 100%;
+			justify-content: flex-end;
 		}
 	}
 </style>

@@ -24,15 +24,36 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
 	let epoch = 0;
 	let generation = 0;
 	let timer: number | undefined;
+	let pollingEnabled = false;
+	let pollingIntervalMs = 2000;
 	let readController: AbortController | null = null;
 	let readPromise: Promise<void> | null = null;
 	let refreshQueued = false;
 	const writes = new Set<AbortController>();
 	const mutations = new Map<string, Promise<void>>();
 
-	function stopPolling(): void {
-		window.clearInterval(timer);
+	function clearPollingTimer(): void {
+		window.clearTimeout(timer);
 		timer = undefined;
+	}
+
+	function stopPolling(): void {
+		pollingEnabled = false;
+		clearPollingTimer();
+	}
+
+	function schedulePolling(): void {
+		clearPollingTimer();
+		const hasActiveTasks = items.value.some((task) =>
+			['queued', 'in-progress', 'cancelling'].includes(task.status),
+		);
+		if (!pollingEnabled || readPromise || !hasActiveTasks) {
+			return;
+		}
+		timer = window.setTimeout(() => {
+			timer = undefined;
+			void load({ background: true });
+		}, pollingIntervalMs);
 	}
 
 	function reset(): void {
@@ -67,6 +88,7 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
 			}
 			return readPromise;
 		}
+		clearPollingTimer();
 		const currentEpoch = epoch;
 		if (!options.background) {
 			loading.value = true;
@@ -101,6 +123,7 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
 					readPromise = null;
 					readController = null;
 					loading.value = false;
+					schedulePolling();
 				}
 			});
 		readPromise = pending;
@@ -131,10 +154,16 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
 				error.value = sendBlocked.value
 					? 'serverTransferErrors.operation_unknown'
 					: serverTransferFailureKey(cause);
+				if (sendBlocked.value) {
+					void load({ background: true, ensureFresh: true });
+				}
 			}
 			throw cause;
 		} finally {
 			writes.delete(controller);
+			if (currentEpoch === epoch) {
+				schedulePolling();
+			}
 		}
 	}
 
@@ -167,6 +196,7 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
 				writes.delete(controller);
 				if (currentEpoch === epoch && mutations.get(taskId) === pending) {
 					mutations.delete(taskId);
+					schedulePolling();
 				}
 			}
 		});
@@ -187,8 +217,9 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
 
 	function startPolling(intervalMs = 2000): () => void {
 		stopPolling();
+		pollingEnabled = true;
+		pollingIntervalMs = Math.max(1000, intervalMs);
 		void load();
-		timer = window.setInterval(() => void load({ background: true }), Math.max(1000, intervalMs));
 		return stopPolling;
 	}
 

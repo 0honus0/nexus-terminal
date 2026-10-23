@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { nextTick, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiContextMenu } from '@/foundation/ui';
+	import { UiContextMenu, UiContextMenuItem, UiEmptyState, UiLoadingState } from '@/foundation/ui';
 	import type { PathHistoryItem } from '../model/catalog-types';
 
 	const props = defineProps<{
@@ -56,31 +56,36 @@
 <template>
 	<div
 		v-if="visible"
-		class="path-history-dropdown absolute right-0 top-full z-40 mt-1 max-h-72 overflow-y-auto rounded-lg border border-border/50 bg-background text-sm shadow-lg"
+		class="path-history-dropdown absolute right-0 top-full z-40 mt-1 overflow-y-auto text-sm"
 		@mousedown.prevent
 	>
-		<div v-if="loading && !items.length" class="p-3 text-center text-text-secondary">
-			<i class="fas fa-spinner fa-spin mr-2" aria-hidden="true"></i>
-			{{ t('pathHistory.loading') }}
-		</div>
-		<div v-else-if="!items.length" class="p-3 text-center text-text-secondary">
-			<i class="fas fa-history mr-2" aria-hidden="true"></i>
-			{{ t('pathHistory.empty') }}
-		</div>
-		<ul v-else class="m-0 list-none p-1">
+		<UiLoadingState
+			v-if="loading && !items.length"
+			class="path-history-state"
+			dense
+			:bordered="false"
+			:title="t('pathHistory.loading')"
+		/>
+		<UiEmptyState
+			v-else-if="!items.length"
+			class="path-history-state"
+			dense
+			:bordered="false"
+			icon="fas fa-history"
+			:title="t('pathHistory.empty')"
+		/>
+		<ul v-else class="path-history-list">
 			<li
 				v-for="(item, index) in items"
 				:key="item.id"
 				:ref="(element) => element && (itemRefs[index] = element as HTMLElement)"
-				class="group flex cursor-pointer items-start justify-between rounded-md px-3 py-1.5 transition-colors duration-150 hover:bg-primary/10"
-				:class="index === selectedIndex ? 'bg-primary/20 font-medium' : ''"
+				class="path-history-item"
+				:class="{ 'is-selected': index === selectedIndex }"
 				:title="item.path"
 				@click="emit('select', item.path)"
 				@contextmenu.prevent.stop="openContext($event, item)"
 			>
-				<span class="path-history-path min-w-0 flex-grow font-mono text-sm text-foreground">{{
-					item.path
-				}}</span>
+				<span class="path-history-path">{{ item.path }}</span>
 			</li>
 		</ul>
 
@@ -92,14 +97,14 @@
 			:width="190"
 			@close="context = null"
 		>
-			<button class="context-item" @mousedown.prevent.stop @click="copyContextPath">
+			<UiContextMenuItem @mousedown.prevent.stop @click="copyContextPath">
 				<i class="fas fa-copy" aria-hidden="true"></i>
 				<span>{{ t('pathHistory.copy') }}</span>
-			</button>
-			<button class="context-item text-error" @mousedown.prevent.stop @click="removeContextPath">
+			</UiContextMenuItem>
+			<UiContextMenuItem tone="danger" @mousedown.prevent.stop @click="removeContextPath">
 				<i class="fas fa-trash-alt" aria-hidden="true"></i>
 				<span>{{ t('pathHistory.delete') }}</span>
-			</button>
+			</UiContextMenuItem>
 		</UiContextMenu>
 	</div>
 </template>
@@ -108,45 +113,64 @@
 	.path-history-dropdown {
 		width: min(34rem, calc(100cqw - 0.5rem));
 		max-width: min(34rem, calc(100cqw - 0.5rem), 100%);
+		max-height: max(92px, min(18rem, calc(100cqh - 3rem)));
 		min-width: 0;
+		padding: 4px;
+		border: 1px solid color-mix(in srgb, var(--border-color) 42%, transparent);
+		border-radius: 10px;
+		background: color-mix(in srgb, var(--card-bg-color, var(--app-bg-color)) 94%, transparent);
+		box-shadow: 0 10px 28px rgb(0 0 0 / 24%);
+		-webkit-backdrop-filter: blur(12px);
+		backdrop-filter: blur(12px);
+		scrollbar-width: thin;
+		scrollbar-color: color-mix(in srgb, var(--text-color) 22%, transparent) transparent;
 	}
 
-	.path-history-path {
-		overflow-wrap: anywhere;
-		word-break: break-all;
-		line-height: 1.35;
-		white-space: normal;
+	.path-history-state {
+		padding: 12px 8px;
+		font-size: 11px;
 	}
 
-	.context-item {
+	.path-history-list {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.path-history-item {
 		display: flex;
-		width: calc(100% - 0.5rem);
-		margin-inline: 0.25rem;
+		min-width: 0;
 		align-items: center;
-		gap: 0.55rem;
-		padding: 0.4rem 0.75rem;
-		border-radius: 0.375rem;
-		text-align: left;
-		font-size: 0.875rem;
+		padding: 6px 8px;
+		border-radius: 7px;
+		color: var(--text-color);
+		cursor: pointer;
 		transition:
 			background-color 0.15s ease,
 			color 0.15s ease;
 	}
 
-	.context-item:hover,
-	.context-item:focus-visible {
-		background: color-mix(in srgb, var(--link-active-color) 10%, transparent);
-		color: var(--link-active-color);
-		outline: none;
+	.path-history-item:hover,
+	.path-history-item:focus-visible {
+		outline: 0;
+		background: color-mix(in srgb, var(--primary-color) 9%, transparent);
 	}
 
-	.context-item i {
-		width: 1rem;
-		text-align: center;
+	.path-history-item.is-selected {
+		background: color-mix(in srgb, var(--primary-color) 14%, transparent);
+		color: var(--primary-color);
 	}
 
-	.context-item.text-error:hover,
-	.context-item.text-error:focus-visible {
-		color: var(--color-error);
+	.path-history-path {
+		display: -webkit-box;
+		min-width: 0;
+		flex: 1 1 auto;
+		overflow: hidden;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+		overflow-wrap: anywhere;
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+		font-size: 10px;
+		line-height: 1.4;
 	}
 </style>

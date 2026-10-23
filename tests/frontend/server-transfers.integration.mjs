@@ -28,7 +28,7 @@ try {
 
 				load(id) {
 					if (id === '/__transfer_imports.js')
-						return 'export {createPinia,setActivePinia} from "pinia"; export {readServerTransferSnapshot} from "@nexus-terminal/shared/remote/transfers/server-codec";';
+						return 'export {createPinia,setActivePinia} from "pinia"; export {readServerTransferSnapshot,readServerTransferInput} from "@nexus-terminal/shared/remote/transfers/server-codec";';
 				},
 
 				configureServer(server) {
@@ -50,7 +50,7 @@ try {
 		const { serverTransfersApi } = await import('/src/features/transfers/api/server-transfers-api.ts');
 		const { useServerTransfersStore } = await import('/src/features/transfers/store/serverTransfers.store.ts');
 		const { ServerTransferRequestFailure } = await import('/src/features/transfers/model/server-transfer-types.ts');
-		const { readServerTransferSnapshot } = await import('/__transfer_imports.js');
+		const { readServerTransferSnapshot, readServerTransferInput } = await import('/__transfer_imports.js');
 		const results = [];
 
 		const expect = (value, label) => {
@@ -67,6 +67,14 @@ try {
 			remoteTargetPath: '/target',
 			transferMethod: 'auto',
 		};
+		expect(
+			readServerTransferInput({ ...command, remoteTargetPath: '/' }).remoteTargetPath === '/',
+			'root is a valid destination directory',
+		);
+		expect(
+			readServerTransferInput({ ...command, remoteTargetPath: '/ folder ' }).remoteTargetPath === '/ folder ',
+			'selected directory whitespace is preserved',
+		);
 
 		const make = (n, status = 'queued') => ({
 			taskId: uuid(n),

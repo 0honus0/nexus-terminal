@@ -264,6 +264,7 @@
   },
   "workspaceConnectionList": {
     "untagged": "Untagged",
+    "groupActions": "Group actions",
     "searchPlaceholder": "Search name or host...",
     "noResults": "No connections found matching \"{searchTerm}\".",
     "allConnectionsTaggedSuccess": "All connections tagged successfully.",

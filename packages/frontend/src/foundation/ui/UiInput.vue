@@ -34,6 +34,18 @@
 	);
 	const isNumber = computed(() => props.type === 'number');
 
+	const focus = (options?: FocusOptions): void => {
+		inputRef.value?.focus(options);
+	};
+
+	const blur = (): void => {
+		inputRef.value?.blur();
+	};
+
+	const select = (): void => {
+		inputRef.value?.select();
+	};
+
 	const step = (direction: 1 | -1): void => {
 		const input = inputRef.value;
 		if (!input || props.disabled || input.readOnly) return;
@@ -48,6 +60,8 @@
 			// type=number with step=any has no discrete next value; keep manual input.
 		}
 	};
+
+	defineExpose({ focus, blur, select });
 </script>
 
 <template>

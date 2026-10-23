@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { computed, reactive, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiFormField, UiInput, UiTextarea } from '@/foundation/ui';
+	import { UiButton, UiFormField, UiInlineNotice, UiInput, UiNumberInput, UiTextarea } from '@/foundation/ui';
 	import { darkUiTheme, defaultUiTheme, defaultWindowThemeColor, normalizeUiTheme } from '../config/default-theme';
 	import { useAppearanceStore } from '../store/appearance.store';
 	import { formatThemeObject } from '../model/theme-editor';
@@ -214,10 +214,10 @@
 						<UiInput v-model="form.terminalFontFamily" />
 					</UiFormField>
 					<UiFormField :label="t('styleCustomizer.terminalFontSize')">
-						<UiInput v-model="form.terminalFontSize" type="number" />
+						<UiNumberInput v-model="form.terminalFontSize" />
 					</UiFormField>
 					<UiFormField :label="t('styleCustomizer.terminalFontSizeMobile')">
-						<UiInput v-model="form.terminalFontSizeMobile" type="number" />
+						<UiNumberInput v-model="form.terminalFontSizeMobile" />
 					</UiFormField>
 				</div>
 				<UiButton v-if="props.section !== 'all'" @click="saveTerminal">{{ t('common.save') }}</UiButton>
@@ -235,10 +235,10 @@
 						<UiInput v-model="form.editorFontFamily" />
 					</UiFormField>
 					<UiFormField :label="t('styleCustomizer.editorFontSize')">
-						<UiInput v-model="form.editorFontSize" type="number" />
+						<UiNumberInput v-model="form.editorFontSize" />
 					</UiFormField>
 					<UiFormField :label="t('styleCustomizer.editorFontSizeMobile')">
-						<UiInput v-model="form.mobileEditorFontSize" type="number" />
+						<UiNumberInput v-model="form.mobileEditorFontSize" />
 					</UiFormField>
 				</div>
 				<UiButton v-if="props.section !== 'all'" @click="saveEditor">{{ t('common.save') }}</UiButton>
@@ -310,12 +310,9 @@
 							applyUiThemeJson();
 						"
 					/>
-					<p
-						v-if="uiThemeParseError"
-						class="mt-2 rounded border border-error/30 bg-error/10 px-3 py-2 text-sm text-error"
-					>
+					<UiInlineNotice v-if="uiThemeParseError" class="mt-2" tone="danger" compact>
 						{{ uiThemeParseError }}
-					</p>
+					</UiInlineNotice>
 				</div>
 				<div v-if="props.showUiActions" class="mt-4 flex gap-2">
 					<UiButton appearance="solid" tone="primary" @click="saveUiTheme">{{ t('common.save') }}</UiButton>

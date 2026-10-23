@@ -31,6 +31,7 @@
       "removeConfirm": "{name} を削除しますか？"
     },
     "waitingForSsh": "SSH接続を待機中...",
+    "moreActions": "その他の操作",
     "stats": {
       "noData": "利用可能な統計データはありません。",
       "cpu": "CPU使用率",

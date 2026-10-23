@@ -71,9 +71,9 @@ export function createMonitoringConfiguration(onFailure?: (cause: unknown) => vo
 		needsRefresh.value = false;
 	}
 
-	async function execute(work?: (signal: AbortSignal) => Promise<CoreConfiguration>): Promise<void> {
+	async function execute(work?: (signal: AbortSignal) => Promise<CoreConfiguration>): Promise<boolean> {
 		if (!active || disposed || request) {
-			return;
+			return false;
 		}
 		started = true;
 		const current = new AbortController();
@@ -83,15 +83,16 @@ export function createMonitoringConfiguration(onFailure?: (cause: unknown) => vo
 		try {
 			const value = work ? await work(current.signal) : await configurationApi.get(current.signal);
 			if (request !== current) {
-				return;
+				return false;
 			}
 			publish(value);
 			if (work) {
 				feedback.value = 'saved';
 			}
+			return true;
 		} catch (cause) {
 			if (request !== current) {
-				return;
+				return false;
 			}
 			onFailure?.(cause);
 			const failure = cause instanceof ConfigurationFailure ? cause : null;
@@ -104,6 +105,7 @@ export function createMonitoringConfiguration(onFailure?: (cause: unknown) => vo
 			if (!work || !failure || failure.outcome === 'unknown' || failure.code !== 'invalid_input') {
 				needsRefresh.value = true;
 			}
+			return false;
 		} finally {
 			if (request === current) {
 				request = null;
@@ -112,15 +114,15 @@ export function createMonitoringConfiguration(onFailure?: (cause: unknown) => vo
 		}
 	}
 
-	function refresh(): Promise<void> {
-		return execute();
+	async function refresh(): Promise<void> {
+		await execute();
 	}
 
-	function save(): Promise<void> {
+	function save(): Promise<boolean> {
 		const original = snapshot.value,
 			input = draft.value;
 		if (!canSave.value || !original || !input) {
-			return Promise.resolve();
+			return Promise.resolve(false);
 		}
 		const command: MonitoringDraft = {
 			statusIntervalSeconds: input.statusIntervalSeconds,
@@ -172,14 +174,17 @@ export function createMonitoringConfiguration(onFailure?: (cause: unknown) => vo
 	};
 }
 
-export function useMonitoringConfiguration(): MonitoringConfigurationController {
+export function useMonitoringConfiguration(options: { notify?: boolean } = {}): MonitoringConfigurationController {
 	let failureCause: unknown;
 	const controller = createMonitoringConfiguration((cause) => {
 		failureCause = cause;
 	});
 	const { t } = useI18n();
 	useFeedbackMessage(
-		() => (controller.feedback.value ? t('settings.monitoring.feedback.' + controller.feedback.value) : ''),
+		() =>
+			options.notify === false || !controller.feedback.value
+				? ''
+				: t('settings.monitoring.feedback.' + controller.feedback.value),
 		() => (controller.feedback.value === 'saved' ? 'success' : 'error'),
 		() => failureCause,
 	);

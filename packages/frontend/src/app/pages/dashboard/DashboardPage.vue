@@ -3,7 +3,16 @@
 	import { computed, onActivated, onBeforeUnmount, onDeactivated, ref, watch } from 'vue';
 	import { useRouter } from 'vue-router';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiSelect, UiSpinner, UiScrollArea } from '@/foundation/ui';
+	import {
+		UiBadge,
+		UiButton,
+		UiEmptyState,
+		UiLoadingState,
+		UiInlineNotice,
+		UiSelect,
+		UiSpinner,
+		UiScrollArea,
+	} from '@/foundation/ui';
 	import DashboardResourceGauge from './DashboardResourceGauge.vue';
 	import {
 		jsonStorageCodec,
@@ -496,16 +505,19 @@
 <template>
 	<main class="dashboard-page min-h-full bg-background px-4 py-5 text-foreground sm:px-6 lg:px-9 lg:py-6">
 		<div class="dashboard-layout mx-auto flex w-full max-w-[1680px] flex-col gap-5">
-			<div
+			<UiInlineNotice
 				v-if="monitoring.needsRefresh.value && monitoring.feedback.value"
-				class="flex flex-wrap items-center gap-3 rounded-lg border border-error p-3 text-sm"
+				tone="danger"
+				compact
 				data-monitoring-dashboard-error
 			>
-				<p>{{ t(`settings.monitoring.feedback.${monitoring.feedback.value}`) }}</p>
-				<UiButton :disabled="monitoring.loading.value" @click="monitoring.refresh">{{
-					t('settings.monitoring.refresh')
-				}}</UiButton>
-			</div>
+				{{ t(`settings.monitoring.feedback.${monitoring.feedback.value}`) }}
+				<template #actions>
+					<UiButton density="compact" :disabled="monitoring.loading.value" @click="monitoring.refresh">{{
+						t('settings.monitoring.refresh')
+					}}</UiButton>
+				</template>
+			</UiInlineNotice>
 			<section class="border-b border-border/70 pb-4">
 				<div class="grid gap-4 px-1 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
 					<div class="min-w-0">
@@ -528,9 +540,9 @@
 									><i class="fas fa-pause-circle text-[10px]" aria-hidden="true"></i
 								></template>
 								<span>{{ t('dashboard.suspendedSessions') }}</span>
-								<span class="rounded-full bg-primary/15 px-1.5 tabular-nums">{{
+								<UiBadge class="tabular-nums" tone="primary" appearance="ghost" density="compact">{{
 									activeSuspendedSessions.length
-								}}</span>
+								}}</UiBadge>
 							</UiButton>
 						</div>
 					</div>
@@ -719,12 +731,13 @@
 						</UiListToolbar>
 
 						<div class="dashboard-status-grid-wrap">
-							<div
+							<UiLoadingState
 								v-if="loading && filteredEntries.length === 0"
-								class="py-14 text-center text-sm text-text-secondary"
-							>
-								{{ t('common.loading') }}
-							</div>
+								class="py-12"
+								compact
+								:bordered="false"
+								:title="t('common.loading')"
+							/>
 							<div v-else-if="filteredEntries.length" class="dashboard-connection-sections">
 								<section
 									v-for="group in connectionGroups"
@@ -813,17 +826,23 @@
 																>
 																	{{ entry.connection.name || entry.connection.host }}
 																</strong>
-																<span class="dashboard-connection-card__protocol">{{
-																	entry.connection.type
-																}}</span>
-																<span
+																<UiBadge
+																	class="dashboard-connection-card__protocol"
+																	appearance="ghost"
+																	density="compact"
+																	>{{ entry.connection.type }}</UiBadge
+																>
+																<UiBadge
 																	v-for="tagName in tagNames(entry.connection)"
 																	:key="tagName"
-																	class="dashboard-connection-card__tag max-w-24 min-w-0 shrink truncate rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-primary"
+																	class="dashboard-connection-card__tag max-w-24 min-w-0"
+																	tone="primary"
+																	appearance="ghost"
+																	density="compact"
 																	:title="tagName"
 																>
 																	{{ tagName }}
-																</span>
+																</UiBadge>
 															</span>
 															<code
 																class="mt-1 block truncate text-[11px] text-text-secondary"
@@ -954,11 +973,20 @@
 									</ul>
 								</section>
 							</div>
-							<div v-else class="py-14 text-center text-sm text-text-secondary">
-								<template v-if="search">{{ t('dashboard.noConnectionsMatchSearch') }}</template>
-								<template v-else-if="tagId !== ''">{{ t('dashboard.noConnectionsWithTag') }}</template>
-								<template v-else>{{ t('dashboard.noConnections') }}</template>
-							</div>
+							<UiEmptyState
+								v-else
+								class="py-12"
+								compact
+								:bordered="false"
+								icon="fa-solid fa-server"
+								:title="
+									search
+										? t('dashboard.noConnectionsMatchSearch')
+										: tagId !== ''
+											? t('dashboard.noConnectionsWithTag')
+											: t('dashboard.noConnections')
+								"
+							/>
 						</div>
 					</div>
 				</UiScrollArea>
@@ -1203,13 +1231,12 @@
 
 	.dashboard-connection-card__protocol {
 		flex: 0 0 auto;
-		padding: 1px 6px;
-		border-radius: 999px;
-		background: color-mix(in srgb, var(--text-color) 6%, transparent);
-		color: var(--text-color-secondary);
-		font-size: 9px;
-		font-weight: 700;
-		letter-spacing: 0.08em;
+	}
+
+	.dashboard-connection-card__tag {
+		flex: 0 1 auto;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	.dashboard-connection-card__aside {

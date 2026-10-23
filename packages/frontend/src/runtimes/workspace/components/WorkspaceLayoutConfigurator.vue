@@ -7,7 +7,7 @@
 	import draggable from 'vuedraggable';
 	import { useI18n } from 'vue-i18n';
 	import { structurallyEqual } from '@/foundation/data';
-	import { UiOverlayPanel } from '@/foundation/ui';
+	import { UiButton, UiOverlayPanel, UiSwitch } from '@/foundation/ui';
 	import { useAuthenticatedViewScope } from '@/shared/session/public';
 	import { useFeedback, preferenceFailureMessage } from '@/shared/feedback/public';
 	import WorkspaceLayoutNodeEditor from './WorkspaceLayoutNodeEditor.vue';
@@ -213,15 +213,16 @@
 		>
 			<header class="flex items-center justify-between border-b border-border bg-header p-4">
 				<h2 class="m-0 text-lg font-semibold">{{ t('layoutConfigurator.title') }}</h2>
-				<button
-					type="button"
-					class="border-0 bg-transparent p-0 text-2xl leading-none text-text-secondary hover:text-foreground"
+				<UiButton
+					appearance="ghost"
+					density="compact"
+					icon-only
 					:title="t('common.close')"
 					:aria-label="t('common.close')"
 					@click="attemptClose"
 				>
-					×
-				</button>
+					<i class="fas fa-times" aria-hidden="true"></i>
+				</UiButton>
 			</header>
 
 			<main class="grid min-h-[450px] flex-1 grid-cols-[220px_minmax(0,1fr)] gap-6 overflow-y-auto p-6">
@@ -268,25 +269,11 @@
 								>
 									{{ t('layoutConfigurator.lockLayout') }}
 								</label>
-								<button
-									type="button"
-									role="switch"
-									:aria-checked="Boolean(layoutLocked)"
+								<UiSwitch
+									:model-value="Boolean(layoutLocked)"
 									aria-labelledby="layout-lock-label"
-									:class="[
-										'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
-										layoutLocked ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600',
-									]"
-									@click="toggleLayoutLock"
-								>
-									<span
-										aria-hidden="true"
-										:class="[
-											'pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200',
-											layoutLocked ? 'translate-x-5' : 'translate-x-0',
-										]"
-									></span>
-								</button>
+									@update:model-value="toggleLayoutLock"
+								/>
 							</div>
 						</div>
 
@@ -302,9 +289,9 @@
 							/>
 						</div>
 						<div class="mt-4 flex gap-2">
-							<button type="button" class="secondary-action" @click="reset">
+							<UiButton appearance="soft" density="compact" @click="reset">
 								{{ t('layoutConfigurator.resetDefault') }}
-							</button>
+							</UiButton>
 						</div>
 					</section>
 
@@ -334,15 +321,18 @@
 										<span class="min-w-0 flex-1 truncate">{{
 											paneLabel(typeof pane === 'string' ? pane : pane.component)
 										}}</span>
-										<button
-											type="button"
+										<UiButton
+											appearance="ghost"
+											tone="danger"
+											density="compact"
+											icon-only
 											class="sidebar-remove"
 											:title="t('common.remove')"
 											:aria-label="t('common.remove')"
 											@click.stop="removeSidebarPane('left', index)"
 										>
-											×
-										</button>
+											<i class="fas fa-times" aria-hidden="true"></i>
+										</UiButton>
 									</li>
 								</template>
 								<template #footer>
@@ -381,15 +371,18 @@
 										<span class="min-w-0 flex-1 truncate">{{
 											paneLabel(typeof pane === 'string' ? pane : pane.component)
 										}}</span>
-										<button
-											type="button"
+										<UiButton
+											appearance="ghost"
+											tone="danger"
+											density="compact"
+											icon-only
 											class="sidebar-remove"
 											:title="t('common.remove')"
 											:aria-label="t('common.remove')"
 											@click.stop="removeSidebarPane('right', index)"
 										>
-											×
-										</button>
+											<i class="fas fa-times" aria-hidden="true"></i>
+										</UiButton>
 									</li>
 								</template>
 								<template #footer>
@@ -407,69 +400,38 @@
 			</main>
 
 			<footer class="flex justify-end gap-3 border-t border-border bg-header p-4">
-				<button
-					type="button"
+				<UiButton
 					v-if="needsRefresh || workspaceLayout.error.value"
-					class="secondary-action"
+					appearance="soft"
+					density="compact"
 					:disabled="saving"
 					@click="refresh"
 				>
 					{{ t('common.refresh') }}
-				</button>
-				<button type="button" class="secondary-action" @click="attemptClose">{{ t('common.cancel') }}</button>
-				<button type="button" class="primary-action" :disabled="!hasChanges || saving" @click="save">
+				</UiButton>
+				<UiButton appearance="ghost" density="compact" @click="attemptClose">
+					{{ t('common.cancel') }}
+				</UiButton>
+				<UiButton
+					appearance="solid"
+					tone="primary"
+					density="compact"
+					:disabled="!hasChanges || saving"
+					@click="save"
+				>
 					{{ saving ? t('common.saving') : t('common.save') }}{{ hasChanges ? '*' : '' }}
-				</button>
+				</UiButton>
 			</footer>
 		</div>
 	</UiOverlayPanel>
 </template>
 
 <style scoped>
-	.secondary-action,
-	.primary-action {
-		border: 1px solid var(--border-color);
-		border-radius: 0.25rem;
-		padding: 0.5rem 1rem;
-		font-size: 0.875rem;
-		transition:
-			background-color 0.15s ease,
-			opacity 0.15s ease;
-	}
-	.secondary-action {
-		background: var(--button-bg-color);
-		color: var(--button-text-color);
-	}
-	.secondary-action:hover {
-		background: var(--button-hover-bg-color);
-	}
-	.primary-action {
-		border-color: transparent;
-		background: var(--link-active-color);
-		color: white;
-	}
-	.primary-action:hover:not(:disabled) {
-		background: var(--button-hover-bg-color);
-	}
-	.primary-action:disabled {
-		cursor: not-allowed;
-		opacity: 0.5;
-	}
 	.sidebar-remove {
-		display: inline-flex;
-		width: 1.5rem;
-		height: 1.5rem;
+		--ui-control-height: 1.5rem;
+		--ui-control-radius: 0.25rem;
 		flex: 0 0 1.5rem;
-		align-items: center;
-		justify-content: center;
-		border-radius: 0.2rem;
-		color: var(--text-color-secondary);
-		font-size: 1rem;
-		line-height: 1;
-	}
-	.sidebar-remove:hover {
-		background: color-mix(in srgb, var(--status-error-color) 10%, transparent);
-		color: var(--status-error-color);
+		font-size: 0.72rem;
 	}
 	:deep(.sortable-ghost) {
 		border: 1px dashed var(--link-active-color) !important;

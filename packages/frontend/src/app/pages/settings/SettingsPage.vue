@@ -12,6 +12,7 @@
 	import { useAuthSession } from '@/features/auth/public';
 	import { supportedLocales } from '@/app/i18n';
 	import { useHorizontalDragScroll } from '@/foundation/interaction';
+	import { UiBadge } from '@/foundation/ui';
 	import AboutPanel from './AboutPanel.vue';
 	import packageJson from '../../../../package.json';
 
@@ -260,12 +261,9 @@
 										<span class="text-sm font-semibold text-foreground">{{
 											t(item.labelKey)
 										}}</span>
-										<span
-											v-if="item.badge"
-											class="rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold text-violet-600 dark:text-violet-400 border border-violet-500/30"
-										>
+										<UiBadge v-if="item.badge" tone="primary" density="compact">
 											{{ item.badge }}
-										</span>
+										</UiBadge>
 									</div>
 								</div>
 							</div>
@@ -407,17 +405,15 @@
 												</div>
 												<span class="truncate">{{ t(item.labelKey) }}</span>
 											</div>
-											<span
+											<UiBadge
 												v-if="item.badge"
-												class="rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase transition-colors"
-												:class="
-													active === item.value
-														? 'bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/30'
-														: 'bg-card text-text-secondary border border-border/40'
-												"
+												class="uppercase"
+												:tone="active === item.value ? 'primary' : 'neutral'"
+												:appearance="active === item.value ? 'soft' : 'ghost'"
+												density="compact"
 											>
 												{{ item.badge }}
-											</span>
+											</UiBadge>
 										</button>
 									</div>
 								</div>

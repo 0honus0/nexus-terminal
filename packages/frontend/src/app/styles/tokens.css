@@ -1,43 +1,20 @@
 @theme inline {
-	--font-sans: var(--font-family-sans-serif);
 	--font-mono: var(--font-family-monospace);
 	--color-background: var(--app-bg-color);
 	--color-card: var(--card-bg-color);
 	--color-border-hover: var(--border-hover-color);
-	--color-primary-hover: var(--button-hover-bg-color);
-	--color-warning-foreground: var(--status-warning-text-color);
 	--color-foreground: var(--text-color);
-	--color-app: var(--app-bg-color);
-	--color-text-default: var(--text-color);
 	--color-text-secondary: var(--text-color-secondary);
 	--color-border: var(--border-color);
-	--color-border-default: var(--border-color);
-	--color-link: var(--link-color);
-	--color-link-hover: var(--link-hover-color);
-	--color-link-active: var(--link-active-color);
 	--color-primary: var(--link-active-color);
-	--color-link-active-bg: var(--link-active-bg-color);
-	--color-nav-active-bg: var(--nav-item-active-bg-color);
 	--color-header: var(--header-bg-color);
 	--color-footer: var(--footer-bg-color);
-	--color-button: var(--button-bg-color);
-	--color-button-text: var(--button-text-color);
-	--color-button-hover: var(--button-hover-bg-color);
-	--color-icon: var(--icon-color);
-	--color-icon-hover: var(--icon-hover-color);
-	--color-split-line: var(--split-line-color);
-	--color-split-line-hover: var(--split-line-hover-color);
 	--color-input: var(--input-bg-color);
-	--color-input-focus-border: var(--input-focus-border-color);
 	--color-overlay: var(--overlay-bg-color);
 	--color-success: var(--status-success-color);
 	--color-warning: var(--status-warning-color);
 	--color-error: var(--status-error-color);
 	--color-info: var(--status-info-color);
-	--color-success-text: var(--status-success-text-color);
-	--color-warning-text: var(--status-warning-text-color);
-	--color-error-text: var(--status-error-text-color);
-	--color-info-text: var(--status-info-text-color);
 }
 
 :root {

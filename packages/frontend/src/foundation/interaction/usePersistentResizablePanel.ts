@@ -15,6 +15,7 @@ export interface PersistentResizablePanelOptions {
 	enabled?: () => boolean;
 	widthMultiplier?: number;
 	heightMultiplier?: number;
+	widthSnap?: (width: number) => number;
 	canStart?: ResizeHandleOptions['canStart'];
 }
 
@@ -54,6 +55,11 @@ export function usePersistentResizablePanel(options: PersistentResizablePanelOpt
 	const clampSize = (): void => {
 		if (!enabled()) return;
 		width.value = clamp(width.value, resolveLimit(options.minWidth), options.maxWidth());
+		width.value = clamp(
+			options.widthSnap?.(width.value) ?? width.value,
+			resolveLimit(options.minWidth),
+			options.maxWidth(),
+		);
 		height.value = clamp(height.value, resolveLimit(options.minHeight), options.maxHeight());
 	};
 
@@ -89,6 +95,7 @@ export function usePersistentResizablePanel(options: PersistentResizablePanelOpt
 		maxHeight: options.maxHeight,
 		widthMultiplier: options.widthMultiplier,
 		heightMultiplier: options.heightMultiplier,
+		widthSnap: options.widthSnap,
 
 		canStart: (event) => enabled() && (options.canStart?.(event) ?? true),
 

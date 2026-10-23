@@ -20,6 +20,8 @@
     "shortcutHint": "点击输入框后按 Alt + 字母或数字设置直接跳转快捷键；按 Backspace 或 Delete 清除。",
     "shortcutSettings": "快捷键设置",
     "noInputsAvailable": "没有可配置的输入项",
+    "moveUp": "上移",
+    "moveDown": "下移",
     "altSwitchHint": "提示：按下 Alt 键可在配置的输入源之间快速切换焦点。"
   }
 }

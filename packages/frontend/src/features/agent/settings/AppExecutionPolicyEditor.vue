@@ -2,7 +2,7 @@
 	import { computed, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { structurallyEqual } from '@/foundation/data';
-	import { UiButton, UiCheckbox, UiInfoHint } from '@/foundation/ui';
+	import { UiBadge, UiButton, UiCheckbox, UiInfoHint } from '@/foundation/ui';
 	import { AGENT_EXECUTION_INTEGER_KEYS } from '@nexus-terminal/shared/agent/governance/values';
 	import type { AppPolicyOverrides } from '../model/app-management-types';
 	import { useAppGovernance } from '../composables/use-app-governance';
@@ -188,17 +188,11 @@
 								<h4 class="text-xs font-semibold text-foreground">
 									{{ t('agent.settings.executionPolicy.fields.contextProfile') }}
 								</h4>
-								<span
-									v-if="hasOverride('contextProfile')"
-									class="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary"
-								>
+								<UiBadge v-if="hasOverride('contextProfile')" tone="primary" density="compact">
 									<i class="fa-solid fa-pen-to-square text-[9px]" aria-hidden="true"></i>
 									{{ t('agent.settings.executionPolicy.customOverride') }}
-								</span>
-								<span
-									v-else
-									class="inline-flex items-center gap-1 rounded-full border border-border/70 bg-header/60 px-2 py-0.5 text-[10px] text-text-secondary"
-								>
+								</UiBadge>
+								<UiBadge v-else appearance="ghost" density="compact">
 									<i
 										class="fa-solid fa-link text-[9px] text-text-secondary/70"
 										aria-hidden="true"
@@ -208,7 +202,7 @@
 											value: view.effective.contextProfile,
 										})
 									}}
-								</span>
+								</UiBadge>
 							</div>
 							<p class="mt-0.5 text-[11px] text-text-secondary leading-relaxed">
 								{{ t('agent.settings.executionPolicy.profileHint') }}
@@ -326,17 +320,11 @@
 								<h4 class="text-xs font-semibold text-foreground">
 									{{ t('agent.settings.executionPolicy.fields.contextCompactionMode') }}
 								</h4>
-								<span
-									v-if="hasOverride('contextCompactionMode')"
-									class="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary"
-								>
+								<UiBadge v-if="hasOverride('contextCompactionMode')" tone="primary" density="compact">
 									<i class="fa-solid fa-pen-to-square text-[9px]" aria-hidden="true"></i>
 									{{ t('agent.settings.executionPolicy.customOverride') }}
-								</span>
-								<span
-									v-else
-									class="inline-flex items-center gap-1 rounded-full border border-border/70 bg-header/60 px-2 py-0.5 text-[11px] text-text-secondary"
-								>
+								</UiBadge>
+								<UiBadge v-else appearance="ghost" density="compact">
 									<i
 										class="fa-solid fa-link text-[9px] text-text-secondary/70"
 										aria-hidden="true"
@@ -346,7 +334,7 @@
 											value: view.effective.contextCompactionMode,
 										})
 									}}
-								</span>
+								</UiBadge>
 							</div>
 							<p class="mt-0.5 text-[11px] text-text-secondary leading-relaxed">
 								{{ t('agent.settings.executionPolicy.compactionHint') }}

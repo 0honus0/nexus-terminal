@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton } from '@/foundation/ui';
+	import { UiButton, UiEmptyState } from '@/foundation/ui';
 	import { useConversationMemory } from '../composables/use-conversation-memory';
 	const props = defineProps<{ appId: string; threadId: string; active: boolean; visible: boolean }>();
 	const emit = defineEmits<{
@@ -39,9 +39,13 @@
 		<UiButton v-if="needsRead" class="mb-3" :disabled="operation.busy.value" @click="load(true)">{{
 			t('agent.memoryReview.reload')
 		}}</UiButton>
-		<p v-if="!items.length && !needsRead" class="text-xs text-text-secondary" role="status">
-			{{ t('agent.memoryReview.empty') }}
-		</p>
+		<UiEmptyState
+			v-if="!items.length && !needsRead"
+			compact
+			:bordered="false"
+			icon="fa-solid fa-brain"
+			:title="t('agent.memoryReview.empty')"
+		/>
 		<div class="space-y-3">
 			<article v-for="item in items" :key="item.id" class="rounded-lg border border-border/50 bg-background p-3">
 				<p class="whitespace-pre-wrap break-words text-sm">{{ item.content }}</p>

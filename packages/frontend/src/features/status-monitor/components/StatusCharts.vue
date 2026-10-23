@@ -53,19 +53,35 @@
 		tooltip.value = null;
 	});
 	const rangeMs = computed(() => Math.max(1, props.rangeMinutes) * 60_000);
-	const latestSampleTime = computed(() =>
-		Math.max(
-			0,
-			props.history.cpu.at(-1)?.time ?? 0,
-			props.history.memory.at(-1)?.time ?? 0,
-			props.history.swap.at(-1)?.time ?? 0,
-			props.history.disk.at(-1)?.time ?? 0,
-			props.history.networkRx.at(-1)?.time ?? 0,
-			props.history.networkTx.at(-1)?.time ?? 0,
-		),
-	);
-	const windowEnd = computed(() => latestSampleTime.value || Date.now());
-	const windowStart = computed(() => windowEnd.value - rangeMs.value);
+	const metricSampleBounds = computed(() => {
+		const series =
+			props.metric === 'network'
+				? [props.history.networkRx, props.history.networkTx]
+				: [props.history[props.metric]];
+		let earliest = 0;
+		let latest = 0;
+		for (const points of series) {
+			const first = points[0];
+			const last = points.at(-1);
+			if (!first || !last) continue;
+			earliest = earliest ? Math.min(earliest, first.time) : first.time;
+			latest = Math.max(latest, last.time);
+		}
+		return { earliest, latest };
+	});
+	const windowEnd = computed(() => metricSampleBounds.value.latest || Date.now());
+	const windowStart = computed(() => {
+		const requestedStart = windowEnd.value - rangeMs.value;
+		const { earliest, latest } = metricSampleBounds.value;
+		const observedSpan = Math.max(0, latest - earliest);
+		if (!earliest || observedSpan >= rangeMs.value) {
+			return requestedStart;
+		}
+		const minimumSpan = Math.min(2_000, rangeMs.value);
+		const fittedSpan = Math.max(minimumSpan, Math.min(rangeMs.value, observedSpan * 1.08));
+		return latest - fittedSpan;
+	});
+	const windowSpanMs = computed(() => Math.max(1, windowEnd.value - windowStart.value));
 
 	const inRange = (points: StatusHistoryPoint[]) =>
 		points.filter((point) => point.time >= windowStart.value && point.time <= windowEnd.value);
@@ -167,6 +183,11 @@
 	};
 
 	const networkAxisMax = ref(1);
+	const percentageAxisMax = computed(() => {
+		const maximum = Math.max(0, ...percentageSeries.value.map((point) => point.value));
+		const required = maximum * 1.15;
+		return [10, 20, 25, 50, 75, 100].find((limit) => limit >= required) ?? 100;
+	});
 
 	const syncNetworkAxis = (force = false) => {
 		const raw = rawNetworkMax.value;
@@ -231,7 +252,7 @@
 	const formatAxisTime = (time: number): string => {
 		const date = new Date(time);
 		const base = `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
-		return props.rangeMinutes <= 1 ? `${base}:${pad2(date.getSeconds())}` : base;
+		return windowSpanMs.value <= 60_000 ? `${base}:${pad2(date.getSeconds())}` : base;
 	};
 
 	const toTimedPoint = (point: StatusHistoryPoint): TimedChartPoint => ({ x: point.time, y: point.value });
@@ -330,7 +351,7 @@
 				max: windowEnd.value,
 				ticks: {
 					color: chartTheme.value.text,
-					maxTicksLimit: props.rangeMinutes <= 1 ? 3 : 4,
+					maxTicksLimit: windowSpanMs.value <= 60_000 ? 3 : 4,
 					font: { size: 8 },
 					align: 'inner',
 
@@ -367,7 +388,7 @@
 							alignToPixels: true,
 							beginAtZero: true,
 							min: 0,
-							max: 100,
+							max: percentageAxisMax.value,
 
 							afterFit: (scale) => {
 								scale.width = Y_AXIS_GUTTER_PX;
@@ -376,7 +397,17 @@
 							ticks: {
 								color: chartTheme.value.text,
 								font: { size: 7 },
-								maxTicksLimit: 5,
+								maxTicksLimit: 6,
+								stepSize:
+									percentageAxisMax.value === 10
+										? 2
+										: percentageAxisMax.value === 75
+											? 15
+											: percentageAxisMax.value === 100
+												? 20
+												: percentageAxisMax.value <= 25
+													? 5
+													: 10,
 								mirror: true,
 								padding: 3,
 								z: 1,

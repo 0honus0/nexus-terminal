@@ -9,6 +9,80 @@ export const WORKSPACE_LAYOUT_MIN_SIZE = 5;
 
 const paneNames = new Set<WorkspacePane>(WORKSPACE_PANES);
 
+const WORKSPACE_PANE_MINIMUMS: Record<WorkspacePane, { inline: number; block: number }> = {
+	connections: { inline: 12, block: 14 },
+	terminal: { inline: 20, block: 24 },
+	commandBar: { inline: 10, block: 5 },
+	fileManager: { inline: 13, block: 14 },
+	editor: { inline: 14, block: 16 },
+	statusMonitor: { inline: 12, block: 38 },
+	commandHistory: { inline: 12, block: 12 },
+	quickCommands: { inline: 12, block: 38 },
+	dockerManager: { inline: 12, block: 14 },
+	suspendedSshSessions: { inline: 12, block: 12 },
+};
+
+const WORKSPACE_PANE_MINIMUM_INLINE_PIXELS: Partial<Record<WorkspacePane, number>> = {
+	commandBar: 100,
+	fileManager: 170,
+	suspendedSshSessions: 170,
+};
+
+const WORKSPACE_PANE_MINIMUM_BLOCK_PIXELS: Partial<Record<WorkspacePane, number>> = {
+	commandBar: 38,
+};
+
+const WORKSPACE_PANE_MAXIMUM_BLOCK_PIXELS: Partial<Record<WorkspacePane, number>> = {
+	commandBar: 42,
+};
+
+const layoutNodeMinimumSize = (
+	node: WorkspaceLayoutNodeState,
+	axis: 'horizontal' | 'vertical',
+	inlineSize: number,
+	blockSize: number,
+): number => {
+	if (node.type === 'pane' && node.component) {
+		const fixedInlineMinimum = WORKSPACE_PANE_MINIMUM_INLINE_PIXELS[node.component];
+		if (axis === 'horizontal' && fixedInlineMinimum && inlineSize > 0) {
+			return (fixedInlineMinimum / inlineSize) * 100;
+		}
+		const fixedBlockMinimum = WORKSPACE_PANE_MINIMUM_BLOCK_PIXELS[node.component];
+		if (axis === 'vertical' && fixedBlockMinimum && blockSize > 0) {
+			return (fixedBlockMinimum / blockSize) * 100;
+		}
+		const minimum = WORKSPACE_PANE_MINIMUMS[node.component];
+		return axis === 'horizontal' ? minimum.inline : minimum.block;
+	}
+	const children = node.children ?? [];
+	if (!children.length) return WORKSPACE_LAYOUT_MIN_SIZE;
+	const minimums = children.map((child) => layoutNodeMinimumSize(child, axis, inlineSize, blockSize));
+	return node.direction === axis ? minimums.reduce((total, minimum) => total + minimum, 0) : Math.max(...minimums);
+};
+
+export const workspacePaneMinimumSize = (
+	node: WorkspaceLayoutNodeState,
+	direction: 'horizontal' | 'vertical',
+	siblingCount: number,
+	inlineSize = 0,
+	blockSize = 0,
+): number => {
+	const requested = layoutNodeMinimumSize(node, direction, inlineSize, blockSize);
+	const safeMaximum = 90 / Math.max(1, siblingCount);
+	return Math.max(1, Math.min(requested, safeMaximum));
+};
+
+export const workspacePaneMaximumSize = (
+	node: WorkspaceLayoutNodeState,
+	direction: 'horizontal' | 'vertical',
+	blockSize = 0,
+): number => {
+	if (node.type !== 'pane' || !node.component || direction !== 'vertical' || blockSize <= 0) return 100;
+	const fixedBlockMaximum = WORKSPACE_PANE_MAXIMUM_BLOCK_PIXELS[node.component];
+	if (!fixedBlockMaximum) return 100;
+	return Math.max(1, Math.min(100, (fixedBlockMaximum / blockSize) * 100));
+};
+
 export const createDefaultWorkspaceLayout = (): WorkspaceLayoutNodeState => ({
 	id: 'workspace-root',
 	size: 100,

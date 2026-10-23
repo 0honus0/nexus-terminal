@@ -113,22 +113,26 @@ export function useNativeRuns(
 		clearRun();
 	}
 
-	const operation = useAgentManagementOperation((reason) => {
-		const originalDraft = draft.value;
-		const intent = pending.value;
-		const originalThread = thread.value;
-		const originalRun = run.value;
-		const keep = reason === 'view' && (intent !== null || !attachmentsReady.value || threadBusy());
-		clearPrivate();
-		if (reason === 'view') {
-			draft.value = originalDraft;
-		}
-		if (keep) {
-			pending.value = intent;
-			thread.value = originalThread;
-			run.value = originalRun;
-		}
-	}, active);
+	const operation = useAgentManagementOperation(
+		(reason) => {
+			const originalDraft = draft.value;
+			const intent = pending.value;
+			const originalThread = thread.value;
+			const originalRun = run.value;
+			const keep = reason === 'view' && (intent !== null || !attachmentsReady.value || threadBusy());
+			clearPrivate();
+			if (reason === 'view') {
+				draft.value = originalDraft;
+			}
+			if (keep) {
+				pending.value = intent;
+				thread.value = originalThread;
+				run.value = originalRun;
+			}
+		},
+		active,
+		{ retainOnView: true },
+	);
 	const connections = computed(() =>
 		deniedIds.value === null
 			? []
@@ -478,8 +482,9 @@ export function useNativeRuns(
 	watch(
 		active,
 		(value) => {
-			if (value) void readScope();
-			else stopPolling();
+			if (!value) stopPolling();
+			else if (scope.value === null) void readScope();
+			else schedulePoll();
 		},
 		{ immediate: true, flush: 'post' },
 	);

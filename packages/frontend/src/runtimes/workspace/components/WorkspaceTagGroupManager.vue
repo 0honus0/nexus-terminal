@@ -1,6 +1,6 @@
 <script setup lang="ts">
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiInput, UiModal } from '@/foundation/ui';
+	import { UiButton, UiCheckbox, UiEmptyState, UiInput, UiModal, UiSearchInput } from '@/foundation/ui';
 	import type { ConnectionSummary } from '@/features/connections/public';
 	import type { TagGroupInput } from '../model/tag-group-types';
 	import { useTagGroupManagement } from '../composables/use-tag-group-management';
@@ -56,40 +56,41 @@
 			<div class="space-y-3 border-b border-border/50 px-4 pb-4">
 				<div class="grid gap-1.5 text-sm text-text-secondary">
 					<span>{{ t('workspaceConnectionList.manageTags.tagName') }}</span>
-					<UiInput
-						v-model="name"
-						:disabled="saving"
-						:aria-label="t('workspaceConnectionList.manageTags.tagName')"
-					/>
-					<UiButton
-						type="button"
-						appearance="soft"
-						density="compact"
-						class="justify-self-start"
-						:disabled="
-							saving ||
-							requiresReview ||
-							tags.busy.value ||
-							tags.needsRefresh.value ||
-							name.trim() === snapshot?.name
-						"
-						@click="rename"
-					>
-						<i class="fas fa-pen mr-1" aria-hidden="true" />
-						{{ t('tags.renameOnly') }}
-					</UiButton>
+					<div class="flex min-w-0 items-center gap-2">
+						<UiInput
+							v-model="name"
+							:disabled="saving"
+							:aria-label="t('workspaceConnectionList.manageTags.tagName')"
+							class="min-w-0 flex-1"
+						/>
+						<UiButton
+							type="button"
+							appearance="soft"
+							density="compact"
+							class="shrink-0 whitespace-nowrap"
+							:disabled="
+								saving ||
+								requiresReview ||
+								tags.busy.value ||
+								tags.needsRefresh.value ||
+								name.trim() === snapshot?.name
+							"
+							@click="rename"
+						>
+							<i class="fas fa-pen mr-1" aria-hidden="true" />
+							{{ t('tags.renameOnly') }}
+						</UiButton>
+					</div>
 				</div>
 
 				<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-					<UiInput
+					<UiSearchInput
 						v-model="search"
-						type="text"
 						:placeholder="t('workspaceConnectionList.manageTags.searchPlaceholder')"
 						:aria-label="t('workspaceConnectionList.manageTags.searchPlaceholder')"
+						:clear-label="t('common.clear')"
 						class="min-w-0 w-full flex-1"
-					>
-						<template #leading><i class="fas fa-search text-xs" aria-hidden="true" /></template>
-					</UiInput>
+					/>
 					<div class="grid min-w-0 grid-cols-3 gap-2 sm:flex sm:shrink-0">
 						<UiButton type="button" appearance="soft" density="compact" @click="selectVisible">
 							{{ t('workspaceConnectionList.manageTags.selectAll') }}
@@ -114,12 +115,11 @@
 							:class="selected.has(connection.id) ? 'bg-primary/20' : ''"
 							@click="toggle(connection.id)"
 						>
-							<input
-								type="checkbox"
-								class="mr-3 h-4 w-4 rounded border-border text-primary focus:ring-primary focus:ring-offset-0"
-								:checked="selected.has(connection.id)"
+							<UiCheckbox
+								class="mr-3"
+								:model-value="selected.has(connection.id)"
 								:aria-label="connection.name || connection.host"
-								@change.stop="toggle(connection.id)"
+								@update:model-value="toggle(connection.id)"
 								@click.stop
 							/>
 							<i
@@ -135,13 +135,14 @@
 							<span class="ml-2 shrink-0 text-xs text-text-alt">({{ connection.type }})</span>
 						</li>
 					</ul>
-					<div
+					<UiEmptyState
 						v-else
-						class="flex min-h-40 flex-col items-center justify-center p-6 text-center text-text-secondary"
-					>
-						<i class="fas fa-search mb-3 text-2xl" aria-hidden="true"></i>
-						<p>{{ t('workspaceConnectionList.manageTags.noConnectionsFound') }}</p>
-					</div>
+						class="min-h-40"
+						compact
+						:bordered="false"
+						icon="fa-solid fa-magnifying-glass"
+						:title="t('workspaceConnectionList.manageTags.noConnectionsFound')"
+					/>
 				</div>
 			</div>
 		</div>

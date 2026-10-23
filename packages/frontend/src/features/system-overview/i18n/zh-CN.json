@@ -37,7 +37,12 @@
       "gcDuration": "主线程 GC 累计耗时",
       "resourcesTitle": "内存与模块资源明细",
       "memoryNote": "RSS 是整个后端进程的驻留内存，进程概览的堆和外部内存仅属于主线程；数据库 Worker 的独立堆和外部内存在数据库组单列，不含 SQLite 原生页缓存。各线程的 ArrayBuffer 已计入对应外部内存，不能相加。其它模块字节指标是已跟踪的缓冲数据量，不是模块总内存，可能共享底层数据，不应合计后与 RSS 相减。CPU 为进程累计，GC 为本次诊断实例启用后的主线程累计；不执行强制 GC 或堆快照。",
+      "memoryNoteTitle": "统计口径与限制",
+      "memorySectionTitle": "进程内存与运行时开销",
+      "modulesSectionTitle": "模块资源",
+      "moduleCount": "共 {count} 个模块",
       "countsOnly": "当前仅统计资源数量，未计量该模块的内存；不代表零占用。",
+      "countsOnlyShort": "仅统计数量",
       "modules": {
         "access": "身份与访问",
         "agent": "Agent",

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { computed, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiFormActions, UiModal } from '@/foundation/ui';
+	import { UiBadge, UiButton, UiFormActions, UiModal, UiSpinner } from '@/foundation/ui';
 	import type { PluginCatalogEntry } from '../model/plugin-types';
 
 	const props = defineProps<{
@@ -61,12 +61,9 @@
 							<h2 class="text-base font-semibold text-foreground tracking-tight">
 								{{ $t('agent.settings.onboarding.title') }}
 							</h2>
-							<span
-								class="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success"
-							>
-								<span class="h-1.5 w-1.5 rounded-full bg-success animate-pulse"></span>
+							<UiBadge tone="success" density="compact" dot dot-pulse>
 								{{ $t('agent.settings.onboarding.publisherVerified') }}
-							</span>
+							</UiBadge>
 						</div>
 						<p class="text-xs text-text-secondary mt-0.5">
 							{{ $t('agent.settings.onboarding.subtitle') }}
@@ -92,16 +89,12 @@
 						<div class="min-w-0 flex-1">
 							<div class="flex flex-wrap items-center gap-2">
 								<span class="text-sm font-bold text-foreground">{{ entry.displayName }}</span>
-								<span
-									class="rounded-md border border-border/60 bg-card px-2 py-0.5 font-mono text-[11px] font-medium text-foreground"
-								>
+								<UiBadge appearance="ghost" density="compact" class="font-mono">
 									v{{ entry.version }}
-								</span>
-								<span
-									class="rounded-md bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary"
-								>
+								</UiBadge>
+								<UiBadge tone="primary" density="compact">
 									{{ $t('agent.settings.onboarding.badge') }}
-								</span>
+								</UiBadge>
 							</div>
 							<p class="mt-1.5 text-xs leading-relaxed text-text-secondary">
 								{{ pluginDescription }}
@@ -229,7 +222,7 @@
 						<div
 							class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary"
 						>
-							<i class="fa-solid fa-circle-notch fa-spin text-sm"></i>
+							<UiSpinner />
 						</div>
 						<div class="min-w-0 flex-1">
 							<div class="text-xs font-semibold text-foreground">
@@ -255,11 +248,11 @@
 						appearance="solid"
 						tone="primary"
 						type="button"
+						:loading="busy"
 						:disabled="busy || confirmDisabled"
 						@click="emit('confirm')"
 					>
-						<i v-if="!busy" class="fa-solid fa-download text-xs" aria-hidden="true"></i>
-						<i v-else class="fa-solid fa-circle-notch fa-spin text-xs" aria-hidden="true"></i>
+						<i class="fa-solid fa-download text-xs" aria-hidden="true"></i>
 						<span>{{
 							busy
 								? $t('agent.settings.onboarding.installing')

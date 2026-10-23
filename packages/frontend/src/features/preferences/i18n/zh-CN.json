@@ -116,6 +116,13 @@
       "showQuickCommandTagsTitle": "显示快捷指令标签",
       "showQuickCommandTagsLabel": "在快捷指令列表中显示标签",
       "showQuickCommandTagsDescription": "关闭后将隐藏快捷指令列表中的标签，并从搜索中排除标签。",
+      "commandBarButtons": {
+        "title": "命令栏按钮",
+        "clear": "清空终端",
+        "focusSwitch": "焦点切换",
+        "editor": "编辑器",
+        "search": "终端搜索"
+      },
       "quickCommandsCollapsibleSearchTitle": "快捷指令搜索框",
       "quickCommandsCollapsibleSearchLabel": "默认将搜索框折叠为搜索按钮",
       "quickCommandsCollapsibleSearchDescription": "默认关闭。开启后快捷指令面板只显示搜索按钮，点击后再展开搜索框。",
@@ -216,6 +223,10 @@
       "effective": "当前生效：采样间隔 {status} 秒 · 主机缓存 TTL / 概览刷新 {host} 秒",
       "status": "监控采样间隔（秒）",
       "host": "主机缓存 TTL / 概览刷新（秒）",
+      "statusShort": "采样",
+      "hostShort": "缓存",
+      "refreshShort": "刷新",
+      "secondsUnit": "秒",
       "refresh": "只读重新加载并核对",
       "feedback": {
         "saved": "已保存并生效。",

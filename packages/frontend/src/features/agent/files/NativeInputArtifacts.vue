@@ -54,7 +54,7 @@
 		}
 	}
 
-	const operation = useAgentManagementOperation(revoke, () => props.active);
+	const operation = useAgentManagementOperation(revoke, () => props.active, { retainOnView: true });
 
 	const locked = computed(() => props.disabled || operation.busy.value || unknown.value);
 	const needsAttention = computed(
@@ -177,14 +177,11 @@
 			icon-only
 			:title="t('agent.nativeRun.bindAttachments')"
 			:aria-label="t('agent.nativeRun.bindAttachments')"
+			:loading="operation.busy.value"
 			:disabled="locked || operation.refreshRequired.value"
 			@click="prepare"
 		>
-			<i
-				class="fa-solid text-[9px]"
-				:class="operation.busy.value ? 'fa-circle-notch fa-spin' : 'fa-paperclip'"
-				aria-hidden="true"
-			></i>
+			<i class="fa-solid fa-paperclip text-[9px]" aria-hidden="true"></i>
 		</UiButton>
 		<span
 			v-if="prepared"

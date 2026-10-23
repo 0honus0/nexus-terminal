@@ -228,11 +228,12 @@ export class NativeServerTransfer implements NativeTransferPort {
 			}
 		}
 		const host = isIP(input.host) === 6 ? '[' + input.host + ']' : input.host;
-		const destination = input.username + '@' + host + ':' + quote(input.targetDirectory + '/');
+		const targetDirectory = input.targetDirectory === '/' ? '/' : input.targetDirectory + '/';
+		const destination = input.username + '@' + host + ':' + quote(targetDirectory);
 		if (method === 'rsync') {
 			const ssh = prefix + 'ssh ' + [...options, '-p', String(input.port)].map(quote).join(' ');
 			// Secluded arguments travel in the rsync protocol; shell quoting inside the remote path would become literal.
-			const remotePath = input.username + '@' + host + ':' + input.targetDirectory + '/';
+			const remotePath = input.username + '@' + host + ':' + targetDirectory;
 			return 'rsync -azs -e ' + quote(ssh) + ' -- ' + quote(input.sourcePath) + ' ' + quote(remotePath);
 		}
 		return (

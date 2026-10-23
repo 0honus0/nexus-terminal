@@ -1,6 +1,6 @@
 <script setup lang="ts">
 	import { useI18n } from 'vue-i18n';
-	import { UiButton } from '@/foundation/ui';
+	import { UiBadge, UiButton } from '@/foundation/ui';
 	import type {
 		NativeRun,
 		NativeChild,
@@ -99,9 +99,7 @@
 		<section v-if="children.length" class="space-y-2">
 			<header class="flex items-center justify-between px-1">
 				<h4 class="text-xs font-semibold text-foreground">{{ t('agent.nativeRun.children') }}</h4>
-				<span class="rounded-full bg-header px-2 py-0.5 text-[10px] text-text-secondary">{{
-					children.length
-				}}</span>
+				<UiBadge appearance="ghost" density="compact">{{ children.length }}</UiBadge>
 			</header>
 			<article
 				v-for="item in children"

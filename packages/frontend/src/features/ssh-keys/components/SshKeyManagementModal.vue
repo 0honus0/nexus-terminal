@@ -1,6 +1,16 @@
 <script setup lang="ts">
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiCheckbox, UiFormField, UiInput, UiModal, UiTextarea } from '@/foundation/ui';
+	import {
+		UiButton,
+		UiCheckbox,
+		UiEmptyState,
+		UiFormField,
+		UiInput,
+		UiLoadingState,
+		UiModal,
+		UiTable,
+		UiTextarea,
+	} from '@/foundation/ui';
 	import { useSshKeyManagement } from '../composables/use-ssh-key-management';
 	const visible = defineModel<boolean>({ default: false });
 	const { t } = useI18n();
@@ -46,61 +56,71 @@
 						t('sshKeys.refresh')
 					}}</UiButton>
 				</div>
-				<div class="max-h-[50vh] flex-grow overflow-y-auto rounded-md border border-border">
-					<table class="w-full table-fixed divide-y divide-border">
-						<thead class="sticky top-0 bg-header">
+				<div class="max-h-[50vh] flex-grow overflow-y-auto">
+					<UiTable :empty="loading || keys.keys.value.length === 0" class="rounded-md">
+						<template #head>
 							<tr>
 								<th
-									class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary"
+									class="sticky top-0 bg-header px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary"
 								>
 									{{ t('sshKeys.modal.keyName') }}
 								</th>
 								<th
-									class="w-20 px-3 py-3 text-right text-xs font-medium uppercase tracking-wider text-text-secondary sm:px-6"
+									class="sticky top-0 w-20 bg-header px-3 py-3 text-right text-xs font-medium uppercase tracking-wider text-text-secondary sm:px-6"
 								>
 									{{ t('sshKeys.modal.actions') }}
 								</th>
 							</tr>
-						</thead>
-						<tbody class="divide-y divide-border bg-background">
-							<tr v-if="loading">
-								<td colspan="2" class="px-6 py-4 text-center text-sm text-text-secondary">
-									{{ t('sshKeys.modal.loading') }}
-								</td>
-							</tr>
-							<tr v-else-if="keys.keys.value.length === 0">
-								<td colspan="2" class="px-6 py-4 text-center text-sm text-text-secondary">
-									{{ t('sshKeys.modal.noKeys') }}
-								</td>
-							</tr>
-							<tr v-for="key in keys.keys.value" :key="key.id" :data-key-id="key.id">
-								<td
-									class="break-all px-3 py-4 text-sm font-medium text-foreground sm:break-words sm:px-6"
+						</template>
+						<template #empty>
+							<UiLoadingState
+								v-if="loading"
+								compact
+								:bordered="false"
+								:title="t('sshKeys.modal.loading')"
+							/>
+							<UiEmptyState
+								v-else
+								compact
+								:bordered="false"
+								icon="fa-solid fa-key"
+								:title="t('sshKeys.modal.noKeys')"
+							/>
+						</template>
+						<tr v-for="key in keys.keys.value" :key="key.id" :data-key-id="key.id">
+							<td class="break-all px-3 py-4 text-sm font-medium text-foreground sm:break-words sm:px-6">
+								{{ key.name }}
+							</td>
+							<td class="space-x-2 px-3 py-4 text-right text-sm font-medium sm:px-6">
+								<UiButton
+									type="button"
+									appearance="ghost"
+									tone="primary"
+									density="compact"
+									icon-only
+									:disabled="loading || keys.busy.value || keys.needsRefresh.value"
+									:title="t('sshKeys.modal.edit')"
+									:aria-label="t('sshKeys.modal.edit')"
+									@click="edit(key)"
 								>
-									{{ key.name }}
-								</td>
-								<td class="space-x-2 px-3 py-4 text-right text-sm font-medium sm:px-6">
-									<button
-										type="button"
-										class="text-primary hover:text-link-hover disabled:opacity-50"
-										:disabled="loading || keys.busy.value || keys.needsRefresh.value"
-										:title="t('sshKeys.modal.edit')"
-										@click="edit(key)"
-									>
-										<i class="fas fa-pencil-alt" aria-hidden="true" /></button
-									><button
-										type="button"
-										class="text-error hover:opacity-80 disabled:opacity-50"
-										:disabled="loading || keys.busy.value || keys.needsRefresh.value"
-										:title="t('sshKeys.modal.delete')"
-										@click="remove(key)"
-									>
-										<i class="fas fa-trash-alt" aria-hidden="true" />
-									</button>
-								</td>
-							</tr>
-						</tbody>
-					</table>
+									<i class="fas fa-pencil-alt" aria-hidden="true" />
+								</UiButton>
+								<UiButton
+									type="button"
+									appearance="ghost"
+									tone="danger"
+									density="compact"
+									icon-only
+									:disabled="loading || keys.busy.value || keys.needsRefresh.value"
+									:title="t('sshKeys.modal.delete')"
+									:aria-label="t('sshKeys.modal.delete')"
+									@click="remove(key)"
+								>
+									<i class="fas fa-trash-alt" aria-hidden="true" />
+								</UiButton>
+							</td>
+						</tr>
+					</UiTable>
 				</div>
 				<div class="mt-6 shrink-0 text-right">
 					<UiButton :disabled="loading" @click="visible = false">{{ t('sshKeys.modal.close') }}</UiButton>

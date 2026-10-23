@@ -10,7 +10,11 @@
 	} from '@/features/ssh-suspend/public';
 	import WorkspaceConnectionList from './WorkspaceConnectionList.vue';
 
-	defineProps<{ markedSessions: MarkedSuspendedSessionState[]; canReturn?: boolean; mobile?: boolean }>();
+	const props = defineProps<{
+		markedSessions: MarkedSuspendedSessionState[];
+		canReturn?: boolean;
+		mobile?: boolean;
+	}>();
 	const emit = defineEmits<{
 		open: [connection: ConnectionSummary];
 		openMany: [connections: ConnectionSummary[]];
@@ -24,165 +28,180 @@
 </script>
 
 <template>
-	<section
-		class="workspace-start-page min-h-0 flex-1 overflow-y-auto bg-background"
-		:class="mobile ? '' : 'mx-2 mb-2 rounded-b-md border border-t-0 border-border'"
-	>
-		<div class="workspace-start-layout min-h-full w-full">
-			<div class="workspace-start-content flex min-w-0 flex-col">
-				<header class="shrink-0">
-					<div class="flex w-full items-center justify-between gap-3 px-4 py-4 sm:px-5">
-						<div class="flex min-w-0 items-center gap-3">
-							<span
-								class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
-							>
-								<i class="fas fa-terminal text-sm" aria-hidden="true"></i>
-							</span>
-							<div class="min-w-0">
-								<h1 class="text-sm font-semibold text-foreground">
-									{{ t('workspace.start.title') }}
-								</h1>
-								<p class="mt-0.5 text-xs leading-relaxed text-text-secondary">
-									{{ t('workspace.start.description') }}
-								</p>
-							</div>
-						</div>
-						<UiButton v-if="canReturn" size="sm" @click="emit('back')">
-							{{ t('workspace.start.back') }}
-						</UiButton>
-					</div>
-				</header>
-				<div class="grid w-full min-w-0 flex-1 items-stretch lg:grid-cols-2">
-					<section
-						class="order-2 min-w-0 p-4 sm:p-5"
-						:class="mobile ? 'border-t border-border/60 lg:border-t-0' : ''"
-					>
-						<h2 class="mb-2 flex h-7 items-center gap-2 text-sm font-semibold text-foreground">
-							<i class="fas fa-pause-circle text-primary/80" aria-hidden="true"></i>
-							{{ t('suspendedSshSessions.modalTitle') }}
-						</h2>
-						<SuspendedSessionsPanel
-							:can-resume="true"
-							:marked-sessions="markedSessions"
-							:page-scroll="true"
-							@resume="emit('resume', $event)"
-							@resume-marked="emit('resumeMarked', $event)"
-							@unmark="emit('unmark', $event)"
-						/>
-					</section>
-					<section class="order-1 min-w-0 p-4 sm:p-5">
-						<h2 class="mb-2 flex h-7 items-center gap-2 text-sm font-semibold text-foreground">
-							<i class="fas fa-plug text-primary/80" aria-hidden="true"></i>
-							{{ t('workspace.start.connections') }}
-						</h2>
-						<WorkspaceConnectionList
-							:page-scroll="true"
-							@open="emit('open', $event)"
-							@open-many="emit('openMany', $event)"
-						/>
-					</section>
-				</div>
-			</div>
-			<aside class="workspace-start-decoration" aria-hidden="true" inert>
-				<div class="workspace-start-orbit workspace-start-orbit--outer"></div>
-				<div class="workspace-start-orbit workspace-start-orbit--inner"></div>
-				<div class="workspace-start-terminal">
-					<div class="workspace-start-terminal-bar"><span></span><span></span><span></span></div>
-					<div class="workspace-start-terminal-body">
+	<section class="workspace-start-page min-h-0 flex-1 overflow-y-auto bg-background">
+		<div class="workspace-start-shell">
+			<header class="workspace-start-header">
+				<div class="workspace-start-heading">
+					<span class="workspace-start-mark" aria-hidden="true">
 						<i class="fas fa-terminal"></i>
-						<div class="workspace-start-code"><span></span><span></span><span></span><span></span></div>
-					</div>
+					</span>
+					<h1>{{ t('workspace.start.title') }}</h1>
 				</div>
-			</aside>
+				<UiButton v-if="props.canReturn" appearance="soft" density="compact" @click="emit('back')">
+					<i class="fas fa-arrow-left mr-2" aria-hidden="true"></i>
+					{{ t('workspace.start.back') }}
+				</UiButton>
+			</header>
+
+			<div class="workspace-start-body">
+				<section class="workspace-start-connections" :aria-label="t('workspace.start.connections')">
+					<WorkspaceConnectionList
+						launchpad
+						page-scroll
+						@open="emit('open', $event)"
+						@open-many="emit('openMany', $event)"
+					/>
+				</section>
+
+				<aside class="workspace-start-suspended" :aria-label="t('suspendedSshSessions.modalTitle')">
+					<header class="workspace-start-section-title">
+						<i class="fas fa-pause-circle" aria-hidden="true"></i>
+						<h2>{{ t('suspendedSshSessions.modalTitle') }}</h2>
+					</header>
+					<SuspendedSessionsPanel
+						:can-resume="true"
+						:marked-sessions="props.markedSessions"
+						page-scroll
+						@resume="emit('resume', $event)"
+						@resume-marked="emit('resumeMarked', $event)"
+						@unmark="emit('unmark', $event)"
+					/>
+				</aside>
+			</div>
 		</div>
 	</section>
 </template>
 
 <style scoped>
-	.workspace-start-layout {
+	.workspace-start-page {
+		margin: 0 0.5rem 0.5rem;
+		border: 1px solid var(--border-color);
+		border-top: 0;
+		border-radius: 0 0 0.375rem 0.375rem;
+		background: var(--app-bg-color);
+	}
+
+	.workspace-start-shell {
+		width: min(1160px, 100%);
+		margin-inline: auto;
+		padding: 2rem 1.5rem 3rem;
+	}
+
+	.workspace-start-header {
 		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		margin-bottom: 1.75rem;
 	}
-	.workspace-start-content {
-		width: 100%;
+
+	.workspace-start-heading {
+		display: flex;
+		min-width: 0;
+		align-items: center;
+		gap: 0.75rem;
+	}
+
+	.workspace-start-heading h1 {
+		margin: 0;
+		font-size: 1.125rem;
+		font-weight: 600;
+		letter-spacing: -0.015em;
+		color: var(--text-color);
+	}
+
+	.workspace-start-mark {
+		display: grid;
+		width: 2.25rem;
+		height: 2.25rem;
 		flex-shrink: 0;
+		place-items: center;
+		border-radius: 0.625rem;
+		background: color-mix(in srgb, var(--link-active-color) 12%, transparent);
+		color: var(--link-active-color);
+		font-size: 0.875rem;
 	}
-	.workspace-start-decoration {
-		display: none;
+
+	.workspace-start-body {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(18rem, 20rem);
+		align-items: start;
+		gap: 2rem;
 	}
-	@media (min-width: 1280px) {
-		.workspace-start-content {
-			width: 960px;
+
+	.workspace-start-connections,
+	.workspace-start-suspended {
+		min-width: 0;
+	}
+
+	.workspace-start-suspended {
+		padding-left: 2rem;
+		border-left: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+	}
+
+	.workspace-start-section-title {
+		display: flex;
+		height: 2rem;
+		align-items: center;
+		gap: 0.5rem;
+		margin-bottom: 0.75rem;
+		color: var(--text-color);
+	}
+
+	.workspace-start-section-title i {
+		width: 1rem;
+		text-align: center;
+		color: var(--link-active-color);
+		font-size: 0.8125rem;
+	}
+
+	.workspace-start-section-title h2 {
+		margin: 0;
+		font-size: 0.8125rem;
+		font-weight: 600;
+		letter-spacing: 0.01em;
+	}
+
+	@media (max-width: 1023px) {
+		.workspace-start-shell {
+			padding: 1.25rem 1rem 2rem;
 		}
-		.workspace-start-decoration {
-			display: flex;
-			position: relative;
-			min-width: 0;
-			flex: 1;
-			overflow: hidden;
-			align-items: center;
-			justify-content: center;
-			background: radial-gradient(
-				ellipse at center,
-				color-mix(in srgb, var(--link-active-color) 7%, transparent),
-				transparent 70%
-			);
+
+		.workspace-start-header {
+			margin-bottom: 1.25rem;
 		}
-		.workspace-start-orbit {
-			position: absolute;
-			width: 340px;
-			height: 340px;
-			border: 1px solid color-mix(in srgb, var(--link-active-color) 9%, transparent);
-			border-radius: 50%;
+
+		.workspace-start-body {
+			grid-template-columns: minmax(0, 1fr);
 		}
-		.workspace-start-orbit--outer {
-			width: 490px;
-			height: 490px;
-			border-style: dashed;
+
+		.workspace-start-suspended {
+			padding-top: 1.5rem;
+			padding-left: 0;
+			border-top: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+			border-left: 0;
 		}
-		.workspace-start-terminal {
-			position: relative;
-			width: min(260px, 75%);
-			border: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
-			border-radius: 16px;
-			background: color-mix(in srgb, var(--card-bg-color) 45%, transparent);
-			transform: rotate(-6deg);
-			color: color-mix(in srgb, var(--link-active-color) 35%, transparent);
+	}
+
+	@media (max-width: 480px) {
+		.workspace-start-shell {
+			padding: 1rem 0.75rem 1.5rem;
 		}
-		.workspace-start-terminal-bar {
-			display: flex;
-			gap: 6px;
-			padding: 14px;
-			border-bottom: 1px solid color-mix(in srgb, var(--border-color) 30%, transparent);
+
+		.workspace-start-heading h1 {
+			font-size: 1rem;
 		}
-		.workspace-start-terminal-bar span {
-			width: 6px;
-			height: 6px;
-			border-radius: 50%;
-			background: color-mix(in srgb, var(--text-color-secondary) 25%, transparent);
+
+		.workspace-start-body {
+			gap: 1.5rem;
 		}
-		.workspace-start-terminal-body {
-			padding: 25px;
-			font-size: 28px;
-		}
-		.workspace-start-code {
-			display: grid;
-			gap: 12px;
-			margin-top: 22px;
-		}
-		.workspace-start-code span {
-			height: 5px;
-			border-radius: 4px;
-			background: currentColor;
-			opacity: 0.4;
-		}
-		.workspace-start-code span:nth-child(2) {
-			width: 65%;
-		}
-		.workspace-start-code span:nth-child(3) {
-			width: 80%;
-		}
-		.workspace-start-code span:nth-child(4) {
-			width: 45%;
+	}
+
+	@media (max-width: 767px) {
+		.workspace-start-page {
+			margin: 0;
+			border: 0;
+			border-radius: 0;
 		}
 	}
 </style>

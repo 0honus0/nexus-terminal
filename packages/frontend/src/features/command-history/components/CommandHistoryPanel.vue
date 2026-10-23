@@ -3,7 +3,14 @@
 	import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 	import { storeToRefs } from 'pinia';
 	import { useI18n } from 'vue-i18n';
-	import { UiContextMenu } from '@/foundation/ui';
+	import {
+		UiButton,
+		UiContextMenu,
+		UiContextMenuItem,
+		UiEmptyState,
+		UiLoadingState,
+		UiSearchInput,
+	} from '@/foundation/ui';
 	import {
 		booleanStorageCodec,
 		numberStorageCodec,
@@ -49,7 +56,7 @@
 	const store = useCommandHistoryStore();
 	const { search, loading, error, filtered, selectedIndex } = storeToRefs(store);
 
-	const searchInput = ref<HTMLInputElement | null>(null);
+	const searchInput = ref<{ focus?: (options?: FocusOptions) => void } | null>(null);
 	const root = ref<HTMLElement | null>(null);
 	const list = ref<HTMLElement | null>(null);
 	const scaleArea = ref<HTMLElement | null>(null);
@@ -207,14 +214,6 @@
 		context.value = { entry, x: event.clientX, y: event.clientY };
 	};
 
-	const refresh = async () => {
-		try {
-			await store.load(true);
-		} catch {
-			// Store error is rendered in the UI
-		}
-	};
-
 	const revealSelected = () => {
 		const entry = filtered.value[selectedIndex.value];
 		if (!entry) {
@@ -300,83 +299,82 @@
 </script>
 
 <template>
-	<section ref="root" class="command-history-root flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-		<div
-			class="command-history-controls flex shrink-0 items-center gap-2 border-b border-border/40 bg-background/80 px-2 py-1.5"
-		>
-			<button
+	<section ref="root" class="command-history-root flex min-h-0 flex-1 flex-col overflow-hidden">
+		<div class="command-history-controls flex shrink-0 items-center gap-2">
+			<UiButton
 				v-if="collapsibleSearch && !searchExpanded"
-				type="button"
+				appearance="ghost"
+				density="compact"
+				icon-only
 				class="history-control"
 				:title="t('commandHistory.expandSearch')"
 				:aria-label="t('commandHistory.expandSearch')"
 				@click="openSearch"
 			>
 				<i class="fas fa-search" aria-hidden="true"></i>
-			</button>
-			<input
+			</UiButton>
+			<UiSearchInput
 				v-if="searchExpanded"
 				ref="searchInput"
 				v-model="search"
 				data-focus-id="commandHistorySearch"
-				type="text"
+				class="command-history-search min-w-0 flex-1 text-sm text-foreground"
+				density="compact"
 				:placeholder="t('commandHistory.searchPlaceholder')"
-				class="command-history-search min-w-0 flex-1 rounded-lg border border-border/50 bg-input px-4 py-1.5 text-sm text-foreground shadow-sm transition duration-150 ease-in-out focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+				:aria-label="t('commandHistory.searchPlaceholder')"
+				:clear-label="t('common.clear')"
 				@keydown="handleSearchKeydown"
 				@blur="handleSearchBlur"
 			/>
-			<button
-				type="button"
+			<UiButton
+				appearance="ghost"
+				density="compact"
+				icon-only
 				class="history-control"
-				:class="{ 'bg-primary/20 text-primary': isCompact }"
+				:class="{ 'history-control--active': isCompact }"
 				:title="t('commandHistory.compactMode')"
 				:aria-label="t('commandHistory.compactMode')"
 				@click="toggleCompact"
 			>
 				<i :class="['fas', isCompact ? 'fa-compress-alt' : 'fa-expand-alt']" aria-hidden="true"></i>
-			</button>
-			<button
-				type="button"
-				class="history-control"
-				:title="t('commandHistory.refresh')"
-				:aria-label="t('commandHistory.refresh')"
-				@click="refresh"
-			>
-				<i class="fas fa-sync-alt" :class="{ 'fa-spin': loading }" aria-hidden="true"></i>
-			</button>
-			<button
-				type="button"
+			</UiButton>
+			<UiButton
+				appearance="ghost"
+				tone="danger"
+				density="compact"
+				icon-only
 				class="history-control history-control--danger"
 				:title="t('commandHistory.clear')"
 				:aria-label="t('commandHistory.clear')"
 				@click="clear"
 			>
 				<i class="fas fa-trash-alt" aria-hidden="true"></i>
-			</button>
+			</UiButton>
 		</div>
 
 		<div
 			ref="scaleArea"
-			class="command-history-list-area min-h-0 flex-1 overflow-y-auto p-2"
+			class="command-history-list-area min-h-0 flex-1 overflow-y-auto"
 			:style="rowStyle"
 			:data-row-scale="localScale.toFixed(2)"
 		>
-			<div
+			<UiLoadingState
 				v-if="loading && !filtered.length"
-				class="flex min-h-0 flex-1 flex-col items-center justify-center p-6 text-center text-sm text-text-secondary"
-			>
-				<i class="fas fa-spinner fa-spin mb-2 text-xl" aria-hidden="true"></i>
-				<p>{{ t('commandHistory.loading') }}</p>
-			</div>
-			<div
+				class="command-history-empty"
+				compact
+				:bordered="false"
+				:title="t('commandHistory.loading')"
+			/>
+			<UiEmptyState
 				v-else-if="!filtered.length"
-				class="flex min-h-0 flex-1 flex-col items-center justify-center p-6 text-center text-sm text-text-secondary"
-			>
-				<i class="fas fa-history mb-2 text-xl" aria-hidden="true"></i>
-				<p>{{ search ? t('commandHistory.noMatches') : t('commandHistory.empty') }}</p>
-			</div>
-			<div v-else class="overflow-hidden rounded-xl border border-border/60 bg-card/25 shadow-2xs">
-				<ul ref="list" class="m-0 list-none p-1.5 space-y-1">
+				class="command-history-empty"
+				dense
+				:icon="search ? 'fas fa-search' : 'fas fa-clock-rotate-left'"
+				:title="search ? t('commandHistory.noMatches') : t('commandHistory.empty')"
+				:bordered="false"
+			/>
+			<div v-else class="command-history-list">
+				<ul ref="list" class="m-0 list-none">
 					<li
 						v-for="(entry, index) in filtered"
 						:key="entry.id"
@@ -423,36 +421,39 @@
 			:width="200"
 			@close="context = null"
 		>
-			<button class="context-item" @click="execute(context.entry)">
+			<UiContextMenuItem @click="execute(context.entry)">
 				<i class="fas fa-play" aria-hidden="true"></i>
 				<span>{{ t('commandHistory.execute') }}</span>
-			</button>
-			<button class="context-item" @click="copy(context.entry.command)">
+			</UiContextMenuItem>
+			<UiContextMenuItem @click="copy(context.entry.command)">
 				<i class="fas fa-copy" aria-hidden="true"></i>
 				<span>{{ t('commandHistory.copy') }}</span>
-			</button>
-			<button class="context-item text-error" @click="remove(context.entry.id)">
+			</UiContextMenuItem>
+			<UiContextMenuItem tone="danger" @click="remove(context.entry.id)">
 				<i class="fas fa-trash-alt" aria-hidden="true"></i>
 				<span>{{ t('commandHistory.delete') }}</span>
-			</button>
+			</UiContextMenuItem>
 			<div class="my-1 border-t border-border" role="separator"></div>
-			<button class="context-item" @click="execute(context.entry, true)">
+			<UiContextMenuItem @click="execute(context.entry, true)">
 				<i class="fas fa-paper-plane" aria-hidden="true"></i>
 				<span>{{ t('commandHistory.actions.sendToAllSessions') }}</span>
-			</button>
+			</UiContextMenuItem>
 		</UiContextMenu>
 	</section>
 </template>
 
 <style scoped>
 	.command-history-root {
-		container-type: inline-size;
+		container-type: size;
 		container-name: command-history-pane;
 		min-width: 0;
+		background: color-mix(in srgb, var(--app-bg-color) 94%, transparent);
 	}
 	.command-history-controls {
-		justify-content: center;
-		gap: clamp(0.2rem, 1.25cqi, 0.5rem);
+		justify-content: flex-start;
+		gap: clamp(0.2rem, 1.25cqi, 0.4rem);
+		padding: 0.35rem 0.45rem 0.25rem;
+		background: linear-gradient(180deg, color-mix(in srgb, var(--header-bg-color) 30%, transparent), transparent);
 	}
 	.command-history-controls,
 	.command-history-list-area,
@@ -462,6 +463,7 @@
 	.command-history-row {
 		min-height: calc(var(--history-row-scale) * 1.875rem);
 		padding: calc(var(--history-row-scale) * 0.35rem) calc(var(--history-row-scale) * 0.6rem);
+		border-radius: 0.35rem;
 	}
 	.command-history-row--compact {
 		min-height: calc(var(--history-row-scale) * 1.5rem);
@@ -470,46 +472,110 @@
 	.command-history-command {
 		min-width: 0;
 	}
+	.command-history-list-area {
+		padding: 0.15rem 0.4rem 0.4rem 0.5rem;
+		scrollbar-gutter: stable;
+	}
+	.command-history-list {
+		padding: 0.05rem 0.1rem;
+	}
+	.command-history-search {
+		--ui-control-radius: 0.45rem;
+	}
+	.command-history-empty {
+		min-height: 100%;
+		margin: auto;
+		justify-content: center;
+		background: transparent;
+	}
+	.command-history-empty :deep(.ui-empty-state__icon) {
+		width: 26px;
+		height: 26px;
+		border: 0;
+		background: color-mix(in srgb, var(--text-color) 6%, transparent);
+		color: var(--text-color-secondary);
+		font-size: 11px;
+	}
+	.command-history-empty :deep(.ui-empty-state__title) {
+		font-size: 11px;
+		font-weight: 500;
+		color: var(--text-color-secondary);
+	}
+	@container command-history-pane (min-width: 420px) {
+		.command-history-list {
+			padding-inline: 0.3rem;
+		}
+	}
 	@container command-history-pane (max-width: 340px) {
 		.command-history-controls {
-			gap: 0.25rem;
-			padding: 0.35rem 0.4rem;
+			gap: 0.2rem;
+			padding: 0.3rem 0.35rem 0.22rem;
 		}
 		.command-history-search {
-			padding-inline: 0.5rem;
-			font-size: 0.75rem;
-			height: 1.75rem;
+			--ui-control-font-size: 0.75rem;
 		}
 		.command-history-list-area {
-			padding: 0.35rem 0.35rem;
+			padding: 0.1rem 0.3rem 0.35rem 0.4rem;
 		}
 		.command-history-row {
 			padding-inline: 0.45rem;
 		}
 	}
-	@container command-history-pane (max-width: 125px) {
+	@container command-history-pane (max-width: 150px) {
 		.command-history-controls {
 			flex-wrap: wrap;
-			justify-content: center;
 		}
 		.command-history-search {
 			flex: 1 1 100%;
 			width: 100%;
+			order: 2;
+		}
+		.history-control {
+			order: 1;
 		}
 		.command-history-row {
 			flex-wrap: nowrap;
 			align-items: center;
+			height: 1.6rem;
+		}
+		.command-history-row > :first-child {
+			gap: 0.25rem;
+		}
+		.command-history-row i {
+			display: none;
+		}
+	}
+	@container command-history-pane (max-height: 180px) {
+		.command-history-controls {
+			padding-block: 0.2rem;
+		}
+		.command-history-list-area {
+			padding-top: 0.05rem;
+		}
+		.command-history-row,
+		.command-history-row--compact {
+			min-height: 1.45rem;
+			padding-block: 0.08rem;
+		}
+	}
+	@container command-history-pane (max-height: 120px) {
+		.command-history-controls {
+			border-bottom-color: transparent;
+		}
+		.command-history-timestamp {
+			display: none;
 		}
 	}
 	.history-control {
 		display: flex;
-		width: clamp(1.6rem, 8.5cqi, 1.875rem);
-		height: clamp(1.6rem, 8.5cqi, 1.875rem);
-		flex: 0 0 clamp(1.6rem, 8.5cqi, 1.875rem);
+		width: clamp(1.65rem, 8.5cqi, 1.875rem);
+		height: clamp(1.65rem, 8.5cqi, 1.875rem);
+		flex: 0 0 clamp(1.65rem, 8.5cqi, 1.875rem);
 		align-items: center;
 		justify-content: center;
-		border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
-		border-radius: 0.5rem;
+		border: 1px solid transparent;
+		border-radius: 0.4rem;
+		background: transparent;
 		color: var(--text-color-secondary);
 		transition:
 			background-color 0.15s ease,
@@ -521,36 +587,15 @@
 		font-size: clamp(0.72rem, 3.5cqi, 0.825rem);
 	}
 	.history-control:hover {
-		background: var(--header-bg-color);
+		background: color-mix(in srgb, var(--text-color) 7%, transparent);
 		color: var(--text-color);
-		border-color: var(--border-color);
 	}
 	.history-control--danger:hover {
-		border-color: color-mix(in srgb, var(--status-error-color) 60%, transparent);
 		background: color-mix(in srgb, var(--status-error-color) 12%, transparent);
 		color: var(--status-error-color);
 	}
-
-	.context-item {
-		display: flex;
-		width: calc(100% - 0.5rem);
-		margin-inline: 0.25rem;
-		align-items: center;
-		gap: 0.75rem;
-		border-radius: 0.375rem;
-		padding: 0.4rem 0.75rem;
-		text-align: left;
-		font-size: 0.875rem;
-		cursor: pointer;
-	}
-	.context-item:hover,
-	.context-item:focus-visible {
-		background: color-mix(in srgb, var(--link-active-color) 10%, transparent);
-		color: var(--link-active-color);
-		outline: none;
-	}
-	.context-item i {
-		width: 1rem;
-		text-align: center;
+	.history-control--active {
+		background: color-mix(in srgb, var(--primary-color) 14%, transparent);
+		color: var(--primary-color);
 	}
 </style>

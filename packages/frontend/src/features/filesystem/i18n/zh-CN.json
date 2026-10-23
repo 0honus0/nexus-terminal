@@ -1,5 +1,13 @@
 {
   "fileManager": {
+    "directoryPicker": {
+      "title": "选择目标目录",
+      "select": "使用此目录",
+      "root": "根目录",
+      "empty": "没有可浏览的子目录",
+      "unavailable": "目录内容尚未加载，可刷新或返回根目录重试；已确认的目录仍可选择。",
+      "notDirectory": "所选位置不是目录。"
+    },
     "modalTitle": "文件管理器",
     "resizePopup": "调整文件管理器窗口大小",
     "currentPath": "当前路径",
@@ -139,6 +147,10 @@
       "permissions": "权限",
       "modified": "修改时间",
       "time": "时间"
+    },
+    "sort": {
+      "ascending": "升序",
+      "descending": "降序"
     },
     "uploadStatus": {
       "cancelled": "已取消",

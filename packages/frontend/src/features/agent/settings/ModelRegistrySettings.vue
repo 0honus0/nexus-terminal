@@ -107,8 +107,13 @@
 				@click="load(false)"
 				>{{ t('agent.settings.providers.registryReadStatus') }}</UiButton
 			>
-			<UiButton type="button" appearance="soft" :disabled="busy || refreshBlocked" @click="load(true)"
-				><i class="fa-solid fa-arrows-rotate text-[9px]" :class="{ 'fa-spin': busy }" aria-hidden="true"></i
+			<UiButton
+				type="button"
+				appearance="soft"
+				:loading="busy"
+				:disabled="busy || refreshBlocked"
+				@click="load(true)"
+				><i class="fa-solid fa-arrows-rotate text-[9px]" aria-hidden="true"></i
 				>{{ t('agent.settings.providers.registryRefresh') }}</UiButton
 			>
 		</div>

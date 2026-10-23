@@ -185,13 +185,6 @@
 	font-variant-numeric: tabular-nums;
 }
 
-.ui-catalog-panel__actions {
-	display: flex;
-	flex: 0 0 auto;
-	align-items: center;
-	gap: 7px;
-}
-
 .ui-catalog-toolbar {
 	display: grid;
 	align-items: center;
@@ -215,26 +208,6 @@
 .ui-catalog-toolbar :is(.ui-select, .ui-input) {
 	--ui-control-font-size: 11px;
 	--ui-control-padding-inline: 10px;
-}
-
-.ui-catalog-notice {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 10px;
-	padding: 10px 14px;
-	border-radius: 11px;
-	font-size: 12px;
-}
-
-.ui-catalog-notice--error {
-	background: color-mix(in srgb, var(--status-error-color) 9%, transparent);
-	color: var(--status-error-color);
-}
-
-.ui-catalog-notice--warning {
-	background: color-mix(in srgb, var(--status-warning-color) 9%, transparent);
-	color: var(--status-warning-color);
 }
 
 .ui-catalog-list {
@@ -322,36 +295,6 @@
 	letter-spacing: -0.012em;
 }
 
-.ui-catalog-badge {
-	display: inline-flex;
-	max-width: 10rem;
-	flex: 0 0 auto;
-	align-items: center;
-	padding: 2px 7px;
-	border-radius: 999px;
-	background: color-mix(in srgb, var(--text-color) 6%, transparent);
-	color: var(--text-color-secondary);
-	font-size: 9.5px;
-	font-weight: 650;
-	line-height: 1.55;
-	letter-spacing: 0.03em;
-}
-
-.ui-catalog-badge--accent {
-	background: color-mix(in srgb, var(--link-active-color) 8%, transparent);
-	color: var(--link-active-color);
-}
-
-.ui-catalog-badge--success {
-	background: color-mix(in srgb, var(--status-success-color) 10%, transparent);
-	color: var(--status-success-color);
-}
-
-.ui-catalog-badge--warning {
-	background: color-mix(in srgb, var(--status-warning-color) 10%, transparent);
-	color: var(--status-warning-color);
-}
-
 .ui-catalog-card__address {
 	display: block;
 	overflow: hidden;
@@ -408,30 +351,6 @@
 
 .ui-catalog-card__action-label {
 	display: none;
-}
-
-.ui-catalog-empty {
-	display: flex;
-	min-height: 240px;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	gap: 10px;
-	padding: 28px;
-	color: var(--text-color-secondary);
-	font-size: 12px;
-	text-align: center;
-}
-
-.ui-catalog-empty__icon {
-	display: grid;
-	width: 42px;
-	height: 42px;
-	place-items: center;
-	border-radius: 13px;
-	background: color-mix(in srgb, var(--text-color) 4%, transparent);
-	color: var(--text-color-secondary);
-	font-size: 15px;
 }
 
 /* Settings share one quiet card material so nested panels never accumulate borders. */
@@ -622,10 +541,6 @@
 		align-items: stretch;
 		flex-direction: column;
 		gap: 10px;
-	}
-
-	.ui-catalog-panel__actions {
-		width: 100%;
 	}
 
 	.ui-catalog-toolbar--notifications {

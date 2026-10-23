@@ -1,5 +1,6 @@
 <script setup lang="ts">
 	import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
+	import { UiBadge } from '@/foundation/ui';
 	const props = defineProps<{ active: boolean; draft: string }>();
 	const emit = defineEmits<{ select: [text: string] }>();
 	type HomePromptTone = 'primary' | 'emerald' | 'sky' | 'amber';
@@ -150,12 +151,9 @@
 		@focusout="homePromptPaused = false"
 	>
 		<!-- 顶端微胶囊标识 -->
-		<div
-			class="mb-3.5 inline-flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/[0.08] px-3.5 py-0.5 text-[11px] font-semibold tracking-wider text-primary shadow-2xs"
-		>
-			<span class="agent-home-pulse h-1.5 w-1.5 rounded-full bg-primary animate-pulse"></span>
+		<UiBadge tone="primary" class="mb-3.5 px-3.5 tracking-wider" dot dot-pulse>
 			<span>{{ $t('agent.conversation.heroTag') }}</span>
-		</div>
+		</UiBadge>
 
 		<!-- 柔和环境光晕与现代卡片图标 -->
 		<div class="relative flex items-center justify-center">

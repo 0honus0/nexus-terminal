@@ -10,7 +10,18 @@
 		SelectTrigger,
 		SelectViewport,
 	} from 'reka-ui';
-	import { Comment, Fragment, Text, computed, ref, useAttrs, useSlots, type VNode } from 'vue';
+	import {
+		Comment,
+		Fragment,
+		Text,
+		computed,
+		onBeforeUnmount,
+		ref,
+		useAttrs,
+		useSlots,
+		watch,
+		type VNode,
+	} from 'vue';
 	import type { UiDensity, UiSelectOption, UiSelectValue } from './uiTypes';
 
 	// The wrapper div only owns layout classes; every other attribute (notably
@@ -53,7 +64,7 @@
 			density: 'default',
 			disabled: false,
 			invalid: false,
-			align: 'start',
+			align: undefined,
 			textAlign: 'start',
 			matchTriggerWidth: true,
 			panelClass: '',
@@ -123,6 +134,30 @@
 		value === '' ? emptyValueSentinel.value : value === null ? nullValueSentinel.value : value;
 
 	const open = ref(false);
+	const panelSide = ref<'top' | 'bottom' | 'left' | 'right' | null>(null);
+	let panelSideObserver: MutationObserver | null = null;
+	const resolvedAlign = computed(() => props.align ?? (props.textAlign === 'center' ? 'center' : 'start'));
+
+	const syncPanelSide = (): void => {
+		const trigger = root.value?.querySelector<HTMLElement>('[role="combobox"]');
+		const panelId = trigger?.getAttribute('aria-controls');
+		const panel = panelId ? document.getElementById(panelId) : null;
+		const side = panel?.dataset.side;
+		panelSide.value = side === 'top' || side === 'bottom' || side === 'left' || side === 'right' ? side : null;
+		if (panel && !panelSideObserver) {
+			panelSideObserver = new MutationObserver(syncPanelSide);
+			panelSideObserver.observe(panel, { attributes: true, attributeFilter: ['data-side'] });
+		}
+	};
+
+	watch(open, (isOpen) => {
+		if (isOpen) return;
+		panelSide.value = null;
+		panelSideObserver?.disconnect();
+		panelSideObserver = null;
+	});
+
+	onBeforeUnmount(() => panelSideObserver?.disconnect());
 
 	const selectedLabel = computed(() => {
 		const selected = resolvedOptions.value.find((option) => option.value === props.modelValue);
@@ -154,6 +189,7 @@
 		:data-density="props.density"
 		:data-invalid="props.invalid || undefined"
 		:data-disabled="props.disabled || undefined"
+		:data-panel-side="panelSide || undefined"
 		:data-text-align="props.textAlign !== 'start' ? props.textAlign : undefined"
 		:data-state="open ? 'open' : 'closed'"
 		class="ui-select"
@@ -205,13 +241,14 @@
 					:data-match-trigger-width="props.matchTriggerWidth || undefined"
 					:data-fit-longest-option="props.fitLongestOption || undefined"
 					position="popper"
-					:align="props.align"
+					:align="resolvedAlign"
 					:side-offset="0"
 					:collision-padding="12"
 					:avoid-collisions="true"
 					:body-lock="false"
 					class="ui-surface ui-radius--panel ui-select__panel ui-glass-panel"
 					:class="[{ 'ui-select__panel--no-indicator': props.hideIndicator }, props.panelClass]"
+					@placed="syncPanelSide"
 				>
 					<SelectViewport class="ui-select__viewport">
 						<SelectItem

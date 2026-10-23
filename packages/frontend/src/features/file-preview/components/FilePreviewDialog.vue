@@ -1,6 +1,7 @@
 <script setup lang="ts">
 	import { computed, nextTick, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
+	import { UiButton } from '@/foundation/ui';
 	import { useFeedback } from '@/shared/feedback/public';
 	import type { FilePreviewSessionController } from '../composables/useFilePreviewTabs';
 
@@ -96,51 +97,59 @@
 				@keydown="handleTabKeydown($event, tab.id)"
 			>
 				<span class="min-w-0 flex-1 truncate">{{ tab.name }}</span>
-				<button
-					type="button"
-					class="flex h-11 w-11 shrink-0 items-center justify-center rounded text-lg leading-none opacity-70 hover:bg-border hover:opacity-100 focus:opacity-100 focus:outline-none sm:h-6 sm:w-6 sm:text-sm"
+				<UiButton
+					appearance="ghost"
+					density="compact"
+					icon-only
+					class="preview-tab-close"
 					:aria-label="t('fileManager.preview.closeFile', { file: tab.name })"
 					@click="closeTab($event, tab.id)"
 				>
-					×
-				</button>
+					<i class="fas fa-times" aria-hidden="true"></i>
+				</UiButton>
 			</div>
 		</div>
 
-		<header
-			v-if="active"
-			class="flex min-h-14 shrink-0 items-center gap-2 border-b border-border bg-header px-3 py-1.5 sm:min-h-12 sm:gap-3 sm:px-4 sm:py-2"
-		>
-			<div class="min-w-0 flex-1">
-				<div class="truncate text-sm font-medium" :title="file.name">{{ file.name }}</div>
-				<div v-if="subtitle" class="hidden truncate text-xs text-text-secondary sm:block">{{ subtitle }}</div>
-			</div>
+		<header v-if="active" class="file-preview-toolbar flex shrink-0 items-center justify-end gap-2">
 			<slot name="toolbar" />
-			<button
-				type="button"
-				class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-border text-sm text-text-secondary hover:bg-border hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary disabled:cursor-wait disabled:opacity-60 sm:h-8 sm:w-8"
+			<UiButton
+				appearance="soft"
+				density="compact"
+				icon-only
+				class="preview-header-action"
+				:loading="isRefreshing"
 				:disabled="isRefreshing"
-				:aria-busy="isRefreshing"
 				:aria-label="t('fileManager.preview.refresh')"
 				:title="t('fileManager.preview.refresh')"
 				@click="refreshCurrentTab"
 			>
-				<i class="fas fa-rotate" :class="isRefreshing ? 'fa-spin' : ''" aria-hidden="true"></i>
-			</button>
-			<button
-				type="button"
-				class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-border text-2xl leading-none text-text-secondary hover:bg-border hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary sm:h-8 sm:w-8 sm:text-xl"
+				<i class="fas fa-rotate" aria-hidden="true"></i>
+			</UiButton>
+			<UiButton
+				appearance="soft"
+				density="compact"
+				icon-only
+				class="preview-header-action"
 				:aria-label="t('fileManager.preview.close')"
 				:title="t('fileManager.preview.close')"
 				@click="emit('close')"
 			>
-				×
-			</button>
+				<i class="fas fa-times" aria-hidden="true"></i>
+			</UiButton>
 		</header>
 
 		<div class="min-h-0 flex-1 overflow-auto">
 			<slot />
 		</div>
+
+		<footer v-if="active && activeTab" class="file-preview-statusbar">
+			<i class="fas fa-file-lines" aria-hidden="true"></i>
+			<span class="file-preview-path" :title="activeTab.path">{{ activeTab.path }}</span>
+			<span v-if="activeTab.scopeLabel" class="file-preview-scope" :title="activeTab.scopeLabel">{{
+				activeTab.scopeLabel
+			}}</span>
+			<span v-if="subtitle" class="file-preview-kind">{{ subtitle }}</span>
+		</footer>
 	</section>
 </template>
 
@@ -153,5 +162,100 @@
 
 	.file-preview-tabs > [role='tab'] {
 		scroll-snap-align: start;
+	}
+
+	.file-preview-toolbar {
+		min-height: 2.75rem;
+		padding: 0.35rem 0.65rem;
+		border-bottom: 1px solid var(--border-color);
+		background: color-mix(in srgb, var(--header-bg-color) 82%, transparent);
+	}
+
+	.file-preview-statusbar {
+		display: flex;
+		min-width: 0;
+		min-height: 2.25rem;
+		flex: 0 0 auto;
+		align-items: center;
+		gap: 0.45rem;
+		overflow: hidden;
+		padding: 0.35rem 0.75rem;
+		border-top: 1px solid var(--border-color);
+		background: color-mix(in srgb, var(--header-bg-color) 82%, transparent);
+		color: var(--text-color-secondary);
+		font-size: 0.68rem;
+		white-space: nowrap;
+	}
+
+	.file-preview-statusbar > i {
+		flex: 0 0 auto;
+		color: var(--link-active-color);
+		font-size: 0.62rem;
+	}
+
+	.file-preview-path {
+		min-width: 0;
+		flex: 1 1 auto;
+		overflow: hidden;
+		color: var(--text-color);
+		font-family: var(--font-family-monospace);
+		text-overflow: ellipsis;
+	}
+
+	.file-preview-scope {
+		max-width: 8rem;
+		flex: 0 0 auto;
+		overflow: hidden;
+		border: 1px solid color-mix(in srgb, var(--link-active-color) 24%, var(--border-color));
+		border-radius: 999px;
+		padding: 0.1rem 0.42rem;
+		color: color-mix(in srgb, var(--link-active-color) 78%, var(--text-color));
+		text-overflow: ellipsis;
+	}
+
+	.file-preview-kind {
+		max-width: 14rem;
+		flex: 0 0 auto;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.preview-tab-close {
+		width: 44px;
+		height: 44px;
+		min-width: 44px;
+		flex: 0 0 44px;
+		opacity: 0.72;
+	}
+
+	.preview-header-action {
+		width: 44px;
+		height: 44px;
+		min-width: 44px;
+		flex: 0 0 44px;
+	}
+
+	@media (min-width: 640px) {
+		.preview-tab-close,
+		.preview-header-action {
+			width: 32px;
+			height: 32px;
+			min-width: 32px;
+			flex-basis: 32px;
+		}
+	}
+
+	@media (max-width: 639px) {
+		.file-preview-toolbar {
+			min-height: 2.75rem;
+		}
+
+		.file-preview-kind {
+			display: none;
+		}
+
+		.file-preview-statusbar {
+			padding-inline: 0.55rem;
+		}
 	}
 </style>

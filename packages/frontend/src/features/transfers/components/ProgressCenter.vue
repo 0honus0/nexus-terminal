@@ -3,7 +3,7 @@
 	import { useI18n } from 'vue-i18n';
 	import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
 	import { useDraggablePosition, useResizeHandle } from '@/foundation/interaction';
-	import { UiResizeHandle } from '@/foundation/ui';
+	import { UiButton, UiEmptyState, UiResizeHandle } from '@/foundation/ui';
 	import type { TransferTask } from '../model/transfer-types';
 	import { transferTaskErrorDescriptor, transferTaskWarningDescriptor } from '../presentation-transfer-message';
 
@@ -230,7 +230,8 @@
 		<div
 			v-show="initialized"
 			ref="panel"
-			class="transfer-progress-window fixed z-[60] flex min-h-0 flex-col overflow-hidden border border-border bg-background text-sm shadow-xl"
+			data-ui-gen="2"
+			class="transfer-progress-window ui-surface ui-surface--raised ui-radius--panel fixed z-[60] flex min-h-0 flex-col overflow-hidden text-sm"
 			:class="[
 				`transfer-progress-window--${presentationMode}`,
 				drag.dragging.value ? 'dragging select-none' : '',
@@ -240,7 +241,7 @@
 		>
 			<header class="transfer-progress-header shrink-0" @pointerdown="drag.startDragging">
 				<template v-if="presentationMode === 'upload'">
-					<div class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+					<div class="flex min-w-0 flex-1 items-center gap-2">
 						<h4 class="m-0 min-w-0 flex-1 truncate text-sm font-semibold">
 							<span v-if="sourceLabel">{{ sourceLabel }} · </span>{{ t('fileManager.uploadTasks') }}
 						</h4>
@@ -250,23 +251,29 @@
 						>
 							{{ t('fileManager.uploadSpeed') }} {{ formatSpeed(aggregateSpeed) }}
 						</span>
-						<button
-							type="button"
-							class="progress-icon-button h-7 w-7"
-							:title="t('progressCenter.hide')"
-							:aria-label="t('progressCenter.hide')"
-							@click="emit('hide')"
-						>
-							<i class="fas fa-minus" aria-hidden="true"></i>
-						</button>
-						<button
-							v-if="activeTasks.length > 1"
-							type="button"
-							class="shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-error transition-colors hover:bg-error/10"
-							@click="emit('cancelAll')"
-						>
-							{{ t('fileManager.actions.cancelAll') }} ({{ activeTasks.length }})
-						</button>
+						<div class="ml-auto flex shrink-0 items-center gap-2">
+							<UiButton
+								v-if="activeTasks.length > 1"
+								appearance="ghost"
+								tone="danger"
+								density="compact"
+								class="shrink-0 text-xs font-medium"
+								@click="emit('cancelAll')"
+							>
+								{{ t('fileManager.actions.cancelAll') }} ({{ activeTasks.length }})
+							</UiButton>
+							<UiButton
+								appearance="ghost"
+								density="compact"
+								icon-only
+								class="progress-icon-button h-7 w-7"
+								:title="t('progressCenter.hide')"
+								:aria-label="t('progressCenter.hide')"
+								@click="emit('hide')"
+							>
+								<i class="fas fa-minus" aria-hidden="true"></i>
+							</UiButton>
+						</div>
 					</div>
 				</template>
 
@@ -285,15 +292,17 @@
 							<div class="text-[11px] text-text-secondary">{{ t('progressCenter.running') }}</div>
 						</div>
 						<span v-if="sorted[0]" class="archive-percent">{{ Math.round(sorted[0].progress) }}%</span>
-						<button
-							type="button"
+						<UiButton
+							appearance="ghost"
+							density="compact"
+							icon-only
 							class="progress-icon-button h-7 w-7"
 							:title="t('progressCenter.hide')"
 							:aria-label="t('progressCenter.hide')"
 							@click="emit('hide')"
 						>
 							<i class="fas fa-minus" aria-hidden="true"></i>
-						</button>
+						</UiButton>
 					</div>
 				</template>
 
@@ -311,30 +320,38 @@
 						>
 							{{ t('fileManager.transferSpeed') }} {{ formatSpeed(aggregateSpeed) }}
 						</span>
-						<button
+						<UiButton
 							v-if="activeTasks.length > 1"
-							type="button"
-							class="rounded px-2 py-1 text-xs text-error hover:bg-error/10"
+							appearance="ghost"
+							tone="danger"
+							density="compact"
+							class="text-xs"
 							@click="emit('cancelAll')"
 						>
 							{{ t('progressCenter.cancelAll') }}
-						</button>
-						<button
-							type="button"
+						</UiButton>
+						<UiButton
+							appearance="ghost"
+							density="compact"
+							icon-only
 							class="progress-icon-button h-6 w-6"
 							:title="t('progressCenter.hide')"
 							:aria-label="t('progressCenter.hide')"
 							@click="emit('hide')"
 						>
 							<i class="fas fa-minus" aria-hidden="true"></i>
-						</button>
+						</UiButton>
 					</div>
 				</template>
 			</header>
 
-			<p v-if="!sorted.length" class="py-4 text-center text-sm text-text-secondary">
-				{{ t('progressCenter.empty') }}
-			</p>
+			<UiEmptyState
+				v-if="!sorted.length"
+				compact
+				:bordered="false"
+				icon="fa-solid fa-arrow-right-arrow-left"
+				:title="t('progressCenter.empty')"
+			/>
 
 			<ul
 				v-else-if="presentationMode === 'upload'"
@@ -359,34 +376,50 @@
 								></span
 							>
 						</div>
-						<progress
+						<div
 							v-if="!done(task.status)"
-							:value="task.progress"
-							max="100"
-							class="legacy-progress mt-2 block h-1.5 w-full"
-						></progress>
+							class="transfer-progress-track mt-2"
+							role="progressbar"
+							aria-valuemin="0"
+							aria-valuemax="100"
+							:aria-valuenow="Math.round(task.progress)"
+						>
+							<span
+								class="transfer-progress-value"
+								:style="{
+									transform: `scaleX(${Math.max(0, Math.min(100, task.progress)) / 100})`,
+								}"
+							></span>
+						</div>
 					</div>
-					<span v-if="!done(task.status)" class="text-right text-xs tabular-nums text-text-secondary">
+					<span
+						v-if="!done(task.status)"
+						class="w-11 shrink-0 text-right text-xs tabular-nums text-text-secondary"
+					>
 						{{ Math.round(task.progress) }}%
 					</span>
 					<span v-else aria-hidden="true"></span>
-					<button
+					<UiButton
 						v-if="!done(task.status)"
-						type="button"
-						class="justify-self-end rounded-lg px-2 py-1 text-xs text-error hover:bg-error/10"
+						appearance="ghost"
+						tone="danger"
+						density="compact"
+						class="justify-self-end text-xs"
 						@click="emit('cancel', task.id)"
 					>
 						{{ t('common.cancel') }}
-					</button>
-					<button
+					</UiButton>
+					<UiButton
 						v-else
-						type="button"
-						class="justify-self-end rounded px-1.5 py-0.5 text-text-secondary hover:bg-border/60"
+						appearance="ghost"
+						density="compact"
+						icon-only
+						class="justify-self-end"
 						:aria-label="t('common.remove')"
 						@click="emit('remove', task.id)"
 					>
 						<i class="fas fa-times" aria-hidden="true"></i>
-					</button>
+					</UiButton>
 					<span v-if="task.error || task.errorKind" class="col-span-3 break-words text-xs text-error">{{
 						taskError(task)
 					}}</span>
@@ -439,19 +472,20 @@
 						<i class="far fa-file-lines" aria-hidden="true"></i
 						><span class="truncate">{{ currentFilename(task) }}</span>
 					</div>
-					<button
+					<UiButton
 						v-if="!done(task.status)"
-						type="button"
-						class="archive-stop-button"
+						appearance="ghost"
+						tone="danger"
+						density="compact"
 						:disabled="task.status === 'cancelling'"
 						@click="emit('cancel', task.id)"
 					>
 						<i class="fas fa-stop" aria-hidden="true"></i
 						>{{ task.status === 'cancelling' ? t('progressCenter.cancelling') : t('common.cancel') }}
-					</button>
-					<button v-else type="button" class="archive-stop-button" @click="emit('remove', task.id)">
+					</UiButton>
+					<UiButton v-else appearance="ghost" density="compact" @click="emit('remove', task.id)">
 						<i class="fas fa-times" aria-hidden="true"></i>{{ t('common.remove') }}
-					</button>
+					</UiButton>
 					<p v-if="task.error || task.errorKind" class="m-0 text-xs text-error">{{ taskError(task) }}</p>
 					<p v-if="task.warning || task.warningKind" class="m-0 text-xs text-warning">
 						{{ taskWarning(task) }}
@@ -466,7 +500,7 @@
 					:data-task-id="task.id"
 					:data-task-kind="task.kind"
 					:data-task-status="task.status"
-					class="mb-3 last:mb-0"
+					class="transfer-mixed-row mb-2 last:mb-0"
 				>
 					<div class="mb-1 flex min-w-0 items-center gap-2 text-xs">
 						<span class="min-w-0 flex-1 truncate" :title="task.currentFile || task.label"
@@ -474,7 +508,20 @@
 						>
 						<span class="shrink-0 tabular-nums">{{ Math.round(task.progress * 10) / 10 }}%</span>
 					</div>
-					<progress :value="task.progress" max="100" class="legacy-progress block h-2 w-full"></progress>
+					<div
+						class="transfer-progress-track"
+						role="progressbar"
+						aria-valuemin="0"
+						aria-valuemax="100"
+						:aria-valuenow="Math.round(task.progress)"
+					>
+						<span
+							class="transfer-progress-value"
+							:style="{
+								transform: `scaleX(${Math.max(0, Math.min(100, task.progress)) / 100})`,
+							}"
+						></span>
+					</div>
 					<div class="mt-1 flex items-center justify-between gap-2 text-[11px] text-text-secondary">
 						<span :class="task.status === 'error' ? 'text-error' : ''">{{
 							task.error || task.errorKind ? taskError(task) : t(`progressCenter.status.${task.status}`)
@@ -490,13 +537,15 @@
 						</span>
 					</div>
 					<div v-if="!done(task.status)" class="mt-1 flex justify-end">
-						<button
-							type="button"
-							class="text-xs text-error hover:underline"
+						<UiButton
+							appearance="ghost"
+							tone="danger"
+							density="compact"
+							class="justify-self-end text-xs"
 							@click="emit('cancel', task.id)"
 						>
 							{{ t('common.cancel') }}
-						</button>
+						</UiButton>
 					</div>
 				</li>
 			</ul>
@@ -518,28 +567,24 @@
 		min-height: min(130px, calc(100vh - 16px));
 		max-width: calc(100vw - 16px);
 		max-height: calc(100vh - 16px);
-		border-radius: 14px;
-		background: #fff;
-		background: rgb(from var(--card-bg-color, var(--app-bg-color)) r g b / 1);
+		border-radius: 18px;
 	}
 	.transfer-progress-window--archive {
-		border-color: var(--border-color);
+		border-color: var(--ui-hairline);
 	}
 	.transfer-progress-header {
 		display: flex;
-		min-height: 45px;
+		min-height: 46px;
 		align-items: center;
 		justify-content: space-between;
 		gap: 8px;
-		border-bottom: 1px solid var(--border-color);
-		padding: 8px 10px;
+		border-bottom: 1px solid var(--ui-hairline);
+		padding: 9px 11px;
 		cursor: grab;
-		background: #fff;
-		background: rgb(from var(--header-bg-color, var(--app-bg-color)) r g b / 1);
+		background: color-mix(in srgb, var(--header-bg-color) 48%, transparent);
 	}
 	.transfer-progress-window--archive .transfer-progress-header {
-		background: #fff;
-		background: rgb(from var(--header-bg-color, var(--app-bg-color)) r g b / 1);
+		background: color-mix(in srgb, var(--header-bg-color) 48%, transparent);
 	}
 	.dragging .transfer-progress-header {
 		cursor: grabbing;
@@ -564,25 +609,39 @@
 		align-items: center;
 		column-gap: 0.5rem;
 		row-gap: 0.25rem;
-		padding-block: 6px;
+		padding: 9px 10px;
+		border: 1px solid var(--ui-hairline);
+		border-radius: 13px;
+		background: color-mix(in srgb, var(--card-bg-color) 44%, transparent);
+		box-shadow: var(--ui-glass-highlight);
 	}
-	.legacy-progress {
-		appearance: none;
+	.transfer-progress-track {
+		position: relative;
+		width: 100%;
+		height: 6px;
 		overflow: hidden;
 		border-radius: 999px;
-		background: var(--border-color);
+		background: color-mix(in srgb, var(--border-color) 58%, transparent);
+		box-shadow: inset 0 1px 1px rgb(0 0 0 / 8%);
 	}
-	.legacy-progress::-webkit-progress-bar {
-		border-radius: 999px;
-		background: var(--border-color);
+	.transfer-progress-value {
+		position: absolute;
+		inset: 0;
+		border-radius: inherit;
+		transform-origin: left center;
+		background-image: linear-gradient(
+			90deg,
+			var(--link-active-color),
+			color-mix(in srgb, var(--link-active-color) 58%, white)
+		);
+		transition: transform 180ms ease;
 	}
-	.legacy-progress::-webkit-progress-value {
-		border-radius: 999px;
-		background: var(--link-active-color);
-	}
-	.legacy-progress::-moz-progress-bar {
-		border-radius: 999px;
-		background: var(--link-active-color);
+	.transfer-mixed-row {
+		padding: 9px 10px;
+		border: 1px solid var(--ui-hairline);
+		border-radius: 13px;
+		background: color-mix(in srgb, var(--card-bg-color) 44%, transparent);
+		box-shadow: var(--ui-glass-highlight);
 	}
 	.archive-icon {
 		display: grid;
@@ -604,16 +663,22 @@
 	.archive-progress-body {
 		display: grid;
 		gap: 10px;
+		margin: 6px 10px;
 		padding: 11px 12px 12px;
+		border: 1px solid var(--ui-hairline);
+		border-radius: 13px;
+		background: color-mix(in srgb, var(--card-bg-color) 44%, transparent);
+		box-shadow: var(--ui-glass-highlight);
 	}
 	.archive-progress-body + .archive-progress-body {
-		border-top: 1px solid var(--border-color);
+		border-top: 1px solid var(--ui-hairline);
 	}
 	.archive-progress-track {
 		height: 7px;
 		overflow: hidden;
 		border-radius: 999px;
-		background: var(--border-color);
+		background: color-mix(in srgb, var(--border-color) 58%, transparent);
+		box-shadow: inset 0 1px 1px rgb(0 0 0 / 8%);
 	}
 	.archive-progress-value {
 		width: 100%;
@@ -676,6 +741,7 @@
 		.upload-task-row {
 			grid-template-columns: minmax(0, 1fr) auto auto;
 			column-gap: 0.35rem;
+			padding-inline: 9px;
 		}
 	}
 </style>

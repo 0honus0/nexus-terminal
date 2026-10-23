@@ -1,5 +1,13 @@
 {
   "fileManager": {
+    "directoryPicker": {
+      "title": "転送先ディレクトリを選択",
+      "select": "このディレクトリを使用",
+      "root": "ルートディレクトリ",
+      "empty": "参照できるサブディレクトリはありません",
+      "unavailable": "内容を読み込めません。更新するかルートに戻って再試行してください。確認済みのディレクトリは選択できます。",
+      "notDirectory": "選択した場所はディレクトリではありません。"
+    },
     "modalTitle": "ファイルマネージャー",
     "resizePopup": "ファイルマネージャーのウィンドウサイズを変更",
     "currentPath": "現在のパス",
@@ -139,6 +147,10 @@
       "permissions": "権限",
       "modified": "変更日",
       "time": "時間"
+    },
+    "sort": {
+      "ascending": "昇順",
+      "descending": "降順"
     },
     "uploadStatus": {
       "cancelled": "キャンセルされました",

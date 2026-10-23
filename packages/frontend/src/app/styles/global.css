@@ -86,11 +86,7 @@ a {
 	a:hover i,
 	a:hover .fas,
 	a:hover .far,
-	a:hover .fab,
-	.icon-interactive:hover i,
-	.icon-interactive:hover .fas,
-	.icon-interactive:hover .far,
-	.icon-interactive:hover .fab {
+	a:hover .fab {
 		color: var(--icon-hover-color);
 	}
 
@@ -128,8 +124,8 @@ a {
 		opacity: 1;
 	}
 
-	input:focus:not([data-no-highlight]):not(.no-highlight),
-	textarea:focus:not([data-no-highlight]):not(.no-highlight) {
+	input:focus:not([data-no-highlight]),
+	textarea:focus:not([data-no-highlight]) {
 		border-color: var(--input-focus-border-color);
 		outline: 0;
 		box-shadow: 0 0 0 2px var(--input-focus-glow);

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiModal, UiSpinner } from '@/foundation/ui';
+	import { UiButton, UiLoadingState, UiModal } from '@/foundation/ui';
 	import ConnectionForm from './ConnectionForm.vue';
 	import { useConnectionEditor } from '../composables/use-connection-editor';
 	import type { ConnectionSummary } from '../model/connection-types';
@@ -19,10 +19,13 @@
 		content-class="!flex !min-h-0 !flex-1 !flex-col !overflow-hidden !py-0"
 		@close="emit('close')"
 	>
-		<div v-if="loading && !ready" class="flex min-h-48 flex-col items-center justify-center gap-3">
-			<UiSpinner />
-			<p class="text-sm text-text-secondary">{{ t('common.loading') }}</p>
-		</div>
+		<UiLoadingState
+			v-if="loading && !ready"
+			class="min-h-48"
+			compact
+			:bordered="false"
+			:title="t('common.loading')"
+		/>
 		<div v-else-if="!ready" class="space-y-4 py-4">
 			<div class="flex flex-wrap justify-end gap-2">
 				<UiButton type="button" :disabled="loading" @click="refresh">

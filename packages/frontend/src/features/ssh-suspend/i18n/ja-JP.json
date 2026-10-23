@@ -1,7 +1,7 @@
 {
   "suspendedSshSessions": {
     "modalTitle": "中断された SSH セッション",
-    "searchPlaceholder": "セッションを検索（名前、接続名など）",
+    "searchPlaceholder": "セッションを検索",
     "loading": "中断されたセッションを読み込み中...",
     "noResults": "条件に一致する中断セッションはありません。",
     "tooltip": {

@@ -5,7 +5,7 @@
 	const props = withDefaults(
 		defineProps<{
 			surface?: UiSurfaceKind;
-			radius?: 'control' | 'panel' | 'pill';
+			radius?: 'control' | 'panel';
 		}>(),
 		{
 			surface: 'raised',

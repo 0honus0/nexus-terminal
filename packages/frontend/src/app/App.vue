@@ -2,6 +2,7 @@
 	import { computed, defineAsyncComponent, markRaw, onBeforeUnmount, ref, watch } from 'vue';
 	import { RouterView, useRoute } from 'vue-router';
 	import { useI18n } from 'vue-i18n';
+	import { UiLoadingState } from '@/foundation/ui';
 	import { preloadAuthenticatedRoutes } from './router';
 	import { logger } from '@/client/logging/logger';
 	import AppHeader from './shell/AppHeader.vue';
@@ -188,6 +189,9 @@
 
 <template>
 	<div class="flex min-h-dvh flex-col text-foreground" :inert="backup.blocked">
+		<div v-if="!route.name" class="app-boot-loading">
+			<UiLoadingState compact :title="t('common.loading')" />
+		</div>
 		<BackupRecoveryOverlay />
 		<AppHeader v-if="authenticatedShellVisible" @customize-appearance="appearance.openCustomizer()" />
 		<div class="min-h-0 flex-1">
@@ -224,3 +228,26 @@
 		<AppUpdatePrompt />
 	</div>
 </template>
+
+<style scoped>
+	.app-boot-loading {
+		position: fixed;
+		z-index: 5000;
+		inset: 0;
+		display: grid;
+		place-items: center;
+		padding: 24px;
+		background:
+			radial-gradient(
+				circle at 50% 38%,
+				color-mix(in srgb, var(--link-active-color) 9%, transparent),
+				transparent 22rem
+			),
+			var(--app-bg-color);
+	}
+
+	.app-boot-loading :deep(.ui-loading-state) {
+		width: min(26rem, 100%);
+		min-height: 10rem;
+	}
+</style>

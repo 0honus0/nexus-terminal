@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { computed } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiTokenInput, type UiTokenOption } from '@/foundation/ui';
+	import { UiButton, UiTokenInput, type UiTokenOption } from '@/foundation/ui';
 	import { useTagPicker } from '../composables/use-tag-picker';
 
 	const model = defineModel<number[]>({ default: () => [] });
@@ -12,14 +12,14 @@
 
 <template>
 	<div class="space-y-2">
-		<button
+		<UiButton
 			v-if="message || data.needsRefresh.value"
 			type="button"
 			:disabled="pending || data.busy.value"
 			@click="refresh"
 		>
 			{{ t('tags.refresh') }}
-		</button>
+		</UiButton>
 		<UiTokenInput
 			:model-value="model"
 			@update:model-value="updateSelection"

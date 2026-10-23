@@ -23,3 +23,15 @@ export interface LoadedEditorDocument {
 	content: string;
 	encoding: string;
 }
+
+export interface EditorSearchState {
+	current: number;
+	total: number;
+}
+
+export interface EditorSearchController {
+	setSearchQuery(query: string): EditorSearchState;
+	findNextSearch(query: string): EditorSearchState;
+	findPreviousSearch(query: string): EditorSearchState;
+	clearSearch(): void;
+}

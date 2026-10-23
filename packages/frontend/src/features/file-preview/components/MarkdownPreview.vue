@@ -3,6 +3,7 @@
 	import { useI18n } from 'vue-i18n';
 	import { marked } from 'marked';
 	import DOMPurify from 'dompurify';
+	import { UiButton } from '@/foundation/ui';
 	import FilePreviewDialog from './FilePreviewDialog.vue';
 	import PreviewSearchBar from './PreviewSearchBar.vue';
 	import {
@@ -119,14 +120,16 @@
 				@previous="moveSearch(-1)"
 				@next="moveSearch(1)"
 			/>
-			<button
+			<UiButton
 				type="button"
-				class="flex h-11 shrink-0 items-center gap-1.5 rounded-md border border-border px-3 text-sm text-text-secondary hover:bg-border hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary sm:h-8"
+				appearance="soft"
+				density="compact"
+				class="h-11 shrink-0 sm:h-8"
 				@click="emit('edit')"
 			>
 				<i class="fas fa-pen" aria-hidden="true"></i>
 				<span>{{ t('fileManager.actions.edit') }}</span>
-			</button>
+			</UiButton>
 		</template>
 		<article
 			ref="host"

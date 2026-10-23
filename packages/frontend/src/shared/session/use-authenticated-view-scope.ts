@@ -5,7 +5,12 @@ export type ViewRevocation = 'session' | 'view' | 'disposed';
 
 /** Owns UI intentions; accepted work remains tracked by its feature store or runtime. */
 export function useAuthenticatedViewScope(
-	options: { available?: () => boolean; onRevoke?: (reason: ViewRevocation) => void } = {},
+	options: {
+		available?: () => boolean;
+		/** Keep the current read state while a sibling view temporarily hides this surface. */
+		retainOnView?: boolean;
+		onRevoke?: (reason: ViewRevocation) => void;
+	} = {},
 ): {
 	capture(): AbortSignal;
 	isCurrent(signal: AbortSignal): boolean;
@@ -14,6 +19,7 @@ export function useAuthenticatedViewScope(
 	let active = true;
 	let disposed = false;
 	const available = options.available ?? (() => true);
+	const retainOnView = options.retainOnView ?? false;
 
 	function revoke(reason: ViewRevocation): void {
 		scope.abort();
@@ -32,7 +38,7 @@ export function useAuthenticatedViewScope(
 		(value) => {
 			if (value) {
 				activate();
-			} else {
+			} else if (!retainOnView) {
 				revoke('view');
 			}
 		},
@@ -56,6 +62,6 @@ export function useAuthenticatedViewScope(
 		capture: (): AbortSignal => scope.signal,
 
 		isCurrent: (signal: AbortSignal): boolean =>
-			!disposed && active && available() && scope.signal === signal && !signal.aborted,
+			!disposed && active && (available() || retainOnView) && scope.signal === signal && !signal.aborted,
 	};
 }

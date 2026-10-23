@@ -2,7 +2,7 @@
 	import { computed, toRaw } from 'vue';
 	import { structurallyEqual } from '@/foundation/data';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiCheckbox, UiInfoHint } from '@/foundation/ui';
+	import { UiButton, UiCheckbox, UiEmptyState, UiInfoHint, UiInlineNotice } from '@/foundation/ui';
 	import type { AgentCapability } from '@nexus-terminal/shared/agent/governance/values';
 	import type { ManagedApp } from '../model/app-management-types';
 	import { useAppGovernance } from '../composables/use-app-governance';
@@ -156,8 +156,8 @@
 					<h4 class="text-xs font-bold text-foreground">
 						{{ t('agent.settings.apps.capabilitiesHeader') }}
 					</h4>
-					<span class="rounded-full bg-background/60 px-2 py-0.5 font-mono text-[10px] text-text-secondary"
-						>{{ grantedCount }} / {{ definitions.length }}</span
+					<UiBadge appearance="ghost" density="compact" class="font-mono"
+						>{{ grantedCount }} / {{ definitions.length }}</UiBadge
 					>
 					<UiInfoHint :text="t('agent.settings.apps.capabilitiesSubtitle')" />
 				</div>
@@ -199,15 +199,11 @@
 						appearance="solid"
 						tone="primary"
 						class="justify-center"
+						:loading="grantOperation.busy.value"
 						:disabled="grantBlocked || !grantChanged"
 						@click="saveGrants"
 					>
-						<i
-							:class="
-								grantOperation.busy.value ? 'fa-solid fa-circle-notch fa-spin' : 'fa-solid fa-check'
-							"
-							aria-hidden="true"
-						></i>
+						<i class="fa-solid fa-check" aria-hidden="true"></i>
 						{{
 							t(
 								grantOperation.busy.value
@@ -219,11 +215,7 @@
 				</div>
 			</header>
 			<div v-if="unavailableGrants.length" class="space-y-2 border-b border-border/50 px-4 py-3.5 sm:px-5">
-				<div
-					v-for="grant in unavailableGrants"
-					:key="grant.capability"
-					class="flex flex-wrap items-center gap-2 rounded-lg bg-warning/8 px-3 py-2 text-[11px] text-warning"
-				>
+				<UiInlineNotice v-for="grant in unavailableGrants" :key="grant.capability" tone="warning" compact>
 					<span class="min-w-0 flex-1">
 						{{
 							t('agent.settings.appManagement.unavailableGrant', {
@@ -231,15 +223,18 @@
 							})
 						}}
 					</span>
-					<UiButton
-						density="compact"
-						appearance="ghost"
-						type="button"
-						@click="grantDraft = grantDraft.filter((item) => item.capability !== grant.capability)"
-					>
-						{{ t('common.delete') }}
-					</UiButton>
-				</div>
+					<template #actions>
+						<UiButton
+							density="compact"
+							appearance="ghost"
+							tone="warning"
+							type="button"
+							@click="grantDraft = grantDraft.filter((item) => item.capability !== grant.capability)"
+						>
+							{{ t('common.delete') }}
+						</UiButton>
+					</template>
+				</UiInlineNotice>
 			</div>
 			<fieldset :disabled="grantBlocked" class="divide-y divide-border/45">
 				<section v-for="group in groupedDefinitions" :key="group.id" class="px-4 py-4 sm:px-5">
@@ -296,9 +291,13 @@
 						</article>
 					</div>
 				</section>
-				<p v-if="definitions.length === 0" class="px-3.5 py-8 text-center text-xs text-text-secondary">
-					{{ t('agent.settings.apps.noCapabilities') }}
-				</p>
+				<UiEmptyState
+					v-if="definitions.length === 0"
+					compact
+					:bordered="false"
+					icon="fa-solid fa-sliders"
+					:title="t('agent.settings.apps.noCapabilities')"
+				/>
 			</fieldset>
 		</section>
 	</div>

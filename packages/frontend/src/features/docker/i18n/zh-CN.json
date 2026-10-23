@@ -31,6 +31,7 @@
       "removeConfirm": "确定要移除 {name} 吗？"
     },
     "waitingForSsh": "等待 SSH 连接...",
+    "moreActions": "更多操作",
     "stats": {
       "noData": "无可用状态数据。",
       "cpu": "CPU 使用率",

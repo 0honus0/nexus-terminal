@@ -14,6 +14,10 @@ export interface UserPreferences {
 	showPopupFileEditor: boolean;
 	shareFileEditorTabs: boolean;
 	showPopupFileManager: boolean;
+	showCommandBarClear: boolean;
+	showCommandBarFocusSwitch: boolean;
+	showCommandBarEditor: boolean;
+	showCommandBarSearch: boolean;
 	dockerStatusIntervalSeconds: number;
 	dockerDefaultExpand: boolean;
 	statusMonitorScale: number;
@@ -101,6 +105,10 @@ export const defaultPreferences: UserPreferences = {
 	showPopupFileEditor: true,
 	shareFileEditorTabs: true,
 	showPopupFileManager: false,
+	showCommandBarClear: true,
+	showCommandBarFocusSwitch: true,
+	showCommandBarEditor: true,
+	showCommandBarSearch: true,
 	dockerStatusIntervalSeconds: 5,
 	dockerDefaultExpand: false,
 	statusMonitorScale: 1,

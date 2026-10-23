@@ -3,7 +3,15 @@
 	import { useI18n } from 'vue-i18n';
 	import { RecycleScroller } from 'vue-virtual-scroller';
 	import 'vue-virtual-scroller/dist/vue-virtual-scroller.css';
-	import { UiButton, UiEmptyState, UiInput, UiSelect, UiSpinner, type UiSelectOption } from '@/foundation/ui';
+	import {
+		UiButton,
+		UiEmptyState,
+		UiLoadingState,
+		UiInlineNotice,
+		UiSearchInput,
+		UiSelect,
+		type UiSelectOption,
+	} from '@/foundation/ui';
 	import { useFeedback } from '@/shared/feedback/public';
 	import { AGENT_ARTIFACT_CONTENT_TYPES } from '@nexus-terminal/shared/agent/artifacts/values';
 	import { useArtifactLibrary } from '../composables/use-artifact-library';
@@ -247,11 +255,7 @@
 				</div>
 
 				<div class="flex flex-wrap items-center justify-end gap-2">
-					<div
-						v-if="deleteTarget"
-						class="flex flex-wrap items-center gap-2 rounded-lg border border-error/20 bg-error/6 px-2.5 py-1.5 text-[10.5px]"
-					>
-						<i class="fa-solid fa-trash-can text-error" aria-hidden="true"></i>
+					<UiInlineNotice v-if="deleteTarget" class="max-w-xl" tone="danger" compact>
 						<span class="font-medium text-foreground">
 							{{
 								t('agent.files.deletePrompt', {
@@ -260,7 +264,7 @@
 								})
 							}}
 						</span>
-						<div class="ml-auto flex items-center gap-1">
+						<template #actions>
 							<UiButton
 								density="compact"
 								appearance="ghost"
@@ -278,8 +282,8 @@
 							>
 								{{ t('agent.files.deleteConfirm') }}
 							</UiButton>
-						</div>
-					</div>
+						</template>
+					</UiInlineNotice>
 
 					<UiButton
 						class="agent-file-cleanup"
@@ -346,20 +350,16 @@
 
 			<div class="mt-2.5 flex flex-wrap items-center gap-1.5">
 				<div class="agent-file-search flex min-w-0 flex-[1_1_13rem] items-center gap-1">
-					<UiInput
+					<UiSearchInput
 						v-model="filters.query"
-						type="search"
 						density="compact"
 						class="min-w-0 flex-1"
 						:aria-label="t('agent.files.search')"
 						:placeholder="t('agent.files.search')"
 						:disabled="busy"
+						:clear-label="t('common.clear')"
 						@keydown.enter.prevent="load()"
-					>
-						<template #leading>
-							<i class="fa-solid fa-magnifying-glass text-[9px]" aria-hidden="true"></i>
-						</template>
-					</UiInput>
+					/>
 					<UiButton
 						density="compact"
 						appearance="ghost"
@@ -389,7 +389,7 @@
 						:options="appOptions"
 						:disabled="busy"
 						density="compact"
-						class="agent-file-filter"
+						class="agent-file-filter agent-file-filter--app"
 						@update:model-value="selectApp"
 					/>
 					<UiSelect
@@ -419,35 +419,43 @@
 			</div>
 
 			<div v-if="visibleError" class="mt-2 flex justify-end">
-				<button
+				<UiButton
 					type="button"
-					class="flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-error/10 disabled:opacity-50"
+					appearance="ghost"
+					density="compact"
+					icon-only
 					:disabled="busy"
 					:aria-label="t('agent.operations.retry')"
 					:title="t('agent.operations.retry')"
 					@click="retryReads"
 				>
 					<i class="fa-solid fa-rotate-right text-[9px]" aria-hidden="true"></i>
-				</button>
+				</UiButton>
 			</div>
 
-			<p v-if="cleanupUnknown" class="mt-2 flex items-center gap-2 text-[11px] leading-4 text-warning">
-				<i class="fa-solid fa-triangle-exclamation mr-1.5" aria-hidden="true"></i>
+			<UiInlineNotice v-if="cleanupUnknown" class="mt-2" tone="warning" compact>
 				<span class="min-w-0 flex-1">{{ t('agent.artifactManagement.cleanupUnknown') }}</span>
-				<button
-					type="button"
-					class="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-warning transition-colors hover:bg-warning/10 disabled:opacity-50"
-					:disabled="busy"
-					:aria-label="t('agent.operations.retry')"
-					:title="t('agent.operations.retry')"
-					@click="retryReads"
-				>
-					<i class="fa-solid fa-rotate-right text-[9px]" aria-hidden="true"></i>
-				</button>
-			</p>
-			<p
+				<template #actions>
+					<UiButton
+						type="button"
+						appearance="ghost"
+						tone="warning"
+						density="compact"
+						icon-only
+						:disabled="busy"
+						:aria-label="t('agent.operations.retry')"
+						:title="t('agent.operations.retry')"
+						@click="retryReads"
+					>
+						<i class="fa-solid fa-rotate-right text-[9px]" aria-hidden="true"></i>
+					</UiButton>
+				</template>
+			</UiInlineNotice>
+			<UiInlineNotice
 				v-if="cleanupResult && (cleanupResult.partial || cleanupResult.failedCount > 0)"
-				class="mt-2 text-[11px] leading-4 text-warning"
+				class="mt-2"
+				tone="warning"
+				compact
 			>
 				{{
 					t('agent.artifactManagement.result', {
@@ -458,7 +466,7 @@
 						partial: cleanupResult.partial,
 					})
 				}}
-			</p>
+			</UiInlineNotice>
 		</header>
 
 		<div
@@ -490,14 +498,13 @@
 				</UiEmptyState>
 			</div>
 
-			<div
+			<UiLoadingState
 				v-else-if="busy && items.length === 0"
-				class="flex min-h-0 flex-1 items-center justify-center gap-2 text-[11px] text-text-secondary"
-				role="status"
-			>
-				<UiSpinner density="compact" />
-				{{ t('agent.files.loading') }}
-			</div>
+				class="min-h-0 flex-1"
+				compact
+				:bordered="false"
+				:title="t('agent.files.loading')"
+			/>
 
 			<RecycleScroller
 				v-else
@@ -541,13 +548,15 @@
 								<div
 									class="agent-file-meta mt-0.5 flex min-w-0 items-center gap-1.5 text-[10.5px] text-text-secondary/75"
 								>
-									<span class="agent-file-meta-source max-w-40 truncate" :title="appName(item)">
+									<span class="agent-file-meta-source" :title="appName(item)">
 										{{ appName(item) }}
 									</span>
 									<span class="agent-file-meta-type max-w-40 truncate" :title="item.mediaType">
 										{{ item.mediaType }}
 									</span>
-									<span class="shrink-0">{{ formatCreatedAt(item.createdAt) }}</span>
+									<span class="agent-file-meta-time shrink-0">{{
+										formatCreatedAt(item.createdAt)
+									}}</span>
 									<span class="agent-file-meta-size shrink-0 tabular-nums">{{
 										bytes(item.sizeBytes)
 									}}</span>
@@ -561,10 +570,7 @@
 							</div>
 						</div>
 
-						<div
-							class="agent-file-source min-w-0 truncate text-[10.5px] text-text-secondary"
-							:title="appName(item)"
-						>
+						<div class="agent-file-source min-w-0 text-[10.5px] text-text-secondary" :title="appName(item)">
 							{{ appName(item) }}
 						</div>
 						<div class="agent-file-size text-[10.5px] tabular-nums text-text-secondary">
@@ -658,9 +664,13 @@
 		width: 5.5rem;
 	}
 
+	.agent-file-filter--app {
+		width: 9.5rem;
+	}
+
 	.agent-file-columns,
 	.agent-file-row {
-		grid-template-columns: minmax(0, 1fr) minmax(80px, 0.25fr) 68px 64px 88px;
+		grid-template-columns: minmax(0, 1fr) minmax(8.5rem, 0.32fr) 68px 64px 88px;
 		column-gap: 12px;
 	}
 
@@ -672,6 +682,15 @@
 
 	.agent-file-row:last-child {
 		border-bottom: 0;
+	}
+
+	.agent-file-source {
+		display: -webkit-box;
+		overflow: hidden;
+		overflow-wrap: anywhere;
+		line-height: 1.35;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
 	}
 
 	.agent-file-meta-source,
@@ -709,9 +728,23 @@
 
 		.agent-file-source,
 		.agent-file-size,
-		.agent-file-meta-type,
-		.agent-file-meta-source {
+		.agent-file-meta-type {
 			display: none;
+		}
+
+		.agent-file-meta {
+			flex-wrap: wrap;
+			column-gap: 0.4rem;
+			row-gap: 0.05rem;
+		}
+
+		.agent-file-meta-source {
+			display: block;
+			flex: 1 0 100%;
+			overflow: hidden;
+			line-height: 1.3;
+			text-overflow: ellipsis;
+			white-space: nowrap;
 		}
 
 		.agent-file-meta-size {

@@ -4,6 +4,7 @@
 	import type { PluginFrontendDescriptor } from '../model/plugin-types';
 	import { PluginFrontendHostBridge } from '../plugin-sdk/host-bridge';
 	import { useAuthenticatedViewScope } from '@/shared/session/use-authenticated-view-scope';
+	import { UiLoadingState } from '@/foundation/ui';
 
 	const props = defineProps<{ appId: string; version: string; visible: boolean }>();
 	const iframe = ref<HTMLIFrameElement | null>(null);
@@ -114,14 +115,19 @@
 			referrerpolicy="no-referrer"
 			:title="$t('agent.pluginFrontend.frameTitle')"
 		/>
+		<UiLoadingState
+			v-if="status === 'loading' || status === 'connecting'"
+			class="absolute inset-0 h-full w-full bg-background"
+			compact
+			:bordered="false"
+			:title="$t(status === 'loading' ? 'agent.pluginFrontend.loading' : 'agent.pluginFrontend.connecting')"
+		/>
 		<div
-			v-if="status !== 'ready'"
+			v-else-if="status !== 'ready'"
 			class="absolute inset-0 flex items-center justify-center bg-background p-6 text-center text-sm text-text-secondary"
 			role="status"
 		>
-			<span v-if="status === 'loading'">{{ $t('agent.pluginFrontend.loading') }}</span>
-			<span v-else-if="status === 'connecting'">{{ $t('agent.pluginFrontend.connecting') }}</span>
-			<span v-else>{{ $t('agent.pluginFrontend.unavailable') }}</span>
+			{{ $t('agent.pluginFrontend.unavailable') }}
 		</div>
 	</div>
 </template>

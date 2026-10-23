@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiBadge, UiSettingsGroup } from '@/foundation/ui';
+	import { UiBadge, UiSettingsGroup, UiSpinner } from '@/foundation/ui';
 	import packageJson from '../../../../package.json';
 	import {
 		fetchLatestRelease,
@@ -56,7 +56,7 @@
 					<div class="settings-about__value-row">
 						<span class="settings-about__version">v{{ currentVersion }}</span>
 						<UiBadge v-if="checking" tone="primary" density="compact" role="status">
-							<i class="fa-solid fa-circle-notch fa-spin" aria-hidden="true"></i>
+							<UiSpinner class="[--ui-spinner-size:10px]" />
 							{{ t('settings.about.checkingUpdate') }}
 						</UiBadge>
 						<UiBadge v-else-if="error" tone="danger" density="compact" :title="error">

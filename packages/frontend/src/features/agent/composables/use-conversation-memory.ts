@@ -12,6 +12,7 @@ export function useConversationMemory(appId: string, threadId: string, active: (
 	const hasMore = ref(false);
 	const needsRead = ref(false);
 	const writeBlocked = ref(false);
+	const loaded = ref(false);
 	let knownIds = new Set<string>();
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let mounted = false;
@@ -19,18 +20,23 @@ export function useConversationMemory(appId: string, threadId: string, active: (
 	let sessionRevoked = false;
 	let writing = false;
 	let pendingReview: ConversationMemory | null = null;
-	const operation = useAgentManagementOperation((reason) => {
-		if (reason === 'session') sessionRevoked = true;
-		if (reason === 'session' || reason === 'disposed') pendingReview = null;
-		if (writing) {
-			writeBlocked.value = true;
-			needsRead.value = true;
-		}
-		stop();
-		items.value = [];
-		hasMore.value = false;
-		knownIds.clear();
-	}, active);
+	const operation = useAgentManagementOperation(
+		(reason) => {
+			if (reason === 'session') sessionRevoked = true;
+			if (reason === 'session' || reason === 'disposed') pendingReview = null;
+			if (writing) {
+				writeBlocked.value = true;
+				needsRead.value = true;
+			}
+			stop();
+			items.value = [];
+			hasMore.value = false;
+			loaded.value = false;
+			knownIds.clear();
+		},
+		active,
+		{ retainOnView: true },
+	);
 
 	function stop(): void {
 		clearTimeout(timer);
@@ -75,6 +81,7 @@ export function useConversationMemory(appId: string, threadId: string, active: (
 				hasMore.value = page.hasMore;
 				knownIds = new Set(page.items.map((item) => item.id));
 				needsRead.value = false;
+				loaded.value = true;
 				if (explicit) {
 					writeBlocked.value = false;
 					pendingReview = null;
@@ -133,7 +140,9 @@ export function useConversationMemory(appId: string, threadId: string, active: (
 
 	function resume(): void {
 		stop();
-		if (canPoll()) void load(false);
+		if (!canPoll()) return;
+		if (loaded.value) schedule();
+		else void load(false);
 	}
 
 	watch(active, resume, { flush: 'post' });

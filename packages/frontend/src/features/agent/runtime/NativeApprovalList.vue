@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { computed, onBeforeUnmount, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiTextarea } from '@/foundation/ui';
+	import { UiBadge, UiButton, UiTextarea } from '@/foundation/ui';
 	import type { ConnectionSummary } from '@/features/connections/public';
 	import type { NativeApproval, NativeRunAction } from '../model/native-run-types';
 
@@ -57,9 +57,9 @@
 		<div class="flex items-center gap-2 px-1">
 			<i class="fa-solid fa-shield-halved text-[10px] text-warning" aria-hidden="true"></i>
 			<h4 class="text-xs font-semibold text-foreground">{{ t('agent.approvals.title') }}</h4>
-			<span class="rounded-full bg-warning/10 px-2 py-0.5 text-[10px] font-medium text-warning">
+			<UiBadge tone="warning" appearance="soft" density="compact">
 				{{ approvals.length }}
-			</span>
+			</UiBadge>
 		</div>
 		<article
 			v-for="approval in approvals"
@@ -83,9 +83,9 @@
 						<span>{{ statusLabel(approval) }}</span>
 					</div>
 				</div>
-				<span class="shrink-0 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-medium text-warning">
+				<UiBadge class="shrink-0" tone="warning" appearance="soft" density="compact">
 					{{ riskLabel(approval) }}
-				</span>
+				</UiBadge>
 			</div>
 
 			<p class="mt-3 whitespace-pre-wrap break-words leading-5 text-text-secondary">

@@ -12,6 +12,10 @@ export interface PresentationPreferences {
 	showPopupFileEditor: boolean;
 	shareFileEditorTabs: boolean;
 	showPopupFileManager: boolean;
+	showCommandBarClear: boolean;
+	showCommandBarFocusSwitch: boolean;
+	showCommandBarEditor: boolean;
+	showCommandBarSearch: boolean;
 	dockerStatusIntervalSeconds: number;
 	dockerDefaultExpand: boolean;
 	statusMonitorScale: number;

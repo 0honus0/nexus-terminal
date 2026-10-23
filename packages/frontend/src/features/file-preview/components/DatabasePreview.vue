@@ -4,6 +4,7 @@
 	import FilePreviewDialog from './FilePreviewDialog.vue';
 	import PreviewHorizontalScrollbar from './PreviewHorizontalScrollbar.vue';
 	import PreviewSearchBar from './PreviewSearchBar.vue';
+	import { UiInlineNotice, UiPagination, UiSpinner } from '@/foundation/ui';
 	import type { FilePreviewSessionController } from '../composables/useFilePreviewTabs';
 	import type { DatabasePreviewColumn, DatabasePreviewController } from '../model/databasePreview';
 	import { openDatabasePreview } from '../model/databasePreview';
@@ -219,17 +220,13 @@
 			@keydown="handleGridKeydown"
 		>
 			<div v-if="loading" class="grid min-h-0 flex-1 place-items-center text-sm text-text-secondary">
-				<i class="fas fa-spinner fa-spin" aria-hidden="true"></i>
+				<UiSpinner />
 			</div>
 
-			<div
-				v-else-if="error"
-				role="alert"
-				class="m-4 rounded border border-error/40 bg-error/10 p-4 text-sm text-error"
-			>
-				<p>{{ t('fileManager.preview.databaseLoadFailed') }}</p>
+			<UiInlineNotice v-else-if="error" class="m-4" tone="danger">
+				<p class="m-0">{{ t('fileManager.preview.databaseLoadFailed') }}</p>
 				<p class="mt-1 break-words text-xs opacity-80">{{ error }}</p>
-			</div>
+			</UiInlineNotice>
 
 			<div
 				v-else-if="!tables.length"
@@ -306,32 +303,22 @@
 							})
 						}}
 					</span>
-					<div class="flex shrink-0 items-center gap-2">
-						<button
-							type="button"
-							class="flex h-11 w-11 items-center justify-center rounded border border-border text-base text-text-secondary hover:bg-border hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 sm:h-auto sm:w-auto sm:px-2 sm:py-1 sm:text-xs"
-							:disabled="page <= 1"
-							:aria-label="t('fileManager.preview.databasePreviousPage')"
-							@click="loadPage(page - 1)"
-						>
-							‹
-						</button>
-						<span class="text-text-secondary">
+					<UiPagination
+						:page="page"
+						:page-count="pageCount"
+						:label="t('common.pagination')"
+						:previous-label="t('fileManager.preview.databasePreviousPage')"
+						:next-label="t('fileManager.preview.databaseNextPage')"
+						@previous="loadPage(page - 1)"
+						@next="loadPage(page + 1)"
+					>
+						<template #default="{ page: currentPage, pageCount: totalPages }">
 							{{ t('fileManager.preview.databasePage') }}
-							<strong class="font-medium text-foreground">{{ page }}</strong>
+							<strong>{{ currentPage }}</strong>
 							/
-							<strong class="font-medium text-foreground">{{ pageCount }}</strong>
-						</span>
-						<button
-							type="button"
-							class="flex h-11 w-11 items-center justify-center rounded border border-border text-base text-text-secondary hover:bg-border hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 sm:h-auto sm:w-auto sm:px-2 sm:py-1 sm:text-xs"
-							:disabled="page >= pageCount"
-							:aria-label="t('fileManager.preview.databaseNextPage')"
-							@click="loadPage(page + 1)"
-						>
-							›
-						</button>
-					</div>
+							<strong>{{ totalPages }}</strong>
+						</template>
+					</UiPagination>
 				</div>
 
 				<div

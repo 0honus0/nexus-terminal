@@ -8,6 +8,22 @@
     "check": "tsc --noEmit"
   },
   "exports": {
+    "./remote/tools/values": {
+      "types": "./dist/remote/tools/values.d.ts",
+      "default": "./dist/remote/tools/values.js"
+    },
+    "./remote/tools/model": {
+      "types": "./dist/remote/tools/model.d.ts",
+      "default": "./dist/remote/tools/model.js"
+    },
+    "./remote/tools/http": {
+      "types": "./dist/remote/tools/http.d.ts",
+      "default": "./dist/remote/tools/http.js"
+    },
+    "./remote/tools/http-codec": {
+      "types": "./dist/remote/tools/http-codec.d.ts",
+      "default": "./dist/remote/tools/http-codec.js"
+    },
     "./agent/tools/model": {
       "types": "./dist/agent/tools/model.d.ts",
       "default": "./dist/agent/tools/model.js"

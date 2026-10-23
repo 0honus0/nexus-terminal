@@ -22,6 +22,8 @@ export { default as UiCheckbox } from './UiCheckbox.vue';
 
 export { default as UiContextMenu } from './UiContextMenu.vue';
 
+export { default as UiContextMenuItem } from './UiContextMenuItem.vue';
+
 export { default as UiDialog } from './UiDialog.vue';
 
 export { default as UiEmptyState } from './UiEmptyState.vue';
@@ -32,19 +34,35 @@ export { default as UiFormActions } from './UiFormActions.vue';
 
 export { default as UiInfoHint } from './UiInfoHint.vue';
 
+export { default as UiInlineNotice } from './UiInlineNotice.vue';
+
 export { default as UiTooltip } from './UiTooltip.vue';
 
 export { default as UiInput } from './UiInput.vue';
+
+export { default as UiListToolbar } from './UiListToolbar.vue';
+
+export { default as UiLoadingState } from './UiLoadingState.vue';
+
+export { default as UiInlineLoading } from './UiInlineLoading.vue';
 
 export { default as UiModal } from './UiModal.vue';
 
 export { default as UiManagementCard } from './UiManagementCard.vue';
 
+export { default as UiNumberInput } from './UiNumberInput.vue';
+
+export { default as UiPagination } from './UiPagination.vue';
+
 export { default as UiPopover } from './UiPopover.vue';
 
 export { default as UiResizeHandle } from './UiResizeHandle.vue';
 
+export { default as UiSearchInput } from './UiSearchInput.vue';
+
 export { default as UiSelect } from './UiSelect.vue';
+
+export { default as UiSegmentedControl } from './UiSegmentedControl.vue';
 
 export { default as UiSettingsGroup } from './UiSettingsGroup.vue';
 

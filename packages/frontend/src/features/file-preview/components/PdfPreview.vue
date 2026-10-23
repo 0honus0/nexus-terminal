@@ -8,6 +8,7 @@
 	import PreviewHorizontalScrollbar from './PreviewHorizontalScrollbar.vue';
 	import PdfOutlineItems from './PdfOutlineItems.vue';
 	import PdfPage from './PdfPage.vue';
+	import { UiButton, UiLoadingState, UiNumberInput } from '@/foundation/ui';
 	import type { FilePreviewSessionController } from '../composables/useFilePreviewTabs';
 	import type { PreviewFile } from '../model/preview';
 	import type { PdfOutlineItem, PdfSearchMatch } from '../model/pdf';
@@ -239,9 +240,9 @@
 		scrollFrame = requestAnimationFrame(updateCurrentPage);
 	};
 
-	const handlePageInput = (event: Event): void => {
-		const value = Number((event.currentTarget as HTMLInputElement).value);
-		if (Number.isFinite(value)) scrollToPage(value);
+	const updatePageNumber = (value: string | number | null): void => {
+		const page = typeof value === 'number' ? value : Number(value);
+		if (Number.isFinite(page)) scrollToPage(page);
 	};
 
 	const setZoom = (percent: number): void => {
@@ -561,69 +562,86 @@
 					@next="moveSearch(1)"
 				/>
 				<span class="pdf-toolbar-divider mx-1 h-5 w-px bg-border"></span>
-				<button
+				<UiButton
 					type="button"
+					appearance="ghost"
+					density="compact"
+					icon-only
 					class="pdf-toolbar-button"
 					:disabled="currentPage <= 1"
 					:aria-label="t('fileManager.preview.pdfPreviousPage')"
 					@click="scrollToPage(currentPage - 1)"
 				>
-					‹
-				</button>
-				<input
-					class="pdf-page-input h-8 w-14 rounded border border-border bg-background px-1 text-center text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-					type="number"
+					<i class="fas fa-chevron-left" aria-hidden="true"></i>
+				</UiButton>
+				<UiNumberInput
+					class="pdf-page-input"
+					density="compact"
 					min="1"
 					:max="pageCount"
-					:value="currentPage"
+					:model-value="currentPage"
 					:aria-label="t('fileManager.preview.pdfCurrentPage')"
-					@change="handlePageInput"
+					@update:model-value="updatePageNumber"
 				/>
 				<span class="text-xs text-text-secondary"
 					>/ <span>{{ pageCount }}</span></span
 				>
-				<button
+				<UiButton
 					type="button"
+					appearance="ghost"
+					density="compact"
+					icon-only
 					class="pdf-toolbar-button"
 					:disabled="currentPage >= pageCount"
 					:aria-label="t('fileManager.preview.pdfNextPage')"
 					@click="scrollToPage(currentPage + 1)"
 				>
-					›
-				</button>
+					<i class="fas fa-chevron-right" aria-hidden="true"></i>
+				</UiButton>
 				<span class="pdf-toolbar-divider mx-1 h-5 w-px bg-border"></span>
-				<button
+				<UiButton
 					type="button"
+					appearance="ghost"
+					density="compact"
+					icon-only
 					class="pdf-toolbar-button"
 					:aria-label="t('fileManager.preview.pdfZoomOut')"
 					@click="setZoom(displayedZoomPercent - 25)"
 				>
-					−
-				</button>
+					<i class="fas fa-minus" aria-hidden="true"></i>
+				</UiButton>
 				<span class="w-12 text-center text-xs text-text-secondary">
 					{{ Math.round(displayedZoomPercent) }}%
 				</span>
-				<button
+				<UiButton
 					type="button"
+					appearance="ghost"
+					density="compact"
+					icon-only
 					class="pdf-toolbar-button"
 					:aria-label="t('fileManager.preview.pdfZoomIn')"
 					@click="setZoom(displayedZoomPercent + 25)"
 				>
-					+
-				</button>
-				<button
+					<i class="fas fa-plus" aria-hidden="true"></i>
+				</UiButton>
+				<UiButton
 					type="button"
-					class="pdf-fit-width ml-1 h-8 rounded-md border border-border px-2 text-xs text-text-secondary hover:bg-border hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-					:class="fitWidth ? 'bg-primary/10 text-primary' : ''"
+					:appearance="fitWidth ? 'soft' : 'ghost'"
+					:tone="fitWidth ? 'primary' : 'neutral'"
+					density="compact"
+					class="pdf-fit-width ml-1 text-xs"
 					:aria-pressed="fitWidth"
 					@click="setFitWidth"
 				>
 					{{ t('fileManager.preview.pdfFitWidth') }}
-				</button>
-				<button
+				</UiButton>
+				<UiButton
 					type="button"
+					:appearance="outlineVisible ? 'soft' : 'ghost'"
+					:tone="outlineVisible ? 'primary' : 'neutral'"
+					density="compact"
+					icon-only
 					class="pdf-toolbar-button"
-					:class="{ 'pdf-toolbar-button-active': outlineVisible }"
 					:aria-expanded="outlineVisible"
 					:aria-pressed="outlineVisible"
 					:aria-label="t('fileManager.preview.pdfOutline')"
@@ -631,7 +649,7 @@
 					@click="desktop ? (desktopOutlineVisible = !desktopOutlineVisible) : (outlineOpen = !outlineOpen)"
 				>
 					<i class="fas fa-list-ul" aria-hidden="true"></i>
-				</button>
+				</UiButton>
 			</div>
 		</template>
 
@@ -657,15 +675,18 @@
 			>
 				<header class="flex min-h-12 shrink-0 items-center justify-between gap-2 border-b border-border px-3">
 					<strong class="truncate text-sm font-medium">{{ t('fileManager.preview.pdfOutline') }}</strong>
-					<button
+					<UiButton
 						v-if="!desktop"
 						type="button"
-						class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-xl text-text-secondary hover:bg-border hover:text-foreground"
+						appearance="ghost"
+						density="compact"
+						icon-only
+						class="h-11 w-11 shrink-0"
 						:aria-label="t('common.close')"
 						@click="outlineOpen = false"
 					>
-						×
-					</button>
+						<i class="fas fa-times" aria-hidden="true"></i>
+					</UiButton>
 				</header>
 				<div class="min-h-0 flex-1 overflow-y-auto p-2">
 					<PdfOutlineItems v-if="outline.length" :items="outline" @navigate="resolveOutlineDestination" />
@@ -688,9 +709,13 @@
 					@touchend="handleTouchEnd"
 					@touchcancel="handleTouchEnd"
 				>
-					<p v-if="loading" class="p-4 text-center text-text-secondary">
-						{{ t('fileManager.preview.loading') }}
-					</p>
+					<UiLoadingState
+						v-if="loading"
+						class="pdf-loading-state"
+						compact
+						:bordered="false"
+						:title="t('fileManager.preview.loading')"
+					/>
 					<p v-else-if="error" class="p-4 text-error">{{ error }}</p>
 					<div
 						v-else-if="document"
@@ -725,43 +750,17 @@
 </template>
 
 <style scoped>
+	.pdf-loading-state {
+		min-height: 12rem;
+	}
+
 	.pdf-toolbar {
 		min-width: 0;
 	}
 
 	.pdf-toolbar-button {
-		display: flex;
 		width: 2rem;
 		height: 2rem;
-		align-items: center;
-		justify-content: center;
-		border: 1px solid var(--color-border);
-		border-radius: 0.375rem;
-		color: var(--text-color-secondary);
-		font-size: 1rem;
-		line-height: 1;
-	}
-
-	.pdf-toolbar-button.pdf-toolbar-button-active {
-		background: color-mix(in srgb, var(--color-primary) 10%, transparent);
-		color: var(--color-primary);
-	}
-
-	@media (hover: hover) and (pointer: fine) {
-		.pdf-toolbar-button:hover:not(:disabled) {
-			background: var(--color-border);
-			color: var(--text-color-primary);
-		}
-	}
-
-	.pdf-toolbar-button:focus-visible {
-		outline: none;
-		box-shadow: 0 0 0 1px var(--color-primary);
-	}
-
-	.pdf-toolbar-button:disabled {
-		cursor: not-allowed;
-		opacity: 0.4;
 	}
 
 	.pdf-outline-drawer {

@@ -20,6 +20,8 @@
     "shortcutHint": "入力欄で Alt + 英字または数字を押すと直接移動するショートカットを設定できます。Backspace または Delete で解除します。",
     "shortcutSettings": "ショートカット設定",
     "noInputsAvailable": "設定可能な入力項目はありません",
+    "moveUp": "上へ移動",
+    "moveDown": "下へ移動",
     "altSwitchHint": "ヒント：Alt キーを押すと、設定された入力ソース間でフォーカスを素早く切り替えることができます。"
   }
 }

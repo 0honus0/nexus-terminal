@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { computed, ref, shallowRef } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiContextMenu } from '@/foundation/ui';
+	import { UiContextMenu, UiContextMenuItem } from '@/foundation/ui';
 	import { useLongPressGesture } from '@/foundation/interaction';
 	import type { WorkspaceRuntimeSession } from '../session';
 
@@ -266,20 +266,20 @@
 	</div>
 
 	<UiContextMenu v-if="context" :visible="true" :x="context.x" :y="context.y" :width="220" @close="context = null">
-		<button v-if="contextCanToggleSuspend" class="context-item" @click="runContextAction('toggleSuspend')">
+		<UiContextMenuItem v-if="contextCanToggleSuspend" @click="runContextAction('toggleSuspend')">
 			{{ t(contextMarkedForSuspend ? 'tabs.contextMenu.unmarkForSuspend' : 'tabs.contextMenu.suspendSession') }}
-		</button>
+		</UiContextMenuItem>
 		<div v-if="contextCanToggleSuspend" class="my-1 border-t border-border" role="separator"></div>
-		<button class="context-item" @click="runContextAction('close')">{{ t('tabs.contextMenu.close') }}</button>
-		<button v-if="canCloseOthers" class="context-item" @click="runContextAction('closeOthers')">
+		<UiContextMenuItem @click="runContextAction('close')">{{ t('tabs.contextMenu.close') }}</UiContextMenuItem>
+		<UiContextMenuItem v-if="canCloseOthers" @click="runContextAction('closeOthers')">
 			{{ t('tabs.contextMenu.closeOthers') }}
-		</button>
-		<button v-if="canCloseRight" class="context-item" @click="runContextAction('closeRight')">
+		</UiContextMenuItem>
+		<UiContextMenuItem v-if="canCloseRight" @click="runContextAction('closeRight')">
 			{{ t('tabs.contextMenu.closeRight') }}
-		</button>
-		<button v-if="canCloseLeft" class="context-item" @click="runContextAction('closeLeft')">
+		</UiContextMenuItem>
+		<UiContextMenuItem v-if="canCloseLeft" @click="runContextAction('closeLeft')">
 			{{ t('tabs.contextMenu.closeLeft') }}
-		</button>
+		</UiContextMenuItem>
 	</UiContextMenu>
 </template>
 
@@ -290,21 +290,5 @@
 	}
 	.mobile-session-scroll::-webkit-scrollbar {
 		display: none;
-	}
-	.context-item {
-		display: flex;
-		width: calc(100% - 0.5rem);
-		margin-inline: 0.25rem;
-		align-items: center;
-		border-radius: 0.375rem;
-		padding: 0.4rem 0.65rem;
-		text-align: left;
-		font-size: 0.875rem;
-	}
-	.context-item:hover,
-	.context-item:focus-visible {
-		background: color-mix(in srgb, var(--link-active-color) 10%, transparent);
-		color: var(--link-active-color);
-		outline: none;
 	}
 </style>

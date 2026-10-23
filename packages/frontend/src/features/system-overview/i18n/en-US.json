@@ -37,7 +37,12 @@
       "gcDuration": "Main-thread GC duration",
       "resourcesTitle": "Memory and module resources",
       "memoryNote": "RSS covers the backend process. Heap and external-memory figures in the process overview cover only the main thread. The database group separately reports its Worker's heap and external memory, excluding SQLite's native page cache. Each thread's ArrayBuffers are included in its external memory; do not add them. Other module bytes describe tracked buffer payloads, not total module memory, and may share backing storage. Do not sum them or subtract them from RSS. CPU is process-cumulative; main-thread GC is cumulative since this diagnostic instance started. No forced GC or heap snapshots are performed.",
+      "memoryNoteTitle": "Measurement notes",
+      "memorySectionTitle": "Process memory and runtime overhead",
+      "modulesSectionTitle": "Module resources",
+      "moduleCount": "{count} modules",
       "countsOnly": "Only resource counts are instrumented here; module memory is not measured, not zero.",
+      "countsOnlyShort": "Counts only",
       "modules": {
         "access": "Identity and access",
         "agent": "Agent",

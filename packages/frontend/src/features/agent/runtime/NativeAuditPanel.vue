@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiInput } from '@/foundation/ui';
+	import { UiButton, UiNumberInput } from '@/foundation/ui';
 	import { AGENT_RUN_STEP_MAX_COUNT } from '@nexus-terminal/shared/agent/runs/values';
 	import { getNativeStep, listNativeStepEvents, getNativeTool, listNativeToolEvents } from '../api/native-audit-api';
 	import { useAgentManagementOperation } from '../composables/use-agent-management-operation';
@@ -42,6 +42,7 @@
 			stepIndex.value = 1;
 		},
 		() => props.active,
+		{ retainOnView: true },
 	);
 
 	async function readStep(more = false): Promise<void> {
@@ -92,9 +93,8 @@
 			<form class="flex flex-wrap items-end gap-2" @submit.prevent="readStep()">
 				<label class="flex items-center gap-2 text-[11px] text-text-secondary">
 					<span>{{ t('agent.nativeRun.step') }}</span>
-					<UiInput
+					<UiNumberInput
 						:model-value="stepIndex"
-						type="number"
 						min="1"
 						:max="AGENT_RUN_STEP_MAX_COUNT"
 						density="compact"

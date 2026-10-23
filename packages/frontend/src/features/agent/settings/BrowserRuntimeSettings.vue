@@ -2,6 +2,7 @@
 	import { computed, onActivated, onMounted, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import {
+		UiBadge,
 		UiButton,
 		UiCheckbox,
 		UiFormActions,
@@ -9,6 +10,7 @@
 		UiInfoHint,
 		UiInput,
 		UiModal,
+		UiNumberInput,
 		UiTextarea,
 	} from '@/foundation/ui';
 	import {
@@ -270,14 +272,13 @@
 									class="inline-flex rounded-xl border border-border/90 bg-background/90 px-3 py-1 text-sm font-bold tracking-tight text-foreground shadow-2xs sm:text-base"
 									>{{ target.id }}</span
 								>
-								<span
-									class="inline-flex items-center gap-1 rounded-full border border-border/70 bg-header/50 px-2.5 py-0.5 font-mono text-[11px] text-text-secondary"
+								<UiBadge appearance="ghost" density="compact" class="font-mono"
 									><i
 										class="fa-solid fa-network-wired text-[9px] text-text-secondary/60"
 										aria-hidden="true"
 									></i>
 									{{ target.endpoints.length }}
-									{{ t('agent.settings.browserRuntime.endpoints') }}</span
+									{{ t('agent.settings.browserRuntime.endpoints') }}</UiBadge
 								>
 							</div>
 							<div class="flex flex-wrap items-center gap-1.5 text-xs text-text-secondary">
@@ -349,16 +350,15 @@
 							<span class="max-w-[280px] truncate font-mono text-xs text-foreground sm:max-w-[360px]">{{
 								endpoint.url
 							}}</span>
-							<span
-								class="shrink-0 rounded-md border border-border/70 bg-card px-1.5 py-0.5 font-mono text-[10px] text-text-secondary"
-								>P{{ endpoint.priority }}</span
+							<UiBadge appearance="ghost" density="compact" class="shrink-0 font-mono"
+								>P{{ endpoint.priority }}</UiBadge
 							>
 						</div>
 						<div class="flex shrink-0 items-center justify-end gap-2">
-							<span v-if="endpoint.allowPlaintext" class="text-[10px] text-text-secondary/80"
-								>HTTP/WS</span
+							<UiBadge v-if="endpoint.allowPlaintext" appearance="ghost" density="compact"
+								>HTTP/WS</UiBadge
 							>
-							<span v-if="endpoint.verifyTls" class="text-[10px] text-success">TLS</span>
+							<UiBadge v-if="endpoint.verifyTls" tone="success" density="compact">TLS</UiBadge>
 							<UiButton
 								type="button"
 								appearance="ghost"
@@ -419,10 +419,9 @@
 					<UiInput id="browser-endpoint-url" v-model="endpointEditor.draft.url" required />
 				</UiFormField>
 				<UiFormField :label="t('agent.settings.browserRuntime.priority')" for-id="browser-endpoint-priority">
-					<UiInput
+					<UiNumberInput
 						id="browser-endpoint-priority"
 						:model-value="endpointEditor.draft.priority"
-						type="number"
 						min="0"
 						:max="AGENT_BROWSER_MAX_PRIORITY"
 						step="1"

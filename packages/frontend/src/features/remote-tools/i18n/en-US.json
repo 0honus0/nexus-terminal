@@ -1,0 +1,27 @@
+{
+  "remoteTools": {
+    "title": "Install required tools",
+    "confirm": "Server {target} needs {tools}. Install using {manager} and continue?",
+    "notice": "Packages come from the server's configured repositories. Installation may take a few minutes. Your authentication password is used only for this installation and is not saved.",
+    "password": "sudo authentication password",
+    "install": "Install and continue",
+    "installing": "Installing and verifying tools…",
+    "errors": {
+      "invalid_input": "Invalid installation parameters or password format.",
+      "unauthenticated": "Your login has expired. Please sign in again.",
+      "forbidden": "This account cannot install tools.",
+      "not_found": "Server connection not found.",
+      "host_key_untrusted": "The server host key is not trusted. Connect to the server and verify its fingerprint first.",
+      "stale_plan": "The server or installation plan has changed. Start the operation again.",
+      "conflict": "Another server operation is active or awaiting confirmation. Try again later.",
+      "unsupported": "Required tools are missing and no supported package manager or privilege method is available. Install them manually.",
+      "authentication_failed": "sudo authentication or permission was denied. Check the password and sudo configuration.",
+      "installation_failed": "Installation failed or tools are still unavailable. Check the server's repositories and package manager.",
+      "unavailable": "Unable to check or install remote tools. Check the connection.",
+      "operation_unknown": "The installation result is unconfirmed. Check the server before attempting another installation.",
+      "limit_exceeded": "Too many tool requests. Please try again later.",
+      "shutting_down": "The service is stopping. Please try again later.",
+      "protocol_failure": "Invalid tool detection response. Refresh and try again."
+    }
+  }
+}

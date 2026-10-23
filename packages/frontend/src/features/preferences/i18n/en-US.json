@@ -116,6 +116,13 @@
       "showQuickCommandTagsTitle": "Show Quick Command Tags",
       "showQuickCommandTagsLabel": "Show tags in quick command list",
       "showQuickCommandTagsDescription": "Disable to hide tags in the quick command list and exclude them from search.",
+      "commandBarButtons": {
+        "title": "Command bar buttons",
+        "clear": "Clear terminal",
+        "focusSwitch": "Focus switcher",
+        "editor": "Editor",
+        "search": "Terminal search"
+      },
       "quickCommandsCollapsibleSearchTitle": "Quick Command Search",
       "quickCommandsCollapsibleSearchLabel": "Collapse the search box into a search button by default",
       "quickCommandsCollapsibleSearchDescription": "Disabled by default. When enabled, the Quick Commands panel shows a search button until you click it to expand the search box.",
@@ -216,6 +223,10 @@
       "effective": "Effective: sample interval {status}s · host cache TTL / overview refresh {host}s",
       "status": "Sampling interval (seconds)",
       "host": "Host cache TTL / overview refresh (seconds)",
+      "statusShort": "Sample",
+      "hostShort": "Cache",
+      "refreshShort": "Refresh",
+      "secondsUnit": "s",
       "refresh": "Reload and review without writing",
       "feedback": {
         "saved": "Saved and applied.",

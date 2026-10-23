@@ -2,7 +2,7 @@
  * Foundation UI Gen 2
  *
  * Component recipes stay scoped to data-ui-gen="2". Product surfaces use the
- * semantic ui-glass-* or ui-solid-* classes below so pages share materials
+ * semantic ui-glass-panel or ui-solid-* classes below so pages share materials
  * without copying component internals or reviving a second component layer.
  */
 :root {
@@ -15,8 +15,6 @@
 	--glass-fill: color-mix(in srgb, var(--card-bg-color) 42%, transparent);
 	--glass-nav-fill: color-mix(in srgb, var(--header-bg-color) 55%, transparent);
 	--glass-inset-fill: color-mix(in srgb, var(--input-bg-color) 34%, transparent);
-	--glass-item-fill: color-mix(in srgb, var(--card-bg-color) 14%, transparent);
-	--glass-item-hover-fill: color-mix(in srgb, var(--card-bg-color) 28%, transparent);
 	--glass-backdrop-filter: blur(28px) saturate(185%);
 	--glass-control-filter: blur(16px) saturate(170%);
 	/* Mixing in the theme border keeps edges visible when a light panel sits on a light page. */
@@ -35,54 +33,13 @@
 }
 
 @layer components {
-	.ui-glass-panel,
-	.ui-glass-nav,
-	.ui-glass-inset,
-	.ui-glass-item {
+	.ui-glass-panel {
 		border: 1px solid var(--glass-border-color);
 		background-image: var(--glass-sheen-image);
 		box-shadow: var(--glass-shadow);
-	}
-
-	.ui-glass-panel,
-	.ui-glass-nav {
 		-webkit-backdrop-filter: var(--glass-backdrop-filter);
 		backdrop-filter: var(--glass-backdrop-filter);
-	}
-
-	.ui-glass-panel {
 		background-color: var(--glass-fill);
-	}
-
-	.ui-glass-nav {
-		background-color: var(--glass-nav-fill);
-	}
-
-	.ui-glass-inset,
-	.ui-glass-item {
-		-webkit-backdrop-filter: var(--glass-control-filter);
-		backdrop-filter: var(--glass-control-filter);
-	}
-
-	.ui-glass-inset {
-		background-color: var(--glass-inset-fill);
-		box-shadow:
-			var(--glass-inset-highlight),
-			inset 0 1px 3px rgb(0 0 0 / 8%);
-	}
-
-	.ui-glass-item {
-		background-color: var(--glass-item-fill);
-		box-shadow: var(--glass-rim-shadow);
-		transition:
-			background-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
-			border-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
-			box-shadow 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
-	}
-
-	.ui-glass-item:hover {
-		background-color: var(--glass-item-hover-fill);
-		border-color: color-mix(in srgb, var(--glass-rim) 34%, transparent);
 	}
 
 	.ui-solid-panel,
@@ -115,20 +72,6 @@
 	.ui-solid-item:hover {
 		background-color: var(--header-bg-color);
 		border-color: var(--border-hover-color);
-	}
-
-	/*
-   * Soft ambient light behind glass pages. Glass only reads as glass when something
-   * with color sits underneath it, so full-page surfaces opt in with this backdrop.
-   */
-	.ui-ambient-backdrop {
-		/* A tinted base plus corner light keeps the page center from washing out to pure white. */
-		background:
-			radial-gradient(48rem 34rem at 0% 0%, rgb(90 160 255 / 22%), transparent 70%),
-			radial-gradient(44rem 32rem at 100% 0%, rgb(64 200 224 / 16%), transparent 70%),
-			radial-gradient(52rem 36rem at 50% 100%, rgb(110 140 200 / 18%), transparent 70%),
-			color-mix(in srgb, var(--app-bg-color) 93%, rgb(96 120 160));
-		background-attachment: fixed;
 	}
 }
 
@@ -237,14 +180,6 @@
 
 :root {
 	--app-header-height: calc(60px + env(safe-area-inset-top, 0px));
-}
-
-.ui-floating-nav {
-	border: 1px solid var(--glass-border-color);
-	border-radius: 14px;
-	background: var(--header-bg-color);
-	color: var(--text-color);
-	box-shadow: 0 4px 12px -8px rgb(0 0 0 / 24%);
 }
 
 .ui-surface {
@@ -511,6 +446,11 @@
 	color: var(--link-active-color);
 	font-size: 16px;
 }
+.ui-empty-state__body {
+	display: grid;
+	min-width: 0;
+	justify-items: center;
+}
 .ui-empty-state__title {
 	font-size: 13px;
 	font-weight: 600;
@@ -565,6 +505,189 @@
 	margin-left: auto;
 	justify-content: flex-end;
 }
+.ui-empty-state[data-dense='true'] .ui-empty-state__body {
+	flex: 1;
+	justify-items: start;
+}
+
+.ui-empty-state[data-compact='true'] {
+	gap: 7px;
+	padding: 12px 10px;
+}
+.ui-empty-state[data-compact='true'] .ui-empty-state__icon {
+	width: 28px;
+	height: 28px;
+	border-radius: 9px;
+	font-size: 12px;
+}
+.ui-empty-state[data-compact='true'][data-dense='true'] {
+	padding: 8px 10px;
+}
+.ui-empty-state[data-compact='true'][data-dense='true'] .ui-empty-state__icon {
+	width: 20px;
+	height: 20px;
+	border-radius: 6px;
+	font-size: 10px;
+}
+.ui-empty-state[data-compact='true'] .ui-empty-state__title {
+	font-size: 11.5px;
+	font-weight: 500;
+}
+.ui-empty-state[data-compact='true'] .ui-empty-state__description {
+	margin-top: 2px;
+	font-size: 10.5px;
+}
+
+.ui-loading-state {
+	position: relative;
+	isolation: isolate;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	overflow: hidden;
+	padding: 24px 16px;
+	border-radius: var(--ui-control-radius);
+	text-align: center;
+}
+.ui-loading-state[data-bordered='true'] {
+	border: 1px solid color-mix(in srgb, var(--ui-text) 10%, transparent);
+	background:
+		linear-gradient(135deg, color-mix(in srgb, var(--card-bg-color) 26%, transparent), transparent 62%),
+		var(--ui-fill-soft);
+	box-shadow: var(--ui-shadow-raised);
+	-webkit-backdrop-filter: var(--ui-glass-control-filter);
+	backdrop-filter: var(--ui-glass-control-filter);
+}
+.ui-loading-state::after {
+	position: absolute;
+	z-index: -1;
+	inset: 0;
+	background: linear-gradient(
+		105deg,
+		transparent 14%,
+		color-mix(in srgb, var(--ui-text) 6%, transparent) 45%,
+		transparent 76%
+	);
+	content: '';
+	pointer-events: none;
+	transform: translateX(-110%);
+	animation: ui-gen2-shimmer 1.8s ease-in-out infinite;
+}
+.ui-loading-state__icon {
+	display: inline-flex;
+	width: 40px;
+	height: 40px;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	border-color: color-mix(in srgb, var(--ui-text) 16%, transparent);
+	background: color-mix(in srgb, var(--ui-text) 5%, transparent);
+	border: 1px solid color-mix(in srgb, var(--ui-text) 16%, transparent);
+	border-radius: 12px;
+	box-shadow: var(--ui-glass-highlight);
+	-webkit-backdrop-filter: var(--ui-glass-control-filter);
+	backdrop-filter: var(--ui-glass-control-filter);
+}
+.ui-loading-state__body {
+	display: grid;
+	min-width: 0;
+	justify-items: center;
+}
+.ui-loading-state__title {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--ui-text-muted);
+}
+.ui-loading-state__description {
+	max-width: 32rem;
+	margin: 4px auto 0;
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--ui-text-muted);
+}
+.ui-loading-state__lines {
+	display: grid;
+	width: clamp(8rem, 28vw, 16rem);
+	justify-items: center;
+	gap: 5px;
+	margin-top: 9px;
+}
+.ui-loading-state__lines > span {
+	display: block;
+	width: 100%;
+	height: 5px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--ui-text) 9%, transparent);
+}
+.ui-loading-state__lines > span:nth-child(2) {
+	width: 82%;
+	opacity: 0.72;
+}
+.ui-loading-state__lines > span:nth-child(3) {
+	width: 58%;
+	opacity: 0.46;
+}
+.ui-loading-state__lines > span:nth-child(4) {
+	width: 38%;
+	opacity: 0.3;
+}
+.ui-loading-state[data-compact='true'] {
+	gap: 7px;
+	padding: 12px 10px;
+}
+.ui-loading-state[data-compact='true'] .ui-loading-state__icon {
+	width: 28px;
+	height: 28px;
+	border-radius: 9px;
+}
+.ui-loading-state[data-compact='true'] .ui-loading-state__title {
+	font-size: 11.5px;
+	font-weight: 500;
+}
+.ui-loading-state[data-compact='true'] .ui-loading-state__description {
+	margin-top: 2px;
+	font-size: 10.5px;
+}
+.ui-loading-state[data-dense='true'] {
+	flex-direction: row;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 8px;
+	padding: 8px 10px;
+	text-align: left;
+}
+.ui-loading-state[data-dense='true'] .ui-loading-state__icon {
+	width: 20px;
+	height: 20px;
+	border-radius: 6px;
+}
+.ui-loading-state[data-dense='true'] .ui-loading-state__body {
+	flex: 1;
+	justify-items: start;
+}
+.ui-loading-state[data-dense='true'] .ui-loading-state__title {
+	font-size: 12px;
+	font-weight: 500;
+}
+.ui-loading-state[data-dense='true'] .ui-loading-state__description {
+	max-width: none;
+	margin: 2px 0 0;
+	font-size: 11px;
+}
+.ui-loading-state[data-compact='true'] .ui-loading-state__lines,
+.ui-loading-state[data-dense='true'] .ui-loading-state__lines {
+	width: clamp(7rem, 24vw, 13rem);
+	gap: 4px;
+	margin-top: 6px;
+}
+.ui-loading-state[data-dense='true'] .ui-loading-state__lines {
+	justify-items: start;
+}
+.ui-loading-state[data-dense='true'] .ui-loading-state__lines > span {
+	height: 4px;
+}
 
 .ui-radius--control {
 	border-radius: var(--ui-control-radius);
@@ -572,10 +695,6 @@
 
 .ui-radius--panel {
 	border-radius: var(--ui-panel-radius);
-}
-
-.ui-radius--pill {
-	border-radius: var(--ui-pill-radius);
 }
 
 .ui-control {
@@ -796,10 +915,12 @@
 	width: 1em;
 	height: 1em;
 	flex: none;
-	border: 1.5px solid color-mix(in srgb, currentColor 28%, transparent);
+	border: max(1.5px, calc(1em * 0.1)) solid color-mix(in srgb, currentColor 16%, transparent);
 	border-top-color: currentColor;
+	border-right-color: color-mix(in srgb, currentColor 58%, transparent);
 	border-radius: 50%;
-	animation: ui-gen2-spin 700ms linear infinite;
+	box-shadow: 0 0 6px color-mix(in srgb, currentColor 14%, transparent);
+	animation: ui-gen2-spin 820ms cubic-bezier(0.62, 0.04, 0.36, 1) infinite;
 }
 
 .ui-resize-handle {
@@ -1159,25 +1280,63 @@
 }
 
 .ui-spinner {
-	--ui-spinner-size: 14px;
+	--ui-spinner-size: 15px;
 	box-sizing: border-box;
 	display: inline-block;
 	width: var(--ui-spinner-size);
 	height: var(--ui-spinner-size);
 	flex: none;
-	border: 1.5px solid color-mix(in srgb, var(--ui-tone-accent) 24%, transparent);
+	border: max(1.5px, calc(var(--ui-spinner-size) * 0.1)) solid
+		color-mix(in srgb, var(--ui-tone-accent) 15%, transparent);
 	border-top-color: var(--ui-tone-accent);
+	border-right-color: color-mix(in srgb, var(--ui-tone-accent) 58%, transparent);
 	border-radius: 50%;
+	box-shadow:
+		0 0 0 1px color-mix(in srgb, var(--ui-tone-accent) 5%, transparent),
+		0 0 7px color-mix(in srgb, var(--ui-tone-accent) 16%, transparent);
 	color: var(--ui-tone-accent);
-	animation: ui-gen2-spin 700ms linear infinite;
+	animation: ui-gen2-spin 820ms cubic-bezier(0.62, 0.04, 0.36, 1) infinite;
+	vertical-align: -0.125em;
 }
 
 .ui-spinner[data-density='compact'] {
-	--ui-spinner-size: 12px;
+	--ui-spinner-size: 13px;
 }
 
 .ui-spinner[data-density='comfortable'] {
-	--ui-spinner-size: 16px;
+	--ui-spinner-size: 18px;
+}
+
+.ui-loading-inline {
+	display: inline-flex;
+	min-width: 0;
+	align-items: center;
+	gap: 8px;
+	color: var(--ui-text-muted);
+}
+
+.ui-loading-inline > span {
+	min-width: 0;
+}
+
+.ui-loading-shimmer {
+	position: relative;
+	overflow: hidden;
+}
+
+.ui-loading-shimmer::after {
+	position: absolute;
+	inset: 0;
+	background: linear-gradient(
+		105deg,
+		transparent 14%,
+		color-mix(in srgb, var(--ui-text) 6%, transparent) 45%,
+		transparent 76%
+	);
+	content: '';
+	pointer-events: none;
+	transform: translateX(-110%);
+	animation: ui-gen2-shimmer 1.8s ease-in-out infinite;
 }
 
 .ui-badge {
@@ -1198,6 +1357,31 @@
 	min-height: 18px;
 	padding-inline: 6px;
 	font-size: 10px;
+}
+
+.ui-badge__dot {
+	width: 5px;
+	height: 5px;
+	flex: none;
+	border-radius: 50%;
+	background: currentColor;
+	box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 18%, transparent);
+}
+
+.ui-badge[data-dot-pulse] .ui-badge__dot {
+	animation: ui-badge-dot-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes ui-badge-dot-pulse {
+	0%,
+	100% {
+		opacity: 0.55;
+		transform: scale(0.9);
+	}
+	50% {
+		opacity: 1;
+		transform: scale(1.15);
+	}
 }
 
 .ui-badge--soft {
@@ -1467,20 +1651,6 @@
 	box-shadow: var(--ui-focus-ring), var(--ui-shadow-raised);
 }
 
-/* A picker keeps its heading/actions outside the one scrollable list. */
-.ui-popover__panel--list {
-	display: flex;
-	flex-direction: column;
-	overflow: hidden;
-}
-
-.ui-popover__list {
-	max-height: 20rem;
-	flex: 1 1 auto;
-	touch-action: pan-y;
-	scrollbar-gutter: stable;
-}
-
 .ui-checkbox {
 	--ui-checkbox-size: 16px;
 	--ui-checkbox-radius: 5px;
@@ -1641,6 +1811,14 @@
 	z-index: 86;
 }
 
+/* When the list flips above the trigger, the touching trigger edge must be square too. */
+.ui-select[data-state='open'][data-panel-side='top'] .ui-select__trigger {
+	border-top-left-radius: 0;
+	border-top-right-radius: 0;
+	border-bottom-left-radius: var(--ui-control-radius);
+	border-bottom-right-radius: var(--ui-control-radius);
+}
+
 .ui-select__trigger:focus-visible {
 	outline: none;
 	border-color: var(--ui-hairline-strong);
@@ -1746,6 +1924,14 @@
 .ui-select[data-text-align='center'] .ui-select__value,
 .ui-select__trigger[data-text-align='center'] .ui-select__value {
 	text-align: center;
+}
+
+/* Balance the trailing chevron so the selected value is centred on the control, not the value slot. */
+.ui-select__trigger[data-text-align='center']::before {
+	content: '';
+	width: 12px;
+	height: 12px;
+	flex: 0 0 12px;
 }
 
 .ui-select__panel[data-text-align='center'] .ui-select__item {
@@ -2210,6 +2396,12 @@ body:has(.app-header) .ui-notification-host {
 	}
 }
 
+@keyframes ui-gen2-shimmer {
+	to {
+		transform: translateX(110%);
+	}
+}
+
 @keyframes ui-gen2-panel-in {
 	from {
 		opacity: 0;
@@ -2244,6 +2436,12 @@ body:has(.app-header) .ui-notification-host {
 	[data-ui-gen='2'][data-ui='spinner'] {
 		animation: none;
 	}
+
+	.ui-loading-state::after,
+	.ui-loading-shimmer::after {
+		animation: none;
+		transform: none;
+	}
 }
 
 @media (forced-colors: active) {
@@ -2254,14 +2452,12 @@ body:has(.app-header) .ui-notification-host {
 	.ui-surface--raised,
 	.ui-surface--inset,
 	.ui-glass-panel,
-	.ui-glass-nav,
-	.ui-glass-inset,
-	.ui-glass-item,
 	.ui-overlay-panel,
 	.ui-context-menu,
 	.ui-info-hint,
 	.ui-info-hint__panel,
 	.ui-empty-state[data-bordered='true'],
+	.ui-loading-state[data-bordered='true'],
 	.ui-token-input__control,
 	.ui-token-input__token,
 	.ui-token-input__list,
@@ -2282,6 +2478,17 @@ body:has(.app-header) .ui-notification-host {
 		background: Canvas;
 		color: CanvasText;
 		box-shadow: none;
+	}
+
+	.ui-loading-state__lines > span,
+	.ui-loading-state__icon {
+		border: 1px solid CanvasText;
+		background: Canvas;
+	}
+
+	.ui-loading-state::after,
+	.ui-loading-shimmer::after {
+		display: none;
 	}
 
 	.ui-checkbox[data-state='checked'],
@@ -2512,30 +2719,7 @@ body:has(.app-header) .ui-notification-host {
 .ui-button--action-batch:nth-last-child(-n + 2) {
 	grid-column: span 3;
 }
-.ui-button--action-card {
-	min-width: 0;
-	padding-inline: 6px;
-}
-.ui-action-group[data-layout='model'] {
-	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: 8px;
-}
-.ui-button--action-model {
-	min-width: 0;
-	height: auto;
-	min-height: 32px;
-	padding-block: 5px;
-	white-space: normal;
-	line-height: 1.4;
-}
 @media (min-width: 640px) {
-	.ui-action-group[data-layout='model'] {
-		grid-template-columns: repeat(4, minmax(0, 1fr));
-	}
-	.ui-button--action-model {
-		min-height: 32px;
-	}
 	.ui-action-group[data-layout='management'] {
 		flex-shrink: 0;
 		padding-top: 0;

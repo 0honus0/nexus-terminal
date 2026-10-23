@@ -8,6 +8,7 @@
 	import { usePreferences } from '@/features/preferences/public';
 	import { releaseRepository, releaseRepositoryUrl } from '@/app/config/release';
 	import { useHorizontalDragScroll } from '@/foundation/interaction';
+	import { UiButton } from '@/foundation/ui';
 	import { useFeedback, useSettingsReloadStore } from '@/shared/feedback/public';
 
 	const emit = defineEmits<{ customizeAppearance: [] }>();
@@ -149,9 +150,12 @@
 			</div>
 
 			<div class="app-nav-tools flex shrink-0 items-center gap-1">
-				<button
+				<UiButton
 					v-if="settingsReload.pendingCount > 0"
 					type="button"
+					appearance="ghost"
+					density="compact"
+					icon-only
 					class="icon-link inline-flex settings-reload-indicator"
 					:title="t('feedback.settingsReload.indicator', { count: settingsReload.pendingCount })"
 					:aria-label="t('feedback.settingsReload.indicator', { count: settingsReload.pendingCount })"
@@ -159,7 +163,7 @@
 				>
 					<i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>
 					<span class="settings-reload-indicator__dot" aria-hidden="true"></span>
-				</button>
+				</UiButton>
 				<a
 					class="icon-link hidden md:inline-flex"
 					:href="releaseRepositoryUrl"
@@ -180,16 +184,19 @@
 						/>
 					</svg>
 				</a>
-				<button
+				<UiButton
 					v-if="auth.isAuthenticated.value"
 					type="button"
+					appearance="ghost"
+					density="compact"
+					icon-only
 					class="icon-link inline-flex"
 					:title="t('nav.customizeStyle')"
 					:aria-label="t('nav.customizeStyle')"
 					@click="emit('customizeAppearance')"
 				>
 					<i class="fas fa-paint-brush" aria-hidden="true"></i>
-				</button>
+				</UiButton>
 				<RouterLink v-if="!auth.isAuthenticated.value" class="nav-link inline-flex" to="/login">{{
 					t('nav.login')
 				}}</RouterLink>

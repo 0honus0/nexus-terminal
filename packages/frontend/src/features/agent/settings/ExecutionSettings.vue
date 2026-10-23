@@ -74,11 +74,11 @@
 				class="shrink-0"
 				:appearance="dirty ? 'solid' : 'soft'"
 				:tone="dirty ? 'primary' : 'neutral'"
+				:loading="busy"
 				:disabled="blocked || !dirty"
 				data-execution-header-save
 				@click="perform('save')"
 			>
-				<i v-if="busy" class="fa-solid fa-spinner fa-spin text-xs" aria-hidden="true"></i>
 				{{ t('common.save') }}
 			</UiButton>
 		</div>

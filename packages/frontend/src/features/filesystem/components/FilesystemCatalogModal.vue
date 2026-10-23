@@ -1,7 +1,19 @@
 <script setup lang="ts">
 	import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiContextMenu, UiOverlayPanel } from '@/foundation/ui';
+	import {
+		UiButton,
+		UiContextMenu,
+		UiContextMenuItem,
+		UiEmptyState,
+		UiLoadingState,
+		UiFormActions,
+		UiFormField,
+		UiInlineNotice,
+		UiInput,
+		UiOverlayPanel,
+		UiSearchInput,
+	} from '@/foundation/ui';
 	import { useDeviceCapabilities } from '@/foundation/browser';
 	import { useLongPressGesture } from '@/foundation/interaction';
 	import { useAuthenticatedViewScope } from '@/shared/session/public';
@@ -315,45 +327,53 @@
 		class="favorite-paths-popover fixed z-50 flex flex-col overflow-hidden rounded-md border border-border/50 bg-background shadow-lg"
 	>
 		<div class="flex shrink-0 items-center gap-2 p-2">
-			<div class="relative flex-grow">
-				<input
+			<div class="min-w-0 flex-grow">
+				<UiSearchInput
 					v-model="catalog.favoriteSearch.value"
-					type="text"
-					class="w-full rounded-md border border-border bg-input py-1.5 pl-2.5 pr-2 text-sm outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
+					density="compact"
+					class="w-full"
 					:placeholder="t('favoritePaths.searchPlaceholder')"
+					:aria-label="t('favoritePaths.searchPlaceholder')"
+					:clear-label="t('common.clear')"
 				/>
 			</div>
-			<button
+			<UiButton
 				type="button"
-				class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-sm text-text-secondary shadow-sm transition-colors duration-200 hover:bg-primary/10 hover:text-primary"
+				appearance="soft"
+				icon-only
 				:aria-label="t('favoritePaths.sortToggle')"
+				:title="t('favoritePaths.sortToggle')"
 				@click="toggleSort"
 			>
 				<i :class="sortIcon" aria-hidden="true"></i>
-			</button>
-			<button
+			</UiButton>
+			<UiButton
 				type="button"
-				class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-none bg-primary text-sm font-semibold text-white shadow-md transition-colors duration-200 hover:bg-button-hover"
+				appearance="solid"
+				tone="primary"
+				icon-only
 				:title="t('favoritePaths.addNew')"
 				:aria-label="t('favoritePaths.addNew')"
 				@click="openAdd"
 			>
 				<i class="fas fa-plus text-base" aria-hidden="true"></i>
-			</button>
+			</UiButton>
 		</div>
 
 		<div class="min-h-0 flex-grow overflow-y-auto p-1 text-sm">
-			<div
+			<UiLoadingState
 				v-if="catalog.loadingFavorites.value && !catalog.filteredFavorites.value.length"
-				class="p-3 text-center text-text-secondary"
-			>
-				<i class="fas fa-spinner fa-spin mr-1" aria-hidden="true"></i>
-				{{ t('favoritePaths.loading') }}
-			</div>
-			<div v-else-if="!catalog.filteredFavorites.value.length" class="p-3 text-center text-text-secondary">
-				<i class="fas fa-star-half-alt mr-1" aria-hidden="true"></i>
-				{{ catalog.favoriteSearch.value ? t('favoritePaths.noResults') : t('favoritePaths.noFavorites') }}
-			</div>
+				dense
+				:bordered="false"
+				:title="t('favoritePaths.loading')"
+			/>
+			<UiEmptyState
+				v-else-if="!catalog.filteredFavorites.value.length"
+				dense
+				:bordered="false"
+				icon="fa-solid fa-star-half-stroke"
+				:title="catalog.favoriteSearch.value ? t('favoritePaths.noResults') : t('favoritePaths.noFavorites')"
+			/>
 			<ul v-else class="m-0 list-none p-0">
 				<li
 					v-for="item in catalog.filteredFavorites.value"
@@ -385,18 +405,18 @@
 	</div>
 
 	<UiContextMenu v-if="context" :visible="true" :x="context.x" :y="context.y" :width="210" @close="context = null">
-		<button class="favorite-context-item" @mousedown.prevent @click="sendContextToTerminal">
+		<UiContextMenuItem @mousedown.prevent @click="sendContextToTerminal">
 			<i class="fas fa-terminal" aria-hidden="true"></i>
 			<span>{{ t('favoritePaths.terminalAction') }}</span>
-		</button>
-		<button class="favorite-context-item" @mousedown.prevent @click="editContextFavorite">
+		</UiContextMenuItem>
+		<UiContextMenuItem @mousedown.prevent @click="editContextFavorite">
 			<i class="fas fa-pencil-alt" aria-hidden="true"></i>
 			<span>{{ t('common.edit') }}</span>
-		</button>
-		<button class="favorite-context-item text-error" @mousedown.prevent @click="removeContextFavorite">
+		</UiContextMenuItem>
+		<UiContextMenuItem tone="danger" @mousedown.prevent @click="removeContextFavorite">
 			<i class="fas fa-trash-alt" aria-hidden="true"></i>
 			<span>{{ t('common.delete') }}</span>
-		</button>
+		</UiContextMenuItem>
 	</UiContextMenu>
 
 	<UiOverlayPanel
@@ -412,55 +432,42 @@
 			{{ t(editing ? 'favoritePaths.addEditForm.editTitle' : 'favoritePaths.addEditForm.addTitle') }}
 		</h2>
 		<form class="flex-grow space-y-4 overflow-y-auto" @submit.prevent="save">
-			<div>
-				<label for="favPath-name" class="mb-1 block text-sm font-medium text-text-secondary">
-					{{ t('favoritePaths.addEditForm.nameLabel') }}
-				</label>
-				<input
+			<UiFormField :label="t('favoritePaths.addEditForm.nameLabel')" for-id="favPath-name">
+				<UiInput
 					id="favPath-name"
 					v-model="form.name"
-					type="text"
 					:disabled="saving"
-					class="w-full rounded-md border border-border bg-input px-3 py-2 text-sm outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
 					:placeholder="t('favoritePaths.addEditForm.namePlaceholder')"
 				/>
-			</div>
-			<div>
-				<label for="favPath-path" class="mb-1 block text-sm font-medium text-text-secondary">
-					{{ t('favoritePaths.addEditForm.pathLabel') }} <span class="ml-0.5 text-error">*</span>
-				</label>
-				<input
+			</UiFormField>
+			<UiFormField :label="t('favoritePaths.addEditForm.pathLabel')" for-id="favPath-path" required>
+				<UiInput
 					id="favPath-path"
 					v-model="form.path"
-					type="text"
 					required
 					:disabled="saving"
-					class="w-full rounded-md border border-border bg-input px-3 py-2 text-sm outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
 					:placeholder="t('favoritePaths.addEditForm.pathPlaceholder')"
 				/>
-			</div>
-			<div v-if="errorMessage" class="rounded-md bg-error/10 p-2 text-sm text-error" role="alert">
+			</UiFormField>
+			<UiInlineNotice v-if="errorMessage" tone="danger">
 				{{ errorMessage }}
-			</div>
+			</UiInlineNotice>
 		</form>
-		<div class="mt-8 flex justify-end border-t border-border/50 pt-4">
-			<button
-				type="button"
-				class="mr-3 rounded-lg border border-border/50 bg-background px-5 py-2 text-sm font-medium text-text-secondary transition-colors duration-150 hover:bg-border hover:text-foreground disabled:opacity-50"
-				:disabled="saving"
-				@click="closeForm"
-			>
+		<UiFormActions class="mt-8 border-t border-border/50 pt-4">
+			<UiButton type="button" :disabled="saving" @click="closeForm">
 				{{ t('common.cancel') }}
-			</button>
-			<button
+			</UiButton>
+			<UiButton
 				type="button"
-				class="rounded-lg border-none bg-primary px-5 py-2 text-sm font-semibold text-white shadow-md transition-colors duration-150 hover:bg-button-hover disabled:cursor-not-allowed disabled:opacity-70"
+				appearance="solid"
+				tone="primary"
 				:disabled="saving || !form.path.trim()"
+				:loading="saving"
 				@click="save"
 			>
-				{{ saving ? t('common.saving') : t('common.save') }}
-			</button>
-		</div>
+				{{ t('common.save') }}
+			</UiButton>
+		</UiFormActions>
 	</UiOverlayPanel>
 </template>
 
@@ -476,28 +483,6 @@
 		text-overflow: ellipsis;
 		line-height: 1.35;
 		white-space: nowrap;
-	}
-
-	.favorite-context-item {
-		display: flex;
-		width: calc(100% - 0.5rem);
-		margin-inline: 0.25rem;
-		align-items: center;
-		gap: 0.55rem;
-		padding: 0.42rem 0.75rem;
-		border-radius: 0.375rem;
-		text-align: left;
-		transition:
-			background-color 0.15s ease,
-			color 0.15s ease;
-	}
-	.favorite-context-item:hover {
-		color: var(--link-active-color);
-		background: color-mix(in srgb, var(--link-active-color) 10%, transparent);
-	}
-	.favorite-context-item.text-error:hover {
-		color: var(--status-error-color);
-		background: color-mix(in srgb, var(--status-error-color) 10%, transparent);
 	}
 
 	@media (min-width: 768px) {

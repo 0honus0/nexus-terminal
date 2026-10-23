@@ -12,7 +12,14 @@
 	} from 'vue';
 	import { useAuthSession } from '@/features/auth/public';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiContextMenu, UiInput } from '@/foundation/ui';
+	import {
+		UiButton,
+		UiContextMenu,
+		UiContextMenuItem,
+		UiEmptyState,
+		UiLoadingState,
+		UiSearchInput,
+	} from '@/foundation/ui';
 	import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
 	import {
 		loadConnectionEditorModal,
@@ -27,14 +34,20 @@
 
 	const ConnectionEditorModal = defineAsyncComponent(loadConnectionEditorModal);
 	const props = withDefaults(
-		defineProps<{ showTags?: boolean; activeConnectionId?: number | null; pageScroll?: boolean }>(),
+		defineProps<{
+			showTags?: boolean;
+			activeConnectionId?: number | null;
+			pageScroll?: boolean;
+			launchpad?: boolean;
+		}>(),
 		{
 			showTags: true,
 			activeConnectionId: null,
+			launchpad: false,
 		},
 	);
 	const emit = defineEmits<{ open: [connection: ConnectionSummary]; openMany: [connections: ConnectionSummary[]] }>();
-	const { t } = useI18n();
+	const { t, locale } = useI18n();
 	const feedback = useFeedback();
 	const management = useConnectionManagement();
 	const data = management.data;
@@ -46,6 +59,8 @@
 	const editorVisible = ref(false);
 	const editorConnection = ref<ConnectionSummary | null>(null);
 	const context = ref<{ connection: ConnectionSummary; x: number; y: number } | null>(null);
+	type ConnectionGroup = { key: string; tagId: number | null; name: string; connections: ConnectionSummary[] };
+	const groupContext = ref<{ group: ConnectionGroup; x: number; y: number } | null>(null);
 	const expandedGroupsStorage = {
 		namespace: 'workspace.connection-groups',
 		version: 1,
@@ -95,6 +110,7 @@
 		editorConnection.value = null;
 		managerTag.value = null;
 		context.value = null;
+		groupContext.value = null;
 	}
 
 	const load = async (force = false): Promise<void> => {
@@ -202,7 +218,7 @@
 
 	const visibleConnections = computed(() => {
 		const source = props.showTags
-			? groups.value.flatMap((group) => (isExpanded(group.key) ? group.connections : []))
+			? groups.value.flatMap((group) => (props.launchpad || isExpanded(group.key) ? group.connections : []))
 			: filtered.value;
 		const seen = new Set<number>();
 		return source.filter((connection) => {
@@ -256,8 +272,42 @@
 	});
 
 	const toggleGroup = (key: string) => {
+		if (props.launchpad) return;
 		expanded.value = { ...expanded.value, [key]: !isExpanded(key) };
 		writeStoredValue(expandedGroupsStorage, expanded.value);
+	};
+
+	const relativeTimeFormatter = computed(() => new Intl.RelativeTimeFormat(locale.value, { numeric: 'auto' }));
+
+	const formatLastConnected = (timestamp: number | null): string => {
+		if (!timestamp) return '';
+		try {
+			const seconds = (timestamp - Date.now()) / 1000;
+			const absoluteSeconds = Math.abs(seconds);
+			const [scale, unit]: [number, Intl.RelativeTimeFormatUnit] =
+				absoluteSeconds < 60
+					? [1, 'second']
+					: absoluteSeconds < 3600
+						? [60, 'minute']
+						: absoluteSeconds < 86400
+							? [3600, 'hour']
+							: absoluteSeconds < 604800
+								? [86400, 'day']
+								: absoluteSeconds < 2629800
+									? [604800, 'week']
+									: absoluteSeconds < 31557600
+										? [2629800, 'month']
+										: [31557600, 'year'];
+			return relativeTimeFormatter.value.format(Math.round(seconds / scale), unit);
+		} catch {
+			return '';
+		}
+	};
+
+	const openFromKeyboard = (event: KeyboardEvent, connection: ConnectionSummary) => {
+		if (!props.launchpad) return;
+		event.preventDefault();
+		emit('open', connection);
 	};
 
 	const connectGroup = (connections: ConnectionSummary[]) => {
@@ -296,7 +346,39 @@
 	};
 
 	const openContext = (event: MouseEvent, connection: ConnectionSummary) => {
+		groupContext.value = null;
 		context.value = { connection, x: event.clientX, y: event.clientY };
+	};
+
+	const hasGroupActions = (group: ConnectionGroup): boolean =>
+		group.tagId !== null || group.connections.some((connection) => connection.type === 'SSH');
+
+	const openGroupContext = (event: MouseEvent, group: ConnectionGroup) => {
+		context.value = null;
+		const rect = (event.currentTarget as HTMLElement | null)?.getBoundingClientRect();
+		groupContext.value = {
+			group,
+			x: rect?.right ?? event.clientX,
+			y: (rect?.bottom ?? event.clientY) + 4,
+		};
+	};
+
+	const connectGroupFromMenu = () => {
+		const group = groupContext.value?.group;
+		groupContext.value = null;
+		if (group) connectGroup(group.connections);
+	};
+
+	const manageGroupFromMenu = () => {
+		const group = groupContext.value?.group;
+		groupContext.value = null;
+		if (group) manageGroup(group.tagId);
+	};
+
+	const deleteGroupFromMenu = () => {
+		const group = groupContext.value?.group;
+		groupContext.value = null;
+		if (group) void deleteGroupConnections(group);
 	};
 
 	const deleteGroupConnections = (group: { tagId: number | null; name: string; connections: ConnectionSummary[] }) =>
@@ -314,86 +396,94 @@
 	<section
 		ref="root"
 		class="workspace-connection-list flex min-h-0 flex-col text-foreground"
-		:class="props.pageScroll ? 'workspace-connection-list--page' : 'h-full overflow-hidden'"
+		:class="[
+			props.pageScroll ? 'workspace-connection-list--page' : 'h-full overflow-hidden',
+			props.launchpad ? 'workspace-connection-list--launchpad' : '',
+		]"
 	>
 		<div class="workspace-connection-toolbar flex items-center gap-2" :class="props.pageScroll ? 'mb-3' : 'p-2'">
-			<UiInput
+			<UiSearchInput
 				v-model="search"
 				data-focus-id="connectionListSearch"
-				type="text"
 				:aria-label="t('workspaceConnectionList.searchPlaceholder')"
 				:placeholder="t('workspaceConnectionList.searchPlaceholder')"
+				:clear-label="t('common.clear')"
 				class="workspace-connection-search min-w-0 flex-1"
 				@keydown="handleSearchKeydown"
-			>
-				<template #leading><i class="fas fa-search text-xs" aria-hidden="true"></i></template>
-				<template v-if="search" #trailing>
-					<button
-						type="button"
-						:aria-label="t('common.clear')"
-						class="cursor-pointer hover:text-foreground"
-						@click="search = ''"
-					>
-						<i class="fas fa-times-circle text-xs" aria-hidden="true"></i>
-					</button>
-				</template>
-			</UiInput>
-			<UiButton
-				v-if="!loading && (loadError || tagLoadFailed || data.needsRefresh.value)"
-				type="button"
-				icon-only
-				class="!h-8 !w-8 shrink-0"
-				:title="t('common.refresh')"
-				:aria-label="t('common.refresh')"
-				@click="load(true)"
-			>
-				<i class="fas fa-sync-alt" aria-hidden="true"></i>
-			</UiButton>
+			/>
 			<UiButton
 				type="button"
 				appearance="solid"
 				tone="primary"
-				icon-only
-				class="!h-8 !w-8 shrink-0"
+				:icon-only="!props.launchpad"
+				class="workspace-connection-add shrink-0"
 				:title="t('connections.addConnection')"
 				:aria-label="t('connections.addConnection')"
 				@click="addConnection"
 			>
 				<i class="fas fa-plus" aria-hidden="true"></i>
+				<span v-if="props.launchpad" class="workspace-connection-add-label">{{
+					t('connections.addConnection')
+				}}</span>
 			</UiButton>
 		</div>
 
-		<div v-if="loading" class="flex h-full items-center justify-center text-text-secondary">
-			<i class="fas fa-spinner fa-spin mr-2" aria-hidden="true"></i>{{ t('common.loading') }}
-		</div>
+		<UiLoadingState
+			v-if="loading"
+			class="workspace-connection-loading"
+			:class="props.launchpad ? 'workspace-connection-loading--launchpad' : 'h-full'"
+			:compact="props.launchpad"
+			:dense="!props.launchpad"
+			:bordered="false"
+			:title="t('common.loading')"
+		/>
 
 		<div
 			v-else
 			class="workspace-connection-content min-h-0"
 			:class="props.pageScroll ? '' : 'flex-1 overflow-y-auto p-2'"
 		>
-			<div
+			<UiEmptyState
 				v-if="data.connections.value.length && !filtered.length && search"
-				class="p-6 text-center text-text-secondary"
+				class="workspace-connection-empty"
+				dense
+				icon="fas fa-search"
+				:title="t('workspaceConnectionList.noResults', { searchTerm: search })"
+				:bordered="false"
 			>
-				<i class="fas fa-search mb-2 text-xl" aria-hidden="true"></i>
-				<p>{{ t('workspaceConnectionList.noResults', { searchTerm: search }) }}</p>
-			</div>
-			<div v-else-if="!data.connections.value.length && !loadError" class="p-6 text-center text-text-secondary">
-				<i class="fas fa-plug mb-2 text-xl" aria-hidden="true"></i>
-				<p>{{ t('connections.noConnections') }}</p>
-				<UiButton type="button" appearance="solid" tone="primary" class="mt-4" @click="addConnection">
-					{{ t('connections.addFirstConnection') }}
-				</UiButton>
-			</div>
+				<template v-if="props.launchpad" #action>
+					<UiButton appearance="ghost" density="compact" @click="search = ''">
+						{{ t('common.clear') }}
+					</UiButton>
+				</template>
+			</UiEmptyState>
+			<UiEmptyState
+				v-else-if="!data.connections.value.length && !loadError"
+				class="workspace-connection-empty"
+				icon="fas fa-plug"
+				:title="t('connections.noConnections')"
+				:bordered="false"
+			>
+				<template #action>
+					<UiButton type="button" appearance="solid" tone="primary" density="compact" @click="addConnection">
+						{{ t('connections.addFirstConnection') }}
+					</UiButton>
+				</template>
+			</UiEmptyState>
 
 			<template v-else-if="showTags">
 				<section v-for="group in groups" :key="group.key" class="workspace-connection-section mb-1 last:mb-0">
 					<header
-						class="workspace-connection-group group flex cursor-pointer items-center rounded-lg px-3 py-2 font-semibold text-foreground transition-colors duration-150"
+						v-if="!props.launchpad || groups.length > 1 || group.tagId !== null"
+						class="workspace-connection-group group flex items-center rounded-lg px-3 py-2 font-semibold text-foreground transition-colors duration-150"
+						:class="{
+							'cursor-pointer': !props.launchpad,
+							'workspace-connection-group--static': props.launchpad,
+						}"
 						@click="toggleGroup(group.key)"
 					>
 						<i
+							v-if="!props.launchpad"
 							:class="['fas', isExpanded(group.key) ? 'fa-chevron-down' : 'fa-chevron-right']"
 							class="mr-2 w-4 shrink-0 cursor-pointer text-center text-text-secondary transition-transform duration-200 ease-in-out group-hover:text-foreground"
 							aria-hidden="true"
@@ -407,112 +497,208 @@
 							>({{ group.connections.length }})</span
 						>
 						<div class="min-w-0 flex-1"></div>
-						<UiButton
-							v-if="group.connections.some((connection) => connection.type === 'SSH')"
-							type="button"
-							appearance="ghost"
-							density="compact"
-							icon-only
-							class="ml-1 !h-8 !w-8 shrink-0"
-							:title="t('workspaceConnectionList.connectAllSshInGroupMenu')"
-							:aria-label="t('workspaceConnectionList.connectAllSshInGroupMenu')"
-							@click.stop="connectGroup(group.connections)"
-						>
-							<i class="fas fa-network-wired fa-xs" aria-hidden="true"></i>
-						</UiButton>
-						<UiButton
-							v-if="group.tagId !== null"
-							type="button"
-							appearance="ghost"
-							density="compact"
-							icon-only
-							class="ml-1 !h-8 !w-8 shrink-0"
-							:title="t('workspaceConnectionList.manageTags.menuItem')"
-							:aria-label="t('workspaceConnectionList.manageTags.menuItem')"
-							@click.stop="manageGroup(group.tagId)"
-						>
-							<i class="fas fa-edit fa-xs" aria-hidden="true"></i>
-						</UiButton>
-						<UiButton
-							v-if="group.tagId !== null && group.connections.length"
-							type="button"
-							appearance="ghost"
-							tone="danger"
-							density="compact"
-							icon-only
-							class="ml-1 !h-8 !w-8 shrink-0"
-							:title="t('workspaceConnectionList.deleteAllConnectionsInGroupMenu')"
-							:aria-label="t('workspaceConnectionList.deleteAllConnectionsInGroupMenu')"
-							@click.stop="deleteGroupConnections(group)"
-						>
-							<i class="fas fa-trash-alt fa-xs" aria-hidden="true"></i>
-						</UiButton>
+						<div class="workspace-connection-group-actions flex items-center">
+							<UiButton
+								v-if="group.connections.some((connection) => connection.type === 'SSH')"
+								type="button"
+								appearance="ghost"
+								density="compact"
+								icon-only
+								class="workspace-connection-group-action workspace-connection-group-action--direct ml-1 shrink-0"
+								:title="t('workspaceConnectionList.connectAllSshInGroupMenu')"
+								:aria-label="t('workspaceConnectionList.connectAllSshInGroupMenu')"
+								@click.stop="connectGroup(group.connections)"
+							>
+								<i class="fas fa-network-wired fa-xs" aria-hidden="true"></i>
+							</UiButton>
+							<UiButton
+								v-if="group.tagId !== null"
+								type="button"
+								appearance="ghost"
+								density="compact"
+								icon-only
+								class="workspace-connection-group-action workspace-connection-group-action--direct ml-1 shrink-0"
+								:title="t('workspaceConnectionList.manageTags.menuItem')"
+								:aria-label="t('workspaceConnectionList.manageTags.menuItem')"
+								@click.stop="manageGroup(group.tagId)"
+							>
+								<i class="fas fa-pen fa-xs" aria-hidden="true"></i>
+							</UiButton>
+							<UiButton
+								v-if="group.tagId !== null && group.connections.length"
+								type="button"
+								appearance="ghost"
+								tone="danger"
+								density="compact"
+								icon-only
+								class="workspace-connection-group-action workspace-connection-group-action--direct ml-1 shrink-0"
+								:title="t('workspaceConnectionList.deleteAllConnectionsInGroupMenu')"
+								:aria-label="t('workspaceConnectionList.deleteAllConnectionsInGroupMenu')"
+								@click.stop="deleteGroupConnections(group)"
+							>
+								<i class="fas fa-trash-alt fa-xs" aria-hidden="true"></i>
+							</UiButton>
+							<UiButton
+								v-if="hasGroupActions(group)"
+								type="button"
+								appearance="ghost"
+								density="compact"
+								icon-only
+								class="workspace-connection-group-action workspace-connection-group-more ml-1 shrink-0"
+								:title="t('workspaceConnectionList.groupActions')"
+								:aria-label="t('workspaceConnectionList.groupActions')"
+								@click.stop="openGroupContext($event, group)"
+							>
+								<i class="fas fa-ellipsis-vertical fa-xs" aria-hidden="true"></i>
+							</UiButton>
+						</div>
 					</header>
 
-					<ul v-show="isExpanded(group.key)" class="workspace-connection-group-items m-0 list-none p-0">
+					<ul
+						v-show="props.launchpad || isExpanded(group.key)"
+						class="workspace-connection-group-items m-0 list-none p-0"
+					>
 						<li
 							v-for="connection in group.connections"
 							:key="connection.id"
 							:data-connection-id="connection.id"
+							:role="props.launchpad ? 'button' : undefined"
+							:tabindex="props.launchpad ? 0 : undefined"
+							:aria-label="
+								props.launchpad
+									? `${connection.name || connection.host}, ${connection.username}@${connection.host}:${connection.port}`
+									: undefined
+							"
 							class="workspace-connection-item group my-0.5 flex cursor-pointer items-center overflow-hidden whitespace-nowrap rounded-lg px-3 py-2 text-ellipsis text-foreground transition-colors duration-150"
 							:class="{
 								'bg-primary/20 font-medium': connection.id === props.activeConnectionId,
 								'ring-1 ring-inset ring-primary/40': connection.id === highlightedId,
+								'workspace-connection-item--launchpad': props.launchpad,
 							}"
 							@click.left="emit('open', connection)"
 							@contextmenu.prevent="openContext($event, connection)"
+							@keydown.enter="openFromKeyboard($event, connection)"
+							@keydown.space="openFromKeyboard($event, connection)"
 						>
-							<i
-								:class="[
-									'fas',
-									connection.type === 'RDP'
-										? 'fa-desktop'
-										: connection.type === 'VNC'
-											? 'fa-chalkboard'
-											: 'fa-server',
-								]"
-								class="mr-2 w-4 shrink-0 text-center text-text-secondary group-hover:text-primary"
-								aria-hidden="true"
-							></i>
-							<span class="min-w-0 flex-1 truncate text-sm" :title="connection.name || connection.host">
-								{{ connection.name || connection.host }}
+							<span class="workspace-connection-icon" aria-hidden="true">
+								<i
+									:class="[
+										'fas',
+										connection.type === 'RDP'
+											? 'fa-desktop'
+											: connection.type === 'VNC'
+												? 'fa-chalkboard'
+												: 'fa-server',
+									]"
+								></i>
+							</span>
+							<span class="workspace-connection-copy min-w-0 flex-1">
+								<span
+									class="workspace-connection-name truncate"
+									:title="connection.name || connection.host"
+								>
+									{{ connection.name || connection.host }}
+								</span>
+								<span v-if="props.launchpad" class="workspace-connection-subline">
+									<span class="workspace-connection-host truncate">
+										{{ connection.username }}@{{ connection.host }}:{{ connection.port }}
+									</span>
+									<span v-if="connection.lastConnectedAt" class="workspace-connection-time">
+										· {{ formatLastConnected(connection.lastConnectedAt) }}
+									</span>
+								</span>
+							</span>
+							<span v-if="props.launchpad" class="workspace-connection-meta">
+								<span class="workspace-connection-type">{{ connection.type }}</span>
 							</span>
 						</li>
 					</ul>
 				</section>
 			</template>
 
-			<ul v-else class="m-0 list-none p-0">
+			<ul v-else class="workspace-connection-grid m-0 list-none p-0">
 				<li
 					v-for="connection in filtered"
 					:key="connection.id"
 					:data-connection-id="connection.id"
+					:role="props.launchpad ? 'button' : undefined"
+					:tabindex="props.launchpad ? 0 : undefined"
+					:aria-label="
+						props.launchpad
+							? `${connection.name || connection.host}, ${connection.username}@${connection.host}:${connection.port}`
+							: undefined
+					"
 					class="workspace-connection-item group my-0.5 flex cursor-pointer items-center overflow-hidden whitespace-nowrap rounded-lg py-2 pl-4 pr-3 text-ellipsis text-foreground transition-colors duration-150"
 					:class="{
 						'bg-primary/20 font-medium': connection.id === props.activeConnectionId,
 						'ring-1 ring-inset ring-primary/40': connection.id === highlightedId,
+						'workspace-connection-item--launchpad': props.launchpad,
 					}"
 					@click.left="emit('open', connection)"
 					@contextmenu.prevent="openContext($event, connection)"
+					@keydown.enter="openFromKeyboard($event, connection)"
+					@keydown.space="openFromKeyboard($event, connection)"
 				>
-					<i
-						:class="[
-							'fas',
-							connection.type === 'RDP'
-								? 'fa-desktop'
-								: connection.type === 'VNC'
-									? 'fa-chalkboard'
-									: 'fa-server',
-						]"
-						class="mr-2.5 w-4 shrink-0 text-center text-text-secondary group-hover:text-primary"
-						aria-hidden="true"
-					></i>
-					<span class="min-w-0 flex-1 truncate text-sm" :title="connection.name || connection.host">
-						{{ connection.name || connection.host }}
+					<span class="workspace-connection-icon" aria-hidden="true">
+						<i
+							:class="[
+								'fas',
+								connection.type === 'RDP'
+									? 'fa-desktop'
+									: connection.type === 'VNC'
+										? 'fa-chalkboard'
+										: 'fa-server',
+							]"
+						></i>
+					</span>
+					<span class="workspace-connection-copy min-w-0 flex-1">
+						<span class="workspace-connection-name truncate" :title="connection.name || connection.host">
+							{{ connection.name || connection.host }}
+						</span>
+						<span v-if="props.launchpad" class="workspace-connection-subline">
+							<span class="workspace-connection-host truncate">
+								{{ connection.username }}@{{ connection.host }}:{{ connection.port }}
+							</span>
+							<span v-if="connection.lastConnectedAt" class="workspace-connection-time">
+								· {{ formatLastConnected(connection.lastConnectedAt) }}
+							</span>
+						</span>
+					</span>
+					<span v-if="props.launchpad" class="workspace-connection-meta">
+						<span class="workspace-connection-type">{{ connection.type }}</span>
 					</span>
 				</li>
 			</ul>
 		</div>
+
+		<UiContextMenu
+			v-if="groupContext"
+			:visible="true"
+			:x="groupContext.x"
+			:y="groupContext.y"
+			:width="190"
+			@close="groupContext = null"
+		>
+			<UiContextMenuItem
+				v-if="groupContext.group.connections.some((connection) => connection.type === 'SSH')"
+				@click="connectGroupFromMenu"
+			>
+				<i class="fas fa-network-wired" aria-hidden="true"></i>
+				<span>{{ t('workspaceConnectionList.connectAllSshInGroupMenu') }}</span>
+			</UiContextMenuItem>
+			<UiContextMenuItem v-if="groupContext.group.tagId !== null" @click="manageGroupFromMenu">
+				<i class="fas fa-pen" aria-hidden="true"></i>
+				<span>{{ t('workspaceConnectionList.manageTags.menuItem') }}</span>
+			</UiContextMenuItem>
+			<UiContextMenuItem
+				v-if="groupContext.group.tagId !== null && groupContext.group.connections.length"
+				tone="danger"
+				@click="deleteGroupFromMenu"
+			>
+				<i class="fas fa-trash-alt" aria-hidden="true"></i>
+				<span>{{ t('workspaceConnectionList.deleteAllConnectionsInGroupMenu') }}</span>
+			</UiContextMenuItem>
+		</UiContextMenu>
 
 		<UiContextMenu
 			v-if="context"
@@ -522,18 +708,18 @@
 			:width="190"
 			@close="context = null"
 		>
-			<button class="context-item" @click="addConnection">
+			<UiContextMenuItem @click="addConnection">
 				<i class="fas fa-plus" aria-hidden="true"></i><span>{{ t('connections.addConnection') }}</span>
-			</button>
-			<button class="context-item" @click="editConnection(context.connection)">
+			</UiContextMenuItem>
+			<UiContextMenuItem @click="editConnection(context.connection)">
 				<i class="fas fa-edit" aria-hidden="true"></i><span>{{ t('connections.actions.edit') }}</span>
-			</button>
-			<button class="context-item" @click="cloneConnection(context.connection)">
+			</UiContextMenuItem>
+			<UiContextMenuItem @click="cloneConnection(context.connection)">
 				<i class="fas fa-clone" aria-hidden="true"></i><span>{{ t('connections.actions.clone') }}</span>
-			</button>
-			<button class="context-item text-error" @click="deleteConnection(context.connection)">
+			</UiContextMenuItem>
+			<UiContextMenuItem tone="danger" @click="deleteConnection(context.connection)">
 				<i class="fas fa-trash-alt" aria-hidden="true"></i><span>{{ t('connections.actions.delete') }}</span>
-			</button>
+			</UiContextMenuItem>
 		</UiContextMenu>
 
 		<ConnectionEditorModal
@@ -557,23 +743,189 @@
 
 <style scoped>
 	.workspace-connection-list {
+		container-type: inline-size;
+		container-name: workspace-connection-pane;
 		background: var(--app-bg-color);
 	}
 	.workspace-connection-content {
 		background: var(--app-bg-color);
 	}
+	.workspace-connection-icon {
+		display: grid;
+		width: 1.25rem;
+		flex-shrink: 0;
+		place-items: center;
+		margin-right: 0.625rem;
+		color: var(--text-color-secondary);
+		font-size: 0.8125rem;
+		transition: color 0.15s ease;
+	}
+	.workspace-connection-copy {
+		display: flex;
+		flex-direction: column;
+	}
+	.workspace-connection-name {
+		display: block;
+		font-size: 0.875rem;
+		line-height: 1.35;
+	}
+	.workspace-connection-item:hover .workspace-connection-icon {
+		color: var(--link-active-color);
+	}
+	.workspace-connection-group .workspace-connection-group-action {
+		width: 2rem;
+		height: 2rem;
+	}
+	.workspace-connection-group-more {
+		display: none;
+	}
 	.workspace-connection-group:hover {
 		background: color-mix(in srgb, var(--text-color) 9%, var(--app-bg-color));
 	}
 	.workspace-connection-group {
-		background: color-mix(in srgb, var(--text-color) 5%, var(--app-bg-color));
-		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-color) 45%, transparent);
+		border-radius: 0.4rem;
+		background: color-mix(in srgb, var(--text-color) 3%, transparent);
+		box-shadow: none;
 	}
 	.workspace-connection-item:hover {
 		background: color-mix(in srgb, var(--link-active-color) 9%, var(--app-bg-color));
 	}
+	@container workspace-connection-pane (max-width: 240px) {
+		.workspace-connection-group {
+			padding-inline: 0.45rem;
+		}
+		.workspace-connection-group-actions {
+			opacity: 0.7;
+		}
+	}
 	.workspace-connection-item.bg-primary\/20 {
 		background: color-mix(in srgb, var(--link-active-color) 16%, var(--app-bg-color));
+	}
+
+	.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-toolbar {
+		gap: 0.35rem;
+		padding: 0.5rem 0.5rem 0.35rem;
+	}
+	.workspace-connection-list:not(.workspace-connection-list--launchpad)
+		.workspace-connection-search
+		:deep(.ui-input) {
+		height: 1.9rem;
+		border-color: transparent;
+		background: color-mix(in srgb, var(--input-bg-color) 44%, transparent);
+		box-shadow: inset 0 1px 1px rgb(0 0 0 / 4%);
+	}
+	.workspace-connection-list:not(.workspace-connection-list--launchpad)
+		.workspace-connection-search
+		:deep(.ui-input__control) {
+		font-size: 0.7rem;
+	}
+	.workspace-connection-list:not(.workspace-connection-list--launchpad)
+		.workspace-connection-search
+		:deep(.ui-input__adornment) {
+		padding-inline: 0.5rem 0.2rem;
+		font-size: 0.65rem;
+	}
+	.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-add {
+		width: 1.9rem;
+		height: 1.9rem;
+		border-radius: 0.5rem;
+	}
+	.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-content {
+		padding: 0.2rem 0.3rem 0.4rem 0.4rem;
+	}
+	.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-group {
+		min-height: 1.85rem;
+		padding: 0.18rem 0.4rem;
+		border-radius: 0.45rem;
+		background: color-mix(in srgb, var(--text-color) 3.5%, transparent);
+	}
+	.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-group-name {
+		font-size: 0.72rem;
+		font-weight: 600;
+		letter-spacing: 0.01em;
+	}
+	.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-group > i {
+		width: 0.75rem;
+		margin-right: 0.35rem;
+		font-size: 0.58rem;
+	}
+	.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-group-actions {
+		margin-left: 0.25rem;
+	}
+	.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-group-action {
+		width: 1.55rem;
+		height: 1.55rem;
+	}
+	.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-item {
+		min-height: 1.72rem;
+		margin-block: 0.08rem;
+		padding: 0.25rem 0.4rem;
+		border-radius: 0.4rem;
+	}
+	.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-icon {
+		width: 1.05rem;
+		margin-right: 0.42rem;
+		font-size: 0.7rem;
+	}
+	.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-name {
+		font-size: 0.76rem;
+	}
+	.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-empty {
+		margin: auto;
+		padding: 0.75rem;
+		background: transparent;
+	}
+	.workspace-connection-list:not(.workspace-connection-list--launchpad)
+		.workspace-connection-empty
+		:deep(.ui-empty-state__icon) {
+		width: 25px;
+		height: 25px;
+		border: 0;
+		background: color-mix(in srgb, var(--text-color) 6%, transparent);
+		color: var(--text-color-secondary);
+		font-size: 10px;
+	}
+	.workspace-connection-list:not(.workspace-connection-list--launchpad)
+		.workspace-connection-empty
+		:deep(.ui-empty-state__title) {
+		font-size: 11px;
+		font-weight: 500;
+		color: var(--text-color-secondary);
+	}
+	.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-loading {
+		font-size: 0.7rem;
+	}
+	@container workspace-connection-pane (max-width: 250px) {
+		.workspace-connection-list:not(.workspace-connection-list--launchpad)
+			.workspace-connection-group-action--direct {
+			display: none;
+		}
+		.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-group-more {
+			display: inline-flex;
+		}
+	}
+	@container workspace-connection-pane (max-width: 180px) {
+		.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-toolbar {
+			padding-inline: 0.35rem;
+		}
+		.workspace-connection-list:not(.workspace-connection-list--launchpad)
+			.workspace-connection-search
+			:deep(.ui-input__adornment) {
+			display: none;
+		}
+		.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-add {
+			width: 1.7rem;
+			height: 1.7rem;
+		}
+		.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-group {
+			padding-inline: 0.3rem;
+		}
+		.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-group-name {
+			font-size: 0.68rem;
+		}
+		.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-group-actions {
+			margin-left: 0;
+		}
 	}
 	.workspace-connection-list--page .workspace-connection-section {
 		margin-bottom: 0.75rem;
@@ -618,32 +970,224 @@
 		padding-left: 1.25rem;
 	}
 
-	.context-item {
-		display: flex;
-		width: calc(100% - 0.5rem);
-		margin-inline: 0.25rem;
-		align-items: center;
-		gap: 0.75rem;
+	.workspace-connection-list--launchpad {
+		container-type: inline-size;
+	}
+
+	.workspace-connection-list--launchpad .workspace-connection-toolbar {
+		margin-bottom: 1.25rem;
+		gap: 0.625rem;
+	}
+
+	.workspace-connection-list--launchpad .workspace-connection-search :deep(.ui-input) {
+		height: 2.75rem;
+		border-radius: 0.625rem;
+	}
+
+	.workspace-connection-list--launchpad .workspace-connection-add,
+	.workspace-connection-list--launchpad .workspace-connection-toolbar > [data-ui='button'] {
+		height: 2.75rem;
+		border-radius: 0.625rem;
+	}
+
+	.workspace-connection-list--launchpad .workspace-connection-refresh {
+		width: 2.75rem;
+	}
+
+	.workspace-connection-list--launchpad .workspace-connection-toolbar > .workspace-connection-add {
+		height: 2rem;
+		padding-inline: 0.625rem;
+		border-radius: 0.5rem;
+	}
+
+	.workspace-connection-add-label {
+		margin-left: 0.375rem;
+		font-size: 0.75rem;
+		font-weight: 500;
+	}
+
+	.workspace-connection-loading--launchpad {
+		min-height: 12rem;
+	}
+
+	.workspace-connection-list--launchpad .workspace-connection-empty {
+		padding: 4rem 1rem;
+	}
+
+	.workspace-connection-list--launchpad .workspace-connection-empty i {
+		color: color-mix(in srgb, var(--text-color-secondary) 65%, transparent);
+	}
+
+	.workspace-connection-list--launchpad .workspace-connection-section {
+		margin-bottom: 1.75rem;
+		border: 0;
+		border-radius: 0;
+		overflow: visible;
+	}
+
+	.workspace-connection-list--launchpad .workspace-connection-section:last-child {
+		margin-bottom: 0;
+	}
+
+	.workspace-connection-list--launchpad .workspace-connection-group {
+		height: 2rem;
+		min-height: 2rem;
+		margin-bottom: 0.5rem;
+		padding: 0 0.125rem;
+		border-radius: 0;
+		background: transparent;
+		box-shadow: none;
+		color: var(--text-color-secondary);
+		font-weight: 500;
+	}
+
+	.workspace-connection-list--launchpad .workspace-connection-group:hover {
+		background: transparent;
+	}
+
+	.workspace-connection-list--launchpad .workspace-connection-group--static {
+		cursor: default;
+	}
+
+	.workspace-connection-list--launchpad .workspace-connection-group-name {
+		font-size: 0.75rem;
+		font-weight: 600;
+		letter-spacing: 0.015em;
+	}
+
+	.workspace-connection-list--launchpad .workspace-connection-group-actions {
+		opacity: 0.5;
+		transition: opacity 0.15s ease;
+	}
+
+	.workspace-connection-list--launchpad .workspace-connection-group:hover .workspace-connection-group-actions,
+	.workspace-connection-list--launchpad .workspace-connection-group:focus-within .workspace-connection-group-actions {
+		opacity: 1;
+	}
+
+	.workspace-connection-list--launchpad .workspace-connection-group-actions [data-ui='button'] {
+		width: 1.75rem;
+		height: 1.75rem;
 		border-radius: 0.375rem;
-		padding: 0.4rem 0.75rem;
-		text-align: left;
-		font-size: 0.875rem;
+	}
+
+	.workspace-connection-list--launchpad .workspace-connection-group-items,
+	.workspace-connection-list--launchpad .workspace-connection-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 0.5rem;
+		padding: 0;
+	}
+
+	.workspace-connection-list--launchpad .workspace-connection-item {
+		min-width: 0;
+		min-height: 4rem;
+		margin: 0;
+		padding: 0.625rem 0.75rem;
+		border-radius: 0.625rem;
+		white-space: normal;
+		background: color-mix(in srgb, var(--text-color) 2.5%, transparent);
 		transition:
 			background-color 0.15s ease,
-			color 0.15s ease;
+			box-shadow 0.15s ease;
 	}
-	.context-item i {
-		width: 1rem;
-		text-align: center;
+
+	.workspace-connection-list--launchpad .workspace-connection-item:hover {
+		background: color-mix(in srgb, var(--link-active-color) 8%, transparent);
+	}
+
+	.workspace-connection-list--launchpad .workspace-connection-item:focus-visible {
+		outline: 1px solid var(--link-active-color);
+		outline-offset: 1px;
+	}
+
+	.workspace-connection-list--launchpad .workspace-connection-item.bg-primary\/20 {
+		background: color-mix(in srgb, var(--link-active-color) 11%, transparent);
+		box-shadow: inset 2px 0 0 var(--link-active-color);
+	}
+
+	.workspace-connection-list--launchpad .workspace-connection-name {
+		font-size: 0.875rem;
+		font-weight: 500;
+		line-height: 1.35;
+	}
+
+	.workspace-connection-subline {
+		display: flex;
+		min-width: 0;
+		align-items: center;
+		gap: 0.375rem;
+		margin-top: 0.125rem;
+	}
+
+	.workspace-connection-host {
+		min-width: 0;
+		color: var(--text-color-secondary);
+		font-family: var(--font-family-monospace);
+		font-size: 0.6875rem;
+		line-height: 1.35;
+		opacity: 0.78;
+	}
+
+	.workspace-connection-meta {
+		display: flex;
+		flex-shrink: 0;
+		align-items: center;
+		margin-left: 0.75rem;
 		color: var(--text-color-secondary);
 	}
-	.context-item:hover,
-	.context-item:focus-visible {
-		background: color-mix(in srgb, var(--link-active-color) 10%, transparent);
-		color: var(--link-active-color);
-		outline: none;
+
+	.workspace-connection-type {
+		padding: 0.125rem 0.375rem;
+		border: 1px solid color-mix(in srgb, var(--border-color) 65%, transparent);
+		border-radius: 9999px;
+		font-size: 0.625rem;
+		font-weight: 600;
+		line-height: 1.4;
 	}
-	.context-item.text-error i {
-		color: currentColor;
+
+	.workspace-connection-time {
+		flex-shrink: 0;
+		font-size: 0.6875rem;
+		white-space: nowrap;
+		opacity: 0.72;
+	}
+
+	.workspace-connection-list--launchpad .workspace-connection-meta {
+		justify-content: flex-end;
+	}
+
+	@container (max-width: 44rem) {
+		.workspace-connection-list--launchpad .workspace-connection-group-items,
+		.workspace-connection-list--launchpad .workspace-connection-grid {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+
+	@media (hover: none) {
+		.workspace-connection-list--launchpad .workspace-connection-group-actions {
+			opacity: 1;
+		}
+	}
+
+	@media (max-width: 640px) {
+		.workspace-connection-add-label {
+			display: none;
+		}
+
+		.workspace-connection-list--launchpad .workspace-connection-toolbar > .workspace-connection-add {
+			width: 2.5rem;
+			height: 2.5rem;
+			padding-inline: 0;
+		}
+
+		.workspace-connection-list--launchpad .workspace-connection-item {
+			min-height: 3.75rem;
+		}
+
+		.workspace-connection-list--launchpad .workspace-connection-group-actions [data-ui='button'] {
+			width: 2.25rem;
+			height: 2.25rem;
+		}
 	}
 </style>

@@ -1,19 +1,16 @@
 <script setup lang="ts">
-	import UiInput from './UiInput.vue';
+	import UiSearchInput from './UiSearchInput.vue';
 	const search = defineModel<string>({ default: '' });
 	defineProps<{ searchLabel: string; placeholder?: string }>();
 </script>
 <template>
 	<div class="ui-list-toolbar">
-		<UiInput
+		<UiSearchInput
 			v-model="search"
-			type="search"
 			density="comfortable"
 			:aria-label="searchLabel"
 			:placeholder="placeholder || searchLabel"
-		>
-			<template #leading><i class="fa-solid fa-magnifying-glass text-xs" aria-hidden="true"></i></template>
-		</UiInput>
+		/>
 		<div class="ui-list-toolbar__filters"><slot /></div>
 	</div>
 </template>

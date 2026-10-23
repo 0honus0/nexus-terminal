@@ -1,7 +1,17 @@
 <script setup lang="ts">
 	import { computed, onActivated, onMounted, ref, toRaw, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiCheckbox } from '@/foundation/ui';
+	import {
+		UiBadge,
+		UiButton,
+		UiCheckbox,
+		UiEmptyState,
+		UiInfoHint,
+		UiInlineNotice,
+		UiInput,
+		UiSearchInput,
+		type UiTone,
+	} from '@/foundation/ui';
 	import { getPluginCatalog, getPluginRepositories, updatePluginRepositories } from '../api/plugin-management-api';
 	import { useAgentManagementOperation } from '../composables/use-agent-management-operation';
 	import type {
@@ -143,28 +153,28 @@
 		);
 	}
 
-	function catalogEntryState(entry: PluginCatalogEntry): { label: string; tone: string } {
+	function catalogEntryState(entry: PluginCatalogEntry): { label: string; tone: UiTone } {
 		if (!entry.compatible) {
-			return { label: t('agent.settings.plugins.incompatible'), tone: 'bg-warning/10 text-warning' };
+			return { label: t('agent.settings.plugins.incompatible'), tone: 'warning' };
 		}
 		const installation = installedFor(entry);
 		if (!installation) {
-			return { label: t('agent.settings.plugins.stateNotInstalled'), tone: 'bg-header text-text-secondary' };
+			return { label: t('agent.settings.plugins.stateNotInstalled'), tone: 'neutral' };
 		}
 		if (installation.status === 'draining') {
-			return { label: t('agent.settings.plugins.stateDraining'), tone: 'bg-warning/10 text-warning' };
+			return { label: t('agent.settings.plugins.stateDraining'), tone: 'warning' };
 		}
 		if (installation.version !== entry.version) {
-			return { label: t('agent.settings.plugins.stateUpgrade'), tone: 'bg-primary/10 text-primary' };
+			return { label: t('agent.settings.plugins.stateUpgrade'), tone: 'primary' };
 		}
 		const app = props.apps.find((item) => item.id === installation.appId);
 		if (app?.enabled) {
-			return { label: t('agent.settings.plugins.stateEnabled'), tone: 'bg-success/10 text-success' };
+			return { label: t('agent.settings.plugins.stateEnabled'), tone: 'success' };
 		}
 		if (app) {
-			return { label: t('agent.settings.plugins.stateDisabled'), tone: 'bg-header text-text-secondary' };
+			return { label: t('agent.settings.plugins.stateDisabled'), tone: 'neutral' };
 		}
-		return { label: t('agent.settings.plugins.stateInstalled'), tone: 'bg-success/10 text-success' };
+		return { label: t('agent.settings.plugins.stateInstalled'), tone: 'success' };
 	}
 
 	function catalogEntryAction(entry: PluginCatalogEntry): string {
@@ -282,29 +292,25 @@
 					<h4 class="text-xs font-semibold text-foreground">
 						{{ t('agent.settings.plugins.remoteRepositories') }}
 					</h4>
-					<span
-						v-if="totalPluginCount > 0"
-						class="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-semibold text-primary"
-					>
+					<UiBadge v-if="totalPluginCount > 0" tone="primary" density="compact">
 						{{ totalPluginCount }}
-					</span>
+					</UiBadge>
 				</div>
 
 				<div class="flex flex-wrap items-center gap-2">
-					<div class="relative w-full min-w-0 sm:w-auto sm:min-w-[280px]">
-						<i
-							class="fa-solid fa-link absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-text-secondary"
-							aria-hidden="true"
-						></i>
-						<input
+					<div class="w-full min-w-0 sm:w-auto sm:min-w-[280px]">
+						<UiInput
 							v-model="repositoryUrl"
 							:aria-label="t('agent.settings.plugins.repositoryUrl')"
-							type="text"
-							data-no-highlight
-							class="h-8.5 w-full rounded-lg border border-border bg-background pl-7 pr-2.5 shadow-2xs text-xs text-foreground placeholder:text-text-secondary/60 focus:border-border-hover focus:outline-none transition-all"
+							density="compact"
+							class="w-full"
 							:placeholder="t('agent.settings.plugins.repositoryUrl')"
 							:disabled="locked"
-						/>
+						>
+							<template #leading>
+								<i class="fa-solid fa-link" aria-hidden="true"></i>
+							</template>
+						</UiInput>
 					</div>
 					<UiInfoHint
 						v-if="!repositoryUrl.trim()"
@@ -323,15 +329,12 @@
 						type="button"
 						appearance="soft"
 						tone="neutral"
+						:loading="operation.busy.value"
 						:disabled="locked"
 						:aria-label="t('agent.settings.plugins.refreshRemote')"
 						@click="reload"
 					>
-						<i
-							class="fa-solid fa-arrows-rotate text-xs"
-							:class="{ 'fa-spin': operation.busy.value }"
-							aria-hidden="true"
-						></i>
+						<i class="fa-solid fa-arrows-rotate text-xs" aria-hidden="true"></i>
 						<span class="hidden whitespace-nowrap min-[360px]:inline">{{
 							t('agent.settings.plugins.refreshRemote')
 						}}</span>
@@ -339,28 +342,15 @@
 				</div>
 			</div>
 
-			<div class="mt-3 relative w-full">
-				<i
-					class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-text-secondary"
-					aria-hidden="true"
-				></i>
-				<input
+			<div class="mt-3 w-full">
+				<UiSearchInput
 					v-model="searchQuery"
 					:aria-label="t('agent.settings.plugins.searchPlaceholder')"
-					type="text"
-					data-no-highlight
-					class="h-8.5 w-full rounded-lg border border-border bg-background pl-8 pr-8 shadow-2xs text-xs text-foreground placeholder:text-text-secondary/60 focus:border-border-hover focus:outline-none transition-all"
+					density="compact"
+					class="w-full"
 					:placeholder="t('agent.settings.plugins.searchPlaceholder')"
+					:clear-label="t('common.clear')"
 				/>
-				<button
-					v-if="searchQuery"
-					type="button"
-					class="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center text-xs text-text-secondary hover:text-foreground cursor-pointer"
-					@click="searchQuery = ''"
-					:aria-label="t('common.clear')"
-				>
-					<i class="fa-solid fa-circle-xmark"></i>
-				</button>
 			</div>
 
 			<div v-if="configuredRepositories.length" class="mt-3 flex flex-wrap gap-2 pt-3 border-t border-border">
@@ -375,15 +365,19 @@
 						:title="repository.url"
 						>{{ repository.url }}</span
 					>
-					<button
+					<UiButton
 						type="button"
-						class="inline-flex h-6 w-6 items-center justify-center rounded text-text-secondary hover:bg-error/10 hover:text-error transition-colors disabled:opacity-50 cursor-pointer"
+						appearance="ghost"
+						tone="danger"
+						density="compact"
+						icon-only
 						:aria-label="t('agent.settings.plugins.removeRepository')"
+						:title="t('agent.settings.plugins.removeRepository')"
 						:disabled="locked"
 						@click="removeRepository(repository.url)"
 					>
 						<i class="fa-solid fa-xmark text-[10px]" aria-hidden="true"></i>
-					</button>
+					</UiButton>
 				</div>
 			</div>
 
@@ -424,30 +418,28 @@
 									group.owner
 								}}</span>
 							</div>
-							<span
-								v-if="group.official"
-								class="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary shrink-0"
-							>
+							<UiBadge v-if="group.official" class="shrink-0" tone="primary" density="compact">
 								<i class="fa-solid fa-certificate text-[8px]" aria-hidden="true"></i>
 								<span>{{ t('agent.settings.plugins.officialRepository') }}</span>
-							</span>
-							<span
-								v-else
-								class="inline-flex items-center gap-1 rounded-full border border-border/70 bg-header/60 px-2 py-0.5 text-[10px] font-medium text-text-secondary shrink-0"
-							>
+							</UiBadge>
+							<UiBadge v-else appearance="ghost" density="compact" class="shrink-0">
 								<i class="fa-solid fa-network-wired text-[8px]" aria-hidden="true"></i>
 								<span>{{ t('agent.settings.plugins.thirdPartyRepository') }}</span>
-							</span>
-							<span
-								class="hidden xs:inline-flex rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 text-[10px] font-mono text-text-secondary shrink-0"
+							</UiBadge>
+							<UiBadge
+								class="hidden shrink-0 font-mono xs:inline-flex"
+								appearance="ghost"
+								density="compact"
 							>
 								{{ t('agent.settings.plugins.pluginCount', { count: group.packages.length }) }}
-							</span>
+							</UiBadge>
 
-							<button
+							<UiButton
 								v-if="group.sourceUrl"
 								type="button"
-								class="inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-header/60 hover:bg-header hover:border-border hover:text-foreground px-2 py-1 text-[11px] font-mono text-text-secondary transition-colors cursor-pointer max-w-full"
+								appearance="ghost"
+								density="compact"
+								class="max-w-full font-mono text-[11px] text-text-secondary"
 								:title="group.sourceUrl"
 								@click.stop="copyCatalogUrl(group.sourceUrl)"
 								@keydown.stop
@@ -462,11 +454,10 @@
 									class="text-[10px] shrink-0"
 									aria-hidden="true"
 								></i>
-								<span
-									class="truncate max-w-[280px] sm:max-w-[420px] md:max-w-[620px] lg:max-w-[820px] text-[11px]"
-									>{{ group.sourceUrl }}</span
-								>
-							</button>
+								<span class="truncate max-w-[280px] sm:max-w-[420px] md:max-w-[620px] lg:max-w-[820px]">
+									{{ group.sourceUrl }}
+								</span>
+							</UiButton>
 						</div>
 					</div>
 
@@ -523,11 +514,9 @@
 											>
 												v{{ entry.version }}
 											</span>
-											<span
-												class="rounded-full px-2 py-0.5 text-[11px] font-medium"
-												:class="catalogEntryState(entry).tone"
-												>{{ catalogEntryState(entry).label }}</span
-											>
+											<UiBadge :tone="catalogEntryState(entry).tone" density="compact">{{
+												catalogEntryState(entry).label
+											}}</UiBadge>
 											<span class="hidden md:inline font-mono text-[11px] text-text-secondary/60">
 												{{ entry.definitionId }}
 											</span>
@@ -623,27 +612,23 @@
 				</div>
 			</div>
 
-			<div
+			<UiEmptyState
 				v-else-if="catalogs.length > 0 && searchQuery"
-				class="mt-3.5 pt-6 pb-6 text-center border-t border-border"
+				class="mt-3.5 border-t border-border pt-4 pb-4"
+				compact
+				:bordered="false"
+				icon="fa-solid fa-magnifying-glass"
+				:title="t('agent.settings.plugins.searchEmpty')"
 			>
-				<div
-					class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-header/60 text-text-secondary mb-2"
-				>
-					<i class="fa-solid fa-magnifying-glass text-xs" aria-hidden="true"></i>
-				</div>
-				<p class="text-xs text-text-secondary">{{ t('agent.settings.plugins.searchEmpty') }}</p>
-				<button
-					type="button"
-					class="mt-2 text-xs text-primary hover:underline cursor-pointer"
-					@click="searchQuery = ''"
-				>
-					{{ t('agent.settings.plugins.clearSearch') }}
-				</button>
-			</div>
+				<template #action>
+					<UiButton appearance="ghost" density="compact" @click="searchQuery = ''">
+						{{ t('agent.settings.plugins.clearSearch') }}
+					</UiButton>
+				</template>
+			</UiEmptyState>
 		</div>
-		<template v-if="unknown">
-			<p class="text-warning">{{ t('agent.pluginManagement.unknown') }}</p>
+		<UiInlineNotice v-if="unknown" tone="warning">
+			<p>{{ t('agent.pluginManagement.unknown') }}</p>
 			<UiCheckbox v-model="acknowledged">{{ t('agent.pluginManagement.acknowledge') }}</UiCheckbox>
 			<UiButton
 				type="button"
@@ -651,6 +636,6 @@
 				@click="newIntent"
 				>{{ t('agent.pluginManagement.newIntent') }}</UiButton
 			>
-		</template>
+		</UiInlineNotice>
 	</section>
 </template>

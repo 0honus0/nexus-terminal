@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { computed, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiInput, UiModal, UiSelect, UiSpinner } from '@/foundation/ui';
+	import { UiBadge, UiButton, UiEmptyState, UiLoadingState, UiModal, UiSearchInput, UiSelect } from '@/foundation/ui';
 	import ProxyForm from '../components/ProxyForm.vue';
 	import { useProxyManagement } from '../composables/use-proxy-management';
 
@@ -93,15 +93,13 @@
 				</header>
 
 				<div class="ui-catalog-toolbar ui-catalog-toolbar--proxy">
-					<UiInput
+					<UiSearchInput
 						v-model="search"
-						type="search"
 						density="comfortable"
 						:placeholder="t('proxies.searchPlaceholder')"
 						:aria-label="t('common.search')"
-					>
-						<template #leading><i class="fas fa-magnifying-glass" aria-hidden="true"></i></template>
-					</UiInput>
+						:clear-label="t('common.clear')"
+					/>
 					<UiSelect
 						v-model="typeFilter"
 						density="comfortable"
@@ -119,17 +117,19 @@
 					</UiButton>
 				</div>
 
-				<div v-if="loading && data.proxies.value.length === 0" class="ui-catalog-empty">
-					<UiSpinner />
-					<p>{{ t('proxies.loading') }}</p>
-				</div>
-				<div v-else-if="filtered.length === 0" class="ui-catalog-empty">
-					<span class="ui-catalog-empty__icon" aria-hidden="true">
-						<i :class="search || typeFilter !== 'all' ? 'fas fa-magnifying-glass' : 'fas fa-route'"></i>
-					</span>
-					<p v-if="data.proxies.value.length === 0">{{ t('proxies.noProxies') }}</p>
-					<p v-else>{{ t('proxies.noMatches') }}</p>
-				</div>
+				<UiLoadingState
+					v-if="loading && data.proxies.value.length === 0"
+					class="min-h-[240px]"
+					:bordered="false"
+					:title="t('proxies.loading')"
+				/>
+				<UiEmptyState
+					v-else-if="filtered.length === 0"
+					class="min-h-[240px]"
+					:bordered="false"
+					:icon="search || typeFilter !== 'all' ? 'fas fa-magnifying-glass' : 'fas fa-route'"
+					:title="data.proxies.value.length === 0 ? t('proxies.noProxies') : t('proxies.noMatches')"
+				/>
 				<ul v-else class="ui-catalog-list">
 					<li v-for="proxy in filtered" :key="proxy.id">
 						<article class="ui-catalog-card">
@@ -143,10 +143,10 @@
 							<div class="ui-catalog-card__content">
 								<div class="ui-catalog-card__heading">
 									<strong class="ui-catalog-card__name">{{ proxy.name }}</strong>
-									<span class="ui-catalog-badge">{{ proxy.type }}</span>
-									<span v-if="proxy.username" class="ui-catalog-badge ui-catalog-badge--accent">
+									<UiBadge appearance="ghost" density="compact">{{ proxy.type }}</UiBadge>
+									<UiBadge v-if="proxy.username" tone="primary" appearance="ghost" density="compact">
 										{{ t('proxies.authenticated') }}
-									</span>
+									</UiBadge>
 								</div>
 								<code class="ui-catalog-card__address">{{ proxy.host }}:{{ proxy.port }}</code>
 								<div class="ui-catalog-card__meta">

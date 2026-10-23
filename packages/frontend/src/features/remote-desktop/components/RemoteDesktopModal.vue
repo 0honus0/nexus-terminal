@@ -1,7 +1,16 @@
 <script setup lang="ts">
 	import { computed, nextTick, onBeforeUnmount, onActivated, onDeactivated, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiOverlayPanel, UiResizeHandle } from '@/foundation/ui';
+	import {
+		UiBadge,
+		UiButton,
+		UiInput,
+		UiNumberInput,
+		UiOverlayPanel,
+		UiResizeHandle,
+		UiSpinner,
+		type UiTone,
+	} from '@/foundation/ui';
 	import { readStoredValue, stringStorageCodec, useDeviceCapabilities, writeStoredValue } from '@/foundation/browser';
 	import { useDraggablePosition, useResizeHandle } from '@/foundation/interaction';
 	import { remoteDesktopApi } from '../api/remote-desktop-api';
@@ -63,11 +72,11 @@
 		props.connection?.type === 'VNC' ? t('vncModal.title') : t('remoteDesktopModal.title'),
 	);
 	const connectionLabel = computed(() => props.connection?.name || t('remoteDesktopModal.titlePlaceholder'));
-	const stateBadgeClass = computed(() => {
-		if (state.value === 'connected') return 'bg-green-200 text-green-800';
-		if (state.value === 'connecting') return 'bg-yellow-200 text-yellow-800';
-		if (state.value === 'error') return 'bg-red-200 text-red-800';
-		return 'bg-gray-200 text-gray-800';
+	const stateTone = computed<UiTone>(() => {
+		if (state.value === 'connected') return 'success';
+		if (state.value === 'connecting') return 'warning';
+		if (state.value === 'error') return 'danger';
+		return 'neutral';
 	});
 	const message = ref('');
 	const fullscreen = ref(false);
@@ -472,34 +481,40 @@
 					{{ windowTitle }} - {{ connectionLabel }}
 				</h3>
 				<div class="ml-2 flex shrink-0 items-center space-x-1">
-					<span class="rounded px-2 py-0.5 text-xs" :class="stateBadgeClass">{{ stateLabel }}</span>
-					<button
+					<UiBadge appearance="soft" density="compact" :tone="stateTone">{{ stateLabel }}</UiBadge>
+					<UiButton
 						type="button"
-						class="rounded p-1 text-text-secondary transition-colors duration-150 hover:bg-hover hover:text-foreground"
+						appearance="ghost"
+						density="compact"
+						icon-only
 						:title="fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')"
 						:aria-label="fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')"
 						@click="toggleFullscreen"
 					>
 						<i :class="fullscreen ? 'fas fa-compress fa-sm' : 'fas fa-expand fa-sm'" aria-hidden="true"></i>
-					</button>
-					<button
+					</UiButton>
+					<UiButton
 						type="button"
-						class="rounded p-1 text-text-secondary transition-colors duration-150 hover:bg-hover hover:text-foreground"
+						appearance="ghost"
+						density="compact"
+						icon-only
 						:title="t('common.minimize')"
 						:aria-label="t('common.minimize')"
 						@click="minimize"
 					>
 						<i class="fas fa-window-minimize fa-sm" aria-hidden="true"></i>
-					</button>
-					<button
+					</UiButton>
+					<UiButton
 						type="button"
-						class="rounded p-1 text-text-secondary transition-colors duration-150 hover:bg-hover hover:text-foreground"
+						appearance="ghost"
+						density="compact"
+						icon-only
 						:title="t('common.close')"
 						:aria-label="t('common.close')"
 						@click="closeModal"
 					>
 						<i class="fas fa-times fa-lg" aria-hidden="true"></i>
-					</button>
+					</UiButton>
 				</div>
 			</header>
 
@@ -553,21 +568,20 @@
 					class="absolute inset-0 z-10 flex items-center justify-center bg-black/75 p-4 text-white"
 				>
 					<div class="text-center">
-						<i
-							v-if="state === 'connecting'"
-							class="fas fa-spinner fa-spin fa-2x mb-3"
-							aria-hidden="true"
-						></i>
+						<UiSpinner v-if="state === 'connecting'" class="mb-3 [--ui-spinner-size:32px]" />
 						<i v-else class="fas fa-exclamation-triangle fa-2x mb-3 text-red-400" aria-hidden="true"></i>
 						<p class="text-sm">{{ message }}</p>
-						<button
+						<UiButton
 							v-if="state === 'error'"
 							type="button"
-							class="mt-4 rounded bg-primary px-3 py-1 text-xs text-white hover:bg-primary-dark"
+							appearance="soft"
+							tone="primary"
+							density="compact"
+							class="mt-4"
 							@click="connect"
 						>
 							{{ t('common.retry') }}
-						</button>
+						</UiButton>
 					</div>
 				</div>
 			</div>
@@ -653,25 +667,28 @@
 					</div>
 
 					<div v-if="connection?.type === 'VNC'" class="flex min-w-[12rem] flex-1 items-center space-x-2">
-						<input
+						<UiInput
 							v-model="vncText"
-							type="text"
+							density="compact"
+							class="min-w-0 flex-1"
 							:placeholder="t('vncModal.textInputPlaceholder')"
-							class="min-w-0 flex-1 rounded border border-border bg-input px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+							:aria-label="t('vncModal.textInputPlaceholder')"
 							@focus="vncTextFocused = true"
 							@blur="releaseVncTextFocus"
 							@keydown.enter.prevent="sendVncText"
 						/>
-						<button
+						<UiButton
 							type="button"
-							class="whitespace-nowrap rounded bg-primary px-3 py-1 text-xs text-white hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
+							appearance="solid"
+							tone="primary"
+							density="compact"
 							:disabled="state !== 'connected' || !vncText"
 							:title="t('vncModal.sendButtonTitle')"
 							@mousedown.prevent
 							@click="sendVncText"
 						>
 							{{ t('common.send') }}
-						</button>
+						</UiButton>
 					</div>
 				</div>
 
@@ -684,40 +701,45 @@
 					<label :for="connection?.type === 'VNC' ? 'vnc-modal-width' : 'rdp-modal-width'" class="text-xs">
 						{{ t('common.width') }}:
 					</label>
-					<input
-						:id="connection?.type === 'VNC' ? 'vnc-modal-width' : 'rdp-modal-width'"
-						v-model.number="modalWidth"
-						:disabled="sizeSaving"
-						type="number"
-						:min="minPanelWidth()"
-						:max="maxPanelWidth()"
-						step="10"
-						class="w-16 rounded border border-border bg-input px-1 py-0.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-						@change="commitSize"
-					/>
+					<div class="w-20">
+						<UiNumberInput
+							:id="connection?.type === 'VNC' ? 'vnc-modal-width' : 'rdp-modal-width'"
+							v-model="modalWidth"
+							:disabled="sizeSaving"
+							density="compact"
+							:min="minPanelWidth()"
+							:max="maxPanelWidth()"
+							step="10"
+							:aria-label="t('common.width')"
+							@change="commitSize"
+						/>
+					</div>
 					<label :for="connection?.type === 'VNC' ? 'vnc-modal-height' : 'rdp-modal-height'" class="text-xs">
 						{{ t('common.height') }}:
 					</label>
-					<input
-						:id="connection?.type === 'VNC' ? 'vnc-modal-height' : 'rdp-modal-height'"
-						v-model.number="modalHeight"
-						:disabled="sizeSaving"
-						type="number"
-						:min="minPanelHeight()"
-						:max="maxPanelHeight()"
-						step="10"
-						class="w-16 rounded border border-border bg-input px-1 py-0.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-						@change="commitSize"
-					/>
-					<button
+					<div class="w-20">
+						<UiNumberInput
+							:id="connection?.type === 'VNC' ? 'vnc-modal-height' : 'rdp-modal-height'"
+							v-model="modalHeight"
+							:disabled="sizeSaving"
+							density="compact"
+							:min="minPanelHeight()"
+							:max="maxPanelHeight()"
+							step="10"
+							:aria-label="t('common.height')"
+							@change="commitSize"
+						/>
+					</div>
+					<UiButton
 						type="button"
-						class="rounded-md bg-button px-4 py-2 text-button-text shadow-sm transition duration-150 ease-in-out hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+						appearance="solid"
+						tone="primary"
 						:disabled="state === 'connecting'"
 						:title="t('remoteDesktopModal.reconnectTooltip')"
 						@click="connect"
 					>
 						{{ t('common.reconnect') }}
-					</button>
+					</UiButton>
 				</div>
 			</footer>
 

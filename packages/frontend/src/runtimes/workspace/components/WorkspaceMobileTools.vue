@@ -4,7 +4,7 @@
 	import { computed, defineAsyncComponent, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { booleanStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
-	import { UiOverlayPanel } from '@/foundation/ui';
+	import { UiButton, UiOverlayPanel } from '@/foundation/ui';
 	import {
 		VirtualKeyboard,
 		type StickyModifierLevels,
@@ -48,6 +48,9 @@
 		commandDraft: string;
 		commandInputSyncTarget?: UserPreferences['commandInputSyncTarget'];
 		quickCommandsGrouped?: boolean;
+		showCommandBarClear?: boolean;
+		showCommandBarEditor?: boolean;
+		showCommandBarSearch?: boolean;
 		commandReady?: boolean;
 		terminalSearchOpen?: boolean;
 		terminalSearchTerm?: string;
@@ -130,8 +133,10 @@
 			:model-value="commandDraft"
 			:command-input-sync-target="commandInputSyncTarget"
 			:quick-commands-grouped="quickCommandsGrouped"
-			:show-file-manager-button="true"
-			:show-editor-button="true"
+			:show-file-manager-button="false"
+			:show-clear-button="showCommandBarClear"
+			:show-editor-button="showCommandBarEditor"
+			:show-search-button="showCommandBarSearch"
 			:ready="commandReady"
 			:terminal-search-open="terminalSearchOpen"
 			:terminal-search-term="terminalSearchTerm"
@@ -171,34 +176,30 @@
 		:visible="quickCommandsVisible"
 		teleport
 		preset="standard-modal"
+		panel-class="!min-h-[18rem]"
 		:close-on-escape="true"
 		role="dialog"
 		:aria-modal="true"
 		:aria-label="t('layout.pane.quickCommands')"
 		@close="quickCommandsVisible = false"
 	>
-		<button
-			type="button"
-			class="absolute right-2 top-2 z-10 p-1 text-text-secondary hover:text-foreground"
-			:title="t('common.close')"
-			:aria-label="t('common.close')"
-			@click="quickCommandsVisible = false"
-		>
-			<svg
-				class="h-5 w-5"
-				fill="none"
-				viewBox="0 0 24 24"
-				stroke="currentColor"
-				stroke-width="2"
-				aria-hidden="true"
+		<span class="absolute right-2 top-2 z-10">
+			<UiButton
+				type="button"
+				appearance="ghost"
+				density="compact"
+				icon-only
+				:title="t('common.close')"
+				:aria-label="t('common.close')"
+				@click="quickCommandsVisible = false"
 			>
-				<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-			</svg>
-		</button>
+				<i class="fas fa-times" aria-hidden="true"></i>
+			</UiButton>
+		</span>
 		<h3 class="mb-3 shrink-0 text-center text-lg font-semibold">{{ t('layout.pane.quickCommands') }}</h3>
-		<div class="min-h-0 flex-grow overflow-y-auto rounded border border-border">
+		<div class="flex min-h-0 flex-grow flex-col overflow-hidden rounded border border-border">
 			<QuickCommandsPanel
-				class="h-full min-h-0"
+				class="min-h-0 flex-1"
 				:collapsible-search="false"
 				:compact="quickCommandsCompactMode"
 				:show-tags="showQuickCommandTags"
@@ -221,17 +222,21 @@
 		:aria-label="t('layout.pane.statusMonitor')"
 		@close="statusVisible = false"
 	>
-		<button
-			type="button"
-			class="absolute right-2 top-2 z-20 grid h-8 w-8 place-items-center rounded-lg border border-border/60 bg-background/80 text-text-secondary"
-			:title="t('common.close')"
-			:aria-label="t('common.close')"
-			@click="statusVisible = false"
-		>
-			<i class="fas fa-times" aria-hidden="true"></i>
-		</button>
+		<span class="absolute right-2 top-2 z-20">
+			<UiButton
+				type="button"
+				appearance="soft"
+				density="compact"
+				icon-only
+				:title="t('common.close')"
+				:aria-label="t('common.close')"
+				@click="statusVisible = false"
+			>
+				<i class="fas fa-times" aria-hidden="true"></i>
+			</UiButton>
+		</span>
 		<StatusMonitor
-			class="h-full min-h-0 overflow-hidden"
+			class="status-monitor--mobile-overlay h-full min-h-0 overflow-hidden"
 			:session="statusSession"
 			:connected="connected"
 			:connecting="connecting"

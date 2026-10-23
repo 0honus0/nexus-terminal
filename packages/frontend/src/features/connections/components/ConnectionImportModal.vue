@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { computed, onBeforeUnmount, onDeactivated, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiModal, UiSpinner, UiTextarea } from '@/foundation/ui';
+	import { UiButton, UiInlineNotice, UiModal, UiSpinner, UiTextarea } from '@/foundation/ui';
 	import { targetArray, InvalidTargetPayload } from '@nexus-terminal/shared/targets/http';
 	import { TARGET_CONNECTION_IMPORT_FILE_MAX_BYTES } from '@nexus-terminal/shared/targets/connections/values';
 	import { readConnectionImportInput } from '@nexus-terminal/shared/targets/connections/http-codec';
@@ -170,19 +170,15 @@
 					<UiSpinner />
 					{{ t('common.loading') }}
 				</div>
-				<div
-					v-if="fileError || message"
-					role="alert"
-					class="rounded-md border border-error/30 bg-error/10 p-3 text-sm text-error"
-				>
+				<UiInlineNotice v-if="fileError || message" tone="danger">
 					{{ fileError || message }}
-				</div>
-				<div v-if="failureReasons.length" class="rounded-md border border-error/25 p-3 text-sm text-error">
-					<p class="font-medium">{{ t('connections.failedItems') }}</p>
+				</UiInlineNotice>
+				<UiInlineNotice v-if="failureReasons.length" tone="danger">
+					<p class="m-0 font-medium">{{ t('connections.failedItems') }}</p>
 					<ul class="mt-1 list-disc space-y-1 pl-5">
 						<li v-for="reason in failureReasons" :key="reason">{{ reason }}</li>
 					</ul>
-				</div>
+				</UiInlineNotice>
 			</fieldset>
 		</form>
 		<template #footer

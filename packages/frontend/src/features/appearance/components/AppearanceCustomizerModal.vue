@@ -32,10 +32,10 @@
 
 	const activeTab = ref<'ui' | 'terminal' | 'background' | 'other'>('ui');
 	const tabs = [
-		{ id: 'ui', label: 'styleCustomizer.uiStyles' },
-		{ id: 'terminal', label: 'styleCustomizer.terminalStyles' },
-		{ id: 'background', label: 'styleCustomizer.backgroundSettings' },
-		{ id: 'other', label: 'styleCustomizer.otherSettings' },
+		{ id: 'ui', label: 'styleCustomizer.uiStyles', icon: 'fa-solid fa-palette' },
+		{ id: 'terminal', label: 'styleCustomizer.terminalStyles', icon: 'fa-solid fa-terminal' },
+		{ id: 'background', label: 'styleCustomizer.backgroundSettings', icon: 'fa-solid fa-image' },
+		{ id: 'other', label: 'styleCustomizer.otherSettings', icon: 'fa-solid fa-sliders' },
 	] as const;
 	const root = ref<HTMLElement | null>(null);
 	const dialog = ref<HTMLElement | null>(null);
@@ -96,6 +96,21 @@
 		document.removeEventListener('mouseup', stopDrag);
 	};
 
+	const moveTab = (event: KeyboardEvent, index: number): void => {
+		const direction =
+			event.key === 'ArrowUp' || event.key === 'ArrowLeft'
+				? -1
+				: event.key === 'ArrowDown' || event.key === 'ArrowRight'
+					? 1
+					: 0;
+		if (direction === 0) return;
+		event.preventDefault();
+		const next = tabs[(index + direction + tabs.length) % tabs.length];
+		if (!next) return;
+		activeTab.value = next.id;
+		void nextTick(() => document.getElementById(`appearance-customizer-tab-${next.id}`)?.focus());
+	};
+
 	onBeforeUnmount(() => {
 		stopDrag();
 		window.removeEventListener('resize', handleResize);
@@ -127,23 +142,38 @@
 
 				<div class="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
 					<nav
-						class="flex w-full shrink-0 flex-row flex-wrap justify-center gap-1.5 overflow-y-auto border-b border-border bg-header p-2 md:w-[128px] md:flex-col md:flex-nowrap md:justify-start md:border-b-0 md:border-r md:py-3"
+						class="appearance-customizer-nav border-b border-border bg-header md:border-b-0 md:border-r"
+						role="tablist"
 						:aria-label="t('settings.appearance.title')"
 					>
-						<UiButton
-							v-for="tab in tabs"
+						<button
+							v-for="(tab, index) in tabs"
 							:key="tab.id"
-							density="compact"
-							:appearance="activeTab === tab.id ? 'soft' : 'ghost'"
-							:tone="activeTab === tab.id ? 'primary' : 'neutral'"
-							:aria-pressed="activeTab === tab.id"
-							class="md:w-full"
+							:id="`appearance-customizer-tab-${tab.id}`"
+							type="button"
+							role="tab"
+							class="appearance-customizer-nav__item ui-focusable"
+							:data-active="activeTab === tab.id || undefined"
+							:aria-selected="activeTab === tab.id"
+							aria-controls="appearance-customizer-panel"
+							:tabindex="activeTab === tab.id ? 0 : -1"
 							@click="activeTab = tab.id"
-							>{{ t(tab.label) }}</UiButton
+							@keydown="moveTab($event, index)"
 						>
+							<span class="appearance-customizer-nav__icon" aria-hidden="true">
+								<i :class="tab.icon"></i>
+							</span>
+							<span class="appearance-customizer-nav__label">{{ t(tab.label) }}</span>
+						</button>
 					</nav>
 
-					<main :key="editorGeneration" class="min-h-0 min-w-0 flex-1 overflow-y-auto p-3 md:px-6 md:py-4">
+					<main
+						id="appearance-customizer-panel"
+						:key="editorGeneration"
+						role="tabpanel"
+						:aria-labelledby="`appearance-customizer-tab-${activeTab}`"
+						class="min-h-0 min-w-0 flex-1 overflow-y-auto p-3 md:px-6 md:py-4"
+					>
 						<UiSurface v-if="activeTab === 'ui'" class="min-w-0 p-4"
 							><BasicAppearancePanel ref="uiPanel" section="ui" :show-ui-actions="false"
 						/></UiSurface>
@@ -188,3 +218,133 @@
 		</div>
 	</Teleport>
 </template>
+
+<style scoped>
+	.appearance-customizer-nav {
+		display: flex;
+		flex: 0 0 auto;
+		flex-direction: row;
+		gap: 6px;
+		width: 100%;
+		padding: 10px;
+		overflow-x: auto;
+		overflow-y: hidden;
+		scrollbar-width: none;
+	}
+
+	.appearance-customizer-nav::-webkit-scrollbar {
+		display: none;
+	}
+
+	.appearance-customizer-nav__item {
+		position: relative;
+		display: flex;
+		flex: 1 1 0;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 4px;
+		min-width: 68px;
+		min-height: 56px;
+		padding: 6px 4px;
+		border: 1px solid transparent;
+		border-radius: 11px;
+		background: transparent;
+		color: var(--text-color-secondary);
+		font-size: 12px;
+		font-weight: 560;
+		line-height: 1.2;
+		text-align: left;
+		white-space: nowrap;
+		cursor: pointer;
+		transition:
+			background-color 140ms cubic-bezier(0.2, 0.8, 0.2, 1),
+			border-color 140ms cubic-bezier(0.2, 0.8, 0.2, 1),
+			color 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+	}
+
+	.appearance-customizer-nav__item:hover:not([data-active]) {
+		background: color-mix(in srgb, var(--card-bg-color) 42%, transparent);
+		color: var(--text-color);
+	}
+
+	.appearance-customizer-nav__item[data-active] {
+		border-color: color-mix(in srgb, var(--link-active-color) 18%, transparent);
+		background: color-mix(in srgb, var(--card-bg-color) 58%, var(--link-active-color) 7%);
+		color: var(--text-color);
+	}
+
+	.appearance-customizer-nav__item[data-active]::after {
+		position: absolute;
+		right: 10px;
+		bottom: 0;
+		left: 10px;
+		height: 2px;
+		border-radius: 999px;
+		background: var(--link-active-color);
+		content: '';
+	}
+
+	.appearance-customizer-nav__icon {
+		display: grid;
+		width: 24px;
+		height: 24px;
+		flex: 0 0 auto;
+		place-items: center;
+		border-radius: 7px;
+		background: color-mix(in srgb, var(--text-color) 5%, transparent);
+		color: var(--text-color-secondary);
+		font-size: 11px;
+		transition:
+			background-color 140ms ease,
+			color 140ms ease;
+	}
+
+	.appearance-customizer-nav__item[data-active] .appearance-customizer-nav__icon {
+		background: color-mix(in srgb, var(--link-active-color) 14%, var(--card-bg-color));
+		color: var(--link-active-color);
+	}
+
+	.appearance-customizer-nav__label {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	@media (min-width: 768px) {
+		.appearance-customizer-nav {
+			flex-direction: column;
+			gap: 4px;
+			width: 184px;
+			padding: 12px;
+			overflow: visible;
+		}
+
+		.appearance-customizer-nav__item {
+			flex: 0 0 auto;
+			flex-direction: row;
+			justify-content: flex-start;
+			gap: 10px;
+			width: 100%;
+			min-width: 0;
+			min-height: 44px;
+			padding: 6px 10px 6px 12px;
+		}
+
+		.appearance-customizer-nav__item[data-active]::after {
+			top: 10px;
+			right: auto;
+			bottom: 10px;
+			left: 0;
+			width: 2px;
+			height: auto;
+		}
+
+		.appearance-customizer-nav__icon {
+			width: 28px;
+			height: 28px;
+			border-radius: 9px;
+			font-size: 12px;
+		}
+	}
+</style>

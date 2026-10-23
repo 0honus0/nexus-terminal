@@ -39,7 +39,8 @@
     "origins": {
       "files": "Files",
       "docker": "Docker",
-      "agent": "Agent"
+      "agent": "Agent",
+      "tools": "Tool installation"
     },
     "states": {
       "held": "Held",

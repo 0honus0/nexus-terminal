@@ -107,6 +107,26 @@ RDP 计数修复的远程证据：Connections、Dashboard、Workspace 三个打�
 
 使用 `https://api.honus.top/workspace`、真实 `amd` 连接及 `1920×953` 视口核对：服务器状态面板 `232.18×390.78px`，四边边框均为 `0px`、外层背景透明；五张内部指标卡仍各有 `1px` 边框，标题分隔线保留。网络行在紧凑高度规则下使用 `7px` 行间距，标题与速率行的实际视觉间距由约 `4.8px` 增至 `11.2px`，未挤压卡片或产生溢出。证据：`.tmp/status-monitor-border-gap.png`。
 
+## 服务器状态趋势网卡定位与时间选择（2026-10-23，本地 CDP）
+
+使用 `https://api.honus.top/workspace`、真实 `amd` 连接并打开网络趋势核对。`1920×953` 下网卡名左缘为 `191.4px`、右缘为 `245.8px`，贴合网络行 `234.23px` 内容区的右缘；`1440×900` 下左缘为 `135.58px`、右缘为 `180.63px`，同样完成右对齐。时间选择容器由 `44.8px` 降至 `26px`，四个按钮均由 `38.4px` 降至 `22px`；两档下文字均未截断，面板与页面无横向溢出。顶部主机状态改为等效 `6px` 圆角、`0.86em` 加粗文字；窄面板隐藏复制装饰后，两档主机名 `clientWidth` 与 `scrollWidth` 均为 `51px`、`33px`，完整显示 `honus.top`。证据：`.tmp/status-trend-network-1920.png`、`.tmp/status-trend-network-1440.png`。目标 ESLint、Prettier、Frontend build 与 `git diff --check` 通过；根 `pnpm run check` 被并行修改的 `observation-model.ts:255` `curly` 错误阻断，未修改该无关文件。
+
+## 命令栏与文件管理器工具按钮边框（2026-10-23，本地 CDP）
+
+使用 `https://api.honus.top/workspace`、真实 `amd` 连接及 `1920×953` 视口核对。命令栏 `265.72×41.69px`、文件管理器 `265.72×569.95px`，两处工具按钮均计算为 `1px` 边框、边框色 `34%`，面板 `scrollWidth-clientWidth=0`。文件管理器 `.file-manager-actions` 的计算背景为 `rgba(0, 0, 0, 0)`、`box-shadow` 为 `none`，工具组整体外框已移除；1×8 按钮排布和文件列表未改变。证据：`.tmp/command-bar-buttons-border.png`、`.tmp/file-manager-tool-borders.png`。目标 ESLint、Prettier、Frontend build 与 `git diff --check` 通过。
+
+## 命令栏按钮独立显隐（2026-10-23，本地隔离 CDP）
+
+使用隔离数据库启动临时 Backend `3002` 与 HTTPS Vite `9999`，避免修改正式测试库或账号。先用旧版本偏好记录读取，四个 `showCommandBar*` 字段均按 `true` 补齐；四项全部保存为 `false` 后重新读取仍为 `false`，版本由 `279` 推进到 `280`；清空 `false`、焦点 `true`、编辑器 `false`、搜索 `true` 的部分组合读回一致，版本为 `281`。旧记录只在新偏好读取边界补默认值，下一次保存写回完整 Shared 结构。
+
+桌面 CDP 下四枚按钮默认均为 `28×28px`。全部关闭后按钮数为 0，输入框由 `169.72px` 自动扩至 `227.72px`；仅开启焦点与搜索时只渲染这两枚按钮，输入框保持 `169.72px`。`390×844` 手机且四项入口全部开启时，输入框为 `118×30px`、七枚工具按钮均为 `32×32px`，页面无横向溢出；关闭四项对应的手机入口后输入框扩至 `220×30px`，只保留快捷指令、状态、键盘和 Docker，页面仍无横向溢出。设置页在桌面为四列，手机为 `2×2`，每项 `160×42px`。
+
+编辑器按钮同时受“弹窗编辑器”总开关约束；搜索已打开时仍保留关闭与查找操作，焦点切换只用于桌面。证据：`.tmp/command-bar-toggle-settings-1440.png`、`.tmp/command-bar-toggle-settings-mobile-final.png`、`.tmp/command-bar-all-hidden.png`、`.tmp/command-bar-partial.png`、`.tmp/command-bar-mobile-all-visible.png`、`.tmp/command-bar-mobile-all-hidden.png`。根 `pnpm run check`、双端 build、目标 Prettier 与 `git diff --check` 通过。临时环境已停止，正式 Backend `3001` 未重启；新偏好需重启正式后端后生效。未提交、推送或部署。
+
+## 服务器状态方形卡片与网络图标居中（2026-10-23，本地 CDP）
+
+使用 `https://api.honus.top/workspace`、真实 `amd` 连接核对普通服务器状态。`1920×953`、状态面板 `254.69×460.41px` 时，CPU、内存、Swap、磁盘四张卡均为 `114.15×114.15px`，形成 2×2 网格；详情在卡内缩放并保持完整，内存与磁盘容量不再出现省略号。网络卡为 `234.32×117.15px` 的通栏 2:1 卡片，图标高 `22px`、中心 `y=860.77px`，与卡片中心重合。`1440×900` 下状态面板宽 `190.06px`，资源卡仍为单列 `168.55px`，避免方形压缩导致文字溢出；网络图标中心与 `81.83px` 高的网络卡中心重合。证据：`.tmp/status-card-square-1920.png`、`.tmp/status-card-stack-1440.png`。
+
 ## 文件管理器窄栏排序单行（2026-10-23，本地 CDP）
 
 使用 `https://api.honus.top/workspace`、真实 `amd` 连接及 `1920×953` 视口核对文件管理器拖拽至 `2×4` 工具布局：面板宽 `169.83px`，工具行为 `[4,4]`，排序行宽 `161.83px`、高 `26px`；排序选择与方向按钮的 `top` 均为 `263.66px`，排序行和工具栏的 `scrollWidth-clientWidth` 均为 `0`。窄栏隐藏视觉“排序”标签与方向文字，但保留排序选择的可访问名称及方向按钮的 `title`/`aria-label`。证据：`.tmp/fm-embedded-2x4-cdp.png`。根 `pnpm run check`、目标 Prettier、Frontend build 与 `git diff --check` 通过；全量格式检查只被并行修改的 `node-process-diagnostic.ts`、`BackupSettingsPanel.vue`、`HostDiagnosticsPanel.vue` 阻断，未修改这些无关文件。
@@ -1656,6 +1676,12 @@ RDP Adapter 将文本从逐字符 SDK 调用改为最多 32 个完整字符一�
 
 按 D17 未运行本地行为、浏览器或 E2E，也未注入真实弱网。远程需回归普通键/长按/组合键、中英 IME、跨批次与非 BMP 字符文本、换行/Tab、鼠标洪泛时键盘输入、拖动最终坐标与窗口外释放、失焦/切换/关闭无晚输入，以及 RDP/VNC 的弱网长时间传输、缓冲排空与发送错误后的真实关闭。静态通过不证明实际输入延迟已改善；本轮沿用用户的两轮复审及提交要求，仅提交这些变更，不推送、部署或重启后端。
 
+## 外观自定义导航统一（2026-10-23，本地 CDP）
+
+使用 `https://api.honus.top/settings` 打开“外观 → 自定义外观”，把原 128px 侧栏内四个 111×28px 纯文字按钮改为与设置页同类的图标导航。桌面侧栏宽 184px，每项 159×44px，图标底座 28px，选中项使用主题色边界、左侧 2px 指示线和图标着色；窄屏改为图标在上、文字在下的四项等分标签。
+
+`1440×1000` 下弹窗为 `1000×700`；`768×900` 时侧栏仍为纵向 `183px` 内容宽；`390×844` 与 `320×700` 下导航 `clientWidth=scrollWidth`，四个标签分别在 `390px` 内占 `88px`、在 `320px` 内占 `70.5px`，无横向溢出或截断。依次切换界面样式、终端样式、背景设置、其他设置，选中项与面板均正确更新。证据：`.tmp/appearance-customizer-nav-desktop.png`、`.tmp/appearance-customizer-nav-mobile.png`。目标 Prettier/ESLint、根 `pnpm run check`、Frontend build 与 `git diff --check` 通过。
+
 ### 2026-10-23 前端首屏与静态交付（仅静态与产物）
 
 范围：首屏原静态依赖分组、弱网/省流/后台停止路由预取、构建 gzip 旁文件、哈希字体/图片缓存与 Docker 构建插件目录复制；保持 UI 源码与操作入口。首轮同一工作区构建的 HTML 直接 JS/CSS 引用从 54 个降到 5 个，原始字节从 1,746,867 降至 1,733,350，统一 gzip-9 从 508,603 降至 483,349；该工作区含并行 UI 修改，不能跨不同源码比较实际时延。321 个 gzip 旁文件逐一解压后与原文件完全一致，均达到至少 1 KiB 且压缩更小，包含 index.html。远程桌面、编辑器及文件预览继续动态加载。
@@ -1672,8 +1698,14 @@ RDP Adapter 将文本从逐字符 SDK 调用改为最多 32 个完整字符一�
 
 已对照固定 IronRDP 0.7.0 发布源码核对：Session.desktopSize 读取初始协商结果且返回需释放的 DesktopSize；resize 仅向 SDK 通道提交，不是远端应用确认。SDK 使用 AsyncRead/LocalFuturesFramed 读取 WS 字节流，不依赖远端每个 TCP chunk 的 WS 边界；softbuffer 局部绘制保持原实现。首轮审核将拟定 64 KiB 小块合并收敛为 16 KiB，避免弱网等待大 WS 消息，并补正常读端结束的尾部提交。
 
-工作区根 check/build 与全量格式日志为 `/tmp/nexus-rdp-display-{check,build,format}.log`；全量格式通过，根 check/build 受并行 UI 新增四个 command-bar 偏好与 Frontend UserPreferences/Backend StoredPresentationPreferences 转换不一致影响，不改动该 UI/协议工作区。
+工作区根 check/build 与全量格式日志为 `/tmp/nexus-rdp-display-{check,build,format}.log`；全量格式通过。当时根 check/build 曾受并行 UI 新增四个 command-bar 偏好与 Frontend UserPreferences/Backend StoredPresentationPreferences 转换不一致影响；该偏好链路后续已补齐并通过根 check/build，本轮未改动该 UI/协议工作区。
 
 第二轮对仅含本次六文件的暂存快照复审 initial/DPI/快速恢复原尺寸、晚建连与关闭取消，以及片段顺序、阈值、大块、EOF、背压恢复与失败收敛；独立快照的根 `pnpm run check`、`pnpm run format:all:check`、双端 `pnpm run build` 通过，日志为 `/tmp/nexus-rdp-display-isolated-{check,format,build}.log`。产物确认后端仍按 16 KiB 合并并取消 immediate，前端 WASM 仍为 4,511,023 字节且 SHA-256 与前轮相同，gzip 解压一致。本轮只提交这六文件，不含并行 UI/安装功能，不推送或部署；需要更新前端并重启后端加载新实现，未代为重启。
 
 按 D17 未运行本地行为、浏览器或 E2E，也未注入弱网；后续远程需回归初始/动态尺寸、非默认 DPI、拖动中快速返回原尺寸、全屏/最小化恢复、尺寸待提交时关闭/切连接，以及小块/大块/混合 PDU、背压排空、远端 EOF 和发送失败后的关闭。不将静态通过写成真实延迟或分块显示已消除。
+
+## Agent 文件与会话视图缓存（2026-10-23，本地 CDP）
+
+使用 `https://api.honus.top`、真实登录会话和 Agent 浮窗核对。首次进入“文件”视图发生时，Network 收到 `/api/v1/agent/files?q=&limit=20&offset=0`、`/api/v1/agent/files/storage` 与 `/api/v1/agent/apps`；切换到“会话”后收到 0 个 `/api/v1/agent/` 请求，再切回“文件”仍为 0 个。两侧组件保持挂载，已加载列表与选择状态未被清空。
+
+本实现只在 Agent 文件/会话视图切换中启用显式保留；首次进入、筛选变化、显式重试、写入后失效、读取失败和认证身份失效仍执行原有重新读取或清理。未执行真实多文件列表、活跃 Run 轮询恢复、附件上传及登录失效竞态；未修改远端文件或配置。目标 ESLint、Prettier、根 `pnpm run check`、Frontend build 与 `git diff --check` 通过。

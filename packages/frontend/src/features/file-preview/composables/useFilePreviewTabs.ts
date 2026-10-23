@@ -5,6 +5,7 @@ import type { PreviewFile, PreviewTab } from '../model/preview';
 
 export interface FilePreviewOpenContext {
 	scopeId?: string;
+	scopeLabel?: string;
 	source: FilePreviewSource;
 }
 
@@ -95,8 +96,10 @@ export function createFilePreviewSession(defaultSource?: FilePreviewSource): Fil
 
 	async function open(path: string, context?: FilePreviewOpenContext): Promise<PreviewTab> {
 		const scopeId = context?.scopeId;
+		const scopeLabel = context?.scopeLabel;
 		let tab = tabs.value.find((item) => item.path === path && item.scopeId === scopeId);
 		if (tab) {
+			if (scopeLabel) tab.scopeLabel = scopeLabel;
 			activeId.value = tab.id;
 			if (tab.error && !tab.file && !tab.loading) {
 				const source = sources.get(tab.id) ?? context?.source ?? defaultSource;
@@ -113,6 +116,7 @@ export function createFilePreviewSession(defaultSource?: FilePreviewSource): Fil
 		tab = {
 			id: crypto.randomUUID(),
 			scopeId,
+			scopeLabel,
 			path,
 			name: path.split('/').pop() || path,
 			kind: previewKindFor(path),

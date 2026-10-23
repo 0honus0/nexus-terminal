@@ -1,11 +1,16 @@
 <script setup lang="ts">
+	import { computed } from 'vue';
 	import { useI18n } from 'vue-i18n';
+	import type { ConnectionRoute, ConnectionType } from '@nexus-terminal/shared/targets/connections/values';
 	import {
+		UiBadge,
 		UiButton,
 		UiFormActions,
 		UiFormField,
 		UiInfoHint,
 		UiInput,
+		UiInlineNotice,
+		UiSegmentedControl,
 		UiSelect,
 		UiSwitch,
 		UiTextarea,
@@ -54,6 +59,23 @@
 			label: host.name || host.host,
 			description: `${host.username ? `${host.username}@` : ''}${host.host}:${host.port}`,
 		}));
+
+	const connectionTypeOptions = computed<Array<{ value: ConnectionType; label: string }>>(() => [
+		{ value: 'SSH', label: 'SSH' },
+		{ value: 'RDP', label: 'RDP' },
+		{ value: 'VNC', label: 'VNC' },
+	]);
+
+	const authMethodOptions = computed<Array<{ value: 'password' | 'key'; label: string }>>(() => [
+		{ value: 'password', label: t('connections.form.authMethodPassword') },
+		{ value: 'key', label: t('connections.form.authMethodKey') },
+	]);
+
+	const routeOptions = computed<Array<{ value: ConnectionRoute; label: string }>>(() => [
+		{ value: 'direct', label: t('connections.form.connectionModeDirect') },
+		{ value: 'proxy', label: t('connections.form.connectionModeProxy') },
+		{ value: 'jump', label: t('connections.form.connectionModeJumpHost') },
+	]);
 </script>
 <template>
 	<form class="connection-form flex min-h-0 flex-1 flex-col" @submit.prevent="submit">
@@ -77,44 +99,11 @@
 						<label class="mb-1 block text-sm font-medium text-text-secondary">{{
 							t('connections.form.connectionType')
 						}}</label>
-						<div class="connection-form-segmented flex rounded-lg p-1">
-							<button
-								type="button"
-								class="connection-form-segment flex-1 px-3 py-2 text-sm font-medium focus:outline-none"
-								:class="
-									form.type === 'SSH'
-										? 'bg-primary text-white'
-										: 'bg-background text-foreground hover:bg-border'
-								"
-								@click="form.type = 'SSH'"
-							>
-								SSH
-							</button>
-							<button
-								type="button"
-								class="connection-form-segment flex-1 px-3 py-2 text-sm font-medium focus:outline-none"
-								:class="
-									form.type === 'RDP'
-										? 'bg-primary text-white'
-										: 'bg-background text-foreground hover:bg-border'
-								"
-								@click="form.type = 'RDP'"
-							>
-								RDP
-							</button>
-							<button
-								type="button"
-								class="connection-form-segment flex-1 px-3 py-2 text-sm font-medium focus:outline-none"
-								:class="
-									form.type === 'VNC'
-										? 'bg-primary text-white'
-										: 'bg-background text-foreground hover:bg-border'
-								"
-								@click="form.type = 'VNC'"
-							>
-								VNC
-							</button>
-						</div>
+						<UiSegmentedControl
+							v-model="form.type"
+							:options="connectionTypeOptions"
+							:label="t('connections.form.connectionType')"
+						/>
 					</div>
 					<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
 						<UiFormField :label="t('connections.form.host')" class="md:col-span-2">
@@ -151,32 +140,11 @@
 							<label class="mb-1 block text-sm font-medium text-text-secondary">{{
 								t('connections.form.authMethod')
 							}}</label>
-							<div class="connection-form-segmented flex rounded-lg p-1">
-								<button
-									type="button"
-									class="connection-form-segment flex-1 px-3 py-2 text-sm font-medium focus:outline-none"
-									:class="
-										form.authMethod === 'password'
-											? 'bg-primary text-white'
-											: 'bg-background text-foreground hover:bg-border'
-									"
-									@click="form.authMethod = 'password'"
-								>
-									{{ t('connections.form.authMethodPassword') }}
-								</button>
-								<button
-									type="button"
-									class="connection-form-segment flex-1 px-3 py-2 text-sm font-medium focus:outline-none"
-									:class="
-										form.authMethod === 'key'
-											? 'bg-primary text-white'
-											: 'bg-background text-foreground hover:bg-border'
-									"
-									@click="form.authMethod = 'key'"
-								>
-									{{ t('connections.form.authMethodKey') }}
-								</button>
-							</div>
+							<UiSegmentedControl
+								v-model="form.authMethod"
+								:options="authMethodOptions"
+								:label="t('connections.form.authMethod')"
+							/>
 						</div>
 						<UiFormField v-if="form.authMethod === 'password'" :label="t('connections.form.password')">
 							<UiInput
@@ -227,44 +195,12 @@
 							<label class="mb-1 block text-sm font-medium text-text-secondary">{{
 								t('connections.form.connectionMode')
 							}}</label>
-							<div class="connection-form-segmented mb-4 flex rounded-lg p-1">
-								<button
-									type="button"
-									class="connection-form-segment flex-1 px-3 py-2 text-sm font-medium"
-									:class="
-										form.route === 'direct'
-											? 'bg-primary text-white'
-											: 'bg-background text-foreground hover:bg-border'
-									"
-									@click="form.route = 'direct'"
-								>
-									{{ t('connections.form.connectionModeDirect') }}
-								</button>
-								<button
-									type="button"
-									class="connection-form-segment flex-1 px-3 py-2 text-sm font-medium"
-									:class="
-										form.route === 'proxy'
-											? 'bg-primary text-white'
-											: 'bg-background text-foreground hover:bg-border'
-									"
-									@click="form.route = 'proxy'"
-								>
-									{{ t('connections.form.connectionModeProxy') }}
-								</button>
-								<button
-									type="button"
-									class="connection-form-segment flex-1 px-3 py-2 text-sm font-medium"
-									:class="
-										form.route === 'jump'
-											? 'bg-primary text-white'
-											: 'bg-background text-foreground hover:bg-border'
-									"
-									@click="form.route = 'jump'"
-								>
-									{{ t('connections.form.connectionModeJumpHost') }}
-								</button>
-							</div>
+							<UiSegmentedControl
+								v-model="form.route"
+								class="mb-4"
+								:options="routeOptions"
+								:label="t('connections.form.connectionMode')"
+							/>
 						</div>
 						<UiFormField
 							v-if="form.route === 'proxy'"
@@ -364,12 +300,7 @@
 				</div>
 			</section>
 
-			<p
-				v-if="submitError"
-				class="rounded-md border border-error/30 bg-error/10 p-3 text-center text-sm font-medium text-error"
-			>
-				{{ submitError }}
-			</p>
+			<UiInlineNotice v-if="submitError" tone="danger">{{ submitError }}</UiInlineNotice>
 		</fieldset>
 
 		<footer class="connection-form__footer">
@@ -378,10 +309,11 @@
 					t('connections.form.testConnection')
 				}}</UiButton>
 				<UiInfoHint :text="t('connections.test.latencyTooltip')" side="top" align="start" />
-				<span
+				<UiBadge
 					v-if="testResult"
-					class="inline-flex min-w-0 items-center gap-1 text-xs font-medium"
-					:class="testResult.success ? 'text-success' : 'text-error'"
+					class="min-w-0"
+					:tone="testResult.success ? 'success' : 'danger'"
+					density="compact"
 					:title="testResult.message"
 				>
 					<i
@@ -397,7 +329,7 @@
 					<span v-else-if="!testResult.success" class="max-w-64 truncate font-normal opacity-90">
 						· {{ testResult.message }}
 					</span>
-				</span>
+				</UiBadge>
 			</div>
 			<div v-else class="flex-1" />
 			<UiFormActions class="ml-auto">
@@ -446,13 +378,6 @@
 		border-top: 1px solid color-mix(in srgb, var(--border-color) 48%, transparent);
 	}
 
-	.connection-form-segmented {
-		gap: 0.25rem;
-		border: 1px solid color-mix(in srgb, var(--border-color) 56%, transparent);
-		background: color-mix(in srgb, var(--header-bg-color) 56%, var(--app-bg-color));
-		box-shadow: inset 0 1px 2px color-mix(in srgb, var(--text-color) 5%, transparent);
-	}
-
 	.connection-form__section {
 		padding-top: 1.125rem;
 		border-top: 1px solid color-mix(in srgb, var(--border-color) 34%, transparent);
@@ -476,27 +401,6 @@
 		border-radius: 999px;
 		background: color-mix(in srgb, var(--link-active-color) 72%, transparent);
 		content: '';
-	}
-
-	.connection-form-segment {
-		margin: 0;
-		border: 0 !important;
-		border-radius: 0.5rem !important;
-		background: transparent !important;
-		color: var(--text-color-secondary) !important;
-	}
-
-	.connection-form-segment:hover {
-		background: color-mix(in srgb, var(--card-bg-color) 76%, var(--app-bg-color)) !important;
-		color: var(--text-color) !important;
-	}
-
-	.connection-form-segment.bg-primary {
-		background: color-mix(in srgb, var(--link-active-color) 16%, var(--card-bg-color)) !important;
-		color: var(--link-active-color) !important;
-		box-shadow:
-			0 1px 2px color-mix(in srgb, var(--text-color) 8%, transparent),
-			inset 0 0 0 1px color-mix(in srgb, var(--link-active-color) 24%, transparent);
 	}
 
 	.connection-jump-chain {

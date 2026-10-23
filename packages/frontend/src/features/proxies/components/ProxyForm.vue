@@ -2,7 +2,15 @@
 	import { reactive, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import type { TargetProxyInput } from '@nexus-terminal/shared/targets/proxies/http';
-	import { UiButton, UiCheckbox, UiFormField, UiInput, UiSelect } from '@/foundation/ui';
+	import {
+		UiButton,
+		UiCheckbox,
+		UiFormActions,
+		UiFormField,
+		UiInlineNotice,
+		UiInput,
+		UiSelect,
+	} from '@/foundation/ui';
 	import { toProxyInput } from '../model/proxy-mapper';
 	import type { ProxySummary, ProxyDraft } from '../model/proxy-types';
 	const props = defineProps<{ proxy?: ProxySummary | null; loading?: boolean }>();
@@ -110,20 +118,17 @@
 					></UiFormField
 				>
 			</section>
-			<p
-				v-if="error"
-				class="rounded-md border border-error/30 bg-error/10 p-3 text-center text-sm font-medium text-error"
-			>
+			<UiInlineNotice v-if="error" tone="danger">
 				{{ error }}
-			</p>
+			</UiInlineNotice>
 		</fieldset>
-		<div class="mt-4 flex shrink-0 justify-end gap-3 border-t border-border pt-4">
+		<UiFormActions class="mt-4 shrink-0 border-t border-border pt-4">
 			<UiButton type="button" :disabled="loading" @click="emit('cancel')">{{
 				t('proxies.form.cancel')
 			}}</UiButton>
 			<UiButton type="submit" appearance="solid" tone="primary" :loading="loading">{{
 				t('common.save')
 			}}</UiButton>
-		</div>
+		</UiFormActions>
 	</form>
 </template>

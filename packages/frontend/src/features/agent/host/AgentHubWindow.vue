@@ -2,7 +2,13 @@
 	import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 	import { logger } from '@/client/logging/logger';
 	import { structurallyEqual } from '@/foundation/data';
-	import { overlayStack, UiButton, UiResizeHandle, type OverlayStackRegistration } from '@/foundation/ui';
+	import {
+		overlayStack,
+		UiButton,
+		UiEmptyState,
+		UiResizeHandle,
+		type OverlayStackRegistration,
+	} from '@/foundation/ui';
 	import type { HostApp, HostDirectory } from '../model/host-types';
 	import PluginAppFrame from './PluginAppFrame.vue';
 	import AgentAppSwitcher from './AgentAppSwitcher.vue';
@@ -896,18 +902,22 @@
 					"
 				/>
 			</div>
-			<div
+			<UiEmptyState
 				v-if="state.hubView !== 'files' && activeApp && !['agent', 'custom'].includes(activeApp.surface)"
-				class="flex h-full items-center justify-center p-6 text-center text-sm text-text-secondary"
-			>
-				{{ $t('agent.hub.noSurface') }}
-			</div>
-			<div
+				class="h-full"
+				compact
+				:bordered="false"
+				icon="fa-solid fa-window-maximize"
+				:title="$t('agent.hub.noSurface')"
+			/>
+			<UiEmptyState
 				v-else-if="state.hubView !== 'files' && !activeApp"
-				class="flex h-full items-center justify-center p-6 text-center text-sm text-text-secondary"
-			>
-				{{ $t('agent.hub.chooseApp') }}
-			</div>
+				class="h-full"
+				compact
+				:bordered="false"
+				icon="fa-solid fa-window-restore"
+				:title="$t('agent.hub.chooseApp')"
+			/>
 		</div>
 
 		<UiResizeHandle
@@ -1055,9 +1065,6 @@
 		}
 
 		.agent-hub-nav-label {
-			display: none;
-		}
-		.agent-hub-approval-badge {
 			display: none;
 		}
 	}

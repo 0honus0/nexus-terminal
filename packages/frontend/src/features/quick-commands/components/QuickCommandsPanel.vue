@@ -3,7 +3,15 @@
 	import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 	import { storeToRefs } from 'pinia';
 	import { useI18n } from 'vue-i18n';
-	import { UiContextMenu, UiInput } from '@/foundation/ui';
+	import {
+		UiButton,
+		UiContextMenu,
+		UiContextMenuItem,
+		UiEmptyState,
+		UiLoadingState,
+		UiInput,
+		UiSearchInput,
+	} from '@/foundation/ui';
 	import { readStoredValue, stringStorageCodec, writeClipboardText, writeStoredValue } from '@/foundation/browser';
 	import { useAuthenticatedViewScope } from '@/shared/session/public';
 	import { useFeedback, preferenceFailureMessage } from '@/shared/feedback/public';
@@ -41,7 +49,7 @@
 	const localScale = ref(props.rowScale);
 	const visible = ref(false);
 	const editing = ref<QuickCommandSummary | null>(null);
-	const searchInput = ref<HTMLInputElement | null>(null);
+	const searchInput = ref<{ focus?: (options?: FocusOptions) => void } | null>(null);
 	const searchExpanded = ref(!props.collapsibleSearch);
 	const root = ref<HTMLElement | null>(null);
 	const list = ref<HTMLElement | null>(null);
@@ -390,78 +398,92 @@
 
 <template>
 	<section ref="root" class="quick-commands-root flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-		<div
-			class="quick-commands-controls flex shrink-0 items-center gap-2 border-b border-border/40 bg-background/80 px-2 py-1.5"
-		>
-			<button
+		<div class="quick-commands-controls flex shrink-0 items-center gap-2 px-2 py-1.5">
+			<UiButton
 				v-if="collapsibleSearch && !searchExpanded"
-				type="button"
+				appearance="ghost"
+				density="compact"
+				icon-only
 				class="quick-control"
 				:title="t('quickCommands.expandSearch')"
 				:aria-label="t('quickCommands.expandSearch')"
 				@click="openSearch"
 			>
 				<i class="fas fa-search" aria-hidden="true"></i>
-			</button>
-			<input
+			</UiButton>
+			<UiSearchInput
 				v-if="searchExpanded"
 				ref="searchInput"
 				v-model="search"
 				data-focus-id="quickCommandsSearch"
-				type="text"
+				class="quick-commands-search min-w-0 flex-1 text-sm text-foreground"
+				density="compact"
 				:placeholder="t('quickCommands.searchPlaceholder')"
-				class="quick-commands-search min-w-0 flex-1 rounded-lg border border-border/50 bg-input px-4 py-1.5 text-sm text-foreground shadow-sm transition duration-150 ease-in-out focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+				:aria-label="t('quickCommands.searchPlaceholder')"
+				:clear-label="t('common.clear')"
 				@keydown="handleSearchKeydown"
 				@blur="handleSearchBlur"
 			/>
-			<button
+			<UiButton
 				v-if="error"
-				type="button"
+				appearance="ghost"
+				density="compact"
+				icon-only
 				class="quick-control"
+				:loading="loading"
 				:disabled="loading"
 				:title="t('common.refresh')"
 				:aria-label="t('common.refresh')"
 				@click="store.load(true).catch(() => undefined)"
 			>
-				<i class="fas fa-sync-alt" :class="{ 'fa-spin': loading }" aria-hidden="true"></i>
-			</button>
-			<button
-				type="button"
+				<i class="fas fa-sync-alt" aria-hidden="true"></i>
+			</UiButton>
+			<UiButton
+				appearance="ghost"
+				density="compact"
+				icon-only
 				class="quick-control"
 				:title="sortButtonTitle"
 				:aria-label="sortButtonTitle"
 				@click="cycleSort"
 			>
 				<i :class="sortButtonIcon" aria-hidden="true"></i>
-			</button>
-			<button
-				type="button"
+			</UiButton>
+			<UiButton
+				appearance="ghost"
+				density="compact"
+				icon-only
 				class="quick-control"
-				:class="{ 'bg-primary/20 text-primary': compact }"
+				:class="{ 'quick-control--active': compact }"
 				:title="t('quickCommands.compactMode')"
 				:aria-label="t('quickCommands.compactMode')"
 				@click="emit('compactMode', !compact)"
 			>
 				<i :class="['fas', compact ? 'fa-compress-alt' : 'fa-expand-alt']" aria-hidden="true"></i>
-			</button>
-			<button
-				type="button"
+			</UiButton>
+			<UiButton
+				appearance="ghost"
+				density="compact"
+				icon-only
 				class="quick-control"
 				:title="t(displayMode === 'name' ? 'quickCommands.switchToCommand' : 'quickCommands.switchToName')"
 				:aria-label="t(displayMode === 'name' ? 'quickCommands.switchToCommand' : 'quickCommands.switchToName')"
 				@click="toggleDisplayMode"
 			>
 				<i :class="['fas', displayMode === 'name' ? 'fa-tag' : 'fa-terminal']" aria-hidden="true"></i>
-			</button>
-			<button
-				type="button"
+			</UiButton>
+			<UiButton
+				appearance="ghost"
+				tone="primary"
+				density="compact"
+				icon-only
 				class="quick-control quick-control--primary"
 				:title="t('quickCommands.add')"
 				:aria-label="t('quickCommands.add')"
 				@click="add"
 			>
 				<i class="fas fa-plus" aria-hidden="true"></i>
-			</button>
+			</UiButton>
 		</div>
 
 		<div
@@ -470,34 +492,27 @@
 			:style="rowStyle"
 			:data-row-scale="localScale.toFixed(2)"
 		>
-			<div
-				v-if="loading"
-				class="flex h-full flex-col items-center justify-center p-6 text-center text-sm text-text-secondary"
-			>
-				<i class="fas fa-spinner fa-spin mb-2 text-xl" aria-hidden="true"></i>
-				<p>{{ t('common.loading') }}</p>
-			</div>
-			<div
+			<UiLoadingState v-if="loading" class="h-full" compact :bordered="false" :title="t('common.loading')" />
+			<UiEmptyState
 				v-else-if="!(showTags ? groups.length : flat.length) && search"
-				class="flex h-full flex-col items-center justify-center p-6 text-center text-sm text-text-secondary"
-			>
-				<i class="fas fa-search mb-2 text-xl" aria-hidden="true"></i>
-				<p>{{ t('quickCommands.empty') }}</p>
-			</div>
-			<div
+				class="h-full"
+				compact
+				icon="fa-solid fa-magnifying-glass"
+				:title="t('quickCommands.empty')"
+			/>
+			<UiEmptyState
 				v-else-if="!(showTags ? groups.length : flat.length)"
-				class="flex h-full flex-col items-center justify-center p-6 text-center text-sm text-text-secondary"
+				class="h-full"
+				compact
+				icon="fa-solid fa-bolt"
+				:title="t('quickCommands.empty')"
 			>
-				<i class="fas fa-bolt mb-2 text-xl" aria-hidden="true"></i>
-				<p class="mb-3">{{ t('quickCommands.empty') }}</p>
-				<button
-					type="button"
-					class="rounded-lg bg-primary px-4 py-2 font-semibold text-white shadow-md hover:bg-primary-dark"
-					@click="add"
-				>
-					{{ t('quickCommands.addFirst') }}
-				</button>
-			</div>
+				<template #action>
+					<UiButton appearance="ghost" density="compact" @click="add">
+						{{ t('quickCommands.addFirst') }}
+					</UiButton>
+				</template>
+			</UiEmptyState>
 
 			<template v-else-if="showTags">
 				<section
@@ -636,29 +651,28 @@
 			:width="200"
 			@close="context = null"
 		>
-			<button class="context-item" @click="copy(context.command)">
+			<UiContextMenuItem @click="copy(context.command)">
 				<i class="fas fa-copy" aria-hidden="true"></i><span>{{ t('quickCommands.actions.copy') }}</span>
-			</button>
-			<button class="context-item" @click="run(context.command)">
+			</UiContextMenuItem>
+			<UiContextMenuItem @click="run(context.command)">
 				<i class="fas fa-play" aria-hidden="true"></i><span>{{ t('quickCommands.form.execute') }}</span>
-			</button>
-			<button
-				class="context-item"
+			</UiContextMenuItem>
+			<UiContextMenuItem
 				@click="
 					edit(context.command);
 					context = null;
 				"
 			>
 				<i class="fas fa-edit" aria-hidden="true"></i><span>{{ t('common.edit') }}</span>
-			</button>
-			<button class="context-item text-error" @click="remove(context.command)">
+			</UiContextMenuItem>
+			<UiContextMenuItem tone="danger" @click="remove(context.command)">
 				<i class="fas fa-trash-alt" aria-hidden="true"></i><span>{{ t('common.delete') }}</span>
-			</button>
+			</UiContextMenuItem>
 			<div class="my-1 border-t border-border" role="separator"></div>
-			<button class="context-item" @click="run(context.command, true)">
+			<UiContextMenuItem @click="run(context.command, true)">
 				<i class="fas fa-paper-plane" aria-hidden="true"></i
 				><span>{{ t('quickCommands.actions.sendToAllSessions') }}</span>
-			</button>
+			</UiContextMenuItem>
 		</UiContextMenu>
 
 		<QuickCommandForm
@@ -674,7 +688,7 @@
 
 <style scoped>
 	.quick-commands-root {
-		container-type: inline-size;
+		container-type: size;
 		container-name: quick-commands-pane;
 		min-width: 0;
 	}
@@ -683,6 +697,8 @@
 		flex-wrap: wrap;
 		column-gap: 0.5rem;
 		row-gap: 0.25rem;
+		border-bottom: 1px solid color-mix(in srgb, var(--border-color) 38%, transparent);
+		background: transparent;
 	}
 	.quick-commands-controls,
 	.quick-command-list-area,
@@ -727,18 +743,22 @@
 	.quick-command-display-text {
 		min-width: 0;
 	}
+	.quick-command-list-area {
+		padding-top: 0.625rem;
+	}
+	.quick-commands-search {
+		--ui-control-radius: 0.45rem;
+	}
 	@container quick-commands-pane (max-width: 340px) {
 		.quick-commands-controls {
 			gap: 0.25rem;
 			padding: 0.35rem 0.4rem;
 		}
 		.quick-commands-search {
-			padding-inline: 0.5rem;
-			font-size: 0.75rem;
-			height: 1.75rem;
+			--ui-control-font-size: 0.75rem;
 		}
 		.quick-command-list-area {
-			padding: 0.125rem 0.35rem 0.35rem;
+			padding: 0.625rem 0.35rem 0.35rem;
 		}
 		.quick-command-group-header {
 			min-height: 2.125rem;
@@ -763,20 +783,30 @@
 			align-items: center;
 		}
 	}
+	@container quick-commands-pane (max-height: 220px) {
+		.quick-commands-controls {
+			padding-block: 0.2rem;
+		}
+	}
+	@container quick-commands-pane (max-height: 140px) {
+		.quick-commands-controls {
+			border-bottom-color: transparent;
+		}
+	}
 	.quick-control {
 		display: flex;
-		width: 1.625rem;
-		height: 1.625rem;
-		min-width: 1.625rem;
-		min-height: 1.625rem;
-		flex: 0 0 1.625rem;
+		width: 1.75rem;
+		height: 1.75rem;
+		min-width: 1.75rem;
+		min-height: 1.75rem;
+		flex: 0 0 1.75rem;
 		padding: 0;
 		margin: 0;
 		align-items: center;
 		justify-content: center;
-		border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
-		border-radius: 0.375rem;
-		background: var(--card-bg-color, var(--app-bg-color));
+		border: 1px solid transparent;
+		border-radius: 0.4rem;
+		background: transparent;
 		color: var(--text-color-secondary);
 		transition:
 			background-color 0.15s ease,
@@ -789,9 +819,8 @@
 		line-height: 1;
 	}
 	.quick-control:hover {
-		background: color-mix(in srgb, var(--primary-color) 8%, var(--header-bg-color));
+		background: color-mix(in srgb, var(--text-color) 7%, transparent);
 		color: var(--text-color);
-		border-color: var(--border-color);
 	}
 	.quick-control--primary {
 		color: var(--text-color-secondary);
@@ -800,26 +829,11 @@
 		color: currentColor !important;
 	}
 	.quick-control--primary:hover {
-		background: color-mix(in srgb, var(--primary-color) 8%, var(--header-bg-color));
+		background: color-mix(in srgb, var(--primary-color) 12%, transparent);
 		color: var(--text-color);
 	}
-	.context-item {
-		display: flex;
-		width: calc(100% - 0.5rem);
-		margin-inline: 0.25rem;
-		align-items: center;
-		gap: 0.75rem;
-		border-radius: 0.375rem;
-		padding: 0.4rem 0.75rem;
-		text-align: left;
-		font-size: 0.875rem;
-	}
-	.context-item:hover {
-		background: color-mix(in srgb, var(--link-active-color) 10%, transparent);
-		color: var(--link-active-color);
-	}
-	.context-item i {
-		width: 1rem;
-		text-align: center;
+	.quick-control--active {
+		background: color-mix(in srgb, var(--primary-color) 14%, transparent);
+		color: var(--primary-color);
 	}
 </style>

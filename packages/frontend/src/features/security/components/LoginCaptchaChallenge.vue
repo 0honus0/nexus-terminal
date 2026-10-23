@@ -3,6 +3,7 @@
 	import { useI18n } from 'vue-i18n';
 	import VueHcaptcha from '@hcaptcha/vue3-hcaptcha';
 	import VueRecaptcha from 'vue3-recaptcha2';
+	import { UiInlineLoading, UiInlineNotice } from '@/foundation/ui';
 	import type { LoginCaptchaConfig, CaptchaStatus } from '../model/security-types';
 
 	const props = withDefaults(
@@ -52,15 +53,17 @@
 </script>
 <template>
 	<div v-if="props.status !== 'ready' || config.enabled" class="space-y-2">
-		<p v-if="props.status === 'loading'" class="text-sm text-text-secondary" role="status">
-			{{ t('auth.login.error.captchaLoading') }}
-		</p>
-		<p v-else-if="props.status === 'error'" class="text-sm text-error" role="alert">
+		<UiInlineLoading
+			v-if="props.status === 'loading'"
+			class="text-sm"
+			:label="t('auth.login.error.captchaLoading')"
+		/>
+		<UiInlineNotice v-else-if="props.status === 'error'" tone="danger" compact>
 			{{ t('auth.login.error.captchaLoadFailed') }}
-		</p>
-		<p v-else-if="props.status === 'invalid'" class="text-sm text-error" role="alert">
+		</UiInlineNotice>
+		<UiInlineNotice v-else-if="props.status === 'invalid'" tone="danger" compact>
 			{{ t('auth.login.error.captchaConfigInvalid') }}
-		</p>
+		</UiInlineNotice>
 		<template v-else>
 			<p class="text-sm font-medium text-text-secondary">{{ t('auth.login.captchaPrompt') }}</p>
 			<VueHcaptcha
@@ -81,7 +84,7 @@
 				@expire="expired"
 				@fail="failed"
 			/>
-			<p v-if="displayedError" class="text-sm text-error" role="alert">{{ displayedError }}</p>
+			<UiInlineNotice v-if="displayedError" tone="danger" compact>{{ displayedError }}</UiInlineNotice>
 		</template>
 	</div>
 </template>

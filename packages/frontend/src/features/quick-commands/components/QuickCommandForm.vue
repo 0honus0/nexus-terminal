@@ -6,6 +6,7 @@
 	import { useResizeHandle } from '@/foundation/interaction';
 	import {
 		UiButton,
+		UiEmptyState,
 		UiFormField,
 		UiInput,
 		UiModal,
@@ -36,7 +37,8 @@
 	const store = useQuickCommandsStore();
 
 	const MIN_DIALOG_WIDTH = 800;
-	const MIN_DIALOG_HEIGHT = 700;
+	const MIN_DIALOG_HEIGHT = 440;
+	const DEFAULT_DIALOG_HEIGHT = 492;
 	const VIEWPORT_GAP = 32;
 
 	const availableWidth = () => Math.max(1, window.innerWidth - VIEWPORT_GAP);
@@ -49,7 +51,7 @@
 
 	const defaultWidth = () => Math.min(1152, window.innerWidth * 0.9, availableWidth());
 
-	const defaultHeight = () => Math.min(window.innerHeight * 0.85, availableHeight());
+	const defaultHeight = () => Math.min(DEFAULT_DIALOG_HEIGHT, window.innerHeight * 0.78, availableHeight());
 
 	const desktopResizable = ref(typeof window !== 'undefined' && window.innerWidth >= 768);
 	const dialogWidth = ref(typeof window === 'undefined' ? 1152 : defaultWidth());
@@ -268,7 +270,7 @@
 				></div>
 			</template>
 		</template>
-		<form class="space-y-5 py-5" @submit.prevent="save">
+		<form id="quick-command-form" class="quick-command-form" @submit.prevent="save">
 			<UiFormField :label="t('quickCommands.form.name')">
 				<UiInput v-model="form.name" :placeholder="t('quickCommands.form.namePlaceholder')" />
 			</UiFormField>
@@ -278,7 +280,7 @@
 					v-model="form.command"
 					:min-rows="5"
 					required
-					class="min-h-[80px] whitespace-nowrap"
+					class="min-h-[88px] whitespace-nowrap"
 					:placeholder="t('quickCommands.form.commandPlaceholder')"
 				/>
 			</UiFormField>
@@ -298,22 +300,29 @@
 				/>
 			</UiFormField>
 
-			<section>
-				<h3 class="mb-3 text-sm font-medium text-text-secondary">
-					{{ t('quickCommands.form.variablesTitle') }}
-				</h3>
-				<div class="space-y-2">
-					<p
-						v-if="!form.variables.length"
-						class="rounded-md border border-dashed border-border/30 p-2 text-sm text-text-alt"
+			<section class="quick-command-variables">
+				<div class="quick-command-section-heading">
+					<h3>{{ t('quickCommands.form.variablesTitle') }}</h3>
+					<UiButton
+						type="button"
+						appearance="ghost"
+						density="compact"
+						@click="form.variables.push({ key: '', value: '' })"
 					>
-						{{ t('quickCommands.form.noVariables') }}
-					</p>
-					<div
-						v-for="(variable, index) in form.variables"
-						:key="index"
-						class="space-y-2 rounded-lg border border-border/40 bg-input/30 p-2.5"
-					>
+						<template #leading><i class="fas fa-plus" aria-hidden="true"></i></template>
+						{{ t('quickCommands.form.addVariable') }}
+					</UiButton>
+				</div>
+
+				<UiEmptyState
+					v-if="!form.variables.length"
+					class="quick-command-variable-empty"
+					dense
+					icon="fas fa-code"
+					:title="t('quickCommands.form.noVariables')"
+				/>
+				<div v-else class="quick-command-variable-list">
+					<div v-for="(variable, index) in form.variables" :key="index" class="quick-command-variable-card">
 						<UiInput
 							v-model="variable.key"
 							:placeholder="t('quickCommands.form.variableNamePlaceholder')"
@@ -325,26 +334,26 @@
 							class="min-h-[40px] resize-y"
 							:placeholder="t('quickCommands.form.variableValuePlaceholder')"
 						/>
-						<button
+						<UiButton
 							type="button"
-							class="w-full rounded-md border border-error/50 px-3 py-1 text-xs text-error transition-colors hover:bg-error/10"
+							appearance="ghost"
+							tone="danger"
+							density="compact"
+							class="quick-command-variable-delete"
 							:title="t('common.delete')"
+							:aria-label="t('common.delete')"
 							@click="form.variables.splice(index, 1)"
 						>
-							<i class="fas fa-trash-alt mr-1" aria-hidden="true"></i>{{ t('common.delete') }}
-						</button>
+							<i class="fas fa-trash-alt" aria-hidden="true"></i>
+							<span>{{ t('common.delete') }}</span>
+						</UiButton>
 					</div>
 				</div>
-				<button
-					type="button"
-					class="mt-3 w-full rounded-md border border-primary/50 px-4 py-2 text-sm text-primary transition-colors hover:bg-primary/10"
-					@click="form.variables.push({ key: '', value: '' })"
-				>
-					<i class="fas fa-plus mr-1" aria-hidden="true"></i>{{ t('quickCommands.form.addVariable') }}
-				</button>
 			</section>
+		</form>
 
-			<div class="flex justify-end gap-3 border-t border-border pt-4">
+		<template #footer>
+			<div class="flex items-center justify-end gap-2">
 				<UiButton type="button" @click="emit('close')">{{ t('common.cancel') }}</UiButton>
 				<UiButton
 					type="button"
@@ -356,15 +365,76 @@
 					<template #leading><i class="fas fa-play" aria-hidden="true"></i></template>
 					{{ t('quickCommands.form.execute') }}
 				</UiButton>
-				<UiButton type="submit" appearance="solid" tone="primary" :disabled="!form.command.trim()">
+				<UiButton
+					type="submit"
+					form="quick-command-form"
+					appearance="solid"
+					tone="primary"
+					:disabled="!form.command.trim()"
+				>
 					{{ t('common.save') }}
 				</UiButton>
 			</div>
-		</form>
+		</template>
 	</UiModal>
 </template>
 
 <style scoped>
+	.quick-command-form {
+		display: flex;
+		min-height: 100%;
+		flex-direction: column;
+		gap: 0.9rem;
+		padding-block: 0.15rem 0.25rem;
+	}
+
+	.quick-command-variables {
+		display: flex;
+		min-height: 0;
+		flex-direction: column;
+		gap: 0.55rem;
+	}
+
+	.quick-command-section-heading {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+	}
+
+	.quick-command-section-heading h3 {
+		margin: 0;
+		color: var(--text-color-secondary);
+		font-size: 0.8125rem;
+		font-weight: 600;
+		line-height: 1.35;
+	}
+
+	.quick-command-variable-empty {
+		min-height: 2.5rem;
+		padding: 0.55rem 0.7rem;
+		border-radius: 0.55rem;
+	}
+
+	.quick-command-variable-list {
+		display: grid;
+		gap: 0.5rem;
+	}
+
+	.quick-command-variable-card {
+		display: grid;
+		gap: 0.5rem;
+		padding: 0.65rem;
+		border: 1px solid color-mix(in srgb, var(--border-color) 36%, transparent);
+		border-radius: 0.6rem;
+		background: color-mix(in srgb, var(--input-bg-color) 34%, transparent);
+	}
+
+	.quick-command-variable-delete {
+		width: fit-content;
+		justify-self: end;
+	}
+
 	.quick-resize {
 		position: absolute;
 		z-index: 20;

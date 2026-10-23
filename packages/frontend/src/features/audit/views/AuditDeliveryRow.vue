@@ -1,6 +1,7 @@
 <script setup lang="ts">
 	import { computed } from 'vue';
 	import { useI18n } from 'vue-i18n';
+	import { UiBadge, type UiTone } from '@/foundation/ui';
 	import type { NotificationDelivery } from '@/features/notifications/public';
 	import { auditEventContextKey, auditEventVisual } from '../model/auditPresentation';
 
@@ -19,13 +20,14 @@
 	});
 	const status = computed(() => {
 		const value = props.delivery.status;
-		const metadata = {
+		const statusMetadata: Record<NotificationDelivery['status'], { tone: UiTone; icon: string }> = {
 			queued: { tone: 'warning', icon: 'fa-solid fa-clock' },
 			dispatched: { tone: 'warning', icon: 'fa-solid fa-paper-plane' },
 			sent: { tone: 'success', icon: 'fa-solid fa-circle-check' },
 			failed: { tone: 'danger', icon: 'fa-solid fa-circle-xmark' },
 			unknown: { tone: 'danger', icon: 'fa-solid fa-circle-question' },
-		}[value];
+		};
+		const metadata = statusMetadata[value];
 		return {
 			...metadata,
 			short: t(`auditLog.deliveries.statusShort.${value}`),
@@ -77,16 +79,20 @@
 		<div class="audit-delivery-row__content">
 			<div class="audit-delivery-row__heading">
 				<strong class="audit-delivery-row__action">{{ eventLabel }}</strong>
-				<span v-if="scope" class="audit-delivery-row__scope">{{ scope }}</span>
-				<span
+				<UiBadge v-if="scope" class="audit-delivery-row__scope" appearance="ghost" density="compact">{{
+					scope
+				}}</UiBadge>
+				<UiBadge
 					class="audit-delivery-row__status"
-					:data-tone="status.tone"
+					appearance="ghost"
+					density="compact"
+					:tone="status.tone"
 					:title="status.full"
 					:aria-label="status.full"
 				>
 					<i :class="status.icon" aria-hidden="true"></i>
 					{{ status.short }}
-				</span>
+				</UiBadge>
 				<span class="audit-delivery-row__mobile-time">
 					<i class="fa-regular fa-clock" aria-hidden="true"></i>
 					{{ dayLabel }} · {{ timeLabel }}
@@ -218,48 +224,12 @@
 	}
 
 	.audit-delivery-row__scope {
-		display: inline-flex;
-		flex: 0 0 auto;
-		align-items: center;
-		padding: 1px 6px;
-		border-radius: 999px;
 		background: color-mix(in srgb, var(--audit-kind-color) 8%, transparent);
 		color: color-mix(in srgb, var(--audit-kind-color) 76%, var(--text-color));
-		font-size: 9px;
-		font-weight: 650;
-		line-height: 1.55;
 	}
 
 	.audit-delivery-row__status {
-		display: inline-flex;
-		min-height: 22px;
-		flex: 0 0 auto;
-		align-items: center;
-		gap: 5px;
 		margin-left: auto;
-		padding: 2px 8px;
-		border-radius: 999px;
-		background: color-mix(in srgb, var(--text-color) 5%, transparent);
-		color: var(--text-color-secondary);
-		font-size: 9.5px;
-		font-weight: 650;
-		line-height: 1.45;
-		white-space: nowrap;
-	}
-
-	.audit-delivery-row__status[data-tone='success'] {
-		background: color-mix(in srgb, var(--status-success-color) 10%, transparent);
-		color: var(--status-success-color);
-	}
-
-	.audit-delivery-row__status[data-tone='warning'] {
-		background: color-mix(in srgb, var(--status-warning-color) 11%, transparent);
-		color: var(--status-warning-color);
-	}
-
-	.audit-delivery-row__status[data-tone='danger'] {
-		background: color-mix(in srgb, var(--status-error-color) 10%, transparent);
-		color: var(--status-error-color);
 	}
 
 	.audit-delivery-row__meta {

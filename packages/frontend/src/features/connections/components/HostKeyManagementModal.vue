@@ -5,6 +5,7 @@
 		UiBadge,
 		UiButton,
 		UiEmptyState,
+		UiLoadingState,
 		UiFormField,
 		UiInfoHint,
 		UiInput,
@@ -70,10 +71,12 @@
 						<UiSpinner v-if="loading" density="compact" :label="t('common.loading')" />
 					</div>
 
-					<div v-if="loading && items.length === 0" class="host-keys__loading">
-						<UiSpinner />
-						<span>{{ t('common.loading') }}</span>
-					</div>
+					<UiLoadingState
+						v-if="loading && items.length === 0"
+						dense
+						:bordered="false"
+						:title="t('common.loading')"
+					/>
 					<UiEmptyState
 						v-else-if="items.length === 0"
 						dense
@@ -242,30 +245,6 @@
 		scrollbar-gutter: stable;
 	}
 
-	.host-keys__notice {
-		display: flex;
-		align-items: center;
-		gap: 9px;
-		margin-top: 12px;
-		padding: 9px 11px;
-		border: 1px solid color-mix(in srgb, var(--link-active-color) 18%, var(--glass-border-color));
-		border-radius: 10px;
-		background: color-mix(in srgb, var(--link-active-color) 6%, transparent);
-		color: var(--text-color-secondary);
-		font-size: 12px;
-		line-height: 1.5;
-	}
-
-	.host-keys__notice--warning {
-		border-color: color-mix(in srgb, var(--status-warning-color) 24%, var(--glass-border-color));
-		background: color-mix(in srgb, var(--status-warning-color) 7%, transparent);
-		color: color-mix(in srgb, var(--status-warning-color) 72%, var(--text-color));
-	}
-
-	.host-keys__notice > i {
-		flex: none;
-	}
-
 	.host-keys__section {
 		margin-top: 20px;
 	}
@@ -292,16 +271,6 @@
 		color: var(--text-color-secondary);
 		font-size: 10px;
 		opacity: 0.8;
-	}
-
-	.host-keys__loading {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 9px;
-		padding: 26px 12px;
-		color: var(--text-color-secondary);
-		font-size: 12px;
 	}
 
 	.host-keys__list {

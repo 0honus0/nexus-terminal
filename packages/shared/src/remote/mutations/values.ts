@@ -2,7 +2,7 @@ export const MUTATION_STATES = ['held', 'blocked', 'released'] as const;
 
 export type MutationState = (typeof MUTATION_STATES)[number];
 
-export const MUTATION_ORIGINS = ['files', 'docker', 'agent'] as const;
+export const MUTATION_ORIGINS = ['files', 'docker', 'agent', 'tools'] as const;
 
 export type MutationOrigin = (typeof MUTATION_ORIGINS)[number];
 

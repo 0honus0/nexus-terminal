@@ -18,18 +18,24 @@ export function useArtifactPicker(
 	const items = ref<ManagedArtifact[]>([]);
 	const nextOffset = ref<number | null>(null);
 	const needsReload = ref(true);
+	const loaded = ref(false);
 	const uploadUnknown = ref(false);
 	const reservation = ref<ManagedArtifact | null>(null);
 	const acknowledged = ref(false);
-	const operation = useAgentManagementOperation(() => {
-		query.value = '';
-		items.value = [];
-		nextOffset.value = null;
-		needsReload.value = true;
-		uploadUnknown.value = false;
-		reservation.value = null;
-		acknowledged.value = false;
-	}, available);
+	const operation = useAgentManagementOperation(
+		() => {
+			query.value = '';
+			items.value = [];
+			nextOffset.value = null;
+			needsReload.value = true;
+			loaded.value = false;
+			uploadUnknown.value = false;
+			reservation.value = null;
+			acknowledged.value = false;
+		},
+		available,
+		{ retainOnView: true },
+	);
 	const blocked = computed(() => operation.busy.value || operation.refreshRequired.value || needsReload.value);
 
 	watch(query, () => {
@@ -57,6 +63,7 @@ export function useArtifactPicker(
 				items.value = more ? [...items.value, ...ready.filter((item) => !known.has(item.id))] : ready;
 				nextOffset.value = page.nextOffset;
 				needsReload.value = false;
+				loaded.value = true;
 			},
 			{ write: false },
 		);
@@ -131,7 +138,7 @@ export function useArtifactPicker(
 	}
 
 	watch(available, (active) => {
-		if (active) {
+		if (active && (!loaded.value || needsReload.value)) {
 			void load();
 		}
 	});

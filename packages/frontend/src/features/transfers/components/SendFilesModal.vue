@@ -1,30 +1,53 @@
 <script setup lang="ts">
 	import type { ServerTransferMethod } from '@nexus-terminal/shared/remote/transfers/server-values';
-	import { computed, onMounted, onBeforeUnmount, onDeactivated, ref, watch } from 'vue';
+	import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiOverlayPanel, UiSelect } from '@/foundation/ui';
+	import {
+		UiBadge,
+		UiButton,
+		UiCheckbox,
+		UiEmptyState,
+		UiLoadingState,
+		UiFormActions,
+		UiFormField,
+		UiInlineNotice,
+		UiOverlayPanel,
+		UiSearchInput,
+		UiSelect,
+	} from '@/foundation/ui';
 	import { apiErrorMessage } from '@/client/http';
 	import { useFeedback } from '@/shared/feedback/public';
+	import { useAuthenticatedViewScope } from '@/shared/session/public';
+	import { useRemoteTools, RemoteToolInstallDialog } from '@/features/remote-tools/public';
+	import { loadRemoteDirectoryPicker } from '@/features/filesystem/public';
 	import { useRuntimeFeatureCapabilities, type ConnectionSummary } from '@/shared/capabilities/public';
 	import { useServerTransfersStore, serverTransferFailureKey } from '../store/serverTransfers.store';
 	import type { SendFileSource, ServerTransferTask } from '../model/server-transfer-types';
+	import { readServerTransferDirectory, rememberServerTransferDirectory } from '../model/server-transfer-directory';
+
+	const RemoteDirectoryPicker = defineAsyncComponent(loadRemoteDirectoryPicker);
 
 	const props = defineProps<{
 		visible: boolean;
 		sourceConnectionId: number;
 		items: readonly SendFileSource[];
-		initialTargetPath?: string;
 	}>();
 	const emit = defineEmits<{ close: []; sent: [task: ServerTransferTask] }>();
 	const { t } = useI18n();
 	const feedback = useFeedback();
+	const toolInstaller = useRemoteTools();
 	const capabilities = useRuntimeFeatureCapabilities();
 	const connections = capabilities.connections;
+	const installationTarget = computed(() =>
+		connections.items.value.find((target) => target.id === toolInstaller.offer.value?.targetId),
+	);
 	const tags = capabilities.tags;
 	const transfers = useServerTransfersStore();
 	const search = ref('');
 	const selected = ref(new Set<number>());
 	const targetPath = ref('');
+	const browseTargetId = ref('');
+	const pickerOpen = ref(false);
 	const method = ref<ServerTransferMethod>('auto');
 	const loadingOptions = ref(false);
 	const submitting = ref(false);
@@ -39,10 +62,18 @@
 		operation = new AbortController();
 		submitting.value = false;
 		loadingOptions.value = false;
+		pickerOpen.value = false;
 	}
 
-	onBeforeUnmount(invalidate);
-	onDeactivated(invalidate);
+	useAuthenticatedViewScope({
+		available: () => props.visible,
+
+		onRevoke: () => {
+			invalidate();
+			selected.value = new Set();
+			targetPath.value = '';
+		},
+	});
 
 	interface ConnectionGroup {
 		id: string;
@@ -56,6 +87,45 @@
 			(connection) => connection.type === 'SSH' && connection.id !== props.sourceConnectionId,
 		),
 	);
+	const selectedConnections = computed(() =>
+		sshConnections.value.filter((connection) => selected.value.has(connection.id)),
+	);
+	const browseTarget = computed(() =>
+		selectedConnections.value.find((connection) => String(connection.id) === browseTargetId.value),
+	);
+	const browseTargetKey = computed(() => {
+		const target = browseTarget.value;
+		return target ? `${target.id}:${target.createdAt}:${target.version}` : '';
+	});
+	watch(
+		selectedConnections,
+		(targets) => {
+			if (!targets.some((target) => String(target.id) === browseTargetId.value)) {
+				browseTargetId.value = targets[0] ? String(targets[0].id) : '';
+			}
+		},
+		{ flush: 'sync' },
+	);
+	watch(
+		[browseTargetKey, capabilities.auth.userId],
+		() => {
+			pickerOpen.value = false;
+			const target = browseTarget.value;
+			const userId = capabilities.auth.userId.value;
+			targetPath.value = target && userId !== null ? readServerTransferDirectory(userId, target) : '';
+		},
+		{ flush: 'sync' },
+	);
+
+	function selectDirectory(path: string): void {
+		const target = browseTarget.value;
+		const userId = capabilities.auth.userId.value;
+		if (!pickerOpen.value || !props.visible || submitting.value || !target || userId === null) return;
+		targetPath.value = path;
+		rememberServerTransferDirectory(userId, target, path);
+		pickerOpen.value = false;
+	}
+
 	const groupedConnections = computed<ConnectionGroup[]>(() => {
 		const groups = new Map<number, ConnectionSummary[]>();
 		const untagged: ConnectionSummary[] = [];
@@ -102,6 +172,7 @@
 	});
 
 	const toggle = (id: number) => {
+		if (submitting.value) return;
 		const next = new Set(selected.value);
 		if (next.has(id)) next.delete(id);
 		else next.add(id);
@@ -117,6 +188,7 @@
 	};
 
 	const toggleGroup = (group: ConnectionGroup) => {
+		if (submitting.value) return;
 		const next = new Set(selected.value);
 		if (isGroupSelected(group)) group.connections.forEach((connection) => next.delete(connection.id));
 		else group.connections.forEach((connection) => next.add(connection.id));
@@ -133,11 +205,14 @@
 	};
 
 	const selectVisible = () => {
+		if (submitting.value) return;
 		const ids = filteredGroups.value.flatMap((group) => group.connections.map((connection) => connection.id));
 		selected.value = new Set([...selected.value, ...ids]);
 	};
 
-	const clear = () => (selected.value = new Set());
+	const clear = () => {
+		if (!submitting.value) selected.value = new Set();
+	};
 
 	const loadOptions = async () => {
 		const current = generation;
@@ -164,7 +239,7 @@
 			search.value = '';
 			selected.value = new Set();
 			expandedGroups.value = {};
-			targetPath.value = props.initialTargetPath?.trim() || '';
+			targetPath.value = '';
 			method.value = 'auto';
 			void loadOptions();
 		},
@@ -175,8 +250,8 @@
 	const submit = async () => {
 		if (submitting.value) return;
 		error.value = '';
-		const path = targetPath.value.trim();
-		if (!selected.value.size || !path || !props.items.length) {
+		const path = targetPath.value;
+		if (!selectedConnections.value.length || !path || !props.items.length) {
 			error.value = t('sendFilesModal.validationError');
 			return;
 		}
@@ -185,7 +260,7 @@
 		const signal = operation.signal;
 		const command = {
 			sourceConnectionId: props.sourceConnectionId,
-			connectionIds: [...selected.value],
+			connectionIds: selectedConnections.value.map((target) => target.id),
 			sourceItems: props.items.map((item) => ({ name: item.name, path: item.path, type: item.type })),
 			remoteTargetPath: path,
 			transferMethod: method.value,
@@ -202,6 +277,39 @@
 				signal.aborted
 			)
 				return;
+			for (const peerId of command.connectionIds) {
+				if (
+					!(await toolInstaller.ensure(
+						{
+							kind: 'transfer',
+							targetId: command.sourceConnectionId,
+							peerId,
+							side: 'source',
+							method: command.transferMethod,
+						},
+						signal,
+					))
+				) {
+					return;
+				}
+				if (
+					!(await toolInstaller.ensure(
+						{
+							kind: 'transfer',
+							targetId: peerId,
+							peerId: command.sourceConnectionId,
+							side: 'target',
+							method: command.transferMethod,
+						},
+						signal,
+					))
+				) {
+					return;
+				}
+			}
+			if (current !== generation || !props.visible || signal.aborted) {
+				return;
+			}
 			const task = await transfers.send(command, signal);
 			if (current !== generation || !props.visible || signal.aborted) {
 				return;
@@ -222,196 +330,790 @@
 </script>
 
 <template>
+	<RemoteToolInstallDialog
+		:offer="toolInstaller.offer.value"
+		:busy="toolInstaller.busy.value"
+		:target-name="installationTarget?.name || installationTarget?.host"
+		@approve="toolInstaller.approve"
+		@cancel="toolInstaller.cancel"
+	/>
 	<UiOverlayPanel
 		:visible="visible"
 		:z-index="70"
-		panel-class="max-w-2xl max-h-[90vh] flex flex-col p-6"
+		panel-class="ui-form-surface flex flex-col !w-[calc(100vw-1rem)] !max-w-[60rem] !h-[calc(100dvh-1rem)] !max-h-[calc(100dvh-1rem)] !p-0 overflow-hidden sm:!w-[calc(100vw-2rem)] sm:!h-auto sm:!max-h-[calc(100dvh-2rem)]"
 		role="dialog"
 		:aria-modal="true"
 		:aria-label="t('sendFilesModal.title')"
+		focus-on-open
+		restore-focus
+		close-on-escape
 		@close="emit('close')"
 	>
-		<div class="mb-4 flex shrink-0 items-center justify-between border-b border-border pb-4">
-			<h3 class="text-xl font-semibold">{{ t('sendFilesModal.title') }}</h3>
-			<button
+		<header class="send-files__header">
+			<div class="send-files__heading">
+				<span class="send-files__mark" aria-hidden="true">
+					<i class="fa-solid fa-paper-plane"></i>
+				</span>
+				<h2 class="send-files__title">{{ t('sendFilesModal.title') }}</h2>
+			</div>
+			<UiButton
 				type="button"
-				class="text-text-secondary transition-colors hover:text-foreground"
+				appearance="ghost"
+				icon-only
 				:aria-label="t('common.close')"
+				:title="t('common.close')"
 				@click="emit('close')"
 			>
-				<i class="fas fa-times text-xl" aria-hidden="true"></i>
-			</button>
-		</div>
+				<i class="fas fa-times" aria-hidden="true"></i>
+			</UiButton>
+		</header>
 
-		<div class="min-h-0 flex-grow space-y-4 overflow-y-auto pr-1">
-			<div class="space-y-4">
-				<input
+		<div class="send-files__body">
+			<section class="send-files__targets" aria-labelledby="send-files-targets-title">
+				<header class="send-files__section-head">
+					<div class="send-files__section-title">
+						<h3 id="send-files-targets-title">
+							<i class="fa-solid fa-server" aria-hidden="true"></i>
+							{{ t('sendFilesModal.targetsTitle') }}
+						</h3>
+						<UiBadge appearance="ghost" density="compact"
+							>{{ selected.size }}/{{ sshConnections.length }}</UiBadge
+						>
+					</div>
+					<div class="send-files__selection-actions">
+						<UiButton
+							type="button"
+							appearance="ghost"
+							density="compact"
+							:disabled="submitting || !filteredGroups.length"
+							@click="selectVisible"
+						>
+							<i class="fa-solid fa-check-double" aria-hidden="true"></i>
+							{{ t('sendFilesModal.selectAll') }}
+						</UiButton>
+						<UiButton
+							type="button"
+							appearance="ghost"
+							density="compact"
+							:disabled="submitting || selected.size === 0"
+							@click="clear"
+						>
+							<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+							{{ t('sendFilesModal.clearSelection') }}
+						</UiButton>
+					</div>
+				</header>
+
+				<UiSearchInput
 					v-model="search"
-					type="text"
+					class="send-files__search"
 					:placeholder="t('sendFilesModal.searchConnectionsPlaceholder')"
-					class="w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground shadow-sm outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
+					:aria-label="t('sendFilesModal.searchConnectionsPlaceholder')"
+					:clear-label="t('common.clear')"
 				/>
-				<div class="flex flex-col gap-4 sm:flex-row">
-					<div class="flex-1">
-						<label
-							for="send-files-target-path"
-							class="mb-1 block text-sm font-medium text-text-secondary"
-							>{{ t('sendFilesModal.targetPathLabel') }}</label
-						>
-						<input
-							id="send-files-target-path"
-							v-model="targetPath"
-							type="text"
-							:placeholder="t('sendFilesModal.targetPathPlaceholder')"
-							class="w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground shadow-sm outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
-						/>
-					</div>
-					<div class="sm:w-48">
-						<label
-							for="send-files-transfer-method"
-							class="mb-1 block text-sm font-medium text-text-secondary"
-							>{{ t('sendFilesModal.transferMethodLabel') }}</label
-						>
-						<UiSelect id="send-files-transfer-method" v-model="method" class="w-full">
-							<option value="auto">{{ t('sendFilesModal.transferMethodAuto') }}</option>
-							<option value="rsync">{{ t('sendFilesModal.methodRsync') }}</option>
-							<option value="scp">{{ t('sendFilesModal.methodScp') }}</option>
-						</UiSelect>
-					</div>
-				</div>
-			</div>
 
-			<section class="max-h-72 space-y-4 overflow-y-auto rounded-md border border-border bg-header/30 p-4">
-				<div class="flex items-center justify-end gap-2 text-[11px]">
-					<button type="button" class="text-primary hover:underline" @click="selectVisible">
-						{{ t('sendFilesModal.selectAll') }}
-					</button>
-					<span class="text-text-secondary" aria-hidden="true">·</span>
-					<button
-						type="button"
-						class="text-text-secondary hover:text-foreground hover:underline"
-						@click="clear"
-					>
-						{{ t('sendFilesModal.clearSelection') }}
-					</button>
-				</div>
-
-				<div v-if="loadingOptions" class="flex h-24 items-center justify-center text-text-secondary">
-					<i class="fas fa-spinner fa-spin mr-2" aria-hidden="true"></i
-					>{{ t('sendFilesModal.loadingConnections') }}
-				</div>
-				<div
-					v-else-if="!sshConnections.length"
-					class="flex h-24 flex-col items-center justify-center text-text-secondary"
-				>
-					<i class="fas fa-folder-open mb-2 text-2xl" aria-hidden="true"></i>
-					<p>{{ t('sendFilesModal.noConnections') }}</p>
-				</div>
-				<div
-					v-else-if="!filteredGroups.length"
-					class="flex h-24 flex-col items-center justify-center text-text-secondary"
-				>
-					<i class="fas fa-search mb-2 text-2xl" aria-hidden="true"></i>
-					<p>{{ t('sendFilesModal.noConnectionsFound') }}</p>
-				</div>
-				<div v-else class="space-y-3">
-					<section v-for="group in filteredGroups" :key="group.id">
-						<div class="group flex cursor-pointer items-center py-1.5" @click="toggleGroupExpansion(group)">
-							<input
-								:id="'send-files-group-' + group.id"
-								type="checkbox"
-								class="mr-1.5 h-4 w-4 cursor-pointer rounded border-border accent-primary focus:ring-primary"
-								:checked="isGroupSelected(group)"
-								:indeterminate="isGroupIndeterminate(group)"
-								@change="toggleGroup(group)"
-								@click.stop
-							/>
-							<i
-								:class="[
-									'fas mr-2 w-3 text-center text-xs text-text-secondary/80 transition-transform duration-150 group-hover:text-text-secondary',
-									isGroupExpanded(group) ? 'fa-chevron-down' : 'fa-chevron-right',
-								]"
-								aria-hidden="true"
-							></i>
-							<label
-								:for="'send-files-group-' + group.id"
-								class="cursor-pointer select-none text-sm font-semibold text-foreground"
-								@click.stop
-								>{{ group.name }} ({{ group.connections.length }})</label
-							>
-						</div>
-						<ul v-show="isGroupExpanded(group)" class="space-y-0.5 pl-7">
-							<li
-								v-for="connection in group.connections"
-								:key="connection.id"
-								class="flex cursor-pointer items-center rounded-md p-2.5 transition-colors duration-150 hover:bg-primary/10"
-								:class="selected.has(connection.id) ? 'bg-primary/20' : ''"
-								@click="toggle(connection.id)"
-							>
-								<input
-									:id="'send-files-connection-' + connection.id"
-									type="checkbox"
-									class="mr-3 h-4 w-4 rounded border-border accent-primary focus:ring-primary"
-									:checked="selected.has(connection.id)"
-									@change="toggle(connection.id)"
+				<div class="send-files__list" :aria-busy="loadingOptions">
+					<UiLoadingState
+						v-if="loadingOptions"
+						class="h-32"
+						compact
+						:bordered="false"
+						:title="t('sendFilesModal.loadingConnections')"
+					/>
+					<UiEmptyState
+						v-else-if="!sshConnections.length"
+						class="h-32"
+						compact
+						:bordered="false"
+						icon="fa-solid fa-folder-open"
+						:title="t('sendFilesModal.noConnections')"
+					/>
+					<UiEmptyState
+						v-else-if="!filteredGroups.length"
+						class="h-32"
+						compact
+						:bordered="false"
+						icon="fa-solid fa-magnifying-glass"
+						:title="t('sendFilesModal.noConnectionsFound')"
+					/>
+					<div v-else class="send-files__groups">
+						<section v-for="group in filteredGroups" :key="group.id" class="send-files__group">
+							<div class="send-files__group-head">
+								<UiCheckbox
+									:id="'send-files-group-' + group.id"
+									:model-value="isGroupSelected(group)"
+									:indeterminate="isGroupIndeterminate(group)"
+									:aria-label="group.name"
+									@update:model-value="toggleGroup(group)"
 									@click.stop
 								/>
-								<i
-									class="fas fa-server mr-2.5 w-4 text-center text-text-secondary"
-									aria-hidden="true"
-								></i>
-								<span class="min-w-0 flex-grow">
-									<span class="block truncate text-sm" :title="connection.name || connection.host">{{
-										connection.name || connection.host
-									}}</span>
-									<span class="block truncate text-[11px] text-text-secondary"
-										>{{ connection.username }}@{{ connection.host }}:{{ connection.port }}</span
-									>
-								</span>
-							</li>
-						</ul>
-					</section>
+								<button
+									type="button"
+									class="send-files__group-toggle"
+									:aria-expanded="isGroupExpanded(group)"
+									@click="toggleGroupExpansion(group)"
+								>
+									<i
+										class="fa-solid send-files__chevron"
+										:class="isGroupExpanded(group) ? 'fa-chevron-down' : 'fa-chevron-right'"
+										aria-hidden="true"
+									></i>
+									<span class="send-files__group-name">{{ group.name }}</span>
+									<span class="send-files__group-count">{{ group.connections.length }}</span>
+								</button>
+							</div>
+							<ul v-show="isGroupExpanded(group)" class="send-files__target-list">
+								<li
+									v-for="connection in group.connections"
+									:key="connection.id"
+									class="send-files__target"
+									:class="{ 'is-selected': selected.has(connection.id) }"
+									@click="toggle(connection.id)"
+								>
+									<UiCheckbox
+										:id="'send-files-connection-' + connection.id"
+										:model-value="selected.has(connection.id)"
+										:aria-label="connection.name || connection.host"
+										@update:model-value="toggle(connection.id)"
+										@click.stop
+									/>
+									<span class="send-files__target-icon" aria-hidden="true">
+										<i class="fa-solid fa-server"></i>
+									</span>
+									<span class="send-files__target-copy">
+										<span
+											class="send-files__target-name"
+											:title="connection.name || connection.host"
+											>{{ connection.name || connection.host }}</span
+										>
+										<span class="send-files__target-address"
+											>{{ connection.username }}@{{ connection.host }}:{{ connection.port }}</span
+										>
+									</span>
+									<i
+										v-if="selected.has(connection.id)"
+										class="fa-solid fa-check send-files__target-check"
+										aria-hidden="true"
+									></i>
+								</li>
+							</ul>
+						</section>
+					</div>
 				</div>
 			</section>
 
-			<section class="space-y-1 rounded-md border border-border bg-header/30 p-3">
-				<h3 class="text-sm font-semibold text-foreground">{{ t('sendFilesModal.itemsToSendTitle') }}</h3>
-				<ul v-if="items.length" class="max-h-24 space-y-0.5 overflow-y-auto">
-					<li
-						v-for="item in items"
-						:key="item.path"
-						class="truncate text-xs text-text-secondary"
-						:title="item.path"
-					>
-						{{ item.name }}
-					</li>
-				</ul>
-				<p v-else class="text-xs italic text-text-secondary">{{ t('sendFilesModal.noItemsSelected') }}</p>
-			</section>
+			<aside class="send-files__settings">
+				<section class="send-files__setup" aria-labelledby="send-files-settings-title">
+					<header class="send-files__section-head send-files__section-head--settings">
+						<div class="send-files__section-title">
+							<h3 id="send-files-settings-title">
+								<i class="fa-solid fa-sliders" aria-hidden="true"></i>
+								{{ t('sendFilesModal.settingsTitle') }}
+							</h3>
+						</div>
+					</header>
 
-			<p v-if="transfers.sendBlocked" class="rounded-md bg-error/10 p-2 text-sm text-error" role="alert">
-				{{ t('serverTransferErrors.operation_unknown') }}
-			</p>
-			<p v-else-if="error" class="rounded-md bg-error/10 p-2 text-sm text-error" role="alert">{{ error }}</p>
+					<div class="send-files__fields">
+						<UiFormField
+							v-if="selectedConnections.length > 1"
+							:label="t('sendFilesModal.browseServer')"
+							for-id="send-files-browse-server"
+						>
+							<UiSelect
+								id="send-files-browse-server"
+								v-model="browseTargetId"
+								:disabled="submitting"
+								class="w-full"
+							>
+								<option
+									v-for="target in selectedConnections"
+									:key="target.id"
+									:value="String(target.id)"
+								>
+									{{ target.name || target.host }}
+								</option>
+							</UiSelect>
+						</UiFormField>
+						<UiFormField :label="t('sendFilesModal.targetPathLabel')" for-id="send-files-target-path">
+							<UiButton
+								id="send-files-target-path"
+								type="button"
+								class="send-files__path-control"
+								block
+								:disabled="!browseTarget || submitting || transfers.sendBlocked"
+								@click="pickerOpen = true"
+							>
+								<span class="send-files__path-icon" aria-hidden="true">
+									<i class="fa-solid fa-folder-open"></i>
+								</span>
+								<span class="send-files__path-value">{{
+									targetPath || t('sendFilesModal.chooseDirectory')
+								}}</span>
+								<i class="fa-solid fa-chevron-right send-files__path-chevron" aria-hidden="true"></i>
+							</UiButton>
+						</UiFormField>
+						<UiFormField
+							:label="t('sendFilesModal.transferMethodLabel')"
+							for-id="send-files-transfer-method"
+						>
+							<UiSelect
+								id="send-files-transfer-method"
+								v-model="method"
+								class="w-full"
+								:disabled="submitting"
+							>
+								<option value="auto">{{ t('sendFilesModal.transferMethodAuto') }}</option>
+								<option value="rsync">{{ t('sendFilesModal.methodRsync') }}</option>
+								<option value="scp">{{ t('sendFilesModal.methodScp') }}</option>
+							</UiSelect>
+						</UiFormField>
+					</div>
+				</section>
+
+				<section class="send-files__items" aria-labelledby="send-files-items-title">
+					<header class="send-files__items-head">
+						<h3 id="send-files-items-title">
+							<i class="fa-solid fa-file-arrow-up" aria-hidden="true"></i>
+							{{ t('sendFilesModal.itemsToSendTitle') }}
+						</h3>
+						<UiBadge appearance="ghost" density="compact">{{ items.length }}</UiBadge>
+					</header>
+					<ul v-if="items.length" class="send-files__item-list">
+						<li v-for="item in items" :key="item.path" class="send-files__item" :title="item.path">
+							<i
+								class="send-files__item-icon"
+								:class="item.type === 'directory' ? 'fa-solid fa-folder' : 'fa-regular fa-file'"
+								aria-hidden="true"
+							></i>
+							<span class="send-files__item-name">{{ item.name }}</span>
+						</li>
+					</ul>
+					<p v-else class="send-files__empty-items">{{ t('sendFilesModal.noItemsSelected') }}</p>
+				</section>
+
+				<div v-if="transfers.sendBlocked || error" class="send-files__notices">
+					<UiInlineNotice v-if="transfers.sendBlocked" tone="danger">
+						{{ t('serverTransferErrors.operation_unknown') }}
+					</UiInlineNotice>
+					<UiInlineNotice v-else-if="error" tone="danger">{{ error }}</UiInlineNotice>
+				</div>
+			</aside>
 		</div>
 
-		<div class="mt-auto flex shrink-0 items-center justify-end gap-3 border-t border-border pt-4">
-			<button
-				type="button"
-				class="rounded-md border border-border bg-transparent px-4 py-2 text-text-secondary shadow-sm transition-colors hover:bg-border hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-				@click="emit('close')"
-			>
-				{{ t('sendFilesModal.cancelButton') }}
-			</button>
-			<button
-				type="button"
-				class="rounded-md bg-button px-4 py-2 text-button-text shadow-sm transition hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
-				:disabled="submitting || transfers.sendBlocked || !items.length || !selected.size || !targetPath.trim()"
-				@click="submit"
-			>
-				<i v-if="submitting" class="fas fa-spinner fa-spin mr-1" aria-hidden="true"></i
-				>{{ t('sendFilesModal.sendButton') }}
-			</button>
-		</div>
+		<footer class="send-files__footer">
+			<UiFormActions>
+				<UiButton type="button" @click="emit('close')">
+					{{ t('sendFilesModal.cancelButton') }}
+				</UiButton>
+				<UiButton
+					type="button"
+					appearance="solid"
+					tone="primary"
+					:disabled="
+						submitting ||
+						transfers.sendBlocked ||
+						!items.length ||
+						!selected.size ||
+						!targetPath ||
+						pickerOpen
+					"
+					:loading="submitting"
+					@click="submit"
+				>
+					<i class="fa-solid fa-paper-plane" aria-hidden="true"></i>
+					{{ t('sendFilesModal.sendButton') }}
+				</UiButton>
+			</UiFormActions>
+		</footer>
 	</UiOverlayPanel>
+	<RemoteDirectoryPicker
+		v-if="pickerOpen && visible && browseTarget"
+		:key="browseTargetKey"
+		:target-id="browseTarget.id"
+		:target-name="browseTarget.name || browseTarget.host"
+		:initial-path="targetPath || '/'"
+		@close="pickerOpen = false"
+		@select="selectDirectory"
+	/>
 </template>
+
+<style scoped>
+	.send-files__header {
+		display: flex;
+		flex: 0 0 auto;
+		align-items: center;
+		justify-content: space-between;
+		gap: 16px;
+		padding: 16px 20px;
+		border-bottom: 1px solid color-mix(in srgb, var(--border-color) 32%, transparent);
+	}
+
+	.send-files__heading,
+	.send-files__section-title,
+	.send-files__items-head {
+		display: flex;
+		min-width: 0;
+		align-items: center;
+	}
+
+	.send-files__heading {
+		gap: 12px;
+	}
+
+	.send-files__mark {
+		display: inline-flex;
+		width: 38px;
+		height: 38px;
+		flex: none;
+		align-items: center;
+		justify-content: center;
+		border-radius: 12px;
+		background: linear-gradient(
+			145deg,
+			color-mix(in srgb, var(--link-active-color) 20%, transparent),
+			color-mix(in srgb, var(--card-bg-color) 30%, transparent)
+		);
+		box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-rim) 16%, transparent);
+		color: var(--link-active-color);
+		font-size: 15px;
+	}
+
+	.send-files__title {
+		margin: 0;
+		font-size: 1.05rem;
+		font-weight: 650;
+		letter-spacing: -0.015em;
+		line-height: 1.25;
+	}
+
+	.send-files__body {
+		display: grid;
+		min-height: 0;
+		flex: 1 1 auto;
+		grid-template-columns: minmax(0, 1.15fr) minmax(19rem, 0.85fr);
+		overflow: hidden;
+	}
+
+	.send-files__targets,
+	.send-files__settings {
+		min-width: 0;
+		min-height: 0;
+	}
+
+	.send-files__targets {
+		display: flex;
+		flex-direction: column;
+		padding: 16px 18px 12px 20px;
+	}
+
+	.send-files__settings {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+		overflow-y: auto;
+		padding: 16px 20px 18px 18px;
+		border-left: 1px solid color-mix(in srgb, var(--border-color) 28%, transparent);
+		background: color-mix(in srgb, var(--card-bg-color) 10%, transparent);
+		overscroll-behavior: contain;
+	}
+
+	.send-files__section-head {
+		display: flex;
+		min-width: 0;
+		flex: none;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+	}
+
+	.send-files__section-title {
+		gap: 8px;
+	}
+
+	.send-files__section-title h3,
+	.send-files__items-head h3 {
+		display: flex;
+		min-width: 0;
+		align-items: center;
+		gap: 8px;
+		margin: 0;
+		color: var(--text-color);
+		font-size: 12px;
+		font-weight: 650;
+		letter-spacing: 0.01em;
+		line-height: 1.3;
+	}
+
+	.send-files__section-title h3 > i,
+	.send-files__items-head h3 > i {
+		color: var(--link-active-color);
+		font-size: 11px;
+	}
+
+	.send-files__selection-actions {
+		display: flex;
+		flex: none;
+		align-items: center;
+		gap: 2px;
+	}
+
+	.send-files__selection-actions :deep(.ui-button) {
+		padding-inline: 6px;
+		color: var(--text-color-secondary);
+		font-size: 10.5px;
+	}
+
+	.send-files__selection-actions :deep(.ui-button i) {
+		font-size: 9px;
+	}
+
+	.send-files__search {
+		flex: none;
+		margin-top: 12px;
+	}
+
+	.send-files__list {
+		display: flex;
+		min-height: 0;
+		flex: 1 1 auto;
+		flex-direction: column;
+		margin-top: 8px;
+		overflow: hidden;
+	}
+
+	.send-files__groups {
+		min-height: 0;
+		flex: 1 1 auto;
+		max-height: min(26rem, calc(100dvh - 20rem));
+		overflow-y: auto;
+		padding-right: 7px;
+		scrollbar-gutter: stable;
+	}
+
+	.send-files__group + .send-files__group {
+		margin-top: 8px;
+		padding-top: 8px;
+		border-top: 1px solid color-mix(in srgb, var(--border-color) 20%, transparent);
+	}
+
+	.send-files__group-head {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 3px 3px 5px;
+	}
+
+	.send-files__group-toggle {
+		display: flex;
+		min-width: 0;
+		flex: 1 1 auto;
+		align-items: center;
+		gap: 7px;
+		border: 0;
+		padding: 2px 0;
+		background: transparent;
+		color: var(--text-color-secondary);
+		cursor: pointer;
+		font: inherit;
+		text-align: left;
+	}
+
+	.send-files__group-toggle:focus-visible {
+		border-radius: 6px;
+		outline: 1px solid var(--ui-focus-color);
+		outline-offset: 2px;
+	}
+
+	.send-files__chevron {
+		width: 11px;
+		flex: none;
+		color: var(--text-color-secondary);
+		font-size: 9px;
+		text-align: center;
+	}
+
+	.send-files__group-name {
+		overflow: hidden;
+		color: var(--text-color);
+		font-size: 11.5px;
+		font-weight: 650;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.send-files__group-count {
+		display: inline-flex;
+		min-width: 19px;
+		height: 18px;
+		align-items: center;
+		justify-content: center;
+		border-radius: 999px;
+		background: var(--ui-fill-soft);
+		color: var(--text-color-secondary);
+		font-size: 9.5px;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.send-files__target-list {
+		display: grid;
+		gap: 2px;
+		margin: 0;
+		padding: 0 0 2px 22px;
+		list-style: none;
+	}
+
+	.send-files__target {
+		position: relative;
+		display: flex;
+		min-width: 0;
+		align-items: center;
+		gap: 10px;
+		border-radius: 10px;
+		padding: 8px 10px 8px 8px;
+		cursor: pointer;
+		transition:
+			background-color 140ms ease,
+			color 140ms ease;
+	}
+
+	.send-files__target:hover {
+		background: var(--ui-fill-soft-hover);
+	}
+
+	.send-files__target.is-selected {
+		background: color-mix(in srgb, var(--link-active-color) 11%, transparent);
+	}
+
+	.send-files__target.is-selected::before {
+		position: absolute;
+		top: 8px;
+		bottom: 8px;
+		left: 0;
+		width: 2px;
+		border-radius: 99px;
+		background: var(--link-active-color);
+		content: '';
+	}
+
+	.send-files__target-icon {
+		display: inline-flex;
+		width: 30px;
+		height: 30px;
+		flex: none;
+		align-items: center;
+		justify-content: center;
+		border-radius: 8px;
+		background: var(--ui-fill-soft);
+		color: color-mix(in srgb, var(--link-active-color) 64%, var(--text-color-secondary));
+		font-size: 11px;
+	}
+
+	.send-files__target-copy {
+		display: flex;
+		min-width: 0;
+		flex: 1 1 auto;
+		flex-direction: column;
+		gap: 1px;
+	}
+
+	.send-files__target-name,
+	.send-files__target-address,
+	.send-files__item-name {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.send-files__target-name {
+		color: var(--text-color);
+		font-size: 12.5px;
+		font-weight: 590;
+		line-height: 1.35;
+	}
+
+	.send-files__target-address {
+		color: var(--text-color-secondary);
+		font-family: var(--font-family-monospace);
+		font-size: 10px;
+		line-height: 1.35;
+	}
+
+	.send-files__target-check {
+		flex: none;
+		color: var(--link-active-color);
+		font-size: 10px;
+	}
+
+	.send-files__section-head--settings {
+		flex: none;
+	}
+
+	.send-files__fields {
+		display: grid;
+		gap: 13px;
+		margin-top: 12px;
+	}
+
+	.send-files__path-control {
+		min-height: 42px;
+		justify-content: flex-start;
+		gap: 9px;
+		padding: 8px 10px;
+		text-align: left;
+	}
+
+	.send-files__path-icon {
+		display: inline-flex;
+		width: 25px;
+		height: 25px;
+		flex: none;
+		align-items: center;
+		justify-content: center;
+		border-radius: 7px;
+		background: color-mix(in srgb, var(--link-active-color) 10%, transparent);
+		color: var(--link-active-color);
+		font-size: 10px;
+	}
+
+	.send-files__path-value {
+		min-width: 0;
+		flex: 1 1 auto;
+		overflow-wrap: anywhere;
+		font-family: var(--font-family-monospace);
+		font-size: 11px;
+		line-height: 1.4;
+	}
+
+	.send-files__path-chevron {
+		flex: none;
+		color: var(--text-color-secondary);
+		font-size: 9px;
+	}
+
+	.send-files__items {
+		flex: none;
+		border-radius: 13px;
+		padding: 12px;
+		background: var(--ui-fill-soft);
+	}
+
+	.send-files__items-head {
+		justify-content: space-between;
+		gap: 10px;
+	}
+
+	.send-files__item-list {
+		display: grid;
+		max-height: 8.5rem;
+		gap: 1px;
+		margin: 8px 0 0;
+		padding: 0;
+		overflow-y: auto;
+		list-style: none;
+		scrollbar-gutter: stable;
+	}
+
+	.send-files__item {
+		display: flex;
+		min-width: 0;
+		align-items: center;
+		gap: 8px;
+		border-radius: 7px;
+		padding: 5px 4px;
+	}
+
+	.send-files__item-icon {
+		width: 14px;
+		flex: none;
+		color: color-mix(in srgb, var(--link-active-color) 62%, var(--text-color-secondary));
+		font-size: 10px;
+		text-align: center;
+	}
+
+	.send-files__item-name {
+		min-width: 0;
+		color: var(--text-color-secondary);
+		font-size: 11px;
+		line-height: 1.35;
+	}
+
+	.send-files__empty-items {
+		margin: 7px 0 1px;
+		color: var(--text-color-secondary);
+		font-size: 11px;
+		font-style: italic;
+	}
+
+	.send-files__notices {
+		display: grid;
+		flex: none;
+		gap: 8px;
+	}
+
+	.send-files__footer {
+		flex: 0 0 auto;
+		border-top: 1px solid color-mix(in srgb, var(--border-color) 32%, transparent);
+		padding: 13px 20px;
+	}
+
+	@media (max-width: 767px) {
+		.send-files__header {
+			padding: 14px 16px;
+		}
+
+		.send-files__mark {
+			width: 34px;
+			height: 34px;
+			border-radius: 10px;
+		}
+
+		.send-files__body {
+			display: flex;
+			flex-direction: column;
+			overflow-y: auto;
+			overscroll-behavior: contain;
+		}
+
+		.send-files__targets {
+			flex: none;
+			padding: 14px 14px 10px 16px;
+		}
+
+		.send-files__section-head {
+			align-items: flex-start;
+			flex-wrap: wrap;
+			gap: 6px 10px;
+		}
+
+		.send-files__selection-actions {
+			margin-left: auto;
+		}
+
+		.send-files__list {
+			max-height: 18rem;
+		}
+
+		.send-files__settings {
+			flex: none;
+			overflow: visible;
+			padding: 16px;
+			border-top: 1px solid color-mix(in srgb, var(--border-color) 28%, transparent);
+			border-left: 0;
+		}
+
+		.send-files__footer {
+			padding: 12px 16px 16px;
+		}
+	}
+
+	@media (max-width: 430px) {
+		.send-files__selection-actions :deep(.ui-button) {
+			gap: 4px;
+			padding-inline: 5px;
+		}
+
+		.send-files__target-list {
+			padding-left: 18px;
+		}
+	}
+</style>

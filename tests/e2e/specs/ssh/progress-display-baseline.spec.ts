@@ -1,6 +1,7 @@
 import { readTestConnectionImportId } from '../../support/targets';
 import path from 'node:path';
 import { readServerTransferPage } from '../../../../packages/shared/src/remote/transfers/server-codec';
+import { readRemoteFileOpenResponse } from '../../../../packages/shared/src/remote/files/http-codec';
 import { E2E_URLS } from '../../support/test-env';
 import { expect, test, type BrowserContext, type Locator, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
@@ -86,28 +87,20 @@ async function openProgressDisplayAndRestorePopup(page: Page, popup: Locator, ta
 }
 
 test('desktop Progress Display floats above the workspace without resizing the terminal', async ({ page, context }) => {
-	let holdNextServerRefresh = false;
-	let backgroundRefreshStarted: (() => void) | undefined;
-	let releaseBackgroundRefresh: (() => void) | undefined;
-	const nextBackgroundRefresh = new Promise<void>((resolve) => {
-		backgroundRefreshStarted = resolve;
-	});
+	let serverStatusReads = 0;
 	await page.route('**/api/v1/transfers/status', async (route) => {
-		if (holdNextServerRefresh) {
-			holdNextServerRefresh = false;
-			backgroundRefreshStarted?.();
-			await new Promise<void>((resolve) => {
-				releaseBackgroundRefresh = resolve;
-			});
-		}
-		// A test-held refresh can be cancelled when its owning view unmounts.
-		// Never forward a request already terminated by the browser.
+		serverStatusReads += 1;
 		if (route.request().failure()) return;
 		await route.continue();
 	});
+	const initialServerStatus = page.waitForResponse(
+		(response) =>
+			new URL(response.url()).pathname === '/api/v1/transfers/status' && response.request().method() === 'GET',
+	);
 
 	await page.setViewportSize({ width: 1024, height: 768 });
 	await openFileManager(page, context);
+	expect((await initialServerStatus).status()).toBe(200);
 	await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=3000`, { method: 'POST' });
 	try {
 		await rightClickRow(page, 'copy-source.txt');
@@ -165,22 +158,18 @@ test('desktop Progress Display floats above the workspace without resizing the t
 			expect(Math.abs(restored!.y - moved!.y)).toBeLessThanOrEqual(2);
 		});
 
-		await step(
-			'background server-transfer polling does not replace the empty state with a loading screen',
-			async () => {
-				await expect(
-					display.getByText('There are no active transfer tasks currently.', { exact: true }),
-				).toBeVisible();
-				holdNextServerRefresh = true;
-				await nextBackgroundRefresh;
-				await expect(display.getByText('Loading transfer tasks...', { exact: true })).toBeHidden();
-				await expect(
-					display.getByText('There are no active transfer tasks currently.', { exact: true }),
-				).toBeVisible();
-				releaseBackgroundRefresh?.();
-				releaseBackgroundRefresh = undefined;
-			},
-		);
+		await step('idle server-transfer lists stop polling and preserve the empty state', async () => {
+			await expect(
+				display.getByText('There are no active transfer tasks currently.', { exact: true }),
+			).toBeVisible();
+			const readsBeforeIdle = serverStatusReads;
+			await page.waitForTimeout(2500);
+			expect(serverStatusReads).toBe(readsBeforeIdle);
+			await expect(display.getByText('Loading transfer tasks...', { exact: true })).toBeHidden();
+			await expect(
+				display.getByText('There are no active transfer tasks currently.', { exact: true }),
+			).toBeVisible();
+		});
 
 		await closeProgressDisplay(display);
 		// Layout assertions can finish before this deliberately delayed copy.
@@ -200,7 +189,6 @@ test('desktop Progress Display floats above the workspace without resizing the t
 		).toHaveCount(0, { timeout: 30_000 });
 		await closeProgressDisplay(settledDisplay);
 	} finally {
-		releaseBackgroundRefresh?.();
 		await page.unroute('**/api/v1/transfers/status');
 		await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
 	}
@@ -450,6 +438,24 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 	const failedTargetConnectionId = readTestConnectionImportId(await failedTargetResponse.json());
 
 	try {
+		const opened = await context.request.post('/api/v1/remote/files/resources', {
+			headers: { Origin: E2E_URLS.frontendOrigin },
+			data: { targetId: validTargetConnectionId },
+		});
+		expect(opened.status()).toBe(201);
+		const resource = readRemoteFileOpenResponse(await opened.json());
+		try {
+			const created = await context.request.post(`/api/v1/remote/files/resources/${resource.id}/mkdir`, {
+				headers: { Origin: E2E_URLS.frontendOrigin },
+				data: { path: destinationPath },
+			});
+			expect(created.status()).toBe(201);
+		} finally {
+			const closed = await context.request.delete(`/api/v1/remote/files/resources/${resource.id}`, {
+				headers: { Origin: E2E_URLS.frontendOrigin },
+			});
+			expect(closed.status()).toBe(200);
+		}
 		await connectTestSshFromConnectionsPage(page, sourceConnectionId);
 		await openConnectedFileManager(page);
 
@@ -465,8 +471,26 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 
 				const targetPath = modal.getByLabel('Target Path', { exact: true });
 				const sendButton = modal.getByRole('button', { name: 'Send', exact: true });
-				await expect(targetPath).toHaveValue('');
+				await expect(modal.locator('input#send-files-target-path')).toHaveCount(0);
+				await expect(targetPath).toContainText('Choose destination directory');
+				await expect(targetPath).toBeDisabled();
 				await expect(sendButton).toBeDisabled();
+				await page.evaluate(
+					async ({ targetId, parent }) => {
+						const connectionsModule = '/src/features/connections/api/connections-api.ts';
+						const directoryModule = '/src/features/transfers/model/server-transfer-directory.ts';
+						const {
+							connectionsApi,
+						}: typeof import('../../../../packages/frontend/src/features/connections/api/connections-api') =
+							await import(connectionsModule);
+						const {
+							rememberServerTransferDirectory,
+						}: typeof import('../../../../packages/frontend/src/features/transfers/model/server-transfer-directory') =
+							await import(directoryModule);
+						rememberServerTransferDirectory(1, await connectionsApi.get(targetId), parent);
+					},
+					{ targetId: validTargetConnectionId, parent: path.dirname(destinationPath) },
+				);
 
 				await modal.getByPlaceholder('Search connections...').fill('E2E Send');
 				const validTargetRow = modal.locator('li').filter({ hasText: validTargetName });
@@ -480,7 +504,28 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 				await visibleGroupCheckbox.click();
 				await expect(validTargetRow.locator('input[type="checkbox"]')).toBeChecked();
 				await expect(failedTargetRow.locator('input[type="checkbox"]')).toBeChecked();
-				await targetPath.fill(destinationPath);
+				await expect(targetPath).toContainText(path.dirname(destinationPath));
+				await targetPath.click();
+				const picker = page.getByRole('dialog', { name: 'Select destination directory', exact: true });
+				await expect(picker).toBeVisible();
+				await picker.getByRole('button', { name: 'server-transfer-e2e', exact: true }).click();
+				await expect(picker.locator('[data-directory-picker-path]')).toHaveText(destinationPath);
+				await picker.getByRole('button', { name: 'Use this directory', exact: true }).click();
+				await expect(picker).toHaveCount(0);
+				await expect(targetPath).toContainText(destinationPath);
+				await targetPath.click();
+				await expect(picker.locator('[data-directory-picker-path]')).toHaveText(destinationPath);
+				await picker.getByRole('button', { name: 'Parent Directory', exact: true }).click();
+				await expect(picker.locator('[data-directory-picker-path]')).toHaveText(path.dirname(destinationPath));
+				await picker.getByRole('button', { name: 'Cancel', exact: true }).click();
+				await expect(picker).toHaveCount(0);
+				await expect(targetPath).toContainText(destinationPath);
+				await modal.getByRole('button', { name: 'Clear selection', exact: true }).click();
+				await expect(targetPath).toBeDisabled();
+				await validTargetRow.click();
+				await expect(targetPath).toContainText(destinationPath);
+				await visibleGroupCheckbox.click();
+				await expect(failedTargetRow.locator('input[type="checkbox"]')).toBeChecked();
 				await selectUiOption(modal.getByLabel('Transfer Method', { exact: true }), 'rsync');
 
 				// The Workspace transfer catalog can still be loading/refreshed in parallel. That global

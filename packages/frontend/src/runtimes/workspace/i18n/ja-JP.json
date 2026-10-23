@@ -7,7 +7,7 @@
       "selectFiles": "ファイルを選択（すべての種類）"
     },
     "start": {
-      "title": "接続とセッション",
+      "title": "新しいセッション",
       "description": "保留中のセッションを再開するか、接続を選んでターミナルを開きます。",
       "connections": "接続を開始",
       "back": "ターミナルに戻る"
@@ -78,8 +78,9 @@
     "emptyContainer": "空のコンテナー"
   },
   "commandInputBar": {
-    "desktopPlaceholder": "コマンド",
-    "placeholder": "ここにコマンドを入力して Enter キーを押すと、ターミナルに送信されます...",
+    "commandLabel": "ターミナルコマンド",
+    "searchLabel": "ターミナル内を検索",
+    "moreActions": "その他のコマンド操作",
     "searchPlaceholder": "ターミナル内で検索...",
     "openSearch": "ターミナル検索を開く",
     "closeSearch": "ターミナル検索を閉じる",

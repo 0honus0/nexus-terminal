@@ -1,6 +1,6 @@
 <script setup lang="ts">
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiInput, UiSettingsGroup } from '@/foundation/ui';
+	import { UiButton, UiEmptyState, UiLoadingState, UiInput, UiSettingsGroup } from '@/foundation/ui';
 	import { useSettingsReloadSource } from '@/shared/feedback/public';
 	import { usePasskeySettings } from '../composables/use-passkey-settings';
 
@@ -30,9 +30,12 @@
 			<h4 class="mb-3 text-xs font-semibold text-foreground">
 				{{ t('settings.passkey.registeredKeysTitle') }}
 			</h4>
-			<div v-if="loading && passkeys.length === 0" class="p-4 text-center text-text-secondary italic">
-				{{ t('common.loading') }}
-			</div>
+			<UiLoadingState
+				v-if="loading && passkeys.length === 0"
+				compact
+				:bordered="false"
+				:title="t('common.loading')"
+			/>
 			<ul v-else-if="passkeys.length" class="space-y-3">
 				<li
 					v-for="key in passkeys"
@@ -109,9 +112,13 @@
 					>
 				</li>
 			</ul>
-			<p v-else-if="!needsRefresh" class="text-sm text-text-secondary italic">
-				{{ t('settings.passkey.noKeysRegistered') }}
-			</p>
+			<UiEmptyState
+				v-else-if="!needsRefresh"
+				compact
+				:bordered="false"
+				icon="fa-solid fa-fingerprint"
+				:title="t('settings.passkey.noKeysRegistered')"
+			/>
 		</div>
 	</UiSettingsGroup>
 </template>

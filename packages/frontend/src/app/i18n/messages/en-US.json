@@ -63,7 +63,8 @@
     "personalDataUnknown": "The result is unknown. Read the list again and verify before editing or repeating the action.",
     "personalDataConflict": "The record changed or no longer exists. Read the list again, then reopen the editor.",
     "personalDataInvalid": "Check the input and the permitted capacity.",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "pagination": "Pagination"
   },
   "header": {
     "hide": "Hide",

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { computed, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiCheckbox, UiInfoHint, UiInput, UiTextarea } from '@/foundation/ui';
+	import { UiBadge, UiButton, UiCheckbox, UiInfoHint, UiInlineNotice, UiInput, UiTextarea } from '@/foundation/ui';
 	import type { usePluginManagement } from '../composables/use-plugin-management';
 	import PluginRepositorySettings from './PluginRepositorySettings.vue';
 	import PluginDataEditor from './PluginDataEditor.vue';
@@ -84,25 +84,24 @@
 		>
 			<div class="flex items-center gap-2">
 				<h3 class="text-sm font-semibold text-foreground">{{ t('agent.settings.plugins.title') }}</h3>
-				<span
-					class="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary"
+				<UiBadge tone="primary" density="compact"
 					><i class="fa-solid fa-store text-[9px]" aria-hidden="true"></i
-					>{{ t('agent.settings.plugins.ecosystemBadge') }}</span
+					>{{ t('agent.settings.plugins.ecosystemBadge') }}</UiBadge
 				><UiInfoHint :text="t('agent.settings.plugins.remoteRepositoriesHint')" />
 			</div>
 		</div>
 		<div :class="embedded ? 'space-y-4' : 'space-y-5 p-4 sm:p-5'">
-			<div
-				v-if="operation.refreshRequired.value"
-				class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/25 bg-warning/5 px-3 py-2 text-xs text-warning"
-			>
-				<UiButton type="button" density="compact" :disabled="operation.busy.value" @click="load">{{
-					t('agent.pluginManagement.reload')
-				}}</UiButton>
-			</div>
+			<UiInlineNotice v-if="operation.refreshRequired.value" tone="warning" compact>
+				{{ t('agent.settings.appManagement.refreshRequired') }}
+				<template #actions>
+					<UiButton type="button" density="compact" :disabled="operation.busy.value" @click="load">{{
+						t('agent.pluginManagement.reload')
+					}}</UiButton>
+				</template>
+			</UiInlineNotice>
 
-			<template v-if="mutationUnknown">
-				<p class="text-sm text-warning">{{ t('agent.pluginManagement.unknown') }}</p>
+			<UiInlineNotice v-if="mutationUnknown" tone="warning">
+				<p>{{ t('agent.pluginManagement.unknown') }}</p>
 				<UiCheckbox v-model="acknowledged">{{ t('agent.pluginManagement.acknowledge') }}</UiCheckbox>
 				<UiButton
 					type="button"
@@ -110,7 +109,7 @@
 					@click="newIntent"
 					>{{ t('agent.pluginManagement.newIntent') }}</UiButton
 				>
-			</template>
+			</UiInlineNotice>
 
 			<div
 				v-if="candidate"
@@ -123,9 +122,9 @@
 						</div>
 						{{ t('agent.settings.plugins.package') }}
 					</div>
-					<span class="rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-medium text-success">{{
+					<UiBadge tone="success" density="compact">{{
 						t('agent.settings.plugins.signatureVerified')
-					}}</span>
+					}}</UiBadge>
 				</div>
 				<p class="mt-2 text-xs leading-relaxed text-text-secondary">
 					{{ t('agent.settings.plugins.packageHint') }}
@@ -228,11 +227,8 @@
 				@recommend="emit('recommend')"
 				@official-publishers="officialPublisherIds = $event"
 			/>
-			<div v-if="removedInstallations.length" class="rounded-xl border border-error/30 bg-error/5 p-4">
-				<div class="flex items-center gap-2 text-xs font-semibold text-error">
-					<i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i
-					><span>{{ t('agent.settings.plugins.retainedData') }}</span>
-				</div>
+			<UiInlineNotice v-if="removedInstallations.length" tone="danger">
+				<strong class="text-xs font-semibold">{{ t('agent.settings.plugins.retainedData') }}</strong>
 				<p class="mt-1 text-[11px] text-text-secondary">{{ t('agent.settings.plugins.retainedDataHint') }}</p>
 				<div class="mt-3 space-y-2">
 					<div
@@ -251,7 +247,7 @@
 						/>
 					</div>
 				</div>
-			</div>
+			</UiInlineNotice>
 
 			<div class="overflow-hidden rounded-xl bg-header/25">
 				<button
@@ -263,10 +259,9 @@
 					<span class="flex items-center gap-2 text-xs font-medium text-foreground"
 						><i class="fa-solid fa-key text-xs text-primary" aria-hidden="true"></i
 						>{{ t('agent.pluginManagement.publishers')
-						}}<span
-							class="rounded-md border border-border/60 bg-card px-2 py-0.5 font-mono text-[11px] text-text-secondary"
-							>{{ publishers.length }}</span
-						></span
+						}}<UiBadge class="font-mono" appearance="ghost" density="compact">{{
+							publishers.length
+						}}</UiBadge></span
 					><i
 						:class="showPublishers ? 'fa-solid fa-chevron-up' : 'fa-solid fa-chevron-down'"
 						class="text-[11px] text-text-secondary"

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiFormField, UiInput, UiSettingsGroup } from '@/foundation/ui';
+	import { UiButton, UiFormField, UiInlineNotice, UiInput, UiSettingsGroup } from '@/foundation/ui';
 	import { useSettingsReloadSource } from '@/shared/feedback/public';
 	import { useTwoFactorSettings } from '../composables/use-two-factor-settings';
 
@@ -54,9 +54,9 @@
 		</template>
 		<template v-if="!needsRefresh">
 			<div v-if="props.enabled">
-				<p class="mb-3 rounded-xl bg-success/10 px-4 py-3 text-sm text-success">
+				<UiInlineNotice class="mb-3" tone="success">
 					{{ t('settings.twoFactor.status.enabled') }}
-				</p>
+				</UiInlineNotice>
 				<form id="two-factor-disable-form" class="space-y-4" @submit.prevent="disable">
 					<UiFormField :label="t('settings.twoFactor.disable.passwordPrompt')" for-id="disablePassword">
 						<UiInput

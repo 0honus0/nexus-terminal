@@ -4,7 +4,17 @@
 	import { useI18n } from 'vue-i18n';
 	import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller';
 	import 'vue-virtual-scroller/dist/vue-virtual-scroller.css';
-	import { UiButton, UiInfoHint, UiInput, UiSelect, UiSpinner } from '@/foundation/ui';
+	import {
+		UiBadge,
+		UiButton,
+		UiEmptyState,
+		UiInfoHint,
+		UiInlineNotice,
+		UiLoadingState,
+		UiSearchInput,
+		UiSelect,
+		UiSpinner,
+	} from '@/foundation/ui';
 	import { OPERATION_EVENTS } from '@nexus-terminal/shared/operations/values';
 	import type { AuditQuery } from '../model/audit-types';
 	import { useAuthenticatedViewScope } from '@/shared/session/public';
@@ -173,7 +183,9 @@
 					>
 						<i class="fa-solid fa-paper-plane" aria-hidden="true"></i>
 						<span>{{ t('auditLog.tabs.deliveries') }}</span>
-						<span v-if="unknownDeliveryCount" class="audit-tab__badge">{{ unknownDeliveryCount }}</span>
+						<UiBadge v-if="unknownDeliveryCount" tone="danger" density="compact">{{
+							unknownDeliveryCount
+						}}</UiBadge>
 					</button>
 				</div>
 			</div>
@@ -199,18 +211,14 @@
 				<template v-if="activeView === 'logs'">
 					<div id="audit-panel-logs" role="tabpanel" aria-labelledby="audit-tab-logs">
 						<div class="audit-filters">
-							<UiInput
+							<UiSearchInput
 								v-model="searchDraft"
 								class="audit-filters__search"
-								type="search"
 								density="comfortable"
 								:aria-label="t('common.search')"
 								:placeholder="t('auditLog.searchPlaceholder')"
-							>
-								<template #leading
-									><i class="fa-solid fa-magnifying-glass text-xs" aria-hidden="true"></i
-								></template>
-							</UiInput>
+								:clear-label="t('common.clear')"
+							/>
 							<div class="audit-filters__tail">
 								<div class="audit-filters__selects">
 									<UiSelect
@@ -245,15 +253,17 @@
 							</div>
 						</div>
 
-						<div v-if="error" role="alert" class="audit-alert">
-							<span class="audit-alert__copy">
-								<i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
-								{{ t('auditLog.loadFailed') }}
-							</span>
-							<UiButton appearance="soft" density="compact" @click="logs.length ? loadMore() : load()">{{
-								t('auditLog.retry')
-							}}</UiButton>
-						</div>
+						<UiInlineNotice v-if="error" class="audit-alert" tone="danger" compact>
+							{{ t('auditLog.loadFailed') }}
+							<template #actions>
+								<UiButton
+									appearance="soft"
+									density="compact"
+									@click="logs.length ? loadMore() : load()"
+									>{{ t('auditLog.retry') }}</UiButton
+								>
+							</template>
+						</UiInlineNotice>
 
 						<DynamicScroller
 							v-if="logs.length"
@@ -272,19 +282,26 @@
 								</DynamicScrollerItem>
 							</template>
 						</DynamicScroller>
-						<div v-else-if="!error" class="ui-catalog-empty audit-empty">
-							<UiSpinner v-if="loading" />
-							<template v-else>
-								<span class="ui-catalog-empty__icon" aria-hidden="true">
-									<i class="fa-solid fa-clock-rotate-left"></i>
-								</span>
-								<p>{{ t('auditLog.noLogs') }}</p>
-								<span>{{ t('auditLog.emptyHint') }}</span>
-								<UiButton v-if="hasFilters" appearance="soft" density="compact" @click="resetFilters">{{
+						<UiLoadingState
+							v-else-if="loading && !error"
+							class="audit-empty"
+							:bordered="false"
+							:title="t('common.loading')"
+						/>
+						<UiEmptyState
+							v-else-if="!error"
+							class="audit-empty"
+							:bordered="false"
+							icon="fa-solid fa-clock-rotate-left"
+							:title="t('auditLog.noLogs')"
+							:description="t('auditLog.emptyHint')"
+						>
+							<template v-if="hasFilters" #action>
+								<UiButton appearance="soft" density="compact" @click="resetFilters">{{
 									t('auditLog.filters.clear')
 								}}</UiButton>
 							</template>
-						</div>
+						</UiEmptyState>
 						<footer v-if="logs.length" class="audit-footer">
 							<span class="audit-footer__state" role="status">
 								<UiSpinner v-if="loading" />
@@ -309,20 +326,24 @@
 
 				<template v-else>
 					<div id="audit-panel-deliveries" role="tabpanel" aria-labelledby="audit-tab-deliveries">
-						<div v-if="deliveriesError" role="alert" class="audit-alert">
-							<span class="audit-alert__copy">
-								<i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
-								{{ deliveryErrorMessage }}
-							</span>
-							<UiButton appearance="soft" density="compact" @click="loadDeliveries()">{{
-								t('auditLog.retry')
-							}}</UiButton>
-						</div>
+						<UiInlineNotice v-if="deliveriesError" class="audit-alert" tone="danger" compact>
+							{{ deliveryErrorMessage }}
+							<template #actions>
+								<UiButton appearance="soft" density="compact" @click="loadDeliveries()">{{
+									t('auditLog.retry')
+								}}</UiButton>
+							</template>
+						</UiInlineNotice>
 
-						<div v-if="unknownDeliveryCount" class="audit-unknown-note" role="status">
-							<i class="fa-solid fa-circle-question" aria-hidden="true"></i>
+						<UiInlineNotice
+							v-if="unknownDeliveryCount"
+							class="audit-unknown-note"
+							tone="warning"
+							icon="fa-solid fa-circle-question"
+							compact
+						>
 							{{ t('auditLog.deliveries.unknownCount', { count: unknownDeliveryCount }) }}
-						</div>
+						</UiInlineNotice>
 
 						<div
 							v-if="deliveries.length"
@@ -333,15 +354,19 @@
 						>
 							<AuditDeliveryRow v-for="delivery in deliveries" :key="delivery.id" :delivery="delivery" />
 						</div>
-						<div v-else-if="!deliveriesError" class="ui-catalog-empty audit-empty">
-							<UiSpinner v-if="deliveriesLoading" />
-							<template v-else>
-								<span class="ui-catalog-empty__icon" aria-hidden="true">
-									<i class="fa-regular fa-paper-plane"></i>
-								</span>
-								<p>{{ t('auditLog.deliveries.empty') }}</p>
-							</template>
-						</div>
+						<UiLoadingState
+							v-else-if="deliveriesLoading && !deliveriesError"
+							class="audit-empty"
+							:bordered="false"
+							:title="t('common.loading')"
+						/>
+						<UiEmptyState
+							v-else-if="!deliveriesError"
+							class="audit-empty"
+							:bordered="false"
+							icon="fa-regular fa-paper-plane"
+							:title="t('auditLog.deliveries.empty')"
+						/>
 						<footer v-if="deliveries.length" class="audit-footer">
 							<span class="audit-footer__state" role="status">
 								<UiSpinner v-if="deliveriesLoading" />
@@ -437,20 +462,6 @@
 		background: color-mix(in srgb, var(--card-bg-color) 82%, var(--app-bg-color));
 		color: var(--text-color);
 		box-shadow: 0 1px 5px -4px color-mix(in srgb, var(--text-color) 36%, transparent);
-	}
-
-	.audit-tab__badge {
-		display: inline-grid;
-		min-width: 16px;
-		height: 16px;
-		place-items: center;
-		padding-inline: 4px;
-		border-radius: 999px;
-		background: color-mix(in srgb, var(--status-error-color) 11%, transparent);
-		color: var(--status-error-color);
-		font-size: 8.5px;
-		font-weight: 700;
-		font-variant-numeric: tabular-nums;
 	}
 
 	.audit-panel {
@@ -549,36 +560,7 @@
 
 	.audit-alert,
 	.audit-unknown-note {
-		display: flex;
-		align-items: center;
-		gap: 9px;
 		margin-bottom: 10px;
-		padding: 9px 12px;
-		border-radius: 11px;
-		font-size: 11.5px;
-	}
-
-	.audit-alert {
-		justify-content: space-between;
-		background: color-mix(in srgb, var(--status-error-color) 8%, transparent);
-		color: var(--status-error-color);
-	}
-
-	.audit-alert__copy,
-	.audit-unknown-note {
-		display: flex;
-		min-width: 0;
-		align-items: center;
-		gap: 8px;
-	}
-
-	.audit-alert__copy {
-		flex-wrap: wrap;
-	}
-
-	.audit-unknown-note {
-		background: color-mix(in srgb, var(--status-warning-color) 9%, transparent);
-		color: var(--status-warning-color);
 	}
 
 	.audit-scroller {
@@ -597,13 +579,6 @@
 	.audit-empty {
 		min-height: 320px;
 		padding-inline: 20px;
-	}
-
-	.audit-empty > span:not(.ui-catalog-empty__icon) {
-		max-width: 360px;
-		color: var(--text-color-secondary);
-		font-size: 10px;
-		line-height: 1.55;
 	}
 
 	.audit-footer {

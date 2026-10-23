@@ -116,6 +116,13 @@
       "showQuickCommandTagsTitle": "クイックコマンドタグを表示",
       "showQuickCommandTagsLabel": "クイックコマンドリストにタグを表示",
       "showQuickCommandTagsDescription": "無効にすると、クイックコマンドリストのタグが非表示になり、検索から除外されます。",
+      "commandBarButtons": {
+        "title": "コマンドバーのボタン",
+        "clear": "ターミナルをクリア",
+        "focusSwitch": "フォーカス切替",
+        "editor": "エディター",
+        "search": "ターミナル検索"
+      },
       "quickCommandsCollapsibleSearchTitle": "クイックコマンド検索",
       "quickCommandsCollapsibleSearchLabel": "検索ボックスを既定で検索ボタンに折りたたむ",
       "quickCommandsCollapsibleSearchDescription": "既定では無効です。有効にすると、クイックコマンドパネルには検索ボタンだけが表示され、クリックすると検索ボックスが展開されます。",
@@ -216,6 +223,10 @@
       "effective": "現在有効：測定間隔 {status}秒 · ホストキャッシュTTL／概要更新 {host}秒",
       "status": "測定間隔（秒）",
       "host": "ホストキャッシュTTL／概要更新（秒）",
+      "statusShort": "測定",
+      "hostShort": "キャッシュ",
+      "refreshShort": "更新",
+      "secondsUnit": "秒",
       "refresh": "読み取り専用で再読込して確認",
       "feedback": {
         "saved": "保存して適用しました。",

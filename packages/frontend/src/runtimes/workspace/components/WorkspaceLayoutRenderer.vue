@@ -1,5 +1,13 @@
 <script setup lang="ts">
-	import { computed, defineAsyncComponent, ref, watch } from 'vue';
+	import {
+		computed,
+		defineAsyncComponent,
+		onBeforeUnmount,
+		onMounted,
+		ref,
+		watch,
+		type ComponentPublicInstance,
+	} from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { Splitpanes, Pane, type SplitpanesResizedPayload } from 'splitpanes';
 	import 'splitpanes/dist/splitpanes.css';
@@ -16,6 +24,7 @@
 	import { loadDockerManager } from '@/features/docker/public';
 	import { loadQuickCommandsPanel, type ExecuteCommandIntent } from '@/features/quick-commands/public';
 	import { loadCommandHistoryPanel, type ExecuteHistoryIntent } from '@/features/command-history/public';
+	import { UiSpinner } from '@/foundation/ui';
 	import {
 		loadSuspendedSessionsPanel,
 		type MarkedSuspendedSessionState,
@@ -25,6 +34,7 @@
 	import type { ConnectionSummary } from '@/features/connections/public';
 	import WorkspaceCommandBar from './WorkspaceCommandBar.vue';
 	import WorkspaceConnectionList from './WorkspaceConnectionList.vue';
+	import { workspacePaneMaximumSize, workspacePaneMinimumSize } from '../layout/workspaceLayout';
 	import type { WorkspaceLayoutNodeState } from '../model/presentation-types';
 	import type { WorkspaceRuntimeSession } from '../session';
 
@@ -82,6 +92,10 @@
 		previewSession?: FilePreviewSessionController;
 		popupDocuments?: boolean;
 		popupFileManager?: boolean;
+		showCommandBarClear?: boolean;
+		showCommandBarFocusSwitch?: boolean;
+		showCommandBarEditor?: boolean;
+		showCommandBarSearch?: boolean;
 		fileManagerConfirmDelete?: boolean;
 		quickCommandsCollapsibleSearch?: boolean;
 		quickCommandsCompactMode?: boolean;
@@ -103,7 +117,6 @@
 		if (props.session.statusMessage.value === 'lease_expired') return t('sshSuspend.reasons.lease_expired');
 		return t('workspace.terminal.ownershipUnknown');
 	});
-
 	const emit = defineEmits<{
 		openConnection: [connection: ConnectionSummary];
 		openFile: [path: string];
@@ -158,14 +171,99 @@
 	const executeHistory = (intent: ExecuteHistoryIntent) =>
 		emit('command', intent.command, Boolean(intent.allSessions));
 
+	const splitRoot = ref<ComponentPublicInstance | null>(null);
+	const splitInlineSize = ref(0);
+	const splitBlockSize = ref(0);
+	let splitResizeObserver: ResizeObserver | null = null;
+
+	const observeSplitSize = (): void => {
+		splitResizeObserver?.disconnect();
+		splitResizeObserver = null;
+		const element = splitRoot.value?.$el;
+		if (!(element instanceof HTMLElement)) return;
+		splitInlineSize.value = element.clientWidth;
+		splitBlockSize.value = element.clientHeight;
+		splitResizeObserver = new ResizeObserver(([entry]) => {
+			if (!entry) return;
+			splitInlineSize.value = entry.contentRect.width;
+			splitBlockSize.value = entry.contentRect.height;
+		});
+		splitResizeObserver.observe(element);
+	};
+
+	onMounted(observeSplitSize);
+	watch(splitRoot, observeSplitSize, { flush: 'post' });
+	onBeforeUnmount(() => splitResizeObserver?.disconnect());
+
+	const containsWorkspacePane = (node: WorkspaceLayoutNodeState, component: string): boolean =>
+		node.type === 'pane'
+			? node.component === component
+			: (node.children ?? []).some((child) => containsWorkspacePane(child, component));
+
+	const snapFileManagerPaneSize = (sizes: readonly number[]): readonly number[] => {
+		if (props.node.direction !== 'horizontal' || !containsWorkspacePane(props.node, 'fileManager')) return sizes;
+		const splitElement = splitRoot.value?.$el;
+		if (!(splitElement instanceof HTMLElement)) return sizes;
+		const paneElements = Array.from(splitElement.children).filter((element) =>
+			element.classList.contains('splitpanes__pane'),
+		);
+		const paneIndex = paneElements.findIndex((element) =>
+			Boolean(element.querySelector('[data-workspace-pane="fileManager"]')),
+		);
+		const fileManagerPane = paneElements[paneIndex]?.querySelector<HTMLElement>(
+			'[data-workspace-pane="fileManager"]',
+		);
+		if (paneIndex < 0 || !fileManagerPane) return sizes;
+		const actionRow = fileManagerPane.querySelector<HTMLElement>('.file-manager-actions');
+		const firstButton = actionRow?.querySelector<HTMLElement>('button');
+		const toolbar = fileManagerPane.querySelector<HTMLElement>('.file-manager-toolbar');
+		if (!actionRow || !firstButton || !toolbar || !sizes[paneIndex]) return sizes;
+
+		const buttonWidth = firstButton.getBoundingClientRect().width;
+		const buttonCount = actionRow.querySelectorAll('button').length;
+		const actionStyle = getComputedStyle(actionRow);
+		const gap = Number.parseFloat(actionStyle.columnGap) || 0;
+		const controlSize = Number.parseFloat(actionStyle.getPropertyValue('--fm-control-size')) || buttonWidth;
+		const toolbarStyle = getComputedStyle(toolbar);
+		const horizontalPadding =
+			(Number.parseFloat(toolbarStyle.paddingLeft) || 0) + (Number.parseFloat(toolbarStyle.paddingRight) || 0);
+		const twoByFourWidth = Math.max(170, 4 * controlSize + 3 * gap + horizontalPadding);
+		// Splitpanes converts pane percentages back to pixels after subtracting splitter
+		// tracks, so include a small width margin to keep the final row on one line.
+		const singleRowWidth = buttonCount * controlSize + (buttonCount - 1) * gap + horizontalPadding + 4;
+		const currentWidth = fileManagerPane.getBoundingClientRect().width;
+		const snapWidth = [twoByFourWidth, singleRowWidth].find(
+			(candidate) => Math.abs(currentWidth - candidate) <= 18,
+		);
+		if (!snapWidth || !splitElement.clientWidth) return sizes;
+
+		const snappedSize = (snapWidth / splitElement.clientWidth) * 100;
+		const otherTotal = sizes.reduce((total, size) => total + size, 0) - sizes[paneIndex]!;
+		if (otherTotal <= 0) return sizes;
+		const remaining = 100 - snappedSize;
+		return sizes.map((size, index) => (index === paneIndex ? snappedSize : (size / otherTotal) * remaining));
+	};
+
 	const handleLayoutResize = (payload: SplitpanesResizedPayload): void => {
 		// Splitpanes also emits `resized` while panes register or reconcile. Only an
 		// explicit splitter interaction owns and persists Workspace layout sizes.
 		if (!payload.event || props.layoutLocked || props.node.type !== 'container') return;
 		const sizes = payload.panes.map((pane) => pane.size);
 		if (sizes.length !== (props.node.children?.length ?? 0) || sizes.some((size) => !Number.isFinite(size))) return;
-		emit('layoutResize', props.node.id, sizes);
+		emit('layoutResize', props.node.id, [...snapFileManagerPaneSize(sizes)]);
 	};
+
+	const paneMinimumSize = (child: WorkspaceLayoutNodeState): number =>
+		workspacePaneMinimumSize(
+			child,
+			props.node.direction ?? 'vertical',
+			props.node.children?.length ?? 1,
+			splitInlineSize.value,
+			splitBlockSize.value,
+		);
+
+	const paneMaximumSize = (child: WorkspaceLayoutNodeState): number =>
+		workspacePaneMaximumSize(child, props.node.direction ?? 'vertical', splitBlockSize.value);
 
 	const stopLockedSplitterKeydown = (event: KeyboardEvent): void => {
 		if (!props.layoutLocked) return;
@@ -181,6 +279,7 @@
        structural changes only; size updates must preserve mounted panes. -->
 	<Splitpanes
 		v-if="node.type === 'container'"
+		ref="splitRoot"
 		:key="JSON.stringify([node.id, node.direction, (node.children ?? []).map((child) => child.id)])"
 		class="workspace-split"
 		:class="{ 'workspace-split--locked': layoutLocked }"
@@ -190,7 +289,14 @@
 		@resized="handleLayoutResize"
 		@keydown.capture="stopLockedSplitterKeydown"
 	>
-		<Pane v-for="child in node.children ?? []" :key="child.id" :size="child.size" :min-size="5">
+		<Pane
+			v-for="child in node.children ?? []"
+			:key="child.id"
+			:size="child.size"
+			:data-workspace-pane="child.type === 'pane' ? child.component : undefined"
+			:min-size="paneMinimumSize(child)"
+			:max-size="paneMaximumSize(child)"
+		>
 			<WorkspaceLayoutRenderer
 				:active="active !== false"
 				:node="child"
@@ -217,6 +323,10 @@
 				:preview-session="previewSession"
 				:popup-documents="popupDocuments"
 				:popup-file-manager="popupFileManager"
+				:show-command-bar-clear="showCommandBarClear"
+				:show-command-bar-focus-switch="showCommandBarFocusSwitch"
+				:show-command-bar-editor="showCommandBarEditor"
+				:show-command-bar-search="showCommandBarSearch"
 				:file-manager-confirm-delete="fileManagerConfirmDelete"
 				:quick-commands-collapsible-search="quickCommandsCollapsibleSearch"
 				:quick-commands-compact-mode="quickCommandsCompactMode"
@@ -274,7 +384,11 @@
 		</Pane>
 	</Splitpanes>
 
-	<section v-else class="relative flex h-full min-h-0 flex-col overflow-hidden border border-border/60 bg-background">
+	<section
+		v-else
+		:data-workspace-component="node.component"
+		class="workspace-pane relative flex h-full min-h-0 flex-col overflow-hidden bg-background"
+	>
 		<RuntimeErrorBoundary
 			:scope="`workspace-pane:${node.component}`"
 			:reset-key="`${session.id}:${node.component}`"
@@ -315,7 +429,10 @@
 				:command-input-sync-target="commandInputSyncTarget"
 				:quick-commands-grouped="showQuickCommandTags"
 				:show-file-manager-button="popupFileManager"
-				:show-editor-button="popupDocuments"
+				:show-clear-button="showCommandBarClear"
+				:show-focus-switch-button="showCommandBarFocusSwitch"
+				:show-editor-button="popupDocuments && showCommandBarEditor"
+				:show-search-button="showCommandBarSearch"
 				:ready="session.state.value === 'connected'"
 				:terminal-search-open="session.terminalState.searchOpen.value"
 				:terminal-search-term="session.terminalState.searchTerm.value"
@@ -390,6 +507,8 @@
 					class="min-h-0 flex-1"
 					:source="session.adapters.preview"
 					:scope-id="session.id"
+					:scope-label="editorScopeLabel"
+					:show-scope-label="showEditorScopeLabel"
 					:session="previewSession"
 					:spreadsheet-rows-per-page="spreadsheetRowsPerPage"
 					:spreadsheet-max-columns="spreadsheetMaxColumns"
@@ -457,7 +576,7 @@
 				<span
 					class="rounded-full border border-border/70 bg-background/90 px-3 py-1.5 text-xs text-foreground shadow-sm"
 				>
-					<i class="fas fa-spinner fa-spin mr-1" aria-hidden="true"></i>
+					<UiSpinner class="mr-1" density="compact" />
 					{{ t(`workspace.sessionState.${session.state.value}`) }}
 				</span>
 			</div>
@@ -471,10 +590,15 @@
 		min-height: 0;
 		background: var(--app-bg-color);
 	}
+
 	:deep(.splitpanes__pane) {
 		min-width: 0;
 		min-height: 0;
 		overflow: hidden;
+	}
+
+	.workspace-split :deep(.splitpanes__pane[data-workspace-pane='commandBar']) {
+		min-height: 38px;
 	}
 	:deep(.splitpanes__splitter) {
 		position: relative;
@@ -490,8 +614,14 @@
 		background: var(--border-color);
 		transition: background-color 0.1s ease-in-out;
 	}
-	:deep(.splitpanes__splitter:hover::before) {
-		background: var(--primary-light-color, var(--primary-color));
+	:deep(.splitpanes__splitter::after) {
+		position: absolute;
+		content: '';
+		background: transparent;
+	}
+	:deep(.splitpanes__splitter:hover::before),
+	:deep(.splitpanes__splitter:focus-visible::before) {
+		background: var(--link-active-color);
 	}
 	.workspace-split--locked :deep(.splitpanes__splitter) {
 		pointer-events: none;
@@ -510,6 +640,12 @@
 		width: 1px;
 		transform: translateX(-50%);
 	}
+	.workspace-split.splitpanes--vertical > :deep(.splitpanes__splitter::after) {
+		inset-block: 0;
+		left: 50%;
+		width: 33px;
+		transform: translateX(-50%);
+	}
 	.workspace-split.splitpanes--horizontal > :deep(.splitpanes__splitter) {
 		height: 9px !important;
 		margin-block: -4px;
@@ -518,6 +654,12 @@
 		inset-inline: 0;
 		top: 50%;
 		height: 1px;
+		transform: translateY(-50%);
+	}
+	.workspace-split.splitpanes--horizontal > :deep(.splitpanes__splitter::after) {
+		inset-inline: 0;
+		top: 50%;
+		height: 33px;
 		transform: translateY(-50%);
 	}
 </style>

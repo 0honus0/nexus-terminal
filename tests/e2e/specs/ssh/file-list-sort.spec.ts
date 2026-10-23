@@ -32,7 +32,7 @@ test('remote file list preserves natural multilingual ordering and directory pre
 	await input.press('Enter');
 	const rows = activeFileManagerList(page).locator('tbody tr[data-filename]:not([data-file-parent])');
 	await expect(rows).toHaveCount(names.length + directories.length);
-	const header = manager.getByRole('columnheader').filter({ hasText: 'Name' }).first();
+	const nameSortButton = manager.locator('.file-manager-name-sort');
 
 	const readNames = () => rows.evaluateAll((items) => items.map((item) => item.getAttribute('data-filename')));
 
@@ -51,14 +51,14 @@ test('remote file list preserves natural multilingual ordering and directory pre
 		},
 		{ names, directories },
 	);
-	if (!(await header.innerText()).includes('▲')) await header.locator('button').click();
+	if (!(await nameSortButton.getAttribute('aria-label'))?.includes('Ascending')) await nameSortButton.click();
 
 	// Equal case-insensitive names retain server order; compare their equivalence
 	// without inventing a new case-sensitive tie-breaker.
 	const normalize = (items: Array<string | null>) => items.map((name) => name?.toLowerCase());
 
 	await expect.poll(async () => normalize(await readNames())).toEqual(normalize(expected.ascending));
-	await header.locator('button').click();
+	await nameSortButton.click();
 	await expect.poll(async () => normalize(await readNames())).toEqual(normalize(expected.descending));
 	const profile = await page.evaluate(() => {
 		const samples = [];

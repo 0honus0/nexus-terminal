@@ -21,6 +21,7 @@ export function useNativeThreads(
 	const nextCursor = ref<string | null>(null);
 	const title = ref('');
 	const selected = ref<NativeThread | null>(null);
+	const loaded = ref(false);
 	const pending = ref<NativeThreadIntent | null>(null);
 	const pendingDelete = ref<NativeThreadDeleteIntent | null>(null);
 	const inspected = ref(false);
@@ -32,6 +33,7 @@ export function useNativeThreads(
 		nextCursor.value = null;
 		title.value = '';
 		selected.value = null;
+		loaded.value = false;
 		pending.value = null;
 		pendingDelete.value = null;
 		inspected.value = false;
@@ -47,20 +49,24 @@ export function useNativeThreads(
 		}
 	}
 
-	const operation = useAgentManagementOperation((reason) => {
-		const intent = pending.value;
-		const deleteIntent = pendingDelete.value;
-		const draftTitle = title.value;
-		const originalThread = selected.value;
-		const keep = reason === 'view' && (intent !== null || deleteIntent !== null);
-		clearPrivate();
-		if (keep) {
-			pending.value = intent;
-			pendingDelete.value = deleteIntent;
-			title.value = draftTitle;
-			selected.value = originalThread;
-		}
-	}, active);
+	const operation = useAgentManagementOperation(
+		(reason) => {
+			const intent = pending.value;
+			const deleteIntent = pendingDelete.value;
+			const draftTitle = title.value;
+			const originalThread = selected.value;
+			const keep = reason === 'view' && (intent !== null || deleteIntent !== null);
+			clearPrivate();
+			if (keep) {
+				pending.value = intent;
+				pendingDelete.value = deleteIntent;
+				title.value = draftTitle;
+				selected.value = originalThread;
+			}
+		},
+		active,
+		{ retainOnView: true },
+	);
 
 	async function refresh(): Promise<void> {
 		await operation.execute(
@@ -72,6 +78,7 @@ export function useNativeThreads(
 				scope.value = result.scope;
 				items.value = result.page.items;
 				nextCursor.value = result.page.nextCursor;
+				loaded.value = true;
 				inspected.value = pending.value !== null;
 				if (
 					pending.value === null &&
@@ -110,6 +117,7 @@ export function useNativeThreads(
 					scope.value = null;
 					items.value = [];
 					nextCursor.value = null;
+					loaded.value = false;
 					inspected.value = false;
 					deleteInspected.value = false;
 					operation.refreshRequired.value = true;
@@ -323,6 +331,7 @@ export function useNativeThreads(
 		nextCursor,
 		title,
 		selected,
+		loaded,
 		pending,
 		pendingDelete,
 		inspected,

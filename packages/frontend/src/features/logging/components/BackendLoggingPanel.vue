@@ -12,7 +12,8 @@
 	const { t } = useI18n();
 </script>
 <template>
-	<section data-backend-logging>
+	<section data-backend-logging class="space-y-3">
+		<span class="text-xs font-semibold text-foreground">{{ t('settings.logging.backendTitle') }}</span>
 		<UiSelect
 			id="backendLogLevelSelect"
 			:model-value="level"

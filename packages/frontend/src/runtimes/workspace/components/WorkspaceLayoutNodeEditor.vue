@@ -5,6 +5,7 @@
 	import { computed } from 'vue';
 	import draggable from 'vuedraggable';
 	import { useI18n } from 'vue-i18n';
+	import { UiButton } from '@/foundation/ui';
 	import { normalizeWorkspaceLayout, rebalanceWorkspaceLayoutChildren } from '../layout/workspaceLayout';
 
 	type DragItem = WorkspaceLayoutNodeState | WorkspacePane;
@@ -106,44 +107,53 @@
 				}}
 			</span>
 			<div class="node-actions">
-				<button
+				<UiButton
 					v-if="modelValue.type === 'container'"
-					type="button"
+					appearance="ghost"
+					density="compact"
+					icon-only
 					class="action-button"
 					:title="t('layoutNodeEditor.toggleDirection')"
+					:aria-label="t('layoutNodeEditor.toggleDirection')"
 					@click="patch({ direction: modelValue.direction === 'horizontal' ? 'vertical' : 'horizontal' })"
 				>
 					<i class="fas fa-sync-alt" aria-hidden="true"></i>
-				</button>
-				<button
+				</UiButton>
+				<UiButton
 					v-if="modelValue.type === 'container'"
-					type="button"
+					appearance="ghost"
+					density="compact"
 					class="action-button"
 					:title="t('layoutNodeEditor.addHorizontalContainer')"
 					@click="addContainer('horizontal')"
 				>
 					<i class="fas fa-columns" aria-hidden="true"></i>
 					<span>{{ t('layoutNodeEditor.horizontalShort') }}</span>
-				</button>
-				<button
+				</UiButton>
+				<UiButton
 					v-if="modelValue.type === 'container'"
-					type="button"
+					appearance="ghost"
+					density="compact"
 					class="action-button"
 					:title="t('layoutNodeEditor.addVerticalContainer')"
 					@click="addContainer('vertical')"
 				>
 					<i class="fas fa-bars" aria-hidden="true"></i>
 					<span>{{ t('layoutNodeEditor.verticalShort') }}</span>
-				</button>
-				<button
+				</UiButton>
+				<UiButton
 					v-if="!root"
-					type="button"
-					class="action-button remove-button"
+					appearance="ghost"
+					tone="danger"
+					density="compact"
+					icon-only
+					class="action-button"
 					:title="t('layoutNodeEditor.removeNode')"
+					:aria-label="t('layoutNodeEditor.removeNode')"
 					@click="emit('remove')"
 				>
 					<i class="fas fa-trash-alt" aria-hidden="true"></i>
-				</button>
+				</UiButton>
 			</div>
 		</div>
 
@@ -217,32 +227,11 @@
 	}
 
 	.action-button {
-		display: inline-flex;
+		--ui-control-height: 1.45rem;
+		--ui-control-radius: 3px;
 		min-width: 1.45rem;
-		height: 1.45rem;
-		align-items: center;
-		justify-content: center;
 		gap: 0.2rem;
-		border: 1px solid var(--border-color);
-		border-radius: 3px;
-		color: var(--text-color-secondary);
 		font-size: 0.72rem;
-		line-height: 1;
-	}
-
-	.action-button:hover {
-		background: var(--border-color);
-		color: var(--text-color);
-	}
-
-	.remove-button {
-		border-color: color-mix(in srgb, var(--status-error-color) 65%, var(--border-color));
-		color: var(--status-error-color);
-	}
-
-	.remove-button:hover {
-		background: var(--status-error-color);
-		color: white;
 	}
 
 	.node-children-container {

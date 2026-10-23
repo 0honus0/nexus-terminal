@@ -4,6 +4,7 @@
 	import FilePreviewDialog from './FilePreviewDialog.vue';
 	import PreviewHorizontalScrollbar from './PreviewHorizontalScrollbar.vue';
 	import PreviewSearchBar from './PreviewSearchBar.vue';
+	import { UiInlineNotice, UiPagination } from '@/foundation/ui';
 	import type { FilePreviewSessionController } from '../composables/useFilePreviewTabs';
 	import type { PreviewFile } from '../model/preview';
 	import { parseSpreadsheetPreview, type SpreadsheetSearchMatch } from '../model/spreadsheetPreview';
@@ -235,14 +236,10 @@
 			tabindex="-1"
 			@keydown="handleGridKeydown"
 		>
-			<div
-				v-if="parseError"
-				role="alert"
-				class="m-4 shrink-0 rounded border border-error/40 bg-error/10 p-4 text-sm text-error"
-			>
-				<p>{{ t('fileManager.preview.loadFailed') }}</p>
+			<UiInlineNotice v-if="parseError" class="m-4 shrink-0" tone="danger">
+				<p class="m-0">{{ t('fileManager.preview.loadFailed') }}</p>
 				<p class="mt-1 break-words text-xs opacity-80">{{ parseError }}</p>
-			</div>
+			</UiInlineNotice>
 
 			<template v-if="activeSheet">
 				<div
@@ -312,32 +309,22 @@
 							})
 						}}
 					</span>
-					<div class="flex shrink-0 items-center gap-2">
-						<button
-							type="button"
-							class="flex h-11 w-11 items-center justify-center rounded border border-border text-base text-text-secondary hover:bg-border hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 sm:h-auto sm:w-auto sm:px-2 sm:py-1 sm:text-xs"
-							:disabled="page <= 1"
-							:aria-label="t('fileManager.preview.spreadsheetPreviousPage')"
-							@click="previousPage"
-						>
-							‹
-						</button>
-						<span class="text-text-secondary">
+					<UiPagination
+						:page="page"
+						:page-count="pageCount"
+						:label="t('common.pagination')"
+						:previous-label="t('fileManager.preview.spreadsheetPreviousPage')"
+						:next-label="t('fileManager.preview.spreadsheetNextPage')"
+						@previous="previousPage"
+						@next="nextPage"
+					>
+						<template #default="{ page: currentPage, pageCount: totalPages }">
 							{{ t('fileManager.preview.spreadsheetPage') }}
-							<strong class="font-medium text-foreground">{{ page }}</strong>
+							<strong>{{ currentPage }}</strong>
 							/
-							<strong class="font-medium text-foreground">{{ pageCount }}</strong>
-						</span>
-						<button
-							type="button"
-							class="flex h-11 w-11 items-center justify-center rounded border border-border text-base text-text-secondary hover:bg-border hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 sm:h-auto sm:w-auto sm:px-2 sm:py-1 sm:text-xs"
-							:disabled="page >= pageCount"
-							:aria-label="t('fileManager.preview.spreadsheetNextPage')"
-							@click="nextPage"
-						>
-							›
-						</button>
-					</div>
+							<strong>{{ totalPages }}</strong>
+						</template>
+					</UiPagination>
 				</div>
 
 				<div

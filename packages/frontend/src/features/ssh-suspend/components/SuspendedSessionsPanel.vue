@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { computed, onBeforeUnmount, onMounted, onActivated, onDeactivated, ref, useId } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiInput } from '@/foundation/ui';
+	import { UiButton, UiEmptyState, UiLoadingState, UiSearchInput, UiSpinner } from '@/foundation/ui';
 	import { registerAuthenticatedSessionReset } from '@/shared/session/public';
 	import { useFeedback, useFeedbackMessage } from '@/shared/feedback/public';
 	import { isNetworkFailure } from '@/client/http/network-failure';
@@ -239,26 +239,14 @@
 		role="region"
 		:aria-label="t('suspendedSshSessions.modalTitle')"
 	>
-		<div class="view-header flex items-center gap-2 shrink-0" :class="props.pageScroll ? 'mb-3 pb-3' : 'mb-2'">
-			<UiInput
+		<div class="suspended-toolbar">
+			<UiSearchInput
 				v-model="data.search.value"
-				type="text"
 				:aria-label="t('suspendedSshSessions.searchPlaceholder')"
 				:placeholder="t('suspendedSshSessions.searchPlaceholder')"
 				class="suspended-session-search min-w-0 flex-1"
-			>
-				<template #leading><i class="fas fa-search text-xs" aria-hidden="true"></i></template>
-				<template v-if="data.search.value" #trailing>
-					<button
-						type="button"
-						:aria-label="t('common.clear')"
-						class="cursor-pointer hover:text-foreground"
-						@click="data.search.value = ''"
-					>
-						<i class="fas fa-times-circle text-xs" aria-hidden="true"></i>
-					</button>
-				</template>
-			</UiInput>
+				:clear-label="t('common.clear')"
+			/>
 			<UiButton
 				v-if="data.error.value"
 				type="button"
@@ -274,24 +262,23 @@
 			</UiButton>
 		</div>
 
-		<!-- 列表容器 -->
 		<div class="session-list-container min-h-0" :class="props.pageScroll ? '' : 'flex-1 overflow-y-auto'">
-			<div
+			<UiLoadingState
 				v-if="data.loading.value && !filteredMarked.length"
-				class="suspended-session-loading flex flex-col items-center justify-center py-6 text-center text-text-secondary"
-			>
-				<i class="fas fa-spinner fa-spin text-base text-primary" aria-hidden="true"></i>
-				<p class="mt-1.5 text-xs">{{ t('suspendedSshSessions.loading') }}</p>
-			</div>
-			<div
+				class="suspended-session-loading suspended-state"
+				compact
+				:bordered="false"
+				:title="t('suspendedSshSessions.loading')"
+			/>
+			<UiEmptyState
 				v-else-if="!hasResults && !data.error.value"
-				class="suspended-session-empty flex flex-col items-center justify-center py-6 px-3 text-center"
-			>
-				<i class="fas fa-inbox text-base text-text-secondary/40 mb-1" aria-hidden="true"></i>
-				<p class="text-xs font-medium text-foreground">{{ t('suspendedSshSessions.noResults') }}</p>
-			</div>
+				class="suspended-session-empty suspended-state"
+				compact
+				:bordered="false"
+				icon="fas fa-pause-circle"
+				:title="t('suspendedSshSessions.noResults')"
+			/>
 
-			<!-- 紧凑小卡片列表 -->
 			<ul v-else class="m-0 list-none p-0 space-y-1.5">
 				<!-- 待关闭标记的会话 (Marked Sessions) -->
 				<li
@@ -442,11 +429,8 @@
 							:aria-label="t('suspendedSshSessions.action.exportLog')"
 							@click="exportLog(session)"
 						>
-							<i
-								:class="exportingId === session.id ? 'fas fa-spinner fa-spin' : 'fas fa-download'"
-								class="text-[9px]"
-								aria-hidden="true"
-							></i>
+							<UiSpinner v-if="exportingId === session.id" density="compact" />
+							<i v-else class="fas fa-download text-[9px]" aria-hidden="true"></i>
 							<span class="button-session-text">{{ t('suspendedSshSessions.action.exportLog') }}</span>
 						</button>
 						<button
@@ -457,11 +441,8 @@
 							:aria-label="t('suspendedSshSessions.action.remove')"
 							@click="remove(session)"
 						>
-							<i
-								:class="removingId === session.id ? 'fas fa-spinner fa-spin' : 'fas fa-trash-alt'"
-								class="text-[9px]"
-								aria-hidden="true"
-							></i>
+							<UiSpinner v-if="removingId === session.id" density="compact" />
+							<i v-else class="fas fa-trash-alt text-[9px]" aria-hidden="true"></i>
 							<span class="button-session-text">{{ t('suspendedSshSessions.action.remove') }}</span>
 						</button>
 					</div>
@@ -473,9 +454,78 @@
 
 <style scoped>
 	.suspended-sessions-panel {
-		container-type: inline-size;
+		--session-scrollbar-size: 9px;
+		--session-card-reserved-height: 78px;
+		--session-list-gap: 6px;
+		--session-list-viewport-height: calc(2 * var(--session-card-reserved-height) + var(--session-list-gap));
+		container-type: size;
 		container-name: suspended-sessions-view-pane;
 		font-family: var(--font-family-sans-serif);
+	}
+
+	.suspended-sessions-panel--page {
+		display: block;
+		height: auto;
+		container-type: inline-size;
+	}
+
+	.suspended-sessions-panel--page .session-list-container {
+		overflow-y: auto;
+	}
+
+	.suspended-toolbar {
+		display: flex;
+		min-width: 0;
+		flex: 0 0 auto;
+		align-items: center;
+		gap: 7px;
+		padding-inline: var(--session-scrollbar-size);
+		padding-top: 6px;
+		margin-bottom: 8px;
+	}
+
+	.session-list-container {
+		display: flex;
+		max-height: var(--session-list-viewport-height);
+		flex-direction: column;
+		overscroll-behavior: contain;
+		padding-inline: 0;
+		scrollbar-gutter: stable both-edges;
+	}
+
+	.session-list-container::-webkit-scrollbar {
+		width: var(--session-scrollbar-size);
+		height: var(--session-scrollbar-size);
+	}
+
+	.session-list-container::-webkit-scrollbar-track {
+		background: transparent;
+	}
+
+	.session-list-container::-webkit-scrollbar-thumb {
+		border: 2px solid transparent;
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--text-color) 28%, transparent);
+		background-clip: content-box;
+	}
+
+	.session-list-container::-webkit-scrollbar-thumb:hover {
+		background: color-mix(in srgb, var(--text-color) 42%, transparent);
+		background-clip: content-box;
+	}
+
+	.session-list-container::-webkit-scrollbar-corner {
+		background: transparent;
+	}
+
+	.session-list {
+		display: flex;
+		width: 100%;
+		flex-direction: column;
+		gap: var(--session-list-gap);
+		margin: 0;
+		padding: 0;
+		list-style: none;
 	}
 
 	.session-card {
@@ -595,5 +645,16 @@
 		.session-action i {
 			margin: 0 !important;
 		}
+	}
+
+	.suspended-state {
+		min-height: min(var(--session-list-viewport-height), 100%);
+		flex: 1 1 auto;
+		padding: 16px 12px;
+		text-align: center;
+	}
+
+	.suspended-sessions-panel--page .suspended-state {
+		min-height: var(--session-list-viewport-height);
 	}
 </style>

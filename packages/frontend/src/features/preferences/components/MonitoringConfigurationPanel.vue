@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { useId } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiFormField, UiInput, UiSettingsGroup } from '@/foundation/ui';
+	import { UiButton, UiFormField, UiNumberInput, UiSettingsGroup } from '@/foundation/ui';
 	import { useSettingsReloadSource } from '@/shared/feedback/public';
 	import {
 		SETTINGS_MONITORING_MIN_SECONDS,
@@ -51,14 +51,19 @@
 		<form
 			v-if="configuration.draft.value"
 			id="monitoring-configuration-form"
-			class="mt-3 flex flex-wrap items-end gap-3"
+			class="monitoring-configuration__form"
 			@submit.prevent="configuration.save"
 		>
-			<UiFormField :label="t('settings.monitoring.status')" :for-id="`${id}-status`" class="min-w-[160px] flex-1">
-				<UiInput
+			<UiFormField
+				:label="t('settings.monitoring.status')"
+				:for-id="`${id}-status`"
+				class="monitoring-configuration__field"
+			>
+				<UiNumberInput
 					:id="`${id}-status`"
 					v-model="configuration.draft.value.statusIntervalSeconds"
-					type="number"
+					class="monitoring-configuration__input"
+					icon="fa-regular fa-clock"
 					:min="SETTINGS_MONITORING_MIN_SECONDS"
 					:max="SETTINGS_MONITORING_MAX_SECONDS"
 					step="1"
@@ -66,11 +71,16 @@
 					data-monitoring-status
 				/>
 			</UiFormField>
-			<UiFormField :label="t('settings.monitoring.host')" :for-id="`${id}-host`" class="min-w-[160px] flex-1">
-				<UiInput
+			<UiFormField
+				:label="t('settings.monitoring.host')"
+				:for-id="`${id}-host`"
+				class="monitoring-configuration__field"
+			>
+				<UiNumberInput
 					:id="`${id}-host`"
 					v-model="configuration.draft.value.hostIntervalSeconds"
-					type="number"
+					class="monitoring-configuration__input"
+					icon="fa-regular fa-clock"
 					:min="SETTINGS_MONITORING_MIN_SECONDS"
 					:max="SETTINGS_MONITORING_MAX_SECONDS"
 					step="1"
@@ -82,3 +92,23 @@
 		<p v-if="configuration.loading.value" class="mt-2 text-sm">{{ t('common.loading') }}</p>
 	</UiSettingsGroup>
 </template>
+
+<style scoped>
+	.monitoring-configuration__form {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-start;
+		gap: 12px 20px;
+		margin-top: 12px;
+	}
+
+	.monitoring-configuration__field {
+		min-width: min(100%, 10rem);
+		flex: 1 1 12rem;
+		max-width: 16rem;
+	}
+
+	.monitoring-configuration__input {
+		width: 100%;
+	}
+</style>

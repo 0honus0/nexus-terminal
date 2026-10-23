@@ -3,7 +3,7 @@
 	import { useRouter } from 'vue-router';
 	import { useI18n } from 'vue-i18n';
 	import { authErrorKey } from '../model/auth-errors';
-	import { UiButton, UiFormField, UiInput } from '@/foundation/ui';
+	import { UiButton, UiFormField, UiInlineNotice, UiInput } from '@/foundation/ui';
 	import { useAuthSession } from '../public';
 
 	const router = useRouter();
@@ -114,20 +114,12 @@
 						/>
 					</UiFormField>
 
-					<p
-						v-if="error"
-						class="text-error rounded border border-error/20 bg-error/10 px-4 py-2 text-center text-sm"
-						role="alert"
-					>
+					<UiInlineNotice v-if="error" tone="danger" icon="fa-solid fa-circle-exclamation">
 						{{ error }}
-					</p>
-					<p
-						v-if="successMessage"
-						class="text-success rounded border border-success/20 bg-success/10 px-4 py-2 text-center text-sm"
-						role="status"
-					>
+					</UiInlineNotice>
+					<UiInlineNotice v-if="successMessage" tone="success">
 						{{ successMessage }}
-					</p>
+					</UiInlineNotice>
 
 					<UiButton
 						type="submit"

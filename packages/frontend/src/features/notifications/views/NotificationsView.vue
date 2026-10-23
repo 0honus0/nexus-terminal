@@ -2,7 +2,7 @@
 	import { computed, onActivated, onMounted, ref, shallowRef } from 'vue';
 	import { storeToRefs } from 'pinia';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiInput, UiModal, UiSelect, UiSpinner } from '@/foundation/ui';
+	import { UiBadge, UiButton, UiEmptyState, UiLoadingState, UiModal, UiSearchInput, UiSelect } from '@/foundation/ui';
 	import { useFeedback, useFeedbackMessage } from '@/shared/feedback/public';
 	import { useAuthenticatedViewScope } from '@/shared/session/public';
 	import NotificationSettingForm from '../components/NotificationSettingForm.vue';
@@ -235,15 +235,13 @@
 				</header>
 
 				<div class="ui-catalog-toolbar ui-catalog-toolbar--notifications">
-					<UiInput
+					<UiSearchInput
 						v-model="search"
-						type="search"
 						density="comfortable"
 						:placeholder="t('settings.notifications.searchPlaceholder')"
 						:aria-label="t('common.search')"
-					>
-						<template #leading><i class="fas fa-magnifying-glass" aria-hidden="true"></i></template>
-					</UiInput>
+						:clear-label="t('common.clear')"
+					/>
 					<UiSelect
 						v-model="typeFilter"
 						density="comfortable"
@@ -272,24 +270,25 @@
 					</UiButton>
 				</div>
 
-				<div v-if="loading && !items.length && !error" class="ui-catalog-empty">
-					<UiSpinner />
-					<p>{{ t('common.loading') }}</p>
-				</div>
-				<div v-else-if="!error && filteredChannels.length === 0" class="ui-catalog-empty">
-					<span class="ui-catalog-empty__icon" aria-hidden="true">
-						<i
-							class="fas"
-							:class="
-								search || typeFilter !== 'all' || enabledFilter !== 'all'
-									? 'fa-magnifying-glass'
-									: 'fa-bell-slash'
-							"
-						></i>
-					</span>
-					<p v-if="!items.length">{{ t('settings.notifications.noChannels') }}</p>
-					<p v-else>{{ t('settings.notifications.noMatches') }}</p>
-				</div>
+				<UiLoadingState
+					v-if="loading && !items.length && !error"
+					class="min-h-[240px]"
+					:bordered="false"
+					:title="t('common.loading')"
+				/>
+				<UiEmptyState
+					v-else-if="!error && filteredChannels.length === 0"
+					class="min-h-[240px]"
+					:bordered="false"
+					:icon="
+						search || typeFilter !== 'all' || enabledFilter !== 'all'
+							? 'fa-magnifying-glass'
+							: 'fa-bell-slash'
+					"
+					:title="
+						!items.length ? t('settings.notifications.noChannels') : t('settings.notifications.noMatches')
+					"
+				/>
 				<ul v-else-if="!error" class="ui-catalog-list">
 					<li v-for="item in filteredChannels" :key="item.id">
 						<article class="notifications-channel-card ui-catalog-card" :data-notification-id="item.id">
@@ -303,17 +302,16 @@
 							<div class="ui-catalog-card__content">
 								<div class="ui-catalog-card__heading">
 									<strong class="ui-catalog-card__name">{{ item.name }}</strong>
-									<span class="ui-catalog-badge">
+									<UiBadge appearance="ghost" density="compact">
 										{{ t('settings.notifications.types.' + item.config.kind) }}
-									</span>
-									<span
-										class="ui-catalog-badge"
-										:class="
-											item.enabled ? 'ui-catalog-badge--success' : 'ui-catalog-badge--warning'
-										"
+									</UiBadge>
+									<UiBadge
+										appearance="ghost"
+										density="compact"
+										:tone="item.enabled ? 'success' : 'warning'"
 									>
 										{{ t(item.enabled ? 'common.enabled' : 'common.disabled') }}
-									</span>
+									</UiBadge>
 								</div>
 								<code class="ui-catalog-card__address" :title="channelEndpoint(item)">
 									{{ channelEndpoint(item) }}

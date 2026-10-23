@@ -5,12 +5,21 @@
 		UiButton,
 		UiCheckbox,
 		UiContextMenu,
+		UiContextMenuItem,
 		UiDialog,
 		UiEmptyState,
+		UiLoadingState,
 		UiFormField,
 		UiInfoHint,
+		UiInlineLoading,
+		UiInlineNotice,
 		UiInput,
+		UiListToolbar,
+		UiNumberInput,
+		UiPagination,
 		UiPopover,
+		UiSearchInput,
+		UiSegmentedControl,
 		UiSelect,
 		UiSlider,
 		UiSpinner,
@@ -30,6 +39,10 @@
 	const tones: UiTone[] = ['neutral', 'primary', 'success', 'warning', 'danger'];
 	const appearances: UiAppearance[] = ['solid', 'soft', 'ghost', 'glass'];
 	const inputValue = ref('Nexus Terminal');
+	const searchValue = ref('terminal');
+	const numberValue = ref<number | null>(24);
+	const segmentValue = ref<'balanced' | 'precise' | 'fast'>('balanced');
+	const paginationPage = ref(2);
 	const bioValue = ref('');
 	const switchValue = ref(true);
 	const sliderValue = ref(68);
@@ -53,6 +66,15 @@
 		{ value: 'keyboard', label: 'Keyboard' },
 		{ value: 'mobile', label: 'Mobile' },
 	];
+	const segmentOptions = [
+		{ value: 'balanced' as const, label: 'Balanced' },
+		{ value: 'precise' as const, label: 'Precise' },
+		{ value: 'fast' as const, label: 'Fast' },
+	];
+
+	const movePagination = (delta: -1 | 1): void => {
+		paginationPage.value = Math.min(6, Math.max(1, paginationPage.value + delta));
+	};
 
 	const openContextMenu = (event: MouseEvent): void => {
 		contextMenu.value = { visible: true, x: event.clientX, y: event.clientY };
@@ -157,16 +179,47 @@
 				<UiSurface class="p-5">
 					<h2 class="text-sm font-semibold">Inputs</h2>
 					<p class="mt-1 text-xs text-text-secondary">
-						Inset glass controls with wrapper-owned focus and validation.
+						Inset glass controls with wrapper-owned focus, validation, and shared search/number behavior.
 					</p>
 					<div class="mt-4 grid gap-3">
 						<UiInput v-model="inputValue" placeholder="Default input">
 							<template #leading><span class="text-[11px]">⌕</span></template>
 						</UiInput>
+						<UiSearchInput v-model="searchValue" placeholder="Search" clear-label="Clear search" />
+						<UiNumberInput
+							v-model="numberValue"
+							icon="fas fa-clock"
+							unit="sec"
+							aria-label="Refresh interval"
+						/>
+						<UiSegmentedControl
+							v-model="segmentValue"
+							:options="segmentOptions"
+							label="Reasoning profile"
+						/>
 						<UiInput v-model="inputValue" density="compact" placeholder="Compact input" />
 						<UiInput v-model="inputValue" invalid aria-label="Invalid example" />
 						<UiInput model-value="Disabled but legible" disabled />
 					</div>
+					<div class="mt-4 grid gap-2">
+						<UiInlineNotice tone="info">Form-level information stays inline.</UiInlineNotice>
+						<UiInlineNotice tone="warning" compact
+							>Operational results still use the global toast host.</UiInlineNotice
+						>
+					</div>
+					<UiListToolbar v-model="searchValue" class="mt-4 !m-0" search-label="Toolbar search">
+						<UiButton appearance="soft" density="compact">Filter</UiButton>
+					</UiListToolbar>
+					<UiPagination
+						class="mt-3"
+						:page="paginationPage"
+						:page-count="6"
+						label="Pagination"
+						previous-label="Previous page"
+						next-label="Next page"
+						@previous="movePagination(-1)"
+						@next="movePagination(1)"
+					/>
 				</UiSurface>
 
 				<UiSurface class="p-5">
@@ -181,6 +234,12 @@
 						<UiBadge v-for="tone in tones" :key="tone" :tone="tone" appearance="ghost" density="compact">
 							{{ tone }}
 						</UiBadge>
+					</div>
+					<div class="mt-3 flex flex-wrap gap-2">
+						<UiBadge v-for="tone in tones" :key="tone" :tone="tone" density="compact" dot>
+							{{ tone }}
+						</UiBadge>
+						<UiBadge tone="success" density="compact" dot dot-pulse>live</UiBadge>
 					</div>
 				</UiSurface>
 			</div>
@@ -320,11 +379,15 @@
 				</UiSurface>
 
 				<UiSurface class="p-5">
-					<h2 class="text-sm font-semibold">Empty state &amp; context menu</h2>
+					<h2 class="text-sm font-semibold">Loading &amp; empty state</h2>
 					<p class="mt-1 text-xs text-text-secondary">
-						Feedback and transient menus keep the same glass edge treatment.
+						Shared skeleton lines and a calm sweep keep waits stable without inventing a second card
+						language.
 					</p>
 					<div class="mt-4 grid gap-4">
+						<UiLoadingState compact :title="`Connecting to the workspace`" />
+						<UiLoadingState dense :bordered="false" title="Loading recent activity" />
+						<UiInlineLoading label="Saving preferences" />
 						<UiEmptyState
 							dense
 							icon="fa-solid fa-layer-group"
@@ -335,6 +398,12 @@
 								<UiButton density="compact">Create</UiButton>
 							</template>
 						</UiEmptyState>
+						<UiEmptyState
+							compact
+							:bordered="false"
+							icon="fa-regular fa-folder-open"
+							title="Compact empty state"
+						/>
 						<UiButton appearance="ghost" @click="openContextMenu" @contextmenu.prevent="openContextMenu">
 							Open glass context menu
 						</UiButton>
@@ -346,22 +415,8 @@
 						auto-width
 						@close="contextMenu.visible = false"
 					>
-						<button
-							type="button"
-							role="menuitem"
-							class="block w-full rounded px-3 py-2 text-left hover:bg-hover"
-							@click="contextMenu.visible = false"
-						>
-							Open workspace
-						</button>
-						<button
-							type="button"
-							role="menuitem"
-							class="block w-full rounded px-3 py-2 text-left hover:bg-hover"
-							@click="contextMenu.visible = false"
-						>
-							Duplicate
-						</button>
+						<UiContextMenuItem @click="contextMenu.visible = false"> Open workspace </UiContextMenuItem>
+						<UiContextMenuItem @click="contextMenu.visible = false"> Duplicate </UiContextMenuItem>
 					</UiContextMenu>
 				</UiSurface>
 			</div>

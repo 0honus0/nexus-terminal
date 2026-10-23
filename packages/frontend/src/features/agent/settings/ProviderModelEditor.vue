@@ -2,7 +2,7 @@
 	import { useId } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { AGENT_REASONING_EFFORTS, type AgentReasoningEffort } from '@nexus-terminal/shared/agent/providers/values';
-	import { UiCheckbox, UiFormField, UiInput, UiSelect } from '@/foundation/ui';
+	import { UiCheckbox, UiFormField, UiInput, UiNumberInput, UiSelect } from '@/foundation/ui';
 	import type { UiSelectValue } from '@/foundation/ui';
 	import type { ProviderModelDraft } from '../model/provider-types';
 
@@ -79,10 +79,9 @@
 			:error="errors?.contextWindow"
 			required
 		>
-			<UiInput
+			<UiNumberInput
 				:id="`${id}-context-window`"
 				:model-value="model.contextWindow"
-				type="number"
 				min="1"
 				step="1"
 				@update:model-value="setNumber('contextWindow', $event)"
@@ -94,10 +93,9 @@
 			:error="errors?.maxOutputTokens"
 			required
 		>
-			<UiInput
+			<UiNumberInput
 				:id="`${id}-max-output-tokens`"
 				:model-value="model.maxOutputTokens"
-				type="number"
 				min="1"
 				step="1"
 				@update:model-value="setNumber('maxOutputTokens', $event)"

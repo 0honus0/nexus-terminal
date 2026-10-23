@@ -63,7 +63,8 @@
     "personalDataUnknown": "操作结果未知。请重新读取列表并核对，再编辑或重复操作。",
     "personalDataConflict": "记录已变化或不存在。请重新读取列表，再打开编辑窗口。",
     "personalDataInvalid": "请检查输入内容及容量限制。",
-    "refresh": "刷新"
+    "refresh": "刷新",
+    "pagination": "分页"
   },
   "header": {
     "hide": "隐藏",

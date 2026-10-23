@@ -7,7 +7,7 @@
       "selectFiles": "选择文件（任意类型）"
     },
     "start": {
-      "title": "连接与会话",
+      "title": "新建会话",
       "description": "恢复挂起会话，或选择连接开启新的终端。",
       "connections": "发起连接",
       "back": "返回当前终端"
@@ -78,8 +78,9 @@
     "emptyContainer": "空容器"
   },
   "commandInputBar": {
-    "desktopPlaceholder": "命令",
-    "placeholder": "输入命令后回车",
+    "commandLabel": "终端命令",
+    "searchLabel": "在终端中搜索",
+    "moreActions": "更多命令操作",
     "searchPlaceholder": "在终端中搜索...",
     "openSearch": "打开终端搜索",
     "closeSearch": "关闭终端搜索",
