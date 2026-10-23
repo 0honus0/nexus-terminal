@@ -66,7 +66,11 @@ test('terminal consumption window pauses output and drains without missing bytes
 			.poll(() => /\nFLOW_WINDOW_DONE\r?\n/.test(Buffer.concat(chunks).toString()), { timeout: 15_000 })
 			.toBe(true);
 		const output = Buffer.concat(chunks).toString();
-		expect(output.split('Z').length - 1).toBe(3145729); // payload plus the echoed command's 'Z'
+		// Shell setup and the echoed command can also contain Z. Verify the
+		// actual uninterrupted payload immediately before its completion marker.
+		const payload = /(?:^|[^Z])(Z+)\r?\nFLOW_WINDOW_DONE\r?\n/.exec(output);
+		expect(payload).not.toBeNull();
+		expect(payload?.[1].length).toBe(3145728);
 	} finally {
 		await closeWebSocket(socket);
 	}

@@ -1,5 +1,15 @@
 # Nexus Terminal E2E
 
+## SSH 启动回显独立解析（2026-10-23，待远程）
+
+远程 `40001250164` / `9aa53b96` 最终 420 通过、38 失败、1 超时，质量与 Docker smoke 通过；八组原日志 `/tmp/nexus-e2e-40001250164-shard{1..8}.log`，最终清单 `/tmp/nexus-e2e-40001250164-cases.json`。新失败集中于 currentDirectory/changeDirectory、挂起恢复及日志压缩；这是产品解析问题，不能通过删除这些断言处理。新增 eager 初始化让缺陷在普通输入前稳定触发：NativeShellIntegration 只有先收到 stdout 的 `stty -echo` 才识别 setup marker，而 SSH 夹具 Bash 通过独立 stderr 回显；真实关闭回显的 shell 同样不能依赖该前提。
+
+Platform 现在独立识别结果 marker，并同时保留结果/回显可能跨 chunk 的前缀；原有回显抑制、完整 marker 的 4096-byte 预算、5 秒期限和 close 清理保留。Workspace 将初始化等待放在最终身份/实例检查之前，并响应原取消 signal。流控测试原统计全部输出中的字符 Z，把新启动脚本的 ZSH_VERSION 也算入业务 payload；现严格核对完成标记前的连续 3 MiB 输出，原消费窗口、停顿、超额 ACK 和 drain 断言保留。
+
+两轮源码复审覆盖有/无/跨 chunk 回显、前后缀正常输出、marker 分片/超限、超时/关闭、普通输入保护与最终授权；根 check、双端 build、全量格式、目标测试静态类型和 diff 检查通过，日志 `/tmp/nexus-e2e-shell-startup-{check,build,format-final,test-types}.log`。首次格式报告本轮 PLAN 及 Adapter，修正后重跑通过。按 D17 未运行本地行为、浏览器、E2E 或收集；上述产品修复仍待新远程验证，不复用旧通过。
+
+后续判定继续区分产品与用例：多目标发送的原初始离线目标回归不能仅由“当前预检会拒绝”判成用例错误。第七批的目标在预检后改变仅覆盖时间窗口，不能代替该基线；下一批恢复原场景并修复明确网络不可达使整批中止的问题，权限、信任、安装失败与未知仍阻断。
+
 ## 第七批：当前入口与发送预检前提（2026-10-23，待远程）
 
 基线 `dev` / `9aa53b96`；远程 `40001250164` 尚在运行，不用新推送取消。前批 `39998158139` / `72dd5714` 的八组日志最终仍为 435 通过、23 失败、1 超时；质量与 Docker smoke 通过，原日志 `/tmp/nexus-e2e-39998158139-shard{1..8}.log`，最终去重清单 `/tmp/nexus-e2e-39998158139-cases.json`。相同总数不代表失败停在相同步骤，以下以离线 trace 确认。

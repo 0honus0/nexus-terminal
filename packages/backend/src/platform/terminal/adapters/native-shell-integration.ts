@@ -304,30 +304,35 @@ class NativeShellIntegration implements ShellIntegrationPort {
 			let joined = Buffer.concat([setup.buffer, value]);
 			let visiblePrefix = Buffer.alloc(0);
 			if (!setup.capturing) {
-				if (!setup.suppressing) {
+				// A PTY may already have echo disabled, or the server may deliver
+				// command echo on stderr. The result marker never depends on echo.
+				const begin = joined.indexOf(setup.start);
+				if (begin >= 0) {
+					if (!setup.suppressing) {
+						const echo = joined.indexOf(setup.echoStart);
+						visiblePrefix = joined.subarray(0, echo >= 0 && echo < begin ? echo : begin);
+					}
+					joined = joined.subarray(begin);
+					setup.capturing = true;
+				} else if (!setup.suppressing) {
 					const echo = joined.indexOf(setup.echoStart);
 					if (echo < 0) {
-						const held = partialSuffix(joined, setup.echoStart);
+						const held = Math.max(
+							partialSuffix(joined, setup.echoStart),
+							partialSuffix(joined, setup.start),
+						);
 						setup.buffer = Buffer.from(joined.subarray(joined.length - held));
 						value = joined.subarray(0, joined.length - held);
-						joined = Buffer.alloc(0);
 					} else {
-						visiblePrefix = joined.subarray(0, echo);
-						joined = joined.subarray(echo);
-						setup.suppressing = true;
-					}
-				}
-				if (setup.suppressing && !setup.capturing) {
-					const begin = joined.indexOf(setup.start);
-					if (begin < 0) {
 						const held = partialSuffix(joined, setup.start);
 						setup.buffer = Buffer.from(joined.subarray(joined.length - held));
-						value = visiblePrefix;
-						joined = Buffer.alloc(0);
-					} else {
-						joined = joined.subarray(begin);
-						setup.capturing = true;
+						value = joined.subarray(0, echo);
+						setup.suppressing = true;
 					}
+				} else {
+					const held = partialSuffix(joined, setup.start);
+					setup.buffer = Buffer.from(joined.subarray(joined.length - held));
+					value = Buffer.alloc(0);
 				}
 			}
 			if (setup.capturing) {

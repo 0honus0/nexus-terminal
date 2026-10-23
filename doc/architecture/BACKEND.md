@@ -1397,7 +1397,7 @@ Files 的二进制读取、目录 ZIP、下载类型探测及票据准备由 Rem
 5. **入口与安装**：HTTP安装有界channel与Desktop原生WS，两者均接管socket error。HTTP传输等待由原请求aborted、响应finish/close与原socket close共同结算并退订；业务handler与资源收尾仍独立等待，不将传输中断当业务完成。Artifact HTTP将具名AbortError连同原signal交协议取消转换，应用/存储/清理失败继续保留到排空；仅signal取消不能掩盖其他错误。有界channel在实际派发排队消息时复查准入generation及关闭状态，输入队列同时考虑路由允许的文本/二进制预算。
 6. **数据、事务与并发**：不新增表或迁移。SFTP复合replace共用完整操作期限，恢复/备份删除另有独立清理预算；确定目录打开拒绝不退役健康lease。
 7. **生命周期与失败**：SSH Client/SFTP先请求结束，2秒后请求destroy，再最多等待2秒确认真实close；超时为清理失败，不当作关闭成功。SFTP未确认资源仍归原连接owner，晚close仅解除原实例。SFTP Adapter单独登记流的期限与取消监听清理；流错误及lease关闭均解除本地等待，即使供应商流不发close。流清理回调不替代SFTP channel关闭确认，未知临时文件仍由Files owner保留。HTTP、SSH channel及路由独立清理不被首个同步异常中断；ACP取消只执行一次并等待读写及permission任务。监控退订后的baseline清理被追踪，采样清理失败有界保留到close；日志停止准入后不新建读写owner。
-8. **当前能力与验收**：保持显式mapper、Shared协议和正常功能；终端导出用线性首尾裁剪，Shell setup按完整marker预算校验，异步返回复查存活。源码/静态与行为证据归testing；SFTP上传中断与实际句柄收尾已有B10有限证据，其余故障和容量仍逐项待验。
+8. **当前能力与验收**：保持显式mapper、Shared协议和正常功能；终端导出用线性首尾裁剪，Shell setup按完整marker预算校验，结果起始标记不依赖先收到命令回显；无回显时保留普通输出和可能跨块的标记前缀，已识别回显时隐藏原setup命令。Workspace初始化等待后重新核对身份、取消与记录实例，再交付附件。源码/静态与行为证据归testing；SFTP上传中断与实际句柄收尾已有B10有限证据，其余故障和容量仍逐项待验。
 
 ### Bootstrap 与外部能力资源边界
 

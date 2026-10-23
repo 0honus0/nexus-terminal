@@ -579,6 +579,7 @@ export class WorkspaceService {
 			if (!target) {
 				throw new WorkspaceFailure('not_found');
 			}
+			await this.untilAbort(shellIntegrationReady, record.controller.signal);
 			record.connectionName = target.name;
 			if (
 				(await this.untilAbort(this.identity(token), record.controller.signal)) !== userId ||
@@ -590,7 +591,6 @@ export class WorkspaceService {
 			record.controller.signal.throwIfAborted();
 			record.phase = 'attached';
 			record.fileTask = this.track(this.openFiles(record, token, shell.fingerprint));
-			await shellIntegrationReady;
 			return this.lease(record);
 		} catch (error) {
 			primary = error;
