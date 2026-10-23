@@ -1035,13 +1035,15 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 	await step(
 		'uploaded Artifact appears in the actual App library and verified download preserves bytes',
 		async () => {
-			await hub.getByRole('button', { name: 'Files', exact: true }).click();
-			const library = hub.getByRole('region', { name: 'Files and Artifact library', exact: true });
-			await selectUiOption(library.getByRole('combobox', { name: 'App', exact: true }), app.id);
 			const bytes = Buffer.from('Plugin native Artifact evidence\n');
-			await library
-				.getByLabel('Upload to selected App', { exact: true })
-				.setInputFiles({ name: 'plugin-evidence.txt', mimeType: 'text/plain', buffer: bytes });
+			// Upload belongs to the conversation attachment picker; the library
+			// manages files that have already been published.
+			await hub.getByRole('button', { name: /^Files \(\d+\)$/ }).click();
+			const picker = page
+				.locator('[data-ui="popover-panel"]')
+				.filter({ has: page.locator('input[type="file"]') });
+			await expect(picker).toBeVisible();
+			await expect(picker.getByRole('button', { name: 'Upload', exact: true })).toBeEnabled();
 			// Hub navigation can retire Chromium's CDP response body after a
 			// successful PUT. Capture and decode the original request in the route
 			// before allowing the UI to navigate; never replay this mutation.
@@ -1066,7 +1068,11 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 					response.url().endsWith('/content') &&
 					response.request().method() === 'PUT',
 			);
-			await library.locator('button[type="submit"]').filter({ hasText: 'Upload to selected App' }).click();
+			await picker.locator('input[type="file"]').setInputFiles({
+				name: 'plugin-evidence.txt',
+				mimeType: 'text/plain',
+				buffer: bytes,
+			});
 			const uploaded = await publication;
 			expect(uploaded.status()).toBe(200);
 			expect(capturedArtifactBody).toBe(true);
@@ -1078,14 +1084,27 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 				sizeBytes: bytes.length,
 				sha256: createHash('sha256').update(bytes).digest('hex'),
 			});
-			await library.getByRole('button', { name: 'Read list', exact: true }).click();
+			const attachmentSearch = picker.getByRole('searchbox', { name: 'Search files', exact: true });
+			await expect(picker.getByRole('button', { name: 'Search', exact: true })).toBeEnabled();
+			await attachmentSearch.fill('plugin-evidence.txt');
+			await attachmentSearch.press('Enter');
+			await expect(picker.getByRole('checkbox').filter({ hasText: 'plugin-evidence.txt' })).toBeChecked();
+			await page.keyboard.press('Escape');
+			await expect(picker).toBeHidden();
+			await hub.getByRole('button', { name: 'Files', exact: true }).click();
+			const library = hub.getByRole('region', { name: 'Files and Artifact library', exact: true });
+			await selectUiOption(library.getByRole('combobox', { name: 'App', exact: true }), app.id);
+			const search = library.getByRole('searchbox', { name: 'Search files', exact: true });
+			await expect(search).toBeEnabled();
+			await search.fill('plugin-evidence.txt');
+			await search.press('Enter');
 			const row = library
 				.locator('article')
-				.filter({ has: page.getByRole('heading', { name: /plugin-evidence\.txt/ }) });
+				.filter({ has: page.getByTitle('plugin-evidence.txt', { exact: true }) });
 			await expect(row).toContainText(artifact.name);
 			await expect(row).toContainText(String(artifact.sizeBytes));
 			const downloading = page.waitForEvent('download');
-			await row.getByRole('button', { name: 'Download and verify', exact: true }).click();
+			await row.getByRole('button', { name: 'Download', exact: true }).click();
 			const download = await downloading;
 			expect(download.suggestedFilename()).toBe('plugin-evidence.txt');
 			expect(await download.failure()).toBeNull();

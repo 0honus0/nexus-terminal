@@ -94,7 +94,12 @@ test('desktop Progress Display floats above the workspace without resizing the t
 	let serverStatusReads = 0;
 	await page.route('**/api/v1/transfers/status', async (route) => {
 		serverStatusReads += 1;
-		if (route.request().failure()) return;
+		if (route.request().failure()) {
+			// A cancelled browser request still needs its interception settled;
+			// returning leaves Playwright's handler pending during unrouteAll.
+			await route.abort('aborted');
+			return;
+		}
 		await route.continue();
 	});
 	const initialServerStatus = page.waitForResponse(
@@ -381,7 +386,12 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 				releaseInitialTransferList = resolve;
 			});
 		}
-		if (route.request().failure()) return;
+		if (route.request().failure()) {
+			// A cancelled browser request still needs its interception settled;
+			// returning leaves Playwright's handler pending during unrouteAll.
+			await route.abort('aborted');
+			return;
+		}
 		await route.continue();
 	});
 	const sourceConnectionId = await ensureTestSshConnection(context.request);

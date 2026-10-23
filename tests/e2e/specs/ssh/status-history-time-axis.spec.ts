@@ -1,3 +1,5 @@
+import { readWorkspaceMessage } from '../../../../packages/shared/src/remote/workspace/workspace-codec';
+import { readRemoteStatusSample } from '../../../../packages/shared/src/remote/monitoring/http-codec';
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import {
@@ -7,7 +9,7 @@ import {
 	resetTestSshFilesystem,
 } from '../../support/ssh';
 
-test('status history uses real time windows and keeps controls fixed and axes sharp while zooming', async ({
+test('status history fits fresh samples within the selected time limit and keeps controls sharp while zooming', async ({
 	page,
 	context,
 }) => {
@@ -22,6 +24,16 @@ test('status history uses real time windows and keeps controls fixed and axes sh
 
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(context.request);
+	const sampleTimestamps = new Set<number>();
+	page.on('websocket', (socket) => {
+		if (new URL(socket.url()).pathname !== '/ws/workspace') return;
+		socket.on('framereceived', ({ payload }) => {
+			const frame = readWorkspaceMessage(JSON.parse(String(payload)));
+			if (frame.type !== 'status.sample') return;
+			const sample = readRemoteStatusSample(frame.payload);
+			if (sample.cpuPercent !== undefined) sampleTimestamps.add(sample.timestamp);
+		});
+	});
 	await connectTestSshFromConnectionsPage(page, connectionId);
 
 	const monitor = page.locator('.status-monitor:visible').first();
@@ -49,10 +61,22 @@ test('status history uses real time windows and keeps controls fixed and axes sh
 			end: Number(element.getAttribute('data-window-end')),
 			first: Number(element.getAttribute('data-visible-start')),
 		}));
-		expect(sampleWindow.end - sampleWindow.start).toBe(range * 60_000);
-		expect(sampleWindow.first).toBeGreaterThan(sampleWindow.start);
-		if (range === 1) expect(sampleWindow.first - sampleWindow.start).toBeGreaterThan(20_000);
-		if (range === 30) expect(sampleWindow.first - sampleWindow.start).toBeGreaterThan(20 * 60_000);
+		// A fresh connection has seconds of history, so the selected minutes are
+		// an upper bound. Keep real timestamps and avoid a mostly empty axis.
+		const span = sampleWindow.end - sampleWindow.start;
+		for (const timestamp of Object.values(sampleWindow)) expect(Number.isFinite(timestamp)).toBe(true);
+		expect(span).toBeGreaterThanOrEqual(2_000);
+		expect(span).toBeLessThanOrEqual(range * 60_000);
+		expect(sampleTimestamps.has(sampleWindow.first)).toBe(true);
+		expect(sampleTimestamps.has(sampleWindow.end)).toBe(true);
+		expect(sampleWindow.first).toBeGreaterThanOrEqual(sampleWindow.start);
+		expect(sampleWindow.first).toBeLessThanOrEqual(sampleWindow.end);
+		expect(sampleWindow.end).toBeLessThanOrEqual(Date.now() + 1_000);
+		// Downsampling may retain a later sample in the first bucket. Measure
+		// leading empty time against the original CPU samples from the wire.
+		const earliestSample = Math.min(...sampleTimestamps);
+		expect(earliestSample).toBeGreaterThanOrEqual(sampleWindow.start);
+		expect(earliestSample - sampleWindow.start).toBeLessThanOrEqual(Math.max(2_000, span * 0.1));
 	}
 
 	// Controls keep a fixed font and the canvas has enough pixels for CSS zoom.
@@ -92,7 +116,7 @@ test('status history uses real time windows and keeps controls fixed and axes sh
 			await button.click();
 			await expect(chart).toHaveAttribute('data-range-minutes', String(range));
 			const fontSize = await button.evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
-			expect(fontSize * scale).toBeCloseTo(12, 1);
+			expect(fontSize * scale).toBeCloseTo(10, 1);
 		}
 		await canvas.hover({ position: { x: 200, y: 30 } });
 		await expect(tooltip).toBeVisible();
@@ -106,7 +130,7 @@ test('status history uses real time windows and keeps controls fixed and axes sh
 		const legend = page.locator('.network-legend');
 		await expect(legend).toBeVisible();
 		const legendFontSize = await legend.evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
-		expect(legendFontSize * scale).toBeCloseTo(12, 1);
+		expect(legendFontSize * scale).toBeCloseTo(11, 1);
 		expect(await legend.evaluate((element) => Boolean(element.closest('.history-header')))).toBe(true);
 		const legendBox = (await legend.boundingBox())!;
 		const chartBox = (await chart.boundingBox())!;

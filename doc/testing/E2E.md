@@ -1,5 +1,21 @@
 # Nexus Terminal E2E
 
+## 远程 40007018128 与当前入口收尾（2026-10-23）
+
+`40007018128` / `aa3093bd` 最终 438 通过、22 失败、1 超时，共 461 个唯一场景；质量门禁、runner、Docker smoke 成功。三项外观分类/主题回归及文件管理器连续拖动通过。原日志 `/tmp/nexus-e2e-40007018128-shard{1..8}.log`，去重清单 `/tmp/nexus-e2e-40007018128-cases.json`；本批不把重试前失败计成额外场景。
+
+发送场景已完成特殊目录、初始离线预检、真实部分成功、方法/错误、任务移除及目标文件检查，最终卡在测试 finally。产物 `/tmp/nexus-e2e-40007018128-shard4.zip` 中初始 GET `/transfers/status` 为 `net::ERR_ABORTED`，后续 GET 200；最终文件断言完成后没有清理 API。沿用例和 Playwright 1.63 RouteHandler 源码确认，取消请求分支直接返回会留下 handling promise，阻塞 unrouteAll(wait)。两处改为显式 abort 后返回，保留等待和所有业务断言，不扩大超时或跳过清理；整个发送场景仍待新远程验收。
+
+Docker 原 `.docker-row`、旧图标和表格布局断言已不对应当前容器卡片；测试按实际容器 ID 与 role 操作窄栏 More actions 的 Enter/Logs/Remove，保留原命令帧、默认展开、真实统计、周期读取、启停刷新、删除取消/确认与 300px 无溢出。挂起搜索按现有 searchbox、36px/13px 统一控件和工具栏验证，新增真实筛选再清空恢复；文件工具区按当前 grid 和 27px 紧凑路径高度检查。
+
+状态历史按 USAGE 已确认的短历史拟合行为验收，保留四档分钟上界、最小可读跨度和有限首样本留白；真实 CPU 样本通过严格 Shared codec 观察，图表首点/结束必须来自原 WS 时间。两轮复审修正了直接拿下采样后首点计算留白及要求拟合起点为整数的问题；画布像素、缩放、工具提示和网络双向速率仍检查，10px 范围按钮与 11px 图例对应现有 CSS。未改产品 UI 或样式，核对 USAGE 的 Docker、挂起搜索、传输及短历史说明仍正确。
+
+Agent 原上传用例停在已经移除的文件库表单。对照 USAGE 与实际 ArtifactPicker，改为对话 Files(count) 附件弹层自动上传；原始 PUT 只转发一次、严格解码并保留 App/大小/SHA256，随后显式搜索重新读取附件列表并验证自动选中，关闭弹层后在文件库按 App/名称搜索。下载沿当前 Download 入口，原下载名称与完整字节断言不变。复审确认上传后只失效列表而不自动重新读取，未直接等待旧列表中不存在的 checkbox；UI、上传与文件库实现均未改变；USAGE 的执行设置章节纠正一处仍将上传归在文件库入口的旧表述。
+
+快捷命令失败暂不能按旧定位处理：原 shard 3 产物 `/tmp/nexus-e2e-40004822130-shard3.zip` 的 metrics 显示根宽约 177px、搜索包装仅约 36px，统一输入的前导图标/间距占满剩余宽度，实际 input 隐藏。属于真实窄栏可用性问题；按 H-13.1 保留失败，未加宽测试规避或擅改 UI。PDF 搜索、Pad/历史和其余入口仍继续独立排查。
+
+本批两轮源码复审核对菜单关闭/删除重确认、默认断点、取消 route 结算、WS 监听范围、CPU 原始样本与下采样边界；根 check、双端 build、四份测试源码静态类型和全量格式通过，日志 `/tmp/nexus-e2e-current-entry-{check,build,types,format}.log`。按 D17 未运行本地行为、浏览器、E2E 或 Playwright 收集；本批源码尚待新 SHA 远程验证。
+
 ## 远程 40004822130 最终结果（2026-10-23）
 
 `40004822130` / `1e8497e0` 已结束，按每个场景最后结果去重为 436 通过、24 失败、1 超时，共 461 场景；Docker smoke 与 runner 成功，质量门禁因 PLAN 格式失败。八组原日志 `/tmp/nexus-e2e-40004822130-shard{1..8}.log`、任务状态 `/tmp/nexus-e2e-40004822130-jobs.json`、完整场景清单 `/tmp/nexus-e2e-40004822130-cases.json`。不把原生依赖的可选编译警告、普通断连日志或重试中的首次失败当作最终结果。
@@ -12,7 +28,7 @@
 
 E2E appearance helper 按当前 768px 分界操作桌面 tab 或手机分类按钮；手机通过实际 Appearance Settings listbox/option 选择，断言菜单关闭、按钮文本及展开状态。两份测试所有分类切换统一使用该入口；原控件检查允许分类触发器，仍检查其余原生按钮和未统一输入，不修改产品 UI。原保存、接口状态、刷新恢复、内容和几何断言保留，核对 USAGE 外观操作仍正确。
 
-两轮复审发现并修正初稿可能匹配内容区 UiSelect 的问题，以及菜单名称与真实 i18n 不一致；通过离线 trace 确认触发器的 aria-haspopup=listbox 和实际分类名称。根 check、双端 build、三份测试源码静态类型和全量格式通过，日志 `/tmp/nexus-e2e-appearance-{check,build,test-types,format}.log`。本轮不运行本地行为、浏览器或 E2E，恢复入口后的后续功能仍待新远程验证，不能据此宣称三个场景已通过。
+两轮复审发现并修正初稿可能匹配内容区 UiSelect 的问题，以及菜单名称与真实 i18n 不一致；通过离线 trace 确认触发器的 aria-haspopup=listbox 和实际分类名称。根 check、双端 build、四份测试源码静态类型和全量格式通过，日志 `/tmp/nexus-e2e-appearance-{check,build,test-types,format}.log`。本轮不运行本地行为、浏览器或 E2E，恢复入口后的后续功能仍待新远程验证，不能据此宣称三个场景已通过。
 
 ## 多目标发送初始离线回归（2026-10-23，待远程）
 
