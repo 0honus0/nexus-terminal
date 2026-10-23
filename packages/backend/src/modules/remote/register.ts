@@ -69,6 +69,7 @@ import { createDesktopWebSocketRoute } from './interfaces/ws/desktop-ws.js';
 import { ServerTransferModel } from './transfers/model/server-transfer-model.js';
 import { ServerTransferService } from './transfers/service/server-transfer-service.js';
 import { NativeServerTransfer } from '../../platform/transfers/adapters/native-transfer.js';
+import type { ResourceCollector } from '../../platform/system/resource-diagnostic.js';
 import { createServerTransferRoutes } from './interfaces/http/server-transfer-http.js';
 
 interface RemoteRegistrationOptions {
@@ -87,6 +88,7 @@ interface RemoteRegistrationOptions {
 }
 
 interface RemoteRegistration {
+	resourceCollector: ResourceCollector;
 	prepareMonitoringConfiguration(statusIntervalSeconds: number, resourceRefreshSeconds: number): () => void;
 	publicApi: RemoteSessions;
 	operations: RemoteMachineOperations;
@@ -243,6 +245,25 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 	return {
 		publicApi,
 		operations: remoteOperations(operations),
+		resourceCollector: {
+			id: 'remote',
+
+			collect: () => {
+				const value = workspaces.getResourceUsage();
+				return [
+					{ name: 'active_workspaces', unit: 'count', value: value.workspaces },
+					{ name: 'suspended_sessions', unit: 'count', value: value.suspended },
+					{ name: 'disconnected_sessions', unit: 'count', value: value.disconnected },
+					{ name: 'output_buffer_bytes', unit: 'bytes', value: value.outputBytes },
+					{ name: 'input_buffer_bytes', unit: 'bytes', value: value.inputBytes },
+					{ name: 'suspend_queue_bytes', unit: 'bytes', value: value.suspendQueueBytes },
+					{ name: 'resume_buffer_bytes', unit: 'bytes', value: value.resumeBytes },
+					{ name: 'active_transfers', unit: 'count', value: serverTransfers.getActiveTransferCount() },
+					{ name: 'retained_transfers', unit: 'count', value: serverTransfers.getRetainedTransferCount() },
+					{ name: 'status_subscriptions', unit: 'count', value: observations.getSubscriptionCount() },
+				];
+			},
+		},
 
 		prepareMonitoringConfiguration: (statusIntervalSeconds, resourceRefreshSeconds) => {
 			const applyStatus = observations.prepareStatusInterval(statusIntervalSeconds);

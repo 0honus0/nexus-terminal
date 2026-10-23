@@ -24,10 +24,56 @@
       "runtime": "Runtime",
       "uptime": "Uptime",
       "resident": "Resident memory",
-      "heap": "Used heap",
+      "heap": "Main-thread used heap",
       "database": "Database schema",
       "unavailable": "Unavailable",
-      "collectedAt": "Collected at"
+      "collectedAt": "Collected at",
+      "heapTotal": "Main-thread heap capacity",
+      "external": "Main-thread external memory",
+      "arrayBuffers": "Main-thread ArrayBuffers",
+      "cpuUser": "Cumulative user CPU",
+      "cpuSystem": "Cumulative system CPU",
+      "gcCount": "Main-thread GC count",
+      "gcDuration": "Main-thread GC duration",
+      "resourcesTitle": "Memory and module resources",
+      "memoryNote": "RSS covers the backend process. Heap and external-memory figures in the process overview cover only the main thread. The database group separately reports its Worker's heap and external memory, excluding SQLite's native page cache. Each thread's ArrayBuffers are included in its external memory; do not add them. Other module bytes describe tracked buffer payloads, not total module memory, and may share backing storage. Do not sum them or subtract them from RSS. CPU is process-cumulative; main-thread GC is cumulative since this diagnostic instance started. No forced GC or heap snapshots are performed.",
+      "countsOnly": "Only resource counts are instrumented here; module memory is not measured, not zero.",
+      "modules": {
+        "access": "Identity and access",
+        "agent": "Agent",
+        "operations": "Logging, audit and notifications",
+        "preferences": "Preferences and appearance",
+        "remote": "Terminals and remote operations",
+        "system": "System diagnostics",
+        "targets": "Connection configuration",
+        "storage": "Database runtime"
+      },
+      "statuses": {
+        "available": "Instrumented",
+        "unavailable": "Collection failed",
+        "not_instrumented": "Not instrumented"
+      },
+      "resources": {
+        "active_http_requests": "In-flight HTTP requests",
+        "active_workspaces": "Tracked workspaces excluding background suspend",
+        "suspended_sessions": "Retained suspend marks",
+        "disconnected_sessions": "Disconnected suspended entries",
+        "output_buffer_bytes": "Terminal output payload",
+        "input_buffer_bytes": "Queued terminal input payload",
+        "suspend_queue_bytes": "Queued suspended-log payload",
+        "resume_buffer_bytes": "Suspend recovery payload",
+        "active_transfers": "Active and draining transfers",
+        "retained_transfers": "Retained transfer records",
+        "pending_requests": "In-flight operations",
+        "pending_operations": "Queued and executing database operations",
+        "worker_heap_used_bytes": "Database Worker used heap",
+        "worker_heap_total_bytes": "Database Worker heap capacity",
+        "worker_external_bytes": "Database Worker external memory",
+        "worker_array_buffer_bytes": "Database Worker ArrayBuffers",
+        "active_runs": "Running and draining Agent tasks",
+        "pending_run_writes": "In-flight Agent writes",
+        "status_subscriptions": "Server status subscriptions"
+      }
     }
   }
 }

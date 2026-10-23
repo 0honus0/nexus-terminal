@@ -152,6 +152,22 @@ try {
 			schema: value.database.schemaVersion,
 			available: value.database.available,
 			runtime: value.process.runtimeVersion,
+			memory: {
+				heapTotalBytes: value.process.heapTotalBytes,
+				externalBytes: value.process.externalBytes,
+				arrayBufferBytes: value.process.arrayBufferBytes,
+				gcCount: value.process.gcCount,
+				gcDurationSeconds: value.process.gcDurationSeconds,
+			},
+			modules: value.modules.map((module) => ({
+				id: module.id,
+				status: module.status,
+				metrics: module.metrics.map((metric) => ({
+					name: metric.name,
+					unit: metric.unit,
+					value: metric.value,
+				})),
+			})),
 			safe: !('path' in value.database) && !('environment' in value.process),
 		};
 	});
@@ -159,6 +175,46 @@ try {
 	assert.ok(diagnostics.schema >= 1);
 	assert.match(diagnostics.runtime, /^v[0-9]+/);
 	assert.equal(diagnostics.safe, true);
+	for (const value of Object.values(diagnostics.memory)) {
+		assert.equal(typeof value, 'number');
+		assert.ok(Number.isFinite(value) && value >= 0);
+	}
+	assert.deepEqual(diagnostics.modules.map((module) => module.id).sort(), [
+		'access',
+		'agent',
+		'operations',
+		'preferences',
+		'remote',
+		'storage',
+		'system',
+		'targets',
+	]);
+	assert.ok(diagnostics.modules.every((module) => module.status === 'available'));
+	const remoteResources = diagnostics.modules.find((module) => module.id === 'remote');
+	const storageResources = diagnostics.modules.find((module) => module.id === 'storage');
+	for (const name of [
+		'worker_heap_used_bytes',
+		'worker_heap_total_bytes',
+		'worker_external_bytes',
+		'worker_array_buffer_bytes',
+	]) {
+		assert.ok(storageResources.metrics.some((metric) => metric.name === name && metric.unit === 'bytes'));
+	}
+	assert.ok(
+		storageResources.metrics.some((metric) => metric.name === 'pending_operations' && metric.unit === 'count'),
+	);
+	assert.ok(
+		storageResources.metrics.find((metric) => metric.name === 'worker_heap_used_bytes').value <=
+			storageResources.metrics.find((metric) => metric.name === 'worker_heap_total_bytes').value,
+	);
+	assert.ok(
+		remoteResources.metrics.some((metric) => metric.name === 'output_buffer_bytes' && metric.unit === 'bytes'),
+	);
+	for (const module of diagnostics.modules) {
+		for (const metric of module.metrics) assert.ok(Number.isSafeInteger(metric.value) && metric.value >= 0);
+	}
+	await page.locator('[data-host-resource-diagnostics] > summary').click();
+	assert.equal(await page.locator('[data-diagnostic-module]').count(), 8);
 	checks.push('formal data settings show real Shared host diagnostics without environment or database paths');
 
 	await page.route(

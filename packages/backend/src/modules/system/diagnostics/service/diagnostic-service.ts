@@ -7,9 +7,15 @@ export class DiagnosticService {
 	private accepting = true;
 	private readonly tasks = new Set<Promise<HostDiagnostic>>();
 	private closePromise: Promise<void> | null = null;
+	private reading: Promise<HostDiagnostic> | null = null;
+	private cached: { value: HostDiagnostic; expiresAt: number } | null = null;
+
+	getPendingRequestCount(): number {
+		return this.tasks.size;
+	}
 
 	private track(action: () => Promise<HostDiagnostic>): Promise<HostDiagnostic> {
-		if (!this.accepting || this.tasks.size >= 4) {
+		if (!this.accepting) {
 			return Promise.reject(new SystemStatusFailure('remote_unavailable'));
 		}
 		const task = Promise.resolve().then(action);
@@ -23,6 +29,7 @@ export class DiagnosticService {
 
 	quiesce(): void {
 		this.accepting = false;
+		this.cached = null;
 	}
 
 	close(): Promise<void> {
@@ -47,7 +54,34 @@ export class DiagnosticService {
 	) {}
 
 	collect(): Promise<HostDiagnostic> {
-		return this.track(() => this.model.collect());
+		return this.track(() => this.collectSnapshot());
+	}
+
+	private collectSnapshot(): Promise<HostDiagnostic> {
+		if (this.cached && this.cached.expiresAt > Date.now()) {
+			return Promise.resolve(this.cached.value);
+		}
+		if (this.reading) {
+			return this.reading;
+		}
+		const reading = this.model.collect();
+		this.reading = reading;
+		void reading.then(
+			(value) => {
+				if (this.reading === reading) {
+					this.reading = null;
+					if (this.accepting) {
+						this.cached = { value, expiresAt: Date.now() + 1000 };
+					}
+				}
+			},
+			() => {
+				if (this.reading === reading) {
+					this.reading = null;
+				}
+			},
+		);
+		return reading;
 	}
 
 	collectAuthenticated(token: string | null): Promise<HostDiagnostic> {
@@ -65,7 +99,7 @@ export class DiagnosticService {
 		if (!this.accepting) {
 			throw new SystemStatusFailure('remote_unavailable');
 		}
-		const value = await this.model.collect();
+		const value = await this.collectSnapshot();
 		const current = await this.access.authenticate(token);
 		if (!this.accepting || !current || current.userId !== identity.userId) {
 			throw new SystemStatusFailure('unauthenticated');

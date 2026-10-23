@@ -72,6 +72,14 @@ export class RunExecutionOwner {
 	private closing = false;
 	private closePromise: Promise<void> | null = null;
 
+	getActiveRunCount(): number {
+		return this.tasks.size;
+	}
+
+	getPendingWriteCount(): number {
+		return this.admittedWrites.size;
+	}
+
 	constructor(
 		private readonly runs: RunModel,
 		private readonly steps: RunStepModel,

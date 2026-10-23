@@ -118,6 +118,51 @@
 			},
 		];
 	});
+
+	function formatBytes(value: number): string {
+		const divisor = value >= 1024 * 1024 ? 1024 * 1024 : value >= 1024 ? 1024 : 1;
+		const unit = divisor === 1024 * 1024 ? 'MiB' : divisor === 1024 ? 'KiB' : 'B';
+		return `${new Intl.NumberFormat(locale.value, { maximumFractionDigits: 2 }).format(value / divisor)} ${unit}`;
+	}
+
+	const memoryMetrics = computed(() => {
+		const value = diagnostics.value;
+		if (!value) return [];
+
+		const seconds = (value: number): string =>
+			`${new Intl.NumberFormat(locale.value, { maximumFractionDigits: 3 }).format(value)} s`;
+
+		return [
+			{ label: t('systemOverview.diagnostics.heapTotal'), value: formatBytes(value.process.heapTotalBytes) },
+			{ label: t('systemOverview.diagnostics.external'), value: formatBytes(value.process.externalBytes) },
+			{ label: t('systemOverview.diagnostics.arrayBuffers'), value: formatBytes(value.process.arrayBufferBytes) },
+			{ label: t('systemOverview.diagnostics.cpuUser'), value: seconds(value.process.cpuUserSeconds) },
+			{ label: t('systemOverview.diagnostics.cpuSystem'), value: seconds(value.process.cpuSystemSeconds) },
+			{
+				label: t('systemOverview.diagnostics.gcCount'),
+				value: new Intl.NumberFormat(locale.value).format(value.process.gcCount),
+			},
+			{ label: t('systemOverview.diagnostics.gcDuration'), value: seconds(value.process.gcDurationSeconds) },
+		];
+	});
+
+	const modules = computed(
+		() =>
+			diagnostics.value?.modules.map((module) => ({
+				id: module.id,
+				name: t(`systemOverview.diagnostics.modules.${module.id}`),
+				status: t(`systemOverview.diagnostics.statuses.${module.status}`),
+				countsOnly: module.status === 'available' && !module.metrics.some((metric) => metric.unit === 'bytes'),
+				metrics: module.metrics.map((metric) => ({
+					name: metric.name,
+					label: t(`systemOverview.diagnostics.resources.${metric.name}`),
+					value:
+						metric.unit === 'bytes'
+							? formatBytes(metric.value)
+							: new Intl.NumberFormat(locale.value).format(metric.value),
+				})),
+			})) ?? [],
+	);
 </script>
 
 <template>
@@ -152,10 +197,62 @@
 				</div>
 			</div>
 		</dl>
+		<details v-if="diagnostics" class="host-diagnostics__resources" data-host-resource-diagnostics>
+			<summary>{{ t('systemOverview.diagnostics.resourcesTitle') }}</summary>
+			<p class="host-diagnostics__note">{{ t('systemOverview.diagnostics.memoryNote') }}</p>
+			<dl class="host-diagnostics__grid">
+				<div v-for="metric in memoryMetrics" :key="metric.label" class="host-diagnostics__metric">
+					<div class="host-diagnostics__metric-copy">
+						<dt>{{ metric.label }}</dt>
+						<dd>{{ metric.value }}</dd>
+					</div>
+				</div>
+			</dl>
+			<section
+				v-for="module in modules"
+				:key="module.id"
+				:data-diagnostic-module="module.id"
+				class="host-diagnostics__module"
+			>
+				<h4>
+					{{ module.name }} <span class="host-diagnostics__note">{{ module.status }}</span>
+				</h4>
+				<p v-if="module.countsOnly" class="host-diagnostics__note">
+					{{ t('systemOverview.diagnostics.countsOnly') }}
+				</p>
+				<dl v-if="module.metrics.length" class="host-diagnostics__grid">
+					<div v-for="metric in module.metrics" :key="metric.name" class="host-diagnostics__metric">
+						<div class="host-diagnostics__metric-copy">
+							<dt>{{ metric.label }}</dt>
+							<dd>{{ metric.value }}</dd>
+						</div>
+					</div>
+				</dl>
+			</section>
+		</details>
 	</UiSettingsGroup>
 </template>
 
 <style scoped>
+	.host-diagnostics__resources {
+		margin-top: 12px;
+	}
+	.host-diagnostics__resources summary {
+		cursor: pointer;
+		font-weight: 600;
+	}
+	.host-diagnostics__note {
+		color: var(--text-color-secondary);
+		font-size: 12px;
+		line-height: 1.6;
+	}
+	.host-diagnostics__module {
+		margin-top: 16px;
+	}
+	.host-diagnostics__module h4 {
+		margin-bottom: 8px;
+		font-size: 13px;
+	}
 	.host-diagnostics__status {
 		display: inline-flex;
 		align-items: center;

@@ -9,7 +9,15 @@ export interface SqlRunResult {
 	lastId: number;
 }
 
+export interface SqliteWorkerMemory {
+	heapUsedBytes: number;
+	heapTotalBytes: number;
+	externalBytes: number;
+	arrayBufferBytes: number;
+}
+
 export interface WorkerResults {
+	diagnostics: SqliteWorkerMemory;
 	exec: void;
 	all: SqlRow[];
 	one: SqlRow | null;
@@ -21,6 +29,7 @@ export type WorkerOperation = keyof WorkerResults;
 
 export type WorkerRequest =
 	| { id: number; kind: 'close' }
+	| { id: number; kind: 'diagnostics' }
 	| { id: number; kind: 'exec'; sql: string }
 	| { id: number; kind: 'all' | 'one' | 'run'; sql: string; params: SqlParameter[] };
 
@@ -58,8 +67,9 @@ export function decodeWorkerRequest(value: unknown): WorkerRequest {
 	const requestId = id(row.id);
 	switch (row.kind) {
 		case 'close':
+		case 'diagnostics':
 			fields(row, ['id', 'kind'], ['id', 'kind']);
-			return { id: requestId, kind: 'close' };
+			return { id: requestId, kind: row.kind };
 		case 'exec':
 			fields(row, ['id', 'kind', 'sql'], ['id', 'kind', 'sql']);
 			if (typeof row.sql !== 'string' || !row.sql.trim()) {
@@ -127,6 +137,30 @@ function decodeRow(value: unknown): SqlRow {
 }
 
 const resultDecoders: { [K in WorkerOperation]: (value: unknown) => WorkerResults[K] } = {
+	diagnostics: (value) => {
+		const row = object(value);
+		const names = ['heapUsedBytes', 'heapTotalBytes', 'externalBytes', 'arrayBufferBytes'];
+		fields(row, names, names);
+
+		const bytes = (value: unknown): number => {
+			if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+				throw new Error('Invalid SQLite worker memory');
+			}
+			return value;
+		};
+
+		const memory = {
+			heapUsedBytes: bytes(row.heapUsedBytes),
+			heapTotalBytes: bytes(row.heapTotalBytes),
+			externalBytes: bytes(row.externalBytes),
+			arrayBufferBytes: bytes(row.arrayBufferBytes),
+		};
+		if (memory.heapUsedBytes > memory.heapTotalBytes) {
+			throw new Error('Invalid SQLite worker heap capacity');
+		}
+		return memory;
+	},
+
 	exec: (value) => {
 		if (value !== null) {
 			throw new Error('Invalid SQLite exec acknowledgment');

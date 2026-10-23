@@ -26,7 +26,23 @@ export function createDiagnosticRoutes(service: DiagnosticService): HttpRoute[] 
 								residentBytes: value.process.residentBytes,
 								heapUsedBytes: value.process.heapUsedBytes,
 								runtimeVersion: value.process.runtimeVersion,
+								heapTotalBytes: value.process.heapTotalBytes,
+								externalBytes: value.process.externalBytes,
+								arrayBufferBytes: value.process.arrayBufferBytes,
+								cpuUserSeconds: value.process.cpuUserSeconds,
+								cpuSystemSeconds: value.process.cpuSystemSeconds,
+								gcCount: value.process.gcCount,
+								gcDurationSeconds: value.process.gcDurationSeconds,
 							},
+							modules: value.modules.map((module) => ({
+								id: module.id,
+								status: module.status,
+								metrics: module.metrics.map((metric) => ({
+									name: metric.name,
+									unit: metric.unit,
+									value: metric.value,
+								})),
+							})),
 							database: {
 								available: value.database.available,
 								schemaVersion: value.database.schemaVersion,

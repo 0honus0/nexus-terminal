@@ -15,6 +15,10 @@ export class AgentRequestOwner {
 
 	constructor(private readonly resources: readonly AgentResource[]) {}
 
+	getPendingRequestCount(): number {
+		return this.pending.size;
+	}
+
 	async run<T>(work: () => Promise<T>): Promise<T> {
 		if (this.closing || this.pending.size >= this.maximumRequests) {
 			throw new AgentFailure('provider_unavailable');

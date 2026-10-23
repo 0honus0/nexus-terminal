@@ -57,6 +57,10 @@ export class RemoteObservationService {
 		}
 	}
 
+	getSubscriptionCount(): number {
+		return this.subscriptions.size;
+	}
+
 	prepareStatusInterval(seconds: number): () => void {
 		if (
 			!Number.isSafeInteger(seconds) ||

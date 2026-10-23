@@ -24,10 +24,56 @@
       "runtime": "ランタイム",
       "uptime": "稼働時間",
       "resident": "常駐メモリ",
-      "heap": "使用ヒープ",
+      "heap": "メインスレッド使用ヒープ",
       "database": "DBスキーマ",
       "unavailable": "利用不可",
-      "collectedAt": "取得日時"
+      "collectedAt": "取得日時",
+      "heapTotal": "メインスレッドヒープ容量",
+      "external": "メインスレッド外部メモリ",
+      "arrayBuffers": "メインスレッド ArrayBuffer",
+      "cpuUser": "累積ユーザー CPU",
+      "cpuSystem": "累積システム CPU",
+      "gcCount": "メインスレッド GC 回数",
+      "gcDuration": "メインスレッド GC 累積時間",
+      "resourcesTitle": "メモリとモジュール別リソース",
+      "memoryNote": "RSS はバックエンドプロセス全体の常駐メモリです。プロセス概要のヒープ・外部メモリはメインスレッドのみです。DB グループには Worker の独立ヒープと外部メモリを表示しますが、SQLite のネイティブページキャッシュは含みません。各スレッドの ArrayBuffer は対応する外部メモリに含まれるため加算できません。他のモジュールのバイト数は追跡中のバッファデータ量であり、総メモリではなく、基底データを共有する場合もあります。合計や RSS からの差し引きはできません。CPU はプロセスの累積、メインスレッド GC は今回の診断インスタンス開始後の累積です。強制 GC やヒープスナップショットは実行しません。",
+      "countsOnly": "現在はリソース数のみ計測しています。メモリ未計測は使用量ゼロを意味しません。",
+      "modules": {
+        "access": "認証とアクセス",
+        "agent": "Agent",
+        "operations": "ログ・監査・通知",
+        "preferences": "設定と外観",
+        "remote": "ターミナルとリモート操作",
+        "system": "システム診断",
+        "targets": "接続設定",
+        "storage": "データベース実行環境"
+      },
+      "statuses": {
+        "available": "計測中",
+        "unavailable": "取得失敗",
+        "not_instrumented": "未対応"
+      },
+      "resources": {
+        "active_http_requests": "処理中 HTTP リクエスト",
+        "active_workspaces": "追跡中のワークスペース（バックグラウンド中断を除く）",
+        "suspended_sessions": "保持中の中断マーク",
+        "disconnected_sessions": "切断済み中断レコード",
+        "output_buffer_bytes": "ターミナル出力データ",
+        "input_buffer_bytes": "待機中の入力データ",
+        "suspend_queue_bytes": "書き込み待ち中断ログデータ",
+        "resume_buffer_bytes": "中断復旧バッファデータ",
+        "active_transfers": "実行・終了処理中の転送",
+        "retained_transfers": "保持中の転送レコード",
+        "pending_requests": "処理中の操作",
+        "pending_operations": "待機・実行中のデータベース操作",
+        "worker_heap_used_bytes": "DB Worker 使用ヒープ",
+        "worker_heap_total_bytes": "DB Worker ヒープ容量",
+        "worker_external_bytes": "DB Worker 外部メモリ",
+        "worker_array_buffer_bytes": "DB Worker ArrayBuffer",
+        "active_runs": "実行・終了処理中の Agent タスク",
+        "pending_run_writes": "処理中の Agent 書き込み",
+        "status_subscriptions": "サーバー状態の購読"
+      }
     }
   }
 }

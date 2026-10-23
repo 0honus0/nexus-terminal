@@ -2,6 +2,16 @@ import type { WorkspaceDirectoryChangeFailureCode } from '@nexus-terminal/shared
 import type { SuspendedSessionStatus, SuspendedOwnershipState } from '@nexus-terminal/shared/remote/suspend/values';
 import type { WorkspaceFileAttachment } from '../../files/model/file-types.js';
 
+export interface WorkspaceResourceUsage {
+	workspaces: number;
+	suspended: number;
+	disconnected: number;
+	outputBytes: number;
+	inputBytes: number;
+	suspendQueueBytes: number;
+	resumeBytes: number;
+}
+
 /** Instance-bound command scope, with no SSH transport or protocol channel. */
 export interface WorkspaceMachineTaskScope {
 	targetId: number;

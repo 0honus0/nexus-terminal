@@ -413,6 +413,8 @@ Shared 唯一定义 channel/event/status、完整 wire 请求/响应和容量。
 
 正式 `BackupSettingsPanel` 的原生导入 file input 自己承担可见的主题边框、圆角、裁剪和键盘焦点，不能只依赖不可见的外层控件。测试直接验证 native input 的 computed styles；不改变导入协议、认证与 global restore fence。
 
+宿主诊断通过现有管理员 API 严格读取 prom-client（官方后继包 `@prometheus-io/client`） 汇总的进程与模块资源。Shared 有限模块/指标/单位/状态经 diagnostic-mapper 白名单转本地对象；HostDiagnosticsPanel 保留原六项概览与布局，新增内部折叠的进程指标和各模块响应式资源卡片，不新增计时器或调试控制。只计数的模块明确标注内存未计量，失败/未接入不补零；不合计不同资源字节或从 RSS 反推模块占用。进程概览的堆/外部内存/ArrayBuffer/GC 限主线程，数据库组独立展示主库 Worker 的堆/外部内存/ArrayBuffer 与排队及执行操作；通过原有限指标列表渲染，不增加 UI 控件。各线程 ArrayBuffer 包含于对应 external、Worker 不含 SQLite 原生页缓存、GC 按诊断实例累计等口径在三语文案明确。后台一秒成功缓存不替代页面 scope/身份撤销，隐藏及身份失效仍丢弃晚结果并走原 Toast。
+
 ### 1. 职责与范围
 
 Backup 拥有完整管理员的加密导出和显式恢复，System Overview 拥有宿主诊断读取。正式设置消费新后端；恢复替换全局业务状态，不能当作普通表单保存后继续使用旧缓存。

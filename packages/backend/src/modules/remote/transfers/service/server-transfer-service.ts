@@ -113,6 +113,17 @@ export class ServerTransferService {
 		private readonly mutations: MachineMutationService,
 	) {}
 
+	getActiveTransferCount(): number {
+		return (
+			this.preparing.size +
+			[...this.records.values()].filter((owner) => !final(owner.task) || owner.running).length
+		);
+	}
+
+	getRetainedTransferCount(): number {
+		return this.records.size;
+	}
+
 	async send(
 		token: string | null,
 		read: () => Promise<ServerTransferCommand>,

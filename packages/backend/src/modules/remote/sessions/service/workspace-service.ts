@@ -3,7 +3,7 @@ import type {
 	SuspendedTerminationReason,
 	SuspendedRemovalDisposition,
 } from '@nexus-terminal/shared/remote/suspend/values';
-import type { WorkspaceMachineTaskScope } from '../model/workspace-types.js';
+import type { WorkspaceMachineTaskScope, WorkspaceResourceUsage } from '../model/workspace-types.js';
 import {
 	WORKSPACE_SUSPEND_MAX_SNAPSHOT_BYTES,
 	WORKSPACE_SUSPEND_MAX_HISTORY_PAGE_BYTES,
@@ -207,6 +207,37 @@ export class WorkspaceService {
 	) {
 		this.leaseSweeper = setInterval(() => this.sweepSuspendedLeases(), 2_000);
 		this.leaseSweeper.unref();
+	}
+
+	getResourceUsage(): WorkspaceResourceUsage {
+		const records = new Set([...this.records.values(), ...this.suspended.values()]);
+		const marks = new Set([...records].flatMap((record) => (record.suspend ? [record.suspend] : [])));
+		for (const record of this.disconnected.values()) {
+			marks.add(record.mark);
+		}
+		let outputBytes = 0;
+		let inputBytes = 0;
+		let resumeBytes = 0;
+		let workspaces = 0;
+		for (const record of records) {
+			if (record.phase !== 'suspended') {
+				workspaces++;
+			}
+			outputBytes += record.outputBytes;
+			inputBytes += record.inputBytes;
+			if (record.pendingSuspended) {
+				resumeBytes += record.pendingSuspended.history.byteLength + record.pendingSuspended.lateBytes;
+			}
+		}
+		return {
+			workspaces,
+			suspended: marks.size,
+			disconnected: this.disconnected.size,
+			outputBytes,
+			inputBytes,
+			resumeBytes,
+			suspendQueueBytes: [...marks].reduce((bytes, mark) => bytes + mark.queuedBytes, 0),
+		};
 	}
 
 	private recordFailure(error: unknown): void {

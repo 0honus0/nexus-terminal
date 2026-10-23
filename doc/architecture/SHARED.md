@@ -219,7 +219,7 @@ Agent file_inspect/patch/move/delete 的模型私有命令、树节点及内容�
 4. **类型与转换**：请求、成功、错误、path/header/query 与二进制 Range/If-Match 分别表达；内部应用/存储类型保持独立，HTTP/Model 明确白名单。通知 secret 命令为 keep/clear/replace，读取仅含存在标志；executionState=governed 不是任务健康状态。
 5. **入口与安装**：Memory 列表、单项读取、提案和审核四管理动作、Artifact元数据/二进制内容/库/引用/确认清理、执行设置和硬限制preview/confirm、Operations管理、宿主诊断均有Backend消费者。Operations日志/审计/通知及宿主诊断已有正式前端消费者；Agent相关完整管理仍F1，不据缺少前端目录删减契约。
 6. **数据、事务与并发**：版本/确认ID/分页在实际用例复查。Memory/Artifact/通知时间为毫秒，期限字段名明确单位；治理审批仍使用其既定秒表示。Memory视图校验到期晚于创建、审核位于创建/更新之间、发布审核早于到期；历史读取不要求当前尚未过期。Shared形状校验不能替代当前授权、SQL事务事实、文件发布或外部投递确认。
-7. **生命周期与失败**：响应预算含转义与完整外壳；Operations请求64KiB/响应8MiB，宿主诊断16KiB，Memory响应8MiB，Artifact JSON响应128KiB/单内容16MiB，清理一次最多128项，执行设置128KiB。unknown 不触发自动重放，配置/引用/观察不授予执行权。
+7. **生命周期与失败**：响应预算含转义与完整外壳；Operations请求64KiB/响应8MiB，宿主诊断16KiB，Memory响应8MiB，Artifact JSON响应128KiB/单内容16MiB，清理一次最多128项，执行设置128KiB。宿主诊断的八个模块 ID、有限资源名/单位/状态由 diagnostics/values 唯一持有；完整响应必须包含唯一分组和名称/单位一致的非负指标，未接入/失败组为空，不能以零冒充缺测。RSS 是进程级，process 扩展堆/外部内存/ArrayBuffer/GC 是主线程级；Storage 的 worker_heap_used_bytes/worker_heap_total_bytes/worker_external_bytes/worker_array_buffer_bytes 单列主库 Worker 的 isolate 内存，pending_operations 表示已接纳的排队及执行项，不与已派发 pending_requests 混用；CPU 与 GC 耗时为有限非负秒数。固定分组和资源名同时限定响应容量及指标标签基数，不能用会话 ID/路径扩展标签。unknown 不触发自动重放，配置/引用/观察不授予执行权。
 8. **当前能力与验收**：契约与真实后端消费者已接线；正式前端F1、故障/双端/外部服务行为B10。无业务消费者的预留事件移除，不增加旧字段兼容解码。
 
 B7 通知响应的顶层与内层配置采用同一响应字节预算，保持逐字段限制；NotificationDeliveryOutcome 从唯一 NotificationDeliveryStatus 收窄，供 Model/Service/Storage/Adapter 共用，不能各层重复声明取值。存储密文 JSON 的容量是 Adapter 私有技术限制，不添加 Shared 存储对象。

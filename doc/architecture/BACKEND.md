@@ -389,7 +389,7 @@ Dashboard的ResourceStatusService与SystemStatusService不设全局4请求准入
 
 真实 SQL 仅在 Adapter：Agent scope/runs 和 Targets Host Key DDL 归各子功能 `adapters/sqlite`，模块迁移通过初始化接口调用。Bootstrap 只保留一个 v1 applicationMigration，直接安装当前完整表结构，版本 marker 与 DDL 同事务提交。首次发布前持续维护该初始结构，不为开发批次追加版本；既有开发版数据库不兼容，新空库验证留 B10。
 
-Platform 的 SQL Executor 契约在 `storage/sqlite/sql-types.ts`；版本表 Adapter、事务控制 Adapter 和 Worker 在 adapters。Runtime 持有队列、隔离和失败语义：回调失败回滚，rollback_failed/commit_unknown 保留因果并使实例不可用；未知提交不自动重试。Worker 严格验证完整消息，损坏/不可关联结果使待完成调用全部拒绝。
+Platform 的 SQL Executor 契约在 `storage/sqlite/sql-types.ts`；版本表 Adapter、事务控制 Adapter 和 Worker 在 adapters。Runtime 持有队列、隔离和失败语义：回调失败回滚，rollback_failed/commit_unknown 保留因果并使实例不可用；未知提交不自动重试。Worker 严格验证完整消息，损坏/不可关联结果使待完成调用全部拒绝。只读 diagnostics 消息只采样自身 isolate 的内存并白名单回传，不执行 SQL、不插入 Runtime 事务队列；Runtime 合并相同采样，关闭停止新采样，已派发消息先于 close 按 Worker 消息顺序收敛。队列计数在准入时增加，实际任务 finally 时归还。
 
 业务多表写入和引用/CAS/幂等校验归存储 Adapter 的真实事务。需要当前状态的业务规则采用明确同步回调：Adapter 在事务内读存储事实 → Model 白名单转换为应用事实 → 纯规则判断 → Model 转回存储结果 → Adapter 写入/提交；回调不执行网络、异步任务或开启嵌套事务。Adapter 只依赖 storage 中的回调契约，不导入应用类型、规则实现或业务策略配置；禁止先在 Service 读旧状态、判断后另开事务写入。
 
@@ -1047,14 +1047,14 @@ Platform logging/pino-logger唯一实现原Logger契约，registerOperations安�
 
 ### System 宿主诊断
 
-1. **职责与范围**：diagnostics 提供当前进程运行时/内存和数据库版本；status 拥有本机资源采样及 HTTP owner 健康响应。不返回环境、路径、表内容、凭据或远端机器详情。
-2. **子功能与目录**：diagnostics/service 管准入/管理员复查/关闭，model 管转换，storage 和 adapters/sqlite 读取 schema 事实；platform/system 只采集进程技术事实。
-3. **依赖方向**：管理员 HTTP → DiagnosticService → DiagnosticModel；Agent ToolService → ToolModel.hostDiagnostics → System public.collect → DiagnosticService；ToolModel 白名单转为本模块工具结果并映射 SystemOperationError。没有 System → Agent 依赖，也不借 Agent 私有诊断类型；System 公共出口只抛 public-errors.ts 的安全 SystemOperationError。
-4. **类型与转换**：Shared system/diagnostics 定义双端对象、响应/错误与16KiB预算；system/status 定义健康响应及严格 codec。内部 HostDiagnostic、SystemHealth 和存储事实分别独立，Model、System public 和 HTTP 各持有自身白名单。纯应用健康判断由 Service 完成，不创建空 Model。
-5. **入口与安装**：GET /api/v1/status 不要求用户会话，返回 {status:"ok",service:"nexus-backend"}；仍经 Bootstrap 全局来源/IP 准入及 Operations 观察，不代表数据库或外部依赖健康。GET /api/v1/system/diagnostics 要求管理员，Bootstrap 将窄诊断能力安装给 Agent。host_diagnostics_read 无参数，使用受信声明 nexus.terminal@1.8.0 的 host.inspect；声明不自动授予 grant。
-6. **数据、事务与并发**：SQLite Adapter 经 schema adapter 读取真实迁移版本；诊断最多4个在途调用。进程和数据库采集不保证同一物理时刻，时间为 Unix 毫秒、uptime 为整秒。
-7. **生命周期与失败**：Service 拒绝关闭后的新任务、追踪实际采集/身份复查，System 并发关闭共享同一 Promise，排空 status 和 diagnostics，数据库最后关闭；关闭排空时仍在途的采集故障由 allSettled 汇总，正常认证/准入拒绝不升级为采集故障。采集技术失败由 Model 转成 SystemCollectionFailure，cause 仅留内部；数据库探测失败仍作为 available=false 的诊断事实返回。跨子功能共用 SystemStatusFailure 只在 system-failure.ts 定义，status-types 只持有状态对象。HTTP 输出安全错误，技术正文不外泄。
-8. **当前能力与验收**：HTTP 与真实 Agent 工具已有源码，正式前端 F1、所有行为 B10。
+1. **职责与范围**：diagnostics 提供进程运行时、RSS、主线程堆/外部内存/ArrayBuffer、进程累计 CPU、主线程 GC、主库 Worker 内存、模块资源和数据库版本；status 拥有本机资源与健康响应。不返回环境、路径、表内容、凭据或远端机器详情。模块资源不等同模块全部内存，不合计或计算“RSS 剩余占用”。
+2. **子功能与目录**：diagnostics/service 管管理员复查、成功快照一秒缓存/在途合并及关闭，model 管转换，storage 和 adapters/sqlite 读 schema；platform/system 的 NodeProcessDiagnostic 持私有 prom-client（官方后继包 `@prometheus-io/client`） Registry、Gauge/Histogram、GC PerformanceObserver 和 ResourceCollector。真实 owner 只提供自身计数/逻辑字节事实；主库 Worker 通过 SQLite 技术协议采集自身 isolate 内存，不序列化业务对象估算内存。
+3. **依赖方向**：管理员 HTTP → DiagnosticService → DiagnosticModel → Platform/Storage；Agent ToolModel → System public.collect，保持 host.inspect 授权。Bootstrap 经 register 装配 Remote/Agent collector；System 不引用其它模块的私有 Service，vendor 实例不穿透技术边界。各模块 HTTP 观察包装由 Bootstrap 安装，不改变原授权/审计。
+4. **类型与转换**：Shared system/diagnostics 唯一拥有双端对象、有限模块/资源/单位/状态、错误与16KiB预算。内部 HostDiagnostic、WorkspaceResourceUsage 和存储事实各自独立，技术 ResourceCollector 留 Platform。Model、System public、HTTP、Agent ToolModel、前端 mapper 各持白名单转换；codec 校验八个分组、唯一名称、非负值与单位关联，未接入/失败组为空，不补零。
+5. **入口与安装**：GET /api/v1/status 为不要求会话的进程健康响应，仍经全局来源/IP 准入，不证明数据库健康。GET /api/v1/system/diagnostics 要求管理员，Agent 窄能力仍需 host.inspect grant。没有公共 /metrics、调试端口或依赖外部 Prometheus 服务。registerSystem 注册 Storage/System source，Bootstrap 注册 Remote/Agent source 并包装七个模块 HTTP。
+6. **数据、事务与并发**：不持久化指标；SQLite Adapter 读真实 schema。并发调用合并同一采集，成功结果最多复用一秒，不再使用四个调用拒绝上限；管理员准入和交付前复查仍逐次独立。各指标非原子快照，时间为毫秒/uptime 整秒。RSS/CPU 为进程级；process 的 heap/external/ArrayBuffer/GC 仅主线程，ArrayBuffer 已包含于对应 external。GC 自本诊断 owner 创建累计。Storage 另外报告主库 Worker 独立 heapUsed/heapTotal/external/ArrayBuffer，不计临时恢复预检 Worker 或 SQLite 原生页缓存；pending_requests 是采样请求派发前的未结算消息数，pending_operations 是 Runtime 已接纳且尚未完成的排队及执行项（事务整体一项，不重复累计内部 SQL）。只读 diagnostics 技术消息由 Runtime 合并、严格解码，不经过事务队列、不执行 SQL；仍等待 Worker 当前同步工作返回，避免维护排空依赖诊断形成队列等待环，不冒充无延迟采集。
+7. **生命周期与失败**：Service 拒绝关闭后任务、追踪真实采集/复查；System 排空 status/diagnostics 后断开 GC observer，清空私有 Registry 与 collector 引用，在线恢复执行相同退订，数据库最后关闭。重复关闭共享 Promise，排空故障汇总。技术异常在 Model 映射 SystemCollectionFailure；数据库失败为 available=false，单组 collector 失败为 unavailable，其它组继续，未注册为 not_instrumented。HTTP 包装保留全部路由预算和路径元数据，finally 归还请求计数，不改变业务准入。无强制 GC、堆快照或常驻堆采样。
+8. **当前能力与验收**：七个业务模块均有在途 HTTP；Remote 提供普通工作区、挂起/断开、输出/输入/日志队列/恢复逻辑字节、传输和状态订阅；Agent 提供执行/写入/请求，Storage 提供 SQLite 消息、排队/执行操作和主库 Worker 内存，System 提供诊断在途。Collector 支持同步或异步、逐组隔离失败，关闭后晚结果不得重新写入 Registry；实际采集仍归原请求与 Runtime 追踪直至收敛，不设置丢弃真实任务的伪超时。缓冲类别可能共享底层数据，未计量全部对象/解析器/原生句柄及其它缓存，只有计数的组明确标注内存未计量。正式数据页复用原诊断分区，折叠展示明细；静态及待远程证据归 testing，编译不等同行为验收。
 
 B7 资源收尾：Artifact 的 HTTP 下载、模型读取和上传均绑定 lease，关闭共享同一 Promise 并等待已接纳 lease 与删除/清理任务（含后续元数据和事件）收敛；清理失败保留删除保护与有界故障证据，不因任务返回而释放保护。Preferences 各子功能在 preferences-lifecycle.ts 复用窄停机结果分类：普通业务拒绝不升级为停机故障，存储不可用/未知提交/内部故障仍汇总返回。
 

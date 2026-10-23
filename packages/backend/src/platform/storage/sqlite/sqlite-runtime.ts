@@ -13,6 +13,7 @@ import {
 	type SqlRunResult,
 	type WorkerOperation,
 	type WorkerResults,
+	type SqliteWorkerMemory,
 } from './worker-types.js';
 
 interface PendingCall {
@@ -33,6 +34,9 @@ export class SqliteRuntime implements SqlExecutor {
 	private readonly worker: Worker;
 	private readonly pending = new Map<number, PendingCall>();
 	private nextId = 0;
+	private pendingOperations = 0;
+	private diagnosticReading: Promise<SqliteWorkerMemory> | null = null;
+
 	private tail: Promise<unknown> = Promise.resolve();
 	private closePromise: Promise<void> | null = null;
 	private unavailable: SqliteFailure | null = null;
@@ -86,6 +90,38 @@ export class SqliteRuntime implements SqlExecutor {
 		} else {
 			pending.resolve(message.value);
 		}
+	}
+
+	getPendingRequestCount(): number {
+		return this.pending.size;
+	}
+
+	getPendingOperationCount(): number {
+		return this.pendingOperations;
+	}
+
+	getWorkerMemory(): Promise<SqliteWorkerMemory> {
+		if (this.closePromise) {
+			return Promise.reject(new SqliteFailure('closed'));
+		}
+		if (this.diagnosticReading) {
+			return this.diagnosticReading;
+		}
+		const reading = this.call('diagnostics');
+		this.diagnosticReading = reading;
+		void reading.then(
+			() => {
+				if (this.diagnosticReading === reading) {
+					this.diagnosticReading = null;
+				}
+			},
+			() => {
+				if (this.diagnosticReading === reading) {
+					this.diagnosticReading = null;
+				}
+			},
+		);
+		return reading;
 	}
 
 	static open(path: string): SqliteRuntime {
@@ -154,7 +190,11 @@ export class SqliteRuntime implements SqlExecutor {
 			});
 			try {
 				const request =
-					kind === 'close' ? { id, kind } : kind === 'exec' ? { id, kind, sql } : { id, kind, sql, params };
+					kind === 'close' || kind === 'diagnostics'
+						? { id, kind }
+						: kind === 'exec'
+							? { id, kind, sql }
+							: { id, kind, sql, params };
 				this.worker.postMessage(request);
 			} catch (error) {
 				this.pending.delete(id);
@@ -177,7 +217,10 @@ export class SqliteRuntime implements SqlExecutor {
 		if (this.unavailable) {
 			return Promise.reject(this.unavailable);
 		}
-		const result = this.tail.then(work);
+		this.pendingOperations++;
+		const result = this.tail.then(work).finally(() => {
+			this.pendingOperations--;
+		});
 		this.tail = result.catch(() => undefined);
 		return result;
 	}

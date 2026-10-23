@@ -230,6 +230,8 @@ export async function registerModules({
 		);
 		agent.installTransactionIdentityReader(access.readTransactionIdentity);
 		owners.push(agent);
+		system.registerResourceCollector(remote.resourceCollector);
+		system.registerResourceCollector(agent.resourceCollector);
 
 		const admitHttp = (routes: HttpRoute[]): HttpRoute[] =>
 			routes.map((route) => ({
@@ -319,13 +321,13 @@ export async function registerModules({
 				admitHttp([
 					...operations.observe(
 						[
-							...access.routes(secureCookies),
-							...targets.routes(access.publicApi),
-							...remote.httpRoutes(),
-							...agent.routes(access.publicApi),
-							...system.httpRoutes(),
-							...preferences.routes(access.publicApi),
-							...operations.routes(access.publicApi),
+							...system.observeDiagnosticRoutes('access', access.routes(secureCookies)),
+							...system.observeDiagnosticRoutes('targets', targets.routes(access.publicApi)),
+							...system.observeDiagnosticRoutes('remote', remote.httpRoutes()),
+							...system.observeDiagnosticRoutes('agent', agent.routes(access.publicApi)),
+							...system.observeDiagnosticRoutes('system', system.httpRoutes()),
+							...system.observeDiagnosticRoutes('preferences', preferences.routes(access.publicApi)),
+							...system.observeDiagnosticRoutes('operations', operations.routes(access.publicApi)),
 						],
 						access.publicApi,
 					),

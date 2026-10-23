@@ -20,6 +20,8 @@ import { BackupService } from './backups/service/backup-service.js';
 import { createBackupRoutes } from './interfaces/http/backup-http.js';
 import type { SecretBox } from '../../platform/security/secret-box.js';
 import type { IncomingMessage } from 'node:http';
+import type { ResourceCollector } from '../../platform/system/resource-diagnostic.js';
+import type { DiagnosticModuleId } from '@nexus-terminal/shared/system/diagnostics/values';
 
 export interface BackupMaintenance {
 	/** false means state/resource outcome is unknown: keep admission stopped. */
@@ -27,6 +29,8 @@ export interface BackupMaintenance {
 }
 
 interface SystemRegistration {
+	registerResourceCollector(collector: ResourceCollector): void;
+	observeDiagnosticRoutes(id: DiagnosticModuleId, routes: readonly HttpRoute[]): HttpRoute[];
 	diagnostics: HostDiagnostics;
 	httpRoutes(): HttpRoute[];
 	quiesce(): void;
@@ -47,12 +51,39 @@ export function registerSystem(
 		new BackupModel(collector, new SealedBytes(BACKUP_MAX_SNAPSHOT_BYTES, secrets)),
 	);
 	const service = new SystemStatusService(access, new SystemStatusModel(new NodeLocalSystemStatusAdapter()));
+	const processDiagnostics = new NodeProcessDiagnostic();
 	const diagnostic = new DiagnosticService(
-		new DiagnosticModel(new NodeProcessDiagnostic(), new SqliteDiagnosticStorage(sqlite)),
+		new DiagnosticModel(processDiagnostics, new SqliteDiagnosticStorage(sqlite)),
 		access,
 	);
+	processDiagnostics.register({
+		id: 'storage',
+
+		collect: async () => {
+			const pendingRequests = sqlite.getPendingRequestCount();
+			const pendingOperations = sqlite.getPendingOperationCount();
+			const memory = await sqlite.getWorkerMemory();
+			return [
+				{ name: 'pending_requests', unit: 'count', value: pendingRequests },
+				{ name: 'pending_operations', unit: 'count', value: pendingOperations },
+				{ name: 'worker_heap_used_bytes', unit: 'bytes', value: memory.heapUsedBytes },
+				{ name: 'worker_heap_total_bytes', unit: 'bytes', value: memory.heapTotalBytes },
+				{ name: 'worker_external_bytes', unit: 'bytes', value: memory.externalBytes },
+				{ name: 'worker_array_buffer_bytes', unit: 'bytes', value: memory.arrayBufferBytes },
+			];
+		},
+	});
+	processDiagnostics.register({
+		id: 'system',
+
+		collect: () => [{ name: 'pending_requests', unit: 'count', value: diagnostic.getPendingRequestCount() }],
+	});
 	let closePromise: Promise<void> | null = null;
 	return {
+		registerResourceCollector: (collector) => processDiagnostics.register(collector),
+
+		observeDiagnosticRoutes: (id, routes) => processDiagnostics.observeHttpRoutes(id, routes),
+
 		diagnostics: {
 			collect: async () => {
 				let value;
@@ -68,7 +99,23 @@ export function registerSystem(
 						residentBytes: value.process.residentBytes,
 						heapUsedBytes: value.process.heapUsedBytes,
 						runtimeVersion: value.process.runtimeVersion,
+						heapTotalBytes: value.process.heapTotalBytes,
+						externalBytes: value.process.externalBytes,
+						arrayBufferBytes: value.process.arrayBufferBytes,
+						cpuUserSeconds: value.process.cpuUserSeconds,
+						cpuSystemSeconds: value.process.cpuSystemSeconds,
+						gcCount: value.process.gcCount,
+						gcDurationSeconds: value.process.gcDurationSeconds,
 					},
+					modules: value.modules.map((module) => ({
+						id: module.id,
+						status: module.status,
+						metrics: module.metrics.map((metric) => ({
+							name: metric.name,
+							unit: metric.unit,
+							value: metric.value,
+						})),
+					})),
 					database: { available: value.database.available, schemaVersion: value.database.schemaVersion },
 				};
 			},
@@ -93,6 +140,7 @@ export function registerSystem(
 			service.quiesce();
 			diagnostic.quiesce();
 			const outcomes = await Promise.allSettled([service.close(), diagnostic.close()]);
+			processDiagnostics.close();
 			const failures = outcomes.flatMap((outcome) => (outcome.status === 'rejected' ? [outcome.reason] : []));
 			if (failures.length) {
 				throw new AggregateError(failures, 'System maintenance drain failed');
@@ -111,6 +159,7 @@ export function registerSystem(
 					const results = await Promise.allSettled(
 						[service, diagnostic, backups].map((owner) => Promise.resolve().then(() => owner.close())),
 					);
+					processDiagnostics.close();
 					const failures = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
 					if (failures.length) {
 						throw new AggregateError(failures, 'System owners failed to close');

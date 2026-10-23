@@ -19,7 +19,7 @@ function serializeError(error: unknown): WorkerSqliteError {
 	};
 }
 
-function executeQuery(db: DatabaseSync, request: Exclude<WorkerRequest, { kind: 'close' }>): unknown {
+function executeQuery(db: DatabaseSync, request: Exclude<WorkerRequest, { kind: 'close' | 'diagnostics' }>): unknown {
 	if (request.kind === 'exec') {
 		db.exec(request.sql);
 		return null;
@@ -46,6 +46,19 @@ function executeQuery(db: DatabaseSync, request: Exclude<WorkerRequest, { kind: 
 
 function handleRequest(port: MessagePort, db: DatabaseSync, request: WorkerRequest): void {
 	try {
+		if (request.kind === 'diagnostics') {
+			const memory = process.memoryUsage();
+			port.postMessage({
+				id: request.id,
+				value: {
+					heapUsedBytes: memory.heapUsed,
+					heapTotalBytes: memory.heapTotal,
+					externalBytes: memory.external,
+					arrayBufferBytes: memory.arrayBuffers,
+				},
+			});
+			return;
+		}
 		if (request.kind === 'close') {
 			db.close();
 			port.postMessage({ id: request.id, value: null });

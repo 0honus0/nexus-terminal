@@ -10,7 +10,7 @@ export class DiagnosticModel {
 	) {}
 
 	async collect(): Promise<HostDiagnostic> {
-		const value = this.collectProcess();
+		const value = await this.collectProcess();
 		let schemaVersion: number | null = null;
 		try {
 			schemaVersion = await this.storage.schemaVersion();
@@ -24,14 +24,30 @@ export class DiagnosticModel {
 				residentBytes: value.residentBytes,
 				heapUsedBytes: value.heapUsedBytes,
 				runtimeVersion: value.runtimeVersion,
+				heapTotalBytes: value.heapTotalBytes,
+				externalBytes: value.externalBytes,
+				arrayBufferBytes: value.arrayBufferBytes,
+				cpuUserSeconds: value.cpuUserSeconds,
+				cpuSystemSeconds: value.cpuSystemSeconds,
+				gcCount: value.gcCount,
+				gcDurationSeconds: value.gcDurationSeconds,
 			},
+			modules: value.modules.map((module) => ({
+				id: module.id,
+				status: module.status,
+				metrics: module.metrics.map((metric) => ({
+					name: metric.name,
+					unit: metric.unit,
+					value: metric.value,
+				})),
+			})),
 			database: { available: schemaVersion !== null, schemaVersion },
 		};
 	}
 
-	private collectProcess(): ReturnType<ProcessDiagnosticSource['collect']> {
+	private async collectProcess(): ReturnType<ProcessDiagnosticSource['collect']> {
 		try {
-			return this.process.collect();
+			return await this.process.collect();
 		} catch (cause) {
 			throw new SystemCollectionFailure({ cause });
 		}

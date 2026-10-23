@@ -1,5 +1,19 @@
 # Nexus Terminal E2E
 
+## 通用模块资源诊断（2026-10-23）
+
+接入 prom-client 的官方后继包 `@prometheus-io/client@0.16.1`（原 npm 包已标记迁移），仅在 Platform Adapter 内使用私有 Registry、Gauge 与 Histogram。主线程 GC 由可显式断开的 PerformanceObserver 记录，不直接安装缺少本地 owner 退订入口的默认采集器，不添加公共抓取/调试端口、强制 GC、堆快照或常驻堆采样。七个业务模块统一观察在途 HTTP；Remote 额外采集普通工作区、挂起/断开、四类逻辑缓冲字节、传输及状态订阅，Agent 采集执行/写入/请求，Storage 采集已派发 SQLite 请求、已接纳的排队及执行操作和主库 Worker 的独立堆/外部内存/ArrayBuffer，System 采集诊断请求。只计数的模块明确未计量内存，不以零冒充缺测，不合计可能共享底层数据的字节或从 RSS 反推占用。
+
+源码复审覆盖 route 预算/路径元数据保留、finally 计数收尾、单组失败隔离、重复/非法指标拒绝、私有标签有限基数、并发采集合并及一秒成功缓存、逐次管理员准入/交付前复查、停机和在线恢复清空 collector/Registry 及 GC 退订。Shared 严格校验完整八组、唯一 ID/指标、单位与名称关联、非负有限数字、堆用量不超过堆容量、失败/未接入空指标；Model、HTTP、公有出口、Agent 工具及前端 mapper 均同步。正式数据页在现有宿主诊断内折叠展示明细，三语明确主线程/进程与 Worker、external/ArrayBuffer 的口径。既有 system-management 集成场景同步真实 API 数值、八组身份、Remote 字节指标及正式页面明细断言，未新增或执行本地行为场景。
+
+最终根 `pnpm run check` 与双端 `pnpm run build` 通过，日志 `/tmp/nexus-module-diagnostics-{check,build}-final.log`；新包 Backend check 另见 `/tmp/nexus-module-diagnostics-types-final.log`。构建保留既有大 chunk 警告。全量格式仅报告并行修改的 `BackupSettingsPanel.vue`，未修改该文件，日志 `/tmp/nexus-module-diagnostics-format-final.log`。按 D17 未运行行为、浏览器或 E2E，不据静态结果宣称实际内存归因或开销已验收。
+
+待远程核对：管理员/匿名/过期身份、多个调用不再触发四个请求上限、只缓存成功读取、模块单独失败与其它组可读、HTTP 成功/拒绝/抛错后计数回落、缓冲增长及取消/挂起/恢复后收敛、传输和 Agent 生命周期、无会话重复计数、Worker 口径及堆用量不超过容量、事务整体计数及 finally 回落、Worker 忙碌/故障/维护关闭时诊断无队列等待环或晚结果污染 Registry、重复刷新无重复指标及在线恢复/关闭无 GC observer 累积、手机布局和异常 Toast。前后端诊断契约同时升级，需要重启 Backend 才能读取新字段；本轮按用户授权仅提交诊断相关变更，不自行重启、推送或部署。
+
+本轮 Worker 内存续补：严格 Worker 请求/结果白名单、非负安全整数字节和 heapUsed ≤ heapTotal；采样绕过 Runtime 事务队列但不绕过 Worker 消息顺序，同一采样共享 Promise，关闭拒绝新采样。队列计数从接纳直到执行 finally，事务整体计一项。异步 Collector 并行采集、单组拒绝隔离、关闭后晚结果不能重写 Registry 或交付快照。既有集成断言同步四项 Worker 字节、操作计数和堆容量关系，仅做语法检查，未执行行为。固定八组全部十九项取 MAX_SAFE_INTEGER、运行时字段按转义最坏值估算，完整 JSON 为 12,053 bytes，小于 16 KiB，不增加协议预算或标签基数。
+
+续补静态：根 check、双端 build 通过，日志 /tmp/nexus-memory-continuation-{check,build}.log；目标 Prettier、既有脚本语法和 diff 检查通过。完整格式仍仅报告并行 BackupSettingsPanel.vue，日志 /tmp/nexus-memory-continuation-format.log；不修改该文件。实际 Worker 忙碌、故障、关闭/维护及缓冲变化仍待远程，不将本轮静态结果当行为通过。
+
 ## 挂起恢复连接指示（2026-10-23）
 
 源码确认 `WorkspaceTabBar` 原先优先将挂起标记映射为蓝色，覆盖了恢复成功的 connected 状态。现仅按实际连接状态显示颜色，不修改挂起标记、续租、恢复或关闭行为。既有手机挂起/恢复场景补充标记后及恢复后的 connected 与绿色指示断言，原有保留会话和关闭后再次挂起的断言保持。

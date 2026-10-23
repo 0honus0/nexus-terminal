@@ -136,6 +136,7 @@ import type {
 } from './runs/model/run-types.js';
 import type { AgentStateApi, AgentCreateRunResult, AgentCancelRunResult, AgentCancelRunInput } from './public.js';
 import { AgentRequestOwner } from './service/agent-request-owner.js';
+import type { ResourceCollector } from '../../platform/system/resource-diagnostic.js';
 import { agentBoundary } from './agent-errors.js';
 import type { AccessPublicApi } from '../access/public.js';
 import type { HttpRoute } from '../../platform/http/http-types.js';
@@ -291,6 +292,7 @@ function toStepEventPage(runId: string, value: RunStepEventPage): AgentRunStepEv
 }
 
 export interface AgentRegistration {
+	resourceCollector: ResourceCollector;
 	publicApi: AgentStateApi;
 	installTransactionIdentityReader(read: (tx: SqlExecutor, digest: string) => Promise<number | null>): void;
 	initialize(mode: 'startup' | 'restore'): Promise<void>;
@@ -681,6 +683,15 @@ export function registerAgent(
 	};
 	return {
 		publicApi,
+		resourceCollector: {
+			id: 'agent',
+
+			collect: () => [
+				{ name: 'active_runs', unit: 'count', value: execution.getActiveRunCount() },
+				{ name: 'pending_run_writes', unit: 'count', value: execution.getPendingWriteCount() },
+				{ name: 'pending_requests', unit: 'count', value: requests.getPendingRequestCount() },
+			],
+		},
 
 		installTransactionIdentityReader: (read) => {
 			threadStorage.installTransactionIdentityReader(read);
