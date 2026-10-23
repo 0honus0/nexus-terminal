@@ -351,6 +351,13 @@ test('mobile RDP opens keyboard explicitly and persists touch mode without recon
 		await page.goto('/login');
 		await openConnection();
 		await expect.poll(() => sessionCreateRequests).toBe(1);
+		await expect
+			.poll(() =>
+				page
+					.locator('.remote-display-container canvas')
+					.evaluate((canvas: HTMLCanvasElement) => canvas.width % 4),
+			)
+			.toBe(0);
 
 		const directMode = page.getByRole('button', { name: 'Direct', exact: true });
 		const touchpadMode = page.getByRole('button', { name: 'Touchpad', exact: true });

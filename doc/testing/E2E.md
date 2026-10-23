@@ -6,7 +6,7 @@
 
 后继测试修复：文件扫描计数前取消浮窗初始目录悬停，并在每次回根前移动指针；不放宽 3/3 次扫描断言。上传百分比定位直接子 span，避免同时匹配填充条；分组头空白点击留出真实 splitter 热区；快捷命令宽度夹具取消 flex 后补回 100% 高度，避免尺寸容器归零及 finally 掩盖原错误；移动挂起使用真实 searchbox 代替旧 fa-search。保留原筛选、持久化、取消、百分比、恢复同一 shell 及内容断言，未改产品 UI。两轮源码复审覆盖实际组件及夹具生命周期。
 
-历史翻页仍停在尾部：此前的刷新等待不足以证明解决，增加安全失败日志和请求/响应计数及首行诊断后继续远程追查；不删除最早内容断言。状态极矮面板缩放裁切属于真实 UI 缺陷，已按 H-13.1 单独请求局部修正确认，答复前不改尺寸或放宽断言。当前未发布，亦未删除失败 Actions；按用户要求在完整收口并成功发布后清理。
+历史翻页仍停在尾部：此前的刷新等待不足以证明解决，增加安全失败日志和请求/响应计数及首行诊断后继续远程追查；不删除最早内容断言。状态极矮面板后继复核：160% 下约 1.5 屏幕像素偏差，原 1 CSS 像素容差应同样变换为 1.6 屏幕像素；原测试混用了单位。调整测试按 scale 换算，保持 CSS 像素容差和所有功能断言；不修改产品 UI，因此无需此前单独请求的局部尺寸授权。当前未发布，亦未删除失败 Actions；按用户要求在完整收口并成功发布后清理。
 
 本后继批次两轮源码复审完成，根 check、双端 build、修改测试静态类型、全量格式和 diff 通过，日志 `/tmp/nexus-e2e-followup-{check,build,types,format}.log`。按 D17 未运行本地行为、浏览器、E2E 或收集；当前改动仍待新 SHA 远程。
 
@@ -1887,3 +1887,9 @@ RDP Adapter 将文本从逐字符 SDK 调用改为最多 32 个完整字符一�
 使用 `https://api.honus.top` 与真实登录会话核对。`390×844`、`320×700` 与 `280×700` 下 Agent App 操作区均为 `3` 列；`390px` 时三枚按钮宽度约 `125.72/93.14/93.14px`，`320px` 时约 `97.52/72.23/72.25px`、`top` 完全一致，容器 `scrollWidth=clientWidth`；`280px` 时约 `81.39/60.30/60.31px`。安全策略盾牌在 `360–639px` 显示、`359px` 以下隐藏，手机三档文字仍完整。外观设置首个无正文卡片高度由 `90px` 降至 `58px`，空 body 不再渲染；自定义外观在 `768/1024/1440px` 使用 `136px` 侧栏、每项 `115×52px`；手机收起时只显示当前分类选择器，`390/320px` 宽 `358/288px`、高 `46px`，展开面板与触发器同宽，四项均为 `46px` 单列行，选择后菜单关闭且面板标题同步切换；所有宽度均无横向溢出或页面错误。图标与文字作为整体在控件内水平居中；选中项左侧 `2px` 高亮线为绝对定位，不再挤压内容。
 
 通知页创建临时 Webhook 渠道后，通过卡片按钮完成启用和停用，两次 PUT 均成功并收到成功 Toast；`390/320px` 下启用/编辑/删除三按钮同排且无横向溢出，随后通过确认弹窗删除临时渠道，剩余匹配项为 `0`。快捷按钮按点击后的动作着色：启用动作为绿色开启图标，停用动作为红色关闭图标，图标、按钮文字、底色和边框均使用对应语义色；启用态实测按钮文字与图标为 `rgb(220, 53, 69)`，停用态为 `rgb(40, 167, 69)`。文件管理器进入 `/etc` 后，名称文字中心相对图标中心上移约 `2.97px`，行高与虚拟列表未变化。`workspace/system/appearance/security/ipControl/data/agent/about` 八个设置标签以及外观弹窗正文在手机端均无可见滚动条，内容仍可滑动。添加 Provider 弹窗在 `390×844` 与 `320×700` 下正文 `padding-inline=0px`、`scrollbar-gutter=auto`、可见滚动条宽度 `0`，`scrollHeight` 大于可视高度且仍可滚动，正文 `scrollWidth=clientWidth`。证据：`.tmp/settings-round2-customizer-320.png`、`.tmp/settings-round2-customizer-390.png`、`.tmp/settings-round2-customizer-1440.png`、`.tmp/settings-round2-app-actions-320.png`、`.tmp/settings-round2-app-actions-390.png`、`.tmp/notifications-toggle-320.png`、`.tmp/notifications-toggle-390.png`、`.tmp/notifications-toggle-color-390.png`、`.tmp/notifications-toggle-color-red-390.png`、`.tmp/notifications-toggle-red-enabled-390.png`、`.tmp/fm-align-round2-1440.png`、`.tmp/security-shield-mobile-390.png`、`.tmp/security-shield-mobile-320.png`、`.tmp/security-shield-mobile-280.png`、`.tmp/provider-mobile-final-390.png`、`.tmp/provider-mobile-final-320.png`、`.tmp/appearance-nav-grid-1440.png`、`.tmp/appearance-mobile-switcher-320.png`、`.tmp/appearance-mobile-switcher-390.png`、`.tmp/appearance-mobile-switcher-open-320.png`、`.tmp/appearance-mobile-switcher-open-390.png`、`.tmp/appearance-mobile-switcher-desktop-1440.png`。目标 ESLint、Prettier、Frontend build、根 `pnpm run check`、全量格式与 `git diff --check` 通过；未运行整套远程 E2E。
+
+## 远程 40015533260 后继批次（2026-10-23）
+
+`29b2436b` 完整远程 461 场景，459 通过、2 失败，七个 shard 和质量/Docker smoke 通过。状态面板 160% 缩放的约 1.5 屏幕像素偏差仍小于一 CSS 像素，测试按 scale 换算原容差。挂起历史只有一次请求/响应、视口持续在尾部，追加 request/received/drain/page/anchor 安全阶段日志，仍待真实根因定位。
+
+移动 RDP 第一次 WASM 在 image.rs:591 数组越界（634×378 framebuffer），重试通过。Adapter 对齐初始和动态宽度，新增真实已渲染 canvas 的四像素对齐断言，保留键盘远端文本、触控及全屏断言。对应上游未发布修复为 IronRDP `80bb81b344dba0197aa7b870c685f398dc4bcaee`。两轮源码复审核对 SDK 边界、窗口尺寸不变、日志不含终端内容及原业务断言；根 check、双端 build、全量 format、目标测试 tsc 与 diff 检查通过，日志为 /tmp/nexus-followup-{check,build,format,types}.log；远程待验，按 D17 未运行本地行为测试。

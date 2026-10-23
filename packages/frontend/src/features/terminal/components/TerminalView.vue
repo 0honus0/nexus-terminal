@@ -339,8 +339,10 @@
 			if (enteringHistory) {
 				// Divert new output while draining xterm's async write queue.
 				// Otherwise a late live write lands in the history buffer.
+				logger.debug({ phase: 'drain-start' }, 'Terminal history state');
 				historyEntryTask = outputWriter.drain();
 				await historyEntryTask;
+				logger.debug({ phase: 'drain-complete' }, 'Terminal history state');
 				if (!terminal || generation !== historyViewGeneration) return;
 				historyLiveSnapshot = `${serializeTerminalSnapshot(
 					terminal,
@@ -360,6 +362,7 @@
 			runtimeModes?.reset();
 			const [pageChunk, ...continuation] = historyWindowChunks;
 			if (pageChunk) await writeTerminal(pageChunk);
+			logger.debug({ phase: 'page-written', baseY: terminal?.buffer.active.baseY }, 'Terminal history state');
 			if (!terminal || generation !== historyViewGeneration) return;
 			const continuationStart = Math.max(0, terminal.buffer.active.baseY + terminal.buffer.active.cursorY);
 			for (const chunk of continuation) {
@@ -386,6 +389,10 @@
 			);
 			terminal.scrollToLine(anchoredViewportY);
 			historyLastViewportY = terminal.buffer.active.viewportY;
+			logger.debug(
+				{ phase: 'anchored', viewportY: historyLastViewportY, anchoredViewportY },
+				'Terminal history state',
+			);
 			syncSearchDecorations();
 		} finally {
 			if (generation === historyViewGeneration) {
@@ -490,7 +497,18 @@
 				16 * 1024,
 				Math.min(64 * 1024, (terminal?.cols ?? 80) * (terminal?.rows ?? 24) * 8),
 			);
+			logger.debug({ phase: 'request', pageBytes }, 'Terminal history state');
 			const page = await props.channel.loadPreviousOutput(pageBytes);
+			logger.debug(
+				{
+					phase: 'received',
+					bytes: page?.data.byteLength,
+					hasMore: page?.hasMore,
+					generation,
+					currentGeneration: historyViewGeneration,
+				},
+				'Terminal history state',
+			);
 			if (generation !== historyViewGeneration) return;
 			if (page?.data.byteLength) await rebuildHistoryWindow(page.data);
 		} catch (cause) {

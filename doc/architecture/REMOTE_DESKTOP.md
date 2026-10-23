@@ -90,3 +90,5 @@ RDP Adapter 的输入事务按完整字符计数，每批最多 32 字符（按�
 源码已替换双端传输并移除 guacd/RemoteApp，既有集成与 E2E 已迁移为真实 TigerVNC/xrdp、浏览器 SDK 和 X selection/xterm/鼠标证据，不用虚假 Guacamole 指令证明画面或输入。
 
 当前已完成静态检查与构建；PLAN D17 的一般本地测试限制保持，D19 授权的指定 HTTPS 站点真实 RDP 基础链路、常用键盘、composition 去重、双向纯文本剪贴板及拒绝授权、窗口/全屏切换，以及 Chromium 移动仿真输入和触控已验证。后续已补证分钟级持续输入、票据重放/过期拒绝不影响原连接、受控 WS 关闭/新票据重连、两次建连中取消及刷新后实际 TCP 释放；页面销毁后的 WS 事件观察缺口由独立 TCP 证据补充，不记录原脚本整体 PASS。该证据不覆盖 VNC、其它系统组合键、原生输入法/手机真机、小时级或空闲稳定性、16 路并发、强制晚成功/复杂故障及多平台。旧 Guacamole 的 B10/Windows PASS 只属于旧实现，不能作为新桥的验收。具体命令/结果归 [testing](../testing/E2E.md)，操作见 [USAGE](../USAGE.md#远程桌面)，实施状态见 [PLAN](../PLAN.md)。
+
+IronRDP npm 0.7.0 尚未包含上游 `80bb81b344dba0197aa7b870c685f398dc4bcaee` 的 bitmap source stride 修复；移动回归出现 634×378 framebuffer 数组越界并中断输入。RDP Adapter 将初始和动态 desktop width 向下对齐到四像素边界，保持容器与输入坐标基于真实 framebuffer；不修改窗口 UI。后续升级 SDK 需继续回归非对齐视口及动态缩放，不能仅凭版本更新移除此规避。

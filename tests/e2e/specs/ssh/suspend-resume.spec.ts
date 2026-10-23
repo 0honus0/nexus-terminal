@@ -1031,6 +1031,9 @@ test('resumed terminal pages older history through a bounded window and restores
 }) => {
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.frontendLogLevel = 'debug';
+	});
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(context.request);
@@ -1101,7 +1104,7 @@ test('resumed terminal pages older history through a bounded window and restores
 		let historyRequestCount = 0;
 		let historyResponseCount = 0;
 		page.on('console', (message) => {
-			if (message.text().includes('Terminal history page failed')) console.log(message.text());
+			if (message.text().includes('Terminal history')) console.log(message.text());
 		});
 		const historyRequestIds = new Set<string>();
 		let resumeStarted = 0;

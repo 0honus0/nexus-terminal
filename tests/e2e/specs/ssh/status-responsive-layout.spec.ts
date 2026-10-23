@@ -122,11 +122,13 @@ test('server status keeps values aligned and contained in narrow, short and zoom
 				expect(metric.card.right, diagnostic).toBeLessThanOrEqual(layout.pane.right + 1);
 				expect(metric.card.bottom, diagnostic).toBeLessThanOrEqual(layout.pane.bottom + 1);
 				expect(metric.parts.length, diagnostic).toBeGreaterThanOrEqual(3);
+				// Bounds are transformed screen pixels; preserve the same one-CSS-pixel tolerance at every scale.
+				const roundingTolerance = scale;
 				for (const bounds of metric.parts) {
-					expect(bounds.left, diagnostic).toBeGreaterThanOrEqual(metric.card.left - 1);
-					expect(bounds.right, diagnostic).toBeLessThanOrEqual(metric.card.right + 1);
-					expect(bounds.top, diagnostic).toBeGreaterThanOrEqual(metric.card.top - 1);
-					expect(bounds.bottom, diagnostic).toBeLessThanOrEqual(metric.card.bottom + 1);
+					expect(bounds.left, diagnostic).toBeGreaterThanOrEqual(metric.card.left - roundingTolerance);
+					expect(bounds.right, diagnostic).toBeLessThanOrEqual(metric.card.right + roundingTolerance);
+					expect(bounds.top, diagnostic).toBeGreaterThanOrEqual(metric.card.top - roundingTolerance);
+					expect(bounds.bottom, diagnostic).toBeLessThanOrEqual(metric.card.bottom + roundingTolerance);
 				}
 				expect(metric.readingOverflow, diagnostic).toBeLessThanOrEqual(1);
 			}
