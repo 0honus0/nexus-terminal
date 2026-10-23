@@ -63,7 +63,7 @@ test('command history UI searches, copies, re-runs, and deletes real terminal hi
 	});
 
 	await step('search filters unrelated history and copy writes the exact command to clipboard', async () => {
-		const search = historyView.locator('.command-history-search');
+		const search = historyView.locator('.command-history-search input');
 		await search.fill('HISTORY_MANAGED_A');
 		const rowA = historyView.locator('li[data-history-id]').filter({ hasText: 'HISTORY_MANAGED_A' }).first();
 		await expect(rowA).toBeVisible();

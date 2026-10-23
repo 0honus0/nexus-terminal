@@ -155,7 +155,7 @@ test('command input sync filters command history and executes the keyboard selec
 		await connectTestSshFromConnectionsPage(page, connectionId);
 		const commandInput = page.locator('input.command-bar-input:visible');
 		const historyView = page.locator('.command-history-root:visible').first();
-		const historySearch = historyView.locator('.command-history-search');
+		const historySearch = historyView.locator('.command-history-search input');
 		const historyRow = historyView.locator(`[data-history-id="${historyId}"]`);
 		const terminalRows = page.locator('.terminal-inner-container .xterm-rows');
 

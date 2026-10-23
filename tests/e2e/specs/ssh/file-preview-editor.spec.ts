@@ -90,9 +90,10 @@ const spreadsheetRows = (dialog: Locator): Locator => spreadsheetScroller(dialog
 const spreadsheetPageRange = (dialog: Locator): Locator => dialog.getByText(/^Rows \d+–\d+ of \d+$/).first();
 
 const previewSearchInput = (dialog: Locator): Locator =>
-	dialog.getByRole('searchbox', { name: 'Search document...', exact: true });
+	dialog.getByRole('searchbox', { name: 'Search in document', exact: true });
 
-const previewSearchControls = (dialog: Locator): Locator => previewSearchInput(dialog).locator('..');
+const previewSearchControls = (dialog: Locator): Locator =>
+	previewSearchInput(dialog).locator('xpath=ancestor::div[span[@aria-live="polite"]][1]');
 
 const previewSearchCount = (dialog: Locator, value: string): Locator =>
 	previewSearchControls(dialog).getByText(value, { exact: true });
@@ -123,7 +124,7 @@ async function openConnectionFromWorkspacePicker(page: Page, connectionId: numbe
 	const tabs = page.locator('.terminal-tab-shell').getByRole('tab');
 	const previousTabCount = await tabs.count();
 	await page.getByRole('button', { name: 'New Connection Tab', exact: true }).click();
-	const picker = page.getByRole('heading', { name: 'Connections & sessions', exact: true });
+	const picker = page.getByRole('heading', { name: 'New session', exact: true });
 	await expect(picker).toBeVisible();
 	const connection = page.locator(`.workspace-connection-list [data-connection-id="${connectionId}"]`);
 	await expect(connection).toBeVisible();
@@ -377,20 +378,22 @@ test('file previews and text editor protect historical file-opening regressions'
 		await captureFunctionalScreenshot(page, 'file-manager-editor.png', { viewport: { width: 1440, height: 900 } });
 	});
 
-	await step('desktop text editor exposes Monaco search from the editor toolbar', async () => {
+	await step('desktop text editor searches Monaco content through the shared editor toolbar', async () => {
 		const editor = editorView(page);
 		const searchButton = editor.getByRole('button', { name: 'Search in document', exact: true });
 		await expect(searchButton).toBeVisible();
 		await searchButton.click();
-		const findWidget = editor.locator('.monaco-editor .find-widget');
-		await expect(findWidget).toBeVisible();
-		const findInput = findWidget.getByRole('textbox').first();
+		const searchBar = editor.locator('.file-editor-search-bar');
+		await expect(searchBar).toBeVisible();
+		const findInput = searchBar.getByRole('searchbox', { name: 'Search in document', exact: true });
+		await expect(findInput).toBeFocused();
 		await findInput.fill('plain-no-extension');
 		await expect(findInput).toHaveValue('plain-no-extension');
+		await expect(searchBar.locator('.file-editor-search-count')).toHaveText('1/1');
+		await expect(editor.locator('.monaco-editor .file-editor-search-match')).toHaveText('plain-no-extension');
 		await page.keyboard.press('Escape');
-		// Monaco keeps the find widget mounted for reuse and marks the closed widget inaccessible
-		// instead of removing it from layout. Assert the component's authoritative closed state.
-		await expect(findWidget).toHaveAttribute('aria-hidden', 'true');
+		await expect(searchBar).toBeHidden();
+		await expect(editor.locator('.monaco-editor .file-editor-search-match')).toHaveCount(0);
 	});
 
 	await step('editor popup resize keeps Monaco visible and usable', async () => {
@@ -704,7 +707,7 @@ test('file previews and text editor protect historical file-opening regressions'
 		await dialog.getByRole('button', { name: 'Next match', exact: true }).click();
 		await expect(previewSearchCount(dialog, '2/2')).toHaveText('2/2');
 		await expect(pdfCurrentPage(dialog)).toHaveValue('3');
-		await dialog.getByTitle('Close search', { exact: true }).click();
+		await previewSearchControls(dialog).getByTitle('Close search', { exact: true }).last().click();
 		await expect(previewSearchInput(dialog)).toHaveCount(0);
 		await waitForScrollToSettle(scroller);
 
@@ -793,7 +796,7 @@ test('file previews and text editor protect historical file-opening regressions'
 		await expect(previewSearchCount(dialog, '1/1')).toHaveText('1/1');
 		await expect(worksheetTab(dialog, 'Second')).toHaveAttribute('aria-selected', 'true');
 		await expect(dialog.locator('td[data-search-active="true"]')).toHaveText('Second Sheet E2E');
-		await dialog.getByTitle('Close search', { exact: true }).click();
+		await previewSearchControls(dialog).getByTitle('Close search', { exact: true }).last().click();
 		await worksheetTab(dialog, 'E2E').click();
 		await expect(worksheetTab(dialog, 'E2E')).toHaveAttribute('aria-selected', 'true');
 

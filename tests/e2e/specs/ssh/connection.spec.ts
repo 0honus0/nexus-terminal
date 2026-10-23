@@ -194,7 +194,7 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
 				timeout: 10_000,
 			});
 
-			const initialLoading = page.locator('.file-manager-connection-state[role="status"]:visible');
+			const initialLoading = page.locator('.file-manager-connection-state:visible').getByRole('status');
 			await expect(initialLoading).toHaveCount(1);
 			await expect(page.locator('.file-manager-root table:visible')).toHaveCount(0);
 			await expect(page.getByText('Directory is empty', { exact: true })).toHaveCount(0);

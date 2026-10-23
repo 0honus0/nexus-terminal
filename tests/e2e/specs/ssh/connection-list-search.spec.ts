@@ -88,8 +88,7 @@ test('workspace connection search filters by name and host and restores the full
 	const secondaryId = await recreateSecondaryConnection(context.request);
 	await connectTestSshFromConnectionsPage(page, primaryId);
 
-	await page.getByTitle('Connections', { exact: true }).click();
-	const list = page.locator('.workspace-connection-list:visible');
+	const list = await openWorkspaceConnectionPicker(page);
 	const search = list.locator('input[data-focus-id="connectionListSearch"]');
 	const primaryRow = list.locator(`li[data-connection-id="${primaryId}"]`);
 	const secondaryRow = list.locator(`li[data-connection-id="${secondaryId}"]`);
@@ -184,8 +183,7 @@ test('workspace tag picker and group manager create, assign, remove, rename, and
 
 	await connectTestSshFromConnectionsPage(page, primaryId);
 	await page.setViewportSize({ width: 360, height: 800 });
-	await page.getByTitle('Connections', { exact: true }).click();
-	const list = page.locator('.workspace-connection-list:visible');
+	const list = await openWorkspaceConnectionPicker(page);
 	await expect(list).toBeVisible({ timeout: 20_000 });
 
 	let tagId = 0;

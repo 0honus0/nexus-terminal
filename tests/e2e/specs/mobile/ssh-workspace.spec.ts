@@ -82,8 +82,10 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
 			.poll(() => countStatusControls('status.start'), { timeout: 15_000 })
 			.toBeGreaterThan(startsBeforeOpen);
 		const monitor = modal.locator('.status-monitor');
-		await expect(monitor.locator('.metric-cpu')).toHaveAccessibleName(/CPU 50\.0%/, { timeout: 15_000 });
-		await monitor.locator('.metric-cpu').hover();
+		await expect(monitor.getByRole('button', { name: /^CPU / })).toHaveAccessibleName(/CPU 50\.0%/, {
+			timeout: 15_000,
+		});
+		await monitor.getByRole('button', { name: /^CPU / }).hover();
 		await page.waitForTimeout(350);
 		await expect(page.locator('[data-ui="tooltip-panel"]')).toHaveCount(0);
 		await expect(monitor).toContainText('CPU');
@@ -100,7 +102,7 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
 		expect(modalBox!.y + modalBox!.height).toBeLessThanOrEqual(viewport!.height + 1);
 		await captureFunctionalScreenshot(page, 'mobile-status-monitor.png');
 
-		await monitor.locator('.metric-cpu').click();
+		await monitor.getByRole('button', { name: /^CPU / }).click();
 		const history = monitor.locator('.history-card');
 		await expect(history).toBeVisible();
 		const ranges = history.locator('.range-tabs');
@@ -126,9 +128,12 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
 		await expect
 			.poll(() => countStatusControls('status.start'), { timeout: 15_000 })
 			.toBeGreaterThan(startsBeforeReopen);
-		await expect(modal.locator('.status-monitor .metric-cpu')).toHaveAccessibleName(/CPU 50\.0%/, {
-			timeout: 15_000,
-		});
+		await expect(modal.locator('.status-monitor').getByRole('button', { name: /^CPU / })).toHaveAccessibleName(
+			/CPU 50\.0%/,
+			{
+				timeout: 15_000,
+			},
+		);
 		await modal.getByRole('button', { name: 'Close', exact: true }).click();
 		await expect(modal).toBeHidden();
 	});

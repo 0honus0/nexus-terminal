@@ -1,4 +1,4 @@
-import { authenticateTestRdp } from '../../support/desktop';
+import { authenticateTestRdp, observeDesktopBinaryTraffic } from '../../support/desktop';
 import { readTestConnectionImportId } from '../../support/targets';
 import { readConnectionList } from '../../../../packages/shared/src/targets/connections/http-codec';
 import { E2E_URLS, E2E_PORTS } from '../../support/test-env';
@@ -256,12 +256,7 @@ test('mobile keyboard sink preserves IME composition before clearing input', asy
 
 test('mobile RDP opens keyboard explicitly and persists touch mode without reconnecting', async ({ page, context }) => {
 	const connectionName = 'E2E Mobile RDP Touch Modes';
-	const remoteFrames: Array<string | Buffer> = [];
-	page.on('websocket', (socket) => {
-		socket.on('framesent', (event) => {
-			remoteFrames.push(event.payload);
-		});
-	});
+	const expectBinaryTraffic = await observeDesktopBinaryTraffic(page);
 	// Match the desktop fullscreen regression: exercise application fullscreen
 	// controls independently of the headless browser's native fullscreen support.
 	await page.addInitScript(() => {
@@ -382,7 +377,7 @@ test('mobile RDP opens keyboard explicitly and persists touch mode without recon
 						.text,
 			)
 			.toContain(mobileText);
-		expect(remoteFrames.some((frame) => Buffer.isBuffer(frame))).toBeTruthy();
+		await expectBinaryTraffic();
 
 		await page.getByRole('button', { name: 'Hide keyboard', exact: true }).tap();
 		await expect(keyboardInput).not.toBeFocused();

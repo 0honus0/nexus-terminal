@@ -286,7 +286,7 @@ test('marking suspend keeps the UI tab interactive and unmarking keeps the shell
 	});
 	await activeTab.click({ button: 'right' });
 	markStarted = performance.now();
-	await page.getByRole('button', { name: 'Suspend Session', exact: true }).click();
+	await page.getByRole('menu').getByRole('menuitem', { name: 'Suspend Session', exact: true }).click();
 	const responseMs = await markResponse;
 	expect(snapshotBytes).toBeGreaterThan(0);
 	expect(snapshotBytes).toBeLessThanOrEqual(1024 * 1024);
@@ -302,7 +302,7 @@ test('marking suspend keeps the UI tab interactive and unmarking keeps the shell
 	await command.press('Enter');
 	await expect(terminal.locator('.xterm-rows')).toContainText('MARKED_UI_ALIVE');
 	await activeTab.click({ button: 'right' });
-	await page.getByRole('button', { name: 'Unmark Suspend', exact: true }).click();
+	await page.getByRole('menu').getByRole('menuitem', { name: 'Unmark Suspend', exact: true }).click();
 	await command.fill('echo UNMARKED_UI_ALIVE');
 	await command.press('Enter');
 	await expect(terminal.locator('.xterm-rows')).toContainText('UNMARKED_UI_ALIVE');

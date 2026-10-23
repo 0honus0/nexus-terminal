@@ -26,11 +26,11 @@ test('status history uses real time windows and keeps controls fixed and axes sh
 
 	const monitor = page.locator('.status-monitor:visible').first();
 	await expect(monitor).toBeVisible({ timeout: 20_000 });
-	await expect(monitor.locator('.metric-cpu')).toBeVisible({ timeout: 20_000 });
-	await monitor.locator('.metric-cpu').hover();
+	await expect(monitor.getByRole('button', { name: /^CPU / })).toBeVisible({ timeout: 20_000 });
+	await monitor.getByRole('button', { name: /^CPU / }).hover();
 	await page.waitForTimeout(350);
 	await expect(page.getByRole('tooltip')).toHaveCount(0);
-	await monitor.locator('.metric-cpu').click();
+	await monitor.getByRole('button', { name: /^CPU / }).click();
 
 	const history = monitor.locator('.history-card');
 	const chart = history.locator('.status-history-chart');
@@ -102,20 +102,20 @@ test('status history uses real time windows and keeps controls fixed and axes sh
 		expect(await tooltip.evaluate((element) => element.parentElement === document.body)).toBe(true);
 		await page.mouse.move(1100, 800);
 		await expect(tooltip).toHaveCount(0);
-		await monitor.locator('.network-card').click();
+		await monitor.locator('.network-row').click();
 		const legend = page.locator('.network-legend');
 		await expect(legend).toBeVisible();
 		const legendFontSize = await legend.evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
 		expect(legendFontSize * scale).toBeCloseTo(12, 1);
-		expect(await legend.evaluate((element) => Boolean(element.closest('.history-heading')))).toBe(true);
+		expect(await legend.evaluate((element) => Boolean(element.closest('.history-header')))).toBe(true);
 		const legendBox = (await legend.boundingBox())!;
 		const chartBox = (await chart.boundingBox())!;
 		expect(legendBox.x).toBeGreaterThanOrEqual(chartBox.x);
 		expect(legendBox.x + legendBox.width).toBeLessThanOrEqual(chartBox.x + chartBox.width);
 		expect(legendBox.y + legendBox.height).toBeLessThanOrEqual(chartBox.y);
-		await monitor.locator('.metric-cpu').click();
+		await monitor.getByRole('button', { name: /^CPU / }).click();
 	}
-	await monitor.locator('.network-card').click();
+	await monitor.locator('.network-row').click();
 	await canvas.hover({ position: { x: 200, y: 30 } });
 	await expect(tooltip).toBeVisible();
 	await expect(tooltip).toContainText(/\d{2}:\d{2}:\d{2}/);

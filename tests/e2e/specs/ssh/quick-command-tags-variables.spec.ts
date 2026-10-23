@@ -98,7 +98,7 @@ test('quick command tags and saved variables survive persistence, grouping, rena
 			await expect(form).toBeVisible();
 			await form.getByPlaceholder('Optional, for quick identification', { exact: true }).fill(COMMAND_NAME);
 			await form.locator('textarea').fill("printf 'QC_TAG_VARIABLE_%s\\n' '${WHO}'");
-			await form.getByRole('button', { name: '+ Add Variable', exact: true }).click();
+			await form.getByRole('button', { name: 'Add variable', exact: true }).click();
 			await form.getByPlaceholder('Variable Name', { exact: true }).fill('WHO');
 			await form.getByPlaceholder('Variable Value', { exact: true }).fill('NEXUS');
 

@@ -1204,7 +1204,7 @@ test('a failed logout still releases live Workspace sessions before reporting th
 	await expect(networkFailureToast(page)).toBeVisible();
 	await expect(page).toHaveURL(/\/workspace(?:\?|$)/);
 	await expect(tabBar.getByRole('tab')).toHaveCount(0);
-	await expect(page.getByRole('heading', { name: 'Connections & sessions', exact: true })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'New session', exact: true })).toBeVisible();
 
 	const status = await context.request.get('/api/v1/auth/status');
 	expect(status.ok()).toBeTruthy();

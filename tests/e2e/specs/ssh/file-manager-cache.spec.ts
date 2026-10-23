@@ -140,6 +140,9 @@ test('hover preloads only the intended directory and clicking shares its already
 	try {
 		await connectTestSshFromConnectionsPage(page, await ensureTestSshConnection(context.request));
 		await openConnectedFileManager(page);
+		// The embedded browser may still be finishing its initial read when the popup is ready.
+		// Drain both before resetting the server's global OPENDIR counter.
+		await expect.poll(() => observation.inFlight.size).toBe(0);
 		await setDirectoryDelay(2500);
 		await fileManagerRow(page, 'cache-one').hover();
 		await expect.poll(() => observation.requests.get('/cache-one')).toBe(1);

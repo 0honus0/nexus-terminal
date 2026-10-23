@@ -157,9 +157,9 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
 		await expect(monitor).toContainText('CPU', { timeout: 20_000 });
 		await expect(monitor).toHaveAttribute('data-status-scale', '1.00');
 		await expect(monitor.locator('.monitor-panel')).toBeVisible();
-		await expect(monitor.locator('.metric-card')).toHaveCount(5);
-		await expect(monitor.locator('.metric-cpu .metric-progress')).toBeVisible();
-		await expect(monitor.locator('.network-card')).toBeVisible();
+		await expect(monitor.locator('.metric-row')).toHaveCount(5);
+		await expect(monitor.getByRole('button', { name: /^CPU / }).locator('.metric-track')).toBeVisible();
+		await expect(monitor.locator('.network-row')).toBeVisible();
 
 		const countStatusControlFrames = () =>
 			sentFrames.reduce((count, frame) => {
@@ -185,10 +185,10 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
 		const controlsBeforeHistory = countStatusControlFrames();
 		const samplesBeforeHistory = countStatusSamples();
 
-		await monitor.locator('.metric-cpu').click();
+		await monitor.getByRole('button', { name: /^CPU / }).click();
 		await expect(monitor.locator('.history-card')).toBeVisible();
 		await expect(monitor.locator('.range-tabs button')).toHaveCount(4);
-		await monitor.locator('.network-card').click();
+		await monitor.locator('.network-row').click();
 		await expect(monitor.locator('.history-card')).toContainText('Network trend');
 		await expect.poll(countStatusSamples, { timeout: 10_000 }).toBeGreaterThan(samplesBeforeHistory);
 		expect(countStatusControlFrames()).toBe(controlsBeforeHistory);

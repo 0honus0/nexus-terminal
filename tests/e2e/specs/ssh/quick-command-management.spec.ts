@@ -155,7 +155,7 @@ test('quick command UI creates, searches, executes, edits, and deletes a command
 		expect(afterResize!.y + afterResize!.height).toBeLessThanOrEqual(800);
 		await form.getByPlaceholder('Optional, for quick identification', { exact: true }).fill(ORIGINAL_NAME);
 		await form.locator('textarea[required]').fill("printf 'QUICK_MANAGED_V1\\n'");
-		await form.getByRole('button', { name: 'Save', exact: true }).click();
+		await dialog.getByRole('button', { name: 'Save', exact: true }).click();
 		await expect(form).toBeHidden({ timeout: 15_000 });
 
 		await expect
@@ -207,7 +207,10 @@ test('quick command UI creates, searches, executes, edits, and deletes a command
 		expect(Math.abs(reopenedBox!.height - defaultDialogSize!.height)).toBeLessThan(2);
 		await form.getByPlaceholder('Optional, for quick identification', { exact: true }).fill(EDITED_NAME);
 		await form.locator('textarea[required]').fill("printf 'QUICK_MANAGED_V2\\n'");
-		await form.getByRole('button', { name: 'Save', exact: true }).click();
+		await page
+			.getByRole('dialog', { name: 'Edit Quick Command', exact: true })
+			.getByRole('button', { name: 'Save', exact: true })
+			.click();
 		await expect(form).toBeHidden({ timeout: 15_000 });
 
 		await expect

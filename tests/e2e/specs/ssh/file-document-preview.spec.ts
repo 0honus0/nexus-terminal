@@ -47,9 +47,10 @@ const spreadsheetRows = (dialog: Locator): Locator => spreadsheetScroller(dialog
 const spreadsheetPageRange = (dialog: Locator): Locator => dialog.getByText(/^Rows \d+–\d+ of \d+$/).first();
 
 const previewSearchInput = (dialog: Locator): Locator =>
-	dialog.getByRole('searchbox', { name: 'Search document...', exact: true });
+	dialog.getByRole('searchbox', { name: 'Search in document', exact: true });
 
-const previewSearchControls = (dialog: Locator): Locator => previewSearchInput(dialog).locator('..');
+const previewSearchControls = (dialog: Locator): Locator =>
+	previewSearchInput(dialog).locator('xpath=ancestor::div[span[@aria-live="polite"]][1]');
 
 const previewSearchCount = (dialog: Locator, value: string): Locator =>
 	previewSearchControls(dialog).getByText(value, { exact: true });

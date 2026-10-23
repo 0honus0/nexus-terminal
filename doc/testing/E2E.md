@@ -18,6 +18,16 @@
 
 第二批工作区与独立暂存快照 `/tmp/nexus-e2e-second-index` 的根 check、全量格式及双端 build 通过，日志 `/tmp/nexus-e2e-second-{check,format,build}.log` 和 `/tmp/nexus-e2e-second-index-{check,format,build}.log`；测试严格静态类型通过，日志 `/tmp/nexus-e2e-second-test-types.log`。两轮复审覆盖消息长度/残片、背压和收尾、恢复刷新竞态、通知焦点及真实 DOM 断言。未执行本地行为、浏览器、E2E 或 Playwright 收集；24 文件分批提交后以新远程结果验收，其余失败继续保留。
 
+## 第三批远程 E2E 修复（2026-10-23）
+
+第二批远程 [39955067524](https://github.com/0honus0/nexus-terminal/actions/runs/39955067524) / `9e49762b` 已结束，按每个场景最终记录去重为 409 通过、50 失败；质量门禁、runner 与 Docker smoke 通过。日志 `/tmp/nexus-e2e-39955067524-shard{1..8}.log`，失败清单 `/tmp/nexus-e2e-39955067524-cases.json`。RDP wide DPI 场景通过，覆盖真实认证和 TPKT 消息边界。主 RDP 场景的 Connections、Dashboard、Workspace 建连与认证及浏览器到远端剪贴板内容通过，随后失败于 CDP 出站 Buffer 观察；移动 RDP 同类失败。不能把局部证据写成整个 RDP 场景或分块显示体验通过。
+
+第三批仅修改测试，按当前真实 DOM 对接新会话、历史搜索、加载状态、mixed 复选框、菜单、快捷指令、状态趋势与统一文档搜索。Monaco 继续验证实际匹配内容、数量、焦点和关闭清理；预加载计数先等初始读取排空，仍要求目标只派发一次且点击共享。RDP 同时观察原生 send 的真实二进制调用及入站 binary，断言双向存在且无文本消息，不记录内容或票据，不替换 SDK 或远端响应；认证、真实输入与剪贴板断言保持。
+
+两轮源码复审核对真实组件角色、搜索匹配与清理、计数隔离及二进制观察不改变发送数据。根 check、双端 build、全量格式和测试静态类型通过，日志 `/tmp/nexus-e2e-third-{check,build,format,test-types}.log`。未执行本地行为、浏览器、E2E 或 Playwright 收集；第三批远程待推送验收。已核对 USAGE 相关功能说明，产品行为与 UI 不变；并行 Docker 和 UI 文档改动不纳入本批提交。
+
+22 文件独立暂存快照 `/tmp/nexus-e2e-third-index` 的根 check、全量格式及双端 build 同样通过，日志 `/tmp/nexus-e2e-third-index-{check,format,build}.log`；快照依赖引用自身 Shared 构建产物，不借用并行产品源码变化。
+
 ## SSH 多会话隔离补测与漏检核对（2026-10-23）
 
 用户明确要求新增用例，本批据此新增源码；仍按 D17 不运行本地行为、浏览器或 E2E，不自动提交、推送或触发远程。最近远程 39920261630 测试的是 `798e204f2a547213652874dca3792bfd42a194f0`，该版本 Surface 只有一个 DOM 根节点；引入并列安装弹窗的改动仍在本地工作区，未进入该轮远程。原日志 shard 3 的 Connect All 和 shard 5 的 session-cache 都实际执行通过，不能据此声称当前工作区通过，也不能断言旧用例必然漏掉当前缺陷。

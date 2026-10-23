@@ -72,7 +72,7 @@ test('mobile upload explains arbitrary files and opens an unrestricted system pi
 		Object.defineProperty(window, 'showOpenFilePicker', { configurable: true, value: undefined }),
 	);
 	const menu = await longPressFile(page, 'archive-source.txt');
-	await menu.getByRole('button', { name: 'Upload', exact: true }).click();
+	await menu.getByRole('menuitem', { name: 'Upload', exact: true }).click();
 	const chooser = page.getByRole('dialog', { name: 'Upload files', exact: true });
 	await expect(chooser).toBeVisible();
 	await expect(chooser).toContainText('Choose any file type');
@@ -116,7 +116,7 @@ for (const outcome of ['success', 'cancel', 'failure'] as const) {
 			});
 		}, outcome);
 		const menu = await longPressFile(page, 'archive-source.txt');
-		await menu.getByRole('button', { name: 'Upload', exact: true }).click();
+		await menu.getByRole('menuitem', { name: 'Upload', exact: true }).click();
 		const chooser = page.getByRole('dialog', { name: 'Upload files', exact: true });
 		await chooser.getByRole('button', { name: 'Choose files (any type)', exact: true }).click();
 		await expect(chooser).toBeHidden();
@@ -134,7 +134,7 @@ for (const outcome of ['success', 'cancel', 'failure'] as const) {
 				Object.defineProperty(window, 'showOpenFilePicker', { configurable: true, value: undefined }),
 			);
 			const retryMenu = await longPressFile(page, 'archive-source.txt');
-			await retryMenu.getByRole('button', { name: 'Upload', exact: true }).click();
+			await retryMenu.getByRole('menuitem', { name: 'Upload', exact: true }).click();
 			const nextPicker = page.waitForEvent('filechooser');
 			await chooser.getByRole('button', { name: 'Choose files (any type)', exact: true }).click();
 			await (
@@ -213,7 +213,7 @@ test('mobile long-press file menu stays inside narrow 320 and 375 viewports', as
 			'Change Permissions',
 			'Delete',
 		]) {
-			await expect(menu.getByRole('button').filter({ hasText: label }).first()).toBeVisible();
+			await expect(menu.getByRole('menuitem').filter({ hasText: label }).first()).toBeVisible();
 		}
 		await expect(page.getByRole('menu')).toHaveCount(1);
 

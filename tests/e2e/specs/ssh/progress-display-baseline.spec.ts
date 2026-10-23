@@ -499,11 +499,11 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 				await expect(failedTargetRow).toBeVisible();
 				await expect(validTargetRow.locator('i.fa-server')).toBeVisible();
 				await validTargetRow.click();
-				const visibleGroupCheckbox = modal.locator('input[id^="send-files-group-"]').first();
-				await expect(visibleGroupCheckbox).toHaveJSProperty('indeterminate', true);
+				const visibleGroupCheckbox = modal.locator('[role="checkbox"][id^="send-files-group-"]').first();
+				await expect(visibleGroupCheckbox).toHaveAttribute('aria-checked', 'mixed');
 				await visibleGroupCheckbox.click();
-				await expect(validTargetRow.locator('input[type="checkbox"]')).toBeChecked();
-				await expect(failedTargetRow.locator('input[type="checkbox"]')).toBeChecked();
+				await expect(validTargetRow.getByRole('checkbox')).toBeChecked();
+				await expect(failedTargetRow.getByRole('checkbox')).toBeChecked();
 				await expect(targetPath).toContainText(path.dirname(destinationPath));
 				await targetPath.click();
 				const picker = page.getByRole('dialog', { name: 'Select destination directory', exact: true });
@@ -525,7 +525,7 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 				await validTargetRow.click();
 				await expect(targetPath).toContainText(destinationPath);
 				await visibleGroupCheckbox.click();
-				await expect(failedTargetRow.locator('input[type="checkbox"]')).toBeChecked();
+				await expect(failedTargetRow.getByRole('checkbox')).toBeChecked();
 				await selectUiOption(modal.getByLabel('Transfer Method', { exact: true }), 'rsync');
 
 				// The Workspace transfer catalog can still be loading/refreshed in parallel. That global

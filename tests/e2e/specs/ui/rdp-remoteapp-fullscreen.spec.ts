@@ -1,4 +1,4 @@
-import { authenticateTestRdp } from '../../support/desktop';
+import { authenticateTestRdp, observeDesktopBinaryTraffic } from '../../support/desktop';
 import { readConnectionList } from '../../../../packages/shared/src/targets/connections/http-codec';
 import { readTestConnectionImportId } from '../../support/targets';
 import { expect, test, type APIRequestContext, type Locator, type Page } from '../../support/fixtures';
@@ -36,10 +36,7 @@ async function cleanupConnection(request: APIRequestContext): Promise<void> {
 }
 
 test('RDP browser client preserves settings, clipboard and browser fullscreen', async ({ page, context }) => {
-	const remoteFrames: Array<string | Buffer> = [];
-	page.on('websocket', (socket) => {
-		socket.on('framesent', (event) => remoteFrames.push(event.payload));
-	});
+	const expectBinaryTraffic = await observeDesktopBinaryTraffic(page);
 	await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: E2E_URLS.frontendOrigin });
 	await loginAsInitialAdmin(context.request);
 	await updateUiPreferences(context.request, (preferences) => {
@@ -223,7 +220,7 @@ test('RDP browser client preserves settings, clipboard and browser fullscreen', 
 							).text,
 					)
 					.toBe(hostText);
-				expect(remoteFrames.some((frame) => Buffer.isBuffer(frame))).toBeTruthy();
+				await expectBinaryTraffic();
 
 				const remoteText = 'NEXUS_RDP_REMOTE_CLIPBOARD_E2E_' + crypto.randomUUID();
 				const remoteClipboard = await context.request.post(
