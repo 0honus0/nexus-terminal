@@ -1,6 +1,6 @@
 import { useI18n } from 'vue-i18n';
 import { useFeedbackMessage } from '@/shared/feedback/public';
-import { computed, onActivated, onMounted, ref, toRaw, watch } from 'vue';
+import { nextTick, computed, onActivated, onMounted, ref, toRaw, watch } from 'vue';
 import { useAuthenticatedViewScope } from '@/shared/session/use-authenticated-view-scope';
 import {
 	deleteManagedProvider,
@@ -296,7 +296,10 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 
 	watch(() => options.available?.() ?? true, loadInitial);
 	onMounted(loadInitial);
-	onActivated(loadInitial);
+	onActivated(async () => {
+		await nextTick();
+		loadInitial();
+	});
 	return {
 		providers,
 		draft,

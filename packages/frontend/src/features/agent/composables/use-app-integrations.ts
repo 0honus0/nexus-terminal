@@ -1,4 +1,4 @@
-import { computed, onActivated, onMounted, ref, toRaw, watch } from 'vue';
+import { nextTick, computed, onActivated, onMounted, ref, toRaw, watch } from 'vue';
 import {
 	createManagedIntegration,
 	deleteManagedIntegration,
@@ -206,7 +206,10 @@ export function useAppIntegrations(appId: string, available: () => boolean = () 
 
 	watch(available, initial);
 	onMounted(initial);
-	onActivated(initial);
+	onActivated(async () => {
+		await nextTick();
+		initial();
+	});
 	return {
 		items,
 		editorOpen,

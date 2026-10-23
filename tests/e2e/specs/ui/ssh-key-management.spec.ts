@@ -3,6 +3,7 @@ import { expect, test, type APIRequestContext, type Page } from '../../support/f
 import { loginAsInitialAdmin } from '../../support/auth';
 import { configureSshE2eSettings, E2E_SSH, trustTestSshHostKey } from '../../support/ssh';
 import { step } from '../../support/steps';
+import { dismissToasts } from '../../support/feedback';
 import { selectUiOption } from '../../support/ui-select';
 import { E2E_URLS } from '../../support/test-env';
 import { readSshKeyList } from '../../../../packages/shared/src/targets/ssh-keys/http-codec';
@@ -262,6 +263,7 @@ test('SSH key management UI adds, renames without replacing private key, and del
 		).toBeVisible();
 		await expect(row).toBeVisible();
 		await page.unroute(`**/api/v1/targets/ssh-keys/${keyId}`);
+		await dismissToasts(page);
 		await modal.getByRole('button', { name: 'Refresh and review', exact: true }).click();
 		await expect(row.getByRole('button', { name: 'Delete', exact: true })).toBeEnabled();
 	});

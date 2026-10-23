@@ -1,6 +1,6 @@
 <script setup lang="ts">
 	import { useFeedbackMessage } from '@/shared/feedback/public';
-	import { computed, onActivated, onMounted, ref } from 'vue';
+	import { nextTick, computed, onActivated, onMounted, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiButton } from '@/foundation/ui';
 	import { useAuthenticatedViewScope } from '@/shared/session/use-authenticated-view-scope';
@@ -81,7 +81,10 @@
 	}
 
 	onMounted(loadInitialStatus);
-	onActivated(loadInitialStatus);
+	onActivated(async () => {
+		await nextTick();
+		loadInitialStatus();
+	});
 </script>
 
 <template>

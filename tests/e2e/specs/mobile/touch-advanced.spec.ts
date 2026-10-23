@@ -273,7 +273,7 @@ test('mobile CodeMirror search opens from the editor header and highlights remot
 			.toContain('plain-no-extension');
 
 		const searchBox = await editor.getByRole('button', { name: 'Search in document', exact: true }).boundingBox();
-		const refreshBox = await editor.getByRole('button', { name: 'Refresh', exact: true }).boundingBox();
+		const refreshBox = await editor.getByRole('button', { name: 'Refresh remote file', exact: true }).boundingBox();
 		const saveBox = await editor.getByRole('button', { name: 'Save', exact: true }).boundingBox();
 		const actionsBox = await editor.locator('.editor-actions').boundingBox();
 		expect(searchBox).toBeTruthy();
@@ -304,22 +304,24 @@ test('mobile CodeMirror search opens from the editor header and highlights remot
 		await expect(editor.locator('.cm-editor')).toHaveClass(/cm-focused/);
 	});
 
-	await step('Search opens CodeMirror search UI and decorates the matching text', async () => {
+	await step('Search opens the shared editor search and decorates CodeMirror text', async () => {
 		const editor = page
 			.locator('[data-document-mode][data-workspace-active="true"]:visible .file-editor-container')
 			.first();
 		await editor.getByRole('button', { name: 'Search in document', exact: true }).click();
-		const searchPanel = editor.locator('.cm-panel.cm-search');
+		const searchPanel = editor.locator('.file-editor-search-bar');
 		await expect(searchPanel).toBeVisible();
-		const searchInput = searchPanel.locator('input[name="search"]');
-		await expect(searchInput).toBeVisible();
+		const searchInput = searchPanel.getByRole('searchbox', { name: 'Search in document', exact: true });
+		await expect(searchInput).toBeFocused();
 		await searchInput.fill('plain-no-extension');
 		await searchInput.press('End');
 		await expect(searchInput).toHaveValue('plain-no-extension');
-		await expect
-			.poll(async () => editor.locator('.cm-searchMatch').count(), { timeout: 10_000 })
-			.toBeGreaterThan(0);
+		await expect(searchPanel.locator('.file-editor-search-count')).toHaveText('1/1');
+		await expect(editor.locator('.cm-editor .file-editor-search-match')).toHaveText('plain-no-extension');
 		await captureFunctionalScreenshot(page, 'mobile-editor-search.png');
+		await searchInput.press('Escape');
+		await expect(searchPanel).toBeHidden();
+		await expect(editor.locator('.cm-editor .file-editor-search-match')).toHaveCount(0);
 	});
 
 	await step('closing the popup returns to the terminal instead of leaving an empty editor pane', async () => {

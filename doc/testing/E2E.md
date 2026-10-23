@@ -28,6 +28,18 @@
 
 22 文件独立暂存快照 `/tmp/nexus-e2e-third-index` 的根 check、全量格式及双端 build 同样通过，日志 `/tmp/nexus-e2e-third-index-{check,format,build}.log`；快照依赖引用自身 Shared 构建产物，不借用并行产品源码变化。
 
+## 第四批：通知重试与设置重新激活（2026-10-23）
+
+远程 `39955067524` shard 8 的 performance-settings trace 显示 `0 → Save → Close → 9 → Save`，首次 Toast 通过、第二次未出现。Notification Store 保留了关闭后 15 秒的 recentErrors，修复移除错误卡片时释放对应键；驻留时仍合并，不改变 UI。连续无效保存原场景继续断言每次错误可见及零 PUT。
+
+同轮 shard 7 host trace 显示离开设置页前 GET/PUT 正常，返回后无 execution-settings GET，开关禁用且执行分组没有草稿。核对 Vue 当前 runtime-core 的 injectToKeepAliveRoot 将后代激活 hook 前插，读取可能早于 scope 激活；Agent 设置、Provider、App/集成/插件/治理、文件库及记忆的恢复读取延至 nextTick，仍由原 scope/generation/available/loaded/busy 控制，旧回调不能恢复写权限或重放写入。host 现有场景增加返回设置时 GET 200、开关启用且保留已保存值，再继续真实关闭写入。
+
+其它定位仅对接当前 UI：集成开关 role=switch；SSH Key 失败 Toast 先关闭再点击原恢复按钮；移动编辑器使用真实 Refresh remote file 入口与统一搜索栏，核对 CodeMirror 匹配内容、计数、焦点和 Escape 清理。不修改布局、样式、尺寸、配色或禁用原功能断言。
+
+根 check、双端 build、测试静态类型通过，日志 `/tmp/nexus-e2e-fourth-{check,build,test-types}.log`；类型检查首次误用不存在的 tsc 文件未执行，改用已安装 tsc6 后通过。初次全量格式仅 PLAN 表格未对齐，修正后全量通过，见 `/tmp/nexus-e2e-fourth-format-final.log`。两轮源码复审核对驻留与关闭去重、原作用域激活顺序、nextTick 后再次停用/卸载/身份变化、只读恢复与写入围栏，以及测试的当前真实入口。不执行本地行为、浏览器、E2E 或收集。独立暂存快照 `/tmp/nexus-e2e-fourth-index` 根 check、全量格式及双端 build 通过，日志 `/tmp/nexus-e2e-fourth-index-{check,format,build}.log`；随后仅补状态缩放场景的另一处旧 network-card 定位，保留图表断言，并重新通过测试静态类型。
+
+第三批远程 [39957933602](https://github.com/0honus0/nexus-terminal/actions/runs/39957933602) / `659ced18` 已结束：426 个唯一场景最终通过、32 失败、1 超时（Send Files），合计 33 未通过。质量门禁、runner、Docker smoke 通过。日志及完整状态去重清单 `/tmp/nexus-e2e-39957933602-*`。RDP 主场景、wide DPI 与 VNC 尺寸/拖拽场景通过；移动 RDP 首次输入观察超时、重试通过，仍有稳定性缺口。弱网分块显示尚未体验验收。不能将这些结果作为尚未推送的第四批证据；其余入口、真实历史分页及新 UI 下的旧尺寸/配色断言继续排查，不为换绿修改产品 UI 或删除断言。
+
 ## SSH 多会话隔离补测与漏检核对（2026-10-23）
 
 用户明确要求新增用例，本批据此新增源码；仍按 D17 不运行本地行为、浏览器或 E2E，不自动提交、推送或触发远程。最近远程 39920261630 测试的是 `798e204f2a547213652874dca3792bfd42a194f0`，该版本 Surface 只有一个 DOM 根节点；引入并列安装弹窗的改动仍在本地工作区，未进入该轮远程。原日志 shard 3 的 Connect All 和 shard 5 的 session-cache 都实际执行通过，不能据此声称当前工作区通过，也不能断言旧用例必然漏掉当前缺陷。

@@ -215,7 +215,7 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
 		await hostButton.click();
 		await expect(page.getByText('Failed to copy IP address', { exact: true })).toBeVisible();
 
-		await monitor.locator('.network-card').click();
+		await monitor.locator('.network-row').click();
 		await expect(monitor.locator('.history-card')).toHaveCount(0);
 
 		const beforeBox = await monitor.boundingBox();

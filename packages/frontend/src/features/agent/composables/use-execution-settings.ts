@@ -1,6 +1,6 @@
 import { useI18n } from 'vue-i18n';
 import { useFeedback, useFeedbackMessage } from '@/shared/feedback/public';
-import { computed, onActivated, onMounted, ref, toRaw } from 'vue';
+import { computed, nextTick, onActivated, onMounted, ref, toRaw } from 'vue';
 import { useAuthenticatedViewScope } from '@/shared/session/use-authenticated-view-scope';
 import { AGENT_EXECUTION_LIMIT_KEYS } from '@nexus-terminal/shared/agent/execution/values';
 import { getExecutionSettings, saveExecutionHardLimits, saveExecutionSettings } from '../api/execution-api';
@@ -167,7 +167,11 @@ export function useExecutionSettings() {
 	}
 
 	onMounted(loadInitial);
-	onActivated(loadInitial);
+	onActivated(async () => {
+		// Descendant KeepAlive hooks may run before the scope's activation hook.
+		await nextTick();
+		loadInitial();
+	});
 	return {
 		saved,
 		toggleEnabled,

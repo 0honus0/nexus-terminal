@@ -1,4 +1,4 @@
-import { computed, onActivated, onMounted, ref, toRaw, watch } from 'vue';
+import { nextTick, computed, onActivated, onMounted, ref, toRaw, watch } from 'vue';
 import { AGENT_ARTIFACT_MAX_BYTES } from '@nexus-terminal/shared/agent/artifacts/values';
 import { listManagedApps } from '../api/app-management-api';
 import {
@@ -294,7 +294,10 @@ export function useArtifactLibrary(available: () => boolean) {
 	}
 
 	onMounted(initial);
-	onActivated(initial);
+	onActivated(async () => {
+		await nextTick();
+		initial();
+	});
 	watch(available, (active) => {
 		if (active) {
 			initial();

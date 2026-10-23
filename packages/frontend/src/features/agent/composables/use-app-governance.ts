@@ -1,4 +1,4 @@
-import { onActivated, onMounted, ref, toRaw, watch } from 'vue';
+import { nextTick, onActivated, onMounted, ref, toRaw, watch } from 'vue';
 import { getAppExecutionPolicy, getAppGrants, saveAppExecutionPolicy, saveAppGrants } from '../api/app-management-api';
 import type { AppExecutionPolicy, AppGrantInput, AppGrants, AppPolicyOverrides } from '../model/app-management-types';
 import { useAgentManagementOperation } from './use-agent-management-operation';
@@ -84,7 +84,10 @@ export function useAppGovernance(appId: string, section: 'grants' | 'policy', av
 
 	watch(available, initial);
 	onMounted(initial);
-	onActivated(initial);
+	onActivated(async () => {
+		await nextTick();
+		initial();
+	});
 	return {
 		grants,
 		grantDraft,

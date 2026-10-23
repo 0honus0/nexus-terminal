@@ -12,6 +12,11 @@ export const useNotificationStore = defineStore('shared-notifications', () => {
 	let nextId = 1;
 
 	const remove = (id: number): void => {
+		const notification = notifications.value.find((item) => item.id === id);
+		if (notification?.kind === 'error') {
+			// A dismissed error must not hide the outcome of the user's next attempt.
+			recentErrors.delete(JSON.stringify([notification.message, notification.action?.key ?? null]));
+		}
 		notifications.value = notifications.value.filter((notification) => notification.id !== id);
 	};
 

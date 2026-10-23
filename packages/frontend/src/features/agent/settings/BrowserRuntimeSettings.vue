@@ -1,5 +1,5 @@
 <script setup lang="ts">
-	import { computed, onActivated, onMounted, ref, watch } from 'vue';
+	import { computed, nextTick, onActivated, onMounted, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import {
 		UiBadge,
@@ -211,7 +211,10 @@
 
 	watch(() => props.active, initial);
 	onMounted(initial);
-	onActivated(initial);
+	onActivated(async () => {
+		await nextTick();
+		initial();
+	});
 </script>
 
 <template>

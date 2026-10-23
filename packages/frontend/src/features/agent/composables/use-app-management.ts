@@ -1,4 +1,4 @@
-import { onActivated, onMounted, ref, watch } from 'vue';
+import { nextTick, onActivated, onMounted, ref, watch } from 'vue';
 import { listAppDefinitions, listManagedApps, setManagedAppEnabled } from '../api/app-management-api';
 import type { AppDefinition, ManagedApp } from '../model/app-management-types';
 import { useAgentManagementOperation } from './use-agent-management-operation';
@@ -96,7 +96,10 @@ export function useAppManagement(available: () => boolean = () => true) {
 	});
 	watch(available, initial);
 	onMounted(initial);
-	onActivated(initial);
+	onActivated(async () => {
+		await nextTick();
+		initial();
+	});
 	return {
 		apps,
 		definitions,

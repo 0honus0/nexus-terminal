@@ -1,4 +1,4 @@
-import { computed, onActivated, onMounted, ref, toRaw, watch } from 'vue';
+import { nextTick, computed, onActivated, onMounted, ref, toRaw, watch } from 'vue';
 import {
 	installPluginStage,
 	listPluginInstallations,
@@ -201,7 +201,10 @@ export function usePluginManagement(available: () => boolean = () => true) {
 	}
 
 	onMounted(initial);
-	onActivated(initial);
+	onActivated(async () => {
+		await nextTick();
+		initial();
+	});
 	watch(available, (active) => {
 		if (active) initial();
 	});

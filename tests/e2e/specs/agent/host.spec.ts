@@ -699,10 +699,19 @@ test('Agent execution setting gates the launcher and its global window', async (
 		['Dashboard', '/'],
 		['Settings', '/settings'],
 	]) {
+		const settingsRead =
+			pathname === '/settings'
+				? page.waitForResponse(
+						(response) =>
+							new URL(response.url()).pathname === '/api/v1/agent/execution-settings' &&
+							response.request().method() === 'GET',
+					)
+				: null;
 		await page
 			.locator('.app-nav-links')
 			.getByRole('link', { name, exact: true })
 			.evaluate((element) => (element as HTMLAnchorElement).click());
+		if (settingsRead) expect((await settingsRead).status()).toBe(200);
 		await expect.poll(() => new URL(page.url()).pathname).toBe(pathname);
 		await expect(hub).toBeVisible();
 		await expect(launcher).toHaveCount(0);
@@ -712,6 +721,8 @@ test('Agent execution setting gates the launcher and its global window', async (
 	await expect(hub).toBeHidden();
 	await page.locator('[role="tab"][aria-controls="settings-panel-agent"]:visible').click();
 	await selectAgentSettingsGroup(page, 'runtime');
+	await expect(enable).toBeEnabled();
+	await expect(enable).toBeChecked();
 	const disabledSave = page.waitForResponse(
 		(response) =>
 			new URL(response.url()).pathname === '/api/v1/agent/execution-settings' &&

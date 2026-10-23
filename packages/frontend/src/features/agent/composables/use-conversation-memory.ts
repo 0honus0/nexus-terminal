@@ -1,4 +1,4 @@
-import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
+import { nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
 import {
 	listConversationMemories,
 	reviewConversationMemory,
@@ -151,8 +151,9 @@ export function useConversationMemory(appId: string, threadId: string, active: (
 		document.addEventListener('visibilitychange', resume);
 		resume();
 	});
-	onActivated(() => {
+	onActivated(async () => {
 		activated = true;
+		await nextTick();
 		resume();
 	});
 	onDeactivated(() => {
