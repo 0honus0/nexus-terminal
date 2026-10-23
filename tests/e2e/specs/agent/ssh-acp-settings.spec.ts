@@ -172,10 +172,12 @@ for (const decision of ['denied', 'cancelled'] as const) {
 		expect(readAgentIntegrationList(await listResponse.json()).items).toContainEqual(integration);
 		await page.reload();
 		await selectAgentExtensionsSection(page, 'integrations');
-		await selectUiOption(
-			section.getByRole('combobox', { name: 'Edit app permissions and policy', exact: true }),
-			app.id,
-		);
+		const appSelector = section.getByRole('combobox', { name: 'Choose an App instance', exact: true });
+		if (apps.length > 1) {
+			await selectUiOption(appSelector, app.id);
+		} else {
+			await expect(appSelector).toHaveCount(0);
+		}
 		const integrationCard = section.getByRole('article').filter({
 			has: page.getByRole('heading', { name: 'SSH ACP settings fixture', exact: true }),
 		});

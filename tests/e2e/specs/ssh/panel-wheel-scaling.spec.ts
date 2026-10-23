@@ -271,10 +271,11 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
 		const nameHeader = fileManagerModal.locator('.file-table-header-name');
 		await expect(list).toHaveAttribute('data-row-scale', '1.00');
 		await expect(nameHeader).toBeVisible();
-		const headerTitles = (await fileManagerModal.locator('thead th').allTextContents()).map((text) =>
-			text.replace(/[▲▼]/g, '').trim(),
-		);
-		expect(headerTitles).toEqual(['Name', 'Permissions', 'Modified']);
+		const columns = await fileManagerModal
+			.locator('colgroup col')
+			.evaluateAll((elements) => elements.map((element) => element.className));
+		expect(columns).toEqual(['file-col-name', 'file-col-permissions', 'file-col-modified']);
+		await expect(fileManagerModal.locator('.file-column-resizer')).toHaveCount(2);
 
 		const nameHeaderLayout = await nameHeader.evaluate((element) => {
 			const html = element as HTMLElement;

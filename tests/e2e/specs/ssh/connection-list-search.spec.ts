@@ -192,7 +192,7 @@ test('workspace tag picker and group manager create, assign, remove, rename, and
 		async () => {
 			const primaryRow = list.locator(`li[data-connection-id="${primaryId}"]`);
 			await primaryRow.click({ button: 'right' });
-			await page.getByRole('button', { name: 'Edit', exact: true }).click();
+			await page.getByRole('menu').getByRole('menuitem', { name: 'Edit', exact: true }).click();
 			const form = page.locator('form.connection-form');
 			await expect(form).toBeVisible();
 			const tagInput = form.getByPlaceholder('Type to search or create tags...', { exact: true });

@@ -550,8 +550,8 @@ test('mobile file manager multi-select prevents accidental opens and single tap 
 
 		await seed.locator('button[data-file-path]').click();
 		await archive.locator('button[data-file-path]').click();
-		await expect(seed).toHaveClass(/bg-primary/);
-		await expect(archive).toHaveClass(/bg-primary/);
+		await expect(seed).toHaveClass(/\bis-selected\b/);
+		await expect(archive).toHaveClass(/\bis-selected\b/);
 		await expect(
 			page.locator('[data-document-mode][data-workspace-active="true"] .file-editor-container'),
 		).toBeHidden();
@@ -559,8 +559,8 @@ test('mobile file manager multi-select prevents accidental opens and single tap 
 		const exitMultiSelect = fileManagerModal.getByRole('button', { name: 'Exit Multi-Select Mode', exact: true });
 		await expect(exitMultiSelect).toBeVisible();
 		await exitMultiSelect.click();
-		await expect(seed).not.toHaveClass(/bg-primary/);
-		await expect(archive).not.toHaveClass(/bg-primary/);
+		await expect(seed).not.toHaveClass(/\bis-selected\b/);
+		await expect(archive).not.toHaveClass(/\bis-selected\b/);
 	});
 
 	await slowStep('single tap opens the inset mobile CodeMirror editor rather than Monaco', async () => {

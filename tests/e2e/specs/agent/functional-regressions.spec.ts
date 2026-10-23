@@ -9,6 +9,7 @@ import {
 	prepareNativeTask,
 	openNativeTask,
 	openNativeTaskPanel,
+	captureNativeCommand,
 	startNativeTask,
 	finishNativeTask,
 	readNativeRun,
@@ -573,6 +574,23 @@ test('SSH search enforces file and byte bounds and never follows a symlink to th
 	const project = path.resolve(__dirname, '../../.tmp/ssh-root/search-scan');
 	await mkdir(project);
 	let runId: string | undefined;
+
+	const cancelAndRefresh = async (id: string) => {
+		await cancelNativeTask(task, id);
+		// Unknown runs deliberately stop polling. Observe the external cancellation through the real UI.
+		await openNativeTaskPanel(page);
+		const panel = page.getByRole('complementary', { name: 'Tasks', exact: true });
+		const { result } = await captureNativeCommand(task, 'agent.runs.get', () =>
+			panel.getByTitle('Refresh current state', { exact: true }).click(),
+		);
+		if (result.method !== 'agent.runs.get' || result.value === null) throw new Error('Unexpected refreshed run');
+		expect(result.value.id).toBe(id);
+		expect(result.value.status).toBe('cancelled');
+		await expect(
+			page.getByRole('dialog', { name: 'Agent', exact: true }).getByRole('button', { name: 'Send', exact: true }),
+		).toBeVisible();
+	};
+
 	try {
 		for (let index = 0; index < 101; index++) {
 			await writeFile(path.join(project, 'a-' + String(index).padStart(3, '0') + '.txt'), 'nothing\n');
@@ -581,14 +599,14 @@ test('SSH search enforces file and byte bounds and never follows a symlink to th
 		const bounded = await startNativeTask(task, `E2E_SEARCH_SCAN connection=${connectionId}`, [connectionId]);
 		runId = bounded.id;
 		expect((await finishNativeTask(task, bounded.id)).run.status).toBe('unknown');
-		await cancelNativeTask(task, bounded.id);
+		await cancelAndRefresh(bounded.id);
 		await rm(project, { recursive: true });
 		await mkdir(project);
 		await writeFile(path.join(project, 'oversized.txt'), 'x'.repeat(32769));
 		const oversized = await startNativeTask(task, `E2E_SEARCH_SCAN connection=${connectionId}`, [connectionId]);
 		runId = oversized.id;
 		expect((await finishNativeTask(task, oversized.id)).run.status).toBe('unknown');
-		await cancelNativeTask(task, oversized.id);
+		await cancelAndRefresh(oversized.id);
 		expect((await readFile(path.join(project, 'oversized.txt'))).length).toBe(32769);
 		await rm(path.join(project, 'oversized.txt'));
 		const external = path.join(path.dirname(project), 'external-sentinel.txt');

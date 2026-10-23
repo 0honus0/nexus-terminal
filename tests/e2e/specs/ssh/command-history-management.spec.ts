@@ -72,7 +72,7 @@ test('command history UI searches, copies, re-runs, and deletes real terminal hi
 		);
 
 		await rowA.click({ button: 'right' });
-		await page.getByRole('button', { name: 'Copy', exact: true }).click();
+		await page.getByRole('menu').getByRole('menuitem', { name: 'Copy', exact: true }).click();
 		await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(COMMAND_A);
 	});
 
@@ -90,7 +90,7 @@ test('command history UI searches, copies, re-runs, and deletes real terminal hi
 		const historyId = Number(await rowA.getAttribute('data-history-id'));
 		expect(historyId).toBeGreaterThan(0);
 		await rowA.click({ button: 'right' });
-		await page.getByRole('button', { name: 'Delete', exact: true }).click();
+		await page.getByRole('menu').getByRole('menuitem', { name: 'Delete', exact: true }).click();
 		await expect(rowA).toHaveCount(0);
 
 		await expect
