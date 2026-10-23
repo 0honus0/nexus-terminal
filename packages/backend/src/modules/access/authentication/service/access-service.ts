@@ -54,6 +54,11 @@ export class AccessService {
 	async setupAdmin(username: string, password: string): Promise<AuthenticatedIdentity> {
 		const validUsername = validateUsername(username);
 		validatePassword(password);
+		// Setup stays publicly reachable after initialization. Reject before the
+		// memory-hard hash; the storage transaction still decides the create race.
+		if (!(await this.accounts.needsSetup())) {
+			throw new AccessFailure('already_initialized');
+		}
 		const passwordHash = await this.accounts.hashPassword(password);
 		const created = await this.accounts.createInitialAdmin({ username: validUsername, passwordHash });
 		if (created === null) {

@@ -1,5 +1,17 @@
 # Nexus Terminal E2E
 
+## 明显安全漏洞审核（2026-10-23）
+
+基线为 `dev` / `d0301766` 加当前未提交工作区。按用户范围检查外部入口和实现缺陷，不把已接受的应用内权限与能力设计作为漏洞，不改变 UI。源码检查覆盖 HTTP/WS 来源和身份、因素验证、下载响应、插件隔离与包路径/签名、MCP 网络边界、原生命令参数及日志出口；这是有限源码审核，不是完整渗透测试或全部分支验收。
+
+修复初始化接口在已初始化后仍先执行 scrypt 的资源消耗问题：AccessService 在哈希前检查 needsSetup；SQLite 原子单次创建仍决定并发胜者，原 409 契约不变。生产依赖初次审计报告四条公告：DOMPurify 三条、MCP client 一条。DOMPurify 升至 3.4.17，catalog override 同时覆盖 Monaco；MCP client/core 升至 2.3.1。当前 DOMPurify 消费没有使用公告中的特殊净化模式，MCP Adapter 已禁止重定向，不将依赖公告严重度直接等同于应用可利用性。
+
+`pnpm run check` 通过；`pnpm audit --prod --json` 和全依赖 `pnpm audit --json` 均报告全部等级为零，日志分别为 `/tmp/nexus-security-audit-final.json` 和 `/tmp/nexus-security-audit-all.json`。全量格式的 ESLint 通过，Prettier 最初报告本轮 PLAN 及并行的 WorkspaceLayoutRenderer.vue、WorkspaceSessionSurface.vue；本轮仅整理自己的文档，不修改这两个 UI 文件。
+
+双端 `pnpm run build` 通过，保留既有大 chunk 警告，日志 `/tmp/nexus-security-build.log`；类型日志 `/tmp/nexus-security-check.log`。本轮目标 Prettier 与 `git diff --check` 通过，全量格式日志 `/tmp/nexus-security-format-all.log`；全量格式不记为通过。
+
+按 D17 未新增或运行本地行为、浏览器或 E2E，未发起攻击流量、真实安装、重启或部署。远程待验：已初始化的合法 setup 请求仍为 409 且不执行哈希、空库并发最多创建一个管理员、正常初始化/登录/改密，以及 Markdown/Monaco 和真实 MCP 服务回归；不以静态通过代替这些行为证据。
+
 ## 本地文档与当前源码核对（2026-10-23）
 
 本轮仅刷新文档，基线为 `dev` / `829b8434ebe8fe15e25cbc99198b7279bba2a459` 加本地未提交工作区。核对范围包括自研基础组件及 DEV 展示路由、全局 Toast、编辑器统一查找与底部工具栏、服务器发送目录选择及按需轮询、远端依赖安装、治理正式消费者、诊断和部署数据目录。保留此前各轮证据，不以旧八组通过覆盖最新未提交实现。
