@@ -1100,6 +1100,9 @@ test('resumed terminal pages older history through a bounded window and restores
 		await expect(suspendedRow).toBeVisible({ timeout: 20_000 });
 		let historyRequestCount = 0;
 		let historyResponseCount = 0;
+		page.on('console', (message) => {
+			if (message.text().includes('Terminal history page failed')) console.log(message.text());
+		});
 		const historyRequestIds = new Set<string>();
 		let resumeStarted = 0;
 		let resumeRequestMs: number | undefined;
@@ -1267,6 +1270,12 @@ test('resumed terminal pages older history through a bounded window and restores
 			);
 			await page.mouse.wheel(0, -6_000);
 			await page.waitForTimeout(100);
+			console.log('[history page]', {
+				pageIndex,
+				historyRequestCount,
+				historyResponseCount,
+				firstRow: (await rows.locator(':scope > div').first().textContent())?.slice(0, 40),
+			});
 		}
 		expect(await renderedTerminalText()).toContain(earlyMarker);
 

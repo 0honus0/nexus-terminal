@@ -104,6 +104,7 @@ test('quick command search stays visible by default and can be collapsed behind 
 				await quickView.evaluate((element, targetWidth) => {
 					element.style.width = `${targetWidth}px`;
 					element.style.flex = '0 0 auto';
+					element.style.height = '100%';
 				}, width);
 				await expect
 					.poll(async () => (await quickView.boundingBox())?.width ?? 0)

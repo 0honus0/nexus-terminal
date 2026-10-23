@@ -190,9 +190,9 @@ test('quick command tags and saved variables survive persistence, grouping, rena
 			expect(nameBox!.x + nameBox!.width).toBeLessThan(headerBox!.x + headerBox!.width - 2);
 
 			if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
-			await header.click({ position: { x: headerBox!.width - 3, y: headerBox!.height / 2 } });
+			await header.click({ position: { x: headerBox!.width - 20, y: headerBox!.height / 2 } });
 			await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-			await header.click({ position: { x: headerBox!.width - 3, y: headerBox!.height / 2 } });
+			await header.click({ position: { x: headerBox!.width - 20, y: headerBox!.height / 2 } });
 			await expect(toggle).toHaveAttribute('aria-expanded', 'true');
 			const row = quickView.locator(`[data-command-id="${commandId}"]`);
 			await expect(row).toBeVisible();

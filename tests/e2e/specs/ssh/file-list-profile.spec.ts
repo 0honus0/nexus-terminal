@@ -126,6 +126,8 @@ test('profiles real large-directory navigation and sort while retaining bounded 
 	const list = activeFileManagerList(page);
 	const rows = list.locator('tbody tr[data-file-path]');
 	const nameSortButton = manager.locator('.file-manager-name-sort');
+	// Cancel the popup's initial hover before installing scan counters, not after its first refresh.
+	await input.hover();
 	const cdp = await context.newCDPSession(page);
 	await cdp.send('Network.enable');
 	const listingRequests = new Map<string, number>();
@@ -197,6 +199,7 @@ test('profiles real large-directory navigation and sort while retaining bounded 
 				).toBeVisible();
 				expect(await rows.count()).toBeLessThan(200);
 				samples.push({ directoryDelayMs, count, sample, navigationMs, sortMs, renderedRows });
+				await input.hover();
 				await input.fill('/');
 				await input.press('Enter');
 				await expect(input).toHaveValue('/');

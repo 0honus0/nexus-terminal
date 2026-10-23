@@ -991,12 +991,12 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
 		const disposableRow = manager.locator(`[data-suspend-id="${disposable!.id}"]`);
 		await expect(hanging).toBeVisible({ timeout: 20_000 });
 		await expect(disposableRow).toBeVisible({ timeout: 20_000 });
-		await expect(manager.locator('i.fa-search')).toBeVisible();
+		await expect(manager.getByRole('searchbox')).toBeVisible();
 		await expect(hanging.locator('i.fa-play')).toBeVisible();
 		await expect(hanging.locator('i.fa-trash-alt')).toBeVisible();
 		await expect(hanging.locator('i.fa-download')).toBeVisible();
 
-		const search = manager.locator('.suspended-session-search input');
+		const search = manager.getByRole('searchbox');
 		await search.fill('DOES_NOT_MATCH_SUSPEND_E2E');
 		await expect(hanging).toBeHidden();
 		await expect(manager).toContainText('No suspended sessions found matching your criteria.');

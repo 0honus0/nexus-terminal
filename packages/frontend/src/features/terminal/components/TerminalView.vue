@@ -9,6 +9,7 @@
 	import { useDeviceCapabilities } from '@/foundation/browser';
 	import { writeClipboardText } from '@/foundation/browser';
 	import { useWheelScale } from '@/foundation/interaction';
+	import { logger } from '@/client/logging/logger';
 	import '@xterm/xterm/css/xterm.css';
 	import type { TerminalChannel } from '../ports/terminal-channel';
 	import type { TerminalVisualOptions } from '../model/terminal-types';
@@ -492,7 +493,8 @@
 			const page = await props.channel.loadPreviousOutput(pageBytes);
 			if (generation !== historyViewGeneration) return;
 			if (page?.data.byteLength) await rebuildHistoryWindow(page.data);
-		} catch {
+		} catch (cause) {
+			logger.warn({ err: cause }, 'Terminal history page failed');
 			// Lazy history is auxiliary. A failed historical-page fetch must never tear down an
 			// otherwise healthy resumed terminal.
 		} finally {
