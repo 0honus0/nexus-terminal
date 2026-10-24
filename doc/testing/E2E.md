@@ -1907,3 +1907,7 @@ RDP Adapter 将文本从逐字符 SDK 调用改为最多 32 个完整字符一�
 ## 历史重入与 RDP 修复回归（2026-10-24）
 
 `40044756208` / `2f19c93b` 仍为 460/461，通过七个分片、质量及 Docker smoke。移动 RDP 首次通过，新增 pageerror 零异常断言也通过。历史现已成功翻到 earliest 并恢复 latest；新失败在随后重入前要求可见 scrollbar。恢复的有界 baseline 可以只有一屏，故 scrollbar 合法隐藏；测试改用原 wheel 手势重新进入历史，仍核对新增真实 history 请求、返回 latest、后续真实命令输出，不改产品 UI、不扩大超时。两轮复审保持完整业务断言，目标测试 tsc、全量格式与 diff 通过（/tmp/nexus-history-final-types.log、/tmp/nexus-final-batch-format.log），新 SHA 远程待验。
+
+## 末端命令入口与 SMTP 跨包接收（2026-10-24）
+
+远程 `40046052239` / `929f0956`：六分片及质量/Docker 全绿，历史场景已通过 earliest/latest 与重入请求，最终停在旧 `Command` textbox 定位；改用当前可见 `input.command-bar-input`，保留真实 printf 输出断言。邮件首轮 dispatched 后 unknown、重试通过；接收夹具清空未找到结束符的完整 TCP buffer，可丢失跨包 `\r\n.\r\n`，现保留末四字节等待后续分包，仍要求纯文本及原模板事件。不扩大超时、不改 UI/生产逻辑。证据保存在 /tmp/nexus-e2e-40046052239-shard6、/tmp/nexus-six-server.log 与 shard7 原日志。两轮源码复审覆盖现有命令框消费者、SMTP 结束符所有分割位置、余下 QUIT 解析及严格 sent 断言；根 check、双端 build、全量 format:all:check、目标测试 tsc、夹具 node --check 与 diff 均通过，日志 /tmp/nexus-last-fixture-{check,build,format,types}.log；按 D17 未执行本地行为测试，完整远程待验。

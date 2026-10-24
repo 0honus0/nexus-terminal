@@ -1451,8 +1451,11 @@ const smtpServer = net.createServer((socket) => {
 			if (dataMode) {
 				const end = buffer.indexOf('\r\n.\r\n');
 				if (end < 0) {
-					data += buffer;
-					buffer = '';
+					// TCP chunks can split any of the five terminator bytes. Keep the
+					// possible prefix until the next chunk rather than consume it as body.
+					const consumed = Math.max(0, buffer.length - 4);
+					data += buffer.slice(0, consumed);
+					buffer = buffer.slice(consumed);
 					return;
 				}
 				data += buffer.slice(0, end);

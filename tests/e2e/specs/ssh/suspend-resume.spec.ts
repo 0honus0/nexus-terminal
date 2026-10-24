@@ -1301,7 +1301,7 @@ test('resumed terminal pages older history through a bounded window and restores
 		await dragHistorySliderToBottom();
 		await expect.poll(renderedTerminalText, { timeout: 10_000 }).toContain(tailMarker);
 		const roundtripMarker = `RESUME_PROFILE_${crypto.randomUUID().replaceAll('-', '')}`;
-		const command = page.getByRole('textbox', { name: 'Command', exact: true });
+		const command = page.locator('input.command-bar-input:visible');
 		await expect(command).toHaveCount(1);
 		const roundtripStarted = performance.now();
 		await command.fill(`printf 'RESUME_%s\\n' '${roundtripMarker.slice('RESUME_'.length)}'`);
