@@ -1911,3 +1911,13 @@ RDP Adapter 将文本从逐字符 SDK 调用改为最多 32 个完整字符一�
 ## 末端命令入口与 SMTP 跨包接收（2026-10-24）
 
 远程 `40046052239` / `929f0956`：六分片及质量/Docker 全绿，历史场景已通过 earliest/latest 与重入请求，最终停在旧 `Command` textbox 定位；改用当前可见 `input.command-bar-input`，保留真实 printf 输出断言。邮件首轮 dispatched 后 unknown、重试通过；接收夹具清空未找到结束符的完整 TCP buffer，可丢失跨包 `\r\n.\r\n`，现保留末四字节等待后续分包，仍要求纯文本及原模板事件。不扩大超时、不改 UI/生产逻辑。证据保存在 /tmp/nexus-e2e-40046052239-shard6、/tmp/nexus-six-server.log 与 shard7 原日志。两轮源码复审覆盖现有命令框消费者、SMTP 结束符所有分割位置、余下 QUIT 解析及严格 sent 断言；根 check、双端 build、全量 format:all:check、目标测试 tsc、夹具 node --check 与 diff 均通过，日志 /tmp/nexus-last-fixture-{check,build,format,types}.log；按 D17 未执行本地行为测试，完整远程待验。
+
+## 完整远程验收与 dev 交付（2026-10-24）
+
+[40047441975](https://github.com/0honus0/nexus-terminal/actions/runs/40047441975) / `79a5cd580c9979f1ff14816e2910bd26a3bd727e` 全绿。461 个独立场景首次通过，零重试、零 flaky、无重复计数：SSH 195、UI 83、Agent 71、Mobile 52、HTTP 50、Auth 6、WebSocket 4。8 个分片、质量/格式/构建、runner 与 Docker 部署冒烟全部通过；截图更新按原流程未启用。最终邮件真实投递约 4 秒通过，历史页最早/最新、重新进入和真实命令往返约 12 秒通过，移动 RDP 的远端输入/触控/全屏和 pageerror 零异常断言通过。
+
+此前产品、上游 SDK、夹具及旧入口失败已在该完整版本验收，不以重试或删除断言换绿。两轮源码复审及本地静态检查结果沿本章前序记录；USAGE 已核对。完整日志 /tmp/nexus-e2e-green-40047441975.log，元数据 /tmp/nexus-e2e-green-metadata.json；未执行本地行为测试。
+
+发布 [40048237411](https://github.com/0honus0/nexus-terminal/actions/runs/40048237411) 使用 `62cea1419e76ae8e306ddfbe8aeddae40119dce0`，与测试 SHA 的唯一差异为自动更新的 scripts/e2e/duration-estimates.json；产品代码和依赖一致。生产依赖审计、双平台构建与推送均成功。`ghcr.io/0honus0/nexus-terminal:dev` 与 `sha-62cea1419e76` 均指向 `sha256:c5220f68a26e7c247d75b194a15cebe7506118af1962c781567540f35c93162c`；Registry 清单包含 linux/amd64、linux/arm64，两平台 config 的 revision 均为完整 `62cea141` SHA。发布日志 /tmp/nexus-dev-publication-40048237411.log，清单 /tmp/nexus-published-{dev-manifest,manifest}.log，平台配置 /tmp/nexus-published-image-configs.json。
+
+发布成功后按用户授权删除 22 条 conclusion=failure 的远程 Actions 记录，复查 total_count=0；成功的 E2E 40047441975、发布 40048237411 均保留，取消等其余状态未删除。删除前元数据 /tmp/nexus-failed-actions-deleted-metadata.json、逐条结果 /tmp/nexus-actions-cleanup-results.json；失败原因及修复证据沿前述记录保留。最终收口提交仅更新 PLAN/本验证文档，不改变已测试与已发布的源码或依赖。
