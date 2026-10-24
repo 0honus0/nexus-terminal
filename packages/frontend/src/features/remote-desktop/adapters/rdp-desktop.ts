@@ -26,14 +26,6 @@ const RESIZE_QUIET_MS = 150;
 // Allow surrogate-pair press/releases and a pointer within Fast-Path's 255-event count.
 const TEXT_BATCH_CHARACTERS = 32;
 
-// IronRDP 0.7 misaddresses padded bitmap rows at unaligned desktop widths.
-// Keep both initial and dynamic framebuffer requests on a four-pixel boundary.
-const rdpDisplay = (display: RemoteDesktopDisplay): RemoteDesktopDisplay => ({
-	width: Math.max(4, Math.floor(display.width / 4) * 4),
-	height: display.height,
-	dpi: display.dpi,
-});
-
 let initialization: Promise<void> | null = null;
 
 function initialize(): Promise<void> {
@@ -341,7 +333,7 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 	};
 
 	const resize = (display: RemoteDesktopDisplay) => {
-		latestDisplay = rdpDisplay(display);
+		latestDisplay = { width: display.width, height: display.height, dpi: display.dpi };
 		if (resizeTimer !== null) {
 			clearTimeout(resizeTimer);
 			resizeTimer = null;
@@ -393,8 +385,7 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 				.free();
 			builder.authToken('').free();
 			builder.renderCanvas(canvas).free();
-			const initialDisplay = rdpDisplay(display);
-			builder.desktopSize(new Backend.DesktopSize(initialDisplay.width, initialDisplay.height)).free();
+			builder.desktopSize(new Backend.DesktopSize(display.width, display.height)).free();
 			builder.extension(displayControl(true)).free();
 			builder.extension(enableCredssp(true)).free();
 			builder.extension(outboundMessageSizeLimit(REMOTE_DESKTOP_FRAME_MAX_BYTES)).free();

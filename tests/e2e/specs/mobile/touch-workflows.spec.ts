@@ -287,6 +287,8 @@ test('mobile RDP opens keyboard explicitly and persists touch mode without recon
 			},
 		});
 	});
+	const desktopErrors: string[] = [];
+	page.on('pageerror', (error) => desktopErrors.push(error.message));
 	let sessionCreateRequests = 0;
 	page.on('request', (request) => {
 		if (/\/api\/v1\/connections\/\d+\/rdp-session(?:\?|$)/.test(request.url())) sessionCreateRequests += 1;
@@ -351,13 +353,6 @@ test('mobile RDP opens keyboard explicitly and persists touch mode without recon
 		await page.goto('/login');
 		await openConnection();
 		await expect.poll(() => sessionCreateRequests).toBe(1);
-		await expect
-			.poll(() =>
-				page
-					.locator('.remote-display-container canvas')
-					.evaluate((canvas: HTMLCanvasElement) => canvas.width % 4),
-			)
-			.toBe(0);
 
 		const directMode = page.getByRole('button', { name: 'Direct', exact: true });
 		const touchpadMode = page.getByRole('button', { name: 'Touchpad', exact: true });
@@ -433,6 +428,7 @@ test('mobile RDP opens keyboard explicitly and persists touch mode without recon
 		await openConnection();
 		await expect.poll(() => sessionCreateRequests).toBe(3);
 		await expect(page.getByRole('button', { name: 'Direct', exact: true })).toHaveAttribute('aria-pressed', 'true');
+		expect(desktopErrors, 'desktop rendering and reconnects must not panic the WASM runtime').toEqual([]);
 	} finally {
 		await context.request.delete(`/api/v1/targets/connections/${connectionId}`, {
 			headers: { Origin: E2E_URLS.frontendOrigin },

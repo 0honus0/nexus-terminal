@@ -1893,3 +1893,9 @@ RDP Adapter 将文本从逐字符 SDK 调用改为最多 32 个完整字符一�
 `29b2436b` 完整远程 461 场景，459 通过、2 失败，七个 shard 和质量/Docker smoke 通过。状态面板 160% 缩放的约 1.5 屏幕像素偏差仍小于一 CSS 像素，测试按 scale 换算原容差。挂起历史只有一次请求/响应、视口持续在尾部，追加 request/received/drain/page/anchor 安全阶段日志，仍待真实根因定位。
 
 移动 RDP 第一次 WASM 在 image.rs:591 数组越界（634×378 framebuffer），重试通过。Adapter 对齐初始和动态宽度，新增真实已渲染 canvas 的四像素对齐断言，保留键盘远端文本、触控及全屏断言。对应上游未发布修复为 IronRDP `80bb81b344dba0197aa7b870c685f398dc4bcaee`。两轮源码复审核对 SDK 边界、窗口尺寸不变、日志不含终端内容及原业务断言；根 check、双端 build、全量 format、目标测试 tsc 与 diff 检查通过，日志为 /tmp/nexus-followup-{check,build,format,types}.log；远程待验，按 D17 未运行本地行为测试。
+
+## 远程 40018215989 根因收口（2026-10-23）
+
+`99fb150f` 完整远程 460/461 通过，状态面板已通过，历史仍失败。完整 trace console（不只过滤被截短的 preview）证明 request/received/drain/page-written/anchored 全部完成；快照显示滑块位于布局 splitter 覆盖区，鼠标每次误拖导致终端缩窄；`/visible/` 同时匹配 invisible。本批改为滑块左侧真实暴露位置，精确 visible token，并在按下前用 elementFromPoint 确认实际接收控件；保留全部历史与输入业务断言，删除临时阶段日志。
+
+移动 RDP 首次仍在 image.rs:591 数组越界、重试通过，不能以重试成功当作修好。移除无效桌面宽度对齐，固定官方构建 39196965692 / SHA 62246b364a0282bab85087f658a81fe4207b6b31 的原始 archive；源码含 bitmap source stride 与非法边界恢复，摘要及许可见 frontend/vendor/ironrdp。生产/runner Docker 均在安装前复制，pnpm 锁定完整性；既有像素 presenter 与所有操作保留，移动场景新增 pageerror 零异常断言。两轮源码复审核对来源、类型、打包和真实拖拽命中，根 check、双端 build、全量 format、目标测试 tsc 与 diff 通过，日志 /tmp/nexus-rdp-sdk-*.log；远程待验，按 D17 无本地行为测试。

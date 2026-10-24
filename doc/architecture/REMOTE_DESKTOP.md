@@ -91,4 +91,4 @@ RDP Adapter 的输入事务按完整字符计数，每批最多 32 字符（按�
 
 当前已完成静态检查与构建；PLAN D17 的一般本地测试限制保持，D19 授权的指定 HTTPS 站点真实 RDP 基础链路、常用键盘、composition 去重、双向纯文本剪贴板及拒绝授权、窗口/全屏切换，以及 Chromium 移动仿真输入和触控已验证。后续已补证分钟级持续输入、票据重放/过期拒绝不影响原连接、受控 WS 关闭/新票据重连、两次建连中取消及刷新后实际 TCP 释放；页面销毁后的 WS 事件观察缺口由独立 TCP 证据补充，不记录原脚本整体 PASS。该证据不覆盖 VNC、其它系统组合键、原生输入法/手机真机、小时级或空闲稳定性、16 路并发、强制晚成功/复杂故障及多平台。旧 Guacamole 的 B10/Windows PASS 只属于旧实现，不能作为新桥的验收。具体命令/结果归 [testing](../testing/E2E.md)，操作见 [USAGE](../USAGE.md#远程桌面)，实施状态见 [PLAN](../PLAN.md)。
 
-IronRDP npm 0.7.0 尚未包含上游 `80bb81b344dba0197aa7b870c685f398dc4bcaee` 的 bitmap source stride 修复；移动回归出现 634×378 framebuffer 数组越界并中断输入。RDP Adapter 将初始和动态 desktop width 向下对齐到四像素边界，保持容器与输入坐标基于真实 framebuffer；不修改窗口 UI。后续升级 SDK 需继续回归非对齐视口及动态缩放，不能仅凭版本更新移除此规避。
+IronRDP npm 0.7.0 尚未包含位图 source stride 与边界修复；Adapter 对齐桌面宽度不能处理单个位图矩形的源行填充，已移除该规避。正式依赖固定为上游成功构建 `62246b364a0282bab85087f658a81fe4207b6b31` 的原始 npm archive，仓库 vendor 目录保留完整来源、SHA-256 与双许可证，pnpm lockfile 验证完整性，Docker 与 E2E runner 安装前复制该文件。运行时不下载 Actions 产物，不更改 SDK 源码或窗口 UI；保持现有 initial/dynamic 尺寸、像素 presenter、输入与关闭 owner。更新上游构建或恢复 npm 正式版均须回归真实画面、键鼠、剪贴板、动态缩放及重连，不能仅凭版本号判为兼容。

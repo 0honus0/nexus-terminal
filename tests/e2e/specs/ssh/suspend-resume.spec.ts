@@ -1031,9 +1031,6 @@ test('resumed terminal pages older history through a bounded window and restores
 }) => {
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	await updateUiPreferences(context.request, (preferences) => {
-		preferences.frontendLogLevel = 'debug';
-	});
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(context.request);
@@ -1103,9 +1100,6 @@ test('resumed terminal pages older history through a bounded window and restores
 		await expect(suspendedRow).toBeVisible({ timeout: 20_000 });
 		let historyRequestCount = 0;
 		let historyResponseCount = 0;
-		page.on('console', (message) => {
-			if (message.text().includes('Terminal history')) console.log(message.text());
-		});
 		const historyRequestIds = new Set<string>();
 		let resumeStarted = 0;
 		let resumeRequestMs: number | undefined;
@@ -1210,33 +1204,38 @@ test('resumed terminal pages older history through a bounded window and restores
 			return box!;
 		};
 
-		const dragHistorySliderToTop = async () => {
-			await page.mouse.move(
-				scrollableBox!.x + scrollableBox!.width - 2,
-				scrollableBox!.y + scrollableBox!.height / 2,
-			);
-			await expect(scrollbar).toHaveClass(/visible/);
-			const scrollbarBox = await scrollbar.boundingBox();
+		const revealHistorySlider = async () => {
 			const currentSliderBox = await sliderBox();
+			// The right pane's splitter overlaps the scrollbar's right edge. Use its exposed left side.
+			const x = currentSliderBox.x + 1;
+			const y = currentSliderBox.y + currentSliderBox.height / 2;
+			await page.mouse.move(x, y);
+			await expect(scrollbar).toHaveClass(/(?:^|\s)visible(?:\s|$)/);
+			expect(
+				await page.evaluate(
+					({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest('.scrollbar.vertical > .slider')),
+					{ x, y },
+				),
+				'the drag must reach the terminal slider rather than the adjacent layout splitter',
+			).toBe(true);
+			return { x, y };
+		};
+
+		const dragHistorySliderToTop = async () => {
+			const { x, y } = await revealHistorySlider();
+			const scrollbarBox = await scrollbar.boundingBox();
 			expect(scrollbarBox).toBeTruthy();
-			const x = currentSliderBox.x + currentSliderBox.width / 2;
-			await page.mouse.move(x, currentSliderBox.y + currentSliderBox.height / 2);
+			await page.mouse.move(x, y);
 			await page.mouse.down();
 			await page.mouse.move(x, scrollbarBox!.y + 2, { steps: 8 });
 			await page.mouse.up();
 		};
 
 		const dragHistorySliderToBottom = async () => {
-			await page.mouse.move(
-				scrollableBox!.x + scrollableBox!.width - 2,
-				scrollableBox!.y + scrollableBox!.height / 2,
-			);
-			await expect(scrollbar).toHaveClass(/visible/);
+			const { x, y } = await revealHistorySlider();
 			const scrollbarBox = await scrollbar.boundingBox();
-			const currentSliderBox = await sliderBox();
 			expect(scrollbarBox).toBeTruthy();
-			const x = currentSliderBox.x + currentSliderBox.width / 2;
-			await page.mouse.move(x, currentSliderBox.y + currentSliderBox.height / 2);
+			await page.mouse.move(x, y);
 			await page.mouse.down();
 			await page.mouse.move(x, scrollbarBox!.y + scrollbarBox!.height - 2, { steps: 8 });
 			await page.mouse.up();
