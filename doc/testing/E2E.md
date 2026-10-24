@@ -2054,3 +2054,9 @@ RDP Adapter 将文本从逐字符 SDK 调用改为最多 32 个完整字符一�
 [e7646ed5 / 40092795332](https://github.com/0honus0/nexus-terminal/actions/runs/40092795332)：质量、Docker冒烟和六分片通过，真实PTY echo开/关及正常命令输出通过，重复提示符修复已验。shard7图标仍越界；百分比max-height受隐式auto行最小内容约束，原metric-row补单行minmax(0,1fr)，保留原大小与既有边界断言。shard8仅主题创建首轮失败、重试通过，属于不能忽略的flaky：trace定位custom-terminal-theme.spec.ts原100行create.json，Chromium Network.getResponseBody找不到资源；无业务导航失败证据。保留真实POST201，等待UI编辑器隐藏后通过原认证API严格读取唯一创建主题及四项颜色，再继续原编辑/应用/重载/删除流程。日志/tmp/nexus-e2e-40092795332-failed.log、shard8产物/tmp/nexus-e2e-40092795332-shard8。两轮源码复审核对Grid内容区、双层高度、缩放/趋势/紧凑显示、唯一主题身份/读取及清理；按D17不运行本地行为测试，新SHA完整回归待验。
 
 根check、Frontend build、全量format:all:check、七份相关spec静态类型及diff通过，日志/tmp/nexus-grid-theme-{check,build,format,types}.log；生产改动仅原Grid单行约束，测试保持全部实际操作与边界判据。
+
+## 40093685950与GET标签通知边界竞争（2026-10-24）
+
+[99a1300b / 40093685950](https://github.com/0honus0/nexus-terminal/actions/runs/40093685950)七分片、质量及Docker冒烟通过，所有状态尺寸/缩放、真实PTY、主题创建编辑应用重载删除均通过。仅shard1连接选择器标签失败Toast默认等待10秒与产品前台10秒恢复宽限竞争，首轮失败后重试通过；日志/tmp/nexus-e2e-40093685950-failed.log。全仓核对route.abort及networkFailureToast消费者，workspace选择器与Connections页两个GET标签失败通知改为15秒；原notification/key-list已15秒，DELETE/logout写入仍立即通知，其它只验自身错误/围栏的场景不改。保持真实连接目录可用断言，不改生产代码或UI，不扩大全局超时。两轮源码复审完成，新SHA完整远程待验；D17无本地行为测试。
+
+根check、全量format:all:check、九份相关spec静态类型及diff通过（/tmp/nexus-tag-read-{check,format,types}.log）；生产依赖审计无已知漏洞（/tmp/nexus-dev-final-production-audit.log）。本批仅测试/文档，生产代码与99a1300b相同，复用该版前端build证据。

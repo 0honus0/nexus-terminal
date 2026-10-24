@@ -133,7 +133,8 @@ test('workspace connection list remains usable when connection tags fail to load
 	await page.goto('/workspace');
 	const list = await openWorkspaceConnectionPicker(page);
 	await expect(list.locator(`li[data-connection-id="${primaryId}"]`)).toBeVisible();
-	await expect(networkFailureToast(page)).toBeVisible();
+	// Read failures notify only after the 10-second foreground recovery grace.
+	await expect(networkFailureToast(page)).toBeVisible({ timeout: 15_000 });
 });
 
 test('workspace connection list remains usable when main preferences fail to load', async ({ page, context }) => {

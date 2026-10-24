@@ -2350,3 +2350,7 @@ Agent 设置的“模型 Provider”标题行原先由左侧标题组和右侧�
 ### 40092795332后继收口
 
 完整远程六分片通过，真实PTY echo开/关与用户输出均已通过，定向重绘修复有效。状态仍失败：仅百分比max-height无法约束隐式auto行的最小内容尺寸；在原metric-row明确单行minmax(0,1fr)，使已有图标高度上限按实际内容区生效，不改卡片设计。主题UI首轮在create.json遇到Chromium Network.getResponseBody资源不存在，重试通过，trace无业务导航失败证据；测试保留POST201，待编辑器关闭后用原认证API严格读取唯一主题和四项颜色，避免依赖DevTools临时响应体缓存，后续编辑/应用/重载/删除保持。两轮源码复审核对Grid及缩放约束、紧凑语义、API真实持久化读取与清理身份；根check、前端build、全量format:all:check、七份相关spec静态类型及diff通过（/tmp/nexus-grid-theme-*.log），新SHA统一远程验收。
+
+### 只读连接标签网络通知的最后两处边界竞争
+
+40093685950七分片通过，PTY、全部状态尺寸及缩放、主题完整流程均已通过；仅连接选择器标签失败通知首轮在默认10秒等不到Toast、重试通过。全仓核对route.abort与networkFailureToast消费者，补齐workspace连接选择器及Connections页两个GET标签失败断言为15秒，匹配前台10秒恢复宽限；DELETE与logout写入仍默认立即通知，设置自身读取失败/按钮围栏不受影响。只改原spec，不改UI/生产代码/全局超时、不新增测试场景。两轮复审核对全部网络故障注入及即时/宽限分类；根check、全量格式、九份spec静态类型和diff通过，生产依赖审计无已知漏洞，新SHA远程结果随后收口。
