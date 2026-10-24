@@ -460,7 +460,9 @@
 			</template>
 
 			<StatusMonitor
-				v-else-if="node.component === 'statusMonitor' && active !== false"
+				v-else-if="node.component === 'statusMonitor'"
+				v-show="active !== false"
+				:active="active !== false"
 				class="min-h-0 flex-1 overflow-hidden"
 				:session="session.statusController"
 				:connecting="['connecting', 'reconnecting'].includes(session.state.value)"

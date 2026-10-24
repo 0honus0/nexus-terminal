@@ -33,6 +33,7 @@
 
 	const props = defineProps<{
 		pane: WorkspacePane;
+		active?: boolean;
 		terminalApi: MobileTerminalApi | null;
 		terminalChannel: TerminalChannel;
 		statusSession: StatusMonitorSessionController;
@@ -207,7 +208,7 @@
 	</UiOverlayPanel>
 
 	<UiOverlayPanel
-		:visible="statusVisible"
+		:visible="statusVisible && active !== false"
 		teleport
 		:z-index="1000"
 		overlay-class="!p-3"
@@ -231,6 +232,7 @@
 			</UiButton>
 		</span>
 		<StatusMonitor
+			:active="active !== false && statusVisible"
 			class="status-monitor--mobile-overlay h-full min-h-0 overflow-hidden"
 			:session="statusSession"
 			:connected="connected"

@@ -1634,6 +1634,7 @@
 
 		<WorkspaceMobileTools
 			v-if="mobile"
+			:active="active !== false"
 			:pane="mobilePane"
 			:terminal-api="terminalApi"
 			:terminal-channel="presentationTerminalChannel"

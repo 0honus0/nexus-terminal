@@ -1,5 +1,17 @@
 # Nexus Terminal E2E
 
+## 挂起会话列表随分栏高度展开（2026-10-24，行为待远程）
+
+原因是 SuspendedSessionsPanel 通用列表 max-height 使用两张78px卡片加6px间隔，面板放大仍被限制在162px。将该 max-height 移到原 pageScroll 模式，工作区默认模式沿原 h-full/min-h-0/flex-1/overflow-y-auto 使用父分栏剩余空间；起始页及Modal均传pageScroll，保持原紧凑滚动。两轮源码核对横纵分栏、侧栏、搜索栏固定、默认列表超出滚动与页面模式选择器优先级，无数据/操作/协议变更。
+
+本批检查日志 `/tmp/nexus-suspended-height-{check,format,build}.log`，根check、全量format:all:check、Frontend build与diff通过；按D17未新增或运行本地行为/E2E。远程验证至少四条会话时扩大分栏可同时展示更多，缩小后滚动仍可到达全部会话，搜索与恢复/删除不受影响，起始页与会话弹窗维持原布局。
+
+## 多 SSH 切换监控订阅复用（2026-10-24，行为待远程）
+
+源码定位：WorkspaceLayoutRenderer 用 active 条件销毁 StatusMonitor，最后一个消费者卸载即 status.stop，返回 status.start 触发后端 bootstrap 双采样和500ms等待。桌面改为按节点保留面板、v-show 隐藏、active控制消费，保留趋势选择；Session controller最后消费者离开后保留订阅30秒，短切换不stop/start，长离开停止但保留样本与历史，返回静默恢复。手机状态浮层核对所属Session active。
+
+两轮源码复审核对多消费者只设一个计时器、返回取消计时器、无消费者时不在首次建连启动、串行启停、断线代次及dispose撤销、独立Session数据隔离；保持后端采样周期/授权/WS协议，不修改UI样式。工作区并行存在状态卡片视觉改动，本批未改写该视觉实现。静态证据 `/tmp/nexus-status-reuse-{check,format,build}.log`，根 check、全量 format:all:check、Frontend build 与 diff 均通过；按D17未新增或执行本地行为/E2E。远程回归：A/B多次快速切换无额外status.start/stop且趋势选择保持，后台30秒后停止，返回先显示旧样本再更新，断线/关闭在途启动/多个面板共享及手机切换互不串数据。
+
 ## 终端边缘文字选择与分栏热区（2026-10-24，行为待远程）
 
 源码确认 WorkspaceLayoutRenderer 的 splitter 本体为 9px，但透明 ::after 横纵热区均为 33px，覆盖两侧各约16px的正文。将两个方向的伪元素尺寸收窄至9px，与本体一致；1px视觉线、负边距、悬停/焦点颜色、键盘调整、布局锁定和尺寸保存逻辑保持原实现。两轮源码复核覆盖横纵与嵌套分栏，未修改终端选区事件或后端。

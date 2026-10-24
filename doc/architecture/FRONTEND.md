@@ -312,7 +312,7 @@ B8跨App的plugin-api/agent-dispatcher/SDK父页已改用Shared plugins/intent-*
 3. **依赖方向**：View→应用controller→所属channel；runtime通过feature public取得窄能力/mapper/types，并消费Shared严格codec。WorkspaceSocket的各子协议maps均来自Shared，删除旧Protocol的Omit混合层，不新增兼容出口。
 4. **类型与转换**：Shared monitoring拥有status请求、null回执、sample/error及预算；docker拥有完整status/stats/command。loadAvg、ports、labels和stats逐字段复制，Docker ID采用安全identifier；完整ID与CLI短ID的关联保留真实生产者语义。指标单位不重解释；缺测不入历史，不显示为零。服务端有限码来自Shared，协议失败及派发状态归前端。
 5. **入口与安装**：正式Session持statusController/dockerController；StatusMonitor/DockerManager通过既有视图入口消费；ACK确认前不派发观测能力。status.start/stop与docker.status/stats/command不隐式创建新socket。
-6. **数据、事务与并发**：不新增存储。监控start/stop串行并绑定原附件；Docker读取单飞，generation隔离停用/断线，命令修订拒绝发布命令前的旧读取。命令pending阻止并发；unknown保留保护，不被poll、无关拒绝或KeepAlive清除。显式读取成功仅清除浏览器本地保护，不解除后端持久突变围栏，也不证明先前命令停止。
+6. **数据、事务与并发**：不新增存储。监控start/stop串行并绑定原附件；每个Session独立保留当前样本与历史，桌面面板切换仅隐藏并显式传active。最后可见消费者离开后由controller唯一30秒计时器延迟退订，返回取消计时器且复用原采样基线；超过期限停止订阅但保留显示快照，实际断开清空快照/历史并取消计时器，dispose取消计时器并串行退订。手机浮层的可见性同时核对所属Session active。Docker读取单飞，generation隔离停用/断线，命令修订拒绝发布命令前的旧读取。命令pending阻止并发；unknown保留保护，不被poll、无关拒绝或KeepAlive清除。显式读取成功仅清除浏览器本地保护，不解除后端持久突变围栏，也不证明先前命令停止。
 7. **生命周期与失败**：视图停用/卸载/连接状态变化撤销原删除确认；晚确认不派发。命令已确认与随后刷新失败分别表达；断流、畸形回执保留unknown，不自动重放。取消/断线不证明远端已停止；旧附件退订不能发送到新socket。安全错误经三语有限映射显示，未取到Docker状态不能冒充未安装。
 8. **当前能力与验收**：WS源码已接入，专项结果归testing。system-overview本机/SSH资源HTTP已独立接入，实际采样设置已接Preferences核心配置及生效投影，专项范围归testing；图表按真实样本时间/点数降采样，不改变服务器实际采样周期。整体App/页面/三语挂载及扩大故障仍C2-D。
 

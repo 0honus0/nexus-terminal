@@ -470,6 +470,7 @@
 	}
 
 	.suspended-sessions-panel--page .session-list-container {
+		max-height: var(--session-list-viewport-height);
 		overflow-y: auto;
 	}
 
@@ -486,7 +487,6 @@
 
 	.session-list-container {
 		display: flex;
-		max-height: var(--session-list-viewport-height);
 		flex-direction: column;
 		overscroll-behavior: contain;
 		padding-inline: 0;

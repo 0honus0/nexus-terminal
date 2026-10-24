@@ -28,6 +28,7 @@
 	const props = withDefaults(
 		defineProps<{
 			session: StatusMonitorSessionController;
+			active?: boolean;
 			connected: boolean;
 			connecting?: boolean;
 
@@ -35,12 +36,12 @@
 			host?: string;
 			scale?: number;
 		}>(),
-		{ showIp: true, scale: 1, connecting: false },
+		{ showIp: true, scale: 1, connecting: false, active: true },
 	);
 	const emit = defineEmits<{ 'update:scale': [scale: number] }>();
 	const { t } = useI18n();
 	const feedback = useFeedback();
-	const monitor = useStatusMonitor(props.session);
+	const monitor = useStatusMonitor(props.session, () => props.active);
 	const localScale = ref(props.scale);
 	const scaleRoot = ref<HTMLElement | null>(null);
 	const selectedMetric = ref<StatusMetric | null>(null);

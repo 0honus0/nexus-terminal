@@ -1,5 +1,5 @@
 import { logger } from '@/client/logging/logger';
-import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, shallowReadonly } from 'vue';
+import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, shallowReadonly, watch } from 'vue';
 import type { StatusChannel } from '../ports/status-channel';
 import {
 	StatusFailure,
@@ -9,6 +9,8 @@ import {
 	type StatusHistory,
 	type StatusHistoryPoint,
 } from '../model/status-types';
+
+const IDLE_SUBSCRIPTION_GRACE_MS = 30_000;
 
 const emptyHistory = (): StatusHistory => ({ cpu: [], memory: [], swap: [], disk: [], networkRx: [], networkTx: [] });
 
@@ -23,8 +25,17 @@ export function createStatusMonitorSession(channel: StatusChannel, maxSamples = 
 	let disposed = false;
 	let generation = 0;
 	let operation = Promise.resolve();
+	let idleStopTimer: ReturnType<typeof setTimeout> | undefined;
 
-	const desiredSampling = (): boolean => !disposed && workspaceAvailable && consumerCount > 0;
+	const cancelIdleStop = (): void => {
+		if (idleStopTimer !== undefined) {
+			clearTimeout(idleStopTimer);
+			idleStopTimer = undefined;
+		}
+	};
+
+	const desiredSampling = (): boolean =>
+		!disposed && workspaceAvailable && (consumerCount > 0 || idleStopTimer !== undefined);
 
 	const push = (list: StatusHistoryPoint[], time: number, value: number | undefined): void => {
 		if (value === undefined) {
@@ -98,6 +109,7 @@ export function createStatusMonitorSession(channel: StatusChannel, maxSamples = 
 		if (disposed) {
 			return;
 		}
+		cancelIdleStop();
 		consumerCount += 1;
 		if (consumerCount === 1) {
 			void syncSampling();
@@ -109,7 +121,13 @@ export function createStatusMonitorSession(channel: StatusChannel, maxSamples = 
 			return;
 		}
 		consumerCount -= 1;
-		if (consumerCount === 0) {
+		if (consumerCount === 0 && sampling && workspaceAvailable && !disposed) {
+			// Keep the actual subscription and rate baseline across short tab switches.
+			idleStopTimer = setTimeout(() => {
+				idleStopTimer = undefined;
+				void syncSampling();
+			}, IDLE_SUBSCRIPTION_GRACE_MS);
+		} else if (consumerCount === 0) {
 			void syncSampling();
 		}
 	};
@@ -123,6 +141,7 @@ export function createStatusMonitorSession(channel: StatusChannel, maxSamples = 
 	};
 
 	const workspaceDisconnected = (): void => {
+		cancelIdleStop();
 		generation += 1;
 		workspaceAvailable = false;
 		sampling = false;
@@ -135,6 +154,7 @@ export function createStatusMonitorSession(channel: StatusChannel, maxSamples = 
 		if (disposed) {
 			return;
 		}
+		cancelIdleStop();
 		disposed = true;
 		consumerCount = 0;
 		stopEvents();
@@ -155,7 +175,8 @@ export function createStatusMonitorSession(channel: StatusChannel, maxSamples = 
 	};
 }
 
-export function useStatusMonitor(controller: StatusMonitorSessionController) {
+export function useStatusMonitor(controller: StatusMonitorSessionController, isVisible: () => boolean = () => true) {
+	let attached = false;
 	let active = false;
 
 	const activate = (): void => {
@@ -174,9 +195,28 @@ export function useStatusMonitor(controller: StatusMonitorSessionController) {
 		controller.deactivate();
 	};
 
-	onMounted(activate);
-	onActivated(activate);
-	onDeactivated(deactivate);
-	onBeforeUnmount(deactivate);
+	const syncVisibility = (): void => {
+		if (attached && isVisible()) {
+			activate();
+		} else {
+			deactivate();
+		}
+	};
+
+	const attach = (): void => {
+		attached = true;
+		syncVisibility();
+	};
+
+	const detach = (): void => {
+		attached = false;
+		deactivate();
+	};
+
+	watch(isVisible, syncVisibility);
+	onMounted(attach);
+	onActivated(attach);
+	onDeactivated(detach);
+	onBeforeUnmount(detach);
 	return controller;
 }
