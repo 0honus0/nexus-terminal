@@ -1,5 +1,11 @@
 # Nexus Terminal E2E
 
+## 终端边缘文字选择与分栏热区（2026-10-24，行为待远程）
+
+源码确认 WorkspaceLayoutRenderer 的 splitter 本体为 9px，但透明 ::after 横纵热区均为 33px，覆盖两侧各约16px的正文。将两个方向的伪元素尺寸收窄至9px，与本体一致；1px视觉线、负边距、悬停/焦点颜色、键盘调整、布局锁定和尺寸保存逻辑保持原实现。两轮源码复核覆盖横纵与嵌套分栏，未修改终端选区事件或后端。
+
+本批静态命令：根 check、全量 format:all:check、Frontend build、git diff --check；日志 `/tmp/nexus-split-hit-{check,format,build}.log`，根 check 与 Frontend build 通过，diff 检查无空白错误。按 D17 未新增或执行本地行为/E2E；远程需核对距分隔线5–16px的正文可开始选区、中心拖动仍可调整及保存、锁定时不调整、横纵与嵌套分栏一致。此前33px扩展热区的实机记录仅证明当时实现，不作为当前预期。
+
 ## 后端诊断日志补齐（2026-10-24，静态通过，行为待远程）
 
 沿用 Platform Pino，Bootstrap/Operations/网络/核心 owner 共用同一实例和热更新阈值。覆盖启动、信号停机、数据库/恢复阶段、HTTP 模板路由及本地响应完成、WS 授权/容量/关闭流量汇总、SSH/Workspace/文件/机器突变/服务器传输/工具安装/监控恢复、Agent/模型/插件/通知与外部请求。保持前端 UI、Shared 协议、权限及未知结果/清理策略。

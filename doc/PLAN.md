@@ -2265,3 +2265,12 @@ Agent 设置的“模型 Provider”标题行原先由左侧标题组和右侧�
 | 职责归属 | 原 ToolJobService / PluginRuntimeService 持有状态事实；日志回调只恢复自己的 AsyncLocalStorage，不捕获其它事务/授权上下文。                                                                                                       |
 | 类型归属 | 复用 Logger、DiagnosticFacts、原 Job/Runtime owner；不新增业务协议或持久字段。                                                                                                                                                   |
 | 完成证据 | 两轮源码复审完成：核对原状态/清理顺序、后台任务关联、安全字段与省略计数；修正插件 Host 失败事件误标实例退出。根 check 已通过，最终 format:all:check、双端 build 与 diff 均通过，证据见 testing；按授权提交推送 dev，行为留远程。 |
+
+## 终端分栏拖拽热区收窄（2026-10-24）
+
+| 审核表   | 范围与判据                                                                                                                                             |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 功能对应 | Workspace 横纵 splitter 的透明命中范围由 33px 收窄至 9px，视觉线保持 1px；恢复边缘正文的选择空间。                                                     |
+| 职责归属 | WorkspaceLayoutRenderer 原 scoped CSS 持有热区；不改 Splitpanes 事件、比例、最小尺寸、布局锁定或保存 owner。                                           |
+| 类型归属 | 仅 CSS 与使用说明变更，无应用类型、Shared 或后端变更。                                                                                                 |
+| 完成证据 | 源码两轮核对横纵热区与原 9px splitter 一致、负边距及锁定规则保持；根 check 与 Frontend build 通过；全量格式及 diff 结果见 testing，行为按 D17 留远程。 |

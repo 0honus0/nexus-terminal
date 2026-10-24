@@ -583,7 +583,7 @@
 	.workspace-split.splitpanes--vertical > :deep(.splitpanes__splitter::after) {
 		inset-block: 0;
 		left: 50%;
-		width: 33px;
+		width: 9px;
 		transform: translateX(-50%);
 	}
 	.workspace-split.splitpanes--horizontal > :deep(.splitpanes__splitter) {
@@ -599,7 +599,7 @@
 	.workspace-split.splitpanes--horizontal > :deep(.splitpanes__splitter::after) {
 		inset-inline: 0;
 		top: 50%;
-		height: 33px;
+		height: 9px;
 		transform: translateY(-50%);
 	}
 </style>
