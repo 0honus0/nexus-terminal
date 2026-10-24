@@ -41,6 +41,7 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 	element.style.width = '100%';
 	element.style.height = '100%';
 	element.style.display = 'flex';
+	element.style.position = 'relative';
 	element.style.alignItems = 'center';
 	element.style.justifyContent = 'center';
 	const canvas = document.createElement('canvas');
@@ -48,6 +49,36 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 	canvas.style.maxHeight = '100%';
 	canvas.style.objectFit = 'contain';
 	element.append(canvas);
+	// CSS cursors are not drawn by mobile browsers for touch input.
+	// Keep a local position indicator outside the decoded remote canvas.
+	const touchPointer = options.hasTouch ? document.createElement('i') : null;
+	if (touchPointer) {
+		touchPointer.className = 'fas fa-arrow-pointer';
+		touchPointer.setAttribute('aria-hidden', 'true');
+		touchPointer.dataset.rdpTouchPointer = '';
+		Object.assign(touchPointer.style, {
+			position: 'absolute',
+			display: 'none',
+			pointerEvents: 'none',
+			zIndex: '2',
+			fontSize: '18px',
+			lineHeight: '1',
+			color: '#fff',
+			textShadow: '0 0 2px #000, 1px 1px 1px #000',
+		});
+		element.append(touchPointer);
+	}
+
+	const showTouchPointer = (clientX: number, clientY: number): void => {
+		const rect = element.getBoundingClientRect();
+		if (!touchPointer || rect.width <= 0 || rect.height <= 0) {
+			return;
+		}
+		touchPointer.style.left = `${((clientX - rect.left) / rect.width) * 100}%`;
+		touchPointer.style.top = `${((clientY - rect.top) / rect.height) * 100}%`;
+		touchPointer.style.display = 'block';
+	};
+
 	const keyboard = options.mobileInput ?? document.createElement('textarea');
 	if (!options.mobileInput) {
 		keyboard.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none';
@@ -260,6 +291,9 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 	};
 
 	const mouse = (event: MouseEvent) => {
+		if (event.isTrusted && touchPointer) {
+			touchPointer.style.display = 'none';
+		}
 		if (closed || !session) {
 			return;
 		}
@@ -468,7 +502,7 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 					negotiated.free();
 				}
 				if (options.hasTouch) {
-					touch = attachDesktopTouch(element, canvas, touchMode);
+					touch = attachDesktopTouch(element, canvas, touchMode, showTouchPointer);
 				}
 				resize(latestDisplay ?? display);
 				options.onState('connected');

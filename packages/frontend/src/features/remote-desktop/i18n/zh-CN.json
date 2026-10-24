@@ -26,6 +26,7 @@
       "tokenError": "准备远程桌面会话失败"
     },
     "reconnectTooltip": "重新连接到远程桌面",
+    "touchGuide": "触控操作指南",
     "touchModeLabel": "触控",
     "touchModeDirect": "直触",
     "touchModeTouchpad": "触控板",

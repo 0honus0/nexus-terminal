@@ -2096,3 +2096,7 @@ RDP Adapter 将文本从逐字符 SDK 调用改为最多 32 个完整字符一�
 ## 服务器趋势修复AMD64 dev发布（2026-10-24）
 
 用户授权提交推送发布dev，沿用上一轮AMD64。产品提交`cb693e4c9c43287076d2e40b2ef4ffb9a480fe8c`已推送，[发布40106222288](https://github.com/0honus0/nexus-terminal/actions/runs/40106222288)生产依赖审计、构建及推送成功。`ghcr.io/0honus0/nexus-terminal:dev`清单digest为`sha256:ed932df1cff65efe9abb0dd81431b4b96fb36f2b48919e899c2b62aeb292bc49`，包含linux/amd64及attestation；`sha-cb693e4c9c43`配置核对amd64/linux、revision与产品SHA一致。发布观察/tmp/nexus-status-trend-dev-amd-publish.log，配置/tmp/nexus-status-trend-published-config.json。仅发布，未部署或重启远端。前序静态检查通过，现有E2E源码已同步但本次不声称完整远程E2E通过；收尾提交仅补文档。
+
+## 手机RDP触控指南与指针（2026-10-24）
+
+源码确认手机指南原whitespace-normal允许长文本占多行，RDP SDK光标仅写canvas.style.cursor，移动浏览器没有触摸鼠标光标。手机指南改复用全局UiInfoHint的click触发、完整内容、无障碍名称及中英日翻译，桌面继续原说明。desktop-touch可选回调报告与MouseEvent相同client坐标，RDP有触控能力时持本地FontAwesome箭头覆盖层，坐标按容器百分比定位且pointer-events:none，不混入远端canvas；触控板首次位置发送mousemove，使用独立初始化标志、派发前夹紧坐标，真实鼠标隐藏覆盖层。VNC不安装本地第二光标；无新timer/listener，关闭由原touch/element生命周期清理。两轮源码复核直触/触控板、首点/边界、长按/双击拖动/双指、取消/关闭/晚建连与缩放定位；根check、前端build、全量format:all:check与diff通过，日志/tmp/nexus-rdp-mobile-touch-{check,build,format}.log。首次静态检查报告新增回调声明缺少空行，修正并重跑通过。按D17未新增/执行本地行为/E2E，手机真机、多语言窄屏、真实键鼠及VNC回归待远程；本地位置指针不证明远端输入已完成。

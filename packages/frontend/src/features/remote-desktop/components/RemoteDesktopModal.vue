@@ -5,6 +5,7 @@
 		UiBadge,
 		UiButton,
 		UiInput,
+		UiInfoHint,
 		UiNumberInput,
 		UiOverlayPanel,
 		UiResizeHandle,
@@ -612,9 +613,24 @@
 							class="flex items-center gap-1.5"
 							:class="device.isMobile.value ? 'w-full justify-between' : ''"
 						>
-							<span class="shrink-0 text-[11px] text-text-muted">{{
-								t('remoteDesktopModal.touchModeLabel')
-							}}</span>
+							<div class="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
+								<span class="text-[11px] text-text-muted">{{
+									t('remoteDesktopModal.touchModeLabel')
+								}}</span>
+								<UiInfoHint
+									v-if="device.isMobile.value"
+									:label="t('remoteDesktopModal.touchGuide')"
+									:text="
+										t(
+											touchMode === 'direct'
+												? 'remoteDesktopModal.touchHintDirect'
+												: 'remoteDesktopModal.touchHintTouchpad',
+										)
+									"
+									trigger="click"
+									align="start"
+								/>
+							</div>
 							<div
 								class="inline-flex shrink-0 overflow-hidden rounded border border-border"
 								role="group"
@@ -652,10 +668,7 @@
 								</button>
 							</div>
 						</div>
-						<span
-							class="text-[11px] leading-tight text-text-muted"
-							:class="device.isMobile.value ? 'whitespace-normal' : ''"
-						>
+						<span v-if="!device.isMobile.value" class="text-[11px] leading-tight text-text-muted">
 							{{
 								t(
 									touchMode === 'direct'

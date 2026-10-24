@@ -26,6 +26,7 @@
       "tokenError": "リモートデスクトップセッションの準備に失敗しました"
     },
     "reconnectTooltip": "リモートデスクトップに再接続",
+    "touchGuide": "タッチ操作ガイド",
     "touchModeLabel": "タッチ",
     "touchModeDirect": "直接操作",
     "touchModeTouchpad": "タッチパッド",

@@ -1,6 +1,11 @@
 import type { RemoteTouchMode } from '../model/remote-desktop-types';
 
-export function attachDesktopTouch(element: HTMLElement, canvas: HTMLCanvasElement, initialMode: RemoteTouchMode) {
+export function attachDesktopTouch(
+	element: HTMLElement,
+	canvas: HTMLCanvasElement,
+	initialMode: RemoteTouchMode,
+	onPointer?: (clientX: number, clientY: number) => void,
+) {
 	let mode = initialMode;
 	let startX = 0;
 	let startY = 0;
@@ -8,6 +13,7 @@ export function attachDesktopTouch(element: HTMLElement, canvas: HTMLCanvasEleme
 	let lastY = 0;
 	let cursorX = 0;
 	let cursorY = 0;
+	let cursorInitialized = false;
 	let moved = false;
 	let dragging = false;
 	let fingers = 0;
@@ -19,6 +25,9 @@ export function attachDesktopTouch(element: HTMLElement, canvas: HTMLCanvasEleme
 
 	const mouse = (type: string, button = 0) => {
 		const rect = canvas.getBoundingClientRect();
+		cursorX = Math.max(0, Math.min(Math.max(0, rect.width - 1), cursorX));
+		cursorY = Math.max(0, Math.min(Math.max(0, rect.height - 1), cursorY));
+		onPointer?.(rect.left + cursorX, rect.top + cursorY);
 		canvas.dispatchEvent(
 			new MouseEvent(type, {
 				bubbles: true,
@@ -58,11 +67,12 @@ export function attachDesktopTouch(element: HTMLElement, canvas: HTMLCanvasEleme
 			if (mode === 'direct') {
 				cursorX = touch.clientX - rect.left;
 				cursorY = touch.clientY - rect.top;
-				mouse('mousemove');
-			} else if (cursorX === 0 && cursorY === 0) {
+			} else if (!cursorInitialized) {
 				cursorX = rect.width / 2;
 				cursorY = rect.height / 2;
 			}
+			cursorInitialized = true;
+			mouse('mousemove');
 			if (fingers === 1 && Date.now() - lastTap < 300) {
 				dragging = true;
 				mouse('mousedown');

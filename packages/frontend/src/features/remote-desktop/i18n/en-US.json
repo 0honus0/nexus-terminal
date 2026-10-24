@@ -26,6 +26,7 @@
       "tokenError": "Failed to prepare remote desktop session"
     },
     "reconnectTooltip": "Reconnect to the remote desktop",
+    "touchGuide": "Touch controls guide",
     "touchModeLabel": "Touch",
     "touchModeDirect": "Direct",
     "touchModeTouchpad": "Touchpad",
