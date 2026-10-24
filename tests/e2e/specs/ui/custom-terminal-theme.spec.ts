@@ -2,7 +2,6 @@ import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { getTestAppearance, selectAppearanceSection, updateTestAppearance } from '../../support/appearance';
 import { listTestThemes, removeTestTheme } from '../../support/themes';
-import { readTerminalThemeView } from '../../../../packages/shared/src/preferences/themes/http-codec';
 import { step } from '../../support/steps';
 
 const THEME_NAME = 'E2E Custom Terminal Theme UI';
@@ -97,9 +96,19 @@ test('custom terminal theme UI creates, edits, applies, persists, and deletes a 
 			await editor.getByRole('button', { name: 'Save', exact: true }).click();
 			const create = await createPromise;
 			expect(create.status()).toBe(201);
-			createdThemeId = readTerminalThemeView(await create.json()).id;
-			expect(createdThemeId).toBeGreaterThan(0);
 			await expect(editor).toBeHidden({ timeout: 15_000 });
+			// Read the committed theme through the authenticated API: Chromium can
+			// discard a page response body from its DevTools cache after delivery.
+			const createdThemes = (await listTestThemes(context.request)).filter((theme) => theme.name === THEME_NAME);
+			expect(createdThemes).toHaveLength(1);
+			createdThemeId = createdThemes[0].id;
+			expect(createdThemeId).toBeGreaterThan(0);
+			expect(createdThemes[0].themeData).toMatchObject({
+				background: '#101820',
+				foreground: '#f2f2f2',
+				cursor: '#ffcc00',
+				selectionBackground: '#304050',
+			});
 
 			await customizer.getByPlaceholder('Search theme name...', { exact: true }).fill(THEME_NAME);
 			await expect(

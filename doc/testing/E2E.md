@@ -2044,3 +2044,13 @@ RDP Adapter 将文本从逐字符 SDK 调用改为最多 32 个完整字符一�
 ## 40091814866完整诊断与PTY定向重绘（2026-10-24）
 
 [e19aa979 / 40091814866](https://github.com/0honus0/nexus-terminal/actions/runs/40091814866)的质量/构建、Docker冒烟及六个分片通过；失败只剩状态图标越界与真实PTY echo关闭时首屏双提示符，所有网络宽限、挂起蓝色及监控订阅复用场景已通过。完整失败日志/tmp/nexus-e2e-40091814866-failed.log，shard3/7原始artifact在同名前缀目录。合并初始化命令不足以修复Bash echo关闭时隐藏提交的换行，现按实际TTY/原echo状态定向回退一行再重绘；不按提示符内容去重、不裁剪登录及用户空行、不削弱既有断言。两轮源码复审覆盖原echo读取时序、TTY/Bash限定、内部结果严格解码、分片/预算/失败及正常pipe路径。根check、双端build、全量format:all:check、相关spec静态类型及diff通过，日志/tmp/nexus-pty-redraw-{check,build,format,types}.log；新SHA完整远程待验；按D17未执行本地行为测试。
+
+## 状态紧凑模式测试假设校正（2026-10-24）
+
+源码复核StatusMonitor.css的118px宽度及210px高度规则：180×240面板在1.6缩放时，装饰图标、容量详情和进度条按原设计隐藏，名称及百分比保持可见。既有至少三个可见元素断言与该设计冲突，现改为明确名称与百分比可见；全部可见元素的边界/容差、卡片范围、容量溢出、完整ARIA及图表交互断言保留，不改生产UI。两轮源码复审核对缩放的逆尺寸与各模式显示条件；新SHA远程待验，按D17无本地行为测试。
+
+## 40092795332回归与Grid/主题夹具修复（2026-10-24）
+
+[e7646ed5 / 40092795332](https://github.com/0honus0/nexus-terminal/actions/runs/40092795332)：质量、Docker冒烟和六分片通过，真实PTY echo开/关及正常命令输出通过，重复提示符修复已验。shard7图标仍越界；百分比max-height受隐式auto行最小内容约束，原metric-row补单行minmax(0,1fr)，保留原大小与既有边界断言。shard8仅主题创建首轮失败、重试通过，属于不能忽略的flaky：trace定位custom-terminal-theme.spec.ts原100行create.json，Chromium Network.getResponseBody找不到资源；无业务导航失败证据。保留真实POST201，等待UI编辑器隐藏后通过原认证API严格读取唯一创建主题及四项颜色，再继续原编辑/应用/重载/删除流程。日志/tmp/nexus-e2e-40092795332-failed.log、shard8产物/tmp/nexus-e2e-40092795332-shard8。两轮源码复审核对Grid内容区、双层高度、缩放/趋势/紧凑显示、唯一主题身份/读取及清理；按D17不运行本地行为测试，新SHA完整回归待验。
+
+根check、Frontend build、全量format:all:check、七份相关spec静态类型及diff通过，日志/tmp/nexus-grid-theme-{check,build,format,types}.log；生产改动仅原Grid单行约束，测试保持全部实际操作与边界判据。

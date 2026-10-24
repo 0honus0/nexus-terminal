@@ -107,6 +107,10 @@ test('server status keeps values aligned and contained in narrow, short and zoom
 					pane: rect(element),
 					cards: [...element.querySelectorAll('.metric-row:not(.network-row)')].map((card) => ({
 						card: rect(card),
+						nameVisible: Boolean(card.querySelector('.metric-name')?.getClientRects().length),
+						percentageVisible: [...card.querySelectorAll('.metric-reading, .metric-track-label')].some(
+							(part) => part.getClientRects().length > 0,
+						),
 						parts: [
 							...card.querySelectorAll(
 								'.metric-icon, .metric-name, .metric-value, .metric-reading, .metric-track, .metric-track-label',
@@ -128,7 +132,9 @@ test('server status keeps values aligned and contained in narrow, short and zoom
 				expect(metric.card.left, diagnostic).toBeGreaterThanOrEqual(layout.pane.left - 1);
 				expect(metric.card.right, diagnostic).toBeLessThanOrEqual(layout.pane.right + 1);
 				expect(metric.card.bottom, diagnostic).toBeLessThanOrEqual(layout.pane.bottom + 1);
-				expect(metric.parts.length, diagnostic).toBeGreaterThanOrEqual(3);
+				// Compact panes intentionally hide decorative icons; label and percentage must remain visible.
+				expect(metric.nameVisible, diagnostic).toBe(true);
+				expect(metric.percentageVisible, diagnostic).toBe(true);
 				// Bounds are transformed screen pixels; preserve the same one-CSS-pixel tolerance at every scale.
 				const roundingTolerance = scale;
 				for (const bounds of metric.parts) {

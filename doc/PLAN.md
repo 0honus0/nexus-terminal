@@ -2342,3 +2342,11 @@ Agent 设置的“模型 Provider”标题行原先由左侧标题组和右侧�
 ### 真实PTY原始echo关闭的定向重绘
 
 40091814866证明合并为一次隐藏提交仍不足：Bash readline在echo关闭时会为隐藏提交输出换行，却没有命令回显可供原过滤器吞掉。NativeShellIntegration在改变echo前读取stty实际标志，内部结果增加严格0/1重绘标志；仅真实TTY/Bash且原先-echo时回退一行，随后CR/EL原位重绘。pipe/echo开启/Zsh仍沿原位重绘，不匹配提示符或裁剪登录空行。两轮复审核对标志产生/解码、首段回显识别、marker分包/预算/超时/关闭及历史清理，所有既有真实PTY输入输出断言保留；根check、双端build、全量format:all:check、相关spec静态类型及diff通过（/tmp/nexus-pty-redraw-*.log），新SHA远程验收随后收口。
+
+### 状态面板紧凑模式的语义断言
+
+源码复核发现既有max-width:118px紧凑模式明确隐藏装饰图标，max-height:210px隐藏容量详情和进度条，仅保留指标名称及百分比。因此状态测试固定要求至少三个可见元素与现有设计冲突；改为显式核对名称和百分比可见，仍逐一测量全部可见元素且保持原一CSS像素边界容差、完整ARIA容量数据及图表断言。不修改生产UI。原spec持有测试投影，无Shared/应用类型或资源变化；两轮复审核对紧凑/普通/趋势与缩放消费者，静态及远程结果随后收口。
+
+### 40092795332后继收口
+
+完整远程六分片通过，真实PTY echo开/关与用户输出均已通过，定向重绘修复有效。状态仍失败：仅百分比max-height无法约束隐式auto行的最小内容尺寸；在原metric-row明确单行minmax(0,1fr)，使已有图标高度上限按实际内容区生效，不改卡片设计。主题UI首轮在create.json遇到Chromium Network.getResponseBody资源不存在，重试通过，trace无业务导航失败证据；测试保留POST201，待编辑器关闭后用原认证API严格读取唯一主题和四项颜色，避免依赖DevTools临时响应体缓存，后续编辑/应用/重载/删除保持。两轮源码复审核对Grid及缩放约束、紧凑语义、API真实持久化读取与清理身份；根check、前端build、全量format:all:check、七份相关spec静态类型及diff通过（/tmp/nexus-grid-theme-*.log），新SHA统一远程验收。

@@ -316,6 +316,7 @@ button.live-state:focus-visible {
 	box-sizing: border-box;
 	display: grid;
 	grid-template-columns: auto minmax(0, 1fr);
+	grid-template-rows: minmax(0, 1fr);
 	align-items: center;
 	column-gap: calc(8px / var(--status-scale, 1));
 	min-width: 0;
