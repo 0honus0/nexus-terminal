@@ -63,8 +63,10 @@ test('server status keeps values aligned and contained in narrow, short and zoom
 	];
 	await expect(resources).toHaveCount(4);
 	await expect(monitor.locator('.network-interface')).toHaveText('enp35s0');
-	await expect(monitor.locator('.rate-down')).toHaveText('↓ 197.9K/s');
-	await expect(monitor.locator('.rate-up')).toHaveText('↑ 30.1K/s');
+	await expect(monitor.locator('.rate-down .rate-label')).toHaveText('下载');
+	await expect(monitor.locator('.rate-up .rate-label')).toHaveText('上传');
+	await expect(monitor.locator('.rate-down b')).toHaveText('197.9K/s');
+	await expect(monitor.locator('.rate-up b')).toHaveText('30.1K/s');
 
 	for (const scale of [1, 1.6]) {
 		if (scale === 1.6) {
@@ -105,12 +107,17 @@ test('server status keeps values aligned and contained in narrow, short and zoom
 					pane: rect(element),
 					cards: [...element.querySelectorAll('.metric-row:not(.network-row)')].map((card) => ({
 						card: rect(card),
-						parts: [...card.querySelectorAll('.small-icon, .metric-copy, .metric-reading, .metric-track')]
+						parts: [
+							...card.querySelectorAll(
+								'.metric-icon, .metric-name, .metric-value, .metric-reading, .metric-track, .metric-track-label',
+							),
+						]
 							.filter((part) => part.getClientRects().length > 0)
 							.map(rect),
-						readingOverflow:
-							card.querySelector('.metric-reading')!.scrollWidth -
-							card.querySelector('.metric-reading')!.clientWidth,
+						valueOverflow: (() => {
+							const value = card.querySelector('.metric-value');
+							return value ? value.scrollWidth - value.clientWidth : 0;
+						})(),
 					})),
 				};
 			});
@@ -130,7 +137,7 @@ test('server status keeps values aligned and contained in narrow, short and zoom
 					expect(bounds.top, diagnostic).toBeGreaterThanOrEqual(metric.card.top - roundingTolerance);
 					expect(bounds.bottom, diagnostic).toBeLessThanOrEqual(metric.card.bottom + roundingTolerance);
 				}
-				expect(metric.readingOverflow, diagnostic).toBeLessThanOrEqual(1);
+				expect(metric.valueOverflow, diagnostic).toBeLessThanOrEqual(1);
 			}
 
 			if (scale === 1.6 && size.width === 294)

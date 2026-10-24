@@ -369,24 +369,34 @@
 								warning: metric.percent >= 65 && metric.percent < 90,
 								critical: metric.percent >= 90,
 							}"
-							:style="{ '--metric-accent': metric.color }"
+							:style="{ '--metric-accent': metric.color, '--metric-value': `${metric.percent}%` }"
 							:aria-label="metricAriaLabel(metric)"
 							:aria-pressed="selectedMetric === metric.key"
 							:title="metricAriaLabel(metric)"
 							@click="selectMetric(metric.key)"
 						>
-							<span class="metric-main">
-								<span class="metric-identity">
-									<span class="small-icon"><component :is="metric.icon" /></span>
-									<span class="metric-copy">
-										<span class="metric-name">{{ metric.name }}</span>
-										<span v-if="metric.detail" class="metric-detail">{{ metric.detail }}</span>
+							<span class="metric-icon"><component :is="metric.icon" /></span>
+							<span class="metric-body">
+								<span class="metric-topline">
+									<span class="metric-name">{{ metric.name }}</span>
+									<span v-if="metric.capacity" class="metric-value">
+										<b>{{ metric.capacity.used }}</b>
+										<span>/ {{ metric.capacity.total }} {{ metric.capacity.unit }}</span>
 									</span>
+									<span v-else-if="metric.load" class="metric-value">
+										<b>{{ metric.load }}</b
+										><span>{{ t('statusMonitor.load') }}</span>
+									</span>
+									<span class="metric-reading">{{ metric.displayPercent }}</span>
 								</span>
-								<span class="metric-reading">{{ metric.displayPercent }}</span>
-							</span>
-							<span class="metric-track" aria-hidden="true">
-								<i :style="{ width: `${metric.percent}%` }"></i>
+								<span
+									class="metric-track"
+									:class="{ 'is-low': metric.percent < 24 }"
+									aria-hidden="true"
+								>
+									<i :style="{ width: `${metric.percent}%` }"></i>
+									<span class="metric-track-label">{{ metric.displayPercent }}</span>
+								</span>
 							</span>
 						</button>
 
@@ -400,20 +410,30 @@
 							:title="`${t('statusMonitor.networkLabel')} ↓ ${formatStatusRate(monitor.current.value.netRxRate)} ↑ ${formatStatusRate(monitor.current.value.netTxRate)}`"
 							@click="selectMetric('network')"
 						>
-							<span class="metric-main">
-								<span class="metric-identity">
-									<span class="small-icon"><i class="fas fa-network-wired"></i></span>
-									<span class="metric-copy">
-										<span class="metric-name">{{ t('statusMonitor.networkLabel') }}</span>
+							<span class="metric-icon"><i class="fas fa-network-wired" aria-hidden="true"></i></span>
+							<span class="metric-body">
+								<span class="metric-topline">
+									<span class="metric-name">{{ t('statusMonitor.networkLabel') }}</span>
+									<span v-if="monitor.current.value.netInterface" class="network-interface">{{
+										monitor.current.value.netInterface
+									}}</span>
+								</span>
+								<span class="network-reading">
+									<span class="rate rate-down">
+										<i class="fas fa-arrow-down" aria-hidden="true"></i>
+										<span class="rate-copy">
+											<span class="rate-label">{{ t('statusMonitor.networkDownload') }}</span>
+											<b>{{ compactRate(monitor.current.value.netRxRate) }}</b>
+										</span>
+									</span>
+									<span class="rate rate-up">
+										<i class="fas fa-arrow-up" aria-hidden="true"></i>
+										<span class="rate-copy">
+											<span class="rate-label">{{ t('statusMonitor.networkUpload') }}</span>
+											<b>{{ compactRate(monitor.current.value.netTxRate) }}</b>
+										</span>
 									</span>
 								</span>
-								<span v-if="monitor.current.value.netInterface" class="network-interface">{{
-									monitor.current.value.netInterface
-								}}</span>
-							</span>
-							<span class="network-reading">
-								<span class="rate-down">↓ {{ compactRate(monitor.current.value.netRxRate) }}</span>
-								<span class="rate-up">↑ {{ compactRate(monitor.current.value.netTxRate) }}</span>
 							</span>
 						</button>
 					</div>
