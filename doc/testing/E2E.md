@@ -2084,3 +2084,11 @@ RDP Adapter 将文本从逐字符 SDK 调用改为最多 32 个完整字符一�
 ## RDP修复与手机尺寸栏AMD64 dev发布（2026-10-24）
 
 产品提交`f325dc488ffb14f26adf37c00ed4ab27d3adb92b`已推送dev，包含Windows HYBRID_EX四字节结果桥接及手机尺寸栏单行；各自静态/指定实测证据见上节，不声称本次新增完整E2E通过。用户明确授权提交推送并发布dev AMD镜像，[发布40104850604](https://github.com/0honus0/nexus-terminal/actions/runs/40104850604)生产依赖审计、构建和推送成功。`ghcr.io/0honus0/nexus-terminal:dev`清单digest为`sha256:c13d5e2b0de67c473f9902cdf84da135bd66da9bc3f5c4fdbc5195e639cbca47`，包含linux/amd64及其attestation；`sha-f325dc488ffb`镜像配置架构amd64、revision与完整产品提交一致。本次只发布AMD64，未部署或重启远端容器。发布观察日志/tmp/nexus-rdp-dev-amd-publish.log；收尾提交仅同步文档，不改变已发布产品源码。
+
+## 服务器状态网络纵轴低流量重复标签（2026-10-24）
+
+源码确认网络轴最小max=1B/s且原ticks未限定precision，Chart.js可生成0.2/0.4/0.6/0.8等小数，formatStatusRateAxis对小于1024的数值Math.round后产生重复0/1。原StatusCharts网络ticks改precision:0、maxTicksLimit:6，Chart.js实际实现将spacing向上取整到整数，同时原niceNetworkAxisMax上限向上取整到完整字节，避免显式非整数边界仍追加重复标签；保留所有范围共用配置、原始可见网络峰值/单位、百分比图、字体、mirror、布局与数据消费。两轮源码核对整数步长、非整数max的边界tick、空闲/低流量、K/M格式和范围切换force重算；不以此判断用户未具体描述的其它刻度现象已解决。根check/前端build/全量format:all:check/diff通过，日志/tmp/nexus-status-axis-{check,build,format}.log；按D17不新增或执行本地行为/E2E，远程仍需验证各时间范围空闲网络刻度不重复及大流量/百分比切换。
+
+## 趋势历史不足时固定完整时间窗（2026-10-24）
+
+用户补充指的是时间轴左端。原StatusCharts在历史不足时按observedSpan*1.08拟合并至少2秒，因此选择30分钟仍只显示几秒；现删除拟合，始终以当前指标最新采样为右端、减去完整1/5/10/30分钟为左端，缺失历史留空，不补数据。原time-axis spec同步为完整span严格等于range*60000、真实样本位于窗口内且首次连接左侧留空；原WS时间戳关联、缩放像素、tooltip、图例及关闭保持。两轮源码审核覆盖空/单点/多序列最新值、全部范围、时间降采样与现有测试消费者。根check、前端build、全量格式、原spec静态类型与diff均通过，日志/tmp/nexus-status-time-window-{check,build,format,spec-types}.log；D17不新增/执行行为或E2E，真实各范围左右边界及短/长历史待远程。

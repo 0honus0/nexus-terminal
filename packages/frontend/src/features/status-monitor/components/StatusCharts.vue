@@ -53,34 +53,20 @@
 		tooltip.value = null;
 	});
 	const rangeMs = computed(() => Math.max(1, props.rangeMinutes) * 60_000);
-	const metricSampleBounds = computed(() => {
+	const windowEnd = computed(() => {
 		const series =
 			props.metric === 'network'
 				? [props.history.networkRx, props.history.networkTx]
 				: [props.history[props.metric]];
-		let earliest = 0;
 		let latest = 0;
 		for (const points of series) {
-			const first = points[0];
 			const last = points.at(-1);
-			if (!first || !last) continue;
-			earliest = earliest ? Math.min(earliest, first.time) : first.time;
+			if (!last) continue;
 			latest = Math.max(latest, last.time);
 		}
-		return { earliest, latest };
+		return latest || Date.now();
 	});
-	const windowEnd = computed(() => metricSampleBounds.value.latest || Date.now());
-	const windowStart = computed(() => {
-		const requestedStart = windowEnd.value - rangeMs.value;
-		const { earliest, latest } = metricSampleBounds.value;
-		const observedSpan = Math.max(0, latest - earliest);
-		if (!earliest || observedSpan >= rangeMs.value) {
-			return requestedStart;
-		}
-		const minimumSpan = Math.min(2_000, rangeMs.value);
-		const fittedSpan = Math.max(minimumSpan, Math.min(rangeMs.value, observedSpan * 1.08));
-		return latest - fittedSpan;
-	});
+	const windowStart = computed(() => windowEnd.value - rangeMs.value);
 	const windowSpanMs = computed(() => Math.max(1, windowEnd.value - windowStart.value));
 
 	const inRange = (points: StatusHistoryPoint[]) =>
@@ -179,7 +165,7 @@
 		const fraction = roughStep / magnitude;
 		const niceFraction = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10;
 		const step = niceFraction * magnitude;
-		return Math.max(unit, Math.ceil(value / step) * step * unit);
+		return Math.ceil(Math.max(unit, Math.ceil(value / step) * step * unit));
 	};
 
 	const networkAxisMax = ref(1);
@@ -375,6 +361,10 @@
 							ticks: {
 								color: chartTheme.value.text,
 								font: { size: 9 },
+								// Axis labels show whole bytes below 1 KiB; fractional ticks
+								// would otherwise round to repeated 0/1 labels at idle.
+								precision: 0,
+								maxTicksLimit: 6,
 								mirror: true,
 								padding: 3,
 								z: 1,

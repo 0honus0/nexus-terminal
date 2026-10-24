@@ -9,7 +9,7 @@ import {
 	resetTestSshFilesystem,
 } from '../../support/ssh';
 
-test('status history fits fresh samples within the selected time limit and keeps controls sharp while zooming', async ({
+test('status history preserves the full selected time range with fresh samples and keeps controls sharp while zooming', async ({
 	page,
 	context,
 }) => {
@@ -62,12 +62,11 @@ test('status history fits fresh samples within the selected time limit and keeps
 			end: Number(element.getAttribute('data-window-end')),
 			first: Number(element.getAttribute('data-visible-start')),
 		}));
-		// A fresh connection has seconds of history, so the selected minutes are
-		// an upper bound. Keep real timestamps and avoid a mostly empty axis.
+		// Fresh samples occupy only the right edge; missing history stays empty
+		// rather than shortening the selected time range.
 		const span = sampleWindow.end - sampleWindow.start;
 		for (const timestamp of Object.values(sampleWindow)) expect(Number.isFinite(timestamp)).toBe(true);
-		expect(span).toBeGreaterThanOrEqual(2_000);
-		expect(span).toBeLessThanOrEqual(range * 60_000);
+		expect(span).toBe(range * 60_000);
 		expect(sampleTimestamps.has(sampleWindow.first)).toBe(true);
 		expect(sampleTimestamps.has(sampleWindow.end)).toBe(true);
 		expect(sampleWindow.first).toBeGreaterThanOrEqual(sampleWindow.start);
@@ -77,7 +76,7 @@ test('status history fits fresh samples within the selected time limit and keeps
 		// leading empty time against the original CPU samples from the wire.
 		const earliestSample = Math.min(...sampleTimestamps);
 		expect(earliestSample).toBeGreaterThanOrEqual(sampleWindow.start);
-		expect(earliestSample - sampleWindow.start).toBeLessThanOrEqual(Math.max(2_000, span * 0.1));
+		expect(earliestSample).toBeGreaterThan(sampleWindow.start);
 	}
 
 	// Controls keep a fixed font and the canvas has enough pixels for CSS zoom.
