@@ -693,15 +693,20 @@
 				</div>
 
 				<div
-					class="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1"
+					class="flex min-w-0 shrink-0 items-center gap-y-1"
 					:class="
-						device.isMobile.value ? 'ml-0 w-full justify-end border-t border-border/60 pt-2' : 'ml-auto'
+						device.isMobile.value
+							? 'ml-0 w-full flex-nowrap justify-end gap-x-1.5 border-t border-border/60 pt-2'
+							: 'ml-auto flex-wrap gap-x-2'
 					"
 				>
-					<label :for="connection?.type === 'VNC' ? 'vnc-modal-width' : 'rdp-modal-width'" class="text-xs">
+					<label
+						:for="connection?.type === 'VNC' ? 'vnc-modal-width' : 'rdp-modal-width'"
+						class="shrink-0 whitespace-nowrap text-xs"
+					>
 						{{ t('common.width') }}:
 					</label>
-					<div class="w-20">
+					<div class="min-w-0 w-20" :class="device.isMobile.value ? 'flex-1 max-w-20' : ''">
 						<UiNumberInput
 							:id="connection?.type === 'VNC' ? 'vnc-modal-width' : 'rdp-modal-width'"
 							v-model="modalWidth"
@@ -714,10 +719,13 @@
 							@change="commitSize"
 						/>
 					</div>
-					<label :for="connection?.type === 'VNC' ? 'vnc-modal-height' : 'rdp-modal-height'" class="text-xs">
+					<label
+						:for="connection?.type === 'VNC' ? 'vnc-modal-height' : 'rdp-modal-height'"
+						class="shrink-0 whitespace-nowrap text-xs"
+					>
 						{{ t('common.height') }}:
 					</label>
-					<div class="w-20">
+					<div class="min-w-0 w-20" :class="device.isMobile.value ? 'flex-1 max-w-20' : ''">
 						<UiNumberInput
 							:id="connection?.type === 'VNC' ? 'vnc-modal-height' : 'rdp-modal-height'"
 							v-model="modalHeight"
@@ -734,6 +742,7 @@
 						type="button"
 						appearance="solid"
 						tone="primary"
+						class="shrink-0 whitespace-nowrap"
 						:disabled="state === 'connecting'"
 						:title="t('remoteDesktopModal.reconnectTooltip')"
 						@click="connect"

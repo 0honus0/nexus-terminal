@@ -86,6 +86,7 @@ class BrowserDesktopPeer implements DesktopTransportPeer {
 	private initialized = false;
 	private sending = 0;
 	private rdpPending = Buffer.alloc(0);
+	private rdpEarlyAuthResultPending = false;
 	private forwardPaused = false;
 	private onTerminated: (() => void) | null = null;
 	private timer: ReturnType<typeof setTimeout> | null = null;
@@ -141,6 +142,7 @@ class BrowserDesktopPeer implements DesktopTransportPeer {
 			}
 			this.timer = null;
 			this.rdpPending = Buffer.alloc(0);
+			this.rdpEarlyAuthResultPending = false;
 			this.queue.length = 0;
 			this.queuedBytes = 0;
 			this.rejectReady(new DesktopTransportFailure('unavailable'));
@@ -372,6 +374,9 @@ class BrowserDesktopPeer implements DesktopTransportPeer {
 		if (this.closing) {
 			return;
 		}
+		// HYBRID_EX adds a raw four-byte authorization result after the DER
+		// CredSSP exchange. It is not a Fast-Path or TPKT frame.
+		this.rdpEarlyAuthResultPending = response.readUInt32LE(response.length - 4) === 8;
 		const secure = this.own(
 			tls.connect({
 				socket,
@@ -458,13 +463,17 @@ class BrowserDesktopPeer implements DesktopTransportPeer {
 				let offset = 0;
 				while (offset < pending.length && !this.closing) {
 					const remaining = pending.subarray(offset);
-					const length = rdpFrameLength(remaining);
+					const earlyAuthResult = this.rdpEarlyAuthResultPending && remaining[0] !== 0x30;
+					const length = earlyAuthResult ? 4 : rdpFrameLength(remaining);
 					if (length === null || length > remaining.length) {
 						break;
 					}
 					// The SDK drops unread bytes when its connection handshake completes.
 					// Keep each PDU in its own WS message, even when TLS combines several PDUs.
 					this.sendForward(socket, remaining.subarray(0, length));
+					if (earlyAuthResult) {
+						this.rdpEarlyAuthResultPending = false;
+					}
 					offset += length;
 				}
 				this.rdpPending = this.closing ? Buffer.alloc(0) : Buffer.from(pending.subarray(offset));

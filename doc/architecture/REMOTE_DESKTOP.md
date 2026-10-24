@@ -58,7 +58,7 @@ Targets 在同一只读事务取得连接版本与密码密文；RDP/VNC 只接�
 
 票据不存明文密码；签发中/待用共用 1,024 项，建连/活跃/未确认清理共用 16 槽。连接时重新获取目标并复查配置及身份。VNC TCP 就绪、RDP TLS/CleanPath 桥就绪后记录服务端最近连接时间；该时点不证明远端认证或画面成功。记录复用 Targets connectionUsage 的版本/创建时间/协议条件和单调更新，不修改配置版本。
 
-bind 在异步授权前登记 WS 监听，避免 SDK 第一帧丢失；授权完成前只做有界缓冲，不连接 TCP。RDP CleanPath 中客户端 destination 仅解码而不参与目标选择，连接始终使用票据对应的受信 Targets 地址。DER 限 128 KiB，X224 有界解析；只接受 SSL/HYBRID/HYBRID_EX，TLS 最低 1.2。当前延续原 ignore-certificate 行为，不验证目标证书链；部署需自行保障目标网络可信，不宣传为远端身份已验证。
+bind 在异步授权前登记 WS 监听，避免 SDK 第一帧丢失；授权完成前只做有界缓冲，不连接 TCP。RDP CleanPath 中客户端 destination 仅解码而不参与目标选择，连接始终使用票据对应的受信 Targets 地址。DER 限 128 KiB，X224 有界解析；只接受 SSL/HYBRID/HYBRID_EX，TLS 最低 1.2。选中HYBRID_EX时，实例在DER CredSSP交换后独立转发四字节Early User Authorization Result；跨TLS分包等待完整四字节，交SDK验证结果，消费一次后恢复常规RDP分帧。当前延续原 ignore-certificate 行为，不验证目标证书链；部署需自行保障目标网络可信，不宣传为远端身份已验证。
 
 WS 单二进制帧最多 2 MiB，私有待写队列最多 4 MiB。TCP 写阻塞暂停 WS；远端到浏览器方向按 WS 实际 bufferedAmount 控制背压，达到 64 KiB 高水位暂停 TCP，send 完成回调确认降至 16 KiB 低水位后恢复，避免逐块暂停；水位属于技术调度参数，不替代原 4 MiB 发送缓冲拒绝与关闭保护。并行排队的 send 保持 WS 原字节顺序并逐个追踪，超量或异常关闭原桥，不丢弃或重放 RDP 协议数据。TCP/TLS socket、初始化、队列消费、全部 WS send 回调及 WS 真正关闭全部收敛后才通知退役，不以 terminate 调用代替释放。该透明桥调度同时适用于 VNC。
 
@@ -81,7 +81,7 @@ RDP Adapter 的输入事务按完整字符计数，每批最多 32 字符（按�
 3. **依赖方向**：前端仍经窄 Peer 能力请求尺寸，SDK 类型只在 Adapter；后端只识别 TPKT、Fast-Path 与 CredSSP DER 的长度，不解码图形、凭据、丢弃或重放 PDU。VNC 保持原逐块转发。
 4. **类型与转换**：复用 RemoteDesktopDisplay，DPI 映射为原 100–500% 有效整数缩放；SDK DesktopSize 读取后释放。Buffer 仅在 Platform，不扩散到 Shared。
 5. **入口与安装**：原 resize、connect、forward 和 stop 路径安装调度，无新配置、路由或依赖；无需升级或重编译 WASM。
-6. **数据、事务与并发**：尺寸变化静默 150ms 后提交最新值，相同宽高及有效缩放跳过；建连以 SDK 协商尺寸和 100% 初始缩放建立基准，非默认 DPI 仍请求更新。TLS 流按完整协议消息逐条发送 WebSocket，不按任意字节数或 I/O 轮次合并；避免 SDK 握手结束时丢弃同一 WS 消息中的后续预读数据。完整消息立即发送，不设凑批 timer；保留原发送水位和有界缓冲，DER 消息受原 2 MiB 单帧预算约束。
+6. **数据、事务与并发**：尺寸变化静默 150ms 后提交最新值，相同宽高及有效缩放跳过；建连以 SDK 协商尺寸和 100% 初始缩放建立基准，非默认 DPI 仍请求更新。TLS 流按完整协议消息逐条发送 WebSocket；HYBRID_EX额外按实际协商状态识别一次四字节认证结果，不按任意字节数或 I/O 轮次合并；避免 SDK 握手结束时丢弃同一 WS 消息中的后续预读数据。完整消息立即发送，不设凑批 timer；保留原发送水位和有界缓冲，DER 消息受原 2 MiB 单帧预算约束。
 7. **生命周期与失败**：关闭取消尺寸 timer 并清空未完成残片；晚建连不重新调度。resize 失败不记录为已提交，本地提交记录不代表远端已确认应用；非法长度、发送错误关闭原桥，并等待所有已派发发送回调与 socket 真实收敛。活跃传输保持完整字节顺序，不重放失败消息。像素 presenter 单实例保留最多 32 MiB 底图，只复制 dirty region，临近且合并面积至多原面积 1.3 倍时合并；最多 32 个区域，超量合成一个外包矩形，不积压中间帧。animation frame 一次提交最新像素，不改 SDK 读取/输入节奏；后台无 animation frame 时继续更新同一有界底图。尺寸赋值即使数值相同也清空 Canvas，因此在当前 canvas 实例拦截 width/height setter 清理旧底图与回调。超预算/分配 RangeError 回退直接绘制，非支持的像素输入先提交待绘内容再回退原生校验；异步提交异常走原连接失败出口。关闭取消回调、释放底图并恢复原实例方法/属性，不保留全局监听或计时器。
 8. **当前能力与验收**：两轮源码及静态/构建证据归 testing；真实拖动/全屏/恢复、DPI、弱网大画面、混合 PDU 与关闭失败留远程回归。不更改主线程解码或宣称获得视频编码/Worker 解码能力。
 

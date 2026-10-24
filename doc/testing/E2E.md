@@ -2068,3 +2068,15 @@ RDP Adapter 将文本从逐字符 SDK 调用改为最多 32 个完整字符一�
 [40094495537](https://github.com/0honus0/nexus-terminal/actions/runs/40094495537) / `9f495f353f7cfea188f0729a421e14ed89db02d9`完整通过：463个独立场景首轮通过，零重试/零flaky。SSH197、UI83、Agent71、Mobile52、HTTP50、Auth6、WebSocket4；8个分片、根检查/格式/构建、runner、Docker部署冒烟全部通过。原监控30秒复用与空闲启停、挂起蓝色、GET10秒网络通知宽限、真实PTY echo开/关单提示符及保留用户空行、状态全部尺寸与1.6缩放的图标/内容边界、主题创建编辑应用重载删除均通过。源码两轮复审及各批静态证据见前序记录，不以重试通过代替修复。完整日志/tmp/nexus-e2e-green-40094495537.log，元数据/tmp/nexus-e2e-green-40094495537-metadata.json；未执行本地行为测试。
 
 双平台dev发布[40095210177](https://github.com/0honus0/nexus-terminal/actions/runs/40095210177)，源码`0bdfb54da609c4f83f02c788c2869e4824a7bd4c`与验收SHA仅差scripts/e2e/duration-estimates.json的Actions自动更新；产品源码和依赖一致。生产依赖审计、双平台构建与推送均成功。`ghcr.io/0honus0/nexus-terminal:dev`和`sha-0bdfb54da609`均指向`sha256:f89d17201030dd3ce4728003aae64a4fc49afc3ef1fa0fe0a57a6c550e9575be`；Registry清单包含linux/amd64、linux/arm64，两个平台config的revision均为完整0bdfb54d源码SHA。日志/tmp/nexus-dev-publication-40095210177.log，发布元数据/tmp/nexus-dev-publication-40095210177-metadata.json，标签清单/tmp/nexus-published-40095210177-{dev,sha}-manifest.log，平台配置/tmp/nexus-published-40095210177-configs.json。未自动更新或重启远程容器；最终收口提交仅更新PLAN和本验证文档，不改变已测试/已发布的源码及依赖。
+
+## Windows增强NLA认证结果被误分帧（2026-10-24）
+
+用户现场RDP提示remote_unavailable/unknown。只读线上日志确认POST票据200、TLS桥OPENED后约一秒WS1006；浏览器SDK原始错误为read frame by hint / WebSocket Closed，不是具名密码拒绝。沿D19指定真实目标用独立临时桥复现，实际X224选中协议8（HYBRID_EX），收到两条DER（262/59 bytes）后合法00000000认证结果（4 bytes），旧rdpFrameLength将其作为长度0的Fast-Path拒绝并主动断开。原463项E2E的xrdp目标未提供该Windows增强NLA分支，不能用原PASS否定现场故障。
+
+原BrowserDesktopPeer根据已验证X224协议8持一次待收认证结果状态；DER交换保持原分帧，下一非DER消息等待四字节完整后独立透传，内容合法性由SDK认证状态验证，消费后恢复TPKT/Fast-Path。成功/拒绝结果都交SDK，不把本地关闭当作远端停止，不改UI、HTTP/票据/权限、背压或容量。两轮源码复审核对协议1/2/8、DER分包及四字节逐段/与后续消息合包、一次消费和关闭清状态、SDK验证与失败收尾。
+
+指定真实Windows修复桥两次复验均出现“已连接”，1264×626及550×346画布，无SDK错误；后次像素抽样有10405个非黑样本、369种颜色，确认实际画面而非空连接。证据/tmp/nexus-rdp-hybrid-live-result.log；未替换或重启运行后端。临时诊断桥和原连接均已关闭。根check、双端build、全量format:all:check与diff均通过，日志分别见/tmp/nexus-rdp-hybrid-final-check.log、/tmp/nexus-rdp-hybrid-build.log、/tmp/nexus-rdp-hybrid-format.log。诊断仅记录协商值、包长度与认证结果头，不记录票据、Cookie、密码、CredSSP正文或画面内容；临时桥验证完关闭。按D17未新增/运行本地全量行为或E2E，D19仅覆盖指定真实RDP场景。
+
+## 手机远程桌面尺寸栏单行（2026-10-24）
+
+用户明确要求手机RDP宽度、高度和重新连接尽量同一行；原Modal手机分支从wrap改nowrap并减小横向间距，两个原UiNumberInput容器min-width:0、可均分收缩且最大保持原80px，标签/按钮保留完整文字。RDP/VNC共用该footer，桌面仍原换行策略；原label关联、尺寸上下限、保存事件、连接/保存禁用和生命周期未改。两轮源码复核覆盖这些消费者与全局输入框内部min-width:0，不新增局部控件CSS。根check、前端build、全量format:all:check与diff均通过；日志/tmp/nexus-mobile-rdp-row-{check,build,format}.log。按D17未新增或运行行为/浏览器/E2E测试；320/375/390px、横屏、多语言、尺寸编辑与重连仍待远程验收。
