@@ -1,3 +1,5 @@
+import type { Logger } from '../../../../platform/logging/logger.js';
+import { logDiagnostic, withDiagnosticContext } from '../../../../platform/logging/diagnostic-log.js';
 import type { OperationsEvents } from '../../../operations/public.js';
 import { contextWindowForProfile, estimateContextTokens } from '../../context/context-rules.js';
 import type { ExecutionService } from '../../execution/service/execution-service.js';
@@ -91,9 +93,11 @@ export class RunExecutionOwner {
 		private readonly checkpoints: CheckpointService,
 		private readonly settings: ExecutionService,
 		private readonly events: OperationsEvents,
+		private readonly logger?: Logger,
 	) {}
 
 	private recordFailure(error: unknown): void {
+		logDiagnostic(this.logger, 'error', 'AGENT_BACKGROUND_FAILED', {}, error);
 		if (this.failures.length < 32) {
 			this.failures.push(error);
 		} else {
@@ -163,17 +167,30 @@ export class RunExecutionOwner {
 			cleanupFailed: false,
 		};
 		this.tasks.set(command.runId, task);
+		logDiagnostic(this.logger, 'info', 'AGENT_RUN_STARTED', {
+			runId: command.runId,
+			parentId,
+			providerId: command.providerId,
+		});
 		// Own the rejection until shutdown; a failed/unknown durable commit is
 		// never replayed by the in-memory task manager.
 		task.settled = this.runs
-			.ownExecutionTask(() => this.executeOwned(command, controller.signal))
+			.ownExecutionTask(() =>
+				withDiagnosticContext({ runId: command.runId }, () => this.executeOwned(command, controller.signal)),
+			)
 			.catch((error: unknown) => {
+				logDiagnostic(this.logger, 'error', 'AGENT_RUN_TASK_FAILED', { runId: command.runId }, error);
 				task.cleanupFailed = hasCleanupFailure(error);
 				this.recordFailure(error);
 				throw error;
 			})
 			.finally(() => {
 				clearTimeout(deadline);
+				logDiagnostic(this.logger, task.cleanupFailed ? 'error' : 'info', 'AGENT_RUN_TASK_SETTLED', {
+					runId: command.runId,
+					aborted: controller.signal.aborted,
+					cleanupFailed: task.cleanupFailed,
+				});
 				if (!task.cleanupFailed && this.tasks.get(command.runId) === task) {
 					this.tasks.delete(command.runId);
 				}
@@ -641,6 +658,7 @@ export class RunExecutionOwner {
 			await failUndispatched();
 			return null;
 		}
+		logDiagnostic(this.logger, 'info', 'AGENT_MODEL_DISPATCH_COMMITTED', { runId: command.runId, stepIndex });
 		let current = dispatched.step;
 		let text = '';
 		let resourceCleanupFailure: ProviderRequestFailure | null = null;
@@ -651,6 +669,7 @@ export class RunExecutionOwner {
 			if (signal.aborted) {
 				throw new AgentFailure('provider_unavailable');
 			}
+			logDiagnostic(this.logger, 'debug', 'AGENT_MODEL_STREAM_STARTED', { runId: command.runId, stepIndex });
 			for await (const event of this.stream.stream(frozen, messages, definitions, credential, signal)) {
 				// Also fence configuration changes made by a different server process.
 				await this.providers.guardCurrent(provider);
@@ -692,6 +711,12 @@ export class RunExecutionOwner {
 					if (result.status !== 'ok') {
 						return null;
 					}
+					logDiagnostic(this.logger, 'info', 'AGENT_MODEL_STEP_COMPLETED', {
+						runId: command.runId,
+						stepIndex,
+						finishReason: event.finishReason,
+						textBytes: Buffer.byteLength(text),
+					});
 					return { step: result.step, text, terminal: event };
 				}
 				if (
@@ -725,6 +750,13 @@ export class RunExecutionOwner {
 				}
 			}
 		} catch (error) {
+			logDiagnostic(
+				this.logger,
+				'warn',
+				'AGENT_MODEL_STEP_FAILED',
+				{ runId: command.runId, stepIndex, aborted: signal.aborted },
+				error,
+			);
 			if (error instanceof ToolExecutionUnknown) {
 				try {
 					await this.steps.finish(this.mutation(command, current), { state: 'unknown' });

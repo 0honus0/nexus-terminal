@@ -1,9 +1,25 @@
+import { PinoLogger } from './platform/logging/pino-logger.js';
+import { logDiagnostic } from './platform/logging/diagnostic-log.js';
+
 import { createApp, type AccessHttpOptions } from './bootstrap/create-app.js';
+
+const logger = new PinoLogger();
+
+// Monitoring preserves Node's normal fatal-exception behavior.
+process.on('uncaughtExceptionMonitor', (error, origin) => {
+	logDiagnostic(logger, 'error', 'UNCAUGHT_PROCESS_FAILURE', { origin }, error);
+});
+
+class StartupConfigurationFailure extends Error {
+	constructor(readonly setting: string) {
+		super('Invalid backend entry configuration');
+	}
+}
 
 function requireSetting(name: string): string {
 	const value = process.env[name]?.trim();
 	if (!value) {
-		throw new Error(name + ' is required for the backend entry');
+		throw new StartupConfigurationFailure(name);
 	}
 	return value;
 }
@@ -11,7 +27,7 @@ function requireSetting(name: string): string {
 function parsePort(value: string, setting = 'NEXUS_PORT'): number {
 	const port = Number(value);
 	if (!Number.isInteger(port) || port < 1 || port > 65535) {
-		throw new Error('Invalid ' + setting);
+		throw new StartupConfigurationFailure(setting);
 	}
 	return port;
 }
@@ -27,7 +43,7 @@ function parseBooleanSetting(name: string, fallback: boolean): boolean {
 	if (raw === 'false') {
 		return false;
 	}
-	throw new Error('Invalid ' + name + ': expected true or false');
+	throw new StartupConfigurationFailure(name);
 }
 
 function parseBoundedSetting(name: string, fallback: number, min: number, max: number): number {
@@ -36,11 +52,11 @@ function parseBoundedSetting(name: string, fallback: number, min: number, max: n
 		return fallback;
 	}
 	if (!/^[1-9][0-9]*$/u.test(raw)) {
-		throw new Error('Invalid ' + name);
+		throw new StartupConfigurationFailure(name);
 	}
 	const number = Number(raw);
 	if (!Number.isSafeInteger(number) || number < min || number > max) {
-		throw new Error('Invalid ' + name);
+		throw new StartupConfigurationFailure(name);
 	}
 	return number;
 }
@@ -49,7 +65,7 @@ function requireCaptchaProvider(raw: string): 'none' | 'hcaptcha' | 'recaptcha' 
 	if (raw === 'none' || raw === 'hcaptcha' || raw === 'recaptcha') {
 		return raw;
 	}
-	throw new Error('Invalid NEXUS_CAPTCHA_PROVIDER');
+	throw new StartupConfigurationFailure('NEXUS_CAPTCHA_PROVIDER');
 }
 
 function parsePasskeySites(primaryOrigin: string): Array<{ origin: string; rpId: string }> {
@@ -60,7 +76,7 @@ function parsePasskeySites(primaryOrigin: string): Array<{ origin: string; rpId:
 	}
 	const sites: unknown = JSON.parse(raw);
 	if (!Array.isArray(sites)) {
-		throw new Error('Invalid NEXUS_PASSKEY_SITES');
+		throw new StartupConfigurationFailure('NEXUS_PASSKEY_SITES');
 	}
 	return sites.map((site: unknown) => {
 		if (
@@ -73,18 +89,19 @@ function parsePasskeySites(primaryOrigin: string): Array<{ origin: string; rpId:
 			typeof site.origin !== 'string' ||
 			typeof site.rpId !== 'string'
 		) {
-			throw new Error('Invalid NEXUS_PASSKEY_SITES');
+			throw new StartupConfigurationFailure('NEXUS_PASSKEY_SITES');
 		}
 		return { origin: site.origin, rpId: site.rpId };
 	});
 }
 
 async function main(): Promise<void> {
+	logDiagnostic(logger, 'info', 'PROCESS_STARTING', { pid: process.pid, node: process.version });
 	const dbPath = requireSetting('NEXUS_DB_PATH');
 	const rawKey = requireSetting('NEXUS_ENCRYPTION_KEY');
 	const key = Buffer.from(rawKey, 'base64');
 	if (key.length !== 32 || key.toString('base64') !== rawKey) {
-		throw new Error('NEXUS_ENCRYPTION_KEY must be exactly 32 bytes, standard base64');
+		throw new StartupConfigurationFailure('NEXUS_ENCRYPTION_KEY');
 	}
 	const http: AccessHttpOptions = {
 		bindHost: process.env.NEXUS_HOST ?? '127.0.0.1',
@@ -94,6 +111,7 @@ async function main(): Promise<void> {
 	};
 	const app = await createApp(dbPath, {
 		encryptionKey: key,
+		logger,
 
 		configuration: () => ({
 			ipWhitelist: process.env.NEXUS_IP_WHITELIST ?? '',
@@ -113,14 +131,14 @@ async function main(): Promise<void> {
 		}),
 	});
 	try {
-		const address = await app.listenHttp(http);
-		process.stdout.write('backend Access listening on ' + address + '\n');
+		await app.listenHttp(http);
 		let closing: Promise<void> | null = null;
 
 		const shutdown = (): Promise<void> => {
 			if (closing) {
 				return closing;
 			}
+			logDiagnostic(logger, 'info', 'PROCESS_SHUTDOWN_REQUESTED');
 			closing = app.close();
 			return closing;
 		};
@@ -128,14 +146,18 @@ async function main(): Promise<void> {
 		const handleSignal = (): void => {
 			void shutdown().catch((error: unknown) => {
 				process.exitCode = 1;
-				process.stderr.write(
-					'backend shutdown failed: ' + (error instanceof Error ? error.name : 'unknown') + '\n',
-				);
+				logDiagnostic(logger, 'error', 'PROCESS_SHUTDOWN_FAILED', {}, error);
 			});
 		};
 
-		process.once('SIGTERM', handleSignal);
-		process.once('SIGINT', handleSignal);
+		process.once('SIGTERM', () => {
+			logDiagnostic(logger, 'info', 'PROCESS_SIGNAL_RECEIVED', { signal: 'SIGTERM' });
+			handleSignal();
+		});
+		process.once('SIGINT', () => {
+			logDiagnostic(logger, 'info', 'PROCESS_SIGNAL_RECEIVED', { signal: 'SIGINT' });
+			handleSignal();
+		});
 	} catch (error) {
 		try {
 			await app.close();
@@ -148,7 +170,11 @@ async function main(): Promise<void> {
 
 void main().catch((error: unknown) => {
 	process.exitCode = 1;
-	process.stderr.write(
-		'backend startup failed: ' + (error instanceof Error ? error.message : 'unknown error') + '\n',
+	logDiagnostic(
+		logger,
+		'error',
+		'PROCESS_STARTUP_FAILED',
+		{ setting: error instanceof StartupConfigurationFailure ? error.setting : null },
+		error,
 	);
 });

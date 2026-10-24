@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import { bindDiagnosticContext, logDiagnostic, withDiagnosticContext } from '../logging/diagnostic-log.js';
 import { closeHttpResources, drainHttpTransport, waitForResponse } from './http-lifecycle.js';
 import { MAX_WEBSOCKET_FRAME_BYTES } from './http-limits.js';
 import { createServer, type Server } from 'node:http';
@@ -16,7 +18,7 @@ import { FailureSummary } from '../lifecycle/failure-summary.js';
 export async function openHttpListener(options: HttpServerOptions): Promise<HttpListener> {
 	validateHttpOptions(options);
 	const trust = proxyaddr.compile([...options.trustedProxies]);
-	let bindings = compileHttpBindings(options.publicOrigin, options, trust);
+	let bindings = compileHttpBindings(options.publicOrigin, options, trust, options.logger);
 	const websocketServer = new WebSocketServer({
 		noServer: true,
 		// Raw third-party protocols may remove their socket 'close' listeners.
@@ -67,16 +69,21 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 	function trackWebSocketTask(task: Promise<unknown>, observeFailure = false): void {
 		websocketTasks.add(task);
 		if (observeFailure) {
-			void task.catch((error: unknown) => websocketFailures.record(error));
+			void task.catch((error: unknown) => {
+				logDiagnostic(options.logger, 'error', 'WS_OWNER_FAILED', {}, error);
+				websocketFailures.record(error);
+			});
 		}
 		void task.finally(() => websocketTasks.delete(task)).catch(() => undefined);
 	}
 
 	async function upgrade(request: IncomingMessage, socket: Duplex, head: Buffer): Promise<void> {
+		let routePath = 'unmatched';
 		const admittedGeneration = generation;
 		const admittedBindings = bindings;
 
 		const reject = (status: number) => {
+			logDiagnostic(options.logger, 'warn', 'WS_UPGRADE_REJECTED', { route: routePath, status });
 			if (!socket.destroyed) {
 				socket.end('HTTP/1.1 ' + status + ' Rejected\r\nConnection: close\r\n\r\n');
 			}
@@ -100,10 +107,12 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 				reject(404);
 				return;
 			}
+			routePath = route.path;
 			let authorized: boolean;
 			try {
 				authorized = await route.authorize(request, url, proxyaddr(request, trust));
-			} catch {
+			} catch (error) {
+				logDiagnostic(options.logger, 'error', 'WS_AUTHORIZATION_FAILED', { route: routePath }, error);
 				reject(503);
 				return;
 			}
@@ -117,6 +126,44 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 			}
 			websocketServer.handleUpgrade(request, socket, head, (ws) => {
 				activeSockets.add(ws);
+				const started = Date.now();
+				let inputBytes = 0;
+				let inputMessages = 0;
+				// ws includes framing overhead in bytesWritten; this is transport traffic, not application bytes.
+				const outputStart = request.socket.bytesWritten;
+				logDiagnostic(options.logger, 'info', 'WS_CONNECTED', { route: routePath });
+				ws.on('message', (data) => {
+					inputMessages++;
+					inputBytes += Buffer.isBuffer(data)
+						? data.length
+						: Array.isArray(data)
+							? data.reduce((sum, part) => sum + part.length, 0)
+							: data.byteLength;
+				});
+				ws.on(
+					'error',
+					bindDiagnosticContext((error) =>
+						logDiagnostic(options.logger, 'warn', 'WS_TRANSPORT_FAILED', { route: routePath }, error),
+					),
+				);
+				ws.once(
+					'close',
+					bindDiagnosticContext((closeCode) =>
+						logDiagnostic(
+							options.logger,
+							closeCode === 1000 || closeCode === 1001 ? 'info' : 'warn',
+							'WS_CLOSED',
+							{
+								route: routePath,
+								closeCode,
+								durationMs: Date.now() - started,
+								inputMessages,
+								inputBytes,
+								outputTransportBytes: Math.max(0, request.socket.bytesWritten - outputStart),
+							},
+						),
+					),
+				);
 				if (route.connectedRaw) {
 					ws.on('error', () => ws.terminate());
 					ws.once('close', () => activeSockets.delete(ws));
@@ -149,11 +196,14 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 
 					trackTask: trackWebSocketTask,
 
+					logger: options.logger,
+
 					onClosed: () => activeSockets.delete(ws),
 				});
 				try {
 					route.connected?.(channel, request, url);
-				} catch {
+				} catch (error) {
+					logDiagnostic(options.logger, 'error', 'WS_CONNECT_HANDLER_FAILED', { route: routePath }, error);
 					ws.terminate();
 				}
 			});
@@ -168,7 +218,7 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 			return;
 		}
 		pendingUpgrades.add(socket);
-		const task = upgrade(request, socket, head);
+		const task = withDiagnosticContext({ socketId: randomUUID() }, () => upgrade(request, socket, head));
 		trackWebSocketTask(
 			task.finally(() => pendingUpgrades.delete(socket)),
 			true,
@@ -177,6 +227,10 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 	await listen(server, options);
 	const address = server.address();
 	const boundAddress = address && typeof address !== 'string' ? address.address + ':' + address.port : '';
+	logDiagnostic(options.logger, 'info', 'HTTP_LISTENING', {
+		address: boundAddress,
+		webSocketRoutes: bindings.webSockets.size,
+	});
 
 	let closePromise: Promise<void> | null = null;
 
@@ -199,6 +253,10 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 				throw new HttpLifecycleFailure('invalid_owner');
 			}
 		}
+		logDiagnostic(options.logger, 'info', 'HTTP_TRANSPORT_SUSPENDED', {
+			activeRequests: activeRequests.size,
+			activeSockets: activeSockets.size,
+		});
 		accepting = false;
 		generation += 1;
 		let drainPromise: Promise<void> | null = null;
@@ -233,6 +291,7 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 						});
 						assertCurrent();
 						drained = true;
+						logDiagnostic(options.logger, 'info', 'HTTP_TRANSPORT_DRAINED');
 					} catch (cause) {
 						throw new HttpLifecycleFailure('drain_failed', { cause });
 					}
@@ -245,7 +304,7 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 				if (!drained || replaced) {
 					throw new HttpLifecycleFailure('invalid_state');
 				}
-				bindings = compileHttpBindings(options.publicOrigin, replacement, trust);
+				bindings = compileHttpBindings(options.publicOrigin, replacement, trust, options.logger);
 				replaced = true;
 			},
 
@@ -256,6 +315,7 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 				}
 				suspension = null;
 				accepting = true;
+				logDiagnostic(options.logger, 'info', 'HTTP_TRANSPORT_RESUMED');
 			},
 		};
 		suspension = lease;

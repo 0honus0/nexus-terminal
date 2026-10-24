@@ -1,3 +1,5 @@
+import type { Logger } from '../../platform/logging/logger.js';
+import { logDiagnostic } from '../../platform/logging/diagnostic-log.js';
 import { registerAgentSnapshot } from './snapshots/adapters/sqlite/snapshot-registration.js';
 import type { SnapshotRegistration } from '../../platform/storage/sqlite/snapshot-types.js';
 import { toRunView } from './interfaces/http/run-mapper.js';
@@ -312,6 +314,7 @@ export function registerAgent(
 	diagnostics: HostDiagnostics,
 	pluginBlobs: BlobStore,
 	productVersion: string,
+	logger?: Logger,
 ): AgentRegistration {
 	const browserStorage = new SqliteBrowserStorage(sqlite);
 	const integrationStorage = new SqliteIntegrationStorage(sqlite);
@@ -380,12 +383,13 @@ export function registerAgent(
 		(userId, appId) => execution.drainRevokedApp(userId, appId),
 		pluginIntents,
 		(access, input, withMutation) => workspace.rpc(access, input, withMutation),
+		logger,
 	);
 	const pluginRepositoryStorage = new SqlitePluginRepositoryStorage(sqlite);
 	const pluginRepositories = new PluginRepositoryService(
 		new PluginRepositoryModel(
 			pluginRepositoryStorage,
-			new HttpPluginCatalog(new NativeBoundedFetch()),
+			new HttpPluginCatalog(new NativeBoundedFetch(logger)),
 			new SecureSessionTokens(),
 		),
 		plugins,
@@ -399,7 +403,7 @@ export function registerAgent(
 		events,
 	);
 	const providerStorage = new SqliteProviderStorage(sqlite);
-	const network = new OpenAiCompatibleAdapter();
+	const network = new OpenAiCompatibleAdapter(logger);
 	const providerModel = new ProviderModel(providerStorage, secrets, network);
 	const registryService = new CapabilityRegistryService(
 		new CapabilityRegistryModel(new SqliteCapabilityRegistryStorage(sqlite), new ModelsDevCatalogAdapter()),
@@ -448,7 +452,7 @@ export function registerAgent(
 		toolModel,
 		tools,
 		governance,
-		new ToolJobService(jobModel),
+		new ToolJobService(jobModel, logger),
 		new AcpPermissionService(tools, governance),
 		collaboration,
 		new ToolProjectService(new ToolProjectModel(new SqliteToolProjectStorage(sqlite)), toolModel),
@@ -473,6 +477,7 @@ export function registerAgent(
 		checkpoints,
 		executionSettings,
 		events,
+		logger,
 	);
 	const runs = new RunService(runModel, steps, execution, tools, collaboration, governance, executionSettings);
 	const providerService = new ProviderService(providerModel, (userId, providerId) =>
@@ -709,11 +714,17 @@ export function registerAgent(
 		// never redispatch a request whose upstream effects are unknown.
 		initialize: async (mode) => {
 			await scope.initialize();
+			logDiagnostic(logger, 'info', 'AGENT_RECOVERY_STAGE_COMPLETED', { stage: 'scope', mode });
 			await steps.reconcileUnsettled(Date.now());
+			logDiagnostic(logger, 'info', 'AGENT_RECOVERY_STAGE_COMPLETED', { stage: 'steps', mode });
 			await tools.reconcileUnsettled();
+			logDiagnostic(logger, 'info', 'AGENT_RECOVERY_STAGE_COMPLETED', { stage: 'tools', mode });
 			await jobModel.reconcile();
+			logDiagnostic(logger, 'info', 'AGENT_RECOVERY_STAGE_COMPLETED', { stage: 'jobs', mode });
 			await artifacts.initialize();
+			logDiagnostic(logger, 'info', 'AGENT_RECOVERY_STAGE_COMPLETED', { stage: 'artifacts', mode });
 			await plugins.initialize(mode === 'startup');
+			logDiagnostic(logger, 'info', 'AGENT_RECOVERY_STAGE_COMPLETED', { stage: 'plugins', mode });
 		},
 
 		quiesce: () => requests.quiesce(),

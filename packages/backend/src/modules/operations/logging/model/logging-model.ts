@@ -1,3 +1,4 @@
+import { logDiagnostic } from '../../../../platform/logging/diagnostic-log.js';
 import type { OperationEvent } from '@nexus-terminal/shared/operations/values';
 import type { Logger } from '../../../../platform/logging/logger.js';
 import type { SessionTokens } from '../../../../platform/security/session-tokens.js';
@@ -31,7 +32,9 @@ export class LoggingModel {
 	}
 
 	activate(level: BackendLogLevel): void {
+		logDiagnostic(this.logger, 'info', 'LOG_LEVEL_ACTIVATING', { level });
 		this.logger.setThreshold(level);
+		logDiagnostic(this.logger, 'info', 'LOG_LEVEL_ACTIVATED', { level });
 	}
 
 	record(event: OperationEvent, id: number, severity: 'info' | 'warn'): void {

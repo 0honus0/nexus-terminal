@@ -1,3 +1,5 @@
+import type { Logger } from '../../../../platform/logging/logger.js';
+import { logDiagnostic } from '../../../../platform/logging/diagnostic-log.js';
 import type { AccessPublicApi } from '../../../access/public.js';
 import type { TrustedDesktopTargets, ConnectionUsage } from '../../../targets/public.js';
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
@@ -46,6 +48,7 @@ export class DesktopService {
 		private readonly targets: TrustedDesktopTargets,
 		private readonly model: DesktopModel,
 		private readonly usage: ConnectionUsage,
+		private readonly logger?: Logger,
 	) {}
 
 	private recordFailure(error: unknown): void {
@@ -55,12 +58,14 @@ export class DesktopService {
 			}
 			this.recordedFailures.add(error);
 		}
+		logDiagnostic(this.logger, 'error', 'DESKTOP_CLEANUP_FAILED', {}, error);
 		this.failures.record(error);
 	}
 
 	private track<T>(task: Promise<T>): Promise<T> {
 		this.tasks.add(task);
 		void task.catch((error: unknown) => {
+			logDiagnostic(this.logger, 'warn', 'DESKTOP_OPERATION_FAILED', {}, error);
 			if (error instanceof RemoteResourceCleanupFailure) {
 				this.recordFailure(error);
 			}
@@ -324,6 +329,10 @@ export class DesktopService {
 				// credential from a consumed ticket to the technical adapter.
 				const connection = toDesktopConnection(current);
 				dispatched = true;
+				logDiagnostic(this.logger, 'info', 'DESKTOP_BRIDGE_OPEN_STARTED', {
+					connectionId: record.targetId,
+					protocol: record.protocol,
+				});
 				await peer.open(connection, record.display, () => {
 					confirmTechnicalTermination();
 					signalEnding();
@@ -353,6 +362,10 @@ export class DesktopService {
 					throw new DesktopFailure('not_found');
 				}
 				if (peer.isOpen && !slot.closing && this.accepting) {
+					logDiagnostic(this.logger, 'info', 'DESKTOP_BRIDGE_OPENED', {
+						connectionId: record.targetId,
+						protocol: record.protocol,
+					});
 					this.startAuthorizationPoll(slot, token, record);
 				}
 			} catch (error) {

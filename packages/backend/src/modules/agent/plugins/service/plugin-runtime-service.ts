@@ -1,3 +1,5 @@
+import type { Logger } from '../../../../platform/logging/logger.js';
+import { logDiagnostic } from '../../../../platform/logging/diagnostic-log.js';
 import { randomUUID } from 'node:crypto';
 import { isPluginIntentRpc } from './plugin-intent-service.js';
 import type { PluginIntentService } from './plugin-intent-service.js';
@@ -37,6 +39,7 @@ export class PluginRuntimeService {
 	constructor(
 		private readonly model: PluginModel,
 		private readonly intents: PluginIntentService,
+		private readonly logger?: Logger,
 	) {}
 
 	hasBoundInstance(userId: number, appId: string): boolean {
@@ -148,6 +151,11 @@ export class PluginRuntimeService {
 			);
 			this.owners.set(key, owner);
 			binding.owner = owner;
+			logDiagnostic(this.logger, 'info', 'PLUGIN_RUNTIME_RESERVED', {
+				appId,
+				instanceId,
+				revision: owner.revision,
+			});
 		} finally {
 			this.reservedSlots--;
 		}
@@ -184,7 +192,13 @@ export class PluginRuntimeService {
 				}
 			});
 			await this.model.settleRuntime(owner, 'active');
+			logDiagnostic(this.logger, 'info', 'PLUGIN_RUNTIME_ACTIVE', {
+				appId,
+				instanceId,
+				revision: owner.revision,
+			});
 		} catch (error) {
+			logDiagnostic(this.logger, 'warn', 'PLUGIN_RUNTIME_ACTIVATION_FAILED', { appId, instanceId }, error);
 			try {
 				await this.closeBoundOwner(owner);
 			} catch (cleanup) {
@@ -206,6 +220,13 @@ export class PluginRuntimeService {
 			if (owner.closing) {
 				return;
 			}
+			logDiagnostic(
+				this.logger,
+				'error',
+				'PLUGIN_RUNTIME_EXITED',
+				{ appId: owner.appId, instanceId: owner.instanceId },
+				error,
+			);
 			owner.failures.push(error);
 			// Bind cleanup to this instance, even if a subsequent construction uses the same App.
 			void this.closeBoundOwner(owner).catch((failure) => {
@@ -282,6 +303,13 @@ export class PluginRuntimeService {
 			(error) => {
 				owner.pending.delete(work);
 				if (isAgentDrainFailure(error)) {
+					logDiagnostic(
+						this.logger,
+						'error',
+						'PLUGIN_RUNTIME_HOST_TASK_FAILED',
+						{ appId: owner.appId, instanceId: owner.instanceId },
+						error,
+					);
 					owner.failures.push(error);
 					owner.closing = true;
 					void this.stop(userId, appId).catch((failure) => {
@@ -345,6 +373,10 @@ export class PluginRuntimeService {
 	}
 
 	private async closeRuntime(owner: PluginRuntimeOwner): Promise<void> {
+		logDiagnostic(this.logger, 'info', 'PLUGIN_RUNTIME_CLOSING', {
+			appId: owner.appId,
+			instanceId: owner.instanceId,
+		});
 		const failures: unknown[] = [];
 		let closed = false;
 		if (owner.opening) {
@@ -381,10 +413,21 @@ export class PluginRuntimeService {
 			failures.push(error);
 		}
 		if (failures.length) {
+			logDiagnostic(
+				this.logger,
+				'error',
+				'PLUGIN_RUNTIME_CLOSE_FAILED',
+				{ appId: owner.appId, instanceId: owner.instanceId },
+				new AggregateError(failures),
+			);
 			throw new AgentFailure('operation_unknown', {
 				cause: new AggregateError(failures, 'Plugin runtime drain unconfirmed'),
 			});
 		}
+		logDiagnostic(this.logger, 'info', 'PLUGIN_RUNTIME_CLOSED', {
+			appId: owner.appId,
+			instanceId: owner.instanceId,
+		});
 		const key = owner.userId + ':' + owner.appId;
 		if (this.owners.get(key) === owner) {
 			this.owners.delete(key);

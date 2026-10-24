@@ -1,3 +1,5 @@
+import type { Logger } from '../../../../platform/logging/logger.js';
+import { logDiagnostic, withDiagnosticContext } from '../../../../platform/logging/diagnostic-log.js';
 import { randomUUID } from 'node:crypto';
 import type { AccessPublicApi } from '../../../access/public.js';
 import type { ServerTransferModel } from '../model/server-transfer-model.js';
@@ -111,6 +113,7 @@ export class ServerTransferService {
 		private readonly access: AccessPublicApi,
 		private readonly model: ServerTransferModel,
 		private readonly mutations: MachineMutationService,
+		private readonly logger?: Logger,
 	) {}
 
 	getActiveTransferCount(): number {
@@ -290,6 +293,7 @@ export class ServerTransferService {
 		}
 		owner.controller.abort();
 		owner.task.status = 'cancelling';
+		logDiagnostic(this.logger, 'info', 'SERVER_TRANSFER_CANCEL_REQUESTED', { taskId: owner.task.taskId });
 		if (!owner.running) {
 			for (const item of owner.task.subTasks) {
 				item.status = 'cancelled';
@@ -322,7 +326,7 @@ export class ServerTransferService {
 				busy.add(resource);
 			}
 			owner.job = this.mutations
-				.ownExecution(() => this.process(owner))
+				.ownExecution(() => withDiagnosticContext({ taskId: owner.task.taskId }, () => this.process(owner)))
 				.catch((cause) => {
 					owner.failure = cause;
 					for (const item of owner.task.subTasks) {
@@ -342,6 +346,10 @@ export class ServerTransferService {
 
 	private async process(owner: TaskOwner): Promise<void> {
 		owner.task.status = 'in-progress';
+		logDiagnostic(this.logger, 'info', 'SERVER_TRANSFER_STARTED', {
+			taskId: owner.task.taskId,
+			subTasks: owner.task.subTasks.length,
+		});
 		let monitoring: Promise<void> | null = null;
 		const monitor = setInterval(() => {
 			if (!monitoring && !owner.controller.signal.aborted) {
@@ -397,6 +405,13 @@ export class ServerTransferService {
 					item.status = 'completed';
 					item.progress = 100;
 				} catch (cause) {
+					logDiagnostic(
+						this.logger,
+						'warn',
+						'SERVER_TRANSFER_ITEM_FAILED',
+						{ taskId: owner.task.taskId, subTaskId: item.subTaskId, connectionId: item.connectionId },
+						cause,
+					);
 					const error = classify(cause);
 					item.status =
 						error.outcome === 'unknown' ? 'unknown' : error.code === 'cancelled' ? 'cancelled' : 'failed';
@@ -423,6 +438,13 @@ export class ServerTransferService {
 	private finish(owner: TaskOwner): void {
 		clearTimeout(owner.timer);
 		owner.task.status = settledStatus(owner.task);
+		logDiagnostic(
+			this.logger,
+			owner.task.status === 'completed' ? 'info' : 'warn',
+			'SERVER_TRANSFER_SETTLED',
+			{ taskId: owner.task.taskId, status: owner.task.status },
+			owner.failure ?? undefined,
+		);
 		owner.task.updatedAt = Math.max(owner.task.updatedAt, Date.now());
 		this.prune();
 	}

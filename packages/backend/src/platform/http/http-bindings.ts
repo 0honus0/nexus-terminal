@@ -1,3 +1,4 @@
+import type { Logger } from '../logging/logger.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { MAX_WEBSOCKET_FRAME_BYTES } from './http-limits.js';
 import type { HttpBindings, HttpWebSocketRoute } from './http-types.js';
@@ -15,6 +16,7 @@ export function compileHttpBindings(
 	publicOrigin: string,
 	bindings: HttpBindings,
 	trust: (address: string, index: number) => boolean,
+	logger?: Logger,
 ): CompiledHttpBindings {
 	const origin = new URL(publicOrigin);
 	if (
@@ -57,7 +59,7 @@ export function compileHttpBindings(
 	return {
 		origins,
 		webSockets,
-		handle: createHttpRequestHandler({ origins, trust, router, admitUnmatched: bindings.admitUnmatched }),
+		handle: createHttpRequestHandler({ origins, trust, router, admitUnmatched: bindings.admitUnmatched, logger }),
 	};
 }
 

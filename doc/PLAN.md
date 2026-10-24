@@ -2226,3 +2226,42 @@ Agent 设置的“模型 Provider”标题行原先由左侧标题组和右侧�
 | 职责归属 | Agent 操作条与外观导航归各自组件；无正文设置组的空状态归 foundation `UiSettingsGroup`；通知切换命令的配置投影归 `notification-mapper`，版本与队列仍由 notifications store 持有；文件行基线归 `FileManager.css`。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | 类型归属 | 通知复用 `NotificationSetting`、`NotificationChange` 与现有 `NotificationCreateRequest`；新增纯函数只输出既有应用类型，Webhook Header、Email 密码和 Telegram Token 明确为 `keep`，无 Shared、API 或后端变更。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | 完成证据 | `390/320/280px` 下 Agent App 三按钮 `top` 完全相同，`390px` 时宽度约 `125.7/93.1/93.1px`，`320px` 时约 `97.5/72.2/72.3px`，容器均无横向溢出；安全策略盾牌在 `390px` 显示、`320/280px` 为 `display:none`；外观首卡 `58px`、body 未渲染；外观自定义在 `768/1024/1440px` 使用 `136px` 侧栏、每项 `115×52px`；手机收起状态仅保留当前分类选择器，`390/320px` 宽 `358/288px`、高 `46px`，展开面板宽 `358/288px`，四项均为单列 `46px` 行，选择后菜单关闭且内容正确切换；各宽度均无横向溢出或页面错误。通知临时渠道完成启用、停用与清理，三枚操作按钮同排，启用动作按钮为成功绿、停用动作按钮为危险红且图标与按钮文字同色；`/etc` 文件列表文字中心相对图标上移约 `3px`。八个设置标签滚动条宽度均为 `0`；Provider 弹窗 `390/320px` 下正文 `padding-inline=0`、`scrollbar-gutter=auto`、滚动条宽度 `0` 且仍可滚动。证据：`.tmp/settings-round2-*.png`、`.tmp/notifications-toggle-*.png`、`.tmp/notifications-toggle-color-390.png`、`.tmp/notifications-toggle-color-red-390.png`、`.tmp/fm-align-round2-1440.png`、`.tmp/security-shield-mobile-390.png`、`.tmp/security-shield-mobile-320.png`、`.tmp/security-shield-mobile-280.png`、`.tmp/provider-mobile-final-*.png`、`.tmp/appearance-nav-grid-1440.png`、`.tmp/appearance-mobile-switcher-320.png`、`.tmp/appearance-mobile-switcher-390.png`、`.tmp/appearance-mobile-switcher-open-320.png`、`.tmp/appearance-mobile-switcher-open-390.png`、`.tmp/appearance-mobile-switcher-desktop-1440.png`。 |
+
+## 后端诊断日志补齐（2026-10-24，源码与静态收口，行为待远程）
+
+范围：复用 Platform Pino 和持久日志等级，覆盖启动/停机/恢复、HTTP/WS 出入口、SSH、Workspace、后台传输、监控及 Agent 执行；保持 UI、协议、授权与副作用语义。按 D17 本地仅静态检查，不重启后端。
+
+| 功能对应           | 判据                                                                                       |
+| ------------------ | ------------------------------------------------------------------------------------------ |
+| 生命周期与恢复     | 阶段开始、完成、失败、清理失败有日志，恢复失败继续停止准入。                               |
+| 数据流与非核心入口 | 全部注册 HTTP 路由按模板记录关联 ID、状态和耗时；WS 记录连接、退出及字节汇总，无逐帧正文。 |
+| 后台核心任务       | SSH、Workspace、传输、监控、Agent 的状态和失败可追踪，不以日志替代持久状态。               |
+
+| 职责归属 | owner/依赖                                                                                |
+| -------- | ----------------------------------------------------------------------------------------- |
+| 日志实现 | Platform logging 持安全投影与上下文；Bootstrap 创建唯一 Logger，Operations 管理同一阈值。 |
+| 状态事实 | 原 Service/技术 Adapter 在实际状态变更及结算处记录，无全局业务 dispatcher。               |
+
+| 类型归属                  | 消费者                                                                    |
+| ------------------------- | ------------------------------------------------------------------------- |
+| Logger/LogFact/诊断上下文 | Platform 技术类型，Bootstrap 与后端原 owner 消费；不增 Shared/HTTP 字段。 |
+| 应用状态与错误            | 复用原模块类型，日志只投影安全标识、计数、阶段和有限错误类别。            |
+
+| 完成证据     | 当前状态                                                                                                                                    |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| 两轮源码审核 | 完成两轮：第一轮核对共享阈值、恢复后实例与事件异步上下文；第二轮核对敏感字段白名单、原因节点预算、高频汇总、错误原样抛回与清理/副作用顺序。 |
+| 静态检查     | 根 check、format:all:check、双端 build 和最终 backend build、diff 检查通过；日志见 testing 本批记录。                                       |
+| 行为回归     | 按 D17 留远程 Actions；未执行本地 E2E/故障注入或重启。                                                                                      |
+
+后续入口：本轮用户已授权提交推送 dev；需要重启后端先通知用户。远程行为核对日志等级即时切换、并发关联隔离、WS 关闭流量汇总、监控失败到恢复、备份恢复后同一阈值，以及秘密不进入诊断。未运行或新增本地行为测试，不将源码复审与静态结果扩大为实机验收。
+
+### 日志补充复审与提交（2026-10-24，源码复审完成）
+
+用户授权进一步完善后提交推送 dev；沿用本阶段四表及 D17，不重启、不改 UI。
+
+| 审核表   | 补充范围及判据                                                                                                                                                                                                                   |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | Agent Job 与插件实例的准备、派发、完成、失败、关闭可关联；诊断省略有明确计数。                                                                                                                                                   |
+| 职责归属 | 原 ToolJobService / PluginRuntimeService 持有状态事实；日志回调只恢复自己的 AsyncLocalStorage，不捕获其它事务/授权上下文。                                                                                                       |
+| 类型归属 | 复用 Logger、DiagnosticFacts、原 Job/Runtime owner；不新增业务协议或持久字段。                                                                                                                                                   |
+| 完成证据 | 两轮源码复审完成：核对原状态/清理顺序、后台任务关联、安全字段与省略计数；修正插件 Host 失败事件误标实例退出。根 check 已通过，最终 format:all:check、双端 build 与 diff 均通过，证据见 testing；按授权提交推送 dev，行为留远程。 |

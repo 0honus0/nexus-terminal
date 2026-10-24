@@ -1,3 +1,5 @@
+import type { Logger } from '../../../../platform/logging/logger.js';
+import { logDiagnostic } from '../../../../platform/logging/diagnostic-log.js';
 import { FailureSummary } from '../../../../platform/lifecycle/failure-summary.js';
 import type { MachineMutationService } from '../../machines/service/mutation-service.js';
 import { RemoteFileFailure } from '../../files/model/file-types.js';
@@ -47,6 +49,7 @@ export class RemoteObservationService {
 		private readonly model: ObservationModel,
 		private readonly mutationClaims: MachineMutationService,
 		private intervalSeconds = 3,
+		private readonly logger?: Logger,
 	) {
 		if (
 			!Number.isSafeInteger(intervalSeconds) ||
@@ -104,6 +107,7 @@ export class RemoteObservationService {
 			.catch((error) => {
 				if (error instanceof RemoteResourceCleanupFailure) {
 					cleanupFailed = true;
+					logDiagnostic(this.logger, 'error', 'MONITORING_CLEANUP_FAILED', {}, error);
 					this.failures.record(error);
 				}
 				throw error;
@@ -195,12 +199,21 @@ export class RemoteObservationService {
 		let timer: ReturnType<typeof setTimeout> | null = null;
 		let current: Promise<unknown> = Promise.resolve();
 		let stopped = false;
+		let failed = false;
+		logDiagnostic(this.logger, 'debug', 'MONITORING_SUBSCRIBED', {
+			workspaceId: owner.workspaceId,
+			subscriptionId: key,
+		});
 
 		const stop = () => {
 			if (stopped) {
 				return;
 			}
 			stopped = true;
+			logDiagnostic(this.logger, 'debug', 'MONITORING_STOPPED', {
+				workspaceId: owner.workspaceId,
+				subscriptionId: key,
+			});
 			controller.abort();
 			if (timer) {
 				clearTimeout(timer);
@@ -231,6 +244,13 @@ export class RemoteObservationService {
 							const value = await this.model.collect(scope, key, bootstrap);
 							await this.validate(scope);
 							if (!stopped) {
+								if (failed) {
+									logDiagnostic(this.logger, 'info', 'MONITORING_RECOVERED', {
+										workspaceId: owner.workspaceId,
+										subscriptionId: key,
+									});
+								}
+								failed = false;
 								listener({ kind: 'sample', value });
 							}
 						},
@@ -238,6 +258,14 @@ export class RemoteObservationService {
 				)
 				.catch((error) => {
 					if (!stopped) {
+						logDiagnostic(
+							this.logger,
+							failed ? 'debug' : 'warn',
+							'MONITORING_SAMPLE_FAILED',
+							{ workspaceId: owner.workspaceId, subscriptionId: key },
+							error,
+						);
+						failed = true;
 						let code: ObservationErrorCode = 'remote_unavailable';
 						if (error instanceof ObservationFailure) {
 							code = error.code;

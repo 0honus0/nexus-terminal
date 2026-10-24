@@ -1,3 +1,5 @@
+import type { Logger } from '../../../../platform/logging/logger.js';
+import { logDiagnostic, withDiagnosticContext } from '../../../../platform/logging/diagnostic-log.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { ToolJobModel } from '../model/tool-job-model.js';
 import type { ToolJob, ToolJobScope, ToolJobPreparation, ToolJobResult } from '../model/tool-job-types.js';
@@ -32,7 +34,10 @@ export class ToolJobService {
 	private readonly jobs = new Map<string, OwnedJob>();
 	private reservations = 0;
 
-	constructor(private readonly model: ToolJobModel) {}
+	constructor(
+		private readonly model: ToolJobModel,
+		private readonly logger?: Logger,
+	) {}
 
 	async prepare(input: ToolJobPreparation): Promise<string> {
 		const { operation, target, policyRevision, signal, work, validate } = input;
@@ -84,6 +89,11 @@ export class ToolJobService {
 
 				unsubscribe: () => signal.removeEventListener('abort', abort),
 			});
+			logDiagnostic(this.logger, 'info', 'AGENT_JOB_ACCEPTED', {
+				jobId: job.id,
+				runId: job.runId,
+				connectionId: job.connectionId,
+			});
 			return JSON.stringify({ jobId: job.id, accepted: true });
 		} finally {
 			this.reservations--;
@@ -96,8 +106,17 @@ export class ToolJobService {
 			throw new AgentFailure('internal_failure');
 		}
 		item.timer = setTimeout(() => item.controller.abort(), Math.max(1, item.deadline - Date.now()));
-		item.pending = Promise.resolve().then(() => this.execute(item));
+		item.pending = Promise.resolve().then(() =>
+			withDiagnosticContext({ jobId: item.job.id, runId: item.job.runId }, () => this.execute(item)),
+		);
 		void item.pending.catch((error: unknown) => {
+			logDiagnostic(
+				this.logger,
+				'error',
+				'AGENT_JOB_TASK_FAILED',
+				{ jobId: item.job.id, runId: item.job.runId },
+				error,
+			);
 			item.failure = error;
 			item.cleanupFailed = hasCleanupFailure(error);
 		});
@@ -115,6 +134,7 @@ export class ToolJobService {
 			item.controller.signal.throwIfAborted();
 			await item.validate(item.controller.signal);
 			item.job = await this.model.change(item.job, 'dispatched', null);
+			logDiagnostic(this.logger, 'info', 'AGENT_JOB_DISPATCHED');
 			await item.validate(item.controller.signal);
 			monitoring = Promise.resolve().then(async () => {
 				while (!monitor.signal.aborted) {
@@ -158,7 +178,15 @@ export class ToolJobService {
 				result.status === 'completed' ? 'completed' : 'failed',
 				result,
 			);
+			logDiagnostic(this.logger, result.status === 'completed' ? 'info' : 'warn', 'AGENT_JOB_SETTLED', {
+				state: item.job.state,
+				exitCode: result.exitCode,
+				stdoutBytes: Buffer.byteLength(result.stdout),
+				stderrBytes: Buffer.byteLength(result.stderr),
+				truncated: result.truncated,
+			});
 		} catch (error) {
+			logDiagnostic(this.logger, 'warn', 'AGENT_JOB_EXECUTION_FAILED', {}, error);
 			monitor.abort();
 			if (monitoring) {
 				await monitoring;
@@ -179,7 +207,9 @@ export class ToolJobService {
 				} else {
 					item.job = await this.model.change(item.job, 'unknown', null);
 				}
+				logDiagnostic(this.logger, 'warn', 'AGENT_JOB_SETTLED', { state: item.job.state });
 			} catch (settlement) {
+				logDiagnostic(this.logger, 'error', 'AGENT_JOB_SETTLEMENT_FAILED', {}, settlement);
 				throw new AggregateError([error, settlement], 'Job execution and settlement failed');
 			}
 			if (error instanceof ToolCleanupFailure) {
@@ -244,6 +274,7 @@ export class ToolJobService {
 		if (input.action === 'cancel') {
 			if (active) {
 				await validate();
+				logDiagnostic(this.logger, 'info', 'AGENT_JOB_CANCEL_REQUESTED', { jobId: job.id, runId: job.runId });
 				active.controller.abort();
 				if (active.pending) {
 					await active.pending;
@@ -329,6 +360,11 @@ export class ToolJobService {
 				this.jobs.delete(item.job.id);
 			}
 		}
+		logDiagnostic(this.logger, failures.length ? 'error' : 'debug', 'AGENT_JOBS_DRAINED', {
+			runId: scope.runId,
+			jobCount: items.length,
+			failures: failures.length,
+		});
 		if (failures.length) {
 			if (items.some((item) => item.cleanupFailed)) {
 				throw new ToolCleanupFailure({ cause: new AggregateError(failures, 'Job cleanup failed') });

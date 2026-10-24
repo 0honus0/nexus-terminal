@@ -12,6 +12,10 @@ export class PinoLogger implements Logger {
 		pino.destination({ dest: 2, sync: true }),
 	);
 
+	isEnabled(severity: LogSeverity): boolean {
+		return this.output.isLevelEnabled(severity);
+	}
+
 	setThreshold(level: LogThreshold): void {
 		this.output.level = level;
 	}

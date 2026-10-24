@@ -1,3 +1,5 @@
+import type { Logger } from '../../../../platform/logging/logger.js';
+import { logDiagnostic, withDiagnosticContext } from '../../../../platform/logging/diagnostic-log.js';
 import type {
 	SuspendedRevocationReason,
 	SuspendedTerminationReason,
@@ -204,6 +206,7 @@ export class WorkspaceService {
 		private readonly shellModels: WorkspaceShellModelFactory,
 		private readonly tokens: SessionTokenModel,
 		private readonly logs?: WorkspaceHistoryModel,
+		private readonly logger?: Logger,
 	) {
 		this.leaseSweeper = setInterval(() => this.sweepSuspendedLeases(), 2_000);
 		this.leaseSweeper.unref();
@@ -241,6 +244,7 @@ export class WorkspaceService {
 	}
 
 	private recordFailure(error: unknown): void {
+		logDiagnostic(this.logger, 'error', 'WORKSPACE_BACKGROUND_FAILED', {}, error);
 		if (error instanceof Error) {
 			if (this.recordedFailures.has(error)) {
 				return;
@@ -514,9 +518,9 @@ export class WorkspaceService {
 		if (signal?.aborted) {
 			abort();
 		}
-		const task = this.openAdmitted(record, token, columns, rows).finally(() =>
-			signal?.removeEventListener('abort', abort),
-		);
+		const task = withDiagnosticContext({ workspaceId: id, connectionId }, () =>
+			this.openAdmitted(record, token, columns, rows),
+		).finally(() => signal?.removeEventListener('abort', abort));
 		record.openPromise = task;
 		return this.track(task);
 	}
@@ -527,6 +531,10 @@ export class WorkspaceService {
 		columns: number,
 		rows: number,
 	): Promise<WorkspaceLease> {
+		logDiagnostic(this.logger, 'info', 'WORKSPACE_OPEN_STARTED', {
+			workspaceId: record.id,
+			connectionId: record.connectionId,
+		});
 		let primary: unknown = null;
 		try {
 			const userId = await this.untilAbort(this.identity(token), record.controller.signal);
@@ -574,7 +582,15 @@ export class WorkspaceService {
 			);
 			// Prepare prompt tracking before the first attachment can send user input.
 			// A shell without Bash/Zsh integration remains usable when preparation fails.
-			const shellIntegrationReady = record.shellIntegration.initialize().catch(() => undefined);
+			const shellIntegrationReady = record.shellIntegration.initialize().catch((error: unknown) => {
+				logDiagnostic(
+					this.logger,
+					'warn',
+					'WORKSPACE_SHELL_INTEGRATION_UNAVAILABLE',
+					{ workspaceId: record.id, connectionId: record.connectionId },
+					error,
+				);
+			});
 			const target = await this.untilAbort(this.targets.get(record.connectionId), record.controller.signal);
 			if (!target) {
 				throw new WorkspaceFailure('not_found');
@@ -590,9 +606,17 @@ export class WorkspaceService {
 			}
 			record.controller.signal.throwIfAborted();
 			record.phase = 'attached';
+			this.logPhase(record);
 			record.fileTask = this.track(this.openFiles(record, token, shell.fingerprint));
 			return this.lease(record);
 		} catch (error) {
+			logDiagnostic(
+				this.logger,
+				'warn',
+				'WORKSPACE_OPEN_FAILED',
+				{ workspaceId: record.id, connectionId: record.connectionId },
+				error,
+			);
 			primary = error;
 		}
 		record.shellIntegration?.close();
@@ -638,6 +662,7 @@ export class WorkspaceService {
 		) {
 			const cleanup = new RemoteResourceCleanupFailure([primary, ...failures]);
 			record.phase = 'cleanup_unknown';
+			this.logPhase(record);
 			this.recordFailure(cleanup);
 			throw cleanup;
 		}
@@ -647,7 +672,22 @@ export class WorkspaceService {
 		throw primary;
 	}
 
+	private logPhase(record: WorkspaceRecord): void {
+		logDiagnostic(this.logger, record.phase === 'cleanup_unknown' ? 'error' : 'info', 'WORKSPACE_PHASE_CHANGED', {
+			workspaceId: record.id,
+			connectionId: record.connectionId,
+			phase: record.phase,
+			generation: record.generation,
+		});
+	}
+
 	private publishFileState(record: WorkspaceRecord, state: WorkspaceFileState): void {
+		logDiagnostic(this.logger, state.kind === 'failed' ? 'warn' : 'info', 'WORKSPACE_FILES_STATE', {
+			workspaceId: record.id,
+			connectionId: record.connectionId,
+			state: state.kind,
+			failureCode: state.kind === 'failed' ? state.reason : null,
+		});
 		record.fileState = state;
 		for (const listener of record.fileListeners) {
 			try {
@@ -1248,6 +1288,7 @@ export class WorkspaceService {
 		record.pendingSuspended = pending;
 		record.attachmentId = attachmentId;
 		record.phase = 'suspend_resuming';
+		this.logPhase(record);
 		this.records.set(workspaceId, record); // Reserved before the first async log operation.
 		mark.ownerId = attachmentId;
 		try {
@@ -1365,6 +1406,7 @@ export class WorkspaceService {
 			return;
 		}
 		record.phase = 'suspended';
+		this.logPhase(record);
 		record.attachmentId = null;
 		const mark = record.suspend;
 		if (mark?.recording) {
@@ -1448,6 +1490,7 @@ export class WorkspaceService {
 			this.records.delete(pending.oldId);
 		}
 		record.phase = 'attached';
+		this.logPhase(record);
 		mark.generation = ownerGeneration;
 		mark.ownerId = attachmentId;
 		mark.leaseExpiresAt = Date.now() + 45_000;
@@ -1952,6 +1995,7 @@ export class WorkspaceService {
 		record.pendingResume = pending;
 		record.attachmentId = attachmentId;
 		record.phase = 'resuming';
+		this.logPhase(record);
 		this.clearDetachTimer(record);
 		const skip = offset - (record.offset - record.outputBytes);
 		const replay = Buffer.concat(record.output.map((bytes) => Buffer.from(bytes))).subarray(skip);
@@ -2029,6 +2073,7 @@ export class WorkspaceService {
 		record.tokenHash = pending.tokenHash;
 		record.pendingResume = null;
 		record.phase = 'attached';
+		this.logPhase(record);
 		record.lastConnectedAt = Math.floor(Date.now() / 1000);
 		if (record.file && record.fileTokenHash !== pending.tokenHash) {
 			// A different login must not momentarily expose a ready FileResource
@@ -2158,6 +2203,7 @@ export class WorkspaceService {
 		const mark = record.suspend;
 		const retained = mark !== null && mark.recording && mark.failure === null;
 		record.phase = retained ? 'suspended' : 'detached';
+		this.logPhase(record);
 		if (retained && mark) {
 			mark.prepared = false;
 		}
@@ -2565,9 +2611,31 @@ export class WorkspaceService {
 		if (record.closePromise) {
 			return record.closePromise;
 		}
+		logDiagnostic(this.logger, 'info', 'WORKSPACE_CLOSE_STARTED', {
+			workspaceId: record.id,
+			connectionId: record.connectionId,
+			reason,
+			outputBytes: record.offset,
+		});
 		const closing = Promise.resolve().then(() => this.closeRecordOwned(record, reason));
+		void closing.then(
+			() =>
+				logDiagnostic(this.logger, 'info', 'WORKSPACE_CLOSED', {
+					workspaceId: record.id,
+					connectionId: record.connectionId,
+				}),
+			(error: unknown) =>
+				logDiagnostic(
+					this.logger,
+					'error',
+					'WORKSPACE_CLOSE_FAILED',
+					{ workspaceId: record.id, connectionId: record.connectionId },
+					error,
+				),
+		);
 		record.closePromise = closing;
 		record.phase = 'closing';
+		this.logPhase(record);
 		if (record.suspend) {
 			this.publishSuspendedCatalogChanged(record.userId);
 		}
@@ -2722,6 +2790,7 @@ export class WorkspaceService {
 			if (failures.length) {
 				const failure = new RemoteResourceCleanupFailure(failures);
 				record.phase = 'cleanup_unknown';
+				this.logPhase(record);
 				this.recordFailure(failure);
 				throw failure;
 			}

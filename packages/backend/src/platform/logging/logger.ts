@@ -8,6 +8,7 @@ export interface LogFact {
 }
 
 export interface Logger {
+	isEnabled(severity: LogSeverity): boolean;
 	setThreshold(level: LogThreshold): void;
 	write(severity: LogSeverity, code: string, facts: readonly LogFact[]): void;
 }

@@ -1,3 +1,5 @@
+import type { Logger } from '../../../../platform/logging/logger.js';
+import { logDiagnostic } from '../../../../platform/logging/diagnostic-log.js';
 import { FailureSummary } from '../../../../platform/lifecycle/failure-summary.js';
 import type { AuditNotice } from '../model/audit-types.js';
 import type { AuditService } from './audit-service.js';
@@ -19,6 +21,7 @@ export class AuditEventOwner {
 		private readonly audit: AuditService,
 		private readonly logging: LoggingService,
 		private readonly notifications: NotificationService,
+		private readonly logger?: Logger,
 	) {}
 
 	async initialize(mode: 'startup' | 'restore'): Promise<void> {
@@ -47,6 +50,7 @@ export class AuditEventOwner {
 			}
 			this.recordedFailures.add(error);
 		}
+		logDiagnostic(this.logger, 'error', 'OPERATIONS_BACKGROUND_FAILED', {}, error);
 		this.failures.record(error);
 	}
 

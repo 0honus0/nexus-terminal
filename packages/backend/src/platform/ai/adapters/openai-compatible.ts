@@ -1,3 +1,5 @@
+import type { Logger } from '../../logging/logger.js';
+import { logDiagnostic } from '../../logging/diagnostic-log.js';
 import type { ReadableStreamReadResult } from 'node:stream/web';
 import { modelRequest } from './model-request.js';
 import type {
@@ -84,6 +86,7 @@ async function request(
 	signal: AbortSignal,
 	method: 'GET' | 'POST',
 	body?: string,
+	logger?: Logger,
 ): Promise<Response> {
 	try {
 		const res = await fetch(url, {
@@ -97,6 +100,7 @@ async function request(
 			redirect: 'error',
 			signal,
 		});
+		logDiagnostic(logger, res.ok ? 'debug' : 'warn', 'MODEL_HTTP_RESPONSE', { method, status: res.status });
 		if (!res.ok) {
 			const primary = new ModelNetworkFailure('http', res.status);
 			try {
@@ -108,6 +112,7 @@ async function request(
 		}
 		return res;
 	} catch (error) {
+		logDiagnostic(logger, 'warn', 'MODEL_HTTP_FAILED', { method, aborted: signal.aborted }, error);
 		throw mapError(error, signal);
 	}
 }
@@ -324,6 +329,8 @@ function parseProbeStream(data: Uint8Array, protocol: ModelProbe['protocol']): M
 }
 
 export class OpenAiCompatibleAdapter implements ModelNetworkPort {
+	constructor(private readonly logger?: Logger) {}
+
 	async *stream(input: ModelStreamInput, signal: AbortSignal): AsyncIterable<ModelStreamEvent> {
 		const responses = input.protocol === 'responses';
 		const body = modelRequest(input);
@@ -333,6 +340,7 @@ export class OpenAiCompatibleAdapter implements ModelNetworkPort {
 			signal,
 			'POST',
 			body,
+			this.logger,
 		);
 		await requireEventStream(response);
 		const reader = response.body?.getReader();
@@ -393,6 +401,13 @@ export class OpenAiCompatibleAdapter implements ModelNetworkPort {
 			} catch (error) {
 				cleanupErrors.push(error);
 			}
+			logDiagnostic(
+				this.logger,
+				cleanupErrors.length || didFail ? 'warn' : 'debug',
+				'MODEL_STREAM_SETTLED',
+				{ bytes, ended, failed: didFail, cleanupFailures: cleanupErrors.length, aborted: signal.aborted },
+				didFail ? primaryError : undefined,
+			);
 			if (cleanupErrors.length) {
 				throw cleanupFailure(cleanupErrors, didFail ? primaryError : undefined);
 			}
@@ -403,7 +418,7 @@ export class OpenAiCompatibleAdapter implements ModelNetworkPort {
 	}
 
 	async discover(baseUrl: string, credential: string | null, signal: AbortSignal): Promise<EndpointModel[]> {
-		const response = await request(endpoint(baseUrl, 'models'), credential, signal, 'GET');
+		const response = await request(endpoint(baseUrl, 'models'), credential, signal, 'GET', undefined, this.logger);
 		const bytes = await bounded(response, LIMIT_MODELS, signal);
 		let raw: unknown;
 		try {
@@ -459,6 +474,7 @@ export class OpenAiCompatibleAdapter implements ModelNetworkPort {
 			signal,
 			'POST',
 			body,
+			this.logger,
 		);
 		await requireEventStream(response);
 		const data = await bounded(response, LIMIT_STREAM, signal);

@@ -1,3 +1,4 @@
+import type { Logger } from '../../platform/logging/logger.js';
 import type { SqliteRuntime } from '../../platform/storage/sqlite/sqlite-runtime.js';
 import type { HostDiagnostics } from './public.js';
 import { SystemOperationError } from './public-errors.js';
@@ -45,10 +46,12 @@ export function registerSystem(
 	collector: SnapshotCollector,
 	secrets: SecretBox | null,
 	maintenance: BackupMaintenance,
+	logger?: Logger,
 ): SystemRegistration {
 	const backups = new BackupService(
 		access,
 		new BackupModel(collector, new SealedBytes(BACKUP_MAX_SNAPSHOT_BYTES, secrets)),
+		logger,
 	);
 	const service = new SystemStatusService(access, new SystemStatusModel(new NodeLocalSystemStatusAdapter()));
 	const processDiagnostics = new NodeProcessDiagnostic();

@@ -1,3 +1,5 @@
+import type { Logger } from '../../../../platform/logging/logger.js';
+import { logDiagnostic } from '../../../../platform/logging/diagnostic-log.js';
 import { randomUUID } from 'node:crypto';
 import type { AccessPublicApi } from '../../../access/public.js';
 import type { RemoteToolModel } from '../model/tool-model.js';
@@ -32,6 +34,7 @@ export class RemoteToolService {
 		private readonly access: AccessPublicApi,
 		private readonly model: RemoteToolModel,
 		private readonly mutations: MachineMutationService,
+		private readonly logger?: Logger,
 	) {}
 
 	check(token: string | null, intent: ToolCheckIntent, signal: AbortSignal): Promise<ToolCheckResult> {
@@ -112,6 +115,12 @@ export class RemoteToolService {
 			if (needsPassword !== (password !== undefined) || (password !== undefined && !isToolPassword(password))) {
 				throw new RemoteToolFailure('invalid_input');
 			}
+			logDiagnostic(this.logger, 'info', 'REMOTE_TOOLS_INSTALL_STARTED', {
+				targetId: plan.inspection.targetId,
+				manager: plan.inspection.manager,
+				privilege: plan.inspection.privilege,
+				missingCount: plan.inspection.missing.length,
+			});
 			this.plans.delete(planId);
 			const installationScope: ToolInstallScope = {
 				signal: scope.signal,
@@ -135,6 +144,9 @@ export class RemoteToolService {
 				{ userId: 1, digest },
 			);
 			await scope.validate();
+			logDiagnostic(this.logger, 'info', 'REMOTE_TOOLS_INSTALL_COMPLETED', {
+				targetId: plan.inspection.targetId,
+			});
 			return { targetId: plan.inspection.targetId };
 		});
 	}
@@ -194,6 +206,7 @@ export class RemoteToolService {
 				return await work(scope, this.model.digest(token));
 			})
 			.catch((cause: unknown) => {
+				logDiagnostic(this.logger, 'warn', 'REMOTE_TOOLS_OPERATION_FAILED', {}, cause);
 				if (cause instanceof RemoteResourceCleanupFailure) {
 					this.blocked = true;
 					this.failures.record(cause);

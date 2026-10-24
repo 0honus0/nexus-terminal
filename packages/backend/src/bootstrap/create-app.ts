@@ -1,3 +1,6 @@
+import type { Logger } from '../platform/logging/logger.js';
+import { PinoLogger } from '../platform/logging/pino-logger.js';
+import { logDiagnostic } from '../platform/logging/diagnostic-log.js';
 import { SqliteRuntime } from '../platform/storage/sqlite/sqlite-runtime.js';
 import { initializeSchema } from '../platform/storage/sqlite/schema.js';
 import { applicationMigrations } from './schema.js';
@@ -22,6 +25,7 @@ import { RemoteOperationError } from '../modules/remote/public-errors.js';
 import { resolveDataPaths } from './data-paths.js';
 
 export interface AppOptions {
+	logger?: Logger;
 	/** 32-byte application-managed key. Required for storing or resolving credentials. */
 	encryptionKey?: Uint8Array;
 	/** Explicit host-key trust owner for internal Remote SSH. Missing policy denies SSH opens. */
@@ -89,6 +93,7 @@ function createLifecycle(
 	install: () => Promise<RegisteredModules>,
 	db: SqliteRuntime,
 	admission: CallAdmission,
+	logger: Logger,
 ): Pick<BackendApplication, 'listenHttp' | 'close'> & { maintenance: BackupMaintenance } {
 	let http: Promise<HttpListener> | null = null;
 	let closePromise: Promise<void> | null = null;
@@ -127,6 +132,7 @@ function createLifecycle(
 			(cause) => {
 				retirements.delete(task);
 				retirementFailures.push(cause);
+				logDiagnostic(logger, 'error', 'RESTORE_RETIREMENT_FAILED', {}, cause);
 			},
 		);
 	}
@@ -143,6 +149,7 @@ function createLifecycle(
 				if (closePromise) {
 					throw new Error('Application closing');
 				}
+				logDiagnostic(logger, 'info', 'RESTORE_DRAIN_STARTED');
 				const lease = (await listener).suspend(request);
 				admission.pause();
 				const original = getModules();
@@ -160,10 +167,13 @@ function createLifecycle(
 					if (failures.length) {
 						throw new AggregateError(failures, 'Maintenance admission or owners failed to drain');
 					}
+					logDiagnostic(logger, 'info', 'RESTORE_APPLY_STARTED');
 					if (!(await apply())) {
+						logDiagnostic(logger, 'error', 'RESTORE_APPLY_UNCONFIRMED');
 						restoreFailed = true;
 						return;
 					}
+					logDiagnostic(logger, 'info', 'RESTORE_REBUILD_STARTED');
 					const replacement = await install();
 					setModules(replacement);
 					await replacement.initialize('restore');
@@ -177,8 +187,10 @@ function createLifecycle(
 					if (!closePromise && !restoreFailed) {
 						lease.resume();
 						admission.resume();
+						logDiagnostic(logger, 'info', 'RESTORE_COMPLETED');
 					}
 				} catch (cause) {
+					logDiagnostic(logger, 'error', 'RESTORE_FAILED', {}, cause);
 					restoreFailed = true;
 					const current = getModules();
 					if (current !== original) {
@@ -224,6 +236,7 @@ function createLifecycle(
 		httpOrigin = options.publicOrigin;
 		const routes = modules.httpRoutes(secureCookies);
 		http = openHttpListener({
+			logger,
 			publicOrigin: options.publicOrigin,
 			allowedOrigins: modules.allowedOrigins,
 			bindHost: options.bindHost,
@@ -241,6 +254,7 @@ function createLifecycle(
 			return closePromise;
 		}
 		closePromise = Promise.resolve().then(async () => {
+			logDiagnostic(logger, 'info', 'APP_SHUTDOWN_STARTED');
 			const failures: unknown[] = [];
 			admission.pause();
 			// Do not close SQLite or the import owner while its durable reconciliation is running.
@@ -277,6 +291,17 @@ function createLifecycle(
 			} catch (error) {
 				failures.push(error);
 			}
+			if (failures.length) {
+				logDiagnostic(
+					logger,
+					'error',
+					'APP_SHUTDOWN_FAILED',
+					{ failureCount: failures.length },
+					new AggregateError(failures),
+				);
+			} else {
+				logDiagnostic(logger, 'info', 'APP_SHUTDOWN_COMPLETED');
+			}
 			if (failures.length === 1) {
 				throw failures[0];
 			}
@@ -291,10 +316,20 @@ function createLifecycle(
 }
 
 export async function createApp(dbPath: string, options: AppOptions = {}): Promise<BackendApplication> {
-	const db = SqliteRuntime.open(dbPath);
+	const logger = options.logger ?? new PinoLogger();
+	logDiagnostic(logger, 'info', 'APP_STARTUP_STARTED');
+	let db: SqliteRuntime;
+	try {
+		db = SqliteRuntime.open(dbPath, logger);
+	} catch (error) {
+		logDiagnostic(logger, 'error', 'DATABASE_OPEN_FAILED', {}, error);
+		throw error;
+	}
 	let modules: RegisteredModules | null = null;
 	try {
+		logDiagnostic(logger, 'info', 'DATABASE_SCHEMA_STARTED');
 		await initializeSchema(db, applicationMigrations);
+		logDiagnostic(logger, 'info', 'DATABASE_SCHEMA_READY');
 		const paths = resolveDataPaths(db.path);
 		// Recover files from durable SQL evidence before any module creates resources or reads state.
 		const files = new NativeSnapshotRestoreFiles(
@@ -305,7 +340,9 @@ export async function createApp(dbPath: string, options: AppOptions = {}): Promi
 				['plugins', paths.plugins],
 			]),
 		);
+		logDiagnostic(logger, 'info', 'STARTUP_RECOVERY_STARTED');
 		await files.recover((id) => new SqliteSnapshotRestore(db).committed(id));
+		logDiagnostic(logger, 'info', 'STARTUP_RECOVERY_COMPLETED');
 		const secrets = options.encryptionKey ? new SecretBox(options.encryptionKey) : null;
 		const admission = new CallAdmission();
 
@@ -319,6 +356,7 @@ export async function createApp(dbPath: string, options: AppOptions = {}): Promi
 		const install = () =>
 			registerModules({
 				sqlite: db,
+				logger,
 				secrets,
 				verifyHostKey: options.verifyHostKey ?? null,
 				configuration: options.configuration,
@@ -333,6 +371,7 @@ export async function createApp(dbPath: string, options: AppOptions = {}): Promi
 			install,
 			db,
 			admission,
+			logger,
 		);
 		modules = await install();
 		// Transient suspended SSH logs are not persistent SSH sessions.
@@ -340,6 +379,7 @@ export async function createApp(dbPath: string, options: AppOptions = {}): Promi
 		const restore = new SqliteSnapshotRestore(db);
 		await modules.initialize((await restore.needsInitialization()) ? 'restore' : 'startup');
 		await restore.initialized();
+		logDiagnostic(logger, 'info', 'APP_STARTUP_COMPLETED');
 		return {
 			targets: admission.bind(
 				() => getModules().targets,
@@ -378,6 +418,7 @@ export async function createApp(dbPath: string, options: AppOptions = {}): Promi
 			close: lifecycle.close,
 		};
 	} catch (error) {
+		logDiagnostic(logger, 'error', 'APP_STARTUP_FAILED', {}, error);
 		const failures: unknown[] = [error];
 		if (modules) {
 			try {

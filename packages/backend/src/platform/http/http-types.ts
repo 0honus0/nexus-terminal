@@ -1,3 +1,4 @@
+import type { Logger } from '../logging/logger.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type WebSocket from 'ws';
 
@@ -37,6 +38,7 @@ export interface HttpBindings {
 }
 
 export interface HttpServerOptions extends HttpBindings {
+	logger?: Logger;
 	/** Explicit external URL prevents Host/X-Forwarded-Host origin spoofing. */
 	publicOrigin: string;
 	bindHost: string;

@@ -1,3 +1,5 @@
+import type { Logger } from '../../../../platform/logging/logger.js';
+import { logDiagnostic } from '../../../../platform/logging/diagnostic-log.js';
 import type { NotificationDeliveryOutcome } from '@nexus-terminal/shared/operations/notifications/values';
 import { FailureSummary } from '../../../../platform/lifecycle/failure-summary.js';
 import { randomUUID } from 'node:crypto';
@@ -118,7 +120,10 @@ export class NotificationService {
 	private readonly failures = new FailureSummary();
 	private closePromise: Promise<void> | null = null;
 
-	constructor(private readonly model: NotificationModel) {}
+	constructor(
+		private readonly model: NotificationModel,
+		private readonly logger?: Logger,
+	) {}
 
 	async initialize(mode: 'startup' | 'restore'): Promise<void> {
 		await this.model.recover({ discardQueued: mode === 'restore', suppressHistoricalFanout: mode === 'restore' });
@@ -275,6 +280,7 @@ export class NotificationService {
 				}
 			},
 			(error) => {
+				logDiagnostic(this.logger, 'error', 'NOTIFICATION_WORKER_FAILED', {}, error);
 				this.failures.record(error);
 				this.quiesce();
 				this.pending = null;
@@ -307,8 +313,19 @@ export class NotificationService {
 			let status: NotificationDeliveryOutcome = 'sent';
 			let cleanupFailure: NotificationCleanupFailure | null = null;
 			try {
+				logDiagnostic(this.logger, 'debug', 'NOTIFICATION_DISPATCH_STARTED', {
+					deliveryId: next.delivery.id,
+					channel: next.config.kind,
+				});
 				await this.model.send(next, body, signal);
 			} catch (error) {
+				logDiagnostic(
+					this.logger,
+					'warn',
+					'NOTIFICATION_DISPATCH_FAILED',
+					{ deliveryId: next.delivery.id, channel: next.config.kind },
+					error,
+				);
 				if (
 					!(error instanceof OperationsFailure) ||
 					(error.code !== 'delivery_failed' && error.code !== 'delivery_unknown')
@@ -323,6 +340,11 @@ export class NotificationService {
 			}
 			try {
 				await this.model.settle(next.delivery.id, status, 50000);
+				logDiagnostic(this.logger, status === 'sent' ? 'info' : 'warn', 'NOTIFICATION_SETTLED', {
+					deliveryId: next.delivery.id,
+					channel: next.config.kind,
+					status,
+				});
 			} catch (error) {
 				throw cleanupFailure === null
 					? error

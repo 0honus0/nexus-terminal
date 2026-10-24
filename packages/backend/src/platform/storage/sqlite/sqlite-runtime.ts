@@ -1,3 +1,5 @@
+import type { Logger } from '../../logging/logger.js';
+import { logDiagnostic } from '../../logging/diagnostic-log.js';
 import type { SqlExecutor } from './sql-types.js';
 import { SqliteTransactionAdapter } from './adapters/transaction-sql.js';
 import { Worker } from 'node:worker_threads';
@@ -54,7 +56,10 @@ export class SqliteRuntime implements SqlExecutor {
 	};
 	private readonly transactions = new SqliteTransactionAdapter(this.directExecutor);
 
-	private constructor(readonly path: string) {
+	private constructor(
+		readonly path: string,
+		private readonly logger?: Logger,
+	) {
 		this.worker = new Worker(new URL('./adapters/worker.js', import.meta.url), { workerData: { path } });
 		this.worker.on('message', (message: unknown) => this.handleWorkerResponse(message));
 		this.worker.on('error', (error) =>
@@ -124,7 +129,7 @@ export class SqliteRuntime implements SqlExecutor {
 		return reading;
 	}
 
-	static open(path: string): SqliteRuntime {
+	static open(path: string, logger?: Logger): SqliteRuntime {
 		if (path === ':memory:') {
 			throw new Error('Use a dedicated on-disk test database');
 		}
@@ -136,7 +141,7 @@ export class SqliteRuntime implements SqlExecutor {
 		}
 		openDatabasePaths.add(canonical);
 		try {
-			return new SqliteRuntime(canonical);
+			return new SqliteRuntime(canonical, logger);
 		} catch (error) {
 			openDatabasePaths.delete(canonical);
 			throw error;
@@ -152,6 +157,13 @@ export class SqliteRuntime implements SqlExecutor {
 		if (this.unavailable) {
 			return;
 		}
+		logDiagnostic(
+			this.logger,
+			'error',
+			'DATABASE_WORKER_UNAVAILABLE',
+			{ pendingRequests: this.pending.size },
+			error,
+		);
 		this.unavailable = error;
 		for (const pending of this.pending.values()) {
 			pending.reject(error);

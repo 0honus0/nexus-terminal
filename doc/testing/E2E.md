@@ -1,5 +1,15 @@
 # Nexus Terminal E2E
 
+## 后端诊断日志补齐（2026-10-24，静态通过，行为待远程）
+
+沿用 Platform Pino，Bootstrap/Operations/网络/核心 owner 共用同一实例和热更新阈值。覆盖启动、信号停机、数据库/恢复阶段、HTTP 模板路由及本地响应完成、WS 授权/容量/关闭流量汇总、SSH/Workspace/文件/机器突变/服务器传输/工具安装/监控恢复、Agent/模型/插件/通知与外部请求。保持前端 UI、Shared 协议、权限及未知结果/清理策略。
+
+两轮源码复审完成：第一轮修正事件回调需显式绑定诊断上下文、恢复前后共享实例及过滤等级后再提取异常；第二轮核对最多四个错误节点与32项 facts、仅提取源码帧而非异常正文、HTTP 只记录模板路由、WS 无逐帧输出、原异常继续抛给原 owner、阶段开始与真实完成分离。全路径不记录密码、令牌、Cookie、命令/终端/文件/模型正文或 URL。
+
+根 `pnpm run check`、`pnpm run format:all:check`、双端 `pnpm run build`、最后补充后的 `pnpm run build:backend`、`git diff --check` 通过；日志 `/tmp/nexus-logs-{check,format-check,build,backend-build}.log`。按 D17 未新增或执行本地行为/E2E，未重启后端；日志等级热切换、并发关联隔离、异常/恢复实机输出及日志泄密断言仍待远程授权验证，本批不继承旧版本 E2E 通过结论。
+
+补充复审覆盖 ToolJob 接纳/派发/完成/失败/取消/排空、插件实例预留/激活/意外退出/宿主调用失败/关闭，并沿原持久状态确认后记录。事件回调改为只恢复诊断自身 AsyncLocalStorage，不捕获其它事务/授权作用域；异常提取前限制堆栈扫描长度，省略已知原因分支和 facts 有显式计数。两轮复审核对原错误传播、关闭顺序、有限字段与并发关联，并修正插件宿主调用失败误标为实例退出。最终根 check、全量 format:all:check、双端 build 与 diff 均通过，日志使用 `/tmp/nexus-logs-final-{check,format-check,build}.log`；本轮继续遵守 D17，未执行本地行为测试或重启。
+
 ## SSH 首次连接提示符重复（2026-10-24，实机通过，E2E 待远程）
 
 用户明确授权通过 `https://api.honus.top/` 验证。基线 `dev` / `4110c5e9`，浏览器 CDP 的独立新页使用已有登录身份，从正式连接管理打开 amd；未输入命令或修改保存配置。登录信息后出现两行相同 `root@…` 提示符，复现原问题。截图 `/tmp/nexus-startup-before.png`；复现时测试后端 PID 2803696。只读 `/api/v1/status` 返回 200，健康成功不作为终端行为通过。

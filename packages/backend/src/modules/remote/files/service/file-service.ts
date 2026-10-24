@@ -1,3 +1,5 @@
+import type { Logger } from '../../../../platform/logging/logger.js';
+import { logDiagnostic, withDiagnosticContext } from '../../../../platform/logging/diagnostic-log.js';
 import type { MachineMutationService } from '../../machines/service/mutation-service.js';
 import { isWellFormedFileText } from '@nexus-terminal/shared/remote/files/text-codec';
 import {
@@ -255,6 +257,7 @@ export class RemoteFileService {
 		private readonly model: RemoteFileModel,
 		private readonly targets: Pick<TargetsPublicApi, 'get'>,
 		private readonly mutations: MachineMutationService,
+		private readonly logger?: Logger,
 	) {
 		this.downloadTickets = new DownloadTickets(model);
 		this.expiryTimer = setInterval(() => {
@@ -430,13 +433,13 @@ export class RemoteFileService {
 								try {
 									await late.close();
 								} catch (cleanup) {
-									this.cleanupFailures.record(cleanup);
+									this.recordCleanupFailure(cleanup);
 									throw cleanup;
 								}
 							},
 							(error: unknown) => {
 								if (error instanceof RemoteResourceCleanupFailure) {
-									this.cleanupFailures.record(error);
+									this.recordCleanupFailure(error);
 									throw error;
 								}
 							},
@@ -486,6 +489,7 @@ export class RemoteFileService {
 				connectionName,
 			};
 		} catch (error) {
+			logDiagnostic(this.logger, 'warn', 'FILE_RESOURCE_OPEN_FAILED', {}, error);
 			if (resource) {
 				const abandoned = resource;
 				// Do not extend the aborted connect deadline with SSH cleanup. Keep
@@ -496,7 +500,7 @@ export class RemoteFileService {
 						.then(() => abandoned.close())
 						.catch((failure: unknown) => {
 							const combined = new RemoteResourceCleanupFailure([error, failure]);
-							this.cleanupFailures.record(combined);
+							this.recordCleanupFailure(combined);
 							throw combined;
 						}),
 				);
@@ -627,17 +631,19 @@ export class RemoteFileService {
 		writeIntent?: FileMutationIntent,
 	): Promise<T> {
 		return this.track(
-			this.runAdmitted(
-				token,
-				id,
-				action,
-				requestSignal,
-				mutation,
-				timeoutMs,
-				authorization,
-				resourceUse,
-				mutationPeers,
-				writeIntent,
+			withDiagnosticContext({ fileOperationId: randomUUID() }, () =>
+				this.runAdmitted(
+					token,
+					id,
+					action,
+					requestSignal,
+					mutation,
+					timeoutMs,
+					authorization,
+					resourceUse,
+					mutationPeers,
+					writeIntent,
+				),
 			),
 		);
 	}
@@ -664,6 +670,12 @@ export class RemoteFileService {
 		}
 		const started = Date.now();
 		const timer = setTimeout(abort, timeoutMs);
+		logDiagnostic(this.logger, 'debug', 'FILE_OPERATION_STARTED', {
+			resourceId: this.owners.has(id) ? id : null,
+			mutation,
+			resourceUse,
+			intent: writeIntent?.kind ?? null,
+		});
 		let record: OwnedResource | null = null;
 		let operationFinished!: () => void;
 		const lifecycle = new Promise<void>((resolve) => {
@@ -750,13 +762,34 @@ export class RemoteFileService {
 					)
 				: execute();
 			try {
-				return await operation;
+				const result = await operation;
+				logDiagnostic(this.logger, mutation ? 'info' : 'debug', 'FILE_OPERATION_COMPLETED', {
+					resourceId: this.owners.has(id) ? id : null,
+					mutation,
+					durationMs: Date.now() - started,
+				});
+				return result;
 			} catch (error) {
 				if (isUnknown(error)) {
 					controller.abort();
 				}
 				throw error;
 			}
+		} catch (error) {
+			logDiagnostic(
+				this.logger,
+				'warn',
+				'FILE_OPERATION_FAILED',
+				{
+					resourceId: this.owners.has(id) ? id : null,
+					mutation,
+					intent: writeIntent?.kind ?? null,
+					durationMs: Date.now() - started,
+					aborted: controller.signal.aborted,
+				},
+				error,
+			);
+			throw error;
 		} finally {
 			this.authorizing.delete(controller);
 			if (record) {
@@ -1512,7 +1545,7 @@ export class RemoteFileService {
 		if (owner.cleanupFailure === failure) {
 			return;
 		}
-		this.cleanupFailures.record(failure);
+		this.recordCleanupFailure(failure);
 		for (const ownerId of owner.cleanupOwnerIds) {
 			const previous = this.transferCleanupByOwner.get(ownerId);
 			this.transferCleanupByOwner.set(
@@ -3059,6 +3092,11 @@ export class RemoteFileService {
 		}
 	}
 
+	private recordCleanupFailure(error: unknown): void {
+		logDiagnostic(this.logger, 'error', 'FILE_RESOURCE_CLEANUP_FAILED', {}, error);
+		this.cleanupFailures.record(error);
+	}
+
 	private closeOwned(record: OwnedResource): Promise<void> {
 		if (record.closePromise) {
 			return record.closePromise;
@@ -3128,6 +3166,10 @@ export class RemoteFileService {
 		this.owners.delete(record.id);
 		void completion.then(
 			() => {
+				logDiagnostic(this.logger, 'debug', 'FILE_RESOURCE_CLOSED', {
+					resourceId: record.id,
+					workspaceId: record.workspaceId ?? null,
+				});
 				this.transferCleanupByOwner.delete(record.id);
 				if (record.workspaceId !== undefined) {
 					this.workspaceReservations.delete(record.workspaceId);
@@ -3138,7 +3180,7 @@ export class RemoteFileService {
 				if (record.workspaceId === undefined) {
 					this.unconfirmedIndependentClosures.add(record.id);
 				}
-				this.cleanupFailures.record(error);
+				this.recordCleanupFailure(error);
 				this.rememberClosed(record.id, completion);
 			},
 		);

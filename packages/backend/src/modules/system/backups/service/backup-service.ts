@@ -1,3 +1,5 @@
+import type { Logger } from '../../../../platform/logging/logger.js';
+import { logDiagnostic } from '../../../../platform/logging/diagnostic-log.js';
 import type { AccessPublicApi } from '../../../access/public.js';
 import { AccessOperationError } from '../../../access/public-errors.js';
 import type { BackupModel } from '../model/backup-model.js';
@@ -20,6 +22,7 @@ export class BackupService {
 	constructor(
 		private readonly access: AccessPublicApi,
 		private readonly model: BackupModel,
+		private readonly logger?: Logger,
 	) {}
 
 	export(
@@ -46,11 +49,14 @@ export class BackupService {
 				}
 				combined.throwIfAborted();
 				await proof.assertCurrent();
+				logDiagnostic(this.logger, 'info', 'BACKUP_EXPORT_STARTED');
 				const file = await this.model.export(input.password, combined);
 				await proof.assertCurrent();
 				combined.throwIfAborted();
 				await deliver({ content: file.content }, combined);
+				logDiagnostic(this.logger, 'info', 'BACKUP_EXPORT_COMPLETED', { bytes: file.content.byteLength });
 			} catch (cause) {
+				logDiagnostic(this.logger, 'warn', 'BACKUP_EXPORT_FAILED', { aborted: combined.aborted }, cause);
 				if (cause instanceof BackupResourceFailure) {
 					this.resourceFailure = cause;
 					this.quiesce();
@@ -122,7 +128,11 @@ export class BackupService {
 				combined.throwIfAborted();
 				const input = await read(combined);
 				try {
+					logDiagnostic(this.logger, 'info', 'BACKUP_IMPORT_PREFLIGHT_STARTED', {
+						bytes: input.content.byteLength,
+					});
 					const prepared = await this.model.prepareImport(input, 1, combined);
+					logDiagnostic(this.logger, 'info', 'BACKUP_IMPORT_PREFLIGHT_COMPLETED');
 					try {
 						let receipt: BackupImportReceipt | null = null;
 						let failure: unknown = null;
@@ -146,6 +156,7 @@ export class BackupService {
 						if (receipt === null) {
 							throw new BackupFailure('unavailable');
 						}
+						logDiagnostic(this.logger, 'info', 'BACKUP_IMPORT_COMPLETED');
 						return receipt;
 					} finally {
 						prepared.close();
@@ -154,6 +165,7 @@ export class BackupService {
 					input.content.fill(0);
 				}
 			} catch (cause) {
+				logDiagnostic(this.logger, 'error', 'BACKUP_IMPORT_FAILED', { aborted: combined.aborted }, cause);
 				if (cause instanceof BackupResourceFailure) {
 					this.resourceFailure = cause;
 					this.stopAdmission();

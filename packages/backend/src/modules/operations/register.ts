@@ -1,3 +1,4 @@
+import type { Logger } from '../../platform/logging/logger.js';
 import { registerOperationsSnapshot } from './snapshots/adapters/sqlite/snapshot-registration.js';
 import type { SnapshotRegistration } from '../../platform/storage/sqlite/snapshot-types.js';
 import { AuditEventOwner } from './audit/service/audit-event-owner.js';
@@ -35,15 +36,20 @@ export interface OperationsRegistration {
 	close(): Promise<void>;
 }
 
-export function registerOperations(sqlite: SqliteRuntime, secrets: SecretBox | null): OperationsRegistration {
+export function registerOperations(
+	sqlite: SqliteRuntime,
+	secrets: SecretBox | null,
+	logger: Logger = new PinoLogger(),
+): OperationsRegistration {
 	const loggingStorage = new SqliteLoggingStorage(sqlite);
 	const notificationStorage = new SqliteNotificationStorage(sqlite);
-	const logging = new LoggingService(new LoggingModel(loggingStorage, new SecureSessionTokens(), new PinoLogger()));
+	const logging = new LoggingService(new LoggingModel(loggingStorage, new SecureSessionTokens(), logger));
 	const audit = new AuditService(new AuditModel(new SqliteAuditStorage(sqlite)));
 	const notifications = new NotificationService(
 		new NotificationModel(notificationStorage, secrets, new SecureSessionTokens(), new NativeDelivery()),
+		logger,
 	);
-	const owner = new AuditEventOwner(audit, logging, notifications);
+	const owner = new AuditEventOwner(audit, logging, notifications, logger);
 	const publicApi: OperationsEvents = {
 		publish: async (notice) => {
 			try {

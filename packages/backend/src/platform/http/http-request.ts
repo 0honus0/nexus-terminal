@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import type { Logger, LogSeverity } from '../logging/logger.js';
+import { bindDiagnosticContext, logDiagnostic, withDiagnosticContext } from '../logging/diagnostic-log.js';
 import { readBodyBytes } from './http-body.js';
 import { DEFAULT_JSON_BODY_BYTES } from './http-limits.js';
 import proxyaddr from 'proxy-addr';
@@ -121,6 +124,7 @@ export function validateOrigin(request: IncomingMessage, origins: readonly URL[]
 }
 
 interface HttpRequestOptions {
+	logger?: Logger;
 	origins: readonly URL[];
 	trust(address: string, index: number): boolean;
 	router: HttpRouter;
@@ -131,6 +135,41 @@ export function createHttpRequestHandler(
 	options: HttpRequestOptions,
 ): (request: IncomingMessage, response: ServerResponse) => Promise<void> {
 	async function handleRequest(request: IncomingMessage, response: ServerResponse): Promise<void> {
+		const started = Date.now();
+		let routePath = 'unmatched';
+		let logged = false;
+		const method = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].includes(request.method ?? '')
+			? (request.method ?? 'OTHER')
+			: 'OTHER';
+
+		const completed = () => {
+			if (logged) {
+				return;
+			}
+			logged = true;
+			response.off('finish', onCompleted);
+			response.off('close', onCompleted);
+			const responseFinished = response.writableFinished && !request.aborted;
+			const status = response.statusCode;
+			let severity: LogSeverity = method === 'GET' ? 'debug' : 'info';
+			if (!responseFinished || status >= 400) {
+				severity = 'warn';
+			}
+			if (status >= 500) {
+				severity = 'error';
+			}
+			logDiagnostic(options.logger, severity, 'HTTP_REQUEST_COMPLETED', {
+				route: routePath,
+				method,
+				status,
+				responseFinished,
+				durationMs: Date.now() - started,
+			});
+		};
+
+		const onCompleted = bindDiagnosticContext(completed);
+		response.once('finish', onCompleted);
+		response.once('close', onCompleted);
 		try {
 			const directIp = request.socket.remoteAddress ?? '';
 			const trustedPeer = options.trust(directIp, 0);
@@ -159,6 +198,8 @@ export function createHttpRequestHandler(
 				return;
 			}
 			const { route, params } = matched;
+			routePath = route.path;
+			logDiagnostic(options.logger, 'debug', 'HTTP_REQUEST_STARTED', { route: routePath, method });
 			const context: HttpRouteContext = {
 				origin: origin.origin,
 				method,
@@ -186,6 +227,13 @@ export function createHttpRequestHandler(
 				}
 			}
 		} catch (error) {
+			logDiagnostic(
+				options.logger,
+				error instanceof HttpInputFailure ? 'warn' : 'error',
+				'HTTP_HANDLER_FAILED',
+				{ route: routePath, method },
+				error,
+			);
 			if (response.headersSent) {
 				// No second JSON envelope is valid after the first headers/body.
 				response.destroy();
@@ -196,5 +244,6 @@ export function createHttpRequestHandler(
 		}
 	}
 
-	return handleRequest;
+	return (request, response) =>
+		withDiagnosticContext({ requestId: randomUUID() }, () => handleRequest(request, response));
 }

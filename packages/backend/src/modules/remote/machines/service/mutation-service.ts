@@ -1,3 +1,5 @@
+import type { Logger } from '../../../../platform/logging/logger.js';
+import { logDiagnostic } from '../../../../platform/logging/diagnostic-log.js';
 import { createHash, randomUUID } from 'node:crypto';
 import type { MutationOrigin } from '@nexus-terminal/shared/remote/mutations/values';
 import { MAX_MUTATION_CLAIMS, MAX_MUTATION_RESOURCES } from '../mutation-rules.js';
@@ -33,7 +35,10 @@ function isUncertain(error: unknown): boolean {
 export class MachineMutationService {
 	readonly ownerId = randomUUID();
 
-	constructor(private readonly model: MachineMutationModel) {}
+	constructor(
+		private readonly model: MachineMutationModel,
+		private readonly logger?: Logger,
+	) {}
 
 	ownExecution(work: () => Promise<void>): Promise<void> {
 		return this.model.ownExecution(work);
@@ -68,15 +73,33 @@ export class MachineMutationService {
 		};
 		const acquired = await this.model.acquire(claim, MAX_MUTATION_RESOURCES, MAX_MUTATION_CLAIMS, actor);
 		if (acquired !== 'acquired') {
+			logDiagnostic(this.logger, 'warn', 'MUTATION_ADMISSION_REJECTED', {
+				claimId: id,
+				origin,
+				reason: acquired,
+			});
 			throw new RemoteFileFailure(acquired);
 		}
+		logDiagnostic(this.logger, 'info', 'MUTATION_CLAIM_ACQUIRED', {
+			claimId: id,
+			origin,
+			targetCount: targets.length,
+		});
 		let result: T;
 		try {
 			result = await work();
 		} catch (error) {
+			logDiagnostic(
+				this.logger,
+				isUncertain(error) ? 'error' : 'warn',
+				'MUTATION_EXECUTION_FAILED',
+				{ claimId: id, origin, uncertain: isUncertain(error) },
+				error,
+			);
 			try {
 				await this.model.settle(claim, isUncertain(error));
 			} catch (settlement) {
+				logDiagnostic(this.logger, 'error', 'MUTATION_SETTLEMENT_FAILED', { claimId: id, origin }, settlement);
 				if (error instanceof RemoteResourceCleanupFailure) {
 					throw new RemoteResourceCleanupFailure([error, settlement]);
 				}
@@ -90,8 +113,10 @@ export class MachineMutationService {
 		try {
 			await this.model.settle(claim, false);
 		} catch (cause) {
+			logDiagnostic(this.logger, 'error', 'MUTATION_RELEASE_UNCONFIRMED', { claimId: id, origin }, cause);
 			throw new RemoteFileFailure('operation_unknown', { cause });
 		}
+		logDiagnostic(this.logger, 'info', 'MUTATION_COMPLETED', { claimId: id, origin });
 		return result;
 	}
 

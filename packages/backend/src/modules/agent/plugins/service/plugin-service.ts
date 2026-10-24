@@ -1,3 +1,5 @@
+import type { Logger } from '../../../../platform/logging/logger.js';
+import { logDiagnostic } from '../../../../platform/logging/diagnostic-log.js';
 import type { WorkspaceInput, WorkspaceResult, WorkspaceMutation } from '../../scope/model/workspace-types.js';
 import type { PluginRuntimeObservation, PluginRuntimeAcknowledgement } from '../model/plugin-types.js';
 import type {
@@ -171,8 +173,9 @@ export class PluginService {
 			input: WorkspaceInput,
 			withMutation: WorkspaceMutation,
 		) => Promise<WorkspaceResult>,
+		private readonly logger?: Logger,
 	) {
-		this.runtime = new PluginRuntimeService(model, intents);
+		this.runtime = new PluginRuntimeService(model, intents, logger);
 	}
 
 	runtimeObservation(
@@ -668,6 +671,7 @@ export class PluginService {
 		void task.then(
 			() => this.pending.delete(task),
 			(error) => {
+				logDiagnostic(this.logger, 'warn', 'PLUGIN_OPERATION_FAILED', {}, error);
 				this.pending.delete(task);
 				if (isAgentDrainFailure(error)) {
 					this.failures.push(error);
@@ -681,6 +685,7 @@ export class PluginService {
 	async initialize(startRuntimes: boolean): Promise<void> {
 		await this.model.recoverRuntimes();
 		const items = await this.model.recovery();
+		logDiagnostic(this.logger, 'info', 'PLUGIN_RECOVERY_STARTED', { stages: items.length, startRuntimes });
 		for (const item of items) {
 			await this.model.recoverStage(
 				item,

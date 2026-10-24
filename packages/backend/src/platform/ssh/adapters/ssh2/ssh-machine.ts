@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import type { Logger } from '../../../logging/logger.js';
+import { logDiagnostic, withDiagnosticContext } from '../../../logging/diagnostic-log.js';
 import { Client, type ClientChannel, type SFTPWrapper } from 'ssh2';
 import type { EventEmitter } from 'node:events';
 import {
@@ -92,11 +95,18 @@ class ConnectedMachine implements MachineConnection {
 	private disconnected = false;
 	private readonly closedClients = new WeakSet<EventEmitter>();
 
-	constructor(private readonly route: ConnectedRoute) {
+	constructor(
+		private readonly route: ConnectedRoute,
+		private readonly logger: Logger | undefined,
+		private readonly sshId: string,
+	) {
 		route.assertOpen();
 
 		const monitor = (resource: EventEmitter) => {
-			resource.on('error', () => this.disconnectedByRemote());
+			resource.on('error', (error: unknown) => {
+				logDiagnostic(this.logger, 'warn', 'SSH_TRANSPORT_FAILED', { sshId: this.sshId }, error);
+				this.disconnectedByRemote();
+			});
 			resource.on('close', () => {
 				this.closedClients.add(resource);
 				this.disconnectedByRemote();
@@ -117,6 +127,7 @@ class ConnectedMachine implements MachineConnection {
 		if (this.disconnected) {
 			return;
 		}
+		logDiagnostic(this.logger, 'warn', 'SSH_DISCONNECTED', { sshId: this.sshId });
 		this.disconnected = true;
 		this.stop.abort(new Error('SSH transport disconnected'));
 		for (const listener of [...this.closeListeners]) {
@@ -180,6 +191,13 @@ class ConnectedMachine implements MachineConnection {
 				settled = true;
 				cleanup();
 				if (error) {
+					logDiagnostic(
+						this.logger,
+						'warn',
+						'SSH_CHANNEL_OPEN_FAILED',
+						{ sshId: this.sshId, outcome },
+						error,
+					);
 					channel?.destroy();
 					reject(
 						error instanceof MachineDispatchFailure
@@ -238,6 +256,11 @@ class ConnectedMachine implements MachineConnection {
 				client.shell({ term: pty.term ?? 'xterm-256color', cols: pty.columns, rows: pty.rows }, callback),
 			signal,
 		);
+		logDiagnostic(this.logger, 'info', 'SSH_SHELL_OPENED', {
+			sshId: this.sshId,
+			columns: pty.columns,
+			rows: pty.rows,
+		});
 		const shell = new SshShellChannel(channel, () => this.channels.delete(shell));
 		this.channels.add(shell);
 		return shell;
@@ -328,7 +351,25 @@ class ConnectedMachine implements MachineConnection {
 				signal: controller.signal,
 				cancelWhenAborted: false,
 			});
-			return await this.collectCommandResult(commandChannel, options, controller.signal);
+			const result = await this.collectCommandResult(commandChannel, options, controller.signal);
+			logDiagnostic(this.logger, result.truncated ? 'warn' : 'debug', 'SSH_COMMAND_SETTLED', {
+				sshId: this.sshId,
+				stdoutBytes: Buffer.byteLength(result.stdout),
+				stderrBytes: Buffer.byteLength(result.stderr),
+				truncated: result.truncated,
+				outcome: result.outcome.status,
+				exitCode: result.outcome.status === 'unknown' ? null : result.outcome.exitCode,
+			});
+			return result;
+		} catch (error) {
+			logDiagnostic(
+				this.logger,
+				'warn',
+				'SSH_COMMAND_FAILED',
+				{ sshId: this.sshId, aborted: controller.signal.aborted },
+				error,
+			);
+			throw error;
 		} finally {
 			clearTimeout(timeout);
 			options.signal?.removeEventListener('abort', abort);
@@ -496,19 +537,55 @@ class ConnectedMachine implements MachineConnection {
 			}
 		}
 		if (failures.length) {
+			logDiagnostic(
+				this.logger,
+				'error',
+				'SSH_CLEANUP_FAILED',
+				{ sshId: this.sshId },
+				new AggregateError(failures),
+			);
 			throw new AggregateError(failures, 'SSH machine resources failed to close');
 		}
+		logDiagnostic(this.logger, 'debug', 'SSH_CLOSED', { sshId: this.sshId });
 	}
 }
 
 export class Ssh2MachineFactory implements MachineSshFactory {
-	async connect(endpoint: MachineEndpoint, options: MachineConnectOptions): Promise<MachineConnection> {
+	constructor(private readonly logger?: Logger) {}
+
+	connect(endpoint: MachineEndpoint, options: MachineConnectOptions): Promise<MachineConnection> {
+		const sshId = randomUUID();
+		return withDiagnosticContext({ sshId }, async () => {
+			const started = Date.now();
+			logDiagnostic(this.logger, 'debug', 'SSH_CONNECT_STARTED');
+			try {
+				const machine = await this.connectRoute(endpoint, options, sshId);
+				logDiagnostic(this.logger, 'debug', 'SSH_CONNECTED', { durationMs: Date.now() - started });
+				return machine;
+			} catch (error) {
+				logDiagnostic(
+					this.logger,
+					'warn',
+					'SSH_CONNECT_FAILED',
+					{ durationMs: Date.now() - started, aborted: options.signal?.aborted ?? false },
+					error,
+				);
+				throw error;
+			}
+		});
+	}
+
+	private async connectRoute(
+		endpoint: MachineEndpoint,
+		options: MachineConnectOptions,
+		sshId: string,
+	): Promise<MachineConnection> {
 		const route = await openSshRoute(endpoint, options);
 		try {
 			if (options.signal?.aborted) {
 				throw new DOMException('SSH connection aborted', 'AbortError');
 			}
-			return new ConnectedMachine(route);
+			return new ConnectedMachine(route, this.logger, sshId);
 		} catch (error) {
 			const failures: unknown[] = [];
 			for (const resource of [...route.clients, ...route.sockets]) {

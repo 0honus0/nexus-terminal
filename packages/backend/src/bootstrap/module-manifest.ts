@@ -1,3 +1,5 @@
+import type { Logger } from '../platform/logging/logger.js';
+import { logDiagnostic } from '../platform/logging/diagnostic-log.js';
 import { readPackageVersion } from '../platform/packages/adapters/node-package-version.js';
 import { NativeBoundedFetch } from '../platform/network/adapters/native-bounded-fetch.js';
 import { NativeImageInspector } from '../platform/images/adapters/native-image-inspector.js';
@@ -52,6 +54,7 @@ export interface RegisteredModules {
 }
 
 interface ModuleRegistrationOptions {
+	logger: Logger;
 	sqlite: SqliteRuntime;
 	secrets: SecretBox | null;
 	verifyHostKey: MachineConnectOptions['verifyHostKey'] | null;
@@ -64,12 +67,14 @@ interface ModuleLifecycle {
 	close(): Promise<void>;
 }
 
-function quiesceModuleOwners(owners: readonly Pick<ModuleLifecycle, 'quiesce'>[]): void {
+function quiesceModuleOwners(owners: ReadonlyMap<string, Pick<ModuleLifecycle, 'quiesce'>>, logger: Logger): void {
 	const failures: unknown[] = [];
-	for (const owner of owners) {
+	for (const [module, owner] of owners) {
 		try {
 			owner.quiesce();
+			logDiagnostic(logger, 'debug', 'MODULE_QUIESCED', { module });
 		} catch (error) {
+			logDiagnostic(logger, 'error', 'MODULE_QUIESCE_FAILED', { module }, error);
 			failures.push(error);
 		}
 	}
@@ -78,14 +83,27 @@ function quiesceModuleOwners(owners: readonly Pick<ModuleLifecycle, 'quiesce'>[]
 	}
 }
 
-async function closeModuleOwners(owners: readonly ModuleLifecycle[]): Promise<void> {
+async function closeModuleOwners(owners: ReadonlyMap<string, ModuleLifecycle>, logger: Logger): Promise<void> {
 	const failures: unknown[] = [];
 	try {
-		quiesceModuleOwners(owners);
+		quiesceModuleOwners(owners, logger);
 	} catch (error) {
 		failures.push(error);
 	}
-	const results = await Promise.allSettled(owners.map((owner) => Promise.resolve().then(() => owner.close())));
+	const results = await Promise.allSettled(
+		[...owners].map(([module, owner]) =>
+			Promise.resolve().then(async () => {
+				logDiagnostic(logger, 'info', 'MODULE_CLOSE_STARTED', { module });
+				try {
+					await owner.close();
+					logDiagnostic(logger, 'info', 'MODULE_CLOSED', { module });
+				} catch (error) {
+					logDiagnostic(logger, 'error', 'MODULE_CLOSE_FAILED', { module }, error);
+					throw error;
+				}
+			}),
+		),
+	);
 	for (const result of results) {
 		if (result.status === 'rejected') {
 			failures.push(result.reason);
@@ -98,6 +116,7 @@ async function closeModuleOwners(owners: readonly ModuleLifecycle[]): Promise<vo
 
 /** Only independent business lifecycle owners appear here. */
 export async function registerModules({
+	logger,
 	sqlite,
 	secrets,
 	verifyHostKey,
@@ -114,15 +133,15 @@ export async function registerModules({
 		seed: configuration,
 		backgrounds,
 		imageInspector: new NativeImageInspector(),
-		network: new NativeBoundedFetch(),
+		network: new NativeBoundedFetch(logger),
 		githubToken: process.env.GITHUB_TOKEN?.trim() || process.env.GH_TOKEN?.trim() || null,
 	});
 	const installed = preferences.installation;
-	const owners: ModuleLifecycle[] = [preferences];
+	const owners = new Map<string, ModuleLifecycle>([['preferences', preferences]]);
 	let operationOwner: OperationsRegistration | null = null;
 
 	const closeOwners = async () => {
-		const results = await Promise.allSettled([closeModuleOwners(owners)]);
+		const results = await Promise.allSettled([closeModuleOwners(owners, logger)]);
 		const operationResult = await Promise.allSettled([Promise.resolve().then(() => operationOwner?.close())]);
 		const failures = [...results, ...operationResult].flatMap((result) =>
 			result.status === 'rejected' ? [result.reason] : [],
@@ -133,7 +152,7 @@ export async function registerModules({
 	};
 
 	try {
-		const operations = registerOperations(sqlite, secrets);
+		const operations = registerOperations(sqlite, secrets, logger);
 		operationOwner = operations;
 		const access = registerAccess({
 			sqlite,
@@ -160,7 +179,8 @@ export async function registerModules({
 		const remote = registerRemote({
 			sqlite,
 			resolver: targets.trustedSshTargets,
-			ssh: new Ssh2MachineFactory(),
+			ssh: new Ssh2MachineFactory(logger),
+			logger,
 			verifyHostKey,
 			hostKeys: targets.publicApi.hostKeys,
 			targets: targets.publicApi,
@@ -170,7 +190,7 @@ export async function registerModules({
 			statusIntervalSeconds: installed.statusMonitorIntervalSeconds,
 			resourceRefreshSeconds: installed.remoteHostRefreshIntervalSeconds,
 		});
-		owners.push(remote);
+		owners.set('remote', remote);
 		remote.installTransactionIdentityReader(access.readTransactionIdentity);
 		preferences.installRuntimeReload((configuration) => {
 			const applyAccess = access.prepareRuntimeConfiguration({
@@ -186,6 +206,7 @@ export async function registerModules({
 			return () => {
 				applyAccess();
 				applyMonitoring();
+				logDiagnostic(logger, 'info', 'CONFIGURATION_RELOADED');
 			};
 		});
 		const snapshot = new SqliteSnapshotCollector(
@@ -214,8 +235,8 @@ export async function registerModules({
 				]),
 			),
 		);
-		const system = registerSystem(access.publicApi, sqlite, snapshot, secrets, maintenance);
-		owners.push(system);
+		const system = registerSystem(access.publicApi, sqlite, snapshot, secrets, maintenance, logger);
+		owners.set('system', system);
 		const agent = registerAgent(
 			sqlite,
 			secrets,
@@ -227,9 +248,10 @@ export async function registerModules({
 			system.diagnostics,
 			plugins,
 			await readPackageVersion(new URL('../../package.json', import.meta.url)),
+			logger,
 		);
 		agent.installTransactionIdentityReader(access.readTransactionIdentity);
-		owners.push(agent);
+		owners.set('agent', agent);
 		system.registerResourceCollector(remote.resourceCollector);
 		system.registerResourceCollector(agent.resourceCollector);
 
@@ -312,9 +334,15 @@ export async function registerModules({
 			admitUnmatchedHttp: (sourceIp) => access.publicApi.admitSource(sourceIp),
 
 			initialize: async (mode) => {
+				logDiagnostic(logger, 'info', 'MODULE_INITIALIZING', { module: 'operations', mode });
 				await operations.initialize(mode);
+				logDiagnostic(logger, 'info', 'MODULE_READY', { module: 'operations', mode });
+				logDiagnostic(logger, 'info', 'MODULE_INITIALIZING', { module: 'agent', mode });
 				await agent.initialize(mode);
+				logDiagnostic(logger, 'info', 'MODULE_READY', { module: 'agent', mode });
+				logDiagnostic(logger, 'info', 'MODULE_INITIALIZING', { module: 'remote', mode });
 				await remote.initialize();
+				logDiagnostic(logger, 'info', 'MODULE_READY', { module: 'remote', mode });
 			},
 
 			httpRoutes: (secureCookies) =>
@@ -342,14 +370,23 @@ export async function registerModules({
 			agent: agent.publicApi,
 
 			quiesce: () => {
-				quiesceModuleOwners([operations, preferences, agent, system, remote]);
+				quiesceModuleOwners(
+					new Map<string, ModuleLifecycle>([
+						['operations', operations],
+						['preferences', preferences],
+						['agent', agent],
+						['system', system],
+						['remote', remote],
+					]),
+					logger,
+				);
 			},
 
 			retireForRestore: async () => {
 				// HTTP and external capability admission are already stopped by the application owner.
 				// Backups retains the admitted import task; Operations has no import wrapper occupancy.
 				const results = await Promise.allSettled([
-					closeModuleOwners(owners.filter((owner) => owner !== system)),
+					closeModuleOwners(new Map([...owners].filter(([, owner]) => owner !== system)), logger),
 					Promise.resolve().then(() => system.closeForRestore()),
 				]);
 				const operationResults = await Promise.allSettled([Promise.resolve().then(() => operations.close())]);

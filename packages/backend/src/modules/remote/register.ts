@@ -1,3 +1,4 @@
+import type { Logger } from '../../platform/logging/logger.js';
 import { registerRemoteSnapshot } from './snapshots/adapters/sqlite/snapshot-registration.js';
 import type { SnapshotRegistration } from '../../platform/storage/sqlite/snapshot-types.js';
 import type { OperationsEvents } from '../operations/public.js';
@@ -77,6 +78,7 @@ import { PosixToolInstaller } from '../../platform/tools/adapters/posix-tool-ins
 import { createRemoteToolRoutes } from './interfaces/http/tool-http.js';
 
 interface RemoteRegistrationOptions {
+	logger?: Logger;
 	events: OperationsEvents;
 	sqlite: SqliteRuntime;
 	resolver: TrustedSshTargetResolver;
@@ -133,13 +135,14 @@ function toOpenSessionRequest(input: OpenShellRequest): OpenSessionRequest {
 export function registerRemote(options: RemoteRegistrationOptions): RemoteRegistration {
 	const mutationStorage = new SqliteMachineMutationStorage(options.sqlite);
 	const mutationModel = new MachineMutationModel(mutationStorage, options.resolver, new SecureSessionTokens());
-	const mutations = new MachineMutationService(mutationModel);
+	const mutations = new MachineMutationService(mutationModel, options.logger);
 	const recovery = new MutationRecoveryService(mutationModel, mutations.ownerId, options.access, options.events);
 	const machines = new RemoteMachineModel(options.resolver, options.ssh, options.verifyHostKey, options.hostKeys);
 	const tools = new RemoteToolService(
 		options.access,
 		new RemoteToolModel(machines, options.resolver, new PosixToolInstaller(), new SecureSessionTokens()),
 		mutations,
+		options.logger,
 	);
 	const serverTransfers = new ServerTransferService(
 		options.access,
@@ -151,6 +154,7 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 			new SecureSessionTokens(),
 		),
 		mutations,
+		options.logger,
 	);
 	const connectionTests = new ConnectionTestService(new ConnectionTestModel(machines), options.access);
 	const service = new RemoteSessionService(new RemoteSessionModel(machines), options.targets);
@@ -168,6 +172,7 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 		new RemoteFileModel(machines, options.resolver, new SecureSessionTokens()),
 		options.targets,
 		mutations,
+		options.logger,
 	);
 	const sessionTokens = new SessionTokenModel(new SecureSessionTokens());
 	const workspaces = new WorkspaceService(
@@ -181,6 +186,7 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 		suspendedLogs
 			? new WorkspaceHistoryModel(suspendedLogs, suspendedCheckpoints, new HeadlessTerminalLogRenderer())
 			: undefined,
+		options.logger,
 	);
 	const observationModel = new ObservationModel(
 		machines,
@@ -203,6 +209,7 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 		observationModel,
 		mutations,
 		options.statusIntervalSeconds,
+		options.logger,
 	);
 	const resources = new ResourceStatusService(
 		options.access,
@@ -216,6 +223,7 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 		options.targets.desktopTargets,
 		desktopModel,
 		options.targets.connectionUsage,
+		options.logger,
 	);
 	const publicApi: RemoteSessions = {
 		open: (input) => remoteBoundary(async () => toSessionView(await service.open(toOpenSessionRequest(input)))),
