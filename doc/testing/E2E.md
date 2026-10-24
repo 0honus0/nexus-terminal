@@ -1,5 +1,34 @@
 # Nexus Terminal E2E
 
+## SSH 首次连接提示符重复（2026-10-24，实机通过，E2E 待远程）
+
+用户明确授权通过 `https://api.honus.top/` 验证。基线 `dev` / `4110c5e9`，浏览器 CDP 的独立新页使用已有登录身份，从正式连接管理打开 amd；未输入命令或修改保存配置。登录信息后出现两行相同 `root@…` 提示符，复现原问题。截图 `/tmp/nexus-startup-before.png`；复现时测试后端 PID 2803696。只读 `/api/v1/status` 返回 200，健康成功不作为终端行为通过。
+
+NativeShellIntegration 的 probe/hook marker 去掉额外换行，并在结果过滤后用 CR/EL 重绘后继提示符；保留原登录/普通输出、跨 chunk 识别及超时/关闭。新增 `ssh/terminal-startup.spec.ts` 通过可选真 PTY Bash 夹具断言回显初始开启/关闭均仅一行提示符、登录空行与正常命令空行原样保留；默认 pipe 夹具不变，基线 reset 同时恢复私有控制。未运行本地全量行为/E2E；指定 endpoint 的限定实机验证经用户明确授权，结果如下。
+
+根 check、双端 build、新用例 tsc、夹具 `node --check`、全量格式及 `git diff --check` 通过，日志 `/tmp/nexus-startup-{check,build,types,format}.log`，临时静态配置 `/tmp/nexus-startup-tsconfig.json`。两轮源码复核覆盖回显/marker 分片、普通输出、超时/关闭、目录就绪和逐例 reset；没有改前端 UI。用户重启后已完成下述限定实机验证，新 E2E 留远程，不复用历史 461/461 代替本次回归。未自行重启、提交或推送。
+
+用户回复“重启了”后，确认 Backend 新 PID `2810810`，Europe/London 启动时间 2026-10-24 07:03:30，晚于 Adapter 构建时间 06:44:54；同一 `dev` / `4110c5e9` 未提交修复，Node `/usr/local/bin/node` v22.23.1、pnpm 11.26.0。通过 CDP 独立新页在 `https://api.honus.top/` 正式连接管理打开 amd，连续三次建立不同 Workspace；每次等待 connected 及启动输出稳定后均只见一个提示符，完整登录信息和原空行保留，无内部 marker。首轮用正式命令栏执行带空行的 printf，两个唯一文本各出现一次、中间空行保留，普通回显正常；截图同时核对终端画面。
+
+同一自有测试附件通过正式文件管理器读取 `/root`，将终端切到 `/tmp`，正常回显仅为 `cd '/tmp'`；文件管理器先浏览 `/`，再从终端同步回 `/tmp`，证明 PID/Hook 和目录事件仍可用。最后恢复 `/root`，显式关闭三个测试附件并关闭自有浏览器页，未更改保存配置或远端文件，未触碰原有用户页面。截图 `/tmp/nexus-startup-after.png`、`/tmp/nexus-startup-directory-after.png`；真实执行日志 `/tmp/nexus-startup-real-check.log`、`/tmp/nexus-startup-real-directory.log`、`/tmp/nexus-startup-repeat.log`，完整观察 `/tmp/nexus-startup-real-evidence.json`、`/tmp/nexus-startup-directory-evidence.json`、`/tmp/nexus-startup-repeat-evidence.json`。限定实机通过不代表新 PTY on/off E2E 或全部 Shell 场景通过，后者仍需后继远程 Actions。
+
+用户后续要求检查其余 SSH。在相同修复代码及 Backend PID 下，通过同一指定地址逐个新建自有页面，从正式连接卡进入 akko、pve_debian、hostbrr、oracle；未触碰原用户页面或修改保存配置。每台可登录主机均等待启动输出稳定，再通过原命令栏运行只读 printf/pwd，验证两个文本各出现一次、中间空行保留，随后通过原文件管理器同步目录并与真实 `pwd -P` 相等：
+
+| 已保存连接 | 启动与命令输出                                                            | 目录同步           | 收尾                         |
+| ---------- | ------------------------------------------------------------------------- | ------------------ | ---------------------------- |
+| akko       | 单个 `root@localhost` 提示符，登录信息/空行保留                           | `/root` 通过       | 关闭自建附件与页面           |
+| pve_debian | 单个 `root@hermes` 提示符，对应用户原报告主机；正常输出通过，截图复核通过 | `/root` 通过       | 关闭自建附件与页面           |
+| hostbrr    | 单个 `isrli@ftpus1` 提示符，普通用户 `$` 提示符与正常输出通过             | `/home/isrli` 通过 | 关闭自建附件与页面           |
+| oracle     | 首次主机公钥确认，未自动信任；取消后未登录，不判为通过或连接失败          | 未验               | 取消确认并关闭自建附件与页面 |
+
+四台验证没有变更产品代码或 UI，没有执行远端文件写入命令，未重启、提交、推送或运行全量 E2E。日志 `/tmp/nexus-startup-other-ssh.log`，完整按主机关联的启动行/输出/状态/目录/收尾证据 `/tmp/nexus-startup-other-ssh-evidence.json`，截图 `/tmp/nexus-startup-{akko,pve_debian,hostbrr}.png`。此轮 oracle 尚未授权保存公钥，未绕过正式信任流程；后续新增授权及验收见下段。
+
+用户随后明确要求验证 Oracle 首页未信任 → 点击连接 → 确认信任 → 返回首页。沿用同一工作区及 Backend PID，通过独立新页打开指定地址首页，正式卡片为 `failed` 并显示“主机密钥未受信任，请先核对主机密钥”；只读确认信任列表中尚无该地址。点击首页 Oracle 卡片跳转工作区，使用全局 SSH 主机密钥确认框保存信任；真实 POST 201，Shared 严格解码并核对 host/port/fingerprint，仅观察到一次确认写入。原附件 `b9d9baa9-dafd-4e3e-9064-36d3618a5f6a` 成功 connected，登录信息及单个提示符可见。
+
+通过原顶部导航返回首页，未 reload/goto，原页面内存标记仍存在；Oracle 卡片恢复 `ready`、“实时”，显示 CPU、内存和根磁盘指标，未信任错误消失。随后额外只读核对原资源接口 HTTP 200，Shared `readSshResourceStatus` 解码成功；这是独立读取证据，不冒充最初自动请求的回执。最后回到工作区确认原附件仍 connected，显式关闭自建标签及独立测试页；按照用户本次要求保留公钥信任，不移除或重复确认。产品代码/UI、连接凭据未改变，无重启/提交/推送/全量 E2E，现有首次/变更公钥 SSH E2E 已包含不刷新返回首页恢复 ready 的场景，本次无需另造重复用例。
+
+证据截图 `/tmp/nexus-oracle-home-before.png`、`/tmp/nexus-oracle-trusted-terminal.png`、`/tmp/nexus-oracle-home-after.png`；原执行 `/tmp/nexus-oracle-home-trust.log`、后续只读核对及收尾 `/tmp/nexus-oracle-home-finish.log`、最终观察 `/tmp/nexus-oracle-home-trust-evidence.json`。原观察脚本在导航附近读取已回收的 CDP 响应体失败，后续 Resource Timing 缓冲无条目也未用于证明 HTTP；未重放公钥写入，仅继续只读核对原页面 DOM、内存标记、已保存公钥和资源接口，区分观察失败与产品结果。实机完整流程通过。
+
 ## 标签栏三项菜单验收与远程 dev（2026-10-24，已完成）
 
 [40065727325](https://github.com/0honus0/nexus-terminal/actions/runs/40065727325) / `0d7c8283` 461/461 首次通过，零重试、零 flaky；质量、8 分片和 Docker smoke 成功。标签变量场景验证菜单顺序“删除标签 / 删除本组（带标签）/ 重命名”，原行内编辑、标签单独删除保留命令及版本更新、组删除包含隐藏与跨标签命令、取消不派发、成员/版本冲突整批拒绝和其它组保留。此前移动 TUI 失败本轮首次通过；旧 flaky 原因尚未确定，未跳过或放宽断言。

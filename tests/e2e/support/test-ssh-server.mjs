@@ -85,6 +85,8 @@ const activeSshClients = new Set();
 const activeSftpChannels = new Set();
 let openedSftpChannels = 0;
 let sshServerOnline = false;
+let shellStartupPty = false;
+let shellStartupEcho = true;
 
 const virtualShellPrelude = `
 cd() {
@@ -607,7 +609,18 @@ async function resetRoot() {
 	await fsp.mkdir(path.join(rootDir, 'folder-seed'), { recursive: true });
 	await fsp.mkdir(path.join(rootDir, 'force-delete-e2e', 'nested'), { recursive: true });
 	await fsp.writeFile(path.join(rootDir, 'force-delete-e2e', 'nested', 'blocked.txt'), 'force-delete-e2e\n', 'utf8');
-	await fsp.writeFile(shellRcPath, `${virtualShellPrelude}\nPS1='nexus-e2e$ '\nPROMPT_COMMAND=''\n`, 'utf8');
+	await fsp.writeFile(
+		shellRcPath,
+		`${virtualShellPrelude}
+PS1='nexus-e2e$ '
+PROMPT_COMMAND=''
+if [ "\${NEXUS_E2E_PTY-}" = 1 ]; then
+  printf 'NEXUS_PTY_LOGIN\\n\\nNEXUS_PTY_LAST_LOGIN\\n'
+  if [ "\${NEXUS_E2E_ECHO-}" = 1 ]; then stty echo; else stty -echo; fi
+fi
+`,
+		'utf8',
+	);
 	await fsp.writeFile(path.join(rootDir, 'seed.txt'), 'nexus-e2e-seed\n', 'utf8');
 	await fsp.writeFile(path.join(rootDir, 'plainfile'), 'plain-no-extension\n', 'utf8');
 	await fsp.writeFile(path.join(rootDir, 'refresh-e2e.txt'), 'refresh-original\n', 'utf8');
@@ -662,6 +675,8 @@ async function resetRoot() {
 function resetControls() {
 	// Only reset policy and observations after the old transport has drained.
 	// Pending I/O counters remain owned by their actual READ/WRITE handlers.
+	shellStartupPty = false;
+	shellStartupEcho = true;
 	dockerContainerPresent = true;
 	dockerContainerState = 'running';
 	statusSample = 0;
@@ -1322,7 +1337,16 @@ function runRemoteCommand(command, stream, session) {
 
 function attachShell(session, accept) {
 	const stream = accept();
-	const child = spawn('/bin/bash', ['--noprofile', '--rcfile', shellRcPath, '-i'], {
+	const quotedRc = "'" + shellRcPath.replaceAll("'", "'\"'\"'") + "'";
+	// Opt-in real PTY coverage: pipe-backed interactive Bash sends readline
+	// echoes/prompts on stderr and cannot reproduce kernel echo/newline behavior.
+	// Open the PTY with echo off before Bash loads its rc so early SSH input cannot
+	// overtake the fixture's login banner; the rc sets the requested echo mode.
+	const command = shellStartupPty ? 'script' : '/bin/bash';
+	const args = shellStartupPty
+		? ['-qefc', 'exec /bin/bash --noprofile --rcfile ' + quotedRc + ' -i', '--echo=never', '/dev/null']
+		: ['--noprofile', '--rcfile', shellRcPath, '-i'];
+	const child = spawn(command, args, {
 		cwd: rootDir,
 		env: {
 			...process.env,
@@ -1331,6 +1355,8 @@ function attachShell(session, accept) {
 			NEXUS_E2E_ROOT: rootDir,
 			PS1: 'nexus-e2e$ ',
 			PROMPT_COMMAND: '',
+			NEXUS_E2E_PTY: shellStartupPty ? '1' : '0',
+			NEXUS_E2E_ECHO: shellStartupEcho ? '1' : '0',
 		},
 		stdio: ['pipe', 'pipe', 'pipe'],
 	});
@@ -1512,6 +1538,13 @@ const controlServer = http.createServer(async (req, res) => {
 		if (req.method === 'GET' && requestUrl.pathname === '/health') {
 			res.writeHead(200, { 'content-type': 'application/json' });
 			res.end(JSON.stringify({ ok: true, sshPort: SSH_PORT, rootDir }));
+			return;
+		}
+		if (req.method === 'POST' && requestUrl.pathname === '/shell/startup-pty') {
+			shellStartupPty = true;
+			shellStartupEcho = requestUrl.searchParams.get('echo') !== 'off';
+			res.writeHead(204);
+			res.end();
 			return;
 		}
 		if (requestUrl.pathname === '/sftp/read-hold' && (req.method === 'POST' || req.method === 'GET')) {

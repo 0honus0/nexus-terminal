@@ -192,7 +192,7 @@ class NativeShellIntegration implements ShellIntegrationPort {
 			[
 				'stty -echo 2>/dev/null;',
 				'if [ -n "${BASH_VERSION-}" ]; then __nexus_kind=bash; elif [ -n "${ZSH_VERSION-}" ]; then __nexus_kind=zsh; else __nexus_kind=other; fi;',
-				"printf '\\n" + octal(start) + '%s:%s' + octal(end) + '\\n\' "$$" "$__nexus_kind";',
+				"printf '" + octal(start) + '%s:%s' + octal(end) + '\' "$$" "$__nexus_kind";',
 				': ' + quote(historyToken) + ';',
 				probeHistoryCleanup(historyToken),
 				'stty echo 2>/dev/null;',
@@ -242,7 +242,7 @@ class NativeShellIntegration implements ShellIntegrationPort {
 			[
 				'stty -echo 2>/dev/null;',
 				hook,
-				"printf '\\n" + octal(start) + 'ok' + octal(end) + "\\n';",
+				"printf '" + octal(start) + 'ok' + octal(end) + "';",
 				': ' + quote(historyToken) + ';',
 				cleanHistory(this.kind, historyToken),
 				'stty echo 2>/dev/null;',
@@ -370,7 +370,14 @@ class NativeShellIntegration implements ShellIntegrationPort {
 					} else {
 						setup.reject(new Error('Prompt integration setup failed'));
 					}
-					value = Buffer.concat([visiblePrefix, joined.subarray(end + setup.end.length)]);
+					// The hidden command consumes the initial prompt without displaying
+					// its echoed Enter. Redraw the following prompt on that same line;
+					// setup delimiters must never add visible newlines of their own.
+					value = Buffer.concat([
+						visiblePrefix,
+						Buffer.from('\r\x1b[2K', 'ascii'),
+						joined.subarray(end + setup.end.length),
+					]);
 				}
 			}
 		}
