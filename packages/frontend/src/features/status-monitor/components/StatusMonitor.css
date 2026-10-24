@@ -365,6 +365,8 @@ button.live-state:focus-visible {
 	place-items: center;
 	width: calc(26px / var(--status-scale, 1));
 	height: calc(26px / var(--status-scale, 1));
+	max-height: 100%;
+	min-height: 0;
 	color: var(--metric-accent);
 	filter: drop-shadow(
 		0 0 calc(6px / var(--status-scale, 1)) color-mix(in srgb, var(--metric-accent) 26%, transparent)
@@ -374,6 +376,8 @@ button.live-state:focus-visible {
 .metric-icon i {
 	width: calc(21px / var(--status-scale, 1));
 	height: calc(21px / var(--status-scale, 1));
+	max-height: 100%;
+	min-height: 0;
 	font-size: calc(19px / var(--status-scale, 1));
 	line-height: 1;
 }

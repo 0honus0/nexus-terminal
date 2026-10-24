@@ -202,13 +202,14 @@ class NativeShellIntegration implements ShellIntegrationPort {
 			start,
 			end,
 			[
-				'stty -echo 2>/dev/null;',
+				'__nexus_tty=$(stty -a 2>/dev/null); stty -echo 2>/dev/null;',
 				'if [ -n "${BASH_VERSION-}" ]; then __nexus_kind=bash; elif [ -n "${ZSH_VERSION-}" ]; then __nexus_kind=zsh; else __nexus_kind=other; fi;',
+				'__nexus_redraw=0; if [ -t 0 ] && [ "$__nexus_kind" = bash ]; then case " $__nexus_tty " in *" -echo "*|*" -echo;"*) __nexus_redraw=1 ;; esac; fi;',
 				'case "$__nexus_kind" in',
 				'bash) eval ' + quote(bashHook) + ' ;;',
 				'zsh) eval ' + quote(zshHook) + ' ;;',
 				'esac;',
-				"printf '" + octal(start) + '%s:%s' + octal(end) + '\' "$$" "$__nexus_kind";',
+				"printf '" + octal(start) + '%s:%s:%s' + octal(end) + '\' "$$" "$__nexus_kind" "$__nexus_redraw";',
 				': ' + quote(historyToken) + ';',
 				probeHistoryCleanup(historyToken),
 				'stty echo 2>/dev/null;',
@@ -236,7 +237,7 @@ class NativeShellIntegration implements ShellIntegrationPort {
 				start: Buffer.from(start, 'ascii'),
 				end: Buffer.from(end, 'ascii'),
 				buffer: Buffer.alloc(0),
-				echoStart: Buffer.from('stty -echo', 'ascii'),
+				echoStart: Buffer.from('__nexus_tty=', 'ascii'),
 				suppressing: false,
 				capturing: false,
 				timer: setTimeout(() => {
@@ -321,10 +322,11 @@ class NativeShellIntegration implements ShellIntegrationPort {
 				} else {
 					const answer = joined.subarray(setup.start.length, end).toString('utf8').trim();
 					this.finishSetup(setup);
+					let redrawPreviousLine = false;
 					if (end + setup.end.length > MAX_SETUP_BYTES) {
 						setup.reject(new Error('Shell setup response too large'));
 					} else {
-						const match = /^(\d+):(bash|zsh|other)$/u.exec(answer);
+						const match = /^(\d+):(bash|zsh|other):(0|1)$/u.exec(answer);
 						if (
 							!match ||
 							!Number.isSafeInteger(Number(match[1])) ||
@@ -333,17 +335,19 @@ class NativeShellIntegration implements ShellIntegrationPort {
 						) {
 							setup.reject(new Error('Interactive shell did not return its PID'));
 						} else {
+							redrawPreviousLine = match[3] === '1';
 							this.pid = Number(match[1]);
 							this.kind = match[2];
 							setup.resolve();
 						}
 					}
-					// The hidden command consumes the initial prompt without displaying
-					// its echoed Enter. Redraw the following prompt on that same line;
-					// setup delimiters must never add visible newlines of their own.
+					// Bash readline emits a newline for a submitted line even when PTY echo
+					// was already off, so no command echo was available to suppress it.
+					// Undo only that hidden submission, based on actual TTY flags; pipe
+					// shells and login blank lines retain their original cursor position.
 					value = Buffer.concat([
 						visiblePrefix,
-						Buffer.from('\r\x1b[2K', 'ascii'),
+						Buffer.from(redrawPreviousLine ? '\x1b[1A\r\x1b[2K' : '\r\x1b[2K', 'ascii'),
 						joined.subarray(end + setup.end.length),
 					]);
 				}

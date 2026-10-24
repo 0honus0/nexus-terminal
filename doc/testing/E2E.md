@@ -2,7 +2,7 @@
 
 ## 远程40089588771后继修复与dev发布（2026-10-24，进行中）
 
-原59c27e45远程失败四项：notification-settings的GET网络故障立即Toast断言与现10秒宽限不一致；mobile/ssh-workspace仍期望关闭监控即stop、短时重开再start，与30秒订阅复用不一致；suspend-resume-ui仍断言挂起/恢复为绿色，与人工已确认蓝色不一致；真实PTY初始echo关闭时首屏多一个提示符。日志 `/tmp/nexus-e2e-40089588771-failed.log`、shard3诊断 `/tmp/nexus-e2e-40089588771-shard3`。最新62e776a0远程40091199668仍运行，结果另核。
+原59c27e45远程失败四项：notification-settings的GET网络故障立即Toast断言与现10秒宽限不一致；mobile/ssh-workspace仍期望关闭监控即stop、短时重开再start，与30秒订阅复用不一致；suspend-resume-ui仍断言挂起/恢复为绿色，与人工已确认蓝色不一致；真实PTY初始echo关闭时首屏多一个提示符。日志 `/tmp/nexus-e2e-40089588771-failed.log`、shard3诊断 `/tmp/nexus-e2e-40089588771-shard3`。62e776a0远程40091199668被后继推送取消，已完成分片日志仍可用于诊断。
 
 前三类调整测试按当前产品行为验：蓝色仍搭配真实connected/所有权确认；监控同时验短切无stop/start、闲置超过30秒后stop及重开start和真实CPU数据；网络持续故障等待恢复宽限后再核对驻留Toast，原输入与窄屏断言保留。SSH Key读取失败场景同步宽限，DELETE失败仍立即提示。PTY在实际Platform owner把PID探测和Hook安装合成一次隐藏提交，避免中途恢复echo后第二次readline产生额外提示符，不改前端渲染与普通输出过滤；既有两类真实PTY与用户空行断言保留。两轮源码审核覆盖合并后marker/超限/关闭/并发探测/输入围栏、其它Shell语法隔离与固定eval、历史清理、正常/缺失Hook、三类测试原功能断言和真实数据关联。根check、双端build、全量format:all:check、五份相关spec静态类型及diff通过，日志 `/tmp/nexus-e2e-resume-{check,build,format,types}.log`；新SHA远程待验，按D17不运行本地行为测试。
 
@@ -2036,3 +2036,11 @@ RDP Adapter 将文本从逐字符 SDK 调用改为最多 32 个完整字符一�
 发布 [40048237411](https://github.com/0honus0/nexus-terminal/actions/runs/40048237411) 使用 `62cea1419e76ae8e306ddfbe8aeddae40119dce0`，与测试 SHA 的唯一差异为自动更新的 scripts/e2e/duration-estimates.json；产品代码和依赖一致。生产依赖审计、双平台构建与推送均成功。`ghcr.io/0honus0/nexus-terminal:dev` 与 `sha-62cea1419e76` 均指向 `sha256:c5220f68a26e7c247d75b194a15cebe7506118af1962c781567540f35c93162c`；Registry 清单包含 linux/amd64、linux/arm64，两平台 config 的 revision 均为完整 `62cea141` SHA。发布日志 /tmp/nexus-dev-publication-40048237411.log，清单 /tmp/nexus-published-{dev-manifest,manifest}.log，平台配置 /tmp/nexus-published-image-configs.json。
 
 发布成功后按用户授权删除 22 条 conclusion=failure 的远程 Actions 记录，复查 total_count=0；成功的 E2E 40047441975、发布 40048237411 均保留，取消等其余状态未删除。删除前元数据 /tmp/nexus-failed-actions-deleted-metadata.json、逐条结果 /tmp/nexus-actions-cleanup-results.json；失败原因及修复证据沿前述记录保留。最终收口提交仅更新 PLAN/本验证文档，不改变已测试与已发布的源码或依赖。
+
+## 状态图标响应式约束补修（2026-10-24）
+
+远程40091199668的shard7两次均在800×180、scale=1失败，图标底边103.22超过卡片100.23约3px；源码证明固定26px图标加边框及padding超出26px卡片，不是过渡动画或采样等待问题。原图标及SVG增加可用高度约束，保持原几何断言和视觉设计。两轮源码复审覆盖矮面板、缩放、SVG及字体图标、趋势模式隐藏和正常大小不变；根check与Frontend build通过，日志/tmp/nexus-status-bounds-{check,build}.log；按D17未执行本地行为测试，新SHA远程待验。
+
+## 40091814866完整诊断与PTY定向重绘（2026-10-24）
+
+[e19aa979 / 40091814866](https://github.com/0honus0/nexus-terminal/actions/runs/40091814866)的质量/构建、Docker冒烟及六个分片通过；失败只剩状态图标越界与真实PTY echo关闭时首屏双提示符，所有网络宽限、挂起蓝色及监控订阅复用场景已通过。完整失败日志/tmp/nexus-e2e-40091814866-failed.log，shard3/7原始artifact在同名前缀目录。合并初始化命令不足以修复Bash echo关闭时隐藏提交的换行，现按实际TTY/原echo状态定向回退一行再重绘；不按提示符内容去重、不裁剪登录及用户空行、不削弱既有断言。两轮源码复审覆盖原echo读取时序、TTY/Bash限定、内部结果严格解码、分片/预算/失败及正常pipe路径。根check、双端build、全量format:all:check、相关spec静态类型及diff通过，日志/tmp/nexus-pty-redraw-{check,build,format,types}.log；新SHA完整远程待验；按D17未执行本地行为测试。
