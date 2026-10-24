@@ -54,6 +54,8 @@
 	const root = ref<HTMLElement | null>(null);
 	const list = ref<HTMLElement | null>(null);
 	const context = ref<{ command: QuickCommandSummary; x: number; y: number } | null>(null);
+	const tagContext = ref<{ tag: QuickCommandTagSummary; x: number; y: number } | null>(null);
+	const deletingTag = ref(false);
 	const editingTagId = ref<number | 'untagged' | null>(null);
 	const tagDraft = ref('');
 	const editingTag = ref<QuickCommandTagSummary | null>(null);
@@ -63,6 +65,8 @@
 			visible.value = false;
 			editing.value = null;
 			context.value = null;
+			tagContext.value = null;
+			deletingTag.value = false;
 			editingTagId.value = null;
 			editingTag.value = null;
 			tagDraft.value = '';
@@ -391,8 +395,58 @@
 	};
 
 	const openContext = (event: MouseEvent, command: QuickCommandSummary) => {
+		tagContext.value = null;
 		selectedId.value = command.id;
 		context.value = { command, x: event.clientX, y: event.clientY };
+	};
+
+	const openTagContext = (event: MouseEvent, group: { id: number | null }) => {
+		context.value = null;
+		const tag = tags.value.find((item) => item.id === group.id);
+		if (!tag || deletingTag.value) {
+			return;
+		}
+		const anchor = event.currentTarget instanceof HTMLElement ? event.currentTarget.getBoundingClientRect() : null;
+		const keyboard = event.clientX === 0 && event.clientY === 0;
+		tagContext.value = {
+			tag,
+			x: keyboard && anchor ? anchor.left : event.clientX,
+			y: keyboard && anchor ? anchor.bottom : event.clientY,
+		};
+	};
+
+	const removeTag = async (tag: QuickCommandTagSummary) => {
+		tagContext.value = null;
+		const signal = view.capture();
+		if (!view.isCurrent(signal) || deletingTag.value) {
+			return;
+		}
+		deletingTag.value = true;
+		try {
+			const confirmed = await feedback.confirm({
+				message: t('quickCommands.tags.confirmDelete', { name: tag.name }),
+				signal,
+				destructive: true,
+			});
+			if (!confirmed || !view.isCurrent(signal)) {
+				return;
+			}
+			await store.removeTag(tag, signal);
+		} catch (cause) {
+			if (!view.isCurrent(signal) || isNetworkFailure(cause) || cause === error.value) {
+				return;
+			}
+			feedback.notifyError(
+				t('quickCommands.tags.deleteFailed', {
+					name: tag.name,
+					error: preferenceFailureMessage(cause, t),
+				}),
+			);
+		} finally {
+			if (view.isCurrent(signal)) {
+				deletingTag.value = false;
+			}
+		}
 	};
 </script>
 
@@ -525,6 +579,7 @@
 						class="quick-command-group-header group flex select-none items-center justify-between bg-card/90 dark:bg-card/60 px-2.5 py-1.5 font-semibold text-foreground transition-colors duration-150 hover:bg-header/70 cursor-pointer"
 						:class="{ 'quick-command-group-header--compact': compact }"
 						@click="store.toggle(group.name)"
+						@contextmenu.prevent.stop="openTagContext($event, group)"
 					>
 						<div class="flex items-center gap-1.5 min-w-0 flex-1">
 							<button
@@ -672,6 +727,19 @@
 			<UiContextMenuItem @click="run(context.command, true)">
 				<i class="fas fa-paper-plane" aria-hidden="true"></i
 				><span>{{ t('quickCommands.actions.sendToAllSessions') }}</span>
+			</UiContextMenuItem>
+		</UiContextMenu>
+
+		<UiContextMenu
+			v-if="tagContext"
+			:visible="true"
+			:x="tagContext.x"
+			:y="tagContext.y"
+			:width="200"
+			@close="tagContext = null"
+		>
+			<UiContextMenuItem tone="danger" :disabled="deletingTag" @click="removeTag(tagContext.tag)">
+				<i class="fas fa-trash-alt" aria-hidden="true"></i><span>{{ t('quickCommands.tags.delete') }}</span>
 			</UiContextMenuItem>
 		</UiContextMenu>
 

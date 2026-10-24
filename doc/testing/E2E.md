@@ -1,5 +1,11 @@
 # Nexus Terminal E2E
 
+## 快捷指令标签组右键删除（2026-10-24，待远程）
+
+Panel 标签分组头新增右键入口，菜单复用 UiContextMenu/UiContextMenuItem，删除确认复用全局 Feedback 与 UiConfirmationPanel；没有新增局部 CSS。沿既有 Store/API 的版本删除，仅移除标签及关联，保留命令和变量，并重读关联变化后的指令版本。
+
+现有 `ssh/quick-command-tags-variables.spec.ts` 增补取消时零 DELETE、确认后仅一次 DELETE、标签移除但命令/变量保留、指令进入未标记组以及继续编辑成功的断言。两轮源码复核覆盖原 ID/version、重复确认、认证视图取消、错误 Toast 与版本刷新。根 check、双端 build、目标测试 tsc、全量格式及 diff 检查通过，日志 `/tmp/nexus-quick-tag-delete-{check,build,types,format}.log`。按 D17 未执行本地行为、浏览器或 E2E；新场景仍待远程，先前 461/461 结果不覆盖本批。
+
 ## 远程 40012928618 后继复核（2026-10-23，进行中）
 
 `40012928618` / `6e8e1f91` 完整 461 场景：454 通过、7 失败；质量、runner、Docker smoke 成功，shard 1/4/5/6 全绿。八组日志 `/tmp/nexus-e2e-40012928618-shard{1..8}.log`、去重结果 `/tmp/nexus-e2e-40012928618-cases.json`；旧 zip 证据因临时目录空间不足移至 `/var/tmp/nexus-e2e-evidence`，日志保留。

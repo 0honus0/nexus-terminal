@@ -37,14 +37,15 @@
       "clickToEditTag": "クリックしてタグ名を編集",
       "removeSelection": "このコマンドからタグを外す",
       "deleteGlobally": "このタグをグローバルに削除",
-      "confirmDelete": "タグ「{name}」をグローバルに削除しますか？",
+      "confirmDelete": "タグ「{name}」を削除しますか？タグのみを削除し、クイックコマンドは保持します。",
       "deleteFailed": "タグ「{name}」の削除に失敗しました: {error}",
       "renameHint": "タグ名を変更",
       "createFromUntagged": "このタグなしグループにタグを作成",
       "renameFailed": "タグ名の変更に失敗しました: {error}",
       "createFailed": "タグの作成と割り当てに失敗しました: {error}",
       "createTagFailed": "タグの作成に失敗しました: {error}",
-      "assignFailedAfterCreate": "タグ「{name}」は作成されましたが、コマンドの割り当てに失敗しました: {error}"
+      "assignFailedAfterCreate": "タグ「{name}」は作成されましたが、コマンドの割り当てに失敗しました: {error}",
+      "delete": "タグを削除"
     },
     "actions": {
       "sendToAllSessions": "すべてのセッションに送信",

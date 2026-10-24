@@ -1,3 +1,4 @@
+import type { Request } from '@playwright/test';
 import {
 	listTestCommandTags,
 	listTestCommands,
@@ -261,6 +262,85 @@ test('quick command tags and saved variables survive persistence, grouping, rena
 				})
 				.toBe(RENAMED_TAG);
 			await expect(group.getByRole('button', { name: RENAMED_TAG, exact: true })).toHaveText(RENAMED_TAG);
+		});
+
+		await step('tag context deletion confirms once and preserves the command and its variables', async () => {
+			const tagName = quickView.getByRole('button', { name: RENAMED_TAG, exact: true });
+			const original = (await listTestCommands(context.request)).find((item) => item.id === commandId);
+			if (!original) {
+				throw new Error('Missing quick command before tag deletion');
+			}
+			const deletePath = `/api/v1/quick-command-tags/${tagId}`;
+			const deletions: string[] = [];
+
+			const observeDelete = (request: Request) => {
+				if (request.method() === 'DELETE' && new URL(request.url()).pathname === deletePath) {
+					deletions.push(request.postData() ?? '');
+				}
+			};
+
+			page.on('request', observeDelete);
+			try {
+				await tagName.click({ button: 'right' });
+				const menu = page.getByRole('menu').filter({ visible: true });
+				await menu.getByRole('menuitem', { name: 'Delete tag', exact: true }).click();
+				const confirm = page.getByRole('dialog', { name: 'Please confirm' });
+				await expect(confirm).toContainText(RENAMED_TAG);
+				await expect(confirm).toContainText('quick commands will be kept');
+				expect(deletions).toHaveLength(0);
+				await confirm.getByRole('button', { name: 'Cancel', exact: true }).click();
+				await expect(confirm).toBeHidden();
+				expect((await listTestCommandTags(context.request)).some((tag) => tag.id === tagId)).toBe(true);
+				expect(deletions).toHaveLength(0);
+
+				await tagName.click({ button: 'right' });
+				await menu.getByRole('menuitem', { name: 'Delete tag', exact: true }).click();
+				await expect(confirm).toBeVisible();
+				const pending = page.waitForResponse(
+					(response) =>
+						response.request().method() === 'DELETE' && new URL(response.url()).pathname === deletePath,
+				);
+				await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
+				expect((await pending).status()).toBe(200);
+				await expect(tagName).toHaveCount(0);
+				await expect
+					.poll(async () => (await listTestCommandTags(context.request)).some((tag) => tag.id === tagId))
+					.toBe(false);
+				const preserved = (await listTestCommands(context.request)).find((item) => item.id === commandId);
+				if (!preserved) {
+					throw new Error('Tag deletion removed the quick command');
+				}
+				expect(preserved.name).toBe(original.name);
+				expect(preserved.command).toBe(original.command);
+				expect(preserved.variables).toEqual(original.variables);
+				expect(preserved.tagIds).not.toContain(tagId);
+				expect(preserved.version).toBe(original.version + 1);
+				const row = quickView.locator(`[data-command-id="${commandId}"]`);
+				await expect(row).toBeVisible();
+				await expect(
+					quickView.locator('.quick-command-group-card').filter({ has: row }).getByRole('button', {
+						name: 'Untagged',
+						exact: true,
+					}),
+				).toBeVisible();
+
+				// A tag removal advances the command version. Editing must use the refreshed version.
+				await row.click({ button: 'right' });
+				await menu.getByRole('menuitem', { name: 'Edit', exact: true }).click();
+				const form = page.getByRole('dialog', { name: 'Edit Quick Command', exact: true });
+				await expect(form.locator('.ui-token-input__token').filter({ hasText: RENAMED_TAG })).toHaveCount(0);
+				const saved = page.waitForResponse(
+					(response) =>
+						response.request().method() === 'PUT' &&
+						new URL(response.url()).pathname === `/api/v1/quick-commands/${commandId}`,
+				);
+				await form.getByRole('button', { name: 'Save', exact: true }).click();
+				expect((await saved).status()).toBe(200);
+				await expect(form).toBeHidden();
+				expect(deletions).toHaveLength(1);
+			} finally {
+				page.off('request', observeDelete);
+			}
 		});
 	} finally {
 		await cleanup(context.request);
