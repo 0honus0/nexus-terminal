@@ -34,7 +34,7 @@
 
 2026-10-22 继续测试：本轮限定分钟级持续连接、一次性票据重放/过期、仅关闭测试实例 WS 的受控断线及显式重连、关闭/页面卸载收敛。沿用正式 Modal/controller/Adapter 与隔离远端内存输入页；判据为远端输入精确匹配、原连接不受非法票据影响、新票据重连和自有资源释放。不进行高并发压力，不将分钟级观察称为长时稳定性通过。
 
-## 标签栏统一右键重命名及删除组内指令（2026-10-24，进行中）
+## 标签栏统一右键重命名及两类删除（2026-10-24，已完成）
 
 用户要求取消标签文字单击重命名，改为标签栏右键菜单，菜单依人工后续要求按“删除标签 / 删除本组（带标签）/ 重命名”排列，标签删除保留命令，删除组同时删除标签及组下所有指令。使用现有全局 UI，不新增局部样式。未标记虚拟组原创建标签入口保留。
 
@@ -46,6 +46,8 @@
 | 职责归属 | Panel/Store/API/Service/Model/SQLite 各归原 owner；原编辑器中单独移除标签仍保留命令。                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | 类型归属 | 新 Shared 请求/decoder；应用及存储 task 分别归原 model/storage。                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | 完成证据 | 源码及两轮复审完成：核对全目录/隐藏成员、跨标签删除、完整成员与版本 CAS、事务授权、失败回执、视图取消及全局 UI；Shared check/build、根 check、双端 build、目标测试 tsc、全量格式和 diff 通过，日志 /tmp/nexus-group-menu-{check,build,types,format}.log。59f9bffb 组删除首次通过，整轮因移动 TUI 一次 flaky 未全绿；后续人工更新三项菜单及单独删除标签回归，最新静态日志 /tmp/nexus-group-menu-final-{check,build,types,format}.log，行为待新远程。终端重复换行已询问发生时机，尚未确认，不修改正常终端输出。 |
+
+最终三项菜单版本 `0d7c8283` 的 [40065727325](https://github.com/0honus0/nexus-terminal/actions/runs/40065727325) 完整 461/461 首次通过、零重试和 flaky，质量、8 分片、Docker smoke 成功。菜单顺序、单独删标签保留命令、组删除覆盖隐藏/跨标签指令、取消及成员/版本冲突整批拒绝均通过；此前移动 TUI 场景本轮首次通过，保留旧 flaky 证据，不声称已找到其根因。双平台 dev [40065733330](https://github.com/0honus0/nexus-terminal/actions/runs/40065733330) 发布成功，digest `sha256:d60f2fda8fae95ccdd3c45f4ab5f9056961513b41a3078bf08f653a76d0a8204`。远程原部署已更新该 SHA，前后端 healthy、两个公网状态接口正常，数据/配置保留。证据 `/tmp/nexus-group-menu-final-{e2e,publish,deploy}.log`。后继 `37dbfb83` 仅自动更新测试耗时；本次收尾只维护证据文档。终端重复换行发生时机仍待用户补充，未变更终端输出。
 
 ## 首页主机信任状态恢复与 dev 更新（2026-10-24，已完成）
 
