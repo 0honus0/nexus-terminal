@@ -1,5 +1,11 @@
 # Nexus Terminal E2E
 
+## 标签栏三项菜单（2026-10-24，待远程）
+
+用户后续明确菜单顺序为“删除标签 / 删除本组（带标签）/ 重命名”。Panel 复用原标签删除与新增组删除两个真实用例，同一个全局确认入口按操作说明保留指令或删除全组；单击不再编辑，重命名仍复用原行内输入，无新增样式。原标签变量 E2E 增补菜单顺序、标签单独删除保留命令及推进版本，与组删除隔离验证。
+
+此前 [40064920451](https://github.com/0honus0/nexus-terminal/actions/runs/40064920451) / `59f9bffb` 的组删除完整场景首次通过，根质量与 Docker smoke 成功；移动触屏 TUI individual rows 出现一次首测未读到 NEW_TUI_SCREEN_2，重试通过，严格门禁因 flaky 失败，不能称全绿。证据 `/tmp/nexus-group-menu-e2e.log`、`/tmp/nexus-group-menu-shard5.zip`。本批未以放宽断言、加等待或改产品 UI 处理未确认原因，保留后继复核；最新菜单需新 SHA 远程验证。本地根 check、双端 build、测试 tsc、全量格式与 diff 通过，日志 `/tmp/nexus-group-menu-final-{check,build,types,format}.log`。
+
 ## 首页与原标签删除验收、后继标签栏菜单（2026-10-24）
 
 [40063583579](https://github.com/0honus0/nexus-terminal/actions/runs/40063583579) / `f242d2c8` 完整 461/461 首次通过，零重试；8 分片、质量、Docker smoke 成功。首次/变更主机密钥取消、确认和不刷新返回首页恢复 ready，原标签删除及删除后继续编辑均通过。原日志 `/tmp/nexus-home-trust-e2e.log`。双平台 dev [40063590074](https://github.com/0honus0/nexus-terminal/actions/runs/40063590074) 发布成功，digest `sha256:57a1e282793d92c46ff53167bc02c72604e2d93b2164fcc136cbf56f0d9332d1`；远程部署已核对 SHA、两个容器健康及两个公网状态接口。日志 `/tmp/nexus-home-trust-{publish,deploy}.log`。后继自动提交 `83bd2a6b` 只更新测试耗时估算。

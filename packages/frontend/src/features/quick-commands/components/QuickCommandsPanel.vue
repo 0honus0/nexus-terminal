@@ -416,7 +416,7 @@
 		};
 	};
 
-	const removeGroup = async (tag: QuickCommandTagSummary) => {
+	const removeTag = async (tag: QuickCommandTagSummary, mode: 'tag' | 'group') => {
 		tagContext.value = null;
 		const signal = view.capture();
 		if (!view.isCurrent(signal) || deletingTag.value) {
@@ -427,14 +427,21 @@
 		const commands = store.items.filter((command) => command.tagIds.includes(tag.id));
 		try {
 			const confirmed = await feedback.confirm({
-				message: t('quickCommands.tags.confirmDeleteGroup', { name: tag.name, count: commands.length }),
+				message:
+					mode === 'group'
+						? t('quickCommands.tags.confirmDeleteGroup', { name: tag.name, count: commands.length })
+						: t('quickCommands.tags.confirmDelete', { name: tag.name }),
 				signal,
 				destructive: true,
 			});
 			if (!confirmed || !view.isCurrent(signal)) {
 				return;
 			}
-			await store.removeGroup(tag, commands, signal);
+			if (mode === 'group') {
+				await store.removeGroup(tag, commands, signal);
+			} else {
+				await store.removeTag(tag, signal);
+			}
 		} catch (cause) {
 			if (!view.isCurrent(signal) || isNetworkFailure(cause) || cause === error.value) {
 				return;
@@ -745,15 +752,18 @@
 			:width="200"
 			@close="tagContext = null"
 		>
+			<UiContextMenuItem tone="danger" :disabled="deletingTag" @click="removeTag(tagContext.tag, 'tag')">
+				<i class="fas fa-trash-alt" aria-hidden="true"></i><span>{{ t('quickCommands.tags.delete') }}</span>
+			</UiContextMenuItem>
+			<UiContextMenuItem tone="danger" :disabled="deletingTag" @click="removeTag(tagContext.tag, 'group')">
+				<i class="fas fa-trash-alt" aria-hidden="true"></i
+				><span>{{ t('quickCommands.tags.deleteGroup') }}</span>
+			</UiContextMenuItem>
 			<UiContextMenuItem
 				:disabled="deletingTag"
 				@click="startTagEdit({ id: tagContext.tag.id, name: tagContext.tag.name })"
 			>
 				<i class="fas fa-edit" aria-hidden="true"></i><span>{{ t('quickCommands.tags.renameHint') }}</span>
-			</UiContextMenuItem>
-			<UiContextMenuItem tone="danger" :disabled="deletingTag" @click="removeGroup(tagContext.tag)">
-				<i class="fas fa-trash-alt" aria-hidden="true"></i
-				><span>{{ t('quickCommands.tags.deleteGroup') }}</span>
 			</UiContextMenuItem>
 		</UiContextMenu>
 

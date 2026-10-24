@@ -22,6 +22,7 @@ const RENAMED_TAG = 'E2E Quick Variable Tag Renamed';
 const HIDDEN_NAME = 'E2E Secondary Group Command';
 const OUTSIDE_NAME = 'E2E Outside Group Command';
 const SHARED_TAG = 'E2E Quick Shared Tag';
+const TAG_ONLY = 'E2E Temporary Only Tag';
 
 async function cleanup(request: APIRequestContext): Promise<void> {
 	const failures: unknown[] = [];
@@ -35,7 +36,7 @@ async function cleanup(request: APIRequestContext): Promise<void> {
 		}
 	}
 	for (const tag of await listTestCommandTags(request)) {
-		if ([TAG_NAME, RENAMED_TAG, SHARED_TAG].includes(tag.name)) {
+		if ([TAG_NAME, RENAMED_TAG, SHARED_TAG, TAG_ONLY].includes(tag.name)) {
 			try {
 				await cleanupTestCommandTag(request, tag.id);
 			} catch (cause) {
@@ -223,7 +224,7 @@ test('quick command tags and saved variables survive persistence, grouping, rena
 			await name.click();
 			await expect(group.getByRole('textbox')).toHaveCount(0);
 			await name.click({ button: 'right' });
-			await page.getByRole('menuitem', { name: 'Rename tag', exact: true }).click();
+			await page.getByRole('menuitem', { name: 'Rename', exact: true }).click();
 			const input = group.getByRole('textbox');
 			await expect(input).toBeVisible();
 			await input.press('Escape');
@@ -257,7 +258,7 @@ test('quick command tags and saved variables survive persistence, grouping, rena
 				.locator('.quick-command-group-card')
 				.filter({ has: page.locator(`[data-command-id="${commandId}"]`) });
 			await group.getByRole('button', { name: TAG_NAME, exact: true }).click({ button: 'right' });
-			await page.getByRole('menuitem', { name: 'Rename tag', exact: true }).click();
+			await page.getByRole('menuitem', { name: 'Rename', exact: true }).click();
 			const input = group.getByRole('textbox');
 			await expect(input).toBeVisible();
 			await input.fill(RENAMED_TAG);
@@ -290,7 +291,22 @@ test('quick command tags and saved variables survive persistence, grouping, rena
 				}
 
 				await addCommand(HIDDEN_NAME, [RENAMED_TAG, SHARED_TAG]);
-				await addCommand(OUTSIDE_NAME, [SHARED_TAG]);
+				await addCommand(OUTSIDE_NAME, [SHARED_TAG, TAG_ONLY]);
+				const beforeTagOnly = (await listTestCommands(context.request)).find(
+					(command) => command.name === OUTSIDE_NAME,
+				);
+				if (!beforeTagOnly) throw new Error('Missing command before tag-only deletion');
+				await quickView.getByRole('button', { name: TAG_ONLY, exact: true }).click({ button: 'right' });
+				await page.getByRole('menuitem', { name: 'Delete tag', exact: true }).click();
+				const tagOnlyConfirm = page.getByRole('dialog', { name: 'Please confirm' });
+				await expect(tagOnlyConfirm).toContainText('quick commands will be kept');
+				await tagOnlyConfirm.getByRole('button', { name: 'Confirm', exact: true }).click();
+				await expect(quickView.getByRole('button', { name: TAG_ONLY, exact: true })).toHaveCount(0);
+				const afterTagOnly = (await listTestCommands(context.request)).find(
+					(command) => command.id === beforeTagOnly.id,
+				);
+				expect(afterTagOnly?.command).toBe(beforeTagOnly.command);
+				expect(afterTagOnly?.version).toBe(beforeTagOnly.version + 1);
 				const original = await listTestCommands(context.request);
 				const members = original.filter((command) => command.tagIds.includes(tagId));
 				expect(members).toHaveLength(2);
@@ -328,7 +344,12 @@ test('quick command tags and saved variables survive persistence, grouping, rena
 				try {
 					await tagName.click({ button: 'right' });
 					const menu = page.getByRole('menu').filter({ visible: true });
-					await menu.getByRole('menuitem', { name: 'Delete group and commands', exact: true }).click();
+					await expect(menu.getByRole('menuitem')).toHaveText([
+						'Delete tag',
+						'Delete group (including tag)',
+						'Rename',
+					]);
+					await menu.getByRole('menuitem', { name: 'Delete group (including tag)', exact: true }).click();
 					const confirm = page.getByRole('dialog', { name: 'Please confirm' });
 					await expect(confirm).toContainText(RENAMED_TAG);
 					await expect(confirm).toContainText('all 2 quick commands');
@@ -342,7 +363,7 @@ test('quick command tags and saved variables survive persistence, grouping, rena
 					expect(deletions).toHaveLength(0);
 
 					await tagName.click({ button: 'right' });
-					await menu.getByRole('menuitem', { name: 'Delete group and commands', exact: true }).click();
+					await menu.getByRole('menuitem', { name: 'Delete group (including tag)', exact: true }).click();
 					await expect(confirm).toBeVisible();
 					const pending = page.waitForResponse(
 						(response) =>

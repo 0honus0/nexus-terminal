@@ -38,15 +38,16 @@
       "deleteGlobally": "このタグをグローバルに削除",
       "confirmDelete": "タグ「{name}」を削除しますか？タグのみを削除し、クイックコマンドは保持します。",
       "deleteFailed": "タグ「{name}」の削除に失敗しました: {error}",
-      "renameHint": "タグ名を変更",
+      "renameHint": "名前を変更",
       "createFromUntagged": "このタグなしグループにタグを作成",
       "renameFailed": "タグ名の変更に失敗しました: {error}",
       "createFailed": "タグの作成と割り当てに失敗しました: {error}",
       "createTagFailed": "タグの作成に失敗しました: {error}",
       "assignFailedAfterCreate": "タグ「{name}」は作成されましたが、コマンドの割り当てに失敗しました: {error}",
       "contextHint": "右クリックでグループ名を変更または削除",
-      "deleteGroup": "タググループとコマンドを削除",
-      "confirmDeleteGroup": "タググループ「{name}」と中の全 {count} 件のクイックコマンドを削除しますか？これらのコマンドは他のタググループからも削除され、元に戻せません。"
+      "deleteGroup": "グループを削除（タグを含む）",
+      "confirmDeleteGroup": "タググループ「{name}」と中の全 {count} 件のクイックコマンドを削除しますか？これらのコマンドは他のタググループからも削除され、元に戻せません。",
+      "delete": "タグを削除"
     },
     "actions": {
       "sendToAllSessions": "すべてのセッションに送信",
