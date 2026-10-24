@@ -14,6 +14,12 @@
 	scrollbar-gutter: stable;
 }
 
+:global(.provider-add-panel > header),
+:global(.provider-add-panel > footer) {
+	/* 与滚动内容右边缘对齐：稳定滚动条 8px + 内容右内边距 4px */
+	margin-inline-end: calc(0.25rem + 8px);
+}
+
 @media (max-width: 639px), (pointer: coarse) {
 	.provider-add-resize-handle {
 		display: none;
@@ -24,6 +30,11 @@
 		scrollbar-gutter: auto;
 		scrollbar-width: none;
 		-ms-overflow-style: none;
+	}
+
+	:global(.provider-add-panel > header),
+	:global(.provider-add-panel > footer) {
+		margin-inline-end: 0;
 	}
 
 	:global(.provider-add-content::-webkit-scrollbar) {
