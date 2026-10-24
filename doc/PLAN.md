@@ -2356,3 +2356,7 @@ Agent 设置的“模型 Provider”标题行原先由左侧标题组和右侧�
 | 职责归属 | 原Modal仅调整响应式utility类，沿用全局控件样式。                                                                            |
 | 类型归属 | 无新类型、接口或存储变更。                                                                                                  |
 | 完成证据 | 两轮源码核对label关联、禁用及事件保持；根check、前端build、全量format:all:check及diff通过，手机真机与多语言窄屏待远程验收。 |
+
+### RDP两项修复交付（2026-10-24）
+
+按用户授权将上述两项修复提交推送dev（f325dc48），并以architecture=amd发布dev；40104850604成功，linux/amd64与镜像revision已核对，digest及证据见testing。未更新或重启远端实例；本次收尾仅记录文档，不改变发布产品源码。

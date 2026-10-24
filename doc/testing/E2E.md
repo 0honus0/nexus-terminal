@@ -2080,3 +2080,7 @@ RDP Adapter 将文本从逐字符 SDK 调用改为最多 32 个完整字符一�
 ## 手机远程桌面尺寸栏单行（2026-10-24）
 
 用户明确要求手机RDP宽度、高度和重新连接尽量同一行；原Modal手机分支从wrap改nowrap并减小横向间距，两个原UiNumberInput容器min-width:0、可均分收缩且最大保持原80px，标签/按钮保留完整文字。RDP/VNC共用该footer，桌面仍原换行策略；原label关联、尺寸上下限、保存事件、连接/保存禁用和生命周期未改。两轮源码复核覆盖这些消费者与全局输入框内部min-width:0，不新增局部控件CSS。根check、前端build、全量format:all:check与diff均通过；日志/tmp/nexus-mobile-rdp-row-{check,build,format}.log。按D17未新增或运行行为/浏览器/E2E测试；320/375/390px、横屏、多语言、尺寸编辑与重连仍待远程验收。
+
+## RDP修复与手机尺寸栏AMD64 dev发布（2026-10-24）
+
+产品提交`f325dc488ffb14f26adf37c00ed4ab27d3adb92b`已推送dev，包含Windows HYBRID_EX四字节结果桥接及手机尺寸栏单行；各自静态/指定实测证据见上节，不声称本次新增完整E2E通过。用户明确授权提交推送并发布dev AMD镜像，[发布40104850604](https://github.com/0honus0/nexus-terminal/actions/runs/40104850604)生产依赖审计、构建和推送成功。`ghcr.io/0honus0/nexus-terminal:dev`清单digest为`sha256:c13d5e2b0de67c473f9902cdf84da135bd66da9bc3f5c4fdbc5195e639cbca47`，包含linux/amd64及其attestation；`sha-f325dc488ffb`镜像配置架构amd64、revision与完整产品提交一致。本次只发布AMD64，未部署或重启远端容器。发布观察日志/tmp/nexus-rdp-dev-amd-publish.log；收尾提交仅同步文档，不改变已发布产品源码。
