@@ -1,10 +1,10 @@
 # Nexus Terminal E2E
 
-## 远程40089588771后继修复与dev发布（2026-10-24，进行中）
+## 远程40089588771后继修复与dev发布（2026-10-24，已完成）
 
 原59c27e45远程失败四项：notification-settings的GET网络故障立即Toast断言与现10秒宽限不一致；mobile/ssh-workspace仍期望关闭监控即stop、短时重开再start，与30秒订阅复用不一致；suspend-resume-ui仍断言挂起/恢复为绿色，与人工已确认蓝色不一致；真实PTY初始echo关闭时首屏多一个提示符。日志 `/tmp/nexus-e2e-40089588771-failed.log`、shard3诊断 `/tmp/nexus-e2e-40089588771-shard3`。62e776a0远程40091199668被后继推送取消，已完成分片日志仍可用于诊断。
 
-前三类调整测试按当前产品行为验：蓝色仍搭配真实connected/所有权确认；监控同时验短切无stop/start、闲置超过30秒后stop及重开start和真实CPU数据；网络持续故障等待恢复宽限后再核对驻留Toast，原输入与窄屏断言保留。SSH Key读取失败场景同步宽限，DELETE失败仍立即提示。PTY在实际Platform owner把PID探测和Hook安装合成一次隐藏提交，避免中途恢复echo后第二次readline产生额外提示符，不改前端渲染与普通输出过滤；既有两类真实PTY与用户空行断言保留。两轮源码审核覆盖合并后marker/超限/关闭/并发探测/输入围栏、其它Shell语法隔离与固定eval、历史清理、正常/缺失Hook、三类测试原功能断言和真实数据关联。根check、双端build、全量format:all:check、五份相关spec静态类型及diff通过，日志 `/tmp/nexus-e2e-resume-{check,build,format,types}.log`；新SHA远程待验，按D17不运行本地行为测试。
+前三类调整测试按当前产品行为验：蓝色仍搭配真实connected/所有权确认；监控同时验短切无stop/start、闲置超过30秒后stop及重开start和真实CPU数据；网络持续故障等待恢复宽限后再核对驻留Toast，原输入与窄屏断言保留。SSH Key读取失败场景同步宽限，DELETE失败仍立即提示。PTY在实际Platform owner把PID探测和Hook安装合成一次隐藏提交，避免中途恢复echo后第二次readline产生额外提示符，不改前端渲染与普通输出过滤；既有两类真实PTY与用户空行断言保留。两轮源码审核覆盖合并后marker/超限/关闭/并发探测/输入围栏、其它Shell语法隔离与固定eval、历史清理、正常/缺失Hook、三类测试原功能断言和真实数据关联。根check、双端build、全量format:all:check、五份相关spec静态类型及diff通过，日志 `/tmp/nexus-e2e-resume-{check,build,format,types}.log`；相关修复现已由40094495537完整回归验收；各批静态结果不替代该远程证据，按D17未运行本地行为测试。
 
 ## 手机后台恢复网络提示（2026-10-24，行为待远程）
 
@@ -1140,6 +1140,8 @@ Dashboard 连接区改为按实际存在的 SSH/RDP/VNC 类型分区，筛选后
 
 ## 当前验收基线
 
+最新完整远程为 [40094495537](https://github.com/0honus0/nexus-terminal/actions/runs/40094495537) / `9f495f353f7cfea188f0729a421e14ed89db02d9`：463项场景首轮通过，零重试/零flaky，八分片、质量/格式/构建及Docker冒烟全绿。下列旧轮次按各自实际范围保留，不将未覆盖的外部环境或扩大故障组合宣称为已验。
+
 2026-10-21 文件管理器修复工作区不继承下方旧 SHA 的行为 PASS。源码对照 `75289ef9^` 的 Workspace Files、文本 Document port、SFTP 下载和 ZipDirectoryArchiveAdapter：旧实现保留 16 MiB 文本读取、目录流式 ZIP 和按读任务持有句柄；新实现此前的 readBinary/cancelRead 与目录 ZIP 仍取消共用 SFTP，runAdmitted 随后关闭主 owner，使后续列表、编辑和下载可能变成 not_found。现将二进制读取、目录 ZIP、票据准备及类型探测放入原 owner 跟踪的独立资源，权限拒绝在 Model 映射为 forbidden，前端区分具名失败并捕获打开动作的读取拒绝。
 
 继续沿有效性检查定位到更直接的共因：owned 和 runAdmitted 对 Workspace 也检查 expiresAt，导致两分钟没有文件操作后的首次读取/写入被拒绝；定时回收本已排除 Workspace，两处准入与其政策不一致。现仅独立 HTTP Files 检查 idle TTL，Workspace 保留原生命周期、身份、指纹及关闭检查。这条源码链可解释 HTML 读取拒绝落入错误边界和目录下载 not_found；HTML 现场具体文件/设备及异常尚未提供，不能据此认定语言组件故障或所有现场组合已恢复。
@@ -2060,3 +2062,9 @@ RDP Adapter 将文本从逐字符 SDK 调用改为最多 32 个完整字符一�
 [99a1300b / 40093685950](https://github.com/0honus0/nexus-terminal/actions/runs/40093685950)七分片、质量及Docker冒烟通过，所有状态尺寸/缩放、真实PTY、主题创建编辑应用重载删除均通过。仅shard1连接选择器标签失败Toast默认等待10秒与产品前台10秒恢复宽限竞争，首轮失败后重试通过；日志/tmp/nexus-e2e-40093685950-failed.log。全仓核对route.abort及networkFailureToast消费者，workspace选择器与Connections页两个GET标签失败通知改为15秒；原notification/key-list已15秒，DELETE/logout写入仍立即通知，其它只验自身错误/围栏的场景不改。保持真实连接目录可用断言，不改生产代码或UI，不扩大全局超时。两轮源码复审完成，新SHA完整远程待验；D17无本地行为测试。
 
 根check、全量format:all:check、九份相关spec静态类型及diff通过（/tmp/nexus-tag-read-{check,format,types}.log）；生产依赖审计无已知漏洞（/tmp/nexus-dev-final-production-audit.log）。本批仅测试/文档，生产代码与99a1300b相同，复用该版前端build证据。
+
+## 463场景完整远程验收与dev发布（2026-10-24）
+
+[40094495537](https://github.com/0honus0/nexus-terminal/actions/runs/40094495537) / `9f495f353f7cfea188f0729a421e14ed89db02d9`完整通过：463个独立场景首轮通过，零重试/零flaky。SSH197、UI83、Agent71、Mobile52、HTTP50、Auth6、WebSocket4；8个分片、根检查/格式/构建、runner、Docker部署冒烟全部通过。原监控30秒复用与空闲启停、挂起蓝色、GET10秒网络通知宽限、真实PTY echo开/关单提示符及保留用户空行、状态全部尺寸与1.6缩放的图标/内容边界、主题创建编辑应用重载删除均通过。源码两轮复审及各批静态证据见前序记录，不以重试通过代替修复。完整日志/tmp/nexus-e2e-green-40094495537.log，元数据/tmp/nexus-e2e-green-40094495537-metadata.json；未执行本地行为测试。
+
+双平台dev发布[40095210177](https://github.com/0honus0/nexus-terminal/actions/runs/40095210177)，源码`0bdfb54da609c4f83f02c788c2869e4824a7bd4c`与验收SHA仅差scripts/e2e/duration-estimates.json的Actions自动更新；产品源码和依赖一致。生产依赖审计、双平台构建与推送均成功。`ghcr.io/0honus0/nexus-terminal:dev`和`sha-0bdfb54da609`均指向`sha256:f89d17201030dd3ce4728003aae64a4fc49afc3ef1fa0fe0a57a6c550e9575be`；Registry清单包含linux/amd64、linux/arm64，两个平台config的revision均为完整0bdfb54d源码SHA。日志/tmp/nexus-dev-publication-40095210177.log，发布元数据/tmp/nexus-dev-publication-40095210177-metadata.json，标签清单/tmp/nexus-published-40095210177-{dev,sha}-manifest.log，平台配置/tmp/nexus-published-40095210177-configs.json。未自动更新或重启远程容器；最终收口提交仅更新PLAN和本验证文档，不改变已测试/已发布的源码及依赖。
