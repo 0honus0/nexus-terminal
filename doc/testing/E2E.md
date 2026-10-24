@@ -1899,3 +1899,11 @@ RDP Adapter 将文本从逐字符 SDK 调用改为最多 32 个完整字符一�
 `99fb150f` 完整远程 460/461 通过，状态面板已通过，历史仍失败。完整 trace console（不只过滤被截短的 preview）证明 request/received/drain/page-written/anchored 全部完成；快照显示滑块位于布局 splitter 覆盖区，鼠标每次误拖导致终端缩窄；`/visible/` 同时匹配 invisible。本批改为滑块左侧真实暴露位置，精确 visible token，并在按下前用 elementFromPoint 确认实际接收控件；保留全部历史与输入业务断言，删除临时阶段日志。
 
 移动 RDP 首次仍在 image.rs:591 数组越界、重试通过，不能以重试成功当作修好。移除无效桌面宽度对齐，固定官方构建 39196965692 / SHA 62246b364a0282bab85087f658a81fe4207b6b31 的原始 archive；源码含 bitmap source stride 与非法边界恢复，摘要及许可见 frontend/vendor/ironrdp。生产/runner Docker 均在安装前复制，pnpm 锁定完整性；既有像素 presenter 与所有操作保留，移动场景新增 pageerror 零异常断言。两轮源码复审核对来源、类型、打包和真实拖拽命中，根 check、双端 build、全量 format、目标测试 tsc 与 diff 通过，日志 /tmp/nexus-rdp-sdk-*.log；远程待验，按 D17 无本地行为测试。
+
+## dev 发布前依赖审计（2026-10-24）
+
+生产审计新增 Zod 受限集合内存耗尽（GHSA-mrhx-c7xc-m3w5）、undici content-encodings DoS（GHSA-xjj6-f33q-929c）及 nodemailer 通告。更新 undici 7.30.1、nodemailer 10.2.1、Puppeteer 25.16.0 并由其正式依赖升级 chromium-bidi/Zod 4.6.7，不直接跨主版本覆盖底层解析库。`pnpm audit --prod --audit-level=high` 无已知漏洞，日志 /tmp/nexus-final-dev-audit-fixed.log；源码两轮核对受影响浏览器/HTTP/邮件 Adapter，USAGE 操作与约束仍适用，根 check、双端 build、全量 format 和 diff 通过（/tmp/nexus-audit-final-*.log），新 SHA 远程待验。
+
+## 历史重入与 RDP 修复回归（2026-10-24）
+
+`40044756208` / `2f19c93b` 仍为 460/461，通过七个分片、质量及 Docker smoke。移动 RDP 首次通过，新增 pageerror 零异常断言也通过。历史现已成功翻到 earliest 并恢复 latest；新失败在随后重入前要求可见 scrollbar。恢复的有界 baseline 可以只有一屏，故 scrollbar 合法隐藏；测试改用原 wheel 手势重新进入历史，仍核对新增真实 history 请求、返回 latest、后续真实命令输出，不改产品 UI、不扩大超时。两轮复审保持完整业务断言，目标测试 tsc、全量格式与 diff 通过（/tmp/nexus-history-final-types.log、/tmp/nexus-final-batch-format.log），新 SHA 远程待验。

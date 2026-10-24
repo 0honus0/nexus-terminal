@@ -1286,9 +1286,9 @@ test('resumed terminal pages older history through a bounded window and restores
 		await expect.poll(renderedTerminalText, { timeout: 10_000 }).toContain(tailMarker);
 		await expect(rows).not.toContainText(earlyMarker);
 
-		// Returning to the live tail resets the history cursor. Re-entering history should request
-		// the newest previous page again instead of keeping an exhausted cursor from the prior browse.
-		await dragHistorySliderToTop();
+		// Returning to the live tail resets the history cursor. Its bounded snapshot may fit entirely
+		// in the viewport, so re-enter with the real upward wheel gesture even when no scrollbar is needed.
+		// This must request the newest previous page rather than retain the exhausted browsing cursor.
 		await page.mouse.move(
 			scrollableBox!.x + scrollableBox!.width / 2,
 			scrollableBox!.y + scrollableBox!.height / 2,

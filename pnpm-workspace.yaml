@@ -7,7 +7,7 @@ catalog:
   axios: ^1.20.0
   dompurify: ^3.4.17
   pino: ^9.14.0
-  puppeteer-core: 25.10.0
+  puppeteer-core: 25.16.0
 
 catalogs:
   node-build:

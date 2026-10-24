@@ -45,6 +45,21 @@
 | 类型归属 | 沿用 Shared 和各模块唯一类型、边界转换，不引入旧协议兼容或忽略异常。                                                                                                            |
 | 完成证据 | 待两轮复审、根检查/双端构建/全量格式/目标测试静态类型、最终 SHA 完整远程 E2E 与 dev 多平台镜像发布成功。                                                                        |
 
+### 历史重入最终回归（2026-10-24，待远程）
+
+`40044756208` / `2f19c93b` 的七个分片及质量/Docker 全绿；移动 RDP 首次通过且无 pageerror，固定上游修复生效。历史场景已成功翻到最早记录、返回实时尾部，失败移到再次进入：恢复的有界快照可只有一屏，不需要滚动条，测试却先要求拖动可见滚动条。改为正式向上 wheel 重新请求历史，再保留原返回尾部与真实输入断言；不修改产品。两轮复审状态/游标/原断言和真实触发，目标测试 tsc、全量格式与 diff 通过（/tmp/nexus-history-final-types.log、/tmp/nexus-final-batch-format.log），新 SHA 远程待验。
+
+### 发布依赖审计收口（2026-10-24，待远程）
+
+发布前重新审计发现 Zod/undici 高危与 nodemailer 中危。升级 undici 7.30.1、nodemailer 10.2.1、Puppeteer 25.16.0，按正式依赖链更新 chromium-bidi 与 Zod 4.6.7，不跨主版本强制覆盖 Zod 3。生产依赖审计已无已知漏洞，日志 /tmp/nexus-final-dev-audit-fixed.log；等待当前远程完成后再提交，避免取消整轮。
+
+| 审核表   | 本批结论                                                                                                                                               |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 功能对应 | HTTP/代理请求、通知邮件及浏览器能力沿原入口，不改变 UI 或权限。                                                                                        |
+| 职责归属 | 依赖版本归 Backend package/catalog，传递版本由 lockfile 唯一固定。                                                                                     |
+| 类型归属 | 沿原 Adapter 消费供应商类型，Shared 契约不变。                                                                                                         |
+| 完成证据 | 两轮复审依赖树/受影响 Adapter、主版本与审计范围；根 check、双端 build、全量 format 和 diff 通过（/tmp/nexus-audit-final-*.log），新 SHA 全量远程待验。 |
+
 ### 当前后继批次（99fb150f 之后）
 
 远程 `40018215989`：461 场景，460 通过、1 失败，状态面板缩放通过，七个 shard、质量及 Docker smoke 全绿。离线 trace 的完整 console 显示历史页 received、drain、page-written、anchored 全部完成；旧日志只看文本 preview 漏掉 anchored。截图及连续快照证实拖拽误命中右侧 splitter，终端每次缩窄，且 `/visible/` 误匹配 invisible。本批使用滑块左侧暴露位置并以 elementFromPoint 核对真实命中、精确 class token；保留最早历史、返回尾部、重入翻页与输入断言，移除临时产品诊断。
