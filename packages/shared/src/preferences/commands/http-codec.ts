@@ -7,6 +7,7 @@ import type {
 	CommandTagUpdateRequest,
 	CommandAssignTagRequest,
 	CommandGroupDeleteRequest,
+	CommandUntaggedGroupDeleteRequest,
 	CommandListQuery,
 	CommandListResponse,
 	CommandTagListResponse,
@@ -149,13 +150,11 @@ export function readCommandTagUpdate(input: unknown): CommandTagUpdateRequest {
 	};
 }
 
-export function readCommandGroupDelete(input: unknown): CommandGroupDeleteRequest {
-	budget(input, COMMAND_REQUEST_MAX_BYTES);
-	const value = object(input, ['expectedVersion', 'commands']);
-	if (!Array.isArray(value.commands) || value.commands.length > COMMAND_MAX_ENTRIES) {
+function readGroupMembers(value: unknown): Array<{ id: number; expectedVersion: number }> {
+	if (!Array.isArray(value) || value.length > COMMAND_MAX_ENTRIES) {
 		throw new InvalidCommandPayload();
 	}
-	const commands = value.commands.map((raw: unknown) => {
+	const commands = value.map((raw: unknown) => {
 		const item = object(raw, ['id', 'expectedVersion']);
 		return {
 			id: integer(item.id, 1),
@@ -165,7 +164,22 @@ export function readCommandGroupDelete(input: unknown): CommandGroupDeleteReques
 	if (new Set(commands.map((item) => item.id)).size !== commands.length) {
 		throw new InvalidCommandPayload();
 	}
-	return { expectedVersion: integer(value.expectedVersion, 1, Number.MAX_SAFE_INTEGER - 1), commands };
+	return commands;
+}
+
+export function readCommandGroupDelete(input: unknown): CommandGroupDeleteRequest {
+	budget(input, COMMAND_REQUEST_MAX_BYTES);
+	const value = object(input, ['expectedVersion', 'commands']);
+	return {
+		expectedVersion: integer(value.expectedVersion, 1, Number.MAX_SAFE_INTEGER - 1),
+		commands: readGroupMembers(value.commands),
+	};
+}
+
+export function readCommandUntaggedGroupDelete(input: unknown): CommandUntaggedGroupDeleteRequest {
+	budget(input, COMMAND_REQUEST_MAX_BYTES);
+	const value = object(input, ['commands']);
+	return { commands: readGroupMembers(value.commands) };
 }
 
 export function readCommandAssign(input: unknown): CommandAssignTagRequest {

@@ -45,6 +45,8 @@
       "createTagFailed": "Failed to create tag: {error}",
       "assignFailedAfterCreate": "Tag \"{name}\" was created, but assigning the commands failed: {error}",
       "contextHint": "Right-click to rename or delete this group",
+      "deleteUntaggedGroup": "Delete group",
+      "confirmDeleteUntaggedGroup": "Delete all {count} untagged quick commands? This cannot be undone.",
       "deleteGroup": "Delete group (including tag)",
       "confirmDeleteGroup": "Delete tag group \"{name}\" and all {count} quick commands in it? These commands will also be removed from other tag groups. This cannot be undone.",
       "delete": "Delete tag"

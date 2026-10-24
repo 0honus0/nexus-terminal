@@ -45,6 +45,8 @@
       "createTagFailed": "创建标签失败：{error}",
       "assignFailedAfterCreate": "标签“{name}”已创建，但分配指令失败：{error}",
       "contextHint": "右键重命名或删除此组",
+      "deleteUntaggedGroup": "删除本组",
+      "confirmDeleteUntaggedGroup": "确定删除“未标记”组内全部 {count} 条快捷指令吗？此操作无法撤销。",
       "deleteGroup": "删除本组（带标签）",
       "confirmDeleteGroup": "确定删除标签组“{name}”及组内全部 {count} 条快捷指令吗？这些指令也会从其他标签组中删除，无法撤销。",
       "delete": "删除标签"

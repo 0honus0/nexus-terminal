@@ -70,6 +70,7 @@ export type CommandTask =
 			expectedVersion: number;
 			commands: Array<{ id: number; expectedVersion: number }>;
 	  }
+	| { action: 'delete_untagged_group'; commands: Array<{ id: number; expectedVersion: number }> }
 	| { action: 'assign_tag'; commands: Array<{ id: number; expectedVersion: number }>; tagId: number };
 
 export type CommandResult =

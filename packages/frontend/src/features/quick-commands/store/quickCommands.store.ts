@@ -282,7 +282,7 @@ export const useQuickCommandsStore = defineStore('quick-commands', () => {
 	}
 
 	function removeGroup(
-		original: QuickCommandTagSummary,
+		original: QuickCommandTagSummary | null,
 		commands: QuickCommandSummary[],
 		permission?: AbortSignal,
 	): Promise<void> {

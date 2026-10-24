@@ -128,7 +128,9 @@
 	};
 
 	const stateDotClass = (session: WorkspaceRuntimeSession): string => {
-		if (session.state.value === 'connected') return 'bg-green-500';
+		if (session.state.value === 'connected') {
+			return session.markedForSuspend.value ? 'bg-blue-500' : 'bg-green-500';
+		}
 		if (session.state.value === 'connecting' || session.state.value === 'reconnecting')
 			return 'bg-yellow-500 animate-pulse';
 		if (session.state.value === 'error' || session.state.value === 'disconnected') return 'bg-red-500';

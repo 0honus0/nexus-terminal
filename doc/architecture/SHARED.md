@@ -213,7 +213,7 @@ Agent file_inspect/patch/move/delete 的模型私有命令、树节点及内容�
 
 ## Preferences 个人数据契约
 
-`preferences/{presentation,commands,history,favorites}/{values,model,http,http-codec}` 为新后端真实HTTP的完整协议并精确export。presentation用明确布局联合及完整偏好，不使用任意配置字典；初始未保存version=0，编辑CAS。commands承载命令/标签/变量/版本及批量命令版本；history保持command/path不同wire字段、分页及去重；favorites独立编辑版本和排序。基础值/协议预算唯一归values，错误含unknown和容量。HTTP投影与Storage对象独立，SQLite Adapter只引values。commands/history/favorites 已由正式 Workspace 的快捷命令、命令历史、Files 收藏与路径历史消费：transport 严格解码分页、CAS 与有限失败，前端 mapper 再转独立应用对象；旧裸数组及无版本写入已删除。正式 App/Router/Workspace 有限整页与真实个人数据 HTTP 验收见 [testing](https://github.com/0honus0/nexus-terminal/blob/558c4b343ba0ef2316309d2e164b9c6075c47efc/doc/testing/E2E.md#f1-c2-d-workspace页面与个人目录契约)。presentation也已由正式Preferences/Workspace共同消费，四读统一版本、完整写入快照和CAS；日志设置独立消费operations/logging。外观已在后续独立批次接入；其余功能仍在F1-D，本子集不代表完整Workspace交互验收。
+`preferences/{presentation,commands,history,favorites}/{values,model,http,http-codec}` 为新后端真实HTTP的完整协议并精确export。presentation用明确布局联合及完整偏好，不使用任意配置字典；初始未保存version=0，编辑CAS。commands承载命令/标签/变量/版本及批量命令版本；未标记组删除独立请求仅含完整commands的ID/expectedVersion，与标签组删除共享严格成员解码及2,000项目录预算，不引入虚拟标签ID；history保持command/path不同wire字段、分页及去重；favorites独立编辑版本和排序。基础值/协议预算唯一归values，错误含unknown和容量。HTTP投影与Storage对象独立，SQLite Adapter只引values。commands/history/favorites 已由正式 Workspace 的快捷命令、命令历史、Files 收藏与路径历史消费：transport 严格解码分页、CAS 与有限失败，前端 mapper 再转独立应用对象；旧裸数组及无版本写入已删除。正式 App/Router/Workspace 有限整页与真实个人数据 HTTP 验收见 [testing](https://github.com/0honus0/nexus-terminal/blob/558c4b343ba0ef2316309d2e164b9c6075c47efc/doc/testing/E2E.md#f1-c2-d-workspace页面与个人目录契约)。presentation也已由正式Preferences/Workspace共同消费，四读统一版本、完整写入快照和CAS；日志设置独立消费operations/logging。外观已在后续独立批次接入；其余功能仍在F1-D，本子集不代表完整Workspace交互验收。
 
 ### Context 续读权限
 

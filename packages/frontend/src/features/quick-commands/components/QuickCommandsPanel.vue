@@ -54,7 +54,7 @@
 	const root = ref<HTMLElement | null>(null);
 	const list = ref<HTMLElement | null>(null);
 	const context = ref<{ command: QuickCommandSummary; x: number; y: number } | null>(null);
-	const tagContext = ref<{ tag: QuickCommandTagSummary; x: number; y: number } | null>(null);
+	const tagContext = ref<{ tag: QuickCommandTagSummary | null; x: number; y: number } | null>(null);
 	const deletingTag = ref(false);
 	const editingTagId = ref<number | 'untagged' | null>(null);
 	const tagDraft = ref('');
@@ -404,19 +404,19 @@
 	const openTagContext = (event: MouseEvent, group: { id: number | null }) => {
 		context.value = null;
 		const tag = tags.value.find((item) => item.id === group.id);
-		if (!tag || deletingTag.value) {
+		if ((group.id !== null && !tag) || deletingTag.value) {
 			return;
 		}
 		const anchor = event.currentTarget instanceof HTMLElement ? event.currentTarget.getBoundingClientRect() : null;
 		const keyboard = event.clientX === 0 && event.clientY === 0;
 		tagContext.value = {
-			tag,
+			tag: tag ?? null,
 			x: keyboard && anchor ? anchor.left : event.clientX,
 			y: keyboard && anchor ? anchor.bottom : event.clientY,
 		};
 	};
 
-	const removeTag = async (tag: QuickCommandTagSummary, mode: 'tag' | 'group') => {
+	const removeTag = async (tag: QuickCommandTagSummary | null, mode: 'tag' | 'group') => {
 		tagContext.value = null;
 		const signal = view.capture();
 		if (!view.isCurrent(signal) || deletingTag.value) {
@@ -424,13 +424,21 @@
 		}
 		deletingTag.value = true;
 		// Use the full store, including commands hidden by the current search.
-		const commands = store.items.filter((command) => command.tagIds.includes(tag.id));
+		const commands = store.items.filter((command) =>
+			tag ? command.tagIds.includes(tag.id) : command.tagIds.length === 0,
+		);
+		const name = tag?.name ?? t('quickCommands.untagged');
 		try {
 			const confirmed = await feedback.confirm({
 				message:
 					mode === 'group'
-						? t('quickCommands.tags.confirmDeleteGroup', { name: tag.name, count: commands.length })
-						: t('quickCommands.tags.confirmDelete', { name: tag.name }),
+						? t(
+								tag
+									? 'quickCommands.tags.confirmDeleteGroup'
+									: 'quickCommands.tags.confirmDeleteUntaggedGroup',
+								{ name, count: commands.length },
+							)
+						: t('quickCommands.tags.confirmDelete', { name }),
 				signal,
 				destructive: true,
 			});
@@ -439,7 +447,7 @@
 			}
 			if (mode === 'group') {
 				await store.removeGroup(tag, commands, signal);
-			} else {
+			} else if (tag) {
 				await store.removeTag(tag, signal);
 			}
 		} catch (cause) {
@@ -448,7 +456,7 @@
 			}
 			feedback.notifyError(
 				t('quickCommands.tags.deleteFailed', {
-					name: tag.name,
+					name,
 					error: preferenceFailureMessage(cause, t),
 				}),
 			);
@@ -752,14 +760,22 @@
 			:width="200"
 			@close="tagContext = null"
 		>
-			<UiContextMenuItem tone="danger" :disabled="deletingTag" @click="removeTag(tagContext.tag, 'tag')">
+			<UiContextMenuItem
+				v-if="tagContext.tag"
+				tone="danger"
+				:disabled="deletingTag"
+				@click="removeTag(tagContext.tag, 'tag')"
+			>
 				<i class="fas fa-trash-alt" aria-hidden="true"></i><span>{{ t('quickCommands.tags.delete') }}</span>
 			</UiContextMenuItem>
 			<UiContextMenuItem tone="danger" :disabled="deletingTag" @click="removeTag(tagContext.tag, 'group')">
 				<i class="fas fa-trash-alt" aria-hidden="true"></i
-				><span>{{ t('quickCommands.tags.deleteGroup') }}</span>
+				><span>{{
+					t(tagContext.tag ? 'quickCommands.tags.deleteGroup' : 'quickCommands.tags.deleteUntaggedGroup')
+				}}</span>
 			</UiContextMenuItem>
 			<UiContextMenuItem
+				v-if="tagContext.tag"
 				:disabled="deletingTag"
 				@click="startTagEdit({ id: tagContext.tag.id, name: tagContext.tag.name })"
 			>
@@ -806,6 +822,7 @@
 		line-height: 1;
 	}
 	.quick-command-group-name {
+		font-family: var(--font-family-sans-serif);
 		height: 20px;
 		padding: 0;
 		line-height: 20px;

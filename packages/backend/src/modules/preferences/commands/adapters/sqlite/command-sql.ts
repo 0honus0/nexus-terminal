@@ -125,6 +125,7 @@ export class SqliteCommandStorage implements CommandStorage {
 					return this.writeTag(tx, userId, task, authorization);
 				case 'delete_tag':
 					return this.deleteTag(tx, userId, task);
+				case 'delete_untagged_group':
 				case 'delete_group':
 					return this.deleteGroup(tx, userId, task);
 				case 'assign_tag':
@@ -295,19 +296,30 @@ export class SqliteCommandStorage implements CommandStorage {
 	private async deleteGroup(
 		tx: SqlExecutor,
 		userId: number,
-		task: Extract<StoredCommandTask, { action: 'delete_group' }>,
+		task: Extract<StoredCommandTask, { action: 'delete_group' | 'delete_untagged_group' }>,
 	): Promise<StoredCommandResult> {
-		const tag = await tx.one('SELECT * FROM preferences_command_tags WHERE user_id=? AND id=?', [userId, task.id]);
-		if (!tag) {
-			return { status: 'not_found' };
+		if (task.action === 'delete_group') {
+			const tag = await tx.one('SELECT * FROM preferences_command_tags WHERE user_id=? AND id=?', [
+				userId,
+				task.id,
+			]);
+			if (!tag) {
+				return { status: 'not_found' };
+			}
+			if (commandTagRow(tag).version !== task.expectedVersion) {
+				return { status: 'version_conflict' };
+			}
 		}
-		if (commandTagRow(tag).version !== task.expectedVersion) {
-			return { status: 'version_conflict' };
-		}
-		const rows = await tx.all(
-			'SELECT id,version FROM preferences_commands WHERE user_id=? AND id IN (SELECT command_id FROM preferences_command_associations WHERE user_id=? AND tag_id=?)',
-			[userId, userId, task.id],
-		);
+		const rows =
+			task.action === 'delete_untagged_group'
+				? await tx.all(
+						'SELECT id,version FROM preferences_commands c WHERE user_id=? AND NOT EXISTS (SELECT 1 FROM preferences_command_associations a WHERE a.user_id=c.user_id AND a.command_id=c.id)',
+						[userId],
+					)
+				: await tx.all(
+						'SELECT id,version FROM preferences_commands WHERE user_id=? AND id IN (SELECT command_id FROM preferences_command_associations WHERE user_id=? AND tag_id=?)',
+						[userId, userId, task.id],
+					);
 		const expected = new Map(task.commands.map((command) => [command.id, command.expectedVersion]));
 		const members = rows.map((row) => {
 			if (
@@ -325,11 +337,18 @@ export class SqliteCommandStorage implements CommandStorage {
 		if (members.length !== expected.size || members.some((row) => expected.get(row.id) !== row.version)) {
 			return { status: 'version_conflict' };
 		}
-		await tx.run(
-			'DELETE FROM preferences_commands WHERE user_id=? AND id IN (SELECT command_id FROM preferences_command_associations WHERE user_id=? AND tag_id=?)',
-			[userId, userId, task.id],
-		);
-		await tx.run('DELETE FROM preferences_command_tags WHERE user_id=? AND id=?', [userId, task.id]);
+		if (task.action === 'delete_untagged_group') {
+			await tx.run(
+				'DELETE FROM preferences_commands WHERE user_id=? AND NOT EXISTS (SELECT 1 FROM preferences_command_associations a WHERE a.user_id=preferences_commands.user_id AND a.command_id=preferences_commands.id)',
+				[userId],
+			);
+		} else {
+			await tx.run(
+				'DELETE FROM preferences_commands WHERE user_id=? AND id IN (SELECT command_id FROM preferences_command_associations WHERE user_id=? AND tag_id=?)',
+				[userId, userId, task.id],
+			);
+			await tx.run('DELETE FROM preferences_command_tags WHERE user_id=? AND id=?', [userId, task.id]);
+		}
 		return { status: 'deleted' };
 	}
 

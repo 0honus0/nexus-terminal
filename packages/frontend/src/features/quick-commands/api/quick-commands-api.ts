@@ -6,6 +6,7 @@ import {
 	readCommandTagUpdate,
 	readCommandAssign,
 	readCommandGroupDelete,
+	readCommandUntaggedGroupDelete,
 	readCommandQuery,
 	readCommandId,
 	readCommandList,
@@ -212,22 +213,25 @@ export const quickCommandsApi = {
 	},
 
 	async removeGroup(
-		original: QuickCommandTagSummary,
+		original: QuickCommandTagSummary | null,
 		commands: QuickCommandSummary[],
 		signal?: AbortSignal,
 	): Promise<void> {
 		await requestPreference({
 			...transport,
 			method: 'DELETE',
-			path: '/quick-command-tags/' + readCommandId(String(original.id)) + '/group',
+			path: original
+				? '/quick-command-tags/' + readCommandId(String(original.id)) + '/group'
+				: '/quick-commands/untagged-group',
 			status: 200,
 			signal,
 
-			input: () =>
-				readCommandGroupDelete({
-					expectedVersion: original.version,
-					commands: commands.map((command) => ({ id: command.id, expectedVersion: command.version })),
-				}),
+			input: () => {
+				const members = commands.map((command) => ({ id: command.id, expectedVersion: command.version }));
+				return original
+					? readCommandGroupDelete({ expectedVersion: original.version, commands: members })
+					: readCommandUntaggedGroupDelete({ commands: members });
+			},
 
 			decode: readCommandDelete,
 		});

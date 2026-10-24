@@ -78,8 +78,11 @@ export function validateCommandTask(task: CommandTask): void {
 			text(task.name, COMMAND_NAME_MAX_BYTES, true);
 			break;
 		case 'delete_group':
-			id(task.id);
-			version(task.expectedVersion);
+		case 'delete_untagged_group':
+			if (task.action === 'delete_group') {
+				id(task.id);
+				version(task.expectedVersion);
+			}
 			if (
 				task.commands.length > COMMAND_MAX_ENTRIES ||
 				new Set(task.commands.map((row) => row.id)).size !== task.commands.length

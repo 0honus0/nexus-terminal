@@ -45,6 +45,8 @@
       "createTagFailed": "タグの作成に失敗しました: {error}",
       "assignFailedAfterCreate": "タグ「{name}」は作成されましたが、コマンドの割り当てに失敗しました: {error}",
       "contextHint": "右クリックでグループ名を変更または削除",
+      "deleteUntaggedGroup": "グループを削除",
+      "confirmDeleteUntaggedGroup": "タグなしのクイックコマンド全 {count} 件を削除しますか？元に戻せません。",
       "deleteGroup": "グループを削除（タグを含む）",
       "confirmDeleteGroup": "タググループ「{name}」と中の全 {count} 件のクイックコマンドを削除しますか？これらのコマンドは他のタググループからも削除され、元に戻せません。",
       "delete": "タグを削除"

@@ -17,6 +17,7 @@ import {
 	readCommandTagUpdate,
 	readCommandAssign,
 	readCommandGroupDelete,
+	readCommandUntaggedGroupDelete,
 	readCommandId,
 	readCommandQuery,
 } from '@nexus-terminal/shared/preferences/commands/http-codec';
@@ -178,6 +179,7 @@ function projectResult(
 			break;
 		case 'delete':
 		case 'delete_tag':
+		case 'delete_untagged_group':
 		case 'delete_group':
 			if (result.status === 'deleted') {
 				return { deleted: true };
@@ -220,6 +222,31 @@ export function createCommandRoutes(service: CommandService, access: AccessPubli
 	const path = '/api/v1/quick-commands';
 	const tags = '/api/v1/quick-command-tags';
 	return [
+		{
+			method: 'DELETE',
+			path: path + '/untagged-group',
+			maxBodyBytes: COMMAND_REQUEST_MAX_BYTES,
+
+			handle: (context) =>
+				handle(context, () =>
+					execute(
+						context,
+						access,
+						service,
+						(value) => {
+							const input = readCommandUntaggedGroupDelete(value);
+							return {
+								action: 'delete_untagged_group',
+								commands: input.commands.map((row) => ({
+									id: row.id,
+									expectedVersion: row.expectedVersion,
+								})),
+							};
+						},
+						200,
+					),
+				),
+		},
 		{
 			method: 'GET',
 			path,
