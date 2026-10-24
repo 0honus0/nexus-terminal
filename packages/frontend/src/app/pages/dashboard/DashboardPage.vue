@@ -291,13 +291,14 @@
 			await resources.loadRemote(() =>
 				connections.load().then((items) => items.filter((item) => item.type === 'SSH')),
 			);
-			if (
-				remoteRefreshRequest === request &&
-				isDashboardVisible() &&
-				resources.remote.value.length &&
-				!resources.remoteError.value
-			)
-				lastRemoteLoadedAt = Date.now();
+			if (remoteRefreshRequest === request && isDashboardVisible()) {
+				// A completed batch can contain host failures; only healthy samples may defer a return refresh.
+				const succeeded =
+					resources.remote.value.length > 0 &&
+					!resources.remoteError.value &&
+					resources.remote.value.every((resource) => resource.state === 'ready' && !resource.refreshError);
+				lastRemoteLoadedAt = succeeded ? Date.now() : 0;
+			}
 		} finally {
 			if (remoteRefreshRequest === request) remoteRefreshRequest = null;
 		}

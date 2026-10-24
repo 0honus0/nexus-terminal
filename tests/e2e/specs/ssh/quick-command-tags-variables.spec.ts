@@ -318,10 +318,13 @@ test('quick command tags and saved variables survive persistence, grouping, rena
 				const row = quickView.locator(`[data-command-id="${commandId}"]`);
 				await expect(row).toBeVisible();
 				await expect(
-					quickView.locator('.quick-command-group-card').filter({ has: row }).getByRole('button', {
-						name: 'Untagged',
-						exact: true,
-					}),
+					quickView
+						.locator('.quick-command-group-card')
+						.filter({ has: page.locator(`[data-command-id="${commandId}"]`) })
+						.getByRole('button', {
+							name: 'Untagged',
+							exact: true,
+						}),
 				).toBeVisible();
 
 				// A tag removal advances the command version. Editing must use the refreshed version.

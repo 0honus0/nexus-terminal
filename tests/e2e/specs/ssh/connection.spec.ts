@@ -47,7 +47,7 @@ for (const changedKey of [false, true]) {
 			});
 			expect(pinned.status()).toBe(201);
 		}
-		const connectionId = await createTestSshConnection(context.request, 'Host key confirmation');
+		await createTestSshConnection(context.request, 'Host key confirmation');
 		let connectRequests = 0;
 		let trustWrites = 0;
 		page.on('websocket', (socket) => {
@@ -82,7 +82,14 @@ for (const changedKey of [false, true]) {
 			});
 		}
 
-		await page.goto(`/workspace?connectionId=${connectionId}`);
+		await updateUiPreferences(context.request, (preferences) => {
+			preferences.dashboardShowRemoteResources = true;
+		});
+		await page.goto('/');
+		const resourceCard = page.getByRole('button', { name: 'Connect Host key confirmation', exact: true });
+		await expect(resourceCard).toContainText('The host key is not trusted. Verify it first.');
+		await expect(resourceCard).toHaveAttribute('data-resource-state', 'failed');
+		await resourceCard.click();
 		const dialog = page.getByRole('dialog', { name: 'SSH Host Keys', exact: true });
 		await expect(dialog).toBeVisible();
 		await expect(dialog.locator('[data-dialog-details]')).toBeVisible();
@@ -121,6 +128,12 @@ for (const changedKey of [false, true]) {
 		await expect
 			.poll(() => page.locator('.terminal-inner-container:visible .xterm-rows').innerText())
 			.toContain('HOST_KEY_CONFIRMED_E2E');
+
+		// Return within the normal cache period without reloading the retained Dashboard page.
+		await page.locator('.app-nav-links a[href="/"]').click();
+		await expect(resourceCard).toHaveAttribute('data-resource-state', 'ready', { timeout: 15_000 });
+		await expect(resourceCard).not.toContainText('The host key is not trusted. Verify it first.');
+		expect(trustWrites).toBe(1);
 	});
 }
 

@@ -1,5 +1,13 @@
 # Nexus Terminal E2E
 
+## 首页主机信任恢复与标签删除定位（2026-10-24，待后继远程）
+
+完整远程 [40062691505](https://github.com/0honus0/nexus-terminal/actions/runs/40062691505) / `d303a446` 结束；7 个分片、根质量及 Docker smoke 成功，仅 shard 2 的新增标签删除断言失败。原日志 `/tmp/nexus-tag-e2e-40062691505.log`、`/tmp/nexus-tag-shard2.log` 和快照归档 `/tmp/nexus-tag-shard2.zip`。快照已有 Untagged 和原指令，删除、变量保留及版本递增断言通过；失败源于 filter(has) 使用含外层 quickView 的定位，分组内再次查找 quickView 必然失败。改为相对指令 ID，不删断言，不改产品 UI。
+
+用户新增首页主机密钥确认后状态仍失败的问题：Dashboard 只检查批次级 remoteError，没有检查各主机 failed/refreshError，错误批次也延后下一次刷新。现仅全主机成功记录成功 TTL，失败批次置零；返回首页按原 800ms 调度重新读取，后台仍暂停，不自动信任主机。原 SSH 首次/变更密钥两例增加首页真实 untrusted → 取消与显式确认 → 执行原命令 → 不刷新页面返回并恢复 ready；丢失确认回执的只读核对仍保留。
+
+两轮源码复核覆盖成功与失败采样、已成功指标保留、页面与认证生命周期、CAS 版本、菜单定位及真实主机密钥回执。根 check、双端 build、修改测试 tsc、全量格式与 diff 通过，日志 `/tmp/nexus-home-trust-{check,build,types,format}.log`。按 D17 未执行本地行为或 E2E。d303a446 双平台发布 [40062703163](https://github.com/0honus0/nexus-terminal/actions/runs/40062703163) 成功，但不含首页修复，尚未部署；后继源码需重新发布后更新远程。
+
 ## 快捷指令标签组右键删除（2026-10-24，待远程）
 
 Panel 标签分组头新增右键入口，菜单复用 UiContextMenu/UiContextMenuItem，删除确认复用全局 Feedback 与 UiConfirmationPanel；没有新增局部 CSS。沿既有 Store/API 的版本删除，仅移除标签及关联，保留命令和变量，并重读关联变化后的指令版本。
