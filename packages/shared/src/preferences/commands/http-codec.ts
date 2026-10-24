@@ -6,6 +6,7 @@ import type {
 	CommandTagCreateRequest,
 	CommandTagUpdateRequest,
 	CommandAssignTagRequest,
+	CommandGroupDeleteRequest,
 	CommandListQuery,
 	CommandListResponse,
 	CommandTagListResponse,
@@ -23,6 +24,7 @@ import {
 	COMMAND_MAX_VARIABLES,
 	COMMAND_VARIABLE_MAX_BYTES,
 	COMMAND_BATCH_MAX_ENTRIES,
+	COMMAND_MAX_ENTRIES,
 	COMMAND_REQUEST_MAX_BYTES,
 	COMMAND_RESPONSE_MAX_BYTES,
 	COMMAND_PAGE_MAX_ENTRIES,
@@ -147,6 +149,25 @@ export function readCommandTagUpdate(input: unknown): CommandTagUpdateRequest {
 	};
 }
 
+export function readCommandGroupDelete(input: unknown): CommandGroupDeleteRequest {
+	budget(input, COMMAND_REQUEST_MAX_BYTES);
+	const value = object(input, ['expectedVersion', 'commands']);
+	if (!Array.isArray(value.commands) || value.commands.length > COMMAND_MAX_ENTRIES) {
+		throw new InvalidCommandPayload();
+	}
+	const commands = value.commands.map((raw: unknown) => {
+		const item = object(raw, ['id', 'expectedVersion']);
+		return {
+			id: integer(item.id, 1),
+			expectedVersion: integer(item.expectedVersion, 1, Number.MAX_SAFE_INTEGER - 1),
+		};
+	});
+	if (new Set(commands.map((item) => item.id)).size !== commands.length) {
+		throw new InvalidCommandPayload();
+	}
+	return { expectedVersion: integer(value.expectedVersion, 1, Number.MAX_SAFE_INTEGER - 1), commands };
+}
+
 export function readCommandAssign(input: unknown): CommandAssignTagRequest {
 	budget(input, COMMAND_REQUEST_MAX_BYTES);
 	const value = object(input, ['commands', 'tagId']);
@@ -185,7 +206,7 @@ export function readCommandQuery(query: URLSearchParams, tags = false): CommandL
 	}
 	return {
 		sortBy,
-		offset: integer(Number(query.get('offset') ?? '0'), 0, 2000),
+		offset: integer(Number(query.get('offset') ?? '0'), 0, COMMAND_MAX_ENTRIES),
 		limit: integer(Number(query.get('limit') ?? String(COMMAND_PAGE_MAX_ENTRIES)), 1, COMMAND_PAGE_MAX_ENTRIES),
 	};
 }

@@ -29,6 +29,11 @@ export interface CommandTagUpdateRequest {
 	expectedVersion: number;
 }
 
+export interface CommandGroupDeleteRequest {
+	expectedVersion: number;
+	commands: Array<{ id: number; expectedVersion: number }>;
+}
+
 export interface CommandAssignTagRequest {
 	commands: Array<{ id: number; expectedVersion: number }>;
 	tagId: number;

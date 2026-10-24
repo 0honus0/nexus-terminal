@@ -1,5 +1,9 @@
 import { PreferencesTasks } from '../../preferences-lifecycle.js';
-import { COMMAND_PAGE_MAX_ENTRIES, COMMAND_MAX_TAGS } from '@nexus-terminal/shared/preferences/commands/values';
+import {
+	COMMAND_PAGE_MAX_ENTRIES,
+	COMMAND_MAX_TAGS,
+	COMMAND_MAX_ENTRIES,
+} from '@nexus-terminal/shared/preferences/commands/values';
 import type { CommandModel } from '../model/command-model.js';
 import type {
 	CommandActor,
@@ -14,7 +18,7 @@ import type {
 import { prepareCommandTask } from '../command-rules.js';
 import { CommandFailure } from '../../command-failure.js';
 
-const COLLECTION_LIMITS = { commands: 2000, tags: 200, associations: COMMAND_MAX_TAGS };
+const COLLECTION_LIMITS = { commands: COMMAND_MAX_ENTRIES, tags: 200, associations: COMMAND_MAX_TAGS };
 
 function admit(actor: CommandActor, identity: CommandIdentity): void {
 	if (identity.userId === null) {

@@ -1,5 +1,11 @@
 # Nexus Terminal E2E
 
+## 首页与原标签删除验收、后继标签栏菜单（2026-10-24）
+
+[40063583579](https://github.com/0honus0/nexus-terminal/actions/runs/40063583579) / `f242d2c8` 完整 461/461 首次通过，零重试；8 分片、质量、Docker smoke 成功。首次/变更主机密钥取消、确认和不刷新返回首页恢复 ready，原标签删除及删除后继续编辑均通过。原日志 `/tmp/nexus-home-trust-e2e.log`。双平台 dev [40063590074](https://github.com/0honus0/nexus-terminal/actions/runs/40063590074) 发布成功，digest `sha256:57a1e282793d92c46ff53167bc02c72604e2d93b2164fcc136cbf56f0d9332d1`；远程部署已核对 SHA、两个容器健康及两个公网状态接口。日志 `/tmp/nexus-home-trust-{publish,deploy}.log`。后继自动提交 `83bd2a6b` 只更新测试耗时估算。
+
+用户后续要求标签右键菜单合并重命名与删除组内指令。现有标签变量用例按新行为补充单击不编辑、菜单重命名、取消零 DELETE、包含隐藏和跨标签指令、保留其它组、成员/版本冲突整批 409。新 group DELETE 是同事务快照核对及删除，原表单标签删除不变。两轮源码审核、Shared check/build、根 check、双端 build、目标测试 tsc、全量格式与 diff 通过，日志 `/tmp/nexus-group-menu-{check,build,types,format}.log`。本地不运行行为/E2E；行为待后继远程，不计入上述 461。
+
 ## 首页主机信任恢复与标签删除定位（2026-10-24，待后继远程）
 
 完整远程 [40062691505](https://github.com/0honus0/nexus-terminal/actions/runs/40062691505) / `d303a446` 结束；7 个分片、根质量及 Docker smoke 成功，仅 shard 2 的新增标签删除断言失败。原日志 `/tmp/nexus-tag-e2e-40062691505.log`、`/tmp/nexus-tag-shard2.log` 和快照归档 `/tmp/nexus-tag-shard2.zip`。快照已有 Untagged 和原指令，删除、变量保留及版本递增断言通过；失败源于 filter(has) 使用含外层 quickView 的定位，分组内再次查找 quickView 必然失败。改为相对指令 ID，不删断言，不改产品 UI。

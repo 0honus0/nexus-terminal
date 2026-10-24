@@ -79,6 +79,13 @@ function toStorage(value: CommandTask): StoredCommandTask {
 		case 'increment':
 		case 'delete_tag':
 			return { action: value.action, id: value.id, expectedVersion: value.expectedVersion };
+		case 'delete_group':
+			return {
+				action: 'delete_group',
+				id: value.id,
+				expectedVersion: value.expectedVersion,
+				commands: value.commands.map((row) => ({ id: row.id, expectedVersion: row.expectedVersion })),
+			};
 		case 'create_tag':
 			return { action: 'create_tag', name: value.name };
 		case 'update_tag':

@@ -19,11 +19,14 @@ import { slowStep, step } from '../../support/steps';
 const COMMAND_NAME = 'E2E Tagged Variable Command';
 const TAG_NAME = 'E2E Quick Variable Tag';
 const RENAMED_TAG = 'E2E Quick Variable Tag Renamed';
+const HIDDEN_NAME = 'E2E Secondary Group Command';
+const OUTSIDE_NAME = 'E2E Outside Group Command';
+const SHARED_TAG = 'E2E Quick Shared Tag';
 
 async function cleanup(request: APIRequestContext): Promise<void> {
 	const failures: unknown[] = [];
 	for (const command of await listTestCommands(request)) {
-		if (command.name === COMMAND_NAME) {
+		if ([COMMAND_NAME, HIDDEN_NAME, OUTSIDE_NAME].includes(command.name ?? '')) {
 			try {
 				await cleanupTestCommand(request, command.id);
 			} catch (cause) {
@@ -32,7 +35,7 @@ async function cleanup(request: APIRequestContext): Promise<void> {
 		}
 	}
 	for (const tag of await listTestCommandTags(request)) {
-		if ([TAG_NAME, RENAMED_TAG].includes(tag.name)) {
+		if ([TAG_NAME, RENAMED_TAG, SHARED_TAG].includes(tag.name)) {
 			try {
 				await cleanupTestCommandTag(request, tag.id);
 			} catch (cause) {
@@ -174,7 +177,7 @@ test('quick command tags and saved variables survive persistence, grouping, rena
 			},
 		);
 
-		await step('only the tag text enters edit mode while the empty header area toggles the group', async () => {
+		await step('tag text toggles the group and only the context menu enters rename mode', async () => {
 			const group = quickView
 				.locator('.quick-command-group-card')
 				.filter({ has: page.locator(`[data-command-id="${commandId}"]`) });
@@ -218,6 +221,9 @@ test('quick command tags and saved variables survive persistence, grouping, rena
 			expect(rowPresentation.monospaceClass).toBe(false);
 
 			await name.click();
+			await expect(group.getByRole('textbox')).toHaveCount(0);
+			await name.click({ button: 'right' });
+			await page.getByRole('menuitem', { name: 'Rename tag', exact: true }).click();
 			const input = group.getByRole('textbox');
 			await expect(input).toBeVisible();
 			await input.press('Escape');
@@ -246,11 +252,12 @@ test('quick command tags and saved variables survive persistence, grouping, rena
 			},
 		);
 
-		await step('inline tag rename persists and keeps the command in the renamed group', async () => {
+		await step('context menu tag rename persists and keeps the command in the renamed group', async () => {
 			const group = quickView
 				.locator('.quick-command-group-card')
 				.filter({ has: page.locator(`[data-command-id="${commandId}"]`) });
-			await group.getByRole('button', { name: TAG_NAME, exact: true }).click();
+			await group.getByRole('button', { name: TAG_NAME, exact: true }).click({ button: 'right' });
+			await page.getByRole('menuitem', { name: 'Rename tag', exact: true }).click();
 			const input = group.getByRole('textbox');
 			await expect(input).toBeVisible();
 			await input.fill(RENAMED_TAG);
@@ -264,87 +271,102 @@ test('quick command tags and saved variables survive persistence, grouping, rena
 			await expect(group.getByRole('button', { name: RENAMED_TAG, exact: true })).toHaveText(RENAMED_TAG);
 		});
 
-		await step('tag context deletion confirms once and preserves the command and its variables', async () => {
-			const tagName = quickView.getByRole('button', { name: RENAMED_TAG, exact: true });
-			const original = (await listTestCommands(context.request)).find((item) => item.id === commandId);
-			if (!original) {
-				throw new Error('Missing quick command before tag deletion');
-			}
-			const deletePath = `/api/v1/quick-command-tags/${tagId}`;
-			const deletions: string[] = [];
-
-			const observeDelete = (request: Request) => {
-				if (request.method() === 'DELETE' && new URL(request.url()).pathname === deletePath) {
-					deletions.push(request.postData() ?? '');
+		await step(
+			'group deletion covers hidden and shared commands, confirms once, and preserves other groups',
+			async () => {
+				async function addCommand(name: string, tagNames: string[]): Promise<void> {
+					await quickView.getByRole('button', { name: 'Add', exact: true }).click();
+					const form = page.getByRole('dialog', { name: 'Add Quick Command', exact: true });
+					await form.getByPlaceholder('Optional, for quick identification', { exact: true }).fill(name);
+					await form.locator('textarea').fill('printf GROUP_DELETE_E2E');
+					for (const tag of tagNames) {
+						const input = form.getByPlaceholder('Select or create tags...', { exact: true });
+						await input.fill(tag);
+						await input.press('Enter');
+						await expect(form.locator('.ui-token-input__token').filter({ hasText: tag })).toBeVisible();
+					}
+					await form.getByRole('button', { name: 'Save', exact: true }).click();
+					await expect(form).toBeHidden();
 				}
-			};
 
-			page.on('request', observeDelete);
-			try {
-				await tagName.click({ button: 'right' });
-				const menu = page.getByRole('menu').filter({ visible: true });
-				await menu.getByRole('menuitem', { name: 'Delete tag', exact: true }).click();
-				const confirm = page.getByRole('dialog', { name: 'Please confirm' });
-				await expect(confirm).toContainText(RENAMED_TAG);
-				await expect(confirm).toContainText('quick commands will be kept');
-				expect(deletions).toHaveLength(0);
-				await confirm.getByRole('button', { name: 'Cancel', exact: true }).click();
-				await expect(confirm).toBeHidden();
-				expect((await listTestCommandTags(context.request)).some((tag) => tag.id === tagId)).toBe(true);
-				expect(deletions).toHaveLength(0);
-
-				await tagName.click({ button: 'right' });
-				await menu.getByRole('menuitem', { name: 'Delete tag', exact: true }).click();
-				await expect(confirm).toBeVisible();
-				const pending = page.waitForResponse(
-					(response) =>
-						response.request().method() === 'DELETE' && new URL(response.url()).pathname === deletePath,
-				);
-				await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
-				expect((await pending).status()).toBe(200);
-				await expect(tagName).toHaveCount(0);
-				await expect
-					.poll(async () => (await listTestCommandTags(context.request)).some((tag) => tag.id === tagId))
-					.toBe(false);
-				const preserved = (await listTestCommands(context.request)).find((item) => item.id === commandId);
-				if (!preserved) {
-					throw new Error('Tag deletion removed the quick command');
+				await addCommand(HIDDEN_NAME, [RENAMED_TAG, SHARED_TAG]);
+				await addCommand(OUTSIDE_NAME, [SHARED_TAG]);
+				const original = await listTestCommands(context.request);
+				const members = original.filter((command) => command.tagIds.includes(tagId));
+				expect(members).toHaveLength(2);
+				const tag = (await listTestCommandTags(context.request)).find((item) => item.id === tagId);
+				if (!tag) throw new Error('Missing group before deletion');
+				const deletePath = `/api/v1/quick-command-tags/${tagId}/group`;
+				const headers = { Origin: E2E_URLS.frontendOrigin };
+				// Membership or command changes reject the entire transaction before any deletion.
+				for (const commands of [
+					[],
+					members.map((command) => ({ id: command.id, expectedVersion: command.version + 1 })),
+				]) {
+					const conflict = await context.request.delete(deletePath, {
+						headers,
+						data: { expectedVersion: tag.version, commands },
+					});
+					expect(conflict.status()).toBe(409);
+					expect((await listTestCommands(context.request)).map((command) => command.id)).toEqual(
+						original.map((command) => command.id),
+					);
+					expect((await listTestCommandTags(context.request)).some((item) => item.id === tagId)).toBe(true);
 				}
-				expect(preserved.name).toBe(original.name);
-				expect(preserved.command).toBe(original.command);
-				expect(preserved.variables).toEqual(original.variables);
-				expect(preserved.tagIds).not.toContain(tagId);
-				expect(preserved.version).toBe(original.version + 1);
-				const row = quickView.locator(`[data-command-id="${commandId}"]`);
-				await expect(row).toBeVisible();
-				await expect(
-					quickView
-						.locator('.quick-command-group-card')
-						.filter({ has: page.locator(`[data-command-id="${commandId}"]`) })
-						.getByRole('button', {
-							name: 'Untagged',
-							exact: true,
-						}),
-				).toBeVisible();
+				await quickView.getByPlaceholder('Search name or command...', { exact: true }).fill(COMMAND_NAME);
+				await expect(quickView.locator(`[data-command-id="${commandId}"]`)).toBeVisible();
+				await expect(quickView.getByText(HIDDEN_NAME, { exact: true })).toHaveCount(0);
+				const tagName = quickView.getByRole('button', { name: RENAMED_TAG, exact: true });
+				const deletions: string[] = [];
 
-				// A tag removal advances the command version. Editing must use the refreshed version.
-				await row.click({ button: 'right' });
-				await menu.getByRole('menuitem', { name: 'Edit', exact: true }).click();
-				const form = page.getByRole('dialog', { name: 'Edit Quick Command', exact: true });
-				await expect(form.locator('.ui-token-input__token').filter({ hasText: RENAMED_TAG })).toHaveCount(0);
-				const saved = page.waitForResponse(
-					(response) =>
-						response.request().method() === 'PUT' &&
-						new URL(response.url()).pathname === `/api/v1/quick-commands/${commandId}`,
-				);
-				await form.getByRole('button', { name: 'Save', exact: true }).click();
-				expect((await saved).status()).toBe(200);
-				await expect(form).toBeHidden();
-				expect(deletions).toHaveLength(1);
-			} finally {
-				page.off('request', observeDelete);
-			}
-		});
+				const observeDelete = (request: Request) => {
+					if (request.method() === 'DELETE' && new URL(request.url()).pathname === deletePath)
+						deletions.push(request.postData() ?? '');
+				};
+
+				page.on('request', observeDelete);
+				try {
+					await tagName.click({ button: 'right' });
+					const menu = page.getByRole('menu').filter({ visible: true });
+					await menu.getByRole('menuitem', { name: 'Delete group and commands', exact: true }).click();
+					const confirm = page.getByRole('dialog', { name: 'Please confirm' });
+					await expect(confirm).toContainText(RENAMED_TAG);
+					await expect(confirm).toContainText('all 2 quick commands');
+					await expect(confirm).toContainText('also be removed from other tag groups');
+					expect(deletions).toHaveLength(0);
+					await confirm.getByRole('button', { name: 'Cancel', exact: true }).click();
+					await expect(confirm).toBeHidden();
+					expect((await listTestCommands(context.request)).map((command) => command.id)).toEqual(
+						original.map((command) => command.id),
+					);
+					expect(deletions).toHaveLength(0);
+
+					await tagName.click({ button: 'right' });
+					await menu.getByRole('menuitem', { name: 'Delete group and commands', exact: true }).click();
+					await expect(confirm).toBeVisible();
+					const pending = page.waitForResponse(
+						(response) =>
+							response.request().method() === 'DELETE' && new URL(response.url()).pathname === deletePath,
+					);
+					await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
+					expect((await pending).status()).toBe(200);
+					await expect(tagName).toHaveCount(0);
+					const remaining = await listTestCommands(context.request);
+					expect(remaining.some((command) => members.some((member) => member.id === command.id))).toBe(false);
+					expect(remaining.find((command) => command.name === OUTSIDE_NAME)).toEqual(
+						original.find((command) => command.name === OUTSIDE_NAME),
+					);
+					const tags = await listTestCommandTags(context.request);
+					expect(tags.some((item) => item.id === tagId)).toBe(false);
+					expect(tags.some((item) => item.name === SHARED_TAG)).toBe(true);
+					await quickView.getByPlaceholder('Search name or command...', { exact: true }).fill('');
+					await expect(quickView.getByRole('button', { name: SHARED_TAG, exact: true })).toBeVisible();
+					expect(deletions).toHaveLength(1);
+				} finally {
+					page.off('request', observeDelete);
+				}
+			},
+		);
 	} finally {
 		await cleanup(context.request);
 	}

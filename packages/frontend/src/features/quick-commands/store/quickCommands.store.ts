@@ -281,6 +281,20 @@ export const useQuickCommandsStore = defineStore('quick-commands', () => {
 		}, permission);
 	}
 
+	function removeGroup(
+		original: QuickCommandTagSummary,
+		commands: QuickCommandSummary[],
+		permission?: AbortSignal,
+	): Promise<void> {
+		return mutate(async (signal) => {
+			await quickCommandsApi.removeGroup(original, commands, signal);
+			if (!signal.aborted && commands.some((command) => command.id === selectedId.value)) {
+				selectedId.value = null;
+			}
+			await refreshAfterAssociation(signal);
+		}, permission);
+	}
+
 	function renameTag(
 		original: QuickCommandTagSummary,
 		name: string,
@@ -395,6 +409,7 @@ export const useQuickCommandsStore = defineStore('quick-commands', () => {
 		recordUsage,
 		addTag,
 		removeTag,
+		removeGroup,
 		renameTag,
 		createTagForCommands,
 		toggle,

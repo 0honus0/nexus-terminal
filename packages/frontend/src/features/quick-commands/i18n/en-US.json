@@ -34,7 +34,6 @@
     },
     "untagged": "Untagged",
     "tags": {
-      "clickToEditTag": "Click to edit tag name",
       "removeSelection": "Remove tag from this command",
       "deleteGlobally": "Delete this tag globally",
       "confirmDelete": "Delete tag \"{name}\"? Only the tag will be removed; quick commands will be kept.",
@@ -45,7 +44,9 @@
       "createFailed": "Failed to create and assign tag: {error}",
       "createTagFailed": "Failed to create tag: {error}",
       "assignFailedAfterCreate": "Tag \"{name}\" was created, but assigning the commands failed: {error}",
-      "delete": "Delete tag"
+      "contextHint": "Right-click to rename or delete this group",
+      "deleteGroup": "Delete group and commands",
+      "confirmDeleteGroup": "Delete tag group \"{name}\" and all {count} quick commands in it? These commands will also be removed from other tag groups. This cannot be undone."
     },
     "actions": {
       "sendToAllSessions": "Send to All Sessions",

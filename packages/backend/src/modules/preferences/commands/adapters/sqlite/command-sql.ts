@@ -125,6 +125,8 @@ export class SqliteCommandStorage implements CommandStorage {
 					return this.writeTag(tx, userId, task, authorization);
 				case 'delete_tag':
 					return this.deleteTag(tx, userId, task);
+				case 'delete_group':
+					return this.deleteGroup(tx, userId, task);
 				case 'assign_tag':
 					return this.assignTag(tx, userId, task, authorization);
 			}
@@ -285,6 +287,47 @@ export class SqliteCommandStorage implements CommandStorage {
 		await tx.run(
 			'UPDATE preferences_commands SET version=version+1,updated_at=MAX(updated_at,?) WHERE user_id=? AND id IN (SELECT command_id FROM preferences_command_associations WHERE user_id=? AND tag_id=?)',
 			[at, userId, userId, task.id],
+		);
+		await tx.run('DELETE FROM preferences_command_tags WHERE user_id=? AND id=?', [userId, task.id]);
+		return { status: 'deleted' };
+	}
+
+	private async deleteGroup(
+		tx: SqlExecutor,
+		userId: number,
+		task: Extract<StoredCommandTask, { action: 'delete_group' }>,
+	): Promise<StoredCommandResult> {
+		const tag = await tx.one('SELECT * FROM preferences_command_tags WHERE user_id=? AND id=?', [userId, task.id]);
+		if (!tag) {
+			return { status: 'not_found' };
+		}
+		if (commandTagRow(tag).version !== task.expectedVersion) {
+			return { status: 'version_conflict' };
+		}
+		const rows = await tx.all(
+			'SELECT id,version FROM preferences_commands WHERE user_id=? AND id IN (SELECT command_id FROM preferences_command_associations WHERE user_id=? AND tag_id=?)',
+			[userId, userId, task.id],
+		);
+		const expected = new Map(task.commands.map((command) => [command.id, command.expectedVersion]));
+		const members = rows.map((row) => {
+			if (
+				typeof row.id !== 'number' ||
+				!Number.isSafeInteger(row.id) ||
+				row.id < 1 ||
+				typeof row.version !== 'number' ||
+				!Number.isSafeInteger(row.version) ||
+				row.version < 1
+			) {
+				throw new Error('Corrupt command group member');
+			}
+			return { id: row.id, version: row.version };
+		});
+		if (members.length !== expected.size || members.some((row) => expected.get(row.id) !== row.version)) {
+			return { status: 'version_conflict' };
+		}
+		await tx.run(
+			'DELETE FROM preferences_commands WHERE user_id=? AND id IN (SELECT command_id FROM preferences_command_associations WHERE user_id=? AND tag_id=?)',
+			[userId, userId, task.id],
 		);
 		await tx.run('DELETE FROM preferences_command_tags WHERE user_id=? AND id=?', [userId, task.id]);
 		return { status: 'deleted' };

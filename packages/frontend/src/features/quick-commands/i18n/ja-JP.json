@@ -34,7 +34,6 @@
     },
     "untagged": "タグなし",
     "tags": {
-      "clickToEditTag": "クリックしてタグ名を編集",
       "removeSelection": "このコマンドからタグを外す",
       "deleteGlobally": "このタグをグローバルに削除",
       "confirmDelete": "タグ「{name}」を削除しますか？タグのみを削除し、クイックコマンドは保持します。",
@@ -45,7 +44,9 @@
       "createFailed": "タグの作成と割り当てに失敗しました: {error}",
       "createTagFailed": "タグの作成に失敗しました: {error}",
       "assignFailedAfterCreate": "タグ「{name}」は作成されましたが、コマンドの割り当てに失敗しました: {error}",
-      "delete": "タグを削除"
+      "contextHint": "右クリックでグループ名を変更または削除",
+      "deleteGroup": "タググループとコマンドを削除",
+      "confirmDeleteGroup": "タググループ「{name}」と中の全 {count} 件のクイックコマンドを削除しますか？これらのコマンドは他のタググループからも削除され、元に戻せません。"
     },
     "actions": {
       "sendToAllSessions": "すべてのセッションに送信",

@@ -64,6 +64,12 @@ export type CommandTask =
 	| { action: 'create_tag'; name: string }
 	| { action: 'update_tag'; id: number; expectedVersion: number; name: string }
 	| { action: 'delete_tag'; id: number; expectedVersion: number }
+	| {
+			action: 'delete_group';
+			id: number;
+			expectedVersion: number;
+			commands: Array<{ id: number; expectedVersion: number }>;
+	  }
 	| { action: 'assign_tag'; commands: Array<{ id: number; expectedVersion: number }>; tagId: number };
 
 export type CommandResult =

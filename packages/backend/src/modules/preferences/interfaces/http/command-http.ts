@@ -16,6 +16,7 @@ import {
 	readCommandTagCreate,
 	readCommandTagUpdate,
 	readCommandAssign,
+	readCommandGroupDelete,
 	readCommandId,
 	readCommandQuery,
 } from '@nexus-terminal/shared/preferences/commands/http-codec';
@@ -177,6 +178,7 @@ function projectResult(
 			break;
 		case 'delete':
 		case 'delete_tag':
+		case 'delete_group':
 			if (result.status === 'deleted') {
 				return { deleted: true };
 			}
@@ -400,6 +402,33 @@ export function createCommandRoutes(service: CommandService, access: AccessPubli
 								id: readCommandId(context.params.id),
 								expectedVersion: input.expectedVersion,
 								name: input.name,
+							};
+						},
+						200,
+					),
+				),
+		},
+		{
+			method: 'DELETE',
+			path: tags + '/:id/group',
+			maxBodyBytes: COMMAND_REQUEST_MAX_BYTES,
+
+			handle: (context) =>
+				handle(context, () =>
+					execute(
+						context,
+						access,
+						service,
+						(value) => {
+							const input = readCommandGroupDelete(value);
+							return {
+								action: 'delete_group',
+								id: readCommandId(context.params.id),
+								expectedVersion: input.expectedVersion,
+								commands: input.commands.map((row) => ({
+									id: row.id,
+									expectedVersion: row.expectedVersion,
+								})),
 							};
 						},
 						200,

@@ -230,6 +230,7 @@
 	};
 
 	const startTagEdit = (group: { id: number | null; name: string }) => {
+		tagContext.value = null;
 		editingTagId.value = group.id ?? 'untagged';
 		editingTag.value = tags.value.find((tag) => tag.id === group.id) ?? null;
 		tagDraft.value = group.id === null ? '' : group.name;
@@ -415,23 +416,25 @@
 		};
 	};
 
-	const removeTag = async (tag: QuickCommandTagSummary) => {
+	const removeGroup = async (tag: QuickCommandTagSummary) => {
 		tagContext.value = null;
 		const signal = view.capture();
 		if (!view.isCurrent(signal) || deletingTag.value) {
 			return;
 		}
 		deletingTag.value = true;
+		// Use the full store, including commands hidden by the current search.
+		const commands = store.items.filter((command) => command.tagIds.includes(tag.id));
 		try {
 			const confirmed = await feedback.confirm({
-				message: t('quickCommands.tags.confirmDelete', { name: tag.name }),
+				message: t('quickCommands.tags.confirmDeleteGroup', { name: tag.name, count: commands.length }),
 				signal,
 				destructive: true,
 			});
 			if (!confirmed || !view.isCurrent(signal)) {
 				return;
 			}
-			await store.removeTag(tag, signal);
+			await store.removeGroup(tag, commands, signal);
 		} catch (cause) {
 			if (!view.isCurrent(signal) || isNetworkFailure(cause) || cause === error.value) {
 				return;
@@ -613,8 +616,12 @@
 								v-else
 								type="button"
 								class="quick-command-group-name inline-flex items-center min-w-0 shrink truncate text-left text-sm font-semibold text-foreground tracking-tight hover:text-primary transition-colors cursor-pointer"
-								:title="t('quickCommands.tags.clickToEditTag')"
-								@click.stop="startTagEdit(group)"
+								:title="
+									group.id === null
+										? t('quickCommands.tags.createFromUntagged')
+										: t('quickCommands.tags.contextHint')
+								"
+								@click.stop="group.id === null ? startTagEdit(group) : store.toggle(group.name)"
 							>
 								{{ group.id === null ? t('quickCommands.untagged') : group.name }}
 							</button>
@@ -738,8 +745,15 @@
 			:width="200"
 			@close="tagContext = null"
 		>
-			<UiContextMenuItem tone="danger" :disabled="deletingTag" @click="removeTag(tagContext.tag)">
-				<i class="fas fa-trash-alt" aria-hidden="true"></i><span>{{ t('quickCommands.tags.delete') }}</span>
+			<UiContextMenuItem
+				:disabled="deletingTag"
+				@click="startTagEdit({ id: tagContext.tag.id, name: tagContext.tag.name })"
+			>
+				<i class="fas fa-edit" aria-hidden="true"></i><span>{{ t('quickCommands.tags.renameHint') }}</span>
+			</UiContextMenuItem>
+			<UiContextMenuItem tone="danger" :disabled="deletingTag" @click="removeGroup(tagContext.tag)">
+				<i class="fas fa-trash-alt" aria-hidden="true"></i
+				><span>{{ t('quickCommands.tags.deleteGroup') }}</span>
 			</UiContextMenuItem>
 		</UiContextMenu>
 

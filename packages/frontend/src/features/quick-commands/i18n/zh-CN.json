@@ -34,7 +34,6 @@
     },
     "untagged": "未标记",
     "tags": {
-      "clickToEditTag": "点击编辑标签名称",
       "removeSelection": "从当前指令移除此标签",
       "deleteGlobally": "全局删除此标签",
       "confirmDelete": "确定删除标签“{name}”吗？仅移除标签，快捷指令会保留。",
@@ -45,7 +44,9 @@
       "createFailed": "创建并分配标签失败：{error}",
       "createTagFailed": "创建标签失败：{error}",
       "assignFailedAfterCreate": "标签“{name}”已创建，但分配指令失败：{error}",
-      "delete": "删除标签"
+      "contextHint": "右键重命名或删除此组",
+      "deleteGroup": "删除标签组及指令",
+      "confirmDeleteGroup": "确定删除标签组“{name}”及组内全部 {count} 条快捷指令吗？这些指令也会从其他标签组中删除，无法撤销。"
     },
     "actions": {
       "sendToAllSessions": "发送到全部会话",
