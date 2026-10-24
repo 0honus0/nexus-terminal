@@ -85,7 +85,7 @@ Connections的应用Summary/Draft/Controller/回执归model/connection-types，w
 
 Workspace复制/移动/归档的完整传输职责归 runtimes/workspace/adapters/transfer-adapters；capabilityAdapters只装配上传及该适配器。各任务只保留路径、原附件能力、进度、确认状态与期限，不缓存归档密码。应用请求/任务/失败仍唯一归 features/transfers/model/transfer-types，复用失败统一为TransferFailure；独立服务器HTTP任务归server-transfers-api、server-transfer-types/mapper及serverTransfers.store：Shared wire严格解码后转独立应用对象，不借用Workspace任务授权。
 
-后台服务器传输的按需刷新仍由 `serverTransfers.store` 单独持有：工作区激活只读列表一次，只有 queued/in-progress/cancelling 安排下一次单次 timer，完整读取结算后才重新计时；空列表或只有终态不创建 timer。发送成功接入同一调度，提交未知仅做一次只读核对并保留原写入围栏。停用/注销撤销调度，旧 epoch 的结算不能重启；generation 继续保护读取与写入竞争。既有进度 UI、Shared 类型和严格 mapper 不变，当前不提供空闲页面跨设备任务变化推送；独立用户级 WS 需要另行设计授权、快照与断线恢复，不能借用 Workspace 附件权限。
+后台服务器传输的按需刷新仍由 `serverTransfers.store` 单独持有：工作区激活只读列表一次，浏览器隐藏/离线时暂停timer并invalidate/abort只读请求，保留真实写入及未知围栏；恢复可见/online/pageshow时仅对活动任务、中断/失败读取或未完成初读补读，空闲无任务不额外读取。只有 queued/in-progress/cancelling 安排下一次单次 timer，完整读取结算后才重新计时；空列表或只有终态不创建 timer。发送成功接入同一调度，提交未知仅做一次只读核对并保留原写入围栏。停用/注销撤销调度，旧 epoch 的结算不能重启；generation 继续保护读取与写入竞争。既有进度 UI、Shared 类型和严格 mapper 不变，当前不提供空闲页面跨设备任务变化推送；独立用户级 WS 需要另行设计授权、快照与断线恢复，不能借用 Workspace 附件权限。
 
 正式Agent的Registry消费归`api/registry-api`与`api/management-request`；后者复用`client/http/json-client`，只持有Agent安全失败与协议预算，不持有认证状态。`model/registry-types`拥有独立应用对象，`registry-mapper`逐字段投影并将秒转为毫秒；状态卡片`settings/ModelRegistrySettings`独立安装在设置页，不依赖旧聚合settings加载成功。Provider编辑器的模型建议也经此入口；旧Registry Envelope/CSRF和Provider管理写接口已删除，不新增新协议到旧响应的兼容包装。Host/SDK已消费当前Shared Provider/模型目录，行为单列验收。
 
@@ -136,7 +136,7 @@ descriptor声明的消息容量与真实前端RPC预算同源；父桥在请求�
 
 Workspace连接事实仍唯一归RuntimeSession.state；LayoutRenderer与SessionSurface将connected/connecting投影给内嵌/浮窗FileManager，LayoutRenderer及SessionSurface→MobileTools同样传入StatusMonitor，connected为组件必填输入。Files 连接中显示紧凑加载行，StatusMonitor 连接中或首轮采样显示标题和五张骨架卡；idle/error/disconnected面板内容留白、不发布旧目录/指标，Files操作scope暂停并撤销旧意图。RuntimeSession在建连失败后保留原因并停止自动派发，foreground自动恢复不越过waitingForRetry；显式重试仍重新核对主机信任与所有权。TerminalView只消费原失败文字，剥离控制字符、限制1000字符后红色输出，与任意键重试提示间空一行；禁用输入时重试键不走远端输入。所有权未知继续原恢复UI，不显示可任意键重试。已连接后的真实文件及采样错误保留原安全映射。中英日文案由各feature持有，无Shared/HTTP变更。
 
-HTTP network-failure持有单一应用安装回调和具名cause分类，JSON/binary/Axios transport仅报告非主动取消的传输失败；App/main通过Feedback安装统一网络Toast，不让client依赖feature或UI。Feedback对当前可见的同类同文案去重，并对错误保留15秒短期去重窗口，错误默认常驻、成功/信息/警告仍3秒；关闭通知不解除原业务围栏；去重窗口过后，后续失败可再次提示。Agent目录取消自绘浮层、共享操作反馈及连接/偏好/外观的已识别网络失败不重复提示；写入unknown/refreshRequired与原cause/outcome保留，业务拒绝仍使用原安全反馈。NotificationHost 使用同侧等宽的主题卡片，桌面 288px、手机左右各留 20px，标题/右上关闭、正文、底部确认行纵向排列，无左侧状态图标；无业务动作时“知道了”关闭，业务恢复动作不自动关闭。关闭按钮保留向外扩展的透明点按区且窄屏不溢出，不自动重试任何写入，不把网络恢复当作原操作成功。
+HTTP network-failure持有单一应用安装回调和具名cause分类，JSON/binary/Axios transport仅报告非主动取消的传输失败；GET按完整请求地址登记待通知，连续10秒前台未恢复才通知，同地址完成响应读取后取消待提示；非GET提交仍立即报告，所有原失败及outcome照常传给业务owner，不在transport自动重试。待通知归network-failure，原signal撤销、handler替换/移除和成功读取负责清理timer/abort监听；visibilitychange/pageshow重置前台宽限，过期timer核对实例/修订与冻结延迟。挂起目录以订阅实例Symbol独立登记网络故障，完整快照、隐藏/恢复及dispose取消原待提示，权限/协议失败保持原反馈；App/main通过Feedback安装统一网络Toast，不让client依赖feature或UI。Feedback对当前可见的同类同文案去重，并对错误保留15秒短期去重窗口，错误默认常驻、成功/信息/警告仍3秒；关闭通知不解除原业务围栏；去重窗口过后，后续失败可再次提示。Agent目录取消自绘浮层、共享操作反馈及连接/偏好/外观的已识别网络失败不重复提示；写入unknown/refreshRequired与原cause/outcome保留，业务拒绝仍使用原安全反馈。NotificationHost 使用同侧等宽的主题卡片，桌面 288px、手机左右各留 20px，标题/右上关闭、正文、底部确认行纵向排列，无左侧状态图标；无业务动作时“知道了”关闭，业务恢复动作不自动关闭。关闭按钮保留向外扩展的透明点按区且窄屏不溢出，不自动重试任何写入，不把网络恢复当作原操作成功。
 
 app 装配 feature/runtime；feature 通过窄公开能力消费 runtime 和 foundation。跨功能通过公开入口/明确能力，不深层引用私有组件、Store 或实现。foundation 不反向依赖业务。新 Shared 契约按 [SHARED](SHARED.md) 消费，不在前端手写同义 DTO。
 

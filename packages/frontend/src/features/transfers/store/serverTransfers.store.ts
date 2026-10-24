@@ -21,6 +21,9 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
 	const error = ref('');
 	const sendBlocked = ref(false);
 	const progressTasks = computed(() => items.value.map(toTransferTask).sort((a, b) => b.createdAt - a.createdAt));
+	const hasActiveTasks = computed(() =>
+		items.value.some((task) => ['queued', 'in-progress', 'cancelling'].includes(task.status)),
+	);
 	let epoch = 0;
 	let generation = 0;
 	let timer: number | undefined;
@@ -29,6 +32,8 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
 	let readController: AbortController | null = null;
 	let readPromise: Promise<void> | null = null;
 	let refreshQueued = false;
+	let refreshOnResume = false;
+	let readFailed = false;
 	const writes = new Set<AbortController>();
 	const mutations = new Map<string, Promise<void>>();
 
@@ -39,20 +44,39 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
 
 	function stopPolling(): void {
 		pollingEnabled = false;
+		refreshOnResume = false;
 		clearPollingTimer();
+		document.removeEventListener('visibilitychange', syncPollingVisibility);
+		window.removeEventListener('pageshow', syncPollingVisibility);
+		window.removeEventListener('online', syncPollingVisibility);
+		window.removeEventListener('offline', syncPollingVisibility);
+	}
+
+	function syncPollingVisibility(): void {
+		clearPollingTimer();
+		if (!pollingEnabled) return;
+		if (document.hidden || !navigator.onLine) {
+			// Only the status read is cancelled; server tasks and mutation owners continue.
+			refreshOnResume ||= readPromise !== null || hasActiveTasks.value || readFailed;
+			invalidate();
+			refreshQueued = false;
+			return;
+		}
+		if (!refreshOnResume && !hasActiveTasks.value && !readFailed) return;
+		refreshOnResume = false;
+		void load({ background: true, ensureFresh: true });
 	}
 
 	function schedulePolling(): void {
 		clearPollingTimer();
-		const hasActiveTasks = items.value.some((task) =>
-			['queued', 'in-progress', 'cancelling'].includes(task.status),
-		);
-		if (!pollingEnabled || readPromise || !hasActiveTasks) {
+		if (!pollingEnabled || document.hidden || !navigator.onLine || readPromise || !hasActiveTasks.value) {
 			return;
 		}
 		timer = window.setTimeout(() => {
 			timer = undefined;
-			void load({ background: true });
+			if (pollingEnabled && !document.hidden && navigator.onLine) {
+				void load({ background: true });
+			}
 		}, pollingIntervalMs);
 	}
 
@@ -69,6 +93,7 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
 		readPromise = null;
 		readController = null;
 		refreshQueued = false;
+		readFailed = false;
 		items.value = [];
 		loading.value = false;
 		error.value = '';
@@ -81,6 +106,10 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
 	}
 
 	function load(options: { background?: boolean; ensureFresh?: boolean } = {}): Promise<void> {
+		if (document.hidden) {
+			refreshOnResume = true;
+			return Promise.resolve();
+		}
 		if (readPromise) {
 			if (options.ensureFresh) {
 				invalidate();
@@ -95,17 +124,19 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
 		}
 		const pending = Promise.resolve()
 			.then(async () => {
-				if (currentEpoch !== epoch) {
+				if (currentEpoch !== epoch || document.hidden) {
 					return;
 				}
 				do {
 					refreshQueued = false;
+					if (document.hidden) return;
 					const current = generation;
 					const active = new AbortController();
 					readController = active;
 					try {
 						const next = await serverTransfersApi.list(active.signal);
 						if (currentEpoch === epoch && current === generation) {
+							readFailed = false;
 							items.value = next;
 							if (!sendBlocked.value) {
 								error.value = '';
@@ -113,6 +144,7 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
 						}
 					} catch (cause) {
 						if (currentEpoch === epoch && current === generation && !active.signal.aborted) {
+							readFailed = true;
 							error.value = serverTransferFailureKey(cause);
 						}
 					}
@@ -219,7 +251,12 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
 		stopPolling();
 		pollingEnabled = true;
 		pollingIntervalMs = Math.max(1000, intervalMs);
-		void load();
+		document.addEventListener('visibilitychange', syncPollingVisibility);
+		window.addEventListener('pageshow', syncPollingVisibility);
+		window.addEventListener('online', syncPollingVisibility);
+		window.addEventListener('offline', syncPollingVisibility);
+		if (!document.hidden && navigator.onLine) void load();
+		else refreshOnResume = true;
 		return stopPolling;
 	}
 

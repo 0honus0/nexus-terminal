@@ -2310,3 +2310,14 @@ Agent 设置的“模型 Provider”标题行原先由左侧标题组和右侧�
 | 职责归属 | QuickCommandsPanel 持确认与快照，Store串行写入及恢复围栏；原commands Service/Model/SQLite Adapter持授权、映射和事务删除；无伪标签ID或逐条部分删除。                                                                                       |
 | 类型归属 | Shared新增 CommandUntaggedGroupDeleteRequest 及严格解码；HTTP→CommandTask→StoredCommandTask逐字段映射；DELETE /api/v1/quick-commands/untagged-group复用原安全删除响应与容量。                                                             |
 | 完成证据 | 两轮源码审核完成，补齐新操作成功响应投影；根check、双端build、全量format:all:check及diff通过。D17不新增/执行本地行为测试，远程验证确认/取消、搜索隐藏项、成员/版本竞争和权限失效。连同挂起蓝色指示提交推送dev，排除并行状态卡片视觉改动。 |
+
+## 手机后台恢复时的网络误报（2026-10-24）
+
+设计八节：① 挂起目录自动同步与传输状态读取各归原 owner，保持UI设计；② 原network-failure统一持GET/订阅网络恢复宽限，JSON/binary/Axios明确传只读来源；suspended-catalog-stream与serverTransfers Store消费；③ 沿原HTTP/WS、Feedback依赖，client不引用业务UI；④ 无Shared或后端契约变化，私有待通知类型留原文件；⑤ 原订阅与轮询入口补充浏览器生命周期；⑥ 仅GET和只读目录订阅允许通知恢复宽限，不自动重放HTTP读取，写入与未知围栏不变；⑦ GET及挂起目录网络故障在前台连续10秒后才通知，同地址成功读取/快照/读取signal撤销取消待提示；后台暂停计时，冻结导致过期计时器重新等待；传输后台停止轮询并取消在途只读请求，返回前台读取最新状态；⑧ 两轮源码审核、根check/全量格式/前端build及diff，按D17行为留远程，不自行提交或部署。
+
+| 审核表   | 本批范围及判据                                                                                                                                                                                                                                               |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 功能对应 | 手机恢复时挂起目录自动重连短暂失败不立即弹操作失败；持续故障仍提示；实际保存/删除的网络失败和未知保护不变。传输任务继续由后端运行。                                                                                                                          |
+| 职责归属 | network-failure持按读取来源的待通知timer/取消监听；目录订阅持退避/心跳及实例来源；serverTransfers原Store持只读轮询暂停及恢复；全局Toast不改样式、不统一吞错。                                                                                                |
+| 类型归属 | 无新增协议或应用类型；私有PendingReadFeedback与计时器留client/http原owner；原socket/epoch/generation围栏不变。                                                                                                                                               |
+| 完成证据 | 实现与两轮源码审核完成；补齐真实拒绝/协议错误取消旧网络待提示、传输初读失败后前台恢复重读；根check、全量format:all:check、Frontend build及diff通过，日志见testing。远程仍待核对后台超45秒恢复、首次重连失败后成功、持续故障、传输后台/前台及未知写入不重放。 |

@@ -3,7 +3,7 @@ import {
 	SUSPENDED_STREAM_MAX_JSON_BYTES,
 } from '@nexus-terminal/shared/remote/suspend/events';
 import { openWebSocket, WebSocketConnectionFailure } from '@/client/websocket';
-import { reportNetworkFailure } from '@/client/http/network-failure';
+import { clearPendingNetworkFailure, reportNetworkFailure } from '@/client/http/network-failure';
 import { toSuspendedSession } from '../model/suspended-session-mapper';
 import { SuspendedRequestFailure, type SuspendedSession } from '../model/suspended-session-types';
 
@@ -15,6 +15,7 @@ export function subscribeSuspendedCatalog(
 	let socket: WebSocket | null = null;
 	let retryTimer: ReturnType<typeof setTimeout> | undefined;
 	let deadline: ReturnType<typeof setTimeout> | undefined;
+	const networkFeedbackSource = Symbol();
 	let retryDelay = 1000;
 
 	const stopSocket = () => {
@@ -36,11 +37,17 @@ export function subscribeSuspendedCatalog(
 		if (disposed) {
 			return;
 		}
+		if (document.hidden) {
+			clearPendingNetworkFailure(networkFeedbackSource);
+			return;
+		}
 		if (cause.code === 'request_failed') {
-			reportNetworkFailure();
+			reportNetworkFailure(networkFeedbackSource);
 			cause = new SuspendedRequestFailure('request_failed', 'not_dispatched', undefined, {
 				cause: new WebSocketConnectionFailure({ cause }),
 			});
+		} else {
+			clearPendingNetworkFailure(networkFeedbackSource);
 		}
 		onUnavailable(cause);
 		if (document.hidden || !navigator.onLine) {
@@ -90,6 +97,7 @@ export function subscribeSuspendedCatalog(
 				const event = readSuspendedCatalogEvent(value);
 				armDeadline();
 				if (event.type === 'snapshot' && event.revision > revision) {
+					clearPendingNetworkFailure(networkFeedbackSource);
 					revision = event.revision;
 					retryDelay = 1000;
 					onSnapshot(event.sessions.map(toSuspendedSession));
@@ -113,6 +121,7 @@ export function subscribeSuspendedCatalog(
 	};
 
 	const refreshConnection = () => {
+		clearPendingNetworkFailure(networkFeedbackSource);
 		if (!document.hidden && navigator.onLine) {
 			retryDelay = 1000;
 			connect();
@@ -122,13 +131,16 @@ export function subscribeSuspendedCatalog(
 	};
 
 	document.addEventListener('visibilitychange', refreshConnection);
+	window.addEventListener('pageshow', refreshConnection);
 	window.addEventListener('online', refreshConnection);
 	window.addEventListener('offline', refreshConnection);
 	connect();
 	return () => {
 		disposed = true;
 		stopSocket();
+		clearPendingNetworkFailure(networkFeedbackSource);
 		document.removeEventListener('visibilitychange', refreshConnection);
+		window.removeEventListener('pageshow', refreshConnection);
 		window.removeEventListener('online', refreshConnection);
 		window.removeEventListener('offline', refreshConnection);
 	};

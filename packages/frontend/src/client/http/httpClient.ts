@@ -1,7 +1,7 @@
 import axios, { type AxiosInstance } from 'axios';
 import { logger } from '../logging/logger';
 import { dispatchUnauthorized } from './unauthorized';
-import { isNetworkFailure, reportNetworkFailure } from './network-failure';
+import { clearPendingNetworkFailure, isNetworkFailure, reportNetworkFailure } from './network-failure';
 
 export { setUnauthorizedHandler } from './unauthorized';
 
@@ -28,10 +28,22 @@ httpClient.interceptors.request.use((config) => {
 });
 
 httpClient.interceptors.response.use(
-	(response) => response,
+	(response) => {
+		if (response.config.method?.toUpperCase() === 'GET') {
+			clearPendingNetworkFailure(httpClient.getUri(response.config));
+		}
+		return response;
+	},
 	(error: unknown) => {
 		if (axios.isAxiosError(error)) {
-			if (isNetworkFailure(error)) reportNetworkFailure();
+			if (isNetworkFailure(error)) {
+				reportNetworkFailure(
+					error.config?.method?.toUpperCase() === 'GET' ? httpClient.getUri(error.config) : undefined,
+					error.config?.signal instanceof AbortSignal ? error.config.signal : undefined,
+				);
+			} else if (error.response && error.config?.method?.toUpperCase() === 'GET') {
+				clearPendingNetworkFailure(httpClient.getUri(error.config));
+			}
 			const context = {
 				method: requestMethod(error.config?.method),
 				path: requestPath(error.config?.url),

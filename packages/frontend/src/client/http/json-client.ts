@@ -1,6 +1,6 @@
 import { HttpRequestFailure } from './request-failure';
 import { readResponseBytes, rejectResponse } from './response-body';
-import { isNetworkFailure, reportNetworkFailure } from './network-failure';
+import { clearPendingNetworkFailure, isNetworkFailure, reportNetworkFailure } from './network-failure';
 
 export interface JsonRequest {
 	method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -81,16 +81,22 @@ export async function requestJson(input: JsonRequest): Promise<{ status: number;
 			body,
 		});
 	} catch (cause) {
-		if (!input.signal?.aborted) reportNetworkFailure();
+		if (!input.signal?.aborted) reportNetworkFailure(input.method === 'GET' ? input.url : undefined, input.signal);
 		throw new HttpRequestFailure(input.signal?.aborted ? 'cancelled' : 'request_failed', 'unknown', { cause });
 	}
 	try {
-		return { status: response.status, body: await readJson(response, input.maxResponseBytes) };
+		const body = await readJson(response, input.maxResponseBytes);
+		if (input.method === 'GET') clearPendingNetworkFailure(input.url);
+		return { status: response.status, body };
 	} catch (cause) {
 		if (input.signal?.aborted) {
 			throw new HttpRequestFailure('cancelled', 'unknown', { cause });
 		}
-		if (isNetworkFailure(cause)) reportNetworkFailure();
+		if (isNetworkFailure(cause)) {
+			reportNetworkFailure(input.method === 'GET' ? input.url : undefined, input.signal);
+		} else if (input.method === 'GET') {
+			clearPendingNetworkFailure(input.url);
+		}
 		throw cause;
 	}
 }
