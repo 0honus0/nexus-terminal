@@ -2092,3 +2092,7 @@ RDP Adapter 将文本从逐字符 SDK 调用改为最多 32 个完整字符一�
 ## 趋势历史不足时固定完整时间窗（2026-10-24）
 
 用户补充指的是时间轴左端。原StatusCharts在历史不足时按observedSpan*1.08拟合并至少2秒，因此选择30分钟仍只显示几秒；现删除拟合，始终以当前指标最新采样为右端、减去完整1/5/10/30分钟为左端，缺失历史留空，不补数据。原time-axis spec同步为完整span严格等于range*60000、真实样本位于窗口内且首次连接左侧留空；原WS时间戳关联、缩放像素、tooltip、图例及关闭保持。两轮源码审核覆盖空/单点/多序列最新值、全部范围、时间降采样与现有测试消费者。根check、前端build、全量格式、原spec静态类型与diff均通过，日志/tmp/nexus-status-time-window-{check,build,format,spec-types}.log；D17不新增/执行行为或E2E，真实各范围左右边界及短/长历史待远程。
+
+## 服务器趋势修复AMD64 dev发布（2026-10-24）
+
+用户授权提交推送发布dev，沿用上一轮AMD64。产品提交`cb693e4c9c43287076d2e40b2ef4ffb9a480fe8c`已推送，[发布40106222288](https://github.com/0honus0/nexus-terminal/actions/runs/40106222288)生产依赖审计、构建及推送成功。`ghcr.io/0honus0/nexus-terminal:dev`清单digest为`sha256:ed932df1cff65efe9abb0dd81431b4b96fb36f2b48919e899c2b62aeb292bc49`，包含linux/amd64及attestation；`sha-cb693e4c9c43`配置核对amd64/linux、revision与产品SHA一致。发布观察/tmp/nexus-status-trend-dev-amd-publish.log，配置/tmp/nexus-status-trend-published-config.json。仅发布，未部署或重启远端。前序静态检查通过，现有E2E源码已同步但本次不声称完整远程E2E通过；收尾提交仅补文档。
