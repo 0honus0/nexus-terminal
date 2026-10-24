@@ -134,6 +134,10 @@ Memory 列表通过 Shared 可选 threadId → HTTP 白名单投影 → Service 
 
 执行设置正式前端已消费独立四HTTP及完整Shared响应codec；独立 Profile 类型、HTTP/持久文档、前端编辑与模型目录请求全部删除。Child 继承 Root 冻结设置，Shared 最大请求容量同时约束 SQL CHECK 和持久解码。业务准入、实际工具集合、版本、占用及确认期限仍归ExecutionService和原事务；本批没有将应用类型下沉Shared或Adapter。完整Agent前端仍待后续迁移。
 
+### Shell 启动探测与提示符 Hook
+
+NativeShellIntegration 在首个终端附件开放输入前，用同一次隐藏命令完成PID/种类探测与Bash/Zsh提示符Hook安装；Shell专用语法仅在识别后执行固定引号内的脚本，不把Bash数组语法交给其它Shell解析。避免两次readline提交之间切换echo及产生额外提示符。Setup唯一持有start/end及部分marker缓存、期限和关闭拒绝；输出仍在journal/WS之前剥离随机内部marker及命令回显，不按提示符正文去重、不裁剪普通登录空行。原currentDirectory、排队cd、用户输入后禁止新探测与不支持Shell拒绝契约保持，行为验证见testing。
+
 ## 2. 子功能与目录
 
 `runs/model/run-tool-types.ts` 是操作的内部类型 owner，`run-tool-model.ts` 逐字段转换存储命令/结果并映射失败；`runs/storage/run-tool-storage.ts` 定义持久任务；`runs/adapters/sqlite/run-tool-{schema,row,sql,events}.ts` 独占 DDL、行解码、CAS 和状态事件。私有参数/结果预算归 runs/run-tool-limits.ts，不预建无人消费的 Shared DTO。

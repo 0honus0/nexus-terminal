@@ -1,5 +1,11 @@
 # Nexus Terminal E2E
 
+## 远程40089588771后继修复与dev发布（2026-10-24，进行中）
+
+原59c27e45远程失败四项：notification-settings的GET网络故障立即Toast断言与现10秒宽限不一致；mobile/ssh-workspace仍期望关闭监控即stop、短时重开再start，与30秒订阅复用不一致；suspend-resume-ui仍断言挂起/恢复为绿色，与人工已确认蓝色不一致；真实PTY初始echo关闭时首屏多一个提示符。日志 `/tmp/nexus-e2e-40089588771-failed.log`、shard3诊断 `/tmp/nexus-e2e-40089588771-shard3`。最新62e776a0远程40091199668仍运行，结果另核。
+
+前三类调整测试按当前产品行为验：蓝色仍搭配真实connected/所有权确认；监控同时验短切无stop/start、闲置超过30秒后stop及重开start和真实CPU数据；网络持续故障等待恢复宽限后再核对驻留Toast，原输入与窄屏断言保留。SSH Key读取失败场景同步宽限，DELETE失败仍立即提示。PTY在实际Platform owner把PID探测和Hook安装合成一次隐藏提交，避免中途恢复echo后第二次readline产生额外提示符，不改前端渲染与普通输出过滤；既有两类真实PTY与用户空行断言保留。两轮源码审核覆盖合并后marker/超限/关闭/并发探测/输入围栏、其它Shell语法隔离与固定eval、历史清理、正常/缺失Hook、三类测试原功能断言和真实数据关联。根check、双端build、全量format:all:check、五份相关spec静态类型及diff通过，日志 `/tmp/nexus-e2e-resume-{check,build,format,types}.log`；新SHA远程待验，按D17不运行本地行为测试。
+
 ## 手机后台恢复网络提示（2026-10-24，行为待远程）
 
 源码发现挂起目录WS自动重连的首次网络失败无条件触发全局驻留Toast，GET传输失败也与写入失败共用立即通知；传输状态轮询缺少文档可见性/在线状态围栏。现由network-failure按完整GET地址及目录订阅实例独立登记待通知，前台10秒仍未恢复才提示，同地址成功读取/目录快照/原signal撤销取消待提示；隐藏暂停、恢复重计时，timer实例/修订及过期时差保护冻结后早于visibilitychange到达的旧回调。仅GET使用宽限，非GET、业务拒绝、协议错误和原未知写入围栏保持；未增加HTTP自动重试，也不清除已显示的其它错误。

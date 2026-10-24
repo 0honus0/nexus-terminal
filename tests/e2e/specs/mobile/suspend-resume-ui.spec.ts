@@ -457,7 +457,7 @@ test('mobile suspended catalog refreshes promptly after the immediate suspend ha
 		await page.getByText('Suspend Session', { exact: true }).click();
 		await expect(tab).toHaveCount(1);
 		await expect(tab).toHaveAttribute('data-session-state', 'connected');
-		await expect(tab.locator(':scope > span.rounded-full')).toHaveClass(/\bbg-green-500\b/);
+		await expect(tab.locator(':scope > span.rounded-full')).toHaveClass(/\bbg-blue-500\b/);
 		await tab.getByRole('button', { name: 'Close Tab', exact: true }).click();
 		await expect(tab).toHaveCount(0);
 
@@ -1100,7 +1100,7 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
 
 		const resumedInput = page.locator('input.command-bar-input');
 		await expect(resumedTab).toHaveAttribute('data-session-state', 'connected');
-		await expect(resumedTab.locator(':scope > span.rounded-full')).toHaveClass(/\bbg-green-500\b/);
+		await expect(resumedTab.locator(':scope > span.rounded-full')).toHaveClass(/\bbg-blue-500\b/);
 		await resumedInput.fill('printf \'AFTER_RESUME=%s\\n\' "$PWD"');
 		await resumedInput.press('Enter');
 		await expect.poll(async () => rows.innerText(), { timeout: 20_000 }).toContain('AFTER_RESUME=');

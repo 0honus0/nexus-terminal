@@ -255,7 +255,7 @@ test('notification settings empty and error states stay within a narrow viewport
 		page
 			.locator('.ui-notification[data-kind="error"]')
 			.filter({ hasText: 'The connection is unstable or the service is unavailable.' }),
-	).toBeVisible();
+	).toBeVisible({ timeout: 15_000 });
 	await expect(settings.getByRole('button', { name: 'Add Notification Channel', exact: true })).toHaveCount(0);
 	await expect(settings.getByRole('button', { name: 'Refresh and review', exact: true })).toBeEnabled();
 	const errorMetrics = await page.evaluate(() => ({

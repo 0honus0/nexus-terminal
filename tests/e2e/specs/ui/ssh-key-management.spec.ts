@@ -301,7 +301,7 @@ test('SSH key selector and manager surface key-list loading failures without ove
 		page
 			.locator('.ui-notification[data-kind="error"]')
 			.filter({ hasText: 'The connection is unstable or the service is unavailable.' }),
-	).toBeVisible();
+	).toBeVisible({ timeout: 15_000 });
 	await expect
 		.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
 		.toBeLessThanOrEqual(1);

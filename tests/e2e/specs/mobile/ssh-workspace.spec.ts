@@ -118,11 +118,24 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
 
 		await modal.getByRole('button', { name: 'Close', exact: true }).click();
 		await expect(modal).toBeHidden();
-		await expect
-			.poll(() => countStatusControls('status.stop'), { timeout: 15_000 })
-			.toBeGreaterThan(stopsBeforeOpen);
+		expect(countStatusControls('status.stop')).toBe(stopsBeforeOpen);
 
 		const startsBeforeReopen = countStatusControls('status.start');
+		await page.getByRole('button', { name: 'Status Monitor', exact: true }).click();
+		await expect(modal).toBeVisible();
+		expect(countStatusControls('status.start')).toBe(startsBeforeReopen);
+		await expect(modal.locator('.status-monitor').getByRole('button', { name: /^CPU / })).toHaveAccessibleName(
+			/CPU 50\.0%/,
+			{
+				timeout: 15_000,
+			},
+		);
+		await modal.getByRole('button', { name: 'Close', exact: true }).click();
+		await expect(modal).toBeHidden();
+		// The subscription survives a short close/reopen, then stops after its idle window.
+		await expect
+			.poll(() => countStatusControls('status.stop'), { timeout: 35_000 })
+			.toBeGreaterThan(stopsBeforeOpen);
 		await page.getByRole('button', { name: 'Status Monitor', exact: true }).click();
 		await expect(modal).toBeVisible();
 		await expect
@@ -130,9 +143,7 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
 			.toBeGreaterThan(startsBeforeReopen);
 		await expect(modal.locator('.status-monitor').getByRole('button', { name: /^CPU / })).toHaveAccessibleName(
 			/CPU 50\.0%/,
-			{
-				timeout: 15_000,
-			},
+			{ timeout: 15_000 },
 		);
 		await modal.getByRole('button', { name: 'Close', exact: true }).click();
 		await expect(modal).toBeHidden();

@@ -8,7 +8,6 @@ import type {
 } from '../shell-integration-port.js';
 type ShellKind = 'bash' | 'zsh' | 'other';
 interface Setup {
-	kind: 'probe' | 'hook';
 	start: Buffer;
 	end: Buffer;
 	buffer: Buffer;
@@ -87,11 +86,9 @@ class NativeShellIntegration implements ShellIntegrationPort {
 	);
 	private kind: ShellKind = 'other';
 	private atPrompt = false;
-	private ready = false;
 	private closed = false;
 	private setup: Setup | null = null;
 	private probeTask: Promise<void> | null = null;
-	private hookTask: Promise<void> | null = null;
 	private markerRemainder = Buffer.alloc(0);
 	private userInputSeen = false;
 
@@ -185,13 +182,32 @@ class NativeShellIntegration implements ShellIntegrationPort {
 		const start = marker('SHELL_BEGIN');
 		const end = marker('SHELL_END');
 		const historyToken = marker('INTERNAL_PROBE');
+		const functionBody = "__nexus_prompt_marker(){ printf '" + octal(this.promptMarker.toString('ascii')) + "'; };";
+		const bashHook = [
+			functionBody,
+			"if declare -p PROMPT_COMMAND 2>/dev/null | grep -q 'declare -a'; then",
+			'case " ${PROMPT_COMMAND[*]} " in *" __nexus_prompt_marker "*) ;; *) PROMPT_COMMAND+=(__nexus_prompt_marker) ;; esac;',
+			'else',
+			'case ";${PROMPT_COMMAND-};" in *";__nexus_prompt_marker;"*) ;; *) PROMPT_COMMAND="${PROMPT_COMMAND:+$PROMPT_COMMAND;}__nexus_prompt_marker" ;; esac;',
+			'fi;',
+		].join(' ');
+		const zshHook =
+			'autoload -Uz add-zsh-hook 2>/dev/null; ' +
+			functionBody +
+			' add-zsh-hook -d precmd __nexus_prompt_marker 2>/dev/null; add-zsh-hook precmd __nexus_prompt_marker;';
+
+		// Discover and install in one readline submission. Re-enabling echo between
+		// two hidden commands can expose an extra prompt when the shell began with echo off.
 		this.probeTask = this.startSetup(
-			'probe',
 			start,
 			end,
 			[
 				'stty -echo 2>/dev/null;',
 				'if [ -n "${BASH_VERSION-}" ]; then __nexus_kind=bash; elif [ -n "${ZSH_VERSION-}" ]; then __nexus_kind=zsh; else __nexus_kind=other; fi;',
+				'case "$__nexus_kind" in',
+				'bash) eval ' + quote(bashHook) + ' ;;',
+				'zsh) eval ' + quote(zshHook) + ' ;;',
+				'esac;',
 				"printf '" + octal(start) + '%s:%s' + octal(end) + '\' "$$" "$__nexus_kind";',
 				': ' + quote(historyToken) + ';',
 				probeHistoryCleanup(historyToken),
@@ -206,60 +222,17 @@ class NativeShellIntegration implements ShellIntegrationPort {
 	async ensureHook(): Promise<void> {
 		await this.ensureProbe();
 		this.assertOpen();
-		if (this.ready) {
-			return;
-		}
-		if (this.hookTask) {
-			return this.hookTask;
-		}
-		if (this.userInputSeen) {
-			throw new Error('Prompt hook setup unavailable after foreground input');
-		}
 		if (this.kind !== 'bash' && this.kind !== 'zsh') {
 			throw new Error('Shell does not support a prompt-safe directory queue');
 		}
-		const start = marker('HOOK_BEGIN');
-		const end = marker('HOOK_END');
-		const historyToken = marker('INTERNAL_HOOK');
-		const functionBody = "__nexus_prompt_marker(){ printf '" + octal(this.promptMarker.toString('ascii')) + "'; };";
-		const hook =
-			this.kind === 'bash'
-				? [
-						functionBody,
-						"if declare -p PROMPT_COMMAND 2>/dev/null | grep -q 'declare -a'; then",
-						'case " ${PROMPT_COMMAND[*]} " in *" __nexus_prompt_marker "*) ;; *) PROMPT_COMMAND+=(__nexus_prompt_marker) ;; esac;',
-						'else',
-						'case ";${PROMPT_COMMAND-};" in *";__nexus_prompt_marker;"*) ;; *) PROMPT_COMMAND="${PROMPT_COMMAND:+$PROMPT_COMMAND;}__nexus_prompt_marker" ;; esac;',
-						'fi;',
-					].join(' ')
-				: 'autoload -Uz add-zsh-hook 2>/dev/null; ' +
-					functionBody +
-					' add-zsh-hook -d precmd __nexus_prompt_marker 2>/dev/null; add-zsh-hook precmd __nexus_prompt_marker;';
-		this.hookTask = this.startSetup(
-			'hook',
-			start,
-			end,
-			[
-				'stty -echo 2>/dev/null;',
-				hook,
-				"printf '" + octal(start) + 'ok' + octal(end) + "';",
-				': ' + quote(historyToken) + ';',
-				cleanHistory(this.kind, historyToken),
-				'stty echo 2>/dev/null;',
-			].join(' ') + '\r',
-		).finally(() => {
-			this.hookTask = null;
-		});
-		return this.hookTask;
 	}
 
-	private startSetup(kind: Setup['kind'], start: string, end: string, command: string): Promise<void> {
+	private startSetup(start: string, end: string, command: string): Promise<void> {
 		if (this.setup) {
 			throw new Error('Shell integration already initializing');
 		}
 		return new Promise<void>((resolve, reject) => {
 			const setup: Setup = {
-				kind,
 				start: Buffer.from(start, 'ascii'),
 				end: Buffer.from(end, 'ascii'),
 				buffer: Buffer.alloc(0),
@@ -350,7 +323,7 @@ class NativeShellIntegration implements ShellIntegrationPort {
 					this.finishSetup(setup);
 					if (end + setup.end.length > MAX_SETUP_BYTES) {
 						setup.reject(new Error('Shell setup response too large'));
-					} else if (setup.kind === 'probe') {
+					} else {
 						const match = /^(\d+):(bash|zsh|other)$/u.exec(answer);
 						if (
 							!match ||
@@ -364,11 +337,6 @@ class NativeShellIntegration implements ShellIntegrationPort {
 							this.kind = match[2];
 							setup.resolve();
 						}
-					} else if (answer === 'ok') {
-						this.ready = true;
-						setup.resolve();
-					} else {
-						setup.reject(new Error('Prompt integration setup failed'));
 					}
 					// The hidden command consumes the initial prompt without displaying
 					// its echoed Enter. Redraw the following prompt on that same line;
@@ -398,7 +366,6 @@ class NativeShellIntegration implements ShellIntegrationPort {
 				visible.push(data.subarray(cursor, begin));
 			}
 			this.atPrompt = true;
-			this.ready = true;
 			this.options.onPrompt();
 			cursor = begin + this.promptMarker.length;
 			begin = data.indexOf(this.promptMarker, cursor);
