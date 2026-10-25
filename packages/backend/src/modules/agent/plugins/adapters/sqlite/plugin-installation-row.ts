@@ -1,10 +1,7 @@
 import type { SqlRow } from '../../../../../platform/storage/sqlite/worker-types.js';
 import type { StoredPluginInstallation } from '../../storage/plugin-storage.js';
 import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
-import {
-	AGENT_PLUGIN_VERSION_PATTERN,
-	AGENT_PLUGIN_INSTALLATION_STATUSES,
-} from '@nexus-terminal/shared/agent/plugins/values';
+import { isAgentPluginVersion, AGENT_PLUGIN_INSTALLATION_STATUSES } from '@nexus-terminal/shared/agent/plugins/values';
 
 function text(input: unknown): string {
 	if (typeof input !== 'string' || !input) {
@@ -38,7 +35,7 @@ export function pluginInstallationRow(row: SqlRow): StoredPluginInstallation {
 		Buffer.byteLength(definitionId) > 128 ||
 		!/^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9-]*)+$/u.test(definitionId) ||
 		Buffer.byteLength(version) > 64 ||
-		!AGENT_PLUGIN_VERSION_PATTERN.test(version) ||
+		!isAgentPluginVersion(version) ||
 		!/^[a-f0-9]{64}$/u.test(packageHash) ||
 		!/^ed25519:[a-f0-9]{64}$/u.test(publisherKeyId) ||
 		revision < 1 ||

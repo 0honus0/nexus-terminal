@@ -2626,3 +2626,23 @@ structurallyEqual虽可考虑fast-deep-equal（2,049），但当前专门限定J
 两轮复审覆盖：Run/Step写入的text/state分类、Stream Service正文热路径与终态再读、HTTP mapper抽取唯一投影、Shared query/subscribe/ACK/update codec与编码容量、WS订阅先于首读/在途dirty/前发与已接纳游标/背压窗口/ACK超时与停机，以及前端首次完整状态、连续revision、解码后接纳与ACK、重连丢弃未接纳页、后台/切换隔离。额外修正：正文窗口允许多页在途，避免每段阻塞于RTT；已确定成功的变更直接订阅首个完整状态解除该次确认后读取围栏，取消创建后多轮HTTP首屏等待；未知结果不进入此分支。原失效通知驱动的HTTP队列及其专用背景取消代码已移除，没有保留双轨。
 
 静态证据：根check、Shared check/build、Backend/Frontend build、全量format和diff均通过，日志为/tmp/nexus-agent-direct-*。修正了窗口数组的显式空值收窄，以及确认后终态关闭时不额外重建订阅。D17下未新增或运行行为/浏览器/E2E；未重启、提交或推送。真实打字流、后台恢复/断线、延迟/丢ACK、窗口暂停续发、长正文最终页、审批子任务、未知写入及撤销/停机仍待远程。
+
+## 成熟开源模块替代实施（2026-10-25）
+
+用户已授权从简单到复杂实施，并允许破坏性更新、不保留兼容。后续明确暂缓存在设计冲突的替换、取消Zod：本轮只保留TOTP、multipart、版本比较、图片识别与VueUse。HTTP框架与Zod的本轮代码/直接依赖已撤回；不保留试验实现。ACP保持；Dockerode依赖Docker API，而现有能力只有受权SSH命令执行，不能直接等价替代，不新增Docker远端部署前提。遵守H-04–H-09/H-12–H-14、E-01–E-13与D17，不改UI设计、不重启；按最新用户指令，将本地全部变更提交并推送dev。
+
+1. **职责与范围**：成熟库替换算法和技术机制；业务权限、事务、CAS、未知结果、资源准入与生命周期仍由原owner负责。
+2. **子功能与目录**：原platform/security、http-body、images与AI图片Adapter、plugins版本规则、前端foundation/布局/终端/预览的监听机制与release；Shared仅新增公共SemVer规范化，不迁移codec。
+3. **依赖方向**：otplib、Formidable、file-type与fast-xml-parser只在技术边界；node-semver只处理版本，VueUse只处理媒体查询/监听/观察器；应用不接收第三方实例。
+4. **类型与转换**：图片inspect与multipart转异步并同步真实消费者；保留Port与显式mapper。插件版本采用Shared唯一谓词，要求规范小写SemVer、无构建元数据，核心及纯数字预发布标识须在安全整数范围，保留原64字节协议预算；不兼容原超大BigInt版本。发布tag允许去除v前缀，畸形版本不作为更新。
+5. **入口与安装**：otplib@13.5.0、formidable@3.5.4、semver@7.8.5、file-type@22.2.0、fast-xml-parser@5.11.2、@vueuse/core@15.0.0及lockfile；依上轮GitHub来源/Star核对均满足H-14。同步TOTP、四个multipart入口、发布/插件比较、背景与生成图片、实际浏览器观察器消费者。
+6. **数据、事务与并发**：无数据库变更。上传保留route原始总字节限制；Formidable只解析有界内存源，全部onPart由Adapter接管，不创建临时文件、不提前解码文本，成功与失败分别零化原始/中间缓冲。缓存不持业务事实。
+7. **生命周期与失败**：原期限、取消、身份复核、事务及未知围栏保持；Formidable拥有MIME分帧，应用保留part数量、字段名与文件类型要求；SVG不处理实体，仅识别格式不消毒。VueUse观察器由原owner显式stop，gesture仍保持pointerId、位移/尺寸算法和选择状态恢复。
+8. **当前能力与验收**：源码与收口复核完成；最终静态检查结果见testing记录。D17不新增或运行本地行为/E2E；远程待验证认证、上传、版本边界、图片及触控/尺寸恢复，不将编译当实测。
+
+| 审核表   | 入口与判据                                             | 状态                 |
+| -------- | ------------------------------------------------------ | -------------------- |
+| 功能对应 | 五类实际消费者已迁移；取消HTTP/Zod，Docker保留原CLI    | 源码完成             |
+| 职责归属 | 算法/解析/监听归成熟库，业务/资源准入仍归原owner       | 源码已审             |
+| 类型归属 | Port/mapper与Shared版本唯一owner，第三方类型不穿透应用 | 源码已审             |
+| 完成证据 | check、Shared/双端build、全量format/diff及模板样式核对 | 静态通过，行为待远程 |

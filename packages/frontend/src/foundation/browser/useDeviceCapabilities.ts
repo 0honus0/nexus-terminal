@@ -1,4 +1,5 @@
-import { computed, onBeforeUnmount, onMounted, ref, type ComputedRef, type Ref } from 'vue';
+import { useMediaQuery } from '@vueuse/core';
+import { computed, onMounted, ref, type ComputedRef, type Ref } from 'vue';
 
 export interface DeviceCapabilities {
 	isMobile: ComputedRef<boolean>;
@@ -20,40 +21,17 @@ export const isMobileUserAgent = (userAgent: string): boolean => MOBILE_USER_AGE
  */
 export function useDeviceCapabilities(): DeviceCapabilities {
 	const hasTouch = ref(false);
-	const hasCoarsePointer = ref(false);
-	const isNarrowViewport = ref(false);
+	const hasCoarsePointer = useMediaQuery('(pointer: coarse)');
+	const isNarrowViewport = useMediaQuery('(max-width: 767px)');
 	const mobileUserAgent = ref(typeof navigator !== 'undefined' && isMobileUserAgent(navigator.userAgent));
-
-	let coarseQuery: MediaQueryList | null = null;
-	let narrowQuery: MediaQueryList | null = null;
-
-	const refreshStaticCapabilities = (): void => {
-		hasTouch.value = navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
-		mobileUserAgent.value = isMobileUserAgent(navigator.userAgent);
-	};
-
-	const refreshMediaCapabilities = (): void => {
-		hasCoarsePointer.value = coarseQuery?.matches ?? false;
-		isNarrowViewport.value = narrowQuery?.matches ?? false;
-	};
-
 	// A narrow desktop viewport needs the same single-column workspace treatment as a
 	// phone; relying on UA alone collapses every tool into unusable columns at 390px.
 	const isMobile = computed(() => mobileUserAgent.value || isNarrowViewport.value);
 	const supportsTouchInteraction = computed(() => hasTouch.value || hasCoarsePointer.value);
 
 	onMounted(() => {
-		coarseQuery = window.matchMedia('(pointer: coarse)');
-		narrowQuery = window.matchMedia('(max-width: 767px)');
-		refreshStaticCapabilities();
-		refreshMediaCapabilities();
-		coarseQuery.addEventListener('change', refreshMediaCapabilities);
-		narrowQuery.addEventListener('change', refreshMediaCapabilities);
-	});
-
-	onBeforeUnmount(() => {
-		coarseQuery?.removeEventListener('change', refreshMediaCapabilities);
-		narrowQuery?.removeEventListener('change', refreshMediaCapabilities);
+		hasTouch.value = navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
+		mobileUserAgent.value = isMobileUserAgent(navigator.userAgent);
 	});
 
 	return { isMobile, supportsTouchInteraction, hasTouch, hasCoarsePointer, isNarrowViewport };

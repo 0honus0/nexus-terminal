@@ -27,7 +27,7 @@ async function readItems(context: HttpRouteContext, signal: AbortSignal): Promis
 	const bytes = await readBodyBytes(context.request, TARGET_CONNECTION_IMPORT_MULTIPART_MAX_BYTES, signal);
 	let parts: MultipartPart[] = [];
 	try {
-		parts = decodeMultipart(bytes, contentType, 1);
+		parts = await decodeMultipart(bytes, contentType, 1, signal);
 		const file = parts[0];
 		if (
 			parts.length !== 1 ||

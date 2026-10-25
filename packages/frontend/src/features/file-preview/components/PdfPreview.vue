@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { useResizeObserver } from '@vueuse/core';
 	import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { GlobalWorkerOptions, getDocument, type PDFDocumentLoadingTask, type PDFDocumentProxy } from 'pdfjs-dist';
@@ -44,7 +45,7 @@
 	const pinchScale = ref(1);
 	const pinchPreviewPercent = ref<number | null>(null);
 	let loadingTask: PDFDocumentLoadingTask | null = null;
-	let resizeObserver: ResizeObserver | null = null;
+	let resizeObserver: ReturnType<typeof useResizeObserver> | null = null;
 	let desktopQuery: MediaQueryList | null = null;
 
 	const syncDesktop = (): void => {
@@ -525,12 +526,12 @@
 	onMounted(() => {
 		desktopQuery = window.matchMedia('(min-width: 640px)');
 		desktopQuery.addEventListener('change', syncDesktop);
-		resizeObserver = new ResizeObserver(() => {
+		resizeObserver = useResizeObserver(scroller.value, () => {
 			if (!props.active) return;
 			const anchorPage = currentPage.value;
 			if (updateAvailableWidth()) scrollToPage(anchorPage, 'auto');
 		});
-		if (scroller.value) resizeObserver.observe(scroller.value);
+
 		void loadDocument();
 	});
 
@@ -539,7 +540,7 @@
 		if (scrollFrame) cancelAnimationFrame(scrollFrame);
 		if (restoreFrame) cancelAnimationFrame(restoreFrame);
 		if (restoreTimer) window.clearTimeout(restoreTimer);
-		resizeObserver?.disconnect();
+		resizeObserver?.stop();
 		void destroyDocument();
 	});
 </script>

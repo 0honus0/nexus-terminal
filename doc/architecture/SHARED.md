@@ -357,3 +357,7 @@ Provider 协议统一为 chat-completions/responses/images；配置与目录中�
 agent/runs/events持AgentRunSubscription、subscribe初始游标、按序ACK、update/heartbeat判别联合与严格unknown解码。query拒绝未知/重复字段和非十进制版本。update含当前Thread正文增量页及可为null的Run/用量/事件/审批/子任务状态；首帧必须含状态。codec复用原子域解码，核对App/Run/Thread、事件游标/版本、子任务父关联、正文连续码点位置与more含义；revision为连接内连续序号，重连重置，不能代替持久正文/事件游标。
 
 容量归runs/values：命令1KiB；完整输出按原审批8MiB、正文512KiB、事件32KiB、子任务16KiB加8KiB封装合计约8.6MiB；最多16页且总编码字节不超过输出预算的未ACK窗口。达到窗口只暂停发送至确认，不拒绝业务Run。各端严格引用同一命令/帧/待接纳容量，底层WS另留心跳余量。没有新的模型执行或变更命令，消息不含凭据、原始供应商帧或数据库行；推送不能作为授权。
+
+### 公共版本校验
+
+common/version.ts的readComparableVersion使用node-semver解析并规范化版本，拒绝比较器无法精确排序的超大纯数字预发布标识。插件values的isAgentPluginVersion是签名包/目录/安装记录/工具输入的唯一规范小写无metadata校验；原版本正则删除，所有真实消费者同步。发布检查消费同一基础范围，允许在前端处理外部tag的v前缀；畸形版本不触发更新。第三方SemVer对象不出Shared公开函数，仅返回规范字符串或null，不兼容旧超大版本。协议codec保持当前实现，不引入Zod。

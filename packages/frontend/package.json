@@ -41,6 +41,7 @@
     "@tailwindcss/vite": "^4.3.3",
     "@uiw/codemirror-theme-vscode": "^4.25.12",
     "@vscode/iconv-lite-umd": "^0.7.1",
+    "@vueuse/core": "15.0.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-search": "^0.16.0",
     "@xterm/addon-serialize": "^0.14.0",
@@ -59,6 +60,7 @@
     "pinia": "^4.0.3",
     "pino": "catalog:",
     "reka-ui": "^2.10.5",
+    "semver": "7.8.5",
     "splitpanes": "^4.1.2",
     "sql.js": "^1.14.2",
     "tailwindcss": "^4.3.3",
@@ -73,6 +75,7 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "@types/semver": "^7.8.0",
     "@types/sql.js": "^1.4.11",
     "@vitejs/plugin-vue": "^6.0.9",
     "@vue/compiler-sfc": "^3.5.43",

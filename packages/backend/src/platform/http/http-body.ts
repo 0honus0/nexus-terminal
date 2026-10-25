@@ -1,3 +1,5 @@
+import formidable, { multipart } from 'formidable';
+import { Readable } from 'node:stream';
 import type { IncomingMessage } from 'node:http';
 import { HttpInputFailure } from './http-errors.js';
 
@@ -47,100 +49,82 @@ export async function readBodyBytes(request: IncomingMessage, maxBytes: number, 
 	}
 }
 
-function invalid(): never {
-	throw new HttpInputFailure(400, 'invalid_multipart');
-}
-
-/** Strict finite multipart form parser; arbitrary MIME trees and nested multipart are unsupported. */
-export function decodeMultipart(bytes: Buffer, contentType: string, maxParts: number): MultipartPart[] {
-	const match =
-		/^multipart\/form-data\s*;\s*boundary=(?:"([A-Za-z0-9'()+_,\-./:=? ]{1,70})"|([A-Za-z0-9'()+_,\-./:=?]{1,70}))$/iu.exec(
-			contentType,
-		);
-	const boundary = match?.[1] ?? match?.[2];
-	if (!boundary || boundary.endsWith(' ')) {
-		throw new HttpInputFailure(415, 'unsupported_media_type');
-	}
-	const delimiter = Buffer.from('--' + boundary, 'ascii');
-	const separator = Buffer.from('\r\n--' + boundary, 'ascii');
+/** Formidable consumes bounded in-memory input; overriding every part prevents temporary files. */
+export async function decodeMultipart(
+	bytes: Buffer,
+	contentType: string,
+	maxParts: number,
+	signal: AbortSignal,
+): Promise<MultipartPart[]> {
+	const source = Object.assign(Readable.from([bytes]), {
+		headers: { 'content-type': contentType, 'content-length': String(bytes.length) },
+	});
+	const form = formidable({ enabledPlugins: [multipart] });
 	const parts: MultipartPart[] = [];
-	let offset = 0;
-	try {
-		while (true) {
-			if (!bytes.subarray(offset, offset + delimiter.length).equals(delimiter)) {
-				invalid();
-			}
-			offset += delimiter.length;
-			if (bytes.subarray(offset, offset + 2).equals(Buffer.from('--'))) {
-				offset += 2;
-				const tail = bytes.subarray(offset);
-				if (tail.length !== 0 && !tail.equals(Buffer.from('\r\n'))) {
-					invalid();
-				}
-				return parts;
-			}
-			if (!bytes.subarray(offset, offset + 2).equals(Buffer.from('\r\n')) || parts.length >= maxParts) {
-				invalid();
-			}
-			offset += 2;
-			const headerEnd = bytes.indexOf('\r\n\r\n', offset, 'ascii');
-			if (headerEnd < offset || headerEnd - offset > 8192) {
-				invalid();
-			}
-			const headers = new Map<string, string>();
-			const rawHeaders = bytes.subarray(offset, headerEnd);
-			if (rawHeaders.includes(0)) {
-				invalid();
-			}
-			let decodedHeaders: string;
-			try {
-				decodedHeaders = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(rawHeaders);
-			} catch {
-				invalid();
-			}
-			for (const line of decodedHeaders.split('\r\n')) {
-				const header = /^([A-Za-z-]+):[ \t]*([^\r\n]*)$/.exec(line);
-				if (!header || !header[1] || header[2] === undefined || headers.has(header[1].toLowerCase())) {
-					invalid();
-				}
-				const key = header[1].toLowerCase();
-				if (key !== 'content-type' && key !== 'content-disposition') {
-					invalid();
-				}
-				headers.set(key, header[2]);
-			}
-			const disposition =
-				/^form-data;\s*name="([^"\r\n\0]{1,128})"(?:;\s*filename="([^"\r\n\0]{1,1024})")?$/iu.exec(
-					headers.get('content-disposition') ?? '',
-				);
-			if (!disposition?.[1]) {
-				invalid();
-			}
-			offset = headerEnd + 4;
-			let end = bytes.indexOf(separator, offset);
-			// A prefix inside file contents is not a delimiter unless its suffix is valid.
-			while (end >= 0) {
-				const suffix = bytes.subarray(end + separator.length, end + separator.length + 2);
-				if (suffix.equals(Buffer.from('--')) || suffix.equals(Buffer.from('\r\n'))) {
-					break;
-				}
-				end = bytes.indexOf(separator, end + separator.length);
-			}
-			if (end < 0) {
-				invalid();
-			}
-			parts.push({
-				name: disposition[1],
-				filename: disposition[2] ?? null,
-				contentType: headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() ?? null,
-				bytes: Uint8Array.from(bytes.subarray(offset, end)),
-			});
-			offset = end + 2;
+	const owned: Buffer[] = [];
+	let failure: HttpInputFailure | null = null;
+	form.onPart = (part) => {
+		const name = part.name;
+		const filename = part.originalFilename;
+		if (
+			!name ||
+			name.length > 128 ||
+			/[\r\n\0]/u.test(name) ||
+			(filename !== null && (filename.length > 1024 || /[\r\n\0]/u.test(filename)))
+		) {
+			failure ??= new HttpInputFailure(400, 'invalid_multipart');
 		}
+		if (parts.length >= maxParts) {
+			failure ??= new HttpInputFailure(400, 'invalid_multipart');
+			return;
+		}
+		const result: MultipartPart = {
+			name: name ?? '',
+			filename,
+			contentType: part.mimetype?.split(';', 1)[0]?.trim().toLowerCase() ?? null,
+			bytes: new Uint8Array(),
+		};
+		const chunks: Buffer[] = [];
+		parts.push(result);
+		part.on('data', (chunk: unknown) => {
+			if (!Buffer.isBuffer(chunk)) {
+				failure ??= new HttpInputFailure(400, 'invalid_multipart');
+				return;
+			}
+			const copy = Buffer.from(chunk);
+			chunks.push(copy);
+			owned.push(copy);
+		});
+		part.on('end', () => {
+			result.bytes = Buffer.concat(chunks);
+		});
+	};
+	try {
+		signal.throwIfAborted();
+		if (!/^multipart\/form-data(?:\s*;|$)/iu.test(contentType)) {
+			throw new HttpInputFailure(415, 'unsupported_media_type');
+		}
+		// Formidable's documented request integration uses only headers and Readable events.
+		// The finite source intentionally has no socket: parsing must not own or destroy the real response.
+		await form.parse(source as IncomingMessage);
+		signal.throwIfAborted();
+		if (failure) {
+			throw failure;
+		}
+		return parts;
 	} catch (cause) {
 		for (const part of parts) {
 			part.bytes.fill(0);
 		}
-		throw cause;
+		if (cause instanceof HttpInputFailure) {
+			throw cause;
+		}
+		throw new HttpInputFailure(400, 'invalid_multipart', { cause });
+	} finally {
+		source.destroy();
+		for (const chunk of owned) {
+			chunk.fill(0);
+		}
+		bytes.fill(0);
 	}
 }

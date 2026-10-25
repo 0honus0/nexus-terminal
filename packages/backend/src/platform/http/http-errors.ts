@@ -2,8 +2,9 @@ export class HttpInputFailure extends Error {
 	constructor(
 		readonly status: number,
 		readonly code: string,
+		options?: ErrorOptions,
 	) {
-		super(code);
+		super(code, options);
 	}
 }
 

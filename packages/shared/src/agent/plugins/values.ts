@@ -1,3 +1,5 @@
+import { readComparableVersion } from '../../common/version.js';
+
 import { AGENT_APP_MAX_RESPONSE_BYTES } from '../scope/values.js';
 import { AGENT_GOVERNANCE_MAX_RESPONSE_BYTES } from '../governance/values.js';
 
@@ -41,5 +43,7 @@ export const AGENT_PLUGIN_MAX_CATALOG_BYTES = 8 * 1024 * 1024;
 
 export const AGENT_PLUGIN_MAX_REPOSITORIES = 16;
 
-export const AGENT_PLUGIN_VERSION_PATTERN =
-	/^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[a-z-][a-z0-9-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[a-z-][a-z0-9-]*))*)?$/u;
+/** Signed package versions use canonical lowercase SemVer without build metadata. */
+export function isAgentPluginVersion(value: string): boolean {
+	return /^[0-9a-z.-]+$/u.test(value) && readComparableVersion(value) === value;
+}

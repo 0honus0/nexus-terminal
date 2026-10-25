@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { useResizeObserver } from '@vueuse/core';
 	import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	// UI glyphs must load for plain text too, independently of lazy language contributions.
@@ -333,7 +334,7 @@
 		searchDecorations?.clear();
 	};
 
-	let resizeObserver: ResizeObserver | undefined;
+	let resizeObserver: ReturnType<typeof useResizeObserver> | undefined;
 	let layoutFrame: number | undefined;
 	const appliedFontSize = ref(props.fontSize);
 	let suppress = false;
@@ -444,8 +445,8 @@
 				if (editor) await toggleEditorComment(editor);
 			},
 		});
-		resizeObserver = new ResizeObserver(scheduleLayout);
-		resizeObserver.observe(root.value!);
+		resizeObserver = useResizeObserver(root.value, scheduleLayout);
+
 		void nextTick(scheduleLayout);
 	});
 	watch(
@@ -474,7 +475,7 @@
 	);
 
 	onBeforeUnmount(() => {
-		resizeObserver?.disconnect();
+		resizeObserver?.stop();
 		resizeObserver = undefined;
 		if (layoutFrame !== undefined) cancelAnimationFrame(layoutFrame);
 		layoutFrame = undefined;

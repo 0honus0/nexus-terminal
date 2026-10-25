@@ -1197,7 +1197,7 @@ Shared 的实际预算与入口见 USAGE；字体、颜色、图片基础值/容
 
 HTML 库保持在 appearance 子功能：service/html-theme-service 管理来源/准入/覆盖政策，model/html-theme-model 转换应用、独立 storage 和目录结果；adapters/sqlite 管理文本/修订，adapters/github 解码厂商目录。17 个真实 preset 作为应用常量，无运行时旧 Backend/CWD 依赖。自定义内容与用户级修订表同事务，删除也推进修订，避免按名称删除重建后的旧 CAS 命中。列表只读摘要，不加载全部 HTML 正文；活动 HTML 内容副本独立保存。全产品备份必须包含 preferences_html_themes 和 preferences_html_revisions，而非继续寻找旧 custom_html_theme 文件目录。
 
-远端来源写入经原 AppearanceService CAS，只维护一份 URL/版本。目录查询冻结当前来源，在异步读取后复查原版本；显式 repoUrl 不借用保存源。网络读取经 Model→独立 HtmlThemeCatalog→Github Adapter→Platform BoundedFetch，Platform 不含 GitHub/主题类型或业务 host 策略；应用期限、主机/来源/容量政策留 Preferences。上游增量预算、redirect:error、严格 UTF-8/目录解码、取消/reader 收尾各自确认，技术失败在 Model 映射。ImageInspector 同样只提供格式/hash/字节技术事实，应用 Model 转为 Shared MIME；SVG 签名扫描不执行 XML。Background/HTML 资源释放未确认时停止所属 owner 准入，有界保留因果，不能用任务结束冒充资源已释放。
+远端来源写入经原 AppearanceService CAS，只维护一份 URL/版本。目录查询冻结当前来源，在异步读取后复查原版本；显式 repoUrl 不借用保存源。网络读取经 Model→独立 HtmlThemeCatalog→Github Adapter→Platform BoundedFetch，Platform 不含 GitHub/主题类型或业务 host 策略；应用期限、主机/来源/容量政策留 Preferences。上游增量预算、redirect:error、严格 UTF-8/目录解码、取消/reader 收尾各自确认，技术失败在 Model 映射。ImageInspector 同样只提供格式/hash/字节技术事实，应用 Model 转为 Shared MIME；格式识别使用file-type；SVG经fast-xml-parser识别根节点且关闭实体处理，不消毒或执行内容。Background/HTML 资源释放未确认时停止所属 owner 准入，有界保留因果，不能用任务结束冒充资源已释放。
 
 ### B8 集成与插件当前接线边界
 
@@ -1541,3 +1541,14 @@ Platform AI的ModelStreamProjection消费SDK已解码事件，持有Chat Complet
 6. **数据、事务与并发**：无新表。先订阅再首次读取，写入通知在原存储调用收敛后发出，unknown不重派。正文/状态变化约16ms合并，读取中dirty保持；状态及用量/审批/子任务独立于正文热路径，终态后再读正文并持续至空页。发送游标与客户端已接纳游标分离，连接内按发送游标连续推送，重连从客户端已接纳游标恢复。
 7. **生命周期与失败**：最多16页且累计不超过完整输出预算的未ACK窗口，满额暂停到ACK，容量不是Run失败条件；大状态页等待先前窗口排空，心跳另留1KiB传输缓冲。ACK按序、60秒期限，订阅首帧15秒，心跳15秒/权限复核3秒；心跳不查询Run/正文。关闭取消计时、退订并等在途短读取，RunChanges纳入AgentRequestOwner停机资源，Platform等真实WS排空。隐藏、断线或关闭不取消Run，不重发模型。
 8. **当前能力与验收**：状态/正文/用量/审批/子任务均有直接推送消费者；记忆审核和插件SDK独立订阅保持原行为。命令1KiB，完整输出按审批8MiB、正文512KiB、事件32KiB、子任务16KiB及8KiB封装合计约8.6MiB；客户端单帧/待接纳窗口和后端发送预算同源。源码与静态证据见PLAN/testing；未以编译代替实机弱网、权限/版本撤销、停机及E2E验证。
+
+## 成熟技术库边界
+
+1. **职责与范围**：安全算法、MIME/图片格式识别及版本比较委托成熟库；应用权限、事务和任务政策保留原owner。HTTP路由/WS/维护架构不变，不使用Fastify或Zod替换。
+2. **子功能与目录**：security/adapters/rfc-totp、http/http-body、images/adapters/native-image-inspector与ai/adapters/model-image、Agent plugins版本规则沿原目录实现。
+3. **依赖方向**：otplib/Formidable/file-type/fast-xml-parser仅Adapter消费；semver通过共享版本校验及插件比较消费，不向应用暴露第三方对象。
+4. **类型与转换**：TotpPort维持同步verify；ImageInspector.inspect与MultipartPart解析返回Promise，Model和四个HTTP producer同步await；原MIME/格式投影、失败与白名单不变。
+5. **入口与安装**：Bootstrap沿用原Port安装。TOTP使用20随机字节的Base32、SHA1/6位/30秒/前后30秒容差，now从毫秒转秒；二维码URI由otplib生成。
+6. **数据、事务与并发**：上传先按原route总预算有限读取，Formidable只开启multipart插件；所有onPart都由Adapter接管原始字节，不调用默认文件处理器，无临时磁盘文件。解析原始/中间缓冲零化，返回part归producer清理；备份保留被交接的content。node-semver版本范围同步Shared及全部签名包消费者。
+7. **生命周期与失败**：解析前后复查signal，异常转HttpInputFailure并保留cause；真实请求socket不交给解析器，有界Readable源显式destroy。图片识别异步后仍走原身份/版本/取消准入；SVG关闭实体处理，格式识别不证明内容安全。生成图片继续只接受PNG/JPEG/WebP。
+8. **当前能力与验收**：源码已迁移；静态与远程待验范围见testing。Docker仍通过原MachineCommandExecutor/SSH执行CLI，没有API socket能力，不装Dockerode或更改远端前提。

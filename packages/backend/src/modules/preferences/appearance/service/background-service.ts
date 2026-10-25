@@ -116,7 +116,7 @@ export class BackgroundService {
 		return this.run(actor, signal, async (active) => {
 			const input = await loadInput(active);
 			validateBackgroundUpload(input);
-			const inspection = this.model.inspect(input.bytes);
+			const inspection = await this.model.inspect(input.bytes);
 			if (inspection.mediaType !== input.mediaType) {
 				throw new AppearanceFailure('invalid_input');
 			}

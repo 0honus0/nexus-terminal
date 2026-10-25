@@ -867,9 +867,17 @@
     "./agent/runs/events": {
       "types": "./dist/agent/runs/events.d.ts",
       "default": "./dist/agent/runs/events.js"
+    },
+    "./common/version": {
+      "types": "./dist/common/version.d.ts",
+      "default": "./dist/common/version.js"
     }
   },
   "devDependencies": {
+    "@types/semver": "^7.8.0",
     "typescript": "catalog:node-build"
+  },
+  "dependencies": {
+    "semver": "7.8.5"
   }
 }

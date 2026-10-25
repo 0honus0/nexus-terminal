@@ -73,9 +73,9 @@ export class BackgroundModel {
 		private readonly images: ImageInspector,
 	) {}
 
-	inspect(bytes: Uint8Array): BackgroundInspection {
+	async inspect(bytes: Uint8Array): Promise<BackgroundInspection> {
 		try {
-			const facts = this.images.inspect(bytes);
+			const facts = await this.images.inspect(bytes);
 			return {
 				mediaType: facts.format === null ? null : MEDIA_TYPES[facts.format],
 				sizeBytes: facts.sizeBytes,

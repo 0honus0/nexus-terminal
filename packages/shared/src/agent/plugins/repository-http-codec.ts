@@ -1,4 +1,4 @@
-import { AGENT_PLUGIN_VERSION_PATTERN } from './values.js';
+import { isAgentPluginVersion } from './values.js';
 import { readAgentPluginInstallation } from './http-codec.js';
 import type { AgentPluginRecommended } from './repository-model.js';
 import { agentRecord, agentText, agentInteger, InvalidAgentPayload } from '../http-codec.js';
@@ -69,7 +69,7 @@ export function readAgentPluginRepositorySettings(input: unknown): AgentPluginRe
 
 function version(input: unknown): string {
 	const value = agentText(input, 64);
-	if (!AGENT_PLUGIN_VERSION_PATTERN.test(value)) {
+	if (!isAgentPluginVersion(value)) {
 		throw new InvalidAgentPayload();
 	}
 	return value;

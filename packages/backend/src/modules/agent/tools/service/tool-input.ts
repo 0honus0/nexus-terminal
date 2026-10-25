@@ -1,4 +1,4 @@
-import { AGENT_PLUGIN_VERSION_PATTERN } from '@nexus-terminal/shared/agent/plugins/values';
+import { isAgentPluginVersion } from '@nexus-terminal/shared/agent/plugins/values';
 import { browserInput } from './browser-input.js';
 import { collaborationInput } from './collaboration-tools.js';
 import { RESULT_PAGE_MAX_BYTES } from '../../context/result-rules.js';
@@ -119,7 +119,7 @@ export function toolInput(definition: ToolDefinition, argumentsJson: string): To
 			sha256 = text(value.sha256, 64);
 		if (
 			!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(name) ||
-			!AGENT_PLUGIN_VERSION_PATTERN.test(version) ||
+			!isAgentPluginVersion(version) ||
 			!/^[a-f0-9]{64}$/u.test(sha256)
 		) {
 			throw new AgentFailure('invalid_input');

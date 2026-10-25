@@ -1,3 +1,4 @@
+import { useEventListener } from '@vueuse/core';
 import { nextTick, onScopeDispose, watch } from 'vue';
 import { clampScale, createWheelScaleResolver } from './wheelScale';
 import type { WheelScaleBindingOptions } from './model/wheel-scale-types';
@@ -8,7 +9,6 @@ export function useWheelScale(options: WheelScaleBindingOptions) {
 	let disposed = false;
 	let generation = 0;
 	let pendingRestore: (() => void) | undefined;
-	let removeListener: (() => void) | undefined;
 
 	const normalize = (value: number): number =>
 		Number(clampScale(value, options.min, options.max).toFixed(options.precision ?? 2));
@@ -51,16 +51,12 @@ export function useWheelScale(options: WheelScaleBindingOptions) {
 		if (change) apply(change.next, true, event);
 	};
 
+	useEventListener(options.target, 'wheel', handleWheel, { capture: true, passive: false });
 	const stopTargetWatch = watch(
 		options.target,
-		(target) => {
-			removeListener?.();
-			removeListener = undefined;
+		() => {
 			pendingRestore = undefined;
 			generation++;
-			if (!target) return;
-			target.addEventListener('wheel', handleWheel, { capture: true, passive: false });
-			removeListener = () => target.removeEventListener('wheel', handleWheel, true);
 		},
 		{ immediate: true, flush: 'post' },
 	);
@@ -71,7 +67,6 @@ export function useWheelScale(options: WheelScaleBindingOptions) {
 		pendingRestore = undefined;
 		stopTargetWatch();
 		stopValueWatch();
-		removeListener?.();
 	});
 	return { setScale: (value: number): void => apply(value, true) };
 }

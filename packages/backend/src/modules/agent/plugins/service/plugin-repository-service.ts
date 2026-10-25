@@ -1,9 +1,6 @@
 import { FailureSummary } from '../../../../platform/lifecycle/failure-summary.js';
 import { AgentFailure, isAgentDrainFailure } from '../../agent-failure.js';
-import {
-	AGENT_PLUGIN_VERSION_PATTERN,
-	AGENT_PLUGIN_MAX_REPOSITORIES,
-} from '@nexus-terminal/shared/agent/plugins/values';
+import { isAgentPluginVersion, AGENT_PLUGIN_MAX_REPOSITORIES } from '@nexus-terminal/shared/agent/plugins/values';
 import type { PluginRepositoryModel } from '../model/plugin-repository-model.js';
 import type { PluginService } from './plugin-service.js';
 import type {
@@ -36,7 +33,7 @@ export class PluginRepositoryService {
 		private readonly plugins: PluginService,
 		private readonly productVersion: string,
 	) {
-		if (!AGENT_PLUGIN_VERSION_PATTERN.test(productVersion)) {
+		if (!isAgentPluginVersion(productVersion)) {
 			throw new Error('Invalid installed product version');
 		}
 	}

@@ -551,7 +551,7 @@ use-wheel-scale.ts 管理捕获阶段的非 passive 监听、比例同步、同�
 
 ### 3. 依赖方向
 
-组件从 foundation/interaction 入口使用 useWheelScale，foundation 仅依赖 Vue 和 DOM，不引用 Monaco、xterm、业务 Store 或 HTTP。组件提供必要的技术适配闭包，跨功能不得复制事件绑定和 props 同步。
+组件从 foundation/interaction 入口使用 useWheelScale，foundation 仅依赖 Vue、VueUse 和 DOM，不引用 Monaco、xterm、业务 Store 或 HTTP。组件提供必要的技术适配闭包，跨功能不得复制事件绑定和 props 同步。
 
 ### 4. 类型与转换
 
@@ -661,3 +661,7 @@ AgentAppSurface按当前可见任务的身份与状态变化，将failed/unknown
 use-native-runs经native-run-stream订阅/ws/agent-runs，浏览器原生WebSocket与现有反馈owner持心跳、退避重连和网络恢复。首次/显式核对可HTTP加载，生成和重连续传直接消费Shared update中的正文及可选状态，收到后立即通过既有消息渲染链更新；没有通知驱动的HTTP循环或伪造打字动画。Shared codec先核对完整页面、Thread/Run/App/版本、前后游标及连续revision；mapper建立独立NativeRunUpdate，页面接纳后ACK；已确定成功的变更直接等待首个完整状态解除该次确认后读取围栏，避免创建后多轮HTTP延迟，写入结果未知不进入该分支。
 
 每连接最多16页且累计约8.6MiB未确认窗口；接收/发送游标和页面已接纳游标分别管理，暂停时最多保存该窗口，确认后释放，重新连接只使用页面已接纳游标，ACK发送失败不重放模型。窗口允许多个正文页在途，避免每段都等待一次RTT；大状态页单独排空前序窗口，正文热路径不附带整份审批/子任务。正常只读交互不阻塞正文显示；改变正文游标的显式读取先关闭原流，操作忙时的延迟接纳通过resume继续。隐藏/切换/注销/卸载关闭并隔离晚帧，恢复重新订阅，终态继续收到空页后结束。协议/权限失败保留原错误恢复，心跳不触发HTTP。记忆审核及插件SDK独立订阅保持，UI布局和样式不变。
+
+### 浏览器机制的 VueUse owner
+
+设备能力使用useMediaQuery，保留原767px断点、UA/触摸分类与组合规则。foundation的手势活动目标、viewport与wheel监听由useEventListener注册和释放；pointerId、主指针、方向/倍率、起点位移、尺寸限值、滚动快照和持久化仍由原交互owner决定，不采用通用drag默认行为。Workspace、终端、编辑/预览、文件列表及Agent的ResizeObserver使用useResizeObserver，保留原测量回调和显式stop点，异步建立/切换/卸载仍由原消费者清理。sandbox iframe内的独立脚本不依赖VueUse，继续使用隔离环境的浏览器API。UI模板/样式/尺寸/布局不变；本轮仅静态检查，触控与后台恢复待远程回归。

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { useResizeObserver } from '@vueuse/core';
 	import { onBeforeUnmount, nextTick, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { Terminal } from '@xterm/xterm';
@@ -14,7 +15,7 @@
 	let generation = 0;
 	let terminal: Terminal | null = null;
 	let handle: RemoteTerminalHandle | null = null;
-	let resizeObserver: ResizeObserver | null = null;
+	let resizeObserver: ReturnType<typeof useResizeObserver> | null = null;
 	const pendingRenders = new Set<() => void>();
 	let openingAbort: AbortController | null = null;
 	let destroyed = false;
@@ -44,7 +45,7 @@
 		handle = null;
 		active.value = false;
 		connecting.value = false;
-		resizeObserver?.disconnect();
+		resizeObserver?.stop();
 		resizeObserver = null;
 		// xterm is permitted to discard pending write callbacks on dispose.
 		// Resolve transport-owned render work first so EOF cleanup cannot hang.
@@ -88,7 +89,7 @@
 					failureFor(current, error);
 				}
 			});
-			const observer = new ResizeObserver(() => {
+			const observer = useResizeObserver(host.value, () => {
 				if (generation !== current || !handle) {
 					return;
 				}
@@ -100,7 +101,6 @@
 				}
 			});
 			resizeObserver = observer;
-			observer.observe(host.value);
 
 			const opened = await openRemoteTerminal(
 				{ targetId: props.targetId, columns: term.cols, rows: term.rows, term: 'xterm-256color' },

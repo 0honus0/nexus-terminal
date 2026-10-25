@@ -1,6 +1,6 @@
 import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
 import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
-import { readBodyBytes, decodeMultipart } from '../../../../platform/http/http-body.js';
+import { readBodyBytes, decodeMultipart, type MultipartPart } from '../../../../platform/http/http-body.js';
 import { InvalidPayload } from '@nexus-terminal/shared/common/http-codec';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
 import {
@@ -144,13 +144,14 @@ async function readImport(context: HttpRouteContext, upstream: AbortSignal): Pro
 	};
 
 	context.response.on('close', disconnected);
+	let parts: MultipartPart[] = [];
 	try {
 		const type = context.request.headers['content-type'];
 		if (typeof type !== 'string') {
 			throw new ThemeFailure('unsupported_media_type');
 		}
 		const bytes = await readBodyBytes(context.request, TERMINAL_THEME_MULTIPART_MAX_BYTES, active);
-		const parts = decodeMultipart(bytes, type, 2);
+		parts = await decodeMultipart(bytes, type, 2, active);
 		const file = parts.find((part) => part.name === 'themeFile');
 		const name = parts.find((part) => part.name === 'name');
 		if (file && file.bytes.byteLength > TERMINAL_THEME_IMPORT_MAX_BYTES) {
@@ -191,6 +192,9 @@ async function readImport(context: HttpRouteContext, upstream: AbortSignal): Pro
 		const code = codeFor(cause);
 		throw new ThemeFailure(active.aborted && code === 'internal_failure' ? 'unavailable' : code, { cause });
 	} finally {
+		for (const part of parts) {
+			part.bytes.fill(0);
+		}
 		clearTimeout(timer);
 		context.response.off('close', disconnected);
 	}

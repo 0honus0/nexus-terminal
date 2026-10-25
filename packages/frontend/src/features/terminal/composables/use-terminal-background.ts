@@ -1,3 +1,4 @@
+import { useResizeObserver } from '@vueuse/core';
 import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch, type Ref } from 'vue';
 
 interface TerminalBackgroundOptions {
@@ -49,10 +50,8 @@ export function useTerminalBackground(options: TerminalBackgroundOptions) {
 	watch(
 		[options.container, frame, options.html, options.active, viewActive],
 		([container, target], _previous, onCleanup) => {
-			const observer = new ResizeObserver(sync);
-			if (container) observer.observe(container);
-			if (target) observer.observe(target);
-			onCleanup(() => observer.disconnect());
+			const observer = useResizeObserver([container, target], sync);
+			onCleanup(observer.stop);
 			refresh();
 		},
 		{ flush: 'post' },

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { useResizeObserver } from '@vueuse/core';
 	import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 	import { UiButton, UiCheckbox, UiEmptyState, UiLoadingState, UiInlineNotice } from '@/foundation/ui';
 	import { useI18n } from 'vue-i18n';
@@ -47,8 +48,8 @@
 	type AgentConfigControl = 'model' | 'reasoning' | 'target';
 	const selectedConfig = ref<AgentConfigControl>('model');
 	let applyingThreadSelection = false;
-	let layoutObserver: ResizeObserver | null = null;
-	let transcriptObserver: ResizeObserver | null = null;
+	let layoutObserver: ReturnType<typeof useResizeObserver> | null = null;
+	let transcriptObserver: ReturnType<typeof useResizeObserver> | null = null;
 	let transcriptFrame: number | null = null;
 
 	onMounted(() => {
@@ -56,17 +57,16 @@
 			return;
 		}
 		threadsOverlay.value = layoutRoot.value.clientWidth <= 760;
-		layoutObserver = new ResizeObserver((entries) => {
+		layoutObserver = useResizeObserver(layoutRoot.value, (entries) => {
 			const entry = entries[0];
 			if (entry) {
 				threadsOverlay.value = entry.contentRect.width <= 760;
 			}
 		});
-		layoutObserver.observe(layoutRoot.value);
 	});
 	onBeforeUnmount(() => {
-		layoutObserver?.disconnect();
-		transcriptObserver?.disconnect();
+		layoutObserver?.stop();
+		transcriptObserver?.stop();
 		if (transcriptFrame !== null) cancelAnimationFrame(transcriptFrame);
 	});
 
@@ -429,10 +429,9 @@
 	watch(
 		scroller,
 		(element) => {
-			transcriptObserver?.disconnect();
+			transcriptObserver?.stop();
 			if (!element) return;
-			transcriptObserver = new ResizeObserver(handleTranscriptResize);
-			transcriptObserver.observe(element);
+			transcriptObserver = useResizeObserver(element, handleTranscriptResize);
 		},
 		{ flush: 'post' },
 	);

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-	import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+	import { useResizeObserver } from '@vueuse/core';
+	import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 
 	const props = withDefaults(
 		defineProps<{
@@ -18,7 +19,8 @@
 	const hasOverflow = computed(() => contentWidth.value > viewportWidth.value + 1);
 
 	let observedTarget: HTMLElement | null = null;
-	let resizeObserver: ResizeObserver | null = null;
+	const observedElements = shallowRef<Array<HTMLElement | SVGElement>>([]);
+	let resizeObserver: ReturnType<typeof useResizeObserver> | null = null;
 	let mutationObserver: MutationObserver | null = null;
 	let refreshFrame = 0;
 	let previousTouchAction = '';
@@ -118,8 +120,21 @@
 	};
 
 	const observeTargetChildren = () => {
-		if (!resizeObserver || !observedTarget) return;
-		for (const child of Array.from(observedTarget.children)) resizeObserver.observe(child);
+		const next = observedTarget
+			? [
+					observedTarget,
+					...Array.from(observedTarget.children).filter(
+						(child): child is HTMLElement | SVGElement =>
+							child instanceof HTMLElement || child instanceof SVGElement,
+					),
+				]
+			: [];
+		if (
+			next.length !== observedElements.value.length ||
+			next.some((element, index) => element !== observedElements.value[index])
+		) {
+			observedElements.value = next;
+		}
 	};
 
 	const detachTarget = () => {
@@ -133,9 +148,10 @@
 			observedTarget.style.overscrollBehaviorX = previousOverscrollBehaviorX;
 		}
 		window.removeEventListener('resize', queueRefresh);
-		resizeObserver?.disconnect();
+		resizeObserver?.stop();
 		mutationObserver?.disconnect();
 		resizeObserver = null;
+		observedElements.value = [];
 		mutationObserver = null;
 		touchGesture = null;
 		observedTarget = null;
@@ -160,8 +176,7 @@
 		target.addEventListener('touchcancel', clearTargetTouchGesture, { passive: true });
 		window.addEventListener('resize', queueRefresh, { passive: true });
 
-		resizeObserver = new ResizeObserver(queueRefresh);
-		resizeObserver.observe(target);
+		resizeObserver = useResizeObserver(observedElements, queueRefresh);
 		observeTargetChildren();
 
 		mutationObserver = new MutationObserver(() => {

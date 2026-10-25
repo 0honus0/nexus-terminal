@@ -7,5 +7,5 @@ export interface ImageFacts {
 }
 
 export interface ImageInspector {
-	inspect(bytes: Uint8Array): ImageFacts;
+	inspect(bytes: Uint8Array): Promise<ImageFacts>;
 }

@@ -1,3 +1,4 @@
+import { fileTypeFromBuffer } from 'file-type';
 import { MODEL_IMAGE_MAX_BYTES, ModelNetworkFailure } from '../model-port.js';
 import type { ModelImageResult } from '../model-port.js';
 
@@ -10,7 +11,7 @@ function record(value: unknown): Record<string, unknown> | null {
 }
 
 /** Never fetch provider-returned URLs or accept executable image formats. */
-export function decodeModelImage(raw: unknown): ModelImageResult {
+export async function decodeModelImage(raw: unknown): Promise<ModelImageResult> {
 	const envelope = record(raw);
 	if (!envelope || (envelope.error !== undefined && envelope.error !== null)) {
 		throw new ModelNetworkFailure('response_invalid');
@@ -33,14 +34,9 @@ export function decodeModelImage(raw: unknown): ModelImageResult {
 	if (content.byteLength > MODEL_IMAGE_MAX_BYTES) {
 		throw new ModelNetworkFailure('too_large');
 	}
-	let mediaType: ModelImageResult['mediaType'];
-	if (content.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
-		mediaType = 'image/png';
-	} else if (content[0] === 255 && content[1] === 216 && content[2] === 255) {
-		mediaType = 'image/jpeg';
-	} else if (content.toString('ascii', 0, 4) === 'RIFF' && content.toString('ascii', 8, 12) === 'WEBP') {
-		mediaType = 'image/webp';
-	} else {
+	const detected = await fileTypeFromBuffer(content);
+	const mediaType = detected?.mime;
+	if (mediaType !== 'image/png' && mediaType !== 'image/jpeg' && mediaType !== 'image/webp') {
 		throw new ModelNetworkFailure('response_invalid');
 	}
 	return { bytes: content, mediaType };

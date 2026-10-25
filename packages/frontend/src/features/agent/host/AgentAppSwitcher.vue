@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { useResizeObserver } from '@vueuse/core';
 	import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiButton, UiSearchInput } from '@/foundation/ui';
@@ -20,7 +21,7 @@
 	 * for one frame). Nothing is painted until the real measurement lands.
 	 */
 	const positioned = ref(false);
-	let hubResizeObserver: ResizeObserver | null = null;
+	let hubResizeObserver: ReturnType<typeof useResizeObserver> | null = null;
 
 	// Teleported panel bounds: stay inside the owning Agent Hub window when the
 	// trigger lives inside one, otherwise fall back to the viewport.
@@ -42,12 +43,10 @@
 	};
 
 	const observeHub = () => {
-		if (typeof ResizeObserver === 'undefined') return;
-		hubResizeObserver?.disconnect();
+		hubResizeObserver?.stop();
 		const hub = getHubElement();
 		if (!hub) return;
-		hubResizeObserver = new ResizeObserver(() => positionPanel());
-		hubResizeObserver.observe(hub);
+		hubResizeObserver = useResizeObserver(hub, () => positionPanel());
 	};
 
 	const enabledApps = computed(() => props.apps.filter((app) => app.enabled));
@@ -115,7 +114,7 @@
 		if (!open.value) return;
 		open.value = false;
 		positioned.value = false;
-		hubResizeObserver?.disconnect();
+		hubResizeObserver?.stop();
 		if (restoreFocus) queueMicrotask(() => triggerRef.value?.querySelector<HTMLButtonElement>('button')?.focus());
 	};
 
@@ -143,7 +142,7 @@
 	});
 
 	onBeforeUnmount(() => {
-		hubResizeObserver?.disconnect();
+		hubResizeObserver?.stop();
 		window.removeEventListener('resize', positionPanel);
 		document.removeEventListener('pointerdown', onPointerDown, true);
 		document.removeEventListener('keydown', onKeyDown, true);

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { useResizeObserver } from '@vueuse/core';
 	import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { Terminal } from '@xterm/xterm';
@@ -76,7 +77,7 @@
 	let searchAddon: SearchAddon | undefined;
 	let serializeAddon: SerializeAddon | undefined;
 	let runtimeModes: TerminalRuntimeModeTracker | undefined;
-	let resizeObserver: ResizeObserver | undefined;
+	let resizeObserver: ReturnType<typeof useResizeObserver> | undefined;
 	let disposed = false;
 	let viewActive = true;
 	let interactionGeneration = 0;
@@ -1565,8 +1566,8 @@
 		root.value?.addEventListener('mousemove', handleLocalSelectionMouseMove, true);
 		root.value?.addEventListener('mouseup', recordClipboardGesture, true);
 		document.addEventListener('pointerdown', handleDocumentPointerDown, true);
-		resizeObserver = new ResizeObserver(scheduleContainerResize);
-		resizeObserver.observe(root.value!);
+		resizeObserver = useResizeObserver(root.value, scheduleContainerResize);
+
 		document.addEventListener('visibilitychange', onVisibilityChange);
 		window.addEventListener('pagehide', suspendPresentation);
 		window.addEventListener('pageshow', restorePresentation);
@@ -1651,7 +1652,7 @@
 		document.fonts.removeEventListener('loadingdone', scheduleGeometrySync);
 		if (geometryFrame !== undefined) window.cancelAnimationFrame(geometryFrame);
 		clearTimeout(geometryResizeTimer);
-		resizeObserver?.disconnect();
+		resizeObserver?.stop();
 		for (const stop of cleanup) stop();
 	});
 

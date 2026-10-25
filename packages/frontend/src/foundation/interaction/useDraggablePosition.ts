@@ -1,4 +1,5 @@
-import { onBeforeUnmount, ref, type Ref } from 'vue';
+import { useEventListener } from '@vueuse/core';
+import { computed, onBeforeUnmount, ref, type Ref } from 'vue';
 
 export interface DragPosition {
 	x: number;
@@ -25,12 +26,6 @@ export function useDraggablePosition(options: DraggablePositionOptions) {
 	let offsetY = 0;
 	let previousBodyUserSelect = '';
 
-	const removeWindowListeners = (): void => {
-		window.removeEventListener('pointermove', handlePointerMove);
-		window.removeEventListener('pointerup', stopDragging);
-		window.removeEventListener('pointercancel', stopDragging);
-	};
-
 	const restoreBodySelection = (): void => {
 		document.body.style.userSelect = previousBodyUserSelect;
 	};
@@ -54,7 +49,6 @@ export function useDraggablePosition(options: DraggablePositionOptions) {
 
 		dragging.value = false;
 		activePointerId = null;
-		removeWindowListeners();
 		restoreBodySelection();
 		options.onEnd?.(options.position.value);
 	}
@@ -76,18 +70,19 @@ export function useDraggablePosition(options: DraggablePositionOptions) {
 		document.body.style.userSelect = 'none';
 		event.preventDefault();
 
-		window.addEventListener('pointermove', handlePointerMove);
-		window.addEventListener('pointerup', stopDragging);
-		window.addEventListener('pointercancel', stopDragging);
 		options.onStart?.(options.position.value);
 	};
+
+	const gestureTarget = computed(() => (dragging.value ? window : undefined));
+	useEventListener(gestureTarget, 'pointermove', handlePointerMove);
+	useEventListener(gestureTarget, 'pointerup', stopDragging);
+	useEventListener(gestureTarget, 'pointercancel', stopDragging);
 
 	onBeforeUnmount(() => {
 		const shouldNotifyEnd = dragging.value;
 		dragging.value = false;
 		activePointerId = null;
-		removeWindowListeners();
-		restoreBodySelection();
+		if (shouldNotifyEnd) restoreBodySelection();
 		if (shouldNotifyEnd) options.onEnd?.(options.position.value);
 	});
 

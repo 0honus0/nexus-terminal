@@ -1,4 +1,5 @@
-import { onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue';
+import { useEventListener } from '@vueuse/core';
+import { ref, watch, type Ref } from 'vue';
 import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
 import { useResizeHandle, type ResizeHandleOptions, type ResizeSize } from './useResizeHandle';
 
@@ -97,8 +98,7 @@ export function usePersistentResizablePanel(options: PersistentResizablePanelOpt
 
 	const handleViewportResize = (): void => clampSize();
 
-	onMounted(() => window.addEventListener('resize', handleViewportResize));
-	onBeforeUnmount(() => window.removeEventListener('resize', handleViewportResize));
+	useEventListener(window, 'resize', handleViewportResize);
 
 	watch(
 		() => [options.active?.value ?? true, enabled()] as const,

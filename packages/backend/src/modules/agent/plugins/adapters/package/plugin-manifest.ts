@@ -1,4 +1,4 @@
-import { AGENT_PLUGIN_VERSION_PATTERN } from '@nexus-terminal/shared/agent/plugins/values';
+import { isAgentPluginVersion } from '@nexus-terminal/shared/agent/plugins/values';
 import { AGENT_CAPABILITIES } from '@nexus-terminal/shared/agent/governance/values';
 import type { AgentCapability } from '@nexus-terminal/shared/agent/governance/values';
 import type { StoredPluginManifest } from '../../storage/plugin-storage.js';
@@ -67,7 +67,7 @@ export function pluginManifest(value: unknown): StoredPluginManifest {
 	}
 	const id = text(row.id, 128),
 		version = text(row.version, 64);
-	if (!/^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9-]*)+$/u.test(id) || !AGENT_PLUGIN_VERSION_PATTERN.test(version)) {
+	if (!/^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9-]*)+$/u.test(id) || !isAgentPluginVersion(version)) {
 		throw new Error('Invalid plugin identity');
 	}
 	const capabilities: AgentCapability[] = row.capabilities.map((value) => {

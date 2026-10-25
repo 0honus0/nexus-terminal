@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { useResizeObserver } from '@vueuse/core';
 	import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import {
@@ -209,7 +210,8 @@
 	const isCustomResized = ref(false);
 	const FILE_VIRTUALIZATION_THRESHOLD = 250;
 	const FILE_LIST_OVERSCAN = 12;
-	let listResizeObserver: ResizeObserver | undefined;
+	let listResizeObserver: ReturnType<typeof useResizeObserver> | undefined;
+	let disposed = false;
 	type ColumnKey = 'name' | 'permissions' | 'modified';
 	const minimumColumnWidths: Record<ColumnKey, number> = {
 		name: 80,
@@ -577,37 +579,39 @@
 			() => Boolean(root.value?.getClientRects().length),
 		);
 		if (ownsFilesystemState) await filesystemState.ensureLoaded();
+		if (disposed) return;
 		pathDraft.value = browser.path.value;
-		listResizeObserver = new ResizeObserver((entries) => {
-			for (const entry of entries) {
-				if (entry.target === root.value) {
-					const width = entry.contentRect.width;
-					if (width > 0) listViewportWidth.value = width;
-				} else if (entry.target === listScroller.value) {
-					const height = entry.contentRect.height;
-					if (height > 0) listViewportHeight.value = height;
+		listResizeObserver = useResizeObserver(
+			() => [root.value, listScroller.value],
+			(entries) => {
+				for (const entry of entries) {
+					if (entry.target === root.value) {
+						const width = entry.contentRect.width;
+						if (width > 0) listViewportWidth.value = width;
+					} else if (entry.target === listScroller.value) {
+						const height = entry.contentRect.height;
+						if (height > 0) listViewportHeight.value = height;
+					}
 				}
-			}
-		});
+			},
+		);
 		await nextTick();
+		if (disposed) return;
 		if (root.value) {
 			listViewportWidth.value = root.value.clientWidth || listViewportWidth.value;
-			listResizeObserver.observe(root.value);
 		}
 		if (listScroller.value) {
 			listViewportHeight.value = listScroller.value.clientHeight || listViewportHeight.value;
-			listResizeObserver.observe(listScroller.value);
 		}
 		document.addEventListener('mousedown', handleOutsideHistory);
 	});
 	const stopListScrollerWatch = watch(
 		listScroller,
-		(value, previous) => {
+		(value) => {
 			if (!listResizeObserver) return;
-			if (previous) listResizeObserver.unobserve(previous);
+
 			if (value) {
 				listViewportHeight.value = value.clientHeight || listViewportHeight.value;
-				listResizeObserver.observe(value);
 			}
 		},
 		{ flush: 'post' },
@@ -698,6 +702,7 @@
 	});
 
 	onBeforeUnmount(() => {
+		disposed = true;
 		browser.cancelPrefetch();
 		stopLoadingWatch();
 		if (loadingIndicatorTimer !== undefined) window.clearTimeout(loadingIndicatorTimer);
@@ -713,7 +718,7 @@
 		if (pathHistoryCloseTimer !== undefined) window.clearTimeout(pathHistoryCloseTimer);
 		if (ownsFilesystemState) filesystemState.dispose();
 		stopListScrollerWatch();
-		listResizeObserver?.disconnect();
+		listResizeObserver?.stop();
 		if (activeColumnResize) {
 			activeColumnResize = undefined;
 			window.removeEventListener('pointermove', moveColumnResize);

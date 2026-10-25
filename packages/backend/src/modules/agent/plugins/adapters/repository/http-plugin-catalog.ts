@@ -1,4 +1,4 @@
-import { AGENT_PLUGIN_VERSION_PATTERN } from '@nexus-terminal/shared/agent/plugins/values';
+import { isAgentPluginVersion } from '@nexus-terminal/shared/agent/plugins/values';
 import { createHash } from 'node:crypto';
 import type { BoundedFetch } from '../../../../../platform/network/bounded-fetch.js';
 import { FetchFailure } from '../../../../../platform/network/bounded-fetch.js';
@@ -31,7 +31,7 @@ function text(value: unknown, max: number): string {
 
 function version(value: unknown): string {
 	const result = text(value, 64);
-	if (!AGENT_PLUGIN_VERSION_PATTERN.test(result)) {
+	if (!isAgentPluginVersion(result)) {
 		throw new PluginRepositoryFailure('invalid_catalog');
 	}
 	return result;

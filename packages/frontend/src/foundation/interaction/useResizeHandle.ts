@@ -1,4 +1,5 @@
-import { onBeforeUnmount, ref, type Ref } from 'vue';
+import { useEventListener } from '@vueuse/core';
+import { computed, onBeforeUnmount, ref, type Ref } from 'vue';
 
 export interface ResizeSize {
 	width: number;
@@ -40,12 +41,6 @@ export function useResizeHandle(options: ResizeHandleOptions) {
 
 	const currentSize = (): ResizeSize => ({ width: options.width.value, height: options.height.value });
 
-	const removeWindowListeners = (): void => {
-		window.removeEventListener('pointermove', handlePointerMove);
-		window.removeEventListener('pointerup', stopResize);
-		window.removeEventListener('pointercancel', stopResize);
-	};
-
 	const handlePointerMove = (event: PointerEvent): void => {
 		if (!isResizing.value || event.pointerId !== activePointerId) return;
 
@@ -73,7 +68,6 @@ export function useResizeHandle(options: ResizeHandleOptions) {
 
 		isResizing.value = false;
 		activePointerId = null;
-		removeWindowListeners();
 		document.body.style.userSelect = previousBodyUserSelect;
 		options.onEnd?.(currentSize());
 	}
@@ -91,18 +85,19 @@ export function useResizeHandle(options: ResizeHandleOptions) {
 		document.body.style.userSelect = 'none';
 		isResizing.value = true;
 
-		window.addEventListener('pointermove', handlePointerMove);
-		window.addEventListener('pointerup', stopResize);
-		window.addEventListener('pointercancel', stopResize);
 		options.onStart?.(currentSize());
 	};
+
+	const gestureTarget = computed(() => (isResizing.value ? window : undefined));
+	useEventListener(gestureTarget, 'pointermove', handlePointerMove);
+	useEventListener(gestureTarget, 'pointerup', stopResize);
+	useEventListener(gestureTarget, 'pointercancel', stopResize);
 
 	onBeforeUnmount(() => {
 		const shouldNotifyEnd = isResizing.value;
 		isResizing.value = false;
 		activePointerId = null;
-		removeWindowListeners();
-		document.body.style.userSelect = previousBodyUserSelect;
+		if (shouldNotifyEnd) document.body.style.userSelect = previousBodyUserSelect;
 		if (shouldNotifyEnd) options.onEnd?.(currentSize());
 	});
 

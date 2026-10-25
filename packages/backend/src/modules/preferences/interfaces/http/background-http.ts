@@ -37,43 +37,50 @@ async function readUpload(
 	if (typeof type !== 'string') {
 		throw new AppearanceFailure('unsupported_media_type');
 	}
-	const parts = decodeMultipart(
+	const parts = await decodeMultipart(
 		await readBodyBytes(context.request, BACKGROUND_MULTIPART_MAX_BYTES, signal),
 		type,
 		2,
+		signal,
 	);
-	const file = parts.find(
-		(part) => part.name === (kind === 'page' ? 'pageBackgroundFile' : 'terminalBackgroundFile'),
-	);
-	const version = parts.find((part) => part.name === 'expectedVersion');
-	if (
-		!file ||
-		file.filename === null ||
-		!version ||
-		version.filename !== null ||
-		parts.some((part) => part !== file && part !== version) ||
-		version.bytes.byteLength > 16
-	) {
-		throw new AppearanceFailure('invalid_input');
-	}
-	if (file.bytes.byteLength > BACKGROUND_MAX_BYTES) {
-		throw new AppearanceFailure('limit_exceeded');
-	}
-	const mediaType = BACKGROUND_MEDIA_TYPES.find((type) => type === file.contentType);
-	if (!mediaType) {
-		throw new AppearanceFailure('unsupported_media_type');
-	}
-	let rawVersion: string;
 	try {
-		rawVersion = new TextDecoder('utf-8', { fatal: true }).decode(version.bytes);
-	} catch (cause) {
-		throw new AppearanceFailure('invalid_input', { cause });
+		const file = parts.find(
+			(part) => part.name === (kind === 'page' ? 'pageBackgroundFile' : 'terminalBackgroundFile'),
+		);
+		const version = parts.find((part) => part.name === 'expectedVersion');
+		if (
+			!file ||
+			file.filename === null ||
+			!version ||
+			version.filename !== null ||
+			parts.some((part) => part !== file && part !== version) ||
+			version.bytes.byteLength > 16
+		) {
+			throw new AppearanceFailure('invalid_input');
+		}
+		if (file.bytes.byteLength > BACKGROUND_MAX_BYTES) {
+			throw new AppearanceFailure('limit_exceeded');
+		}
+		const mediaType = BACKGROUND_MEDIA_TYPES.find((type) => type === file.contentType);
+		if (!mediaType) {
+			throw new AppearanceFailure('unsupported_media_type');
+		}
+		let rawVersion: string;
+		try {
+			rawVersion = new TextDecoder('utf-8', { fatal: true }).decode(version.bytes);
+		} catch (cause) {
+			throw new AppearanceFailure('invalid_input', { cause });
+		}
+		if (!/^[1-9]\d*$/u.test(rawVersion)) {
+			throw new AppearanceFailure('invalid_input');
+		}
+		const fields = readBackgroundUploadFields({ expectedVersion: Number(rawVersion) });
+		return { kind, expectedVersion: fields.expectedVersion, bytes: Uint8Array.from(file.bytes), mediaType };
+	} finally {
+		for (const part of parts) {
+			part.bytes.fill(0);
+		}
 	}
-	if (!/^[1-9]\d*$/u.test(rawVersion)) {
-		throw new AppearanceFailure('invalid_input');
-	}
-	const fields = readBackgroundUploadFields({ expectedVersion: Number(rawVersion) });
-	return { kind, expectedVersion: fields.expectedVersion, bytes: Uint8Array.from(file.bytes), mediaType };
 }
 
 function writeChunk(context: HttpRouteContext, chunk: Uint8Array, signal: AbortSignal): Promise<void> {

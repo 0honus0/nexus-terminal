@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { useResizeObserver } from '@vueuse/core';
 	import { computed, nextTick, onBeforeUnmount, onActivated, onDeactivated, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import {
@@ -90,7 +91,7 @@
 	const vncText = ref('');
 	const vncTextFocused = ref(false);
 
-	let resizeObserver: ResizeObserver | undefined;
+	let resizeObserver: ReturnType<typeof useResizeObserver> | undefined;
 	let resizeAnimationFrame: number | undefined;
 	let mobileInputComposing = false;
 	let active = true;
@@ -107,7 +108,7 @@
 				: t('remoteDesktopModal.status.' + next);
 			if (next === 'connected') void nextTick(sendSize);
 			if (next === 'disconnected' || next === 'error') {
-				resizeObserver?.disconnect();
+				resizeObserver?.stop();
 				resizeObserver = undefined;
 				cancelScheduledSize();
 				hideMobileKeyboard();
@@ -216,7 +217,7 @@
 		vncTextFocused.value = false;
 		if (mobileKeyboardInput.value) mobileKeyboardInput.value.value = '';
 		controller.close();
-		resizeObserver?.disconnect();
+		resizeObserver?.stop();
 		resizeObserver = undefined;
 		cancelScheduledSize();
 		hideMobileKeyboard();
@@ -244,9 +245,8 @@
 			props.connection?.id === target.id &&
 			props.connection.type === target.type
 		) {
-			resizeObserver?.disconnect();
-			resizeObserver = new ResizeObserver(sendSize);
-			resizeObserver.observe(host);
+			resizeObserver?.stop();
+			resizeObserver = useResizeObserver(host, sendSize);
 		}
 	};
 

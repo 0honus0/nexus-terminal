@@ -40,7 +40,7 @@ async function readImport(ctx: HttpRouteContext, signal: AbortSignal): Promise<B
 		}
 		const bytes = await readBodyBytes(ctx.request, BACKUP_MULTIPART_MAX_BYTES, signal);
 		body = bytes;
-		const parts = decodeMultipart(bytes, ctx.request.headers['content-type'] ?? '', 2);
+		const parts = await decodeMultipart(bytes, ctx.request.headers['content-type'] ?? '', 2, signal);
 		for (const part of parts) {
 			owned.push(part.bytes);
 		}

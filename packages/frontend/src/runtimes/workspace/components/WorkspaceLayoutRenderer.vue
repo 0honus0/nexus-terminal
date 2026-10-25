@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { useResizeObserver } from '@vueuse/core';
 	import {
 		computed,
 		defineAsyncComponent,
@@ -170,26 +171,25 @@
 	const splitRoot = ref<ComponentPublicInstance | null>(null);
 	const splitInlineSize = ref(0);
 	const splitBlockSize = ref(0);
-	let splitResizeObserver: ResizeObserver | null = null;
+	let splitResizeObserver: ReturnType<typeof useResizeObserver> | null = null;
 
 	const observeSplitSize = (): void => {
-		splitResizeObserver?.disconnect();
+		splitResizeObserver?.stop();
 		splitResizeObserver = null;
 		const element = splitRoot.value?.$el;
 		if (!(element instanceof HTMLElement)) return;
 		splitInlineSize.value = element.clientWidth;
 		splitBlockSize.value = element.clientHeight;
-		splitResizeObserver = new ResizeObserver(([entry]) => {
+		splitResizeObserver = useResizeObserver(element, ([entry]) => {
 			if (!entry) return;
 			splitInlineSize.value = entry.contentRect.width;
 			splitBlockSize.value = entry.contentRect.height;
 		});
-		splitResizeObserver.observe(element);
 	};
 
 	onMounted(observeSplitSize);
 	watch(splitRoot, observeSplitSize, { flush: 'post' });
-	onBeforeUnmount(() => splitResizeObserver?.disconnect());
+	onBeforeUnmount(() => splitResizeObserver?.stop());
 
 	const handleLayoutResize = (payload: SplitpanesResizedPayload): void => {
 		// Splitpanes also emits `resized` while panes register or reconcile. Only an
