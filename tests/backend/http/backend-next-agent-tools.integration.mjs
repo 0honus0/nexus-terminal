@@ -14,7 +14,7 @@ import {
 	validateContextBudget,
 } from '../../../packages/backend/dist/modules/agent/context/context-rules.js';
 import { RunModelStream } from '../../../packages/backend/dist/modules/agent/runs/model/run-model-stream.js';
-import { modelRequest } from '../../../packages/backend/dist/platform/ai/adapters/model-request.js';
+import { chatModelRequest } from '../../../packages/backend/dist/platform/ai/adapters/model-request.js';
 import {
 	ModelNetworkFailure,
 	MODEL_TOOL_MAX_DEFINITIONS,
@@ -70,20 +70,20 @@ await test('B10 tool catalog and conversation budgets preserve their independent
 	)) {
 		assert.ok(['text', 'finished'].includes(event.kind));
 	}
-	assert.ok(JSON.parse(modelRequest(input)).tools.length > 32);
+	assert.ok(chatModelRequest(input).tools.length > 32);
 	const definition = input.tools[0];
 	const catalog = Array.from({ length: MODEL_TOOL_MAX_DEFINITIONS }, (_, index) => ({
 		...definition,
 		name: 'tool_' + index,
 	}));
-	assert.equal(JSON.parse(modelRequest({ ...input, tools: catalog })).tools.length, MODEL_TOOL_MAX_DEFINITIONS);
+	assert.equal(chatModelRequest({ ...input, tools: catalog }).tools.length, MODEL_TOOL_MAX_DEFINITIONS);
 	assert.throws(
-		() => modelRequest({ ...input, tools: [...catalog, { ...definition, name: 'overflow' }] }),
+		() => chatModelRequest({ ...input, tools: [...catalog, { ...definition, name: 'overflow' }] }),
 		(error) => error instanceof ModelNetworkFailure && error.kind === 'response_invalid',
 	);
 	assert.throws(
 		() =>
-			modelRequest({
+			chatModelRequest({
 				...input,
 				messages: [
 					{ role: 'user', content: 'hello' },

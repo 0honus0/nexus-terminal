@@ -1,3 +1,4 @@
+import type { AgentReasoningEffort } from '@nexus-terminal/shared/agent/providers/values';
 import type { AppDeclaration, AgentThread } from './scope-types.js';
 import type { ThreadPage } from './thread-types.js';
 import type { AvailableModel } from '../../providers/model/provider-types.js';
@@ -13,7 +14,12 @@ export type WorkspaceMutation = <T>(work: () => Promise<T>) => Promise<T>;
 export interface WorkspaceRunInput {
 	prompt: string;
 	connectionIds: number[];
-	model: { providerId: string; modelId: string; configurationVersion: number };
+	model: {
+		providerId: string;
+		modelId: string;
+		configurationVersion: number;
+		reasoningEffort?: AgentReasoningEffort;
+	};
 }
 
 export interface WorkspaceApprovalInput {

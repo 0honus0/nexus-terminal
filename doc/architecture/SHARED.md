@@ -51,7 +51,7 @@ packages/shared/src/<domain>/<feature>/
   events.ts          WS/事件契约与必要纯解码
 ```
 
-Shared已建立Access、Targets、Remote、Agent、Preferences、Operations与System契约；正式消费者按功能分别迁移，不能因存在契约就宣称双端完成。子域按业务语义划分，无实际内容不创建空文件。Agent 使用 `agent/scope`（App/Thread）与 `agent/runs`（有限 Run、变更结果及事件分页）；共同安全码、UUID 取值和完整 JSON 字节预算在 `agent/values.ts`，共同错误响应与纯解码在 `agent/http.ts`、`agent/http-codec.ts`。持久事件对象在 runs/model，本批没有 Agent WS，不创建 events。
+Shared已建立Access、Targets、Remote、Agent、Preferences、Operations与System契约；正式消费者按功能分别迁移，不能因存在契约就宣称双端完成。子域按业务语义划分，无实际内容不创建空文件。Agent 使用 `agent/scope`（App/Thread）与 `agent/runs`（有限 Run、变更结果及事件分页）；共同安全码、UUID 取值和完整 JSON 字节预算在 `agent/values.ts`，共同错误响应与纯解码在 `agent/http.ts`、`agent/http-codec.ts`。持久事件对象在 runs/model；runs/events 持有原生 Run 变更订阅。
 
 Remote Files 的 `remote/files` 同时承载只读与 B1 mutation 双端契约：model 保留文件安全对象；http 定义 open/list/stat/read-text 及 write-text/rename/remove/mkdir/rmdir；values 定义路径、目录 metadata、16 MiB UTF-8 文本、完整 JSON wire 预算和安全错误；codec 从 unknown 严格解码。HTTP 路径/条目与 SFTP 一致保留 POSIX 合法的换行、制表符和反斜杠，拒绝 NUL、替换字符和非法 Unicode；路径须绝对，条目名不能包含 `/` 或为 `.`/`..`，不因合法特殊名称使整个目录不可读。files/text-codec 是文件字符串 Unicode 校验的唯一 owner；HTTP、Workspace、Transfers 的纯解码和后端路径政策复用，避免孤立代理字符在 UTF-8 编码中被替换成另一文件名。
 
@@ -341,3 +341,19 @@ pending/running/unknown 的 Root 或 Child 阻止删除，安全失败复用 age
 ## 图片模型协议与可选预算
 
 Provider 协议统一为 chat-completions/responses/images；配置与目录中的 contextWindow/maxOutputTokens 可缺省，已给值必须为正安全整数，双值存在时输出不超过上下文。supportsImageGeneration 表示图片输出能力，与 supportsImageInput 分开；目录匹配不保证网关支持 Images API。协议、能力基础字段归 providers/values，HTTP、workspace、Registry codec 与双端 mapper 同步消费。执行所需文本预算归后端 Run 校验，不在 Shared 填充虚构默认值；内部图像字节、凭据与 model actor 不进入 Shared。图片预览沿认证 Artifact GET 路由交付，不新增任意 URL 或 base64 的聊天协议字段。
+
+### Agent Run 用量摘要
+
+`agent/runs/model.ts` 的 AgentRunUsageView 由认证 HTTP 用量读取与前端共同消费；http-codec 严格解码身份、非负安全整数、报告覆盖和输入/输出成对可空约束，并拒绝总量超出安全整数。无报告必须为 null；模型请求与工具计数独立，不能用预留预算充当实际 Token。
+
+### Agent 思考等级选择
+
+工作区AgentSelectableModel携带reasoningEfforts、可选defaultReasoningEffort及reasoningMandatory，响应解码拒绝重复/未知等级、默认值越界及Images携带思考选项。AgentCreateRunRequest.model可带reasoningEffort，创建和追加共用同一严格解码；Provider配置、工作区列表和Run请求复用providers/http-codec的readAgentOptionalReasoningEffort，其枚举仍唯一归providers/values。后端ModelReference与StoredModelReference各自持有应用/存储字段并逐字段转换，不公开冻结凭据或内部执行对象。
+
+思考字段的可选性在精确record边界按实际自有字段登记：工作区模型的defaultReasoningEffort和Run模型请求的reasoningEffort缺失均合法，其余字段仍必填，未知字段及非法等级仍拒绝；不放宽通用agentRecord，避免影响其它协议。
+
+### Agent Run 直接增量协议
+
+agent/runs/events持AgentRunSubscription、subscribe初始游标、按序ACK、update/heartbeat判别联合与严格unknown解码。query拒绝未知/重复字段和非十进制版本。update含当前Thread正文增量页及可为null的Run/用量/事件/审批/子任务状态；首帧必须含状态。codec复用原子域解码，核对App/Run/Thread、事件游标/版本、子任务父关联、正文连续码点位置与more含义；revision为连接内连续序号，重连重置，不能代替持久正文/事件游标。
+
+容量归runs/values：命令1KiB；完整输出按原审批8MiB、正文512KiB、事件32KiB、子任务16KiB加8KiB封装合计约8.6MiB；最多16页且总编码字节不超过输出预算的未ACK窗口。达到窗口只暂停发送至确认，不拒绝业务Run。各端严格引用同一命令/帧/待接纳容量，底层WS另留心跳余量。没有新的模型执行或变更命令，消息不含凭据、原始供应商帧或数据库行；推送不能作为授权。

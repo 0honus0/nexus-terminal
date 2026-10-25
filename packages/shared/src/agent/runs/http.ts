@@ -1,3 +1,4 @@
+import type { AgentReasoningEffort } from '../providers/values.js';
 import type { AgentRunView, AgentRunEventView, AgentRunStepView, AgentRunStepEventView } from './model.js';
 import type { AgentCreateRunOutcome, AgentCancelRunOutcome } from './values.js';
 
@@ -6,7 +7,12 @@ export interface AgentCreateRunRequest {
 	/** Restricts this Run; selection never grants Agent permission. Empty means no selected targets. */
 	connectionIds: number[];
 	/** Selected configuration must match when the Run is created. */
-	model: { providerId: string; modelId: string; configurationVersion: number };
+	model: {
+		providerId: string;
+		modelId: string;
+		configurationVersion: number;
+		reasoningEffort?: AgentReasoningEffort;
+	};
 }
 
 export interface AgentCancelRunRequest {

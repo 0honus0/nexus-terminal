@@ -2199,3 +2199,75 @@ RDP Adapter 将文本从逐字符 SDK 调用改为最多 32 个完整字符一�
 按D17未新增/运行本地行为、浏览器或E2E。Android Chrome/PWA真机仍需验证：键盘打开时后台→断线→续接→收键盘；重连期间连续触摸；长按/滚动中切后台；中文组合输入、横竖屏与多终端/KeepAlive切换；这些场景不以静态通过代替。
 
 本批根check与前端build通过，日志 /tmp/nexus-mobile-recovery-final-{check,build}.log；全量format:all:check与git diff --check通过，格式日志 /tmp/nexus-mobile-recovery-final-format.log。Android真机未执行，不把上述源码修复称为真机验收通过。
+
+## Agent Token 与快速跳转恢复（2026-10-25）
+
+范围为当前任务及子任务真实用量摘要、输入框状态行和原“回到最新消息”及上一条／下一条入口。两轮源码审核核对了认证与 user/App 范围、单 SQL 快照、成对空用量/整数溢出、Shared 解码与响应身份、Model/HTTP/前端白名单转换、终态后的最终读取、切换/取消围栏及 ResizeObserver/RAF 释放；第二轮补充隐藏 Surface 的滚动事件不覆盖阅读位置。未引入表变更、新轮询或逐步骤拉取。
+
+按 PLAN D17，本轮只做静态检查和构建，不新增或运行行为测试、CDP 或本地 E2E。待远程回归：有/无/部分 usage 的总量及覆盖、图片 Run 不补零、主子任务聚合、历史任务打开与切换无串数据、滚离底部后跳回、异步图片加载/窗口变化/隐藏再显示保持滚动、前后跳转不逐流式片段、首尾禁用和加载历史后的定位、手机点击明细与键盘操作。新接口需要部署新版后端，未自行重启服务。最终静态命令及结果在本节收口记录。
+
+静态证据：`pnpm run check`、`pnpm run build`、`pnpm run format:all:check`、`git diff --check` 均通过。补充前后消息跳转后，重新执行根check及前端build通过，全量格式再次通过；行为验收仍保留上述待远程范围。
+
+## Agent 聊天思考等级恢复（2026-10-25）
+
+源码两轮审核覆盖模型列表→Shared解码→前端选择/意图快照→工作区create/append和直接HTTP→public/register/Service/Model/storage→Provider冻结→实际外呼参数；核对模型切换、缺省/显式区别、无效/未支持/Images覆盖拒绝、强制思考不选none、hash绑定及Child复制父冻结配置。沿用全局Popover/Button及现有文案，不新增自定义样式或数据库结构。
+
+按D17不新增/运行本地行为测试、CDP或E2E。待远程验收：支持模型显示对应等级，普通/Images模型隐藏入口；默认与显式等级对Chat Completions/Responses参数分别生效；create/append与Child保持选择、模型切换清空、未知重试不改变选择、不支持等级拒绝且不产生外呼。Shared构建、根check、双端build、全量格式及diff检查通过；不以源码审核冒充实测。部署需同步更新前后端，未自行重启后端或提交。
+
+## 重启后 Agent 会话加载失败限定诊断（2026-10-25）
+
+用户报告重启后仍失败，针对当前故障只读诊断既有环境：后端进程3007202，api.honus.top。仅通过CDP Network.getCookies取得内存认证供正式HTTP读取使用，不打印/保存凭据、不操作浏览器页面；页面Runtime只读获取未返回，已关闭诊断进程，不改变页面状态。未调用任何写配置/创建Run/模型生成入口，不运行完整浏览器或E2E套件。
+
+真实模型列表含Images和文字模型，两者均没有defaultReasoningEffort；接口200，但原Shared精确record错误地将该可选字段当成必填，readAgentWorkspaceResponse抛InvalidAgentPayload。会话列表200且解码正常。同步发现默认Run请求缺失reasoningEffort也被误拒。修复只按实际存在的可选字段构建精确键集合，保持未知字段、其余必填及坏值拒绝，不放宽通用record。
+
+限定复核：同一真实两模型响应由失败变为解码通过，四个会话列表正常；现存一个Run的usage读取200，Shared解码、Run身份和版本核对通过。仅本地解码默认/none/low/high创建输入均通过并保留选择；未知等级、null及未知字段仍拒绝，没有派发任何Run。源码两轮复核确认create/append共用修复，不修改UI或数据结构。根check、双端build、全量格式及diff检查通过。当前运行后端仍缓存修复前Shared模块，默认请求校验需要用户再次重启后端；未自行重启。
+
+## Agent 文字消息无回复定位与流重放（2026-10-25）
+
+针对用户刚发送的现有测试消息，只读核对Run 5b71860d、会话正文及后端日志：任务创建/模型dispatch已成功，493字节返回后在ModelStreamDecoder的choice检查抛response_invalid，任务进入unknown且只有用户正文，不是发送或会话读取失败。该任务没有自动重试或更改。
+
+本轮限定一次最小真实文字协议请求：沿相同既有Provider/冻结模型，无工具、最大32输出tokens，提示仅要求OK。配置/密钥从现有只读数据库与SecretBox在内存取得，未打印或保存凭据，不修改数据库或业务配置。返回200 SSE、3250字节，包含choice.native_finish_reason和delta.reasoning_content，随后可见正文OK、标准stop与DONE及真实usage（输入34/输出11）。这是本轮新增的唯一外部模型请求，不是完整App/工具E2E。
+
+修复后用同一响应离线按1、73和3250字节分块重放，均得到OK、34/11和stop；思考独占、只有native终态、畸形思考/原生终态类型及未知audio输出仍拒绝。思考数据只计字节上限，不作为回复、历史或工具权限，未知原任务不重放。两轮源码审核覆盖类型/预算/终态/错误及Toast按任务状态变更通知、隐藏不弹出，未更改布局/样式。根check、前后端build、全量格式及diff检查通过；实际App需用户重启后端后新发消息核对，未自行重启或自动派发新Run。临时原始响应已删除。追加只读核对该任务冻结输入：模型deepseek/deepseek-v4.1-flash，Chat Completions，实际reasoning_effort=max；思考片段来自所选推理等级下的供应商流协议，不是提示词要求模型生成特定JSON。
+
+## Agent 供应商响应同类兼容排查（2026-10-25）
+
+本轮按D17仅源码审核、静态检查和编译，不新增/执行行为、浏览器或E2E，不读取凭据、不发外部模型请求、不重启服务。修复六类兼容点：delta.refusal/tool_calls为空占位；合法finish_reason随delta:null结束；reasoning文本别名（与reasoning_content共享累计1MiB预算，不作为正文）；工具调用续帧中id/type/name/function/arguments为null的占位（首帧仍须完整身份，非空身份变化仍拒绝）；Chat Completions重复累计usage保存单调最新快照并于DONE交付一次；模型发现supports_image_generation遗漏白名单。
+
+两轮源码复核覆盖model-request/model-stream/model-tool-stream/model-reasoning/model-image/openai-compatible及RunModelStream/probe/Shared/前端真实消费者：正文/工具和正式终态仍必需；只有思考、非空拒答、错误、畸形工具、累计用量倒退、未知输出或截断继续失败；已知unknown任务不自动重放。usage不逐帧相加，缺失不补零，Responses仍沿原单次usage与续接证据校验，不改变业务/Shared/存储或UI。
+
+静态证据：根check和双端build通过，日志为/tmp/nexus-provider-compat-{check,backend,frontend}.log；全量format:all:check和git diff --check通过，格式日志/tmp/nexus-provider-compat-format.log。当前没有上述新增分支的行为实测证据。待远程回归：上述nullable字段与正常文本/工具组合、累计usage重复/递增/倒退、错误或拒答混入、标准结束缺失、1字节/多帧同chunk、reasoning预算及图片能力发现，分别覆盖模型测试和正式Run。不将前轮真实DeepSeek重放当成本轮新增分支验证。
+
+## OpenAI 官方 Node SDK 替换（2026-10-25）
+
+按用户明确要求和H-14，将平台模型网络入口迁移到openai@7.43.0（官方openai/openai-node，选型时11,240 Star、Apache-2.0）。选型读取OpenAI Docs libraries、Chat Completions/Responses协议及已安装SDK的公开请求/流类型和实现。无API Key工具可用，本轮未读取或打印任何用户密钥，未发起模型调用、未改业务数据或重启。按D17不新增/运行行为、浏览器或本地E2E。
+
+两轮源码复核覆盖：Chat Completions/Responses/Images/发现/probe五入口使用SDK资源方法；模型请求对象使用SDK类型，SSE由SDK Stream.fromSSEResponse解码并保留事件名，不再自行分帧或JSON解析。业务仍只消费原ModelNetworkPort，SDK类型不出Platform；权限/审批/版本/预算/未知任务不变，前端未改。兼容端点保持原路径，匿名调用移除占位Authorization，禁用环境organization/project继承、SDK日志和自动重试，重定向仍拒绝。模型列表仅读取SDK当前页，不消费自动分页；可选created/owned_by/nexus_capabilities为空按缺省处理。
+
+ModelSdkRequest在SDK解码前按需读取并限制原始响应总字节、验证UTF-8，SDK解析后的Projection限制所消费事件/正文/工具/思考及续接；保持命名事件与type关联、真实拒答/未知输出/坏工具/不一致快照拒绝和真实usage只交付一次。SDK吞掉的读取/取消/清理失败由独立原reader owner记录并于close重新抛出；关闭Promise先登记，取消失败仍releaseLock，主失败与清理失败只聚合一次。正式终态在try中确认，清理成功后才yield completed，失败日志不虚报ended成功。同步原工具容量断言使用新的具名SDK请求构造器，保留原功能断言，不新增兼容别名。
+
+明确协议差异：SDK处理DONE并在其后结束消费；业务要求合法finish_reason或response.completed、SDK迭代正常结束和本地清理成功，不再额外自研可见DONE校验。普通事件JSON的128KiB预算在SDK解码后执行，原始注释/分隔符只计完整网络预算；单次流8MiB、正文2MiB、probe512KiB/16 token、模型发现1MiB/1000项和图片响应/字节预算不变。缺失正式终态、只有思考或空正文仍失败。不将编译当作上述新增行为实测。
+
+根pnpm run check、前后端build、全量format:all:check及git diff --check通过，命令日志为/tmp/nexus-openai-sdk-{check,backend,frontend,format}.log；既有工具断言mjs执行node --check，仅检查语法。待远程：正常文字/累计usage/真实拒答/非2xx无自动重试、命名事件错误、CRLF与UTF-8分块、截断/取消/清理失败和容量、Responses工具与加密续接、图片生成和模型发现/匿名端点。部署需安装新依赖并重启后端，未自行执行。前端SSE推送不属于本轮SDK替换。
+
+### Agent Run 变更推送（2026-10-25，源码与静态）
+
+工作区 `dev` / `98fd8aa0`，包含此前未提交的OpenAI SDK迁移，本轮保留ACP和当前UI。新增 `/ws/agent-runs` 仅推送有界失效通知，客户端通过原严格HTTP/Workspace API增量补读；不把通知当持久日志、不将HTTP读取描述为WS正文直传。原生Run的两秒定时器已删除，记忆审核与插件SDK轮询不在本轮范围。
+
+已完成两轮源码链路审核：Run/Step/Tool/Collaboration及审批请求/决策/消费/失效写入通知、先订阅后初始通知、50ms合并与在途dirty、心跳权限复查、慢消费者关闭、停机退订、前端交互取消背景读取、分页追至空页、终态补齐、旧对话结果隔离，以及网络背景读失败暂停/退避重连/原游标补读。Vite既有`/ws/agent`前缀及生产Nginx `/ws/`覆盖新入口；未改变UI模板、样式或交互入口。
+
+执行 `pnpm run check`、`pnpm --filter @nexus-terminal/shared check/build`、Backend/Frontend build、`pnpm run format:all:check`、`git diff --check`；日志 `/tmp/nexus-agent-push-{check,shared,shared-check,backend-build,frontend-build,format}.log`。类型/构建通过；格式初轮发现新Shared codec缺少大括号，修正后重新核对全量格式。静态不证明网络与业务行为通过。
+
+按PLAN D17未新增或运行本地行为、浏览器或E2E，也未重启、提交、推送。部署后仍待验证真实流式回复、超过一页的最终正文/事件、审批与子任务跨端更新、断网时在途读取、后台恢复、切换对话、注销/撤销/版本变化及停机排空。需重启后端并刷新前端才能使用新入口。
+
+### Agent 正文直接WS增量（2026-10-25，替代上一节通知后HTTP方案）
+
+工作区仍为dev/98fd8aa0，包含此前未提交变更。模型→后端使用官方OpenAI SDK流，后端→原生对话现在直接WS交付正文增量及可选状态，取消通知后HTTP补读队列；首次和显式核对HTTP保留。确定成功的新建/追加及其它变更直接等首个完整WS状态确认，不再先做多轮HTTP读取；未知写入不能使用该路径解除围栏。ACP与UI设计保持。
+
+两轮源码复审覆盖新增RunStreamService/内部页类型、RunChanges分类、原HTTP mapper唯一投影抽取、Shared命令/输出/窗口预算及上下文codec、WS起始订阅/正文热路径/终态再读/顺序ACK/缓冲/超时/退出，以及前端接收与已接纳游标分离、连续revision、旧连接隔离、ACK发送失败重连和权限拒绝。窗口最多16页且总编码量不超过约8.6MiB，达到窗口暂停等待ACK，正文多页可在途而非每片等待一次RTT；状态大页等前序排空。提交时各原写入依然是权威，不新增数据库或绕过准入。
+
+执行根pnpm run check、Shared check/build、Backend/Frontend build、pnpm run format:all:check及git diff --check，日志/tmp/nexus-agent-direct-{check,shared,shared-check,backend-build,frontend-build,format}.log。类型、构建、格式及diff通过；首次类型检查发现窗口数组取首项需显式空值收窄，已修正后复跑。此前通知方案的静态结果不代替本版结果。
+
+按PLAN D17没有新增或运行本地行为/浏览器/E2E，也没有重启、提交或推送。待远程核对真实供应商增量到DOM、长输出与最终空页、延迟/丢ACK及窗口暂停继续、断网/前后台/页缓存恢复、未知写入围栏、审批/子任务跨端更新、会话/App撤销及停机。当前静态证据不能证明这些行为已经通过。后端需重启、前端需刷新后才使用新协议。
+
+提交前追加源码复核：重新核对WS准入、正文/状态读取、终态补齐、顺序ACK与窗口、前端接纳游标及旧连接隔离，以及SDK错误和清理路径，未发现新增源码问题。根check与全量格式重新执行，日志为/tmp/nexus-agent-final-review-{check,format}.log；双端构建沿用本版相同源码的上述通过结果。按最新用户指令将全部本地修改提交到dev，不推送、不重启；实机与行为验收仍待远程。

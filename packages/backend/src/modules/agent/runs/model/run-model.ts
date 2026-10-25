@@ -1,3 +1,4 @@
+import { RunChanges } from './run-changes.js';
 import { toPolicyOverrides } from '../../governance/model/governance-model.js';
 import type { PolicyOverrides } from '../../governance/model/governance-types.js';
 import type { ExecutionSettings } from '../../execution/model/execution-types.js';
@@ -22,7 +23,10 @@ import type {
 } from './run-types.js';
 
 export class RunModel {
-	constructor(private readonly storage: RunStorage) {}
+	constructor(
+		private readonly storage: RunStorage,
+		private readonly changes = new RunChanges(),
+	) {}
 
 	ownExecutionTask(work: () => Promise<void>): Promise<void> {
 		try {
@@ -49,47 +53,55 @@ export class RunModel {
 			overrides: PolicyOverrides,
 		) => ExecutionSettings,
 	): Promise<CreateRunResult> {
-		const result = await agentStorage(() =>
-			this.storage.create(
-				{
-					origin:
-						command.origin === null
-							? null
-							: { runId: command.origin.runId, expectedVersion: command.origin.expectedVersion },
-					model: {
-						providerId: command.model.providerId,
-						modelId: command.model.modelId,
-						configurationVersion: command.model.configurationVersion,
+		const result = await this.changes.after(command.userId, command.appId, () =>
+			agentStorage(() =>
+				this.storage.create(
+					{
+						origin:
+							command.origin === null
+								? null
+								: { runId: command.origin.runId, expectedVersion: command.origin.expectedVersion },
+						model: {
+							providerId: command.model.providerId,
+							modelId: command.model.modelId,
+							configurationVersion: command.model.configurationVersion,
+							...(command.model.reasoningEffort === undefined
+								? {}
+								: { reasoningEffort: command.model.reasoningEffort }),
+						},
+						id: command.id,
+						userId: command.userId,
+						appId: command.appId,
+						threadId: command.threadId,
+						inputText: command.prompt,
+						connectionIds: command.connectionIds.map((id) => id),
+						operationKey: command.operationKey,
+						requestHash: command.requestHash,
 					},
-					id: command.id,
-					userId: command.userId,
-					appId: command.appId,
-					threadId: command.threadId,
-					inputText: command.prompt,
-					connectionIds: command.connectionIds.map((id) => id),
-					operationKey: command.operationKey,
-					requestHash: command.requestHash,
-				},
-				(active) =>
-					mayCreateRootRun(active === null ? null : { status: active.status, version: active.version }),
-				(provider, reference) => {
-					const frozen = resolveFrozenModel(fromStoredProvider(provider), {
-						providerId: reference.providerId,
-						modelId: reference.modelId,
-						configurationVersion: reference.configurationVersion,
-					});
-					return frozen === null ? null : toStoredFrozen(frozen);
-				},
-				(current) => authorizeApp({ enabled: current.enabled, declared: current.declared }),
-				(current) => authorizeOrigin(current === null ? null : fromStoredRun(current)),
-				(current, activeRuns, overrides) =>
-					toSettings(
-						freezeExecution(
-							current === null ? null : fromSettings(current),
-							activeRuns,
-							toPolicyOverrides(overrides),
+					(active) =>
+						mayCreateRootRun(active === null ? null : { status: active.status, version: active.version }),
+					(provider, reference) => {
+						const frozen = resolveFrozenModel(fromStoredProvider(provider), {
+							providerId: reference.providerId,
+							modelId: reference.modelId,
+							configurationVersion: reference.configurationVersion,
+							...(reference.reasoningEffort === undefined
+								? {}
+								: { reasoningEffort: reference.reasoningEffort }),
+						});
+						return frozen === null ? null : toStoredFrozen(frozen);
+					},
+					(current) => authorizeApp({ enabled: current.enabled, declared: current.declared }),
+					(current) => authorizeOrigin(current === null ? null : fromStoredRun(current)),
+					(current, activeRuns, overrides) =>
+						toSettings(
+							freezeExecution(
+								current === null ? null : fromSettings(current),
+								activeRuns,
+								toPolicyOverrides(overrides),
+							),
 						),
-					),
+				),
 			),
 		);
 		if (result.status === 'replayed') {
@@ -103,17 +115,19 @@ export class RunModel {
 
 	async cancel(command: CancelRootRunCommand): Promise<CancelRunResult> {
 		// Frozen definition remains immutable even when Run cancellation succeeds.
-		const result = await agentStorage(() =>
-			this.storage.cancel(
-				{
-					userId: command.userId,
-					appId: command.appId,
-					runId: command.runId,
-					expectedVersion: command.expectedVersion,
-					operationKey: command.operationKey,
-					requestHash: command.requestHash,
-				},
-				(run) => decideCancelRootRun({ status: run.status, version: run.version }, command.expectedVersion),
+		const result = await this.changes.after(command.userId, command.appId, () =>
+			agentStorage(() =>
+				this.storage.cancel(
+					{
+						userId: command.userId,
+						appId: command.appId,
+						runId: command.runId,
+						expectedVersion: command.expectedVersion,
+						operationKey: command.operationKey,
+						requestHash: command.requestHash,
+					},
+					(run) => decideCancelRootRun({ status: run.status, version: run.version }, command.expectedVersion),
+				),
 			),
 		);
 		if (result.status === 'replayed') {

@@ -80,7 +80,7 @@ function optionalBoolean(value: unknown): boolean | undefined {
 	return value === undefined ? undefined : boolean(value);
 }
 
-function optionalEffort(value: unknown): (typeof AGENT_REASONING_EFFORTS)[number] | undefined {
+export function readAgentOptionalReasoningEffort(value: unknown): (typeof AGENT_REASONING_EFFORTS)[number] | undefined {
 	if (value === undefined) {
 		return undefined;
 	}
@@ -126,7 +126,7 @@ function model(value: unknown): AgentProviderModelInput {
 						throw new InvalidAgentPayload();
 					}
 					const a = r.reasoningEfforts.map((value) => {
-						const effort = optionalEffort(value);
+						const effort = readAgentOptionalReasoningEffort(value);
 						if (effort === undefined) {
 							throw new InvalidAgentPayload();
 						}
@@ -137,7 +137,7 @@ function model(value: unknown): AgentProviderModelInput {
 					}
 					return a;
 				})();
-	const defaultReasoningEffort = optionalEffort(r.defaultReasoningEffort);
+	const defaultReasoningEffort = readAgentOptionalReasoningEffort(r.defaultReasoningEffort);
 	if (defaultReasoningEffort && !efforts?.includes(defaultReasoningEffort)) {
 		throw new InvalidAgentPayload();
 	}
@@ -521,7 +521,7 @@ export function readAgentDiscoveredModels(v: unknown): AgentDiscoveredModel[] {
 					throw new InvalidAgentPayload();
 				}
 				const efforts = cap.reasoningEfforts.map((value) => {
-					const effort = optionalEffort(value);
+					const effort = readAgentOptionalReasoningEffort(value);
 					if (effort === undefined) {
 						throw new InvalidAgentPayload();
 					}
@@ -533,7 +533,7 @@ export function readAgentDiscoveredModels(v: unknown): AgentDiscoveredModel[] {
 				fields.reasoningEfforts = efforts;
 			}
 			if (cap.defaultReasoningEffort !== undefined) {
-				const effort = optionalEffort(cap.defaultReasoningEffort);
+				const effort = readAgentOptionalReasoningEffort(cap.defaultReasoningEffort);
 				if (!effort || !fields.reasoningEfforts?.includes(effort)) {
 					throw new InvalidAgentPayload();
 				}
@@ -688,7 +688,7 @@ function registryDefaults(value: unknown): AgentRegistryDefaults {
 			throw new InvalidAgentPayload();
 		}
 		reasoningEfforts = row.reasoningEfforts.map((value) => {
-			const effort = optionalEffort(value);
+			const effort = readAgentOptionalReasoningEffort(value);
 			if (effort === undefined) {
 				throw new InvalidAgentPayload();
 			}
@@ -698,7 +698,7 @@ function registryDefaults(value: unknown): AgentRegistryDefaults {
 			throw new InvalidAgentPayload();
 		}
 	}
-	const defaultReasoningEffort = optionalEffort(row.defaultReasoningEffort);
+	const defaultReasoningEffort = readAgentOptionalReasoningEffort(row.defaultReasoningEffort);
 	if (defaultReasoningEffort && !reasoningEfforts?.includes(defaultReasoningEffort)) {
 		throw new InvalidAgentPayload();
 	}

@@ -73,7 +73,7 @@ export function useAgentManagementOperation(
 		if (!scope.isCurrent(signal)) {
 			return;
 		}
-		// Interactive work supersedes polling; an aborted read cannot publish late state.
+		// Interactive work supersedes background reads; an aborted read cannot publish late state.
 		backgroundRequest?.abort();
 		backgroundRequest = options.background ? new AbortController() : null;
 		const requestSignal = backgroundRequest ? AbortSignal.any([signal, backgroundRequest.signal]) : signal;

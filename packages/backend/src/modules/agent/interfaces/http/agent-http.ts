@@ -1,3 +1,4 @@
+import type { AgentRunUsageView } from '@nexus-terminal/shared/agent/runs/model';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
 import { AGENT_APP_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/scope/values';
 import { readAgentAppStateUpdateRequest } from '@nexus-terminal/shared/agent/scope/http-codec';
@@ -65,6 +66,7 @@ type AgentHttpResponse =
 	| AgentAppView[]
 	| AgentAppDefinitionView[]
 	| AgentThreadView
+	| AgentRunUsageView
 	| AgentRunView
 	| AgentCreateRunResponse
 	| AgentCancelRunResponse
@@ -436,6 +438,9 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 					providerId: body.model.providerId,
 					modelId: body.model.modelId,
 					configurationVersion: body.model.configurationVersion,
+					...(body.model.reasoningEffort === undefined
+						? {}
+						: { reasoningEffort: body.model.reasoningEffort }),
 				},
 				operationKey: key,
 			});
@@ -542,6 +547,25 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 		},
 		['after', 'limit'],
 	);
+	add(routes, 'GET', '/apps/:appId/runs/:id/usage', access, async (ctx, userId) => {
+		const path = runPath(ctx);
+		const value = await agent.getUsage(userId, path.appId, path.runId);
+		await deliver(
+			ctx,
+			value === null ? 404 : 200,
+			value === null
+				? { code: 'not_found' }
+				: {
+						runId: value.runId,
+						runVersion: value.runVersion,
+						inputTokens: value.inputTokens,
+						outputTokens: value.outputTokens,
+						reportedModelRequests: value.reportedModelRequests,
+						modelRequests: value.modelRequests,
+						toolExecutions: value.toolExecutions,
+					},
+		);
+	});
 	add(routes, 'GET', '/apps/:appId/runs/:id/steps/:stepIndex', access, async (ctx, userId) => {
 		const path = readAgentRunStepPath({
 			appId: ctx.params.appId,

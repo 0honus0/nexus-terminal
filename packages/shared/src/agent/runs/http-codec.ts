@@ -1,3 +1,4 @@
+import { readAgentOptionalReasoningEffort } from '../providers/http-codec.js';
 import {
 	agentRecord,
 	agentInteger,
@@ -19,7 +20,13 @@ import {
 } from './values.js';
 import { AGENT_MAX_JSON_BODY_BYTES } from '../values.js';
 import { AGENT_PROVIDER_MAX_MODEL_ID_BYTES } from '../providers/values.js';
-import type { AgentRunView, AgentRunEventView, AgentRunStepView, AgentRunStepEventView } from './model.js';
+import type {
+	AgentRunUsageView,
+	AgentRunView,
+	AgentRunEventView,
+	AgentRunStepView,
+	AgentRunStepEventView,
+} from './model.js';
 import type {
 	AgentCreateRunRequest,
 	AgentCancelRunRequest,
@@ -43,7 +50,12 @@ export function readAgentCreateRunRequest(input: unknown): AgentCreateRunRequest
 	if (new Set(connectionIds).size !== connectionIds.length) {
 		throw new InvalidAgentPayload();
 	}
-	const model = agentRecord(fields.model, ['providerId', 'modelId', 'configurationVersion']);
+	if (!isAgentRecord(fields.model)) {
+		throw new InvalidAgentPayload();
+	}
+	const optional = Object.hasOwn(fields.model, 'reasoningEffort') ? ['reasoningEffort'] : [];
+	const model = agentRecord(fields.model, ['providerId', 'modelId', 'configurationVersion', ...optional]);
+	const reasoningEffort = readAgentOptionalReasoningEffort(model.reasoningEffort);
 	return {
 		prompt: agentText(fields.prompt, AGENT_RUN_MAX_PROMPT_BYTES),
 		connectionIds,
@@ -51,6 +63,7 @@ export function readAgentCreateRunRequest(input: unknown): AgentCreateRunRequest
 			providerId: readAgentId(model.providerId),
 			modelId: agentText(model.modelId, AGENT_PROVIDER_MAX_MODEL_ID_BYTES),
 			configurationVersion: agentInteger(model.configurationVersion, 1),
+			...(reasoningEffort === undefined ? {} : { reasoningEffort }),
 		},
 	};
 }
@@ -328,4 +341,36 @@ export function readAgentRunStepEventsResponse(input: unknown): AgentRunStepEven
 		throw new InvalidAgentPayload();
 	}
 	return { items, nextCursor };
+}
+
+export function readAgentRunUsageResponse(input: unknown): AgentRunUsageView {
+	const row = agentRecord(input, [
+		'runId',
+		'runVersion',
+		'inputTokens',
+		'outputTokens',
+		'reportedModelRequests',
+		'modelRequests',
+		'toolExecutions',
+	]);
+	const modelRequests = agentInteger(row.modelRequests, 0);
+	const reportedModelRequests = agentInteger(row.reportedModelRequests, 0, modelRequests);
+	const inputTokens = row.inputTokens === null ? null : agentInteger(row.inputTokens, 0);
+	const outputTokens = row.outputTokens === null ? null : agentInteger(row.outputTokens, 0);
+	if (
+		(inputTokens === null) !== (outputTokens === null) ||
+		(reportedModelRequests === 0) !== (inputTokens === null) ||
+		(inputTokens !== null && outputTokens !== null && !Number.isSafeInteger(inputTokens + outputTokens))
+	) {
+		throw new InvalidAgentPayload();
+	}
+	return {
+		runId: readAgentId(row.runId),
+		runVersion: agentInteger(row.runVersion, 1),
+		inputTokens,
+		outputTokens,
+		reportedModelRequests,
+		modelRequests,
+		toolExecutions: agentInteger(row.toolExecutions, 0),
+	};
 }

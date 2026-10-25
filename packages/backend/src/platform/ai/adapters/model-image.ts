@@ -10,14 +10,12 @@ function record(value: unknown): Record<string, unknown> | null {
 }
 
 /** Never fetch provider-returned URLs or accept executable image formats. */
-export function decodeModelImage(bytes: Uint8Array): ModelImageResult {
-	let raw: unknown;
-	try {
-		raw = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
-	} catch (cause) {
-		throw new ModelNetworkFailure('response_invalid', undefined, { cause });
+export function decodeModelImage(raw: unknown): ModelImageResult {
+	const envelope = record(raw);
+	if (!envelope || (envelope.error !== undefined && envelope.error !== null)) {
+		throw new ModelNetworkFailure('response_invalid');
 	}
-	const data = record(raw)?.data;
+	const data = envelope.data;
 	if (!Array.isArray(data) || data.length !== 1) {
 		throw new ModelNetworkFailure('response_invalid');
 	}

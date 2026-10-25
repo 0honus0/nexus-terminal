@@ -1,3 +1,8 @@
+import type {
+	ChatCompletionCreateParamsStreaming,
+	ChatCompletionMessageParam,
+} from 'openai/resources/chat/completions';
+import type { ResponseCreateParamsStreaming, ResponseInputItem } from 'openai/resources/responses/responses';
 import {
 	ModelNetworkFailure,
 	MODEL_STREAM_MAX_BYTES,
@@ -71,7 +76,7 @@ function parameters(input: ModelToolDefinition['parameters']): ModelToolDefiniti
 	return { type: 'object', properties, required: input.required.map((name) => name), additionalProperties: false };
 }
 
-function chatMessage(value: ModelMessage): Record<string, unknown> {
+function chatMessage(value: ModelMessage): ChatCompletionMessageParam {
 	if (value.role === 'user') {
 		return { role: 'user', content: value.content };
 	}
@@ -93,7 +98,7 @@ function chatMessage(value: ModelMessage): Record<string, unknown> {
 	};
 }
 
-function responseMessages(value: ModelMessage): Record<string, unknown>[] {
+function responseMessages(value: ModelMessage): ResponseInputItem[] {
 	if (value.role === 'user') {
 		return [{ role: 'user', content: value.content }];
 	}
@@ -102,14 +107,14 @@ function responseMessages(value: ModelMessage): Record<string, unknown>[] {
 	}
 	return [
 		...value.reasoning.map((item) => ({
-			type: 'reasoning',
+			type: 'reasoning' as const,
 			id: item.id,
 			encrypted_content: item.encryptedContent,
-			summary: item.summary.map((text) => ({ type: 'summary_text', text })),
+			summary: item.summary.map((text) => ({ type: 'summary_text' as const, text })),
 		})),
-		...(value.content ? [{ role: 'assistant', content: value.content }] : []),
+		...(value.content ? [{ role: 'assistant' as const, content: value.content }] : []),
 		...value.toolCalls.map((call) => ({
-			type: 'function_call',
+			type: 'function_call' as const,
 			call_id: call.id,
 			name: call.name,
 			arguments: call.argumentsJson,
@@ -164,8 +169,7 @@ function validateHistory(input: ModelStreamInput): void {
 	}
 }
 
-/** The application owns history selection; this adapter owns the two provider request encodings. */
-export function modelRequest(input: ModelStreamInput): string {
+function toolDefinitions(input: ModelStreamInput) {
 	if (
 		input.messages.length === 0 ||
 		input.messages.length > 1024 ||
@@ -178,7 +182,7 @@ export function modelRequest(input: ModelStreamInput): string {
 		throw new ModelNetworkFailure('response_invalid');
 	}
 	validateHistory(input);
-	const toolDefinitions = input.tools.map((tool) => {
+	return input.tools.map((tool) => {
 		if (!/^[a-zA-Z0-9_-]{1,64}$/u.test(tool.name) || !tool.description.trim()) {
 			throw new ModelNetworkFailure('response_invalid');
 		}
@@ -188,53 +192,43 @@ export function modelRequest(input: ModelStreamInput): string {
 			parameters: parameters(tool.parameters),
 		};
 	});
-	const body =
-		input.protocol === 'responses'
-			? {
-					model: input.modelId,
-					input: input.messages.flatMap(responseMessages),
-					max_output_tokens: input.maxOutputTokens,
-					stream: true,
-					store: false,
-					include: ['reasoning.encrypted_content'],
-					...(toolDefinitions.length
-						? {
-								tools: toolDefinitions.map((tool) => ({
-									type: 'function',
-									name: tool.name,
-									description: tool.description,
-									parameters: tool.parameters,
-									strict: false,
-								})),
-							}
-						: {}),
-					...(input.reasoningEffort === undefined ? {} : { reasoning: { effort: input.reasoningEffort } }),
-				}
-			: {
-					model: input.modelId,
-					messages: input.messages.map(chatMessage),
-					stream: true,
-					stream_options: { include_usage: true },
-					...(input.usesReasoning
-						? { max_completion_tokens: input.maxOutputTokens }
-						: { max_tokens: input.maxOutputTokens }),
-					...(toolDefinitions.length
-						? {
-								tools: toolDefinitions.map((tool) => ({
-									type: 'function',
-									function: {
-										name: tool.name,
-										description: tool.description,
-										parameters: tool.parameters,
-									},
-								})),
-							}
-						: {}),
-					...(input.reasoningEffort === undefined ? {} : { reasoning_effort: input.reasoningEffort }),
-				};
-	const json = JSON.stringify(body);
-	if (Buffer.byteLength(json, 'utf8') > MODEL_STREAM_MAX_BYTES) {
-		throw new ModelNetworkFailure('too_large');
-	}
-	return json;
+}
+
+/** SDK request types remain inside the technical adapter. */
+export function chatModelRequest(input: ModelStreamInput): ChatCompletionCreateParamsStreaming {
+	const tools: NonNullable<ChatCompletionCreateParamsStreaming['tools']> = toolDefinitions(input).map((tool) => ({
+		type: 'function',
+		function: { name: tool.name, description: tool.description, parameters: tool.parameters },
+	}));
+	return {
+		model: input.modelId,
+		messages: input.messages.map(chatMessage),
+		stream: true,
+		stream_options: { include_usage: true },
+		...(input.usesReasoning
+			? { max_completion_tokens: input.maxOutputTokens }
+			: { max_tokens: input.maxOutputTokens }),
+		...(tools.length ? { tools } : {}),
+		...(input.reasoningEffort === undefined ? {} : { reasoning_effort: input.reasoningEffort }),
+	};
+}
+
+export function responseModelRequest(input: ModelStreamInput): ResponseCreateParamsStreaming {
+	const tools: NonNullable<ResponseCreateParamsStreaming['tools']> = toolDefinitions(input).map((tool) => ({
+		type: 'function',
+		name: tool.name,
+		description: tool.description,
+		parameters: tool.parameters,
+		strict: false,
+	}));
+	return {
+		model: input.modelId,
+		input: input.messages.flatMap(responseMessages),
+		max_output_tokens: input.maxOutputTokens,
+		stream: true,
+		store: false,
+		include: ['reasoning.encrypted_content'],
+		...(tools.length ? { tools } : {}),
+		...(input.reasoningEffort === undefined ? {} : { reasoning: { effort: input.reasoningEffort } }),
+	};
 }

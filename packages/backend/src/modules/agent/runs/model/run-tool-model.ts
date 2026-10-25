@@ -1,3 +1,4 @@
+import { RunChanges } from './run-changes.js';
 import type { ExecutionBudgetAdmission } from '../../execution/model/execution-types.js';
 import { fromSettings, fromUsage } from '../../execution/model/execution-projection.js';
 import type { AgentRunStatus } from '@nexus-terminal/shared/agent/runs/values';
@@ -107,6 +108,7 @@ export class RunToolModel {
 	constructor(
 		private readonly storage: RunToolStorage,
 		private readonly admitBudget: ExecutionBudgetAdmission,
+		private readonly changes = new RunChanges(),
 	) {}
 
 	async inspect(input: ToolInspectionCommand): Promise<ToolOperation> {
@@ -114,9 +116,11 @@ export class RunToolModel {
 			throw new AgentFailure('limit_exceeded');
 		}
 		return mutation(
-			await agentStorage(() =>
-				this.storage.inspect(toStoredInspection(input), Date.now, (settings, usage) =>
-					this.admitBudget(fromSettings(settings), fromUsage(usage)),
+			await this.changes.after(input.userId, input.appId, () =>
+				agentStorage(() =>
+					this.storage.inspect(toStoredInspection(input), Date.now, (settings, usage) =>
+						this.admitBudget(fromSettings(settings), fromUsage(usage)),
+					),
 				),
 			),
 		);
@@ -130,16 +134,18 @@ export class RunToolModel {
 			throw new AgentFailure('limit_exceeded');
 		}
 		return mutation(
-			await agentStorage(() =>
-				this.storage.inspectPermission(
-					{
-						parent: toStoredIdentity(input.parent),
-						inspection: toStoredInspection(input.inspection),
-						maxPermissions: input.maxPermissions,
-					},
-					Date.now,
-					(parent, status) => accept(fromStoredTool(parent), status),
-					(settings, usage) => this.admitBudget(fromSettings(settings), fromUsage(usage)),
+			await this.changes.after(input.inspection.userId, input.inspection.appId, () =>
+				agentStorage(() =>
+					this.storage.inspectPermission(
+						{
+							parent: toStoredIdentity(input.parent),
+							inspection: toStoredInspection(input.inspection),
+							maxPermissions: input.maxPermissions,
+						},
+						Date.now,
+						(parent, status) => accept(fromStoredTool(parent), status),
+						(settings, usage) => this.admitBudget(fromSettings(settings), fromUsage(usage)),
+					),
 				),
 			),
 		);
@@ -176,16 +182,18 @@ export class RunToolModel {
 			throw new AgentFailure('limit_exceeded');
 		}
 		return mutation(
-			await agentStorage(() =>
-				this.storage.finish(
-					{
-						identity: toStoredIdentity(input.identity),
-						expectedRevision: input.expectedRevision,
-						state: input.state,
-						resultText: input.resultText,
-					},
-					Date.now,
-					(current) => maySettleTool(fromStoredTool(current), input),
+			await this.changes.after(input.identity.userId, input.identity.appId, () =>
+				agentStorage(() =>
+					this.storage.finish(
+						{
+							identity: toStoredIdentity(input.identity),
+							expectedRevision: input.expectedRevision,
+							state: input.state,
+							resultText: input.resultText,
+						},
+						Date.now,
+						(current) => maySettleTool(fromStoredTool(current), input),
+					),
 				),
 			),
 		);

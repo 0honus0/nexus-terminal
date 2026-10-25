@@ -863,6 +863,10 @@
     "./agent/scope/workspace-http-codec": {
       "types": "./dist/agent/scope/workspace-http-codec.d.ts",
       "default": "./dist/agent/scope/workspace-http-codec.js"
+    },
+    "./agent/runs/events": {
+      "types": "./dist/agent/runs/events.d.ts",
+      "default": "./dist/agent/runs/events.js"
     }
   },
   "devDependencies": {

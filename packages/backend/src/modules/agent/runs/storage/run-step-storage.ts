@@ -86,6 +86,7 @@ export interface StoredRunStepEventPage {
 }
 
 export interface RunStepStorage {
+	usage(userId: number, appId: string, runId: string): Promise<StoredRunUsage | null>;
 	/** Denial cleanup cannot settle an attempt that already has any model step. */
 	failUnstarted(command: UnstartedRunFailure): Promise<boolean>;
 	endRoot(
@@ -124,4 +125,14 @@ export interface RunStepStorage {
 	): Promise<StoredRunStepEventPage | null>;
 	/** Startup reconciliation: reserved was not dispatched, dispatched is unknown. */
 	reconcileUnsettled(now: number): Promise<number>;
+}
+
+export interface StoredRunUsage {
+	runId: string;
+	runVersion: number;
+	inputTokens: number | null;
+	outputTokens: number | null;
+	reportedModelRequests: number;
+	modelRequests: number;
+	toolExecutions: number;
 }

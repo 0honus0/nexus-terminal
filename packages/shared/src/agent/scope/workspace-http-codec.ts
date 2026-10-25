@@ -1,4 +1,13 @@
-import { agentRecord, agentInteger, agentText, readAgentId, InvalidAgentPayload } from '../http-codec.js';
+import { readAgentOptionalReasoningEffort } from '../providers/http-codec.js';
+import { AGENT_REASONING_EFFORTS } from '../providers/values.js';
+import {
+	agentRecord,
+	agentInteger,
+	agentText,
+	readAgentId,
+	isAgentRecord,
+	InvalidAgentPayload,
+} from '../http-codec.js';
 
 import { AGENT_WORKSPACE_MAX_RESPONSE_BYTES, AGENT_WORKSPACE_MAX_SELECTABLE_MODELS } from './values.js';
 import { AGENT_SCOPE_MAX_NAME_BYTES, AGENT_THREAD_MAX_PAGE } from './values.js';
@@ -283,17 +292,43 @@ export function readAgentWorkspaceResult(input: unknown, request: AgentWorkspace
 		case 'agent.providers.list': {
 			const value = requireArray(row.value, AGENT_WORKSPACE_MAX_SELECTABLE_MODELS).map(
 				(raw): AgentSelectableModel => {
+					if (!isAgentRecord(raw)) {
+						throw new InvalidAgentPayload();
+					}
+					const optional = Object.hasOwn(raw, 'defaultReasoningEffort') ? ['defaultReasoningEffort'] : [];
 					const p = agentRecord(raw, [
 						'providerId',
 						'providerDisplayName',
 						'configurationVersion',
 						'modelId',
 						'protocol',
+						'reasoningEfforts',
+						'reasoningMandatory',
+						...optional,
 					]);
 					const protocol =
 						p.protocol === 'chat-completions' || p.protocol === 'responses' || p.protocol === 'images'
 							? p.protocol
 							: null;
+					const reasoningEfforts = requireArray(p.reasoningEfforts, AGENT_REASONING_EFFORTS.length).map(
+						(raw) => {
+							const effort = readAgentOptionalReasoningEffort(raw);
+							if (effort === undefined) {
+								throw new InvalidAgentPayload();
+							}
+							return effort;
+						},
+					);
+					const defaultReasoningEffort = readAgentOptionalReasoningEffort(p.defaultReasoningEffort);
+					if (
+						new Set(reasoningEfforts).size !== reasoningEfforts.length ||
+						(defaultReasoningEffort !== undefined && !reasoningEfforts.includes(defaultReasoningEffort)) ||
+						typeof p.reasoningMandatory !== 'boolean' ||
+						(p.reasoningMandatory && !reasoningEfforts.length) ||
+						(protocol === 'images' && (reasoningEfforts.length > 0 || p.reasoningMandatory))
+					) {
+						throw new InvalidAgentPayload();
+					}
 					if (!protocol) {
 						throw new InvalidAgentPayload();
 					}
@@ -303,6 +338,9 @@ export function readAgentWorkspaceResult(input: unknown, request: AgentWorkspace
 						configurationVersion: agentInteger(p.configurationVersion, 1),
 						modelId: agentText(p.modelId, AGENT_PROVIDER_MAX_MODEL_ID_BYTES),
 						protocol,
+						reasoningEfforts,
+						reasoningMandatory: p.reasoningMandatory,
+						...(defaultReasoningEffort === undefined ? {} : { defaultReasoningEffort }),
 					};
 				},
 			);

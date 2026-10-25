@@ -1,6 +1,6 @@
 import type { AgentAppDefinitionView, AgentThreadView } from './model.js';
 import type { AgentRunView } from '../runs/model.js';
-import type { AgentProviderProtocol } from '../providers/values.js';
+import type { AgentProviderProtocol, AgentReasoningEffort } from '../providers/values.js';
 import type { AgentRunEventsResponse } from '../runs/http.js';
 import type { AgentChildrenResponse, AgentMessageMetadataResponse } from '../collaboration/http.js';
 import type { AgentApprovalView } from '../governance/model.js';
@@ -14,6 +14,9 @@ export interface AgentSelectableModel {
 	configurationVersion: number;
 	modelId: string;
 	protocol: AgentProviderProtocol;
+	reasoningEfforts: AgentReasoningEffort[];
+	defaultReasoningEffort?: AgentReasoningEffort;
+	reasoningMandatory: boolean;
 }
 
 export interface AgentDeleteThreadResponse {

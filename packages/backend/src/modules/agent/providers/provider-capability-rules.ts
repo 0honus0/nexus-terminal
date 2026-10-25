@@ -1,3 +1,4 @@
+import { AgentFailure } from '../agent-failure.js';
 import type {
 	ProviderRecord,
 	FrozenModelInput,
@@ -82,6 +83,15 @@ export function resolveFrozenModel(provider: ProviderRecord, reference: ModelRef
 		return null;
 	}
 
+	const reasoningEffort = reference.reasoningEffort ?? selected.defaultReasoningEffort;
+	if (
+		reference.reasoningEffort !== undefined &&
+		((selected.protocol ?? provider.protocol) === 'images' ||
+			!selected.reasoningEfforts?.includes(reference.reasoningEffort) ||
+			(selected.reasoningMandatory === true && reference.reasoningEffort === 'none'))
+	) {
+		throw new AgentFailure('invalid_input');
+	}
 	return {
 		providerId: provider.id,
 		providerVersion: provider.version,
@@ -104,9 +114,7 @@ export function resolveFrozenModel(provider: ProviderRecord, reference: ModelRef
 				? {}
 				: { supportsPromptCacheKey: selected.supportsPromptCacheKey }),
 			...(selected.reasoningEfforts === undefined ? {} : { reasoningEfforts: [...selected.reasoningEfforts] }),
-			...(selected.defaultReasoningEffort === undefined
-				? {}
-				: { defaultReasoningEffort: selected.defaultReasoningEffort }),
+			...(reasoningEffort === undefined ? {} : { defaultReasoningEffort: reasoningEffort }),
 			...(selected.reasoningMandatory === undefined ? {} : { reasoningMandatory: selected.reasoningMandatory }),
 		},
 		executionPolicy: 'governed',

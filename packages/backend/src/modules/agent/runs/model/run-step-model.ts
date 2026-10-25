@@ -1,3 +1,4 @@
+import { RunChanges } from './run-changes.js';
 import { fromSettings, fromUsage } from '../../execution/model/execution-projection.js';
 import type { ExecutionBudgetAdmission } from '../../execution/model/execution-types.js';
 import { agentStorage } from '../../agent-storage-failure.js';
@@ -17,6 +18,7 @@ import { mayExecuteFrozenRun, mayFinishModelStep, interruptedRootState } from '.
 import type { StoredFrozenInput } from '../storage/run-storage.js';
 import type { ProviderStoredRow } from '../../providers/storage/provider-storage.js';
 import type {
+	RunUsage,
 	RunModelStep,
 	RunModelStepResult,
 	RunStepCommand,
@@ -90,26 +92,33 @@ function projectResult(value: StepWriteResult): RunModelStepResult {
 
 /** Not an executor. Only the existing Run aggregate may own model-step journal writes. */
 export class RunStepModel {
-	constructor(private readonly storage: RunStepStorage) {}
+	constructor(
+		private readonly storage: RunStepStorage,
+		private readonly changes = new RunChanges(),
+	) {}
 
 	failUnstarted(command: RunUnstartedFailure): Promise<boolean> {
-		return agentStorage(() =>
-			this.storage.failUnstarted({
-				userId: command.userId,
-				appId: command.appId,
-				runId: command.runId,
-				expectedVersion: command.expectedVersion,
-				creationHash: command.creationHash,
-				now: command.now,
-			}),
+		return this.changes.after(command.userId, command.appId, () =>
+			agentStorage(() =>
+				this.storage.failUnstarted({
+					userId: command.userId,
+					appId: command.appId,
+					runId: command.runId,
+					expectedVersion: command.expectedVersion,
+					creationHash: command.creationHash,
+					now: command.now,
+				}),
+			),
 		);
 	}
 
 	async endRoot(command: RunStepMutation, uncertain: boolean): Promise<RunModelStepResult> {
 		return projectResult(
-			await agentStorage(() =>
-				this.storage.endRoot(toStorageMutation(command), (hasUnconfirmedEffects) =>
-					interruptedRootState(uncertain, hasUnconfirmedEffects),
+			await this.changes.after(command.userId, command.appId, () =>
+				agentStorage(() =>
+					this.storage.endRoot(toStorageMutation(command), (hasUnconfirmedEffects) =>
+						interruptedRootState(uncertain, hasUnconfirmedEffects),
+					),
 				),
 			),
 		);
@@ -122,38 +131,40 @@ export class RunStepModel {
 		admitBudget: ExecutionBudgetAdmission,
 	): Promise<RunModelStepResult> {
 		return projectResult(
-			await agentStorage(() =>
-				this.storage.reserve(
-					{
-						userId: command.userId,
-						appId: command.appId,
-						runId: command.runId,
-						stepIndex: command.stepIndex,
-						expectedRunVersion: command.expectedRunVersion,
-						requestHash: command.requestHash,
-						creationHash: command.creationHash,
-						now: command.now,
-						context: toStoredContext(context.messages, context.sources),
-						estimatedTokens,
-					},
-					authorizeExecution,
-					(results) => {
-						const facts = results.map((result) => ({
-							id: result.id,
-							providerCallId: result.providerCallId,
-							content: result.content,
-						}));
-						const messages = context.messages.slice(context.messages.length - facts.length);
-						return facts.every((result) =>
-							messages.some(
-								(message) =>
-									message.role === 'tool' &&
-									message.providerCallId === result.providerCallId &&
-									message.content === projectCapturedResult(result.id, result.content),
-							),
-						);
-					},
-					(settings, usage) => admitBudget(fromSettings(settings), fromUsage(usage)),
+			await this.changes.after(command.userId, command.appId, () =>
+				agentStorage(() =>
+					this.storage.reserve(
+						{
+							userId: command.userId,
+							appId: command.appId,
+							runId: command.runId,
+							stepIndex: command.stepIndex,
+							expectedRunVersion: command.expectedRunVersion,
+							requestHash: command.requestHash,
+							creationHash: command.creationHash,
+							now: command.now,
+							context: toStoredContext(context.messages, context.sources),
+							estimatedTokens,
+						},
+						authorizeExecution,
+						(results) => {
+							const facts = results.map((result) => ({
+								id: result.id,
+								providerCallId: result.providerCallId,
+								content: result.content,
+							}));
+							const messages = context.messages.slice(context.messages.length - facts.length);
+							return facts.every((result) =>
+								messages.some(
+									(message) =>
+										message.role === 'tool' &&
+										message.providerCallId === result.providerCallId &&
+										message.content === projectCapturedResult(result.id, result.content),
+								),
+							);
+						},
+						(settings, usage) => admitBudget(fromSettings(settings), fromUsage(usage)),
+					),
 				),
 			),
 		);
@@ -161,16 +172,25 @@ export class RunStepModel {
 
 	async dispatch(command: RunStepMutation, admitBudget: ExecutionBudgetAdmission): Promise<RunModelStepResult> {
 		return projectResult(
-			await agentStorage(() =>
-				this.storage.dispatch(toStorageMutation(command), authorizeExecution, (settings, usage) =>
-					admitBudget(fromSettings(settings), fromUsage(usage)),
+			await this.changes.after(command.userId, command.appId, () =>
+				agentStorage(() =>
+					this.storage.dispatch(toStorageMutation(command), authorizeExecution, (settings, usage) =>
+						admitBudget(fromSettings(settings), fromUsage(usage)),
+					),
 				),
 			),
 		);
 	}
 
 	async appendText(command: RunStepMutation, text: string): Promise<RunModelStepResult> {
-		return projectResult(await agentStorage(() => this.storage.appendText(toStorageMutation(command), text)));
+		return projectResult(
+			await this.changes.after(
+				command.userId,
+				command.appId,
+				() => agentStorage(() => this.storage.appendText(toStorageMutation(command), text)),
+				'text',
+			),
+		);
 	}
 
 	async recordUsage(
@@ -179,7 +199,9 @@ export class RunStepModel {
 		outputTokens: number,
 	): Promise<RunModelStepResult> {
 		return projectResult(
-			await agentStorage(() => this.storage.recordUsage(toStorageMutation(command), inputTokens, outputTokens)),
+			await this.changes.after(command.userId, command.appId, () =>
+				agentStorage(() => this.storage.recordUsage(toStorageMutation(command), inputTokens, outputTokens)),
+			),
 		);
 	}
 
@@ -204,12 +226,30 @@ export class RunStepModel {
 			stored = { state: 'unknown' };
 		}
 		return projectResult(
-			await agentStorage(() =>
-				this.storage.finish(toStorageMutation(command), stored, (hasUnsettledTools, hasUnsettledChildren) =>
-					mayFinishModelStep(result, hasUnsettledTools, hasUnsettledChildren),
+			await this.changes.after(command.userId, command.appId, () =>
+				agentStorage(() =>
+					this.storage.finish(toStorageMutation(command), stored, (hasUnsettledTools, hasUnsettledChildren) =>
+						mayFinishModelStep(result, hasUnsettledTools, hasUnsettledChildren),
+					),
 				),
 			),
 		);
+	}
+
+	async usage(userId: number, appId: string, runId: string): Promise<RunUsage | null> {
+		const value = await agentStorage(() => this.storage.usage(userId, appId, runId));
+		if (value === null) {
+			return null;
+		}
+		return {
+			runId: value.runId,
+			runVersion: value.runVersion,
+			inputTokens: value.inputTokens,
+			outputTokens: value.outputTokens,
+			reportedModelRequests: value.reportedModelRequests,
+			modelRequests: value.modelRequests,
+			toolExecutions: value.toolExecutions,
+		};
 	}
 
 	async get(userId: number, appId: string, runId: string, stepIndex: number): Promise<RunModelStep | null> {

@@ -82,7 +82,7 @@ export class ModelToolStream {
 			) {
 				throw new ModelNetworkFailure('response_invalid');
 			}
-			const fn = row.function === undefined ? {} : record(row.function);
+			const fn = row.function === undefined || row.function === null ? {} : record(row.function);
 			if (Object.keys(fn).some((key) => key !== 'name' && key !== 'arguments')) {
 				throw new ModelNetworkFailure('response_invalid');
 			}
@@ -93,13 +93,14 @@ export class ModelToolStream {
 				}
 				call = this.add(row.index, row.id, fn.name, null);
 			} else if (
-				(row.id !== undefined && row.id !== call.id) ||
-				(row.type !== undefined && row.type !== 'function') ||
-				(fn.name !== undefined && fn.name !== call.name)
+				(row.id !== undefined && row.id !== null && row.id !== call.id) ||
+				(row.type !== undefined && row.type !== null && row.type !== 'function') ||
+				(fn.name !== undefined && fn.name !== null && fn.name !== call.name)
 			) {
 				throw new ModelNetworkFailure('response_invalid');
 			}
-			if (fn.arguments !== undefined) {
+			// Nullable continuation fields are placeholders, never a new call identity.
+			if (fn.arguments !== undefined && fn.arguments !== null) {
 				this.append(call, fn.arguments);
 			}
 		}

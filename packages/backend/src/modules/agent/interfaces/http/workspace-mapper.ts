@@ -1,3 +1,9 @@
+import type { ThreadEntries } from '../../context/model/context-types.js';
+import type { RunEventPage } from '../../runs/model/run-types.js';
+import type { Participant } from '../../runs/model/run-collaboration-types.js';
+import type { AgentThreadEntries } from '@nexus-terminal/shared/agent/scope/model';
+import type { AgentRunEventsResponse } from '@nexus-terminal/shared/agent/runs/http';
+import type { AgentChildrenResponse } from '@nexus-terminal/shared/agent/collaboration/http';
 import type { AgentWorkspaceInput, AgentWorkspaceResult } from '@nexus-terminal/shared/agent/scope/workspace-http';
 import { AGENT_CHILD_PROFILES } from '@nexus-terminal/shared/agent/collaboration/values';
 import { AgentFailure } from '../../agent-failure.js';
@@ -23,6 +29,9 @@ export function fromWorkspace(value: AgentWorkspaceInput): WorkspaceInput {
 						providerId: p.input.model.providerId,
 						modelId: p.input.model.modelId,
 						configurationVersion: p.input.model.configurationVersion,
+						...(p.input.model.reasoningEffort === undefined
+							? {}
+							: { reasoningEffort: p.input.model.reasoningEffort }),
 					},
 				},
 			};
@@ -52,6 +61,9 @@ export function fromWorkspace(value: AgentWorkspaceInput): WorkspaceInput {
 						providerId: p.input.model.providerId,
 						modelId: p.input.model.modelId,
 						configurationVersion: p.input.model.configurationVersion,
+						...(p.input.model.reasoningEffort === undefined
+							? {}
+							: { reasoningEffort: p.input.model.reasoningEffort }),
 					},
 				},
 			};
@@ -136,30 +148,7 @@ export function fromWorkspace(value: AgentWorkspaceInput): WorkspaceInput {
 export function toWorkspace(value: WorkspaceResult): AgentWorkspaceResult {
 	switch (value.method) {
 		case 'agent.threads.entries':
-			return {
-				method: value.method,
-				value: {
-					appId: value.value.appId,
-					threadId: value.value.threadId,
-					items: value.value.items.map((item) => ({
-						runId: item.runId,
-						role: item.role,
-						text: item.text,
-						position: {
-							runSequence: item.position.runSequence,
-							stepIndex: item.position.stepIndex,
-							eventSequence: item.position.eventSequence,
-							textOffset: item.position.textOffset,
-						},
-					})),
-					nextCursor: {
-						runSequence: value.value.nextCursor.runSequence,
-						stepIndex: value.value.nextCursor.stepIndex,
-						eventSequence: value.value.nextCursor.eventSequence,
-						textOffset: value.value.nextCursor.textOffset,
-					},
-				},
-			};
+			return { method: value.method, value: toThreadEntries(value.value) };
 		case 'agent.runs.create':
 		case 'agent.runs.appendInput': {
 			const result = value.value;
@@ -201,6 +190,12 @@ export function toWorkspace(value: WorkspaceResult): AgentWorkspaceResult {
 					configurationVersion: item.configurationVersion,
 					modelId: item.model.id,
 					protocol: item.protocol,
+					reasoningEfforts:
+						item.protocol === 'images' ? [] : (item.model.reasoningEfforts?.map((effort) => effort) ?? []),
+					reasoningMandatory: item.protocol !== 'images' && item.model.reasoningMandatory === true,
+					...(item.protocol === 'images' || item.model.defaultReasoningEffort === undefined
+						? {}
+						: { defaultReasoningEffort: item.model.defaultReasoningEffort }),
 				})),
 			};
 		case 'agent.threads.list':
@@ -225,39 +220,9 @@ export function toWorkspace(value: WorkspaceResult): AgentWorkspaceResult {
 		case 'agent.runs.get':
 			return { method: value.method, value: value.value === null ? null : toRunView(value.value) };
 		case 'agent.runs.events':
-			return {
-				method: value.method,
-				value: {
-					items: value.value.items.map((item) => ({
-						runId: item.runId,
-						sequence: item.sequence,
-						type: item.type,
-						runVersion: item.runVersion,
-						createdAt: item.createdAt,
-					})),
-					nextCursor: value.value.nextCursor,
-				},
-			};
+			return { method: value.method, value: toRunEvents(value.value) };
 		case 'agent.subagents.list':
-			return {
-				method: value.method,
-				value: {
-					items: value.value.map((item) => {
-						const profile = AGENT_CHILD_PROFILES.find((profile) => profile === item.profile);
-						if (item.parentId === null || !profile) {
-							throw new AgentFailure('internal_failure');
-						}
-						return {
-							id: item.id,
-							parentId: item.parentId,
-							status: item.status,
-							version: item.version,
-							profile,
-							deadlineAt: item.deadline,
-						};
-					}),
-				},
-			};
+			return { method: value.method, value: toChildren(value.value) };
 		case 'agent.subagents.messages':
 			return {
 				method: value.method,
@@ -274,4 +239,60 @@ export function toWorkspace(value: WorkspaceResult): AgentWorkspaceResult {
 		case 'agent.approvals.list':
 			return { method: value.method, value: value.value.map(toApproval) };
 	}
+}
+
+export function toThreadEntries(value: ThreadEntries): AgentThreadEntries {
+	return {
+		appId: value.appId,
+		threadId: value.threadId,
+		items: value.items.map((item) => ({
+			runId: item.runId,
+			role: item.role,
+			text: item.text,
+			position: {
+				runSequence: item.position.runSequence,
+				stepIndex: item.position.stepIndex,
+				eventSequence: item.position.eventSequence,
+				textOffset: item.position.textOffset,
+			},
+		})),
+		nextCursor: {
+			runSequence: value.nextCursor.runSequence,
+			stepIndex: value.nextCursor.stepIndex,
+			eventSequence: value.nextCursor.eventSequence,
+			textOffset: value.nextCursor.textOffset,
+		},
+	};
+}
+
+export function toRunEvents(value: RunEventPage): AgentRunEventsResponse {
+	return {
+		items: value.items.map((item) => ({
+			runId: item.runId,
+			sequence: item.sequence,
+			type: item.type,
+			runVersion: item.runVersion,
+			createdAt: item.createdAt,
+		})),
+		nextCursor: value.nextCursor,
+	};
+}
+
+export function toChildren(value: Participant[]): AgentChildrenResponse {
+	return {
+		items: value.map((item) => {
+			const profile = AGENT_CHILD_PROFILES.find((profile) => profile === item.profile);
+			if (item.parentId === null || !profile) {
+				throw new AgentFailure('internal_failure');
+			}
+			return {
+				id: item.id,
+				parentId: item.parentId,
+				status: item.status,
+				version: item.version,
+				profile,
+				deadlineAt: item.deadline,
+			};
+		}),
+	};
 }

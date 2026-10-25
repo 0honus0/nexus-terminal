@@ -525,7 +525,7 @@ Agent 设置按原四分类组织：AgentSettingsPanel 持唯一 useExecutionSet
 4. **类型与转换**：Shared唯一持工作区18方法及App、Provider、Run、正文、审批、Child、Step、Tool的完整协议／基础值／容量；前端分别转HostApp/NativeThread/NativeRun/Entry/Approval等本地对象，数组与嵌套字段显式投影。App数字CAS、definitionVersion、安装revision分开；请求先规范化解码，再使用同一解码结果验证响应关联。单会话删除请求冻结threadId与expectedVersion，响应只接收关联appId/threadId。正文offset是Unicode码点，审计textBytes是字节，本地显示窗口以UTF-16长度估算内存，不相互冒充。
 5. **入口与安装**：正式Host读取实际App、定义、安装、版本与执行设置，按受信声明及真实manifest选择通用原生界面／自定义iframe；没有前端资源的合法插件也可使用原生会话。只给管理员安装。执行关闭时仍提供历史读取与取消。原生使用POST /api/v1/agent/apps/:appId/workspace，审计使用实际steps/tools及events；DEV仍走/__next。
 6. **数据、事务与并发**：后端是权威；先读实际App版本，写入冻结原线程／Run／审批版本、输入、operationHash与operationId；原意图不跟随刷新变更。单会话删除以threadId与expectedVersion在后台原子移除会话关联数据；前端只在成功回执后移除列表项，不先做本地假删除。活跃Run冲突保留会话并要求先结束Run。follow-up只基于已收敛Run创建新Root，unknown仍活跃且可取消。事件、正文、Run和消息各持服务端游标；事件显示最近200条、正文显示窗口最多128片／约256 Ki UTF-16单元，省略有明确提示，不删除服务器数据。Step/Tool/消息按页替换展示，不伪造完整统计或原子快照。
-7. **生命周期与失败**：useAuthenticatedViewScope明确区分视图暂停、会话重置和销毁；各owner按generation／signal隔离晚返回与旧finally。可见pending/running每两秒只读刷新，隐藏／unknown／失败／销毁停止轮询；后台读取不占交互busy，用户操作取消其等待并推进generation，旧结果／错误／finally不能覆盖新操作，写入仍串行且保留CAS／unknown保护；较新Run状态停止轮询前，从原正文游标再读一次，避免先读正文、后见完成时遗漏最终回复；失败仍显式保留，不自动重放写入。原实例隐藏时保留在途／未知写意图，会话重置与销毁清私有数据。未知恢复先只读核对实际资源，重试保留原键／版本／输入，后续拒绝不抹去原未知；明确放弃不表示回滚。删除unknown以列表核对原threadId，已不存在才收口，仍存在才允许按原版本重试；放弃不表示回滚。附件关联与Run派发是两个动作，关联未知阻断后续，查询文件不冒充已确认引用；确认引用以不可信数据写入实际prompt，工具仍复查权限。
+7. **生命周期与失败**：useAuthenticatedViewScope明确区分视图暂停、会话重置和销毁；各owner按generation／signal隔离晚返回与旧finally。可见时订阅Run直接增量流，隐藏／unknown补齐后／失败／销毁停止订阅；后台读取不占交互busy，用户操作取消其等待并推进generation，旧结果／错误／finally不能覆盖新操作，写入仍串行且保留CAS／unknown保护；较新Run终态后从原正文游标持续补读至空页，避免遗漏最终回复；失败仍显式保留，不自动重放写入。原实例隐藏时保留在途／未知写意图，会话重置与销毁清私有数据。未知恢复先只读核对实际资源，重试保留原键／版本／输入，后续拒绝不抹去原未知；明确放弃不表示回滚。删除unknown以列表核对原threadId，已不存在才收口，仍存在才允许按原版本重试；放弃不表示回滚。附件关联与Run派发是两个动作，关联未知阻断后续，查询文件不冒充已确认引用；确认引用以不可信数据写入实际prompt，工具仍复查权限。
 8. **当前能力与验收**：正式Host、线程、Run/正文/事件/审批/Child与步骤／工具审计已接Shared；旧API、CSRF、聚合settings、host/Run流、facade/Store和旧Protocol消费删除。会话单删已接新线程CAS契约；旧Goal/Plan、活动输入队列/interrupt、手工增额/checkpoint/resume及旧Run历史删除仍按当前后端Run/上下文/治理重新设计，不提供兼容接口；具体差异归USAGE与当前方案。两轮源码审核及静态结果归testing，D17最终远程Actions E2E未执行，旧行为证据不代表此次界面通过。
 
 ## 终端动态背景
@@ -645,3 +645,19 @@ ProviderModelEditor 按明确 Images 协议隐藏文本预算/推理参数；Mod
 TerminalView拥有临时touch/inputmode状态；textarea只读资格从当前inputEnabled派生，不保存/恢复旧只读事实。xterm的disableStdin变更会写readOnly，因此观察器同时保留尚未结束的触摸抑制；手势结束或显式聚焦时还原inputmode并按最新资格恢复只读。隐藏/pagehide清理手势、焦点及尺寸RAF/timer，可见/pageshow/连接就绪flush原输出并重新fit/refresh，不重建PTY或清空终端。短触可请求原重连，移动/多指/取消不作为重连或聚焦动作；普通parser回复仍沿原onData处理，不因后台输出查询而被丢弃。
 
 WorkspacePage在触控环境用VisualViewport的resize/scroll，按可视底边减工作区真实顶边限定原main的maxHeight；保持原100dvh、布局、控件与CSS，软键盘收起后恢复可用高度。RAF合并度量，隐藏/失活/卸载取消，终端沿原ResizeObserver和100ms防抖重排；桌面和无VisualViewport环境保持原尺寸。所有新增监听由原组件卸载清理，不自动聚焦或注入远端输入。Android真机与浏览器缓存恢复待远程验证。
+
+### Agent 对话用量与底部导航
+
+AgentAppSurface 在原输入框状态行消费 useNativeRuns 的当前 Run 用量；native API 严格解码 Shared RunUsage 并核对请求 Run 身份，mapper 转换独立前端对象。沿 Run 直接增量流接收摘要，先取得最新 Run 再读取用量，拒绝落后版本；不另设用量定时器或逐步骤请求。切换 Run/Thread/scope 清理旧用量，原 operation 围栏拒绝晚结果。用量弹层复用全局 Popover/Button，缺失和部分报告明确显示。上一条／下一条通过当前加载消息的DOM起点定位，同一步骤的连续流式片段只登记一个起点，不新增后端请求；首尾按真实滚动范围禁用。回到最新消息复用原按钮，Surface 负责底部跟随、滚动位置和窗口/图片加载变化，隐藏与卸载取消 RAF 并释放 ResizeObserver。
+
+### Agent 聊天思考等级
+
+工作区模型列表公开支持等级、默认值和强制思考标记，Shared严格解码后由native mapper投影到独立NativeModel；Surface工具栏沿用AgentConfigPopover及全局UiButton和原三语文案。useNativeRuns持本轮覆盖，模型身份变化同步清空，captureInput和snapshotNativeRunAction复制选择及模型元数据；pending意图不随后续编辑改变。create及append经toNativeRunInput发送model.reasoningEffort，不重写Provider设置，不猜测模型能力；Images和未声明等级的模型无此入口。
+
+AgentAppSurface按当前可见任务的身份与状态变化，将failed/unknown通过原全局驻留错误Toast反馈；增量读取返回同一状态不重复提示，隐藏视图不弹出，不自动重试或修改任务结果。供应商原始错误与思考正文不进入通知。
+
+### Agent Run 直接增量订阅
+
+use-native-runs经native-run-stream订阅/ws/agent-runs，浏览器原生WebSocket与现有反馈owner持心跳、退避重连和网络恢复。首次/显式核对可HTTP加载，生成和重连续传直接消费Shared update中的正文及可选状态，收到后立即通过既有消息渲染链更新；没有通知驱动的HTTP循环或伪造打字动画。Shared codec先核对完整页面、Thread/Run/App/版本、前后游标及连续revision；mapper建立独立NativeRunUpdate，页面接纳后ACK；已确定成功的变更直接等待首个完整状态解除该次确认后读取围栏，避免创建后多轮HTTP延迟，写入结果未知不进入该分支。
+
+每连接最多16页且累计约8.6MiB未确认窗口；接收/发送游标和页面已接纳游标分别管理，暂停时最多保存该窗口，确认后释放，重新连接只使用页面已接纳游标，ACK发送失败不重放模型。窗口允许多个正文页在途，避免每段都等待一次RTT；大状态页单独排空前序窗口，正文热路径不附带整份审批/子任务。正常只读交互不阻塞正文显示；改变正文游标的显式读取先关闭原流，操作忙时的延迟接纳通过resume继续。隐藏/切换/注销/卸载关闭并隔离晚帧，恢复重新订阅，终态继续收到空页后结束。协议/权限失败保留原错误恢复，心跳不触发HTTP。记忆审核及插件SDK独立订阅保持，UI布局和样式不变。

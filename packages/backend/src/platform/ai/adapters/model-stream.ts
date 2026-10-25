@@ -6,13 +6,10 @@ import {
 	MODEL_STREAM_MAX_BYTES,
 	MODEL_STREAM_MAX_DELTA_FRAME_BYTES,
 	MODEL_STREAM_MAX_TEXT_BYTES,
+	MODEL_REASONING_MAX_BYTES,
 } from '../model-port.js';
 
-/** Protocol-only SSE decoder: incrementally bounded, strict UTF-8, no full-stream buffering. */
-const MAX_FRAME_BYTES = MODEL_STREAM_MAX_DELTA_FRAME_BYTES;
-// Responses terminal snapshots repeat text/content/item output as JSON.
-// Bound those frames by the total budget rather than the delta-frame budget.
-const MAX_COMPLETED_FRAME_BYTES = MODEL_STREAM_MAX_BYTES;
+/** Projects SDK-decoded provider events into bounded internal facts; never parses SSE. */
 const MAX_TEXT_BYTES = MODEL_STREAM_MAX_TEXT_BYTES;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -23,7 +20,7 @@ function record(value: unknown): Record<string, unknown> | null {
 	return isRecord(value) ? value : null;
 }
 
-function usage(raw: unknown, input: string, output: string): ModelStreamEvent | null {
+function usage(raw: unknown, input: string, output: string): Extract<ModelStreamEvent, { type: 'usage' }> | null {
 	if (raw === undefined || raw === null) {
 		return null;
 	}
@@ -81,11 +78,9 @@ function textFromResponse(raw: Record<string, unknown>, tools: ModelToolStream):
 	return chunks.join('');
 }
 
-export class ModelStreamDecoder {
-	private readonly utf8 = new TextDecoder('utf-8', { fatal: true });
-	private buffer = '';
-	private skipLeadingLineFeed = false;
+export class ModelStreamProjection {
 	private textBytes = 0;
+	private reasoningTextBytes = 0;
 	private readonly responseChunks: string[] = [];
 	private itemChunks: string[] = [];
 	private hasVisibleText = false;
@@ -93,8 +88,7 @@ export class ModelStreamDecoder {
 	private finishReason: 'stop' | 'length' | 'content_filter' | 'tool_calls' | null = null;
 	private readonly tools: ModelToolStream;
 	private reasoning: ModelReasoningState[] = [];
-	private done = false;
-	private hasUsage = false;
+	private chatUsage: Extract<ModelStreamEvent, { type: 'usage' }> | null = null;
 
 	constructor(
 		private readonly protocol: ModelStreamInput['protocol'],
@@ -121,64 +115,19 @@ export class ModelStreamDecoder {
 		return value ? [{ type: 'text_delta', text: value }] : [];
 	}
 
-	private frame(frame: string): ModelStreamEvent[] {
-		const frameBytes = Buffer.byteLength(frame, 'utf8');
-		const lines = frame.split(/\r\n|\r|\n/);
-		// SSE event names are part of the provider protocol, not harmless
-		// decoration. A named error or a mismatched Responses event must never
-		// be interpreted as a successful text delta or ignored metadata.
-		let eventName: string | undefined;
-		for (const line of lines) {
-			if (line.startsWith('event:')) {
-				if (eventName !== undefined) {
-					throw new ModelNetworkFailure('response_invalid');
-				}
-				eventName = line.slice(6).trim();
-				if (!eventName) {
-					throw new ModelNetworkFailure('response_invalid');
-				}
-			}
-		}
-		const data = lines
-			.filter((line) => line.startsWith('data:'))
-			.map((line) => line.slice(5).trimStart())
-			.join('\n');
-		if (!data) {
-			if (frameBytes > MAX_FRAME_BYTES) {
-				throw new ModelNetworkFailure('too_large');
-			}
-			if (eventName !== undefined) {
-				throw new ModelNetworkFailure('response_invalid');
-			}
-			return [];
-		}
-		if (this.protocol === 'chat-completions' && eventName !== undefined && eventName !== 'message') {
+	accept(input: unknown): ModelStreamEvent[] {
+		const frame = record(input);
+		if (!frame || (frame.event !== null && typeof frame.event !== 'string')) {
 			throw new ModelNetworkFailure('response_invalid');
 		}
-		if (data === '[DONE]') {
-			if (frameBytes > MAX_FRAME_BYTES) {
-				throw new ModelNetworkFailure('too_large');
-			}
-			if (this.protocol !== 'chat-completions' || !this.finished || this.done) {
-				throw new ModelNetworkFailure('response_invalid');
-			}
-			this.done = true;
-			return [];
-		}
-		if (this.done || (this.finished && this.protocol === 'responses')) {
+		const event = record(frame.data);
+		if (!event || (this.finished && this.protocol === 'responses')) {
 			throw new ModelNetworkFailure('response_invalid');
 		}
-		let parsed: unknown;
-		try {
-			parsed = JSON.parse(data);
-		} catch {
-			throw new ModelNetworkFailure('response_invalid');
-		}
-		const event = record(parsed);
-		if (!event) {
-			throw new ModelNetworkFailure('response_invalid');
-		}
-		if (this.protocol === 'responses' && eventName !== undefined && eventName !== event.type) {
+		if (
+			frame.event !== null &&
+			(this.protocol === 'responses' ? frame.event !== event.type : frame.event !== 'message')
+		) {
 			throw new ModelNetworkFailure('response_invalid');
 		}
 		const isOutputSnapshot =
@@ -188,7 +137,8 @@ export class ModelStreamDecoder {
 				event.type === 'response.content_part.done' ||
 				event.type === 'response.output_item.done' ||
 				event.type === 'response.function_call_arguments.done');
-		if (frameBytes > MAX_FRAME_BYTES && !isOutputSnapshot) {
+		const eventBytes = Buffer.byteLength(JSON.stringify(event), 'utf8');
+		if (eventBytes > (isOutputSnapshot ? MODEL_STREAM_MAX_BYTES : MODEL_STREAM_MAX_DELTA_FRAME_BYTES)) {
 			throw new ModelNetworkFailure('too_large');
 		}
 		if (this.protocol === 'responses') {
@@ -295,7 +245,7 @@ export class ModelStreamDecoder {
 			}
 			return [];
 		}
-		if (event.error !== undefined) {
+		if (event.error !== undefined && event.error !== null) {
 			throw new ModelNetworkFailure('response_invalid');
 		}
 		if (
@@ -322,10 +272,13 @@ export class ModelStreamDecoder {
 			if (
 				!choice ||
 				choice.index !== 0 ||
-				choice.delta === null ||
-				Object.keys(choice).some(
-					(key) => key !== 'index' && key !== 'delta' && key !== 'finish_reason' && key !== 'logprobs',
-				) ||
+				'message' in choice ||
+				'function_call' in choice ||
+				'tool_calls' in choice ||
+				'refusal' in choice ||
+				(choice.native_finish_reason !== undefined &&
+					choice.native_finish_reason !== null &&
+					typeof choice.native_finish_reason !== 'string') ||
 				(choice.finish_reason !== null &&
 					choice.finish_reason !== undefined &&
 					choice.finish_reason !== 'stop' &&
@@ -335,16 +288,43 @@ export class ModelStreamDecoder {
 			) {
 				throw new ModelNetworkFailure('response_invalid');
 			}
-			const delta = record(choice.delta);
+			// Some compatible endpoints use null instead of {} on their terminal chunk.
+			const delta =
+				choice.delta === null && choice.finish_reason !== undefined && choice.finish_reason !== null
+					? {}
+					: record(choice.delta);
 			if (
 				!delta ||
-				Object.keys(delta).some((key) => key !== 'role' && key !== 'content' && key !== 'tool_calls') ||
-				(delta.role !== undefined && delta.role !== 'assistant')
+				Object.keys(delta).some(
+					(key) =>
+						key !== 'role' &&
+						key !== 'content' &&
+						key !== 'tool_calls' &&
+						key !== 'refusal' &&
+						key !== 'reasoning_content' &&
+						key !== 'reasoning',
+				) ||
+				(delta.role !== undefined && delta.role !== 'assistant') ||
+				(delta.refusal !== undefined && delta.refusal !== null)
 			) {
 				// Refusals, audio and unknown output must not be silently discarded.
 				throw new ModelNetworkFailure('response_invalid');
 			}
-			if (delta.tool_calls !== undefined) {
+			// Some compatible providers stream plain reasoning separately from visible output.
+			// Bound it without exposing it as an answer or using vendor finish metadata as authority.
+			for (const field of ['reasoning_content', 'reasoning'] as const) {
+				const reasoning = delta[field];
+				if (reasoning !== undefined && reasoning !== null) {
+					if (typeof reasoning !== 'string' || this.finished) {
+						throw new ModelNetworkFailure('response_invalid');
+					}
+					this.reasoningTextBytes += Buffer.byteLength(reasoning, 'utf8');
+					if (this.reasoningTextBytes > MODEL_REASONING_MAX_BYTES) {
+						throw new ModelNetworkFailure('too_large');
+					}
+				}
+			}
+			if (delta.tool_calls !== undefined && delta.tool_calls !== null) {
 				this.tools.chat(delta.tool_calls);
 			}
 			if (delta?.content !== undefined && delta.content !== null) {
@@ -363,60 +343,22 @@ export class ModelStreamDecoder {
 		}
 		const reported = usage(event.usage, 'prompt_tokens', 'completion_tokens');
 		if (reported) {
-			if (this.hasUsage) {
+			if (
+				this.chatUsage !== null &&
+				(reported.inputTokens < this.chatUsage.inputTokens ||
+					reported.outputTokens < this.chatUsage.outputTokens)
+			) {
 				throw new ModelNetworkFailure('response_invalid');
 			}
-			this.hasUsage = true;
-			result.push(reported);
+			// Providers may attach cumulative usage to every chunk. Publish only the
+			// last snapshot at completion so Run/probe consumers neither reject nor add it twice.
+			this.chatUsage = reported;
 		}
 		return result;
 	}
 
-	*feed(bytes: Uint8Array): IterableIterator<ModelStreamEvent> {
-		let decoded: string;
-		try {
-			decoded = this.utf8.decode(bytes, { stream: true });
-		} catch {
-			throw new ModelNetworkFailure('response_invalid');
-		}
-		// Normalize complete line endings before framing. A CRLF is ONE line
-		// ending, including when the pair is split across reader chunks.
-		if (decoded.length) {
-			if (this.skipLeadingLineFeed && decoded.startsWith('\n')) {
-				decoded = decoded.slice(1);
-			}
-			this.skipLeadingLineFeed = decoded.endsWith('\r');
-		}
-		this.buffer += decoded.replace(/\r\n|\r/g, '\n');
-		for (;;) {
-			const boundary = this.buffer.indexOf('\n\n');
-			if (boundary === -1) {
-				break;
-			}
-			const frame = this.buffer.slice(0, boundary);
-			if (Buffer.byteLength(frame, 'utf8') > MAX_COMPLETED_FRAME_BYTES) {
-				throw new ModelNetworkFailure('too_large');
-			}
-			this.buffer = this.buffer.slice(boundary + 2);
-			// Yield each frame before decoding the next: a single read can contain
-			// many SSE events, but the consumer controls incremental delivery.
-			yield* this.frame(frame);
-		}
-		if (Buffer.byteLength(this.buffer, 'utf8') > MAX_COMPLETED_FRAME_BYTES) {
-			throw new ModelNetworkFailure('too_large');
-		}
-	}
-
-	finish(): ModelStreamEvent {
-		try {
-			this.buffer += this.utf8.decode();
-		} catch {
-			throw new ModelNetworkFailure('response_invalid');
-		}
-		if (this.buffer.trim()) {
-			throw new ModelNetworkFailure('stream_truncated');
-		}
-		if (!this.finished || (this.protocol === 'chat-completions' && !this.done)) {
+	finish(): ModelStreamEvent[] {
+		if (!this.finished) {
 			throw new ModelNetworkFailure('stream_truncated');
 		}
 		const calls = this.tools.finish();
@@ -424,7 +366,10 @@ export class ModelStreamDecoder {
 			if (calls.length === 0) {
 				throw new ModelNetworkFailure('response_invalid');
 			}
-			return { type: 'completed', finishReason: 'tool_calls', toolCalls: calls, reasoning: this.reasoning };
+			return [
+				...(this.chatUsage ? [this.chatUsage] : []),
+				{ type: 'completed', finishReason: 'tool_calls', toolCalls: calls, reasoning: this.reasoning },
+			];
 		}
 		if (calls.length !== 0) {
 			throw new ModelNetworkFailure('response_invalid');
@@ -435,6 +380,6 @@ export class ModelStreamDecoder {
 		if (this.finishReason === null) {
 			throw new ModelNetworkFailure('stream_truncated');
 		}
-		return { type: 'completed', finishReason: this.finishReason };
+		return [...(this.chatUsage ? [this.chatUsage] : []), { type: 'completed', finishReason: this.finishReason }];
 	}
 }

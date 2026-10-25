@@ -78,6 +78,7 @@ export interface ModelReference {
 	providerId: string;
 	modelId: string;
 	configurationVersion: number;
+	reasoningEffort?: AgentReasoningEffort;
 }
 
 export interface FrozenModelInput {

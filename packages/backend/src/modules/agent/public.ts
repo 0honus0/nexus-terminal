@@ -1,5 +1,6 @@
+import type { AgentReasoningEffort } from '@nexus-terminal/shared/agent/providers/values';
 import type { AgentAppView, AgentAppDefinitionView, AgentThreadView } from '@nexus-terminal/shared/agent/scope/model';
-import type { AgentRunView, AgentRunStepView } from '@nexus-terminal/shared/agent/runs/model';
+import type { AgentRunUsageView, AgentRunView, AgentRunStepView } from '@nexus-terminal/shared/agent/runs/model';
 import type { AgentRunEventsResponse, AgentRunStepEventsResponse } from '@nexus-terminal/shared/agent/runs/http';
 import type { AgentCreateRunOutcome, AgentCancelRunOutcome } from '@nexus-terminal/shared/agent/runs/values';
 import type { AgentToolView } from '@nexus-terminal/shared/agent/tools/model';
@@ -13,7 +14,12 @@ import type {
 /** Trusted backend inputs: identity comes from authentication, not a request body. */
 export interface AgentCreateRunInput {
 	connectionIds: number[];
-	model: { providerId: string; modelId: string; configurationVersion: number };
+	model: {
+		providerId: string;
+		modelId: string;
+		configurationVersion: number;
+		reasoningEffort?: AgentReasoningEffort;
+	};
 	userId: number;
 	appId: string;
 	threadId: string;
@@ -80,6 +86,7 @@ export interface AgentStateApi {
 		after: number,
 		limit: number,
 	): Promise<AgentRunEventsResponse | null>;
+	getUsage(userId: number, appId: string, runId: string): Promise<AgentRunUsageView | null>;
 	getStep(userId: number, appId: string, runId: string, stepIndex: number): Promise<AgentRunStepView | null>;
 	listStepEvents(
 		userId: number,

@@ -1,10 +1,11 @@
 import { decodeModelImage } from './model-image.js';
-import { MODEL_IMAGE_MAX_RESPONSE_BYTES } from '../model-port.js';
-import type { ModelImageRequest, ModelImageResult } from '../model-port.js';
+import { Stream } from 'openai/core/streaming';
+import { MODEL_IMAGE_MAX_RESPONSE_BYTES, MODEL_STREAM_MAX_BYTES, ModelNetworkFailure } from '../model-port.js';
 import type { Logger } from '../../logging/logger.js';
 import { logDiagnostic } from '../../logging/diagnostic-log.js';
-import type { ReadableStreamReadResult } from 'node:stream/web';
-import { modelRequest } from './model-request.js';
+import { chatModelRequest, responseModelRequest } from './model-request.js';
+import { ModelStreamProjection } from './model-stream.js';
+import { ModelSdkRequest, modelSdkFailure } from './model-sdk-request.js';
 import type {
 	EndpointModel,
 	ModelNetworkPort,
@@ -12,16 +13,18 @@ import type {
 	ModelProbeResult,
 	ModelStreamInput,
 	ModelStreamEvent,
+	ModelImageRequest,
+	ModelImageResult,
 } from '../model-port.js';
-import { ModelNetworkFailure } from '../model-port.js';
-import { MODEL_STREAM_MAX_BYTES } from '../model-port.js';
-import { ModelStreamDecoder } from './model-stream.js';
 
 const LIMIT_MODELS = 1024 * 1024;
-const LIMIT_STREAM = 512 * 1024;
+const LIMIT_PROBE = 512 * 1024;
 const MAX_MODELS = 1000;
 
-const isNonemptyText = (x: unknown): x is string => typeof x === 'string' && x.trim().length > 0;
+const isNonemptyText = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0;
+
+const isPositiveInteger = (value: unknown): value is number =>
+	typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -31,173 +34,8 @@ function record(value: unknown): Record<string, unknown> | null {
 	return isRecord(value) ? value : null;
 }
 
-const isPositiveInteger = (x: unknown): x is number => typeof x === 'number' && Number.isSafeInteger(x) && x > 0;
-
-/** Preserve every cleanup failure and, when present, the primary operation failure. */
-function cleanupFailure(failures: unknown[], primary?: unknown): ModelNetworkFailure {
-	const reasons = primary === undefined ? failures : [primary, ...failures];
-	return new ModelNetworkFailure('cleanup_failed', undefined, {
-		cause: reasons.length === 1 ? reasons[0] : new AggregateError(reasons, 'Model response cleanup failed'),
-	});
-}
-
-const mapError = (err: unknown, signal: AbortSignal): ModelNetworkFailure => {
-	if (err instanceof ModelNetworkFailure) {
-		return err;
-	}
-
-	const failure = (kind: ModelNetworkFailure['kind']) => new ModelNetworkFailure(kind, undefined, { cause: err });
-
-	if (signal.aborted) {
-		return failure('timeout');
-	}
-	let e: unknown = err;
-	for (let i = 0; i < 5; i++) {
-		const r = record(e);
-		if (!r) {
-			break;
-		}
-		const c = r.code;
-		if (c === 'ENOTFOUND' || c === 'EAI_AGAIN') {
-			return failure('dns');
-		}
-		if (
-			typeof c === 'string' &&
-			/^(ERR_TLS_|CERT_|DEPTH_ZERO_SELF_SIGNED_CERT|UNABLE_TO_VERIFY_LEAF_SIGNATURE)/.test(c)
-		) {
-			return failure('tls');
-		}
-		if (c === 'ETIMEDOUT' || c === 'UND_ERR_CONNECT_TIMEOUT' || c === 'UND_ERR_HEADERS_TIMEOUT') {
-			return failure('timeout');
-		}
-		e = r.cause;
-	}
-	return failure('network');
-};
-
-function endpoint(baseUrl: string, path: string): string {
-	const u = new URL(baseUrl);
-	if (!['https:', 'http:'].includes(u.protocol) || u.username || u.password || u.search || u.hash) {
-		throw new ModelNetworkFailure('response_invalid');
-	}
-	return u.href.replace(/\/$/, '') + '/' + path;
-}
-
-async function request(
-	url: string,
-	credential: string | null,
-	signal: AbortSignal,
-	method: 'GET' | 'POST',
-	body?: string,
-	logger?: Logger,
-	accept = 'text/event-stream',
-): Promise<Response> {
-	try {
-		const res = await fetch(url, {
-			method,
-			headers: {
-				accept: method === 'GET' ? 'application/json' : accept,
-				...(body === undefined ? {} : { 'content-type': 'application/json' }),
-				...(credential === null ? {} : { authorization: 'Bearer ' + credential }),
-			},
-			...(body === undefined ? {} : { body }),
-			redirect: 'error',
-			signal,
-		});
-		logDiagnostic(logger, res.ok ? 'debug' : 'warn', 'MODEL_HTTP_RESPONSE', { method, status: res.status });
-		if (!res.ok) {
-			const primary = new ModelNetworkFailure('http', res.status);
-			try {
-				await res.body?.cancel();
-			} catch (cleanupError) {
-				throw cleanupFailure([cleanupError], primary);
-			}
-			throw primary;
-		}
-		return res;
-	} catch (error) {
-		logDiagnostic(logger, 'warn', 'MODEL_HTTP_FAILED', { method, aborted: signal.aborted }, error);
-		throw mapError(error, signal);
-	}
-}
-
-/** Probe and Run streaming reject the same MIME mismatch with identical cleanup. */
-async function requireEventStream(response: Response): Promise<void> {
-	if (response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() === 'text/event-stream') {
-		return;
-	}
-	const primary = new ModelNetworkFailure('response_invalid');
-	try {
-		await response.body?.cancel();
-	} catch (cleanupError) {
-		throw cleanupFailure([cleanupError], primary);
-	}
-	throw primary;
-}
-
-async function bounded(response: Response, max: number, signal: AbortSignal): Promise<Uint8Array> {
-	const reader = response.body?.getReader();
-	if (!reader) {
-		throw new ModelNetworkFailure('response_invalid');
-	}
-	const chunks: Uint8Array[] = [];
-	let total = 0;
-	let primaryError: unknown;
-	let didFail = false;
-	try {
-		const length = Number(response.headers.get('content-length') ?? 0);
-		if (Number.isFinite(length) && length > max) {
-			throw new ModelNetworkFailure('too_large');
-		}
-		for (;;) {
-			if (signal.aborted) {
-				throw new ModelNetworkFailure('timeout');
-			}
-			const part = await reader.read();
-			if (part.done) {
-				break;
-			}
-			total += part.value.byteLength;
-			if (total > max) {
-				throw new ModelNetworkFailure('too_large');
-			}
-			chunks.push(part.value);
-		}
-	} catch (error) {
-		didFail = true;
-		primaryError = mapError(error, signal);
-	} finally {
-		const cleanupErrors: unknown[] = [];
-		if (didFail) {
-			try {
-				await reader.cancel();
-			} catch (error) {
-				cleanupErrors.push(error);
-			}
-		}
-		try {
-			reader.releaseLock();
-		} catch (error) {
-			cleanupErrors.push(error);
-		}
-		if (cleanupErrors.length) {
-			throw cleanupFailure(cleanupErrors, didFail ? primaryError : undefined);
-		}
-	}
-	if (didFail) {
-		throw primaryError;
-	}
-	const out = new Uint8Array(total);
-	let at = 0;
-	for (const c of chunks) {
-		out.set(c, at);
-		at += c.byteLength;
-	}
-	return out;
-}
-
 function metadata(raw: unknown): EndpointModel['capabilities'] {
-	if (raw === undefined) {
+	if (raw === undefined || raw === null) {
 		return undefined;
 	}
 	const r = record(raw);
@@ -212,6 +50,7 @@ function metadata(raw: unknown): EndpointModel['capabilities'] {
 					'max_output_tokens',
 					'supports_tools',
 					'supports_image_input',
+					'supports_image_generation',
 					'supports_file_input',
 					'supports_prompt_cache_key',
 					'reasoning',
@@ -292,207 +131,172 @@ function metadata(raw: unknown): EndpointModel['capabilities'] {
 	return capabilities;
 }
 
-function probeBody(input: ModelProbe): string {
-	const maxTokens = Math.min(input.maxOutputTokens, 16);
-	if (input.protocol === 'responses') {
-		return JSON.stringify({
-			model: input.modelId,
-			input: [{ role: 'user', content: 'Reply with OK.' }],
-			max_output_tokens: maxTokens,
-			stream: true,
-			store: false,
-			...(input.reasoningEffort === undefined ? {} : { reasoning: { effort: input.reasoningEffort } }),
-		});
-	}
-	return JSON.stringify({
-		model: input.modelId,
-		messages: [{ role: 'user', content: 'Reply with OK.' }],
-		...(input.usesReasoning ? { max_completion_tokens: maxTokens } : { max_tokens: maxTokens }),
-		stream: true,
-		stream_options: { include_usage: true },
-		...(input.reasoningEffort === undefined ? {} : { reasoning_effort: input.reasoningEffort }),
-	});
-}
-
-/** The Provider probe must use the same strict protocol semantics as a Run stream. */
-function parseProbeStream(data: Uint8Array, protocol: ModelProbe['protocol']): ModelProbeResult {
-	const decoder = new ModelStreamDecoder(protocol);
-	let reported: ModelProbeResult['usage'];
-	for (const event of decoder.feed(data)) {
-		if (event.type === 'usage') {
-			if (reported !== undefined) {
-				throw new ModelNetworkFailure('response_invalid');
-			}
-			reported = { inputTokens: event.inputTokens, outputTokens: event.outputTokens };
-		}
-	}
-	const terminal = decoder.finish();
-	if (terminal.type !== 'completed' || terminal.finishReason !== 'stop') {
-		throw new ModelNetworkFailure('response_invalid');
-	}
-	return reported === undefined ? {} : { usage: reported };
-}
-
 export class OpenAiCompatibleAdapter implements ModelNetworkPort {
 	constructor(private readonly logger?: Logger) {}
 
-	async generateImage(input: ModelImageRequest, signal: AbortSignal): Promise<ModelImageResult> {
-		const body = JSON.stringify({
-			model: input.modelId,
-			prompt: input.prompt,
-			n: 1,
-			// GPT Image returns base64 directly; the older compatible contract requests it explicitly.
-			...(input.modelId.toLowerCase().split('/').at(-1)?.startsWith('gpt-image-')
-				? {}
-				: { response_format: 'b64_json' }),
-		});
-		const response = await request(
-			endpoint(input.baseUrl, 'images/generations'),
-			input.credential,
-			signal,
-			'POST',
-			body,
-			this.logger,
-			'application/json',
-		);
-		return decodeModelImage(await bounded(response, MODEL_IMAGE_MAX_RESPONSE_BYTES, signal));
+	private async request<T>(
+		baseUrl: string,
+		credential: string | null,
+		signal: AbortSignal,
+		maxBytes: number,
+		work: (request: ModelSdkRequest) => Promise<T>,
+	): Promise<T> {
+		const request = new ModelSdkRequest(baseUrl, credential, signal, maxBytes, false, this.logger);
+		let primary: ModelNetworkFailure | undefined;
+		try {
+			return await work(request);
+		} catch (error) {
+			primary = modelSdkFailure(error, signal);
+			logDiagnostic(this.logger, 'warn', 'MODEL_HTTP_FAILED', { aborted: signal.aborted }, primary);
+			throw primary;
+		} finally {
+			await request.close(primary);
+		}
 	}
 
-	async *stream(input: ModelStreamInput, signal: AbortSignal): AsyncIterable<ModelStreamEvent> {
+	async generateImage(input: ModelImageRequest, signal: AbortSignal): Promise<ModelImageResult> {
+		return this.request(
+			input.baseUrl,
+			input.credential,
+			signal,
+			MODEL_IMAGE_MAX_RESPONSE_BYTES,
+			async (request) => {
+				const image = await request.client.images.generate(
+					{
+						model: input.modelId,
+						prompt: input.prompt,
+						n: 1,
+						...(input.modelId.toLowerCase().split('/').at(-1)?.startsWith('gpt-image-')
+							? {}
+							: { response_format: 'b64_json' as const }),
+					},
+					{ signal },
+				);
+				return decodeModelImage(image);
+			},
+		);
+	}
+
+	private async *streamModel(
+		input: ModelStreamInput,
+		signal: AbortSignal,
+		maxBytes: number,
+	): AsyncIterable<ModelStreamEvent> {
 		if (input.protocol === 'images') {
 			throw new ModelNetworkFailure('response_invalid');
 		}
-		const responses = input.protocol === 'responses';
-		const body = modelRequest(input);
-		const response = await request(
-			endpoint(input.baseUrl, responses ? 'responses' : 'chat/completions'),
-			input.credential,
-			signal,
-			'POST',
-			body,
-			this.logger,
-		);
-		await requireEventStream(response);
-		const reader = response.body?.getReader();
-		if (!reader) {
-			throw new ModelNetworkFailure('response_invalid');
-		}
-		const decoder = new ModelStreamDecoder(input.protocol, input.tools.length > 0);
-		let bytes = 0;
+		const request = new ModelSdkRequest(input.baseUrl, input.credential, signal, maxBytes, true, this.logger);
+		const projection = new ModelStreamProjection(input.protocol, input.tools.length > 0);
+		let primary: ModelNetworkFailure | undefined;
 		let ended = false;
-		let primaryError: unknown;
-		let didFail = false;
+		let finalEvents: ModelStreamEvent[] = [];
+		const controller = new AbortController();
 		try {
-			const declared = Number(response.headers.get('content-length') ?? 0);
-			if (Number.isFinite(declared) && declared > MODEL_STREAM_MAX_BYTES) {
-				throw new ModelNetworkFailure('too_large');
-			}
-			for (;;) {
+			const sdkResponse =
+				input.protocol === 'responses'
+					? request.client.responses.create(responseModelRequest(input), { signal })
+					: request.client.chat.completions.create(chatModelRequest(input), { signal });
+			// Keep event names supplied by the SDK so named failures or mismatched
+			// Responses events cannot masquerade as successful text deltas.
+			const stream = Stream.fromSSEResponse<unknown>(
+				await sdkResponse.asResponse(),
+				controller,
+				request.client,
+				true,
+			);
+			for await (const event of stream) {
 				if (signal.aborted) {
 					throw new ModelNetworkFailure('timeout');
 				}
-				let item: ReadableStreamReadResult<Uint8Array>;
-				try {
-					item = await reader.read();
-				} catch (error) {
-					throw mapError(error, signal);
-				}
-				if (item.done) {
-					break;
-				}
-				bytes += item.value.byteLength;
-				if (bytes > MODEL_STREAM_MAX_BYTES) {
-					throw new ModelNetworkFailure('too_large');
-				}
-				for (const event of decoder.feed(item.value)) {
-					yield event;
+				for (const output of projection.accept(event)) {
+					yield output;
 				}
 			}
 			if (signal.aborted) {
 				throw new ModelNetworkFailure('timeout');
 			}
-			const terminal = decoder.finish();
+			finalEvents = projection.finish();
 			ended = true;
-			yield terminal;
 		} catch (error) {
-			didFail = true;
-			primaryError = error;
+			primary = modelSdkFailure(error, signal);
+			throw primary;
 		} finally {
-			const cleanupErrors: unknown[] = [];
-			if (!ended) {
-				try {
-					await reader.cancel();
-				} catch (error) {
-					cleanupErrors.push(error);
-				}
-			}
+			controller.abort();
 			try {
-				reader.releaseLock();
+				await request.close(primary);
 			} catch (error) {
-				cleanupErrors.push(error);
-			}
-			logDiagnostic(
-				this.logger,
-				cleanupErrors.length || didFail ? 'warn' : 'debug',
-				'MODEL_STREAM_SETTLED',
-				{ bytes, ended, failed: didFail, cleanupFailures: cleanupErrors.length, aborted: signal.aborted },
-				didFail ? primaryError : undefined,
-			);
-			if (cleanupErrors.length) {
-				throw cleanupFailure(cleanupErrors, didFail ? primaryError : undefined);
+				primary = modelSdkFailure(error, signal);
+				throw primary;
+			} finally {
+				logDiagnostic(
+					this.logger,
+					primary || !ended ? 'warn' : 'debug',
+					'MODEL_STREAM_SETTLED',
+					{
+						bytes: request.bytes,
+						ended,
+						failed: primary !== undefined,
+						aborted: signal.aborted,
+					},
+					primary,
+				);
 			}
 		}
-		if (didFail) {
-			throw primaryError;
+		for (const event of finalEvents) {
+			yield event;
 		}
 	}
 
+	stream(input: ModelStreamInput, signal: AbortSignal): AsyncIterable<ModelStreamEvent> {
+		return this.streamModel(input, signal, MODEL_STREAM_MAX_BYTES);
+	}
+
 	async discover(baseUrl: string, credential: string | null, signal: AbortSignal): Promise<EndpointModel[]> {
-		const response = await request(endpoint(baseUrl, 'models'), credential, signal, 'GET', undefined, this.logger);
-		const bytes = await bounded(response, LIMIT_MODELS, signal);
-		let raw: unknown;
-		try {
-			raw = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
-		} catch {
-			throw new ModelNetworkFailure('response_invalid');
-		}
-		const r = record(raw);
-		if (!r || !Array.isArray(r.data) || r.data.length > MAX_MODELS) {
-			throw new ModelNetworkFailure('response_invalid');
-		}
-		const map = new Map<string, EndpointModel>();
-		for (const item of r.data) {
-			const m = record(item);
-			if (!m || !isNonemptyText(m.id) || Buffer.byteLength(m.id, 'utf8') > 512) {
+		return this.request(baseUrl, credential, signal, LIMIT_MODELS, async (request) => {
+			// Read exactly one bounded response; SDK auto-pagination is deliberately not consumed.
+			const page: unknown = await request.client.models.list({ signal });
+			const raw = record(page);
+			if (!raw || !Array.isArray(raw.data) || raw.data.length > MAX_MODELS) {
 				throw new ModelNetworkFailure('response_invalid');
 			}
-			const id = m.id.trim();
-			if (map.has(id)) {
-				throw new ModelNetworkFailure('response_invalid');
-			}
-			let ownedBy: string | undefined;
-			if (m.owned_by !== undefined) {
-				if (!isNonemptyText(m.owned_by) || Buffer.byteLength(m.owned_by, 'utf8') > 512) {
+			const models = new Map<string, EndpointModel>();
+			for (const item of raw.data) {
+				const model = record(item);
+				if (!model || !isNonemptyText(model.id) || Buffer.byteLength(model.id, 'utf8') > 512) {
 					throw new ModelNetworkFailure('response_invalid');
 				}
-				ownedBy = m.owned_by;
-			}
-			let createdAt: number | undefined;
-			if (m.created !== undefined) {
-				if (typeof m.created !== 'number' || !Number.isSafeInteger(m.created) || m.created < 0) {
+				const id = model.id.trim();
+				if (models.has(id)) {
 					throw new ModelNetworkFailure('response_invalid');
 				}
-				createdAt = m.created;
+				let ownedBy: string | undefined;
+				if (model.owned_by !== undefined && model.owned_by !== null) {
+					if (!isNonemptyText(model.owned_by) || Buffer.byteLength(model.owned_by, 'utf8') > 512) {
+						throw new ModelNetworkFailure('response_invalid');
+					}
+					ownedBy = model.owned_by;
+				}
+				let createdAt: number | undefined;
+				if (model.created !== undefined && model.created !== null) {
+					if (
+						typeof model.created !== 'number' ||
+						!Number.isSafeInteger(model.created) ||
+						model.created < 0
+					) {
+						throw new ModelNetworkFailure('response_invalid');
+					}
+					createdAt = model.created;
+				}
+				const capabilities = metadata(model.nexus_capabilities);
+				models.set(id, {
+					id,
+					...(ownedBy === undefined ? {} : { ownedBy }),
+					...(createdAt === undefined ? {} : { createdAt }),
+					...(capabilities === undefined ? {} : { capabilities }),
+				});
 			}
-			const capabilities = metadata(m.nexus_capabilities);
-			map.set(id, {
-				id,
-				...(ownedBy === undefined ? {} : { ownedBy }),
-				...(createdAt === undefined ? {} : { createdAt }),
-				...(capabilities === undefined ? {} : { capabilities }),
-			});
-		}
-		return [...map.values()].sort((a, b) => a.id.localeCompare(b.id));
+			return [...models.values()].sort((a, b) => a.id.localeCompare(b.id));
+		});
 	}
 
 	async probe(input: ModelProbe, signal: AbortSignal): Promise<ModelProbeResult> {
@@ -508,22 +312,31 @@ export class OpenAiCompatibleAdapter implements ModelNetworkPort {
 			);
 			return {};
 		}
-
-		const isResponses = input.protocol === 'responses';
-		const body = probeBody(input);
-		const response = await request(
-			endpoint(input.baseUrl, isResponses ? 'responses' : 'chat/completions'),
-			input.credential,
+		let usage: ModelProbeResult['usage'];
+		for await (const event of this.streamModel(
+			{
+				baseUrl: input.baseUrl,
+				credential: input.credential,
+				modelId: input.modelId,
+				protocol: input.protocol,
+				maxOutputTokens: Math.min(input.maxOutputTokens, 16),
+				usesReasoning: input.usesReasoning,
+				...(input.reasoningEffort === undefined ? {} : { reasoningEffort: input.reasoningEffort }),
+				messages: [{ role: 'user', content: 'Reply with OK.' }],
+				tools: [],
+			},
 			signal,
-			'POST',
-			body,
-			this.logger,
-		);
-		await requireEventStream(response);
-		const data = await bounded(response, LIMIT_STREAM, signal);
-		if (signal.aborted) {
-			throw new ModelNetworkFailure('timeout');
+			LIMIT_PROBE,
+		)) {
+			if (event.type === 'usage') {
+				if (usage) {
+					throw new ModelNetworkFailure('response_invalid');
+				}
+				usage = { inputTokens: event.inputTokens, outputTokens: event.outputTokens };
+			} else if (event.type === 'completed' && event.finishReason !== 'stop') {
+				throw new ModelNetworkFailure('response_invalid');
+			}
 		}
-		return parseProbeStream(data, input.protocol);
+		return usage ? { usage } : {};
 	}
 }

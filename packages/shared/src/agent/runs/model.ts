@@ -53,3 +53,13 @@ export type AgentRunStepEventView =
 			kind: 'step.completed' | 'step.failed' | 'step.unknown';
 			createdAt: number;
 	  };
+
+export interface AgentRunUsageView {
+	runId: string;
+	runVersion: number;
+	inputTokens: number | null;
+	outputTokens: number | null;
+	reportedModelRequests: number;
+	modelRequests: number;
+	toolExecutions: number;
+}

@@ -1,3 +1,4 @@
+import { subscribeNativeRun } from '../api/native-run-stream';
 import type { AgentReasoningEffort } from '@nexus-terminal/shared/agent/providers/values';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
@@ -32,6 +33,8 @@ import type {
 	NativeRunIntent,
 	NativeRunAction,
 	NativeRunInput,
+	NativeRunSubscription,
+	NativeRunUpdate,
 } from '../model/native-run-types';
 import { snapshotNativeRunAction } from '../model/native-run-mapper';
 import { compareNativeEntryCursor, isNativeRunActive, nativeModelKey } from '../model/native-run-rules';
@@ -82,12 +85,15 @@ export function useNativeRuns(
 	const acknowledged = ref(false);
 	const olderHidden = ref(false);
 	const feedback = ref('');
-	let timer: ReturnType<typeof setTimeout> | null = null;
+	let subscription: NativeRunSubscription | null = null;
+	let updateGeneration = 0;
+	let awaitingConfirmedUpdate = false;
 	let disposed = false;
 
-	function stopPolling(): void {
-		if (timer !== null) clearTimeout(timer);
-		timer = null;
+	function stopUpdates(): void {
+		updateGeneration += 1;
+		subscription?.close();
+		subscription = null;
 	}
 
 	function clearRun(): void {
@@ -104,7 +110,8 @@ export function useNativeRuns(
 	}
 
 	function clearPrivate(): void {
-		stopPolling();
+		awaitingConfirmedUpdate = false;
+		stopUpdates();
 		scope.value = null;
 		thread.value = null;
 		models.value = [];
@@ -163,7 +170,8 @@ export function useNativeRuns(
 	);
 
 	function fail(cause: unknown): void {
-		stopPolling();
+		awaitingConfirmedUpdate = false;
+		stopUpdates();
 		operation.refreshRequired.value = true;
 		if (cause instanceof AgentManagementFailure && (cause.code === 'unauthenticated' || cause.code === 'forbidden'))
 			clearPrivate();
@@ -218,7 +226,7 @@ export function useNativeRuns(
 
 	async function selectThread(value: NativeThread): Promise<void> {
 		if (operation.busy.value || pending.value !== null || !attachmentsReady.value) return;
-		stopPolling();
+		stopUpdates();
 		inputArtifacts.value = [];
 		attachmentsReady.value = true;
 		thread.value = {
@@ -241,7 +249,7 @@ export function useNativeRuns(
 
 	function clearThread(): void {
 		if (operation.busy.value || pending.value !== null) return;
-		stopPolling();
+		stopUpdates();
 		thread.value = null;
 		runs.value = [];
 		runCursor.value = 0;
@@ -259,6 +267,7 @@ export function useNativeRuns(
 		const selected = thread.value;
 		if (!current || !selected) return;
 		const after = more ? runCursor.value : 0;
+		stopUpdates();
 		await operation.execute(
 			async (signal) => {
 				const [page, body] = await Promise.all([
@@ -276,22 +285,25 @@ export function useNativeRuns(
 			},
 			{ write: false, onFailure: fail },
 		);
+		startUpdates();
 	}
 
 	async function readEntries(): Promise<void> {
 		const current = scope.value;
 		const selected = thread.value;
 		if (!current || !selected) return;
+		stopUpdates();
 		await operation.execute(
 			(signal) => listNativeEntries(current, selected.id, entryCursor.value, signal),
 			acceptEntries,
 			{ write: false, onFailure: fail },
 		);
+		startUpdates();
 	}
 
 	async function selectRun(value: NativeRun): Promise<void> {
 		if (operation.busy.value || pending.value !== null) return;
-		stopPolling();
+		stopUpdates();
 		clearRun();
 		run.value = {
 			id: value.id,
@@ -306,14 +318,17 @@ export function useNativeRuns(
 	}
 
 	async function refreshRun(): Promise<void> {
-		await readRun(false);
+		stopUpdates();
+		await readRun();
+		startUpdates();
 	}
 
-	async function readRun(background: boolean): Promise<void> {
+	async function readRun(): Promise<void> {
 		const current = scope.value;
 		const selected = run.value;
 		const selectedThread = thread.value;
 		if (!current || !selected || !selectedThread) return;
+		const generation = updateGeneration;
 		await operation.execute(
 			async (signal) => {
 				const [page, permits, descendants, initialBody] = await Promise.all([
@@ -327,7 +342,7 @@ export function useNativeRuns(
 					throw new AgentManagementFailure('not_found', 'confirmed');
 				if (latest.version < selected.version || page.items.some((item) => item.runVersion > latest.version))
 					throw new AgentManagementFailure('protocol_failure', 'unknown');
-				// A Run can finish after the body read but before the status read. Once polling stops,
+				// A Run can finish after the body read but before the status read. At its terminal state,
 				// read the final durable entries again instead of leaving the reply behind its cursor.
 				const stopped = !isNativeRunActive(latest) || latest.status === 'unknown';
 				const body =
@@ -339,6 +354,13 @@ export function useNativeRuns(
 				return { latest, page, permits, descendants, body, usage };
 			},
 			(value) => {
+				if (
+					generation !== updateGeneration ||
+					scope.value?.appId !== current.appId ||
+					run.value?.id !== selected.id ||
+					thread.value?.id !== selectedThread.id
+				)
+					return;
 				acceptEntries(value.body);
 				run.value = value.latest;
 				usage.value = value.usage;
@@ -349,29 +371,87 @@ export function useNativeRuns(
 				children.value = value.descendants;
 				inspected.value = pending.value !== null;
 			},
-			{ write: false, background, onFailure: fail },
+			{ write: false, onFailure: fail },
 		);
-		schedulePoll();
 	}
 
-	function schedulePoll(): void {
-		stopPolling();
-		if (
-			disposed ||
-			!active() ||
-			document.visibilityState === 'hidden' ||
-			!run.value ||
-			!isNativeRunActive(run.value) ||
-			run.value.status === 'unknown' ||
-			pending.value ||
-			operation.refreshRequired.value
-		)
-			return;
-		timer = setTimeout(() => {
-			timer = null;
-			void readRun(true);
-		}, 2000);
+	function canReadUpdates(): boolean {
+		return (
+			!disposed &&
+			active() &&
+			!document.hidden &&
+			scope.value !== null &&
+			run.value !== null &&
+			thread.value !== null &&
+			pending.value === null &&
+			(!operation.refreshRequired.value || awaitingConfirmedUpdate)
+		);
 	}
+
+	function startUpdates(): void {
+		if (!canReadUpdates() || subscription || !scope.value || !run.value || !thread.value) return;
+		const generation = updateGeneration;
+		subscription = subscribeNativeRun(
+			scope.value,
+			run.value.id,
+			() => {
+				if (!thread.value || !run.value) throw new AgentManagementFailure('protocol_failure', 'not_dispatched');
+				return {
+					threadId: thread.value.id,
+					entries: {
+						runSequence: entryCursor.value.runSequence,
+						stepIndex: entryCursor.value.stepIndex,
+						eventSequence: entryCursor.value.eventSequence,
+						textOffset: entryCursor.value.textOffset,
+					},
+					events: eventCursor.value,
+					runVersion: run.value.version,
+				};
+			},
+			(value) => {
+				if (generation !== updateGeneration || !canReadUpdates()) return false;
+				acceptUpdate(value);
+				return true;
+			},
+			(cause) => {
+				if (generation === updateGeneration) {
+					operation.notice.value = 'failed';
+					fail(cause);
+				}
+			},
+		);
+	}
+
+	function acceptUpdate(value: NativeRunUpdate): void {
+		acceptEntries(value.body);
+		if (value.state) {
+			run.value = value.state.run;
+			usage.value = value.state.usage;
+			events.value = [...events.value, ...value.state.events.items].slice(-200);
+			eventCursor.value = value.state.events.nextCursor;
+			approvals.value = value.state.approvals;
+			children.value = value.state.children;
+			if (awaitingConfirmedUpdate) {
+				// This releases only a definitively acknowledged mutation's post-write read fence.
+				awaitingConfirmedUpdate = false;
+				operation.refreshRequired.value = false;
+			}
+		}
+		if (!value.more && run.value && (!isNativeRunActive(run.value) || run.value.status === 'unknown'))
+			stopUpdates();
+	}
+
+	watch(operation.busy, (busy) => {
+		if (!busy) subscription?.resume();
+	});
+	watch(operation.refreshRequired, (required) => {
+		if (required && !awaitingConfirmedUpdate) stopUpdates();
+		else if (
+			awaitingConfirmedUpdate ||
+			(run.value && isNativeRunActive(run.value) && run.value.status !== 'unknown')
+		)
+			startUpdates();
+	});
 
 	async function readMessages(value: NativeChild, more = false): Promise<void> {
 		const current = scope.value;
@@ -461,7 +541,7 @@ export function useNativeRuns(
 		}
 		const intent = pending.value;
 		inspected.value = false;
-		stopPolling();
+		stopUpdates();
 		await operation.execute(
 			(signal) => mutateNativeRun(intent, signal),
 			(result) => {
@@ -473,6 +553,7 @@ export function useNativeRuns(
 				} else if (intent.action.kind === 'cancel' && result.kind === 'run') run.value = result.run;
 				pending.value = null;
 				acknowledged.value = false;
+				awaitingConfirmedUpdate = true;
 			},
 			{
 				write: true,
@@ -486,7 +567,7 @@ export function useNativeRuns(
 			},
 		);
 		if (!pending.value && operation.notice.value === 'saved') {
-			if (run.value) await refreshRun();
+			if (run.value) startUpdates();
 			else await refreshThread();
 		}
 	}
@@ -508,24 +589,30 @@ export function useNativeRuns(
 	}
 
 	function onVisibility(): void {
-		if (document.visibilityState === 'hidden') stopPolling();
-		else schedulePoll();
+		if (document.visibilityState === 'hidden') stopUpdates();
+		else {
+			startUpdates();
+		}
 	}
 
 	document.addEventListener('visibilitychange', onVisibility);
+	window.addEventListener('pageshow', onVisibility);
 	watch(
 		active,
 		(value) => {
-			if (!value) stopPolling();
+			if (!value) stopUpdates();
 			else if (scope.value === null) void readScope();
-			else schedulePoll();
+			else {
+				startUpdates();
+			}
 		},
 		{ immediate: true, flush: 'post' },
 	);
 	onBeforeUnmount(() => {
 		disposed = true;
-		stopPolling();
+		stopUpdates();
 		document.removeEventListener('visibilitychange', onVisibility);
+		window.removeEventListener('pageshow', onVisibility);
 	});
 	return {
 		operation,

@@ -2474,3 +2474,155 @@ Agent 设置的“模型 Provider”标题行原先由左侧标题组和右侧�
 | 职责归属 | 用例/转换/事务和浏览器消费者沿已有owner，外部供应商只在隔离夹具替换，不绕过授权/派发/保存。                                                                                                                                                                                                                                                                                                                                                                                                            |
 | 类型归属 | 如发现契约问题同步Shared/双端；测试夹具不新增产品接口或私有回调。                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | 完成证据 | 隔离HTTP六项通过，含直接Images/审批工具、字节Hash/Range/认证/App隔离/版本冲突、保留解除删除、HTML禁止内联、URL-only未知不获取和在途请求取消不重试。两轮复审补齐初始v1签名，根check/双端build/全量格式/diff通过。用户准备新版环境后，CDP正式添加gpt-image-2.5、一次真实Run生成、1536×1024预览、浏览器下载完成及SHA一致、保留/解除/删除取消与确认、文件库清空/占用归零/原链接404全部通过，证据见testing。保留新增模型配置，删除本轮图片，不动其它数据。Android真机独立待验；收尾本地提交，不推送或发布。 |
+
+## Agent对话Token统计与快速跳转恢复（2026-10-25，源码完成）
+
+用户报告后端重构后的正式Agent缺失Token统计与快速跳转；按H-13恢复旧输入框状态行，不改其它UI。旧基线75289ef9父提交AgentConversation的Token徽标、usage明细和回到最新消息作为功能参照，用户确认两种快速跳转都需要：原“回到最新消息”及上一条／下一条消息；工作区已有图片预览/文件库/模型编辑及三语文案修改，不覆盖或代为提交。
+
+八节设计：① Run拥有真实usage，Surface拥有统计呈现及滚动；② 原RunStepStorage/Model、RunService及Agent公开/HTTP，前端原native API/mapper/composable/Surface；③ Storage SQL→Model→Service→public/HTTP→Shared codec→前端mapper，不逐步骤拉取或增加第二个轮询；④ Shared新增RunUsage只读契约，内部应用/存储/前端对象独立逐字段转换；⑤ 新增认证GET runs/:runId/usage，原Run读取流程消费；⑥ 单个SQL快照聚合当前Root与其Child的步骤/工具和已报告input/output，用量缺失为null，计数与已报告覆盖分开；无表结构或迁移；⑦ scope/Run切换/取消/卸载沿原operation代际，usage不提前于Run终态最后读取，失败不冒充零；滚动恢复不抢夺阅读位置；⑧ 按D17仅源码双轮审核、根check/Shared双端build/格式/diff，不新增或运行行为测试；本轮未授权自动提交。
+
+| 审核表   | 判据及状态                                                                                                                                 |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| 功能对应 | 当前Run及Child真实input/output汇总，状态行及可点击明细恢复；原回到最新消息入口补齐窗口/图片/切回处理，并增加按消息起点前后跳转及首尾禁用。 |
+| 职责归属 | 原Run所有者汇总，不在前端N+1扫描步骤、不另设定时器；滚动由Surface持有。                                                                    |
+| 类型归属 | Shared/应用/storage/前端各自对象与白名单投影，缺测不等于零。                                                                               |
+| 完成证据 | 实现与双轮源码审核完成；静态命令结果见testing，行为与手机回归按D17留远程，本轮不自动提交。                                                 |
+
+## Agent 聊天思考等级恢复（2026-10-25，源码完成）
+
+范围：恢复聊天工具栏思考等级入口及本轮请求覆盖，沿用全局按钮/Popover与原有文案，不重设计其它UI；保留工作区所有前序及未知修改，不自动提交。遵守H-04–H-09/H-13、E-03/E-07/E-11/E-13和D17，仅静态检查，不新增/运行行为测试。
+
+八节设计：① Provider规则拥有可用等级和冻结选择，Run拥有命令及幂等身份，Surface/composable拥有草稿；② 原Shared run/workspace、Provider ModelReference/storage、Run Model/Service、HTTP/register/workspace及前端mapper；③ 按原边界逐字段转换，无跨层技术调用；④ SelectableModel公开支持列表/默认值/强制标记，CreateRun.model增加可选reasoningEffort，前端输入单独保存本轮覆盖；⑤ create与append及直接HTTP均同步；⑥ 默认沿模型设置，显式覆盖必须支持，Images不接受思考覆盖，冻结到现有capabilities.defaultReasoningEffort，不改数据库；⑦ 选项切换不改在途任务，模型身份变化清空覆盖，命令快照及hash包含选择，未知重试不换意图；⑧ 两轮源码审核，Shared构建、根check、双端build、全量格式和diff，浏览器/远程E2E留待后续。
+
+| 审核表   | 判据及状态                                                                                                |
+| -------- | --------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 支持模型显示默认/等级选项，普通和图片模型隐藏；create/append实际发出选择。                                |
+| 职责归属 | Provider选择校验与冻结、Run幂等，前端仅选择不推断能力。                                                   |
+| 类型归属 | Shared公开契约与内部/存储/前端对象显式映射，完整链路无字段丢失。                                          |
+| 完成证据 | 实现与两轮源码审核完成；Shared构建、根check、双端build、全量格式及diff通过；按D17行为待远程，不自动提交。 |
+
+## Agent 重启后会话加载失败（2026-10-25，源码及限定只读诊断完成）
+
+用户重启后仍报告会话加载失败，授权针对当前问题只读诊断。通过既有浏览器认证仅取得会话cookie供内存HTTP请求使用，不打印/保存cookie、不操作页面、不发模型请求、不写配置。真实agent.providers.list返回200但Shared解码失败，agent.threads.list解码正常；根因是新增可选defaultReasoningEffort被精确record解码误作必填，且create默认不带reasoningEffort也存在同类问题。前轮静态检查未覆盖该行为，必须修正，不修改UI。
+
+八节设计：① Shared协议解码持字段要求；② 原agent http-codec、run及workspace codec；③ 不变更owner及依赖方向；④ 明确区分必填和可选字段，缺失可选合法，未知字段及坏值仍拒绝；⑤ 模型列表、create/append全链复核；⑥ 不修改数据/表结构/外呼逻辑；⑦ 不自动重试写入，不重启服务；⑧ 限定真实只读模型/会话响应与修复后解码核对，静态根check/build/格式/diff，不扩大为行为/E2E测试。
+
+| 审核表   | 判据及状态                                                                                                                                                                                           |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 无默认思考字段的普通/Images模型列表能加载，默认创建请求不被误拒绝。                                                                                                                                  |
+| 职责归属 | 仅严格边界解码表达optional，不在UI吞失败或补造字段。                                                                                                                                                 |
+| 类型归属 | Shared可选字段与解码一致，其余字段必填/未知字段拒绝保持。                                                                                                                                            |
+| 完成证据 | 真实同一模型列表修复前解码失败、修复后通过；会话列表及Run/usage身份版本核对通过，默认/显式请求仅解码不派发；根check、双端build、全量格式及diff通过；前端刷新与后端再次重启后的端到端行为待用户核对。 |
+
+## Agent 文字消息无回复（2026-10-25，源码及限定重放完成）
+
+用户发送测试后无回复。本轮针对该现有任务及日志只读诊断，确认Root创建/dispatch成功、供应商流493字节后response_invalid并进入unknown；会话只有用户正文。为定位协议，使用相同既有Provider和冻结模型做一次只含“Reply only OK.”的最小文字请求（最多32输出tokens，无工具、无业务写入），取得完整3250字节SSE，实际返回OK及usage。凭据由现有SecretBox在内存解密，未输出/保存；响应仅临时保存供本轮离线重放，不增加后续付费请求或重试原unknown任务。
+
+八节设计：① Platform模型协议Adapter持外部帧校验，Surface持失败反馈；② 原model-stream与AgentSurface；③ 不变更应用/存储/Shared，不让供应商字段进入业务正文；④ native_finish_reason只作为经类型检查的供应商元数据，不驱动终态；reasoning_content接受有界string/null且不冒充答复，仍需真实content、finish_reason和DONE；⑤ 现有Chat Completions流入口；⑥ 保持未知字段/拒绝/畸形正文、工具、截断与预算规则，不更改UI设计；⑦ 输出未知仍不自动重试，失败/未知状态复用全局驻留Toast按当前任务状态变化提示；⑧ 重放本轮真实帧核对OK/usage/终态，并限定核对坏字段与思考独占不冒充成功；两轮源码审核、根check/双端build/全量格式/diff，不运行全量本地E2E。新后端需用户重启。
+
+| 审核表   | 判据及状态                                                                                                                                                                                                                |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 实际NewAPI/deepseek流不因native_finish_reason/reasoning_content中断，正常正文与usage可交付；失败有Toast。                                                                                                                 |
+| 职责归属 | 供应商兼容在Platform，任务状态反馈在Surface，不改模型执行/幂等/授权。                                                                                                                                                     |
+| 类型归属 | 无新协议/存储字段；外部思考文本不进入正文/持久消息，不赋予工具执行资格。                                                                                                                                                  |
+| 完成证据 | 真实3250字节帧按1/73/3250字节分块均得到OK、usage34/11与stop；五类坏帧仍拒绝。两轮源码审核及根check/前后端build/全量格式/diff通过；冻结等级确认为max，临时原始响应已删除。App新请求需用户重启后核对，原unknown任务不重放。 |
+
+## Agent 供应商响应兼容排查（2026-10-25，源码完成）
+
+范围：核对真实模型请求、Chat Completions/Responses流、工具参数、图片返回、模型发现及前端消费，修复合法可选字段被误拒的同类问题；不修改UI设计、不自动重试原unknown任务、不重启或提交。遵守H-04–H-09/H-13、E-06/E-08/E-09/E-11/E-13和D17，仅源码/静态检查，不新增或运行行为测试及外部模型请求。
+
+八节设计：① 供应商编码/校验由Platform AI Adapter持有；② 沿model-stream/model-tool-stream/openai-compatible及原消费链；③ 不改变依赖方向；④ 外部unknown按已知字段逐项校验，nullable空占位不视为实际输出，reasoning别名仅有界消费；⑤ 模型测试与正式Run共享解码，发现入口同步图片能力；⑥ 流式累计usage只保留最新单调快照，收到标准DONE后向原消费者交付一次，不累加重复统计；⑦ null终态delta必须同时有合法finish_reason，真实拒答/未知输出/截断/畸形工具仍失败，原unknown围栏不变；⑧ 两轮调用链审核，根check、双端build、全量格式和diff，行为回归留远程。
+
+| 审核表   | 判据及状态                                                                                                                                                                          |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | nullable拒答/工具占位、空终态delta、工具续帧nullable身份与参数、reasoning别名、累计usage及发现图片能力，源码修正完成。                                                              |
+| 职责归属 | 仅修改第三方协议Adapter，业务和前端消费保持原语义。                                                                                                                                 |
+| 类型归属 | 外部字段不透传进Shared或存储，usage沿原技术事件只交付一次。                                                                                                                         |
+| 完成证据 | 两轮源码审核完成：复核标准终态、拒答/未知输出、工具首帧/续帧身份和参数拼接、usage单次消费及探测/Run资源收尾；根check、双端build、全量格式和diff通过。未运行行为/E2E或真实模型请求。 |
+
+## OpenAI 官方 Node SDK 替换（2026-10-25，源码完成）
+
+用户明确要求以OpenAI开源SDK替换自研协议实现。依H-14选用openai/openai-node（选型时11,240 Star、Apache-2.0），固定openai@7.43.0。使用已读取的OpenAI Docs libraries及官方流协议，不发外部模型请求、不读取密钥、不重启、不提交；D17仅静态及源码审核，UI保持现状。
+
+八节设计：① Platform AI Adapter拥有SDK实例与网络资源，业务Run保持权限/预算/审批/未知结果权威；② 沿openai-compatible/model-request/model-stream/model-tool-stream/model-image，增加有界SDK传输owner，移除自研SSE分帧和JSON解析；③ SDK类型只在Platform，Model/Shared/前端保持原契约；④ 生成具名SDK请求对象，响应以unknown进行应用所需字段与联合校验及白名单投影，不按无关扩展字段拒绝；⑤ chat.completions.create/responses.create/images.generate/models.list及probe共用实际SDK路径；⑥ 不变更数据库，工具参数/续接证据和累计usage保留原语义；⑦ maxRetries=0，拒绝重定向，继承原signal/期限，传输有界读取与清理由Adapter保留并追踪SDK可能吞掉的取消/清理失败，必须正式终态及迭代成功才交付完成；⑧ 两轮调用链审核、根check/双端build/全量格式/diff，修改真实静态消费者，行为与供应商验证留远程。
+
+| 审核表   | 判据及状态                                                                                                                                                                                                                  |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 五类模型入口均迁移SDK，前端呈现与既有轮询保持不变。                                                                                                                                                                         |
+| 职责归属 | SDK持请求和SSE，Adapter持资源/容量/语义转换，Run持业务政策。                                                                                                                                                                |
+| 类型归属 | SDK请求/响应只归Platform，Shared/应用/存储不引入SDK类型。                                                                                                                                                                   |
+| 完成证据 | 双轮源码审核完成：检查正式/测试共用路径、匿名/兼容端点、重试禁用、SDK事件名关联、输入/响应容量、正常/异常/提前退出及清理因果；根check、双端build、全量格式、既有mjs语法和diff通过；行为按D17留远程，不将SDK接入当实机通过。 |
+
+## 成熟开源模块替换盘点（2026-10-25，只读审核完成）
+
+用户要求继续检查其它模块是否适合使用成熟库；本轮仅盘点源码、依赖及GitHub/npm元数据，不新增依赖、不修改产品代码或UI、不发模型请求、不提交。遵守H-04–H-09/H-13/H-14、E-01/E-02/E-09/E-10和D17。以下Star于本轮通过GitHub仓库API核对，是选型时快照，不作为功能/安全/兼容性保证；未进行SDK/解析器行为验收。
+
+### 可替换候选及真实落点
+
+| 顺序/范围            | 当前实现与实际消费者                                                                                                                             | 候选项目及Star快照                                                                                                                            | 替换边界与注意事项                                                                                                                                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 TOTP               | platform/security/adapters/rfc-totp.ts：82行含Base32、HOTP/TOTP截取、URI与校验；TotpPort及Access因素消费                                         | [otplib](https://github.com/yeojz/otplib) 2,298；Speakeasy 2,754但最近推送为2023年，不因Star略高优先采用                                      | 替换算法与URI生成，保留原secret格式、SHA1/6位/30秒/±1窗口、now毫秒转换、二维码及认证流程。高敏功能需要独立回归，不宣称当前算法有漏洞。                                                                                  |
+| 2 multipart          | platform/http/http-body.ts：146行含手写boundary/header/filename；主题、背景、备份、连接导入四入口消费                                            | [Formidable](https://github.com/node-formidable/formidable) 7,176；[Busboy](https://github.com/mscdex/busboy) 2,999                           | 优先评估Formidable，若其流/资源模型不适配则采用Busboy。保留各route字节/part限制、取消、零化、错误码、UTF-8文件名及不隐式写临时文件；同步decodeMultipart需迁移为异步流，不能只替换函数正文。@fastify/busboy仅140，排除。 |
+| 3 版本比较           | 前端app/config/release.ts自写parseVersion/isNewerRelease；后端plugins/service/plugin-source.ts自写comparePluginVersions，仓库兼容性/推荐排序消费 | [node-semver](https://github.com/npm/node-semver) 5,474                                                                                       | 前端优先采用标准SemVer及显式tag规范化，替换非法版本“只要不同就算更新”的当前回退。后端目前BigInt且Shared版本语法未限制核心整数大小，不能直接换库后静默缩小范围；先明确并同步版本契约/签名包消费者，保留预发布排序。      |
+| 4 图片格式           | platform/images/adapters/native-image-inspector.ts自行识别PNG/JPEG/GIF/WebP与SVG根；图片生成另有独立格式白名单                                   | [file-type](https://github.com/sindresorhus/file-type) 4,339；[fast-xml-parser](https://github.com/NaturalIntelligence/fast-xml-parser) 3,138 | file-type只覆盖位图检测，不能替代SVG识别/安全策略；SVG若迁移XML解析须禁止实体处理并维持原允许格式。文件识别不等于完整图片验证或消毒；异步API需同步原消费者。                                                            |
+| 5 前端通用浏览器机制 | foundation/browser/useDeviceCapabilities、interaction的监听/resize/drag等；既有UI与终端消费者                                                    | [VueUse](https://github.com/vueuse/vueuse) 22,396                                                                                             | 用useMediaQuery/useResizeObserver/useEventListener等替代底层监听和释放。保留767px等现有断点、设备分类规则、终端焦点、触控与拖动效果，不以库默认行为更改UI。                                                             |
+| 6 协议校验           | Shared各域严格codec手动遍历字段及形状，真实双端/SDK脚本均消费                                                                                    | [Zod](https://github.com/colinhacks/zod) 44,193                                                                                               | 分域逐步替换基础形状校验；保持Shared唯一契约、strict未知字段拒绝、可选/null差异、UTF-8字节容量、请求响应身份及跨字段规则；不能把全部显式mapper合并成直接透传。改动大，排在局部替换之后。                                |
+| 架构级 HTTP          | platform/http的自研路由/请求/服务生命周期                                                                                                        | [Fastify](https://github.com/fastify/fastify) 37,298；[Hono](https://github.com/honojs/hono) 32,671                                           | 候选成熟，但须独立迁移计划，核对自定义route预算、WS认证、来源链、停机/取消、未知写入及所有真实路由；不能和上述局部替换混批。Fastify更贴近现有Node HTTP/WS边界。                                                         |
+| 条件性 Docker        | platform/docker/adapters/native-docker.ts经MachineCommandExecutor/SSH执行docker CLI并读JSON                                                      | [Dockerode](https://github.com/apocas/dockerode) 4,953                                                                                        | 当前无Docker API连接能力，不能直接替换CLI Adapter；若采用须复用现有SSH代理/跳板/授权和资源清理，不额外要求开放Docker TCP端口。暂不作为首批。                                                                            |
+
+### 排除项与已使用成熟库
+
+ACP的ndjson-acp.ts/acp-codec.ts共369行含自写JSON-RPC/握手/事件处理，是潜在替换点，但官方agentclientprotocol/typescript-sdk只有266 Star，按H-14排除；协议主仓库4,497不能代替SDK自身计数。vscode-jsonrpc所属microsoft/vscode-languageserver-node为1,796，Jayson为727，虽达到门槛但仅提供通用JSON-RPC，并不等价于ACP SDK，不能承诺直接接入或伪称已替换。
+
+MCP已使用官方client；SSH/SFTP使用ssh2；WebAuthn使用SimpleWebAuthn；日志用Pino；归档生成用archiver、插件读取用tar；浏览器用Puppeteer；RDP/VNC用IronRDP/noVNC；前端交互控件已封装Reka UI。指标依赖@prometheus-io/client的真实上游是prometheus/client_js，3,497 Star，满足门槛，不是单凭包名判定的自研实现。Node crypto.scrypt/AES-GCM/随机数是标准库能力，外层业务封装有真实职责；授权、CAS、未知副作用围栏及任务资源归属没有通用库可直接替代。
+
+structurallyEqual虽可考虑fast-deep-equal（2,049），但当前专门限定JSON/plain-object、非plain对象仅引用相等，库的Date/RegExp/Map等语义并不等价；只有22处调用且实现小，不列首批，不能为换库改变相等性。VueUse同样只替换机制，业务保存顺序/写入未知不交给通用debounce或请求重试库。
+
+| 审核表   | 本轮结论                                                                                                                                                                                                        |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 确认六类局部/逐域候选、两个需独立设计的架构候选；记录四个multipart入口、版本比较双端与实际依赖，排除ACP SDK和低Star fork。                                                                                      |
+| 职责归属 | 后续替换发生在原Platform/Shared/foundation owner，SDK不持业务权限/事务/资源政策，不改变UI效果。                                                                                                                 |
+| 类型归属 | 候选第三方类型留技术边界；业务/Shared对象和逐字段mapper仍由原owner持有。本轮无类型修改。                                                                                                                        |
+| 完成证据 | 已只读核对所列源码与实时元数据，未安装或运行候选库，无行为通过结论；仅执行本文格式和diff检查。建议按TOTP→multipart→前端版本比较→图片识别推进，随后VueUse/Shared分域，不能据本审核自动扩大为HTTP架构重构或部署。 |
+
+## Agent 原生对话改为变更推送（已由下一节正文直推替代）
+
+1. **职责与范围**：按用户要求保留 ACP，移除原生 Run 两秒前端轮询；UI 不变。Run 日志仍为权威，WS 仅推送失效通知，原严格 HTTP/Workspace 增量读取负责正文、用量、审批和子任务。
+2. **子功能与目录**：runs/model 的变更 owner 接收 Run/Step/Tool/Collaboration/Governance 写入后的通知；interfaces/ws 持订阅；前端 api 持 WS 生命周期，use-native-runs 持串行补读与游标。
+3. **依赖方向**：写入 Model → 同模块变更 owner；WS → Thread/Run Service 完成原身份与 App 准入，不从 Storage 反向调用 Service。复用现有 ws 和浏览器 WebSocket，不添加协议解析库。
+4. **类型与转换**：Shared agent/runs/events 唯一持有订阅、通知和心跳，预算归 runs/values；双端严格解码并核对 App/Run 关联，公开通知不包含正文、秘密或数据库行。
+5. **入口与安装**：新增 /ws/agent-runs，经 Bootstrap 原来源/认证准入；register 注入同一变更 owner，并在停机时停止订阅。
+6. **数据、事务与并发**：不变更表。写入等待收敛后通知，提交未知也提示只读核对；先订阅再初始通知，读取中通知保留 dirty 位，分页持续到空页，最终状态不能截断正文。
+7. **生命周期与失败**：合并突发通知，慢消费者关闭后重连补读；心跳只保活与复核权限，不定时读取 Run。前端隐藏/注销/切换/卸载关闭，重连按原游标补读，不重发模型请求或变更；网络断开的背景只读等待退避重连后补读，其它读取失败仍保留原失败围栏。
+8. **当前能力与验收**：源码与两轮调用链审核完成，静态证据见 testing；D17 不新增或运行本地行为/E2E，实机弱网、后台恢复、并发写入与权限撤销待远程。ACP、记忆审核和插件 SDK 的独立订阅不在本次原生 Run 轮询范围。
+
+| 审核表   | 本阶段入口与判据                                                           | 状态                 |
+| -------- | -------------------------------------------------------------------------- | -------------------- |
+| 功能对应 | use-native-runs 状态/正文/用量/审批/子任务改为通知驱动，显式刷新保留       | 源码已审             |
+| 职责归属 | Model 写入收敛通知；WS 原身份准入；页面串行增量读取；Platform 追踪连接排空 | 源码已审             |
+| 类型归属 | Shared events/values，双端白名单及订阅关联；无 SDK 或存储类型越界          | 源码已审             |
+| 完成证据 | 源码两轮审核，根 check、双端 build、format/diff；实机/E2E 按 D17 待验      | 静态通过，行为待远程 |
+
+两轮源码复审覆盖：全部上述写入Model、RunChanges、WS入口、register/Bootstrap、Shared codec/包出口、native-run-stream、原生Run队列及operation取消。首轮修正交互优先、读取中dirty保留、终态逐页补读和旧结果隔离；第二轮补齐审批消费通知、背景网络读取退避重连、Shared容量归属，并核对Vite已有/ws/agent代理前缀与Nginx /ws/入口。没有新增UI组件或改动模板/样式，没有更换ACP或其它候选库。根check、Shared check/build、Backend/Frontend build通过；全量格式及最终diff结果见testing。无行为/E2E、模型请求、重启、提交或推送。
+
+## Agent 正文直接流式推送（替代上一节失效通知方案）
+
+1. **职责与范围**：用户指出失效通知后HTTP补读达不到预期流式体验。本阶段让原生对话直接消费WS正文增量及状态；首次/显式加载仍可HTTP，正常生成与重连续读不再逐批请求HTTP。ACP及UI保持。
+2. **子功能与目录**：原RunChanges区分正文/状态变更；新增runs/service/run-stream-service组合原持久读取，interfaces/ws投影正文页与可选状态；前端api解码/确认，composable只接纳当前对话更新。
+3. **依赖方向**：原写入Model→RunChanges；WS→Thread准入→RunStreamService→既有Run/Context/Collaboration/Governance Service。复用ws，不自己实现SSE解析；WS同样可直接交付文本增量。
+4. **类型与转换**：Shared events定义初始游标/ACK/增量页；容量分开命令和完整输出。内部应用页与前端页各归model类型，mapper显式白名单，复用既有HTTP投影及codec。
+5. **入口与安装**：沿用/ws/agent-runs，升级后客户端提交正文/事件确认游标，服务器逐页发送正文和状态，客户端接纳后ACK。
+6. **数据、事务与并发**：不新增表；日志提交后推送，先订阅再读取防竞态。每连接最多16个未ACK页且总字节有界，满窗口暂停到确认，状态大页等前序排空，在途变化合并dirty；正文热路径不重读完整审批列表，终态仍排空正文。断线从前端已接纳游标继续，不重派模型。
+7. **生命周期与失败**：后台/切换/注销/卸载退订，交互读取正文前关闭原流；普通只读交互不暂停正文；延迟接纳的帧受同一窗口约束。心跳只复核权限/保活，ACK有期限，慢消费者重连补读。推送不解除未知写入围栏。
+8. **当前能力与验收**：源码、两轮审核及静态检查完成；D17只源码/类型/构建/格式，不运行本地行为/E2E、不重启。按用户最新指令，追加收口复核后提交全部本地修改，不推送。
+
+| 审核表   | 实际入口与判据                                                       | 状态                 |
+| -------- | -------------------------------------------------------------------- | -------------------- |
+| 功能对应 | 原生Run正文/状态直接WS增量，HTTP仅首次/显式核对，恢复游标连续        | 源码已审             |
+| 职责归属 | Run写入通知，Stream Service读取，WS准入/背压，页面接受后ACK          | 源码已审             |
+| 类型归属 | Shared events/values，服务与前端独立页对象，既有mapper/codec唯一归属 | 源码已审             |
+| 完成证据 | 源码两轮审核，根check、Shared/双端build、全量format/diff；行为待远程 | 静态通过，行为待远程 |
+
+两轮复审覆盖：Run/Step写入的text/state分类、Stream Service正文热路径与终态再读、HTTP mapper抽取唯一投影、Shared query/subscribe/ACK/update codec与编码容量、WS订阅先于首读/在途dirty/前发与已接纳游标/背压窗口/ACK超时与停机，以及前端首次完整状态、连续revision、解码后接纳与ACK、重连丢弃未接纳页、后台/切换隔离。额外修正：正文窗口允许多页在途，避免每段阻塞于RTT；已确定成功的变更直接订阅首个完整状态解除该次确认后读取围栏，取消创建后多轮HTTP首屏等待；未知结果不进入此分支。原失效通知驱动的HTTP队列及其专用背景取消代码已移除，没有保留双轨。
+
+静态证据：根check、Shared check/build、Backend/Frontend build、全量format和diff均通过，日志为/tmp/nexus-agent-direct-*。修正了窗口数组的显式空值收窄，以及确认后终态关闭时不额外重建订阅。D17下未新增或运行行为/浏览器/E2E；未重启、提交或推送。真实打字流、后台恢复/断线、延迟/丢ACK、窗口暂停续发、长正文最终页、审批子任务、未知写入及撤销/停机仍待远程。

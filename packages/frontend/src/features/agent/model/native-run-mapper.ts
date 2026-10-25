@@ -1,3 +1,5 @@
+import type { AgentRunStreamUpdate } from '@nexus-terminal/shared/agent/runs/events';
+import type { NativeRunUpdate } from './native-run-types';
 import type { AgentRunUsageView } from '@nexus-terminal/shared/agent/runs/model';
 import type { NativeRunUsage } from './native-run-types';
 import type {
@@ -332,5 +334,25 @@ export function fromNativeRunUsage(value: AgentRunUsageView): NativeRunUsage {
 		reportedModelRequests: value.reportedModelRequests,
 		modelRequests: value.modelRequests,
 		toolExecutions: value.toolExecutions,
+	};
+}
+
+export function fromNativeRunUpdate(value: AgentRunStreamUpdate): NativeRunUpdate {
+	return {
+		body: { items: value.body.items.map(fromNativeEntry), nextCursor: fromNativeCursor(value.body.nextCursor) },
+		state:
+			value.state === null
+				? null
+				: {
+						run: fromNativeRun(value.state.run),
+						usage: fromNativeRunUsage(value.state.usage),
+						events: {
+							items: value.state.events.items.map(fromNativeEvent),
+							nextCursor: value.state.events.nextCursor,
+						},
+						approvals: value.state.approvals.map(fromNativeApproval),
+						children: value.state.children.items.map(fromNativeChild),
+					},
+		more: value.more,
 	};
 }

@@ -29,6 +29,7 @@ export interface StoredModelReference {
 	providerId: string;
 	modelId: string;
 	configurationVersion: number;
+	reasoningEffort?: AgentReasoningEffort;
 }
 
 export interface ProviderStoredRow {

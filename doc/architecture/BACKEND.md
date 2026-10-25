@@ -148,7 +148,7 @@ NativeShellIntegration 在首个终端附件开放输入前，用同一次隐藏
 
 `agent/service/agent-request-owner.ts` 负责模块请求准入/停机排空（最多64个在途请求）；`runs/service/run-execution-owner.ts` 是唯一进程内模型执行任务 owner；RunService 编排用例，Model 转换存储/技术请求及结果。`runs/model/run-projection.ts` 统一主 Run、事件和冻结输入的存储投影；复用应用类型归 `run-types.ts`。
 
-步骤契约在 `runs/storage/run-step-storage.ts`，事务和行/JSON 解码在 `runs/adapters/sqlite`；`run-step-model.ts` 持有步骤转换。`run-model-stream.ts` 把技术流转成应用增量/终态/安全失败。通用协议和 SSE 解码归 `platform/ai/{model-port,adapters}`，不含 Run/用户/业务授权类型。
+步骤契约在 `runs/storage/run-step-storage.ts`，事务和行/JSON 解码在 `runs/adapters/sqlite`；`run-step-model.ts` 持有步骤转换。`run-model-stream.ts` 把技术流转成应用增量/终态/安全失败。OpenAI SDK在 `platform/ai/adapters` 内发送模型请求并解码SSE，原技术Port不含SDK/Run/用户/业务授权类型。
 
 ### Provider 与 Registry 目录
 
@@ -377,6 +377,8 @@ Model 根据完整应用检查内容和 user/App/Run/modelStepIndex/providerCall
 
 reserve/dispatch 同事务校验主体、App、Run version、step revision、请求 hash、冻结政策和当前 Provider 版本/凭据代际。dispatch 同时写 running、run.started 和 dispatched；finish 同时写主子终态、版本及事件。文本/usage 写入须持有 running 和有效 CAS。取消先持久围栏，再 Abort。
 
+Run 用量通过认证 GET `/api/v1/agent/apps/:appId/runs/:id/usage` 只读获取。RunStepStorage 的 SQLite Adapter 单语句按 user/App/Run 限定当前任务与直接子任务，聚合持久步骤的 input/output、已报告请求数、模型步骤数及工具数；未报告为 null，不推算缓存命中率。Model、Service、公开出口和 HTTP mapper 各持原边界职责；响应携带同一 SQL 快照的 Run 版本，无表结构变更。
+
 恢复仅将 reserved 归 failed/DISPATCH_NOT_STARTED、dispatched 或孤立 running 归 unknown；主子状态、版本、hash 和事件数量不合法则拒绝并保留现场。unknown 主 Run 保持活跃直到显式取消；已终结 unknown 步骤后取消主 Run 允许主版本多一。均不自动重放付费请求。
 
 ### Provider 事务与冻结
@@ -431,13 +433,13 @@ Run owner 在持久创建前保留本机准入：8 个尝试名额（含在途�
 
 Provider 配置提交后中止本进程关联请求；获取凭据后、dispatch 返回后及发布每个模型事件前复查当前 Provider，复查 await 后检查 Abort。跨进程配置变更以重新读取发现，不宣称网络副作用与配置更新具有跨系统原子性。未派发失败与已派发 unknown 分开，SQLite 写入异常不误归网络失败或重复补写；双重失败保留 AggregateError。
 
-技术 Adapter 持有响应体、reader 和迭代器清理，取消失败仍尝试 releaseLock，异常 cause 留内部。Registry下载同样保留清理失败；Provider/Registry在清理失败后拒绝新网络工作并在模块close上报，Registry无人订阅后的持久写入失败也保留并阻断重试。Model 等待技术迭代自然退出及清理完成后才发布唯一 finished/stop；缺失/重复终态、断流、拒绝/工具输出、未知事件、空正文和不一致快照都不能成功。Provider probe 与 Run 共用解码器，前者仍受 512 KiB/16 token 限额，不授予执行权。
+技术 Adapter 持有响应体、reader 和迭代器清理，取消失败仍尝试 releaseLock，异常 cause 留内部。Registry下载同样保留清理失败；Provider/Registry在清理失败后拒绝新网络工作并在模块close上报，Registry无人订阅后的持久写入失败也保留并阻断重试。Model 等待技术迭代自然退出及清理完成后才发布唯一 finished/stop；缺失/重复终态、断流、拒绝/工具输出、未知事件、空正文和不一致快照都不能成功。Provider probe 与 Run 共用SDK请求和事件投影，前者仍受 512 KiB/16 token 限额，不授予执行权。
 
-SSE 逐块严格 UTF-8，先归一化 LF/CRLF/CR 再分帧，跨 chunk 的 CRLF 仍是一个换行；校验 event 名称与载荷。普通帧/注释帧 128 KiB，Responses 重复完整文本的 done/completed 快照帧可至 8 MiB，网络总量 8 MiB、正文总量 2 MiB 独立限制。普通增量不因快照预算扩大。
+OpenAI官方Node SDK处理SSE换行、分帧、JSON和DONE，项目不另写SSE解析器。ModelSdkRequest在SDK解码前有界读取并严格验证UTF-8，网络总量8MiB、正文总量2MiB独立限制；ModelStreamProjection验证SDK保留的event名称与载荷，并限制解码后普通事件JSON为128KiB、Responses重复完整内容的done/completed快照为8MiB。SDK忽略的注释和分隔符仍计网络总量，不再声明独立注释帧上限；正式终态和SDK迭代正常结束共同确认完成，不自行要求可见的DONE事件。
 
 ### Provider 生命周期与失败
 
-Provider 外呼完整期限 10 秒，Registry 刷新 15 秒；真实 fetch 支持 Abort、有界读取及拒绝重定向。允许管理员配置的 HTTP(S)/内网端点，额外出口隔离由部署承担。更新/删除中止本进程相关请求；外呼前后及观察写入前复查配置、凭据与身份，CAS 拒绝陈旧回写。Registry 请求 single-flight，各订阅者独立取消，最后订阅者退出中止底层任务；新请求先等待已取消任务及其存储写入收尾，再共享新刷新，避免旧失败覆盖新成功。缓存 JSON 由 Registry SQLite Adapter 解码为独立 storage 快照，Model 经 registry-projection 双向白名单转换；损坏缓存由应用层报告不可用，不影响后续刷新。精确的 provider/modelId 条目优先于短名称别名。测试传递模型推理参数并校验两种协议的 SSE 终态；缺省 usage 不补零。Model 将技术错误转具名应用失败并保留 cause。提交未知保留 operation_unknown；响应总预算 8 MiB，超限返回 limit_exceeded。应用/存储时间为毫秒，Registry 对外 Unix 秒由 HTTP mapper 转换。
+Provider 外呼完整期限 10 秒，Registry 刷新 15 秒；真实 fetch 支持 Abort、有界读取及拒绝重定向。允许管理员配置的 HTTP(S)/内网端点，额外出口隔离由部署承担。更新/删除中止本进程相关请求；外呼前后及观察写入前复查配置、凭据与身份，CAS 拒绝陈旧回写。Registry 请求 single-flight，各订阅者独立取消，最后订阅者退出中止底层任务；新请求先等待已取消任务及其存储写入收尾，再共享新刷新，避免旧失败覆盖新成功。缓存 JSON 由 Registry SQLite Adapter 解码为独立 storage 快照，Model 经 registry-projection 双向白名单转换；损坏缓存由应用层报告不可用，不影响后续刷新。精确的 provider/modelId 条目优先于短名称别名。测试传递模型推理参数并校验两种协议的 SSE 终态；缺省 usage 不补零。 Chat Completions的native_finish_reason仅接受string/null元数据，不替代标准finish_reason；reasoning_content仅接受string/null，按原MODEL_REASONING_MAX_BYTES累计字节约束，不进入可见正文、历史或工具授权。真实文本/工具、标准终态、SDK正常结束、usage和拒绝/未知输出校验仍保持。 Run 创建/追加的 ModelReference 可携带本轮 reasoningEffort，Provider resolveFrozenModel 在创建事务中检查等级属于当前模型声明、强制思考不允许 none、Images 不接受覆盖；生效值写入原冻结 capabilities.defaultReasoningEffort，沿 RunModelStream 转为 Responses reasoning.effort 或 Chat Completions reasoning_effort，Child 复制父冻结输入。选择加入创建命令hash，默认与显式等级分别绑定幂等意图；无新增配置写入或表结构。Model 将技术错误转具名应用失败并保留 cause。提交未知保留 operation_unknown；响应总预算 8 MiB，超限返回 limit_exceeded。应用/存储时间为毫秒，Registry 对外 Unix 秒由 HTTP mapper 转换。
 
 ### B4.2 安全失败与清理
 
@@ -1513,3 +1515,29 @@ Remote register 安装 `/api/v1/transfers/send`、`status`、`status/:taskId`、
 6. **数据、事务与并发**：直接图片沿模型 Step 的 reserve/dispatch/finish 与原请求/并发预算；工具沿 ToolCall 账本和原工具预算。Artifact 写事务核对 Images frozen protocol、原 dispatched Step/hash、当前 Run 与 Provider 代际。图片输出继承原文件预算/期限，不冒充网络与 SQLite 原子事务。
 7. **生命周期与失败**：Provider 请求跟踪及停机/配置修改取消覆盖图片请求，最大五分钟并与原 Run/工具信号取交集。外部 JSON 与 base64 有界读取；不获取返回 URL，不接收 SVG/HTML。付费请求未知或落盘失败不自动重试；本地取消不证明供应商回滚。全局日志不记提示词/图片/凭据。
 8. **当前能力与验收**：一次一张、最多16MiB、供应商默认尺寸/质量。直接图片只用本次描述，文字工具可传 Agent 整理的描述；不接入编辑、视频、音频。前端 Markdown 仅允许受保护的本站预览图。静态、目录、隔离HTTP及真实CDP验收的环境、入口与保证边界分别见 testing；编译不替代真实图片生成或完整治理回归。
+
+### Agent 供应商流的可选字段
+
+Platform AI的ModelStreamProjection消费SDK已解码事件，持有Chat Completions的nullable拒答/工具占位、reasoning_content/reasoning有界文本和native_finish_reason元数据校验；只有带合法finish_reason的终帧允许delta为null。普通思考不作为答复或执行许可，真实拒答及未知输出仍拒绝。累计usage在Projection保存单调最新快照，于SDK迭代结束且正式终态校验后仅交付一次原usage事件，RunModelStream和probe继续只接收一次真实用量；缺失不补零。ModelToolStream只允许已登记工具调用的后续身份字段为null，首帧仍须完整ID/type/name，后续非空身份不一致拒绝；参数null不追加字符。Responses续接证据仍沿原独立校验，不与普通思考混用。模型发现nexus_capabilities支持已有supports_image_generation字段，应用/Shared转换不变。
+
+### OpenAI 官方 SDK 技术边界
+
+1. **职责与范围**：Platform使用官方openai@7.43.0完成Chat Completions、Responses、Images和模型发现；Run业务权限/预算/审批/持久结算不交给SDK。
+2. **子功能与目录**：原openai-compatible组合SDK资源方法与技术结果转换；model-request构造具名SDK请求；model-stream只投影已解码事件；model-sdk-request持一次操作的SDK实例、原始响应reader和清理；model-tool-stream及model-reasoning保留工具/续接事实校验。
+3. **依赖方向**：应用Model→原ModelNetworkPort→Platform Adapter→OpenAI SDK；SDK类型只用于技术Adapter，不能进入Shared或应用/storage。
+4. **类型与转换**：SDK类型不能代替外部运行时校验；事件/模型/图片在Adapter以unknown检查实际消费字段并白名单投影。标准可选字段不作每帧必填，额外choice元数据有界忽略，拒绝未知执行输出。
+5. **入口与安装**：原Bootstrap安装不变，使用client.chat.completions.create、responses.create、images.generate和models.list；流通过公开asResponse及SDK Stream.fromSSEResponse保留事件名，模型测试复用同一路径。models.list只取当前响应，不迭代自动分页。
+6. **数据、事务与并发**：不改变表或Shared契约；SDK不管理工具执行、幂等记录或授权。请求由SDK编码，派发前限制实际编码字节，模型声明和工具/正文/续接容量保持原owner。
+7. **生命周期与失败**：maxRetries=0、logLevel=off、拒绝重定向，显式传入原AbortSignal，应用拥有完整期限。禁用环境organization/project自动继承，无凭据时移除占位Authorization。Reader按需读取，总量在SDK缓冲/JSON解码前检查；关闭Promise在取消前保存，SDK忽略的传输或清理失败仍由原owner记录并在close抛出，不提前交付completed或释放Run名额。不证明远端停止、不自动重发未知请求。
+8. **当前能力与验收**：迁移进度/静态证据和远程待验见PLAN/testing；UI不变；原生浏览器增量更新由下述Run变更订阅负责，SDK的供应商SSE与浏览器WS分属不同边界。
+
+### Agent Run 正文与状态流
+
+1. **职责与范围**：原生对话通过WS直接消费已提交正文增量和状态；RunChanges用Node EventEmitter唤醒交付，Run日志仍为持久权威，不直接转发供应商SSE。首次/显式读取保留HTTP，生成及重连续传不逐段HTTP请求；ACP保持。
+2. **子功能与目录**：RunChanges在原Run/Step/Tool/Collaboration/Governance写入收敛后区分text/state通知；RunStreamService组合原Context/Run等读取，正文热路径只读正文页。interfaces/ws持认证、游标和发送窗口，run-stream-mapper复用原HTTP投影的唯一owner。
+3. **依赖方向**：写入Model→RunChanges；WS→Thread准入→RunStreamService→同模块既有Service→各Model/Storage。SQLite不反向调用应用，Platform只持WS句柄与真实排空。
+4. **类型与转换**：Shared runs/events持订阅/ACK/更新、前后游标与严格codec，runs/values持独立命令和完整输出预算；内部RunStreamCursor/Page/State/ChangeKind归runs/model。入口与出口逐字段映射，不透传Storage/供应商对象。
+5. **入口与安装**：/ws/agent-runs升级需原来源/Origin、管理员、当前启用受信版本App及可见Run；客户端subscribe给出Thread和正文/事件游标，首次状态页核对Run所属Thread。每批交付前后和心跳期复核原持久会话/App准入。
+6. **数据、事务与并发**：无新表。先订阅再首次读取，写入通知在原存储调用收敛后发出，unknown不重派。正文/状态变化约16ms合并，读取中dirty保持；状态及用量/审批/子任务独立于正文热路径，终态后再读正文并持续至空页。发送游标与客户端已接纳游标分离，连接内按发送游标连续推送，重连从客户端已接纳游标恢复。
+7. **生命周期与失败**：最多16页且累计不超过完整输出预算的未ACK窗口，满额暂停到ACK，容量不是Run失败条件；大状态页等待先前窗口排空，心跳另留1KiB传输缓冲。ACK按序、60秒期限，订阅首帧15秒，心跳15秒/权限复核3秒；心跳不查询Run/正文。关闭取消计时、退订并等在途短读取，RunChanges纳入AgentRequestOwner停机资源，Platform等真实WS排空。隐藏、断线或关闭不取消Run，不重发模型。
+8. **当前能力与验收**：状态/正文/用量/审批/子任务均有直接推送消费者；记忆审核和插件SDK独立订阅保持原行为。命令1KiB，完整输出按审批8MiB、正文512KiB、事件32KiB、子任务16KiB及8KiB封装合计约8.6MiB；客户端单帧/待接纳窗口和后端发送预算同源。源码与静态证据见PLAN/testing；未以编译代替实机弱网、权限/版本撤销、停机及E2E验证。

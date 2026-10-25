@@ -362,7 +362,8 @@ export async function registerModules({
 					...system.maintenanceRoutes(),
 				]),
 
-			webSocketRoutes: () => admitWebSocket(remote.webSocketRoutes()),
+			webSocketRoutes: () =>
+				admitWebSocket([...remote.webSocketRoutes(), ...agent.webSocketRoutes(access.publicApi)]),
 
 			targets: targets.publicApi,
 			trustedSshTargets: targets.trustedSshTargets,

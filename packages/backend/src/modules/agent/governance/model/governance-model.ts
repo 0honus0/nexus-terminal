@@ -1,3 +1,4 @@
+import { RunChanges } from '../../runs/model/run-changes.js';
 import type { StoredExecutionSettings } from '../../execution/storage/execution-storage.js';
 import { fromSettings } from '../../execution/model/execution-projection.js';
 import type { StoredToolAuthorityDecision } from '../storage/governance-storage.js';
@@ -230,6 +231,7 @@ export class GovernanceModel {
 	constructor(
 		private readonly storage: GovernanceStorage,
 		private readonly targets: ConnectionCatalog,
+		private readonly changes = new RunChanges(),
 	) {}
 
 	async toolAuthority(
@@ -281,21 +283,23 @@ export class GovernanceModel {
 		decide: ApprovalResolveDecision,
 		authorize: ToolAuthorityDecision,
 	): Promise<ToolOperation> {
-		const result = await agentStorage(() =>
-			this.storage.consumeApproval(
-				{
-					userId: input.userId,
-					appId: input.appId,
-					approvalId: input.approvalId,
-					expectedVersion: input.expectedVersion,
-				},
-				() => {
-					const milliseconds = now();
-					return { approvalTime: Math.floor(milliseconds / 1000), operationTime: milliseconds };
-				},
-				(approval, policy, status, revision, time) =>
-					decide(fromApproval(approval), appState(policy), status, revision, time),
-				toStoredAuthorityDecision(authorize),
+		const result = await this.changes.after(input.userId, input.appId, () =>
+			agentStorage(() =>
+				this.storage.consumeApproval(
+					{
+						userId: input.userId,
+						appId: input.appId,
+						approvalId: input.approvalId,
+						expectedVersion: input.expectedVersion,
+					},
+					() => {
+						const milliseconds = now();
+						return { approvalTime: Math.floor(milliseconds / 1000), operationTime: milliseconds };
+					},
+					(approval, policy, status, revision, time) =>
+						decide(fromApproval(approval), appState(policy), status, revision, time),
+					toStoredAuthorityDecision(authorize),
+				),
 			),
 		);
 		if (result === 'approval_stale') {
@@ -446,33 +450,35 @@ export class GovernanceModel {
 		create: ApprovalRequestDecision,
 		authorize: ToolAuthorityDecision,
 	): Promise<Approval | null> {
-		const row = await agentStorage(() =>
-			this.storage.requestApproval(
-				{
-					userId: input.userId,
-					appId: input.appId,
-					runId: input.runId,
-					toolCallId: input.toolCallId,
-				},
-				(stored, status, operation) => {
-					const fact = create(appState(stored), status, {
-						id: operation.id,
-						operationHash: operation.operationHash,
-						operationRevision: operation.operationRevision,
-						capability: operation.capability,
-						targetVersion: operation.targetVersion,
-						inspection: {
-							toolName: operation.toolName,
-							toolVersion: operation.toolVersion,
-							risk: operation.risk,
-							mutation: operation.mutation,
-							targetConnectionId: operation.targetId,
-							summary: operation.summary,
-						},
-					});
-					return fact === null ? null : toStoredApproval(fact);
-				},
-				toStoredAuthorityDecision(authorize),
+		const row = await this.changes.after(input.userId, input.appId, () =>
+			agentStorage(() =>
+				this.storage.requestApproval(
+					{
+						userId: input.userId,
+						appId: input.appId,
+						runId: input.runId,
+						toolCallId: input.toolCallId,
+					},
+					(stored, status, operation) => {
+						const fact = create(appState(stored), status, {
+							id: operation.id,
+							operationHash: operation.operationHash,
+							operationRevision: operation.operationRevision,
+							capability: operation.capability,
+							targetVersion: operation.targetVersion,
+							inspection: {
+								toolName: operation.toolName,
+								toolVersion: operation.toolVersion,
+								risk: operation.risk,
+								mutation: operation.mutation,
+								targetConnectionId: operation.targetId,
+								summary: operation.summary,
+							},
+						});
+						return fact === null ? null : toStoredApproval(fact);
+					},
+					toStoredAuthorityDecision(authorize),
+				),
 			),
 		);
 		return row === null ? null : fromApproval(row);
@@ -485,22 +491,24 @@ export class GovernanceModel {
 		transition: ApprovalTransition,
 		decide: ApprovalResolveDecision,
 	): Promise<Approval> {
-		const result = await agentStorage(() =>
-			this.storage.resolveApproval(
-				{
-					userId: input.userId,
-					appId: input.appId,
-					approvalId: input.approvalId,
-					decision: input.decision,
-					expectedVersion: input.expectedVersion,
-					operationKey: input.operationKey,
-					requestHash: hash,
-					feedback: input.feedback ?? null,
-				},
-				now,
-				(stored, status, time) => transition(fromApproval(stored), status, time),
-				(stored, policy, status, version, time) =>
-					decide(fromApproval(stored), appState(policy), status, version, time),
+		const result = await this.changes.after(input.userId, input.appId, () =>
+			agentStorage(() =>
+				this.storage.resolveApproval(
+					{
+						userId: input.userId,
+						appId: input.appId,
+						approvalId: input.approvalId,
+						decision: input.decision,
+						expectedVersion: input.expectedVersion,
+						operationKey: input.operationKey,
+						requestHash: hash,
+						feedback: input.feedback ?? null,
+					},
+					now,
+					(stored, status, time) => transition(fromApproval(stored), status, time),
+					(stored, policy, status, version, time) =>
+						decide(fromApproval(stored), appState(policy), status, version, time),
+				),
 			),
 		);
 		if (result.status === 'not_found') {
@@ -528,9 +536,11 @@ export class GovernanceModel {
 		now: () => number,
 		transition: ApprovalTransition,
 	): Promise<number> {
-		return agentStorage(() =>
-			this.storage.invalidateRunApprovals(userId, appId, runId, now, (stored, status, time) =>
-				transition(fromApproval(stored), status, time),
+		return this.changes.after(userId, appId, () =>
+			agentStorage(() =>
+				this.storage.invalidateRunApprovals(userId, appId, runId, now, (stored, status, time) =>
+					transition(fromApproval(stored), status, time),
+				),
 			),
 		);
 	}

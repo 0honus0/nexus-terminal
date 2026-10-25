@@ -1,3 +1,4 @@
+import type { StoredRunUsage } from '../../storage/run-step-storage.js';
 import type { SqlReader } from '../../../../../platform/storage/sqlite/sql-types.js';
 import {
 	frozenExecution,
@@ -697,6 +698,50 @@ export class SqliteRunStepStorage implements RunStepStorage {
 			undefined,
 			0,
 		);
+	}
+
+	async usage(userId: number, appId: string, runId: string): Promise<StoredRunUsage | null> {
+		const row = await this.db.one(
+			`
+			WITH requested AS (SELECT id,user_id,app_id,version FROM agent_runs WHERE id=? AND user_id=? AND app_id=?),
+			family AS (SELECT r.id FROM agent_runs r JOIN requested q ON r.user_id=q.user_id AND r.app_id=q.app_id
+				WHERE r.id=q.id OR r.id IN (SELECT run_id FROM agent_run_children WHERE parent_id=q.id)),
+			summary AS (SELECT COUNT(*) AS requests, COUNT(input_tokens) AS reported,
+				SUM(input_tokens) AS inputs, SUM(output_tokens) AS outputs,
+				SUM(CASE WHEN (input_tokens IS NULL)!=(output_tokens IS NULL) THEN 1 ELSE 0 END) AS invalid
+				FROM agent_run_model_steps WHERE run_id IN (SELECT id FROM family))
+			SELECT q.id AS run_id,q.version AS run_version,s.*,
+				(SELECT COUNT(*) FROM agent_run_tools WHERE run_id IN (SELECT id FROM family)) AS tools
+			FROM requested q CROSS JOIN summary s`,
+			[runId, userId, appId],
+		);
+		if (row === null) {
+			return null;
+		}
+		if (row.run_id !== runId || (row.invalid !== null && row.invalid !== 0)) {
+			throw new Error('Invalid Run usage scope');
+		}
+		const reportedModelRequests = whole(row.reported, 0);
+		const inputTokens = row.inputs === null ? null : whole(row.inputs, 0);
+		const outputTokens = row.outputs === null ? null : whole(row.outputs, 0);
+		const modelRequests = whole(row.requests, 0);
+		if (
+			reportedModelRequests > modelRequests ||
+			(reportedModelRequests === 0) !== (inputTokens === null) ||
+			(inputTokens === null) !== (outputTokens === null) ||
+			(inputTokens !== null && outputTokens !== null && !Number.isSafeInteger(inputTokens + outputTokens))
+		) {
+			throw new Error('Invalid Run usage totals');
+		}
+		return {
+			runId,
+			runVersion: whole(row.run_version, 1),
+			inputTokens,
+			outputTokens,
+			reportedModelRequests,
+			modelRequests,
+			toolExecutions: whole(row.tools, 0),
+		};
 	}
 
 	async get(userId: number, appId: string, runId: string, stepIndex: number): Promise<StoredRunStep | null> {

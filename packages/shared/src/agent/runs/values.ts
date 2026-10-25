@@ -1,3 +1,8 @@
+import { AGENT_GOVERNANCE_MAX_RESPONSE_BYTES } from '../governance/values.js';
+import { AGENT_THREAD_ENTRIES_MAX_RESPONSE_BYTES } from '../scope/values.js';
+import { AGENT_COLLABORATION_MAX_RESPONSE_BYTES } from '../collaboration/values.js';
+import { AGENT_MAX_RESPONSE_BYTES } from '../values.js';
+
 export const AGENT_RUN_STATUSES = ['pending', 'running', 'completed', 'failed', 'unknown', 'cancelled'] as const;
 
 export type AgentRunStatus = (typeof AGENT_RUN_STATUSES)[number];
@@ -58,3 +63,14 @@ export const AGENT_RUN_STEP_EVENT_TYPES = [
 export type AgentRunStepEventType = (typeof AGENT_RUN_STEP_EVENT_TYPES)[number];
 
 export type AgentRunStepFailureCode = 'DISPATCH_NOT_STARTED';
+
+export const AGENT_RUN_STREAM_MAX_COMMAND_BYTES = 1024;
+
+export const AGENT_RUN_STREAM_MAX_JSON_BYTES =
+	AGENT_GOVERNANCE_MAX_RESPONSE_BYTES +
+	AGENT_THREAD_ENTRIES_MAX_RESPONSE_BYTES +
+	AGENT_COLLABORATION_MAX_RESPONSE_BYTES +
+	AGENT_MAX_RESPONSE_BYTES +
+	8192;
+
+export const AGENT_RUN_STREAM_MAX_IN_FLIGHT_PAGES = 16;

@@ -1,9 +1,12 @@
+import { RunStreamService } from './runs/service/run-stream-service.js';
+import { RunChanges } from './runs/model/run-changes.js';
+import { createRunChangesWebSocketRoute } from './interfaces/ws/run-changes-ws.js';
 import { ProviderImageService } from './providers/service/provider-image-service.js';
 import type { Logger } from '../../platform/logging/logger.js';
 import { logDiagnostic } from '../../platform/logging/diagnostic-log.js';
 import { registerAgentSnapshot } from './snapshots/adapters/sqlite/snapshot-registration.js';
 import type { SnapshotRegistration } from '../../platform/storage/sqlite/snapshot-types.js';
-import { toRunView } from './interfaces/http/run-mapper.js';
+import { toRunUsageView, toRunView } from './interfaces/http/run-mapper.js';
 import { toThreadView, toDefinitionView } from './interfaces/http/scope-mapper.js';
 import { ThreadModel } from './scope/model/thread-model.js';
 import { ThreadService } from './scope/service/thread-service.js';
@@ -142,7 +145,7 @@ import { AgentRequestOwner } from './service/agent-request-owner.js';
 import type { ResourceCollector } from '../../platform/system/resource-diagnostic.js';
 import { agentBoundary } from './agent-errors.js';
 import type { AccessPublicApi } from '../access/public.js';
-import type { HttpRoute } from '../../platform/http/http-types.js';
+import type { HttpRoute, HttpWebSocketRoute } from '../../platform/http/http-types.js';
 import { createAgentHttpRoutes } from './interfaces/http/agent-http.js';
 import { SqliteGovernanceStorage } from './governance/adapters/sqlite/governance-sql.js';
 import { GovernanceModel } from './governance/model/governance-model.js';
@@ -302,6 +305,7 @@ export interface AgentRegistration {
 	quiesce(): void;
 	close(): Promise<void>;
 	routes(access: AccessPublicApi): HttpRoute[];
+	webSocketRoutes(access: AccessPublicApi): HttpWebSocketRoute[];
 }
 
 export function registerAgent(
@@ -409,11 +413,14 @@ export function registerAgent(
 	const registryService = new CapabilityRegistryService(
 		new CapabilityRegistryModel(new SqliteCapabilityRegistryStorage(sqlite), new ModelsDevCatalogAdapter()),
 	);
-	const steps = new RunStepModel(new SqliteRunStepStorage(sqlite, providerStorage));
-	const tools = new RunToolModel(new SqliteRunToolStorage(sqlite), (settings, usage) =>
-		executionSettings.admitTool(settings, usage),
+	const changes = new RunChanges();
+	const steps = new RunStepModel(new SqliteRunStepStorage(sqlite, providerStorage), changes);
+	const tools = new RunToolModel(
+		new SqliteRunToolStorage(sqlite),
+		(settings, usage) => executionSettings.admitTool(settings, usage),
+		changes,
 	);
-	const runModel = new RunModel(new SqliteRunStorage(sqlite, providerStorage));
+	const runModel = new RunModel(new SqliteRunStorage(sqlite, providerStorage), changes);
 
 	const revoke = async (request: RunRevocationRequest): Promise<void> => {
 		const results = await Promise.allSettled([
@@ -427,14 +434,14 @@ export function registerAgent(
 	};
 
 	const governance = new GovernanceService(
-		new GovernanceModel(new SqliteGovernanceStorage(sqlite, providerStorage), targets),
+		new GovernanceModel(new SqliteGovernanceStorage(sqlite, providerStorage), targets, changes),
 		revoke,
 		events,
 		executionSettings,
 	);
 	const jobModel = new ToolJobModel(new SqliteToolJobStorage(sqlite));
 	const collaboration = new RunCollaborationService(
-		new RunCollaborationModel(new SqliteRunCollaborationStorage(sqlite)),
+		new RunCollaborationModel(new SqliteRunCollaborationStorage(sqlite), changes),
 		{
 			admit: (work, maxRuns) => execution.admitCreate(work, maxRuns),
 
@@ -508,9 +515,11 @@ export function registerAgent(
 		};
 	});
 	const threads = new ThreadService(new ThreadModel(threadStorage, new SecureSessionTokens()));
+	const stream = new RunStreamService(runs, contexts, governance, collaboration);
 	const workspace = new WorkspaceService(scope, threads, providerService, runs, collaboration, governance, contexts);
 
 	const requests = new AgentRequestOwner([
+		changes,
 		execution,
 		providerService,
 		registryService,
@@ -645,6 +654,9 @@ export function registerAgent(
 						providerId: input.model.providerId,
 						modelId: input.model.modelId,
 						configurationVersion: input.model.configurationVersion,
+						...(input.model.reasoningEffort === undefined
+							? {}
+							: { reasoningEffort: input.model.reasoningEffort }),
 					},
 					operationKey: input.operationKey,
 				});
@@ -677,6 +689,12 @@ export function registerAgent(
 			boundary(async () => {
 				const result = await runs.listEvents(userId, appId, id, after, limit);
 				return result === null ? null : toEventPage(result);
+			}),
+
+		getUsage: (userId, appId, runId) =>
+			boundary(async () => {
+				const result = await runs.getUsage(userId, appId, runId);
+				return result === null ? null : toRunUsageView(result);
 			}),
 
 		getStep: (userId, appId, runId, index) =>
@@ -735,6 +753,8 @@ export function registerAgent(
 		quiesce: () => requests.quiesce(),
 
 		close: () => requests.close(),
+
+		webSocketRoutes: (access) => [createRunChangesWebSocketRoute(access, threads, runs, changes, stream, boundary)],
 
 		routes: (access) => [
 			createWorkspaceHttpRoute(access, threads, workspace, boundary),

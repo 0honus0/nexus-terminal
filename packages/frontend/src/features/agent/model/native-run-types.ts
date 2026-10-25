@@ -193,6 +193,11 @@ export interface NativePage<T, Cursor> {
 	nextCursor: Cursor;
 }
 
+export interface NativeRunSubscription {
+	close(): void;
+	resume(): void;
+}
+
 export interface NativeRunUsage {
 	runId: string;
 	runVersion: number;
@@ -201,4 +206,23 @@ export interface NativeRunUsage {
 	reportedModelRequests: number;
 	modelRequests: number;
 	toolExecutions: number;
+}
+
+export interface NativeRunStreamCursor {
+	threadId: string;
+	entries: NativeEntryCursor;
+	events: number;
+	runVersion: number;
+}
+
+export interface NativeRunUpdate {
+	body: NativePage<NativeEntry, NativeEntryCursor>;
+	state: {
+		run: NativeRun;
+		usage: NativeRunUsage;
+		events: NativePage<NativeEvent, number>;
+		approvals: NativeApproval[];
+		children: NativeChild[];
+	} | null;
+	more: boolean;
 }

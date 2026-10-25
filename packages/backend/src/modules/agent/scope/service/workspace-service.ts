@@ -57,6 +57,9 @@ export class WorkspaceService {
 						providerId: input.input.model.providerId,
 						modelId: input.input.model.modelId,
 						configurationVersion: input.input.model.configurationVersion,
+						...(input.input.model.reasoningEffort === undefined
+							? {}
+							: { reasoningEffort: input.input.model.reasoningEffort }),
 					},
 				};
 				const value = await withMutation(() =>

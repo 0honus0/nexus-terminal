@@ -1,3 +1,4 @@
+import { RunChanges } from './run-changes.js';
 import { AgentFailure } from '../../agent-failure.js';
 import { agentStorage } from '../../agent-storage-failure.js';
 import { CollaborationStorageRefusal } from '../storage/run-collaboration-storage.js';
@@ -61,7 +62,10 @@ async function storage<T>(work: () => Promise<T>): Promise<T> {
 }
 
 export class RunCollaborationModel {
-	constructor(private readonly owner: RunCollaborationStorage) {}
+	constructor(
+		private readonly owner: RunCollaborationStorage,
+		private readonly changes = new RunChanges(),
+	) {}
 
 	async messageMetadata(scope: ParticipantScope, after: number, limit: number): Promise<MessageMetadataPage> {
 		const page = await storage(() => this.owner.messageMetadata(toScope(scope), after, limit));
@@ -89,32 +93,34 @@ export class RunCollaborationModel {
 		command: DelegateCommand,
 		admit: (facts: ChildAdmissionFacts) => boolean,
 	): Promise<ChildCreation | null> {
-		const value = await storage(() =>
-			this.owner.delegate(
-				{
-					scope: toScope(command.scope),
-					operationId: command.operationId,
-					operationHash: command.operationHash,
-					now: command.now,
-					id: command.id,
-					requestHash: command.requestHash,
-					objective: command.objective,
-					targets: command.targets.map((id) => id),
-					profile: command.profile,
-					tools: command.tools.map((name) => name),
-					maxRequests: command.maxRequests,
-					deadline: command.deadline,
-					dependencies: command.dependencies.map((id) => id),
-					dependencyMode: command.dependencyMode,
-				},
-				(facts) =>
-					admit({
-						parent: fromParticipant(facts.parent),
-						selectedTargets: facts.selectedTargets.map((id) => id),
-						children: facts.children,
-						now: facts.now,
-						dependencies: facts.dependencies.map(fromParticipant),
-					}),
+		const value = await this.changes.after(command.scope.userId, command.scope.appId, () =>
+			storage(() =>
+				this.owner.delegate(
+					{
+						scope: toScope(command.scope),
+						operationId: command.operationId,
+						operationHash: command.operationHash,
+						now: command.now,
+						id: command.id,
+						requestHash: command.requestHash,
+						objective: command.objective,
+						targets: command.targets.map((id) => id),
+						profile: command.profile,
+						tools: command.tools.map((name) => name),
+						maxRequests: command.maxRequests,
+						deadline: command.deadline,
+						dependencies: command.dependencies.map((id) => id),
+						dependencyMode: command.dependencyMode,
+					},
+					(facts) =>
+						admit({
+							parent: fromParticipant(facts.parent),
+							selectedTargets: facts.selectedTargets.map((id) => id),
+							children: facts.children,
+							now: facts.now,
+							dependencies: facts.dependencies.map(fromParticipant),
+						}),
+				),
 			),
 		);
 		return value
@@ -135,12 +141,14 @@ export class RunCollaborationModel {
 		authority: CollaborationAuthority | null = null,
 	): Promise<string[]> {
 		return (
-			await storage(() =>
-				this.owner.cancelChildren(
-					toScope(scope),
-					ids === null ? null : ids.map((id) => id),
-					Date.now(),
-					authority === null ? null : toAuthority(authority),
+			await this.changes.after(scope.userId, scope.appId, () =>
+				storage(() =>
+					this.owner.cancelChildren(
+						toScope(scope),
+						ids === null ? null : ids.map((id) => id),
+						Date.now(),
+						authority === null ? null : toAuthority(authority),
+					),
 				),
 			)
 		).map((id) => id);
@@ -175,15 +183,17 @@ export class RunCollaborationModel {
 		maxMessages: number,
 		maxBytes: number,
 	): Promise<number> {
-		return storage(() =>
-			this.owner.send(
-				toAuthority(authority),
-				authority.operationId,
-				recipientId,
-				body,
-				expiresAt,
-				maxMessages,
-				maxBytes,
+		return this.changes.after(authority.scope.userId, authority.scope.appId, () =>
+			storage(() =>
+				this.owner.send(
+					toAuthority(authority),
+					authority.operationId,
+					recipientId,
+					body,
+					expiresAt,
+					maxMessages,
+					maxBytes,
+				),
 			),
 		);
 	}

@@ -7,7 +7,10 @@ import {
 	AGENT_RUN_STEP_MAX_COUNT,
 	AGENT_RUN_MAX_SELECTED_CONNECTIONS,
 } from '@nexus-terminal/shared/agent/runs/values';
-import { AGENT_PROVIDER_MAX_MODEL_ID_BYTES } from '@nexus-terminal/shared/agent/providers/values';
+import {
+	AGENT_PROVIDER_MAX_MODEL_ID_BYTES,
+	AGENT_REASONING_EFFORTS,
+} from '@nexus-terminal/shared/agent/providers/values';
 import { AGENT_TOOL_EVENT_MAX_LIMIT } from '@nexus-terminal/shared/agent/tools/values';
 import type { ToolOperation, ToolIdentity, ToolEventPage } from '../model/run-tool-types.js';
 import type { RunToolModel } from '../model/run-tool-model.js';
@@ -16,6 +19,7 @@ import type { RunModel } from '../model/run-model.js';
 import type { RunStepModel } from '../model/run-step-model.js';
 import type { RunExecutionOwner } from './run-execution-owner.js';
 import type {
+	RunUsage,
 	AgentRun,
 	CreateRunResult,
 	RunFrozenInput,
@@ -139,10 +143,17 @@ export class RunService {
 		) {
 			throw new AgentFailure('invalid_input');
 		}
+		if (
+			request.model.reasoningEffort !== undefined &&
+			!AGENT_REASONING_EFFORTS.includes(request.model.reasoningEffort)
+		) {
+			throw new AgentFailure('invalid_input');
+		}
 		const model = {
 			providerId: request.model.providerId,
 			modelId: request.model.modelId,
 			configurationVersion: request.model.configurationVersion,
+			...(request.model.reasoningEffort === undefined ? {} : { reasoningEffort: request.model.reasoningEffort }),
 		};
 		if (
 			!Array.isArray(request.connectionIds) ||
@@ -160,6 +171,7 @@ export class RunService {
 			model.providerId,
 			model.modelId,
 			model.configurationVersion,
+			model.reasoningEffort ?? 'default',
 			JSON.stringify(connectionIds),
 			JSON.stringify(origin),
 		]);
@@ -320,6 +332,12 @@ export class RunService {
 			throw new AgentFailure('invalid_input');
 		}
 		return this.model.listEvents(userId, appId, runId, after, limit);
+	}
+
+	getUsage(userId: number, appId: string, runId: string): Promise<RunUsage | null> {
+		validateScope(userId, appId);
+		validateAgentId(runId);
+		return this.steps.usage(userId, appId, runId);
 	}
 
 	/** Read-only audit: unavailable execution steps are 404, not synthetic pending work. */

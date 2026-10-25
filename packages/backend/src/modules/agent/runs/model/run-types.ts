@@ -212,3 +212,13 @@ export interface RunPage {
 	items: AgentRun[];
 	nextCursor: number;
 }
+
+export interface RunUsage {
+	runId: string;
+	runVersion: number;
+	inputTokens: number | null;
+	outputTokens: number | null;
+	reportedModelRequests: number;
+	modelRequests: number;
+	toolExecutions: number;
+}
