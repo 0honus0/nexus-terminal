@@ -70,118 +70,242 @@
 	<section
 		ref="root"
 		data-file-preview-dialog
-		class="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-background text-foreground"
+		class="file-preview-dialog relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-background text-foreground"
 	>
-		<div
-			v-if="active && session.tabs.value.length"
-			role="tablist"
-			:aria-label="t('fileManager.preview.openFiles')"
-			class="file-preview-tabs flex shrink-0 overflow-x-auto border-b border-border bg-header"
-		>
+		<div v-if="active" class="file-preview-header">
 			<div
-				v-for="tab in session.tabs.value"
-				:key="tab.id"
-				role="tab"
-				:aria-label="tab.name"
-				:aria-selected="tab.id === session.activeId.value"
-				:tabindex="tab.id === session.activeId.value ? 0 : -1"
-				:title="tab.path"
-				:data-preview-tab-id="tab.id"
-				class="group flex min-h-11 min-w-0 max-w-56 shrink-0 cursor-pointer items-center gap-1 border-r border-border px-2 py-0 text-xs outline-none transition-colors focus:ring-1 focus:ring-inset focus:ring-primary sm:min-h-0 sm:gap-2 sm:px-3 sm:py-2"
-				:class="
-					tab.id === session.activeId.value
-						? 'bg-background text-foreground'
-						: 'bg-header text-text-secondary hover:bg-border/70 hover:text-foreground'
-				"
-				@click="activateTab(tab.id)"
-				@keydown="handleTabKeydown($event, tab.id)"
+				v-if="session.tabs.value.length"
+				role="tablist"
+				:aria-label="t('fileManager.preview.openFiles')"
+				class="file-preview-tabs"
 			>
-				<span class="min-w-0 flex-1 truncate">{{ tab.name }}</span>
-				<UiButton
-					appearance="ghost"
-					density="compact"
-					icon-only
-					class="preview-tab-close"
-					:aria-label="t('fileManager.preview.closeFile', { file: tab.name })"
-					@click="closeTab($event, tab.id)"
+				<div
+					v-for="tab in session.tabs.value"
+					:key="tab.id"
+					role="tab"
+					:aria-label="tab.name"
+					:aria-selected="tab.id === session.activeId.value"
+					:tabindex="tab.id === session.activeId.value ? 0 : -1"
+					:title="tab.path"
+					:data-preview-tab-id="tab.id"
+					class="preview-tab"
+					:class="{ active: tab.id === session.activeId.value }"
+					@click="activateTab(tab.id)"
+					@keydown="handleTabKeydown($event, tab.id)"
 				>
-					<i class="fas fa-times" aria-hidden="true"></i>
-				</UiButton>
+					<span class="preview-tab-name">{{ tab.name }}</span>
+					<UiButton
+						appearance="ghost"
+						density="compact"
+						icon-only
+						class="preview-tab-close"
+						:aria-label="t('fileManager.preview.closeFile', { file: tab.name })"
+						@click="closeTab($event, tab.id)"
+					>
+						<i class="fas fa-times" aria-hidden="true"></i>
+					</UiButton>
+				</div>
 			</div>
-		</div>
-
-		<header v-if="active" class="file-preview-toolbar flex shrink-0 items-center justify-end gap-2">
-			<slot name="toolbar" />
+			<div v-else class="file-preview-tabs"></div>
 			<UiButton
-				appearance="soft"
+				appearance="ghost"
 				density="compact"
 				icon-only
-				class="preview-header-action"
-				:loading="isRefreshing"
-				:disabled="isRefreshing"
-				:aria-label="t('fileManager.preview.refresh')"
-				:title="t('fileManager.preview.refresh')"
-				@click="refreshCurrentTab"
-			>
-				<i class="fas fa-rotate" aria-hidden="true"></i>
-			</UiButton>
-			<UiButton
-				appearance="soft"
-				density="compact"
-				icon-only
-				class="preview-header-action"
+				class="preview-header-close"
 				:aria-label="t('fileManager.preview.close')"
 				:title="t('fileManager.preview.close')"
 				@click="emit('close')"
 			>
-				<i class="fas fa-times" aria-hidden="true"></i>
+				<i class="fas fa-xmark" aria-hidden="true"></i>
 			</UiButton>
-		</header>
+		</div>
 
 		<div class="min-h-0 flex-1 overflow-auto">
 			<slot />
 		</div>
 
-		<footer v-if="active && activeTab" class="file-preview-statusbar">
-			<i class="fas fa-file-lines" aria-hidden="true"></i>
-			<span class="file-preview-path" :title="activeTab.path">{{ activeTab.path }}</span>
-			<span v-if="activeTab.scopeLabel" class="file-preview-scope" :title="activeTab.scopeLabel">{{
-				activeTab.scopeLabel
-			}}</span>
-			<span v-if="subtitle" class="file-preview-kind">{{ subtitle }}</span>
+		<footer v-if="active && activeTab" class="file-preview-footer">
+			<div class="file-preview-statusbar">
+				<i class="fas fa-file-lines" aria-hidden="true"></i>
+				<span class="file-preview-path" :title="activeTab.path">{{ activeTab.path }}</span>
+				<span v-if="activeTab.scopeLabel" class="file-preview-scope" :title="activeTab.scopeLabel">{{
+					activeTab.scopeLabel
+				}}</span>
+				<span v-if="subtitle" class="file-preview-kind">{{ subtitle }}</span>
+			</div>
+			<div class="file-preview-toolbar">
+				<slot name="toolbar" />
+				<UiButton
+					appearance="soft"
+					density="compact"
+					icon-only
+					class="preview-footer-action"
+					:loading="isRefreshing"
+					:disabled="isRefreshing"
+					:aria-label="t('fileManager.preview.refresh')"
+					:title="t('fileManager.preview.refresh')"
+					@click="refreshCurrentTab"
+				>
+					<i class="fas fa-rotate" aria-hidden="true"></i>
+				</UiButton>
+			</div>
 		</footer>
 	</section>
 </template>
 
 <style scoped>
+	.file-preview-dialog {
+		container-type: inline-size;
+		container-name: file-preview-dialog;
+	}
+
+	.file-preview-header {
+		display: flex;
+		min-height: 2rem;
+		flex: 0 0 auto;
+		align-items: stretch;
+		border-bottom: 1px solid var(--border-color);
+		background: color-mix(in srgb, var(--header-bg-color) 82%, transparent);
+		-webkit-backdrop-filter: var(--glass-backdrop-filter, blur(18px) saturate(160%));
+		backdrop-filter: var(--glass-backdrop-filter, blur(18px) saturate(160%));
+	}
+
 	.file-preview-tabs {
+		display: flex;
+		min-width: 0;
+		min-height: 2rem;
+		flex: 1 1 auto;
+		flex-wrap: nowrap;
+		gap: 0.18rem;
+		overflow-x: auto;
+		overflow-y: hidden;
+		padding: 0.3rem 0.25rem 0 0.38rem;
 		overscroll-behavior-x: contain;
 		scroll-snap-type: x proximity;
+		scrollbar-width: thin;
+		scrollbar-color: color-mix(in srgb, var(--text-color) 20%, transparent) transparent;
 		-webkit-overflow-scrolling: touch;
 	}
 
-	.file-preview-tabs > [role='tab'] {
+	.file-preview-tabs::-webkit-scrollbar {
+		height: 3px;
+	}
+
+	.file-preview-tabs::-webkit-scrollbar-thumb {
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--text-color) 20%, transparent);
+	}
+
+	.preview-tab {
+		position: relative;
+		display: flex;
+		min-width: 0;
+		max-width: 15rem;
+		flex: 0 0 auto;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.3rem 0.35rem 0.3rem 0.5rem;
+		border: 1px solid transparent;
+		border-bottom: 0;
+		border-radius: 0.48rem 0.48rem 0 0;
+		color: var(--text-color-secondary);
+		font-size: 0.7rem;
+		white-space: nowrap;
+		cursor: pointer;
 		scroll-snap-align: start;
+		outline: none;
+		transition:
+			background-color 0.14s ease,
+			color 0.14s ease,
+			box-shadow 0.14s ease;
+	}
+
+	.preview-tab:hover,
+	.preview-tab:focus-visible {
+		background: color-mix(in srgb, var(--card-bg-color) 58%, transparent);
+		color: var(--text-color);
+	}
+
+	.preview-tab.active {
+		border-color: color-mix(in srgb, var(--border-color) 46%, transparent);
+		background: color-mix(in srgb, var(--card-bg-color) 72%, transparent);
+		color: var(--text-color);
+		box-shadow: inset 0 -2px 0 var(--link-active-color);
+	}
+
+	.preview-tab-name {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.preview-header-close {
+		width: 2.125rem;
+		height: 2.125rem;
+		min-width: 2.125rem;
+		flex: 0 0 2.125rem;
+		margin: 0 0.55rem 0 0.2rem;
+		align-self: center;
+		--ui-control-padding-inline: 0;
+		--ui-control-height: 2.125rem;
+	}
+
+	.preview-header-close i {
+		font-size: 0.85rem;
+	}
+
+	.file-preview-footer {
+		display: flex;
+		min-width: 0;
+		min-height: 2.75rem;
+		flex: 0 0 auto;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.35rem 0.6rem;
+		padding: 0.3rem 0.55rem;
+		border-top: 1px solid var(--border-color);
+		background: color-mix(in srgb, var(--header-bg-color) 82%, transparent);
+		-webkit-backdrop-filter: var(--glass-backdrop-filter, blur(18px) saturate(160%));
+		backdrop-filter: var(--glass-backdrop-filter, blur(18px) saturate(160%));
 	}
 
 	.file-preview-toolbar {
-		min-height: 2.75rem;
-		padding: 0.35rem 0.65rem;
-		border-bottom: 1px solid var(--border-color);
-		background: color-mix(in srgb, var(--header-bg-color) 82%, transparent);
+		display: flex;
+		min-width: 0;
+		max-width: 100%;
+		flex: 0 1 auto;
+		align-items: center;
+		justify-content: flex-start;
+		gap: 0.32rem;
+		overflow-x: auto;
+		overscroll-behavior-x: contain;
+		padding-block: 0.1rem;
+		scrollbar-width: thin;
+		scrollbar-color: color-mix(in srgb, var(--text-color) 20%, transparent) transparent;
+		-webkit-overflow-scrolling: touch;
+	}
+
+	.file-preview-toolbar > :first-child {
+		margin-left: auto;
+	}
+
+	.file-preview-toolbar::-webkit-scrollbar {
+		height: 3px;
+	}
+
+	.file-preview-toolbar::-webkit-scrollbar-thumb {
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--text-color) 20%, transparent);
 	}
 
 	.file-preview-statusbar {
 		display: flex;
 		min-width: 0;
-		min-height: 2.25rem;
-		flex: 0 0 auto;
+		min-height: 2rem;
+		flex: 1 1 12rem;
 		align-items: center;
 		gap: 0.45rem;
 		overflow: hidden;
-		padding: 0.35rem 0.75rem;
-		border-top: 1px solid var(--border-color);
-		background: color-mix(in srgb, var(--header-bg-color) 82%, transparent);
 		color: var(--text-color-secondary);
 		font-size: 0.68rem;
 		white-space: nowrap;
@@ -221,41 +345,62 @@
 	}
 
 	.preview-tab-close {
-		width: 44px;
-		height: 44px;
-		min-width: 44px;
-		flex: 0 0 44px;
+		width: 1.35rem;
+		height: 1.35rem;
+		min-width: 1.35rem;
+		flex: 0 0 1.35rem;
 		opacity: 0.72;
 	}
 
-	.preview-header-action {
-		width: 44px;
-		height: 44px;
-		min-width: 44px;
-		flex: 0 0 44px;
+	.preview-tab-close:hover {
+		opacity: 1;
 	}
 
-	@media (min-width: 640px) {
-		.preview-tab-close,
-		.preview-header-action {
-			width: 32px;
-			height: 32px;
-			min-width: 32px;
-			flex-basis: 32px;
+	.preview-footer-action {
+		width: 2rem;
+		height: 2rem;
+		min-width: 2rem;
+		flex: 0 0 2rem;
+	}
+
+	@container file-preview-dialog (max-width: 640px) {
+		.file-preview-footer {
+			gap: 0.25rem;
+			padding: 0.3rem 0.5rem;
 		}
-	}
 
-	@media (max-width: 639px) {
+		.file-preview-statusbar {
+			flex-basis: 100%;
+		}
+
 		.file-preview-toolbar {
-			min-height: 2.75rem;
+			width: 100%;
+			flex-basis: 100%;
 		}
 
+		.preview-header-close {
+			width: 2.75rem;
+			height: 2.75rem;
+			min-width: 2.75rem;
+			flex-basis: 2.75rem;
+		}
+	}
+
+	@container file-preview-dialog (max-width: 420px) {
 		.file-preview-kind {
 			display: none;
 		}
 
-		.file-preview-statusbar {
-			padding-inline: 0.55rem;
+		.preview-tab {
+			max-width: 11rem;
+			padding-inline: 0.45rem 0.3rem;
+		}
+
+		.preview-footer-action {
+			width: 2.75rem;
+			height: 2.75rem;
+			min-width: 2.75rem;
+			flex-basis: 2.75rem;
 		}
 	}
 </style>

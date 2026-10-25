@@ -756,7 +756,21 @@
 	}
 
 	.pdf-toolbar {
+		width: max-content;
 		min-width: 0;
+		flex: 0 0 auto;
+		flex-wrap: nowrap;
+	}
+
+	.pdf-toolbar > * {
+		flex: 0 0 auto;
+	}
+
+	.pdf-page-input {
+		width: 4.5rem;
+		min-width: 4.5rem;
+		max-width: 4.5rem;
+		flex-basis: 4.5rem;
 	}
 
 	.pdf-toolbar-button {
@@ -779,30 +793,9 @@
 		-webkit-overflow-scrolling: touch;
 	}
 
-	@media (min-width: 640px) {
-		.pdf-toolbar:has(.preview-search-controls) {
-			flex-wrap: wrap;
-		}
-	}
-
 	@media (max-width: 639px) {
-		.pdf-preview-root {
-			padding-bottom: 3.35rem;
-		}
-
 		.pdf-toolbar {
-			position: absolute;
-			right: 0;
-			bottom: 0;
-			left: 0;
-			z-index: 30;
-			min-height: 3.35rem;
-			overflow-x: auto;
-			overscroll-behavior-x: contain;
-			border-top: 1px solid var(--color-border);
-			background: var(--color-header);
-			padding: 0.3rem 0.35rem;
-			-webkit-overflow-scrolling: touch;
+			min-height: 2.75rem;
 		}
 
 		.pdf-toolbar-button,
@@ -821,6 +814,8 @@
 		.pdf-page-input {
 			width: 3.25rem;
 			min-width: 3.25rem;
+			max-width: 3.25rem;
+			flex-basis: 3.25rem;
 			font-size: 0.875rem;
 		}
 
@@ -834,10 +829,6 @@
 		.pdf-toolbar-divider {
 			margin-right: 0.15rem;
 			margin-left: 0.15rem;
-		}
-
-		.pdf-outline-drawer {
-			bottom: 3.35rem;
 		}
 	}
 </style>
