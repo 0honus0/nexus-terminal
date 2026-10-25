@@ -629,10 +629,8 @@
 			return;
 		}
 
-		// v-show normally makes inactive surfaces display:none. Showing a terminal and only then
-		// fitting xterm lets one frame escape with the stale viewport/canvas height, which appears
-		// as a brief flash along the bottom edge. Pre-show the target invisibly, fit it while it has
-		// real geometry, then make it active on the next animation frame.
+		// Inactive surfaces stay laid out but invisible. Fit xterm while the target has real
+		// geometry, then make it active on the next animation frame so the pane never reflows.
 		preparingSessionId.value = id;
 		void nextTick(() => {
 			if (!isCurrent() || generation !== activationGeneration || preparingSessionId.value !== id) return;

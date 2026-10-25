@@ -421,17 +421,11 @@
 								<span class="network-reading">
 									<span class="rate rate-down">
 										<i class="fas fa-arrow-down" aria-hidden="true"></i>
-										<span class="rate-copy">
-											<span class="rate-label">{{ t('statusMonitor.networkDownload') }}</span>
-											<b>{{ compactRate(monitor.current.value.netRxRate) }}</b>
-										</span>
+										<b>{{ compactRate(monitor.current.value.netRxRate) }}</b>
 									</span>
 									<span class="rate rate-up">
 										<i class="fas fa-arrow-up" aria-hidden="true"></i>
-										<span class="rate-copy">
-											<span class="rate-label">{{ t('statusMonitor.networkUpload') }}</span>
-											<b>{{ compactRate(monitor.current.value.netTxRate) }}</b>
-										</span>
+										<b>{{ compactRate(monitor.current.value.netTxRate) }}</b>
 									</span>
 								</span>
 							</span>

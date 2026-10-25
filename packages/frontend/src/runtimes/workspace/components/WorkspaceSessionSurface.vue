@@ -1279,17 +1279,17 @@
 
 <template>
 	<div
-		v-show="visible !== false"
 		v-bind="$attrs"
 		ref="surfaceRoot"
 		data-workspace-surface
 		:data-workspace-id="session.id"
 		:data-workspace-active="active !== false ? 'true' : undefined"
-		class="relative flex h-full min-h-0 overflow-hidden bg-background"
-		:class="mobile ? 'flex-col' : 'flex-row'"
+		class="flex h-full min-h-0 overflow-hidden bg-background"
+		:class="[mobile ? 'flex-col' : 'flex-row', visible === false ? 'invisible pointer-events-none' : '']"
 		@pointerdown.capture="handleSurfacePointerDown"
 	>
-		<!-- Keep one DOM root so WorkspacePage's v-show and positioning reach this session. -->
+		<!-- Keep one DOM root so WorkspacePage's positioning reaches this session. Inactive
+		sessions stay laid out but invisible, so Splitpanes never re-measures on tab switch. -->
 		<RemoteToolInstallDialog
 			:offer="toolInstaller.offer.value"
 			:busy="toolInstaller.busy.value"
