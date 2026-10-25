@@ -63,7 +63,7 @@
 		remove,
 		discover,
 		test,
-		lookup,
+		resetModel,
 		matchModels,
 		preserveModelTools,
 	} = useProviderManagement({ available: () => props.active });
@@ -462,20 +462,6 @@
 		}
 	}
 
-	function providerUpdatedAt(provider: Provider): string {
-		return formatAgentDate(locale.value, new Date(provider.updatedAt), { dateStyle: 'medium' });
-	}
-
-	function protocolLabel(protocol: Provider['protocol']): string {
-		return t(
-			protocol === 'images'
-				? 'agent.settings.providers.protocolImages'
-				: protocol === 'responses'
-					? 'agent.settings.providers.protocolResponses'
-					: 'agent.settings.providers.protocolChat',
-		);
-	}
-
 	function capabilityFieldLabel(field: AgentModelCapabilityField): string {
 		const keys: Partial<Record<AgentModelCapabilityField, string>> = {
 			contextWindow: 'agent.settings.providers.contextWindow',
@@ -628,10 +614,12 @@
 				:key="provider.id"
 				class="group overflow-hidden rounded-2xl border border-border/80 bg-card/80 shadow-2xs transition-all hover:border-primary/45 hover:bg-card/95"
 			>
-				<div class="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+				<div
+					class="provider-card-main flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
+				>
 					<div class="flex min-w-0 flex-1 items-start gap-3.5">
 						<div
-							class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-primary/25 bg-gradient-to-br from-primary/15 via-primary/10 to-transparent text-primary shadow-xs"
+							class="provider-card-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-primary/25 bg-gradient-to-br from-primary/15 via-primary/10 to-transparent text-primary shadow-xs"
 						>
 							<i class="fa-solid fa-server text-lg" aria-hidden="true"></i>
 						</div>
@@ -684,22 +672,12 @@
 									aria-hidden="true"
 								></i>
 							</button>
-							<div
-								class="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-text-secondary"
-							>
-								<span>{{ protocolLabel(provider.protocol) }}</span>
-								<span class="text-text-secondary/35">·</span>
-								<span>{{
-									t('agent.settings.providers.modelCount', { count: provider.models.length })
-								}}</span>
-							</div>
 						</div>
 					</div>
-					<div class="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+					<div class="flex shrink-0 flex-wrap items-center justify-between gap-1.5">
 						<UiButton
 							type="button"
 							appearance="soft"
-							:density="'compact'"
 							:icon-only="true"
 							:tone="provider.enabled ? 'danger' : 'success'"
 							:disabled="blocked || draft !== null"
@@ -725,11 +703,16 @@
 							type="button"
 							appearance="soft"
 							tone="neutral"
+							class="provider-test-button"
+							:title="t('agent.settings.providers.testModalBtn', { count: provider.models.length })"
+							:aria-label="t('agent.settings.providers.testModalBtn', { count: provider.models.length })"
 							:disabled="blocked || draft !== null"
 							@click="openTests(provider)"
 						>
 							<i class="fa-solid fa-vial text-[10px]" aria-hidden="true"></i>
-							{{ t('agent.settings.providers.testModalBtn', { count: provider.models.length }) }}
+							<span class="provider-test-label">{{
+								t('agent.settings.providers.testModalBtn', { count: provider.models.length })
+							}}</span>
 						</UiButton>
 						<UiButton
 							type="button"
@@ -796,37 +779,6 @@
 						</span>
 						<span v-if="!provider.models.length">{{ t('agent.settings.providers.empty') }}</span>
 					</div>
-				</details>
-				<details class="border-t border-border/45 px-4 py-2.5 text-[11px] text-text-secondary sm:px-5">
-					<summary class="cursor-pointer font-medium">
-						{{ t('agent.settings.providerManagement.technicalDetails') }}
-					</summary>
-					<dl class="mt-2 grid gap-x-4 gap-y-1 font-mono text-[10px] sm:grid-cols-2">
-						<div class="flex gap-2">
-							<dt class="shrink-0 text-text-secondary/70">ID</dt>
-							<dd class="break-all">{{ provider.id }}</dd>
-						</div>
-						<div class="flex gap-2">
-							<dt class="shrink-0 text-text-secondary/70">v</dt>
-							<dd>{{ provider.version }}</dd>
-						</div>
-						<div class="flex gap-2">
-							<dt class="shrink-0 text-text-secondary/70">credential</dt>
-							<dd>{{ provider.credentialRevision }}</dd>
-						</div>
-						<div class="flex gap-2">
-							<dt class="shrink-0 text-text-secondary/70">protocol</dt>
-							<dd>{{ provider.protocol }}</dd>
-						</div>
-						<div class="flex gap-2">
-							<dt class="shrink-0 text-text-secondary/70">created</dt>
-							<dd>{{ formatAgentDate(locale, new Date(provider.createdAt)) }}</dd>
-						</div>
-						<div class="flex gap-2">
-							<dt class="shrink-0 text-text-secondary/70">updated</dt>
-							<dd>{{ providerUpdatedAt(provider) }}</dd>
-						</div>
-					</dl>
 				</details>
 			</article>
 		</div>
@@ -1117,80 +1069,105 @@
 								>{{ t('agent.settings.providerManagement.discoverEndpoint') }}</UiButton
 							>
 						</div>
-						<div v-for="group in modelGroups" :key="group.kind" class="space-y-3">
-							<h5 class="text-xs font-semibold text-foreground">
-								{{
-									t(
-										group.kind === 'images'
-											? 'agent.settings.providers.imageModels'
-											: 'agent.settings.providers.chatModels',
-									)
-								}}
-							</h5>
-							<div
-								v-for="{ model, index } in group.items"
-								:key="index"
-								class="space-y-3 rounded-xl bg-card/65 p-3.5"
-							>
-								<div class="flex items-center justify-between gap-2">
-									<span class="text-[11px] font-semibold text-foreground">{{
-										model.id || t('agent.settings.providerManagement.modelId')
-									}}</span>
+						<div class="space-y-4">
+							<div v-for="group in modelGroups" :key="group.kind" class="provider-model-group">
+								<div class="provider-model-group__header">
+									<span class="provider-model-group__icon" aria-hidden="true">
+										<i
+											:class="
+												group.kind === 'images' ? 'fa-solid fa-image' : 'fa-solid fa-comments'
+											"
+										></i>
+									</span>
+									<h5 class="provider-model-group__title">
+										{{
+											t(
+												group.kind === 'images'
+													? 'agent.settings.providers.imageModels'
+													: 'agent.settings.providers.chatModels',
+											)
+										}}
+									</h5>
+									<UiBadge appearance="ghost" density="compact" class="font-mono">{{
+										group.items.length
+									}}</UiBadge>
 									<UiButton
 										type="button"
-										appearance="ghost"
-										tone="danger"
-										icon-only
-										:title="t('common.delete')"
-										:aria-label="t('common.delete')"
-										@click="draft.models.splice(index, 1)"
-										><i class="fa-regular fa-trash-can text-[10px]" aria-hidden="true"></i
-									></UiButton>
+										appearance="soft"
+										density="compact"
+										class="provider-model-group__action"
+										:disabled="draft.models.length >= AGENT_PROVIDER_MODEL_LIMIT"
+										@click="
+											addModel(
+												undefined,
+												group.kind === 'images'
+													? 'images'
+													: draft.protocol === 'images'
+														? 'chat-completions'
+														: undefined,
+											)
+										"
+										><i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i
+										>{{ t('agent.settings.providerManagement.addModel') }}</UiButton
+									>
 								</div>
-								<ProviderModelEditor
-									:model-value="model"
-									:default-protocol="draft.protocol"
-									:compact="device.isMobile.value"
-									@match-registry="matchModels([model])"
-									@configure-tools="preserveModelTools(model)"
-									:errors="validationAttempted ? validation.models[index] : undefined"
-									@update:model-value="(value) => draft?.models.splice(index, 1, value)"
-								/>
 								<div
-									v-if="currentProvider?.models.find((item) => item.id === model.id)?.observation"
-									class="space-y-2 rounded-lg bg-header/25 p-2.5 text-[11px] text-text-secondary"
+									v-for="{ model, index } in group.items"
+									:key="index"
+									class="space-y-3 rounded-xl bg-card/65 p-3.5"
 								>
-									<p>{{ t('agent.settings.providerManagement.observationHelp') }}</p>
-									<div class="flex flex-wrap gap-2">
-										<UiButton type="button" density="compact" @click="applyObservation(model)">{{
-											t('agent.settings.providerManagement.applyObservation')
-										}}</UiButton>
-										<UiButton type="button" density="compact" @click="lookup(model)">{{
-											t('agent.settings.providerManagement.registry')
-										}}</UiButton>
+									<div class="flex items-center justify-between gap-3">
+										<span class="min-w-0 truncate text-[11px] font-semibold text-foreground">{{
+											model.id || t('agent.settings.providerManagement.modelId')
+										}}</span>
+										<div class="flex shrink-0 items-center gap-0.5">
+											<UiButton
+												class="provider-model-reset"
+												type="button"
+												appearance="ghost"
+												icon-only
+												:title="t('agent.settings.providerManagement.resetParameters')"
+												:aria-label="t('agent.settings.providerManagement.resetParameters')"
+												@click="resetModel(model)"
+												><i class="fa-solid fa-rotate-left text-[10px]" aria-hidden="true"></i
+											></UiButton>
+											<UiButton
+												class="provider-model-delete"
+												type="button"
+												appearance="ghost"
+												icon-only
+												:title="t('common.delete')"
+												:aria-label="t('common.delete')"
+												@click="draft.models.splice(index, 1)"
+												><i class="fa-regular fa-trash-can text-[10px]" aria-hidden="true"></i
+											></UiButton>
+										</div>
+									</div>
+									<ProviderModelEditor
+										:model-value="model"
+										:default-protocol="draft.protocol"
+										:compact="device.isMobile.value"
+										@match-registry="matchModels([model])"
+										@configure-tools="preserveModelTools(model)"
+										:errors="validationAttempted ? validation.models[index] : undefined"
+										@update:model-value="(value) => draft?.models.splice(index, 1, value)"
+									/>
+									<div
+										v-if="currentProvider?.models.find((item) => item.id === model.id)?.observation"
+										class="space-y-2 rounded-lg bg-header/25 p-2.5 text-[11px] text-text-secondary"
+									>
+										<p>{{ t('agent.settings.providerManagement.observationHelp') }}</p>
+										<div class="flex flex-wrap justify-end gap-2">
+											<UiButton
+												type="button"
+												density="compact"
+												@click="applyObservation(model)"
+												>{{ t('agent.settings.providerManagement.applyObservation') }}</UiButton
+											>
+										</div>
 									</div>
 								</div>
-								<UiButton v-else type="button" density="compact" @click="lookup(model)">{{
-									t('agent.settings.providerManagement.registry')
-								}}</UiButton>
 							</div>
-							<UiButton
-								type="button"
-								appearance="soft"
-								:disabled="draft.models.length >= AGENT_PROVIDER_MODEL_LIMIT"
-								@click="
-									addModel(
-										undefined,
-										group.kind === 'images'
-											? 'images'
-											: draft.protocol === 'images'
-												? 'chat-completions'
-												: undefined,
-									)
-								"
-								><i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i
-								>{{ t('agent.settings.providerManagement.addModel') }}</UiButton
-							>
 						</div>
 					</section>
 				</fieldset>

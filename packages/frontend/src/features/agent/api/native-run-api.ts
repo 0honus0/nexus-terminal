@@ -1,3 +1,8 @@
+import { readAgentRunPath, readAgentRunUsageResponse } from '@nexus-terminal/shared/agent/runs/http-codec';
+import { AGENT_MAX_JSON_BODY_BYTES, AGENT_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/values';
+import { requestAgentManagement } from './management-request';
+import type { NativeRunUsage } from '../model/native-run-types';
+import { fromNativeRunUsage } from '../model/native-run-mapper';
 import { requestNativeWorkspace } from './native-workspace-request';
 import { AgentManagementFailure } from '../model/management-failure';
 import type { NativeThreadScope } from '../model/native-thread-types';
@@ -180,4 +185,31 @@ export async function mutateNativeRun(intent: NativeRunIntent, signal?: AbortSig
 	)
 		return { kind: 'run', run: fromNativeRun(result.value.run) };
 	return unexpected();
+}
+
+export async function getNativeRunUsage(
+	scope: NativeThreadScope,
+	runId: string,
+	signal?: AbortSignal,
+): Promise<NativeRunUsage> {
+	let path;
+	try {
+		path = readAgentRunPath({ appId: scope.appId, runId });
+	} catch (cause) {
+		throw new AgentManagementFailure('invalid_input', 'not_dispatched', { cause });
+	}
+	const value = await requestAgentManagement({
+		method: 'GET',
+		path: '/apps/' + path.appId + '/runs/' + path.runId + '/usage',
+		maxRequestBytes: AGENT_MAX_JSON_BODY_BYTES,
+		maxResponseBytes: AGENT_MAX_RESPONSE_BYTES,
+		signal,
+
+		decode(input) {
+			const usage = readAgentRunUsageResponse(input);
+			if (usage.runId !== runId) throw new AgentManagementFailure('protocol_failure', 'unknown');
+			return usage;
+		},
+	});
+	return fromNativeRunUsage(value);
 }

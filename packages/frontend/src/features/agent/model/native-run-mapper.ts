@@ -1,3 +1,5 @@
+import type { AgentRunUsageView } from '@nexus-terminal/shared/agent/runs/model';
+import type { NativeRunUsage } from './native-run-types';
 import type {
 	AgentRunView,
 	AgentRunEventView,
@@ -47,6 +49,9 @@ export function fromNativeModel(value: AgentSelectableModel): NativeModel {
 		configurationVersion: value.configurationVersion,
 		modelId: value.modelId,
 		protocol: value.protocol,
+		reasoningEfforts: value.reasoningEfforts.map((effort) => effort),
+		reasoningMandatory: value.reasoningMandatory,
+		...(value.defaultReasoningEffort === undefined ? {} : { defaultReasoningEffort: value.defaultReasoningEffort }),
 	};
 }
 
@@ -129,6 +134,7 @@ export function toNativeRunInput(value: NativeRunInput): AgentCreateRunRequest {
 			providerId: value.model.providerId,
 			modelId: value.model.modelId,
 			configurationVersion: value.model.configurationVersion,
+			...(value.reasoningEffort === undefined ? {} : { reasoningEffort: value.reasoningEffort }),
 		},
 	};
 }
@@ -286,6 +292,7 @@ export function fromNativeToolEvent(value: AgentToolEventView): NativeToolEvent 
 export function snapshotNativeRunAction(value: NativeRunAction): NativeRunAction {
 	function input(value: NativeRunInput): NativeRunInput {
 		return {
+			...(value.reasoningEffort === undefined ? {} : { reasoningEffort: value.reasoningEffort }),
 			prompt: value.prompt,
 			connectionIds: value.connectionIds.map((id) => id),
 			model: {
@@ -294,6 +301,11 @@ export function snapshotNativeRunAction(value: NativeRunAction): NativeRunAction
 				configurationVersion: value.model.configurationVersion,
 				modelId: value.model.modelId,
 				protocol: value.model.protocol,
+				reasoningEfforts: value.model.reasoningEfforts.map((effort) => effort),
+				reasoningMandatory: value.model.reasoningMandatory,
+				...(value.model.defaultReasoningEffort === undefined
+					? {}
+					: { defaultReasoningEffort: value.model.defaultReasoningEffort }),
 			},
 		};
 	}
@@ -308,5 +320,17 @@ export function snapshotNativeRunAction(value: NativeRunAction): NativeRunAction
 		approval: fromNativeApproval(value.approval),
 		decision: value.decision,
 		feedback: value.feedback,
+	};
+}
+
+export function fromNativeRunUsage(value: AgentRunUsageView): NativeRunUsage {
+	return {
+		runId: value.runId,
+		runVersion: value.runVersion,
+		inputTokens: value.inputTokens,
+		outputTokens: value.outputTokens,
+		reportedModelRequests: value.reportedModelRequests,
+		modelRequests: value.modelRequests,
+		toolExecutions: value.toolExecutions,
 	};
 }

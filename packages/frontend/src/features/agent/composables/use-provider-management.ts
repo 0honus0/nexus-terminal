@@ -37,9 +37,11 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 	useFeedbackMessage(
 		() => (notice.value ? t('agent.settings.providerManagement.' + notice.value) : ''),
 		() =>
-			['saved', 'deleted', 'discovered', 'registryApplied'].includes(notice.value)
+			['saved', 'deleted', 'discovered', 'parametersRestored'].includes(notice.value)
 				? 'success'
-				: ['noModels', 'noRegistry', 'registryRefreshNeeded'].includes(notice.value)
+				: ['noModels', 'noRegistry', 'registryRefreshNeeded', 'parametersRestoredNoDefaults'].includes(
+							notice.value,
+					  )
 					? 'info'
 					: 'error',
 		() => failureCause,
@@ -349,27 +351,40 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 		);
 	}
 
-	async function lookup(model: ProviderModelDraft): Promise<void> {
+	async function resetModel(model: ProviderModelDraft): Promise<void> {
 		if (!draft.value || blocked.value) return;
 		const currentDraft = draft.value;
-		const id = model.id;
+		const id = model.id.trim();
 		const before = JSON.stringify(model);
 		await perform(
-			(signal) => resolveModelRegistry(id, signal),
+			(signal) => (id ? resolveModelRegistry(id, signal) : Promise.resolve(null)),
 			(value) => {
 				if (
 					draft.value !== currentDraft ||
 					!currentDraft.models.includes(model) ||
-					model.id !== id ||
 					JSON.stringify(model) !== before
 				)
 					return;
-				if (!value) {
-					notice.value = 'noRegistry';
-					return;
+				const protocol = model.protocol;
+				const effectiveProtocol = protocol ?? currentDraft.protocol;
+				configuredTools.delete(toRaw(model));
+				model.contextWindow = undefined;
+				model.maxOutputTokens = undefined;
+				model.supportsTools = false;
+				model.supportsImageInput = undefined;
+				model.supportsImageGeneration = undefined;
+				model.supportsFileInput = undefined;
+				model.supportsPromptCacheKey = undefined;
+				model.reasoningEfforts = undefined;
+				model.defaultReasoningEffort = undefined;
+				model.reasoningMandatory = undefined;
+				if (value) applyRegistry(model, value, 'replace');
+				if (protocol !== undefined) model.protocol = protocol;
+				if (effectiveProtocol === 'images') {
+					model.supportsTools = false;
+					if (model.supportsImageGeneration === undefined) model.supportsImageGeneration = true;
 				}
-				applyRegistry(model, value, 'replace');
-				notice.value = 'registryApplied';
+				notice.value = value ? 'parametersRestored' : 'parametersRestoredNoDefaults';
 			},
 			false,
 		);
@@ -404,7 +419,7 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 		remove,
 		discover,
 		test,
-		lookup,
+		resetModel,
 		matchModels,
 		preserveModelTools,
 	};

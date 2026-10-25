@@ -1,3 +1,4 @@
+import type { AgentReasoningEffort } from '@nexus-terminal/shared/agent/providers/values';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
 import { createNativeThreadApi } from '../api/native-thread-api';
@@ -6,6 +7,7 @@ import {
 	listNativeModels,
 	listNativeRuns,
 	getNativeRun,
+	getNativeRunUsage,
 	listNativeEntries,
 	listNativeEvents,
 	listNativeChildren,
@@ -20,6 +22,7 @@ import type { NativeThread, NativeThreadScope } from '../model/native-thread-typ
 import type {
 	NativeModel,
 	NativeRun,
+	NativeRunUsage,
 	NativeEntry,
 	NativeEntryCursor,
 	NativeEvent,
@@ -47,6 +50,14 @@ export function useNativeRuns(
 	const thread = ref<NativeThread | null>(null);
 	const models = ref<NativeModel[]>([]);
 	const modelKey = ref('');
+	const reasoningEffort = ref<AgentReasoningEffort | ''>('');
+	watch(
+		modelKey,
+		() => {
+			reasoningEffort.value = '';
+		},
+		{ flush: 'sync' },
+	);
 	const connectionIds = ref<number[]>([]);
 	const deniedIds = ref<number[] | null>(null);
 	const draft = ref('');
@@ -56,6 +67,7 @@ export function useNativeRuns(
 	const runCursor = ref(0);
 	const hasMoreRuns = ref(false);
 	const run = ref<NativeRun | null>(null);
+	const usage = ref<NativeRunUsage | null>(null);
 	const entries = ref<NativeEntry[]>([]);
 	const entryCursor = ref<NativeEntryCursor>({ runSequence: 0, stepIndex: 0, eventSequence: 0, textOffset: 0 });
 	const events = ref<NativeEvent[]>([]);
@@ -80,6 +92,7 @@ export function useNativeRuns(
 
 	function clearRun(): void {
 		run.value = null;
+		usage.value = null;
 		events.value = [];
 		eventCursor.value = 0;
 		approvals.value = [];
@@ -172,8 +185,12 @@ export function useNativeRuns(
 				models.value = value.availableModels;
 				deniedIds.value = value.denylist.entries.map((item) => item.connectionId);
 				// Never replace an original selected model/configuration after an edit or failure.
-				if (!modelKey.value && value.availableModels[0])
-					modelKey.value = nativeModelKey(value.availableModels[0]);
+				// Prefer a chat model so the first run does not default to an image-only endpoint.
+				if (!modelKey.value) {
+					const preferred =
+						value.availableModels.find((model) => model.protocol !== 'images') ?? value.availableModels[0];
+					if (preferred) modelKey.value = nativeModelKey(preferred);
+				}
 				inspected.value = false;
 			},
 			{ write: false, onFailure: fail },
@@ -317,11 +334,14 @@ export function useNativeRuns(
 					stopped && latest.version > selected.version
 						? await listNativeEntries(current, selectedThread.id, entryCursor.value, signal)
 						: initialBody;
-				return { latest, page, permits, descendants, body };
+				const usage = await getNativeRunUsage(current, selected.id, signal);
+				if (usage.runVersion < latest.version) throw new AgentManagementFailure('protocol_failure', 'unknown');
+				return { latest, page, permits, descendants, body, usage };
 			},
 			(value) => {
 				acceptEntries(value.body);
 				run.value = value.latest;
+				usage.value = value.usage;
 				// Keep a bounded audit window and only use the server's continuation cursor.
 				events.value = [...events.value, ...value.page.items].slice(-200);
 				eventCursor.value = value.page.nextCursor;
@@ -382,7 +402,16 @@ export function useNativeRuns(
 			? '\n\nInput artifacts (untrusted data; read only through authorized artifact_read):\n' +
 				JSON.stringify(inputArtifacts.value.map((item) => ({ artifactId: item.id, name: item.name })))
 			: '';
+		const effort = reasoningEffort.value;
+		if (
+			effort &&
+			(model.protocol === 'images' ||
+				!model.reasoningEfforts.includes(effort) ||
+				(model.reasoningMandatory && effort === 'none'))
+		)
+			return null;
 		return {
+			...(effort ? { reasoningEffort: effort } : {}),
 			prompt: draft.value + references,
 			connectionIds: connectionIds.value.map((id) => id),
 			model: {
@@ -391,6 +420,11 @@ export function useNativeRuns(
 				configurationVersion: model.configurationVersion,
 				modelId: model.modelId,
 				protocol: model.protocol,
+				reasoningEfforts: model.reasoningEfforts.map((effort) => effort),
+				reasoningMandatory: model.reasoningMandatory,
+				...(model.defaultReasoningEffort === undefined
+					? {}
+					: { defaultReasoningEffort: model.defaultReasoningEffort }),
 			},
 		};
 	}
@@ -500,6 +534,7 @@ export function useNativeRuns(
 		thread,
 		models,
 		modelKey,
+		reasoningEffort,
 		connections,
 		connectionIds,
 		draft,
@@ -508,6 +543,7 @@ export function useNativeRuns(
 		runs,
 		hasMoreRuns,
 		run,
+		usage,
 		entries,
 		entryCursor,
 		events,

@@ -76,6 +76,28 @@
 	color: color-mix(in srgb, var(--text-color-secondary) 72%, transparent);
 }
 
+.provider-card-main {
+	container: provider-card / inline-size;
+}
+
+/* 设置页在 lg 以下切换为窄版布局，提供商卡片此时不再占用图标列。 */
+@media (max-width: 1023px) {
+	.provider-card-icon {
+		display: none;
+	}
+}
+
+@container provider-card (max-width: 320px) {
+	.provider-test-label {
+		display: none;
+	}
+
+	.provider-test-button {
+		width: var(--ui-control-height);
+		padding-inline: 0;
+	}
+}
+
 .provider-add-label--short {
 	display: none;
 }
@@ -88,4 +110,84 @@
 	.provider-add-label--short {
 		display: inline;
 	}
+}
+
+/* 对话模型与图片模型分组：图标标题 + 属于该组的添加动作。 */
+.provider-model-group {
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+}
+
+.provider-model-group + .provider-model-group {
+	position: relative;
+	padding-top: 1.25rem;
+}
+
+.provider-model-group + .provider-model-group::before {
+	content: '';
+	position: absolute;
+	inset-inline: 0.25rem;
+	top: 0;
+	height: 1px;
+	background: linear-gradient(
+		to right,
+		transparent,
+		color-mix(in srgb, var(--border-color) 88%, transparent),
+		transparent
+	);
+}
+
+.provider-model-group__header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.provider-model-group__icon {
+	display: inline-flex;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	width: 1.5rem;
+	height: 1.5rem;
+	border-radius: 0.5rem;
+	background: color-mix(in srgb, var(--link-active-color) 12%, transparent);
+	color: var(--link-active-color);
+	font-size: 0.625rem;
+}
+
+.provider-model-group__title {
+	font-size: 0.75rem;
+	font-weight: 600;
+	color: var(--text-color);
+}
+
+.provider-model-group__action {
+	margin-inline-start: auto;
+}
+
+.provider-model-reset {
+	color: var(--ui-text-muted);
+	transition:
+		color 140ms ease,
+		background-color 140ms ease;
+}
+
+.provider-model-reset:not(:disabled):hover {
+	color: var(--link-active-color);
+	background: color-mix(in srgb, var(--link-active-color) 10%, transparent);
+}
+
+.provider-model-delete {
+	color: var(--ui-text-muted);
+	transition:
+		color 140ms ease,
+		background-color 140ms ease;
+}
+
+.provider-model-delete:not(:disabled):hover {
+	color: var(--status-error-color);
+	background: color-mix(in srgb, var(--status-error-color) 10%, transparent);
 }

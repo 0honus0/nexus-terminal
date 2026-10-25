@@ -1,5 +1,5 @@
 <script setup lang="ts">
-	import { computed, onBeforeUnmount, watch } from 'vue';
+	import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { RecycleScroller } from 'vue-virtual-scroller';
 	import 'vue-virtual-scroller/dist/vue-virtual-scroller.css';
@@ -8,15 +8,23 @@
 		UiEmptyState,
 		UiLoadingState,
 		UiInlineNotice,
+		UiOverlayPanel,
 		UiSearchInput,
 		UiSelect,
 		type UiSelectOption,
 	} from '@/foundation/ui';
 	import { useFeedback } from '@/shared/feedback/public';
+	import {
+		createFilePreviewSession,
+		loadFilePreview,
+		previewKindFor,
+		type FilePreviewSource,
+	} from '@/features/file-preview/public';
 	import { AGENT_ARTIFACT_CONTENT_TYPES } from '@nexus-terminal/shared/agent/artifacts/values';
 	import { useArtifactLibrary } from '../composables/use-artifact-library';
 	import { formatAgentDateTime } from '../locale-format';
 	import type { ManagedArtifact } from '../model/artifact-types';
+	import { createArtifactPreviewSource } from './artifact-preview-source';
 
 	const props = withDefaults(defineProps<{ active?: boolean }>(), { active: true });
 	const { t, locale } = useI18n();
@@ -46,6 +54,20 @@
 
 	const busy = computed(() => operation.busy.value);
 	const appNames = computed(() => new Map(apps.value.map((app) => [app.id, app.name])));
+
+	const FilePreview = defineAsyncComponent(loadFilePreview);
+	const previewSession = createFilePreviewSession();
+	const previewMounted = ref(false);
+	const previewVisible = ref(false);
+	// 兜底源：预览内 Markdown 相对链接按文件名继续打开同批产物。
+	const previewSource: FilePreviewSource = {
+		read(path, options) {
+			const name = path.split('/').pop() ?? path;
+			const item = items.value.find((candidate) => candidate.name === name && candidate.status === 'ready');
+			if (!item) return Promise.reject(new Error(t('agent.files.previewLoadFailed')));
+			return createArtifactPreviewSource(item, t('agent.files.previewLoadFailed')).read(path, options);
+		},
+	};
 
 	const appOptions = computed<UiSelectOption[]>(() => [
 		{ value: '', label: t('agent.files.allApps'), triggerLabel: t('agent.files.filterLabels.app') },
@@ -130,6 +152,25 @@
 
 	function formatCreatedAt(value: number): string {
 		return formatAgentDateTime(locale.value, new Date(value));
+	}
+
+	function previewable(item: ManagedArtifact): boolean {
+		return item.status === 'ready' && previewKindFor(item.name) !== 'unsupported';
+	}
+
+	async function openPreview(item: ManagedArtifact): Promise<void> {
+		if (blocked.value || !previewable(item)) return;
+		previewMounted.value = true;
+		previewVisible.value = true;
+		await previewSession.open(item.name, {
+			scopeId: item.id,
+			scopeLabel: appName(item),
+			source: createArtifactPreviewSource(item, t('agent.files.previewLoadFailed')),
+		});
+	}
+
+	function closePreview(): void {
+		previewVisible.value = false;
 	}
 
 	let cleanupConfirmation: AbortController | null = null;
@@ -226,10 +267,15 @@
 	watch(
 		() => props.active,
 		(active) => {
-			if (!active) cancelCleanupConfirmation();
+			if (active) return;
+			cancelCleanupConfirmation();
+			closePreview();
 		},
 	);
-	onBeforeUnmount(cancelCleanupConfirmation);
+	onBeforeUnmount(() => {
+		cancelCleanupConfirmation();
+		previewSession.clear();
+	});
 </script>
 <template>
 	<section
@@ -586,6 +632,19 @@
 						</div>
 						<div class="flex items-center justify-end gap-0.5">
 							<UiButton
+								v-if="previewable(item)"
+								class="agent-file-action"
+								density="compact"
+								appearance="ghost"
+								icon-only
+								:disabled="blocked"
+								:aria-label="t('agent.files.preview')"
+								:title="t('agent.files.preview')"
+								@click="openPreview(item)"
+							>
+								<i class="fa-regular fa-eye text-[9px]" aria-hidden="true"></i>
+							</UiButton>
+							<UiButton
 								class="agent-file-action agent-file-action--primary"
 								density="compact"
 								appearance="ghost"
@@ -638,6 +697,33 @@
 				</UiButton>
 			</footer>
 		</div>
+
+		<UiOverlayPanel
+			:visible="previewVisible"
+			:keep-mounted="true"
+			teleport
+			:z-index="60"
+			:close-on-backdrop="true"
+			:close-on-escape="true"
+			:focus-on-open="true"
+			:restore-focus="true"
+			panel-class="flex h-[min(760px,90dvh)] w-full max-w-[1180px] min-h-0 flex-col overflow-hidden !p-0"
+			overlay-class="p-2 sm:p-4"
+			role="dialog"
+			:aria-modal="true"
+			:aria-label="t('agent.files.preview')"
+			@close="closePreview"
+		>
+			<FilePreview
+				v-if="previewMounted"
+				class="min-h-0 flex-1"
+				:source="previewSource"
+				:session="previewSession"
+				show-scope-label
+				@hide="closePreview"
+				@dismiss="closePreview"
+			/>
+		</UiOverlayPanel>
 	</section>
 </template>
 
@@ -670,7 +756,7 @@
 
 	.agent-file-columns,
 	.agent-file-row {
-		grid-template-columns: minmax(0, 1fr) minmax(8.5rem, 0.32fr) 68px 64px 88px;
+		grid-template-columns: minmax(0, 1fr) minmax(8.5rem, 0.32fr) 68px 64px 118px;
 		column-gap: 12px;
 	}
 
@@ -722,7 +808,7 @@
 	@container agent-hub-window (max-width: 760px) {
 		.agent-file-columns,
 		.agent-file-row {
-			grid-template-columns: minmax(0, 1fr) 58px 88px;
+			grid-template-columns: minmax(0, 1fr) 58px 118px;
 			column-gap: 8px;
 		}
 
@@ -792,7 +878,7 @@
 
 		.agent-file-columns,
 		.agent-file-row {
-			grid-template-columns: minmax(0, 1fr) 88px;
+			grid-template-columns: minmax(0, 1fr) 118px;
 		}
 
 		.agent-file-status {
@@ -805,6 +891,13 @@
 
 		.agent-file-meta-status {
 			display: inline-flex;
+		}
+	}
+
+	/* 行高固定 62px；窄容器里操作列占位更大，隐藏时间以免元信息折成三行裁掉“可用”徽标。 */
+	@container agent-hub-window (max-width: 480px) {
+		.agent-file-meta-time {
+			display: none;
 		}
 	}
 </style>

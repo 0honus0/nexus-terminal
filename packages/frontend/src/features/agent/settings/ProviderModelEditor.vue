@@ -74,6 +74,7 @@
 			:label="t('agent.settings.providerManagement.modelId')"
 			:for-id="`${id}-model-id`"
 			:error="errors?.id"
+			:class="props.compact ? 'sm:col-span-2' : undefined"
 			required
 		>
 			<UiInput
@@ -87,17 +88,28 @@
 		<UiButton
 			v-if="props.compact"
 			type="button"
-			appearance="ghost"
+			appearance="soft"
+			class="provider-model-parameters-toggle sm:col-span-2"
 			:aria-expanded="Boolean(showParameters)"
 			@click="parametersOpen = !showParameters"
 		>
-			{{
-				t(
-					showParameters
-						? 'agent.settings.providerManagement.collapseParameters'
-						: 'agent.settings.providerManagement.configureParameters',
-				)
-			}}
+			<span class="flex min-w-0 items-center gap-2">
+				<i class="fa-solid fa-sliders text-[10px] text-primary/80" aria-hidden="true"></i>
+				<span class="truncate">{{
+					t(
+						showParameters
+							? 'agent.settings.providerManagement.collapseParameters'
+							: 'agent.settings.providerManagement.configureParameters',
+					)
+				}}</span>
+			</span>
+			<template #trailing>
+				<i
+					class="fa-solid fa-chevron-down text-[9px] text-text-secondary transition-transform duration-150"
+					:class="{ 'rotate-180': showParameters }"
+					aria-hidden="true"
+				></i>
+			</template>
 		</UiButton>
 		<template v-if="showParameters">
 			<UiFormField :label="t('agent.settings.providers.protocol')" :for-id="`${id}-protocol`">
@@ -205,3 +217,11 @@
 		</template>
 	</div>
 </template>
+
+<style scoped>
+	.provider-model-parameters-toggle {
+		width: 100%;
+		justify-content: space-between;
+		padding-inline: 12px;
+	}
+</style>

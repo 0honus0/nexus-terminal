@@ -2,6 +2,7 @@
 	import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 	import { UiButton, UiCheckbox, UiEmptyState, UiLoadingState, UiInlineNotice } from '@/foundation/ui';
 	import { useI18n } from 'vue-i18n';
+	import { useFeedback } from '@/shared/feedback/public';
 	import { useNativeRuns } from '../composables/use-native-runs';
 	import { isNativeRunActive, nativeModelKey } from '../model/native-run-rules';
 	import NativeThreadPanel from './NativeThreadPanel.vue';
@@ -13,7 +14,9 @@
 	import AgentMessageBody from '../ai/AgentMessageBody.vue';
 	import AgentConversationWelcome from '../ai/AgentConversationWelcome.vue';
 	import type { NativeThread } from '../model/native-thread-types';
+	import { formatAgentNumber } from '../locale-format';
 	import type { NativeModel } from '../model/native-run-types';
+	import { AGENT_REASONING_EFFORTS, type AgentReasoningEffort } from '@nexus-terminal/shared/agent/providers/values';
 
 	const props = defineProps<{
 		appId: string;
@@ -23,7 +26,8 @@
 		executionEnabled: boolean;
 		active: boolean;
 	}>();
-	const { t } = useI18n();
+	const { t, locale } = useI18n();
+	const { notifyError } = useFeedback();
 	const layoutRoot = ref<HTMLElement | null>(null);
 	const threadsOverlay = ref(false);
 	const threadSidebarVisible = ref(true);
@@ -38,8 +42,14 @@
 	const attachmentControl = ref<{ removeById(id: string): void } | null>(null);
 	const showJumpToLatest = ref(false);
 	const keepPinnedToBottom = ref(true);
+	const canJumpPrevious = ref(false);
+	const canJumpNext = ref(false);
+	type AgentConfigControl = 'model' | 'reasoning' | 'target';
+	const selectedConfig = ref<AgentConfigControl>('model');
 	let applyingThreadSelection = false;
 	let layoutObserver: ResizeObserver | null = null;
+	let transcriptObserver: ResizeObserver | null = null;
+	let transcriptFrame: number | null = null;
 
 	onMounted(() => {
 		if (!layoutRoot.value) {
@@ -54,7 +64,11 @@
 		});
 		layoutObserver.observe(layoutRoot.value);
 	});
-	onBeforeUnmount(() => layoutObserver?.disconnect());
+	onBeforeUnmount(() => {
+		layoutObserver?.disconnect();
+		transcriptObserver?.disconnect();
+		if (transcriptFrame !== null) cancelAnimationFrame(transcriptFrame);
+	});
 
 	const threadBusy = ref(false);
 	const bindingBusy = ref(false);
@@ -70,12 +84,13 @@
 		thread,
 		models,
 		modelKey,
+		reasoningEffort,
 		connections,
 		connectionIds,
 		draft,
 		run,
+		usage,
 		entries,
-		entryCursor,
 		events,
 		approvals,
 		children,
@@ -131,12 +146,164 @@
 		},
 	);
 
+	watch(
+		() => (props.active && run.value ? run.value.id + ':' + run.value.status : ''),
+		() => {
+			if (!props.active) return;
+			if (run.value?.status === 'failed') notifyError(t('agent.nativeRun.runFailed'));
+			else if (run.value?.status === 'unknown') notifyError(t('agent.nativeRun.runUnknown'));
+		},
+	);
+
+	const totalTokens = computed(() => {
+		const value = usage.value;
+		return value?.inputTokens !== null && value?.inputTokens !== undefined && value.outputTokens !== null
+			? value.inputTokens + value.outputTokens
+			: null;
+	});
+	const tokenLabel = computed(() => {
+		const value = totalTokens.value;
+		if (value === null) return '—';
+		const divisor = value >= 1_000_000 ? 1_000_000 : value >= 1_000 ? 1_000 : 1;
+		return (
+			formatAgentNumber(locale.value, value / divisor, { maximumFractionDigits: divisor === 1 ? 0 : 1 }) +
+			(divisor === 1_000_000 ? 'M' : divisor === 1_000 ? 'k' : '')
+		);
+	});
+	const usageDetails = computed(() => {
+		const value = usage.value;
+		if (!value) return '';
+		const tokens =
+			value.inputTokens === null
+				? t('agent.nativeRun.usageUnavailable')
+				: t('agent.nativeRun.tokens') +
+					': ' +
+					formatAgentNumber(locale.value, value.inputTokens) +
+					' / ' +
+					formatAgentNumber(locale.value, value.outputTokens ?? 0);
+		return (
+			tokens +
+			' · ' +
+			t('agent.tasks.modelRequests') +
+			': ' +
+			value.modelRequests +
+			' · ' +
+			t('agent.tasks.toolExecutions') +
+			': ' +
+			value.toolExecutions +
+			' · ' +
+			t('agent.nativeRun.usageCoverage', { reported: value.reportedModelRequests, requests: value.modelRequests })
+		);
+	});
+
 	const selectedModel = computed(() => models.value.find((model) => nativeModelKey(model) === modelKey.value));
+
+	const reasoningLevels = computed(() => {
+		const model = selectedModel.value;
+		if (!model || model.protocol === 'images') return [];
+		return AGENT_REASONING_EFFORTS.filter(
+			(effort) => model.reasoningEfforts.includes(effort) && (!model.reasoningMandatory || effort !== 'none'),
+		);
+	});
+	const reasoningDisplayLabel = computed(() =>
+		reasoningEffort.value
+			? t(`agent.ui.reasoningLevels.${reasoningEffort.value}`)
+			: t('agent.ui.reasoningDefaultShort'),
+	);
+	const activeReasoningIndex = computed(() => {
+		const effort = reasoningEffort.value || selectedModel.value?.defaultReasoningEffort;
+		if (!effort) return 0;
+		const index = reasoningLevels.value.indexOf(effort);
+		return index === -1 ? 0 : index;
+	});
+	const reasoningDragging = ref(false);
+	const reasoningDragPercent = ref<number | null>(null);
+	const reasoningThumbPercent = computed(() => {
+		if (reasoningDragging.value && reasoningDragPercent.value !== null) return reasoningDragPercent.value;
+		const count = reasoningLevels.value.length;
+		if (count <= 1) return 50;
+		return Math.round(5 + (activeReasoningIndex.value / (count - 1)) * 90);
+	});
+	const reasoningIntense = computed(() => reasoningEffort.value === 'max' || reasoningEffort.value === 'xhigh');
+	const reasoningDescription = computed(() =>
+		reasoningEffort.value
+			? t(`agent.ui.reasoningDescriptions.${reasoningEffort.value}`)
+			: t('agent.ui.reasoningDefault'),
+	);
+	const reasoningTrack = ref<HTMLElement | null>(null);
+	let reasoningPointerId: number | null = null;
+
+	function setReasoning(effort: AgentReasoningEffort | ''): void {
+		if (blocked.value || (effort && !reasoningLevels.value.includes(effort))) return;
+		reasoningEffort.value = effort;
+	}
+
+	function updateReasoningFromPointer(clientX: number): void {
+		const track = reasoningTrack.value;
+		const levels = reasoningLevels.value;
+		if (!track || levels.length <= 1) return;
+		const rect = track.getBoundingClientRect();
+		if (rect.width <= 0) return;
+		const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+		reasoningDragPercent.value = Math.round(5 + ratio * 90);
+		const index = Math.max(0, Math.min(levels.length - 1, Math.round(ratio * (levels.length - 1))));
+		const effort = levels[index];
+		if (effort && effort !== reasoningEffort.value) setReasoning(effort);
+	}
+
+	function onReasoningPointerDown(event: PointerEvent): void {
+		if (blocked.value || event.button !== 0 || reasoningLevels.value.length <= 1) return;
+		reasoningPointerId = event.pointerId;
+		reasoningDragging.value = true;
+		try {
+			(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+		} catch {
+			// Synthetic pointers and detached targets may not support capture.
+		}
+		updateReasoningFromPointer(event.clientX);
+	}
+
+	function onReasoningPointerMove(event: PointerEvent): void {
+		if (!reasoningDragging.value || reasoningPointerId !== event.pointerId) return;
+		updateReasoningFromPointer(event.clientX);
+	}
+
+	function releaseReasoningPointer(event: PointerEvent): void {
+		if (reasoningPointerId !== event.pointerId) return;
+		const target = event.currentTarget as HTMLElement;
+		try {
+			if (target.hasPointerCapture(event.pointerId)) target.releasePointerCapture(event.pointerId);
+		} catch {
+			// Ignore capture teardown failures; the drag state still resets below.
+		}
+		reasoningPointerId = null;
+		reasoningDragging.value = false;
+		reasoningDragPercent.value = null;
+	}
+
+	function onReasoningKeydown(event: KeyboardEvent): void {
+		const levels = reasoningLevels.value;
+		if (!levels.length || blocked.value) return;
+		const current = activeReasoningIndex.value;
+		let index = current;
+		if (event.key === 'ArrowRight' || event.key === 'ArrowUp') index = Math.min(levels.length - 1, current + 1);
+		else if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') index = Math.max(0, current - 1);
+		else if (event.key === 'Home') index = 0;
+		else if (event.key === 'End') index = levels.length - 1;
+		else return;
+		event.preventDefault();
+		const effort = levels[index];
+		if (effort) setReasoning(effort);
+	}
 
 	function selectModel(model: NativeModel, close: () => void): void {
 		if (blocked.value) return;
 		modelKey.value = nativeModelKey(model);
 		close();
+	}
+
+	function selectConfigControl(control: AgentConfigControl, open: boolean): void {
+		if (open) selectedConfig.value = control;
 	}
 
 	function setConnectionSelected(id: number, selected: boolean): void {
@@ -160,7 +327,6 @@
 	}
 
 	const activeRun = computed(() => run.value !== null && isNativeRunActive(run.value));
-	const hasMoreEntries = computed(() => Object.values(entryCursor.value).some((value) => value > 0));
 	const sendDisabled = computed(
 		() =>
 			blocked.value ||
@@ -195,17 +361,91 @@
 	}
 
 	async function scrollToBottom(): Promise<void> {
+		const selectedThreadId = thread.value?.id;
 		await nextTick();
+		if (!props.active || thread.value?.id !== selectedThreadId) return;
 		const element = scroller.value;
 		if (element) element.scrollTop = element.scrollHeight;
 		keepPinnedToBottom.value = true;
 		showJumpToLatest.value = false;
+		updateMessageNavigation();
+	}
+
+	function updateMessageNavigation(): void {
+		const element = scroller.value;
+		canJumpPrevious.value = !!element && element.scrollTop > 2;
+		canJumpNext.value = !!element && element.scrollHeight - element.scrollTop - element.clientHeight > 2;
+	}
+
+	function isMessageStart(index: number): boolean {
+		const entry = entries.value[index];
+		if (!entry) return false;
+		const previous = entries.value[index - 1];
+		return (
+			!previous ||
+			previous.role !== entry.role ||
+			previous.runId !== entry.runId ||
+			previous.position.stepIndex !== entry.position.stepIndex ||
+			(entry.role === 'user' && previous.position.eventSequence !== entry.position.eventSequence)
+		);
+	}
+
+	function jumpMessage(direction: 'previous' | 'next'): void {
+		const element = scroller.value;
+		if (!props.active || !element) return;
+		const top = element.getBoundingClientRect().top + element.clientTop;
+		const padding = Number.parseFloat(getComputedStyle(element).paddingTop) || 0;
+		const positions = Array.from(
+			element.querySelectorAll<HTMLElement>('[data-agent-message]'),
+			(message) => message.getBoundingClientRect().top - top + element.scrollTop - padding,
+		);
+		const target =
+			direction === 'previous'
+				? (positions.filter((position) => position < element.scrollTop - 2).at(-1) ?? 0)
+				: (positions.find((position) => position > element.scrollTop + 2) ?? element.scrollHeight);
+		keepPinnedToBottom.value = false;
+		element.scrollTop = target;
+		handleTranscriptScroll();
 	}
 
 	function handleTranscriptScroll(): void {
+		if (!props.active) return;
+		updateMessageNavigation();
 		keepPinnedToBottom.value = isNearBottom();
 		showJumpToLatest.value = !keepPinnedToBottom.value;
 	}
+
+	function handleTranscriptResize(): void {
+		if (!props.active || transcriptFrame !== null) return;
+		transcriptFrame = requestAnimationFrame(() => {
+			transcriptFrame = null;
+			if (!props.active) return;
+			updateMessageNavigation();
+			if (keepPinnedToBottom.value) void scrollToBottom();
+			else showJumpToLatest.value = !isNearBottom();
+		});
+	}
+
+	watch(
+		scroller,
+		(element) => {
+			transcriptObserver?.disconnect();
+			if (!element) return;
+			transcriptObserver = new ResizeObserver(handleTranscriptResize);
+			transcriptObserver.observe(element);
+		},
+		{ flush: 'post' },
+	);
+	watch(
+		() => props.active,
+		(shown) => {
+			if (shown) handleTranscriptResize();
+			else if (transcriptFrame !== null) {
+				cancelAnimationFrame(transcriptFrame);
+				transcriptFrame = null;
+			}
+		},
+	);
 
 	function submitComposer(): void {
 		if (!thread.value || activeRun.value) {
@@ -247,7 +487,8 @@
 				return;
 			}
 			if (keepPinnedToBottom.value) void scrollToBottom();
-			else showJumpToLatest.value = true;
+			else showJumpToLatest.value = !isNearBottom();
+			updateMessageNavigation();
 		},
 		{ flush: 'post' },
 	);
@@ -427,19 +668,8 @@
 						class="agent-conversation-scroller min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-5 py-5 touch-pan-y"
 						aria-live="polite"
 						@scroll.passive="handleTranscriptScroll"
+						@load.capture="handleTranscriptResize"
 					>
-						<div v-if="hasMoreEntries" class="mx-auto mb-4 flex max-w-3xl justify-center">
-							<UiButton
-								density="compact"
-								appearance="soft"
-								class="rounded-full px-3.5"
-								:disabled="operation.busy.value || threadBusy"
-								@click="runtime.readEntries"
-							>
-								<i class="fa-solid fa-clock-rotate-left mr-1.5" aria-hidden="true"></i>
-								{{ t('agent.conversation.loadOlder') }}
-							</UiButton>
-						</div>
 						<AgentConversationWelcome
 							v-if="!entries.length"
 							:active="active"
@@ -447,7 +677,7 @@
 							@select="draft = $event"
 						/>
 						<article
-							v-for="entry in entries"
+							v-for="(entry, index) in entries"
 							:key="
 								[
 									entry.position.runSequence,
@@ -456,6 +686,7 @@
 									entry.position.textOffset,
 								].join(':')
 							"
+							:data-agent-message="isMessageStart(index) ? '' : undefined"
 							class="mx-auto flex w-full max-w-3xl"
 							:class="entry.role === 'user' ? 'justify-end' : ''"
 						>
@@ -521,7 +752,27 @@
 								</UiButton>
 							</div>
 							<div class="agent-composer-status mb-1.5 flex min-h-6 items-center justify-between gap-2">
+								<AgentConfigPopover
+									v-if="usage"
+									:ariaLabel="t('agent.tasks.totalTokens')"
+									:title="usageDetails"
+									trigger-class="agent-token-status"
+									panel-class="max-w-xs text-xs text-text-secondary"
+								>
+									<template #trigger>
+										<i class="fa-solid fa-chart-simple text-[9px]" aria-hidden="true"></i>
+										<strong class="font-mono font-medium">{{ tokenLabel }}</strong>
+									</template>
+									<template #panel>
+										<p>
+											{{ t('agent.tasks.totalTokens') }}:
+											{{ totalTokens === null ? '—' : formatAgentNumber(locale, totalTokens) }}
+										</p>
+										<p class="mt-2 leading-relaxed">{{ usageDetails }}</p>
+									</template>
+								</AgentConfigPopover>
 								<span
+									v-else
 									class="agent-composer-hint min-w-0 truncate text-[11px] leading-none text-text-secondary/65 select-none"
 								>
 									<i class="fa-regular fa-keyboard mr-1 text-[9px] opacity-80" aria-hidden="true"></i>
@@ -529,18 +780,44 @@
 									<span class="px-1 text-text-secondary/40">·</span>
 									{{ t('agent.conversation.sendHintNewline') }}
 								</span>
-								<UiButton
-									v-if="showJumpToLatest"
-									density="compact"
-									appearance="soft"
-									class="agent-jump-latest shrink-0 rounded-full px-2.5"
-									:title="t('agent.ui.latest')"
-									:aria-label="t('agent.ui.latest')"
-									@click="scrollToBottom"
-								>
-									<i class="fa-solid fa-arrow-down text-[9px]" aria-hidden="true"></i>
-									<span class="agent-jump-latest-label">{{ t('agent.ui.latest') }}</span>
-								</UiButton>
+								<div class="ml-auto flex shrink-0 items-center gap-1">
+									<UiButton
+										v-if="entries.length"
+										density="compact"
+										appearance="ghost"
+										icon-only
+										:disabled="!canJumpPrevious"
+										:aria-label="t('agent.conversation.previousMessage')"
+										:title="t('agent.conversation.previousMessage')"
+										@click="jumpMessage('previous')"
+									>
+										<i class="fa-solid fa-chevron-up text-[9px]" aria-hidden="true"></i>
+									</UiButton>
+									<UiButton
+										v-if="entries.length"
+										density="compact"
+										appearance="ghost"
+										icon-only
+										:disabled="!canJumpNext"
+										:aria-label="t('agent.conversation.nextMessage')"
+										:title="t('agent.conversation.nextMessage')"
+										@click="jumpMessage('next')"
+									>
+										<i class="fa-solid fa-chevron-down text-[9px]" aria-hidden="true"></i>
+									</UiButton>
+									<UiButton
+										v-if="showJumpToLatest"
+										density="compact"
+										appearance="soft"
+										class="agent-jump-latest shrink-0 rounded-full px-2.5"
+										:title="t('agent.ui.latest')"
+										:aria-label="t('agent.ui.latest')"
+										@click="scrollToBottom"
+									>
+										<i class="fa-solid fa-arrow-down text-[9px]" aria-hidden="true"></i>
+										<span class="agent-jump-latest-label">{{ t('agent.ui.latest') }}</span>
+									</UiButton>
+								</div>
 							</div>
 							<form
 								class="agent-composer-shell overflow-hidden rounded-xl border border-border/65 bg-card/88 shadow-sm backdrop-blur-md transition-all duration-200 hover:border-border-hover focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/15"
@@ -567,7 +844,10 @@
 										<AgentConfigPopover
 											:ariaLabel="t('agent.nativeRun.model')"
 											:disabled="blocked"
+											trigger-appearance="soft"
+											:trigger-selected="selectedConfig === 'model'"
 											panel-class="w-80"
+											@open-change="selectConfigControl('model', $event)"
 										>
 											<template #trigger
 												><i class="fa-solid fa-microchip text-[9px]" aria-hidden="true"></i
@@ -626,18 +906,124 @@
 											</template>
 										</AgentConfigPopover>
 										<AgentConfigPopover
+											v-if="reasoningLevels.length"
+											class="agent-reasoning-control"
+											:ariaLabel="t('agent.ui.reasoning')"
+											:title="t('agent.ui.reasoning') + ': ' + reasoningDisplayLabel"
+											:disabled="blocked"
+											trigger-appearance="soft"
+											:trigger-selected="selectedConfig === 'reasoning'"
+											panel-class="w-56"
+											@open-change="selectConfigControl('reasoning', $event)"
+										>
+											<template #trigger>
+												<i
+													class="fa-solid fa-bolt text-[9px] text-primary"
+													aria-hidden="true"
+												></i>
+												<span
+													class="agent-config-reasoning agent-reasoning-trigger-label min-w-4 whitespace-nowrap text-center"
+													>{{ reasoningDisplayLabel }}</span
+												>
+												<i
+													class="agent-config-affordance fa-solid fa-chevron-down text-[7px]"
+													aria-hidden="true"
+												></i>
+											</template>
+											<template #panel>
+												<div class="space-y-2" :aria-label="t('agent.ui.reasoning')">
+													<div class="flex items-center justify-between gap-2 px-0.5">
+														<span class="text-[11px] font-semibold text-foreground">{{
+															t('agent.ui.reasoning')
+														}}</span>
+														<span
+															class="agent-config-reasoning text-[11px] text-text-secondary"
+															>{{ reasoningDisplayLabel }}</span
+														>
+													</div>
+													<div class="relative px-0.5">
+														<div
+															ref="reasoningTrack"
+															class="agent-reasoning-track"
+															:class="{ 'agent-reasoning-track--disabled': blocked }"
+															:style="{
+																'--agent-reasoning-position':
+																	reasoningThumbPercent + '%',
+															}"
+															role="slider"
+															tabindex="0"
+															:aria-label="t('agent.ui.reasoning')"
+															:aria-valuemin="0"
+															:aria-valuemax="Math.max(0, reasoningLevels.length - 1)"
+															:aria-valuenow="activeReasoningIndex"
+															:aria-valuetext="reasoningDisplayLabel"
+															:aria-disabled="blocked || reasoningLevels.length <= 1"
+															@pointerdown="onReasoningPointerDown"
+															@pointermove="onReasoningPointerMove"
+															@pointerup="releaseReasoningPointer"
+															@pointercancel="releaseReasoningPointer"
+															@keydown="onReasoningKeydown"
+														>
+															<div
+																class="agent-reasoning-fill"
+																:class="{
+																	'agent-reasoning-fill--intense': reasoningIntense,
+																	'agent-reasoning-fill--dragging': reasoningDragging,
+																}"
+															></div>
+															<div class="agent-reasoning-ticks" aria-hidden="true">
+																<span
+																	v-for="(level, index) in reasoningLevels"
+																	:key="level"
+																	class="agent-reasoning-tick"
+																	:class="{
+																		'agent-reasoning-tick--active':
+																			index <= activeReasoningIndex,
+																	}"
+																></span>
+															</div>
+															<div
+																class="agent-reasoning-thumb"
+																:class="{
+																	'agent-reasoning-thumb--dragging':
+																		reasoningDragging,
+																}"
+																aria-hidden="true"
+															>
+																<span></span>
+															</div>
+														</div>
+													</div>
+													<p
+														class="px-1 text-center text-[10.5px] leading-4 text-text-secondary"
+													>
+														{{ reasoningDescription }}
+													</p>
+												</div>
+											</template>
+										</AgentConfigPopover>
+										<AgentConfigPopover
+											class="agent-target-control"
 											:ariaLabel="t('agent.nativeRun.targets')"
 											:disabled="blocked"
+											trigger-appearance="soft"
+											:trigger-selected="selectedConfig === 'target'"
 											panel-class="w-72"
+											@open-change="selectConfigControl('target', $event)"
 										>
 											<template #trigger
 												><i class="fa-solid fa-server text-[9px]" aria-hidden="true"></i
-												><span
-													>{{ t('agent.nativeRun.targets')
-													}}<span v-if="connectionIds.length">
+												><span class="agent-target-summary"
+													><span class="agent-target-label">{{
+														t('agent.nativeRun.targets')
+													}}</span
+													><span v-if="connectionIds.length" class="agent-target-count">
 														· {{ connectionIds.length }}</span
 													></span
-												><i class="fa-solid fa-chevron-down text-[7px]" aria-hidden="true"></i
+												><i
+													class="agent-target-affordance fa-solid fa-chevron-down text-[7px]"
+													aria-hidden="true"
+												></i
 											></template>
 											<template #panel>
 												<fieldset class="min-w-0 text-xs">

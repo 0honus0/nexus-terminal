@@ -1,4 +1,4 @@
-import type { AgentProviderProtocol } from '@nexus-terminal/shared/agent/providers/values';
+import type { AgentProviderProtocol, AgentReasoningEffort } from '@nexus-terminal/shared/agent/providers/values';
 import type {
 	AgentRunStatus,
 	AgentRunEventType,
@@ -23,6 +23,9 @@ export interface NativeModel {
 	configurationVersion: number;
 	modelId: string;
 	protocol: AgentProviderProtocol;
+	reasoningEfforts: AgentReasoningEffort[];
+	defaultReasoningEffort?: AgentReasoningEffort;
+	reasoningMandatory: boolean;
 }
 
 export interface NativeRun {
@@ -100,6 +103,7 @@ export interface NativeMessage {
 }
 
 export interface NativeRunInput {
+	reasoningEffort?: AgentReasoningEffort;
 	prompt: string;
 	connectionIds: number[];
 	model: NativeModel;
@@ -187,4 +191,14 @@ export interface NativeToolEvent {
 export interface NativePage<T, Cursor> {
 	items: T[];
 	nextCursor: Cursor;
+}
+
+export interface NativeRunUsage {
+	runId: string;
+	runVersion: number;
+	inputTokens: number | null;
+	outputTokens: number | null;
+	reportedModelRequests: number;
+	modelRequests: number;
+	toolExecutions: number;
 }

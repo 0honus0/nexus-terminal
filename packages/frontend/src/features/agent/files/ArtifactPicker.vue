@@ -5,6 +5,7 @@
 	import { UiButton, UiCheckbox, UiSearchInput } from '@/foundation/ui';
 	import AgentConfigPopover from './AgentConfigPopover.vue';
 	import { RecycleScroller } from 'vue-virtual-scroller';
+	import 'vue-virtual-scroller/dist/vue-virtual-scroller.css';
 	import type { ManagedArtifact } from '../model/artifact-types';
 	import { useArtifactPicker } from '../composables/use-artifact-picker';
 

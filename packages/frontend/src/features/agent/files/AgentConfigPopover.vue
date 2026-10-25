@@ -5,6 +5,7 @@
 <script setup lang="ts">
 	import { onBeforeUnmount, ref } from 'vue';
 	import { UiButton, UiPopover } from '@/foundation/ui';
+	import type { UiAppearance } from '@/foundation/ui';
 
 	const props = withDefaults(
 		defineProps<{
@@ -13,10 +14,21 @@
 			align?: 'left' | 'right';
 			panelClass?: string;
 			triggerClass?: string;
+			triggerAppearance?: UiAppearance;
+			triggerSelected?: boolean;
 			triggerVariant?: 'default' | 'square';
 			disabled?: boolean;
 		}>(),
-		{ title: '', align: 'left', panelClass: '', triggerClass: '', triggerVariant: 'default', disabled: false },
+		{
+			title: '',
+			align: 'left',
+			panelClass: '',
+			triggerClass: '',
+			triggerAppearance: 'ghost',
+			triggerSelected: false,
+			triggerVariant: 'default',
+			disabled: false,
+		},
 	);
 	const emit = defineEmits<{ 'open-change': [open: boolean] }>();
 	const open = ref(false);
@@ -56,11 +68,15 @@
 	>
 		<template #trigger-control="{ open: expanded }">
 			<UiButton
-				:appearance="expanded ? 'soft' : 'ghost'"
+				:appearance="expanded ? 'soft' : props.triggerAppearance"
 				density="compact"
 				:icon-only="props.triggerVariant === 'square'"
 				class="agent-config-summary"
-				:class="[props.triggerVariant === 'square' ? 'agent-config-trigger-square' : '', props.triggerClass]"
+				:class="[
+					props.triggerVariant === 'square' ? 'agent-config-trigger-square' : '',
+					props.triggerSelected ? 'agent-config-summary--selected' : '',
+					props.triggerClass,
+				]"
 				:disabled="props.disabled"
 				:aria-label="props.ariaLabel"
 				:title="props.title || undefined"
@@ -78,6 +94,12 @@
 	.agent-config-summary {
 		font-size: 11px;
 		line-height: 1.25;
+	}
+
+	.agent-config-summary--selected {
+		border-color: color-mix(in srgb, var(--link-active-color) 55%, var(--border-color));
+		background-color: color-mix(in srgb, var(--link-active-color) 10%, var(--header-bg-color));
+		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--link-active-color) 14%, transparent);
 	}
 
 	.agent-config-summary.agent-config-trigger-square {

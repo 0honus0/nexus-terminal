@@ -398,6 +398,24 @@
 	}
 }
 
+@container agent-composer (max-width: 360px) {
+	.agent-reasoning-trigger-label,
+	.agent-target-affordance {
+		display: none;
+	}
+
+	:deep(.agent-reasoning-control),
+	:deep(.agent-target-control) {
+		flex: 0 0 auto;
+	}
+}
+
+@container agent-composer (max-width: 300px) {
+	.agent-target-label {
+		display: none;
+	}
+}
+
 @container agent-conversation-pane (max-width: 700px) {
 	.agent-conversation-scroller {
 		padding-inline: 14px;
@@ -479,8 +497,140 @@
 	box-shadow: none !important;
 }
 
+/* 思考等级胶囊滑块：拖动吸附到模型支持的能力等级。 */
+.agent-reasoning-track {
+	--agent-reasoning-thumb-radius: 9px;
+	position: relative;
+	display: flex;
+	width: 100%;
+	height: 26px;
+	align-items: center;
+	overflow: hidden;
+	border: 1px solid color-mix(in srgb, var(--border-color) 55%, transparent);
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--header-bg-color) 80%, transparent);
+	box-shadow: inset 0 1px 2px color-mix(in srgb, var(--text-color) 8%, transparent);
+	cursor: pointer;
+	outline: none;
+	touch-action: none;
+	user-select: none;
+}
+
+.agent-reasoning-track:focus-visible {
+	border-color: color-mix(in srgb, var(--link-active-color) 60%, var(--border-color));
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--link-active-color) 14%, transparent);
+}
+
+.agent-reasoning-track--disabled {
+	cursor: not-allowed;
+	opacity: 0.55;
+}
+
+.agent-reasoning-fill {
+	position: absolute;
+	inset-block: 0;
+	inset-inline-start: 0;
+	width: calc(
+		clamp(
+				var(--agent-reasoning-thumb-radius),
+				var(--agent-reasoning-position),
+				calc(100% - var(--agent-reasoning-thumb-radius))
+			) +
+			var(--agent-reasoning-thumb-radius)
+	);
+	border-radius: 999px;
+	background: linear-gradient(to right, var(--status-info-color), var(--link-active-color));
+	pointer-events: none;
+	transition: width 150ms ease-out;
+}
+
+.agent-reasoning-fill--dragging {
+	transition: none;
+}
+
+.agent-reasoning-fill--intense {
+	background: linear-gradient(
+		to right,
+		var(--status-info-color),
+		var(--link-active-color),
+		var(--status-warning-color)
+	);
+	box-shadow: 0 0 8px color-mix(in srgb, var(--link-active-color) 35%, transparent);
+}
+
+.agent-reasoning-ticks {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	width: 100%;
+	align-items: center;
+	justify-content: space-between;
+	padding-inline: var(--agent-reasoning-thumb-radius);
+	pointer-events: none;
+}
+
+.agent-reasoning-tick {
+	width: 4px;
+	height: 4px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--text-color) 38%, transparent);
+	transition: background-color 140ms ease;
+}
+
+.agent-reasoning-tick--active {
+	background: color-mix(in srgb, white 90%, transparent);
+}
+
+.agent-reasoning-thumb {
+	position: absolute;
+	z-index: 2;
+	top: 50%;
+	display: flex;
+	width: 18px;
+	height: 18px;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+	border-radius: 999px;
+	background: var(--card-bg-color);
+	box-shadow: 0 1px 3px rgb(0 0 0 / 0.22);
+	cursor: grab;
+	left: clamp(
+		var(--agent-reasoning-thumb-radius),
+		var(--agent-reasoning-position),
+		calc(100% - var(--agent-reasoning-thumb-radius))
+	);
+	transform: translate(-50%, -50%);
+	transition: left 150ms ease-out;
+}
+
+.agent-reasoning-thumb--dragging {
+	cursor: grabbing;
+	box-shadow: 0 2px 6px rgb(0 0 0 / 0.28);
+	transform: translate(-50%, -50%) scale(1.1);
+	transition: none;
+}
+
+.agent-reasoning-thumb span {
+	width: 6px;
+	height: 6px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--link-active-color) 55%, transparent);
+	transition: background-color 140ms ease;
+}
+
+.agent-reasoning-thumb--dragging span {
+	background: var(--link-active-color);
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.agent-surface-layout {
+		transition: none;
+	}
+
+	.agent-reasoning-fill,
+	.agent-reasoning-thumb,
+	.agent-reasoning-tick {
 		transition: none;
 	}
 
