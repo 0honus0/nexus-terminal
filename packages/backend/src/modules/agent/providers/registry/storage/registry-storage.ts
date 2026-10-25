@@ -2,10 +2,11 @@ import type { AgentRegistryErrorCode } from '@nexus-terminal/shared/agent/provid
 import type { AgentReasoningEffort } from '@nexus-terminal/shared/agent/providers/values';
 
 export interface StoredRegistryDefaults {
-	contextWindow: number;
-	maxOutputTokens: number;
+	contextWindow?: number;
+	maxOutputTokens?: number;
 	supportsTools?: boolean;
 	supportsImageInput?: boolean;
+	supportsImageGeneration?: boolean;
 	supportsFileInput?: boolean;
 	supportsPromptCacheKey?: boolean;
 	reasoningEfforts?: AgentReasoningEffort[];
@@ -14,7 +15,7 @@ export interface StoredRegistryDefaults {
 }
 
 export interface StoredRegistrySnapshot {
-	schemaVersion: 1;
+	schemaVersion: 2;
 	source: 'models.dev';
 	sourceRevision: string | null;
 	generatedAt: number;

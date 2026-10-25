@@ -2,10 +2,11 @@
 export const MODELS_DEV_CATALOG_URL = 'https://models.dev/api.json?type=all';
 
 export interface CatalogModelCapabilities {
-	contextWindow: number;
-	maxOutputTokens: number;
+	contextWindow?: number;
+	maxOutputTokens?: number;
 	supportsTools?: boolean;
 	supportsImageInput?: boolean;
+	supportsImageGeneration?: boolean;
 	supportsFileInput?: boolean;
 	reasoningEfforts?: ('none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max')[];
 }

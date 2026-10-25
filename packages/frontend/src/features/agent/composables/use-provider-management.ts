@@ -265,9 +265,11 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 
 	function applyRegistry(model: ProviderModelDraft, value: ModelRegistryDefaults, mode: 'missing' | 'replace'): void {
 		const replace = mode === 'replace';
+		if (value.supportsImageGeneration === true && (replace || model.protocol === undefined))
+			model.protocol = 'images';
 		const observed = discovered.value.find((item) => item.id === model.id)?.capabilities;
-		if (replace || model.contextWindow <= 0) model.contextWindow = value.contextWindow;
-		if (replace || model.maxOutputTokens <= 0) model.maxOutputTokens = value.maxOutputTokens;
+		if (replace || model.contextWindow === undefined) model.contextWindow = value.contextWindow;
+		if (replace || model.maxOutputTokens === undefined) model.maxOutputTokens = value.maxOutputTokens;
 		if (
 			value.supportsTools !== undefined &&
 			(replace || (!configuredTools.has(toRaw(model)) && observed?.supportsTools === undefined))
@@ -276,6 +278,8 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 		}
 		configuredTools.add(toRaw(model));
 		if (replace || model.supportsImageInput === undefined) model.supportsImageInput = value.supportsImageInput;
+		if (replace || model.supportsImageGeneration === undefined)
+			model.supportsImageGeneration = value.supportsImageGeneration;
 		if (replace || model.supportsFileInput === undefined) model.supportsFileInput = value.supportsFileInput;
 		if (replace || model.supportsPromptCacheKey === undefined)
 			model.supportsPromptCacheKey = value.supportsPromptCacheKey;

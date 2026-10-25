@@ -1,3 +1,6 @@
+import { decodeModelImage } from './model-image.js';
+import { MODEL_IMAGE_MAX_RESPONSE_BYTES } from '../model-port.js';
+import type { ModelImageRequest, ModelImageResult } from '../model-port.js';
 import type { Logger } from '../../logging/logger.js';
 import { logDiagnostic } from '../../logging/diagnostic-log.js';
 import type { ReadableStreamReadResult } from 'node:stream/web';
@@ -87,12 +90,13 @@ async function request(
 	method: 'GET' | 'POST',
 	body?: string,
 	logger?: Logger,
+	accept = 'text/event-stream',
 ): Promise<Response> {
 	try {
 		const res = await fetch(url, {
 			method,
 			headers: {
-				accept: method === 'GET' ? 'application/json' : 'text/event-stream',
+				accept: method === 'GET' ? 'application/json' : accept,
 				...(body === undefined ? {} : { 'content-type': 'application/json' }),
 				...(credential === null ? {} : { authorization: 'Bearer ' + credential }),
 			},
@@ -231,6 +235,7 @@ function metadata(raw: unknown): EndpointModel['capabilities'] {
 	for (const [src, dst] of [
 		['supports_tools', 'supportsTools'],
 		['supports_image_input', 'supportsImageInput'],
+		['supports_image_generation', 'supportsImageGeneration'],
 		['supports_file_input', 'supportsFileInput'],
 		['supports_prompt_cache_key', 'supportsPromptCacheKey'],
 	] as const) {
@@ -331,7 +336,32 @@ function parseProbeStream(data: Uint8Array, protocol: ModelProbe['protocol']): M
 export class OpenAiCompatibleAdapter implements ModelNetworkPort {
 	constructor(private readonly logger?: Logger) {}
 
+	async generateImage(input: ModelImageRequest, signal: AbortSignal): Promise<ModelImageResult> {
+		const body = JSON.stringify({
+			model: input.modelId,
+			prompt: input.prompt,
+			n: 1,
+			// GPT Image returns base64 directly; the older compatible contract requests it explicitly.
+			...(input.modelId.toLowerCase().split('/').at(-1)?.startsWith('gpt-image-')
+				? {}
+				: { response_format: 'b64_json' }),
+		});
+		const response = await request(
+			endpoint(input.baseUrl, 'images/generations'),
+			input.credential,
+			signal,
+			'POST',
+			body,
+			this.logger,
+			'application/json',
+		);
+		return decodeModelImage(await bounded(response, MODEL_IMAGE_MAX_RESPONSE_BYTES, signal));
+	}
+
 	async *stream(input: ModelStreamInput, signal: AbortSignal): AsyncIterable<ModelStreamEvent> {
+		if (input.protocol === 'images') {
+			throw new ModelNetworkFailure('response_invalid');
+		}
 		const responses = input.protocol === 'responses';
 		const body = modelRequest(input);
 		const response = await request(
@@ -466,6 +496,19 @@ export class OpenAiCompatibleAdapter implements ModelNetworkPort {
 	}
 
 	async probe(input: ModelProbe, signal: AbortSignal): Promise<ModelProbeResult> {
+		if (input.protocol === 'images') {
+			await this.generateImage(
+				{
+					baseUrl: input.baseUrl,
+					credential: input.credential,
+					modelId: input.modelId,
+					prompt: 'A small blue circle on a white background.',
+				},
+				signal,
+			);
+			return {};
+		}
+
 		const isResponses = input.protocol === 'responses';
 		const body = probeBody(input);
 		const response = await request(

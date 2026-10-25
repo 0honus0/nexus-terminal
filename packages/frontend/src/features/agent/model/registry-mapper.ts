@@ -20,6 +20,9 @@ export function fromRegistryDefaults(value: AgentRegistryDefaults): ModelRegistr
 		maxOutputTokens: value.maxOutputTokens,
 		...(value.supportsTools === undefined ? {} : { supportsTools: value.supportsTools }),
 		...(value.supportsImageInput === undefined ? {} : { supportsImageInput: value.supportsImageInput }),
+		...(value.supportsImageGeneration === undefined
+			? {}
+			: { supportsImageGeneration: value.supportsImageGeneration }),
 		...(value.supportsFileInput === undefined ? {} : { supportsFileInput: value.supportsFileInput }),
 		...(value.supportsPromptCacheKey === undefined ? {} : { supportsPromptCacheKey: value.supportsPromptCacheKey }),
 		...(value.reasoningEfforts === undefined ? {} : { reasoningEfforts: [...value.reasoningEfforts] }),

@@ -9,6 +9,7 @@
 	const props = defineProps<{
 		errors?: { id?: string; contextWindow?: string; maxOutputTokens?: string };
 		compact?: boolean;
+		defaultProtocol: import('@nexus-terminal/shared/agent/providers/values').AgentProviderProtocol;
 	}>();
 	const emit = defineEmits<{ 'match-registry': []; 'configure-tools': [] }>();
 	const parametersOpen = ref(false);
@@ -20,10 +21,12 @@
 	);
 
 	const model = defineModel<ProviderModelDraft>({ required: true });
+	const isImage = computed(() => (model.value.protocol ?? props.defaultProtocol) === 'images');
 	const { t } = useI18n();
 	const id = useId();
 	const optionalFlags = [
 		'supportsImageInput',
+		'supportsImageGeneration',
 		'supportsFileInput',
 		'supportsPromptCacheKey',
 		'reasoningMandatory',
@@ -34,12 +37,16 @@
 	}
 
 	function setProtocol(value: UiSelectValue): void {
-		model.value.protocol = value === 'chat-completions' || value === 'responses' ? value : undefined;
+		model.value.protocol =
+			value === 'chat-completions' || value === 'responses' || value === 'images' ? value : undefined;
+		if (model.value.protocol === 'images') {
+			model.value.supportsImageGeneration = true;
+			model.value.supportsTools = false;
+		}
 	}
 
 	function setNumber(field: 'contextWindow' | 'maxOutputTokens', value: string | number | null): void {
-		const parsed = typeof value === 'number' ? value : Number(value);
-		model.value[field] = Number.isFinite(parsed) ? parsed : 0;
+		model.value[field] = value === null || value === '' ? undefined : Number(value);
 	}
 
 	function setEffort(effort: AgentReasoningEffort, checked: boolean): void {
@@ -102,95 +109,99 @@
 					<option value="inherit">{{ t('agent.settings.providerManagement.inherit') }}</option>
 					<option value="chat-completions">{{ t('agent.settings.providers.protocolChat') }}</option>
 					<option value="responses">{{ t('agent.settings.providers.protocolResponses') }}</option>
+					<option value="images">{{ t('agent.settings.providers.protocolImages') }}</option>
 				</UiSelect>
 			</UiFormField>
-			<UiFormField
-				:label="t('agent.settings.providers.contextWindow')"
-				:for-id="`${id}-context-window`"
-				:error="errors?.contextWindow"
-				required
-			>
-				<UiNumberInput
-					:id="`${id}-context-window`"
-					:model-value="model.contextWindow"
-					min="1"
-					step="1"
-					@update:model-value="setNumber('contextWindow', $event)"
-				/>
-			</UiFormField>
-			<UiFormField
-				:label="t('agent.settings.providers.maxOutputTokens')"
-				:for-id="`${id}-max-output-tokens`"
-				:error="errors?.maxOutputTokens"
-				required
-			>
-				<UiNumberInput
-					:id="`${id}-max-output-tokens`"
-					:model-value="model.maxOutputTokens"
-					min="1"
-					step="1"
-					@update:model-value="setNumber('maxOutputTokens', $event)"
-				/>
-			</UiFormField>
-			<label
-				:for="`${id}-supports-tools`"
-				class="flex min-h-9 cursor-pointer items-center gap-2 text-sm text-foreground"
-			>
-				<UiCheckbox
-					:id="`${id}-supports-tools`"
-					v-model="model.supportsTools"
-					@update:model-value="emit('configure-tools')"
-				/>
-				<span>{{ t('agent.settings.providers.tools') }}</span>
-			</label>
-			<UiFormField
-				v-for="field in optionalFlags"
-				:key="field"
-				:label="t('agent.settings.providerManagement.' + field)"
-				:for-id="`${id}-${field}`"
-			>
-				<UiSelect
-					:id="`${id}-${field}`"
-					:model-value="model[field] === undefined ? 'unknown' : model[field] ? 'yes' : 'no'"
-					@update:model-value="setOptionalFlag(field, $event)"
+			<template v-if="!isImage">
+				<UiFormField
+					:label="t('agent.settings.providers.contextWindow')"
+					:for-id="`${id}-context-window`"
+					:error="errors?.contextWindow"
 				>
-					<option value="unknown">{{ t('agent.settings.providerManagement.unknownValue') }}</option>
-					<option value="yes">{{ t('agent.settings.providerManagement.yes') }}</option>
-					<option value="no">{{ t('agent.settings.providerManagement.no') }}</option>
-				</UiSelect>
-			</UiFormField>
-			<fieldset class="space-y-3 rounded-xl bg-header/20 p-3.5 text-sm sm:col-span-2">
-				<legend class="px-1 text-xs font-semibold text-foreground">
-					{{ t('agent.settings.providers.reasoningCapability') }}
-				</legend>
-				<div class="flex flex-wrap gap-x-4 gap-y-2">
-					<label
-						v-for="effort in AGENT_REASONING_EFFORTS"
-						:key="effort"
-						class="flex cursor-pointer items-center gap-2 text-xs"
-					>
-						<UiCheckbox
-							:model-value="model.reasoningEfforts?.includes(effort) ?? false"
-							:aria-label="t('agent.ui.reasoningLevels.' + effort)"
-							@update:model-value="setEffort(effort, $event)"
-						/>
-						{{ t('agent.ui.reasoningLevels.' + effort) }}
-					</label>
-				</div>
-				<UiFormField :label="t('agent.settings.providers.reasoningDefault')" :for-id="`${id}-default-effort`">
+					<UiNumberInput
+						:id="`${id}-context-window`"
+						:model-value="model.contextWindow"
+						min="1"
+						step="1"
+						@update:model-value="setNumber('contextWindow', $event)"
+					/>
+				</UiFormField>
+				<UiFormField
+					:label="t('agent.settings.providers.maxOutputTokens')"
+					:for-id="`${id}-max-output-tokens`"
+					:error="errors?.maxOutputTokens"
+				>
+					<UiNumberInput
+						:id="`${id}-max-output-tokens`"
+						:model-value="model.maxOutputTokens"
+						min="1"
+						step="1"
+						@update:model-value="setNumber('maxOutputTokens', $event)"
+					/>
+				</UiFormField>
+				<label
+					:for="`${id}-supports-tools`"
+					class="flex min-h-9 cursor-pointer items-center gap-2 text-sm text-foreground"
+				>
+					<UiCheckbox
+						:id="`${id}-supports-tools`"
+						v-model="model.supportsTools"
+						@update:model-value="emit('configure-tools')"
+					/>
+					<span>{{ t('agent.settings.providers.tools') }}</span>
+				</label>
+				<UiFormField
+					v-for="field in optionalFlags"
+					:key="field"
+					:label="t('agent.settings.providerManagement.' + field)"
+					:for-id="`${id}-${field}`"
+				>
 					<UiSelect
-						:id="`${id}-default-effort`"
-						:model-value="model.defaultReasoningEffort ?? ''"
-						:disabled="!model.reasoningEfforts?.length"
-						@update:model-value="setDefaultEffort"
+						:id="`${id}-${field}`"
+						:model-value="model[field] === undefined ? 'unknown' : model[field] ? 'yes' : 'no'"
+						@update:model-value="setOptionalFlag(field, $event)"
 					>
-						<option value="">{{ t('agent.settings.providers.reasoningNoDefault') }}</option>
-						<option v-for="effort in model.reasoningEfforts" :key="effort" :value="effort">
-							{{ t('agent.ui.reasoningLevels.' + effort) }}
-						</option>
+						<option value="unknown">{{ t('agent.settings.providerManagement.unknownValue') }}</option>
+						<option value="yes">{{ t('agent.settings.providerManagement.yes') }}</option>
+						<option value="no">{{ t('agent.settings.providerManagement.no') }}</option>
 					</UiSelect>
 				</UiFormField>
-			</fieldset>
+				<fieldset class="space-y-3 rounded-xl bg-header/20 p-3.5 text-sm sm:col-span-2">
+					<legend class="px-1 text-xs font-semibold text-foreground">
+						{{ t('agent.settings.providers.reasoningCapability') }}
+					</legend>
+					<div class="flex flex-wrap gap-x-4 gap-y-2">
+						<label
+							v-for="effort in AGENT_REASONING_EFFORTS"
+							:key="effort"
+							class="flex cursor-pointer items-center gap-2 text-xs"
+						>
+							<UiCheckbox
+								:model-value="model.reasoningEfforts?.includes(effort) ?? false"
+								:aria-label="t('agent.ui.reasoningLevels.' + effort)"
+								@update:model-value="setEffort(effort, $event)"
+							/>
+							{{ t('agent.ui.reasoningLevels.' + effort) }}
+						</label>
+					</div>
+					<UiFormField
+						:label="t('agent.settings.providers.reasoningDefault')"
+						:for-id="`${id}-default-effort`"
+					>
+						<UiSelect
+							:id="`${id}-default-effort`"
+							:model-value="model.defaultReasoningEffort ?? ''"
+							:disabled="!model.reasoningEfforts?.length"
+							@update:model-value="setDefaultEffort"
+						>
+							<option value="">{{ t('agent.settings.providers.reasoningNoDefault') }}</option>
+							<option v-for="effort in model.reasoningEfforts" :key="effort" :value="effort">
+								{{ t('agent.ui.reasoningLevels.' + effort) }}
+							</option>
+						</UiSelect>
+					</UiFormField>
+				</fieldset>
+			</template>
 		</template>
 	</div>
 </template>

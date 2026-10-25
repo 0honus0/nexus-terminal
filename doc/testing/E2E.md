@@ -1,5 +1,23 @@
 # Nexus Terminal E2E
 
+## 图片预览、下载与管理定向验收（2026-10-25，HTTP与CDP通过）
+
+用户授权继续图片预览/下载/文件管理验收并完成后提交，随后追加通过CDP在api.honus.top添加模型、Agent真实生成、预览与删除。仅操作本轮测试配置/产物，保留已有数据；不运行全量E2E，不自行部署或重启。
+
+新增 `tests/backend/http/backend-next-agent-images.integration.mjs`，通过 `agent-image-fixture.mjs` 使用独立新SQLite、正式认证、Provider/App/Run/Tool/Artifact及HTTP，仅外部供应商为可控边界。六项（含父测试）通过：Images直接生成、文字Agent先列图片模型再独立批准生成、预览inline与下载attachment、SHA-256/Range/private-no-store/nosniff、无认证与跨App拒绝、过期版本拒绝、保留时禁止删除/解除保留后删除/原链接404；普通HTML不能使用图片预览；URL-only返回unknown且不获取外链/重试；在途请求取消后无文件且不重试。命令 `node --test tests/backend/http/backend-next-agent-images.integration.mjs`，日志 `/tmp/nexus-image-acceptance-http.log`。初次夹具错误为分页100超过Shared上限16、误以为保留文件可删除；扩展HTML用例时If-Match遗漏引号，均修正夹具遵守原契约，不放宽产品限制。测试被后端现有通配命令自动收集。
+
+CDP通过 `172.30.30.11:9223` 的独立自有页访问真实 `https://api.honus.top/settings?tab=agent`，添加“NewAPI 图片验收”草稿，端点使用用户指定NewAPI，图片组添加gpt-image-2.5，不填写文字预算。正式保存POST返回400，Provider只读列表仍为空，未成功保存模型、未发起付费生成。当前Backend PID2810810启动于2026-10-24，早于图片功能产物，前端为当前Vite源码；只读检查开发SQLite确认旧Provider协议CHECK不含images。已请用户使用新临时测试数据目录保留旧目录后重启；未清库、改写旧库或擅自重启。源码复审补齐初始v1结构签名及部署/使用说明，禁止新版静默接入旧结构。真实生成、浏览器预览/下载/文件库删除仍未验收，不以隔离HTTP通过代替。随后旧后端进程退出，指定地址API返回502，等待新版测试实例就绪。
+
+两轮源码复审覆盖Run真实派发及保存身份、Provider代际/取消、工具审批、Artifact认证/App隔离/版本和删除、预览白名单与管理消费者，补齐初始schema签名遗漏。最终根check、双端build、全量format:all:check及diff通过，日志 `/tmp/nexus-image-acceptance-{check,build,format}.log`；格式首轮发现新夹具函数间距，按现有ESLint规则修正后通过。Android真机及完整E2E未执行。线上后续结果见下段，按用户要求完成后本地提交，不推送或发布。
+
+用户回复继续后，Backend新PID2991545于2026-10-25 04:17 UTC启动，正式status200；只读确认当前数据库初始签名为 `backend-next-v1-initial-20261025-agent-images`、Provider CHECK含images，保留原连接。环境由用户准备，本轮未改写数据库或自行重启。通过同一独立CDP页正式添加“NewAPI 图片验收”，图片组gpt-image-2.5/Images，无文字预算；正式回读Provider已保存且hasCredential=true，不回显密钥。旧模型目录缓存按原失效机制重拉为442项。
+
+Agent会话初读有一次target-denylist网络失败，随后重新加载并打开Agent，正式App/workspace/denylist/连接请求均200，未为此修改UI或放宽契约。在本轮新建会话输入白背景蓝圆描述，经正式发送按钮只提交一次；CDP读取响应体遇到已回收资源时仅继续只读观察，不重放Run。Run完成，对话PNG成功解码1536×1024，文件1006210字节；预览与下载SHA-256均为 `495d47dd5119baa17daab885d9934b95f67ce2635a879f1cea2e9158c03dac4e`，inline/attachment、private-no-store及nosniff核对通过，桌面截图复核蓝圆正常。文件库正式下载按钮完成应用字节/hash校验并触发浏览器下载，CDP Page.downloadProgress为completed、receivedBytes=totalBytes=1006210。
+
+文件库正式点击保留，回读retained=true，删除按钮禁用；解除后可删除。第一次删除确认取消，文件仍ready且未保留；第二次确认删除成功，Artifact变deleted，列表0行、存储totalBytes/retainedBytes/reservedBytes均为0，原preview/content均404。保留新增Provider及测试对话供核对，仅删除本轮生成图片；无其它连接/文件删除。直接图片真实链通过；文字工具真实供应商未额外付费调用，其审批/生成/预览下载管理链由上面的隔离HTTP覆盖。手机键盘/后台恢复仍未真机验收。
+
+证据：`/tmp/nexus-image-cdp-evidence.json`、`/tmp/nexus-image-cdp-download.json`、`/tmp/nexus-image-cdp-retained.json`、`/tmp/nexus-image-cdp-delete.json`；截图 `/tmp/nexus-image-cdp-preview-desktop.png`、`/tmp/nexus-image-cdp-deleted.png`。初始环境拒绝截图 `/tmp/nexus-image-cdp-old-backend.png`。测试页关闭前清除本页尺寸模拟，保留用户已有浏览器页面。
+
 ## 远程40089588771后继修复与dev发布（2026-10-24，已完成）
 
 原59c27e45远程失败四项：notification-settings的GET网络故障立即Toast断言与现10秒宽限不一致；mobile/ssh-workspace仍期望关闭监控即stop、短时重开再start，与30秒订阅复用不一致；suspend-resume-ui仍断言挂起/恢复为绿色，与人工已确认蓝色不一致；真实PTY初始echo关闭时首屏多一个提示符。日志 `/tmp/nexus-e2e-40089588771-failed.log`、shard3诊断 `/tmp/nexus-e2e-40089588771-shard3`。62e776a0远程40091199668被后继推送取消，已完成分片日志仍可用于诊断。
@@ -2112,3 +2130,72 @@ RDP Adapter 将文本从逐字符 SDK 调用改为最多 32 个完整字符一�
 用户授权提交推送发布dev，沿用最近的AMD64范围。产品提交`b0353f1c7054db30aec68567e6fce5c42ea3a9cc`已推送，接入的远端662a7a34仅修改E2E耗时估计；[发布40156453342](https://github.com/0honus0/nexus-terminal/actions/runs/40156453342)生产依赖审计、构建与推送成功。`ghcr.io/0honus0/nexus-terminal:dev`的清单digest为`sha256:edce4d7152c4dcdffc1fda511478a115589479e2805bef086e2b9663e9ea9c1f`，含linux/amd64及attestation，`sha-b0353f1c7054`配置revision与完整产品SHA一致。日志`/tmp/nexus-agent-model-dev-publish.log`、清单`/tmp/nexus-agent-model-published-manifest.log`、配置`/tmp/nexus-agent-model-published-config.json`。未部署或重启远端容器；推送自动触发[远程E2E40156449229](https://github.com/0honus0/nexus-terminal/actions/runs/40156449229)，不将发布成功等同E2E通过。
 
 用户要求逐项检查24个未匹配项。重新只读获取原始models.dev目录，对照全部供应商、当前17个允许源及实际Adapter/匹配产物，确认不能把null全部称为目录缺失：① DeepSeek V4.1 Flash及fast两项有NVIDIA记录，但快照还为OpenCode生成不带供应商前缀的别名；matcher将其误当非聚合来源，与NVIDIA的推理能力产生同级冲突。只读限定复验移除生成别名后两项均明确匹配，`/tmp/nexus-model-unmatched-review.log`；② Qwen3.6-35B-A3B-FP8有nearai/inferx等精确项，但这些供应商未纳入当前白名单，FP8也未作为变体处理；Qwen3.8-27B、gpt-oss-120b-medium、grok-3-mini及fast共4项的基础模型在groq/cerebras/helicone/poe等源中，当前白名单过滤掉，且不同源能力不完全一致；③ 12个图像/视频/语音模型有精确记录，10项缺少正整数文本输出预算，两个TTS记录来自未允许源；另grok-imagine-video-1.5-preview只有不带preview的基础视频项。这13项不能直接当作当前文本Agent模型补造预算；④ codex-auto-review、gpt-image-2.5、grok-4.7-build-fast、grok-composer-2.5-fast四项无可确定的同名/既定变体记录，不以相邻模型替代。原始目录在`/tmp/nexus-model-match-catalog-latest.json`；本轮为审核，不修改匹配规则、扩大源或重发发布，明确缺口承接PLAN。
+
+## 当前 models.dev 46 项匹配复核与来源别名修复（2026-10-25）
+
+保留 models.dev 和现有 17 个来源，不改 UI。使用真实 ModelsDevCatalogAdapter 只读拉取最新 416 项，并对已有授权发现的 46 个 ID 调用实际 build 产物；同一目录重建修改前别名和修改后快照：22/46 → 24/46，原 22 个结果逐字段不变。新增 deepseek/deepseek-v4.1-flash 与 fast，两项均为 1000000 上下文、384000 输出、工具/图片输入、none/low/high/max 等级，未根据 fast 猜测默认等级。日志 /tmp/nexus-current-model-audit.log，完整结果 /tmp/nexus-current-model-audit-result.json。未保存 Provider 或发起生成，不记录密钥。
+
+已匹配的 24 项均有上下文及输出预算，其中 21 项声明推理等级；未声明等级不等同不支持推理。
+
+| 模型 ID                           | 上下文 / 输出 token | 推理等级                            |
+| --------------------------------- | ------------------- | ----------------------------------- |
+| claude-opus-4-6-thinking          | 1000000 / 128000    | low, medium, high, max              |
+| claude-sonnet-4-6                 | 1000000 / 128000    | low, medium, high, max              |
+| deepseek/deepseek-v4.1-flash      | 1000000 / 384000    | none, low, high, max                |
+| deepseek/deepseek-v4.1-flash-fast | 1000000 / 384000    | none, low, high, max                |
+| gemini-3-flash                    | 1048576 / 65536     | minimal, low, medium, high          |
+| gemini-3.1-flash-image            | 131072 / 32768      | minimal, high                       |
+| gemini-3.1-flash-lite             | 1048576 / 65536     | minimal, low, medium, high          |
+| gemini-3.5-flash-lite             | 1048576 / 65536     | minimal, low, medium, high          |
+| gemini-3.8-flash-high             | 1048576 / 65536     | low, medium, high                   |
+| gpt-5.6-luna                      | 1050000 / 128000    | none, low, medium, high, xhigh, max |
+| gpt-5.6-sol                       | 1050000 / 128000    | none, low, medium, high, xhigh, max |
+| gpt-5.6-terra                     | 1050000 / 128000    | none, low, medium, high, xhigh, max |
+| gpt-6-astra                       | 1050000 / 128000    | low, medium, high, xhigh, max       |
+| gpt-6-luna                        | 1050000 / 128000    | none, low, medium, high, xhigh, max |
+| gpt-6-sol                         | 1050000 / 128000    | none, low, medium, high, xhigh, max |
+| gpt-6.1-sol                       | 1050000 / 128000    | low, medium, high, xhigh, max       |
+| grok-4.20-0309-non-reasoning      | 1000000 / 30000     | 未声明                              |
+| grok-4.20-0309-reasoning          | 1000000 / 30000     | 未声明                              |
+| grok-4.20-multi-agent-0309        | 1000000 / 30000     | low, medium, high, xhigh            |
+| grok-4.3                          | 1000000 / 30000     | none, low, medium, high, xhigh      |
+| grok-4.5                          | 500000 / 500000     | low, medium, high, xhigh            |
+| grok-4.6                          | 500000 / 500000     | low, medium, high, xhigh            |
+| grok-4.7                          | 500000 / 500000     | low, medium, high, xhigh            |
+| grok-build-0.1                    | 256000 / 256000     | 未声明                              |
+
+剩余 22 项：
+
+| 分类                     | 模型 ID                                                                                                                                                                                                                                                                                | 未匹配原因                                                                                                                                        |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 文本来源/变体（5）       | Qwen/Qwen3.6-35B-A3B-FP8；Qwen3.8-27B；gpt-oss-120b-medium；grok-3-mini；grok-3-mini-fast                                                                                                                                                                                              | 精确/基础记录在当前未纳入的 nearai/inferx/groq/cerebras/helicone/poe 等供应商；不同部署的上限、模态及等级存在差异。FP8 不直接视为无精度后缀版本。 |
+| 非当前文本配置范围（13） | gpt-image-1.5；gpt-image-2；gpt-image-2.5-flare；gpt-image-2.5-sunburst；grok-imagine-image；grok-imagine-image-2.0；grok-imagine-image-quality；grok-imagine-video；grok-imagine-video-1.5；grok-imagine-video-1.5-lite；grok-imagine-video-1.5-preview；grok-tts；grok-voice-tts-1.0 | 图像/视频项缺正整数文本输出预算，preview 仅基础项；TTS 为音频输出且来源未纳入，不伪造聊天配置。                                                   |
+| 无可确定对应（4）        | codex-auto-review；gpt-image-2.5；grok-4.7-build-fast；grok-composer-2.5-fast                                                                                                                                                                                                          | 没有同名或已确认的等价变体，不能以相邻型号替代。                                                                                                  |
+
+本轮源码复核：第一轮核对别名唯一生产者、全部应用/存储 schemaVersion、SQLite 解码与 Model 投影；旧缓存无效后 snapshot=null，refresh 不带旧 ETag，因此重新获取而非错误沿用 304。第二轮核对当前 46 项前后差异、精确/聚合排名、同级冲突拒绝、必填预算及不修改前端消费者；不新增兼容数据路径。根 check、双端 build 通过，日志 /tmp/nexus-model-provenance-check.log、/tmp/nexus-model-provenance-all-build.log。补齐结果表后已重新执行全量格式检查及 diff，均通过，格式日志 /tmp/nexus-model-provenance-final-format.log。限定只读目录核对不等同浏览器/E2E 或真实供应商生成验收。
+
+## 图片模型分组与两种聊天入口（2026-10-25）
+
+用户明确要求同时保留直接选择图片模型聊天与文字 Agent 工具生成；Provider 新增 images 协议，原设置表单分对话/图片组，文本预算可缺省保存，文本运行冻结仍须两项正整数预算。Images Run 使用原模型 Step 派发账本，图片 Tool 使用原 artifacts.write 授权及独立批准，共用 ProviderImageService 与 Artifact 文件。没有新增本地行为/E2E；后续用户单独授权 gpt-image-2.5 一次真实付费图片测试。
+
+第一轮源码审核覆盖协议/能力字段的 Shared、HTTP/workspace codec、应用/存储/SQLite/目录/前端 mapper、可选预算及来源；修正遗漏的类型/解码、图片探测超时和模型选择。第二轮核对直接 Run 的派发/未知/取消/Provider 修订、实际 model actor 写事务、工具批准与分页、受保护预览路径及 Markdown URL 限制；补齐列表 nextOffset、移出模板内分组计算、供应商默认 Images 选项与带供应商前缀 GPT Image 的 base64 参数处理。生成后本地保存失败仍可能已计费，不自动重试；不声称网络与存储原子。
+
+最终根 pnpm run check、pnpm run build 均通过，日志 /tmp/nexus-image-final-{check,build}.log；全量 format:all:check 与 git diff --check 通过，格式日志 /tmp/nexus-image-final-format.log。静态与源码审核不证明浏览器选择、App 文件保存/预览、审批、取消/超时和多进程竞争实际通过；这些场景仍须远程整链验收。
+
+通过真实 build 的 ModelsDevCatalogAdapter 只读读取当前442项，对已授权发现的46个ID调用实际Registry resolver，31项命中，5项明确图片输出：gemini-3.1-flash-image、gpt-image-1.5、gpt-image-2、grok-imagine-image、grok-imagine-image-quality。此次接受缺省文本预算，匹配范围包含非文本目录记录，不能把31项都当作可运行的文本/图片模型；视频/音频执行没有实现。剩余15项详见 /tmp/nexus-image-model-coverage.log，完整结果 /tmp/nexus-image-model-coverage.json。gpt-image-2.5 不在明确匹配结果中，仍可手动设为 Images，无需虚构目录能力。
+
+用户指定 NewAPI 只读发现确认 gpt-image-2.5 后，使用实际 OpenAiCompatibleAdapter.generateImage 发起一次 images/generations 请求，无重试：19478ms 返回 image/png，1006293 bytes，PNG头及实际图像均为1254×1254，白底蓝色圆形。严格base64/类型/容量解码通过，并人工查看确认图像；结果 /tmp/nexus-gpt-image-live-result.json，临时图片 /tmp/nexus-gpt-image-2.5-live.png。没有保存远端Provider、发起第二次生成或记录密钥；该证据仅覆盖网关接口和正式Adapter，不覆盖Run/Tool/Artifact/浏览器整链。
+
+数据库沿 D14/H-12 仅更新 v1 初始结构，未迁移或删除实际数据库；已有协议CHECK不含images时，保存供应商默认Images或冻结图片Run前需先处理结构更新。此部署前提已记入USAGE，不将旧库可直接运行计作通过。
+
+## Android 手机终端后台恢复与软键盘（2026-10-25）
+
+用户确认Android：切后台自动续接后偶发终端不重排、点击不弹键盘及有输出不能输入。源码发现明确竞态：触摸抑制原先保存textarea.readOnly，若当时重连尚未完成为true，而连接就绪后xterm已经把readonly改false，touchend仍会回写旧true。现临时状态只保存inputmode，恢复按当前inputEnabled派生readonly；inputEnabled观察器保留尚未结束的触摸抑制，显式聚焦也恢复当前资格。短触发原interaction重连入口，多指/滚动/取消不触发；不改变后端准入。
+
+原visibility恢复仅fit，隐藏时没有清理丢失touchcancel的手势，也未覆盖VisualViewport变化。现隐藏/pagehide清理原手势/焦点及尺寸RAF/timer；可见/pageshow/连接就绪刷新原输出并fit/refresh，同尺寸也重绘。WorkspacePage在触控环境以实际可视底边减root顶边限制main最大高度，保持原布局/CSS/100dvh，Android键盘收起后可重新展开。viewport resize/scroll和root ResizeObserver触发原100ms终端测量，后台/失活不安排测量，所有监听在原组件卸载清理，不主动弹键盘、不重建PTY。
+
+第一轮审核覆盖readonly与disableStdin/触摸/连接状态交错、隐藏中断手势和恢复路径。第二轮核对快速visibility/pagehide/pageshow、RAF取消与再安排、KeepAlive失活/激活、Navbar顶边变化、无VisualViewport/桌面回退、多指/长按/取消、显式聚焦及普通parser查询回复；保留原onData，以免后台有输出时丢失协议回复。仅客户端逻辑与可见区域尺寸约束变化，无Shared/后端/存储变更。
+
+按D17未新增/运行本地行为、浏览器或E2E。Android Chrome/PWA真机仍需验证：键盘打开时后台→断线→续接→收键盘；重连期间连续触摸；长按/滚动中切后台；中文组合输入、横竖屏与多终端/KeepAlive切换；这些场景不以静态通过代替。
+
+本批根check与前端build通过，日志 /tmp/nexus-mobile-recovery-final-{check,build}.log；全量format:all:check与git diff --check通过，格式日志 /tmp/nexus-mobile-recovery-final-format.log。Android真机未执行，不把上述源码修复称为真机验收通过。

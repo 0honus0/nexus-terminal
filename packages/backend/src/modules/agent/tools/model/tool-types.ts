@@ -18,6 +18,8 @@ export type ToolInputField = { name: string; required: boolean } & (
 );
 
 export type ToolInput =
+	| { kind: 'image_models'; offset: number }
+	| { kind: 'image_generate'; input: import('../../providers/model/provider-types.js').ProviderImageRequest }
 	| { kind: 'skill'; input: import('../../plugins/model/plugin-skill-types.js').PluginSkillInput }
 	| { kind: 'mcp_discovery'; input: import('../../integrations/model/integration-types.js').IntegrationCatalogInput }
 	| { kind: 'browser'; input: import('../../integrations/model/browser-types.js').BrowserInput }

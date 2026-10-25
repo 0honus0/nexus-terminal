@@ -263,39 +263,49 @@ export function createArtifactHttpRoutes(
 		},
 		AGENT_ARTIFACT_MAX_BYTES,
 	);
-	addApp('GET', '/apps/:appId/artifacts/:artifactId/content', async (ctx, actor, signal) => {
-		noQuery(ctx);
-		const artifactId = readAgentId(ctx.params.artifactId);
-		const value = await service.get(actor, artifactId);
-		if (
-			!value ||
-			value.status !== 'ready' ||
-			(!value.retained && value.expiresAt !== null && value.expiresAt <= Date.now())
-		) {
-			throw new AgentOperationError('not_found');
-		}
-		const { start, endInclusive, partial } = readAgentArtifactDownloadRange(
-			ctx.request.headers.range,
-			value.sizeBytes,
-		);
-		await responseIdentity(ctx, access, actor);
-		ctx.response.statusCode = partial ? 206 : 200;
-		ctx.response.setHeader('Content-Type', 'application/octet-stream');
-		ctx.response.setHeader('Content-Disposition', "attachment; filename*=UTF-8''" + encodeURIComponent(value.name));
-		ctx.response.setHeader('ETag', '"' + value.version + '"');
-		ctx.response.setHeader('Accept-Ranges', 'bytes');
-		ctx.response.setHeader('Content-Length', Math.max(0, endInclusive - start + 1));
-		if (partial) {
-			ctx.response.setHeader('Content-Range', `bytes ${start}-${endInclusive}/${value.sizeBytes}`);
-		}
-		await pipeline(
-			Readable.from(service.read(actor, artifactId, value.version, { start, endInclusive }, signal)),
-			ctx.response,
-			{
-				signal,
-			},
-		);
-	});
+	for (const mode of ['content', 'preview'] as const) {
+		addApp('GET', '/apps/:appId/artifacts/:artifactId/' + mode, async (ctx, actor, signal) => {
+			noQuery(ctx);
+			const artifactId = readAgentId(ctx.params.artifactId);
+			const value = await service.get(actor, artifactId);
+			if (
+				!value ||
+				value.status !== 'ready' ||
+				(!value.retained && value.expiresAt !== null && value.expiresAt <= Date.now())
+			) {
+				throw new AgentOperationError('not_found');
+			}
+			if (mode === 'preview' && !['image/png', 'image/jpeg', 'image/webp'].includes(value.mediaType)) {
+				throw new AgentOperationError('not_found');
+			}
+			const { start, endInclusive, partial } = readAgentArtifactDownloadRange(
+				ctx.request.headers.range,
+				value.sizeBytes,
+			);
+			await responseIdentity(ctx, access, actor);
+			ctx.response.statusCode = partial ? 206 : 200;
+			ctx.response.setHeader('Content-Type', mode === 'preview' ? value.mediaType : 'application/octet-stream');
+			ctx.response.setHeader('X-Content-Type-Options', 'nosniff');
+			ctx.response.setHeader('Cache-Control', 'private, no-store');
+			ctx.response.setHeader(
+				'Content-Disposition',
+				(mode === 'preview' ? 'inline' : 'attachment') + "; filename*=UTF-8''" + encodeURIComponent(value.name),
+			);
+			ctx.response.setHeader('ETag', '"' + value.version + '"');
+			ctx.response.setHeader('Accept-Ranges', 'bytes');
+			ctx.response.setHeader('Content-Length', Math.max(0, endInclusive - start + 1));
+			if (partial) {
+				ctx.response.setHeader('Content-Range', `bytes ${start}-${endInclusive}/${value.sizeBytes}`);
+			}
+			await pipeline(
+				Readable.from(service.read(actor, artifactId, value.version, { start, endInclusive }, signal)),
+				ctx.response,
+				{
+					signal,
+				},
+			);
+		});
+	}
 	addApp('PATCH', '/apps/:appId/artifacts/:artifactId/retain', async (ctx, actor) => {
 		noQuery(ctx);
 		const input = readAgentArtifactRetain(await ctx.json());

@@ -1,3 +1,4 @@
+import type { ProviderImageRequest, ProviderImageResult } from './provider-types.js';
 import { agentStorage } from '../../agent-storage-failure.js';
 import { createHash } from 'node:crypto';
 import type { SecretBox } from '../../../../platform/security/secret-box.js';
@@ -32,10 +33,11 @@ function toModelView(model: ProviderModelInput, observation?: ProviderObservatio
 	return {
 		...cloneProviderModel(model),
 		capabilitySources: {
-			contextWindow: 'manual',
-			maxOutputTokens: 'manual',
+			...(model.contextWindow === undefined ? {} : { contextWindow: 'manual' as const }),
+			...(model.maxOutputTokens === undefined ? {} : { maxOutputTokens: 'manual' as const }),
 			supportsTools: 'manual',
 			...(model.supportsImageInput === undefined ? {} : { supportsImageInput: 'manual' as const }),
+			...(model.supportsImageGeneration === undefined ? {} : { supportsImageGeneration: 'manual' as const }),
 			...(model.supportsFileInput === undefined ? {} : { supportsFileInput: 'manual' as const }),
 			...(model.supportsPromptCacheKey === undefined ? {} : { supportsPromptCacheKey: 'manual' as const }),
 			...(model.reasoningEfforts === undefined ? {} : { reasoningEfforts: 'manual' as const }),
@@ -62,6 +64,9 @@ function toModelView(model: ProviderModelInput, observation?: ProviderObservatio
 							...(observation.capabilities.supportsImageInput === undefined
 								? {}
 								: { supportsImageInput: observation.capabilities.supportsImageInput }),
+							...(observation.capabilities.supportsImageGeneration === undefined
+								? {}
+								: { supportsImageGeneration: observation.capabilities.supportsImageGeneration }),
 							...(observation.capabilities.supportsFileInput === undefined
 								? {}
 								: { supportsFileInput: observation.capabilities.supportsFileInput }),
@@ -232,6 +237,9 @@ export class ProviderModel {
 					...(model.providerCapabilities?.supportsImageInput === undefined
 						? {}
 						: { supportsImageInput: model.providerCapabilities.supportsImageInput }),
+					...(model.providerCapabilities?.supportsImageGeneration === undefined
+						? {}
+						: { supportsImageGeneration: model.providerCapabilities.supportsImageGeneration }),
 					...(model.providerCapabilities?.supportsFileInput === undefined
 						? {}
 						: { supportsFileInput: model.providerCapabilities.supportsFileInput }),
@@ -285,6 +293,9 @@ export class ProviderModel {
 							...(row.capabilities.supportsImageInput === undefined
 								? {}
 								: { supportsImageInput: row.capabilities.supportsImageInput }),
+							...(row.capabilities.supportsImageGeneration === undefined
+								? {}
+								: { supportsImageGeneration: row.capabilities.supportsImageGeneration }),
 							...(row.capabilities.supportsFileInput === undefined
 								? {}
 								: { supportsFileInput: row.capabilities.supportsFileInput }),
@@ -309,6 +320,35 @@ export class ProviderModel {
 		try {
 			return this.toDiscovered(await this.network.discover(url, credential, signal));
 		} catch (error) {
+			throw toProviderRequestFailure(error);
+		}
+	}
+
+	async generateImage(
+		provider: ProviderRecord,
+		input: ProviderImageRequest,
+		signal: AbortSignal,
+	): Promise<ProviderImageResult> {
+		try {
+			const credential = await this.credential(provider);
+			await this.guardCurrent(provider);
+			if (signal.aborted) {
+				throw new AgentFailure('provider_unavailable');
+			}
+			const result = await this.network.generateImage(
+				{
+					baseUrl: provider.baseUrl,
+					credential,
+					modelId: input.modelId,
+					prompt: input.prompt,
+				},
+				signal,
+			);
+			return { bytes: Uint8Array.from(result.bytes), mediaType: result.mediaType };
+		} catch (error) {
+			if (error instanceof AgentFailure) {
+				throw error;
+			}
 			throw toProviderRequestFailure(error);
 		}
 	}

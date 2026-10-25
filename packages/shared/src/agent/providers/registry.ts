@@ -2,11 +2,12 @@ import type { AgentRegistryErrorCode, AgentRegistrySource } from './values.js';
 import type { AgentReasoningEffort } from './values.js';
 
 export interface AgentRegistryDefaults {
-	contextWindow: number;
-	maxOutputTokens: number;
+	contextWindow?: number;
+	maxOutputTokens?: number;
 	/** Missing vendor information is unknown, not false. */
 	supportsTools?: boolean;
 	supportsImageInput?: boolean;
+	supportsImageGeneration?: boolean;
 	supportsFileInput?: boolean;
 	supportsPromptCacheKey?: boolean;
 	reasoningEfforts?: AgentReasoningEffort[];

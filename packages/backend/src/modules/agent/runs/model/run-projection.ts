@@ -1,5 +1,6 @@
 import type { StoredRun, StoredRunEvent, StoredFrozenInput } from '../storage/run-storage.js';
 import type { AgentRun, AgentRunEvent, RunFrozenInput } from './run-types.js';
+import { AgentFailure } from '../../agent-failure.js';
 import { fromStoredModel, toStoredModel } from '../../providers/model/provider-projection.js';
 
 export function fromStoredRun(value: StoredRun): AgentRun {
@@ -25,6 +26,13 @@ export function fromStoredEvent(value: StoredRunEvent): AgentRunEvent {
 }
 
 export function fromStoredFrozen(value: StoredFrozenInput): RunFrozenInput {
+	const capabilities = fromStoredModel(value.capabilities);
+	if (
+		value.protocol !== 'images' &&
+		(capabilities.contextWindow === undefined || capabilities.maxOutputTokens === undefined)
+	) {
+		throw new AgentFailure('provider_unavailable');
+	}
 	return {
 		providerId: value.providerId,
 		providerVersion: value.providerVersion,
@@ -32,7 +40,7 @@ export function fromStoredFrozen(value: StoredFrozenInput): RunFrozenInput {
 		modelId: value.modelId,
 		baseUrl: value.baseUrl,
 		protocol: value.protocol,
-		capabilities: fromStoredModel(value.capabilities),
+		capabilities,
 		executionPolicy: value.executionPolicy,
 	};
 }

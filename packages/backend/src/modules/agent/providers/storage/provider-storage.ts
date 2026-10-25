@@ -5,10 +5,11 @@ import type { AgentRunStatus } from '@nexus-terminal/shared/agent/runs/values';
 export interface StoredProviderModel {
 	id: string;
 	protocol?: AgentProviderProtocol;
-	contextWindow: number;
-	maxOutputTokens: number;
+	contextWindow?: number;
+	maxOutputTokens?: number;
 	supportsTools: boolean;
 	supportsImageInput?: boolean;
+	supportsImageGeneration?: boolean;
 	supportsFileInput?: boolean;
 	supportsPromptCacheKey?: boolean;
 	reasoningEfforts?: AgentReasoningEffort[];

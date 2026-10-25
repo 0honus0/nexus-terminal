@@ -8,6 +8,7 @@ export interface EndpointModel {
 		maxOutputTokens?: number;
 		supportsTools?: boolean;
 		supportsImageInput?: boolean;
+		supportsImageGeneration?: boolean;
 		supportsFileInput?: boolean;
 		supportsPromptCacheKey?: boolean;
 		reasoningEfforts?: ('none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max')[];
@@ -18,7 +19,7 @@ export interface EndpointModel {
 
 export interface ModelProbe {
 	baseUrl: string;
-	protocol: 'responses' | 'chat-completions';
+	protocol: 'responses' | 'chat-completions' | 'images';
 	modelId: string;
 	credential: string | null;
 	maxOutputTokens: number;
@@ -30,6 +31,22 @@ export interface ModelProbe {
 export interface ModelProbeResult {
 	usage?: { inputTokens: number; outputTokens: number };
 }
+
+export interface ModelImageRequest {
+	baseUrl: string;
+	credential: string | null;
+	modelId: string;
+	prompt: string;
+}
+
+export interface ModelImageResult {
+	bytes: Uint8Array;
+	mediaType: 'image/png' | 'image/jpeg' | 'image/webp';
+}
+
+export const MODEL_IMAGE_MAX_BYTES = 16 * 1024 * 1024;
+
+export const MODEL_IMAGE_MAX_RESPONSE_BYTES = 4 * Math.ceil(MODEL_IMAGE_MAX_BYTES / 3) + 64 * 1024;
 
 /** Success requires a completed event and normal iterator termination; EOF alone is not success. */
 export const MODEL_STREAM_MAX_BYTES = 8 * 1024 * 1024;
@@ -97,6 +114,7 @@ export type ModelStreamEvent =
 	| { type: 'completed'; finishReason: 'tool_calls'; toolCalls: ModelToolCall[]; reasoning: ModelReasoningState[] };
 
 export interface ModelNetworkPort {
+	generateImage(input: ModelImageRequest, signal: AbortSignal): Promise<ModelImageResult>;
 	discover(baseUrl: string, credential: string | null, signal: AbortSignal): Promise<EndpointModel[]>;
 	probe(input: ModelProbe, signal: AbortSignal): Promise<ModelProbeResult>;
 	/** The consumer owns the iterator lifecycle; cancellation never proves remote rollback. */

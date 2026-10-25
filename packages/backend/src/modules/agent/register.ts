@@ -1,3 +1,4 @@
+import { ProviderImageService } from './providers/service/provider-image-service.js';
 import type { Logger } from '../../platform/logging/logger.js';
 import { logDiagnostic } from '../../platform/logging/diagnostic-log.js';
 import { registerAgentSnapshot } from './snapshots/adapters/sqlite/snapshot-registration.js';
@@ -448,6 +449,10 @@ export function registerAgent(
 		executionSettings,
 	);
 	const toolModel = new ToolModel(targets, resolver, remoteOperations, diagnostics);
+	const providerService = new ProviderService(providerModel, (userId, providerId) =>
+		execution.abortProvider(userId, providerId),
+	);
+	const images = new ProviderImageService(providerService, artifacts);
 	const toolService = new ToolService(
 		toolModel,
 		tools,
@@ -464,6 +469,8 @@ export function registerAgent(
 		integrations,
 		browser,
 		plugins,
+		providerService,
+		images,
 	);
 	const contexts = new ContextHistoryService(new ContextModel(new SqliteContextStorage(sqlite)));
 	const execution = new RunExecutionOwner(
@@ -477,12 +484,10 @@ export function registerAgent(
 		checkpoints,
 		executionSettings,
 		events,
+		images,
 		logger,
 	);
 	const runs = new RunService(runModel, steps, execution, tools, collaboration, governance, executionSettings);
-	const providerService = new ProviderService(providerModel, (userId, providerId) =>
-		execution.abortProvider(userId, providerId),
-	);
 
 	const scope = new ScopeService(
 		new ScopeModel(new SqliteScopeStorage(sqlite)),

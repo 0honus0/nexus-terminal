@@ -6,7 +6,9 @@ export interface StoredArtifactScope {
 }
 
 export type StoredArtifactAuthorization =
-	{ kind: 'session'; digest: string } | { kind: 'tool'; runId: string; operationId: string; operationHash: string };
+	| { kind: 'session'; digest: string }
+	| { kind: 'model'; runId: string; stepIndex: number; requestHash: string }
+	| { kind: 'tool'; runId: string; operationId: string; operationHash: string };
 
 export interface StoredArtifact {
 	id: string;

@@ -3,10 +3,11 @@ import type { AgentReasoningEffort } from '@nexus-terminal/shared/agent/provider
 
 /** Application registry facts; HTTP wire projections are owned by the interface. */
 export interface RegistryDefaults {
-	contextWindow: number;
-	maxOutputTokens: number;
+	contextWindow?: number;
+	maxOutputTokens?: number;
 	supportsTools?: boolean;
 	supportsImageInput?: boolean;
+	supportsImageGeneration?: boolean;
 	supportsFileInput?: boolean;
 	supportsPromptCacheKey?: boolean;
 	reasoningEfforts?: AgentReasoningEffort[];
@@ -37,7 +38,7 @@ export interface RegistryResolution {
 }
 
 export interface CapabilityRegistrySnapshot {
-	schemaVersion: 1;
+	schemaVersion: 2;
 	source: 'models.dev';
 	sourceRevision: string | null;
 	generatedAt: number;

@@ -60,6 +60,7 @@ function verifySaved(value: unknown, expected: AgentProviderInput | null, draft:
 				actual.maxOutputTokens !== model.maxOutputTokens ||
 				actual.supportsTools !== model.supportsTools ||
 				actual.supportsImageInput !== model.supportsImageInput ||
+				actual.supportsImageGeneration !== model.supportsImageGeneration ||
 				actual.supportsFileInput !== model.supportsFileInput ||
 				actual.supportsPromptCacheKey !== model.supportsPromptCacheKey ||
 				actual.defaultReasoningEffort !== model.defaultReasoningEffort ||

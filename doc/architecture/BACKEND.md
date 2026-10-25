@@ -1499,6 +1499,17 @@ Remote register 安装 `/api/v1/transfers/send`、`status`、`status/:taskId`、
 3. **依赖方向**：Registry Service → Model/纯规则，Model → storage/Platform；匹配器不读取网络或存储，不绕过Provider冻结时观察冲突核对。
 4. **类型与转换**：RegistryDefaults、StoredRegistryDefaults和Shared AgentRegistryDefaults独立定义完整能力；白名单mapper投影缓存键、默认推理等级及必需推理，两个decoder核对等级唯一性、默认值所属及mandatory依赖。
 5. **入口与安装**：沿用model-registry/resolve与refresh，无新路由或安装点。
-6. **数据、事务与并发**：原快照持久化结构不变；精确名优先于前缀/分隔符及系列日期/等级/thinking/fast后缀，同级冲突不猜测，OpenCode聚合候选不覆盖原厂。名称变体不构成能力证明；只对支持的等级后缀选择默认等级。保留旧正式resolver的明确模型缓存键与推理修正。
+6. **数据、事务与并发**：内部快照 schemaVersion=2，仅保存 provider/model 键，不生成丢失来源的裸别名；旧快照通过原缓存无效机制提示重新更新，不自动迁移。精确名优先于前缀/分隔符及系列日期/等级/thinking/fast后缀，同级冲突不猜测，OpenCode聚合候选不覆盖原厂。名称变体不构成能力证明；只对支持的等级后缀选择默认等级。保留旧正式resolver的明确模型缓存键与推理修正。
 7. **生命周期与失败**：沿原refresh/load owner、取消及安全错误映射；无目录或无明确匹配返回null，不自动发起外部模型请求。
 8. **当前能力与验收**：前端新增模型与显式应用目录均消费完整Shared能力；使用与恢复见USAGE，静态及限定只读验证见PLAN/testing，完整交互仍待远程。
+
+### Agent 图片生成与模型预算
+
+1. **职责与范围**：Provider/Registry 保存声明能力，文字预算可缺省；Run 持文本执行预算。ProviderImageService 统一直接 Images Run 与图片工具的网络生成、App 文件落盘及安全结果。
+2. **子功能与目录**：原 providers/service、platform/ai/adapters/model-image 与 openai-compatible；RunExecutionOwner 持直接派发，原 ToolService 持 image_models_list/image_generate，Artifact 原 owner 持输出。
+3. **依赖方向**：Run/Tool → ProviderImageService → ProviderService/ArtifactService；Model/技术 Adapter 各自投影；不从网络 Adapter 写数据库或绕过 Run 派发记录。
+4. **类型与转换**：Shared 的 images 协议、supportsImageGeneration 与可选文字预算同步应用/存储/SQLite/前端；新 ProviderImageRequest/ImageArtifact 留 providers/model。Artifact 的 model actor 与独立存储授权逐字段转换，不伪造工具授权。
+5. **入口与安装**：原模型选择器同时消费 Images；配置分对话/图片两组。图片工具由原 toolDefinitions 安装，需原 artifacts.write/批准。新增 GET /api/v1/agent/apps/:appId/artifacts/:artifactId/preview，复用认证下载读取与 Range，限定 PNG/JPEG/WebP、nosniff、private/no-store。
+6. **数据、事务与并发**：直接图片沿模型 Step 的 reserve/dispatch/finish 与原请求/并发预算；工具沿 ToolCall 账本和原工具预算。Artifact 写事务核对 Images frozen protocol、原 dispatched Step/hash、当前 Run 与 Provider 代际。图片输出继承原文件预算/期限，不冒充网络与 SQLite 原子事务。
+7. **生命周期与失败**：Provider 请求跟踪及停机/配置修改取消覆盖图片请求，最大五分钟并与原 Run/工具信号取交集。外部 JSON 与 base64 有界读取；不获取返回 URL，不接收 SVG/HTML。付费请求未知或落盘失败不自动重试；本地取消不证明供应商回滚。全局日志不记提示词/图片/凭据。
+8. **当前能力与验收**：一次一张、最多16MiB、供应商默认尺寸/质量。直接图片只用本次描述，文字工具可传 Agent 整理的描述；不接入编辑、视频、音频。前端 Markdown 仅允许受保护的本站预览图。静态、目录、隔离HTTP及真实CDP验收的环境、入口与保证边界分别见 testing；编译不替代真实图片生成或完整治理回归。

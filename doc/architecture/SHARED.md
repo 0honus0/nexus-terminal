@@ -337,3 +337,7 @@ scope/workspace-http 及 workspace-http-codec 唯一定义18项工作区请求/�
 pending/running/unknown 的 Root 或 Child 阻止删除，安全失败复用 agent/values 的 active_run_conflict（HTTP 409）；线程/App版本冲突使用 version_conflict，缺失/异 App线程使用 not_found，不根据错误正文归类。事务删除线程、全部 Run 和所属持久子表及附件引用，Memory 保留并清除 sourceRunId、推进自身版本；Artifact 元数据和文件保留。SQL、事务、状态准入和记忆版本耗尽判断均由 Backend 各自 owner 持有，Shared 不定义存储事实或删除策略对象。没有删除回执重放或墓碑兼容层，重复删除为 not_found；未知结果应保留原 threadId/expectedVersion 并先只读核对，不自动重放旧创建意图。
 
 验收边界为严格 unknown 输入、方法/线程/App/version/envelope 响应关联、现有消费者编译，以及 Backend 当前 v1 隔离 SQLite 的 FK/级联、拒绝和回滚验证；正式删除 UI、真实插件/原生 HTTP 交付丢失与并发竞争仍须各自整链验收，静态和隔离证据不扩大为全量行为通过。
+
+## 图片模型协议与可选预算
+
+Provider 协议统一为 chat-completions/responses/images；配置与目录中的 contextWindow/maxOutputTokens 可缺省，已给值必须为正安全整数，双值存在时输出不超过上下文。supportsImageGeneration 表示图片输出能力，与 supportsImageInput 分开；目录匹配不保证网关支持 Images API。协议、能力基础字段归 providers/values，HTTP、workspace、Registry codec 与双端 mapper 同步消费。执行所需文本预算归后端 Run 校验，不在 Shared 填充虚构默认值；内部图像字节、凭据与 model actor 不进入 Shared。图片预览沿认证 Artifact GET 路由交付，不新增任意 URL 或 base64 的聊天协议字段。

@@ -15,13 +15,27 @@ function allowedByObservation(model: ProviderModelInput, observation: ProviderOb
 		return true;
 	}
 	const reported = observation.capabilities;
-	if (reported.contextWindow !== undefined && model.contextWindow > reported.contextWindow) {
+	if (
+		reported.contextWindow !== undefined &&
+		model.contextWindow !== undefined &&
+		model.contextWindow > reported.contextWindow
+	) {
 		return false;
 	}
-	if (reported.maxOutputTokens !== undefined && model.maxOutputTokens > reported.maxOutputTokens) {
+	if (
+		reported.maxOutputTokens !== undefined &&
+		model.maxOutputTokens !== undefined &&
+		model.maxOutputTokens > reported.maxOutputTokens
+	) {
 		return false;
 	}
-	for (const key of ['supportsTools', 'supportsImageInput', 'supportsFileInput', 'supportsPromptCacheKey'] as const) {
+	for (const key of [
+		'supportsTools',
+		'supportsImageInput',
+		'supportsImageGeneration',
+		'supportsFileInput',
+		'supportsPromptCacheKey',
+	] as const) {
 		if (model[key] === true && reported[key] === false) {
 			return false;
 		}
@@ -55,7 +69,11 @@ export function resolveFrozenModel(provider: ProviderRecord, reference: ModelRef
 	}
 
 	const selected = provider.models.find((candidate) => candidate.id === reference.modelId);
-	if (!selected) {
+	if (
+		!selected ||
+		((selected.protocol ?? provider.protocol) !== 'images' &&
+			(selected.contextWindow === undefined || selected.maxOutputTokens === undefined))
+	) {
 		return null;
 	}
 
@@ -78,6 +96,9 @@ export function resolveFrozenModel(provider: ProviderRecord, reference: ModelRef
 			maxOutputTokens: selected.maxOutputTokens,
 			supportsTools: selected.supportsTools,
 			...(selected.supportsImageInput === undefined ? {} : { supportsImageInput: selected.supportsImageInput }),
+			...(selected.supportsImageGeneration === undefined
+				? {}
+				: { supportsImageGeneration: selected.supportsImageGeneration }),
 			...(selected.supportsFileInput === undefined ? {} : { supportsFileInput: selected.supportsFileInput }),
 			...(selected.supportsPromptCacheKey === undefined
 				? {}

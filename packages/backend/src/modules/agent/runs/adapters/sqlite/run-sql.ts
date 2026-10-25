@@ -145,7 +145,7 @@ export async function frozenFromRun(
 		return null;
 	}
 	const protocol = row.protocol;
-	if (protocol !== 'responses' && protocol !== 'chat-completions') {
+	if (protocol !== 'responses' && protocol !== 'chat-completions' && protocol !== 'images') {
 		throw new Error('Corrupt frozen protocol');
 	}
 	if (row.execution_policy !== 'governed') {

@@ -44,15 +44,19 @@ function defaults(raw: unknown): CatalogModelCapabilities | null {
 	if (
 		!entry ||
 		!limit ||
-		!positive(limit.context) ||
-		!positive(limit.output) ||
-		limit.output > limit.context ||
+		(limit.context !== undefined && limit.context !== 0 && !positive(limit.context)) ||
+		(limit.output !== undefined && limit.output !== 0 && !positive(limit.output)) ||
+		(positive(limit.context) && positive(limit.output) && limit.output > limit.context) ||
 		(entry.tool_call !== undefined && typeof entry.tool_call !== 'boolean')
 	) {
 		return null;
 	}
 	const modalities = record(entry.modalities);
 	const input = modalities?.input;
+	const output = modalities?.output;
+	if (output !== undefined && (!Array.isArray(output) || output.some((value) => typeof value !== 'string'))) {
+		return null;
+	}
 	if (input !== undefined && (!Array.isArray(input) || input.some((value) => typeof value !== 'string'))) {
 		return null;
 	}
@@ -74,10 +78,11 @@ function defaults(raw: unknown): CatalogModelCapabilities | null {
 		}
 	}
 	return {
-		contextWindow: limit.context,
-		maxOutputTokens: limit.output,
+		...(positive(limit.context) ? { contextWindow: limit.context } : {}),
+		...(positive(limit.output) ? { maxOutputTokens: limit.output } : {}),
 		...(entry.tool_call === undefined ? {} : { supportsTools: entry.tool_call }),
 		...(inputs === undefined ? {} : { supportsImageInput: inputs.includes('image') }),
+		...(Array.isArray(output) ? { supportsImageGeneration: output.includes('image') } : {}),
 		...(inputs === undefined ? {} : { supportsFileInput: inputs.includes('file') || inputs.includes('pdf') }),
 		...(reasoningEfforts ? { reasoningEfforts } : {}),
 	};

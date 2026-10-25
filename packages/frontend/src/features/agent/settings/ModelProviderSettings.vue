@@ -134,6 +134,17 @@
 		discovered.value.filter((item) => item.id.toLowerCase().includes(query.value.toLowerCase())),
 	);
 	const currentProvider = computed(() => providers.value.find((provider) => provider.id === draft.value?.id));
+	const modelGroups = computed(() => {
+		const provider = draft.value;
+		const entries = provider?.models.map((model, index) => ({ model, index })) ?? [];
+		return [
+			{ kind: 'chat', items: entries.filter(({ model }) => (model.protocol ?? provider?.protocol) !== 'images') },
+			{
+				kind: 'images',
+				items: entries.filter(({ model }) => (model.protocol ?? provider?.protocol) === 'images'),
+			},
+		];
+	});
 	const isNewProvider = computed(() => draft.value !== null && draft.value.id === null);
 	const credentialValue = computed({
 		get: () => (draft.value?.credential.action === 'replace' ? draft.value.credential.value : ''),
@@ -145,6 +156,7 @@
 	const protocolOptions = computed<UiSelectOption[]>(() => [
 		{ value: 'chat-completions', label: t('agent.settings.providers.protocolChat') },
 		{ value: 'responses', label: t('agent.settings.providers.protocolResponses') },
+		{ value: 'images', label: t('agent.settings.providers.protocolImages') },
 	]);
 	const credentialOptions = computed<UiSelectOption[]>(() => [
 		{ value: 'keep', label: t('agent.settings.providerManagement.keep') },
@@ -247,12 +259,20 @@
 			} else if ((idCounts.get(id) ?? 0) > 1) {
 				errors.id = t('agent.settings.providerManagement.validation.modelIdDuplicate');
 			}
-			if (!Number.isSafeInteger(model.contextWindow) || model.contextWindow < 1) {
+			if (
+				model.contextWindow !== undefined &&
+				(!Number.isSafeInteger(model.contextWindow) || model.contextWindow < 1)
+			) {
 				errors.contextWindow = t('agent.settings.providerManagement.validation.contextWindowInvalid');
 			}
-			if (!Number.isSafeInteger(model.maxOutputTokens) || model.maxOutputTokens < 1) {
+			if (
+				model.maxOutputTokens !== undefined &&
+				(!Number.isSafeInteger(model.maxOutputTokens) || model.maxOutputTokens < 1)
+			) {
 				errors.maxOutputTokens = t('agent.settings.providerManagement.validation.maxOutputTokensInvalid');
 			} else if (
+				model.contextWindow !== undefined &&
+				model.maxOutputTokens !== undefined &&
 				Number.isSafeInteger(model.contextWindow) &&
 				model.contextWindow > 0 &&
 				model.maxOutputTokens > model.contextWindow
@@ -281,13 +301,14 @@
 			return;
 		}
 		const cap = found?.capabilities;
-		// Zero keeps unadvertised required limits visibly incomplete until the user configures them.
+		// Missing catalog limits remain unknown and do not block saving the model.
 		const value: ProviderModelDraft = {
 			id: found?.id ?? '',
-			contextWindow: cap?.contextWindow ?? 0,
-			maxOutputTokens: cap?.maxOutputTokens ?? 0,
+			contextWindow: cap?.contextWindow,
+			maxOutputTokens: cap?.maxOutputTokens,
 			supportsTools: cap?.supportsTools ?? false,
 			supportsImageInput: cap?.supportsImageInput,
+			supportsImageGeneration: cap?.supportsImageGeneration,
 			supportsFileInput: cap?.supportsFileInput,
 			supportsPromptCacheKey: cap?.supportsPromptCacheKey,
 			reasoningEfforts: cap?.reasoningEfforts?.map((effort) => effort),
@@ -298,8 +319,12 @@
 		return draft.value.models.at(-1);
 	}
 
-	async function addModel(found?: DiscoveredProviderModel): Promise<void> {
+	async function addModel(found?: DiscoveredProviderModel, protocol?: Provider['protocol']): Promise<void> {
 		const model = appendModel(found);
+		if (model && protocol) {
+			model.protocol = protocol;
+			if (protocol === 'images') model.supportsImageGeneration = true;
+		}
 		if (model?.id) await matchModels([model]);
 	}
 
@@ -329,6 +354,7 @@
 			return;
 		}
 		const cap = observation.capabilities;
+		if (cap.supportsImageGeneration !== undefined) model.supportsImageGeneration = cap.supportsImageGeneration;
 		if (cap.contextWindow !== undefined) {
 			model.contextWindow = cap.contextWindow;
 		}
@@ -363,7 +389,7 @@
 
 	function setProtocol(value: UiSelectValue): void {
 		if (!draft.value) return;
-		if (value === 'chat-completions' || value === 'responses') {
+		if (value === 'chat-completions' || value === 'responses' || value === 'images') {
 			draft.value.protocol = value;
 		}
 	}
@@ -442,9 +468,11 @@
 
 	function protocolLabel(protocol: Provider['protocol']): string {
 		return t(
-			protocol === 'responses'
-				? 'agent.settings.providers.protocolResponses'
-				: 'agent.settings.providers.protocolChat',
+			protocol === 'images'
+				? 'agent.settings.providers.protocolImages'
+				: protocol === 'responses'
+					? 'agent.settings.providers.protocolResponses'
+					: 'agent.settings.providers.protocolChat',
 		);
 	}
 
@@ -763,7 +791,7 @@
 						>
 							<span class="truncate font-mono text-foreground">{{ model.id }}</span>
 							<span class="shrink-0 font-mono text-[10px] text-text-secondary">{{
-								t('agent.settings.providers.contextShort', { value: model.contextWindow })
+								t('agent.settings.providers.contextShort', { value: model.contextWindow ?? '—' })
 							}}</span>
 						</span>
 						<span v-if="!provider.models.length">{{ t('agent.settings.providers.empty') }}</span>
@@ -860,10 +888,10 @@
 						</div>
 						<div class="mt-2 flex flex-wrap gap-1.5">
 							<UiBadge appearance="ghost" density="compact" class="font-mono">
-								{{ t('agent.settings.providers.contextShort', { value: model.contextWindow }) }}
+								{{ t('agent.settings.providers.contextShort', { value: model.contextWindow ?? '—' }) }}
 							</UiBadge>
 							<UiBadge appearance="ghost" density="compact" class="font-mono">
-								{{ t('agent.settings.providers.outputShort', { value: model.maxOutputTokens }) }}
+								{{ t('agent.settings.providers.outputShort', { value: model.maxOutputTokens ?? '—' }) }}
 							</UiBadge>
 							<UiBadge v-if="model.supportsTools" tone="primary" density="compact">
 								{{ t('agent.settings.providers.toolCapable') }}
@@ -1089,63 +1117,81 @@
 								>{{ t('agent.settings.providerManagement.discoverEndpoint') }}</UiButton
 							>
 						</div>
-						<div
-							v-for="(model, index) in draft.models"
-							:key="index"
-							class="space-y-3 rounded-xl bg-card/65 p-3.5"
-						>
-							<div class="flex items-center justify-between gap-2">
-								<span class="text-[11px] font-semibold text-foreground">{{
-									model.id || t('agent.settings.providerManagement.modelId')
-								}}</span>
-								<UiButton
-									type="button"
-									appearance="ghost"
-									tone="danger"
-									icon-only
-									:title="t('common.delete')"
-									:aria-label="t('common.delete')"
-									@click="draft.models.splice(index, 1)"
-									><i class="fa-regular fa-trash-can text-[10px]" aria-hidden="true"></i
-								></UiButton>
-							</div>
-							<ProviderModelEditor
-								:model-value="model"
-								:compact="device.isMobile.value"
-								@match-registry="matchModels([model])"
-								@configure-tools="preserveModelTools(model)"
-								:errors="validationAttempted ? validation.models[index] : undefined"
-								@update:model-value="(value) => draft?.models.splice(index, 1, value)"
-							/>
+						<div v-for="group in modelGroups" :key="group.kind" class="space-y-3">
+							<h5 class="text-xs font-semibold text-foreground">
+								{{
+									t(
+										group.kind === 'images'
+											? 'agent.settings.providers.imageModels'
+											: 'agent.settings.providers.chatModels',
+									)
+								}}
+							</h5>
 							<div
-								v-if="currentProvider?.models.find((item) => item.id === model.id)?.observation"
-								class="space-y-2 rounded-lg bg-header/25 p-2.5 text-[11px] text-text-secondary"
+								v-for="{ model, index } in group.items"
+								:key="index"
+								class="space-y-3 rounded-xl bg-card/65 p-3.5"
 							>
-								<p>{{ t('agent.settings.providerManagement.observationHelp') }}</p>
-								<div class="flex flex-wrap gap-2">
-									<UiButton type="button" density="compact" @click="applyObservation(model)">{{
-										t('agent.settings.providerManagement.applyObservation')
-									}}</UiButton>
-									<UiButton type="button" density="compact" @click="lookup(model)">{{
-										t('agent.settings.providerManagement.registry')
-									}}</UiButton>
+								<div class="flex items-center justify-between gap-2">
+									<span class="text-[11px] font-semibold text-foreground">{{
+										model.id || t('agent.settings.providerManagement.modelId')
+									}}</span>
+									<UiButton
+										type="button"
+										appearance="ghost"
+										tone="danger"
+										icon-only
+										:title="t('common.delete')"
+										:aria-label="t('common.delete')"
+										@click="draft.models.splice(index, 1)"
+										><i class="fa-regular fa-trash-can text-[10px]" aria-hidden="true"></i
+									></UiButton>
 								</div>
+								<ProviderModelEditor
+									:model-value="model"
+									:default-protocol="draft.protocol"
+									:compact="device.isMobile.value"
+									@match-registry="matchModels([model])"
+									@configure-tools="preserveModelTools(model)"
+									:errors="validationAttempted ? validation.models[index] : undefined"
+									@update:model-value="(value) => draft?.models.splice(index, 1, value)"
+								/>
+								<div
+									v-if="currentProvider?.models.find((item) => item.id === model.id)?.observation"
+									class="space-y-2 rounded-lg bg-header/25 p-2.5 text-[11px] text-text-secondary"
+								>
+									<p>{{ t('agent.settings.providerManagement.observationHelp') }}</p>
+									<div class="flex flex-wrap gap-2">
+										<UiButton type="button" density="compact" @click="applyObservation(model)">{{
+											t('agent.settings.providerManagement.applyObservation')
+										}}</UiButton>
+										<UiButton type="button" density="compact" @click="lookup(model)">{{
+											t('agent.settings.providerManagement.registry')
+										}}</UiButton>
+									</div>
+								</div>
+								<UiButton v-else type="button" density="compact" @click="lookup(model)">{{
+									t('agent.settings.providerManagement.registry')
+								}}</UiButton>
 							</div>
-							<UiButton v-else type="button" density="compact" @click="lookup(model)">{{
-								t('agent.settings.providerManagement.registry')
-							}}</UiButton>
+							<UiButton
+								type="button"
+								appearance="soft"
+								:disabled="draft.models.length >= AGENT_PROVIDER_MODEL_LIMIT"
+								@click="
+									addModel(
+										undefined,
+										group.kind === 'images'
+											? 'images'
+											: draft.protocol === 'images'
+												? 'chat-completions'
+												: undefined,
+									)
+								"
+								><i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i
+								>{{ t('agent.settings.providerManagement.addModel') }}</UiButton
+							>
 						</div>
-						<p class="text-[11px] leading-relaxed text-text-secondary">
-							{{ t('agent.settings.providerManagement.modelHelp', { max: AGENT_PROVIDER_MODEL_LIMIT }) }}
-						</p>
-						<UiButton
-							type="button"
-							appearance="soft"
-							:disabled="draft.models.length >= AGENT_PROVIDER_MODEL_LIMIT"
-							@click="addModel()"
-							><i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i
-							>{{ t('agent.settings.providerManagement.addModel') }}</UiButton
-						>
 					</section>
 				</fieldset>
 			</form>

@@ -10,10 +10,11 @@ import type {
 export interface ProviderModelInput {
 	id: string;
 	protocol?: AgentProviderProtocol;
-	contextWindow: number;
-	maxOutputTokens: number;
+	contextWindow?: number;
+	maxOutputTokens?: number;
 	supportsTools: boolean;
 	supportsImageInput?: boolean;
+	supportsImageGeneration?: boolean;
 	supportsFileInput?: boolean;
 	supportsPromptCacheKey?: boolean;
 	reasoningEfforts?: AgentReasoningEffort[];
@@ -158,4 +159,24 @@ export type ProviderDeletion = { status: 'ok' } | { status: 'not_found' | 'versi
 
 export interface ProviderUsage {
 	runStatuses: AgentRunStatus[];
+}
+
+export interface ProviderImageRequest {
+	providerId: string;
+	configurationVersion: number;
+	modelId: string;
+	prompt: string;
+}
+
+export interface ProviderImageResult {
+	bytes: Uint8Array;
+	mediaType: 'image/png' | 'image/jpeg' | 'image/webp';
+}
+
+export interface ImageArtifact {
+	id: string;
+	name: string;
+	previewUrl: string;
+	downloadUrl: string;
+	sizeBytes: number;
 }

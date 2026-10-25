@@ -5,7 +5,7 @@ export async function initializeAgentProviders(tx: SqlExecutor): Promise<void> {
  CREATE TABLE agent_providers(
   id TEXT PRIMARY KEY, user_id INTEGER NOT NULL,
   display_name TEXT NOT NULL,base_url TEXT NOT NULL,
-  protocol TEXT NOT NULL CHECK(protocol IN ('chat-completions','responses')),
+  protocol TEXT NOT NULL CHECK(protocol IN ('chat-completions','responses','images')),
   models_json TEXT NOT NULL,
   observations_json TEXT NOT NULL DEFAULT '[]',
   protected_credential TEXT,
@@ -22,7 +22,7 @@ export async function initializeAgentProviders(tx: SqlExecutor): Promise<void> {
   provider_version INTEGER NOT NULL CHECK(provider_version>=1),
   credential_revision INTEGER NOT NULL CHECK(credential_revision>=1),
   model_id TEXT NOT NULL,base_url TEXT NOT NULL,
-  protocol TEXT NOT NULL CHECK(protocol IN ('chat-completions','responses')),
+  protocol TEXT NOT NULL CHECK(protocol IN ('chat-completions','responses','images')),
   capabilities_json TEXT NOT NULL,
   execution_policy TEXT NOT NULL CHECK(execution_policy='governed')
  );

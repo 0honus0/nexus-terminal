@@ -1,12 +1,21 @@
 <script setup lang="ts">
 	import { computed } from 'vue';
 	import { marked } from 'marked';
-	import DOMPurify from 'dompurify';
+	import createDOMPurify from 'dompurify';
+	const purifier = createDOMPurify(window);
+	purifier.addHook('uponSanitizeAttribute', (node, attribute) => {
+		if (node.nodeName === 'IMG' && attribute.attrName === 'src') {
+			attribute.keepAttr = /^\/api\/v1\/agent\/apps\/[a-f0-9-]{36}\/artifacts\/[a-f0-9-]{36}\/preview$/.test(
+				attribute.attrValue,
+			);
+		}
+	});
 	const props = defineProps<{ text: string }>();
 	const html = computed(() =>
-		DOMPurify.sanitize(marked.parse(props.text, { async: false, breaks: true }), {
+		purifier.sanitize(marked.parse(props.text, { async: false, breaks: true }), {
 			ALLOWED_TAGS: [
 				'p',
+				'img',
 				'br',
 				'strong',
 				'em',
@@ -30,7 +39,7 @@
 				'th',
 				'td',
 			],
-			ALLOWED_ATTR: ['href', 'title', 'start'],
+			ALLOWED_ATTR: ['href', 'title', 'start', 'src', 'alt'],
 		}),
 	);
 </script>

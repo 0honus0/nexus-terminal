@@ -137,6 +137,8 @@ export class ToolModel {
 			| { kind: 'project' }
 			| { kind: 'result' }
 			| { kind: 'memory' }
+			| { kind: 'image_models' }
+			| { kind: 'image_generate' }
 			| { kind: 'artifact' }
 			| { kind: 'checkpoint' }
 			| { kind: 'host_diagnostics' }

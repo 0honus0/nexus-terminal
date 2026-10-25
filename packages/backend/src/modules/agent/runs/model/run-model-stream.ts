@@ -100,7 +100,11 @@ export class RunModelStream {
 		credential: string | null,
 		signal: AbortSignal,
 	): AsyncIterable<RunModelDelta> {
-		if (frozen.executionPolicy !== 'governed') {
+		if (
+			frozen.executionPolicy !== 'governed' ||
+			frozen.protocol === 'images' ||
+			frozen.capabilities.maxOutputTokens === undefined
+		) {
 			throw new AgentFailure('provider_unavailable');
 		}
 		if (signal.aborted) {

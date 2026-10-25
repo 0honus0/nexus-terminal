@@ -47,7 +47,7 @@ function boolean(value: unknown): boolean {
 }
 
 function protocol(value: unknown): AgentProviderProtocol {
-	if (value !== 'chat-completions' && value !== 'responses') {
+	if (value !== 'chat-completions' && value !== 'responses' && value !== 'images') {
 		throw new Error('Corrupt provider protocol');
 	}
 	return value;
@@ -67,6 +67,7 @@ const capabilityKeys = [
 	'maxOutputTokens',
 	'supportsTools',
 	'supportsImageInput',
+	'supportsImageGeneration',
 	'supportsFileInput',
 	'supportsPromptCacheKey',
 	'reasoningEfforts',
@@ -108,6 +109,9 @@ function capabilities(value: unknown): StoredProviderObservation['capabilities']
 		...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
 		...(row.supportsTools === undefined ? {} : { supportsTools: boolean(row.supportsTools) }),
 		...(row.supportsImageInput === undefined ? {} : { supportsImageInput: boolean(row.supportsImageInput) }),
+		...(row.supportsImageGeneration === undefined
+			? {}
+			: { supportsImageGeneration: boolean(row.supportsImageGeneration) }),
 		...(row.supportsFileInput === undefined ? {} : { supportsFileInput: boolean(row.supportsFileInput) }),
 		...(row.supportsPromptCacheKey === undefined
 			? {}
@@ -125,6 +129,7 @@ export function decodeStoredModel(value: unknown): StoredProviderModel {
 		maxOutputTokens: row.maxOutputTokens,
 		supportsTools: row.supportsTools,
 		supportsImageInput: row.supportsImageInput,
+		supportsImageGeneration: row.supportsImageGeneration,
 		supportsFileInput: row.supportsFileInput,
 		supportsPromptCacheKey: row.supportsPromptCacheKey,
 		reasoningEfforts: row.reasoningEfforts,
@@ -134,10 +139,13 @@ export function decodeStoredModel(value: unknown): StoredProviderModel {
 	return {
 		id: text(row.id, AGENT_PROVIDER_MAX_MODEL_ID_BYTES),
 		...(row.protocol === undefined ? {} : { protocol: protocol(row.protocol) }),
-		contextWindow: integer(checked.contextWindow, 1),
-		maxOutputTokens: integer(checked.maxOutputTokens, 1),
+		...(checked.contextWindow === undefined ? {} : { contextWindow: checked.contextWindow }),
+		...(checked.maxOutputTokens === undefined ? {} : { maxOutputTokens: checked.maxOutputTokens }),
 		supportsTools: boolean(checked.supportsTools),
 		...(checked.supportsImageInput === undefined ? {} : { supportsImageInput: checked.supportsImageInput }),
+		...(checked.supportsImageGeneration === undefined
+			? {}
+			: { supportsImageGeneration: checked.supportsImageGeneration }),
 		...(checked.supportsFileInput === undefined ? {} : { supportsFileInput: checked.supportsFileInput }),
 		...(checked.supportsPromptCacheKey === undefined
 			? {}

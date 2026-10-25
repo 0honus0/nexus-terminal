@@ -19,6 +19,9 @@ function fromCatalog(value: CatalogModelCapabilities): RegistryDefaults {
 		maxOutputTokens: value.maxOutputTokens,
 		...(value.supportsTools === undefined ? {} : { supportsTools: value.supportsTools }),
 		...(value.supportsImageInput === undefined ? {} : { supportsImageInput: value.supportsImageInput }),
+		...(value.supportsImageGeneration === undefined
+			? {}
+			: { supportsImageGeneration: value.supportsImageGeneration }),
 		...(value.supportsFileInput === undefined ? {} : { supportsFileInput: value.supportsFileInput }),
 		...(value.reasoningEfforts === undefined ? {} : { reasoningEfforts: [...value.reasoningEfforts] }),
 	};

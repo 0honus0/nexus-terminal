@@ -26,6 +26,7 @@ function checkDefaults(raw: unknown): StoredRegistryDefaults {
 					'maxOutputTokens',
 					'supportsTools',
 					'supportsImageInput',
+					'supportsImageGeneration',
 					'supportsFileInput',
 					'supportsPromptCacheKey',
 					'reasoningEfforts',
@@ -33,15 +34,18 @@ function checkDefaults(raw: unknown): StoredRegistryDefaults {
 					'reasoningMandatory',
 				].includes(key),
 		) ||
-		!positive(row.contextWindow) ||
-		!positive(row.maxOutputTokens) ||
-		row.maxOutputTokens > row.contextWindow ||
+		(row.contextWindow !== undefined && !positive(row.contextWindow)) ||
+		(row.maxOutputTokens !== undefined && !positive(row.maxOutputTokens)) ||
+		(typeof row.contextWindow === 'number' &&
+			typeof row.maxOutputTokens === 'number' &&
+			row.maxOutputTokens > row.contextWindow) ||
 		(row.supportsTools !== undefined && typeof row.supportsTools !== 'boolean')
 	) {
 		throw new Error('Invalid persisted registry capability');
 	}
 	for (const value of [
 		row.supportsImageInput,
+		row.supportsImageGeneration,
 		row.supportsFileInput,
 		row.supportsPromptCacheKey,
 		row.reasoningMandatory,
@@ -84,10 +88,13 @@ function checkDefaults(raw: unknown): StoredRegistryDefaults {
 		throw new Error('Invalid registry reasoning');
 	}
 	return {
-		contextWindow: row.contextWindow,
-		maxOutputTokens: row.maxOutputTokens,
+		...(typeof row.contextWindow === 'number' ? { contextWindow: row.contextWindow } : {}),
+		...(typeof row.maxOutputTokens === 'number' ? { maxOutputTokens: row.maxOutputTokens } : {}),
 		...(row.supportsTools === undefined ? {} : { supportsTools: row.supportsTools }),
 		...(typeof row.supportsImageInput === 'boolean' ? { supportsImageInput: row.supportsImageInput } : {}),
+		...(typeof row.supportsImageGeneration === 'boolean'
+			? { supportsImageGeneration: row.supportsImageGeneration }
+			: {}),
 		...(typeof row.supportsFileInput === 'boolean' ? { supportsFileInput: row.supportsFileInput } : {}),
 		...(typeof row.supportsPromptCacheKey === 'boolean'
 			? { supportsPromptCacheKey: row.supportsPromptCacheKey }
@@ -104,7 +111,7 @@ export function decodeRegistrySnapshot(raw: unknown): StoredRegistrySnapshot {
 	if (
 		!row ||
 		!entries ||
-		row.schemaVersion !== 1 ||
+		row.schemaVersion !== 2 ||
 		row.source !== 'models.dev' ||
 		(row.sourceRevision !== null && typeof row.sourceRevision !== 'string') ||
 		!positive(row.generatedAt) ||
@@ -121,7 +128,7 @@ export function decodeRegistrySnapshot(raw: unknown): StoredRegistrySnapshot {
 		validated[key] = checkDefaults(value);
 	}
 	return {
-		schemaVersion: 1,
+		schemaVersion: 2,
 		source: 'models.dev',
 		sourceRevision: row.sourceRevision,
 		generatedAt: row.generatedAt,

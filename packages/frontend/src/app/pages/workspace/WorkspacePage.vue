@@ -79,7 +79,37 @@
 	};
 
 	const device = useDeviceCapabilities();
+	const viewportRoot = ref<HTMLElement | null>(null);
+	const visibleWorkspaceHeight = ref<number>();
+	let viewportFrame: number | undefined;
+
+	const cancelViewportSync = () => {
+		if (viewportFrame !== undefined) window.cancelAnimationFrame(viewportFrame);
+		viewportFrame = undefined;
+	};
+
+	const scheduleViewportSync = () => {
+		if (!workspaceActive || document.visibilityState !== 'visible' || viewportFrame !== undefined) return;
+		viewportFrame = window.requestAnimationFrame(() => {
+			viewportFrame = undefined;
+			if (!workspaceActive || document.visibilityState !== 'visible') return;
+			const viewport = window.visualViewport;
+			const element = viewportRoot.value;
+			if (!device.supportsTouchInteraction.value || !viewport || !element?.isConnected) {
+				visibleWorkspaceHeight.value = undefined;
+				return;
+			}
+			// 100dvh need not shrink for the software keyboard. Keep the existing layout
+			// inside the visible viewport so ResizeObserver can fit the terminal correctly.
+			const height = viewport.height + viewport.offsetTop - element.getBoundingClientRect().top;
+			if (Number.isFinite(height) && height > 0) visibleWorkspaceHeight.value = Math.floor(height);
+		});
+	};
+
 	const preferences = usePreferences();
+	watch(() => [preferences.values.value.navBarVisible, device.supportsTouchInteraction.value], scheduleViewportSync, {
+		flush: 'post',
+	});
 	const appearance = useAppearance();
 	const appearanceSettings = appearance.settings;
 	const appearanceThemes = appearance.themes;
@@ -951,7 +981,11 @@
 	);
 
 	const handleDocumentVisibilityChange = () => {
-		if (document.visibilityState !== 'visible') return;
+		if (document.visibilityState !== 'visible') {
+			cancelViewportSync();
+			return;
+		}
+		scheduleViewportSync();
 		void recoverForegroundSessions();
 	};
 
@@ -1093,6 +1127,7 @@
 
 	const unregisterSessionReset = registerAuthenticatedSessionReset(`workspace-page-${crypto.randomUUID()}`, () => {
 		workspaceActive = false;
+		cancelViewportSync();
 		revokePageActions();
 	});
 
@@ -1105,6 +1140,9 @@
 		document.addEventListener('visibilitychange', handleDocumentVisibilityChange);
 		window.addEventListener('online', handleBrowserOnline);
 		window.addEventListener('pageshow', handleDocumentVisibilityChange);
+		window.visualViewport?.addEventListener('resize', scheduleViewportSync);
+		window.visualViewport?.addEventListener('scroll', scheduleViewportSync);
+		scheduleViewportSync();
 		stopServerTransferPolling = serverTransfers.startPolling();
 		// The layout is needed before mounting a terminal; the remaining settings can settle while
 		// the provisional session connects. Appearance changes are reactive, including its background.
@@ -1126,6 +1164,7 @@
 	onActivated(async () => {
 		activatePageActions();
 		workspaceVisible.value = true;
+		scheduleViewportSync();
 		if (initialActivation) {
 			initialActivation = false;
 			return;
@@ -1149,6 +1188,7 @@
 	});
 	onDeactivated(() => {
 		workspaceActive = false;
+		cancelViewportSync();
 		revokePageActions();
 		workspaceVisible.value = false;
 		altCycleCandidate = false;
@@ -1162,6 +1202,7 @@
 	});
 	onBeforeUnmount(() => {
 		workspaceActive = false;
+		cancelViewportSync();
 		revokePageActions();
 		unregisterSessionReset();
 		void workspaceLayout.dispose();
@@ -1169,6 +1210,8 @@
 		window.removeEventListener('keyup', handleGlobalKeyup, true);
 		window.removeEventListener('online', handleBrowserOnline);
 		window.removeEventListener('pageshow', handleDocumentVisibilityChange);
+		window.visualViewport?.removeEventListener('resize', scheduleViewportSync);
+		window.visualViewport?.removeEventListener('scroll', scheduleViewportSync);
 		document.removeEventListener('visibilitychange', handleDocumentVisibilityChange);
 		stopServerTransferPolling?.();
 		void statusScaleSaver.dispose({ flush: true });
@@ -1182,6 +1225,8 @@
 
 <template>
 	<main
+		ref="viewportRoot"
+		:style="visibleWorkspaceHeight === undefined ? undefined : { maxHeight: `${visibleWorkspaceHeight}px` }"
 		class="flex min-h-0 flex-col overflow-hidden bg-background"
 		:class="preferences.values.value.navBarVisible ? 'h-[calc(100dvh-var(--app-header-height))]' : 'h-dvh'"
 	>

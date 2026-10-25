@@ -31,7 +31,7 @@ export function validateProviderInput(input: ProviderInput): void {
 		input.kind !== 'openai-compatible' ||
 		!validText(input.displayName, AGENT_PROVIDER_MAX_NAME_BYTES) ||
 		!validText(input.baseUrl, AGENT_PROVIDER_MAX_URL_BYTES) ||
-		!['responses', 'chat-completions'].includes(input.protocol) ||
+		!['responses', 'chat-completions', 'images'].includes(input.protocol) ||
 		typeof input.enabled !== 'boolean' ||
 		!Array.isArray(input.models) ||
 		input.models.length < 1 ||
@@ -51,19 +51,22 @@ export function validateProviderInput(input: ProviderInput): void {
 		if (
 			!validText(model.id, AGENT_PROVIDER_MAX_MODEL_ID_BYTES) ||
 			ids.has(model.id.trim()) ||
-			!Number.isSafeInteger(model.contextWindow) ||
-			model.contextWindow < 1 ||
-			!Number.isSafeInteger(model.maxOutputTokens) ||
-			model.maxOutputTokens < 1 ||
-			model.maxOutputTokens > model.contextWindow ||
+			(model.contextWindow !== undefined &&
+				(!Number.isSafeInteger(model.contextWindow) || model.contextWindow < 1)) ||
+			(model.maxOutputTokens !== undefined &&
+				(!Number.isSafeInteger(model.maxOutputTokens) || model.maxOutputTokens < 1)) ||
+			(model.contextWindow !== undefined &&
+				model.maxOutputTokens !== undefined &&
+				model.maxOutputTokens > model.contextWindow) ||
 			typeof model.supportsTools !== 'boolean' ||
-			(model.protocol !== undefined && !['responses', 'chat-completions'].includes(model.protocol))
+			(model.protocol !== undefined && !['responses', 'chat-completions', 'images'].includes(model.protocol))
 		) {
 			throw new AgentFailure('invalid_input');
 		}
 		ids.add(model.id.trim());
 		for (const value of [
 			model.supportsImageInput,
+			model.supportsImageGeneration,
 			model.supportsFileInput,
 			model.supportsPromptCacheKey,
 			model.reasoningMandatory,
@@ -100,6 +103,9 @@ export function cloneProviderModel(model: ProviderModelInput): ProviderModelInpu
 		maxOutputTokens: model.maxOutputTokens,
 		supportsTools: model.supportsTools,
 		...(model.supportsImageInput === undefined ? {} : { supportsImageInput: model.supportsImageInput }),
+		...(model.supportsImageGeneration === undefined
+			? {}
+			: { supportsImageGeneration: model.supportsImageGeneration }),
 		...(model.supportsFileInput === undefined ? {} : { supportsFileInput: model.supportsFileInput }),
 		...(model.supportsPromptCacheKey === undefined ? {} : { supportsPromptCacheKey: model.supportsPromptCacheKey }),
 		...(model.reasoningEfforts === undefined ? {} : { reasoningEfforts: [...model.reasoningEfforts] }),

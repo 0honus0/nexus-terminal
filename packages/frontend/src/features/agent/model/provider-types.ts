@@ -11,6 +11,7 @@ export interface ProviderCapabilities {
 	maxOutputTokens?: number;
 	supportsTools?: boolean;
 	supportsImageInput?: boolean;
+	supportsImageGeneration?: boolean;
 	supportsFileInput?: boolean;
 	supportsPromptCacheKey?: boolean;
 	reasoningEfforts?: AgentReasoningEffort[];
@@ -21,10 +22,11 @@ export interface ProviderCapabilities {
 export interface ProviderModelDraft {
 	id: string;
 	protocol?: AgentProviderProtocol;
-	contextWindow: number;
-	maxOutputTokens: number;
+	contextWindow?: number;
+	maxOutputTokens?: number;
 	supportsTools: boolean;
 	supportsImageInput?: boolean;
+	supportsImageGeneration?: boolean;
 	supportsFileInput?: boolean;
 	supportsPromptCacheKey?: boolean;
 	reasoningEfforts?: AgentReasoningEffort[];

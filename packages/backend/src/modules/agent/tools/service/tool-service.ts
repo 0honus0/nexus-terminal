@@ -1,3 +1,5 @@
+import type { ProviderService } from '../../providers/service/provider-service.js';
+import type { ProviderImageService } from '../../providers/service/provider-image-service.js';
 import type { PluginService } from '../../plugins/service/plugin-service.js';
 import type { BrowserService } from '../../integrations/service/browser-service.js';
 import type { IntegrationService } from '../../integrations/service/integration-service.js';
@@ -46,7 +48,16 @@ function inspectionSummary(input: ToolInput, trusted: ToolDefinition): string {
 	const hash = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
 
 	let summary: string;
-	if (input.kind === 'acp') {
+	if (input.kind === 'image_generate') {
+		summary = JSON.stringify({
+			action: 'image_generate',
+			providerId: input.input.providerId,
+			configurationVersion: input.input.configurationVersion,
+			modelId: input.input.modelId,
+			promptBytes: Buffer.byteLength(input.input.prompt),
+			promptSha256: hash(input.input.prompt),
+		});
+	} else if (input.kind === 'acp') {
 		summary = JSON.stringify({
 			action: 'acp_execute',
 			cwd: input.cwd,
@@ -143,6 +154,8 @@ export class ToolService {
 		private readonly integrations: IntegrationService,
 		private readonly browser: BrowserService,
 		private readonly plugins: PluginService,
+		private readonly providers: ProviderService,
+		private readonly images: ProviderImageService,
 	) {}
 
 	validate(proposal: RunToolProposal): void {
@@ -166,6 +179,8 @@ export class ToolService {
 		await validateIntegration();
 		interrupted(signal);
 		const target =
+			input.kind === 'image_models' ||
+			input.kind === 'image_generate' ||
 			input.kind === 'skill' ||
 			input.kind === 'browser' ||
 			input.kind === 'mcp' ||
@@ -361,6 +376,33 @@ export class ToolService {
 		};
 
 		await validate();
+		if (input.kind === 'image_models') {
+			const models = await this.providers.imageModels(operation.userId);
+			await validate();
+			return {
+				text: JSON.stringify({
+					models: models.slice(input.offset, input.offset + 20),
+					nextOffset: input.offset + 20 < models.length ? input.offset + 20 : null,
+				}),
+				targets: [],
+			};
+		}
+		if (input.kind === 'image_generate') {
+			const result = await this.images.generate(
+				{
+					kind: 'tool',
+					userId: operation.userId,
+					appId: operation.appId,
+					runId: operation.runId,
+					operationId: operation.id,
+					operationHash: operation.operationHash,
+				},
+				input.input,
+				signal,
+				validate,
+			);
+			return { text: JSON.stringify(result), targets: [] };
+		}
 		if (input.kind === 'skill') {
 			const text = await this.plugins.performSkill(
 				{ userId: operation.userId, appId: operation.appId },

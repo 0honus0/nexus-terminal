@@ -24,6 +24,49 @@ const path = (maxBytes = 4096): ToolInputField => ({
 /** Definitions and risk are server-owned; each caller receives an independent declaration. */
 export function toolDefinitions(): ToolDefinition[] {
 	return [
+		{
+			name: 'image_models_list',
+			version: '1.0.0',
+			capability: 'context.read',
+			risk: 'read',
+			mutation: false,
+			description:
+				'List enabled, explicitly configured image-generation models. Use the returned providerId, configurationVersion and modelId for image_generate; never guess IDs. Follow nextOffset until null to read later pages.',
+			input: {
+				fields: [
+					{
+						name: 'offset',
+						kind: 'integer',
+						required: false,
+						minimum: 0,
+						maximum: Number.MAX_SAFE_INTEGER - 20,
+					},
+				],
+			},
+		},
+		{
+			name: 'image_generate',
+			version: '1.0.0',
+			capability: 'artifacts.write',
+			risk: 'mutate',
+			mutation: true,
+			description:
+				'Generate one image from a text prompt using a configured Images model. This is a paid external request and creates an App-owned file. Independent approval required. Use image_models_list first. Return the preview using Markdown ![description](previewUrl) and a download link. Never retry unknown outcomes.',
+			input: {
+				fields: [
+					{ name: 'providerId', kind: 'text', required: true, allowEmpty: false, maxBytes: 36 },
+					{
+						name: 'configurationVersion',
+						kind: 'integer',
+						required: true,
+						minimum: 1,
+						maximum: Number.MAX_SAFE_INTEGER,
+					},
+					{ name: 'modelId', kind: 'text', required: true, allowEmpty: false, maxBytes: 512 },
+					{ name: 'prompt', kind: 'text', required: true, allowEmpty: false, maxBytes: 16000 },
+				],
+			},
+		},
 		...mcpTools(),
 		{
 			name: 'skill_search',

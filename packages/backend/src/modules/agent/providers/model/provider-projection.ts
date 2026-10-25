@@ -9,6 +9,9 @@ export function fromStoredModel(value: StoredProviderModel): ProviderModelInput 
 		supportsTools: value.supportsTools,
 		...(value.protocol === undefined ? {} : { protocol: value.protocol }),
 		...(value.supportsImageInput === undefined ? {} : { supportsImageInput: value.supportsImageInput }),
+		...(value.supportsImageGeneration === undefined
+			? {}
+			: { supportsImageGeneration: value.supportsImageGeneration }),
 		...(value.supportsFileInput === undefined ? {} : { supportsFileInput: value.supportsFileInput }),
 		...(value.supportsPromptCacheKey === undefined ? {} : { supportsPromptCacheKey: value.supportsPromptCacheKey }),
 		...(value.reasoningEfforts === undefined ? {} : { reasoningEfforts: [...value.reasoningEfforts] }),
@@ -25,6 +28,9 @@ export function toStoredModel(value: ProviderModelInput): StoredProviderModel {
 		supportsTools: value.supportsTools,
 		...(value.protocol === undefined ? {} : { protocol: value.protocol }),
 		...(value.supportsImageInput === undefined ? {} : { supportsImageInput: value.supportsImageInput }),
+		...(value.supportsImageGeneration === undefined
+			? {}
+			: { supportsImageGeneration: value.supportsImageGeneration }),
 		...(value.supportsFileInput === undefined ? {} : { supportsFileInput: value.supportsFileInput }),
 		...(value.supportsPromptCacheKey === undefined ? {} : { supportsPromptCacheKey: value.supportsPromptCacheKey }),
 		...(value.reasoningEfforts === undefined ? {} : { reasoningEfforts: [...value.reasoningEfforts] }),
@@ -45,6 +51,7 @@ function fromStoredObservation(value: StoredProviderObservation): ProviderObserv
 			...(c.maxOutputTokens === undefined ? {} : { maxOutputTokens: c.maxOutputTokens }),
 			...(c.supportsTools === undefined ? {} : { supportsTools: c.supportsTools }),
 			...(c.supportsImageInput === undefined ? {} : { supportsImageInput: c.supportsImageInput }),
+			...(c.supportsImageGeneration === undefined ? {} : { supportsImageGeneration: c.supportsImageGeneration }),
 			...(c.supportsFileInput === undefined ? {} : { supportsFileInput: c.supportsFileInput }),
 			...(c.supportsPromptCacheKey === undefined ? {} : { supportsPromptCacheKey: c.supportsPromptCacheKey }),
 			...(c.reasoningEfforts === undefined ? {} : { reasoningEfforts: [...c.reasoningEfforts] }),
@@ -84,6 +91,7 @@ export function toStoredObservation(value: ProviderObservation): StoredProviderO
 			...(c.maxOutputTokens === undefined ? {} : { maxOutputTokens: c.maxOutputTokens }),
 			...(c.supportsTools === undefined ? {} : { supportsTools: c.supportsTools }),
 			...(c.supportsImageInput === undefined ? {} : { supportsImageInput: c.supportsImageInput }),
+			...(c.supportsImageGeneration === undefined ? {} : { supportsImageGeneration: c.supportsImageGeneration }),
 			...(c.supportsFileInput === undefined ? {} : { supportsFileInput: c.supportsFileInput }),
 			...(c.supportsPromptCacheKey === undefined ? {} : { supportsPromptCacheKey: c.supportsPromptCacheKey }),
 			...(c.reasoningEfforts === undefined ? {} : { reasoningEfforts: [...c.reasoningEfforts] }),

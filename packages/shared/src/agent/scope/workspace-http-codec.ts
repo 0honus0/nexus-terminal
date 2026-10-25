@@ -291,7 +291,9 @@ export function readAgentWorkspaceResult(input: unknown, request: AgentWorkspace
 						'protocol',
 					]);
 					const protocol =
-						p.protocol === 'chat-completions' || p.protocol === 'responses' ? p.protocol : null;
+						p.protocol === 'chat-completions' || p.protocol === 'responses' || p.protocol === 'images'
+							? p.protocol
+							: null;
 					if (!protocol) {
 						throw new InvalidAgentPayload();
 					}

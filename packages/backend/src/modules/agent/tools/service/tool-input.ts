@@ -82,6 +82,27 @@ export function toolInput(definition: ToolDefinition, argumentsJson: string): To
 			text(value[field.name], field.maxBytes, field.allowEmpty);
 		}
 	}
+	if (definition.name === 'image_models_list') {
+		return {
+			kind: 'image_models',
+			offset: value.offset === undefined ? 0 : integer(value.offset, 0, Number.MAX_SAFE_INTEGER - 20),
+		};
+	}
+	if (definition.name === 'image_generate') {
+		const providerId = text(value.providerId, 36);
+		if (!AGENT_ID_PATTERN.test(providerId)) {
+			throw new AgentFailure('invalid_input');
+		}
+		return {
+			kind: 'image_generate',
+			input: {
+				providerId,
+				configurationVersion: integer(value.configurationVersion, 1, Number.MAX_SAFE_INTEGER),
+				modelId: text(value.modelId, 512),
+				prompt: text(value.prompt, 16000),
+			},
+		};
+	}
 	if (definition.name === 'skill_search') {
 		const query = text(value.query, 512).trim();
 		if (!query) {

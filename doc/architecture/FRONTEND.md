@@ -633,3 +633,15 @@ Terminal background由useTerminalBackground持有文档生命周期：同页会�
 ### Agent 模型自动补齐
 
 Provider管理composable沿原认证scope与generation，添加发现模型、批量添加或提交ID变更后读取Registry；每批最多4个并发读取，按完整草稿/模型/ID/字段快照核对晚结果。有效参数和已配置工具值保留，显式应用目录才替换；工具/图片/文件/缓存键及完整推理能力经Shared decoder与独立mapper进入草稿。ProviderModelEditor仅持手机折叠状态与ID change意图，必填参数错误展开；复用全局按钮和反馈，无新通信/存储owner，失败不伪装未匹配。模型库不可用、更新失败或匹配缺失由原composable统一Toast提醒更新，去除页面重复通知监听。完整边界和能力规则见Backend模型目录章节，交互待远程验收。
+
+## 图片模型配置与对话呈现
+
+ProviderModelEditor 按明确 Images 协议隐藏文本预算/推理参数；ModelProviderSettings 在原供应商编辑器内分对话/图片两组，保留原模型索引供校验、编辑与删除，分组由 computed 投影。自动目录匹配支持图片输出声明，用户仍可覆盖实际网关协议。预算空值映射为缺省，非法数值保留无效状态阻止保存。沿用全局组件及样式，不扩展其它设置布局。
+
+直接图片 Run 沿原模型选择器与运行状态消费；文字 Agent 可经独立批准的 image_generate 生成。AgentMessageBody 使用组件内 DOMPurify 实例，只允许 img src 指向本站认证 Artifact preview 路由，不接收任意远程、data、srcset 或事件属性；下载仍走原 content。预览与文件保留期限一致，不保证历史消息永久有图。完整浏览器、真实治理批准及两入口回归与静态证据分开记录于 testing。
+
+## 手机终端后台及软键盘恢复
+
+TerminalView拥有临时touch/inputmode状态；textarea只读资格从当前inputEnabled派生，不保存/恢复旧只读事实。xterm的disableStdin变更会写readOnly，因此观察器同时保留尚未结束的触摸抑制；手势结束或显式聚焦时还原inputmode并按最新资格恢复只读。隐藏/pagehide清理手势、焦点及尺寸RAF/timer，可见/pageshow/连接就绪flush原输出并重新fit/refresh，不重建PTY或清空终端。短触可请求原重连，移动/多指/取消不作为重连或聚焦动作；普通parser回复仍沿原onData处理，不因后台输出查询而被丢弃。
+
+WorkspacePage在触控环境用VisualViewport的resize/scroll，按可视底边减工作区真实顶边限定原main的maxHeight；保持原100dvh、布局、控件与CSS，软键盘收起后恢复可用高度。RAF合并度量，隐藏/失活/卸载取消，终端沿原ResizeObserver和100ms防抖重排；桌面和无VisualViewport环境保持原尺寸。所有新增监听由原组件卸载清理，不自动聚焦或注入远端输入。Android真机与浏览器缓存恢复待远程验证。

@@ -37,6 +37,9 @@ function appModel(model: AgentProviderModelInput): ProviderModelInput {
 		maxOutputTokens: model.maxOutputTokens,
 		supportsTools: model.supportsTools,
 		...(model.supportsImageInput === undefined ? {} : { supportsImageInput: model.supportsImageInput }),
+		...(model.supportsImageGeneration === undefined
+			? {}
+			: { supportsImageGeneration: model.supportsImageGeneration }),
 		...(model.supportsFileInput === undefined ? {} : { supportsFileInput: model.supportsFileInput }),
 		...(model.supportsPromptCacheKey === undefined ? {} : { supportsPromptCacheKey: model.supportsPromptCacheKey }),
 		...(model.reasoningEfforts === undefined ? {} : { reasoningEfforts: [...model.reasoningEfforts] }),
@@ -68,6 +71,9 @@ function wireCapabilities(
 		...(capabilities.supportsImageInput === undefined
 			? {}
 			: { supportsImageInput: capabilities.supportsImageInput }),
+		...(capabilities.supportsImageGeneration === undefined
+			? {}
+			: { supportsImageGeneration: capabilities.supportsImageGeneration }),
 		...(capabilities.supportsFileInput === undefined ? {} : { supportsFileInput: capabilities.supportsFileInput }),
 		...(capabilities.supportsPromptCacheKey === undefined
 			? {}
@@ -92,6 +98,9 @@ function wireModel(model: ProviderModelView): AgentProviderModelView {
 		maxOutputTokens: model.maxOutputTokens,
 		supportsTools: model.supportsTools,
 		...(model.supportsImageInput === undefined ? {} : { supportsImageInput: model.supportsImageInput }),
+		...(model.supportsImageGeneration === undefined
+			? {}
+			: { supportsImageGeneration: model.supportsImageGeneration }),
 		...(model.supportsFileInput === undefined ? {} : { supportsFileInput: model.supportsFileInput }),
 		...(model.supportsPromptCacheKey === undefined ? {} : { supportsPromptCacheKey: model.supportsPromptCacheKey }),
 		...(model.reasoningEfforts === undefined ? {} : { reasoningEfforts: [...model.reasoningEfforts] }),
@@ -110,6 +119,9 @@ function wireModel(model: ProviderModelView): AgentProviderModelView {
 			...(model.capabilitySources.supportsImageInput === undefined
 				? {}
 				: { supportsImageInput: model.capabilitySources.supportsImageInput }),
+			...(model.capabilitySources.supportsImageGeneration === undefined
+				? {}
+				: { supportsImageGeneration: model.capabilitySources.supportsImageGeneration }),
 			...(model.capabilitySources.supportsFileInput === undefined
 				? {}
 				: { supportsFileInput: model.capabilitySources.supportsFileInput }),
@@ -205,6 +217,9 @@ function wireRegistryDefaults(value: RegistryDefaults): AgentRegistryDefaults {
 		maxOutputTokens: value.maxOutputTokens,
 		...(value.supportsTools === undefined ? {} : { supportsTools: value.supportsTools }),
 		...(value.supportsImageInput === undefined ? {} : { supportsImageInput: value.supportsImageInput }),
+		...(value.supportsImageGeneration === undefined
+			? {}
+			: { supportsImageGeneration: value.supportsImageGeneration }),
 		...(value.supportsFileInput === undefined ? {} : { supportsFileInput: value.supportsFileInput }),
 		...(value.supportsPromptCacheKey === undefined ? {} : { supportsPromptCacheKey: value.supportsPromptCacheKey }),
 		...(value.reasoningEfforts === undefined ? {} : { reasoningEfforts: [...value.reasoningEfforts] }),

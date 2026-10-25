@@ -1,3 +1,4 @@
+import type { ProviderImageRequest, ProviderImageResult } from '../model/provider-types.js';
 import { resolveFrozenModel } from '../provider-capability-rules.js';
 import { AGENT_PROVIDER_MAX_URL_BYTES } from '@nexus-terminal/shared/agent/providers/values';
 import { randomUUID } from 'node:crypto';
@@ -28,7 +29,11 @@ function endpoint(base: string): string {
 	return url.toString().replace(/\/$/, '');
 }
 
-async function deadline<T>(task: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T> {
+async function deadline<T>(
+	task: (signal: AbortSignal) => Promise<T>,
+	signal?: AbortSignal,
+	timeoutMs = 10000,
+): Promise<T> {
 	const controller = new AbortController();
 
 	const onAbort = () => controller.abort();
@@ -38,7 +43,7 @@ async function deadline<T>(task: (signal: AbortSignal) => Promise<T>, signal?: A
 	} else {
 		signal?.addEventListener('abort', onAbort, { once: true });
 	}
-	const timeout = setTimeout(() => controller.abort(), 10000);
+	const timeout = setTimeout(() => controller.abort(), timeoutMs);
 	try {
 		if (controller.signal.aborted) {
 			throw new AgentFailure('provider_request_failed');
@@ -140,6 +145,7 @@ export class ProviderService {
 		id: string,
 		outer: AbortSignal | undefined,
 		action: (signal: AbortSignal) => Promise<T>,
+		timeoutMs = 10000,
 	): Promise<T> {
 		if (this.closing || this.requestFailures.length) {
 			throw new AgentFailure('provider_unavailable');
@@ -157,7 +163,7 @@ export class ProviderService {
 		const running = this.active.get(key) ?? new Set<AbortController>();
 		running.add(controller);
 		this.active.set(key, running);
-		const pending = Promise.resolve().then(() => deadline(action, controller.signal));
+		const pending = Promise.resolve().then(() => deadline(action, controller.signal, timeoutMs));
 		this.pendingRequests.add(pending);
 		try {
 			return await pending;
@@ -337,6 +343,75 @@ export class ProviderService {
 		});
 	}
 
+	async imageModels(
+		userId: number,
+	): Promise<Array<{ providerId: string; configurationVersion: number; modelId: string }>> {
+		validateUserId(userId);
+		return (await this.model.list(userId))
+			.filter((provider) => provider.enabled)
+			.flatMap((provider) =>
+				provider.models
+					.filter((model) => (model.protocol ?? provider.protocol) === 'images')
+					.map((model) => ({
+						providerId: provider.id,
+						configurationVersion: provider.version,
+						modelId: model.id,
+					})),
+			);
+	}
+
+	async generateImage(
+		userId: number,
+		input: ProviderImageRequest,
+		signal: AbortSignal,
+		validate: () => Promise<void>,
+	): Promise<ProviderImageResult> {
+		validateUserId(userId);
+		validateAgentId(input.providerId);
+		if (
+			!input.prompt.trim() ||
+			Buffer.byteLength(input.prompt, 'utf8') > 16000 ||
+			!Number.isSafeInteger(input.configurationVersion) ||
+			input.configurationVersion < 1 ||
+			!input.modelId.trim() ||
+			Buffer.byteLength(input.modelId, 'utf8') > 512
+		) {
+			throw new AgentFailure('invalid_input');
+		}
+		const provider = await this.model.get(userId, input.providerId);
+		if (
+			!provider?.enabled ||
+			provider.version !== input.configurationVersion ||
+			!provider.models.some(
+				(model) => model.id === input.modelId && (model.protocol ?? provider.protocol) === 'images',
+			)
+		) {
+			throw new AgentFailure('provider_unavailable');
+		}
+		return this.withProviderRequest(
+			userId,
+			provider.id,
+			signal,
+			async (currentSignal) => {
+				try {
+					await validate();
+					await this.model.guardCurrent(provider);
+					if (currentSignal.aborted) {
+						throw new AgentFailure('provider_request_failed');
+					}
+					const result = await this.model.generateImage(provider, input, currentSignal);
+					await this.model.guardCurrent(provider);
+					await validate();
+					return result;
+				} catch (error) {
+					await this.guardFailedRequest(provider, error);
+					throw error;
+				}
+			},
+			300000,
+		);
+	}
+
 	async test(userId: number, id: string, modelId: string, signal?: AbortSignal): Promise<ProviderTestResult> {
 		validateUserId(userId);
 		validateAgentId(id);
@@ -351,47 +426,54 @@ export class ProviderService {
 		if (!selected) {
 			throw new AgentFailure('model_not_found');
 		}
+		const maxOutputTokens = selected.maxOutputTokens ?? 16;
 		const start = Date.now();
-		return this.withProviderRequest(userId, id, signal, async (s) => {
-			try {
-				const credential = await this.model.credential(provider);
-				await this.model.guardCurrent(provider);
-				if (s.aborted) {
-					throw new AgentFailure('provider_configuration_stale');
+		return this.withProviderRequest(
+			userId,
+			id,
+			signal,
+			async (s) => {
+				try {
+					const credential = await this.model.credential(provider);
+					await this.model.guardCurrent(provider);
+					if (s.aborted) {
+						throw new AgentFailure('provider_configuration_stale');
+					}
+					const result = await this.model.probe(
+						{
+							baseUrl: provider.baseUrl,
+							protocol: selected.protocol ?? provider.protocol,
+							modelId: selected.id,
+							credential,
+							maxOutputTokens,
+							usesReasoning: Boolean(selected.reasoningEfforts?.length),
+							...(selected.defaultReasoningEffort === undefined
+								? {}
+								: { reasoningEffort: selected.defaultReasoningEffort }),
+						},
+						s,
+					);
+					await this.model.guardCurrent(provider);
+					if (s.aborted) {
+						throw new AgentFailure('provider_configuration_stale');
+					}
+					return {
+						ok: true,
+						latencyMs: Date.now() - start,
+						...(result.usage === undefined ? {} : { usage: result.usage }),
+					};
+				} catch (error) {
+					await this.guardFailedRequest(provider, error);
+					if (s.aborted) {
+						throw new AgentFailure('provider_configuration_stale');
+					}
+					if (!(error instanceof ProviderRequestFailure)) {
+						throw error;
+					}
+					return { ok: false, latencyMs: Date.now() - start, errorCode: error.errorCode };
 				}
-				const result = await this.model.probe(
-					{
-						baseUrl: provider.baseUrl,
-						protocol: selected.protocol ?? provider.protocol,
-						modelId: selected.id,
-						credential,
-						maxOutputTokens: selected.maxOutputTokens,
-						usesReasoning: Boolean(selected.reasoningEfforts?.length),
-						...(selected.defaultReasoningEffort === undefined
-							? {}
-							: { reasoningEffort: selected.defaultReasoningEffort }),
-					},
-					s,
-				);
-				await this.model.guardCurrent(provider);
-				if (s.aborted) {
-					throw new AgentFailure('provider_configuration_stale');
-				}
-				return {
-					ok: true,
-					latencyMs: Date.now() - start,
-					...(result.usage === undefined ? {} : { usage: result.usage }),
-				};
-			} catch (error) {
-				await this.guardFailedRequest(provider, error);
-				if (s.aborted) {
-					throw new AgentFailure('provider_configuration_stale');
-				}
-				if (!(error instanceof ProviderRequestFailure)) {
-					throw error;
-				}
-				return { ok: false, latencyMs: Date.now() - start, errorCode: error.errorCode };
-			}
-		});
+			},
+			(selected.protocol ?? provider.protocol) === 'images' ? 300000 : 10000,
+		);
 	}
 }

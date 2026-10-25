@@ -128,6 +128,28 @@ export class SqliteArtifactStorage implements ArtifactStorage {
 		if (appId === null) {
 			return null;
 		}
+		if (auth.kind === 'model') {
+			const row = await tx.one(
+				`SELECT s.state FROM agent_run_model_steps s
+			JOIN agent_runs r ON r.id=s.run_id
+			JOIN agent_run_frozen_inputs f ON f.run_id=r.id
+			JOIN agent_providers p ON p.id=f.provider_id AND p.user_id=r.user_id
+			WHERE r.id=? AND r.user_id=? AND r.app_id=? AND s.step_index=? AND s.request_hash=?
+			AND s.state='dispatched' AND f.protocol='images' AND p.enabled=1 AND p.deleted_at IS NULL
+			AND p.version=f.provider_version AND p.credential_revision=f.credential_revision`,
+				[auth.runId, userId, appId, auth.stepIndex, auth.requestHash],
+			);
+			return row &&
+				(await currentParticipant(
+					tx,
+					{ userId, appId, runId: auth.runId },
+					Date.now,
+					undefined,
+					auth.stepIndex,
+				))
+				? userId
+				: null;
+		}
 		const operation = await toolOperation(tx, userId, appId, auth.runId, auth.operationId);
 		const current =
 			operation !== null &&

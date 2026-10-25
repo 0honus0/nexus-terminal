@@ -1,3 +1,7 @@
+import type { ContextLimits } from '../../context/model/context-types.js';
+import type { ToolDefinition } from '../../tools/model/tool-types.js';
+import type { ProviderImageService } from '../../providers/service/provider-image-service.js';
+import { CONTEXT_MAX_BYTES } from '../../context/context-limits.js';
 import type { Logger } from '../../../../platform/logging/logger.js';
 import { logDiagnostic, withDiagnosticContext } from '../../../../platform/logging/diagnostic-log.js';
 import type { OperationsEvents } from '../../../operations/public.js';
@@ -93,6 +97,7 @@ export class RunExecutionOwner {
 		private readonly checkpoints: CheckpointService,
 		private readonly settings: ExecutionService,
 		private readonly events: OperationsEvents,
+		private readonly images: ProviderImageService,
 		private readonly logger?: Logger,
 	) {}
 
@@ -458,7 +463,7 @@ export class RunExecutionOwner {
 					appId: command.appId,
 					runId: command.runId,
 					expectedVersion: command.version,
-					includeThread: participant.parentId === null,
+					includeThread: frozen.protocol !== 'images' && participant.parentId === null,
 				},
 				command.prompt,
 			);
@@ -547,6 +552,73 @@ export class RunExecutionOwner {
 		}
 	}
 
+	private async *imageEvents(
+		command: RunExecutionCommand,
+		frozen: RunFrozenInput,
+		step: RunModelStep,
+		signal: AbortSignal,
+	): AsyncIterable<RunModelDelta> {
+		const validate = async () => {
+			const current = await this.steps.get(command.userId, command.appId, command.runId, step.stepIndex);
+			if (
+				signal.aborted ||
+				current?.state !== 'dispatched' ||
+				current.revision !== step.revision ||
+				current.requestHash !== step.requestHash
+			) {
+				throw new AgentFailure('version_conflict');
+			}
+		};
+
+		const result = await this.images.generate(
+			{
+				kind: 'model',
+				userId: command.userId,
+				appId: command.appId,
+				runId: command.runId,
+				stepIndex: step.stepIndex,
+				requestHash: step.requestHash,
+			},
+			{
+				providerId: frozen.providerId,
+				configurationVersion: frozen.providerVersion,
+				modelId: frozen.modelId,
+				prompt: command.prompt,
+			},
+			signal,
+			validate,
+		);
+		yield {
+			kind: 'text',
+			content: '![Generated image](' + result.previewUrl + ')\n\n[Download image](' + result.downloadUrl + ')',
+		};
+		yield { kind: 'finished', finishReason: 'stop' };
+	}
+
+	private async contextLimits(
+		command: RunExecutionCommand,
+		frozen: RunFrozenInput,
+		definitions: ToolDefinition[],
+	): Promise<ContextLimits> {
+		if (frozen.protocol === 'images') {
+			return { contextWindow: CONTEXT_MAX_BYTES + 8192, reservedOutputTokens: 1 };
+		}
+		const contextWindow = frozen.capabilities.contextWindow;
+		const maxOutputTokens = frozen.capabilities.maxOutputTokens;
+		if (contextWindow === undefined || maxOutputTokens === undefined) {
+			throw new AgentFailure('provider_unavailable');
+		}
+		return {
+			contextWindow: contextWindowForProfile(
+				(await this.settings.frozen(command.userId, command.appId, command.runId)).contextProfile,
+				contextWindow,
+				maxOutputTokens,
+				definitions,
+			),
+			reservedOutputTokens: maxOutputTokens,
+		};
+	}
+
 	private async executeStep(
 		command: RunExecutionCommand,
 		frozen: RunFrozenInput,
@@ -563,19 +635,16 @@ export class RunExecutionOwner {
 			appId: command.appId,
 			runId: command.runId,
 		});
-		const definitions = frozen.capabilities.supportsTools ? this.collaboration.definitions(participant) : [];
-		// Reject a complete over-budget request before journaling dispatch intent.
-		const snapshot = context.snapshot(definitions, {
-			contextWindow: contextWindowForProfile(
-				(await this.settings.frozen(command.userId, command.appId, command.runId)).contextProfile,
-				frozen.capabilities.contextWindow,
-				frozen.capabilities.maxOutputTokens,
-				definitions,
-			),
-			reservedOutputTokens: frozen.capabilities.maxOutputTokens,
-		});
+		const isImage = frozen.protocol === 'images';
+		if (isImage && Buffer.byteLength(command.prompt, 'utf8') > 16000) {
+			throw new AgentFailure('invalid_input');
+		}
+		const definitions =
+			!isImage && frozen.capabilities.supportsTools ? this.collaboration.definitions(participant) : [];
+		const limits = await this.contextLimits(command, frozen, definitions);
+		const snapshot = context.snapshot(definitions, limits);
 		const messages = snapshot.messages;
-		const estimatedTokens = estimateContextTokens(messages, definitions) + frozen.capabilities.maxOutputTokens;
+		const estimatedTokens = estimateContextTokens(messages, definitions) + limits.reservedOutputTokens;
 		if (signal.aborted) {
 			return null;
 		}
@@ -670,7 +739,10 @@ export class RunExecutionOwner {
 				throw new AgentFailure('provider_unavailable');
 			}
 			logDiagnostic(this.logger, 'debug', 'AGENT_MODEL_STREAM_STARTED', { runId: command.runId, stepIndex });
-			for await (const event of this.stream.stream(frozen, messages, definitions, credential, signal)) {
+			const events = isImage
+				? this.imageEvents(command, frozen, current, signal)
+				: this.stream.stream(frozen, messages, definitions, credential, signal);
+			for await (const event of events) {
 				// Also fence configuration changes made by a different server process.
 				await this.providers.guardCurrent(provider);
 				if (signal.aborted) {

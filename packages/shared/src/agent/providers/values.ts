@@ -16,13 +16,14 @@ export const AGENT_REASONING_EFFORTS = ['none', 'minimal', 'low', 'medium', 'hig
 
 export type AgentReasoningEffort = (typeof AGENT_REASONING_EFFORTS)[number];
 
-export type AgentProviderProtocol = 'chat-completions' | 'responses';
+export type AgentProviderProtocol = 'chat-completions' | 'responses' | 'images';
 
 export const AGENT_MODEL_CAPABILITY_FIELDS = [
 	'contextWindow',
 	'maxOutputTokens',
 	'supportsTools',
 	'supportsImageInput',
+	'supportsImageGeneration',
 	'supportsFileInput',
 	'supportsPromptCacheKey',
 	'reasoningEfforts',

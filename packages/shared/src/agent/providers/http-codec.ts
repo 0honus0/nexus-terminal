@@ -63,7 +63,7 @@ function agentRecord(
 }
 
 function protocol(value: unknown): AgentProviderProtocol {
-	if (value !== 'responses' && value !== 'chat-completions') {
+	if (value !== 'responses' && value !== 'chat-completions' && value !== 'images') {
 		throw new InvalidAgentPayload();
 	}
 	return value;
@@ -102,6 +102,7 @@ function model(value: unknown): AgentProviderModelInput {
 			'maxOutputTokens',
 			'supportsTools',
 			'supportsImageInput',
+			'supportsImageGeneration',
 			'supportsFileInput',
 			'supportsPromptCacheKey',
 			'reasoningEfforts',
@@ -110,8 +111,9 @@ function model(value: unknown): AgentProviderModelInput {
 		],
 		AGENT_PROVIDER_MAX_BODY_BYTES,
 	);
-	const contextWindow = agentInteger(r.contextWindow, 1);
-	const maxOutputTokens = agentInteger(r.maxOutputTokens, 1, contextWindow);
+	const contextWindow = r.contextWindow === undefined ? undefined : agentInteger(r.contextWindow, 1);
+	const maxOutputTokens =
+		r.maxOutputTokens === undefined ? undefined : agentInteger(r.maxOutputTokens, 1, contextWindow);
 	const efforts =
 		r.reasoningEfforts === undefined
 			? undefined
@@ -149,6 +151,9 @@ function model(value: unknown): AgentProviderModelInput {
 		maxOutputTokens,
 		supportsTools: boolean(r.supportsTools),
 		...(r.supportsImageInput === undefined ? {} : { supportsImageInput: boolean(r.supportsImageInput) }),
+		...(r.supportsImageGeneration === undefined
+			? {}
+			: { supportsImageGeneration: boolean(r.supportsImageGeneration) }),
 		...(r.supportsFileInput === undefined ? {} : { supportsFileInput: boolean(r.supportsFileInput) }),
 		...(r.supportsPromptCacheKey === undefined
 			? {}
@@ -313,6 +318,7 @@ export function readAgentProviderView(v: unknown): AgentProviderView {
 			'maxOutputTokens',
 			'supportsTools',
 			'supportsImageInput',
+			'supportsImageGeneration',
 			'supportsFileInput',
 			'supportsPromptCacheKey',
 			'reasoningEfforts',
@@ -329,6 +335,7 @@ export function readAgentProviderView(v: unknown): AgentProviderView {
 			maxOutputTokens: row.maxOutputTokens,
 			supportsTools: row.supportsTools,
 			supportsImageInput: row.supportsImageInput,
+			supportsImageGeneration: row.supportsImageGeneration,
 			supportsFileInput: row.supportsFileInput,
 			supportsPromptCacheKey: row.supportsPromptCacheKey,
 			reasoningEfforts: row.reasoningEfforts,
@@ -377,6 +384,7 @@ export function readAgentProviderView(v: unknown): AgentProviderView {
 						'maxOutputTokens',
 						'supportsTools',
 						'supportsImageInput',
+						'supportsImageGeneration',
 						'supportsFileInput',
 						'supportsPromptCacheKey',
 						'reasoningEfforts',
@@ -409,6 +417,9 @@ export function readAgentProviderView(v: unknown): AgentProviderView {
 				maxOutputTokens: m.maxOutputTokens,
 				supportsTools: m.supportsTools,
 				...(m.supportsImageInput === undefined ? {} : { supportsImageInput: m.supportsImageInput }),
+				...(m.supportsImageGeneration === undefined
+					? {}
+					: { supportsImageGeneration: m.supportsImageGeneration }),
 				...(m.supportsFileInput === undefined ? {} : { supportsFileInput: m.supportsFileInput }),
 				...(m.supportsPromptCacheKey === undefined ? {} : { supportsPromptCacheKey: m.supportsPromptCacheKey }),
 				...(m.reasoningEfforts === undefined ? {} : { reasoningEfforts: m.reasoningEfforts }),
@@ -469,6 +480,7 @@ export function readAgentDiscoveredModels(v: unknown): AgentDiscoveredModel[] {
 				'maxOutputTokens',
 				'supportsTools',
 				'supportsImageInput',
+				'supportsImageGeneration',
 				'supportsFileInput',
 				'supportsPromptCacheKey',
 				'reasoningEfforts',
@@ -491,6 +503,7 @@ export function readAgentDiscoveredModels(v: unknown): AgentDiscoveredModel[] {
 			for (const k of [
 				'supportsTools',
 				'supportsImageInput',
+				'supportsImageGeneration',
 				'supportsFileInput',
 				'supportsPromptCacheKey',
 				'reasoningMandatory',
@@ -657,13 +670,14 @@ function registryDefaults(value: unknown): AgentRegistryDefaults {
 		'maxOutputTokens',
 		'supportsTools',
 		'supportsImageInput',
+		'supportsImageGeneration',
 		'supportsFileInput',
 		'supportsPromptCacheKey',
 		'reasoningEfforts',
 		'defaultReasoningEffort',
 		'reasoningMandatory',
 	]);
-	const contextWindow = agentInteger(row.contextWindow, 1);
+	const contextWindow = row.contextWindow === undefined ? undefined : agentInteger(row.contextWindow, 1);
 	let reasoningEfforts: AgentRegistryDefaults['reasoningEfforts'];
 	if (row.reasoningEfforts !== undefined) {
 		if (
@@ -693,9 +707,13 @@ function registryDefaults(value: unknown): AgentRegistryDefaults {
 	}
 	return {
 		contextWindow,
-		maxOutputTokens: agentInteger(row.maxOutputTokens, 1, contextWindow),
+		maxOutputTokens:
+			row.maxOutputTokens === undefined ? undefined : agentInteger(row.maxOutputTokens, 1, contextWindow),
 		...(row.supportsTools === undefined ? {} : { supportsTools: boolean(row.supportsTools) }),
 		...(row.supportsImageInput === undefined ? {} : { supportsImageInput: boolean(row.supportsImageInput) }),
+		...(row.supportsImageGeneration === undefined
+			? {}
+			: { supportsImageGeneration: boolean(row.supportsImageGeneration) }),
 		...(row.supportsFileInput === undefined ? {} : { supportsFileInput: boolean(row.supportsFileInput) }),
 		...(row.supportsPromptCacheKey === undefined
 			? {}

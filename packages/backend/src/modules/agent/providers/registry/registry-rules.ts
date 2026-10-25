@@ -50,7 +50,6 @@ export function buildRegistrySnapshot(
 	now: number,
 ): CapabilityRegistrySnapshot {
 	const entries: Record<string, RegistryDefaults> = Object.create(null);
-	const aliases = new Map<string, RegistryDefaults | null>();
 	for (const item of items) {
 		const value: RegistryDefaults = {
 			contextWindow: item.capabilities.contextWindow,
@@ -61,6 +60,9 @@ export function buildRegistrySnapshot(
 			...(item.capabilities.supportsImageInput === undefined
 				? {}
 				: { supportsImageInput: item.capabilities.supportsImageInput }),
+			...(item.capabilities.supportsImageGeneration === undefined
+				? {}
+				: { supportsImageGeneration: item.capabilities.supportsImageGeneration }),
 			...(item.capabilities.supportsFileInput === undefined
 				? {}
 				: { supportsFileInput: item.capabilities.supportsFileInput }),
@@ -78,22 +80,11 @@ export function buildRegistrySnapshot(
 				: { reasoningEfforts: [...item.capabilities.reasoningEfforts] }),
 		};
 		entries[item.providerId + '/' + item.modelId] = value;
-		const normalized = item.modelId.toLowerCase();
-		if (!aliases.has(normalized)) {
-			aliases.set(normalized, value);
-		} else if (JSON.stringify(aliases.get(normalized)) !== JSON.stringify(value)) {
-			aliases.set(normalized, null);
-		}
-	}
-	for (const [key, value] of aliases) {
-		if (value && !Object.hasOwn(entries, key)) {
-			entries[key] = value;
-		}
 	}
 	if (Object.keys(entries).length > 5000) {
 		throw new RegistryRefreshFailure('MODEL_REGISTRY_RESPONSE_INVALID');
 	}
-	return { schemaVersion: 1, source: 'models.dev', sourceRevision: revision, generatedAt: now, entries };
+	return { schemaVersion: 2, source: 'models.dev', sourceRevision: revision, generatedAt: now, entries };
 }
 
 export function recoverRegistryState(state: CapabilityRegistryRead): CapabilityRegistryState {
@@ -124,6 +115,9 @@ export function resolveRegistryDefaults(state: CapabilityRegistryState, modelId:
 		maxOutputTokens: entry.maxOutputTokens,
 		...(entry.supportsTools === undefined ? {} : { supportsTools: entry.supportsTools }),
 		...(entry.supportsImageInput === undefined ? {} : { supportsImageInput: entry.supportsImageInput }),
+		...(entry.supportsImageGeneration === undefined
+			? {}
+			: { supportsImageGeneration: entry.supportsImageGeneration }),
 		...(entry.supportsFileInput === undefined ? {} : { supportsFileInput: entry.supportsFileInput }),
 		...(supportsPromptCacheKey === undefined ? {} : { supportsPromptCacheKey }),
 		...(reasoningEfforts === undefined ? {} : { reasoningEfforts: [...reasoningEfforts] }),

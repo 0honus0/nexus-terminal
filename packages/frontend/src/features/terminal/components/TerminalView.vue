@@ -175,6 +175,7 @@
 		terminalState.replaceGeometry(terminal.cols, terminal.rows);
 		if (wrapper.value && wrapper.value.scrollLeft !== 0) wrapper.value.scrollLeft = 0;
 		if (element.scrollLeft !== 0) element.scrollLeft = 0;
+		if (forceGeometrySync) terminal.refresh(0, terminal.rows - 1);
 		if (forceGeometrySync || terminal.cols !== lastColumns || terminal.rows !== lastRows) {
 			forceGeometrySync = false;
 			lastColumns = terminal.cols;
@@ -187,7 +188,7 @@
 	// Splitter drags and pane transitions can produce a new size every frame. Fit
 	// once they settle so interactive TUIs do not receive a stream of SIGWINCH redraws.
 	const scheduleContainerResize = () => {
-		if (disposed) return;
+		if (disposed || !viewActive || !props.active || document.visibilityState === 'hidden') return;
 		clearTimeout(geometryResizeTimer);
 		geometryResizeTimer = setTimeout(() => {
 			geometryResizeTimer = undefined;
@@ -196,7 +197,14 @@
 	};
 
 	const scheduleGeometryFit = () => {
-		if (disposed || geometryFrame !== undefined) return;
+		if (
+			disposed ||
+			!viewActive ||
+			!props.active ||
+			document.visibilityState === 'hidden' ||
+			geometryFrame !== undefined
+		)
+			return;
 		geometryFrame = window.requestAnimationFrame(() => {
 			geometryFrame = undefined;
 			fitAndResize();
@@ -221,9 +229,25 @@
 		scheduleGeometryFit();
 	};
 
-	const onVisibilityChange = () => {
+	const suspendPresentation = () => {
+		// Mobile browsers may omit touchcancel when freezing a page.
+		resetInteractions();
+		terminal?.blur();
+		if (geometryFrame !== undefined) window.cancelAnimationFrame(geometryFrame);
+		geometryFrame = undefined;
+		clearTimeout(geometryResizeTimer);
+		geometryResizeTimer = undefined;
+	};
+
+	const restorePresentation = () => {
+		if (disposed || document.visibilityState !== 'visible') return;
 		outputWriter.flush();
-		if (document.visibilityState === 'visible') scheduleGeometrySync();
+		scheduleGeometrySync();
+	};
+
+	const onVisibilityChange = () => {
+		if (document.visibilityState === 'hidden') suspendPresentation();
+		else restorePresentation();
 	};
 
 	const openSearch = () => {
@@ -508,7 +532,12 @@
 
 	let clipboardGestureAt = -Infinity;
 
-	const canInteract = (): boolean => !disposed && viewActive && props.active && Boolean(root.value?.isConnected);
+	const canInteract = (): boolean =>
+		!disposed &&
+		viewActive &&
+		props.active &&
+		document.visibilityState === 'visible' &&
+		Boolean(root.value?.isConnected);
 
 	const isCurrentInteraction = (generation: number, target: Terminal | undefined): boolean =>
 		canInteract() && generation === interactionGeneration && Boolean(target) && terminal === target;
@@ -607,7 +636,7 @@
 	let mobileTouchScrollRemainder = 0;
 	let mobileSelectionLastPoint: { x: number; y: number } | null = null;
 	let mobileTouchSelectionActive = false;
-	let mobileKeyboardRestoreState: { readOnly: boolean; inputMode: string | null } | null = null;
+	let mobileKeyboardRestoreState: { inputMode: string | null } | null = null;
 	let suppressMobileContextMenuUntil = 0;
 	let mobileSelectionBaseRange: { startColumn: number; startRow: number; endColumn: number; endRow: number } | null =
 		null;
@@ -675,7 +704,6 @@
 		const textarea = terminal.textarea;
 		if (!mobileKeyboardRestoreState) {
 			mobileKeyboardRestoreState = {
-				readOnly: textarea.readOnly,
 				inputMode: textarea.getAttribute('inputmode'),
 			};
 		}
@@ -688,15 +716,18 @@
 	const restoreMobileSoftKeyboard = (focus = false): void => {
 		const textarea = terminal?.textarea;
 		const restore = mobileKeyboardRestoreState;
-		if (textarea && restore) {
-			terminal?.blur();
-			textarea.blur();
-			textarea.readOnly = restore.readOnly;
-			if (restore.inputMode === null) textarea.removeAttribute('inputmode');
-			else textarea.setAttribute('inputmode', restore.inputMode);
+		if (textarea) {
+			if (restore) {
+				terminal?.blur();
+				textarea.blur();
+				if (restore.inputMode === null) textarea.removeAttribute('inputmode');
+				else textarea.setAttribute('inputmode', restore.inputMode);
+			}
+			// Connection readiness may have changed while this gesture was in progress.
+			textarea.readOnly = !props.inputEnabled;
 		}
 		mobileKeyboardRestoreState = null;
-		if (focus) terminal?.focus();
+		if (focus && canInteract()) terminal?.focus();
 	};
 
 	const hideMobileSelectionHandles = (): void => {
@@ -872,7 +903,7 @@
 	};
 
 	const triggerMobileLongPress = (clientX: number, clientY: number): void => {
-		if (!terminal || !device.supportsTouchInteraction.value) return;
+		if (!canInteract() || !terminal || !device.supportsTouchInteraction.value) return;
 		resetMobileTouchScroll();
 		mobileLongPressTriggered = true;
 		mobileTouchSelectionActive = true;
@@ -1156,6 +1187,10 @@
 	};
 
 	const handleTouchEnd = (event: TouchEvent) => {
+		if (!canInteract()) {
+			resetInteractions();
+			return;
+		}
 		clearMobileLongPressTimer();
 		mobileLongPressStart = null;
 		if (mobileLongPressTriggered) {
@@ -1172,6 +1207,7 @@
 			mobileLongPressTriggered = false;
 		} else if (device.supportsTouchInteraction.value && event.touches.length === 0) {
 			const shouldFocus = event.type !== 'touchcancel' && !mobileTouchMoved && !mobileGestureHadMultipleTouches;
+			if (shouldFocus) emit('interaction');
 			restoreMobileSoftKeyboard(shouldFocus);
 		}
 		mobileSelectionLastPoint = null;
@@ -1480,7 +1516,7 @@
 				}
 				void props.channel.sendInput(data);
 			}).dispose,
-			props.channel.onConnected?.(scheduleGeometrySync) ?? (() => undefined),
+			props.channel.onConnected?.(restorePresentation) ?? (() => undefined),
 			props.channel.onResumeComplete?.(() => {
 				const target = terminal;
 				const generation = terminalState.remotePtyGeneration.value;
@@ -1532,7 +1568,10 @@
 		resizeObserver = new ResizeObserver(scheduleContainerResize);
 		resizeObserver.observe(root.value!);
 		document.addEventListener('visibilitychange', onVisibilityChange);
-		window.addEventListener('pageshow', scheduleGeometrySync);
+		window.addEventListener('pagehide', suspendPresentation);
+		window.addEventListener('pageshow', restorePresentation);
+		window.visualViewport?.addEventListener('resize', scheduleContainerResize);
+		window.visualViewport?.addEventListener('scroll', scheduleContainerResize);
 		window.addEventListener('focus', scheduleGeometrySync);
 		document.fonts.addEventListener('loadingdone', scheduleGeometrySync);
 		void document.fonts.ready.then(() => {
@@ -1546,7 +1585,11 @@
 		() => props.inputEnabled,
 		(enabled) => {
 			if (!enabled) resetInteractions();
-			if (terminal) terminal.options.disableStdin = !enabled;
+			if (terminal) {
+				terminal.options.disableStdin = !enabled;
+				// xterm's option handler also writes readOnly; preserve suppression until touchend.
+				if (terminal.textarea) terminal.textarea.readOnly = !enabled || mobileKeyboardRestoreState !== null;
+			}
 		},
 	);
 
@@ -1600,7 +1643,10 @@
 		}
 		document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
 		document.removeEventListener('visibilitychange', onVisibilityChange);
-		window.removeEventListener('pageshow', scheduleGeometrySync);
+		window.removeEventListener('pagehide', suspendPresentation);
+		window.removeEventListener('pageshow', restorePresentation);
+		window.visualViewport?.removeEventListener('resize', scheduleContainerResize);
+		window.visualViewport?.removeEventListener('scroll', scheduleContainerResize);
 		window.removeEventListener('focus', scheduleGeometrySync);
 		document.fonts.removeEventListener('loadingdone', scheduleGeometrySync);
 		if (geometryFrame !== undefined) window.cancelAnimationFrame(geometryFrame);
@@ -1611,7 +1657,8 @@
 
 	defineExpose({
 		focus: () => {
-			if (canInteract()) terminal?.focus();
+			if (!canInteract()) return;
+			restoreMobileSoftKeyboard(true);
 		},
 
 		fit: fitAndResize,
