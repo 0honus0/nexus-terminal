@@ -18,7 +18,7 @@
 	--glass-backdrop-filter: blur(28px) saturate(185%);
 	--glass-control-filter: blur(16px) saturate(170%);
 	/* Mixing in the theme border keeps edges visible when a light panel sits on a light page. */
-	--glass-border-color: color-mix(in srgb, var(--border-color) 64%, transparent);
+	--glass-border-color: color-mix(in srgb, var(--border-color) 70%, transparent);
 	--glass-inset-highlight: inset 0 1px 0 color-mix(in srgb, var(--glass-rim) 8%, transparent);
 	--glass-rim-shadow:
 		var(--glass-inset-highlight), inset 1px 0 0 color-mix(in srgb, var(--glass-rim) 5%, transparent),
@@ -90,7 +90,7 @@
 	--ui-text: var(--text-color);
 	--ui-text-muted: var(--text-color-secondary);
 	--ui-hairline: var(--glass-border-color);
-	--ui-hairline-strong: color-mix(in srgb, var(--border-color) 80%, transparent);
+	--ui-hairline-strong: color-mix(in srgb, var(--border-color) 88%, transparent);
 	--ui-fill-raised: color-mix(in srgb, var(--card-bg-color) 58%, transparent);
 	--ui-fill-inset: color-mix(in srgb, var(--input-bg-color) 48%, transparent);
 	--ui-fill-inset-hover: color-mix(in srgb, var(--input-bg-color) 62%, transparent);

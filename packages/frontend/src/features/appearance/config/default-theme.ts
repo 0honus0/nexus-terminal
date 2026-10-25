@@ -27,8 +27,8 @@ export const defaultTerminalTheme: Record<string, string> = {
 	brightWhite: '#e5e5e5',
 };
 
-const DEFAULT_LIGHT_BORDER_COLOR = '#b8bdc8';
-const LEGACY_LIGHT_BORDER_COLORS = new Set(['#cccccc', '#c3c7d0']);
+const DEFAULT_LIGHT_BORDER_COLOR = '#aeb5c1';
+const LEGACY_LIGHT_BORDER_COLORS = new Set(['#cccccc', '#c3c7d0', '#b8bdc8']);
 
 export const defaultUiTheme: Record<string, string> = {
 	'--app-bg-color': '#ffffff',
