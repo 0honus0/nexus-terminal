@@ -7,7 +7,10 @@ export interface StoredRegistryDefaults {
 	supportsTools?: boolean;
 	supportsImageInput?: boolean;
 	supportsFileInput?: boolean;
+	supportsPromptCacheKey?: boolean;
 	reasoningEfforts?: AgentReasoningEffort[];
+	defaultReasoningEffort?: AgentReasoningEffort;
+	reasoningMandatory?: boolean;
 }
 
 export interface StoredRegistrySnapshot {

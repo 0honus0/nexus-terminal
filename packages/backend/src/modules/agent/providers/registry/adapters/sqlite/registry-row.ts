@@ -27,7 +27,10 @@ function checkDefaults(raw: unknown): StoredRegistryDefaults {
 					'supportsTools',
 					'supportsImageInput',
 					'supportsFileInput',
+					'supportsPromptCacheKey',
 					'reasoningEfforts',
+					'defaultReasoningEffort',
+					'reasoningMandatory',
 				].includes(key),
 		) ||
 		!positive(row.contextWindow) ||
@@ -37,7 +40,12 @@ function checkDefaults(raw: unknown): StoredRegistryDefaults {
 	) {
 		throw new Error('Invalid persisted registry capability');
 	}
-	for (const value of [row.supportsImageInput, row.supportsFileInput]) {
+	for (const value of [
+		row.supportsImageInput,
+		row.supportsFileInput,
+		row.supportsPromptCacheKey,
+		row.reasoningMandatory,
+	]) {
 		if (value !== undefined && typeof value !== 'boolean') {
 			throw new Error('Invalid persisted registry capability');
 		}
@@ -64,13 +72,29 @@ function checkDefaults(raw: unknown): StoredRegistryDefaults {
 			throw new Error('Invalid registry reasoning');
 		});
 	}
+	const defaultReasoningEffort =
+		row.defaultReasoningEffort === undefined
+			? undefined
+			: REASONING.find((effort) => effort === row.defaultReasoningEffort);
+	if (
+		(row.defaultReasoningEffort !== undefined &&
+			(defaultReasoningEffort === undefined || !efforts?.includes(defaultReasoningEffort))) ||
+		(row.reasoningMandatory === true && !efforts?.length)
+	) {
+		throw new Error('Invalid registry reasoning');
+	}
 	return {
 		contextWindow: row.contextWindow,
 		maxOutputTokens: row.maxOutputTokens,
 		...(row.supportsTools === undefined ? {} : { supportsTools: row.supportsTools }),
 		...(typeof row.supportsImageInput === 'boolean' ? { supportsImageInput: row.supportsImageInput } : {}),
 		...(typeof row.supportsFileInput === 'boolean' ? { supportsFileInput: row.supportsFileInput } : {}),
+		...(typeof row.supportsPromptCacheKey === 'boolean'
+			? { supportsPromptCacheKey: row.supportsPromptCacheKey }
+			: {}),
 		...(efforts === undefined ? {} : { reasoningEfforts: [...efforts] }),
+		...(defaultReasoningEffort === undefined ? {} : { defaultReasoningEffort }),
+		...(typeof row.reasoningMandatory === 'boolean' ? { reasoningMandatory: row.reasoningMandatory } : {}),
 	};
 }
 

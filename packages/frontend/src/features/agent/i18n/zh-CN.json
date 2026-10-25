@@ -845,6 +845,9 @@
         }
       },
       "providerManagement": {
+        "registryRefreshNeeded": "模型库尚未更新或上次更新失败，请点击模型库“立即更新”后重新匹配。",
+        "configureParameters": "参数配置",
+        "collapseParameters": "收起参数",
         "title": "模型供应商",
         "description": "独立管理供应商和显式模型能力。发现会回写观察，测试发送真实请求，均不自动重试。",
         "read": "重新读取（放弃草稿）",
@@ -871,7 +874,7 @@
         "deleted": "供应商已删除。",
         "discovered": "已取得模型目录，请选择并补齐配置后保存。",
         "noModels": "端点未返回模型。",
-        "noRegistry": "无目录匹配项，草稿保持不变。",
+        "noRegistry": "部分模型未在模型库中匹配，请先点击模型库“立即更新”后重新匹配；仍无匹配时需手动配置，不会猜测模型参数。",
         "registryApplied": "目录建议已应用到草稿，请核对后保存。",
         "registry": "应用目录建议",
         "failed": "请求失败，请核对登录状态或重新读取。",

@@ -64,6 +64,8 @@
 		discover,
 		test,
 		lookup,
+		matchModels,
+		preserveModelTools,
 	} = useProviderManagement({ available: () => props.active });
 	const deleting = ref<Provider | null>(null);
 	const testingProviderId = ref<string | null>(null);
@@ -267,23 +269,11 @@
 		return result;
 	});
 
-	watch(notice, (value) => {
-		if (!value) return;
-		const message = t('agent.settings.providerManagement.' + value);
-		if (['invalid', 'failed', 'unknown', 'conflict', 'inUse'].includes(value)) {
-			feedback.notifyError(message);
-		} else if (['saved', 'deleted', 'discovered', 'registryApplied'].includes(value)) {
-			feedback.notifySuccess(message);
-		} else {
-			feedback.notifyInfo(message);
-		}
-	});
-
 	onBeforeUnmount(() => {
 		if (copiedTimer !== undefined) clearTimeout(copiedTimer);
 	});
 
-	function addModel(found?: DiscoveredProviderModel): void {
+	function appendModel(found?: DiscoveredProviderModel): ProviderModelDraft | undefined {
 		if (!draft.value || blocked.value || draft.value.models.length >= AGENT_PROVIDER_MODEL_LIMIT) {
 			return;
 		}
@@ -305,9 +295,15 @@
 			reasoningMandatory: cap?.reasoningMandatory,
 		};
 		draft.value.models.push(value);
+		return draft.value.models.at(-1);
 	}
 
-	function addSelected(): void {
+	async function addModel(found?: DiscoveredProviderModel): Promise<void> {
+		const model = appendModel(found);
+		if (model?.id) await matchModels([model]);
+	}
+
+	async function addSelected(): Promise<void> {
 		if (!draft.value) {
 			return;
 		}
@@ -318,12 +314,13 @@
 			notice.value = 'capacity';
 			return;
 		}
-		for (const found of discovered.value) {
-			if (selected.value.includes(found.id)) {
-				addModel(found);
-			}
+		const added: ProviderModelDraft[] = [];
+		for (const found of additions) {
+			const model = appendModel(found);
+			if (model) added.push(model);
 		}
 		selected.value = [];
+		await matchModels(added);
 	}
 
 	function applyObservation(model: ProviderModelDraft): void {
@@ -1114,6 +1111,9 @@
 							</div>
 							<ProviderModelEditor
 								:model-value="model"
+								:compact="device.isMobile.value"
+								@match-registry="matchModels([model])"
+								@configure-tools="preserveModelTools(model)"
 								:errors="validationAttempted ? validation.models[index] : undefined"
 								@update:model-value="(value) => draft?.models.splice(index, 1, value)"
 							/>

@@ -2100,3 +2100,9 @@ RDP Adapter 将文本从逐字符 SDK 调用改为最多 32 个完整字符一�
 ## 手机RDP触控指南与指针（2026-10-24）
 
 源码确认手机指南原whitespace-normal允许长文本占多行，RDP SDK光标仅写canvas.style.cursor，移动浏览器没有触摸鼠标光标。手机指南改复用全局UiInfoHint的click触发、完整内容、无障碍名称及中英日翻译，桌面继续原说明。desktop-touch可选回调报告与MouseEvent相同client坐标，RDP有触控能力时持本地FontAwesome箭头覆盖层，坐标按容器百分比定位且pointer-events:none，不混入远端canvas；触控板首次位置发送mousemove，使用独立初始化标志、派发前夹紧坐标，真实鼠标隐藏覆盖层。VNC不安装本地第二光标；无新timer/listener，关闭由原touch/element生命周期清理。两轮源码复核直触/触控板、首点/边界、长按/双击拖动/双指、取消/关闭/晚建连与缩放定位；根check、前端build、全量format:all:check与diff通过，日志/tmp/nexus-rdp-mobile-touch-{check,build,format}.log。首次静态检查报告新增回调声明缺少空行，修正并重跑通过。按D17未新增/执行本地行为/E2E，手机真机、多语言窄屏、真实键鼠及VNC回归待远程；本地位置指针不证明远端输入已完成。
+
+## Agent 模型匹配与能力还原（2026-10-25）
+
+对照75289ef9父提交的旧正式model-capability-{matcher,resolver,registry-source}，恢复前缀、名称分隔符、日期系列、推理等级后缀与明确模型的缓存键/推理修正，并按本轮要求增加thinking/fast匹配；工具、图片、文件、缓存键、推理等级/默认等级/必需标记完整通过Registry应用/存储/Shared/前端mapper。精确名优先，同级不同原厂能力冲突不猜测；OpenCode聚合不阻断原厂同名。自动添加/ID change补缺，显式应用才替换已有值，工具手工值有单独保护；批量每次4个并发，取消停止后续批次，不限制总量。手机参数默认收起、错误展开，目录未更新/失败/无匹配使用统一Toast。
+
+本轮沿用指定NewAPI只读发现授权：先前发现46个模型且未报告能力，本次用真实ModelsDevCatalogAdapter重新读取公开目录416项，以本版build产物解析这些ID，22项明确匹配；claude-opus-4-6-thinking正确填充1M上下文、128K输出、工具/图片/文件和low/medium/high/max推理等级；gpt-5.6三个已存在变体正确带出缓存键及默认medium。其余24项没有可确定的目录项，保持未匹配；不会将不存在的基础型号猜为相邻版本。日志`/tmp/nexus-model-match-live.log`不含密钥；没有保存Provider、发起付费生成或修改远端配置。两轮源码核对Shared/SQLite严格解码关联、完整白名单、前缀/日期/等级顺序、精确优先/冲突、微调模型隔离、scope/generation及模型快照、旧配置与新手工工具值保护；根check、双端build、全量format:all:check及diff通过，日志`/tmp/nexus-model-match-{check,build,format}.log`；补充新模型手工工具值保护后根check、前端build再次通过，日志`/tmp/nexus-model-match-final-{check,build,format}.log`。本轮按D17未新增或执行浏览器/本地E2E，手机折叠、添加与编辑、供应商能力优先、未知匹配提醒、目录替换后保存/冻结、网络失败/取消及完整后端管理回归仍待远程。

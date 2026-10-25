@@ -206,7 +206,10 @@ function wireRegistryDefaults(value: RegistryDefaults): AgentRegistryDefaults {
 		...(value.supportsTools === undefined ? {} : { supportsTools: value.supportsTools }),
 		...(value.supportsImageInput === undefined ? {} : { supportsImageInput: value.supportsImageInput }),
 		...(value.supportsFileInput === undefined ? {} : { supportsFileInput: value.supportsFileInput }),
+		...(value.supportsPromptCacheKey === undefined ? {} : { supportsPromptCacheKey: value.supportsPromptCacheKey }),
 		...(value.reasoningEfforts === undefined ? {} : { reasoningEfforts: [...value.reasoningEfforts] }),
+		...(value.defaultReasoningEffort === undefined ? {} : { defaultReasoningEffort: value.defaultReasoningEffort }),
+		...(value.reasoningMandatory === undefined ? {} : { reasoningMandatory: value.reasoningMandatory }),
 	};
 }
 

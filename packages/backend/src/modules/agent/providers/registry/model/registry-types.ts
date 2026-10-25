@@ -8,7 +8,16 @@ export interface RegistryDefaults {
 	supportsTools?: boolean;
 	supportsImageInput?: boolean;
 	supportsFileInput?: boolean;
+	supportsPromptCacheKey?: boolean;
 	reasoningEfforts?: AgentReasoningEffort[];
+	defaultReasoningEffort?: AgentReasoningEffort;
+	reasoningMandatory?: boolean;
+}
+
+export interface RegistryMatch {
+	canonicalId: string;
+	defaults: RegistryDefaults;
+	reasoningEffort?: AgentReasoningEffort;
 }
 
 export interface RegistryStatus {

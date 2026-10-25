@@ -10,7 +10,8 @@ import {
 	saveManagedProvider,
 	testManagedProvider,
 } from '../api/provider-management-api';
-import { resolveModelRegistry } from '../api/registry-api';
+import { getModelRegistryStatus, resolveModelRegistry } from '../api/registry-api';
+import type { ModelRegistryDefaults } from '../model/registry-types';
 import { AgentManagementFailure } from '../model/management-failure';
 import { createProviderDraft } from '../model/provider-mapper';
 import type {
@@ -31,13 +32,14 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 	const refreshRequired = ref(true);
 	const notice = ref('');
 	let failureCause: unknown;
+	const configuredTools = new WeakSet<ProviderModelDraft>();
 	const { t } = useI18n();
 	useFeedbackMessage(
 		() => (notice.value ? t('agent.settings.providerManagement.' + notice.value) : ''),
 		() =>
 			['saved', 'deleted', 'discovered', 'registryApplied'].includes(notice.value)
 				? 'success'
-				: ['noModels', 'noRegistry'].includes(notice.value)
+				: ['noModels', 'noRegistry', 'registryRefreshNeeded'].includes(notice.value)
 					? 'info'
 					: 'error',
 		() => failureCause,
@@ -70,6 +72,7 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 		// A new provider never has a stored secret, so the form starts in replace mode
 		// instead of exposing a meaningless keep/clear action.
 		if (provider === null) next.credential = { action: 'replace', value: '' };
+		for (const model of next.models) configuredTools.add(toRaw(model));
 		draft.value = next;
 		discovered.value = [];
 		testResult.value = null;
@@ -256,32 +259,112 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 		);
 	}
 
-	async function lookup(model: ProviderModelDraft): Promise<void> {
-		if (!draft.value || blocked.value) {
-			return;
+	function preserveModelTools(model: ProviderModelDraft): void {
+		configuredTools.add(toRaw(model));
+	}
+
+	function applyRegistry(model: ProviderModelDraft, value: ModelRegistryDefaults, mode: 'missing' | 'replace'): void {
+		const replace = mode === 'replace';
+		const observed = discovered.value.find((item) => item.id === model.id)?.capabilities;
+		if (replace || model.contextWindow <= 0) model.contextWindow = value.contextWindow;
+		if (replace || model.maxOutputTokens <= 0) model.maxOutputTokens = value.maxOutputTokens;
+		if (
+			value.supportsTools !== undefined &&
+			(replace || (!configuredTools.has(toRaw(model)) && observed?.supportsTools === undefined))
+		) {
+			model.supportsTools = value.supportsTools;
 		}
+		configuredTools.add(toRaw(model));
+		if (replace || model.supportsImageInput === undefined) model.supportsImageInput = value.supportsImageInput;
+		if (replace || model.supportsFileInput === undefined) model.supportsFileInput = value.supportsFileInput;
+		if (replace || model.supportsPromptCacheKey === undefined)
+			model.supportsPromptCacheKey = value.supportsPromptCacheKey;
+		if (replace || model.reasoningEfforts === undefined) {
+			model.reasoningEfforts = value.reasoningEfforts?.map((effort) => effort);
+		}
+		if (
+			(replace || model.defaultReasoningEffort === undefined) &&
+			(value.defaultReasoningEffort === undefined ||
+				model.reasoningEfforts?.includes(value.defaultReasoningEffort))
+		) {
+			model.defaultReasoningEffort = value.defaultReasoningEffort;
+		}
+		if (replace || model.reasoningMandatory === undefined) {
+			if (value.reasoningMandatory !== true || model.reasoningEfforts?.length)
+				model.reasoningMandatory = value.reasoningMandatory;
+		}
+	}
+
+	async function matchModels(models: ProviderModelDraft[]): Promise<void> {
+		const currentDraft = draft.value;
+		if (!currentDraft || blocked.value) return;
+		const selected = models
+			.filter((model) => currentDraft.models.includes(model) && model.id.trim())
+			.map((model) => ({ model, id: model.id, before: JSON.stringify(model) }));
+		if (!selected.length) return;
+		await perform(
+			async (signal) => {
+				const status = await getModelRegistryStatus(signal);
+				const matches: Array<{ item: (typeof selected)[number]; value: ModelRegistryDefaults | null }> = [];
+				for (let index = 0; index < selected.length; index += 4) {
+					if (signal.aborted) return { status, matches: [] };
+					const batch = await Promise.all(
+						selected.slice(index, index + 4).map(async (item) => ({
+							item,
+							value: status.entryCount > 0 ? await resolveModelRegistry(item.id, signal) : null,
+						})),
+					);
+					matches.push(...batch);
+				}
+				return { status, matches };
+			},
+			({ status, matches }) => {
+				if (draft.value !== currentDraft) return;
+				let missing = false;
+				for (const { item, value } of matches) {
+					if (
+						!currentDraft.models.includes(item.model) ||
+						item.model.id !== item.id ||
+						JSON.stringify(item.model) !== item.before
+					)
+						continue;
+					if (value) applyRegistry(item.model, value, 'missing');
+					else missing = true;
+				}
+				if (
+					status.activeSource === 'unavailable' ||
+					status.lastSuccessAt === null ||
+					status.lastErrorCode !== null
+				) {
+					notice.value = 'registryRefreshNeeded';
+				} else if (missing) {
+					notice.value = 'noRegistry';
+				}
+			},
+			false,
+		);
+	}
+
+	async function lookup(model: ProviderModelDraft): Promise<void> {
+		if (!draft.value || blocked.value) return;
 		const currentDraft = draft.value;
 		const id = model.id;
+		const before = JSON.stringify(model);
 		await perform(
 			(signal) => resolveModelRegistry(id, signal),
 			(value) => {
-				if (draft.value !== currentDraft || model.id !== id) {
+				if (
+					draft.value !== currentDraft ||
+					!currentDraft.models.includes(model) ||
+					model.id !== id ||
+					JSON.stringify(model) !== before
+				)
 					return;
-				}
 				if (!value) {
 					notice.value = 'noRegistry';
 					return;
 				}
-				model.contextWindow = value.contextWindow;
-				model.maxOutputTokens = value.maxOutputTokens;
-				if (value.supportsTools !== undefined) {
-					model.supportsTools = value.supportsTools;
-				}
-				model.supportsImageInput = value.supportsImageInput;
-				model.supportsFileInput = value.supportsFileInput;
-				model.reasoningEfforts = value.reasoningEfforts?.map((effort) => effort);
-				model.defaultReasoningEffort = undefined;
-				model.reasoningMandatory = undefined;
+				applyRegistry(model, value, 'replace');
 				notice.value = 'registryApplied';
 			},
 			false,
@@ -318,5 +401,7 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 		discover,
 		test,
 		lookup,
+		matchModels,
+		preserveModelTools,
 	};
 }

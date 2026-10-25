@@ -1491,3 +1491,14 @@ Remote register 安装 `/api/v1/transfers/send`、`status`、`status/:taskId`、
 6. **数据、事务与并发**：日志写 stderr 单行 JSON；不增加数据库记录或改变事务。HTTP/WS 使用后端生成关联 ID，异步上下文随实际任务传播；事件回调只绑定诊断自身上下文，不捕获其它 owner 的事务或授权作用域，不信任客户端自报关联字段。
 7. **生命周期与失败**：记录启动、停机、恢复、入场、派发、结算和清理；Job 与插件运行实例在原 owner 持久结算及关闭处记录；WS 字节汇总避免逐帧日志。诊断输出失败不阻断原任务，原异常继续由原 owner 处理。
 8. **当前能力与验收**：等级、字段、查看方式及保护范围见 USAGE；源码审核和静态证据归 PLAN，行为按 D17 留远程验收。
+
+### Agent 模型目录名称与能力解析
+
+1. **职责与范围**：Agent providers/registry持有模型名称匹配及明确模型修正，Platform仅转换models.dev供应商事实。
+2. **子功能与目录**：原registry-rules组装快照与解析完整能力，registry-matcher持纯名称评分；原Model、SQLite Adapter及HTTP mapper保持各自边界。
+3. **依赖方向**：Registry Service → Model/纯规则，Model → storage/Platform；匹配器不读取网络或存储，不绕过Provider冻结时观察冲突核对。
+4. **类型与转换**：RegistryDefaults、StoredRegistryDefaults和Shared AgentRegistryDefaults独立定义完整能力；白名单mapper投影缓存键、默认推理等级及必需推理，两个decoder核对等级唯一性、默认值所属及mandatory依赖。
+5. **入口与安装**：沿用model-registry/resolve与refresh，无新路由或安装点。
+6. **数据、事务与并发**：原快照持久化结构不变；精确名优先于前缀/分隔符及系列日期/等级/thinking/fast后缀，同级冲突不猜测，OpenCode聚合候选不覆盖原厂。名称变体不构成能力证明；只对支持的等级后缀选择默认等级。保留旧正式resolver的明确模型缓存键与推理修正。
+7. **生命周期与失败**：沿原refresh/load owner、取消及安全错误映射；无目录或无明确匹配返回null，不自动发起外部模型请求。
+8. **当前能力与验收**：前端新增模型与显式应用目录均消费完整Shared能力；使用与恢复见USAGE，静态及限定只读验证见PLAN/testing，完整交互仍待远程。

@@ -658,7 +658,10 @@ function registryDefaults(value: unknown): AgentRegistryDefaults {
 		'supportsTools',
 		'supportsImageInput',
 		'supportsFileInput',
+		'supportsPromptCacheKey',
 		'reasoningEfforts',
+		'defaultReasoningEffort',
+		'reasoningMandatory',
 	]);
 	const contextWindow = agentInteger(row.contextWindow, 1);
 	let reasoningEfforts: AgentRegistryDefaults['reasoningEfforts'];
@@ -681,13 +684,25 @@ function registryDefaults(value: unknown): AgentRegistryDefaults {
 			throw new InvalidAgentPayload();
 		}
 	}
+	const defaultReasoningEffort = optionalEffort(row.defaultReasoningEffort);
+	if (defaultReasoningEffort && !reasoningEfforts?.includes(defaultReasoningEffort)) {
+		throw new InvalidAgentPayload();
+	}
+	if (row.reasoningMandatory === true && !reasoningEfforts?.length) {
+		throw new InvalidAgentPayload();
+	}
 	return {
 		contextWindow,
 		maxOutputTokens: agentInteger(row.maxOutputTokens, 1, contextWindow),
 		...(row.supportsTools === undefined ? {} : { supportsTools: boolean(row.supportsTools) }),
 		...(row.supportsImageInput === undefined ? {} : { supportsImageInput: boolean(row.supportsImageInput) }),
 		...(row.supportsFileInput === undefined ? {} : { supportsFileInput: boolean(row.supportsFileInput) }),
+		...(row.supportsPromptCacheKey === undefined
+			? {}
+			: { supportsPromptCacheKey: boolean(row.supportsPromptCacheKey) }),
 		...(reasoningEfforts === undefined ? {} : { reasoningEfforts }),
+		...(defaultReasoningEffort === undefined ? {} : { defaultReasoningEffort }),
+		...(row.reasoningMandatory === undefined ? {} : { reasoningMandatory: boolean(row.reasoningMandatory) }),
 	};
 }
 

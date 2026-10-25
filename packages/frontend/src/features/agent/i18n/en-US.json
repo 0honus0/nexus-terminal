@@ -845,6 +845,9 @@
         }
       },
       "providerManagement": {
+        "registryRefreshNeeded": "The model registry has not been updated or its last update failed. Update the registry and match again.",
+        "configureParameters": "Configure parameters",
+        "collapseParameters": "Collapse parameters",
         "title": "Model providers",
         "description": "Manage providers and explicit capabilities. Discovery records observations; tests send real requests. No automatic retries.",
         "read": "Read again (discard draft)",
@@ -871,7 +874,7 @@
         "deleted": "Provider deleted.",
         "discovered": "Directory loaded. Select models and complete their configuration before saving.",
         "noModels": "The endpoint returned no models.",
-        "noRegistry": "No registry match. Draft unchanged.",
+        "noRegistry": "Some models were not found. Update the model registry and match again; configure unmatched models manually. Parameters are never guessed.",
         "registryApplied": "Registry suggestions applied. Review before saving.",
         "registry": "Apply registry suggestions",
         "failed": "Request failed. Check your session or read again.",
