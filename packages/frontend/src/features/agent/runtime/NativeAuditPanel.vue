@@ -1,7 +1,7 @@
 <script setup lang="ts">
-	import { ref } from 'vue';
+	import { onBeforeUnmount, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiNumberInput } from '@/foundation/ui';
+	import { UiButton, UiInput, UiNumberInput } from '@/foundation/ui';
 	import { AGENT_RUN_STEP_MAX_COUNT } from '@nexus-terminal/shared/agent/runs/values';
 	import { getNativeStep, listNativeStepEvents, getNativeTool, listNativeToolEvents } from '../api/native-audit-api';
 	import { useAgentManagementOperation } from '../composables/use-agent-management-operation';
@@ -23,6 +23,8 @@
 	const toolEvents = ref<NativeToolEvent[]>([]);
 	const stepCursor = ref(0);
 	const toolCursor = ref(0);
+	const open = ref(false);
+	let stepTimer: ReturnType<typeof setTimeout> | null = null;
 
 	function setStepIndex(value: string | number | null): void {
 		const parsed = typeof value === 'number' ? value : Number(value);
@@ -64,6 +66,31 @@
 		);
 	}
 
+	async function initializeAudit(): Promise<void> {
+		if (operation.busy.value) return;
+		await readStep();
+		if (toolId.value && !tool.value && !operation.busy.value) await readTool();
+	}
+
+	function handleToggle(event: Event): void {
+		if (!(event.currentTarget instanceof HTMLDetailsElement)) return;
+		open.value = event.currentTarget.open;
+		if (open.value) void initializeAudit();
+	}
+
+	watch(stepIndex, () => {
+		if (!open.value || props.disabled || operation.busy.value) return;
+		if (stepTimer !== null) clearTimeout(stepTimer);
+		stepTimer = setTimeout(() => {
+			stepTimer = null;
+			void readStep();
+		}, 350);
+	});
+
+	onBeforeUnmount(() => {
+		if (stepTimer !== null) clearTimeout(stepTimer);
+	});
+
 	async function readTool(more = false): Promise<void> {
 		if (props.disabled) return;
 		const id = more && tool.value ? tool.value.id : toolId.value;
@@ -84,7 +111,7 @@
 	}
 </script>
 <template>
-	<details class="rounded-xl border border-border/55 bg-card/70 p-3">
+	<details class="rounded-xl border border-border/55 bg-card/70 p-3" @toggle="handleToggle">
 		<summary class="cursor-pointer text-xs font-medium text-foreground">
 			{{ t('agent.nativeRun.audit') }}
 		</summary>
@@ -103,14 +130,6 @@
 						@update:model-value="setStepIndex"
 					/>
 				</label>
-				<UiButton
-					type="submit"
-					density="compact"
-					appearance="soft"
-					:disabled="disabled || operation.busy.value"
-				>
-					{{ t('agent.nativeRun.read') }}
-				</UiButton>
 				<UiButton
 					v-if="step"
 					type="button"
@@ -151,14 +170,6 @@
 						:aria-label="t('agent.nativeRun.toolId')"
 					/>
 				</label>
-				<UiButton
-					type="submit"
-					density="compact"
-					appearance="soft"
-					:disabled="disabled || operation.busy.value"
-				>
-					{{ t('agent.nativeRun.read') }}
-				</UiButton>
 				<UiButton
 					v-if="tool"
 					type="button"

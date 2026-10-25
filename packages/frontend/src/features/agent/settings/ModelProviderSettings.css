@@ -80,6 +80,22 @@
 	container: provider-card / inline-size;
 }
 
+.provider-card-actions :deep(.ui-button:disabled) {
+	border-color: transparent;
+	background: transparent;
+	color: var(--ui-text-muted);
+	box-shadow: none;
+	opacity: 0.45;
+}
+
+.provider-edit-label {
+	display: none;
+}
+
+.provider-discovered-check {
+	box-shadow: inset 0 1px 0 rgb(255 255 255 / 28%);
+}
+
 /* 设置页在 lg 以下切换为窄版布局，提供商卡片此时不再占用图标列。 */
 @media (max-width: 1023px) {
 	.provider-card-icon {
@@ -95,6 +111,12 @@
 	.provider-test-button {
 		width: var(--ui-control-height);
 		padding-inline: 0;
+	}
+}
+
+@container provider-card (min-width: 440px) {
+	.provider-edit-label {
+		display: inline;
 	}
 }
 

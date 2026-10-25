@@ -413,6 +413,17 @@
 		selected.value = [...next];
 	}
 
+	function hasDraftModel(id: string): boolean {
+		return draft.value?.models.some((model) => model.id === id) ?? false;
+	}
+
+	function discoverDraft(): void {
+		if (!draft.value || blocked.value) return;
+		const provider = currentProvider.value;
+		if (draft.value.id === null) void discover(null);
+		else if (provider) void discover(provider);
+	}
+
 	async function saveProvider(): Promise<void> {
 		if (!draft.value || blocked.value) return;
 		draft.value.name = draft.value.name.trim();
@@ -674,7 +685,7 @@
 							</button>
 						</div>
 					</div>
-					<div class="flex shrink-0 flex-wrap items-center justify-between gap-1.5">
+					<div class="provider-card-actions flex shrink-0 flex-wrap items-center justify-between gap-1.5">
 						<UiButton
 							type="button"
 							appearance="soft"
@@ -718,25 +729,14 @@
 							type="button"
 							appearance="soft"
 							tone="neutral"
-							icon-only
-							:disabled="blocked || draft !== null"
-							:title="t('agent.settings.providerManagement.discover')"
-							:aria-label="t('agent.settings.providerManagement.discover')"
-							@click="discover(provider)"
-						>
-							<i class="fa-solid fa-arrows-rotate text-xs" aria-hidden="true"></i>
-						</UiButton>
-						<UiButton
-							type="button"
-							appearance="soft"
-							tone="neutral"
-							icon-only
+							class="provider-edit-button"
 							:disabled="blocked || draft !== null"
 							:title="t('common.edit')"
 							:aria-label="t('common.edit')"
 							@click="edit(provider)"
 						>
 							<i class="fa-solid fa-pen text-xs" aria-hidden="true"></i>
+							<span class="provider-edit-label">{{ t('common.edit') }}</span>
 						</UiButton>
 						<UiButton
 							type="button"
@@ -1059,14 +1059,24 @@
 								>
 							</h4>
 							<UiButton
-								v-if="draft.id === null"
 								type="button"
 								appearance="soft"
 								density="compact"
 								class="shrink-0 whitespace-nowrap"
-								@click="discover(null)"
-								><i class="fa-solid fa-magnifying-glass text-[10px]" aria-hidden="true"></i
-								>{{ t('agent.settings.providerManagement.discoverEndpoint') }}</UiButton
+								:disabled="busy"
+								@click="discoverDraft"
+								><i
+									:class="
+										draft.id === null ? 'fa-solid fa-magnifying-glass' : 'fa-solid fa-arrows-rotate'
+									"
+									class="text-[10px]"
+									aria-hidden="true"
+								></i
+								>{{
+									draft.id === null
+										? t('agent.settings.providerManagement.discoverEndpoint')
+										: t('agent.settings.providerManagement.discover')
+								}}</UiButton
 							>
 						</div>
 						<div class="space-y-4">
@@ -1191,10 +1201,19 @@
 					<label
 						v-for="found in visibleDiscovered"
 						:key="found.id"
-						class="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg bg-card/70 px-2.5 py-1.5 text-xs"
-						><UiCheckbox
+						class="flex min-w-0 items-center gap-2 rounded-lg bg-card/70 px-2.5 py-1.5 text-xs"
+						:class="hasDraftModel(found.id) ? 'cursor-default' : 'cursor-pointer'"
+						><span
+							v-if="hasDraftModel(found.id)"
+							class="provider-discovered-check flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] bg-success text-white"
+							:aria-label="`${found.id} · ${t('agent.settings.providers.configuredModels')}`"
+						>
+							<i class="fa-solid fa-check text-[8px]" aria-hidden="true"></i>
+						</span>
+						<UiCheckbox
+							v-else
 							:model-value="selected.includes(found.id)"
-							:disabled="blocked || !draft || draft.models.some((model) => model.id === found.id)"
+							:disabled="blocked || !draft"
 							@update:model-value="toggleSelected(found.id, $event)"
 						/><span class="truncate font-mono">{{ found.id }}</span></label
 					>

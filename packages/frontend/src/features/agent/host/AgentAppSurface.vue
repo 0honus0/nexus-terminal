@@ -1,9 +1,9 @@
 <script setup lang="ts">
-	import { useResizeObserver } from '@vueuse/core';
+	import { useElementSize, useResizeObserver } from '@vueuse/core';
+	import { useResizeHandle } from '@/foundation/interaction';
 	import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 	import { UiButton, UiCheckbox, UiEmptyState, UiLoadingState, UiInlineNotice } from '@/foundation/ui';
 	import { useI18n } from 'vue-i18n';
-	import { useFeedback } from '@/shared/feedback/public';
 	import { useNativeRuns } from '../composables/use-native-runs';
 	import { isNativeRunActive, nativeModelKey } from '../model/native-run-rules';
 	import NativeThreadPanel from './NativeThreadPanel.vue';
@@ -12,11 +12,12 @@
 	import NativeRunDetails from '../runtime/NativeRunDetails.vue';
 	import NativeMemoryReview from '../runtime/NativeMemoryReview.vue';
 	import NativeApprovalList from '../runtime/NativeApprovalList.vue';
+	import NativeToolActivityList from '../runtime/NativeToolActivityList.vue';
 	import AgentMessageBody from '../ai/AgentMessageBody.vue';
 	import AgentConversationWelcome from '../ai/AgentConversationWelcome.vue';
 	import type { NativeThread } from '../model/native-thread-types';
 	import { formatAgentNumber } from '../locale-format';
-	import type { NativeModel } from '../model/native-run-types';
+	import type { NativeModel, NativeTool } from '../model/native-run-types';
 	import { AGENT_REASONING_EFFORTS, type AgentReasoningEffort } from '@nexus-terminal/shared/agent/providers/values';
 
 	const props = defineProps<{
@@ -28,8 +29,9 @@
 		active: boolean;
 	}>();
 	const { t, locale } = useI18n();
-	const { notifyError } = useFeedback();
 	const layoutRoot = ref<HTMLElement | null>(null);
+	const composer = ref<HTMLElement | null>(null);
+	const { width: composerWidth } = useElementSize(composer);
 	const threadsOverlay = ref(false);
 	const threadSidebarVisible = ref(true);
 	const threadDrawerOpen = ref(false);
@@ -38,6 +40,8 @@
 	const memoryCount = ref(0);
 	const memoryNeedsRead = ref(false);
 	const auditToolId = ref('');
+	const taskRailWidth = ref(360);
+	const taskRailHeight = ref(0);
 	const pendingThreadSelection = ref<NativeThread | null>(null);
 	const scroller = ref<HTMLElement | null>(null);
 	const attachmentControl = ref<{ removeById(id: string): void } | null>(null);
@@ -45,7 +49,7 @@
 	const keepPinnedToBottom = ref(true);
 	const canJumpPrevious = ref(false);
 	const canJumpNext = ref(false);
-	type AgentConfigControl = 'model' | 'reasoning' | 'target';
+	type AgentConfigControl = 'model' | 'reasoning' | 'target' | 'approval';
 	const selectedConfig = ref<AgentConfigControl>('model');
 	let applyingThreadSelection = false;
 	let layoutObserver: ReturnType<typeof useResizeObserver> | null = null;
@@ -85,12 +89,16 @@
 		models,
 		modelKey,
 		reasoningEffort,
+		approvalMode,
 		connections,
 		connectionIds,
 		draft,
 		run,
 		usage,
 		entries,
+		tools,
+		toolCursor,
+		readOlderTools,
 		events,
 		approvals,
 		children,
@@ -104,6 +112,39 @@
 		inputArtifacts,
 		attachmentsReady,
 	} = runtime;
+
+	const requestedApprovalCount = computed(
+		() => approvals.value.filter((approval) => approval.status === 'requested').length,
+	);
+	const layoutStyle = computed<Record<string, string> | undefined>(() => {
+		if (!run.value || !taskRailVisible.value) return undefined;
+		return { '--agent-task-rail-column': `${taskRailWidth.value}px` };
+	});
+	const taskRailResize = useResizeHandle({
+		width: taskRailWidth,
+		height: taskRailHeight,
+		minWidth: 300,
+		minHeight: 0,
+
+		maxWidth: () => Math.min(560, Math.max(320, (layoutRoot.value?.clientWidth ?? 1280) - 520)),
+
+		maxHeight: () => 0,
+
+		widthDirection: -1,
+
+		canStart: (event) => event.button === 0 && (layoutRoot.value?.clientWidth ?? 0) > 1040,
+	});
+
+	watch(
+		requestedApprovalCount,
+		(count, previous) => {
+			if (count > 0 && count > (previous ?? 0)) {
+				taskRailVisible.value = true;
+				memoryRailVisible.value = false;
+			}
+		},
+		{ flush: 'sync' },
+	);
 
 	watch(
 		() => thread.value?.id,
@@ -146,14 +187,66 @@
 		},
 	);
 
-	watch(
-		() => (props.active && run.value ? run.value.id + ':' + run.value.status : ''),
-		() => {
-			if (!props.active) return;
-			if (run.value?.status === 'failed') notifyError(t('agent.nativeRun.runFailed'));
-			else if (run.value?.status === 'unknown') notifyError(t('agent.nativeRun.runUnknown'));
-		},
-	);
+	const chatError = computed(() => {
+		if (operation.failureMessage.value) return operation.failureMessage.value;
+		const current = run.value;
+		if (operation.busy.value || !current || (current.status !== 'failed' && current.status !== 'unknown'))
+			return '';
+		const reason = current.failure
+			? t('agent.nativeRun.failureReasons.' + current.failure.code, { tool: current.failure.toolName })
+			: t('agent.nativeRun.runFailedReasonUnavailable');
+		return t(current.status === 'unknown' ? 'agent.nativeRun.runUnknown' : 'agent.nativeRun.runFailed', {
+			reason,
+			runId: current.id,
+		});
+	});
+
+	const toolGroups = computed<NativeTool[][]>(() => {
+		const groups = new Map<string, NativeTool[]>();
+		for (const tool of tools.value) {
+			const key = tool.runId + ':' + tool.modelStepIndex;
+			const group = groups.get(key);
+			if (group) group.push(tool);
+			else groups.set(key, [tool]);
+		}
+		return [...groups.values()]
+			.filter((group) => group.length > 0)
+			.map((group) => group.slice().sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)))
+			.sort(
+				(a, b) =>
+					(a[0]?.createdAt ?? 0) - (b[0]?.createdAt ?? 0) || (a[0]?.id ?? '').localeCompare(b[0]?.id ?? ''),
+			);
+	});
+
+	const toolsByEntry = computed(() => {
+		const assigned = new Map<number, NativeTool[]>();
+		const orphan: NativeTool[] = [];
+		for (const group of toolGroups.value) {
+			const first = group[0];
+			if (!first) continue;
+			let target = -1;
+			for (let index = 0; index < entries.value.length; index++) {
+				const entry = entries.value[index];
+				if (!entry || entry.role !== 'assistant' || entry.runId !== first.runId) continue;
+				if (entry.position.stepIndex === first.modelStepIndex) {
+					target = index;
+					break;
+				}
+				if (entry.position.stepIndex < first.modelStepIndex) target = index;
+			}
+			if (target < 0) {
+				for (let index = entries.value.length - 1; index >= 0; index--) {
+					if (entries.value[index]?.runId === first.runId) {
+						target = index;
+						break;
+					}
+				}
+			}
+			if (target < 0) orphan.push(...group);
+			else assigned.set(target, [...(assigned.get(target) ?? []), ...group]);
+		}
+		return { assigned, orphan };
+	});
 
 	const totalTokens = computed(() => {
 		const value = usage.value;
@@ -310,7 +403,7 @@
 		const next = new Set(connectionIds.value);
 		if (selected) next.add(id);
 		else next.delete(id);
-		connectionIds.value = [...next];
+		runtime.selectConnections([...next]);
 	}
 
 	const allConnectionsSelected = computed(
@@ -321,9 +414,9 @@
 
 	function setAllConnectionsSelected(selected: boolean): void {
 		if (blocked.value) return;
-		connectionIds.value = selected
-			? connections.value.map((connection) => connection.id).sort((left, right) => left - right)
-			: [];
+		runtime.selectConnections(
+			selected ? connections.value.map((connection) => connection.id).sort((left, right) => left - right) : [],
+		);
 	}
 
 	const activeRun = computed(() => run.value !== null && isNativeRunActive(run.value));
@@ -476,7 +569,7 @@
 		{ flush: 'post' },
 	);
 	watch(
-		() => [thread.value?.id, entries.value.length, entries.value.at(-1)?.text] as const,
+		() => [thread.value?.id, entries.value.length, entries.value.at(-1)?.text, chatError.value] as const,
 		(value, previous) => {
 			const threadId = value[0];
 			const previousThreadId = previous?.[0];
@@ -525,6 +618,7 @@
 			'is-threads-hidden': !threadSidebarVisible,
 			'has-task-rail': (run && taskRailVisible) || memoryRailVisible,
 		}"
+		:style="layoutStyle"
 	>
 		<aside
 			id="agent-thread-sidebar"
@@ -534,6 +628,7 @@
 		>
 			<NativeThreadPanel
 				:app-id="appId"
+				:live-thread="thread"
 				:active="active"
 				:resume-revision="resumeRevision"
 				:disabled="operation.busy.value || bindingBusy || !!pending || !attachmentsReady"
@@ -577,13 +672,18 @@
 					density="compact"
 					appearance="ghost"
 					icon-only
-					class="agent-header-tool shrink-0"
+					class="agent-header-tool relative shrink-0"
 					:aria-label="t('agent.ui.toggleTasks')"
 					:aria-expanded="taskRailVisible"
 					aria-controls="agent-task-rail"
 					@click="taskRailVisible = !taskRailVisible"
 				>
 					<i class="fa-solid fa-list-check text-xs" aria-hidden="true"></i>
+					<span
+						v-if="requestedApprovalCount"
+						class="absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-warning px-0.5 text-[8px] font-bold text-white"
+						>{{ requestedApprovalCount }}</span
+					>
 				</UiButton>
 				<UiButton
 					v-if="thread && (memoryCount || memoryNeedsRead || memoryRailVisible)"
@@ -654,7 +754,7 @@
 					</UiButton>
 				</UiInlineNotice>
 				<UiLoadingState
-					v-else-if="operation.busy.value || !scope"
+					v-else-if="operation.busy.value || (!scope && !chatError)"
 					class="flex-1"
 					compact
 					:bordered="false"
@@ -675,7 +775,7 @@
 							:draft="draft"
 							@select="draft = $event"
 						/>
-						<article
+						<template
 							v-for="(entry, index) in entries"
 							:key="
 								[
@@ -685,52 +785,60 @@
 									entry.position.textOffset,
 								].join(':')
 							"
-							:data-agent-message="isMessageStart(index) ? '' : undefined"
-							class="mx-auto flex w-full max-w-3xl"
-							:class="entry.role === 'user' ? 'justify-end' : ''"
 						>
-							<div
-								class="min-w-0"
-								:class="
-									entry.role === 'user'
-										? 'max-w-[80%] rounded-2xl rounded-tr-[5px] bg-primary/[0.07] px-4 py-3.5 ring-1 ring-inset ring-primary/10 shadow-2xs'
-										: 'w-full'
-								"
+							<article
+								:data-agent-message="isMessageStart(index) ? '' : undefined"
+								class="mx-auto flex w-full max-w-3xl"
+								:class="entry.role === 'user' ? 'justify-end' : ''"
 							>
 								<div
-									v-if="entry.role === 'assistant'"
-									class="mb-2.5 flex items-center gap-2 px-1 text-[11px] text-text-secondary/70"
+									class="min-w-0"
+									:class="
+										entry.role === 'user'
+											? 'max-w-[80%] rounded-2xl rounded-tr-[5px] bg-primary/[0.07] px-4 py-3.5 ring-1 ring-inset ring-primary/10 shadow-2xs'
+											: 'w-full'
+									"
 								>
-									<span class="h-1.5 w-1.5 rounded-full bg-primary"></span
-									>{{ t('agent.nativeRun.roles.assistant') }}
+									<div
+										v-if="entry.role === 'assistant'"
+										class="mb-2.5 flex items-center gap-2 px-1 text-[11px] text-text-secondary/70"
+									>
+										<span class="h-1.5 w-1.5 rounded-full bg-primary"></span
+										>{{ t('agent.nativeRun.roles.assistant') }}
+									</div>
+									<p
+										v-if="entry.role === 'user'"
+										class="whitespace-pre-wrap break-words text-[13px] leading-[1.7]"
+									>
+										{{ entry.text }}
+									</p>
+									<div
+										v-else
+										class="rounded-xl bg-card px-4 py-3.5 ring-1 ring-inset ring-border/30 shadow-2xs"
+									>
+										<AgentMessageBody :text="entry.text" />
+									</div>
 								</div>
-								<p
-									v-if="entry.role === 'user'"
-									class="whitespace-pre-wrap break-words text-[13px] leading-[1.7]"
-								>
-									{{ entry.text }}
-								</p>
-								<div
-									v-else
-									class="rounded-xl bg-card px-4 py-3.5 ring-1 ring-inset ring-border/30 shadow-2xs"
-								>
-									<AgentMessageBody :text="entry.text" />
-								</div>
-							</div>
-						</article>
-						<div v-if="run" class="mx-auto max-w-3xl">
-							<NativeApprovalList
-								:key="run.id"
-								:approvals="approvals"
+							</article>
+							<NativeToolActivityList
+								:tools="toolsByEntry.assigned.get(index) ?? []"
 								:connections="connections"
-								:disabled="operation.busy.value || threadBusy"
-								@mutate="runtime.mutate"
-								@inspect="
-									auditToolId = $event;
-									taskRailVisible = true;
-								"
 							/>
+						</template>
+						<NativeToolActivityList :tools="toolsByEntry.orphan" :connections="connections" />
+						<div v-if="toolCursor !== null" class="mx-auto flex w-full max-w-3xl justify-center">
+							<UiButton
+								density="compact"
+								appearance="ghost"
+								:disabled="operation.busy.value"
+								@click="readOlderTools"
+							>
+								{{ t('agent.nativeRun.toolOlder') }}
+							</UiButton>
 						</div>
+						<UiInlineNotice v-if="chatError" class="mx-auto w-full max-w-3xl" tone="danger">
+							{{ chatError }}
+						</UiInlineNotice>
 					</div>
 					<footer
 						class="agent-composer-footer relative z-10 shrink-0 bg-background/90 px-4 pb-4 pt-2 backdrop-blur-xs"
@@ -781,6 +889,18 @@
 								</span>
 								<div class="ml-auto flex shrink-0 items-center gap-1">
 									<UiButton
+										v-if="showJumpToLatest"
+										density="compact"
+										appearance="soft"
+										class="agent-jump-latest shrink-0 rounded-full px-2.5"
+										:title="t('agent.ui.latest')"
+										:aria-label="t('agent.ui.latest')"
+										@click="scrollToBottom"
+									>
+										<i class="fa-solid fa-arrow-down text-[9px]" aria-hidden="true"></i>
+										<span class="agent-jump-latest-label">{{ t('agent.ui.latest') }}</span>
+									</UiButton>
+									<UiButton
 										v-if="entries.length"
 										density="compact"
 										appearance="ghost"
@@ -804,21 +924,10 @@
 									>
 										<i class="fa-solid fa-chevron-down text-[9px]" aria-hidden="true"></i>
 									</UiButton>
-									<UiButton
-										v-if="showJumpToLatest"
-										density="compact"
-										appearance="soft"
-										class="agent-jump-latest shrink-0 rounded-full px-2.5"
-										:title="t('agent.ui.latest')"
-										:aria-label="t('agent.ui.latest')"
-										@click="scrollToBottom"
-									>
-										<i class="fa-solid fa-arrow-down text-[9px]" aria-hidden="true"></i>
-										<span class="agent-jump-latest-label">{{ t('agent.ui.latest') }}</span>
-									</UiButton>
 								</div>
 							</div>
 							<form
+								ref="composer"
 								class="agent-composer-shell overflow-hidden rounded-xl border border-border/65 bg-card/88 shadow-sm backdrop-blur-md transition-all duration-200 hover:border-border-hover focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/15"
 								@submit.prevent="submitComposer"
 							>
@@ -845,12 +954,12 @@
 											:disabled="blocked"
 											trigger-appearance="soft"
 											:trigger-selected="selectedConfig === 'model'"
-											panel-class="w-80"
+											:panel-class="composerWidth > 730 ? 'w-[28rem]' : 'w-80'"
 											@open-change="selectConfigControl('model', $event)"
 										>
 											<template #trigger
 												><i class="fa-solid fa-microchip text-[9px]" aria-hidden="true"></i
-												><span class="max-w-28 truncate">{{
+												><span class="agent-model-trigger-label max-w-28 truncate">{{
 													selectedModel?.modelId || t('agent.nativeRun.chooseModel')
 												}}</span
 												><i class="fa-solid fa-chevron-down text-[7px]" aria-hidden="true"></i
@@ -1007,7 +1116,7 @@
 											:disabled="blocked"
 											trigger-appearance="soft"
 											:trigger-selected="selectedConfig === 'target'"
-											panel-class="w-72"
+											panel-class="w-56"
 											@open-change="selectConfigControl('target', $event)"
 										>
 											<template #trigger
@@ -1092,6 +1201,115 @@
 												</fieldset>
 											</template>
 										</AgentConfigPopover>
+										<!-- Run 级批准策略：新 Run 创建时冻结，运行中只读 -->
+										<AgentConfigPopover
+											:disabled="blocked || activeRun"
+											:trigger-selected="selectedConfig === 'approval'"
+											@open-change="selectConfigControl('approval', $event)"
+											:ariaLabel="t('agent.operations.approvalMode')"
+											:title="`${t('agent.operations.approvalModeHint')}: ${
+												approvalMode === 'full_access'
+													? t('agent.operations.approvalFullAccess')
+													: t('agent.operations.approvalAsk')
+											}`"
+											panel-class="w-56"
+										>
+											<template #trigger>
+												<i
+													class="fa-solid fa-shield-halved text-[9px]"
+													:class="
+														approvalMode === 'full_access' ? 'text-warning' : 'text-success'
+													"
+													aria-hidden="true"
+												></i>
+												<span
+													class="agent-config-verbose max-w-24 truncate whitespace-nowrap text-left"
+												>
+													{{
+														approvalMode === 'full_access'
+															? t('agent.operations.approvalFullAccess')
+															: t('agent.operations.approvalAsk')
+													}}
+												</span>
+												<i
+													:class="activeRun ? 'fa-solid fa-lock' : 'fa-solid fa-chevron-down'"
+													class="agent-config-affordance text-[11px] text-text-secondary"
+													aria-hidden="true"
+												></i>
+											</template>
+											<template #panel="{ close }">
+												<div class="space-y-1">
+													<UiButton
+														appearance="ghost"
+														density="compact"
+														block
+														class="flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition-colors disabled:cursor-default"
+														:class="
+															approvalMode === 'ask'
+																? 'border-success/25 bg-success/[0.06] text-foreground'
+																: 'border-transparent text-text-secondary hover:bg-card/70'
+														"
+														:disabled="blocked || activeRun"
+														@click="
+															approvalMode = 'ask';
+															close(true);
+														"
+													>
+														<span
+															class="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success"
+														>
+															<i
+																class="fa-solid fa-hand text-[9px] text-success"
+																aria-hidden="true"
+															></i>
+														</span>
+														<span
+															class="min-w-0 flex-1 text-xs font-semibold text-foreground"
+															>{{ t('agent.operations.approvalAsk') }}</span
+														>
+														<i
+															v-if="approvalMode === 'ask'"
+															class="fa-solid fa-check text-[9px] text-success"
+															aria-hidden="true"
+														></i>
+													</UiButton>
+													<UiButton
+														appearance="ghost"
+														density="compact"
+														block
+														class="flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition-colors disabled:cursor-default"
+														:class="
+															approvalMode === 'full_access'
+																? 'border-warning/25 bg-warning/[0.06] text-foreground'
+																: 'border-transparent text-text-secondary hover:bg-card/70'
+														"
+														:disabled="blocked || activeRun"
+														@click="
+															approvalMode = 'full_access';
+															close(true);
+														"
+													>
+														<span
+															class="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-warning/10 text-warning"
+														>
+															<i
+																class="fa-solid fa-bolt text-[9px] text-warning"
+																aria-hidden="true"
+															></i>
+														</span>
+														<span
+															class="min-w-0 flex-1 text-xs font-semibold text-foreground"
+															>{{ t('agent.operations.approvalFullAccess') }}</span
+														>
+														<i
+															v-if="approvalMode === 'full_access'"
+															class="fa-solid fa-check text-[9px] text-warning"
+															aria-hidden="true"
+														></i>
+													</UiButton>
+												</div>
+											</template>
+										</AgentConfigPopover>
 									</div>
 									<div class="agent-composer-actions flex shrink-0 items-center gap-1.5">
 										<NativeInputArtifacts
@@ -1150,6 +1368,9 @@
 						</div>
 					</footer>
 				</section>
+				<UiInlineNotice v-if="!thread && chatError" class="mx-auto mt-auto w-full max-w-3xl" tone="danger">
+					{{ chatError }}
+				</UiInlineNotice>
 			</div>
 		</main>
 		<button
@@ -1180,8 +1401,22 @@
 			class="agent-task-rail min-h-0 overflow-y-auto border-l border-border/50 bg-background p-3"
 			:aria-label="t('agent.tasks.title')"
 		>
+			<button
+				type="button"
+				class="agent-task-rail-resize"
+				:aria-label="t('agent.tasks.resize')"
+				:title="t('agent.tasks.resize')"
+				@pointerdown.prevent="taskRailResize.startResize"
+			></button>
 			<header class="mb-3 flex items-center justify-between border-b border-border/50 pb-2">
-				<h3 class="text-xs font-semibold">{{ t('agent.tasks.title') }}</h3>
+				<h3 class="flex items-center gap-2 text-xs font-semibold">
+					{{ t('agent.tasks.title') }}
+					<span
+						v-if="requestedApprovalCount"
+						class="rounded-full bg-warning/15 px-1.5 py-0.5 text-[10px] text-warning"
+						>{{ requestedApprovalCount }}</span
+					>
+				</h3>
 				<UiButton
 					density="compact"
 					appearance="ghost"
@@ -1192,6 +1427,18 @@
 					<i class="fa-solid fa-xmark" aria-hidden="true"></i>
 				</UiButton>
 			</header>
+			<NativeApprovalList
+				v-if="approvals.length"
+				class="mb-3"
+				:approvals="approvals"
+				:connections="connections"
+				:disabled="operation.busy.value || threadBusy"
+				@mutate="runtime.mutate"
+				@inspect="
+					auditToolId = $event;
+					taskRailVisible = true;
+				"
+			/>
 			<NativeRunDetails
 				:key="run.id"
 				:app-id="appId"
@@ -1203,7 +1450,6 @@
 				:messages="messages"
 				:active="active"
 				:disabled="blocked"
-				@refresh="runtime.refreshRun"
 				@mutate="runtime.mutate($event)"
 				@messages="runtime.readMessages"
 			/>

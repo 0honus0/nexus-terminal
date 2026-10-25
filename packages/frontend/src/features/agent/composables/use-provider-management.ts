@@ -209,10 +209,13 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 	}
 
 	async function discover(provider: Provider | null): Promise<void> {
-		if (blocked.value || (provider !== null && draft.value !== null)) {
+		if (blocked.value) {
 			return;
 		}
 		const input = draft.value === null ? null : structuredClone(toRaw(draft.value));
+		if (provider !== null && input !== null && input.id !== provider.id) {
+			return;
+		}
 		if (!provider && (!input || input.id !== null)) {
 			return;
 		}
@@ -238,8 +241,10 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 				discovered.value = value.found;
 				if (provider && value.updated) {
 					providers.value = value.updated;
-					const selected = value.updated.find((item) => item.id === provider.id);
-					draft.value = selected ? createProviderDraft(selected) : null;
+					if (draft.value === null) {
+						const selected = value.updated.find((item) => item.id === provider.id);
+						draft.value = selected ? createProviderDraft(selected) : null;
+					}
 					agentHostEvents.emit('configuration-changed', { origin: 'local' });
 				}
 				notice.value = value.found.length === 0 ? 'noModels' : 'discovered';

@@ -27,11 +27,14 @@ export const defaultTerminalTheme: Record<string, string> = {
 	brightWhite: '#e5e5e5',
 };
 
+const DEFAULT_LIGHT_BORDER_COLOR = '#b8bdc8';
+const LEGACY_LIGHT_BORDER_COLORS = new Set(['#cccccc', '#c3c7d0']);
+
 export const defaultUiTheme: Record<string, string> = {
 	'--app-bg-color': '#ffffff',
 	'--text-color': '#333333',
 	'--text-color-secondary': '#666666',
-	'--border-color': '#cccccc',
+	'--border-color': DEFAULT_LIGHT_BORDER_COLOR,
 	'--border-hover-color': 'color-mix(in srgb, var(--link-active-color) 45%, var(--border-color))',
 	'--card-bg-color': 'rgb(246 247 249 / 92%)',
 	'--link-color': '#8e44ad',
@@ -109,6 +112,8 @@ const isDarkColor = (color: string): boolean => {
 
 export const normalizeUiTheme = (theme: Record<string, string>): Record<string, string> => {
 	const normalized = { ...defaultUiTheme, ...theme };
+	if (LEGACY_LIGHT_BORDER_COLORS.has(normalized['--border-color']?.toLowerCase() ?? ''))
+		normalized['--border-color'] = DEFAULT_LIGHT_BORDER_COLOR;
 	if (!normalized['--font-family-sans-serif'] || normalized['--font-family-sans-serif'] === 'sans-serif') {
 		normalized['--font-family-sans-serif'] = DEFAULT_FONT_FAMILY_SANS;
 	}

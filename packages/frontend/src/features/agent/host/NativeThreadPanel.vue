@@ -8,6 +8,7 @@
 
 	const props = defineProps<{
 		appId: string;
+		liveThread?: NativeThread | null;
 		active: boolean;
 		resumeRevision?: number;
 		disabled?: boolean;
@@ -90,7 +91,7 @@
 		}
 		editor.newThread();
 		title.value = t('agent.operations.untitledThread');
-		await editor.submit();
+		await editor.submit(false, true);
 		if (pending.value === null && selected.value !== null) {
 			await editor.refresh();
 		}
@@ -118,6 +119,13 @@
 		void editor.loadMore();
 	}
 
+	watch(
+		() => props.liveThread,
+		(value) => {
+			if (value) editor.acceptThread(value);
+		},
+		{ immediate: true },
+	);
 	watch(busy, (value) => emit('working', value), { flush: 'sync' });
 	watch([busy, pending, pendingDelete], clearDeleteConfirmation);
 	let pendingRefresh = false;
@@ -279,7 +287,7 @@
 			/>
 		</div>
 
-		<div v-if="pending || pendingDelete" class="shrink-0 border-t border-border/45 p-2.5">
+		<div v-if="(pending || pendingDelete) && !busy" class="shrink-0 border-t border-border/45 p-2.5">
 			<UiInlineNotice v-if="pending" tone="warning" compact>
 				<p class="leading-4">{{ t('agent.nativeThreads.unknown') }}</p>
 				<details class="mt-1 text-[10px] text-text-secondary">

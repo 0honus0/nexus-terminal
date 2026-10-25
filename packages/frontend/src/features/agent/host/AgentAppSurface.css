@@ -83,6 +83,32 @@
 .agent-task-rail {
 	position: relative;
 }
+.agent-task-rail-resize {
+	position: absolute;
+	inset-block: 0;
+	left: -3px;
+	z-index: 3;
+	width: 9px;
+	cursor: col-resize;
+	touch-action: none;
+	border: 0;
+	background: transparent;
+}
+.agent-task-rail-resize::after {
+	position: absolute;
+	inset-block: 0;
+	left: 3px;
+	width: 2px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--link-active-color) 55%, transparent);
+	content: '';
+	opacity: 0;
+	transition: opacity 140ms ease;
+}
+.agent-task-rail:hover .agent-task-rail-resize::after,
+.agent-task-rail-resize:focus-visible::after {
+	opacity: 1;
+}
 .agent-run-config {
 	flex-wrap: nowrap;
 	gap: 0.25rem;
@@ -274,6 +300,9 @@
 }
 
 @container agent-hub-window (max-width: 1040px) {
+	.agent-task-rail-resize {
+		display: none;
+	}
 	.agent-surface-layout,
 	.agent-surface-layout.has-task-rail {
 		grid-template-columns: var(--agent-thread-sidebar-column) minmax(0, 1fr);
@@ -296,6 +325,12 @@
    * Configuration density tiers follow the composer width (the composer shell
    * declares the `agent-composer` container), never the conversation pane.
    */
+@container agent-composer (width > 730px) {
+	.agent-model-trigger-label {
+		max-width: 18rem;
+	}
+}
+
 @container agent-composer (max-width: 730px) {
 	.agent-composer-toolbar {
 		min-height: 36px;

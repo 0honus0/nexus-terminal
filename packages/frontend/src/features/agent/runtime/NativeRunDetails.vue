@@ -23,7 +23,6 @@
 		disabled: boolean;
 	}>();
 	const emit = defineEmits<{
-		refresh: [];
 		mutate: [action: NativeRunAction];
 		messages: [child: NativeChild, more: boolean];
 	}>();
@@ -41,7 +40,7 @@
 	}
 
 	function formatTime(value: number): string {
-		return new Date(value * 1000).toLocaleString(locale.value);
+		return new Date(value).toLocaleString(locale.value);
 	}
 </script>
 <template>
@@ -59,29 +58,16 @@
 						}}</strong>
 					</div>
 				</div>
-				<div class="flex shrink-0 items-center gap-1">
-					<UiButton
-						density="compact"
-						appearance="ghost"
-						icon-only
-						:title="t('agent.nativeRun.read')"
-						:aria-label="t('agent.nativeRun.read')"
-						:disabled="disabled"
-						@click="emit('refresh')"
-					>
-						<i class="fa-solid fa-rotate text-[9px]" aria-hidden="true"></i>
-					</UiButton>
-					<UiButton
-						v-if="isNativeRunActive(run)"
-						density="compact"
-						appearance="soft"
-						tone="danger"
-						:disabled="disabled"
-						@click="emit('mutate', { kind: 'cancel', run })"
-					>
-						{{ t('agent.nativeRun.cancel') }}
-					</UiButton>
-				</div>
+				<UiButton
+					v-if="isNativeRunActive(run)"
+					density="compact"
+					appearance="soft"
+					tone="danger"
+					:disabled="disabled"
+					@click="emit('mutate', { kind: 'cancel', run })"
+				>
+					{{ t('agent.nativeRun.cancel') }}
+				</UiButton>
 			</div>
 
 			<div class="mt-3 grid grid-cols-2 gap-2 border-t border-border/50 pt-2.5 text-[11px]">
