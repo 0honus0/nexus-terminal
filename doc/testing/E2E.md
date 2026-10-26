@@ -1939,3 +1939,9 @@ a0cb4f49正式40319856905全部质量/构建/Docker和8个分片通过，新增�
 第三轮b1ba1399 / [40345176173](https://github.com/0honus0/nexus-terminal/actions/runs/40345176173)：质量/构建/Docker及7分片通过，直传和中转页面用例分别17秒/16秒首次通过，分片2全53项通过；DOM多个中间进度、实际总字节、WS completed后卡片退役、源/目标SHA-256及零/精确SFTP READ均通过。分片7现有connection-create失败后重试通过（整轮flaky拒绝），原因是浏览器response.json的CDP Network.getResponseBody返回No data found；页面快照仍有SSH connection failed错误结果。改测试一次性route.fetch捕获真实后端422正文并严格解码，route.fulfill交付同一响应；不重发、不伪造返回、不删除正文或UI断言。新SHA全量回归待验。
 
 连接表单响应采集修正静态：根check、全量format:all:check、目标E2E严格tsc、ESLint和diff通过，日志`/tmp/nexus-e2e-connection-reply-{check,format,types}.log`。两轮复核一次性路由只覆盖失败测试POST，原请求内容/认证和真实响应保留，后续正常测试无拦截；无产品变化。
+
+### 本批最终正式验收（2026-10-26）
+
+产品/测试源码`dd7a558b572a4bb510ca70531d95f691967a7604`的[Actions 40347041664](https://github.com/0honus0/nexus-terminal/actions/runs/40347041664)全部成功：质量、生产构建、Docker部署冒烟和8个分片共494项首次通过；完整日志核对retry_entries=0、flaky_summaries=0，证据`/tmp/nexus-e2e-40347041664-all.log`。新增跨服务器复制粘贴页面直传17秒、中转16秒首次通过，完整覆盖DOM递增百分比/8MiB总字节、正式WS completed及卡片退役、源/目标SHA-256、直传零SFTP READ及中转精确READ字节。连接创建表单失败/成功/真实持久化全链4.5秒首次通过；501项/>1MiB脚本、12个慢目录、161条传输21页与重复拒绝、51会话跨页搜索及503后Retry恢复通过。
+
+本次修复的远程失败均归测试：SSH多标签可见弹窗定位、rsync -s虚拟根路径映射、CDP响应正文采集；原产品UI设计、内容核验、unknown围栏和全部功能断言保留。`f340063f`只更新CI耗时估计并已同步本地。前述“待验”记录保留对应轮次边界，本批功能远程已验收；专项视觉未执行。本轮未发布镜像或部署，用户自行增删截图未纳入提交。
