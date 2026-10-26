@@ -4,13 +4,11 @@ import { targetErrorKey, TargetRequestFailure } from '@/client/targets/target-ty
 import { hostKeysApi } from '../api/host-keys-api';
 import type { HostKeyTrustRequest } from './host-key-types';
 
-const MAX_PENDING_CONFIRMATIONS = 64;
-let pendingConfirmations = 0;
 let confirmationTail: Promise<void> = Promise.resolve();
 
 /** Batch-opened Workspaces share the dialog without replacing one another's confirmation. */
 export async function confirmConnectionHostKey(input: HostKeyTrustRequest, signal: AbortSignal): Promise<boolean> {
-	if (signal.aborted || pendingConfirmations >= MAX_PENDING_CONFIRMATIONS) {
+	if (signal.aborted) {
 		return false;
 	}
 	const request: HostKeyTrustRequest = {
@@ -19,12 +17,7 @@ export async function confirmConnectionHostKey(input: HostKeyTrustRequest, signa
 		fingerprint: input.fingerprint,
 		expectedFingerprint: input.expectedFingerprint,
 	};
-	pendingConfirmations += 1;
-	const task = confirmationTail
-		.then(() => confirmPresentedHostKey(request, signal))
-		.finally(() => {
-			pendingConfirmations -= 1;
-		});
+	const task = confirmationTail.then(() => confirmPresentedHostKey(request, signal));
 	confirmationTail = task.then(
 		() => undefined,
 		() => undefined,

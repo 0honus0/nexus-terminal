@@ -1,5 +1,4 @@
 <script setup lang="ts">
-	import { useFeedbackMessage } from '@/shared/feedback/public';
 	import { computed, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiButton, UiCheckbox, UiSearchInput } from '@/foundation/ui';
@@ -21,10 +20,7 @@
 	const { t } = useI18n();
 	const opened = ref(false);
 	const input = ref<HTMLInputElement | null>(null);
-	const error = ref('');
-	useFeedbackMessage(() => error.value);
 	const selectedIds = computed(() => new Set(props.modelValue.map((item) => item.id)));
-	const selectionLimit = 10;
 
 	function appName(item: ManagedArtifact): string {
 		return props.appNames?.[item.appId] ?? t('agent.files.unknownApp');
@@ -32,10 +28,6 @@
 
 	function select(item: ManagedArtifact): void {
 		if (props.disabled || selectedIds.value.has(item.id)) {
-			return;
-		}
-		if (props.modelValue.length >= selectionLimit) {
-			error.value = t('agent.attachments.limitReached', { count: selectionLimit });
 			return;
 		}
 		emit('update:modelValue', [...props.modelValue, item]);
@@ -82,8 +74,8 @@
 		}
 		const files = Array.from(event.target.files ?? []);
 		event.target.value = '';
-		if (!props.disabled && props.modelValue.length < selectionLimit) {
-			void uploadFiles(files.slice(0, selectionLimit - props.modelValue.length));
+		if (!props.disabled) {
+			void uploadFiles(files);
 		}
 	}
 
@@ -98,7 +90,6 @@
 		() => props.appId,
 		() => {
 			opened.value = false;
-			error.value = '';
 		},
 	);
 </script>
@@ -151,7 +142,7 @@
 					<UiButton
 						density="compact"
 						appearance="solid"
-						:disabled="blocked || uploadUnknown || disabled || modelValue.length >= selectionLimit"
+						:disabled="blocked || uploadUnknown || disabled"
 						@click="input?.click()"
 					>
 						{{ $t('agent.attachments.upload') }}

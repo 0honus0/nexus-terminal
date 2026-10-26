@@ -1901,3 +1901,29 @@ a0cb4f49正式40319856905全部质量/构建/Docker和8个分片通过，新增�
 追加静态最终：根check、完整build、全量format、变更E2E严格tsc（显式Node类型及前端@路径）、新增fixture语法/diff通过；日志/tmp/nexus-confirm-review-*。初次构建发现不可达shutting_down比较，已删除；最初E2E命令缺@路径，使用临时配置补齐后通过。行为仍待新SHA正式Actions。
 
 最终验收：产品源码2b64a167的正式[E2E 40331990551](https://github.com/0honus0/nexus-terminal/actions/runs/40331990551)全部成功，质量/构建/Docker及8个分片通过，无重试/flaky。复制与发送各两种路径的实时进度、SHA256、直传零SFTP READ、中转精确READ字节通过；已派发失败/取消保留源、不二次中转通过；目录copy 200文件内容/每任务父检查一次、上传24组profile精确33/41检查次数及失败恢复通过，发送UI零前置工具检查且部分目标失败不影响成功目标。652630f9仅CI耗时更新，已快进同步；工作区交付不包含发布/部署，生产吞吐仍未实测。
+
+### Agent 输入区状态栏整合（2026-10-26，本地静态）
+
+将 Token 统计、上一条／下一条和回到最新消息纳入聊天输入区共同外框。两轮源码复核确认全部事件、显示条件和按钮禁用表达式保留；UiButton 默认 button，不触发表单提交；Token 弹层沿原 portal，宽度测量仍归原 form，状态行进入既有窄屏容器查询。根 `pnpm run check`、`pnpm run build:frontend` 和 `git diff --check` 通过，日志 `/tmp/nexus-agent-composer-{check,build}.log`；全量 `pnpm run format:all:check` 通过，结果记录于同前缀 `format.log`。遵守 D17 未执行本地行为测试，视觉、窄屏与跳转实测待远程；未提交、未发布或部署。
+
+### 手机 Agent 会话抽屉背景（2026-10-26，本地静态）
+
+窄屏 `agent-hub-window <= 760px` 中的会话侧栏改用主题 header 背景，覆盖玻璃材质的透明混色；桌面、宽度、层级、遮罩及 inert/显隐保持。两轮源码复核覆盖选择器作用范围、CSS layer 优先级和默认深浅主题。根 check、前端 build、全量格式与 diff 通过，结果见 `/tmp/nexus-agent-sidebar-{check,build,format}.log`；未本地运行行为或视觉测试，未提交、发布及部署。
+
+### 前端冗余功能门槛（2026-10-26，本地静态）
+
+移除连接创建/导入/导出仅前端500项与本地1MiB上限、附件10项及多选静默截断、公钥确认排队64项拒绝、传输详情5项裁切及目录读取8个在途拒绝。协议分批、逐项严格解码、权限/取消/未知结果保护及缓存LRU保留，UI布局与样式未改。两轮源码复核覆盖导入全批预检/部分成功回执、串行上传首失败停止、信任队列取消、目录去重/失效/真实错误传播、传输滚动容器。
+
+新增 `ui/frontend-capacity.spec.ts`：501项且超过1MiB脚本保留最后项，末尾无效项仍拒绝；12个慢目录读取、同路径去重、真实权限失败、失效晚结果与关闭后读取。仅加入正式远程回归，遵守D17未本地运行行为测试。根check、前端build、新回归严格tsc及diff通过，证据 `/tmp/nexus-frontend-limits-{check,build,types}.log`。首次测试类型检查缺Vue声明，临时静态配置补声明后通过；全量格式首次发现测试方法间距，已按规则修正且全量格式重新检查通过，结果见 `/tmp/nexus-frontend-limits-format-final.log`。未提交、推送、发布或部署。
+
+### 列表记录可达与分页完整性（2026-10-26，本地静态）
+
+传输API删除累计160项协议拒绝，保留逐页严格解码、递增游标及跨页重复ID拒绝；Agent会话搜索沿既有游标串行读取后续页，不再只查首50条，清空搜索/失活/禁用/未决写入停止新页，失败进入原重读围栏。未改模板、样式或布局。两轮源码复核包含刷新/搜索变化、分页期间失活、错误不自动重试、旧结果归原owner，以及其它列表的分页/完整入口。
+
+新增 `ui/list-pagination.spec.ts`：浏览器真实API模块读取161项、21个协议页，跨页重复记录拒绝；创建51个真实Agent会话，搜索位于第二页的会话，注入下一页503后经原Retry恢复。正式远程用例尚未运行，本地仅静态。根check、前端build、新增两份回归严格tsc及diff通过，证据 `/tmp/nexus-list-pagination-{check,build,types}.log`，全量格式检查通过，结果见同前缀 `format.log`。未提交、推送、发布或部署。
+
+### 跨服务器剪贴板页面实时进度（2026-10-26，本地静态）
+
+`ssh/direct-and-relay-transfer.spec.ts` 新增两个浏览器用例，分别覆盖原生直传和不可达时的SFTP中转：登录、连接两个SSH标签、文件管理器复制、切换目标标签并粘贴、确认凭据交付。传输真实8MiB样本，沿用夹具带宽控制，DOM观察要求至少两个递增的中间百分比与正确字节总量；通过正式Workspace codec核对同一任务的实际字节进度及completed，随后确认卡片自动退出，核验源和目标SHA-256一致。完成卡片会立即退役，不要求瞬态100%必须绘制。另核对直传零SFTP READ、中转READ字节精确等于样本大小，保存DOM/WS及路径证据附件。
+
+两轮复审修正第二连接使用Workspace新建标签，避免整页导航销毁首会话；登录使用浏览器context.request共享认证。根check、全量format:all:check、目标E2E严格TypeScript及diff通过，证据`/tmp/nexus-clipboard-progress-{check,format,types}.log`。本批仅测试和文档，无产品/UI代码变更；遵守D17未执行本地行为测试，新增场景待正式远程Actions，不引用前轮PASS作为本批结果；未发布或部署。

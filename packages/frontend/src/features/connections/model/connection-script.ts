@@ -1,15 +1,9 @@
 import { InvalidTargetPayload, targetOption } from '@nexus-terminal/shared/targets/http';
-import {
-	CONNECTION_TYPES,
-	TARGET_CONNECTION_IMPORT_FILE_MAX_BYTES,
-} from '@nexus-terminal/shared/targets/connections/values';
+import { CONNECTION_TYPES } from '@nexus-terminal/shared/targets/connections/values';
 import { readConnectionImportInput } from '@nexus-terminal/shared/targets/connections/http-codec';
 import type { TargetImportInput } from '@nexus-terminal/shared/targets/connections/http';
 import type { ProxySummary } from '@/features/proxies/public';
 import type { SshKeySummary } from '@/features/ssh-keys/public';
-
-/** A bounded UI batch, dispatched in protocol-sized independent chunks. */
-export const CONNECTION_CREATION_MAX_ITEMS = 500;
 
 function tokens(line: string): string[] {
 	const result: string[] = [];
@@ -96,14 +90,11 @@ export function parseConnectionScript(
 	proxies: readonly ProxySummary[],
 	keys: readonly SshKeySummary[],
 ): TargetImportInput[] {
-	if (new TextEncoder().encode(source).byteLength > TARGET_CONNECTION_IMPORT_FILE_MAX_BYTES) {
-		throw new InvalidTargetPayload();
-	}
 	const lines = source
 		.split(/\r?\n/u)
 		.map((line) => line.trim())
 		.filter(Boolean);
-	if (!lines.length || lines.length > CONNECTION_CREATION_MAX_ITEMS) {
+	if (!lines.length) {
 		throw new InvalidTargetPayload();
 	}
 	return lines.map((line) => {

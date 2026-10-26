@@ -2,12 +2,10 @@
 	import { computed, onBeforeUnmount, onDeactivated, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiButton, UiInlineNotice, UiModal, UiSpinner, UiTextarea } from '@/foundation/ui';
-	import { targetArray, InvalidTargetPayload } from '@nexus-terminal/shared/targets/http';
-	import { TARGET_CONNECTION_IMPORT_FILE_MAX_BYTES } from '@nexus-terminal/shared/targets/connections/values';
+	import { InvalidTargetPayload } from '@nexus-terminal/shared/targets/http';
 	import { readConnectionImportInput } from '@nexus-terminal/shared/targets/connections/http-codec';
 	import { targetErrorKey } from '@/client/targets/target-types';
 	import { useConnectionEditor } from '../composables/use-connection-editor';
-	import { CONNECTION_CREATION_MAX_ITEMS } from '../model/connection-script';
 	import type { ConnectionSummary } from '../model/connection-types';
 	const props = defineProps<{ visible: boolean }>();
 	const emit = defineEmits<{ close: []; saved: [item: ConnectionSummary] }>();
@@ -64,9 +62,6 @@
 		reading.value = true;
 		fileError.value = '';
 		try {
-			if (file.size > TARGET_CONNECTION_IMPORT_FILE_MAX_BYTES) {
-				throw new InvalidTargetPayload();
-			}
 			const bytes = await file.arrayBuffer();
 			if (current !== generation) {
 				return;
@@ -90,11 +85,11 @@
 		}
 		fileError.value = '';
 		try {
-			if (new TextEncoder().encode(source.value).byteLength > TARGET_CONNECTION_IMPORT_FILE_MAX_BYTES) {
+			const value: unknown = JSON.parse(source.value);
+			if (!Array.isArray(value) || !value.length) {
 				throw new InvalidTargetPayload();
 			}
-			const value: unknown = JSON.parse(source.value);
-			const items = targetArray(value, readConnectionImportInput, CONNECTION_CREATION_MAX_ITEMS);
+			const items = value.map((item: unknown) => readConnectionImportInput(item));
 			void saveMany(items);
 		} catch (cause) {
 			fileError.value = t('connections.failures.' + targetErrorKey(cause));

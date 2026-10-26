@@ -1398,8 +1398,7 @@
       "search": "搜索文件",
       "searchAction": "搜索",
       "upload": "上传",
-      "loadMore": "加载更多",
-      "limitReached": "最多可附加 {count} 个文件。"
+      "loadMore": "加载更多"
     },
     "apiErrors": {
       "providerResponse": "上游响应格式不兼容或流响应不完整，请检查提供商协议及上游通道。",

@@ -896,79 +896,86 @@
 									<span class="ml-1 shrink-0 opacity-60" aria-hidden="true">×</span>
 								</UiButton>
 							</div>
-							<div class="agent-composer-status mb-1.5 flex min-h-6 items-center justify-between gap-2">
-								<AgentConfigPopover
-									v-if="usage"
-									:ariaLabel="t('agent.tasks.totalTokens')"
-									:title="usageDetails"
-									trigger-class="agent-token-status"
-									panel-class="max-w-xs text-xs text-text-secondary"
-								>
-									<template #trigger>
-										<i class="fa-solid fa-chart-simple text-[9px]" aria-hidden="true"></i>
-										<strong class="font-mono font-medium">{{ tokenLabel }}</strong>
-									</template>
-									<template #panel>
-										<p>
-											{{ t('agent.tasks.totalTokens') }}:
-											{{ totalTokens === null ? '—' : formatAgentNumber(locale, totalTokens) }}
-										</p>
-										<p class="mt-2 leading-relaxed">{{ usageDetails }}</p>
-									</template>
-								</AgentConfigPopover>
-								<span
-									v-else
-									class="agent-composer-hint min-w-0 truncate text-[11px] leading-none text-text-secondary/65 select-none"
-								>
-									<i class="fa-regular fa-keyboard mr-1 text-[9px] opacity-80" aria-hidden="true"></i>
-									{{ t('agent.conversation.sendHint') }}
-									<span class="px-1 text-text-secondary/40">·</span>
-									{{ t('agent.conversation.sendHintNewline') }}
-								</span>
-								<div class="ml-auto flex shrink-0 items-center gap-1">
-									<UiButton
-										v-if="showJumpToLatest"
-										density="compact"
-										appearance="soft"
-										class="agent-jump-latest shrink-0 rounded-full px-2.5"
-										:title="t('agent.ui.latest')"
-										:aria-label="t('agent.ui.latest')"
-										@click="scrollToBottom"
-									>
-										<i class="fa-solid fa-arrow-down text-[9px]" aria-hidden="true"></i>
-										<span class="agent-jump-latest-label">{{ t('agent.ui.latest') }}</span>
-									</UiButton>
-									<UiButton
-										v-if="entries.length"
-										density="compact"
-										appearance="ghost"
-										icon-only
-										:disabled="!canJumpPrevious"
-										:aria-label="t('agent.conversation.previousMessage')"
-										:title="t('agent.conversation.previousMessage')"
-										@click="jumpMessage('previous')"
-									>
-										<i class="fa-solid fa-chevron-up text-[9px]" aria-hidden="true"></i>
-									</UiButton>
-									<UiButton
-										v-if="entries.length"
-										density="compact"
-										appearance="ghost"
-										icon-only
-										:disabled="!canJumpNext"
-										:aria-label="t('agent.conversation.nextMessage')"
-										:title="t('agent.conversation.nextMessage')"
-										@click="jumpMessage('next')"
-									>
-										<i class="fa-solid fa-chevron-down text-[9px]" aria-hidden="true"></i>
-									</UiButton>
-								</div>
-							</div>
 							<form
 								ref="composer"
 								class="agent-composer-shell overflow-hidden rounded-xl border border-border/65 bg-card/88 shadow-sm backdrop-blur-md transition-all duration-200 hover:border-border-hover focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/15"
 								@submit.prevent="submitComposer"
 							>
+								<div
+									class="agent-composer-status flex min-h-6 items-center justify-between gap-2 px-2 pt-1.5"
+								>
+									<AgentConfigPopover
+										v-if="usage"
+										:ariaLabel="t('agent.tasks.totalTokens')"
+										:title="usageDetails"
+										trigger-class="agent-token-status"
+										panel-class="max-w-xs text-xs text-text-secondary"
+									>
+										<template #trigger>
+											<i class="fa-solid fa-chart-simple text-[9px]" aria-hidden="true"></i>
+											<strong class="font-mono font-medium">{{ tokenLabel }}</strong>
+										</template>
+										<template #panel>
+											<p>
+												{{ t('agent.tasks.totalTokens') }}:
+												{{
+													totalTokens === null ? '—' : formatAgentNumber(locale, totalTokens)
+												}}
+											</p>
+											<p class="mt-2 leading-relaxed">{{ usageDetails }}</p>
+										</template>
+									</AgentConfigPopover>
+									<span
+										v-else
+										class="agent-composer-hint min-w-0 truncate text-[11px] leading-none text-text-secondary/65 select-none"
+									>
+										<i
+											class="fa-regular fa-keyboard mr-1 text-[9px] opacity-80"
+											aria-hidden="true"
+										></i>
+										{{ t('agent.conversation.sendHint') }}
+										<span class="px-1 text-text-secondary/40">·</span>
+										{{ t('agent.conversation.sendHintNewline') }}
+									</span>
+									<div class="ml-auto flex shrink-0 items-center gap-1">
+										<UiButton
+											v-if="showJumpToLatest"
+											density="compact"
+											appearance="soft"
+											class="agent-jump-latest shrink-0 rounded-full px-2.5"
+											:title="t('agent.ui.latest')"
+											:aria-label="t('agent.ui.latest')"
+											@click="scrollToBottom"
+										>
+											<i class="fa-solid fa-arrow-down text-[9px]" aria-hidden="true"></i>
+											<span class="agent-jump-latest-label">{{ t('agent.ui.latest') }}</span>
+										</UiButton>
+										<UiButton
+											v-if="entries.length"
+											density="compact"
+											appearance="ghost"
+											icon-only
+											:disabled="!canJumpPrevious"
+											:aria-label="t('agent.conversation.previousMessage')"
+											:title="t('agent.conversation.previousMessage')"
+											@click="jumpMessage('previous')"
+										>
+											<i class="fa-solid fa-chevron-up text-[9px]" aria-hidden="true"></i>
+										</UiButton>
+										<UiButton
+											v-if="entries.length"
+											density="compact"
+											appearance="ghost"
+											icon-only
+											:disabled="!canJumpNext"
+											:aria-label="t('agent.conversation.nextMessage')"
+											:title="t('agent.conversation.nextMessage')"
+											@click="jumpMessage('next')"
+										>
+											<i class="fa-solid fa-chevron-down text-[9px]" aria-hidden="true"></i>
+										</UiButton>
+									</div>
+								</div>
 								<textarea
 									id="agent-composer"
 									v-model="draft"

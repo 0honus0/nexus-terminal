@@ -108,16 +108,23 @@
 		const element = scroller.value;
 		if (
 			!element ||
-			query.value ||
+			!props.active ||
+			props.disabled ||
+			!loaded.value ||
+			pending.value !== null ||
+			pendingDelete.value !== null ||
 			nextCursor.value === null ||
 			busy.value ||
 			editor.refreshRequired.value ||
-			element.scrollHeight - element.scrollTop - element.clientHeight > 96
+			(!query.value.trim() && element.scrollHeight - element.scrollTop - element.clientHeight > 96)
 		) {
 			return;
 		}
 		void editor.loadMore();
 	}
+
+	// Search must inspect later pages even when the current filtered list cannot scroll.
+	watch([query, nextCursor, busy, () => props.active, () => props.disabled], handleScroll, { flush: 'post' });
 
 	watch(
 		() => props.liveThread,

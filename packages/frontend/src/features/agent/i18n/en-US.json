@@ -1398,8 +1398,7 @@
       "search": "Search files",
       "searchAction": "Search",
       "upload": "Upload",
-      "loadMore": "Load more",
-      "limitReached": "You can attach up to {count} files."
+      "loadMore": "Load more"
     },
     "apiErrors": {
       "providerResponse": "The upstream response is incompatible or incomplete. Check the provider protocol and upstream route.",

@@ -97,7 +97,7 @@ export const serverTransfersApi = {
 				SERVER_TRANSFER_PAGE_MAX_BYTES,
 			);
 			for (const task of page.items) {
-				if (seen.has(task.taskId) || (cursor !== null && task.taskId <= cursor) || result.length >= 160) {
+				if (seen.has(task.taskId) || (cursor !== null && task.taskId <= cursor)) {
 					throw new ServerTransferRequestFailure('protocol_failure', 'unknown');
 				}
 				seen.add(task.taskId);

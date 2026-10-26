@@ -158,7 +158,7 @@
 	};
 
 	const displayedServerTransfers = computed(() =>
-		[...props.serverTransfers].sort((left, right) => right.createdAt - left.createdAt).slice(0, 5),
+		[...props.serverTransfers].sort((left, right) => right.createdAt - left.createdAt),
 	);
 
 	const serverTaskFinal = (status: ServerTransferTaskStatus): boolean =>

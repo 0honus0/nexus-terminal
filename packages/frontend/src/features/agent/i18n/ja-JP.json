@@ -1398,8 +1398,7 @@
       "search": "ファイルを検索",
       "searchAction": "検索",
       "upload": "アップロード",
-      "loadMore": "さらに読み込む",
-      "limitReached": "添付できるファイルは最大 {count} 件です。"
+      "loadMore": "さらに読み込む"
     },
     "apiErrors": {
       "providerResponse": "上流の応答形式が非互換、またはストリームが不完全です。プロトコルと上流経路を確認してください。",

@@ -19,7 +19,6 @@ import type {
 	ConnectionImportReceipt,
 } from '../model/connection-types';
 import { useConnections } from './useConnections';
-import { CONNECTION_CREATION_MAX_ITEMS } from '../model/connection-script';
 
 export function useConnectionEditor(
 	props: Readonly<{ visible: boolean; connection?: ConnectionSummary | null }>,
@@ -192,7 +191,7 @@ export function useConnectionEditor(
 	function saveMany(inputs: TargetImportInput[]): Promise<void> {
 		return execute(async (signal) => {
 			receipts.value = [];
-			if (!inputs.length || inputs.length > CONNECTION_CREATION_MAX_ITEMS) {
+			if (!inputs.length) {
 				throw new TargetRequestFailure('invalid_input', 'not_dispatched');
 			}
 			const chunks: TargetImportInput[][] = [];

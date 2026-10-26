@@ -1,11 +1,10 @@
 import type { FilesystemChannel } from '../ports/filesystem-channel';
-import { FilesystemFailure, type DirectoryListing } from './filesystem-types';
+import type { DirectoryListing } from './filesystem-types';
 
 const DIRECTORY_TTL_MS = 5 * 60 * 1000;
 const MAX_DIRECTORIES = 20;
 const MAX_ENTRIES = 20_000;
 const MAX_ESTIMATED_BYTES = 8 * 1024 * 1024;
-const MAX_PENDING_READS = 8;
 
 interface CachedDirectory {
 	listing: DirectoryListing;
@@ -81,7 +80,6 @@ export function createDirectoryCache(channel: FilesystemChannel): DirectoryCache
 		if (cached) return Promise.resolve(cached);
 		const existing = pending.get(path);
 		if (existing?.revision === revision) return existing.promise;
-		if (tasks.size >= MAX_PENDING_READS) return Promise.reject(new FilesystemFailure('limit_exceeded', false));
 		const current = revision;
 		const promise = Promise.resolve()
 			.then(() => channel.listDirectory(path))

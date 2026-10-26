@@ -9,12 +9,10 @@ import {
 	readCredentialInput,
 	readConnectionImportInput,
 } from '@nexus-terminal/shared/targets/connections/http-codec';
-import { TARGET_CONNECTION_IMPORT_FILE_MAX_BYTES } from '@nexus-terminal/shared/targets/connections/values';
 import type { ConnectionSummary, ConnectionBatchCommand, ConnectionTestSummary } from '../model/connection-types';
 import { connectionTestApi } from '../api/connection-test-api';
 import { ConnectionTestFailure } from '../model/connection-errors';
 import { useConnections } from './useConnections';
-import { CONNECTION_CREATION_MAX_ITEMS } from '../model/connection-script';
 
 export function useConnectionManagement() {
 	const { t } = useI18n();
@@ -267,9 +265,6 @@ export function useConnectionManagement() {
 			if (data.needsRefresh.value || !items.length) {
 				throw new TargetRequestFailure('recovery_required', 'not_dispatched');
 			}
-			if (items.length > CONNECTION_CREATION_MAX_ITEMS) {
-				throw new TargetRequestFailure('limit_exceeded', 'not_dispatched');
-			}
 			const output = items.map((item) =>
 				readConnectionImportInput({
 					connection: {
@@ -287,9 +282,6 @@ export function useConnectionManagement() {
 				}),
 			);
 			const encoded = JSON.stringify(output, null, 2);
-			if (new TextEncoder().encode(encoded).byteLength > TARGET_CONNECTION_IMPORT_FILE_MAX_BYTES) {
-				throw new TargetRequestFailure('limit_exceeded', 'not_dispatched');
-			}
 			const url = URL.createObjectURL(new Blob([encoded], { type: 'application/json' }));
 			try {
 				const anchor = document.createElement('a');
