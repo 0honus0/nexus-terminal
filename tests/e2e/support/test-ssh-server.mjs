@@ -1110,6 +1110,26 @@ function attachSftp(session, accept) {
 		}
 	});
 
+	sftp.on('READLINK', async (reqid, remotePath) => {
+		try {
+			const target = await fsp.readlink(resolveRemotePath(remotePath));
+			sftp.name(reqid, [{ filename: target, longname: target, attrs: {} }]);
+		} catch (error) {
+			respondError(reqid, error);
+		}
+	});
+
+	// ssh2 normalizes the OpenSSH wire argument order for server listeners.
+	// Preserve the target text; only the link's location belongs to the root.
+	sftp.on('SYMLINK', async (reqid, linkPath, targetPath) => {
+		try {
+			await fsp.symlink(targetPath, resolveRemotePath(linkPath));
+			sftp.status(reqid, STATUS_CODE.OK);
+		} catch (error) {
+			respondError(reqid, error);
+		}
+	});
+
 	sftp.on('MKDIR', async (reqid, remotePath, attrs) => {
 		try {
 			if (remotePath.startsWith('/prepare-profile-')) {

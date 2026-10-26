@@ -357,18 +357,18 @@ for (const scenario of ['direct', 'relay', 'install-rsync', 'skip-rsync', 'skip-
 				timeout: 35_000,
 			});
 			await expect(page.locator('.terminal-tab-shell').getByRole('tab')).toHaveCount(2);
-			await page
-				.getByRole('tab')
-				.filter({ hasText: `Transfer peer ${E2E_SSH.port}` })
-				.click();
+			const sourceTab = page.getByRole('tab').filter({ hasText: `Transfer peer ${E2E_SSH.port}` });
+			await sourceTab.click();
+			await expect(sourceTab).toHaveAttribute('aria-selected', 'true');
 			await openConnectedFileManager(page);
 			await rightClickRow(page, filename);
 			await clickMenuItem(page, 'Copy');
 			await closeConnectedFileManager(page);
-			await page
+			const destinationTab = page
 				.getByRole('tab')
-				.filter({ hasText: `Transfer peer ${E2E_SSH.transferTargetPort}` })
-				.click();
+				.filter({ hasText: `Transfer peer ${E2E_SSH.transferTargetPort}` });
+			await destinationTab.click();
+			await expect(destinationTab).toHaveAttribute('aria-selected', 'true');
 			await openConnectedFileManager(page);
 			await goIntoFolder(page, 'folder-seed');
 			const monitor = await page.evaluateHandle((name) => {

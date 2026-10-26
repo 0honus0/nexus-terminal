@@ -3663,3 +3663,7 @@ a0cb4f49/40319856905完整通过（含质量、Docker及全部8分片），3381d
 ### 第二轮远程 E2E 的 SCP 虚拟路径一致性（2026-10-27）
 
 `791c8917` / `40377275162` 已验证 clipboard/send 原生 SCP 两条真实 8 MiB 传输均约 12 秒完成，EOF 修复成立；其余 7 个分片、检查及 Docker smoke 通过。接续 UI 流程使用虚拟 `/folder-seed` 时，测试 exec 的 `mkdir -p` 未映射到 SFTP root，而旧 SCP 参数映射又按宿主 `existsSync` 放行，导致文件写到 runner 目录，SFTP 完成核验返回 not_found。后续发送任务的 unknown 继续触发基线保护。修复夹具同时映射目的目录创建、SCP 源/接收端路径，复用 resolveRemotePath 对隔离根与私有凭据目录的唯一解释，保留 `/dev/null`；去掉依赖宿主偶然存在路径的判断，并保持 shell 单引号转义。产品及 UI 不变，完成校验、unknown 保护、原文件/哈希/进度断言全部保留。四表范围仍为测试 SSH 协议与虚拟文件系统 owner，无新类型，等待本次静态和完整正式回归。
+
+### 第三轮完整回归及最后两项夹具修复（2026-10-27）
+
+`b9b1d099` / `40379274442` 中全部原生传输、skip-rsync 页面粘贴及发送安装流程首次通过，路径修复成立；无后续基线污染。第 5 分片余下失败为目录/根符号链接回退：测试 SFTP 未注册 READLINK/SYMLINK，ssh2 按协议返回 OP_UNSUPPORTED；按实际 ssh2 Server 参数顺序补齐两种操作，原样保留链接 target 文本并仅映射 link 所在路径。另 relay/skip-all 页面各重试一次才通过，trace 确认在标签 activate 的 animation frame 前，测试沿旧 active surface 点击旧按钮，随后旧 surface 隐藏。用例在两个标签点击后明确等待目标 aria-selected=true，保留原可见/可点击、进度、字节、哈希和完成断言，不 force 点击、不扩大超时、不改 UI 或产品切换。设计/职责/类型仍沿既有夹具与用例；两轮源码复核覆盖 ssh2 协议参数、相对链接文本及真实标签激活条件，待静态及新 SHA 全量远程验收后才发布。
