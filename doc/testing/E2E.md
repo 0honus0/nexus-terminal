@@ -1927,3 +1927,7 @@ a0cb4f49正式40319856905全部质量/构建/Docker和8个分片通过，新增�
 `ssh/direct-and-relay-transfer.spec.ts` 新增两个浏览器用例，分别覆盖原生直传和不可达时的SFTP中转：登录、连接两个SSH标签、文件管理器复制、切换目标标签并粘贴、确认凭据交付。传输真实8MiB样本，沿用夹具带宽控制，DOM观察要求至少两个递增的中间百分比与正确字节总量；通过正式Workspace codec核对同一任务的实际字节进度及completed，随后确认卡片自动退出，核验源和目标SHA-256一致。完成卡片会立即退役，不要求瞬态100%必须绘制。另核对直传零SFTP READ、中转READ字节精确等于样本大小，保存DOM/WS及路径证据附件。
 
 两轮复审修正第二连接使用Workspace新建标签，避免整页导航销毁首会话；登录使用浏览器context.request共享认证。根check、全量format:all:check、目标E2E严格TypeScript及diff通过，证据`/tmp/nexus-clipboard-progress-{check,format,types}.log`。本批仅测试和文档，无产品/UI代码变更；遵守D17未执行本地行为测试，新增场景待正式远程Actions，不引用前轮PASS作为本批结果；未发布或部署。
+
+首轮25561d1b / [40340550595](https://github.com/0honus0/nexus-terminal/actions/runs/40340550595)：质量/构建/Docker与7分片通过，新增前端容量及列表分页回归通过；分片2新增直传/中转UI两例均在打开目标文件管理器前置断言失败，重试相同。trace/error-context明确已有可见目标dialog及目录，helper却以全文“File Manager”的first匹配首会话隐藏编辑器提示。替换为既有可见dialog定位，实际用户操作、进度/内容和路由证据断言保持。此轮不算验收通过，待修正后新SHA完整回归。
+
+可见弹窗修正静态：根check、全量format:all:check、目标E2E严格tsc、ESLint与git diff --check通过，日志`/tmp/nexus-e2e-visibility-{check,format,types}.log`。产品代码无新增变化，无需重复产品构建；待新SHA正式回归，不发布。

@@ -177,7 +177,7 @@ export async function openConnectedFileManager(page: Page): Promise<void> {
 	const openButton = visibleFileManagerOpenButton(page);
 	await expect(openButton).toBeVisible({ timeout: 20_000 });
 	await openButton.click();
-	await expect(page.getByText('File Manager', { exact: false }).first()).toBeVisible();
+	await expect(visibleFileManagerModal(page)).toBeVisible();
 	await expect(fileManagerRow(page, 'seed.txt')).toBeVisible({ timeout: 20_000 });
 }
 
