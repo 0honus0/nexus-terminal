@@ -1755,3 +1755,32 @@ e2f66bdf对应 https://github.com/0honus0/nexus-terminal/actions/runs/4026284297
 涉及首页旧搜索/容器、Settings旧Workspace分组、Agent旧原生滑块/配置/历史控件、模型旧输入框、已取消的内联提示、快捷指令旧信息区和传输旧停止按钮等12个原样式owner。两轮源码复核核对实际消费者和全部diff；静态AST对照工具/tmp/nexus-css-review.cjs证实每个已改Vue文件的template/script/scriptSetup内容、style属性，以及全部保留选择器的声明值/顺序/at-rule条件与HEAD一致，仅排除明确批准清理项。结果/tmp/nexus-css-cleanup-review.log。
 
 根check（含Backend包级类型检查）、Frontend生产build、全量format:all:check和git diff --check通过，日志/tmp/nexus-css-cleanup-{check,build,format}.log。临时扫描首两次因独立/tmp脚本无法解析pnpm间接依赖而失败，改用已安装依赖的实际解析路径后通过，未增加依赖或修改项目配置。按D17未运行本地行为/浏览器/E2E，不将静态AST对照冒充视觉回归；前轮463项PASS仍只对应其原提交。本次未提交、推送、部署或重启，未改个人未跟踪截图。
+
+## CSS清理交付、dev amd64与原站点升级（2026-10-26，已完成）
+
+代码0fc60b7b127e699efffe99c89987b39b3a78a9bf推送dev。正式E2E https://github.com/0honus0/nexus-terminal/actions/runs/40265599805 完整success：463通过、0失败/0 flaky，8分片、根质量/格式/build和Docker smoke成功；分片1–8分别58/49/52/51/57/56/67/73项，独立用例计入对应分片。各分片日志/tmp/nexus-css-final-e2e-job-121387248{795,802,808,811,833,842,858,861}.log。CI自动f5b6221f仅更新duration-estimates，已同步。
+
+用户要求dev amd镜像，发布 https://github.com/0honus0/nexus-terminal/actions/runs/40265629589 成功，生产依赖high级审计通过。镜像ghcr.io/0honus0/nexus-terminal:dev及sha-0fc60b7b127e，仅linux/amd64；digest为sha256:29d0af1b3797a2a796a5aa7fcfb4e6f2b48f52960e60a423cb418011d763cf54，revision精确对应代码SHA。发布原始日志/tmp/nexus-css-dev-amd-publish.log。
+
+### 原部署识别及用户明确的数据处理选择
+
+容器Compose标签定位原部署/home/honus/product/nexus_terminal，原NEXUS_DATA_DIR为./data，公开Origin为https://ssh.honus.top。旧镜像cb693e4c、数据库signature为backend-next-v1-initial-20261023-remote-tool-installer；新镜像要求backend-next-v1-initial-20261025-agent-approvals，不能直接复用旧库。初步只拉镜像未替换服务；用户随后明确要求备份旧库、在原目录新建后导入UI/连接/快捷指令分组/Agent配置等，才执行一次性离线导入，产品没有新增兼容逻辑或修改旧库签名。
+
+隔离容器network=none、无发布端口，用新镜像初始化schema，43张配置表逐列比对；原旧库已有执行覆盖为空、全局执行设置无记录，不需要猜测已删字段。试导入和正式最终备份导入均验证原配置逐行完全一致、foreign_key_check无结果、integrity_check=ok。保留ID、加密密文及原实例密钥；源库无Provider/聊天内容。旧模型库缓存schemaVersion=1不导入，按当前v2缓存重新建立；旧审计/通知派发及运行账本留备份，不混入新运行实例。数据目录appearance/artifacts/plugins按内容hash复制核对；原环境文件hash保持。
+
+正式停止前后端后完整备份data/.env/Compose，再做独立SQLite备份；原data移动到维护目录previous-data，新库仍放原data路径。保留旧镜像rollback标签、原数据及失败自动回退流程；没有触发回退。正式前后端健康，image architecture/revision/digest与发布一致。
+
+### 数据和入口验收
+
+| 内容       | 核对结果                                                                                                                                                 |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 账号/会话  | 原账号1、原会话3，密码/因素字段及原摘要会话完整保留；短期维护验证会话finally清除。                                                                       |
+| 连接       | 连接6、凭据6、主机密钥5、连接标签关联6；Proxy1/标签3保留。                                                                                               |
+| 外观与命令 | 主题403、外观1、布局偏好1；快捷指令14、标签组2、关联14、原历史16保留。                                                                                   |
+| Agent配置  | 内置App及政策各1、声明能力19、denylist元数据保留；Provider/聊天源记录为0。                                                                               |
+| 认证读取   | 新版启动后26项实际GET覆盖设置/布局/外观/主题/连接/各凭据/命令与标签/Agent App/模型库/执行设置/政策/权限，全部200；只输出路径/状态/长度，不打印秘密正文。 |
+| 公网       | 首页200且字节与容器新版index.html一致；/api/v1/status为200；无Cookie的auth/status为预期401，携维护会话认证读取为200。                                    |
+| 数据与备份 | 正式库FK/integrity再次通过；完整备份tar目录可读、SHA-256匹配，原数据保留，.env未改。                                                                     |
+| 日志       | 新后端启动及验证期间无error级日志；未据此宣称未覆盖的真实SSH/浏览器视觉行为已验。                                                                        |
+
+远程备份目录/home/honus/product/nexus_terminal/upgrade-20261026T035324Z（0700）：data-env-compose-before-upgrade.tar.gz、nexus-terminal-before-upgrade.db及previous-data完整旧目录；包含实例密钥，保留root权限，不上传仓库。部署元数据deployment.json、final-import.json及final-verification.json保存在该目录；本地日志/tmp/nexus-upgrade-{prepare,trial-import,trial-http,cutover,final-http,final-check}.log。首次临时验证误用了settings/appearance及credentials复数路径，按真实路由纠正后26项全通过；最初公网检查将无Cookie的正常401误当失败，核对认证路由后按真实语义记录，不修改产品。没有输出或更换原密码、实例密钥或Provider密钥。未保留浏览器测试会话、未运行本地E2E；原个人截图保持不动。
