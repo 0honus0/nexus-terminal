@@ -283,7 +283,9 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
 		await expect(target).toHaveCount(0, { timeout: 20_000 });
 
 		await manager(page).getByTitle('Refresh', { exact: true }).click();
+		await expect(row(page, 'seed.txt')).toBeVisible();
 		await expect(row(page, 'force-delete-e2e')).toHaveCount(0);
+		await expect(page.getByText(/Deletion failed;/)).toHaveCount(0);
 	});
 
 	await step('delete preserves literal backslashes, template markers, and quotes in POSIX filenames', async () => {

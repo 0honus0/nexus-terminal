@@ -11,8 +11,6 @@ import {
 	SERVER_TRANSFER_TASK_STATES,
 	SERVER_TRANSFER_ITEM_STATES,
 	SERVER_TRANSFER_ERROR_CODES,
-	SERVER_TRANSFER_MAX_TARGETS,
-	SERVER_TRANSFER_MAX_SOURCES,
 	SERVER_TRANSFER_MAX_ITEMS,
 	SERVER_TRANSFER_MAX_NAME_BYTES,
 	SERVER_TRANSFER_MAX_PATH_BYTES,
@@ -127,10 +125,8 @@ export function readServerTransferInput(value: unknown): ServerTransferInput {
 	if (
 		!Array.isArray(input.connectionIds) ||
 		!input.connectionIds.length ||
-		input.connectionIds.length > SERVER_TRANSFER_MAX_TARGETS ||
 		!Array.isArray(input.sourceItems) ||
 		!input.sourceItems.length ||
-		input.sourceItems.length > SERVER_TRANSFER_MAX_SOURCES ||
 		input.connectionIds.length * input.sourceItems.length > SERVER_TRANSFER_MAX_ITEMS
 	) {
 		return reject();
@@ -191,7 +187,7 @@ function item(value: unknown): ServerTransferItem {
 	return {
 		subTaskId: readServerTransferId(row.subTaskId),
 		connectionId: integer(row.connectionId, 1),
-		sourceItemIndex: integer(row.sourceItemIndex, 0, SERVER_TRANSFER_MAX_SOURCES - 1),
+		sourceItemIndex: integer(row.sourceItemIndex, 0),
 		status,
 		progress,
 		error,

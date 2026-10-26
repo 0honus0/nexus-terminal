@@ -333,7 +333,8 @@ class ConnectedMachine implements MachineConnection {
 		) {
 			throw new Error('Invalid command output budget');
 		}
-		if (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 1 || options.timeoutMs > 300000) {
+		// Node timers overflow beyond signed 32-bit milliseconds and fire almost immediately.
+		if (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 1 || options.timeoutMs > 2_147_483_647) {
 			throw new Error('Invalid command timeout');
 		}
 		if (options.signal?.aborted) {

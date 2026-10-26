@@ -1460,7 +1460,7 @@ HTTP → Service → Model → Remote machines 与 Platform transfers；跨模�
 
 ### 4. 类型与转换
 
-Shared `remote/transfers/server-{values,model,http,codec}` 持有有限值、完整安全任务及五入口契约；目标目录可为根目录，源项仍禁止根目录，Native Adapter 不为根目标重复追加斜线，路径空白保持原值；后端应用对象独立归 `transfers/model/*-types`。HTTP、Model、前端 mapper 均逐字段投影；主机密钥 pin、密码和私钥只在后端可信转换与技术 Adapter 间短暂存在。
+Shared `remote/transfers/server-{values,model,http,codec}` 持有有限值、完整安全任务及五入口契约；目标目录可为根目录，源项仍禁止根目录，Native Adapter 不为根目标重复追加斜线，路径空白保持原值；独立64目标/256来源计数门槛移除，实际请求/任务字节与1024子项展开预算保留；sourceItemIndex按该任务自身来源数组校验。后端应用对象独立归 `transfers/model/*-types`。HTTP、Model、前端 mapper 均逐字段投影；主机密钥 pin、密码和私钥只在后端可信转换与技术 Adapter 间短暂存在。
 
 ### 5. 入口与安装
 
@@ -1468,7 +1468,7 @@ Remote register 安装 `/api/v1/transfers/send`、`status`、`status/:taskId`、
 
 ### 6. 数据、事务与并发
 
-任务列表维持进程内语义，不按32个在途/unknown任务拒绝，保留最新100个已确认终态；unknown不裁剪。最多5个互不冲突父任务并行，父内子项串行；父期限1小时含排队，单子项最多5分钟。每个子项在源/目标真实 endpoint 的持久突变围栏取得后才执行，保存可关联子任务的 claim ID；重启 held 转 blocked，不重派。列表重启后清空不代表远端结束，恢复依据归已有机器突变观察/证据/释放接口。无新迁移或伪造持久任务表。
+任务列表维持进程内语义，不按32个在途/unknown任务拒绝，保留最新100个已确认终态；unknown不裁剪。最多5个互不冲突父任务并行，父内子项串行；父期限1小时含排队，单子项继承父任务剩余期限，不再误套5分钟截断。每个子项在源/目标真实 endpoint 的持久突变围栏取得后才执行，保存可关联子任务的 claim ID；重启 held 转 blocked，不重派。列表重启后清空不代表远端结束，恢复依据归已有机器突变观察/证据/释放接口。无新迁移或伪造持久任务表。
 
 ### 7. 生命周期与失败
 

@@ -122,9 +122,7 @@ test('paused HTTP download resumes with exact bytes and releases remote handles'
 	}
 });
 
-test('HTTP downloads reject excess admission and reclaim delayed OPEN handles after consumer abort', async ({
-	request,
-}) => {
+test('overlapping HTTP downloads reclaim delayed OPEN handles after consumer abort', async ({ request }) => {
 	await loginAsInitialAdmin(request);
 	const connectionId = await ensureTestSshConnection(request);
 	const workspace = await openWorkspaceSession(request, connectionId);
@@ -136,7 +134,7 @@ test('HTTP downloads reject excess admission and reclaim delayed OPEN handles af
 		return response.json() as Promise<{ opened: number; closed: number }>;
 	};
 
-	const controllers = Array.from({ length: 8 }, () => new AbortController());
+	const controllers = Array.from({ length: 9 }, () => new AbortController());
 	let downloads: Promise<string>[] = [];
 	try {
 		await waitForFilesystemReady(workspace.socket);
@@ -177,39 +175,26 @@ test('HTTP downloads reject excess admission and reclaim delayed OPEN handles af
 				const response = await fetch(`${E2E_SSH.controlUrl}/sftp/open-delay`);
 				return (await response.json()).sftpDelayedOpenCount;
 			})
-			.toBe(8);
-		const excess = await request.get(url);
-		expect(excess.status()).toBe(429);
-		expect((await request.get(ticket.url)).status()).toBe(429);
-		// HEAD consumes no remote read slot and must remain available at capacity.
+			.toBe(9);
+		// HEAD opens no remote read handle while the nine downloads are pending.
 		expect((await request.head(url)).status()).toBe(200);
 		for (const controller of controllers) controller.abort();
-		expect(await Promise.all(downloads)).toEqual(Array(8).fill('AbortError'));
-		await expect.poll(handles).toEqual({ opened: baseline.opened + 8, closed: baseline.closed + 8 });
+		expect(await Promise.all(downloads)).toEqual(Array(9).fill('AbortError'));
+		await expect.poll(handles).toEqual({ opened: baseline.opened + 9, closed: baseline.closed + 9 });
 		expect((await fetch(`${E2E_SSH.controlUrl}/sftp/open-delay?ms=0`, { method: 'POST' })).ok).toBeTruthy();
 		const recovered = await Promise.all(controllers.map(() => request.get(url)));
 		for (const response of recovered) {
 			expect(response.status()).toBe(200);
 			expect(await response.body()).toEqual(bytes);
 		}
-		// Receipt of all eight HTTP bodies does not prove their remote CLOSE
-		// and release callbacks have reclaimed the admission slots. Probe the
-		// still-valid ticket until a slot is really available, keeping the
-		// earlier exact eight-at-capacity 429 checks unchanged.
-		await expect
-			.poll(async () => {
-				const response = await request.get(ticket.url);
-				const status = response.status();
-				if (status === 200) expect(await response.body()).toEqual(bytes);
-				await response.dispose();
-				return status;
-			})
-			.toBe(200);
+		const ticketDownload = await request.get(ticket.url);
+		expect(ticketDownload.status()).toBe(200);
+		expect(await ticketDownload.body()).toEqual(bytes);
 		// Receiving Content-Length bytes can precede remote CLOSE/pipeline cleanup.
-		// Observe remote handle settlement; HTTP handler admission can settle later.
-		await expect.poll(handles).toEqual({ opened: baseline.opened + 17, closed: baseline.closed + 17 });
+		// Observe the aborted, recovered and ticket download handles all settling.
+		await expect.poll(handles).toEqual({ opened: baseline.opened + 19, closed: baseline.closed + 19 });
 		// Detect accumulated failure-path leaks without assuming body receipt or
-		// remote CLOSE is a full-capacity HTTP cleanup barrier.
+		// remote CLOSE is an HTTP cleanup barrier.
 		for (let attempt = 0; attempt < 16; attempt++) {
 			const missing = await request.get(url.replace('%2Fseed.txt', '%2Fmissing-download-e2e.txt'));
 			expect(missing.status()).toBe(404);

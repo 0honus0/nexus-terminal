@@ -231,10 +231,7 @@ export class RemoteFileService {
 	private readonly owners = new Map<string, OwnedResource>();
 	private readonly authorizing = new Set<AbortController>();
 	private readonly opening = new Set<AbortController>();
-	private readonly independentOpening = new Set<AbortController>();
 	private readonly workspaceReservations = new Set<string>();
-	/** Failed cleanup is still charged; it is not evidence that the lease was released. */
-	private readonly unconfirmedIndependentClosures = new Set<string>();
 	private readonly releasingRequests = new Set<AbortController>();
 	private readonly pending = new Set<Promise<unknown>>();
 	private readonly closing = new Map<string, ReleasedFile>();
@@ -363,7 +360,7 @@ export class RemoteFileService {
 		let delivered = false;
 		let cleanupUncertain = false;
 		try {
-			// Count pending Workspace attachments before auth/catalog awaits. The
+			// Reserve this Workspace binding before auth/catalog awaits. The
 			// reservation is also retained while SSH opening or cleanup is pending.
 			controller.signal.throwIfAborted();
 			if (workspaceId !== undefined) {
@@ -385,8 +382,6 @@ export class RemoteFileService {
 					throw new RemoteFileFailure('not_found');
 				}
 				connectionName = target.name;
-			} else {
-				this.independentOpening.add(controller);
 			}
 			if (workspace && !workspace.authority.isCurrent()) {
 				throw new RemoteFileFailure('not_found');
@@ -470,7 +465,7 @@ export class RemoteFileService {
 			if (resource) {
 				const abandoned = resource;
 				// Do not extend the aborted connect deadline with SSH cleanup. Keep
-				// both the actual cleanup task and its capacity reservation alive.
+				// the actual cleanup task and its Workspace binding tracked until it settles.
 				cleanupUncertain = true;
 				const cleanup = this.track(
 					Promise.resolve()
@@ -486,8 +481,6 @@ export class RemoteFileService {
 					.then(() => {
 						if (workspaceId !== undefined) {
 							this.workspaceReservations.delete(workspaceId);
-						} else {
-							this.independentOpening.delete(controller);
 						}
 					})
 					.catch(() => undefined)
@@ -500,17 +493,7 @@ export class RemoteFileService {
 			if (lateOpeningCleanup === null) {
 				this.opening.delete(controller);
 			}
-			if (workspaceId === undefined) {
-				if (!cleanupUncertain) {
-					if (lateOpeningCleanup === null) {
-						this.independentOpening.delete(controller);
-					} else {
-						void lateOpeningCleanup
-							.then(() => this.independentOpening.delete(controller))
-							.catch(() => undefined);
-					}
-				}
-			} else if (reserved && !delivered && !cleanupUncertain) {
+			if (workspaceId !== undefined && reserved && !delivered && !cleanupUncertain) {
 				if (lateOpeningCleanup === null) {
 					this.workspaceReservations.delete(workspaceId);
 				} else {
@@ -3121,9 +3104,6 @@ export class RemoteFileService {
 				this.rememberClosed(record.id, completion);
 			},
 			(error) => {
-				if (record.workspaceId === undefined) {
-					this.unconfirmedIndependentClosures.add(record.id);
-				}
 				this.recordCleanupFailure(error);
 				this.rememberClosed(record.id, completion);
 			},

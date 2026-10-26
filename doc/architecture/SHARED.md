@@ -195,7 +195,7 @@ transfers HTTP/WS 请求及任务事件已由新后端消费；基础格式、�
 
 Shared check/build、Backend check/build、适用消费者编译及对应格式检查通过后才收口源码阶段，真实行为仍独立验收。Remote Files B1 的历史隔离 fixture 仅证明其记录基线，不覆盖 R1 对旧 WS、编码、批量/递归、技术失败边界的修改；R1 按阶段决定不运行行为测试，真实 SSH/SFTP、旧 Workspace Files 全链路与浏览器行为统一留 B10/F1。Agent 实际消费者与具体收口见 [实施方案](../PLAN.md)。
 
-传输 codec 不使用对象断言、String 强制转换或数组断言通过验证；字符串按 UTF-8 字节检查，有限值严格匹配，数组逐项与可选字段显式投影。upload 单帧 1 MiB、路径 4096 bytes、task ID 512 bytes、单批 prepare 20k 目录、copy/archive 64 sources 归 values；服务端资源名额/缓存和每 Workspace 总配额仍私有。
+传输 codec 不使用对象断言、String 强制转换或数组断言通过验证；字符串按 UTF-8 字节检查，有限值严格匹配，数组逐项与可选字段显式投影。upload 单帧 1 MiB、路径 4096 bytes、task ID 512 bytes、prepare目录及copy/archive来源不设置重复数量阈值；服务端原生命周期追踪和调度/缓存仍私有。
 
 Suspend 的 snapshot 原文 4 MiB、最坏转义及完整 JSON 预算 24 MiB + 16 KiB、history 页 256 KiB 与 name 长度归 `remote/suspend/values.ts`；完整 wire 上限由真实 WS 路由 opt-in，并受 Platform 技术上限容纳。普通控制消息仍消费 Workspace 的 1 MiB，不因 snapshot 扩大所有用例范围。
 
@@ -304,7 +304,7 @@ Connections的TargetCredentialView/readCredentialView持有connectionId/version�
 
 ### 独立后台服务器传输
 
-remote/transfers/server-values唯一持有auto/rsync/scp、父/子有限状态、安全失败及完整编码容量；server-model/http定义安全任务、输入、分页和取消受理，server-codec严格解码并核对源名称/路径/嵌套、目标集合、完整父子对应、进度/状态/时间及游标。源项禁止根目录，目标目录允许根目录；目录选择保留路径空白，不通过 trim 改写真实名称。最多64目标、256源、乘积1024；完整输入128KiB、单任务1MiB、每页8项。时间为Unix毫秒，queued受理与终态分开，unknown有独立状态；取消accepted不表达远端停止。Backend真实五HTTP与Frontend正式transport均消费精确包出口。Service私有并发、任务历史、会话digest、pin、公钥、凭据及持久claim不进入Shared；双端对象在各自边界显式转换，不能直接当应用状态。
+remote/transfers/server-values唯一持有auto/rsync/scp、父/子有限状态、安全失败及完整编码容量；server-model/http定义安全任务、输入、分页和取消受理，server-codec严格解码并核对源名称/路径/嵌套、目标集合、完整父子对应、进度/状态/时间及游标。源项禁止根目录，目标目录允许根目录；目录选择保留路径空白，不通过 trim 改写真实名称。来源和目标不单独设数量门槛，乘积1024的任务展开预算保留；完整输入128KiB、单任务1MiB、每页8项。时间为Unix毫秒，queued受理与终态分开，unknown有独立状态；取消accepted不表达远端停止。Backend真实五HTTP与Frontend正式transport均消费精确包出口。Service私有并发、任务历史、会话digest、pin、公钥、凭据及持久claim不进入Shared；双端对象在各自边界显式转换，不能直接当应用状态。
 
 ### 挂起管理 HTTP
 

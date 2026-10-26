@@ -380,7 +380,7 @@ export class ServerTransferService {
 								plan: owner.plan,
 								targetId: item.connectionId,
 								sourceIndex: item.sourceItemIndex,
-								deadline: Math.min(owner.deadline, Date.now() + 5 * 60 * 1000),
+								deadline: owner.deadline,
 								signal: owner.controller.signal,
 
 								validate: () => this.validate(owner),
