@@ -60,7 +60,7 @@
 	touch-action: pan-y;
 	-webkit-overflow-scrolling: touch;
 }
-.agent-composer-shell {
+.agent-composer-area {
 	container-type: inline-size;
 	container-name: agent-composer;
 }
@@ -282,7 +282,7 @@
 }
 
 /*
-   * Configuration density tiers follow the composer width (the composer shell
+   * Configuration density tiers follow the composer width (the composer area
    * declares the `agent-composer` container), never the conversation pane.
    */
 @container agent-composer (width > 730px) {

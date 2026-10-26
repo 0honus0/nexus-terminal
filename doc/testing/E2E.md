@@ -1945,3 +1945,15 @@ a0cb4f49正式40319856905全部质量/构建/Docker和8个分片通过，新增�
 产品/测试源码`dd7a558b572a4bb510ca70531d95f691967a7604`的[Actions 40347041664](https://github.com/0honus0/nexus-terminal/actions/runs/40347041664)全部成功：质量、生产构建、Docker部署冒烟和8个分片共494项首次通过；完整日志核对retry_entries=0、flaky_summaries=0，证据`/tmp/nexus-e2e-40347041664-all.log`。新增跨服务器复制粘贴页面直传17秒、中转16秒首次通过，完整覆盖DOM递增百分比/8MiB总字节、正式WS completed及卡片退役、源/目标SHA-256、直传零SFTP READ及中转精确READ字节。连接创建表单失败/成功/真实持久化全链4.5秒首次通过；501项/>1MiB脚本、12个慢目录、161条传输21页与重复拒绝、51会话跨页搜索及503后Retry恢复通过。
 
 本次修复的远程失败均归测试：SSH多标签可见弹窗定位、rsync -s虚拟根路径映射、CDP响应正文采集；原产品UI设计、内容核验、unknown围栏和全部功能断言保留。`f340063f`只更新CI耗时估计并已同步本地。前述“待验”记录保留对应轮次边界，本批功能远程已验收；专项视觉未执行。本轮未发布镜像或部署，用户自行增删截图未纳入提交。
+
+### Agent 输入框外侧玻璃底色（2026-10-26，本地静态）
+
+按用户指定doc截图，移除AgentAppSurface输入区footer的ui-glass-chrome材质类，使外侧不再铺满导航玻璃底色、渐变和内高光。两轮源码复核确认只改该footer的一个类，输入框自身边框/焦点反馈、原间距/响应式尺寸、Token与跳转控件、公共玻璃材质定义和其它界面保持。USAGE对应输入区章节已同步。根check、前端build、全量format:all:check和diff通过，日志`/tmp/nexus-agent-footer-{check,build,format}.log`。按D17未运行本地行为或视觉测试；不为单项材质删除新增行为用例，不沿用前轮494项通过作为本轮证据。未提交、推送、发布或部署。
+
+### 矮状态面板网络读数（2026-10-26，本地静态）
+
+按doc服务器状态截图，沿原max-height:210px分支将网络标题与上下行速率改为左右同排；移除network-reading的0.68em父字号，将数值从0.58em恢复为与紧凑指标一致的0.76em，箭头保留独立字号及两方向间隔。紧凑加载骨架同步单行。两轮源码复核检查普通/窄栏/缩放规则优先级、趋势模式隐藏速率并保留网卡名、方向/完整aria-label与title、固定数据与点击入口未改。根check、前端build、全量format:all:check及diff通过，日志`/tmp/nexus-status-network-{check,build,format}.log`。D17下未本地运行行为或视觉测试，本轮不新增样式专用行为测试，不沿用旧Actions结果作为视觉证据；未提交、推送、发布或部署。前轮Agent footer样式修改保留。
+
+### Agent 输入框上方独立控件（2026-10-26，本地静态）
+
+按用户最新布局要求将Token、回到最新、上一条/下一条状态块移至form之前；只保留各自全局控件，无整条底色或边框。原footer透明表面保留。composer容器声明从form移到既有外层agent-composer-area，使上方控件和输入工具栏继续按相同可用宽度响应式收缩，不依赖整个聊天面板宽度；form测量ref、提交、键盘、详情弹层和导航条件/事件保持。两轮源码复核包含窄屏容器查询、Popover portal、按钮类型及既有E2E定位无失效消费，USAGE共同外框描述已按最新选择更新。根check、前端build、全量format:all:check与diff通过，证据`/tmp/nexus-agent-controls-{check,build,format}.log`。按D17未运行本地行为或视觉测试，不将旧轮次494项PASS当作本轮结果；未提交、推送、发布或部署。

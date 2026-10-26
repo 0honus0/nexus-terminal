@@ -942,26 +942,48 @@ button.live-state:focus-visible {
 		margin-left: auto;
 		font-size: 0.76em;
 	}
+	.network-row .metric-body {
+		flex-direction: row;
+		align-items: center;
+		gap: 0.45em;
+	}
+	.network-row .metric-topline {
+		flex: 0 0 auto;
+	}
 	.network-reading {
 		display: flex;
+		flex: 1 1 auto;
 		flex-wrap: nowrap;
 		align-items: center;
-		justify-content: space-between;
+		justify-content: flex-end;
 		gap: 0.5em;
-		font-size: 0.68em;
 	}
 	.rate {
-		gap: 0;
+		flex: 0 1 auto;
+		gap: 0.2em;
 		padding: 0;
 	}
 	.rate > i {
-		font-size: 0.5em;
+		font-size: 0.65em;
 	}
 	.rate > b {
-		font-size: 0.58em;
+		font-size: 0.76em;
 	}
 	.rate + .rate {
-		padding-left: calc(1px / var(--status-scale, 1));
+		padding-left: 0.5em;
+	}
+	.status-loading-card--network {
+		grid-template-rows: minmax(0, 1fr);
+	}
+	.status-loading-card--network .status-loading-icon {
+		grid-row: 1;
+	}
+	.status-loading-card--network .status-loading-interface {
+		display: none;
+	}
+	.status-loading-traffic {
+		grid-column: 3;
+		grid-row: 1;
 	}
 }
 
