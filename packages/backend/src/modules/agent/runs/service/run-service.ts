@@ -4,21 +4,14 @@ import type { RunCollaborationService } from './run-collaboration-service.js';
 import {
 	AGENT_RUN_MAX_PROMPT_BYTES,
 	AGENT_RUN_EVENT_MAX_LIMIT,
-	AGENT_RUN_STEP_MAX_COUNT,
 	AGENT_RUN_MAX_SELECTED_CONNECTIONS,
 } from '@nexus-terminal/shared/agent/runs/values';
 import {
 	AGENT_PROVIDER_MAX_MODEL_ID_BYTES,
 	AGENT_REASONING_EFFORTS,
 } from '@nexus-terminal/shared/agent/providers/values';
-import { AGENT_TOOL_EVENT_MAX_LIMIT, AGENT_TOOL_LIST_MAX_LIMIT } from '@nexus-terminal/shared/agent/tools/values';
-import type {
-	ToolOperation,
-	ToolIdentity,
-	ToolEventPage,
-	ToolListCursor,
-	ToolListPage,
-} from '../model/run-tool-types.js';
+import { AGENT_TOOL_LIST_MAX_LIMIT } from '@nexus-terminal/shared/agent/tools/values';
+import type { ToolListCursor, ToolListPage } from '../model/run-tool-types.js';
 import type { RunToolModel } from '../model/run-tool-model.js';
 import { createHash, randomUUID } from 'node:crypto';
 import type { RunModel } from '../model/run-model.js';
@@ -33,8 +26,6 @@ import type {
 	RunEventPage,
 	CreateRunRequest,
 	CancelRunRequest,
-	RunModelStep,
-	RunStepEventPage,
 } from '../model/run-types.js';
 import { AgentFailure } from '../../agent-failure.js';
 import { validateAgentId, validateOperationKey, validateUserId } from '../../agent-validation.js';
@@ -305,13 +296,6 @@ export class RunService {
 		return this.model.get(userId, appId, runId);
 	}
 
-	getTool(input: ToolIdentity): Promise<ToolOperation | null> {
-		validateScope(input.userId, input.appId);
-		validateAgentId(input.runId);
-		validateAgentId(input.id);
-		return this.tools.get(input);
-	}
-
 	listThreadTools(
 		userId: number,
 		appId: string,
@@ -333,17 +317,6 @@ export class RunService {
 			validateAgentId(before.id);
 		}
 		return this.tools.listThread({ userId, appId, threadId }, before, limit);
-	}
-
-	listToolEvents(input: ToolIdentity, after: number, limit: number): Promise<ToolEventPage | null> {
-		validateScope(input.userId, input.appId);
-		validateAgentId(input.runId);
-		validateAgentId(input.id);
-		validateCursor(after);
-		if (!Number.isSafeInteger(limit) || limit < 1 || limit > AGENT_TOOL_EVENT_MAX_LIMIT) {
-			throw new AgentFailure('invalid_input');
-		}
-		return this.tools.listEvents(input, after, limit);
 	}
 
 	frozen(userId: number, appId: string, runId: string): Promise<RunFrozenInput | null> {
@@ -372,35 +345,5 @@ export class RunService {
 		validateScope(userId, appId);
 		validateAgentId(runId);
 		return this.steps.usage(userId, appId, runId);
-	}
-
-	/** Read-only audit: unavailable execution steps are 404, not synthetic pending work. */
-	getStep(userId: number, appId: string, runId: string, stepIndex: number): Promise<RunModelStep | null> {
-		validateScope(userId, appId);
-		validateAgentId(runId);
-		if (!Number.isSafeInteger(stepIndex) || stepIndex < 1 || stepIndex > AGENT_RUN_STEP_MAX_COUNT) {
-			throw new AgentFailure('invalid_input');
-		}
-		return this.steps.get(userId, appId, runId, stepIndex);
-	}
-
-	listStepEvents(
-		userId: number,
-		appId: string,
-		runId: string,
-		stepIndex: number,
-		after: number,
-		limit: number,
-	): Promise<RunStepEventPage | null> {
-		validateScope(userId, appId);
-		validateAgentId(runId);
-		if (!Number.isSafeInteger(stepIndex) || stepIndex < 1 || stepIndex > AGENT_RUN_STEP_MAX_COUNT) {
-			throw new AgentFailure('invalid_input');
-		}
-		validateCursor(after);
-		if (!Number.isSafeInteger(limit) || limit < 1 || limit > AGENT_RUN_EVENT_MAX_LIMIT) {
-			throw new AgentFailure('invalid_input');
-		}
-		return this.steps.listEvents(userId, appId, runId, stepIndex, after, limit);
 	}
 }

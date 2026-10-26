@@ -1822,3 +1822,30 @@ e2f66bdf对应 https://github.com/0honus0/nexus-terminal/actions/runs/4026284297
 独立临时Chromium访问 https://api.honus.top，在登录页面挂载真实TerminalView隔离测试实例，无账号或SSH资源写入。抽取既有终端生命周期场景及新增3个TypeAhead场景，使用正式源模块及真实浏览器断言；13项通过：前后台重挂载与原始ACK、鼠标模式清理、UTF-8跨重挂载、PTY替换、历史snapshot排空/慢游标、后台顺序、无rAF同步TUI/尺寸、预测与不同远端结果校正、snapshot/重挂载不保留预测及密码/粘贴不预显。日志 `/tmp/nexus-typeahead-browser.log`；这是定向执行，不是正式远程Actions。新增回归位于 `tests/e2e/specs/ui/terminal-lifecycle.spec.ts`，传输观察者拒绝/退订断言同步至既有 `tests/frontend/workspace-terminal.integration.mjs`（后者仅静态检查，未运行其服务集成）。临时工具最初遇到esbuild虚拟模块external和已有Chromium版本路径问题，修正工具后执行，未修改项目测试配置。
 
 两轮源码复核覆盖实际派发/手机修饰键、唯一发送、原始字节流控、首字符与异常序列、样本/超时、解析队列、后台/历史/断线/resize及PTY generation、挂起snapshot和订阅/定时器清理。正常UI template/style本批无变更，保留其它并行UI/Agent修改。根check（含Backend包级check）、Frontend生产build、新增E2E严格tsc、既有JS语法及本批ESLint/Prettier/diff检查通过，日志 `/tmp/nexus-typeahead-{check,build,e2e-types,scope-format}.log`；全量format仅受并行修改的UiInlineNotice.vue格式阻塞（`/tmp/nexus-typeahead-all-format.log`），未代为调整。未提交、推送、重启或部署；Android真机、任意全屏程序、所有超高RTT/代理与长时交互仍不在本次实机保证内。
+
+### 文件管理器纵向拖动与固定命令栏（2026-10-26）
+
+用户报告api.honus.top连接后文件管理器无法向上拖动。原因是同一纵向Splitpanes中terminal/commandBar/fileManager三项只调整相邻Pane，而commandBar只有38–42px可调整区间；仅打开pushOtherPanes又会遇到库的最大尺寸提前返回、after-pane漏算后续兄弟，以及前侧全部到最小值后重复扣减前序尺寸的问题。后两项会造成总尺寸超过100%或极限拖动丢失24%的高度，不能只改一个开关。
+
+修复：仅含commandBar的纵向容器开启库原有推挤能力，按两侧可伸缩量传递到其它兄弟，命令栏原限制不变；pnpm patch同步Splitpanes 4.1.2源文件与实际消费的浏览器ESM产物。修正最大值判断/分配中的后序尺寸、最小值边界重复扣减。其它容器保持原相邻调整，分隔线/命中区/默认布局/UI样式不变。
+
+在指定api.honus.top使用独立临时Chromium，先复现原开关两种状态（`/tmp/nexus-fileheight-repro.log`），再挂载真实WorkspaceLayoutRenderer、RuntimeSession和正式默认中心布局；会话保持本地idle，使用独立Pinia和本地布局ref接收真实layoutResize事件，不打开SSH/WS、不保存用户设置。600px容器内初始terminal/command/files高度354/38/207；下侧分隔条上拖后230/38/330，反向342/42/215，上侧分隔条上拖后247/42/309，锁定后完全不变。极限向上144/38/417，向下472/42/84；方向键两次后417/38/144。7个有效resize事件尺寸总和均100%，零pageerror；关闭实例并dispose本地RuntimeSession。证据 `/tmp/nexus-fileheight-actual.log`。最初隔离工具缺少active Pinia而未挂载，补上独立Pinia后执行；中途边界断言发现库漏算/重复扣减后继续修复，失败轮不作为PASS。
+
+前端开发进程已按原工作目录、参数和环境重启并强制更新预构建依赖，后续只由Vite配置watch重新加载补丁；端口9998及api入口保持。没有重启后端。前端就绪日志 `/tmp/nexus-fileheight-vite.log`，不把开发服务重启写为生产部署。
+
+既有正式SSH E2E `tests/e2e/specs/ssh/docker-manager-ui.spec.ts` 的Workspace布局场景新增上下拖动、命令栏高度、总百分比、终端最小尺寸及恢复断言；等待远程Actions，未运行全量本地E2E或真实SSH此新增场景。两轮源码复核核对库源/ESM一致、min/max/百分比守恒、容器选择、布局锁及原保存链。根check（含Backend包级）、Frontend生产build、变更E2E严格tsc、本批ESLint/Prettier和diff通过，日志 `/tmp/nexus-fileheight-{check,build,e2e-types,scope-format}.log`；全量format仅原有UiInlineNotice.vue格式失败，未代改（`/tmp/nexus-fileheight-all-format.log`）。本轮未按自身操作提交或推送，无用户连接/文件/布局写入。
+
+## Agent 步骤与工具审计移除（2026-10-26）
+
+删除正式 Host/审批卡片及 DEV 页的审计入口，撤销四个专用查询端点和 Shared 审计 DTO。保留步骤/工具状态及内部事件事务，供执行、审批、异常恢复和快照一致性校验。回归改用线程工具列表核对 ACP 和工具终态，继续验证审批 hash、命令预览、真实副作用和取消围栏；插件用例核对审计入口消失及 Run 用量仍可读取，后端 HTTP 用例核对已移除端点 404。
+
+静态证据：根 `pnpm run check`、双端 build（含 Shared）、Agent 相关 E2E 严格 TypeScript 检查已通过；日志 `/tmp/audit-check-final.log`、`/tmp/audit-build5.log`、`/tmp/audit-e2e-types.log`。依 D17 未运行本地 Agent 行为测试，正式 HTTP/Agent E2E 和浏览器验收待 Actions，不将静态通过记为 E2E 通过。最终契约及用例收口后，根 check、双端 build、Agent E2E 严格类型、`pnpm run format:check` 和 `git diff --check` 均通过；记录见 `/tmp/audit-final-*`。
+
+### 2026-10-26 自动图片与远程回归修正
+
+- functional-regressions：本地受控 Provider 返回 PNG Base64，模型调用 image_models_list/image_generate，结果只允许文件事实，最终仅回答普通文字。验证审批前无预览、完成后图片实际解码/下载、刷新恢复。无需真实付费图片请求。
+- panel-wheel-scaling 与 host：定位当前 IP 复制可访问名称与分开的聊天/图片模型筛选框。
+- rdp-remoteapp-fullscreen：在转发唯一的创建请求回执前读取结果，避免导航后 CDP 响应体丢失，不重复变更请求。
+- 传输取消：独立传输 lease 仅在获取阶段转发取消；流式 stage 等待已派发 WRITE 后用独立清理期限删除临时文件，保持真正网络故障的 unknown/清理错误。既有 Progress Display 取消与后续 baseline reset 回归验证。
+
+本地静态检查与正式远程 Actions 证据在本次实施方案记录；未通过前不视为发布验收。

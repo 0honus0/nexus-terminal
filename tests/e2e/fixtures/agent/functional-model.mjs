@@ -29,6 +29,28 @@ export function respondFunctionalModel(messages, userText, response, send) {
 
 	const file = (path) => ({ connectionId, path });
 
+	if (userText.includes('E2E_AUTOMATIC_IMAGE_PREVIEW')) {
+		const models = result('image_models');
+		if (!models) call('image_models', 'image_models_list', { offset: 0 });
+		else if (!result('generate_image')) {
+			const model = models.models[0];
+			if (!model) throw new Error('Missing configured image model');
+			call('generate_image', 'image_generate', {
+				providerId: model.providerId,
+				configurationVersion: model.configurationVersion,
+				modelId: model.modelId,
+				prompt: 'E2E deterministic image',
+			});
+		} else {
+			const image = result('generate_image');
+			if (Object.keys(image).sort().join(',') !== 'id,name,sizeBytes') {
+				throw new Error('Image tool must return file facts without preview instructions or URLs');
+			}
+			send(response, { content: 'Image generated and saved.' });
+		}
+		return true;
+	}
+
 	if (userText.includes('E2E_BLOCKED_DEPLOY')) {
 		if (!result('blocked_shell')) {
 			call('blocked_shell', 'shell_execute', shell('printf unauthorized > "$NEXUS_E2E_ROOT/blocked-deploy.txt"'));

@@ -22,9 +22,6 @@
 		run: null,
 		events: [],
 		nextCursor: 0,
-		step: null,
-		stepEvents: [],
-		stepCursor: 0,
 		availableModels: [],
 	};
 	const state = ref<AgentNextControllerState>(initialState);
@@ -217,14 +214,6 @@
 		await controller.listEvents(appId.value, runId.value);
 	}
 
-	async function getStep(): Promise<void> {
-		await controller.getStep(appId.value, runId.value);
-	}
-
-	async function listStepEvents(): Promise<void> {
-		await controller.listStepEvents(appId.value, runId.value);
-	}
-
 	watch([appId, threadId, runId], ([nextAppId, nextThreadId, nextRunId]) => {
 		const current = state.value.run;
 		if (
@@ -388,16 +377,6 @@
 					<button class="rounded border px-3 py-2" :disabled="state.busy" @click="listEvents">
 						{{ t('agentNext.listEvents') }}
 					</button>
-					<button class="rounded border px-3 py-2" :disabled="state.busy" @click="getStep">
-						{{ t('agentNext.getStep') }}
-					</button>
-					<button
-						class="rounded border px-3 py-2"
-						:disabled="state.busy || !state.step"
-						@click="listStepEvents"
-					>
-						{{ t('agentNext.listStepEvents') }}
-					</button>
 				</div>
 			</section>
 
@@ -412,23 +391,6 @@
 				<ul class="space-y-1">
 					<li v-for="event in state.events" :key="event.runId + ':' + event.sequence">
 						#{{ event.sequence }} · {{ event.type }} · v{{ event.runVersion }}
-					</li>
-				</ul>
-			</section>
-
-			<section class="space-y-2 rounded border p-4">
-				<h2 class="font-semibold">{{ t('agentNext.stepAudit') }}</h2>
-				<p v-if="!state.step">{{ t('agentNext.noStep') }}</p>
-				<pre v-else class="overflow-auto whitespace-pre-wrap break-all">{{
-					JSON.stringify(state.step, null, 2)
-				}}</pre>
-				<p>{{ t('agentNext.nextCursor') }}: {{ state.stepCursor }}</p>
-				<ul class="space-y-1">
-					<li
-						v-for="event in state.stepEvents"
-						:key="event.runId + ':' + event.stepIndex + ':' + event.sequence"
-					>
-						#{{ event.sequence }} · {{ event.kind }} · {{ 'textBytes' in event ? event.textBytes : '' }}
 					</li>
 				</ul>
 			</section>

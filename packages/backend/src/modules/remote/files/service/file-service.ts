@@ -1509,13 +1509,25 @@ export class RemoteFileService {
 		action: (transfer: FileResource) => Promise<T>,
 	): Promise<T> {
 		let transfer: FileResource;
+		// Cancellation may interrupt acquisition. Once acquired, the dedicated
+		// lease must survive long enough to acknowledge and discard staged writes.
+		const opening = new AbortController();
+
+		const cancelOpening = () => opening.abort(signal.reason);
+
+		signal.addEventListener('abort', cancelOpening, { once: true });
+		if (signal.aborted) {
+			cancelOpening();
+		}
 		try {
-			transfer = await this.model.open(workspace.targetId, Math.min(timeoutMs, 30000), signal);
+			transfer = await this.model.open(workspace.targetId, Math.min(timeoutMs, 30000), opening.signal);
 		} catch (error) {
 			if (error instanceof RemoteResourceCleanupFailure) {
 				this.rememberTransferCleanup(owner, error);
 			}
 			throw error;
+		} finally {
+			signal.removeEventListener('abort', cancelOpening);
 		}
 		let primary: unknown = null;
 		try {

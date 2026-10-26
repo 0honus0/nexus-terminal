@@ -1744,15 +1744,8 @@
       "runUnknown": "実行結果を確認できません：{reason} 実行 ID：{runId}。再試行前にリモートの結果を確認してください。",
       "usageUnavailable": "プロバイダーからトークン使用量が未報告です",
       "usageCoverage": "使用量報告済み: {reported}/{requests} モデルリクエスト",
-      "audit": "ステップとツールの監査",
-      "auditStep": "ステップ",
-      "auditTool": "ツール呼び出し",
-      "auditHelp": "読み取り専用メタデータです。Shell／ACP は長さ制限付きのコマンドプレビューのみ表示し、元の引数・認証情報・出力は非表示のままです。1ページずつ取得します。",
-      "step": "ステップ番号",
       "read": "現在の状態を更新",
-      "moreEvents": "次のイベントを取得",
       "tokens": "入力 / 出力トークン",
-      "toolId": "ツール呼び出し ID",
       "target": "対象の接続",
       "events": "Run イベント（最新200件）",
       "cancel": "キャンセルを要求",
@@ -1761,7 +1754,6 @@
       "expires": "有効期限",
       "approve": "元の操作を承認",
       "deny": "元の操作を拒否",
-      "inspectTool": "ツール監査を確認",
       "children": "子タスク",
       "messages": "メッセージのメタデータを取得",
       "metadataOnly": "番号、送信者、サイズのみ表示します。本文の取得や確認は行いません。",
@@ -1884,13 +1876,6 @@
         "denied": "拒否済み",
         "expired": "期限切れ",
         "superseded": "失効"
-      },
-      "stepStates": {
-        "reserved": "予約済み",
-        "dispatched": "送信済み",
-        "completed": "完了",
-        "failed": "失敗",
-        "unknown": "不明"
       },
       "roles": {
         "user": "ユーザー",

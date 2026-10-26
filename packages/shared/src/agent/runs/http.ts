@@ -1,6 +1,6 @@
 import type { AgentApprovalMode } from './values.js';
 import type { AgentReasoningEffort } from '../providers/values.js';
-import type { AgentRunView, AgentRunEventView, AgentRunStepView, AgentRunStepEventView } from './model.js';
+import type { AgentRunView, AgentRunEventView } from './model.js';
 import type { AgentCreateRunOutcome, AgentCancelRunOutcome } from './values.js';
 
 export interface AgentCreateRunRequest {
@@ -53,17 +53,5 @@ export type AgentGetRunResponse = AgentRunView;
 
 export interface AgentRunEventsResponse {
 	items: AgentRunEventView[];
-	nextCursor: number;
-}
-
-export interface AgentRunStepPath extends AgentRunPath {
-	stepIndex: number;
-}
-
-export type AgentRunStepResponse = AgentRunStepView;
-
-/** Only audit metadata is public: a delta's byte length, never the model's raw text. */
-export interface AgentRunStepEventsResponse {
-	items: AgentRunStepEventView[];
 	nextCursor: number;
 }

@@ -616,10 +616,9 @@ export class SftpFileResource implements FileResource {
 			flags: 'wx',
 			mode: request.mode ?? 0o600,
 			timeoutMs: remaining(),
-			signal: request.signal,
 		});
 		try {
-			await once(stream, 'open', { signal: request.signal });
+			await once(stream, 'open');
 		} catch (cause) {
 			stream.destroy();
 			throw this.translate(cause, true);
@@ -633,9 +632,10 @@ export class SftpFileResource implements FileResource {
 
 		return {
 			append: async (bytes) => {
-				if (state !== 'writing' || request.signal.aborted) {
+				if (state !== 'writing') {
 					throw new RemoteFileFailure('operation_unknown');
 				}
+				request.signal.throwIfAborted();
 				try {
 					const stable = Buffer.from(bytes);
 					for (let windowStart = 0; windowStart < stable.length; windowStart += SFTP_STAGE_WINDOW_BYTES) {
@@ -701,7 +701,7 @@ export class SftpFileResource implements FileResource {
 				if (state === 'committed' || state === 'discarded') {
 					return;
 				}
-				if (state === 'unknown' || request.signal.aborted) {
+				if (state === 'unknown') {
 					stream.destroy();
 					state = 'unknown';
 					this.usable = false;
@@ -711,7 +711,7 @@ export class SftpFileResource implements FileResource {
 					// Finish acknowledged temporary writes before deleting; local destroy
 					// does not prove the remote file handle has stopped writing.
 					await finishedWriting();
-					await this.#lease.remove(temporary, this.options(request, remaining()));
+					await this.#lease.remove(temporary, { timeoutMs: 2000 });
 				} catch (cause) {
 					if (!(cause instanceof MachineSftpFailure && cause.remoteStatus === 'not_found')) {
 						state = 'unknown';

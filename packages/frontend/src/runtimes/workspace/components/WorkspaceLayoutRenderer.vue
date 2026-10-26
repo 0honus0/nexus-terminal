@@ -209,6 +209,14 @@
 			splitBlockSize.value,
 		);
 
+	// A narrow command bar must move with its neighboring flexible panes instead
+	// of limiting file-manager/terminal resizing to the command bar's own height.
+	const pushConstrainedPanes = computed(
+		() =>
+			props.node.direction === 'vertical' &&
+			props.node.children?.some((child) => child.type === 'pane' && child.component === 'commandBar') === true,
+	);
+
 	const paneMaximumSize = (child: WorkspaceLayoutNodeState): number =>
 		workspacePaneMaximumSize(child, props.node.direction ?? 'vertical', splitBlockSize.value);
 
@@ -231,7 +239,7 @@
 		class="workspace-split"
 		:class="{ 'workspace-split--locked': layoutLocked }"
 		:horizontal="node.direction === 'vertical'"
-		:push-other-panes="false"
+		:push-other-panes="pushConstrainedPanes"
 		:maximize-panes="!layoutLocked"
 		@resized="handleLayoutResize"
 		@keydown.capture="stopLockedSplitterKeydown"

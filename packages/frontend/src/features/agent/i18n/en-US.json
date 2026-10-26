@@ -1744,15 +1744,8 @@
       "runUnknown": "Execution outcome is unconfirmed: {reason} Run ID: {runId}. Check the remote outcome before retrying.",
       "usageUnavailable": "Provider has not reported token usage",
       "usageCoverage": "Usage reported for {reported}/{requests} model requests",
-      "audit": "Step and tool audit",
-      "auditStep": "Step",
-      "auditTool": "Tool call",
-      "auditHelp": "Read-only metadata; Shell/ACP show a length-bounded command preview, while raw arguments, credentials and output remain hidden. One page per read.",
-      "step": "Step index",
       "read": "Refresh current state",
-      "moreEvents": "Read next events",
       "tokens": "Input / output tokens",
-      "toolId": "Tool call ID",
       "target": "Target connection",
       "events": "Run events (latest 200)",
       "cancel": "Request cancellation",
@@ -1761,7 +1754,6 @@
       "expires": "Expires at",
       "approve": "Approve original operation",
       "deny": "Deny original operation",
-      "inspectTool": "Inspect tool audit",
       "children": "Child tasks",
       "messages": "Read message metadata",
       "metadataOnly": "Sequence, sender and size only; observing does not read or acknowledge message bodies.",
@@ -1884,13 +1876,6 @@
         "denied": "Denied",
         "expired": "Expired",
         "superseded": "Superseded"
-      },
-      "stepStates": {
-        "reserved": "Reserved",
-        "dispatched": "Dispatched",
-        "completed": "Completed",
-        "failed": "Failed",
-        "unknown": "Unknown"
       },
       "roles": {
         "user": "User",

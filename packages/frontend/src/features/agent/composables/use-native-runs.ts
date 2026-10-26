@@ -17,7 +17,7 @@ import {
 	listNativeMessages,
 	mutateNativeRun,
 } from '../api/native-run-api';
-import { listNativeThreadTools } from '../api/native-audit-api';
+import { listNativeThreadTools } from '../api/native-tools-api';
 import { useAgentManagementOperation } from './use-agent-management-operation';
 import type { NativeArtifactReference } from '../model/native-input-types';
 import { AgentManagementFailure } from '../model/management-failure';

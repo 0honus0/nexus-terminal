@@ -193,7 +193,7 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
 		await expect.poll(countStatusSamples, { timeout: 10_000 }).toBeGreaterThan(samplesBeforeHistory);
 		expect(countStatusControlFrames()).toBe(controlsBeforeHistory);
 
-		const hostButton = monitor.getByRole('button', { name: '127.0.0.1', exact: true });
+		const hostButton = monitor.getByRole('button', { name: 'Copy IP: 127.0.0.1', exact: true });
 		await expect(hostButton).toBeVisible();
 		await hostButton.click();
 		await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('127.0.0.1');

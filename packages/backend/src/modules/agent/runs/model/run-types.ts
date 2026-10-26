@@ -4,7 +4,6 @@ import type { AgentRunStepFailureCode } from '@nexus-terminal/shared/agent/runs/
 import type {
 	AgentRunStatus,
 	AgentRunStepState,
-	AgentRunStepEventType,
 	AgentRunEventType,
 	AgentCreateRunOutcome,
 	AgentCancelRunOutcome,
@@ -163,21 +162,6 @@ export type RunStepFinish =
 	| { state: 'completed'; finishReason: 'tool_calls'; proposals: RunToolProposal[] }
 	| { state: 'failed'; failureCode: AgentRunStepFailureCode }
 	| { state: 'unknown' };
-
-export interface RunStepEvent {
-	stepIndex: number;
-	sequence: number;
-	kind: AgentRunStepEventType;
-	textDelta?: string;
-	inputTokens?: number;
-	outputTokens?: number;
-	createdAt: number;
-}
-
-export interface RunStepEventPage {
-	items: RunStepEvent[];
-	nextCursor: number;
-}
 
 export interface RunExecutionCommand {
 	deadlineAt: number;

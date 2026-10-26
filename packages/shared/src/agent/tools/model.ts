@@ -1,7 +1,7 @@
 import type { AgentToolState } from './values.js';
 import type { AgentApprovalRisk, AgentCapability } from '../governance/values.js';
 
-/** Audit metadata only; arguments, result bodies and provider identifiers stay private. */
+/** Safe tool state and generated image reference; arguments and raw results stay private. */
 export interface AgentToolView {
 	id: string;
 	appId: string;
@@ -19,16 +19,8 @@ export interface AgentToolView {
 	operationRevision: number;
 	revision: number;
 	state: AgentToolState;
+	/** Saved image owned by this App; only populated for a completed image_generate. */
+	generatedImageId: string | null;
 	createdAt: number;
 	updatedAt: number;
-}
-
-export interface AgentToolEventView {
-	toolCallId: string;
-	runId: string;
-	revision: number;
-	operationRevision: number;
-	state: AgentToolState;
-	operationHash: string;
-	createdAt: number;
 }

@@ -521,7 +521,10 @@ export class ToolService {
 				signal,
 				validate,
 			);
-			return { text: JSON.stringify(result), targets: [] };
+			return {
+				text: JSON.stringify({ id: result.id, name: result.name, sizeBytes: result.sizeBytes }),
+				targets: [],
+			};
 		}
 		if (input.kind === 'skill') {
 			const text = await this.plugins.performSkill(

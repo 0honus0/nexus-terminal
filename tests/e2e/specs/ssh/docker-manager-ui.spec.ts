@@ -342,6 +342,67 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
 	try {
 		await connectTestSshFromConnectionsPage(page, connectionId);
 
+		await step('file manager height moves past the fixed command bar in both directions', async () => {
+			const fileManager = page.locator('.file-manager-root:visible').first();
+			await expect(fileManager).toBeVisible();
+			const split = page.locator('.workspace-split.splitpanes--horizontal').filter({ has: fileManager }).first();
+			const filePane = split.locator(':scope > [data-workspace-pane="fileManager"]');
+			const terminalPane = split.locator(':scope > [data-workspace-pane="terminal"]');
+			const commandPane = split.locator(':scope > [data-workspace-pane="commandBar"]');
+			const splitter = split.locator(':scope > .splitpanes__splitter').nth(1);
+
+			const height = async (pane: Locator): Promise<number> => {
+				const box = await pane.boundingBox();
+				if (!box) throw new Error('Expected a visible workspace pane');
+				return box.height;
+			};
+
+			const drag = async (delta: number, matches: () => Promise<boolean>): Promise<void> => {
+				const box = await splitter.boundingBox();
+				if (!box) throw new Error('Expected the file-manager height splitter');
+				await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+				await page.mouse.down();
+				try {
+					await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + delta, { steps: 12 });
+					// Wait for the library's animation-frame update before ending the drag.
+					await expect.poll(matches).toBe(true);
+				} finally {
+					await page.mouse.up();
+				}
+			};
+
+			const beforeFiles = await height(filePane);
+			const beforeTerminal = await height(terminalPane);
+			await drag(-80, async () => (await height(filePane)) > beforeFiles + 55);
+			await expect.poll(() => height(terminalPane)).toBeLessThan(beforeTerminal - 55);
+			expect(await height(commandPane)).toBeGreaterThanOrEqual(37);
+			expect(await height(commandPane)).toBeLessThanOrEqual(43);
+			const largerFiles = await height(filePane);
+			await drag(80, async () => (await height(filePane)) < largerFiles - 55);
+			await expect.poll(() => height(terminalPane)).toBeGreaterThan(beforeTerminal - 20);
+			expect(await height(commandPane)).toBeGreaterThanOrEqual(37);
+			expect(await height(commandPane)).toBeLessThanOrEqual(43);
+			const sizes = await split
+				.locator(':scope > .splitpanes__pane')
+				.evaluateAll((panes) => panes.map((pane) => Number.parseFloat((pane as HTMLElement).style.height)));
+			expect(sizes.reduce((total, size) => total + size, 0)).toBeCloseTo(100, 2);
+			// Hitting the terminal minimum must clamp without losing pane percentages.
+			const splitBox = await split.boundingBox();
+			if (!splitBox) throw new Error('Expected a visible workspace split');
+			const beforeLimit = await height(filePane);
+			await drag(-splitBox.height, async () => (await height(filePane)) > beforeLimit + 55);
+			const clampedSizes = await split
+				.locator(':scope > .splitpanes__pane')
+				.evaluateAll((panes) => panes.map((pane) => Number.parseFloat((pane as HTMLElement).style.height)));
+			expect(clampedSizes.reduce((total, size) => total + size, 0)).toBeCloseTo(100, 2);
+			expect(clampedSizes[0]).toBeCloseTo(24, 1);
+			expect(await height(commandPane)).toBeGreaterThanOrEqual(37);
+			expect(await height(commandPane)).toBeLessThanOrEqual(43);
+			const atLimit = await height(filePane);
+			const restoreDistance = Math.max(0, atLimit - beforeFiles);
+			await drag(restoreDistance, async () => Math.abs((await height(filePane)) - beforeFiles) < 20);
+		});
+
 		await step(
 			'constrained utility panes switch to a compact presentation without content-driven layout jumps',
 			async () => {

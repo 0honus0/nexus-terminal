@@ -153,8 +153,12 @@ await test('B10 Agent tool approval, actual SSH effects and revocation', { timeo
 
 	const approvals = async (run) => await listAgentApprovalHistory(api, agentApp.id, run.id);
 
-	const tool = async (run, approval) =>
-		expectStatus(await api('GET', runPath(run) + '/tools/' + approval.toolCallId), 200);
+	const tool = async (run, approval) => {
+		const page = expectStatus(await api('GET', base() + '/threads/' + run.threadId + '/tools?limit=100'), 200);
+		const found = page.items.find((item) => item.id === approval.toolCallId);
+		assert.ok(found);
+		return found;
+	};
 
 	const waitRun = (run, status) =>
 		until(
@@ -312,15 +316,14 @@ await test('B10 Agent tool approval, actual SSH effects and revocation', { timeo
 				const settled = expectStatus(await api('GET', approvalPath(approval)), 200);
 				assert.ok(settled.consumedAt !== null);
 				assert.equal((await tool(run, approval)).state, 'completed');
-				const events = expectStatus(
-					await api('GET', runPath(run) + '/tools/' + approval.toolCallId + '/events?after=0&limit=100'),
-					200,
-				);
-				assert.deepEqual(
-					events.items.map((event) => event.state),
-					['inspected', 'dispatched', 'completed'],
-				);
-				assert.equal(JSON.stringify(events).includes(content), false);
+				for (const path of [
+					'/steps/1',
+					'/steps/1/events?after=0&limit=50',
+					'/tools/' + approval.toolCallId,
+					'/tools/' + approval.toolCallId + '/events?after=0&limit=50',
+				]) {
+					expectStatus(await api('GET', runPath(run) + path), 404);
+				}
 				assert.equal(expectStatus(await resolve(approval, 'approved', key), 200).status, 'approved');
 				assert.equal(calls.length, 2);
 				assert.ok(calls[1].messages.some((message) => message.role === 'tool'));

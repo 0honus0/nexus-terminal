@@ -29,6 +29,7 @@ overrides:
 patchedDependencies:
   '@xterm/xterm@6.0.0': fdc066c72e28d5596d6fc51bf7caaa5d1b1cf7f65f947875e74fb6ba4fde8709
   monaco-editor@0.56.0: c23d454741b9c602522924706171e4362a6cf35302051169b54531f4484538e7
+  splitpanes@4.1.2: 61ff51a487c85851881a8bbe4eaf00ee07a8c388e942f9d351ea7e39d4684bf5
 
 importers:
 
@@ -331,7 +332,7 @@ importers:
         version: 7.8.5
       splitpanes:
         specifier: ^4.1.2
-        version: 4.1.2(vue@3.5.43(@typescript/typescript6@6.0.2))
+        version: 4.1.2(patch_hash=61ff51a487c85851881a8bbe4eaf00ee07a8c388e942f9d351ea7e39d4684bf5)(vue@3.5.43(@typescript/typescript6@6.0.2))
       sql.js:
         specifier: ^1.14.2
         version: 1.14.2
@@ -5812,7 +5813,7 @@ snapshots:
 
   split2@4.2.0: {}
 
-  splitpanes@4.1.2(vue@3.5.43(@typescript/typescript6@6.0.2)):
+  splitpanes@4.1.2(patch_hash=61ff51a487c85851881a8bbe4eaf00ee07a8c388e942f9d351ea7e39d4684bf5)(vue@3.5.43(@typescript/typescript6@6.0.2)):
     dependencies:
       vue: 3.5.43(@typescript/typescript6@6.0.2)
 

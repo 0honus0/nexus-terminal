@@ -3,17 +3,12 @@ import type { AgentRunStreamUpdate } from '@nexus-terminal/shared/agent/runs/eve
 import type { NativeRunUpdate } from './native-run-types';
 import type { AgentRunUsageView } from '@nexus-terminal/shared/agent/runs/model';
 import type { NativeRunUsage } from './native-run-types';
-import type {
-	AgentRunView,
-	AgentRunEventView,
-	AgentRunStepView,
-	AgentRunStepEventView,
-} from '@nexus-terminal/shared/agent/runs/model';
+import type { AgentRunView, AgentRunEventView } from '@nexus-terminal/shared/agent/runs/model';
 import type { AgentApprovalView } from '@nexus-terminal/shared/agent/governance/model';
 import type { AgentChildView, AgentMessageMetadata } from '@nexus-terminal/shared/agent/collaboration/model';
 import type { AgentSelectableModel, AgentWorkspaceRequest } from '@nexus-terminal/shared/agent/scope/workspace-http';
 import type { AgentThreadEntry, AgentThreadEntryCursor } from '@nexus-terminal/shared/agent/scope/model';
-import type { AgentToolView, AgentToolEventView } from '@nexus-terminal/shared/agent/tools/model';
+import type { AgentToolView } from '@nexus-terminal/shared/agent/tools/model';
 import type { AgentCreateRunRequest } from '@nexus-terminal/shared/agent/runs/http';
 import type {
 	NativeRun,
@@ -27,10 +22,7 @@ import type {
 	NativeRunInput,
 	NativeRunAction,
 	NativeRunIntent,
-	NativeStep,
-	NativeStepEvent,
 	NativeTool,
-	NativeToolEvent,
 } from './native-run-types';
 
 export function fromNativeRun(value: AgentRunView): NativeRun {
@@ -213,53 +205,6 @@ export function toNativeRunMutation(value: NativeRunIntent): AgentWorkspaceReque
 	}
 }
 
-export function fromNativeStep(value: AgentRunStepView): NativeStep {
-	const result: NativeStep = {
-		runId: value.runId,
-		stepIndex: value.stepIndex,
-		state: value.state,
-		revision: value.revision,
-		runVersion: value.runVersion,
-		textBytes: value.textBytes,
-		createdAt: value.createdAt,
-		updatedAt: value.updatedAt,
-	};
-	if (value.finishReason !== undefined) result.finishReason = value.finishReason;
-	if (value.inputTokens !== undefined) result.inputTokens = value.inputTokens;
-	if (value.outputTokens !== undefined) result.outputTokens = value.outputTokens;
-	if (value.failureCode !== undefined) result.failureCode = value.failureCode;
-	return result;
-}
-
-export function fromNativeStepEvent(value: AgentRunStepEventView): NativeStepEvent {
-	if (value.kind === 'text.delta')
-		return {
-			runId: value.runId,
-			stepIndex: value.stepIndex,
-			sequence: value.sequence,
-			kind: value.kind,
-			textBytes: value.textBytes,
-			createdAt: value.createdAt,
-		};
-	if (value.kind === 'usage')
-		return {
-			runId: value.runId,
-			stepIndex: value.stepIndex,
-			sequence: value.sequence,
-			kind: value.kind,
-			inputTokens: value.inputTokens,
-			outputTokens: value.outputTokens,
-			createdAt: value.createdAt,
-		};
-	return {
-		runId: value.runId,
-		stepIndex: value.stepIndex,
-		sequence: value.sequence,
-		kind: value.kind,
-		createdAt: value.createdAt,
-	};
-}
-
 export function fromNativeTool(value: AgentToolView): NativeTool {
 	return {
 		id: value.id,
@@ -278,20 +223,9 @@ export function fromNativeTool(value: AgentToolView): NativeTool {
 		operationRevision: value.operationRevision,
 		revision: value.revision,
 		state: value.state,
+		generatedImageId: value.generatedImageId,
 		createdAt: value.createdAt,
 		updatedAt: value.updatedAt,
-	};
-}
-
-export function fromNativeToolEvent(value: AgentToolEventView): NativeToolEvent {
-	return {
-		toolCallId: value.toolCallId,
-		runId: value.runId,
-		revision: value.revision,
-		operationRevision: value.operationRevision,
-		state: value.state,
-		operationHash: value.operationHash,
-		createdAt: value.createdAt,
 	};
 }
 

@@ -10,21 +10,13 @@ import {
 } from '../governance/values.js';
 import {
 	AGENT_TOOL_STATES,
-	AGENT_TOOL_EVENT_MAX_LIMIT,
 	AGENT_TOOL_LIST_DEFAULT_LIMIT,
 	AGENT_TOOL_LIST_MAX_LIMIT,
 	AGENT_TOOL_MAX_RESPONSE_BYTES,
 } from './values.js';
 import type { AgentToolState } from './values.js';
-import type {
-	AgentThreadToolsPath,
-	AgentThreadToolsQuery,
-	AgentThreadToolsResponse,
-	AgentToolPath,
-	AgentToolEventsQuery,
-	AgentToolEventsResponse,
-} from './http.js';
-import type { AgentToolView, AgentToolEventView } from './model.js';
+import type { AgentThreadToolsPath, AgentThreadToolsQuery, AgentThreadToolsResponse } from './http.js';
+import type { AgentToolView } from './model.js';
 
 function state(input: unknown): AgentToolState {
 	const result = AGENT_TOOL_STATES.find((value) => value === input);
@@ -40,11 +32,6 @@ function hash(input: unknown): string {
 		throw new InvalidAgentPayload();
 	}
 	return result;
-}
-
-export function readAgentToolPath(input: unknown): AgentToolPath {
-	const row = agentRecord(input, ['appId', 'runId', 'toolCallId']);
-	return { appId: readAgentId(row.appId), runId: readAgentId(row.runId), toolCallId: readAgentId(row.toolCallId) };
 }
 
 export function readAgentThreadToolsPath(input: unknown): AgentThreadToolsPath {
@@ -95,26 +82,7 @@ export function readAgentThreadToolsQuery(input: URLSearchParams): AgentThreadTo
 	return { before: before.length === 0 ? null : readToolListCursor(before[0]), limit };
 }
 
-export function readAgentToolEventsQuery(input: URLSearchParams): AgentToolEventsQuery {
-	if ([...input.keys()].some((key) => key !== 'after' && key !== 'limit')) {
-		throw new InvalidAgentPayload();
-	}
-
-	function value(key: string, fallback: number, maximum: number): number {
-		const entries = input.getAll(key);
-		if (entries.length === 0) {
-			return fallback;
-		}
-		if (entries.length !== 1 || !/^(0|[1-9][0-9]*)$/u.test(entries[0])) {
-			throw new InvalidAgentPayload();
-		}
-		return agentInteger(Number(entries[0]), key === 'limit' ? 1 : 0, maximum);
-	}
-
-	return { after: value('after', 0, Number.MAX_SAFE_INTEGER), limit: value('limit', 50, AGENT_TOOL_EVENT_MAX_LIMIT) };
-}
-
-export function readAgentToolResponse(input: unknown): AgentToolView {
+function readTool(input: unknown): AgentToolView {
 	const row = agentRecord(
 		input,
 		[
@@ -134,6 +102,7 @@ export function readAgentToolResponse(input: unknown): AgentToolView {
 			'operationRevision',
 			'revision',
 			'state',
+			'generatedImageId',
 			'createdAt',
 			'updatedAt',
 		],
@@ -151,6 +120,10 @@ export function readAgentToolResponse(input: unknown): AgentToolView {
 	}
 	const operationRevision = agentInteger(row.operationRevision, 1);
 	const createdAt = agentInteger(row.createdAt);
+	const generatedImageId = row.generatedImageId === null ? null : readAgentId(row.generatedImageId);
+	if (generatedImageId !== null && (row.toolName !== 'image_generate' || row.state !== 'completed')) {
+		throw new InvalidAgentPayload();
+	}
 	return {
 		id: readAgentId(row.id),
 		appId: readAgentId(row.appId),
@@ -168,30 +141,9 @@ export function readAgentToolResponse(input: unknown): AgentToolView {
 		operationRevision,
 		revision: agentInteger(row.revision, operationRevision),
 		state: state(row.state),
+		generatedImageId,
 		createdAt,
 		updatedAt: agentInteger(row.updatedAt, createdAt),
-	};
-}
-
-function readEvent(input: unknown): AgentToolEventView {
-	const row = agentRecord(input, [
-		'toolCallId',
-		'runId',
-		'revision',
-		'operationRevision',
-		'state',
-		'operationHash',
-		'createdAt',
-	]);
-	const operationRevision = agentInteger(row.operationRevision, 1);
-	return {
-		toolCallId: readAgentId(row.toolCallId),
-		runId: readAgentId(row.runId),
-		revision: agentInteger(row.revision, operationRevision),
-		operationRevision,
-		state: state(row.state),
-		operationHash: hash(row.operationHash),
-		createdAt: agentInteger(row.createdAt),
 	};
 }
 
@@ -205,7 +157,7 @@ export function readAgentThreadToolsResponse(
 	if (!Array.isArray(row.items) || row.items.length > limit) {
 		throw new InvalidAgentPayload();
 	}
-	const items = row.items.map(readAgentToolResponse);
+	const items = row.items.map(readTool);
 	for (const item of items) {
 		if (item.appId !== appId) {
 			throw new InvalidAgentPayload();
@@ -238,34 +190,6 @@ export function readAgentThreadToolsResponse(
 		nextCursor !== null &&
 		(items.length !== limit || encodeAgentToolListCursor(items[0].createdAt, items[0].id) !== nextCursor)
 	) {
-		throw new InvalidAgentPayload();
-	}
-	return { items, nextCursor };
-}
-
-export function readAgentToolEventsResponse(input: unknown): AgentToolEventsResponse {
-	const row = agentRecord(input, ['items', 'nextCursor'], AGENT_TOOL_MAX_RESPONSE_BYTES);
-	if (!Array.isArray(row.items) || row.items.length > AGENT_TOOL_EVENT_MAX_LIMIT) {
-		throw new InvalidAgentPayload();
-	}
-	const items = row.items.map(readEvent);
-	for (let index = 1; index < items.length; index++) {
-		const previous = items[index - 1];
-		const current = items[index];
-		if (
-			current.runId !== previous.runId ||
-			current.toolCallId !== previous.toolCallId ||
-			current.revision !== previous.revision + 1 ||
-			current.operationRevision < previous.operationRevision ||
-			current.operationRevision > previous.operationRevision + 1 ||
-			(current.operationRevision === previous.operationRevision &&
-				current.operationHash !== previous.operationHash)
-		) {
-			throw new InvalidAgentPayload();
-		}
-	}
-	const nextCursor = agentInteger(row.nextCursor);
-	if (items.length !== 0 && nextCursor !== items[items.length - 1].revision) {
 		throw new InvalidAgentPayload();
 	}
 	return { items, nextCursor };

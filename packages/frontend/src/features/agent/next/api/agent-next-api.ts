@@ -25,18 +25,14 @@ import {
 	readAgentRunEventsQuery,
 	readAgentRunEventsResponse,
 	readAgentRunResponse,
-	readAgentRunStepPath,
-	readAgentRunStepResponse,
-	readAgentRunStepEventsResponse,
 } from '@nexus-terminal/shared/agent/runs/http-codec';
 import type {
 	AgentCancelRunResponse,
 	AgentCreateRunResponse,
 	AgentRunEventsResponse,
-	AgentRunStepEventsResponse,
 	AgentCreateRunRequest,
 } from '@nexus-terminal/shared/agent/runs/http';
-import type { AgentRunView, AgentRunStepView } from '@nexus-terminal/shared/agent/runs/model';
+import type { AgentRunView } from '@nexus-terminal/shared/agent/runs/model';
 import { AGENT_RUN_IDEMPOTENCY_HEADER, AGENT_RUN_MAX_JSON_BODY_BYTES } from '@nexus-terminal/shared/agent/runs/values';
 
 export type AgentNextFailureCode = AgentHttpErrorCode | 'request_failed' | 'protocol_failure';
@@ -301,50 +297,6 @@ export function createAgentNextApi(baseUrl: string) {
 				throw protocolFailure();
 			}
 			return response;
-		},
-
-		getStep: async (appId: string, runId: string, signal?: AbortSignal): Promise<AgentRunStepView> => {
-			const path = inputDecoded(() => readAgentRunStepPath({ appId, runId, stepIndex: '1' }));
-			const step = decoded(
-				await request('GET', `/apps/${path.appId}/runs/${path.runId}/steps/1`, undefined, undefined, signal),
-				readAgentRunStepResponse,
-			);
-			if (step.runId !== path.runId || step.stepIndex !== 1) throw protocolFailure();
-			return step;
-		},
-
-		listStepEvents: async (
-			appId: string,
-			runId: string,
-			after: number,
-			limit: number,
-			signal?: AbortSignal,
-		): Promise<AgentRunStepEventsResponse> => {
-			const path = inputDecoded(() => readAgentRunStepPath({ appId, runId, stepIndex: '1' }));
-			const query = inputDecoded(() =>
-				readAgentRunEventsQuery(new URLSearchParams({ after: String(after), limit: String(limit) })),
-			);
-			const page = decoded(
-				await request(
-					'GET',
-					`/apps/${path.appId}/runs/${path.runId}/steps/1/events?after=${query.after}&limit=${query.limit}`,
-					undefined,
-					undefined,
-					signal,
-				),
-				readAgentRunStepEventsResponse,
-			);
-			if (
-				page.items.length > query.limit ||
-				page.nextCursor < query.after ||
-				(page.items.length === 0 && page.nextCursor !== query.after) ||
-				page.items.some(
-					(item) => item.runId !== path.runId || item.stepIndex !== 1 || item.sequence <= query.after,
-				)
-			) {
-				throw protocolFailure();
-			}
-			return page;
 		},
 	};
 }

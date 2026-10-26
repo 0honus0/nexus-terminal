@@ -1,7 +1,7 @@
 {
   "agentNext": {
     "title": "新版后端 Agent — 开发入口",
-    "isolation": "此开发页仅消费 Backend 的 Agent 状态和只读模型步骤审计接口，不启用 Provider 执行、工具、审批、WebSocket 流式能力，也不切换旧 Agent。",
+    "isolation": "此开发页仅消费 Backend 的 Agent 状态接口，不提供步骤与工具审计。",
     "setup": "首次管理员初始化",
     "login": "登录新版后端",
     "username": "用户名",
@@ -27,10 +27,6 @@
     "getRun": "读取 Run",
     "cancelRun": "取消 Run",
     "listEvents": "读取下一页事件",
-    "getStep": "读取步骤 1 审计",
-    "listStepEvents": "读取步骤审计事件",
-    "stepAudit": "模型步骤审计（不含输出原文）",
-    "noStep": "尚未批准或记录模型步骤。",
     "currentRun": "当前 Run",
     "events": "事件",
     "nextCursor": "下一游标",

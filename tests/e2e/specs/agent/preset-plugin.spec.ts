@@ -1,3 +1,4 @@
+import { readAgentRunUsageResponse } from '../../../../packages/shared/src/agent/runs/http-codec';
 import { readAgentArtifactResponse } from '../../../../packages/shared/src/agent/artifacts/http-codec';
 import { readAgentBrowserConfiguration } from '../../../../packages/shared/src/agent/integrations/browser-http-codec';
 import { readAgentExecutionSettingsResponse } from '../../../../packages/shared/src/agent/execution/http-codec';
@@ -37,7 +38,6 @@ import {
 } from '../../../../packages/shared/src/agent/plugins/http-codec';
 import { readAgentPluginRepositorySettings } from '../../../../packages/shared/src/agent/plugins/repository-http-codec';
 import { agentRecord, readAgentErrorResponse } from '../../../../packages/shared/src/agent/http-codec';
-
 import { expect, test, type APIRequestContext, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
@@ -887,13 +887,14 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 			.filter({ hasText: /^Technical details$/ })
 			.first()
 			.click();
-		await hub.getByText('Step and tool audit', { exact: true }).click();
-		const audit = hub
-			.locator('details')
-			.filter({ has: page.locator(':scope > summary').filter({ hasText: /^Step and tool audit$/ }) });
-		await audit.getByLabel('Step index', { exact: true }).fill('1');
-		await expect(audit).toContainText('step.completed');
-		await expect(audit).toContainText('Input / output tokens');
+		await expect(hub.getByText('Step and tool audit', { exact: true })).toHaveCount(0);
+		const usage = await requestAgentJson(
+			request,
+			{ method: 'GET', path: `/apps/${task.app.id}/runs/${run.id}/usage` },
+			readAgentRunUsageResponse,
+		);
+		expect(usage.runId).toBe(run.id);
+		expect(usage.reportedModelRequests).toBeGreaterThan(0);
 		await captureFunctionalScreenshot(page, 'agent-installed-native-run.png', {
 			viewport: { width: 1440, height: 900 },
 		});
@@ -1001,14 +1002,8 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 			await article.getByRole('button', { name: 'Normalized operation', exact: true }).click();
 			await expect(article).toContainText(approval.id);
 			await expect(article).toContainText(approval.operationHash);
-			await article.getByRole('button', { name: 'Inspect tool audit', exact: true }).click();
-			const audit = hub
-				.locator('details')
-				.filter({ has: page.locator(':scope > summary').filter({ hasText: /^Step and tool audit$/ }) });
-			await expect(audit).toHaveAttribute('open', '');
-			await expect(audit).toContainText('shell_execute');
-			await expect(audit).toContainText(approval.operationHash);
-			await expect(audit).toContainText('printf approval-e2e');
+			await expect(article.getByRole('button', { name: 'Inspect tool audit', exact: true })).toHaveCount(0);
+			await expect(article).toContainText('printf approval-e2e');
 			const { command: input } = await captureNativeCommand(task, 'agent.approvals.resolve', () =>
 				article.getByRole('button', { name: 'Approve and run', exact: true }).click(),
 			);

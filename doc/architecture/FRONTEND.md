@@ -321,7 +321,7 @@ register 在单一 v1 初始化之后，通过 RunToolModel 收敛未完成操�
 
 register 安装一个 RunModel、RunStepModel、RunModelStream、RunExecutionOwner 和 RunService；ProviderService 在配置提交后通知该执行 owner 中止对应请求。AgentRequestOwner 先停止准入，quiesce Run/Provider/Registry，再等待已准入请求、实际Registry刷新和各资源close，SQLite最后关闭。Provider端点发现也纳入同一取消owner；Provider close独立等待其持有的网络Promise并有界保留多项清理失败，模块停止及关闭逐项执行，同步抛错不跳过其余资源；Registry最后一个HTTP订阅者离开不解除实际任务追踪。初始化在迁移后 reconcileUnsettled，不重发已派发请求。
 
-状态 HTTP 统一经异步交付检查复核管理员会话，创建/取消的结果映射只负责状态码与白名单响应；交付失败不撤销已提交写入。保留创建/查询/取消/主事件 HTTP；增加 `/api/v1/agent/apps/:appId/runs/:id/steps/1` 和 `/steps/1/events` 两个管理员只读审计入口。没有公开执行启动/步骤写入接口。既有 DEV 页消费模型候选、必填模型三字段和步骤审计，正式前端 F1 未切换。
+状态 HTTP 统一经异步交付检查复核管理员会话，创建/取消的结果映射只负责状态码与白名单响应；交付失败不撤销已提交写入。保留创建/查询/取消/主事件 HTTP；专用步骤审计 HTTP 已移除。没有公开执行启动/步骤写入接口。既有 DEV 页消费模型候选、必填模型三字段和 Run 状态，正式前端 F1 未切换。
 
 ### Provider 安装与接口
 
@@ -525,13 +525,13 @@ B6.2B 当前落地持久账本、审批绑定、原子消费基础设施及安�
 
 ### B5.2 范围与延期
 
-B5.2 可独立完成的源码链路已具备：持久状态/步骤/事务、初始表结构、取消/恢复、通用双协议模型流、Model 转换、唯一执行 owner/准入/停机及只读审计消费者。当前执行由 B6/B7 已接入的 governed 政策、可信授权、冻结上下文与全族预算约束，默认 enabled=false；启用执行不授予工具权限。不把运行骨架或静态通过当作行为验收。
+B5.2 可独立完成的源码链路已具备：持久状态/步骤/事务、初始表结构、取消/恢复、通用双协议模型流、Model 转换、唯一执行 owner/准入/停机及状态消费者。当前执行由 B6/B7 已接入的 governed 政策、可信授权、冻结上下文与全族预算约束，默认 enabled=false；启用执行不授予工具权限。不把运行骨架或静态通过当作行为验收。
 
 静态门禁与四表归 testing 最新复审；网络、迁移、资源、并发等全部行为仍待 B10。正式前端、输出交付与 F-R14/F1 留后端完成后；当前施工以实施方案为准。
 
 ### Provider 验收边界
 
-源码与静态证据见 testing 最新复审；行为全部留 B10。`/__agent-next` 已消费模型候选与必填 model 及步骤审计；正式前端已消费 Shared，旧 Backend 已删除；统一 E2E 仍待验收。Run 执行 owner 已接入 B6/B7 的授权、上下文与预算；默认执行关闭，pending 或静态通过不证明 Agent 行为验收完成。
+源码与静态证据见 testing 最新复审；行为全部留 B10。`/__agent-next` 已消费模型候选与必填 model 及 Run 状态；正式前端已消费 Shared，旧 Backend 已删除；统一 E2E 仍待验收。Run 执行 owner 已接入 B6/B7 的授权、上下文与预算；默认执行关闭，pending 或静态通过不证明 Agent 行为验收完成。
 
 ### B4.2 源码与验收边界
 
@@ -685,7 +685,7 @@ Root owner → tools Service → ToolModel → Targets public listEntries；Root
 | 模型声明/历史/提案      | tools/runs Model / Platform model-port    | RunModelStream 双向投影   | Root owner     |
 | 安全目录                | Targets public / ToolConnection           | ToolModel                 | ToolService    |
 | 检查、许可、结果 → 存储 | runs/governance Model / storage           | 对应 Model                | SQLite Adapter |
-| 步骤/工具审计 → 公开    | Shared runs/tools                         | register 与 HTTP 独立投影 | DEV/F1         |
+| 线程工具状态 → 公开     | Shared tools                              | register 与 HTTP 独立投影 | 聊天工具卡片   |
 
 connectionIds 是必填的最多 50 个唯一正整数，空数组表示没有选中目标，选择不等于授权。modelStepIndex 公开；providerCallId、参数、结果正文及 encrypted reasoning 留内部。工具结果仅有 id/name/host/port/username，Targets 的 type/version 只用于内部过滤与复查，不读取凭据。
 
@@ -693,7 +693,7 @@ connectionIds 是必填的最多 50 个唯一正整数，空数组表示没有�
 
 Agent HTTP 的 AgentHttpInput 统一归 interfaces/http/agent-input.ts；Governance、Execution、Memory、Artifact、Integration、Browser 与 Plugin 共用输入失败转换。unknown JSON/Shared codec 拒绝先转应用 invalid_input，HTTP 保留400/413等原协议状态；Service、公开出口和Platform不引用该HTTP辅助类，原 mapper/Model 转换保持独立。
 
-register 将 ToolModel/ToolService 注入唯一 RunExecutionOwner；目录工具参数严格空对象，诊断及文件工具使用有界字段声明，定义由服务器提供，不新增客户端检查或派发 HTTP。已有步骤审计支持 1–400，工具审计包含真实模型步骤。DEV 创建明确传 connectionIds:[]，正式选择器与多步 UI 留 F1。
+register 将 ToolModel/ToolService 注入唯一 RunExecutionOwner；目录工具参数严格空对象，诊断及文件工具使用有界字段声明，定义由服务器提供，不新增客户端检查或派发 HTTP。步骤和工具记录保留真实模型步骤，用于内部执行、恢复与快照校验；专用审计查询已移除。DEV 创建明确传 connectionIds:[]，正式选择器与多步 UI 留 F1。
 
 ### 6. 数据、事务与并发
 
@@ -885,7 +885,7 @@ Agent ToolService→ToolModel→Remote public→OperationService→MachineAcpMod
 
 ### 5. 入口与安装
 
-新增acp_execute v2模型工具，connectionId/argv/cwd/prompt绑定本次人工destructive批准，需integration.acp.invoke。嵌套权限生产独立acp_inner_permission记录及acp_permission批准；权限观察和决定复用已安装审批HTTP、工具审计及事件页，不新建无消费者WS。技术协议拒绝direct fs/terminal和持久allow选项，只支持allow_once/reject_once。
+新增acp_execute v2模型工具，connectionId/argv/cwd/prompt绑定本次人工destructive批准，需integration.acp.invoke。嵌套权限生产独立acp_inner_permission记录及acp_permission批准；权限观察和决定复用已安装审批 HTTP 及线程工具列表，不新建无消费者WS。技术协议拒绝direct fs/terminal和持久allow选项，只支持allow_once/reject_once。
 
 ### 6. 数据、事务与并发
 
@@ -1266,7 +1266,7 @@ Access已经提供窄provePassword公开能力，内部PasswordProof归authentic
 5. **入口与安装**：POST /api/v1/agent/apps/:appId/workspace 要求当前完整管理员会话、真实 App UUID、appVersion 和 request。register 安装事务身份读取及原生路由；插件继续走原 descriptor/grant 入口。正式Host与DEV原生线程／运行消费者均使用该入口，正式Host不借用插件grant。
 6. **数据、事务与并发**：原生当前会话、App 所属用户、启用/受信声明及原 App version 在实际事务前后核对；Thread 创建/改名使用稳定 operationId 与不可变回执，改名和删除绑定原线程 version。删除由 ThreadService → ThreadModel → SqliteThreadStorage.remove 执行：Adapter 在同一写事务读取全部 Root/Child 的不同状态和关联 Memory 最大版本，Model 白名单转换 ThreadRemovalFacts，Service 同步拒绝任何 pending/running/unknown（active_run_conflict）以及记忆版本耗尽（version_conflict），并提供事务实际决策时的更新时间；Adapter 不选择业务准入状态。事务依次将关联 agent_memories.source_run_id 置 NULL、版本加一且时间不倒退，删除线程或 Run 的 artifact attachments，显式移除 agent_run_children / facts / mailbox / budget_reservations 的 NO ACTION 引用，再删除全部 Run；步骤、事件、工具体、Job、审批、上下文及幂等结果按真实 FK CASCADE。协作表同时覆盖 operation_id/message_id 对待删工具的引用。最后删除该线程的 agent_thread_commands，并以 user/app/thread/version CAS 删除 agent_threads，提交前复核原身份/App。任一步拒绝或失败均回滚，不关闭 FK、不依赖延迟约束；Artifact 对象元数据和文件均不删除，Memory 正文及审核状态保留。删除不递增线程版本，允许最大安全整数的当前 CAS；不新增 schema/旧库兼容。组合调用经 ThreadModel 的事务准入能力消费同一规则，不在接口层复制 SQL 或业务判断；后台执行仍由原 Run owner 明确脱离临时请求准入并持续复验自身授权。
 7. **生命周期与失败**：Scope 入口和交付前保留当前事实复查；已成功写入后交付或复查失败返回 operation_unknown。删除也纳入原生 HTTP、插件 Service/HTTP 及交付 SDK 的写入分类：没有 operationId 仍是副作用，取消/超时/畸形或错 App 回执不能解释成未提交。读操作不授予执行权限；读列表不证明未知写入未提交。删除没有额外幂等回执或墓碑，确认后再次删除返回 not_found，不自动重放旧创建/改名或套新版本重试；未知结果保留原 threadId/expectedVersion，先只读核对。完整工作区编码预算8 MiB+1 KiB，Thread 列表最多50项，正文页遵守各自更窄预算。资源已销毁时不继续接纳新的请求步骤。
-8. **当前能力与验收**：原生18方法生产者及Shared已接线；正式Host/Run/正文/审批/Child的原消费者和独立应用转换保留，删除 UI 由前端批次接入，步骤／工具审计继续消费各自只读HTTP。删除验收覆盖严格请求/回执关联、原线程/App CAS、Root及Child三种活跃状态、关联记忆版本耗尽、提交前撤权/末步SQL失败整批回滚、工具/审批等级联、记忆/Artifact保留、其他线程隔离和 foreign_key_check。当前限定隔离 SQLite 实测不代表浏览器/插件整链已验收；真实并发、提交/交付确认丢失及资源清理故障仍待对应远程或现场验证，不沿用旧 Actions PASS。
+8. **当前能力与验收**：原生18方法生产者及Shared已接线；正式Host/Run/正文/审批/Child的原消费者和独立应用转换保留，删除 UI 由前端批次接入，步骤／工具专用审计 HTTP 已移除。删除验收覆盖严格请求/回执关联、原线程/App CAS、Root及Child三种活跃状态、关联记忆版本耗尽、提交前撤权/末步SQL失败整批回滚、工具/审批等级联、记忆/Artifact保留、其他线程隔离和 foreign_key_check。当前限定隔离 SQLite 实测不代表浏览器/插件整链已验收；真实并发、提交/交付确认丢失及资源清理故障仍待对应远程或现场验证，不沿用旧 Actions PASS。
 
 ### B8 前端SDK与显式迁移当前边界
 
@@ -1700,3 +1700,22 @@ Context预压缩现状：checkpoint工具需要实际context.compact授权，摘
 6. 并发：本地预测、远端输出和撤销经同一个 xterm 解析队列；远端 ACK 保留原始字节及原回调，只在真实解析后释放。预测不可替代服务器输出或重放输入。
 7. 生命周期：失活/后台、断线/错误、历史、resize、PTY替换和快照先撤销；snapshot 等待解析屏障；销毁取消 timer/标题订阅与样本订阅。旧 epoch 排队输入失效。备用屏幕、隐藏光标、原点/插入模式和滚动区内不预测；滚动区下方的普通输入行可参与，但不预测跨行滚动。
 8. 验收：定向算法回放、真实 Codex 捕获流和组件/传输回归分别记录 testing/E2E；类型/构建不能代表真实弱网所有程序通过。不新增远端 helper 或改变现有输入流控。
+
+### 工作区固定命令栏与纵向分隔条
+
+1. 职责与范围：WorkspaceLayoutRenderer持有布局分隔条行为，不修改文件列表、终端渲染或UI样式。
+2. 目录：原Workspace layout计算与Renderer；Splitpanes补丁归scripts/patches/splitpanes@4.1.2.patch。
+3. 依赖：沿既有Splitpanes；仅包含commandBar的纵向容器开启pushOtherPanes，其余分栏保留相邻调整语义。
+4. 类型：原LayoutNode及Splitpanes事件不变，不增加Shared/后端字段。
+5. 入口：拖动或键盘调整经过同一库计算，命令栏38–42px约束达到边界后将剩余位移传给可伸缩的同侧兄弟面板。
+6. 并发与守恒：库补丁修正after-pane最大值判断漏算后续兄弟尺寸，以及到达前侧全体最小值时重复扣减前序尺寸；推挤按可增长/可缩减量成对转移，保留总百分比和最小/最大约束。同步上游源文件及本项目实际消费的浏览器ESM产物，锁文件记录patch hash。
+7. 生命周期：原布局锁、ResizeObserver、结构key和真实拖动事件保存不变；不改命中区、可见分隔线或默认布局。
+8. 验收：api.honus.top隔离实例挂载真实Renderer/RuntimeSession，无SSH连接/用户配置写入；验证上下往返、两侧分隔条、38–42px、百分比总和及锁定。既有SSH E2E补齐真实连接后的上下拖动回归，等待正式远程Actions。
+
+### Agent 审计入口移除
+
+任务详情不再展示步骤与工具审计；审批卡片移除查看工具审计按钮及定位状态。NativeRunDetails 保留运行概况、子任务和 Run 事件；开发页同步移除步骤审计。线程工具列表 API 由 `native-tools-api.ts` 持有，供聊天工具状态和审批记录使用；不保留旧审计 API 包装。其他界面布局和样式不变。
+
+### 自动图片预览（2026-10-26）
+
+image_generate 仅负责生成并保存 App 文件，返回给模型的结果只有 id、name、sizeBytes；工具说明不要求模型拼接预览或下载 Markdown。服务端从已完成工具的持久结果投影 generatedImageId，前端使用 App ID 与文件 ID 自动显示现有图片预览和下载入口。Base64 只经生成服务落盘，不写入聊天或工具列表。待批准、失败或 unknown 不产生成功预览；刷新后仍可从工具记录恢复，文件读取继续执行原会话与 App 授权。直接 Images 对话仍由程序生成展示内容，不依赖文字模型。

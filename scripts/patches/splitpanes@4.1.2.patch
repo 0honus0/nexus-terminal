@@ -1,0 +1,89 @@
+diff --git a/dist/splitpanes.esm.js b/dist/splitpanes.esm.js
+index 68f7a5f6d43bc1d326858f4855fd0dbf7077cf98..34a3c21e058fcf83f8afbe7dfd61356c9a4aa690 100644
+--- a/dist/splitpanes.esm.js
++++ b/dist/splitpanes.esm.js
+@@ -128,9 +128,22 @@ var y = /* @__PURE__ */ Object.assign({ inheritAttrs: !1 }, {
+ 				nextReachedMinPanes: 0
+ 			}, r = 0 + (s.pushOtherPanes ? 0 : n.prevPanesSize), i = 100 - (s.pushOtherPanes ? 0 : n.nextPanesSize);
+ 			e = Math.max(Math.min(e, i), r);
+-			let a = [t, t + 1], o = y.value[a[0]] || null, c = y.value[a[1]] || null, l = o !== null && o.max < 100 && e >= o.max + n.prevPanesSize, u = c !== null && c.max < 100 && e <= 100 - (c.max + B(t + 1));
++			let a = [t, t + 1], o = y.value[a[0]] || null, c = y.value[a[1]] || null, l = o !== null && o.max < 100 && e >= o.max + n.prevPanesSize, u = c !== null && c.max < 100 && e <= 100 - (c.max + n.nextPanesSize);
+ 			if (l || u) {
+-				l ? (o.size = o.max, c.size = Math.min(Math.max(100 - o.max - n.prevPanesSize - n.nextPanesSize, c.min), c.max)) : (o.size = Math.min(Math.max(100 - c.max - n.prevPanesSize - B(t + 1), o.min), o.max), c.size = c.max);
++				l ? (o.size = o.max, c.size = Math.min(Math.max(100 - o.max - n.prevPanesSize - n.nextPanesSize, c.min), c.max)) : (o.size = Math.min(Math.max(100 - c.max - n.prevPanesSize - n.nextPanesSize, o.min), o.max), c.size = c.max);
++				// Preserve bounded intermediate panes while pushing remaining movement.
++				if (s.pushOtherPanes) {
++					const step = l ? -1 : 1;
++					const donor = l ? c : o;
++					let remaining = Math.max(0, l ? e - z(t) - o.size : z(t) + o.size - e);
++					for (let index = t + (step < 0 ? -1 : 2); index >= 0 && index < y.value.length && remaining > 0; index += step) {
++						const pane = y.value[index];
++						const amount = Math.min(remaining, Math.max(0, pane.max - pane.size), Math.max(0, donor.size - donor.min));
++						pane.size += amount;
++						donor.size -= amount;
++						remaining -= amount;
++					}
++				}
+ 				return;
+ 			}
+ 			if (s.pushOtherPanes) {
+@@ -146,7 +159,7 @@ var y = /* @__PURE__ */ Object.assign({ inheritAttrs: !1 }, {
+ 					i > r[0] && i <= n && (t.size = t.min, e.prevReachedMinPanes += t.min);
+ 				}), r[0] === void 0) return e.prevReachedMinPanes = 0, y.value[0].size = y.value[0].min, y.value.forEach((t, r) => {
+ 					r > 0 && r <= n && (t.size = t.min, e.prevReachedMinPanes += t.min);
+-				}), y.value[r[1]].size = 100 - e.prevReachedMinPanes - y.value[0].min - e.prevPanesSize - e.nextPanesSize, null;
++				}), y.value[r[1]].size = 100 - e.prevReachedMinPanes - y.value[0].min - e.nextPanesSize, null;
+ 				e.prevPanesSize = z(r[0]);
+ 			}
+ 			return t > 100 - e.nextPanesSize - y.value[r[1]].min && (r[1] = H(n).index, e.nextReachedMinPanes = 0, r[1] > n + 1 && y.value.forEach((t, i) => {
+diff --git a/src/components/splitpanes/splitpanes.vue b/src/components/splitpanes/splitpanes.vue
+index 02643569a3c1d827e844b4486297dee6891f9bab..2ee9ff126cdece2200f60331e3081eb608b010b4 100644
+--- a/src/components/splitpanes/splitpanes.vue
++++ b/src/components/splitpanes/splitpanes.vue
+@@ -241,7 +241,7 @@ const calculatePanesSizeFromDragPercentage = dragPercentage => {
+   let paneAfter = panes.value[panesToResize[1]] || null
+ 
+   const paneBeforeMaxReached = paneBefore !== null && paneBefore.max < 100 && (dragPercentage >= (paneBefore.max + sums.prevPanesSize))
+-  const paneAfterMaxReached = paneAfter !== null && paneAfter.max < 100 && (dragPercentage <= 100 - (paneAfter.max + sumNextPanesSize(splitterIndex + 1)))
++  const paneAfterMaxReached = paneAfter !== null && paneAfter.max < 100 && (dragPercentage <= 100 - (paneAfter.max + sums.nextPanesSize))
+   // Prevent dragging beyond pane max.
+   if (paneBeforeMaxReached || paneAfterMaxReached) {
+     if (paneBeforeMaxReached) {
+@@ -249,9 +249,27 @@ const calculatePanesSizeFromDragPercentage = dragPercentage => {
+       paneAfter.size = Math.min(Math.max(100 - paneBefore.max - sums.prevPanesSize - sums.nextPanesSize, paneAfter.min), paneAfter.max)
+     }
+     else {
+-      paneBefore.size = Math.min(Math.max(100 - paneAfter.max - sums.prevPanesSize - sumNextPanesSize(splitterIndex + 1), paneBefore.min), paneBefore.max)
++      paneBefore.size = Math.min(Math.max(100 - paneAfter.max - sums.prevPanesSize - sums.nextPanesSize, paneBefore.min), paneBefore.max)
+       paneAfter.size = paneAfter.max
+     }
++    // A max-constrained intermediate pane must not trap a pushing splitter.
++    // Transfer only the remaining distance to siblings that can grow, taking
++    // the identical amount from the opposite pane so the total stays constant.
++    if (props.pushOtherPanes) {
++      const step = paneBeforeMaxReached ? -1 : 1
++      const donor = paneBeforeMaxReached ? paneAfter : paneBefore
++      let remaining = Math.max(0, paneBeforeMaxReached
++        ? dragPercentage - sumPrevPanesSize(splitterIndex) - paneBefore.size
++        : sumPrevPanesSize(splitterIndex) + paneBefore.size - dragPercentage)
++      for (let index = splitterIndex + (step < 0 ? -1 : 2);
++        index >= 0 && index < panes.value.length && remaining > 0; index += step) {
++        const pane = panes.value[index]
++        const amount = Math.min(remaining, Math.max(0, pane.max - pane.size), Math.max(0, donor.size - donor.min))
++        pane.size += amount
++        donor.size -= amount
++        remaining -= amount
++      }
++    }
+     return
+   }
+ 
+@@ -301,7 +319,7 @@ const doPushOtherPanes = (sums, dragPercentage) => {
+           sums.prevReachedMinPanes += pane.min
+         }
+       })
+-      panes.value[panesToResize[1]].size = 100 - sums.prevReachedMinPanes - panes.value[0].min - sums.prevPanesSize - sums.nextPanesSize
++      panes.value[panesToResize[1]].size = 100 - sums.prevReachedMinPanes - panes.value[0].min - sums.nextPanesSize
+       return null
+     }
+     sums.prevPanesSize = sumPrevPanesSize(panesToResize[0])

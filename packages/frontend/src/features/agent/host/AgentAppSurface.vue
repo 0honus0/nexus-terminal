@@ -40,8 +40,6 @@
 	const memoryRailVisible = ref(false);
 	const memoryCount = ref(0);
 	const memoryNeedsRead = ref(false);
-	const auditToolId = ref('');
-	const auditRequest = ref(0);
 	const taskRailWidth = ref(360);
 	const taskRailHeight = ref(0);
 	const pendingThreadSelection = ref<NativeThread | null>(null);
@@ -181,19 +179,6 @@
 		memoryCount.value = count;
 		memoryNeedsRead.value = needsRead;
 	}
-
-	function inspectToolAudit(toolId: string): void {
-		auditToolId.value = toolId;
-		auditRequest.value += 1;
-		taskRailVisible.value = true;
-	}
-
-	watch(
-		() => run.value?.id,
-		() => {
-			auditToolId.value = '';
-		},
-	);
 
 	const chatError = computed(() => {
 		if (operation.failureMessage.value) return operation.failureMessage.value;
@@ -1487,19 +1472,14 @@
 				:connections="connections"
 				:disabled="operation.busy.value || threadBusy"
 				@mutate="runtime.mutate"
-				@inspect="inspectToolAudit"
 			/>
 			<NativeRunDetails
 				:key="run.id"
-				:app-id="appId"
 				:run="run"
 				:events="events"
-				:audit-tool-id="auditToolId"
-				:audit-request="auditRequest"
 				:children="children"
 				:child="child"
 				:messages="messages"
-				:active="active"
 				:disabled="blocked"
 				@mutate="runtime.mutate($event)"
 				@messages="runtime.readMessages"

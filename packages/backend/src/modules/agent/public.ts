@@ -1,11 +1,9 @@
 import type { AgentReasoningEffort } from '@nexus-terminal/shared/agent/providers/values';
 import type { AgentAppView, AgentAppDefinitionView, AgentThreadView } from '@nexus-terminal/shared/agent/scope/model';
-import type { AgentRunUsageView, AgentRunView, AgentRunStepView } from '@nexus-terminal/shared/agent/runs/model';
-import type { AgentRunEventsResponse, AgentRunStepEventsResponse } from '@nexus-terminal/shared/agent/runs/http';
+import type { AgentRunUsageView, AgentRunView } from '@nexus-terminal/shared/agent/runs/model';
+import type { AgentRunEventsResponse } from '@nexus-terminal/shared/agent/runs/http';
 import type { AgentCreateRunOutcome, AgentCancelRunOutcome } from '@nexus-terminal/shared/agent/runs/values';
-import type { AgentToolView } from '@nexus-terminal/shared/agent/tools/model';
-import type { AgentThreadToolsResponse, AgentToolEventsResponse } from '@nexus-terminal/shared/agent/tools/http';
-
+import type { AgentThreadToolsResponse } from '@nexus-terminal/shared/agent/tools/http';
 import type {
 	AgentChildrenResponse,
 	AgentMessageMetadataResponse,
@@ -71,7 +69,6 @@ export interface AgentStateApi {
 	createRun(input: AgentCreateRunInput): Promise<AgentCreateRunResult>;
 	cancelRun(input: AgentCancelRunInput): Promise<AgentCancelRunResult>;
 	getRun(userId: number, appId: string, runId: string): Promise<AgentRunView | null>;
-	getTool(userId: number, appId: string, runId: string, toolCallId: string): Promise<AgentToolView | null>;
 	listThreadTools(
 		userId: number,
 		appId: string,
@@ -79,14 +76,6 @@ export interface AgentStateApi {
 		before: { createdAt: number; id: string } | null,
 		limit: number,
 	): Promise<AgentThreadToolsResponse | null>;
-	listToolEvents(
-		userId: number,
-		appId: string,
-		runId: string,
-		toolCallId: string,
-		after: number,
-		limit: number,
-	): Promise<AgentToolEventsResponse | null>;
 	listEvents(
 		userId: number,
 		appId: string,
@@ -95,13 +84,4 @@ export interface AgentStateApi {
 		limit: number,
 	): Promise<AgentRunEventsResponse | null>;
 	getUsage(userId: number, appId: string, runId: string): Promise<AgentRunUsageView | null>;
-	getStep(userId: number, appId: string, runId: string, stepIndex: number): Promise<AgentRunStepView | null>;
-	listStepEvents(
-		userId: number,
-		appId: string,
-		runId: string,
-		stepIndex: number,
-		after: number,
-		limit: number,
-	): Promise<AgentRunStepEventsResponse | null>;
 }

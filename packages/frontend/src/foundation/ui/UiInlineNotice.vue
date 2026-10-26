@@ -51,7 +51,11 @@
 		border-radius: 11px;
 		background-color: var(--glass-fill);
 		background-image:
-			linear-gradient(180deg, color-mix(in srgb, var(--ui-inline-notice-accent) 7%, transparent), transparent 72%),
+			linear-gradient(
+				180deg,
+				color-mix(in srgb, var(--ui-inline-notice-accent) 7%, transparent),
+				transparent 72%
+			),
 			var(--glass-sheen-image);
 		box-shadow: var(--glass-rim-shadow);
 		color: color-mix(in srgb, var(--ui-inline-notice-accent) 76%, var(--text-color));

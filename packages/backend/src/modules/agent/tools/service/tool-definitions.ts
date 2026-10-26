@@ -52,7 +52,7 @@ export function toolDefinitions(): ToolDefinition[] {
 			risk: 'mutate',
 			mutation: true,
 			description:
-				'Generate one image from a text prompt using a configured Images model. This is a paid external request and creates an App-owned file. Independent approval required. Use image_models_list first. After success, display ![description](URL) with URL replaced by the exact previewUrl value from the result, followed by [Download image](URL) with URL replaced by the exact downloadUrl value. Each pair of parentheses must contain only the returned URL, without field labels such as "previewUrl:", JSON syntax or quotes. Do not invent or rewrite artifact paths, and do not wrap the Markdown in a code block. Never retry unknown outcomes.',
+				'Generate one image from a text prompt using a configured Images model and save it as an App-owned file. This is a paid external request and requires independent approval. Use image_models_list first. Never retry unknown outcomes.',
 			input: {
 				fields: [
 					{ name: 'providerId', kind: 'text', required: true, allowEmpty: false, maxBytes: 36 },

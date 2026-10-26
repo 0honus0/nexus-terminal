@@ -25,7 +25,6 @@ import type {
 	RunStepStorage,
 	StoredRunStep,
 	StoredRunStepEvent,
-	StoredRunStepEventPage,
 	StoredStepState,
 	StepScope,
 	StepReservationScope,
@@ -730,68 +729,6 @@ export class SqliteRunStepStorage implements RunStepStorage {
 			[userId, appId, runId, stepIndex],
 		);
 		return row === null ? null : decodeStep(row);
-	}
-
-	listEvents(
-		userId: number,
-		appId: string,
-		runId: string,
-		stepIndex: number,
-		after: number,
-		limit: number,
-	): Promise<StoredRunStepEventPage | null> {
-		if (!Number.isSafeInteger(after) || after < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
-			throw new Error('Invalid model step event pagination');
-		}
-		return this.db.transaction(async (tx) => {
-			const current = await tx.one(
-				'SELECT ' +
-					STEP_COLUMNS +
-					` FROM agent_run_model_steps s JOIN agent_runs r ON r.id=s.run_id
-				 WHERE r.user_id=? AND r.app_id=? AND s.run_id=? AND s.step_index=?`,
-				[userId, appId, runId, stepIndex],
-			);
-			if (!current) {
-				return null;
-			}
-			const rows = await tx.all(
-				`SELECT run_id,step_index,sequence,kind,text_delta,input_tokens,output_tokens,created_at
-				 FROM agent_run_model_step_events WHERE run_id=? AND step_index=? AND sequence>?
-				 ORDER BY sequence ASC LIMIT ?`,
-				[runId, stepIndex, after, limit],
-			);
-			const snapshot = decodeStep(current);
-			const firstSequence = snapshot.state === 'failed' && snapshot.revision === 2 ? 2 : 3;
-			const cursor = Math.max(after, firstSequence - 1);
-			if (rows.length !== Math.min(limit, Math.max(0, snapshot.revision - cursor))) {
-				throw new Error('Incomplete model step event journal');
-			}
-			const items = rows.map((row, index) => {
-				const value = readStepEvent(row);
-				if (value.runId !== runId || value.stepIndex !== stepIndex || value.sequence !== cursor + index + 1) {
-					throw new Error('Corrupt Run step event identity');
-				}
-				if (value.sequence === snapshot.revision) {
-					const terminal = snapshot.state !== 'reserved' && snapshot.state !== 'dispatched';
-					if (
-						value.createdAt !== snapshot.updatedAt ||
-						(terminal
-							? value.kind !== 'step.' + snapshot.state
-							: value.kind !== 'text.delta' && value.kind !== 'usage')
-					) {
-						throw new Error('Model step event does not match current step');
-					}
-					if (
-						value.kind === 'usage' &&
-						(value.inputTokens !== snapshot.inputTokens || value.outputTokens !== snapshot.outputTokens)
-					) {
-						throw new Error('Model step usage does not match current step');
-					}
-				}
-				return value;
-			});
-			return { items, nextCursor: items.length ? items[items.length - 1].sequence : after };
-		});
 	}
 
 	/** Only a dispatched step can have reached the provider; never retry it. */

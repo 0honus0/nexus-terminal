@@ -6,12 +6,10 @@ import {
 	parseAgentToolListCursor,
 	readAgentThreadToolsPath,
 	readAgentThreadToolsQuery,
-	readAgentToolPath,
-	readAgentToolEventsQuery,
 } from '@nexus-terminal/shared/agent/tools/http-codec';
 import { AGENT_TOOL_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/tools/values';
 import type { AgentToolView } from '@nexus-terminal/shared/agent/tools/model';
-import type { AgentThreadToolsResponse, AgentToolEventsResponse } from '@nexus-terminal/shared/agent/tools/http';
+import type { AgentThreadToolsResponse } from '@nexus-terminal/shared/agent/tools/http';
 import { agentErrorStatus } from './agent-http-status.js';
 import { InvalidAgentPayload, encodeAgentJson } from '@nexus-terminal/shared/agent/http-codec';
 import { AGENT_MAX_JSON_BODY_BYTES, AGENT_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/values';
@@ -28,20 +26,13 @@ import {
 	readAgentRunEventsQuery,
 	readAgentCreateRunPath,
 	readAgentRunPath,
-	readAgentRunStepPath,
 } from '@nexus-terminal/shared/agent/runs/http-codec';
 import type { AgentAppView, AgentAppDefinitionView, AgentThreadView } from '@nexus-terminal/shared/agent/scope/model';
-import type {
-	AgentRunView,
-	AgentRunEventView,
-	AgentRunStepView,
-	AgentRunStepEventView,
-} from '@nexus-terminal/shared/agent/runs/model';
+import type { AgentRunView, AgentRunEventView } from '@nexus-terminal/shared/agent/runs/model';
 import type {
 	AgentCreateRunResponse,
 	AgentCancelRunResponse,
 	AgentRunEventsResponse,
-	AgentRunStepEventsResponse,
 	AgentRunPath,
 } from '@nexus-terminal/shared/agent/runs/http';
 import type { AgentErrorResponse } from '@nexus-terminal/shared/agent/http';
@@ -51,7 +42,6 @@ import type { AccessPublicApi } from '../../../access/public.js';
 import { AccessOperationError } from '../../../access/public-errors.js';
 import { AgentOperationError } from '../../public-errors.js';
 import type { AgentStateApi, AgentCreateRunResult, AgentCancelRunResult } from '../../public.js';
-
 import {
 	readAgentChildPath,
 	readAgentMessageMetadataQuery,
@@ -77,10 +67,7 @@ type AgentHttpResponse =
 	| AgentCreateRunResponse
 	| AgentCancelRunResponse
 	| AgentRunEventsResponse
-	| AgentRunStepView
-	| AgentRunStepEventsResponse
 	| AgentToolView
-	| AgentToolEventsResponse
 	| AgentThreadToolsResponse
 	| AgentErrorResponse;
 
@@ -128,61 +115,6 @@ function toEvent(value: AgentRunEventView): AgentRunEventView {
 		type: value.type,
 		runVersion: value.runVersion,
 		createdAt: value.createdAt,
-	};
-}
-
-function toStep(value: AgentRunStepView): AgentRunStepView {
-	const result: AgentRunStepView = {
-		runId: value.runId,
-		stepIndex: value.stepIndex,
-		state: value.state,
-		revision: value.revision,
-		runVersion: value.runVersion,
-		textBytes: value.textBytes,
-		createdAt: value.createdAt,
-		updatedAt: value.updatedAt,
-	};
-	if (value.finishReason !== undefined) {
-		result.finishReason = value.finishReason;
-	}
-	if (value.inputTokens !== undefined) {
-		result.inputTokens = value.inputTokens;
-		result.outputTokens = value.outputTokens;
-	}
-	if (value.failureCode !== undefined) {
-		result.failureCode = value.failureCode;
-	}
-	return result;
-}
-
-function toStepEvent(value: AgentRunStepEventView): AgentRunStepEventView {
-	if (value.kind === 'text.delta') {
-		return {
-			runId: value.runId,
-			stepIndex: value.stepIndex,
-			sequence: value.sequence,
-			createdAt: value.createdAt,
-			kind: value.kind,
-			textBytes: value.textBytes,
-		};
-	}
-	if (value.kind === 'usage') {
-		return {
-			runId: value.runId,
-			stepIndex: value.stepIndex,
-			sequence: value.sequence,
-			createdAt: value.createdAt,
-			kind: value.kind,
-			inputTokens: value.inputTokens,
-			outputTokens: value.outputTokens,
-		};
-	}
-	return {
-		runId: value.runId,
-		stepIndex: value.stepIndex,
-		sequence: value.sequence,
-		createdAt: value.createdAt,
-		kind: value.kind,
 	};
 }
 
@@ -511,62 +443,6 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 		},
 		['before', 'limit'],
 	);
-	add(routes, 'GET', '/apps/:appId/runs/:id/tools/:toolCallId', access, async (ctx, userId) => {
-		const path = readAgentToolPath({
-			appId: ctx.params.appId,
-			runId: ctx.params.id,
-			toolCallId: ctx.params.toolCallId,
-		});
-		const result = await agent.getTool(userId, path.appId, path.runId, path.toolCallId);
-		await deliver(
-			ctx,
-			result === null ? 404 : 200,
-			result === null ? { code: 'not_found' } : toTool(result),
-			AGENT_TOOL_MAX_RESPONSE_BYTES,
-		);
-	});
-	add(
-		routes,
-		'GET',
-		'/apps/:appId/runs/:id/tools/:toolCallId/events',
-		access,
-		async (ctx, userId) => {
-			const path = readAgentToolPath({
-				appId: ctx.params.appId,
-				runId: ctx.params.id,
-				toolCallId: ctx.params.toolCallId,
-			});
-			const query = readAgentToolEventsQuery(ctx.query);
-			const result = await agent.listToolEvents(
-				userId,
-				path.appId,
-				path.runId,
-				path.toolCallId,
-				query.after,
-				query.limit,
-			);
-			await deliver(
-				ctx,
-				result === null ? 404 : 200,
-				result === null
-					? { code: 'not_found' }
-					: {
-							items: result.items.map((event) => ({
-								toolCallId: event.toolCallId,
-								runId: event.runId,
-								revision: event.revision,
-								operationRevision: event.operationRevision,
-								state: event.state,
-								operationHash: event.operationHash,
-								createdAt: event.createdAt,
-							})),
-							nextCursor: result.nextCursor,
-						},
-				AGENT_TOOL_MAX_RESPONSE_BYTES,
-			);
-		},
-		['after', 'limit'],
-	);
 	add(
 		routes,
 		'GET',
@@ -608,48 +484,7 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 					},
 		);
 	});
-	add(routes, 'GET', '/apps/:appId/runs/:id/steps/:stepIndex', access, async (ctx, userId) => {
-		const path = readAgentRunStepPath({
-			appId: ctx.params.appId,
-			runId: ctx.params.id,
-			stepIndex: ctx.params.stepIndex,
-		});
-		const result = await agent.getStep(userId, path.appId, path.runId, path.stepIndex);
-		await deliver(ctx, result === null ? 404 : 200, result === null ? { code: 'not_found' } : toStep(result));
-	});
-	add(
-		routes,
-		'GET',
-		'/apps/:appId/runs/:id/steps/:stepIndex/events',
-		access,
-		async (ctx, userId) => {
-			const path = readAgentRunStepPath({
-				appId: ctx.params.appId,
-				runId: ctx.params.id,
-				stepIndex: ctx.params.stepIndex,
-			});
-			const query = readAgentRunEventsQuery(ctx.query);
-			const result = await agent.listStepEvents(
-				userId,
-				path.appId,
-				path.runId,
-				path.stepIndex,
-				query.after,
-				query.limit,
-			);
-			await deliver(
-				ctx,
-				result === null ? 404 : 200,
-				result === null
-					? { code: 'not_found' }
-					: {
-							items: result.items.map(toStepEvent),
-							nextCursor: result.nextCursor,
-						},
-			);
-		},
-		['after', 'limit'],
-	);
+
 	return routes;
 }
 
@@ -686,6 +521,7 @@ function toTool(value: AgentToolView): AgentToolView {
 		operationRevision: value.operationRevision,
 		revision: value.revision,
 		state: value.state,
+		generatedImageId: value.generatedImageId,
 		createdAt: value.createdAt,
 		updatedAt: value.updatedAt,
 	};

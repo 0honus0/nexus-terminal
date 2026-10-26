@@ -24,6 +24,8 @@ export interface StoredToolOperation {
 	operationRevision: number;
 	revision: number;
 	state: AgentToolState;
+	/** Saved image owned by this App; only populated for a completed image_generate. */
+	generatedImageId: string | null;
 	resultText: string | null;
 	createdAt: number;
 	updatedAt: number;
@@ -74,11 +76,6 @@ export interface StoredToolEvent {
 	createdAt: number;
 }
 
-export interface StoredToolEventPage {
-	items: StoredToolEvent[];
-	nextCursor: number;
-}
-
 export interface StoredToolListCursor {
 	createdAt: number;
 	id: string;
@@ -108,7 +105,6 @@ export interface RunToolStorage {
 		admitBudget: (settings: StoredExecutionSettings, usage: StoredExecutionUsage) => void,
 	): Promise<StoredToolOperation | 'not_found' | 'version_conflict'>;
 	get(identity: StoredToolIdentity): Promise<StoredToolOperation | null>;
-	listEvents(identity: StoredToolIdentity, after: number, limit: number): Promise<StoredToolEventPage | null>;
 	listThread(
 		input: { userId: number; appId: string; threadId: string },
 		before: StoredToolListCursor | null,

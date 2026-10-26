@@ -95,14 +95,9 @@ import type { RunRevocationRequest } from './runs/model/run-types.js';
 import { builtinAppDefinitions } from './scope/service/app-definitions.js';
 import type { ConnectionCatalog } from '../targets/public.js';
 import { AgentFailure } from './agent-failure.js';
-import type { AgentAppView, AgentThreadView } from '@nexus-terminal/shared/agent/scope/model';
-import type {
-	AgentRunView,
-	AgentRunEventView,
-	AgentRunStepView,
-	AgentRunStepEventView,
-} from '@nexus-terminal/shared/agent/runs/model';
-import type { AgentRunEventsResponse, AgentRunStepEventsResponse } from '@nexus-terminal/shared/agent/runs/http';
+import type { AgentAppView } from '@nexus-terminal/shared/agent/scope/model';
+import type { AgentRunEventView } from '@nexus-terminal/shared/agent/runs/model';
+import type { AgentRunEventsResponse } from '@nexus-terminal/shared/agent/runs/http';
 import type { SqliteRuntime } from '../../platform/storage/sqlite/sqlite-runtime.js';
 import type { SecretBox } from '../../platform/security/secret-box.js';
 import { OpenAiCompatibleAdapter } from '../../platform/ai/adapters/openai-compatible.js';
@@ -122,9 +117,8 @@ import { SqliteRunStorage } from './runs/adapters/sqlite/run-sql.js';
 import { SqliteRunStepStorage } from './runs/adapters/sqlite/run-step-sql.js';
 import { SqliteRunToolStorage } from './runs/adapters/sqlite/run-tool-sql.js';
 import { RunToolModel } from './runs/model/run-tool-model.js';
-import type { ToolOperation, ToolEventPage } from './runs/model/run-tool-types.js';
+import type { ToolOperation } from './runs/model/run-tool-types.js';
 import type { AgentToolView } from '@nexus-terminal/shared/agent/tools/model';
-import type { AgentToolEventsResponse } from '@nexus-terminal/shared/agent/tools/http';
 import { RunModel } from './runs/model/run-model.js';
 import { RunStepModel } from './runs/model/run-step-model.js';
 import { ContextModel } from './context/model/context-model.js';
@@ -134,17 +128,8 @@ import { SqliteContextStorage } from './context/adapters/sqlite/context-history-
 import { RunModelStream } from './runs/model/run-model-stream.js';
 import { RunExecutionOwner } from './runs/service/run-execution-owner.js';
 import { RunService } from './runs/service/run-service.js';
-import type { AgentApp, AgentThread } from './scope/model/scope-types.js';
-import type {
-	AgentRun,
-	AgentRunEvent,
-	CreateRunResult,
-	CancelRunResult,
-	RunEventPage,
-	RunModelStep,
-	RunStepEvent,
-	RunStepEventPage,
-} from './runs/model/run-types.js';
+import type { AgentApp } from './scope/model/scope-types.js';
+import type { AgentRunEvent, CreateRunResult, CancelRunResult, RunEventPage } from './runs/model/run-types.js';
 import type { AgentStateApi, AgentCreateRunResult, AgentCancelRunResult, AgentCancelRunInput } from './public.js';
 import { AgentRequestOwner } from './service/agent-request-owner.js';
 import type { ResourceCollector } from '../../platform/system/resource-diagnostic.js';
@@ -190,23 +175,9 @@ function toToolView(value: ToolOperation): AgentToolView {
 		operationRevision: value.operationRevision,
 		revision: value.revision,
 		state: value.state,
+		generatedImageId: value.generatedImageId,
 		createdAt: value.createdAt,
 		updatedAt: value.updatedAt,
-	};
-}
-
-function toToolEventPage(value: ToolEventPage): AgentToolEventsResponse {
-	return {
-		items: value.items.map((event) => ({
-			toolCallId: event.toolCallId,
-			runId: event.runId,
-			revision: event.revision,
-			operationRevision: event.operationRevision,
-			state: event.state,
-			operationHash: event.operationHash,
-			createdAt: event.createdAt,
-		})),
-		nextCursor: value.nextCursor,
 	};
 }
 
@@ -242,65 +213,6 @@ function toCancelResult(value: CancelRunResult): AgentCancelRunResult {
 
 function toEventPage(value: RunEventPage): AgentRunEventsResponse {
 	return { items: value.items.map(toEventView), nextCursor: value.nextCursor };
-}
-
-function toStepView(value: RunModelStep): AgentRunStepView {
-	return {
-		runId: value.runId,
-		stepIndex: value.stepIndex,
-		state: value.state,
-		revision: value.revision,
-		runVersion: value.runVersion,
-		textBytes: value.textBytes,
-		...(value.finishReason === undefined ? {} : { finishReason: value.finishReason }),
-		...(value.inputTokens === undefined
-			? {}
-			: { inputTokens: value.inputTokens, outputTokens: value.outputTokens }),
-		...(value.failureCode === undefined ? {} : { failureCode: value.failureCode }),
-		createdAt: value.createdAt,
-		updatedAt: value.updatedAt,
-	};
-}
-
-function toStepEventView(runId: string, value: RunStepEvent): AgentRunStepEventView {
-	if (value.kind === 'text.delta') {
-		if (value.textDelta === undefined) {
-			throw new Error('Missing persisted text delta');
-		}
-		return {
-			runId,
-			stepIndex: value.stepIndex,
-			sequence: value.sequence,
-			createdAt: value.createdAt,
-			kind: 'text.delta',
-			textBytes: Buffer.byteLength(value.textDelta, 'utf8'),
-		};
-	}
-	if (value.kind === 'usage') {
-		if (value.inputTokens === undefined || value.outputTokens === undefined) {
-			throw new Error('Missing persisted usage');
-		}
-		return {
-			runId,
-			stepIndex: value.stepIndex,
-			sequence: value.sequence,
-			createdAt: value.createdAt,
-			kind: 'usage',
-			inputTokens: value.inputTokens,
-			outputTokens: value.outputTokens,
-		};
-	}
-	return {
-		runId,
-		stepIndex: value.stepIndex,
-		sequence: value.sequence,
-		createdAt: value.createdAt,
-		kind: value.kind,
-	};
-}
-
-function toStepEventPage(runId: string, value: RunStepEventPage): AgentRunStepEventsResponse {
-	return { items: value.items.map((event) => toStepEventView(runId, event)), nextCursor: value.nextCursor };
 }
 
 export interface AgentRegistration {
@@ -685,12 +597,6 @@ export function registerAgent(
 				return run === null ? null : toRunView(run);
 			}),
 
-		getTool: (userId, appId, runId, id) =>
-			boundary(async () => {
-				const result = await runs.getTool({ userId, appId, runId, id });
-				return result === null ? null : toToolView(result);
-			}),
-
 		listThreadTools: (userId, appId, threadId, before, limit) =>
 			boundary(async () => {
 				const result = await runs.listThreadTools(userId, appId, threadId, before, limit);
@@ -705,12 +611,6 @@ export function registerAgent(
 						};
 			}),
 
-		listToolEvents: (userId, appId, runId, id, after, limit) =>
-			boundary(async () => {
-				const result = await runs.listToolEvents({ userId, appId, runId, id }, after, limit);
-				return result === null ? null : toToolEventPage(result);
-			}),
-
 		listEvents: (userId, appId, id, after, limit) =>
 			boundary(async () => {
 				const result = await runs.listEvents(userId, appId, id, after, limit);
@@ -721,18 +621,6 @@ export function registerAgent(
 			boundary(async () => {
 				const result = await runs.getUsage(userId, appId, runId);
 				return result === null ? null : toRunUsageView(result);
-			}),
-
-		getStep: (userId, appId, runId, index) =>
-			boundary(async () => {
-				const result = await runs.getStep(userId, appId, runId, index);
-				return result === null ? null : toStepView(result);
-			}),
-
-		listStepEvents: (userId, appId, runId, index, after, limit) =>
-			boundary(async () => {
-				const result = await runs.listStepEvents(userId, appId, runId, index, after, limit);
-				return result === null ? null : toStepEventPage(runId, result);
 			}),
 	};
 	return {

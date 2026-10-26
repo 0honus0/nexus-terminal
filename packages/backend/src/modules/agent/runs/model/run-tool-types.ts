@@ -21,6 +21,8 @@ export interface ToolOperation {
 	operationRevision: number;
 	revision: number;
 	state: AgentToolState;
+	/** Saved image owned by this App; only populated for a completed image_generate. */
+	generatedImageId: string | null;
 	resultText: string | null;
 	createdAt: number;
 	updatedAt: number;
@@ -58,21 +60,6 @@ export interface ToolSettlement {
 	expectedRevision: number;
 	state: 'completed' | 'failed' | 'unknown' | 'cancelled';
 	resultText: string | null;
-}
-
-export interface ToolEvent {
-	toolCallId: string;
-	runId: string;
-	revision: number;
-	operationRevision: number;
-	state: AgentToolState;
-	operationHash: string;
-	createdAt: number;
-}
-
-export interface ToolEventPage {
-	items: ToolEvent[];
-	nextCursor: number;
 }
 
 export interface ToolListCursor {

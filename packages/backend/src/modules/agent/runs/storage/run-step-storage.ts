@@ -80,11 +80,6 @@ export interface StoredRunStepEvent {
 	createdAt: number;
 }
 
-export interface StoredRunStepEventPage {
-	items: StoredRunStepEvent[];
-	nextCursor: number;
-}
-
 export interface RunStepStorage {
 	usage(userId: number, appId: string, runId: string): Promise<StoredRunUsage | null>;
 	/** Denial cleanup cannot settle an attempt that already has any model step. */
@@ -116,14 +111,6 @@ export interface RunStepStorage {
 		maySettle: (hasUnsettledTools: boolean, hasUnsettledChildren: boolean) => boolean,
 	): Promise<StepWriteResult>;
 	get(userId: number, appId: string, runId: string, stepIndex: number): Promise<StoredRunStep | null>;
-	listEvents(
-		userId: number,
-		appId: string,
-		runId: string,
-		stepIndex: number,
-		after: number,
-		limit: number,
-	): Promise<StoredRunStepEventPage | null>;
 	/** Startup reconciliation: reserved was not dispatched, dispatched is unknown. */
 	reconcileUnsettled(now: number): Promise<number>;
 }

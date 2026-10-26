@@ -1,7 +1,7 @@
 {
   "agentNext": {
     "title": "新バックエンド Agent — 開発用",
-    "isolation": "この開発画面は Backend の Agent 状態と読み取り専用のモデルステップ監査 API を使用します。Provider 実行、ツール、承認、WebSocket ストリーミング、旧 Agent の切替は有効化しません。",
+    "isolation": "この開発ページは Backend の Agent 状態 API を利用します。ステップとツールの監査機能は公開しません。",
     "setup": "初期管理者の設定",
     "login": "新バックエンドにログイン",
     "username": "ユーザー名",
@@ -27,10 +27,6 @@
     "getRun": "Run を取得",
     "cancelRun": "Run をキャンセル",
     "listEvents": "次のイベントを取得",
-    "getStep": "ステップ1の監査を取得",
-    "listStepEvents": "ステップ監査イベントを取得",
-    "stepAudit": "モデルステップ監査（出力本文なし）",
-    "noStep": "承認済みまたは記録済みのモデルステップはありません。",
     "currentRun": "現在の Run",
     "events": "イベント",
     "nextCursor": "次のカーソル",

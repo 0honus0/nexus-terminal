@@ -863,7 +863,8 @@ test('Agent settings surface exposes the current control plane and saves explici
 	await testDialog.getByRole('button', { name: 'Close', exact: true }).click();
 	await card.getByRole('button', { name: 'Edit', exact: true }).click();
 	await editor.getByRole('button', { name: 'Update model list', exact: true }).click();
-	await expect(editor.getByRole('textbox', { name: 'Filter discovered models', exact: true })).toBeVisible();
+	await expect(editor.locator('#discovered-model-filter-chat')).toBeVisible();
+	await expect(editor.locator('#discovered-model-filter-images')).toBeVisible();
 	const protocol = form.locator('#provider-protocol');
 	await selectUiOption(protocol, 'responses');
 	const update = page.waitForResponse(

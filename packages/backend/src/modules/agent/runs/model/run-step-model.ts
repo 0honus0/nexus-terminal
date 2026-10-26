@@ -5,13 +5,7 @@ import { agentStorage } from '../../agent-storage-failure.js';
 import { toStoredContext } from '../../context/model/context-model.js';
 import { projectCapturedResult } from '../../context/result-rules.js';
 import type { ContextSnapshot } from '../../context/model/context-types.js';
-import type {
-	RunStepStorage,
-	StoredRunStep,
-	StoredRunStepEvent,
-	StepFinish,
-	StepWriteResult,
-} from '../storage/run-step-storage.js';
+import type { RunStepStorage, StoredRunStep, StepFinish, StepWriteResult } from '../storage/run-step-storage.js';
 import { fromStoredProvider } from '../../providers/model/provider-projection.js';
 import { fromStoredFrozen } from './run-projection.js';
 import { mayExecuteFrozenRun, mayFinishModelStep, interruptedRootState } from '../run-rules.js';
@@ -24,8 +18,6 @@ import type {
 	RunStepCommand,
 	RunStepMutation,
 	RunStepFinish,
-	RunStepEvent,
-	RunStepEventPage,
 	RunUnstartedFailure,
 } from './run-types.js';
 
@@ -45,18 +37,6 @@ function toStorageMutation(command: RunStepMutation) {
 		requestHash: command.requestHash,
 		creationHash: command.creationHash,
 		now: command.now,
-	};
-}
-
-function projectEvent(row: StoredRunStepEvent): RunStepEvent {
-	return {
-		stepIndex: row.stepIndex,
-		sequence: row.sequence,
-		kind: row.kind,
-		...(row.textDelta === undefined ? {} : { textDelta: row.textDelta }),
-		...(row.inputTokens === undefined ? {} : { inputTokens: row.inputTokens }),
-		...(row.outputTokens === undefined ? {} : { outputTokens: row.outputTokens }),
-		createdAt: row.createdAt,
 	};
 }
 
@@ -260,18 +240,6 @@ export class RunStepModel {
 	async get(userId: number, appId: string, runId: string, stepIndex: number): Promise<RunModelStep | null> {
 		const stored = await agentStorage(() => this.storage.get(userId, appId, runId, stepIndex));
 		return stored === null ? null : projectStep(stored);
-	}
-
-	async listEvents(
-		userId: number,
-		appId: string,
-		runId: string,
-		stepIndex: number,
-		after: number,
-		limit: number,
-	): Promise<RunStepEventPage | null> {
-		const page = await agentStorage(() => this.storage.listEvents(userId, appId, runId, stepIndex, after, limit));
-		return page === null ? null : { items: page.items.map(projectEvent), nextCursor: page.nextCursor };
 	}
 
 	/** Never resend after restart: undispatched is failed, dispatched is unknown. */

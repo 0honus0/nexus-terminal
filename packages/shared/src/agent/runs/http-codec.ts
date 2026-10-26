@@ -16,20 +16,10 @@ import {
 	AGENT_RUN_MAX_PROMPT_BYTES,
 	AGENT_RUN_MAX_SELECTED_CONNECTIONS,
 	AGENT_RUN_MAX_JSON_BODY_BYTES,
-	AGENT_RUN_STEP_MAX_TEXT_BYTES,
-	AGENT_RUN_STEP_MAX_COUNT,
-	AGENT_RUN_STEP_FINISH_REASONS,
 } from './values.js';
 import { AGENT_MAX_JSON_BODY_BYTES } from '../values.js';
 import { AGENT_PROVIDER_MAX_MODEL_ID_BYTES } from '../providers/values.js';
-import type {
-	AgentRunFailureView,
-	AgentRunUsageView,
-	AgentRunView,
-	AgentRunEventView,
-	AgentRunStepView,
-	AgentRunStepEventView,
-} from './model.js';
+import type { AgentRunFailureView, AgentRunUsageView, AgentRunView, AgentRunEventView } from './model.js';
 import type {
 	AgentCreateRunRequest,
 	AgentCancelRunRequest,
@@ -40,8 +30,6 @@ import type {
 	AgentCreateRunResponse,
 	AgentCancelRunResponse,
 	AgentRunEventsResponse,
-	AgentRunStepPath,
-	AgentRunStepEventsResponse,
 } from './http.js';
 
 export function readAgentCreateRunRequest(input: unknown): AgentCreateRunRequest {
@@ -101,18 +89,6 @@ export function readAgentCreateRunPath(input: unknown): AgentCreateRunPath {
 export function readAgentRunPath(input: unknown): AgentRunPath {
 	const row = agentRecord(input, ['appId', 'runId']);
 	return { appId: readAgentId(row.appId), runId: readAgentId(row.runId) };
-}
-
-export function readAgentRunStepPath(input: unknown): AgentRunStepPath {
-	const row = agentRecord(input, ['appId', 'runId', 'stepIndex']);
-	if (typeof row.stepIndex !== 'string' || !/^[1-9][0-9]*$/u.test(row.stepIndex)) {
-		throw new InvalidAgentPayload();
-	}
-	return {
-		appId: readAgentId(row.appId),
-		runId: readAgentId(row.runId),
-		stepIndex: agentInteger(Number(row.stepIndex), 1, AGENT_RUN_STEP_MAX_COUNT),
-	};
 }
 
 function queryNumber(query: URLSearchParams, key: string, fallback: number, min: number, max: number): number {
@@ -261,126 +237,6 @@ export function readAgentRunEventsResponse(input: unknown): AgentRunEventsRespon
 		if (
 			index > 0 &&
 			(items[index].runId !== items[0].runId || items[index].sequence <= items[index - 1].sequence)
-		) {
-			throw new InvalidAgentPayload();
-		}
-	}
-	if (items.length > 0 && nextCursor !== items[items.length - 1].sequence) {
-		throw new InvalidAgentPayload();
-	}
-	return { items, nextCursor };
-}
-
-export function readAgentRunStepResponse(input: unknown): AgentRunStepView {
-	if (!isAgentRecord(input)) {
-		throw new InvalidAgentPayload();
-	}
-	const candidate = input;
-	const optional = ['finishReason', 'inputTokens', 'outputTokens', 'failureCode'].filter((key) =>
-		Object.hasOwn(candidate, key),
-	);
-	const row = agentRecord(input, [
-		'runId',
-		'stepIndex',
-		'state',
-		'revision',
-		'runVersion',
-		'textBytes',
-		'createdAt',
-		'updatedAt',
-		...optional,
-	]);
-	const state = row.state;
-	if (
-		state !== 'reserved' &&
-		state !== 'dispatched' &&
-		state !== 'completed' &&
-		state !== 'failed' &&
-		state !== 'unknown'
-	) {
-		throw new InvalidAgentPayload();
-	}
-	if (
-		(state === 'reserved' && (row.textBytes !== 0 || row.inputTokens !== undefined)) ||
-		(state === 'completed' && row.finishReason === 'stop' && row.textBytes === 0) ||
-		(state === 'completed' && !AGENT_RUN_STEP_FINISH_REASONS.some((reason) => reason === row.finishReason)) ||
-		(state !== 'completed' && row.finishReason !== undefined) ||
-		(state === 'failed' && row.failureCode !== 'DISPATCH_NOT_STARTED') ||
-		(state !== 'failed' && row.failureCode !== undefined) ||
-		(row.inputTokens === undefined) !== (row.outputTokens === undefined)
-	) {
-		throw new InvalidAgentPayload();
-	}
-	return {
-		runId: readAgentId(row.runId),
-		stepIndex: agentInteger(row.stepIndex, 1, AGENT_RUN_STEP_MAX_COUNT),
-		state,
-		revision: agentInteger(row.revision, 1),
-		runVersion: agentInteger(row.runVersion, 1),
-		textBytes: agentInteger(row.textBytes, 0, AGENT_RUN_STEP_MAX_TEXT_BYTES),
-		...(row.finishReason === 'stop' || row.finishReason === 'tool_calls' ? { finishReason: row.finishReason } : {}),
-		...(row.inputTokens === undefined
-			? {}
-			: {
-					inputTokens: agentInteger(row.inputTokens),
-					outputTokens: agentInteger(row.outputTokens),
-				}),
-		...(row.failureCode === 'DISPATCH_NOT_STARTED' ? { failureCode: row.failureCode } : {}),
-		createdAt: agentInteger(row.createdAt),
-		updatedAt: agentInteger(row.updatedAt),
-	};
-}
-
-export function readAgentRunStepEvent(input: unknown): AgentRunStepEventView {
-	if (!input || typeof input !== 'object' || Array.isArray(input)) {
-		throw new InvalidAgentPayload();
-	}
-	const kind = (input as Record<string, unknown>).kind;
-	const base = ['runId', 'stepIndex', 'sequence', 'kind', 'createdAt'];
-	const row = agentRecord(
-		input,
-		kind === 'text.delta'
-			? [...base, 'textBytes']
-			: kind === 'usage'
-				? [...base, 'inputTokens', 'outputTokens']
-				: base,
-	);
-	const identity = {
-		runId: readAgentId(row.runId),
-		stepIndex: agentInteger(row.stepIndex, 1, AGENT_RUN_STEP_MAX_COUNT),
-		sequence: agentInteger(row.sequence, 1),
-		createdAt: agentInteger(row.createdAt),
-	};
-	if (kind === 'text.delta') {
-		return { ...identity, kind, textBytes: agentInteger(row.textBytes, 1, AGENT_RUN_STEP_MAX_TEXT_BYTES) };
-	}
-	if (kind === 'usage') {
-		return {
-			...identity,
-			kind,
-			inputTokens: agentInteger(row.inputTokens),
-			outputTokens: agentInteger(row.outputTokens),
-		};
-	}
-	if (kind === 'step.completed' || kind === 'step.failed' || kind === 'step.unknown') {
-		return { ...identity, kind };
-	}
-	throw new InvalidAgentPayload();
-}
-
-export function readAgentRunStepEventsResponse(input: unknown): AgentRunStepEventsResponse {
-	const row = agentRecord(input, ['items', 'nextCursor']);
-	if (!Array.isArray(row.items) || row.items.length > AGENT_RUN_EVENT_MAX_LIMIT) {
-		throw new InvalidAgentPayload();
-	}
-	const items = row.items.map(readAgentRunStepEvent);
-	const nextCursor = agentInteger(row.nextCursor);
-	for (let index = 0; index < items.length; index++) {
-		if (
-			index > 0 &&
-			(items[index].runId !== items[0].runId ||
-				items[index].stepIndex !== items[0].stepIndex ||
-				items[index].sequence <= items[index - 1].sequence)
 		) {
 			throw new InvalidAgentPayload();
 		}

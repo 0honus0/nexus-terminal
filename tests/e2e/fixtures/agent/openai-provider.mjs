@@ -171,6 +171,31 @@ const server = http.createServer(async (request, response) => {
 		return;
 	}
 
+	if (request.method === 'POST' && request.url === '/v1/images/generations') {
+		if (request.headers.authorization !== `Bearer ${expectedCredential}`) {
+			response.writeHead(401).end();
+			return;
+		}
+		const image = await readJson(request);
+		if (image.model !== 'e2e-image' || image.prompt !== 'E2E deterministic image') {
+			response.writeHead(422).end();
+			return;
+		}
+		response.writeHead(200, { 'Content-Type': 'application/json' });
+		response.end(
+			JSON.stringify({
+				created: 1700000000,
+				data: [
+					{
+						b64_json:
+							'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNIWPAfAANjAgCeQrYLAAAAAElFTkSuQmCC',
+					},
+				],
+			}),
+		);
+		return;
+	}
+
 	if (request.method !== 'POST' || request.url !== '/v1/chat/completions') {
 		response.writeHead(404).end();
 		return;

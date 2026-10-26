@@ -10,8 +10,6 @@ export type {
 	AgentNextControllerState,
 	AgentNextEventState,
 	AgentNextRunState,
-	AgentNextStepState,
-	AgentNextStepEventState,
 	AgentNextModelSelection,
 	AgentNextThreadState,
 	AgentNextUnknownWrite,

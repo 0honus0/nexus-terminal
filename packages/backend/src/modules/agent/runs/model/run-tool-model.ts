@@ -13,7 +13,6 @@ import type {
 	ToolIdentity,
 	ToolInspectionCommand,
 	ToolSettlement,
-	ToolEventPage,
 	ToolListCursor,
 	ToolListPage,
 } from './run-tool-types.js';
@@ -40,6 +39,7 @@ export function fromStoredTool(row: StoredToolOperation): ToolOperation {
 		operationRevision: row.operationRevision,
 		revision: row.revision,
 		state: row.state,
+		generatedImageId: row.generatedImageId,
 		resultText: row.resultText,
 		createdAt: row.createdAt,
 		updatedAt: row.updatedAt,
@@ -169,24 +169,6 @@ export class RunToolModel {
 			: {
 					items: page.items.map(fromStoredTool),
 					nextCursor: page.nextCursor === null ? null : { ...page.nextCursor },
-				};
-	}
-
-	async listEvents(input: ToolIdentity, after: number, limit: number): Promise<ToolEventPage | null> {
-		const page = await agentStorage(() => this.storage.listEvents(toStoredIdentity(input), after, limit));
-		return page === null
-			? null
-			: {
-					items: page.items.map((event) => ({
-						toolCallId: event.toolCallId,
-						runId: event.runId,
-						revision: event.revision,
-						operationRevision: event.operationRevision,
-						state: event.state,
-						operationHash: event.operationHash,
-						createdAt: event.createdAt,
-					})),
-					nextCursor: page.nextCursor,
 				};
 	}
 

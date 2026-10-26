@@ -1,3 +1,4 @@
+import { readAgentThreadToolsResponse } from '../../../../packages/shared/src/agent/tools/http-codec';
 import { openNativeTaskPanel } from '../../fixtures/agent/native-task';
 import {
 	openAgentConversations,
@@ -25,7 +26,6 @@ import {
 	readAgentWorkspaceRequest,
 	readAgentWorkspaceResponse,
 } from '../../../../packages/shared/src/agent/scope/workspace-http-codec';
-import { readAgentToolResponse } from '../../../../packages/shared/src/agent/tools/http-codec';
 import type { AgentApprovalView } from '../../../../packages/shared/src/agent/governance/model';
 
 test.use({ actionTimeout: 10_000 });
@@ -377,12 +377,14 @@ for (const decision of ['denied', 'cancelled'] as const) {
 				),
 			).toBe(false);
 			await expect(stat(evidencePath + '.forbidden')).rejects.toMatchObject({ code: 'ENOENT' });
-			const tool = await requestAgentJson(
+			const tools = await requestAgentJson(
 				request,
-				{ method: 'GET', path: `/apps/${app.id}/runs/${runId}/tools/${launch.toolCallId}` },
-				readAgentToolResponse,
+				{ method: 'GET', path: `/apps/${app.id}/threads/${runResult.value.run.threadId}/tools?limit=100` },
+				(raw) => readAgentThreadToolsResponse(raw, app.id, null, 100),
 			);
-			expect(tool.state).toBe(decision === 'cancelled' ? 'unknown' : 'completed');
+			const tool = tools.items.find((item) => item.id === launch.toolCallId);
+			expect(tool).toBeDefined();
+			expect(tool!.state).toBe(decision === 'cancelled' ? 'unknown' : 'completed');
 			expect(tool).not.toHaveProperty('argumentsJson');
 		} finally {
 			const current = await readRun();

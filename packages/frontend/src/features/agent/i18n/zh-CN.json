@@ -1744,15 +1744,8 @@
       "runUnknown": "执行结果尚未确认：{reason} 运行编号：{runId}。请先核对远端结果。",
       "usageUnavailable": "供应商尚未返回 Token 用量",
       "usageCoverage": "已返回用量 {reported}/{requests} 次模型请求",
-      "audit": "步骤与工具审计",
-      "auditStep": "步骤",
-      "auditTool": "工具调用",
-      "auditHelp": "只读审计元数据；Shell／ACP 展示有长度上限的命令预览，原始参数、凭据与输出仍隐藏。每次读取一页。",
-      "step": "步骤编号",
       "read": "刷新当前状态",
-      "moreEvents": "读取后续事件",
       "tokens": "输入 / 输出 Token",
-      "toolId": "工具调用 ID",
       "target": "目标连接",
       "events": "Run 事件（最近 200 条）",
       "cancel": "请求取消",
@@ -1761,7 +1754,6 @@
       "expires": "到期时间",
       "approve": "批准原操作",
       "deny": "拒绝原操作",
-      "inspectTool": "查看工具审计",
       "children": "子任务",
       "messages": "读取消息元数据",
       "metadataOnly": "仅展示序号、发送者、容量，不读取或确认消息正文。",
@@ -1884,13 +1876,6 @@
         "denied": "已拒绝",
         "expired": "已过期",
         "superseded": "已失效"
-      },
-      "stepStates": {
-        "reserved": "已预留",
-        "dispatched": "已派发",
-        "completed": "已完成",
-        "failed": "失败",
-        "unknown": "未知"
       },
       "roles": {
         "user": "用户",

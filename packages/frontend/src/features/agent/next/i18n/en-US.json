@@ -1,7 +1,7 @@
 {
   "agentNext": {
     "title": "New Backend Agent — Development",
-    "isolation": "This development view uses Backend Agent state and read-only model-step audit endpoints. It does not enable Provider execution, tools, approvals, WebSocket streaming, or legacy Agent switching.",
+    "isolation": "This development page consumes Backend Agent state APIs; step and tool audit is not exposed.",
     "setup": "Initial administrator setup",
     "login": "Sign in to Backend",
     "username": "Username",
@@ -27,10 +27,6 @@
     "getRun": "Get run",
     "cancelRun": "Cancel run",
     "listEvents": "Load next events",
-    "getStep": "Read step 1 audit",
-    "listStepEvents": "Load step audit events",
-    "stepAudit": "Model step audit (no output text)",
-    "noStep": "No model step has been authorized or recorded.",
     "currentRun": "Current run",
     "events": "Events",
     "nextCursor": "Next cursor",

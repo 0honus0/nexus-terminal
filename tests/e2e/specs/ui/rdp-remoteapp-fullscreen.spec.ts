@@ -89,15 +89,16 @@ test('RDP browser client preserves settings, clipboard and browser fullscreen', 
 			await form.locator('#conn-username').fill('rdp-remoteapp-user');
 			await form.locator('#conn-password-rdp').fill('b10-pass');
 
-			const createPromise = page.waitForResponse(
-				(response) =>
-					response.url().endsWith('/api/v1/targets/connections/import') &&
-					response.request().method() === 'POST',
-			);
+			// Capture the one mutation receipt before forwarding it: the form navigates
+			// after success, which can evict CDP's response body.
+			await page.route('**/api/v1/targets/connections/import', async (route) => {
+				if (route.request().method() !== 'POST') return route.fallback();
+				const receipt = await route.fetch();
+				expect(receipt.status()).toBe(200);
+				connectionId = readTestConnectionImportId(await receipt.json());
+				await route.fulfill({ response: receipt });
+			});
 			await form.locator('button[type="submit"]').click();
-			const createResponse = await createPromise;
-			expect(createResponse.status()).toBe(200);
-			connectionId = readTestConnectionImportId(await createResponse.json());
 			await expect(form).toBeHidden({ timeout: 15_000 });
 
 			const persisted = await context.request.get(`/api/v1/targets/connections/${connectionId}`);

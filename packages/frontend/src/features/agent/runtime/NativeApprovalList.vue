@@ -12,7 +12,7 @@
 		connections: ConnectionSummary[];
 		disabled: boolean;
 	}>();
-	const emit = defineEmits<{ mutate: [action: NativeRunAction]; inspect: [toolId: string] }>();
+	const emit = defineEmits<{ mutate: [action: NativeRunAction] }>();
 	const { t, te } = useI18n();
 	const feedback = ref('');
 	const feedbackId = ref<string | null>(null);
@@ -232,16 +232,6 @@
 								{{ approval.policyRevision }} / {{ approval.inputRevision }} / {{ approval.version }}
 							</dd>
 						</dl>
-						<UiButton
-							class="mt-2"
-							density="compact"
-							appearance="soft"
-							:disabled="disabled"
-							@click="emit('inspect', approval.toolCallId)"
-						>
-							<i class="fa-solid fa-magnifying-glass mr-1.5 text-[9px]" aria-hidden="true"></i>
-							{{ t('agent.nativeRun.inspectTool') }}
-						</UiButton>
 					</div>
 				</div>
 

@@ -4,7 +4,6 @@ import { currentParticipant } from './run-participant-sql.js';
 import type { AgentRunStatus } from '@nexus-terminal/shared/agent/runs/values';
 import { AGENT_RUN_STATUSES } from '@nexus-terminal/shared/agent/runs/values';
 import { recordToolEvent, fenceRunTools } from './run-tool-events.js';
-import { AGENT_TOOL_EVENT_MAX_LIMIT } from '@nexus-terminal/shared/agent/tools/values';
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 import type {
@@ -14,11 +13,10 @@ import type {
 	StoredToolOperation,
 	StoredToolIdentity,
 	StoredToolSettlement,
-	StoredToolEventPage,
 	StoredToolListCursor,
 	StoredToolListPage,
 } from '../../storage/run-tool-storage.js';
-import { readToolOperation, toolOperation, readToolEvent } from './run-tool-row.js';
+import { readToolOperation, toolOperation } from './run-tool-row.js';
 import { readStepProposals } from './run-step-proposals.js';
 
 async function assertToolApprovalRevision(tx: SqlExecutor, toolId: string): Promise<void> {
@@ -332,63 +330,6 @@ export class SqliteRunToolStorage implements RunToolStorage {
 					? { createdAt: items[0].createdAt, id: items[0].id }
 					: null;
 			return { items, nextCursor };
-		});
-	}
-
-	listEvents(input: StoredToolIdentity, after: number, limit: number): Promise<StoredToolEventPage | null> {
-		if (
-			!Number.isSafeInteger(after) ||
-			after < 0 ||
-			!Number.isSafeInteger(limit) ||
-			limit < 1 ||
-			limit > AGENT_TOOL_EVENT_MAX_LIMIT
-		) {
-			throw new Error('Invalid tool event pagination');
-		}
-		return this.db.transaction(async (tx) => {
-			const current = await toolOperation(tx, input.userId, input.appId, input.runId, input.id);
-			if (current === null) {
-				return null;
-			}
-			const rows = await tx.all(
-				`SELECT e.tool_call_id,t.run_id,e.revision,e.operation_revision,e.state,e.operation_hash,e.created_at
- FROM agent_run_tool_events e JOIN agent_run_tools t ON t.id=e.tool_call_id
- WHERE t.user_id=? AND t.app_id=? AND t.run_id=? AND t.id=? AND e.revision>?
- ORDER BY e.revision LIMIT ?`,
-				[input.userId, input.appId, input.runId, input.id, after, limit],
-			);
-			const items = rows.map(readToolEvent);
-			const expectedCount = Math.min(limit, Math.max(0, current.revision - after));
-			if (items.length !== expectedCount) {
-				throw new Error('Incomplete tool event journal');
-			}
-			for (const [index, event] of items.entries()) {
-				const previous = items[index - 1];
-				if (
-					event.toolCallId !== current.id ||
-					event.runId !== current.runId ||
-					event.revision !== after + index + 1 ||
-					event.operationRevision > current.operationRevision ||
-					(previous !== undefined && event.operationRevision < previous.operationRevision) ||
-					(previous !== undefined && event.operationRevision > previous.operationRevision + 1) ||
-					(previous !== undefined &&
-						event.operationRevision === previous.operationRevision &&
-						event.operationHash !== previous.operationHash) ||
-					event.createdAt < current.createdAt
-				) {
-					throw new Error('Inconsistent tool event journal');
-				}
-				if (
-					event.revision === current.revision &&
-					(event.operationRevision !== current.operationRevision ||
-						event.operationHash !== current.operationHash ||
-						event.state !== current.state ||
-						event.createdAt !== current.updatedAt)
-				) {
-					throw new Error('Tool event does not match current operation');
-				}
-			}
-			return { items, nextCursor: items.length === 0 ? after : items[items.length - 1].revision };
 		});
 	}
 

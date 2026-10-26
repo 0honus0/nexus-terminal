@@ -32,6 +32,18 @@ function id(value: unknown): string {
 	return typeof value === 'string' && AGENT_ID_PATTERN.test(value) ? value : invalid();
 }
 
+/** Only server-owned image generation results can publish an image reference. */
+function generatedImageId(toolName: unknown, state: unknown, resultText: string | null): string | null {
+	if (toolName !== 'image_generate' || state !== 'completed' || resultText === null) {
+		return null;
+	}
+	const result: unknown = JSON.parse(resultText);
+	if (typeof result !== 'object' || result === null || Array.isArray(result) || !('id' in result)) {
+		return invalid();
+	}
+	return id(result.id);
+}
+
 export function readToolOperation(row: Record<string, unknown>): StoredToolOperation {
 	const state = AGENT_TOOL_STATES.find((item) => item === row.state);
 	const capability = AGENT_CAPABILITIES.find((item) => item === row.capability);
@@ -98,6 +110,7 @@ export function readToolOperation(row: Record<string, unknown>): StoredToolOpera
 		revision,
 		state,
 		resultText,
+		generatedImageId: generatedImageId(row.tool_name, state, resultText),
 		createdAt,
 		updatedAt,
 	};

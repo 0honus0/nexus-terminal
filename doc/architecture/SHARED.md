@@ -125,7 +125,7 @@ codec检查完整metadata、计数、路径、有限联合及crossSession/source
 
 ## 5. 入口与安装
 
-工具审计安装 `GET /api/v1/agent/apps/:appId/runs/:id/tools/:toolCallId` 及其 `/events?after=&limit=`。Shared codec 为 HTTP 的实际路径/query 解码 owner；内部 Model → public 与 public → HTTP 各自逐字段白名单转换。读取不产生检查、审批或执行许可；正式前端 NativeAuditPanel 已消费并核对原请求关联，行为留远程回归。
+步骤/工具专用审计 HTTP 已移除。线程工具列表保留严格 query、响应解码和白名单状态投影，供正式聊天工具卡片与审批历史使用；读取不产生执行许可。
 
 新 Agent HTTP 的 `/ai/providers` 列表/创建/PATCH/DELETE、`/ai/models`、`/ai/providers/discover-endpoint-models`、`/:providerId/discover-models`/`test`，以及 `/ai/model-registry`、`/resolve`、`/refresh` 使用上述契约；既有 Run 创建端点仍以 `Idempotency-Key` 为提交意图，新增可见模型选择字段。新 Backend 为生产者，正式 Provider/Registry 设置及原生运行界面已消费 Shared；各批实际验证范围见 testing，本轮界面不沿用旧 PASS。
 
@@ -141,7 +141,7 @@ B3.2 真实消费者为新后端 Workspace status/Docker 和 system 三条 HTTP�
 
 Agent 六个状态 HTTP 已接入 Shared 的请求、路径、幂等 header、分页 query、成功联合及安全错误；后端 public 只保留可信身份输入、能力和后端结果语义。正式features/agent/api和DEV next均消费Shared codec与容量；正式Host还消费Scope原生工作区。行为验收单列，不以源码接入等同通过。
 
-步骤状态/事件/stop与tool_calls基础取值、400步审计容量及累计正文容量（2 MiB）唯一归 Run 子域 values.ts，Shared codec、Backend应用和存储均消费它；Platform仍保有独立技术上限。B5.2 只读模型步骤审计新增 Run 子域现有 `model.ts/http.ts/http-codec.ts` 中的 `AgentRunStepView`、`AgentRunStepEventView`、严格 stepIndex 1–400 路径和事件分页；仅暴露状态、序号、用量、UTF-8 文本字节数、安全失败分类，**不导出 `textDelta` 或冻结模型/凭据**。Backend Service/Model/Storage 保留独立类型，经注册和 HTTP 逐字段白名单投影。正式 native-audit-api/mapper 与只读审计界面以及隔离 DEV Controller 均已消费步骤/事件契约；100 条每页的小型元数据响应须服从现有 32 KiB 完整 JSON 预算，正文/流式输出需要另定可审核协议，不能把这个审计响应上限擅自提高。
+步骤状态、事件、stop/tool_calls 取值和累计正文容量仍归 Run 子域 values.ts，由后端执行及存储消费。专用步骤审计 DTO、路径、事件分页 codec 和前端审计消费者已移除；Run 状态、正文流及用量保持各自现有契约。
 
 Agent Provider 列表新增纯 `readAgentProviderListResponse`，基于既有 ProviderView 严格 decoder 检查完整 8 MiB 上限及唯一 Provider ID；隔离 `agent/next` 使用它读取 `GET /ai/providers` 的配置候选，最终 Run 创建仍由原 `runs/http-codec` 验证非可选 `model` 三字段及 128 KiB 请求预算。Shared 不代替 Provider 当前版本、观察冲突和 Run 同事务冻结决策；正式 F1 尚未切换。
 
@@ -426,3 +426,11 @@ providers/model的AgentProviderModelInput允许可选capabilitySources，取值�
 6. **数据、事务与并发**：尺寸切换经过xterm解析队列屏障，容器测量等待恢复完成；同尺寸PTY resize直接返回，checkpoint按捕获的每次尺寸排队，先于相应重绘数据。
 7. **生命周期与失败**：原ACK、背压、租约和失效清理保持；屏障绑定writer generation，旧PTY取消后不得调整新画面；本地重挂载快照同样等待解析完成才fit。
 8. **当前能力与验收**：实现与静态证据见PLAN/testing；既有fullscreen恢复回归同步协议顺序断言，真实浏览器宽窄切换、正常/备用缓冲区及后台恢复按D17待远程验收。
+
+### Agent 审计契约清理
+
+移除步骤详情/事件、单工具详情路径和工具事件分页专用 HTTP 契约及展示 DTO；保留线程工具列表、工具状态取值、Run 状态/事件/用量。工具条目解码继续由 tools/http-codec 持有，供列表消费；内部存储日志不属于 Shared 对外审计能力。
+
+### 生成图片工具投影
+
+AgentToolView.generatedImageId 为必填 nullable 文件 UUID，只能在 completed image_generate 非空；Shared codec 严格验证状态与工具类型。应用 Model、StoredToolOperation 与前端 NativeTool 各自声明，通过 SQLite→Model→register→HTTP→frontend 白名单转换。工具列表不暴露原始结果、模型参数、URL 或 Base64。
