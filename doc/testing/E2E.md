@@ -2005,3 +2005,13 @@ a0cb4f49正式40319856905全部质量/构建/Docker和8个分片通过，新增�
 已读取用户 doc 截图：服务器状态处于矮面板单行模式，网络上下行读数均出现省略号。用户授权缩小左右留白与字体；改动仅在原 `max-height:210px` 容器分支，收紧非趋势内容边距、卡片内距、图标/标签/上下行间隔，并将速率字号结合实际容器宽度计算。正常高度布局、趋势内容留白、速率格式、配色和完整 title/aria-label 保留。
 
 两轮源码复核覆盖容器查询、极窄面板隐藏图标规则、趋势选择器优先级与原状态缩放：数值字体只调整本层，上限不因缩小面板而反向增大；不增加 JS 测量或采样请求。根 `pnpm run check`、前端构建、`pnpm run format:all:check` 及 `git diff --check` 全部通过，日志为 `/tmp/nexus-status-compact-{check,build,format}.log`；遵循 D17 不运行本地视觉/浏览器或行为测试。本批实际待验为截图尺寸下两项速率与单位无截断，及宽窄拖动、滚轮缩放、展开趋势后的原布局。
+
+### 远端工具准备、SCP 进度与图片拒绝诊断正式验收（2026-10-27）
+
+产品/测试提交 `0f174219ca0cdac181035d57a33b42b8ec339732` 的正式 [E2E 40382042043](https://github.com/0honus0/nexus-terminal/actions/runs/40382042043) 全部成功：质量、格式、双端构建、Docker 部署 smoke 与全部 8 分片，共 526 项首次通过。逐分片日志 `/tmp/nexus-e2e-fourth-shard{1..8}.log` 核对重试 0、失败条目 0、flaky 摘要 0。
+
+本轮三次失败回归修复均归测试：SSH exec 未转发 EOF 导致 SCP sink 无法退出；SCP/mkdir 的虚拟路径与 SFTP 不一致导致完成核验找不到目标；夹具缺 READLINK/SYMLINK。另外两个首次失败后重试通过的页面用例在标签激活 animation frame 前沿旧 active surface 操作，补等待目标标签 aria-selected=true。保留所有原产品 UI、进度/字节/哈希/元数据/链接断言、超时与 unknown 保护，没有扩大超时、强制点击或跳过完成核验。
+
+最终回归确认：clipboard/send 原生 SCP 分别 13 秒/11 秒首次完成；页面 relay、skip-rsync、skip-all 均 16 秒首次完成；发送入口准备/安装/跳过/离页、目录及根相对符号链接回退通过。工具依赖与提权流程、归档格式/辅助工具、两种已知图片内容审核码与未知码安全兜底，以及原图片成功预览均通过；图片拒绝不重放、不泄漏上游正文或生成伪成功预览。此处行为验收不等于状态面板截图尺寸的专项视觉验收。
+
+`0695d0bf1f24fb21d157924d620c8fb458dc7177` 只自动刷新测试耗时估计，已快进同步，无产品代码差异。[dev amd64 发布 40383423178](https://github.com/0honus0/nexus-terminal/actions/runs/40383423178) 已成功，生产依赖审计通过。标签 `ghcr.io/0honus0/nexus-terminal:dev` 与 `sha-0695d0bf1f24` 的索引摘要均为 `sha256:059d333a3fa22f81c4fbae18d0b8053c4c3234dfd0dc5649a010e5c7235df0fb`；实际镜像平台 `linux/amd64`，OCI revision 精确为 `0695d0bf1f24fb21d157924d620c8fb458dc7177`，附属 unknown/unknown 项为 BuildKit attestation。证据为 `/tmp/nexus-release-publish-full.log`、`/tmp/nexus-release-image-inspect.txt` 和 `/tmp/nexus-release-image-config.json`。本轮不更新服务器容器，个人截图增删未提交。
