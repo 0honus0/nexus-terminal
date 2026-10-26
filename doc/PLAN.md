@@ -3300,3 +3300,14 @@ HTTP 框架暂缓、Zod 已取消；ACP 保持，Docker 保留 SSH CLI。这些�
 | 职责归属 | Workspace 只发布实际发送内容，TerminalView 持有预测实例，vendor 核心不依赖应用或网络。                                                                                                                                               |
 | 类型归属 | TerminalChannel 事件归原 Port；xterm 私有读取集中单一 adapter，未知布局禁用预测。                                                                                                                                                    |
 | 完成证据 | 两轮源码复审、11项真实xterm算法定向、16块真实Codex捕获流及api.honus.top隔离浏览器13项通过；根check/Frontend build/目标类型与格式通过，全量格式仅被并行UiInlineNotice.vue阻塞。详见testing/E2E；未正式远程Actions、未提交推送或重启。 |
+
+## 文件管理器纵向拖动受阻（2026-10-26，已修复）
+
+用户要求在api.honus.top连接后的文件管理器向上扩大高度，保持现有UI。① owner为Workspace布局与Splitpanes适配；② 核对默认terminal/commandBar/fileManager三分栏；③ 复用现有Splitpanes，不修改文件列表或终端渲染；④ 无Shared/后端契约；⑤ 定位文件管理器工具栏与分隔条同为z-index:30，工具栏按DOM顺序拦截了分隔条鼠标事件；⑥ 仅将Workspace分隔条提升至z-index:40，视觉不变，拖动结果继续由原1秒debounce保存；⑦ 布局锁、触摸/键盘、最小尺寸及卸载清理不变；⑧ 使用测试账号验证分隔条命中、向上拖动、保存及刷新恢复。
+
+| 审核表   | 当前状态                                                                                                                 |
+| -------- | ------------------------------------------------------------------------------------------------------------------------ |
+| 功能对应 | 向上拖动文件管理器高度可正常响应，终端按最小尺寸约束相应缩小，拖动结果可保存并在刷新后恢复。                             |
+| 职责归属 | 分隔条层级归WorkspaceLayoutRenderer；文件管理器内容、终端渲染及布局协议无改动。                                          |
+| 类型归属 | 沿原LayoutNode、Splitpanes事件及偏好保存契约，无新增类型。                                                               |
+| 完成证据 | CDP实测分隔条命中且高度106.9→137.9px，布局版本49→54；刷新重开会话保持137.92px；Prettier、ESLint、vue-tsc及diff检查通过。 |
