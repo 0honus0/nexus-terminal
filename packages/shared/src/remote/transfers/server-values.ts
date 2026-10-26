@@ -2,7 +2,9 @@ export const SERVER_TRANSFER_METHODS = ['auto', 'rsync', 'scp'] as const;
 
 export type ServerTransferMethod = (typeof SERVER_TRANSFER_METHODS)[number];
 
-export type ServerTransferMethodUsed = Exclude<ServerTransferMethod, 'auto'>;
+export const SERVER_TRANSFER_METHODS_USED = ['rsync', 'scp', 'sftp'] as const;
+
+export type ServerTransferMethodUsed = (typeof SERVER_TRANSFER_METHODS_USED)[number];
 
 export const SERVER_TRANSFER_TASK_STATES = [
 	'queued',

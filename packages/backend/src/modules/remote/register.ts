@@ -143,16 +143,19 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 		mutations,
 		options.logger,
 	);
+	const serverTransferModel = new ServerTransferModel(
+		options.resolver,
+		machines,
+		options.hostKeys,
+		new NativeServerTransfer(),
+		new SecureSessionTokens(),
+	);
+	const fileModel = new RemoteFileModel(machines, options.resolver, new SecureSessionTokens(), serverTransferModel);
 	const serverTransfers = new ServerTransferService(
 		options.access,
-		new ServerTransferModel(
-			options.resolver,
-			machines,
-			options.hostKeys,
-			new NativeServerTransfer(),
-			new SecureSessionTokens(),
-		),
+		serverTransferModel,
 		mutations,
+		fileModel,
 		options.logger,
 	);
 	const connectionTests = new ConnectionTestService(new ConnectionTestModel(machines), options.access);
@@ -166,13 +169,7 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 	const workspaceCommands = new WorkspaceCommandModel(machines);
 	const suspendedLogs = options.logDirectory ? new LocalSuspendedTerminalLog(options.logDirectory) : null;
 	const suspendedCheckpoints = new HeadlessSuspendedCheckpointFactory();
-	const files = new RemoteFileService(
-		options.access,
-		new RemoteFileModel(machines, options.resolver, new SecureSessionTokens()),
-		options.targets,
-		mutations,
-		options.logger,
-	);
+	const files = new RemoteFileService(options.access, fileModel, options.targets, mutations, options.logger);
 	const sessionTokens = new SessionTokenModel(new SecureSessionTokens());
 	const workspaces = new WorkspaceService(
 		options.access,
@@ -195,7 +192,7 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 		options.resolver,
 	);
 	const operations = new RemoteMachineOperationService(
-		new RemoteFileModel(machines, options.resolver, new SecureSessionTokens()),
+		fileModel,
 		observationModel,
 		new MachineCommandModel(machines, new PosixCommandAdapter()),
 		new MachineAcpModel(machines, new PosixCommandAdapter(), new NdjsonAcpAdapter()),

@@ -1887,3 +1887,11 @@ aba02d2f正式Actions 40316497521：质量、构建、Docker及分片1/3/4/5/7/8
 141836cf的40318510258：质量/构建/Docker及全部7个非分片2通过，目录删除与9路迟到OPEN/票据恢复均首跑通过。分片2仅新增专项夹具失败：SQLite测试在reconcile后错误调用held专属settle；codec动态import触发Playwright TS/ESM解析差异。改为先完成held结算/重用再reconcile，并验证blocked不能被settle释放；Shared codec与已有测试统一静态导入，未放宽存储围栏或产品校验。
 
 a0cb4f49正式40319856905全部质量/构建/Docker和8个分片通过，新增持久4100 claim、Shared257来源/65目标、65前端准备批/65复制任务与原文件协议专项首跑通过，远程工作流成功；3381d6b1仅自动耗时更新。当前1025来源和动态展开字节增量仍需新SHA完整回归，不将本次PASS扩为未提交增量通过。
+
+### 跨服务器直传优先与中转共用链（2026-10-26）
+
+跨会话剪贴板与发送到服务器共用copyRemoteEntries/RemoteFileModel.copyDirect。正式新增direct-and-relay-transfer六例：两个入口各测源到目标可达/不可达，8MiB单ZIP二进制的中间进度、精确SHA256、实际rsync/sftp方法；夹具记录直传零SFTP READ字节，中转READ字节等于文件大小；另测已派发原生失败/取消不回退且移动源保留。测试限速仅用于稳定观察中间进度，不作生产吞吐证据。http专项增加原生凭据清理与流式取消回归，不依赖sshd。
+
+前轮40321121777质量/构建/Docker成功，分片6/8各一项首次失败、重试通过，整轮因flaky拒绝。分别为响应式按钮定位未过滤可见性，以及保护API后台401先卸载页面而测试还等待Hide；本轮修测试真实入口和401观察，保留最终功能断言及原UI。当前批次行为待正式远程Actions，不复用前轮PASS。
+
+两轮源码复核覆盖直传前只读连接探测、清理失败禁止回退、原生stderr排空/初始化失败退出等待、SFTP顺序流水线/ACK后清理、双端授权、源删除重验。根check（含Backend包级）、完整build及最终Backend build、全量format、变更E2E严格tsc、mjs语法和diff通过；日志/tmp/nexus-direct-final-*。最初E2E类型命令未显式加载Node类型，补types/typeRoots后通过；本地未运行行为测试，遵守D17。pve_debian到amd生产网络吞吐尚未实测；按D20不发布、不更新生产容器。

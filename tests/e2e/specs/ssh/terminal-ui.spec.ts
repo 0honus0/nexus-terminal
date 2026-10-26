@@ -1242,20 +1242,21 @@ test('a protected API 401 invalidates the local session and releases the live Wo
 	await expect(tabBar.getByRole('tab')).toHaveCount(1);
 	await expect(tabBar.getByRole('button', { name: 'Hide', exact: true })).toBeVisible();
 
+	// Background protected reads may observe revocation before the button's
+	// preference write. Either genuine 401 must invalidate this same session.
+	const hide = await tabBar.getByRole('button', { name: 'Hide', exact: true }).elementHandle();
+	if (!hide) throw new Error('Missing Hide action');
+	const unauthorized = page.waitForResponse(
+		(response) => response.url().includes('/api/v1/') && response.status() === 401,
+	);
+	void unauthorized.catch(() => undefined);
 	const serverLogout = await context.request.post('/api/v1/auth/logout', {
 		headers: { Origin: E2E_URLS.frontendOrigin },
 	});
 	expect(serverLogout.ok()).toBeTruthy();
-	await expect(page).toHaveURL(/\/workspace(?:\?|$)/);
-
-	const unauthorized = page.waitForResponse(
-		(response) =>
-			response.url().endsWith('/api/v1/settings/preferences') &&
-			response.request().method() === 'PUT' &&
-			readPreferencesUpdate(response.request().postDataJSON()).preferences.navBarVisible === false &&
-			response.status() === 401,
-	);
-	await tabBar.getByRole('button', { name: 'Hide', exact: true }).click();
+	await hide.evaluate((button) => {
+		if (button instanceof HTMLButtonElement && button.isConnected) button.click();
+	});
 	await unauthorized;
 
 	await expect(page).toHaveURL(/\/login$/);

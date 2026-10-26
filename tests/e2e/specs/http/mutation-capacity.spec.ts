@@ -87,3 +87,19 @@ for (const fixture of ['workspace-upload', 'workspace-files', 'workspace-transfe
 		expect(result.stdout).toContain('PASS');
 	});
 }
+
+test('native transfer preserves stream cancellation, pinned keys and credential cleanup', async () => {
+	test.setTimeout(120_000);
+	const result = await promisify(execFile)(
+		process.execPath,
+		[
+			'--test',
+			'--test-name-pattern=native secret cleanup',
+			path.resolve(__dirname, '../../../backend/remote/backend-next-server-transfers.integration.mjs'),
+		],
+		{ timeout: 90_000, maxBuffer: 1024 * 1024 },
+	);
+	expect(result.stdout).toContain(
+		'native secret cleanup and pinned handshake evidence remain independent of execution outcome',
+	);
+});

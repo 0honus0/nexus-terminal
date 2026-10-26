@@ -1,13 +1,22 @@
+import type { RemoteFileModel } from '../../files/model/file-model.js';
+import { copyRemoteEntries } from '../../files/service/file-copy.js';
 import type { Logger } from '../../../../platform/logging/logger.js';
 import { logDiagnostic, withDiagnosticContext } from '../../../../platform/logging/diagnostic-log.js';
 import { randomUUID } from 'node:crypto';
 import type { AccessPublicApi } from '../../../access/public.js';
 import type { ServerTransferModel } from '../model/server-transfer-model.js';
-import type { ServerTransferCommand, ServerTransferTask, ServerTransferPlan } from '../model/server-transfer-types.js';
+import type {
+	ServerTransferCommand,
+	ServerTransferTask,
+	ServerTransferPlan,
+	ServerTransferExecution,
+} from '../model/server-transfer-types.js';
 import { ServerTransferFailure } from '../model/server-transfer-types.js';
 import type { MachineMutationService } from '../../machines/service/mutation-service.js';
 import { RemoteFileFailure } from '../../files/model/file-types.js';
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
+import type { ServerTransferMethodUsed } from '@nexus-terminal/shared/remote/transfers/server-values';
+import type { FileResource } from '../../files/model/file-types.js';
 import { SERVER_TRANSFER_PAGE_SIZE } from '@nexus-terminal/shared/remote/transfers/server-values';
 
 interface TaskOwner {
@@ -21,6 +30,7 @@ interface TaskOwner {
 	job: Promise<void> | null;
 	running: boolean;
 	failure: unknown;
+	relayTargets: Set<number>;
 }
 
 const MAX_HISTORY = 100;
@@ -112,6 +122,7 @@ export class ServerTransferService {
 		private readonly access: AccessPublicApi,
 		private readonly model: ServerTransferModel,
 		private readonly mutations: MachineMutationService,
+		private readonly files: RemoteFileModel,
 		private readonly logger?: Logger,
 	) {}
 
@@ -142,9 +153,6 @@ export class ServerTransferService {
 			const command = toCommand(await read());
 			inputSignal.throwIfAborted();
 			const plan = await this.model.prepare(command);
-			if (plan.targets.some((target) => !target.direct)) {
-				throw new ServerTransferFailure('unsupported_target_route');
-			}
 			if (new Set(plan.resources).size !== plan.resources.length) {
 				throw new ServerTransferFailure('invalid_input');
 			}
@@ -190,6 +198,7 @@ export class ServerTransferService {
 				job: null,
 				running: false,
 				failure: null,
+				relayTargets: new Set(),
 			};
 			owner.timer.unref();
 			this.records.set(task.taskId, owner);
@@ -374,23 +383,45 @@ export class ServerTransferService {
 						'files',
 						[owner.plan.source, { targetId: target.targetId, fingerprint: target.fingerprint }],
 						() =>
-							this.model.execute({
-								executionId: item.subTaskId,
-								command: owner.task.payload,
-								plan: owner.plan,
-								targetId: item.connectionId,
-								sourceIndex: item.sourceItemIndex,
-								deadline: owner.deadline,
-								signal: owner.controller.signal,
+							this.executeItem(
+								{
+									executionId: item.subTaskId,
+									command: owner.task.payload,
+									plan: owner.plan,
+									targetId: item.connectionId,
+									sourceIndex: item.sourceItemIndex,
+									deadline: owner.deadline,
+									signal: owner.controller.signal,
 
-								validate: () => this.validate(owner),
+									validate: () => this.validate(owner),
 
-								onMethod: (method) => {
-									item.transferMethodUsed = method;
-									item.status = 'transferring';
-									owner.task.updatedAt = Math.max(owner.task.updatedAt, Date.now());
+									onMutation: () => undefined,
+
+									onProgress: (_bytes, percent) => {
+										item.progress = Math.max(item.progress, Math.min(99, percent));
+										owner.task.overallProgress = Math.floor(
+											owner.task.subTasks.reduce((sum, sub) => sum + sub.progress, 0) /
+												owner.task.subTasks.length,
+										);
+										owner.task.updatedAt = Math.max(owner.task.updatedAt, Date.now());
+									},
+
+									onMethod: (method) => {
+										if (method === 'sftp') {
+											owner.relayTargets.add(item.connectionId);
+										}
+										logDiagnostic(this.logger, 'info', 'SERVER_TRANSFER_METHOD_SELECTED', {
+											taskId: owner.task.taskId,
+											connectionId: item.connectionId,
+											method,
+										});
+										item.transferMethodUsed = method;
+										item.status = 'transferring';
+										owner.task.updatedAt = Math.max(owner.task.updatedAt, Date.now());
+									},
 								},
-							}),
+								owner.relayTargets.has(item.connectionId),
+							),
 						{ userId: owner.userId, digest: owner.digest },
 					);
 					item.transferMethodUsed = method;
@@ -424,6 +455,136 @@ export class ServerTransferService {
 		} finally {
 			clearInterval(monitor);
 			await monitoring;
+		}
+	}
+
+	/** Both entry points use the same direct-first copy/verification pipeline. */
+	private async executeItem(input: ServerTransferExecution, relayOnly: boolean): Promise<ServerTransferMethodUsed> {
+		const sourceItem = input.command.sourceItems[input.sourceIndex];
+		const target = input.plan.targets.find((item) => item.targetId === input.targetId);
+		if (!sourceItem || !target) {
+			throw new ServerTransferFailure('invalid_input');
+		}
+		const resources: FileResource[] = [];
+		let failure: unknown;
+		let mutationStarted = false;
+		try {
+			const remaining = () => {
+				input.signal.throwIfAborted();
+				const timeout = input.deadline - Date.now();
+				if (timeout <= 0) {
+					throw new ServerTransferFailure('cancelled');
+				}
+				return timeout;
+			};
+
+			const source = await this.files.open(
+				input.plan.source.targetId,
+				remaining(),
+				input.signal,
+				input.plan.source.fingerprint,
+				input.validate,
+			);
+			resources.push(source);
+			const info = await source.stat({
+				path: sourceItem.path,
+				followLinks: false,
+				timeoutMs: remaining(),
+				signal: input.signal,
+			});
+			if ((info.kind === 'directory') !== (sourceItem.type === 'directory')) {
+				throw new ServerTransferFailure('invalid_input');
+			}
+			const destination = await this.files.open(
+				target.targetId,
+				remaining(),
+				input.signal,
+				target.fingerprint,
+				input.validate,
+			);
+			resources.push(destination);
+			let method: ServerTransferMethodUsed = 'sftp';
+
+			const onMutation = () => {
+				mutationStarted = true;
+				input.onMutation();
+			};
+
+			const validate = async () => {
+				remaining();
+				await input.validate();
+				remaining();
+			};
+
+			await copyRemoteEntries(
+				source,
+				destination,
+				[sourceItem.path],
+				input.command.remoteTargetPath,
+				'copy',
+				remaining,
+				input.signal,
+				(progress) => {
+					const percent =
+						progress.totalKnown && progress.totalBytes > 0
+							? (progress.transferredBytes / progress.totalBytes) * 100
+							: 0;
+					input.onProgress(progress.transferredBytes, percent);
+				},
+				onMutation,
+				async (from, directory, onProgress, dispatched) => {
+					if (relayOnly) {
+						input.onMethod('sftp');
+						return false;
+					}
+					const direct = await this.files.copyDirect({
+						sourceTargetId: source.targetId,
+						sourceFingerprint: source.fingerprint,
+						targetId: destination.targetId,
+						targetFingerprint: destination.fingerprint,
+						sourcePath: from,
+						directory,
+						method: input.command.transferMethod,
+						destinationDirectory: input.command.remoteTargetPath,
+						deadline: input.deadline,
+						signal: input.signal,
+						validate,
+
+						onProgress: (bytes, percent) => {
+							onProgress(bytes);
+							input.onProgress(bytes, percent);
+						},
+
+						onMethod: (selected) => {
+							method = selected;
+							input.onMethod(selected);
+						},
+
+						onMutation: dispatched,
+					});
+					if (!direct) {
+						method = 'sftp';
+						input.onMethod(method);
+					}
+					return direct;
+				},
+			);
+			await validate();
+			return method;
+		} catch (cause) {
+			failure =
+				mutationStarted && !(cause instanceof RemoteResourceCleanupFailure)
+					? new ServerTransferFailure('operation_unknown', 'unknown', { cause })
+					: cause;
+			throw failure;
+		} finally {
+			const results = await Promise.allSettled(
+				resources.map((resource) => Promise.resolve().then(() => resource.close())),
+			);
+			const failures = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+			if (failures.length) {
+				throw new RemoteResourceCleanupFailure(failure === undefined ? failures : [failure, ...failures]);
+			}
 		}
 	}
 

@@ -1,12 +1,12 @@
 import type { MachineConnection, MachineAuthentication } from '../ssh/ssh-port.js';
-import type {
-	ServerTransferMethod,
-	ServerTransferMethodUsed,
-} from '@nexus-terminal/shared/remote/transfers/server-values';
+import type { ServerTransferMethod } from '@nexus-terminal/shared/remote/transfers/server-values';
+
+export type NativeTransferMethod = Exclude<ServerTransferMethod, 'auto'>;
 
 export type NativeTransferReason =
 	| 'invalid_endpoint'
 	| 'tool_missing'
+	| 'peer_unreachable'
 	| 'host_key_rejected'
 	| 'command_failed'
 	| 'transport_lost'
@@ -39,9 +39,11 @@ export interface NativeTransferRequest {
 	deadline: number;
 	signal: AbortSignal;
 	validate(): Promise<void>;
-	onMethod(method: ServerTransferMethodUsed): void;
+	onMethod(method: NativeTransferMethod): void;
+	onProgress(bytes: number, percent: number): void;
+	onMutation(): void;
 }
 
 export interface NativeTransferPort {
-	execute(request: NativeTransferRequest): Promise<ServerTransferMethodUsed>;
+	execute(request: NativeTransferRequest): Promise<NativeTransferMethod>;
 }

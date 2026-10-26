@@ -2005,15 +2005,41 @@ export class RemoteFileService {
 													type: 'progress',
 													requestId,
 													transferredBytes: progress.transferredBytes,
-													totalBytes: progress.transferredBytes,
+													totalBytes: progress.totalBytes,
 													completedFiles: progress.completedFiles,
-													totalFiles: paths.length,
-													totalKnown: false,
+													totalFiles: progress.totalFiles,
+													totalKnown: progress.totalKnown,
 													currentFile: progress.currentFile,
 												}),
 											() => {
 												dispatchedMutation = true;
 											},
+											(from, directory, onProgress, onMutation) =>
+												this.model.copyDirect({
+													sourceTargetId: source.targetId,
+													sourceFingerprint: source.fingerprint,
+													targetId: destinationResource.targetId,
+													targetFingerprint: destinationResource.fingerprint,
+													sourcePath: from,
+													method: 'auto',
+													directory,
+													destinationDirectory,
+													deadline: Date.now() + remaining(),
+													signal: sourceSignal,
+
+													validate: async () => {
+														remaining();
+														await this.model.checkFingerprint(source);
+														await this.model.checkFingerprint(destinationResource);
+														remaining();
+													},
+
+													onProgress,
+
+													onMethod: () => undefined,
+
+													onMutation,
+												}),
 										);
 									},
 								),

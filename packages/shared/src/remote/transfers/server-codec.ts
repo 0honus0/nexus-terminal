@@ -8,6 +8,7 @@ import type {
 import type { ServerTransferPage, ServerTransferCancellation, ServerTransferHttpError } from './server-http.js';
 import {
 	SERVER_TRANSFER_METHODS,
+	SERVER_TRANSFER_METHODS_USED,
 	SERVER_TRANSFER_TASK_STATES,
 	SERVER_TRANSFER_ITEM_STATES,
 	SERVER_TRANSFER_ERROR_CODES,
@@ -218,7 +219,8 @@ function item(value: unknown): ServerTransferItem {
 	]);
 	const status = choice(row.status, SERVER_TRANSFER_ITEM_STATES);
 	const error = row.error === null ? null : choice(row.error, SERVER_TRANSFER_ERROR_CODES);
-	const method = row.transferMethodUsed === null ? null : choice(row.transferMethodUsed, ['rsync', 'scp']);
+	const method =
+		row.transferMethodUsed === null ? null : choice(row.transferMethodUsed, SERVER_TRANSFER_METHODS_USED);
 	const progress = percent(row.progress);
 	if (
 		(status === 'failed' || status === 'unknown') !== (error !== null) ||
@@ -260,6 +262,7 @@ export function readServerTransferSnapshot(value: unknown): ServerTransferSnapsh
 			sub.sourceItemIndex >= payload.sourceItems.length ||
 			(payload.transferMethod !== 'auto' &&
 				sub.transferMethodUsed !== null &&
+				sub.transferMethodUsed !== 'sftp' &&
 				sub.transferMethodUsed !== payload.transferMethod)
 		) {
 			reject();

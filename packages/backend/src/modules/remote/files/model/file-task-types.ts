@@ -1,4 +1,8 @@
 import type {
+	ServerTransferMethod,
+	ServerTransferMethodUsed,
+} from '@nexus-terminal/shared/remote/transfers/server-values';
+import type {
 	WorkspaceCopyMoveMode,
 	WorkspaceArchiveOperation,
 	WorkspaceArchiveErrorCode,
@@ -60,7 +64,34 @@ export type FileArchiveEvent =
 	  }
 	| { type: 'cancelled'; operation: FileArchiveOperation; requestId: string };
 
+export interface FileDirectCopyRequest {
+	sourceTargetId: number;
+	sourceFingerprint: string;
+	targetId: number;
+	targetFingerprint: string;
+	sourcePath: string;
+	directory: boolean;
+	method: ServerTransferMethod;
+	destinationDirectory: string;
+	deadline: number;
+	signal: AbortSignal;
+	validate(): Promise<void>;
+	onProgress(bytes: number, percent: number): void;
+	onMethod(method: ServerTransferMethodUsed): void;
+	onMutation(): void;
+}
+
+export type FileDirectCopy = (
+	sourcePath: string,
+	directory: boolean,
+	onProgress: (bytes: number) => void,
+	onMutation: () => void,
+) => Promise<boolean>;
+
 export interface CopyProgress {
+	totalBytes: number;
+	totalFiles: number;
+	totalKnown: boolean;
 	transferredBytes: number;
 	completedFiles: number;
 	currentFile: string;

@@ -60,7 +60,7 @@ async function runTransfer(
 			message.type === 'transfer.copyMove' &&
 			message.payload?.requestId === requestId &&
 			message.payload?.type === 'progress' &&
-			message.payload?.totalKnown === false,
+			Number(message.payload?.transferredBytes) > 0,
 		20_000,
 	);
 	const terminalPromise = waitForJson(
@@ -75,14 +75,17 @@ async function runTransfer(
 	const terminal = await terminalPromise;
 	expect(terminal.payload?.type, JSON.stringify(terminal.payload)).toBe('completed');
 	const progress = await progressPromise;
-	expect(progress.payload?.totalBytes).toBe(progress.payload?.transferredBytes);
+	if (progress.payload?.totalKnown)
+		expect(progress.payload?.totalBytes).toBeGreaterThanOrEqual(progress.payload?.transferredBytes);
+	else expect(progress.payload?.totalBytes).toBe(progress.payload?.transferredBytes);
 	return progress.payload;
 }
 
-test('cross-session copy and move transfer data and progress over real SFTP', async ({ request }) => {
+test('cross-session relay copy and move transfer data and progress over real SFTP', async ({ request }) => {
 	await loginAsInitialAdmin(request);
 	await trustTestSshHostKey(request);
 	await resetTestSshFilesystem();
+	expect((await fetch(`${E2E_SSH.controlUrl}/transfer-peer?blocked=1`, { method: 'POST' })).ok).toBe(true);
 
 	const sourceId = await createConnection(request, 'E2E Cross Source');
 	const destinationId = await createConnection(request, 'E2E Cross Destination');
@@ -99,7 +102,7 @@ test('cross-session copy and move transfer data and progress over real SFTP', as
 				sources: ['/cross-copy.txt'],
 				destination: '/cross-target',
 			});
-			expect(progress).toMatchObject({ totalKnown: false });
+			expect(progress).toMatchObject({ totalKnown: true, totalFiles: 1 });
 			expect(Number(progress?.totalBytes)).toBeGreaterThan(0);
 			await expect(readRemoteFile(destination.socket, '/cross-target/cross-copy.txt')).resolves.toContain(
 				'cross-copy-body',

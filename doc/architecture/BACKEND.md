@@ -503,7 +503,7 @@ Files Service 区分直接借用 Workspace 与独立传输：direct 操作取消
 
 file-copy 由 Service 在首次副作用前预检整批目标与源的重叠。同 target/fingerprint 用源父目录 realpath 保留叶节点链接语义，目标的缺失后缀基于现有祖先解析，不为预检创建目录；检测相等/祖先/后代及规范位置的嵌套源。原始同路径 move 仍 no-op，别名解析与 metadata 只是变化检测，不是远端原子隔离。move 删除目录后的复查豁免自身删除引起的 mtime/size 变化，但 mode 仍须一致。ZIP 技术 Adapter 在 append 同步拒绝时同样停止并等待 reader finished，保证其拒绝被观察且原 producer/consumer 因果保留。
 
-file-copy以256 KiB固定窗口聚合读取，逐窗等待stage append确认，保持顺序、背压与失败时原迭代器排空/关闭，不并发调用stage。upload协议帧仍最多1 MiB，Service内部按512 KiB批次写入，每批开始前检查discarding；取消不abort独立lease，只停止后续批次，当前批次确认后由原worker清理stage，不将部分帧计为完整progress。
+file-copy中转按256 KiB聚合，最多4个单stage窗口append在途；单append在首次等待前已按源顺序排入ssh2 writev，滚动补位维持约1 MiB写入预算，失败/取消后排空全部已派发确认再清理。Stage复用调用方保持不变的字节视图直到确认，避免额外Buffer复制；源端32×32 KiB预取在yield前补位。upload协议帧仍最多1 MiB，Service内部按512 KiB批次写入，每批开始前检查discarding；取消不abort独立lease，只停止后续批次，当前批次确认后由原worker清理stage，不将部分帧计为完整progress。
 
 压缩源递归归原生 ZIP/TAR 工具，不在 Files Service 或 SFTP 重复遍历；删除源树计数/深度预算、特殊节点清单及其 `FileArchiveSources` 类型。Native Adapter 的条目输出仅转换成展示进度，不作为源树完整性的证明；随机原生命令结束标记与进程退出结果负责完成判定，Service 确认临时产物后发布，非零无密码 ZIP 仍须独立 `zip -T` 核验才可返回 `verified_warning`。特殊节点遵循工具行为：ZIP 跳过 FIFO/socket，GNU tar 保留 FIFO 元数据并忽略 socket；解压仍独立拒绝特殊成员。原生命令已退出、尚未尝试发布且私有输出已删除/确认不存在时，具名 `FileArchiveDiscarded` 表示确定失败，沿既有 RemoteFileFailure 分类结算机器突变名额并发送普通失败；专属资源关闭失败仍覆盖为清理未知，已经尝试rename/replace或原始未知错误不降级。错误不公开原始工具输出或远端路径。
 
@@ -1717,3 +1717,14 @@ Context预压缩现状：checkpoint工具需要实际context.compact授权，摘
 ### 自动图片预览（2026-10-26）
 
 image_generate 仅负责生成并保存 App 文件，返回给模型的结果只有 id、name、sizeBytes；工具说明不要求模型拼接预览或下载 Markdown。服务端从已完成工具的持久结果投影 generatedImageId，前端使用 App ID 与文件 ID 自动显示现有图片预览和下载入口。Base64 只经生成服务落盘，不写入聊天或工具列表。待批准、失败或 unknown 不产生成功预览；刷新后仍可从工具记录恢复，文件读取继续执行原会话与 App 授权。直接 Images 对话仍由程序生成展示内容，不依赖文字模型。
+
+### 跨Workspace服务器点对点复制
+
+1. **职责与范围**：Files负责剪贴板复制/移动权限和任务，NativeServerTransfer负责服务器间文件数据传输；支持直传优先和未开始传文件时的SFTP中转回退。
+2. **子功能与目录**：复用files/service/file-copy、files/model/file-model、transfers/model/server-transfer-model和platform/transfers/adapters/native-transfer；不增加第二套凭据或SSH实现。
+3. **依赖方向**：FileService→RemoteFileModel→ServerTransferModel→NativeTransferPort，技术句柄不进入Files Service；复用原机器Resolver和已信任主机公钥。
+4. **类型与转换**：Files内部直接复制请求/回调归file-task-types；Native回调归transfer-port；Model逐字段映射，Shared原WS totalBytes/totalKnown承载进度；Shared实际方法增加sftp，严格codec及双端消费者同版迁移。
+5. **入口与安装**：原transfer.copyMove与工具安装确认入口不变；register给FileModel注入同一ServerTransferModel。跨目标auto优先rsync，显式发送可选scp；源侧SSH探测先于目标文件变更，工具/版本、路由或源到目标连接不满足时回退中转，同目标保留SFTP文件操作。发送与剪贴板均消费copyRemoteEntries和RemoteFileModel.copyDirect。
+6. **数据与并发**：不改变双Workspace权限及机器突变围栏；只读取选择根元数据即可计算文件批总量。目录复制由rsync遍历，移动为安全删除保存源元数据，全部目标完成后复查再删源。
+7. **生命周期与失败**：原生进程有同任务期限/取消，实际退出与临时凭据清理由Native owner确认；只对not_started的连接/工具/端点不满足回退；直传已经派发、清理或结果未知不换方式重传。每任务对已确定不互通的目标记住中转选择，不重复逐项探测。部分发布、源删除或清理未确认仍为unknown，不自动重试。
+8. **当前能力与验收**：源码已接线，正式消费者与新增远程Actions用例覆盖单文件进度、内容、目录、移动和取消；生产网络吞吐未测，静态不代表实际速度。

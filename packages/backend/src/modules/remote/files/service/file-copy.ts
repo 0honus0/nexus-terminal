@@ -1,4 +1,4 @@
-import type { CopyProgress } from '../model/file-task-types.js';
+import type { CopyProgress, FileDirectCopy } from '../model/file-task-types.js';
 import path from 'node:path';
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 import {
@@ -12,6 +12,7 @@ import {
 
 const RPC_TIMEOUT_MS = 300_000;
 const COPY_WRITE_WINDOW_BYTES = 256 * 1024;
+const COPY_WRITE_WINDOWS = 4;
 
 interface CopyContext {
 	source: FileResource;
@@ -20,10 +21,27 @@ interface CopyContext {
 	signal: AbortSignal;
 	transferredBytes: number;
 	completedFiles: number;
+	totalBytes: number;
+	totalFiles: number;
+	totalKnown: boolean;
 	mutationStarted: boolean;
 	onMutation(): void;
 	completedSources: Array<{ path: string; info: FileInfo; linkTarget?: string }>;
 	onProgress(progress: CopyProgress): void;
+}
+
+function reportProgress(ctx: CopyContext, currentFile: string): void {
+	if (ctx.transferredBytes > ctx.totalBytes) {
+		ctx.totalKnown = false;
+	}
+	ctx.onProgress({
+		transferredBytes: ctx.transferredBytes,
+		completedFiles: ctx.completedFiles,
+		totalBytes: ctx.totalKnown ? ctx.totalBytes : ctx.transferredBytes,
+		totalFiles: ctx.totalFiles,
+		totalKnown: ctx.totalKnown,
+		currentFile,
+	});
 }
 
 function options(ctx: CopyContext, filePath: string) {
@@ -139,19 +157,52 @@ async function copyOneFile(ctx: CopyContext, from: string, to: string, info: Fil
 			start: 0,
 		});
 		let lastReportedBytes = ctx.transferredBytes;
-		for await (const chunk of copyWriteWindows(source)) {
-			ctx.signal.throwIfAborted();
-			ctx.remaining();
-			await stage.append(chunk);
-			ctx.transferredBytes += chunk.byteLength;
-			if (ctx.transferredBytes - lastReportedBytes >= 512 * 1024) {
-				ctx.onProgress({
-					transferredBytes: ctx.transferredBytes,
-					completedFiles: ctx.completedFiles,
-					currentFile: from,
+		const pending = new Set<Promise<void>>();
+		const failures: unknown[] = [];
+		try {
+			for await (const chunk of copyWriteWindows(source)) {
+				ctx.signal.throwIfAborted();
+				ctx.remaining();
+				if (failures.length > 0) {
+					throw failures[0];
+				}
+				// One append fits one stage window: enqueue in source order,
+				// then overlap its acknowledgement with subsequent reads/writes.
+				const writing = stage.append(chunk).then(() => {
+					ctx.transferredBytes += chunk.byteLength;
+					if (ctx.transferredBytes - lastReportedBytes >= 512 * 1024) {
+						reportProgress(ctx, from);
+						lastReportedBytes = ctx.transferredBytes;
+					}
 				});
-				lastReportedBytes = ctx.transferredBytes;
+				const tracked = writing.then(
+					() => {
+						pending.delete(tracked);
+					},
+					(cause: unknown) => {
+						failures.push(cause);
+						pending.delete(tracked);
+					},
+				);
+				pending.add(tracked);
+				if (pending.size >= COPY_WRITE_WINDOWS) {
+					await Promise.race(pending);
+				}
 			}
+		} catch (cause) {
+			if (!failures.includes(cause)) {
+				failures.push(cause);
+			}
+		} finally {
+			// A local cancellation does not stop queued SFTP writes. Settle
+			// every acknowledgement before committing or discarding the stage.
+			await Promise.all(pending);
+		}
+		if (failures.length === 1) {
+			throw failures[0];
+		}
+		if (failures.length > 1) {
+			throw new AggregateError(failures, 'Copy pipeline failed');
 		}
 		// The old transfer replaced existing regular destination files. The
 		// new stage still prevents partial content becoming a visible file.
@@ -189,11 +240,7 @@ async function copyOneFile(ctx: CopyContext, from: string, to: string, info: Fil
 		}
 		ctx.completedFiles++;
 		ctx.completedSources.push({ path: from, info });
-		ctx.onProgress({
-			transferredBytes: ctx.transferredBytes,
-			completedFiles: ctx.completedFiles,
-			currentFile: from,
-		});
+		reportProgress(ctx, from);
 		return { path: to, name: path.posix.basename(to), info: result };
 	} catch (cause) {
 		if (committed) {
@@ -240,11 +287,7 @@ async function copyOneLink(ctx: CopyContext, from: string, to: string, info: Fil
 	}
 	ctx.completedFiles++;
 	ctx.completedSources.push({ path: from, info, linkTarget: target });
-	ctx.onProgress({
-		transferredBytes: ctx.transferredBytes,
-		completedFiles: ctx.completedFiles,
-		currentFile: from,
-	});
+	reportProgress(ctx, from);
 	return { path: to, name: path.posix.basename(to), info: result };
 }
 
@@ -325,6 +368,91 @@ async function copyOne(ctx: CopyContext, from: string, to: string, scannedInfo?:
 	return { path: to, name: path.posix.basename(to), info: destinationInfo };
 }
 
+/** Capture deletion candidates only for moves; copy traversal belongs to rsync. */
+async function rememberMoveSource(
+	ctx: CopyContext,
+	from: string,
+	info: FileInfo,
+): Promise<CopyContext['completedSources']> {
+	const entries: CopyContext['completedSources'] = [];
+	if (info.kind === 'directory') {
+		for (const entry of await ctx.source.scan(options(ctx, from))) {
+			if (entry.name === '.' || entry.name === '..' || entry.name.includes('/')) {
+				throw new RemoteFileFailure('invalid_input');
+			}
+			for (const item of await rememberMoveSource(ctx, path.posix.join(from, entry.name), entry.info)) {
+				entries.push(item);
+			}
+		}
+	}
+	if (info.kind === 'other') {
+		throw new RemoteFileFailure('invalid_input');
+	}
+	const linkTarget = info.kind === 'symlink' ? await ctx.source.readlink(options(ctx, from)) : undefined;
+	entries.push({ path: from, info, ...(linkTarget === undefined ? {} : { linkTarget }) });
+	return entries;
+}
+
+async function copyDirectRoot(
+	ctx: CopyContext,
+	from: string,
+	to: string,
+	info: FileInfo,
+	mode: 'copy' | 'move',
+	direct: FileDirectCopy,
+): Promise<FilePathEntry | null> {
+	const existing = await optionalStat(ctx.destination, ctx, to);
+	if (existing !== null && existing.kind !== info.kind) {
+		throw new RemoteFileFailure('conflict');
+	}
+	if (info.kind === 'other') {
+		throw new RemoteFileFailure('invalid_input');
+	}
+	const linkTarget = info.kind === 'symlink' ? await ctx.source.readlink(options(ctx, from)) : undefined;
+	const sources = mode === 'move' ? await rememberMoveSource(ctx, from, info) : [];
+	const before = ctx.transferredBytes;
+	const transferred = await direct(
+		from,
+		info.kind === 'directory',
+		(bytes) => {
+			ctx.transferredBytes = Math.max(ctx.transferredBytes, before + bytes);
+			reportProgress(ctx, from);
+		},
+		() => {
+			ctx.mutationStarted = true;
+			ctx.onMutation();
+		},
+	);
+	if (!transferred) {
+		return null;
+	}
+	ctx.remaining();
+	const result = await ctx.destination.stat({
+		path: to,
+		timeoutMs: Math.min(ctx.remaining(), RPC_TIMEOUT_MS),
+		signal: ctx.signal,
+		followLinks: false,
+	});
+	if (
+		result.kind !== info.kind ||
+		(info.kind === 'file' && result.size !== info.size) ||
+		(result.mode & 0o7777) !== (info.mode & 0o7777) ||
+		result.modifiedAt !== info.modifiedAt ||
+		(linkTarget !== undefined && (await ctx.destination.readlink(options(ctx, to))) !== linkTarget)
+	) {
+		throw new RemoteFileFailure('operation_unknown');
+	}
+	if (info.kind === 'file') {
+		ctx.transferredBytes = Math.max(ctx.transferredBytes, before + info.size);
+	}
+	ctx.completedFiles++;
+	for (const item of sources) {
+		ctx.completedSources.push(item);
+	}
+	reportProgress(ctx, from);
+	return { path: to, name: path.posix.basename(to), info: result };
+}
+
 /** Metadata is a change detector, not an atomic snapshot or conditional unlink. */
 async function validateMoveSource(
 	ctx: CopyContext,
@@ -359,7 +487,9 @@ export async function copyRemoteEntries(
 	signal: AbortSignal,
 	onProgress: (progress: CopyProgress) => void,
 	onMutation: () => void,
+	direct: FileDirectCopy,
 ): Promise<{ items: FilePathEntry[]; transferredBytes: number; completedFiles: number }> {
+	let directTransfer: FileDirectCopy | undefined = direct;
 	const sameTarget = source.targetId === destination.targetId && source.fingerprint === destination.fingerprint;
 	const ctx: CopyContext = {
 		source,
@@ -369,6 +499,9 @@ export async function copyRemoteEntries(
 		onProgress,
 		transferredBytes: 0,
 		completedFiles: 0,
+		totalBytes: 0,
+		totalFiles: paths.length,
+		totalKnown: false,
 		mutationStarted: false,
 		onMutation,
 		completedSources: [],
@@ -415,6 +548,28 @@ export async function copyRemoteEntries(
 				throw new RemoteFileFailure('conflict');
 			}
 		}
+		// Selected file roots have exact totals without a recursive pre-scan.
+		const roots = new Map<string, FileInfo>();
+		if (!(sameTarget && mode === 'move')) {
+			ctx.totalKnown = true;
+			for (const sourcePath of paths) {
+				const info = await source.stat({
+					path: sourcePath,
+					timeoutMs: Math.min(ctx.remaining(), RPC_TIMEOUT_MS),
+					signal,
+					followLinks: false,
+				});
+				roots.set(sourcePath, info);
+				if (info.kind !== 'file' || !Number.isSafeInteger(info.size) || info.size < 0) {
+					ctx.totalKnown = false;
+				} else {
+					ctx.totalBytes += info.size;
+					if (!Number.isSafeInteger(ctx.totalBytes)) {
+						ctx.totalKnown = false;
+					}
+				}
+			}
+		}
 		await mkdirParents(ctx, destinationDirectory);
 		const items: FilePathEntry[] = [];
 		for (const sourcePath of paths) {
@@ -440,18 +595,23 @@ export async function copyRemoteEntries(
 						followLinks: false,
 					});
 					ctx.completedFiles++;
-					ctx.onProgress({
-						transferredBytes: ctx.transferredBytes,
-						completedFiles: ctx.completedFiles,
-						currentFile: sourcePath,
-					});
+					reportProgress(ctx, sourcePath);
 					items.push({ path: destinationPath, name: path.posix.basename(destinationPath), info });
 					continue;
 				}
 				// Existing files/directories use the verified copy/merge and source
 				// deletion workflow; ordinary SFTP rename cannot overwrite or merge.
 			}
-			items.push(await copyOne(ctx, sourcePath, destinationPath));
+			const rootInfo = roots.get(sourcePath);
+			let copied: FilePathEntry | null = null;
+			if (directTransfer && !sameTarget && rootInfo) {
+				copied = await copyDirectRoot(ctx, sourcePath, destinationPath, rootInfo, mode, directTransfer);
+				// Probe unreachable peers once per task, then relay later roots.
+				if (copied === null) {
+					directTransfer = undefined;
+				}
+			}
+			items.push(copied ?? (await copyOne(ctx, sourcePath, destinationPath, rootInfo)));
 		}
 		if (mode === 'move') {
 			for (const item of ctx.completedSources) {

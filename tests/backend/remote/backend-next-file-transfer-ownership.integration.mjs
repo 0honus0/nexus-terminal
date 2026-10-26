@@ -126,6 +126,8 @@ async function setup(t) {
 			},
 
 			checkFingerprint: async () => undefined,
+
+			copyDirect: async () => false,
 		},
 		{ get: async () => ({ name: 'Controlled transfer owner' }) },
 		new MachineMutationService(

@@ -431,7 +431,7 @@
 
 	const pasteFileClipboard = async (target: WorkspaceRuntimeSession, destination: string) => {
 		const snapshot = registry.fileClipboard.value.value;
-		const targetPath = destination.trim();
+		const targetPath = destination;
 		if (!snapshot || !targetPath.startsWith('/')) return;
 
 		const source = registry.sessions.get(snapshot.sourceScopeId);
@@ -450,7 +450,29 @@
 			return;
 		}
 
+		const permission = pageScope.signal;
+
+		const current = () =>
+			isPageCurrent(permission) &&
+			registry.sessions.get(source.id) === source &&
+			registry.sessions.get(target.id) === target &&
+			source.state.value === 'connected' &&
+			target.state.value === 'connected';
+
 		try {
+			if (source.connection.id !== target.connection.id) {
+				if (
+					!(await feedback.confirm({
+						message: t('sendFilesModal.credentialTrustWarning'),
+						destructive: true,
+						signal: permission,
+					})) ||
+					!current() ||
+					registry.fileClipboard.value.value?.generation !== snapshot.generation
+				)
+					return;
+			}
+			if (!current()) return;
 			const taskId = await target.transferController.copyMove({
 				kind: snapshot.operation === 'cut' ? 'move' : 'copy',
 				sources: snapshot.items.map((item) => ({ scopeId: source.id, path: item.path })),
@@ -458,6 +480,7 @@
 			});
 
 			const task = await target.transferController.waitForTask(taskId);
+			if (!current()) return;
 			if (task.status === 'error' || task.status === 'unknown') {
 				feedback.notifyError(
 					task.error || task.errorKind
@@ -480,6 +503,7 @@
 			if (refreshed.some((result) => result.status === 'rejected'))
 				feedback.notifyWarning(t('fileManager.warnings.transferRefreshFailed'));
 		} catch (cause) {
+			if (!current()) return;
 			feedback.notifyError(
 				t(
 					cause instanceof TransferFailure && cause.outcomeUnknown

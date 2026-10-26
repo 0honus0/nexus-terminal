@@ -59,6 +59,8 @@ export interface ServerTransferExecution {
 	signal: AbortSignal;
 	validate(): Promise<void>;
 	onMethod(method: ServerTransferMethodUsed): void;
+	onProgress(bytes: number, percent: number): void;
+	onMutation(): void;
 }
 
 export class ServerTransferFailure extends MachineMutationRejection {

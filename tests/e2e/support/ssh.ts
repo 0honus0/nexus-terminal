@@ -162,6 +162,7 @@ const visibleFileManagerOpenButton = (page: Page): Locator =>
 	page
 		.locator('[data-workspace-surface][data-workspace-active="true"]')
 		.getByRole('button', { name: 'File Manager', exact: true })
+		.filter({ visible: true })
 		.first();
 
 export function activeFileManagerList(page: Page): Locator {

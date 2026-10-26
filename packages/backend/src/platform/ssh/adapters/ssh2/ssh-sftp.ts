@@ -591,10 +591,10 @@ export class SshSftpLease implements MachineSftpLease {
 		}
 		// ssh2's ReadStream waits for every READ reply before dispatching the
 		// next one. At 80-200ms RTT, this serializes a multi-MiB HTTP body.
-		// Keep at most eight independently acknowledged 32KiB READs ahead,
+		// Keep the pre-refactor 1MiB window of acknowledged 32KiB READs ahead,
 		// emit strictly in offset order, and never buffer an unbounded file.
 		const packetBytes = 32 * 1024;
-		const windowSize = 8;
+		const windowSize = 32;
 		const queue: Array<{ length: number; pending: Promise<Buffer> }> = [];
 		let nextOffset = start;
 		let failure: unknown = null;
@@ -644,13 +644,15 @@ export class SshSftpLease implements MachineSftpLease {
 			while (queue.length) {
 				const current = queue.shift()!;
 				const chunk = await current.pending;
+				if (chunk.length === current.length) {
+					fill();
+				}
 				if (chunk.length > 0) {
 					yield chunk;
 				}
 				if (chunk.length < current.length) {
 					break;
 				}
-				fill();
 			}
 		} catch (cause) {
 			failure = cause;

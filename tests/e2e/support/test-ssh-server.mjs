@@ -62,6 +62,12 @@ let prepareStatRequests = 0;
 let prepareMkdirRequests = 0;
 let sftpSlowDirectory = '';
 let sftpSlowDirectoryDelayMs = 0;
+let transferPeerBlocked = false;
+let transferBandwidth = 0;
+let transferForcedExit = false;
+let transferPeerProbes = 0;
+let nativeTransfersStarted = 0;
+let nativeTransfersExited = 0;
 let sftpReadDelayMs = 0;
 let sftpReadBlocked = false;
 const sftpReadWaiters = new Set();
@@ -696,6 +702,12 @@ function resetControls() {
 	prepareMkdirRequests = 0;
 	sftpSlowDirectory = '';
 	sftpSlowDirectoryDelayMs = 0;
+	transferPeerBlocked = false;
+	transferBandwidth = 0;
+	transferForcedExit = false;
+	transferPeerProbes = 0;
+	nativeTransfersStarted = 0;
+	nativeTransfersExited = 0;
 	sftpReadDelayMs = 0;
 	sftpDelayedReadCount = 0;
 	sftpReadBytesPerSecond = 0;
@@ -1198,6 +1210,24 @@ function buildStatusFixture() {
 }
 
 function runRemoteCommand(command, stream, session) {
+	if (/(?:^|\s)ssh\s/u.test(command) && command.endsWith("'true'")) {
+		transferPeerProbes++;
+		if (transferPeerBlocked) {
+			finishExec(stream, '', 'Fixture source cannot reach peer\n', 255);
+			return;
+		}
+	}
+	const nativeTransfer = command.startsWith('LC_ALL=C rsync ');
+	if (nativeTransfer) {
+		nativeTransfersStarted++;
+		if (transferForcedExit) {
+			nativeTransfersExited++;
+			finishExec(stream, '', 'Fixture transfer failed after dispatch\n', 23);
+			return;
+		}
+		if (transferBandwidth > 0) command = command.replace('rsync ', `rsync --bwlimit=${transferBandwidth} `);
+	}
+
 	if (command.includes('__NEXUS_STATUS_')) {
 		finishExec(stream, buildStatusFixture());
 		return;
@@ -1319,6 +1349,7 @@ function runRemoteCommand(command, stream, session) {
 	stream.on('data', (chunk) => child.stdin.write(chunk));
 	stream.on('close', () => child.kill('SIGTERM'));
 	child.on('close', (code, signal) => {
+		if (nativeTransfer) nativeTransfersExited++;
 		if (isArchiveCommand) archiveCommandsExited += 1;
 		session.off('signal', onSignal);
 		// The SSH wire strips SIG and the ssh2 client restores it. Preserve the
@@ -1533,6 +1564,16 @@ const controlServer = http.createServer(async (req, res) => {
 		if (req.method === 'GET' && requestUrl.pathname === '/host-key') {
 			res.writeHead(200, { 'content-type': 'application/json' });
 			res.end(JSON.stringify({ host: SSH_HOST, port: SSH_PORT, fingerprint: hostFingerprint }));
+			return;
+		}
+		if (requestUrl.pathname === '/transfer-peer' && (req.method === 'GET' || req.method === 'POST')) {
+			if (req.method === 'POST') {
+				transferPeerBlocked = requestUrl.searchParams.get('blocked') === '1';
+				transferForcedExit = requestUrl.searchParams.get('fail') === '1';
+				transferBandwidth = Number(requestUrl.searchParams.get('bandwidth') || '0');
+			}
+			res.writeHead(200, { 'content-type': 'application/json' });
+			res.end(JSON.stringify({ transferPeerProbes, nativeTransfersStarted, nativeTransfersExited }));
 			return;
 		}
 		if (req.method === 'GET' && requestUrl.pathname === '/health') {

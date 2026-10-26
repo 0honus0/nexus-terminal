@@ -144,6 +144,7 @@ export interface FileStagedWrite {
 
 /** Model-owned streaming write resource: protocol chunks never reach Platform. */
 export interface FileUploadStage {
+	/** The caller keeps bytes immutable until the returned acknowledgement settles. */
 	append(bytes: Uint8Array): Promise<void>;
 	commit(mode: 'create' | 'replace'): Promise<void>;
 	discard(): Promise<void>;

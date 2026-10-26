@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { Readable, PassThrough } from 'node:stream';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises';
@@ -264,7 +265,32 @@ await test(
 
 			run: (_id, _origin, _targets, work) => work(),
 		};
-		const service = new ServerTransferService(access, model, mutations);
+		const files = {
+			async open(targetId) {
+				return {
+					targetId,
+					fingerprint: targetId === 1 ? 'source' : 'target',
+
+					stat: async ({ path }) => ({
+						kind: path.endsWith('/a') ? 'file' : 'directory',
+						size: 1,
+						mode: 0o644,
+						modifiedAt: 1,
+						accessedAt: 1,
+						uid: 0,
+						gid: 0,
+					}),
+
+					close: async () => {},
+				};
+			},
+
+			copyDirect: async (input) => {
+				input.onMutation();
+				return model.execute(input);
+			},
+		};
+		const service = new ServerTransferService(access, model, mutations, files);
 		const payload = {
 			sourceConnectionId: 1,
 			connectionIds: [2],
@@ -401,12 +427,13 @@ await test('native secret cleanup and pinned handshake evidence remain independe
 	const size = Buffer.alloc(4);
 	size.writeUInt32BE(algorithm.length);
 	const key = Buffer.concat([size, algorithm, Buffer.from([0, 0, 0, 32]), randomBytes(32)]);
-	for (const scenario of ['cleanup_failure', 'cancel_after_dispatch', 'wrong_key']) {
+	for (const scenario of ['cleanup_failure', 'cancel_after_dispatch', 'progress_setup_failure', 'wrong_key']) {
 		const controller = new AbortController();
 		let writes = 0;
 		let closed = 0;
 		let cleanup = 0;
 		let dispatched = 0;
+		let cancelled = 0;
 		const completed = {
 			outcome: { status: 'completed', exitCode: 0, signal: null },
 			stdout: '',
@@ -422,14 +449,33 @@ await test('native secret cleanup and pinned handshake evidence remain independe
 						? { ...completed, outcome: { status: 'nonzero', exitCode: 1, signal: null } }
 						: completed;
 				}
-				if (command.startsWith('rsync -azs')) {
-					dispatched += 1;
-					if (scenario === 'cancel_after_dispatch') {
-						controller.abort();
-						return { ...completed, outcome: { status: 'unknown', reason: 'cancelled' } };
-					}
-				}
+
 				return completed;
+			},
+
+			async openRawCommand(command) {
+				assert.ok(command.startsWith('LC_ALL=C rsync -aWs'));
+				dispatched++;
+				if (scenario === 'cancel_after_dispatch') controller.abort();
+				return {
+					writable: new PassThrough(),
+
+					onStderr: () => {
+						if (scenario === 'progress_setup_failure') throw new Error('fixture progress setup');
+						return () => {};
+					},
+
+					readable: Readable.from([' 1,024 50% 1.00MB/s 0:00:01\r', ' 2,048 100% 1.00MB/s 0:00:00\n']),
+					outcome: Promise.resolve(
+						scenario === 'cancel_after_dispatch'
+							? { status: 'unknown', reason: 'cancelled' }
+							: completed.outcome,
+					),
+
+					cancel() {
+						cancelled++;
+					},
+				};
 			},
 
 			async openSftp() {
@@ -472,6 +518,10 @@ await test('native secret cleanup and pinned handshake evidence remain independe
 				validate: async () => controller.signal.throwIfAborted(),
 
 				onMethod: () => {},
+
+				onProgress: () => {},
+
+				onMutation: () => {},
 			})
 			.catch((error) => error);
 		assert.ok(failure instanceof NativeTransferFailure);
@@ -486,6 +536,7 @@ await test('native secret cleanup and pinned handshake evidence remain independe
 			assert.equal(dispatched, 1);
 			assert.equal(cleanup, 1);
 			assert.equal(closed, 1);
+			if (scenario === 'progress_setup_failure') assert.equal(cancelled, 1);
 		}
 	}
 });

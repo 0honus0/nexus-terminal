@@ -22,6 +22,7 @@ function failure(cause: unknown): ServerTransferFailure {
 		const codes = {
 			invalid_endpoint: 'unsupported_endpoint',
 			tool_missing: 'tool_unavailable',
+			peer_unreachable: 'connection_failed',
 			host_key_rejected: 'host_key_untrusted',
 			command_failed: 'transfer_failed',
 			transport_lost: 'operation_unknown',
@@ -187,6 +188,10 @@ export class ServerTransferModel {
 				validate: input.validate,
 
 				onMethod: (method) => input.onMethod(method),
+
+				onProgress: (bytes, percent) => input.onProgress(bytes, percent),
+
+				onMutation: () => input.onMutation(),
 			});
 		} catch (cause) {
 			error = failure(cause);

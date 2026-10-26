@@ -630,7 +630,8 @@ export class SftpFileResource implements FileResource {
 				}
 				request.signal.throwIfAborted();
 				try {
-					const stable = Buffer.from(bytes);
+					// append retains the caller-owned immutable view until all WRITE callbacks settle.
+					const stable = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 					for (let windowStart = 0; windowStart < stable.length; windowStart += SFTP_STAGE_WINDOW_BYTES) {
 						const windowEnd = Math.min(stable.length, windowStart + SFTP_STAGE_WINDOW_BYTES);
 						await new Promise<void>((resolve, reject) => {

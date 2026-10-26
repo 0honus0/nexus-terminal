@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
+import { createInterface, type Interface } from 'node:readline';
 import type { MachineConnection, MachineSftpLease } from '../../ssh/ssh-port.js';
 import { NativeTransferFailure } from '../transfer-port.js';
-import type { NativeTransferPort, NativeTransferRequest } from '../transfer-port.js';
-import type { ServerTransferMethodUsed } from '@nexus-terminal/shared/remote/transfers/server-values';
+import type { NativeTransferPort, NativeTransferRequest, NativeTransferMethod } from '../transfer-port.js';
 
 function quote(value: string): string {
 	return "'" + value.replaceAll("'", "'\\''") + "'";
@@ -60,14 +60,14 @@ function pinnedKey(bytes: Uint8Array, fingerprint: string, host: string, port: n
 
 /** Native source-side clients only. No application identity or task registry enters this adapter. */
 export class NativeServerTransfer implements NativeTransferPort {
-	async execute(input: NativeTransferRequest): Promise<ServerTransferMethodUsed> {
+	async execute(input: NativeTransferRequest): Promise<NativeTransferMethod> {
 		endpoint(input);
 		let fs: MachineSftpLease | null = null;
 		let created = false;
 		let mutated = false;
 		const directory = '/tmp/nexus-transfer-' + input.executionId;
 		const failures: unknown[] = [];
-		let result: ServerTransferMethodUsed | null = null;
+		let result: NativeTransferMethod | null = null;
 		try {
 			const method = await this.select(input);
 			const knownHosts = pinnedKey(input.hostPublicKey, input.hostKeyFingerprint, input.host, input.port);
@@ -78,7 +78,11 @@ export class NativeServerTransfer implements NativeTransferPort {
 				signal: input.signal,
 				timeoutMs: Math.min(15_000, input.deadline - Date.now()),
 			});
-			if (info.isSymbolicLink || info.isDirectory !== input.directory || (!info.isDirectory && !info.isFile)) {
+			if (
+				(info.isSymbolicLink && method !== 'rsync') ||
+				info.isDirectory !== input.directory ||
+				(!info.isDirectory && !info.isFile && !info.isSymbolicLink)
+			) {
 				throw new NativeTransferFailure('command_failed', 'not_started');
 			}
 			await input.validate();
@@ -108,6 +112,19 @@ export class NativeServerTransfer implements NativeTransferPort {
 				);
 			}
 			await input.validate();
+			// A source-side SSH handshake is read-only at the target. Establish
+			// peer reachability/authentication before any destination mutation;
+			// the caller may relay only when this probe definitively fails.
+			const { prefix, options } = this.sshOptions(input, directory);
+			const peer =
+				prefix +
+				'ssh ' +
+				[...options, '-p', String(input.port), input.username + '@' + input.host, 'true'].map(quote).join(' ');
+			if (!(await run(input, input.source, peer))) {
+				throw new NativeTransferFailure('peer_unreachable', 'not_started');
+			}
+			await input.validate();
+			input.onMutation();
 			mutated = true;
 			const target = await run(input, input.target, `mkdir -p -- ${quote(input.targetDirectory)}`, true);
 			if (!target) {
@@ -115,7 +132,7 @@ export class NativeServerTransfer implements NativeTransferPort {
 			}
 			await input.validate();
 			input.onMethod(method);
-			const transfer = await run(input, input.source, this.command(input, method, directory), true);
+			const transfer = await this.transfer(input, this.command(input, method, directory));
 			if (!transfer) {
 				throw new NativeTransferFailure('command_failed', 'failed');
 			}
@@ -164,7 +181,68 @@ export class NativeServerTransfer implements NativeTransferPort {
 		return result;
 	}
 
-	private async select(input: NativeTransferRequest): Promise<ServerTransferMethodUsed> {
+	private async transfer(input: NativeTransferRequest, command: string): Promise<boolean> {
+		const remaining = input.deadline - Date.now();
+		if (remaining <= 0) {
+			throw new NativeTransferFailure('transport_lost', 'not_started');
+		}
+		const signal = AbortSignal.any([input.signal, AbortSignal.timeout(remaining)]);
+		const running = await input.source.openRawCommand(command, signal, 'signal');
+		let stopStderr: (() => void) | undefined;
+		let lines: Interface | undefined;
+		try {
+			stopStderr = running.onStderr(() => undefined);
+			lines = createInterface({ input: running.readable, crlfDelay: Infinity });
+			running.writable.end();
+			for await (const line of lines) {
+				if (signal.aborted) {
+					continue;
+				}
+				// LC_ALL=C pins rsync's numeric format. Ignore filenames and
+				// diagnostics; only native progress facts leave this adapter.
+				const match = /^\s*([0-9,]+)\s+(\d{1,3})%\s/u.exec(line);
+				if (!match) {
+					continue;
+				}
+				const bytes = Number(match[1]!.replaceAll(',', ''));
+				const percent = Number(match[2]);
+				if (Number.isSafeInteger(bytes) && bytes >= 0 && percent <= 100) {
+					input.onProgress(bytes, percent);
+				}
+			}
+			const result = await running.outcome;
+			if (result.status === 'unknown') {
+				throw new NativeTransferFailure('transport_lost', 'unknown');
+			}
+			return result.status === 'completed';
+		} catch (cause) {
+			const failures: unknown[] = [cause];
+			try {
+				running.cancel();
+			} catch (cancelFailure) {
+				failures.push(cancelFailure);
+			}
+			try {
+				await running.outcome;
+			} catch (exitFailure) {
+				failures.push(exitFailure);
+			}
+			if (failures.length > 1) {
+				throw new NativeTransferFailure('transport_lost', 'unknown', {
+					cause: new AggregateError(failures, 'Transfer progress and shutdown failed'),
+				});
+			}
+			throw cause;
+		} finally {
+			try {
+				lines?.close();
+			} finally {
+				stopStderr?.();
+			}
+		}
+	}
+
+	private async select(input: NativeTransferRequest): Promise<NativeTransferMethod> {
 		const auth = input.authentication;
 		const password = auth.kind === 'password' || auth.passphrase !== null;
 		const required = ['ssh', ...(password ? ['sshpass'] : [])];
@@ -176,7 +254,12 @@ export class NativeServerTransfer implements NativeTransferPort {
 		if (input.method !== 'scp') {
 			const source = await run(input, input.source, 'command -v rsync >/dev/null 2>&1');
 			const target = await run(input, input.target, 'command -v rsync >/dev/null 2>&1');
-			if (source && target) {
+			if (
+				source &&
+				target &&
+				(await run(input, input.source, 'rsync --info=progress2 --outbuf=L --version >/dev/null 2>&1')) &&
+				(await run(input, input.target, 'rsync -s --version >/dev/null 2>&1'))
+			) {
 				return 'rsync';
 			}
 			if (input.method === 'rsync') {
@@ -191,7 +274,7 @@ export class NativeServerTransfer implements NativeTransferPort {
 		return 'scp';
 	}
 
-	private command(input: NativeTransferRequest, method: ServerTransferMethodUsed, directory: string): string {
+	private sshOptions(input: NativeTransferRequest, directory: string): { prefix: string; options: string[] } {
 		const options = [
 			'-F',
 			'/dev/null',
@@ -227,6 +310,11 @@ export class NativeServerTransfer implements NativeTransferPort {
 				options.push('-o', 'BatchMode=yes');
 			}
 		}
+		return { prefix, options };
+	}
+
+	private command(input: NativeTransferRequest, method: NativeTransferMethod, directory: string): string {
+		const { prefix, options } = this.sshOptions(input, directory);
 		const host = isIP(input.host) === 6 ? '[' + input.host + ']' : input.host;
 		const targetDirectory = input.targetDirectory === '/' ? '/' : input.targetDirectory + '/';
 		const destination = input.username + '@' + host + ':' + quote(targetDirectory);
@@ -234,11 +322,18 @@ export class NativeServerTransfer implements NativeTransferPort {
 			const ssh = prefix + 'ssh ' + [...options, '-p', String(input.port)].map(quote).join(' ');
 			// Secluded arguments travel in the rsync protocol; shell quoting inside the remote path would become literal.
 			const remotePath = input.username + '@' + host + ':' + targetDirectory;
-			return 'rsync -azs -e ' + quote(ssh) + ' -- ' + quote(input.sourcePath) + ' ' + quote(remotePath);
+			return (
+				'LC_ALL=C rsync -aWs --info=progress2 --outbuf=L --no-inc-recursive -e ' +
+				quote(ssh) +
+				' -- ' +
+				quote(input.sourcePath) +
+				' ' +
+				quote(remotePath)
+			);
 		}
 		return (
 			prefix +
-			'scp -O -q ' +
+			'scp -O -p -q ' +
 			[
 				...options,
 				'-P',
