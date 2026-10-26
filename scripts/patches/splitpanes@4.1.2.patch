@@ -1,5 +1,5 @@
 diff --git a/dist/splitpanes.esm.js b/dist/splitpanes.esm.js
-index 68f7a5f6d43bc1d326858f4855fd0dbf7077cf98..f842ee989023a0ff04c3ca021c885e6bb53e1010 100644
+index 68f7a5f6d43bc1d326858f4855fd0dbf7077cf98..d0d60995d0b4dde1e946c25371484caa15269780 100644
 --- a/dist/splitpanes.esm.js
 +++ b/dist/splitpanes.esm.js
 @@ -57,7 +57,9 @@ var y = /* @__PURE__ */ Object.assign({ inheritAttrs: !1 }, {
@@ -13,17 +13,19 @@ index 68f7a5f6d43bc1d326858f4855fd0dbf7077cf98..f842ee989023a0ff04c3ca021c885e6b
  			let n = e.target.closest(".splitpanes__splitter");
  			if (n) {
  				let { left: t, top: r } = n.getBoundingClientRect(), { clientX: i, clientY: a } = "ontouchstart" in window && e.touches ? e.touches[0] : e;
-@@ -69,8 +71,8 @@ var y = /* @__PURE__ */ Object.assign({ inheritAttrs: !1 }, {
+@@ -69,9 +71,9 @@ var y = /* @__PURE__ */ Object.assign({ inheritAttrs: !1 }, {
  				L(F(e)), $("resize", { event: e }, !0);
  			}));
  		}, A = (e) => {
 -			w.value.dragging && (window.getSelection()?.removeAllRanges(), $("resized", { event: e }, !0)), w.value.mouseDown = !1, w.value.activeSplitter = null, setTimeout(() => {
 -				w.value.dragging = !1, D(), document.documentElement.style.cursor = "";
+-			}, 100);
 +			w.value.dragging && (window.getSelection()?.removeAllRanges(), $("resized", { event: e }, !0)), w.value.mouseDown = !1, w.value.activeSplitter = null, D(), document.documentElement.style.cursor = "", dragEndTimer = setTimeout(() => {
 +				w.value.dragging = !1;
- 			}, 100);
++			}, 0);
  		}, j = (e, t) => {
  			"ontouchstart" in window && (e.preventDefault(), T.value.splitter === t ? (clearTimeout(T.value.timeoutId), T.value.timeoutId = null, M(e, t), T.value.splitter = null) : (T.value.splitter = t, T.value.timeoutId = setTimeout(() => T.value.splitter = null, 500))), w.value.dragging || $("splitter-click", {
+ 				event: e,
 @@ -128,9 +130,22 @@ var y = /* @__PURE__ */ Object.assign({ inheritAttrs: !1 }, {
  				nextReachedMinPanes: 0
  			}, r = 0 + (s.pushOtherPanes ? 0 : n.prevPanesSize), i = 100 - (s.pushOtherPanes ? 0 : n.nextPanesSize);
@@ -68,7 +70,7 @@ index 68f7a5f6d43bc1d326858f4855fd0dbf7077cf98..f842ee989023a0ff04c3ca021c885e6b
  			let { class: e, ...t } = p;
  			return i("div", {
 diff --git a/src/components/splitpanes/splitpanes.vue b/src/components/splitpanes/splitpanes.vue
-index 02643569a3c1d827e844b4486297dee6891f9bab..1906e2d7e4aea1665a70ca6a88940a30c3add09e 100644
+index 02643569a3c1d827e844b4486297dee6891f9bab..59b1956f9e8fccab5767b68b7f2a32b0dc2bed70 100644
 --- a/src/components/splitpanes/splitpanes.vue
 +++ b/src/components/splitpanes/splitpanes.vue
 @@ -46,6 +46,8 @@ const splitterTaps = ref({ // Used to detect double click on touch devices.
@@ -98,11 +100,11 @@ index 02643569a3c1d827e844b4486297dee6891f9bab..1906e2d7e4aea1665a70ca6a88940a30
 -    unbindEvents()
 -    document.documentElement.style.cursor = ''
 -  }, 100)
-+  // Detach this drag immediately so its delayed click guard cannot unbind
-+  // the listeners of a new drag started within the next 100ms.
++  // Detach this drag immediately. Release the CSS pointer-event guard just
++  // after the synchronous click, so it cannot swallow the next real drag.
 +  unbindEvents()
 +  document.documentElement.style.cursor = ''
-+  dragEndTimer = setTimeout(() => { touch.value.dragging = false }, 100)
++  dragEndTimer = setTimeout(() => { touch.value.dragging = false }, 0)
  }
  
  // If touch device, detect double tap manually (2 taps separated by less than 500ms).

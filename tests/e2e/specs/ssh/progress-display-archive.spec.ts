@@ -265,7 +265,10 @@ test('archive failure uses Toast and leaves both progress views without a failed
 	// Keep the real browser listing stale while the source disappears remotely.
 	await fs.unlink(path.resolve('.tmp/ssh-root/archive-source.txt'));
 	await startZipCompression(page, 'archive-source.txt');
-	await expect(page.getByRole('alert').filter({ hasText: 'Compression failed' })).toBeVisible();
+	const failureToast = page.getByRole('alert').filter({ hasText: 'Compression failed' });
+	await expect(failureToast).toBeVisible();
+	await failureToast.getByRole('button', { name: 'Close', exact: true }).click();
+	await expect(failureToast).toBeHidden();
 	await expect(visibleProgressTask(page, 'archive-source.zip')).toHaveCount(0);
 	await expect(visibleProgressCenter(page)).toHaveCount(0);
 	await closeConnectedFileManager(page);

@@ -56,7 +56,9 @@
 			if (!wasDesktop) desktopOutlineVisible.value = true;
 		}
 		void nextTick(() => {
-			if (updateAvailableWidth() && props.active) scrollToPage(currentPage.value, 'auto');
+			if (updateAvailableWidth() && props.active) {
+				scrollToPage(currentPage.value, 'auto', { preserveHorizontal: true });
+			}
 		});
 	};
 
@@ -73,7 +75,7 @@
 	let savedScrollLeft = 0;
 	let savedCurrentPage = 1;
 	let savedNeedsPageAnchor = false;
-	let pendingPageJump: { page: number; behavior: ScrollBehavior } | null = null;
+	let pendingPageJump: { page: number; behavior: ScrollBehavior; preserveHorizontal: boolean } | null = null;
 	let pinchGesture: { startDistance: number; startZoom: number; targetZoom: number } | null = null;
 
 	const pageCount = computed(() => document.value?.numPages ?? 0);
@@ -166,7 +168,7 @@
 		return true;
 	};
 
-	const applyPageScroll = (page: number, behavior: ScrollBehavior): boolean => {
+	const applyPageScroll = (page: number, behavior: ScrollBehavior, preserveHorizontal: boolean): boolean => {
 		const container = scroller.value;
 		const target = pageElement(page);
 		if (!container || !target) return false;
@@ -176,7 +178,9 @@
 		restoringScroll = true;
 		container.scrollTo({
 			top: Math.max(0, container.scrollTop + targetRect.top - containerRect.top - 8),
-			left: 0,
+			// A late zoom/resize anchor must not undo horizontal scrolling made
+			// while PDF.js was still measuring and rendering the new page size.
+			left: preserveHorizontal ? container.scrollLeft : 0,
 			behavior,
 		});
 		if (restoreFrame) cancelAnimationFrame(restoreFrame);
@@ -200,16 +204,20 @@
 	const finishPendingPageJump = (): boolean => {
 		const pending = pendingPageJump;
 		if (!pending || !props.active || !hasMeasuredPagesThrough(pending.page)) return false;
-		if (!applyPageScroll(pending.page, pending.behavior)) return false;
+		if (!applyPageScroll(pending.page, pending.behavior, pending.preserveHorizontal)) return false;
 		pendingPageJump = null;
 		savedNeedsPageAnchor = false;
 		return true;
 	};
 
-	const scrollToPage = (page: number, behavior: ScrollBehavior = 'auto'): void => {
+	const scrollToPage = (
+		page: number,
+		behavior: ScrollBehavior = 'auto',
+		options: { preserveHorizontal?: boolean } = {},
+	): void => {
 		const targetPage = Math.min(Math.max(Math.round(page), 1), Math.max(1, pageCount.value));
 		currentPage.value = targetPage;
-		pendingPageJump = { page: targetPage, behavior };
+		pendingPageJump = { page: targetPage, behavior, preserveHorizontal: options.preserveHorizontal === true };
 		if (!desktop.value) outlineOpen.value = false;
 		void nextTick(finishPendingPageJump);
 	};
@@ -250,13 +258,17 @@
 		const anchorPage = currentPage.value;
 		zoomPercent.value = Math.min(400, Math.max(25, Math.round(percent)));
 		fitWidth.value = false;
-		void nextTick(() => requestAnimationFrame(() => scrollToPage(anchorPage, 'auto')));
+		void nextTick(() =>
+			requestAnimationFrame(() => scrollToPage(anchorPage, 'auto', { preserveHorizontal: true })),
+		);
 	};
 
 	const setFitWidth = (): void => {
 		const anchorPage = currentPage.value;
 		fitWidth.value = true;
-		void nextTick(() => requestAnimationFrame(() => scrollToPage(anchorPage, 'auto')));
+		void nextTick(() =>
+			requestAnimationFrame(() => scrollToPage(anchorPage, 'auto', { preserveHorizontal: true })),
+		);
 	};
 
 	const handlePageScale = (page: number, percent: number): void => {
@@ -438,7 +450,7 @@
 		void nextTick(() =>
 			requestAnimationFrame(() => {
 				pinchScale.value = 1;
-				scrollToPage(anchorPage, 'auto');
+				scrollToPage(anchorPage, 'auto', { preserveHorizontal: true });
 			}),
 		);
 	};
@@ -508,7 +520,7 @@
 					if (updateAvailableWidth()) savedNeedsPageAnchor = true;
 					if (savedNeedsPageAnchor) {
 						restoringScroll = false;
-						scrollToPage(savedCurrentPage, 'auto');
+						scrollToPage(savedCurrentPage, 'auto', { preserveHorizontal: true });
 						return;
 					}
 					container.scrollTo({ top: savedScrollTop, left: savedScrollLeft, behavior: 'auto' });
@@ -529,7 +541,9 @@
 		resizeObserver = useResizeObserver(scroller.value, () => {
 			if (!props.active) return;
 			const anchorPage = currentPage.value;
-			if (updateAvailableWidth()) scrollToPage(anchorPage, 'auto');
+			if (updateAvailableWidth()) {
+				scrollToPage(anchorPage, 'auto', { preserveHorizontal: true });
+			}
 		});
 
 		void loadDocument();

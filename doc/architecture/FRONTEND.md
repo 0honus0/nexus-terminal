@@ -1722,4 +1722,6 @@ image_generate 仅负责生成并保存 App 文件，返回给模型的结果只
 
 Workspace 传输失败呈现：原 TransferController 保留 error/unknown 真实结算，WorkspaceSessionSurface 与 WorkspacePage 通过 transfers 的 `isProgressTaskVisible` 统一过滤浮动进度、恢复按钮与隐藏任务列表。各操作原等待回执的 owner 发出 Toast，上传在批次完成回执中通知，准备失败只由原提交 catch 通知，不重复订阅同一错误。密码拒绝仍进入原重输流程。此展示过滤不取消远端任务、不解除机器突变未知围栏。
 
-Splitpanes 连续拖动的生命周期补丁：mouseup 立即解除本次全局拖动监听，100ms click 防抖只保留 dragging 标记；新 mousedown 清除上次定时器，卸载清理监听和定时器，防止旧拖动延迟收尾解除新拖动的监听。正常尺寸和布局不变。
+Splitpanes 连续拖动的生命周期补丁：mouseup 立即解除本次全局拖动监听，click 保护仅保留到本次同步 click 结束后的下一任务；新 mousedown 清除上次定时器，卸载清理监听和定时器，防止旧拖动延迟收尾解除新拖动的监听，且不保留100ms全页pointer-events屏障。正常尺寸和布局不变。
+
+PDF 的异步页定位显式区分主动跳页与缩放/尺寸锚定：前者保持原重置横向位置，后者在实际应用时读取当前scrollLeft，避免PDF.js晚到尺寸和锚定覆盖用户已经作出的横向滚动。不调整模板、滚动条或样式。

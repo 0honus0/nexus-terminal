@@ -1859,3 +1859,5 @@ e2f66bdf对应 https://github.com/0honus0/nexus-terminal/actions/runs/4026284297
 - 新正式回归：archive-cancel-recovery校验ZIP和tar.gz实际条目/内容与verified_warning；progress-display-archive验证真实来源删除后压缩失败Toast、两处进度无残留、恢复来源后仍能压缩；复制取消保留unknown Toast且不显示失败卡片。
 - 40298917003失败复核：图片用例传错分页before游标，实际工具生成成功；分片6 trace显示第二次拖动发生在前次100ms延迟解绑前，旧timer中断新拖动。分别修复测试参数和Splitpanes真实事件生命周期，不弱化交互断言。
 - 本轮本地：根check、完整build、全量format:all:check与受影响E2E严格tsc通过（日志/tmp/nexus-zip-{check,build,lint,types}.log）；正式Actions待当前提交完整回归，镜像待全绿发布。
+
+33e1cb77 / [40302424259](https://github.com/0honus0/nexus-terminal/actions/runs/40302424259) 实际结果：质量与Docker通过，分片1/2/4/7/8通过。生成图片的预览/下载/刷新持久化通过；新Unix socket/FIFO目录ZIP与tar.gz内容校验通过；复制取消unknown Toast/隐藏失败任务通过。分片5仅新增用例没有先关闭驻留Toast导致后续点击被遮挡，修测试正常关闭流程；分片6首跑极限恢复在松手后97ms开始，100ms全页pointer-events保护吞掉mousedown，重试通过但整轮按flaky拒绝，补丁将保护缩至同步click结束后的下一任务；分片3原PDF横向滚动首跑失败、重试通过，trace记录scrollbar613px后最终缩放宽度才更新至1284px，晚到几何锚定重置left0，修复仅几何锚定保留当前横向滚动。既有产品UI模板/样式未变，原双向拖动与PDF横滚断言保留，待下一SHA完整回归。
