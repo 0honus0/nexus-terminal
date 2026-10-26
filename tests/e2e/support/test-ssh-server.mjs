@@ -223,7 +223,13 @@ function remapArchiveExecWorkingDirectory(command) {
 
 function remapTransferExecPaths(command) {
 	if (!/(?:^|[\s/])(scp|rsync)(?:[\s']|$)/.test(command)) return command;
-	return command.replace(/'((?:\/)[^']*)'/g, (match, remotePath) => {
+	// rsync -s sends the destination in its protocol, bypassing the peer's
+	// exec-command mapping. Translate the remote operand before launching it.
+	const peerPaths = command.replace(/'([^'@\s]+@(?:\[[^\]]+\]|[^':\s]+):)(\/[^']*)'/g, (match, peer, remotePath) => {
+		if (remotePath === rootDir || remotePath.startsWith(rootDir + '/')) return match;
+		return "'" + (peer + resolveRemotePath(remotePath)).replaceAll("'", "'\"'\"'") + "'";
+	});
+	return peerPaths.replace(/'((?:\/)[^']*)'/g, (match, remotePath) => {
 		if (remotePath.startsWith(rootDir) || existsSync(remotePath)) return match;
 		const mapped = resolveRemotePath(remotePath);
 		return existsSync(mapped) ? JSON.stringify(mapped) : match;

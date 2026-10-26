@@ -1931,3 +1931,7 @@ a0cb4f49正式40319856905全部质量/构建/Docker和8个分片通过，新增�
 首轮25561d1b / [40340550595](https://github.com/0honus0/nexus-terminal/actions/runs/40340550595)：质量/构建/Docker与7分片通过，新增前端容量及列表分页回归通过；分片2新增直传/中转UI两例均在打开目标文件管理器前置断言失败，重试相同。trace/error-context明确已有可见目标dialog及目录，helper却以全文“File Manager”的first匹配首会话隐藏编辑器提示。替换为既有可见dialog定位，实际用户操作、进度/内容和路由证据断言保持。此轮不算验收通过，待修正后新SHA完整回归。
 
 可见弹窗修正静态：根check、全量format:all:check、目标E2E严格tsc、ESLint与git diff --check通过，日志`/tmp/nexus-e2e-visibility-{check,format,types}.log`。产品代码无新增变化，无需重复产品构建；待新SHA正式回归，不发布。
+
+第二轮1e9f8bac / [40342500710](https://github.com/0honus0/nexus-terminal/actions/runs/40342500710)：质量/构建/Docker、7分片及中转UI进度/哈希首跑通过。直传原生进度正常，9.4秒后SFTP核验not_found并发出failed/operation_unknown；两次相同。fixture的remapTransferExecPaths仅替换单独绝对路径，rsync -s的user@host:/folder-seed/目的路径经协议发送，没有在发起端映射到测试虚拟根，接收端exec无法重写协议内路径。修正夹具远端参数映射，保留真实原生传输、限速、最终SFTP核验及哈希；未降低产品unknown围栏或改UI。待新SHA完整验证。
+
+夹具远端路径修正静态：根check、全量format:all:check、MJS语法、目标ESLint与diff通过；日志`/tmp/nexus-e2e-peer-path-{check,format}.log`。两轮源码复核确认实际rootDir路径不重复映射、原凭据临时目录不变、旧协议路径与新页面虚拟路径归同一fixture文件。无产品源码变化。
