@@ -3211,3 +3211,9 @@ HTTP 框架暂缓、Zod 已取消；ACP 保持，Docker 保留 SSH CLI。这些�
 八节：① 仅剩模型发现及审批交互旧用例；② 原host/preset-plugin用例owner；③ 沿既有页面→Workspace→Shared契约；④ 无产品类型/协议变化；⑤ Update model list与Tasks待审批卡片真实入口；⑥ 批准前核对原审批ID/hash和审计，批准后只读核对原回执/实际命令结果/approved历史；⑦ 保留finally取消与原操作身份，无自动写入重试；⑧ 两轮源码复审、E2E严格tsc/ESLint/格式、第三轮正式全量远程。
 
 四表：功能对应保留发现/协议保存/未知恢复、审批原版本/hash/命令输出；职责仍测试owner，无UI修改；类型归属无新增；证据为第二轮质量/Docker及6分片通过，剩2用例定位修正后待第三轮。
+
+### 第三轮审批面板竞态（2026-10-26）
+
+40262842979质量、Docker及7个分片通过；分片3的完整插件用例首次失败、重试通过，按failOnFlakyTests仍判失败。trace显示waitNativeApproval的API读取先于WS卡片交付，测试在读取aria-expanded=false与点击之间，产品的同步watch自动展开Tasks，随后测试点击反而关闭面板。产品审批卡片与附件完整链在重试中通过。
+
+八节增量：① 仅修测试时序；② 原preset-plugin用例owner；③ API确认事实后等待现有WS→同步watch→面板；④ 无类型变动；⑤ 断言aria-expanded=true与Tasks可见，不再手动toggle；⑥ 保留原ID/hash/版本/审计/实际命令输出全部断言；⑦ 不增加重试或延长超时；⑧ 两轮源码审核、严格tsc/目标ESLint/格式，第四轮正式全量回归。四表结论：功能验证增强为自动展开；职责和类型不变；完成证据待新SHA远程确认。另修正文档SDK方法总数为27并补threads.delete。

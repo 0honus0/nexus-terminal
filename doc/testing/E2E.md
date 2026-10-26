@@ -1733,3 +1733,9 @@ D17：不新增/运行本地行为、浏览器/E2E或付费图片请求。现有
 剩余测试修正：发现按钮当前翻译为Update model list；审批不按原始JSON摘要查找，而在Tasks侧栏按工具名及实际Approve and run按钮定位。批准前展开Normalized operation核对ID/hash并打开审计；批准后核对原请求expectedVersion/operationHash及命令真实结果，并验证待审批卡片消失、历史为approved。避免对批准后已退出的待审批卡片继续点击。两轮源码审查保留原授权/哈希/版本/执行结果断言，不改产品UI或业务逻辑。完整日志/tmp/nexus-e2e-job-121375378{516,538}.log。第三轮全量远程待验。
 
 本批仅两处既有E2E及文档变更；目标ESLint、全部已变更E2E严格tsc、目标格式及git diff --check通过，日志/tmp/nexus-e2e-round3-{lint,types,format}.log。未重跑本地行为测试或修改产品UI。第三轮将按新SHA执行完整正式工作流。
+
+### 第三轮远程反馈（40262842979）
+
+e2f66bdf对应 https://github.com/0honus0/nexus-terminal/actions/runs/40262842979 ：质量、Docker及分片1/2/4/5/6/7/8通过；分片3仅完整插件审批出现一次flaky，重试后命令、unknown与上传/下载完整流程均通过，failOnFlakyTests正确阻止假绿。
+
+原trace已下载/tmp/nexus-e2e-40262842979-artifacts3，解压/tmp/nexus-e2e-round3-trace；日志/tmp/nexus-e2e-job-121378765711.log。证据：测试读取折叠状态后点击前，WS审批到达触发产品同步watch展开；测试toggle随后关闭，错误截图Tasks完全不存在而请求徽标已为1。修正为等待既有自动展开并核对Tasks可见，保留原卡片/版本/hash/审计/命令与附件断言，不改产品UI、不放宽flaky标准。两轮源码审核确认该用例是唯一waitNativeApproval后立即toggle面板入口。严格tsc、目标ESLint/格式及diff后按新SHA第四轮远程回归。

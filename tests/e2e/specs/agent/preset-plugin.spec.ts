@@ -984,7 +984,13 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 		]);
 		try {
 			const approval = await waitNativeApproval(task, run.id, 'shell_execute');
-			await openNativeTaskPanel(page);
+			// Approval delivery opens Tasks automatically. Toggling here races the
+			// WebSocket update and can close the panel just as the card arrives.
+			await expect(hub.getByRole('button', { name: 'Show or hide task panel', exact: true })).toHaveAttribute(
+				'aria-expanded',
+				'true',
+			);
+			await expect(hub.getByRole('complementary', { name: 'Tasks', exact: true })).toBeVisible();
 			const article = hub
 				.getByRole('complementary', { name: 'Tasks', exact: true })
 				.locator('article')
