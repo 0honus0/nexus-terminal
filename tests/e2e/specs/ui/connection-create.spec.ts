@@ -118,6 +118,18 @@ test('regular connection form tests and creates a persisted working SSH connecti
 
 	await slowStep('failed SSH tests render an inline red result without replacing the form', async () => {
 		await form.locator('#conn-port').fill('1');
+		const failures: ReturnType<typeof readConnectionTestFailure>[] = [];
+		// Capture the real backend reply before handing it to Chromium: CDP may
+		// evict the body by the time the click action has completed.
+		await page.route(
+			'**/api/v1/targets/connections/test-unsaved',
+			async (route) => {
+				const response = await route.fetch({ maxRetries: 0, maxRedirects: 0 });
+				failures.push(readConnectionTestFailure(await response.json()));
+				await route.fulfill({ response });
+			},
+			{ times: 1 },
+		);
 		const responsePromise = page.waitForResponse(
 			(response) =>
 				response.url().endsWith('/api/v1/targets/connections/test-unsaved') &&
@@ -126,7 +138,7 @@ test('regular connection form tests and creates a persisted working SSH connecti
 		await form.getByRole('button', { name: 'Test Connection', exact: true }).click();
 		const response = await responsePromise;
 		expect(response.status()).toBe(422);
-		expect(readConnectionTestFailure(await response.json())).toEqual({ code: 'connection_failed' });
+		expect(failures).toEqual([{ code: 'connection_failed' }]);
 		const result = form.locator('footer [data-ui="badge"][data-tone="danger"]');
 		await expect(result).toBeVisible();
 		await expect(result).toHaveAttribute('data-tone', 'danger');

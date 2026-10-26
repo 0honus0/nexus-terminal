@@ -1935,3 +1935,7 @@ a0cb4f49正式40319856905全部质量/构建/Docker和8个分片通过，新增�
 第二轮1e9f8bac / [40342500710](https://github.com/0honus0/nexus-terminal/actions/runs/40342500710)：质量/构建/Docker、7分片及中转UI进度/哈希首跑通过。直传原生进度正常，9.4秒后SFTP核验not_found并发出failed/operation_unknown；两次相同。fixture的remapTransferExecPaths仅替换单独绝对路径，rsync -s的user@host:/folder-seed/目的路径经协议发送，没有在发起端映射到测试虚拟根，接收端exec无法重写协议内路径。修正夹具远端参数映射，保留真实原生传输、限速、最终SFTP核验及哈希；未降低产品unknown围栏或改UI。待新SHA完整验证。
 
 夹具远端路径修正静态：根check、全量format:all:check、MJS语法、目标ESLint与diff通过；日志`/tmp/nexus-e2e-peer-path-{check,format}.log`。两轮源码复核确认实际rootDir路径不重复映射、原凭据临时目录不变、旧协议路径与新页面虚拟路径归同一fixture文件。无产品源码变化。
+
+第三轮b1ba1399 / [40345176173](https://github.com/0honus0/nexus-terminal/actions/runs/40345176173)：质量/构建/Docker及7分片通过，直传和中转页面用例分别17秒/16秒首次通过，分片2全53项通过；DOM多个中间进度、实际总字节、WS completed后卡片退役、源/目标SHA-256及零/精确SFTP READ均通过。分片7现有connection-create失败后重试通过（整轮flaky拒绝），原因是浏览器response.json的CDP Network.getResponseBody返回No data found；页面快照仍有SSH connection failed错误结果。改测试一次性route.fetch捕获真实后端422正文并严格解码，route.fulfill交付同一响应；不重发、不伪造返回、不删除正文或UI断言。新SHA全量回归待验。
+
+连接表单响应采集修正静态：根check、全量format:all:check、目标E2E严格tsc、ESLint和diff通过，日志`/tmp/nexus-e2e-connection-reply-{check,format,types}.log`。两轮复核一次性路由只覆盖失败测试POST，原请求内容/认证和真实响应保留，后续正常测试无拦截；无产品变化。
