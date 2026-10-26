@@ -1871,3 +1871,7 @@ e2f66bdf对应 https://github.com/0honus0/nexus-terminal/actions/runs/4026284297
 正式回归新增：20,005个文件及70层子目录压缩，检查ZIP实际条目、末项/深层文件正文、完成后SFTP stat，并通过夹具OPENDIR观察断言压缩不遍历SFTP目录；既有socket/FIFO用例改为验证原生行为，ZIP跳过两者并核验warning，TAR保留FIFO元数据、跳过socket，普通文件正文保持。取消/后续压缩与目标位于源目录内的既有断言保留。
 
 两轮源码复核覆盖Service→Model→Native完整参数迁移、无人消费类型删除、随机原生退出标记与进度隔离、非零ZIP独立zip -T、临时输出字面量排除、取消/未知与清理；未以进度数作为源树完整性证明。静态检查：根check、完整构建（前端无后续源码变化）、最终Backend构建、全量format:all:check、变更E2E严格TypeScript及git diff --check通过。最终日志 `/tmp/nexus-native-archive-{check,backend-build,format,e2e-types}.log`；本轮正式远程Actions尚待执行，不沿用前轮469项通过作为本轮证据。未更新生产容器。
+
+首轮 [40310375522](https://github.com/0honus0/nexus-terminal/actions/runs/40310375522) 对应fd3c2c95：质量/构建/Docker及6个分片通过。新增大目录用例3.3秒通过，实际ZIP20,077项与两处正文、零SFTP OPENDIR、完成后stat均通过；原生ZIP/TAR特殊文件行为通过。分片3缺失源后下一次压缩和分片7失败Toast两项各失败两次，均为代码问题：命令已退出且私有输出不存在/已删除，压缩catch仍包为operation_unknown并阻塞持久突变claim，前端显示未知提示。新增FileArchiveDiscarded仅在未开始发布、原生退出已确认、私有输出已清理、原异常非unknown时产生；最终专属lease关闭失败仍升级RemoteResourceCleanupFailure；已尝试rename/replace、失联或未知原异常不降级。协议用例保留后续真实ZIP读取并明确断言普通失败消息，UI用例不修改。待下一SHA完整回归，失败轮不作发布依据。
+
+失败收尾补修静态：根check、Backend构建、全量格式、E2E严格TypeScript与diff检查通过，日志 `/tmp/nexus-native-recovery-{check,build,format,e2e-types}.log`。两轮复核确认具名确定失败只在私有输出删除后产生，实际lease关闭失败可覆盖并保留全部因果，批量claim分类沿既有RemoteFileFailure分支结算；既有UI失败Toast用例不改。正式回归待补修提交。

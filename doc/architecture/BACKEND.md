@@ -505,7 +505,7 @@ file-copy 由 Service 在首次副作用前预检整批目标与源的重叠。�
 
 file-copy以256 KiB固定窗口聚合读取，逐窗等待stage append确认，保持顺序、背压与失败时原迭代器排空/关闭，不并发调用stage。upload协议帧仍最多1 MiB，Service内部按512 KiB批次写入，每批开始前检查discarding；取消不abort独立lease，只停止后续批次，当前批次确认后由原worker清理stage，不将部分帧计为完整progress。
 
-压缩源递归归原生 ZIP/TAR 工具，不在 Files Service 或 SFTP 重复遍历；删除源树计数/深度预算、特殊节点清单及其 `FileArchiveSources` 类型。Native Adapter 的条目输出仅转换成展示进度，不作为源树完整性的证明；随机原生命令结束标记与进程退出结果负责完成判定，Service 确认临时产物后发布，非零无密码 ZIP 仍须独立 `zip -T` 核验才可返回 `verified_warning`。特殊节点遵循工具行为：ZIP 跳过 FIFO/socket，GNU tar 保留 FIFO 元数据并忽略 socket；解压仍独立拒绝特殊成员。错误不公开原始工具输出或远端路径。
+压缩源递归归原生 ZIP/TAR 工具，不在 Files Service 或 SFTP 重复遍历；删除源树计数/深度预算、特殊节点清单及其 `FileArchiveSources` 类型。Native Adapter 的条目输出仅转换成展示进度，不作为源树完整性的证明；随机原生命令结束标记与进程退出结果负责完成判定，Service 确认临时产物后发布，非零无密码 ZIP 仍须独立 `zip -T` 核验才可返回 `verified_warning`。特殊节点遵循工具行为：ZIP 跳过 FIFO/socket，GNU tar 保留 FIFO 元数据并忽略 socket；解压仍独立拒绝特殊成员。原生命令已退出、尚未尝试发布且私有输出已删除/确认不存在时，具名 `FileArchiveDiscarded` 表示确定失败，沿既有 RemoteFileFailure 分类结算机器突变名额并发送普通失败；专属资源关闭失败仍覆盖为清理未知，已经尝试rename/replace或原始未知错误不降级。错误不公开原始工具输出或远端路径。
 
 Files Service 统一维护每 Workspace 16 个 prepare/upload/copy-move/archive 活跃名额，排队与清理失败任务计入总数；同步检查后立即登记，prepare 收尾释放名额，已完成 allowlist 独立缓存。FileArchiveModel 将 NativeArchiveFailure.cleanup_failed 显式转换为模块具名清理失败，不以普通 unknown 抹除生命周期事实。
 

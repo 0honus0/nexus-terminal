@@ -5,7 +5,7 @@ import type {
 	WorkspaceArchiveFormat,
 } from '@nexus-terminal/shared/remote/transfers/values';
 import type { RemoteFileErrorCode } from '@nexus-terminal/shared/remote/files/values';
-import type { FilePathEntry, RemoteFileFailure } from './file-types.js';
+import { RemoteFileFailure, type FilePathEntry } from './file-types.js';
 import type { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 
 export type FileCopyMoveEvent =
@@ -86,6 +86,14 @@ export interface TransferResourceOwner {
 export type FileMutationIntent =
 	| { kind: 'upload'; destination: string }
 	| { kind: 'compression'; sources: readonly string[]; destination: string; owner: TransferResourceOwner };
+
+/** The native writer exited, its private output was discarded, and publication never began. */
+export class FileArchiveDiscarded extends RemoteFileFailure {
+	constructor(options?: ErrorOptions) {
+		super('remote_unavailable', options);
+		this.name = 'FileArchiveDiscarded';
+	}
+}
 
 export class ArchiveRejection extends Error {
 	constructor(

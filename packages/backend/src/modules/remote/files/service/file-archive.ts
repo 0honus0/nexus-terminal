@@ -5,6 +5,7 @@ import type { FileResource, FileInfo } from '../model/file-types.js';
 import { FileCommandNotStarted, RemoteFileFailure } from '../model/file-types.js';
 import {
 	ArchiveRejection,
+	FileArchiveDiscarded,
 	type ArchiveFormat,
 	type FileArchiveEntry,
 	type FileCompressionFootprint,
@@ -160,6 +161,7 @@ export async function compressRemoteArchive(
 	let count = 0;
 	let finished = false;
 	let nativeEnded = false;
+	let publicationStarted = false;
 	let warning: string | undefined;
 	try {
 		onMutation();
@@ -208,6 +210,7 @@ export async function compressRemoteArchive(
 			throw new RemoteFileFailure('operation_unknown');
 		}
 		const move = { from: temporary, to: destination, timeoutMs: Math.min(remaining(), 300_000), signal };
+		publicationStarted = true;
 		if (previous) {
 			await resource.replace(move);
 		} else {
@@ -229,6 +232,7 @@ export async function compressRemoteArchive(
 	} catch (cause) {
 		// Remove the private partial output only after a confirmed native exit.
 		// An unknown SSH outcome may still have a remote writer.
+		let discarded = false;
 		if (nativeEnded && resource.isOpen) {
 			try {
 				await resource.remove({ path: temporary, timeoutMs: CLEANUP_MS, signal: new AbortController().signal });
@@ -237,6 +241,15 @@ export async function compressRemoteArchive(
 					throw new RemoteResourceCleanupFailure([cause, cleanup]);
 				}
 			}
+			discarded = true;
+		}
+		if (
+			discarded &&
+			!publicationStarted &&
+			cause instanceof RemoteFileFailure &&
+			cause.code !== 'operation_unknown'
+		) {
+			throw new FileArchiveDiscarded({ cause });
 		}
 		if (
 			cause instanceof RemoteResourceCleanupFailure ||

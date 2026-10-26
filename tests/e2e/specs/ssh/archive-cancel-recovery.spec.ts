@@ -188,7 +188,7 @@ test('a failed archive command does not poison subsequent compression in the sam
 			},
 			id,
 		);
-		expect(await failed).toMatchObject({ type: 'failed', requestId: id });
+		expect(await failed).toMatchObject({ type: 'failed', requestId: id, message: 'remote_unavailable' });
 		await expect
 			.poll(() => requestWorkspace(workspace.socket, 'transfer.cancelArchive', { taskId: id }))
 			.toBe(false);

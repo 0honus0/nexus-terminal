@@ -62,6 +62,7 @@ import { streamRemoteDirectoryZip } from './file-directory-zip.js';
 import { compressRemoteArchive, decompressRemoteArchive, compressionFootprint } from './file-archive.js';
 import {
 	ArchiveRejection,
+	FileArchiveDiscarded,
 	type FileArchiveRequest,
 	type ArchiveFormat,
 	type FileMutationIntent,
@@ -2329,16 +2330,17 @@ export class RemoteFileService {
 						});
 						return;
 					}
+					const unknown =
+						isUnknown(cause) || (task.mutationStarted && !(cause instanceof FileArchiveDiscarded));
 					emit({
 						type: 'failed',
 						operation,
 						requestId,
-						message:
-							task.mutationStarted || isUnknown(cause)
-								? 'operation_unknown'
-								: cause instanceof RemoteFileFailure
-									? cause.code
-									: 'remote_unavailable',
+						message: unknown
+							? 'operation_unknown'
+							: cause instanceof RemoteFileFailure
+								? cause.code
+								: 'remote_unavailable',
 					});
 				},
 			)
