@@ -1709,3 +1709,9 @@ D17：不新增/运行本地行为、浏览器/E2E或付费图片请求。现有
 已完成根check、Shared/双端build、全量格式/diff、变更E2E的独立tsc（临时配置 `/tmp/nexus-all-review-e2e-tsconfig.json`，包含原前端别名及严格类型）；日志 `/tmp/nexus-all-review-{check,build,format,e2e-types}.log`。首次直接tsc因缺少项目配置、继而别名未设置失败，改用临时显式配置后通过，不视为产品问题。游标最终修正后的根check、双端build、全量format/diff亦通过，日志 `/tmp/nexus-all-review-final-{check,build,format}.log`。另修复模型手动添加按钮因聊天/图片两组重名导致的严格定位冲突，按Chat models组定位；更新已恢复的Run批准策略断言为默认Ask when needed，仍核对不产生grant。未执行本地行为测试；远程使用正式E2E工作流。
 
 旧失败基线40218989558：质量/Docker由Agent宿主引用尚未提交的composable/Shared字段导致编译失败；Agent窗口链大量失败与此一致；状态监控仍定位已删除rate-label。完整日志下载到 `/tmp/nexus-e2e-40218989558-logs/`，旧证据不代表当前修复已通过。当前待提交新版本并远程回归。
+
+### 首轮远程构建反馈
+
+提交1f21e469推送dev，正式工作流 https://github.com/0honus0/nexus-terminal/actions/runs/40259908812 。质量作业通过；Docker独立后端构建失败在model-sdk-request的内置fetch/Undici Dispatcher类型冲突（Node26的undici-types与显式Undici7不同），不是UI或测试断言问题。完整Docker日志/tmp/nexus-e2e-40259908812-docker.log。
+
+修复后工作区Backend build通过（/tmp/nexus-undici-boundary-build.log）；复制backend/shared源码及固定锁文件至/tmp/nexus-backend-isolated-review，严格filtered安装后build亦通过（/tmp/nexus-undici-isolated-{install,build}.log）。此隔离构建不含Frontend DOM类型，未做本地行为测试。远程Docker实际构建/启动和8个功能分片待下一轮确认，不将编译通过记为运行通过。

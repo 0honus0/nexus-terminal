@@ -3186,3 +3186,9 @@ HTTP 框架暂缓、Zod 已取消；ACP 保持，Docker 保留 SSH CLI。这些�
 | 职责归属 | 沿现有业务owner审核，不以更改UI或删除功能断言解决失败。                                                                                                                                                                      |
 | 类型归属 | Shared、前后端mapper、SQLite/快照与SDK/测试消费者全量盘点。                                                                                                                                                                  |
 | 完成证据 | 两轮分组源码审查完成，修正游标数值比较、黑名单用例多余字段与状态监控旧定位。根check/双端build/全量format及E2E独立tsc已通过；最终静态通过；另修复聊天/图片添加按钮重名定位与旧批准控件不存在断言，提交及新SHA远程回归待收口。 |
+
+### 远程 Docker 模型传输构建修正（2026-10-26）
+
+首轮提交1f21e469已推送；远程40259908812质量检查通过，Docker独立后端构建暴露Node内置fetch的Dispatcher与显式Undici Agent版本不一致。修正在原Platform模型SDK传输owner：普通请求继续内置fetch；图片任务独享Agent与同版本undiciFetch配套，逐字段投影JSON请求，用原响应reader适配Node/标准流，校验二进制块并继续统一取消、容量、UTF-8与清理。无业务/Shared/存储/UI变化，不修改超时或重试政策。
+
+四表增量：功能对应保留图片Run绝对期限和普通池；职责仍为ModelSdkRequest唯一技术owner；类型在Platform明确区分两套技术接口，不断言或放宽编译；完成证据为工作区Backend build及/tmp隔离backend+shared安装/build通过，根check/格式与远程分片待收口。两轮源码复核覆盖请求体投影、header处理、取消、字节验证和dispatcher销毁。USAGE图片期限说明仍符合实际。

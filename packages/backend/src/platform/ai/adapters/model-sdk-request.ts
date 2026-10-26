@@ -1,5 +1,9 @@
 import OpenAI from 'openai';
-import { Agent } from 'undici';
+import { Agent, fetch as undiciFetch } from 'undici';
+import type {
+	ReadableStream as NodeReadableStream,
+	ReadableStreamDefaultReader as NodeReadableStreamDefaultReader,
+} from 'node:stream/web';
 import { ModelNetworkFailure, MODEL_STREAM_MAX_BYTES } from '../model-port.js';
 import type { Logger } from '../../logging/logger.js';
 import { logDiagnostic } from '../../logging/diagnostic-log.js';
@@ -67,14 +71,14 @@ class ModelResponseBody {
 	private closing: Promise<void> | null = null;
 	private ended = false;
 	private cancelled = false;
-	private readonly reader: ReadableStreamDefaultReader<Uint8Array>;
+	private readonly reader: ReadableStreamDefaultReader<Uint8Array> | NodeReadableStreamDefaultReader<unknown>;
 	private readonly readerSettled: Promise<void>;
 	private readerFailure: { error: unknown } | null = null;
 	private readonly utf8 = new TextDecoder('utf-8', { fatal: true });
 	readonly stream: ReadableStream<Uint8Array>;
 
 	constructor(
-		body: ReadableStream<Uint8Array>,
+		body: ReadableStream<Uint8Array> | NodeReadableStream<unknown>,
 		signal: AbortSignal,
 		consume: (bytes: number) => void,
 		fail: (error: unknown) => ModelNetworkFailure,
@@ -102,6 +106,9 @@ class ModelResponseBody {
 							this.ended = true;
 							controller.close();
 							return;
+						}
+						if (!(part.value instanceof Uint8Array)) {
+							throw new ModelNetworkFailure('response_invalid');
 						}
 						consume(part.value.byteLength);
 						this.validateEncoding(part.value);
@@ -221,6 +228,9 @@ export class ModelSdkRequest {
 					) {
 						throw new ModelNetworkFailure('too_large');
 					}
+					if (this.dispatcher !== null && init?.body != null && typeof init.body !== 'string') {
+						throw new ModelNetworkFailure('response_invalid');
+					}
 				} catch (error) {
 					throw this.failLocally(error);
 				}
@@ -235,19 +245,28 @@ export class ModelSdkRequest {
 				logDiagnostic(this.logger, 'debug', 'MODEL_HTTP_DISPATCH', {
 					attempt: this.attempts,
 				});
-				let response: Response;
+				let response: Response | Awaited<ReturnType<typeof undiciFetch>>;
 				try {
 					// Local retry cancellation must not error the raw reader before
 					// its owner can drain it. The application signal owns transport
 					// cancellation and the full deadline; requestSignal fences SDK backoff.
-					const requestOptions = {
-						...init,
-						signal: this.signal,
-						headers,
-						redirect: 'error' as const,
-						...(this.dispatcher === null ? {} : { dispatcher: this.dispatcher }),
-					};
-					response = await fetch(input, requestOptions);
+					if (this.dispatcher === null) {
+						response = await fetch(input, { ...init, signal: this.signal, headers, redirect: 'error' });
+					} else {
+						// Pair the owned Agent with its own Undici implementation. Node's
+						// built-in fetch may use a different Dispatcher contract/version.
+						response = await undiciFetch(
+							typeof input === 'string' || input instanceof URL ? input : input.url,
+							{
+								method: init?.method,
+								body: typeof init?.body === 'string' ? init.body : null,
+								headers: [...headers],
+								signal: this.signal,
+								redirect: 'error',
+								dispatcher: this.dispatcher,
+							},
+						);
+					}
 				} catch (error) {
 					const failure = modelSdkFailure(error, this.signal);
 					logDiagnostic(
@@ -297,7 +316,7 @@ export class ModelSdkRequest {
 					if (response.ok && this.streaming && contentType !== 'text/event-stream') {
 						throw new ModelNetworkFailure('response_invalid');
 					}
-					const responseHeaders = new Headers(response.headers);
+					const responseHeaders = new Headers([...response.headers]);
 					// A compatible provider cannot force retries for authentication or
 					// input failures via x-should-retry. Backoff itself remains SDK-owned.
 					const transient = [408, 409, 429].includes(response.status) || response.status >= 500;
