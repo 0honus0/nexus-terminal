@@ -2,6 +2,10 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { expect, test } from '../../support/fixtures';
+import {
+	readServerTransferInput,
+	readServerTransferSnapshot,
+} from '../../../../packages/shared/src/remote/transfers/server-codec';
 
 test('durable mutation claims and backup validation do not reject unrelated hosts at global capacity counts', async ({}, testInfo) => {
 	test.setTimeout(120_000);
@@ -16,8 +20,6 @@ test('durable mutation claims and backup validation do not reject unrelated host
 });
 
 test('server-transfer decoding accepts sources beyond 256 and targets beyond 64 with matching task indices', async () => {
-	const { readServerTransferInput, readServerTransferSnapshot } =
-		await import('../../../../packages/shared/src/remote/transfers/server-codec');
 	const input = readServerTransferInput({
 		sourceConnectionId: 1,
 		connectionIds: [2],
@@ -66,3 +68,15 @@ test('server-transfer decoding accepts sources beyond 256 and targets beyond 64 
 		}),
 	).toThrow();
 });
+
+for (const fixture of ['workspace-upload', 'workspace-files', 'workspace-transfer']) {
+	test(`frontend ${fixture} boundaries preserve lifecycle without retired count rejections`, async () => {
+		test.setTimeout(120_000);
+		const result = await promisify(execFile)(
+			process.execPath,
+			[path.resolve(__dirname, '../../../frontend/' + fixture + '.integration.mjs')],
+			{ timeout: 90_000, maxBuffer: 1024 * 1024 },
+		);
+		expect(result.stdout).toContain('PASS');
+	});
+}

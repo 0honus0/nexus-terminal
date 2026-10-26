@@ -40,7 +40,7 @@ export interface FileResource {
 	readonly fingerprint: string;
 	readonly isOpen: boolean;
 	list(request: FileListRequest): Promise<FileEntry[]>;
-	scan(request: FileScanRequest): Promise<FileEntry[]>;
+	scan(request: FileOperationRequest): Promise<FileEntry[]>;
 	stat(request: FileStatRequest): Promise<FileInfo>;
 	read(request: FileReadRequest): Promise<Uint8Array>;
 	openRead(request: FileReadRequest): Promise<FileByteSource>;
@@ -72,11 +72,6 @@ export interface FileOperationRequest {
 	path: string;
 	timeoutMs: number;
 	signal: AbortSignal;
-}
-
-export interface FileScanRequest extends FileOperationRequest {
-	/** Optional application budget for one directory's scanned entries. */
-	maxEntries?: number;
 }
 
 export interface FileListRequest extends FileOperationRequest {

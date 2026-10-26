@@ -34,6 +34,8 @@ try {
 	for (const claim of claims) assert.equal(await storage.acquire(claim), 'acquired');
 	assert.equal(await storage.acquire(claims[0]), 'conflict');
 	assert.equal(await storage.acquire({ ...claims[0], id: 'same-endpoint' }), 'conflict');
+	await storage.settle('capacity-0', claims[0].keys, false, Date.now());
+	assert.equal(await storage.acquire({ ...claims[0], id: 'released-endpoint' }), 'acquired');
 	await storage.reconcile(Date.now());
 	const registration = registerRemoteSnapshot();
 	const rows = new Map();
@@ -44,8 +46,7 @@ try {
 		rows.get('remote_machine_mutation_claims').filter((claim) => claim.state === 'blocked').length,
 		claims.length,
 	);
-	await storage.settle('capacity-0', claims[0].keys, false, Date.now());
-	assert.equal(await storage.acquire({ ...claims[0], id: 'released-endpoint' }), 'acquired');
+	await assert.rejects(storage.settle('released-endpoint', claims[0].keys, false, Date.now()));
 	assert.equal(await storage.acquire({ ...claims[1], id: 'still-blocked-endpoint' }), 'conflict');
 	console.log('Verified 4100 independent claims, snapshot integrity and endpoint conflict preservation');
 } finally {

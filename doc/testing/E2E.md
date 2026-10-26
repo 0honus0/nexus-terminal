@@ -1881,3 +1881,7 @@ e2f66bdf对应 https://github.com/0honus0/nexus-terminal/actions/runs/4026284297
 aba02d2f正式Actions 40316497521：质量、构建、Docker及分片1/3/4/5/7/8通过；分片2的mutation fixture使用了重复cwd路径，下载用例仍期待已移除的8任务429；分片6目录force删除把1小时剩余期限传入SSH execute时，被旧5分钟参数检查拒绝，Model因派发状态不明退役文件资源。三项均已修正，用例保留九路重叠下载、迟到OPEN回收、票据内容和失败后恢复；目录删除新增刷新后seed可见及无失败Toast断言，防止列表报错消失造成假通过。最终新SHA正式回归待执行，不复用旧PASS。
 
 清理复核：已移除的容量常量、校验函数及独立资源准入集合全仓引用为零；Shared子项索引按实际来源验证，后台传输子项继承父任务期限。原取消/晚到资源/关闭失败仍由原owner追踪，未修改UI设计。SSH execute仅保留Node setTimeout有符号32位毫秒表示范围，避免溢出变成约1ms，不再自设5分钟上限。
+
+动态清理增量：删除scan无消费者容量参数及专属接口；前端upload准备64批、20,000上传任务和64复制/归档任务门槛同步移除。前后端上传准备集合按既有有效期主动清理，前端仅单个最近到期timer并在断线/dispose回收。新增正式Actions入口执行既有真实浏览器受控协议边界专项，检查65批准备与65复制任务独立完成；这类接缝回归不替代正式SSH/SFTP功能链。最新SHA待远程验收。
+
+141836cf的40318510258：质量/构建/Docker及全部7个非分片2通过，目录删除与9路迟到OPEN/票据恢复均首跑通过。分片2仅新增专项夹具失败：SQLite测试在reconcile后错误调用held专属settle；codec动态import触发Playwright TS/ESM解析差异。改为先完成held结算/重用再reconcile，并验证blocked不能被settle释放；Shared codec与已有测试统一静态导入，未放宽存储围栏或产品校验。

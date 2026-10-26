@@ -208,6 +208,16 @@ try {
 		const state = (id) => controller.tasks.value.find((t) => t.id === id);
 
 		try {
+			const queued = await Promise.all(Array.from({ length: 65 }, () => controller.copyMove(copy)));
+			expect(
+				queued.every((id) => state(id).status === 'queued'),
+				'65 copy tasks remain accepted until their own completion',
+			);
+			for (const id of queued) done(id);
+			expect(
+				queued.every((id) => state(id).status === 'completed'),
+				'all 65 task results remain independently correlated',
+			);
 			const id = await controller.copyMove(copy);
 			expect(state(id).status === 'queued', 'start acceptance is not completion');
 			await controller.cancel(id);

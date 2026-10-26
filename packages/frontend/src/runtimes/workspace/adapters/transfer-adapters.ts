@@ -48,7 +48,6 @@ interface WorkspaceTransferAdapter {
 	dispose(): void;
 }
 
-const MAX_LOCAL_TASKS = 64;
 const TASK_TIMEOUT_MS = 60 * 60 * 1000 + 30_000;
 
 function failure(cause: unknown, dispatched: boolean): TransferFailure {
@@ -253,7 +252,7 @@ export function createWorkspaceTransferAdapter(
 
 	const start = async (command: CopyMoveCommand | ArchiveCommand): Promise<void> => {
 		if (disposed || !canUse() || !socket.connected) throw new TransferFailure('not_connected', false);
-		if (tasks.size >= MAX_LOCAL_TASKS || tasks.has(command.id)) throw new TransferFailure('limit_exceeded', false);
+		if (tasks.has(command.id)) throw new TransferFailure('invalid_input', false);
 		let task: TransferTask | undefined;
 		let dispatched = false;
 		try {

@@ -59,8 +59,6 @@ interface WorkspaceUploadAdapter {
 	dispose(): void;
 }
 
-const MAX_LOCAL_TASKS = 20_000;
-const MAX_PREPARED_BATCHES = 64;
 const OPEN_TIMEOUT_MS = 10_000;
 const TASK_TIMEOUT_MS = 60 * 60 * 1000 + 30_000;
 const BUFFER_HIGH_WATER = 8 * 1024 * 1024;
@@ -155,6 +153,33 @@ export function createWorkspaceUploadAdapter(
 	let disposed = false;
 	let disconnected = false;
 	let generation = 0;
+	let preparedExpiryTimer: ReturnType<typeof setTimeout> | null = null;
+
+	const expirePrepared = (): void => {
+		for (const [id, batch] of prepared) {
+			if (batch.expiresAt <= Date.now()) {
+				prepared.delete(id);
+			}
+		}
+	};
+
+	const schedulePreparedExpiry = (): void => {
+		if (preparedExpiryTimer !== null || prepared.size === 0) {
+			return;
+		}
+		let nextExpiry = Infinity;
+		for (const batch of prepared.values()) {
+			nextExpiry = Math.min(nextExpiry, batch.expiresAt);
+		}
+		preparedExpiryTimer = setTimeout(
+			() => {
+				preparedExpiryTimer = null;
+				expirePrepared();
+				schedulePreparedExpiry();
+			},
+			Math.max(1, nextExpiry - Date.now()),
+		);
+	};
 
 	const current = (task: UploadTask): boolean =>
 		!disposed && tasks.get(task.command.id) === task && !task.controller.signal.aborted;
@@ -510,6 +535,10 @@ export function createWorkspaceUploadAdapter(
 		}
 		preparations.clear();
 		prepared.clear();
+		if (preparedExpiryTimer !== null) {
+			clearTimeout(preparedExpiryTimer);
+			preparedExpiryTimer = null;
+		}
 		for (const task of [...tasks.values()]) {
 			const dispatched = task.phase !== 'queued' && task.phase !== 'conflict';
 			fail(task, new TransferFailure(dispatched ? 'operation_unknown' : 'not_connected', dispatched));
@@ -519,19 +548,12 @@ export function createWorkspaceUploadAdapter(
 	return {
 		async prepare(command) {
 			available();
-			for (const [id, batch] of prepared) {
-				if (batch.expiresAt <= Date.now()) {
-					prepared.delete(id);
-				}
-			}
+			expirePrepared();
 			if (command.destination.scopeId !== workspaceId) {
 				throw new TransferFailure('invalid_input', false);
 			}
 			if (prepared.has(command.id) || preparations.has(command.id)) {
 				throw new TransferFailure('invalid_input', false);
-			}
-			if (prepared.size + preparations.size >= MAX_PREPARED_BATCHES) {
-				throw new TransferFailure('limit_exceeded', false);
 			}
 			let input: WorkspaceUploadPrepare;
 			let paths: Set<string>;
@@ -568,6 +590,7 @@ export function createWorkspaceUploadAdapter(
 					directories: paths,
 					expiresAt: Date.now() + 30 * 60 * 1000,
 				});
+				schedulePreparedExpiry();
 			} catch (cause) {
 				throw failure(cause, true);
 			} finally {
@@ -581,9 +604,6 @@ export function createWorkspaceUploadAdapter(
 			available();
 			if (tasks.has(command.id)) {
 				throw new TransferFailure('invalid_input', false);
-			}
-			if (tasks.size >= MAX_LOCAL_TASKS) {
-				throw new TransferFailure('limit_exceeded', false);
 			}
 			let input: WorkspaceUploadStart;
 			try {

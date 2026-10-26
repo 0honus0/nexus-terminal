@@ -90,6 +90,10 @@ try {
 	await once(producer, 'listening');
 	assert.deepEqual(files.readWorkspaceFileEntry({ ...entry, secret: 'discard' }), entry);
 	assert.deepEqual(files.readWorkspaceFileEntry({ ...entry, metadata: { ...metadata, secret: 'discard' } }), entry);
+	assert.equal(
+		files.readWorkspaceFileListResponse({ path: '/', entries: Array(20001).fill(entry) }).entries.length,
+		20001,
+	);
 	let rejected = 0;
 	for (const [decode, input] of [
 		[files.readWorkspaceFileMetadata, { ...metadata, size: -1 }],
@@ -98,7 +102,6 @@ try {
 		[files.readWorkspaceFileMetadata, { ...metadata, mode: 2 ** 32 }],
 		[files.readWorkspaceFileEntry, { ...entry, name: 'bad/name' }],
 		[files.readWorkspaceFileEntry, { ...entry, path: '/bad\ud800' }],
-		[files.readWorkspaceFileListResponse, { path: '/', entries: Array(20001).fill(entry) }],
 		[files.readWorkspaceFileSearchResponse, { entries: [], truncated: 1 }],
 		[
 			files.readWorkspaceFileSearchResponse,

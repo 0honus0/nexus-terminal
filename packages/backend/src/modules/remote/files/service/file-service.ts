@@ -253,6 +253,11 @@ export class RemoteFileService {
 	) {
 		this.downloadTickets = new DownloadTickets(model);
 		this.expiryTimer = setInterval(() => {
+			for (const [key, batch] of this.preparedUploads) {
+				if (batch.expiresAt <= Date.now()) {
+					this.preparedUploads.delete(key);
+				}
+			}
 			for (const record of this.owners.values()) {
 				// Active transfers must not be culled when their idle TTL elapses.
 				// A Workspace lease is owned by its shell lifecycle across disconnects.

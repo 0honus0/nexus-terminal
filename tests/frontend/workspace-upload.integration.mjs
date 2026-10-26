@@ -18,10 +18,10 @@ const directory = await mkdtemp(join(tmpdir(), 'nexus-f1-workspace-upload-'));
 let vite;
 let browser;
 try {
-	let codecChecks = 0;
+	assert.deepEqual(readWorkspaceUploadPrepared({ preparedDirectories: 20_002 }), { preparedDirectories: 20_002 });
+	let codecChecks = 1;
 	for (const [decode, invalid] of [
 		[readWorkspaceUploadPrepared, { preparedDirectories: 0 }],
-		[readWorkspaceUploadPrepared, { preparedDirectories: 20_002 }],
 		[readWorkspaceTaskStarted, { started: 1 }],
 		[readWorkspaceTaskStopped, { stopped: true }],
 		[readWorkspaceUploadEvent, { type: 'failed', uploadId: 'u', message: 'technical secret' }],
@@ -208,6 +208,15 @@ try {
 		};
 
 		try {
+			const batches = fixture();
+			for (let index = 0; index < 65; index++) {
+				await batches.owner.prepare({
+					id: 'batch-' + index,
+					destination: command('x').destination,
+					directories: [],
+				});
+			}
+			expect(batches.calls.length === 65, '65 prepared batches are dispatched without a count rejection');
 			let f = fixture();
 			f.socket.connected = false;
 			await f.owner.upload(command('offline')).then(

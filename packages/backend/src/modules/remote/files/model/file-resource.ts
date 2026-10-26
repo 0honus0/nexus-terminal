@@ -29,7 +29,6 @@ import {
 	type FileReadRequest,
 	type FileRenameRequest,
 	type FileResource,
-	type FileScanRequest,
 	type FileStageRequest,
 	type FileStagedWrite,
 	type FileUploadStage,
@@ -132,7 +131,7 @@ export class SftpFileResource implements FileResource {
 		return this.perform(() => this.listEntries(request), request.signal);
 	}
 
-	scan(request: FileScanRequest): Promise<FileEntry[]> {
+	scan(request: FileOperationRequest): Promise<FileEntry[]> {
 		return this.perform(() => this.scanEntries(request), request.signal);
 	}
 
@@ -524,16 +523,10 @@ export class SftpFileResource implements FileResource {
 		return result;
 	}
 
-	private async scanEntries(request: FileScanRequest): Promise<FileEntry[]> {
-		if (request.maxEntries !== undefined && (!Number.isSafeInteger(request.maxEntries) || request.maxEntries < 1)) {
-			throw new RemoteFileFailure('invalid_input');
-		}
+	private async scanEntries(request: FileOperationRequest): Promise<FileEntry[]> {
 		const result: FileEntry[] = [];
 		for await (const row of this.#lease.scan(request.path, this.options(request))) {
 			request.signal.throwIfAborted();
-			if (request.maxEntries !== undefined && result.length >= request.maxEntries) {
-				throw new RemoteFileFailure('limit_exceeded');
-			}
 			result.push(this.entry(row));
 		}
 		return result;
