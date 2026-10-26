@@ -3659,3 +3659,7 @@ a0cb4f49/40319856905完整通过（含质量、Docker及全部8分片），3381d
 `740ea79f` 的正式 E2E `40375013136` 中，静态/构建、Docker smoke 及 7 个 Playwright 分片通过；第 5 分片首次失败为 clipboard/send 的真实 SCP 传输一直 in-progress，随后清理失败使基线 reset 返回 500/503。源码核对确认测试 SSH exec 转发了 data 却未转发 EOF：传统 SCP sink 收完文件后等待 stdin 关闭，无法退出。修复仅在夹具将 SSH readable end 传给子进程 stdin.end，与 sshd 一致；不修改产品、UI、超时、断言或未知结果保护。既有两种入口的真实进度、完成状态、哈希及原生进程退出计数覆盖此回归。新增归档依赖及图片拒绝场景所在其它分片已经通过；全部结论仍待修复 SHA 的正式完整回归，不以首轮局部通过替代。
 
 职责及类型复核：SSH 协议仿真归测试夹具，产品 NativeTransfer 保持原生命周期；没有新公开契约或数据变更。四表完成证据待本次静态与远程结果回填，仍以完整绿灯作为发布门槛。
+
+### 第二轮远程 E2E 的 SCP 虚拟路径一致性（2026-10-27）
+
+`791c8917` / `40377275162` 已验证 clipboard/send 原生 SCP 两条真实 8 MiB 传输均约 12 秒完成，EOF 修复成立；其余 7 个分片、检查及 Docker smoke 通过。接续 UI 流程使用虚拟 `/folder-seed` 时，测试 exec 的 `mkdir -p` 未映射到 SFTP root，而旧 SCP 参数映射又按宿主 `existsSync` 放行，导致文件写到 runner 目录，SFTP 完成核验返回 not_found。后续发送任务的 unknown 继续触发基线保护。修复夹具同时映射目的目录创建、SCP 源/接收端路径，复用 resolveRemotePath 对隔离根与私有凭据目录的唯一解释，保留 `/dev/null`；去掉依赖宿主偶然存在路径的判断，并保持 shell 单引号转义。产品及 UI 不变，完成校验、unknown 保护、原文件/哈希/进度断言全部保留。四表范围仍为测试 SSH 协议与虚拟文件系统 owner，无新类型，等待本次静态和完整正式回归。

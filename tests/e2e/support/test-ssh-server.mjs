@@ -229,17 +229,20 @@ function remapArchiveExecWorkingDirectory(command) {
 }
 
 function remapTransferExecPaths(command) {
-	if (!/(?:^|[\s/])(scp|rsync)(?:[\s']|$)/.test(command)) return command;
+	if (!command.startsWith('mkdir -p -- ') && !/(?:^|[\s/])(scp|rsync)(?:[\s']|$)/.test(command)) return command;
 	// rsync -s sends the destination in its protocol, bypassing the peer's
 	// exec-command mapping. Translate the remote operand before launching it.
 	const peerPaths = command.replace(/'([^'@\s]+@(?:\[[^\]]+\]|[^':\s]+):)(\/[^']*)'/g, (match, peer, remotePath) => {
 		if (remotePath === rootDir || remotePath.startsWith(rootDir + '/')) return match;
 		return "'" + (peer + resolveRemotePath(remotePath)).replaceAll("'", "'\"'\"'") + "'";
 	});
-	return peerPaths.replace(/'((?:\/)[^']*)'/g, (match, remotePath) => {
-		if (remotePath.startsWith(rootDir) || existsSync(remotePath)) return match;
-		const mapped = resolveRemotePath(remotePath);
-		return existsSync(mapped) ? JSON.stringify(mapped) : match;
+	return peerPaths.replace(/'(?:[^']|'"'"')*'/g, (token) => {
+		const remotePath = token.slice(1, -1).replaceAll("'\"'\"'", "'");
+		if (!remotePath.startsWith('/') || remotePath === '/dev/null') return token;
+		// Exec and SFTP must use the same virtual filesystem even when a path
+		// happens to exist on the runner. Only resolveRemotePath's private SSH
+		// credential directory and the real fixture root bypass virtual mapping.
+		return "'" + resolveRemotePath(remotePath).replaceAll("'", "'\"'\"'") + "'";
 	});
 }
 
