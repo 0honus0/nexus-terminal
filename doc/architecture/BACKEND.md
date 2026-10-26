@@ -1274,7 +1274,7 @@ ThreadService持有名称归一、512个实际线程容量及明确区分的插�
 
 WorkspaceService使用原RunService与ContextHistoryService：Root列表按thread_sequence续页；entries只读Root用户输入和模型文字事件，按码点分片，不读工具/私有reasoning。SQLite技术函数nexus_text_length/slice保留NUL和Unicode；片段未完不推进后项。appendInput在原Root终态/version同事务校验后创建同Thread后续Root，原身份/version纳入幂等hash，模型/连接重新显式选择，不注入活跃上下文。
 
-前端RPC由Shared frontend-events/frontend-rpc-codec定义27方法；core events/rpc-codec/backend-sdk仍只有九方法。前端完整预算8MiB+1KiB，descriptor的maxMessageBytes同源声明；核心子预算/IPC仍512KiB。SDK交付依赖图按白名单安装。frontend-sdk仅持有纯类型，窗口/MessagePort/计时器归原Frontend Adapter；Run订阅是500ms有限轮询原事件分页，不是新增WS/事件中心。退订取消原读取并等待，close共享Promise，异步回调由原订阅追踪，过期结果不发布。正式父页F1。
+前端RPC由Shared frontend-events/frontend-rpc-codec定义27方法；core events/rpc-codec/backend-sdk仍只有九方法。前端完整预算8MiB+1KiB，descriptor的maxMessageBytes同源声明；核心子预算/IPC仍512KiB。SDK由Backend构建时通过esbuild打包实际Shared及第三方依赖，以独立浏览器ESM交付；不再运行时改写import或维护拆模块白名单。frontend-sdk仅持有纯类型，窗口/MessagePort/计时器归原Frontend Adapter；Run订阅是500ms有限轮询原事件分页，不是新增WS/事件中心。退订取消原读取并等待，close共享Promise，异步回调由原订阅追踪，过期结果不发布。正式父页F1。
 
 组合写入经PluginModel→Storage→SQLite技术admission scope，在实际事务前后复核原会话、安装revision、启用、publisher与期限。排队操作捕获原scope；原RunExecutionOwner通过RunModel的应用任务能力明确脱离请求临时scope，再按自身持久权限执行，不意外继承浏览器grant的生命周期。最终响应前再次复查，已提交变更失去确认时返回unknown，不换意图重发。
 

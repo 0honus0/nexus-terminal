@@ -330,7 +330,7 @@ Memory四HTTP的完整codec由后端管理入口、对话候选审核及既有 A
 
 ### 原生与插件共用工作区契约
 
-scope/workspace-http 及 workspace-http-codec 唯一定义18项工作区请求/安全结果、严格codec、原生appVersion外壳和App响应关联；基础完整预算8MiB+1KiB与可选模型上限1024归scope/values。插件frontend-events/frontend-rpc-codec组合并消费该契约，原核心九方法不变；SDK交付白名单包含新增codec运行依赖。不再把通用工作区对象定义在plugins中。Backend原生会话HTTP和插件RPC、Frontend正式Host/Run/正文/审批/Child、DEV线程组件及插件桥均为真实消费者。前端mapper逐字段转换独立NativeThread/Scope/Run/Entry/Approval/Child/Step/Tool对象，不直接把wire当UI状态；前端包已移除旧Protocol依赖。
+scope/workspace-http 及 workspace-http-codec 唯一定义18项工作区请求/安全结果、严格codec、原生appVersion外壳和App响应关联；基础完整预算8MiB+1KiB与可选模型上限1024归scope/values。插件frontend-events/frontend-rpc-codec组合并消费该契约，原核心九方法不变；SDK由Backend构建时通过esbuild打包全部实际codec及第三方运行依赖，以独立浏览器ESM交付。不再把通用工作区对象定义在plugins中。Backend原生会话HTTP和插件RPC、Frontend正式Host/Run/正文/审批/Child、DEV线程组件及插件桥均为真实消费者。前端mapper逐字段转换独立NativeThread/Scope/Run/Entry/Approval/Child/Step/Tool对象，不直接把wire当UI状态；前端包已移除旧Protocol依赖。
 
 新增 agent.threads.delete 的完整参数为 {threadId,expectedVersion}，成功 value 为 AgentDeleteThreadResponse {appId,threadId}；不接受 operationId、额外字段、缺字段、非 UUID 或非正安全整数版本。删除不递增线程版本，因此当前最大安全整数版本仍合法。结果 decoder 严格验证方法和原 threadId，原生响应还验证外壳 App/version 以及内层 appId；插件响应复用工作区 codec 关联线程与 envelope 的 nonce/id/seq，交付 SDK 按已绑定 App 检查结果归属。Backend workspace-mapper 为唯一协议↔应用白名单转换；删除属于 mutation，即使没有 operationId，丢失确认、超时或本地取消也保持未知副作用语义。
 

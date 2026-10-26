@@ -984,9 +984,25 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 		]);
 		try {
 			const approval = await waitNativeApproval(task, run.id, 'shell_execute');
-			const article = hub.locator('article').filter({ hasText: approval.inspection.summary });
+			await openNativeTaskPanel(page);
+			const article = hub
+				.getByRole('complementary', { name: 'Tasks', exact: true })
+				.locator('article')
+				.filter({ has: page.getByRole('button', { name: 'Approve and run', exact: true }) })
+				.filter({ hasText: approval.inspection.toolName });
 			await expect(article).toContainText('shell_execute');
 			await expect(article).toContainText('Destructive');
+			await article.getByRole('button', { name: 'Normalized operation', exact: true }).click();
+			await expect(article).toContainText(approval.id);
+			await expect(article).toContainText(approval.operationHash);
+			await article.getByRole('button', { name: 'Inspect tool audit', exact: true }).click();
+			const audit = hub
+				.locator('details')
+				.filter({ has: page.locator(':scope > summary').filter({ hasText: /^Step and tool audit$/ }) });
+			await expect(audit).toHaveAttribute('open', '');
+			await expect(audit).toContainText('shell_execute');
+			await expect(audit).toContainText(approval.operationHash);
+			await expect(audit).toContainText('printf approval-e2e');
 			const { command: input } = await captureNativeCommand(task, 'agent.approvals.resolve', () =>
 				article.getByRole('button', { name: 'Approve and run', exact: true }).click(),
 			);
@@ -1001,16 +1017,10 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 			const result = await finishNativeTask(task, run.id);
 			expect(result.run.status).toBe('completed');
 			expect(JSON.parse(result.text)).toMatchObject({ exitCode: 0, stdout: 'approval-e2e' });
-			await article.getByText('Normalized operation', { exact: true }).click();
-			await article.getByRole('button', { name: 'Inspect tool audit', exact: true }).click();
-			await openNativeTaskPanel(page);
-			const audit = hub
-				.locator('details')
-				.filter({ has: page.locator(':scope > summary').filter({ hasText: /^Step and tool audit$/ }) });
-			await expect(audit).toHaveAttribute('open', '');
-			await expect(audit).toContainText('shell_execute');
-			await expect(audit).toContainText(approval.operationHash);
-			await expect(audit).toContainText('printf approval-e2e');
+			await expect(article).toHaveCount(0);
+			await expect(
+				hub.locator('article[data-tool-name="shell_execute"][data-approval-status="approved"]'),
+			).toHaveCount(1);
 		} finally {
 			await cancelNativeTask(task, run.id);
 		}

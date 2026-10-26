@@ -1274,7 +1274,7 @@ ThreadService持有名称归一、512个实际线程容量及明确区分的插�
 
 WorkspaceService使用原RunService与ContextHistoryService：Root列表按thread_sequence续页；entries只读Root用户输入和模型文字事件，按码点分片，不读工具/私有reasoning。SQLite技术函数nexus_text_length/slice保留NUL和Unicode；片段未完不推进后项。appendInput在原Root终态/version同事务校验后创建同Thread后续Root，原身份/version纳入幂等hash，模型/连接重新显式选择，不注入活跃上下文。
 
-前端RPC由Shared frontend-events/frontend-rpc-codec定义27方法；core events/rpc-codec/backend-sdk仍只有九方法。前端完整预算8MiB+1KiB，descriptor的maxMessageBytes同源声明；核心子预算/IPC仍512KiB。SDK交付依赖图按白名单安装。frontend-sdk仅持有纯类型，窗口/MessagePort/计时器归原Frontend Adapter；Run订阅是500ms有限轮询原事件分页，不是新增WS/事件中心。退订取消原读取并等待，close共享Promise，异步回调由原订阅追踪，过期结果不发布。正式父页F1。
+前端RPC由Shared frontend-events/frontend-rpc-codec定义27方法；core events/rpc-codec/backend-sdk仍只有九方法。前端完整预算8MiB+1KiB，descriptor的maxMessageBytes同源声明；核心子预算/IPC仍512KiB。SDK由Backend构建时通过esbuild打包实际Shared及第三方依赖，以独立浏览器ESM交付；不再运行时改写import或维护拆模块白名单。frontend-sdk仅持有纯类型，窗口/MessagePort/计时器归原Frontend Adapter；Run订阅是500ms有限轮询原事件分页，不是新增WS/事件中心。退订取消原读取并等待，close共享Promise，异步回调由原订阅追踪，过期结果不发布。正式父页F1。
 
 组合写入经PluginModel→Storage→SQLite技术admission scope，在实际事务前后复核原会话、安装revision、启用、publisher与期限。排队操作捕获原scope；原RunExecutionOwner通过RunModel的应用任务能力明确脱离请求临时scope，再按自身持久权限执行，不意外继承浏览器grant的生命周期。最终响应前再次复查，已提交变更失去确认时返回unknown，不换意图重发。
 
@@ -1725,3 +1725,11 @@ D17：不新增/运行本地行为、浏览器/E2E或付费图片请求。现有
 完整失败作业日志在/tmp/nexus-e2e-40259908812-shard{3,8}.log及/tmp/nexus-e2e-job-121370361{720,744,763}.log；分片3的截图/trace下载/tmp/nexus-e2e-40259908812-artifacts3。未用本地浏览器或行为测试替代远程证据。
 
 本批两轮源码复审完成；静态比较56张Agent表的建表列与备份注册顺序，修正后全部一致。根check、Shared/Backend/Frontend build、全量format、变更E2E严格tsc、JS与SDK产物语法检查、git diff --check通过，日志/tmp/nexus-e2e-round2-{check,build,format,types}.log。初轮静态发现SDK资产早返回缺花括号、工具列表decoder调用参数不完整，均修正重跑；不计作通过。SSH首次失败用例还验证3秒无自动重试、显式按键才发第二次连接且保持单个tab。待推送本批并远程全量复验。
+
+### 第二轮远程反馈（40261572646）
+
+3bb022fd对应 https://github.com/0honus0/nexus-terminal/actions/runs/40261572646 ：质量、Docker构建/启动冒烟及分片1/2/4/5/6/7通过；分片3/8各剩一个旧测试入口。前轮备份503、Custom SDK依赖交付、预览刷新遮挡均已通过真实远程回归；非法委派参数反馈、ACP审批取消、手机预览与SSH首次失败显式重试也通过。
+
+剩余测试修正：发现按钮当前翻译为Update model list；审批不按原始JSON摘要查找，而在Tasks侧栏按工具名及实际Approve and run按钮定位。批准前展开Normalized operation核对ID/hash并打开审计；批准后核对原请求expectedVersion/operationHash及命令真实结果，并验证待审批卡片消失、历史为approved。避免对批准后已退出的待审批卡片继续点击。两轮源码审查保留原授权/哈希/版本/执行结果断言，不改产品UI或业务逻辑。完整日志/tmp/nexus-e2e-job-121375378{516,538}.log。第三轮全量远程待验。
+
+本批仅两处既有E2E及文档变更；目标ESLint、全部已变更E2E严格tsc、目标格式及git diff --check通过，日志/tmp/nexus-e2e-round3-{lint,types,format}.log。未重跑本地行为测试或修改产品UI。第三轮将按新SHA执行完整正式工作流。
