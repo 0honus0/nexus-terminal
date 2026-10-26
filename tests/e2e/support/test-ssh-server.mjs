@@ -1462,6 +1462,10 @@ function runRemoteCommand(command, stream, session, pty = false) {
 	child.stdout.on('data', (chunk) => stream.write(chunk));
 	child.stderr.on('data', (chunk) => stream.stderr.write(chunk));
 	stream.on('data', (chunk) => child.stdin.write(chunk));
+	// sshd forwards channel EOF to the executed program's stdin. In particular,
+	// legacy SCP's sink waits for EOF after acknowledging the final file; leaving
+	// its stdin open transfers all bytes but deadlocks both peers at completion.
+	stream.once('end', () => child.stdin.end());
 	stream.on('close', () => child.kill('SIGTERM'));
 	child.on('close', (code, signal) => {
 		if (nativeTransfer) nativeTransfersExited++;
