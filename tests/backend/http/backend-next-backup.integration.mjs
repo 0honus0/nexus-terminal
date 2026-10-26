@@ -274,6 +274,7 @@ await test(
 							base + '/threads/' + thread.id + '/runs',
 							{
 								prompt,
+								approvalMode: 'ask',
 								connectionIds: [source.connectionId],
 								model: {
 									providerId: provider.id,

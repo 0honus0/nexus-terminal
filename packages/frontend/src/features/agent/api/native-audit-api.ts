@@ -5,13 +5,19 @@ import {
 	readAgentRunEventsQuery,
 } from '@nexus-terminal/shared/agent/runs/http-codec';
 import {
+	readAgentThreadToolsPath,
+	readAgentThreadToolsQuery,
+	readAgentThreadToolsResponse,
 	readAgentToolPath,
 	readAgentToolResponse,
 	readAgentToolEventsResponse,
 	readAgentToolEventsQuery,
 } from '@nexus-terminal/shared/agent/tools/http-codec';
 import { AGENT_MAX_JSON_BODY_BYTES, AGENT_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/values';
-import { AGENT_TOOL_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/tools/values';
+import {
+	AGENT_TOOL_LIST_DEFAULT_LIMIT,
+	AGENT_TOOL_MAX_RESPONSE_BYTES,
+} from '@nexus-terminal/shared/agent/tools/values';
 import { fromNativeStep, fromNativeStepEvent, fromNativeTool, fromNativeToolEvent } from '../model/native-run-mapper';
 import type { NativeStep, NativeStepEvent, NativeTool, NativeToolEvent, NativePage } from '../model/native-run-types';
 import { AgentManagementFailure } from '../model/management-failure';
@@ -53,6 +59,37 @@ function query(after: number, tool: boolean): URLSearchParams {
 	} catch (cause) {
 		throw new AgentManagementFailure('invalid_input', 'not_dispatched', { cause });
 	}
+}
+
+export async function listNativeThreadTools(
+	appId: string,
+	threadId: string,
+	before: string | null,
+	limit = AGENT_TOOL_LIST_DEFAULT_LIMIT,
+	signal?: AbortSignal,
+): Promise<NativePage<NativeTool, string | null>> {
+	let path: ReturnType<typeof readAgentThreadToolsPath>;
+	let params: URLSearchParams;
+	try {
+		path = readAgentThreadToolsPath({ appId, threadId });
+		params = new URLSearchParams({ limit: String(limit) });
+		if (before !== null) params.set('before', before);
+		readAgentThreadToolsQuery(params);
+	} catch (cause) {
+		throw new AgentManagementFailure('invalid_input', 'not_dispatched', { cause });
+	}
+	const value = await requestAgentManagement({
+		method: 'GET',
+		path: '/apps/' + path.appId + '/threads/' + path.threadId + '/tools?' + params,
+		maxRequestBytes: AGENT_MAX_JSON_BODY_BYTES,
+		maxResponseBytes: AGENT_TOOL_MAX_RESPONSE_BYTES,
+		signal,
+
+		decode(input) {
+			return readAgentThreadToolsResponse(input, path.appId, before, limit);
+		},
+	});
+	return { items: value.items.map(fromNativeTool), nextCursor: value.nextCursor };
 }
 
 export async function getNativeStep(

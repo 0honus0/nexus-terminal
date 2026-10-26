@@ -81,7 +81,7 @@ export async function prepareAgentRun(
 	const app = existingApp ?? (await createTestAgentApp(request));
 	const created = await requestAgentWorkspace(request, app, {
 		method: 'agent.threads.create',
-		params: { operationId: randomUUID(), title: 'Event pagination' },
+		params: { autoTitle: false, operationId: randomUUID(), title: 'Event pagination' },
 	});
 	if (created.method !== 'agent.threads.create') throw new Error('Unexpected thread confirmation');
 	const provider = await createAgentProvider(request);
@@ -92,6 +92,7 @@ export async function prepareAgentRun(
 		provider,
 		input: {
 			prompt: 'Reply OK without using tools.',
+			approvalMode: 'ask',
 			connectionIds: [],
 			model: { providerId: provider.id, modelId: 'e2e-model', configurationVersion: provider.version },
 		},

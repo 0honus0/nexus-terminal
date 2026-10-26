@@ -28,6 +28,7 @@ function fromParticipant(value: StoredParticipant): Participant {
 		status: value.status,
 		profile: value.profile,
 		output: value.output,
+		outputBytes: value.outputBytes,
 		tools: value.tools.map((name) => name),
 		maxRequests: value.maxRequests,
 		deadline: value.deadline,
@@ -89,6 +90,10 @@ export class RunCollaborationModel {
 		return (await storage(() => this.owner.children(toScope(scope)))).map(fromParticipant);
 	}
 
+	output(scope: ParticipantScope, childId: string): Promise<string | null> {
+		return storage(() => this.owner.output(toScope(scope), childId));
+	}
+
 	async delegate(
 		command: DelegateCommand,
 		admit: (facts: ChildAdmissionFacts) => boolean,
@@ -116,7 +121,7 @@ export class RunCollaborationModel {
 						admit({
 							parent: fromParticipant(facts.parent),
 							selectedTargets: facts.selectedTargets.map((id) => id),
-							children: facts.children,
+							activeChildIds: facts.activeChildIds.map((id) => id),
 							now: facts.now,
 							dependencies: facts.dependencies.map(fromParticipant),
 						}),

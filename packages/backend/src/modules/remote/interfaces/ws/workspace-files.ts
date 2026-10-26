@@ -1293,14 +1293,14 @@ class WorkspaceFilesSession {
 			this.terminalQueuedBytes -= bytes.length;
 			this.terminalSentBytes += bytes.length;
 		}
-		if (this.workspaceId) {
+		if (this.workspaceId && this.attachmentId) {
 			if (
 				this.terminalQueue.length > 0 ||
 				this.terminalSentBytes - this.terminalConsumedBytes >= WORKSPACE_TERMINAL_MAX_IN_FLIGHT_BYTES
 			) {
-				this.workspaces.pause(this.workspaceId);
+				this.workspaces.pause(this.workspaceId, this.attachmentId);
 			} else {
-				this.workspaces.resumeOutput(this.workspaceId);
+				this.workspaces.resumeOutput(this.workspaceId, this.attachmentId);
 			}
 		}
 		if (
@@ -1806,7 +1806,6 @@ class WorkspaceFilesSession {
 		if (workspaceId && attachmentId) {
 			try {
 				this.workspaces.detach(workspaceId, attachmentId);
-				this.workspaces.resumeOutput(workspaceId);
 			} catch (error) {
 				failures.push(error);
 			}

@@ -65,6 +65,11 @@ export class ThreadModel {
 		);
 	}
 
+	async forRun(userId: number, appId: string, runId: string): Promise<AgentThread | null> {
+		const value = await agentStorage(() => this.storage.forRun(userId, appId, runId));
+		return value === null ? null : fromThreadRecord(value);
+	}
+
 	async list(
 		access: ThreadAccess,
 		after: string | null,
@@ -97,7 +102,7 @@ export class ThreadModel {
 			.update(
 				JSON.stringify(
 					input.kind === 'create'
-						? [1, input.kind, input.title]
+						? [1, input.kind, input.title, input.autoTitle]
 						: [1, input.kind, input.threadId, input.expectedVersion, input.title],
 				),
 			)
@@ -116,6 +121,7 @@ export class ThreadModel {
 								kind: input.kind,
 								operationId: input.operationId,
 								title: input.title,
+								autoTitle: input.autoTitle,
 								requestHash,
 								now: Date.now(),
 							}

@@ -6,14 +6,18 @@ import {
 	AGENT_RUN_EVENT_MAX_LIMIT,
 } from './values.js';
 import { AGENT_THREAD_ENTRY_MAX_PAGE } from '../scope/values.js';
-import { readAgentThreadEntryCursor, readAgentThreadEntries } from '../scope/http-codec.js';
+import {
+	readAgentCreateThreadResponse,
+	readAgentThreadEntryCursor,
+	readAgentThreadEntries,
+} from '../scope/http-codec.js';
 import { readAgentRunResponse, readAgentRunUsageResponse, readAgentRunEventsResponse } from './http-codec.js';
-import { readAgentApprovalList } from '../governance/http-codec.js';
+import { readAgentApprovalPage, readAgentApprovalAfter } from '../governance/http-codec.js';
 import { readAgentChildrenResponse } from '../collaboration/http-codec.js';
-import type { AgentThreadEntryCursor, AgentThreadEntries } from '../scope/model.js';
+import type { AgentThreadView, AgentThreadEntryCursor, AgentThreadEntries } from '../scope/model.js';
 import type { AgentRunView, AgentRunUsageView } from './model.js';
 import type { AgentRunEventsResponse } from './http.js';
-import type { AgentApprovalView } from '../governance/model.js';
+import type { AgentApprovalPage } from '../governance/model.js';
 import type { AgentChildrenResponse } from '../collaboration/http.js';
 
 export interface AgentRunSubscription {
@@ -42,16 +46,18 @@ export interface AgentRunStreamCursor {
 	threadId: string;
 	entries: AgentThreadEntryCursor;
 	events: number;
+	approvals: string | null;
 }
 
 export type AgentRunStreamCommand =
 	{ type: 'subscribe'; cursor: AgentRunStreamCursor } | { type: 'ack'; revision: number };
 
 export interface AgentRunStreamState {
+	thread: AgentThreadView;
 	run: AgentRunView;
 	usage: AgentRunUsageView;
 	events: AgentRunEventsResponse;
-	approvals: AgentApprovalView[];
+	approvals: AgentApprovalPage;
 	children: AgentChildrenResponse;
 }
 
@@ -76,13 +82,18 @@ export function readAgentRunStreamCommand(input: unknown): AgentRunStreamCommand
 	if (row.type !== 'subscribe') {
 		throw new InvalidAgentPayload();
 	}
-	const cursor = agentRecord(row.cursor, ['threadId', 'entries', 'events'], AGENT_RUN_STREAM_MAX_COMMAND_BYTES);
+	const cursor = agentRecord(
+		row.cursor,
+		['threadId', 'entries', 'events', 'approvals'],
+		AGENT_RUN_STREAM_MAX_COMMAND_BYTES,
+	);
 	return {
 		type: 'subscribe',
 		cursor: {
 			threadId: readAgentId(cursor.threadId),
 			entries: readAgentThreadEntryCursor(cursor.entries),
 			events: agentInteger(cursor.events),
+			approvals: readAgentApprovalAfter(cursor.approvals),
 		},
 	};
 }
@@ -117,15 +128,18 @@ export function readAgentRunStreamEvent(
 	if (row.state !== null) {
 		const value = agentRecord(
 			row.state,
-			['run', 'usage', 'events', 'approvals', 'children'],
+			['thread', 'run', 'usage', 'events', 'approvals', 'children'],
 			AGENT_RUN_STREAM_MAX_JSON_BYTES,
 		);
+		const thread = readAgentCreateThreadResponse(value.thread);
 		const run = readAgentRunResponse(value.run);
 		const usage = readAgentRunUsageResponse(value.usage);
 		const events = readAgentRunEventsResponse(value.events);
-		const approvals = readAgentApprovalList(value.approvals);
+		const approvals = readAgentApprovalPage(value.approvals, cursor.approvals);
 		const children = readAgentChildrenResponse(value.children);
 		if (
+			thread.id !== cursor.threadId ||
+			thread.appId !== selected.appId ||
 			run.id !== selected.runId ||
 			run.appId !== selected.appId ||
 			run.threadId !== cursor.threadId ||
@@ -137,15 +151,18 @@ export function readAgentRunStreamEvent(
 					event.runId !== selected.runId || event.sequence <= cursor.events || event.runVersion > run.version,
 			) ||
 			(events.items.length === 0 && events.nextCursor !== cursor.events) ||
-			approvals.some((approval) => approval.appId !== selected.appId || approval.runId !== selected.runId) ||
+			approvals.items.some(
+				(approval) => approval.appId !== selected.appId || approval.runId !== selected.runId,
+			) ||
 			children.items.some((child) => child.parentId !== selected.runId)
 		) {
 			throw new InvalidAgentPayload();
 		}
-		state = { run, usage, events, approvals, children };
+		state = { thread, run, usage, events, approvals, children };
 	}
-	const more = body.items.length > 0 || (state !== null && state.events.items.length > 0);
-	if (row.more !== more) {
+	const more =
+		body.items.length > 0 || (state !== null && (state.events.items.length > 0 || state.approvals.hasMore));
+	if (more && !row.more) {
 		throw new InvalidAgentPayload();
 	}
 	return {
@@ -155,6 +172,6 @@ export function readAgentRunStreamEvent(
 		revision: agentInteger(row.revision, 1),
 		body,
 		state,
-		more,
+		more: row.more,
 	};
 }

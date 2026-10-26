@@ -97,7 +97,7 @@ export interface RunStepStorage {
 	reserve(
 		command: StepReservationScope,
 		authorize: RunStepPolicyCheck,
-		verifyResults: (results: StoredContextToolResult[]) => boolean,
+		verifyResults: (results: StoredContextToolResult[], previewBytes: number) => boolean,
 		admitBudget: (settings: StoredExecutionSettings, usage: StoredExecutionUsage) => void,
 	): Promise<StepWriteResult>;
 	/** Commit intent BEFORE network dispatch; recheck frozen policy in this transaction.
@@ -107,6 +107,7 @@ export interface RunStepStorage {
 		authorize: RunStepPolicyCheck,
 		admitBudget: (settings: StoredExecutionSettings, usage: StoredExecutionUsage) => void,
 	): Promise<StepWriteResult>;
+	releaseCapacity(command: StepVersionedScope): Promise<StepWriteResult>;
 	appendText(command: StepVersionedScope, text: string): Promise<StepWriteResult>;
 	recordUsage(command: StepVersionedScope, inputTokens: number, outputTokens: number): Promise<StepWriteResult>;
 	finish(

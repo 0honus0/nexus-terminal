@@ -1,3 +1,4 @@
+import { fromNativeThread } from './native-thread-mapper';
 import type { AgentRunStreamUpdate } from '@nexus-terminal/shared/agent/runs/events';
 import type { NativeRunUpdate } from './native-run-types';
 import type { AgentRunUsageView } from '@nexus-terminal/shared/agent/runs/model';
@@ -37,7 +38,9 @@ export function fromNativeRun(value: AgentRunView): NativeRun {
 		id: value.id,
 		appId: value.appId,
 		threadId: value.threadId,
+		approvalMode: value.approvalMode,
 		status: value.status,
+		failure: value.failure === null ? null : { code: value.failure.code, toolName: value.failure.toolName },
 		version: value.version,
 		createdAt: value.createdAt,
 		updatedAt: value.updatedAt,
@@ -130,6 +133,7 @@ export function fromNativeEntry(value: AgentThreadEntry): NativeEntry {
 
 export function toNativeRunInput(value: NativeRunInput): AgentCreateRunRequest {
 	return {
+		approvalMode: value.approvalMode,
 		prompt: value.prompt,
 		connectionIds: value.connectionIds.map((id) => id),
 		model: {
@@ -269,6 +273,7 @@ export function fromNativeTool(value: AgentToolView): NativeTool {
 		targetVersion: value.targetVersion,
 		risk: value.risk,
 		mutation: value.mutation,
+		summary: value.summary,
 		operationHash: value.operationHash,
 		operationRevision: value.operationRevision,
 		revision: value.revision,
@@ -295,6 +300,7 @@ export function snapshotNativeRunAction(value: NativeRunAction): NativeRunAction
 	function input(value: NativeRunInput): NativeRunInput {
 		return {
 			...(value.reasoningEffort === undefined ? {} : { reasoningEffort: value.reasoningEffort }),
+			approvalMode: value.approvalMode,
 			prompt: value.prompt,
 			connectionIds: value.connectionIds.map((id) => id),
 			model: {
@@ -344,13 +350,14 @@ export function fromNativeRunUpdate(value: AgentRunStreamUpdate): NativeRunUpdat
 			value.state === null
 				? null
 				: {
+						thread: fromNativeThread(value.state.thread),
 						run: fromNativeRun(value.state.run),
 						usage: fromNativeRunUsage(value.state.usage),
 						events: {
 							items: value.state.events.items.map(fromNativeEvent),
 							nextCursor: value.state.events.nextCursor,
 						},
-						approvals: value.state.approvals.map(fromNativeApproval),
+						approvals: value.state.approvals.items.map(fromNativeApproval),
 						children: value.state.children.items.map(fromNativeChild),
 					},
 		more: value.more,

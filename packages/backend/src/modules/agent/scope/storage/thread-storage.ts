@@ -26,7 +26,7 @@ export type StoredThreadAccessFacts =
 	  };
 
 export type StoredThreadMutation =
-	| { kind: 'create'; operationId: string; title: string; requestHash: string; now: number }
+	| { kind: 'create'; operationId: string; autoTitle: boolean; title: string; requestHash: string; now: number }
 	| {
 			kind: 'rename';
 			operationId: string;
@@ -58,6 +58,7 @@ export class ThreadStorageRefusal extends Error {
 }
 
 export interface ThreadStorage {
+	forRun(userId: number, appId: string, runId: string): Promise<ThreadRecord | null>;
 	withAdmission<T>(
 		access: StoredThreadAccess,
 		admit: (facts: StoredThreadAccessFacts) => void,

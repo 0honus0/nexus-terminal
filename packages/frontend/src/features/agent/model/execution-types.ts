@@ -12,7 +12,6 @@ export interface ExecutionLimits {
 	maxMessageBytes: number;
 	maxRecallItems: number;
 	maxRecallBytes: number;
-	maxSingleArtifactBytes: number;
 	maxArtifactBytes: number;
 	artifactTtlSeconds: number;
 }

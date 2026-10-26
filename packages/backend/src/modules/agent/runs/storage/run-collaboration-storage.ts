@@ -14,7 +14,9 @@ export interface StoredParticipant {
 	parentId: string | null;
 	status: AgentRunStatus;
 	profile: 'root' | AgentChildProfile;
+	/** Bounded preview; complete immutable output is read separately. */
 	output: string | null;
+	outputBytes: number;
 	tools: string[];
 	maxRequests: number;
 	deadline: number;
@@ -54,7 +56,7 @@ export interface StoredChildCreation {
 export interface StoredChildAdmissionFacts {
 	parent: StoredParticipant;
 	selectedTargets: number[];
-	children: number;
+	activeChildIds: string[];
 	now: number;
 	dependencies: StoredParticipant[];
 }
@@ -83,6 +85,7 @@ export interface RunCollaborationStorage {
 	messageMetadata(scope: StoredParticipantScope, after: number, limit: number): Promise<StoredMessageMetadataPage>;
 	participant(scope: StoredParticipantScope): Promise<StoredParticipant | null>;
 	children(scope: StoredParticipantScope): Promise<StoredParticipant[]>;
+	output(scope: StoredParticipantScope, childId: string): Promise<string | null>;
 	delegate(
 		command: StoredDelegateCommand,
 		admit: (facts: StoredChildAdmissionFacts) => boolean,

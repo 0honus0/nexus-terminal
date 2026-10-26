@@ -68,7 +68,12 @@ export class RunModelStream {
 	constructor(private readonly network: ModelNetworkPort) {}
 
 	/** Each paid step has its own immutable request identity, distinct from Run creation. */
-	requestHash(frozen: RunFrozenInput, messages: RunModelMessage[], definitions: ToolDefinition[]): string {
+	requestHash(
+		frozen: RunFrozenInput,
+		messages: RunModelMessage[],
+		definitions: ToolDefinition[],
+		maxOutputTokens = frozen.capabilities.maxOutputTokens,
+	): string {
 		return createHash('sha256')
 			.update(
 				JSON.stringify([
@@ -78,7 +83,7 @@ export class RunModelStream {
 					frozen.credentialRevision,
 					frozen.modelId,
 					frozen.protocol,
-					frozen.capabilities.maxOutputTokens,
+					maxOutputTokens,
 					frozen.capabilities.defaultReasoningEffort ?? null,
 					messages.map(toModelMessage),
 					toModelTools(definitions),
@@ -99,12 +104,9 @@ export class RunModelStream {
 		definitions: ToolDefinition[],
 		credential: string | null,
 		signal: AbortSignal,
+		maxOutputTokens = frozen.capabilities.maxOutputTokens,
 	): AsyncIterable<RunModelDelta> {
-		if (
-			frozen.executionPolicy !== 'governed' ||
-			frozen.protocol === 'images' ||
-			frozen.capabilities.maxOutputTokens === undefined
-		) {
+		if (frozen.executionPolicy !== 'governed' || frozen.protocol === 'images' || maxOutputTokens === undefined) {
 			throw new AgentFailure('provider_unavailable');
 		}
 		if (signal.aborted) {
@@ -122,7 +124,7 @@ export class RunModelStream {
 					protocol: frozen.protocol,
 					modelId: frozen.modelId,
 					credential,
-					maxOutputTokens: frozen.capabilities.maxOutputTokens,
+					maxOutputTokens,
 					usesReasoning: Boolean(frozen.capabilities.reasoningEfforts?.length),
 					...(frozen.capabilities.defaultReasoningEffort === undefined
 						? {}
@@ -163,7 +165,8 @@ export class RunModelStream {
 						!Number.isSafeInteger(event.inputTokens) ||
 						!Number.isSafeInteger(event.outputTokens) ||
 						event.inputTokens < 0 ||
-						event.outputTokens < 0
+						event.outputTokens < 0 ||
+						!Number.isSafeInteger(event.inputTokens + event.outputTokens)
 					) {
 						throw new ProviderRequestFailure('PROVIDER_RESPONSE_INVALID');
 					}

@@ -50,6 +50,8 @@
 	}>();
 	const { t } = useI18n();
 	const device = useDeviceCapabilities();
+	// Failed sessions accept local retry input, never SSH input. Connecting sessions remain read-only.
+	const acceptsKeyboardInput = computed(() => props.inputEnabled || Boolean(props.connectionFailure));
 	const terminalState = props.state ?? createTerminalSessionState();
 	const wrapper = ref<HTMLElement | null>(null);
 	const root = ref<HTMLElement | null>(null);
@@ -68,7 +70,7 @@
 		renderedConnectionFailure = props.connectionFailure;
 		const reason = props.connectionFailure.replace(/[\x00-\x1f\x7f-\x9f]/gu, ' ').slice(0, 1000);
 		terminal.write(
-			`\r\n\x1b[31m${t('terminal.connectionFailed', { reason })}\x1b[0m\r\n\r\n${t('terminal.retryConnection')}\r\n`,
+			`\r\n\x1b[31m${t('terminal.connectionFailed', { reason })}\x1b[0m\r\n\r\n${t(device.supportsTouchInteraction.value ? 'terminal.retryConnectionTouch' : 'terminal.retryConnection')}\r\n`,
 		);
 	};
 
@@ -725,7 +727,7 @@
 				else textarea.setAttribute('inputmode', restore.inputMode);
 			}
 			// Connection readiness may have changed while this gesture was in progress.
-			textarea.readOnly = !props.inputEnabled;
+			textarea.readOnly = !acceptsKeyboardInput.value;
 		}
 		mobileKeyboardRestoreState = null;
 		if (focus && canInteract()) terminal?.focus();
@@ -1370,6 +1372,7 @@
 	};
 
 	onMounted(async () => {
+		const snapshotGeneration = terminalState.remotePtyGeneration.value;
 		const snapshot = await terminalState.restoreSnapshot();
 		if (disposed) return;
 		terminal = new Terminal({
@@ -1379,7 +1382,7 @@
 			cursorStyle: 'block',
 			cursorInactiveStyle: 'block',
 			allowTransparency: true,
-			disableStdin: !props.inputEnabled,
+			disableStdin: !acceptsKeyboardInput.value,
 			fontFamily: props.fontFamily,
 			fontSize: renderedFontSize.value,
 			scrollback: props.scrollback,
@@ -1436,8 +1439,9 @@
 			() => backgroundOsc.dispose(),
 			() => backgroundResetOsc.dispose(),
 		);
-		if (snapshot) terminal.write(snapshot, syncSearchDecorations);
-		else syncSearchDecorations();
+		if (snapshot && snapshotGeneration === terminalState.remotePtyGeneration.value) {
+			terminal.write(snapshot, syncSearchDecorations);
+		} else syncSearchDecorations();
 		root.value!.addEventListener('wheel', handleHistoryWheel, { capture: true, passive: false });
 		root.value!.addEventListener('touchstart', handleTouchStart, { capture: true, passive: false });
 		root.value!.addEventListener('touchmove', handleTouchMove, { passive: false });
@@ -1449,7 +1453,11 @@
 			// that key to a transport whose current attachment is not ready.
 			if (!props.inputEnabled) {
 				if (
+					props.connectionFailure &&
 					event.type === 'keydown' &&
+					!event.isComposing &&
+					event.keyCode !== 229 &&
+					event.key !== 'Unidentified' &&
 					!event.repeat &&
 					!['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)
 				) {
@@ -1489,6 +1497,51 @@
 			}
 			return true;
 		});
+		// Android keyboards can commit through input/composition without a usable keydown.
+		// Listen to the DOM input itself so xterm's automatic protocol replies cannot trigger retries.
+		let retryComposition = false;
+
+		const consumeRetryInput = (event: Event): void => {
+			event.stopImmediatePropagation();
+			if (terminal?.textarea) terminal.textarea.value = '';
+		};
+
+		const retryInput = (event: Event): void => {
+			if (retryComposition) {
+				// Keep the browser's in-progress composition intact, but never hand it to xterm.
+				if (!(event instanceof InputEvent) || event.isComposing) {
+					event.stopImmediatePropagation();
+					return;
+				}
+				retryComposition = false;
+			}
+			if (!canInteract() || props.inputEnabled || !props.connectionFailure) return;
+			consumeRetryInput(event);
+			emit('interaction');
+		};
+
+		const retryCompositionInput = (event: Event): void => {
+			if (event.type === 'compositionstart')
+				retryComposition = canInteract() && !props.inputEnabled && Boolean(props.connectionFailure);
+			if (!retryComposition) return;
+			event.stopImmediatePropagation();
+			if (event.type === 'compositionend') {
+				consumeRetryInput(event);
+				retryComposition = false;
+				if (canInteract() && !props.inputEnabled && props.connectionFailure) emit('interaction');
+			}
+		};
+
+		const inputRoot = root.value;
+		inputRoot?.addEventListener('input', retryInput, true);
+		for (const type of ['compositionstart', 'compositionupdate', 'compositionend'])
+			inputRoot?.addEventListener(type, retryCompositionInput, true);
+		cleanup.push(() => {
+			inputRoot?.removeEventListener('input', retryInput, true);
+			for (const type of ['compositionstart', 'compositionupdate', 'compositionend'])
+				inputRoot?.removeEventListener(type, retryCompositionInput, true);
+		});
+
 		fitAndResize();
 		stopOutput = props.channel.onOutput(handleTerminalOutput);
 		cleanup.push(
@@ -1583,13 +1636,14 @@
 	});
 
 	watch(
-		() => props.inputEnabled,
-		(enabled) => {
+		() => [props.inputEnabled, acceptsKeyboardInput.value] as const,
+		([enabled, acceptsInput]) => {
 			if (!enabled) resetInteractions();
 			if (terminal) {
-				terminal.options.disableStdin = !enabled;
+				terminal.options.disableStdin = !acceptsInput;
 				// xterm's option handler also writes readOnly; preserve suppression until touchend.
-				if (terminal.textarea) terminal.textarea.readOnly = !enabled || mobileKeyboardRestoreState !== null;
+				if (terminal.textarea)
+					terminal.textarea.readOnly = !acceptsInput || mobileKeyboardRestoreState !== null;
 			}
 		},
 	);

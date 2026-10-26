@@ -11,7 +11,7 @@ import { initializeSnapshotRestoreSchema } from '../platform/storage/sqlite/adap
 export const applicationMigrations: readonly SchemaMigration[] = [
 	{
 		version: 1,
-		signature: 'backend-next-v1-initial-20261025-agent-images',
+		signature: 'backend-next-v1-initial-20261025-agent-approvals',
 
 		async apply(tx) {
 			await targetMigrations[0].apply(tx);

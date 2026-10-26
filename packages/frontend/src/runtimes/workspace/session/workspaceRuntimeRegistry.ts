@@ -1,4 +1,3 @@
-import { WorkspaceRequestFailure } from '../model/workspace-error-types';
 import type { WorkspaceSuspendResumeOptions } from '../model/workspace-suspend-types';
 import type { SuspendedAutoTermination } from '@/features/ssh-suspend/public';
 import { computed, nextTick, ref, shallowReactive } from 'vue';
@@ -174,7 +173,6 @@ const runResume = (
 				'Workspace resume replacement target was missing from tab order',
 			);
 		}
-		const shouldRestorePrevious = Boolean(previousActiveId && oldSession && previousActiveId !== oldSession.id);
 		const session = new WorkspaceRuntimeSession(connection, {
 			onSuspendedAutoTerminated: handleSuspendedAutoTerminated,
 		});
@@ -186,7 +184,7 @@ const runResume = (
 			// temporary second tab and removing the stale disconnected tab only after resume completes.
 			sessions.set(session.id, session);
 			order.value = order.value.map((id) => (id === oldSession.id ? session.id : id));
-			activeId.value = session.id;
+			if (activeId.value === oldSession.id) activeId.value = session.id;
 		} else {
 			add(session, replaceIndex >= 0 ? replaceIndex : order.value.length);
 		}
@@ -203,11 +201,6 @@ const runResume = (
 			void refreshSuspendedSessionsCatalog();
 			if (oldSession && sessions.get(oldSession.id) === oldSession) {
 				removeRuntime(oldSession.id, 'Replaced by resumed suspended session');
-			}
-			if (shouldRestorePrevious) {
-				restoreActive(previousActiveId, session.id);
-			} else {
-				activeId.value = session.id;
 			}
 			return session;
 		} catch (error) {
@@ -230,6 +223,7 @@ const runResume = (
 				},
 				'Workspace resume registry transaction failed',
 			);
+			const wasActive = activeId.value === session.id;
 			removeRuntime(session.id, 'Suspended session resume failed');
 			if (replacingVisibleSlot && oldSession && sessions.get(oldSession.id) === oldSession) {
 				const next = [...order.value];
@@ -239,7 +233,7 @@ const runResume = (
 				}
 				order.value = next;
 			}
-			restoreActive(previousActiveId, oldSession?.id ?? null);
+			if (wasActive) restoreActive(previousActiveId, oldSession?.id ?? null);
 			throw error;
 		}
 	})().finally(() => {
@@ -279,11 +273,11 @@ export const workspaceRuntimeRegistry = {
 			if (sessions.get(session.id) !== session) {
 				throw new DOMException('Workspace closed', 'AbortError');
 			}
-			// Keep a refused host's tab available for an explicit reconnect after confirmation/cancellation.
-			if (error instanceof WorkspaceRequestFailure && error.code === 'host_key_untrusted') {
+			// Runtime owns the failure reason and retry/unknown-result fence. Retain
+			// its tab so every failed initial connection keeps that recovery entry.
+			if (session.state.value === 'error') {
 				return session;
 			}
-			// Other failed initial bindings still release the provisional tab.
 			removeRuntime(session.id, 'Initial Workspace connection failed');
 			throw error;
 		}

@@ -686,12 +686,13 @@ test('read-only delivery keeps future repair outside the Run without executing t
 	expect(result.text).toBe('Read-only report delivered. Future repair is not authorized and was not executed.');
 	const approvals = await requestAgentWorkspace(request, task.app, {
 		method: 'agent.approvals.list',
-		params: { runId: run.id },
+		params: { runId: run.id, after: null },
 	});
 	if (approvals.method !== 'agent.approvals.list') {
 		throw new Error('Unexpected approvals');
 	}
-	expect(approvals.value).toEqual([]);
+	expect(approvals.value.hasMore).toBe(false);
+	expect(approvals.value.items).toEqual([]);
 	const step = await requestAgentJson(
 		request,
 		{ method: 'GET', path: `/apps/${task.app.id}/runs/${run.id}/steps/1` },

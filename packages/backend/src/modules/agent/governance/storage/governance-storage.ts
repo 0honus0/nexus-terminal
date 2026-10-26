@@ -201,19 +201,21 @@ export interface GovernanceStorage {
 		userId: number,
 		appId: string,
 		runId: string,
+		after: string | null,
 		now: () => number,
 		transition: (
 			approval: StoredApproval,
 			runStatus: AgentRunStatus,
 			now: number,
 		) => 'expired' | 'superseded' | null,
-	): Promise<StoredApproval[] | null | 'limit_exceeded'>;
+	): Promise<StoredApprovalPage | null>;
 	requestApproval(
 		input: { userId: number; appId: string; runId: string; toolCallId: string },
 		create: (
 			policy: StoredPolicy,
 			runStatus: AgentRunStatus,
 			operation: StoredToolOperation,
+			approvalMode: import('@nexus-terminal/shared/agent/runs/values').AgentApprovalMode,
 		) => StoredApproval | null,
 		authorize: StoredToolAuthorityDecision,
 	): Promise<StoredApproval | null>;
@@ -268,4 +270,11 @@ export interface StoredDenylistCommand {
 export interface StoredDenylistMutation {
 	value: StoredTargetDenylist;
 	revokedRuns: boolean;
+}
+
+export interface StoredApprovalPage {
+	items: StoredApproval[];
+	after: string | null;
+	nextCursor: string | null;
+	hasMore: boolean;
 }

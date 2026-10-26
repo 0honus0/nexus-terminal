@@ -1,5 +1,5 @@
 import { AgentHttpInput } from './agent-input.js';
-import { toApproval } from './governance-mapper.js';
+import { toApproval, toApprovalPage } from './governance-mapper.js';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
 import { readAgentTargetDenylistReplaceRequest } from '@nexus-terminal/shared/agent/governance/http-codec';
 import type { AgentTargetDenylistView } from '@nexus-terminal/shared/agent/governance/model';
@@ -16,6 +16,7 @@ import {
 	readAgentExecutionPolicyReplaceRequest,
 	readAgentApprovalPath,
 	readAgentRunApprovalsPath,
+	readAgentApprovalQuery,
 	readAgentApprovalResolveRequest,
 	readAgentApprovalCommandHeaders,
 } from '@nexus-terminal/shared/agent/governance/http-codec';
@@ -24,6 +25,7 @@ import type {
 	AgentGrantView,
 	AgentExecutionPolicyView,
 	AgentApprovalView,
+	AgentApprovalPage,
 	AgentGrantScope,
 } from '@nexus-terminal/shared/agent/governance/model';
 import type { AgentErrorResponse } from '@nexus-terminal/shared/agent/http';
@@ -47,7 +49,7 @@ type Response =
 	| AgentGrantView
 	| AgentExecutionPolicyView
 	| AgentApprovalView
-	| AgentApprovalView[]
+	| AgentApprovalPage
 	| AgentTargetDenylistView
 	| AgentErrorResponse;
 
@@ -246,6 +248,7 @@ export function createGovernanceHttpRoutes(
 		path: string,
 		action: Handler,
 		maxBodyBytes = AGENT_GOVERNANCE_MAX_BODY_BYTES,
+		queryKeys: readonly string[] = [],
 	): void {
 		routes.push({
 			method,
@@ -259,7 +262,7 @@ export function createGovernanceHttpRoutes(
 					if (userId === null) {
 						return;
 					}
-					if ([...ctx.query.keys()].length) {
+					if ([...ctx.query.keys()].some((key) => !queryKeys.includes(key))) {
 						throw new InvalidAgentPayload();
 					}
 					await boundary(() => inputBoundary.normalize(() => action(ctx, userId)));
@@ -343,11 +346,21 @@ export function createGovernanceHttpRoutes(
 		const value = await governance.approval(userId, path.appId, path.approvalId);
 		await deliver(ctx, value === null ? 404 : 200, value === null ? { code: 'not_found' } : toApproval(value));
 	});
-	add('GET', '/apps/:appId/runs/:runId/approvals', async (ctx, userId) => {
-		const path = readAgentRunApprovalsPath(ctx.params);
-		const items = await governance.approvals(userId, path.appId, path.runId);
-		await deliver(ctx, items === null ? 404 : 200, items === null ? { code: 'not_found' } : items.map(toApproval));
-	});
+	add(
+		'GET',
+		'/apps/:appId/runs/:runId/approvals',
+		async (ctx, userId) => {
+			const path = readAgentRunApprovalsPath(ctx.params);
+			const items = await governance.approvals(userId, path.appId, path.runId, readAgentApprovalQuery(ctx.query));
+			await deliver(
+				ctx,
+				items === null ? 404 : 200,
+				items === null ? { code: 'not_found' } : toApprovalPage(items),
+			);
+		},
+		AGENT_GOVERNANCE_MAX_BODY_BYTES,
+		['after'],
+	);
 	add('POST', '/apps/:appId/approvals/:approvalId/resolve', async (ctx, userId) => {
 		const path = readAgentApprovalPath(ctx.params);
 		const request = readAgentApprovalResolveRequest(await ctx.json());

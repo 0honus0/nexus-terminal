@@ -12,12 +12,13 @@
 	import NativeRunDetails from '../runtime/NativeRunDetails.vue';
 	import NativeMemoryReview from '../runtime/NativeMemoryReview.vue';
 	import NativeApprovalList from '../runtime/NativeApprovalList.vue';
+	import NativeApprovalHistoryList from '../runtime/NativeApprovalHistoryList.vue';
 	import NativeToolActivityList from '../runtime/NativeToolActivityList.vue';
 	import AgentMessageBody from '../ai/AgentMessageBody.vue';
 	import AgentConversationWelcome from '../ai/AgentConversationWelcome.vue';
 	import type { NativeThread } from '../model/native-thread-types';
 	import { formatAgentNumber } from '../locale-format';
-	import type { NativeModel, NativeTool } from '../model/native-run-types';
+	import type { NativeApproval, NativeModel, NativeTool } from '../model/native-run-types';
 	import { AGENT_REASONING_EFFORTS, type AgentReasoningEffort } from '@nexus-terminal/shared/agent/providers/values';
 
 	const props = defineProps<{
@@ -40,6 +41,7 @@
 	const memoryCount = ref(0);
 	const memoryNeedsRead = ref(false);
 	const auditToolId = ref('');
+	const auditRequest = ref(0);
 	const taskRailWidth = ref(360);
 	const taskRailHeight = ref(0);
 	const pendingThreadSelection = ref<NativeThread | null>(null);
@@ -50,7 +52,7 @@
 	const canJumpPrevious = ref(false);
 	const canJumpNext = ref(false);
 	type AgentConfigControl = 'model' | 'reasoning' | 'target' | 'approval';
-	const selectedConfig = ref<AgentConfigControl>('model');
+	const selectedConfig = ref<AgentConfigControl | null>(null);
 	let applyingThreadSelection = false;
 	let layoutObserver: ReturnType<typeof useResizeObserver> | null = null;
 	let transcriptObserver: ReturnType<typeof useResizeObserver> | null = null;
@@ -96,6 +98,7 @@
 		run,
 		usage,
 		entries,
+		submittedMessage,
 		tools,
 		toolCursor,
 		readOlderTools,
@@ -113,9 +116,8 @@
 		attachmentsReady,
 	} = runtime;
 
-	const requestedApprovalCount = computed(
-		() => approvals.value.filter((approval) => approval.status === 'requested').length,
-	);
+	const pendingApprovals = computed(() => approvals.value.filter((approval) => approval.status === 'requested'));
+	const requestedApprovalCount = computed(() => pendingApprovals.value.length);
 	const layoutStyle = computed<Record<string, string> | undefined>(() => {
 		if (!run.value || !taskRailVisible.value) return undefined;
 		return { '--agent-task-rail-column': `${taskRailWidth.value}px` };
@@ -180,6 +182,12 @@
 		memoryNeedsRead.value = needsRead;
 	}
 
+	function inspectToolAudit(toolId: string): void {
+		auditToolId.value = toolId;
+		auditRequest.value += 1;
+		taskRailVisible.value = true;
+	}
+
 	watch(
 		() => run.value?.id,
 		() => {
@@ -221,6 +229,7 @@
 	const toolsByEntry = computed(() => {
 		const assigned = new Map<number, NativeTool[]>();
 		const orphan: NativeTool[] = [];
+		const indexByToolId = new Map<string, number>();
 		for (const group of toolGroups.value) {
 			const first = group[0];
 			if (!first) continue;
@@ -243,7 +252,22 @@
 				}
 			}
 			if (target < 0) orphan.push(...group);
-			else assigned.set(target, [...(assigned.get(target) ?? []), ...group]);
+			else {
+				assigned.set(target, [...(assigned.get(target) ?? []), ...group]);
+				for (const tool of group) indexByToolId.set(tool.id, target);
+			}
+		}
+		return { assigned, orphan, indexByToolId };
+	});
+
+	const approvalsByEntry = computed(() => {
+		const assigned = new Map<number, NativeApproval[]>();
+		const orphan: NativeApproval[] = [];
+		for (const approval of approvals.value) {
+			if (approval.status === 'requested') continue;
+			const target = toolsByEntry.value.indexByToolId.get(approval.toolCallId);
+			if (target === undefined) orphan.push(approval);
+			else assigned.set(target, [...(assigned.get(target) ?? []), approval]);
 		}
 		return { assigned, orphan };
 	});
@@ -396,7 +420,7 @@
 	}
 
 	function selectConfigControl(control: AgentConfigControl, open: boolean): void {
-		if (open) selectedConfig.value = control;
+		selectedConfig.value = open ? control : null;
 	}
 
 	function setConnectionSelected(id: number, selected: boolean): void {
@@ -543,6 +567,7 @@
 		if (!thread.value || activeRun.value) {
 			return;
 		}
+		keepPinnedToBottom.value = true;
 		void runtime.send(run.value !== null);
 	}
 
@@ -569,7 +594,14 @@
 		{ flush: 'post' },
 	);
 	watch(
-		() => [thread.value?.id, entries.value.length, entries.value.at(-1)?.text, chatError.value] as const,
+		() =>
+			[
+				thread.value?.id,
+				entries.value.length,
+				entries.value.at(-1)?.text,
+				submittedMessage.value?.operationId,
+				chatError.value,
+			] as const,
 		(value, previous) => {
 			const threadId = value[0];
 			const previousThreadId = previous?.[0];
@@ -709,7 +741,11 @@
 				>
 					{{ t('agent.nativeRun.executionDisabled') }}
 				</UiInlineNotice>
-				<UiInlineNotice v-if="pending" class="agent-unknown-panel space-y-2.5" tone="warning">
+				<UiInlineNotice
+					v-if="pending && !operation.busy.value"
+					class="agent-unknown-panel space-y-2.5"
+					tone="warning"
+				>
 					<p class="text-xs font-medium">{{ t('agent.nativeRun.unknown') }}</p>
 					<details class="rounded-lg bg-background/45 p-2 text-xs text-text-secondary">
 						<summary class="cursor-pointer select-none">
@@ -754,7 +790,7 @@
 					</UiButton>
 				</UiInlineNotice>
 				<UiLoadingState
-					v-else-if="operation.busy.value || (!scope && !chatError)"
+					v-else-if="!thread && (operation.busy.value || (!scope && !chatError))"
 					class="flex-1"
 					compact
 					:bordered="false"
@@ -770,7 +806,7 @@
 						@load.capture="handleTranscriptResize"
 					>
 						<AgentConversationWelcome
-							v-if="!entries.length"
+							v-if="!entries.length && !submittedMessage"
 							:active="active"
 							:draft="draft"
 							@select="draft = $event"
@@ -824,8 +860,26 @@
 								:tools="toolsByEntry.assigned.get(index) ?? []"
 								:connections="connections"
 							/>
+							<NativeApprovalHistoryList
+								:approvals="approvalsByEntry.assigned.get(index) ?? []"
+								:connections="connections"
+							/>
 						</template>
+						<article
+							v-if="submittedMessage"
+							data-agent-message
+							class="mx-auto flex w-full max-w-3xl justify-end"
+						>
+							<div
+								class="min-w-0 max-w-[80%] rounded-2xl rounded-tr-[5px] bg-primary/[0.07] px-4 py-3.5 ring-1 ring-inset ring-primary/10 shadow-2xs"
+							>
+								<p class="whitespace-pre-wrap break-words text-[13px] leading-[1.7]">
+									{{ submittedMessage.text }}
+								</p>
+							</div>
+						</article>
 						<NativeToolActivityList :tools="toolsByEntry.orphan" :connections="connections" />
+						<NativeApprovalHistoryList :approvals="approvalsByEntry.orphan" :connections="connections" />
 						<div v-if="toolCursor !== null" class="mx-auto flex w-full max-w-3xl justify-center">
 							<UiButton
 								density="compact"
@@ -850,12 +904,13 @@
 									:key="artifact.id"
 									density="compact"
 									appearance="soft"
-									class="max-w-56 rounded-full px-3"
+									class="agent-input-artifact max-w-full min-w-0 rounded-full px-3"
 									:title="artifact.name"
 									@click="removeInputArtifact(artifact.id)"
 								>
-									<i class="fa-solid fa-paperclip mr-1" aria-hidden="true"></i>{{ artifact.name }}
-									<span class="ml-1 opacity-60" aria-hidden="true">×</span>
+									<i class="fa-solid fa-paperclip mr-1 shrink-0" aria-hidden="true"></i>
+									<span class="agent-input-artifact-name min-w-0">{{ artifact.name }}</span>
+									<span class="ml-1 shrink-0 opacity-60" aria-hidden="true">×</span>
 								</UiButton>
 							</div>
 							<div class="agent-composer-status mb-1.5 flex min-h-6 items-center justify-between gap-2">
@@ -1428,16 +1483,13 @@
 				</UiButton>
 			</header>
 			<NativeApprovalList
-				v-if="approvals.length"
+				v-if="pendingApprovals.length"
 				class="mb-3"
-				:approvals="approvals"
+				:approvals="pendingApprovals"
 				:connections="connections"
 				:disabled="operation.busy.value || threadBusy"
 				@mutate="runtime.mutate"
-				@inspect="
-					auditToolId = $event;
-					taskRailVisible = true;
-				"
+				@inspect="inspectToolAudit"
 			/>
 			<NativeRunDetails
 				:key="run.id"
@@ -1445,6 +1497,7 @@
 				:run="run"
 				:events="events"
 				:audit-tool-id="auditToolId"
+				:audit-request="auditRequest"
 				:children="children"
 				:child="child"
 				:messages="messages"

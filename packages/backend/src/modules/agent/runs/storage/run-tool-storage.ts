@@ -79,6 +79,16 @@ export interface StoredToolEventPage {
 	nextCursor: number;
 }
 
+export interface StoredToolListCursor {
+	createdAt: number;
+	id: string;
+}
+
+export interface StoredToolListPage {
+	items: StoredToolOperation[];
+	nextCursor: StoredToolListCursor | null;
+}
+
 export interface StoredPermissionInspection {
 	parent: StoredToolIdentity;
 	inspection: StoredToolInspection;
@@ -99,6 +109,11 @@ export interface RunToolStorage {
 	): Promise<StoredToolOperation | 'not_found' | 'version_conflict'>;
 	get(identity: StoredToolIdentity): Promise<StoredToolOperation | null>;
 	listEvents(identity: StoredToolIdentity, after: number, limit: number): Promise<StoredToolEventPage | null>;
+	listThread(
+		input: { userId: number; appId: string; threadId: string },
+		before: StoredToolListCursor | null,
+		limit: number,
+	): Promise<StoredToolListPage | null>;
 	finish(
 		command: StoredToolSettlement,
 		now: () => number,

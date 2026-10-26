@@ -14,6 +14,7 @@ export interface AgentToolView {
 	targetVersion: number | null;
 	risk: AgentApprovalRisk;
 	mutation: boolean;
+	summary: string;
 	operationHash: string;
 	operationRevision: number;
 	revision: number;

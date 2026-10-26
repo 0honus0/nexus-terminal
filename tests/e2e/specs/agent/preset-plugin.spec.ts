@@ -155,12 +155,13 @@ async function approveNativeFamily(task: NativeTask, runId: string, allowed: str
 	for (const id of ids) {
 		const result = await requestAgentWorkspace(task.request, task.app, {
 			method: 'agent.approvals.list',
-			params: { runId: id },
+			params: { runId: id, after: null },
 		});
 		if (result.method !== 'agent.approvals.list') {
 			throw new Error('Unexpected approval list');
 		}
-		for (const approval of result.value.filter((item) => item.status === 'requested')) {
+		expect(result.value.hasMore).toBe(false);
+		for (const approval of result.value.items.filter((item) => item.status === 'requested')) {
 			expect(allowed).toContain(approval.inspection.toolName);
 			await resolveNativeApproval(task, approval, 'approved');
 		}
@@ -542,16 +543,17 @@ test('Nexus Agent Browser lifecycle cases reclaim contexts across cancellation a
 				if (phase === 'cancel-approval') {
 					const approvals = await requestAgentWorkspace(request, app, {
 						method: 'agent.approvals.list',
-						params: { runId: run.id },
+						params: { runId: run.id, after: null },
 					});
 					if (approvals.method !== 'agent.approvals.list') {
 						throw new Error('Unexpected approvals');
 					}
-					expect(approvals.value.filter((item) => item.inspection.toolName === 'shell_execute')).toHaveLength(
-						1,
-					);
+					expect(approvals.value.hasMore).toBe(false);
 					expect(
-						approvals.value.find((item) => item.inspection.toolName === 'shell_execute')!.consumedAt,
+						approvals.value.items.filter((item) => item.inspection.toolName === 'shell_execute'),
+					).toHaveLength(1);
+					expect(
+						approvals.value.items.find((item) => item.inspection.toolName === 'shell_execute')!.consumedAt,
 					).toBeNull();
 				}
 			} finally {
@@ -708,7 +710,9 @@ test('Nexus Agent subagent lifecycle preserves tool batches and reclaims child B
 					await releaseBrowserModel();
 				}
 				const result = await finishNativeTask(task, run.id);
-				expect(result.run.status).toBe(cancelled ? (independent ? 'unknown' : 'cancelled') : 'completed');
+				expect(result.run.status).toBe(
+					cancelled ? (independent ? (creating ? 'unknown' : 'completed') : 'cancelled') : 'completed',
+				);
 				expect((await nativeChildren(task, run.id))[0].status).toBe(cancelled ? 'cancelled' : 'completed');
 				if (!cancelled) {
 					expect(result.text).toContain('Browser lifecycle fixture completed.');
@@ -800,13 +804,14 @@ test('remote signed Nexus Agent plugin installs, registers an Agent definition, 
 		});
 		const approvals = await requestAgentWorkspace(request, app, {
 			method: 'agent.approvals.list',
-			params: { runId: result.run.id },
+			params: { runId: result.run.id, after: null },
 		});
 		if (approvals.method !== 'agent.approvals.list') {
 			throw new Error('Unexpected approvals');
 		}
-		expect(approvals.value).toHaveLength(2);
-		for (const approval of approvals.value) {
+		expect(approvals.value.hasMore).toBe(false);
+		expect(approvals.value.items).toHaveLength(2);
+		for (const approval of approvals.value.items) {
 			expect(approval.inspection).toMatchObject({ toolName: 'collaboration_fact_write', risk: 'control' });
 		}
 	});
@@ -1000,19 +1005,13 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 			await article.getByText('Normalized operation', { exact: true }).click();
 			await article.getByRole('button', { name: 'Inspect tool audit', exact: true }).click();
 			await openNativeTaskPanel(page);
-			await hub
-				.getByRole('complementary', { name: 'Tasks', exact: true })
-				.locator('details > summary')
-				.filter({ hasText: /^Technical details$/ })
-				.first()
-				.click();
 			const audit = hub
 				.locator('details')
 				.filter({ has: page.locator(':scope > summary').filter({ hasText: /^Step and tool audit$/ }) });
-			await audit.locator(':scope > summary').click();
-			await audit.getByRole('button', { name: 'Refresh current state', exact: true }).last().click();
+			await expect(audit).toHaveAttribute('open', '');
 			await expect(audit).toContainText('shell_execute');
 			await expect(audit).toContainText(approval.operationHash);
+			await expect(audit).toContainText('printf approval-e2e');
 		} finally {
 			await cancelNativeTask(task, run.id);
 		}

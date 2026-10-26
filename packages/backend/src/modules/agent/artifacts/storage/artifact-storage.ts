@@ -33,7 +33,6 @@ export interface StoredArtifactFacts {
 	appExists: boolean;
 	appEnabled: boolean;
 	totalBytes: number;
-	totalCount: number;
 }
 
 export interface StoredArtifactCreation {

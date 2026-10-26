@@ -4,6 +4,22 @@ import type { ProviderRecord, ProviderModelInput, ProviderObservation } from './
 export function fromStoredModel(value: StoredProviderModel): ProviderModelInput {
 	return {
 		id: value.id,
+		...(value.capabilitySources === undefined
+			? {}
+			: {
+					capabilitySources: {
+						contextWindow: value.capabilitySources.contextWindow,
+						maxOutputTokens: value.capabilitySources.maxOutputTokens,
+						supportsTools: value.capabilitySources.supportsTools,
+						supportsImageInput: value.capabilitySources.supportsImageInput,
+						supportsImageGeneration: value.capabilitySources.supportsImageGeneration,
+						supportsFileInput: value.capabilitySources.supportsFileInput,
+						supportsPromptCacheKey: value.capabilitySources.supportsPromptCacheKey,
+						reasoningEfforts: value.capabilitySources.reasoningEfforts,
+						defaultReasoningEffort: value.capabilitySources.defaultReasoningEffort,
+						reasoningMandatory: value.capabilitySources.reasoningMandatory,
+					},
+				}),
 		contextWindow: value.contextWindow,
 		maxOutputTokens: value.maxOutputTokens,
 		supportsTools: value.supportsTools,
@@ -23,6 +39,22 @@ export function fromStoredModel(value: StoredProviderModel): ProviderModelInput 
 export function toStoredModel(value: ProviderModelInput): StoredProviderModel {
 	return {
 		id: value.id,
+		...(value.capabilitySources === undefined
+			? {}
+			: {
+					capabilitySources: {
+						contextWindow: value.capabilitySources.contextWindow,
+						maxOutputTokens: value.capabilitySources.maxOutputTokens,
+						supportsTools: value.capabilitySources.supportsTools,
+						supportsImageInput: value.capabilitySources.supportsImageInput,
+						supportsImageGeneration: value.capabilitySources.supportsImageGeneration,
+						supportsFileInput: value.capabilitySources.supportsFileInput,
+						supportsPromptCacheKey: value.capabilitySources.supportsPromptCacheKey,
+						reasoningEfforts: value.capabilitySources.reasoningEfforts,
+						defaultReasoningEffort: value.capabilitySources.defaultReasoningEffort,
+						reasoningMandatory: value.capabilitySources.reasoningMandatory,
+					},
+				}),
 		contextWindow: value.contextWindow,
 		maxOutputTokens: value.maxOutputTokens,
 		supportsTools: value.supportsTools,

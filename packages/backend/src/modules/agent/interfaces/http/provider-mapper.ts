@@ -32,6 +32,22 @@ import type {
 function appModel(model: AgentProviderModelInput): ProviderModelInput {
 	return {
 		id: model.id,
+		...(model.capabilitySources === undefined
+			? {}
+			: {
+					capabilitySources: {
+						contextWindow: model.capabilitySources.contextWindow,
+						maxOutputTokens: model.capabilitySources.maxOutputTokens,
+						supportsTools: model.capabilitySources.supportsTools,
+						supportsImageInput: model.capabilitySources.supportsImageInput,
+						supportsImageGeneration: model.capabilitySources.supportsImageGeneration,
+						supportsFileInput: model.capabilitySources.supportsFileInput,
+						supportsPromptCacheKey: model.capabilitySources.supportsPromptCacheKey,
+						reasoningEfforts: model.capabilitySources.reasoningEfforts,
+						defaultReasoningEffort: model.capabilitySources.defaultReasoningEffort,
+						reasoningMandatory: model.capabilitySources.reasoningMandatory,
+					},
+				}),
 		...(model.protocol === undefined ? {} : { protocol: model.protocol }),
 		contextWindow: model.contextWindow,
 		maxOutputTokens: model.maxOutputTokens,
@@ -62,8 +78,8 @@ export function appProvider(input: AgentProviderInput): ProviderInput {
 }
 
 function wireCapabilities(
-	capabilities: Partial<Omit<ProviderModelInput, 'id' | 'protocol'>>,
-): Partial<Omit<AgentProviderModelInput, 'id' | 'protocol'>> {
+	capabilities: Partial<Omit<ProviderModelInput, 'id' | 'protocol' | 'capabilitySources'>>,
+): Partial<Omit<AgentProviderModelInput, 'id' | 'protocol' | 'capabilitySources'>> {
 	return {
 		...(capabilities.contextWindow === undefined ? {} : { contextWindow: capabilities.contextWindow }),
 		...(capabilities.maxOutputTokens === undefined ? {} : { maxOutputTokens: capabilities.maxOutputTokens }),

@@ -1,3 +1,4 @@
+import type { AgentModelCapabilityField } from '@nexus-terminal/shared/agent/providers/values';
 import { useI18n } from 'vue-i18n';
 import { useFeedbackMessage } from '@/shared/feedback/public';
 import { nextTick, computed, onActivated, onMounted, ref, toRaw, watch } from 'vue';
@@ -272,37 +273,47 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 
 	function applyRegistry(model: ProviderModelDraft, value: ModelRegistryDefaults, mode: 'missing' | 'replace'): void {
 		const replace = mode === 'replace';
+
+		function apply<K extends AgentModelCapabilityField>(field: K, value: ProviderModelDraft[K]): void {
+			model[field] = value;
+			if (value === undefined) delete model.sources[field];
+			else model.sources[field] = 'registry';
+		}
+
 		if (value.supportsImageGeneration === true && (replace || model.protocol === undefined))
 			model.protocol = 'images';
 		const observed = discovered.value.find((item) => item.id === model.id)?.capabilities;
-		if (replace || model.contextWindow === undefined) model.contextWindow = value.contextWindow;
-		if (replace || model.maxOutputTokens === undefined) model.maxOutputTokens = value.maxOutputTokens;
+		if (replace || model.contextWindow === undefined) apply('contextWindow', value.contextWindow);
+		if (replace || model.maxOutputTokens === undefined) apply('maxOutputTokens', value.maxOutputTokens);
 		if (
 			value.supportsTools !== undefined &&
 			(replace || (!configuredTools.has(toRaw(model)) && observed?.supportsTools === undefined))
 		) {
-			model.supportsTools = value.supportsTools;
+			apply('supportsTools', value.supportsTools);
 		}
 		configuredTools.add(toRaw(model));
-		if (replace || model.supportsImageInput === undefined) model.supportsImageInput = value.supportsImageInput;
+		if (replace || model.supportsImageInput === undefined) apply('supportsImageInput', value.supportsImageInput);
 		if (replace || model.supportsImageGeneration === undefined)
-			model.supportsImageGeneration = value.supportsImageGeneration;
-		if (replace || model.supportsFileInput === undefined) model.supportsFileInput = value.supportsFileInput;
+			apply('supportsImageGeneration', value.supportsImageGeneration);
+		if (replace || model.supportsFileInput === undefined) apply('supportsFileInput', value.supportsFileInput);
 		if (replace || model.supportsPromptCacheKey === undefined)
-			model.supportsPromptCacheKey = value.supportsPromptCacheKey;
+			apply('supportsPromptCacheKey', value.supportsPromptCacheKey);
 		if (replace || model.reasoningEfforts === undefined) {
-			model.reasoningEfforts = value.reasoningEfforts?.map((effort) => effort);
+			apply(
+				'reasoningEfforts',
+				value.reasoningEfforts?.map((effort) => effort),
+			);
 		}
 		if (
 			(replace || model.defaultReasoningEffort === undefined) &&
 			(value.defaultReasoningEffort === undefined ||
 				model.reasoningEfforts?.includes(value.defaultReasoningEffort))
 		) {
-			model.defaultReasoningEffort = value.defaultReasoningEffort;
+			apply('defaultReasoningEffort', value.defaultReasoningEffort);
 		}
 		if (replace || model.reasoningMandatory === undefined) {
 			if (value.reasoningMandatory !== true || model.reasoningEfforts?.length)
-				model.reasoningMandatory = value.reasoningMandatory;
+				apply('reasoningMandatory', value.reasoningMandatory);
 		}
 	}
 
@@ -373,6 +384,7 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 				const protocol = model.protocol;
 				const effectiveProtocol = protocol ?? currentDraft.protocol;
 				configuredTools.delete(toRaw(model));
+				model.sources = {};
 				model.contextWindow = undefined;
 				model.maxOutputTokens = undefined;
 				model.supportsTools = false;
@@ -387,7 +399,11 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 				if (protocol !== undefined) model.protocol = protocol;
 				if (effectiveProtocol === 'images') {
 					model.supportsTools = false;
-					if (model.supportsImageGeneration === undefined) model.supportsImageGeneration = true;
+					model.sources.supportsTools = 'manual';
+					if (model.supportsImageGeneration === undefined) {
+						model.supportsImageGeneration = true;
+						model.sources.supportsImageGeneration = 'manual';
+					}
 				}
 				notice.value = value ? 'parametersRestored' : 'parametersRestoredNoDefaults';
 			},

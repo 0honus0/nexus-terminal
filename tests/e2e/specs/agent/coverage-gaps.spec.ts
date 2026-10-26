@@ -200,7 +200,7 @@ test('Memory proposal, review, list, stale-CAS rejection, and revoke close the p
 	expect(candidates.items).toContainEqual(proposed);
 	const thread = await requestAgentWorkspace(request, app, {
 		method: 'agent.threads.create',
-		params: { operationId: randomUUID(), title: 'Memory review scope' },
+		params: { autoTitle: false, operationId: randomUUID(), title: 'Memory review scope' },
 	});
 	if (thread.method !== 'agent.threads.create') throw new Error('Unexpected thread confirmation');
 	const scoped = await requestAgentJson(

@@ -14,7 +14,9 @@ export interface Participant {
 	parentId: string | null;
 	status: AgentRunStatus;
 	profile: 'root' | AgentChildProfile;
+	/** Bounded preview; complete immutable output is read separately. */
 	output: string | null;
+	outputBytes: number;
 	tools: string[];
 	maxRequests: number;
 	deadline: number;
@@ -32,7 +34,8 @@ export type CollaborationInput =
 			dependencies: string[];
 			dependencyMode: 'success' | 'settled';
 	  }
-	| { action: 'list' }
+	| { action: 'list'; after: string | null; limit: number }
+	| { action: 'output_read'; childId: string; offset: number; maxBytes: number }
 	| { action: 'join'; childIds: string[]; mode: 'all' | 'any'; waitSeconds: number }
 	| { action: 'cancel'; childIds: string[] }
 	| { action: 'send'; recipientId: string; body: string; ttlSeconds: number }
@@ -97,12 +100,13 @@ export interface ChildCreation {
 export interface ChildAdmissionFacts {
 	parent: Participant;
 	selectedTargets: number[];
-	children: number;
+	activeChildIds: string[];
 	now: number;
 	dependencies: Participant[];
 }
 
 export interface CollaborationRuntime {
+	occupiedChildIds(scope: ParticipantScope): string[];
 	admit<T>(work: (admit: () => void) => Promise<T>, maxRuns: number): Promise<T>;
 	start(command: import('./run-types.js').RunExecutionCommand, parentId: string): boolean;
 	abort(scope: ParticipantScope, id: string): void;

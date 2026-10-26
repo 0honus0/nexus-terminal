@@ -1,3 +1,4 @@
+import { readRunApprovalMode } from '../../../runs/adapters/sqlite/run-sql.js';
 import { executionSettings } from '../../../execution/adapters/sqlite/execution-sql.js';
 import type { StoredExecutionSettings } from '../../../execution/storage/execution-storage.js';
 import { currentParticipant } from '../../../runs/adapters/sqlite/run-participant-sql.js';
@@ -27,12 +28,13 @@ import type {
 import type { AgentRunStatus } from '@nexus-terminal/shared/agent/runs/values';
 import type { SqlExecutor, SqlReader } from '../../../../../platform/storage/sqlite/sql-types.js';
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
-import { AGENT_APPROVAL_MAX_LIST_ITEMS, AGENT_CAPABILITIES } from '@nexus-terminal/shared/agent/governance/values';
+import { AGENT_APPROVAL_MAX_PAGE_ITEMS, AGENT_CAPABILITIES } from '@nexus-terminal/shared/agent/governance/values';
 import type {
 	GovernanceStorage,
 	StoredPolicyOverrides,
 	StoredPolicy,
 	StoredApproval,
+	StoredApprovalPage,
 	StoredGrant,
 	GrantReplaceResult,
 	ExecutionReplaceResult,
@@ -452,13 +454,14 @@ export class SqliteGovernanceStorage implements GovernanceStorage {
 		userId: number,
 		appId: string,
 		runId: string,
+		after: string | null,
 		now: () => number,
 		transition: (
 			approval: StoredApproval,
 			runStatus: AgentRunStatus,
 			now: number,
 		) => 'expired' | 'superseded' | null,
-	): Promise<StoredApproval[] | null | 'limit_exceeded'> {
+	): Promise<StoredApprovalPage | null> {
 		return this.db.transaction(async (tx) => {
 			const run = await tx.one('SELECT id FROM agent_runs WHERE user_id=? AND app_id=? AND id=?', [
 				userId,
@@ -468,24 +471,19 @@ export class SqliteGovernanceStorage implements GovernanceStorage {
 			if (!run) {
 				return null;
 			}
-			// Do not scan or materialize an oversized Run before returning a safe capacity failure.
-			const overflow = await tx.one(
-				'SELECT id FROM agent_governance_approvals WHERE user_id=? AND app_id=? AND run_id=? ORDER BY requested_at,id LIMIT 1 OFFSET ?',
-				[userId, appId, runId, AGENT_APPROVAL_MAX_LIST_ITEMS],
-			);
-			if (overflow) {
-				return 'limit_exceeded';
-			}
 			await sweep(tx, userId, appId, { runId }, now, transition);
 			const rows = await tx.all(
 				`SELECT ${approvalColumns} FROM agent_governance_approvals
-     WHERE user_id=? AND app_id=? AND run_id=? ORDER BY requested_at,id LIMIT ?`,
-				[userId, appId, runId, AGENT_APPROVAL_MAX_LIST_ITEMS + 1],
+     WHERE user_id=? AND app_id=? AND run_id=? AND id>? ORDER BY id LIMIT ?`,
+				[userId, appId, runId, after ?? '', AGENT_APPROVAL_MAX_PAGE_ITEMS + 1],
 			);
-			if (rows.length > AGENT_APPROVAL_MAX_LIST_ITEMS) {
-				return 'limit_exceeded';
-			}
-			return rows.map(readApproval);
+			const items = rows.slice(0, AGENT_APPROVAL_MAX_PAGE_ITEMS).map(readApproval);
+			return {
+				items,
+				after,
+				nextCursor: items.at(-1)?.id ?? after,
+				hasMore: rows.length > AGENT_APPROVAL_MAX_PAGE_ITEMS,
+			};
 		});
 	}
 
@@ -495,6 +493,7 @@ export class SqliteGovernanceStorage implements GovernanceStorage {
 			policy: StoredPolicy,
 			runStatus: AgentRunStatus,
 			operation: StoredToolOperation,
+			approvalMode: import('@nexus-terminal/shared/agent/runs/values').AgentApprovalMode,
 		) => StoredApproval | null,
 		authorize: StoredToolAuthorityDecision,
 	): Promise<StoredApproval | null> {
@@ -504,7 +503,7 @@ export class SqliteGovernanceStorage implements GovernanceStorage {
 				return null;
 			}
 			const run = await tx.one(
-				'SELECT status,selected_connections_json FROM agent_runs WHERE id=? AND user_id=? AND app_id=?',
+				'SELECT status,selected_connections_json,approval_mode FROM agent_runs WHERE id=? AND user_id=? AND app_id=?',
 				[input.runId, input.userId, input.appId],
 			);
 			if (!run) {
@@ -531,14 +530,27 @@ export class SqliteGovernanceStorage implements GovernanceStorage {
 			) {
 				return null;
 			}
-			const requested = create(policy, readRunStatus(run.status), operation);
+			const approvalMode = readRunApprovalMode(run.approval_mode);
+			const requested = create(policy, readRunStatus(run.status), operation, approvalMode);
 			if (requested === null) {
 				return null;
 			}
 			if (
 				!matchesOperation(requested, operation) ||
 				requested.policyRevision !== policy.revision ||
-				requested.status !== 'requested'
+				requested.userId !== input.userId ||
+				requested.appId !== input.appId ||
+				requested.runId !== input.runId ||
+				requested.version !== 1 ||
+				requested.consumedAt !== null ||
+				requested.feedback !== null ||
+				(approvalMode === 'full_access'
+					? requested.status !== 'approved' ||
+						requested.decidedAt !== requested.requestedAt ||
+						requested.decidedByUserId !== input.userId
+					: requested.status !== 'requested' ||
+						requested.decidedAt !== null ||
+						requested.decidedByUserId !== null)
 			) {
 				throw new Error('Approval producer changed authoritative operation');
 			}

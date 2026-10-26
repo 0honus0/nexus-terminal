@@ -9,7 +9,7 @@ import {
 	AGENT_EXECUTION_LIMIT_MAXIMA,
 } from '@nexus-terminal/shared/agent/execution/values';
 
-import { AgentFailure } from '../../agent-failure.js';
+import { AgentFailure, ModelCapacityBusy } from '../../agent-failure.js';
 
 import type { ExecutionModel } from '../model/execution-model.js';
 import type {
@@ -35,13 +35,12 @@ export function defaultExecutionSettings(): ExecutionSettings {
 		maxMessageBytes: 524288,
 		maxRecallItems: 5,
 		maxRecallBytes: 8192,
-		maxSingleArtifactBytes: 16777216,
 		maxArtifactBytes: 536870912,
 		artifactTtlSeconds: 604800,
 	};
 	const hardLimits: ExecutionLimits = {
-		maxModelRequests: 160,
-		maxToolExecutions: 1280,
+		maxModelRequests: 400,
+		maxToolExecutions: 4000,
 		maxActiveSeconds: 7200,
 		toolTimeoutSeconds: 300,
 		maxToolOutputBytes: 262144,
@@ -53,7 +52,6 @@ export function defaultExecutionSettings(): ExecutionSettings {
 		maxMessageBytes: 8388608,
 		maxRecallItems: 20,
 		maxRecallBytes: 32768,
-		maxSingleArtifactBytes: 16777216,
 		maxArtifactBytes: 10737418240,
 		artifactTtlSeconds: 2592000,
 	};
@@ -81,7 +79,6 @@ function validateLimits(limits: ExecutionLimits, hard: ExecutionLimits): void {
 		throw new AgentFailure('invalid_input');
 	}
 	if (
-		limits.maxSingleArtifactBytes > limits.maxArtifactBytes ||
 		limits.toolTimeoutSeconds > limits.maxActiveSeconds ||
 		limits.maxConcurrentModelCalls > limits.maxConcurrentRuns
 	) {
@@ -130,7 +127,7 @@ export class ExecutionService {
 
 	admitDispatch(settings: ExecutionSettings, usage: ExecutionUsage): void {
 		if (usage.concurrentModelCalls >= settings.limits.maxConcurrentModelCalls) {
-			throw new AgentFailure('limit_exceeded');
+			throw new ModelCapacityBusy();
 		}
 	}
 

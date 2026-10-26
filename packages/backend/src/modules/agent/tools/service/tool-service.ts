@@ -1,3 +1,4 @@
+import { runFailureCode } from '../../runs/run-failure-rules.js';
 import type { ProviderService } from '../../providers/service/provider-service.js';
 import type { ProviderImageService } from '../../providers/service/provider-image-service.js';
 import type { PluginService } from '../../plugins/service/plugin-service.js';
@@ -6,7 +7,7 @@ import type { IntegrationService } from '../../integrations/service/integration-
 import type { CheckpointService } from '../../context/service/checkpoint-service.js';
 import type { ArtifactService } from '../../artifacts/service/artifact-service.js';
 import type { MemoryService } from '../../memory/service/memory-service.js';
-import { toolAuthorityIdentity } from '../../governance/governance-rules.js';
+import { authorizationFact, toolAuthorityIdentity } from '../../governance/governance-rules.js';
 import type { ToolProjectService } from './tool-project-service.js';
 import type { ResultService } from '../../context/service/result-service.js';
 import { projectCapturedResult } from '../../context/result-rules.js';
@@ -27,8 +28,21 @@ import type { ToolInput, ToolDefinition, ToolTarget } from '../model/tool-types.
 import type { ExecutionService } from '../../execution/service/execution-service.js';
 import { toolDefinitions } from './tool-definitions.js';
 import { toolInput } from './tool-input.js';
-import { AgentFailure, ToolExecutionUnknown, isAgentDrainFailure, aggregateToolFailures } from '../../agent-failure.js';
+import {
+	AgentFailure,
+	ToolOperationRefusal,
+	ToolExecutionUnknown,
+	isAgentDrainFailure,
+	aggregateToolFailures,
+} from '../../agent-failure.js';
 import { TOOL_RESULT_MAX_BYTES } from '../../runs/run-tool-limits.js';
+
+function recoverableToolError(error: unknown): boolean {
+	return (
+		(error instanceof AgentFailure && (error.code === 'invalid_input' || error.code === 'not_found')) ||
+		(error instanceof ToolOperationRefusal && (error.code === 'not_text' || error.code === 'command_failed'))
+	);
+}
 
 function interrupted(signal: AbortSignal): void {
 	if (signal.aborted) {
@@ -42,6 +56,33 @@ function definition(proposal: RunToolProposal): ToolDefinition {
 		throw new AgentFailure('invalid_input');
 	}
 	return value;
+}
+
+function summaryWithCommand(base: Record<string, unknown>, command: string): string {
+	const characters = Array.from(command);
+
+	const build = (length: number) =>
+		JSON.stringify({
+			...base,
+			command: characters.slice(0, length).join(''),
+			commandTruncated: length < characters.length,
+		});
+
+	const complete = build(characters.length);
+	if (Buffer.byteLength(complete, 'utf8') <= AGENT_APPROVAL_MAX_SUMMARY_BYTES) {
+		return complete;
+	}
+	let low = 0;
+	let high = characters.length;
+	while (low < high) {
+		const middle = Math.ceil((low + high) / 2);
+		if (Buffer.byteLength(build(middle), 'utf8') <= AGENT_APPROVAL_MAX_SUMMARY_BYTES) {
+			low = middle;
+		} else {
+			high = middle - 1;
+		}
+	}
+	return build(low);
 }
 
 function inspectionSummary(input: ToolInput, trusted: ToolDefinition): string {
@@ -58,23 +99,30 @@ function inspectionSummary(input: ToolInput, trusted: ToolDefinition): string {
 			promptSha256: hash(input.input.prompt),
 		});
 	} else if (input.kind === 'acp') {
-		summary = JSON.stringify({
-			action: 'acp_execute',
-			cwd: input.cwd,
-			argvSha256: hash(JSON.stringify(input.argv)),
-			promptBytes: Buffer.byteLength(input.prompt, 'utf8'),
-			promptSha256: hash(input.prompt),
-		});
+		const command = JSON.stringify(input.argv);
+		summary = summaryWithCommand(
+			{
+				action: 'acp_execute',
+				cwd: input.cwd,
+				argvSha256: hash(command),
+				promptBytes: Buffer.byteLength(input.prompt, 'utf8'),
+				promptSha256: hash(input.prompt),
+			},
+			command,
+		);
 	} else if (input.kind === 'shell') {
 		const command = input.command.kind === 'argv' ? JSON.stringify(input.command.argv) : input.command.script;
-		summary = JSON.stringify({
-			action: 'execute',
-			mode: input.mode,
-			kind: input.command.kind,
-			cwd: input.cwd,
-			bytes: Buffer.byteLength(command, 'utf8'),
-			sha256: hash(command),
-		});
+		summary = summaryWithCommand(
+			{
+				action: 'execute',
+				mode: input.mode,
+				kind: input.command.kind,
+				cwd: input.cwd,
+				bytes: Buffer.byteLength(command, 'utf8'),
+				sha256: hash(command),
+			},
+			command,
+		);
 	} else if (input.kind === 'project') {
 		summary = JSON.stringify({
 			action: input.input.action,
@@ -158,10 +206,6 @@ export class ToolService {
 		private readonly images: ProviderImageService,
 	) {}
 
-	validate(proposal: RunToolProposal): void {
-		toolInput(definition(proposal), proposal.argumentsJson);
-	}
-
 	async execute(
 		scope: { userId: number; appId: string; runId: string; modelStepIndex: number },
 		proposal: RunToolProposal,
@@ -169,6 +213,176 @@ export class ToolService {
 	): Promise<string> {
 		const configuration = await this.settings.frozen(scope.userId, scope.appId, scope.runId);
 		const trusted = definition(proposal);
+		let prepared: {
+			input: Exclude<ToolInput, { kind: 'acp_integration' }>;
+			target: ToolTarget | null;
+			validateIntegration: () => Promise<void>;
+		};
+		try {
+			prepared = await this.prepare(scope, trusted, proposal, signal);
+		} catch (error) {
+			if (!recoverableToolError(error) || signal.aborted) {
+				throw error;
+			}
+			const rejected = await this.journal.inspect({
+				id: randomUUID(),
+				userId: scope.userId,
+				appId: scope.appId,
+				runId: scope.runId,
+				modelStepIndex: scope.modelStepIndex,
+				providerCallId: proposal.providerCallId,
+				toolName: trusted.name,
+				toolVersion: trusted.version,
+				capability: trusted.capability,
+				targetId: null,
+				targetVersion: null,
+				risk: trusted.risk,
+				mutation: trusted.mutation,
+				summary: trusted.description,
+				argumentsJson: proposal.argumentsJson,
+				expectedOperationRevision: null,
+			});
+			const settled = await this.journal.finish({
+				identity: { userId: scope.userId, appId: scope.appId, runId: scope.runId, id: rejected.id },
+				expectedRevision: rejected.revision,
+				state: 'failed',
+				resultText: JSON.stringify({ failureCode: runFailureCode(error, true) }),
+			});
+			interrupted(signal);
+			if (settled.resultText === null) {
+				throw new AgentFailure('internal_failure');
+			}
+			return projectCapturedResult(settled.id, settled.resultText, configuration.limits.maxToolOutputBytes);
+		}
+		const { input, target, validateIntegration } = prepared;
+		let current = await this.journal.inspect({
+			id: randomUUID(),
+			userId: scope.userId,
+			appId: scope.appId,
+			runId: scope.runId,
+			modelStepIndex: scope.modelStepIndex,
+			providerCallId: proposal.providerCallId,
+			toolName: trusted.name,
+			toolVersion: trusted.version,
+			capability: trusted.capability,
+			targetId: target?.id ?? null,
+			targetVersion: target?.version ?? null,
+			risk:
+				input.kind === 'docker_control' && input.action === 'remove'
+					? 'destructive'
+					: input.kind === 'job' && input.action === 'cancel'
+						? 'control'
+						: trusted.risk,
+			mutation: trusted.mutation || (input.kind === 'job' && input.action === 'cancel'),
+			summary: inspectionSummary(input, trusted),
+			argumentsJson: proposal.argumentsJson,
+			expectedOperationRevision: null,
+		});
+		let taskSignal: AbortSignal | null = null;
+		try {
+			interrupted(signal);
+			const admitted = current.mutation
+				? await this.approve(current, target, signal)
+				: await this.governance.toolAuthority(toolAuthorityIdentity(current), { kind: 'dispatch' });
+			if (!admitted) {
+				throw new AgentFailure('version_conflict');
+			}
+			current = admitted.operation;
+			// Paid image generation uses the Run's remaining deadline, including file publication.
+			// The ordinary tool timeout is intended for short tool operations.
+			taskSignal =
+				input.kind === 'image_generate'
+					? signal
+					: AbortSignal.any([signal, AbortSignal.timeout(configuration.limits.toolTimeoutSeconds * 1000)]);
+			const result = await this.perform(
+				input,
+				target,
+				current,
+				admitted.policy.revision,
+				taskSignal,
+				configuration.limits.toolTimeoutSeconds * 1000,
+				configuration.limits.maxToolOutputBytes,
+				validateIntegration,
+				signal,
+			);
+			interrupted(taskSignal);
+			if (Buffer.byteLength(result.text, 'utf8') > TOOL_RESULT_MAX_BYTES) {
+				throw new AgentFailure('limit_exceeded');
+			}
+			interrupted(signal);
+			const completed = await this.governance.toolAuthority(toolAuthorityIdentity(current), {
+				kind: 'complete',
+				policyRevision: admitted.policy.revision,
+				resultText: result.text,
+				targets: result.targets,
+			});
+			if (!completed || completed.operation.resultText === null) {
+				throw new AgentFailure('version_conflict');
+			}
+			current = completed.operation;
+			if (input.kind === 'shell' && input.mode === 'background') {
+				this.jobs.launch(current.id);
+			}
+			if (target) {
+				await this.model.validateTarget(target);
+			}
+			await this.verify(current, admitted.policy.revision, signal);
+			interrupted(signal);
+			return projectCapturedResult(
+				completed.operation.id,
+				completed.operation.resultText,
+				configuration.limits.maxToolOutputBytes,
+			);
+		} catch (error) {
+			// Unknown commits and cleanup failures must not trigger a speculative second write.
+			if (
+				(isAgentDrainFailure(error) && !(error instanceof ToolExecutionUnknown)) ||
+				current.state === 'completed'
+			) {
+				throw error;
+			}
+			const recoverable =
+				recoverableToolError(error) &&
+				!signal.aborted &&
+				!taskSignal?.aborted &&
+				(current.state === 'inspected' || !current.mutation);
+			let settled: ToolOperation;
+			try {
+				settled = await this.journal.finish({
+					identity: { userId: scope.userId, appId: scope.appId, runId: scope.runId, id: current.id },
+					expectedRevision: current.revision,
+					state: current.state === 'inspected' || recoverable ? 'failed' : 'unknown',
+					resultText: JSON.stringify({
+						failureCode: runFailureCode(error, true, taskSignal?.aborted === true && !signal.aborted),
+					}),
+				});
+			} catch (settlementError) {
+				if (settlementError instanceof AgentFailure && settlementError.code === 'version_conflict') {
+					throw error;
+				}
+				throw new AggregateError([error, settlementError], 'Tool execution and settlement failed');
+			}
+			if (recoverable) {
+				interrupted(signal);
+				if (settled.resultText === null) {
+					throw new AgentFailure('internal_failure');
+				}
+				return projectCapturedResult(settled.id, settled.resultText, configuration.limits.maxToolOutputBytes);
+			}
+			throw error;
+		}
+	}
+
+	private async prepare(
+		scope: { userId: number; appId: string; runId: string },
+		trusted: ToolDefinition,
+		proposal: RunToolProposal,
+		signal: AbortSignal,
+	): Promise<{
+		input: Exclude<ToolInput, { kind: 'acp_integration' }>;
+		target: ToolTarget | null;
+		validateIntegration: () => Promise<void>;
+	}> {
 		const requested = toolInput(trusted, proposal.argumentsJson);
 		const input =
 			requested.kind === 'acp_integration' ? await this.integrations.acp(scope, requested.input) : requested;
@@ -195,102 +409,7 @@ export class ToolService {
 				? null
 				: await this.model.target(input.connectionId);
 		interrupted(signal);
-		let current = await this.journal.inspect({
-			id: randomUUID(),
-			userId: scope.userId,
-			appId: scope.appId,
-			runId: scope.runId,
-			modelStepIndex: scope.modelStepIndex,
-			providerCallId: proposal.providerCallId,
-			toolName: trusted.name,
-			toolVersion: trusted.version,
-			capability: trusted.capability,
-			targetId: target?.id ?? null,
-			targetVersion: target?.version ?? null,
-			risk:
-				input.kind === 'docker_control' && input.action === 'remove'
-					? 'destructive'
-					: input.kind === 'job' && input.action === 'cancel'
-						? 'control'
-						: trusted.risk,
-			mutation: trusted.mutation || (input.kind === 'job' && input.action === 'cancel'),
-			summary: inspectionSummary(input, trusted),
-			argumentsJson: proposal.argumentsJson,
-			expectedOperationRevision: null,
-		});
-		try {
-			interrupted(signal);
-			const admitted = current.mutation
-				? await this.approve(current, target, signal)
-				: await this.governance.toolAuthority(toolAuthorityIdentity(current), { kind: 'dispatch' });
-			if (!admitted) {
-				throw new AgentFailure('version_conflict');
-			}
-			current = admitted.operation;
-			const taskSignal = AbortSignal.any([
-				signal,
-				AbortSignal.timeout(configuration.limits.toolTimeoutSeconds * 1000),
-			]);
-			const result = await this.perform(
-				input,
-				target,
-				current,
-				admitted.policy.revision,
-				taskSignal,
-				configuration.limits.toolTimeoutSeconds * 1000,
-				validateIntegration,
-				signal,
-			);
-			interrupted(taskSignal);
-			if (
-				Buffer.byteLength(result.text, 'utf8') >
-				Math.min(TOOL_RESULT_MAX_BYTES, configuration.limits.maxToolOutputBytes)
-			) {
-				throw new AgentFailure('limit_exceeded');
-			}
-			interrupted(signal);
-			const completed = await this.governance.toolAuthority(toolAuthorityIdentity(current), {
-				kind: 'complete',
-				policyRevision: admitted.policy.revision,
-				resultText: result.text,
-				targets: result.targets,
-			});
-			if (!completed || completed.operation.resultText === null) {
-				throw new AgentFailure('version_conflict');
-			}
-			current = completed.operation;
-			if (input.kind === 'shell' && input.mode === 'background') {
-				this.jobs.launch(current.id);
-			}
-			if (target) {
-				await this.model.validateTarget(target);
-			}
-			await this.verify(current, admitted.policy.revision, signal);
-			interrupted(signal);
-			return projectCapturedResult(completed.operation.id, completed.operation.resultText);
-		} catch (error) {
-			// Unknown commits and cleanup failures must not trigger a speculative second write.
-			if (
-				(isAgentDrainFailure(error) && !(error instanceof ToolExecutionUnknown)) ||
-				current.state === 'completed'
-			) {
-				throw error;
-			}
-			try {
-				await this.journal.finish({
-					identity: { userId: scope.userId, appId: scope.appId, runId: scope.runId, id: current.id },
-					expectedRevision: current.revision,
-					state: current.state === 'inspected' ? 'failed' : 'unknown',
-					resultText: null,
-				});
-			} catch (settlementError) {
-				if (settlementError instanceof AgentFailure && settlementError.code === 'version_conflict') {
-					throw error;
-				}
-				throw new AggregateError([error, settlementError], 'Tool execution and settlement failed');
-			}
-			throw error;
-		}
+		return { input, target, validateIntegration };
 	}
 
 	private async approve(
@@ -363,6 +482,7 @@ export class ToolService {
 		revision: number,
 		signal: AbortSignal,
 		timeoutMs: number,
+		previewBytes: number,
 		validateIntegration: () => Promise<void>,
 		runSignal: AbortSignal,
 	): Promise<{ text: string; targets: { id: number; version: number }[] }> {
@@ -555,7 +675,7 @@ export class ToolService {
 			return { text, targets: [] };
 		}
 		if (input.kind === 'result') {
-			const result = await this.results.read(input.input, operation, revision);
+			const result = await this.results.read(input.input, operation, revision, previewBytes);
 			await validate();
 			return {
 				text: JSON.stringify({
@@ -675,13 +795,15 @@ export class ToolService {
 		}
 		const before = await this.verify(operation, revision, signal);
 		const entries = await this.model.connections(
-			before.connectionIds.filter((id) => !before.policy.app.deniedTargetIds.includes(id)),
+			before.connectionIds.filter((id) => authorizationFact(before.policy, 'machine.inspect', id).allowed),
 		);
 		const after = await this.verify(operation, revision, signal);
 		const selected = new Set(after.connectionIds);
-		const denied = new Set(after.policy.app.deniedTargetIds);
 		const connections = entries.filter(
-			(entry) => entry.type === 'SSH' && selected.has(entry.id) && !denied.has(entry.id),
+			(entry) =>
+				entry.type === 'SSH' &&
+				selected.has(entry.id) &&
+				authorizationFact(after.policy, 'machine.inspect', entry.id).allowed,
 		);
 		return {
 			text: JSON.stringify({
@@ -693,7 +815,7 @@ export class ToolService {
 					username: entry.username,
 				})),
 			}),
-			targets: entries.map((entry) => ({ id: entry.id, version: entry.version })),
+			targets: connections.map((entry) => ({ id: entry.id, version: entry.version })),
 		};
 	}
 

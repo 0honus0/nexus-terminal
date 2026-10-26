@@ -1,5 +1,5 @@
-import type { AgentApprovalView } from '@nexus-terminal/shared/agent/governance/model';
-import type { Approval } from '../../governance/model/governance-types.js';
+import type { AgentApprovalView, AgentApprovalPage } from '@nexus-terminal/shared/agent/governance/model';
+import type { Approval, ApprovalPage } from '../../governance/model/governance-types.js';
 
 export const toApproval = (a: Approval): AgentApprovalView => ({
 	id: a.id,
@@ -26,3 +26,12 @@ export const toApproval = (a: Approval): AgentApprovalView => ({
 		summary: a.inspection.summary,
 	},
 });
+
+export function toApprovalPage(value: ApprovalPage): AgentApprovalPage {
+	return {
+		items: value.items.map(toApproval),
+		after: value.after,
+		nextCursor: value.nextCursor,
+		hasMore: value.hasMore,
+	};
+}

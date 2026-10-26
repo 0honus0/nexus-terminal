@@ -1,3 +1,4 @@
+import { listAgentApprovalHistory } from './agent-approval-fixture.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { randomUUID } from 'node:crypto';
@@ -177,7 +178,7 @@ await test('B10 actual Root/Child collaboration ownership', { timeout: 60000 }, 
 			assert.ok((await children(f, run, 2)).every((child) => child.status === 'cancelled'));
 		});
 		await scenario(
-			'Child cancellation invalidates its own pending write approval and parent success',
+			'Child cancellation invalidates its pending write approval while allowing the parent to finish',
 			async (f, directory, releases, cleanup) => {
 				const unrelated = await f.start('unrelated family', () => ({}));
 				await f.wait(unrelated, 'completed');
@@ -230,9 +231,8 @@ await test('B10 actual Root/Child collaboration ownership', { timeout: 60000 }, 
 					409,
 				);
 				await assert.rejects(stat(path), { code: 'ENOENT' });
-				cleanup.unknown = true;
 				f.finishModels();
-				await f.wait(run, 'unknown');
+				await f.wait(run, 'completed');
 				assert.equal((await children(f, run, 1))[0].status, 'cancelled');
 				assert.ok(f.rows('agent_run_tools', child).every((tool) => tool.state !== 'completed'));
 			},
@@ -388,10 +388,7 @@ await test('B10 actual Root/Child collaboration ownership', { timeout: 60000 }, 
 				await f.wait(run, 'failed');
 				assert.deepEqual(await children(f, run, 0), []);
 				assert.equal(f.calls.length, 1);
-				assert.deepEqual(
-					expectStatus(await f.api('GET', '/api/v1/apps/' + f.appId + '/runs/' + run.id + '/approvals'), 200),
-					[],
-				);
+				assert.deepEqual(await listAgentApprovalHistory(f.api, f.appId, run.id), []);
 			},
 		);
 		await scenario('join timeout leaves the Child running until an explicit Root cancel', async (f) => {
@@ -472,8 +469,7 @@ await test('B10 actual Root/Child collaboration ownership', { timeout: 60000 }, 
 				assert.equal(approval.inspection.risk, 'control');
 				assert.equal((await children(f, run, 1))[0].status, 'running');
 				await f.approve(approval);
-				cleanup.unknown = true;
-				await f.wait(run, 'unknown');
+				await f.wait(run, 'completed');
 				assert.equal((await children(f, run, 1))[0].status, 'cancelled');
 				assert.deepEqual(
 					f.rows('agent_run_tools', run).map((tool) => tool.state),

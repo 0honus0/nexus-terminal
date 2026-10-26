@@ -1,3 +1,4 @@
+import { sha256 } from '@noble/hashes/sha2.js';
 import {
 	readAgentArtifactBegin,
 	readAgentArtifactAttach,
@@ -211,9 +212,22 @@ function readJson(headers: Headers, bytes: Uint8Array): unknown {
 	}
 }
 
-async function sha256(bytes: ArrayBuffer): Promise<string> {
-	const hash = await crypto.subtle.digest('SHA-256', bytes);
-	return Array.from(new Uint8Array(hash), (value) => value.toString(16).padStart(2, '0')).join('');
+// A transfer batch, independent of the configured Artifact storage quota.
+const ARTIFACT_TRANSFER_CHUNK_BYTES = 4 * 1024 * 1024;
+
+async function hashFile(file: Blob, signal?: AbortSignal): Promise<string> {
+	const hash = sha256.create();
+	try {
+		for (let offset = 0; offset < file.size; offset += ARTIFACT_TRANSFER_CHUNK_BYTES) {
+			if (signal?.aborted) throw new AgentManagementFailure('cancelled', 'not_dispatched');
+			const chunk = await file.slice(offset, offset + ARTIFACT_TRANSFER_CHUNK_BYTES).arrayBuffer();
+			if (signal?.aborted) throw new AgentManagementFailure('cancelled', 'not_dispatched');
+			hash.update(new Uint8Array(chunk));
+		}
+		return Array.from(hash.digest(), (value) => value.toString(16).padStart(2, '0')).join('');
+	} finally {
+		hash.destroy();
+	}
 }
 
 export async function uploadManagedArtifact(
@@ -231,7 +245,7 @@ export async function uploadManagedArtifact(
 	} catch (cause) {
 		throw new AgentManagementFailure('invalid_input', 'not_dispatched', { cause });
 	}
-	const hash = await sha256(await file.arrayBuffer());
+	const hash = await hashFile(file, signal);
 	const response = await artifactBinary({
 		method: 'PUT',
 		path: artifactPath(original.appId, original.id) + '/content',
@@ -265,30 +279,49 @@ export async function downloadManagedArtifact(original: ManagedArtifact, signal?
 	if (original.status !== 'ready' || original.sha256 === null) {
 		throw new AgentManagementFailure('invalid_input', 'not_dispatched');
 	}
-	const response = await artifactBinary({
-		method: 'GET',
-		path: artifactPath(original.appId, original.id) + '/content',
-		maxResponseBytes: AGENT_ARTIFACT_MAX_BYTES,
-		signal,
-	});
+	const chunks: Blob[] = [];
+	const hash = sha256.create();
 	try {
-		const declared = response.headers.get('content-length');
-		if (
-			response.status !== 200 ||
-			response.headers.get('content-type') !== 'application/octet-stream' ||
-			response.headers.get('etag') !== '"' + original.version + '"' ||
-			response.headers.get('content-range') !== null ||
-			response.bytes.byteLength !== original.sizeBytes ||
-			(declared !== null &&
-				!response.headers.has('content-encoding') &&
-				declared !== String(original.sizeBytes)) ||
-			(await sha256(response.bytes.buffer)) !== original.sha256
-		) {
-			throw new Error('Artifact content confirmation mismatch');
+		let offset = 0;
+		do {
+			const end = Math.min(original.sizeBytes, offset + ARTIFACT_TRANSFER_CHUNK_BYTES);
+			const partial = original.sizeBytes > ARTIFACT_TRANSFER_CHUNK_BYTES;
+			const response = await artifactBinary({
+				method: 'GET',
+				path: artifactPath(original.appId, original.id) + '/content',
+				headers: partial ? { Range: 'bytes=' + offset + '-' + (end - 1) } : undefined,
+				maxResponseBytes: Math.max(1, end - offset),
+				signal,
+			});
+			const declared = response.headers.get('content-length');
+			if (
+				response.status !== (partial ? 206 : 200) ||
+				response.headers.get('content-type') !== 'application/octet-stream' ||
+				response.headers.get('etag') !== '"' + original.version + '"' ||
+				response.headers.get('content-range') !==
+					(partial ? 'bytes ' + offset + '-' + (end - 1) + '/' + original.sizeBytes : null) ||
+				response.bytes.byteLength !== end - offset ||
+				(declared !== null && !response.headers.has('content-encoding') && declared !== String(end - offset))
+			) {
+				throw new Error('Artifact content confirmation mismatch');
+			}
+			if (signal?.aborted) throw new AgentManagementFailure('cancelled', 'unknown');
+			hash.update(response.bytes);
+			chunks.push(new Blob([response.bytes]));
+			offset = end;
+		} while (offset < original.sizeBytes);
+		const digest = Array.from(hash.digest(), (value) => value.toString(16).padStart(2, '0')).join('');
+		if (digest !== original.sha256) {
+			throw new Error('Artifact hash confirmation mismatch');
 		}
-		return new Blob([response.bytes], { type: 'application/octet-stream' });
+		return new Blob(chunks, { type: 'application/octet-stream' });
 	} catch (cause) {
+		if (cause instanceof AgentManagementFailure) {
+			throw cause;
+		}
 		throw new AgentManagementFailure('protocol_failure', 'unknown', { cause });
+	} finally {
+		hash.destroy();
 	}
 }
 

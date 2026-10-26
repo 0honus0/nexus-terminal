@@ -58,7 +58,7 @@ function belongsToApp(result: AgentPluginFrontendResult, appId: string): boolean
 		case 'agent.subagents.cancel':
 			return result.value.run.appId === appId;
 		case 'agent.approvals.list':
-			return result.value.every((item) => item.appId === appId);
+			return result.value.items.every((item) => item.appId === appId);
 		default:
 			return true;
 	}

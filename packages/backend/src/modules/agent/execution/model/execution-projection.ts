@@ -18,7 +18,6 @@ export function fromLimits(value: StoredExecutionLimits): ExecutionLimits {
 		maxMessageBytes: value.maxMessageBytes,
 		maxRecallItems: value.maxRecallItems,
 		maxRecallBytes: value.maxRecallBytes,
-		maxSingleArtifactBytes: value.maxSingleArtifactBytes,
 		maxArtifactBytes: value.maxArtifactBytes,
 		artifactTtlSeconds: value.artifactTtlSeconds,
 	};
@@ -39,7 +38,6 @@ export function toLimits(value: ExecutionLimits): StoredExecutionLimits {
 		maxMessageBytes: value.maxMessageBytes,
 		maxRecallItems: value.maxRecallItems,
 		maxRecallBytes: value.maxRecallBytes,
-		maxSingleArtifactBytes: value.maxSingleArtifactBytes,
 		maxArtifactBytes: value.maxArtifactBytes,
 		artifactTtlSeconds: value.artifactTtlSeconds,
 	};

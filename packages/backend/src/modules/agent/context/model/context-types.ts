@@ -11,7 +11,7 @@ export interface ContextExchange {
 }
 
 export interface ContextLimits {
-	contextWindow: number;
+	contextWindow?: number;
 	reservedOutputTokens: number;
 }
 
@@ -94,4 +94,32 @@ export interface ThreadEntries {
 	threadId: string;
 	items: { runId: string; role: 'user' | 'assistant'; position: ThreadEntryCursor; text: string }[];
 	nextCursor: ThreadEntryCursor;
+}
+
+export interface ContextUsageAnchor {
+	messages: RunModelMessage[];
+	definitions: string;
+	tokens: number;
+}
+
+export interface CompactionCommand {
+	id: string;
+	userId: number;
+	appId: string;
+	runId: string;
+	stepIndex: number;
+	expectedRunVersion: number;
+	creationHash: string;
+	requestHash: string;
+	now: number;
+	snapshot: ContextSnapshot;
+	cut: number;
+	estimatedTokens: number;
+}
+
+export interface CompactionResult {
+	id: string;
+	summary: string;
+	source: RunModelMessage[];
+	cut: number;
 }

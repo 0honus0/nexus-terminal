@@ -4,7 +4,7 @@ import type { ThreadPage } from './thread-types.js';
 import type { AvailableModel } from '../../providers/model/provider-types.js';
 import type { AgentRun, RunEventPage, RunPage } from '../../runs/model/run-types.js';
 import type { Participant, MessageMetadataPage } from '../../runs/model/run-collaboration-types.js';
-import type { Approval } from '../../governance/model/governance-types.js';
+import type { Approval, ApprovalPage } from '../../governance/model/governance-types.js';
 import type { CreateRunResult, CancelRunResult } from '../../runs/model/run-types.js';
 import type { AgentApprovalDecision } from '@nexus-terminal/shared/agent/governance/values';
 import type { ThreadEntryCursor, ThreadEntries } from '../../context/model/context-types.js';
@@ -12,6 +12,7 @@ import type { ThreadEntryCursor, ThreadEntries } from '../../context/model/conte
 export type WorkspaceMutation = <T>(work: () => Promise<T>) => Promise<T>;
 
 export interface WorkspaceRunInput {
+	approvalMode: import('@nexus-terminal/shared/agent/runs/values').AgentApprovalMode;
 	prompt: string;
 	connectionIds: number[];
 	model: {
@@ -50,13 +51,14 @@ export type WorkspaceInput =
 	| { method: 'agent.approvals.resolve'; approvalId: string; operationId: string; input: WorkspaceApprovalInput }
 	| { method: 'agent.definitions.list' | 'agent.providers.list' }
 	| { method: 'agent.threads.list'; after: string | null; limit: number }
-	| { method: 'agent.threads.create'; operationId: string; title: string }
+	| { method: 'agent.threads.create'; operationId: string; title: string; autoTitle: boolean }
 	| { method: 'agent.threads.rename'; threadId: string; expectedVersion: number; operationId: string; title: string }
 	| { method: 'agent.threads.delete'; threadId: string; expectedVersion: number }
 	| { method: 'agent.runs.list'; threadId: string; after: number; limit: number }
 	| { method: 'agent.runs.get'; runId: string }
 	| { method: 'agent.runs.events'; runId: string; after: number; limit: number }
-	| { method: 'agent.subagents.list' | 'agent.approvals.list'; runId: string }
+	| { method: 'agent.subagents.list'; runId: string }
+	| { method: 'agent.approvals.list'; runId: string; after: string | null }
 	| { method: 'agent.subagents.messages'; runId: string; childId: string; after: number; limit: number };
 
 export type WorkspaceResult =
@@ -74,4 +76,4 @@ export type WorkspaceResult =
 	| { method: 'agent.runs.events'; value: RunEventPage }
 	| { method: 'agent.subagents.list'; value: Participant[] }
 	| { method: 'agent.subagents.messages'; value: MessageMetadataPage }
-	| { method: 'agent.approvals.list'; value: Approval[] };
+	| { method: 'agent.approvals.list'; value: ApprovalPage };

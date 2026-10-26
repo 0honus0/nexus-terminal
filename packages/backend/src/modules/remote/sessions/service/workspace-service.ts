@@ -2520,9 +2520,14 @@ export class WorkspaceService {
 		}
 	}
 
-	pause(id: string): void {
+	pause(id: string, attachmentId: string): void {
 		const record = this.records.get(id);
-		if (record?.shellId && record.phase === 'attached' && this.shells.get(record.shellId)) {
+		if (
+			record?.shellId &&
+			record.phase === 'attached' &&
+			record.attachmentId === attachmentId &&
+			this.shells.get(record.shellId)
+		) {
 			record.pauseByConsumer = true;
 			this.shells.pauseOutput(record.shellId);
 		}
@@ -2543,9 +2548,9 @@ export class WorkspaceService {
 		}
 	}
 
-	resumeOutput(id: string): void {
+	resumeOutput(id: string, attachmentId: string): void {
 		const record = this.records.get(id);
-		if (record?.phase !== 'attached') {
+		if (record?.phase !== 'attached' || record.attachmentId !== attachmentId) {
 			return;
 		}
 		record.pauseByConsumer = false;

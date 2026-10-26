@@ -3,6 +3,7 @@ import type {
 	AgentGrantView,
 	AgentExecutionPolicyView,
 	AgentApprovalView,
+	AgentApprovalPage,
 	AgentExecutionPolicyOverrides,
 	AgentGrantScope,
 } from './model.js';
@@ -48,7 +49,7 @@ export type AgentExecutionPolicyResponse = AgentExecutionPolicyView;
 
 export type AgentApprovalResponse = AgentApprovalView;
 
-export type AgentApprovalListResponse = AgentApprovalView[];
+export type AgentApprovalListResponse = AgentApprovalPage;
 
 export interface AgentTargetDenylistReplaceRequest {
 	connectionIds: number[];

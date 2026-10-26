@@ -20,6 +20,7 @@ export interface ProviderCapabilities {
 }
 
 export interface ProviderModelDraft {
+	sources: Partial<Record<AgentModelCapabilityField, AgentModelCapabilitySource>>;
 	id: string;
 	protocol?: AgentProviderProtocol;
 	contextWindow?: number;
@@ -35,7 +36,6 @@ export interface ProviderModelDraft {
 }
 
 export interface ProviderModel extends ProviderModelDraft {
-	sources: Partial<Record<AgentModelCapabilityField, AgentModelCapabilitySource>>;
 	observation?: {
 		source: string;
 		revision: string;

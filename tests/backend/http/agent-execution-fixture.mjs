@@ -1,3 +1,4 @@
+import { listAgentApprovalHistory } from './agent-approval-fixture.mjs';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
@@ -241,6 +242,7 @@ export async function openAgentExecution(directory, sshd) {
 					base() + '/threads/' + thread.id + '/runs',
 					{
 						prompt: key,
+						approvalMode: 'ask',
 						connectionIds: [connectionId],
 						model: { providerId: provider.id, modelId: 'fixture', configurationVersion: provider.version },
 					},
@@ -260,11 +262,7 @@ export async function openAgentExecution(directory, sshd) {
 
 		async approval(run, name) {
 			const items = await until(
-				async () =>
-					expectStatus(
-						await api('GET', '/api/v1/apps/' + agentApp.id + '/runs/' + run.id + '/approvals'),
-						200,
-					),
+				async () => await listAgentApprovalHistory(api, agentApp.id, run.id),
 				(values) => values.some((value) => value.status === 'requested' && value.inspection.toolName === name),
 				'Approval ' + name,
 			);

@@ -5,4 +5,8 @@ export type AgentToolState = (typeof AGENT_TOOL_STATES)[number];
 
 export const AGENT_TOOL_EVENT_MAX_LIMIT = 100;
 
+export const AGENT_TOOL_LIST_DEFAULT_LIMIT = 60;
+
+export const AGENT_TOOL_LIST_MAX_LIMIT = 100;
+
 export const AGENT_TOOL_MAX_RESPONSE_BYTES = 128 * 1024;

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { nextTick, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiBadge, UiButton } from '@/foundation/ui';
 	import type {
@@ -11,11 +12,12 @@
 	import { isNativeRunActive } from '../model/native-run-rules';
 	import NativeAuditPanel from './NativeAuditPanel.vue';
 
-	defineProps<{
+	const props = defineProps<{
 		appId: string;
 		run: NativeRun;
 		events: NativeEvent[];
 		auditToolId: string;
+		auditRequest: number;
 		children: NativeChild[];
 		child: NativeChild | null;
 		messages: NativeMessage[];
@@ -27,6 +29,20 @@
 		messages: [child: NativeChild, more: boolean];
 	}>();
 	const { t, locale } = useI18n();
+	const technicalDetails = ref<HTMLDetailsElement | null>(null);
+	const auditSection = ref<HTMLElement | null>(null);
+
+	watch(
+		() => [props.auditToolId, props.auditRequest] as const,
+		async ([toolId]) => {
+			if (!toolId) return;
+			await nextTick();
+			if (technicalDetails.value) technicalDetails.value.open = true;
+			await nextTick();
+			auditSection.value?.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+		},
+		{ flush: 'post' },
+	);
 
 	function statusDotClass(status: NativeRun['status']): string {
 		if (status === 'running') return 'bg-success';
@@ -175,7 +191,7 @@
 			</ul>
 		</section>
 
-		<details class="rounded-xl border border-border/55 bg-card/80 p-3 shadow-xs">
+		<details ref="technicalDetails" class="rounded-xl border border-border/55 bg-card/80 p-3 shadow-xs">
 			<summary class="cursor-pointer text-[11px] font-medium text-text-secondary hover:text-foreground">
 				{{ t('agent.nativeRun.technicalDetails') }}
 			</summary>
@@ -201,15 +217,17 @@
 					</li>
 				</ul>
 			</details>
-			<NativeAuditPanel
-				:key="run.id + ':' + auditToolId"
-				class="mt-2"
-				:app-id="appId"
-				:run-id="run.id"
-				:initial-tool-id="auditToolId"
-				:active="active"
-				:disabled="disabled"
-			/>
+			<div ref="auditSection">
+				<NativeAuditPanel
+					:key="run.id + ':' + auditToolId + ':' + auditRequest"
+					class="mt-2"
+					:app-id="appId"
+					:run-id="run.id"
+					:initial-tool-id="auditToolId"
+					:active="active"
+					:disabled="disabled"
+				/>
+			</div>
 		</details>
 	</section>
 </template>

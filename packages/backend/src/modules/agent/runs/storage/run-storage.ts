@@ -1,3 +1,5 @@
+import type { AgentApprovalMode } from '@nexus-terminal/shared/agent/runs/values';
+import type { AgentRunFailureCode } from '@nexus-terminal/shared/agent/runs/values';
 import type { StoredPolicyOverrides } from '../../governance/storage/governance-storage.js';
 import type { StoredExecutionSettings } from '../../execution/storage/execution-storage.js';
 import type { StoredAppAuthority } from '../../scope/storage/scope-storage.js';
@@ -28,6 +30,7 @@ export interface StoredFrozenInput {
 
 /** Storage contracts: no HTTP DTO or SQLite row escapes. */
 export interface StoredRun {
+	approvalMode: AgentApprovalMode;
 	id: string;
 	userId: number;
 	appId: string;
@@ -39,6 +42,7 @@ export interface StoredRun {
 }
 
 export interface CreateRunStorageCommand {
+	approvalMode: AgentApprovalMode;
 	origin: { runId: string; expectedVersion: number } | null;
 	model: StoredModelReference;
 	connectionIds: number[];
@@ -85,7 +89,13 @@ export interface RunEventPageRecord {
 
 export type StoredCancelRunDecision = 'cancel' | 'already_cancelled' | 'version_conflict' | 'active_run_conflict';
 
+export interface StoredRunFailure {
+	code: AgentRunFailureCode;
+	toolName: string;
+}
+
 export interface RunStorage {
+	failure(userId: number, appId: string, runId: string): Promise<StoredRunFailure | null>;
 	ownExecution(work: () => Promise<void>): Promise<void>;
 	list(
 		userId: number,

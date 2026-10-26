@@ -4,7 +4,7 @@ import type { AgentRunUsageView, AgentRunView, AgentRunStepView } from '@nexus-t
 import type { AgentRunEventsResponse, AgentRunStepEventsResponse } from '@nexus-terminal/shared/agent/runs/http';
 import type { AgentCreateRunOutcome, AgentCancelRunOutcome } from '@nexus-terminal/shared/agent/runs/values';
 import type { AgentToolView } from '@nexus-terminal/shared/agent/tools/model';
-import type { AgentToolEventsResponse } from '@nexus-terminal/shared/agent/tools/http';
+import type { AgentThreadToolsResponse, AgentToolEventsResponse } from '@nexus-terminal/shared/agent/tools/http';
 
 import type {
 	AgentChildrenResponse,
@@ -13,6 +13,7 @@ import type {
 
 /** Trusted backend inputs: identity comes from authentication, not a request body. */
 export interface AgentCreateRunInput {
+	approvalMode: import('@nexus-terminal/shared/agent/runs/values').AgentApprovalMode;
 	connectionIds: number[];
 	model: {
 		providerId: string;
@@ -71,6 +72,13 @@ export interface AgentStateApi {
 	cancelRun(input: AgentCancelRunInput): Promise<AgentCancelRunResult>;
 	getRun(userId: number, appId: string, runId: string): Promise<AgentRunView | null>;
 	getTool(userId: number, appId: string, runId: string, toolCallId: string): Promise<AgentToolView | null>;
+	listThreadTools(
+		userId: number,
+		appId: string,
+		threadId: string,
+		before: { createdAt: number; id: string } | null,
+		limit: number,
+	): Promise<AgentThreadToolsResponse | null>;
 	listToolEvents(
 		userId: number,
 		appId: string,

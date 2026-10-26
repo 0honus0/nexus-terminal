@@ -14,6 +14,8 @@ import type {
 	ToolInspectionCommand,
 	ToolSettlement,
 	ToolEventPage,
+	ToolListCursor,
+	ToolListPage,
 } from './run-tool-types.js';
 import { maySettleTool } from '../run-tool-rules.js';
 
@@ -154,6 +156,20 @@ export class RunToolModel {
 	async get(input: ToolIdentity): Promise<ToolOperation | null> {
 		const row = await agentStorage(() => this.storage.get(toStoredIdentity(input)));
 		return row === null ? null : fromStoredTool(row);
+	}
+
+	async listThread(
+		input: { userId: number; appId: string; threadId: string },
+		before: ToolListCursor | null,
+		limit: number,
+	): Promise<ToolListPage | null> {
+		const page = await agentStorage(() => this.storage.listThread(input, before, limit));
+		return page === null
+			? null
+			: {
+					items: page.items.map(fromStoredTool),
+					nextCursor: page.nextCursor === null ? null : { ...page.nextCursor },
+				};
 	}
 
 	async listEvents(input: ToolIdentity, after: number, limit: number): Promise<ToolEventPage | null> {

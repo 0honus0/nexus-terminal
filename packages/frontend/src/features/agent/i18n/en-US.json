@@ -371,10 +371,6 @@
             "label": "Run Artifact Disk Quota",
             "hint": "Total disk space quota for artifacts within a single run"
           },
-          "maxSingleArtifactBytes": {
-            "label": "Max Single Artifact Size",
-            "hint": "Maximum file size allowed for an individual artifact"
-          },
           "maxGlobalArtifactBytes": {
             "label": "Global Artifact Disk Quota",
             "hint": "System-wide disk quota for all agent artifacts combined"
@@ -841,7 +837,6 @@
           "maxMessageBytes": "Message total (bytes)",
           "maxRecallItems": "Recall items",
           "maxRecallBytes": "Recall total (bytes)",
-          "maxSingleArtifactBytes": "Single artifact (bytes)",
           "maxArtifactBytes": "Artifact total (bytes)",
           "artifactTtlSeconds": "Artifact lifetime (seconds)"
         }
@@ -866,7 +861,7 @@
         "secretHelp": "Credentials are never returned or trimmed. Local input is cleared after submission.",
         "hasCredential": "Credential configured",
         "noCredential": "No credential configured",
-        "discover": "Discover and record models",
+        "discover": "Update model list",
         "discoverEndpoint": "Query endpoint models",
         "test": "Send real connection test",
         "testOk": "Test succeeded in {ms} ms",
@@ -1563,12 +1558,17 @@
     },
     "approvals": {
       "command": "Execution details",
+      "commandTruncated": "The command preview was truncated; complete arguments and output remain hidden.",
       "title": "Operation requires approval",
+      "historyTitle": "Approval history",
       "acpInnerTitle": "ACP inner action requires approval",
       "allowOnce": "Allow once",
       "rejectOnce": "Reject once",
       "timeline": "Pending approvals",
       "target": "Target",
+      "requestedAt": "Requested at",
+      "decidedAt": "Decided at",
+      "riskLabel": "Risk",
       "expires": "Expires in",
       "hash": "Operation hash",
       "operation": "Normalized operation",
@@ -1741,7 +1741,9 @@
       "usageUnavailable": "Provider has not reported token usage",
       "usageCoverage": "Usage reported for {reported}/{requests} model requests",
       "audit": "Step and tool audit",
-      "auditHelp": "Read-only metadata; credentials, tool arguments and raw output remain private. One page per read.",
+      "auditStep": "Step",
+      "auditTool": "Tool call",
+      "auditHelp": "Read-only metadata; Shell/ACP show a length-bounded command preview, while raw arguments, credentials and output remain hidden. One page per read.",
       "step": "Step index",
       "read": "Refresh current state",
       "moreEvents": "Read next events",

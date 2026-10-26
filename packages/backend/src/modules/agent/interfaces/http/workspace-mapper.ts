@@ -10,7 +10,7 @@ import { AgentFailure } from '../../agent-failure.js';
 import type { WorkspaceInput, WorkspaceResult } from '../../scope/model/workspace-types.js';
 import { toThreadView, toDefinitionView } from './scope-mapper.js';
 import { toRunView } from './run-mapper.js';
-import { toApproval } from './governance-mapper.js';
+import { toApproval, toApprovalPage } from './governance-mapper.js';
 
 export function fromWorkspace(value: AgentWorkspaceInput): WorkspaceInput {
 	switch (value.method) {
@@ -24,6 +24,7 @@ export function fromWorkspace(value: AgentWorkspaceInput): WorkspaceInput {
 				operationId: p.operationId,
 				input: {
 					prompt: p.input.prompt,
+					approvalMode: p.input.approvalMode,
 					connectionIds: p.input.connectionIds.map((id) => id),
 					model: {
 						providerId: p.input.model.providerId,
@@ -56,6 +57,7 @@ export function fromWorkspace(value: AgentWorkspaceInput): WorkspaceInput {
 				operationId: p.operationId,
 				input: {
 					prompt: p.input.prompt,
+					approvalMode: p.input.approvalMode,
 					connectionIds: p.input.connectionIds.map((id) => id),
 					model: {
 						providerId: p.input.model.providerId,
@@ -101,7 +103,12 @@ export function fromWorkspace(value: AgentWorkspaceInput): WorkspaceInput {
 		case 'agent.threads.list':
 			return { method: value.method, after: value.params.after, limit: value.params.limit };
 		case 'agent.threads.create':
-			return { method: value.method, operationId: value.params.operationId, title: value.params.title };
+			return {
+				method: value.method,
+				operationId: value.params.operationId,
+				title: value.params.title,
+				autoTitle: value.params.autoTitle,
+			};
 		case 'agent.threads.rename':
 			return {
 				method: value.method,
@@ -125,8 +132,9 @@ export function fromWorkspace(value: AgentWorkspaceInput): WorkspaceInput {
 			};
 		case 'agent.runs.get':
 		case 'agent.subagents.list':
-		case 'agent.approvals.list':
 			return { method: value.method, runId: value.params.runId };
+		case 'agent.approvals.list':
+			return { method: value.method, runId: value.params.runId, after: value.params.after };
 		case 'agent.runs.events':
 			return {
 				method: value.method,
@@ -237,7 +245,7 @@ export function toWorkspace(value: WorkspaceResult): AgentWorkspaceResult {
 				},
 			};
 		case 'agent.approvals.list':
-			return { method: value.method, value: value.value.map(toApproval) };
+			return { method: value.method, value: toApprovalPage(value.value) };
 	}
 }
 

@@ -1,2283 +1,1711 @@
-# Nexus Terminal E2E
+# 后端架构
 
-## 图片预览、下载与管理定向验收（2026-10-25，HTTP与CDP通过）
+当前验收基线：后端重构、正式前端 Shared 适配及远程八组回归已收口，具体 SHA、覆盖与仍未验证的外部/扩大故障范围统一见 [E2E](../testing/E2E.md#当前验收基线)，后续任务见 [PLAN](../PLAN.md)。下文 B/F 阶段名仅定位设计来源；原阶段的静态或有限行为证据不扩大为当前全量保证，历史“待 B10/F1”不表示重启已完成迁移。
 
-用户授权继续图片预览/下载/文件管理验收并完成后提交，随后追加通过CDP在api.honus.top添加模型、Agent真实生成、预览与删除。仅操作本轮测试配置/产物，保留已有数据；不运行全量E2E，不自行部署或重启。
+当前设计同时记录本地未提交实现；新增目录选择、依赖安装和基础组件接入不自动纳入上述历史验收基线。产品行为见 [USAGE](../USAGE.md)，源码、静态检查和待验范围分别见 [PLAN](../PLAN.md) 与 testing。
 
-新增 `tests/backend/http/backend-next-agent-images.integration.mjs`，通过 `agent-image-fixture.mjs` 使用独立新SQLite、正式认证、Provider/App/Run/Tool/Artifact及HTTP，仅外部供应商为可控边界。六项（含父测试）通过：Images直接生成、文字Agent先列图片模型再独立批准生成、预览inline与下载attachment、SHA-256/Range/private-no-store/nosniff、无认证与跨App拒绝、过期版本拒绝、保留时禁止删除/解除保留后删除/原链接404；普通HTML不能使用图片预览；URL-only返回unknown且不获取外链/重试；在途请求取消后无文件且不重试。命令 `node --test tests/backend/http/backend-next-agent-images.integration.mjs`，日志 `/tmp/nexus-image-acceptance-http.log`。初次夹具错误为分页100超过Shared上限16、误以为保留文件可删除；扩展HTML用例时If-Match遗漏引号，均修正夹具遵守原契约，不放宽产品限制。测试被后端现有通配命令自动收集。
+本文约束新后端及后续功能的放置和依赖。开发前由 [AGENTS](../AGENTS.md) 读取 [人工规则](../rules/HUMAN.md)、[工程经验](../rules/ENGINEERING.md) 与 [编码规范](../rules/CODE_STYLE.md)。按 [模块模板](MODULE_TEMPLATE.md) 维护下面八个章节，不复制人工规则和编码列表。
 
-CDP通过 `172.30.30.11:9223` 的独立自有页访问真实 `https://api.honus.top/settings?tab=agent`，添加“NewAPI 图片验收”草稿，端点使用用户指定NewAPI，图片组添加gpt-image-2.5，不填写文字预算。正式保存POST返回400，Provider只读列表仍为空，未成功保存模型、未发起付费生成。当前Backend PID2810810启动于2026-10-24，早于图片功能产物，前端为当前Vite源码；只读检查开发SQLite确认旧Provider协议CHECK不含images。已请用户使用新临时测试数据目录保留旧目录后重启；未清库、改写旧库或擅自重启。源码复审补齐初始v1结构签名及部署/使用说明，禁止新版静默接入旧结构。真实生成、浏览器预览/下载/文件库删除仍未验收，不以隔离HTTP通过代替。随后旧后端进程退出，指定地址API返回502，等待新版测试实例就绪。
+## 1. 职责与范围
 
-两轮源码复审覆盖Run真实派发及保存身份、Provider代际/取消、工具审批、Artifact认证/App隔离/版本和删除、预览白名单与管理消费者，补齐初始schema签名遗漏。最终根check、双端build、全量format:all:check及diff通过，日志 `/tmp/nexus-image-acceptance-{check,build,format}.log`；格式首轮发现新夹具函数间距，按现有ESLint规则修正后通过。Android真机及完整E2E未执行。线上后续结果见下段，按用户要求完成后本地提交，不推送或发布。
+### 远端工具安装
 
-用户回复继续后，Backend新PID2991545于2026-10-25 04:17 UTC启动，正式status200；只读确认当前数据库初始签名为 `backend-next-v1-initial-20261025-agent-images`、Provider CHECK含images，保留原连接。环境由用户准备，本轮未改写数据库或自行重启。通过同一独立CDP页正式添加“NewAPI 图片验收”，图片组gpt-image-2.5/Images，无文字预算；正式回读Provider已保存且hasCredential=true，不回显密钥。旧模型目录缓存按原失效机制重拉为442项。
+1. **职责与范围**：Remote tools 管理用户确认的远端依赖安装，供传输与归档预检消费。仅安装服务器固定白名单工具，不开放任意命令、包名或仓库配置。
+2. **子功能与目录**：`remote/tools/{service,model}` 持计划、授权和应用能力；`platform/tools` 持包管理器检测、固定包映射、提权认证及技术执行。HTTP 仍归 Remote interfaces。
+3. **依赖方向**：HTTP → tools Service → tools Model → machines Model / Platform；Service 复用原 MachineMutationService，安装与文件、Docker、Agent 远端突变按真实 endpoint 互斥。
+4. **类型与转换**：Shared remote/tools 定义有限工具、包管理器、提权方式、安全检查/安装契约；独立应用对象归 tools/model，技术对象归 Platform；HTTP 与 Model 分别白名单投影。sudo 密码仅写入 SSH stdin，不进入命令参数、持久化、公开结果或日志。
+5. **入口与安装**：认证 POST `/api/v1/remote/tools/check` 只读检测并签发短期计划；POST `/api/v1/remote/tools/install` 绑定原计划及原登录确认安装。register 安装并纳入 quiesce/close。
+6. **数据、事务与并发**：计划只在内存有效五分钟，绑定目标指纹、会话摘要及缺失工具；消费后不能重放安装。实际安装先取得持久机器突变 claim 并事务复查身份，再复查配置及工具。重启不恢复执行；未知 claim 保留至人工恢复。
+7. **生命周期与失败**：Service 追踪全操作至 SSH 关闭及 claim 结算，包命令输出有界消费。断连、超时和取消不证明远端安装停止，派发后无确定退出保持 unknown，不自动重试。认证失败发生于包命令之前，可重新检查再确认；安装退出后仍重新查找工具。前端原操作仅在依赖确认可用且原视图身份有效时派发。
+8. **当前能力与验收**：实现进度见 PLAN；root、sudo 免密/密码、apt/dnf/yum/apk/zypper/pacman 支持在固定映射范围内，无管理员权限或未知系统明确拒绝。保留原生归档能力要求与并发窗口，不承诺包管理器事务回滚。行为验收遵守 D17。
 
-Agent会话初读有一次target-denylist网络失败，随后重新加载并打开Agent，正式App/workspace/denylist/连接请求均200，未为此修改UI或放宽契约。在本轮新建会话输入白背景蓝圆描述，经正式发送按钮只提交一次；CDP读取响应体遇到已回收资源时仅继续只读观察，不重放Run。Run完成，对话PNG成功解码1536×1024，文件1006210字节；预览与下载SHA-256均为 `495d47dd5119baa17daab885d9934b95f67ce2635a879f1cea2e9158c03dac4e`，inline/attachment、private-no-store及nosniff核对通过，桌面截图复核蓝圆正常。文件库正式下载按钮完成应用字节/hash校验并触发浏览器下载，CDP Page.downloadProgress为completed、receivedBytes=totalBytes=1006210。
+### B9 Targets 导入补齐（源码收口，行为待 B10）
 
-文件库正式点击保留，回读retained=true，删除按钮禁用；解除后可删除。第一次删除确认取消，文件仍ready且未保留；第二次确认删除成功，Artifact变deleted，列表0行、存储totalBytes/retainedBytes/reservedBytes均为0，原preview/content均404。保留新增Provider及测试对话供核对，仅删除本轮生成图片；无其它连接/文件删除。直接图片真实链通过；文字工具真实供应商未额外付费调用，其审批/生成/预览下载管理链由上面的隔离HTTP覆盖。手机键盘/后台恢复仍未真机验收。
+Targets的Proxy/SSH Key/Tag列表在HTTP出口使用Shared管理集合预算（10,000项，Proxy完整JSON 64MiB、SSH Key/Tag各16MiB），超限返回413 limit_exceeded，不截断或交付部分列表；单项白名单仍由target-http-view持有。正式前端已消费对应Shared管理契约，其他Targets前端迁移状态归当前实施方案。
 
-证据：`/tmp/nexus-image-cdp-evidence.json`、`/tmp/nexus-image-cdp-download.json`、`/tmp/nexus-image-cdp-retained.json`、`/tmp/nexus-image-cdp-delete.json`；截图 `/tmp/nexus-image-cdp-preview-desktop.png`、`/tmp/nexus-image-cdp-deleted.png`。初始环境拒绝截图 `/tmp/nexus-image-cdp-old-backend.png`。测试页关闭前清除本页尺寸模拟，保留用户已有浏览器页面。
+1. **职责与范围**：Targets import 持有批量连接导入，恢复文件上传、密码/私钥/代理凭据及逐项结果；不导入旧密文或兼容旧字段。连接测试的实际 SSH 生命周期仍归 Remote。
+2. **子功能与目录**：沿用 import/service、model、storage、adapters/sqlite；HTTP 上传解析留 interfaces/http。SSH Key 与 Proxy 事务任务由原子功能 Adapter 提供，register 安装明确参与者，不复制 SQL。
+3. **依赖方向**：HTTP→Targets 入口→ImportService→ImportModel→独立存储任务→SQLite；Model 加密明文并投影命令，Adapter 不读取应用类型或 SecretBox。
+4. **类型与转换**：Shared connections/http 独立定义导入写命令和私钥联合，values 定义上传字段/容量；入口逐字段映射内部命令，Model 逐字段映射密文存储命令。文件是新格式的命令数组，不接受旧开发密文；结果不返回密码、文件内容或技术错误。
+5. **入口与安装**：同一 POST /api/v1/targets/connections/import 按媒体类型接 JSON items 或 multipart connectionsFile；严格 UTF-8/JSON 和项目数量校验，文件内坏项返回安全逐项错误，其余项继续。正式前端 F1 迁移文件格式和结果。
+6. **数据、事务与并发**：每个项目的标签、代理、内联私钥、连接与凭据同事务创建，任一拒绝全部回滚。已有代理仅在用户名相同且没有新凭据写意图时复用；秘密冲突明确拒绝，不覆盖他人配置。私钥名称唯一冲突明确返回，不自动重命名。
+7. **生命周期与失败**：上传有完整字节预算和期限，写入前复验会话；已提交后失败不冒充回滚，commit_unknown 单独表示。单项失败不自动重放，保持输入顺序返回结果；日志不得包含明文。
+8. **当前能力与验收**：导入源码及静态已收口，连接测试独立实现，完整功能对应与两轮审核见 testing；行为统一 B10，不代表后端 100%。
 
-## 远程40089588771后继修复与dev发布（2026-10-24，已完成）
+### B9 保存与未保存 SSH 测试（源码接线）
 
-原59c27e45远程失败四项：notification-settings的GET网络故障立即Toast断言与现10秒宽限不一致；mobile/ssh-workspace仍期望关闭监控即stop、短时重开再start，与30秒订阅复用不一致；suspend-resume-ui仍断言挂起/恢复为绿色，与人工已确认蓝色不一致；真实PTY初始echo关闭时首屏多一个提示符。日志 `/tmp/nexus-e2e-40089588771-failed.log`、shard3诊断 `/tmp/nexus-e2e-40089588771-shard3`。62e776a0远程40091199668被后继推送取消，已完成分片日志仍可用于诊断。
+1. **职责与范围**：Targets resolver 只拥有目标/引用/秘密解析；Remote machines 拥有真实握手、期限和关闭，不把测试塞入配置管理 Service，不执行命令或创建临时记录。
+2. **子功能与目录**：Targets resolver 的 Service/ssh-target-rules 决定输入与图容量，Model 负责存储/SecretBox 转换；Remote machines 的 connection-test Service/Model/type 管理用例与能力，接口沿原 Remote interfaces/http，不另建 testing 大模块。
+3. **依赖方向**：Remote Service→TestModel→MachineModel→Targets trusted resolver / Platform SSH；Targets 不能反向引用 Remote。存储 Adapter 只接独立任务和显式图预算，不引入应用政策、应用错误或 Model 类型。
+4. **类型与转换**：Shared connections/test-http、test-codec 和 values 拥有完整请求、结果/错误、容量。Remote HTTP→内部应用、TestModel→Targets public、Targets public→内部应用、Model→独立存储均逐字段投影；未保存解析没有虚构 ID/fingerprint，明文仅存在受信后端输出和写命令，不进入公开响应。
+5. **入口与安装**：Remote register 安装 POST /api/v1/targets/connections/:id/test、/test-unsaved。Access 是当前管理员身份权威；同一入场不重复认证，引用/Host Key 异步读取后、交付前仍复验。全局 Operations 观察 SSH_CONNECT_SUCCESS/FAILURE。
+6. **数据、事务与并发**：引用的 Key/Proxy/Jump 在单一快照读取，递归环/深度/展开预算受约束。未保存请求不写数据库；每个测试使用独立机器，不借用普通 Workspace/Agent 资源。存储不存在/引用拒绝在 Model 转换，不由 Adapter 实例化应用错误。
+7. **生命周期与失败**：HTTP 及真实任务均受15秒期限和断连/停机取消约束，最多8个在途。原 owner 等待实际 connect/close，未收敛任务不归还配额；关闭失败保留句柄/原因并阻断新测试，所有在途排空后汇总。成功必须完成本地关闭和当前身份复验；Host Key 未受信明确失败，没有自动信任或重试。
+8. **当前能力与验收**：保存/未保存握手、Shared、路由、审计观察及关闭链已接线，静态证据归 testing；真实 SSH/代理/跳板、取消/关闭和权限交错均待 B10，正式前端待 F1；B9整体源码结论见实施方案/testing，不将本子链或静态通过当行为验收。
 
-前三类调整测试按当前产品行为验：蓝色仍搭配真实connected/所有权确认；监控同时验短切无stop/start、闲置超过30秒后stop及重开start和真实CPU数据；网络持续故障等待恢复宽限后再核对驻留Toast，原输入与窄屏断言保留。SSH Key读取失败场景同步宽限，DELETE失败仍立即提示。PTY在实际Platform owner把PID探测和Hook安装合成一次隐藏提交，避免中途恢复echo后第二次readline产生额外提示符，不改前端渲染与普通输出过滤；既有两类真实PTY与用户空行断言保留。两轮源码审核覆盖合并后marker/超限/关闭/并发探测/输入围栏、其它Shell语法隔离与固定eval、历史清理、正常/缺失Hook、三类测试原功能断言和真实数据关联。根check、双端build、全量format:all:check、五份相关spec静态类型及diff通过，日志 `/tmp/nexus-e2e-resume-{check,build,format,types}.log`；相关修复现已由40094495537完整回归验收；各批静态结果不替代该远程证据，按D17未运行本地行为测试。
+B6.2B 的 ToolCall 账本、审批消费及文件/Shell/Docker工具源码已接线。账本归原 runs 聚合，governance 拥有审批政策与单次许可。目录、诊断及文件只读工具的可信检查、执行消费者与模型反馈已接线；受审批文件突变、Shell/当前 Run 后台 Job/Docker 已接线，ACP Runtime、独立权限及直接 Root/Child 协作已接线；执行设置、上下文与预算已接入 governed 政策，行为待 B10。
 
-## 手机后台恢复网络提示（2026-10-24，行为待远程）
+### B5.2 Root Run 执行链（源码接线，行为待 B10）
 
-源码发现挂起目录WS自动重连的首次网络失败无条件触发全局驻留Toast，GET传输失败也与写入失败共用立即通知；传输状态轮询缺少文档可见性/在线状态围栏。现由network-failure按完整GET地址及目录订阅实例独立登记待通知，前台10秒仍未恢复才提示，同地址成功读取/目录快照/原signal撤销取消待提示；隐藏暂停、恢复重计时，timer实例/修订及过期时差保护冻结后早于visibilitychange到达的旧回调。仅GET使用宽限，非GET、业务拒绝、协议错误和原未知写入围栏保持；未增加HTTP自动重试，也不清除已显示的其它错误。
+唯一 Run owner 在 `modules/agent/runs`，持有创建/取消、主状态、模型步骤、事件、幂等、执行任务和恢复。旧 Backend 的现存 Run/提交/调度/模型端口及 HTTP/WS 是功能覆盖依据，不恢复退役 Runner。主 Run 已有 pending/running/completed/failed/unknown/cancelled 源码，步骤与主状态同事务联动。模型探测和 pending 均不证明执行成功。
 
-传输轮询隐藏/离线暂停并取消只读请求，恢复仅补读活动任务、被中断/失败读取或未完成初读；空闲无任务不因切前台轮询。发送/取消/移除的真实任务不被此暂停撤销；原epoch/generation、串行读取及未知保护保持。目录订阅补pageshow恢复，隐藏不将生命周期暂停发布为目录错误。
+执行按 governed 政策核对，默认 enabled=false；启用设置不授予工具 grant 或审批。 B5/B6 的真实执行消费者已接入 B7 冻结上下文与预算；外围工具 B8 已源码接线；持久证据恢复已由 B9 接线，行为验收 B10。
 
-两轮源码复审完成：核对JSON/binary/Axios方法分流、完整响应/真实拒绝/协议失败的恢复取消、原signal及handler清理、订阅实例与timer修订围栏、传输只读取消/前台补读/失败初读恢复及epoch隔离；根 `pnpm run check`、全量 `pnpm run format:all:check`、`pnpm run build:frontend` 及 `git diff --check` 通过，日志 `/tmp/nexus-mobile-resume-final-{check,format,build}.log`。按D17未新增或运行本地行为/浏览器/E2E，未部署或重启。远程待验：手机后台超45秒恢复、Wi-Fi/蜂窝切换及短暂首次重连失败后成功时无Toast；持续前台网络故障超过宽限仍常驻提示；冻结timer先于可见事件不误报；读取失败后离页/注销取消待提示；不同资源成功不抵消仍失败资源；GET响应体中断、Axios读取及binary下载；提交丢响应立即提醒且不重放；活动传输后台无状态请求、恢复新状态、空闲无重复请求及新登录晚结果隔离。并行状态卡片及相关E2E视觉改动不属于本批。
+### Agent Provider 与冻结输入
 
-## 快捷指令字体及未标记组删除（2026-10-24，行为待远程）
+管理 Provider、加密凭据、发现/测试模型、查询/刷新 Registry，并在创建 Root Run 时冻结模型配置与凭据代际。Run 持有完整主状态与子步骤，执行政策/工具审批 B6、上下文/预算 B7、正式前端 F1、行为验收 B10 分别承接。
 
-未标记是虚拟分组，原右键入口只接受真实标签，导致无菜单；现支持全局“删除本组”菜单与危险操作确认，显示完整Store内全部未标记指令数量，包含搜索隐藏项。自定义/未标记标题显式共用全局界面字体。后端独立DELETE端点沿原认证、Service/Model映射及SQLite事务，严格核对完整无标签成员与各版本，整批删除；真实标签三项菜单和点击未标记创建标签保留。
+### B4.2 Factors / Passkey 认证范围（源码阶段）
 
-两轮源码复审覆盖严格解码/重复成员、用户隔离、事务内成员及版本竞争、权限撤销、取消/页面失效、Store串行化与失败Toast；第一轮修正新增操作缺失成功响应投影，第二轮核对全部action消费者、静态路由匹配及有标签成员不受影响。根check与双端build通过，日志 `/tmp/nexus-untagged-group-{check,build}.log`；全量format:all:check及diff通过，格式日志 `/tmp/nexus-untagged-group-format.log`。按D17未新增或执行本地行为/浏览器/E2E。远程待验：确认/取消、搜索隐藏成员、全组删除后重新新增、其它标签保留、并发新增/移除/改标签/改版本时整批拒绝、权限过期及未知结果只读恢复。本批不继承历史远程通过证据。
+Access 在 B4.1 完整密码和摘要会话之上扩展 TOTP 与 WebAuthn。Factors 只拥有部分认证、挑战、密码因素启停与凭据操作；**完整身份权威仍为 access_sessions / AccessPublicApi**。五分钟 `nexus_partial` 是独立随机 bearer，只能用于 `POST /auth/login/2fa`，不能传给普通 SSH、Agent 或其它需完整身份的路由。Passkey 登录最终直接核实 WebAuthn signature/RP/Origin/user verification 并签完整摘要会话；已经建立的完整会话不因启用新 TOTP 被隐式撤销。正式Auth/Security已对接Shared因素与配置，本机前端证据归testing；审计/通知/动态Settings已接线，行为待 B10。Preferences 持久配置已接入多 Origin/RP，HTTP/WS 选择受信站点、Factors 按对应 RP 签发并验证挑战；Passkey站点配置在重启生效，实际行为待 B10。
 
-## 挂起标签恢复蓝色指示（2026-10-24，行为待远程）
+B4.2 本轮复审：WebAuthn 技术 Port 以具名选项表达 RP/user/credential descriptors，Adapter 先对浏览器 clientDataJSON 的 challenge/Origin/type 与 assertion RP Hash、UP/UV、counter 做确定性拒绝；第三方验证仍是最终权威，无法可靠分类的供应商异常映射为不可用而非凭据失败。注册与登录 options 明确要求 User Verification（required），与最终 requireUserVerification 一致。Model 在写 challenge 之前投影技术选项，HTTP 对 options 仅维护一套可选字段白名单；HTTP 签发后的挑战 Cookie 必须交付成功，若在完成之前断开连接则撤销已提交的 challenge/TOTP setup，回收失败保留因果。交付由 Access interfaces/http/access-delivery 唯一持有：原 response、socket 和 request 共同观察，只有原传输未销毁/中断时的 finish 才结算成功；关闭后缓冲清空或迟到 finish 不解除失败撤销。所有路径解除原监听，撤销失败只执行一次并保留因果；本地 finish 不等于浏览器收件确认。源码/静态收口；当前行为范围以 testing 为准。
 
-按用户最新要求修改 WorkspaceTabBar.stateDotClass：已连接且 markedForSuspend 时蓝色，普通已连接绿色；连接/重连黄色闪烁，断开/失败红色，未连接灰色。两轮源码复核确认恢复成功沿原流程设置标记、取消挂起沿原流程清除标记；桌面和手机共用同一指示，无后端/协议/挂起副作用变更。
+### B4.1 Access 核心认证与入场策略
 
-本批静态证据 `/tmp/nexus-suspend-dot-{check,format,build}.log`，根 check、全量 format:all:check、Frontend build 与 diff 通过；按D17未新增或执行本地行为/E2E。远程回归已连接标记/取消后的蓝绿切换、恢复后蓝色及失败/重连优先显示真实连接状态。历史“恢复后绿色”验收仅描述当时版本，不作为本次预期。
+Access 统一拥有初始管理员、密码身份认证、token 摘要会话、登录失败/封禁、来源白名单和 CAPTCHA 准入。HTTP/WS 接收由 Platform HTTP 从 TCP peer 与明确受信代理链解析的来源，不读取业务客户端自报 userId/IP；已登录身份由 Access public 的 token/digest 实时复验。安装态策略真实执行，Preferences 已提供核心持久设置，IP/监控热更新，CAPTCHA/站点重启生效；执行配置与 Operations 已接线，外围集成配置已由 B8 接线；TOTP/Passkey 已由 factors 实现完整挑战流程，完整因素不能被密码闸门绕过。
 
-## 挂起会话列表随分栏高度展开（2026-10-24，行为待远程）
+### B3.2 资源观测与 Docker
 
-原因是 SuspendedSessionsPanel 通用列表 max-height 使用两张78px卡片加6px间隔，面板放大仍被限制在162px。将该 max-height 移到原 pageScroll 模式，工作区默认模式沿原 h-full/min-h-0/flex-1/overflow-y-auto 使用父分栏剩余空间；起始页及Modal均传pageScroll，保持原紧凑滚动。两轮源码核对横纵分栏、侧栏、搜索栏固定、默认列表超出滚动与页面模式选择器优先级，无数据/操作/协议变更。
+Linux 采集唯一实现为 `platform/system/adapters/posix-status.ts`，由 Remote register 安装到 ObservationModel。一次命令导出 `LC_ALL=C`，按段读取 `/proc/meminfo`、`/proc/loadavg`、CPU/网络内核事实及 df；不解析 free/uptime 的可翻译标签。内存优先 MemAvailable，缺失时按 MemFree + Buffers + Cached + SReclaimable − Shmem 估算并夹取到总量；应用容量为 MiB、磁盘为 KiB、网速为 bytes/s。远端内存当前按 MiB 四舍五入，不承诺与 free -m 截断值逐整数一致；缺失必需内核数据明确采集失败，无非 Linux 回退。本机 System 使用 Node OS API 与 /proc/meminfo，不依赖本地化 shell 输出。
 
-本批检查日志 `/tmp/nexus-suspended-height-{check,format,build}.log`，根check、全量format:all:check、Frontend build与diff通过；按D17未新增或运行本地行为/E2E。远程验证至少四条会话时扩大分栏可同时展示更多，缩小后滚动仍可到达全部会话，搜索与恢复/删除不受影响，起始页与会话弹窗维持原布局。
+Remote 的 monitoring 子功能负责普通 Workspace 状态订阅、Docker 查询/控制和后台 SSH 资源采样；不执行任意用户命令、不复制 Workspace registry。System 负责本机状态。cwd 已归 sessions，快捷命令/命令历史已归 Preferences commands/history。SSH/Agent 可分别消费通用 Linux/Docker 技术能力，不能复用普通用户权限和活跃会话。
 
-## 多 SSH 切换监控订阅复用（2026-10-24，行为待远程）
+RemoteObservationService.run 不设普通观测的全局任务数量上限；tasks 只追踪真实在途和清理未确认的任务，不以数量拒绝第9个或更多已接纳 Workspace 的采样、Docker及后台采样操作。原45秒期限、授权、取消和停机等待保留；Dashboard请求级并发、输出容量及Agent机器操作预算保持各自owner政策，移除观测计数不承诺无限服务器资源。状态订阅由 startStatus 串行采样；遇到具名 RemoteResourceCleanupFailure 时先停止原订阅，再交付 operation_unknown，禁止定时重建 SSH 累积未释放任务。stop 继续追踪本轮真实结算后清除 collector baseline；run 与 Workspace 的未确认任务及停机失败证据不删除、不重置。普通读取失败仍可按周期重试；Shared及前端契约不变。
 
-源码定位：WorkspaceLayoutRenderer 用 active 条件销毁 StatusMonitor，最后一个消费者卸载即 status.stop，返回 status.start 触发后端 bootstrap 双采样和500ms等待。桌面改为按节点保留面板、v-show 隐藏、active控制消费，保留趋势选择；Session controller最后消费者离开后保留订阅30秒，短切换不stop/start，长离开停止但保留样本与历史，返回静默恢复。手机状态浮层核对所属Session active。
+### 服务器传输与Workspace任务的范围
 
-两轮源码复审核对多消费者只设一个计时器、返回取消计时器、无消费者时不在首次建连启动、串行启停、断线代次及dispose撤销、独立Session数据隔离；保持后端采样周期/授权/WS协议，不修改UI样式。工作区并行存在状态卡片视觉改动，本批未改写该视觉实现。静态证据 `/tmp/nexus-status-reuse-{check,format,build}.log`，根 check、全量 format:all:check、Frontend build 与 diff 均通过；按D17未新增或执行本地行为/E2E。远程回归：A/B多次快速切换无额外status.start/stop且趋势选择保持，后台30秒后停止，返回先显示旧样本再更新，断线/关闭在途启动/多个面板共享及手机切换互不串数据。
+Workspace的copy/move/archive已归Remote Files，按原附件准入和原任务生命周期执行。旧正式 /api/v1/transfers 的send、列表、详情、cancel、remove是独立后台服务器任务，源机器执行rsync/scp并交付目标凭据；当前register已安装这五个HTTP，Shared server-*契约及正式API/store/UI消费者同步迁移。两条链独立验收，后台任务不借用Workspace授权；设计见本文“Remote 后台服务器传输”，当前证据见testing。
 
-## 终端边缘文字选择与分栏热区（2026-10-24，行为待远程）
+### Workspace 当前边界（源码收口，行为待验）
 
-源码确认 WorkspaceLayoutRenderer 的 splitter 本体为 9px，但透明 ::after 横纵热区均为 33px，覆盖两侧各约16px的正文。将两个方向的伪元素尺寸收窄至9px，与本体一致；1px视觉线、负边距、悬停/焦点颜色、键盘调整、布局锁定和尺寸保存逻辑保持原实现。两轮源码复核覆盖横纵与嵌套分栏，未修改终端选区事件或后端。
+挂起目录通过独立 `/ws/suspended-sessions` 提供首次/变化完整快照，不创建 SSH Workspace。WorkspaceService 持按用户变化事件，覆盖标记、恢复预约/ACK/回滚、续租、detach、改名、终止、自然断线及日志过期；WS Interface 持连接内 revision、合并串行快照读取、发送前身份复查和背压失败关闭。订阅先登记再初读，读取期间变化使旧快照失效；3秒串行身份复查、15秒心跳，不定期重读目录。关闭先退订和清 timer，再等待原快照/授权任务；客户端隐藏或断线重连后重新取得完整快照，HTTP 写入及显式读回保持原 owner 与未知围栏。Shared events 负责严格协议，接口复用 suspend-view 白名单；不按单个终端复用控制 socket。
 
-本批静态命令：根 check、全量 format:all:check、Frontend build、git diff --check；日志 `/tmp/nexus-split-hit-{check,format,build}.log`，根 check 与 Frontend build 通过，diff 检查无空白错误。按 D17 未新增或执行本地行为/E2E；远程需核对距分隔线5–16px的正文可开始选区、中心拖动仍可调整及保存、锁定时不调整、横纵与嵌套分栏一致。此前33px扩展热区的实机记录仅证明当时实现，不作为当前预期。
+Remote 的普通 SSH Workspace 是一条持续存在的交互式 shell，而非 Files attachment 或一次性 HTTP PTY。一个 Workspace ID 对应唯一应用会话 owner，涵盖 pending/open/离线宽限/挂起/恢复交付/closing/清理待确认；外部 WS 仅持有可撤销 attachment。Access 注销令当前 Cookie 失效，附着 WS 在身份复查时关闭；这与终止原 Workspace 是不同操作，断开后按普通宽限/挂起保留策略管理原 PTY。同用户以新有效登录和原 Workspace 凭据续接，显式 ACK 后关联 Files 按新会话重新取得资源，不复用旧会话文件权限。已有独立 Remote HTTP/PTY 保留其实际消费者与关闭语义，不冒充可恢复 Workspace。Agent 仍仅复用 Platform SSH/字节通道，不继承普通 Workspace 的令牌、用户权限或资源额度。WorkspaceService 向 Files 显式提供原实例与会话摘要绑定的 WorkspaceFileAuthority（Files Model 应用契约），统一检查生命周期和挂起租约；独立上传、下载交付及多步骤传输通过该能力复查，不依赖扫描先撤销控制 WS。Files 不反向引用 Workspace Service，Platform/Shared 不承载该后端私有政策。跨 Workspace 复制同时绑定原源和目标 owner；普通离线宽限与独立 Files 保持各自政策。检查只限制后续应用派发/交付，不承诺撤回已派发技术调用；授权失效不免除清理责任，远端清理未知保留原因及现场。
 
-## 后端诊断日志补齐（2026-10-24，静态通过，行为待远程）
+当前唯一后端为 `packages/backend`（原 backend-next），包名为 `@nexus-terminal/backend`，入口为 `dist/main.js`。宿主版本读取本包交付的 `package.json`，Backend包版本与产品版本同步，不依赖仓库根路径。旧 Backend 已移出工作树；功能追溯使用 `05e140d2:packages/backend` 或 Git 历史，不能恢复运行时兼容层。源码归一不代表统一 E2E 已验收；现有未验范围仍由实施方案与 testing 承接。
 
-沿用 Platform Pino，Bootstrap/Operations/网络/核心 owner 共用同一实例和热更新阈值。覆盖启动、信号停机、数据库/恢复阶段、HTTP 模板路由及本地响应完成、WS 授权/容量/关闭流量汇总、SSH/Workspace/文件/机器突变/服务器传输/工具安装/监控恢复、Agent/模型/插件/通知与外部请求。保持前端 UI、Shared 协议、权限及未知结果/清理策略。
+| 一级模块    | 业务 owner                                                    | 当前边界                                                                                                                  |
+| ----------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Access      | 账号、认证、会话与访问策略                                    | 管理员初始化、密码、TOTP/Passkey、来源/IP/CAPTCHA、会话与撤销；正式前端已接入 Shared，真实硬件和故障组合按 testing 区分。 |
+| Targets     | 连接配置、凭据、Proxy、SSH Key、Tag、目标解析与 Host Key 信任 | 管理、导入、测试输入、最近连接及 SSH/RDP/VNC 可信目标解析；实际连接归 Remote。                                            |
+| Remote      | 普通用户终端、文件与远程用例                                  | Workspace/Files/传输/挂起 WS/监控/Docker、浏览器 RDP/VNC 桥及确认后的依赖安装；当前未验范围分别记录。                     |
+| Preferences | 核心安装配置、个人偏好、布局及命令/路径数据                   | 核心 CAS、按消费者热更新与冷配置、个人完整偏好及目录数据；正式前端消费独立版本，不混用授权或写入。                        |
+| System      | 本机状态、备份恢复与诊断                                      | 本机成功缓存、全局在线恢复、进程及模块资源诊断；数据库 Worker 独立指标，不以逻辑字节冒充完整内存归因。                    |
+| Agent       | App/Run、Provider、工具、治理及集成                           | 正式管理与 Host/Run 已接 Shared；Subagent 继承主 Agent 限制，记忆候选在对话侧栏审核，插件从仓库安装。                     |
+| Operations  | 日志、审计与通知                                              | Pino 后端日志、动态日志级别、有限审计与通知投递；不归 Preferences 或 System 复制实现。                                    |
 
-两轮源码复审完成：第一轮修正事件回调需显式绑定诊断上下文、恢复前后共享实例及过滤等级后再提取异常；第二轮核对最多四个错误节点与32项 facts、仅提取源码帧而非异常正文、HTTP 只记录模板路由、WS 无逐帧输出、原异常继续抛给原 owner、阶段开始与真实完成分离。全路径不记录密码、令牌、Cookie、命令/终端/文件/模型正文或 URL。
+本机状态已有独立 System owner；Preferences 已接入核心持久设置；Operations 已持有 notifications/audit/logging，System 已提供宿主诊断；后续能力按真实业务所有权实施；Agent 的 Provider/调度/Tool/授权/审批/Job/Artifact/Memory/集成归 Agent 子功能，不复制技术底座。
 
-根 `pnpm run check`、`pnpm run format:all:check`、双端 `pnpm run build`、最后补充后的 `pnpm run build:backend`、`git diff --check` 通过；日志 `/tmp/nexus-logs-{check,format-check,build,backend-build}.log`。按 D17 未新增或执行本地行为/E2E，未重启后端；日志等级热切换、并发关联隔离、异常/恢复实机输出及日志泄密断言仍待远程授权验证，本批不继承旧版本 E2E 通过结论。
+### Agent 上下文设计（源码接线，行为待 B10）
 
-补充复审覆盖 ToolJob 接纳/派发/完成/失败/取消/排空、插件实例预留/激活/意外退出/宿主调用失败/关闭，并沿原持久状态确认后记录。事件回调改为只恢复诊断自身 AsyncLocalStorage，不捕获其它事务/授权作用域；异常提取前限制堆栈扫描长度，省略已知原因分支和 facts 有显式计数。两轮复审核对原错误传播、关闭顺序、有限字段与并发关联，并修正插件宿主调用失败误标为实例退出。最终根 check、全量 format:all:check、双端 build 与 diff 均通过，日志使用 `/tmp/nexus-logs-final-{check,format-check,build}.log`；本轮继续遵守 D17，未执行本地行为测试或重启。
+1. **职责与范围**：context 拥有 Root 的 Thread 历史装配、Run-local 完整工具交换及容量准入。历史保留此前 Root 的输入、步骤、工具状态与已记录结果，包含失败、取消和 unknown，不伪造缺失结果。历史转为不可信数据，不成为当前指令或授权；Child 仅取得委派输入和自身交换，不读取父 Thread 私有历史。
+2. **子功能与目录**：context/service 的 ContextHistoryService 管历史准入，ContextService 管 Run 内快照与完整交换；context-rules 管纯规则（含normal/extended窗口选择及统一完整请求估算），context-limits 管私有表示上限。context/model 持有应用类型及存储转换，context/storage 定义独立历史/快照契约，context/adapters/sqlite 持有 SQL、行/JSON 解码和快照连续性校验。
+3. **依赖方向**：原 RunExecutionOwner → ContextHistoryService → ContextModel → ContextStorage/SQLite；每轮再由 ContextService → RunStepModel → RunStepStorage/SQLite 同事务保存快照。Context 不引用执行 Service，Adapter 不引入应用 Model/Service 类型；模型请求编码仍由原 RunModelStream/Platform AI 转换。
+4. **类型与转换**：消息/proposal/reasoning 应用类型唯一归 Run；History/Source/Snapshot 归 context/model，独立存储对象归 context/storage，Model 对全部嵌套字段逐项转换。基础状态引用已有 Shared values；内部快照无双端消费者，不新增 Shared/public 对象。跨 Run 不复用加密 reasoning；同 Run 续接保留供应商需要的完整 reasoning。
+5. **入口与安装**：Agent register 安装 ContextModel/Storage 和历史 Service 到原执行 owner，无第二个执行 registry 或新 HTTP。读取历史仍位于冻结政策检查之后，每轮取得快照后才 reserve；每轮受 governed、当前版本、冻结预算及期限约束。
+6. **数据、事务与并发**：Root/Child 创建事务分配不可变 thread_sequence，历史按该序号排序，不用时间戳推断先后。Service 通过 Model 向原读取事务传入来源窗口容量与纯预算判定；Adapter 按不可变序号倒序选择最近连续完整Run后转正序，最多4096个来源、1024步骤、4096工具和512KiB原始正文，较早历史不占本轮预算但持久记录不删除，单个过大历史Run可整体省略。相容来源前缀的语义检查点仍复用，超过预算则保留原窗口。ContextService在首轮快照之前按完整序列化/Provider预算移除最旧完整历史消息及其全部来源（摘要按coveredRuns一起移除），只缩小连续后缀，不裁剪当前输入或执行中的工具交换；首轮快照后锁定来源，后续连续性仍严格校验。步骤 reserve 同事务保存 agent_model_contexts 的完整内容、来源及 SHA-256，并核对窗口内完整连续后缀的来源 user/App/Thread/sequence/version/status；后续轮与已存前缀、原步骤文本/proposals及确定工具结果经Model投影后的消息逐项一致。只更新单一初始 v1 与精确签名，不兼容旧开发库。未来恢复若修改被引用的历史步骤/结果，必须原子推进来源版本；B9 不得仅修改子账本而维持来源版本不变。
+7. **生命周期与失败**：消息与工具定义合计4MiB，不另设消息数量上限；不按normal/extended裁剪窗口，不以字节估算作为模型上下文硬拒。context-rules保留完整性和编码容量检查，其保守估算仅用于尚未报告usage的步骤预约，不是供应商精确token用量。Platform AI将最多128项工具声明与每轮最多32次调用分别限制，不以调用数量限制目录。模型输入明确标注近期历史可能省略，历史只按完整Run滑窗，不截断半组工具；本轮消息/请求自身超限仍明确拒绝；首轮确定拒绝只结算原身份/版本/创建请求且无步骤的 pending Run，后续按真实派发事实结算，存储失败保留因果且不重试。原执行 owner 管取消、围栏、unknown 与 drain；持久快照不授权重启后重新派发。
+8. **当前能力与验收**：Run-local 交换、持久 Thread 历史和逐步骤内容快照已接线；受限结果续读已接线；语义检查点、Memory/Recall、Artifact/清理与执行设置已有实际消费者。USAGE、实施四表与 testing 分别维护当前行为、任务和检查证据；全部行为待 B10，正式前端 F1。
 
-## SSH 首次连接提示符重复（2026-10-24，实机通过，E2E 待远程）
+### 上下文结果投影与续读（B7.3 源码）
 
-用户明确授权通过 `https://api.honus.top/` 验证。基线 `dev` / `4110c5e9`，浏览器 CDP 的独立新页使用已有登录身份，从正式连接管理打开 amd；未输入命令或修改保存配置。登录信息后出现两行相同 `root@…` 提示符，复现原问题。截图 `/tmp/nexus-startup-before.png`；复现时测试后端 PID 2803696。只读 `/api/v1/status` 返回 200，健康成功不作为终端行为通过。
+1. **职责与范围**：context拥有模型结果投影/Unicode页准入；原RunTool账本仍保存完整确定结果，预览不升级原操作的验证或授权，不重放外部工具。
+2. **子功能与目录**：context/result-rules.ts持有纯投影/hash/编码容量规则；model/context-types.ts持有读取输入/页/结果，service/result-service.ts管理来源准入；无需第二份存储/文件库。
+3. **依赖方向**：ToolService→ResultService→原RunToolModel/GovernanceService；RunStepModel在存储事务回调内转换结果事实并验证相同应用投影，SQLite只读独立storage事实，不引入应用规则。
+4. **类型与转换**：ToolInput引用context应用读取类型；StoredContextToolResult归context/storage，Model逐字段转换。已有Shared治理values新增context.read，完整治理codec/后端是实际消费者；私有工具正文与ResultPage无双端消费者，不放Shared。返回页嵌套投影归ToolService。
+5. **入口与安装**：register将ResultService接原ToolService；tool_result_read v2是模型生产者，Root/Child依原工具名单缩窄。当前内置声明nexus.terminal@1.8.0明确声明context.read，grants仍默认空；新能力不自动授权。
+6. **数据、事务与并发**：结果原文仍唯一存agent_run_tools，完成确认后才向模型投影；超过8KiB原文提供4KiB JSON编码预览（原捕获上限256KiB不变）。后续reserve同事务核对原前缀/proposals/完整确定结果，Model回调验证应用投影。续读的源SSH目标id/version进入当前结果确认事务；单一初始v1签名同步，不新增兼容迁移。
+7. **生命周期与失败**：只能读同user/App/Run较早步骤的completed记录，hash/当前原能力/批准/目标有效性复查；context.read不能代替源操作权限。目录结果在当前选择含denylist项时保守拒绝；不存在/非确定/续读递归拒绝。offset按Unicode码点，maxBytes为JSON编码文本含引号，8–4096/default4096；完整页元数据容纳在8KiB模型结果预算。由原Run/Tool owner结算、取消和关闭，不新增后台工作或重试。
+8. **当前能力与验收**：结果投影和真实工具续读源码接线；跨Run历史仍保留实际捕获正文，不能用同Run续读绕过其容量。语义检查点、Memory/Artifact已接线，所有行为待B10，正式治理/提示/结果卡片迁移归F1。
 
-NativeShellIntegration 的 probe/hook marker 去掉额外换行，并在结果过滤后用 CR/EL 重绘后继提示符；保留原登录/普通输出、跨 chunk 识别及超时/关闭。新增 `ssh/terminal-startup.spec.ts` 通过可选真 PTY Bash 夹具断言回显初始开启/关闭均仅一行提示符、登录空行与正常命令空行原样保留；默认 pipe 夹具不变，基线 reset 同时恢复私有控制。未运行本地全量行为/E2E；指定 endpoint 的限定实机验证经用户明确授权，结果如下。
+### Agent 数据与执行配置（源码接线，行为待 B10）
 
-根 check、双端 build、新用例 tsc、夹具 `node --check`、全量格式及 `git diff --check` 通过，日志 `/tmp/nexus-startup-{check,build,types,format}.log`，临时静态配置 `/tmp/nexus-startup-tsconfig.json`。两轮源码复核覆盖回显/marker 分片、普通输出、超时/关闭、目录就绪和逐例 reset；没有改前端 UI。用户重启后已完成下述限定实机验证，新 E2E 留远程，不复用历史 461/461 代替本次回归。未自行重启、提交或推送。
+Memory 列表通过 Shared 可选 threadId → HTTP 白名单投影 → Service 独立 MemoryQuery → Model → storage 参数 → SQLite Adapter 接线。Adapter 在原读取事务核对 thread 属于当前 user/App，分页前通过来源 Run 的 thread_id 筛选，包含 Root/Child；无来源的记录不匹配，缺失或异 App 的线程为 not_found。不传参数仍是实际全 App 管理用途，不是旧协议兼容。候选原文、来源、状态和版本只由原事务持久 owner 修改；本次不改 schema、权限或人工审核政策。
 
-用户回复“重启了”后，确认 Backend 新 PID `2810810`，Europe/London 启动时间 2026-10-24 07:03:30，晚于 Adapter 构建时间 06:44:54；同一 `dev` / `4110c5e9` 未提交修复，Node `/usr/local/bin/node` v22.23.1、pnpm 11.26.0。通过 CDP 独立新页在 `https://api.honus.top/` 正式连接管理打开 amd，连续三次建立不同 Workspace；每次等待 connected 及启动输出稳定后均只见一个提示符，完整登录信息和原空行保留，无内部 marker。首轮用正式命令栏执行带空行的 printf，两个唯一文本各出现一次、中间空行保留，普通回显正常；截图同时核对终端画面。
+1. **职责与范围**：Memory 拥有候选、人工审核、撤销与受限 Recall；Artifact 拥有内容、元数据、引用、保留及清理；execution 拥有管理员执行设置、硬限制确认及 Run 冻结预算。原 RunExecutionOwner 是唯一模型任务 owner。各能力已有管理入口和真实消费者，源审与静态证据归 testing，行为待 B10。
+2. **子功能与目录**：分别放在 Agent 的 memory/artifacts/execution 子功能，沿用 service/model/storage/adapters/sqlite。context 新增 checkpoint Service/Model/SQLite；通信入口仍集中 interfaces/http。Platform blobs 只持有不透明 key、实际字节流、文件句柄和具名技术失败，不认识 App/Run、配额或保留政策。
+3. **依赖方向**：业务 Service → Model → 独立 storage/Platform → Adapter；SQL/DDL、私有行与 JSON 解码留 Adapter。execution 的纯政策决定通过 Model 转换后的同事务事实回调执行；Root/Child、Governance 与其他 Agent 子功能直接消费内部应用契约，不绕 public 包装。
+4. **类型与转换**：双端管理协议唯一归 Shared agent/{memory,artifacts,execution}；应用对象分别归所属 model，独立存储对象归 storage。HTTP 与 Model 分别白名单转换全部嵌套对象。摘要正文与内部来源快照没有新增公开对象；能力基础值包含 context.compact、memory.read、memory.propose、artifacts.read/write，内置声明当前版本 1.8.0，默认 grant 空。
+5. **入口与安装**：register 安装管理 HTTP 和 memory_propose/recall、artifact_create/read、context_checkpoint 真实模型工具；Bootstrap 安装原 Access 提供的事务身份 reader，并创建数据库同路径派生的专用 Artifact 内容目录。核心 SQL 仍仅一个初始 v1，不兼容旧开发库；精确签名随最终结构更新。
+6. **数据、事务与并发**：Memory 提案来源、审核 CAS 在原写事务核对；期限使用实际读取后的时钟，审核耗尽版本拒绝递增；跨App记忆导入的路由、用例、存储及快照声明已移除，不保留兼容入口。持久/Shared解码一致校验创建、审核和到期关联。Artifact SQL 预留、文件独占写入/发布和 SQL 确认分别有完成判据；上传/删除领取前预留最终结算的版本空间，批量清理先验证完整计划，确认期限在实际读取后复查。删除先持久 claim，实际文件删除与结算均确认后才归还额度。硬限制 preview/confirm 在真实存储事务读取事实后取时钟，期限由 Service 决定，校验、updatedAt 与单次消费共用该次时刻；耗尽版本不递增。Root 创建同事务冻结设置，Child 同事务复制 Root 冻结模型及不可变执行设置；模型与工具准入读取全族账本，模型预算按已报告input/output usage核算，未报告保留reservation，确定未派发失败计0；不改写原预留记录，不冒充精确账单。
+7. **生命周期与失败**：所有管理任务归 AgentRequestOwner，模型/工具仍归原 Run owner。持久语义检查点绑定实际模型输入 hash 和完成工具；下一轮保留原用户请求及完整当前交换，预留事务重新验证摘要来源。未知提交不补写、不重派，导入/清理确认只消费一次；结果未知按预分配资源身份只读核对。内容流覆盖全部 yield、取消和 close，读取期间不允许清理对应文件；未确认文件/句柄清理保留资源与容量归属。
+8. **当前能力与验收**：Memory/Artifact、语义检查点、执行设置、Operations 日志/审计/通知与宿主诊断源码已接线；执行按 governed 政策核对，默认 enabled=false；启用设置不授予工具 grant 或审批。 正式前端 F1、行为 B10。
 
-同一自有测试附件通过正式文件管理器读取 `/root`，将终端切到 `/tmp`，正常回显仅为 `cd '/tmp'`；文件管理器先浏览 `/`，再从终端同步回 `/tmp`，证明 PID/Hook 和目录事件仍可用。最后恢复 `/root`，显式关闭三个测试附件并关闭自有浏览器页，未更改保存配置或远端文件，未触碰原有用户页面。截图 `/tmp/nexus-startup-after.png`、`/tmp/nexus-startup-directory-after.png`；真实执行日志 `/tmp/nexus-startup-real-check.log`、`/tmp/nexus-startup-real-directory.log`、`/tmp/nexus-startup-repeat.log`，完整观察 `/tmp/nexus-startup-real-evidence.json`、`/tmp/nexus-startup-directory-evidence.json`、`/tmp/nexus-startup-repeat-evidence.json`。限定实机通过不代表新 PTY on/off E2E 或全部 Shell 场景通过，后者仍需后继远程 Actions。
+执行设置正式前端已消费独立四HTTP及完整Shared响应codec；独立 Profile 类型、HTTP/持久文档、前端编辑与模型目录请求全部删除。Child 继承 Root 冻结设置，Shared 最大请求容量同时约束 SQL CHECK 和持久解码。业务准入、实际工具集合、版本、占用及确认期限仍归ExecutionService和原事务；本批没有将应用类型下沉Shared或Adapter。完整Agent前端仍待后续迁移。
 
-用户后续要求检查其余 SSH。在相同修复代码及 Backend PID 下，通过同一指定地址逐个新建自有页面，从正式连接卡进入 akko、pve_debian、hostbrr、oracle；未触碰原用户页面或修改保存配置。每台可登录主机均等待启动输出稳定，再通过原命令栏运行只读 printf/pwd，验证两个文本各出现一次、中间空行保留，随后通过原文件管理器同步目录并与真实 `pwd -P` 相等：
+### Shell 启动探测与提示符 Hook
 
-| 已保存连接 | 启动与命令输出                                                            | 目录同步           | 收尾                         |
-| ---------- | ------------------------------------------------------------------------- | ------------------ | ---------------------------- |
-| akko       | 单个 `root@localhost` 提示符，登录信息/空行保留                           | `/root` 通过       | 关闭自建附件与页面           |
-| pve_debian | 单个 `root@hermes` 提示符，对应用户原报告主机；正常输出通过，截图复核通过 | `/root` 通过       | 关闭自建附件与页面           |
-| hostbrr    | 单个 `isrli@ftpus1` 提示符，普通用户 `$` 提示符与正常输出通过             | `/home/isrli` 通过 | 关闭自建附件与页面           |
-| oracle     | 首次主机公钥确认，未自动信任；取消后未登录，不判为通过或连接失败          | 未验               | 取消确认并关闭自建附件与页面 |
+NativeShellIntegration 在首个终端附件开放输入前，用同一次隐藏命令完成PID/种类探测与Bash/Zsh提示符Hook安装；Shell专用语法仅在识别后执行固定引号内的脚本，不把Bash数组语法交给其它Shell解析。避免两次readline提交之间切换echo；初始化先读取实际TTY标志，Bash真实PTY原先关闭echo时定向回退隐藏提交产生的一行，再原位重绘，不猜测或匹配提示符正文。Setup唯一持有start/end及部分marker缓存、期限和关闭拒绝；输出仍在journal/WS之前剥离随机内部marker及命令回显，不按提示符正文去重、不裁剪普通登录空行。原currentDirectory、排队cd、用户输入后禁止新探测与不支持Shell拒绝契约保持，行为验证见testing。
 
-四台验证没有变更产品代码或 UI，没有执行远端文件写入命令，未重启、提交、推送或运行全量 E2E。日志 `/tmp/nexus-startup-other-ssh.log`，完整按主机关联的启动行/输出/状态/目录/收尾证据 `/tmp/nexus-startup-other-ssh-evidence.json`，截图 `/tmp/nexus-startup-{akko,pve_debian,hostbrr}.png`。此轮 oracle 尚未授权保存公钥，未绕过正式信任流程；后续新增授权及验收见下段。
+## 2. 子功能与目录
 
-用户随后明确要求验证 Oracle 首页未信任 → 点击连接 → 确认信任 → 返回首页。沿用同一工作区及 Backend PID，通过独立新页打开指定地址首页，正式卡片为 `failed` 并显示“主机密钥未受信任，请先核对主机密钥”；只读确认信任列表中尚无该地址。点击首页 Oracle 卡片跳转工作区，使用全局 SSH 主机密钥确认框保存信任；真实 POST 201，Shared 严格解码并核对 host/port/fingerprint，仅观察到一次确认写入。原附件 `b9d9baa9-dafd-4e3e-9064-36d3618a5f6a` 成功 connected，登录信息及单个提示符可见。
+`runs/model/run-tool-types.ts` 是操作的内部类型 owner，`run-tool-model.ts` 逐字段转换存储命令/结果并映射失败；`runs/storage/run-tool-storage.ts` 定义持久任务；`runs/adapters/sqlite/run-tool-{schema,row,sql,events}.ts` 独占 DDL、行解码、CAS 和状态事件。私有参数/结果预算归 runs/run-tool-limits.ts，不预建无人消费的 Shared DTO。
 
-通过原顶部导航返回首页，未 reload/goto，原页面内存标记仍存在；Oracle 卡片恢复 `ready`、“实时”，显示 CPU、内存和根磁盘指标，未信任错误消失。随后额外只读核对原资源接口 HTTP 200，Shared `readSshResourceStatus` 解码成功；这是独立读取证据，不冒充最初自动请求的回执。最后回到工作区确认原附件仍 connected，显式关闭自建标签及独立测试页；按照用户本次要求保留公钥信任，不移除或重复确认。产品代码/UI、连接凭据未改变，无重启/提交/推送/全量 E2E，现有首次/变更公钥 SSH E2E 已包含不刷新返回首页恢复 ready 的场景，本次无需另造重复用例。
+工具结算政策归 `runs/run-tool-rules.ts`；Model 将事务内存储事实转换后执行纯规则，Adapter 只做引用/版本复查和事务写入。未派发操作允许 failed/cancelled；已派发不能写 cancelled，无法确认远端结果时写 unknown。父 Run 成功条件归 `runs/run-rules.ts`，通过 Model 的窄同步回调消费事务内未结工具事实。
 
-证据截图 `/tmp/nexus-oracle-home-before.png`、`/tmp/nexus-oracle-trusted-terminal.png`、`/tmp/nexus-oracle-home-after.png`；原执行 `/tmp/nexus-oracle-home-trust.log`、后续只读核对及收尾 `/tmp/nexus-oracle-home-finish.log`、最终观察 `/tmp/nexus-oracle-home-trust-evidence.json`。原观察脚本在导航附近读取已回收的 CDP 响应体失败，后续 Resource Timing 缓冲无条目也未用于证明 HTTP；未重放公钥写入，仅继续只读核对原页面 DOM、内存标记、已保存公钥和资源接口，区分观察失败与产品结果。实机完整流程通过。
+### B5.2 所属目录
 
-## 标签栏三项菜单验收与远程 dev（2026-10-24，已完成）
+`agent/service/agent-request-owner.ts` 负责模块请求准入/停机排空（最多64个在途请求）；`runs/service/run-execution-owner.ts` 是唯一进程内模型执行任务 owner；RunService 编排用例，Model 转换存储/技术请求及结果。`runs/model/run-projection.ts` 统一主 Run、事件和冻结输入的存储投影；复用应用类型归 `run-types.ts`。
 
-[40065727325](https://github.com/0honus0/nexus-terminal/actions/runs/40065727325) / `0d7c8283` 461/461 首次通过，零重试、零 flaky；质量、8 分片和 Docker smoke 成功。标签变量场景验证菜单顺序“删除标签 / 删除本组（带标签）/ 重命名”，原行内编辑、标签单独删除保留命令及版本更新、组删除包含隐藏与跨标签命令、取消不派发、成员/版本冲突整批拒绝和其它组保留。此前移动 TUI 失败本轮首次通过；旧 flaky 原因尚未确定，未跳过或放宽断言。
+步骤契约在 `runs/storage/run-step-storage.ts`，事务和行/JSON 解码在 `runs/adapters/sqlite`；`run-step-model.ts` 持有步骤转换。`run-model-stream.ts` 把技术流转成应用增量/终态/安全失败。OpenAI SDK在 `platform/ai/adapters` 内发送模型请求并解码SSE，原技术Port不含SDK/Run/用户/业务授权类型。
 
-双平台 dev [40065733330](https://github.com/0honus0/nexus-terminal/actions/runs/40065733330) 发布成功，digest `sha256:d60f2fda8fae95ccdd3c45f4ab5f9056961513b41a3078bf08f653a76d0a8204`。远程 `/home/honus/product/nexus_terminal` 已更新 `0d7c8283`，前后端健康、两个公网 `/api/v1/status` 正常；保留数据与配置，不执行测试数据删除。日志 `/tmp/nexus-group-menu-final-{e2e,publish,deploy}.log`。后继 `37dbfb83` 只更新耗时估算，产品源码不变。以下待验描述保留原轮范围，由本节覆盖本次已验项；终端重复换行尚待确认出现时机，未计入本次修复。
+### Provider 与 Registry 目录
 
-## 标签栏三项菜单（2026-10-24，待远程）
+`agent/providers/{service,model,storage,adapters/sqlite}` 持有配置与秘密；Provider规范化和冻结资格归`provider-rules.ts/provider-capability-rules.ts`，Service及Run事务回调消费纯规则；Model只做事实转换。`providers/registry/{service,model,storage,adapters/sqlite}` 持有目录刷新、缓存与解析；Registry Service决定快照生成时点、缓存损坏恢复和别名冲突，纯规则在`registry-rules.ts`；Model从技术结果投影独立RegistryCatalogEntry，从存储投影snapshotInvalid事实。HTTP 统一在 Agent `interfaces/http`。`platform/ai` 提供通用模型/目录技术契约及 Adapter；不持有用户、Run 或授权政策。
 
-用户后续明确菜单顺序为“删除标签 / 删除本组（带标签）/ 重命名”。Panel 复用原标签删除与新增组删除两个真实用例，同一个全局确认入口按操作说明保留指令或删除全组；单击不再编辑，重命名仍复用原行内输入，无新增样式。原标签变量 E2E 增补菜单顺序、标签单独删除保留命令及推进版本，与组删除隔离验证。
+### B4.2 目录与唯一 owner
 
-此前 [40064920451](https://github.com/0honus0/nexus-terminal/actions/runs/40064920451) / `59f9bffb` 的组删除完整场景首次通过，根质量与 Docker smoke 成功；移动触屏 TUI individual rows 出现一次首测未读到 NEW_TUI_SCREEN_2，重试通过，严格门禁因 flaky 失败，不能称全绿。证据 `/tmp/nexus-group-menu-e2e.log`、`/tmp/nexus-group-menu-shard5.zip`。本批未以放宽断言、加等待或改产品 UI 处理未确认原因，保留后继复核；最新菜单需新 SHA 远程验证。本地根 check、双端 build、测试 tsc、全量格式与 diff 通过，日志 `/tmp/nexus-group-menu-final-{check,build,types,format}.log`。
+`access/factors/service/factor-service.ts` 管因素用例、cookie 对应的授权、失败与恢复政策；`factors/model/{factor-model,factor-types,options-projector}.ts` 管存储↔应用字段投影、SecretBox 加解密、TOTP/WebAuthn Port 调用、WebAuthn 浏览器选项白名单；`factors/storage/factor-storage.ts` 仅定义持久命令；Access 一级 `access-failure.ts` 持有跨账户/认证/因素共用的内部具名错误；`factors/adapters/sqlite/{factor-schema,factor-sql}.ts` 持 DDL、事务、challenge 与 counter 原子更新。Platform 的 `security/{totp-port,webauthn-port}` 与 `adapters/{rfc-totp,native-webauthn}` 只拥有通用算法、签名验证和提供者消息。HTTP `interfaces/http/factor-http.ts` 接真实路由，Shared `access/factors/http.ts` 负责严格未知输入解码；不向其他模块新增部分登录 public。
 
-## 首页与原标签删除验收、后继标签栏菜单（2026-10-24）
+### B4.1 Access 目录
 
-[40063583579](https://github.com/0honus0/nexus-terminal/actions/runs/40063583579) / `f242d2c8` 完整 461/461 首次通过，零重试；8 分片、质量、Docker smoke 成功。首次/变更主机密钥取消、确认和不刷新返回首页恢复 ready，原标签删除及删除后继续编辑均通过。原日志 `/tmp/nexus-home-trust-e2e.log`。双平台 dev [40063590074](https://github.com/0honus0/nexus-terminal/actions/runs/40063590074) 发布成功，digest `sha256:57a1e282793d92c46ff53167bc02c72604e2d93b2164fcc136cbf56f0d9332d1`；远程部署已核对 SHA、两个容器健康及两个公网状态接口。日志 `/tmp/nexus-home-trust-{publish,deploy}.log`。后继自动提交 `83bd2a6b` 只更新测试耗时估算。
+`access/authentication/service/access-service.ts` 编排账号初始化、改密与密码登录用例，`accounts/model/account-model.ts` 隔离 Scrypt Port 调用、账号行转换和存储能力；`accounts/adapters/sqlite` 负责唯一初始化与改密撤销事务。`sessions/model/session-model.ts` 负责会话 token/digest 应用转换，`sessions/adapters/sqlite` 负责会话查验、CAS 签发、原子失败计数、封禁解除与分页。`admission/service/source-admission.ts` 消费安装时验证的 IP 白名单和失败政策；`admission/source-ip-rules.ts` 只含白名单容量/条目和内网分类纯规则；`admission/model/source-address-model.ts` 将技术解析转为普通应用地址/网络事实；`platform/security/source-address.ts` 定义通用地址契约，`adapters/source-addresses.ts` 独占 ipaddr.js。`captcha/service` 决定配置、是否需要验证与 token 预算；`captcha/model` 持有第三方验证调用与错误转换；`platform/security/adapters/network-captcha-verifier.ts` 负责带期限和受限响应读取的供应商 HTTPS 表单协议。Access HTTP 只实现 Shared 的解码和逐字段结果投影，不接触 hash、SQL、CAPTCHA secret。
 
-用户后续要求标签右键菜单合并重命名与删除组内指令。现有标签变量用例按新行为补充单击不编辑、菜单重命名、取消零 DELETE、包含隐藏和跨标签指令、保留其它组、成员/版本冲突整批 409。新 group DELETE 是同事务快照核对及删除，原表单标签删除不变。两轮源码审核、Shared check/build、根 check、双端 build、目标测试 tsc、全量格式与 diff 通过，日志 `/tmp/nexus-group-menu-{check,build,types,format}.log`。本地不运行行为/E2E；行为待后继远程，不计入上述 461。
+### B3.2 目录
 
-## 首页主机信任恢复与标签删除定位（2026-10-24，待后继远程）
+`remote/monitoring/service` 持有准入、采样状态、按主机缓存、授权及 Docker 操作用例；`monitoring/model` 持有内部事实类型、可信目标到临时 SSH 能力的转换、技术失败及输出转换。`platform/system/adapters` 解析 Linux/Node 状态，`platform/docker/adapters` 构造 Docker 命令并严格解析原生 JSON。`system/status/{service,model}` 负责本机状态用例，不依赖 Remote 私有代码。Shared 的 `remote/monitoring`、`remote/docker` 和 `system/status` 持有双端协议。
 
-完整远程 [40062691505](https://github.com/0honus0/nexus-terminal/actions/runs/40062691505) / `d303a446` 结束；7 个分片、根质量及 Docker smoke 成功，仅 shard 2 的新增标签删除断言失败。原日志 `/tmp/nexus-tag-e2e-40062691505.log`、`/tmp/nexus-tag-shard2.log` 和快照归档 `/tmp/nexus-tag-shard2.zip`。快照已有 Untagged 和原指令，删除、变量保留及版本递增断言通过；失败源于 filter(has) 使用含外层 quickView 的定位，分组内再次查找 quickView 必然失败。改为相对指令 ID，不删断言，不改产品 UI。
+### B3.1 子功能设计
 
-用户新增首页主机密钥确认后状态仍失败的问题：Dashboard 只检查批次级 remoteError，没有检查各主机 failed/refreshError，错误批次也延后下一次刷新。现仅全主机成功记录成功 TTL，失败批次置零；返回首页按原 800ms 调度重新读取，后台仍暂停，不自动信任主机。原 SSH 首次/变更密钥两例增加首页真实 untrusted → 取消与显式确认 → 执行原命令 → 不刷新页面返回并恢复 ready；丢失确认回执的只读核对仍保留。
-
-两轮源码复核覆盖成功与失败采样、已成功指标保留、页面与认证生命周期、CAS 版本、菜单定位及真实主机密钥回执。根 check、双端 build、修改测试 tsc、全量格式与 diff 通过，日志 `/tmp/nexus-home-trust-{check,build,types,format}.log`。按 D17 未执行本地行为或 E2E。d303a446 双平台发布 [40062703163](https://github.com/0honus0/nexus-terminal/actions/runs/40062703163) 成功，但不含首页修复，尚未部署；后继源码需重新发布后更新远程。
-
-## 快捷指令标签组右键删除（2026-10-24，待远程）
-
-Panel 标签分组头新增右键入口，菜单复用 UiContextMenu/UiContextMenuItem，删除确认复用全局 Feedback 与 UiConfirmationPanel；没有新增局部 CSS。沿既有 Store/API 的版本删除，仅移除标签及关联，保留命令和变量，并重读关联变化后的指令版本。
-
-现有 `ssh/quick-command-tags-variables.spec.ts` 增补取消时零 DELETE、确认后仅一次 DELETE、标签移除但命令/变量保留、指令进入未标记组以及继续编辑成功的断言。两轮源码复核覆盖原 ID/version、重复确认、认证视图取消、错误 Toast 与版本刷新。根 check、双端 build、目标测试 tsc、全量格式及 diff 检查通过，日志 `/tmp/nexus-quick-tag-delete-{check,build,types,format}.log`。按 D17 未执行本地行为、浏览器或 E2E；新场景仍待远程，先前 461/461 结果不覆盖本批。
-
-## 远程 40012928618 后继复核（2026-10-23，进行中）
-
-`40012928618` / `6e8e1f91` 完整 461 场景：454 通过、7 失败；质量、runner、Docker smoke 成功，shard 1/4/5/6 全绿。八组日志 `/tmp/nexus-e2e-40012928618-shard{1..8}.log`、去重结果 `/tmp/nexus-e2e-40012928618-cases.json`；旧 zip 证据因临时目录空间不足移至 `/var/tmp/nexus-e2e-evidence`，日志保留。
-
-后继测试修复：文件扫描计数前取消浮窗初始目录悬停，并在每次回根前移动指针；不放宽 3/3 次扫描断言。上传百分比定位直接子 span，避免同时匹配填充条；分组头空白点击留出真实 splitter 热区；快捷命令宽度夹具取消 flex 后补回 100% 高度，避免尺寸容器归零及 finally 掩盖原错误；移动挂起使用真实 searchbox 代替旧 fa-search。保留原筛选、持久化、取消、百分比、恢复同一 shell 及内容断言，未改产品 UI。两轮源码复审覆盖实际组件及夹具生命周期。
-
-历史翻页仍停在尾部：此前的刷新等待不足以证明解决，增加安全失败日志和请求/响应计数及首行诊断后继续远程追查；不删除最早内容断言。状态极矮面板后继复核：160% 下约 1.5 屏幕像素偏差，原 1 CSS 像素容差应同样变换为 1.6 屏幕像素；原测试混用了单位。调整测试按 scale 换算，保持 CSS 像素容差和所有功能断言；不修改产品 UI，因此无需此前单独请求的局部尺寸授权。当前未发布，亦未删除失败 Actions；按用户要求在完整收口并成功发布后清理。
-
-本后继批次两轮源码复审完成，根 check、双端 build、修改测试静态类型、全量格式和 diff 通过，日志 `/tmp/nexus-e2e-followup-{check,build,types,format}.log`。按 D17 未运行本地行为、浏览器、E2E 或收集；当前改动仍待新 SHA 远程。
-
-## 集中修复批次与待授权范围（2026-10-23）
-
-完整远程 `40010025045` / `93553f36` 已结束：461 个唯一场景，440 通过、21 失败，质量门禁、runner 与 Docker smoke 通过。原始八组日志 `/tmp/nexus-e2e-40010025045-shard{1..8}.log`、去重结果 `/tmp/nexus-e2e-40010025045-cases.json`；Agent 上传及传输清理在该 SHA 已通过，不能把本地后继改动算入该结果。
-
-当前集中修改的逐类原因和真实 owner 见 PLAN“当前批次原因与修复状态”。产品仅修改 WorkspacePage 成功发送后按会话身份恢复实时尾部，以及 TerminalView 历史写入后等待 xterm 刷新滚动范围再锚定；保持原权限、历史游标与 generation 判据，不重发输入。剩余用例按现有单击/双击断点、玻璃表面、按钮顺序、统一控件状态和真实滚动 owner 适配；保留实际字节、会话、分页、取消和执行断言，不 skip 或修改产品 UI 换绿。新状态观察仅文本帧进入 Shared JSON decoder，NXW1 终端二进制仍正常交付。
-
-快捷命令与 PDF 搜索属于真实零宽输入缺陷；用户本轮“继续”已授权局部尺寸修正。快捷命令 260px 内沿原机制换行，预览搜索保持最小输入宽度，桌面 PDF 仅搜索打开时允许工具条换行；补充填入前后原生输入宽度断言，不扩大 viewport 回避。历史及计数修复目前只有源码依据和静态证据，完整行为待后继 SHA 远程，未宣称全部解决。
-
-两轮复审已覆盖所有修改与直接消费者，修正目录按钮泛型及函数间距；根 check、双端 build 和本批所有修改 E2E 静态类型通过，全量间距/格式与 diff 检查也通过，日志 `/tmp/nexus-e2e-batch-{check,build,types,format}.log`。遵守 D17，没有运行本地行为、浏览器、E2E 或 Playwright 收集。用户授权完整收口后提交、跟进 Actions 全绿，再从 dev 发布 dev 的 amd64/arm64 镜像；当前尚未发布。
-
-## 远程 40007018128 与当前入口收尾（2026-10-23）
-
-`40007018128` / `aa3093bd` 最终 438 通过、22 失败、1 超时，共 461 个唯一场景；质量门禁、runner、Docker smoke 成功。三项外观分类/主题回归及文件管理器连续拖动通过。原日志 `/tmp/nexus-e2e-40007018128-shard{1..8}.log`，去重清单 `/tmp/nexus-e2e-40007018128-cases.json`；本批不把重试前失败计成额外场景。
-
-发送场景已完成特殊目录、初始离线预检、真实部分成功、方法/错误、任务移除及目标文件检查，最终卡在测试 finally。产物 `/tmp/nexus-e2e-40007018128-shard4.zip` 中初始 GET `/transfers/status` 为 `net::ERR_ABORTED`，后续 GET 200；最终文件断言完成后没有清理 API。沿用例和 Playwright 1.63 RouteHandler 源码确认，取消请求分支直接返回会留下 handling promise，阻塞 unrouteAll(wait)。两处改为显式 abort 后返回，保留等待和所有业务断言，不扩大超时或跳过清理；整个发送场景仍待新远程验收。
-
-Docker 原 `.docker-row`、旧图标和表格布局断言已不对应当前容器卡片；测试按实际容器 ID 与 role 操作窄栏 More actions 的 Enter/Logs/Remove，保留原命令帧、默认展开、真实统计、周期读取、启停刷新、删除取消/确认与 300px 无溢出。挂起搜索按现有 searchbox、36px/13px 统一控件和工具栏验证，新增真实筛选再清空恢复；文件工具区按当前 grid 和 27px 紧凑路径高度检查。
-
-状态历史按 USAGE 已确认的短历史拟合行为验收，保留四档分钟上界、最小可读跨度和有限首样本留白；真实 CPU 样本通过严格 Shared codec 观察，图表首点/结束必须来自原 WS 时间。两轮复审修正了直接拿下采样后首点计算留白及要求拟合起点为整数的问题；画布像素、缩放、工具提示和网络双向速率仍检查，10px 范围按钮与 11px 图例对应现有 CSS。未改产品 UI 或样式，核对 USAGE 的 Docker、挂起搜索、传输及短历史说明仍正确。
-
-Agent 原上传用例停在已经移除的文件库表单。对照 USAGE 与实际 ArtifactPicker，改为对话 Files(count) 附件弹层自动上传；原始 PUT 只转发一次、严格解码并保留 App/大小/SHA256，随后显式搜索重新读取附件列表并验证自动选中，关闭弹层后在文件库按 App/名称搜索。下载沿当前 Download 入口，原下载名称与完整字节断言不变。复审确认上传后只失效列表而不自动重新读取，未直接等待旧列表中不存在的 checkbox；UI、上传与文件库实现均未改变；USAGE 的执行设置章节纠正一处仍将上传归在文件库入口的旧表述。
-
-快捷命令失败暂不能按旧定位处理：原 shard 3 产物 `/tmp/nexus-e2e-40004822130-shard3.zip` 的 metrics 显示根宽约 177px、搜索包装仅约 36px，统一输入的前导图标/间距占满剩余宽度，实际 input 隐藏。属于真实窄栏可用性问题；按 H-13.1 保留失败，未加宽测试规避或擅改 UI。PDF 搜索、Pad/历史和其余入口仍继续独立排查。
-
-本批两轮源码复审核对菜单关闭/删除重确认、默认断点、取消 route 结算、WS 监听范围、CPU 原始样本与下采样边界；根 check、双端 build、四份测试源码静态类型和全量格式通过，日志 `/tmp/nexus-e2e-current-entry-{check,build,types,format}.log`。按 D17 未运行本地行为、浏览器、E2E 或 Playwright 收集；本批源码尚待新 SHA 远程验证。
-
-## 远程 40004822130 最终结果（2026-10-23）
-
-`40004822130` / `1e8497e0` 已结束，按每个场景最后结果去重为 436 通过、24 失败、1 超时，共 461 场景；Docker smoke 与 runner 成功，质量门禁因 PLAN 格式失败。八组原日志 `/tmp/nexus-e2e-40004822130-shard{1..8}.log`、任务状态 `/tmp/nexus-e2e-40004822130-jobs.json`、完整场景清单 `/tmp/nexus-e2e-40004822130-cases.json`。不把原生依赖的可选编译警告、普通断连日志或重试中的首次失败当作最终结果。
-
-该轮不包含 `a4d7513f` 的多目标离线前端修复和 `abeee82f` 的外观分类测试适配；两批已分别完成两轮复审及静态验证，等待推送后的新 SHA 独立验收。Shell 启动/currentDirectory、cd、恢复等多数前批失败已通过；仍有 Pad 首次滚动后回显及历史页场景失败，不能宣称整条终端链已验收。其余 Docker 当前入口、文档搜索/分页、快捷命令和 Agent 后继入口、上传及状态/挂起布局断言需逐项对照调用链与 trace；尚未确认分类的失败不直接归为用例问题，不修改 UI 换绿。
-
-## 外观分类导航回归（2026-10-23，待远程）
-
-远程 `40004822130` / `1e8497e0` 的 shard 2 两个外观场景仍停在手机端隐藏的桌面 tab；shard 5 自定义终端主题在统一控件检查发现新增的原生分类按钮。结合原日志、失败页快照及 trace 的实际 DOM，确认属于测试入口及控件前提过时，不是设置保存失败。原证据 `/tmp/nexus-e2e-40004822130-shard{2,5}.log`、`/tmp/nexus-e2e-40004822130-shard2.zip`。
-
-E2E appearance helper 按当前 768px 分界操作桌面 tab 或手机分类按钮；手机通过实际 Appearance Settings listbox/option 选择，断言菜单关闭、按钮文本及展开状态。两份测试所有分类切换统一使用该入口；原控件检查允许分类触发器，仍检查其余原生按钮和未统一输入，不修改产品 UI。原保存、接口状态、刷新恢复、内容和几何断言保留，核对 USAGE 外观操作仍正确。
-
-两轮复审发现并修正初稿可能匹配内容区 UiSelect 的问题，以及菜单名称与真实 i18n 不一致；通过离线 trace 确认触发器的 aria-haspopup=listbox 和实际分类名称。根 check、双端 build、四份测试源码静态类型和全量格式通过，日志 `/tmp/nexus-e2e-appearance-{check,build,test-types,format}.log`。本轮不运行本地行为、浏览器或 E2E，恢复入口后的后续功能仍待新远程验证，不能据此宣称三个场景已通过。
-
-## 多目标发送初始离线回归（2026-10-23，待远程）
-
-重新核对原部分成功行为后，将初始离线目标被工具预检中止判为产品回归。第七批仅在成功预检之后修改目标地址，覆盖的是配置变化窗口，不能替代初始离线回归；本批恢复第二目标从创建起使用可信但不可达端口，真实转发工具检查一次并严格断言 HTTP 503 / connection_unavailable。保留原正常目标成功、离线目标失败、部分完成、实际 rsync 方法、错误详情、源文件及目标文件断言。
-
-前端 remote-tools 返回 ready/deferred/cancelled，仅传输只读检查的具名网络不可达可 deferred，由原后台任务结算各目标；不是工具检查成功。归档仅接受 ready，取消、信任/权限拒绝、通用检查失败、安装失败和未知结果仍停止。沿 SSH2 原生错误 → MachineConnectionFailure → Remote Model → Shared/HTTP → 前端准备 → 两个实际消费者复核取消、资源清理与最终派发；没有变更 UI 模板或样式。
-
-两轮调用链复审完成，根 check、双端 build、相关五份 E2E 源码静态类型及全量格式通过，日志 `/tmp/nexus-e2e-transfer-{check,build,test-types,format}.log`；最终文档另做格式及 diff 检查。本轮不运行本地行为或 E2E，恢复的初始离线场景仍待远程。当前运行 `40004822130` / `1e8497e0` 不包含本批前端修复；其质量门禁失败为 doc/PLAN.md 格式，不将依赖 ssh2 可选原生扩展编译警告判为最终失败原因，原日志 `/tmp/nexus-e2e-40004822130-quality.log`。
-
-## SSH 启动回显独立解析（2026-10-23，待远程）
-
-远程 `40001250164` / `9aa53b96` 最终 420 通过、38 失败、1 超时，质量与 Docker smoke 通过；八组原日志 `/tmp/nexus-e2e-40001250164-shard{1..8}.log`，最终清单 `/tmp/nexus-e2e-40001250164-cases.json`。新失败集中于 currentDirectory/changeDirectory、挂起恢复及日志压缩；这是产品解析问题，不能通过删除这些断言处理。新增 eager 初始化让缺陷在普通输入前稳定触发：NativeShellIntegration 只有先收到 stdout 的 `stty -echo` 才识别 setup marker，而 SSH 夹具 Bash 通过独立 stderr 回显；真实关闭回显的 shell 同样不能依赖该前提。
-
-Platform 现在独立识别结果 marker，并同时保留结果/回显可能跨 chunk 的前缀；原有回显抑制、完整 marker 的 4096-byte 预算、5 秒期限和 close 清理保留。Workspace 将初始化等待放在最终身份/实例检查之前，并响应原取消 signal。流控测试原统计全部输出中的字符 Z，把新启动脚本的 ZSH_VERSION 也算入业务 payload；现严格核对完成标记前的连续 3 MiB 输出，原消费窗口、停顿、超额 ACK 和 drain 断言保留。
-
-两轮源码复审覆盖有/无/跨 chunk 回显、前后缀正常输出、marker 分片/超限、超时/关闭、普通输入保护与最终授权；根 check、双端 build、全量格式、目标测试静态类型和 diff 检查通过，日志 `/tmp/nexus-e2e-shell-startup-{check,build,format-final,test-types}.log`。首次格式报告本轮 PLAN 及 Adapter，修正后重跑通过。按 D17 未运行本地行为、浏览器、E2E 或收集；上述产品修复仍待新远程验证，不复用旧通过。
-
-后续判定继续区分产品与用例：多目标发送的原初始离线目标回归不能仅由“当前预检会拒绝”判成用例错误。第七批的目标在预检后改变仅覆盖时间窗口，不能代替该基线；下一批恢复原场景并修复明确网络不可达使整批中止的问题，权限、信任、安装失败与未知仍阻断。
-
-## 第七批：当前入口与发送预检前提（2026-10-23，待远程）
-
-基线 `dev` / `9aa53b96`；远程 `40001250164` 尚在运行，不用新推送取消。前批 `39998158139` / `72dd5714` 的八组日志最终仍为 435 通过、23 失败、1 超时；质量与 Docker smoke 通过，原日志 `/tmp/nexus-e2e-39998158139-shard{1..8}.log`，最终去重清单 `/tmp/nexus-e2e-39998158139-cases.json`。相同总数不代表失败停在相同步骤，以下以离线 trace 确认。
-
-Send Files 的特殊目录创建、导航、取消与记忆已通过，后续真实工具检查返回 503（目标初始离线），没有发出创建任务请求；测试仍等待弹窗关闭。新前提让测试目标先通过真实预检，在原回执交付前通过正式 CAS 将第二目标设为可信但不可达的端口，再验证实际任务部分成功、rsync、错误详情和真实文件内容。只转发一次原检查请求并交付同一回执，不伪造成功、不扩大超时。目标配置更新和返回版本/身份均严格核对，既有 finally 仍移除本场景任务与连接。
-
-Agent 审批 hash/version 和真实命令结果已通过，失败发生在重新打开 Tasks 后关闭的技术详情中；测试经可见 summary 展开，再检查直接属于审计 details 的 summary 与原 operationHash。收藏目录菜单末处同步 menuitem；桌面/移动进度入口按 USAGE 的常显行为验证空列表可开关、返回后终端及命令栏可用；移动快捷命令 Add 按当前 28px 紧凑控件和实际图标验证。保留原功能断言，不修改产品 UI。
-
-两轮源码复审覆盖这五份测试、当前组件/Shared 消费者及正常/失败/收尾路径；根 `pnpm run check`、双端 `pnpm run build` 和五份测试静态类型通过，日志 `/tmp/nexus-e2e-seventh-{check,build,test-types}.log`。复审将空列表断言落到实际任务行与后台空态，随后测试静态类型再次通过，日志 `/tmp/nexus-e2e-seventh-test-types-final.log`。全量格式首次仅报告本轮 PLAN 表格，整理后通过，日志 `/tmp/nexus-e2e-seventh-format-final.log`；按 D17 未运行本地行为、浏览器、E2E 或 Playwright 收集。历史分页、搜索、其它入口和视觉断言仍继续排查；以上不作为新远程通过证据。
-
-## 文件管理器连续缩放回归（2026-10-23，待远程）
-
-用户单独授权修复拖动阻力，不混入 E2E 视觉适配。移除浮窗 pointermove 的 ±18px widthSnap 和分栏松手吸附；保留 170px 最小宽度、居中浮窗的双倍指针倍率、最大宽度及持久化。按钮按实际七/八/九个选择单行或四列，不再在最小宽度留下 5+3。
-
-新增 `ssh/file-manager-resize.spec.ts`，经真实 SSH/文件管理器入口进行一次不松手的双向拖动，逐点校验 310px 至 158px 请求区间的实际宽度（下限 170px），覆盖原单行吸附范围、换行断点和最小宽度吸附区；同时验证八按钮为 1×8 或 2×4、按钮不小于 28px、无横向溢出，松手与关闭重开不改变最终 310px。不执行本地行为测试。前批 `72dd5714` / 远程 `39998158139` 尚在运行，本批不推送取消它。
-
-两轮源码复审覆盖全部 widthSnap 消费者移除、指针倍率/边界、七/八/九按钮断点、键盘分栏、保存恢复及取消/卸载收尾。目标测试静态类型通过，日志 `/tmp/nexus-file-resize-test-types.log`。工作区根 check 被并行外观组件的 UiPopover 必填属性类型错误阻断，全量格式被其它 PLAN 表格阻断，未修改这些内容。10 文件独立暂存快照 `/tmp/nexus-file-resize-index` 的根 check、全量格式及双端 build 通过，日志 `/tmp/nexus-file-resize-index-{check,format,build}.log`；未将静态通过记为实际拖动或新 E2E 通过。
-
-## 第六批：目录协议及菜单/审批定位（2026-10-23）
-
-远程 [39967104850](https://github.com/0honus0/nexus-terminal/actions/runs/39967104850) / `517f7814f035be1c9f92040811fe7e2b6bd8a033` 已结束，459 个场景最终 435 通过、23 失败、1 超时；按场景最后结果去重，保留 timedOut。质量、runner、Docker smoke 和 RDP 所在分片通过；不等同于弱网体验已验收。原日志 `/tmp/nexus-e2e-39967104850-shard{1..8}.log`，完整清单 `/tmp/nexus-e2e-39967104850-cases.json`。
-
-shard 4 的 Send Files trace 中独立 Files stat/list 均 200，列表含 `line\nbreak` 文件名，HTTP codec 拒绝控制字符后使整个目录显示未加载。修复对齐 SFTP 的合法 POSIX 名称；原场景增加含换行/制表符/引号的真实目录创建、选择器导航、完整路径保留及 NUL 请求 400，原记忆、取消、混合选择、传输及成功/失败结果断言保留。文件历史/收藏按 menuitem 定位；Agent 开关先关闭挡住点击的成功 Toast；审批按当前 Approve and run 入口，原哈希/版本和真实执行断言保留。不改产品 UI。
-
-两轮复审覆盖完整 HTTP→Files→SFTP 路径、POSIX 名称/Unicode/容量限制、JSON 与 shell 边界、菜单角色和原审批回执。工作区根 check、双端 build、目标测试静态类型通过，日志 `/tmp/nexus-e2e-sixth-{check,build,test-types}.log`；全量格式仅被并行工作区其它 PLAN 表格阻断，未修改该部分。9 文件独立暂存快照 `/tmp/nexus-e2e-sixth-index` 根 check、全量格式、双端 build 均通过，日志 `/tmp/nexus-e2e-sixth-index-{check,format,build}.log`。未执行本地行为测试、浏览器、E2E 或 Playwright 收集。其余视觉断言及功能失败继续保留，不能把本批源码修复写成远程通过。
-
-## 远程失败入口与桌面尺寸修复（2026-10-23，第一批）
-
-基线为远程 [39942702527](https://github.com/0honus0/nexus-terminal/actions/runs/39942702527)，被测 `1dbad409f4b49c077fc35c0cb6a3c44890e01db4`。八组共 162 个唯一失败，其中 138 个首次失败停在旧命令输入 class；SSH helper 已等到 connected，不把入口失效判为 SSH 建连普遍失败。原日志、去重清单及 shard 1/3 产物保存在 `/tmp/nexus-e2e-39942702527-*`。
-
-第一批将命令输入、连接类型/认证 radio、连接测试徽标、新会话入口与挂起列表滚动断言对接当前真实 UI，保留发送、焦点、搜索、隔离、成功/失败及无横向溢出断言；命令栏响应式场景改为当前单行及独立横向工具滚动，键盘查找继续覆盖。Send Files 的 held route 在释放后等待 handler 完成再移除，避免 continue 与 unroute 竞争。
-
-桌面保存边界对小数像素取整，并将窄屏或超大窗口映射到 Shared 的持久范围；不改变实际窗口和 UI。现有 RDP/VNC 拖拽场景改用小数坐标并断言保存返回 200 及实际持久尺寸，不新增或运行本地行为测试。
-
-工作区根 check、双端 build、全量 format 通过，日志 `/tmp/nexus-e2e-current-{check,build,format}.log`。测试 TypeScript 首次命令缺少前端别名，未记通过；补临时静态配置后通过，见 `/tmp/nexus-e2e-current-test-types-final.log`。两轮源码核对覆盖真实 DOM、全部旧输入定位、保存整数范围与 held route 收尾。并行 UI/偏好变更保留，不纳入本批提交；35 文件的独立暂存快照 `/tmp/nexus-e2e-first-index` 根 check、全量格式及双端 build 均通过，日志 `/tmp/nexus-e2e-first-index-{check,format,build}.log`；新远程结果待补。真实 RDP 建连错误、分块刷新及解锁后其它失败仍待处理，不能声称 138 项已通过。
-
-## 第二批远程 E2E 修复（2026-10-23）
-
-第二批 E2E 修复已完成两轮源码复核：外观 tab、设置 radio、菜单 menuitem 和 Agent 审计的技术详情折叠入口对接当前真实组件；服务器状态用四个真实资源、完整可访问数值、网络吞吐、容器范围和趋势切换验证，不保留旧卡片类名造成的空循环。Agent 连续无效保存每次发送 Toast，重新展开只读刷新线程目录且保留已选草稿；全局通知移至背景 inert 区域外，并加入 Agent 焦点允许区域，保留现有通知样式及备份锁定。现有 performance-settings 和 host 场景覆盖真实保存拒绝、通知关闭和跨页线程更新。
-
-远程 [39951440073](https://github.com/0honus0/nexus-terminal/actions/runs/39951440073) / `639b2ef6` 已结束，八组有 74 个唯一失败，质量门禁和 Docker smoke 通过。RDP/VNC 小数拖拽保存场景通过；RDP 建连仍失败，不算通过。原始日志 `/tmp/nexus-e2e-39951440073-shard{1..8}.log`，去重清单 `/tmp/nexus-e2e-39951440073-cases.json`。源码核对 IronRDP 0.7 的握手预读丢弃风险后，桥改为完整协议消息逐条发送，保留 TPKT/Fast-Path/CredSSP、背压、有界残片及关闭语义。新改动尚未通过远程验证，不宣称消除弱网渐进显示。
-
-第二批工作区与独立暂存快照 `/tmp/nexus-e2e-second-index` 的根 check、全量格式及双端 build 通过，日志 `/tmp/nexus-e2e-second-{check,format,build}.log` 和 `/tmp/nexus-e2e-second-index-{check,format,build}.log`；测试严格静态类型通过，日志 `/tmp/nexus-e2e-second-test-types.log`。两轮复审覆盖消息长度/残片、背压和收尾、恢复刷新竞态、通知焦点及真实 DOM 断言。未执行本地行为、浏览器、E2E 或 Playwright 收集；24 文件分批提交后以新远程结果验收，其余失败继续保留。
-
-## 第三批远程 E2E 修复（2026-10-23）
-
-第二批远程 [39955067524](https://github.com/0honus0/nexus-terminal/actions/runs/39955067524) / `9e49762b` 已结束，按每个场景最终记录去重为 409 通过、50 失败；质量门禁、runner 与 Docker smoke 通过。日志 `/tmp/nexus-e2e-39955067524-shard{1..8}.log`，失败清单 `/tmp/nexus-e2e-39955067524-cases.json`。RDP wide DPI 场景通过，覆盖真实认证和 TPKT 消息边界。主 RDP 场景的 Connections、Dashboard、Workspace 建连与认证及浏览器到远端剪贴板内容通过，随后失败于 CDP 出站 Buffer 观察；移动 RDP 同类失败。不能把局部证据写成整个 RDP 场景或分块显示体验通过。
-
-第三批仅修改测试，按当前真实 DOM 对接新会话、历史搜索、加载状态、mixed 复选框、菜单、快捷指令、状态趋势与统一文档搜索。Monaco 继续验证实际匹配内容、数量、焦点和关闭清理；预加载计数先等初始读取排空，仍要求目标只派发一次且点击共享。RDP 同时观察原生 send 的真实二进制调用及入站 binary，断言双向存在且无文本消息，不记录内容或票据，不替换 SDK 或远端响应；认证、真实输入与剪贴板断言保持。
-
-两轮源码复审核对真实组件角色、搜索匹配与清理、计数隔离及二进制观察不改变发送数据。根 check、双端 build、全量格式和测试静态类型通过，日志 `/tmp/nexus-e2e-third-{check,build,format,test-types}.log`。未执行本地行为、浏览器、E2E 或 Playwright 收集；第三批远程待推送验收。已核对 USAGE 相关功能说明，产品行为与 UI 不变；并行 Docker 和 UI 文档改动不纳入本批提交。
-
-22 文件独立暂存快照 `/tmp/nexus-e2e-third-index` 的根 check、全量格式及双端 build 同样通过，日志 `/tmp/nexus-e2e-third-index-{check,format,build}.log`；快照依赖引用自身 Shared 构建产物，不借用并行产品源码变化。
-
-## 第四批：通知重试与设置重新激活（2026-10-23）
-
-远程 `39955067524` shard 8 的 performance-settings trace 显示 `0 → Save → Close → 9 → Save`，首次 Toast 通过、第二次未出现。Notification Store 保留了关闭后 15 秒的 recentErrors，修复移除错误卡片时释放对应键；驻留时仍合并，不改变 UI。连续无效保存原场景继续断言每次错误可见及零 PUT。
-
-同轮 shard 7 host trace 显示离开设置页前 GET/PUT 正常，返回后无 execution-settings GET，开关禁用且执行分组没有草稿。核对 Vue 当前 runtime-core 的 injectToKeepAliveRoot 将后代激活 hook 前插，读取可能早于 scope 激活；Agent 设置、Provider、App/集成/插件/治理、文件库及记忆的恢复读取延至 nextTick，仍由原 scope/generation/available/loaded/busy 控制，旧回调不能恢复写权限或重放写入。host 现有场景增加返回设置时 GET 200、开关启用且保留已保存值，再继续真实关闭写入。
-
-其它定位仅对接当前 UI：集成开关 role=switch；SSH Key 失败 Toast 先关闭再点击原恢复按钮；移动编辑器使用真实 Refresh remote file 入口与统一搜索栏，核对 CodeMirror 匹配内容、计数、焦点和 Escape 清理。不修改布局、样式、尺寸、配色或禁用原功能断言。
-
-根 check、双端 build、测试静态类型通过，日志 `/tmp/nexus-e2e-fourth-{check,build,test-types}.log`；类型检查首次误用不存在的 tsc 文件未执行，改用已安装 tsc6 后通过。初次全量格式仅 PLAN 表格未对齐，修正后全量通过，见 `/tmp/nexus-e2e-fourth-format-final.log`。两轮源码复审核对驻留与关闭去重、原作用域激活顺序、nextTick 后再次停用/卸载/身份变化、只读恢复与写入围栏，以及测试的当前真实入口。不执行本地行为、浏览器、E2E 或收集。独立暂存快照 `/tmp/nexus-e2e-fourth-index` 根 check、全量格式及双端 build 通过，日志 `/tmp/nexus-e2e-fourth-index-{check,format,build}.log`；随后仅补状态缩放场景的另一处旧 network-card 定位，保留图表断言，并重新通过测试静态类型。
-
-第三批远程 [39957933602](https://github.com/0honus0/nexus-terminal/actions/runs/39957933602) / `659ced18` 已结束：426 个唯一场景最终通过、32 失败、1 超时（Send Files），合计 33 未通过。质量门禁、runner、Docker smoke 通过。日志及完整状态去重清单 `/tmp/nexus-e2e-39957933602-*`。RDP 主场景、wide DPI 与 VNC 尺寸/拖拽场景通过；移动 RDP 首次输入观察超时、重试通过，仍有稳定性缺口。弱网分块显示尚未体验验收。不能将这些结果作为尚未推送的第四批证据；其余入口、真实历史分页及新 UI 下的旧尺寸/配色断言继续排查，不为换绿修改产品 UI 或删除断言。
-
-## 第五批：显式任务核对及当前文件列/菜单入口（2026-10-23）
-
-第四批远程 [39962359204](https://github.com/0honus0/nexus-terminal/actions/runs/39962359204) / `996153cc` 最终为 428 个唯一场景通过、30 失败、1 超时，共 459；质量、runner 和 Docker smoke 通过。原日志 `/tmp/nexus-e2e-39962359204-shard{1..8}.log`，完整最终状态清单 `/tmp/nexus-e2e-39962359204-cases.json`。关闭错误后重复提示、Agent 设置返回、密钥失败恢复和移动 CodeMirror 搜索均通过。Agent 搜索本轮通过，但上一轮已确认外部取消后 unknown 界面不会自动读取，仍补显式核对；不声称本轮通过由尚未提交的第五批产生。预加载本轮新失败及其余历史分页、发送超时、搜索不可见和样式断言仍待处理。
-
-本批七份测试保留真实功能，使用当前 menuitem 执行历史复制/删除与连接编辑；unknown 搜索取消后经任务栏刷新读取同一 Run 的 cancelled 回执，再继续后续扫描。文件列按实际根内容宽度断言；仅桌面的列宽拖动表头与移动文件列分别检查，修改时间尺寸检查落到真实文件单元格。列缩放核对三列和两个拖动柄，保留行缩放、列宽稳定及溢出断言；移动多选按当前 is-selected 检查，仍验证退出清除和不误开编辑器。ACP 重载后按 App 数量使用现有选择器或唯一 App 的集成卡片，不增加不存在的入口。
-
-两轮源码复审覆盖工作区响应方法/非空/Run 身份、取消后的空草稿与后续发送、单 App 与多 App 分支、根内容宽度与移动表头条件，以及所有原持久/剪贴板/扫描隔离断言。根 check、双端 build、全量格式和七份测试的静态类型通过，日志 `/tmp/nexus-e2e-fifth-{check,build,format,test-types}.log`；初次静态类型发现可空 Run 回执，初次格式发现函数间距，均已修正后重跑。未执行本地行为、浏览器、E2E 或 Playwright 收集，行为待后续远程验收。核对 USAGE 原任务刷新、菜单和文件列说明仍适用，产品与 UI 不变。
-
-## RDP 浏览器像素提交合并（2026-10-23）
-
-按用户要求保留浏览器 IronRDP 解码与透明桥，参考 Termix Remote Desktop 的脏区域合并思路；没有迁移后端 Worker 解码、Guacamole 协议或有损 JPEG。`rdp-frame-presenter` 仅在当前实例 context 合并已解码像素，下一次 animation frame 提交最新区域，不延迟键鼠或修改网络消息。底图最多 32 MiB；超预算或分配 RangeError 回退原绘制，不引入连接容量拒绝。画面尺寸赋值（包括相同值）、关闭时清理底图与回调，恢复原实例方法/属性。
-
-两轮源码复审覆盖固定 SDK 0.7 的真实 `putImageData` 调用与 width/height setter、WASM ImageData 的同步复制、重叠最新像素、负 dirty 尺寸/边界裁剪、零面积、全宽连续复制、区域数合并、后台回调暂停、超预算/分配失败回退及关闭/晚建连。SDK 原地修改/释放内存后不持有原像素 view；不新增逐帧全屏复制或帧队列。既有真实 RDP 主场景补绘制后的不透明像素与多颜色检查，防止只有 connected 和非零 Canvas 而没有真实画面；原认证、输入、剪贴板和全屏断言保留。
-
-根 check、双端 build、全量格式及目标测试静态类型通过，日志 `/tmp/nexus-rdp-present-{check,build,format,test-types}.log`，全宽复制优化后再通过前端构建 `/tmp/nexus-rdp-present-frontend-final.log`。七文件独立暂存快照 `/tmp/nexus-rdp-present-index` 的根 check、全量格式及双端 build 通过，日志 `/tmp/nexus-rdp-present-index-{check,format,build}.log`；初次快照未生成 Shared dist 导致模块解析失败，先独立构建其 Shared 后重新检查通过，不借用工作区编译产物。按 D17 不运行本地行为、浏览器、E2E 或收集。当前只证明源码与静态范围，真实像素回归、弱网体验、帧提交次数/主线程开销及多平台仍待远程验证；不能将上一轮 RDP 通过作为本批优化证据。
-
-第五批远程 [39964931894](https://github.com/0honus0/nexus-terminal/actions/runs/39964931894) / `8455791e` 最终为 435 通过、23 失败、1 超时；质量与 Docker smoke 通过。原始日志 `/tmp/nexus-e2e-39964931894-shard{1..8}.log`，清单 `/tmp/nexus-e2e-39964931894-cases.json`。历史菜单管理、窄屏连接标签管理、ACP 两分支及列缩放场景通过。文件导航窄屏列验证通过，后续失败在 Copy path 的旧 button 定位；移动多选通过选择/退出检查后出现更深失败，不能宣称整个场景通过。其余失败与历史分页、Send Files 超时仍继续跟进，不改产品 UI。本批像素合并不属于该被测 SHA，真实绘制回归待新远程。
-
-## SSH 多会话隔离补测与漏检核对（2026-10-23）
-
-用户明确要求新增用例，本批据此新增源码；仍按 D17 不运行本地行为、浏览器或 E2E，不自动提交、推送或触发远程。最近远程 39920261630 测试的是 `798e204f2a547213652874dca3792bfd42a194f0`，该版本 Surface 只有一个 DOM 根节点；引入并列安装弹窗的改动仍在本地工作区，未进入该轮远程。原日志 shard 3 的 Connect All 和 shard 5 的 session-cache 都实际执行通过，不能据此声称当前工作区通过，也不能断言旧用例必然漏掉当前缺陷。
-
-覆盖缺口：原缓存场景断言目标终端与背景可见、实例保留，但未完整断言所有非选中内容隐藏；原 Connect All 场景检查连接、协议错误和返回后的后台输出，未验证两个 shell 的输入/输出隔离。上一批已补 Connect All 的唯一可见容器与选中 ID，本批再补缓存场景的唯一可见容器、终端、背景及非选中内容隐藏断言。
-
-新增 `ssh/terminal-session-isolation.spec.ts` 两个场景：分别从“新建连接标签”打开不同连接配置、重复打开同一配置，检查第二标签自动选中、唯一可见容器与会话 ID 一致、不同 Workspace ID、独立 shell 变量、终端键盘输入与命令栏派发、反复 A/B 切换不混入另一会话输出，以及关闭 B 后 A 保留原 shell 并可继续输入。标记在远端 printf 时组合，完整期望值不出现在输入命令内，避免命令回显假阳性。不注入组件状态、不改 UI 或测试夹具。新文件由现有 SSH project 和分组脚本自动发现，无需手动白名单。
-
-本批根 `pnpm run check`、双端 `pnpm run build`、完整 `pnpm run format:all:check`、目标 ESLint/Prettier、三份 SSH 场景的 TypeScript 语法转换与 `git diff --check` 通过；日志 `/tmp/nexus-ssh-isolation-{check,build,format,lint,target-format}.log`。仅转换检查语法，不加载执行测试，也未启动 Playwright 收集；上述新增行为未执行，不能记为 E2E 通过。未提交、推送或部署。
-
-## SSH 第二标签画面隔离（2026-10-23）
-
-源码确认安装弹窗作为 WorkspaceSessionSurface 的并列根节点，使父组件 v-show 与 class 无法落到真实容器。独立修复改由 WorkspacePage 传递 visible，Surface 禁用隐式属性继承，将 v-show 与 $attrs 显式绑定真实容器，不依赖安装模块或根节点数量；本地安装弹窗同时保留在原容器内，但其未提交功能不纳入本次独立提交。不修改 UI 样式、会话通道或后台输出。提交前重新执行根 check、双端 build、目标 ESLint、暂存九文件 Prettier 与暂存 diff 检查通过，日志 `/tmp/nexus-ssh-commit-{check,build,lint}.log`；本次只提交独立修复、回归与文档，不推送或部署。
-
-既有 SSH connection.spec.ts 两会话场景补强新开与 A/B 切换后的唯一可见容器及选中会话 ID 断言，保留后台输出完成断言。根 `pnpm run check`、双端 `pnpm run build`、完整 `pnpm run format:all:check`、目标 Prettier 与 `git diff --check` 通过，日志为 `/tmp/nexus-ssh-surface-{check,build,format,target-format}.log`。按 PLAN D17 未运行本地行为测试、浏览器或 E2E，真实切换与安装浮层仍待远程验收。未提交、推送或部署。
-
-## 远程 E2E 后端范围修复（2026-10-23）
-
-本轮按用户要求先处理后端与服务端夹具，不改正在重构的前端源码、UI 或浏览器测试交互。读取远程 [39830123543](https://github.com/0honus0/nexus-terminal/actions/runs/39830123543) 的八组原始 job 日志，被测 SHA 为 `8f10e54166cf322d4362f1e35fd865cdf6a96c08`；当前本地基线为 `00ec5bfb` 加未提交工作区。原轮质量与 Docker smoke 通过，日志中 HTTP 50、Auth 6、WebSocket 4、SSH 191 个完成记录均为 passed；没有在这些分组确认后端失败，不将这些旧 SHA 记录扩大为当前后端全量通过。
-
-原轮共有 10 个唯一失败场景（每个重试仍失败），其中 3 个 RDP 场景在 `authenticateTestRdp` 的认证计数失败：期望递增 1，实际递增 2。服务端夹具按字符串总出现次数统计；xrdp 0.9 的 `xrdp_wm_log_msg` 先写 DEBUG，再由 `add_string_to_logwindow` 写同文 INFO，因此一次成功重复计算。上游源码核对：`neutrinolabs/xrdp@v0.9.21.1` / `v0.9.24` 的 `xrdp/xrdp_wm.c`，成功调用见 `vnc/vnc.c`；runner 基于 Debian bookworm 的 xrdp。修复仅在 test-desktop-server.mjs 统计完整 INFO 成功消息，不调整客户端严格加一断言、不触发额外连接、不伪造认证成功。产品后端、Shared 与 USAGE 远程桌面行为不变。
-
-| 原失败场景                                                                                                   | 处理范围                                                                                                 |
-| ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| RDP settings/clipboard/fullscreen、wide RDP DPI、mobile RDP touch                                            | 服务端认证计数转换已修，后续真实输入、剪贴板、全屏和触控仍须远程验收；原失败没有到达的断言不能记为通过。 |
-| Agent host 两项、preset plugin 审计入口、ACP denied/cancelled 两项、performance settings、SSH key management | 七项均失败于前端控件定位、校验提示或浮层遮挡，按用户本轮范围留待前端完成后处理，不修改或跳过用例。       |
-
-本轮根 `pnpm run check`、双端 `pnpm run build`、夹具 `node --check`、目标 Prettier 与 diff 检查通过，日志 `/tmp/nexus-e2e-backend-{check,build,format}.log`。全量格式的 ESLint 通过，Prettier 初报本轮 PLAN 和并行 WorkspaceSessionSurface.vue，PLAN 已整理并通过目标格式，不修改该 UI，全量格式不记为通过；构建保留既有大 chunk 警告。按 D17 未新增或执行本地行为、浏览器或 E2E，也未启动 xrdp 或连接真实桌面。原始八组日志 `/tmp/nexus-e2e-shard{1..8}-raw.log`，shard 3 诊断下载于 `/tmp/nexus-e2e-39830123543-shard3`。按 D18 单独提交推送服务端夹具修复和本轮文档；前端与其它未提交实现不纳入。不以源码分析和语法检查代替修复后的远程通过。
-
-修复提交 `798e204f2a547213652874dca3792bfd42a194f0` 已推送；远程 [39920261630](https://github.com/0honus0/nexus-terminal/actions/runs/39920261630) 已结束：448 个唯一场景通过、9 个失败，失败重试也未通过，无整轮通过结论。质量门禁、runner 和 Docker smoke 成功；HTTP 50、Auth 6、WebSocket 4、SSH 191 个完成记录均 passed。第 1/2 组成功，第 3–8 组仍有失败，原始日志 `/tmp/nexus-e2e-39920261630-shard{1..8}.log`，新 shard 3 诊断 `/tmp/nexus-e2e-39920261630-shard3`。
-
-RDP 计数修复的远程证据：Connections、Dashboard、Workspace 三个打开及认证步骤初次与重试均通过，宽屏 DPI 场景直接通过，移动 RDP 也越过认证计数。主 RDP 场景在浏览器文本到远端剪贴板的真实内容核对成功后，失败于 `remoteFrames.some(Buffer.isBuffer)`；远端到浏览器剪贴板与全屏断言因此尚未执行，不能宣称整个场景通过。后端 BrowserDesktopPeer 拒绝非 binary 入帧并以 binary 发送，不为观察断言改传输行为；浏览器观察链的具体原因仍待前端专项定位，未修改该测试。
-
-移动 RDP 首次失败在键盘文本未进入远端 input，重试中真实文本核对通过后同样失败于帧观察断言；首次输入的偶发问题归属尚未确认，保留待查，不冒充已修或简单归为后端。其余七个前端失败与原轮相同，均保留原测试。用户本轮限定后端、前端仍在修改，故不继续改前端源码、UI 或浏览器交互；没有确认需要修改产品后端的新增失败。本轮服务端夹具修复已远程验证原失败消失，其余九项单独承接。
-
-## 明显安全漏洞审核（2026-10-23）
-
-基线为 `dev` / `d0301766` 加当前未提交工作区。按用户范围检查外部入口和实现缺陷，不把已接受的应用内权限与能力设计作为漏洞，不改变 UI。源码检查覆盖 HTTP/WS 来源和身份、因素验证、下载响应、插件隔离与包路径/签名、MCP 网络边界、原生命令参数及日志出口；这是有限源码审核，不是完整渗透测试或全部分支验收。
-
-修复初始化接口在已初始化后仍先执行 scrypt 的资源消耗问题：AccessService 在哈希前检查 needsSetup；SQLite 原子单次创建仍决定并发胜者，原 409 契约不变。生产依赖初次审计报告四条公告：DOMPurify 三条、MCP client 一条。DOMPurify 升至 3.4.17，catalog override 同时覆盖 Monaco；MCP client/core 升至 2.3.1。当前 DOMPurify 消费没有使用公告中的特殊净化模式，MCP Adapter 已禁止重定向，不将依赖公告严重度直接等同于应用可利用性。
-
-`pnpm run check` 通过；`pnpm audit --prod --json` 和全依赖 `pnpm audit --json` 均报告全部等级为零，日志分别为 `/tmp/nexus-security-audit-final.json` 和 `/tmp/nexus-security-audit-all.json`。全量格式的 ESLint 通过，Prettier 最初报告本轮 PLAN 及并行的 WorkspaceLayoutRenderer.vue、WorkspaceSessionSurface.vue；本轮仅整理自己的文档，不修改这两个 UI 文件。
-
-双端 `pnpm run build` 通过，保留既有大 chunk 警告，日志 `/tmp/nexus-security-build.log`；类型日志 `/tmp/nexus-security-check.log`。本轮目标 Prettier 与 `git diff --check` 通过，全量格式日志 `/tmp/nexus-security-format-all.log`；全量格式不记为通过。
-
-按 D17 未新增或运行本地行为、浏览器或 E2E，未发起攻击流量、真实安装、重启或部署。远程待验：已初始化的合法 setup 请求仍为 409 且不执行哈希、空库并发最多创建一个管理员、正常初始化/登录/改密，以及 Markdown/Monaco 和真实 MCP 服务回归；不以静态通过代替这些行为证据。
-
-## 本地文档与当前源码核对（2026-10-23）
-
-本轮仅刷新文档，基线为 `dev` / `829b8434ebe8fe15e25cbc99198b7279bba2a459` 加本地未提交工作区。核对范围包括自研基础组件及 DEV 展示路由、全局 Toast、编辑器统一查找与底部工具栏、服务器发送目录选择及按需轮询、远端依赖安装、治理正式消费者、诊断和部署数据目录。保留此前各轮证据，不以旧八组通过覆盖最新未提交实现。
-
-参考 `Heavrnl/nexus-terminal@c1bf8006aa2666268f0f45f525556c72d3e8961a` 的中文系统内存问题做了源码排查：Remote register 实际安装 PosixServerStatusCollector，读取 /proc/meminfo 与 /proc/loadavg 并导出 LC_ALL=C；本机使用 Node Adapter。未发现依赖 free/uptime 本地化标签的同类路径。当前 MiB 四舍五入与 free -m 截断有小数口径差异，不属于内存缺测。此结论是源码审核，不是 Debian/BusyBox 实机复现或行为通过证据。
-
-本轮验证仅限文档格式、相对链接/源码引用及 diff；不运行行为、浏览器、E2E、真实远端安装或重启，不改变 D17 与既有未验范围。根类型检查和构建未重跑，不复用上一轮静态 PASS 作为本轮证据。
-
-目标九份文档的 `pnpm exec prettier --check` 通过；静态核对 99 个相对文件链接、39 个本地 Markdown 锚点和 11 个源码路径，修正 README 原先指向已不存在部署标题的链接，全部可定位。`git diff --check` 通过。以上只证明文档格式及引用有效，不证明产品行为通过。
-
-## 通用远端依赖安装（2026-10-23）
-
-基线 `dev` / `829b8434ebe8fe15e25cbc99198b7279bba2a459` 加当前未提交工作区；Node `v22.23.1`、pnpm `11.26.0`。新增 Remote tools check/install、固定六类包管理器、sudo stdin 认证与原持久机器突变围栏；真实前端消费者为 SendFilesModal 和 WorkspaceSessionSurface 的归档派发前检查，不增加配置页面或修改既有 UI 设计。
-
-完成两轮源码复审，覆盖 Shared 严格联合/容量/请求关联、显式凭据表示转换、会话摘要与目标指纹绑定、单次计划消费与过期、多计划共存、前置探测及原生任务继续自检、auto 的双端 scp 回退、ZIP/GNU tar/coreutils 及压缩器依赖、无权限/主机不受信任/认证失败/软件源失败、未知派发及清理保留、退出/关闭/停机追踪、前端秘密与监听收尾及不自动重放文件操作。复审发现并修正：auto 不能强制安装可回退的 rsync；BusyBox 同名命令不能冒充 GNU 能力；不同确认不能相互作废计划；严格期限须在真正派发前检查；缺失/超限的安装回执不能报认证拒绝或成功。源码范围与四表见 PLAN。
-
-最终 `pnpm run check`、双端 `pnpm run build` 通过，日志 `/tmp/nexus-tools-{check,build}-final.log`；目标 Prettier 与 diff 检查通过，日志 `/tmp/nexus-tools-target-format.log`。生成命令只捕获并交给 `/bin/sh -n`，六包管理器 × root/免密 sudo/密码 sudo 及其探测共 37 份脚本语法通过，日志 `/tmp/nexus-tools-shell-syntax.log`；没有连接 SSH、执行 sudo、调用包管理器或安装软件。这只是脚本语法证据，不是权限、安装或功能行为回归。首次检查曾遇到 Shared dist 未重建及真实凭据取值不匹配，均在修复并重建后重新检查，不复用原失败结果。
-
-按 D17 未新增或执行本地行为/浏览器/E2E；远程待验：工具齐全不安装、取消不派发文件操作、root/免密/正确及错误 sudo 密码、无 sudo/不支持包管理器、软件源失败/包锁/工具仍缺失、六类发行版、三格式归档、源/目标缺失与 auto 回退、多个视图/登录和目标配置变化、安装中失联或取消、真实退出与清理失败、重复/过期计划、unknown 跨重启及人工恢复。现有服务器传输和归档 E2E 仍由正式消费者走新预检，未删断言或用假安装放行。
-
-仅新增 tools 来源而复用原持久 claim 表，按 D14 同步唯一 v1 签名，旧开发数据库不兼容；本轮没有删除旧库、重启后端、提交推送或真实安装。构建保留既有大 chunk 警告；最终全量格式的 ESLint 通过，Prettier 仅报告并行 `ProgressDisplayModal.vue`、`WorkspaceLayoutRenderer.vue`、`WorkspaceSessionSurface.vue` 三个文件，日志 `/tmp/nexus-tools-format-all-final.log`。不整理其原有样式；目标格式命令排除整个 WorkspaceSessionSurface，仅格式化本次新增的接入片段，其余任务文件及所有新模块文件完整通过。
-
-## 服务器发送目录选择（2026-10-23）
-
-保留原后台多目标 rsync/scp；目标路径只通过真实 Remote Files HTTP 独立 SFTP 资源选择，不再手填。Filesystem 拥有 API 白名单转换、目录/链接检查、导航串行和关闭排空；Transfers 只持参考目标、共同路径及按用户/连接创建身份/配置版本绑定的浏览器记忆。根目录仅放开为目标，源根目录仍拒绝；路径尾部空格保持原值。选择器取消不改原路径，旧路径不存在提示并只读退回根目录，超限/权限/不受信任主机走 Toast，不绕过 Host Key 校验。闲置后下次导航重开资源，无轮询；开启回执丢失无法定位资源时依赖后端原独立资源空闲回收，不把取消视为释放确认。
-
-既有 Progress Display 的真实服务器发送场景同步：预建现有目标目录，使用合法的上次浏览目录作为夹具起点，实际浏览子目录确认，取消/重选时核对记忆，继续验证多目标部分成功、rsync 方法、原源文件及目标文件内容；不改为 mock 传输、不移除断言。既有 server-transfers 集成脚本同步目标根目录及空白路径保持的协议断言。D17 未运行本地行为/浏览器/E2E；远程还需核对隐藏/注销/切目标时晚开启和释放失败、空目录/链接、记忆目录删除、列表失败但目录本身已确认时仍可选择、缓存隔离与窄屏键盘交互。
-
-本轮根 check、双端 build、目标 Prettier、改动 E2E 类型、既有 server-transfers 集成脚本语法及 diff 检查通过，日志 /tmp/nexus-directory-picker-{check,build,target-format,e2e-types}.log。E2E 类型通过临时独立编译配置检查，没有修改项目 tsconfig 或收集/运行测试；初始无 E2E tsconfig 的命令仅显示帮助，继承前端 noUncheckedIndexedAccess 也曾触发 Shared 既有源码告警，均不记为通过，随后按独立 E2E 检查口径调整。各包原类型门禁仍完整通过。全量格式仅报告并行 BackupSettingsPanel.vue、FileManager.vue、ProgressDisplayModal.vue、WorkspaceLayoutRenderer.vue、WorkspaceSessionSurface.vue，未替其整理；日志 /tmp/nexus-directory-picker-format.log。构建保留既有大 chunk 警告，不自行重启、提交、推送或部署。
-
-## 通用模块资源诊断（2026-10-23）
-
-接入 prom-client 的官方后继包 `@prometheus-io/client@0.16.1`（原 npm 包已标记迁移），仅在 Platform Adapter 内使用私有 Registry、Gauge 与 Histogram。主线程 GC 由可显式断开的 PerformanceObserver 记录，不直接安装缺少本地 owner 退订入口的默认采集器，不添加公共抓取/调试端口、强制 GC、堆快照或常驻堆采样。七个业务模块统一观察在途 HTTP；Remote 额外采集普通工作区、挂起/断开、四类逻辑缓冲字节、传输及状态订阅，Agent 采集执行/写入/请求，Storage 采集已派发 SQLite 请求、已接纳的排队及执行操作和主库 Worker 的独立堆/外部内存/ArrayBuffer，System 采集诊断请求。只计数的模块明确未计量内存，不以零冒充缺测，不合计可能共享底层数据的字节或从 RSS 反推占用。
-
-源码复审覆盖 route 预算/路径元数据保留、finally 计数收尾、单组失败隔离、重复/非法指标拒绝、私有标签有限基数、并发采集合并及一秒成功缓存、逐次管理员准入/交付前复查、停机和在线恢复清空 collector/Registry 及 GC 退订。Shared 严格校验完整八组、唯一 ID/指标、单位与名称关联、非负有限数字、堆用量不超过堆容量、失败/未接入空指标；Model、HTTP、公有出口、Agent 工具及前端 mapper 均同步。正式数据页在现有宿主诊断内折叠展示明细，三语明确主线程/进程与 Worker、external/ArrayBuffer 的口径。既有 system-management 集成场景同步真实 API 数值、八组身份、Remote 字节指标及正式页面明细断言，未新增或执行本地行为场景。
-
-最终根 `pnpm run check` 与双端 `pnpm run build` 通过，日志 `/tmp/nexus-module-diagnostics-{check,build}-final.log`；新包 Backend check 另见 `/tmp/nexus-module-diagnostics-types-final.log`。构建保留既有大 chunk 警告。全量格式仅报告并行修改的 `BackupSettingsPanel.vue`，未修改该文件，日志 `/tmp/nexus-module-diagnostics-format-final.log`。按 D17 未运行行为、浏览器或 E2E，不据静态结果宣称实际内存归因或开销已验收。
-
-待远程核对：管理员/匿名/过期身份、多个调用不再触发四个请求上限、只缓存成功读取、模块单独失败与其它组可读、HTTP 成功/拒绝/抛错后计数回落、缓冲增长及取消/挂起/恢复后收敛、传输和 Agent 生命周期、无会话重复计数、Worker 口径及堆用量不超过容量、事务整体计数及 finally 回落、Worker 忙碌/故障/维护关闭时诊断无队列等待环或晚结果污染 Registry、重复刷新无重复指标及在线恢复/关闭无 GC observer 累积、手机布局和异常 Toast。前后端诊断契约同时升级，需要重启 Backend 才能读取新字段；本轮按用户授权仅提交诊断相关变更，不自行重启、推送或部署。
-
-本轮 Worker 内存续补：严格 Worker 请求/结果白名单、非负安全整数字节和 heapUsed ≤ heapTotal；采样绕过 Runtime 事务队列但不绕过 Worker 消息顺序，同一采样共享 Promise，关闭拒绝新采样。队列计数从接纳直到执行 finally，事务整体计一项。异步 Collector 并行采集、单组拒绝隔离、关闭后晚结果不能重写 Registry 或交付快照。既有集成断言同步四项 Worker 字节、操作计数和堆容量关系，仅做语法检查，未执行行为。固定八组全部十九项取 MAX_SAFE_INTEGER、运行时字段按转义最坏值估算，完整 JSON 为 12,053 bytes，小于 16 KiB，不增加协议预算或标签基数。
-
-续补静态：根 check、双端 build 通过，日志 /tmp/nexus-memory-continuation-{check,build}.log；目标 Prettier、既有脚本语法和 diff 检查通过。完整格式仍仅报告并行 BackupSettingsPanel.vue，日志 /tmp/nexus-memory-continuation-format.log；不修改该文件。实际 Worker 忙碌、故障、关闭/维护及缓冲变化仍待远程，不将本轮静态结果当行为通过。
-
-## 文件管理器工具紧凑宽度（2026-10-23，本地 CDP）
-
-使用 `https://api.honus.top/workspace`、真实 `amd` 连接及 `1920×953` 视口核对文件管理器工具区：控制宽度由 `30px` 收窄为 `28px` 后，`1×8` 吸附宽度由约 `280.6px` 降至 `265.7px`，工具仍稳定为单行 8 枚，按钮组左右留白各 `5px`，工具栏和面板均无横向溢出。证据：`.tmp/fm-embedded-1x8-cdp.png`。目标 Prettier、Frontend build 与 `git diff --check` 通过；根 `pnpm run check` 的 Backend type check 被并行修改的 `platform/storage/sqlite/adapters/worker.ts` 类型错误阻断，未修改该无关文件。
-
-## 挂起会话面板左缘对齐（2026-10-23，本地 CDP）
-
-使用 `https://api.honus.top/workspace`、真实 `amd` 及以上终端首页挂起目录核对：调整前标题图标左缘为 `1225px`，搜索框与卡片左缘均为 `1238px`；移除内容左缩进并改为只在右侧保留稳定滚动条槽后，三者左缘统一为 `1225px`，搜索框和卡片右缘统一为 `1503px`。证据：`.tmp/suspended-alignment-after.png`。
-
-## 命令栏输入标识与最小宽度（2026-10-23，本地 CDP）
-
-使用 `https://api.honus.top/workspace`、真实 `amd` 连接及 `1920×953` 视口核对：普通命令输入框不再显示“命令”占位文字，提示符为文本 `>`；输入框可访问名称仍为“终端命令”。命令栏容器宽 `281.7px` 时输入框宽 `147.7px`，提示符 `11px`；临时将容器缩至 `150px` 时输入框保持 `40px` 可见宽，CSS 最小宽度按提示符、间距、内边距和边框计算为 `32px`，提示符仍显示且页面无横向溢出。证据：`.tmp/command-bar-prompt.png`、`.tmp/command-bar-prompt-narrow.png`。
-
-## 服务器状态外层边界与网络间距（2026-10-23，本地 CDP）
-
-使用 `https://api.honus.top/workspace`、真实 `amd` 连接及 `1920×953` 视口核对：服务器状态面板 `232.18×390.78px`，四边边框均为 `0px`、外层背景透明；五张内部指标卡仍各有 `1px` 边框，标题分隔线保留。网络行在紧凑高度规则下使用 `7px` 行间距，标题与速率行的实际视觉间距由约 `4.8px` 增至 `11.2px`，未挤压卡片或产生溢出。证据：`.tmp/status-monitor-border-gap.png`。
-
-## 服务器状态趋势网卡定位与时间选择（2026-10-23，本地 CDP）
-
-使用 `https://api.honus.top/workspace`、真实 `amd` 连接并打开网络趋势核对。`1920×953` 下网卡名左缘为 `191.4px`、右缘为 `245.8px`，贴合网络行 `234.23px` 内容区的右缘；`1440×900` 下左缘为 `135.58px`、右缘为 `180.63px`，同样完成右对齐。时间选择容器由 `44.8px` 降至 `26px`，四个按钮均由 `38.4px` 降至 `22px`；两档下文字均未截断，面板与页面无横向溢出。顶部主机状态改为等效 `6px` 圆角、`0.86em` 加粗文字；窄面板隐藏复制装饰后，两档主机名 `clientWidth` 与 `scrollWidth` 均为 `51px`、`33px`，完整显示 `honus.top`。证据：`.tmp/status-trend-network-1920.png`、`.tmp/status-trend-network-1440.png`。目标 ESLint、Prettier、Frontend build 与 `git diff --check` 通过；根 `pnpm run check` 被并行修改的 `observation-model.ts:255` `curly` 错误阻断，未修改该无关文件。
-
-## 命令栏与文件管理器工具按钮边框（2026-10-23，本地 CDP）
-
-使用 `https://api.honus.top/workspace`、真实 `amd` 连接及 `1920×953` 视口核对。命令栏 `265.72×41.69px`、文件管理器 `265.72×569.95px`，两处工具按钮均计算为 `1px` 边框、边框色 `34%`，面板 `scrollWidth-clientWidth=0`。文件管理器 `.file-manager-actions` 的计算背景为 `rgba(0, 0, 0, 0)`、`box-shadow` 为 `none`，工具组整体外框已移除；1×8 按钮排布和文件列表未改变。证据：`.tmp/command-bar-buttons-border.png`、`.tmp/file-manager-tool-borders.png`。目标 ESLint、Prettier、Frontend build 与 `git diff --check` 通过。
-
-## 终端右上角按钮独立显隐（2026-10-23，本地 CDP）
-
-使用隔离数据库旧记录与新版偏好契约核对兼容读取：旧 `showCommandBar*` 键被允许但忽略，四个新字段按 `true` 补齐；四项保存为 `false` 后重新读取仍为 `false`，部分组合读回一致，下一次保存只写新字段。桌面 CDP 分别关闭四项后，对应挂起会话、顶栏、进度和布局按钮消失；重新开启后恢复。配置布局仍只在桌面显示，进度入口开启后常显。
-
-后端使用旧版偏好记录的隔离数据库启动后，读取版本 `281` 自动补齐四个新字段为 `true`。CDP `1440×900` 真实 `amd` SSH 会话下，标签栏默认显示挂起会话、隐藏、进度显示和配置布局四项；逐项关闭后版本从 `300` 推进至 `304`，每次只移除对应按钮；四项全关后右侧操作按钮为 0，关闭标签页与新建连接仍保留，命令栏已启用按钮保持可见。设置页四个新 ID 均存在、四个旧命令栏 ID 均不存在，最后恢复四项为 `true`，数据库 JSON 的旧键数量为 0。证据：`.tmp/workspace-tabbar-defaults-1440.png`、`.tmp/workspace-tabbar-all-off-1440.png`、`.tmp/workspace-tabbar-settings-1440.png`。
-
-## 服务器状态方形卡片与网络图标居中（2026-10-23，本地 CDP）
-
-使用 `https://api.honus.top/workspace`、真实 `amd` 连接核对普通服务器状态。`1920×953`、状态面板 `254.69×460.41px` 时，CPU、内存、Swap、磁盘四张卡均为 `114.15×114.15px`，形成 2×2 网格；详情在卡内缩放并保持完整，内存与磁盘容量不再出现省略号。网络卡为 `234.32×117.15px` 的通栏 2:1 卡片，图标高 `22px`、中心 `y=860.77px`，与卡片中心重合。`1440×900` 下状态面板宽 `190.06px`，资源卡仍为单列 `168.55px`，避免方形压缩导致文字溢出；网络图标中心与 `81.83px` 高的网络卡中心重合。证据：`.tmp/status-card-square-1920.png`、`.tmp/status-card-stack-1440.png`。
-
-## 文件管理器窄栏排序单行（2026-10-23，本地 CDP）
-
-使用 `https://api.honus.top/workspace`、真实 `amd` 连接及 `1920×953` 视口核对文件管理器拖拽至 `2×4` 工具布局：面板宽 `169.83px`，工具行为 `[4,4]`，排序行宽 `161.83px`、高 `26px`；排序选择与方向按钮的 `top` 均为 `263.66px`，排序行和工具栏的 `scrollWidth-clientWidth` 均为 `0`。窄栏隐藏视觉“排序”标签与方向文字，但保留排序选择的可访问名称及方向按钮的 `title`/`aria-label`。证据：`.tmp/fm-embedded-2x4-cdp.png`。根 `pnpm run check`、目标 Prettier、Frontend build 与 `git diff --check` 通过；全量格式检查只被并行修改的 `node-process-diagnostic.ts`、`BackupSettingsPanel.vue`、`HostDiagnosticsPanel.vue` 阻断，未修改这些无关文件。
-
-## 监控核心周期与开关合并（2026-10-23，本地 CDP）
-
-工作区设置的“首页与监控”将本机/远程资源开关与监控采样/主机缓存周期、Docker 默认展开与状态刷新周期合并为 2×2 的紧凑卡片，分组右上角保留单一保存入口。`1440×1000` 下分组 `1020px` 宽，四张卡片各 `487×54px`，周期输入容器各 `108×28px`；`390×844` 下分组 `350px` 宽，带周期卡片 `320×80px`，无横向溢出，页面 `scrollWidth=382 < innerWidth=390`。
-
-`node tests/frontend/monitoring-configuration.integration.mjs` 通过真实 HTTP/重启、CAS 冲突/未知结果、三组件与中英日翻译在内的 57 项断言，确认合并分组一次提交只产生一次核心写入并发布成功 Toast。证据：`.tmp/monitoring-group-final-1440.png`、`.tmp/monitoring-group-final-390.png`。目标 Prettier/ESLint、Frontend 类型检查与 `git diff --check` 通过。
-
-## 首页与监控窄屏时间控件单行（2026-10-23，本地 CDP）
-
-使用 `https://api.honus.top/settings?tab=workspace` 核对。`390×844`、`320×844` 与 `1440×844` 下卡片顺序均为“显示本机资源 → 显示远程资源 → 默认展开容器详情 → 在状态监视器中显示IP地址”，四卡均为 `54px` 高，三个周期卡片不再换行；“采样/缓存/刷新”可见文字已移除，只显示时钟、数值和单位，时间输入仍保留完整 `aria-label`。`390px` 下时间控件为 `108×28px`，`320px` 下卡片内边距与时间控件自动收窄为 `8px / 100px`，标题与时间仍同处一行，页面 `scrollWidth=clientWidth`。证据：`.tmp/monitor-order-390.png`、`.tmp/monitor-order-320.png`、`.tmp/monitor-order-1440.png`。本轮只读取设置并切换视口，未保存任何偏好。
-
-## 日志等级标题对齐与挂起会话搜索文案（2026-10-23，本地 CDP）
-
-使用 `https://api.honus.top/settings` 核对系统设置：前端与后端日志等级两列各宽 `630px`，两个标题均为 `72×16px` 且 `top=540.19px`，两个选择框均为 `630×32px` 且 `top=559.78px`；不显示当前生效级别。使用 `https://api.honus.top/workspace` 核对挂起会话搜索框，`placeholder` 与 `aria-label` 均为“搜索会话”。证据：`.tmp/settings-logging-after.png`、`.tmp/suspended-search-placeholder-after.png`。
-
-## 挂起会话空态两行预留高度（2026-10-23，本地 CDP）
-
-挂起会话空态原先按 `91px × 2 + 6px = 188px` 预留，但真实会话卡片为 `78px`，导致空态比两行多出约 `26px` 并产生内部滚动。现改为按真实卡片高度 `78px`、间距 `6px` 预留两行；固定高度面板使用 `min(162px, 100%)`，可用空间略少时贴合容器，页面滚动模式仍固定预留 `162px`。同时移除一条对容器自身无效的 `max-height: 220px` 变量覆盖。
-
-使用 `https://api.honus.top/workspace` 的右侧挂起会话面板搜索无结果态核对：面板高 `210.95px`，列表容器与空态高 `160.95px`，`clientHeight` 与 `scrollHeight` 均为 `161px`，空态图标与文字整体居中；恢复结果后单卡仍为 `78px`。证据：`.tmp/suspended-empty-after.png`。目标 Prettier/ESLint、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过。
-
-## 文件编辑器底部工具栏与编码菜单（2026-10-23，本地 CDP）
-
-文件编辑器顶部仅保留标签和路径；编码、换行、保存状态、搜索、刷新、保存和关闭移到底部工具栏，外壳改用当前主题的玻璃表面、边框和基础按钮，移除了编辑器专属的独立深色控件样式。编码菜单不再跟随窄触发器宽度，桌面展开为 `160px`，`Windows-1252` 等长名称的 `scrollWidth=clientWidth`，选中项与选项均居中，左右内边距对称。
-
-使用 `https://api.honus.top/workspace` 连接真实 `amd`，打开 `/etc/hostname` 核对：`756px` 编辑区下底部工具栏单行高 `41.78px`；`400px` 编辑浮窗与 `350px` 手机编辑区下自动换行为两行，高 `72.66px`，编码触发器 `92.8×28px`、菜单 `160×329px`，编辑区及页面均无横向溢出。证据：`.tmp/file-editor-final-encoding-open.png`、`.tmp/file-editor-theme-footer-mobile-open.png`。目标 Prettier/ESLint、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过。
-
-## 文件操作弹窗基础组件统一（2026-10-23，本地 CDP）
-
-新建文件夹、创建文件、重命名和权限修改统一改用 `UiDialog`、`UiFormField`、`UiInput`、`UiFormActions` 与 `UiButton`，保留原表单提交、冲突校验、忙状态和关闭清理行为。桌面 `1920×953` 下弹窗为 `448×229.89px`，输入框 `410×36px`，取消/确认按钮各 `88×36px`；手机 `390×844` 下弹窗为 `366×245.89px`，输入框 `328×44px`，操作按钮各 `161×44px`，弹窗与页面均无横向溢出。截图：`.tmp/file-manager-mkdir-base-dialog-final.png`、`.tmp/file-manager-create-file-base-dialog.png`、`.tmp/file-manager-mkdir-mobile-final.png`。目标 Prettier/ESLint、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过。
-
-## 快捷指令列表视觉回退（2026-10-23，本地 CDP）
-
-按用户要求仅回退快捷指令工具栏以下的分组与条目视觉，顶部搜索、排序、紧凑、显示模式及新增按钮保留新版。分组区域恢复重构前的卡片边框/底色、组头数量胶囊、组内浅底色与条目间距；扁平列表恢复原卡片容器。运行、右键菜单、标签编辑、搜索、缩放和响应式行为未改。
-
-使用 `https://api.honus.top/workspace`（未使用 9998）连接真实 `amd`，在 CSS 视口 `1920×953` 核对双项分组与单项分组：双项卡片 `240.19×108.44px`，两条指令均为 `230.19×30.22px`，`scrollWidth=clientWidth`；单项卡片高 `74.22px`。工具栏 5 个按钮各 `28px` 且均可见。将 pane 收窄至 `220px`、`170px`、`120px` 后，根节点及分组、条目均无横向溢出。证据：`.tmp/quick-commands-reverted-lower.png`、`.tmp/quick-commands-reverted-page.png`、`.tmp/quick-commands-reverted-{220,170,120}.png`。目标 Prettier/ESLint、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过；本轮为本地 CDP 视觉验收，不替代完整 E2E；未提交、推送或部署。
-
-## 挂起恢复连接指示（2026-10-23）
-
-源码确认 `WorkspaceTabBar` 原先优先将挂起标记映射为蓝色，覆盖了恢复成功的 connected 状态。现仅按实际连接状态显示颜色，不修改挂起标记、续租、恢复或关闭行为。既有手机挂起/恢复场景补充标记后及恢复后的 connected 与绿色指示断言，原有保留会话和关闭后再次挂起的断言保持。
-
-根 `pnpm run check`、Frontend build、目标 ESLint/Prettier 通过；日志 `/tmp/nexus-resume-dot-{check,build}.log`。构建保留既有大 chunk 警告；全量格式仅报告并行修改的 `BackupSettingsPanel.vue`，未改该文件，见 `/tmp/nexus-resume-dot-format.log`。按 D17 未运行本地行为或 E2E，真实挂起恢复及连接失败颜色仍待远程核对；不宣称行为已通过。本轮按授权仅提交连接指示修复，不推送。
-
-## 后台服务器传输按需刷新（2026-10-23）
-
-`serverTransfers.store` 改用读取结算后的单次计时器：进入/返回工作区只读一次，只在 queued/in-progress/cancelling 时继续获取，发送成功自动恢复，全部终态或空列表停用；离页/注销阻止晚完成重启。提交未知仅做只读核对，不重放发送，不清除原未知保护。现有 Progress Display 场景改为计数真实 HTTP 请求，等待超过原轮询周期后验证空闲期间没有额外请求，并保留空态、无 loading 替换及真实复制完成断言；已有真实服务器传输场景继续验证发送后最终状态与移除。
-
-按 D17 未新增测试用例或执行本地行为/E2E。根 `pnpm run check`、双端 `pnpm run build`、目标 ESLint 和改动 E2E 文件 TypeScript 静态编译通过，日志 `/tmp/nexus-transfer-on-demand-{check,build,eslint}.log`；构建保留既有大 chunk 警告。全量格式只报告并行修改的 `BackupSettingsPanel.vue`，未修改该文件；日志 `/tmp/nexus-transfer-on-demand-format.log`。待远程核对空列表/全部终态停轮询、发送后恢复、取消中仍更新、请求慢于周期时无重叠、离页/注销、返回恢复及未知提交只读核对；不宣称已行为通过，不自动提交或推送。
-
-## 命令栏展开与工具区浅边界（2026-10-23，本地 CDP）
-
-使用 `https://api.honus.top/workspace`（未使用 9998）登录现有测试账号并连接真实 `amd`，在 CSS 视口 `1920×953` 核对内嵌命令栏和文件管理器。命令栏删除桌面 `...` 溢出菜单后，清空、焦点配置、文件管理器、编辑器和搜索 5 个图标同时直接显示；`...` 元素与图标计数均为 0。命令栏 pane 宽 `320px` 时，输入区为 `156px`、工具区为 `148px`，工具区 `scrollWidth=clientWidth=148`；`260px` 时输入区 `96px`、5 个按钮仍完整；`210px` 时输入框内容区 `24px`，恰好完整显示“命令”两字，工具区仍为 `148px`；`190px` 时输入内容区保持 `24px`，工具区改为 `128/148px` 横向滚动且五个按钮仍保留。输入框采用 `flex: 1 1 0`，常规 `min-width: 64px`，极窄隐藏提示符后为 `46px`，空间不足时先压缩输入区。
-
-文件管理器工具组增加低对比圆角底纹与 1px inset 边界，实测 `box-shadow` 为边框色 24% 透明度，按钮行、路径行和文件列表布局未改变。证据：`.tmp/fm-command-after-min.png`、`.tmp/fm-command-narrow-after.png`、`.tmp/fm-command-min-command-text-clean.png`。目标 Prettier/ESLint、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过；本轮为本地 CDP UI 验收，不替代完整 E2E；未提交、推送或部署。
-
-## 挂起会话卡片视觉回退（2026-10-23）
-
-按用户要求只回退挂起会话卡片视觉，不调整新版搜索栏、空态、弹窗标题栏和滚动正文。源码对比确认 `SuspendedSessionsPanel.vue` 的卡片 `<ul>` 模板与上一提交逐字一致，卡片 CSS 段也与上一提交一致；仅保留外层 `suspended-toolbar`、新空态和卡片列表容器。恢复/接管、取消标记、改名、导出、移除、搜索及目录同步逻辑未改，弹窗与 `pageScroll` 布局保持当前版本。
-
-当前真实挂起目录为空，因此没有为视觉截图额外创建并终止挂起会话；本轮以源码等价比对和静态检查验收。目标 ESLint/Prettier、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过。未提交、推送或部署。
-
-后续按用户截图补调左右边界。搜索区与卡片列表使用相同横向内边距，列表采用双侧稳定滚动条槽，并在搜索区右侧补偿滚动条宽度。经 `https://api.honus.top/workspace` 的 CDP 实测，搜索外框与卡片左右边界完全一致：`1024×900` 均为 `709–970px`（宽 `261px`），面板为 `696–983px`；`390×844` 均为 `27–347px`（宽 `320px`），面板为 `12–362px`；`320×700` 均为 `25–279px`（宽 `254px`），面板为 `12–292px`。对应左右留白为 13px、15px、13px，未产生横向溢出。截图：`.tmp/suspended-spacing-current.png`、`.tmp/suspended-spacing-1024.png`、`.tmp/suspended-spacing-390.png`、`.tmp/suspended-spacing-320.png`。仅修改展示 CSS，搜索、恢复、导出、移除、空态和目录同步逻辑未变。
-
-## 使用中终端的挂起目录移除（2026-10-23）
-
-本批按用户确认修改：移除仍附着的挂起记录只取消挂起，不关闭原 SSH/PTY；后台无人使用时才终止。新增安全移除 HTTP 回执和原附件 `suspend.unmarked` 事件，正式目录不再根据旧 `status` 选择终止接口；取消事件同时清除本地挂起标记、续租及历史入口，避免重新出现“待关闭”替身。准备提交或恢复中的记录返回冲突，不自动终止。
-
-按 D17 未新增或运行本地行为/E2E；待远程验证同设备与跨设备移除使用中记录、原 PID/输入输出不变、目录及本地标记同步、后来打开的终端不受影响、后台终止、断开条目移除、准备/恢复/重复移除竞争和未知清理围栏。不继承此前 Actions 或 UI CDP 结果。
-
-源码复审确认：安全移除由后端读取当前附着事实，准备/恢复状态拒绝；并发取消共用原清理 Promise，取消期间不能重新取得挂起所有权；日志/checkpoint 失败保持未知，不降级终止。前端按 ID/generation 清除原标记，晚到回执不能重新挂起已取消记录；“取消挂起”动作不再切换为“重新挂起”，旧 UI 点击不影响新状态。根 `pnpm run check`、双端 `pnpm run build`、目标 ESLint/Prettier 和 `git diff --check` 通过，证据 `/tmp/nexus-suspend-remove-final2-{check,build}.log`、`/tmp/nexus-suspend-remove-eslint.log`、`/tmp/nexus-suspend-remove-target-format.log`。全量格式检查在并行修改的 `BackupSettingsPanel.vue`、`FileManager.vue`、`SuspendedSessionsPanel.vue` 样式处失败，未调整这些无关格式；日志 `/tmp/nexus-suspend-remove-format-final.log`。构建保留原有大 chunk 警告；未提交、推送或重启。
-
-## 挂起会话目录卡片与弹窗（2026-10-22，本地 CDP）
-
-使用当前工作区经 `https://api.honus.top/workspace` 核对，未使用 9998。启动页已有真实挂起会话 `amd`。`819×378` 下弹窗 `480×200.9px`、内嵌面板 `454.4×130.5px`、卡片 `454.4×90.5px`；标题栏固定，正文 `overflow-y:auto`。手机视口 `390×844` 弹窗 `358×201.5px`、卡片 `332×90.5px`，`320×700` 弹窗 `288×201.5px`、卡片 `262×90.5px`，`270×700` 弹窗 `238×201.5px`、卡片 `212×90.5px`；三档文档宽度均等于视口，操作组在窄容器居中，270px 下恢复按钮收起文字但保留图标和无障碍名称，导出、移除按钮仍为 `26×28px`。
-
-搜索注入不存在的名称后显示 `332×104px` 空态“没有找到符合条件的挂起会话。”，清空搜索恢复 1 张卡片。核对后通过卡片移除按钮与确认框终止并移除真实测试挂起会话，挂起卡片归零且弹窗关闭；随后关闭 `pve_debian` 测试标签页，并清理临时视口与触摸仿真。证据：`/tmp/suspend-current.png`、`/tmp/suspend-after-card-819.png`、`/tmp/suspend-mobile-390.png`、`/tmp/suspend-mobile-320.png`、`/tmp/suspend-mobile-270.png`、`/tmp/suspend-search-empty-390.png`。
-
-目标 Vue ESLint/Prettier、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过。本轮为本地 CDP 视觉与有限交互验收，不替代完整 E2E；未提交、推送或部署。
-
-## 远程 Actions 修复第三批（2026-10-22）
-
-第二批被测 SHA `b010273fbdb0552c3557c6c30323df59817b6cb1`，[39827272148](https://github.com/0honus0/nexus-terminal/actions/runs/39827272148)。Agent 的真实 SSH 部署、修复、文件生命周期与搜索原失败场景已通过；分片 4 普通组 56 项通过，但随后特殊工具组的桌面夹具重启失败，不能记作该分片通过。
-
-第三批修复：记忆审核从已移除的设置页迁移到当前对话卡片，保留 confidence、管理发布/撤销和原版本 CAS 冲突核验；失效挂起恢复测试受控延迟 WS 投影，取消挂起核对 WS 回执及独立目录事实，健康前台断言不重复 HTTP。Toast 关闭等待原 DOM 节点退场，避免 `.last()` 重绑定到剩余通知；显式关闭前一错误后继续密码/外观操作，恢复入口使用 Reload settings。
-
-RDP 失败截图 `/tmp/nexus-rdp-ci.png` 显示实际停在 xrdp 登录画面；SDK 当前 autologon 为 false，不以 Connected 标签冒充桌面认证。夹具预填固定测试密码，通过真实 RDP Enter 确认登录并核对服务端 VNC 成功次数，再执行原双向剪贴板和输入断言。VNC 单行文本框不再尝试填入被浏览器剥除的换行，发送文本后通过远端键盘 Enter 提交。Xvnc 改用 displayfd 分配空闲 display，并为桌面 webServer 配置 SIGTERM 清理，避免同分片串行特殊组复用被强制终止的固定 X display。
-
-窄屏离线 DOM 显示底层连接页头仍保留完整添加按钮，310px 的图标化断点未覆盖 320px，导致页面多出 73px；仅将已有紧凑页头断点修正为 420px，不改弹窗或整体视觉设计，原溢出断言不放宽。根 check/build 通过，日志 `/tmp/nexus-e2e-repair3-final2-{check,build}.log`；新增测试交互后补充目标 ESLint、改动 E2E TypeScript 编译（零诊断）、全量格式、diff 与桌面脚本语法检查通过，最终格式日志 `/tmp/nexus-e2e-repair3-final3-format.log`。未运行本地行为测试或 E2E；新远程结果待验。
-
-## 远程 Actions 修复第二批（2026-10-22，不改 UI）
-
-`3ec0f570` 的 [39823945737](https://github.com/0honus0/nexus-terminal/actions/runs/39823945737) 静态、构建及 Docker smoke 通过，八个行为分片仍失败。离线 trace 已确认 Agent Run 的 `input.connectionIds` 为空；Reka checkbox 的交互节点不提供原生 input value，夹具改按控件 ID 选择并同时断言选中状态及实际派发目标，不放宽后端授权。
-
-第二批同步当前嵌套 App/集成/市场分页、Agent 启用前提、设置保存及 dirty 状态、统一 Toast 反馈与显式关闭、真实 VNC 夹具及 RDP 连接就绪、SSH 结果与初始加载定位。终端断线验证首次自动恢复失败后等待任意键，保留按键恢复、真实 Shell 与几何断言。Workspace 前台恢复不再无条件额外读取 HTTP 挂起目录，断开挂起会话 reconciliation 仍读取权威事实；USAGE 已同步。
-
-本地仅执行静态和构建：根 `pnpm run check`、`pnpm run build`、`pnpm run format:all:check` 与 `git diff --check` 均通过，日志 `/tmp/nexus-e2e-repair2-final-{check,build,format}.log`。尚待处理记忆审核迁移、挂起目录竞争、桌面剪贴板与窄屏溢出，不宣称全量 E2E 已通过，不纳入并行 UI 变更。
-
-## 远程 Actions 修复首批（2026-10-22，不改 UI）
-
-失败基线为 [39789022254](https://github.com/0honus0/nexus-terminal/actions/runs/39789022254)，被测 SHA `7151fca95bf9951b3739f8674e19e37bbde14672`。8 个分片均有失败；最长分片的 24 个原生 Agent 场景首先卡在已移除的原生模型 select，末尾上传场景被 15 分钟整组期限中断，不能据此判定上传本身失败。当前尚无新的远程通过证据。
-
-首批只修改测试：模型列表通过真实 listbox/option 选择唯一供应商并验证选中态；共用 Hub 打开入口支持已打开窗口；SSH 目标使用真实 checkbox；安全设置定位完整 UiSettingsGroup 而非标题容器；偏好保存后验证 dirty 清零、日志使用统一保存入口，失败恢复走全局 Reload settings Toast；SSH 资源缓存按首轮 checkedAt（采样完成）起算等待下一轮，保留真实新采样和持久化断言。已核对 USAGE 的模型选择、设置保存/Toast 与资源缓存说明，无产品行为变更。
-
-本地按 D17 不运行行为测试、浏览器或 E2E。根 `pnpm run check` 与 `pnpm run build` 通过，日志 `/tmp/nexus-e2e-repair-check.log`、`/tmp/nexus-e2e-repair-build.log`；构建保留既有大 chunk 提示。全量格式首次发现本轮测试排版，修正后 `pnpm run format:all:check` 与 `git diff --check` 通过，日志 `/tmp/nexus-e2e-repair-format-final.log`；按 D18 分批提交推送后继续修复其余失败，不提交并行 UI 或设计产物。
-
-## 两轮逻辑修复提交收口（2026-10-22）
-
-用户最新授权“修改提交”，本次仅提交下方两轮逻辑修复和对应 PLAN/USAGE/验证记录；并行 UI 代码、UI 验证记录及未跟踪设计产物保留在工作区，不代为提交。最近的根 check、build、全量格式检查结果见下方本轮证据；提交前追加核对暂存文件、格式及 diff，不运行行为测试或 E2E，不推送、部署或重启。
-
-## 文件编辑与搜索链路续审（2026-10-22，不改 UI）
-
-基于 `dev`、`f9e11e03` 和上一轮未提交逻辑修复继续核对；保留并行 UI 改动，不修改组件、模板、样式或布局。本轮按源码确认并修复以下问题，未运行行为复现：
-
-- `editorEncoding.ts` 对大于 256 KiB 的内容拼接头/中/尾字节样本，再按 UTF-8 校验；切片可能从中文或表情的多字节序列中间开始/结束，导致合法 UTF-8 误入其他编码检测，也可能漏掉未采样区域的非法字节。现 UTF-8 校验消费完整连续原文，包含 NUL 的内容仍进入既有检测，其他编码继续沿用有界样本及 BOM 优先级。
-- `file-search.ts` 只跳过子目录 not_found；SFTP 的 permission_denied 经 `SftpFileResource.translate` 转成 forbidden 后，会令整次递归搜索失败。现对子目录 forbidden 同样跳过并标记 truncated；根目录失败、容量/连接/取消及未知错误仍传播，保留全部在途 scan 的 finally 等待，不减少授权检查。
-- 文件 Adapter 在请求返回后因代际失效抛出 FilesystemFailure(not_connected)，又被自身通用 catch 包成 protocol_error。现普通读取和二进制读取保留已归一的 FilesystemFailure，仍拒绝旧结果；真正的 WS 拒绝、解码失败与未知写入仍保留原分类。
-
-消费者复核范围：文件编辑器检测/解码 → DocumentPort → 编辑器 open/reload/changeEncoding；RemoteFileService.search → searchFiles → FileResource.scan/SFTP 错误转换 → Workspace 搜索投影；Workspace 读取 → assertCurrent → 目录缓存、编辑器/预览及 filesystemFailureMessage。没有新增 Shared 字段、资源 owner 或架构边界；核对 Frontend/Backend 既有文件生命周期设计仍适用。
-
-按 D17 未新增或运行行为测试、浏览器或 E2E。待远程覆盖：超过样本窗口的连续中文/表情与混合文本、未采样区非法 UTF-8、UTF-16/BOM 与传统编码；无权限/被删除子目录和可读兄弟目录并存、根目录无权限、扫描容量/取消；普通及二进制读取等待期间断线/代际替换、畸形响应仍拒绝。未提交、推送、部署或重启。
-
-本轮实际执行 `pnpm run check`、`pnpm run build`、`pnpm run format:all:check` 均退出 0，日志分别为 `/tmp/nexus-files-review-check.log`、`/tmp/nexus-files-review-build.log`、`/tmp/nexus-files-review-format.log`；构建仍有既有大 chunk 提示。环境为 Node v22.23.1、pnpm 11.26.0；`git diff --check` 通过，没有暂存变更。检查覆盖当前完整工作区，但本轮不修改或代为提交并行 UI 文件；静态通过不表示本轮行为场景或 E2E 已通过。
-
-## 功能逻辑续审（2026-10-22，不改 UI）
-
-基于 `f9e11e03` 继续核对文件会话/缓存、挂起 WS/HTTP 和日志、文件库下载及资源采样；本轮不修改模板、样式、UI 布局或并行设计代码。
-
-- Workspace 文件 Adapter 的 `filesystem.error` 原来只更新可用状态，不推进代际；旧只读请求的异步返回只核对 generation，因此在错误后乃至再次 ready 后仍可能交付。现错误事件推进代际，失效旧读取，保留写入回执/未知语义。
-- ResourceStatus 两个 worker 同时失败时原来一律聚合为 remote_unavailable；注销/到期同时导致两个 unauthenticated 时，HTTP 错误从 401 变成 503。现所有子失败为同一具名 ObservationFailure 时保留原 code，并保留全部 cause；混合故障仍安全兜底，清理失败仍优先处理。
-- 日志下载直接把 Content-Length 与 Fetch 解码后的正文比较，文件库还强制存在该头；代理压缩保留压缩长度、或合法 chunked 响应省略长度时会误拒绝。现分别按传输编码核对长度，始终保留实际正文上限、文件库 ID/版本/字节数/SHA-256、日志媒体类型/文件名及流清理。
-
-源码复核覆盖 filesystem.error/ready/close → request/assertCurrent → 目录/预览/编辑器消费者，以及采样 worker → Service 聚合 → resource-status HTTP 状态映射；下载沿通用有界 Binary/Response reader 与独立日志 reader 核对，不增加自动重试。待远程回归：读取未返回时失败再恢复、并行注销/权限/容量失败与混合清理错误、gzip/br 日志及文件库下载、无 Content-Length 完整文件、截断/超量/错误 hash 拒绝。按 D17 不新增或运行本地行为测试、浏览器或 E2E；不提交、推送、部署或重启。
-
-本轮重新执行 `pnpm run check`、`pnpm run build`、`pnpm run format:all:check`，均退出 0；日志分别为 `/tmp/nexus-logic-followup-check.log`、`/tmp/nexus-logic-followup-build.log`、`/tmp/nexus-logic-followup-format.log`。构建仍有既有大 chunk 提示；`git diff --check` 通过。本轮没有暂存或提交变更，保留并行 UI 修改及未跟踪产物。以上仅为源码和静态验证，不代表待远程场景或 E2E 已通过。
-
-## 累计配额修复续审与提交（2026-10-22）
-
-用户授权修复后提交。复查 stage 回收与引用/退役 CAS、同包复用的内容和身份复核、插件墓碑/历史回执退役、有效容量与备份注册、完整历史后缀及首轮模型预算；保留未知状态、不可变版本和防重放证据。追加修复历史读取成本：先物化最近有限候选，再做步骤/工具及正文体积关联聚合，不再让全部旧对话参与候选统计；完整对话仍持久保留。
-
-上一节所述并行 `StatusMonitor.vue` 阻断已由原修改更新，不覆盖或提交该 UI 文件。本轮重新运行静态检查，不复用先前 PASS；D17 下不运行行为测试、浏览器或 E2E，不推送、重启或部署。跨阈值循环、故障注入、跨设备注销、长对话供应商请求及备份恢复仍待远程验收。
-
-本轮 `pnpm run check`、`pnpm run build`、`pnpm run format:all:check` 均退出 0，日志分别为 `/tmp/nexus-quota-followup-check.log`、`/tmp/nexus-quota-followup-build.log`、`/tmp/nexus-quota-followup-format.log`；构建仍有既有大 chunk 提示。`git diff --check` 与两份既有集成脚本的 `node --check` 通过。暂存范围排除并行工作区/状态监控等 UI 调整及其文档、临时文件和设计产物；这些检查不代表行为/E2E 已通过。
-
-另将暂存内容导出到 `/tmp/nexus-quota-index.XidjQG` 核对独立交付：双端 ESLint 通过，随后 pnpm 因复用的 `node_modules` 为符号链接拒绝任务状态目录，未将该命令记为通过（`/tmp/nexus-quota-index-check.log`）。改为在该快照直接执行既有 `vue-tsc --noEmit`、`tsc --noEmit`，两端均退出 0（`/tmp/nexus-quota-index-types.log`），不依赖未暂存 UI 的新增导出。
-
-## 累计配额及四项缺陷修复（2026-10-22，源码收口／全量静态受并行 UI 阻断）
-
-沿上一轮四项P2修复真实owner，不改模板/样式，保留并行UI变更。相同签名包复用原stage并复核Blob/hash/信任，退役绑定ID/version不变；无引用stage新建前回收旧缓存，保护versions/retirements/未知staging，删除失败保留failed及原因；同版本同hash核验不进入升级；在途主机采样按登录隔离，成功缓存仍共享且逐等待者认证。
-
-追加盘点及源码修复：正常closed诊断按App保留128项，未知/曾未知证据不裁剪；数据按有效键/8MiB准入、每键最新有效回执保留正文，旧回执保留身份并返回version_conflict；取消32次迁移/清除与4096次Thread命令终身限制；Memory/Publisher/Intent/机器恢复claim只计有效状态，Intent失效正文压缩，released备份注册同样不计活跃额度；Memory/Artifact分页不受10,000历史偏移限制；插件集合以完整编码预算约束，versions名称列表与当前安装一对一。长对话按最近连续完整Run滑窗，首轮继续按编码/Provider预算移除旧完整消息与来源，随后锁定来源并保留逐步连续性校验。历史窗口不删除持久对话，不伪造摘要或授权。
-
-已静态同步既有 `backend-next-plugin-owner-faults.integration.mjs`（4095历史种子后循环保留并继续构造）及 `backend-next-plugins.integration.mjs`（当前回执幂等、过时回执拒绝）断言；按D17不新增或运行行为测试、浏览器或E2E。跨256次选包/4096次写入、跨设备注销、清理/提交失败、自然过期、长对话模型窗口及备份恢复整链仍待远程验收。本轮不提交、推送或重启。
-
-本轮真实静态结果（不继承历史PASS）：
-
-| 检查                | 结果与证据                                                                                                                                                                                                                                                                                      |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Shared/Backend 构建 | 最新 `pnpm run build` 的前两段成功，随后 Frontend 类型失败；日志 `/tmp/nexus-quota-build.log`。                                                                                                                                                                                                 |
-| 根检查              | 首轮退出0（`/tmp/nexus-quota-check.log`）；并行 UI 改动后末轮退出1（`/tmp/nexus-quota-check-final.log`），双端 ESLint 通过，Frontend vue-tsc 在 StatusMonitor.vue 报15项 TS2339（模板中 controller/chartColors.value）及1项 TS2322（nullable metric）。没有改动该文件，不报告当前全量类型通过。 |
-| 全量格式            | 首轮通过；末轮 `pnpm run format:all:check` 退出1，仅报告并行 StatusMonitor.vue 的Prettier问题，日志 `/tmp/nexus-quota-format.log`。                                                                                                                                                             |
-| 本轮目标检查        | Backend/Shared/两处插件前端逻辑、六份相关文档及两份既有脚本的目标Prettier检查、`git diff --check` 和两份 `node --check` 通过；未运行脚本行为。                                                                                                                                                  |
-
-上述全量阻断须待原 owner 完成并行 UI 修改后重跑；本轮没有覆盖、回滚或代修该 UI。静态检查不证明本轮新增循环、并发与故障恢复路径已通过实机回归。
-
-## 前后端三轮源码复审（2026-10-22）
-
-本节保留上一轮审查当时的发现与证据，当前四项修复见上一节，不能把原发现当作仍未修复的现状。范围为 `7151fca9` 与当时未提交清理；工作区还存在并行 UI 调整，本轮保留，不修改功能代码、UI、USAGE 或契约。第一轮核对 Agent 仓库/候选/安装/退役和删除残留；第二轮核对挂起 WS/HTTP、身份撤销及共享状态采样；第三轮核对桌面签发、票据消费、TCP/TLS/WS 与前端 SDK 收尾，并反查前两轮疑点。以下为沿源码确认的缺陷，未运行行为复现：
-
-- **P2：准备升级后离开页面，无法用重新选包直接完成原升级。** `use-plugin-management.ts:44` 在工具页停用时清空 candidate；重新选包经 `plugin-service.ts:812` 生成新 stage UUID。`plugin-sql.ts:820`（以及 install 的 707）要求与原 retirement 的 stage ID/version 完全相同，因此哪怕同一包，完成升级仍冲突。原 stage 读取后端保留，但正式前端已无恢复入口。触发：准备升级成功 → 切设置分组/刷新/取消候选 → 重新选择原版本 → 完成升级。无数据迁移时可取消退役后重新开始，不能把这当作直接续接成功。修复应从权威 retirement 恢复原候选，不放宽 stage CAS 或恢复旧维护 UI。
-- **P2：有效操作会永久耗尽 stage 配额。** `plugin-service.ts:812` 每次从仓库下载/重新核验都创建新 stage；`plugin-sql.ts:1065` 统计用户全部 stage，含 installed/failed，而服务在总数256时拒绝。候选取消只清前端 ref；现有 stage owner 无删除/过期/相同包复用流程。连续选包后取消、核验同一包或正常升级均累积记录及包文件，最终无法再安装/升级，重启不清除。USAGE 588 确有256项容量约束，但不能为保留容量而遗漏回收。修复须保留实际版本、正在安装/退役及未知结果引用，只回收确定无引用项或复用安全等价候选，不简单移除容量。
-- **P2：已安装同版本的“重新核验”仍开放必失败的升级动作。** `PluginRepositorySettings.vue:170` 对同版本提供重新核验；候选区只要有安装实例，就给出准备升级。`use-plugin-management.ts:158` 不区分同版本，调用 prepare-upgrade；后端 `plugin-service.ts:572` 明确拒绝 replacement 与当前版本相同，必然 version_conflict。修复应把相同版本/相同包的核验与真正升级分开，不把成功核验接入必失败写入，也不放宽后端不可变版本约束。
-- **P2：共享主机采样继承首个请求的登录，另一设备会被连带拒绝。** `resource-status-service.ts:164` 用首个 token 创建采样，160行按目标 fingerprint 把同主机其它会话加入同一 Promise；`observation-service.ts:344` 在采样过程继续复查这个 token。若设备 A 发起采样、设备 B 加入等待后 A 登出/到期，采样抛 unauthenticated；`resource-status-service.ts:133` 继续向 B 传播，B 自己的登录有效也收不到本轮结果。这不是未授权数据泄露，但破坏多登录隔离。修复可按会话区分在途采样，或由明确共享授权 owner 承担采样并逐等待者验证；不能去掉身份复查。
-
-挂起目录初始快照/修订、事件变化时拒绝旧读、写入未知围栏、可见性停流/重连、服务端事件身份复查，以及桌面票据一次消费/目标版本/晚收尾已逐链核对，本轮未确认其它具体缺陷。SDK pending connect 无取消 API、目标证书不验证等现有限制已有专题文档，不另冒充新缺陷，也不据此宣称长时/故障行为通过。
-
-`pnpm run check`、`pnpm run build` 均退出 0，日志 `/tmp/nexus-audit-rounds-check.log`、`/tmp/nexus-audit-rounds-build.log`；构建仍有既有大 chunk 提示。`pnpm run format:all:check` 退出 0，日志 `/tmp/nexus-audit-rounds-format.log`；`git diff --check` 通过。遵守 D17，未新增/运行本地行为测试、浏览器或 E2E；没有提交、推送、部署或重启。本轮结论是审查发现，不是修复或真实回归通过。
-
-## 已删除前端功能残留清理（2026-10-22）
-
-基于 `7151fca9` 清理前端死链：旧插件维护面板的暂存列表/手工核验/运行观测确认、手动创建 App、孤立仪表盘卡片与系统边界卡片/选择工具、旧工作区追加工具/描述与终端通道抽象，以及对应三语失效文案。仓库候选安装/升级、版本显示名称、实际插件 RPC、App 启停与未知写入围栏保留。后端接口与 Shared 无改动。
-
-源码引用复核覆盖导入图、API/composable 调用、模板与动态翻译；静态 import 图无新孤立业务文件（只剩入口和环境声明），所有活跃 Vue 文件零修改，只删除两个无入口组件；已核对 USAGE「Plugin 与 MCP」，当前产品操作和恢复说明不变。设置加载不再请求无人展示的 `/plugins/stages`；服务端该接口保留。
-
-本轮 `pnpm run check` 通过，日志 `/tmp/nexus-residue-check.log`；`pnpm run build:frontend` 退出 0，日志 `/tmp/nexus-residue-build.log`，仍有既有大 chunk 提示。首次全量格式检查发现新 PLAN 表格需对齐，修正后 `pnpm run format:all:check` 退出 0，日志 `/tmp/nexus-residue-format-final.log`；`git diff --check` 通过。三语各删除53个无消费者叶子键，保留文案值未改；静态引用与活跃 Vue/Backend/Shared 零改动检查通过。按 D17 未新增/运行本地行为、浏览器或 E2E，不宣称真实安装/升级/恢复回归通过。未提交、推送、部署或重启；保留未跟踪的临时和设计产物。
-
-## 本地修改统一提交前检查（2026-10-22）
-
-用户授权将全部本地功能修改提交并推送 `dev`。基于 `10ae19c5` 的完整工作区，`pnpm run check`、`pnpm run build`、`pnpm run format:all:check` 均退出 0，记录分别为 `/tmp/nexus-precommit-{check,build,format}.log`；构建仍有大 chunk 提示，不作为失败。最初尝试只收桌面相关修改时，隔离暂存快照发现已提交前端依赖未提交的 Agent `profiles` 删除契约，不能单独交付；最终按用户指令纳入完整前后端功能配套，不把不完整快照的类型失败记作整套源码通过。
-
-Compose 与 `.env.example` 同步移除 guacd，增加宿主数据目录 `NEXUS_DATA_DIR`（默认 `./data`，容器内仍为 `/app/data`）。使用纯测试 key 的 `docker compose --env-file .env.example config --quiet` 通过；JSON 投影断言只有 frontend/backend 两个服务，自定义目录挂载到 `/app/data`。只校验配置，没有启动容器、重启后端或生成实际实例密钥。真实 `.env`、临时文件和未纳入产品的截图/设计稿不提交；本批不新增全量行为/E2E 通过声明。
-
-## 指定站点 RDP 持续连接与生命周期补测（2026-10-22）
-
-承接用户“继续测试”，按 PLAN D19 仅访问 `https://api.honus.top` 的正式 RDP 入口；复用上节相同的隔离本机 Chromium、内存 Cookie 和远端临时 `data:` 输入页。Backend 仍为 PID 1992285，启动时间 2026-10-22 12:24:32（Europe/London），未重启、修改保存凭据、执行远端命令或保存文件；没有运行全量 E2E 或并发压力。产品源码没有修改，本轮仅补充证据及文档。
-
-| 场景           | 实际证据与结果                                                                                                                                                            |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 分钟级持续连接 | 182,671 ms 观察，四次间隔约一分钟的真实键盘输入在远端 textarea 精确匹配；始终同一条活跃 WS。初次输入前等待远端桌面就绪，不把 SDK connected 等同远端应用已获得输入焦点。   |
-| 票据一次性     | 重放本测试实例已消费的票据，WS 升级后以 1008 拒绝；原连接仍能输入且远端精确匹配。                                                                                         |
-| 票据过期       | 新签一张未消费票据，等待 31.5 秒后尝试 WS，以 1008 拒绝；原活跃连接输入不受影响。没有输出票据或凭据。                                                                     |
-| 受控断线与重连 | 仅关闭本测试实例的 WS（4000），正式 controller 清除 Canvas；点击“重新连接”获得不同票据及新 WS，远端输入匹配。此项不是物理断网、丢包或黑洞超时验证。                       |
-| 建连中取消     | 两次串行打开，在真实 WS 创建且 UI 仍为“连接中...”时立即关闭；每次等待 5 秒后自有 WS 关闭、弹窗不回弹。随后新建连接并在远端确认输入，11 项补测断言全部通过。               |
-| 页面刷新收敛   | 刷新前 `ss -tnpH` 确认该 Backend 到测试端口的 TCP 从基线 0 变为 1；刷新后 10 秒内归零，额外等待 2 秒仍为零且没有自动重开弹窗。                                            |
-| 最终清理       | 两份最终脚本均无 pageerror，临时输入页关闭、残留数为 0，目标 TCP 已释放；未关闭用户原有页签。刷新会销毁页面观察器，不以 Playwright 遗留的 closed=false 推断实际资源泄漏。 |
-
-命令与安全输出：`node /tmp/nexus-rdp-lifecycle-local.mjs` → `/tmp/nexus-rdp-lifecycle-local-final.log`，前 15 个生命周期断言通过，但第 16 个只依赖 Playwright WS close 事件的刷新断言为 false，脚本退出 1；因此不记录该整份脚本 PASS。独立的 `node /tmp/nexus-rdp-cancellation-local.mjs` → `/tmp/nexus-rdp-cancellation-local-final.log` 使用 Backend 实际 TCP 作为刷新收敛判据，11 个断言全部 true，退出 0，补证上述观察器缺口。两份脚本 `node --check` 通过。
-
-早期诊断 `/tmp/nexus-rdp-lifecycle-local.log` 的首次输入发生在远端桌面未就绪时，且重连定位错误使用“重连”而非实际“重新连接”，退出 1；最终生命周期脚本修正测试准备和定位后，持续输入及重连均通过，不将工具准备失败记作产品修复。分钟级有输入连接不证明小时级或空闲稳定性；VNC、真机、多平台、16 路并发、物理网络故障、身份撤销、强制晚成功及清理失败注入仍未覆盖。
-
-## 指定站点真实 RDP 交互补测（2026-10-22）
-
-用户继续授权“测试别的功能”，并明确允许使用临时文本覆盖本机和远端剪贴板。按 PLAN D19，仅通过 `https://api.honus.top` 的正式桌面入口验证已提供目标；没有运行远端 shell、保存文件、改写连接凭据、重启 Backend、提交、推送或执行全量 E2E。本轮没有修改产品代码，USAGE/专题架构与当前实施状态同步刷新。
-
-环境为 `dev`、HEAD `8742ac29` 的未提交工作区，Node v22.23.1、Playwright 1.63.0、本机 Linux headless Chrome for Testing 153.0.8010.12；登录 Cookie 仅经现有浏览器 CDP 在内存传入隔离浏览器上下文，不输出或写入脚本。真实目标 Windows 上新建独立的内存 `data:` 输入页，RDP 负责实际输入，远端 CDP 仅初始化测试页、读取文本/鼠标证据及最后关闭测试页；不通过 CDP 代写待核对的文本或模拟远端成功。前端仍使用正式 Modal/controller/Adapter，临时页只隔离 Vite HMR 更新，不模拟 API/WS/RDP。
-
-| 场景               | 实际证据与结果                                                                                                                                                                                                                              |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 桌面原生键盘       | Playwright 原生 keyboard.type 输入临时英文数字标记，远端测试 textarea 精确匹配；Ctrl+A/C、方向键、Home/End、退格，以及先释放 Ctrl 再释放字符键后的编辑结果均匹配。                                                                          |
-| 双向纯文本剪贴板   | 远端 Ctrl+C 后本机读取精确匹配；本机写入临时中英文文本、正式焦点同步、远端 Ctrl+V 后，远端 textarea 精确匹配。两侧为不同机器，不能用同一系统剪贴板的自读自写冒充传输。                                                                      |
-| 中文提交与失焦释放 | compositionstart/未提交 beforeinput/compositionend/紧随相同 beforeinput 后，远端“中文输入测试”仅出现一次；按住 Ctrl 时本机输入框失焦再恢复，后续输入仍精确匹配，没有粘住修饰键。                                                            |
-| 剪贴板权限拒绝     | 仅在隔离上下文把 clipboard-read 设为 denied，实际 readText 拒绝为 NotAllowedError；焦点同步后连接仍为 connected，后续原生键盘输入在远端精确匹配。上述桌面脚本共 8 项布尔断言全部 true，任一 false 会令脚本失败。                            |
-| 最小化/恢复        | 实际按钮最小化后对话框不可见、50×50 恢复按钮可达；恢复后仍 connected，同一个 WS 未关闭或重建。                                                                                                                                              |
-| 浏览器全屏/退出    | 实际全屏按钮令 document.fullscreenElement 存在、远端 Canvas 为 1440×1000；退出后回到已连接窗口，两次切换均保留原 WS。                                                                                                                       |
-| 手机模拟输入       | Chromium 移动仿真 390×844，文档 scrollWidth=390、Canvas 356×547；键盘按钮可聚焦真实移动 textarea。insertText 标记及中文 composition 提交均由远端独立 textarea 精确核对，中文 6 字符仅一次，本机隐藏输入框及时清空；远端 Ctrl+C 回读也匹配。 |
-| 直触               | 原生 CDP touchStart/touchEnd 的 isTrusted=true；点按、长按右键在远端输入页分别收到 button 0 和 button 2 的 down/up，右键产生真实 contextmenu，坐标与客户端映射对应。                                                                        |
-| 触控板与模式切换   | 单指移动在远端由 (40,73) 移到 (60,88)，双指点按收到右键 down/up/contextmenu，双指滑动收到远端 wheel；双击开始拖动后切模式，客户端 down/up 成对收口。                                                                                        |
-| 清理               | 桌面、窗口和手机脚本最终均观察到各自 WS 关闭，pageErrors 为空；本机 `ss -tnp` 无目标 13389 端口连接，远端残留测试页计数为 0。未关闭用户原有页签或保存测试内容；远端剪贴板允许保留临时文本，不承诺还原原富文本格式。                         |
-
-最终命令和安全输出：`node /tmp/nexus-rdp-desktop-input-local.mjs` → `/tmp/nexus-rdp-desktop-input-local.log`，`node /tmp/nexus-rdp-windows-local.mjs` → `/tmp/nexus-rdp-windows-local.log`，`node /tmp/nexus-rdp-mobile-local.mjs` → `/tmp/nexus-rdp-mobile-remote-input.log`；三份脚本的 `node --check` 通过。准备阶段依赖既有桌面焦点的输入核对曾为 false、较早的混合交互脚本曾等待超时，不能据此报告产品通过或失败；隔离远端测试输入页后，最终按真实远端值与事件复核全部匹配。初期移动诊断保留在 `/tmp/nexus-rdp-mobile-{local,debug,focused,scratch}.log`，最终证据不沿用它们的结果。
-
-范围限制：中文测试覆盖 composition 事件处理及去重，不等于已操作每一种系统输入法；手机为 Chromium 移动/触控仿真，不是 iOS/Android 真机软键盘。Win+R 等其它系统组合键、原生真机、多平台、VNC、长时间/并发压力及网络/清理故障仍待验。本轮未发现需要修改的业务代码，不把本轮检查等同全量 E2E。
-
-## 指定站点真实 RDP 验证（2026-10-22，基础链路通过）
-
-用户授权仅通过 `https://api.honus.top` 使用所提供目标验证真实 RDP，按 PLAN D19 执行；目标凭据不记录。工作区为 `dev`、HEAD `8742ac29` 及未提交修改。用户已重启 Backend：PID `1992285`，本机 Europe/London 时间 12:24:32 启动，晚于当前 `dist/main.js` 的 12:22:26 构建时间。本轮未自行重启、部署、提交或推送，未运行全量 E2E；仅刷新文档，无产品行为、职责或类型变更。
-
-使用现有已登录 Chrome `155.0.8059.85` 的 CDP，经站点 HTTPS 调用正式 `remoteDesktopApi` 和 `createBrowserDesktop`；使用目标已保存凭据，不新增连接或改写密码。先从实际 Dashboard 卡片打开原桌面弹窗，观察到“已连接”及非黑画面。随后用独立临时页验证正式 Adapter 生命周期，临时页仅屏蔽 Vite HMR 的 update/full-reload，防止并行开发热更新中断验收；没有模拟 HTTP、WS、RDP 数据或状态，没有禁用生产超时/容量限制。
-
-| 场景                 | 实际证据与结果                                                                                                                                                                                                                  |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 正式签票与秘密边界   | 两次 POST 均 200；成功字段精确为 host/password/port/protocol/ticket/username，目标关联匹配，Cache-Control 为 no-store、Pragma 为 no-cache。只记录字段名及布尔值，不记录字段秘密正文。                                           |
-| 认证与真实画面       | 首次 SDK 状态 connected；Canvas 1024×768，749,980 个非黑像素、3,174 种颜色；真实 WS 收到 453 帧、2,970,891 bytes。不是仅凭 TCP/TLS 桥就绪判断成功。                                                                             |
-| 鼠标移动与动态分辨率 | 发送无点击鼠标移动，再 resize 至 1100×800；等待 12 秒后 Canvas 为 1100×800，840,439 个非黑像素，原 WS 仍打开，Adapter failures 为空。仅证明输入派发及画面持续更新，不宣称已独立核对远端指针位置。                               |
-| 显式关闭             | 调用正式 peer.close，3 秒后观察到原 WS close（浏览器 code 1005，未携带关闭码），没有 Adapter failure。                                                                                                                          |
-| 新票据重连           | 再次通过正式 API 签票，与前票据不同；第二次 connected，Canvas 1024×768，749,965 个非黑像素，收到 393 帧、2,526,944 bytes；没有 Adapter failure。                                                                                |
-| 最终清理             | 第二次 peer.close 后观察到 WS close；临时测试页均已关闭，`ss -tnp` 无目标 13389 端口连接，Backend 原 PID 未改变。未发送文字/按键、未主动读写剪贴板或运行远端命令；正常 RDP 登录、显示尺寸及最近连接时间属于本次连接的预期效果。 |
-
-可复核命令：`node --check /tmp/nexus-real-rdp-check.mjs`、`node /tmp/nexus-real-rdp-check.mjs`；安全投影输出在 `/tmp/nexus-real-rdp-check.log`。临时脚本不包含密码或票据常量；运行时凭据仅由正式 API 交给原 SDK 内存实例。此次用原生 CDP WebSocket 新建临时目标成功；此前 Playwright 全浏览器附加超时仅保留为当时工具准备结果，不再是当前连接阻断。
-
-结论仅限指定真实目标的基本 RDP 认证/画面、短时连接、动态尺寸、关闭与新票据重连。VNC、键盘/IME/软键盘、剪贴板、触控、完整全屏恢复、多平台、长时间稳定性、16 路并发、故障收敛、跨设备挂起及全量 E2E 仍待验；不继承旧 Guacamole 的 PASS，不将本轮限定实机验证称为全量回归通过。
-
-## 挂起目录 WS 与浏览器 RDP/VNC 迁移（2026-10-22，静态收口）
-
-环境为本地 `dev`、HEAD `8742ac29b20561df88d556cc87cb411d410a493d` 的未提交工作区，保留其它修改；Node `/usr/local/bin/node` v22.23.1、pnpm `/usr/local/bin/pnpm` 11.26.0。按 PLAN D17 没有运行本地业务测试、浏览器、E2E 或测试收集，没有提交、推送、部署或触发远程任务。
-
-源码审核覆盖 App 登录订阅 → 挂起目录 store/stream → 独立 `/ws/suspended-sessions` → WorkspaceService 变化发布，以及 Dashboard 路由停用/恢复的采样取消。既有 Dashboard/mobile/集成断言已改为观察真实 WS 快照、跨客户端改名和离页不再请求 status；HTTP 管理及显式恢复仍保留。快照不解除写入未知围栏，旧 HTTP/WS 不能覆盖新状态。Dashboard 虚拟时钟只用于采样生命周期断言，不作为目录流真实心跳/重连的证据。
-
-桌面审核覆盖 Shared 六字段会话和 64 KiB 编码预算、HTTP no-store、协议关联、同步 WS bind、票据/目标/身份复查、RDCleanPath/X224/TLS、权威目标地址、二进制流控、socket/send/初始化真实关闭与 SDK 晚连接收尾。删除 guacd 依赖/补丁/Compose/环境配置，删除 RemoteApp 表单、三语文案、Shared/Targets/存储/快照字段和 SQL 列；同步更新 application/targets 唯一 v1 签名，明确不兼容旧开发库/快照。生产源码与锁文件无旧厂商/RemoteApp 消费者；测试保留旧字段拒绝/无控件断言及原文件名，smoke 保留禁止 guacd 服务断言。
-
-原桌面测试夹具已迁移为真实 TigerVNC/xrdp/xterm/vncconfig/xclip；正式浏览器 Adapter 负责画面/键鼠，control 只读取真实 X selection、终端文本与指针。既有 E2E 保留窗口、剪贴板、触控、软键盘、票据与权限断言；单独 raw WS 只验证真实 RDCleanPath/TLS 握手，不把它当作图像或远端认证证据。runner 安装真实桌面工具并参与缓存指纹，端口统一由 runner 分配，不再依赖 MockGuacd。
-
-静态检查：根 `pnpm run check`（双端 ESLint/类型、Shared build）、`pnpm run build`（Shared/Backend/Frontend）、`pnpm run format:all:check` 和 `git diff --check` 通过。日志为 `/tmp/nexus-browser-desktop-final-{check,build,format-check,diff}.log`；修改后既有 mjs/cjs 与新夹具的 `node --check`、smoke 的 `bash -n` 通过，记录于 `/tmp/nexus-browser-desktop-syntax.log`。五个受影响桌面/Dashboard/mobile E2E 入口以 `tsc --noEmit --target ES2022 --module esnext --moduleResolution bundler --esModuleInterop --skipLibCheck --types node --typeRoots ../../packages/frontend/node_modules/@types` 单独编译通过，日志为 `/tmp/nexus-browser-desktop-e2e-types.log`；初次缺少 Node types 的命令失败后显式引用已有类型，未新增依赖或放宽检查。其它已修改 E2E TS 通过 transpileModule 语法核对，未执行或收集测试。
-
-Frontend 构建有大 chunk 提醒：按需加载的 IronRDP JS/WASM chunk 约 6.07 MB，gzip 约 2.26 MB；未调整警告阈值。移除 guacd 减少后端服务/解码负担，但前端增加 WASM 下载，不将其表述为所有维度都变小。RDP 当前仍忽略目标证书校验；SDK 不提供 pending-connect 取消，保留晚成功 shutdown/run/free owner，限制已进入产品及专题文档。
-
-行为仍远程待验：跨设备挂起/接管/租约/断线与未知结果、首页离页/返回、双协议真实画面/剪贴板/IME/软键盘/触控/全屏、16 路与第 17 路准入、权限/目标变化、弱网与清理故障，以及 Windows/Linux 远端和不同客户端平台。新夹具本身也尚未行为执行；旧 Guacamole/B10/Windows PASS 仅属于旧实现，不作为本版验收。
-
-## 插件市场刷新仓库并入标题行（2026-10-22，本地 CDP）
-
-使用 CDP（`https://api.honus.top/settings?tab=agent`，未使用 9998）进入“App 与扩展 → 插件市场”，未点击刷新或修改仓库配置。修复后请求视口 1152×900（实际 CSS 视口 `914×900`）下，仓库标题行高 `38px`，“刷新仓库”与标题及“添加仓库”同行，按钮为 `105×38px`。390×844 下仓库标题和 URL 输入分行，刷新按钮与添加按钮同排，分别为 `105×38px` 与 `82×38px`；320×700 下刷新按钮收起文字为 `45×38px` 图标按钮，仍与添加按钮同排，不再独占一行。三档页面均无横向溢出，控制台无异常。
-
-目标 Vue ESLint／Prettier、根 `pnpm run check`、Frontend build 与 `git diff --check` 通过。全量 `format:all:check` 仍被并行工作区既有格式告警阻断，本批未修改这些文件。证据：`/tmp/plugin-market-refresh-1152.png`、`/tmp/plugin-market-refresh-390.png`、`/tmp/plugin-market-refresh-320.png`。按 D17 未运行 E2E，未触发真实仓库刷新。
-
-## App 安全策略配置展开布局（2026-10-22，本地 CDP）
-
-使用 CDP（`https://api.honus.top/settings?tab=agent`，未使用 9998）进入“App 与扩展 → Agent App”，展开“安全策略配置”。现为单一授权面板、分类浅分隔和独立能力卡片；请求视口 1152×900（实际 CSS 视口 `914×900`）下授权面板 `790×1478px`、能力卡 `366×68px`、卡片间距约 `10px`；390×844 下能力卡宽 `246px`、320×700 下宽 `185px`，均为单列且无横向溢出。
-
-临时勾选“读取文件”后，计数由 `0 / 19` 更新为 `1 / 19`，授权高亮和保存按钮可用状态同步出现；能力项内不再出现 SSH 目标范围选择器。截图后已刷新页面丢弃草稿，未保存授权。三档页面均无横向溢出，控制台无异常。证据：`/tmp/app-security-policy-1152.png`、`/tmp/app-security-policy-390.png`、`/tmp/app-security-policy-320.png`、`/tmp/app-security-policy-selected-1152.png`、`/tmp/app-security-policy-selected-390.png`、`/tmp/app-security-policy-selected-320.png`。
-
-目标 Vue ESLint／Prettier、根 `pnpm run check`、Frontend build 与 `git diff --check` 通过。全量 `format:all:check` 被并行工作区 `main.ts`、`remote/register.ts`、`connection-sql.ts` 与 Shared `connections/values.ts` 的既有格式告警阻断，本批未修改这些文件。按 D17 未运行 E2E。
-
-## Provider 标题统计与操作窄屏避让（2026-10-22，本地 CDP）
-
-使用本地 CDP（`https://api.honus.top/settings?tab=agent`，未使用 9998）进入“模型与预算”，未改写 Provider 数据。修复后 `390×844` 下标题行为 `344×63px`，标题、计数徽标、信息提示与“添加 Provider”保持同一行且矩形不相交；`360×800` 与 `320×700` 下标题行自动增高为 `314×99px`、`274×99px`，操作按钮换到下一行并右对齐，统计徽标、提示与按钮均不重叠。各档页面均为 `scrollWidth=clientWidth`，控制台无异常。
-
-目标 Vue ESLint／Prettier、根 `pnpm run check`、Frontend build 与 `git diff --check` 通过；全量 `format:all:check` 被并行工作区的既有格式告警阻断，本批未修改这些文件。证据：`/tmp/provider-header-after-390.png`、`/tmp/provider-header-after-320.png`、`/tmp/provider-header-width-360.png`。按 D17 只验证响应式布局，未打开或保存 Provider 弹窗。
-
-## Agent App 与扩展页签化（2026-10-22，本地 CDP）
-
-使用本地 CDP（`https://api.honus.top/settings?tab=agent`，未使用 9998）进入“App 与扩展”，依次切换 Agent App、MCP / ACP、插件市场、执行预算。桌面请求 1152×900（浏览器实际 CSS 视口 922×720）下外层工作区为单一容器，四个页签均显示完整；390×844 下窄屏隐藏页签图标后四项完整可见；320×700 下第四项在页签区域内滚动，页面级 `scrollWidth=clientWidth` 分别为 `922/922`、`390/390`、`320/320`。App 行、集成空态、插件仓库来源与预算字段均正常渲染，控制台无异常。
-
-目标 Vue 与三语 JSON 已通过 Prettier、ESLint、根 `pnpm run check`、`pnpm --filter @nexus-terminal/frontend build` 和 `git diff --check`。按 D17 未运行 E2E，也未触发真实授权、插件安装、预算保存或未知写入恢复。证据：`/tmp/agent-extensions-final-1152-apps.png`、`/tmp/agent-extensions-final-1152-integrations.png`、`/tmp/agent-extensions-final-1152-market.png`、`/tmp/agent-extensions-final-1152-budget.png`，以及 `/tmp/agent-extensions-final-390-*.png`、`/tmp/agent-extensions-final-320-*.png`。
-
-全量 `format:all:check` 被并行工作区 `tests/e2e/support/remote-desktop-websocket.cjs` 与 `test-desktop-server.mjs` 的既有 spacing 告警阻断，本批未修改这些文件。
-
-## 全局 Toast 避开顶部导航（2026-10-22，本地 CDP）
-
-使用本地 CDP（`https://api.honus.top`，未使用 9998）向 `shared-notifications` store 注入实际失败 Toast，未修改测试环境业务数据。桌面导航底部为 `60px`、Toast 顶部为 `72px`；390×844 下导航底部同为 `60px`、Toast 顶部同为 `72px`，间隔均为 `12px`。退出按钮与 Toast 的矩形相交检测均为 `false`，退出按钮中心仍命中 `/login` 链接；手机文档宽度保持 `390px`。临时从 DOM 移除 `.app-header` 并等待两帧后，Toast 宿主顶部回落到 `16px`，恢复导航后回到 `72px`。证据：`/tmp/toast-header-offset-desktop.png`、`/tmp/toast-header-offset-mobile.png`。
-
-`NotificationHost` Vue、`uiGen2.css` Prettier 与 ESLint、`pnpm --filter @nexus-terminal/frontend build`、根 `pnpm run check` 与 `git diff --check` 通过。全量 `pnpm run format:all:check` 仍受并行工作区 `tests/e2e/specs/ui/dashboard-workflows.spec.ts` 的既有格式告警影响，未修改该文件。按 D17 未运行 E2E；通知计时、合并、操作与关闭逻辑未改，注入的通知已在核对后清理。
-
-## Agent CDP 添加目标弹窗卡片优化（2026-10-22，本地 CDP）
-
-使用本地 CDP（`https://api.honus.top/settings?tab=agent`，未使用 9998）打开“执行与集成 → CDP → 添加目标”，未保存目标。桌面窗口下弹窗为 `560×364px`，内容宽 `510.4px`，保存与取消按钮分别为 `107.6×32px`、`88×32px`；390×844 下弹窗 `358×355.2px`，320×568 下 `288×355.2px`，两档 `scrollWidth=clientWidth`，无横向溢出，窄屏按钮均等宽且为 32px 高。图标标题、CDP 标记、小号字段标签和等宽 URL 编辑区均正常渲染。证据：`/tmp/cdp-target-modal-after.png`、`/tmp/cdp-target-modal-after-390.png`、`/tmp/cdp-target-modal-after-320.png`。
-
-目标 Vue Prettier、ESLint、`pnpm --filter @nexus-terminal/frontend build`、根 `pnpm run check` 与 `git diff --check` 通过。全量 `pnpm run format:all:check` 仍受并行工作区 `tests/e2e/specs/ui/dashboard-workflows.spec.ts` 的既有格式告警影响，未修改该文件。按 D17 未执行真实保存、编辑回填、键盘焦点或 E2E；保存与取消继续使用原逻辑和统一基础按钮。
-
-## Agent CDP 按钮统一（2026-10-22，本地 CDP）
-
-使用本地 CDP（`https://api.honus.top/settings?tab=agent`，未使用 9998）进入 Agent“执行与集成”的 CDP 区，未保存浏览器配置。1152×720 下，标题栏“添加目标”渲染为 `data-ui="button"`、`ui-button--soft`、neutral、38px；列表底部“添加目标”与 Endpoint“添加”使用同一基础按钮。打开“添加目标”后，弹窗“保存浏览器配置”为 solid/primary、“取消”为 soft/neutral，均为 32px；连接管理“添加连接”弹窗的确认／取消按钮同为 32px，结构和视觉已对齐。证据：`/tmp/agent-cdp-section.png`、`/tmp/agent-cdp-add-modal.png`。
-
-全仓按钮组件盘点为 `UiButton`、`UiFormActions`、`UiActionGroup`；旧 `BaseButton.vue` 已在提交 `dd40d0be` 删除，`rg` 无源码或测试引用，因此本批无需再次删除旧文件，也未新建同义按钮组件。目标 Vue Prettier、ESLint、`pnpm --filter @nexus-terminal/shared build`、`pnpm --filter @nexus-terminal/frontend build`、根 `pnpm run check` 与 `git diff --check` 通过。全量 `pnpm run format:all:check` 仅被并行工作区的 `tests/e2e/specs/ui/dashboard-workflows.spec.ts` 格式告警阻断，未修改该文件。按 D17 未执行真实保存、窄屏或 E2E；Endpoint 编辑／删除和危险操作继续保留原有语义色。
-
-## 全局禁用目标说明收进信息提示（2026-10-22，本地 CDP）
-
-使用本地 CDP（`https://api.honus.top/settings?tab=agent`，未使用 9998）进入“安全与系统”并定位“全局禁用目标”。修改后页面正文中“这是跨会话、跨 Run 的全局硬限制”命中为 0，标题旁 `[data-ui="info-hint"]` 仍存在；点击后提示面板同时包含“聊天框下方的 SSH 只决定某次 Run”和“被全局禁用的目标即使在聊天框中被选中……Host 强制阻断”两段说明。截图证据：`/tmp/agent-denylist-hint-only.png`。
-
-三语 `scopeHint` 均删除且 JSON 解析通过；目标 Vue ESLint、Prettier、`pnpm --filter @nexus-terminal/frontend build` 与 `git diff --check` 通过。CDP 未修改禁用草稿、原因或保存状态。按 D17 未运行本地业务测试、E2E 或测试收集；窄屏、键盘打开提示及真实保存仍随既有 Agent 安全回归覆盖。
-
-## 全局 Toast 等宽卡片材质（2026-10-22，本地 CDP）
-
-使用本地 CDP（`https://api.honus.top`，未使用 9998）在已登录页面直接向 `shared-notifications` store 注入短成功、长警告和带“重新读取”action 的失败通知，未触发真实保存或修改测试环境数据。桌面宿主和三条卡片均为 340px 宽，高度分别为 56/56/106px，`scrollWidth=clientWidth=338`；390×844 下卡片左右边界统一为 12/378px、宽 366px，高度 56/56/102px；320×700 下边界为 12/308px、宽 296px，高度 56/65/102px。三档文档宽度均等于视口宽度，短消息不再收缩，长文案与 action 只增加高度。
-
-卡片计算材质为细边框、`15px` 圆角、`color-mix(card-bg-color 95%, app-bg-color)` 底色、`inset 0 1px 0` 轻高光、低强度阴影和 2px 语义色侧线，与仪表盘连接卡片保持同一材质方向；状态仍由侧线、图标和语义色共同表达。通知计时、去重、错误驻留、`aria-live`、错误 `role=alert` 和 action 逻辑未改。证据：`/tmp/toast-equal-width-1152.png`、`/tmp/toast-equal-width-390.png`、`/tmp/toast-equal-width-320.png`。
-
-目标 Vue/CSS Prettier、NotificationHost ESLint、`pnpm --filter @nexus-terminal/frontend build` 与 `git diff --check` 通过。按 D17 未运行本地业务测试、E2E 或测试收集；真实保存/测试动作产生的 Toast、键盘焦点、减少动态效果和成功/警告/信息三种独立状态仍随既有远程回归覆盖。
-
-## 对话右侧记忆审核（2026-10-22）
-
-当前对话 Root/Child 的来源记忆由后端按 threadId 在分页前筛选，同事务校验当前用户/App 的线程归属；无来源候选不进入对话审核。对话独立 owner 每3秒读取一页50条，新候选展开原风格右侧栏，关闭不拒绝/发布，顶部按钮可重新打开；任务详情与记忆栏互斥，窄屏沿用浮层。只有人工点击保存才发布，拒绝和过期候选不进入 Recall。背景读取不置 busy，交互取代旧读取；未知/冲突保留原记录，显式核对原 memoryId 后再读列表，自动轮询不解除写入围栏或重发审核。读取失败保留卡片、停止轮询并提供恢复，active/KeepAlive/身份/文档可见性/卸载负责停止观察。
-
-扩展既有 `coverage-gaps.spec.ts` 的 Memory 生命周期断言：有真实线程但无来源的候选不会误入；缺失线程404，非法/重复 threadId 400。未新建业务测试，按 D17 未运行本地测试、浏览器、E2E 或测试收集。源码复核 Root/Child 共用 thread_id、分页前隔离、只读/写入晚结果、原版本 CAS、失效原文与统一 Toast；静态证据与真实交互验收分别记录。
-
-根 `pnpm run check`、`pnpm run build`（Shared/Backend/Frontend）、Shared check、最终 Backend check/build、本轮目标源码及既有断言 ESLint/Prettier、`git diff --check` 通过。日志为 `/tmp/nexus-conversation-memory-{check,build}.log`、`/tmp/nexus-conversation-memory-shared-check.log`、`/tmp/nexus-conversation-memory-backend-final.log`、`/tmp/nexus-conversation-memory-target-{lint,format}.log`。复核期间执行设置的并行工作区修改曾造成五处类型错误，后续重跑根检查和构建已通过；保留当时日志 `/tmp/nexus-conversation-memory-check-concurrent.log`，未修改或回滚无关文件。全量格式检查仍受 `use-artifact-library.ts`、`use-execution-settings.ts`、`AgentSettingsPanel.vue`、`ExecutionSettings.vue` 的其它未提交改动告警影响，不能记为通过；实际日志 `/tmp/nexus-conversation-memory-format-check.log`，本轮文档单独复核格式。
-
-真实模型提案、同 App 不同线程/用户隔离、多页和多窗口审核竞争、未知回执/重新核对、关闭重开、切换线程、后台恢复、桌面/窄屏与键盘可访问性留远程验收。没有提交、推送或部署。
-
-## 移除 Agent 设置记忆管理（2026-10-22）
-
-用户明确移除设置中的记忆管理模块。删除安全分组记忆卡片及专用 AppScopedSettings、AppMemoryEditor、use-app-memory、memory-management-api、memory-types/mapper 和三语 memoryManagement 文案；全仓引用核对未发现其它前端消费者。安全分组剩余协作限制与网络政策保持原布局。后端候选/审核/Recall、Shared 协议、持久数据与备份未修改，候选仍须人工发布；既有 coverage-gaps API E2E 继续验证原后端生命周期，不删除或跳过断言。前批针对已删除记忆 UI 的远程待验范围不再适用。
-
-本地 `dev`、HEAD `013f07061fbde592f7a3e3b6e53e02da24389bc2`，保留其它未提交修改；根 `pnpm run check`、`pnpm --filter @nexus-terminal/frontend build`、`pnpm run format:all:check` 与 `git diff --check` 通过。日志为 `/tmp/nexus-remove-memory-{check,build}.log`；全量格式结果另记 `/tmp/nexus-remove-memory-format-check.log`。按 D17 未新增或运行本地业务测试、浏览器、E2E 或测试收集。真实设置页入口消失与其它分组交互仍待远程核对；不将编译通过解释为界面行为通过。未提交推送，也未删除用户记忆数据。
-
-## 前后端架构偏移审核（2026-10-22）
-
-基线为本地 `dev`、HEAD `013f07061fbde592f7a3e3b6e53e02da24389bc2` 及原有大量未提交修改；未回滚其它改动。本批沿 App/定义/插件管理、记忆列表/审核与后台资源采样的 API → Shared codec/mapper → 应用 owner → Model/技术能力 → 出口/消费者核对状态、拒绝、取消与收尾，并核对配置热更新安装链。补查 Backend 跨模块/Bootstrap 依赖、Adapter 反向引用、Service/Model SQL，以及 Frontend 跨 feature、runtime/client/foundation 的深层引用；这些静态搜索不替代完整功能审核，不声称已逐行审核全部工作区。
-
-确认并修复：App 刷新在 busy 时静默丢失，插件变化后只读取 App 而遗漏定义目录；现由 use-app-management 合并排队读取，两份目录各自管理刷新，旧读失效后不回填。自动刷新不解除已存在或排队期间新产生的写入失败围栏，仍须原入口显式核对；不自动重试写入。App 目录、安全分组 App 选择及记忆审核接 active scope，停用同步清除选择/私有草稿并撤销旧回填。ResourceStatusService 仅缓存成功采样，失败结果不再等待最长一天的成功 TTL；共享在途、授权复查、取消与关闭归属保持不变。USAGE 与架构同步修正旧 TTL 起算和重启生效描述。不改布局、样式、导航或控件，仅补充必要 active 绑定。
-
-本轮 Node `/usr/local/bin/node` v22.23.1、pnpm `/usr/local/bin/pnpm` 11.26.0：`pnpm run check`、`pnpm run build`（Shared/Backend/Frontend）、`pnpm run format:all:check` 和 `git diff --check` 通过，日志为 `/tmp/nexus-architecture-audit-{check,build,format-check}.log`。按 D17 未新增或运行本地业务测试、浏览器、E2E 或测试收集；没有提交、推送或触发远程任务。待远程核对：插件安装/升级/卸载与 App 读写交错、定义目录刷新、排队后的未知写入围栏、记忆编辑离开/返回及晚响应隔离、SSH 失败恢复/并发共享/TTL 热更新与停机清理。
-
-## App 与扩展旧 UI 恢复（2026-10-22）
-
-展示依据为 `75289ef9^` 正式设置页面，协议仍为当前 Shared/API。App 卡片恢复包版本、权限抽屉及卸载确认；插件安装/卸载共享普通管理 owner，独立策略区只读取自己的策略资源；集成恢复图标操作栏、添加/编辑、删除和目录弹窗；市场恢复标题栏刷新、URL 添加/标签、搜索与可折叠来源/地址复制。按用户最新要求仅保留默认/第三方仓库下载，删除本地包上传入口、弹窗、状态、编排及无人消费的前端暂存 API；维护页的无消费者上传预留显示也一并移除，不涉及普通文件/附件上传。数据源缺失的旧运行/审批统计不恢复，排空数据清理按新版真实契约呈现，差异见 USAGE。
-
-同步既有 `preset-plugin.spec.ts`：来源 URL 复制按钮定位、已安装记录移到 App 卡片、真实包版本、启用 App 的卸载禁用、原权限按钮及无本地上传入口断言，保留后续高级维护与 SDK 链路；集成区域保持原可访问名称和 App 选择定位。按 D17 未新增或运行本地业务测试、浏览器、E2E 或测试收集。
-
-本轮根 `pnpm run check`、`pnpm --filter @nexus-terminal/frontend build`、`pnpm run format:all:check`、目标源码/既有用例 ESLint 和 `git diff --check` 通过；还静态核对恢复组件的三语言字面文案引用。初次还原日志为 `/tmp/nexus-app-ui-{check,build,format}-final.log`；移除本地包上传后重新执行，日志为 `/tmp/nexus-repository-only-check.log`、`/tmp/nexus-repository-only-build.log` 和 `/tmp/nexus-repository-only-format-check.log`。这些检查不能证明像素与行为验收通过：真实桌面/窄屏/键盘焦点、三语言、剪贴板权限、仓库下载/验签、第三方市场信任、安装/升级、卸载排空/取消/数据删除、授权范围、集成启停/发现以及未知写入/离页竞态仍待远程。未提交、推送或部署，保留工作区其它改动。
-
-## Subagent 继承主 Agent 与功能逻辑审核（2026-10-22）
-
-执行设置的 Shared 请求/响应、持久 JSON、双端 Model/mapper 和管理接口删除独立 profiles；前端删除模型目录加载及独立配置表单，仅保留公共协调容量与继承说明。delegate 删除 maxRequests/durationSeconds，九个协作工具使用当前 v3 定义，删除 collaboration_profiles。Child 同事务复制 Root 模型与执行快照，继承绝对期限及模型请求上限，工具与主 Agent 一致但排除嵌套委派和 Root 专属 join/cancel；原权限/审批、目标缩窄、家族账本及未知结果围栏不变。复审修正 SQL CHECK/持久解码的旧32次上限，改为引用 Shared 最大请求容量；初始v1签名更新，不兼容旧开发库。
-
-同步既有后端执行/协作/ACP/工具/浏览器夹具、存储集成、前端执行设置集成及 Agent Host/性能设置/插件 E2E。原独立模型用例改为继承说明、无独立模型控件及 Provider 变更不改执行设置；协作用例核对继承工具、Root deadline 和持久请求上限。前端夹具使用当前共享 editor/分区组件，保留版本冲突、未知结果围栏、确认过期、身份撤销和晚读取隔离；Provider 读取失败不阻止公共额度编辑。旧 duration/绝对期限注入仍作为非法委派字段拒绝用例，不恢复旧参数。
-
-功能源码审核覆盖已提交 `013f0706` 的网络失败归类/通知与 Pino、`6a34b081` 的缓存/在途共享，以及本地 Agent 执行/快照、数据目录、普通cd、挂起读取失败与配置热更新。发现 SourceAdmissionService 在等待封禁读取时若白名单收紧，仍可能接受旧准入事实；现于 await 后复查当前白名单和黑名单开关。普通cd仍取调用方的真实目录，不固定为根目录。未审核全部317个改动文件，不将局部源码审核解释为全仓无缺陷，也未调整无关 UI 风格或布局。
-
-`pnpm run check`、`pnpm run build`（Shared/Backend/Frontend）、最终 Backend build、`pnpm run format:all:check`、`git diff --check` 及本轮修改既有 mjs 的 `node --check` 通过；目标源码/既有测试 ESLint 通过。日志为 `/tmp/nexus-agent-inherit-{check,build,format}.log` 和 `/tmp/nexus-agent-inherit-backend-final.log`。按 D17 未新增或运行本地业务测试、浏览器、E2E 或测试收集；真实多 Child、共享预算耗尽、审批/撤权、取消与未知提交、白名单热更新交错及停机仍待远程 Actions。配置未知提交保守不激活，不根据持久值声称运行态已应用，须显式核对后保存确定配置或重启。未提交、推送或部署。
-
-## 核心配置热更新（2026-10-22）
-
-源码确认旧 ConfigurationService 只更新持久设置，Access/Remote 始终消费启动快照，前端所有保存均提示重启。本批改为串行 prepare → SQL CAS 确认 → 同步 apply：六个 IP/监控字段在原模块实例热更新；保留 CAPTCHA/Passkey 冷字段。状态订阅重排等待定时器，不额外并发或中断在途采样；资源 TTL 改变清旧缓存，晚成功按新 TTL 入缓存。失败 CAS 不激活，未知提交不猜测，停机晚确认不再通过拒绝准入的 installation 重新取有效态，原任务继续 drain；已停止的订阅不重新创建。
-
-同步既有 monitoring-configuration/auth 集成脚本的有效版本、模拟响应与成功提示，系统设置 E2E 改为即时有效周期，白名单 E2E 在保存/清空后直接验证同一来源拒绝/允许，黑名单 E2E 无重启产生真实封禁；受影响定位同步当前 settings-group、标题行表单提交和 Switch。三语言区分已应用与冷配置待重启；IP/监控不因其它冷配置误报重启。未新增或执行本地业务测试、浏览器、E2E 或测试收集（D17）。
-
-本轮根 `pnpm run check`、`pnpm run build`（Shared/Backend/Frontend）、`pnpm run format:all:check`、`git diff --check` 和两个修改集成脚本的 `node --check` 通过；受影响 E2E/集成脚本 ESLint 通过。日志为 `/tmp/nexus-hot-config-{check,build,format}.log`。真实远程采样时序、多客户端、白名单准入、已有封禁、新阈值、混合冷/热配置、未知提交和停机交错仍待远程 Actions，不用静态或历史 PASS 代替。本批未提交、推送或部署。
-
-## Agent 设置窄屏分组与滚动条间距（2026-10-22，本地 CDP）
-
-使用当前工作区经 `https://api.honus.top/settings?tab=agent` 核对，未直接访问 9998。390×844 与 320×700 下四个分类均为两列两行，单卡宽分别为 169px 与 134px；总开关卡片只显示开关和“活跃 App 1 / 1”，标题、信息按钮与活跃 App 保持同一行，页面 `scrollWidth=clientWidth`。Agent 设置卡片右缘到内容滚动条可用边界为 12px。
-
-Provider 添加弹窗恢复原尺寸与定位后正常显示：390×844 下为 `358×717.4px`，正文 `clientWidth=308px`、`offsetWidth=316px`、`scrollWidth=308px`、右侧内边距 12px；1024×768 下弹窗为 `576×736px`，正文无横向溢出，未额外增加全屏或侧栏避让样式。证据：`/tmp/agent-settings-scrollbar-gap-390.png`、`/tmp/agent-settings-320-final-gap.png`、`/tmp/provider-modal-reverted-390.png`。
-
-本轮 `pnpm --filter @nexus-terminal/frontend build`、目标文件 Prettier、目标 Vue ESLint 与 `git diff --check` 通过。未提交 Provider 写入，未验证真实触屏指针、软键盘弹出后的可视区变化、浅色主题及全部语言下的像素表现。未提交、推送或部署。
-
-## 挂起目录只读失败误报未知（2026-10-22）
-
-确认源码缺陷：`suspendedFailureKey` 原先把 HTTP 传输的 unknown 无条件解释为修改结果未知，目录 GET 的失败也进入同一文案。现对目录与日志按读取语义展示有限 code，服务端 internal/unknown 在只读场景使用三语读取失败文案；保留 cause 供全局网络去重。挂起 Panel 的正文告警迁至常驻 Toast，搜索栏保留具可访问名称的核对按钮；真实命名/终止/移除 unknown 仍设置 blockedIds，轮询和 Toast 关闭不能解除保护。
-
-同步既有 `suspended-sessions.integration.mjs` 的读失败保留目录且不新增写保护断言，以及权限失败 Toast/核对按钮断言；原未知修改、晚读取不能解除新围栏、取消及 KeepAlive 断言保留。按 D17 不新增/运行本地业务、浏览器及 E2E。本轮 `pnpm run check`、`pnpm --filter @nexus-terminal/frontend build`、`pnpm run format:all:check`、`git diff --check` 和该脚本 `node --check` 均通过，日志为 `/tmp/nexus-suspend-feedback-{check,build,format}.log`。用户现场此次偶发的实际网络/后端原因未复现；实际轮询、移交、Toast/关闭恢复、弱网并发与丢写入回执仍待远程，不能将源码定位/编译当作实机通过。未提交、推送或部署。
-
-## 统一实例数据目录（2026-10-22）
-
-用户明确采用破坏性布局，不处理旧数据。Bootstrap 现在统一从数据库父目录解析 `appearance/`、`artifacts/`、`plugins/`，用于资源打开、在线备份恢复和启动恢复；无旧路径读取、迁移、删除或环境变量兼容分支。Compose 仍挂载完整 data，SQLite 与恢复暂存文件仍在同一目录，Snapshot 原有逻辑分区和同级根约束不变。
-
-既有 backup 集成脚本更新真实 Artifact 损坏注入路径，并在源实例初始化后断言新目录存在、旧前缀目录未创建；Artifact 流句柄观察及 Linux 文件租约夹具同步新路径，不削弱真实句柄/权限撤销断言；Access 多实例夹具改为每实例独立目录，避免仅换 DB 文件名而共享资源根。按 D17 未新增或运行业务测试、浏览器及 E2E。本轮 `pnpm run check`、`pnpm --filter @nexus-terminal/backend build`、`pnpm run format:all:check`、`git diff --check` 及四个修改脚本的 `node --check` 均通过，日志为 `/tmp/nexus-data-dir-{check,build,format}.log`；空目录启动、背景/附件/插件实际读写、完整导出导入、恢复崩溃重启和实例隔离仍待远程验收。未移动/删除现场数据，未提交、推送或部署。
-
-## 终端目录切换普通 cd 回显（2026-10-22）
-
-源码对照确认：`75289ef9^` 的旧 `workspace-shell-integration.service` 已附带 INTERNAL_CD 标记及历史清理，但会隐藏提示符前的全部输出；当前 Adapter 保留后台输出，导致原包装可见。本批仅将真实 PTY 写入改为安全转义的普通 cd，移除无用的输出抑制/清行状态，保留 setup 清理、控制字符拒绝、提示符排队、当前附件与实际 cwd 核对。普通 cd 是否进入历史由远端 Shell 配置决定。
-
-同步已有 `terminal-protocol.spec.ts` 首次目录切换场景，核对普通 cd 独立回显且无 INTERNAL_CD；已有 `file-manager-navigation.spec.ts` 保留 HISTIGNORE 下不记录 cd、用户命令不丢失的断言，并检查无 INTERNAL_CD。按 D17 未新增或运行本地业务测试、浏览器或 E2E。本轮 `pnpm run check`、`pnpm run build`、`pnpm run format:all:check` 和 `git diff --check` 均通过，日志为 `/tmp/nexus-cd-{check,build,format}.log`；真实 Bash/Zsh、单引号/空格路径、前台程序等待、后台输出和历史配置待远程验收，不把编译当作行为通过。未提交、推送或部署。
-
-## 工作区与设置通用结果统一 Toast（2026-10-22）
-
-本批把工作区布局冲突/读取失败、命令列表和连接树恢复，以及设置的个人偏好、日志、安全、监控、外观、备份、宿主诊断、Agent 与密钥管理通用操作结果迁至全局 Toast；不再在正文插入错误横条。字段校验、危险确认与未知结果核对保留，待重启状态仍由业务 owner 持有并改由 Toast 展示，业务 owner 继续持有 CAS、原意图和刷新围栏。已识别网络 cause 沿原统一网络通知，关闭 Toast 不解除围栏。
-
-Toast 增加只读刷新 action；设置聚合核对从自动对话框改为常驻 Toast，页头待核对入口仍可重新打开。根卸载后不发布晚返回通知；恢复 Promise 使用 allSettled 汇总同步与异步失败，不重放原写入。同步迁移已有 monitoring、registry、execution、provider、targets 与 system-settings 断言，直接核对通知 store 或正式全局 Toast，而非已删除的正文节点。
-
-本批 `pnpm run check`、`pnpm run build`、`pnpm run format:all:check` 和 `git diff --check` 通过；既有 monitoring、registry、execution、provider、targets、notifications 集成脚本的 `node --check` 通过，仅作语法核对，未执行脚本。按 D17 不新增/运行本地业务测试、浏览器或 E2E。常驻/关闭、同文案去重及不同恢复范围隔离、弱网并发、只读恢复、各语言/窄屏与权限切换的实际交互仍待远程验收，类型及编译不作为这些行为通过的证据。主仓库本轮未提交、推送或部署。
-
-## 安全设置重启提示统一 Toast（2026-10-22，本地 CDP）
-
-使用当前工作区经 `https://api.honus.top/settings?tab=ipControl` 核对，未直接访问 9998。安全设置正文已移除 `ConfigurationStatus` 及“配置将在服务器重启后生效”“已保存，重启服务器后生效”节点，避免读取或保存时插入、移除提示导致布局跳动。IP 管控页面正文内对应文案数量为 0，页面 `scrollWidth=clientWidth`，无横向溢出。
-
-通过 CDP 向安全配置读取注入 `requiresRestart: true` 的待重启快照后，全局通知 store 得到一条 `warning`，正文为“验证码或 Passkey 站点配置将在服务器重启后生效。”，正文内联重启提示数量仍为 0。当前测试环境本身没有待重启冷配置，因此未触发真实页面 Toast；也没有对真实 CAPTCHA 配置执行需重启保存。`tests/frontend/auth.integration.mjs` 已改为直接检查通知 store，覆盖初次待重启 warning、CAPTCHA 保存 success、冲突及网络热保存 `savedLive` 断言，但按 D17 本轮未执行该集成脚本。
-
-本轮 `pnpm --filter @nexus-terminal/frontend build`、目标文件 Prettier、目标 Vue ESLint、`node --check tests/frontend/auth.integration.mjs` 与 `git diff --check` 通过。真实待重启保存、Toast 自动关闭/堆叠、窄屏与弱网并发交互仍待远程验收；注入响应只验证展示分支，不改写测试环境配置。
-
-## 设置页解释性副标题移除（2026-10-22，本地 CDP）
-
-使用当前工作区经 `https://api.honus.top/settings` 核对，未直接访问 9998。桌面 `1536×900` 依次检查工作区、系统、安全、IP 管控、数据管理、外观、Agent 和关于页：可见 `.ui-settings-group__description` 与 `.settings-content-head p` 均为 0，八页 `settings-page.scrollWidth=clientWidth`，无页面级横向溢出。移动端 `390×844` 复跑同八页，说明元素为 0 且页面无横向溢出；设置目录卡片不再渲染条目说明，主标题下也不再显示概览说明。
-
-展开“诊断与恢复（高级）”后，宿主诊断与机器突变恢复的分组标题均无副标题；机器突变恢复的原有核对警告仍以正文 warning 提示显示“解除只移除执行围栏，不重试原操作，也不证明原操作成功。请先独立核对远端实际效果。”，没有因移除标题说明丢失。证据：`/tmp/settings-subtitles-workspace.png`、`/tmp/settings-subtitles-system.png`、`/tmp/settings-subtitles-security.png`、`/tmp/settings-subtitles-ipControl.png`、`/tmp/settings-subtitles-data.png`、`/tmp/settings-subtitles-mobile-menu.png`、`/tmp/settings-maintenance-expanded.png`。
-
-目标文件 Prettier、目标 Vue ESLint、`pnpm --filter @nexus-terminal/frontend build` 与相关文件 `git diff --check` 通过。首次构建曾因并行改动的 `packages/frontend/src/features/agent/model/execution-mapper.ts:71` 报 `TS2741` 中断，该并行改动完成后重试通过；本批未修改该文件。工作区整体 `git diff --check` 仍被其他并行改动在 Agent execution 文件中的行尾空格和 EOF 空行阻断，未清理这些未知变更。设置值保存、机器突变证据录入/解除和真实窄屏交互动画仍待远程 E2E。
-
-## Agent 市场对照、官方插件发布与记忆导入移除（2026-10-22）
-
-本批对照 `75289ef9^` 的正式 Agent，不以开发页作为旧版基线；主仓库为 `dev` 工作区，未提交、推送或部署其中既有页面改动。按 D17 仅做源码、类型、格式、构建及发布资产完整性核对，不运行本地业务测试、浏览器或 E2E。
-
-| 功能             | 重构前事实                                                                                                            | 当前核对与处理                                                                                                                                                                                                    |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 默认与第三方市场 | `PluginManagementSettings.loadRemoteCatalogs` 并行读取官方及全部配置仓库，按来源展示；标题已是“可安装 App 与 Skill”。 | `PluginRepositorySettings.load` 仍读取官方及所有配置仓库，并保留成功结果；没有丢失多市场能力，但改为串行读取，部分失败只给通用提示。此处没有改名或另建 Skill 安装通道。                                           |
-| 官方目录与签名包 | 官方目录是默认安装来源，Skills 属于签名插件包。                                                                       | 线上 v1.0.0 的 publisher 多出 `schemaVersion`，SDK 为 `1.0.0`，manifest 含旧 `nexus/agents/agentSurface/targets`；分别违反当前目录白名单、SDK 精确值 `1` 和 manifest 白名单。通过发布新包修复，未放宽 Host 校验。 |
-| App 与启用引导   | 旧 `compose-agent` 创建空 AppRegistry，插件提供 App；首次启用先读取推荐并确认安装官方插件。                           | 当前 `ScopeService.list` 自动创建 `nexus.terminal`，设置开关直接调用 `execution.toggleEnabled`，推荐安装仍在市场。两项是仍存在的产品流程差异，本批没有擅自改动，也不宣称 Agent 已全部还原。                       |
-| 跨 App 记忆导入  | 旧 `MemorySettings` 与后端已有来源选择、预览和确认导入，并非重构新增。                                                | 用户本次明确删除：移除 UI、API、Shared codec/类型、Service/Model/Storage/SQL、确认表、快照登记和专属事件/三语文案；保留当前 App 提案、审核、发布、撤销、Recall、普通备份和通用 AppIntent。                        |
-
-记忆来源选择移除后，删除无人消费的 slot `apps` 参数与外部导入失效通知；列表读取仍由原 `useAgentManagementOperation` 独占并保护身份/离页竞态。专属 `agent_memory_imports` 已从当前初始结构及快照中移除，初始签名更新为 `backend-next-v1-initial-20261022-memory-scope`。按 H-12 不添加旧开发库兼容迁移，本批没有删除或重置任何数据库。测试夹具的 `memory.import` 只是通用 Intent 声明，不调用已删的记忆路由，未借此删除普通跨 App 通道。
-
-官方源码归独立仓库 `0honus0/nexus-agent-plugins`，提交并推送 `bda89fc66e1ed08f7ee5f27ced1d851785dac64d`。两个插件均发布为不可变新版本 `1.0.1`：精确 manifest/SDK、目录 publisher 白名单、catalog 独立 Nexus 范围（1.0.2–1.99.99），补齐显式 context/memory/artifact 等声明但不自动授权；Full-stack 改用当前 `request`、`valueJson`、CAS/operationId、布尔 health 和符合 CSP 的外部样式；官方 Skills 不再描述已移除的旧审批模式。
-
-- [源码验证 39733680384](https://github.com/0honus0/nexus-agent-plugins/actions/runs/39733680384)：当前提交的 `Plugin validation gate` 成功。
-- [草稿签名发布 39733748916](https://github.com/0honus0/nexus-agent-plugins/actions/runs/39733748916)：原固定 Ed25519 Publisher 身份签名并上传三个资产，成功；私钥仅在 Actions secret/runner 内使用。
-- [公开发布](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.1)：草稿资产核对后发布；发布触发的 [Release 39733871666](https://github.com/0honus0/nexus-agent-plugins/actions/runs/39733871666) 及 [Validate 39733870820](https://github.com/0honus0/nexus-agent-plugins/actions/runs/39733870820) 均成功。
-
-草稿与公开资产分别下载并逐字节比较一致，`releases/latest/download/catalog.json` 与已核对目录一致。核对目录字段/SDK/范围、原 Publisher 指纹、公钥、两个 tar 的 size/SHA-256、Ed25519 签名、全部文件 hash/大小/清单及与提交源码的对应；没有执行插件代码或 Host 安装行为。
-
-| 资产                        | 字节  | SHA-256                                                            |
-| --------------------------- | ----- | ------------------------------------------------------------------ |
-| `nexus.agent-1.0.1.tar`     | 20480 | `d2250949930fcf1675a96ed13744c7e892374bf182e589f36e2ffc76136791ea` |
-| `nexus.fullstack-1.0.1.tar` | 20480 | `293c5b48ef67c42a5fa6ba32e4df47573fdcccb60aaff8a2ee71e608f740a36d` |
-
-本批静态与构建：官方 `node scripts/check.mjs`（两个插件）、全部发布脚本及两个运行入口 `node --check`、主仓库 `pnpm run check`、`pnpm run build`、`pnpm run format:all:check` 和两仓 `git diff --check` 通过。末次 schema/slot 小改后再次执行根 check 与前后端构建均通过；文档收口后再次核对全量格式及 diff。普通记忆管理、已移除入口不可达、多市场安装/升级及官方两个包在真实 Host 的安装、授权、运行仍待远程 E2E/现场验收；资产核验不等同于这些行为通过。
-
-## 设置页保存入口与文案统一（2026-10-22，本地 CDP）
-
-使用当前工作区经 `https://api.honus.top/settings` 核对，未直接访问 9998。工作区四组已从“保存本组”统一为“保存”；系统语言、时区、日志，首页与监控，监控核心配置，安全密码/CAPTCHA，IP 白名单/黑名单和外观标题栏颜色均把主保存按钮放在 `UiSettingsGroup` 标题右侧。未修改时按钮为 `soft + neutral` 且禁用，修改后才变为 `solid + primary`。
-
-1536×900 下系统三组按钮均为 `55.6×38px`，位于标题行右缘；安全、IP 管控、外观和工作区的可见分组均无标题与操作区重叠。390×844、320×844 下五个设置页签页面级 `scrollWidth=clientWidth`，标题可按需增高但操作区保持右对齐且不覆盖标题；320px 下语言、时区、日志、工作区、密码、Passkey、两步验证、CAPTCHA、IP 白名单及外观标题操作区均完成边界检查。
-
-通过真实 UI 草稿分别修改语言（`中文 → 日本語`）、时区、前端日志等级、工作区弹窗编辑器复选框、外观标题栏颜色和 IP 白名单文本：对应按钮均由 `disabled=true / soft / neutral` 变为 `disabled=false / solid / primary`；每次重新加载后草稿丢弃并恢复弱化禁用。全程未点击保存，未修改测试环境配置。证据：`/tmp/settings-saves-system-after.png`、`/tmp/settings-saves-workspace-after.png`、`/tmp/settings-saves-security-after.png`、`/tmp/settings-saves-ipControl-after.png`、`/tmp/settings-saves-appearance-after.png`、`/tmp/two-factor-saves-1536.png`。
-
-两步验证启用态的“禁用两步验证”已改为标题右侧按钮并通过 `form` 关联正文密码表单，但当前测试账号未启用 TOTP，启用态视觉和真实禁用提交仍未实机覆盖。目标 Prettier/ESLint、Frontend build、根 `pnpm run check`、`pnpm run format:all:check` 与 `git diff --check` 通过；全量格式首次被忽略目录 `tests/e2e/.tmp/vite-cache` 的生成缓存阻断，移出该缓存后通过，未修改无关源码。未提交、推送或部署。
-
-## 两步验证主操作移至标题栏右侧（2026-10-22，本地 CDP）
-
-使用当前工作区经 `https://api.honus.top/settings?tab=security` 核对，未直接访问 9998。两步验证未启用时，“启用两步验证”从正文底部移至 `UiSettingsGroup` 标题行操作区，与 Passkey 注册按钮采用同一右侧对齐方式；正文只保留当前状态提示，不再重复主操作。扫码配置、启用后密码禁用和读取失败重试的分支保持原语义。
-
-1536×900 下标题行高 `38px`，操作区与按钮均为 `107.6×38px` 且右缘对齐分组内容；390×844 下按钮为 `108×38px`。320×844 下标题允许换行但操作区仍右对齐，页面无横向溢出（`scrollWidth=clientWidth=320`）。截图证据包含 `/tmp/two-factor-wide.png`、`/tmp/two-factor-390.png`、`/tmp/two-factor-320.png`、`/tmp/two-factor-saves-1536.png`。最新源码已把启用后的禁用按钮也移至标题右侧，但测试账号未启用 TOTP；完整激活、启用态布局和真实禁用流程仍待远程 E2E。
-
-## 代理与通知管理窄屏操作与事件计数（2026-10-22，本地 CDP）
-
-使用当前工作区经 `https://api.honus.top/proxies` 与 `/notifications` 核对，未直接访问 9998。760px 以下两页的编辑、删除从内容右侧移到下方，作为等宽图文按钮；代理筛选在 360px 以下按行展开，通知筛选固定为搜索独占一行、类型与状态各半行。通知卡片只显示“已启用 49 项事件”，不再渲染事件名称示例；搜索仍会匹配事件名称。
-
-390×844 下代理工具栏为 `234px + 112px` 两列，通知卡片操作区宽 `330px`，两枚按钮各 `161×32px`。320×844 下页面均无横向溢出（`scrollWidth=clientWidth=320`）；代理工具栏收为单列 `284px`，通知工具栏为搜索 `284px`、类型与状态各 `138px`，卡片操作区 `260px`，两枚按钮各 `127×32px`。320px 通知卡片 DOM 的元信息实测仅为 `已启用 49 项事件`。截图为 `/tmp/proxies-320-final-v2.png`、`/tmp/proxies-390-final-v2.png`、`/tmp/notifications-320-final.png`。完整远程 E2E、浅色主题与更多物理设备未运行。
-
-## Agent 执行设置底部保存栏窄屏对齐（2026-10-22，本地 CDP）
-
-`https://api.honus.top/settings?tab=agent` 使用当前工作区核对，未直接访问 9998。原底部栏使用 `flex-wrap`，`320×568` 下提示文字占满首行后把“保存”按钮挤到下一行并靠左，形成高 `86px` 的断裂布局。现改为提示文字可换行、按钮不收缩的单行布局。
-
-修复后 `320×568` 下底部栏为 `288×64px`，提示文字 `188×40px` 分两行，保存按钮 `56×38px` 固定在右侧且垂直居中；`390×844` 下提示保持单行，按钮仍固定右侧。`1536×762` 桌面布局同样保持提示单行、按钮右侧对齐。三档均无页面级横向溢出。证据：`/tmp/execution-footer-wide-before.png`、`/tmp/execution-footer-390-before.png`、`/tmp/execution-footer-320-before.png`、`/tmp/execution-footer-390-after.png`、`/tmp/execution-footer-320-after.png`。
-
-## 成功与失败 Toast 视觉强化（2026-10-22，本地 CDP）
-
-`https://api.honus.top` 使用当前工作区核对，未直接访问 9998。通过页面内真实 `shared-notifications` store 同时展示成功与失败提示，未触发后端写入。桌面 1536×762 下成功 Toast 为 `400×58px`、失败为 `400×63.1px`；两类卡片分别命中 `--status-success-color` 与 `--status-error-color` 的边框、渐变底色、图标容器和左侧强调线，消息仍可完整换行。
-
-390×844 下两类 Toast 宽 `366px`；320×568 下宽 `294px`，长失败文案换行后卡片高度 `58px`，图标、关闭按钮和消息均未裁切，页面 `scrollWidth=clientWidth`。成功/失败卡片的圆角、阴影、内边距与关闭按钮尺寸在窄屏统一收紧；通知类型、时长、去重和关闭语义未改动。证据：`/tmp/toast-refined-wide.png`、`/tmp/toast-refined-mobile.png`、`/tmp/toast-refined-320.png`。浅色主题和更长的多段错误文案未单独验证。
-
-## Provider 添加弹窗移动端适配（2026-10-22，本地 CDP）
-
-`https://api.honus.top/settings?tab=agent` 使用当前工作区核对，未直接访问 9998。窄屏问题来自表单 `fieldset` 的浏览器默认最小内联尺寸把正文撑宽，而不是缩放柄本身：`320×568` 修复前正文 `scrollWidth=298px`、`clientWidth=238px`，可横向拖动；修复后两者均为 `238px`。弹窗为 `288×482.8px`，缩放柄不渲染，正文独立纵向滚动，保存/取消底栏保持可达。
-
-`390×844` 下弹窗为 `358×730.4px`，正文 `scrollWidth=clientWidth=300px`，缩放柄在设备能力回调完成后不存在；页面 `scrollWidth=clientWidth=390px`。桌面 `1536×762` 下缩放柄可见、启用，指针拖动会写入新的宽高；随后切入 `320px` 视口时内联尺寸被清除，弹窗恢复自适应，证明桌面能力保留且不会污染手机布局。本轮未提交 Provider 写入，未测试软键盘弹出后的可视区变化。证据：`/tmp/provider-320-after.png`、`/tmp/provider-390-after.png`、`/tmp/provider-mobile-current.png`。
-
-API 密钥区域进一步核对：标签独占一行后，输入框与“显示凭据”按钮同在下一行，`390×844` 下两者高度均为 `32px`，顶部和底部位置差值均为 0；输入框仍可收缩，按钮和说明文案未溢出。证据：`/tmp/provider-credential-aligned-390.png`。
-
-调用协议与启用开关同步核对：宽屏两者均为 `32px` 高，顶部和底部位置差值均为 0；`390×844` 下启用行宽 `280px`，`320×568` 下宽 `210px`，均与协议下拉框同宽并铺满单列，文字靠左、开关靠右。两种窄屏页面均无横向溢出。证据：`/tmp/provider-protocol-toggle-wide.png`、`/tmp/provider-protocol-toggle-390.png`、`/tmp/provider-protocol-toggle-320.png`。
-
-## 全局提示弹层与 Toast 重构（2026-10-22，本地 CDP）
-
-`https://api.honus.top` 使用当前工作区核对，未直接访问 9998。通过真实 `confirmConnectionHostKey` 入口打开 SSH 主机密钥变化提示：1536×762 下面板为 `500×354.5px`，390×844 下为 `358×352.5px`；详情区展示目标、已保存指纹和当前指纹，长指纹可换行，两个操作按钮在手机端各 `155px` 宽、`44px` 高，面板无横向或纵向溢出。取消正常收起且未写入信任。证据：`/tmp/global-host-key-dialog-wide.png`、`/tmp/global-prompts-mobile-2.png`。
-
-临时修改 `public/sw.js` 触发真实 Service Worker 更新事件，更新提示显示为 `420×127.5px` 玻璃面板，手机为 `358×157.3px`，操作按钮在手机端等宽 `44px`；验证后已立即还原 `public/sw.js`，工作区无该文件差异。全局 Toast 在桌面为 `400×59.6px`、手机为 `366×60px`，计算样式包含 `backdrop-filter: blur(14px) saturate(1.55)` 和语义色左侧强调线。证据：`/tmp/global-prompts-wide-final.png`、`/tmp/global-update-prompt-mobile-final3.png`。
-
-`tests/e2e/specs/ssh/connection.spec.ts` 仍以 `SSH Host Keys`、`Cancel` 和 `Trust and reconnect` 定位，重设计未改变可访问名称与按钮文案，按 D17 未运行该远程用例。目标 ESLint／Prettier、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过；浅色主题和扩大视口组合未运行。
-
-## 全局下拉基础组件统一（2026-10-22，本地 CDP）
-
-`packages/frontend/src` 已无原生 `<select>`／`</select>`。原剩余三处消费者已迁入 foundation `UiSelect`：Agent DEV 模型选择、Targets DEV SSH 连接选择，以及设置数据页高级维护中的突变结果与解除证据选择；空值占位、禁用态和证据校验保持原语义。
-
-`https://api.honus.top` 使用当前工作区核对，未直接访问 9998。1536×762 下依次检查仪表盘、连接管理、代理管理、通知管理、审计日志和设置的工作区／系统／外观／安全／IP 管控／数据管理／Agent 页：`document.querySelectorAll('select').length` 均为 0；所有可见 `.ui-select__trigger` 的计算样式均为 `backdrop-filter: blur(8px) saturate(1.45)` 与 48% 半透明填充。系统设置语言下拉实际展开后，浮层为 `backdrop-filter: blur(28px) saturate(1.85)`、37.8% 半透明填充，三个语言选项完整可读。证据：`/tmp/global-dropdown-glass.png`、`/tmp/global-dropdown-glass-open.png`。
-
-`tests/frontend/mutation-recovery.integration.mjs` 已按 ReKa 交互更新并实际通过 12 项检查：先展开高级维护区，再点击 `UiSelect` 并选择观察结果与证据选项，同时以 `data-value` 核对空值占位。目标 ESLint／Prettier、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过；完整远程 E2E、浅色主题和更多设备视口未运行。
-
-## Agent 空会话首页默认无内部滚动（2026-10-22，本地 CDP）
-
-`https://api.honus.top` 使用当前工作区核对，未直接访问 9998。临时启用 Agent 执行后打开默认 `1180×740` 悬浮窗并进入空会话首页：修复前会话 scroller `clientHeight=412`、`scrollHeight=500`、`scrollTop=87.2`，右侧出现滚动条；将欢迎区固定最小高度改为填满可用区后，`clientHeight=scrollHeight=412`、`scrollTop=0`，滚动条消失，页面无横向溢出。截图证据 `/tmp/agent-home-before.png`、`/tmp/agent-home-after.png`。验证后通过同一执行设置接口恢复 `enabled=false`，重新加载确认入口与窗口数量均为 0。
-
-`tests/e2e/specs/agent/configuration-hints.spec.ts` 在创建空会话并显示输入区后，新增 scroller `scrollHeight - clientHeight === 0` 断言。该用例按 D17 未运行；本轮静态检查将随当前批次执行。
-
-## Agent SSH 目标批量选择（2026-10-22）
-
-`tests/e2e/specs/agent/configuration-hints.spec.ts` 现创建两个真实测试 SSH 连接并启用执行设置；打开 Agent 的“选择 SSH 目标”弹层后，断言初始“全部停用”不可用，点击“全部启用”后两项均选中且“全部启用”不可用，点击“全部停用”后两项均取消，再保留原有单项勾选与 grants 为空断言。该用例覆盖当前 `AgentAppSurface` 直接写入 `useNativeRuns.connectionIds` 的批量交互，不派发 Run。
-
-本轮执行 `pnpm exec prettier --check`（目标文件）、目标 ESLint、`pnpm run check`、`pnpm --filter @nexus-terminal/frontend build` 与 `git diff --check`，均通过。按 D17 未运行该 E2E；当前 `api.honus.top` 的 Agent 执行设置关闭，未为视觉截图临时开启，因此弹层实际布局、窄屏换行和启用态点击结果仍待浏览器验证。
-
-## Agent 执行关闭时隐藏悬浮入口（2026-10-22，本地 CDP）
-
-使用当前工作区经 `https://api.honus.top` 核对，未直接访问 9998。登录测试账号后打开 `/settings?tab=agent`，当前“Agent 功能”开关为 `aria-checked=false`；页面中 `[data-agent-launcher-trigger]` 数量为 0，`.agent-hub-window` 数量为 0。1536×762 CSS 视口下 `document.documentElement.scrollWidth=1528`，未出现页面级横向溢出。
-
-`tests/e2e/specs/agent/host.spec.ts` 对应用例已改为：先确保执行设置关闭并断言入口与窗口均不存在；通过设置开关启用后等待入口出现并打开窗口；全局导航期间窗口保留；再次从设置关闭后入口与窗口消失。本机按 D17 未运行该浏览器行为用例；本轮实际执行 `pnpm exec eslint packages/frontend/src/features/agent/host/AgentSurfaceHost.vue tests/e2e/specs/agent/host.spec.ts`、`pnpm run check`、`pnpm --filter @nexus-terminal/frontend build` 与 `git diff --check`，均通过。未覆盖浅色主题、其他视口和启用状态下的实机开关切换。
-
-## 全局应用更新弹层与自动读取（2026-10-22，本地 CDP）
-
-使用当前工作区经 `https://api.honus.top` 核对，未直接访问 9998。代理、通知与审计标题区已无常驻刷新按钮，列表在进入页面时自动读取；代理、通知的异常提示仍保留重试，审计读取失败保留旧记录和重试。插件管理进入“App 与扩展”后自动读取已安装插件与仓库状态，标题区不再要求手动刷新；入口自身的“读取仓库与推荐”只在对应操作失败时出现。
-
-实际修改本地 `sw.js` 内容并触发 `registration.update()` 后，已有控制者的页面出现全局“新版本已就绪”弹层；1200×800 下弹层为 `560×130.1px`，标题、单句说明与“稍后／立即更新”完整显示。390×844 设备视口下以同一 `UiDialog` 打开状态核对为 `280×147.5px`，居中且无横向溢出；未点击“立即更新”执行重载，以免中断核对页。证据：`/tmp/app-update-prompt.png`、`/tmp/app-update-prompt-final-wide.png`、`/tmp/app-update-prompt-final-mobile.png`、`/tmp/agent-tools-after-auto-load.png`。
-
-待验：真实点击“立即更新”后的缓存清理、Worker 接管与登录态恢复，选择“稍后”后同一 Worker 不再提示，新 Worker 可再次提示，离线/多标签页/浅色主题组合。静态检查结果见本轮最终检查记录。
-
-## 连接管理中窄屏卡片与筛选栏自适应（2026-10-22，本地 CDP）
-
-使用当前工作区经 `https://api.honus.top/connections` 核对，未直接访问 9998。中屏筛选固定为两行：搜索独占一行，标签、当前排序、排序方向和批量开关在下一行；列表级“测试全部／连接全部”在右侧上下等分并撑满。连接卡片在 760px 以下保持名称、地址、最近连接三行左对齐，左侧类型图标垂直居中；360–760px 使用右侧竖排协议/标签块，360px 以下恢复名称同行。底部测试、编辑、克隆与连接作为同一组，左缘统一对齐类型图标列，按钮内容居中并带浅色细边框；空间足够时四个均显示图文，稍窄时前三项为图标、连接保留文字，极窄时四个均为图标且隐藏类型图标。窄屏批量栏固定为三枚选择操作与两枚批量动作两行，选择框在卡片左缘跨行居中。
-
-CDP 实测：390×844 与 640×900 均无横向溢出；390px 卡片宽 `358px`，右侧竖排标签块 `80px`，操作行 `334px`，四个图文按钮完整显示；640px 卡片宽 `592px`、操作行 `566.4px`，批量栏 `334×135.8px` 稳定为三加二两行。320×568 恢复名称行内标签并显示三图标加连接图文，256×520 隐藏类型图标并显示四图标；两种宽度均无横向溢出。
-
-证据：`/tmp/connections-final-390.png`、`/tmp/connections-batch3-390.png`、`/tmp/connections-border-640.png`、`/tmp/connections-border-320.png`、`/tmp/connections-align-256.png`。目标 Prettier/ESLint、`pnpm --filter @nexus-terminal/frontend build`、根 `pnpm run check` 与 `git diff --check` 通过。全量 `format:all:check` 被现有生成缓存 `tests/e2e/.tmp/vite-cache/**` 的大量 spacing 报错阻断，未修改该目录或无关源码。未提交、未部署。
-
-## Agent 设置总开关可见性恢复（2026-10-21，本地 CDP）
-
-最后成功发布的 `dev` 镜像标签 `ghcr.io/0honus0/nexus-terminal:dev` 的 `org.opencontainers.image.revision` 为 `d9a27832426524a13bc180225aab4eda03afff5e`；Actions `39531103157` 之后没有新的成功发布。源码对照确认该镜像与当前工作区的执行设置 API、mapper、composable 未变，失效点是设置页把总开关放在执行设置成功读取的条件内，读取失败会连同标题和控件隐藏。
-
-本地 CDP（`https://api.honus.top`，未使用 9998）验证：桌面页开关可见，实际启用→停用两次 PUT 均为 200，最终恢复停用；将 `GET /api/v1/agent/execution-settings` 返回 503 后，开关仍可见、处于禁用态并显示“不可用”，页面保留“读取已保存设置”入口。新增 `performance-settings.spec.ts` 失败态回归，检查开关可见、禁用与不可用文案。390×844 设备视口下开关仍可见，页面 `scrollWidth=304`、`clientWidth=312`，无横向溢出。证据：`/tmp/agent-switch-live.png`、`/tmp/agent-switch-390.png`、`/tmp/agent-switch-503-debug.png`。旧镜像未包含本次源码修复，须重新构建发布后才进入 `:dev`。
-
-## 代理与通知管理目录式布局（2026-10-21，本地 CDP）
-
-使用当前工作区经 `https://api.honus.top/proxies` 与 `/notifications` 核对，未直接访问 9998。桌面物理视口 `1920×1125`（CSS `1536×900`）下，两页均采用与连接管理一致的标题/主操作、概览卡、搜索筛选栏和无外框圆角列表；代理按协议显示总数、SOCKS5、HTTP 三项统计，通知显示总数及三种渠道统计。代理项显示协议、`host:port`、认证状态与图标编辑/删除，通知项显示类型、启用状态、目标地址、前三项订阅事件及同一组图标操作。通知页只保留渠道配置；投递记录已移到审计日志页。
-
-390×844 设备视口下页面实测 `scrollWidth=382`、`clientWidth=382`，无页面级横向溢出；代理与通知筛选器改为单列，卡片操作移至内容下方。320×568 下页面 `scrollWidth=312`、`clientWidth=312`，代理与通知弹窗均为 `280×536`。通知编辑器的内容区 `scrollHeight=2292`、`clientHeight=638`，标题和“取消／保存”底栏保持固定，内容独立滚动。
-
-通过界面创建两条临时 Webhook 通知渠道后删除，最终通知渠道数为 `0`；未触发真实通知投递、未测试外部供应商，也未覆盖浅色主题和更多物理设备。控制台无 error。证据：`/tmp/proxies-cdp-full.png`、`/tmp/proxies-390.png`、`/tmp/proxies-320.png`、`/tmp/proxy-form-desktop.png`、`/tmp/proxy-form-320.png`、`/tmp/notifications-with-cards.png`、`/tmp/notifications-390-card.png`、`/tmp/notifications-320.png`、`/tmp/notification-form-desktop.png`、`/tmp/notification-form-390.png`、`/tmp/notification-form-320.png`、`/tmp/notifications-390-refresh.png`。目标 ESLint/Prettier、`pnpm --filter @nexus-terminal/frontend build`、`pnpm run check`、`pnpm run format:all:check` 与 `git diff --check` 见本轮最终静态检查。
-
-通知编辑器在 1280×900 CSS 环境中实测“测试通知”按钮始终显示，未填写 URL 时按钮禁用，页面不再渲染“请填写必填字段以启用测试”提示；控制台无 error。证据：`/tmp/notification-form-test-button.png`。
-
-## 通知投递迁入审计日志（2026-10-21，本地 CDP）
-
-`https://api.honus.top/audit-logs` 现提供“操作记录 / 通知投递”两个视图，默认仍显示操作记录。通知投递视图显示时间、事件类型和投递状态，保留 unknown 数量提示、异常重试、继续加载和分页入口；通知页面不再读取或渲染投递记录。切换视图、重新读取或离开页面不会触发通知重发。
-
-测试环境当前没有真实投递记录，空态显示“暂无投递记录。”。为核对终态行布局，使用 Playwright 在浏览器内只读拦截投递列表响应并注入 `sent`、`failed` 两条合成记录，未向 webhook 或外部供应商发送请求；桌面与 390 设备视口下页面均无横向溢出（窄屏实测 `scrollWidth=304`、`clientWidth=312`），状态文案与图标完整进入 DOM 且为点击命中元素。控制台无 error。证据：`/tmp/audit-log-tabs-desktop.png`、`/tmp/audit-deliveries-desktop.png`、`/tmp/audit-deliveries-390.png`、`/tmp/audit-deliveries-rows-desktop.png`、`/tmp/audit-deliveries-rows-390.png`。真实通知终态读取、分页和失败恢复仍需完整 E2E 覆盖。
-
-## 审计日志时间线重构（2026-10-21，本地 CDP）
-
-操作记录由表头加详情块改为时间线：左侧时间列、事件类别节点、事件名称/范围/HTTP状态与用户/来源IP/对象/路由分层展示，去掉逐行边框和原始键值 `<pre>`。页头提供操作记录/通知投递切换、关键词、操作类型与全部时间/24小时/7天/30天筛选；时间范围实测发出带 `from/to` 的请求，筛选、重新激活或失败重试会按当前时刻重算范围，翻页继续沿用同一 `activeQuery`。通知投递沿用时间线骨架，显示短状态、渠道编号和更新时间；渠道编号为空时显示“渠道已不可用”，不再渲染 `#null`。
-
-`https://api.honus.top` 当前工作区核对：桌面物理视口 `1920×953`（CSS `1536×762`）、390×844 与 320×844 均无页面级横向溢出，320 下对象标签与 UUID 正常换行。用 `defaultUiTheme` 令牌临时切换浅色后，桌面仍无横向溢出和错误提示；核对后恢复原主题，不写入外观偏好。测试环境没有真实投递记录，使用浏览器内 Pinia 展示状态只读注入 `sent`、`failed`、`unknown` 三条合成记录，未派发通知或写入服务端；桌面三行宽度一致，390 行宽 `342px`，未知数量提示与三种状态标签完整。控制台无 error，运行时无 exception。证据：`/tmp/audit-refined-desktop.png`、`/tmp/audit-refined-light-desktop.png`、`/tmp/audit-refined-deliveries-desktop.png`、`/tmp/audit-refined-390.png`、`/tmp/audit-refined-deliveries-390.png`、`/tmp/audit-refined-320.png`。
-
-审计专用 UI E2E 使用独立端口启动，`specs/ui/audit-log-filtering.spec.ts` 两项全部通过：分页/虚拟列表、筛选、时间范围 `from/to`、窄屏无溢出，以及续页失败保留旧记录并重试。夹具时间戳改为当前时间以符合客户端对时间范围的严格校验；原始日志 `/tmp/nexus-audit-e2e-final.log`。真实投递分页、失败恢复与完整像素组合仍需回归。
-
-## SSH 主机密钥面板（2026-10-21，本地 CDP）
-
-`https://api.honus.top/connections` 的“更多操作 → SSH 主机密钥”使用当前本地工作区核对，未直接访问 9998。面板改为固定标题区、独立滚动内容和固定底栏；安全说明不再占据列表上方空间，改为标题右侧与全站一致的标准 `UiInfoHint`，悬停或键盘聚焦显示完整文案。
-
-桌面视口下弹窗 `896×730.4`，已信任密钥为单一容器内四行，实测行高约 `86.4px`，指纹完整显示且无横向滚动；手动建立信任的主机/端口同排，SHA-256 输入与 `93.6×32` 的紧凑“确认信任”按钮同排。面板只有底部一个“关闭”按钮，列表行“移除信任”仍打开原二次确认；实际点击后取消，未产生 `/host-keys/remove` POST。
-
-390×844 CSS 设备视口下弹窗 `x=16`、宽 `350.4`、高 `760`，主机与端口改为单列，指纹输入与 `93.6×32` 的确认按钮保持同行，按钮左侧无空缺；320×568 下同排布局仍无横向溢出（内容区 `scrollWidth=270`、`clientWidth=270`）。未执行确认信任或实际移除写入，未覆盖浅色主题、其他物理设备和弱网未知结果。
-
-证据：`/tmp/host-keys-refined-desktop-form.png`、`/tmp/host-keys-390-final.png`、`/tmp/host-keys-320-final.png`。静态结果为目标 ESLint/Prettier、`pnpm --filter @nexus-terminal/frontend build`、`pnpm run check`、`pnpm run format:all:check` 与 `git diff --check` 全部通过。
-
-## 连接表单细节、数字步进与列表密度（2026-10-21，本地 CDP）
-
-`https://api.honus.top/connections` 使用本地 CDP 核对当前工作区，未直接访问 9998。连接列表第一张卡与工具栏之间实测 `14px` 间距，卡片高度 `88px`，仍为标题/标签、地址、上次连接/状态三行；标签筛选触发器和展开选项均为居中文本，排序控件同为中心对齐。
-
-添加连接弹窗使用不透明表单表面，分区线为浅色单线。端口框隐藏浏览器原生 spinner，替换为主题化上下按钮；实际点击将端口由 `22` 增至 `23`，再连续降为 `21`，`22→23→21` 的 `valueAsNumber` 与输入值同步。`type=number` 计算样式为 `appearance: textfield`，步进按钮共两个。SSH“测试连接”改为普通基础按钮尺寸，与“确认添加／取消”同为 `32px` 高；测试延迟说明位于按钮右侧信息图标，悬停后浮层 `z-index=200`，`elementFromPoint` 命中 `info-hint-panel`，不再被模态层遮挡。
-
-390×844 CSS 视口下，添加弹窗实测 `x=16`、宽 `350.4`、高 `760`，无横向溢出；底部测试行在操作组上方，“确认添加／取消”各宽 `153.4px` 且完整位于面板内。批量编辑弹窗为 `x=16`、宽 `350.4`、高 `584.4`，标题显示“已选 2 项”，分区标题均带统一强调线，内容与底栏无横向溢出。桌面批量编辑使用同一不透明 `ui-form-surface`，配置/凭据分区、滚动内容和固定底栏保持原提交语义。
-
-证据：`/tmp/connections-number-stepper.png`、`/tmp/connections-tag-select-center.png`、`/tmp/connections-add-final-390.png`、`/tmp/connections-batch-final-390.png`、`/tmp/connections-add-final-1536.png`、`/tmp/connections-batch-final-1536.png`。本轮未保存连接、未触发真实 SSH 测试，也未核对浅色主题和更多物理设备；静态结果为目标 ESLint/Prettier、`pnpm --filter @nexus-terminal/frontend build`、`pnpm run check`、`pnpm run format:all:check` 和 `git diff --check` 全部通过。
-
-## 添加连接跳板机链样式（2026-10-21，本地 CDP）
-
-`https://api.honus.top/connections` 的添加连接弹窗中，跳板机区域已由逐行描边表单改为编号步骤链：宽屏实测两项时序号 `1/2` 由细连接线串联，添加按钮位于链尾；下拉展开后每个选项显示连接名称和 `用户名@主机:端口`。实际将第二跳从 `amd` 替换为 `hostbrr` 后 `data-value` 由 `1` 变为 `4`，移除第一跳后步骤由 2 降为 1，控制台无 error。
-
-390×844 设备视口下页面与弹窗无横向溢出（页面 `scrollWidth=304`、CSS 视口 `312`；弹窗 `scrollWidth=270`、`clientWidth=270`），跳板行与两个下拉均完整可操作。证据：`/tmp/connection-jump-after-modal-1.png`、`/tmp/connection-jump-after-menu.png`、`/tmp/connection-jump-after-390.png`、`/tmp/connection-jump-after-390-menu.png`。本批未保存或创建连接；真实保存与建链仍按既有测试范围。
-
-## 根磁盘占用百分比统一（2026-10-21，本地 CDP）
-
-修复前本机 `Nexus 本机` 显示约 72%，同根分区的 `pve_debian` 显示约 76%。`df -kP /` 的 Capacity 为 `76%`；两边接口的已用/总容量一致，但远端采用 `used / (used + available)`，本机采用 `used / total`。统一后两个 Adapter 共用 `platform/system/disk-percent.ts`。
-
-登录 `honus` 后经 `https://api.honus.top` 实测：`GET /api/v1/system/status` 为 `diskUsed=21686456`、`diskTotal=30154612`、`diskPercent=71.91754282893774`；`GET /api/v1/system/ssh-resources/6`（`pve_debian`）返回完全相同的三项。CDP 仪表盘的本机与 `pve_debian` 根磁盘均显示 `72%`，圆环 `stroke-dashoffset` 均为 `28`，截图 `/tmp/nexus-disk-percent-unified.png`。该结果只覆盖当前根分区和当前测试环境；非根挂载、其他文件系统预留策略及外部主机仍按各自真实采样。
-
-静态：目标文件 ESLint、`pnpm --filter @nexus-terminal/backend build`、根 `pnpm run check`、`pnpm run format:all:check` 与 `git diff --check` 通过。
-
-## 连接管理轻量布局与添加弹窗滚动（2026-10-21，本地 CDP）
-
-`https://api.honus.top/connections` 在 1536×900、1024×768、768×900、390×844、320×568 核对：统计区为四张独立概览卡，名称、类型与数量横向排列，1536/1024 单排、768/390/320 两列且 320px 无内部溢出；卡片无描边，列表九像素间隔、整行圆角底卡无额外边框，页面无横向溢出，六条连接均保留。标签筛选为可访问下拉，实测由“所有标签”切换到“本地”后列表即时变为 0 条、空状态正确，刷新后仍保持“本地”，随后恢复为“所有标签”。导航栏连接管理图标已替换为插头；更多菜单为不透明实心面板，背景图与 backdrop 均为 none；测试、编辑、克隆的 ghost 图标背景透明、无阴影和玻璃滤镜。
-
-添加新连接弹窗在 1536×900 与 390×844 均限制在视口内，表单内容独立滚动到底，底部“确认添加／取消”和测试说明保持可见；桌面 fieldset 可滚动 442px，移动端可滚动 523px，滚轮输入后 `scrollTop` 从 0 变为 400，脚本模式开关以既有 UiSwitch 呈现，控制台无错误。证据：`/tmp/connections-v4-{1536,1024,768,390,320}.png`、`/tmp/connections-v4-more-1536.png`、`/tmp/connection-modal-v3c-{top,bottom}-1536.png`、`/tmp/connection-modal-v3c-{top,bottom}-390.png`。Frontend build、根 `pnpm run check`、全量 `format:all:check` 与 `git diff --check` 通过。
-
-## Backend Pino与网络Toast/终端失败等待（2026-10-21，待远程）
-
-Backend由NativeLogger切换Platform PinoLogger，原Logger及Operations应用链不变；前后端均为catalog Pino9.14.0。后端同步stderr、白名单time/severity/code/facts、32facts/16KiB及级别过滤保持，移除旧实现和安装路径，lock仅新增backend对已有Pino的依赖。
-
-本次源码核对确认日志等级设置没有移除：PreferencesSettingsPanel保留前端选择/保存与BackendLoggingPanel；前端Preferences watcher调用setFrontendLogLevel设置Pino.level，后端GET/PUT /settings/logging经LoggingService的原版本CAS和单调激活调用PinoLogger.setThreshold。后端启动加载持久级别及effectiveLevel读取保留，前端trace/debug/info/warn/error/silent、后端debug/info/warn/error/silent不变。真实保存、重启和冲突/unknown交互仍待远程验证；用户已授权本批相关改动提交推送，无关工作区变更不纳入。
-
-Frontend HTTP传输失败集中由App安装回调汇入一条驻留网络Toast，主动取消不报告；相同种类/文案可见期间去重，关闭后后续错误仍可再提示。失败Toast默认不自动消失，成功/信息/警告仍3秒，显式时长优先。Agent目录自绘失败卡取消；共享操作反馈、Connections初始读取、Preferences及Appearance保留状态围栏，但不对已识别网络故障重复Toast。关闭按钮44×44px、标签/悬停/焦点，窄屏通知容器受视口约束。权限/业务拒绝与unknown写入不改成成功，不自动重放。
-
-按用户后续明确要求，原“未连接”中性行改为Files/Status留白（含内嵌、浮窗及移动状态弹层）。建连失败后Runtime停止自动重复建连及foreground自动重试，保留原原因；Terminal过滤控制字符及1000字符后红字输出原因，空一行显示任意键重试，重试按键不发送远端。显式重试仍核对主机指纹，recoveryRequired的未知所有权继续原恢复限制、不显示任意键提示；晚close/error不覆盖等待重试的原失败原因。
-
-按D17不新增或运行本地行为测试/浏览器/E2E。待远程：并发JSON/binary/Axios超时/断流只有一条网络Toast；取消/路由隐藏不误报；持续15秒以上仍只有一条、手动关闭后后续失败可再提示；非网络拒绝和写入unknown仍可见且不重放；Agent失败后由既有launcher/重新打开触发只读刷新；Toast窄屏/长文本/44px触控/键盘关闭；失败终端红字及空行、任意非修饰键只发起一次重连且不泄露按键、相同失败再次可输出；失败后可长期等待、foreground/晚socket关闭不重连或覆盖原因；主机信任及所有权未知仍安全。Pino真实stderr JSON、无pid/hostname/level额外字段、阈值/silent、边界、多owner恢复及写入失败待远程核对。不把构建当行为通过；未提交推送。
-
-静态结果：根pnpm run check（双端ESLint/类型及Shared构建）、Backend build与Frontend build通过，日志 `/tmp/nexus-toast-pino-{check,backend-build,frontend-build}.log`。全量format:all:check仅由工作区既有 `packages/frontend/src/app/shell/AppHeader.vue` 的Prettier格式问题阻断（`/tmp/nexus-toast-pino-format.log`），未更改该无关文件。最终Toast/终端/Runtime/Pino组件ESLint、最终Frontend重建和涉及文件Prettier均通过，日志 `/tmp/nexus-toast-pino-{final-eslint,final-frontend-build,targeted-format}.log`；git diff --check通过。本批没有行为测试、提交、推送或部署。
-
-用户授权提交推送后，重新执行工作区pnpm run check通过（`/tmp/nexus-pino-precommit-check.log`）；仅暂存本批代码及相关文档段落，排除其它页面、最近连接与测试改动。将暂存区完整导出至 `/tmp/nexus-pino-submit-F0ydjV`，使用独立Shared构建及现有依赖检查实际提交快照，pnpm run check、pnpm run build与pnpm run format:all:check全部通过（`/tmp/nexus-pino-submit-validation.log`）；工作区无关AppHeader格式问题不在提交快照内。日志设置保存、真实网络与终端交互仍按D17待远程回归，不将静态通过称为行为验收。
-
-## Workspace 未连接面板紧凑状态（2026-10-21，待远程）
-
-后续用户已将此处中性未连接提示改为留白，并要求终端红字/空行/任意键重试；当前实现和待验范围以上一节为准，以下为首轮修改和静态证据。
-
-内嵌和浮窗FileManager及桌面/移动弹层StatusMonitor消费原session.state的connected/connecting事实；connected为组件必填输入，全部实际宿主显式传入。未连接时只显示小型中性图标/提示，不显示文件not_connected红字、大块等待数据或持续spinner；连接中与首轮读取为12px小型加载行，不经过Status缩放容器放大。连接后原目录、指标、趋势、错误映射不变；未连接时Files工具栏与scope暂停，终端仍负责具体连接失败和手动重连。拒绝主机信任不会自动信任或重新连接，新增文案同步中英日。
-
-按D17不新增或运行本地行为测试/浏览器专项/E2E。待远程核对：首次未信任主机弹窗等待、拒绝与取消后两个面板均停止加载；idle/error/disconnected中性提示；手动重连等待及成功首轮数据恢复；原有成功连接断线不保留旧目录/指标，失败由终端保留；已连接的文件权限/Files失败与采样失败不被中性状态掩盖；浮窗/内嵌及移动弹层一致，未连接工具栏不可操作，晚到下载/写入意图不交付；窄面板及Status缩放下提示保持紧凑，深浅主题及辅助技术可读。不宣称视觉或真实时序通过；本批未提交推送。
-
-静态结果：根check、Frontend build、最终前端vue-tsc、五组件ESLint、全量format:all:check及git diff --check通过。日志为 `/tmp/nexus-workspace-idle-{check,build,final-types,final-eslint,format}.log`。未运行行为测试，未提交推送。
-
-## Dashboard 多端请求与后端缓存（2026-10-21，待远程）
-
-本地dev删除SSH资源HTTP与本机状态的全局4请求门槛；SSH复用既有按主机/配置的共享在途及结果缓存，TTL改为完成后起算，本机新增成功结果3秒缓存与单一共享采样。SSH资源错误对象仍按原结果缓存策略处理，抛出的失败不缓存；本机采样失败不缓存。每个调用的会话复核、SSH配置复核、真实任务追踪和关闭失败语义保留。不新增整响应缓存，不改前端及诊断接口。
-
-按D17本批不新增/运行行为测试或收集E2E，仅做静态验证；用户仅授权本地dev修复，不提交、推送或部署。待远程覆盖：至少9个不同有效登录会话同时等待两个入口，同主机只派发一次采样；缓存期内直接复用，慢采样完成后保留完整TTL，过期并发只采一次；本机失败后下一请求可重采；SSH配置/凭据修改、删除及缓存重置不交付旧配置结果；缓存命中与等待中撤销会话均拒绝；取消一个HTTP等待不停止其它调用共享的采样；10秒/120秒等待超时后任务仍归原owner，停机禁止新采样及缓存回填并汇总真实失败。不据此宣称多端实测通过。
-
-静态结果：Backend check/build（含Shared build）、两Service ESLint/Prettier、根pnpm run check、全量format:all:check及git diff --check通过。日志为 `/tmp/nexus-status-cache-{check,build,root-check,format}.log`。未运行行为测试。用户随后授权仅提交本批相关改动，不推送或部署。
-
-## SSH 长连接观测容量（待远程）
-
-交付授权：用户随后明确要求提交与推送本批监控修改；既有未验范围不变，不部署或额外触发远程任务。
-
-2026-10-21 首轮源码核对发现，状态采样清理失败后 run 和 Workspace 正确保留原任务，但 startStatus 的 finally 仍按周期继续采样；连续清理失败会占满原有8个共享名额并以 limit_exceeded 覆盖原始 operation_unknown。先在具名清理失败分支停止订阅后再报告原始安全失败，保留原资源、任务及关闭失败汇总。随后用户明确要求9个终端不能因观测总数被拒绝，本轮删除 run 的 tasks.size >= 8 准入分支，不提高为另一个固定数字；保留原45秒期限、串行采样、授权、取消和清理证据。Dashboard请求级并发、协议输出容量和Agent机器操作预算不变。
-
-按 D17 本地只进行源码、类型、格式和构建检查，不新增或执行行为测试。待远程覆盖：至少9个真实Workspace同步发起并保持采样，须确保9个采样实际同时在途而非只有9条空闲终端连接；9路与Dashboard/Docker混合不因全局任务数拒绝；单Workspace长时间串行不重叠；首次清理失败后只报告一次operation_unknown、不再自动派发采样，其它Workspace仍可采样；stop/断开/停机与失败并发时baseline仅在原采样结算后清除、未确认任务保留且停机仍汇总失败；普通读取失败后恢复及输出容量拒绝仍正常。现场触发条件及SSH关闭失败技术原因尚未复现，不以静态检查宣称真实长连接验收通过。代码生效需正常交付及重启，不自动修改运行中进程或释放未知资源。
-
-静态结果：Backend check/build（含 Shared build）、变更代码 ESLint、涉及文件 Prettier 与 git diff --check 通过。根 check 与全量格式均被既有 DashboardPage.vue 的133/137/149行声明空行错误阻断，未修改其它工作区代码。日志为 `/tmp/nexus-observation-capacity-{check,format,backend-check,build}.log`；本批未提交、推送、部署或触发远程任务。
-
-取消全局任务上限后重新执行：Backend check/build（含Shared build）、变更代码ESLint、涉及文件Prettier及git diff --check均通过；根check/全量格式仍由上述无关DashboardPage.vue的三处空行错误阻断。新日志为 `/tmp/nexus-observation-unlimited-{check,format,backend-check,build}.log`。未运行行为测试，尚未提交、推送或部署。
-
-## 服务端最近连接与仪表盘排序（2026-10-21，本地 CDP）
-
-子任务先在 `/home/honus/nexus-terminal-recent` 完成，随后合入主工作区。连接列表与单项的 `lastConnectedAt` 改为必填毫秒/null，后台只在 PTY 建立或桌面 guacd ready 后持久记录，前端删除本地 recent/markConnected 并改为成功后只读刷新。仪表盘默认按最近使用降序，可选名称、类型、修改时间或创建时间；名称/类型切换时默认升序，时间字段默认降序。独立“最近连接”区块删除，最近使用信息并入连接卡片，摘要标签改为“SSH 检测”。
-
-源码审核覆盖 Shared codec、Targets 的 storage/Model/public/HTTP 投影、初始 v1 精确签名、Remote 两类成功/取消/关闭链、Frontend API/mapper/Store/runtime，以及现有测试消费者。时间允许晚于配置 updatedAt，但不能早于 createdAt；历史写入不推进配置版本，SQL 同时核对 id/version/createdAt/type，旧结果或较小时间不覆盖新事实。
-
-`https://api.honus.top` 本地 CDP 实测：打开 `akko` SSH 后 API 返回新的毫秒 `lastConnectedAt`，返回仪表盘该连接自动排到首位并显示“39 秒钟前”；名称排序为 A→Z，切回最近使用为降序；后端重启后重新加载仍读到同一时间并保持首位。通过 CDP 路由拦截临时令 `dashboardShowRemoteResources=false` 核对了检测关闭态，摘要显示 `6 / 连接总数 / — / SSH 检测`，区块徽标显示“检测关闭”，SSH 卡片提供“前往设置”；未修改真实账号设置。本机资源随后按重构前样式并入顶部概览：桌面移除独立卡片外框，以竖向分隔线与连接摘要同排；700px 以下恢复上下排列并改用细分隔线。1440×900、1024×768、768×900 下三项指标保持单排且页面无横向溢出，390×844 下资源指标仍在同一行、摘要与资源上下排列；1440×900、1024×768 页面无纵向滚动，768×900、390×844 允许纵向滚动，六张连接卡和五张活动卡均保留。证据：`/tmp/dashboard-recent-1440.png`、`/tmp/dashboard-recent-1024.png`、`/tmp/dashboard-recent-768.png`、`/tmp/dashboard-recent-390.png`、`/tmp/dashboard-after-ssh-connect.png`、`/tmp/dashboard-detection-off.png`、`/tmp/dashboard-local-ref-1440.png`、`/tmp/dashboard-local-ref-1024.png`、`/tmp/dashboard-local-ref-768.png`、`/tmp/dashboard-local-ref-390.png`。
-
-Shared build、根 `pnpm run check`、Backend/Frontend build、`pnpm run format:all:check` 与 `git diff --check` 通过。按 D14 保持唯一初始 v1；本地测试库在备份后更新安装标记，并把旧桌面秒时间规范为毫秒，该开发环境处理不构成产品迁移。RDP/VNC 成功建连、跨浏览器持久读取、克隆/导入初始 null、备份往返、配置变更与并发单调写入、存储失败/未知提交、浅色主题和扩大视口组合仍待回归，不把本轮 CDP 与静态结果扩大为完整验收。
-
-开发前读取 [AGENTS](../AGENTS.md)，产品要求见 [USAGE](../USAGE.md)，当前工作见 [PLAN](../PLAN.md)。本文维护实际验证入口、覆盖边界和验收证据。
-
-## 仪表盘类型分区、环形指标与等高卡片（2026-10-21，本地 CDP）
-
-Dashboard 连接区改为按实际存在的 SSH/RDP/VNC 类型分区，筛选后没有内容的类型不渲染标题。SSH 卡片使用 CPU、内存、根磁盘环形指标；环形 `stroke-dasharray: 100`，进度偏移取 `100 - 百分比`，缺测显示 `—` 而非补零。状态下方以小字号展示上次连接相对时间与本次刷新时刻，以细竖线分隔；SSH 卡片高 `188px`，资源成功、等待、检测关闭和读取失败共用相同宽高。RDP/VNC 改为 `76px` 紧凑卡片，只保留连接信息、状态与上次连接时间，删除底部资源占位图标区，不混入 SSH 资源指标。
-
-`https://api.honus.top` CDP 在 1536×762 及窄屏核对：五张 SSH 卡片高度均为 188px，RDP 卡片为 76px，宽度一致；状态下方时间为“相对时间 | HH:mm:ss”且无横向溢出，卡片无内部溢出；CPU/内存/磁盘偏移分别与显示百分比相符；只有 SSH、RDP 两个实际类型分区出现；窄屏筛选行改为标签、排序、方向、计数四列，管理入口隐藏，页面无横向溢出。返回 Dashboard 时最后一次资源样本继续显示，不在刷新结果到达前跳变为等待态。
-
-独立端口运行完整 Dashboard E2E：`specs/ui/dashboard-workflows.spec.ts` 与 `specs/mobile/dashboard-mobile.spec.ts` 共 8 项通过，覆盖搜索/标签/排序持久化、检测关闭、失败/等待等高、RDP 启动、SSH 资源并发和移动端控件布局。`node tests/frontend/system-overview.integration.mjs` 通过缓存保留、取消晚响应、错误状态与会话清理断言。Frontend build（3925 modules）、ESLint、Prettier 和 `git diff --check` 通过。证据：`/tmp/dashboard-final-1440.png`、`/tmp/dashboard-final-390.png`、`/tmp/dashboard-final-rdp-section.png`；未执行 RDP/VNC 成功建连、浅色主题和全部缩放组合。
-
-## 登录页正式 UI 重构（2026-10-21，本地 CDP）
-
-按用户明确要求将正式 `LoginView` 重构为当期登录页设计稿，保留密码登录、TOTP 二阶段、Passkey、CAPTCHA 插槽、安全错误映射和原路由跳转。右侧取消独立卡片边框、底色与阴影；主题按钮移到右侧面板右上角；普通登录不再显示工作区副标题；登录主按钮改为品牌粉紫纯色、无渐变和位移动效；Passkey 入口始终显示，并移除登录页的 `has-configured` 预探测及对应前端 API/状态。新增文案同步中英日三语。
-
-`https://api.honus.top` 本地 CDP 已验证 1440×900、1024×768、1024×600、768×1024、390×844、320×568 和 844×390 均无页面级横向/纵向溢出；矮横屏使用紧凑双栏，主题按钮与 Passkey 入口完整可见。登录页网络记录只有 needs-setup、status、captcha config，未发起 `/passkey/has-configured`。错误密码返回 401 并显示“用户名、密码或验证码不正确。”且停留登录页；`honus` / `honustest` 返回 200 后跳转仪表盘。密码显隐、记住我、主题切换和 localStorage 持久化均正常。Passkey 点击后 authentication-options 返回 200 并进入浏览器认证等待；本次未配置虚拟凭据，不把该结果扩大为 Passkey 登录成功。测试环境未启用 2FA/CAPTCHA，二者只核对原调用链与插槽保留。
-
-证据：`/tmp/login-passkey-1440x900.png`、`/tmp/login-passkey-390x844.png`、`/tmp/login-passkey-844x390.png`、`/tmp/login-button-1440-light.png`、`/tmp/login-button-1440-dark.png`、`/tmp/login-button-390-light.png`、`/tmp/login-final-1440-light.png`、`/tmp/login-final-1440-dark.png`、`/tmp/login-final-390-light.png`、`/tmp/login-final-844x390-light.png`、`/tmp/login-wrong-password.png`、`/tmp/login-correct-password.png`。移除 discovery 后再次执行 `honus` / `honustest` 登录，401/200 分支与跳转保持。静态结果：Node 22.23.1 / pnpm 11.26.0，根 `pnpm run check`、`pnpm run format:all:check`、`pnpm --filter @nexus-terminal/frontend build` 与 `git diff --check` 均 exit 0；未运行 `tests/frontend/auth.integration.mjs`，不把静态与本次 CDP 结果扩大为完整认证回归。
-
-窄屏自适应补测：使用同一 `https://api.honus.top` CDP 环境，在不超过 560px 的窄屏隐藏品牌图片区，仅保留垂直居中的登录表单，并在标题上方显示 64px 项目图标；主题按钮固定在右上角。430×932、390×844、360×780、320×568 的登录卡顶部位于 222.9、178.9、151.4、58.4px，卡高为 486.2、486.2、477.2、449.2px，深浅色均无横向溢出或控件裁切；320×568 错误密码态文档高 568px，无需额外滚动。560×800 仍显示图标，561×800 起隐藏图标并恢复品牌区；600×760、768×1024、900×800、844×390、812×375 保持品牌区与原布局。布局调整后以 `honus` / `honustest` 登录仍成功跳转。该轮只调整 `LoginView` 响应式样式与产品说明，未改认证请求、Shared 契约或登录逻辑。
-
-证据：`/tmp/narrow-inspect-430.png`、`/tmp/narrow-inspect-390.png`、`/tmp/narrow-inspect-360.png`、`/tmp/narrow-inspect-320.png`、`/tmp/narrow-inspect-768.png`、`/tmp/narrow-inspect-844.png`、`/tmp/narrow-dark-430x932.png`、`/tmp/narrow-dark-390x844.png`、`/tmp/narrow-dark-320x568.png`、`/tmp/narrow-dark-768x1024.png`、`/tmp/narrow-dark-844x390.png`、`/tmp/narrow-error-320x568.png`、`/tmp/login-success-390x844.png`、`/tmp/login-breakpoint-560x800.png`、`/tmp/login-breakpoint-561x800.png`、`/tmp/login-breakpoint-600x760.png`、`/tmp/login-breakpoint-900x800.png`。
-
-登录切换补测：在 `https://api.honus.top` 用 CDP 将 DashboardPage 懒加载延迟 900ms。修复前导航栏在 `/login` 上提前出现，逐帧记录到约 1.8 秒登录页与导航栏共存；修复后 148 个登录页帧均只有登录界面，首个 `/` 帧才同时出现仪表盘与导航栏。`tests/e2e/specs/auth/setup-login.spec.ts` 的登录用例加入同样的延迟与逐帧断言；因默认 `3001` 已被现有测试环境占用，改用独立端口运行完整 `setup-login.spec.ts`，6 项全部通过（23.6s）。证据：`/tmp/login-transition-after-baseline.png`、`/tmp/login-transition-fixed.png`。
-
-## 目录预读50ms与上级目录（待远程）
-
-2026-10-21 将 Browser 两处预读定时统一到50ms常量；“..”行的鼠标进入和键盘定位调用同一预读队列，离开行取消排队。父路径复用既有parentOf，根目录不预读自身；点击仍走原goParent，缓存、在途合并、失败/失效隔离和150ms spinner不变。
-
-待远程验证直接进入深目录后对未缓存父目录的悬停/键盘预读、50ms前离开不派发、返回父目录复用在途请求/缓存、根目录不增加读取，以及普通目录原回归。既有3项缓存E2E可覆盖通用预读和合并，但尚无本次上级目录专项的执行证据。D17仅静态，不新增或运行本地行为测试，本轮已获提交推送授权，不额外触发远程任务或部署。
-
-静态结果：根 `pnpm run check`、`pnpm run format:all:check`、`pnpm --filter @nexus-terminal/frontend build` 和 `git diff --check` 均 exit 0；日志为 `/tmp/nexus-parent-prefetch-{check,format,build}.log`。源码核对两个调度入口共用50ms、父路径与点击目标一致、鼠标/键盘均接入、根目录不预读自身，以及原权限/单任务/缓存失效约束不变。静态不等于已验证真实交互时序。
-
-## 文件管理器连接中展示（待远程）
-
-2026-10-21 源码定位：WorkspaceRuntimeSession.runConnect 在首次握手前调用 markCapabilitiesDisconnected，Files 缓存失效订阅因 not_connected 清列表并设置错误；此时 FileManager 原先仅判断 browser.loading/error，无法区分真正失败与 SSH 正在连接。连接成功后的目录预热仍会正常清错加载，因此现场表现为刚连接期间短暂显示错误。
-
-现由两个实际宿主同步传入 idle/connecting/reconnecting 的连接等待状态，FileManager 将其与目录读取合并展示加载，连接中暂停工具栏和原 view scope。连接成功后继续使用原目录读取，error/disconnected 与真实 Files 错误仍走原失败提示；不修改 Channel 准入、超时、缓存失效或服务端协议。
-
-待远程覆盖慢首次连接/主机密钥确认等待时只显示加载且不派发文件操作、成功后展示目录、连接失败/取消后不常驻加载、内嵌与浮窗一致、重连和 Files ready 延迟/失败。按 D17 本批仅做源码、类型、格式和构建检查，不新增或运行本地行为测试；本轮已获提交推送授权，不额外触发远程任务；旧提交 E2E 不自动证明本次展示修复已通过。
-
-静态验收：根 `pnpm run check`、`pnpm run format:all:check`、变更组件 ESLint、`pnpm --filter @nexus-terminal/frontend build` 与 `git diff --check` 均 exit 0；日志为 `/tmp/nexus-files-connecting-{check,format,build}.log`。源码复审覆盖两个宿主、连接与目录读取的合并加载、真实失败不被吞掉、视图暂停及拖放异步结果/失败在原 permission 下交付。产品说明已同步 USAGE，未将静态结果扩大为现场或远程行为 PASS。
-
-## 镜像发布依赖审计（2026-10-21）
-
-[E2E Actions 39528858672](https://github.com/0honus0/nexus-terminal/actions/runs/39528858672) 的被测 SHA 为 `1df0ee036e66d253c0bdeb812f1934f7a98e0391`，八组 Playwright、检查/格式/构建、Docker smoke、runner image 与耗时统计均 success；可选截图 skipped。逐组原日志的通过数为48（47+1）／42／54（52+1+1）／61／46／56／79／69，合计455项；新增的4项文件管理器修复用例及3项缓存用例全部通过。原日志保存在 `/tmp/nexus-e2e-39528858672.log`，不扩大为未执行的权限/断线等组合或本地未提交 UI/Agent 修改已验收。
-
-[Publish Actions 39529899552](https://github.com/0honus0/nexus-terminal/actions/runs/39529899552) 使用 `164823c2e8b5bf26e04e909de066e5b73aec27bd`，相对被测提交只更新 `scripts/e2e/duration-estimates.json`。失败发生于 `Prepare publication / Audit production dependencies`，`pnpm audit --prod --audit-level=high` 返回1；镜像构建和推送 job 均未启动，不是 E2E、GHCR 登录或 Docker 构建失败。
-
-实际阻断项为 `follow-redirects@1.16.0` 的 GHSA-q3jh-wrc6-jgq8、GHSA-8r9p-f939-6h3c，以及 `vite@8.3.2` 的 GHSA-587h-7wmj-h5pm。Vite 虽声明为开发依赖，也通过 Tailwind/Vue Router 的依赖图进入生产审计，不能简单用调整依赖分类绕过。失败日志为 `/tmp/nexus-publish-39529899552-failed.log`。
-
-本批将 Vite 最低版本提高为 `^8.3.4`，目标更新锁定 `vite@8.3.4`、`follow-redirects@1.16.1` 及 Vite 的实际 PostCSS/nanoid 子依赖；保留原发布审计等级和 workflow。`pnpm audit --prod --audit-level=high`、`pnpm install --frozen-lockfile`、根 `pnpm run check`、`pnpm run format:all:check`、Frontend build 与 `git diff --check` 均 exit 0。审计仍有1项 moderate（`@modelcontextprotocol/client`），high/critical 为0，不宣称全部漏洞清零。日志为 `/tmp/nexus-publish-{deps-update,audit,install,check,format,build}.log`，结构化审计为 `/tmp/nexus-publish-audit.json`。本轮已获提交与推送授权；未额外触发远程工作流或部署，新依赖图不继承旧 E2E 的行为结论。
-
-## 目录切换缓存回归（已远程验收）
-
-2026-10-21 按用户要求新增会话内5分钟目录快照与意图预读，默认容量20目录/20,000项/约8MiB估算数据；不改Shared/Backend协议、不持久化。新增 `tests/e2e/specs/ssh/file-manager-cache.spec.ts` 的3项真实浏览器/SSH回归已在上述 Actions 的第6组全部通过：
-
-| 场景                          | 有效断言                                                                                                                                                                                                                                                            |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 缓存命中、五分钟TTL和显式刷新 | 第一次目录访问捕获真实WS列表请求及成功列表回执；返回新鲜目录不增请求、不显示转圈；手动刷新确实新增请求并显示外部创建文件。浏览器时钟推进121秒仍命中缓存，再推进181秒后必须重新读取并显示外部新增文件；推进前等待已派发Workspace请求结算，不伪造响应或推进后端时钟。 |
-| 真实预读与前台在途合并        | 悬停目标目录，受控OPENDIR延迟计数证明预读已派发；当前路径/列表不变且不转圈，其他目录不预读；在途点击只使用同一列表请求，随后进入和返回均显示正确条目。                                                                                                              |
-| 写入失效与晚返回隔离          | 先缓存另一目录，启动真实延迟预读，再经New File界面创建文件；核对成功刷新及磁盘精确零字节内容。等预读实际返回后，当前目录仍不变，再进入两目录均要求新增列表请求，证明旧缓存和晚预读未复活。                                                                          |
-
-已有 `file-list-profile.spec.ts` 的大目录场景在每个冷导航样本前显式刷新根目录使缓存失效；仍要求两个大目录各有3次完整列表请求，根目录每样本真实刷新，成功回执全部收敛。延迟OPENDIR计数与捕获的实际请求总数精确相等，避免TTL影响根目录返回次数，也不将缓存命中误算成真实SFTP性能改善；既有虚拟行、排序和末行可达断言不变。
-
-源码复核覆盖：写入派发前/结算后及传输接纳/终态失效、未知结果不重放、旧代次成功和失败不发布、缓存失败抑制重复预读、断线/Files错误清展示并保留具名错误码、预读最大1项/最新候选、在途共用上限8项（含失效代次）、停用/卸载清排队及订阅。已派发只读任务仍跟踪至原Channel结算，前台可复用，不因预读取消破坏共用SFTP。
-
-最终静态验证：根 `pnpm run check`、`pnpm run format:all:check`、Frontend build、变更spec的独立TypeScript及 `git diff --check` 均 exit 0；日志为 `/tmp/nexus-directory-cache-{check,format,build,e2e-types}.log`。上述远程3项场景已通过，LRU/容量边界、断线重连、外部权限变更及传输未知组合仍待验。遵守D17，未运行本地E2E/用例收集；提交推送后的远程 Actions 证据与镜像发布状态见本页上方，不混同为部署已完成。
-
-## 当前验收基线
-
-最新完整远程为 [40094495537](https://github.com/0honus0/nexus-terminal/actions/runs/40094495537) / `9f495f353f7cfea188f0729a421e14ed89db02d9`：463项场景首轮通过，零重试/零flaky，八分片、质量/格式/构建及Docker冒烟全绿。下列旧轮次按各自实际范围保留，不将未覆盖的外部环境或扩大故障组合宣称为已验。
-
-2026-10-21 文件管理器修复工作区不继承下方旧 SHA 的行为 PASS。源码对照 `75289ef9^` 的 Workspace Files、文本 Document port、SFTP 下载和 ZipDirectoryArchiveAdapter：旧实现保留 16 MiB 文本读取、目录流式 ZIP 和按读任务持有句柄；新实现此前的 readBinary/cancelRead 与目录 ZIP 仍取消共用 SFTP，runAdmitted 随后关闭主 owner，使后续列表、编辑和下载可能变成 not_found。现将二进制读取、目录 ZIP、票据准备及类型探测放入原 owner 跟踪的独立资源，权限拒绝在 Model 映射为 forbidden，前端区分具名失败并捕获打开动作的读取拒绝。
-
-继续沿有效性检查定位到更直接的共因：owned 和 runAdmitted 对 Workspace 也检查 expiresAt，导致两分钟没有文件操作后的首次读取/写入被拒绝；定时回收本已排除 Workspace，两处准入与其政策不一致。现仅独立 HTTP Files 检查 idle TTL，Workspace 保留原生命周期、身份、指纹及关闭检查。这条源码链可解释 HTML 读取拒绝落入错误边界和目录下载 not_found；HTML 现场具体文件/设备及异常尚未提供，不能据此认定语言组件故障或所有现场组合已恢复。
-
-用户随后明确要求补充 E2E，已新增 `tests/e2e/specs/ssh/file-manager-regressions.spec.ts`，4 项用例已在上述 Actions 的第1组全部通过：
-
-| 用例                             | 有效断言                                                                                                                                                                                                                                                                              |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| HTML/HTM、读取拒绝与目录右键下载 | 浏览器编辑器实际显示 HTML 内容；从已加载列表删除文件后打开，显示 not_found 产品提示；受控 SSH STAT/LSTAT 返回 permission denied 后显示权限提示。失败后仍能刷新目录、右键 Download Folder 并再次打开 HTML；下载成功且 ZIP 解压后的文件名与内容逐项一致，包含嵌套中文路径和零字节文件。 |
-| Workspace 闲置超过两分钟         | 实际等待 125 秒，不发送会续期的 workspace.ping、不模拟浏览器时钟、不重连；随后原 Workspace 列目录、读取 HTML、保存并读回精确内容、申请票据并下载精确内容、解压目录并核对内容，最后句柄清零。该例单独设置 180 秒超时。                                                                 |
-| 取消在途二进制读取               | SSH READ 延迟计数证明已派发，再取消指定 requestId；要求 cancelRead 返回 true、原读取返回 remote_unavailable、句柄关闭，随后同一原 Workspace 完成完整读写及下载链。                                                                                                                    |
-| 中断在途目录 ZIP                 | 通过认证 HTTP 客户端请求真实目录 ZIP，等待 SSH READ 派发后 AbortController 中断；要求 AbortError、句柄关闭，随后同一原 Workspace 完成完整读写及下载链。                                                                                                                               |
-
-fixture 仅新增 `/sftp/stat-deny-prefix`，对指定路径的 STAT/LSTAT 返回真实 SFTP 权限拒绝，finally 清除且隔离基线 reset 同样清除；不改变已有 lstat 专项控制语义。取消用例 finally 恢复 READ 延迟并关闭原 socket、收尾原请求，不通过新会话恢复来掩盖主资源损坏。
-
-新增用例静态验证：根 `pnpm run check`、`pnpm run format:all:check`、变更测试/fixture 的 ESLint、fixture `node --check` 和 `git diff --check` 均 exit 0；另以 Backend 的 TypeScript 对新增 spec 及其依赖执行 `tsc --ignoreConfig --noEmit --skipLibCheck --types node --module nodenext --moduleResolution nodenext --esModuleInterop --target es2022`，exit 0。日志为 `/tmp/nexus-files-e2e-{check,format,lint,types}.log`。未运行用例收集或服务，不替换既有开发进程。
-
-上述4项新增用例已远程通过，仍待补充尚未新增的独立资源 TTL、真实预览关闭的 UI 取消链、普通文本组合、三语提示、身份撤销及独立资源关闭失败。遵守 D17，未运行本地行为测试、浏览器专项及 E2E；远程通过只覆盖实际断言，不代表这些剩余组合已验。
-
-本批 `pnpm run check`、`pnpm run format:all:check`、`pnpm --filter @nexus-terminal/backend build`、`pnpm --filter @nexus-terminal/frontend build` 与 `git diff --check` 均 exit 0；日志为 `/tmp/nexus-files-repair-{check,format,backend-build,frontend-build}.log`。源码复审覆盖独立/Workspace TTL 准入、原身份/指纹检查、读取取消、临时资源关闭及失败追踪、打开动作 permission/Session 晚返回保护和三语错误消费者。用户随后明确授权提交与推送；未重启或部署，静态证据不代替上述现场及远程验收。
-
-2026-10-20，canonical [Actions 39445026926](https://github.com/0honus0/nexus-terminal/actions/runs/39445026926)，SHA `ddf5ce0e95c39367977cf08c951ce1e4d63b34ef`：
-
-| 检查                                                          | 结果                                  |
-| ------------------------------------------------------------- | ------------------------------------- |
-| Playwright shard 1–8                                          | 全部 success，共448项，无flaky        |
-| Checks, format, and build                                     | success                               |
-| Docker deployment smoke                                       | success                               |
-| Prepare E2E runner image / Update Playwright duration balance | success                               |
-| Update E2E documentation screenshots                          | skipped（可选截图更新，非功能回归组） |
-
-本轮远程失败修复已收口。此结果适用于该 SHA 的实际运行用例，不证明所有公网服务、物理设备或故障组合。本文整理仅涉及文档，未重新运行本地行为测试。后续提交不能自动继承本 SHA 的行为 PASS。
-
-唯一被测后端是 `packages/backend`；Shared 为双端协议 owner。旧 Backend、Protocol 与 Agent Runner 不再是验收入口。旧测试文件名中的 backend-next 仅是文件名称，实际启动包必须为当前 Backend。
-
-## 未覆盖与恢复条件
-
-| 范围                        | 当前边界与恢复条件                                                                                                                                                                               |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 公网 Provider、真实模型场景 | 当前受控供应商覆盖不等于公网可用或模型任务成功；需可用凭据、兼容模型及明确调用授权。历史 Agent 人工场景仍见 [场景清单](AGENT_TASK_SCENARIOS.md)，不能按八组成功批量宣布完成。                    |
-| 官方新签名插件包            | 隔离签名包/环回仓库通过不证明官方新发布包完整可安装；需实际包及官方信任链。                                                                                                                      |
-| 安全硬件                    | 受控 WebAuthn/浏览器场景不代替真实安全密钥、生物识别设备和物理交互。                                                                                                                             |
-| RemoteApp 与真实桌面设备    | Windows 普通 RDP 有历史有限实机证据，RemoteApp 当时未配置；需配置实际 RemoteApp 后验收。隔离 xrdp/VNC 与合成触控不代表全部物理输入法、剪贴板权限或触控故障组合。                                 |
-| 持久介质与断电              | SIGKILL/受控重启、SQLite 与文件恢复只证明对应故障窗口；真实断电需专用持久介质和可控环境。                                                                                                        |
-| 归档保证限制                | 保留原生 zip/unzip/zipinfo/GNU tar；没有远端 helper 或文件系统配额。接受 SFTP 检查到发布间的并发替换窗口，无任务总磁盘硬配额；64 GiB 是声明/事后预算，非实时硬上限。不是待修复功能或已测强隔离。 |
-| Codex CLI 与物理终端体验    | 同批/跨 chunk 同步帧、超时、后台恢复及销毁按实际 terminal-output-scheduling 断言核对；真实 Codex CLI 持续计时和手机现场体验未独立确认，需对应程序/设备。不将合成帧覆盖扩写为现场已恢复。         |
-| 其他扩大故障组合            | 原始逐项清单的未覆盖组合保留历史事实，不因本轮成功批量标 PASS；新增保证前对照实际 spec/断言及对应运行日志。                                                                                      |
-
-## UI 还原与 SSH 信任回归
-
-本批在上方 SHA 已整轮通过，以下失败历史仅解释修复依据，不作为当前未解决项：
-
-`01c371c2` 的远程 [Actions 39396132264](https://github.com/0honus0/nexus-terminal/actions/runs/39396132264) 已结束，质量门禁与 Docker smoke 通过；Playwright 2/4/7/8 通过，1/3/5/6 失败。失败项共13个，重试不重复计数，含独立 invalid-tool 变体：
-
-| 分组 | 失败范围                                   | 源码修复及下轮判据                                                                                                                                                     |
-| ---- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1    | 2项文件搜索取消                            | 会话区和输入表单不压缩到内容最小尺寸以下，允许外层滚动；保留真实取消、句柄关闭与恢复断言。                                                                             |
-| 3    | 2项插件管理、4项批量编辑、1项 invalid-tool | 进入实际 tools 分类、经有名称的管理区域读取；备注开关使用实际“Change notes”名称；同一会话布局修复同时解除目标选择遮挡。保留隔离SDK、持久写入、部分失败和未知结果断言。 |
-| 5    | 1项失效模型版本                            | 从页面重新进入实际 runtime 分类重新读取，保留失效版本和持久配置不变断言，不依赖正常状态下已移除的恢复按钮。                                                            |
-| 6    | 3项执行设置／黑名单／外观                  | 重载后进入 runtime 分类；开关即保存只提交自身字段、保留相邻草稿；外观先注入版本冲突进入真实恢复入口，再保留延迟读取／排队保存及主题持久化断言。                        |
-
-在既有 `ssh/connection.spec.ts` 另补两项远程回归：真实首见／变化主机密钥、取消不写信任且保留原标签、阻止自动重连、用户再次确认后同标签执行真实命令；变化密钥场景另丢弃已成功写入的确认回执，要求只读核对且只写一次。第二轮停于基线准备，第三轮已验证完整确认链。
-
-第二轮 `657603bc`：[Actions 39398382324](https://github.com/0honus0/nexus-terminal/actions/runs/39398382324)，Checks／Docker 通过，Playwright 1/2/3/5/6 通过，4/7/8 失败。首轮13项原失败均已通过；本轮剩4项失败和1项 flaky：
-
-| 分组 | 实际结果与原因                                                             | 当前修复及下轮判据                                                                                               |
-| ---- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| 4    | 2项 SSH 信任回归基线准备失败；不存在的 pin 删除返回正确的404               | 先只读确认独立基线无 pin，再按场景创建变化密钥；不改产品删除语义，继续验证取消／同标签重连／丢回执。             |
-| 7    | 1项非 SSH 创建／批量删除重试通过，首次浏览器回执被导航回收，flaky 门禁失败 | 在原 import 请求交付前捕获真实上游响应，再交付同一回执并严格解码；不重发写入，保留持久字段和批量选择／删除断言。 |
-| 8    | 2项 ACP 拒绝／取消用例仍按已移除的内部版本标题定位                         | 按可见名称定位实际卡片并核对 ACP／工作目录；保留持久版本、真实进程、内层授权与取消断言。                         |
-
-第三轮补修仅调整上述测试消费者及证据说明，无产品功能／协议变更；USAGE 对应 SSH 信任、集成卡片和非 SSH 连接章节已核对，无需改写行为。新增的 E-10.6 只记录回执采集的共性约束。未运行本地行为测试或用例收集。静态环境为 `/usr/local/bin/node` v22.23.1、`/usr/local/bin/pnpm` 11.26.0；`pnpm run check` 已通过（`/tmp/nexus-ui-round3-check.log`），只修改测试与文档，未重建产品包。`pnpm run format:all:check` 最终通过（`/tmp/nexus-ui-round3-format-final.log`），`git diff --check` 通过；最初的函数间距错误已由原 ESLint 规则修正，再完整复查通过。
-
-第三轮 `d6b73d254794fed0f76a7ba92e9000248996851d`：[Actions 39401405110](https://github.com/0honus0/nexus-terminal/actions/runs/39401405110) 最终 success，8/8 Playwright、Checks、Docker、runner image 及耗时统计全部通过；可选截图任务 skipped。上述4项失败及1项 flaky 均未再出现。原 `ssh/connection.spec.ts` 两项真实首见／变化密钥回归各一次通过：取消保留标签且不写信任、不自动重连，手动确认后同一标签执行真实命令；变化密钥另验证确认已写入但回执丢失后只读核对，未重复信任写入。ACP denied/cancelled 各一次通过；非 SSH RDP/VNC 创建和批量删除一次通过。原首轮13项失败所在的1/3/5/6组继续通过。
-
-远程日志已读取第4/6/7/8组（本地 `/tmp/nexus-ui-round3-shard{4,6,7,8}.log`）；可追溯证据以 Actions 原 job 日志为准。其余组按实际 job 的 success 记录，不扩大其 spec 覆盖。
-
-### UI 扩展覆盖边界
-
-以下是逐项复核时保留的关注范围，已执行的 spec 以本轮实际断言为准；整轮通过不等于所有组合或像素一致性均已验证。尤其多跳板／批量信任确认排队、等待期间关标签／登出及全部窄屏交互组合没有由新增两项 SSH 用例覆盖：
-
-- Agent 分类导航、提供商卡片与添加／编辑弹窗，模型发现、凭据 keep/replace/clear、原版本冲突、unknown 只读恢复及三语反馈；正常加载不常驻展示读取按钮。
-- 实际未信任／变化 Host Key 提示（含跳板的真实 endpoint、批量打开的确认排队），用户核对确认后原标签重连；取消保留标签、不后台重试，关标签和登出撤销确认；确认响应未知只读核对，不重复写入。
-- 普通设置自动加载与异常恢复、数据页高级诊断／恢复入口、Modal 焦点恢复及桌面拖拽调整大小。
-- MCP／ACP 列表添加／编辑弹窗、取消清草稿、分类隐藏与原请求失效；未知创建保留原输入／键，恢复只读核对，身份失效清理；既有 ACP 实际执行消费者同步弹窗及 UiSelect 定位。
-- CAPTCHA 按供应商展开字段／帮助、切换和停用清密钥草稿、显式清除后停用与保存、hostname／CAS／重启语义；执行、Registry 和应用选择卡片样式待桌面／窄屏核对。
-- Browser 卡片添加／编辑弹窗、取消不写入、分类／页面隐藏撤销、原版本冲突和未知结果恢复；应用卡内权限、插件发布者折叠。
-- Agent 会话侧栏展开／折叠、窄窗遮罩、线程创建／改名／选择及 Run／审批操作；按钮定位同步标题，不依赖内部版本展示。
-- 黑名单切换只保存开关，邻近未保存草稿保持独立，失败／冲突／unknown 及登出晚响应；批量编辑分区与 footer、备份／通知原样式及窄屏布局。
-
-本批行为验收仅使用获准的远程 Actions，未运行本地行为测试或用例收集；未覆盖组合继续保留，不恢复已通过的旧失败清单。
-
-## 展示清理与后续远程修复
-
-本轮另收窄工作区／系统偏好、监控、后端日志、布局／焦点、工作区连接列表、导入、主机信任和记忆源选择器的新增刷新入口：正常／初始读取不常驻，失败或待核对时可恢复。保留旧版记忆刷新、插件同步、文件／预览／历史及其他正常操作。监控脚本不再依赖刷新按钮存在判断保存完成；新增按钮变更的根 check、Frontend build、两份前端脚本语法及 diff 检查已通过，日志在 `/tmp/nexus-ui-refresh-{check,build}.log`；完整格式检查通过（`/tmp/nexus-ui-refresh-format.log`），提交前尚未远程验证，后续实际结果见下方失败轮次。
-
-当前工作区移除重构额外增加的常驻技术说明、设置修订展示，并将必要帮助精简为用户操作文字；三语及既有 Targets 隔离脚本的展示断言同步。未改 API／Shared、写入与恢复策略。上一版成功不代表本批已通过行为验收；重点为连接列表／导入、Browser／集成／记忆／Artifact／插件及安全／监控设置的常规、失败恢复与待重启状态。本批 `pnpm run check`、`pnpm run format:all:check`、`pnpm --filter @nexus-terminal/frontend build`、`node --check tests/frontend/targets.integration.mjs` 和 `git diff --check` 均 exit 0；日志在 `/tmp/nexus-ui-prose-{check,format,build}.log`。不运行本地行为测试或用例收集，该提交的远程结果及后续修复见下方。
-
-### 展示清理后的失败轮次与修复
-
-[Actions 39413492909](https://github.com/0honus0/nexus-terminal/actions/runs/39413492909)，SHA `90d5bb6c5a42eaedfedc75a1e1f85e40bc961613`：第7组失败，其余7组、Checks/format/build、Docker deployment smoke 和 runner image 均 success。仅两项失败：
-
-- `ui/connection-non-ssh-bulk.spec.ts`：导入响应200后表单未关闭；trace 显示紧随移除拦截启动的标签请求未完成。现保留原请求拦截直至 UI 消费回执并完成依赖读取，不重发写入。
-- `ssh/progress-display-archive-cancel.spec.ts` 的准备阻塞取消场景：取消后目录刷新被拒绝。源码查出压缩准备/声明复查仍使用共享 SFTP，现两处都使用原任务追踪的独立传输资源。失败 trace 无 WS 帧，不能宣称已证明全部运行因果。
-
-修复工作区的 `pnpm run check`、`pnpm run build` 已 exit 0（`/tmp/nexus-refresh-e2e-fix-{check,build}.log`）；完整 `pnpm run format:all:check`、既有配额夹具的 `node --check` 和 diff 检查通过（格式日志 `/tmp/nexus-refresh-e2e-fix-format.log`）。未运行本地行为测试、E2E 或用例收集。修复提交为 `1ebaddfc96875770b940fc7d8690b66273938b21`，下轮这两项均通过；原压缩取消、真实远端目录读取、RDP/VNC 持久化与精确删除断言均保留。
-
-### Agent ACP 取消场景轮次
-
-[Actions 39415763862](https://github.com/0honus0/nexus-terminal/actions/runs/39415763862)，SHA `1ebaddfc96875770b940fc7d8690b66273938b21`：第7组 regular 58项通过（包括上一轮两项修复），独立 ACP cancelled 场景失败；其余7组、Checks/format/build、Docker deployment smoke、runner image 均success。独立场景重试被原实例清理失败阻断，不计成另一个产品场景失败。
-
-trace中原Run创建200，移除拦截发生在18404.925ms；18413.625ms启动的`agent.approvals.list`始终未完成，其他并行读取有响应，UI保留Pending v1且全部运行操作禁用。测试finally另行取消Run之后产生具名执行未知，重试reset据此拒绝；不通过忽略清理或删除隔离来绕过。证据为Actions第7组job `118604334779`及artifact `e2e-shard-7-1`（本地解压`/tmp/nexus-acp-failure-trace`）。
-
-当前修复让ACP创建及Artifact上传的纯回执观察拦截随页面fixture销毁，避免持续轮询期间切换网络匹配；ACP另确认回执对应Run已渲染且取消按钮可用，再推进外部审批。核对其余20处拦截移除的用途；不改产品协议、按钮状态或后台失败语义。全部取消/409/退出及无副作用断言保留。本轮`pnpm run check`、`pnpm run format:all:check`与`git diff --check`均exit 0，日志为`/tmp/nexus-acp-route-{check,format}.log`；仅测试与文档变更，E2E包无build步骤。修复提交`0e425fe20189e8e2079b575af70ec0657c269b67`的[Actions 39417865747](https://github.com/0honus0/nexus-terminal/actions/runs/39417865747)整体success：8/8 Playwright、Checks/format/build、Docker、runner image及耗时统计均通过。第7组regular 58项通过，独立ACP cancelled 1项通过（场景14秒），取消及清理断言未放宽。未运行本地行为测试或用例收集。耗时统计另提交`79d7b97d`，仅更新下一轮分配估计，不作为重新执行的被测SHA。
-
-## 历史证据追溯
-
-已完成施工记录不再作为当前任务。以下链接固定在删除前的已验收 SHA；历史静态、源码审核和行为结果各自只代表原范围：
-
-- [B9 逐文件审核索引（726 条登记，不代表当前 HEAD 全量复审）](https://github.com/0honus0/nexus-terminal/blob/558c4b343ba0ef2316309d2e164b9c6075c47efc/doc/testing/%E5%90%8E%E7%AB%AF%E9%87%8D%E6%9E%84%E6%BA%90%E7%A0%81%E5%AE%A1%E6%A0%B8.md)。
-- [B10/F1 逐批范围、四表与未验记录](https://github.com/0honus0/nexus-terminal/blob/558c4b343ba0ef2316309d2e164b9c6075c47efc/doc/testing/%E5%90%8E%E7%AB%AF%E9%87%8D%E6%9E%84%E5%BE%85%E5%AE%9E%E6%9C%BA%E9%AA%8C%E8%AF%81.md)。B10 最终本机统一记录为 66 文件、584/584，仅对应当时快照。
-- [重构阶段决定及历史交接](https://github.com/0honus0/nexus-terminal/blob/558c4b343ba0ef2316309d2e164b9c6075c47efc/doc/%E5%90%8E%E7%AB%AF%E9%87%8D%E6%9E%84%E4%B8%8B%E4%B8%80%E9%98%B6%E6%AE%B5%E5%AE%9E%E6%96%BD%E6%96%B9%E6%A1%88.md)。
-- [远程修复各轮原 SHA、失败与静态证据](https://github.com/0honus0/nexus-terminal/blob/558c4b343ba0ef2316309d2e164b9c6075c47efc/doc/testing/E2E.md)。历史“当前失败/尚未验收”不得覆盖上方最新成功结果。
-
-### 用例顺序与夹具隔离
-
-每个用例和重试先关闭原 App，再重建 Backend、SSH 与外部夹具基线。关闭失败阻断 reset 并保留现场；各独立重置均等待并汇总失败，不自动重放丢失回执的重置。原实例成功关闭后才恢复故障开关、模型计数、插件目录和浏览器屏障；在途 SSH 操作先有界排空。
-
-rebalance 只改变 spec 分配，不承担清理。刻意产生未知副作用的 Agent 场景使用独立 Playwright/服务生命周期，与所在 shard 无关；不能依赖前序用例、固定分组或强制清理绕过围栏。每个分组内仍为单 worker。
-
-## Structure
-
-- `tests/e2e/specs/auth/` — first-run setup, administrator creation, login, and session establishment.
-- `tests/e2e/specs/http/` — HTTP API authentication and protected endpoint flows.
-- `tests/e2e/specs/agent/` — Agent Host, Provider, signed Plugin, SSH-only execution, Browser CDP and ACP product flows.
-- `tests/e2e/specs/ingress/` — production Nginx ingress regressions exercised against the production-style ingress.
-- `tests/e2e/specs/websocket/` — WebSocket upgrade authentication and protocol frame flows.
-- `tests/e2e/specs/ui/` — authenticated browser navigation and UI behavior.
-- `tests/e2e/specs/ssh/` — real SSH connection and SFTP/File Manager flows.
-- `tests/e2e/specs/mobile/` — mobile Workspace, layout, status monitor and touch interaction.
-- `tests/e2e/support/` — shared helpers, test servers and the mirrored log reporter.
-- `tests/e2e/fixtures/` — isolated backend setup and external service fixtures.
-- `tests/e2e/.tmp/` and `tests/e2e/logs/` — generated runtime data and per-test logs, ignored by Git.
-
-The main E2E projects do not depend on `auth` to create shared state. Normal specs initialize an isolated current-v1 database through the real setup API; first-run setup explicitly requests an empty database. This keeps project and spec scheduling independent from first-run setup order.
-
-The SSH project starts a real `ssh2.Server` on `127.0.0.1:22222`. Its SFTP filesystem is isolated under `tests/e2e/.tmp/ssh-root`, so GitHub Actions does not depend on any external SSH host.
-
-The controlled transfer target forwards `127.0.0.1:22225` to that SSH server; override it with `NEXUS_E2E_SSH_TRANSFER_TARGET_PORT`. It provides a distinct endpoint with the same fixture key and filesystem. Native transfer credentials alone use their real private `/tmp/nexus-transfer-<UUID>` directory so exec and SFTP address the same files.
-
-Local cross-server transfer scenarios require `ssh`, `scp`, `rsync` and `sshpass` on the host PATH, matching the E2E runner image. Missing tools must be supplied before running these scenarios, not worked around by weakening transfer assertions.
-
-Run local Playwright invocations sequentially within a checkout: they share fixture services and the report/artifact directories. Select multiple spec files in one invocation rather than overlapping commands; isolated GitHub shard jobs do not share these resources.
-
-Terminal UI coverage uses the rendered font-size state, terminal surface and Workspace-scoped tablist to verify real SSH output, clipboard interaction, scrollback, geometry, font persistence and session cleanup. Mobile HTML background coverage measures actual animation callback spacing, canceled callbacks, CSS/frame suspension while hidden or under reduced motion, and recovery with the same background document; it validates rendering work, not Android device temperature. Appearance coverage uses visible controls, theme names and public appearance API state for preset selection, mobile typography/text effects, background uploads and local/remote HTML theme flows; it does not depend on production test-only attributes.
-
-Wide-touch Pad coverage keeps a desktop user agent and layout while exercising downward drags at empty history, the history boundary and a real alternate-screen input loop. Touch and mouse-wheel recovery are independent scenarios. Wheel recovery observes the scrollbar reaching its bottom before checking the received completion marker: requested Playwright wheel pixels are normalized by browser DPR and xterm and do not imply a particular number of terminal rows. Synthetic touch cancellation and CSS touch-action assertions do not prove native browser pull-to-refresh behavior on a physical device.
-
-`mobile/pad-file-gestures.spec.ts` checks desktop-UA touch file holds with a controlled clock: movement beyond tolerance and pointer cancellation do not open menus, a subsequent hold opens the archive action, a post-hold click preserves the menu, ZIP creation is observed through SFTP, and mouse right-click remains usable afterward. Synthetic pointer dispatch does not establish physical-device pointer capture or native scrolling behavior.
-
-`mobile/pad-suspended-output.spec.ts` releases a real shell producer only after suspended ownership is available, generates 112MiB of either line logs or single-line output while detached, and checks bounded retained storage, the latest screen, original shell identity, input and historical dragging after browser recovery. It does not seed those bytes into a log file and does not establish an unlimited output-rate or long-duration suspend guarantee.
-
-`mobile/pad-tui-redraw.spec.ts` uses a remote alternate-screen input loop to show old header/footer rows, Chinese wide characters and explicit true-color background cells before each viewport change. Independent full-screen and individual-row erase scenarios require a new frame marker and disappearance of the old text and colored DOM cells. These assertions cover rendered DOM state, not browser compositor pixels. The pipe-based SSH fixture accepts window changes without delivering real PTY SIGWINCH signals, so this does not validate signal-driven application redraw or explain intermittent rendering artifacts on physical Android devices.
-
-Remote-desktop regressions exercise RemoteApp persistence, route-preserving RDP/VNC launch, clipboard exchange, DPI, fullscreen and pointer resize/minimize/restore through the shared window surface. Docker/layout and mobile-preview regressions use public pane controls, existing layout/session/task state and accessible document controls to verify remote commands, compact geometry, layout locking, PDF outline/pinch/panning, preview reset and upload hide/restore/cancellation.
-
-`ssh/suspend-log-compaction.spec.ts` seeds a near-compaction-threshold log in the isolated fixture filesystem, then uses real SSH output and Workspace WebSocket handoff to cross the threshold, resume during continuing output, verify the original shell identity and confirm the physical log was compacted. It avoids sending a 100MiB seed through the terminal renderer and does not substitute a larger ownership lease for storage recovery.
-
-CAPTCHA and proxy lifecycle coverage uses settings headings, form controls and management cards while retaining public-configuration secrecy and explicit credential-update assertions. Panel scaling and advanced mobile touch coverage uses rendered scale state, accessible menus/document actions and the real terminal surface to verify persistence races, archive creation, CodeMirror editing and virtual-keyboard escape sequences without production test markers.
-
-Dashboard and mobile suspend/resume coverage targets host cards, public connection timestamps, tab semantics and suspend identifiers. It retains assertions for independent resource loading, persisted filters, catalog refresh, single-tab recovery, original-shell continuity and older-history touch scrolling.
-
-Test support HTTP controls are limited to deterministic fixture setup and fault injection (for example remote file creation, artificial latency, or SSH availability). Test assertions use the Nexus HTTP/WebSocket/UI/ingress surfaces. Fake external services validate incoming requests directly and return success/failure instead of exposing captured internal request logs to specs.
-
-The Agent preset flow also starts a dedicated real Chromium fixture with loopback CDP and an external context observation endpoint. A model-response barrier holds the Root Run after `browser_session_open`: the spec verifies a new Chromium context exists while the public Run status is `running`, then releases the response, verifies a successful terminal Run and successful tool result, and waits for context count to return to its baseline. A second Run is cancelled while its context is live: the test waits for public `cancelled` status and context reclamation before releasing the barrier, then executes a fresh Run in the same Thread and verifies successful creation, completion and reclamation. A Run with an initial three-request allowance automatically extends within its frozen ceiling while its real Browser context stays live; the held response is released and successful completion reclaims the context. The test restores the original settings after this scenario. Unique provider tool-call identities prevent earlier Thread history from satisfying a later Run's fixture state. This proves Root normal-completion, cancellation/recovery and budget-wait retention Browser behavior, not Child cleanup or late session creation races. The fixture owns only its own Chromium process; it never attaches to a user's browser. The remote launcher allocates isolated control and CDP ports alongside other fixture ports.
-
-Functional/documentation screenshots are declared directly at real E2E checkpoints with `captureFunctionalScreenshot(page, filename)`. Screenshot capture remains opt-in for focused maintenance runs; the canonical E2E workflow does not mutate the repository or commit refreshed screenshots.
-
-Browser approval-wait retention is exercised by opening a real context, proposing a bounded SSH command in `ask` mode, and observing public `awaiting_approval` status with that context still live. Denying or approving the versioned approval resumes the Run; the same context IDs must remain present until the held model response is released. Both branches verify successful completion and context reclamation. This Run's Ledger must contain successful Browser creation and either `APPROVAL_DENIED` or a successful SSH result with the exact fixture output `browser-approval-e2e`. These Root approval scenarios do not establish Child approval behavior.
-
-Cancelling instead of deciding that pending approval must reach public `cancelled` and reclaim the real context. The original approval must become `superseded`; late approval requests using either its original version or its refreshed current version must return HTTP 409, and neither the cancelled Run nor its context may be revived. This exercises immediate terminal cancellation without an active scheduler cleanup fallback; cancellation events must traverse the existing StateCommit post-commit observer.
-
-The automatic-extension scenario also exercises cancellation: the live context must be reclaimed after public `cancelled`. Mailbox budget increases using both the pre-cancellation version and the current cancelled Run version must return HTTP 409, preserving the terminal status and context baseline. Current-version rejection distinguishes terminal-state protection from stale-version protection.
-
-`tests/backend/agent-scenarios/adaptive-execution-budget.scenario.ts` uses real SQLite admission and Native execution to cover a single durable extension under concurrent evaluators, normal completion after expansion, duplicate evidence refusing another extension, concurrent request admission without overshoot, atomic rejection of an oversized tool batch, current Goal／Plan and resource projection, and a failed summary retaining a partial result／checkpoint. These deterministic assertions do not establish live SSH deployment success or an optimal numerical cap for every task.
-
-Child normal-completion coverage delegates to a profile explicitly granted `browser.read`, observes a real context while the Child model response is held, then releases completion and waits for a successful parent Run and context reclamation. The public Subagent record must contain exactly the expected completed Child with a Runtime distinct from its parent. The deterministic Child response projects its actual Browser tool result so the spec can associate the session's Run and Runtime identities with that public Child record and confirm successful creation. This proves Child-created context cleanup at parent Run completion, not cleanup immediately at Child completion while the parent remains active, or cancellation during session creation.
-
-The same delegation flow also cancels the parent while the Child's real context is live and its model response remains held. Both public parent and Child statuses must become `cancelled`, and Chromium contexts must return to baseline before the fixture releases the response. This guards Root execution-slot handoff across model/tool rounds and join waiting: a cancelled Child alone does not satisfy the assertion when the parent remains `cancelling`. It covers cancellation after context creation, not cancellation during asynchronous session creation.
-
-The retired Runner process-group cancellation harness was removed with Agent Workspace. Current SSH session/job cancellation and remote process settlement are exercised by SSH-specific cases; their evidence does not imply the removed Runner process-tree semantics.
-
-Creation-race coverage uses a loopback WebSocket proxy in the dedicated Chromium fixture. It forwards real CDP text frames and holds the response to `Browser.setDownloadBehavior`, after the context/page exists but before session registration completes. Separate Root and Child scenarios observe the held response and live context, cancel the parent Run, release the response, and require public `cancelled` plus context reclamation (and a cancelled Child for delegation). This covers that specific late-initialization window, not every asynchronous creation boundary or an independently cancelled Child while its parent stays running. A safety deadline releases abandoned fixture responses; successful assertions explicitly release them rather than relying on the deadline. No production testing endpoint is added.
-
-Independent Child cancellation is exercised both with a live Browser context and with its final initialization response held. The parent explicitly calls `collaboration_subagent_join` and yields its runtime slot before the Child starts. The public versioned Subagent cancel endpoint must return a cancelled delegation without cancelling the parent. A separate provider response barrier observes the resumed parent still `running`; releasing it must allow successful parent completion with the Child still cancelled and Chromium contexts back at baseline. This verifies Root join parking and wake-up as well as final Run-owned cleanup, not immediate context reclamation while the parent remains active.
-
-## Logs
-
-Every test receives its own text log. The archive layout mirrors the test source layout, for example:
+- `remote/sessions/service`：唯一 Workspace 状态、实例绑定 attachment/lease、认证续接、准入、恢复 ACK、挂起、取消、终止及最终任务追踪；terminal 的背压/offset/输入与 shell cwd 的应用流程分职责实现，共享原 Workspace 实例而非复制 registry。目录请求的排队/替换/期限/安全事件由 workspace-shell-service 持有；Model 转换 shell 能力，命令语法和输出解析归 Native Shell Adapter。
+- `remote/sessions/model`：Workspace、终端、历史及 checkpoint 的内部复用类型与明确应用↔技术转换；底层 SSH shell/字节流通过已有 machines/model、session-model 和 ssh-port；技术文件 I/O/Headless 终端只放独立 Platform Adapter，不在 Service 直接访问 fs/ssh2。workspace-history-model 隐藏日志/checkpoint/renderer Port、Node Stream 和技术失败；所有复用应用类型均在 workspace-types。
+- `remote/interfaces/ws`：单一 `/ws/workspace` envelope、终端流与 resume 事件投影，接入现有 Files/transfer 调用与 NXW1，旧 attachment 的 lifetime 与新 owner generation 独立。管理 HTTP 在 `remote/interfaces/http` 显式安装。
+- `remote/files/service`：FileAttachment、上传、copy/move、archive 仍独立掌管 SSH/SFTP 与任务资源；由 Workspace owner 绑定实例化释放能力，不另设可恢复 shell registry。
+- `shared/src/remote`：共用 envelope 移交 Workspace 子域；terminal/suspend 协议按其消费者单独定义，Files/transfer 保留既有领域 DTO。
 
 ```text
-tests/e2e/specs/ssh/file-manager-navigation.spec.ts
-tests/e2e/logs/ssh/file-manager-navigation/navigates remote directories over real SFTP.log
+packages/backend/src/
+  main.ts                         进程配置与启动
+  bootstrap/                      技术实例、模块安装、全库迁移与停机
+  platform/
+    storage/sqlite/               SQL 契约与 Runtime
+      adapters/                   SQLite 方言、版本表及实际 Worker
+    ssh/adapters/ssh2/            SSH/SFTP/命令技术实现
+    archive/adapters/             原生命令格式与流式 ZIP 技术能力
+    text/adapters/                文本编码技术能力
+    http/                         通用 HTTP/WS
+    security/                     通用加密与密码散列
+    lifecycle/                    通用有界结果/失败记录
+  modules/<module>/
+    public.ts                     后端跨模块安全契约
+    public-errors.ts              确有消费的安全错误出口
+    register.ts                   装配、安装选项与生命周期
+    migrations.ts / schema.ts     安装接口与顺序，不含 SQL
+    interfaces/http/              HTTP 协议解码与投影
+    interfaces/ws/                WebSocket 协议解码、投影与通道生命周期
+    <feature>/
+      *-rules.ts                  确需独立的纯业务规则，不访问存储或网络
+      service/                    用例、权限、顺序与应用资源 owner
+      model/                      应用类型及存储/技术转换
+      storage/                    内部存储任务契约
+      adapters/sqlite/            SQL、行解码、事务和 DDL
 ```
 
-The log records Playwright steps, API/browser actions, stdout/stderr, final status, failure stacks, and attachment paths. Failed GitHub Actions matrix jobs upload logs, Playwright reports, traces, screenshots, and videos in a project-scoped diagnostic artifact.
+Targets 的 connections/proxies/ssh-keys/tags/host-keys/resolver/import/management 为同一模块子功能；共用持久引用拒绝定义在 targets/storage/target-storage-refusal.ts，SQLite Adapter 在删除事务内核对真实引用，Model 转为 reference_in_use，不依赖 RESTRICT 的供应商扩展码推断业务语义；模块级 `targets/model/target-technical-failure.ts` 仅复用这些子功能的技术失败转换，不承载用例、类型集合或存储；Remote 的 sessions/files 各有资源，共用可信目标→SSH 建连转换归 `remote/machines/model`，不为该共用 Model 机械创建空 Service/Storage；Agent 当前为 scope/runs/providers（含 registry）/governance；通信对象在 Shared，内部可信输入和用例/存储对象仍各有 owner。无持久化功能不创建 storage。文件按职责和消费者拆分，独立 helper 不自动升级为公用能力。
 
-On GitHub Actions, the mirrored reporter also prints concise live progress to the job log: test start/end, explicit `test.step(...)` start/result, retry number, and duration. Set `E2E_CONSOLE_LOGS=1` to enable the same console output locally without changing the full per-test log files.
+## 3. 依赖方向
 
-## Local commands
+Scope 的 App/声明行解码归 scope/adapters/sqlite/app-row，列表和单项复用能力解码；来源种类、身份、UTF-8/容量、hash 与有限标志不以宽泛文本代替。审批 Service → Governance Model → Governance Storage → SQLite；事务读取 runs 的存储操作事实，Model 转成独立 ApprovalOperation，再交 Service 的同步判断。消费提交返回的存储操作经 RunTool Model 唯一投影转换；Service 不取得存储行。SQLite owner 之间可协作实现同一事务，不引入 Model/Service。
 
-当前按 [PLAN D17](../PLAN.md#决定项保留区) 不执行本地行为测试或用例收集；以下仅记录可用入口，不构成执行授权。验收以远程 Actions 为准。
+### B5.2 执行流方向
 
-From the repository root:
+HTTP → Shared codec/HTTP mapper → RunService → RunModel/RunStepModel → storage → SQLite Adapter。首次创建提交后，RunService 调用 RunExecutionOwner；owner 通过 Model 读取冻结、获取凭据、复查 Provider，保留/确认派发后消费 RunModelStream → ModelNetworkPort → 网络 Adapter。重放和重启不启动新请求。
 
-```bash
-pnpm run test:backend
-pnpm run test:e2e
-pnpm run test:e2e:auth
-pnpm run test:e2e:http
-pnpm run test:e2e:agent
-pnpm run test:e2e:websocket
-pnpm run test:e2e:ui
-pnpm run test:e2e:ssh
-pnpm run test:e2e:mobile
-pnpm run test:e2e:list
-pnpm run test:e2e:remote -- --project=http specs/http/auth-2fa.spec.ts
-pnpm --filter @nexus-terminal/e2e run test:docs
+reserve/dispatch 的事务回调由 Model 将独立 frozen/Provider 存储事实投影成应用类型，再调用纯业务规则。Storage 负责同事务读取和写入，不持有授权策略。当前规则和流入口只接受 governed，并核对实时 Provider 与原 Run 权威；配置存在、测试成功或手工步骤记录都不能授予执行权。
+
+### Provider 调用链
+
+HTTP → Shared codec → HTTP mapper → Provider Service → Model → storage/AI Port → Adapter。SQL 行在 SQLite Adapter 解码；厂商 `/models`、SSE、models.dev JSON 在网络 Adapter 解码；Model 逐字段转换应用命令、记录、技术结果及失败。Run 的同步冻结回调由 Run Model 持有，Adapter 只接收 storage 契约。
+
+### B4.2 实际调用链
+
+B4.1 密码成功且 TOTP 已启用时，`AccessService → FactorService → FactorModel → FactorStorage → SQLite` 写五分钟待认证；`POST /auth/login/2fa` 读取独立部分 Cookie，再经 `FactorModel → TotpPort → RfcTotp` 真实验证，最终同事务删除 pending、插入完整 session、清失败计数。WebAuthn OPTIONS/VERIFY 经相同 FactorService/Model，Model 消费 `WebauthnPort`，Adapter 调 `@simplewebauthn/server` 并将不可确定的供应商异常封装为具名技术失败；Model 转为安全应用失败；Shared unknown 解码经 HTTP 显式转换为内部 credential evidence，不让原始第三方凭据对象进入 Service。只有已提交的完整 SessionModel/AccessPublicApi 能供 Targets、Remote、Agent 使用。Platform Port 是合法通用技术契约，Service 不直接调用。
+
+### B4.1 Access 调用链
+
+Bootstrap 安装 Access、注入技术 Scrypt/SQLite/CAPTCHA Adapter；`platform/http` 只解析来源、Host/Origin/CSRF 和通用路由。安装模块时，对业务 HTTP 与 WS 路由施加 `AccessPublicApi.admitSource(trustedIp)`，登录/状态/登出/管理员黑名单恢复 HTTP 路由使用只检查白名单的 `admitAuthenticationSource(trustedIp)`（登录封禁由用例返回 429）；未匹配 HTTP 路由通过 Platform 可选通用回调先执行完整来源准入；业务端点依旧经各自 Access public `authenticate/authenticateDigest` 判定当前身份。Access Service → Accounts/Sessions/Captcha Model → 各自 Storage/Platform Port → Adapter。Remote/Targets/Agent/System 只依赖 Access public；Service 不直接调用密码、网络、SQL Port，Platform 不依赖 Access 业务类型。正常 HTTP/WS 入场不重复身份查询，长时建连、资源交付和敏感操作由所属 Service 复验原会话及实例身份。
+
+### B3.2 调用链
+
+Workspace WS → RemoteObservationService → WorkspaceService 实例绑定任务能力 → ObservationModel → machines/model、System/Docker Port → Adapter。Dashboard HTTP → 同一 ObservationService → Model；本机 HTTP → SystemStatusService → SystemStatusModel → LocalStatusPort。技术命令与供应商输出只在 Adapter，Platform 不导入模块/Shared 业务对象。
+
+### B3.1 依赖约束
+
+WS/HTTP → Workspace Service → sessions Model → machines/model → Platform ssh-port → ssh2 Adapter；Workspace Service → Files Service 的实例绑定能力，不经 WS 反向寻找资源。Workspace Service → History Model → Platform 日志/checkpoint/renderer Port → 本机文件/终端 Adapter。Interface 只投影 Shared 协议和安全错误，Service 不导入 Shared wire；Platform 不导入 user、Workspace、suspend 或 Agent 应用类型。Agent 通过各自 owner 使用通用 Platform，不深层引用 Remote 私有 Model。
+
+```text
+Bootstrap → 模块 register / 迁移安装入口
+Bootstrap → Platform 技术实例
+Interface → 本模块用例 + Shared 协议
+Service → 本模块 Model / 子功能纯业务规则 + 所需跨模块公开能力
+Model → 模块 storage 契约 / Platform 技术契约 / 子功能纯业务规则
+SQLite Adapter → storage 契约 + Platform SQL
 ```
 
-GitHub Actions provides the canonical complete delivery evidence. The quality job runs standard lint/type checks, formatting and production builds serially. Push and pull-request runs use eight Playwright runners by default. Manual workflow dispatch can select 6–10 runners. The selected matrix uses `scripts/e2e/duration-estimates.json` and a longest-estimated-spec-first allocator to distribute the seven normal Playwright projects across duration-balanced shards. Each shard job pulls the current prewarmed E2E runner image, links the frozen workspace from its offline pnpm store, deterministically regenerates the same assignment and runs its assigned spec files. New specs without a direct estimate use the median for their Playwright project, then the global median as a fallback. The Docker job restores the repository-pinned Playwright browser, builds the unified Frontend/Backend image with BuildKit cache, and runs `docker-core-no-runner-smoke.sh` with Guacd. Cache hits only avoid unchanged image layers; this job does not build or run an Agent Workspace Runner. Local commands remain useful for listing tests, running focused specs and reproducing failures. Automated dependency updates dispatch this same workflow on their update branch.
+Platform 不依赖业务模块、不持有 Connection/Run/User、业务表、授权状态或业务注册槽。业务 SQL Adapter 不依赖 Model/Service/Shared 对象与协议；确需共享的基础值只从 Shared 精确 values 路径引用。
 
-For a long-lived remote development host that may already be serving Nexus on the default E2E ports, use `pnpm run test:e2e:remote -- <Playwright args>`. The remote launcher keeps explicit `NEXUS_E2E_*_PORT` overrides, dynamically reserves unique loopback ports for every unset E2E service, and invokes the installed `pnpm` executable directly. It enforces the repository Node engine before starting tests. This helper is for focused remote reproduction; it does not replace the canonical GitHub Actions evidence.
+跨一级模块仅用 public 安全能力和明确安装契约，不深层导入 Model/Service；模块内部可直接协作，不绕全局 dispatcher。Service 定义密码/凭据保护的业务政策，Model 通过技术 Port 调用 SecretBox/PasswordHasher 并映射应用结果，技术细节和密码哈希算法由 Platform Adapter 持有。应用实例依赖由 Bootstrap/register 安装，不使用可变进程级数据库单例。
 
-The old standalone Agent Runner smoke and Runner-enabled full-deployment smoke were removed together with the production Agent Workspace/Runner. The preserved `tests/e2e/Dockerfile.runner` is solely a Playwright/CI tool image; `scripts/e2e/build-runner-image.sh` builds and verifies its offline pnpm cache before publication. The current Docker production check is `scripts/e2e/docker-core-no-runner-smoke.sh`.
+Port 文件表达 Platform 的技术能力及技术输入/输出，不是新增业务层：Model 调 Port，具体 Adapter 实现 Port。不得在 Port 中定义账户、连接、Run、授权或业务 registry，不允许 Service 绕 Model 直接调用；原始第三方对象不得进入应用类型。文件是否命名为 *-port 不改变此边界。
 
-## CI balanced shards
+## 4. 类型与转换
 
-Release publication validates a complete successful run of this workflow for the current main SHA, so every selected shard and Docker smoke must pass together; retired per-project check names are not release prerequisites. UI regression locators must use accessible roles, names and existing product state or rendered component classes instead of requiring production-only test markers.
+ToolOperation/ToolInspectionCommand/ToolIdentity 归 runs/model；StoredToolOperation/StoredToolInspection/StoredToolIdentity 归 runs/storage，各边界逐字段转换。ApprovalRequest 只指定操作身份及审批种类，不接受自报 hash、风险、能力或摘要；这些事实从当前持久操作生成。Shared agent/tools 的 values/model/http/http-codec 定义有限状态、安全审计对象和分页；参数/结果正文、providerCallId 与私密摘要保持内部。ToolEvent/Page 归 runs/model，StoredToolEvent/Page 归 runs/storage，不继承 Shared 对象。
 
-The canonical push/pull-request workflow keeps eight isolated Playwright jobs, but their spec assignments are duration-balanced rather than fixed at one job per project. Manual dispatch can select 6–10 jobs. The allocator covers every spec under `auth`, `http`, `agent`, `websocket`, `ui`, `ssh`, and `mobile` exactly once. Matrix jobs fail directly when their Playwright command fails.
+### B5.2 模型流表示
 
-Each job checks out the tested commit inside the current E2E runner image, links the frozen workspace offline, and regenerates the same deterministic shard assignment before running it. The image supplies Node.js Current, pnpm, Chromium and Playwright's system dependencies. Its fingerprint includes a weekly refresh marker; a rebuild pulls the floating base image without build cache to refresh Node and OS packages. Fresh GitHub-hosted runners eliminate local port collisions. The default balance can be inspected locally with `node scripts/e2e/balanced-shards.mjs plan --shards 8`.
+应用类型唯一归 `runs/model/run-types.ts`；存储命令/记录归 storage，第三方流契约归 Platform。Model 明确逐字段投影，包括同步事务回调的输入。Adapter 校验持久 JSON、模型 ID 与能力快照一致性，业务资格判断留应用规则。
 
-Every Playwright shard publishes its successful per-spec runtime after the run. A final aggregation job smooths those observations into `scripts/e2e/duration-estimates.json`; a new spec is added immediately, while an existing estimate changes only when the smoothed value differs by at least two seconds and five percent. Pull-request and manual runs upload the proposed baseline as an artifact without writing either branch. A successful branch push writes a material timing update directly back to the same branch that triggered the workflow. The workflow skips the update if that branch advanced after the tested revision. The generated commit contains `[skip ci]`, so pushing the baseline cannot recursively start another E2E workflow. The next E2E run therefore starts from the latest committed balance while one noisy run cannot completely replace established history.
+Shared Run 子域持有主状态/事件、步骤状态/事件基础取值、2 MiB 正文容量，以及严格路径/分页/响应 codec。只读步骤公开投影提供状态、版本、用量和文本字节数；原始增量、prompt、冻结配置、凭据、技术 cause 不公开。现有 DEV transport 严格解码 wire，controller 再投影独立应用状态。
 
-Before Playwright starts, the workflow fingerprints the runner definition, dependency lockfile, Node, pnpm, and Playwright versions. It anonymously reads only the `nexus-terminal-e2e-runner:latest` manifest/config metadata and compares the embedded fingerprint with the current repository, without logging in to GHCR or downloading image layers. A missing or outdated image triggers GHCR login, rebuild, an exact offline workspace-install verification through an Actions-style bind-mounted checkout, and a push directly as `latest`; an unchanged image skips all four operations. Every Playwright shard pulls `latest` when its job starts and links the frozen workspace from the image's prewarmed offline pnpm store. The image fixes pnpm's effective store with `PNPM_CONFIG_STORE_DIR` and enables its side-effects cache, so a checkout mounted outside the image work directory reuses both downloaded packages and lifecycle outputs. Python and the native compiler toolchain build the optional `ssh2` crypto binding once in the same image layer that removes them and clears the apt metadata afterward; release verification confirms those build-only tools are absent and rejects an image if a fresh mounted checkout tries to run the build again. If another branch replaces `latest` before a shard starts, or a fork pull request cannot update the repository package, the shard detects the fingerprint mismatch and downloads only dependencies and the headless browser revision absent from the image. The slim image includes only Chromium's headless shell, its system dependencies, and the command-line tools used by the suite, so normal E2E runs do not reinstall the browser or carry the full headed Chromium package.
+### Provider 类型与转换
 
-Manual workflow dispatch exposes a `refresh_screenshots` option. When enabled, the normal duration-balanced E2E shards capture the declared documentation checkpoints during the same test run and upload their PNG artifacts. After quality checks, every Playwright shard, and Docker smoke succeed, a final job merges the produced screenshots into `doc/imgs/e2e/` and pushes a single `docs(e2e): refresh screenshots [skip ci]` commit back to the selected branch. It skips the write if that branch advanced after the tested revision, and `[skip ci]` prevents the generated commit from starting another E2E workflow.
+应用类型分别在 `providers/model/provider-types.ts`、`registry/model/registry-types.ts`；存储类型各在 storage，技术类型在 Platform。Provider/Registry错误码、步骤状态/事件与失败码取值归Shared独立values，存储只引用基础取值，不能借用Shared对象。通用网络失败由`providers/model/provider-network-failure.ts`唯一转换，两个Model共享，原始cause不公开。内部 HTTP 协作接口 `providers/model/provider-api-types.ts` 不作跨模块出口。冻结输入仅由 Run Model/Service 内部读取，不放 Agent public。Provider 输入/视图、能力基础值及完整请求响应归 Shared；Run 的模型引用必填。
 
-Production-ingress coverage can still be run explicitly against a prepared production-style endpoint:
+### B4.2 类型及公开白名单
 
-```bash
-NEXUS_PRODUCTION_BASE_URL=http://127.0.0.1:18113 pnpm --filter @nexus-terminal/e2e run test:ingress
-```
+Shared 的 `access/factors/http.ts` 拥有 TOTP token/disable、WebAuthn credential JSON 和 Passkey 名称/发现 query 的未知输入解码，以及公开成功结果。Factors 内部身份、PendingLogin/FactorChallenge/PasskeyCredential 分别归 `factors/model/factor-types.ts`，Storage 行/命令归 `factors/storage`，Port 的公钥/注册结果不含 account/user 类型。HTTP 明确构造用户/id/计数/时间响应，登录成功联合含 `requiresTwoFactor:true` 的部分分支，注册/认证 options 由 Model 的 `options-projector.ts` 投影；完整会话 bearer、服务端 pending/challenge cookie 和加密的 TOTP secret 不进入跨模块 public。Factors Adapter 复用 Sessions 的事务内身份读取，不另写一套会话 SQL；到期时钟在读取后取值，挑战消费在实际事务中读取并判断期限。令牌生成/摘要技术异常由 FactorModel 映射；Passkey 列表交付前由 Service 复查原会话。凭据持久编码与容量由 Adapter 严格解码，基础容量精确引用 Shared values。
 
-## Regression coverage
+### B4.1 Access 类型唯一归属
 
-Agent task-oriented coverage is planned in [AGENT_TASK_SCENARIOS.md](AGENT_TASK_SCENARIOS.md). Its 81 scenarios are design targets, not a claim that all are implemented or verified.
+Shared `access/{values,http,model}` 持有 cookie 名与持久时长、CAPTCHA 有限值/预算、登录 body、status 联合、公开 site key、黑名单分页与安全错误；Access 内部身份和密码登录请求归 `authentication/model/access-types.ts`，账号归 `accounts/model/account-types.ts`，登录计数/会话归 `sessions/model/session-types.ts`，验证码安装事实归 `captcha/model/captcha-types.ts`，技术 CAPTCHA 请求/失败归 `platform/security/captcha-verifier.ts`，存储行归对应 storage。接口 unknown → Shared codec → Access 应用命令；Account/Session Model 逐字段转换 SQL 行，Captcha Model 逐字段转换供应商请求和失败；`register.ts` 及 HTTP 接口逐字段投影 public 身份及 wire 响应。未暴露 password_hash、secret、cookie token 给其他模块。安装 CAPTCHA 字段独立定义在 register，并逐字段转内部 CaptchaConfiguration；SourceAddress/AllowedNetwork 在 admission/model，不含 ipaddr 实例。
 
-Agent regression inputs live with executable tests: backend cases in `tests/backend/agent-scenarios`, browser/API cases in `tests/e2e/specs/agent`, and shared mock-model inputs in `tests/e2e/fixtures/agent/regression-inputs.json`. Tests do not parse historical Markdown reports or generated live-run datasets. Raw live-model evidence is retained separately and is not a deterministic pass/fail oracle.
+### B3.2 类型
 
-The 2026-10-05 regressions cover fractional memory confidence and file timestamps, file permissions, pre-execution Browser/Workspace rejections, bounded child deadlines, cleanup-safe completion evidence, cancellation settlement, recoverable resource quarantine, cross-tab Thread events, and awaiting-input snapshot restoration. Exact-output tests use a deterministic provider fixture; they do not prove a real model always follows “exactly once” tool instructions. The runtime loop guard bounds repetition but does not infer task completion from a single successful tool result. Real ACP/MCP/plugin services, optional toolchain downloads, extreme-number arithmetic and real-phone animation behavior remain separate environment/quality validation, not resolved product defects.
+Shared wire 与内部观测事实独立定义；HTTP/WS 投影逐字段构造，包括 Docker stats、ports、labels 和 loadAvg。内部复用事实在 monitoring/model/observation-types，本机类型在 system/status/model/status-types；技术事实归 Platform。任务 scope 归 sessions/model/workspace-types，不暴露机器句柄。
 
-`specs/mobile/terminal-output-scheduling.spec.ts` defers new animation frames while keeping the page visible and the real SSH transport/timers running, then verifies output consumer credit advances, rows visibly update, successive ANSI timer ticks replace the previous line, and subsequent display/input recover. `specs/ui/terminal-lifecycle.spec.ts` mounts the real TerminalView/xterm with a controlled channel to exercise foreground/background drain before remount, split UTF-8, obsolete PTYs and interactions, stale history pages, slow history cursor reset, ordered background-to-foreground output, viewport recovery with deferred frames, and complete DEC 2026 frames followed immediately by an unfinished frame. The synchronized-frame regression fails without committing the completed frame before the next one reopens synchronization; a render deadline alone does not fix it. These cases do not prove real phone IME behavior, fully frozen browser progress, every physical-browser scheduling fault, or all Codex/OpenCode redraw sequences. `specs/mobile/keyboard-geometry.spec.ts` checks fitted rows, remote resize messages and direct xterm input across keyboard-sized viewport changes; it does not open a real system keyboard.
+### B3.1 唯一类型与转换
 
-`specs/agent/event-catchup.spec.ts` exercises the production Agent subscriber with controlled WebSocket events: ordered backlog consumption, duplicate filtering, arrivals while consumption is paused, abort/unsubscribe and reconnect using the consumed cursor. It does not validate real backend durable repository replay or sustained slow-consumer memory bounds.
+| 边界                                                   | 真实输入/输出                                                             | 唯一 owner                                                     | 白名单转换/消费者                                                                                |
+| ------------------------------------------------------ | ------------------------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| WS envelope 与 connect/resume/terminal/suspend         | unknown JSON、requestId、viewport、token、generation、ACK、事件及安全失败 | Shared `remote/workspace`、`remote/terminal`、`remote/suspend` | Shared codec 严格读取；WS → sessions model 入参逐字段；WS 逐字段投影响应及事件；正式前端 F1 消费 |
+| Workspace 应用会话、attached owner、pending 恢复、游标 | 状态判别联合、身份摘要、实例 generation、任务与关闭能力                   | `remote/sessions/model/*-types.ts`                             | sessions Service 消费；Model 转为纯技术连接/日志命令，敏感值不出 HTTP                            |
+| SSH/PTY/channel/technical error                        | machine/shell 字节、开关/退出与派发结果                                   | `platform/ssh/ssh-port.ts`                                     | ssh2 Adapter 归一技术错误；sessions Model 映射具名应用失败，保留 cause                           |
+| 日志/checkpoint 技术事实                               | 有界字节范围、偏移/修订、模式与视口                                       | sessions Model + Platform 本机日志/terminal 技术契约           | Model 字段投影；Service 持有页大小/保留/恢复政策；WS/HTTP 安全输出                               |
+| 关联 Files 资源                                        | workspaceId、会话绑定与附件实例                                           | `remote/files/model/file-types.ts`                             | Workspace Service 调用 FileService 的实例绑定 release；Files Service 自行管理任务                |
 
-The editor encoding regression in `specs/ssh/file-preview-editor.spec.ts` checks exact saved UTF-16LE bytes including BOM after selecting LF, not only the success message.
+Files请求/完整成功结果和ready/error事件统一由Shared remote/files/workspace及codec表达；正式浏览/编辑/预览消费者已在F1-C2-B1迁移，不留转导出兼容桥。metadata的accessedAt/modifiedAt由SFTP Model转换为Unix毫秒后投影，前端不二次换算。目录20,000项、搜索500项的结果上限由Shared values唯一维护，后端遍历队列/并发策略仍归Files。正式下载与上传port已迁Shared；上传完整回执/终态按原附件投影，failed.message使用Shared有限RemoteFileErrorCode，内部FileUploadEvent仍归Files Model；独立服务器传输HTTP也已接Shared；完整页面继续C2-D。
 
-SFTP write-watermark candidate (2026-10-04): changing the upload Writable high watermark from 4 MiB to 8 MiB reduced completion median from 4,439.1 ms to 2,303.2 ms in three disk-backed 16 MiB + 123-byte samples with 30 ms fixture WRITE delay (48.1%); peak pending WRITE rose from 7 to 15. No-delay medians were 482.1 / 492.2 ms with overlapping sample ranges, not evidence of a stable regression. All measured files matched exactly and pending WRITE returned to zero. Protocol regressions passed 5/5. `NEXUS_E2E_UPLOAD_MULTI_LARGE_WRITE_PROFILE=1` exercises four 10 MiB files at 50 ms WRITE delay, including progress hide/restore and complete content checks. `NEXUS_E2E_UPLOAD_LARGE_CANCEL_PROFILE=1` sends half of a 20 MiB payload before cancellation, preserves the original destination, checks temporary-file removal and pending WRITE convergence, then verifies a complete subsequent upload. Sending 10 MiB does not prove that Writable buffering reached its watermark at cancellation.
+内部复用应用类型在所属 `model/*-types.ts`；存储契约在 storage；技术契约在 Platform；后端跨模块类型在 public；双端契约按 [Shared 架构](SHARED.md) 归属。类型与实现分开，低层不反向引用上层。Remote 内部会话关闭原因归 sessions/model，后端公开原因独立定义；内部 Model/Service 不引用本模块 public 类型。
 
-The larger watermark adds 4 MiB of nominal Writable buffering per active upload (24 MiB additional at six streams, 48 MiB at twelve), not a bound on total process memory. Multi-file correctness is not a measured RSS bound. The first large-cancel candidate run failed in final fixture control reset with `fetch failed / other side closed`; its artifacts are retained. After making this scenario's fixture-control requests use `Connection: close`, both 4 MiB and 8 MiB large-cancel cases passed once without retries or increased timeouts. This removes connection reuse as a variable in those samples but does not establish the original failure's root cause. The watermark candidate still requires repository checks/build and full fixed-SHA acceptance before deployment.
+业务流程、权限和操作顺序由 Service 持有；复杂或共用的纯判断放所属子功能 `*-rules.ts`，输入/结果类型仍归 model。规则只消费应用事实，不引用 Model 类、Service、Storage、SQL 或网络；简单判断直接留 Service，不为每个操作创建规则文件。Model 不内置业务算法，可以在事实转换回调中调用规则。
 
-The upload backpressure polling candidate (2→4→8 ms instead of fixed 8 ms) was removed after three baseline and three candidate runs at 300 ms fixture WRITE delay. Completion medians were 41,420.1 / 41,422.4 ms, with browser high-water hits in only 2/3 / 1/3 samples. A single candidate drain observation of 13.1 ms is not evidence of repeatable polling benefit; sampled socket drain is not actual loop wait duration. Sustained/background backpressure coverage remains open.
+Model 逐字段转换应用与存储/技术输入结果；模块入口/出口 mapper 保护公开边界；HTTP/WS 逐字段投影完整 wire。三个边界各有职责，即使字段相同也保留运行时白名单；同一边界不复制转换。复杂公开投影可独立 public-mappers，单处投影就地保留。
 
-The delayed file-picker upload probe accepts `NEXUS_E2E_UPLOAD_WRITE_DELAY_MS` (integer 0–750) to override the isolated fixture WRITE delay without changing the file source or production watermarks. A 300 ms calibration on the disk-backed 16 MiB + 123-byte file reached the browser 8 MiB high watermark, unlike previous 30 ms samples. Verify actual high-water hits in each measured sample; fixture WRITE delay is not network latency and a brief browser drain does not establish sustained backpressure or background safety.
+应用与存储/底层能力之间明确保留 Model 转换层，即使当前字段一致、暂不需要变换，也不让 Service 绕过 Model；协议入口/出口 mapper 同样保留。精简只合并同一边界的重复实现，不删除转换边界。同一用例兼有存储与远端资源时，由 Service 协调；复杂度确有需要时按存储转换和资源封装拆分 Model，数据库事务不覆盖远端副作用。
 
-Local production-candidate evaluation (2026-10-04): unchanged-checkpoint caching passed three resume samples but did not consistently improve request/response or tail-visible latency and was removed. One-chunk upload prefetch passed three disk-backed 16 MiB + 123-byte samples with exact bytes, but completion median changed from 482.1 ms to 500.8 ms and summed Blob-read median from 236.2 ms to 290.9 ms; it was removed. These small sequential samples reject retaining the candidates, not establish stable regressions or resolve prior browser OOM evidence. Input TextEncoder reuse was also removed: its original three-sample comparison had one reply-order failure and therefore no valid complete performance comparison. Controlled recovery reply-order checks are correctness evidence only, not optimization gains.
+协议差异由 interfaces 解码和投影，Service 以真实业务语义组织用例，不使用 Legacy/New 等迁移标签构造长期双轨。同语义共用路径归一、结果确认及资源执行机制；不同的覆盖前提、编码和操作范围保留明确用例。协议容量由 Shared codec/interface 校验，Service 另守应用路径、操作权限、预算与副作用约束。
 
-The mobile automatic-status-reply recovery case reports live/post-recovery input observation intervals and timestamps for resume requests, replayed queries, DSR replies and observed command enablement. UI interaction and polling are included; these timings do not isolate input encoding cost. The same visible query marker is delivered before and after recovery, so its presence alone cannot establish that the replay was processed or serve as a response-gating barrier. The default case holds the replay query until input is enabled and requires exactly one reply to that query. `NEXUS_E2E_INPUT_RESUME_RESPONSE_GATE=1` instead holds the real reconnect response until a cumulative `terminal.flow` acknowledgement covers the replay frame on the replacement socket: that query must produce no reply, including after activation. Both orders require a fresh post-activation query to receive exactly one reply and a user command to exit the remote loop. The earlier uncontrolled failure is retained as evidence of ambiguous delivery order, not counted as resolved real-device inability to type. Do not compare the controlled delivery orders as input-encoding performance results.
+Files 的 `FileResource` 只提供应用身份、可用状态、metadata/字节读取、staged write、基础 SFTP mutation、realpath/chmod 及受约束 command 结果；Machine/SFTP lease/Node Stream 私有持有于 Model 的 `SftpFileResource`。Model 负责技术 metadata/byte source、同目录临时项和技术 commit/discard 转换；Service 持有 UTF-8/hash/文件类型、覆盖、编码、search、递归/force 删除、批量顺序和写后确认等业务政策；目录搜索流程归 `files/service/file-search.ts`，资源准入与整项期限由主 Service 统一管理，不取得技术句柄。Files 内部失败码归 model，HTTP/WS 分别白名单投影公开契约。
 
-The long-list refresh case in `file-manager-navigation.spec.ts` accepts `NEXUS_E2E_REFRESH_DIRECTORY_DELAY=1` for 60 ms OPENDIR delay instead of zero. Each refresh must confirm the expected delayed-open count, retain sorting, final-entry accessibility and long-filename menu geometry checks, and reset the delay. Reported time includes sorting and scrolling until the target is reachable, not isolated directory-request latency. The external-deleted-directory path-sync case separately verifies refresh falls back to a valid ancestor. These condition comparisons do not establish production optimization gains. Set `M11_03A_EVIDENCE_DIR` to a run-specific directory under `/tmp/opencode` when retaining diagnostic artifacts.
+本轮 HTTP 流式下载的身份、Workspace owner、原附件期限及下载票据绑定维持不变；HEAD 只读元数据复用 owner 的 FileResource，GET 的实际 byte body 由 FileService 准入一个 fingerprint 一致的独立 SFTP 技术资源，避免浏览器取消导致主 Workspace lease 同时退场。该临时技术资源关闭结果仍记录在原 owner cleanup ledger，失败或未知不可推断为已清理。Platform SFTP Adapter 针对 RTT 较大的 4MiB+ 下载使用有限 8×32KiB 并行 READ、按 offset 严格有序输出、关闭前结算全部已派发读取；取消时必须确认整条 lease 关闭。写入端用户明确 Cancel 在 stage 未提交且通道仍可用时等待已有 WRITE 结算，确认私有暂存删除后再返回，不提前 abort SFTP 去制造伪 unknown；完成阶段或断流时仍保留未知状态。以上只是源码候选，远程 admission/backpressure/字节 hash/Handle 计数/复原必须独立验收。
 
-The initial-connection capability profile in `suspend-resume.spec.ts` compares three normal connections with three fixture REALPATH-gated connections. Gated samples require an outstanding REALPATH before real shell output is requested; split printf arguments avoid a command-echo false positive. Connection response and shell round-trip intervals are reported separately, and released initialization must permit directory listing. This verifies optional filesystem initialization does not block initial shell use, complementing ready/error/closed suspended-recovery cases; it is not a production optimization before/after comparison or coverage of every optional capability.
+第八轮进一步确认 `/ws/uploads` **丢失客户端 binary transport 不等于专属 SFTP 失效**：过去 onClose 立即 abort 复合 signal，先前已 ACK 的写入也无法经过 `stage.discard()` 的确认流程，进而在 reset 留下 RemoteResourceCleanupFailure。新的未提交 owner 候选只对尚未 terminal、SFTP stage 仍在且 signal 有效的任务停止接受新帧、令上传 worker drain 已派发队列后做正常关闭及删除；仍向调用方投影不确定操作结果，不能擅自标为 `cancelled` 或 `completed`。已进入 commit、SFTP 真正失效、无法确认的并行写入及 discard 不确定时仍保留未知和原 Root ledger，不尝试重复提交。
 
-The gated filesystem initialization recovery cases wait for server-reported suspended ownership `available` after closing the old socket before attempting another resume. Client socket closure alone is not the server ownership-release barrier; the earlier immediate-resume failure returned `SUSPENDED_SESSION_OWNED` and is retained as diagnostic evidence. Ready/error/closed outcomes still require real shell output while initialization is blocked. The reported gated timing includes fixture-state polling, not only resume response latency. These cases cover suspended recovery, not all initial connection capabilities.
+八组最新 Actions `39239518815` 证明同类异常仍发生于明确的 `upload.abort`：旧 Service 的 `finishUpload(mode='abort')` 即使拥有未提交、可收敛的 SFTP stage，也在 reject 已接收字节之后立即 abort 其 SFTP 信号，导致 `stage.discard()` 没有可用连接确认。这条独立调用路径现与 binary WS onClose 一样，保留健康的技术 lease 到 ACK 队列和 stage 的删除/关闭结算；不同之处是 transport abort 始终以 unknown 投影，绝不报告用户已成功取消。已经进入 commit 或 stage/lease 不可用的分支仍不伪造回滚成功，清理失败继续由 Root ledger 汇总。
 
-The extensionless-file save step in `file-preview-editor.spec.ts` accepts `NEXUS_E2E_EDITOR_SAVE_DELAY=1` to inject 60 ms fixture WRITE delay instead of zero. It observes Save click through exact isolated destination content, resets the delay in cleanup, and retains editor reopening, encoding and line-ending regressions. Reported verification time includes UI interaction and polling, not isolated remote WRITE time or Monaco CPU. These small-file samples do not cover large text, save failure recovery or demonstrate an optimization before/after gain.
+Workspace WebSocket 在绑定附件后的 owner 身份轮询属于 Remote WS 协议边界：密码轮换的 Access/SQLite 事务会撤销旧 token；即使 socket 上不再发生 RPC，`WorkspaceFilesSession` 每 3 秒重新调用 Workspaces.allowed 验证会话及附件身份，失效主动 close(1008)。既不引入旧兼容 WS，也不延长原安全撤销测试的 10 秒要求；负载与撤销时延须由远程 Actions 独立复核。第七轮第 4/6 shard 已出现真实 stage `abort/append` 与 `discard` 无法确认后 Root shutdown 失败，必须保留 cleanup ledger 未知，不允许把这类 500 当作普通 404 或吞错。
 
-The repeated-refresh case in `file-list-profile.spec.ts` compares one/five synthetic DOM clicks under 300 ms OPENDIR delay, three samples each, correlating real list requests and responses and requiring new fixture files and the correct final directory. The existing UI navigation queue serializes refreshes, so five clicks must issue five requests with peak pending count one. This measures queue cost, not overlapping requests or a coalescing optimization. The earlier overlap assertion failed because its concurrency assumption was incorrect; changing the expectation follows the diagnosed serial navigation behavior, not a reduced correctness requirement. A production coalescing candidate still needs mutation-during-refresh and navigation-order evidence before adoption.
+ssh2 的 SFTP status、异步 read stream error 与 command channel 派发结果在 Platform Adapter 转为具名技术失败；Model 只消费 `remoteStatus` / `not_started|failed|unknown` 等技术契约，不读取供应商 `cause.code` 或错误正文。原始 cause 仅作诊断。PTY 同样通过应用资源操作。公开出口不传 cause 或凭据。Agent 的安全错误类在 public-errors，内部 agent-errors 只映射失败，不重复定义公开码；HTTP 使用 Shared 严格解码并逐字段投影。
 
-The browser marking case in `suspend-resume.spec.ts` accepts `NEXUS_E2E_SMALL_SNAPSHOT_PROFILE=1` for 200 output lines instead of 2,000. It reports actual serialized snapshot bytes and correlated prepare/commit send/response intervals, while retaining marked and unmarked shell-input checks. Output line count is not retained snapshot line count: terminal scrollback bounds the captured content. Click-to-frame and click-to-response intervals include UI scheduling, transport and server work, so this size comparison does not isolate serializer CPU or demonstrate production optimization gains.
+Workspace复制失败message收窄为Shared RemoteFileErrorCode；归档失败为该有限码或WorkspaceArchiveErrorCode。内部任务对象保持独立，WS逐字段投影，归档警告仅投影verified_warning，缺失工具名按Shared有限取值投影，不输出原生命令、密码或技术诊断。Shared task-codec由正式前端严格消费；原Files执行、独立SSH/SFTP、资源准入与清理owner不变。
 
-The existing suspended-log reconciliation Agent scenario also compares 128 real 64 KiB appends with batch sizes 1/16, verifies streamed export hashes and deletion, and reports append completion and subsequent flush separately. Set `NEXUS_LOG_COMPACTION_PROFILE=1` to additionally preseed isolated physical files at 131/132 MiB, append 64 KiB, and compare append-plus-flush across the 132 MiB physical compaction threshold. Physical-size assertions and streamed 100 MiB export hashes preserve the public retention boundary. Use `TMPDIR=/tmp/opencode` for these diagnostic runs; the scenario removes only its own unique fixture directory. Uniform fixture bytes validate retained length/content but not ordering of distinct historical chunks. These disk-backed measurements do not establish PTY throughput, power-loss safety, queue stability at arbitrary output rates or production optimization gains; real marking/output/history recovery remains covered separately in `suspend-resume.spec.ts`.
+## 5. 入口与安装
 
-ZIP diagnostics distinguish remote `transfer.compress` from backend-streamed directory downloads. `archive-cancel-recovery.spec.ts` compares three 0/100 ms remote command-delay samples for a 106,496-byte source, requires exact extracted content via `unzip -p` and remote process exit, and retains cancellation, concurrent isolation and failure recovery cases. `sftp-download.spec.ts` compares three 0/20 ms READ-delay samples for four 256 KiB files through the directory ZIP endpoint, verifies the exact entry set and every extracted byte, disposes HTTP responses and observes pending READ and remote handle convergence. The latter fixture is highly compressible, so it does not establish incompressible-data throughput, compression CPU cost, large-directory memory bounds or streamed-ZIP cancellation safety. Neither condition comparison is production optimization before/after evidence; remote command cancellation does not cover the independent HTTP ZIP owner.
+工具只读审计安装 `GET /api/v1/agent/apps/:appId/runs/:id/tools/:toolCallId` 及 `/events`。Shared 严格解码 UUID 与 after/limit（默认 0/50，最多 100），RunService → RunToolModel → Storage 读取，register 和 HTTP 各自安全投影；Access 管理员身份在入场及异步结果交付前核验。响应最多 128 KiB，不新增工具创建/派发入口。前端 F1 待接线；目录/诊断、文件读写、Shell、Docker、Job 与 ACP 等工具的可信生产与执行源码已接线，真实权限、执行和故障行为统一留 B10。
 
-The paused HTTP case in `download-admission.spec.ts` creates a 32 MiB fixture with bounded local buffers and hashes the HTTP body incrementally. It compares three normal reads with three real Node HTTP reader pauses of one second, under 20 ms fixture READ delay. At resume the client must have delivered zero bytes while remote response bytes are positive and below the full file size; remote bytes are also observed at 300 ms. Full length/hash, pending READ convergence and remote handle closure remain required, alongside the existing abort/admission recovery case. Partial remote reads beyond normal completion time support downstream backpressure, but two sampled counters do not establish a stationary queue, per-process memory bounds or exact cleanup timing. The earlier 8 MiB fixture fitted within the tested link buffers and did not enter the intended window; a 300 ms pause alone cannot distinguish backpressure from an unfinished ordinary transfer. This is behavior diagnosis, not production optimization before/after evidence.
+register 在单一 v1 初始化之后，通过 RunToolModel 收敛未完成操作，并通过 ToolJobModel 收敛 queued/dispatched Job 后再接收请求。审批 request/consume 由内部可信工具消费者调用，不对外新增任意派发入口；resolve HTTP 只产生决议，不能消费执行许可。AcpPermissionService 持有独立持久权限操作，绑定父操作与真实 runtime 请求；缺失或失效的绑定明确拒绝，不能借普通工具审批派发父操作。
 
-`search-network-profile.spec.ts` compares wide, deep and skewed trees with 0/20/80 ms fixture OPENDIR delay and three samples per condition. Nonzero-delay searches must observe 25 delayed directory opens for wide/deep trees and 26 for the skewed tree. Exact complete results, the 500-result truncation boundary, missing-directory failure and subsequent successful search remain asserted. The skewed tree also has a 1,500 ms slow directory. This measures the existing traversal under directory-open waiting, not packet-level network latency or an optimization before/after comparison; sequential depth and slow branches remain dependencies. Nested cleanup resets both directory delays and closes the workspace socket.
+### B5.2 安装边界
 
-`file-list-profile.spec.ts` compares navigation and local sorting for 1,000/5,000-entry directories with bounded rendered rows and reachable final entries. `NEXUS_E2E_DIRECTORY_OPEN_DELAY=1` injects 60 ms at fixture OPENDIR, not at each READDIR response; the `/sftp/readdir-delay` counter must confirm all delayed directory opens, including returns to the fixture root. This isolates directory-open waiting from the existing listing and UI costs; it does not emulate full-link latency or demonstrate production optimization gains. Cleanup resets the fixture delay.
+register 安装一个 RunModel、RunStepModel、RunModelStream、RunExecutionOwner 和 RunService；ProviderService 在配置提交后通知该执行 owner 中止对应请求。AgentRequestOwner 先停止准入，quiesce Run/Provider/Registry，再等待已准入请求、实际Registry刷新和各资源close，SQLite最后关闭。Provider端点发现也纳入同一取消owner；Provider close独立等待其持有的网络Promise并有界保留多项清理失败，模块停止及关闭逐项执行，同步抛错不跳过其余资源；Registry最后一个HTTP订阅者离开不解除实际任务追踪。初始化在迁移后 reconcileUnsettled，不重发已派发请求。
 
-Upload cancellation diagnostics in `upload-protocol.spec.ts` distinguish cancel response, observed terminal event, and verified convergence (pending fixture writes zero, temporary path absent, destination bytes preserved, and subsequent upload succeeds). Convergence timings include polling and content verification, not only backend cleanup. Pending-start cancellation waits for the fixture delayed-stat counter instead of a fixed sleep to establish entry into the metadata window. The existing `workspace/upload-idle-timeout` Agent scenario covers an injected short timeout with an isolated Writable; it does not establish real SSH behavior at the default five-minute idle deadline.
+状态 HTTP 统一经异步交付检查复核管理员会话，创建/取消的结果映射只负责状态码与白名单响应；交付失败不撤销已提交写入。保留创建/查询/取消/主事件 HTTP；增加 `/api/v1/agent/apps/:appId/runs/:id/steps/1` 和 `/steps/1/events` 两个管理员只读审计入口。没有公开执行启动/步骤写入接口。既有 DEV 页消费模型候选、必填模型三字段和步骤审计，正式前端 F1 未切换。
 
-The slow-ACK batch case in `file-upload.spec.ts` accepts `NEXUS_E2E_UPLOAD_BATCH_CORES=1|4|8` to supply browser hardware capability before application startup without changing the production scheduler. Both 1 and 4 select the existing six-stream minimum; 8 selects a twelve-stream ceiling, with a ten-file batch limited by its file count. Diagnostics report actual peak upload sockets and time to all upload-ID-correlated completion events; all ten 64 KiB files are downloaded and compared byte-for-byte, and active upload sockets must converge to zero. The 750 ms per-WRITE fixture delay models a slow-ACK small-file batch, not bandwidth, low-core resource pressure, background scheduling, or large-file performance. Capability-condition comparisons are not production optimization before/after evidence.
+### Provider 安装与接口
 
-`small-upload-profile.spec.ts` measures ready, send-to-final-progress, and final-progress-to-completed intervals with exact destination bytes and no upload `.part` residue. Its default conditions compare 0/60 ms WRITE delay. `NEXUS_E2E_UPLOAD_COMMIT_PROFILE=1` instead keeps WRITE delay zero and compares 0/60 ms STAT/LSTAT delay scoped to `/small-`, asserting actual delayed metadata requests through the fixture counter. These are protocol-observation intervals, not isolated backend CPU timings; metadata delay may affect both preparation and completion. `/sftp/stat-delay` accepts an optional `prefix`; without it the existing pending-start cancellation target remains the default. Both delays are reset and the workspace socket is closed in nested cleanup.
+register 安装 Provider/Registry/Run owners；管理员接口前缀 `/api/v1/agent/ai`，含 Provider CRUD、models、端点/保存配置的发现、test、model-registry 查询/resolve/refresh。PATCH 为 `expectedVersion` 加部分字段；省略字段保留旧值。Provider身份来自Access；各管理接口在异步读取/写入之后、结果交付前复查身份，撤销后不发布结果；写入已提交但交付失败不证明回滚。query契约及容量归Shared严格codec。 Provider自身在途任务覆盖网络、授权/配置复查及发现结果持久化，停止准入后仍等待读写收口；清理失败与关闭期间的存储/内部故障有界保留，同一失败不重复登记。
 
-Upload read diagnostics in the delayed file-picker case wrap only slices of the selected filename, report per-chunk Blob read durations, and restore the browser methods in cleanup. `NEXUS_E2E_LARGE_UPLOAD_READ_PROFILE=1` selects a disk-backed 16 MiB + 123-byte file with no injected SFTP write delay and verifies exact bytes directly in the isolated SSH fixture; it omits binary frame decoding/storage and the additional browser download, but CDP events still incur overhead. `NEXUS_E2E_UPLOAD_FILE_READER=1` substitutes FileReader only inside the test probe for a same-condition candidate comparison, not in production. Browser OOM/crash samples are failed evidence, not valid timing medians. Page destruction skips obsolete CDP detachment while fixture delay reset still runs; the normal-path regression does not establish crash-cleanup coverage.
+### B4.2 安装与真实接口
 
-With large-upload profiling, `NEXUS_E2E_UPLOAD_BACKPRESSURE_PROFILE=1` injects 30 ms per SFTP WRITE instead of zero delay. A test-side WebSocket send wrapper and 4 ms sampler observe actual upload socket buffered bytes without modifying the queue, thresholds, or production waiting policy. High-water samples are observations, not distinct backpressure transitions; drain intervals measure sampled time from at least 8 MiB to at most 2 MiB (or socket closure), not exact production wait time. The fixture `/sftp/write-delay` response also reports WRITE request count, requested bytes, current pending requests, and peak pending requests since fixture reset. Counts are fixture-wide, so byte assertions require an otherwise idle, reset fixture; requested bytes do not establish write success without exact destination-byte verification. These diagnostics cover foreground successful transfers, not cancellation, background scheduling, or failure recovery.
+`registerAccess({sqlite,secrets,passkeys})` 装配 Factors，`createApp.configuration` 首次初始化持久 Preferences 的 passkeys 站点列表，每项为 `{origin,rpId}`，后续启动从持久安装快照装配，独立入口从 `NEXUS_PUBLIC_ORIGIN` 推断并允许 `NEXUS_PASSKEY_RP_ID` 收窄。RP 必须与公开来源 hostname 一致或是其合法父域；非 localhost 的 HTTP Origin 禁止启用。
 
-For input recovery, run `--project=mobile specs/mobile/suspend-resume-ui.spec.ts --grep 'foreground probes|recovery'`. Healthy foreground probes must not reconnect; dropped probes recover the same Workspace without fresh login. Recovery gates automatic terminal status replies, then handles server replay and fresh queries. The post-recovery shell marker is split to prevent input echo from satisfying it. Synthetic foreground events and a routed WebSocket do not reproduce real device suspension, OS OOM, or establish the cause of an incident on a deployed server.
+因素路由：`POST /api/v1/auth/login/2fa`、`POST /api/v1/auth/2fa/{setup,verify}`、`DELETE /api/v1/auth/2fa`、`POST /api/v1/auth/passkey/{registration-options,register,authentication-options,authenticate}`、`GET /api/v1/auth/passkey/has-configured`、`GET /api/v1/auth/user/passkeys`、`DELETE /api/v1/auth/user/passkeys/:credentialID`、`PUT /api/v1/auth/user/passkeys/:credentialID/name`。Auth HTTP 仅签 HttpOnly/SameSite/Lax 受控 cookie；FactorService 始终通过完整 SessionModel 验证管理权限。
 
-The bounded-window resume UI case also reports click-to-resume-request, response, and success-message observation separately. Compare three samples normally and with `NEXUS_E2E_RESUME_FILESYSTEM_GATE=1`; the latter verifies a pending fixture REALPATH request before releasing it after terminal activation. These observations include browser scheduling and Playwright polling, not pure activation CPU time. Both modes retain historical content and post-history shell-result assertions; release the fixture barrier in cleanup.
+### B4.1 Access 安装与入口
 
-`specs/ssh/suspend-resume.spec.ts --grep 'initialization is gated'` uses the isolated SSH fixture's REALPATH barrier and pending-request count to prove that SFTP initialization is actually blocked. Before releasing it, resume must acknowledge committed ownership and a real shell command must produce its result. The scenarios then verify filesystem ready, filesystem permission failure without terminal loss, and close-before-release followed by a second successful resume. This protocol evidence does not measure browser paint or prove every cause of a delayed connecting indicator on a real device.
+`createApp` 先读取 Preferences 持久快照；`AppOptions.configuration` 是仅首次创建时调用的初始化工厂。独立 `main.ts` 提供 `NEXUS_IP_WHITELIST`（逗号/换行分隔 CIDR）、`NEXUS_IP_BLACKLIST_ENABLED`（默认 true）、`NEXUS_MAX_LOGIN_ATTEMPTS`（默认 5）、`NEXUS_LOGIN_BAN_SECONDS`（默认 300）、`NEXUS_CAPTCHA_ENABLED/PROVIDER/SITE_KEY/SECRET_KEY`（默认关闭）并在开放监听前检查值。实际 Access HTTP：`GET /api/v1/auth/{needs-setup,status,captcha/config}`、`POST /api/v1/auth/{setup,login,logout}`、`PUT /api/v1/auth/password`；认证的黑名单 `GET/DELETE /api/v1/settings/ip-blacklist`；其它 Targets/Remote/Agent/System 路由经全局完整来源准入，未知路径同样检查来源；仅状态、登出、登录及管理员黑名单恢复保留白名单级入场（后者须 Access Service 验证 userId=1）。CAPTCHA 成功绑定公共 Origin hostname；安装时从公共 Origin 推导，未绑定拒绝启用。Preferences 在 Access 注册前提供经过校验的版本化快照；保存与生效版本分开，IP/监控经唯一安装回调热更新，CAPTCHA/站点重启激活，不使用 Platform 注册槽。SourceAdmissionService 在封禁查询返回后复查当前白名单和黑名单启用策略，旧异步准入不能穿透已收紧的来源策略。
 
-The delayed file-picker case in `specs/ssh/file-upload.spec.ts` observes upload WebSocket binary-frame timestamps/byte totals and the completion event through browser CDP, while retaining exact remote-byte verification and target refresh. Use `--grep 'file picker uploads a delayed file' --repeat-each=3` for independent samples. Its 786,555-byte payload does not exercise the browser's 8 MiB bufferedAmount high-water threshold. Frame timestamps are send observations, not remote write acknowledgements; completion time includes fixture per-SFTP-write delays, verification, and commit rather than isolating any one phase. No upload chunk/buffer settings or timeouts are changed by this diagnostic.
+基础认证setup/login/password及TOTP二阶段登录路由显式引用Shared `ACCESS_AUTH_REQUEST_MAX_BYTES`，保持原16KiB传输预算；前端同一常量约束完整编码输入，不用字段长度替代路由预算。
 
-Directory and search result snapshots use shallow reactive array replacement, not per-entry reactive metadata mutation. Validate this path with `specs/ssh/file-list-profile.spec.ts`, `specs/ssh/file-list-sort.spec.ts`, and `specs/ssh/file-manager-navigation.spec.ts`, retaining remote refresh, replacement search results, natural sorting, and virtualized last-entry access. Compare diagnostic timing samples without adding speed thresholds; frame scheduling and fixture metadata overhead can obscure gains, particularly for smaller lists.
+### B3.2 入口
 
-The bounded-window UI history case in `specs/ssh/suspend-resume.spec.ts` logs resume-click-to-visible-tail and, separately, real shell round-trip time after history browsing and returning to the live tail. It does not report a combined click-to-usable duration across the intervening browsing steps. The round-trip output marker is split in the command so echoed input alone cannot satisfy the output assertion. Existing lazy paging, earliest-history access, return-to-live-tail, and cursor-reset checks remain before sending the new command, which changes the terminal state. Use `--grep 'resumed terminal pages older history through a bounded window' --repeat-each=3` for independent samples. Measurements include Playwright actions/polling and local fixture behavior; DOM text visibility is not a compositor paint measurement, and these samples do not cover mobile, background tabs, or weak networks.
+同一 `/ws/workspace` 安装 status.start/stop、docker.status/command/stats，事件 status.sample/error；HTTP 保留 `/api/v1/system/status`、`/ssh-resources` 与 `/ssh-resources/:connectionId`。Remote/register 装配观测能力，System/register 安装本机能力；Bootstrap 仅调用模块安装入口。观测空请求codec归Shared monitoring，Docker仅消费自己的命令/统计codec，HTTP/WS仍在原协议边界白名单投影；正式前端WS与Dashboard概览HTTP已接Shared，配置消费者继续F1-C2-C2，不改变Remote/Agent各自授权政策。
 
-The interactive suspend-mark case in `specs/ssh/suspend-resume.spec.ts` produces 2,000 real shell output lines before marking through the UI, then observes outgoing snapshot byte counts and click-to-request/click-to-response times for both `suspend.prepare` and `suspend.commit` through browser CDP. It retains attached-tab interactivity and unmark/live-shell checks. Use `--grep 'marking suspend keeps the UI tab interactive' --repeat-each=3` for independent samples. Click-to-request includes UI scheduling, pending-output drain, and serialization; commit timings also include the preceding prepare phase and are not isolated serializer CPU time. This does not measure recovery painting or prove preservation of every snapshot line.
+### B3.1 安装设计
 
-The cached-tail/history-paging case in `specs/ssh/suspend-resume.spec.ts` logs submission of a preconstructed 665,650-byte snapshot, resume response time, and per-page bytes/latency. It verifies retrieval of all 5,200 fixture lines, cursor reset replay consistency, and bounded small-page reads. Use `--grep 'resume sends only the newest cached tail' --repeat-each=3` for independent samples. These are local protocol diagnostics, not browser snapshot serialization/rendering measurements or public-network guarantees; no additional timing thresholds are imposed.
+`registerRemote` 只安装一个 `/ws/workspace`，接入 `workspace.connect/resume/ping/close`、`terminal.input/resize/flow/currentDirectory/changeDirectory`、`suspend.mark/prepare/commit/unmark/list/resume/owner.renew/history.previous/history.reset/terminate/remove/rename`，保留 Files/transfer 实际协议；另安装 `/api/v1/ssh-suspend` 的列表、终止、移除断线条目、重命名、日志导出。旧 PTY HTTP/WS 仍在独立消费者范围内运行；不得因新入口存在就宣称旧接口等价。管理和 WS 共用 sessions 的权限、结果与资源 owner。
 
-The sustained-output case in `specs/ssh/terminal-ui.spec.ts` retains parser-consumption and subsequent real shell round-trip assertions while logging command-to-visible-completion time, cumulative `terminal.flow` acknowledgements, and browser long tasks. These diagnostics do not isolate parser time, identify the function responsible for a long task, or prove byte-for-byte output integrity. For three independent performance samples, run the case with `--grep 'terminal parser acknowledges sustained output' --repeat-each=3`; timings are not pass thresholds. This profile does not cover background tabs, reconnect, snapshot serialization, or history paging.
+main 读取环境和启动；Bootstrap 安装实例与全库迁移；模块 register 组装内部 Model/Service/Adapter，并返回消费者需要的能力、HTTP/WS 安装及 quiesce/close。Bootstrap 不逐个构造所有业务 Repository，也不引用私有配置类型。
 
-`specs/ssh/file-list-profile.spec.ts` measures real SFTP-backed navigation to the first visible row and browser sort-to-paint over three samples for 1,000/5,000 entries. It checks bounded rendered rows and access to the last entry after scrolling, without timing thresholds. The SSH fixture returns at most 128 entries per `READDIR` response until EOF rather than emitting one potentially oversized NAME packet. Fixture OPENDIR still performs sequential local metadata reads, so navigation timings are not ordinary SSH-server performance guarantees. The profile does not isolate network, decoding, reactive sorting, and rendering costs.
+WebSocket来源准入包装显式保留route的文本/二进制入站预算和文本发送缓存预算。Workspace目录列表使用Shared的8MiB发送预算，其它路由继续使用各自声明或默认值；HTTP bindings在安装时核对三类容量均为合法整数且不超技术帧上限。入站控制限制与出站列表预算分别执行，不用默认发送缓存误拒绝合法列表。
 
-`specs/ssh/file-list-sort.spec.ts` verifies natural numeric/multilingual name ordering, case-insensitive equivalence, and directory precedence in both directions through a real SFTP-backed File Manager. Browser-local comparator profiling compares 1,000/10,000 names over three samples and checks identical complete ordering; timings are diagnostic, not CI speed thresholds or end-to-end large-directory latency guarantees. Run alongside `specs/ssh/file-manager-navigation.spec.ts` to retain refresh, navigation, long-list actionability, and terminal path-sync regression coverage.
+Targets 导入仅公开 importMany；单项使用一元素集合，每项仍有独立事务与安全结果。importOne 保留为模块内部实现，不因测试方便扩大出口。管理类型为区分模块保留 Shared 别名，不复制字段定义。
 
-Actions run `37180354883` failed the real GitHub remote-theme list in shard 8: Playwright trace recorded local HTTP 400 with `Request failed with status code 403` from upstream on both attempts. Upstream body/rate-limit headers were not retained, so rate limiting is not a confirmed cause. E2E shards now receive the workflow's read-only `GITHUB_TOKEN` for the existing authenticated GitHub catalog path; real list/search/download/apply assertions remain. List failures include local status and response body. Local theme UI regression passed 10/10, but workflow-token behavior requires a new complete remote run; this is not acceptance of the failed SHA.
+待实施：模块 interfaces 将 Shared 协议 schema 绑定到真实 HTTP 路由，Platform 提供通用元数据契约，Bootstrap 汇总已安装路由生成 OpenAPI；WS 契约另行汇总。当前 HttpRoute 尚无完整 schema 关联，此设计不能写成已完成。
 
-The preparation recovery fixture also requests a valid sibling alongside a blocked parent: the valid directory must remain after failure, and reusing the prepare ID after fixing the parent must succeed. This exercises acknowledged partial success without destructive rollback. The Agent preset-plugin E2E remains part of local regression because the known-failure settlement branch touches the shared mutation guard.
+Platform HTTP 已支持 HEAD、流响应和按路由 opt-in 的 binary 入站，队列/背压属于技术层。票据、Workspace/任务、目标授权与业务预算归 Remote；Platform 不注册业务资源。统一 Files 应用绑定由 FileService 持有，Interface 不作为 Service 的资源查询来源。
 
-Upload preparation executes sorted depth layers: all workers in a parent layer settle before starting a child layer, with up to eight workers and no new tasks claimed after a failure is observed. A metadata-acknowledged non-directory is a typed conflict; only preparation whose failures are exclusively these conflicts, after all started work drains, reports a known failed mutation that can release its lease. Other failures and lost leases remain conservative quarantine cases; this does not clear pre-existing quarantine. Recovery coverage reuses the same prepare ID after fixing a blocking file. A separate fixture connection exercises denied LSTAT followed by `RESOURCE_QUARANTINED` even after denial removal. Layered candidate nested preparation measured about 1386ms at 80ms operation delay; it does not prove disconnect/mixed-error safety or cancellation during preparation.
+Access 取得可信会话身份；Targets 管理出口只给非敏感对象，可信 SSH 解析为独立后端能力；Remote 普通资源绑定登录会话；Agent 绑定自己的 user/App/Thread/Run。UUID 和目标选择不替代授权。模块内部 HTTP 可调用本模块明确 Service，跨模块仍走 public。
 
-`ssh/upload-prepare-profile.spec.ts` measures existing, new sibling and nested directories with three samples at 0/80ms fixture STAT/LSTAT/MKDIR delay, verifies every requested directory, and attaches operation counts. Internal scheduling adds at most one direct parent per requested path before sorting; the prepared destination allowlist and its capacity accounting retain only explicitly requested directories plus the base. At 80ms, 32 nested children under eight parents measured about 1796ms before versus 1388ms after; metadata requests increased from 45 to 50 and mkdir stayed at 41. This trades extra checks for shorter scheduling waits, not fewer I/O operations or a full-WAN speed guarantee. Boundary coverage rejects implicit-parent, sibling and outside-base upload destinations, recovers the same prepare ID after a file blocks the parent path, and starts/cancels an allowed upload with no temporary residue. It does not cover permission failures, mid-prepare cancellation or every capacity boundary.
+Remote 会话 HTTP 仅负责协议解码和失败投影，入场身份查询与管理员授权统一由 RemoteSessionOwner 执行。读取/关闭对未认证或无权限身份抛具名失败，认证通过但资源不属于该会话时返回未找到；建连完成后再次核对权威身份，WebSocket 访问/输出也继续复查。入场去重不删除异步期间会话撤销保护。
 
-Corrected-fixture local regression passed 24/24 across small upload, search profiles, download profiles, upload protocol, download admission and binary-read limits. Search median milliseconds (three samples) for wide/deep/mixed-slow trees were 11/27/1504 at 0ms, 96/564/1546 at 20ms, and 335/2067/2067 at 80ms OPENDIR delay. A 1.5s slow directory still sets the mixed-tree completion floor; refill overlaps independent work but cannot eliminate that wait. Current download median aggregate throughput was approximately 74.5MiB/s locally, 35.3/11.3/4.83MiB/s at 20/80/200ms READ delay, and 40.0MiB/s for four streams at 80ms. These are current-implementation measurements, not a fair corrected-fixture before/after comparison or production performance promises.
+Remote 同时安装 `/ws/workspace` 的旧 Files 子协议适配层。Interface 持有旧 envelope、requestId/in-flight、binary read owner、NXW1 发送、cancel 和 ready/error；旧 WorkspaceEventHub/Protocol 复查确认没有独立 Files mutation change event，因此适配层不虚构 `filesystem.changed` 一类消息。Files Service 持有路径/编码/操作政策；Model/Platform 不知道旧 Workspace DTO。R1 恢复 fresh `workspace.connect`、`workspace.ping` 与 Files 消息；完整 `workspace.resume`、Terminal/suspend 已有 B3.1 源码，status/docker 已有 B3.2 源码，行为统一待 B10。下载/上传/传输/归档的 B2 源码已收口，行为待 B10。现有 `/api/v1/remote/files` 暂由 DEV `remote-next` 消费，后续 P1/F1 决定最终 API，不把双入口固化成长期设计。
 
-The test SSH server explicitly enables `TCP_NODELAY`. An isolated 4KiB upload comparison (three samples per 0/60ms WRITE-response delay) found total medians of 447/506ms before versus 12/73ms afterward, with exact remote bytes and no temporary-file residue. This is a fixture transport correction, not a production upload optimization: the production SSH client already enables `TCP_NODELAY`. Earlier download/search throughput and absolute timings measured the former fixture including its small-packet transport behavior and must not be generalized to ordinary SSH servers. Re-measure on the corrected fixture before attributing further bottlenecks to production code. WRITE-only delay is not full-link RTT; timing profiles are investigative evidence, not latency SLAs.
+## 6. 数据、事务与并发
 
-Suspended-log append creates the storage directory when initializing a per-log writer rather than on every chunk. The local 2048-append investigation (three samples, 256B/4KiB/32KiB chunks, exact length and SHA-256 verification) measured median adapter times of 165/171/234ms before and 109/114/177ms after; these are local microbenchmarks, not end-to-end recovery guarantees. `mobile/pad-suspended-output.spec.ts` and `mobile/suspend-resume-ui.spec.ts` cover real detached output exceeding retained history, compaction/history recovery and the original-shell resume path. They do not prove behavior if an external process deletes the storage directory while a writer is active, or disk-full durability.
+工具事件分页在 SQLite 同一事务核对 user/App/Run/Tool 当前记录并读取其历史状态事件；按 revision 升序、严格大于 after，空页 nextCursor=after，否则为末项 revision。读取页校验应有条数、连续 revision、operationRevision 不倒退；到达当前 revision 时，事件的 hash/状态/修订/时间必须与当前行一致；不存在或范围不匹配返回未找到，不查询跨范围事件。读取与当前行校验共享快照，不据审计状态授予执行权。
 
-The Pad detached-output cases verify touch-history progress relative to the first visible numbered history line, then require `PAD_HISTORY_000` to become visible and the live shell marker to leave the viewport without scrolling the page. They do not assume a fixed pixel drag reaches a particular line: measured terminal row height, wrapped command echoes and shell notices affect that position. Original-shell identity and the real 112 MiB detached output remain required for both line logs and single-line output.
+agent_run_tools 通过复合外键绑定 Run/user/App，agent_governance_approvals 绑定同范围 ToolCall；agent_run_tool_events 与每次操作更新同事务写入。operationRevision 只随内容改变，revision 随状态/内容改变，审批 inputRevision 绑定前者。request/resolve/consume 读取当前政策、Run、操作、目标；consume 对未消费的普通工具批准做 CAS，并与 dispatched 状态及事件原子提交。历史 approved/幂等快照不产生第二份许可；未知提交不允许外呼。App/政策/审批和工具派发修订在递增前检查安全整数上限，批量失效也先检查原集合，任一耗尽使原事务回滚。审批消费时间必须处于决议之后且截止之前，存储与 Shared decoder 同时拒绝矛盾记录。审批创建及其后续 Operations 事件发布同属 GovernanceService 的在途任务；已提交审批后的事件失败保留 operation_unknown 与原因。
 
-Child Browser independent-cancel coverage fences the live-context case at the provider's post-tool model wait before reading the delegation version; context allocation alone is not a tool-settlement barrier. The creating case uses the Browser creation barrier. Both assert that a stale version is rejected with `409 DELEGATION_VERSION_CONFLICT`, then require current-version cancellation to return `202` with `cancelled`; no conflict retry is used. This addresses the test synchronization gap exposed by Actions run `37177979514`, not a relaxation of production optimistic-version checks.
+Model 根据完整应用检查内容和 user/App/Run/modelStepIndex/providerCallId 的固定位置编码生成 SHA-256，内部调用者不指定 operationHash；检查写入时间在 Adapter 的实际事务中取样。该摘要不替代可信工具定义/输入生产者。同模型步骤内相同 providerCallId/hash 的重放还须匹配完整检查内容；不一致返回版本冲突。工具 finish 在事务内复查父 Run 与自身 revision，结算与状态事件、未决审批失效原子提交，时间在写事务内取样。Run 完成不能越过 inspected/dispatched/unknown 工具；父 Run 终态与工具围栏同事务提交。启动恢复同时读取模型步骤和工具账本，即使没有模型步骤，也不遗漏已派发工具；保留其 unknown，不重放。
 
-`ssh/search-network-profile.spec.ts` compares three samples of 24 sibling directories, a 24-level chain, and that chain alongside a directory delayed by 1.5 seconds, under 0/20/80ms OPENDIR delay. Every sample checks exact relative-path sets and no truncation. It also verifies the 500-result bound with unique scoped paths, missing-root failure and a successful complete search afterward. Controlled response delays measure refill scheduling, not full WAN behavior; deep-tree parent discovery remains sequential. The current profile does not prove the 5000-directory ceiling, subtree permission-error handling or physical-device UI latency.
+### B5.2 状态提交与恢复约束
 
-Download network profiles use 4MiB per stream except the 2Mbps profile, which uses 2MiB: 4MiB at that configured rate necessarily exceeds CI's existing 15-second HTTP deadline. The smaller sample still spans two full prefetch windows; request timeouts are unchanged. Network-profile cleanup waits for fixture-confirmed pending READs to reach zero and requires successful configuration reset so an aborted request cannot contaminate the following profile.
+第一版通过一个 applicationMigration 直接安装完整 Run、事件与步骤账本，不执行开发期父表重建或数据升级。各模块仅编排所属 Adapter 的初始化接口；版本 marker 与全库 DDL 同事务提交，提交未知不重试。
 
-`ssh/reconnect-ui.spec.ts` also exercises hidden-page terminal consumption with animation-frame callbacks suspended and retained until visibility is restored. More than 1.2 MB of real SSH output must be acknowledged while hidden; on return the terminal must display the completion marker and accept input on the original shell without another Workspace connect. Hidden terminals use timer-based output batches with the existing byte threshold rather than relying on animation frames. This deterministic case does not simulate full browser process freezing, prove long-duration timer-throttling behavior, or cover every detached-view replay boundary.
+reserve/dispatch 同事务校验主体、App、Run version、step revision、请求 hash、冻结政策和当前 Provider 版本/凭据代际。dispatch 同时写 running、run.started 和 dispatched；finish 同时写主子终态、版本及事件。文本/usage 写入须持有 running 和有效 CAS。取消先持久围栏，再 Abort。
 
-Change coverage is counted by production change, not by test-case count. Mutation Origin/Fetch Metadata has eight HTTP cases and Webhook secret editing has seven HTTP cases plus its UI delivery flow; these represent two production changes, not fifteen.
+Run 用量通过认证 GET `/api/v1/agent/apps/:appId/runs/:id/usage` 只读获取。RunStepStorage 的 SQLite Adapter 单语句按 user/App/Run 限定当前任务与直接子任务，聚合持久步骤的 input/output、已报告请求数、模型步骤数及工具数；未报告为 null，不推算缓存命中率。Model、Service、公开出口和 HTTP mapper 各持原边界职责；响应携带同一 SQL 快照的 Run 版本，无表结构变更。
 
-The following mapping groups fifteen production changes with their behavioral E2E entrypoints. Acceptance requires the exact pushed revision's canonical Actions workflow to pass checks/format/build, all eight Playwright shards, and all three Docker smoke modes. Local results are preflight diagnostics only. A passing suite does not imply coverage of behaviors absent from these assertions.
+恢复仅将 reserved 归 failed/DISPATCH_NOT_STARTED、dispatched 或孤立 running 归 unknown；主子状态、版本、hash 和事件数量不合法则拒绝并保留现场。unknown 主 Run 保持活跃直到显式取消；已终结 unknown 步骤后取消主 Run 允许主版本多一。均不自动重放付费请求。
 
-| Production change                          | Behavioral coverage                                                                                                                                                                                                                               |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| HTTP mutation Origin / Fetch Metadata      | `http/mutation-origin.spec.ts`, `agent/provider.spec.ts`: matching public/direct Origins, denied foreign/opaque/path Origins, metadata rejection and unchanged settings                                                                           |
-| Webhook secret header editing              | `http/webhook-secret-contract.spec.ts`, `ui/notification-settings.spec.ts`: redaction, preserve/replace/remove, rejected edits and actual outbound credentials                                                                                    |
-| Effective Proxy credential validation      | `http/architecture-contracts.spec.ts`: password/key null or empty rejection, metadata atomicity, omission preservation and no credential reuse after switching to none                                                                            |
-| SSH Key mutation audit                     | `http/architecture-contracts.spec.ts`, `http/ssh-key-audit-failure.spec.ts`: mutation audit actor/source and field names without credentials; rejected edit preserves state and emits no success audit, subsequent rename succeeds                |
-| HTML theme content response isolation      | `ui/html-theme-security.spec.ts`: real direct navigation displays source, restrictive response headers and no script/localStorage side effect; remote upstream response remains outside this assertion                                            |
-| Connection tag atomic replacement          | `http/architecture-contracts.spec.ts`: duplicates, invalid/oversized batches, missing targets, preserved associations and explicit empty replacement                                                                                              |
-| Quick Command bounded tag batches          | `http/architecture-contracts.spec.ts`: duplicate IDs, raw oversized/invalid input rejection, no partial association and subsequent valid assignment                                                                                               |
-| Active terminal theme deletion             | `http/architecture-contracts.spec.ts`, `ui/custom-terminal-theme.spec.ts`, `http/terminal-theme-deletion-isolation.spec.ts`: active reference cleared and visible fallback; inactive/repeated deletion preserves selected theme                   |
-| Password-bound session invalidation        | `websocket/authenticated-session.spec.ts`, `ui/change-password.spec.ts`: established socket revoked, old HTTP session rejected and new-password login restores capability                                                                         |
-| Logout revokes established WebSocket       | `websocket/authenticated-session.spec.ts`: live ping before logout, server closure, HTTP 401 and rejected new upgrade                                                                                                                             |
-| Bounded Workspace binary read              | `ssh/binary-read-limits.spec.ts`: strict budgets, admission recovery, duplicate-ID ownership, pending-OPEN cancellation, in-place growth bounds and remote handle CLOSE on consumer disconnect before/after acquisition                           |
-| Archive cancellation exit evidence         | `ssh/protocol.spec.ts`, `ssh/progress-display-archive-cancel.spec.ts`, `ssh/archive-cancel-recovery.spec.ts`: remote exit evidence, task retirement, concurrent cancellation isolation, extraction round trip and missing-source failure recovery |
-| Fresh SSH Shell listener rebinding         | `ssh/reconnect-ui.spec.ts`: outage/reconnect with fresh prompt and executable output under the same Workspace ID                                                                                                                                  |
-| Cross-source credential trust confirmation | `ssh/progress-display-baseline.spec.ts`: Send Files requires public trust confirmation before real task submission and progress assertions                                                                                                        |
+### Provider 事务与冻结
 
-Webhook secret coverage reads redacted automatic/custom credential headers, preserves `null` secrets through a real UI save, replaces them, then removes their entries. Each stage sends a saved-channel test to a strict fixture receiver that checks actual outbound credentials without logging or retaining them.
+Provider模型配置的逐字段capabilitySources与能力值一起写入原models_json和同一版本CAS；协议、应用、存储和前端草稿分别白名单复制来源，来源基础字段/有限值归Shared providers/values。来源为可选配置注释，未注明的显式配置值为manual，registry/provider仅表示赋值来源，不能授权或证明实时能力。Provider观察对象明确排除capabilitySources；实际模型网络请求仍只映射能力值。输入/存储解码同时验证来源有限值、字段白名单及来源对应能力值存在；界面手动赋值、模型库补全/重置和应用观察在原赋值owner同步来源，不通过全局watch推测。不更新表结构或自动迁移/重写旧数据，无法恢复未记录的历史来源。
 
-Additional production-change mapping: SFTP upload pipelining and download prefetch (`847bb4f2`) is exercised by `ssh/upload-protocol.spec.ts`. With real remote WRITE/READ latency, the test requires bounded throughput and byte-identical full downloads, unaligned ranges, suffix ranges and open-ended ranges crossing prefetch windows through EOF. An out-of-bounds range must return 416 with the exact unsatisfied Content-Range, followed by a successful full download. Cancellation waits until multiple actual remote WRITEs are pending, then requires public cancelled state, remote writes draining to zero, temporary-file removal and preservation of an existing destination; a subsequent upload on the same Workspace must complete with exact bytes. This does not claim rollback of already committed uploads, a content snapshot under concurrent remote edits, or download-disconnect handle reclamation.
+第一版初始化直接创建 Provider、Registry 与冻结输入表。配置更新 CAS 增加 version；替换/清除/删除凭据增加 credentialRevision。Run、冻结输入、初始事件及幂等记录同事务写入；Model 回调从存储记录投影应用事实并判断，结果再投影为存储命令。重放先返回原结果。冻结包含端点、协议、模型能力和原凭据代际，不含密钥；已变配置或凭据不能以新秘密替代旧引用。删除关联 active `pending/running/unknown` Run 的 Provider 返回冲突。观察数据失效与删除准入由 Provider 纯规则决定；Adapter 在同一事务读取当前配置或去重的 Run 状态，Model 显式转换后调用同步规则，再由 Adapter 执行存储任务。CAS/关联读取与写入保持同一事务，Adapter 不定义业务状态筛选政策。
 
-`ssh/download-network-profile.spec.ts` measures three samples per isolated SFTP READ profile: no added latency, 20/80/200ms response delays, shared 100/10/2Mbps response bandwidth and four concurrent downloads at 80ms. Each stream verifies length and SHA-256, disposes its HTTP response, and checks remote delivered bytes and pending READ settlement. Attachments include durations, per-stream/aggregate throughput, request count and peak pending requests. Comparisons require identical test harnesses; no universal speed threshold is inferred. Fixture response delay/rate shaping is not full network RTT, packet loss, TCP retransmission or browser-to-backend throttling.
+### B4.2 因素存储与挑战原子性
 
-`ssh/download-admission.spec.ts` fills all eight GET slots with fixture-confirmed pending OPENs, rejects excess authenticated and ticket requests with 429, and verifies HEAD at capacity. Aborting consumers must close all late-acquired handles, then eight downloads and the previously rejected ticket must return identical bytes. Resource CLOSE settlement is observed before subsequent sequential missing-file failures and recovery; neither remote CLOSE nor receiving Content-Length bytes alone establishes handler admission cleanup. Directory ZIP cancellation and other transfer phases are not covered by this case.
+第一版初始化在 `access_accounts` 定义 `totp_secret_encrypted`，创建 `access_pending_logins`、`access_factor_challenges`、`access_passkeys`。待登录只保存 digest、用户、密码修订、rememberMe 与五分钟到期，同一浏览器旧 partial 按摘要同事务替换，最大 64 在事务中准入；挑战只保存 digest、kind、用户/完整会话摘要、加密的暂存 TOTP secret 或 WebAuthn challenge、RP/Origin 与到期，最多 1024。保存新 challenge 会删除旧 cookie 对应项，完整会话下同类 challenge 被替换。注册只有在原 challenge 未过期、同一账号完整 session 仍有效、credential ID 未占用时入库。认证在存储事务内复验 challenge、账户/credential 所属、counter 变化、来源封禁，并同事务消耗 challenge、更新计数、签发完整 session；零 counter 遵循旧技术契约，非零 counter 必须递增。TOTP 激活在 session 与 challenge 上 CAS，禁用在密码旧 hash、session 和当前加密 secret 上 CAS；禁用后删除该账户 pending/challenge。
 
-The Webhook case-collision regressions submit an explicit replacement and a differently cased `null` entry in both orders while removing custom secret classification. They require rejection before persisted mutation, no old secret in the response, unchanged redacted configuration and successful outbound delivery with the original credentials. Create and unsaved-test entrypoints also reject case collisions without persisting a channel. Mixed-case preservation with a single entry remains supported.
+Access 改密由 Service 一次入场认证、AccountModel 转 token digest，SQLite 在修改同一事务复核原 session 仍存在且未到期、旧 password hash 未变，再撤销账号全部会话；计算密码期间撤销或过期阻止写入。登录签发 Storage 与 Model 各自持有具名结果，明确 issued、credentials_changed、rate_limited、cancelled，避免并发封禁被降为错误密码。accounts/sessions Model 使用共用 access-storage-boundary 转技术失败，公开 accessBoundary 只消费应用失败并投影安全码。该 helper 只用于 Model 的技术错误转换，不是新的 Service 或公开能力。
 
-The Agent Provider fixture handles semantic handoff requests separately from normal tool scenarios, emitting all eight required sections. The installed-plugin continuation must complete successfully after retained Skill history triggers context compaction, before inline approval is exercised.
+### B4.1 Access 持久权威与竞态
 
-Provider discovery verifies both direct-backend and public-frontend same-Origin mutations, rejects a mismatched Origin, and rejects cross-site Fetch Metadata even with an otherwise matching Origin; all Agent rejections preserve the standard error envelope.
+AccessService.setupAdmin 在输入校验后、scrypt 哈希前读取 AccountModel.needsSetup；已有管理员直接按原 already_initialized 拒绝，不继续昂贵计算。该预检查只减少重复初始化请求的资源消耗，不是创建授权或并发保证；createInitialAdmin 的 SQLite 原子创建仍是最终权威，两个空库请求同时通过预检查时最多一项提交。密码格式、HTTP 409、安全失败与正式初始化 UI 不变。
 
-The SSH outage regression checks the fresh shell prompt and executable input after reconnecting the same logical Workspace ID; fresh connections replace ended-shell listeners and terminal replay/input state rather than reusing stale bindings.
+Access 登录失败记录的 `last_attempt_at` 及其索引直接在第一版初始化中建立，不保留开发版数据回填。
 
-The no-Workspace-tool fixture assertion is scoped to the latest user input too: subsequent Runs on the same thread can explicitly select SSH Hosts and request approval without inheriting the earlier no-target fixture scenario.
+`access_accounts` 对管理员初始化使用同一 SQLite 事务的空库检查/唯一写入；改密以旧 hash CAS 更新并同事务删除用户全部 `access_sessions`。`access_sessions` 只保存 256-bit 随机 bearer 的 SHA-256 摘要、账号凭据修订、remember 标志与 30 天到期；状态每次验证从存储重新查，撤销即失效，不复制到 Platform。`access_login_attempts` 按规范化公网 IP 保存次数、窗口起点、封禁至与最后失败时间。普通会话及各模块的原事务身份读取在查询完成后取当前时钟核对期限，不使用入场时刻；账户行由 accounts Adapter 唯一解码，会话复用，不把损坏账户/到期字段当正常未登录并静默修复。失败计数的读改写在存储事务内使用应用规则回调，窗口/封禁和持久时间取同一次当前时钟；成功登录在创建会话事务里复核账号密码/因素及当时封禁、检查取消意图，然后原子新增 token 摘要并清除失败记录；不预先撤销旧浏览器会话：HTTP Cookie 交付无法与 SQLite 提交原子绑定，断连时旧 Cookie 必须仍可使用。若事务已提交、响应尚未交付，则尝试撤销新 token；确认不了撤销/提交时保持 `operation_unknown`，不声称自动回滚。每 5 分钟至多执行一次后台数据库惰性 sweep，删除过期会话与封禁已结束且最后失败超过 7 天的记录，不提前清活跃封禁。名单列表/解除的管理员准入由 AccessService 提供纯同步判断，SessionModel 将 token 转摘要、独立存储 SessionRecord 转 SessionIdentity；SessionTransactionAdmission 只用存储类型。SQLite 在同一真实事务开始及完成前复查当前原会话，身份失效回滚解除或拒绝交付；HTTP 不额外先查一次身份。名单解除是独立删除；登录先检允许入场，验证码网络 await 后、会话提交前复检封禁。单 SQLite v1 已包含 Preferences 配置表；持久配置由 Preferences 拥有，Access 只消费安装快照。
 
-The retired Agent Runner Journal recovery, Runner process-tree kill fixture and standalone deployment smoke are no longer part of the current E2E suite. The supported production Docker acceptance is `scripts/e2e/docker-core-no-runner-smoke.sh`, and SSH session/job interruption plus Backend restart recovery are verified through their independent current Agent/SSH regressions. Historical Runner evidence is not a current test result.
+### B3.2 并发与缓存
 
-Send Files regression coverage accepts the public credential-transfer trust confirmation before checking task submission, while keeping the held initial-list race and independent form-loading assertions.
+无新增业务持久化，不创建空 storage。缓存仍为本进程状态；Docker 控制与 Agent/Files 共用 Remote machines 持久突变占用，Preferences 已接入状态间隔/资源刷新持久配置。Workspace 操作绑定具体 attachment、配置 fingerprint 与原 owner；后台主机缓存当前仅供 userId=1，按 host/port 及完整可信配置指纹隔离，同配置且同登录的在途采样才共享，不同会话单独拥有采样；仅成功结果跨登录进入缓存，失败下次读取可重新采样；TTL 从采样完成计算。删除/改配置及 reset 后旧任务不可回填。首次初始化默认状态间隔 3 秒、后台 TTL 30 秒；Preferences 保存确认后热更新状态周期与后台 TTL，独立 Service 的技术安装默认不覆盖持久设置。Docker 按规范化文本 endpoint 与全部受管突变互斥，覆盖容器名称与短/完整 ID 别名；unknown/清理失败保持持久 blocked，重启不解除，恢复能力已由下述B9机器突变恢复接线，行为待B10。
 
-Skill fixture scenarios are selected from the latest user input, not retained historical scenario markers; initial metadata-only exposure and explicit `skill_read` body checks remain enforced.
+Dashboard的ResourceStatusService与SystemStatusService不设全局4请求准入上限。前者复用上述主机缓存、保留单请求2主机并行与120秒等待，每次交付前复核会话及当前配置；模块自己的取消signal允许多个等待监听，退出时仍逐请求退订。后者由原Service共享一次本机采样，成功结果完成后缓存3秒，失败不缓存，逐请求在取缓存/采样前后验证管理员会话，等待最多10秒。超时只结束调用方等待，真实采样仍登记到原tasks并参与停机排空；quiesce清除缓存且晚结果不可回填。Shared、HTTP白名单映射、前端、协议容量及独立诊断入口政策不变。本机 Node Adapter 与 POSIX SSH Adapter 的根磁盘百分比统一消费 `platform/system/disk-percent.ts`，以有限非负的已用/总容量计算并限制到 0–100；`df` Capacity 只作为技术输出，不参与应用事实。
 
-The deleted Runner Journal corruption fixture is not an active deployment check. Current production Docker smoke verifies the Backend/Frontend/Guacd stack and absence of the retired Agent modules; other current SQLite corruption/recovery checks must be interpreted separately.
+归档在 Files Service 的首次私有文件写入前，通过 FileArchiveModel.prepare → NativeArchiveCommands.requireTool 执行独立只读工具查找；Model 仅在该边界将丢失的查找回执转换为尚未派发归档写入，清理失败仍独立传播。原生写入仍执行自身工具检查，预检不是后续执行的永久保证；写入取消不能借用此只读分类。
 
-The SSH exec fixture handles supported SSH signal requests against its command process group and reports actual exit status or exit-signal. Archive cancellation checks require remote exit evidence rather than channel closure alone.
+### B3.1 权威状态与竞态
 
-The direct archive cancellation/recovery regression waits for a real held compression process to start before cancellation. On the cancelled terminal event it requires that process to have exited, checks the retired task no longer accepts cancellation and the held destination does not exist, then completes a subsequent compression and checks its output metadata. This does not establish rollback for archives that have already written partial output.
+活跃 SSH/PTY、attachment/generation、lease、ACK 等由进程内唯一 Workspace Service 状态机权威持有，重启不持久化技术句柄。64 个普通 Workspace 名额在首次异步身份/目标解析前原子预留，覆盖排队、opening、attached/detached、closing 和未确认清理；重复 ID 不能抢占或重复计数。挂起目录另按用户 32/进程 64 限额与 24h 生存期，重附着同一 Workspace 不再占第二槽。每次 await/WS delivery/ACK 都复查记录实例与 generation；过期/旧 attachment 不能归还新实例或恢复旧 input。技术日志在私有本机临时目录，可重启清理，无持久活跃 shell。文件记录若无需 SQL 则不创建数据库层；任何未来持久变更仍经 Model/Storage/Adapter 执行。
 
-The concurrent archive regression starts two held commands in one Workspace, cancels only one and requires the other process to remain alive. After releasing the hold it checks the second archive completes, removes the unique source fixture, decompresses the surviving archive and compares the restored bytes exactly. Cancellation isolation is not inferred from progress UI or file existence alone.
+真实 SQL 仅在 Adapter：Agent scope/runs 和 Targets Host Key DDL 归各子功能 `adapters/sqlite`，模块迁移通过初始化接口调用。Bootstrap 只保留一个 v1 applicationMigration，直接安装当前完整表结构，版本 marker 与 DDL 同事务提交。首次发布前持续维护该初始结构，不为开发批次追加版本；既有开发版数据库不兼容，新空库验证留 B10。
 
-The missing-source archive regression requires a failed terminal event, retirement of the old cancellation handle and absence of the requested destination, then verifies a subsequent compression completes and returns a ZIP header through binary read. The header check is not a full archive integrity check; the concurrent regression above supplies an extraction round trip.
+Platform 的 SQL Executor 契约在 `storage/sqlite/sql-types.ts`；版本表 Adapter、事务控制 Adapter 和 Worker 在 adapters。Runtime 持有队列、隔离和失败语义：回调失败回滚，rollback_failed/commit_unknown 保留因果并使实例不可用；未知提交不自动重试。Worker 严格验证完整消息，损坏/不可关联结果使待完成调用全部拒绝。只读 diagnostics 消息只采样自身 isolate 的内存并白名单回传，不执行 SQL、不插入 Runtime 事务队列；Runtime 合并相同采样，关闭停止新采样，已派发消息先于 close 按 Worker 消息顺序收敛。队列计数在准入时增加，实际任务 finally 时归还。
 
-Direct Workspace binary-read regressions require a numeric safe-integer `maxBytes` ceiling and reject coercible strings, booleans and arrays. Delayed real SFTP reads fill all four admission slots, reject a fifth read, then cancel every admitted read and verify four subsequent reads return identical bytes. A duplicate request-ID regression verifies that rejecting the duplicate preserves the original read's cancellation handle and confirms its aborted result before a successful subsequent read. Three batches of four missing-file reads verify stream-acquisition failures release admission, followed by four successful byte-identical reads. A fixture-confirmed pending SFTP OPEN is cancelled before its delayed reply; the read must abort, retire its cancellation handle and allow four successful byte-identical reads afterward. The growth regression appends to the same fixture file after a confirmed delayed SFTP READ: the existing read returns only its original size-bounded range, reopening with the old budget fails with a size-limit error, and reopening with the exact new budget returns all bytes. This does not promise a content snapshot for concurrent edits; other concurrent edit races remain outside these assertions.
+业务多表写入和引用/CAS/幂等校验归存储 Adapter 的真实事务。需要当前状态的业务规则采用明确同步回调：Adapter 在事务内读存储事实 → Model 白名单转换为应用事实 → 纯规则判断 → Model 转回存储结果 → Adapter 写入/提交；回调不执行网络、异步任务或开启嵌套事务。Adapter 只依赖 storage 中的回调契约，不导入应用类型、规则实现或业务策略配置；禁止先在 Service 读旧状态、判断后另开事务写入。
 
-The pending-OPEN disconnect regression confirms the fixture received SFTP OPEN before closing the Workspace WebSocket, then requires one additional read-only handle open and one additional successful SFTP CLOSE. It covers delayed acquisition after consumer disconnect, not SSH transport loss, channel shutdown cleanup or all remote handle lifecycles.
+B1 Files mutation 不新增数据库或 SQL。单个文件资源由 Service 串行执行操作，但远端 SFTP 预检与后续 mutation 之间仍存在服务器侧竞争窗口；`expectedSha256` 的两次复查只提供尽力冲突检测，不是事务/CAS。目录项 rename 的目标不存在预检同样不是原子 no-overwrite 保证。
 
-The pending-READ disconnect regression confirms the read-only handle is already open and not yet closed, and the fixture has received a delayed SFTP READ. Closing the consumer WebSocket must then produce a successful remote CLOSE for that handle. A new Workspace on the same SSH connection must also read a unique fixture back byte-for-byte. Together these two regressions cover consumer disconnection before and after acquisition; they do not establish cleanup under SSH transport loss or reconnection of the same Workspace.
+Access 的失败窗口/封禁计算在 sessions/login-failure-rules，Adapter 只读取、解码计数并原子写回。Targets 的 connections/ssh-graph-rules 根据同事务图快照覆盖拟修改边，再校验成环、深度、展开数量及受影响祖先；Adapter 读图及写关系，Model 持有回调转换，register 同时装配普通写入与导入/克隆路径。Agent 的 runs/run-rules 同样独立于 Model，版本/状态判断继续在事务内执行。Targets 可信解析在同一 SQL 快照读取目标、凭据与路由，Model 计算指纹并在解密前核对 expectedFingerprint；先读指纹后重新解析不能替代同快照检查。指纹不替代 Host Key 信任，也不证明后续配置永不变化。
 
-The suite intentionally keeps regression tests for previously fixed production issues, including:
+## 7. 生命周期与失败
 
-- quick-command tag batches reject missing command references in either order and missing tags with 404 / `QUICK_COMMAND_TAG_REFERENCE_NOT_FOUND`, leave no partial associations and permit a subsequent valid assignment;
+Remote Files 的 upload.prepare 在单一原机器突变claim内先准备根目录，再按根下第一段分组；最多4个worker处理互不重叠的分支，同一分支按路径长度串行。每次创建仍由ensureRemoteDirectory检查完整父链，不缓存stat作后续授权。首个失败停止未派发路径，所有在途worker排空后才结算；混合失败保留全部cause、清理失败类别和unknown，部分创建失败仍保留原保守围栏。allowlist只包含请求路径及根，不把隐式父目录加入可上传范围。
 
-- desktop Dashboard keeps the Recent Activity section reachable in the initial common viewport while connection/resource panels own their scrolling;
-- Quick Commands preserve text-only group rename, header-area expand/collapse, and narrow-pane toolbar scaling without horizontal overflow;
-- File Manager path history and favorite-path popovers keep rounded themed chrome, wrap long paths, resize with the viewport, and remain inside viewport bounds;
-- unified document search keeps rounded themed controls, while spreadsheet pagination is absent when the active sheet fits on one page;
-- first SSH directory change waiting for the initial real shell prompt;
-- extensionless text files opening and saving through the editor;
-- streamed previews for Unicode image names, Markdown, and XLSX files, plus stale symlink failure isolation;
-- cross-session copy and two-phase move semantics with transfer progress;
-- real SFTP navigation uses the actual list scroll container and rendered filename label to verify long-list scrolling, truncation, sorting, popup resizing and path history; shared Progress Display helpers distinguish the tab-bar manager from the per-session restore button and use task state, named actions and rendered source cards;
-- terminal-tool regressions exercise terminal search, clear-and-redraw, command-history replay and saved quick-command execution through the rendered terminal and command controls; hidden upload progress verifies the visible fractional percentage beside its progress bar;
-- document preview coverage uses the active document mode, named preview tabs, PDF toolbar and spreadsheet pager to verify cached state, close/hide behavior, single content scrollbars, external refresh and persisted pagination limits;
-- file preview/editor scenarios retain real remote-content, encoding, line-ending, search, database-table and resize assertions using existing editor controls and preview semantics;
-- connection creation coverage uses named actions, saved connection cards and inline test results while verifying real SSH authentication, credential-preserving clones, script imports and filtered bulk tests;
-- batch connection editing verifies persisted notes, failed-item selection after partial updates, lazy auxiliary catalogs and narrow-screen row selection through existing cards, switches and modal controls;
-- SSH key management coverage uses named dialogs and actions to verify file import, name-only edits, saved-key/password authentication switches, delete recovery and narrow-screen loading errors without exposing private-key details;
-- password-change coverage uses the Security heading, associated password labels and named submit action to verify local validation, rejected current credentials, cleared inputs, old-session rejection and real login with the changed credential before restoring the test account;
-- audit-log coverage uses the page heading, named filters, durable audit row identities and pagination navigation to verify combined filtering, filter persistence across pages and narrow-screen detail scrolling;
-- quick-command management uses the rendered panel, named dialogs and row/context actions to verify persisted creation/edit/deletion, live SSH execution and usage counts, dialog resizing/reset and usable flat commands when the tag catalog fails;
-- SSH reconnect coverage observes Workspace protocol requests, rendered terminal geometry and named connection-picker controls to verify initial failures, periodic/key-triggered recovery, hidden sessions, HTML backgrounds and mobile tab lifecycle;
-- saved connection lifecycle coverage verifies real SSH tests before and after a name-only edit and confirmed deletion from both the visible list and persistence using named card/form actions;
-- collapsible quick-command search coverage verifies default visibility, group-save persistence, search focus/Escape behavior and centered controls across sidebar widths using the existing panel and named controls;
-- file upload scenarios verify clipboard/file-picker/folder uploads, remote bytes, conflict decisions, delayed SFTP acknowledgements, stream concurrency and hidden progress restoration/cancellation through existing file-manager and progress controls;
-- hidden upload batch cancellation waits for every remaining row to reach a terminal state or for the empty-progress surface after automatic record cleanup; a cancelling action is not treated as cancellation completion;
-- custom terminal theme and Workspace tag-management scenarios use current editor, token-input and named manager controls while retaining theme persistence/deletion and narrow-screen tag association assertions;
-- backup and IP-control scenarios verify real export/import and persisted blacklist policy through named settings controls; mobile touch coverage retains RDP mode persistence without reconnect, live SSH Ctrl input, dormant progress, single-tap navigation and multi-select/editor behavior using current product surfaces;
-- notification channel and tagged quick-command scenarios retain persistence, narrow-screen geometry and live SSH variable substitution through current controls; suspended-history recovery waits for available ownership, and fullscreen checkpoint scenarios synchronize with real shell readiness before freezing terminal state;
-- multi-megabyte SFTP uploads completing every block before success;
-- SSH suspend/disconnect/resume lifecycle;
-- mobile terminal height, command-bar sizing, touch long-press context menus, and the status-monitor modal;
-- settings regressions locate IP whitelist and logging forms through their labelled controls and verify persisted API values; appearance title-bar tests use the accessible color textbox and document theme state;
-- dark/default UI theme switching and legacy input-token normalization use the rendered appearance editor and named Dashboard controls, while retaining contrast, persistence and viewport assertions;
-- desktop and mobile no-session Workspace coverage verifies the unified start page, both connection and suspended-session panels, and page-owned vertical scrolling without horizontal overflow;
-- mobile global navigation remains horizontally swipeable when constrained while its native scrollbar track/thumb stays hidden;
-- mobile terminal long-press selection suppresses the xterm helper textarea's soft-keyboard focus during hold/menu/copy, restores its input attributes after Copy without refocusing, and restores normal focus on a later short tap;
-- Workspace layout configurator direction rendering, including horizontal sibling alignment and vertical child stacking in the editor preview;
-- narrow File Manager presentation collapsing secondary metadata columns, keeping the type icon close to the filename without horizontal overflow, and centering a deliberately delayed directory-loading spinner in the remaining list area;
-- Quick Commands keeping Copy/Edit/Delete in the row context menu with the duplicate inline three-button strip absent;
-- desktop no-session Workspace connection-pane divider resizing and persisted width restoration;
-- status-monitor network samples and Docker status over the live SSH transport;
-- full encrypted backup export/import restoring settings and encrypted connection credentials, with the retired standalone connection-export UI/API kept absent and the backup file picker retaining rounded themed chrome;
-- legacy official HTML-theme repository URLs resolving to the current remote catalog instead of returning a missing-directory 400;
-- HTTP SFTP download-ticket/Range/inline/directory-ZIP behavior bound to an active Workspace session;
-- raw binary upload ready/progress/completion and remote-content verification through the clean Workspace/upload protocols;
-- real Login CAPTCHA fail-closed/token lifecycle and browser WebAuthn passkey success/credential-failure/password-fallback surfaces.
-- TOTP 2FA setup, login gating, verification, and disable lifecycle;
-- historical database startup applying connection migrations, including migration 20 normalizing legacy proxy-route rows without `proxy_id` while preserving real proxy references;
-- connection update/clone/delete with preserved encrypted credentials and tag associations;
-- RDP/VNC conditional forms and filtered bulk selection/deletion use named controls and connection cards, with API checks for saved connection fields and exact deletion results;
-- command-history search, clipboard copy, replay and individual deletion are exercised through real SSH output and persisted history IDs;
-- notification delivery tests use localized Add/Test controls and real webhook/SMTP receivers to verify unsaved delivery, localized event content, HTML email and persisted channel error recovery;
-- Agent Host coverage verifies launcher passivity, cached conversation visibility, user-scoped layout reset including launcher docking, provider controls and expanded batched tool-call details through existing labels and tool-name state;
+取消/禁用/来源或名单撤销与模型步骤、ToolCall 的持久围栏同事务：inspected → cancelled，dispatched → unknown，状态事件同时写入。重启通过同一 SQLite owner 收敛，不重新执行。审批内部期限/消费时间为 Unix 秒，工具账本时间为毫秒；消费从同一个事务内时钟样本投影两种表示，不能把截断的秒直接作为毫秒更新时间。当前文件/Shell/Docker工具资源关闭已接线，ACP等待/关闭已接线，直接 Child/族收尾已接线，剩余跨 Run 资源由后续 B6/B8 承接。
 
-For optional focused local browser debugging, install Chromium when the host already has (or can install) the required system libraries:
+### B5.2 增量执行流生命周期
 
-```bash
-pnpm install --frozen-lockfile
-pnpm --filter @nexus-terminal/e2e exec playwright install chromium
-```
+Run owner 在持久创建前保留本机准入：8 个尝试名额（含在途创建、资源清理失败的已结算任务），64 个在途写入。拒绝关闭/满额请求不先创建 Run。每个尝试有 5 分钟本地 Abort 期限，不能证明远端停止或计费结束。quiesce 拒绝新请求并中止任务；close 共享 Promise，等待已准入写入与任务结算，有界保留 32 个失败及超量计数。清理失败任务不提前释放名额。
 
-On Linux hosts that do not already contain Chromium system libraries, Playwright may require root privileges for `playwright install --with-deps chromium`.
+Provider 配置提交后中止本进程关联请求；获取凭据后、dispatch 返回后及发布每个模型事件前复查当前 Provider，复查 await 后检查 Abort。跨进程配置变更以重新读取发现，不宣称网络副作用与配置更新具有跨系统原子性。未派发失败与已派发 unknown 分开，SQLite 写入异常不误归网络失败或重复补写；双重失败保留 AggregateError。
 
-## Test reset baseline
+技术 Adapter 持有响应体、reader 和迭代器清理，取消失败仍尝试 releaseLock，异常 cause 留内部。ModelResponseBody独立观察reader.closed；cancel拒绝仅在与已errored reader的原始错误为同一对象时视为重复读取错误，不再虚报cleanup_failed；底层cancel拒绝与releaseLock失败仍保留。Run在辅助资源排空阶段失败后独立尝试主步骤unknown CAS，原步骤未知提交异常不进入此补写路径；标题清理和终态结算双失败保留全部因果，聚合诊断沿原有限错误码投影。Registry下载同样保留清理失败；Provider/Registry在清理失败后拒绝新网络工作并在模块close上报，Registry无人订阅后的持久写入失败也保留并阻断重试。Model 等待技术迭代自然退出及清理完成后才发布唯一 finished/stop；缺失/重复终态、断流、拒绝/工具输出、未知事件、空正文和不一致快照都不能成功。Provider probe 与 Run 共用SDK请求和事件投影，前者仍受 512 KiB/16 token 限额，不授予执行权。
 
-Each run uses `tests/e2e/.tmp/backend-data` through `NEXUS_DATA_DIR`. The backend database, generated environment data, and file-backed sessions therefore never touch `packages/backend/data`.
+OpenAI官方Node SDK处理SSE换行、分帧、JSON和DONE，项目不另写SSE解析器。ModelSdkRequest在SDK解码前有界读取并严格验证UTF-8，网络总量8MiB、正文总量2MiB独立限制；ModelStreamProjection验证SDK保留的event名称与载荷，并限制解码后普通事件JSON为128KiB、Responses重复完整内容的done/completed快照为8MiB。SDK忽略的注释和分隔符仍计网络总量，不再声明独立注释帧上限；正式终态和SDK迭代正常结束共同确认完成，不自行要求可见的DONE事件。
 
-Each GitHub Actions shard owns an isolated backend process and current-v1 database. Before every case or retry, the fixture closes the original App, creates a fresh data directory and keys, initializes the administrator through the real setup API for normal cases (or leaves the database empty for setup coverage), and resets SSH/external fixture state. Failed close/reset blocks the next case; lost reset acknowledgements are not automatically replayed. Restart deliberately retains the current database and keys. No committed legacy database or product reset endpoint is used.
+### Provider 生命周期与失败
 
-Vite also uses an E2E-specific cache directory so local dependency-cache permissions do not affect the test server.
+Provider 外呼完整期限 10 秒，Registry 刷新 15 秒；真实 fetch 支持 Abort、有界读取及拒绝重定向。允许管理员配置的 HTTP(S)/内网端点，额外出口隔离由部署承担。更新/删除中止本进程相关请求；外呼前后及观察写入前复查配置、凭据与身份，CAS 拒绝陈旧回写。Registry 请求 single-flight，各订阅者独立取消，最后订阅者退出中止底层任务；新请求先等待已取消任务及其存储写入收尾，再共享新刷新，避免旧失败覆盖新成功。缓存 JSON 由 Registry SQLite Adapter 解码为独立 storage 快照，Model 经 registry-projection 双向白名单转换；损坏缓存由应用层报告不可用，不影响后续刷新。精确的 provider/modelId 条目优先于短名称别名。测试传递模型推理参数并校验两种协议的 SSE 终态；缺省 usage 不补零。 Chat Completions的native_finish_reason仅接受string/null元数据，不替代标准finish_reason；reasoning_content仅接受string/null，按原MODEL_REASONING_MAX_BYTES累计字节约束，不进入可见正文、历史或工具授权。真实文本/工具、标准终态、SDK正常结束、usage和拒绝/未知输出校验仍保持。 Run 创建/追加的 ModelReference 可携带本轮 reasoningEffort，Provider resolveFrozenModel 在创建事务中检查等级属于当前模型声明、强制思考不允许 none、Images 不接受覆盖；生效值写入原冻结 capabilities.defaultReasoningEffort，沿 RunModelStream 转为 Responses reasoning.effort 或 Chat Completions reasoning_effort，Child 复制父冻结输入。选择加入创建命令hash，默认与显式等级分别绑定幂等意图；无新增配置写入或表结构。Model 将技术错误转具名应用失败并保留 cause。提交未知保留 operation_unknown；响应总预算 8 MiB，超限返回 limit_exceeded。应用/存储时间为毫秒，Registry 对外 Unix 秒由 HTTP mapper 转换。
 
-Runtime databases, reports, traces, screenshots, videos, logs, PID files, caches, and test-installed `node_modules` are ignored by Git.
+### B4.2 安全失败与清理
 
-## 阶段逻辑回归
+TOTP 使用随机 20-byte 秘钥的 Base32/HMAC-SHA1 6 位 RFC6238、30 秒步进前后各一窗，向用户展示 otpauth QR；仅在加密 `SecretBox` 生效时允许初始化，密钥以账户绑定 AAD 存 SQLite，失败拒绝而非明文降级。WebAuthn 由本地 `@simplewebauthn/server` 验证签名、challenge、公开 Origin、RP ID 与 user verification，认证 counter 用 SQLite CAS，不能信任客户端自报结果。多个并发完成只能消费同一 token 一次，重试未知结果先重新获取权威会话。完成登录前检查来源黑名单，错误因素验证码累计来源失败。Logout 同时撤销完整/部分 bearer 和设置/Passkey challenge；过期与替换 challenge 不成为资源授权。已经派发的数据库事务不因断连而假定回滚；WebAuthn 浏览器结果的真实交付行为留 B10。
 
-E2E 失败修复的范围按 [H-13.1](../rules/HUMAN.md#维护与执行) 执行，只修复和回归功能问题；UI 保持要求以该规则为准。测试定位对齐当前真实界面，保留功能断言；发现视觉问题单独记录，不在 E2E 修复中处理。测试执行时机与环境仍按 PLAN 决定项和当前授权，不因本段扩大执行范围。
+### B4.1 Access 生命周期
 
-每个涉及行为的代码阶段按改动范围规划并执行逻辑回归，覆盖实际实现及消费者；格式、类型和 build 通过不能替代业务断言。内部重构也核对原有结果与失败语义，不只确认接口仍可调用。
+账号不存在时仍执行无账号的耗时密码校验以缩小用户枚举时差；密码错误与 CAPTCHA 拒绝只记有权限的公网失败计数，强制 Passkey 的账号拒绝密码路径（`factor_unavailable`），TOTP 账号转部分认证而不签发完整会话。CAPTCHA 网络 Adapter 单次 POST、不自动重试、十秒截止、16 KiB 响应预算；配置无效在安装时拒绝，网络/非预期响应是安全 `captcha_unavailable`，供应商明确 `success:false` 是 `captcha_invalid`；成功时还必须匹配配置的公开 Origin hostname，Google 仅支持 v2 checkbox、不接受 v3 action/score，非 2xx 响应体取消，不能固定成功。请求断连传播 AbortSignal，已开始的 SQLite 事务不凭取消推断回滚。失败计数/签发是独立事务，供应商失败不影响既有会话。改密和登出持久撤销立即阻断下一次身份复查，但不能撤回已经发出的远端副作用；Workspace、Files、PTY、desktop、Agent 原 owner 仍在操作/交付/定期状态门槛复验会话摘要并自行收尾。HTTP 与各独立模块关闭并发收尾，SQLite 在二者实际结束后关闭；失败聚合，不把定时等待终结当资源释放。
 
-- 正常与边界：核对输入/输出、状态转换、容量临界值、分页和资源归属等受影响行为。
-- 失败与副作用：核对拒绝、冲突、异常、回滚/未知结果，既检查返回结果，也检查持久数据或资源是否符合预期。
-- 并发与生命周期：改动涉及幂等、版本、generation、取消或关闭时，验证重复调用、晚返回及清理路径；不只测顺序成功。
-- 消费者一致性：契约、错误或共享类型改变时覆盖实际双端与跨模块消费者；旧 Backend 的通过不能证明当前 Backend，新 transport 的单测也不等于真实浏览器验收。
+### B3.2 生命周期
 
-优先选择既有单元、集成或专项用例，以能验证该风险的最小范围执行；必要时在现有测试结构补充缺失场景，不新建镜像实现或只读取源码文本的测试。外部服务可在适用技术边界使用隔离 fixture；真实 SSH/浏览器及故障注入专项保持单独验收，不把模拟结果扩写成实机保证。
+临时命令任务有全局准入和整项期限，取消不提前释放；Workspace detach/close 和观察 owner shutdown 取消关联任务并等待真实收敛。Model 关闭临时 SSH，不修改最近连接时间，不在 PTY 注入采集命令。Docker 非零退出是确定失败，已派发但无退出证据为 operation_unknown，清理失败保持具名类别并占用名额；不自动重放。订阅取消使旧结果失效，慢采样不重叠，资源缓存不交付已失效身份/配置。
 
-每阶段记录场景、被验代码/消费者、实际命令、分支/SHA/工作区、退出结果及未覆盖项。已知失败本阶段修复，修复后重跑受影响用例；仅文档/纯格式且无行为变化可记不适用并说明依据。用户明确限定测试范围或环境阻断时保留未验证状态，不宣称逻辑回归通过。本要求不自动启动全量 E2E 或改写历史证据。
+### B3.1 生命周期设计
 
-## Agent 设置与浮窗还原（2026-10-20，待远程）
+Workspace WS 的输出暂停/恢复同时绑定 workspaceId 与 attachmentId，由 WorkspaceService 核对当前 attached owner；旧 socket 的流控回调不能改变后继附件的 pauseByConsumer。释放只调用带身份检查的 detach，由其统一核对录制队列和关闭状态再恢复底层输出，不另行解除背压。
 
-当前工作区恢复原四分类和顶部启停，模型目录并入 Provider，浮窗恢复欢迎卡、消息气泡、配置弹出框、会话内审批和任务侧栏；插件选包串联校验、文件列表紧凑展示。既有 host/performance/settings/plugin/ACP 场景按真实入口同步，保留原 CAS、回执、持久状态和未知结果断言。按 PLAN D17 不执行本地行为测试或用例收集。历史 Actions PASS 只适用于原 SHA；本版仍需远程核对桌面／窄屏弹出框、审批／任务侧栏遮挡、顶部开关、跨分类保存／冲突、插件确认／升级和文件操作。
+连接按 reserve → 身份/可信目标 → SSH open → shell open → FileAttachment → 认证复查 → 绑定 WS/交付 → ACK/运行推进；异步拒绝或取消后晚到 shell 和 Files 仍由其原 owner 追踪关闭，确认清理前不释放预留。异常 WS 断线只解除当前 generation，默认保留约 120 秒再终止；主动关闭先失效附着，终止 shell 及相关 Files/transfer。标记/prepare/commit 挂起应完整记录日志/checkpoint、先暂停后移交再恢复消费，部分副作用未确认的结果保留 `operation_unknown`。接管先撤旧 generation，再有界交付历史/状态与明确恢复 ACK；未 ACK 不能宣称恢复完成，原 owner 在 rollback/lease expiry 继续跟踪资源。日志导出按Shared限制渲染后UTF-8实际交付不超过128MiB，流中超限终止交付且仍释放原source；该预算不同于原始历史窗口。管理HTTP按Shared严格解码输入/目录输出，输出投影无效映射remote_unavailable而非用户输入错误。历史 100 MiB 最大保留、初始约 256 KiB、翻页约 256 KiB、checkpoint 4 MiB，流读取/完整编码/客户端背压单独设限，先做输入预检、再对读到的实际字节检查；不声称快照或磁盘硬配额。同步抛错、异步拒绝、清理多个失败经具名错误与 AggregateError 收敛，同一失败只登记一次。远端失控/断网后不主动重放命令与 unknown 变更；D12/D13 的原生工具与非原子窗口取舍不变。
 
-静态结果：dev 工作区基于 `6e0bc293`，Node 22.23.1 / pnpm 11.26.0；`pnpm run check`、`pnpm run format:all:check`、`pnpm --filter @nexus-terminal/frontend build` 和 `git diff --check` 均退出 0。未提交工作区不是新的行为验收 SHA。
+资源有唯一 owner；准入、半开、活跃和关闭任务追踪至真实收敛。等待超时不归还仍被资源占用的名额；晚成功关闭，晚拒绝中的清理失败进入有界诊断及停机汇总。`RemoteResourceCleanupFailure` 区分清理完整性失败与普通授权/建连拒绝。
 
-### 记忆与导入展示续审、远程失败修复（2026-10-20，待远程）
+外部操作和按 ID 释放继续认证；已获资源的内部 owner 使用绑定该实例的窄关闭能力，撤销会话、取消或断开后仍能完成清理，不重新认证后才关闭，不增加任意 ID 的无认证释放入口。关闭能力不进入 Shared/HTTP，关闭 Promise 与失败仍归原资源 owner。
 
-基于 `bcd6a036` 继续按 `75289ef9^` 对照展示：审核草稿回到记忆卡片内，导入恢复应用／来源下拉选择，移除手填 UUID 与常驻存储版本；上传成功不再显示只读核对按钮。权威读取、原版本 CAS、一次性导入确认及未知恢复仍由原 owner 持有。来源页成功翻页时清除原选择，读取失败不把缓存当作空列表。
+二进制读取的允许类型、容量和初始范围由 Service 确定，Model/Platform 按明确字节范围读取；空文件不创建无界流，短读不能伪报完整成功，后续追加不扩张本次范围。范围确定不等于内容快照；失败、提前终止和消费者断开都须收敛底层读取。
 
-[Actions 39426039985](https://github.com/0honus0/nexus-terminal/actions/runs/39426039985) 对应 `bcd6a036`，结果 failure：1/3/6/7组共16项失败，2/4/5/8组、Checks/format/build及Docker通过。核对各失败组日志及第3组trace：空目标弹出框按Escape时Host关闭，引起13项输入框缺失；最小化清除标题草稿引起1项；旧说明文案和同时命中暂存／安装article各1项。本轮让外层窗口在配置弹出框打开时交由内层消费Escape，暂停视图保留标题及原选中线程（身份撤销仍清理）；测试显式核对关闭弹出框后Host／输入仍可达，按真实卸载操作定位安装记录，并用实际目标选择后权限不增加代替已移除的技术说明断言。未恢复多余UI、放宽权限或重放写入。
+R2 后，Files Service 的 `runAdmitted` 统一限定二进制数据及 final 帧发送期限，Service 将同一有效 signal/剩余期限交给 Interface 的 NXW1/backpressure 发送循环；Interface 不再独立无限等待。应用交付联合类型 `FileBinaryPiece`/回调归 Files Model 类型 owner，Interface 仅投影具体帧。Workspace `ping` 调用 Service 核对登录身份、配置指纹、资源权威状态及 Workspace ID 并续期；失效绑定不继续发布成功。Files Service 对普通 Workspace 保留 64 个含 opening/closing 的预约，独立 HTTP Files 另有 8 个名额，晚到清理与无法确认的关闭仍占对应名额，避免错误释放。
 
-本轮只执行静态检查与构建，按D17不运行本地行为或用例收集。静态结果：`pnpm run check`、`pnpm run format:all:check`、`pnpm --filter @nexus-terminal/frontend build` 和 `git diff --check` 均退出0；上述修复与记忆／导入显示仍须新提交的远程Actions验收，不继承历史PASS。
+R2 二次审核：Workspace `connect` 的 Targets `get` 不再由 Interface 在容量/期限之外等待，Files Service 在第一次 await 前预留 workspaceId 和 64 槽，将身份/Targets 查找/SSH open 置于同一个可中断的建连期限；返回 `WorkspaceFileAttachment.connectionName` 的应用事实，WS Interface 仅投影。关闭期间底层 SSH cleanup 可能无界，不能以强制短路伪称已清理；WS 心跳和断开先失效绑定、交还确定失败，Service 对迟到资源、关闭 Promise 和清理错误持续负责，**只有确认释放成功才归还名额**。测试夹具的 Service 构造调用已同步注入 Targets public 查询；慢查、竞态与失败清理的精确验收范围见 testing；受控 Service 队列、晚构造及64预约证据不替代真实传输故障。
 
-### 单位输入、插件确认与维护入口续审（2026-10-20）
+关闭先保存共享 Promise，再执行可能重入的清理；取消订阅也属于可能失败的清理步骤，一项失败仍继续其余退订、资源关闭和终态通知，保留全部因果并聚合。停机停止新准入、关闭 HTTP/WS 并等待已接纳任务、取消并 drain 模块资源，最后关闭 SQLite。当前动态资源由 Remote 持有，后续 Agent 调度/执行必须提供自己的生命周期。
 
-[Actions 39428185902](https://github.com/0honus0/nexus-terminal/actions/runs/39428185902) 被测 SHA `bab9129aaaf1e19806dc2454c9b66ff75530e0b1`，已完成且 failure：7/8 Playwright组通过；第1组仅1项旧 `Completed · UUID` 定位失败，Checks/format/build、Docker及runner image成功。本轮按真实完成时间标签定位，仍检查follow-up创建的新ID、原Run不变与回复，不恢复UUID展示或放宽业务断言。
+普通 PTY、Files 和 Agent 使用共同 SSH/SFTP Platform 工厂，但不共用授权或活跃资源；Remote sessions/files 共用的可信目标建连转换由本模块 `machines/model` 持有，Agent 不深层导入它。PTY 协议 owner 管 ACK/背压/EOF；Files Service 管身份/指纹复查、准入/期限和文件业务流程，Files Model 管 SFTP lease、byte source、metadata 转换与 staged temp/commit。新建文件使用标准 SFTP rename，不调用可覆盖目标的 POSIX replace；覆盖已有文件才使用 replace。`ssh2` POSIX rename 扩展仅在协商声明可用时调用；无声明视为本地尚未派发，使用有备份恢复的标准 rename 路径；已派发操作仅明确 unsupported 可回退，超时、远端未知与备份清理失败保留 unknown，不冒充已提交成功。此协商修正仍待第五轮后续远程 E2E 复验。实际 SFTP 目录扫描以 opendir/readdir(handle)/close 收敛，文件读取经 Adapter `readChunks` 将异步 ssh2 error 归一后再交 Model。
 
-本轮基于该SHA恢复预算／存储单位控件和底部保存栏、插件仓库添加／搜索／来源卡片与候选确认、官方卡片首次安装弹窗、通知分区与保存栏、SSH Key管理按钮样式。手工AppStorage／暂存／运行时诊断移到已有数据页高级维护，卸载后的显式删除仍留插件页。后端会自动创建内置应用，故总开关不依赖可选插件；推荐插件安装不自动启用插件App或授予能力，三语说明同步真实语义。
+下载HTTP Interface保留GET/HEAD、单段/suffix Range、inline和目录ZIP；票据POST显式使用Shared 32KiB预算，JSON/容量等HttpInputFailure交还Platform，不包装成500。安全失败由Shared有限message/code契约约束，真实状态码保持对应。HTTP sink只保留最后1字节，源迭代与最后授权复查后随response.end交付，避免Content-Length已满足但应用还在等待时代理提前断开并退役健康Files资源；空文件不生成额外字节。票据300秒TTL的协议值与Service实际期限同源，活跃流/原实例/IP/会话绑定政策仍归Files owner。服务端finish仍不证明浏览器保存成功。
 
-两轮源码复核覆盖全部本批文件及设置装配、composable、transport、Shared／后端真实调用：第一轮检查展示基线与转换owner；第二轮检查CAS、无效数值、单位精度、候选安装／升级、发布者信任、部分目录失败、视图撤销／晚响应、未知写入围栏与数据原意图保留。额外通过SFC解析扫描66个非Agent既有变更组件的完整template和静态class集合，分类核对新增恢复／契约差异；此静态扫描不等于浏览器外观验收。
+B2 源码已包含独立 HTTP 文件下载 ticket/GET/HEAD/目录 ZIP 和 binary 上传 WS。Platform HTTP 提供通用 HEAD 与 opt-in binary ingress（其余 PTY/Workspace 控制消息仍拒绝原始字节），Platform SFTP 按明确 byte offset/end 读取及技术流期限；不会接收 Workspace、票据或 Task 业务类型。Files Model 对外提供 byte source 和临时写流 staged append/commit/discard；HTTP Interface 解码 Range 语法/状态码，FileService 负责应用范围政策、票据、上传冲突、目录 allowlist、原有 Workspace owner/身份与指纹、任务准入与长流确认。ZIP 目录遍历政策由 Service file-directory-zip 持有，条目/字节经 file-zip-model 转给技术 ZIP Adapter，库/reader/producer 的收尾归 Adapter；file-copy 则完成文件/目录 SFTP copy/move 技术流程，Interface 单向投影状态和 metadata，不在 Platform 放文件业务政策。
 
-本轮静态环境 Node 22.23.1 / pnpm 11.26.0：`pnpm run check`、`pnpm run format:all:check`、`pnpm --filter @nexus-terminal/frontend build`、`git diff --check` 均退出0。未执行本地行为测试、浏览器、用例收集或线上部署。单位临界值／跨分类草稿、官方安装取消／回执丢失、仓库信任／升级、维护区域生命周期和窄屏布局须由新提交远程Actions及适用实机环境验收，旧7/8不代表本轮通过或UI还原百分比。
+本批没有把旧传输实现照搬为远端通用命令：旧跨机器执行曾将私钥临时放在远端机器上、使用包含密码的命令参数，新 copy/move 使用独立的 SFTP 源/目标技术资源；未知副作用不自动重放。旧上传传输层异步触发 append，但其 Service 本来有串行队列；新 binary WS 在技术接收层额外显式串行并受背压/字节上限控制。旧目录 ZIP 遍历与短期下载票据活跃流过期等隐患均增加有界 owner 处理。跨不同登录 token 的同用户 Workspace 源资源改经 Access authenticateDigest 校验原会话有效性及当前请求者身份；原 bearer 不保留。Model 的 SFTP readlink/symlink 支撑保留链接本体，目录复制后显式恢复 mode，旧隐式跟随 symlink 的行为不照搬。
 
-### 插件场景跟随真实展示入口（2026-10-20，待远程）
+B2 archive 由 Service 决定输入/成员安全/任务/取消与发布；file-archive-model 将应用参数/结果和错误显式转换，Platform archive native Adapter 持有 shell 命令、原生列表及退出码解码；FileResource 管 SSH/SFTP 技术资源：压缩通过原生 `zip`、GNU `tar` 直接在远端写带格式后缀的私有 `.part`，由 SFTP 确认后 rename/replace；支持归档输出位于所选源目录内部，源树先经 SFTP 有界扫描并拒绝控制字符（防止 native stdout 进度伪造），命令明确排除旧目标和临时项。解压先用远端原生 `cp --reflink=auto --no-dereference` 建立权限受限的私有归档快照并经 SFTP 核验文件类型/大小，`unzip`/`zipinfo` 或 GNU `tar` 对该快照分别列出简略成员名与详细成员元数据并逐项交叉检查名称/类型/大小（GNU tar 顶层 `./` 不占发布条目预算），实际提取使用同一份快照，按规范化路径、非目录祖先、重复名称、特殊成员、20k 项/64 GiB 声明展开预算与 64 层深度校验，GNU tar 使用 `--no-overwrite-dir` 防止根条目改写私有 stage 权限，先提取至私有 stage，再由 SFTP 复核每一项的真实类型、实际文件大小、总展开体积/层级及 setuid/setgid 权限位，并预检查目标路径类型冲突后发布；原生提取显式排除 symlink/hardlink，只提取普通文件和目录；应用校验通过后，符号链接经 FileResource/SFTP 创建，TAR 硬链接由 ArchiveModel → native Adapter 的 `ln -P` 创建，避免提取中沿归档链接写入；设备/特权成员仍在提取前拒绝。源可能并发变化，预检不等于文件快照；保留 unknown 退役、取消与进度边界。密码执行器按实施方案 D12 保留原生 zip/unzip `-P`：密码经 POSIX shell quote 直接拼入原生命令参数，与旧正式实现一致；接受 SSH command string 和工具 argv 中包含密码，不额外导出密码环境变量，不记录完整命令或回传诊断。无需新增归档 PTY、Python 或 Expect；现有 Model 转换不变。B10 核对密码/失败/秘密日志行为；不承诺 AES 兼容。
 
-基于 `a7406e88cebf888cce0fa0caae8a2b266a5c0f36` 继续静态审核既有插件场景，发现两个消费者仍依赖已移除的平铺诊断入口。官方目录场景改为观察设置页自动发出的真实官方 GET，并核对没有第三方查询参数、已配置仓库仍可见；原先两个覆盖来源的400及空安装目录断言保留。Custom Surface 场景先检查普通插件页的三条可见安装记录，再从数据页高级维护打开运行时观察并核对三条真实实例选项，随后原 iframe SDK、隔离、存储和跨应用断言保持不变；明确断言普通插件页没有运行时诊断。
+SFTP 单次元数据请求的技术上限唯一归 Platform SSH 契约，FileResource Model 将应用剩余期限限制到该上限；上传字节流仍使用完整传输期限，不把总任务预算当作单次 RPC 预算。同目标移动在目标不存在时优先 rename；已有普通文件或目录走既有 staged copy/merge，全部复制确认后再删除来源，类型冲突仍拒绝。
 
-两轮源码复核分别核对实际组件入口和完整业务断言；没有新增产品按钮、放宽权限、跳过用例或执行本地行为测试。本批只修改既有测试消费者与验证／规划文档，USAGE 原操作说明仍符合实际，E2E 包无 build 脚本。`a7406e88` 的 [Actions 39433921156](https://github.com/0honus0/nexus-terminal/actions/runs/39433921156) 的 Checks/format/build 和 Docker 已通过；八组运行中，不能据此宣称本批行为通过。
+归档纯政策归 `files/file-archive-rules.ts`：成员名称/结构/预算、符号链接逐段目标及硬链接引用完整性只消费应用事实，不访问资源。归档内部 `FileArchiveEntry`、链接计划和提取计划归 `files/model/file-task-types.ts`，不放 Shared；Service 编排快照、提取、链接物化、发布与恢复。Model 对提取计划及成员 kind/linkTarget 显式白名单转换；native Adapter 解码 GNU tar 的 `->`/`link to` 与 ZIP 链接载荷，处理 Info-ZIP 的字面量 pattern 和原生排除参数；压缩时临时输出/旧目标的 ZIP 排除项同样逐项转义，shell 引号不替代工具 pattern 转义。ZIP 链接载荷按 4096-byte 预算、严格 UTF-8、具名密码失败和真实结束 marker 解码，不给 Service 原始 CLI 输出。硬链接保留真实 inode 关联，不自动退化为复制。
 
-静态环境仍为 Node 22.23.1 / pnpm 11.26.0；根 `pnpm run check`、`pnpm run format:all:check` 均退出0，日志为 `/tmp/nexus-ui-followup-{check,format}.log`。最终定位微调后另检查修改的spec和文档格式、ESLint及`git diff --check`；未修改产品源码，无新增产品构建需求。本批远程行为待新提交验收。
+Remote 协议入口按通道归 `interfaces/http` 与 `interfaces/ws`；PTY、Workspace Files 和 upload binary 都归 ws，业务语境留文件名。目录迁移同步 register 和后端 fixture，URL、Shared 协议及授权 owner 不变；没有旧路径转导出。
 
-本批远程证据：`a7406e88` 的 Actions 39433921156 被新推送按已有 `cancel-in-progress` 策略自动取消，原日志 `/tmp/nexus-ui-a7406e88.log` 保留两项第3组旧入口失败；不得算作完整验收。`9808dbdc0d67dc982bbaed11132a28b25275dc40` 的 [Actions 39434833396](https://github.com/0honus0/nexus-terminal/actions/runs/39434833396) 八组全部success：各组通过数依次为55、37、48（含两个独立1项）、46、58（含独立1项）、76、77、51，共448项。逐组读取原job日志，无failed、flaky或skipped用例；两个修复场景分别3.9秒及8.8秒通过。Checks/format/build、Docker及runner image也通过。该范围不包含完整像素比对、全部单位临界值／未知安装故障和扩大的窄屏／生命周期组合，既有未覆盖说明继续有效。
+Native Adapter 的列表输出按 names/modes 顺序分段，每段 od 独立检查退出状态；只有完整两段之后才输出完成标记，不依赖 POSIX 管道的最后一步掩盖前一步失败。列表工具写入前设置单文件大小限制，后端每段 8 MiB 解码预算仍保留；限额及工具语法是技术策略，不进入 Shared。该单文件限额不提供解压总配额。命令 stdin finished 监听在 Model 完成/取消后清理，stderr 与 channel 继续由原 finally 收尾。
 
-### Files 库展示续审（2026-10-20，待远程）
+Native Adapter 将原始工具退出码归一为 NativeArchiveOperationOutcome；Model 只消费 missing_tool/limit_exceeded/password_required/invalid_password/rejected 技术事实，再显式投影应用失败。压缩 writerExited 来自工具返回后的独立 marker，容量超限继续 drain，未确认 writer 退出不能清理或通过 ZIP warning 发布。ZIP/TAR 成员的 mode 在技术 parser 解码，DOS ZIP 没有 POSIX 元数据时为 null；Service 拒绝特权成员，记录 native stage 的 mtime，并在发布后由深至浅恢复明确成员的普通 mode/mtime，stat 确认整项结果。未显式声明的既有 implicit directory 不重写属性。发布及恢复前检查根规范路径与父目录 lstat/realpath；这是有界复查，不能替代 fd/nofollow 原子能力。安全链接有源码实现、实机待验，设备/特权成员的 UNSUPPORTED_ENTRY 与前端消费延后项在 Shared/实施方案对应 owner 维护。
 
-基于 `9e56d456`，按 `75289ef9^` 完整 ArtifactLibraryView 模板还原用量条与保护／回收／剩余统计、紧凑搜索／UiSelect筛选及重置、空列表、原文件图标／扩展名／状态和动作顺序。删除确认与上传状态不常驻显示内部ID／版本；成功上传隐藏核对按钮，未知或staging仍保留恢复入口。实际kind来自已验证应用对象，不恢复旧媒体推断或旧API；时间仍为毫秒。新协议的offset分页、真实App、上传／引用／清理、权限／CAS和未知结果仍归原owner。USAGE同步真实浮窗入口与对应操作。既有插件场景只把原生select操作换为现有UiSelect helper，原上传、下载和持久数据断言不变。
+mutation 技术结果区分 `not_started / failed / unknown`；远端 command channel 建立也使用同样派发分类。已派发后取消、deadline 或连接终止不证明远端回滚，unknown 资源退役且不自动重试。写入已生效后的读取或结果校验失败同样保持未知结果，不能按普通未写入失败处理。确定失败尽力清理临时项；unknown 时不继续发可能与晚到 mutation 竞争的清理命令，因此真实服务器可能残留私有 temp/backup，B10 必须核对。整体停机有界、原子 nofollow、原子 CAS 和文件快照不能凭接口宣称。
 
-两轮源码复核覆盖展示基线、Shared有限取值、父窗口安装、筛选互斥、上传恢复按钮条件、删除和原清理确认；没有新增行为测试或本地收集／浏览器运行。原448项只对应 `9808dbdc`，不代表本批已通过。静态环境 Node 22.23.1 / pnpm 11.26.0；根check和frontend build退出0（`/tmp/nexus-files-ui-{check,build}.log`），完整format及最终diff结果按本批收口补充。窄屏筛选条和Files完整交互待新提交远程／对应现场验收，不宣称像素一致。
+远端能力按实施方案 D13 保持现有 SSH/SFTP 和原生工具要求，不部署新增 helper 或特权/文件系统配额。路径检查与发布间的同权限并发替换窗口、解压期间无总磁盘硬配额均为明确接受的能力限制；64 GiB 是声明/事后展开量的应用预算。保留私有 snapshot/stage、成员拒绝、逐项复查、结果确认及清理失败追踪，不将这些机制描述为强隔离或实时磁盘限额。
 
-本批最终全量format退出0（`/tmp/nexus-files-ui-format.log`），修改组件／spec的ESLint、文档与源码Prettier、`git diff --check`通过。第二轮父窗口复核发现Files没有独立滚动容器，补回有界窗口内的纵向滚动，避免新协议上传／清理区域越出浮窗不可达；该布局仍须远程核对。
+原 Python 版 `dir_fd`/`O_NOFOLLOW` 解压审查为历史记录，不构成原生 CLI 安全保证。当前原生工具排除全部归档内链接，安全相对 symlink 和指向归档普通文件的 TAR hardlink 在独立步骤恢复；device/特权节点和危险链接拒绝；通过私有 staging + SFTP 类型检查限制已知攻击面，但最终目标目录替换仍存在竞态；取消或断线后只在能确认远端命令结束时尝试清理 staging，不能宣称所有资源已原子清理。原生命令退出 marker/进度解析、POSIX/DOS 属性、ZIP 加密及目录合并需 B10 验证。旧正式实现本来不支持 AES；Python 迁移中间方案不是旧功能基线。Model SSH stdout 按行白名单解析，stderr 独立 drain 且不回显。Service upload/copy/move/archive 仍统一阻止活跃 taskId 冲突、复查异步身份与任务实例。
 
-Files续审补充：旧模板只有保留／删除／下载，重构新增的逐行ArtifactAttachmentEditor要求手填Thread/Run，属于H-13下无依据的技术表单。本批移除该表单、无人消费的组件及前端detach包装，清理三语专属文案；真实会话仍由NativeInputArtifacts使用Shared／Model的版本读取、当前线程绑定及未知结果围栏。后端HTTP、Shared及SDK不变。USAGE和Frontend架构同步真实owner。此修改晚于396728e2，不计入该轮远程结果；两个源码复核分别确认无旧版依据及全部消费者，静态和新SHA行为结果单独记录。
+Files Service 区分直接借用 Workspace 与独立传输：direct 操作取消沿原资源退役，dedicated_transfer 只收尾独立 SSH/SFTP，健康 Workspace 续闲置期限；显式关闭仍中止全部关联任务。压缩范围准备与取得声明后的元数据复查同样使用独立传输 SSH/SFTP，不把任务取消信号传给工作区共享文件句柄；每次短读取的资源由原归档任务持有并在返回前关闭，清理失败继续保留原任务及配额。任务清理契约唯一归 Files Model，finished/cleanupFailure 实际状态由 Service 的任务 owner 持有，打开阶段、任务正文临时项清理与关闭阶段的具名清理失败均追踪并保留任务标识及配额；copy/归档整项 unknown 转换不抹除清理失败类别，Workspace 关闭尽力完成其余清理再聚合失败，不提前归还预约。prepare 在串行准入内计数，登记前复查取消及具体 owner；start 始终重新检查真实父目录，部分 mkdir 后失败保留 unknown。派生路径按 Shared 传输预算检查，不将该预算施加到旧 Workspace 基础路径。WS callback 绑定具体 attachment，接口只投影安全 operation_unknown，不暴露 cleanup cause。
 
-引用表单清理后的根 `pnpm run check`、`pnpm --filter @nexus-terminal/frontend build`、`pnpm run format:all:check` 均退出0，日志为 `/tmp/nexus-files-reference-{check,build,format}.log`；`git diff --check`通过。前端源码无ArtifactAttachmentEditor／detachManagedArtifact消费者或孤立引用；仍保留NativeInputArtifacts真实attach调用。当前只改源码／静态，没有本地行为验证；后续远程以该补充提交SHA为准。
+file-copy 由 Service 在首次副作用前预检整批目标与源的重叠。同 target/fingerprint 用源父目录 realpath 保留叶节点链接语义，目标的缺失后缀基于现有祖先解析，不为预检创建目录；检测相等/祖先/后代及规范位置的嵌套源。原始同路径 move 仍 no-op，别名解析与 metadata 只是变化检测，不是远端原子隔离。move 删除目录后的复查豁免自身删除引起的 mtime/size 变化，但 mode 仍须一致。ZIP 技术 Adapter 在 append 同步拒绝时同样停止并等待 reader finished，保证其拒绝被观察且原 producer/consumer 因果保留。
 
-396728e299bf4a734aa92bc43448404bdb31b527 的 [Actions 39437631131](https://github.com/0honus0/nexus-terminal/actions/runs/39437631131) 整体success：八组共448项，无失败／flaky／skipped用例；质量／构建、Docker、runner image和耗时统计通过，可选截图任务skipped。逐组日志保存为 `/tmp/nexus-files-ui-job-<jobId>.log`；真实Files切换UiSelect、上传、列表及校验下载场景所在第3组的独立场景通过。本轮未包含8735d59f的引用表单清理，后者仍待独立远程验收；源码／静态和当前像素保证范围不扩大。
+file-copy以256 KiB固定窗口聚合读取，逐窗等待stage append确认，保持顺序、背压与失败时原迭代器排空/关闭，不并发调用stage。upload协议帧仍最多1 MiB，Service内部按512 KiB批次写入，每批开始前检查discarding；取消不abort独立lease，只停止后续批次，当前批次确认后由原worker清理stage，不将部分帧计为完整progress。
 
-附件选择续审：原ArtifactPicker支持multiple及最多10个文件，重构后仅取files[0]。现恢复多选并按剩余额度裁剪，由原use-artifact-picker在单一busy／scope内串行完成每个独立预留和上传；每次await后核对原App、signal和可见性，首个失败／未知停止后续，不自动重试。每项开始前清除前一预留，避免把后项无ID未知错误地恢复为前项成功；前项已确认即加入选择并标目录失效，后项确定拒绝也不会丢掉这一事实。两轮源码复核覆盖正常多项、部分成功后拒绝／未知、下一预留丢回执、离页／切App及容量裁剪；本段是源码分析，未执行这些行为场景。USAGE与Frontend同步。晚于a758e243，不计入其远程结果；静态及新SHA结果另记。
+Files Service 统一维护每 Workspace 16 个 prepare/upload/copy-move/archive 活跃名额，排队与清理失败任务计入总数；同步检查后立即登记，prepare 收尾释放名额，已完成 allowlist 独立缓存。FileArchiveModel 将 NativeArchiveFailure.cleanup_failed 显式转换为模块具名清理失败，不以普通 unknown 抹除生命周期事实。
 
-### 2026-10-20 ACP取消点击与后台读取竞争（待新SHA）
+Files 操作在准入后、串行排队前登记 active/inFlight，关闭和 quiesce 覆盖排队与执行，追踪到 finally 退订和解锁完成。尚未执行的排队请求取消不退役健康 Workspace，也不提前解除前序门禁；入场认证等待归既有 authorizing owner。跨 Workspace copy/move 的私有任务记录双端归属，任一端关闭取消任务，双端关闭都汇总关联清理失败；控制协议、任务 ID 和授权仍归原目标端。上传任务用独立discarding状态区分清理已开始与最终块已接纳：取消/断流先停止接纳，原worker排空WRITE、关闭并删除stage，重复取消等待同一settlement，字节通道关闭不再次中断租约。首次断流仍为unknown；提交后的取消与真实清理失败不因该状态放宽。
 
-a758e2431baedcd4143272e6e09f09271eb41a9f 的 [Actions 39438940586](https://github.com/0honus0/nexus-terminal/actions/runs/39438940586) 整体failure：7/8组通过，第4组独立ACP cancelled失败；质量、Docker及runner通过。首次trace中点击取消与两秒轮询同时发生，按钮在pointer按下后被busy禁用，页面无agent.runs.cancel请求；10秒后finally的API取消与用户点击分开。重试reset500来自原执行未知清理，未删除或绕过围栏。trace位于 `/tmp/nexus-acp-cancelled-trace`，原日志 `/tmp/nexus-files-reference-shard4.log`。
+Files 内部 FileDownloadSink<TPlan> 由 files/model/file-types 唯一定义，表达 plan/write/finish 应用能力。HTTP 构造 sink 并持有 response/drain/finished；Service 将 finish 放在原操作期限和 inFlight 内，交付前复查当前身份/owner/指纹，交付后原 run 再确认当前权威状态，ticket 只在完整操作成功后续期并随后释放 claim。不以 Service 字节迭代结束代替响应收尾。票据登记在读取及最终授权成功后，登记前再次同步核对具体 owner/取消；HTTP ticket 响应按 Shared 白名单投影，inline 20 MiB 硬预算只引用 Shared，技术对象不穿透应用 sink。
 
-修复由原operation owner标记可被取代的只读background请求，不周期性切换交互busy；新交互取消原读取等待并推进generation，旧accept/catch/finally不能覆盖新状态。自动轮询之外的读取与写入仍串行，写入CAS及unknown不变。既有ACP取消用例增加实际取消HTTP回执与Shared关联解码，再核对Run取消、晚审批拒绝、进程及工具账本；未放宽原断言。两轮源码复核覆盖轮询被写入／手动读取取代、会话撤销、晚成功/失败及旧finally。此为源码分析，按D17未本地执行行为；附件多选故障分支也不冒充已验。静态及推送后的八组结果另记。
+下载票据只保存原会话摘要及原 FileResource ID，重新打开相同 Workspace 不复用旧票据；claim 对外不暴露私有 digest Buffer/可变 lease。上传 byte channel 取得实例绑定的 append/abort 能力：append 持续认证，断开清理可在会话撤销后执行。SFTP scan 的 finally 覆盖 break/return；ZIP 消费者拒绝或取消时停止并等待生产者/读者收尾。供应商 stdout 使用增量严格 UTF-8 解码，不按 SSH packet 独立转字符串。
 
-本批最终静态门禁：Node 22.23.1／pnpm 11.26.0，根 `pnpm run check`、`pnpm --filter @nexus-terminal/frontend build`、`pnpm run format:all:check` 均exit0，日志为 `/tmp/nexus-ui-poll-{check,build,format}.log`；`git diff --check`通过。包含附件多选与可取代的后台读取，未运行本地行为测试。最终diff第二次复核确认后台仅用于只读轮询、原写入保护及全部ACP业务断言保留。
+Remote Files 的流 attachment 绑定具体任务实例；prepare 配额由资源串行 mutation 边界判断。下载票据分别维护有效期准入与在途 claim 生命周期，过期不再接纳新请求，在途读取不因清扫被破坏。跨目标 move 的源变化检查与目录 ZIP 的持续身份复查归 Service；ZIP Adapter 只负责生产、消费和清理收敛，多项失败保留因果。源 metadata 检查不提供原子快照或条件删除保证。
 
-### 2026-10-20 编辑器保存关闭准入（待新SHA）
+归档解压的目录、普通文件和链接统一逐项发布，不以整树 rename 绕过子项复查；stage 根及中间目录的类型/规范路径检查归 Service，不能冒充原子 nofollow。新建目录集合仅是局部属性恢复状态，已有隐式目录不被重写。原生列表 EXIT 清理由 Adapter 确认，具名 cleanup_failed 经 Model 转安全 unknown，原操作与清理因果只留内部。HTTP 下载 Interface 持有覆盖最终 flush 的完整传输期限与取消监听；Service 的写入执行在 mutation 队列后重新核对身份、owner 与指纹。
 
-f0acd1d78433872dc1b8d08eb210a21dd5928aa8 的 [Actions 39441269931](https://github.com/0honus0/nexus-terminal/actions/runs/39441269931) 为failure：七组成功、447项通过／1项失败，无flaky；质量／构建、Docker及runner通过。第4组原ACP取消首次通过（9.5秒），第3组Files／插件场景通过。第5组file-preview-editor在保存后关闭失败，两次均如此。原始逐组日志 `/tmp/nexus-ui-poll-job-<jobId>.log`；trace `/tmp/nexus-editor-close-trace`。
+## 8. 当前能力与验收
 
-trace显示Save后为saving，测试已从磁盘读到新字节，但关闭时原保存回执仍未完成，closeDocuments正确拒绝，随后才显示Save successful。修复FileEditor：关闭窗口按全部文档saveState，关闭标签和右键批量菜单按涉及集合禁用；Model的在途保存、确认后草稿复核及生命周期不变。既有测试在磁盘内容断言之后额外等可见保存回执，再保留关闭／重开及全部后续预览断言，不增加固定延迟。两轮源码复核覆盖活动／非活动保存、桌面／移动关闭、左右／其他标签及失效草稿保护；USAGE／Frontend同步。此为源码复核，D17下无本地行为执行，新SHA结果另记。
+B10正在逐链验收。首批覆盖实际HTTP认证/状态、有限Run/脚本Provider、SQLite失败、同实例备份；第二批覆盖本机OpenSSH/internal-sftp/PTY、原生三格式归档及部分传输；第三批验证普通续接双阶段确认、挂起恢复/接管与注销后重新登录续接；第四批验证 TOTP、受信代理来源 HTTP/WS、CAPTCHA 受控响应与 Chromium 虚拟认证器 Passkey。后续批次已推进 Agent 工具/集成、Docker、跨实例备份、通知/外观/插件及真实 RDP/VNC；具体通过子集与未验范围唯一归 testing，不把下列源码范围或单条通过解释为模块整体验收。续接/挂起及因素的容量/期限/竞态、桌面剩余故障、插件 SDK/intents 与备份未知提交/崩溃恢复等仍待验。
 
-编辑器补修静态门禁：Node 22.23.1／pnpm 11.26.0，根check、frontend build及全量format均exit0，日志 `/tmp/nexus-editor-close-{check,build,format}.log`；diff检查通过。最终第二次源码复核确认单标签／左右／其他集合及桌面／移动窗口均消费同一文档saveState，Model实际准入与UI禁用分开保留；未运行本地行为。
+B6.2B 当前落地持久账本、审批绑定、原子消费基础设施及安全工具只读审计。安全单项/事件审计 HTTP 与 Shared 后端链已接线；目录、诊断及文件只读工具的可信 ToolInspection、只读许可和持久结果反馈已接线；file_write 审批等待/消费与写入反馈已接线；文件/Shell/Docker 突变与当前 Run 后台 Job 已接线，ACP waiter及安全审批HTTP/工具事件观察已接线，直接 Child/协作已接线，项目上下文和跨Run突变占用已在B6.2E接线；外围工具及blocked恢复已由B8/B9接线，正式前端F1仍未完成；源码收口不代表模型执行已解冻。静态与源码证据见当前方案/testing，所有行为留 B10。
 
-等待603303ed期间补核UI源码：ArtifactPicker完整模板／样式及AgentConfigPopover、AgentHubWindow、AgentAppSwitcher、AgentLauncher、AgentSurfaceHost、PluginAppFrame的旧版diff；未新增源码修改。除已记录的新契约绑定、缺少真实来源的统计徽标和失败恢复外，未发现新的无依据展示改动。该结果是源码对照，未执行像素比对或新增浏览器场景。
+### B5.2 范围与延期
 
-### 2026-10-20 ACP取消回执采集补修（待新SHA）
+B5.2 可独立完成的源码链路已具备：持久状态/步骤/事务、初始表结构、取消/恢复、通用双协议模型流、Model 转换、唯一执行 owner/准入/停机及只读审计消费者。当前执行由 B6/B7 已接入的 governed 政策、可信授权、冻结上下文与全族预算约束，默认 enabled=false；启用执行不授予工具权限。不把运行骨架或静态通过当作行为验收。
 
-603303edb6904c52b77d39f8dedb84d599699fc8的[Actions 39443340321](https://github.com/0honus0/nexus-terminal/actions/runs/39443340321)为failure：447项通过／1项失败，无其他重试或flaky；第5组文件编辑历史回归首次通过（26秒），第4组独立ACP取消停在新增cancellationResponse.json，报Network.getResponseBody无数据。取消已收到HTTP200，此轮尚未执行后续终态断言，不能据此认定完整链通过；重试reset500仍保留unknown因果。原日志`/tmp/nexus-editor-close-job-118698763023.log`及`/tmp/nexus-editor-close-job-118698763219.log`。
+静态门禁与四表归 testing 最新复审；网络、迁移、资源、并发等全部行为仍待 B10。正式前端、输出交付与 F-R14/F1 留后端完成后；当前施工以实施方案为准。
 
-按既有E-10.6，原页面route现在对create和cancel都只转发一次上游请求，先保存unknown回执再fulfill同一响应，断言使用同一Shared decoder及原请求关联；其他读取继续交付，route持续到页面销毁，不重新派发写入、不删除清理围栏。两轮源码复核覆盖实际等待／捕获先后、两个写入方法、全部只读continuation和fixture teardown。仅修改测试与文档，无产品改动，未本地运行行为或收集用例。
+### Provider 验收边界
 
-取消回执补修最终静态：根check及全量format均exit0（`/tmp/nexus-acp-receipt-{check,format}.log`），diff检查通过；仅测试／文档改动，不重建未变产品，不运行本地行为。最终diff复核：create/cancel各取一次上游回执，其他方法continue，Map保存unknown且仅由Shared关联解码消费，原取消后的全部业务断言保留。
+源码与静态证据见 testing 最新复审；行为全部留 B10。`/__agent-next` 已消费模型候选与必填 model 及步骤审计；正式前端已消费 Shared，旧 Backend 已删除；统一 E2E 仍待验收。Run 执行 owner 已接入 B6/B7 的授权、上下文与预算；默认执行关闭，pending 或静态通过不证明 Agent 行为验收完成。
 
-### 2026-10-21 远程 UI 还原后 E2E 修复
+### B4.2 源码与验收边界
 
-原始失败为[Actions 39568515716](https://github.com/0honus0/nexus-terminal/actions/runs/39568515716)，被测81aa1a0da26e11f609ca961e683c5332c20dde36；第1–7组失败，第8组通过，原日志保存在`/tmp/nexus-e2e-39568515716-shard-*.log`。首批按耗时优先修复Agent公共App选择、会话列表与插件新建／版本重命名场景，保留真实回执、版本与历史断言，不恢复已删除的调试表单。对应三个测试文件ESLint、Prettier与diff静态检查通过；未执行本地行为测试，远程修复结果待新SHA核对。
+B4.2 因素/Passkey 主链、初始表结构、Shared/HTTP、登录联合与 Platform Adapter 已落源码，旧Backend从Git历史追溯；正式Frontend的密码/TOTP/Passkey登录、改密/因素管理与CAPTCHA/IP安全配置已由F1接Shared；完整设置与其他业务消费者仍待迁移。本轮安装依赖并修复真实静态失败，Shared/Backend-next/Frontend、根检查与格式门禁实际通过；四表、命令证据与未验场景归 testing。静态通过不能视为行为验收完成。核心持久 Settings 与 Operations 审计/通知已接线；外围集成配置已由 B8 接线，正式前端留 F1；实际 TOTP 客户端、RP、challenge 并发、回滚/断连、库升级均留 B10。初始表结构包含凭据 generation、匿名挑战来源约束与全局改密修订，最终签发事务复验 generation/counter/挑战修订；静态与行为门禁均不得用设计声明替代。
 
-首批b251f1f7已推送，触发[Actions 39571411450](https://github.com/0honus0/nexus-terminal/actions/runs/39571411450)。第二批修复其余旧入口并补上凭据选择器可访问名称、临时隐藏保留未发送任务文本；保留通知真实投递、精确请求重试、版本、权限与跨页隔离断言。根`pnpm run check`、正式前端build及本批ESLint通过（`/tmp/nexus-e2e-fix-{check,build,eslint}.log`）；按D17未执行本地行为。原第1组27失败后耗尽900秒整组期限，上传用例被中断，不将其误报为已确认上传缺陷。产品章节已修正旧标题草稿与常驻刷新描述；最新SHA远程结果待验。
+### B4.1 Access 验收界限
 
-第二批24560197触发[Actions 39572270233](https://github.com/0honus0/nexus-terminal/actions/runs/39572270233)，首批按workflow并发策略自动取消，取消不算失败或通过。取消前第1／4组原日志`/tmp/nexus-e2e-b251-shard-{1,4}.log`已揭示后续公共问题：同场景多App重名、统一Send的后续Run实际走appendInput。第三批修复夹具唯一名称与真实Send派发方法，保留完整原始回执／线程身份／显式follow-up判据。全量格式最终检查通过（`/tmp/nexus-e2e-fix-format-final.log`）；没有本地行为或用例收集。
+B4.1 已建立上述源码及安装配置入口，并完成 Review 纠正（入场例外、身份和时间边界、断连令牌、供应商 hostname、既有测试源码契约），当前静态结果归 testing，后续修改需按实际工作区重跑。B7.1 核心持久 Settings 已接通，IP/监控热更新，CAPTCHA/站点重启生效；个人偏好、Agent 执行设置与 Operations 审计/通知已有各自 owner，外观/集成/备份已由 B8 接线；B4.2 TOTP/Passkey 挑战已在新 Access 收口，密码登录对已启用因素仍拒绝降级，源码/静态已收口，仍待 B10 行为验收。全套 HTTP/WS、真实代理、受控验证码供应商、封禁并发、撤销后的长任务收敛和实机浏览器行为统一留 B10；正式 Frontend 仍消费旧 Protocol，按 F1 登记差异，不能宣称已切换。
 
-第三批68b72125触发[Actions 39572715320](https://github.com/0honus0/nexus-terminal/actions/runs/39572715320)。第二批取消前原日志`/tmp/nexus-e2e-2456-shard-{2,3,4,6,7}.log`还显示批量配置保存与模型推理级别采用了正式本地化名称；第四批同步精确按钮／checkbox名称，不改变保存副作用或持久验证。两测试文件ESLint、Prettier及diff检查通过，最新远程仍待完整八组。
+### B3.2 施工范围
 
-### 2026-10-20 本批最终远程收口
+资源状态、Docker 和后台采样已接线，完整静态结果见实施方案/testing；正式前端 Shared 对接延至 F1，行为检查留 B10。当前施工状态与真实静态证据归实施方案/testing，不能把本段设计视为功能已通过。
 
-[Actions 39445026926](https://github.com/0honus0/nexus-terminal/actions/runs/39445026926)整体success，被测ddf5ce0e95c39367977cf08c951ce1e4d63b34ef。逐组读取原日志，各组通过数为53／38／54（52+1+1）／57（56+1）／46／60／74／66，共448项，无失败、flaky、重试或跳过用例；质量／格式／构建、Docker、runner及耗时统计success，可选截图任务skipped。原日志`/tmp/nexus-acp-receipt-job-<jobId>.log`。ACP取消首次11秒通过，文件预览编辑历史回归首次27秒通过；Files／插件独立场景通过。未扩大为多文件故障、完整像素或全部窄屏已验。
+### B3.1 设计与验收边界
 
-随后bot的68397774仅更新duration-estimates；文档收口只刷新当前基线、擦除已完成施工记录并保留V-UI-01／02和独立V-THREAD等后续，不改变被测产品。没有本地行为测试或线上部署，未知.tmp保持。
+本设计建立于原 `workspace.service`、`workspace-terminal.service`、shell integration、suspend coordinator/registry、ssh-suspend HTTP、log/xterm Adapter、现有 Files WS/transfer 与前端 WorkspaceSocket 实际消费者盘点；B3.1 源码及四表已收口，行为待 B10；Shared/backend-next check/build、Frontend build、根 check、格式和 diff 静态门禁须对应最终工作区重新运行。逻辑/故障/E2E 保留 B10，浏览器协议/反馈迁移与静态消费者差异进入 F1。
 
-### 2026-10-20 设置与通知跨页 UI 回退（本地 CDP）
+Workspace 的当前源码由唯一 sessions Service 持有：64 项准入覆盖 opening、detached、resuming、closing 和 cleanup_unknown；普通恢复使用同一 SSH shell、8 MiB journal、120 秒宽限及显式 workspace.resumeAck。新建回执的terminalOffset为初始journal端点、replayedBytes为本次保留回放字节，前端由两者定位收到字节的起点；普通恢复的terminalOffset为回放终点，replayedBytes必须与请求offset对应。lastConnectedAt为Unix秒。终端累计消费归 WS attachment，未确认窗口 1 MiB；消费 ACK 与恢复所有权 ACK 分开，回放和普通输出均服从窗口。非法消费不推进计数，越界 journal offset 在创建 pending attachment 前拒绝；断开释放原消费者暂停，由原 Workspace 继续保留输出。独立 Remote HTTP/PTY 使用自己的技术 SessionService，复用 machines Model/Platform，不暴露用户 Workspace 的活跃 shell 或权限。
 
-基于当前未提交工作区，按 `75289ef9^` 继续核对展示差异。设置页恢复 Provider／App／插件／Browser／安全的卡片层级；通知页恢复列表标题、按钮、渠道分区、事件网格和底部测试／保存区，同时保留当前结构化 Header、SMTP／Telegram 秘密意图、CAS 和失败围栏。批量连接编辑恢复高级选项折叠，SSH 密钥错误回到列表内，备份导出／导入恢复各自按钮行与就地消息；三语补齐 19 个新操作事件名称。
+挂起标记、prepare/commit/unmark、lease/takeover、pending 恢复与历史由同一 Workspace 实例拥有；只为新 ID 临时登记别名，不另建 SSH shell。历史/checkpoint 经 History Model 转换到 Platform Port/Adapter，Shared 只传安全管理对象、请求及事件。suspend.resumeAck 与普通 ACK 独立，baseline 已发送不代表 ownership 已提交；准备/ACK 超时、WS 关闭和接管回滚原 owner，晚字节有界保留。
 
-本地 `https://api.honus.top` CDP 证据：`/tmp/settings-models-restored.png`、`/tmp/settings-tools-restored.png`、`/tmp/settings-runtime-restored.png`、`/tmp/settings-safety-expanded2.png`、`/tmp/notifications-restored.png`、`/tmp/notification-form-final.png`、`/tmp/settings-data-restored.png`、`/tmp/settings-security-restored.png`。通知页与设置页控制台均无 error；通知事件网格未出现未翻译大写枚举。测试环境没有 Provider 和连接，Provider 仅核对空态，批量编辑、真实通知投递和 SSH 密钥保存未执行；未做完整像素或窄屏专项。
+目录安全移除由 WorkspaceService 的 `removeSuspended` 根据当前状态决定：attached 且租约有效时共用原 unmark 清理，只删除挂起日志/checkpoint/目录和历史游标，不关闭 SSH、PTY、Files 或当前附件；suspended 才终止；已断开只删 tombstone；prepared/resuming/所有权不明则拒绝，不根据旧前端状态回退到终止。同一标记共享清理 Promise，日志或 checkpoint 清理失败保留 `operation_unknown`；成功经原附件的 `suspend.unmarked` 事件同步 ID/generation，再发布完整目录。事件监听随附件解绑/关闭释放，前端清除本地标记而不关闭终端。HTTP 回执逐字段返回请求 ID 与有限 disposition，原显式终止接口仍保留其终止语义，安全移除不隐式调用它。
 
-静态结果：Node 22.23.1／pnpm 11.26.0，根 `pnpm run check`、`pnpm run format:all:check`、`pnpm --filter @nexus-terminal/frontend build` 和 `git diff --check` 均退出 0。该结果只证明当前工作区的静态与本地展示核对，不代表远程 448 项回归或部署验收。
+目录协作由 Shell Service 持有排队、替换、期限与事件；有限失败基础值归Shared remote/terminal/values，内部事件对象仍归sessions/model，WS逐字段投影。Shell Model转换应用能力，Native Shell Adapter构造Bash/Zsh命令、解析PID/提示符和字节输出。目录切换仅写入安全转义的普通 cd，按 Shell 配置记录历史，不附加内部标记/历史清理、不隐藏命令或后台输出；setup 探测仍保留独立的内部历史清理；结果分隔符不输出换行，过滤完成后用 CR/EL 重绘后续提示符；实际TTY标志确认Bash初始化原先关闭echo时，先回退隐藏提交的一行，不扫描或裁剪登录信息及普通命令的空行。每实例随机marker避免普通stdout充当prompt；未完成探测而已接收用户输入时安全拒绝迟到注入。普通Workspace响应与protocol.error使用Shared有限安全码，准入满额为limit_exceeded。真实Bash目录切换/回读及普通续接已有F1专项；其他登录脚本、Zsh及并发提示符组合仍分别待验。
 
-### 2026-10-20 Agent 与文件库窄屏 CDP 回归
+日志由技术 Adapter 串行 append/read/compact/delete，绝对 offset 不随 100 MiB 可见窗口裁剪回退；checkpoint 和 renderer 的技术资源通过 Model 隐藏。日志导出在 Service 对每个最多 64 KiB 的块复查身份和实例，技术分块归 renderer Adapter；取消与清理失败分别判断，不能把 allSettled 的完成当作释放成功。历史前页交付成功并复查原 cursor 后才推进。HTTP/WS 管理视图共用 suspend-view 白名单；当前身份、attachment/generation 和 45 秒租约在异步边界复查，2 秒 sweep 不代替实时授权。关闭、背压、导出和失败边界见第 7 节与下述当前范围。
 
-使用本地 CDP（`https://api.honus.top`，未使用 9998）在 390×844 与 768×900 检查当前工作区。Agent 设置页和通知编辑器页面级 `scrollWidth` 与视口同为 390；文件页修复前 header 内容宽 447px、容器 388px，筛选栏改为移动端分行后溢出项消失。会话页修复前只有标题和空主区；在线程列表已有 7 项时，修复后自动选中最近更新会话并渲染欢迎卡、输入区和单行工具栏。768px 最大化窗口为 256px 会话侧栏加 512px 主区，工具栏未裁切。
+B3.1 源码收口不等于行为验收。实际类型、构建和格式结论以 [B3.1 收口证据](https://github.com/0honus0/nexus-terminal/blob/558c4b343ba0ef2316309d2e164b9c6075c47efc/doc/testing/%E5%90%8E%E7%AB%AF%E9%87%8D%E6%9E%84%E5%BE%85%E5%AE%9E%E6%9C%BA%E9%AA%8C%E8%AF%81.md#b31-源码阶段最终收口) 为准；B10 已验证本机 OpenSSH 的普通续接双阶段确认、普通终端消费窗口/暂停后断线回放、journal裁剪/offset拒绝、挂起 ACK/主动接管及 Files 正常链；挂起准备、消费暂停和日志积压分别持有阻断条件，取消挂起标记经WorkspaceService原resumeIfUnblocked计算是否可恢复，不能直接解除独立背压。慢日志 detach、prepared断开、自然租约到期、准备超时、历史帧失败/reset、日志文件系统拒绝向PTY收尾及导出授权/名额/断连已有有限证据；慢日志 rollback、空间耗尽、其余 Shell/VT 与清理故障仍待验证，精确范围归 testing。正式前端普通/挂起独立ACK及Shared挂起契约已接线；标记标签关闭仅脱离传输，明确取消标记后关闭才请求终止Workspace，受控与真实专项范围见testing，完整 Access/IP/2FA 源码已收口、行为待 B10。
 
-证据：`/tmp/ui-audit-agent-settings-390.png`、`/tmp/ui-audit-notifications-390.png`、`/tmp/ui-audit-agent-mobile.png`（修复前）、`/tmp/ui-audit-agent-mobile-fixed.png`、`/tmp/ui-audit-agent-chat-390.png`（修复前空主区）、`/tmp/ui-audit-agent-chat-390-fixed.png`、`/tmp/ui-audit-agent-768-max.png`。本次未执行真实 Run、附件上传、删除、通知保存或 Provider 数据态；完整像素与全部视口组合仍按 V-UI-01 待验。
+Access/Targets/Remote 与 Agent 的计划后端功能源码及 B9 逐文件审核已收口，当前职责见职责表；行为验收仍待 B10。Remote Files 已同时具备 B1 新 HTTP 读写能力及 R1 旧 Workspace Files 子协议源码：编码写入/独占新建、list/search/stat、binary read/cancel、递归/force 批量删除、rename/chmod/realpath、ready/error 均有真实调用链；A-04 machines owner、SFTP 技术失败边界及 Files Service/Model 职责已收口。R1 行为验证未运行，真实 SSH/SFTP、故障窗口和旧消费者全链路仍待 B10。
 
-### 2026-10-20 Agent 悬浮会话、附件与错误态 UI 收口（本地 CDP）
+R2-01–R2-05 的源码缺口已修补：背压/final 纳入同一操作截止时间，心跳按实际资源 owner 验证并续期，Workspace 64 与独立 Files 8 的预算分别计数；WS authorize 的身份查询异常沿技术握手返回服务不可用而非伪装未登录；PTY 定时/EOF 身份查询异常与正常拒绝分开，所有 unsubscribe 与 release 失败聚合进入原关闭追踪。以上仅是源码/静态完成，B10 的长背压、撤销、故障及容量行为尚未执行，不能标为已验收。
 
-使用本地 CDP（`https://api.honus.top`，未使用 9998）核对当前工作区。会话侧栏恢复标题／更新时间行，App 切换器、会话附件选择器、文件来源、Agent 设置与通知页均未出现裸 UUID、模型目录错误码或已知通知事件枚举。真实接口回归中会话列表从 7 新建到 8，首次删除只进入确认态，第二次删除返回成功后回到 7；等待 3.7 秒未确认时列表不变，控制台无 error。注入 `/api/v1/agent/apps` 503 后，390×844 显示“无法加载 Agent 服务”和“重试”，没有原始操作／错误文本；设置、通知、Agent 会话和文件页均无页面级横向溢出（`scrollWidth=382`，视口 390）。
+B2 下载/上传/copy/move/目录 ZIP、原生归档、密码与进度、属性及链接恢复的源码已收口；D12/D13 的部署取舍已确定，B2-V01–V66 全部待 B10 行为验证。Files 子协议不等于完整 Workspace 已迁移：完整 reconnect/resume、Terminal/挂起恢复的 B3.1 源码已收口、行为待 B10；status/docker 的 B3.2 源码已收口、行为待 B10；RDP/VNC 的 B3.3 源码复审已矫正，本轮最终静态通过，行为待 B10；完整 Access/IP/2FA 源码已收口、行为待 B10。按明确决定，旧 writer 的隐式 metadata 失败容错不在后端保留，正式编辑器的显式失败处理转 F1。Agent Shared、六个 HTTP 与开发前端源码消费者已接入；真实浏览器与故障行为仍待验收，不能因静态通过就声称正式通信迁移完成。
 
-证据：`/tmp/ui-final-directory-failure-390.png`、`/tmp/ui-continue2-agent-delete-confirm.png`、`/tmp/ui-continue2-agent-after-delete.png`、`/tmp/ui-continue2-agent-chat-390.png`、`/tmp/ui-continue2-agent-files-390.png`、`/tmp/ui-continue2-settings-agent-390.png`、`/tmp/ui-continue2-notifications-390.png`。测试环境没有 Provider、连接和 Artifact，真实 Run 发送、附件上传／关联／下载、文件清理、通知保存与外部投递未执行；这些场景和完整像素比对仍待验。
+**B3.3 RDP/VNC 新后端源码**：DesktopService 持一次性票据、pending/opening/active 配额、Access/Targets 版本及周期复查；DesktopModel 转换应用事实和实例技术能力。Targets 同事务读取配置/密文，由 Model 解密并经公开 mapper 转换；connectionUsage 记录桥就绪时间。BrowserDesktopAdapter 只桥接 VNC TCP 或 RDP X224/TLS/RDCleanPath，不运行图形解码进程或 guacd。签发 HTTP 逐字段交付六字段内存会话并设置 no-store，WS 仅携带原 Cookie 和 ticket；目标由受信配置决定，不使用客户端 destination。RemoteApp UI/协议/SQL 列已删除，初始签名已更新，不兼容旧开发库/快照。完整八节见 [远程桌面专题](REMOTE_DESKTOP.md)，本版行为待远程验收。
 
-### 2026-10-22 Agent 文件库紧凑工作区布局（本地 CDP）
+产品行为与容量以 [USAGE](../USAGE.md) 为准，当前工作见 [实施方案](../PLAN.md)，未执行真实专项见 [待实机验证](https://github.com/0honus0/nexus-terminal/blob/558c4b343ba0ef2316309d2e164b9c6075c47efc/doc/testing/%E5%90%8E%E7%AB%AF%E9%87%8D%E6%9E%84%E5%BE%85%E5%AE%9E%E6%9C%BA%E9%AA%8C%E8%AF%81.md)。新后端独立 check/build，Shared 与实际双端消费者同步检查；架构审核按模块模板和工程经验执行，静态通过不能证明真实 SSH、并发、清理与浏览器验收完成。
 
-使用本地 CDP（`https://api.honus.top`，未使用 9998）核对当前工作区。默认 Agent 浮窗 `1180×740` 下，文件库页头由基线约 `212px` 降至 `142.4px`，文件库 `scrollWidth=clientWidth=1178`，文档无横向溢出。390×844 下页头为 `193.8px`，搜索与三个筛选分行后完整可见，文件库宽 `356px`、列表行宽 `354px`，所有行 `scrollWidth=clientWidth`；文件状态和大小在行内展示，保留／删除／下载三个按钮均有 `28×28` 可点击区域。搜索无结果时显示带重置动作的紧凑空态，重置后恢复列表；未选择 App 时清理按钮保持禁用。
+B3.3 的 Service 只消费 Model 创建的 DesktopPeer；Model 同步 bind 原 WS 防止首帧丢失，授权前仅有界缓冲，异步复查后才允许 TCP 派发。Platform 持有 DER、TCP/TLS、队列与背压；真实关闭确认覆盖 WS、原 socket、初始化、队列消费与 send 回调，未确认清理不提前释放槽。桥就绪不证明远端认证或画面成功；RDP 当前沿用 ignore-certificate，部署须确保目标网络可信。新实现的画面、输入、权限及资源释放分别等待远程回归，不复用旧 Guacamole B10 PASS。
 
-通过当前 Artifact API 临时创建 PDF、Markdown 和 gzip 三个文件，验证有数据列表、窄屏行布局与操作按钮，随后用同一 API 全部删除并确认剩余 0 项、存储回到 0 B。CDP 同时发现文件库遗漏 `vue-virtual-scroller` 定位样式，导致有数据时虚拟行脱离列表容器；补齐样式后 scroller 定位为 `relative`，行位于列表区内。证据：`/tmp/agent-files-after-wide-final2.png`、`/tmp/agent-files-after-390-final2.png`、`/tmp/agent-files-after-wide-empty-final.png`、`/tmp/agent-files-after-390-empty-final.png`、`/tmp/agent-files-after-390-filter-empty2.png`。
+后端功能迁移与正式前端 Shared 对接已完成，当前后端 HTTP/WS 及双端消费者经远程 Actions 回归；DEV 入口仅用于有限诊断，不能替代正式入口或扩大环境保证。
 
-本轮未执行真实下载、删除确认、清理确认或远程 E2E；完整像素与全部视口组合仍按 V-UI-01 待验。
+B3.1 当前关闭/导出边界：Workspace Service 跟踪导出准入、60 秒完整期限、交付 sink 及实例关联取消；HTTP Interface 持有 response/pipeline，History Model 暴露应用字节源与可等待释放，Platform 只提供技术流/VT 操作。全 Remote 导出最多 2 项，清理失败保留名额。checkpoint dispose 返回共享 Promise，参与关闭确认；临时日志删除及渲染释放的具名技术失败经 Model 转为模块清理失败，HTTP/WS 都输出 operation_unknown。模块各独立 owner 并发关闭，30 秒确认截止不代表真实任务结束，晚任务继续观察；应用整体验收仍待 B10。
 
-### 2026-10-22 系统设置后端日志控件反馈（本地 CDP）
+## B6.1 授权与审批基础（按照模块模板八节，静态/行为结论见 testing）
 
-使用本地 CDP（`https://api.honus.top`，未使用 9998）核对系统设置。后端日志字段的重复标签现为视觉隐藏，触发器保留可访问名称；下拉从 `INFO` 切到 `DEBUG` 后，保存按钮由禁用变为启用，并使用主题 solid 主操作样式，当前生效级别仍显示 `INFO`。390×844 下标签占位高度为 0，页面无横向溢出，主按钮保持可见。本轮只修改前端草稿，未点击保存；真实 PUT、冲突和失败恢复继续由既有 `system-settings.spec.ts` 覆盖。
+### 1. 职责与范围
 
-`system-settings.spec.ts` 已新增标签隐藏、保存启用及 `data-appearance="solid"` 断言，但本轮未执行远程 E2E。证据：`/tmp/logging-before-changed.png`、`/tmp/logging-after-viewport.png`、`/tmp/logging-after-390-final.png`。
+Agent 模块的 `governance` 持有每个 user/App 的 capability grant、执行预算覆盖项与审批持久状态。它不是普通 SSH 的权限授予器；普通 SSH 仍由 Access/Targets/Remote 各自独立鉴权与管理活跃连接。授权事实仅说明 Agent 某一 capability 在指定 App/目标范围内的授予情况，**不能代替**执行时 Targets 当前身份、Tool Inspection、App 生命周期及 Run 策略检查。执行按 governed 政策核对，默认 enabled=false；启用设置不授予工具 grant 或审批。 本版没有执行模型或行为测试。
 
-### 2026-10-22 设置高级诊断与恢复内容重构（本地 CDP）
+### 2. 子功能与目录
 
-使用本地 CDP（`https://api.honus.top`，未使用 9998）核对设置 → 数据 → 诊断与恢复（高级）。默认折叠；展开后宿主诊断呈宽屏 3 列、中屏 2 列、窄屏 1 列，机器突变恢复显示权威列表、空态和详情卡片，Agent 维护显示安装恢复、插件数据、版本目录与运行态核对四组。1536 宽、390×844 与 320×700 下文档 `scrollWidth` 均不超过视口；390 下 Agent 维护卡片宽 358px、插件数据卡宽 304px，320 下分别为 288px、234px。
+- `agent/governance/service/governance-service.ts`：用户/App 输入校验、能力定义与政策、审批构造/幂等意图哈希、关闭准入与自身在途任务等待；无无主 timer。纯政策在 `governance-rules.ts`：授权范围交集判断、grant 校验、执行预算默认/硬上限、审批过期/版本判断。
+- `governance/model/governance-model.ts`：应用 Grant/政策事实/Approval 与 storage command/record 的显式转换；适配同步应用回调及技术失败；`model/governance-types.ts` 独占内部授权事实与审批命令。
+- `governance/storage/governance-storage.ts`：狭窄持久记录与同步回调接口，不携带 Shared DTO。
+- `governance/adapters/sqlite/{governance-schema,governance-row,governance-sql}.ts`：初始化 DDL、严谨行/持久 JSON 解码、SQLite 事务、CAS、失效与审批决议。技术操作、SQL/事务不外泄至 Service。
+- `agent/interfaces/http/governance-http.ts`：安装真实 HTTP 路由与参数白名单、登录验证、Model→安全 wire 投影。未发现独立的旧审批命令 WS；旧通知是从持久 Run `approval.requested` 事件投影到 Notifications，不在本批虚构新的审批 WS 指令/通知通道。
 
-通过 CDP Fetch 模拟 `/api/v1/agent/plugins/{publishers,installations,stages,versions}` 与单安装 `data-snapshot`，验证插件有数据态：3 条快照（含已删除墓碑）、单键读取表单、保存／删除和批量迁移区均渲染；390 与 320 下无横向溢出。模拟响应只用于视觉检查，脚本结束已 `Fetch.disable` 并关闭临时页面，没有写入测试环境。真实机器突变记录和插件安装数据不存在，真实证据录入／释放、插件数据写入及服务端 CAS 未执行。
+### 3. 依赖方向
 
-证据：`/tmp/advanced-after-wide.png`、`/tmp/advanced-after-390.png`、`/tmp/advanced-after-320.png`、`/tmp/advanced-after-wide-agent.png`、`/tmp/advanced-after-390-agent.png`、`/tmp/advanced-after-320-agent.png`、`/tmp/advanced-mutation-detail-wide.png`、`/tmp/advanced-mutation-detail-390.png`、`/tmp/advanced-plugin-data-wide.png`、`/tmp/advanced-plugin-data-390.png`、`/tmp/advanced-plugin-data-320.png`。
+`registerAgent` 装配同模块 `GovernanceService → GovernanceModel → GovernanceStorage ← SQLite Adapter`；Adapter 只依赖通用 Platform SQL、storage 契约与 Shared 基础有限取值。Service 只消费 Model 暴露的应用对象；同步事务政策回调由 Service 提供，Model 将 Storage 事实转换后调用，再将创建任务投影回 Storage；Model 不选默认政策或构造虚假的初始 revision。跨模块 Access 仅通过 `AccessPublicApi.authenticate`；普通 SSH 通过 Targets 自身授权；没有跨模块深层引用、全局 dispatcher 或 Platform 定义的 grant/approval 类型。后续 B6.2 必须通过 Targets public 重新解析当前目标，禁止利用普通 Workspace 既有会话冒名授权。
 
-目标文件 Prettier、ESLint、JSON 解析、`pnpm --filter @nexus-terminal/frontend build` 与 `git diff --check` 通过。`tests/frontend/mutation-recovery.integration.mjs` 本轮执行失败：测试仍等待 `[data-mutation-recovery]` 内的内联 alert，而当前并发改动已把操作提示迁到全局 Toast；该断言需由对应 owner 更新，不能视为本轮 UI 通过。完整远程 E2E、浅色主题和更多视口仍未运行。
+### 4. 类型与转换
 
-### 2026-10-22 设置分组标题垂直居中与数量范围提示（本地 CDP）
+| 边界         | 类型唯一 owner                                           | 转换与实际消费                                                                                                                                                                  |
+| ------------ | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 协议→请求    | Shared `agent/governance/{values,model,http,http-codec}` | HTTP 严格读 UUID/原始类型、完整 grant/审批/执行政策字段与具名 path/header/response；Interface 将 scope 转 Model 输入，不收客户端身份或授权布尔                                  |
+| DB→应用      | governance/storage、Model types                          | SQLite Adapter 校验 schemaVersion/JSON/行的有限值及状态/期限/决议/消耗关联；Model 转换 GrantScope、政策覆盖、Approval；实际 grant replace、request/resolve 回调在同一事务内消费 |
+| 应用→协议    | Model / Shared model                                     | governance HTTP 白名单映射；只输出 tool 摘要、hash/版本，不输出 SQL 行、凭据/冻结输入；正式前端仍消费旧 Protocol（F1）                                                          |
+| App 当前授权 | governance/model 的 `AuthorizationFact`                  | 包含 user/App/capability/connectionId/revision；不复用客户端 DTO，批准不自动授权派发                                                                                            |
+| 技术资源     | Platform SQL Executor/SqliteRuntime                      | Adapter 执行事务及行解码；Policy 不由 Platform 拥有                                                                                                                             |
 
-使用本地 CDP（`https://api.honus.top`，未使用 9998）核对设置 → 安全。桌面 1920×953 下四个分组头部的图标、标题和右侧操作按钮中心线均为 `y=188`、`482.8`、`636.8`、`774.8`，头部计算样式为 `align-items:center`，标题无顶部外边距。390×844 与 320×700 下四组中心线分别是 `160`、`445.8`、`593.8`、`722.8`，图标、标题和操作区域逐组一致；分组头部 `scrollWidth=clientWidth`，文档宽度分别保持 390 与 320，未产生页面级横向溢出。导航自身保留横向滚动，不属于页面溢出。
+目标 grant 的 ssh IDs 在 Shared 协议中是长度受限文本，应用判断时严格要求规范化的正安全整数目标 ID；执行政策秒/字节/条数沿原始类型进行验证，不将 `String(value)` 后的相同文字当成有效 enum。grant 目标 ID 最多 256、单个最多 128 UTF-8 bytes，capability 取值以 Shared governance/values 唯一列表为准；审批 TTL 600 秒；grant 请求上限 512 KiB，普通 governance JSON 16 KiB，完整结果上限 8 MiB；审批 list 按ID游标每页最多64条，返回 after/nextCursor/hasMore，历史总数不截断；容量按完整 JSON 编码计算。
 
-Agent 数量组件新增范围失败局部状态：合法单位表达超出当前字段上限时优先显示“超出范围：最大 …”，只有语法无法解析时才显示格式错误；`type=number` 的有效范围值仍不重复显示换算微反馈。测试环境后端仍返回旧版执行设置形状，正式 Agent 面板未渲染 Recall 字段；改在页面内临时挂载 `QuantityInput`（`max=32768`）验证：输入值 `1G` 显示 `Out of range; maximum 32K` 且 `aria-invalid=true`，输入 `not-a-size` 显示 `Invalid format; use a number with an optional unit`，临时应用随后已卸载。`performance-settings.spec.ts` 已新增对应断言，但按 D17 未运行该 E2E。
+### 5. 入口与安装
 
-证据：`/tmp/settings-security-390.png`、`/tmp/settings-security-320.png`、`/tmp/agent-settings-current.png`、`/tmp/recall-range-feedback.png`。真实 Agent 页面 Recall 输入与保存、完整 E2E 仍未执行；分类标题量测只覆盖安全页，其他使用同一 `UiSettingsGroup` 的页面共享样式结论，不扩大为全部页面交互验收。
+`modules/agent/register.ts` 在 Agent request owner 中装配 governance；`bootstrap/schema.ts` 在唯一 v1 初始化项中安装治理表。已接线的管理员 HTTP 为 GET/PUT `/api/v1/agent/apps/:appId/grants`、GET/PUT `/api/v1/agent/apps/:appId/execution-policy`、GET `/api/v1/apps/:appId/approvals/:approvalId`、POST `.../resolve`、GET `/api/v1/apps/:appId/runs/:runId/approvals`。共享认证、CSRF/Origin 控制由新 Platform/Access 负责；治理入口使用实际 session userId=1，结果交付前再次认证。没有创建审批的客户端 HTTP 入口：审批生产者必须是 B6.2 的受信 Tool/ACP 过程而非客户端请求。
 
-### 2026-10-22 Agent 管理预览入口移除（本地集成与 CDP）
+### 6. 数据、事务与并发
 
-硬限制管理不再渲染预览按钮或二次确认面板，普通预算与硬限制共用顶部“保存”；`saveExecutionHardLimits` 仍在原 API 内部按后端契约调用 preview → confirm，用户只执行一次保存。文件库清理不再提供独立预览步骤，选择来源 App 后通过一次全局确认执行；文件内容预览保留。三语中无消费者的 `hardLimits.review`、`noPreviewChanges` 已删除，文件删除确认键由 `deletePreview` 改为 `deletePrompt`。
+第一版创建 `agent_governance_policies`、`agent_governance_grants`、`agent_governance_approvals`、`agent_governance_resolution_keys`，引用 Agent App/Run 身份。首次 GET 不会自动批准任何 capability：revision/version 为 0、grant 空、政策 override 空。grant PUT 在同一个 SQLite 事务中查 App、读当前 policy、调用 Model 转换后的同步纯规则、CAS revision、替换所有 grant、失效 requested 审批并读取最终结果。执行政策 PUT CAS executionVersion 并推进 policyRevision/使旧待批失效；同事务读取全局 execution settings；覆盖项不能超过动态 hard limits，effective 与实际冻结使用同一执行规则。
 
-`node tests/frontend/agent-execution.integration.mjs` 在本机隔离 SQLite 与 Vite 页中执行 28 项检查通过，包含“hard limits have no preview action”“actual component saves hard limits without a preview step”、普通预算与硬限制互斥、unknown/冲突恢复及认证撤销。测试未访问 `api.honus.top` 的生产数据，临时目录在结束时删除。
+审批请求的窄内部命令写入时读取真实 ToolCall、当前 Run 状态及 App grant，并从操作账本冻结 operationHash、policyRevision、operationRevision 对应的 inputRevision 与 TTL；Model 必须消费经 Adapter 读取的 Storage 快照，未经认证客户端不能创建。resolve 在同一事务读原审批、Run 当前 status、ToolCall 内容修订/状态及目标版本、App 当前 policyRevision 和幂等键；同步规则拒绝 stale/expiry/版本/哈希漂移；时钟在实际事务执行时读取，决议校验与 decidedAt 共用一个时刻；成功 CAS 到 approved/denied 并保存 feedback、首次事务结果快照。同键/同输入重放原始已提交结果，不从随后变化的审批行重建，不同输入返回冲突；无网络派发，不能把批准视为副作用已经执行。审批 list 先以有界数量检查总量，再分批失效扫描和读取，避免先聚合无限记录后才检查字节上限。inputRevision 已绑定 ToolCall.operationRevision，与父 Run 生命周期版本分离；消费同事务提交 consumedAt、dispatched 状态和操作事件，file_write 的实际执行/派发后复查已接线，文件/Shell/Docker突变与当前Run后台Job已接线，ACP独立权限与协作已接线，不得默许跨内容版本批准。App/Run 删除由外键回收，不在 Adapter 内藏删除准入规则。
 
-使用本地 CDP（`https://api.honus.top`，未使用 9998）读取已登录的 `settings?tab=agent`：页面文本和可操作元素中“预览/preview”匹配为 0；展开“硬限制”后渲染 16 个字段，`previewActions=[]`，只有保存操作。全程未修改或保存测试环境设置。证据：`/tmp/agent-settings-preview-removal-desktop.png`。
+### 7. 生命周期与失败
 
-目标文件 Prettier、ESLint、三语 JSON 解析、`pnpm --filter @nexus-terminal/frontend build` 与 `git diff --check` 通过。文件库清理未在真实测试账号点击最终确认，避免删除账号级可回收文件；真实清理、删除确认、窄屏布局及完整远程 Actions E2E 仍未执行。
+Governance Service 与 AgentRequestOwner 双层跟踪自身请求；停止新准入、`closePromise` 先保存，等待 in-flight 事务/请求终态，Governance 最多保留 32 个原始持久/关闭失败及额外失败计数，不使单项清理跳过其他子资源。审批 TTL 不启动无 owner 的 interval：get/list/resolve 同事务按数据库条件把到期 requested 转 expired，把已终止 Run 的 requested 转 superseded。grant 撤回/执行政策修改同事务令待批 superseded，取消 Run 持久终态后执行失效，并通过后续读取 sweep 恢复；取消已经提交后失效失败返回 operation_unknown，不能假称取消已回滚；commit_unknown 不得默认重放写入。继承取消清理只在 quiesce 后、子 owner close 开始前准入；close 开始后拒绝全部新任务。原 owner 在任务退出前记录存储/未知/内部故障，不因它们已映射为 AgentFailure 就忽略；父层聚合去除同一失败的重复引用。持久 approved/denied 的产生只是审批状态提交，B6.2 在真正执行前必须重新确认当前 grants、Run、ToolCall、目标/租约及消耗状态。停机后已经派发的远端任务不得因本批 `close` 即宣称终止。
 
-### 2026-10-22 全局禁用目标选中态去重（本地 CDP）
+### 8. 当前能力与验收
 
-使用本地 CDP（`https://api.honus.top/settings?tab=agent`，未使用 9998）进入“安全与系统”并展开“全局禁用目标”。选择 SSH 目标 `akko` 后，顶部旧标签容器数量为 0，列表内高亮卡片为 1，顶部“这是跨会话、跨 Run 的全局硬限制”说明不包含目标名；标题计数由 `0 / 6` 更新为 `1 / 6`。核对后刷新页面丢弃草稿，未填写原因或保存。
+B6.1 的 Shared、SQLite 与 HTTP 请求/查询/变更/决议路径有源码；审批请求生产者、ACP活waiter与文件/Shell/Docker/ACP消费者已接线；安全观察采用审批HTTP/工具事件页，直接 Child/协作已接线，B7动态settings/预算已接入；外围资源B8与持久证据恢复B9已接线，行为仍待B10。旧代码实际包含 App enable/manifest/默认 grant 和详细 ToolInspection；新 App 由受信内置声明创建，默认 grant 空（fail closed）；插件manifest/运行时已由B8接线，差异登记 F1，不补虚假兼容桥。行为、真实取消/并发、SQLite 迁移与实机权限试验按 D2 登记 B10，静态命令结果限 testing 当前批次，不复用 B5.2 PASS。
 
-目标文件 ESLint、Prettier、`pnpm --filter @nexus-terminal/frontend build` 与 `git diff --check` 通过。证据：`/tmp/agent-denylist-selected-only.png`。窄屏布局、批量禁止／允许及真实保存仍未在本轮执行。
+## B6.2A App 声明与目标政策
 
-### 2026-10-22 设置分组窄屏左边界对齐（本地 CDP）
+### 1. 职责与范围
 
-使用本地 CDP（`https://api.honus.top/settings?tab=workspace`，未使用 9998）在 390×844 与 320×700 视口核对设置分组。修改前分组内边距为 15px，但标题因 30px 装饰图标和 9px 间距从 66px 开始，正文从 27px 开始；760px 以下隐藏图标后，390px 下“文件与编辑”标题与表单左边界均为 27px。320px 下“文件与编辑、终端与指令、首页与监控、监控核心配置、布局与高级设置”五组标题与正文均逐项对齐，页面 `scrollWidth=innerWidth` 为 390 和 320，没有横向溢出。
+Scope 拥有受信声明目录、UUID App 实例与启用状态；Governance 拥有 grants 和全局 Agent 目标拒绝政策；Runs 拥有持久取消围栏与实际执行资源。旧 bootstrap 未注册内置 App，插件声明来自安装版本；新内置 `nexus.terminal` 是明确新增的宿主声明，声明远程文件、命令及状态能力，默认 grant 为空，不代表这些能力已获授权或已接通 Agent 工具执行。插件包及运行时安装仍归 B8。
 
-目标 CSS Prettier、Frontend build 与 `git diff --check` 通过。证据：`/tmp/settings-mobile-aligned.png`。本轮只读取边界，未修改或保存设置；桌面 761px 以上图标布局保持原样。
+### 2. 子功能与目录
 
-### 2026-10-23 Provider 弹窗紧凑留白与模型库单行（本地 CDP）
+Scope 的 service 管理受信 definition、默认初始化与生命周期任务；model 转换实例、声明与 storage 任务；SQLite Adapter 安装声明与实例。Governance 的目标政策沿现有 service/model/storage/adapters 增加 denylist。Runs 的 Adapter 提供原事务取消任务；执行 owner 在提交后中止其实际持有的尝试。
 
-使用远程 CDP（`https://api.honus.top/settings?tab=agent`，未使用 9998）在独立临时页核对，未提交，也未填写、测试或保存 Provider。模型库状态条在 `1440×900`、`390×844`、`320×700` 与 `280×700` 下均为单行，状态文字可截断，“立即更新”按钮不换行，状态条 `scrollWidth=clientWidth`。
+### 3. 依赖方向
 
-添加 Provider 弹窗在 `1440×900` 下内容左缘距面板约 17px，在 `390×844`、`320×700` 下约 13px；三档内容右缘距滚动条可用边界约 12px，正文 `scrollWidth=clientWidth`，无横向溢出，面板与表单尺寸、字段及保存取消流程未改变。证据：`.tmp/agent-registry-final-320.png`、`.tmp/agent-provider-final-1440.png`、`.tmp/agent-provider-final-390.png`、`.tmp/agent-provider-final-320.png`。目标 Prettier、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过；完整 E2E 仍按 D17 范围执行。
+Service 消费应用事实；Model 转换 storage 契约和 Targets public 安全目标元数据；Adapter 不引用 Service、Model 或 Shared DTO。同数据库跨子功能写入使用各自 Adapter 的事务接口，不重复其 SQL。不借 Remote 活跃会话或普通 SSH 权限。
 
-### 2026-10-22 App 与扩展四分类等分（本地 CDP）
+### 4. 类型与转换
 
-使用本地 CDP（`https://api.honus.top/settings?tab=agent`，未使用 9998）进入“App 与扩展”。四个页签现在为 `grid-cols-4`，1152×900 下每列约 160.06px、390×844 下 80.20px、320×700 下 62.60px，四列宽度差均为 0；四个标签的 `scrollWidth=clientWidth`，页签容器无横向滚动，文档宽度分别为 1144、382、312，均未超过对应视口。
+声明来源 ID/version 是必填非空字段，与实例 UUID 分别表达；SQLite 外键绑定来源，Shared 解码拒绝缺失或 null，不保留旧无来源实例分支。Shared scope 定义双端实例、声明摘要和 CAS 请求；Governance 定义拒绝名单协议。内部对象仍归各子功能 model，存储对象仍归 storage；HTTP、public 与 Model 各自逐字段转换。能力有限值复用 governance/values；秘密、运行时句柄与默认 grant 初始化任务不进入 Shared。
 
-证据：`/tmp/agent-extensions-tabs-1152.png`、`/tmp/agent-extensions-tabs-390.png`、`/tmp/agent-extensions-tabs-320.png`。目标 ESLint、Prettier、Frontend build 与 `git diff --check` 通过。本轮只读取与切换页签，未执行资源写入或完整 E2E。
+### 5. 入口与安装
 
-### 2026-10-22 插件仓库折叠提示精简（本地 CDP）
+注册器只接收服务器内置声明，客户端仅选择已注册的 definitionId。GET Apps/单项、PATCH enabled+expectedVersion、GET definitions、GET/PUT target-denylist 安装在 Agent HTTP；POST Apps 使用默认受信声明。启动同步声明，但账号默认实例在 Apps 列表入口按已认证用户初始化，避免首次安装尚无账号时写入外键。
 
-使用本地 CDP（`https://api.honus.top/settings?tab=agent`，未使用 9998）进入“App 与扩展 → 插件市场”。官方仓库分组展开后仍显示仓库来源、复制按钮、插件列表与发布者区域，分组头 `aria-expanded=true`；页面“展开”和“收起”文字计数均为 0，文档 `scrollWidth=1144`、视口 1152，无页面级横向溢出。
+### 6. 数据、事务与并发
 
-证据：`/tmp/plugin-repositories-without-expand-text.png`。目标 Prettier、ESLint、Frontend build 与 `git diff --check` 通过。本轮未添加、移除或保存仓库，也未执行完整 E2E。
+所有相关表直接纳入唯一 v1 初始化；初始结构变更同步更新签名，不匹配的开发库明确拒绝，不自动转换或删除。启动声明同步在独立安装事务完成；实例与初始政策/grants 同事务创建；存在实例不重写默认权限；实例缺失治理政策视为完整性失败，治理读取/写入/撤销均不补建记录或返回默认政策。
 
-### 2026-10-22 设置页一致性与尺寸巡检（本地 CDP）
+同版本声明以完整内容指纹核对，包括默认启用及默认 grants；内容变化必须推进声明版本，指纹不公开。声明更新、禁用及 denylist 变更在各自写事务内推进围栏、失效未决审批、取消旧活动 Run。治理写入/审批决议消费同事务最新声明、启用与目标政策。新实例必须绑定受信声明，不凭名字自动绑定。
 
-使用本地 CDP（`https://api.honus.top/settings`，未使用 9998）巡检工作区、系统、外观、Agent、安全、IP 管控、数据管理和关于八个分类，未点击保存或改写测试环境设置。桌面请求 1440×1000（实际 CSS 视口 1152×800）下普通设置卡宽统一为 `780px`，390×844 下为 `358px`，320×700 下为 `288px`；关于页分别同宽，版本、状态和仓库入口均无悬空竖线。内容画布计算样式为 `scrollbar-gutter: stable`，长短页面切换时左右边界不再变化，三档文档均无页面级横向溢出。
+目标管理先经 Targets public 获取事实，实际持久提交再核对引用和版本；审批也持久绑定目标版本。拒绝 ID 保留到显式撤销，不随目标删除自动丢失。目标集合变化才撤销旧 Run，修改原因不撤销或触发执行复查。denylist 存储与应用时间保留毫秒，HTTP 将 changedAt 转为 Unix 秒，取消围栏直接使用原毫秒。审批 capability 必填；targetVersion 的 null 仅表示真实无目标操作。全部 Agent Model 使用同一存储失败映射 owner，存储不可用、未知提交和内部失败仍由实际异步 owner 收口。
 
-八页均未发现原生 `<select>` 残留，常规按钮高度统一为 `38px`，控制台无运行异常。数据管理双卡在桌面各 `384px`、窄屏恢复整行宽，属于页面既定双列布局；Appearance 首卡只保留标题与“自定义外观”操作，第二轮延迟加载后卡片宽仍为 `780px`。修改前后对比证据：`/tmp/settings-audit-*-1152.png`、`/tmp/settings-audit-*-390.png`、`/tmp/settings-audit-*-320.png`；修改后证据：`/tmp/settings-ui-about-1440-final.png`、`/tmp/settings-ui-about-390-final.png`、`/tmp/settings-ui-about-320-final.png`、`/tmp/settings-ui-system-1440-final.png`、`/tmp/settings-ui-system-390-final.png`、`/tmp/settings-ui-system-320-final.png`。
+### 7. 生命周期与失败
 
-目标 Vue ESLint、Prettier、`pnpm --filter @nexus-terminal/frontend build` 与 `git diff --check` 通过。本轮未提交、推送或部署，完整远程 E2E 仍未执行。
+当前内置声明仅有宿主持久状态，无插件初始化或资源 hook；enabled 只表示管理准入，executionState 为 governed，不制造 running/healthy。禁用/政策更新先提交取消围栏，再由 Run execution owner 中止具体尝试；未知提交也保守中止本地尝试，不宣称回滚或远端停止。实例/声明状态无需异步健康回写，不存在晚 health 覆盖禁用。父 owner 关闭等待已准入请求后关闭治理及执行 owner。
 
-### 2026-10-22 Toast 整卡状态色（本地 CDP）
+### 8. 当前能力与验收
 
-使用本地 CDP（`https://api.honus.top`，未使用 9998）通过页面内现有 notification store 同时展示成功、警告和失败 Toast，未触发业务写入。桌面请求 1440×1000（实际 CSS 视口 1152×800）下三条均为 `340×56px`；390×844 下均为 `366×56px`。成功卡背景、边框和阴影命中 `--status-success-color`，警告命中 `--status-warning-color`，失败命中 `--status-error-color`，图标容器与操作按钮使用同一语义 tone；页面无横向溢出，控制台无异常。
+当前 B6.2A 源码按四表核验；静态证据归 testing，行为全部待 B10。Tool消费已在B6.2B接线；ACP消费已在B6.2C接线；动态预算已接入，插件运行时 B8、正式前端 F1；执行按 governed 政策核对，默认 enabled=false；启用设置不授予工具 grant 或审批。。旧声明 ID 路径改为实例 UUID，Shared 正式前端迁移登记 F1。
 
-验证后已从 store 清除临时通知，未改变驻留、去重、关闭或恢复逻辑。证据：`/tmp/toast-status-colors-1440.png`、`/tmp/toast-status-colors-390.png`。目标 CSS/Vue ESLint、Prettier、Frontend build 与 `git diff --check` 通过；浅色主题和真实业务失败回执尚未单独执行。
+## B6.2B 首个可信工具链
 
-### 2026-10-22 Toast 操作内联与 Provider 标题窄屏（本地 CDP）
+### 1. 职责与范围
 
-使用本地 CDP（`https://api.honus.top/settings?tab=agent`，未使用 9998）在 320×700、390×844 与实际 CSS 视口 1152×720 下，直接向现有 notification store 注入带“重新读取”action 的警告通知，并读取模型 Provider 标题边界；未触发真实设置重载、保存或其他业务写入。
+首工具 machine_connection_list 提供已选中、当前授权且未被拒绝的 SSH 安全目录。RunExecutionOwner 拥有模型循环及在途任务；governance 拥有当前许可；tools 拥有服务器定义、输入校验和工具用例。旧协调器拆分不作为必须保留的设计；后续能力按实际价值重新设计，差异归实施方案 F1。
 
-320px 下警告 Toast 为 `296×92.75px`，图标 `28×28px`、说明正文左缘 62px，action 按钮为 `72×28px` 并接在文案末尾；390px 下卡片为 `366×73.38px`，桌面为 `340×97.9px`，三档 `scrollWidth=clientWidth` 且文档无横向溢出。单独注入成功、警告、失败三条 Toast 时，390px 高度分别为 `56px`、`73.38px`、`73.38px`，强调色分别命中绿、黄、红语义色。模型 Provider 标题行在 320px 下由 `94.59px` 恢复为 `63px`，390px 同为 `63px`，标题组、计数、说明入口和“添加”按钮保持同行，标题容器 `scrollWidth=clientWidth`。
+### 2. 子功能与目录
 
-证据：`/tmp/toast-layout-320-polished.png`、`/tmp/toast-layout-390-polished.png`、`/tmp/toast-layout-1440-final.png`、`/tmp/toast-three-kinds-action-final.png`。验证后已清除注入通知。目标 Vue/CSS ESLint、Prettier、`pnpm --filter @nexus-terminal/frontend build`、根 `pnpm run check` 与 `git diff --check` 通过；按 D17 未运行本地业务测试、E2E 或测试收集，真实设置重载与窄屏键盘操作仍随既有回归覆盖。
+tools/service 持有工具定义和用例，tools/model 定义独立应用目录并转换 Targets public。runs/model 持有步骤、proposal、历史和 reasoning 应用类型；runs/storage 独立持久契约；runs/adapters/sqlite 持有步骤/工具 SQL 与 JSON 解码。governance/service 与纯规则判断只读权限，governance/model 转换事务决策，SQLite Adapter 原子提交许可。Platform AI Adapter 仅编码供应商工具声明、增量参数与技术续接事实。
 
-### 2026-10-22 高级维护移除插件安装与运行态入口（本地 CDP）
+### 3. 依赖方向
 
-使用本地 CDP（`https://api.honus.top/settings?tab=data`，未使用 9998）展开“诊断与恢复（高级）”。390×844、320×700 与实际 CSS 视口 1152×720 下均只显示“宿主诊断”和“机器突变恢复”；“安装恢复与升级包、插件数据与迁移、已安装版本目录、运行态核对”文本计数均为 0，`[data-agent-maintenance]` 节点计数为 0。三档文档宽度分别为 390、320、1144/1152，未产生页面级横向溢出，控制台无运行异常。
+Root owner → tools Service → ToolModel → Targets public listEntries；Root → RunModelStream → Platform AI。tools 同模块调用 RunToolModel 与 GovernanceService，不绕公开 HTTP。技术层不认识 SSH、App 或业务能力；Storage 回调不借用应用类型。
 
-宿主诊断仍读取到真实运行时、运行时长、内存、数据库版本和采集时间；机器突变恢复仍显示 warning 说明、权威列表与空态。`preset-plugin.spec.ts` 已删除从高级维护打开运行态下拉并核对三项安装的断言，改为断言两个保留分区可见、两个已移除分区不可见。目标 Vue/TS ESLint、Prettier、Frontend build、根 `pnpm run check`、全量格式检查与 `git diff --check` 通过。证据：`/tmp/advanced-without-agent-maintenance-390.png`、`/tmp/advanced-without-agent-maintenance-320.png`、`/tmp/advanced-without-agent-maintenance-1440.png`。按 D17 未运行完整远程 E2E；普通插件页安装／升级和卸载后数据删除仍由既有场景覆盖。
+### 4. 类型与转换
 
-### 2026-10-22 设置关于双卡布局（本地 CDP）
+| 边界                    | 类型 owner                                | 转换 owner                | 消费者         |
+| ----------------------- | ----------------------------------------- | ------------------------- | -------------- |
+| 创建协议 → 应用         | Shared AgentCreateRunRequest / runs Model | HTTP/register 白名单      | RunService     |
+| 模型声明/历史/提案      | tools/runs Model / Platform model-port    | RunModelStream 双向投影   | Root owner     |
+| 安全目录                | Targets public / ToolConnection           | ToolModel                 | ToolService    |
+| 检查、许可、结果 → 存储 | runs/governance Model / storage           | 对应 Model                | SQLite Adapter |
+| 步骤/工具审计 → 公开    | Shared runs/tools                         | register 与 HTTP 独立投影 | DEV/F1         |
 
-使用本地 CDP（`https://api.honus.top/settings?tab=about`，未使用 9998）核对版本与项目地址布局，未点击更新链接、仓库链接或写入测试环境设置。桌面请求 1440×1000（实际 CSS 视口 1152×720）下“应用信息”分组宽 `780px`，版本与项目地址两卡各 `367px`、高约 `60px`；390×844 和 320×700 下自动单列，卡宽分别为 `328px` 和 `258px`。三档均保持设置分组内边距，仓库文本在卡内收起，文档无页面级横向溢出，控制台无运行异常。
+connectionIds 是必填的最多 50 个唯一正整数，空数组表示没有选中目标，选择不等于授权。modelStepIndex 公开；providerCallId、参数、结果正文及 encrypted reasoning 留内部。工具结果仅有 id/name/host/port/username，Targets 的 type/version 只用于内部过滤与复查，不读取凭据。
 
-版本卡继续显示 `v1.0.2` 与“已是最新版本”状态，项目卡显示 `0honus0/nexus-terminal` 和外部链接图标；检查中、发现更新、检查失败的分支沿用原逻辑。目标 Vue/JSON Prettier、Vue ESLint、`pnpm --filter @nexus-terminal/frontend build`、根 `pnpm run check`、全量格式检查和 `git diff --check` 通过。证据：`/tmp/about-after-1440.png`、`/tmp/about-after-390.png`、`/tmp/about-after-320.png`。按 D17 未运行完整 E2E，未提交、推送或部署。
+### 5. 入口与安装
 
-### 2026-10-22 Toast 操作区与材质（本地 CDP）
+Agent HTTP 的 AgentHttpInput 统一归 interfaces/http/agent-input.ts；Governance、Execution、Memory、Artifact、Integration、Browser 与 Plugin 共用输入失败转换。unknown JSON/Shared codec 拒绝先转应用 invalid_input，HTTP 保留400/413等原协议状态；Service、公开出口和Platform不引用该HTTP辅助类，原 mapper/Model 转换保持独立。
 
-使用本地 CDP（`https://api.honus.top/`，未使用 9998）通过现有 notification store 注入成功、带“重新读取”的警告和失败三条通知；未触发真实保存、重读或业务写入。Toast 已改为无左侧状态图标的“状态标题 + 正文 + 底部确认按钮”，右上仅保留关闭按钮；成功通知的确认文案为“知道了”，带恢复动作的警告和失败显示原动作。
+register 将 ToolModel/ToolService 注入唯一 RunExecutionOwner；目录工具参数严格空对象，诊断及文件工具使用有界字段声明，定义由服务器提供，不新增客户端检查或派发 HTTP。已有步骤审计支持 1–400，工具审计包含真实模型步骤。DEV 创建明确传 connectionIds:[]，正式选择器与多步 UI 留 F1。
 
-实际 CSS 视口 1152×720 下桌面 Toast 宽 `288px`，成功/警告/失败高度分别为 `138.4px`、`138.4px`、`119.4px`，按钮 `84×28px`；390×844 下宽 `350px`，高度分别为 `122px`、`141px`、`122px`，按钮 `88×30px`；320×700 下宽 `280px`，高度分别为 `141px`、`141px`、`122px`，按钮 `88×30px`。三档按钮右缘均与关闭按钮精确对齐，卡片 `scrollWidth=clientWidth`，文档宽度分别保持 `1144/1152`、`390/390`、`320/320`，无页面级横向溢出。
+### 6. 数据、事务与并发
 
-点击“知道了”后成功通知被移除；点击失败通知的“重新读取”后业务动作只执行一次，通知保留。卡片改为接近不透明的中性主题底与低饱和状态渐变，语义色收敛到标题、细边框和按钮，验证后已清除注入通知。证据：`/tmp/toast-layout-v7-desktop.png`、`/tmp/toast-layout-v7-390.png`、`/tmp/toast-layout-v7-320.png`。目标 Prettier、Vue/CSS ESLint、Frontend build、根 `pnpm run check`、全量格式检查和 `git diff --check` 均通过；按 D17 未运行完整 E2E，未提交、推送或部署。
+一个 v1 直接安装 selection、步骤创建身份/proposals、工具 modelStepIndex/result；签名为 backend-next-v1-initial-20261013-tool-rounds，拒绝旧开发结构。调用身份绑定 Run/步骤/providerCallId，允许供应商跨步骤复用 ID。工具检查必须匹配已完成工具轮的持久 proposal；派发意图与当前只读许可同事务。完成事务复查政策 revision 和所有已读取目标的版本，结果与事件原子提交；完成后交付前再复核。读取与结果提交不是整个目录的强原子快照，不保证新增/未读取对象的快照一致性。
 
-### 2026-10-22 Workspace 状态骨架、趋势窗口与网络卡响应式（本地 CDP）
+### 7. 生命周期与失败
 
-使用本地 CDP（`https://api.honus.top/workspace`，未使用 9998）连接 `amd` 目标。窄栏状态区约 `90.6×92.8px` 时，加载态显示 1 个紧凑 Spinner、可读状态文字和 5 张与最终指标同尺寸的骨架卡，`scrollWidth=clientWidth`；临时扩展到 760px 后骨架自动重排为 2 列，未出现横向溢出，验证后已还原临时预览条件。
+工具轮正常 EOF 与资源清理完成后只终结模型步骤；持久工具结果按 call ID 回送下一模型步骤，最终 stop 才成功结束 Root。下一步骤本地拒绝、取消或历史超限收口 Root；提交未知不猜测写入结果、不二次提交或重放。恢复检查历史步骤、活跃步骤、创建 hash 与工具账本，运行空档保守 unknown。Root owner 等待整个模型/工具过程，清理失败仍占资源名额并保留因果。只读许可不伪造审批，撤权再授予改变 revision，旧结果无法交付。
 
-展开 CPU 趋势后，历史模式资源列表高度由错误的 `124.8px` 恢复为 `80px`，图表容器获得实际高度；5 分钟视图仅采集约 1 分钟数据时，折线按实际跨度铺满图表，不再集中在左侧留下大块空白。网络卡在 520px 与 760px 宽度下保持标题/吞吐上下结构，标题到吞吐行间距约 `4.7px`，大宽度网络行固定为 `64px` 并居中于 `34rem` 信息带内；中/大宽度断点分别降低为 `150px`、`180px` 高度门槛，760×214px 状态栏不再落回单列。
+### 8. 当前能力与验收
 
-证据：`/tmp/nexus-loading-narrow.png`、`/tmp/nexus-loading-wide.png`、`/tmp/nexus-history-tall.png`、`/tmp/nexus-network-layout-full.png`。目标 Vue/TS ESLint、Prettier、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过。按 D17 未运行完整 E2E，未提交、推送或部署。
+目录首链及后续有目标只读源码已接通，两轮复审与最终静态结果归 testing。预算/上下文和 ACP 已接线；执行按 governed 政策核对，默认 enabled=false；启用设置不授予工具 grant 或审批。 实际运行尚待 B10。400 步是审计容量而非执行授权；私有历史上限 8 MiB/1024 条、参数 16 KiB、结果 256 KiB。Platform 独立约束 32 调用、参数 128 KiB、网络/请求 8 MiB、正文 2 MiB、reasoning 1 MiB。Chat 支持首片完整身份及后续参数增量，拒绝身份冲突；不承诺所有供应商碎片变体。Responses 续接保留加密 reasoning，不静默丢弃。USAGE 对应 Agent 新后端章节，全部行为留 B10。
 
-### 2026-10-22 Workspace 命令栏单行与响应式（本地 CDP）
+## B6.2B 有目标只读能力
 
-使用本地 CDP（`https://api.honus.top/workspace`，未使用 9998）连接 `amd`。实际 CSS 视口 `819×378` 下，窄命令栏 pane 为 `123.8×38px`，输入区 `85.8×30px`，“更多”按钮 `22×22px`；菜单完整显示搜索、焦点配置、文件管理器、编辑器和清空终端 5 项。打开搜索后输入框 `54.2×28.4px`，仅保留关闭按钮，上下键与 Enter/Shift+Enter 继续承担查找，不再让三个搜索按钮挤占输入。
+### 1. 职责与范围
 
-临时扩大到 CSS 视口 `3000×1120` 后，命令栏 pane 为 `464.8×50.1px`，输入区 `300.8×34px`，5 个工具按钮均为 `28×28px`，“更多”菜单隐藏。手机 UA 390×844 下命令栏 `390×38px`，输入 `116×30px`，工具区 `258×30px` 内按钮均为 `30×30px`；320×700 下命令栏 `320×38px`，工具区 `154×30px`、`scrollWidth=286`，只横向滚动工具按钮。两档手机文档宽度均保持 390/320，无页面级横向溢出。
+Agent tools拥有模型工具定义、严格输入、当前授权及持久反馈；Remote提供独立短任务的远端诊断和文件读取/列表/字面量内容搜索。不借普通Workspace会话、用户令牌或附件。旧diagnostics混合目标身份与宿主数据，新v2明确远端指标（generatedAt毫秒、CPU百分比、内存/磁盘bytes、1/5/15分钟load），同一采样key双采样取得CPU差值并在finally清理状态，宿主诊断已归System diagnostics并由ToolModel转换消费；旧任意正则搜索改为字面量，差异归F1。
 
-桌面和手机检查后均还原临时视口/UA。证据：`/tmp/cmdbar-after-reload.png`、`/tmp/cmdbar-menu-final.png`、`/tmp/cmdbar-search-final.png`、`/tmp/cmdbar-wide-final.png`、`/tmp/cmdbar-mobile-ua-final.png`、`/tmp/cmdbar-mobile-320.png`。目标 Vue/JSON ESLint、Prettier、Frontend build、根 `pnpm run check`、全量格式检查和 `git diff --check` 通过；按 D17 未运行完整 E2E，未提交、推送或部署。
+### 2. 子功能与目录
 
-### 2026-10-22 文件管理器工具区、空态与响应式（本地 CDP）
+tools/model/tool-types持有声明字段、输入联合、目标及读取scope；service/tool-input从unknown严格解码；RunModelStream转换声明字段为Platform有限schema。Remote machines/model/operation-types持有读取应用事实，machines/service/operation-service拥有所有独立短任务；files/service/file-inspection持有路径、UTF-8读/目录/内容搜索政策，复用FileModel和ObservationModel。不新建SQL表或迁移版本。
 
-使用本地 CDP（`https://api.honus.top/workspace`，未使用 9998）连接 `amd` 并打开文件管理器。窄 pane 实测 `123.9×155.4px`，工具条 `33.8px`、路径栏 `87.9×27px`、“更多”按钮 `24×24px`；菜单 `240×169.6px` 完整显示终端、同步、刷新、搜索、编辑器、上传、新建文件夹、新建文件、收藏 9 项，无滚动；路径历史 `115.9×107.4px`，仅自身纵向滚动。搜索行高 `63.8px`，输入自动聚焦；新建弹窗 `448×192.3px`，无溢出。中等宽度文件列表 `clientWidth=472`、`scrollWidth=472`，未出现横向滚动。
+### 3. 依赖方向
 
-实际 CSS 视口 `819×378` 下，空目录 `/lost+found` 的居中空态为 `777.6×84px`；在该目录搜索无匹配文本时显示“未找到匹配的搜索结果”，列表区 `778×187px` 且 `scrollWidth=clientWidth`。访问不存在路径时错误态为 `757.6×171.4px`；模拟外部文件 `dragenter` 后覆盖层为 `761.6×251.2px`，移出后恢复列表，未上传文件。搜索等待期间读取态为 `777.6×187.4px`，随后正确切换为空结果。
+Agent ToolService→ToolModel→Targets public/TrustedSshTargetResolver与Remote public RemoteMachineOperations。Remote operation-mapper转换public与内部应用；RemoteMachineOperationService→Files/Monitoring Model→共用Platform。Bootstrap只装配正式register/public，Platform不引业务类型，Agent不深引用Remote私有实现。
 
-手机 UA 390×844 下文件管理器 `356×662.4px`，工具条 `70px`，完整工具按钮可见；320×700 下为 `286×540px`，工具条 `40px` 并自动显示“更多”，菜单 `240×223px` 完整显示 10 项。两档文档宽度分别保持 390/390、320/320，无页面级横向溢出。检查后已恢复视口、UA、触控和缩放。
+### 4. 类型与转换
 
-证据：`/tmp/fm-menu-final.png`、`/tmp/fm-history-final.png`、`/tmp/fm-search-final.png`、`/tmp/fm-dialog-final.png`、`/tmp/fm-context-final.png`、`/tmp/fm-rename-final.png`、`/tmp/fm-chmod-final.png`、`/tmp/fm-medium-final.png`、`/tmp/fm-empty-directory-final.png`、`/tmp/fm-empty-search-final2.png`、`/tmp/fm-error-final.png`、`/tmp/fm-drag-final.png`、`/tmp/fm-mobile-390-panel.png`、`/tmp/fm-mobile-390-search.png`、`/tmp/fm-mobile-390-dialog.png`、`/tmp/fm-mobile-320-panel.png`、`/tmp/fm-mobile-320-menu.png`、`/tmp/fm-mobile-320-dialog-correct.png`。目标 Vue/JSON ESLint、Prettier、Frontend build、根 `pnpm run check`、全量格式检查与 `git diff --check` 均通过；按 D17 未运行完整 E2E，未提交、推送或部署。
+| 边界                  | 类型owner                                                                   | 转换owner                         | 实际消费者                              |
+| --------------------- | --------------------------------------------------------------------------- | --------------------------------- | --------------------------------------- |
+| 模型JSON→用例         | tools Model ToolInput                                                       | tool-input严格字段/整数/UTF-8解码 | ToolService                             |
+| 应用声明→技术schema   | ToolInputField / Platform ModelToolProperty                                 | RunModelStream                    | Chat/Responses Adapter                  |
+| Agent→Remote请求/结果 | ToolOperationScope / RemoteMachineOperations public / MachineOperationScope | ToolModel、operation-mapper逐字段 | RemoteMachineOperationService与Tool反馈 |
+| 技术读取→应用事实     | SSH/SFTP/status技术 / FileInfo/ObservationSample                            | File/Observation Model            | RemoteMachineOperationService           |
+| 工具操作→存储         | runs/governance应用 / storage                                               | 对应Model                         | tool-authority-sql                      |
 
-### 2026-10-22 Workspace 可用面板与编辑器响应式（本地 CDP）
+工具输入/输出是模型私有契约，当前没有双端HTTP消费者，不在Shared虚构对象；真实已有安全审计继续消费Shared。基础文件kind和安全错误值引用Shared，但各层对象独立。ToolReadFailure表达预期远端拒绝，存储、未知提交及清理失败保持收口证据。
 
-使用本地 CDP（`https://api.honus.top/workspace`，未使用 9998）登录现有测试账号并连接真实 `amd` 目标；临时布局只把连接列表、Docker、命令历史与文件编辑器放入 pane，核对后恢复原布局。三档视口下四面板均无横向溢出：CSS `819×378` 时连接列表 `143×120px`、Docker `143×141px`、历史 `269×109px`、编辑器 `269×151px`；CSS `922×640` 时为 `161×240`、`161×282`、`304×219`、`304×303px`；CSS `1280×720` 时为 `225×277`、`225×325`、`426×253`、`426×349px`。文档宽度在三档均未超过视口。
+### 5. 入口与安装
 
-窄栏连接列表“分组操作”菜单完整显示“连接全部、管理标签、删除分组内所有连接”3 项；Docker“更多操作”完整显示“移除、进入、日志”3 项，宽栏直接渲染 6 个动作。命令历史通过一次安全记录写入取得真实数据态，显示命令与时间，核对后已用 DELETE 删除该测试记录；没有执行该命令。打开 `/etc/hostname` 检查编辑器，弹窗为 `756×354px`，标签、`/etc/hostname`、作用域、`UTF-8`、`LF`、搜索、重载、保存和关闭完整显示；未保存远程文件。
+Remote register暴露operations，不新增HTTP路由；Agent register接入Targets resolver与RemoteMachineOperations，由唯一Root owner消费五个只读工具及受审批file_write。新增v2诊断只需connectionId；文件只需connectionId、绝对path，搜索另需query和可选maxResults。不沿用旧target/id或可空字段；正式前端差异归F-R18。
 
-证据：`/tmp/available-panels-final-819.png`、`/tmp/available-panels-final-1152b.png`、`/tmp/available-panels-final-wide2.png`、`/tmp/editor-popup-final-current.png`。目标 Vue/JSON ESLint、Prettier、Frontend build、根 `pnpm run check`、全量格式检查与 `git diff --check` 通过；按 D17 未运行完整 E2E，未提交、推送或部署。
+### 6. 数据、事务与并发
 
-### 2026-10-23 文件管理器弹窗吸附与宽屏工具栏（本地前端 9998）
+派发/复核/完成事务同时读持久selection与目标type/version；Service纯规则判定目标已选中及当前声明/grant/denylist。结果绑定目标必须出现在版本引用中。额外Agent Model fingerprint复查覆盖Proxy/Key/jump依赖变动，Remote建连使用expectedFingerprint并在实际网络开通前调用授权复查。数据库许可不能与远端读取组成原子事务；异步期间撤销阻止后续读取/交付，已开始的读取不能追溯撤回。唯一v1结构未改，本批不追加迁移。
 
-使用本地前端 `172.30.30.10:9998`、后端 `127.0.0.1:3001` 和现有测试账号打开真实 `amd` 连接的文件管理器；请求保留 `X-Forwarded-Host: api.honus.top` 与可信 Origin，未改动远端文件。桌面 `1024×900` 下弹窗 `896px`，8 个工具按钮在宽屏等分为 `106.5×32px`、排序行 `880px`；工具、路径、排序三者纵向间距均为 `6px`，列名表头文字不再显示。
+### 7. 生命周期与失败
 
-真实拖拽与重开验证：宽度 `270px` 或 `290px` 均吸附为 `280px` 单行 8 枚，按钮行计数 `[8]`；继续向左拖到最小值时稳定在 `170px`，工具行计数 `[4,4]`，释放并重新打开后仍为 `170px / [4,4]`。`320px` 视口下弹窗为 `280px`，同样保持单行 8 枚；未出现命令栏、挂起会话或页面级横向溢出。
+RemoteMachineOperationService统一8个名额和45秒整项期限，计入排队/实际读取/关闭及清理失败；Root等待整个工具Promise。停机停止准入、abort所有任务并等待实际收尾；清理失败占名额并汇总因果，安全出口仅带cleanup_failed。请求方治理/存储失败经Model保留原类别，不被Remote安全兜底误改成输入失败。读前/读后复查目标指纹、版本、政策和操作，最终政策检查在异步目标检查之后；结果持久再反馈，unknown不重试。
 
-证据：`.tmp/filemanager-1024.png`、`.tmp/filemanager-320.png`、`.tmp/filemanager-resize-minimum.png`。目标 Prettier、Vue/TS ESLint、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过；未提交、推送或部署。
+### 8. 当前能力与验收
 
-### 2026-10-23 文件管理器工具区对齐与分栏热区（本地 CDP）
+只读v2源码已接线，执行须当前 governed 准入。文件UTF-8完整读取32KiB，拒绝非文本；目录200条/48KiB metadata，超额拒绝。搜索是区分大小写字面量，每行首匹配、1起算UTF-16列；maxResults默认20/最多100，发现额外匹配才truncated。遍历最多100文件/100目录/8层/2MiB，排队也有界；symlink不跟随，路径规范化/realpath/lstat复查不构成并发原子隔离。同大小/mtime并发变化可能无法检测，SHA-256只说明实际捕获内容。结果整体256KiB，超额拒绝；32KiB单文本留足JSON最坏转义预算，搜索集合另按整体编码复核。所有行为仍待B10，四表及静态证据归实施方案/testing。
 
-使用 `https://api.honus.top/workspace`（未使用 9998）登录现有测试账号并连接真实 `amd`，在 CSS 视口 `1920×953` 下核对内嵌文件管理器。工具行与路径栏实测同为 `241.015625px`，左右坐标完全一致；工具按钮左右留白均为 `5px`。宽拖后释放为 `281.703125px`、按钮行计数 `[8]`；向左拖至最小宽度后吸附为 `169.828125px`、行计数 `[4,4]`，按钮左右留白均为 `4px`。`1×8` 释放后保持 `[8]`，不再回落到 `7+1`。
+## B6.2B 受审批的文件写入
 
-分栏视觉线仍为 1px，透明拖拽热区扩展到 splitter 两侧约 16px。将指针放在 splitter 中心左侧 12px（已超出 9px 原生 splitter 区域）按下并拖动，文件管理 pane 从 `246.546875px` 调整到 `230.296875px`，证明扩展热区实际参与命中；随后恢复正常中心拖拽，未修改远端文件。
+### 1. 职责与范围
 
-证据：`.tmp/fm-embedded-1x8-cdp.png`、`.tmp/fm-embedded-2x4-cdp.png`、`.tmp/cdp-drag-splitter.mjs`、`.tmp/fm-embedded-cdp-probe.mjs`。目标 Prettier、目标 ESLint、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过；全量格式检查仅因并行修改的 `BackupSettingsPanel.vue` 既有格式失败，未改动该无关文件。本轮为本地 CDP UI 验收，不替代完整 E2E；未提交、推送或部署。
+Agent tools 负责首个 file_write v2：明确目标 connectionId、绝对 path、UTF-8 content、expectedSha256（新建为 absent，替换为原内容 SHA-256）。路径最多 256 UTF-8 bytes，内容最多 8 KiB（允许空文本），完整参数仍受 16 KiB 编码预算。所有写入需要当前 file.write grant 与单次人工批准；不自动推导旧内容或继承读取许可。后续文件/Shell/Docker突变已接线，ACP与直接 Child/协作已接线，剩余能力见后续阶段。
 
-### 2026-10-23 前后端性能优化（仅静态与产物）
+### 2. 子功能与目录
 
-范围：连接目录事务批读、SQLite Worker 语句 LRU、监控按请求主机计算及复核指纹、连接列表排序/检索索引与线性标签分组、单层列表 memo、后台 xterm 解析批次调度、RDP WASM 资产拆分。未变更 UI 样式、布局和操作入口。嵌套分组保留原渲染，完整 DOM 与键盘/滚动访问保持；Monaco 已按需加载，本轮未删除编辑功能。
+复用 tools/service 的声明、解码及执行流程，governance 的审批请求/决议/消费，runs 的真实 proposal 和工具账本。Remote machines 的独立短任务 owner 扩展为 operations，统一读写准入和关闭；files/service 持有路径、覆盖及确认政策，FileModel/FileResource 转换 SFTP 能力。不新增平行协调器。
 
-证据：根 `pnpm run check`、双端 `pnpm run build` 通过；全量格式初次通过，最终重查受并行修改的 FileManager.css 格式影响，未改动该 UI 文件；本轮性能文件单独检查。构建插件及 Vite 配置补充独立严格 TypeScript/ESLint 检查。RDP 构建 JS 为 52,275 字节，WASM 为 4,511,023 字节（原内嵌 Base64 为 6,014,700 字节），二进制 SHA-256 为 `68b5c65280e5348ea418cd0aba2e4e28f9bd4051c2cf9fd4b84d721847ef3363`，与依赖中内嵌内容逐字节一致；产物 JS 正确引用 hash WASM，首页 HTML 未直接引入该资产。日志为 `/tmp/nexus-performance-{check,format,build,build-types}.log`。
+### 3. 依赖方向
 
-按 PLAN D17 未运行本地行为、浏览器或 E2E，未测真实 CPU/网络收益。远程需核对大目录完整元数据/标签/跳板、监控同主机多凭据回退与配置变更冲突、定向刷新不驱逐其它主机、多 SSH 隐藏刷屏与前台切换/续接/关闭的输出完整和消费顺序、列表搜索排序/选择/语言/高亮，以及 RDP 冷/热缓存连接与部署 WASM MIME/压缩。静态通过不等于上述行为已验收；本轮按用户授权提交性能修改，不含并行 UI/安装功能，未推送或部署。
+Agent ToolModel 仅消费 Targets 与 Remote public。Remote Model 仅消费技术能力，Service 不借用户 Workspace/Files 附件。写入不引入 Agent 类型到 Remote/Platform，SQLite Adapter 不引入应用规则。
 
-两轮复审：第一轮复核目录事务/关联解码、监控配置与授权失效、SQLite 语句缓存淘汰、终端 flush/drain/discard 及消费确认，补齐连接列表 memo 的相对时间失效，避免文案停留在旧时间。第二轮复核 15 文件的独立暂存内容，工作区目录仅保留检索/分组优化，排除对未提交 launchpad UI 的依赖；通过暂存快照另建临时目录，仅执行类型、格式及双端构建。独立证据日志为 `/tmp/nexus-performance-isolated-{check,format,build}.log`；此快照没有工作区的 FileManager.css 格式修改。
+### 4. 类型与转换
 
-### 2026-10-23 RDP 弱网输入与透明桥调度（仅静态）
+| 边界           | 类型 owner                         | 转换 owner                         | 消费者                   |
+| -------------- | ---------------------------------- | ---------------------------------- | ------------------------ |
+| 模型参数→应用  | tools/model/tool-types             | tools/service/tool-input 严格解码  | ToolService              |
+| 审批/工具→存储 | governance/model、storage 各自定义 | GovernanceModel                    | SQLite 同事务规则回调    |
+| Agent→Remote   | Remote public 独立写命令/结果      | ToolModel、Remote operation mapper | Remote operation Service |
+| 远端资源→应用  | files/model 与 machines/model      | FileModel/FileResource             | 文件写入政策             |
 
-RDP Adapter 将文本从逐字符 SDK 调用改为最多 32 个完整字符一批，普通按键立即提交，失败停止后续批次且不重试。mousemove 使用实例内 16ms timer 合并最新坐标，按键、滚轮、点击及 releaseAllInputs 前提交最后位置；按钮与位置同事务，窗口外 mouseup 同样保留释放顺序。关闭、失焦与切文本输入清理待发送 timer，原 IME 去重与 64 KiB UTF-8 整体预检保留。透明桥不再每次 send 都暂停 TCP，按 WS bufferedAmount 的 64/16 KiB 高低水位调度；原双向有界缓冲、协议字节顺序、失败关闭及全部发送回调收敛保持，VNC 共用这一透明桥。
+模型私有内容与 SHA 前提不进入 Shared；真正双端安全审批和审计继续使用已有 Shared。摘要只含动作、路径、字节数和内容哈希，不包含内容正文。
 
-首轮根 check、全量格式及双端 build 通过；源码复审补齐文本失败后停止后续批次。第二轮核对独立 6 文件提交快照，检查事件顺序、按键释放、慢消费者的暂停/恢复、并行发送失败及 close 等待，快照静态检查、全量格式及双端构建通过。复审进一步将批次限制为 32 完整字符，计入非 BMP 字符可能生成的 UTF-16 代理对按下/释放与指针事件；最终源码补充检查和前端构建通过，补充日志为 `/tmp/nexus-rdp-input-isolated-final-{check,format,frontend}.log`。其余日志为 `/tmp/nexus-rdp-input-{check,format,build}.log` 与 `/tmp/nexus-rdp-input-isolated-{check,format,build}.log`。
+### 5. 入口与安装
 
-按 D17 未运行本地行为、浏览器或 E2E，也未注入真实弱网。远程需回归普通键/长按/组合键、中英 IME、跨批次与非 BMP 字符文本、换行/Tab、鼠标洪泛时键盘输入、拖动最终坐标与窗口外释放、失焦/切换/关闭无晚输入，以及 RDP/VNC 的弱网长时间传输、缓冲排空与发送错误后的真实关闭。静态通过不证明实际输入延迟已改善；本轮沿用用户的两轮复审及提交要求，仅提交这些变更，不推送、部署或重启后端。
+模型工具 file_write 经持久真实 proposal 检查建立工具账本；ToolService 请求审批并等待已有 HTTP resolve。Bootstrap 注入 Remote operations；没有直接派发 HTTP 或前端正式入口。批准只是决议，消费成功提交才允许后续网络派发。
 
-## 外观自定义导航统一（2026-10-23，本地 CDP）
+### 6. 数据、事务与并发
 
-使用 `https://api.honus.top/settings` 打开“外观 → 自定义外观”，把原 128px 侧栏内四个 111×28px 纯文字按钮改为与设置页同类的图标导航。桌面侧栏宽 184px，每项 159×44px，图标底座 28px，选中项使用主题色边界、左侧 2px 指示线和图标着色；窄屏改为图标在上、文字在下的四项等分标签。
+消费事务同时复查批准绑定、policyRevision、Run/frozen/provider、持久 selection 和目标 SSH/version，原子提交 consumedAt、工具 dispatched 与事件。后续 verify/complete 事务对突变核对已消费绑定许可，不能借只读 dispatch。取消/撤权/过期拒绝，批准不能用于第二次消费。写入使用同目录暂存；新建拒绝现有目标，替换必须匹配原哈希并保留普通权限。准备后再次校验内容前提及当前权限，最终提交后回读核对内容哈希。SFTP 的路径检查及哈希预检不构成跨调用原子 CAS；仍有并发替换窗口，不能承诺无覆盖竞争。
 
-`1440×1000` 下弹窗为 `1000×700`；`768×900` 时侧栏仍为纵向 `183px` 内容宽；`390×844` 与 `320×700` 下导航 `clientWidth=scrollWidth`，四个标签分别在 `390px` 内占 `88px`、在 `320px` 内占 `70.5px`，无横向溢出或截断。依次切换界面样式、终端样式、背景设置、其他设置，选中项与面板均正确更新。证据：`.tmp/appearance-customizer-nav-desktop.png`、`.tmp/appearance-customizer-nav-mobile.png`。目标 Prettier/ESLint、根 `pnpm run check`、Frontend build 与 `git diff --check` 通过。
+### 7. 生命周期与失败
 
-### 2026-10-23 前端首屏与静态交付（仅静态与产物）
+审批轮询由 RunExecutionOwner 的工具调用持有，timer 跟随 AbortSignal 取消，不建立脱离 Root 的后台等待。每轮复查当前授权，批准后先复查目标再单次消费；停机关闭会取消等待。远端整项最多 45 秒，共用 8 个名额，清理失败仍占名额。临时写入开始即有副作用；准备、提交、回读、最终授权或释放失败不能冒充未写入。unknown 不重放，暂存 discard 和资源 close 都尝试，失败保留原因与未收敛证据；确认持久结果之后才反馈模型。
 
-范围：首屏原静态依赖分组、弱网/省流/后台停止路由预取、构建 gzip 旁文件、哈希字体/图片缓存与 Docker 构建插件目录复制；保持 UI 源码与操作入口。首轮同一工作区构建的 HTML 直接 JS/CSS 引用从 54 个降到 5 个，原始字节从 1,746,867 降至 1,733,350，统一 gzip-9 从 508,603 降至 483,349；该工作区含并行 UI 修改，不能跨不同源码比较实际时延。321 个 gzip 旁文件逐一解压后与原文件完全一致，均达到至少 1 KiB 且压缩更小，包含 index.html。远程桌面、编辑器及文件预览继续动态加载。
+### 8. 当前能力与验收
 
-两轮审核完成：首轮复核分包标签、压缩并发、预取前复查及缓存匹配优先级，修复 Dockerfile 未复制前轮新增 build 插件目录、哈希字体图片被七天规则覆盖的问题。根 check、全量格式、Frontend build 与构建插件的独立严格 TypeScript/ESLint 检查通过，日志为 `/tmp/nexus-front-delivery-{check,format,build,plugin-check,plugin-lint}.log`。第二轮对仅含本次 10 文件变更的暂存快照执行根 check、全量格式、Frontend build 和插件专项静态检查，均通过；日志为 `/tmp/nexus-front-delivery-isolated-{check,format,build,plugin-check,plugin-lint}.log`。独立快照首屏同为 5 个引用（原始 1,720,614 字节、gzip-9 482,020 字节），314 个 gzip 逐一解压一致，WASM 二进制校验保持原 SHA-256。通过 JS AST 追踪全部首屏静态导入，只有 runtime/vendor/core 三个 JS，TerminalView、Monaco、RDP 与 PDF/表格/文档/数据库预览均不在静态闭包内；产物证据为 `/tmp/nexus-front-delivery-artifacts.log`。
+本批 N11–N13 源码及两轮审核已完成，静态结果归 testing；所有行为待 B10，不运行测试。实际预算与来源均来自冻结输入，执行须 governed 准入。后续 N14–N16 已按新设计接通 patch/move/delete、Shell/后台 Job/Docker，前端差异归 F1。
 
-独立快照的 `docker build --target frontend-builder` 通过，日志为 `/tmp/nexus-front-delivery-docker-final.log`；生产配置在现有 Alpine Nginx 1.30.4 镜像中通过 `nginx -t`，确认包含 gzip_static 模块，日志为 `/tmp/nexus-front-delivery-nginx.log`。DEPLOYMENT 代理示例补齐临时 http/server 外壳后通过本机 Nginx 配置静态检查，日志为 `/tmp/nexus-front-delivery-proxy-example.log`。仅构建自有校验镜像和检查配置，未启动应用服务。
+## B6.2B 文件补丁、移动与删除
 
-按 PLAN D17 未运行本地行为、浏览器或 E2E；未测试真实压缩协商、冷/热缓存、路由视觉与弱网导航耗时，也未部署、重启服务或修改实际边缘代理。远程需回归登录/主页/Workspace/设置的路由、重功能动态加载、PDF worker、缺失资产返回 404、gzip/identity 协商、HTML/SW 更新与 hash 字体图片缓存；静态请求数下降不证明端到端延迟。本次仅提交上述变更，不含并行 UI/安装功能，不推送。
+### 1. 职责与范围
 
-### 2026-10-23 RDP 尺寸与接收调度（仅静态）
+N14 按 D15 重设计 file_patch/move/delete，复用已有逐操作人工审批。补丁为单文件、原 SHA-256 绑定的一次唯一字面量替换；不接受旧 unified diff，多个文件由独立工具调用表达，不提供远端事务。移动与删除可处理普通文件和目录，拒绝链接/特殊节点及根目录；必须提供 file_inspect 返回的有界快照 fingerprint。递归删除必须明确 scope:tree，scope:entry 仅文件或空目录。
 
-范围：RDP 150ms 尺寸稳定后提交、基于初始协商尺寸及有效 DPI 去重；后端同 I/O 轮小块按序合并至最多 16 KiB，单块达到阈值立即发送，尾部不等待凑满，正常读端结束先提交，关闭清理 immediate/暂存数据。VNC 保留逐块派发，原 64/16 KiB 水位、4 MiB 缓冲保护和真实发送回调收敛保持；输入、SDK 二进制、图像解码/质量与 UI 源码不变。
+### 2. 子功能与目录
 
-已对照固定 IronRDP 0.7.0 发布源码核对：Session.desktopSize 读取初始协商结果且返回需释放的 DesktopSize；resize 仅向 SDK 通道提交，不是远端应用确认。SDK 使用 AsyncRead/LocalFuturesFramed 读取 WS 字节流，不依赖远端每个 TCP chunk 的 WS 边界；softbuffer 局部绘制保持原实现。首轮审核将拟定 64 KiB 小块合并收敛为 16 KiB，避免弱网等待大 WS 消息，并补正常读端结束的尾部提交。
+Agent tools 的声明/严格输入/安全摘要和 ToolModel 扩展现有 owner。Remote files/service/file-snapshot 持有遍历预算与捕获快照；file-mutation 持有补丁/移动/删除的用例政策；file-write 复用暂存/确认机制。files/model 持有快照节点及计划，machines/model 持有独立短任务命令/结果，RemoteMachineOperationService 统一资源/期限/失败准入，不新建协调器。
 
-工作区根 check/build 与全量格式日志为 `/tmp/nexus-rdp-display-{check,build,format}.log`；全量格式通过。当时根 check/build 曾受并行 UI 新增四个 command-bar 偏好与 Frontend UserPreferences/Backend StoredPresentationPreferences 转换不一致影响；该偏好链路后续已补齐并通过根 check/build，本轮未改动该 UI/协议工作区。
+### 3. 依赖方向
 
-第二轮对仅含本次六文件的暂存快照复审 initial/DPI/快速恢复原尺寸、晚建连与关闭取消，以及片段顺序、阈值、大块、EOF、背压恢复与失败收敛；独立快照的根 `pnpm run check`、`pnpm run format:all:check`、双端 `pnpm run build` 通过，日志为 `/tmp/nexus-rdp-display-isolated-{check,format,build}.log`。产物确认后端仍按 16 KiB 合并并取消 immediate，前端 WASM 仍为 4,511,023 字节且 SHA-256 与前轮相同，gzip 解压一致。本轮只提交这六文件，不含并行 UI/安装功能，不推送或部署；需要更新前端并重启后端加载新实现，未代为重启。
+Agent→ToolModel→Remote public；Remote Service→文件应用能力→FileModel/Platform。所有新增命令/结果经过独立 public mapper，Model 不透传；路径/覆盖/递归政策不进入技术 Adapter，Service 不引用 SSH/SFTP 原始句柄。
 
-按 D17 未运行本地行为、浏览器或 E2E，也未注入弱网；后续远程需回归初始/动态尺寸、非默认 DPI、拖动中快速返回原尺寸、全屏/最小化恢复、尺寸待提交时关闭/切连接，以及小块/大块/混合 PDU、背压排空、远端 EOF 和发送失败后的关闭。不将静态通过写成真实延迟或分块显示已消除。
+### 4. 类型与转换
 
-## Agent 文件与会话视图缓存（2026-10-23，本地 CDP）
+| 边界          | 唯一 owner                                           | 转换                                 | 消费者                    |
+| ------------- | ---------------------------------------------------- | ------------------------------------ | ------------------------- |
+| 模型参数→应用 | tools/model/tool-types                               | tool-input 从 unknown 严格解码       | ToolService               |
+| Agent→Remote  | Remote public 与 machines/model/operation-types 独立 | ToolModel 与 operation-mapper 白名单 | 独立机器任务 owner        |
+| 文件快照/计划 | files/model/file-types                               | 文件应用能力返回校验事实             | snapshot/mutation Service |
+| 审批/账本     | 既有 governance/runs 应用及 storage                  | 原 Model/事务回调                    | 单次许可/持久反馈         |
 
-使用 `https://api.honus.top`、真实登录会话和 Agent 浮窗核对。首次进入“文件”视图发生时，Network 收到 `/api/v1/agent/files?q=&limit=20&offset=0`、`/api/v1/agent/files/storage` 与 `/api/v1/agent/apps`；切换到“会话”后收到 0 个 `/api/v1/agent/` 请求，再切回“文件”仍为 0 个。两侧组件保持挂载，已加载列表与选择状态未被清空。
+模型参数、文件内容/计划及指纹无双端消费者，不放 Shared；审批/审计基础值继续引用已有 Shared。
 
-本实现只在 Agent 文件/会话视图切换中启用显式保留；首次进入、筛选变化、显式重试、写入后失效、读取失败和认证身份失效仍执行原有重新读取或清理。未执行真实多文件列表、活跃 Run 轮询恢复、附件上传及登录失效竞态；未修改远端文件或配置。目标 ESLint、Prettier、根 `pnpm run check`、Frontend build 与 `git diff --check` 通过。
+### 5. 入口与安装
 
-### 2026-10-23 工作区设置移除重复布局入口（本地 CDP）
+新增 file_inspect 只读能力供模型取得文件/树指纹；新增三个 v2 突变声明，服务端决定风险：patch/move 为 mutate，delete 为 destructive。file_inspect 要当前 file.read，突变分别要 file.write/file.delete；读取快照不授予写入。所有操作仍由真实模型 proposal→原账本→原治理消费者执行；无新 HTTP 或正式页面。
 
-在 `https://api.honus.top/settings?tab=workspace` 的 `1440×900` 视口确认“布局与高级设置”分组已移除，工作区设置面板内不存在 `layoutLocked` 与 `navBarVisible` 控件；对应偏好字段仍由接口返回，布局配置器和终端标签栏的顶栏显隐按钮继续作为实际开关。证据：`.tmp/settings-workspace-advanced-removed.png`。目标 Prettier、根 `pnpm run check`、Frontend build 与 `git diff --check` 通过。
+### 6. 数据、事务与并发
 
-### 2026-10-23 文件管理器终端目录在用户输入后仍可用（本地 CDP）
+不改表结构/迁移。approval 绑定真实参数、摘要、内容修订和目标；操作前重捕获快照并核对 fingerprint，scope/tree 决定也绑定审批。移动拒绝既有目的地及源/目的祖先关系，成功后确认源消失/目的快照一致。删除先核对整树，再倒序逐节点核对并删除；目录确认无剩余节点，自身删除造成的目录 mtime 变化不作为外部冲突。检查不能提供 SFTP 跨调用原子隔离；外部并发替换/创建仍存在窗口，部分删除或最终确认失败为 unknown，不自动重放。
 
-使用 `https://api.honus.top/workspace` 的真实 `amd` SSH 会话核对。Workspace 建连后先向终端输入普通命令，再点击“从终端同步当前路径”，文件管理器从 `/` 更新到终端当前目录 `/root`；随后在文件管理器进入 `/etc` 并点击“将终端目录切换到当前路径”，收到 `terminal.directoryChangeQueued`、请求回执和 `terminal.directoryChanged`，终端提示符进入 `/etc`，再次同步仍得到 `/etc`。
+### 7. 生命周期与失败
 
-终端初始输出不再包含内部 PID 探测、`PROMPT_COMMAND` Hook、`stty -echo` 或 `__NEXUS_*` 标记；内部初始化成功后只保留登录 banner、正常提示符和用户实际执行的命令。证据：`.tmp/fm-directory-verified.png`。根 `pnpm run check`、双端 build、目标 Prettier 与 `git diff --check` 通过；新增 SSH 场景已加入 `tests/e2e/specs/ssh/terminal-protocol.spec.ts`，本轮未运行整套远程 E2E。
+复用8混合名额与45秒完整期限。快照最多100文件/100目录、深度8、单文件1MiB/累计2MiB、元数据256KiB，队列也计预算；每文件按预检长度读取，目录导航项在技术 Adapter 过滤，重复节点拒绝；不跟随链接，二进制文件可hash，不输出内容。patch 原文件/结果最多32KiB，oldText/newText各4KiB且完整JSON16KiB；唯一非空oldText可替换为空，零次/多次/相同替换拒绝。首次远端变更后任意节点拒绝、权限变化、取消、确认或释放失败不能报完整成功。原owner追踪全部资源/清理，未知无重放。
 
-### 2026-10-23 工作区连接列表排布（本地 CDP）
+### 8. 当前能力与验收
 
-使用 `https://api.honus.top` 的真实登录会话核对启动页连接列表：`1440/1024/768/640/390/320` 六档宽度下搜索框和添加按钮均保持 `40px` 高，提示为“搜索连接”，列表与页面均无横向溢出。进入真实 `amd` 会话后，终端紧凑连接栏在 `225px` 宽时搜索/添加均为 `32px`，连接行 `44.8px` 并显示主机与最近时间；模拟 `180px` 极窄栏时信息自动退回单行 `27.5px`，工具栏仍无溢出。选中项左侧细高亮、分组菜单和原连接打开流程保持可用。证据：`.tmp/workspace-connections-after-1440.png`、`.tmp/workspace-connections-after-390.png`、`.tmp/compact-final-verified-225.png`、`.tmp/compact-final-verified-180.png`、`.tmp/cdp-workspace-final-verified.png`。根 `pnpm run check`、Frontend build、目标 Prettier/ESLint 与 `git diff --check` 通过；未运行整套远程 E2E。
+file_inspect/patch/move/delete v2 已经沿真实工具提案、账本、审批/单次消费、Remote 独立资源与持久反馈接线；两轮源码复审覆盖预算、重复节点、元数据、部分执行及清理分支，静态证据见 testing。B10已核对真实七步文件变更、显式tree删除、哈希过期/重叠上下文/目的存在和链接拒绝；部分执行、竞争和断流仍待验，正式前端差异留F1，执行须 governed 准入。移除旧多文件diff协议并明确新逐文件操作，目录范围有界而不提供任意无界删除。
 
-### 2026-10-23 Agent 设置移动端右边界对齐（本地 CDP）
+## B6.2B Shell、后台 Job 与 Docker 工具
 
-使用 `https://api.honus.top/settings?tab=agent` 与真实登录会话核对。隐藏手机端设置画布滚动条后，Agent 面板仍保留 `12px` 的滚动条占位；现仅在 `1023px` 以下将面板右侧内边距归零。`390×844` 下画布与“Agent 功能”首卡右缘同为 `370px`；`320×700` 下同为 `300px`，偏差 `0px`。两档画布滚动条宽度均为 `0`，内容 `scrollHeight` 大于可视高度且仍可触控滚动，文档无页面级横向溢出。桌面 `1440×900` 仍保持 Agent 面板 `12px` 右内边距、画布稳定滚动条槽和原布局。证据：`.tmp/agent-settings-right-align-390.png`、`.tmp/agent-settings-right-align-320.png`。目标 ESLint、Prettier、Frontend build、根 `pnpm run check`、全量格式与 `git diff --check` 通过；未运行整套远程 E2E。
+### 1. 职责与范围
 
-### 2026-10-23 设置与通知渠道细节收口（本地 CDP）
+N15 同批实现 Shell 前台/后台、Job list/status/wait/cancel 和 Docker inspect/control。Shell 明确区分 argv 与 executable script，不用命令文本启发式判断安全；执行按 destructive 审批。Job 属于 user/App/Run/目标版本，不借普通 Workspace/sessionId，不跨 Run 接管。后台仅指模型可以继续下一轮，不是脱离 Root 的长期服务。Root 终结前取消并等待全部 Job；取消不证明远端子进程停止。
 
-使用 `https://api.honus.top` 与真实登录会话核对。`390×844`、`320×700` 与 `280×700` 下 Agent App 操作区均为 `3` 列；`390px` 时三枚按钮宽度约 `125.72/93.14/93.14px`，`320px` 时约 `97.52/72.23/72.25px`、`top` 完全一致，容器 `scrollWidth=clientWidth`；`280px` 时约 `81.39/60.30/60.31px`。安全策略盾牌在 `360–639px` 显示、`359px` 以下隐藏，手机三档文字仍完整。外观设置首个无正文卡片高度由 `90px` 降至 `58px`，空 body 不再渲染；自定义外观在 `768/1024/1440px` 使用 `136px` 侧栏、每项 `115×52px`；手机收起时只显示当前分类选择器，`390/320px` 宽 `358/288px`、高 `46px`，展开面板与触发器同宽，四项均为 `46px` 单列行，选择后菜单关闭且面板标题同步切换；所有宽度均无横向溢出或页面错误。图标与文字作为整体在控件内水平居中；选中项左侧 `2px` 高亮线为绝对定位，不再挤压内容。
+### 2. 子功能与目录
 
-通知页创建临时 Webhook 渠道后，通过卡片按钮完成启用和停用，两次 PUT 均成功并收到成功 Toast；`390/320px` 下启用/编辑/删除三按钮同排且无横向溢出，随后通过确认弹窗删除临时渠道，剩余匹配项为 `0`。快捷按钮按点击后的动作着色：启用动作为绿色开启图标，停用动作为红色关闭图标，图标、按钮文字、底色和边框均使用对应语义色；启用态实测按钮文字与图标为 `rgb(220, 53, 69)`，停用态为 `rgb(40, 167, 69)`。文件管理器进入 `/etc` 后，名称文字中心相对图标中心上移约 `2.97px`，行高与虚拟列表未变化。`workspace/system/appearance/security/ipControl/data/agent/about` 八个设置标签以及外观弹窗正文在手机端均无可见滚动条，内容仍可滑动。添加 Provider 弹窗在 `390×844` 与 `320×700` 下正文 `padding-inline=0px`、`scrollbar-gutter=auto`、可见滚动条宽度 `0`，`scrollHeight` 大于可视高度且仍可滚动，正文 `scrollWidth=clientWidth`。证据：`.tmp/settings-round2-customizer-320.png`、`.tmp/settings-round2-customizer-390.png`、`.tmp/settings-round2-customizer-1440.png`、`.tmp/settings-round2-app-actions-320.png`、`.tmp/settings-round2-app-actions-390.png`、`.tmp/notifications-toggle-320.png`、`.tmp/notifications-toggle-390.png`、`.tmp/notifications-toggle-color-390.png`、`.tmp/notifications-toggle-color-red-390.png`、`.tmp/notifications-toggle-red-enabled-390.png`、`.tmp/fm-align-round2-1440.png`、`.tmp/security-shield-mobile-390.png`、`.tmp/security-shield-mobile-320.png`、`.tmp/security-shield-mobile-280.png`、`.tmp/provider-mobile-final-390.png`、`.tmp/provider-mobile-final-320.png`、`.tmp/appearance-nav-grid-1440.png`、`.tmp/appearance-mobile-switcher-320.png`、`.tmp/appearance-mobile-switcher-390.png`、`.tmp/appearance-mobile-switcher-open-320.png`、`.tmp/appearance-mobile-switcher-open-390.png`、`.tmp/appearance-mobile-switcher-desktop-1440.png`。目标 ESLint、Prettier、Frontend build、根 `pnpm run check`、全量格式与 `git diff --check` 通过；未运行整套远程 E2E。
+ToolService 持有声明/审批/派发及工具资源排空的失败汇总。全部子失败均属 ToolExecutionUnknown 时保留该类别（清理未确认保留 ToolCleanupFailure），由 RunExecutionOwner CAS 收口 unknown；混合存储/内部失败保留 AggregateError，不猜测后续状态写入。tools/service/tool-job-service 持有有限后台任务、轮询权限、等待与收尾，tools/model/tool-job-model 做独立存储转换，tools/storage 及 adapters/sqlite 持久身份/状态。Remote machines/model/command-model 转换应用命令、结果与 SSH 生命周期，platform/commands Adapter 持有 POSIX argv/cwd/script 语法。Docker 复用 ObservationModel 和 NativeDockerAdapter，OperationService 持有原状态前提及后验政策。
 
-## 远程 40015533260 后继批次（2026-10-23）
+### 3. 依赖方向
 
-`29b2436b` 完整远程 461 场景，459 通过、2 失败，七个 shard 和质量/Docker smoke 通过。状态面板 160% 缩放的约 1.5 屏幕像素偏差仍小于一 CSS 像素，测试按 scale 换算原容差。挂起历史只有一次请求/响应、视口持续在尾部，追加 request/received/drain/page/anchor 安全阶段日志，仍待真实根因定位。
+Agent Service→ToolModel→Remote public→独立 OperationService→Command/Observation Model→Platform Adapter。Job Service→JobModel→Storage→SQLite Adapter；无平台业务类型，无 SQL 越层，无 Workspace 权限继承。
 
-移动 RDP 第一次 WASM 在 image.rs:591 数组越界（634×378 framebuffer），重试通过。Adapter 对齐初始和动态宽度，新增真实已渲染 canvas 的四像素对齐断言，保留键盘远端文本、触控及全屏断言。对应上游未发布修复为 IronRDP `80bb81b344dba0197aa7b870c685f398dc4bcaee`。两轮源码复审核对 SDK 边界、窗口尺寸不变、日志不含终端内容及原业务断言；根 check、双端 build、全量 format、目标测试 tsc 与 diff 检查通过，日志为 /tmp/nexus-followup-{check,build,format,types}.log；远程待验，按 D17 未运行本地行为测试。
+### 4. 类型与转换
 
-## 远程 40018215989 根因收口（2026-10-23）
+工具参数与 Job 内部类型分别在 tools/model/*-types；Job storage 独立定义命令/记录及具名结果联合；持久JSON和状态/结果关联仅在SQLite Adapter解码，JobModel逐字段转换，前台/后台共用ToolModel.command的应用结果，不通过JSON往返协作。Remote public 命令/结果独立于 machines/model/operation-types，operation-mapper 与 ToolModel 白名单；Shell 技术类型只在 commands Port。新增 argv 数组 schema 经 RunModelStream 转成通用 ModelToolProperty，技术请求再次逐字段投影。只有后端/模型消费，不新增无人消费 Shared Job DTO；Docker action 复用已有 Shared 基础取值。
 
-`99fb150f` 完整远程 460/461 通过，状态面板已通过，历史仍失败。完整 trace console（不只过滤被截短的 preview）证明 request/received/drain/page-written/anchored 全部完成；快照显示滑块位于布局 splitter 覆盖区，鼠标每次误拖导致终端缩窄；`/visible/` 同时匹配 invisible。本批改为滑块左侧真实暴露位置，精确 visible token，并在按下前用 elementFromPoint 确认实际接收控件；保留全部历史与输入业务断言，删除临时阶段日志。
+### 5. 入口与安装
 
-移动 RDP 首次仍在 image.rs:591 数组越界、重试通过，不能以重试成功当作修好。移除无效桌面宽度对齐，固定官方构建 39196965692 / SHA 62246b364a0282bab85087f658a81fe4207b6b31 的原始 archive；源码含 bitmap source stride 与非法边界恢复，摘要及许可见 frontend/vendor/ironrdp。生产/runner Docker 均在安装前复制，pnpm 锁定完整性；既有像素 presenter 与所有操作保留，移动场景新增 pageerror 零异常断言。两轮源码复审核对来源、类型、打包和真实拖拽命中，根 check、双端 build、全量 format、目标测试 tsc 与 diff 通过，日志 /tmp/nexus-rdp-sdk-*.log；远程待验，按 D17 无本地行为测试。
+新增 shell_execute v2、shell_job_control v2、machine_docker_inspect/control v2。执行与取消分别单次批准；状态/列表/等待只读且需当前 shell.execute；Docker 要 machine.docker.manage，remove 为 destructive。Job prepare 在原工具单次消费后持久 queued，原工具完成提交确认后才 launch，Job dispatched 提交确认后才发 SSH；数据库 unknown 不派发或自动重试。
 
-## dev 发布前依赖审计（2026-10-24）
+### 6. 数据、事务与并发
 
-生产审计新增 Zod 受限集合内存耗尽（GHSA-mrhx-c7xc-m3w5）、undici content-encodings DoS（GHSA-xjj6-f33q-929c）及 nodemailer 通告。更新 undici 7.30.1、nodemailer 10.2.1、Puppeteer 25.16.0 并由其正式依赖升级 chromium-bidi/Zod 4.6.7，不直接跨主版本覆盖底层解析库。`pnpm audit --prod --audit-level=high` 无已知漏洞，日志 /tmp/nexus-final-dev-audit-fixed.log；源码两轮核对受影响浏览器/HTTP/邮件 Adapter，USAGE 操作与约束仍适用，根 check、双端 build、全量 format 和 diff 通过（/tmp/nexus-audit-final-*.log），新 SHA 远程待验。
+更新唯一 v1 初始化：新增 agent_tool_jobs；id 绑定原工具记录，完整 scope/目标版本/命令身份独立持久化。queued/dispatched→completed/failed/unknown 使用 CAS；重启 queued 确认未派发为 failed，dispatched 为 unknown，不恢复技术句柄或自动重放。最多8后台槽、每Run最多64历史项；派发前预留终态结算的版本空间，启动恢复的批量递增先完整检查耗尽。Docker 必须传完整64hex ID与 inspect 指纹（id/state/image/created），控制前复核，控制后确认目标状态/不存在；跨调用外部竞争窗口明确保留。
 
-## 历史重入与 RDP 修复回归（2026-10-24）
+### 7. 生命周期与失败
 
-`40044756208` / `2f19c93b` 仍为 460/461，通过七个分片、质量及 Docker smoke。移动 RDP 首次通过，新增 pageerror 零异常断言也通过。历史现已成功翻到 earliest 并恢复 latest；新失败在随后重入前要求可见 scrollbar。恢复的有界 baseline 可以只有一屏，故 scrollbar 合法隐藏；测试改用原 wheel 手势重新进入历史，仍核对新增真实 history 请求、返回 latest、后续真实命令输出，不改产品 UI、不扩大超时。两轮复审保持完整业务断言，目标测试 tsc、全量格式与 diff 通过（/tmp/nexus-history-final-types.log、/tmp/nexus-final-batch-format.log），新 SHA 远程待验。
+Shell argv≤128项、总8KiB，script≤8KiB，cwd≤256bytes，完整参数JSON≤16KiB；stdout/stderr合计32KiB有界捕获，明确truncated，完整结果可容纳最坏JSON转义。Remote 仍共用8任务/45秒整项期限，后台不突破原限制；等待最多30秒，等待超时不取消Job。每个后台任务、权限监测、timer/listener/Promise均有原owner；完整期限包含Job持久准备和等待启动，派发前再次核对剩余时间；每秒复查原批准/目标/当前权威，终态结算前先停止并等待权限监控收敛，失效取消后等真实收尾。根取消/结束/停机统一drain；清理失败保留配额和原因。Shell非零退出是已确认命令失败，SSH派发未知、取消、后验失败和清理失败不得报远端回滚。
 
-## 末端命令入口与 SMTP 跨包接收（2026-10-24）
+### 8. 当前能力与验收
 
-远程 `40046052239` / `929f0956`：六分片及质量/Docker 全绿，历史场景已通过 earliest/latest 与重入请求，最终停在旧 `Command` textbox 定位；改用当前可见 `input.command-bar-input`，保留真实 printf 输出断言。邮件首轮 dispatched 后 unknown、重试通过；接收夹具清空未找到结束符的完整 TCP buffer，可丢失跨包 `\r\n.\r\n`，现保留末四字节等待后续分包，仍要求纯文本及原模板事件。不扩大超时、不改 UI/生产逻辑。证据保存在 /tmp/nexus-e2e-40046052239-shard6、/tmp/nexus-six-server.log 与 shard7 原日志。两轮源码复审覆盖现有命令框消费者、SMTP 结束符所有分割位置、余下 QUIT 解析及严格 sent 断言；根 check、双端 build、全量 format:all:check、目标测试 tsc、夹具 node --check 与 diff 均通过，日志 /tmp/nexus-last-fixture-{check,build,format,types}.log；按 D17 未执行本地行为测试，完整远程待验。
+Shell 前台/后台、Job 四动作及 Docker inspect/control 源码同批接线，两轮源码复审完成。B10已用真实OpenSSH核对Shell转义/退出/截断、Job查询/等待/取消、撤权、目标版本及重启围栏/证据释放；Docker及其他故障专项仍待验，精确证据归testing，前端差异F1。执行须 governed 准入，不建立旧Thread/sessionId桥；ACP与直接 Root/Child/协作已在 B6.2C/D 接线，剩余租约/工具继续盘点。
 
-## 完整远程验收与 dev 交付（2026-10-24）
+## B6.2C ACP Runtime 与独立权限
 
-[40047441975](https://github.com/0honus0/nexus-terminal/actions/runs/40047441975) / `79a5cd580c9979f1ff14816e2910bd26a3bd727e` 全绿。461 个独立场景首次通过，零重试、零 flaky、无重复计数：SSH 195、UI 83、Agent 71、Mobile 52、HTTP 50、Auth 6、WebSocket 4。8 个分片、质量/格式/构建、runner 与 Docker 部署冒烟全部通过；截图更新按原流程未启用。最终邮件真实投递约 4 秒通过，历史页最早/最新、重新进入和真实命令往返约 12 秒通过，移动 RDP 的远端输入/触控/全屏和 pageerror 零异常断言通过。
+### 1. 职责与范围
 
-此前产品、上游 SDK、夹具及旧入口失败已在该完整版本验收，不以重试或删除断言换绿。两轮源码复审及本地静态检查结果沿本章前序记录；USAGE 已核对。完整日志 /tmp/nexus-e2e-green-40047441975.log，元数据 /tmp/nexus-e2e-green-metadata.json；未执行本地行为测试。
+ACP通过独立SSH短任务执行远端程序，支持v1初始化、创建会话、prompt、文本更新、权限请求及取消/关闭。不借普通Workspace资源。D15下调用按明确argv/cwd/prompt设计，不保留integrationId/Workspace/profile兼容参数；旧集成配置管理仍归B8盘点，当前调用配置完整绑定本次批准。禁止远端ACP直接调用Nexus文件/terminal能力。
 
-发布 [40048237411](https://github.com/0honus0/nexus-terminal/actions/runs/40048237411) 使用 `62cea1419e76ae8e306ddfbe8aeddae40119dce0`，与测试 SHA 的唯一差异为自动更新的 scripts/e2e/duration-estimates.json；产品代码和依赖一致。生产依赖审计、双平台构建与推送均成功。`ghcr.io/0honus0/nexus-terminal:dev` 与 `sha-62cea1419e76` 均指向 `sha256:c5220f68a26e7c247d75b194a15cebe7506118af1962c781567540f35c93162c`；Registry 清单包含 linux/amd64、linux/arm64，两平台 config 的 revision 均为完整 `62cea141` SHA。发布日志 /tmp/nexus-dev-publication-40048237411.log，清单 /tmp/nexus-published-{dev-manifest,manifest}.log，平台配置 /tmp/nexus-published-image-configs.json。
+### 2. 子功能与目录
 
-发布成功后按用户授权删除 22 条 conclusion=failure 的远程 Actions 记录，复查 total_count=0；成功的 E2E 40047441975、发布 40048237411 均保留，取消等其余状态未删除。删除前元数据 /tmp/nexus-failed-actions-deleted-metadata.json、逐条结果 /tmp/nexus-actions-cleanup-results.json；失败原因及修复证据沿前述记录保留。最终收口提交仅更新 PLAN/本验证文档，不改变已测试与已发布的源码或依赖。
+platform/acp持有通用协议、消息关联与有限流；commands Adapter持有argv命令构造；Remote machines/model/acp-model持有SSH生命周期及技术转换，OperationService持有准入。Agent tools/service/acp-permission-service持有独立权限等待/批准/消费/监测，runs journal持有子操作及父关系，真实SQL只在runs/governance Adapter。
 
-## 状态图标响应式约束补修（2026-10-24）
+### 3. 依赖方向
 
-远程40091199668的shard7两次均在800×180、scale=1失败，图标底边103.22超过卡片100.23约3px；源码证明固定26px图标加边框及padding超出26px卡片，不是过渡动画或采样等待问题。原图标及SVG增加可用高度约束，保持原几何断言和视觉设计。两轮源码复审覆盖矮面板、缩放、SVG及字体图标、趋势模式隐藏和正常大小不变；根check与Frontend build通过，日志/tmp/nexus-status-bounds-{check,build}.log；按D17未执行本地行为测试，新SHA远程待验。
+Agent ToolService→ToolModel→Remote public→OperationService→MachineAcpModel→Platform ACP/SSH。权限回调经上述边界白名单回到Agent Service→Governance/RunToolModel→Storage→SQLite；Platform不引入Agent业务类型。父批准只授权启动远端程序，子批准只授权其绑定的单次ACP请求。
 
-## 40091814866完整诊断与PTY定向重绘（2026-10-24）
+### 4. 类型与转换
 
-[e19aa979 / 40091814866](https://github.com/0honus0/nexus-terminal/actions/runs/40091814866)的质量/构建、Docker冒烟及六个分片通过；失败只剩状态图标越界与真实PTY echo关闭时首屏双提示符，所有网络宽限、挂起蓝色及监控订阅复用场景已通过。完整失败日志/tmp/nexus-e2e-40091814866-failed.log，shard3/7原始artifact在同名前缀目录。合并初始化命令不足以修复Bash echo关闭时隐藏提交的换行，现按实际TTY/原echo状态定向回退一行再重绘；不按提示符内容去重、不裁剪登录及用户空行、不削弱既有断言。两轮源码复审覆盖原echo读取时序、TTY/Bash限定、内部结果严格解码、分片/预算/失败及正常pipe路径。根check、双端build、全量format:all:check、相关spec静态类型及diff通过，日志/tmp/nexus-pty-redraw-{check,build,format,types}.log；新SHA完整远程待验；按D17未执行本地行为测试。
+技术请求/许可/结果归platform/acp Port；Remote public与machines/model各自独立对象，operation-mapper逐字段转换；Agent内部输入/许可归tools/model，journal命令与存储各自唯一owner。用户审批读取和工具事件复用Shared现有安全契约，不公开rawInput、程序流或技术句柄。仅后端/模型消费的ACP参数不预留Shared DTO。
 
-## 状态紧凑模式测试假设校正（2026-10-24）
+### 5. 入口与安装
 
-源码复核StatusMonitor.css的118px宽度及210px高度规则：180×240面板在1.6缩放时，装饰图标、容量详情和进度条按原设计隐藏，名称及百分比保持可见。既有至少三个可见元素断言与该设计冲突，现改为明确名称与百分比可见；全部可见元素的边界/容差、卡片范围、容量溢出、完整ARIA及图表交互断言保留，不改生产UI。两轮源码复审核对缩放的逆尺寸与各模式显示条件；新SHA远程待验，按D17无本地行为测试。
+新增acp_execute v2模型工具，connectionId/argv/cwd/prompt绑定本次人工destructive批准，需integration.acp.invoke。嵌套权限生产独立acp_inner_permission记录及acp_permission批准；权限观察和决定复用已安装审批HTTP、工具审计及事件页，不新建无消费者WS。技术协议拒绝direct fs/terminal和持久allow选项，只支持allow_once/reject_once。
 
-## 40092795332回归与Grid/主题夹具修复（2026-10-24）
+### 6. 数据、事务与并发
 
-[e7646ed5 / 40092795332](https://github.com/0honus0/nexus-terminal/actions/runs/40092795332)：质量、Docker冒烟和六分片通过，真实PTY echo开/关及正常命令输出通过，重复提示符修复已验。shard7图标仍越界；百分比max-height受隐式auto行最小内容约束，原metric-row补单行minmax(0,1fr)，保留原大小与既有边界断言。shard8仅主题创建首轮失败、重试通过，属于不能忽略的flaky：trace定位custom-terminal-theme.spec.ts原100行create.json，Chromium Network.getResponseBody找不到资源；无业务导航失败证据。保留真实POST201，等待UI编辑器隐藏后通过原认证API严格读取唯一创建主题及四项颜色，再继续原编辑/应用/重载/删除流程。日志/tmp/nexus-e2e-40092795332-failed.log、shard8产物/tmp/nexus-e2e-40092795332-shard8。两轮源码复审核对Grid内容区、双层高度、缩放/趋势/紧凑显示、唯一主题身份/读取及清理；按D17不运行本地行为测试，新SHA完整回归待验。
+唯一v1新增ACP权限父关系表。子操作仅能在真实dispatched ACP父工具下创建，绑定相同scope/步骤/目标及父内容哈希；事务复查当前父状态，不伪造模型proposal。所有父终态围栏、Root unknown/restart继续覆盖同一工具账本。批准请求/resolve/consume/verify均核对独立子身份及活父关系；数据库未知不派发、不补写、不重放。
 
-根check、Frontend build、全量format:all:check、七份相关spec静态类型及diff通过，日志/tmp/nexus-grid-theme-{check,build,format,types}.log；生产改动仅原Grid单行约束，测试保持全部实际操作与边界判据。
+### 7. 生命周期与失败
 
-## 40093685950与GET标签通知边界竞争（2026-10-24）
+复用8混合名额/45秒整项期限；每父最多64受支持权限操作、逐请求当前权限复查，等待不得延长任务期限。argv最多128项/8KiB，cwd256bytes、prompt8KiB、完整工具参数16KiB；单NDJSON消息256KiB、总输入8MiB、文本输出32KiB。技术流的pending请求、writer/reader、监听、权限Promise和关闭结果均由原owner追踪。prompt派发后失败/取消为unknown；初始化前拒绝区分未启动业务prompt与远端程序已经启动。关闭保留全部原因，不能吞错；本地关闭不证明远端进程停止。
 
-[99a1300b / 40093685950](https://github.com/0honus0/nexus-terminal/actions/runs/40093685950)七分片、质量及Docker冒烟通过，所有状态尺寸/缩放、真实PTY、主题创建编辑应用重载删除均通过。仅shard1连接选择器标签失败Toast默认等待10秒与产品前台10秒恢复宽限竞争，首轮失败后重试通过；日志/tmp/nexus-e2e-40093685950-failed.log。全仓核对route.abort及networkFailureToast消费者，workspace选择器与Connections页两个GET标签失败通知改为15秒；原notification/key-list已15秒，DELETE/logout写入仍立即通知，其它只验自身错误/围栏的场景不改。保持真实连接目录可用断言，不改生产代码或UI，不扩大全局超时。两轮源码复审完成，新SHA完整远程待验；D17无本地行为测试。
+### 8. 当前能力与验收
 
-根check、全量format:all:check、九份相关spec静态类型及diff通过（/tmp/nexus-tag-read-{check,format,types}.log）；生产依赖审计无已知漏洞（/tmp/nexus-dev-final-production-audit.log）。本批仅测试/文档，生产代码与99a1300b相同，复用该版前端build证据。
+ACP执行、独立权限/交付确认、审批HTTP和工具事件消费者已接线。B10已验证真实SSH独立审批与取消，以及受控技术流中reader/permission未收敛时继续等待、退订/cancel同步失败的单次清理和Machine Model因果保留；writer在途等其余故障仍待验。四表/证据归testing，正式前端差异归F1。
 
-## 463场景完整远程验收与dev发布（2026-10-24）
+## B6.2D Root/Child 与协作
 
-[40094495537](https://github.com/0honus0/nexus-terminal/actions/runs/40094495537) / `9f495f353f7cfea188f0729a421e14ed89db02d9`完整通过：463个独立场景首轮通过，零重试/零flaky。SSH197、UI83、Agent71、Mobile52、HTTP50、Auth6、WebSocket4；8个分片、根检查/格式/构建、runner、Docker部署冒烟全部通过。原监控30秒复用与空闲启停、挂起蓝色、GET10秒网络通知宽限、真实PTY echo开/关单提示符及保留用户空行、状态全部尺寸与1.6缩放的图标/内容边界、主题创建编辑应用重载删除均通过。源码两轮复审及各批静态证据见前序记录，不以重试通过代替修复。完整日志/tmp/nexus-e2e-green-40094495537.log，元数据/tmp/nexus-e2e-green-40094495537-metadata.json；未执行本地行为测试。
+### 1. 职责与范围
 
-双平台dev发布[40095210177](https://github.com/0honus0/nexus-terminal/actions/runs/40095210177)，源码`0bdfb54da609c4f83f02c788c2869e4824a7bd4c`与验收SHA仅差scripts/e2e/duration-estimates.json的Actions自动更新；产品源码和依赖一致。生产依赖审计、双平台构建与推送均成功。`ghcr.io/0honus0/nexus-terminal:dev`和`sha-0bdfb54da609`均指向`sha256:f89d17201030dd3ce4728003aae64a4fc49afc3ef1fa0fe0a57a6c550e9575be`；Registry清单包含linux/amd64、linux/arm64，两个平台config的revision均为完整0bdfb54d源码SHA。日志/tmp/nexus-dev-publication-40095210177.log，发布元数据/tmp/nexus-dev-publication-40095210177-metadata.json，标签清单/tmp/nexus-published-40095210177-{dev,sha}-manifest.log，平台配置/tmp/nexus-published-40095210177-configs.json。未自动更新或重启远程容器；最终收口提交仅更新PLAN和本验证文档，不改变已测试/已发布的源码及依赖。
+Child 是原 `runs` 中的独立 Run，不建立第二个 Runner、Root 注册表或权限中心。Root 按冻结配置限制活跃直接 Child（默认四个），已终态且排空者释放名额，累计历史由任务族工具预算限定；新设计不提供多层委派、付费请求自动重试或恢复原执行。explore/review/worker 仅为角色标签。Child 直接继承 Root 冻结模型、执行限制和绝对期限，与 Root 共用家族预算；工具集合继承主 Agent，但排除嵌套委派与 Root 专属 join/cancel。原访问模式、目标范围、实时 grant 和独立审批继续复查，继承不授予 capability。
 
-## Windows增强NLA认证结果被误分帧（2026-10-24）
+### 2. 子功能与目录
 
-用户现场RDP提示remote_unavailable/unknown。只读线上日志确认POST票据200、TLS桥OPENED后约一秒WS1006；浏览器SDK原始错误为read frame by hint / WebSocket Closed，不是具名密码拒绝。沿D19指定真实目标用独立临时桥复现，实际X224选中协议8（HYBRID_EX），收到两条DER（262/59 bytes）后合法00000000认证结果（4 bytes），旧rdpFrameLength将其作为长度0的Fast-Path拒绝并主动断开。原463项E2E的xrdp目标未提供该Windows增强NLA分支，不能用原PASS否定现场故障。
+`runs/service/run-collaboration-service.ts` 管委派、依赖、join、取消、消息与事实用例；`run-collaboration-rules.ts` 管配额及纯准入。`runs/model/run-collaboration-{types,model}.ts` 持有应用对象和存储白名单；`runs/storage/run-collaboration-storage.ts` 持有独立存储契约。SQL、关系解码、协作数据和父子围栏归 `runs/adapters/sqlite/run-{collaboration,participant,child-fence}*`。工具严格输入与声明归 `tools/service/collaboration-tools.ts`，不新增平级模块或私有 HTTP 树。
 
-原BrowserDesktopPeer根据已验证X224协议8持一次待收认证结果状态；DER交换保持原分帧，下一非DER消息等待四字节完整后独立透传，内容合法性由SDK认证状态验证，消费后恢复TPKT/Fast-Path。成功/拒绝结果都交SDK，不把本地关闭当作远端停止，不改UI、HTTP/票据/权限、背压或容量。两轮源码复审核对协议1/2/8、DER分包及四字节逐段/与后续消息合包、一次消费和关闭清状态、SDK验证与失败收尾。
+### 3. 依赖方向
 
-指定真实Windows修复桥两次复验均出现“已连接”，1264×626及550×346画布，无SDK错误；后次像素抽样有10405个非黑样本、369种颜色，确认实际画面而非空连接。证据/tmp/nexus-rdp-hybrid-live-result.log；未替换或重启运行后端。临时诊断桥和原连接均已关闭。根check、双端build、全量format:all:check与diff均通过，日志分别见/tmp/nexus-rdp-hybrid-final-check.log、/tmp/nexus-rdp-hybrid-build.log、/tmp/nexus-rdp-hybrid-format.log。诊断仅记录协商值、包长度与认证结果头，不记录票据、Cookie、密码、CredSSP正文或画面内容；临时桥验证完关闭。按D17未新增/运行本地全量行为或E2E，D19仅覆盖指定真实RDP场景。
+原 RunExecutionOwner → ToolService → RunCollaborationService → Model → Storage/SQLite；子模型调用继续由同一个 RunExecutionOwner、RunStepModel 和 Platform AI 执行。register 只接入原 owner 的准入、start/abort/wait/drain 能力，不将应用规则注入 SQLite。Remote/Platform 不认识 Child、profile、共享事实或消息。
 
-## 手机远程桌面尺寸栏单行（2026-10-24）
+### 4. 类型与转换
 
-用户明确要求手机RDP宽度、高度和重新连接尽量同一行；原Modal手机分支从wrap改nowrap并减小横向间距，两个原UiNumberInput容器min-width:0、可均分收缩且最大保持原80px，标签/按钮保留完整文字。RDP/VNC共用该footer，桌面仍原换行策略；原label关联、尺寸上下限、保存事件、连接/保存禁用和生命周期未改。两轮源码复核覆盖这些消费者与全局输入框内部min-width:0，不新增局部控件CSS。根check、前端build、全量format:all:check与diff均通过；日志/tmp/nexus-mobile-rdp-row-{check,build,format}.log。按D17未新增或运行行为/浏览器/E2E测试；320/375/390px、横屏、多语言、尺寸编辑与重连仍待远程验收。
+| 边界                                  | 类型 owner                                             | 转换 owner                       | 消费者                 |
+| ------------------------------------- | ------------------------------------------------------ | -------------------------------- | ---------------------- |
+| 模型工具 JSON → 应用输入              | tools 的未知输入解码、runs Model 的 CollaborationInput | tools/service 严格解码           | 原 ToolService         |
+| 协作应用 ↔ 持久记录/事务事实          | runs/model 与 runs/storage 各自定义                    | RunCollaborationModel 逐字段投影 | Service/纯规则、SQLite |
+| 运行与工具/Child安全审计 → 双端协议   | Shared runs/tools/governance/collaboration             | 原 register/HTTP mapper          | 已安装管理员 HTTP      |
+| Child 完成输出/协作文本 → 父/同族模型 | runs 内部应用对象                                      | 协作 Service 明确投影            | 模型工具结果           |
 
-## RDP修复与手机尺寸栏AMD64 dev发布（2026-10-24）
+消息和事实只是未验证文本，不能作为授权、系统指令或已验证证据。Child 列表、取消及消息元数据 HTTP 的完整契约与严格 codec 在 Shared agent/collaboration，取消复用 Shared runs 请求/header/成功联合。profile 的双端有限取值归 collaboration/values；目标 allowlist、模型历史、正文、事实与存储对象不出公开端点。正式前端消费归 F1。
 
-产品提交`f325dc488ffb14f26adf37c00ed4ab27d3adb92b`已推送dev，包含Windows HYBRID_EX四字节结果桥接及手机尺寸栏单行；各自静态/指定实测证据见上节，不声称本次新增完整E2E通过。用户明确授权提交推送并发布dev AMD镜像，[发布40104850604](https://github.com/0honus0/nexus-terminal/actions/runs/40104850604)生产依赖审计、构建和推送成功。`ghcr.io/0honus0/nexus-terminal:dev`清单digest为`sha256:c13d5e2b0de67c473f9902cdf84da135bd66da9bc3f5c4fdbc5195e639cbca47`，包含linux/amd64及其attestation；`sha-f325dc488ffb`镜像配置架构amd64、revision与完整产品提交一致。本次只发布AMD64，未部署或重启远端容器。发布观察日志/tmp/nexus-rdp-dev-amd-publish.log；收尾提交仅同步文档，不改变已发布产品源码。
+### 5. 入口与安装
 
-## 服务器状态网络纵轴低流量重复标签（2026-10-24）
+当前内置声明为 `nexus.terminal@1.8.0`，包含 `app.intents.exchange` 和已接线能力，默认 grants 仍空。十个 `collaboration_*` 工具（含正文续读 `collaboration_output_read`）通过原模型工具入口使用；读操作仍需实时全局 grant，委派、取消、发送、消费和 CAS 写入需独立 ToolCall 批准。父模型/工具批准不代替 Child 自己的工具批准。没有旧 runtimeId/sessionId 桥接或新的公开 dispatcher。管理员 HTTP 安装 GET /apps/:appId/runs/:id/subagents、POST /apps/:appId/runs/:id/subagents/:childId/cancel 和 GET /apps/:appId/runs/:id/subagents/:childId/messages，完整前缀 /api/v1/agent；入场/交付分别核验 Access。列表仅 id/parentId/status/version/profile/deadlineAt；消息仅 sequence/senderId/bodyBytes/expiresAt，查询 after/limit（默认0/16，最大32），完整响应16 KiB。观察不改变模型邮箱水位。Child 取消由 RunService 验证不可变父子/user/App 归属，再复用原 Run CAS/幂等取消及审批失效，不建立第二账本。外部直接创建由受审批模型委派替代，独立 Profile 管理及 collaboration_profiles 查询工具已删除，delegate 不再接受单独 maxRequests/durationSeconds 或模型覆盖。
 
-源码确认网络轴最小max=1B/s且原ticks未限定precision，Chart.js可生成0.2/0.4/0.6/0.8等小数，formatStatusRateAxis对小于1024的数值Math.round后产生重复0/1。原StatusCharts网络ticks改precision:0、maxTicksLimit:6，Chart.js实际实现将spacing向上取整到整数，同时原niceNetworkAxisMax上限向上取整到完整字节，避免显式非整数边界仍追加重复标签；保留所有范围共用配置、原始可见网络峰值/单位、百分比图、字体、mirror、布局与数据消费。两轮源码核对整数步长、非整数max的边界tick、空闲/低流量、K/M格式和范围切换force重算；不以此判断用户未具体描述的其它刻度现象已解决。根check/前端build/全量format:all:check/diff通过，日志/tmp/nexus-status-axis-{check,build,format}.log；按D17不新增或执行本地行为/E2E，远程仍需验证各时间范围空闲网络刻度不重复及大流量/百分比切换。
+### 6. 数据、事务与并发
 
-## 趋势历史不足时固定完整时间窗（2026-10-24）
+唯一 v1 更新 Run kind/绝对期限及 Child 关系、事实、mailbox、扫描/消费水位和本地副作用标识。Child 的目标集合、继承工具、继承请求上限、Root 期限、依赖和创建 hash 固定；委派读取父当前状态/目标/已有子集，在原事务经 Model 回调执行 Service 纯规则。Child 步骤和工具/审批消费复查独立身份、活父和期限；目标与 capability 仍由原治理权威核验。此前 Child 才能成为依赖，无环；success 依赖要求 completed，settled 接受所有终态。
 
-用户补充指的是时间轴左端。原StatusCharts在历史不足时按observedSpan*1.08拟合并至少2秒，因此选择30分钟仍只显示几秒；现删除拟合，始终以当前指标最新采样为右端、减去完整1/5/10/30分钟为左端，缺失历史留空，不补数据。原time-axis spec同步为完整span严格等于range*60000、真实样本位于窗口内且首次连接左侧留空；原WS时间戳关联、缩放像素、tooltip、图例及关闭保持。两轮源码审核覆盖空/单点/多序列最新值、全部范围、时间降采样与现有测试消费者。根check、前端build、全量格式、原spec静态类型与diff均通过，日志/tmp/nexus-status-time-window-{check,build,format,spec-types}.log；D17不新增/执行行为或E2E，真实各范围左右边界及短/长历史待远程。
+事实 CAS、消息容量/序列及消费 CAS 同事务，重复工具身份不重做副作用。mailbox 页包括过期位置的扫描进度，空结果不丢 nextCursor；消费不得越过已连续扫描水位。根终态和活 Child/工具/步骤围栏同事务；Root 成功必须没有未完成 Child。ACP 内部权限不计入模型步骤普通工具提案数量，仍纳入独立工具/权限审计。
 
-## 服务器趋势修复AMD64 dev发布（2026-10-24）
+### 7. 生命周期与失败
 
-用户授权提交推送发布dev，沿用上一轮AMD64。产品提交`cb693e4c9c43287076d2e40b2ef4ffb9a480fe8c`已推送，[发布40106222288](https://github.com/0honus0/nexus-terminal/actions/runs/40106222288)生产依赖审计、构建及推送成功。`ghcr.io/0honus0/nexus-terminal:dev`清单digest为`sha256:ed932df1cff65efe9abb0dd81431b4b96fb36f2b48919e899c2b62aeb292bc49`，包含linux/amd64及attestation；`sha-cb693e4c9c43`配置核对amd64/linux、revision与产品SHA一致。发布观察/tmp/nexus-status-trend-dev-amd-publish.log，配置/tmp/nexus-status-trend-published-config.json。仅发布，未部署或重启远端。前序静态检查通过，现有E2E源码已同步但本次不声称完整远程E2E通过；收尾提交仅补文档。
+Root/Child 共用冻结执行名额，排队依赖也占名额；执行准入满载拒绝，模型派发并发忙则由原owner等待。Child 继承Root期限和任务族请求额度，不再独立缩短；期限到达阻止新派发，但允许原步骤未知结算。join 最多30秒，只结束等待。父成功前等待每个 Child 的真实任务和清理；Agent 共用错误 owner 的 aggregateToolFailures 同时服务 ToolService 排空和 RunExecutionOwner.waitChildren，嵌套的纯执行未知保留 ToolExecutionUnknown/ToolCleanupFailure，混合存储或内部故障保留 AggregateError，不推测结算；父失败/取消/撤权/停机覆盖整族。存储取消失败仍取消本地 Child、等待资源并聚合全部失败，不以一项错误跳过其他收尾。
 
-## 手机RDP触控指南与指针（2026-10-24）
+重启只对账：未派发 Child 失败，已派发/运行中保守 unknown，不重建等待、不重放请求。Child 每步正文与最后正文沿模型步骤2 MiB容量，同步骤/Run成功事务完整保存。participant SQL只读取1024字符预览与原UTF-8字节数；list分页最多16项，output_read按原身份续读并返回hash。仅活跃、unknown或未结算工具的Child阻止父成功；确定失败/取消且实际排空不强制父失败。没有远端 rollback、跨进程活任务接管或公平排队承诺。
 
-源码确认手机指南原whitespace-normal允许长文本占多行，RDP SDK光标仅写canvas.style.cursor，移动浏览器没有触摸鼠标光标。手机指南改复用全局UiInfoHint的click触发、完整内容、无障碍名称及中英日翻译，桌面继续原说明。desktop-touch可选回调报告与MouseEvent相同client坐标，RDP有触控能力时持本地FontAwesome箭头覆盖层，坐标按容器百分比定位且pointer-events:none，不混入远端canvas；触控板首次位置发送mousemove，使用独立初始化标志、派发前夹紧坐标，真实鼠标隐藏覆盖层。VNC不安装本地第二光标；无新timer/listener，关闭由原touch/element生命周期清理。两轮源码复核直触/触控板、首点/边界、长按/双击拖动/双指、取消/关闭/晚建连与缩放定位；根check、前端build、全量format:all:check与diff通过，日志/tmp/nexus-rdp-mobile-touch-{check,build,format}.log。首次静态检查报告新增回调声明缺少空行，修正并重跑通过。按D17未新增/执行本地行为/E2E，手机真机、多语言窄屏、真实键鼠及VNC回归待远程；本地位置指针不证明远端输入已完成。
+### 8. 当前能力与验收
 
-## Agent 模型匹配与能力还原（2026-10-25）
+委派、角色标签、依赖等待、list/join/cancel、持久消息读取/消费、共享事实 CAS 与父子收尾已接线。B7 接入共享预算、Root 冻结模型/设置继承与原执行 owner，Memory/Artifact/Browser/MCP 已接线；跨 Run 持久占用归下方 B6.2E。B10 已通过隔离新后端、实际 HTTP/SQLite/OpenSSH 的委派/join、整族取消、独立批准/错族拒绝、消息消费、事实冲突与 Child Job 未知结算子场景；完整配额/期限、未知提交与崩溃恢复仍待验。确切版本、两轮复审及命令证据归 testing，正式前端后置 F1。
 
-对照75289ef9父提交的旧正式model-capability-{matcher,resolver,registry-source}，恢复前缀、名称分隔符、日期系列、推理等级后缀与明确模型的缓存键/推理修正，并按本轮要求增加thinking/fast匹配；工具、图片、文件、缓存键、推理等级/默认等级/必需标记完整通过Registry应用/存储/Shared/前端mapper。精确名优先，同级不同原厂能力冲突不猜测；OpenCode聚合不阻断原厂同名。自动添加/ID change补缺，显式应用才替换已有值，工具手工值有单独保护；批量每次4个并发，取消停止后续批次，不限制总量。手机参数默认收起、错误展开，目录未更新/失败/无匹配使用统一Toast。
+## B6.2E 项目上下文与共享突变占用
 
-本轮沿用指定NewAPI只读发现授权：先前发现46个模型且未报告能力，本次用真实ModelsDevCatalogAdapter重新读取公开目录416项，以本版build产物解析这些ID，22项明确匹配；claude-opus-4-6-thinking正确填充1M上下文、128K输出、工具/图片/文件和low/medium/high/max推理等级；gpt-5.6三个已存在变体正确带出缓存键及默认medium。其余24项在本版匹配链路返回null，具体原因见后续逐项审核；此结果不能推断原始目录没有记录。日志`/tmp/nexus-model-match-live.log`不含密钥；没有保存Provider、发起付费生成或修改远端配置。两轮源码核对Shared/SQLite严格解码关联、完整白名单、前缀/日期/等级顺序、精确优先/冲突、微调模型隔离、scope/generation及模型快照、旧配置与新手工工具值保护；根check、双端build、全量format:all:check及diff通过，日志`/tmp/nexus-model-match-{check,build,format}.log`；补充新模型手工工具值保护后根check、前端build再次通过，日志`/tmp/nexus-model-match-final-{check,build,format}.log`。本轮按D17未新增或执行浏览器/本地E2E，手机折叠、添加与编辑、供应商能力优先、未知匹配提醒、目录替换后保存/冻结、网络失败/取消及完整后端管理回归仍待远程。
+### 1. 职责与范围
 
-## Agent模型匹配AMD64 dev发布与未匹配项复核（2026-10-25）
+Agent tools 持有 Run-local 项目目录；Remote machines 持有受管远端突变的唯一准入权威。普通 SSH Files/传输、Workspace Docker 与 Agent 文件/Shell/Job/ACP/Docker 共用占用，但不共享登录身份、批准或活跃连接。旧 ssh_session_open/list/close 仅复用 transport、没有持久 shell 状态；新设计由独立 Remote operation、Run/Job 查询取消及父生命周期替代，不保留第二连接池或 sessionId 桥接。旧 Thread 项目共享改为 Root/Child 各自绑定，当前不自动向子 Run 或系统提示注入指导。
 
-用户授权提交推送发布dev，沿用最近的AMD64范围。产品提交`b0353f1c7054db30aec68567e6fce5c42ea3a9cc`已推送，接入的远端662a7a34仅修改E2E耗时估计；[发布40156453342](https://github.com/0honus0/nexus-terminal/actions/runs/40156453342)生产依赖审计、构建与推送成功。`ghcr.io/0honus0/nexus-terminal:dev`的清单digest为`sha256:edce4d7152c4dcdffc1fda511478a115589479e2805bef086e2b9663e9ea9c1f`，含linux/amd64及attestation，`sha-b0353f1c7054`配置revision与完整产品SHA一致。日志`/tmp/nexus-agent-model-dev-publish.log`、清单`/tmp/nexus-agent-model-published-manifest.log`、配置`/tmp/nexus-agent-model-published-config.json`。未部署或重启远端容器；推送自动触发[远程E2E40156449229](https://github.com/0honus0/nexus-terminal/actions/runs/40156449229)，不将发布成功等同E2E通过。
+### 2. 子功能与目录
 
-用户要求逐项检查24个未匹配项。重新只读获取原始models.dev目录，对照全部供应商、当前17个允许源及实际Adapter/匹配产物，确认不能把null全部称为目录缺失：① DeepSeek V4.1 Flash及fast两项有NVIDIA记录，但快照还为OpenCode生成不带供应商前缀的别名；matcher将其误当非聚合来源，与NVIDIA的推理能力产生同级冲突。只读限定复验移除生成别名后两项均明确匹配，`/tmp/nexus-model-unmatched-review.log`；② Qwen3.6-35B-A3B-FP8有nearai/inferx等精确项，但这些供应商未纳入当前白名单，FP8也未作为变体处理；Qwen3.8-27B、gpt-oss-120b-medium、grok-3-mini及fast共4项的基础模型在groq/cerebras/helicone/poe等源中，当前白名单过滤掉，且不同源能力不完全一致；③ 12个图像/视频/语音模型有精确记录，10项缺少正整数文本输出预算，两个TTS记录来自未允许源；另grok-imagine-video-1.5-preview只有不带preview的基础视频项。这13项不能直接当作当前文本Agent模型补造预算；④ codex-auto-review、gpt-image-2.5、grok-4.7-build-fast、grok-composer-2.5-fast四项无可确定的同名/既定变体记录，不以相邻模型替代。原始目录在`/tmp/nexus-model-match-catalog-latest.json`；本轮为审核，不修改匹配规则、扩大源或重发发布，明确缺口承接PLAN。
+Agent tools/{model,service,storage,adapters/sqlite}/tool-project-* 分别持有应用类型/转换、目录用例、存储契约与真实 SQL；tools/service/tool-definitions 和 tool-input 持有受信声明/严格参数，ToolModel 持有 Remote 请求/结果/失败转换。Remote machines 对应层的 mutation-* 持有应用身份/转换、准入政策、存储接口和 SQLite 事务，migrations 仅安装 Adapter。128 个 endpoint 占用、单次最多两个 endpoint 是 Remote Service 政策；目录256 UTF-8 bytes、子目录深度8、四份文件/每份8 KiB 是 Agent 项目用例限制，不是新增 HTTP 容量。
 
-## 当前 models.dev 46 项匹配复核与来源别名修复（2026-10-25）
+### 3. 依赖方向
 
-保留 models.dev 和现有 17 个来源，不改 UI。使用真实 ModelsDevCatalogAdapter 只读拉取最新 416 项，并对已有授权发现的 46 个 ID 调用实际 build 产物；同一目录重建修改前别名和修改后快照：22/46 → 24/46，原 22 个结果逐字段不变。新增 deepseek/deepseek-v4.1-flash 与 fast，两项均为 1000000 上下文、384000 输出、工具/图片输入、none/low/high/max 等级，未根据 fast 猜测默认等级。日志 /tmp/nexus-current-model-audit.log，完整结果 /tmp/nexus-current-model-audit-result.json。未保存 Provider 或发起生成，不记录密钥。
+Agent ToolService → ToolProjectService → ToolProjectModel → ProjectStorage → SQLite Adapter；指导读取走 ToolModel → Remote public.operations → RemoteMachineOperationService → File/Command/Acp Model → Platform。Remote Files/Observation/Operations Service 直接复用同一 MachineMutationService → Model → Storage → SQLite Adapter。Adapter 不引用应用类型或规则实现，Platform 不定义 Agent/目标业务对象；Bootstrap 只安装 register/migrations。
 
-已匹配的 24 项均有上下文及输出预算，其中 21 项声明推理等级；未声明等级不等同不支持推理。
+### 4. 类型与转换
 
-| 模型 ID                           | 上下文 / 输出 token | 推理等级                            |
-| --------------------------------- | ------------------- | ----------------------------------- |
-| claude-opus-4-6-thinking          | 1000000 / 128000    | low, medium, high, max              |
-| claude-sonnet-4-6                 | 1000000 / 128000    | low, medium, high, max              |
-| deepseek/deepseek-v4.1-flash      | 1000000 / 384000    | none, low, high, max                |
-| deepseek/deepseek-v4.1-flash-fast | 1000000 / 384000    | none, low, high, max                |
-| gemini-3-flash                    | 1048576 / 65536     | minimal, low, medium, high          |
-| gemini-3.1-flash-image            | 131072 / 32768      | minimal, high                       |
-| gemini-3.1-flash-lite             | 1048576 / 65536     | minimal, low, medium, high          |
-| gemini-3.5-flash-lite             | 1048576 / 65536     | minimal, low, medium, high          |
-| gemini-3.8-flash-high             | 1048576 / 65536     | low, medium, high                   |
-| gpt-5.6-luna                      | 1050000 / 128000    | none, low, medium, high, xhigh, max |
-| gpt-5.6-sol                       | 1050000 / 128000    | none, low, medium, high, xhigh, max |
-| gpt-5.6-terra                     | 1050000 / 128000    | none, low, medium, high, xhigh, max |
-| gpt-6-astra                       | 1050000 / 128000    | low, medium, high, xhigh, max       |
-| gpt-6-luna                        | 1050000 / 128000    | none, low, medium, high, xhigh, max |
-| gpt-6-sol                         | 1050000 / 128000    | none, low, medium, high, xhigh, max |
-| gpt-6.1-sol                       | 1050000 / 128000    | low, medium, high, xhigh, max       |
-| grok-4.20-0309-non-reasoning      | 1000000 / 30000     | 未声明                              |
-| grok-4.20-0309-reasoning          | 1000000 / 30000     | 未声明                              |
-| grok-4.20-multi-agent-0309        | 1000000 / 30000     | low, medium, high, xhigh            |
-| grok-4.3                          | 1000000 / 30000     | none, low, medium, high, xhigh      |
-| grok-4.5                          | 500000 / 500000     | low, medium, high, xhigh            |
-| grok-4.6                          | 500000 / 500000     | low, medium, high, xhigh            |
-| grok-4.7                          | 500000 / 500000     | low, medium, high, xhigh            |
-| grok-build-0.1                    | 256000 / 256000     | 未声明                              |
+| 边界                       | 类型 owner                                                              | 转换 owner / 消费者                                                      |
+| -------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| 模型工具 JSON → 应用       | tools/model/tool-project-types、tool-types                              | tool-input 严格校验，ToolService 生成安全审批摘要                        |
+| 项目应用 ↔ 存储            | ProjectScope/Binding/Mutation；storage StoredProject*                   | ToolProjectModel 逐字段转换，Adapter 仅解码 row                          |
+| 指导应用 ↔ Remote 后端契约 | ProjectGuidance；remote/public.operations                               | ToolModel 构造请求并逐字段生成指导结果，ToolProjectService 生成工具 JSON |
+| 突变应用 ↔ 存储/Targets    | machines/model/mutation-types；storage mutation-storage；Targets public | MachineMutationModel 解析受信 endpoint、投影命令并映射安全失败           |
+| 应用 → 双端审计            | 既有 Shared agent/tools 与 remote 安全错误                              | 既有审计/HTTP/WS mapper；目录正文、claim keys、row 不进入 Shared         |
 
-剩余 22 项：
+本版无新增目录/占用 HTTP 或 WS DTO。指导不可信，不等于授权、证据、Shell cwd 或系统指令；普通协议安全码继续使用 conflict/operation_unknown/limit_exceeded 等现有契约。
 
-| 分类                     | 模型 ID                                                                                                                                                                                                                                                                                | 未匹配原因                                                                                                                                        |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 文本来源/变体（5）       | Qwen/Qwen3.6-35B-A3B-FP8；Qwen3.8-27B；gpt-oss-120b-medium；grok-3-mini；grok-3-mini-fast                                                                                                                                                                                              | 精确/基础记录在当前未纳入的 nearai/inferx/groq/cerebras/helicone/poe 等供应商；不同部署的上限、模态及等级存在差异。FP8 不直接视为无精度后缀版本。 |
-| 非当前文本配置范围（13） | gpt-image-1.5；gpt-image-2；gpt-image-2.5-flare；gpt-image-2.5-sunburst；grok-imagine-image；grok-imagine-image-2.0；grok-imagine-image-quality；grok-imagine-video；grok-imagine-video-1.5；grok-imagine-video-1.5-lite；grok-imagine-video-1.5-preview；grok-tts；grok-voice-tts-1.0 | 图像/视频项缺正整数文本输出预算，preview 仅基础项；TTS 为音频输出且来源未纳入，不伪造聊天配置。                                                   |
-| 无可确定对应（4）        | codex-auto-review；gpt-image-2.5；grok-4.7-build-fast；grok-composer-2.5-fast                                                                                                                                                                                                          | 没有同名或已确认的等价变体，不能以相邻型号替代。                                                                                                  |
+### 5. 入口与安装
 
-本轮源码复核：第一轮核对别名唯一生产者、全部应用/存储 schemaVersion、SQLite 解码与 Model 投影；旧缓存无效后 snapshot=null，refresh 不带旧 ETag，因此重新获取而非错误沿用 304。第二轮核对当前 46 项前后差异、精确/聚合排名、同级冲突拒绝、必填预算及不修改前端消费者；不新增兼容数据路径。根 check、双端 build 通过，日志 /tmp/nexus-model-provenance-check.log、/tmp/nexus-model-provenance-all-build.log。补齐结果表后已重新执行全量格式检查及 diff，均通过，格式日志 /tmp/nexus-model-provenance-final-format.log。限定只读目录核对不等同浏览器/E2E 或真实供应商生成验收。
+project_directory_bind/read/clear v2 经原模型 proposal、账本、目标检查与治理消费执行；bind/clear 需当前 file.read 和独立批准，read 需当前只读权。参数为 connectionId 加 directory（bind）或可选 path（read），clear 无额外字段。bind/read 从绑定根沿指定子目录读取不区分大小写的 AGENT.md/AGENTS.md，拒绝链接、越界和超量；未绑定 read 返回空上下文。Remote register 安装唯一 mutation owner，普通 Files、独立 Agent operations 与 Workspace observations 接入；启动 initialize 在监听前完成 held→blocked 围栏。
 
-## 图片模型分组与两种聊天入口（2026-10-25）
+### 6. 数据、事务与并发
 
-用户明确要求同时保留直接选择图片模型聊天与文字 Agent 工具生成；Provider 新增 images 协议，原设置表单分对话/图片组，文本预算可缺省保存，文本运行冻结仍须两项正整数预算。Images Run 使用原模型 Step 派发账本，图片 Tool 使用原 artifacts.write 授权及独立批准，共用 ProviderImageService 与 Artifact 文件。没有新增本地行为/E2E；后续用户单独授权 gpt-image-2.5 一次真实付费图片测试。
+仍只有初始化 v1，Bootstrap 调 Agent/Remote migrations，不升级旧开发库。agent_run_projects 按 Run/connection 唯一，删除 Run/connection 级联清理；agent_project_effects 按 ToolCall 唯一，目录改写与 effect 同事务，复查 dispatched/action/hash/target/policyRevision/live participant，bind 另核 SSH/version。不重放未知目录写入。
 
-第一轮源码审核覆盖协议/能力字段的 Shared、HTTP/workspace codec、应用/存储/SQLite/目录/前端 mapper、可选预算及来源；修正遗漏的类型/解码、图片探测超时和模型选择。第二轮核对直接 Run 的派发/未知/取消/Provider 修订、实际 model actor 写事务、工具批准与分页、受保护预览路径及 Markdown URL 限制；补齐列表 nextOffset、移出模板内分组计算、供应商默认 Images 选项与带供应商前缀 GPT Image 的 base64 参数处理。生成后本地保存失败仍可能已计费，不自动重试；不声称网络与存储原子。
+remote_machine_mutations 按 SHA-256([lowercase host,port]) 唯一。ID/user/凭据/代理变更不为同一文本 endpoint 创建第二占用；跨端复制/移动一次事务检查并获取两个排序去重 key，部分获取不提交。已持有或 blocked 报 conflict，最多128个 endpoint；不自动重试或排队。释放/阻断必须匹配原 claim ID、key 和 held 状态。私有 Files 同资源既有队列仍保留，跨资源占用不等待。DNS/IP别名、不同跳板网络中的同名主机不被此文本身份准确区分，可能漏合并或保守拒绝；不宣称真实物理主机识别。
 
-最终根 pnpm run check、pnpm run build 均通过，日志 /tmp/nexus-image-final-{check,build}.log；全量 format:all:check 与 git diff --check 通过，格式日志 /tmp/nexus-image-final-format.log。静态与源码审核不证明浏览器选择、App 文件保存/预览、审批、取消/超时和多进程竞争实际通过；这些场景仍须远程整链验收。
+### 7. 生命周期与失败
 
-通过真实 build 的 ModelsDevCatalogAdapter 只读读取当前442项，对已授权发现的46个ID调用实际Registry resolver，31项命中，5项明确图片输出：gemini-3.1-flash-image、gpt-image-1.5、gpt-image-2、grok-imagine-image、grok-imagine-image-quality。此次接受缺省文本预算，匹配范围包含非文本目录记录，不能把31项都当作可运行的文本/图片模型；视频/音频执行没有实现。剩余15项详见 /tmp/nexus-image-model-coverage.log，完整结果 /tmp/nexus-image-model-coverage.json。gpt-image-2.5 不在明确匹配结果中，仍可手动设为 Images，无需虚构目录能力。
+占用涵盖实际操作、远端结果确认、独立资源清理和最终授权复查；后台 Job 在实际执行时持有，受理回执不持有假执行占用。确定结果/拒绝且清理完成释放；operation_unknown、未知异常或清理失败保留 blocked。拒绝的归档操作必须由原归档 owner 完成私有临时项清理，Host Key 拒绝不等于已执行突变。结算失败保留未知，不在未知释放后猜测第二次写入；清理与结算双失败仍保留 RemoteResourceCleanupFailure 供停机 owner 汇总。重启将 held 保守转 blocked，不恢复执行、不按 TTL 自动释放。
 
-用户指定 NewAPI 只读发现确认 gpt-image-2.5 后，使用实际 OpenAiCompatibleAdapter.generateImage 发起一次 images/generations 请求，无重试：19478ms 返回 image/png，1006293 bytes，PNG头及实际图像均为1254×1254，白底蓝色圆形。严格base64/类型/容量解码通过，并人工查看确认图像；结果 /tmp/nexus-gpt-image-live-result.json，临时图片 /tmp/nexus-gpt-image-2.5-live.png。没有保存远端Provider、发起第二次生成或记录密钥；该证据仅覆盖网关接口和正式Adapter，不覆盖Run/Tool/Artifact/浏览器整链。
+项目读取共用45秒整项期限，绑定只在指导读取及当前授权复查后提交；目标 version/fingerprint 改变拒绝旧上下文，不隐式重绑定。占用不是 OS 隔离：交互 PTY、外部客户端、后台派生进程不受此数据库锁控制，命令退出/SSH close 不能证明派生进程停止。已确认远端结果后的响应丢失不自动重放副作用。
 
-数据库沿 D14/H-12 仅更新 v1 初始结构，未迁移或删除实际数据库；已有协议CHECK不含images时，保存供应商默认Images或冻结图片Run前需先处理结构更新。此部署前提已记入USAGE，不将旧库可直接运行计作通过。
+### 8. 当前能力与验收
 
-## Android 手机终端后台恢复与软键盘（2026-10-25）
+受管突变准入与 Run-local 项目工具源码已接线；全部行为待 B10，执行须 governed 准入。持久 blocked 已由下述 B9 机器突变恢复接线管理员只读核对、人工证据和独立 CAS 释放；不将重启/期限/改连接ID当解除证据，原未知结果不改写。B7 已接入可配置上下文/预算及执行回接，B8 外围能力已接线；Shared 恢复契约已有后端消费者，正式前端 F1。USAGE 记录当前限制，四表/源码复审与待验场景见 testing。
 
-用户确认Android：切后台自动续接后偶发终端不重排、点击不弹键盘及有输出不能输入。源码发现明确竞态：触摸抑制原先保存textarea.readOnly，若当时重连尚未完成为true，而连接就绪后xterm已经把readonly改false，touchend仍会回写旧true。现临时状态只保存inputmode，恢复按当前inputEnabled派生readonly；inputEnabled观察器保留尚未结束的触摸抑制，显式聚焦也恢复当前资格。短触发原interaction重连入口，多指/滚动/取消不触发；不改变后端准入。
+## B7.1 Preferences 持久安装配置（源码已接线，行为待 B10）
 
-原visibility恢复仅fit，隐藏时没有清理丢失touchcancel的手势，也未覆盖VisualViewport变化。现隐藏/pagehide清理原手势/焦点及尺寸RAF/timer；可见/pageshow/连接就绪刷新原输出并fit/refresh，同尺寸也重绘。WorkspacePage在触控环境以实际可视底边减root顶边限制main最大高度，保持原布局/CSS/100dvh，Android键盘收起后可重新展开。viewport resize/scroll和root ResizeObserver触发原100ms终端测量，后台/失活不安排测量，所有监听在原组件卸载清理，不主动弹键盘、不重建PTY。
+### 1. 职责与范围
 
-第一轮审核覆盖readonly与disableStdin/触摸/连接状态交错、隐藏中断手势和恢复路径。第二轮核对快速visibility/pagehide/pageshow、RAF取消与再安排、KeepAlive失活/激活、Navbar顶边变化、无VisualViewport/桌面回退、多指/长按/取消、显式聚焦及普通parser查询回复；保留原onData，以免后台有输出时丢失协议回复。仅客户端逻辑与可见区域尺寸约束变化，无Shared/后端/存储变更。
+Preferences 拥有持久设置及版本；Access拥有准入/认证政策，Remote拥有采样/缓存用例，Platform不持有设置业务。本批迁移安全策略、活动CAPTCHA配置、监控间隔和多Origin/RP。界面布局和个人数据归 Preferences，日志/审计/通知归 Operations，Agent 上下文/子模型/预算归 Agent；外观/备份及外围集成已由 B8 接线，全部行为仍待 B10。
 
-按D17未新增/运行本地行为、浏览器或E2E。Android Chrome/PWA真机仍需验证：键盘打开时后台→断线→续接→收键盘；重连期间连续触摸；长按/滚动中切后台；中文组合输入、横竖屏与多终端/KeepAlive切换；这些场景不以静态通过代替。
+### 2. 子功能与目录
 
-本批根check与前端build通过，日志 /tmp/nexus-mobile-recovery-final-{check,build}.log；全量format:all:check与git diff --check通过，格式日志 /tmp/nexus-mobile-recovery-final-format.log。Android真机未执行，不把上述源码修复称为真机验收通过。
+preferences/configuration/{service,model,storage,adapters/sqlite} 分别持有配置用例、应用与存储/密码技术转换、独立存储契约、SQL/row解码。通信放preferences/interfaces/http，安装在register，DDL经migrations调用Adapter。configuration-rules 持有可复用纯配置校验，Service 与恢复预检共用；配置版本、默认值、热/冷激活策略归Service；编码容量/安全失败归Shared preferences/configuration/values。
 
-## Agent Token 与快速跳转恢复（2026-10-25）
+### 3. 依赖方向
 
-范围为当前任务及子任务真实用量摘要、输入框状态行和原“回到最新消息”及上一条／下一条入口。两轮源码审核核对了认证与 user/App 范围、单 SQL 快照、成对空用量/整数溢出、Shared 解码与响应身份、Model/HTTP/前端白名单转换、终态后的最终读取、切换/取消围栏及 ResizeObserver/RAF 释放；第二轮补充隐藏 Surface 的滚动事件不覆盖阅读位置。未引入表变更、新轮询或逐步骤拉取。
+HTTP→Service→Model→Storage→SQLite Adapter；Bootstrap先await Preferences初始化，取得窄安装快照后安装Access/Remote。Preferences业务入口只依赖Access public认证接口，不引用其策略实现；Access register另提供仅安装使用的readTransactionIdentity，执行Access Adapter自己的SQL并返回userId/null。Bootstrap在读取配置、安装Access后将它一次性绑定到Preferences Adapter；事务executor不进入业务Service/公开HTTP，未安装拒绝写入。配置不会通过Platform注册槽传播。因素Model只根据已配置Origin/RP及协议边界验证的当前Origin选用技术配置。
 
-按 PLAN D17，本轮只做静态检查和构建，不新增或运行行为测试、CDP 或本地 E2E。待远程回归：有/无/部分 usage 的总量及覆盖、图片 Run 不补零、主子任务聚合、历史任务打开与切换无串数据、滚离底部后跳回、异步图片加载/窗口变化/隐藏再显示保持滚动、前后跳转不逐流式片段、首尾禁用和加载历史后的定位、手机点击明细与键盘操作。新接口需要部署新版后端，未自行重启服务。最终静态命令及结果在本节收口记录。
+### 4. 类型与转换
 
-静态证据：`pnpm run check`、`pnpm run build`、`pnpm run format:all:check`、`git diff --check` 均通过。补充前后消息跳转后，重新执行根check及前端build通过，全量格式再次通过；行为验收仍保留上述待远程范围。
+Shared持有完整配置GET/PUT、业务可见政策及CAPTCHA安全视图/秘密写命令。应用类型归configuration/model/configuration-types，存储记录归storage；Model逐字段映射并加解密，SQLite Adapter只解码其storage类型。ConfigurationView内部独立定义有效监控投影，Service从当前有效配置选值，HTTP逐字段构造Shared必填effectiveMonitoring；范围基础值归Shared，规则与SQLite row解码精确引用。HTTP白名单投影不返回secret或ciphertext；Backend初始安装快照在register/public边界明确投影，秘密只供Access真实安装消费者使用。PreferencesRuntimeConfiguration在register定义六个热字段安装契约，Bootstrap逐字段转为Access安装契约和Remote周期参数，不透传应用类型或秘密。
 
-## Agent 聊天思考等级恢复（2026-10-25）
+### 5. 入口与安装
 
-源码两轮审核覆盖模型列表→Shared解码→前端选择/意图快照→工作区create/append和直接HTTP→public/register/Service/Model/storage→Provider冻结→实际外呼参数；核对模型切换、缺省/显式区别、无效/未支持/Images覆盖拒绝、强制思考不选none、hash绑定及Child复制父冻结配置。沿用全局Popover/Button及现有文案，不新增自定义样式或数据库结构。
+管理员GET/PUT /api/v1/settings承载当前核心配置，PUT完整替换并必填expectedVersion；CAPTCHA管理入口单独GET/PUT /api/v1/settings/captcha，匿名读取保持公共安全视图。未知/旧界面字段拒绝，不静默过滤。初始化使用环境seed且仅首次写入，后续启动读取持久配置；Access/Remote采用同一已验证版本快照，不重新用环境覆盖。
 
-按D17不新增/运行本地行为测试、CDP或E2E。待远程验收：支持模型显示对应等级，普通/Images模型隐藏入口；默认与显式等级对Chat Completions/Responses参数分别生效；create/append与Child保持选择、模型切换清空、未知重试不改变选择、不支持等级拒绝且不产生外呼。Shared构建、根check、双端build、全量格式及diff检查通过；不以源码审核冒充实测。部署需同步更新前后端，未自行重启后端或提交。
+### 6. 数据、事务与并发
 
-## 重启后 Agent 会话加载失败限定诊断（2026-10-25）
+单一v1增加preferences配置单例表。完整更新和CAPTCHA专项更新都在Adapter以版本CAS写入，不先读后无条件覆盖；同事务通过Access安装能力复查session/password revision/expiry，Model将userId/null转换应用actor，Service的同步准入回调决定管理员权限，拒绝整体回滚。秘密keep/replace/clear由Service决定新配置，Model加密并逐字段转换，存储永不保存明文。ConfigurationService串行读写，Bootstrap在监听前安装唯一prepare回调：先验证并编译Access白名单/封禁和Remote周期，SQL确认后同步apply，不在失败CAS或未知提交后猜测激活。有效配置保留原CAPTCHA/Passkey冷字段，更新六个热字段；全部字段与保存值相同时推进effectiveVersion，否则保留最近完整有效版本，requiresRestart仅反映冷配置差异。apply异常返回operation_unknown，不虚报成功；重启从持久配置重装。
 
-用户报告重启后仍失败，针对当前故障只读诊断既有环境：后端进程3007202，api.honus.top。仅通过CDP Network.getCookies取得内存认证供正式HTTP读取使用，不打印/保存凭据、不操作浏览器页面；页面Runtime只读获取未返回，已关闭诊断进程，不改变页面状态。未调用任何写配置/创建Run/模型生成入口，不运行完整浏览器或E2E套件。
+Access更新原SourceAdmissionService/LoginFailurePolicy实例，后续请求采用新策略，不撤销既有会话或清除封禁记录。Remote更新原服务，等待中的状态订阅重新计时，在途采样仍由原owner追踪，结算后按新周期调度，不另起并行采样；资源TTL变化清空成功缓存，不释放在途任务，晚成功采用当前TTL。Bootstrap初始installation仍是安装快照，不作为运行时查询缓存；在线恢复重建模块并重新绑定回调。
 
-真实模型列表含Images和文字模型，两者均没有defaultReasoningEffort；接口200，但原Shared精确record错误地将该可选字段当成必填，readAgentWorkspaceResponse抛InvalidAgentPayload。会话列表200且解码正常。同步发现默认Run请求缺失reasoningEffort也被误拒。修复只按实际存在的可选字段构建精确键集合，保持未知字段、其余必填及坏值拒绝，不放宽通用record。
+### 7. 生命周期与失败
 
-限定复核：同一真实两模型响应由失败变为解码通过，四个会话列表正常；现存一个Run的usage读取200，Shared解码、Run身份和版本核对通过。仅本地解码默认/none/low/high创建输入均通过并保留选择；未知等级、null及未知字段仍拒绝，没有派发任何Run。源码两轮复核确认create/append共用修复，不修改UI或数据结构。根check、双端build、全量格式及diff检查通过。当前运行后端仍缓存修复前Shared模块，默认请求校验需要用户再次重启后端；未自行重启。
+读取/更新以原Access身份入场并在交付前复查；Settings关闭拒绝新调用和未开始的排队工作，等待已开始任务真实结算，SQLite在其后关闭。提交前保留有效配置引用，停机中晚确认仍完成同步激活与有效态记录，不因停止准入误报未提交；Remote停止时已注销订阅重排回调，不重新激活已关闭采样。已提交而响应失败按未知交付处理，保留版本/输入并只读核对，不自动重写。存储/解密/配置无效时启动失败，不回落默认或放宽安全策略；重启不重放运行任务。可信Origin/RP与CAPTCHA仍在进程内固定，在途认证挑战不因热更新混用配置。
 
-## Agent 文字消息无回复定位与流重放（2026-10-25）
+### 8. 当前能力与验收
 
-针对用户刚发送的现有测试消息，只读核对Run 5b71860d、会话正文及后端日志：任务创建/模型dispatch已成功，493字节返回后在ModelStreamDecoder的choice检查抛response_invalid，任务进入unknown且只有用户正文，不是发送或会话读取失败。该任务没有自动重试或更改。
+源码安装、Shared 和四个 Settings HTTP 已接线，四表、两轮复审与静态证据归 testing。快照 Adapter 复用行解码后，经安装回调调用 Model 的解密投影及同一 configuration-rules；SQL 层不引用应用类型或规则，恢复预检拒绝无效白名单、站点或 CAPTCHA 配置。多Origin HTTP/WS仍必须校验Host、协议、同Origin来源；多RP根据当前可信Origin选用，并绑定挑战中的Origin/RP，不能取任意第一个配置。最多16个配置站点，与监听主Origin使用同一协议，HTTP仅允许localhost/127.0.0.1；不同协议须调整配置和部署后重新启动，监听校验失败不开放服务。会话身份复查与Settings CAS在同一SQLite事务；撤销先提交则设置拒绝，设置先提交则交付仍复查且不能撤回已提交配置，也不能承诺浏览器收到。正式CAPTCHA/IP及监控配置面板已消费Shared，Dashboard使用有效监控值；其余Preferences消费者仍F1-D。真实HTTP保存/CAS/重启与受控界面专项证据归testing，不代表全部运行时采样时序验收；B8外围功能已源码接线，执行须 governed 准入。
 
-本轮限定一次最小真实文字协议请求：沿相同既有Provider/冻结模型，无工具、最大32输出tokens，提示仅要求OK。配置/密钥从现有只读数据库与SecretBox在内存取得，未打印或保存凭据，不修改数据库或业务配置。返回200 SSE、3250字节，包含choice.native_finish_reason和delta.reasoning_content，随后可见正文OK、标准stop与DONE及真实usage（输入34/输出11）。这是本轮新增的唯一外部模型请求，不是完整App/工具E2E。
+### B7.2 偏好与个人数据设计
 
-修复后用同一响应离线按1、73和3250字节分块重放，均得到OK、34/11和stop；思考独占、只有native终态、畸形思考/原生终态类型及未知audio输出仍拒绝。思考数据只计字节上限，不作为回复、历史或工具权限，未知原任务不重放。两轮源码审核覆盖类型/预算/终态/错误及Toast按任务状态变更通知、隐藏不弹出，未更改布局/样式。根check、前后端build、全量格式及diff检查通过；实际App需用户重启后端后新发消息核对，未自行重启或自动派发新Run。临时原始响应已删除。追加只读核对该任务冻结输入：模型deepseek/deepseek-v4.1-flash，Chat Completions，实际reasoning_effort=max；思考片段来自所选推理等级下的供应商流协议，不是提示词要求模型生成特定JSON。
+#### 1. 职责与范围
 
-## Agent 供应商响应同类兼容排查（2026-10-25）
+Preferences 拥有界面偏好、快捷命令/标签、命令历史、路径历史和收藏；核心安全配置仍由 configuration 独立持有。个人数据按当前 Access 用户隔离，不能因知道记录 ID 访问其他用户的数据。历史的真实生产者是前端 HTTP，旧 Workspace 未自动写历史；不为假设消费者添加跨模块入口。Agent 不读取普通用户历史或继承活跃 Workspace。
 
-本轮按D17仅源码审核、静态检查和编译，不新增/执行行为、浏览器或E2E，不读取凭据、不发外部模型请求、不重启服务。修复六类兼容点：delta.refusal/tool_calls为空占位；合法finish_reason随delta:null结束；reasoning文本别名（与reasoning_content共享累计1MiB预算，不作为正文）；工具调用续帧中id/type/name/function/arguments为null的占位（首帧仍须完整身份，非空身份变化仍拒绝）；Chat Completions重复累计usage保存单调最新快照并于DONE交付一次；模型发现supports_image_generation遗漏白名单。
+#### 2. 子功能与目录
 
-两轮源码复核覆盖model-request/model-stream/model-tool-stream/model-reasoning/model-image/openai-compatible及RunModelStream/probe/Shared/前端真实消费者：正文/工具和正式终态仍必需；只有思考、非空拒答、错误、畸形工具、累计用量倒退、未知输出或截断继续失败；已知unknown任务不自动重放。usage不逐帧相加，缺失不补零，Responses仍沿原单次usage与续接证据校验，不改变业务/Shared/存储或UI。
+用户界面偏好归 presentation，快捷命令和标签归 commands，历史归 history，路径收藏归 favorites；各自 Service 编排用例/容量，Model 转换与失败分类，storage 定义任务，adapters/sqlite 定义 SQL/行解码。HTTP 统一归 Preferences interfaces/http，不创建第二棵入口树。
 
-静态证据：根check和双端build通过，日志为/tmp/nexus-provider-compat-{check,backend,frontend}.log；全量format:all:check和git diff --check通过，格式日志/tmp/nexus-provider-compat-format.log。当前没有上述新增分支的行为实测证据。待远程回归：上述nullable字段与正常文本/工具组合、累计usage重复/递增/倒退、错误或拒答混入、标准结束缺失、1字节/多帧同chunk、reasoning预算及图片能力发现，分别覆盖模型测试和正式Run。不将前轮真实DeepSeek重放当成本轮新增分支验证。
+#### 3. 依赖方向
 
-## OpenAI 官方 Node SDK 替换（2026-10-25）
+HTTP → Service → Model → Storage → SQLite Adapter。Access 只通过 public 认证及 register 安装的事务身份读取能力协作；Adapter 不借用 Access 私有 SQL。没有实际后端消费者的能力不公开到 public，不新增全局分发器。backendLogLevel 归 Operations logging owner；终端 scrollback、Docker 面板轮询及预览参数都是前端偏好，不修改 Backend checkpoint/采样资源限制。
 
-按用户明确要求和H-14，将平台模型网络入口迁移到openai@7.43.0（官方openai/openai-node，选型时11,240 Star、Apache-2.0）。选型读取OpenAI Docs libraries、Chat Completions/Responses协议及已安装SDK的公开请求/流类型和实现。无API Key工具可用，本轮未读取或打印任何用户密钥，未发起模型调用、未改业务数据或重启。按D17不新增/运行行为、浏览器或本地E2E。
+#### 4. 类型与转换
 
-两轮源码复核覆盖：Chat Completions/Responses/Images/发现/probe五入口使用SDK资源方法；模型请求对象使用SDK类型，SSE由SDK Stream.fromSSEResponse解码并保留事件名，不再自行分帧或JSON解析。业务仍只消费原ModelNetworkPort，SDK类型不出Platform；权限/审批/版本/预算/未知任务不变，前端未改。兼容端点保持原路径，匿名调用移除占位Authorization，禁用环境organization/project继承、SDK日志和自动重试，重定向仍拒绝。模型列表仅读取SDK当前页，不消费自动分页；可选created/owned_by/nexus_capabilities为空按缺省处理。
+Shared preferences 子域持有双端请求、完整成功/失败、基础值及预算；应用类型只在子功能 model，存储任务只在 storage，SQL 行只在 Adapter。HTTP 与 Model 分别逐字段转换，时间在协议边界表达，既有字段相同仍转换。查询、写入、清空的契约分别定义，不用任意字典充当业务结构。
 
-ModelSdkRequest在SDK解码前按需读取并限制原始响应总字节、验证UTF-8，SDK解析后的Projection限制所消费事件/正文/工具/思考及续接；保持命名事件与type关联、真实拒答/未知输出/坏工具/不一致快照拒绝和真实usage只交付一次。SDK吞掉的读取/取消/清理失败由独立原reader owner记录并于close重新抛出；关闭Promise先登记，取消失败仍releaseLock，主失败与清理失败只聚合一次。正式终态在try中确认，清理成功后才yield completed，失败日志不虚报ended成功。同步原工具容量断言使用新的具名SDK请求构造器，保留原功能断言，不新增兼容别名。
+#### 5. 入口与安装
 
-明确协议差异：SDK处理DONE并在其后结束消费；业务要求合法finish_reason或response.completed、SDK迭代正常结束和本地清理成功，不再额外自研可见DONE校验。普通事件JSON的128KiB预算在SDK解码后执行，原始注释/分隔符只计完整网络预算；单次流8MiB、正文2MiB、probe512KiB/16 token、模型发现1MiB/1000项和图片响应/字节预算不变。缺失正式终态、只有思考或空正文仍失败。不将编译当作上述新增行为实测。
+旧实际方法/路径逐项核对，契约变更列 F-R26/F-R27；个人偏好 GET/PUT /settings/preferences 与原 layout/focus-switcher-sequence/sidebar/workspace-layout 安装，命令/标签/历史/收藏保留旧各自路径方法。register 安装各 Service/Storage、路由和生命周期，Bootstrap 只接安装入口。用户身份来自 Access，不来自 JSON/query。历史新增只是记录数据，不执行 Shell。
 
-根pnpm run check、前后端build、全量format:all:check及git diff --check通过，命令日志为/tmp/nexus-openai-sdk-{check,backend,frontend,format}.log；既有工具断言mjs执行node --check，仅检查语法。待远程：正常文字/累计usage/真实拒答/非2xx无自动重试、命名事件错误、CRLF与UTF-8分块、截断/取消/清理失败和容量、Responses工具与加密续接、图片生成和模型发现/匿名端点。部署需安装新依赖并重启后端，未自行执行。前端SSE推送不属于本轮SDK替换。
+#### 6. 数据、事务与并发
 
-### Agent Run 变更推送（2026-10-25，源码与静态）
+仍只有初始 v1。每次个人数据写事务复查会话，并绑定最初认证用户；历史 upsert、更新时间、修剪同事务完成。命令与标签关联同事务，不允许部分批量成功。编辑类使用版本 CAS，存储损坏失败闭合，不默默恢复空对象。用户偏好保存立即成为读取权威；首次未保存明确 version=0，第一次 CAS 写入创建 version=1，不读取旧字典或恢复损坏数据。界面实际生效由 F1 的真实消费者负责。命令按用户最多2000、标签200、收藏2000；上限归 Service 同事务回调，SQLite 只提供事实。批量标签关联核对全部命令原版本；删除标签推进受影响命令版本，原编辑不能覆盖变化。标签组及未标记组删除均核对完整成员与指令版本；真实标签额外核对标签版本。未标记组按当前用户无标签关联的指令集合读取与删除，不持久化虚拟标签或使用伪ID；整批匹配后在同一授权事务删除，变化时无部分写入。列表有界分页、固定次序，但非跨请求快照。命令/标签/收藏的持久时间在 Adapter 完成权威读取后生成，更新不倒退；历史按同用户/类别现有最大时间防止回退导致新项误裁剪。行解码核对创建、使用与更新时间关系，命令递增在写入前拒绝版本或使用次数耗尽。
 
-工作区 `dev` / `98fd8aa0`，包含此前未提交的OpenAI SDK迁移，本轮保留ACP和当前UI。新增 `/ws/agent-runs` 仅推送有界失效通知，客户端通过原严格HTTP/Workspace API增量补读；不把通知当持久日志、不将HTTP读取描述为WS正文直传。原生Run的两秒定时器已删除，记忆审核与插件SDK轮询不在本轮范围。
+#### 7. 生命周期与失败
 
-已完成两轮源码链路审核：Run/Step/Tool/Collaboration及审批请求/决策/消费/失效写入通知、先订阅后初始通知、50ms合并与在途dirty、心跳权限复查、慢消费者关闭、停机退订、前端交互取消背景读取、分页追至空页、终态补齐、旧对话结果隔离，以及网络背景读失败暂停/退避重连/原游标补读。Vite既有`/ws/agent`前缀及生产Nginx `/ws/`覆盖新入口；未改变UI模板、样式或交互入口。
+Service 停止准入后等待已接纳真实工作，关闭不取消已提交结果；限制排队数量。协议严格解码和预算在副作用之前，事务后转换/认证/交付失败为 operation_unknown，客户端只读核对，不自动重放。普通历史记录与 Agent 执行权限独立。configuration/presentation/commands/history/favorites 复用模块内部 PreferencesTasks 观察已接纳任务，Service 仍拥有准入与配额；已结束真实故障保留最多16个诊断样本及额外数量，关闭排空并汇总，预期用例拒绝不算存储故障。
 
-执行 `pnpm run check`、`pnpm --filter @nexus-terminal/shared check/build`、Backend/Frontend build、`pnpm run format:all:check`、`git diff --check`；日志 `/tmp/nexus-agent-push-{check,shared,shared-check,backend-build,frontend-build,format}.log`。类型/构建通过；格式初轮发现新Shared codec缺少大括号，修正后重新核对全量格式。静态不证明网络与业务行为通过。
+#### 8. 当前能力与验收
 
-按PLAN D17未新增或运行本地行为、浏览器或E2E，也未重启、提交、推送。部署后仍待验证真实流式回复、超过一页的最终正文/事件、审批与子任务跨端更新、断网时在途读取、后台恢复、切换对话、注销/撤销/版本变化及停机排空。需重启后端并刷新前端才能使用新入口。
+B7.2 的个人偏好、命令/标签、历史及收藏源码已接线，功能源码和静态通过分开记录。正式前端留 F1，行为回归留 B10；逐项缺口、两轮审核四表及当前执行证据归实施方案和 testing，不把设计当完成。
 
-### Agent 正文直接WS增量（2026-10-25，替代上一节通知后HTTP方案）
+### Operations 日志、审计与通知
 
-工作区仍为dev/98fd8aa0，包含此前未提交变更。模型→后端使用官方OpenAI SDK流，后端→原生对话现在直接WS交付正文增量及可选状态，取消通知后HTTP补读队列；首次和显式核对HTTP保留。确定成功的新建/追加及其它变更直接等首个完整WS状态确认，不再先做多轮HTTP读取；未知写入不能使用该路径解除围栏。ACP与UI设计保持。
+Platform logging/pino-logger唯一实现原Logger契约，registerOperations安装PinoLogger，替换NativeLogger，不保留转导出或旧路径。前后端依赖同一catalog的Pino9；后端采用stderr同步destination、禁用默认base/timestamp，由白名单对象与severity formatter保留time/severity/code/facts单行JSON。原32facts、16KiB编码预算及debug/info/warn/error/silent过滤不变，LoggingModel只转换安全auditId，Service仍拥有持久级别CAS及激活。没有worker、异步传输队列或新的公开类型，正常同步写入无需新增flush owner；审计持久化、写入失败与关闭汇总沿原链路，不因换库改变为日志失败可忽略。
 
-两轮源码复审覆盖新增RunStreamService/内部页类型、RunChanges分类、原HTTP mapper唯一投影抽取、Shared命令/输出/窗口预算及上下文codec、WS起始订阅/正文热路径/终态再读/顺序ACK/缓冲/超时/退出，以及前端接收与已接纳游标分离、连续revision、旧连接隔离、ACK发送失败重连和权限拒绝。窗口最多16页且总编码量不超过约8.6MiB，达到窗口暂停等待ACK，正文多页可在途而非每片等待一次RTT；状态大页等前序排空。提交时各原写入依然是权威，不新增数据库或绕过准入。
+1. **职责与范围**：Operations 拥有 backendLogLevel、受限审计记录、通知配置与投递账本。Access/Targets/Remote/Agent 仍各自持有业务状态；Operations 不成为授权 owner。仅已实现的事件进入 Shared 可选列表。
+2. **子功能与目录**：logging/audit/notifications 各按 service/model/storage/adapters/sqlite 放置；HTTP 和安全投影集中 interfaces/http；audit/service/audit-event-owner.ts 持有发布、请求/事件准入及停机排空，register 只装配和公开投影；operations-storage-refusal 是独立存储拒绝，Model 的 operationsStorage 负责映射应用失败。Service 管保留数、订阅选择、队列容量和激活时机；Model 管对象、秘密与技术失败转换；Adapter 管 SQL、行/JSON 解码和事务。
+3. **依赖方向**：业务 owner 经 Operations public.publish 提交有限安全事实，出口将同步准入/异步任务失败统一转为 public-errors.ts 的安全 OperationsError，内部原始 cause 由真实任务 owner 留存，已安装 HTTP 经 observer 直接调用内部发布 owner 记录结果，不绕公开安全包装；通知 Service → Model → Platform delivery。Platform logging/delivery 不引用业务事件、用户或通知配置对象。Shared common/http-codec 仅复用通用 JSON 原语，不反向依赖 Agent。
+4. **类型与转换**：Shared operations 持有事件/日志级别/投递状态、完整协议与容量。内部类型归各子功能 model，存储类型独立归 storage。秘密字段按配置ID与字段作用域加密；Adapter 的配置 JSON 独立限制为128KiB以容纳加密膨胀，不能复用64KiB请求预算；公开对象和内层配置解码均使用完整响应预算。公开只返回 hasPassword/hasBotToken 与 header 的名称/hasValue，明文/密文不出 HTTP。
+5. **入口与安装**：GET/PUT /api/v1/settings/logging；GET audit-logs；GET/POST notifications、PUT/DELETE notifications/:id、POST notifications/:id/test、POST notifications/test-unsaved、GET notification-deliveries，均要求当前管理员。Bootstrap 安装 Access 事务身份读取能力、初始化日志/投递恢复，再开放监听。真实 Agent 审批/Memory/Artifact/Run 和 Remote SSH 事件从原 owner 发布，Auth/Targets/Settings 观察真实路由结果。
+6. **数据、事务与并发**：日志设置未显式写入时允许无持久行，由 LoggingService 提供 version=0/info 默认；快照导出与恢复保留该合法空表，不补写默认记录。配置 CAS 与会话复查同事务，写入时钟在读取事务事实后求值；日志/通知配置递增前拒绝安全整数耗尽，通知删除不因版本耗尽被阻止。通知行及投递行核对更新不早于创建，派发与结算均验证状态 CAS。审计 event_key 去重且核对原事件、身份、资源及路由/状态内容，不把重试时钟作为绑定内容；订阅选择通过 Model 同步回调消费事务内事件/配置/待投递事实，最多4096个 queued/dispatched，容量不足保留整个事件待分发，不丢一部分。选择采用分发时已启用的配置，且配置创建时间不晚于事件；不是业务写入时的配置快照。outbox 保存加密配置快照；禁用仅停止未来分发，删除令尚未派发项失败，已派发不撤回。审计保留最新50000条及尚未分发积压；投递保留最新50000条终态与全部在途项。业务提交与审计发布不是同一事务，崩溃可能遗漏尚未发布的业务事件，不承诺全局 exactly-once。
+7. **生命周期与失败**：HTTP 最多64个、事件发布最多256个在途任务，晚失败有界汇总。其他业务 owner 排空后 Operations 才停止发布并排空请求/事件，再取消和关闭投递。投递串行、完整截止20秒；queued → dispatched 在网络前持久，成功/确定拒绝/未知分别结算 sent/failed/unknown。重启将 dispatched 围栏为 unknown，不重发；关闭和响应体/SMTP资源失败保留因果。日志按版本单调激活，避免迟到读取恢复旧阈值。协议边界保留 HttpInputFailure 的状态/安全码，正常输入拒绝不污染事件 owner 的关闭证据；观察的是响应决定，不证明客户端收到。投递观察器唯一记录其任务失败，关闭只等待后汇总；事件owner按错误实例去重，发布与请求两条追踪链不重复登记同一失败；仅 delivery_failed/delivery_unknown 可结算为投递结果，其他故障停止派发并保留原账本。日志失败仍启动独立分发收尾。
+8. **当前能力与验收**：源码已接线，正式 UI 留 F1；安全有限事件替代任意 details，模板支持 event/subjectId/time，时间为UTC、Email为纯文本。B10已验证环回HTTP/Telegram协议、实际SMTP收发与全部/部分收件人拒绝、Access登录事件分发、配置CAS/秘密保留清除、在途关闭及重启不重发。Delivery Adapter仅按供应商结构化EENVELOPE/RCPT TO及4xx/5xx确认全部收件人在DATA前被拒，映射确定失败；部分成功和其他确认缺失仍保留unknown，清理失败不能被覆盖。真实公网供应商、TLS/SMTP认证、崩溃/满额/自然期限及其余producer仍待验，不把回执当交付成功。
 
-执行根pnpm run check、Shared check/build、Backend/Frontend build、pnpm run format:all:check及git diff --check，日志/tmp/nexus-agent-direct-{check,shared,shared-check,backend-build,frontend-build,format}.log。类型、构建、格式及diff通过；首次类型检查发现窗口数组取首项需显式空值收窄，已修正后复跑。此前通知方案的静态结果不代替本版结果。
+### System 宿主诊断
 
-按PLAN D17没有新增或运行本地行为/浏览器/E2E，也没有重启、提交或推送。待远程核对真实供应商增量到DOM、长输出与最终空页、延迟/丢ACK及窗口暂停继续、断网/前后台/页缓存恢复、未知写入围栏、审批/子任务跨端更新、会话/App撤销及停机。当前静态证据不能证明这些行为已经通过。后端需重启、前端需刷新后才使用新协议。
+1. **职责与范围**：diagnostics 提供进程运行时、RSS、主线程堆/外部内存/ArrayBuffer、进程累计 CPU、主线程 GC、主库 Worker 内存、模块资源和数据库版本；status 拥有本机资源与健康响应。不返回环境、路径、表内容、凭据或远端机器详情。模块资源不等同模块全部内存，不合计或计算“RSS 剩余占用”。
+2. **子功能与目录**：diagnostics/service 管管理员复查、成功快照一秒缓存/在途合并及关闭，model 管转换，storage 和 adapters/sqlite 读 schema；platform/system 的 NodeProcessDiagnostic 持私有 prom-client（官方后继包 `@prometheus-io/client`） Registry、Gauge/Histogram、GC PerformanceObserver 和 ResourceCollector。真实 owner 只提供自身计数/逻辑字节事实；主库 Worker 通过 SQLite 技术协议采集自身 isolate 内存，不序列化业务对象估算内存。
+3. **依赖方向**：管理员 HTTP → DiagnosticService → DiagnosticModel → Platform/Storage；Agent ToolModel → System public.collect，保持 host.inspect 授权。Bootstrap 经 register 装配 Remote/Agent collector；System 不引用其它模块的私有 Service，vendor 实例不穿透技术边界。各模块 HTTP 观察包装由 Bootstrap 安装，不改变原授权/审计。
+4. **类型与转换**：Shared system/diagnostics 唯一拥有双端对象、有限模块/资源/单位/状态、错误与16KiB预算。内部 HostDiagnostic、WorkspaceResourceUsage 和存储事实各自独立，技术 ResourceCollector 留 Platform。Model、System public、HTTP、Agent ToolModel、前端 mapper 各持白名单转换；codec 校验八个分组、唯一名称、非负值与单位关联，未接入/失败组为空，不补零。
+5. **入口与安装**：GET /api/v1/status 为不要求会话的进程健康响应，仍经全局来源/IP 准入，不证明数据库健康。GET /api/v1/system/diagnostics 要求管理员，Agent 窄能力仍需 host.inspect grant。没有公共 /metrics、调试端口或依赖外部 Prometheus 服务。registerSystem 注册 Storage/System source，Bootstrap 注册 Remote/Agent source 并包装七个模块 HTTP。
+6. **数据、事务与并发**：不持久化指标；SQLite Adapter 读真实 schema。并发调用合并同一采集，成功结果最多复用一秒，不再使用四个调用拒绝上限；管理员准入和交付前复查仍逐次独立。各指标非原子快照，时间为毫秒/uptime 整秒。RSS/CPU 为进程级；process 的 heap/external/ArrayBuffer/GC 仅主线程，ArrayBuffer 已包含于对应 external。GC 自本诊断 owner 创建累计。Storage 另外报告主库 Worker 独立 heapUsed/heapTotal/external/ArrayBuffer，不计临时恢复预检 Worker 或 SQLite 原生页缓存；pending_requests 是采样请求派发前的未结算消息数，pending_operations 是 Runtime 已接纳且尚未完成的排队及执行项（事务整体一项，不重复累计内部 SQL）。只读 diagnostics 技术消息由 Runtime 合并、严格解码，不经过事务队列、不执行 SQL；仍等待 Worker 当前同步工作返回，避免维护排空依赖诊断形成队列等待环，不冒充无延迟采集。
+7. **生命周期与失败**：Service 拒绝关闭后任务、追踪真实采集/复查；System 排空 status/diagnostics 后断开 GC observer，清空私有 Registry 与 collector 引用，在线恢复执行相同退订，数据库最后关闭。重复关闭共享 Promise，排空故障汇总。技术异常在 Model 映射 SystemCollectionFailure；数据库失败为 available=false，单组 collector 失败为 unavailable，其它组继续，未注册为 not_instrumented。HTTP 包装保留全部路由预算和路径元数据，finally 归还请求计数，不改变业务准入。无强制 GC、堆快照或常驻堆采样。
+8. **当前能力与验收**：七个业务模块均有在途 HTTP；Remote 提供普通工作区、挂起/断开、输出/输入/日志队列/恢复逻辑字节、传输和状态订阅；Agent 提供执行/写入/请求，Storage 提供 SQLite 消息、排队/执行操作和主库 Worker 内存，System 提供诊断在途。Collector 支持同步或异步、逐组隔离失败，关闭后晚结果不得重新写入 Registry；实际采集仍归原请求与 Runtime 追踪直至收敛，不设置丢弃真实任务的伪超时。缓冲类别可能共享底层数据，未计量全部对象/解析器/原生句柄及其它缓存，只有计数的组明确标注内存未计量。正式数据页复用原诊断分区，折叠展示明细；静态及待远程证据归 testing，编译不等同行为验收。
 
-提交前追加源码复核：重新核对WS准入、正文/状态读取、终态补齐、顺序ACK与窗口、前端接纳游标及旧连接隔离，以及SDK错误和清理路径，未发现新增源码问题。根check与全量格式重新执行，日志为/tmp/nexus-agent-final-review-{check,format}.log；双端构建沿用本版相同源码的上述通过结果。按最新用户指令将全部本地修改提交到dev，不推送、不重启；实机与行为验收仍待远程。
+B7 资源收尾：Artifact 的 HTTP 下载、模型读取和上传均绑定 lease，关闭共享同一 Promise 并等待已接纳 lease 与删除/清理任务（含后续元数据和事件）收敛；清理失败保留删除保护与有界故障证据，不因任务返回而释放保护。Preferences 各子功能在 preferences-lifecycle.ts 复用窄停机结果分类：普通业务拒绝不升级为停机故障，存储不可用/未知提交/内部故障仍汇总返回。
 
-### 成熟开源模块替代收口（2026-10-25，源码与静态）
+## 实例数据目录
 
-本轮以dev/31d59e97为基线，替换TOTP、multipart、版本比较、图片格式识别和浏览器监听/观察器机制，采用otplib、Formidable、node-semver、file-type、fast-xml-parser及VueUse。HTTP框架与Zod试验代码/直接依赖已撤回，ACP及Docker CLI保持原实现。插件版本不兼容原超大整数版本，详见USAGE；无数据库变更。
+1. **职责与范围**：数据库父目录为整个实例的持久数据目录。Bootstrap 统一装配数据库、背景资源、Artifact 和插件原包位置，各业务模块不推导物理路径。
+2. **子功能与目录**：`bootstrap/data-paths.ts` 唯一推导 `appearance/`、`artifacts/`、`plugins/`；`create-app` 的启动恢复与 `module-manifest` 的 Blob 安装、在线恢复共同消费。
+3. **依赖方向**：Bootstrap 依赖 Node path 与 Platform；业务 Service 不读取进程环境或依赖 Bootstrap。Compose 数据卷及现有 `NEXUS_DB_PATH` 不变，不增加第二路径配置源。
+4. **类型与转换**：DataPaths 为路径 owner 内的局部结果类型；不修改 Shared、SQL schema、Blob 键或备份的 appearance/artifacts/plugins 逻辑分区。物理路径不进入公开协议。
+5. **入口与安装**：`createApp` 取得 SQLite canonical path 后解析资源路径；启动恢复先于资源打开，模块安装按同一解析规则打开 NativeBlobStore。
+6. **数据、事务与并发**：数据库与三个资源根同级，每实例独占数据目录，不同实例不能通过同目录不同 DB 文件名隔离。Snapshot 原有根目录校验、同文件系统发布、SQL 提交与文件日志对账不变。
+7. **生命周期与失败**：资源目录由原 Blob Adapter 创建；WAL/SHM、恢复日志及暂存目录仍由原 owner 清理。本次破坏性布局不兼容、不自动迁移或删除旧资源，不改变未知结果围栏和停机收尾。
+8. **当前能力与验收**：USAGE 与 DEPLOYMENT 记录新目录结构和空目录部署要求；既有备份与多实例夹具同步路径。静态结果归 testing，实际读写、在线/启动恢复及中断故障仍待远程验证。
 
-源码复核覆盖四个上传入口的异步调用、原始字节与part缓冲清理、版本谓词全部消费者、图片异步消费者，以及观察器显式stop和卸载后晚结果保护。程序化对比全部10个修改过的Vue文件，模板与样式和HEAD一致。
+## B8 外观、外围集成与备份设计（源码收口，行为待 B10）
 
-提交前重新执行pnpm run check、pnpm run build、pnpm run format:all:check和git diff --check，结果通过；日志为/tmp/nexus-precommit-{check,build,format}.log。根build覆盖Shared及前后端，静态检查不代表真实行为通过。
+### 1. 职责与范围
 
-按PLAN D17未新增或运行本地行为、浏览器/CDP或E2E，未调用真实模型、重启或部署。远程待验：TOTP设置与校验、四类上传及失败清理、版本边界、图片格式和移动端触控/尺寸恢复。按用户最新指令提交并推送本地全部变更；使用新版本需安装依赖、重启后端并刷新前端，本轮不执行。
+Preferences 拥有终端主题、外观偏好、HTML 主题与背景引用。Agent integrations 拥有 MCP/ACP 配置和 Browser targets/session；Agent plugins 拥有可信包、安装版本、插件数据、签名 Skills、前后端 SDK/RPC 与跨 App intents。System backups 拥有全产品加密导出、候选预检、在线导入、持久恢复对账和实例重建。上述源码及两轮复核已收口，静态证据归 testing，B10仅通过已登记的有限行为子集；原功能以实际路由、Service/Adapter 和消费者为依据，正式前端 F1。
+
+备份是实际产品能力：旧快照包含产品/Agent 数据和 background、custom_html_theme、Artifact objects、plugins 文件，不含认证表与可重建模型目录缓存。新设计覆盖最新 owner，不导入旧 Backend/Protocol，不兼容旧开发库或旧快照表结构。现有 Artifact、Memory、Execution、Run/审批和 Remote machines 不另建一份。
+
+### 2. 子功能与目录
+
+| 所属位置                     | 职责及复用                                                                                                                                                                 |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| preferences/themes           | 终端 preset/用户主题、导入导出、名称及版本规则；真实 preset 内容归应用，不放 Platform。                                                                                    |
+| preferences/appearance       | 完整字体/颜色/描边/阴影/UI 及活动主题、HTML 副本、背景引用；内容技术调用由 Model 封装。与 presentation 的布局/一般偏好分工明确，同义字段只有一个 owner。                   |
+| agent/integrations           | MCP/ACP 配置与刷新，Browser 配置/会话/操作；确有独立生命周期时在该子功能内拆分，不新增平行一级模块。                                                                       |
+| agent/plugins                | Publisher、仓库/catalog、stage、安装/升级/卸载、数据、SDK/RPC及 intents；内部按真实独立职责拆分，不按每条路由建目录。                                                      |
+| system/backups               | 密码证明消费、覆盖集、维护准入、验证/导出/恢复政策和恢复状态；跨模块技术快照经明确注册能力取得。                                                                           |
+| platform 的实际协议/内容能力 | 通用有界文件、加密封装、包解析、网络、MCP/CDP 技术与具名失败；可复用时扩展已有 blobs/acp/http/security/storage，不把 manifest、App、背景类型或 restore 政策移入 Platform。 |
+
+各子功能沿用 service/model/storage/adapters 的实际职责；通信集中在所属模块 interfaces/http，不另建同义入口树。无持久需要的 runtime 不建空 SQL 层。SQL/DDL/持久 JSON 与第三方结果的解码归对应 Adapter。
+
+五个产品模块的`snapshots/adapters/sqlite/snapshot-registration.ts`仅维护模块固定表列、秘密传递及内容验证任务，由`register*Backup`安装；不另设业务Service/Model或建立可任意调用的跨模块存储入口。Access安装明确排除集。System BackupService持有密码证明、单任务名额和完整交付生命周期；BackupModel消费opaque SnapshotCollector字节并映射技术失败。Platform的SnapshotRegistration/SqliteSnapshotCollector和SealedBytes只持有固定技术注册、SQLite/Blob读取及加密封装，不定义产品业务对象。
+
+### 3. 依赖方向
+
+业务 Service → Model → 独立 storage/Platform → Adapter。Preferences 子功能直接消费同模块应用能力，themes/appearance 的当前引用判断通过同事务事实回调协调。Agent plugins 通过 Scope/Governance/Run/Artifact 的内部应用能力安装声明、排空与管理引用，不能让插件 SQLite Adapter import 这些 Service/Model 或跨 owner 直接改表。
+
+MCP、Browser 和已实现 ACP 继续经原 ToolService/RunExecutionOwner/governance/context/execution；共用技术连接不共用普通 SSH 会话、批准、budget 或资源名额。Browser 目标由服务器配置，模型输入不能自报一个新的 CDP endpoint 取得权限。
+
+System backups 通过 Access public 消费窄密码证明，通过安装契约取得应用维护/重建能力；不深层读取账户 hash 或直接访问私有 Model。模块 SQL Adapter 可向通用快照机制登记固定表列、顺序、存储校验和秘密转换任务，签名只使用存储/技术类型；register/Bootstrap 仅安装注册，不在通用层定义业务对象。备份 Service 不取得原始 SqlRow、文件句柄或万能执行器。实现前核对这些注册能力的真实消费者，不为测试或预留扩大 public。
+
+### 4. 类型与转换
+
+| 边界                        | 类型唯一 owner                                                                 | 转换 owner / 消费者                                                                                             |
+| --------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| 外观/主题/HTML/背景 HTTP    | Shared preferences/{appearance,themes,html-themes} 的完整请求/响应/基础值/容量 | Preferences interfaces 严格 unknown 解码及双向白名单；正式前端 F1 自行 wire→UI。                                |
+| 集成/Browser 配置和安全观察 | Shared agent/integrations；秘密仅明确写意图及存在标志                          | Agent interfaces→应用输入，Model→独立存储/技术；管理 UI、真实模型执行与恢复链分别核对。                         |
+| 插件管理、SDK/RPC、intents  | Shared agent/plugins，复用 scope/governance/artifacts 的真实基础契约           | HTTP/静态/RPC 边界显式转换；后端内部 manifest/已安装事实/版本账本各有 model 与 storage owner。                  |
+| 备份 HTTP 与安全结果        | Shared system/backups                                                          | System interfaces 与 BackupModel；共享只包含输入、摘要、状态/错误/容量，不包含秘密、表行、解密 key 或恢复日志。 |
+| 应用↔数据/协议/文件         | 子功能 model/*-types、storage、Platform 各自独立                               | 每个 Model 负责字段/单位/能力/失败转换，Adapter 解码 SQL、manifest、CDP/MCP 和包内容。                          |
+| 跨模块密码证明/维护能力     | Access/System 或安装 owner 的 public/register 独立契约                         | 模块入口/出口逐字段转换成功与拒绝；私有 cause、ReturnType 和技术句柄不穿透。                                    |
+
+Browser 配置原来在 Agent settings；不能因名字相似把它塞进 MCP/ACP configuration 联合。同 Run collaboration 消息与跨 App plugin-intents 是不同范围和授权语义，不共用一个泛化消息对象。存储密文与可导出的受保护载荷不同，跨实例恢复须真实重新保护秘密；直接复制旧实例密文不构成可用备份。
+
+### 5. 入口与安装
+
+Preferences 安装 /api/v1/appearance、/terminal-themes 的实际对应入口；主题 JSON 导入/导出、background 二进制与 HTML 文本各有明确读取预算、媒体类型和资源收尾。HTML 内容仍只当文本交付，前端 sandbox 消费；不在后端执行，也不把可信 GitHub 来源当执行授权。
+
+Agent integrations 对应旧实际 /api/v1/apps/:appId/integrations；plugins 对应 /api/v1/agent/plugins；跨 App intents 保留独立 /agent/apps/:appId/plugin-intents 覆盖依据。Agent settings 的 Browser targets、插件 repositories 和 onboarding 推荐/安装也要有实际新消费者。允许按 D15 修改 Agent 契约，但须逐项记差异与 F1，不保留旧字段桥。
+
+System backups 的导出已安装POST /api/v1/settings/backup/export（JSON password→二进制下载），Shared system/backups拥有请求、安全错误和容量；导入已安装 /api/v1/settings/backup/import，multipart backupFile/password，安全回执与严格 codec 同属 Shared。HTTP 输入失败以接口层具名错误保留状态码，cause 仅供诊断，不据其内容决定响应。导出验证原会话的当前密码；导入当前完整认证与输入解密分别校验。实际 method/path/header/query/multipart/binary/响应/认证预算以实施对应表收口，schema 自动汇总仍留 P1，不借施工改变该启动条件。
+
+Bootstrap 安装维护 owner、快照注册、恢复状态核对和模块重建能力，不承担业务判断。启动时先核对未完成恢复，再安装依赖最终数据的运行时并开放监听；无法确定存活数据时保留现场并拒绝开放写入口。
+
+### 6. 数据、事务与并发
+
+Run创建/取消时间由SQLite Adapter在实际读取后生成，Model不再传入排队前时间。Service通过Model的事务回调核对新建容量；RunExecutionOwner跟踪排队写入，执行名额仅在重放查询后对新Run准入。Run/Step/Tool及审批的单项、批量、级联和启动恢复均检查递增上限，派发和流式累计预留必要结算空间；SQL与行解码仍只在Adapter。Run/Step事件分页在同事务核对应有数量、连续序列、版本与末项状态/时间。
+
+Artifact普通下载和插件包暂存复用ArtifactService的readGranted lease；存储读取显式区分session原App归属与tool附件授权，会话读取保留原管理范围，不借用tool-only前提。会话/工具身份经Model读取当前事实，Service核对ready/有效期及HTTP响应绑定版本，分块及结束前复查。空文件仍授权，插件intent下载也经同一lease和最终复查，精确范围短读/超量均失败；HTTP只持有Range、响应头和交付。Run撤销确认失败也等待原任务收敛；Child围栏提交不明仍取消并排空已验证归属的本地任务，保留存储与清理双因果。ProviderHTTP仅将成功写入后的投影/复查/交付失败归为operation_unknown，写前确定拒绝保持原码；发现写入完成后不再将取消误报为确定未写。
+
+终端主题身份/内容/preset 来源与名称明确持久化；preset 同名冲突按应用规则保留用户主题的颜色、ID 和引用。活动主题删除与引用清空/相关设置版本同事务处理，不能把引用清理拆成之后的 best-effort 写。读取缺内容不静默改偏好；损坏与主动删除不同。
+
+集成配置 CAS、凭据代际、发现的 schema/hash 与 App/声明版本分别表达。保存配置不等于连接已建立；刷新回写核对原版本和具体 generation。模型发现引用与真实工具调用绑定同一 schema/配置/授权事实；旧批准不自动授权新远端工具。Browser action 绑定原 session/target/version，页面快照/nodeRef 不能被新导航复用。
+
+插件包同身份/版本内容不可变；stage→verify→install、升级排空→版本切换和卸载→数据删除分别有持久判据。受信 manifest 由 Scope 安装成声明，不自动赋予 grants；撤销 publisher、App 禁用或升级围栏旧 Run/工具。intents 固定原用户、发送/接收 App 和意图内容，Artifact 引用/授予与消息创建同事务，不把收到消息解释为通用文件权限。
+
+当前导出登记87张产品表，逐次核对实际表集、声明列顺序及唯一v1签名；认证七表、模型缓存及技术schema记录明确排除，新增表或列但未登记会拒绝导出。固定表列按技术白名单投影，秘密在所属Adapter解密为受载荷保护的传递表示，System只取得字节。背景ready、Artifact ready和插件staged/verified/installed原包按真实引用采集；实际大小在读取前后核对，内容hash及插件manifest/files/entry/signature复用原解码owner验证；文件预算先包含base64膨胀及完整JSON。SQL前后快照内容hash必须相同，内容发布中或变化拒绝；这不是全应用物理一致快照。
+
+备份覆盖集在全部本阶段 owner 确定后冻结，登记允许的表/列/文件根/敏感字段和恢复顺序，拒绝未知或缺失的必需组成，不使用过滤字段/跳过未知表兼容。数据库快照与文件不是同一物理事务；采集前后核对源版本、实际引用、大小/hash 与包内容，有限重采集仍不能宣称全系统物理快照。
+
+恢复先完成格式/预算/解密/表引用/文件/包/声明校验，再进入维护态。staging、目录 journal、文件发布、SQL 数据及 commit marker、旧内容清理分别确认；恢复表和 marker 同事务。数据库提交未知保留 journal，不猜测回滚或重做写入。跨实例秘密按目标密钥重新保护；认证表、当前会话与活跃技术句柄不恢复，目标用户归属明确核对。历史批准/Run/outbox 的数据恢复不能自动派发原副作用；持久 unknown/blocked 保留，由原 owner 对账。
+
+跨 App 消息独立于 Run mailbox：plugin-intent Service 判断双方当前启用/声明/能力/grant、manifest intent/schema、配额、有效期和防重放；Model 转换应用事实与存储任务，SQL Adapter 不判断授权政策。消息冻结 App 版本及 App/政策修订，当前事务先复核身份与原内容，合法重放不重新计准入。新记录与 Artifact grant 同事务；Artifact SQL 由注册的 Artifact 存储任务持有，消息 Adapter 不改 Artifact 表。持久证据有限，过期不重建同一操作。
+
+Artifact grants 表及查询归 Artifact Adapter，实际删除/清理预览/统计同时计算附件和有效消息授权。消息授权只覆盖绑定的 artifact/version；读取经 Artifact Service 持有 lease，消息 Service 的窄授权回调逐块复查会话/双方版本/grant与期限。HTTP 逐字段投影、Range及字节交付归 interfaces；同一 Artifact存储→应用及应用→HTTP转换只有一个owner，消息读取复用它们。两端九方法调用复用原PluginService/PluginRuntimeService与消息Service；IntentService是五个消息RPC方法的唯一分派owner，应用契约定义于plugin-intent-types。前端资源grant的安装revision/期限与后端具体实例的存活/安装revision在实际消息事务检查；存储身份用明确session/runtime联合，不伪造会话或当前用户身份。128 KiB SDK分段读取复用Artifact lease与逐块复查，完整读取后再次确认权限再交付；Shared校验身份、范围、精确长度和规范base64。后端编码保留1 KiB IPC封装余量，超限读返回limit_exceeded，已提交写返回operation_unknown。confirmed声明不替代执行grant。接收列表的limit限制最终可见回执：SQLite Adapter在同一事务按(created_at,id)倒序、128候选一批继续扫描，缓存本事务发送方存储事实；业务visible回调仍由Service持有，经Model逐字段转换，失效候选不能挤掉较早有效回执。
+
+所有初始表与精确签名仍只维护一个 applicationMigration v1；不增加 B8 开发升级历史。
+
+### 7. 生命周期与失败
+
+背景替换、包下载/展开/发布、snapshot、CDP/MCP 与恢复都跟踪真实任务直到字节/句柄/存储确认和独立清理结束。取消只结束当前等待或触发原资源 owner 收尾，不证明外部停止。失败保留确定拒绝、提交未知、外部执行未知与清理失败，安全出口不透出秘密或底层正文。
+
+插件升级先停止新准入并等待原 Run、runtime、SDK/RPC 和内容 lease 收敛；超时不能报已退役或删除仍被使用的包。并发 close 共享 Promise，晚构造的连接/子进程仍由原 owner 释放；版本切换不借当前 appId 去关闭随后创建的新实例。Browser/CDP 关闭仅证明本地连接收尾，远端浏览器是否退出分别判断；MCP input_required 有独立等待与取消 owner。
+
+恢复涉及所有可能写入被恢复事实的 owner：Remote Files/挂起/Docker、Targets/Preferences、Agent 模型/工具/内容/插件、Operations 的事件和 outbox。终止式 quiesce/close 的旧实例不能重新投入使用；恢复成功或已确认回滚后基于存活数据重建并重新绑定全部消费者，关闭旧事件/订阅与在途回调。无法排空、存储未知或清理未确认时保持维护/受限状态，提供安全诊断；不自动重播付费请求、通知或插件任务。
+
+HTTP 技术监听器已提供 `suspend(owner) → drain() → replace(bindings) → resume()`。暂停立即关闭 HTTP/WS 准入，保留已登记的维护请求；共用连接的并发请求不能作为排空排除项。请求占位同时覆盖业务 handler 和响应 finish/close；其他请求的本地连接销毁不代替 handler 收敛。旧 WS 授权和消息能力绑定监听 generation，异步授权返回后复查；排空等待旧 WS 任务及真实关闭状态。替换先完整编译 HTTP 路由、WS 路由、Origin 和未匹配路径准入，再一次发布；未确认排空、未替换或监听器终止关闭时不能恢复准入。Platform 仅持有这些传输事实，不处理备份、业务停机或模块初始化。
+
+System 的导入 Service 已消费维护能力。Bootstrap 同时暂停外部 public 能力、HTTP/WS，排空真实请求和旧模块 owner；导入入口不进入 Operations 的全请求占位，System 只关闭状态/诊断 owner，保留当前 Backups 任务，避免自等待。旧实例退出后，重新执行模块安装，重新绑定事件、事务身份、HTTP/WS 和配置消费者；BackendApplication 的稳定能力树在每次调用时解析当前实例，缓存方法或子能力也不会继续调用旧实例。旧 Backups 在维护任务之外完成最终关闭；排空、重建或提交结果不明时保持停止准入。
+
+导入由 System BackupService 持有完整管理员身份、单名额及期限，BackupModel 解封并取得技术 SnapshotCollector.prepareImport 的一次性候选资源，interfaces/http 严格解码实际 multipart。Adapter 严格核对最新 compact JSON、精确签名/表列/标量、owner 声明的目标分区及完整文件引用；各模块 Adapter 将传递秘密用目标 SecretBox 重新保护，通知嵌套 JSON 沿用原持久 decoder。模块原解码器与窄 `SqlReader` 回调分别检查记录和关联事实，Platform 不持有产品字段或应用类型；Targets 通过 Model 转换回调复用跳板规则，整批只构建一次图；Agent 核对实际内置定义、签名插件 manifest、App/治理/Run 冻结输入和子任务。候选数据装入独立内存 SQLite Worker：DDL 只来自当前目标 schema，目标认证/明确排除的记录仅复制到隔离库，先按目标 DDL 拒绝 INTEGER/TEXT 类型强制转换及必填/主键空值，再执行真实 UNIQUE/CHECK/FK 并调用模块原跨表读取。内置终端主题与无用户的系统审计明确允许 null 用户分区，其余个人记录必须匹配目标管理员。预检不修改当前库或内容目录，结束等待隔离 Worker 关闭；一次性候选持有校验后的行与文件字节，提交或关闭时清空；输入损坏、目标资源不可用、清理未确认分别映射。该内存候选库不是持久恢复 staging；实际 commit 在维护排空后再次按当前目标认证和 schema 复验。Run/步骤沿用原恢复校验，并核对 Run/Tool 历史与当前状态、步骤正文/usage 计数；校验不能冒充实机恢复验收。
+
+### 8. 当前能力与验收
+
+B8 已接入 Preferences themes/appearance 的主题、设置和图片链路，以及System加密导出。导出单名额包括输入producer、密码证明、采集/封装与HTTP finish；120秒总期限和关闭/断连取消由原owner持有，文件清理未确认拒绝新准入并在close汇总。NXSEALED2采用随机数据密钥、PBKDF2-SHA256密码包、可选实例密钥包及AES-256-GCM完整头部认证。实际 multipart 导入已接线到预检、全应用维护、持久 staging/journal、同事务 marker、启动对账和新实例重建/重绑。该链与 B8 整批源码复审已收口，静态证据归 testing；B10 行为仍待验收。themes 包含 403 个实际 preset、22 个颜色字段、严格导入/导出和用户 CAS；活动引用清空与外观版本同事务。appearance 首次认证 GET 在事务内创建 version=1 默认，已存在记录不会重新填默认；PUT 为明确 patch/CAS，图片字段只读。协议图片 URL 在 interfaces 从内部 opaque ID 构造；UI 线格式保留 JSON 字符串，HTTP mapper 转换到应用 UI 变量对象，Model 逐项复制独立存储对象，SQLite Adapter 解码嵌套持久 JSON；Service 不解析线格式或持久 JSON。外观写入 producer 同样在应用名额取得后读取完整输入。HTTP 输入与交付边界将协议拒绝、认证失败和取消转换为所属应用失败，再进入 Service 的任务观察；存储、清理及提交未知仍保留具名原因，期限取消不覆盖已分类失败。HTML 来源写入调用 AppearanceService 时，输入回调使用 Appearance 失败契约，返回后再转换为 HTML 失败契约。
+
+BackgroundService 共用 16 个串行在途任务，输入 producer 返回应用命令，不带 HTTP 对象；名额覆盖 multipart 消费、等待、SQL/文件发布、交付与清理，shutdown 取消 producer/读取并等待实际任务。BackgroundModel 转换独立存储事实、内容格式证据和 Blob 应用能力/失败。Adapter 负责 pending→ready/retired 和引用/版本同事务；清理只有在同事务确认无引用后开始，文件删除确认后删除元数据。启动/后续上传/停机复查无引用记录；清理失败保留有界原因、持久记录及 cleanupPending，不删除活跃内容。文件根由 Bootstrap 安装 NativeBlobStore(resolveDataPaths(db.path).appearance)，即数据库父目录下的 appearance/；不在 Service/register 拼技术路径。只维护最新初始 v1 签名。
+
+Shared 的实际预算与入口见 USAGE；字体、颜色、图片基础值/容量单独放 values，私有主题数/存储记录数/在途数归纯规则或 Service。正常失败、存储 unknown、内容发布 unknown、响应交付 unknown 分别在真实边界保留因果，不在 unknown 后自动激活 pending 或重传。HTTP 图片有完整期限、流回压、同源/no-store/CSP，旧图片不再暴露。静态和两轮源码复审证据归 testing；集成、插件 Agent host/runtime 和备份恢复源码已收口，行为统一 B10。B7 原执行链不重建。
+
+实现后维护 USAGE 对应外观、Agent Plugin/MCP/Browser/ACP、备份章节，并记录 F1 完整契约/状态/错误/恢复差异；正式前端尚未施工。完整两轮源码审核与最终静态检查分别记录，行为统一 B10；不把旧正式消费者或旧测试 PASS 当作新后端完成。
+
+HTML 库保持在 appearance 子功能：service/html-theme-service 管理来源/准入/覆盖政策，model/html-theme-model 转换应用、独立 storage 和目录结果；adapters/sqlite 管理文本/修订，adapters/github 解码厂商目录。17 个真实 preset 作为应用常量，无运行时旧 Backend/CWD 依赖。自定义内容与用户级修订表同事务，删除也推进修订，避免按名称删除重建后的旧 CAS 命中。列表只读摘要，不加载全部 HTML 正文；活动 HTML 内容副本独立保存。全产品备份必须包含 preferences_html_themes 和 preferences_html_revisions，而非继续寻找旧 custom_html_theme 文件目录。
+
+远端来源写入经原 AppearanceService CAS，只维护一份 URL/版本。目录查询冻结当前来源，在异步读取后复查原版本；显式 repoUrl 不借用保存源。网络读取经 Model→独立 HtmlThemeCatalog→Github Adapter→Platform BoundedFetch，Platform 不含 GitHub/主题类型或业务 host 策略；应用期限、主机/来源/容量政策留 Preferences。上游增量预算、redirect:error、严格 UTF-8/目录解码、取消/reader 收尾各自确认，技术失败在 Model 映射。ImageInspector 同样只提供格式/hash/字节技术事实，应用 Model 转为 Shared MIME；格式识别使用file-type；SVG经fast-xml-parser识别根节点且关闭实体处理，不消毒或执行内容。Background/HTML 资源释放未确认时停止所属 owner 准入，有界保留因果，不能用任务结束冒充资源已释放。
+
+### B8 集成与插件当前接线边界
+
+签名 Skills 使用 plugins/model/plugin-skill-types、plugin-skill-rules 和 PluginModel 的 packageSource/skillDocuments。包 Adapter 解码已签名内容，Model 严格 UTF-8 转换，纯规则校验 skills/<name>/SKILL.md 路径与有限 frontmatter；最多64份、每份12KiB。验证安装与备份候选复用同一规则。原 ToolService 提供 skill_search/skill_read，按 context.read、原账本/当前 App/安装修订授权，读取绑定精确版本和 SHA-256；不自动注入包提示，不接受 allowed-tools 授权。文档是后端内部应用对象，无独立双端 DTO。Run 读取独立执行并由 PluginService 的 pending/期限/关闭统一追踪，不排在会等待 Run 的管理队列之后；交付前复核安装修订、当前信任和治理权限。
+
+Agent integrations有独立IntegrationService/BrowserService；HTTP mapper→应用类型，Model→独立Storage或MCP/Browser技术能力，SQLite只持有存储类型和DDL/SQL/持久JSON解码。MCP/CDP Adapter不认识App/Run/授权；MCP通用endpoint包含不透明key/generation，Browser只接受技术连接选项和应用提供的URL判定能力。真实调用进入原ToolService；Browser的Run资源由原drainRun关闭，MCP续接身份由应用owner生成并绑定原Run/输入，不直接消费远端token作为授权。
+
+插件已接 Publisher/Artifact stage/verify/install、不可变版本、安装查询、Run 退役及前端资源读取。Service owns 信任、容量、安装/升级/卸载准入；Model 转换应用、独立 Storage、包/Blob 内容和失败；Adapter 解码 manifest/签名 files，仓库Adapter将PEM的CRLF规范为LF后再交付应用，官方固定公钥核对不受等价换行影响；Platform packages 只提供惰性 TAR/Ed25519 技术能力。包条目与整个展开 TAR（包括元数据/填充）都受限。Stage 登记→Blob 发布→身份/CAS 复验→staged 分别确认；启动按完整大小/hash 对账 staging，不重放安装。专用目录为数据库路径加 `.plugins`。
+
+暂存缓存政策由PluginService持有：新建前保留127条确定无引用缓存，再写入新包；Model先验相同包hash/长度、原Blob完整性与当前信任后复用verified/installed stage，不改变原ID/version，因此retirement仍精确绑定。Adapter在事务内排除versions/retirements引用和未知staging后将待回收项置failed并清除验证字段；Model先确认Blob删除再按认领版本删除行，失败保留记录且汇总所有清理因果，不把取消当作完成。不可变版本/退役包属于实际资源而非临时缓存，不能淘汰。versions列表与当前用户安装记录一对一，完整不可变版本账本保留。
+
+插件 SQLite 通过注册的 Scope 存储任务参加同一事务，实际 App/声明 SQL 仍归 Scope Adapter；不 import Scope Model/Service，不自动授予 grants。首次安装禁用 App、空授权；版本/hash/声明来源不可变，builtin 初始化只更新 builtin。当前用户安装与 publisher 信任在 Scope 读取/授权事务核对。撤销、升级和卸载由 Scope 任务禁用/围栏旧 Run，Plugin Service 等待对应 Execution owner；draining 任务持久保存，重启不重放。取消退役保持旧版本与禁用状态。
+
+前端资源使用与会话/安装 revision 绑定的短期 grant 路径；Service owns 名额及交付，Model 复验存活安装、包 hash/签名并转换字节，interfaces owns MIME/CSP/no-store/stream。只交付 frontend/ 命名空间，backend/ 与签名元文件不可读；匿名资源请求仍通过 grant 和原会话事务复查。独立插件数据具有明确model/storage对象；Model逐字段转换，Adapter解码JSON和事务事实，Service判断身份、当前信任/启用、CAS与总容量。有效数据按1024个有正文键/8MiB计，删除墓碑不占有效容量但保留CAS。每键仅最新有效操作保存正文，旧ID/hash/version元数据保留；更新、迁移或清除同事务退役旧回执正文，重放已退役回执明确version_conflict。删除/迁移回执不设累计32次拒绝。有效信任额度只计未撤销发布者，撤销身份不能复活。removed安装的明确清除只清正文，推进安装修订/数据墓碑并退役账本正文，保留旧意图摘要，原清除结果可重放。安装状态基础取值引用Shared，应用与存储对象独立；Stage/Publisher/Installation在Adapter校验身份、容量、时间及状态与验证字段的关联。单调版本耗尽在写入前拒绝，覆盖配置、凭据、安装、退役、清除及迁移，读取和既有确定回执不因此失效。
+
+有限SDK/data RPC通过Shared agent/plugins/events与rpc-codec消费唯一协议，实际浏览器SDK归plugins/adapters/frontend；Shared不持有窗口/通道/计时器。SDK交付限定完整纯模块依赖图，浏览器import与已安装SDK路径显式链接；不公开任意Shared文件。HTTP先认证，Service取得名额后调用输入producer，模块mapper转内部方法；事务内复核grant期限/原安装修订/会话。HTTP输入producer与输出consumer区分预期拒绝/取消和基础故障，畸形输入与断连不停止全模块；Blob读取消是独立技术类别，Model转换且清理失败不被取消覆盖。HTTP把成功或安全失败关联到nonce/id/seq；响应失败不自动换operationId。原子写/重放/明确清除只在SQLite Adapter，资源交付名额覆盖实际stream及晚到清理；普通RPC结果交付归HTTP owner，断流仍可能是未知写入。
+
+MCP owner统一计入已建立/建立中/关闭未确认资源，共享连接构造并取消、等待原构造；close绑定具体实例，不按当前key误关新实例。每连接仅一个固定DNS池，关闭等待池构造并执行SDK与池独立清理。Browser页面/节点按键保留组合键与原合法Key/Digit词汇，失败释放按键，聚焦前就失效旧快照。动作settleMs由工具Service选择默认250ms与Shared的0–2000ms协议范围，Model逐字段传为通用技术等待值，Node CDP Adapter执行有界空闲观察，只吸收正常TimeoutError；断开/取消仍传播。scroll的deltaX可省略为0；Shared动作取值覆盖全部15项。
+
+两端SDK、实例持久恢复、仓库/推荐、显式迁移和备份导入恢复已有源码；B8源码审核已收口。B10已验证真实签名包暂存/信任/验证/安装、独立子进程及包内依赖、Host数据CAS/幂等/墓碑、禁用/启用/正常重启、显式完整快照迁移/升级、撤销/卸载/清除，以及descriptor资源和有限HTTP RPC；原进程身份退出与物化目录清理分别核对。外观字体/CSS/HTML副本、PNG/SVG字节、HTML中文路径/同名重建/预置回退和活动终端主题删除引用也有有限整链证据；B10另已验证真实Chromium的签名sandbox/完整SDK依赖/MessagePort握手、关联失败后的写入unknown、32项等待、8订阅/回调失败收敛，以及HTTP intents创建/幂等/权限撤销/重启、140失效候选后的可见列表、100条发送容量、实际附件/Range与前端RPC分段；父页是隔离测试桥，不代表F1。B10另已验证环回仓库配置/目录/签名下载安装、固定官方公钥和兼容推荐/离线已安装查询，以及真实子进程九方法的消息/附件/撤权链；官方新包完整安装、自然到期、已在途SDK/RPC撤权、其余崩溃与完整容量故障仍待验，不能据此宣称B8或B10整体验收完成。只有最新初始v1，当前精确签名为backend-next-v1-initial-20261015-b9-mutation-evidence。
+
+Browser 补齐 back/scroll/press/select/wait 和 Artifact 字节消费：Service owns 端点顺序/退避资格、会话范围、操作期限及输出 Artifact；Model 转换独立应用能力和技术动作/字节/失败，技术 DOM/CDP 对象不泄露。会话交付在最后异步阶段后复查原 Run 与取消；快照采集及节点解析后复查原快照身份，节点对象由统一 finally 释放并保留操作与清理两项因果。Artifact 读取保护覆盖实际上传，版本/hash/原工具权限复查；截图/下载经原 Artifact 发布，而非大 base64 工具结果。下载策略限定本次 context，context、拦截任务、WebSocket 关闭分别确认。管理和执行共用同一配置 owner，正式前端 F1 未施工。
+
+Integration 创建意图同事务保存首次安全回执，重放不从当前可变对象读取，删除集成不删除原回执；独立 storage receipt 无凭据正文，Model 显式转换，备份复用其 Adapter 解码器。Integration 原行/回执解码同时核对 MCP 的规范端点及私有 authority、ACP argv/cwd、身份/版本/hash/时间与 Shared 基础容量；不依赖 Shared 业务 codec。Browser 存储解码同时验证端点/明文许可/页面模式/数量和唯一性，恢复不放宽配置语义。
+
+MCP 模型 discovery 直接消费真实 App 配置和目录，返回安全 ID/version/schemaHash，不要求人先刷新；目录选择/资格与 hash 一致性政策归 Service，Model 转换技术目录及哈希事实。管理页保存的 schemaHash 是观察值；调用必须与实际重取目录一致。input_required 的本地身份继续绑定原 Run/输入，不能重放未知副作用。Service 将128项待续接与在途预留统一计数，派发前取得续接名额，finally释放预留；异步返回后复查取消/关闭，已派发工具不降为确定不可用。Model保留后续存储/内部失败，不能将未知提交改写为可结算的远端执行未知；管理刷新在真实写事务的准入回调复查取消。关闭只由原任务观察者记录一次失败，远端结果未知与资源清理失败分别判定。MCP 客户端名称/产品版本由 Agent 安装传入通用技术契约，Platform 不硬编码产品身份。保存配置的 ACP 执行与直接 ACP 执行使用一致的 destructive 审批风险。AcpPermissionService 的准入和 Runs Adapter 的父关系复查同时识别两种真实父工具名，内层操作仍绑定原父 id/hash/target/version/modelStep；Child 使用继承工具集合中获准的父入口，不额外授予直接执行工具。每项内层许可独立审批及消费，外层批准不能代替。幂等创建先认证/核对原意图，再仅对新记录检查容量。
+
+当前B10已验证MCP实际SDK/HTTP的固定协议发现、工具/资源/提示词及独立续接、目录变化与断流/取消；ACP实际SSH上的直接/保存入口、仅允许保存入口的Child、独立内层批准/拒绝及取消；Browser实际CDP上的导航/快照/console/截图元数据、一次点击与旧快照/错Run拒绝、原context释放。外部Provider与MCP/ACP端点输出脚本化，真实资源/授权/存储不被替代；截图现已下载核对实际PNG字节/长度/hash并由浏览器解码；B10另已验证128个pending MCP真实握手的准入/同key共享与全局排空、SDK/dispatcher单或双清理失败；实际CDP的context/page/configuration构造取消、单次context关闭、操作与清理因果、按键释放和截图预检、握手中断。应用owner另已验证128续接预约、16任务准入/排空、刷新等待真实SQLite事务期间取消，以及ACP/Job在途权限监控的等待和失败因果；这些受控接缝证据不代替全部SDK/SSH与治理存储集成交错。其余动作、配额/期限、撤权和关闭故障全集仍待验，不能扩大为集成或B10整体通过。
+
+### Artifact 在途交付边界
+
+普通Artifact HTTP及跨App intent HTTP均由原ArtifactService.readGranted持有实际lease，ArtifactModel转换Blob能力/失败，NativeBlobStore以finally关闭原文件句柄；HTTP pipeline持有响应断开/整体期限的取消信号。每块和流结束前核对当前授权及原文件版本，不对已写入传输缓冲或已交付字节承诺撤回。意图可见性归PluginIntentService，失去可见性不删除原持久grant；未撤销且未到期的grant保守保护源文件，发送者显式撤销同事务解除保护，实际读取lease独立收尾。
+
+B10有限回归已用真实16MiB内容、暂停HTTP消费者和Linux原blob文件句柄确认在途，覆盖断连/注销/停机、版本变化、双方授权/禁用、回执撤销与准备升级；旧回执不复活，新会话/受控重启可重新读取仍有效回执。删除成功保留deleted墓碑，content拒绝读取。应用级HTTP RPC和真实后端SDK另以Linux内核确认原Blob open已派发后，验证双方grant、回执撤销、启停和旧实例升级排空；每次失败均不输出部分字节。Artifact授权绑定原文件版本，版本变化使原grant不可读，需新回执；重新授予App权限也不复活原回执。HTTP会话注销和后台实例授权分别处理，后者继续复查自身安装/当前授权。范围仅上述分段读取链，不代表全部方法、副作用未知、自然期限、混合清理或数据库未知确认通过；无新Platform业务类型、DTO、迁移或注册出口。
+
+### B8 有限后端运行时与仓库接线
+
+PluginRuntimeService持有实例、共享构造和host任务；PluginService保留管理/资源/data用例，plugin-rules持有两者共用的信任与数据CAS/配额政策。Scope启用回调进入runtime.reconcile，禁用/撤权同时取消Run与runtime；升级/卸载独立启动 Run 和 runtime 排空，一项失败不跳过另一项，全部确认后才能继续；取消退役保留禁用状态。最多32实例/2构造，每实例最多32个IPC host等待；Runtime的32项pending预算属于生命周期任务，不是全局host共享额度。实例额度在异步持久预留前同步占位，成功绑定owner后交接计数；已绑定owner仍等真实关闭确认后释放，避免31实例时两构造同时取得最后一个名额。原构造包含包读取，单个等待者取消不终止共用构造，关闭保存共享Promise并等待开机、进程退出和host任务，未确认清理不释放占位。Platform以exited Promise通知实际进程退出，正常退出与异常失败分别表达，Model转为应用失败；PluginRuntimeService观察原实例并围栏、取消读取、启动原实例关闭，观察回调不等待自身触发的关闭Promise。仅在close已确认时等待退出观察，关闭失败不追加无期限退出等待；资源清理与实际退出分别确认。持久观察和启动进程/目录对账已接线，规则见下方运行实例恢复边界。
+
+PluginModel将原包/存储事实、九个host方法和失败显式转换；plugins/storage/plugin-runtime定义独立协议任务，plugins/adapters/runtime是Shared SDK/IPC投影owner。Platform isolation仅有文件/hash、opaque contextJson/host回调与通用activate/health/quiesce/close，不定义App/manifest/授权。Node Adapter生成独立进程、清理宿主环境、使用Nodepermission与只读文件授权；禁子进程/Worker/addons、控制V8堆，未声明OS或网络隔离。Shared backend-sdk仅是纯类型，真正进程、timer、pipe与临时文件留Platform。NodeModuleInstance的首次故障闸门与后续失败账本分别持有：首个故障阻止新交付，后续独立失败由原host/write观察器登记，保留最近16个样本及溢出计数；排空等待观察器收敛后读取一次，不从allSettled再次重复收集。同一写入拒绝先归一为具名技术失败再传播，已派发host的技术拒绝仍为execution_unknown；后续异常按弱身份去重，避免write/host重复登记或强引用无限异常。已有故障触发进程终止后的close通知不再生成无独立原因的第二个故障。实际进程退出与host任务/目录清理分别确认，旧owner收口不影响替换实例。Linux /proc身份和命令探测仅将ENOENT/ESRCH视为进程消失；命令读取失败仍复查原出生身份，普通日志文件、权限和其他读取失败继续上报。当前已接host.appInfo/data/intents及Artifact分段读取；前端Agent协作能力走WorkspaceService并调用原Scope/Thread/Run/Provider/Context/Governance，后端仍限定九方法；不建立新的执行或审批中心。
+
+PluginRepositoryService持有用户源、版本兼容/官方固定发布者、选择及推荐安装政策；所有源读写和目录/下载操作共用串行lane，防同一用户配置在下载中被替换。Model转换独立repositoryStorage/目录/内容与失败，Adapter负责持久JSON、上游JSON/相对URL/字节hash；平台BoundedFetch只执行调用方明确的有界redirect政策和响应体清理，默认仍不follow，不认识官方或Plugin。读取失败后cancel若重抛同一原错误，保留原读取失败；仅独立cancel/release异常归cleanup_failed，不将普通上游断流升级为模块排空故障。目录/下载继续进入原PluginService.stagePackage→Model→包/Blob/SQL，实际签名与请求App/version/publisher匹配先于stage副作用；安装不自动启用或授grant，已撤销官方信任不能重新登记。
+
+repositories是单一v1的最新表，读取未保存状态明确version=0，CAS/身份同事务。Bootstrap经通用包metadata Adapter按模块相对URL读取实际根package.json，并安装productVersion；不硬编码版本、依赖CWD或让Platform选择兼容政策。管理HTTP和Shared repository-{model,http,http-codec}已接真实消费者，正式前端仍F1。Repository Service同一lane串行目录/暂存和配置写入，不能把排队更新描述为已在读取中生效；SQL身份/CAS复查归原Adapter，Model显式转换。仓库stage在返回前执行真实包检查/信任验证，成功为verified；Artifact stage仍显式verify。B10有限行为覆盖环回源、严格目录/兼容性、下载hash/身份/撤销信任及注销后晚结果、推荐离线读取和子进程九方法；官方新包/自然期限及其余未验限制归testing；已在途SDK/RPC附件读取的有限验证见上节，不扩为全部插件操作。B10另验证8任务准入/溢出不派发/结算回收、包下载断流后可继续、下载中注销拒绝晚发布和关闭中止原网络读取。PluginService管理lane内的撤销排在当前stagePackage后生效，不声称即时撤销下载。仓库协议、官方推荐、SDK/生命周期差异见USAGE与F-R35；最新签名见上文，源审/静态/待验分别归testing。
+
+### B8 运行实例持久恢复当前边界
+
+运行时实例先持久登记opening，再创建进程，成功激活/health及权限复查后登记active；关闭确认登记closed，执行/清理未知登记unknown。实例身份与安装revision分离，启动先对账db.path+'.modules'的私有物化目录：Linux /proc birth identity、原worker路径及原父进程均核对，活父进程、缺失spawn身份、畸形目录或未确认退出/清理均阻止开放服务；不能只凭PID杀进程。owner/spawn/process journal和目录创建/删除做fsync。启动将上次opening/active围栏为unknown并跳过，不自动重放activate或旧任务。查询/确认归PluginService→Model→Storage→SQLite，通用Platform不持有App/用户类型。
+
+管理员GET /api/v1/agent/plugins/installations/:appId/runtime查询当前实例，GET /runtime/:instanceId查询该App历史实例；时间为毫秒。POST /runtime/acknowledge严格输入{expectedRevision,instanceRevision,instanceId,confirmed:true}：expectedRevision为当前安装修订，instanceRevision为原实例修订，不能借用一份版本。只有本地无绑定构造/实例、持久状态unknown或同实例已closed时允许，认证与安装CAS在实际事务复核；确认只解除围栏，不启动模块，不声称旧外部效果已回滚。保留unknownAt/acknowledgedAt及原实例历史，新实例不能覆盖旧未知证据。升级/卸载遇未知实例仍保持draining，确认后以当前安装修订继续原操作；运行中未知owner须先完成服务重启与目录对账，不靠确认跳过实际清理。B10已验证原child被SIGKILL后的unknown、失败关闭因果、重启不自动激活、原实例/当前安装修订确认及幂等、显式重新启用与历史隔离；quiesce内调用在worker边界拒绝，不代替已在途host RPC/流中撤权验收。正常closed且unknownAt为空的诊断历史按App循环保留最近128条，容量由Runtime Service经Model传入Adapter，历史不再造成累计4096次构造拒绝；当前/未知/曾未知后确认的实例证据不裁剪；实际host数据写入在异步查询/写入后、提交前再次复查原实例与当前授权。
+
+Access已经提供窄provePassword公开能力，内部PasswordProof归authentication/model，CredentialConfirmation归accounts/storage；账户hash和原会话digest在实际事务执行时复核，技术失败在Model转换、公开失败在Access出口转换。System backups导出已消费该证明，并在采集和交付前复验；导入仅要求当前完整管理员会话，password 是备份解封密码，不复用导出的当前登录密码证明；维护后再次核对原会话，认证表不恢复。B10已验证跨实例不同密钥下Artifact字节、SSH私钥和Provider凭据真实消费及重建，目标密码/当前会话不被源认证覆盖；上传中断名额释放、待上传时登出拒绝及实际文件hash损坏拒绝均有回归，未知提交与完整文件类型/故障仍待验。
+
+已有实例unknown拒绝新的构造/退役以AgentResourceFenced表达，公开仍为operation_unknown；它是未派发的新准入拒绝，不触发其他App的故障停机。复合排空由Agent错误owner的aggregateAgentFailures保留类别：全部子项只是已有围栏拒绝时继续为AgentResourceFenced，包含真实关闭/提交失败时仍为故障并保留全部cause。PluginService的卸载/发布者撤销及Runtime撤销共用该转换；不以通用operation_unknown包装抹去已有围栏的类别。B10已验证32实例/2构造边界、同App共用构造、批量撤销中的独立quiesce/dispose失败与健康实例收尾，以及卸载unknown重启→旧围栏拒绝→明确确认→继续卸载；目录清理失败/数据库确认未知仍分别待验。新存储提交未知、实际进程/host/清理失败仍保留真实故障并停止所属owner准入，二者不能混淆。
+
+### 原生 Agent 工作区会话入口
+
+1. **职责与范围**：Scope 的 WorkspaceService 复用原 Scope/Thread/Provider/Run/Context/Governance 用例，供原生会话与插件入口调用。插件 owner 仅持有插件安装与短期 grant 授权，通用工作区不反向依赖插件私有应用类型。
+2. **子功能与目录**：scope/model/workspace-types 持内部命令/结果，scope/service/workspace-service 持用例派发；ThreadService/Model/SQLite 持当前入场事实、转换及实际事务。interfaces/http/workspace-http 与 workspace-mapper 持原生协议及唯一双向白名单。
+3. **依赖方向**：原生 HTTP → Scope Workspace/Thread → 各真实能力 owner；插件 RPC → 原插件授权 → 同一 Scope Workspace。Platform 仅提供事务与准入机制；不包含 App 或 grant 类型。
+4. **类型与转换**：Shared scope/workspace-http 与 workspace-http-codec 唯一定义通用18方法及严格解码；插件 frontend-events 组合该联合与自身九方法，不复制定义。新增 agent.threads.delete 仅接受 {threadId,expectedVersion}，返回 {appId,threadId}；HTTP workspace-mapper 逐字段转换独立应用命令和 DeletedThread 结果，codec 关联方法、线程及原生外壳的 App/version。ThreadAccess/事实使用 plugin/session 可辨识联合；原生使用真实 App version，不填写 installed/trusted 或虚构 grant。
+5. **入口与安装**：POST /api/v1/agent/apps/:appId/workspace 要求当前完整管理员会话、真实 App UUID、appVersion 和 request。register 安装事务身份读取及原生路由；插件继续走原 descriptor/grant 入口。正式Host与DEV原生线程／运行消费者均使用该入口，正式Host不借用插件grant。
+6. **数据、事务与并发**：原生当前会话、App 所属用户、启用/受信声明及原 App version 在实际事务前后核对；Thread 创建/改名使用稳定 operationId 与不可变回执，改名和删除绑定原线程 version。删除由 ThreadService → ThreadModel → SqliteThreadStorage.remove 执行：Adapter 在同一写事务读取全部 Root/Child 的不同状态和关联 Memory 最大版本，Model 白名单转换 ThreadRemovalFacts，Service 同步拒绝任何 pending/running/unknown（active_run_conflict）以及记忆版本耗尽（version_conflict），并提供事务实际决策时的更新时间；Adapter 不选择业务准入状态。事务依次将关联 agent_memories.source_run_id 置 NULL、版本加一且时间不倒退，删除线程或 Run 的 artifact attachments，显式移除 agent_run_children / facts / mailbox / budget_reservations 的 NO ACTION 引用，再删除全部 Run；步骤、事件、工具体、Job、审批、上下文及幂等结果按真实 FK CASCADE。协作表同时覆盖 operation_id/message_id 对待删工具的引用。最后删除该线程的 agent_thread_commands，并以 user/app/thread/version CAS 删除 agent_threads，提交前复核原身份/App。任一步拒绝或失败均回滚，不关闭 FK、不依赖延迟约束；Artifact 对象元数据和文件均不删除，Memory 正文及审核状态保留。删除不递增线程版本，允许最大安全整数的当前 CAS；不新增 schema/旧库兼容。组合调用经 ThreadModel 的事务准入能力消费同一规则，不在接口层复制 SQL 或业务判断；后台执行仍由原 Run owner 明确脱离临时请求准入并持续复验自身授权。
+7. **生命周期与失败**：Scope 入口和交付前保留当前事实复查；已成功写入后交付或复查失败返回 operation_unknown。删除也纳入原生 HTTP、插件 Service/HTTP 及交付 SDK 的写入分类：没有 operationId 仍是副作用，取消/超时/畸形或错 App 回执不能解释成未提交。读操作不授予执行权限；读列表不证明未知写入未提交。删除没有额外幂等回执或墓碑，确认后再次删除返回 not_found，不自动重放旧创建/改名或套新版本重试；未知结果保留原 threadId/expectedVersion，先只读核对。完整工作区编码预算8 MiB+1 KiB，Thread 列表最多50项，正文页遵守各自更窄预算。资源已销毁时不继续接纳新的请求步骤。
+8. **当前能力与验收**：原生18方法生产者及Shared已接线；正式Host/Run/正文/审批/Child的原消费者和独立应用转换保留，删除 UI 由前端批次接入，步骤／工具审计继续消费各自只读HTTP。删除验收覆盖严格请求/回执关联、原线程/App CAS、Root及Child三种活跃状态、关联记忆版本耗尽、提交前撤权/末步SQL失败整批回滚、工具/审批等级联、记忆/Artifact保留、其他线程隔离和 foreign_key_check。当前限定隔离 SQLite 实测不代表浏览器/插件整链已验收；真实并发、提交/交付确认丢失及资源清理故障仍待对应远程或现场验证，不沿用旧 Actions PASS。
+
+### B8 前端SDK与显式迁移当前边界
+
+ThreadService持有名称归一、512个实际线程容量及明确区分的插件/原生会话准入；历史命令不再计入4096次终身配额，原幂等身份与结果保留；ThreadModel持有应用/Storage转换，Thread SQL持有keyset、CAS和不可变原结果。普通HTTP创建也在同一存储事务消费同一线程容量。线程存储→应用转换唯一归scope/model/thread-mapper，协议投影唯一归interfaces/http/scope-mapper。新Thread具有必填version/updatedAt。Provider可选模型的protocol来自实际resolve结果，不由配置缺省推测。
+
+WorkspaceService使用原RunService与ContextHistoryService：Root列表按thread_sequence续页；entries只读Root用户输入和模型文字事件，按码点分片，不读工具/私有reasoning。SQLite技术函数nexus_text_length/slice保留NUL和Unicode；片段未完不推进后项。appendInput在原Root终态/version同事务校验后创建同Thread后续Root，原身份/version纳入幂等hash，模型/连接重新显式选择，不注入活跃上下文。
+
+前端RPC由Shared frontend-events/frontend-rpc-codec定义27方法；core events/rpc-codec/backend-sdk仍只有九方法。前端完整预算8MiB+1KiB，descriptor的maxMessageBytes同源声明；核心子预算/IPC仍512KiB。SDK交付依赖图按白名单安装。frontend-sdk仅持有纯类型，窗口/MessagePort/计时器归原Frontend Adapter；Run订阅是500ms有限轮询原事件分页，不是新增WS/事件中心。退订取消原读取并等待，close共享Promise，异步回调由原订阅追踪，过期结果不发布。正式父页F1。
+
+组合写入经PluginModel→Storage→SQLite技术admission scope，在实际事务前后复核原会话、安装revision、启用、publisher与期限。排队操作捕获原scope；原RunExecutionOwner通过RunModel的应用任务能力明确脱离请求临时scope，再按自身持久权限执行，不意外继承浏览器grant的生命周期。最终响应前再次复查，已提交变更失去确认时返回unknown，不换意图重发。
+
+插件迁移从旧可执行migrate回调改为管理员显式快照转换：prepare-upgrade排空并停在draining→读取snapshot→提交含全部有效键/版本的完整数据集→原目标upgrade。政策、配额及取消退役限制归PluginService，Model转换及指纹，Adapter同事务核对快照版本、写数据/墓碑、推进安装revision并记录不可变migration回执。retirements.base_revision区分迁移前后；迁移已提交不允许取消退役。未知数据库提交不重跑转换或插件代码，重启保留draining。1024键/8MiB正文/52MiB完整线预算，32个迁移意图；R1/R2 全应用备份已接线，整批审核与行为验收分别执行。
+
+### B8 在线恢复持久边界
+
+NativeSnapshotRestoreFiles 只处理已安装的 opaque 根、暂存文件、目录切换日志及清理；SqliteSnapshotRestore 只处理技术表恢复和提交证据。所有真实 SQL/DDL 仍在 Adapter；只有一个最新初始 v1，snapshot_restore_state 是本机技术事实，排除于可携备份。87张产品表不包含认证、模型目录缓存或恢复标记。Preferences 预检除引用存在外，核对活动主题的用户或内置归属、背景的用户/用途/ready 状态；批量索引避免逐条扫描全集。
+
+文件及日志写入同步后才发布；日志在每次 rename 前保存意图，rename 后同步相关目录。删除按目标 schema 的 FK 依赖先子后父，插入使用延迟 FK；恢复数据和 restore_id/initialized 标记在同一事务提交，SQLite 明确使用 FULL 同步。提交失败后读取标记，不能用异常或断连推断回滚；标记不可读时保留现场并停止准入。仅旧内容清理失败、而当前数据与文件已确认一致时，可返回 cleanupPending 并由日志在后续启动/导入前继续清理。
+
+B10 已在真实文件/SQLite Adapter 上验证暂存、完整发布、未提交事务、提交后及清理后 SIGKILL：按持久标记恢复三类根，无旧目录也可对账，重复恢复不改变结果；真实应用启动已验证暂存和发布后未提交的恢复。日志畸形、超限、未知/重复根及符号链接拒绝恢复；标记查询失败保留现场。另已验证有/无旧根的publish内部rename前后SIGKILL，以及未提交回滚/已提交清理再次遭文件系统拒绝后按原journal幂等恢复。已补验实际 COMMIT 完成但调用方未获确认即 SIGKILL、恢复过程中再次 SIGKILL，以及在线导入已提交而 owner 重建失败后的重启初始化。断电或持久介质故障仍未验，不能替代全产品恢复验收；逐项证据归testing。
+
+启动先初始化当前 schema、对账恢复日志，再安装模块，防止模块先创建内容目录或读到混合状态。初始化未完成的提交保留 initialized=0，重启继续恢复初始化；新模块及传输入口准备成功后才确认初始化完成。恢复初始化不派发历史通知：queued 结算 failed、dispatched 保留 unknown，旧审计记录登记为已完成 fanout；不自动启动导入的插件 runtime。Run 未派发任务（包括没有模型步骤的 pending Root）结算失败，已派发保留 unknown，Tool/Job/远端占用沿用各自重启围栏；不接管进程或重放付费调用。
+
+POST /api/v1/settings/backup/import 保留 backupFile/password 字段，响应只包含 restoredTables/restoredRows/restoredFiles/cleanupPending；完整契约和 codec 归 Shared。正式前端差异归 F-R36，源码实现与运行行为分别验收。
+
+### B8 路由与恢复校验边界
+
+HTML 主题内容的 GET/PUT/DELETE 显式声明 segment 路径参数与255字节解码预算，认证/审计包装保留元数据。Platform 只拒绝通用分隔符、控制字符与点路径，Shared/Preferences 持有 .html 名称业务规则，支持中文和空格。
+
+Preferences 备份校验在 Adapter 解码 StoredAppearance 后调用同步存储契约回调，register 经原 Model 的 fromStoredAppearance 转换后复用纯 validateAppearance；字体、窗口颜色、UI 变量及 GitHub 来源规则用于导出与候选恢复。Adapter 不引用应用类型或规则，引用归属/文件事实仍由存储校验。默认 UI 纯数据位于 appearance/default-ui-theme.ts，不放在 Service 目录。
+
+## B9 共用机器突变围栏恢复
+
+### 1. 职责与范围
+
+Remote machines 持有普通 Files/Docker 与 Agent 远程突变共用的持久资源围栏。原 claim 不能表达恢复证据；新设计保留原操作身份和目标快照、阻断事实及不可变人工核对记录，解除围栏只允许后续新操作，不改变原 Tool/Job/Run 的 unknown 或触发重放。Plugin runtime 的实例核对继续归原 Plugin owner，不合并为通用恢复中心。
+
+### 2. 子功能与目录
+
+沿用 machines 的 mutation-service/model/storage/sqlite；恢复用例放 machines/service/mutation-recovery-service，协议放 remote/interfaces/http/mutation-http 与 mutation-mapper。共用状态/结果/容量在 Shared remote/mutations；内部对象归 machines/model/mutation-types，存储对象归 mutation-storage，持久解码归 mutation-row。
+
+### 3. 依赖方向
+
+HTTP → RecoveryService → MutationModel → 独立 MutationStorage → SQLite。Service 消费 Access/Operations 窄 public；Access 的事务身份 reader 通过 register 安装到 Adapter，不在 Model/Service 直接查会话表，不让 Adapter 引用应用类型。运行准入和人工恢复复用同一数据库围栏。
+
+### 4. 类型与转换
+
+Shared 仅定义安全观察、明确证据写命令/释放命令、完整响应与错误。HTTP mapper 与 Model 分别双向白名单；资源摘要和本地 owner 实例 ID 不公开，目标仅含 ID/原配置指纹。人工证据明确 source=administrator，不冒充自动探测，禁止在 note 放秘密或命令正文。
+
+### 5. 入口与安装
+
+管理员入口 /api/v1/remote/mutations：GET 分页和 /:id 只读；POST /:id/evidence 记录核对；POST /:id/release 显式解除。完整会话与管理员身份在实际读取/写入事务复核，输入在 HTTP 从 unknown 严格解码。RecoveryService 在 Remote quiesce 停止准入，close 等待已受理任务及审计。
+
+### 6. 数据、事务与并发
+
+remote_machine_mutations 只持有活跃资源锁；新增 mutation_claims 与 mutation_evidence 两张持久表保留阻断/释放历史。正常已确认操作释放并移除临时 claim，blocked/released 证据不自动清除。最多128活跃资源、4096未释放claim、每claim 16份证据；released历史只保留审计，不占准入配额，未确认占用不能循环覆盖。记录证据、推进 claim 修订同事务，释放核对原 claim 修订与最新 evidence 身份、完整锁集并原子移除锁/保存 released。读取和恢复写入在实际事务入场及交付/提交前检查原管理员会话；末次复查失败回滚本次写入。会话摘要的同步技术失败同样在Model转换。只修改初始 v1，无旧库兼容。
+
+### 7. 生命周期与失败
+
+当前 Remote owner 产生的未确认资源不能在同实例被人工释放；owner ID 不同仅允许进入人工核对路径，不证明旧生产者退出或远端停止。管理员须从独立只读检查确认原生产者停止、远端效果（已应用/未应用/部分应用）及关联资源停止，记录时间和说明；仍无法确认则保持围栏。证据记录与解除为两个动作，任一网络/提交 unknown 先查询原记录，不重放。原 unknown 永不改写成功。释放审计通过 Operations 发布，模块内持久记录先于事件；事件失败返回 operation_unknown，暂停恢复写入并保留只读查询，原记录可查询，不猜测回滚。
+
+### 8. 当前能力与验收
+
+恢复子链已有源码与类型检查，B9 整体及最终静态状态见当前实施方案；行为全部留 B10。正式前端 F1 需要只读观察、人工核对和单独释放流程，不提供一键重试/自动解锁。Agent 既有 Tool/Job/Run 历史继续保留，恢复不重新启动它们。
+
+### Targets 凭据与存储转换边界
+
+1. **职责与范围**：Proxy、SSH Key、连接凭据的 Service 校验应用输入；Model 调用 SecretBox，把明文应用命令转为密文存储命令，秘密不进入响应。
+2. **子功能与目录**：沿用各子功能 service/model/storage/adapters。共用 SQLite/SecretBox 失败转换及同步加密唯一归 targets/model/target-technical-failure；应用错误类仍独立于技术实现。
+3. **依赖方向**：Service → 所属 Model → 独立 Storage/SecretBox；模块共用 Model 转换不依赖 Service、register 或公开错误映射。SQLite 不引用应用规则或应用错误。
+4. **类型与转换**：内部输入唯一归各 model/*-types，删除只因 Service 提前加密而存在的密文应用命令；密文写命令只归 storage。Model 逐字段构造，Shared/公开响应不变。
+5. **入口与安装**：register 只向 Model 安装 SecretBox；连接类型变更和凭据赋值的存储校验回调经 Model 投影后调用 connections/connection-rules。不新增公共能力。
+6. **数据、事务与并发**：SQLite 在实际更新事务读取原类型、凭据和跳板引用，再调用规则；不把检查移到事务外。连接删除由原跳板外键 RESTRICT 保持引用保护。凭据修改在副作用前拒绝安全整数版本耗尽；目录查询应用容量只在 Service 决定。
+7. **生命周期与失败**：所有 Targets 存储调用在 Model 映射具名技术失败并保留 cause；公开出口只接受应用/公开错误并安全兜底。提交或回滚未确认统一 operation_unknown，不解释为未写入；具体缺引用拒绝仍在所属 Model 转换。
+8. **当前能力与验收**：秘密省略保留、显式清空、名称/版本冲突及引用保护沿用当前语义。源码复核和静态证据见 testing，事务交错/存储故障待 B10，正式前端处理未知结果待 F1。
+
+### Targets 标签关联设计
+
+1. **职责与范围**：Tags 拥有按标签替换/追加连接和标签删除用例；Connections 拥有关系表与连接版本。保留单连接标签替换，三个入口不相互冒充覆盖。
+2. **子功能与目录**：沿用 tags 的 Service/Model/Storage/管理SQL；名称规范唯一归tags/tag-rules，管理与导入共同消费；connections/adapters/sqlite/connection-tag-sql 负责关系事务任务，契约在 connections/storage/connection-tag-storage，不新增业务中心。
+3. **依赖方向**：HTTP → Tags公开入口 → TagService → TagModel → TagStorage；Tags SQLite经register安装的窄存储任务操作连接关系，不能直接引用Connections应用类型/SQL实现。
+4. **类型与转换**：请求/固定成功响应/容量归Shared tags与connections；内部命令归tags/model/tag-types，存储命令独立。入口与Model分别白名单复制数组；容量事实经Model转换到纯规则，不把应用规则传给Adapter。
+5. **入口与安装**：PUT /api/v1/targets/tags/:id/connections替换，POST /api/v1/targets/connections/add-tag追加；Shared严格解码，服务器完整管理员会话准入。DELETE tags/:id保留原路径并解除关联，不额外要求先手工清空。
+6. **数据、事务与并发**：原事务检查标签与全部连接存在，重复ID合并，替换允许空数组；实际新增/移除关系的Connection版本同事务各推进一次。删除复用同一Connections事务任务；原单连接标签写入/导入/快照校验统一遵守64项协议容量。标签本身未修改可见字段时不虚增其版本。
+7. **生命周期与失败**：请求32KiB，原始ID数组最多1000项，追加非空；缺引用整项回滚。Model保留提交unknown，HTTP返回安全码；响应或审计观察不冒充原子写入凭证，不自动重试。关联请求复用下述management事务准入：在排队后的实际事务复查原管理员会话，不保留正文后重复Access查询。
+8. **当前能力与验收**：标签持久行的ID/版本、非负时间、名称UTF-8与容量由同一Adapter decoder校验；管理、导入已有标签和备份预检复用，不将坏数据重新规范化。本链源码已接线，源码/两轮复核与静态结果见实施方案及testing；正常行为/并发/故障统一B10。正式前端F1消费Shared、updated:true、容量及连接缓存刷新；不增加旧包兼容。
+
+### Targets 管理事务准入
+
+1. **职责与范围**：management仅持有Targets管理HTTP的管理员准入，不替代各子功能用例，不成为跨模块认证中心。Access仍拥有会话事实；可信后端public/SSH解析保留调用模块自己的授权与生命周期。
+2. **子功能与目录**：新增management/service/management-service、model/management-model与management-types、storage/management-storage、adapters/sqlite/management-sql。Service持有管理员政策，Model转换token摘要/存储身份与失败，Adapter复用SqliteRuntime事务准入，不复制关系SQL或在每个业务Adapter重复会话代码。
+3. **依赖方向**：Targets HTTP → ManagementService → ManagementModel → 独立ManagementStorage → SQLite技术作用域。Bootstrap经register安装Access事务身份reader，仅使用SqlExecutor/digest/用户数字的窄契约，Adapter不引用Access私有类型或应用规则。
+4. **类型与转换**：HTTP从Access公开身份与原cookie逐字段构造内部ManagementActor，唯一归management/model/management-types；Model将token转digest，将独立存储身份转ManagementIdentity交Service纯校验。会话token/digest不进入Shared、公开结果或日志。既有Shared安全认证错误码复用，不增加旧消费者兼容。
+5. **入口与安装**：createTargetsRoutes接收模块内ManagementService；所有Targets管理路由在初次Access认证后进入同一准入作用域。register暴露安装身份reader方法，Bootstrap先安装再交付路由；未安装明确失败，不放行。不向TargetsPublicApi增加任意回调执行接口。
+6. **数据、事务与并发**：复用SqliteRuntime.withTransactionAdmission，在实际排队后的每个事务开始和提交前经Access原tx读取会话；必须仍是原管理员。管理CRUD、目录/凭据/Host Key/标签及导入逐项事务共用。会话撤销与写入按SQLite事务排序，不将整批导入合成一事务，也不将已提交项回滚；拒绝当前项后停止批次。
+7. **生命周期与失败**：work在事务外、准入作用域内执行；只有存储admit是事务内同步业务判断。作用域覆盖被await的HTTP用例，结束后新发起事务不再继承，已排队事务仍携带捕获的原身份校验；不作为后续独立任务的权限。HTTP读取正文后无需重复Access查询，原会话在真实事务复查；认证/权限拒绝分别401/403，存储不可用503，提交或回滚unknown保留原语义。已经提交后的响应失败仍不能证明未写入，数据交付与会话撤销也不声称跨网络原子性。
+8. **当前能力与验收**：当前31条Targets管理路由（含安全凭据GET）均使用同一准入，源码/两轮复核/静态结果见方案与testing；行为待B10。正式前端既有401/403和unknown处理在F1对接，正常业务对象不变，B10新增覆盖未安装/重复安装及作用域隔离，不添加默认绕过。Remote拥有的两条SSH测试路由仍由其原用例复查，不混入本作用域。
+
+RemoteMachineModel 在主机校验拒绝时保存实际握手 endpoint、观测指纹和原 pin 到独立应用错误；仅 Workspace connect 的 WS 失败出口白名单投影为 Shared challenge。信任仍由 Targets 管理确认接口持久化，不自动录入；未知资源清理不能降为可重试的密钥拒绝。
+
+Targets Host Key列表HTTP与正式管理前端共同消费Shared集合上限10,000项/完整JSON16MiB，超限413 limit_exceeded且不截断。确认按host/port覆盖，移除按host/port删除，不提供指纹或版本CAS；管理前端明确提示此语义，不把读取当作写入前提保证。主机名容量唯一归Shared `targets/host-keys/values`（253 UTF-8 bytes）；HTTP codec、可信Service入口和SQLite行解码一致校验编码容量，Service另持有小写规范化及主机名准入政策。SQLite解码拒绝损坏事实，备份复用该解码器；不为旧非法记录保留兼容分支。
+
+Targets `ssh-keys/ssh-key-rules` 唯一持有密钥名称规范化，普通管理和导入共用；`target-validation` 提供模块内文本编码/容量基础校验，秘密正文不规范化。Service和纯规则消费Shared基础容量，Model保持秘密与存储转换；SQLite的Proxy/SSH Key行解码校验正ID/版本、非负时间、有效端口及公开文本编码容量，备份复用同一行解码。独立SSH Key和导入/测试私钥统一64 KiB。旧Proxy管理可存key字段，但旧SSH resolver/传输只消费用户名/密码；新设计不保留无真实运行消费者的key字段，正式前端差异归F-R40。
+
+Targets保存SSH解析入口同样由 `public-mappers.toStoredTargetRequest` 将Trusted请求逐字段转换为内部请求，包含可选expectedFingerprint；不能直接把public对象交给Service。SSH密文快照与未保存引用只供resolver Model实现使用，类型局部定义于该实现，不进入Service应用类型；Host Key公开确认请求直接复用Shared唯一契约，再由register白名单转内部命令。RemoteMachineModel建连后只返回独立RemoteMachineIdentity的id/fingerprint及原机器能力，不把可信解析中的明文认证、Proxy或Jump对象传给终端、Files等后继Model；完整目标仅用于本次握手转换。
+
+Targets恢复预检通过 `registerTargetsSnapshot` 显式安装Connection与Credential两个Model转换回调。Connection回调将完整存储连接投影为应用事实，复用元数据及图规则；Credential回调复用SSH-only密钥规则，Adapter仅按索引关联读取事实并调用回调，不引入应用规则实现。凭据行解码唯一归connections/adapters/sqlite/connection-credential-sql，独立Storage联合记录由SSH解析、Desktop读取和快照复用；身份/时间/方法与秘密字段互斥均严格解码。当前连接元数据与秘密输入容量归Shared connections/values，Service使用UTF-8字节，真实SQL仍只在Adapter；恢复不自动规范化或放宽旧非法数据。
+
+Targets每条连接的直接跳板协议容量16项归Shared，与递归深度/总展开政策分别表达；完整连接应用校验和持久行解码都检查直接集合容量。快照Adapter在秘密转为便携明文后、恢复重新加密前按Shared原始字节容量检查；加密膨胀不计为原始秘密长度，超限当前数据拒绝导出、超限备份拒绝导入，不通过截断或兼容放行。
+
+连接元数据的持久解码唯一归 connections/adapters/sqlite/connection-sql 的 readConnectionMetadataRow，管理读取、Desktop 同次元数据/凭据查询及 SSH resolver 复用；Model 保留白名单转换，不重复存储形状校验。Proxy 导入命中既有记录也复用 readProxyRow，不能仅凭 ID 与用户名绕过持久表示校验。
+
+代理凭据同样由proxies/storage独立StoredProxyCredential表达，SQLite唯一readProxyCredentialRow校验正ID、非负时间和非空密文，SSH解析及快照预检共同消费；无凭据行仍表达null，不把损坏行解释为没有密码。
+
+### Remote 会话与文件资源转换边界
+
+Workspace FileResource 的有效性由 workspaceAuthority 与原 SSH owner 管理；两分钟 idle TTL 只适用于 workspaceId 缺失的独立 HTTP 文件资源。定时回收、owned 与 runAdmitted 三处采用同一适用范围，不能让仍连接的 Workspace 因文件面板闲置而在下次操作时被拒绝。身份、指纹、资源存活、关闭状态及 Workspace 当前实例校验仍逐次执行。
+
+Files 的二进制读取、目录 ZIP、下载类型探测及票据准备由 RemoteFileService.runTransferRead 统一绑定原 Workspace owner，复用 withUploadResource 取得同目标/指纹的独立 FileResource。读取的取消与清理只作用于该临时资源；原 Workspace 的主 SFTP 不因读取取消而退役。任务沿原 run 的 active/inFlight、身份/指纹复查、总期限及模块停机链追踪，关闭失败仍记录到原 owner 的 transferCleanupByOwner。协议入口和 Model 白名单投影不变；SFTP permission_denied 在 Model 映射为已有 forbidden，不把确定权限拒绝当远端不可用。普通目录元数据仍使用主资源；隔离不宣称 SSH 路径快照或远端回滚。当前源码与静态证据见 testing，真实 HTML、ZIP 和取消组合仍待远程验收。
+
+1. **职责与范围**：Files、独立PTY和Workspace共用技术凭据能力，各自Service持有身份、归属、期限及准入政策；凭据不进入公开结果之外的额外通道。
+2. **子功能与目录**：files/model/file-model持有文件票据随机值/摘要；sessions/model/session-token-model持有会话凭据表示。Shell与History Model封装终端集成/检查点，Service不操作技术Port。
+3. **依赖方向**：Service→所属Model→Platform SessionTokens/SSH/Terminal；register安装SecureSessionTokens，Platform不定义业务对象。
+4. **类型与转换**：应用内摘要为不透明字符串，Model转换字节和技术异常；HTTP/WS保留逐字段映射，Docker labels保留原生CLI返回的字符串语义，不将标量展开成字符索引对象；数组及嵌套对象仍逐字段投影。Cookie及终端流控窗口引用Shared唯一取值。
+5. **入口与安装**：Files/PTY开启HTTP在真实finish前保留失败撤销路径，取得资源后交付等待最多15秒，Files使用已绑定release，PTY由原SessionOwner释放；按ID的外部关闭仍认证。事件发布后重新核对PTY身份、实例及存活，失败不交付旧资源。
+6. **数据、事务与并发**：Files Service 的 FileMutationQueue 按原 Workspace 排队；同一目录、不同目标的有界上传组，或同一真实目录中普通文件到不同新目标的无冲突压缩组，共享一个原 MachineMutation 持久 endpoint claim，最多16项，两类不混组。压缩组按读写集合拒绝输出与其他输入/输出重叠，准入与派发均核对真实父目录、普通文件和目标不存在；目录/链接源、覆盖、解压及其他写操作封组排队。父目录检查/创建串行且拒绝链接祖先，私有stage与替换各自独立；同名/不同目录也封组排队。成员执行前后仍逐项验证原身份、指纹及Workspace权限。全部成员与专属资源排空后统一结算claim，任一unknown保留blocked；结算失败影响所有写入结果回执；明确没有启动writer且独立资源已排空的取消，在仍有其他成员持有该claim时可先退场，不能据此释放持久claim或提前交付写入结果。已排队且未派发的取消可立即结束且不会后来执行。不同Workspace、Agent与后台传输不共享此组。本边界不新增存储；搜索限制已扫描及待遍历目录、单目录条目；列目录/递归删除的私有预算由Files Service持有，不替代Shared编码预算。
+7. **生命周期与失败**：上传stage取得后如取消或资源关闭，仍执行绑定discard；健康且未commit的stage在取消、断流、Workspace关闭和quiesce期间停止接纳新块，保留原signal排空已派发WRITE，再关闭句柄/删除暂存/释放专属连接。active操作标明upload或other，关闭不重复硬取消已由上传owner接管的排空；未取得stage/已commit准入或原signal失效仍取消并保留unknown。取消只受理，不等待同组结算，终态回执仍等待整组claim。无法确认远端清理保留unknown。WS退订失败继续其余清理。Workspace丢弃撤销attachment的待发输入，drain退订从活跃列表移除；退订/集成释放异常转入原owner关闭。长期清理诊断保留16个样本及总数，同一Error去重，未确认资源事实仍保留。
+8. **当前能力与验收**：源码规则见H-06、E-01.1/E-05.1/E-06.3/E-08.1；行为/容量和未知结果说明见USAGE，静态与待B10场景见testing，不将源码审查作为行为通过。
+
+压缩Adapter在首个写入前同步发送随机标记，发送失败不启动writer。Files Model选择SSH的TERM排空模式，完整读取stdout后仅将实际远端TERM退出且没有该标记映射为FileCommandNotStarted；已见标记、断流、协议失败或5秒收尾期限内未得到退出均保持unknown。Platform归一ssh2的信号名称，远端exit-signal本身仍是副作用unknown，不为Agent或其他命令改变结果分类。派发期间取消保留晚到channel并请求终止，连接关闭与信号受理不冒充实际退出；不新增远端helper或工具。
+
+### Platform 传输与观测资源边界
+
+1. **职责与范围**：HTTP/WS、SSH/SFTP、终端渲染和ACP提供技术能力；Remote监控Service持有用户准入、采样订阅与任务归属。普通SSH与Agent复用技术能力，分别保留授权及活跃资源owner。
+2. **子功能与目录**：Platform既有http、ssh/adapters/ssh2、terminal/adapters、acp/adapters持有传输实现；Remote monitoring/model转换技术事实，monitoring/service管理订阅及缓存请求。
+3. **依赖方向**：Service→Model→技术契约/Adapter；Platform不引用业务类型。诊断采样汇总复用通用有界FailureSummary，不新建业务分发或兼容层。
+4. **类型与转换**：ACP技术cleanup_failed在MachineAcpModel显式转为RemoteResourceCleanupFailure；操作失败与清理失败分别保留因果。SFTP路径由Adapter校验实际字符串，协议出口不推断第三方异常。技术目录项与realpath保留合法POSIX字面量，包括换行；不得把终端/归档/Agent的控制字符政策下沉成全局SFTP拒绝。各应用与Shared边界继续按自身契约校验。
+5. **入口与安装**：HTTP安装有界channel与Desktop原生WS，两者均接管socket error。HTTP传输等待由原请求aborted、响应finish/close与原socket close共同结算并退订；业务handler与资源收尾仍独立等待，不将传输中断当业务完成。Artifact HTTP将具名AbortError连同原signal交协议取消转换，应用/存储/清理失败继续保留到排空；仅signal取消不能掩盖其他错误。有界channel在实际派发排队消息时复查准入generation及关闭状态，输入队列同时考虑路由允许的文本/二进制预算。
+6. **数据、事务与并发**：不新增表或迁移。SFTP复合replace共用完整操作期限，恢复/备份删除另有独立清理预算；确定目录打开拒绝不退役健康lease。
+7. **生命周期与失败**：SSH Client/SFTP先请求结束，2秒后请求destroy，再最多等待2秒确认真实close；超时为清理失败，不当作关闭成功。SFTP未确认资源仍归原连接owner，晚close仅解除原实例。SFTP Adapter单独登记流的期限与取消监听清理；流错误及lease关闭均解除本地等待，即使供应商流不发close。流清理回调不替代SFTP channel关闭确认，未知临时文件仍由Files owner保留。HTTP、SSH channel及路由独立清理不被首个同步异常中断；ACP取消只执行一次并等待读写及permission任务。监控退订后的baseline清理被追踪，采样清理失败有界保留到close；日志停止准入后不新建读写owner。
+8. **当前能力与验收**：保持显式mapper、Shared协议和正常功能；终端导出用线性首尾裁剪，Shell setup按完整marker预算校验，结果起始标记不依赖先收到命令回显；无回显时保留普通输出和可能跨块的标记前缀，已识别回显时隐藏原setup命令。Workspace初始化等待后重新核对身份、取消与记录实例，再交付附件。源码/静态与行为证据归testing；SFTP上传中断与实际句柄收尾已有B10有限证据，其余故障和容量仍逐项待验。
+
+### Bootstrap 与外部能力资源边界
+
+1. **职责与范围**：Bootstrap负责模块安装、维护替换和关闭；Platform提供AI、Blob、Browser、MCP、投递及隔离运行时，Agent/Preferences/Operations的应用政策仍归各自Service。
+2. **子功能与目录**：沿用bootstrap与platform/{ai,blobs,browser,delivery,isolation,mcp,network,packages}；Provider与Registry保持原子功能Model、storage和sqlite Adapter，不增加分发或兼容层。
+3. **依赖方向**：Bootstrap只读模块register/public及技术契约；Service经Model使用技术能力，Platform不引业务对象。Operations最后关闭，以覆盖其他模块退出时发布的事件。
+4. **类型与转换**：Provider/Registry应用、存储与技术对象保持独立白名单；BrowserSession由BrowserModel封装为应用能力。具名cleanup_failed保留到Model；HTTP安全出口不传cause。
+5. **入口与安装**：模块安装失败清理已安装owner；停止准入逐项尝试。维护绑定保存原HTTP origin取值，调用方修改原options对象不会改变后续替换的Cookie策略。
+6. **数据、事务与并发**：唯一初始v1及业务SQL归属不变。Blob发布前复查取消；临时文件删除需目录同步，发布后失败保持io_unknown，清理未确认单独表达cleanup_failed。
+7. **生命周期与失败**：独立释放实际调用放入Promise任务，同步抛错不跳过其余资源。Fetch取消reader与释放锁分别保留失败；Delivery保留HTTP主失败及释放失败，NotificationModel转为独立NotificationCleanupFailure；Service停止准入并结算当前投递unknown，结算失败保留双因果，关闭不能报成功。Browser构造取消在已建立CDP后保留释放context所需通道，交付前失败交给同一session.close；不重复关闭context，也不关闭共用浏览器进程。MCP连接失败分别释放SDK及dispatcher。
+8. **当前能力与验收**：AI双协议、Provider/Registry、包解析/签名及隔离进程保留现有语义；本节不扩大功能或部署前提。静态结果和逐文件证据归testing，真实外部依赖、取消和故障场景仍待B10。
+
+### Targets 服务端最近连接
+
+1. **职责与范围**：Targets 拥有保存连接的最近成功观测；RemoteSessionService 在 PTY 建立后、DesktopService 在 TCP/TLS 桥就绪后调用，覆盖 Workspace 与独立/Agent shell、RDP/VNC。测试、监控与已有会话恢复不记录。桥就绪不证明远端认证或画面成功。
+2. **子功能与目录**：复用 connections 的 ConnectionService、ConnectionModel、ConnectionStorage、connection-sql/connection-schema；删除 desktop-target 的 markAttempt 全链。没有第二张历史表或客户端写历史路由。
+3. **依赖方向**：Remote 经 Targets public ConnectionUsage 调用；Service 验证观测时间与基础值，Model 转换存储调用/失败，Adapter 独占 SQL。RemoteSessionService 在开启前取得只读配置身份，桌面复用实际授权的可信配置快照。
+4. **类型与转换**：StoredConnection、内部 ConnectionSnapshot 与 Shared TargetConnectionView 各自持有必填 lastConnectedAt:number|null；存储、public、HTTP 与前端 Summary mapper 白名单投影，均使用 Unix 毫秒。Workspace 原有附件秒时间仍只表示运行时附件事实，不再驱动最近连接列表。
+5. **入口与安装**：registerTargets 安装后端专用 connectionUsage，registerRemote 注入两个独立 PTY owner 与 DesktopService；GET /api/v1/targets/connections 和单项读取经既有认证接口返回持久时间。管理写命令不接受 lastConnectedAt；桌面签发返回 ticket 与仅在浏览器内存消费的连接参数。连接准入、Access 与 Agent 授权继续由原 owner 执行，观测能力不授予执行权限。
+6. **数据、事务与并发**：现有 connections.last_connected_at 唯一存储毫秒/null，同一 UPDATE 核对 id/version/created_at/type，仅在新时间更大时更新；不推进 version/updated_at，过期配置结果不覆盖新配置。初始 v1 与精确安装签名同步更新，不兼容旧开发库、不自动转换秒时间。新建/导入/克隆为 null；备份原列覆盖不变，预检复用同一行解码和时间关系。
+7. **生命周期与失败**：持久调用由原 opening 任务等待并参与关闭；写入失败进入原资源关闭和安全失败路径，已提交而后续交付失败不回滚历史。写入后 SSH 再检查 signal/accepting/isOpen，桌面再复查身份/配置/存活。未匹配或已有更新观测是无操作；不重新创建被删除记录、不自动重派建连。
+8. **当前能力与验收**：前端成功挂钩只读刷新元数据，Store 不保留 recent Map 或 markConnected；现有搜索、排序、连接编辑视觉不变，无新增三语产品文案。静态及待验范围归 PLAN/E2E，重启、并发、真实 SSH/RDP/VNC 与存储故障未由编译证明。
+
+### Targets 安全凭据读取
+
+1. **职责与范围**：为正式连接编辑提供安全认证摘要，密码和密文不出后端；保持元数据与凭据独立写入用例。
+2. **子功能与目录**：沿用connections的Service→Model→Storage→SQLite，不新增业务分发或额外数据层。
+3. **依赖方向**：HTTP→Targets public→CredentialService→CredentialModel→独立Storage；Adapter只消费存储契约及Shared基础值。
+4. **类型与转换**：应用CredentialSnapshot、存储StoredCredentialSnapshot独立定义；Model、public mapper及HTTP逐字段投影Shared TargetCredentialView，返回none/password/ssh_key引用。
+5. **入口与安装**：GET /api/v1/targets/connections/:id/credential经既有Targets管理会话/事务准入，缺连接404；register安装原Storage/Model。
+6. **数据、事务与并发**：单条LEFT JOIN取得连接version与凭据状态，无秘密解密；不新增迁移。前端要求与元数据读取版本一致再编辑；两次读取不冒充一个数据库快照。创建复用单项import原子事务，元数据与凭据更新各使用原版本CAS。
+7. **生命周期与失败**：沿现有具名技术失败与安全HTTP映射；不存在与损坏数据分别处理，不将坏凭据当none。提交/交付unknown仍先只读核对，读取不触发写入或版本推进。
+8. **当前能力与验收**：正式Connections表单已消费，真实读取/CAS/原子创建/清除及OpenSSH测试结果见testing；生产和C2运行协议未切换。
+
+## Remote 后台服务器传输
+
+### 1. 职责与范围
+
+Remote transfers 持有管理员会话的后台源端 rsync/scp 任务，不依赖 Workspace 附件或 Agent grant。保留五管理 HTTP 和源端直传；不把 SFTP Workspace copy/move 当作替代。
+
+### 2. 子功能与目录
+
+`transfers/service` 拥有准入、调度、任务状态和授权监控；`transfers/model` 转换 Targets/SSH/原生命令能力与失败；`platform/transfers/adapters` 只执行通用源端 rsync/scp、验证已给出的 Host Key pin、管理临时密钥和解析工具结果。HTTP 留 Remote 的 `interfaces/http`，不新增空 Storage。
+
+### 3. 依赖方向
+
+HTTP → Service → Model → Remote machines 与 Platform transfers；跨模块只消费 Access/Targets public。后台交接经机器突变 owner 脱离临时请求 scope，并在独立准入事务和执行前复核原会话。Service 不取得技术句柄或目标凭据。
+
+### 4. 类型与转换
+
+Shared `remote/transfers/server-{values,model,http,codec}` 持有有限值、完整安全任务及五入口契约；目标目录可为根目录，源项仍禁止根目录，Native Adapter 不为根目标重复追加斜线，路径空白保持原值；后端应用对象独立归 `transfers/model/*-types`。HTTP、Model、前端 mapper 均逐字段投影；主机密钥 pin、密码和私钥只在后端可信转换与技术 Adapter 间短暂存在。
+
+### 5. 入口与安装
+
+Remote register 安装 `/api/v1/transfers/send`、`status`、`status/:taskId`、`cancel/:taskId` 和 `DELETE /:taskId`。后台受理与真实结束分开；列表以有界页读取，详情保留。正式前端同步迁移，不维护旧 Protocol 桥。
+
+### 6. 数据、事务与并发
+
+任务列表维持进程内语义，32 个在途/unknown、100 个已确认终态；unknown 不裁剪。最多5个互不冲突父任务并行，父内子项串行；父期限1小时含排队，单子项最多5分钟。每个子项在源/目标真实 endpoint 的持久突变围栏取得后才执行，保存可关联子任务的 claim ID；重启 held 转 blocked，不重派。列表重启后清空不代表远端结束，恢复依据归已有机器突变观察/证据/释放接口。无新迁移或伪造持久任务表。
+
+### 7. 生命周期与失败
+
+任务期限包含排队，取消只发信号；已派发且未确认退出、秘密清理或资源释放的任务保持 unknown。后台监控原会话和捕获的配置指纹；撤销停止后续派发。源可以使用既有代理/跳板；目标原生直连不隐式忽略配置路线，非直连明确拒绝。Model只取实际已验证握手的目标公钥，Adapter重算指纹并匹配冻结pin后生成私有known_hosts；源端CLI严格校验，不额外keyscan或关闭验证。原始key只在技术转换Model之间消费，不进入Service/Shared。源端管理员仍能读取交付的凭据，需逐次确认信任源端。
+
+### 8. 当前能力与验收
+
+五HTTP、Shared完整codec、正式API/store/SendFiles/Progress消费者已实现。列表采用UUID游标每页8项，时间为Unix毫秒；输入拒绝同名/嵌套源与同文本endpoint，scp/rsync均复制目录本身。命令和原始结果留Adapter，有限失败经Model映射；原会话在独立持久准入事务及执行期复查。真实双端点OpenSSH与受控取消/未知/重启/清理、正式store浏览器回归见testing；完整页面及跨业务撤销仍C2-D，公网与非直连目标不在通过范围。部署与生产切换不在本批范围。
+
+## 连接目录与监控读取性能
+
+1. **职责与范围**：Targets 连接 Adapter 拥有目录关联批读；Remote monitoring 拥有主机候选筛选及指纹复核；SQLite Worker 拥有预编译语句缓存。优化不改变连接数据、授权或监控公开结果。
+2. **子功能与目录**：connection-sql 在原事务中批读 connections、connection_tags、connection_jumps 并复用逐条解码；observation-targets 定义原有主机分组规则；worker 缓存最多 128 条、SQL 文本不超过 16,384 字符的 StatementSync。容量仅用于淘汰缓存，超出仍正常执行。
+3. **依赖方向**：保持 Service → Model → Adapter；SQL 及数据库句柄仅在 Adapter。monitoring 的 Model/Service 复用本模块纯分组规则，不新增跨模块入口。
+4. **类型与转换**：沿用 StoredConnection、ObservationTarget 和 WorkerRequest；存储关联仍按原字段、容量、位置和路由约束校验。不新增 Shared 字段，不缓存身份、授权或目标凭据。
+5. **入口与安装**：原连接目录、资源状态入口与 Worker 安装点不变，无新 HTTP/WS 路由或迁移。
+6. **数据、事务与并发**：目录三次 SELECT 共用原事务和稳定排序；定向监控在指纹计算前筛选同 host/port 候选，保留同主机连接回退。返回前按请求主机重新读取并线性分组校验完整配置指纹，仍含代理、跳板与凭据变更。
+7. **生命周期与失败**：定向目录保留其它主机有效缓存与在途索引，每次读取淘汰过期样本，避免仅做定向刷新时长期保留失效项；保留原授权复核、取消、失败不缓存及真实任务清理。语句缓存按使用顺序淘汰，事务控制保留缓存，其它 exec 清理，数据库关闭前清空，不改变执行与错误协议。
+8. **当前能力与验收**：源码已接入原消费者；全量监控仍执行必要的前后指纹校验，不宣称消除所有目录成本。静态检查、产物及未执行行为范围见 testing/E2E；性能实测与并发配置变更回归按 PLAN D17 留远程验收。
+
+### 后端诊断日志
+
+1. **职责与范围**：Platform logging 负责结构化诊断，Operations 负责持久阈值及审计；诊断不能改变业务成功、失败或恢复结论。
+2. **子功能与目录**：沿用 `platform/logging`，安全投影和异步关联上下文在该目录；各原 Service/Adapter 记录真实生命周期。
+3. **依赖方向**：Bootstrap 创建一个 Logger，注入 Operations、网络与业务 owner；无模块反向依赖或全局可变 Logger。
+4. **类型与转换**：复用 Logger/LogFact，诊断字段仅显式标量；异常只提取有限代码、类型、源码位置及有界 cause 链，不打印原文、请求或供应商对象。
+5. **入口与安装**：createApp 向安装与恢复后的模块传递同一实例，main 在配置读取前启用；原设置接口管理同一实例的日志等级。
+6. **数据、事务与并发**：日志写 stderr 单行 JSON；不增加数据库记录或改变事务。HTTP/WS 使用后端生成关联 ID，异步上下文随实际任务传播；事件回调只绑定诊断自身上下文，不捕获其它 owner 的事务或授权作用域，不信任客户端自报关联字段。
+7. **生命周期与失败**：记录启动、停机、恢复、入场、派发、结算和清理；Job 与插件运行实例在原 owner 持久结算及关闭处记录；WS 字节汇总避免逐帧日志。诊断输出失败不阻断原任务，原异常继续由原 owner 处理。
+8. **当前能力与验收**：等级、字段、查看方式及保护范围见 USAGE；源码审核和静态证据归 PLAN，行为按 D17 留远程验收。
+
+### Agent 模型目录名称与能力解析
+
+1. **职责与范围**：Agent providers/registry持有模型名称匹配及明确模型修正，Platform仅转换models.dev供应商事实。
+2. **子功能与目录**：原registry-rules组装快照与解析完整能力，registry-matcher持纯名称评分；原Model、SQLite Adapter及HTTP mapper保持各自边界。
+3. **依赖方向**：Registry Service → Model/纯规则，Model → storage/Platform；匹配器不读取网络或存储，不绕过Provider冻结时观察冲突核对。
+4. **类型与转换**：RegistryDefaults、StoredRegistryDefaults和Shared AgentRegistryDefaults独立定义完整能力；白名单mapper投影缓存键、默认推理等级及必需推理，两个decoder核对等级唯一性、默认值所属及mandatory依赖。
+5. **入口与安装**：沿用model-registry/resolve与refresh，无新路由或安装点。
+6. **数据、事务与并发**：内部快照 schemaVersion=2，仅保存 provider/model 键，不生成丢失来源的裸别名；旧快照通过原缓存无效机制提示重新更新，不自动迁移。精确名优先于前缀/分隔符及系列日期/等级/thinking/fast后缀，同级冲突不猜测，OpenCode聚合候选不覆盖原厂。名称变体不构成能力证明；只对支持的等级后缀选择默认等级。保留旧正式resolver的明确模型缓存键与推理修正。
+7. **生命周期与失败**：沿原refresh/load owner、取消及安全错误映射；无目录或无明确匹配返回null，不自动发起外部模型请求。
+8. **当前能力与验收**：前端新增模型与显式应用目录均消费完整Shared能力；使用与恢复见USAGE，静态及限定只读验证见PLAN/testing，完整交互仍待远程。
+
+### Agent 图片生成与模型预算
+
+1. **职责与范围**：Provider/Registry 保存声明能力，文字预算可缺省；Run 持文本执行预算。ProviderImageService 统一直接 Images Run 与图片工具的网络生成、App 文件落盘及安全结果。
+2. **子功能与目录**：原 providers/service、platform/ai/adapters/model-image 与 openai-compatible；RunExecutionOwner 持直接派发，原 ToolService 持 image_models_list/image_generate，Artifact 原 owner 持输出。
+3. **依赖方向**：Run/Tool → ProviderImageService → ProviderService/ArtifactService；Model/技术 Adapter 各自投影；不从网络 Adapter 写数据库或绕过 Run 派发记录。
+4. **类型与转换**：Shared 的 images 协议、supportsImageGeneration 与可选文字预算同步应用/存储/SQLite/前端；新 ProviderImageRequest/ImageArtifact 留 providers/model。Artifact 的 model actor 与独立存储授权逐字段转换，不伪造工具授权。
+5. **入口与安装**：原模型选择器同时消费 Images；配置分对话/图片两组。图片工具由原 toolDefinitions 安装，需原 artifacts.write/批准。新增 GET /api/v1/agent/apps/:appId/artifacts/:artifactId/preview，复用认证下载读取与 Range，限定 PNG/JPEG/WebP、nosniff、private/no-store。
+6. **数据、事务与并发**：直接图片沿模型 Step 的 reserve/dispatch/finish 与原请求/并发预算；工具沿 ToolCall 账本和原工具预算。Artifact 写事务核对 Images frozen protocol、原 dispatched Step/hash、当前 Run 与 Provider 代际。图片输出继承原文件预算/期限，不冒充网络与 SQLite 原子事务。
+7. **生命周期与失败**：Provider请求跟踪及停机/配置修改取消覆盖图片请求。正式直接Images与image_generate统一继承Run剩余绝对期限，ToolService不为image_generate另设普通工具短超时，ProviderService该入口不再添加固定五分钟计时；网络生成、文件发布和后续验证共同消耗同一任务时限。管理图片测试仍独立五分钟，发现等管理读取仍十秒。Platform仅为图片ModelSdkRequest建立独立Undici Agent，其它请求保留原连接池，headersTimeout/bodyTimeout为0，由原应用signal控制完整等待（连接建立仍受传输自己的连接时限）；close分别尝试reader与dispatcher.destroy，保留独立失败和原错误身份，不使用全局连接池修改。外部 JSON 与 base64 有界读取；不获取返回 URL，不接收 SVG/HTML。付费请求未知或落盘失败不自动重试；本地取消不证明供应商回滚。全局日志不记提示词/图片/凭据。
+8. **当前能力与验收**：一次一张、按Artifact剩余空间与Node字符串/Buffer技术容量约束、供应商默认尺寸/质量。直接图片只用本次描述，文字工具可传 Agent 整理的描述；不接入编辑、视频、音频。前端 Markdown 仅允许受保护的本站预览图。静态、目录、隔离HTTP及真实CDP验收的环境、入口与保证边界分别见 testing；编译不替代真实图片生成或完整治理回归。
+
+### Agent 供应商流的可选字段
+
+Platform AI的ModelStreamProjection消费SDK已解码事件，持有Chat Completions的nullable拒答/工具占位、reasoning_content/reasoning有界文本和native_finish_reason元数据校验；只有带合法finish_reason的终帧允许delta为null。普通思考不作为答复或执行许可，真实拒答及未知输出仍拒绝。累计usage在Projection保存单调最新快照，于SDK迭代结束且正式终态校验后仅交付一次原usage事件，RunModelStream和probe继续只接收一次真实用量；缺失不补零。ModelToolStream只允许已登记工具调用的后续身份字段为null，首帧仍须完整ID/type/name，后续非空身份不一致拒绝；参数null不追加字符。Responses续接证据仍沿原独立校验，不与普通思考混用。模型发现nexus_capabilities支持已有supports_image_generation字段，应用/Shared转换不变。
+
+### OpenAI 官方 SDK 技术边界
+
+1. **职责与范围**：Platform使用官方openai@7.43.0完成Chat Completions、Responses、Images和模型发现；Run业务权限/预算/审批/持久结算不交给SDK。
+2. **子功能与目录**：原openai-compatible组合SDK资源方法与技术结果转换；model-request构造具名SDK请求；model-stream只投影已解码事件；model-sdk-request持一次操作的SDK实例、原始响应reader和清理；model-tool-stream及model-reasoning保留工具/续接事实校验。
+3. **依赖方向**：应用Model→原ModelNetworkPort→Platform Adapter→OpenAI SDK；SDK类型只用于技术Adapter，不能进入Shared或应用/storage。
+4. **类型与转换**：SDK类型不能代替外部运行时校验；事件/模型/图片在Adapter以unknown检查实际消费字段并白名单投影。标准可选字段不作每帧必填，额外choice元数据有界忽略，拒绝未知执行输出。
+5. **入口与安装**：原Bootstrap安装不变，使用client.chat.completions.create、responses.create、images.generate和models.list；流通过公开asResponse及SDK Stream.fromSSEResponse保留事件名，模型测试复用同一路径。models.list只取当前响应，不迭代自动分页。
+6. **数据、事务与并发**：不改变表或Shared契约；SDK不管理工具执行、幂等记录或授权。请求由SDK编码，派发前限制实际编码字节，模型声明和工具/正文/续接容量保持原owner。
+7. **生命周期与失败**：文本流及probe的maxRetries=2，发现/图片为0；退避/Retry-After由官方SDK负责。仅连接故障与408/409/429/5xx可重试，TLS证书错误与本地失败中止专用signal，非临时HTTP失败强制禁止重试。成功响应后不重试SSE/投影失败；应用持原完整期限，所有尝试共用累计响应字节预算。同一逻辑模型步骤最多3次HTTP派发，不重放工具。logLevel=off、拒绝重定向，原AbortSignal与本地停止重试signal组合并传给SDK；原始fetch只用应用signal，避免停止SDK重试时先破坏尚待排空的reader，传输总期限仍归应用。禁用环境organization/project自动继承，无凭据时移除占位Authorization。每个响应有独立ModelResponseBody、reader/decoder和关闭Promise，SDK重试前重新等待上一响应关闭；清理失败阻断下一次派发，不能覆盖旧资源。Reader按需读取，总量在SDK缓冲/JSON解码前检查；关闭Promise在取消前保存，SDK忽略的传输或清理失败仍由原owner记录并在close抛出，不提前交付completed或释放Run名额。不证明远端停止，不自动重放已取得成功响应的请求或未知Run。
+8. **当前能力与验收**：迁移进度/静态证据和远程待验见PLAN/testing；UI不变；原生浏览器增量更新由下述Run变更订阅负责，SDK的供应商SSE与浏览器WS分属不同边界。
+
+### Agent Run 正文与状态流
+
+1. **职责与范围**：原生对话通过WS直接消费已提交正文增量和状态；RunChanges用Node EventEmitter唤醒交付，Run日志仍为持久权威，不直接转发供应商SSE。首次/显式读取保留HTTP，生成及重连续传不逐段HTTP请求；ACP保持。
+2. **子功能与目录**：RunChanges在原Run/Step/Tool/Collaboration/Governance写入收敛后区分text/state通知；RunStreamService组合原Context/Run等读取，正文热路径只读正文页。interfaces/ws持认证、游标和发送窗口，run-stream-mapper复用原HTTP投影的唯一owner。
+3. **依赖方向**：写入Model→RunChanges；WS→Thread准入→RunStreamService→同模块既有Service→各Model/Storage。SQLite不反向调用应用，Platform只持WS句柄与真实排空。
+4. **类型与转换**：Shared runs/events持订阅/ACK/更新、前后游标与严格codec，runs/values持独立命令和完整输出预算；内部RunStreamCursor/Page/State/ChangeKind归runs/model。入口与出口逐字段映射，不透传Storage/供应商对象。
+5. **入口与安装**：/ws/agent-runs升级需原来源/Origin、管理员、当前启用受信版本App及可见Run；客户端subscribe给出Thread和正文/事件游标，首次状态页核对Run所属Thread。每批交付前后和心跳期复核原持久会话/App准入。
+6. **数据、事务与并发**：无新表。先订阅再首次读取，写入通知在原存储调用收敛后发出，unknown不重派。正文/状态变化约16ms合并，读取中dirty保持；状态及用量/审批/子任务独立于正文热路径，终态后再读正文并持续至空页。发送游标与客户端已接纳游标分离，连接内按发送游标连续推送，重连从客户端已接纳游标恢复。
+7. **生命周期与失败**：最多16页且累计不超过完整输出预算的未ACK窗口，满额暂停到ACK，容量不是Run失败条件；大状态页等待先前窗口排空，心跳另留1KiB传输缓冲。ACK按序、60秒期限，订阅首帧15秒，心跳15秒/权限复核3秒；心跳不查询Run/正文。关闭取消计时、退订并等在途短读取，RunChanges纳入AgentRequestOwner停机资源，Platform等真实WS排空。隐藏、断线或关闭不取消Run，不重发模型。
+8. **当前能力与验收**：状态/正文/用量/审批/子任务均有直接推送消费者；记忆审核和插件SDK独立订阅保持原行为。命令1KiB，完整输出按审批8MiB、正文512KiB、事件32KiB、由最大工具预算推导的子任务元数据容量及8KiB封装，合计按runs/values公式计算；客户端单帧/待接纳窗口和后端发送预算同源。源码与静态证据见PLAN/testing；未以编译代替实机弱网、权限/版本撤销、停机及E2E验证。
+
+## 成熟技术库边界
+
+1. **职责与范围**：安全算法、MIME/图片格式识别及版本比较委托成熟库；应用权限、事务和任务政策保留原owner。HTTP路由/WS/维护架构不变，不使用Fastify或Zod替换。
+2. **子功能与目录**：security/adapters/rfc-totp、http/http-body、images/adapters/native-image-inspector与ai/adapters/model-image、Agent plugins版本规则沿原目录实现。
+3. **依赖方向**：otplib/Formidable/file-type/fast-xml-parser仅Adapter消费；semver通过共享版本校验及插件比较消费，不向应用暴露第三方对象。
+4. **类型与转换**：TotpPort维持同步verify；ImageInspector.inspect与MultipartPart解析返回Promise，Model和四个HTTP producer同步await；原MIME/格式投影、失败与白名单不变。
+5. **入口与安装**：Bootstrap沿用原Port安装。TOTP使用20随机字节的Base32、SHA1/6位/30秒/前后30秒容差，now从毫秒转秒；二维码URI由otplib生成。
+6. **数据、事务与并发**：上传先按原route总预算有限读取，Formidable只开启multipart插件；所有onPart都由Adapter接管原始字节，不调用默认文件处理器，无临时磁盘文件。解析原始/中间缓冲零化，返回part归producer清理；备份保留被交接的content。node-semver版本范围同步Shared及全部签名包消费者。
+7. **生命周期与失败**：解析前后复查signal，异常转HttpInputFailure并保留cause；真实请求socket不交给解析器，有界Readable源显式destroy。图片识别异步后仍走原身份/版本/取消准入；SVG关闭实体处理，格式识别不证明内容安全。生成图片继续只接受PNG/JPEG/WebP。
+8. **当前能力与验收**：源码已迁移；静态与远程待验范围见testing。Docker仍通过原MachineCommandExecutor/SSH执行CLI，没有API socket能力，不装Dockerode或更改远端前提。
+
+## Agent 安全失败诊断与 SSH 发现授权
+
+1. **职责与范围**：Run/Tool owner 记录有限故障类别；Governance 唯一决定授权，诊断不授予权限、不重派任务。
+2. **子功能与目录**：runs/run-failure-rules 分类具名应用异常；RunModel 组合原工具日志与当前进程诊断；tool-service 在既有失败 CAS 写入安全错误结果。
+3. **依赖方向**：Tool/Run Service → Run Model/Storage；Governance Model 在原事务决策回调内记录政策拒绝原因，收敛后抛具名 AgentFailure；SQLite 不引用应用错误类。
+4. **类型与转换**：Shared runs/values 持有限错误码，runs/model 持公开只读 failure；内部 RunFailure、StoredRunFailure 各归本层 owner，HTTP/WS/前端保持显式白名单转换。
+5. **入口与安装**：原 Run get 和 WS 状态投影附带 failure；列表/创建/取消快照不虚构诊断。无新接口、依赖、数据库结构或初始化签名变化。
+6. **数据、事务与并发**：工具失败以现有 result_text 保存单一 failureCode，仍在原 expectedRevision CAS 中收敛；完成工具的结果与上下文引用不变。RunStorage 仅查询当前用户/App/Run 的终态工具，按原 scope 索引过滤。RunModel 最多保存512次运行的有限诊断，按用户/App 核对后只附在 failed/unknown 上；满额淘汰旧诊断，不拒绝任务或影响持久终态。
+7. **生命周期与失败**：工具错误原因随原账本持久保留，进程内模型/派发前诊断在模块重建时释放，日志按运行编号关联。保留首次原因，已持久的具体工具原因优先；围栏/恢复无已知原因时返回真实未知，不读取供应商正文。unknown 仍表示可能存在远端效果；失败结算、未知提交和清理围栏保持原行为。
+8. **当前能力与验收**：machine_connection_list 与其它工具共用 authorize，其 machine.inspect 按 Shared 定义要求 global grant，不设列表专用授权分支；查询前与交付前核对所选目标及 App 禁用列表，仅记录实际交付目标。普通工具仍严格检查绑定目标，版本、Provider、审批与事务复核不放宽。静态和指定站点待验范围见 testing。
+
+模型派发前的凭据读取/Provider版本核对失败也由 RunExecutionOwner 记录有限诊断与 AGENT_MODEL_DISPATCH_REJECTED 日志；仅当前进程保留原因，不写供应商正文或凭据。确定未派发仍按原预留步骤 CAS 结算，未知存储提交继续传播，不因诊断追加第二次写入；用户取消不冒充配置变化。
+
+### Agent 上下文容量分类
+
+Context不再按普通/扩展裁剪窗口，也不使用字节代token判断实际模型容量；Provider拥有真实tokenizer和最终超窗拒绝。ContextLimitExceeded仍归Agent内部错误owner，继承limit_exceeded以保留初始历史整段裁剪，用于本地编码容量或无法完成必要上下文压缩；Run映射context_limit_exceeded。所有入口保留消息+工具定义4MiB、完整快照和源身份预算；1024消息数量限制已从Context校验、存储解码和Platform编码入口一起移除，History原文选择使用4MiB而非512KiB。ContextLimits保留真实模型声明与输出配置，未引入新schema或重写失败历史。profile字段/设置删除依H-13待用户确认，执行侧已无消费者。
+
+Execution预算SQL在原事务内以已报告input_tokens+output_tokens替代对应reservation作为累计占用；未报告usage或结果未知仍保留原reservation，确定未派发失败为0；主/子共享root_id，不修改旧账本或伪造missing usage。SDK仍是唯一重试调度owner；attempt仅日志计数，未另设次数循环。
+
+Context预压缩现状：checkpoint工具需要实际context.compact授权，摘要绑定真实已持久模型输入及其hash，完整工具组完成后应用，不能临时拼接新摘要绕过contextContinues校验。自动阈值/后台摘要由下节Context自动压缩owner负责；contextCompactionMode仅限制显式checkpoint工具摘要比例。
+
+追加核对：未知contextWindow不应成为文本模型执行的硬门槛；已从Provider冻结和Run冻结投影一起移除，ContextLimits按真实缺失表示、不填伪造窗口，maxOutputTokens仍作为实际输出配置要求。图片上下文不再填虚构字节窗口。无Shared/schema/UI变化；未知容量不能推导提前压缩阈值。
+
+### Context 自动压缩与用量估算
+
+1. **职责与范围**：ContextService持本Run同冻结模型的usage锚点、当前消息和替换；CompactionSession持每Run自动摘要任务。采用OpenCode固定提交49a112f的字符/4回退、15%/16k余量、64k已测输入与85%阈值前预生成思路，不引入整套Agent框架，不声称精确分词或跨模型校准。
+2. **子功能与目录**：context/compaction-rules持阈值与完整分组切分，compaction-values持摘要数据标识；service/compaction-session持准入、预生成、消费和排空，model/compaction-model持存储转换；adapters/sqlite/compaction-{schema,row,sql,context-sql}持DDL、真实解码、事务和前缀证明。Run的run-authority-sql由原步骤与摘要共用，不复制身份政策。
+3. **依赖方向**：RunExecutionOwner→Context服务/Model→Storage与RunModelStream/ProviderModel→Platform官方SDK。预算由ExecutionService决策，事务内回调转换独立StoredExecutionSettings/Usage。摘要没有工具，不伪造context_checkpoint授权、模型工具调用或用户回复。
+4. **类型与转换**：ContextUsageAnchor/CompactionCommand/Result归context/model/context-types，StoredCompactionCommand/Compaction与接口归context/storage/compaction-storage。CompactionModel逐字段转换源快照、身份和预算回调，SQLite不消费应用规则/类型；新增表/摘要不增加Shared或前端字段。usage只计现有已归一化input+output，缓存/推理不重复相加。
+5. **入口与安装**：register安装CompactionModel/Storage，Run每轮派发前prepare，完成工具提议后可precompute；初始v1安装agent_context_compactions，快照注册与真实decoder同步，无旧库兼容或自动删除数据。未知window/Images不启用自动压缩，maxOutput仍为正常模型上限，摘要单次输出至多16384token（包含供应商计入输出的推理），正文至多16KiB。
+6. **数据、事务与并发**：摘要独立持久reserve/dispatch/completed/failed/unknown、原快照/hash/切分位置和usage，root_id与Root/Child共享请求、token、并发账本。后台只与工具阶段重叠，下一轮前收敛，预留至少一次继续请求；实际任务预算不能因压缩绕过。摘要以唯一id绑定替换，下一步事务按同Run已完成记录重建原前缀，再复用contextContinues验证持久助手输出、完整工具结果和来源；陈旧前缀不能应用，保留近期约25%窗口（适用时至少30k，最多半窗口）及完整最后交互。原用户请求独立保留；不把摘要提升为授权。
+7. **生命周期与失败**：每Run仅一个后台Promise和取消controller，子任务继承原期限/预算；取消/撤销/恢复在原围栏事务将未派发置failed、已派发置unknown，不重放。完整流和清理完成后才持久摘要，usage缺失保留预约；未知存储提交不二次写入。可选摘要连续失败两次暂停，存储/清理故障不能吞掉；原任务finally及成功提交前排空，清理未确认保留运行名额。摘要费用汇入原Run用量但不生成正文事件。
+8. **当前能力与验收**：已实现同Runusage校准/回退、自动阈值、初始历史压缩、工具期预生成、完整分组与原输入保留、预算/取消/恢复/快照消费。初次/跨Run重建历史使用估算；不增加供应商超窗的自动重放恢复，不声称与OpenCode全部内部实现一致。语义摘要有信息损失及额外费用。操作见USAGE执行设置，静态与D17待验场景见testing。
+
+### Agent 会话自动命名
+
+1. **职责与范围**：scope 的 TitleSession/TitleModel 持默认 Thread 首条 Root 消息自动命名，RunExecutionOwner 追踪所属辅助模型调用；人工 Thread 标题不参与。
+2. **子功能与目录**：scope/model/title-types、title-model，storage/title-storage，service/title-session，adapters/sqlite/title-schema/title-sql/title-row；title-rules 持输出归一化和无工具提示词。
+3. **依赖方向**：Run owner → TitleSession → TitleModel → TitleStorage；现有 RunModelStream/OpenAI SDK 提供模型流，ProviderModel/ExecutionService 提供冻结配置复验和预算；不复制网络重试。
+4. **类型与转换**：TitleScope/Claim/Command 属 scope model，StoredTitle 对应 storage；Model 持白名单转换和政策投影。WS RunStreamState 带 AgentThread，由 ThreadModel.forRun 精确关联读取、原 interfaces 投影；不暴露标题账本/请求hash/供应商正文。
+5. **入口与安装**：workspace create 必填 autoTitle，前端新建默认 true，显式命名/SDK调用由调用方指定；直接 HTTP create 为人工标题。初始 v1 新增 agent_threads.title_origin 与 agent_thread_titles，注册快照列和真实decoder，不迁移旧库、不自动删除数据。
+6. **数据、事务与并发**：pending→automatic 的首次 claim 原子保存摘要、递增 Thread version；仅 thread_sequence=1 的 Root 原 create_run 身份且当前可执行时可 claim。独立 Thread version lease 不受 Run 文本增量改版影响；reserve/dispatch/finish 在事务复验原创建hash、Run活跃期限、冻结Provider与当前Thread来源/version。人工 rename 总是转manual；最后命名按原版本CAS，晚结果不能覆盖。账本请求/token/并发并入原Root/Child总量；未派发失败释放token，未知派发保留预留，真实usage成对记账。
+7. **生命周期与失败**：前台首模型派发后才启动可选任务，同模型最低支持思考等级、无工具、最多2000码点输入/2048输出token/4096字节正文，最终标题按128 UTF-8字节码点截断。Images/额度不足保留摘要。独立10秒和原期限信号，前台步骤结束立即取消并排空，终态前收口；取消/撤权/重启将reserved置failed、dispatched置unknown，不重放。普通命名失败只日志；存储提交未知或资源清理失败仍按原Run安全围栏处理，不假装清理成功。
+8. **当前能力与验收**：参考OpenCode固定提交49a112f的独立标题任务和人工改名保护；源码与静态证据见testing，D17下真实模型、竞态、快照及手机行为待验。
+
+## Agent 额外门槛清理（2026-10-25）
+
+1. **职责与范围**：恢复正常模型等待和可恢复工具失败；保留任务族总预算、授权、审批及未知结果围栏，UI设计不变。
+2. **子功能与目录**：Execution持准入，RunExecutionOwner持等待，ToolService持失败与投影，Context持持久续轮，Collaboration持活跃Child与完整输出读取。
+3. **依赖方向**：原Service→Model→Storage；本地容量等待使用p-retry8，仅重试ModelCapacityBusy，OpenAI SDK继续独占网络重试。
+4. **类型与转换**：Participant/StoredParticipant显式增加outputBytes；模型结果只带有标记预览，完整正文经原族关系续读；公开元数据无正文，Shared严格容量同步。
+5. **入口与安装**：模型/tool次数可配置上界400/4000，已有用户预算保留；十个协作工具声明更新到4.0.0，不保留旧参数兼容。
+6. **数据、事务与并发**：忙错误在派发写入前抛出并回滚；每次等待后重新做原CAS/准入。p-retry不接收signal，避免派发已提交后被其取消检查遮住；每次尝试前检查原取消，等待最长250ms响应取消，未知存储失败不重试。模型收到finished后以原步骤CAS持久记录response_received，先释放模型并发再等待标题/摘要/Child；该单调资源事实不改变正文revision或Run终态，快照列与decoder同步，重启仍按未结算派发保守对账。Child名额结合事务活跃数和原owner实际占用，历史不再累计四个。
+7. **生命周期与失败**：确定参数/不存在等工具错误持久failed后交回模型，Context快照及后续历史接受带正文的failed；权限、变更已派发未知及清理异常仍停止。工具捕获256KiB、模型步骤2MiB不变；预览与续读保留完整原文和可核对hash。
+8. **当前能力与验收**：源码两轮复核及静态证据见PLAN/testing；按D17不新增或执行行为测试，不重启当前旧schema运行实例。
+
+## Agent 结果续读与Child名额复核（2026-10-25）
+
+1. **职责与范围**：小预览额度时仍完整交付结果续读页；错误hash反馈模型；Child名额按真实占用ID去重，不改UI设计。
+2. **子功能与目录**：Context result-rules持唯一页预算，ResultService处理原工具结果，RunCollaborationService处理Child正文；ToolService传冻结预览额度。
+3. **依赖方向**：原Service→Context纯规则及各自Model→Storage，未新增模块或依赖。
+4. **类型与转换**：resultPage必填previewBytes，实际消费者同步；原ResultReadInput/ResultPage、hash、码点offset及nextOffset不变，不新增Shared字段或兼容接口。ChildAdmissionFacts/StoredChildAdmissionFacts明确持activeChildIds，Model复制转换；原执行owner只投影occupiedChildIds，不向Service交付任务对象。
+5. **入口与安装**：tool_result_read与collaboration_output_read按冻结设置缩小页；projectCapturedResult复用同一预算，没有独立截断实现。
+6. **数据、事务与并发**：先验证请求maxBytes为8..4096，再计算min(请求,有效预览额度-512)，有效预览额度仍1KiB..8KiB；512bytes外壳余量容纳UUID/hash、数字及字段。只读不可变账本，原文/hash保持，游标按实际码点推进。Child准入在原事务合并数据库的pending/running/unknown及未结算工具所属Child，与本机尚未收尾任务的ID；对并集计数，既不重复计算同一任务，也不漏计不同任务。
+7. **生命周期与失败**：错误hash属invalid_input，作为确定失败反馈模型后允许续轮；原授权、资源版本、取消、结果未知及清理保护保留，不绕过完整性检查。
+8. **当前能力与验收**：两轮源码核对覆盖Unicode/转义、最小与默认额度、末页、hash、权限和历史续轮；本轮静态证据见PLAN/testing，按D17未运行行为测试。
+
+## Agent Run 级批准策略与确定存储失败
+
+1. **职责与范围**：Runs 持有创建时冻结的 ask/full_access 意图；Governance 持有审批/单次消费。全授权不修改 App grant 或普通 SSH 授权。
+2. **目录**：原 runs/model/storage/adapters、governance/model/service/storage/adapters、interfaces HTTP/WS；错误分类 owner 为 agent-failure / agent-storage-failure。
+3. **依赖方向**：Service → Model → Storage，SQLite 在原事务读取模式，经 Model 转换交给治理规则；不从前端或工具参数推断自动批准。
+4. **类型与转换**：Shared runs/values 唯一定义 AgentApprovalMode；内部 CreateRootRunCommand / AgentRun、StoredRun / 创建命令及公开后端输入独立定义并逐字段映射。Shared 安全失败码 execution_storage_failed 不含技术正文。
+5. **入口与安装**：HTTP create、workspace create/append、public create 及 HTTP/WS RunView 同步字段；初始 v1 签名为 backend-next-v1-initial-20261025-agent-approvals，不兼容旧开发结构。
+6. **数据与并发**：agent_runs.approval_mode 非空有限值，创建 hash 包含模式，Child 创建事务复制父模式；快照列/解码与父子关系同时验证。自动审批绑定原 operation hash/revision、policy revision、目标版本和原用户，approved 后沿原 consume/authority 事务派发，未知提交不重放。
+7. **生命周期与失败**：具名 SQL/constraint 失败区别于 commit_unknown/rollback_failed；无模型步骤的 pending 仅以原创建 hash/version CAS 结算，轮间以原 completed 步骤 CAS 结束；reserved 并发等待的确定拒绝结算 DISPATCH_NOT_STARTED。纯确定 SQL 失败聚合仍可分类，混合未知或清理失败保持原因，不推测。App/Provider/目标撤权仍逐阶段检查。
+8. **当前能力与验收**：恢复聊天批准策略的真实执行链，未改变布局/风格；按 USAGE 操作。静态和两轮源码审核见 testing，真实审批/故障/取消和空库启动验收待远程，不把编译通过视为实机通过。
+
+## Agent 审批历史分页
+
+1. **职责**：Governance提供完整可遍历历史，单页最多64项；不以历史条数拒绝Run状态读取。
+2. **目录**：沿原治理Service/Model/Storage及HTTP/Workspace mapper，RunStreamService与run-changes-ws调度推送。
+3. **依赖**：Run仅消费治理应用页；SQL/索引归SQLite Adapter，插件SDK沿Shared严格解码。
+4. **类型**：Shared AgentApprovalPage、应用ApprovalPage和存储StoredApprovalPage各自归属并逐字段转换；after为小写UUID/null，稳定ID升序及游标关联在协议边界验证。
+5. **安装**：GET approvals可省略after；Workspace必传after；WS订阅游标必含approvals，重连从null开始，现有v1初始索引与精确签名同步，旧开发库不自动迁移。
+6. **并发**：同事务核对Run归属、刷新未决状态、读取64+1行；按(user,App,Run,id)索引keyset分页。存储不截断历史、不扩大单消息容量。
+7. **生命周期**：WS逐页沿原ACK背压发送；扫描中发生state变更后再从首页扫描，more保留待交付状态，Run终态不提前结束。审批批准与真实消费权限事务保持原约束。
+8. **验收**：保留原卡片和完整历史，静态及复审证据见testing；大历史、并发决议与断线真实行为按D17待远程，不以编译通过替代。
+
+### Artifact 总空间准入与二进制生成
+
+1. **职责与范围**：ArtifactService拥有总空间准入，去掉16MiB单文件政策及10,000项累计准入；Execution只保留总空间与保留时间。
+2. **子功能与目录**：沿原artifacts/execution/providers/integrations；ModelImageRequest的maxBytes属于Platform技术契约，SDK adapter负责编码预算与技术上限。
+3. **依赖方向**：ProviderImageService和BrowserService向ArtifactService取得当前可用字节，再由各Model显式传入Platform；Platform不依赖Agent或Shared业务政策。
+4. **类型与转换**：删除maxSingleArtifactBytes所有写入/视图/存储文档及mapper；ArtifactFacts不再保留无消费者的totalCount，Sqlite仅聚合字节。图片应用预算经Service→Model逐字段写入技术请求，输出仍经Model隔离。
+5. **入口与安装**：原HTTP路由不变。PUT内容直接流式写入，实际长度由reservation约束；不把10GiB内容容量放入maxBodyBytes或提高全局JSON内存预算。
+6. **数据、事务与并发**：availableBytes为预检，冻结Run设置总空间减用户已有占用（含预留），再与磁盘余量取较小值。begin在事务内继续核对settingsVersion、实时totalBytes及新增声明字节，并保留磁盘64MiB余量；生成期间并发占用可能使最终准入失败，预检不是空间预留。
+7. **生命周期与失败**：图片请求编码预算从允许解码字节推导；Node MAX_STRING_LENGTH/MAX_LENGTH决定整体JSON/Base64技术天花板，保留64KiB外壳余量。浏览器CDP二进制同样受字符串表示容量约束；显式download.maxBytes可主动缩窄本次下载，省略时用实际剩余空间。保留格式、权限、hash、版本、取消及unknown围栏，不自动重试付费生成。
+8. **当前能力与验收**：16MiB/8MiB业务限制已去掉；整体Base64路径依然需要比文件更大的内存，运行时技术限制不等于可承诺的内存容量；大体积/配额并发行为按D17待验。现存旧设置/冻结文档不自动迁移或删除，新版本使用当前结构。
+
+### Artifact 总空间与分段文件传输
+
+1. **职责与范围**：文件库消费总空间契约，移除已授权删除的单文件设置，其余UI保持不变。
+2. **子功能与目录**：execution-types/mapper和ExecutionSettings同步字段删除；artifact-management-api拥有长度/版本/范围/hash关联，通用binary-client继续只负责技术传输。
+3. **依赖方向**：功能API消费Shared和client；增量SHA-256复用成熟@noble/hashes，不自行实现hash。
+4. **类型与转换**：Artifact metadata和begin字节上限随Shared总空间最大值；上传File不再先整体arrayBuffer，按4MiB分片增量hash，Blob请求直接交付不重复解包。
+5. **入口与安装**：原上传/下载按钮与返回Blob契约不变，超过4MiB下载沿原content Range接口逐段获取，无新UI或轮询。
+6. **数据、事务与并发**：每段验证原ID路由、etag、206/200、Content-Range、真实长度及末尾完整SHA-256；版本变化或段失败不交付部分文件。Blob分段组装避免单个巨大ArrayBuffer，实际仍取决于浏览器内存/Blob能力。
+7. **生命周期与失败**：同一取消信号覆盖hash和各段请求，hash状态在finally销毁；无自动上传或未知写入重试。分段只缩小传输工作集，不作为存储上限。
+8. **当前能力与验收**：双端静态和构建见testing；按D17大文件、取消、版本变化、窄设备真实资源占用待验。
+
+### Artifact 总空间统一（2026-10-26）
+
+范围：删除单文件设置及固定16MiB Artifact/图片、8MiB截图业务上限，取消10,000项累计文件准入，读取偏移跟随Shared协议容量；生成/截图/下载预检总剩余空间，最终begin事务保证总配额。文件库增量hash与Range分段下载复用现有入口，无额外UI变更。
+
+D17：不新增/运行本地行为、浏览器/E2E或付费图片请求。现有plugin-artifact-streams夹具将内容大小固定为16MiB测试批次，不随新10GiB协议上限分配巨大内存；未改变原授权撤销/关闭/lease断言。
+
+待验：超过16MiB生成/上传/预览/下载，超过8MiB截图；总空间接近耗尽、已有staging预留、并发生成最终begin拒绝、磁盘余量；多段下载逐段版本/范围/长度/hash/空文件/中途取消；大文件上传分片hash且无整体ArrayBuffer；文件数超过10,000后按空间准入；SDK Base64技术容量、非规范Base64及格式拒绝；旧设置文档不自动迁移。
+
+两轮源码审核完成：第一轮核对全契约删除、HTTP流式/JSON容量区分、最终配额事务、已有预留和工具偏移；第二轮核对Base64规范编码/运行时预算、浏览器上传读取前技术能力、Range空文件/末段/版本变化、增量hash销毁及取消。检查证据：
+
+- `pnpm run check`通过，`/tmp/nexus-artifact-capacity-check.log`。
+- `pnpm --filter @nexus-terminal/shared build`、`pnpm run build`及最后技术能力补齐后的`pnpm run build:backend`通过，日志`/tmp/nexus-artifact-capacity-shared.log`、`/tmp/nexus-artifact-capacity-build.log`、`/tmp/nexus-artifact-capacity-backend-final-build.log`。
+- `pnpm run format:all:check`通过，`/tmp/nexus-artifact-capacity-format.log`；后续修改均目标Prettier写入并再做完整格式检查，`git diff --check`及既有流式夹具`node --check`通过。
+
+源码/静态结果不代表上述运行时场景已通过；未重启、未改已有数据库、未提交推送。删除执行配置字段按当前破坏性结构执行，旧持久设置及冻结Run文档不兼容。
+
+### 文件管理器预读20ms（2026-10-26）
+
+原useFilesystemBrowser的PREFETCH_DELAY_MS由50改为20；FileManager普通目录、“..”鼠标停留及键盘定位共用此入口，后继最新候选补调度也引用同一常量。两轮源码审核核对入口与两处定时器，以及缓存命中、单个预读、最新候选、点击复用、离开/失活/dispose取消和revision围栏，无其它代码改动。
+
+静态检查日志：`/tmp/nexus-files-prefetch20-check.log`、`/tmp/nexus-files-prefetch20-build.log`、`/tmp/nexus-files-prefetch20-format.log`；根check、Frontend build、全量格式及git diff --check均通过。按D17不新增/运行行为或浏览器/E2E测试，真实普通目录/上级目录20ms预读与快速移出待远程验收。
+
+## WebSocket 周期保活（2026-10-26，源码及静态）
+
+范围：Platform HTTP listener 的既有 channel/raw WebSocket，每25秒以 ws 标准 Ping 保活，浏览器自动 Pong；无 UI、Shared 或业务消息变化。
+
+两轮源码复核：沿 upgrade→activeSockets→channel/raw→维护 suspend/drain/resume→listener close 追踪所有权；复核 ws.ping(callback) 支持、OPEN/缓冲保护、同步/异步发送失败、一次性定时器unref与同步清除。保活不刷新业务授权/挂起租约，不以一次漏Pong强制断开；原前台恢复探测、业务心跳及SSH离线策略保留。原始路由即使调整事件监听，统一timer仍由HTTP owner掌管。
+
+静态：Backend build通过，日志 `/tmp/nexus-ws-keepalive-build.log`；根check、全量format及git diff --check通过，日志 `/tmp/nexus-ws-keepalive-{check,format}.log`。初轮ESLint发现新增分支缺少花括号及声明空行，已按项目规范修正后重跑，不将初轮失败记为通过。
+
+按PLAN D17未新增/运行行为、浏览器专项或E2E。待验：经真实反向代理空闲超过60秒及多轮Ping；SSH/Agent/raw RDP/VNC并存；手机后台恢复、休眠/断网；发送背压、维护暂停恢复及停机无残留timer。未部署、重启或提交推送。
+
+## 全部本地变更审核与远程回归（2026-10-26，进行中）
+
+用户授权审核、提交全部本地代码并修复远程E2E。两轮分组源码审核覆盖 Agent Run/Step/Tool/Child、预算和模型SDK重试、上下文摘要与标题、批准分页/策略、模型来源、Artifact空间与分块下载、前端流合并/乐观消息/目标记忆、终端生命周期/输入恢复、Workspace附件流控及WS保活；保留已有授权UI变更，本轮不增加UI设计修改。
+
+审核修正：工具列表协议按数值时间戳与ID校验游标，避免字符串位数影响排序；后端目标黑名单用例删除误加的approvalMode字段；状态监控用例按当前方向箭头及可访问标签核对上下行，保留速率/窄窗/缩放/趋势全部断言。
+
+已完成根check、Shared/双端build、全量格式/diff、变更E2E的独立tsc（临时配置 `/tmp/nexus-all-review-e2e-tsconfig.json`，包含原前端别名及严格类型）；日志 `/tmp/nexus-all-review-{check,build,format,e2e-types}.log`。首次直接tsc因缺少项目配置、继而别名未设置失败，改用临时显式配置后通过，不视为产品问题。游标最终修正后的根check、双端build、全量format/diff亦通过，日志 `/tmp/nexus-all-review-final-{check,build,format}.log`。另修复模型手动添加按钮因聊天/图片两组重名导致的严格定位冲突，按Chat models组定位；更新已恢复的Run批准策略断言为默认Ask when needed，仍核对不产生grant。未执行本地行为测试；远程使用正式E2E工作流。
+
+旧失败基线40218989558：质量/Docker由Agent宿主引用尚未提交的composable/Shared字段导致编译失败；Agent窗口链大量失败与此一致；状态监控仍定位已删除rate-label。完整日志下载到 `/tmp/nexus-e2e-40218989558-logs/`，旧证据不代表当前修复已通过。当前待提交新版本并远程回归。

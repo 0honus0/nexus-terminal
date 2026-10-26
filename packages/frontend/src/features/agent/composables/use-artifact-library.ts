@@ -107,6 +107,8 @@ export function useArtifactLibrary(available: () => boolean) {
 			},
 			{ write: false },
 		);
+		// If the view returned before the obsolete read finished, complete its missed refresh.
+		if (current !== revision && available() && needsReload.value) await load();
 	}
 
 	async function loadStorage(): Promise<void> {
@@ -121,6 +123,7 @@ export function useArtifactLibrary(available: () => boolean) {
 			},
 			{ write: false },
 		);
+		if (current !== revision && available() && statsRequired.value) await loadStorage();
 	}
 
 	async function loadApps(): Promise<void> {
@@ -299,9 +302,12 @@ export function useArtifactLibrary(available: () => boolean) {
 		initial();
 	});
 	watch(available, (active) => {
-		if (active) {
-			initial();
+		if (!active) {
+			// Generation and other App writes may complete while this cached view is hidden.
+			invalidate();
+			return;
 		}
+		initial();
 	});
 	return {
 		apps,

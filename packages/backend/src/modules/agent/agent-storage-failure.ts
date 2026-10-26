@@ -1,5 +1,5 @@
 import { SqliteFailure } from '../../platform/storage/sqlite/sqlite-errors.js';
-import { AgentFailure } from './agent-failure.js';
+import { AgentFailure, AgentStorageStatementFailure } from './agent-failure.js';
 
 /** Application/storage boundary; causes stay private. */
 export async function agentStorage<T>(action: () => Promise<T>): Promise<T> {
@@ -10,6 +10,9 @@ export async function agentStorage<T>(action: () => Promise<T>): Promise<T> {
 			throw error;
 		}
 		if (error instanceof SqliteFailure) {
+			if (error.kind === 'sql' || error.kind === 'constraint') {
+				throw new AgentStorageStatementFailure({ cause: error });
+			}
 			if (error.kind === 'commit_unknown' || error.kind === 'rollback_failed') {
 				throw new AgentFailure('operation_unknown', { cause: error });
 			}

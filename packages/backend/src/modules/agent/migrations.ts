@@ -1,3 +1,5 @@
+import { initializeThreadTitles } from './scope/adapters/sqlite/title-schema.js';
+import { initializeAutomaticCompactions } from './context/adapters/sqlite/compaction-schema.js';
 import { initializePluginIntents } from './plugins/adapters/sqlite/plugin-intent-sql.js';
 import { initializeAgentPlugins } from './plugins/adapters/sqlite/plugin-schema.js';
 import { initializeBrowserConfiguration } from './integrations/adapters/sqlite/browser-sql.js';
@@ -29,6 +31,8 @@ export async function initializeAgentSchema(tx: SqlExecutor): Promise<void> {
 	await initializeModelRegistry(tx);
 	await initializeAgentRunSteps(tx);
 	await initializeContextSnapshots(tx);
+	await initializeAutomaticCompactions(tx);
+	await initializeThreadTitles(tx);
 	await initializeRunTools(tx);
 	await initializeContextCheckpoints(tx);
 	await initializeRunCollaboration(tx);

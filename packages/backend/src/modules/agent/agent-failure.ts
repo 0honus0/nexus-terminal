@@ -12,6 +12,48 @@ export class AgentFailure extends Error {
 	}
 }
 
+/** A SQL statement definitely failed; unknown commit/rollback outcomes use their own failure. */
+export class AgentStorageStatementFailure extends AgentFailure {
+	constructor(options?: ErrorOptions) {
+		super('internal_failure', options);
+		this.name = 'AgentStorageStatementFailure';
+	}
+}
+
+/** Aggregated local statement failures still prove that no commit-unknown evidence was reported. */
+export function isAgentStorageStatementFailure(error: unknown): boolean {
+	return (
+		error instanceof AgentStorageStatementFailure ||
+		(error instanceof AggregateError &&
+			error.errors.length > 0 &&
+			error.errors.every(isAgentStorageStatementFailure))
+	);
+}
+
+/** Definite pre-dispatch capacity refusal; the original Run may wait without replaying effects. */
+export class ModelCapacityBusy extends AgentFailure {
+	constructor() {
+		super('limit_exceeded');
+		this.name = 'ModelCapacityBusy';
+	}
+}
+
+/** Context capacity refusal, distinct from execution time/request/budget limits. */
+export class ContextLimitExceeded extends AgentFailure {
+	constructor() {
+		super('limit_exceeded');
+		this.name = 'ContextLimitExceeded';
+	}
+}
+
+/** Current App capability/target grant is absent; distinct from stale authority or resource refusals. */
+export class ToolCapabilityDenied extends AgentFailure {
+	constructor() {
+		super('forbidden');
+		this.name = 'ToolCapabilityDenied';
+	}
+}
+
 /** A persisted unknown resource refuses new work; this refusal dispatched no new effect. */
 export class AgentResourceFenced extends AgentFailure {
 	constructor(options?: ErrorOptions) {

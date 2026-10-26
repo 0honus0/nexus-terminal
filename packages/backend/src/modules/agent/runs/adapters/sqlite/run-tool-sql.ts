@@ -15,6 +15,8 @@ import type {
 	StoredToolIdentity,
 	StoredToolSettlement,
 	StoredToolEventPage,
+	StoredToolListCursor,
+	StoredToolListPage,
 } from '../../storage/run-tool-storage.js';
 import { readToolOperation, toolOperation, readToolEvent } from './run-tool-row.js';
 import { readStepProposals } from './run-step-proposals.js';
@@ -291,6 +293,46 @@ export class SqliteRunToolStorage implements RunToolStorage {
 
 	get(input: StoredToolIdentity): Promise<StoredToolOperation | null> {
 		return this.db.transaction((tx) => toolOperation(tx, input.userId, input.appId, input.runId, input.id));
+	}
+
+	listThread(
+		input: { userId: number; appId: string; threadId: string },
+		before: StoredToolListCursor | null,
+		limit: number,
+	): Promise<StoredToolListPage | null> {
+		if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+			throw new Error('Invalid tool list pagination');
+		}
+		return this.db.transaction(async (tx) => {
+			const thread = await tx.one('SELECT id FROM agent_threads WHERE user_id=? AND app_id=? AND id=?', [
+				input.userId,
+				input.appId,
+				input.threadId,
+			]);
+			if (thread === null) {
+				return null;
+			}
+			const params = [input.userId, input.appId, input.threadId];
+			let boundary = '';
+			if (before !== null) {
+				boundary = ' AND (t.created_at<? OR (t.created_at=? AND t.id<?))';
+				params.push(before.createdAt, before.createdAt, before.id);
+			}
+			const rows = await tx.all(
+				`SELECT t.* FROM agent_run_tools t
+				 JOIN agent_runs r ON r.id=t.run_id AND r.user_id=t.user_id AND r.app_id=t.app_id
+				 WHERE t.user_id=? AND t.app_id=? AND r.thread_id=? ${boundary}
+				 ORDER BY t.created_at DESC,t.id DESC LIMIT ?`,
+				[...params, limit + 1],
+			);
+			const descending = rows.map(readToolOperation);
+			const items = descending.slice(0, limit).reverse();
+			const nextCursor =
+				descending.length > limit && items.length > 0
+					? { createdAt: items[0].createdAt, id: items[0].id }
+					: null;
+			return { items, nextCursor };
+		});
 	}
 
 	listEvents(input: StoredToolIdentity, after: number, limit: number): Promise<StoredToolEventPage | null> {

@@ -33,6 +33,18 @@ function fromCapabilities(value: NonNullable<AgentDiscoveredModel['providerCapab
 
 export function toProviderModel(value: ProviderModelDraft): AgentProviderModelInput {
 	return {
+		capabilitySources: {
+			contextWindow: value.sources.contextWindow,
+			maxOutputTokens: value.sources.maxOutputTokens,
+			supportsTools: value.sources.supportsTools,
+			supportsImageInput: value.sources.supportsImageInput,
+			supportsImageGeneration: value.sources.supportsImageGeneration,
+			supportsFileInput: value.sources.supportsFileInput,
+			supportsPromptCacheKey: value.sources.supportsPromptCacheKey,
+			reasoningEfforts: value.sources.reasoningEfforts,
+			defaultReasoningEffort: value.sources.defaultReasoningEffort,
+			reasoningMandatory: value.sources.reasoningMandatory,
+		},
 		id: value.id,
 		protocol: value.protocol,
 		contextWindow: value.contextWindow,
@@ -154,6 +166,18 @@ export function createProviderDraft(value: Provider | null): ProviderDraft {
 		credential: { action: 'keep' },
 		models:
 			value?.models.map((model) => ({
+				sources: {
+					contextWindow: model.sources.contextWindow,
+					maxOutputTokens: model.sources.maxOutputTokens,
+					supportsTools: model.sources.supportsTools,
+					supportsImageInput: model.sources.supportsImageInput,
+					supportsImageGeneration: model.sources.supportsImageGeneration,
+					supportsFileInput: model.sources.supportsFileInput,
+					supportsPromptCacheKey: model.sources.supportsPromptCacheKey,
+					reasoningEfforts: model.sources.reasoningEfforts,
+					defaultReasoningEffort: model.sources.defaultReasoningEffort,
+					reasoningMandatory: model.sources.reasoningMandatory,
+				},
 				id: model.id,
 				protocol: model.protocol,
 				contextWindow: model.contextWindow,

@@ -8,7 +8,9 @@ export function fromStoredRun(value: StoredRun): AgentRun {
 		id: value.id,
 		appId: value.appId,
 		threadId: value.threadId,
+		approvalMode: value.approvalMode,
 		status: value.status,
+		failure: null,
 		version: value.version,
 		createdAt: value.createdAt,
 		updatedAt: value.updatedAt,
@@ -27,10 +29,7 @@ export function fromStoredEvent(value: StoredRunEvent): AgentRunEvent {
 
 export function fromStoredFrozen(value: StoredFrozenInput): RunFrozenInput {
 	const capabilities = fromStoredModel(value.capabilities);
-	if (
-		value.protocol !== 'images' &&
-		(capabilities.contextWindow === undefined || capabilities.maxOutputTokens === undefined)
-	) {
+	if (value.protocol !== 'images' && capabilities.maxOutputTokens === undefined) {
 		throw new AgentFailure('provider_unavailable');
 	}
 	return {

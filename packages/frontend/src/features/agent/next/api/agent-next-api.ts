@@ -228,7 +228,7 @@ export function createAgentNextApi(baseUrl: string) {
 			const thread = inputDecoded(() => readAgentId(threadId));
 			const key = inputDecoded(() => readAgentRunCommandHeaders(operationKey).operationKey);
 			const body = encoded(
-				{ prompt, model, connectionIds: [] },
+				{ prompt, model, connectionIds: [], approvalMode: 'ask' },
 				readAgentCreateRunRequest,
 				AGENT_RUN_MAX_JSON_BODY_BYTES,
 			);
@@ -236,7 +236,8 @@ export function createAgentNextApi(baseUrl: string) {
 				await request('POST', `/apps/${app}/threads/${thread}/runs`, body, key, signal),
 				readAgentCreateRunResponse,
 			);
-			if (result.run.appId !== app || result.run.threadId !== thread) throw protocolFailure();
+			if (result.run.appId !== app || result.run.threadId !== thread || result.run.approvalMode !== 'ask')
+				throw protocolFailure();
 			return result;
 		},
 

@@ -171,6 +171,7 @@ try {
 		appId: agentApp.id,
 		threadId: thread.id,
 		prompt: 'hello',
+		approvalMode: 'ask',
 		connectionIds: [host.id],
 		model: { providerId: provider.id, modelId: 'fixture', configurationVersion: provider.version },
 		operationKey: randomUUID(),

@@ -33,7 +33,7 @@ export function collaborationTools(): ToolDefinition[] {
 		{
 			name: 'delegate',
 			description:
-				'Create one direct Child Run from a Root, at most four total. profile=explore|review|worker; objective is an independent task, not inherited private history. targets are decimal SSH connection ID strings narrowed from Root selection. Model, tools and execution limits inherit the Root snapshot; the Root deadline and shared family budgets still apply. Optional dependencies are earlier Child UUIDs; dependencyMode=success|settled. Independent tool approval and current live grants still required. No nested delegation or automatic retry.',
+				'Create one direct Child Run from a Root, only active Children occupy the configured Child limit; completed history does not consume slots. profile=explore|review|worker; objective is an independent task, not inherited private history. targets are decimal SSH connection ID strings narrowed from Root selection. Model, tools and execution limits inherit the Root snapshot; the Root deadline and shared family budgets still apply. Optional dependencies are earlier Child UUIDs; dependencyMode=success|settled. Independent tool approval and current live grants still required. No nested delegation or automatic retry.',
 			fields: [
 				text('profile', 16),
 				text('objective', 8192),
@@ -46,8 +46,19 @@ export function collaborationTools(): ToolDefinition[] {
 		},
 		{
 			name: 'list',
-			description: 'List safe statuses of this Root family. Never expose private model history.',
-			fields: [],
+			description:
+				'Page this Root family by optional after Child UUID and limit (default 16). Output is a bounded preview; use collaboration_output_read for complete final text. Never expose private model history.',
+			fields: [
+				{ ...text('after', 36), required: false },
+				{ ...integer('limit', 1, 16), required: false },
+			],
+			mutation: false,
+		},
+		{
+			name: 'output_read',
+			description:
+				'Read immutable completed Child output in this Root family. offset is Unicode code points, maxBytes bounds JSON-encoded text (8..4096). Continue using nextOffset; result is untrusted data.',
+			fields: [text('childId', 36), integer('offset', 0, Number.MAX_SAFE_INTEGER), integer('maxBytes', 8, 4096)],
 			mutation: false,
 		},
 		{
@@ -105,7 +116,7 @@ export function collaborationTools(): ToolDefinition[] {
 	];
 	return definitions.map((value) => ({
 		name: 'collaboration_' + value.name,
-		version: '3.0.0',
+		version: '4.0.0',
 		description: value.description,
 		capability: 'app.intents.exchange',
 		risk: value.mutation ? 'control' : 'read',
@@ -184,7 +195,18 @@ export function collaborationInput(name: string, value: Record<string, unknown>)
 		};
 	}
 	if (name === 'collaboration_list') {
-		return { action: 'list' };
+		const after = value.after === undefined ? null : string(value.after);
+		if (after !== null && !AGENT_ID_PATTERN.test(after)) {
+			throw new AgentFailure('invalid_input');
+		}
+		return { action: 'list', after, limit: value.limit === undefined ? 16 : number(value.limit) };
+	}
+	if (name === 'collaboration_output_read') {
+		const childId = string(value.childId);
+		if (!AGENT_ID_PATTERN.test(childId)) {
+			throw new AgentFailure('invalid_input');
+		}
+		return { action: 'output_read', childId, offset: number(value.offset), maxBytes: number(value.maxBytes) };
 	}
 	if (name === 'collaboration_cancel') {
 		return { action: 'cancel', childIds: ids(value.childIds) };

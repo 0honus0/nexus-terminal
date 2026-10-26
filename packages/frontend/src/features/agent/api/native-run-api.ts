@@ -142,12 +142,23 @@ export async function listNativeApprovals(
 	runId: string,
 	signal?: AbortSignal,
 ): Promise<NativeApproval[]> {
-	const result = await requestNativeWorkspace(
-		scope,
-		{ appVersion: scope.appVersion, request: { method: 'agent.approvals.list', params: { runId } } },
-		signal,
-	);
-	return result.method === 'agent.approvals.list' ? result.value.map(fromNativeApproval) : unexpected();
+	let after: string | null = null;
+	const items: NativeApproval[] = [];
+	while (true) {
+		const result = await requestNativeWorkspace(
+			scope,
+			{
+				appVersion: scope.appVersion,
+				request: { method: 'agent.approvals.list', params: { runId, after } },
+			},
+			signal,
+		);
+		if (result.method !== 'agent.approvals.list') return unexpected();
+		items.push(...result.value.items.map(fromNativeApproval));
+		if (!result.value.hasMore)
+			return items.sort((a, b) => a.requestedAt - b.requestedAt || a.id.localeCompare(b.id));
+		after = result.value.nextCursor;
+	}
 }
 
 export async function listNativeMessages(

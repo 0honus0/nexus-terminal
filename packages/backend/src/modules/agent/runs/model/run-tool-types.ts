@@ -75,6 +75,17 @@ export interface ToolEventPage {
 	nextCursor: number;
 }
 
+export interface ToolListCursor {
+	createdAt: number;
+	id: string;
+}
+
+export interface ToolListPage {
+	items: ToolOperation[];
+	/** Oldest cursor in this page; null when no older records remain. */
+	nextCursor: ToolListCursor | null;
+}
+
 export interface ToolPermissionInspection {
 	parent: ToolIdentity;
 	inspection: ToolInspectionCommand;

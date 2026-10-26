@@ -64,6 +64,19 @@
 	container-type: inline-size;
 	container-name: agent-composer;
 }
+.agent-input-artifact {
+	max-width: min(100%, 42rem);
+	height: auto;
+	min-height: var(--ui-control-height);
+	padding-block: 5px;
+	white-space: normal;
+}
+.agent-input-artifact-name {
+	min-width: 0;
+	overflow-wrap: anywhere;
+	line-height: 1.35;
+	text-align: left;
+}
 #agent-composer {
 	font-size: 13px;
 }

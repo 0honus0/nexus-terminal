@@ -271,14 +271,8 @@ export async function finishNativeTask(task: NativeTask, runId: string, approved
 	await expect
 		.poll(
 			async () => {
-				const approvals = await requestAgentWorkspace(task.request, task.app, {
-					method: 'agent.approvals.list',
-					params: { runId },
-				});
-				if (approvals.method !== 'agent.approvals.list') {
-					throw new Error('Unexpected approval list');
-				}
-				for (const approval of approvals.value.filter((item) => item.status === 'requested')) {
+				const approvals = await listNativeApprovalHistory(task, runId);
+				for (const approval of approvals.filter((item) => item.status === 'requested')) {
 					expect(approvedTools, `Unexpected approval: ${approval.inspection.toolName}`).toContain(
 						approval.inspection.toolName,
 					);
@@ -333,14 +327,8 @@ export async function waitNativeApproval(task: NativeTask, runId: string, toolNa
 	let found: import('../../../../packages/shared/src/agent/governance/model').AgentApprovalView | undefined;
 	await expect
 		.poll(async () => {
-			const result = await requestAgentWorkspace(task.request, task.app, {
-				method: 'agent.approvals.list',
-				params: { runId },
-			});
-			if (result.method !== 'agent.approvals.list') {
-				throw new Error('Unexpected approval list');
-			}
-			found = result.value.find((item) => item.status === 'requested' && item.inspection.toolName === toolName);
+			const result = await listNativeApprovalHistory(task, runId);
+			found = result.find((item) => item.status === 'requested' && item.inspection.toolName === toolName);
 			return !!found;
 		})
 		.toBe(true);
@@ -382,4 +370,19 @@ export async function cancelNativeTask(task: NativeTask, runId: string) {
 			expectedVersion: run.version,
 		},
 	});
+}
+
+async function listNativeApprovalHistory(task: NativeTask, runId: string) {
+	const items: import('../../../../packages/shared/src/agent/governance/model').AgentApprovalView[] = [];
+	let after: string | null = null;
+	while (true) {
+		const result = await requestAgentWorkspace(task.request, task.app, {
+			method: 'agent.approvals.list',
+			params: { runId, after },
+		});
+		if (result.method !== 'agent.approvals.list') throw new Error('Unexpected approval history page');
+		items.push(...result.value.items);
+		if (!result.value.hasMore) return items;
+		after = result.value.nextCursor;
+	}
 }

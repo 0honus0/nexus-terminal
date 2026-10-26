@@ -1,5 +1,6 @@
 import {
 	AGENT_PROVIDER_MODEL_LIMIT,
+	AGENT_MODEL_CAPABILITY_FIELDS,
 	AGENT_PROVIDER_MAX_MODEL_ID_BYTES,
 	AGENT_PROVIDER_MAX_NAME_BYTES,
 	AGENT_PROVIDER_MAX_SECRET_BYTES,
@@ -63,6 +64,22 @@ export function validateProviderInput(input: ProviderInput): void {
 		) {
 			throw new AgentFailure('invalid_input');
 		}
+		if (model.capabilitySources !== undefined) {
+			for (const [field, source] of Object.entries(model.capabilitySources)) {
+				if (source === undefined) {
+					continue;
+				}
+				const key = AGENT_MODEL_CAPABILITY_FIELDS.find((item) => item === field);
+				if (
+					!key ||
+					model[key] === undefined ||
+					(source !== 'manual' && source !== 'provider' && source !== 'registry')
+				) {
+					throw new AgentFailure('invalid_input');
+				}
+			}
+		}
+
 		ids.add(model.id.trim());
 		for (const value of [
 			model.supportsImageInput,
@@ -98,6 +115,22 @@ export function validateProviderInput(input: ProviderInput): void {
 export function cloneProviderModel(model: ProviderModelInput): ProviderModelInput {
 	return {
 		id: model.id,
+		...(model.capabilitySources === undefined
+			? {}
+			: {
+					capabilitySources: {
+						contextWindow: model.capabilitySources.contextWindow,
+						maxOutputTokens: model.capabilitySources.maxOutputTokens,
+						supportsTools: model.capabilitySources.supportsTools,
+						supportsImageInput: model.capabilitySources.supportsImageInput,
+						supportsImageGeneration: model.capabilitySources.supportsImageGeneration,
+						supportsFileInput: model.capabilitySources.supportsFileInput,
+						supportsPromptCacheKey: model.capabilitySources.supportsPromptCacheKey,
+						reasoningEfforts: model.capabilitySources.reasoningEfforts,
+						defaultReasoningEffort: model.capabilitySources.defaultReasoningEffort,
+						reasoningMandatory: model.capabilitySources.reasoningMandatory,
+					},
+				}),
 		...(model.protocol === undefined ? {} : { protocol: model.protocol }),
 		contextWindow: model.contextWindow,
 		maxOutputTokens: model.maxOutputTokens,

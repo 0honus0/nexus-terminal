@@ -41,7 +41,7 @@ docker compose logs --tail=100 backend
 
 数据库文件的父目录即实例数据目录；每个实例使用独立目录。资源目录不再拼接 `.db.appearance/.db.artifacts/.db.plugins`，本次布局为破坏性升级，不自动迁移旧目录或混用旧数据库；以新的空数据目录启动，旧目录需由操作者自行保管，程序不删除旧数据。Compose 的数据库固定为容器内 `/app/data/nexus-terminal.db`，通过 `.env` 的 `NEXUS_DATA_DIR` 配置宿主目录，默认仍为 `./data`。运行中可能出现 SQLite WAL/SHM、恢复日志和临时目录，勿手动清除正在使用的恢复文件。
 
-当前首版数据库仅保留 v1 完整结构；当前结构包含远端依赖安装的 `tools` 机器突变来源及 Agent Images 协议，结构签名为 `backend-next-v1-initial-20261025-agent-images`。即使旧开发库也标为 v1，亦不能据此视为兼容；启用当前工作区构建前使用独立空数据目录并保管原目录与密钥，不把旧库/旧快照直接混入新实例。程序不会自动删除旧数据或执行开发期升级。
+当前首版数据库仅保留 v1 完整结构；当前结构包含远端依赖安装的 `tools` 机器突变来源、Agent Images 协议、上下文摘要/自动标题、模型响应收讫标记和 Run 级批准策略，结构签名为 `backend-next-v1-initial-20261025-agent-approvals`。即使旧开发库也标为 v1，亦不能据此视为兼容；启用当前工作区构建前使用独立空数据目录并保管原目录与密钥，不把旧库/旧快照直接混入新实例。程序不会自动删除旧数据或执行开发期升级。
 
 首次 Passkey 站点从公开 Origin 推导；多站点可用 `NEXUS_PASSKEY_SITES` JSON 初始化。CAPTCHA 和 Passkey 站点配置在设置页维护，按界面提示重启激活；IP 白名单、登录封禁策略、监控周期和资源缓存 TTL 保存后热更新。白名单保存前确认当前来源仍被允许，保留部署恢复入口。插件仓库与信任 Publisher 由管理接口配置，不使用旧 catalog 环境变量。写操作依赖当前会话、同源 Origin/Fetch Metadata，不使用旧 CSRF token 端点。
 

@@ -371,10 +371,6 @@
             "label": "单会话产物磁盘总额",
             "hint": "单个会话产物所允许占用的总磁盘空间"
           },
-          "maxSingleArtifactBytes": {
-            "label": "单文件产物体积上限",
-            "hint": "单个产物文件允许写入的最大字节数"
-          },
           "maxGlobalArtifactBytes": {
             "label": "全局产物总磁盘配额",
             "hint": "全系统所有 Agent 产物累计占用的磁盘上限"
@@ -841,7 +837,6 @@
           "maxMessageBytes": "消息累计容量（字节）",
           "maxRecallItems": "Recall 条数",
           "maxRecallBytes": "Recall 容量（字节）",
-          "maxSingleArtifactBytes": "单个 Artifact（字节）",
           "maxArtifactBytes": "Artifact 总量（字节）",
           "artifactTtlSeconds": "Artifact 有效期（秒）"
         }
@@ -866,7 +861,7 @@
         "secretHelp": "密钥不回显、不去除空白。提交后清空本地输入。",
         "hasCredential": "已配置密钥",
         "noCredential": "未配置密钥",
-        "discover": "发现并记录模型",
+        "discover": "更新模型列表",
         "discoverEndpoint": "查询此端点模型",
         "test": "发送真实连通测试",
         "testOk": "测试成功，用时 {ms} ms",
@@ -1563,12 +1558,17 @@
     },
     "approvals": {
       "command": "执行详情",
+      "commandTruncated": "命令预览已截断；完整参数和输出不在界面展示。",
       "title": "需要批准的操作",
+      "historyTitle": "审批记录",
       "acpInnerTitle": "ACP 内部操作需要批准",
       "allowOnce": "允许一次",
       "rejectOnce": "拒绝一次",
       "timeline": "待处理审批",
       "target": "目标",
+      "requestedAt": "申请时间",
+      "decidedAt": "处理时间",
+      "riskLabel": "风险",
       "expires": "剩余",
       "hash": "操作 Hash",
       "operation": "规范化操作",
@@ -1741,7 +1741,9 @@
       "usageUnavailable": "供应商尚未返回 Token 用量",
       "usageCoverage": "已返回用量 {reported}/{requests} 次模型请求",
       "audit": "步骤与工具审计",
-      "auditHelp": "只读审计元数据，不展示凭据、工具参数或原始输出。每次读取一页。",
+      "auditStep": "步骤",
+      "auditTool": "工具调用",
+      "auditHelp": "只读审计元数据；Shell／ACP 展示有长度上限的命令预览，原始参数、凭据与输出仍隐藏。每次读取一页。",
       "step": "步骤编号",
       "read": "刷新当前状态",
       "moreEvents": "读取后续事件",

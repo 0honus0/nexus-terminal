@@ -85,6 +85,14 @@ export class SqliteThreadStorage implements ThreadStorage {
 		);
 	}
 
+	async forRun(userId: number, appId: string, runId: string): Promise<ThreadRecord | null> {
+		const row = await this.db.one(
+			`SELECT t.* FROM agent_threads t JOIN agent_runs r ON r.thread_id=t.id AND r.user_id=t.user_id AND r.app_id=t.app_id WHERE r.id=? AND r.user_id=? AND r.app_id=?`,
+			[runId, userId, appId],
+		);
+		return row === null ? null : threadRow(row);
+	}
+
 	list(
 		access: StoredThreadAccess,
 		after: string | null,
@@ -151,8 +159,16 @@ export class SqliteThreadStorage implements ThreadStorage {
 					throw new ThreadStorageRefusal('idempotency_conflict');
 				}
 				await tx.run(
-					'INSERT INTO agent_threads(id,user_id,app_id,title,version,created_at,updated_at) VALUES(?,?,?,?,1,?,?)',
-					[threadId, access.userId, access.appId, input.title, input.now, input.now],
+					'INSERT INTO agent_threads(id,user_id,app_id,title,title_origin,version,created_at,updated_at) VALUES(?,?,?,?,?,1,?,?)',
+					[
+						threadId,
+						access.userId,
+						access.appId,
+						input.title,
+						input.autoTitle ? 'pending' : 'manual',
+						input.now,
+						input.now,
+					],
 				);
 			} else {
 				const row = await tx.one('SELECT * FROM agent_threads WHERE user_id=? AND app_id=? AND id=?', [
@@ -170,7 +186,7 @@ export class SqliteThreadStorage implements ThreadStorage {
 					throw new ThreadStorageRefusal('version_conflict');
 				}
 				const changed = await tx.run(
-					'UPDATE agent_threads SET title=?,version=version+1,updated_at=? WHERE user_id=? AND app_id=? AND id=? AND version=?',
+					"UPDATE agent_threads SET title=?,title_origin='manual',version=version+1,updated_at=? WHERE user_id=? AND app_id=? AND id=? AND version=?",
 					[input.title, input.now, access.userId, access.appId, threadId, input.expectedVersion],
 				);
 				if (changed.changes !== 1) {

@@ -61,7 +61,8 @@ test('native target selection preserves grants and uses the authenticated App wi
 	await page.keyboard.press('Escape');
 	await expect(hub.getByRole('textbox', { name: 'Task input', exact: true })).toBeVisible();
 	await expect(hub.getByRole('button', { name: 'Execution mode', exact: true })).toHaveCount(0);
-	await expect(hub.getByRole('button', { name: 'Approval mode', exact: true })).toHaveCount(0);
+	await expect(hub.getByRole('button', { name: 'Approval mode', exact: true })).toBeVisible();
+	await expect(hub.getByRole('button', { name: 'Approval mode', exact: true })).toContainText('Ask when needed');
 	const grants = await requestAgentJson(
 		context.request,
 		{

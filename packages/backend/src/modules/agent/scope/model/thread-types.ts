@@ -28,7 +28,7 @@ export interface ThreadPage {
 }
 
 export type ThreadMutation =
-	| { kind: 'create'; operationId: string; title: string }
+	| { kind: 'create'; operationId: string; autoTitle: boolean; title: string }
 	| { kind: 'rename'; operationId: string; threadId: string; expectedVersion: number; title: string };
 
 export interface ThreadRemoval {

@@ -1,3 +1,4 @@
+import { mergeNativeApprovals } from '../model/native-run-rules';
 import { subscribeNativeRun } from '../api/native-run-stream';
 import type { AgentReasoningEffort } from '@nexus-terminal/shared/agent/providers/values';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
@@ -16,28 +17,39 @@ import {
 	listNativeMessages,
 	mutateNativeRun,
 } from '../api/native-run-api';
+import { listNativeThreadTools } from '../api/native-audit-api';
 import { useAgentManagementOperation } from './use-agent-management-operation';
 import type { NativeArtifactReference } from '../model/native-input-types';
 import { AgentManagementFailure } from '../model/management-failure';
+import { readNativeTargetPreference, writeNativeTargetPreference } from '../model/native-target-preferences';
 import type { NativeThread, NativeThreadScope } from '../model/native-thread-types';
 import type {
 	NativeModel,
 	NativeRun,
 	NativeRunUsage,
 	NativeEntry,
+	NativeConversationEntry,
 	NativeEntryCursor,
 	NativeEvent,
 	NativeChild,
 	NativeMessage,
 	NativeApproval,
 	NativeRunIntent,
+	NativeSubmittedMessage,
 	NativeRunAction,
 	NativeRunInput,
 	NativeRunSubscription,
 	NativeRunUpdate,
+	NativeTool,
 } from '../model/native-run-types';
 import { snapshotNativeRunAction } from '../model/native-run-mapper';
-import { compareNativeEntryCursor, isNativeRunActive, nativeModelKey } from '../model/native-run-rules';
+import {
+	appendNativeConversationEntries,
+	compareNativeEntryCursor,
+	isNativeRunActive,
+	mergeNativeTools,
+	nativeModelKey,
+} from '../model/native-run-rules';
 import { AGENT_RUN_EVENT_MAX_LIMIT } from '@nexus-terminal/shared/agent/runs/values';
 
 /** One native surface owns its requests and explicit mutation intention; no singleton Run store. */
@@ -53,6 +65,7 @@ export function useNativeRuns(
 	const thread = ref<NativeThread | null>(null);
 	const models = ref<NativeModel[]>([]);
 	const modelKey = ref('');
+	const approvalMode = ref<import('@nexus-terminal/shared/agent/runs/values').AgentApprovalMode>('ask');
 	const reasoningEffort = ref<AgentReasoningEffort | ''>('');
 	watch(
 		modelKey,
@@ -67,20 +80,21 @@ export function useNativeRuns(
 	const inputArtifacts = ref<NativeArtifactReference[]>([]);
 	const attachmentsReady = ref(true);
 	const runs = ref<NativeRun[]>([]);
-	const runCursor = ref(0);
-	const hasMoreRuns = ref(false);
 	const run = ref<NativeRun | null>(null);
 	const usage = ref<NativeRunUsage | null>(null);
-	const entries = ref<NativeEntry[]>([]);
+	const entries = ref<NativeConversationEntry[]>([]);
 	const entryCursor = ref<NativeEntryCursor>({ runSequence: 0, stepIndex: 0, eventSequence: 0, textOffset: 0 });
 	const events = ref<NativeEvent[]>([]);
 	const eventCursor = ref(0);
+	const tools = ref<NativeTool[]>([]);
+	const toolCursor = ref<string | null>(null);
 	const approvals = ref<NativeApproval[]>([]);
 	const children = ref<NativeChild[]>([]);
 	const child = ref<NativeChild | null>(null);
 	const messages = ref<NativeMessage[]>([]);
 	const messageCursor = ref(0);
 	const pending = ref<NativeRunIntent | null>(null);
+	const submittedMessage = ref<NativeSubmittedMessage | null>(null);
 	const inspected = ref(false);
 	const acknowledged = ref(false);
 	const olderHidden = ref(false);
@@ -89,6 +103,7 @@ export function useNativeRuns(
 	let updateGeneration = 0;
 	let awaitingConfirmedUpdate = false;
 	let disposed = false;
+	let toolRefreshTimer: number | null = null;
 
 	function stopUpdates(): void {
 		updateGeneration += 1;
@@ -111,9 +126,11 @@ export function useNativeRuns(
 
 	function clearPrivate(): void {
 		awaitingConfirmedUpdate = false;
+		clearToolRefreshTimer();
 		stopUpdates();
 		scope.value = null;
 		thread.value = null;
+		approvalMode.value = 'ask';
 		models.value = [];
 		modelKey.value = '';
 		connectionIds.value = [];
@@ -122,11 +139,12 @@ export function useNativeRuns(
 		inputArtifacts.value = [];
 		attachmentsReady.value = true;
 		runs.value = [];
-		runCursor.value = 0;
-		hasMoreRuns.value = false;
 		entries.value = [];
 		entryCursor.value = { runSequence: 0, stepIndex: 0, eventSequence: 0, textOffset: 0 };
+		tools.value = [];
+		toolCursor.value = null;
 		pending.value = null;
+		submittedMessage.value = null;
 		inspected.value = false;
 		acknowledged.value = false;
 		olderHidden.value = false;
@@ -151,7 +169,7 @@ export function useNativeRuns(
 			}
 		},
 		active,
-		{ retainOnView: true },
+		{ retainOnView: true, notifySuccess: false, notifyFailure: false, notifyFailureDetails: true },
 	);
 	const connections = computed(() =>
 		deniedIds.value === null
@@ -168,6 +186,16 @@ export function useNativeRuns(
 			pending.value !== null ||
 			scope.value === null,
 	);
+
+	function selectConnections(ids: number[]): void {
+		if (blocked.value || !active()) return;
+		const available = new Set(connections.value.map((connection) => connection.id));
+		connectionIds.value = [...new Set(ids)].filter((id) => available.has(id));
+		const userId = capabilities.auth.userId.value;
+		if (capabilities.auth.authenticated.value && userId !== null) {
+			writeNativeTargetPreference(userId, appId, connectionIds.value);
+		}
+	}
 
 	function fail(cause: unknown): void {
 		awaitingConfirmedUpdate = false;
@@ -189,9 +217,19 @@ export function useNativeRuns(
 				return { current, availableModels, denylist };
 			},
 			(value) => {
+				const userId = capabilities.auth.userId.value;
+				const remembered =
+					scope.value === null && capabilities.auth.authenticated.value && userId !== null
+						? readNativeTargetPreference(userId, appId)
+						: connectionIds.value;
 				scope.value = value.current;
 				models.value = value.availableModels;
 				deniedIds.value = value.denylist.entries.map((item) => item.connectionId);
+				const available = new Set(connections.value.map((connection) => connection.id));
+				connectionIds.value = remembered.filter((id) => available.has(id));
+				if (capabilities.auth.authenticated.value && userId !== null) {
+					writeNativeTargetPreference(userId, appId, connectionIds.value);
+				}
 				// Never replace an original selected model/configuration after an edit or failure.
 				// Prefer a chat model so the first run does not default to an image-only endpoint.
 				if (!modelKey.value) {
@@ -206,13 +244,14 @@ export function useNativeRuns(
 	}
 
 	function acceptEntries(page: { items: NativeEntry[]; nextCursor: NativeEntryCursor }): void {
-		if (
-			page.items.some((item) =>
-				entries.value.some((existing) => compareNativeEntryCursor(existing.position, item.position) === 0),
-			)
-		)
-			throw new AgentManagementFailure('protocol_failure', 'unknown');
-		const combined = [...entries.value, ...page.items];
+		let previous = entryCursor.value;
+		for (const item of page.items) {
+			if (compareNativeEntryCursor(previous, item.position) >= 0) {
+				throw new AgentManagementFailure('protocol_failure', 'unknown');
+			}
+			previous = item.position;
+		}
+		const combined = appendNativeConversationEntries(entries.value, page.items);
 		// This is a local display window, never a protocol or durable-content limit.
 		let characters = combined.reduce((total, item) => total + item.text.length, 0);
 		while (combined.length > 1 && (combined.length > 128 || characters > 256 * 1024)) {
@@ -220,15 +259,33 @@ export function useNativeRuns(
 			if (first) characters -= first.text.length;
 			olderHidden.value = true;
 		}
+		const first = combined[0];
+		if (first && characters > 256 * 1024) {
+			let start = first.text.length - 256 * 1024;
+			// Do not cut between the UTF-16 halves of a Unicode code point.
+			const code = first.text.charCodeAt(start);
+			if (code >= 0xdc00 && code <= 0xdfff) start += 1;
+			first.text = first.text.slice(start);
+			olderHidden.value = true;
+		}
 		entries.value = combined;
 		entryCursor.value = page.nextCursor;
+		const submitted = submittedMessage.value;
+		if (
+			submitted &&
+			submitted.threadId === thread.value?.id &&
+			page.items.some((item) => item.role === 'user' && item.runId === submitted.runId)
+		)
+			submittedMessage.value = null;
 	}
 
 	async function selectThread(value: NativeThread): Promise<void> {
 		if (operation.busy.value || pending.value !== null || !attachmentsReady.value) return;
+		clearToolRefreshTimer();
 		stopUpdates();
 		inputArtifacts.value = [];
 		attachmentsReady.value = true;
+		submittedMessage.value = null;
 		thread.value = {
 			id: value.id,
 			appId: value.appId,
@@ -240,8 +297,11 @@ export function useNativeRuns(
 		runs.value = [];
 		entries.value = [];
 		entryCursor.value = { runSequence: 0, stepIndex: 0, eventSequence: 0, textOffset: 0 };
+		tools.value = [];
+		toolCursor.value = null;
 		olderHidden.value = false;
 		clearRun();
+		approvalMode.value = 'ask';
 		await refreshThread();
 		const latest = runs.value.at(-1);
 		if (!run.value && latest) await selectRun(latest);
@@ -249,38 +309,57 @@ export function useNativeRuns(
 
 	function clearThread(): void {
 		if (operation.busy.value || pending.value !== null) return;
+		operation.clearFeedback();
+		clearToolRefreshTimer();
 		stopUpdates();
 		thread.value = null;
+		submittedMessage.value = null;
+		approvalMode.value = 'ask';
 		runs.value = [];
-		runCursor.value = 0;
-		hasMoreRuns.value = false;
 		entries.value = [];
 		entryCursor.value = { runSequence: 0, stepIndex: 0, eventSequence: 0, textOffset: 0 };
+		tools.value = [];
+		toolCursor.value = null;
 		olderHidden.value = false;
 		inputArtifacts.value = [];
 		attachmentsReady.value = true;
 		clearRun();
 	}
 
-	async function refreshThread(more = false): Promise<void> {
+	async function readRecentRuns(
+		current: NativeThreadScope,
+		threadId: string,
+		signal: AbortSignal,
+	): Promise<NativeRun[]> {
+		let after = 0;
+		let recent: NativeRun[] = [];
+		for (;;) {
+			const page = await listNativeRuns(current, threadId, after, signal);
+			recent = [...recent, ...page.items].slice(-AGENT_RUN_EVENT_MAX_LIMIT);
+			if (page.items.length < AGENT_RUN_EVENT_MAX_LIMIT) return recent;
+			after = page.nextCursor;
+		}
+	}
+
+	async function refreshThread(): Promise<void> {
 		const current = scope.value;
 		const selected = thread.value;
 		if (!current || !selected) return;
-		const after = more ? runCursor.value : 0;
 		stopUpdates();
 		await operation.execute(
 			async (signal) => {
-				const [page, body] = await Promise.all([
-					listNativeRuns(current, selected.id, after, signal),
+				const [recentRuns, body, toolPage] = await Promise.all([
+					readRecentRuns(current, selected.id, signal),
 					listNativeEntries(current, selected.id, entryCursor.value, signal),
+					listNativeThreadTools(current.appId, selected.id, null, undefined, signal),
 				]);
-				return { page, body };
+				return { recentRuns, body, toolPage };
 			},
 			(result) => {
-				runs.value = result.page.items;
-				runCursor.value = result.page.nextCursor;
-				hasMoreRuns.value = result.page.items.length === AGENT_RUN_EVENT_MAX_LIMIT;
+				runs.value = result.recentRuns;
 				acceptEntries(result.body);
+				tools.value = mergeNativeTools(tools.value, result.toolPage.items);
+				toolCursor.value = result.toolPage.nextCursor;
 				inspected.value = pending.value !== null;
 			},
 			{ write: false, onFailure: fail },
@@ -309,11 +388,14 @@ export function useNativeRuns(
 			id: value.id,
 			appId: value.appId,
 			threadId: value.threadId,
+			approvalMode: value.approvalMode,
 			status: value.status,
+			failure: value.failure === null ? null : { code: value.failure.code, toolName: value.failure.toolName },
 			version: value.version,
 			createdAt: value.createdAt,
 			updatedAt: value.updatedAt,
 		};
+		approvalMode.value = value.approvalMode;
 		await refreshRun();
 	}
 
@@ -331,11 +413,12 @@ export function useNativeRuns(
 		const generation = updateGeneration;
 		await operation.execute(
 			async (signal) => {
-				const [page, permits, descendants, initialBody] = await Promise.all([
+				const [page, permits, descendants, initialBody, toolPage] = await Promise.all([
 					listNativeEvents(current, selected.id, eventCursor.value, signal),
 					listNativeApprovals(current, selected.id, signal),
 					listNativeChildren(current, selected.id, signal),
 					listNativeEntries(current, selectedThread.id, entryCursor.value, signal),
+					listNativeThreadTools(current.appId, selectedThread.id, null, undefined, signal),
 				]);
 				const latest = await getNativeRun(current, selected.id, signal);
 				if (latest === null || latest.threadId !== selectedThread.id)
@@ -351,7 +434,7 @@ export function useNativeRuns(
 						: initialBody;
 				const usage = await getNativeRunUsage(current, selected.id, signal);
 				if (usage.runVersion < latest.version) throw new AgentManagementFailure('protocol_failure', 'unknown');
-				return { latest, page, permits, descendants, body, usage };
+				return { latest, page, permits, descendants, body, usage, toolPage };
 			},
 			(value) => {
 				if (
@@ -362,6 +445,8 @@ export function useNativeRuns(
 				)
 					return;
 				acceptEntries(value.body);
+				tools.value = mergeNativeTools(tools.value, value.toolPage.items);
+				toolCursor.value = value.toolPage.nextCursor;
 				run.value = value.latest;
 				usage.value = value.usage;
 				// Keep a bounded audit window and only use the server's continuation cursor.
@@ -372,6 +457,55 @@ export function useNativeRuns(
 				inspected.value = pending.value !== null;
 			},
 			{ write: false, onFailure: fail },
+		);
+	}
+
+	function clearToolRefreshTimer(): void {
+		if (toolRefreshTimer !== null) window.clearTimeout(toolRefreshTimer);
+		toolRefreshTimer = null;
+	}
+
+	function scheduleToolRefresh(): void {
+		if (disposed) return;
+		clearToolRefreshTimer();
+		toolRefreshTimer = window.setTimeout(() => {
+			toolRefreshTimer = null;
+			void refreshToolSnapshot();
+		}, 250);
+	}
+
+	async function refreshToolSnapshot(): Promise<void> {
+		const current = scope.value;
+		const selected = thread.value;
+		if (!current || !selected || disposed) return;
+		const threadId = selected.id;
+		const generation = updateGeneration;
+		await operation.execute(
+			(signal) => listNativeThreadTools(current.appId, threadId, null, undefined, signal),
+			(page) => {
+				if (generation !== updateGeneration || thread.value?.id !== threadId) return;
+				tools.value = mergeNativeTools(tools.value, page.items);
+				toolCursor.value = page.nextCursor;
+			},
+			{ write: false, background: true },
+		);
+	}
+
+	async function readOlderTools(): Promise<void> {
+		const current = scope.value;
+		const selected = thread.value;
+		const before = toolCursor.value;
+		if (!current || !selected || before === null || disposed) return;
+		const threadId = selected.id;
+		const generation = updateGeneration;
+		await operation.execute(
+			(signal) => listNativeThreadTools(current.appId, threadId, before, undefined, signal),
+			(page) => {
+				if (generation !== updateGeneration || thread.value?.id !== threadId) return;
+				tools.value = mergeNativeTools(tools.value, page.items);
+				toolCursor.value = page.nextCursor;
+			},
+			{ write: false, background: true },
 		);
 	}
 
@@ -415,7 +549,7 @@ export function useNativeRuns(
 			},
 			(cause) => {
 				if (generation === updateGeneration) {
-					operation.notice.value = 'failed';
+					operation.reportFailure(cause);
 					fail(cause);
 				}
 			},
@@ -425,12 +559,20 @@ export function useNativeRuns(
 	function acceptUpdate(value: NativeRunUpdate): void {
 		acceptEntries(value.body);
 		if (value.state) {
+			const previousExecutions = usage.value?.toolExecutions ?? 0;
+			const previousStatus = run.value?.status;
+			if (thread.value?.id === value.state.thread.id && value.state.thread.version > thread.value.version) {
+				thread.value = value.state.thread;
+			}
 			run.value = value.state.run;
 			usage.value = value.state.usage;
 			events.value = [...events.value, ...value.state.events.items].slice(-200);
 			eventCursor.value = value.state.events.nextCursor;
-			approvals.value = value.state.approvals;
+			approvals.value = mergeNativeApprovals(approvals.value, value.state.approvals);
 			children.value = value.state.children;
+			if (value.state.usage.toolExecutions !== previousExecutions || value.state.run.status !== previousStatus) {
+				scheduleToolRefresh();
+			}
 			if (awaitingConfirmedUpdate) {
 				// This releases only a definitively acknowledged mutation's post-write read fence.
 				awaitingConfirmedUpdate = false;
@@ -492,6 +634,7 @@ export function useNativeRuns(
 			return null;
 		return {
 			...(effort ? { reasoningEffort: effort } : {}),
+			approvalMode: approvalMode.value,
 			prompt: draft.value + references,
 			connectionIds: connectionIds.value.map((id) => id),
 			model: {
@@ -542,6 +685,14 @@ export function useNativeRuns(
 		const intent = pending.value;
 		inspected.value = false;
 		stopUpdates();
+		if (!retry && (intent.action.kind === 'create' || intent.action.kind === 'append')) {
+			submittedMessage.value = {
+				operationId: intent.operationId,
+				threadId: intent.action.kind === 'create' ? intent.action.threadId : intent.action.run.threadId,
+				runId: null,
+				text: intent.action.input.prompt,
+			};
+		}
 		await operation.execute(
 			(signal) => mutateNativeRun(intent, signal),
 			(result) => {
@@ -549,7 +700,16 @@ export function useNativeRuns(
 					if (result.kind !== 'run') throw new AgentManagementFailure('protocol_failure', 'unknown');
 					clearRun();
 					run.value = result.run;
+					if (submittedMessage.value?.operationId === intent.operationId) {
+						if (entries.value.some((item) => item.role === 'user' && item.runId === result.run.id)) {
+							submittedMessage.value = null;
+						} else submittedMessage.value.runId = result.run.id;
+					}
 					draft.value = '';
+				} else if (intent.action.kind === 'approve') {
+					if (result.kind !== 'approval') throw new AgentManagementFailure('protocol_failure', 'unknown');
+					approvals.value = mergeNativeApprovals(approvals.value, [result.approval]);
+					scheduleToolRefresh();
 				} else if (intent.action.kind === 'cancel' && result.kind === 'run') run.value = result.run;
 				pending.value = null;
 				acknowledged.value = false;
@@ -560,6 +720,7 @@ export function useNativeRuns(
 				refreshAfterSuccess: true,
 
 				onFailure(cause) {
+					if (submittedMessage.value?.operationId === intent.operationId) submittedMessage.value = null;
 					fail(cause);
 					if (!retry && cause instanceof AgentManagementFailure && cause.outcome !== 'unknown')
 						pending.value = null;
@@ -610,6 +771,7 @@ export function useNativeRuns(
 	);
 	onBeforeUnmount(() => {
 		disposed = true;
+		clearToolRefreshTimer();
 		stopUpdates();
 		document.removeEventListener('visibilitychange', onVisibility);
 		window.removeEventListener('pageshow', onVisibility);
@@ -622,17 +784,22 @@ export function useNativeRuns(
 		models,
 		modelKey,
 		reasoningEffort,
+		approvalMode,
 		connections,
 		connectionIds,
+		selectConnections,
 		draft,
 		inputArtifacts,
 		attachmentsReady,
 		runs,
-		hasMoreRuns,
 		run,
 		usage,
 		entries,
+		submittedMessage,
 		entryCursor,
+		tools,
+		toolCursor,
+		readOlderTools,
 		events,
 		approvals,
 		children,

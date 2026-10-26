@@ -194,6 +194,7 @@ export type ApprovalRequestDecision = (
 	policy: GrantState,
 	status: AgentRunStatus,
 	operation: ApprovalOperation,
+	approvalMode: import('@nexus-terminal/shared/agent/runs/values').AgentApprovalMode,
 ) => Approval | null;
 
 export type ApprovalResolveDecision = (
@@ -248,4 +249,11 @@ export type DenylistChangeDecision = (current: TargetDenylist) => { revoke: bool
 export interface DenylistMutation {
 	value: TargetDenylist;
 	revokedRuns: boolean;
+}
+
+export interface ApprovalPage {
+	items: Approval[];
+	after: string | null;
+	nextCursor: string | null;
+	hasMore: boolean;
 }

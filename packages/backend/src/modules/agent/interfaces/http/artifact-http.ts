@@ -4,7 +4,6 @@ import { pipeline } from 'node:stream/promises';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
 import {
 	AGENT_ARTIFACT_MAX_BODY_BYTES,
-	AGENT_ARTIFACT_MAX_BYTES,
 	AGENT_ARTIFACT_MAX_RESPONSE_BYTES,
 } from '@nexus-terminal/shared/agent/artifacts/values';
 import {
@@ -237,32 +236,27 @@ export function createArtifactHttpRoutes(
 		}
 		await deliver(ctx, actor, 200, { artifact: toArtifactView(value) });
 	});
-	addApp(
-		'PUT',
-		'/apps/:appId/artifacts/:artifactId/content',
-		async (ctx, actor, signal) => {
-			noQuery(ctx);
-			const artifactId = readAgentId(ctx.params.artifactId);
-			const { expectedVersion } = readAgentArtifactUploadHeaders(
-				ctx.request.headers['if-match'],
-				ctx.request.headers['content-type'],
-			);
+	addApp('PUT', '/apps/:appId/artifacts/:artifactId/content', async (ctx, actor, signal) => {
+		noQuery(ctx);
+		const artifactId = readAgentId(ctx.params.artifactId);
+		const { expectedVersion } = readAgentArtifactUploadHeaders(
+			ctx.request.headers['if-match'],
+			ctx.request.headers['content-type'],
+		);
 
-			async function* source(): AsyncIterable<Uint8Array> {
-				for await (const chunk of ctx.request) {
-					signal.throwIfAborted();
-					if (!Buffer.isBuffer(chunk)) {
-						throw new InvalidAgentPayload();
-					}
-					yield Uint8Array.from(chunk);
+		async function* source(): AsyncIterable<Uint8Array> {
+			for await (const chunk of ctx.request) {
+				signal.throwIfAborted();
+				if (!Buffer.isBuffer(chunk)) {
+					throw new InvalidAgentPayload();
 				}
+				yield Uint8Array.from(chunk);
 			}
+		}
 
-			const value = await service.upload(actor, artifactId, expectedVersion, source(), signal);
-			await deliver(ctx, actor, 200, { artifact: toArtifactView(value) });
-		},
-		AGENT_ARTIFACT_MAX_BYTES,
-	);
+		const value = await service.upload(actor, artifactId, expectedVersion, source(), signal);
+		await deliver(ctx, actor, 200, { artifact: toArtifactView(value) });
+	});
 	for (const mode of ['content', 'preview'] as const) {
 		addApp('GET', '/apps/:appId/artifacts/:artifactId/' + mode, async (ctx, actor, signal) => {
 			noQuery(ctx);

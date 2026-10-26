@@ -8,6 +8,8 @@ import type {
 
 /** Internal Agent application types, not Shared HTTP objects or SQL rows. */
 export interface ProviderModelInput {
+	/** Optional field provenance; unannotated configuration values are manually supplied. */
+	capabilitySources?: Partial<Record<AgentModelCapabilityField, AgentModelCapabilitySource>>;
 	id: string;
 	protocol?: AgentProviderProtocol;
 	contextWindow?: number;
@@ -39,7 +41,7 @@ export interface ProviderModelView extends ProviderModelInput {
 		source: string;
 		sourceVersion: string;
 		updatedAt: number;
-		capabilities: Partial<Omit<ProviderModelInput, 'id' | 'protocol'>>;
+		capabilities: Partial<Omit<ProviderModelInput, 'id' | 'protocol' | 'capabilitySources'>>;
 	};
 	capabilityConflicts?: AgentModelCapabilityField[];
 }
@@ -63,7 +65,7 @@ export interface DiscoveredModel {
 	id: string;
 	ownedBy?: string;
 	createdAt?: number;
-	providerCapabilities?: Partial<Omit<ProviderModelInput, 'id' | 'protocol'>>;
+	providerCapabilities?: Partial<Omit<ProviderModelInput, 'id' | 'protocol' | 'capabilitySources'>>;
 }
 
 export interface ProviderObservation {
@@ -71,7 +73,7 @@ export interface ProviderObservation {
 	source: string;
 	sourceVersion: string;
 	updatedAt: number;
-	capabilities: Partial<Omit<ProviderModelInput, 'id' | 'protocol'>>;
+	capabilities: Partial<Omit<ProviderModelInput, 'id' | 'protocol' | 'capabilitySources'>>;
 }
 
 export interface ModelReference {

@@ -4,7 +4,7 @@
 	import { UiBadge } from '@/foundation/ui';
 	import type { ConnectionSummary } from '@/features/connections/public';
 	import type { NativeTool } from '../model/native-run-types';
-	import { formatToolSummary } from './native-tool-summary';
+	import { formatToolSummary, toolCommandPreview } from './native-tool-summary';
 
 	const props = defineProps<{
 		tools: NativeTool[];
@@ -89,6 +89,10 @@
 			has: (key) => te(key),
 		});
 	}
+
+	function commandPreview(tool: NativeTool) {
+		return toolCommandPreview(tool.summary);
+	}
 </script>
 <template>
 	<section v-if="tools.length" class="mx-auto w-full max-w-3xl">
@@ -165,6 +169,15 @@
 							</span>
 						</summary>
 						<div class="mb-1.5 ml-7 rounded-xl bg-header/25 px-3 py-2.5 ring-1 ring-inset ring-border/30">
+							<div v-if="commandPreview(tool)" class="mb-2.5 min-w-0">
+								<p class="text-text-secondary/75">{{ t('agent.approvals.command') }}</p>
+								<pre
+									class="mt-1 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-background/70 px-2.5 py-2 font-mono text-[10px] leading-4 text-foreground/85 ring-1 ring-inset ring-border/30"
+									>{{ commandPreview(tool)?.text }}</pre>
+								<p v-if="commandPreview(tool)?.truncated" class="mt-1.5 text-[10px] text-warning">
+									{{ t('agent.approvals.commandTruncated') }}
+								</p>
+							</div>
 							<dl class="grid grid-cols-1 gap-x-4 gap-y-2 text-[11px] sm:grid-cols-2">
 								<div class="min-w-0">
 									<dt class="text-text-secondary/75">{{ t('agent.nativeRun.target') }}</dt>

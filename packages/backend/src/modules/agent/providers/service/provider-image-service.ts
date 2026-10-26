@@ -17,7 +17,8 @@ export class ProviderImageService {
 		validate: () => Promise<void>,
 	): Promise<ImageArtifact> {
 		await validate();
-		const result = await this.providers.generateImage(actor.userId, input, signal, validate);
+		const maxBytes = await this.artifacts.availableBytes(actor);
+		const result = await this.providers.generateImage(actor.userId, input, maxBytes, signal, validate);
 		await validate();
 		const extension =
 			result.mediaType === 'image/jpeg' ? 'jpg' : result.mediaType === 'image/webp' ? 'webp' : 'png';

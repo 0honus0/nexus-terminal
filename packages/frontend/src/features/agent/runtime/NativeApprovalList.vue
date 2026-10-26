@@ -5,7 +5,7 @@
 	import type { UiTone } from '@/foundation/ui';
 	import type { ConnectionSummary } from '@/features/connections/public';
 	import type { NativeApproval, NativeRunAction } from '../model/native-run-types';
-	import { formatToolSummary } from './native-tool-summary';
+	import { formatToolSummary, toolCommandPreview } from './native-tool-summary';
 
 	const props = defineProps<{
 		approvals: NativeApproval[];
@@ -63,6 +63,10 @@
 		return approval.status === 'requested' && remainingSeconds(approval) > 0 && !props.disabled;
 	}
 
+	function showRemaining(approval: NativeApproval): boolean {
+		return approval.status === 'requested' && remainingSeconds(approval) > 0;
+	}
+
 	function toggleFeedback(approval: NativeApproval): void {
 		feedbackId.value = feedbackId.value === approval.id ? null : approval.id;
 		feedback.value = '';
@@ -85,6 +89,10 @@
 
 			has: (key) => te(key),
 		});
+	}
+
+	function commandPreview(approval: NativeApproval) {
+		return toolCommandPreview(approval.inspection.summary);
 	}
 </script>
 <template>
@@ -150,10 +158,17 @@
 						<p class="whitespace-pre-wrap break-words font-mono text-[11px] leading-5 text-foreground/80">
 							{{ summaryText(approval) }}
 						</p>
+						<pre
+							v-if="commandPreview(approval)"
+							class="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-background/70 px-2.5 py-2 font-mono text-[11px] leading-5 text-foreground/85 ring-1 ring-inset ring-border/30"
+							>{{ commandPreview(approval)?.text }}</pre>
+						<p v-if="commandPreview(approval)?.truncated" class="mt-1.5 text-[10px] text-warning">
+							{{ t('agent.approvals.commandTruncated') }}
+						</p>
 					</div>
 				</details>
 
-				<dl class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+				<dl class="grid grid-cols-1 gap-2" :class="showRemaining(approval) ? 'sm:grid-cols-2' : ''">
 					<div class="min-w-0 rounded-xl bg-background/45 px-3 py-2.5">
 						<dt class="flex items-center gap-1.5 text-[10px] text-text-secondary/75">
 							<i class="fa-solid fa-server text-[8px]" aria-hidden="true"></i>
@@ -163,7 +178,7 @@
 							{{ targetLabel(approval) }}
 						</dd>
 					</div>
-					<div class="rounded-xl bg-background/45 px-3 py-2.5">
+					<div v-if="showRemaining(approval)" class="rounded-xl bg-background/45 px-3 py-2.5">
 						<dt class="flex items-center gap-1.5 text-[10px] text-text-secondary/75">
 							<i class="fa-regular fa-clock text-[8px]" aria-hidden="true"></i>
 							{{ t('agent.approvals.expires') }}

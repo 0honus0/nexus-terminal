@@ -147,7 +147,7 @@ export class RunStepModel {
 							estimatedTokens,
 						},
 						authorizeExecution,
-						(results) => {
+						(results, previewBytes) => {
 							const facts = results.map((result) => ({
 								id: result.id,
 								providerCallId: result.providerCallId,
@@ -159,7 +159,8 @@ export class RunStepModel {
 									(message) =>
 										message.role === 'tool' &&
 										message.providerCallId === result.providerCallId &&
-										message.content === projectCapturedResult(result.id, result.content),
+										message.content ===
+											projectCapturedResult(result.id, result.content, previewBytes),
 								),
 							);
 						},
@@ -180,6 +181,10 @@ export class RunStepModel {
 				),
 			),
 		);
+	}
+
+	async releaseCapacity(command: RunStepMutation): Promise<RunModelStepResult> {
+		return projectResult(await agentStorage(() => this.storage.releaseCapacity(toStorageMutation(command))));
 	}
 
 	async appendText(command: RunStepMutation, text: string): Promise<RunModelStepResult> {

@@ -14,8 +14,6 @@ export const AGENT_BROWSER_PATTERN_MAX_BYTES = 2048;
 
 export const AGENT_BROWSER_MAX_PRIORITY = 100;
 
-export const AGENT_BROWSER_MAX_TRANSFER_BYTES = 8 * 1024 * 1024;
-
 export const AGENT_BROWSER_ACTIONS = [
 	'open',
 	'close',

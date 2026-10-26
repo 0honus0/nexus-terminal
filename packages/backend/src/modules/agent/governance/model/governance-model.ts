@@ -1,3 +1,7 @@
+import type { ApprovalPage } from './governance-types.js';
+import { ToolCapabilityDenied } from '../../agent-failure.js';
+import { toolAuthorizationFailure } from '../governance-rules.js';
+import type { AgentOperationErrorCode } from '@nexus-terminal/shared/agent/values';
 import { RunChanges } from '../../runs/model/run-changes.js';
 import type { StoredExecutionSettings } from '../../execution/storage/execution-storage.js';
 import { fromSettings } from '../../execution/model/execution-projection.js';
@@ -240,6 +244,7 @@ export class GovernanceModel {
 		decide: ToolAuthorityDecision,
 		permit: ToolPermitDecision,
 	): Promise<ToolAuthority | null> {
+		let refusal: AgentOperationErrorCode | null = null;
 		const result = await agentStorage(() =>
 			this.storage.toolAuthority(
 				{
@@ -263,11 +268,23 @@ export class GovernanceModel {
 							? { kind: 'inspect', policyRevision: task.policyRevision }
 							: { kind: 'dispatch' },
 				Date.now,
-				toStoredAuthorityDecision(decide),
+				toStoredAuthorityDecision((operation, policy, status, frozen, provider, ids) => {
+					const allowed = decide(operation, policy, status, frozen, provider, ids);
+					if (!allowed) {
+						refusal = toolAuthorizationFailure(operation, policy);
+					}
+					return allowed;
+				}),
 				(approval, operation, policy, time) =>
 					permit(fromApproval(approval), fromStoredTool(operation), appState(policy), time),
 			),
 		);
+		if (result === null && refusal !== null) {
+			if (refusal === 'forbidden') {
+				throw new ToolCapabilityDenied();
+			}
+			throw new AgentFailure(refusal);
+		}
 		return result === null
 			? null
 			: {
@@ -431,18 +448,23 @@ export class GovernanceModel {
 		userId: number,
 		appId: string,
 		runId: string,
+		after: string | null,
 		now: () => number,
 		transition: ApprovalTransition,
-	): Promise<Approval[] | null> {
+	): Promise<ApprovalPage | null> {
 		const list = await agentStorage(() =>
-			this.storage.listApprovals(userId, appId, runId, now, (stored, status, time) =>
+			this.storage.listApprovals(userId, appId, runId, after, now, (stored, status, time) =>
 				transition(fromApproval(stored), status, time),
 			),
 		);
-		if (list === 'limit_exceeded') {
-			throw new AgentFailure('limit_exceeded');
-		}
-		return list === null ? null : list.map(fromApproval);
+		return list === null
+			? null
+			: {
+					items: list.items.map(fromApproval),
+					after: list.after,
+					nextCursor: list.nextCursor,
+					hasMore: list.hasMore,
+				};
 	}
 
 	async request(
@@ -459,22 +481,27 @@ export class GovernanceModel {
 						runId: input.runId,
 						toolCallId: input.toolCallId,
 					},
-					(stored, status, operation) => {
-						const fact = create(appState(stored), status, {
-							id: operation.id,
-							operationHash: operation.operationHash,
-							operationRevision: operation.operationRevision,
-							capability: operation.capability,
-							targetVersion: operation.targetVersion,
-							inspection: {
-								toolName: operation.toolName,
-								toolVersion: operation.toolVersion,
-								risk: operation.risk,
-								mutation: operation.mutation,
-								targetConnectionId: operation.targetId,
-								summary: operation.summary,
+					(stored, status, operation, approvalMode) => {
+						const fact = create(
+							appState(stored),
+							status,
+							{
+								id: operation.id,
+								operationHash: operation.operationHash,
+								operationRevision: operation.operationRevision,
+								capability: operation.capability,
+								targetVersion: operation.targetVersion,
+								inspection: {
+									toolName: operation.toolName,
+									toolVersion: operation.toolVersion,
+									risk: operation.risk,
+									mutation: operation.mutation,
+									targetConnectionId: operation.targetId,
+									summary: operation.summary,
+								},
 							},
-						});
+							approvalMode,
+						);
 						return fact === null ? null : toStoredApproval(fact);
 					},
 					toStoredAuthorityDecision(authorize),

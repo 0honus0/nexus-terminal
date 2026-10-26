@@ -72,8 +72,7 @@ export function resolveFrozenModel(provider: ProviderRecord, reference: ModelRef
 	const selected = provider.models.find((candidate) => candidate.id === reference.modelId);
 	if (
 		!selected ||
-		((selected.protocol ?? provider.protocol) !== 'images' &&
-			(selected.contextWindow === undefined || selected.maxOutputTokens === undefined))
+		((selected.protocol ?? provider.protocol) !== 'images' && selected.maxOutputTokens === undefined)
 	) {
 		return null;
 	}

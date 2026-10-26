@@ -1,6 +1,6 @@
 import { useI18n } from 'vue-i18n';
 import { useFeedbackMessage } from '@/shared/feedback/public';
-import { ref } from 'vue';
+import { computed, ref, shallowRef } from 'vue';
 import { useAuthenticatedViewScope, type ViewRevocation } from '@/shared/session/use-authenticated-view-scope';
 import { AgentManagementFailure } from '../model/management-failure';
 import { isNetworkFailure } from '@/client/http/network-failure';
@@ -24,23 +24,44 @@ function failureNotice(cause: unknown, writing: boolean): string {
 export function useAgentManagementOperation(
 	onRevoke?: (reason: ViewRevocation) => void,
 	available?: () => boolean,
-	options: { retainOnView?: boolean } = {},
+	options: {
+		retainOnView?: boolean;
+		notifySuccess?: boolean;
+		notifyFailure?: boolean;
+		notifyFailureDetails?: boolean;
+	} = {},
 ) {
 	const busy = ref(false);
 	const refreshRequired = ref(true);
 	const notice = ref('');
-	let failureCause: unknown;
-	const { t } = useI18n();
+	const failureCause = shallowRef<unknown>();
+	const { t, te } = useI18n();
+	const message = computed(() => {
+		if (notice.value === 'deleteThreadActive') return t('agent.operations.deleteThreadActiveHint');
+		if (!notice.value) return '';
+		if (
+			options.notifyFailureDetails &&
+			notice.value !== 'saved' &&
+			failureCause.value instanceof AgentManagementFailure
+		) {
+			const key = 'agent.nativeRun.requestFailureReasons.' + failureCause.value.code;
+			if (te(key)) {
+				const reason = t(key);
+				return notice.value === 'unknown' ? reason + ' ' + t('agent.settings.appManagement.unknown') : reason;
+			}
+		}
+		return t('agent.settings.appManagement.' + notice.value);
+	});
+	const failureMessage = computed(() => (notice.value === 'saved' ? '' : message.value));
 	useFeedbackMessage(
-		() =>
-			notice.value === 'deleteThreadActive'
-				? t('agent.operations.deleteThreadActiveHint')
-				: notice.value
-					? t('agent.settings.appManagement.' + notice.value)
-					: '',
+		() => {
+			if (notice.value === 'saved' ? options.notifySuccess === false : options.notifyFailure === false) return '';
+			return message.value;
+		},
 		() => (notice.value === 'saved' ? 'success' : 'error'),
-		() => failureCause,
+		() => failureCause.value,
 	);
+
 	let generation = 0;
 	let backgroundRequest: AbortController | null = null;
 	const scope = useAuthenticatedViewScope({
@@ -53,11 +74,20 @@ export function useAgentManagementOperation(
 			backgroundRequest = null;
 			busy.value = false;
 			refreshRequired.value = true;
-			notice.value = '';
-			failureCause = undefined;
+			clearFeedback();
 			onRevoke?.(reason);
 		},
 	});
+
+	function clearFeedback(): void {
+		notice.value = '';
+		failureCause.value = undefined;
+	}
+
+	function reportFailure(cause: unknown, writing = false): void {
+		failureCause.value = cause;
+		notice.value = !writing && isNetworkFailure(cause) ? '' : failureNotice(cause, writing);
+	}
 
 	async function execute<T>(
 		action: (signal: AbortSignal) => Promise<T>,
@@ -79,8 +109,7 @@ export function useAgentManagementOperation(
 		const requestSignal = backgroundRequest ? AbortSignal.any([signal, backgroundRequest.signal]) : signal;
 		const current = ++generation;
 		busy.value = !options.background;
-		notice.value = '';
-		failureCause = undefined;
+		clearFeedback();
 		try {
 			const result = await action(requestSignal);
 			if (generation !== current || !scope.isCurrent(signal)) {
@@ -95,9 +124,8 @@ export function useAgentManagementOperation(
 			if (generation !== current || !scope.isCurrent(signal)) {
 				return;
 			}
-			failureCause = cause;
+			reportFailure(cause, options.write);
 			const failure = cause instanceof AgentManagementFailure ? cause : null;
-			notice.value = !options.write && isNetworkFailure(cause) ? '' : failureNotice(cause, options.write);
 			if (options.write && (!failure || failure.outcome !== 'not_dispatched')) {
 				refreshRequired.value = true;
 			}
@@ -110,5 +138,5 @@ export function useAgentManagementOperation(
 		}
 	}
 
-	return { busy, refreshRequired, notice, execute };
+	return { busy, refreshRequired, notice, failureMessage, execute, reportFailure, clearFeedback };
 }

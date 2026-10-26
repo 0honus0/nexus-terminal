@@ -1,36 +1,13 @@
-import { AgentFailure } from '../agent-failure.js';
+import { estimateMessages, estimateTools } from './compaction-rules.js';
+import { AgentFailure, ContextLimitExceeded } from '../agent-failure.js';
 import type { RunModelMessage } from '../runs/model/run-types.js';
 import type { ToolDefinition } from '../tools/model/tool-types.js';
 import type { ContextExchange, ContextLimits } from './model/context-types.js';
-import { CONTEXT_MAX_BYTES, CONTEXT_MAX_MESSAGES } from './context-limits.js';
-import type { AgentContextProfile } from '@nexus-terminal/shared/agent/governance/values';
+import { CONTEXT_MAX_BYTES } from './context-limits.js';
 
-const CONTEXT_FRAME_TOKENS = 64;
-const CONTEXT_TOOL_FRAME_TOKENS = 512;
-const CONTEXT_REQUEST_FRAME_TOKENS = 1024;
-
-function toolContextTokens(definitions: ToolDefinition[]): number {
-	return Buffer.byteLength(JSON.stringify(definitions), 'utf8') + definitions.length * CONTEXT_TOOL_FRAME_TOKENS;
-}
-
-/** Normal limits conversation growth while still budgeting the installed tool catalog. */
-export function contextWindowForProfile(
-	profile: AgentContextProfile,
-	providerWindow: number,
-	reservedOutputTokens: number,
-	definitions: ToolDefinition[],
-): number {
-	const normalWindow = Math.max(32768, reservedOutputTokens + 2048) + toolContextTokens(definitions);
-	return profile === 'extended' ? providerWindow : Math.min(providerWindow, normalWindow);
-}
-
+/** Approximation for reservation; observed provider usage supersedes it within a Run. */
 export function estimateContextTokens(messages: RunModelMessage[], definitions: ToolDefinition[]): number {
-	return (
-		contextBytes(messages) +
-		toolContextTokens(definitions) +
-		messages.length * CONTEXT_FRAME_TOKENS +
-		CONTEXT_REQUEST_FRAME_TOKENS
-	);
+	return estimateMessages(messages) + estimateTools(definitions);
 }
 
 export function copyContextMessage(message: RunModelMessage): RunModelMessage {
@@ -94,23 +71,23 @@ export function exchangeMessages(exchange: ContextExchange): RunModelMessage[] {
 
 export function contextBytes(messages: RunModelMessage[]): number {
 	const bytes = Buffer.byteLength(JSON.stringify(messages), 'utf8');
-	if (messages.length > CONTEXT_MAX_MESSAGES || bytes > CONTEXT_MAX_BYTES) {
-		throw new AgentFailure('limit_exceeded');
+	if (bytes > CONTEXT_MAX_BYTES) {
+		throw new ContextLimitExceeded();
 	}
 	return bytes;
 }
 
-/** Include schemas and framing; never report this estimate as actual paid usage. */
+/** Validate request integrity and encoded capacity; provider tokenizers own model-window validation. */
 export function validateContextBudget(
 	messages: RunModelMessage[],
 	definitions: ToolDefinition[],
 	limits: ContextLimits,
 ): void {
 	if (
-		!Number.isSafeInteger(limits.contextWindow) ||
+		(limits.contextWindow !== undefined &&
+			(!Number.isSafeInteger(limits.contextWindow) || limits.contextWindow < 1)) ||
 		!Number.isSafeInteger(limits.reservedOutputTokens) ||
 		limits.reservedOutputTokens < 1 ||
-		limits.contextWindow <= limits.reservedOutputTokens ||
 		new Set(definitions.map((tool) => tool.name)).size !== definitions.length
 	) {
 		throw new AgentFailure('invalid_input');
@@ -121,15 +98,11 @@ export function validateContextBudget(
 			throw new AgentFailure('invalid_input');
 		}
 	}
+	// Different providers use different tokenizers. Encoded bytes protect local
+	// resources; they are not an authoritative model context-token count.
 	const messageBytes = contextBytes(messages);
 	const toolBytes = Buffer.byteLength(JSON.stringify(definitions), 'utf8');
 	if (messageBytes + toolBytes > CONTEXT_MAX_BYTES) {
-		throw new AgentFailure('limit_exceeded');
-	}
-	// One unit per encoded UTF-8 byte deliberately favors rejection over silent
-	// compaction. Provider-specific tokenization and usage anchoring are separate.
-	const estimated = estimateContextTokens(messages, definitions);
-	if (estimated + limits.reservedOutputTokens > limits.contextWindow) {
-		throw new AgentFailure('limit_exceeded');
+		throw new ContextLimitExceeded();
 	}
 }

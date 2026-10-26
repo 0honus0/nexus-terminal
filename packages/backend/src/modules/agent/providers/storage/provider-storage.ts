@@ -1,8 +1,14 @@
+import type {
+	AgentModelCapabilityField,
+	AgentModelCapabilitySource,
+} from '@nexus-terminal/shared/agent/providers/values';
 import type { AgentProviderProtocol, AgentReasoningEffort } from '@nexus-terminal/shared/agent/providers/values';
 import type { SqlExecutor } from '../../../../platform/storage/sqlite/sql-types.js';
 import type { AgentRunStatus } from '@nexus-terminal/shared/agent/runs/values';
 
 export interface StoredProviderModel {
+	/** Optional field provenance; unannotated configuration values are manually supplied. */
+	capabilitySources?: Partial<Record<AgentModelCapabilityField, AgentModelCapabilitySource>>;
 	id: string;
 	protocol?: AgentProviderProtocol;
 	contextWindow?: number;
@@ -22,7 +28,7 @@ export interface StoredProviderObservation {
 	source: string;
 	sourceVersion: string;
 	updatedAt: number;
-	capabilities: Partial<Omit<StoredProviderModel, 'id' | 'protocol'>>;
+	capabilities: Partial<Omit<StoredProviderModel, 'id' | 'protocol' | 'capabilitySources'>>;
 }
 
 export interface StoredModelReference {

@@ -29,7 +29,7 @@
 			'maxRecallBytes',
 		],
 		runtime: ['maxConcurrentRuns', 'maxConcurrentModelCalls'],
-		storage: ['maxSingleArtifactBytes', 'maxArtifactBytes', 'artifactTtlSeconds'],
+		storage: ['maxArtifactBytes', 'artifactTtlSeconds'],
 		subagents: ['maxChildren', 'maxMessages', 'maxMessageBytes'],
 	};
 	const visibleKeys = computed(() =>

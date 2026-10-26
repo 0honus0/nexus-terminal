@@ -258,10 +258,11 @@ for (const decision of ['denied', 'cancelled'] as const) {
 		const approvals = async () => {
 			const result = await requestAgentWorkspace(request, app, {
 				method: 'agent.approvals.list',
-				params: { runId },
+				params: { runId, after: null },
 			});
 			if (result.method !== 'agent.approvals.list') throw new Error('Unexpected approval list');
-			return result.value;
+			expect(result.value.hasMore).toBe(false);
+			return result.value.items;
 		};
 
 		const waitApproval = async (toolName: string): Promise<AgentApprovalView> => {

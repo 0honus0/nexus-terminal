@@ -51,7 +51,7 @@ function admit(
 		if (!facts.appEnabled) {
 			throw new AgentFailure('app_disabled');
 		}
-		if (creation && (facts.totalCount >= 10000 || facts.totalBytes + bytes > maxBytes)) {
+		if (creation && facts.totalBytes + bytes > maxBytes) {
 			throw new AgentFailure('limit_exceeded');
 		}
 	};
@@ -306,13 +306,19 @@ export class ArtifactService {
 		artifactId: string,
 		expectedVersion: number,
 		sha256: string,
+		maxBytes: number,
 		signal: AbortSignal,
 		consume: (content: ArtifactContent) => Promise<T>,
 	): Promise<T> {
 		scope(actor);
 		id(artifactId);
 		version(expectedVersion);
-		if (actor.kind !== 'tool' || !/^[a-f0-9]{64}$/u.test(sha256)) {
+		if (
+			actor.kind !== 'tool' ||
+			!/^[a-f0-9]{64}$/u.test(sha256) ||
+			!Number.isSafeInteger(maxBytes) ||
+			maxBytes < 1
+		) {
 			throw new AgentFailure('invalid_input');
 		}
 		const release = this.acquireRead(artifactId);
@@ -329,7 +335,7 @@ export class ArtifactService {
 			const row = await read();
 			const chunks: Uint8Array[] = [];
 			let size = 0;
-			if (row.sizeBytes > AGENT_ARTIFACT_MAX_BYTES) {
+			if (row.sizeBytes > Math.min(maxBytes, AGENT_ARTIFACT_MAX_BYTES)) {
 				throw new AgentFailure('limit_exceeded');
 			}
 			if (row.sizeBytes) {
@@ -376,6 +382,27 @@ export class ArtifactService {
 		private readonly events: OperationsEvents,
 	) {}
 
+	/** Preflight only: begin() makes the final quota reservation inside its transaction. */
+	async availableBytes(actor: ArtifactActor): Promise<number> {
+		scope(actor);
+		const configuration =
+			actor.kind === 'session'
+				? await this.settings.get(actor.userId)
+				: await this.settings.frozen(actor.userId, actor.appId, actor.runId);
+		const usage = await this.model.summary(actor.userId, Date.now(), configuration.limits.maxArtifactBytes);
+		const available = Math.max(
+			0,
+			Math.min(
+				configuration.limits.maxArtifactBytes - usage.totalBytes,
+				(await this.model.freeBytes()) - 64 * 1024 * 1024,
+			),
+		);
+		if (available < 1) {
+			throw new AgentFailure('limit_exceeded');
+		}
+		return available;
+	}
+
 	async begin(actor: ArtifactActor, input: ArtifactBegin): Promise<ArtifactRecord> {
 		scope(actor);
 		if (
@@ -398,9 +425,6 @@ export class ArtifactService {
 			actor.kind === 'session'
 				? await this.settings.get(actor.userId)
 				: await this.settings.frozen(actor.userId, actor.appId, actor.runId);
-		if (input.declaredBytes > configuration.limits.maxSingleArtifactBytes) {
-			throw new AgentFailure('limit_exceeded');
-		}
 		const now = Date.now();
 		return this.model.create(
 			actor,

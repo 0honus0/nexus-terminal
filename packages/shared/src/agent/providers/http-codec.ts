@@ -92,10 +92,33 @@ export function readAgentOptionalReasoningEffort(value: unknown): (typeof AGENT_
 	throw new InvalidAgentPayload();
 }
 
+function modelSources(
+	value: unknown,
+	capabilities: Record<string, unknown>,
+): NonNullable<AgentProviderModelInput['capabilitySources']> {
+	const row = agentRecord(value, AGENT_MODEL_CAPABILITY_FIELDS);
+	const sources: NonNullable<AgentProviderModelInput['capabilitySources']> = {};
+	for (const field of AGENT_MODEL_CAPABILITY_FIELDS) {
+		const source = row[field];
+		if (source === undefined) {
+			continue;
+		}
+		if (
+			capabilities[field] === undefined ||
+			(source !== 'manual' && source !== 'registry' && source !== 'provider')
+		) {
+			throw new InvalidAgentPayload();
+		}
+		sources[field] = source;
+	}
+	return sources;
+}
+
 function model(value: unknown): AgentProviderModelInput {
 	const r = agentRecord(
 		value,
 		[
+			'capabilitySources',
 			'id',
 			'protocol',
 			'contextWindow',
@@ -145,6 +168,7 @@ function model(value: unknown): AgentProviderModelInput {
 		throw new InvalidAgentPayload();
 	}
 	return {
+		...(r.capabilitySources === undefined ? {} : { capabilitySources: modelSources(r.capabilitySources, r) }),
 		id: agentText(r.id, AGENT_PROVIDER_MAX_MODEL_ID_BYTES).trim(),
 		...(r.protocol === undefined ? {} : { protocol: protocol(r.protocol) }),
 		contextWindow,
@@ -342,18 +366,7 @@ export function readAgentProviderView(v: unknown): AgentProviderView {
 			defaultReasoningEffort: row.defaultReasoningEffort,
 			reasoningMandatory: row.reasoningMandatory,
 		});
-		const source = agentRecord(row.capabilitySources, AGENT_MODEL_CAPABILITY_FIELDS);
-		const capabilitySources: AgentProviderModelView['capabilitySources'] = {};
-		for (const key of AGENT_MODEL_CAPABILITY_FIELDS) {
-			const value = source[key];
-			if (value === undefined) {
-				continue;
-			}
-			if (value !== 'manual' && value !== 'provider' && value !== 'registry') {
-				throw new InvalidAgentPayload();
-			}
-			capabilitySources[key] = value;
-		}
+		const capabilitySources = modelSources(row.capabilitySources, row);
 		let providerCapabilities: AgentProviderModelView['providerCapabilities'];
 		if (row.providerCapabilities !== undefined) {
 			const o = agentRecord(row.providerCapabilities, ['source', 'sourceVersion', 'updatedAt', 'capabilities']);
@@ -372,7 +385,7 @@ export function readAgentProviderView(v: unknown): AgentProviderView {
 		if (row.capabilityConflicts !== undefined) {
 			if (
 				!Array.isArray(row.capabilityConflicts) ||
-				row.capabilityConflicts.length > 9 ||
+				row.capabilityConflicts.length > AGENT_MODEL_CAPABILITY_FIELDS.length ||
 				new Set(row.capabilityConflicts).size !== row.capabilityConflicts.length
 			) {
 				throw new InvalidAgentPayload();

@@ -37,16 +37,14 @@ export interface ModelImageRequest {
 	credential: string | null;
 	modelId: string;
 	prompt: string;
+	/** Decoded byte budget selected by the application storage owner. */
+	maxBytes: number;
 }
 
 export interface ModelImageResult {
 	bytes: Uint8Array;
 	mediaType: 'image/png' | 'image/jpeg' | 'image/webp';
 }
-
-export const MODEL_IMAGE_MAX_BYTES = 16 * 1024 * 1024;
-
-export const MODEL_IMAGE_MAX_RESPONSE_BYTES = 4 * Math.ceil(MODEL_IMAGE_MAX_BYTES / 3) + 64 * 1024;
 
 /** Success requires a completed event and normal iterator termination; EOF alone is not success. */
 export const MODEL_STREAM_MAX_BYTES = 8 * 1024 * 1024;

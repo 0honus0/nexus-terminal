@@ -6,6 +6,8 @@ import type {
 } from './values.js';
 
 export interface AgentProviderModelInput {
+	/** Optional field provenance; unannotated configuration values are manually supplied. */
+	capabilitySources?: Partial<Record<AgentModelCapabilityField, AgentModelCapabilitySource>>;
 	id: string;
 	protocol?: AgentProviderProtocol;
 	contextWindow?: number;
@@ -38,7 +40,7 @@ export interface AgentProviderModelView extends AgentProviderModelInput {
 		source: string;
 		sourceVersion: string;
 		updatedAt: number;
-		capabilities: Partial<Omit<AgentProviderModelInput, 'id' | 'protocol'>>;
+		capabilities: Partial<Omit<AgentProviderModelInput, 'id' | 'protocol' | 'capabilitySources'>>;
 	};
 	capabilityConflicts?: AgentModelCapabilityField[];
 }
@@ -71,7 +73,7 @@ export interface AgentDiscoveredModel {
 	ownedBy?: string;
 	createdAt?: number;
 	/** Only server-advertised capability facts; an absent value must not be inferred. */
-	providerCapabilities?: Partial<Omit<AgentProviderModelInput, 'id' | 'protocol'>>;
+	providerCapabilities?: Partial<Omit<AgentProviderModelInput, 'id' | 'protocol' | 'capabilitySources'>>;
 }
 
 export interface AgentProviderPatch {

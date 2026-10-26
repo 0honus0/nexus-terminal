@@ -41,7 +41,7 @@ test('the current first-release schema initializes a clean database through norm
 	);
 	const thread = await requestAgentWorkspace(request, app, {
 		method: 'agent.threads.create',
-		params: { operationId: randomUUID(), title: 'Fresh thread' },
+		params: { autoTitle: false, operationId: randomUUID(), title: 'Fresh thread' },
 	});
 	if (thread.method !== 'agent.threads.create') throw new Error('Unexpected thread confirmation');
 	expect(thread.value).toMatchObject({ appId: app.id, title: 'Fresh thread', version: 1 });
@@ -64,7 +64,7 @@ test('reopening the current schema preserves account, App, thread and encrypted 
 	);
 	const command = {
 		method: 'agent.threads.create',
-		params: { operationId: randomUUID(), title: 'Retained thread' },
+		params: { autoTitle: false, operationId: randomUUID(), title: 'Retained thread' },
 	} as const;
 	const created = await requestAgentWorkspace(request, app, command);
 	const token = process.env.NEXUS_E2E_CONTROL_TOKEN;

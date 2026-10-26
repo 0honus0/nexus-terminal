@@ -1,3 +1,4 @@
+import type { AgentOperationErrorCode } from '@nexus-terminal/shared/agent/values';
 import type { AgentRunStatus } from '@nexus-terminal/shared/agent/runs/values';
 import type { ToolOperation } from '../runs/model/run-tool-types.js';
 import type { RunFrozenInput } from '../runs/model/run-types.js';
@@ -37,6 +38,21 @@ export function toolAuthorityIdentity(operation: ToolOperation): ToolAuthorityId
 	};
 }
 
+/** Explain only current policy facts; stale versions/provider changes remain separate. */
+export function toolAuthorizationFailure(operation: ToolOperation, policy: GrantState): AgentOperationErrorCode | null {
+	if (!policy.app.declared || !policy.app.capabilities.includes(operation.capability)) {
+		return 'capability_undeclared';
+	}
+	if (!policy.app.enabled) {
+		return 'app_disabled';
+	}
+	if (operation.targetId !== null && policy.app.deniedTargetIds.includes(operation.targetId)) {
+		return 'target_denied';
+	}
+	const granted = authorize(policy.grants, operation.capability, operation.targetId);
+	return granted ? null : 'forbidden';
+}
+
 export function mayUseTool(
 	operation: ToolOperation,
 	policy: GrantState,
@@ -50,7 +66,7 @@ export function mayUseTool(
 		operation.risk !== 'forbidden' &&
 		(operation.targetId === null || connectionIds.includes(operation.targetId)) &&
 		mayExecuteFrozenRun(frozen, provider) &&
-		authorizationFact(policy, operation.capability, operation.targetId).allowed
+		toolAuthorizationFailure(operation, policy) === null
 	);
 }
 

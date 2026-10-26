@@ -261,7 +261,10 @@ export class BrowserService {
 			if (input.action === 'snapshot') {
 				result = await session.capability.snapshot(input.maxNodes, combined);
 			} else if (input.action === 'screenshot') {
-				const bytes = await session.capability.screenshot(8 * 1024 * 1024, combined);
+				const bytes = await session.capability.screenshot(
+					await this.artifacts.availableBytes(this.actor(owner)),
+					combined,
+				);
 				await validate();
 				result = await this.saveCapture(
 					owner,
@@ -278,6 +281,7 @@ export class BrowserService {
 					input.artifactId,
 					input.expectedVersion,
 					input.sha256,
+					session.capability.maxUploadBytes,
 					combined,
 					async (content) => {
 						await validate();
@@ -297,7 +301,21 @@ export class BrowserService {
 					},
 				);
 			} else {
-				const reply = await session.capability.perform(input, combined);
+				const reply = await session.capability.perform(
+					input.action === 'download'
+						? {
+								action: 'download',
+								sessionId: input.sessionId,
+								snapshotId: input.snapshotId,
+								nodeRef: input.nodeRef,
+								maxBytes: Math.min(
+									input.maxBytes,
+									await this.artifacts.availableBytes(this.actor(owner)),
+								),
+							}
+						: input,
+					combined,
+				);
 				if (reply.kind === 'file') {
 					await validate();
 					result = await this.saveCapture(owner, reply.name, reply.mediaType, reply.bytes, combined);

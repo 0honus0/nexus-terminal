@@ -105,7 +105,7 @@ Remote 的普通 SSH Workspace 是一条持续存在的交互式 shell，而非 
 4. **类型与转换**：消息/proposal/reasoning 应用类型唯一归 Run；History/Source/Snapshot 归 context/model，独立存储对象归 context/storage，Model 对全部嵌套字段逐项转换。基础状态引用已有 Shared values；内部快照无双端消费者，不新增 Shared/public 对象。跨 Run 不复用加密 reasoning；同 Run 续接保留供应商需要的完整 reasoning。
 5. **入口与安装**：Agent register 安装 ContextModel/Storage 和历史 Service 到原执行 owner，无第二个执行 registry 或新 HTTP。读取历史仍位于冻结政策检查之后，每轮取得快照后才 reserve；每轮受 governed、当前版本、冻结预算及期限约束。
 6. **数据、事务与并发**：Root/Child 创建事务分配不可变 thread_sequence，历史按该序号排序，不用时间戳推断先后。Service 通过 Model 向原读取事务传入来源窗口容量与纯预算判定；Adapter 按不可变序号倒序选择最近连续完整Run后转正序，最多4096个来源、1024步骤、4096工具和512KiB原始正文，较早历史不占本轮预算但持久记录不删除，单个过大历史Run可整体省略。相容来源前缀的语义检查点仍复用，超过预算则保留原窗口。ContextService在首轮快照之前按完整序列化/Provider预算移除最旧完整历史消息及其全部来源（摘要按coveredRuns一起移除），只缩小连续后缀，不裁剪当前输入或执行中的工具交换；首轮快照后锁定来源，后续连续性仍严格校验。步骤 reserve 同事务保存 agent_model_contexts 的完整内容、来源及 SHA-256，并核对窗口内完整连续后缀的来源 user/App/Thread/sequence/version/status；后续轮与已存前缀、原步骤文本/proposals及确定工具结果经Model投影后的消息逐项一致。只更新单一初始 v1 与精确签名，不兼容旧开发库。未来恢复若修改被引用的历史步骤/结果，必须原子推进来源版本；B9 不得仅修改子账本而维持来源版本不变。
-7. **生命周期与失败**：每 Run 最多1024消息，消息与工具定义合计4MiB；normal的会话窗口预算另加完整工具定义与工具框架开销，再受Provider窗口约束；extended直接使用Provider窗口。完整请求估算与步骤token预约共用context-rules，包含消息/请求框架及冻结输出预留，不是供应商精确 token 用量。Platform AI将最多128项工具声明与每轮最多32次调用分别限制，不以调用数量限制目录。模型输入明确标注近期历史可能省略，历史只按完整Run滑窗，不截断半组工具；本轮消息/请求自身超限仍明确拒绝；首轮确定拒绝只结算原身份/版本/创建请求且无步骤的 pending Run，后续按真实派发事实结算，存储失败保留因果且不重试。原执行 owner 管取消、围栏、unknown 与 drain；持久快照不授权重启后重新派发。
+7. **生命周期与失败**：消息与工具定义合计4MiB，不另设消息数量上限；不按normal/extended裁剪窗口，不以字节估算作为模型上下文硬拒。context-rules保留完整性和编码容量检查，其保守估算仅用于尚未报告usage的步骤预约，不是供应商精确token用量。Platform AI将最多128项工具声明与每轮最多32次调用分别限制，不以调用数量限制目录。模型输入明确标注近期历史可能省略，历史只按完整Run滑窗，不截断半组工具；本轮消息/请求自身超限仍明确拒绝；首轮确定拒绝只结算原身份/版本/创建请求且无步骤的 pending Run，后续按真实派发事实结算，存储失败保留因果且不重试。原执行 owner 管取消、围栏、unknown 与 drain；持久快照不授权重启后重新派发。
 8. **当前能力与验收**：Run-local 交换、持久 Thread 历史和逐步骤内容快照已接线；受限结果续读已接线；语义检查点、Memory/Recall、Artifact/清理与执行设置已有实际消费者。USAGE、实施四表与 testing 分别维护当前行为、任务和检查证据；全部行为待 B10，正式前端 F1。
 
 ### 上下文结果投影与续读（B7.3 源码）
@@ -128,7 +128,7 @@ Memory 列表通过 Shared 可选 threadId → HTTP 白名单投影 → Service 
 3. **依赖方向**：业务 Service → Model → 独立 storage/Platform → Adapter；SQL/DDL、私有行与 JSON 解码留 Adapter。execution 的纯政策决定通过 Model 转换后的同事务事实回调执行；Root/Child、Governance 与其他 Agent 子功能直接消费内部应用契约，不绕 public 包装。
 4. **类型与转换**：双端管理协议唯一归 Shared agent/{memory,artifacts,execution}；应用对象分别归所属 model，独立存储对象归 storage。HTTP 与 Model 分别白名单转换全部嵌套对象。摘要正文与内部来源快照没有新增公开对象；能力基础值包含 context.compact、memory.read、memory.propose、artifacts.read/write，内置声明当前版本 1.8.0，默认 grant 空。
 5. **入口与安装**：register 安装管理 HTTP 和 memory_propose/recall、artifact_create/read、context_checkpoint 真实模型工具；Bootstrap 安装原 Access 提供的事务身份 reader，并创建数据库同路径派生的专用 Artifact 内容目录。核心 SQL 仍仅一个初始 v1，不兼容旧开发库；精确签名随最终结构更新。
-6. **数据、事务与并发**：Memory 提案来源、审核 CAS 在原写事务核对；期限使用实际读取后的时钟，审核耗尽版本拒绝递增；跨App记忆导入的路由、用例、存储及快照声明已移除，不保留兼容入口。持久/Shared解码一致校验创建、审核和到期关联。Artifact SQL 预留、文件独占写入/发布和 SQL 确认分别有完成判据；上传/删除领取前预留最终结算的版本空间，批量清理先验证完整计划，确认期限在实际读取后复查。删除先持久 claim，实际文件删除与结算均确认后才归还额度。硬限制 preview/confirm 在真实存储事务读取事实后取时钟，期限由 Service 决定，校验、updatedAt 与单次消费共用该次时刻；耗尽版本不递增。Root 创建同事务冻结设置，Child 同事务复制 Root 冻结模型及不可变执行设置；模型与工具准入读取全族账本，模型 token reservation 不退款，不冒充供应商精确用量。
+6. **数据、事务与并发**：Memory 提案来源、审核 CAS 在原写事务核对；期限使用实际读取后的时钟，审核耗尽版本拒绝递增；跨App记忆导入的路由、用例、存储及快照声明已移除，不保留兼容入口。持久/Shared解码一致校验创建、审核和到期关联。Artifact SQL 预留、文件独占写入/发布和 SQL 确认分别有完成判据；上传/删除领取前预留最终结算的版本空间，批量清理先验证完整计划，确认期限在实际读取后复查。删除先持久 claim，实际文件删除与结算均确认后才归还额度。硬限制 preview/confirm 在真实存储事务读取事实后取时钟，期限由 Service 决定，校验、updatedAt 与单次消费共用该次时刻；耗尽版本不递增。Root 创建同事务冻结设置，Child 同事务复制 Root 冻结模型及不可变执行设置；模型与工具准入读取全族账本，模型预算按已报告input/output usage核算，未报告保留reservation，确定未派发失败计0；不改写原预留记录，不冒充精确账单。
 7. **生命周期与失败**：所有管理任务归 AgentRequestOwner，模型/工具仍归原 Run owner。持久语义检查点绑定实际模型输入 hash 和完成工具；下一轮保留原用户请求及完整当前交换，预留事务重新验证摘要来源。未知提交不补写、不重派，导入/清理确认只消费一次；结果未知按预分配资源身份只读核对。内容流覆盖全部 yield、取消和 close，读取期间不允许清理对应文件；未确认文件/句柄清理保留资源与容量归属。
 8. **当前能力与验收**：Memory/Artifact、语义检查点、执行设置、Operations 日志/审计/通知与宿主诊断源码已接线；执行按 governed 政策核对，默认 enabled=false；启用设置不授予工具 grant 或审批。 正式前端 F1、行为 B10。
 
@@ -383,6 +383,8 @@ Run 用量通过认证 GET `/api/v1/agent/apps/:appId/runs/:id/usage` 只读获�
 
 ### Provider 事务与冻结
 
+Provider模型配置的逐字段capabilitySources与能力值一起写入原models_json和同一版本CAS；协议、应用、存储和前端草稿分别白名单复制来源，来源基础字段/有限值归Shared providers/values。来源为可选配置注释，未注明的显式配置值为manual，registry/provider仅表示赋值来源，不能授权或证明实时能力。Provider观察对象明确排除capabilitySources；实际模型网络请求仍只映射能力值。输入/存储解码同时验证来源有限值、字段白名单及来源对应能力值存在；界面手动赋值、模型库补全/重置和应用观察在原赋值owner同步来源，不通过全局watch推测。不更新表结构或自动迁移/重写旧数据，无法恢复未记录的历史来源。
+
 第一版初始化直接创建 Provider、Registry 与冻结输入表。配置更新 CAS 增加 version；替换/清除/删除凭据增加 credentialRevision。Run、冻结输入、初始事件及幂等记录同事务写入；Model 回调从存储记录投影应用事实并判断，结果再投影为存储命令。重放先返回原结果。冻结包含端点、协议、模型能力和原凭据代际，不含密钥；已变配置或凭据不能以新秘密替代旧引用。删除关联 active `pending/running/unknown` Run 的 Provider 返回冲突。观察数据失效与删除准入由 Provider 纯规则决定；Adapter 在同一事务读取当前配置或去重的 Run 状态，Model 显式转换后调用同步规则，再由 Adapter 执行存储任务。CAS/关联读取与写入保持同一事务，Adapter 不定义业务状态筛选政策。
 
 ### B4.2 因素存储与挑战原子性
@@ -433,7 +435,7 @@ Run owner 在持久创建前保留本机准入：8 个尝试名额（含在途�
 
 Provider 配置提交后中止本进程关联请求；获取凭据后、dispatch 返回后及发布每个模型事件前复查当前 Provider，复查 await 后检查 Abort。跨进程配置变更以重新读取发现，不宣称网络副作用与配置更新具有跨系统原子性。未派发失败与已派发 unknown 分开，SQLite 写入异常不误归网络失败或重复补写；双重失败保留 AggregateError。
 
-技术 Adapter 持有响应体、reader 和迭代器清理，取消失败仍尝试 releaseLock，异常 cause 留内部。Registry下载同样保留清理失败；Provider/Registry在清理失败后拒绝新网络工作并在模块close上报，Registry无人订阅后的持久写入失败也保留并阻断重试。Model 等待技术迭代自然退出及清理完成后才发布唯一 finished/stop；缺失/重复终态、断流、拒绝/工具输出、未知事件、空正文和不一致快照都不能成功。Provider probe 与 Run 共用SDK请求和事件投影，前者仍受 512 KiB/16 token 限额，不授予执行权。
+技术 Adapter 持有响应体、reader 和迭代器清理，取消失败仍尝试 releaseLock，异常 cause 留内部。ModelResponseBody独立观察reader.closed；cancel拒绝仅在与已errored reader的原始错误为同一对象时视为重复读取错误，不再虚报cleanup_failed；底层cancel拒绝与releaseLock失败仍保留。Run在辅助资源排空阶段失败后独立尝试主步骤unknown CAS，原步骤未知提交异常不进入此补写路径；标题清理和终态结算双失败保留全部因果，聚合诊断沿原有限错误码投影。Registry下载同样保留清理失败；Provider/Registry在清理失败后拒绝新网络工作并在模块close上报，Registry无人订阅后的持久写入失败也保留并阻断重试。Model 等待技术迭代自然退出及清理完成后才发布唯一 finished/stop；缺失/重复终态、断流、拒绝/工具输出、未知事件、空正文和不一致快照都不能成功。Provider probe 与 Run 共用SDK请求和事件投影，前者仍受 512 KiB/16 token 限额，不授予执行权。
 
 OpenAI官方Node SDK处理SSE换行、分帧、JSON和DONE，项目不另写SSE解析器。ModelSdkRequest在SDK解码前有界读取并严格验证UTF-8，网络总量8MiB、正文总量2MiB独立限制；ModelStreamProjection验证SDK保留的event名称与载荷，并限制解码后普通事件JSON为128KiB、Responses重复完整内容的done/completed快照为8MiB。SDK忽略的注释和分隔符仍计网络总量，不再声明独立注释帧上限；正式终态和SDK迭代正常结束共同确认完成，不自行要求可见的DONE事件。
 
@@ -454,6 +456,8 @@ TOTP 使用随机 20-byte 秘钥的 Base32/HMAC-SHA1 6 位 RFC6238、30 秒步�
 临时命令任务有全局准入和整项期限，取消不提前释放；Workspace detach/close 和观察 owner shutdown 取消关联任务并等待真实收敛。Model 关闭临时 SSH，不修改最近连接时间，不在 PTY 注入采集命令。Docker 非零退出是确定失败，已派发但无退出证据为 operation_unknown，清理失败保持具名类别并占用名额；不自动重放。订阅取消使旧结果失效，慢采样不重叠，资源缓存不交付已失效身份/配置。
 
 ### B3.1 生命周期设计
+
+Workspace WS 的输出暂停/恢复同时绑定 workspaceId 与 attachmentId，由 WorkspaceService 核对当前 attached owner；旧 socket 的流控回调不能改变后继附件的 pauseByConsumer。释放只调用带身份检查的 detach，由其统一核对录制队列和关闭状态再恢复底层输出，不另行解除背压。
 
 连接按 reserve → 身份/可信目标 → SSH open → shell open → FileAttachment → 认证复查 → 绑定 WS/交付 → ACK/运行推进；异步拒绝或取消后晚到 shell 和 Files 仍由其原 owner 追踪关闭，确认清理前不释放预留。异常 WS 断线只解除当前 generation，默认保留约 120 秒再终止；主动关闭先失效附着，终止 shell 及相关 Files/transfer。标记/prepare/commit 挂起应完整记录日志/checkpoint、先暂停后移交再恢复消费，部分副作用未确认的结果保留 `operation_unknown`。接管先撤旧 generation，再有界交付历史/状态与明确恢复 ACK；未 ACK 不能宣称恢复完成，原 owner 在 rollback/lease expiry 继续跟踪资源。日志导出按Shared限制渲染后UTF-8实际交付不超过128MiB，流中超限终止交付且仍释放原source；该预算不同于原始历史窗口。管理HTTP按Shared严格解码输入/目录输出，输出投影无效映射remote_unavailable而非用户输入错误。历史 100 MiB 最大保留、初始约 256 KiB、翻页约 256 KiB、checkpoint 4 MiB，流读取/完整编码/客户端背压单独设限，先做输入预检、再对读到的实际字节检查；不声称快照或磁盘硬配额。同步抛错、异步拒绝、清理多个失败经具名错误与 AggregateError 收敛，同一失败只登记一次。远端失控/断网后不主动重放命令与 unknown 变更；D12/D13 的原生工具与非原子窗口取舍不变。
 
@@ -601,7 +605,7 @@ Agent 模块的 `governance` 持有每个 user/App 的 capability grant、执行
 | App 当前授权 | governance/model 的 `AuthorizationFact`                  | 包含 user/App/capability/connectionId/revision；不复用客户端 DTO，批准不自动授权派发                                                                                            |
 | 技术资源     | Platform SQL Executor/SqliteRuntime                      | Adapter 执行事务及行解码；Policy 不由 Platform 拥有                                                                                                                             |
 
-目标 grant 的 ssh IDs 在 Shared 协议中是长度受限文本，应用判断时严格要求规范化的正安全整数目标 ID；执行政策秒/字节/条数沿原始类型进行验证，不将 `String(value)` 后的相同文字当成有效 enum。grant 目标 ID 最多 256、单个最多 128 UTF-8 bytes，capability 取值以 Shared governance/values 唯一列表为准；审批 TTL 600 秒；grant 请求上限 512 KiB，普通 governance JSON 16 KiB，完整结果上限 8 MiB；审批 list 至多 1024 条完整记录，超额为安全的 `limit_exceeded` 而非截断（分页消费者仍未实现）；容量按完整 JSON 编码计算。
+目标 grant 的 ssh IDs 在 Shared 协议中是长度受限文本，应用判断时严格要求规范化的正安全整数目标 ID；执行政策秒/字节/条数沿原始类型进行验证，不将 `String(value)` 后的相同文字当成有效 enum。grant 目标 ID 最多 256、单个最多 128 UTF-8 bytes，capability 取值以 Shared governance/values 唯一列表为准；审批 TTL 600 秒；grant 请求上限 512 KiB，普通 governance JSON 16 KiB，完整结果上限 8 MiB；审批 list 按ID游标每页最多64条，返回 after/nextCursor/hasMore，历史总数不截断；容量按完整 JSON 编码计算。
 
 ### 5. 入口与安装
 
@@ -899,7 +903,7 @@ ACP执行、独立权限/交付确认、审批HTTP和工具事件消费者已接
 
 ### 1. 职责与范围
 
-Child 是原 `runs` 中的独立 Run，不建立第二个 Runner、Root 注册表或权限中心。Root 最多累计创建四个直接 Child；新设计不提供多层委派、付费请求自动重试或恢复原执行。explore/review/worker 仅为角色标签。Child 直接继承 Root 冻结模型、执行限制和绝对期限，与 Root 共用家族预算；工具集合继承主 Agent，但排除嵌套委派与 Root 专属 join/cancel。原访问模式、目标范围、实时 grant 和独立审批继续复查，继承不授予 capability。
+Child 是原 `runs` 中的独立 Run，不建立第二个 Runner、Root 注册表或权限中心。Root 按冻结配置限制活跃直接 Child（默认四个），已终态且排空者释放名额，累计历史由任务族工具预算限定；新设计不提供多层委派、付费请求自动重试或恢复原执行。explore/review/worker 仅为角色标签。Child 直接继承 Root 冻结模型、执行限制和绝对期限，与 Root 共用家族预算；工具集合继承主 Agent，但排除嵌套委派与 Root 专属 join/cancel。原访问模式、目标范围、实时 grant 和独立审批继续复查，继承不授予 capability。
 
 ### 2. 子功能与目录
 
@@ -922,7 +926,7 @@ Child 是原 `runs` 中的独立 Run，不建立第二个 Runner、Root 注册�
 
 ### 5. 入口与安装
 
-当前内置声明为 `nexus.terminal@1.8.0`，包含 `app.intents.exchange` 和已接线能力，默认 grants 仍空。九个 `collaboration_*` 工具通过原模型工具入口使用；读操作仍需实时全局 grant，委派、取消、发送、消费和 CAS 写入需独立 ToolCall 批准。父模型/工具批准不代替 Child 自己的工具批准。没有旧 runtimeId/sessionId 桥接或新的公开 dispatcher。管理员 HTTP 安装 GET /apps/:appId/runs/:id/subagents、POST /apps/:appId/runs/:id/subagents/:childId/cancel 和 GET /apps/:appId/runs/:id/subagents/:childId/messages，完整前缀 /api/v1/agent；入场/交付分别核验 Access。列表仅 id/parentId/status/version/profile/deadlineAt；消息仅 sequence/senderId/bodyBytes/expiresAt，查询 after/limit（默认0/16，最大32），完整响应16 KiB。观察不改变模型邮箱水位。Child 取消由 RunService 验证不可变父子/user/App 归属，再复用原 Run CAS/幂等取消及审批失效，不建立第二账本。外部直接创建由受审批模型委派替代，独立 Profile 管理及 collaboration_profiles 查询工具已删除，delegate 不再接受单独 maxRequests/durationSeconds 或模型覆盖。
+当前内置声明为 `nexus.terminal@1.8.0`，包含 `app.intents.exchange` 和已接线能力，默认 grants 仍空。十个 `collaboration_*` 工具（含正文续读 `collaboration_output_read`）通过原模型工具入口使用；读操作仍需实时全局 grant，委派、取消、发送、消费和 CAS 写入需独立 ToolCall 批准。父模型/工具批准不代替 Child 自己的工具批准。没有旧 runtimeId/sessionId 桥接或新的公开 dispatcher。管理员 HTTP 安装 GET /apps/:appId/runs/:id/subagents、POST /apps/:appId/runs/:id/subagents/:childId/cancel 和 GET /apps/:appId/runs/:id/subagents/:childId/messages，完整前缀 /api/v1/agent；入场/交付分别核验 Access。列表仅 id/parentId/status/version/profile/deadlineAt；消息仅 sequence/senderId/bodyBytes/expiresAt，查询 after/limit（默认0/16，最大32），完整响应16 KiB。观察不改变模型邮箱水位。Child 取消由 RunService 验证不可变父子/user/App 归属，再复用原 Run CAS/幂等取消及审批失效，不建立第二账本。外部直接创建由受审批模型委派替代，独立 Profile 管理及 collaboration_profiles 查询工具已删除，delegate 不再接受单独 maxRequests/durationSeconds 或模型覆盖。
 
 ### 6. 数据、事务与并发
 
@@ -932,9 +936,9 @@ Child 是原 `runs` 中的独立 Run，不建立第二个 Runner、Root 注册�
 
 ### 7. 生命周期与失败
 
-Root/Child 共用原八个执行名额，排队依赖也占名额；满载明确拒绝，不暗建另一队列。Root 绝对期限五分钟，Child 一至120秒且不超父期限，请求上限一至32；期限到达阻止新派发，但允许原步骤未知结算。join 最多30秒，只结束等待。父成功前等待每个 Child 的真实任务和清理；Agent 共用错误 owner 的 aggregateToolFailures 同时服务 ToolService 排空和 RunExecutionOwner.waitChildren，嵌套的纯执行未知保留 ToolExecutionUnknown/ToolCleanupFailure，混合存储或内部故障保留 AggregateError，不推测结算；父失败/取消/撤权/停机覆盖整族。存储取消失败仍取消本地 Child、等待资源并聚合全部失败，不以一项错误跳过其他收尾。
+Root/Child 共用冻结执行名额，排队依赖也占名额；执行准入满载拒绝，模型派发并发忙则由原owner等待。Child 继承Root期限和任务族请求额度，不再独立缩短；期限到达阻止新派发，但允许原步骤未知结算。join 最多30秒，只结束等待。父成功前等待每个 Child 的真实任务和清理；Agent 共用错误 owner 的 aggregateToolFailures 同时服务 ToolService 排空和 RunExecutionOwner.waitChildren，嵌套的纯执行未知保留 ToolExecutionUnknown/ToolCleanupFailure，混合存储或内部故障保留 AggregateError，不推测结算；父失败/取消/撤权/停机覆盖整族。存储取消失败仍取消本地 Child、等待资源并聚合全部失败，不以一项错误跳过其他收尾。
 
-重启只对账：未派发 Child 失败，已派发/运行中保守 unknown，不重建等待、不重放请求。Child 每步正文与最后交接正文各最多8 KiB，同步骤/Run 成功事务保存，仅作为模型生成结果交接；超额明确失败。全部 Child 未确认会阻止 Root 成功。没有远端 rollback、跨进程活任务接管或公平排队承诺。
+重启只对账：未派发 Child 失败，已派发/运行中保守 unknown，不重建等待、不重放请求。Child 每步正文与最后正文沿模型步骤2 MiB容量，同步骤/Run成功事务完整保存。participant SQL只读取1024字符预览与原UTF-8字节数；list分页最多16项，output_read按原身份续读并返回hash。仅活跃、unknown或未结算工具的Child阻止父成功；确定失败/取消且实际排空不强制父失败。没有远端 rollback、跨进程活任务接管或公平排队承诺。
 
 ### 8. 当前能力与验收
 
@@ -1513,8 +1517,8 @@ Remote register 安装 `/api/v1/transfers/send`、`status`、`status/:taskId`、
 4. **类型与转换**：Shared 的 images 协议、supportsImageGeneration 与可选文字预算同步应用/存储/SQLite/前端；新 ProviderImageRequest/ImageArtifact 留 providers/model。Artifact 的 model actor 与独立存储授权逐字段转换，不伪造工具授权。
 5. **入口与安装**：原模型选择器同时消费 Images；配置分对话/图片两组。图片工具由原 toolDefinitions 安装，需原 artifacts.write/批准。新增 GET /api/v1/agent/apps/:appId/artifacts/:artifactId/preview，复用认证下载读取与 Range，限定 PNG/JPEG/WebP、nosniff、private/no-store。
 6. **数据、事务与并发**：直接图片沿模型 Step 的 reserve/dispatch/finish 与原请求/并发预算；工具沿 ToolCall 账本和原工具预算。Artifact 写事务核对 Images frozen protocol、原 dispatched Step/hash、当前 Run 与 Provider 代际。图片输出继承原文件预算/期限，不冒充网络与 SQLite 原子事务。
-7. **生命周期与失败**：Provider 请求跟踪及停机/配置修改取消覆盖图片请求，最大五分钟并与原 Run/工具信号取交集。外部 JSON 与 base64 有界读取；不获取返回 URL，不接收 SVG/HTML。付费请求未知或落盘失败不自动重试；本地取消不证明供应商回滚。全局日志不记提示词/图片/凭据。
-8. **当前能力与验收**：一次一张、最多16MiB、供应商默认尺寸/质量。直接图片只用本次描述，文字工具可传 Agent 整理的描述；不接入编辑、视频、音频。前端 Markdown 仅允许受保护的本站预览图。静态、目录、隔离HTTP及真实CDP验收的环境、入口与保证边界分别见 testing；编译不替代真实图片生成或完整治理回归。
+7. **生命周期与失败**：Provider请求跟踪及停机/配置修改取消覆盖图片请求。正式直接Images与image_generate统一继承Run剩余绝对期限，ToolService不为image_generate另设普通工具短超时，ProviderService该入口不再添加固定五分钟计时；网络生成、文件发布和后续验证共同消耗同一任务时限。管理图片测试仍独立五分钟，发现等管理读取仍十秒。Platform仅为图片ModelSdkRequest建立独立Undici Agent，其它请求保留原连接池，headersTimeout/bodyTimeout为0，由原应用signal控制完整等待（连接建立仍受传输自己的连接时限）；close分别尝试reader与dispatcher.destroy，保留独立失败和原错误身份，不使用全局连接池修改。外部 JSON 与 base64 有界读取；不获取返回 URL，不接收 SVG/HTML。付费请求未知或落盘失败不自动重试；本地取消不证明供应商回滚。全局日志不记提示词/图片/凭据。
+8. **当前能力与验收**：一次一张、按Artifact剩余空间与Node字符串/Buffer技术容量约束、供应商默认尺寸/质量。直接图片只用本次描述，文字工具可传 Agent 整理的描述；不接入编辑、视频、音频。前端 Markdown 仅允许受保护的本站预览图。静态、目录、隔离HTTP及真实CDP验收的环境、入口与保证边界分别见 testing；编译不替代真实图片生成或完整治理回归。
 
 ### Agent 供应商流的可选字段
 
@@ -1528,7 +1532,7 @@ Platform AI的ModelStreamProjection消费SDK已解码事件，持有Chat Complet
 4. **类型与转换**：SDK类型不能代替外部运行时校验；事件/模型/图片在Adapter以unknown检查实际消费字段并白名单投影。标准可选字段不作每帧必填，额外choice元数据有界忽略，拒绝未知执行输出。
 5. **入口与安装**：原Bootstrap安装不变，使用client.chat.completions.create、responses.create、images.generate和models.list；流通过公开asResponse及SDK Stream.fromSSEResponse保留事件名，模型测试复用同一路径。models.list只取当前响应，不迭代自动分页。
 6. **数据、事务与并发**：不改变表或Shared契约；SDK不管理工具执行、幂等记录或授权。请求由SDK编码，派发前限制实际编码字节，模型声明和工具/正文/续接容量保持原owner。
-7. **生命周期与失败**：maxRetries=0、logLevel=off、拒绝重定向，显式传入原AbortSignal，应用拥有完整期限。禁用环境organization/project自动继承，无凭据时移除占位Authorization。Reader按需读取，总量在SDK缓冲/JSON解码前检查；关闭Promise在取消前保存，SDK忽略的传输或清理失败仍由原owner记录并在close抛出，不提前交付completed或释放Run名额。不证明远端停止、不自动重发未知请求。
+7. **生命周期与失败**：文本流及probe的maxRetries=2，发现/图片为0；退避/Retry-After由官方SDK负责。仅连接故障与408/409/429/5xx可重试，TLS证书错误与本地失败中止专用signal，非临时HTTP失败强制禁止重试。成功响应后不重试SSE/投影失败；应用持原完整期限，所有尝试共用累计响应字节预算。同一逻辑模型步骤最多3次HTTP派发，不重放工具。logLevel=off、拒绝重定向，原AbortSignal与本地停止重试signal组合并传给SDK；原始fetch只用应用signal，避免停止SDK重试时先破坏尚待排空的reader，传输总期限仍归应用。禁用环境organization/project自动继承，无凭据时移除占位Authorization。每个响应有独立ModelResponseBody、reader/decoder和关闭Promise，SDK重试前重新等待上一响应关闭；清理失败阻断下一次派发，不能覆盖旧资源。Reader按需读取，总量在SDK缓冲/JSON解码前检查；关闭Promise在取消前保存，SDK忽略的传输或清理失败仍由原owner记录并在close抛出，不提前交付completed或释放Run名额。不证明远端停止，不自动重放已取得成功响应的请求或未知Run。
 8. **当前能力与验收**：迁移进度/静态证据和远程待验见PLAN/testing；UI不变；原生浏览器增量更新由下述Run变更订阅负责，SDK的供应商SSE与浏览器WS分属不同边界。
 
 ### Agent Run 正文与状态流
@@ -1540,7 +1544,7 @@ Platform AI的ModelStreamProjection消费SDK已解码事件，持有Chat Complet
 5. **入口与安装**：/ws/agent-runs升级需原来源/Origin、管理员、当前启用受信版本App及可见Run；客户端subscribe给出Thread和正文/事件游标，首次状态页核对Run所属Thread。每批交付前后和心跳期复核原持久会话/App准入。
 6. **数据、事务与并发**：无新表。先订阅再首次读取，写入通知在原存储调用收敛后发出，unknown不重派。正文/状态变化约16ms合并，读取中dirty保持；状态及用量/审批/子任务独立于正文热路径，终态后再读正文并持续至空页。发送游标与客户端已接纳游标分离，连接内按发送游标连续推送，重连从客户端已接纳游标恢复。
 7. **生命周期与失败**：最多16页且累计不超过完整输出预算的未ACK窗口，满额暂停到ACK，容量不是Run失败条件；大状态页等待先前窗口排空，心跳另留1KiB传输缓冲。ACK按序、60秒期限，订阅首帧15秒，心跳15秒/权限复核3秒；心跳不查询Run/正文。关闭取消计时、退订并等在途短读取，RunChanges纳入AgentRequestOwner停机资源，Platform等真实WS排空。隐藏、断线或关闭不取消Run，不重发模型。
-8. **当前能力与验收**：状态/正文/用量/审批/子任务均有直接推送消费者；记忆审核和插件SDK独立订阅保持原行为。命令1KiB，完整输出按审批8MiB、正文512KiB、事件32KiB、子任务16KiB及8KiB封装合计约8.6MiB；客户端单帧/待接纳窗口和后端发送预算同源。源码与静态证据见PLAN/testing；未以编译代替实机弱网、权限/版本撤销、停机及E2E验证。
+8. **当前能力与验收**：状态/正文/用量/审批/子任务均有直接推送消费者；记忆审核和插件SDK独立订阅保持原行为。命令1KiB，完整输出按审批8MiB、正文512KiB、事件32KiB、由最大工具预算推导的子任务元数据容量及8KiB封装，合计按runs/values公式计算；客户端单帧/待接纳窗口和后端发送预算同源。源码与静态证据见PLAN/testing；未以编译代替实机弱网、权限/版本撤销、停机及E2E验证。
 
 ## 成熟技术库边界
 
@@ -1552,3 +1556,114 @@ Platform AI的ModelStreamProjection消费SDK已解码事件，持有Chat Complet
 6. **数据、事务与并发**：上传先按原route总预算有限读取，Formidable只开启multipart插件；所有onPart都由Adapter接管原始字节，不调用默认文件处理器，无临时磁盘文件。解析原始/中间缓冲零化，返回part归producer清理；备份保留被交接的content。node-semver版本范围同步Shared及全部签名包消费者。
 7. **生命周期与失败**：解析前后复查signal，异常转HttpInputFailure并保留cause；真实请求socket不交给解析器，有界Readable源显式destroy。图片识别异步后仍走原身份/版本/取消准入；SVG关闭实体处理，格式识别不证明内容安全。生成图片继续只接受PNG/JPEG/WebP。
 8. **当前能力与验收**：源码已迁移；静态与远程待验范围见testing。Docker仍通过原MachineCommandExecutor/SSH执行CLI，没有API socket能力，不装Dockerode或更改远端前提。
+
+## Agent 安全失败诊断与 SSH 发现授权
+
+1. **职责与范围**：Run/Tool owner 记录有限故障类别；Governance 唯一决定授权，诊断不授予权限、不重派任务。
+2. **子功能与目录**：runs/run-failure-rules 分类具名应用异常；RunModel 组合原工具日志与当前进程诊断；tool-service 在既有失败 CAS 写入安全错误结果。
+3. **依赖方向**：Tool/Run Service → Run Model/Storage；Governance Model 在原事务决策回调内记录政策拒绝原因，收敛后抛具名 AgentFailure；SQLite 不引用应用错误类。
+4. **类型与转换**：Shared runs/values 持有限错误码，runs/model 持公开只读 failure；内部 RunFailure、StoredRunFailure 各归本层 owner，HTTP/WS/前端保持显式白名单转换。
+5. **入口与安装**：原 Run get 和 WS 状态投影附带 failure；列表/创建/取消快照不虚构诊断。无新接口、依赖、数据库结构或初始化签名变化。
+6. **数据、事务与并发**：工具失败以现有 result_text 保存单一 failureCode，仍在原 expectedRevision CAS 中收敛；完成工具的结果与上下文引用不变。RunStorage 仅查询当前用户/App/Run 的终态工具，按原 scope 索引过滤。RunModel 最多保存512次运行的有限诊断，按用户/App 核对后只附在 failed/unknown 上；满额淘汰旧诊断，不拒绝任务或影响持久终态。
+7. **生命周期与失败**：工具错误原因随原账本持久保留，进程内模型/派发前诊断在模块重建时释放，日志按运行编号关联。保留首次原因，已持久的具体工具原因优先；围栏/恢复无已知原因时返回真实未知，不读取供应商正文。unknown 仍表示可能存在远端效果；失败结算、未知提交和清理围栏保持原行为。
+8. **当前能力与验收**：machine_connection_list 与其它工具共用 authorize，其 machine.inspect 按 Shared 定义要求 global grant，不设列表专用授权分支；查询前与交付前核对所选目标及 App 禁用列表，仅记录实际交付目标。普通工具仍严格检查绑定目标，版本、Provider、审批与事务复核不放宽。静态和指定站点待验范围见 testing。
+
+模型派发前的凭据读取/Provider版本核对失败也由 RunExecutionOwner 记录有限诊断与 AGENT_MODEL_DISPATCH_REJECTED 日志；仅当前进程保留原因，不写供应商正文或凭据。确定未派发仍按原预留步骤 CAS 结算，未知存储提交继续传播，不因诊断追加第二次写入；用户取消不冒充配置变化。
+
+### Agent 上下文容量分类
+
+Context不再按普通/扩展裁剪窗口，也不使用字节代token判断实际模型容量；Provider拥有真实tokenizer和最终超窗拒绝。ContextLimitExceeded仍归Agent内部错误owner，继承limit_exceeded以保留初始历史整段裁剪，用于本地编码容量或无法完成必要上下文压缩；Run映射context_limit_exceeded。所有入口保留消息+工具定义4MiB、完整快照和源身份预算；1024消息数量限制已从Context校验、存储解码和Platform编码入口一起移除，History原文选择使用4MiB而非512KiB。ContextLimits保留真实模型声明与输出配置，未引入新schema或重写失败历史。profile字段/设置删除依H-13待用户确认，执行侧已无消费者。
+
+Execution预算SQL在原事务内以已报告input_tokens+output_tokens替代对应reservation作为累计占用；未报告usage或结果未知仍保留原reservation，确定未派发失败为0；主/子共享root_id，不修改旧账本或伪造missing usage。SDK仍是唯一重试调度owner；attempt仅日志计数，未另设次数循环。
+
+Context预压缩现状：checkpoint工具需要实际context.compact授权，摘要绑定真实已持久模型输入及其hash，完整工具组完成后应用，不能临时拼接新摘要绕过contextContinues校验。自动阈值/后台摘要由下节Context自动压缩owner负责；contextCompactionMode仅限制显式checkpoint工具摘要比例。
+
+追加核对：未知contextWindow不应成为文本模型执行的硬门槛；已从Provider冻结和Run冻结投影一起移除，ContextLimits按真实缺失表示、不填伪造窗口，maxOutputTokens仍作为实际输出配置要求。图片上下文不再填虚构字节窗口。无Shared/schema/UI变化；未知容量不能推导提前压缩阈值。
+
+### Context 自动压缩与用量估算
+
+1. **职责与范围**：ContextService持本Run同冻结模型的usage锚点、当前消息和替换；CompactionSession持每Run自动摘要任务。采用OpenCode固定提交49a112f的字符/4回退、15%/16k余量、64k已测输入与85%阈值前预生成思路，不引入整套Agent框架，不声称精确分词或跨模型校准。
+2. **子功能与目录**：context/compaction-rules持阈值与完整分组切分，compaction-values持摘要数据标识；service/compaction-session持准入、预生成、消费和排空，model/compaction-model持存储转换；adapters/sqlite/compaction-{schema,row,sql,context-sql}持DDL、真实解码、事务和前缀证明。Run的run-authority-sql由原步骤与摘要共用，不复制身份政策。
+3. **依赖方向**：RunExecutionOwner→Context服务/Model→Storage与RunModelStream/ProviderModel→Platform官方SDK。预算由ExecutionService决策，事务内回调转换独立StoredExecutionSettings/Usage。摘要没有工具，不伪造context_checkpoint授权、模型工具调用或用户回复。
+4. **类型与转换**：ContextUsageAnchor/CompactionCommand/Result归context/model/context-types，StoredCompactionCommand/Compaction与接口归context/storage/compaction-storage。CompactionModel逐字段转换源快照、身份和预算回调，SQLite不消费应用规则/类型；新增表/摘要不增加Shared或前端字段。usage只计现有已归一化input+output，缓存/推理不重复相加。
+5. **入口与安装**：register安装CompactionModel/Storage，Run每轮派发前prepare，完成工具提议后可precompute；初始v1安装agent_context_compactions，快照注册与真实decoder同步，无旧库兼容或自动删除数据。未知window/Images不启用自动压缩，maxOutput仍为正常模型上限，摘要单次输出至多16384token（包含供应商计入输出的推理），正文至多16KiB。
+6. **数据、事务与并发**：摘要独立持久reserve/dispatch/completed/failed/unknown、原快照/hash/切分位置和usage，root_id与Root/Child共享请求、token、并发账本。后台只与工具阶段重叠，下一轮前收敛，预留至少一次继续请求；实际任务预算不能因压缩绕过。摘要以唯一id绑定替换，下一步事务按同Run已完成记录重建原前缀，再复用contextContinues验证持久助手输出、完整工具结果和来源；陈旧前缀不能应用，保留近期约25%窗口（适用时至少30k，最多半窗口）及完整最后交互。原用户请求独立保留；不把摘要提升为授权。
+7. **生命周期与失败**：每Run仅一个后台Promise和取消controller，子任务继承原期限/预算；取消/撤销/恢复在原围栏事务将未派发置failed、已派发置unknown，不重放。完整流和清理完成后才持久摘要，usage缺失保留预约；未知存储提交不二次写入。可选摘要连续失败两次暂停，存储/清理故障不能吞掉；原任务finally及成功提交前排空，清理未确认保留运行名额。摘要费用汇入原Run用量但不生成正文事件。
+8. **当前能力与验收**：已实现同Runusage校准/回退、自动阈值、初始历史压缩、工具期预生成、完整分组与原输入保留、预算/取消/恢复/快照消费。初次/跨Run重建历史使用估算；不增加供应商超窗的自动重放恢复，不声称与OpenCode全部内部实现一致。语义摘要有信息损失及额外费用。操作见USAGE执行设置，静态与D17待验场景见testing。
+
+### Agent 会话自动命名
+
+1. **职责与范围**：scope 的 TitleSession/TitleModel 持默认 Thread 首条 Root 消息自动命名，RunExecutionOwner 追踪所属辅助模型调用；人工 Thread 标题不参与。
+2. **子功能与目录**：scope/model/title-types、title-model，storage/title-storage，service/title-session，adapters/sqlite/title-schema/title-sql/title-row；title-rules 持输出归一化和无工具提示词。
+3. **依赖方向**：Run owner → TitleSession → TitleModel → TitleStorage；现有 RunModelStream/OpenAI SDK 提供模型流，ProviderModel/ExecutionService 提供冻结配置复验和预算；不复制网络重试。
+4. **类型与转换**：TitleScope/Claim/Command 属 scope model，StoredTitle 对应 storage；Model 持白名单转换和政策投影。WS RunStreamState 带 AgentThread，由 ThreadModel.forRun 精确关联读取、原 interfaces 投影；不暴露标题账本/请求hash/供应商正文。
+5. **入口与安装**：workspace create 必填 autoTitle，前端新建默认 true，显式命名/SDK调用由调用方指定；直接 HTTP create 为人工标题。初始 v1 新增 agent_threads.title_origin 与 agent_thread_titles，注册快照列和真实decoder，不迁移旧库、不自动删除数据。
+6. **数据、事务与并发**：pending→automatic 的首次 claim 原子保存摘要、递增 Thread version；仅 thread_sequence=1 的 Root 原 create_run 身份且当前可执行时可 claim。独立 Thread version lease 不受 Run 文本增量改版影响；reserve/dispatch/finish 在事务复验原创建hash、Run活跃期限、冻结Provider与当前Thread来源/version。人工 rename 总是转manual；最后命名按原版本CAS，晚结果不能覆盖。账本请求/token/并发并入原Root/Child总量；未派发失败释放token，未知派发保留预留，真实usage成对记账。
+7. **生命周期与失败**：前台首模型派发后才启动可选任务，同模型最低支持思考等级、无工具、最多2000码点输入/2048输出token/4096字节正文，最终标题按128 UTF-8字节码点截断。Images/额度不足保留摘要。独立10秒和原期限信号，前台步骤结束立即取消并排空，终态前收口；取消/撤权/重启将reserved置failed、dispatched置unknown，不重放。普通命名失败只日志；存储提交未知或资源清理失败仍按原Run安全围栏处理，不假装清理成功。
+8. **当前能力与验收**：参考OpenCode固定提交49a112f的独立标题任务和人工改名保护；源码与静态证据见testing，D17下真实模型、竞态、快照及手机行为待验。
+
+## Agent 额外门槛清理（2026-10-25）
+
+1. **职责与范围**：恢复正常模型等待和可恢复工具失败；保留任务族总预算、授权、审批及未知结果围栏，UI设计不变。
+2. **子功能与目录**：Execution持准入，RunExecutionOwner持等待，ToolService持失败与投影，Context持持久续轮，Collaboration持活跃Child与完整输出读取。
+3. **依赖方向**：原Service→Model→Storage；本地容量等待使用p-retry8，仅重试ModelCapacityBusy，OpenAI SDK继续独占网络重试。
+4. **类型与转换**：Participant/StoredParticipant显式增加outputBytes；模型结果只带有标记预览，完整正文经原族关系续读；公开元数据无正文，Shared严格容量同步。
+5. **入口与安装**：模型/tool次数可配置上界400/4000，已有用户预算保留；十个协作工具声明更新到4.0.0，不保留旧参数兼容。
+6. **数据、事务与并发**：忙错误在派发写入前抛出并回滚；每次等待后重新做原CAS/准入。p-retry不接收signal，避免派发已提交后被其取消检查遮住；每次尝试前检查原取消，等待最长250ms响应取消，未知存储失败不重试。模型收到finished后以原步骤CAS持久记录response_received，先释放模型并发再等待标题/摘要/Child；该单调资源事实不改变正文revision或Run终态，快照列与decoder同步，重启仍按未结算派发保守对账。Child名额结合事务活跃数和原owner实际占用，历史不再累计四个。
+7. **生命周期与失败**：确定参数/不存在等工具错误持久failed后交回模型，Context快照及后续历史接受带正文的failed；权限、变更已派发未知及清理异常仍停止。工具捕获256KiB、模型步骤2MiB不变；预览与续读保留完整原文和可核对hash。
+8. **当前能力与验收**：源码两轮复核及静态证据见PLAN/testing；按D17不新增或执行行为测试，不重启当前旧schema运行实例。
+
+## Agent 结果续读与Child名额复核（2026-10-25）
+
+1. **职责与范围**：小预览额度时仍完整交付结果续读页；错误hash反馈模型；Child名额按真实占用ID去重，不改UI设计。
+2. **子功能与目录**：Context result-rules持唯一页预算，ResultService处理原工具结果，RunCollaborationService处理Child正文；ToolService传冻结预览额度。
+3. **依赖方向**：原Service→Context纯规则及各自Model→Storage，未新增模块或依赖。
+4. **类型与转换**：resultPage必填previewBytes，实际消费者同步；原ResultReadInput/ResultPage、hash、码点offset及nextOffset不变，不新增Shared字段或兼容接口。ChildAdmissionFacts/StoredChildAdmissionFacts明确持activeChildIds，Model复制转换；原执行owner只投影occupiedChildIds，不向Service交付任务对象。
+5. **入口与安装**：tool_result_read与collaboration_output_read按冻结设置缩小页；projectCapturedResult复用同一预算，没有独立截断实现。
+6. **数据、事务与并发**：先验证请求maxBytes为8..4096，再计算min(请求,有效预览额度-512)，有效预览额度仍1KiB..8KiB；512bytes外壳余量容纳UUID/hash、数字及字段。只读不可变账本，原文/hash保持，游标按实际码点推进。Child准入在原事务合并数据库的pending/running/unknown及未结算工具所属Child，与本机尚未收尾任务的ID；对并集计数，既不重复计算同一任务，也不漏计不同任务。
+7. **生命周期与失败**：错误hash属invalid_input，作为确定失败反馈模型后允许续轮；原授权、资源版本、取消、结果未知及清理保护保留，不绕过完整性检查。
+8. **当前能力与验收**：两轮源码核对覆盖Unicode/转义、最小与默认额度、末页、hash、权限和历史续轮；本轮静态证据见PLAN/testing，按D17未运行行为测试。
+
+## Agent Run 级批准策略与确定存储失败
+
+1. **职责与范围**：Runs 持有创建时冻结的 ask/full_access 意图；Governance 持有审批/单次消费。全授权不修改 App grant 或普通 SSH 授权。
+2. **目录**：原 runs/model/storage/adapters、governance/model/service/storage/adapters、interfaces HTTP/WS；错误分类 owner 为 agent-failure / agent-storage-failure。
+3. **依赖方向**：Service → Model → Storage，SQLite 在原事务读取模式，经 Model 转换交给治理规则；不从前端或工具参数推断自动批准。
+4. **类型与转换**：Shared runs/values 唯一定义 AgentApprovalMode；内部 CreateRootRunCommand / AgentRun、StoredRun / 创建命令及公开后端输入独立定义并逐字段映射。Shared 安全失败码 execution_storage_failed 不含技术正文。
+5. **入口与安装**：HTTP create、workspace create/append、public create 及 HTTP/WS RunView 同步字段；初始 v1 签名为 backend-next-v1-initial-20261025-agent-approvals，不兼容旧开发结构。
+6. **数据与并发**：agent_runs.approval_mode 非空有限值，创建 hash 包含模式，Child 创建事务复制父模式；快照列/解码与父子关系同时验证。自动审批绑定原 operation hash/revision、policy revision、目标版本和原用户，approved 后沿原 consume/authority 事务派发，未知提交不重放。
+7. **生命周期与失败**：具名 SQL/constraint 失败区别于 commit_unknown/rollback_failed；无模型步骤的 pending 仅以原创建 hash/version CAS 结算，轮间以原 completed 步骤 CAS 结束；reserved 并发等待的确定拒绝结算 DISPATCH_NOT_STARTED。纯确定 SQL 失败聚合仍可分类，混合未知或清理失败保持原因，不推测。App/Provider/目标撤权仍逐阶段检查。
+8. **当前能力与验收**：恢复聊天批准策略的真实执行链，未改变布局/风格；按 USAGE 操作。静态和两轮源码审核见 testing，真实审批/故障/取消和空库启动验收待远程，不把编译通过视为实机通过。
+
+## Agent 审批历史分页
+
+1. **职责**：Governance提供完整可遍历历史，单页最多64项；不以历史条数拒绝Run状态读取。
+2. **目录**：沿原治理Service/Model/Storage及HTTP/Workspace mapper，RunStreamService与run-changes-ws调度推送。
+3. **依赖**：Run仅消费治理应用页；SQL/索引归SQLite Adapter，插件SDK沿Shared严格解码。
+4. **类型**：Shared AgentApprovalPage、应用ApprovalPage和存储StoredApprovalPage各自归属并逐字段转换；after为小写UUID/null，稳定ID升序及游标关联在协议边界验证。
+5. **安装**：GET approvals可省略after；Workspace必传after；WS订阅游标必含approvals，重连从null开始，现有v1初始索引与精确签名同步，旧开发库不自动迁移。
+6. **并发**：同事务核对Run归属、刷新未决状态、读取64+1行；按(user,App,Run,id)索引keyset分页。存储不截断历史、不扩大单消息容量。
+7. **生命周期**：WS逐页沿原ACK背压发送；扫描中发生state变更后再从首页扫描，more保留待交付状态，Run终态不提前结束。审批批准与真实消费权限事务保持原约束。
+8. **验收**：保留原卡片和完整历史，静态及复审证据见testing；大历史、并发决议与断线真实行为按D17待远程，不以编译通过替代。
+
+### Artifact 总空间准入与二进制生成
+
+1. **职责与范围**：ArtifactService拥有总空间准入，去掉16MiB单文件政策及10,000项累计准入；Execution只保留总空间与保留时间。
+2. **子功能与目录**：沿原artifacts/execution/providers/integrations；ModelImageRequest的maxBytes属于Platform技术契约，SDK adapter负责编码预算与技术上限。
+3. **依赖方向**：ProviderImageService和BrowserService向ArtifactService取得当前可用字节，再由各Model显式传入Platform；Platform不依赖Agent或Shared业务政策。
+4. **类型与转换**：删除maxSingleArtifactBytes所有写入/视图/存储文档及mapper；ArtifactFacts不再保留无消费者的totalCount，Sqlite仅聚合字节。图片应用预算经Service→Model逐字段写入技术请求，输出仍经Model隔离。
+5. **入口与安装**：原HTTP路由不变。PUT内容直接流式写入，实际长度由reservation约束；不把10GiB内容容量放入maxBodyBytes或提高全局JSON内存预算。
+6. **数据、事务与并发**：availableBytes为预检，冻结Run设置总空间减用户已有占用（含预留），再与磁盘余量取较小值。begin在事务内继续核对settingsVersion、实时totalBytes及新增声明字节，并保留磁盘64MiB余量；生成期间并发占用可能使最终准入失败，预检不是空间预留。
+7. **生命周期与失败**：图片请求编码预算从允许解码字节推导；Node MAX_STRING_LENGTH/MAX_LENGTH决定整体JSON/Base64技术天花板，保留64KiB外壳余量。浏览器CDP二进制同样受字符串表示容量约束；会话经Model提供maxUploadBytes技术事实，Artifact在加载完整上传内容前检查，超出时不先分配巨大Buffer；显式download.maxBytes可主动缩窄本次下载，省略时用实际剩余空间。保留格式、权限、hash、版本、取消及unknown围栏，不自动重试付费生成。
+8. **当前能力与验收**：16MiB/8MiB业务限制已去掉；整体Base64路径依然需要比文件更大的内存，运行时技术限制不等于可承诺的内存容量；大体积/配额并发行为按D17待验。现存旧设置/冻结文档不自动迁移或删除，新版本使用当前结构。
+
+## WebSocket 传输保活
+
+1. **职责与范围**：Platform HTTP listener 为已接纳的所有 WebSocket 发送标准控制帧，减少代理空闲超时；业务心跳、权限复查及挂起租约仍归原 owner。
+2. **子功能与目录**：复用 `platform/http/http-server.ts` 的 `activeSockets`，覆盖 channel 与 connectedRaw，不增加业务接口或第三方库。
+3. **依赖方向**：使用现有 `ws` 的 Ping 和浏览器原生自动 Pong；前端及 Remote/Agent 不新增依赖。
+4. **类型与转换**：控制帧由 ws 处理，不进入应用 message 队列；Shared/HTTP/WS JSON 契约不变。25 秒是 Platform 传输策略。
+5. **入口与安装**：listener 成功监听后创建唯一周期 timer，枚举原 activeSockets；原始 RDP/VNC 路由即使更换 socket 事件监听，也不影响此 owner。
+6. **数据、事务与并发**：无持久化；只向 OPEN 且无待发送缓冲的 socket 发 Ping，拥塞时已有输出承担保活，不堆积额外控制帧。
+7. **生命周期与失败**：timer unref，维护暂停时不发送，恢复后继续；close 同步清 timer，关闭中的 socket 跳过。发送异常记录 WS_KEEPALIVE_FAILED 并终止原损坏传输；不因漏收一次 Pong 判定失败，不改变原 SSH 会话存活策略。
+8. **当前能力与验收**：源码覆盖统一 channel/raw 入口；静态证据及真实代理空闲、后台/休眠、拥塞与维护关闭待验范围见 testing，不把保活表述为休眠仍在线保证。

@@ -26,7 +26,8 @@ import { AGENT_PROVIDER_MAX_NAME_BYTES, AGENT_PROVIDER_MAX_MODEL_ID_BYTES } from
 import { readAgentChildrenResponse, readAgentMessageMetadataResponse } from '../collaboration/http-codec.js';
 import { AGENT_COLLABORATION_MESSAGE_MAX_PAGE } from '../collaboration/values.js';
 import {
-	readAgentApprovalList,
+	readAgentApprovalPage,
+	readAgentApprovalAfter,
 	readAgentApprovalResolveRequest,
 	readAgentApprovalView,
 } from '../governance/http-codec.js';
@@ -145,11 +146,15 @@ export function readAgentWorkspaceInput(input: unknown): AgentWorkspaceInput {
 			};
 		}
 		case 'agent.threads.create': {
-			const p = agentRecord(row.params, ['title', 'operationId']);
+			const p = agentRecord(row.params, ['title', 'operationId', 'autoTitle']);
+			if (typeof p.autoTitle !== 'boolean') {
+				throw new InvalidAgentPayload();
+			}
 			return {
 				method: row.method,
 				params: {
 					operationId: readAgentId(p.operationId),
+					autoTitle: p.autoTitle,
 					title: agentText(p.title, AGENT_SCOPE_MAX_NAME_BYTES),
 				},
 			};
@@ -187,9 +192,15 @@ export function readAgentWorkspaceInput(input: unknown): AgentWorkspaceInput {
 				},
 			};
 		}
-		case 'agent.runs.get':
-		case 'agent.subagents.list':
 		case 'agent.approvals.list': {
+			const p = agentRecord(row.params, ['runId', 'after']);
+			return {
+				method: row.method,
+				params: { runId: readAgentId(p.runId), after: readAgentApprovalAfter(p.after) },
+			};
+		}
+		case 'agent.runs.get':
+		case 'agent.subagents.list': {
 			const p = agentRecord(row.params, ['runId']);
 			return { method: row.method, params: { runId: readAgentId(p.runId) } };
 		}
@@ -255,6 +266,7 @@ export function readAgentWorkspaceResult(input: unknown, request: AgentWorkspace
 			const value = readAgentCreateRunResponse(row.value);
 			if (
 				value.run.threadId !== request.params.threadId ||
+				value.run.approvalMode !== request.params.input.approvalMode ||
 				(request.method === 'agent.runs.appendInput' && value.run.id === request.params.runId)
 			) {
 				throw new InvalidAgentPayload();
@@ -443,8 +455,8 @@ export function readAgentWorkspaceResult(input: unknown, request: AgentWorkspace
 			return { method: request.method, value };
 		}
 		case 'agent.approvals.list': {
-			const value = readAgentApprovalList(row.value);
-			if (value.some((item) => item.runId !== request.params.runId)) {
+			const value = readAgentApprovalPage(row.value, request.params.after);
+			if (value.items.some((item) => item.runId !== request.params.runId)) {
 				throw new InvalidAgentPayload();
 			}
 			return { method: request.method, value };
@@ -476,7 +488,7 @@ function belongsToApp(value: AgentWorkspaceResult, appId: string): boolean {
 		case 'agent.runs.get':
 			return value.value === null || value.value.appId === appId;
 		case 'agent.approvals.list':
-			return value.value.every((item) => item.appId === appId);
+			return value.value.items.every((item) => item.appId === appId);
 		default:
 			return true;
 	}

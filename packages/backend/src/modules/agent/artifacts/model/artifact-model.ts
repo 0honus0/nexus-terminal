@@ -70,7 +70,6 @@ function facts(value: StoredArtifactFacts): ArtifactFacts {
 		appExists: value.appExists,
 		appEnabled: value.appEnabled,
 		totalBytes: value.totalBytes,
-		totalCount: value.totalCount,
 	};
 }
 

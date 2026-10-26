@@ -225,6 +225,35 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 		);
 	});
 	await listen(server, options);
+	// Transport control frames cover ordinary and raw routes alike. Browsers
+	// answer Ping without a page timer, including when the page is in background.
+	const keepaliveTimer = setInterval(() => {
+		if (!accepting) {
+			return;
+		}
+		for (const ws of activeSockets) {
+			// Existing output already keeps the proxy active; avoid adding to a
+			// congested writer. A missed Pong alone must not evict a live session.
+			if (ws.readyState !== WebSocket.OPEN || ws.bufferedAmount > 0) {
+				continue;
+			}
+
+			const failed = (error: unknown): void => {
+				if (!error) {
+					return;
+				}
+				logDiagnostic(options.logger, 'warn', 'WS_KEEPALIVE_FAILED', {}, error);
+				ws.terminate();
+			};
+
+			try {
+				ws.ping(failed);
+			} catch (error) {
+				failed(error);
+			}
+		}
+	}, 25_000);
+	keepaliveTimer.unref();
 	const address = server.address();
 	const boundAddress = address && typeof address !== 'string' ? address.address + ':' + address.port : '';
 	logDiagnostic(options.logger, 'info', 'HTTP_LISTENING', {
@@ -332,6 +361,7 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 			}
 			// Admission closes synchronously, before the returned Promise is published.
 			accepting = false;
+			clearInterval(keepaliveTimer);
 			generation += 1;
 			closePromise = Promise.resolve().then(() =>
 				closeHttpResources({

@@ -11,8 +11,14 @@ import {
 	AGENT_PROVIDER_MAX_MODEL_ID_BYTES,
 	AGENT_REASONING_EFFORTS,
 } from '@nexus-terminal/shared/agent/providers/values';
-import { AGENT_TOOL_EVENT_MAX_LIMIT } from '@nexus-terminal/shared/agent/tools/values';
-import type { ToolOperation, ToolIdentity, ToolEventPage } from '../model/run-tool-types.js';
+import { AGENT_TOOL_EVENT_MAX_LIMIT, AGENT_TOOL_LIST_MAX_LIMIT } from '@nexus-terminal/shared/agent/tools/values';
+import type {
+	ToolOperation,
+	ToolIdentity,
+	ToolEventPage,
+	ToolListCursor,
+	ToolListPage,
+} from '../model/run-tool-types.js';
 import type { RunToolModel } from '../model/run-tool-model.js';
 import { createHash, randomUUID } from 'node:crypto';
 import type { RunModel } from '../model/run-model.js';
@@ -130,6 +136,9 @@ export class RunService {
 		validateAgentId(request.threadId);
 		validateOperationKey(request.operationKey);
 		validatePrompt(request.prompt);
+		if (request.approvalMode !== 'ask' && request.approvalMode !== 'full_access') {
+			throw new AgentFailure('invalid_input');
+		}
 		if (!request.model) {
 			throw new AgentFailure('invalid_input');
 		}
@@ -172,6 +181,7 @@ export class RunService {
 			model.modelId,
 			model.configurationVersion,
 			model.reasoningEffort ?? 'default',
+			request.approvalMode,
 			JSON.stringify(connectionIds),
 			JSON.stringify(origin),
 		]);
@@ -182,6 +192,7 @@ export class RunService {
 				{
 					origin,
 					model,
+					approvalMode: request.approvalMode,
 					connectionIds,
 					userId: request.userId,
 					appId: request.appId,
@@ -299,6 +310,29 @@ export class RunService {
 		validateAgentId(input.runId);
 		validateAgentId(input.id);
 		return this.tools.get(input);
+	}
+
+	listThreadTools(
+		userId: number,
+		appId: string,
+		threadId: string,
+		before: ToolListCursor | null,
+		limit: number,
+	): Promise<ToolListPage | null> {
+		validateScope(userId, appId);
+		validateAgentId(threadId);
+		if (
+			!Number.isSafeInteger(limit) ||
+			limit < 1 ||
+			limit > AGENT_TOOL_LIST_MAX_LIMIT ||
+			(before !== null && (!Number.isSafeInteger(before.createdAt) || before.createdAt < 0))
+		) {
+			throw new AgentFailure('invalid_input');
+		}
+		if (before !== null) {
+			validateAgentId(before.id);
+		}
+		return this.tools.listThread({ userId, appId, threadId }, before, limit);
 	}
 
 	listToolEvents(input: ToolIdentity, after: number, limit: number): Promise<ToolEventPage | null> {

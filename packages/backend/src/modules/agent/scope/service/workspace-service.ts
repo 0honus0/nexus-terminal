@@ -52,6 +52,7 @@ export class WorkspaceService {
 					threadId: input.threadId,
 					operationKey: input.operationId,
 					prompt: input.input.prompt,
+					approvalMode: input.input.approvalMode,
 					connectionIds: input.input.connectionIds.map((id) => id),
 					model: {
 						providerId: input.input.model.providerId,
@@ -123,6 +124,7 @@ export class WorkspaceService {
 					method: input.method,
 					value: await this.threads.mutate(access, {
 						kind: 'create',
+						autoTitle: input.autoTitle,
 						operationId: input.operationId,
 						title: input.title,
 					}),
@@ -188,7 +190,9 @@ export class WorkspaceService {
 			case 'agent.approvals.list':
 				return {
 					method: input.method,
-					value: required(await this.governance.approvals(access.userId, access.appId, input.runId)),
+					value: required(
+						await this.governance.approvals(access.userId, access.appId, input.runId, input.after),
+					),
 				};
 		}
 	}

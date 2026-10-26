@@ -1,3 +1,4 @@
+import type { ApprovalPage } from '../model/governance-types.js';
 import type { ExecutionService } from '../../execution/service/execution-service.js';
 import type { OperationsEvents } from '../../../operations/public.js';
 import type { RevokeRuns } from '../../runs/model/run-types.js';
@@ -197,10 +198,13 @@ export class GovernanceService {
 		return this.admitted(() => this.model.approval(userId, appId, id, now, approvalTransition));
 	}
 
-	approvals(userId: number, appId: string, runId: string): Promise<Approval[] | null> {
+	approvals(userId: number, appId: string, runId: string, after: string | null): Promise<ApprovalPage | null> {
 		validateScope(userId, appId);
 		validateAgentId(runId);
-		return this.admitted(() => this.model.approvals(userId, appId, runId, now, approvalTransition));
+		if (after !== null) {
+			validateAgentId(after);
+		}
+		return this.admitted(() => this.model.approvals(userId, appId, runId, after, now, approvalTransition));
 	}
 
 	async request(input: ApprovalRequest): Promise<Approval | null> {
@@ -214,7 +218,7 @@ export class GovernanceService {
 		return this.admitted(async () => {
 			const saved = await this.model.request(
 				input,
-				(policy, status, operation) => {
+				(policy, status, operation, approvalMode) => {
 					if (
 						input.kind !==
 						(operation.inspection.toolName === 'acp_inner_permission' ? 'acp_permission' : 'tool')
@@ -228,7 +232,7 @@ export class GovernanceService {
 					) {
 						return null;
 					}
-					return createRequestedApproval(input, operation, policy.revision, now());
+					return createRequestedApproval(input, operation, policy.revision, now(), approvalMode);
 				},
 				mayUseTool,
 			);
@@ -476,6 +480,7 @@ function createRequestedApproval(
 	operation: ApprovalOperation,
 	policyRevision: number,
 	requestedAt: number,
+	approvalMode: import('@nexus-terminal/shared/agent/runs/values').AgentApprovalMode,
 ): Approval {
 	return {
 		capability: operation.capability,
@@ -487,14 +492,14 @@ function createRequestedApproval(
 		toolCallId: input.toolCallId,
 		operationHash: operation.operationHash,
 		kind: input.kind,
-		status: 'requested',
+		status: approvalMode === 'full_access' ? 'approved' : 'requested',
 		policyRevision,
 		inputRevision: operation.operationRevision,
 		version: 1,
 		requestedAt: requestedAt,
 		expiresAt: requestedAt + AGENT_APPROVAL_TTL_SECONDS,
-		decidedAt: null,
-		decidedByUserId: null,
+		decidedAt: approvalMode === 'full_access' ? requestedAt : null,
+		decidedByUserId: approvalMode === 'full_access' ? input.userId : null,
 		consumedAt: null,
 		feedback: null,
 		inspection: {

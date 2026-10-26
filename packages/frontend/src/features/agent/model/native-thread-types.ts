@@ -13,7 +13,7 @@ export interface NativeThreadScope {
 }
 
 export type NativeThreadIntent =
-	| { kind: 'create'; scope: NativeThreadScope; operationId: string; title: string }
+	| { kind: 'create'; scope: NativeThreadScope; operationId: string; autoTitle: boolean; title: string }
 	| { kind: 'rename'; scope: NativeThreadScope; operationId: string; thread: NativeThread; title: string };
 
 export interface NativeThreadDeleteIntent {

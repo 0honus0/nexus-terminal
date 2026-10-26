@@ -1,3 +1,5 @@
+import { frozenExecution } from '../../../execution/adapters/sqlite/execution-budget-sql.js';
+import { expandAutomaticContext } from './compaction-context-sql.js';
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 import type { StepScope } from '../../../runs/storage/run-step-storage.js';
 import type { StoredContextSnapshot, StoredContextToolResult } from '../../storage/context-storage.js';
@@ -72,7 +74,7 @@ export async function contextContinues(
 	command: StepScope,
 	context: StoredContextSnapshot,
 	proposals: StoredStepProposal[],
-	verifyResults: (results: StoredContextToolResult[]) => boolean,
+	verifyResults: (results: StoredContextToolResult[], previewBytes: number) => boolean,
 ): Promise<boolean> {
 	const row = await tx.one(
 		`SELECT c.content_json,c.content_hash,
@@ -86,7 +88,11 @@ export async function contextContinues(
 	}
 	const previous = readContextSnapshot(row);
 	let prefixLength = previous.messages.length;
-	const retainsPrefix = JSON.stringify(previous.messages) === JSON.stringify(context.messages.slice(0, prefixLength));
+	let retainsPrefix = JSON.stringify(previous.messages) === JSON.stringify(context.messages.slice(0, prefixLength));
+	if (!retainsPrefix) {
+		context = await expandAutomaticContext(tx, command.runId, context);
+		retainsPrefix = JSON.stringify(previous.messages) === JSON.stringify(context.messages.slice(0, prefixLength));
+	}
 	if (!retainsPrefix) {
 		const checkpoint = await tx.one(
 			`SELECT c.* FROM agent_context_checkpoints c JOIN agent_run_tools t ON t.id=c.tool_id
@@ -139,7 +145,7 @@ export async function contextContinues(
 	);
 	return (
 		tools.length === proposals.length &&
-		tools.every((tool) => tool.state === 'completed') &&
+		tools.every((tool) => tool.state === 'completed' || tool.state === 'failed') &&
 		proposals.every((proposal, index) => {
 			const result = context.messages[prefixLength + 1 + index];
 			return (
@@ -154,6 +160,7 @@ export async function contextContinues(
 				providerCallId: storedText(tool.provider_call_id),
 				content: storedText(tool.result_text),
 			})),
+			(await frozenExecution(tx, command.runId)).limits.maxToolOutputBytes,
 		)
 	);
 }

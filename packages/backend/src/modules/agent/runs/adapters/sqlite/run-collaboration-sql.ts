@@ -1,3 +1,5 @@
+import { readRunApprovalMode } from './run-sql.js';
+import { AGENT_RUN_STEP_MAX_TEXT_BYTES } from '@nexus-terminal/shared/agent/runs/values';
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 import type {
 	RunCollaborationStorage,
@@ -67,6 +69,28 @@ export class SqliteRunCollaborationStorage extends CollaborationDataSql implemen
 		return this.db.transaction((tx) => children(tx, scope));
 	}
 
+	output(scope: StoredParticipantScope, childId: string): Promise<string | null> {
+		return this.db.transaction(async (tx) => {
+			const owner = await participant(tx, scope);
+			if (!owner) {
+				return null;
+			}
+			const row = await tx.one(
+				`SELECT c.output_text FROM agent_run_children c JOIN agent_runs r ON r.id=c.run_id
+				 WHERE c.parent_id=? AND c.run_id=? AND r.user_id=? AND r.app_id=? AND r.status='completed'`,
+				[owner.rootId, childId, scope.userId, scope.appId],
+			);
+			if (!row || row.output_text === null) {
+				return null;
+			}
+			const text = storedText(row.output_text);
+			if (Buffer.byteLength(text, 'utf8') > AGENT_RUN_STEP_MAX_TEXT_BYTES) {
+				throw new Error('Corrupt Child output');
+			}
+			return text;
+		});
+	}
+
 	delegate(
 		command: StoredDelegateCommand,
 		admit: (facts: StoredChildAdmissionFacts) => boolean,
@@ -96,26 +120,32 @@ export class SqliteRunCollaborationStorage extends CollaborationDataSql implemen
 				};
 			}
 			const row = await tx.one(
-				'SELECT thread_id,selected_connections_json FROM agent_runs WHERE id=? AND user_id=? AND app_id=?',
+				'SELECT thread_id,selected_connections_json,approval_mode FROM agent_runs WHERE id=? AND user_id=? AND app_id=?',
 				[command.scope.runId, command.scope.userId, command.scope.appId],
 			);
 			if (!row) {
 				return null;
 			}
 			const peers = await children(tx, command.scope);
+			const active = await tx.all(
+				`SELECT c.run_id FROM agent_run_children c JOIN agent_runs r ON r.id=c.run_id
+				 WHERE c.parent_id=? AND (r.status IN ('pending','running','unknown') OR EXISTS(
+				 SELECT 1 FROM agent_run_tools t WHERE t.run_id=r.id AND t.state IN ('inspected','dispatched','unknown')))`,
+				[command.scope.runId],
+			);
 			if (
 				!admit({
 					parent,
 					selectedTargets: readRunSelection(row.selected_connections_json),
 					now: Date.now(),
-					children: peers.length,
+					activeChildIds: active.map((row) => storedText(row.run_id)),
 					dependencies: peers.filter((peer) => command.dependencies.includes(peer.id)),
 				})
 			) {
 				return null;
 			}
 			await tx.run(
-				"INSERT INTO agent_runs(id,user_id,app_id,thread_id,thread_sequence,run_kind,status,version,input_text,selected_connections_json,created_at,updated_at,deadline_at) VALUES(?,?,?,?,?,'child','pending',1,?,?,?,?,?)",
+				"INSERT INTO agent_runs(id,user_id,app_id,thread_id,thread_sequence,run_kind,status,version,input_text,selected_connections_json,created_at,updated_at,deadline_at,approval_mode) VALUES(?,?,?,?,?,'child','pending',1,?,?,?,?,?,?)",
 				[
 					command.id,
 					command.scope.userId,
@@ -127,6 +157,7 @@ export class SqliteRunCollaborationStorage extends CollaborationDataSql implemen
 					command.now,
 					command.now,
 					command.deadline,
+					readRunApprovalMode(row.approval_mode),
 				],
 			);
 			await tx.run(

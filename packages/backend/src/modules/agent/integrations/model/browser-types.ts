@@ -109,6 +109,7 @@ export type BrowserSessionAction =
 
 /** Application resource capability: no CDP/Page/Browser object leaves this Model. */
 export interface BrowserApplicationSession {
+	readonly maxUploadBytes: number;
 	snapshot(maxNodes: number, signal: AbortSignal): Promise<BrowserSnapshot>;
 	screenshot(maxBytes: number, signal: AbortSignal): Promise<Uint8Array>;
 	console(

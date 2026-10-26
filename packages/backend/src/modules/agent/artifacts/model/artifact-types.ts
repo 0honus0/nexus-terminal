@@ -55,7 +55,6 @@ export interface ArtifactFacts {
 	appExists: boolean;
 	appEnabled: boolean;
 	totalBytes: number;
-	totalCount: number;
 }
 
 export interface ArtifactMutationFacts {

@@ -1,18 +1,11 @@
 import type { Participant, ChildAdmissionFacts, DelegateCommand } from './model/run-collaboration-types.js';
 
-export const CHILDREN_PER_ROOT = 4;
-
 export const COLLABORATION_MAX_FACTS = 128;
-
-export const COLLABORATION_MAX_MESSAGES = 256;
-
-export const COLLABORATION_MAX_MESSAGE_BYTES = 512 * 1024;
 
 export function mayDelegate(command: DelegateCommand, facts: ChildAdmissionFacts): boolean {
 	return (
 		facts.parent.parentId === null &&
 		facts.parent.status === 'running' &&
-		facts.children < CHILDREN_PER_ROOT &&
 		command.deadline > facts.now &&
 		command.deadline <= facts.parent.deadline &&
 		command.targets.every((id) => facts.selectedTargets.includes(id)) &&

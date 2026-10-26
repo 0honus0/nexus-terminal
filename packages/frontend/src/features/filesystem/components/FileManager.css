@@ -1,4 +1,5 @@
 .file-manager-root {
+	--primary-color: var(--link-active-color);
 	--fm-control-size: 28px;
 	--fm-path-height: 30px;
 	--fm-gap: 4px;
@@ -456,8 +457,10 @@
 }
 
 .file-row.is-selected {
-	background: color-mix(in srgb, var(--primary-color) 11%, transparent);
-	box-shadow: inset 2px 0 0 var(--primary-color);
+	background: color-mix(in srgb, var(--primary-color) 20%, transparent);
+	box-shadow:
+		inset 3px 0 0 var(--primary-color),
+		inset 0 0 0 1px color-mix(in srgb, var(--primary-color) 24%, transparent);
 }
 
 .file-row.is-drop-target {

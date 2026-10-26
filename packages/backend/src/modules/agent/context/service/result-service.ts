@@ -13,7 +13,12 @@ export class ResultService {
 		private readonly governance: GovernanceService,
 	) {}
 
-	async read(input: ResultReadInput, reader: ToolOperation, policyRevision: number): Promise<ResultReadOutcome> {
+	async read(
+		input: ResultReadInput,
+		reader: ToolOperation,
+		policyRevision: number,
+		previewBytes: number,
+	): Promise<ResultReadOutcome> {
 		const source = await this.journal.get({
 			userId: reader.userId,
 			appId: reader.appId,
@@ -44,7 +49,7 @@ export class ResultService {
 			throw new AgentFailure('internal_failure');
 		}
 		return {
-			page: resultPage(source.resultText, input),
+			page: resultPage(source.resultText, input, previewBytes),
 			targets:
 				source.targetId !== null && source.targetVersion !== null
 					? [{ id: source.targetId, version: source.targetVersion }]

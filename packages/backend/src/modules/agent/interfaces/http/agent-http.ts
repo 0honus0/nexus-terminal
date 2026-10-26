@@ -2,10 +2,16 @@ import type { AgentRunUsageView } from '@nexus-terminal/shared/agent/runs/model'
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
 import { AGENT_APP_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/scope/values';
 import { readAgentAppStateUpdateRequest } from '@nexus-terminal/shared/agent/scope/http-codec';
-import { readAgentToolPath, readAgentToolEventsQuery } from '@nexus-terminal/shared/agent/tools/http-codec';
+import {
+	parseAgentToolListCursor,
+	readAgentThreadToolsPath,
+	readAgentThreadToolsQuery,
+	readAgentToolPath,
+	readAgentToolEventsQuery,
+} from '@nexus-terminal/shared/agent/tools/http-codec';
 import { AGENT_TOOL_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/tools/values';
 import type { AgentToolView } from '@nexus-terminal/shared/agent/tools/model';
-import type { AgentToolEventsResponse } from '@nexus-terminal/shared/agent/tools/http';
+import type { AgentThreadToolsResponse, AgentToolEventsResponse } from '@nexus-terminal/shared/agent/tools/http';
 import { agentErrorStatus } from './agent-http-status.js';
 import { InvalidAgentPayload, encodeAgentJson } from '@nexus-terminal/shared/agent/http-codec';
 import { AGENT_MAX_JSON_BODY_BYTES, AGENT_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/values';
@@ -75,6 +81,7 @@ type AgentHttpResponse =
 	| AgentRunStepEventsResponse
 	| AgentToolView
 	| AgentToolEventsResponse
+	| AgentThreadToolsResponse
 	| AgentErrorResponse;
 
 function sendAgent(
@@ -105,7 +112,9 @@ function toRun(value: AgentRunView): AgentRunView {
 		id: value.id,
 		appId: value.appId,
 		threadId: value.threadId,
+		approvalMode: value.approvalMode,
 		status: value.status,
+		failure: value.failure === null ? null : { code: value.failure.code, toolName: value.failure.toolName },
 		version: value.version,
 		createdAt: value.createdAt,
 		updatedAt: value.updatedAt,
@@ -433,6 +442,7 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 				appId: path.appId,
 				threadId: path.threadId,
 				prompt: body.prompt,
+				approvalMode: body.approvalMode,
 				connectionIds: body.connectionIds.map((id) => id),
 				model: {
 					providerId: body.model.providerId,
@@ -469,6 +479,38 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 		const result = await agent.getRun(userId, path.appId, path.runId);
 		await deliver(ctx, result === null ? 404 : 200, result === null ? { code: 'not_found' } : toRun(result));
 	});
+	add(
+		routes,
+		'GET',
+		'/apps/:appId/threads/:threadId/tools',
+		access,
+		async (ctx, userId) => {
+			const path = readAgentThreadToolsPath({
+				appId: ctx.params.appId,
+				threadId: ctx.params.threadId,
+			});
+			const query = readAgentThreadToolsQuery(ctx.query);
+			const result = await agent.listThreadTools(
+				userId,
+				path.appId,
+				path.threadId,
+				query.before === null ? null : parseAgentToolListCursor(query.before),
+				query.limit,
+			);
+			await deliver(
+				ctx,
+				result === null ? 404 : 200,
+				result === null
+					? { code: 'not_found' }
+					: {
+							items: result.items.map(toTool),
+							nextCursor: result.nextCursor,
+						},
+				AGENT_TOOL_MAX_RESPONSE_BYTES,
+			);
+		},
+		['before', 'limit'],
+	);
 	add(routes, 'GET', '/apps/:appId/runs/:id/tools/:toolCallId', access, async (ctx, userId) => {
 		const path = readAgentToolPath({
 			appId: ctx.params.appId,
@@ -639,6 +681,7 @@ function toTool(value: AgentToolView): AgentToolView {
 		targetVersion: value.targetVersion,
 		risk: value.risk,
 		mutation: value.mutation,
+		summary: value.summary,
 		operationHash: value.operationHash,
 		operationRevision: value.operationRevision,
 		revision: value.revision,

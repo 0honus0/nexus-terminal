@@ -1,3 +1,5 @@
+import type { AgentApprovalMode } from '@nexus-terminal/shared/agent/runs/values';
+import type { AgentRunFailureCode } from '@nexus-terminal/shared/agent/runs/values';
 import type { AgentRunStepFailureCode } from '@nexus-terminal/shared/agent/runs/values';
 import type {
 	AgentRunStatus,
@@ -28,6 +30,7 @@ export type RunModelMessage =
 
 /** Application command; SQLite's write record is constructed only in this Model. */
 export interface CreateRootRunCommand {
+	approvalMode: AgentApprovalMode;
 	origin: { runId: string; expectedVersion: number } | null;
 	model: ModelReference;
 	connectionIds: number[];
@@ -49,7 +52,14 @@ export interface CancelRootRunCommand {
 	requestHash: string;
 }
 
+export interface RunFailure {
+	code: AgentRunFailureCode;
+	toolName: string | null;
+}
+
 export interface AgentRun {
+	approvalMode: AgentApprovalMode;
+	failure: RunFailure | null;
 	id: string;
 	appId: string;
 	threadId: string;
@@ -83,6 +93,7 @@ export interface RunEventPage {
 }
 
 export interface CreateRunRequest {
+	approvalMode: AgentApprovalMode;
 	model: ModelReference;
 	connectionIds: number[];
 	userId: number;

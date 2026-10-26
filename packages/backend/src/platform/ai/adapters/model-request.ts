@@ -172,7 +172,6 @@ function validateHistory(input: ModelStreamInput): void {
 function toolDefinitions(input: ModelStreamInput) {
 	if (
 		input.messages.length === 0 ||
-		input.messages.length > 1024 ||
 		input.messages[0].role !== 'user' ||
 		input.tools.length > MODEL_TOOL_MAX_DEFINITIONS ||
 		new Set(input.tools.map((tool) => tool.name)).size !== input.tools.length ||

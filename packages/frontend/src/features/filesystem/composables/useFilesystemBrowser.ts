@@ -41,7 +41,7 @@ export interface FilesystemBrowserController {
 	dispose(): void;
 }
 
-const PREFETCH_DELAY_MS = 50;
+const PREFETCH_DELAY_MS = 20;
 
 const parentPath = (path: string) => {
 	const normalized = path.replace(/\/+$/, '') || '/';

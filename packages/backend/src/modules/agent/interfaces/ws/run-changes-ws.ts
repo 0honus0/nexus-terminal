@@ -74,6 +74,7 @@ export function createRunChangesWebSocketRoute(
 			let closed = false;
 			let dirty = true;
 			let stateDirty = true;
+			let approvalRescan = false;
 			let revision = 0;
 			let cursor: RunStreamCursor | null = null;
 			const pending: Array<{ revision: number; bytes: number; expiresAt: number }> = [];
@@ -120,7 +121,7 @@ export function createRunChangesWebSocketRoute(
 				if (!cursor || pending.length >= AGENT_RUN_STREAM_MAX_IN_FLIGHT_PAGES) {
 					return false;
 				}
-				// State can contain a large approvals snapshot: send it only after prior pages drain.
+				// State includes multiple bounded projections: wait for prior pages to drain.
 				return stateDirty
 					? pending.length === 0
 					: pendingBytes + AGENT_THREAD_ENTRIES_MAX_RESPONSE_BYTES + 1024 <= AGENT_RUN_STREAM_MAX_JSON_BYTES;
@@ -142,6 +143,9 @@ export function createRunChangesWebSocketRoute(
 				flushing = true;
 				const current = dirty && canSendPage() ? cursor : null;
 				const includeState = stateDirty;
+				if (current && includeState && current.approvals === null) {
+					approvalRescan = false;
+				}
 				if (current) {
 					dirty = false;
 					stateDirty = false;
@@ -163,6 +167,9 @@ export function createRunChangesWebSocketRoute(
 								return;
 							}
 							revision += 1;
+							const repeatApprovals =
+								page.state !== null && !page.state.approvals.hasMore && approvalRescan;
+							page.more = page.more || stateDirty || repeatApprovals;
 							const encoded = encodeAgentJson(
 								toRunStreamEvent(actor.appId, selected.runId, revision, page),
 								AGENT_RUN_STREAM_MAX_JSON_BYTES,
@@ -179,9 +186,19 @@ export function createRunChangesWebSocketRoute(
 									textOffset: page.body.nextCursor.textOffset,
 								},
 								events: page.state?.events.nextCursor ?? current.events,
+								approvals: page.state
+									? page.state.approvals.hasMore
+										? page.state.approvals.nextCursor
+										: null
+									: current.approvals,
 							};
-							dirty = dirty || page.more;
-							stateDirty = stateDirty || (page.state?.events.items.length ?? 0) > 0;
+							// Changes to a page already scanned require a complete follow-up scan.
+							dirty = dirty || page.more || repeatApprovals;
+							stateDirty =
+								stateDirty ||
+								(page.state?.events.items.length ?? 0) > 0 ||
+								(page.state?.approvals.hasMore ?? false) ||
+								repeatApprovals;
 							if (!channel.send(encoded)) {
 								reject();
 							}
@@ -222,6 +239,7 @@ export function createRunChangesWebSocketRoute(
 			const changed = (kind: RunChangeKind) => {
 				dirty = true;
 				if (kind === 'state') {
+					approvalRescan = true;
 					stateDirty = true;
 				}
 				schedule();

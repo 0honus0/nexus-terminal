@@ -1,3 +1,4 @@
+import { listAgentApprovalHistory } from './agent-approval-fixture.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -9,10 +10,7 @@ import { join } from 'node:path';
 import { createApp } from '../../../packages/backend/dist/bootstrap/create-app.js';
 import { origin, until, send, expectStatus, openSshd } from '../remote/openssh-fixture.mjs';
 import { toolDefinitions } from '../../../packages/backend/dist/modules/agent/tools/service/tool-definitions.js';
-import {
-	contextWindowForProfile,
-	validateContextBudget,
-} from '../../../packages/backend/dist/modules/agent/context/context-rules.js';
+import { validateContextBudget } from '../../../packages/backend/dist/modules/agent/context/context-rules.js';
 import { RunModelStream } from '../../../packages/backend/dist/modules/agent/runs/model/run-model-stream.js';
 import { chatModelRequest } from '../../../packages/backend/dist/platform/ai/adapters/model-request.js';
 import {
@@ -23,27 +21,17 @@ import {
 await test('B10 tool catalog and conversation budgets preserve their independent boundaries', async () => {
 	const definitions = toolDefinitions();
 	const reservedOutputTokens = 256;
-	const contextWindow = contextWindowForProfile('normal', 131072, reservedOutputTokens, definitions);
-	assert.ok(contextWindow > 32768 && contextWindow < 131072);
+	const contextWindow = 131072;
 	validateContextBudget([{ role: 'user', content: 'hello' }], definitions, { contextWindow, reservedOutputTokens });
-	assert.throws(
-		() =>
-			validateContextBudget([{ role: 'user', content: 'x'.repeat(33000) }], definitions, {
-				contextWindow,
-				reservedOutputTokens,
-			}),
-		{ code: 'limit_exceeded' },
-	);
-	assert.equal(contextWindowForProfile('normal', 8192, reservedOutputTokens, definitions), 8192);
-	assert.throws(
-		() =>
-			validateContextBudget([{ role: 'user', content: 'hello' }], definitions, {
-				contextWindow: 8192,
-				reservedOutputTokens,
-			}),
-		{ code: 'limit_exceeded' },
-	);
-	assert.equal(contextWindowForProfile('extended', 131072, reservedOutputTokens, definitions), 131072);
+	// Local byte estimates must not reject a valid provider window or shrink it to 32K.
+	validateContextBudget([{ role: 'user', content: 'x'.repeat(33000) }], definitions, {
+		contextWindow,
+		reservedOutputTokens,
+	});
+	validateContextBudget([{ role: 'user', content: 'hello' }], definitions, {
+		contextWindow: 8192,
+		reservedOutputTokens,
+	});
 
 	// Capture the actual Model conversion, then exercise the real technical request encoder.
 	let input;
@@ -163,8 +151,7 @@ await test('B10 Agent tool approval, actual SSH effects and revocation', { timeo
 
 	const runPath = (run) => base() + '/runs/' + run.id;
 
-	const approvals = async (run) =>
-		expectStatus(await api('GET', '/api/v1/apps/' + agentApp.id + '/runs/' + run.id + '/approvals'), 200);
+	const approvals = async (run) => await listAgentApprovalHistory(api, agentApp.id, run.id);
 
 	const tool = async (run, approval) =>
 		expectStatus(await api('GET', runPath(run) + '/tools/' + approval.toolCallId), 200);
@@ -204,6 +191,7 @@ await test('B10 Agent tool approval, actual SSH effects and revocation', { timeo
 		const path = join(directory, name + '.txt');
 		const input = {
 			prompt: JSON.stringify({ path, content: 'private-content-' + name }),
+			approvalMode: 'ask',
 			connectionIds: [connectionId],
 			model: { providerId: provider.id, modelId: 'fixture', configurationVersion: provider.version },
 		};

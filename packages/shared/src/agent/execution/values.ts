@@ -12,7 +12,6 @@ export const AGENT_EXECUTION_LIMIT_KEYS = [
 	'maxMessageBytes',
 	'maxRecallItems',
 	'maxRecallBytes',
-	'maxSingleArtifactBytes',
 	'maxArtifactBytes',
 	'artifactTtlSeconds',
 ] as const;
@@ -20,8 +19,8 @@ export const AGENT_EXECUTION_LIMIT_KEYS = [
 export type AgentExecutionLimitKey = (typeof AGENT_EXECUTION_LIMIT_KEYS)[number];
 
 export const AGENT_EXECUTION_LIMIT_MAXIMA = {
-	maxModelRequests: 160,
-	maxToolExecutions: 1280,
+	maxModelRequests: 400,
+	maxToolExecutions: 4000,
 	maxActiveSeconds: 7200,
 	toolTimeoutSeconds: 300,
 	maxToolOutputBytes: 262144,
@@ -33,7 +32,6 @@ export const AGENT_EXECUTION_LIMIT_MAXIMA = {
 	maxMessageBytes: 8388608,
 	maxRecallItems: 20,
 	maxRecallBytes: 32768,
-	maxSingleArtifactBytes: 16777216,
 	maxArtifactBytes: 10737418240,
 	artifactTtlSeconds: 2592000,
 } as const;

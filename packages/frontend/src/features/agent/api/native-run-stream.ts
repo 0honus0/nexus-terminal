@@ -89,6 +89,7 @@ export function subscribeNativeRun(
 				cursor = {
 					threadId: initial.threadId,
 					events: initial.events,
+					approvals: null,
 					entries: {
 						runSequence: initial.entries.runSequence,
 						stepIndex: initial.entries.stepIndex,
@@ -173,6 +174,11 @@ export function subscribeNativeRun(
 							textOffset: event.body.nextCursor.textOffset,
 						},
 						events: event.state?.events.nextCursor ?? cursor.events,
+						approvals: event.state
+							? event.state.approvals.hasMore
+								? event.state.approvals.nextCursor
+								: null
+							: cursor.approvals,
 					};
 					resume();
 				}

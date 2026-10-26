@@ -71,6 +71,10 @@ function failure(error: unknown, mutation = false): never {
 class ApplicationBrowserSession implements BrowserApplicationSession {
 	constructor(private readonly session: BrowserSession) {}
 
+	get maxUploadBytes(): number {
+		return this.session.maxUploadBytes;
+	}
+
 	async snapshot(maxNodes: number, signal: AbortSignal): Promise<BrowserSnapshot> {
 		try {
 			const value = await this.session.snapshot(maxNodes, signal);

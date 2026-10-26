@@ -14,7 +14,6 @@ export interface ExecutionLimits {
 	maxMessageBytes: number;
 	maxRecallItems: number;
 	maxRecallBytes: number;
-	maxSingleArtifactBytes: number;
 	maxArtifactBytes: number;
 	artifactTtlSeconds: number;
 }
@@ -76,7 +75,6 @@ export function copyExecutionLimits(value: ExecutionLimits): ExecutionLimits {
 		maxMessageBytes: value.maxMessageBytes,
 		maxRecallItems: value.maxRecallItems,
 		maxRecallBytes: value.maxRecallBytes,
-		maxSingleArtifactBytes: value.maxSingleArtifactBytes,
 		maxArtifactBytes: value.maxArtifactBytes,
 		artifactTtlSeconds: value.artifactTtlSeconds,
 	};

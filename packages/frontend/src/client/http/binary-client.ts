@@ -57,7 +57,8 @@ export async function requestBinary(
 			throw new Error('Invalid binary request');
 		}
 		const original = new Request(url, { method: input.method, body: input.body, headers: input.headers });
-		const body = input.body === undefined ? undefined : await original.blob();
+		const body =
+			input.body === undefined ? undefined : input.body instanceof Blob ? input.body : await original.blob();
 		if (body && body.size > input.maxRequestBytes) {
 			throw new Error('Encoded request budget exceeded');
 		}

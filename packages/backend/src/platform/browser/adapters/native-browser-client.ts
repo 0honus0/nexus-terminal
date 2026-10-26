@@ -1,3 +1,4 @@
+import { constants } from 'node:buffer';
 import { randomUUID } from 'node:crypto';
 import puppeteer, { TimeoutError } from 'puppeteer-core';
 import type { Browser, BrowserContext, Page, CDPSession, HTTPRequest, KeyInput } from 'puppeteer-core';
@@ -11,8 +12,15 @@ import type {
 	BrowserActionResult,
 	BrowserNode,
 } from '../browser-client.js';
+
 import { BrowserFailure } from '../browser-client.js';
 import { FailureSummary } from '../../lifecycle/failure-summary.js';
+
+/** CDP binary replies are JSON/base64 strings, bounded by the local runtime representation. */
+const BROWSER_BINARY_MAX_BYTES = Math.min(
+	constants.MAX_LENGTH,
+	Math.floor((constants.MAX_STRING_LENGTH - 64 * 1024) / 4) * 3,
+);
 
 function isRecord(input: unknown): input is Record<string, unknown> {
 	return input !== null && typeof input === 'object' && !Array.isArray(input);
@@ -20,6 +28,7 @@ function isRecord(input: unknown): input is Record<string, unknown> {
 
 /** The adapter owns only the new isolated browser context and its local transport. */
 class NativeBrowserSession implements BrowserSession {
+	readonly maxUploadBytes = BROWSER_BINARY_MAX_BYTES;
 	private snapshotId: string | null = null;
 	private documentVersion = 0;
 	private readonly nodes = new Map<string, number>();
@@ -205,11 +214,11 @@ class NativeBrowserSession implements BrowserSession {
 
 	screenshot(maxBytes: number, signal: AbortSignal): Promise<Uint8Array> {
 		return this.scope(signal, async () => {
-			if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 8 * 1024 * 1024) {
+			if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
 				throw new BrowserFailure('limit_exceeded');
 			}
 			const bytes = await this.page.screenshot({ type: 'png', fullPage: false });
-			if (bytes.byteLength > maxBytes) {
+			if (bytes.byteLength > Math.min(maxBytes, BROWSER_BINARY_MAX_BYTES)) {
 				throw new BrowserFailure('limit_exceeded');
 			}
 			return Uint8Array.from(bytes);
@@ -304,6 +313,10 @@ class NativeBrowserSession implements BrowserSession {
 					action,
 					async (objectId): Promise<BrowserActionResult | null> => {
 						if (action.kind === 'download') {
+							const maxBytes = Math.min(action.maxBytes, BROWSER_BINARY_MAX_BYTES);
+							if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
+								throw new BrowserFailure('limit_exceeded');
+							}
 							const href = await this.cdp.send('Runtime.callFunctionOn', {
 								objectId,
 								functionDeclaration: 'function(){return this.href || null}',
@@ -318,7 +331,7 @@ class NativeBrowserSession implements BrowserSession {
 								'(async function(url,ceiling){const response=await fetch(url,{credentials:"include",redirect:"error"});if(!response.ok||!response.body)throw new Error("download unavailable");const reader=response.body.getReader();let total=0;const chunks=[];try{for(;;){const part=await reader.read();if(part.done)break;total+=part.value.byteLength;if(total>ceiling)throw new Error("download limit");chunks.push(part.value);}}catch(error){await reader.cancel();throw error;}finally{reader.releaseLock();}let binary="";for(const chunk of chunks){for(let i=0;i<chunk.length;i+=8192){binary+=String.fromCharCode(...chunk.subarray(i,i+8192));}}return {url:response.url,mediaType:response.headers.get("content-type")?.split(";")[0]||"application/octet-stream",base64:btoa(binary)};})(' +
 									JSON.stringify(url) +
 									',' +
-									action.maxBytes +
+									maxBytes +
 									')',
 							);
 							if (
@@ -331,7 +344,7 @@ class NativeBrowserSession implements BrowserSession {
 								throw new BrowserFailure('unavailable');
 							}
 							const bytes = Buffer.from(result.base64, 'base64');
-							if (bytes.byteLength > action.maxBytes || bytes.toString('base64') !== result.base64) {
+							if (bytes.byteLength > maxBytes || bytes.toString('base64') !== result.base64) {
 								throw new BrowserFailure('limit_exceeded');
 							}
 							return {
@@ -341,6 +354,9 @@ class NativeBrowserSession implements BrowserSession {
 								mediaType: result.mediaType,
 								bytes,
 							};
+						}
+						if (action.kind === 'upload' && action.bytes.byteLength > this.maxUploadBytes) {
+							throw new BrowserFailure('limit_exceeded');
 						}
 						const functionDeclaration =
 							action.kind === 'select'

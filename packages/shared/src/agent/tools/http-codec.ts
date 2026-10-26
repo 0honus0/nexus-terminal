@@ -4,12 +4,26 @@ import {
 	AGENT_CAPABILITIES,
 	AGENT_APPROVAL_RISKS,
 	AGENT_APPROVAL_OPERATION_HASH_PATTERN,
+	AGENT_APPROVAL_MAX_SUMMARY_BYTES,
 	AGENT_APPROVAL_MAX_TOOL_NAME_BYTES,
 	AGENT_APPROVAL_MAX_TOOL_VERSION_BYTES,
 } from '../governance/values.js';
-import { AGENT_TOOL_STATES, AGENT_TOOL_EVENT_MAX_LIMIT, AGENT_TOOL_MAX_RESPONSE_BYTES } from './values.js';
+import {
+	AGENT_TOOL_STATES,
+	AGENT_TOOL_EVENT_MAX_LIMIT,
+	AGENT_TOOL_LIST_DEFAULT_LIMIT,
+	AGENT_TOOL_LIST_MAX_LIMIT,
+	AGENT_TOOL_MAX_RESPONSE_BYTES,
+} from './values.js';
 import type { AgentToolState } from './values.js';
-import type { AgentToolPath, AgentToolEventsQuery, AgentToolEventsResponse } from './http.js';
+import type {
+	AgentThreadToolsPath,
+	AgentThreadToolsQuery,
+	AgentThreadToolsResponse,
+	AgentToolPath,
+	AgentToolEventsQuery,
+	AgentToolEventsResponse,
+} from './http.js';
 import type { AgentToolView, AgentToolEventView } from './model.js';
 
 function state(input: unknown): AgentToolState {
@@ -31,6 +45,54 @@ function hash(input: unknown): string {
 export function readAgentToolPath(input: unknown): AgentToolPath {
 	const row = agentRecord(input, ['appId', 'runId', 'toolCallId']);
 	return { appId: readAgentId(row.appId), runId: readAgentId(row.runId), toolCallId: readAgentId(row.toolCallId) };
+}
+
+export function readAgentThreadToolsPath(input: unknown): AgentThreadToolsPath {
+	const row = agentRecord(input, ['appId', 'threadId']);
+	return { appId: readAgentId(row.appId), threadId: readAgentId(row.threadId) };
+}
+
+export function parseAgentToolListCursor(input: unknown): { createdAt: number; id: string } {
+	const value = agentText(input, 64);
+	const separator = value.indexOf(':');
+	if (separator <= 0 || separator !== value.lastIndexOf(':')) {
+		throw new InvalidAgentPayload();
+	}
+	const createdAt = value.slice(0, separator);
+	if (!/^(0|[1-9][0-9]{0,15})$/u.test(createdAt) || !Number.isSafeInteger(Number(createdAt))) {
+		throw new InvalidAgentPayload();
+	}
+	return { createdAt: Number(createdAt), id: readAgentId(value.slice(separator + 1)) };
+}
+
+function readToolListCursor(input: unknown): string {
+	const cursor = parseAgentToolListCursor(input);
+	return encodeAgentToolListCursor(cursor.createdAt, cursor.id);
+}
+
+export function encodeAgentToolListCursor(createdAt: number, id: string): string {
+	if (!Number.isSafeInteger(createdAt) || createdAt < 0) {
+		throw new InvalidAgentPayload();
+	}
+	readAgentId(id);
+	return String(createdAt) + ':' + id;
+}
+
+export function readAgentThreadToolsQuery(input: URLSearchParams): AgentThreadToolsQuery {
+	if ([...input.keys()].some((key) => key !== 'before' && key !== 'limit')) {
+		throw new InvalidAgentPayload();
+	}
+	const before = input.getAll('before');
+	const limits = input.getAll('limit');
+	if (before.length > 1 || limits.length > 1) {
+		throw new InvalidAgentPayload();
+	}
+	const rawLimit = limits.length === 0 ? String(AGENT_TOOL_LIST_DEFAULT_LIMIT) : limits[0];
+	if (!/^(0|[1-9][0-9]{0,15})$/u.test(rawLimit)) {
+		throw new InvalidAgentPayload();
+	}
+	const limit = agentInteger(Number(rawLimit), 1, AGENT_TOOL_LIST_MAX_LIMIT);
+	return { before: before.length === 0 ? null : readToolListCursor(before[0]), limit };
 }
 
 export function readAgentToolEventsQuery(input: URLSearchParams): AgentToolEventsQuery {
@@ -67,6 +129,7 @@ export function readAgentToolResponse(input: unknown): AgentToolView {
 			'targetVersion',
 			'risk',
 			'mutation',
+			'summary',
 			'operationHash',
 			'operationRevision',
 			'revision',
@@ -100,6 +163,7 @@ export function readAgentToolResponse(input: unknown): AgentToolView {
 		targetVersion,
 		risk,
 		mutation: row.mutation,
+		summary: agentText(row.summary, AGENT_APPROVAL_MAX_SUMMARY_BYTES),
 		operationHash: hash(row.operationHash),
 		operationRevision,
 		revision: agentInteger(row.revision, operationRevision),
@@ -129,6 +193,54 @@ function readEvent(input: unknown): AgentToolEventView {
 		operationHash: hash(row.operationHash),
 		createdAt: agentInteger(row.createdAt),
 	};
+}
+
+export function readAgentThreadToolsResponse(
+	input: unknown,
+	appId: string,
+	before: string | null,
+	limit: number,
+): AgentThreadToolsResponse {
+	const row = agentRecord(input, ['items', 'nextCursor'], AGENT_TOOL_MAX_RESPONSE_BYTES);
+	if (!Array.isArray(row.items) || row.items.length > limit) {
+		throw new InvalidAgentPayload();
+	}
+	const items = row.items.map(readAgentToolResponse);
+	for (const item of items) {
+		if (item.appId !== appId) {
+			throw new InvalidAgentPayload();
+		}
+	}
+	for (let index = 1; index < items.length; index++) {
+		const previous = items[index - 1];
+		const current = items[index];
+		if (
+			current.createdAt < previous.createdAt ||
+			(current.createdAt === previous.createdAt && current.id <= previous.id)
+		) {
+			throw new InvalidAgentPayload();
+		}
+	}
+	if (before !== null) {
+		const boundary = parseAgentToolListCursor(before);
+		if (
+			items.some(
+				(item) =>
+					item.createdAt > boundary.createdAt ||
+					(item.createdAt === boundary.createdAt && item.id >= boundary.id),
+			)
+		) {
+			throw new InvalidAgentPayload();
+		}
+	}
+	const nextCursor = row.nextCursor === null ? null : readToolListCursor(row.nextCursor);
+	if (
+		nextCursor !== null &&
+		(items.length !== limit || encodeAgentToolListCursor(items[0].createdAt, items[0].id) !== nextCursor)
+	) {
+		throw new InvalidAgentPayload();
+	}
+	return { items, nextCursor };
 }
 
 export function readAgentToolEventsResponse(input: unknown): AgentToolEventsResponse {

@@ -80,6 +80,9 @@ export class ThreadService {
 		) {
 			throw new AgentFailure('invalid_input');
 		}
+		if (input.kind === 'create' && typeof input.autoTitle !== 'boolean') {
+			throw new AgentFailure('invalid_input');
+		}
 		if (input.kind === 'rename') {
 			validateAgentId(input.threadId);
 			if (
@@ -92,7 +95,12 @@ export class ThreadService {
 		}
 		const command: ThreadMutation =
 			input.kind === 'create'
-				? { kind: input.kind, operationId: input.operationId, title: input.title.trim() }
+				? {
+						kind: input.kind,
+						operationId: input.operationId,
+						title: input.title.trim(),
+						autoTitle: input.autoTitle,
+					}
 				: {
 						kind: input.kind,
 						operationId: input.operationId,

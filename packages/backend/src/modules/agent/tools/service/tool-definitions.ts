@@ -1,3 +1,4 @@
+import { AGENT_ARTIFACT_MAX_BYTES } from '@nexus-terminal/shared/agent/artifacts/values';
 import { browserTools } from './browser-tools.js';
 import { mcpTools } from './mcp-tools.js';
 import { collaborationTools } from './collaboration-tools.js';
@@ -51,7 +52,7 @@ export function toolDefinitions(): ToolDefinition[] {
 			risk: 'mutate',
 			mutation: true,
 			description:
-				'Generate one image from a text prompt using a configured Images model. This is a paid external request and creates an App-owned file. Independent approval required. Use image_models_list first. Return the preview using Markdown ![description](previewUrl) and a download link. Never retry unknown outcomes.',
+				'Generate one image from a text prompt using a configured Images model. This is a paid external request and creates an App-owned file. Independent approval required. Use image_models_list first. After success, display ![description](URL) with URL replaced by the exact previewUrl value from the result, followed by [Download image](URL) with URL replaced by the exact downloadUrl value. Each pair of parentheses must contain only the returned URL, without field labels such as "previewUrl:", JSON syntax or quotes. Do not invent or rewrite artifact paths, and do not wrap the Markdown in a code block. Never retry unknown outcomes.',
 			input: {
 				fields: [
 					{ name: 'providerId', kind: 'text', required: true, allowEmpty: false, maxBytes: 36 },
@@ -147,7 +148,7 @@ export function toolDefinitions(): ToolDefinition[] {
 			input: {
 				fields: [
 					{ name: 'artifactId', kind: 'text', required: true, allowEmpty: false, maxBytes: 36 },
-					{ name: 'offset', kind: 'integer', required: false, minimum: 0, maximum: 16777216 },
+					{ name: 'offset', kind: 'integer', required: false, minimum: 0, maximum: AGENT_ARTIFACT_MAX_BYTES },
 					{ name: 'maxBytes', kind: 'integer', required: false, minimum: 1, maximum: 4096 },
 				],
 			},

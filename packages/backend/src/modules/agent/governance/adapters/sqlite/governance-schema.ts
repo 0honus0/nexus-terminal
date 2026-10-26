@@ -31,7 +31,7 @@ export async function initializeAgentGovernance(tx: SqlExecutor): Promise<void> 
    FOREIGN KEY(tool_call_id,user_id,app_id,run_id) REFERENCES agent_run_tools(id,user_id,app_id,run_id) ON DELETE CASCADE,
    FOREIGN KEY(app_id,user_id) REFERENCES agent_apps(id,user_id) ON DELETE CASCADE
  );
- CREATE INDEX agent_governance_approval_run ON agent_governance_approvals(user_id,app_id,run_id,requested_at,id);
+ CREATE INDEX agent_governance_approval_run ON agent_governance_approvals(user_id,app_id,run_id,id);
  CREATE INDEX agent_governance_approval_expiry ON agent_governance_approvals(status,expires_at);
  CREATE TABLE agent_governance_resolution_keys(
    user_id INTEGER NOT NULL,app_id TEXT NOT NULL,operation_key TEXT NOT NULL,

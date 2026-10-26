@@ -109,7 +109,10 @@ function historyTurns(roots: SqlRow[], steps: SqlRow[], tools: SqlRow[]): Stored
 					(step) =>
 						step.state !== 'completed' ||
 						step.results.length !== step.proposals.length ||
-						step.results.some((result) => result.state !== 'completed'),
+						step.results.some(
+							(result) =>
+								(result.state !== 'completed' && result.state !== 'failed') || result.content === null,
+						),
 				))
 		) {
 			throw new Error('Incomplete completed context history');
@@ -118,7 +121,10 @@ function historyTurns(roots: SqlRow[], steps: SqlRow[], tools: SqlRow[]): Stored
 			if (
 				step !== last &&
 				(step.results.length !== step.proposals.length ||
-					step.results.some((result) => result.state !== 'completed'))
+					step.results.some(
+						(result) =>
+							(result.state !== 'completed' && result.state !== 'failed') || result.content === null,
+					))
 			) {
 				throw new Error('Incomplete context history continuation');
 			}

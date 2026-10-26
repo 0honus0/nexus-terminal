@@ -1,7 +1,11 @@
 <script setup lang="ts">
 	import { computed, ref, useId } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { AGENT_REASONING_EFFORTS, type AgentReasoningEffort } from '@nexus-terminal/shared/agent/providers/values';
+	import {
+		AGENT_REASONING_EFFORTS,
+		type AgentReasoningEffort,
+		type AgentModelCapabilityField,
+	} from '@nexus-terminal/shared/agent/providers/values';
 	import { UiButton, UiCheckbox, UiFormField, UiInput, UiNumberInput, UiSelect } from '@/foundation/ui';
 	import type { UiSelectValue } from '@/foundation/ui';
 	import type { ProviderModelDraft } from '../model/provider-types';
@@ -32,8 +36,19 @@
 		'reasoningMandatory',
 	] as const;
 
+	function markManual(field: AgentModelCapabilityField): void {
+		if (model.value[field] === undefined) delete model.value.sources[field];
+		else model.value.sources[field] = 'manual';
+	}
+
+	function configureTools(): void {
+		markManual('supportsTools');
+		emit('configure-tools');
+	}
+
 	function setOptionalFlag(field: (typeof optionalFlags)[number], value: UiSelectValue): void {
 		model.value[field] = value === 'unknown' ? undefined : value === 'yes';
+		markManual(field);
 	}
 
 	function setProtocol(value: UiSelectValue): void {
@@ -42,11 +57,14 @@
 		if (model.value.protocol === 'images') {
 			model.value.supportsImageGeneration = true;
 			model.value.supportsTools = false;
+			markManual('supportsTools');
+			markManual('supportsImageGeneration');
 		}
 	}
 
 	function setNumber(field: 'contextWindow' | 'maxOutputTokens', value: string | number | null): void {
 		model.value[field] = value === null || value === '' ? undefined : Number(value);
+		markManual(field);
 	}
 
 	function setEffort(effort: AgentReasoningEffort, checked: boolean): void {
@@ -55,16 +73,20 @@
 		else selected.delete(effort);
 		model.value.reasoningEfforts =
 			selected.size === 0 ? undefined : AGENT_REASONING_EFFORTS.filter((item) => selected.has(item));
+		markManual('reasoningEfforts');
 		if (model.value.defaultReasoningEffort && !selected.has(model.value.defaultReasoningEffort)) {
 			model.value.defaultReasoningEffort = undefined;
+			markManual('defaultReasoningEffort');
 		}
 		if (selected.size === 0) {
 			model.value.reasoningMandatory = undefined;
+			markManual('reasoningMandatory');
 		}
 	}
 
 	function setDefaultEffort(value: UiSelectValue): void {
 		model.value.defaultReasoningEffort = model.value.reasoningEfforts?.find((effort) => effort === value);
+		markManual('defaultReasoningEffort');
 	}
 </script>
 
@@ -158,7 +180,7 @@
 					<UiCheckbox
 						:id="`${id}-supports-tools`"
 						v-model="model.supportsTools"
-						@update:model-value="emit('configure-tools')"
+						@update:model-value="configureTools"
 					/>
 					<span>{{ t('agent.settings.providers.tools') }}</span>
 				</label>

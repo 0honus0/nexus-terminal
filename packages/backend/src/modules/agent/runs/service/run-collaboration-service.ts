@@ -1,3 +1,4 @@
+import { capturedResultHash, resultPage } from '../../context/result-rules.js';
 import type { ExecutionService } from '../../execution/service/execution-service.js';
 import { validateAgentId, validateUserId } from '../../agent-validation.js';
 import { createHash, randomUUID } from 'node:crypto';
@@ -27,6 +28,8 @@ function view(value: Participant) {
 		status: value.status,
 		profile: value.profile,
 		output: value.output,
+		outputBytes: value.outputBytes,
+		outputTruncated: value.output !== null && Buffer.byteLength(value.output, 'utf8') < value.outputBytes,
 		maxRequests: value.maxRequests,
 		deadline: value.deadline,
 	};
@@ -114,7 +117,40 @@ export class RunCollaborationService {
 		if (input.action === 'delegate') {
 			result = await this.delegate(scope, input, operation, signal);
 		} else if (input.action === 'list') {
-			result = { children: (await this.model.children(scope)).map(view) };
+			const children = await this.model.children(scope);
+			const after = input.after === null ? -1 : children.findIndex((child) => child.id === input.after);
+			if (input.after !== null && after < 0) {
+				throw new AgentFailure('invalid_input');
+			}
+			const items = children.slice(after + 1, after + 1 + input.limit);
+			result = {
+				children: items.map(view),
+				nextCursor: after + 1 + items.length < children.length ? (items.at(-1)?.id ?? null) : null,
+			};
+		} else if (input.action === 'output_read') {
+			const text = await this.model.output(scope, input.childId);
+			if (text === null) {
+				throw new AgentFailure('not_found');
+			}
+			const page = resultPage(
+				text,
+				{
+					toolCallId: input.childId,
+					sha256: capturedResultHash(text),
+					offset: input.offset,
+					maxBytes: input.maxBytes,
+				},
+				execution.limits.maxToolOutputBytes,
+			);
+			result = {
+				childId: input.childId,
+				sha256: page.sha256,
+				originalBytes: page.originalBytes,
+				offset: page.offset,
+				nextOffset: page.nextOffset,
+				text: page.text,
+				untrusted: true,
+			};
 		} else if (input.action === 'join' || input.action === 'cancel') {
 			const parent = await this.model.participant(scope);
 			const children = await this.model.children(scope);
@@ -277,7 +313,10 @@ export class RunCollaborationService {
 			};
 			const child = await this.model.delegate(command, (facts) => {
 				admit();
-				return facts.children < frozen.limits.maxChildren && mayDelegate(command, facts);
+				return (
+					new Set([...facts.activeChildIds, ...this.runtime.occupiedChildIds(scope)]).size <
+						frozen.limits.maxChildren && mayDelegate(command, facts)
+				);
 			});
 			if (!child) {
 				throw new AgentFailure('version_conflict');
@@ -357,7 +396,9 @@ export class RunCollaborationService {
 			return;
 		}
 		await this.runtime.wait(children.map((child) => child.id));
-		if ((await this.model.children(scope)).some((child) => child.status !== 'completed')) {
+		if (
+			(await this.model.children(scope)).some((child) => !isSettled(child.status) || child.status === 'unknown')
+		) {
 			throw new ToolExecutionUnknown();
 		}
 	}

@@ -110,6 +110,43 @@ export function registerAgentSnapshot(
 				'created_at',
 			],
 		},
+		{
+			name: 'agent_context_compactions',
+			columns: [
+				'id',
+				'run_id',
+				'root_id',
+				'step_index',
+				'state',
+				'request_hash',
+				'creation_hash',
+				'source_json',
+				'source_hash',
+				'cut_index',
+				'estimated_tokens',
+				'input_tokens',
+				'output_tokens',
+				'summary_text',
+				'created_at',
+				'updated_at',
+			],
+		},
+		{
+			name: 'agent_thread_titles',
+			columns: [
+				'run_id',
+				'thread_id',
+				'thread_version',
+				'state',
+				'creation_hash',
+				'request_hash',
+				'estimated_tokens',
+				'input_tokens',
+				'output_tokens',
+				'created_at',
+				'updated_at',
+			],
+		},
 		{ name: 'agent_model_contexts', columns: ['run_id', 'step_index', 'content_json', 'content_hash'] },
 		{ name: 'agent_execution_settings', columns: ['user_id', 'version', 'settings_json'] },
 		{
@@ -394,6 +431,7 @@ export function registerAgentSnapshot(
 		{
 			name: 'agent_runs',
 			columns: [
+				'approval_mode',
 				'id',
 				'user_id',
 				'app_id',
@@ -436,6 +474,7 @@ export function registerAgentSnapshot(
 				'expected_run_version',
 				'request_hash',
 				'creation_hash',
+				'response_received',
 				'text_bytes',
 				'input_tokens',
 				'output_tokens',
@@ -511,7 +550,10 @@ export function registerAgentSnapshot(
 				'created_at',
 			],
 		},
-		{ name: 'agent_threads', columns: ['id', 'user_id', 'app_id', 'title', 'version', 'created_at', 'updated_at'] },
+		{
+			name: 'agent_threads',
+			columns: ['id', 'user_id', 'app_id', 'title', 'title_origin', 'version', 'created_at', 'updated_at'],
+		},
 		{
 			name: 'agent_thread_commands',
 			columns: [

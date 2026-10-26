@@ -1,3 +1,7 @@
+import { TitleModel } from './scope/model/title-model.js';
+import { SqliteTitleStorage } from './scope/adapters/sqlite/title-sql.js';
+import { CompactionModel } from './context/model/compaction-model.js';
+import { SqliteCompactionStorage } from './context/adapters/sqlite/compaction-sql.js';
 import { RunStreamService } from './runs/service/run-stream-service.js';
 import { RunChanges } from './runs/model/run-changes.js';
 import { createRunChangesWebSocketRoute } from './interfaces/ws/run-changes-ws.js';
@@ -7,6 +11,7 @@ import { logDiagnostic } from '../../platform/logging/diagnostic-log.js';
 import { registerAgentSnapshot } from './snapshots/adapters/sqlite/snapshot-registration.js';
 import type { SnapshotRegistration } from '../../platform/storage/sqlite/snapshot-types.js';
 import { toRunUsageView, toRunView } from './interfaces/http/run-mapper.js';
+import { encodeAgentToolListCursor } from '@nexus-terminal/shared/agent/tools/http-codec';
 import { toThreadView, toDefinitionView } from './interfaces/http/scope-mapper.js';
 import { ThreadModel } from './scope/model/thread-model.js';
 import { ThreadService } from './scope/service/thread-service.js';
@@ -180,6 +185,7 @@ function toToolView(value: ToolOperation): AgentToolView {
 		targetVersion: value.targetVersion,
 		risk: value.risk,
 		mutation: value.mutation,
+		summary: value.summary,
 		operationHash: value.operationHash,
 		operationRevision: value.operationRevision,
 		revision: value.revision,
@@ -443,6 +449,8 @@ export function registerAgent(
 	const collaboration = new RunCollaborationService(
 		new RunCollaborationModel(new SqliteRunCollaborationStorage(sqlite), changes),
 		{
+			occupiedChildIds: (scope) => execution.occupiedChildIds(scope),
+
 			admit: (work, maxRuns) => execution.admitCreate(work, maxRuns),
 
 			start: (command, parentId) => execution.start(command, parentId),
@@ -492,6 +500,8 @@ export function registerAgent(
 		executionSettings,
 		events,
 		images,
+		new CompactionModel(new SqliteCompactionStorage(sqlite, providerStorage)),
+		new TitleModel(new SqliteTitleStorage(sqlite, providerStorage), changes),
 		logger,
 	);
 	const runs = new RunService(runModel, steps, execution, tools, collaboration, governance, executionSettings);
@@ -514,8 +524,9 @@ export function registerAgent(
 			trusted: facts.trusted,
 		};
 	});
-	const threads = new ThreadService(new ThreadModel(threadStorage, new SecureSessionTokens()));
-	const stream = new RunStreamService(runs, contexts, governance, collaboration);
+	const threadModel = new ThreadModel(threadStorage, new SecureSessionTokens());
+	const threads = new ThreadService(threadModel);
+	const stream = new RunStreamService(runs, contexts, governance, collaboration, threadModel);
 	const workspace = new WorkspaceService(scope, threads, providerService, runs, collaboration, governance, contexts);
 
 	const requests = new AgentRequestOwner([
@@ -649,6 +660,7 @@ export function registerAgent(
 					appId: input.appId,
 					threadId: input.threadId,
 					prompt: input.prompt,
+					approvalMode: input.approvalMode,
 					connectionIds: input.connectionIds.map((id) => id),
 					model: {
 						providerId: input.model.providerId,
@@ -661,7 +673,7 @@ export function registerAgent(
 					operationKey: input.operationKey,
 				});
 				// Only a newly committed Run enters the execution owner; its frozen
-				// policy currently denies remote dispatch. Replays never restart it.
+				// policy is checked again at dispatch. Replays never restart it.
 				return toCreateResult(result);
 			}),
 
@@ -677,6 +689,20 @@ export function registerAgent(
 			boundary(async () => {
 				const result = await runs.getTool({ userId, appId, runId, id });
 				return result === null ? null : toToolView(result);
+			}),
+
+		listThreadTools: (userId, appId, threadId, before, limit) =>
+			boundary(async () => {
+				const result = await runs.listThreadTools(userId, appId, threadId, before, limit);
+				return result === null
+					? null
+					: {
+							items: result.items.map(toToolView),
+							nextCursor:
+								result.nextCursor === null
+									? null
+									: encodeAgentToolListCursor(result.nextCursor.createdAt, result.nextCursor.id),
+						};
 			}),
 
 		listToolEvents: (userId, appId, runId, id, after, limit) =>

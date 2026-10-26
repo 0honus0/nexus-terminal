@@ -1,3 +1,4 @@
+import { AGENT_ARTIFACT_MAX_BYTES } from '@nexus-terminal/shared/agent/artifacts/values';
 import { AGENT_BROWSER_MAX_SETTLE_MS } from '@nexus-terminal/shared/agent/integrations/browser-values';
 import { AgentFailure } from '../../agent-failure.js';
 import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
@@ -153,7 +154,13 @@ export function browserInput(name: string, value: Record<string, unknown>): Brow
 		};
 	}
 	if (action === 'download') {
-		return { action: 'download', sessionId, snapshotId, nodeRef, maxBytes: integer(value.maxBytes, 4096) };
+		return {
+			action: 'download',
+			sessionId,
+			snapshotId,
+			nodeRef,
+			maxBytes: integer(value.maxBytes, AGENT_ARTIFACT_MAX_BYTES),
+		};
 	}
 	throw new AgentFailure('invalid_input');
 }

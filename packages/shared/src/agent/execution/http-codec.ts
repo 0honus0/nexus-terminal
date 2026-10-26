@@ -35,7 +35,6 @@ export function readAgentExecutionLimits(value: unknown): AgentExecutionLimits {
 		maxMessageBytes: field('maxMessageBytes'),
 		maxRecallItems: field('maxRecallItems'),
 		maxRecallBytes: field('maxRecallBytes'),
-		maxSingleArtifactBytes: field('maxSingleArtifactBytes'),
 		maxArtifactBytes: field('maxArtifactBytes'),
 		artifactTtlSeconds: field('artifactTtlSeconds'),
 	};

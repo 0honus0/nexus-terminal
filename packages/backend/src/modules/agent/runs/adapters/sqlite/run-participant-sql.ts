@@ -1,3 +1,4 @@
+import { AGENT_RUN_STEP_MAX_TEXT_BYTES } from '@nexus-terminal/shared/agent/runs/values';
 import { AGENT_EXECUTION_LIMIT_MAXIMA } from '@nexus-terminal/shared/agent/execution/values';
 import { AGENT_CHILD_PROFILES } from '@nexus-terminal/shared/agent/collaboration/values';
 import { CollaborationStorageRefusal } from '../../storage/run-collaboration-storage.js';
@@ -52,7 +53,7 @@ export function storedText(value: unknown): string {
 
 export async function participant(tx: SqlReader, scope: StoredParticipantScope): Promise<StoredParticipant | null> {
 	const row = await tx.one(
-		`SELECT r.id,r.version,r.run_kind,r.status,r.created_at,r.deadline_at,c.parent_id,c.profile,c.output_text,c.tools_json,c.max_requests,c.dependencies_json,c.dependency_mode
+		`SELECT r.id,r.version,r.run_kind,r.status,r.created_at,r.deadline_at,c.parent_id,c.profile,substr(c.output_text,1,1024) AS output_text,COALESCE(length(CAST(c.output_text AS BLOB)),0) AS output_bytes,c.tools_json,c.max_requests,c.dependencies_json,c.dependency_mode
 		 FROM agent_runs r LEFT JOIN agent_run_children c ON c.run_id=r.id WHERE r.id=? AND r.user_id=? AND r.app_id=?`,
 		[scope.runId, scope.userId, scope.appId],
 	);
@@ -72,6 +73,7 @@ export async function participant(tx: SqlReader, scope: StoredParticipantScope):
 			status,
 			profile: 'root',
 			output: null,
+			outputBytes: 0,
 			tools: [],
 			maxRequests: AGENT_RUN_STEP_MAX_COUNT,
 			deadline: storedInteger(row.deadline_at, 1),
@@ -91,7 +93,9 @@ export async function participant(tx: SqlReader, scope: StoredParticipantScope):
 		!profile ||
 		storedInteger(row.max_requests, 1) > AGENT_EXECUTION_LIMIT_MAXIMA.maxModelRequests ||
 		(status === 'completed') !== (row.output_text !== null) ||
-		(row.output_text !== null && Buffer.byteLength(storedText(row.output_text), 'utf8') > 8192) ||
+		(row.output_text !== null &&
+			(storedInteger(row.output_bytes, 1) > AGENT_RUN_STEP_MAX_TEXT_BYTES ||
+				storedInteger(row.output_bytes, 1) < Buffer.byteLength(storedText(row.output_text), 'utf8'))) ||
 		storedStrings(row.dependencies_json).length > 4
 	) {
 		throw new Error('Corrupt participant limits or terminal output');
@@ -104,6 +108,7 @@ export async function participant(tx: SqlReader, scope: StoredParticipantScope):
 		status,
 		profile,
 		output: row.output_text === null ? null : storedText(row.output_text),
+		outputBytes: storedInteger(row.output_bytes),
 		tools: storedStrings(row.tools_json),
 		maxRequests: storedInteger(row.max_requests, 1),
 		deadline: storedInteger(row.deadline_at, 1),

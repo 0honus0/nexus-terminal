@@ -511,7 +511,7 @@ test('Agent thread selection retains its identity while authoritative history is
 	const create = async (title: string) => {
 		const result = await requestAgentWorkspace(context.request, app, {
 			method: 'agent.threads.create',
-			params: { operationId: randomUUID(), title },
+			params: { autoTitle: false, operationId: randomUUID(), title },
 		});
 		if (result.method !== 'agent.threads.create') throw new Error('Unexpected thread confirmation');
 		return result.value;
@@ -814,7 +814,11 @@ test('Agent settings surface exposes the current control plane and saves explici
 	await form.locator('input[type="password"]').fill('e2e-provider-secret');
 	const enabled = form.getByRole('switch', { name: 'Enabled', exact: true });
 	if ((await enabled.getAttribute('aria-checked')) !== 'true') await enabled.click();
-	await form.getByRole('button', { name: 'Add model manually', exact: true }).click();
+	await form
+		.locator('.provider-model-group')
+		.filter({ has: page.getByRole('heading', { name: 'Chat models', exact: true }) })
+		.getByRole('button', { name: 'Add model manually', exact: true })
+		.click();
 	await form.getByRole('textbox', { name: 'Model ID', exact: true }).fill('e2e-model');
 	await form.getByRole('spinbutton', { name: 'Context window', exact: true }).fill('131072');
 	await form.getByRole('spinbutton', { name: 'Maximum output tokens', exact: true }).fill('128');
@@ -1027,7 +1031,7 @@ test('Agent tabs own independent local drafts and observe external threads throu
 	await enableTestAgentExecution(context.request);
 	const initialThread = await requestAgentWorkspace(context.request, app, {
 		method: 'agent.threads.create',
-		params: { operationId: randomUUID(), title: 'Shared initial conversation' },
+		params: { autoTitle: false, operationId: randomUUID(), title: 'Shared initial conversation' },
 	});
 	if (initialThread.method !== 'agent.threads.create') throw new Error('Unexpected initial thread');
 	let sockets = 0;
@@ -1065,7 +1069,7 @@ test('Agent tabs own independent local drafts and observe external threads throu
 		await firstDraft.fill('Leader draft');
 		const result = await requestAgentWorkspace(context.request, app, {
 			method: 'agent.threads.create',
-			params: { operationId: randomUUID(), title: 'External thread' },
+			params: { autoTitle: false, operationId: randomUUID(), title: 'External thread' },
 		});
 		if (result.method !== 'agent.threads.create') throw new Error('Unexpected thread');
 		await secondHub.getByRole('button', { name: 'Minimize Agent', exact: true }).click();

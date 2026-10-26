@@ -371,10 +371,6 @@
             "label": "セッション成果物クォータ",
             "hint": "1 回のセッション成果物が占有可能なディスク総容量"
           },
-          "maxSingleArtifactBytes": {
-            "label": "単一成果物サイズ上限",
-            "hint": "1 つの成果物ファイルに許可される最大バイト数"
-          },
           "maxGlobalArtifactBytes": {
             "label": "全体成果物ディスククォータ",
             "hint": "システム全体のエージェント成果物が占有可能な最大ディスク容量"
@@ -841,7 +837,6 @@
           "maxMessageBytes": "メッセージ総量（バイト）",
           "maxRecallItems": "Recall 件数",
           "maxRecallBytes": "Recall 容量（バイト）",
-          "maxSingleArtifactBytes": "単一 Artifact（バイト）",
           "maxArtifactBytes": "Artifact 総量（バイト）",
           "artifactTtlSeconds": "Artifact 有効期間（秒）"
         }
@@ -866,7 +861,7 @@
         "secretHelp": "キーを再表示・空白除去しません。送信後にローカル入力を消去します。",
         "hasCredential": "キー設定済み",
         "noCredential": "キー未設定",
-        "discover": "モデルを検出・記録",
+        "discover": "モデルリストを更新",
         "discoverEndpoint": "エンドポイントのモデルを取得",
         "test": "実際の接続テストを送信",
         "testOk": "テスト成功：{ms} ms",
@@ -1563,12 +1558,17 @@
     },
     "approvals": {
       "command": "実行の詳細",
+      "commandTruncated": "コマンドプレビューは切り詰められています。完全な引数と出力は表示されません。",
       "title": "操作の承認が必要です",
+      "historyTitle": "承認履歴",
       "acpInnerTitle": "ACP 内部操作の承認が必要です",
       "allowOnce": "今回のみ許可",
       "rejectOnce": "今回のみ拒否",
       "timeline": "承認待ち",
       "target": "対象",
+      "requestedAt": "申請時刻",
+      "decidedAt": "処理時刻",
+      "riskLabel": "リスク",
       "expires": "残り時間",
       "hash": "操作 Hash",
       "operation": "正規化された操作",
@@ -1741,7 +1741,9 @@
       "usageUnavailable": "プロバイダーからトークン使用量が未報告です",
       "usageCoverage": "使用量報告済み: {reported}/{requests} モデルリクエスト",
       "audit": "ステップとツールの監査",
-      "auditHelp": "読み取り専用メタデータです。認証情報、ツール引数、元の出力は表示しません。1ページずつ取得します。",
+      "auditStep": "ステップ",
+      "auditTool": "ツール呼び出し",
+      "auditHelp": "読み取り専用メタデータです。Shell／ACP は長さ制限付きのコマンドプレビューのみ表示し、元の引数・認証情報・出力は非表示のままです。1ページずつ取得します。",
       "step": "ステップ番号",
       "read": "現在の状態を更新",
       "moreEvents": "次のイベントを取得",

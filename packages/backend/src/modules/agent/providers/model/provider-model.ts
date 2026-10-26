@@ -33,16 +33,34 @@ function toModelView(model: ProviderModelInput, observation?: ProviderObservatio
 	return {
 		...cloneProviderModel(model),
 		capabilitySources: {
-			...(model.contextWindow === undefined ? {} : { contextWindow: 'manual' as const }),
-			...(model.maxOutputTokens === undefined ? {} : { maxOutputTokens: 'manual' as const }),
-			supportsTools: 'manual',
-			...(model.supportsImageInput === undefined ? {} : { supportsImageInput: 'manual' as const }),
-			...(model.supportsImageGeneration === undefined ? {} : { supportsImageGeneration: 'manual' as const }),
-			...(model.supportsFileInput === undefined ? {} : { supportsFileInput: 'manual' as const }),
-			...(model.supportsPromptCacheKey === undefined ? {} : { supportsPromptCacheKey: 'manual' as const }),
-			...(model.reasoningEfforts === undefined ? {} : { reasoningEfforts: 'manual' as const }),
-			...(model.defaultReasoningEffort === undefined ? {} : { defaultReasoningEffort: 'manual' as const }),
-			...(model.reasoningMandatory === undefined ? {} : { reasoningMandatory: 'manual' as const }),
+			...(model.contextWindow === undefined
+				? {}
+				: { contextWindow: model.capabilitySources?.contextWindow ?? ('manual' as const) }),
+			...(model.maxOutputTokens === undefined
+				? {}
+				: { maxOutputTokens: model.capabilitySources?.maxOutputTokens ?? ('manual' as const) }),
+			supportsTools: model.capabilitySources?.supportsTools ?? 'manual',
+			...(model.supportsImageInput === undefined
+				? {}
+				: { supportsImageInput: model.capabilitySources?.supportsImageInput ?? ('manual' as const) }),
+			...(model.supportsImageGeneration === undefined
+				? {}
+				: { supportsImageGeneration: model.capabilitySources?.supportsImageGeneration ?? ('manual' as const) }),
+			...(model.supportsFileInput === undefined
+				? {}
+				: { supportsFileInput: model.capabilitySources?.supportsFileInput ?? ('manual' as const) }),
+			...(model.supportsPromptCacheKey === undefined
+				? {}
+				: { supportsPromptCacheKey: model.capabilitySources?.supportsPromptCacheKey ?? ('manual' as const) }),
+			...(model.reasoningEfforts === undefined
+				? {}
+				: { reasoningEfforts: model.capabilitySources?.reasoningEfforts ?? ('manual' as const) }),
+			...(model.defaultReasoningEffort === undefined
+				? {}
+				: { defaultReasoningEffort: model.capabilitySources?.defaultReasoningEffort ?? ('manual' as const) }),
+			...(model.reasoningMandatory === undefined
+				? {}
+				: { reasoningMandatory: model.capabilitySources?.reasoningMandatory ?? ('manual' as const) }),
 		},
 		...(observation === undefined
 			? {}
@@ -327,6 +345,7 @@ export class ProviderModel {
 	async generateImage(
 		provider: ProviderRecord,
 		input: ProviderImageRequest,
+		maxBytes: number,
 		signal: AbortSignal,
 	): Promise<ProviderImageResult> {
 		try {
@@ -341,6 +360,7 @@ export class ProviderModel {
 					credential,
 					modelId: input.modelId,
 					prompt: input.prompt,
+					maxBytes,
 				},
 				signal,
 			);

@@ -3,7 +3,7 @@ import type { AgentRunView } from '../runs/model.js';
 import type { AgentProviderProtocol, AgentReasoningEffort } from '../providers/values.js';
 import type { AgentRunEventsResponse } from '../runs/http.js';
 import type { AgentChildrenResponse, AgentMessageMetadataResponse } from '../collaboration/http.js';
-import type { AgentApprovalView } from '../governance/model.js';
+import type { AgentApprovalView, AgentApprovalPage } from '../governance/model.js';
 import type { AgentCreateRunRequest, AgentCreateRunResponse, AgentCancelRunResponse } from '../runs/http.js';
 import type { AgentApprovalResolveRequest } from '../governance/http.js';
 import type { AgentThreadEntryCursor, AgentThreadEntries } from './model.js';
@@ -48,7 +48,7 @@ export type AgentWorkspaceInput =
 	  }
 	| { method: 'agent.definitions.list' | 'agent.providers.list'; params: Record<string, never> }
 	| { method: 'agent.threads.list'; params: { after: string | null; limit: number } }
-	| { method: 'agent.threads.create'; params: { operationId: string; title: string } }
+	| { method: 'agent.threads.create'; params: { operationId: string; title: string; autoTitle: boolean } }
 	| {
 			method: 'agent.threads.rename';
 			params: { threadId: string; expectedVersion: number; operationId: string; title: string };
@@ -57,7 +57,8 @@ export type AgentWorkspaceInput =
 	| { method: 'agent.runs.list'; params: { threadId: string; after: number; limit: number } }
 	| { method: 'agent.runs.get'; params: { runId: string } }
 	| { method: 'agent.runs.events'; params: { runId: string; after: number; limit: number } }
-	| { method: 'agent.subagents.list' | 'agent.approvals.list'; params: { runId: string } }
+	| { method: 'agent.subagents.list'; params: { runId: string } }
+	| { method: 'agent.approvals.list'; params: { runId: string; after: string | null } }
 	| { method: 'agent.subagents.messages'; params: { runId: string; childId: string; after: number; limit: number } };
 
 export type AgentWorkspaceResult =
@@ -75,7 +76,7 @@ export type AgentWorkspaceResult =
 	| { method: 'agent.runs.events'; value: AgentRunEventsResponse }
 	| { method: 'agent.subagents.list'; value: AgentChildrenResponse }
 	| { method: 'agent.subagents.messages'; value: AgentMessageMetadataResponse }
-	| { method: 'agent.approvals.list'; value: AgentApprovalView[] };
+	| { method: 'agent.approvals.list'; value: AgentApprovalPage };
 
 export interface AgentWorkspaceRequest {
 	appVersion: number;

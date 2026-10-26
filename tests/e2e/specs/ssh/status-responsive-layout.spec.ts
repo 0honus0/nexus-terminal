@@ -63,8 +63,9 @@ test('server status keeps values aligned and contained in narrow, short and zoom
 	];
 	await expect(resources).toHaveCount(4);
 	await expect(monitor.locator('.network-interface')).toHaveText('enp35s0');
-	await expect(monitor.locator('.rate-down .rate-label')).toHaveText('下载');
-	await expect(monitor.locator('.rate-up .rate-label')).toHaveText('上传');
+	await expect(monitor.locator('.network-row')).toHaveAttribute('aria-label', /↓ .*197\.9.* ↑ .*30\.1/);
+	await expect(monitor.locator('.rate-down .fa-arrow-down')).toBeVisible();
+	await expect(monitor.locator('.rate-up .fa-arrow-up')).toBeVisible();
 	await expect(monitor.locator('.rate-down b')).toHaveText('197.9K/s');
 	await expect(monitor.locator('.rate-up b')).toHaveText('30.1K/s');
 

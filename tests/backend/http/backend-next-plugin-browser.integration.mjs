@@ -61,7 +61,10 @@ await test('B10 real signed sandbox, complete SDK imports and MessagePort RPC', 
 	await t.test('SDK creates, lists and renames actual threads with explicit CAS', async () => {
 		const thread = await frame.evaluate(
 			(operationId) =>
-				window.sdk.request({ method: 'agent.threads.create', params: { operationId, title: 'SDK thread' } }),
+				window.sdk.request({
+					method: 'agent.threads.create',
+					params: { autoTitle: false, operationId, title: 'SDK thread' },
+				}),
 			randomUUID(),
 		);
 		const renamed = await frame.evaluate(
@@ -233,7 +236,7 @@ await test('B10 real signed sandbox, complete SDK imports and MessagePort RPC', 
 				(operationId) =>
 					window.sdk.request({
 						method: 'agent.threads.create',
-						params: { operationId, title: 'subscription' },
+						params: { autoTitle: false, operationId, title: 'subscription' },
 					}),
 				randomUUID(),
 			)
@@ -243,7 +246,11 @@ await test('B10 real signed sandbox, complete SDK imports and MessagePort RPC', 
 				({ threadId, operationId, model }) =>
 					window.sdk.request({
 						method: 'agent.runs.create',
-						params: { threadId, operationId, input: { prompt: 'subscription', connectionIds: [], model } },
+						params: {
+							threadId,
+							operationId,
+							input: { prompt: 'subscription', approvalMode: 'ask', connectionIds: [], model },
+						},
 					}),
 				{
 					threadId: thread.id,

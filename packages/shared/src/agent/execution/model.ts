@@ -12,7 +12,6 @@ export interface AgentExecutionLimits {
 	maxMessageBytes: number;
 	maxRecallItems: number;
 	maxRecallBytes: number;
-	maxSingleArtifactBytes: number;
 	maxArtifactBytes: number;
 	artifactTtlSeconds: number;
 }

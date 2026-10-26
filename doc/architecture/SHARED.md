@@ -209,7 +209,7 @@ Agent file_inspect/patch/move/delete 的模型私有命令、树节点及内容�
 
 ### B6.2D 协作契约边界
 
-`agent/collaboration/{values,model,http,http-codec}.ts` 定义已安装的 Child 列表、路径及消息元数据页、有限 profile 和容量，包出口精确列出。列表最多4项，消息元数据每页最多32项，完整响应16 KiB；取消复用 runs 的 expectedVersion/Idempotency-Key/成功联合与安全错误。严格 codec 检查字段、UUID、取值、唯一 Child/父归属和有序游标。后端 register/HTTP 各自白名单投影，Service 保持独立应用对象，Model 转独立 storage。九个模型协作工具的目标缩窄、正文/事实和上下文仍属私有 owner；观察 HTTP 不暴露正文、不推进模型扫描/消费水位。正式前端按 F-R23 后置，不能宣称已有双端验收。
+`agent/collaboration/{values,model,http,http-codec}.ts` 定义已安装的 Child 列表、路径及消息元数据页、有限 profile 和容量，包出口精确列出。Child历史集合上界由任务族工具预算推导（4000），完整响应为每Child512bytes加16KiB封装；消息元数据每页仍最多32项；取消复用 runs 的 expectedVersion/Idempotency-Key/成功联合与安全错误。严格 codec 检查字段、UUID、取值、唯一 Child/父归属和有序游标。后端 register/HTTP 各自白名单投影，Service 保持独立应用对象，Model 转独立 storage。十个模型协作工具的目标缩窄、正文/事实和上下文仍属私有 owner；观察 HTTP 不暴露正文、不推进模型扫描/消费水位。正式前端按 F-R23 后置，不能宣称已有双端验收。
 
 ## Preferences 个人数据契约
 
@@ -227,7 +227,7 @@ Agent file_inspect/patch/move/delete 的模型私有命令、树节点及内容�
 4. **类型与转换**：请求、成功、错误、path/header/query 与二进制 Range/If-Match 分别表达；内部应用/存储类型保持独立，HTTP/Model 明确白名单。通知 secret 命令为 keep/clear/replace，读取仅含存在标志；executionState=governed 不是任务健康状态。
 5. **入口与安装**：Memory 列表、单项读取、提案和审核四管理动作、Artifact元数据/二进制内容/库/引用/确认清理、执行设置和硬限制preview/confirm、Operations管理、宿主诊断均有Backend消费者。Operations日志/审计/通知及宿主诊断已有正式前端消费者；Agent相关完整管理仍F1，不据缺少前端目录删减契约。
 6. **数据、事务与并发**：版本/确认ID/分页在实际用例复查。Memory/Artifact/通知时间为毫秒，期限字段名明确单位；治理审批仍使用其既定秒表示。Memory视图校验到期晚于创建、审核位于创建/更新之间、发布审核早于到期；历史读取不要求当前尚未过期。Shared形状校验不能替代当前授权、SQL事务事实、文件发布或外部投递确认。
-7. **生命周期与失败**：响应预算含转义与完整外壳；Operations请求64KiB/响应8MiB，宿主诊断16KiB，Memory响应8MiB，Artifact JSON响应128KiB/单内容16MiB，清理一次最多128项，执行设置128KiB。宿主诊断的八个模块 ID、有限资源名/单位/状态由 diagnostics/values 唯一持有；完整响应必须包含唯一分组和名称/单位一致的非负指标，未接入/失败组为空，不能以零冒充缺测。RSS 是进程级，process 扩展堆/外部内存/ArrayBuffer/GC 是主线程级；Storage 的 worker_heap_used_bytes/worker_heap_total_bytes/worker_external_bytes/worker_array_buffer_bytes 单列主库 Worker 的 isolate 内存，pending_operations 表示已接纳的排队及执行项，不与已派发 pending_requests 混用；CPU 与 GC 耗时为有限非负秒数。固定分组和资源名同时限定响应容量及指标标签基数，不能用会话 ID/路径扩展标签。unknown 不触发自动重放，配置/引用/观察不授予执行权。
+7. **生命周期与失败**：响应预算含转义与完整外壳；Operations请求64KiB/响应8MiB，宿主诊断16KiB，Memory响应8MiB，Artifact JSON响应128KiB/单内容协议容量随execution.maxArtifactBytes最大可配置值10GiB，实际写入由总配额事务决定，清理一次最多128项，执行设置128KiB。宿主诊断的八个模块 ID、有限资源名/单位/状态由 diagnostics/values 唯一持有；完整响应必须包含唯一分组和名称/单位一致的非负指标，未接入/失败组为空，不能以零冒充缺测。RSS 是进程级，process 扩展堆/外部内存/ArrayBuffer/GC 是主线程级；Storage 的 worker_heap_used_bytes/worker_heap_total_bytes/worker_external_bytes/worker_array_buffer_bytes 单列主库 Worker 的 isolate 内存，pending_operations 表示已接纳的排队及执行项，不与已派发 pending_requests 混用；CPU 与 GC 耗时为有限非负秒数。固定分组和资源名同时限定响应容量及指标标签基数，不能用会话 ID/路径扩展标签。unknown 不触发自动重放，配置/引用/观察不授予执行权。
 8. **当前能力与验收**：契约与真实后端消费者已接线；正式前端F1、故障/双端/外部服务行为B10。无业务消费者的预留事件移除，不增加旧字段兼容解码。
 
 B7 通知响应的顶层与内层配置采用同一响应字节预算，保持逐字段限制；NotificationDeliveryOutcome 从唯一 NotificationDeliveryStatus 收窄，供 Model/Service/Storage/Adapter 共用，不能各层重复声明取值。存储密文 JSON 的容量是 Adapter 私有技术限制，不添加 Shared 存储对象。
@@ -354,10 +354,64 @@ Provider 协议统一为 chat-completions/responses/images；配置与目录中�
 
 ### Agent Run 直接增量协议
 
-agent/runs/events持AgentRunSubscription、subscribe初始游标、按序ACK、update/heartbeat判别联合与严格unknown解码。query拒绝未知/重复字段和非十进制版本。update含当前Thread正文增量页及可为null的Run/用量/事件/审批/子任务状态；首帧必须含状态。codec复用原子域解码，核对App/Run/Thread、事件游标/版本、子任务父关联、正文连续码点位置与more含义；revision为连接内连续序号，重连重置，不能代替持久正文/事件游标。
+agent/runs/events持AgentRunSubscription、subscribe初始游标、按序ACK、update/heartbeat判别联合与严格unknown解码。query拒绝未知/重复字段和非十进制版本。update含当前Thread正文增量页及可为null的Thread/Run/用量/事件/审批/子任务状态；首帧必须含状态。codec复用原子域解码，核对App/Run/Thread、事件游标/版本、子任务父关联、正文连续码点位置与more含义；revision为连接内连续序号，重连重置，不能代替持久正文/事件游标。
 
-容量归runs/values：命令1KiB；完整输出按原审批8MiB、正文512KiB、事件32KiB、子任务16KiB加8KiB封装合计约8.6MiB；最多16页且总编码字节不超过输出预算的未ACK窗口。达到窗口只暂停发送至确认，不拒绝业务Run。各端严格引用同一命令/帧/待接纳容量，底层WS另留心跳余量。没有新的模型执行或变更命令，消息不含凭据、原始供应商帧或数据库行；推送不能作为授权。
+容量归runs/values：命令1KiB；完整输出按原审批8MiB、正文512KiB、事件32KiB、由最大工具预算推导的子任务元数据容量加8KiB封装，合计按runs/values公式计算；最多16页且总编码字节不超过输出预算的未ACK窗口。达到窗口只暂停发送至确认，不拒绝业务Run。各端严格引用同一命令/帧/待接纳容量，底层WS另留心跳余量。没有新的模型执行或变更命令，消息不含凭据、原始供应商帧或数据库行；推送不能作为授权。
 
 ### 公共版本校验
 
 common/version.ts的readComparableVersion使用node-semver解析并规范化版本，拒绝比较器无法精确排序的超大纯数字预发布标识。插件values的isAgentPluginVersion是签名包/目录/安装记录/工具输入的唯一规范小写无metadata校验；原版本正则删除，所有真实消费者同步。发布检查消费同一基础范围，允许在前端处理外部tag的v前缀；畸形版本不触发更新。第三方SemVer对象不出Shared公开函数，仅返回规范字符串或null，不兼容旧超大版本。协议codec保持当前实现，不引入Zod。
+
+### Agent 运行故障投影
+
+AgentRunView 的必填 failure 为 null 或 {code,toolName}；code 唯一归 runs/values 的有限 AgentRunFailureCode，toolName 可为 null，工具类别必须有工具名。仅 failed/unknown 允许非空，unknown 结果语义独立于错误原因。严格 codec、HTTP 出口、workspace 投影和 WS 状态复用同一 Run 白名单；无供应商异常正文、凭据或底层对象。NativeRun 与内部 RunFailure/StoredRunFailure 各自明确转换，创建/取消的幂等快照仍无故障信息；选中运行经原 get 读取诊断。
+
+AgentRunFailureCode另含context_limit_exceeded，区分上下文容量与execution_limit_exceeded；有限数组由严格HTTP/WS解码及存储故障解码共同消费，工具名为null，三语言显示安全原因，不传外部异常正文。
+
+### Agent 自动标题契约
+
+1. **职责与范围**：workspace create显式声明自动命名意图；Run状态流携带当前Thread安全视图。
+2. **子功能与目录**：scope/workspace-http、workspace-http-codec、runs/events；复用scope/model与http-codec的Thread。
+3. **依赖方向**：双端与插件SDK消费Shared定义，不将后台标题账本或模型执行类型放入Shared。
+4. **类型与转换**：create params必填autoTitle:boolean，仅创建消费；rename不接受该字段。RunStreamState必填thread:AgentThreadView；严格unknown解码核对App/Thread与原订阅关联。
+5. **入口与安装**：native workspace与plugin SDK共用decoder；直接Thread创建HTTP保留人工标题语义。
+6. **数据与并发**：Thread.version独立于Run.version；客户端只接纳较新Thread版本，创建幂等响应仍核对原提交标题/版本。
+7. **生命周期与失败**：辅助命名失败不新增协议错误；标题随原状态推送与最终页交付，不进入正文或增加周期HTTP。
+8. **当前能力与验收**：双端mapper和既有协议fixture同版迁移；静态证据见testing，行为按D17待验，无旧协议兼容。
+
+## Run 批准模式契约
+
+1. **职责与范围**：runs/values 唯一定义 ask/full_access 基础值及 execution_storage_failed 安全原因，不能作为后端授权证据。
+2. **子功能与目录**：原 runs/{values,model,http,http-codec}、scope/workspace-http-codec；无第二套协议或兼容字段。
+3. **依赖方向**：双端经包出口消费；Shared 不依赖后端应用/存储。
+4. **类型与转换**：AgentCreateRunRequest 和 AgentRunView 的 approvalMode 必填且有限；Workspace 嵌套创建复用严格解码，回执同时匹配 thread 和模式。HTTP/WS、后端 public 与 native/DEV 实际消费者同步。
+5. **入口与安装**：原 create/append 与 Run 读取/推送携带模式；遗漏、未知值、错型拒绝，服务端不默认 full_access 或兼容旧请求。
+6. **数据与并发**：幂等意图包含模式；持久化、父子继承、审批消费和数据库签名由后端 owner 负责，不把技术行放入 Shared。
+7. **生命周期与失败**：数据库失败仅安全有限码和 toolName/null，不公开 SQL 或供应商异常；未知结果仍保留原操作身份。
+8. **当前能力与验收**：双端与既有 fixture 生产者已迁移；静态与待远程范围见 testing，不以类型正确推断运行正确。
+
+## 审批历史页与推送游标
+
+1. **范围**：替换完整数组为AgentApprovalPage，不保留旧协议分支。
+2. **目录**：governance定义页/容量/codec，scope与runs分别消费。
+3. **依赖**：Shared无技术句柄；HTTP/WS/SDK双端共用严格协议。
+4. **转换**：items/after/nextCursor/hasMore必填；每页64项，ID严格递增，after匹配请求，nextCursor等于末项或空页原游标，hasMore要求满页；各入口另查App/Run身份。
+5. **入口**：HTTP查询after可省略，Workspace after必填；WS cursor增加approvals，state.approvals为页。
+6. **并发**：稳定ID用于遍历，version用于客户端合并，展示仍按requestedAt/id排序；页不声称整个历史的原子快照。
+7. **生命周期**：WS more必须覆盖非空正文/事件页和审批hasMore；服务端有并发待补推送时也可为true，客户端不得提前停止。
+8. **验收**：原生前端、后端出口、插件SDK及既有夹具同步；静态证据与远程待验范围见testing。
+
+### Provider 能力来源写入
+
+providers/model的AgentProviderModelInput允许可选capabilitySources，取值复用providers/values的AgentModelCapabilityField/AgentModelCapabilitySource；来源只解释配置填充路径，未附来源的显式值为manual。输入/视图codec共用同一来源解码，拒绝未知字段/来源及给未配置能力标来源；已有视图仍必带实际能力的来源映射。Provider观察和发现的Partial能力类型排除此配置元数据。Backend输入/JSON存储/读取投影与Frontend草稿/保存映射同步消费，不改变模型网络、授权及UI设计。
+
+### Artifact 总空间契约
+
+1. **职责与范围**：artifacts/values的内容协议容量引用execution/values总空间最大值，不再维护独立单文件容量政策。
+2. **子功能与目录**：沿用agent/artifacts与agent/execution四文件owner。
+3. **依赖方向**：artifacts基础取值依赖execution基础取值，均不依赖后端或技术句柄。
+4. **类型与转换**：maxSingleArtifactBytes从Shared请求/响应、完整解码、双端内部类型及白名单mapper删除；元数据长度和Range解码一致支持总空间协议上限。
+5. **入口与安装**：原设置、Artifact begin/PUT/content/preview与文件库入口不变；设置只保留总空间及期限。
+6. **数据、事务与并发**：Shared仅校验形状与协议容量，不代替服务端已有占用、预留和磁盘空间检查。
+7. **生命周期与失败**：容量拒绝沿既有limit_exceeded；SDK/浏览器字符串技术上限归Platform，不能下沉为Shared文件政策。不为旧设置文档做兼容转换。
+8. **当前能力与验收**：双端及现有流式读取夹具已同步；静态与待验边界见testing。

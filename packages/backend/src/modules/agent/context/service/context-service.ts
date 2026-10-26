@@ -1,5 +1,7 @@
+import { AUTO_SUMMARY_PREFIX } from '../compaction-values.js';
+import { estimateMessages, estimateTools } from '../compaction-rules.js';
 import type { RunModelMessage } from '../../runs/model/run-types.js';
-import { AgentFailure } from '../../agent-failure.js';
+import { AgentFailure, ContextLimitExceeded } from '../../agent-failure.js';
 import type { ToolDefinition } from '../../tools/model/tool-types.js';
 import type {
 	ContextExchange,
@@ -7,6 +9,7 @@ import type {
 	ContextSource,
 	ContextSnapshot,
 	ContextHistoryBundle,
+	ContextUsageAnchor,
 } from '../model/context-types.js';
 import { CONTEXT_MAX_SOURCES } from '../context-limits.js';
 import { contextBytes, copyContextMessage, validateContextBudget, exchangeMessages } from '../context-rules.js';
@@ -17,13 +20,14 @@ export class ContextService {
 	private readonly sources: ContextSource[];
 	private readonly historySources: number[];
 	private historyAdjustable = true;
+	private usageAnchor: ContextUsageAnchor | null = null;
 
 	constructor(
 		private readonly prompt: string,
 		history: ContextHistoryBundle,
 	) {
 		if (history.sources.length > CONTEXT_MAX_SOURCES) {
-			throw new AgentFailure('limit_exceeded');
+			throw new ContextLimitExceeded();
 		}
 		this.sources = history.sources.map((source) => ({
 			runId: source.runId,
@@ -114,6 +118,59 @@ export class ContextService {
 		];
 		contextBytes(candidate);
 		this.messages = candidate;
+	}
+
+	/** Only a complete successful exchange from this frozen model can calibrate its next request. */
+	recordUsage(
+		inputTokens: number | undefined,
+		outputTokens: number | undefined,
+		definitions: ToolDefinition[],
+		toolCount: number,
+	): void {
+		if (inputTokens === undefined || outputTokens === undefined || inputTokens <= 0) {
+			return;
+		}
+		this.usageAnchor = {
+			messages: this.messages.slice(0, this.messages.length - toolCount).map(copyContextMessage),
+			definitions: JSON.stringify(definitions),
+			tokens: inputTokens + outputTokens,
+		};
+	}
+
+	estimatedTokens(definitions: ToolDefinition[]): number {
+		const anchor = this.usageAnchor;
+		if (
+			anchor &&
+			anchor.definitions === JSON.stringify(definitions) &&
+			JSON.stringify(this.messages.slice(0, anchor.messages.length)) === JSON.stringify(anchor.messages)
+		) {
+			return anchor.tokens + estimateMessages(this.messages.slice(anchor.messages.length));
+		}
+		return estimateMessages(this.messages) + estimateTools(definitions);
+	}
+
+	private retainedPrompt(alreadyPresent: boolean): RunModelMessage[] {
+		return alreadyPresent ? [] : [{ role: 'user', content: this.prompt }];
+	}
+
+	applyAutomatic(id: string, summary: string, source: RunModelMessage[], cut: number): boolean {
+		if (JSON.stringify(this.messages.slice(0, cut)) !== JSON.stringify(source.slice(0, cut))) {
+			return false;
+		}
+		const tail = this.messages.slice(cut);
+		const keepsPrompt = tail.some((message) => message.role === 'user' && message.content === this.prompt);
+		const candidate: RunModelMessage[] = [
+			{ role: 'user', content: AUTO_SUMMARY_PREFIX + id + '\n' + summary },
+			...this.retainedPrompt(keepsPrompt),
+			...tail,
+		];
+		contextBytes(candidate);
+		if (estimateMessages(candidate) >= estimateMessages(this.messages)) {
+			return false;
+		}
+		this.messages = candidate;
+		this.usageAnchor = null;
+		return true;
 	}
 
 	appendExchange(exchange: ContextExchange): void {

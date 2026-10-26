@@ -145,7 +145,7 @@ export class ProviderService {
 		id: string,
 		outer: AbortSignal | undefined,
 		action: (signal: AbortSignal) => Promise<T>,
-		timeoutMs = 10000,
+		timeoutMs: number | null = 10000,
 	): Promise<T> {
 		if (this.closing || this.requestFailures.length) {
 			throw new AgentFailure('provider_unavailable');
@@ -163,7 +163,10 @@ export class ProviderService {
 		const running = this.active.get(key) ?? new Set<AbortController>();
 		running.add(controller);
 		this.active.set(key, running);
-		const pending = Promise.resolve().then(() => deadline(action, controller.signal, timeoutMs));
+		// Run-owned image requests already carry the remaining task deadline and cancellation.
+		const pending = Promise.resolve().then(() =>
+			timeoutMs === null ? action(controller.signal) : deadline(action, controller.signal, timeoutMs),
+		);
 		this.pendingRequests.add(pending);
 		try {
 			return await pending;
@@ -363,12 +366,15 @@ export class ProviderService {
 	async generateImage(
 		userId: number,
 		input: ProviderImageRequest,
+		maxBytes: number,
 		signal: AbortSignal,
 		validate: () => Promise<void>,
 	): Promise<ProviderImageResult> {
 		validateUserId(userId);
 		validateAgentId(input.providerId);
 		if (
+			!Number.isSafeInteger(maxBytes) ||
+			maxBytes < 1 ||
 			!input.prompt.trim() ||
 			Buffer.byteLength(input.prompt, 'utf8') > 16000 ||
 			!Number.isSafeInteger(input.configurationVersion) ||
@@ -399,7 +405,7 @@ export class ProviderService {
 					if (currentSignal.aborted) {
 						throw new AgentFailure('provider_request_failed');
 					}
-					const result = await this.model.generateImage(provider, input, currentSignal);
+					const result = await this.model.generateImage(provider, input, maxBytes, currentSignal);
 					await this.model.guardCurrent(provider);
 					await validate();
 					return result;
@@ -408,7 +414,7 @@ export class ProviderService {
 					throw error;
 				}
 			},
-			300000,
+			null,
 		);
 	}
 

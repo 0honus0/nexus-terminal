@@ -2,7 +2,7 @@ import { AgentFailure } from '../../agent-failure.js';
 import { validateUserId, validateAgentId } from '../../agent-validation.js';
 import { AGENT_THREAD_ENTRY_MAX_PAGE } from '@nexus-terminal/shared/agent/scope/values';
 import type { ThreadEntryCursor, ThreadEntries } from '../model/context-types.js';
-import { CONTEXT_MAX_SOURCES } from '../context-limits.js';
+import { CONTEXT_MAX_BYTES, CONTEXT_MAX_SOURCES } from '../context-limits.js';
 import type { ContextModel } from '../model/context-model.js';
 import type { ContextHistoryCommand, ContextHistoryFacts } from '../model/context-types.js';
 import { ContextService } from './context-service.js';
@@ -13,7 +13,7 @@ function fitsHistory(facts: ContextHistoryFacts): boolean {
 		facts.runs <= CONTEXT_MAX_SOURCES &&
 		facts.steps <= 1024 &&
 		facts.tools <= 4096 &&
-		facts.bytes <= 512 * 1024
+		facts.bytes <= CONTEXT_MAX_BYTES
 	);
 }
 

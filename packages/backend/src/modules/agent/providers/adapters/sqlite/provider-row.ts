@@ -1,5 +1,6 @@
 import {
 	AGENT_REASONING_EFFORTS,
+	AGENT_MODEL_CAPABILITY_FIELDS,
 	AGENT_PROVIDER_MODEL_LIMIT,
 	AGENT_PROVIDER_DISCOVERY_LIMIT,
 	AGENT_PROVIDER_MAX_MODEL_ID_BYTES,
@@ -123,7 +124,7 @@ function capabilities(value: unknown): StoredProviderObservation['capabilities']
 }
 
 export function decodeStoredModel(value: unknown): StoredProviderModel {
-	const row = record(value, ['id', 'protocol', ...capabilityKeys]);
+	const row = record(value, ['id', 'protocol', 'capabilitySources', ...capabilityKeys]);
 	const checked = capabilities({
 		contextWindow: row.contextWindow,
 		maxOutputTokens: row.maxOutputTokens,
@@ -136,7 +137,23 @@ export function decodeStoredModel(value: unknown): StoredProviderModel {
 		defaultReasoningEffort: row.defaultReasoningEffort,
 		reasoningMandatory: row.reasoningMandatory,
 	});
+	const sources: NonNullable<StoredProviderModel['capabilitySources']> = {};
+	if (row.capabilitySources !== undefined) {
+		const input = record(row.capabilitySources, AGENT_MODEL_CAPABILITY_FIELDS);
+		for (const field of AGENT_MODEL_CAPABILITY_FIELDS) {
+			const source = input[field];
+			if (source === undefined) {
+				continue;
+			}
+			if (row[field] === undefined || (source !== 'manual' && source !== 'provider' && source !== 'registry')) {
+				throw new Error('Corrupt provider capability source');
+			}
+			sources[field] = source;
+		}
+	}
+
 	return {
+		...(row.capabilitySources === undefined ? {} : { capabilitySources: sources }),
 		id: text(row.id, AGENT_PROVIDER_MAX_MODEL_ID_BYTES),
 		...(row.protocol === undefined ? {} : { protocol: protocol(row.protocol) }),
 		...(checked.contextWindow === undefined ? {} : { contextWindow: checked.contextWindow }),

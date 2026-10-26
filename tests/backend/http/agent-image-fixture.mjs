@@ -1,3 +1,4 @@
+import { listAgentApprovalHistory } from './agent-approval-fixture.mjs';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
@@ -207,6 +208,7 @@ export async function openImageFixture(directory, { publicOrigin = origin, png =
 						base + '/threads/' + thread.id + '/runs',
 						{
 							prompt,
+							approvalMode: 'ask',
 							connectionIds: [],
 							model: { providerId: provider.id, modelId, configurationVersion: provider.version },
 						},
@@ -244,11 +246,7 @@ export async function openImageFixture(directory, { publicOrigin = origin, png =
 
 			approval(run) {
 				return until(
-					async () =>
-						expectStatus(
-							await api('GET', '/api/v1/apps/' + agentApp.id + '/runs/' + run.id + '/approvals'),
-							200,
-						),
+					async () => await listAgentApprovalHistory(api, agentApp.id, run.id),
 					(items) => items.some((item) => item.status === 'requested'),
 					'Image approval',
 				).then((items) => items.find((item) => item.status === 'requested'));

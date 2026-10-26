@@ -52,8 +52,8 @@ export type AgentApprovalDecision = (typeof AGENT_APPROVAL_DECISIONS)[number];
 
 export const AGENT_APPROVAL_TTL_SECONDS = 600;
 
-/** A list must fail rather than truncate when this complete-result budget is exceeded. */
-export const AGENT_APPROVAL_MAX_LIST_ITEMS = 1024;
+/** Per-message history budget; total durable approval history is not truncated. */
+export const AGENT_APPROVAL_MAX_PAGE_ITEMS = 64;
 
 export const AGENT_GRANT_MAX_TARGET_IDS = 256;
 

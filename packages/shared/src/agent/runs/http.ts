@@ -1,8 +1,10 @@
+import type { AgentApprovalMode } from './values.js';
 import type { AgentReasoningEffort } from '../providers/values.js';
 import type { AgentRunView, AgentRunEventView, AgentRunStepView, AgentRunStepEventView } from './model.js';
 import type { AgentCreateRunOutcome, AgentCancelRunOutcome } from './values.js';
 
 export interface AgentCreateRunRequest {
+	approvalMode: AgentApprovalMode;
 	prompt: string;
 	/** Restricts this Run; selection never grants Agent permission. Empty means no selected targets. */
 	connectionIds: number[];

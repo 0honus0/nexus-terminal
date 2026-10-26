@@ -1,3 +1,4 @@
+import { listAgentApprovalHistory } from './agent-approval-fixture.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { execFileSync } from 'node:child_process';
@@ -221,10 +222,7 @@ await test('B10 actual Docker over ordinary Workspace and governed Agent SSH', {
 				f.rows('agent_run_tools', run).map((row) => row.state),
 				['failed'],
 			);
-			assert.deepEqual(
-				expectStatus(await f.api('GET', '/api/v1/apps/' + f.appId + '/runs/' + run.id + '/approvals'), 200),
-				[],
-			);
+			assert.deepEqual(await listAgentApprovalHistory(f.api, f.appId, run.id), []);
 		});
 	} finally {
 		const failures = [];

@@ -51,6 +51,8 @@ export type BrowserActionResult =
 	| { kind: 'file'; url: string; name: string; mediaType: string; bytes: Uint8Array };
 
 export interface BrowserSession {
+	/** Maximum decoded upload bytes supported by this transport representation. */
+	readonly maxUploadBytes: number;
 	snapshot(maxNodes: number, signal: AbortSignal): Promise<BrowserSnapshot>;
 	screenshot(maxBytes: number, signal: AbortSignal): Promise<Uint8Array>;
 	console(

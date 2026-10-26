@@ -1,3 +1,4 @@
+import { AGENT_ARTIFACT_MAX_BYTES } from '@nexus-terminal/shared/agent/artifacts/values';
 import { isAgentPluginVersion } from '@nexus-terminal/shared/agent/plugins/values';
 import { browserInput } from './browser-input.js';
 import { collaborationInput } from './collaboration-tools.js';
@@ -227,7 +228,7 @@ export function toolInput(definition: ToolDefinition, argumentsJson: string): To
 			kind: 'artifact',
 			action: 'read',
 			artifactId,
-			offset: value.offset === undefined ? 0 : integer(value.offset, 0, 16777216),
+			offset: value.offset === undefined ? 0 : integer(value.offset, 0, AGENT_ARTIFACT_MAX_BYTES),
 			maxBytes: value.maxBytes === undefined ? 4096 : integer(value.maxBytes, 1, 4096),
 		};
 	}

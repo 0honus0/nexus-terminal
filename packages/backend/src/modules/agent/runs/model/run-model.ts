@@ -1,3 +1,4 @@
+import type { RunFailure } from './run-types.js';
 import { RunChanges } from './run-changes.js';
 import { toPolicyOverrides } from '../../governance/model/governance-model.js';
 import type { PolicyOverrides } from '../../governance/model/governance-types.js';
@@ -23,6 +24,22 @@ import type {
 } from './run-types.js';
 
 export class RunModel {
+	/** Advisory diagnostics only; eviction never rejects execution or changes durable status. */
+	private readonly failures = new Map<string, { userId: number; appId: string; failure: RunFailure }>();
+
+	rememberFailure(userId: number, appId: string, runId: string, failure: RunFailure): void {
+		if (this.failures.has(runId)) {
+			return;
+		}
+		if (this.failures.size >= 512) {
+			const oldest = this.failures.keys().next();
+			if (!oldest.done) {
+				this.failures.delete(oldest.value);
+			}
+		}
+		this.failures.set(runId, { userId, appId, failure: { code: failure.code, toolName: failure.toolName } });
+	}
+
 	constructor(
 		private readonly storage: RunStorage,
 		private readonly changes = new RunChanges(),
@@ -74,6 +91,7 @@ export class RunModel {
 						appId: command.appId,
 						threadId: command.threadId,
 						inputText: command.prompt,
+						approvalMode: command.approvalMode,
 						connectionIds: command.connectionIds.map((id) => id),
 						operationKey: command.operationKey,
 						requestHash: command.requestHash,
@@ -141,7 +159,22 @@ export class RunModel {
 
 	async get(userId: number, appId: string, runId: string): Promise<AgentRun | null> {
 		const value = await agentStorage(() => this.storage.get(userId, appId, runId));
-		return value === null ? null : fromStoredRun(value);
+		if (value === null) {
+			return null;
+		}
+		const run = fromStoredRun(value);
+		if (run.status === 'failed' || run.status === 'unknown') {
+			const failure = await agentStorage(() => this.storage.failure(userId, appId, runId));
+			const remembered = this.failures.get(runId);
+			if (failure !== null && failure.code !== 'tool_failed') {
+				run.failure = { code: failure.code, toolName: failure.toolName };
+			} else if (remembered?.userId === userId && remembered.appId === appId) {
+				run.failure = { code: remembered.failure.code, toolName: remembered.failure.toolName };
+			} else {
+				run.failure = failure === null ? null : { code: failure.code, toolName: failure.toolName };
+			}
+		}
+		return run;
 	}
 
 	async frozen(userId: number, appId: string, runId: string): Promise<RunFrozenInput | null> {

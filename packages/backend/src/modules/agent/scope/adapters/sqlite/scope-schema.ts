@@ -23,6 +23,7 @@ export async function initializeAgentScopeSchema(tx: SqlExecutor): Promise<void>
 			user_id INTEGER NOT NULL,
 			app_id TEXT NOT NULL,
 			title TEXT NOT NULL,
+			title_origin TEXT NOT NULL DEFAULT 'manual' CHECK(title_origin IN ('manual','pending','automatic')),
 			version INTEGER NOT NULL DEFAULT 1 CHECK(version>=1),
 			created_at INTEGER NOT NULL,
 			updated_at INTEGER NOT NULL,

@@ -1,6 +1,6 @@
-import { decodeModelImage } from './model-image.js';
+import { decodeModelImage, MODEL_IMAGE_BUFFER_MAX_BYTES } from './model-image.js';
 import { Stream } from 'openai/core/streaming';
-import { MODEL_IMAGE_MAX_RESPONSE_BYTES, MODEL_STREAM_MAX_BYTES, ModelNetworkFailure } from '../model-port.js';
+import { MODEL_STREAM_MAX_BYTES, ModelNetworkFailure } from '../model-port.js';
 import type { Logger } from '../../logging/logger.js';
 import { logDiagnostic } from '../../logging/diagnostic-log.js';
 import { chatModelRequest, responseModelRequest } from './model-request.js';
@@ -140,8 +140,17 @@ export class OpenAiCompatibleAdapter implements ModelNetworkPort {
 		signal: AbortSignal,
 		maxBytes: number,
 		work: (request: ModelSdkRequest) => Promise<T>,
+		applicationDeadline = false,
 	): Promise<T> {
-		const request = new ModelSdkRequest(baseUrl, credential, signal, maxBytes, false, this.logger);
+		const request = new ModelSdkRequest(
+			baseUrl,
+			credential,
+			signal,
+			maxBytes,
+			false,
+			this.logger,
+			applicationDeadline,
+		);
 		let primary: ModelNetworkFailure | undefined;
 		try {
 			return await work(request);
@@ -155,11 +164,15 @@ export class OpenAiCompatibleAdapter implements ModelNetworkPort {
 	}
 
 	async generateImage(input: ModelImageRequest, signal: AbortSignal): Promise<ModelImageResult> {
+		const maxBytes = Math.min(input.maxBytes, MODEL_IMAGE_BUFFER_MAX_BYTES);
+		if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
+			throw new ModelNetworkFailure('too_large');
+		}
 		return this.request(
 			input.baseUrl,
 			input.credential,
 			signal,
-			MODEL_IMAGE_MAX_RESPONSE_BYTES,
+			4 * Math.ceil(maxBytes / 3) + 64 * 1024,
 			async (request) => {
 				const image = await request.client.images.generate(
 					{
@@ -170,10 +183,11 @@ export class OpenAiCompatibleAdapter implements ModelNetworkPort {
 							? {}
 							: { response_format: 'b64_json' as const }),
 					},
-					{ signal },
+					{ signal: request.requestSignal },
 				);
-				return decodeModelImage(image);
+				return decodeModelImage(image, maxBytes);
 			},
+			true,
 		);
 	}
 
@@ -194,8 +208,10 @@ export class OpenAiCompatibleAdapter implements ModelNetworkPort {
 		try {
 			const sdkResponse =
 				input.protocol === 'responses'
-					? request.client.responses.create(responseModelRequest(input), { signal })
-					: request.client.chat.completions.create(chatModelRequest(input), { signal });
+					? request.client.responses.create(responseModelRequest(input), { signal: request.requestSignal })
+					: request.client.chat.completions.create(chatModelRequest(input), {
+							signal: request.requestSignal,
+						});
 			// Keep event names supplied by the SDK so named failures or mismatched
 			// Responses events cannot masquerade as successful text deltas.
 			const stream = Stream.fromSSEResponse<unknown>(
@@ -254,7 +270,7 @@ export class OpenAiCompatibleAdapter implements ModelNetworkPort {
 	async discover(baseUrl: string, credential: string | null, signal: AbortSignal): Promise<EndpointModel[]> {
 		return this.request(baseUrl, credential, signal, LIMIT_MODELS, async (request) => {
 			// Read exactly one bounded response; SDK auto-pagination is deliberately not consumed.
-			const page: unknown = await request.client.models.list({ signal });
+			const page: unknown = await request.client.models.list({ signal: request.requestSignal });
 			const raw = record(page);
 			if (!raw || !Array.isArray(raw.data) || raw.data.length > MAX_MODELS) {
 				throw new ModelNetworkFailure('response_invalid');
@@ -307,6 +323,7 @@ export class OpenAiCompatibleAdapter implements ModelNetworkPort {
 					credential: input.credential,
 					modelId: input.modelId,
 					prompt: 'A small blue circle on a white background.',
+					maxBytes: MODEL_IMAGE_BUFFER_MAX_BYTES,
 				},
 				signal,
 			);

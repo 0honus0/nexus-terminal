@@ -1,11 +1,16 @@
+import pRetry from 'p-retry';
+import { ModelCapacityBusy, isAgentStorageStatementFailure } from '../../agent-failure.js';
+import { TitleSession } from '../../scope/service/title-session.js';
+import type { TitleModel } from '../../scope/model/title-model.js';
+import { CompactionSession } from '../../context/service/compaction-session.js';
+import type { CompactionModel } from '../../context/model/compaction-model.js';
+import { runFailureCode } from '../run-failure-rules.js';
 import type { ContextLimits } from '../../context/model/context-types.js';
 import type { ToolDefinition } from '../../tools/model/tool-types.js';
 import type { ProviderImageService } from '../../providers/service/provider-image-service.js';
-import { CONTEXT_MAX_BYTES } from '../../context/context-limits.js';
 import type { Logger } from '../../../../platform/logging/logger.js';
 import { logDiagnostic, withDiagnosticContext } from '../../../../platform/logging/diagnostic-log.js';
 import type { OperationsEvents } from '../../../operations/public.js';
-import { contextWindowForProfile, estimateContextTokens } from '../../context/context-rules.js';
 import type { ExecutionService } from '../../execution/service/execution-service.js';
 import type { CheckpointService } from '../../context/service/checkpoint-service.js';
 import type { RunCollaborationService } from './run-collaboration-service.js';
@@ -39,6 +44,7 @@ const MAX_RUN_ATTEMPTS = 8;
 const MAX_PENDING_RUN_WRITES = 64;
 
 interface ModelStepOutcome {
+	definitions: ToolDefinition[];
 	step: RunModelStep;
 	text: string;
 	terminal: Extract<RunModelDelta, { kind: 'finished' }>;
@@ -98,6 +104,8 @@ export class RunExecutionOwner {
 		private readonly settings: ExecutionService,
 		private readonly events: OperationsEvents,
 		private readonly images: ProviderImageService,
+		private readonly compactions: CompactionModel,
+		private readonly titles: TitleModel,
 		private readonly logger?: Logger,
 	) {}
 
@@ -148,6 +156,15 @@ export class RunExecutionOwner {
 		}
 	}
 
+	occupiedChildIds(scope: { userId: number; appId: string; runId: string }): string[] {
+		return [...this.tasks.entries()]
+			.filter(
+				([, task]) =>
+					task.parentId === scope.runId && task.userId === scope.userId && task.appId === scope.appId,
+			)
+			.map(([id]) => id);
+	}
+
 	occupiedSlots(): number {
 		return this.tasks.size + this.pendingCreates;
 	}
@@ -159,7 +176,13 @@ export class RunExecutionOwner {
 		}
 		const controller = new AbortController();
 		const deadline = setTimeout(
-			() => controller.abort(new Error('Root Run attempt deadline exceeded')),
+			() => {
+				this.runs.rememberFailure(command.userId, command.appId, command.runId, {
+					code: 'execution_limit_exceeded',
+					toolName: null,
+				});
+				controller.abort(new Error('Root Run attempt deadline exceeded'));
+			},
 			Math.max(1, command.deadlineAt - Date.now()),
 		);
 		const task: RunningTask = {
@@ -361,6 +384,23 @@ export class RunExecutionOwner {
 			await this.execute(command, signal);
 		} catch (error) {
 			failure = error;
+			if (isAgentStorageStatementFailure(error)) {
+				this.runs.rememberFailure(command.userId, command.appId, command.runId, {
+					code: runFailureCode(error),
+					toolName: null,
+				});
+				try {
+					// This CAS can only fail a pending Run with no persisted model
+					// attempt. It cannot overwrite an unknown or committed dispatch.
+					await this.failUnstarted(command);
+				} catch (settlement) {
+					failure = new AggregateError(
+						[error, settlement],
+						'Initial storage failure and Run settlement failed',
+					);
+					throw failure;
+				}
+			}
 			throw error;
 		} finally {
 			try {
@@ -418,7 +458,23 @@ export class RunExecutionOwner {
 		error: unknown,
 		uncertain: boolean,
 	): Promise<void> {
-		if (isAgentDrainFailure(error)) {
+		this.runs.rememberFailure(command.userId, command.appId, command.runId, {
+			code: runFailureCode(error),
+			toolName: null,
+		});
+		logDiagnostic(
+			this.logger,
+			'warn',
+			'AGENT_RUN_ADMISSION_REJECTED',
+			{
+				runId: command.runId,
+				stepIndex: (previous?.stepIndex ?? 0) + 1,
+				uncertain,
+				failureCode: runFailureCode(error),
+			},
+			error,
+		);
+		if (hasCleanupFailure(error) || (isAgentDrainFailure(error) && !isAgentStorageStatementFailure(error))) {
 			throw error;
 		}
 		try {
@@ -436,6 +492,9 @@ export class RunExecutionOwner {
 			}
 		} catch (settlement) {
 			throw new AggregateError([error, settlement], 'Model admission rejection and Run settlement failed');
+		}
+		if (isAgentDrainFailure(error)) {
+			throw error;
 		}
 	}
 
@@ -476,12 +535,75 @@ export class RunExecutionOwner {
 			return;
 		}
 
+		const compaction = new CompactionSession(
+			this.compactions,
+			this.stream,
+			this.providers,
+			this.settings,
+			command,
+			frozen,
+			signal,
+			this.logger,
+		);
+		const title = new TitleSession(
+			this.titles,
+			this.stream,
+			this.providers,
+			this.settings,
+			command,
+			frozen,
+			signal,
+			this.logger,
+		);
+		let executionFailure: unknown = null;
+		try {
+			if (participant.parentId === null) {
+				await title.prepare();
+			}
+			await this.executeRounds(command, frozen, context, participant.maxRequests, compaction, title, signal);
+		} catch (error) {
+			executionFailure = error;
+			throw error;
+		} finally {
+			try {
+				const results = await Promise.allSettled([compaction.close(), title.close()]);
+				const errors = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+				if (errors.length) {
+					throw new AggregateError(errors, 'Run auxiliary cleanup failed');
+				}
+			} catch (cleanup) {
+				if (executionFailure !== null && executionFailure !== cleanup) {
+					throw new AggregateError([executionFailure, cleanup], 'Run and context compaction cleanup failed');
+				}
+				throw cleanup;
+			}
+		}
+	}
+
+	private async executeRounds(
+		command: RunExecutionCommand,
+		frozen: RunFrozenInput,
+		context: ContextService,
+		maxRequests: number,
+		compaction: CompactionSession,
+		title: TitleSession,
+		signal: AbortSignal,
+	): Promise<void> {
 		let version = command.version;
 		let previous: RunModelStep | null = null;
-		for (let stepIndex = 1; stepIndex <= Math.min(AGENT_RUN_STEP_MAX_COUNT, participant.maxRequests); stepIndex++) {
+		for (let stepIndex = 1; stepIndex <= Math.min(AGENT_RUN_STEP_MAX_COUNT, maxRequests); stepIndex++) {
 			let outcome: ModelStepOutcome | null;
 			try {
-				outcome = await this.executeStep(command, frozen, context, stepIndex, version, signal);
+				outcome = await this.executeStep(
+					command,
+					frozen,
+					context,
+					stepIndex,
+					version,
+					signal,
+					compaction,
+					title,
+				);
 			} catch (error) {
 				// A definite local rejection between rounds must settle the Root.
 				// Unknown storage commits remain untouched for durable recovery.
@@ -503,22 +625,45 @@ export class RunExecutionOwner {
 			try {
 				const results: { providerCallId: string; content: string }[] = [];
 				for (const proposal of terminal.proposals) {
-					const content = await this.tools.execute(
-						{
-							userId: command.userId,
-							appId: command.appId,
-							runId: command.runId,
-							modelStepIndex: step.stepIndex,
-						},
-						proposal,
-						signal,
-					);
+					compaction.assertHealthy();
+					let content: string;
+					try {
+						content = await this.tools.execute(
+							{
+								userId: command.userId,
+								appId: command.appId,
+								runId: command.runId,
+								modelStepIndex: step.stepIndex,
+							},
+							proposal,
+							signal,
+						);
+					} catch (error) {
+						this.runs.rememberFailure(command.userId, command.appId, command.runId, {
+							code: runFailureCode(error, true),
+							toolName: proposal.toolName,
+						});
+						logDiagnostic(
+							this.logger,
+							'warn',
+							'AGENT_RUN_TOOL_FAILED',
+							{
+								runId: command.runId,
+								stepIndex: step.stepIndex,
+								toolName: proposal.toolName,
+								failureCode: runFailureCode(error, true),
+								aborted: signal.aborted,
+							},
+							error,
+						);
+						throw error;
+					}
 					results.push({ providerCallId: proposal.providerCallId, content });
 				}
 				if (
 					signal.aborted ||
-					Date.now() >= participant.deadline ||
-					stepIndex === Math.min(AGENT_RUN_STEP_MAX_COUNT, participant.maxRequests)
+					Date.now() >= command.deadlineAt ||
+					stepIndex === Math.min(AGENT_RUN_STEP_MAX_COUNT, maxRequests)
 				) {
 					throw new AgentFailure('limit_exceeded');
 				}
@@ -528,12 +673,34 @@ export class RunExecutionOwner {
 					reasoning: terminal.reasoning,
 					results,
 				});
+				context.recordUsage(
+					step.inputTokens,
+					step.outputTokens,
+					outcome.definitions,
+					terminal.proposals.length,
+				);
 				await this.checkpoints.apply(
 					{ userId: command.userId, appId: command.appId, runId: command.runId },
 					stepIndex,
 					context,
 				);
 			} catch (error) {
+				this.runs.rememberFailure(command.userId, command.appId, command.runId, {
+					code: runFailureCode(error),
+					toolName: null,
+				});
+				logDiagnostic(
+					this.logger,
+					'warn',
+					'AGENT_RUN_EXCHANGE_FAILED',
+					{
+						runId: command.runId,
+						stepIndex: step.stepIndex,
+						aborted: signal.aborted,
+						failureCode: runFailureCode(error),
+					},
+					error,
+				);
 				if (isAgentDrainFailure(error) && !(error instanceof ToolExecutionUnknown)) {
 					throw error;
 				}
@@ -595,26 +762,17 @@ export class RunExecutionOwner {
 		yield { kind: 'finished', finishReason: 'stop' };
 	}
 
-	private async contextLimits(
-		command: RunExecutionCommand,
-		frozen: RunFrozenInput,
-		definitions: ToolDefinition[],
-	): Promise<ContextLimits> {
+	private contextLimits(frozen: RunFrozenInput): ContextLimits {
 		if (frozen.protocol === 'images') {
-			return { contextWindow: CONTEXT_MAX_BYTES + 8192, reservedOutputTokens: 1 };
+			return { reservedOutputTokens: 1 };
 		}
 		const contextWindow = frozen.capabilities.contextWindow;
 		const maxOutputTokens = frozen.capabilities.maxOutputTokens;
-		if (contextWindow === undefined || maxOutputTokens === undefined) {
+		if (maxOutputTokens === undefined) {
 			throw new AgentFailure('provider_unavailable');
 		}
 		return {
-			contextWindow: contextWindowForProfile(
-				(await this.settings.frozen(command.userId, command.appId, command.runId)).contextProfile,
-				contextWindow,
-				maxOutputTokens,
-				definitions,
-			),
+			contextWindow,
 			reservedOutputTokens: maxOutputTokens,
 		};
 	}
@@ -626,6 +784,8 @@ export class RunExecutionOwner {
 		stepIndex: number,
 		version: number,
 		signal: AbortSignal,
+		compaction: CompactionSession,
+		title: TitleSession,
 	): Promise<ModelStepOutcome | null> {
 		if (signal.aborted) {
 			return null;
@@ -641,10 +801,14 @@ export class RunExecutionOwner {
 		}
 		const definitions =
 			!isImage && frozen.capabilities.supportsTools ? this.collaboration.definitions(participant) : [];
-		const limits = await this.contextLimits(command, frozen, definitions);
-		const snapshot = context.snapshot(definitions, limits);
+		const limits = this.contextLimits(frozen);
+		let snapshot = context.snapshot(definitions, limits);
+		if (!isImage) {
+			await compaction.prepare(context, snapshot, context.estimatedTokens(definitions), stepIndex, version);
+			snapshot = context.snapshot(definitions, limits);
+		}
 		const messages = snapshot.messages;
-		const estimatedTokens = estimateContextTokens(messages, definitions) + limits.reservedOutputTokens;
+		const estimatedTokens = context.estimatedTokens(definitions) + limits.reservedOutputTokens;
 		if (signal.aborted) {
 			return null;
 		}
@@ -698,6 +862,17 @@ export class RunExecutionOwner {
 				provider = candidate;
 			}
 		} catch (error) {
+			this.runs.rememberFailure(command.userId, command.appId, command.runId, {
+				code: runFailureCode(error),
+				toolName: null,
+			});
+			logDiagnostic(
+				this.logger,
+				'warn',
+				'AGENT_MODEL_DISPATCH_REJECTED',
+				{ runId: command.runId, stepIndex, failureCode: runFailureCode(error), aborted: signal.aborted },
+				error,
+			);
 			// Credential reads and Provider checks happen strictly before the
 			// dispatch intent. The settlement is OUTSIDE the provider try block
 			// on the normal rejection path, so a failed CAS cannot be retried by
@@ -713,12 +888,53 @@ export class RunExecutionOwner {
 			throw error;
 		}
 		if (!provider || signal.aborted) {
+			if (!provider && !signal.aborted) {
+				this.runs.rememberFailure(command.userId, command.appId, command.runId, {
+					code: 'configuration_changed',
+					toolName: null,
+				});
+				logDiagnostic(this.logger, 'warn', 'AGENT_MODEL_DISPATCH_REJECTED', {
+					runId: command.runId,
+					stepIndex,
+					failureCode: 'configuration_changed',
+					aborted: false,
+				});
+			}
 			await failUndispatched();
 			return null;
 		}
-		const dispatched = await this.steps.dispatch(this.mutation(command, reserved.step), (settings, usage) =>
-			this.settings.admitDispatch(settings, usage),
-		);
+		// Do not pass the signal to pRetry: its post-attempt abort check could hide
+		// an already committed dispatch. Cancellation is checked before each CAS;
+		// a successful dispatch must reach the normal settlement path below.
+		const dispatched = await pRetry(
+			() => {
+				if (signal.aborted) {
+					throw new AgentFailure('provider_unavailable');
+				}
+				return this.steps.dispatch(this.mutation(command, reserved.step), (settings, usage) =>
+					this.settings.admitDispatch(settings, usage),
+				);
+			},
+			{
+				retries: Infinity,
+				minTimeout: 100,
+				maxTimeout: 250,
+				factor: 1.5,
+
+				shouldRetry: ({ error }) => error instanceof ModelCapacityBusy && !signal.aborted,
+			},
+		).catch(async (error: unknown) => {
+			// Only definite non-dispatch failures may settle this reservation.
+			// A failed/unknown storage commit must retain its original evidence.
+			if (!isAgentDrainFailure(error) || isAgentStorageStatementFailure(error)) {
+				try {
+					await failUndispatched();
+				} catch (settlement) {
+					throw new AggregateError([error, settlement], 'Dispatch refusal and reservation settlement failed');
+				}
+			}
+			throw error;
+		});
 		// A thrown DB commit or a non-ok CAS is NOT permission to re-dispatch.
 		if (dispatched.status !== 'ok') {
 			// The storage returned a definite non-dispatch. Another writer may
@@ -728,9 +944,13 @@ export class RunExecutionOwner {
 			return null;
 		}
 		logDiagnostic(this.logger, 'info', 'AGENT_MODEL_DISPATCH_COMMITTED', { runId: command.runId, stepIndex });
+		if (stepIndex === 1) {
+			title.start();
+		}
 		let current = dispatched.step;
 		let text = '';
 		let resourceCleanupFailure: ProviderRequestFailure | null = null;
+		let drainingResources = false;
 
 		try {
 			// Dispatch awaited SQLite; reread revocation before opening the network.
@@ -749,7 +969,14 @@ export class RunExecutionOwner {
 					break; // Wait for iterator.return() and transport cleanup.
 				}
 				if (event.kind === 'finished') {
+					const released = await this.steps.releaseCapacity(this.mutation(command, current));
+					if (released.status !== 'ok') {
+						return null;
+					}
+					drainingResources = true;
+					await title.close();
 					if (event.finishReason === 'stop') {
+						await compaction.close();
 						await this.collaboration.finishChildren({
 							userId: command.userId,
 							appId: command.appId,
@@ -761,11 +988,7 @@ export class RunExecutionOwner {
 							runId: command.runId,
 						});
 					}
-					if (event.finishReason === 'tool_calls') {
-						for (const proposal of event.proposals) {
-							this.tools.validate(proposal);
-						}
-					}
+					drainingResources = false;
 					if (signal.aborted || Date.now() >= command.deadlineAt) {
 						break;
 					}
@@ -789,15 +1012,16 @@ export class RunExecutionOwner {
 						finishReason: event.finishReason,
 						textBytes: Buffer.byteLength(text),
 					});
-					return { step: result.step, text, terminal: event };
-				}
-				if (
-					event.kind === 'text' &&
-					participant?.parentId !== null &&
-					participant?.parentId !== undefined &&
-					Buffer.byteLength(text + event.content, 'utf8') > 8192
-				) {
-					throw new AgentFailure('limit_exceeded');
+					if (event.finishReason === 'tool_calls') {
+						compaction.precompute(
+							snapshot,
+							result.step.inputTokens,
+							Math.max(result.step.inputTokens ?? 0, context.estimatedTokens(definitions)),
+							stepIndex,
+							result.step.runVersion,
+						);
+					}
+					return { step: result.step, text, terminal: event, definitions };
 				}
 				const result =
 					event.kind === 'text'
@@ -822,20 +1046,23 @@ export class RunExecutionOwner {
 				}
 			}
 		} catch (error) {
+			this.runs.rememberFailure(command.userId, command.appId, command.runId, {
+				code: runFailureCode(error),
+				toolName: null,
+			});
 			logDiagnostic(
 				this.logger,
 				'warn',
 				'AGENT_MODEL_STEP_FAILED',
-				{ runId: command.runId, stepIndex, aborted: signal.aborted },
+				{ runId: command.runId, stepIndex, aborted: signal.aborted, failureCode: runFailureCode(error) },
 				error,
 			);
-			if (error instanceof ToolExecutionUnknown) {
-				try {
-					await this.steps.finish(this.mutation(command, current), { state: 'unknown' });
-				} catch (settlement) {
-					throw new AggregateError([error, settlement], 'Job failure and Root settlement failed');
-				}
-				throw error;
+			if (drainingResources || error instanceof ToolExecutionUnknown) {
+				// The main response has not attempted its terminal write. An
+				// independent auxiliary drain failure cannot skip that CAS, even
+				// when the auxiliary's own storage result is unknown.
+				await this.settleUnknownStep(command, current, title, error);
+				return null;
 			}
 			if (isAgentDrainFailure(error)) {
 				throw error;
@@ -848,22 +1075,37 @@ export class RunExecutionOwner {
 		// protocol failure or local stop. CAS fences concurrent cancellation.
 		// Unknown DB writes above throw (not classified as Provider failures),
 		// so they never trigger an unsafe second terminal write or retry.
+		await this.settleUnknownStep(command, current, title, resourceCleanupFailure);
+		return null;
+	}
+
+	/** Known main revision and no unresolved main terminal commit; auxiliary writes are independent. */
+	private async settleUnknownStep(
+		command: RunExecutionCommand,
+		current: RunModelStep,
+		title: TitleSession,
+		failure: unknown,
+	): Promise<void> {
+		const failures: unknown[] = failure === null ? [] : [failure];
+		try {
+			await title.close();
+		} catch (error) {
+			if (!failures.includes(error)) {
+				failures.push(error);
+			}
+		}
 		try {
 			await this.steps.finish(this.mutation(command, current), { state: 'unknown' });
 		} catch (error) {
-			if (resourceCleanupFailure) {
-				throw new AggregateError(
-					[resourceCleanupFailure, error],
-					'Stream cleanup and unknown settlement failed',
-				);
-			}
-			throw error;
+			failures.push(error);
 		}
-		// Cleanup failed despite the durable unknown terminal. Keep the cause
-		// observable to the owning module's shutdown, not just the model decoder.
-		if (resourceCleanupFailure) {
-			throw resourceCleanupFailure;
+		// Preserve real resource failures for shutdown/capacity accounting after
+		// independently attempting the durable unknown state and its WS update.
+		if (failures.length === 1) {
+			throw failures[0];
 		}
-		return null;
+		if (failures.length > 1) {
+			throw new AggregateError(failures, 'Model resources and unknown settlement failed');
+		}
 	}
 }

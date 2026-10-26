@@ -218,6 +218,7 @@ await test('B10 installed backend-next HTTP, durable state and model execution',
 				const runPath = `/api/v1/agent/apps/${agentApp.id}/threads/${thread.id}/runs`;
 				const input = {
 					prompt: 'hello',
+					approvalMode: 'ask',
 					connectionIds: [],
 					model: { providerId: provider.id, modelId: 'fixture', configurationVersion: provider.version },
 				};
@@ -244,6 +245,7 @@ await test('B10 installed backend-next HTTP, durable state and model execution',
 				const path = `/api/v1/agent/apps/${agentApp.id}/threads/${thread.id}/runs`;
 				const input = {
 					prompt: 'complete once',
+					approvalMode: 'ask',
 					connectionIds: [],
 					model: { providerId: provider.id, modelId: 'fixture', configurationVersion: provider.version },
 				};
@@ -284,6 +286,7 @@ await test('B10 installed backend-next HTTP, durable state and model execution',
 				const path = `/api/v1/agent/apps/${agentApp.id}/threads/${thread.id}/runs`;
 				const input = {
 					prompt: 'hold until cancellation',
+					approvalMode: 'ask',
 					connectionIds: [],
 					model: { providerId: provider.id, modelId: 'fixture', configurationVersion: provider.version },
 				};

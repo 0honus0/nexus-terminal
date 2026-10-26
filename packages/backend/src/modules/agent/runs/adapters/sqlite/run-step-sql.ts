@@ -1,3 +1,4 @@
+import { runAuthority } from './run-authority-sql.js';
 import type { StoredRunUsage } from '../../storage/run-step-storage.js';
 import type { SqlReader } from '../../../../../platform/storage/sqlite/sql-types.js';
 import {
@@ -38,7 +39,7 @@ import type { ProviderStorage } from '../../../providers/storage/provider-storag
 import type { StoredContextToolResult } from '../../../context/storage/context-storage.js';
 
 const STEP_COLUMNS =
-	's.run_id,s.step_index,s.state,s.revision,s.expected_run_version,s.request_hash,s.creation_hash,s.text_bytes,s.finish_reason,s.proposals_json,s.input_tokens,s.output_tokens,s.failure_code,s.created_at,s.updated_at';
+	's.run_id,s.step_index,s.state,s.revision,s.expected_run_version,s.request_hash,s.creation_hash,s.response_received,s.text_bytes,s.finish_reason,s.proposals_json,s.input_tokens,s.output_tokens,s.failure_code,s.created_at,s.updated_at';
 
 function whole(value: unknown, minimum: number): number {
 	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < minimum) {
@@ -68,6 +69,12 @@ export function decodeStep(row: Record<string, unknown>): StoredRunStep {
 		(row.failure_code !== null && typeof row.failure_code !== 'string')
 	) {
 		throw new Error('Corrupt Run model step identity');
+	}
+	if (
+		(row.response_received !== 0 && row.response_received !== 1) ||
+		(state === 'reserved' && row.response_received !== 0)
+	) {
+		throw new Error('Corrupt model response receipt');
 	}
 	const inputTokens = row.input_tokens === null ? undefined : whole(row.input_tokens, 0);
 	const outputTokens = row.output_tokens === null ? undefined : whole(row.output_tokens, 0);
@@ -114,51 +121,6 @@ export function decodeStep(row: Record<string, unknown>): StoredRunStep {
 		createdAt: whole(row.created_at, 0),
 		updatedAt: whole(row.updated_at, whole(row.created_at, 0)),
 	};
-}
-
-async function runAuthority(
-	tx: SqlExecutor,
-	command: StepScope,
-): Promise<
-	{ status: 'ok'; runStatus: 'pending' | 'running' } | { status: 'not_found' | 'version_conflict' | 'stale' }
-> {
-	const row = await tx.one(
-		`SELECT r.status,r.version,
-		 CASE WHEN r.run_kind='root' THEN (SELECT i.request_hash FROM agent_command_idempotency i
-		  WHERE i.run_id=r.id AND i.user_id=r.user_id AND i.app_id=r.app_id
-		  AND i.command_name='create_run' AND i.result_outcome='created')
-		 ELSE (SELECT c.request_hash FROM agent_run_children c WHERE c.run_id=r.id) END AS create_request_hash
-		 FROM agent_runs r WHERE r.id=? AND r.user_id=? AND r.app_id=?`,
-		[command.runId, command.userId, command.appId],
-	);
-	if (row === null) {
-		return { status: 'not_found' };
-	}
-	if (typeof row.create_request_hash !== 'string' || !/^[a-f0-9]{64}$/u.test(row.create_request_hash)) {
-		throw new Error('Run has no valid original creation identity');
-	}
-	if (row.create_request_hash !== command.creationHash) {
-		return { status: 'stale' };
-	}
-	if (whole(row.version, 1) !== command.expectedRunVersion) {
-		return { status: 'version_conflict' };
-	}
-	if (
-		!(await currentParticipant(
-			tx,
-			{ userId: command.userId, appId: command.appId, runId: command.runId },
-			Date.now,
-			undefined,
-			command.stepIndex,
-			true,
-		))
-	) {
-		return { status: 'stale' };
-	}
-	if (row.status !== 'pending' && row.status !== 'running') {
-		return { status: 'stale' };
-	}
-	return { status: 'ok', runStatus: row.status };
 }
 
 async function step(tx: SqlExecutor, command: StepScope): Promise<StoredRunStep | null> {
@@ -323,7 +285,7 @@ export class SqliteRunStepStorage implements RunStepStorage {
 	reserve(
 		command: StepReservationScope,
 		authorize: RunStepPolicyCheck,
-		verifyResults: (results: StoredContextToolResult[]) => boolean,
+		verifyResults: (results: StoredContextToolResult[], previewBytes: number) => boolean,
 		admitBudget: (settings: StoredExecutionSettings, usage: StoredExecutionUsage) => void,
 	): Promise<StepWriteResult> {
 		return this.db.transaction(async (tx) => {
@@ -583,6 +545,22 @@ export class SqliteRunStepStorage implements RunStepStorage {
 		});
 	}
 
+	/** Monotonic resource fact, independent of output/event revision and final Run CAS. */
+	releaseCapacity(command: StepVersionedScope): Promise<StepWriteResult> {
+		return this.mutate(
+			command,
+			['dispatched'],
+			async (tx) => {
+				await tx.run(
+					'UPDATE agent_run_model_steps SET response_received=1 WHERE run_id=? AND step_index=? AND revision=?',
+					[command.runId, command.stepIndex, command.expectedRevision],
+				);
+			},
+			undefined,
+			0,
+		);
+	}
+
 	finish(
 		command: StepVersionedScope,
 		result: StepFinish,
@@ -597,7 +575,7 @@ export class SqliteRunStepStorage implements RunStepStorage {
 				[command.runId],
 			);
 			const children = await tx.one(
-				"SELECT 1 FROM agent_run_children c JOIN agent_runs r ON r.id=c.run_id WHERE c.parent_id=? AND r.status!='completed' LIMIT 1",
+				"SELECT 1 FROM agent_run_children c JOIN agent_runs r ON r.id=c.run_id WHERE c.parent_id=? AND (r.status IN ('pending','running','unknown') OR EXISTS(SELECT 1 FROM agent_run_tools t WHERE t.run_id=r.id AND t.state IN ('inspected','dispatched','unknown'))) LIMIT 1",
 				[command.runId],
 			);
 			if (!maySettle(unsettled !== null, children !== null)) {
@@ -618,9 +596,6 @@ export class SqliteRunStepStorage implements RunStepStorage {
 				}
 				const child = await tx.one('SELECT run_id FROM agent_run_children WHERE run_id=?', [command.runId]);
 				if (child) {
-					if (current.textBytes > 8192) {
-						throw new Error('Child completion output exceeded its bound');
-					}
 					await tx.run('UPDATE agent_run_children SET output_text=? WHERE run_id=?', [
 						result.outputText,
 						command.runId,
@@ -706,10 +681,13 @@ export class SqliteRunStepStorage implements RunStepStorage {
 			WITH requested AS (SELECT id,user_id,app_id,version FROM agent_runs WHERE id=? AND user_id=? AND app_id=?),
 			family AS (SELECT r.id FROM agent_runs r JOIN requested q ON r.user_id=q.user_id AND r.app_id=q.app_id
 				WHERE r.id=q.id OR r.id IN (SELECT run_id FROM agent_run_children WHERE parent_id=q.id)),
+			calls AS (SELECT input_tokens,output_tokens FROM agent_run_model_steps WHERE run_id IN (SELECT id FROM family)
+				UNION ALL SELECT input_tokens,output_tokens FROM agent_context_compactions WHERE run_id IN (SELECT id FROM family)
+				UNION ALL SELECT input_tokens,output_tokens FROM agent_thread_titles WHERE run_id IN (SELECT id FROM family)),
 			summary AS (SELECT COUNT(*) AS requests, COUNT(input_tokens) AS reported,
 				SUM(input_tokens) AS inputs, SUM(output_tokens) AS outputs,
 				SUM(CASE WHEN (input_tokens IS NULL)!=(output_tokens IS NULL) THEN 1 ELSE 0 END) AS invalid
-				FROM agent_run_model_steps WHERE run_id IN (SELECT id FROM family))
+				FROM calls)
 			SELECT q.id AS run_id,q.version AS run_version,s.*,
 				(SELECT COUNT(*) FROM agent_run_tools WHERE run_id IN (SELECT id FROM family)) AS tools
 			FROM requested q CROSS JOIN summary s`,
@@ -842,6 +820,7 @@ export class SqliteRunStepStorage implements RunStepStorage {
 				 SELECT r.id,(SELECT COALESCE(MAX(e.sequence),0)+1 FROM agent_run_events e WHERE e.run_id=r.id),
 				        CASE WHEN r.status='running' OR EXISTS(SELECT 1 FROM agent_run_model_steps d WHERE d.run_id=r.id AND d.state='dispatched')
 				             OR EXISTS(SELECT 1 FROM agent_run_tools t WHERE t.run_id=r.id AND t.state IN ('dispatched','unknown'))
+				             OR EXISTS(SELECT 1 FROM agent_context_compactions a WHERE a.run_id=r.id AND a.state IN ('dispatched','unknown'))
 				             THEN 'run.unknown' ELSE 'run.failed' END,r.version+1,?
 				 FROM agent_runs r
 				 WHERE r.status IN ('pending','running')`,
@@ -852,6 +831,7 @@ export class SqliteRunStepStorage implements RunStepStorage {
 				 SET status=CASE WHEN status='running' OR EXISTS(SELECT 1 FROM agent_run_model_steps d
 				                             WHERE d.run_id=agent_runs.id AND d.state='dispatched')
 				                     OR EXISTS(SELECT 1 FROM agent_run_tools t WHERE t.run_id=agent_runs.id AND t.state IN ('dispatched','unknown'))
+				                 OR EXISTS(SELECT 1 FROM agent_context_compactions a WHERE a.run_id=agent_runs.id AND a.state IN ('dispatched','unknown'))
 				                 THEN 'unknown' ELSE 'failed' END,
 				     version=version+1,updated_at=?
 				 WHERE status IN ('pending','running')`,

@@ -8,6 +8,8 @@ import {
 	InvalidAgentPayload,
 } from '../http-codec.js';
 import {
+	AGENT_APPROVAL_MODES,
+	AGENT_RUN_FAILURE_CODES,
 	AGENT_RUN_EVENT_DEFAULT_AFTER,
 	AGENT_RUN_EVENT_DEFAULT_LIMIT,
 	AGENT_RUN_EVENT_MAX_LIMIT,
@@ -21,6 +23,7 @@ import {
 import { AGENT_MAX_JSON_BODY_BYTES } from '../values.js';
 import { AGENT_PROVIDER_MAX_MODEL_ID_BYTES } from '../providers/values.js';
 import type {
+	AgentRunFailureView,
 	AgentRunUsageView,
 	AgentRunView,
 	AgentRunEventView,
@@ -42,8 +45,16 @@ import type {
 } from './http.js';
 
 export function readAgentCreateRunRequest(input: unknown): AgentCreateRunRequest {
-	const fields = agentRecord(input, ['prompt', 'model', 'connectionIds'], AGENT_RUN_MAX_JSON_BODY_BYTES);
+	const fields = agentRecord(
+		input,
+		['prompt', 'model', 'connectionIds', 'approvalMode'],
+		AGENT_RUN_MAX_JSON_BODY_BYTES,
+	);
 	if (!Array.isArray(fields.connectionIds) || fields.connectionIds.length > AGENT_RUN_MAX_SELECTED_CONNECTIONS) {
+		throw new InvalidAgentPayload();
+	}
+	const approvalMode = AGENT_APPROVAL_MODES.find((mode) => mode === fields.approvalMode);
+	if (!approvalMode) {
 		throw new InvalidAgentPayload();
 	}
 	const connectionIds = fields.connectionIds.map((id: unknown) => agentInteger(id, 1));
@@ -57,6 +68,7 @@ export function readAgentCreateRunRequest(input: unknown): AgentCreateRunRequest
 	const model = agentRecord(fields.model, ['providerId', 'modelId', 'configurationVersion', ...optional]);
 	const reasoningEffort = readAgentOptionalReasoningEffort(model.reasoningEffort);
 	return {
+		approvalMode,
 		prompt: agentText(fields.prompt, AGENT_RUN_MAX_PROMPT_BYTES),
 		connectionIds,
 		model: {
@@ -124,8 +136,34 @@ export function readAgentRunEventsQuery(query: URLSearchParams): AgentRunEventsQ
 	};
 }
 
+function readRunFailure(input: unknown): AgentRunFailureView | null {
+	if (input === null) {
+		return null;
+	}
+	const row = agentRecord(input, ['code', 'toolName']);
+	const code = AGENT_RUN_FAILURE_CODES.find((value) => value === row.code);
+	if (!code) {
+		throw new InvalidAgentPayload();
+	}
+	const toolName = row.toolName === null ? null : agentText(row.toolName, 128);
+	if (code.startsWith('tool_') && toolName === null) {
+		throw new InvalidAgentPayload();
+	}
+	return { code, toolName };
+}
+
 export function readAgentRunResponse(input: unknown): AgentRunView {
-	const row = agentRecord(input, ['id', 'appId', 'threadId', 'status', 'version', 'createdAt', 'updatedAt']);
+	const row = agentRecord(input, [
+		'id',
+		'appId',
+		'threadId',
+		'status',
+		'failure',
+		'approvalMode',
+		'version',
+		'createdAt',
+		'updatedAt',
+	]);
 	if (
 		row.status !== 'pending' &&
 		row.status !== 'running' &&
@@ -136,11 +174,21 @@ export function readAgentRunResponse(input: unknown): AgentRunView {
 	) {
 		throw new InvalidAgentPayload();
 	}
+	const approvalMode = AGENT_APPROVAL_MODES.find((mode) => mode === row.approvalMode);
+	if (!approvalMode) {
+		throw new InvalidAgentPayload();
+	}
+	const failure = readRunFailure(row.failure);
+	if (failure !== null && row.status !== 'failed' && row.status !== 'unknown') {
+		throw new InvalidAgentPayload();
+	}
 	return {
 		id: readAgentId(row.id),
 		appId: readAgentId(row.appId),
 		threadId: readAgentId(row.threadId),
+		approvalMode,
 		status: row.status,
+		failure,
 		version: agentInteger(row.version, 1),
 		createdAt: agentInteger(row.createdAt),
 		updatedAt: agentInteger(row.updatedAt),

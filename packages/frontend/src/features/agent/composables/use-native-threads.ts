@@ -17,6 +17,7 @@ export function useNativeThreads(
 	select: (value: NativeThread | null) => void,
 ) {
 	const items = ref<NativeThread[]>([]);
+	const observedThread = ref<NativeThread | null>(null);
 	const scope = ref<NativeThreadScope | null>(null);
 	const nextCursor = ref<string | null>(null);
 	const title = ref('');
@@ -29,6 +30,7 @@ export function useNativeThreads(
 
 	function clearPrivate(): void {
 		items.value = [];
+		observedThread.value = null;
 		scope.value = null;
 		nextCursor.value = null;
 		title.value = '';
@@ -65,18 +67,37 @@ export function useNativeThreads(
 			}
 		},
 		active,
-		{ retainOnView: true },
+		{ retainOnView: true, notifySuccess: false, notifyFailureDetails: true },
 	);
 
 	async function refresh(): Promise<void> {
 		await operation.execute(
 			async (signal) => {
 				const current = await api.scope(appId, signal);
-				return { scope: current, page: await api.list(current, null, AGENT_THREAD_MAX_PAGE, signal) };
+				const page = await api.list(current, null, AGENT_THREAD_MAX_PAGE, signal);
+				const deletedId = pendingDelete.value?.thread.id;
+				let found = deletedId === undefined || page.items.some((item) => item.id === deletedId);
+				let after = page.nextCursor;
+				// Absence from one page cannot confirm an unknown delete.
+				while (!found && after !== null) {
+					const next = await api.list(current, after, AGENT_THREAD_MAX_PAGE, signal);
+					found = next.items.some((item) => item.id === deletedId);
+					after = next.nextCursor;
+				}
+				return { scope: current, page, deletedThreadExists: found };
 			},
 			(result) => {
 				scope.value = result.scope;
-				items.value = result.page.items;
+				items.value = result.page.items.map((item) => {
+					const observed = observedThread.value;
+					const existing = items.value.find((value) => value.id === item.id);
+					const current = existing && existing.version > item.version ? existing : item;
+					return observed?.id === current.id && observed.version > current.version ? observed : current;
+				});
+				const updatedSelection = items.value.find((item) => item.id === selected.value?.id);
+				if (updatedSelection) {
+					acceptThread(updatedSelection);
+				}
 				nextCursor.value = result.page.nextCursor;
 				loaded.value = true;
 				inspected.value = pending.value !== null;
@@ -94,9 +115,8 @@ export function useNativeThreads(
 					select(newest);
 				}
 				if (pendingDelete.value) {
-					const stillExists = items.value.some((item) => item.id === pendingDelete.value?.thread.id);
 					deleteInspected.value = true;
-					if (!stillExists) {
+					if (!result.deletedThreadExists) {
 						const deletedId = pendingDelete.value.thread.id;
 						pendingDelete.value = null;
 						if (selected.value?.id === deletedId) {
@@ -150,6 +170,19 @@ export function useNativeThreads(
 				},
 			},
 		);
+	}
+
+	function acceptThread(value: NativeThread): void {
+		if (value.appId !== appId) return;
+		if (observedThread.value?.id !== value.id || value.version > observedThread.value.version)
+			observedThread.value = value;
+		items.value = items.value.map((item) => (item.id === value.id && value.version > item.version ? value : item));
+		const current = selected.value;
+		if (current?.id !== value.id || value.version <= current.version) return;
+		// Keep an in-flight mutation's original CAS and any unsent manual title draft.
+		if (pending.value !== null || pendingDelete.value !== null) return;
+		if (title.value === current.title) title.value = value.title;
+		selected.value = value;
 	}
 
 	function choose(value: NativeThread): void {
@@ -258,7 +291,7 @@ export function useNativeThreads(
 		operation.refreshRequired.value = true;
 	}
 
-	async function submit(retry = false): Promise<void> {
+	async function submit(retry = false, autoTitle = false): Promise<void> {
 		if (operation.busy.value || operation.refreshRequired.value || pendingDelete.value !== null || !scope.value) {
 			return;
 		}
@@ -271,6 +304,7 @@ export function useNativeThreads(
 				selected.value === null
 					? {
 							kind: 'create',
+							autoTitle,
 							scope: { appId: current.appId, appVersion: current.appVersion },
 							operationId: crypto.randomUUID(),
 							title: title.value,
@@ -338,6 +372,7 @@ export function useNativeThreads(
 		deleteInspected,
 		refresh,
 		loadMore,
+		acceptThread,
 		choose,
 		newThread,
 		submit,

@@ -82,3 +82,10 @@ export interface AgentTargetDenylistView {
 	/** changedAt is Unix seconds; backend persistence retains millisecond precision. */
 	entries: { connectionId: number; reason: string; changedBy: number; changedAt: number }[];
 }
+
+export interface AgentApprovalPage {
+	items: AgentApprovalView[];
+	after: string | null;
+	nextCursor: string | null;
+	hasMore: boolean;
+}

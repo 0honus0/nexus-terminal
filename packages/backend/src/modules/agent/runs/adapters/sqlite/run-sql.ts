@@ -1,3 +1,5 @@
+import { AGENT_RUN_FAILURE_CODES } from '@nexus-terminal/shared/agent/runs/values';
+import type { StoredRunFailure } from '../../storage/run-storage.js';
 import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
 import { readOverrides } from '../../../governance/adapters/sqlite/governance-row.js';
 import type { StoredPolicyOverrides } from '../../../governance/storage/governance-storage.js';
@@ -57,6 +59,15 @@ function runStatus(value: unknown): AgentRunStatus {
 	throw new Error('Corrupt Agent Run status');
 }
 
+export function readRunApprovalMode(
+	value: unknown,
+): import('@nexus-terminal/shared/agent/runs/values').AgentApprovalMode {
+	if (value !== 'ask' && value !== 'full_access') {
+		throw new Error('Corrupt Run approval mode');
+	}
+	return value;
+}
+
 export function decodeRun(row: Row): StoredRun {
 	const createdAt = integer(row.created_at);
 	if (
@@ -69,6 +80,7 @@ export function decodeRun(row: Row): StoredRun {
 		userId: integer(row.user_id, 1),
 		appId: stringValue(row.app_id),
 		threadId: stringValue(row.thread_id),
+		approvalMode: readRunApprovalMode(row.approval_mode),
 		status: runStatus(row.status),
 		version: integer(row.version, 1),
 		createdAt,
@@ -111,6 +123,7 @@ function decodeReplay(row: Row): {
 		user_id: row.user_id,
 		app_id: row.app_id,
 		thread_id: row.thread_id,
+		approval_mode: row.approval_mode,
 		status: row.result_status,
 		version: row.result_version,
 		created_at: row.result_created_at,
@@ -127,7 +140,7 @@ function decodeReplay(row: Row): {
 }
 
 const SELECT_RUN = `
-	SELECT id,user_id,app_id,thread_id,status,version,created_at,updated_at FROM agent_runs
+	SELECT id,user_id,app_id,thread_id,approval_mode,status,version,created_at,updated_at FROM agent_runs
 `;
 
 /** The Run-owned SQLite adapter decodes frozen JSON inside an existing transaction. */
@@ -170,7 +183,7 @@ export async function frozenFromRun(
 
 const SELECT_REPLAY = `
 	SELECT i.user_id,i.app_id,i.run_id,i.request_hash,i.result_status,i.result_outcome,
-		i.result_version,i.result_created_at,i.result_updated_at,r.thread_id
+		i.result_version,i.result_created_at,i.result_updated_at,r.thread_id,r.approval_mode
 	FROM agent_command_idempotency i
 	JOIN agent_runs r ON r.id=i.run_id
 	WHERE i.user_id=? AND i.app_id=? AND i.command_name=? AND i.operation_key=?
@@ -304,8 +317,8 @@ export class SqliteRunStorage implements RunStorage {
 			const deadlineAt = createdAt + execution.limits.maxActiveSeconds * 1000;
 			await tx.run(
 				`
-				INSERT INTO agent_runs(id,user_id,app_id,thread_id,thread_sequence,run_kind,status,version,input_text,selected_connections_json,created_at,updated_at,deadline_at)
-				VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+				INSERT INTO agent_runs(id,user_id,app_id,thread_id,thread_sequence,run_kind,status,version,input_text,selected_connections_json,created_at,updated_at,deadline_at,approval_mode)
+				VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 			`,
 				[
 					command.id,
@@ -321,6 +334,7 @@ export class SqliteRunStorage implements RunStorage {
 					createdAt,
 					createdAt,
 					deadlineAt,
+					command.approvalMode,
 				],
 			);
 			const run: StoredRun = {
@@ -328,6 +342,7 @@ export class SqliteRunStorage implements RunStorage {
 				userId: command.userId,
 				appId: command.appId,
 				threadId: command.threadId,
+				approvalMode: command.approvalMode,
 				status: 'pending',
 				version: 1,
 				createdAt,
@@ -411,6 +426,7 @@ export class SqliteRunStorage implements RunStorage {
 				userId: current.userId,
 				appId: current.appId,
 				threadId: current.threadId,
+				approvalMode: current.approvalMode,
 				status: 'cancelled',
 				version: current.version + 1,
 				createdAt: current.createdAt,
@@ -444,6 +460,33 @@ export class SqliteRunStorage implements RunStorage {
 			await fenceRunSteps(tx, updated.id, updated.version, updated.updatedAt);
 			return { status: 'cancelled', run: updated };
 		});
+	}
+
+	async failure(userId: number, appId: string, runId: string): Promise<StoredRunFailure | null> {
+		const row = await this.db.one(
+			`SELECT t.tool_name,t.result_text FROM agent_run_tools t JOIN agent_runs r ON r.id=t.run_id
+			 WHERE t.user_id=? AND t.app_id=? AND t.run_id=? AND r.status IN ('failed','unknown')
+			 AND t.state IN ('failed','unknown') ORDER BY t.model_step_index DESC,t.created_at DESC,t.id DESC LIMIT 1`,
+			[userId, appId, runId],
+		);
+		if (!row) {
+			return null;
+		}
+		const toolName = stringValue(row.tool_name);
+		// Fencing and recovery can leave a terminal tool without a known
+		// failure cause. Do not invent one from its current permissions.
+		if (row.result_text === null) {
+			return { code: 'tool_failed', toolName };
+		}
+		const value: unknown = JSON.parse(stringValue(row.result_text));
+		if (!value || typeof value !== 'object' || Array.isArray(value) || !('failureCode' in value)) {
+			throw new Error('Corrupt tool failure diagnostic');
+		}
+		const code = AGENT_RUN_FAILURE_CODES.find((code) => code === value.failureCode);
+		if (!code) {
+			throw new Error('Corrupt tool failure code');
+		}
+		return { code, toolName };
 	}
 
 	async get(userId: number, appId: string, runId: string): Promise<StoredRun | null> {

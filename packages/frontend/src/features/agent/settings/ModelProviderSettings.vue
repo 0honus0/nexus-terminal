@@ -108,6 +108,7 @@
 	});
 	const query = ref('');
 	const selected = ref<string[]>([]);
+	const expandedModels = ref<Set<number>>(new Set());
 	watch(
 		draft,
 		() => {
@@ -116,6 +117,7 @@
 			showApiKey.value = false;
 			resized.value = false;
 			validationAttempted.value = false;
+			expandedModels.value = new Set();
 		},
 		{ flush: 'sync' },
 	);
@@ -293,6 +295,41 @@
 		if (copiedTimer !== undefined) clearTimeout(copiedTimer);
 	});
 
+	function setModelsExpanded(indices: Iterable<number>, expanded: boolean): void {
+		const next = new Set(expandedModels.value);
+		for (const index of indices) {
+			if (expanded) next.add(index);
+			else next.delete(index);
+		}
+		expandedModels.value = next;
+	}
+
+	function toggleModel(index: number): void {
+		setModelsExpanded([index], !expandedModels.value.has(index));
+	}
+
+	function isModelExpanded(index: number): boolean {
+		return device.isMobile.value || expandedModels.value.has(index);
+	}
+
+	function removeModel(index: number): void {
+		if (!draft.value || index < 0 || index >= draft.value.models.length) return;
+		draft.value.models.splice(index, 1);
+		const next = new Set<number>();
+		for (const expanded of expandedModels.value) {
+			if (expanded < index) next.add(expanded);
+			else if (expanded > index) next.add(expanded - 1);
+		}
+		expandedModels.value = next;
+	}
+
+	function expandInvalidModels(): void {
+		const invalid = validation.value.models.flatMap((errors, index) =>
+			errors.id || errors.contextWindow || errors.maxOutputTokens ? [index] : [],
+		);
+		setModelsExpanded(invalid, true);
+	}
+
 	function appendModel(found?: DiscoveredProviderModel): ProviderModelDraft | undefined {
 		if (!draft.value || blocked.value || draft.value.models.length >= AGENT_PROVIDER_MODEL_LIMIT) {
 			return;
@@ -303,6 +340,7 @@
 		const cap = found?.capabilities;
 		// Missing catalog limits remain unknown and do not block saving the model.
 		const value: ProviderModelDraft = {
+			sources: {},
 			id: found?.id ?? '',
 			contextWindow: cap?.contextWindow,
 			maxOutputTokens: cap?.maxOutputTokens,
@@ -315,15 +353,23 @@
 			defaultReasoningEffort: cap?.defaultReasoningEffort,
 			reasoningMandatory: cap?.reasoningMandatory,
 		};
+		for (const field of AGENT_MODEL_CAPABILITY_FIELDS) {
+			if (cap?.[field] !== undefined) value.sources[field] = 'provider';
+		}
 		draft.value.models.push(value);
-		return draft.value.models.at(-1);
+		const index = draft.value.models.length - 1;
+		setModelsExpanded([index], true);
+		return draft.value.models[index];
 	}
 
 	async function addModel(found?: DiscoveredProviderModel, protocol?: Provider['protocol']): Promise<void> {
 		const model = appendModel(found);
 		if (model && protocol) {
 			model.protocol = protocol;
-			if (protocol === 'images') model.supportsImageGeneration = true;
+			if (protocol === 'images') {
+				model.supportsImageGeneration = true;
+				model.sources.supportsImageGeneration = 'manual';
+			}
 		}
 		if (model?.id) await matchModels([model]);
 	}
@@ -354,36 +400,46 @@
 			return;
 		}
 		const cap = observation.capabilities;
-		if (cap.supportsImageGeneration !== undefined) model.supportsImageGeneration = cap.supportsImageGeneration;
+
+		function apply<K extends AgentModelCapabilityField>(field: K, value: ProviderModelDraft[K]): void {
+			model[field] = value;
+			if (value === undefined) delete model.sources[field];
+			else model.sources[field] = 'provider';
+		}
+
+		if (cap.supportsImageGeneration !== undefined) apply('supportsImageGeneration', cap.supportsImageGeneration);
 		if (cap.contextWindow !== undefined) {
-			model.contextWindow = cap.contextWindow;
+			apply('contextWindow', cap.contextWindow);
 		}
 		if (cap.maxOutputTokens !== undefined) {
-			model.maxOutputTokens = cap.maxOutputTokens;
+			apply('maxOutputTokens', cap.maxOutputTokens);
 		}
 		if (cap.supportsTools !== undefined) {
-			model.supportsTools = cap.supportsTools;
+			apply('supportsTools', cap.supportsTools);
 		}
 		if (cap.supportsImageInput !== undefined) {
-			model.supportsImageInput = cap.supportsImageInput;
+			apply('supportsImageInput', cap.supportsImageInput);
 		}
 		if (cap.supportsFileInput !== undefined) {
-			model.supportsFileInput = cap.supportsFileInput;
+			apply('supportsFileInput', cap.supportsFileInput);
 		}
 		if (cap.supportsPromptCacheKey !== undefined) {
-			model.supportsPromptCacheKey = cap.supportsPromptCacheKey;
+			apply('supportsPromptCacheKey', cap.supportsPromptCacheKey);
 		}
 		if (cap.reasoningEfforts !== undefined) {
-			model.reasoningEfforts = cap.reasoningEfforts.map((effort) => effort);
-			if (!model.reasoningEfforts.includes(model.defaultReasoningEffort ?? 'none')) {
-				model.defaultReasoningEffort = undefined;
+			apply(
+				'reasoningEfforts',
+				cap.reasoningEfforts.map((effort) => effort),
+			);
+			if (!cap.reasoningEfforts.includes(model.defaultReasoningEffort ?? 'none')) {
+				apply('defaultReasoningEffort', undefined);
 			}
 		}
 		if (cap.defaultReasoningEffort !== undefined) {
-			model.defaultReasoningEffort = cap.defaultReasoningEffort;
+			apply('defaultReasoningEffort', cap.defaultReasoningEffort);
 		}
 		if (cap.reasoningMandatory !== undefined) {
-			model.reasoningMandatory = cap.reasoningMandatory;
+			apply('reasoningMandatory', cap.reasoningMandatory);
 		}
 	}
 
@@ -430,6 +486,7 @@
 		draft.value.baseUrl = draft.value.baseUrl.trim();
 		for (const model of draft.value.models) model.id = model.id.trim();
 		validationAttempted.value = true;
+		expandInvalidModels();
 		if (validation.value.messages.length > 0) {
 			feedback.notifyError(validation.value.messages.join(' '));
 			await nextTick();
@@ -1124,12 +1181,38 @@
 								<div
 									v-for="{ model, index } in group.items"
 									:key="index"
-									class="space-y-3 rounded-xl bg-card/65 p-3.5"
+									class="overflow-hidden rounded-xl bg-card/65"
 								>
-									<div class="flex items-center justify-between gap-3">
-										<span class="min-w-0 truncate text-[11px] font-semibold text-foreground">{{
-											model.id || t('agent.settings.providerManagement.modelId')
-										}}</span>
+									<div class="flex items-center justify-between gap-3 px-3.5 py-3">
+										<button
+											v-if="!device.isMobile.value"
+											type="button"
+											class="flex min-w-0 flex-1 items-center gap-2 rounded-md text-left text-[11px] font-semibold text-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+											:aria-expanded="isModelExpanded(index)"
+											:aria-controls="`provider-model-body-${group.kind}-${index}`"
+											:title="
+												t(
+													isModelExpanded(index)
+														? 'agent.settings.providerManagement.collapseParameters'
+														: 'agent.settings.providerManagement.configureParameters',
+												)
+											"
+											@click="toggleModel(index)"
+										>
+											<i
+												class="fa-solid fa-chevron-right shrink-0 text-[9px] text-text-secondary transition-transform duration-150"
+												:class="{ 'rotate-90 text-primary': isModelExpanded(index) }"
+												aria-hidden="true"
+											></i>
+											<span class="truncate">{{
+												model.id || t('agent.settings.providerManagement.modelId')
+											}}</span>
+										</button>
+										<span
+											v-else
+											class="min-w-0 truncate text-[11px] font-semibold text-foreground"
+											>{{ model.id || t('agent.settings.providerManagement.modelId') }}</span
+										>
 										<div class="flex shrink-0 items-center gap-0.5">
 											<UiButton
 												class="provider-model-reset"
@@ -1148,32 +1231,43 @@
 												icon-only
 												:title="t('common.delete')"
 												:aria-label="t('common.delete')"
-												@click="draft.models.splice(index, 1)"
+												@click="removeModel(index)"
 												><i class="fa-regular fa-trash-can text-[10px]" aria-hidden="true"></i
 											></UiButton>
 										</div>
 									</div>
-									<ProviderModelEditor
-										:model-value="model"
-										:default-protocol="draft.protocol"
-										:compact="device.isMobile.value"
-										@match-registry="matchModels([model])"
-										@configure-tools="preserveModelTools(model)"
-										:errors="validationAttempted ? validation.models[index] : undefined"
-										@update:model-value="(value) => draft?.models.splice(index, 1, value)"
-									/>
 									<div
-										v-if="currentProvider?.models.find((item) => item.id === model.id)?.observation"
-										class="space-y-2 rounded-lg bg-header/25 p-2.5 text-[11px] text-text-secondary"
+										v-if="isModelExpanded(index)"
+										:id="`provider-model-body-${group.kind}-${index}`"
+										class="space-y-3 border-t border-border/40 px-3.5 pb-3.5 pt-3"
 									>
-										<p>{{ t('agent.settings.providerManagement.observationHelp') }}</p>
-										<div class="flex flex-wrap justify-end gap-2">
-											<UiButton
-												type="button"
-												density="compact"
-												@click="applyObservation(model)"
-												>{{ t('agent.settings.providerManagement.applyObservation') }}</UiButton
-											>
+										<ProviderModelEditor
+											:model-value="model"
+											:default-protocol="draft.protocol"
+											:compact="device.isMobile.value"
+											@match-registry="matchModels([model])"
+											@configure-tools="preserveModelTools(model)"
+											:errors="validationAttempted ? validation.models[index] : undefined"
+											@update:model-value="(value) => draft?.models.splice(index, 1, value)"
+										/>
+										<div
+											v-if="
+												currentProvider?.models.find((item) => item.id === model.id)
+													?.observation
+											"
+											class="space-y-2 rounded-lg bg-header/25 p-2.5 text-[11px] text-text-secondary"
+										>
+											<p>{{ t('agent.settings.providerManagement.observationHelp') }}</p>
+											<div class="flex flex-wrap justify-end gap-2">
+												<UiButton
+													type="button"
+													density="compact"
+													@click="applyObservation(model)"
+													>{{
+														t('agent.settings.providerManagement.applyObservation')
+													}}</UiButton
+												>
+											</div>
 										</div>
 									</div>
 								</div>

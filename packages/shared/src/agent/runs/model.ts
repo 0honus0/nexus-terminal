@@ -1,7 +1,16 @@
+import type { AgentApprovalMode } from './values.js';
+import type { AgentRunFailureCode } from './values.js';
 import type { AgentRunStepFailureCode } from './values.js';
 import type { AgentRunEventType, AgentRunStatus, AgentRunStepState } from './values.js';
 
+export interface AgentRunFailureView {
+	code: AgentRunFailureCode;
+	toolName: string | null;
+}
+
 export interface AgentRunView {
+	approvalMode: AgentApprovalMode;
+	failure: AgentRunFailureView | null;
 	id: string;
 	appId: string;
 	threadId: string;

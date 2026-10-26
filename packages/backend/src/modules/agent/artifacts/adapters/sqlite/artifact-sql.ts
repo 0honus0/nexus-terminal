@@ -175,7 +175,7 @@ export class SqliteArtifactStorage implements ArtifactStorage {
 			scope.userId,
 		]);
 		const totals = await tx.one(
-			"SELECT COALESCE(SUM(size_bytes),0) AS bytes,COUNT(*) AS count FROM agent_artifacts WHERE user_id=? AND status!='deleted'",
+			"SELECT COALESCE(SUM(size_bytes),0) AS bytes FROM agent_artifacts WHERE user_id=? AND status!='deleted'",
 			[scope.userId],
 		);
 		if (!totals) {
@@ -197,7 +197,6 @@ export class SqliteArtifactStorage implements ArtifactStorage {
 			appExists: app !== null,
 			appEnabled: app?.enabled === 1,
 			totalBytes: artifactInteger(totals.bytes),
-			totalCount: artifactInteger(totals.count),
 		};
 	}
 

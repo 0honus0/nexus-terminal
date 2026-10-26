@@ -35,7 +35,7 @@ import {
 	AGENT_APPROVAL_MAX_SUMMARY_BYTES,
 	AGENT_APPROVAL_MAX_FEEDBACK_BYTES,
 	AGENT_APPROVAL_OPERATION_HASH_LENGTH,
-	AGENT_APPROVAL_MAX_LIST_ITEMS,
+	AGENT_APPROVAL_MAX_PAGE_ITEMS,
 } from './values.js';
 import type { AgentCapability } from './values.js';
 import type { AgentGrantScope, AgentExecutionPolicyOverrides } from './model.js';
@@ -43,6 +43,7 @@ import type {
 	AgentGrantView,
 	AgentExecutionPolicyView,
 	AgentApprovalView,
+	AgentApprovalPage,
 	AgentCapabilityDefinition,
 } from './model.js';
 import type {
@@ -392,12 +393,40 @@ export function readAgentApprovalView(value: unknown): AgentApprovalView {
 	return result;
 }
 
-export function readAgentApprovalList(value: unknown): AgentApprovalView[] {
-	encodeAgentJson(value, AGENT_GOVERNANCE_MAX_RESPONSE_BYTES);
-	if (!Array.isArray(value) || value.length > AGENT_APPROVAL_MAX_LIST_ITEMS) {
+export function readAgentApprovalAfter(value: unknown): string | null {
+	return value === null ? null : readAgentId(value);
+}
+
+export function readAgentApprovalPage(value: unknown, after: string | null): AgentApprovalPage {
+	const row = agentRecord(value, ['items', 'after', 'nextCursor', 'hasMore'], AGENT_GOVERNANCE_MAX_RESPONSE_BYTES);
+	if (
+		!Array.isArray(row.items) ||
+		row.items.length > AGENT_APPROVAL_MAX_PAGE_ITEMS ||
+		row.after !== after ||
+		typeof row.hasMore !== 'boolean'
+	) {
 		throw new InvalidAgentPayload();
 	}
-	return value.map(readAgentApprovalView);
+	const items = row.items.map(readAgentApprovalView);
+	let previous = after;
+	for (const item of items) {
+		if (previous !== null && item.id <= previous) {
+			throw new InvalidAgentPayload();
+		}
+		previous = item.id;
+	}
+	const nextCursor = readAgentApprovalAfter(row.nextCursor);
+	if (nextCursor !== previous || (row.hasMore && items.length !== AGENT_APPROVAL_MAX_PAGE_ITEMS)) {
+		throw new InvalidAgentPayload();
+	}
+	return { items, after, nextCursor, hasMore: row.hasMore };
+}
+
+export function readAgentApprovalQuery(query: URLSearchParams): string | null {
+	if ([...query.keys()].some((key) => key !== 'after') || query.getAll('after').length > 1) {
+		throw new InvalidAgentPayload();
+	}
+	return readAgentApprovalAfter(query.get('after'));
 }
 
 export function readAgentApprovalCommandHeaders(raw: unknown): AgentApprovalCommandHeaders {

@@ -5,7 +5,8 @@ import { readdir, readlink } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { openPlugins } from './plugin-management-fixture.mjs';
 import { expectStatus, until } from '../remote/openssh-fixture.mjs';
-import { AGENT_ARTIFACT_MAX_BYTES } from '../../../packages/shared/dist/agent/artifacts/values.js';
+// Fixture size exercises backpressure independently of the configurable storage ceiling.
+const STREAM_FIXTURE_BYTES = 16 * 1024 * 1024;
 
 // Observe the actual server file handle, rather than infer backpressure from a paused client alone.
 async function openBlobHandles(f, artifact) {
@@ -58,7 +59,7 @@ await test(
 	async (t) => {
 		const f = await openPlugins(t);
 		const app = expectStatus(await f.api('POST', '/api/v1/agent/apps', { name: 'stream owner' }), 201);
-		const content = randomBytes(AGENT_ARTIFACT_MAX_BYTES);
+		const content = randomBytes(STREAM_FIXTURE_BYTES);
 		let artifact = await f.upload(app.id, content, 'bounded-stream.bin');
 		const path = '/api/v1/agent/apps/' + app.id + '/artifacts/' + artifact.id;
 
@@ -137,7 +138,7 @@ await test(
 		});
 		await sender.grants(capabilities);
 		await receiver.grants(capabilities);
-		const content = randomBytes(AGENT_ARTIFACT_MAX_BYTES);
+		const content = randomBytes(STREAM_FIXTURE_BYTES);
 		const artifact = await f.upload(sender.appId, content, 'cross-app-stream.bin');
 		const senderPath = sender.appPath + '/plugin-intents';
 		const receipts = [];

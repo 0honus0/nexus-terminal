@@ -46,6 +46,18 @@ function toolLabel(toolName: string, translator: ToolSummaryTranslator): string 
 	return prefix && translator.has(groupKey) ? translator.translate(groupKey) : null;
 }
 
+export interface ToolCommandPreview {
+	text: string;
+	truncated: boolean;
+}
+
+/** Reads the bounded command preview included with Shell and ACP audit summaries. */
+export function toolCommandPreview(summary: string): ToolCommandPreview | null {
+	const fields = parsedSummary(summary);
+	const command = fields ? readText(fields.command) : null;
+	return command ? { text: command, truncated: fields?.commandTruncated === true } : null;
+}
+
 /** Converts the server's sanitized audit summary into readable UI copy without exposing raw JSON. */
 export function formatToolSummary(summary: string, toolName: string, translator: ToolSummaryTranslator): string {
 	const fields = parsedSummary(summary);

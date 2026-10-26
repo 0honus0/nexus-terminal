@@ -36,6 +36,16 @@ async function fenceTools(
 	scopeParameters: (string | number)[],
 	now: number,
 ): Promise<number> {
+	await tx.run(
+		`UPDATE agent_context_compactions SET state=CASE WHEN state='reserved' THEN 'failed' ELSE 'unknown' END,
+		updated_at=? WHERE state IN ('reserved','dispatched') ${scope}`,
+		[now, ...scopeParameters],
+	);
+	await tx.run(
+		`UPDATE agent_thread_titles SET state=CASE WHEN state='reserved' THEN 'failed' ELSE 'unknown' END,
+		updated_at=? WHERE state IN ('reserved','dispatched') ${scope}`,
+		[now, ...scopeParameters],
+	);
 	const exhausted = await tx.one(
 		`SELECT id FROM agent_run_tools WHERE state IN ('inspected','dispatched') ${scope} AND revision>=? LIMIT 1`,
 		[...scopeParameters, Number.MAX_SAFE_INTEGER],

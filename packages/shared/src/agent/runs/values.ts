@@ -3,6 +3,10 @@ import { AGENT_THREAD_ENTRIES_MAX_RESPONSE_BYTES } from '../scope/values.js';
 import { AGENT_COLLABORATION_MAX_RESPONSE_BYTES } from '../collaboration/values.js';
 import { AGENT_MAX_RESPONSE_BYTES } from '../values.js';
 
+export const AGENT_APPROVAL_MODES = ['ask', 'full_access'] as const;
+
+export type AgentApprovalMode = (typeof AGENT_APPROVAL_MODES)[number];
+
 export const AGENT_RUN_STATUSES = ['pending', 'running', 'completed', 'failed', 'unknown', 'cancelled'] as const;
 
 export type AgentRunStatus = (typeof AGENT_RUN_STATUSES)[number];
@@ -74,3 +78,46 @@ export const AGENT_RUN_STREAM_MAX_JSON_BYTES =
 	8192;
 
 export const AGENT_RUN_STREAM_MAX_IN_FLIGHT_PAGES = 16;
+
+/** Safe user-facing tool failure reasons; raw exceptions never enter the protocol. */
+export const AGENT_RUN_FAILURE_CODES = [
+	'execution_not_authorized',
+	'execution_failed',
+	'execution_storage_failed',
+	'execution_limit_exceeded',
+	'context_limit_exceeded',
+	'configuration_changed',
+	'tool_capability_missing',
+	'tool_target_denied',
+	'tool_app_disabled',
+	'tool_capability_undeclared',
+	'tool_not_authorized',
+	'tool_timeout',
+	'tool_invalid_input',
+	'tool_target_unavailable',
+	'tool_host_untrusted',
+	'tool_command_failed',
+	'tool_limit_exceeded',
+	'tool_state_changed',
+	'tool_approval_expired',
+	'tool_failed',
+	'model_auth_failed',
+	'model_rate_limited',
+	'model_request_rejected',
+	'model_not_found',
+	'model_service_unavailable',
+	'model_output_limit',
+	'model_content_filtered',
+	'model_response_too_large',
+	'model_cleanup_failed',
+	'model_timeout',
+	'model_response_invalid',
+	'model_dns_failed',
+	'model_tls_failed',
+	'model_response_empty',
+	'model_stream_truncated',
+	'model_network_failed',
+	'model_failed',
+] as const;
+
+export type AgentRunFailureCode = (typeof AGENT_RUN_FAILURE_CODES)[number];

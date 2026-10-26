@@ -17,7 +17,10 @@ export function toNativeThreadMutation(value: NativeThreadIntent): AgentWorkspac
 	if (value.kind === 'create') {
 		return {
 			appVersion: value.scope.appVersion,
-			request: { method: 'agent.threads.create', params: { operationId: value.operationId, title: value.title } },
+			request: {
+				method: 'agent.threads.create',
+				params: { operationId: value.operationId, title: value.title, autoTitle: value.autoTitle },
+			},
 		};
 	}
 	return {
