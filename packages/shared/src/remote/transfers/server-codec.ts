@@ -11,7 +11,6 @@ import {
 	SERVER_TRANSFER_TASK_STATES,
 	SERVER_TRANSFER_ITEM_STATES,
 	SERVER_TRANSFER_ERROR_CODES,
-	SERVER_TRANSFER_MAX_ITEMS,
 	SERVER_TRANSFER_MAX_NAME_BYTES,
 	SERVER_TRANSFER_MAX_PATH_BYTES,
 	SERVER_TRANSFER_REQUEST_MAX_BYTES,
@@ -126,8 +125,7 @@ export function readServerTransferInput(value: unknown): ServerTransferInput {
 		!Array.isArray(input.connectionIds) ||
 		!input.connectionIds.length ||
 		!Array.isArray(input.sourceItems) ||
-		!input.sourceItems.length ||
-		input.connectionIds.length * input.sourceItems.length > SERVER_TRANSFER_MAX_ITEMS
+		!input.sourceItems.length
 	) {
 		return reject();
 	}
@@ -147,13 +145,58 @@ export function readServerTransferInput(value: unknown): ServerTransferInput {
 			reject();
 		}
 	}
-	return {
+	const result = {
 		sourceConnectionId,
 		connectionIds,
 		sourceItems,
 		remoteTargetPath: input.remoteTargetPath === '/' ? '/' : path(input.remoteTargetPath),
 		transferMethod: choice(input.transferMethod, SERVER_TRANSFER_METHODS),
 	};
+	validateExpandedTaskBudget(result);
+	return result;
+}
+
+/** Reserve the payload and emitted task states before allocating the source/target product. */
+function validateExpandedTaskBudget(input: ServerTransferInput): void {
+	const longest = (values: readonly string[]): string =>
+		values.reduce((result, value) => (value.length > result.length ? value : result), '');
+
+	const id = '00000000-0000-4000-8000-000000000000';
+	const encoder = new TextEncoder();
+
+	const encodedBytes = (value: object): number => encoder.encode(JSON.stringify(value)).byteLength;
+
+	const itemStatus = longest(SERVER_TRANSFER_ITEM_STATES);
+	const itemError = longest(SERVER_TRANSFER_ERROR_CODES);
+	const itemMethod = longest(SERVER_TRANSFER_METHODS);
+	let bytes = encodedBytes({
+		taskId: id,
+		status: longest(SERVER_TRANSFER_TASK_STATES),
+		createdAt: Number.MAX_SAFE_INTEGER,
+		updatedAt: Number.MAX_SAFE_INTEGER,
+		overallProgress: 100,
+		payload: input,
+		subTasks: [],
+	});
+	let first = true;
+	for (const connectionId of input.connectionIds) {
+		for (let sourceItemIndex = 0; sourceItemIndex < input.sourceItems.length; sourceItemIndex++) {
+			bytes +=
+				encodedBytes({
+					subTaskId: id,
+					connectionId,
+					sourceItemIndex,
+					status: itemStatus,
+					progress: 100,
+					error: itemError,
+					transferMethodUsed: itemMethod,
+				}) + (first ? 0 : 1);
+			if (bytes > SERVER_TRANSFER_TASK_MAX_BYTES) {
+				reject();
+			}
+			first = false;
+		}
+	}
 }
 
 function percent(value: unknown): number {

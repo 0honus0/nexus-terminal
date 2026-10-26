@@ -304,7 +304,7 @@ Connections的TargetCredentialView/readCredentialView持有connectionId/version�
 
 ### 独立后台服务器传输
 
-remote/transfers/server-values唯一持有auto/rsync/scp、父/子有限状态、安全失败及完整编码容量；server-model/http定义安全任务、输入、分页和取消受理，server-codec严格解码并核对源名称/路径/嵌套、目标集合、完整父子对应、进度/状态/时间及游标。源项禁止根目录，目标目录允许根目录；目录选择保留路径空白，不通过 trim 改写真实名称。来源和目标不单独设数量门槛，乘积1024的任务展开预算保留；完整输入128KiB、单任务1MiB、每页8项。时间为Unix毫秒，queued受理与终态分开，unknown有独立状态；取消accepted不表达远端停止。Backend真实五HTTP与Frontend正式transport均消费精确包出口。Service私有并发、任务历史、会话digest、pin、公钥、凭据及持久claim不进入Shared；双端对象在各自边界显式转换，不能直接当应用状态。
+remote/transfers/server-values唯一持有auto/rsync/scp、父/子有限状态、安全失败及完整编码容量；server-model/http定义安全任务、输入、分页和取消受理，server-codec严格解码并核对源名称/路径/嵌套、目标集合、完整父子对应、进度/状态/时间及游标。源项禁止根目录，目标目录允许根目录；目录选择保留路径空白，不通过 trim 改写真实名称。来源、目标及展开子项不设固定计数门槛，按输入和每个子项状态的实际编码字节校验总预算；完整输入128KiB、单任务1MiB、每页8项。时间为Unix毫秒，queued受理与终态分开，unknown有独立状态；取消accepted不表达远端停止。Backend真实五HTTP与Frontend正式transport均消费精确包出口。Service私有并发、任务历史、会话digest、pin、公钥、凭据及持久claim不进入Shared；双端对象在各自边界显式转换，不能直接当应用状态。
 
 ### 挂起管理 HTTP
 

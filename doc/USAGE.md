@@ -398,7 +398,7 @@ PDF 缩放或容器宽度变化后的异步页定位保留当前横向滚动位�
 
 | 范围      | 限制与行为                                                                                                                                                                                                                                      |
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 输入      | 来源与目标不重复限制各自数量，乘积≤1,024；路径≤4096 UTF-8 bytes、名称≤255 bytes、完整JSON≤128 KiB。拒绝重复目标/源路径、同名或嵌套源项、源作为目标及相同文本endpoint。                                                                          |
+| 输入      | 来源/目标及子项不设固定数量门槛，按实际输入和所有子项状态编码字节动态校验；路径≤4096 UTF-8 bytes、名称≤255 bytes、完整JSON≤128 KiB。拒绝重复目标/源路径、同名或嵌套源项、源作为目标及相同文本endpoint。                                         |
 | 路由/信任 | 源可按已保存代理/跳板连接；目标只支持直连。源/目标须先确认Host Key；实际握手公钥生成私有known_hosts，源端SSH仍严格校验。DNS别名不保证识别为同一机器。                                                                                           |
 | 方法      | auto在两端均有rsync时选rsync，否则scp；显式方法缺工具即拒绝。源须有ssh及所选工具，目标须有相应rsync/scp；密码或加密私钥需源端sshpass。rsync须支持secluded args（-s），scp须支持旧协议（-O）。目录均复制目录本身到目标目录，已存在内容可能覆盖。 |
 | 任务      | 不按在途/unknown数量拒绝，保留最近100个已确认终态；最多5个不冲突父任务并行，同源/目标串行，父内子项串行。父期限1小时含排队，单子项使用父任务剩余期限。列表每页8项，时间为Unix毫秒；单任务JSON≤1 MiB。                                           |
@@ -752,7 +752,7 @@ B10已验证真实子进程在quiesce内的SDK调用被拒绝且无晚写入、h
 - 当前Agent移除 ssh_session_open/list/close 和 sessionId，使用独立45秒 Remote 任务及当前 Run 的 Job/取消管理，不继承 shell cwd/env，不共享 Root/Child 活跃连接。
 - project_directory_bind v2 参数 connectionId/directory；read 参数 connectionId/可选 path；clear 只有 connectionId。目录绝对路径≤256 UTF-8 bytes，read 仅允许绑定根及深度≤8的子目录。未绑定返回空上下文；目标 version/fingerprint 变化报冲突，重新绑定须独立批准。绑定按 Run 独立保存，删除 Run/connection 清理，不沿用旧 Thread 共享。
 - 从绑定根到选定子目录读取不区分大小写的 AGENT.md/AGENTS.md，最多4份、每份≤8 KiB，拒绝链接、超量和越界；返回 path/scopePath/text/sha256。指导是不可信工具数据，不自动变为系统提示、Shell cwd 或权限；bind/clear 需要当前 file.read 与单次批准，read 需要当前只读授权。
-- Agent 文件/Shell/Job/ACP/Docker、普通 Files/上传/复制移动/归档/权限修改与 Workspace Docker 按 lowercase host+port 共用持久独占占用。不同连接ID、用户或凭据不能绕过同一文本 endpoint；跨主机复制/移动原子占用两端。冲突直接拒绝，最多128个 endpoint，不自动排队/重试；同资源已有 Files 队列保留。
+- Agent 文件/Shell/Job/ACP/Docker、普通 Files/上传/复制移动/归档/权限修改与 Workspace Docker 按 lowercase host+port 共用持久独占占用。不同连接ID、用户或凭据不能绕过同一文本 endpoint；跨主机复制/移动原子占用两端。冲突直接拒绝，不设跨endpoint数量上限，不自动排队/重试；同资源已有 Files 队列保留。
 - 结果及清理确认才释放，unknown/清理失败和重启后的遗留占用保持 blocked；先只读核对，不按 TTL/重启/改连接自动放行。管理员可通过机器突变恢复入口记录独立证据，再单独 CAS 解除；不能确认原生产者和关联资源已停止则继续阻断。DNS/IP别名无法准确合并；交互PTY、外部进程及远端派生进程不受数据库锁隔离。执行按 governed 政策核对，默认 enabled=false；启用设置不授予工具 grant 或审批。 行为待 B10。
 
 ### 新后端 App、授权与审批（源码范围）

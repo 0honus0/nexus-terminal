@@ -481,7 +481,7 @@ B2 源码已包含独立 HTTP 文件下载 ticket/GET/HEAD/目录 ZIP 和 binary
 
 本批没有把旧传输实现照搬为远端通用命令：旧跨机器执行曾将私钥临时放在远端机器上、使用包含密码的命令参数，新 copy/move 使用独立的 SFTP 源/目标技术资源；未知副作用不自动重放。旧上传传输层异步触发 append，但其 Service 本来有串行队列；新 binary WS 在技术接收层额外显式串行并受背压/字节上限控制。旧目录 ZIP 遍历与短期下载票据活跃流过期等隐患均增加有界 owner 处理。跨不同登录 token 的同用户 Workspace 源资源改经 Access authenticateDigest 校验原会话有效性及当前请求者身份；原 bearer 不保留。Model 的 SFTP readlink/symlink 支撑保留链接本体，目录复制后显式恢复 mode，旧隐式跟随 symlink 的行为不照搬。
 
-B2 archive 由 Service 决定输入/成员安全/任务/取消与发布；file-archive-model 将应用参数/结果和错误显式转换，Platform archive native Adapter 持有 shell 命令、原生列表及退出码解码；FileResource 管 SSH/SFTP 技术资源：压缩通过原生 `zip`、GNU `tar` 直接在远端写带格式后缀的私有 `.part`，由 SFTP 确认后 rename/replace；支持归档输出位于所选源目录内部，不做源树预扫描，直接将所选路径交给原生工具递归处理，不设置压缩总条目数或目录深度上限，命令明确排除旧目标和临时项。解压先用远端原生 `cp --reflink=auto --no-dereference` 建立权限受限的私有归档快照并经 SFTP 核验文件类型/大小，`unzip`/`zipinfo` 或 GNU `tar` 对该快照分别列出简略成员名与详细成员元数据并逐项交叉检查名称/类型/大小（GNU tar 顶层 `./` 不占发布条目预算），实际提取使用同一份快照，按规范化路径、非目录祖先、重复名称、特殊成员、安全整数大小，不按成员数量、深度或固定64GiB展开量拒绝，GNU tar 使用 `--no-overwrite-dir` 防止根条目改写私有 stage 权限，先提取至私有 stage，再由 SFTP 复核每一项的真实类型、实际文件大小及 setuid/setgid 权限位，并预检查目标路径类型冲突后发布；原生提取显式排除 symlink/hardlink，只提取普通文件和目录；应用校验通过后，符号链接经 FileResource/SFTP 创建，TAR 硬链接由 ArchiveModel → native Adapter 的 `ln -P` 创建，避免提取中沿归档链接写入；设备/特权成员仍在提取前拒绝。源可能并发变化，预检不等于文件快照；保留 unknown 退役、取消与进度边界。密码执行器按实施方案 D12 保留原生 zip/unzip `-P`：密码经 POSIX shell quote 直接拼入原生命令参数，与旧正式实现一致；接受 SSH command string 和工具 argv 中包含密码，不额外导出密码环境变量，不记录完整命令或回传诊断。无需新增归档 PTY、Python 或 Expect；现有 Model 转换不变。B10 核对密码/失败/秘密日志行为；不承诺 AES 兼容。
+B2 archive 由 Service 决定输入/成员安全/任务/取消与发布；file-archive-model 将应用参数/结果和错误显式转换，Platform archive native Adapter 持有 shell 命令、原生列表及退出码解码；FileResource 管 SSH/SFTP 技术资源：压缩通过原生 `zip`、GNU `tar` 直接在远端写带格式后缀的私有 `.part`，由 SFTP 确认后 rename/replace；支持归档输出位于所选源目录内部，不做源树预扫描，直接将所选路径交给原生工具递归处理，不设置压缩总条目数或目录深度上限，命令明确排除旧目标和临时项。解压先用远端原生 `cp --reflink=auto --no-dereference` 建立权限受限的私有归档快照并经 SFTP 核验文件类型/大小，`unzip`/`zipinfo` 或 GNU `tar` 对该快照分别列出简略成员名与详细成员元数据并逐项交叉检查名称/类型/大小（忽略GNU tar顶层 `./` 元数据条目），实际提取使用同一份快照，按规范化路径、非目录祖先、重复名称、特殊成员、安全整数大小，不按成员数量、深度或固定64GiB展开量拒绝，GNU tar 使用 `--no-overwrite-dir` 防止根条目改写私有 stage 权限，先提取至私有 stage，再由 SFTP 复核每一项的真实类型、实际文件大小及 setuid/setgid 权限位，并预检查目标路径类型冲突后发布；原生提取显式排除 symlink/hardlink，只提取普通文件和目录；应用校验通过后，符号链接经 FileResource/SFTP 创建，TAR 硬链接由 ArchiveModel → native Adapter 的 `ln -P` 创建，避免提取中沿归档链接写入；设备/特权成员仍在提取前拒绝。源可能并发变化，预检不等于文件快照；保留 unknown 退役、取消与进度边界。密码执行器按实施方案 D12 保留原生 zip/unzip `-P`：密码经 POSIX shell quote 直接拼入原生命令参数，与旧正式实现一致；接受 SSH command string 和工具 argv 中包含密码，不额外导出密码环境变量，不记录完整命令或回传诊断。无需新增归档 PTY、Python 或 Expect；现有 Model 转换不变。B10 核对密码/失败/秘密日志行为；不承诺 AES 兼容。
 
 SFTP 单次元数据请求的技术上限唯一归 Platform SSH 契约，FileResource Model 将应用剩余期限限制到该上限；上传字节流仍使用完整传输期限，不把总任务预算当作单次 RPC 预算。同目标移动在目标不存在时优先 rename；已有普通文件或目录走既有 staged copy/merge，全部复制确认后再删除来源，类型冲突仍拒绝。
 
@@ -980,7 +980,7 @@ project_directory_bind/read/clear v2 经原模型 proposal、账本、目标检�
 
 仍只有初始化 v1，Bootstrap 调 Agent/Remote migrations，不升级旧开发库。agent_run_projects 按 Run/connection 唯一，删除 Run/connection 级联清理；agent_project_effects 按 ToolCall 唯一，目录改写与 effect 同事务，复查 dispatched/action/hash/target/policyRevision/live participant，bind 另核 SSH/version。不重放未知目录写入。
 
-remote_machine_mutations 按 SHA-256([lowercase host,port]) 唯一。ID/user/凭据/代理变更不为同一文本 endpoint 创建第二占用；跨端复制/移动一次事务检查并获取两个排序去重 key，部分获取不提交。已持有或 blocked 报 conflict，最多128个 endpoint；不自动重试或排队。释放/阻断必须匹配原 claim ID、key 和 held 状态。私有 Files 同资源既有队列仍保留，跨资源占用不等待。DNS/IP别名、不同跳板网络中的同名主机不被此文本身份准确区分，可能漏合并或保守拒绝；不宣称真实物理主机识别。
+remote_machine_mutations 按 SHA-256([lowercase host,port]) 唯一。ID/user/凭据/代理变更不为同一文本 endpoint 创建第二占用；跨端复制/移动一次事务检查并获取两个排序去重 key，部分获取不提交。已持有或 blocked 报 conflict，不设跨endpoint数量上限；不自动重试或排队。释放/阻断必须匹配原 claim ID、key 和 held 状态。私有 Files 同资源既有队列仍保留，跨资源占用不等待。DNS/IP别名、不同跳板网络中的同名主机不被此文本身份准确区分，可能漏合并或保守拒绝；不宣称真实物理主机识别。
 
 ### 7. 生命周期与失败
 
@@ -1460,7 +1460,7 @@ HTTP → Service → Model → Remote machines 与 Platform transfers；跨模�
 
 ### 4. 类型与转换
 
-Shared `remote/transfers/server-{values,model,http,codec}` 持有有限值、完整安全任务及五入口契约；目标目录可为根目录，源项仍禁止根目录，Native Adapter 不为根目标重复追加斜线，路径空白保持原值；独立64目标/256来源计数门槛移除，实际请求/任务字节与1024子项展开预算保留；sourceItemIndex按该任务自身来源数组校验。后端应用对象独立归 `transfers/model/*-types`。HTTP、Model、前端 mapper 均逐字段投影；主机密钥 pin、密码和私钥只在后端可信转换与技术 Adapter 间短暂存在。
+Shared `remote/transfers/server-{values,model,http,codec}` 持有有限值、完整安全任务及五入口契约；目标目录可为根目录，源项仍禁止根目录，Native Adapter 不为根目标重复追加斜线，路径空白保持原值；独立64目标/256来源计数门槛移除，实际请求/任务字节预算保留，子项展开按实际编码动态校验；sourceItemIndex按该任务自身来源数组校验。后端应用对象独立归 `transfers/model/*-types`。HTTP、Model、前端 mapper 均逐字段投影；主机密钥 pin、密码和私钥只在后端可信转换与技术 Adapter 间短暂存在。
 
 ### 5. 入口与安装
 

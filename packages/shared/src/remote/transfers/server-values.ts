@@ -56,8 +56,6 @@ export const SERVER_TRANSFER_ERROR_CODES = [
 
 export type ServerTransferErrorCode = (typeof SERVER_TRANSFER_ERROR_CODES)[number];
 
-export const SERVER_TRANSFER_MAX_ITEMS = 1024;
-
 export const SERVER_TRANSFER_MAX_PATH_BYTES = 4096;
 
 export const SERVER_TRANSFER_MAX_NAME_BYTES = 255;
