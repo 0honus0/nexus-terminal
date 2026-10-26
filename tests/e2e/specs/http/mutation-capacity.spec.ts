@@ -103,3 +103,12 @@ test('native transfer preserves stream cancellation, pinned keys and credential 
 		'native secret cleanup and pinned handshake evidence remain independent of execution outcome',
 	);
 });
+
+test('directory copy reuses parent checks within each task and keeps exact content', async () => {
+	const result = await promisify(execFile)(
+		process.execPath,
+		[path.resolve(__dirname, '../../fixtures/remote/copy-directory-checks.mjs')],
+		{ timeout: 30_000, maxBuffer: 1024 * 1024 },
+	);
+	expect(result.stdout).toContain('Verified task-local parent checks and exact content across 200 file copies');
+});

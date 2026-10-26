@@ -253,6 +253,19 @@ await test('Files independent transfer ownership and mixed admission at controll
 				const stats = [];
 				f.state.lstat = async (path, targetId) => {
 					stats.push({ path, targetId });
+					if (targetId === 1 && path === '/source') {
+						return {
+							uid: 0,
+							gid: 0,
+							accessedAt: 1700000000,
+							modifiedAt: 1700000000,
+							size: 1,
+							mode: 0o600,
+							isDirectory: false,
+							isFile: true,
+							isSymbolicLink: false,
+						};
+					}
 					if (targetId === 2 && path === '/destination') {
 						entered.resolve();
 						await release.promise;
@@ -290,7 +303,10 @@ await test('Files independent transfer ownership and mixed admission at controll
 				);
 				assert.equal(terminal.type, 'failed');
 				assert.equal(terminal.message, 'not_found');
-				assert.deepEqual(stats, [{ path: '/destination', targetId: 2 }]);
+				assert.deepEqual(stats, [
+					{ path: '/source', targetId: 1 },
+					{ path: '/destination', targetId: 2 },
+				]);
 				assert.deepEqual(f.state.opens, [1, 2, 1, 2]);
 				await source.release();
 				await destination.release();

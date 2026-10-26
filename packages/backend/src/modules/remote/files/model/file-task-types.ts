@@ -70,6 +70,7 @@ export interface FileDirectCopyRequest {
 	targetId: number;
 	targetFingerprint: string;
 	sourcePath: string;
+	mode: 'copy' | 'move';
 	directory: boolean;
 	method: ServerTransferMethod;
 	destinationDirectory: string;

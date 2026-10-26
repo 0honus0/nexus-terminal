@@ -10,7 +10,7 @@
 
 ### 远端工具安装
 
-1. **职责与范围**：Remote tools 管理用户确认的远端依赖安装，供传输与归档预检消费。仅安装服务器固定白名单工具，不开放任意命令、包名或仓库配置。
+1. **职责与范围**：Remote tools 管理用户确认的远端依赖安装，供确实依赖系统工具的归档预检消费；服务器发送已改为执行时选择直传或SFTP中转，不再强制预安装。仅安装服务器固定白名单工具，不开放任意命令、包名或仓库配置。
 2. **子功能与目录**：`remote/tools/{service,model}` 持计划、授权和应用能力；`platform/tools` 持包管理器检测、固定包映射、提权认证及技术执行。HTTP 仍归 Remote interfaces。
 3. **依赖方向**：HTTP → tools Service → tools Model → machines Model / Platform；Service 复用原 MachineMutationService，安装与文件、Docker、Agent 远端突变按真实 endpoint 互斥。
 4. **类型与转换**：Shared remote/tools 定义有限工具、包管理器、提权方式、安全检查/安装契约；独立应用对象归 tools/model，技术对象归 Platform；HTTP 与 Model 分别白名单投影。sudo 密码仅写入 SSH stdin，不进入命令参数、持久化、公开结果或日志。

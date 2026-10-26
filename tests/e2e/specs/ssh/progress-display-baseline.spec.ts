@@ -2,10 +2,6 @@ import { readTestConnectionImportId } from '../../support/targets';
 import path from 'node:path';
 import { readServerTransferPage } from '../../../../packages/shared/src/remote/transfers/server-codec';
 import { readRemoteFileOpenResponse } from '../../../../packages/shared/src/remote/files/http-codec';
-import {
-	readRemoteToolCheckRequest,
-	readRemoteToolError,
-} from '../../../../packages/shared/src/remote/tools/http-codec';
 import { E2E_URLS } from '../../support/test-env';
 import { expect, test, type BrowserContext, type Locator, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
@@ -452,16 +448,10 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 	});
 	expect(failedTargetResponse.status()).toBe(200);
 	const failedTargetConnectionId = readTestConnectionImportId(await failedTargetResponse.json());
-	let unavailableTargetChecks = 0;
+	let transferToolChecks = 0;
 	await page.route('**/api/v1/remote/tools/check', async (route) => {
-		const input = readRemoteToolCheckRequest(route.request().postDataJSON());
-		const response = await route.fetch({ maxRetries: 0 });
-		if (input.kind === 'transfer' && input.side === 'target' && input.targetId === failedTargetConnectionId) {
-			expect(response.status()).toBe(503);
-			expect(readRemoteToolError(await response.json()).code).toBe('connection_unavailable');
-			unavailableTargetChecks += 1;
-		}
-		await route.fulfill({ response });
+		transferToolChecks++;
+		await route.continue();
 	});
 
 	try {
@@ -583,7 +573,7 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 				await expect(trustConfirmation).toBeVisible();
 				await trustConfirmation.getByRole('button', { name: 'Confirm', exact: true }).click();
 				await expect(modal).toBeHidden();
-				expect(unavailableTargetChecks).toBe(1);
+				expect(transferToolChecks).toBe(0);
 				releaseInitialTransferList?.();
 				releaseInitialTransferList = undefined;
 			},

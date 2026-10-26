@@ -1360,10 +1360,10 @@ export class RemoteFileService {
 		signal: AbortSignal,
 		onMutation: () => void,
 	): Promise<void> {
-		await this.ensureRemoteDirectory(resource, root, remaining, signal, onMutation);
-		// Independent root children can be prepared concurrently. Paths sharing
-		// an implicit parent stay serial, avoiding competing mkdir operations.
-		// Each path still checks its full ancestry; no cached stat grants access.
+		const preparedDirectories = new Set<string>();
+		await this.ensureRemoteDirectory(resource, root, remaining, signal, onMutation, preparedDirectories);
+		// Share confirmed ancestry only within this preparation. Root children
+		// run independently; paths with the same implicit parent stay serial.
 		const branches = new Map<string, string[]>();
 		for (const filePath of [...paths].sort((a, b) => a.length - b.length)) {
 			if (filePath === root) {
@@ -1388,7 +1388,14 @@ export class RemoteFileService {
 						if (failures.length) {
 							return;
 						}
-						await this.ensureRemoteDirectory(resource, filePath, remaining, signal, onMutation);
+						await this.ensureRemoteDirectory(
+							resource,
+							filePath,
+							remaining,
+							signal,
+							onMutation,
+							preparedDirectories,
+						);
 					}
 				} catch (cause) {
 					failures.push(cause);
@@ -1418,11 +1425,16 @@ export class RemoteFileService {
 		remaining: () => number,
 		signal: AbortSignal,
 		onMutation?: () => void,
+		preparedDirectories?: Set<string>,
 	): Promise<void> {
+		remaining();
 		const parts = filePath.split('/').filter(Boolean);
 		let current = '/';
 		for (const name of parts) {
 			current = path.posix.join(current, name);
+			if (preparedDirectories?.has(current)) {
+				continue;
+			}
 			const info = await this.optionalStat(resource, current, false, remaining, signal);
 			if (info === null) {
 				await resource.mkdir({ path: current, timeoutMs: Math.min(remaining(), 300000), signal });
@@ -1430,6 +1442,7 @@ export class RemoteFileService {
 			} else if (info.kind !== 'directory') {
 				throw new RemoteFileFailure('conflict');
 			}
+			preparedDirectories?.add(current);
 		}
 	}
 
@@ -2021,6 +2034,7 @@ export class RemoteFileService {
 													targetId: destinationResource.targetId,
 													targetFingerprint: destinationResource.fingerprint,
 													sourcePath: from,
+													mode,
 													method: 'auto',
 													directory,
 													destinationDirectory,
@@ -2028,9 +2042,6 @@ export class RemoteFileService {
 													signal: sourceSignal,
 
 													validate: async () => {
-														remaining();
-														await this.model.checkFingerprint(source);
-														await this.model.checkFingerprint(destinationResource);
 														remaining();
 													},
 

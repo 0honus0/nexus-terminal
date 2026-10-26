@@ -61,7 +61,6 @@ export async function inspectText(context: FileInspectionContext, input: string)
 		timeoutMs: context.remaining(),
 		signal: context.signal,
 	});
-	await context.validate();
 	const after = await inspectInfo(context, requested);
 	if (
 		after.kind !== 'file' ||
@@ -145,7 +144,6 @@ export async function inspectSearch(
 		if (!next) {
 			break;
 		}
-		await context.validate();
 		if (next.depth > 8) {
 			throw new RemoteFileFailure('limit_exceeded');
 		}

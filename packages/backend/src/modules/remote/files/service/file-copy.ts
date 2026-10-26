@@ -25,6 +25,7 @@ interface CopyContext {
 	totalFiles: number;
 	totalKnown: boolean;
 	mutationStarted: boolean;
+	preparedDirectories: Set<string>;
 	onMutation(): void;
 	completedSources: Array<{ path: string; info: FileInfo; linkTarget?: string }>;
 	onProgress(progress: CopyProgress): void;
@@ -91,10 +92,14 @@ async function destinationLocation(ctx: CopyContext, directory: string): Promise
 }
 
 async function mkdirParents(ctx: CopyContext, absolutePath: string): Promise<void> {
+	ctx.remaining();
 	const segments = absolutePath.split('/').filter(Boolean);
 	let current = '/';
 	for (const segment of segments) {
 		current = path.posix.join(current, segment);
+		if (ctx.preparedDirectories.has(current)) {
+			continue;
+		}
 		const info = await optionalStat(ctx.destination, ctx, current);
 		if (info === null) {
 			ctx.mutationStarted = true;
@@ -103,6 +108,7 @@ async function mkdirParents(ctx: CopyContext, absolutePath: string): Promise<voi
 		} else if (info.kind !== 'directory') {
 			throw new RemoteFileFailure('conflict');
 		}
+		ctx.preparedDirectories.add(current);
 	}
 }
 
@@ -323,6 +329,7 @@ async function copyOne(ctx: CopyContext, from: string, to: string, scannedInfo?:
 		ctx.onMutation();
 		await ctx.destination.mkdir(options(ctx, to));
 	}
+	ctx.preparedDirectories.add(to);
 	const entries: FileEntry[] = await ctx.source.scan({
 		path: from,
 		timeoutMs: Math.min(ctx.remaining(), RPC_TIMEOUT_MS),
@@ -503,6 +510,7 @@ export async function copyRemoteEntries(
 		totalFiles: paths.length,
 		totalKnown: false,
 		mutationStarted: false,
+		preparedDirectories: new Set(),
 		onMutation,
 		completedSources: [],
 	};

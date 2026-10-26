@@ -96,7 +96,9 @@ function classify(cause: unknown): ServerTransferFailure {
 			code === 'stale_target' ||
 			code === 'not_found' ||
 			code === 'unauthenticated' ||
-			code === 'forbidden'
+			code === 'forbidden' ||
+			code === 'host_key_untrusted' ||
+			code === 'invalid_input'
 		) {
 			return new ServerTransferFailure(code, 'not_started', { cause });
 		}
@@ -480,7 +482,7 @@ export class ServerTransferService {
 
 			const source = await this.files.open(
 				input.plan.source.targetId,
-				remaining(),
+				Math.min(15_000, remaining()),
 				input.signal,
 				input.plan.source.fingerprint,
 				input.validate,
@@ -497,7 +499,7 @@ export class ServerTransferService {
 			}
 			const destination = await this.files.open(
 				target.targetId,
-				remaining(),
+				Math.min(15_000, remaining()),
 				input.signal,
 				target.fingerprint,
 				input.validate,
@@ -543,6 +545,7 @@ export class ServerTransferService {
 						targetId: destination.targetId,
 						targetFingerprint: destination.fingerprint,
 						sourcePath: from,
+						mode: 'copy',
 						directory,
 						method: input.command.transferMethod,
 						destinationDirectory: input.command.remoteTargetPath,
@@ -572,10 +575,12 @@ export class ServerTransferService {
 			await validate();
 			return method;
 		} catch (cause) {
-			failure =
-				mutationStarted && !(cause instanceof RemoteResourceCleanupFailure)
-					? new ServerTransferFailure('operation_unknown', 'unknown', { cause })
-					: cause;
+			failure = cause;
+			if (mutationStarted && !(cause instanceof RemoteResourceCleanupFailure)) {
+				failure = new ServerTransferFailure('operation_unknown', 'unknown', { cause });
+			} else if (cause instanceof RemoteFileFailure && cause.code === 'remote_unavailable') {
+				failure = new ServerTransferFailure('connection_failed', 'not_started', { cause });
+			}
 			throw failure;
 		} finally {
 			const results = await Promise.allSettled(

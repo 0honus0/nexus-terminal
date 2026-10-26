@@ -127,6 +127,9 @@ export class RemoteFileModel {
 					destination.startsWith(input.sourcePath + '/') ||
 					input.sourcePath.startsWith(destination + '/')
 				) {
+					if (destination === input.sourcePath && input.mode === 'copy') {
+						return false;
+					}
 					throw new RemoteFileFailure('conflict');
 				}
 			}

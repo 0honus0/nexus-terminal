@@ -18,7 +18,6 @@
 	import { apiErrorMessage } from '@/client/http';
 	import { useFeedback } from '@/shared/feedback/public';
 	import { useAuthenticatedViewScope } from '@/shared/session/public';
-	import { useRemoteTools, RemoteToolInstallDialog } from '@/features/remote-tools/public';
 	import { loadRemoteDirectoryPicker } from '@/features/filesystem/public';
 	import { useRuntimeFeatureCapabilities, type ConnectionSummary } from '@/shared/capabilities/public';
 	import { useServerTransfersStore, serverTransferFailureKey } from '../store/serverTransfers.store';
@@ -35,12 +34,8 @@
 	const emit = defineEmits<{ close: []; sent: [task: ServerTransferTask] }>();
 	const { t } = useI18n();
 	const feedback = useFeedback();
-	const toolInstaller = useRemoteTools();
 	const capabilities = useRuntimeFeatureCapabilities();
 	const connections = capabilities.connections;
-	const installationTarget = computed(() =>
-		connections.items.value.find((target) => target.id === toolInstaller.offer.value?.targetId),
-	);
 	const tags = capabilities.tags;
 	const transfers = useServerTransfersStore();
 	const search = ref('');
@@ -277,36 +272,6 @@
 				signal.aborted
 			)
 				return;
-			for (const peerId of command.connectionIds) {
-				if (
-					(await toolInstaller.prepare(
-						{
-							kind: 'transfer',
-							targetId: command.sourceConnectionId,
-							peerId,
-							side: 'source',
-							method: command.transferMethod,
-						},
-						signal,
-					)) === 'cancelled'
-				) {
-					return;
-				}
-				if (
-					(await toolInstaller.prepare(
-						{
-							kind: 'transfer',
-							targetId: peerId,
-							peerId: command.sourceConnectionId,
-							side: 'target',
-							method: command.transferMethod,
-						},
-						signal,
-					)) === 'cancelled'
-				) {
-					return;
-				}
-			}
 			if (current !== generation || !props.visible || signal.aborted) {
 				return;
 			}
@@ -330,13 +295,6 @@
 </script>
 
 <template>
-	<RemoteToolInstallDialog
-		:offer="toolInstaller.offer.value"
-		:busy="toolInstaller.busy.value"
-		:target-name="installationTarget?.name || installationTarget?.host"
-		@approve="toolInstaller.approve"
-		@cancel="toolInstaller.cancel"
-	/>
 	<UiOverlayPanel
 		:visible="visible"
 		:z-index="70"

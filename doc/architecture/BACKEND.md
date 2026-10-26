@@ -10,7 +10,7 @@
 
 ### 远端工具安装
 
-1. **职责与范围**：Remote tools 管理用户确认的远端依赖安装，供传输与归档预检消费。仅安装服务器固定白名单工具，不开放任意命令、包名或仓库配置。
+1. **职责与范围**：Remote tools 管理用户确认的远端依赖安装，供确实依赖系统工具的归档预检消费；服务器发送已改为执行时选择直传或SFTP中转，不再强制预安装。仅安装服务器固定白名单工具，不开放任意命令、包名或仓库配置。
 2. **子功能与目录**：`remote/tools/{service,model}` 持计划、授权和应用能力；`platform/tools` 持包管理器检测、固定包映射、提权认证及技术执行。HTTP 仍归 Remote interfaces。
 3. **依赖方向**：HTTP → tools Service → tools Model → machines Model / Platform；Service 复用原 MachineMutationService，安装与文件、Docker、Agent 远端突变按真实 endpoint 互斥。
 4. **类型与转换**：Shared remote/tools 定义有限工具、包管理器、提权方式、安全检查/安装契约；独立应用对象归 tools/model，技术对象归 Platform；HTTP 与 Model 分别白名单投影。sudo 密码仅写入 SSH stdin，不进入命令参数、持久化、公开结果或日志。
@@ -1724,7 +1724,9 @@ image_generate 仅负责生成并保存 App 文件，返回给模型的结果只
 2. **子功能与目录**：复用files/service/file-copy、files/model/file-model、transfers/model/server-transfer-model和platform/transfers/adapters/native-transfer；不增加第二套凭据或SSH实现。
 3. **依赖方向**：FileService→RemoteFileModel→ServerTransferModel→NativeTransferPort，技术句柄不进入Files Service；复用原机器Resolver和已信任主机公钥。
 4. **类型与转换**：Files内部直接复制请求/回调归file-task-types；Native回调归transfer-port；Model逐字段映射，Shared原WS totalBytes/totalKnown承载进度；Shared实际方法增加sftp，严格codec及双端消费者同版迁移。
-5. **入口与安装**：原transfer.copyMove与工具安装确认入口不变；register给FileModel注入同一ServerTransferModel。跨目标auto优先rsync，显式发送可选scp；源侧SSH探测先于目标文件变更，工具/版本、路由或源到目标连接不满足时回退中转，同目标保留SFTP文件操作。发送与剪贴板均消费copyRemoteEntries和RemoteFileModel.copyDirect。
+5. **入口与安装**：原transfer.copyMove入口不变；发送移除多余的前置工具检测/安装，归档保留实际依赖安装；register给FileModel注入同一ServerTransferModel。跨目标auto优先rsync，显式发送可选scp；源侧SSH探测先于目标文件变更，工具/版本、路由或源到目标连接不满足时回退中转，同目标保留SFTP文件操作。发送与剪贴板均消费copyRemoteEntries和RemoteFileModel.copyDirect。
 6. **数据与并发**：不改变双Workspace权限及机器突变围栏；只读取选择根元数据即可计算文件批总量。目录复制由rsync遍历，移动为安全删除保存源元数据，全部目标完成后复查再删源。
 7. **生命周期与失败**：原生进程有同任务期限/取消，实际退出与临时凭据清理由Native owner确认；只对not_started的连接/工具/端点不满足回退；直传已经派发、清理或结果未知不换方式重传。每任务对已确定不互通的目标记住中转选择，不重复逐项探测。部分发布、源删除或清理未确认仍为unknown，不自动重试。
 8. **当前能力与验收**：源码已接线，正式消费者与新增远程Actions用例覆盖单文件进度、内容、目录、移动和取消；生产网络吞吐未测，静态不代表实际速度。
+
+复制与上传准备的父目录事实仅在当前任务Set内复用；共享分支祖先只读取一次，同分支串行、不同分支仍按原窗口执行。任务结束不跨任务缓存，实际上传写入仍复查完整祖先。Agent读取/搜索的下一次inspectInfo已完整鉴权，删除紧邻该调用的重复validate，不删除跨异步操作的复查。

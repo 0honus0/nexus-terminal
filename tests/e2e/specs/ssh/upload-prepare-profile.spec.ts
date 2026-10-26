@@ -54,14 +54,9 @@ test('profile upload directory preparation and verify every requested directory'
 						expect((await stat(path.join(localRoot, directory))).isDirectory()).toBe(true);
 					const metrics = await fetch(`${E2E_SSH.controlUrl}/sftp/prepare-profile`);
 					expect(metrics.ok).toBe(true);
-					results.push({
-						delayMs,
-						shape,
-						sample,
-						directories: directories.length,
-						ms,
-						...(await metrics.json()),
-					});
+					const counts = await metrics.json();
+					expect(counts.prepareStatRequests).toBe(shape.startsWith('nested') ? 41 : 33);
+					results.push({ delayMs, shape, sample, directories: directories.length, ms, ...counts });
 				}
 			}
 		}
