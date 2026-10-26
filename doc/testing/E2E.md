@@ -1700,7 +1700,7 @@ D17：不新增/运行本地行为、浏览器/E2E或付费图片请求。现有
 
 按PLAN D17未新增/运行行为、浏览器专项或E2E。待验：经真实反向代理空闲超过60秒及多轮Ping；SSH/Agent/raw RDP/VNC并存；手机后台恢复、休眠/断网；发送背压、维护暂停恢复及停机无残留timer。未部署、重启或提交推送。
 
-## 全部本地变更审核与远程回归（2026-10-26，进行中）
+## 全部本地变更审核与远程回归（2026-10-26，已完成）
 
 用户授权审核、提交全部本地代码并修复远程E2E。两轮分组源码审核覆盖 Agent Run/Step/Tool/Child、预算和模型SDK重试、上下文摘要与标题、批准分页/策略、模型来源、Artifact空间与分块下载、前端流合并/乐观消息/目标记忆、终端生命周期/输入恢复、Workspace附件流控及WS保活；保留已有授权UI变更，本轮不增加UI设计修改。
 
@@ -1739,3 +1739,11 @@ D17：不新增/运行本地行为、浏览器/E2E或付费图片请求。现有
 e2f66bdf对应 https://github.com/0honus0/nexus-terminal/actions/runs/40262842979 ：质量、Docker及分片1/2/4/5/6/7/8通过；分片3仅完整插件审批出现一次flaky，重试后命令、unknown与上传/下载完整流程均通过，failOnFlakyTests正确阻止假绿。
 
 原trace已下载/tmp/nexus-e2e-40262842979-artifacts3，解压/tmp/nexus-e2e-round3-trace；日志/tmp/nexus-e2e-job-121378765711.log。证据：测试读取折叠状态后点击前，WS审批到达触发产品同步watch展开；测试toggle随后关闭，错误截图Tasks完全不存在而请求徽标已为1。修正为等待既有自动展开并核对Tasks可见，保留原卡片/版本/hash/审计/命令与附件断言，不改产品UI、不放宽flaky标准。两轮源码审核确认该用例是唯一waitNativeApproval后立即toggle面板入口。严格tsc、目标ESLint/格式及diff后按新SHA第四轮远程回归。
+
+### 最终验收：第四轮全绿（40263876745）
+
+代码提交fc5845fd97be449e11bb1b58b03ab2b9150af481，正式工作流 https://github.com/0honus0/nexus-terminal/actions/runs/40263876745 结论success。Checks/format/build、Docker deployment smoke、runner准备及8个Playwright分片全部success；463个用例通过，0失败、0 flaky。分片1–8分别72、42、69、36、55、49、66、74通过；分片2及3包含隔离运行的用例，计入各分片总数。审批卡片自动展开、原hash/版本与审计、命令执行、unknown、附件真实上传/验证下载全部通过。截图更新作业按未请求刷新而skipped，不是遗漏回归。
+
+全部分片原始日志/tmp/nexus-e2e-job-121381919{843,879,881,884,905,923,973}.log及/tmp/nexus-e2e-job-121381920218.log；本轮目标ESLint、严格tsc、格式和diff通过（/tmp/nexus-e2e-round4-{lint,types,format}.log）。源码两轮复审完成；没有本地行为/E2E运行，没有更改UI设计。远程CI自动提交0f44d2b3只刷新duration-estimates，已快进同步。
+
+本次代码审核、提交推送与远程E2E修复已完成。未部署、重启或发布应用镜像；初始v1数据库签名变化仍按H-12/D14使用新数据目录，不提供旧开发数据兼容。个人未跟踪截图不属于代码交付，保持原状。真实生产代理/Android后台等专项不因CI通过而扩大宣称已验。
