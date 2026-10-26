@@ -7,6 +7,8 @@ export type TerminalConnectionState = 'idle' | 'connecting' | 'connected' | 'dis
 
 export interface TerminalOutput {
 	data: string | Uint8Array;
+	/** Apply after data has been parsed and before subsequent output. */
+	viewport?: TerminalViewport;
 	consumed?: () => void;
 }
 

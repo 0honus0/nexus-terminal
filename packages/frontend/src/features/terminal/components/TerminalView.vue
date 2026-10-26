@@ -13,7 +13,7 @@
 	import { logger } from '@/client/logging/logger';
 	import '@xterm/xterm/css/xterm.css';
 	import type { TerminalChannel } from '../ports/terminal-channel';
-	import type { TerminalVisualOptions } from '../model/terminal-types';
+	import type { TerminalOutput, TerminalVisualOptions } from '../model/terminal-types';
 	import { createTerminalBackgroundDocument } from '../model/terminal-background-document';
 	import { useTerminalBackground } from '../composables/use-terminal-background';
 	import { trackTerminalRuntimeModes, type TerminalRuntimeModeTracker } from '../model/terminalRuntimeModes';
@@ -141,6 +141,8 @@
 	let geometryFrame: number | undefined;
 	let geometryResizeTimer: ReturnType<typeof setTimeout> | undefined;
 	let forceGeometrySync = false;
+	let restoringBaseline = false;
+	let restoringSnapshot = false;
 
 	const {
 		ready: backgroundReady,
@@ -158,7 +160,16 @@
 		clearTimeout(geometryResizeTimer);
 		geometryResizeTimer = undefined;
 		const element = root.value;
-		if (disposed || !viewActive || !terminal || !fit || !element?.isConnected) return;
+		if (
+			disposed ||
+			!viewActive ||
+			restoringBaseline ||
+			restoringSnapshot ||
+			!terminal ||
+			!fit ||
+			!element?.isConnected
+		)
+			return;
 		// Hidden ancestors trigger ResizeObserver with zero-size geometry. Keep the last
 		// valid viewport while hidden to avoid collapsing and reflowing the prompt on tab restore.
 		if (
@@ -592,6 +603,7 @@
 		terminalState.remotePtyGeneration,
 		() => {
 			resetInteractions();
+			restoringBaseline = false;
 			outputWriter.discard();
 			deferredTerminalOutput.length = 0;
 			historyReplayingOutput = [];
@@ -1266,7 +1278,8 @@
 		return liveReplaySnapshot();
 	};
 
-	const handleTerminalOutput = ({ data, consumed }: { data: string | Uint8Array; consumed?: () => void }): void => {
+	const handleTerminalOutput = ({ data, consumed, viewport }: TerminalOutput): void => {
+		if (viewport) restoringBaseline = true;
 		const decoded = terminalState.decodeOutput(data);
 		activatePagedHistoryMode();
 		if (historyBrowsing || historyRebuilding) {
@@ -1281,6 +1294,12 @@
 			!viewActive || !props.active || document.visibilityState === 'hidden',
 			consumed,
 		);
+		if (viewport) {
+			outputWriter.barrier(() => {
+				terminal?.resize(viewport.columns, viewport.rows);
+				terminalState.replaceGeometry(viewport.columns, viewport.rows);
+			});
+		}
 	};
 
 	watch(
@@ -1440,7 +1459,13 @@
 			() => backgroundResetOsc.dispose(),
 		);
 		if (snapshot && snapshotGeneration === terminalState.remotePtyGeneration.value) {
-			terminal.write(snapshot, syncSearchDecorations);
+			restoringSnapshot = true;
+			terminal.write(snapshot, () => {
+				restoringSnapshot = false;
+				if (disposed || snapshotGeneration !== terminalState.remotePtyGeneration.value) return;
+				syncSearchDecorations();
+				scheduleGeometryFit();
+			});
 		} else syncSearchDecorations();
 		root.value!.addEventListener('wheel', handleHistoryWheel, { capture: true, passive: false });
 		root.value!.addEventListener('touchstart', handleTouchStart, { capture: true, passive: false });
@@ -1582,8 +1607,11 @@
 						generation === terminalState.remotePtyGeneration.value &&
 						!historyBrowsing &&
 						!historyRebuilding
-					)
+					) {
+						restoringBaseline = false;
 						target.scrollToBottom();
+						scheduleGeometryFit();
+					}
 				});
 			}) ?? (() => undefined),
 			props.channel.onClose((reason) => {

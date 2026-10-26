@@ -1667,3 +1667,25 @@ Context预压缩现状：checkpoint工具需要实际context.compact授权，摘
 6. **数据、事务与并发**：无持久化；只向 OPEN 且无待发送缓冲的 socket 发 Ping，拥塞时已有输出承担保活，不堆积额外控制帧。
 7. **生命周期与失败**：timer unref，维护暂停时不发送，恢复后继续；close 同步清 timer，关闭中的 socket 跳过。发送异常记录 WS_KEEPALIVE_FAILED 并终止原损坏传输；不因漏收一次 Pong 判定失败，不改变原 SSH 会话存活策略。
 8. **当前能力与验收**：源码覆盖统一 channel/raw 入口；静态证据及真实代理空闲、后台/休眠、拥塞与维护关闭待验范围见 testing，不把保活表述为休眠仍在线保证。
+
+### 挂起终端画面恢复的尺寸顺序
+
+1. **职责与范围**：恢复原PTY画面时保留快照尺寸与实时输出尺寸，不改变UI设计。
+2. **子功能与目录**：复用Remote WorkspaceService/WS、Shared suspend契约、前端Workspace terminal adapter及TerminalView/output writer。
+3. **依赖方向**：后端应用提供快照和尺寸，WS投影事件；前端adapter转换为终端输出元数据，xterm操作仍由Terminal功能持有。
+4. **类型与转换**：Shared `suspend.viewport`严格解码columns/rows及baseline/live阶段；应用PreparedSuspendedWorkspace持有独立viewport，接口逐字段投影；前端转换为TerminalOutput.viewport。
+5. **入口与安装**：原suspend.resume先发送baseline尺寸再发送快照；resumeAck先发送live尺寸，再调整原PTY并释放实时输出，无新增用户入口。
+6. **数据、事务与并发**：尺寸切换经过xterm解析队列屏障，容器测量等待恢复完成；同尺寸PTY resize直接返回，checkpoint按捕获的每次尺寸排队，先于相应重绘数据。
+7. **生命周期与失败**：原ACK、背压、租约和失效清理保持；屏障绑定writer generation，旧PTY取消后不得调整新画面；本地重挂载快照同样等待解析完成才fit。
+8. **当前能力与验收**：实现与静态证据见PLAN/testing；既有fullscreen恢复回归同步协议顺序断言，真实浏览器宽窄切换、正常/备用缓冲区及后台恢复按D17待远程验收。
+
+### 挂起快照的活动屏幕滚动区域
+
+1. **职责与范围**：补齐SerializeAddon 0.14未保存的DECSTBM滚动边界，使重绘中途的快照可接续增量输出；不识别特定TUI文案、不改变UI设计。
+2. **子功能与目录**：Backend沿Platform headless-suspended-checkpoint技术Adapter，Frontend沿Terminal的terminalRuntimeModes tracker；各自管理原xterm实例。
+3. **依赖方向**：复用已安装xterm及SerializeAddon，仅使用公开parser、buffer、modes与resize接口，不引用私有core、不向Shared放入厂商实现。
+4. **类型与转换**：滚动区域使用1起始的技术行号，独立记录普通/备用缓冲区；CSI观察器返回false，接受/默认/裁剪规则匹配当前xterm。
+5. **入口与安装**：快照继续使用原序列化入口，已有鼠标模式后追加活动屏幕的非默认滚动边界，再恢复DECOM与光标位置，避免设置区域时光标归位。
+6. **数据、事务与并发**：状态随xterm解析更新，快照仍等待输出解析；软重置清当前区域、RIS与resize清两套区域，返回普通缓冲区清备用区域。
+7. **生命周期与失败**：原tracker统一释放parser/resize/buffer监听，沿原快照失败与清理路径；仅补齐活动屏幕区域，不承诺序列化任意未闭合ANSI解析状态或非活动屏幕的自定义区域。
+8. **当前能力与验收**：真实Codex分块数据在15个输出边界经双端实际实现回放，校准等价ANSI调色板编码后可见单元格无差异；后端9项定向回归、静态证据与实机边界见testing。运行中的旧Backend尚未加载本轮代码，不据此宣称端到端修复已实机验收。

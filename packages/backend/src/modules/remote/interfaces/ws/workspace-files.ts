@@ -807,7 +807,7 @@ class WorkspaceFilesSession {
 			this.attachmentGeneration = view.attachmentGeneration;
 			this.suspendedPending = prepared.resumedFrom;
 			this.suspendedDeliveredBytes = prepared.history.length;
-			this.suspendedViewport = input.viewport ?? null;
+			this.suspendedViewport = input.viewport ?? prepared.viewport;
 			try {
 				this.terminalOff.push(
 					this.workspaces.onPendingSuspendRevoked(view.workspaceId, view.attachmentId, (reason) => {
@@ -819,7 +819,12 @@ class WorkspaceFilesSession {
 						this.channel.close(1008, 'Suspended ownership revoked');
 					}),
 				);
-				// Raw baseline precedes final JSON, but NOT ownership commit.
+				// Geometry must precede the ANSI snapshot, and neither commits ownership.
+				this.sendEvent('suspend.viewport', {
+					columns: prepared.viewport.columns,
+					rows: prepared.viewport.rows,
+					stage: 'baseline',
+				});
 				await this.sendReplay(prepared.history, () =>
 					this.workspaces.allowed(this.token, view.workspaceId, view.attachmentId, true),
 				);
@@ -863,6 +868,13 @@ class WorkspaceFilesSession {
 			input.ownershipGeneration,
 		);
 		try {
+			if (this.suspendedViewport) {
+				this.sendEvent('suspend.viewport', {
+					columns: this.suspendedViewport.columns,
+					rows: this.suspendedViewport.rows,
+					stage: 'live',
+				});
+			}
 			this.bindTerminal(false); // Baseline was already delivered before ACK.
 			if (this.suspendedViewport) {
 				this.workspaces.resize(id, attachmentId, this.suspendedViewport.columns, this.suspendedViewport.rows);

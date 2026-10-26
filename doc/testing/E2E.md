@@ -1784,3 +1784,21 @@ e2f66bdf对应 https://github.com/0honus0/nexus-terminal/actions/runs/4026284297
 | 日志       | 新后端启动及验证期间无error级日志；未据此宣称未覆盖的真实SSH/浏览器视觉行为已验。                                                                        |
 
 远程备份目录/home/honus/product/nexus_terminal/upgrade-20261026T035324Z（0700）：data-env-compose-before-upgrade.tar.gz、nexus-terminal-before-upgrade.db及previous-data完整旧目录；包含实例密钥，保留root权限，不上传仓库。部署元数据deployment.json、final-import.json及final-verification.json保存在该目录；本地日志/tmp/nexus-upgrade-{prepare,trial-import,trial-http,cutover,final-http,final-check}.log。首次临时验证误用了settings/appearance及credentials复数路径，按真实路由纠正后26项全通过；最初公网检查将无Cookie的正常401误当失败，核对认证路由后按真实语义记录，不修改产品。没有输出或更换原密码、实例密钥或Provider密钥。未保留浏览器测试会话、未运行本地E2E；原个人截图保持不动。
+
+### 挂起关闭恢复画面几何修复（2026-10-26）
+
+截图显示恢复后的TUI底部重复提示及空白；源码核对确认快照尺寸缺失、重复PTY resize和checkpoint尺寸排队问题。既有SSH `resizing a suspended fullscreen terminal is ordered after its checkpoint`同步验证baseline尺寸先于快照、live尺寸在快照之后；保留原快照正文断言。D17下未执行本地行为或E2E。
+
+待远程：普通缓冲区TUI/备用屏幕在同尺寸、宽窄及高低变化后挂起关闭恢复，底部提示/光标正常；恢复时切后台、重挂载及多SSH切换保留各自输出；连续resize的checkpoint按每次尺寸处理，相同尺寸不重复发送远端调整；ACK失败/被接管仍不开放输入。
+
+静态证据：两轮源码审核覆盖快照/实时尺寸事件、预挂载缓冲、xterm解析队列及失效generation、同尺寸去重、checkpoint resize/reset尺寸捕获、ACK与背压保持；`pnpm run check`、`pnpm run build`（含Shared/Backend/Frontend）、`pnpm run format:all:check`和`git diff --check`通过。日志：`/tmp/nexus-suspend-geometry-{check,build,all-format}.log`；末次reset尺寸捕获后的Backend check/build分别见`/tmp/nexus-suspend-geometry-backend-{recheck,build}.log`。静态通过不代表截图实机/E2E已通过，本轮未重启、提交或推送；保留其它正在修改的UI/Agent文件及原截图。
+
+### Codex挂起恢复：高延时与滚动区域定向验证（2026-10-26）
+
+用户明确授权api.honus.top的Codex测试及高延时时序排查，本轮限定该链路。使用独立Chrome/CDP与自建测试SSH会话，未接管用户现有终端；初次共享浏览器的恢复定位存在歧义，其结果作废，后续按精确suspend ID隔离。普通静止、执行中排队、75×28窄窗口恢复，以及WS上行700ms/下行900ms（实际往返约1.9秒）均保留输入区背景，未直接稳定复现原截图。
+
+真实Codex 0.164.0输出显示DECSTBM区域处于1–29行而屏幕共34行；SerializeAddon 0.14不保存此状态。126×34真实输出按15个块间边界快照/接续，旧路径在重绘区域未还原的切点有1287–1576个单元格差异；补齐边界后余下7项均为同色调色板16色/256色编码差异，规范化后无可见字符格差异。实际新Backend checkpoint factory及浏览器加载的新Frontend tracker分别重放15个切点，全部零差异；非手工拼接修复后缀代替实现验证。
+
+持久回归：`tests/backend/remote/backend-next-terminal.integration.mjs`新增7个真实xterm快照接续场景（普通/备用屏、DECOM、非法区域忽略、软重置、RIS、resize），断言后续滚动后的完整屏幕字符/背景及底部输入区保留；连同原两项共9项通过。检查命令：`node --test tests/backend/remote/backend-next-terminal.integration.mjs`。既有SSH fullscreen E2E保留几何顺序断言，尚未运行本轮远程Actions。
+
+证据：`/tmp/nexus-codex-region-tests.log`、`/tmp/nexus-codex-factory-replay.log`、`/tmp/nexus-codex-browser-replay-result.json`、`/tmp/nexus-codex-delayed-private-result.log`。原始流仅放/tmp，不提交对话内容或Cookie。源码复核两轮覆盖几何、解析屏障、scroll region与监听生命周期；末轮check/build/全量format/diff日志分别为`/tmp/nexus-codex-region-{check,build,format}.log`。实机原截图尚未稳定复现，旧Backend进程尚未加载本轮代码，不能宣称新版本端到端恢复通过；非活动缓冲区区域和任意未闭合ANSI解析状态不在本轮快照保证内。无UI设计变更；按用户后续授权提交本次修复，未推送或部署重启。

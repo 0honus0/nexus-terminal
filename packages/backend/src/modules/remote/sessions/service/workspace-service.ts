@@ -1004,9 +1004,10 @@ export class WorkspaceService {
 				throw new WorkspaceFailure('operation_unknown');
 			}
 			if (initialBuffer && existing.checkpoint) {
+				const viewport = { columns: record.viewport.columns, rows: record.viewport.rows };
 				existing.tail = existing.tail.then(async () => {
 					try {
-						await existing.checkpoint?.reset(initialBuffer, record.viewport);
+						await existing.checkpoint?.reset(initialBuffer, viewport);
 					} catch {
 						await existing.checkpoint?.dispose();
 						existing.checkpoint = null;
@@ -1301,11 +1302,13 @@ export class WorkspaceService {
 				throw new WorkspaceFailure('remote_unavailable');
 			}
 			let baseline: Uint8Array | null = null;
+			let baselineViewport = { columns: record.viewport.columns, rows: record.viewport.rows };
 			let cursor = 0;
 			if (mark.checkpoint) {
 				try {
 					const snapshot = await mark.checkpoint.snapshot();
 					baseline = Buffer.from(snapshot.data, 'utf8');
+					baselineViewport = { columns: snapshot.columns, rows: snapshot.rows };
 					cursor = await this.logs.position(mark.id);
 				} catch {
 					await mark.checkpoint.dispose();
@@ -1340,6 +1343,7 @@ export class WorkspaceService {
 				},
 				resumedFrom: suspendedId,
 				history: pending.history,
+				viewport: baselineViewport,
 				historyAvailable: pending.historyCursor > 0,
 				ownershipGeneration: pending.ownerGeneration,
 				ownershipLeaseExpiresAt: Date.now() + 45_000,
@@ -2504,20 +2508,26 @@ export class WorkspaceService {
 		if (record.phase !== 'attached' || record.attachmentId !== attachmentId || !record.shellId) {
 			throw new WorkspaceFailure('not_found');
 		}
-		this.shells.resize(record.shellId, columns, rows);
-		record.viewport = { columns, rows };
+		if (record.viewport.columns === columns && record.viewport.rows === rows) {
+			return;
+		}
+		const viewport = { columns, rows };
+		if (record.suspend) {
+			record.suspend.viewport = viewport;
+		}
 		if (record.suspend?.checkpoint) {
 			const mark = record.suspend;
-			mark.viewport = record.viewport;
 			mark.tail = mark.tail.then(async () => {
 				try {
-					await mark.checkpoint?.resize(record.viewport);
+					await mark.checkpoint?.resize(viewport);
 				} catch {
 					await mark.checkpoint?.dispose();
 					mark.checkpoint = null;
 				}
 			});
 		}
+		this.shells.resize(record.shellId, columns, rows);
+		record.viewport = viewport;
 	}
 
 	pause(id: string, attachmentId: string): void {

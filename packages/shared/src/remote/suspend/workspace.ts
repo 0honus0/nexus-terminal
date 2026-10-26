@@ -105,7 +105,14 @@ export interface WorkspaceSuspendResponses {
 	'suspend.rename': null;
 }
 
+export interface WorkspaceSuspendViewportEvent {
+	columns: number;
+	rows: number;
+	stage: 'baseline' | 'live';
+}
+
 export interface WorkspaceSuspendEvents {
+	'suspend.viewport': WorkspaceSuspendViewportEvent;
 	'suspend.autoTerminated': WorkspaceSuspendAutoTerminatedEvent;
 	'suspend.revoked': WorkspaceSuspendRevokedEvent;
 	'suspend.unmarked': WorkspaceSuspendUnmarkedEvent;

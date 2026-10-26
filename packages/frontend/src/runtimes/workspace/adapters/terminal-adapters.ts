@@ -6,7 +6,12 @@ import {
 import { WORKSPACE_SUSPEND_MAX_HISTORY_PAGE_BYTES } from '@nexus-terminal/shared/remote/suspend/values';
 import { WorkspaceSuspendFailure } from '../model/workspace-suspend-types';
 import { logger } from '@/client/logging/logger';
-import type { TerminalChannel, TerminalOutput, TerminalViewport } from '@/features/terminal/public';
+import {
+	RESET_REMOTE_PTY_DISPLAY,
+	type TerminalChannel,
+	type TerminalOutput,
+	type TerminalViewport,
+} from '@/features/terminal/public';
 import { TerminalDirectoryFailure, type TerminalDirectoryPort } from '@/features/filesystem/public';
 import { WorkspaceSocket } from '../protocol/workspaceSocket';
 import { WorkspaceDispatchFailure, WorkspaceRequestFailure } from '../model/workspace-error-types';
@@ -68,6 +73,16 @@ export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceT
 	socket.onClose(invalidateHistory);
 	socket.on('terminal.closed', discardRemoteOutput);
 	socket.on('terminal.error', discardRemoteOutput);
+
+	socket.on('suspend.viewport', ({ columns, rows, stage }) => {
+		const output: TerminalOutput = {
+			data: stage === 'baseline' ? RESET_REMOTE_PTY_DISPLAY : '',
+			viewport: { columns, rows },
+		};
+		if (outputHandlers.size) {
+			for (const handler of outputHandlers) handler(output);
+		} else buffered.push(output);
+	});
 
 	socket.onBinary((data, consumed) => {
 		if (outputHandlers.size) {

@@ -100,6 +100,7 @@ export interface PreparedSuspendedWorkspace {
 	readonly lease: WorkspaceLease;
 	readonly resumedFrom: string;
 	readonly history: Uint8Array;
+	readonly viewport: WorkspaceViewport;
 	readonly historyAvailable: boolean;
 	readonly ownershipGeneration: number;
 	readonly ownershipLeaseExpiresAt: number;

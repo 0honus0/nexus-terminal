@@ -415,3 +415,14 @@ providers/model的AgentProviderModelInput允许可选capabilitySources，取值�
 6. **数据、事务与并发**：Shared仅校验形状与协议容量，不代替服务端已有占用、预留和磁盘空间检查。
 7. **生命周期与失败**：容量拒绝沿既有limit_exceeded；SDK/浏览器字符串技术上限归Platform，不能下沉为Shared文件政策。不为旧设置文档做兼容转换。
 8. **当前能力与验收**：双端及现有流式读取夹具已同步；静态与待验边界见testing。
+
+### 挂起终端画面恢复的尺寸顺序
+
+1. **职责与范围**：恢复原PTY画面时保留快照尺寸与实时输出尺寸，不改变UI设计。
+2. **子功能与目录**：复用Remote WorkspaceService/WS、Shared suspend契约、前端Workspace terminal adapter及TerminalView/output writer。
+3. **依赖方向**：后端应用提供快照和尺寸，WS投影事件；前端adapter转换为终端输出元数据，xterm操作仍由Terminal功能持有。
+4. **类型与转换**：Shared `suspend.viewport`严格解码columns/rows及baseline/live阶段；应用PreparedSuspendedWorkspace持有独立viewport，接口逐字段投影；前端转换为TerminalOutput.viewport。
+5. **入口与安装**：原suspend.resume先发送baseline尺寸再发送快照；resumeAck先发送live尺寸，再调整原PTY并释放实时输出，无新增用户入口。
+6. **数据、事务与并发**：尺寸切换经过xterm解析队列屏障，容器测量等待恢复完成；同尺寸PTY resize直接返回，checkpoint按捕获的每次尺寸排队，先于相应重绘数据。
+7. **生命周期与失败**：原ACK、背压、租约和失效清理保持；屏障绑定writer generation，旧PTY取消后不得调整新画面；本地重挂载快照同样等待解析完成才fit。
+8. **当前能力与验收**：实现与静态证据见PLAN/testing；既有fullscreen恢复回归同步协议顺序断言，真实浏览器宽窄切换、正常/备用缓冲区及后台恢复按D17待远程验收。

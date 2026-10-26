@@ -1,3 +1,4 @@
+import { readWorkspaceTerminalResize } from '../terminal/workspace-codec.js';
 import { readWorkspaceAttachment } from '../workspace/workspace-codec.js';
 import { readSuspendedSessionId } from './http-codec.js';
 import {
@@ -8,6 +9,7 @@ import {
 } from './values.js';
 import type {
 	WorkspaceSuspendMarkResponse,
+	WorkspaceSuspendViewportEvent,
 	WorkspaceSuspendResumeResponse,
 	WorkspaceSuspendOwnerRenewResponse,
 	WorkspaceSuspendHistoryPreviousResponse,
@@ -146,4 +148,10 @@ export function readWorkspaceSuspendUnmarked(value: unknown): WorkspaceSuspendUn
 		suspendedSessionId: readSuspendedSessionId(row.suspendedSessionId),
 		generation: positive(row.generation),
 	};
+}
+
+export function readWorkspaceSuspendViewport(value: unknown): WorkspaceSuspendViewportEvent {
+	const row = object(value, ['columns', 'rows', 'stage']);
+	const viewport = readWorkspaceTerminalResize(row);
+	return { columns: viewport.columns, rows: viewport.rows, stage: choice(row.stage, ['baseline', 'live']) };
 }

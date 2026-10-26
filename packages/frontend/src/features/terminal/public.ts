@@ -12,7 +12,7 @@ export type {
 	TerminalVisualOptions,
 } from './model/terminal-types';
 
-export { createTerminalSessionState } from './state/terminalSessionState';
+export { RESET_REMOTE_PTY_DISPLAY, createTerminalSessionState } from './state/terminalSessionState';
 
 export type { TerminalSessionState } from './state/terminalSessionState';
 

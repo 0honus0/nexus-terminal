@@ -6,6 +6,7 @@ import type {
 } from '@nexus-terminal/shared/remote/suspend/workspace';
 import {
 	readWorkspaceSuspendAutoTerminated,
+	readWorkspaceSuspendViewport,
 	readWorkspaceSuspendRevoked,
 	readWorkspaceSuspendUnmarked,
 } from '@nexus-terminal/shared/remote/suspend/workspace-result-codec';
@@ -111,6 +112,8 @@ function readKnownEvent(type: string, payload: unknown): unknown {
 			return readRemoteStatusSample(payload);
 		case 'status.error':
 			return readWorkspaceStatusError(payload);
+		case 'suspend.viewport':
+			return readWorkspaceSuspendViewport(payload);
 		case 'suspend.autoTerminated':
 			return readWorkspaceSuspendAutoTerminated(payload);
 		case 'suspend.revoked':

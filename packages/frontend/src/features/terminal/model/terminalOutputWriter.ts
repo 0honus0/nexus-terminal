@@ -65,6 +65,14 @@ export const createTerminalOutputWriter = (write: TerminalWrite) => {
 				timer = window.setTimeout(() => flush(false), BACKGROUND_BATCH_MS);
 		},
 
+		barrier(action: () => void): void {
+			flush();
+			const current = generation;
+			write('', () => {
+				if (current === generation) action();
+			});
+		},
+
 		flush,
 
 		drain(): Promise<void> {

@@ -3,6 +3,7 @@ import { E2E_URLS } from '../../support/test-env';
 import type { SuspendedSessionView as SuspendedSession } from '../../../../packages/shared/src/remote/suspend/http';
 import type { PresentationLayout } from '../../../../packages/shared/src/preferences/presentation/model';
 import { readSuspendedSessionCatalog } from '../../../../packages/shared/src/remote/suspend/http-codec';
+import { readWorkspaceSuspendViewport } from '../../../../packages/shared/src/remote/suspend/workspace-result-codec';
 import {
 	readPreferencesResponse,
 	readLayoutResponse,
@@ -609,11 +610,22 @@ test('resizing a suspended fullscreen terminal is ordered after its checkpoint',
 		expect(suspended).toBeTruthy();
 
 		const initialChunks: Buffer[] = [];
+		const presentationOrder: string[] = [];
 
 		const onInitialMessage = (data: Buffer, isBinary: boolean) => {
-			if (!isBinary) return;
+			if (!isBinary) {
+				const event = JSON.parse(data.toString());
+				if (event.type === 'suspend.viewport') {
+					const viewport = readWorkspaceSuspendViewport(event.payload);
+					presentationOrder.push(`${viewport.stage}:${viewport.columns}x${viewport.rows}`);
+				}
+				return;
+			}
 			const frame = decodeWorkspaceBinaryFrame(Buffer.from(data));
-			if (frame.kind === 'terminal') initialChunks.push(Buffer.from(frame.data));
+			if (frame.kind === 'terminal') {
+				initialChunks.push(Buffer.from(frame.data));
+				presentationOrder.push('output');
+			}
 		};
 
 		recovery.on('message', onInitialMessage);
@@ -624,6 +636,9 @@ test('resizing a suspended fullscreen terminal is ordered after its checkpoint',
 		});
 		recovery.off('message', onInitialMessage);
 		const cached = Buffer.concat(initialChunks).toString('utf8');
+		expect(presentationOrder[0]).toBe(`baseline:${originalColumns}x${originalRows}`);
+		const liveViewport = presentationOrder.indexOf(`live:${resumedColumns}x${resumedRows}`);
+		expect(liveViewport).toBeGreaterThan(presentationOrder.indexOf('output'));
 		expect(cached).toContain('RESIZE_BASELINE');
 		expect(cached).toContain(`STATUS_${originalColumns}x${originalRows}`);
 		expect(cached).not.toContain(`STATUS_${resumedColumns}x${resumedRows}`);
