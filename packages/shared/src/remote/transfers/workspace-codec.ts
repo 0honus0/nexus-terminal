@@ -15,12 +15,7 @@ import type {
 	WorkspaceUploadPrepared,
 	WorkspaceTaskStarted,
 } from './workspace.js';
-import {
-	WORKSPACE_TRANSFER_MAX_PATH_BYTES,
-	WORKSPACE_TRANSFER_MAX_TASK_ID_BYTES,
-	WORKSPACE_TRANSFER_MAX_SOURCES,
-	WORKSPACE_UPLOAD_MAX_PREPARE_DIRECTORIES,
-} from './values.js';
+import { WORKSPACE_TRANSFER_MAX_PATH_BYTES, WORKSPACE_TRANSFER_MAX_TASK_ID_BYTES } from './values.js';
 
 export class InvalidWorkspaceTransferPayload extends Error {
 	constructor() {
@@ -78,7 +73,7 @@ function absolutePath(value: unknown): string {
 export function readWorkspaceUploadPrepared(input: unknown): WorkspaceUploadPrepared {
 	const preparedDirectories = nonnegativeInteger(row(input).preparedDirectories);
 	// The producer includes the root in addition to the submitted directories.
-	if (preparedDirectories < 1 || preparedDirectories > WORKSPACE_UPLOAD_MAX_PREPARE_DIRECTORIES + 1) {
+	if (preparedDirectories < 1) {
 		throw new InvalidWorkspaceTransferPayload();
 	}
 	return { preparedDirectories };
@@ -157,11 +152,7 @@ export function readWorkspaceUploadEvent(input: unknown): WorkspaceUploadEvent {
 
 export function readWorkspaceUploadPrepare(input: unknown): WorkspaceUploadPrepare {
 	const value = row(input);
-	if (
-		!Array.isArray(value.directories) ||
-		value.directories.length > WORKSPACE_UPLOAD_MAX_PREPARE_DIRECTORIES ||
-		value.directories.some((item) => typeof item !== 'string')
-	) {
+	if (!Array.isArray(value.directories) || value.directories.some((item) => typeof item !== 'string')) {
 		throw new InvalidWorkspaceTransferPayload();
 	}
 	return {
@@ -249,7 +240,6 @@ export function readWorkspaceCopyMove(input: unknown): WorkspaceCopyMoveRequest 
 		(data.mode !== 'copy' && data.mode !== 'move') ||
 		!Array.isArray(data.sources) ||
 		data.sources.length < 1 ||
-		data.sources.length > WORKSPACE_TRANSFER_MAX_SOURCES ||
 		data.sources.some(
 			(p) =>
 				typeof p !== 'string' ||
@@ -282,7 +272,6 @@ export function readWorkspaceArchiveCompress(input: unknown): WorkspaceArchiveCo
 	if (
 		!Array.isArray(data.sources) ||
 		data.sources.length < 1 ||
-		data.sources.length > WORKSPACE_TRANSFER_MAX_SOURCES ||
 		data.sources.some(
 			(value) =>
 				typeof value !== 'string' ||

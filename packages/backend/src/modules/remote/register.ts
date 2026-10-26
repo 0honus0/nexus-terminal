@@ -7,7 +7,6 @@ import { SqliteMachineMutationStorage } from './machines/adapters/sqlite/mutatio
 import { MachineMutationModel } from './machines/model/mutation-model.js';
 import { MachineMutationService } from './machines/service/mutation-service.js';
 import { MutationRecoveryService } from './machines/service/mutation-recovery-service.js';
-import { validateMutationCapacity } from './machines/mutation-rules.js';
 import { createMutationHttpRoutes } from './interfaces/http/mutation-http.js';
 import { SecureSessionTokens } from '../../platform/security/adapters/secure-session-tokens.js';
 import type { SqlExecutor } from '../../platform/storage/sqlite/sql-types.js';
@@ -419,5 +418,5 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 
 /** Installation-only fixed storage coverage; no business records leave the adapter. */
 export function registerRemoteBackup(): SnapshotRegistration {
-	return registerRemoteSnapshot(validateMutationCapacity);
+	return registerRemoteSnapshot();
 }

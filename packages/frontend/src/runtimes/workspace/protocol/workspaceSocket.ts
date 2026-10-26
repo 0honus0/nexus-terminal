@@ -62,7 +62,10 @@ import { logger } from '@/client/logging/logger';
 import { openWebSocket } from '@/client/websocket';
 import { decodeWorkspaceBinaryFrame } from '@nexus-terminal/shared/remote/workspace/workspace-binary';
 import { readWorkspaceFileReadBinaryRequest } from '@nexus-terminal/shared/remote/files/workspace-codec';
-import { WORKSPACE_FILES_MAX_BINARY_READ_BYTES } from '@nexus-terminal/shared/remote/files/values';
+import {
+	WORKSPACE_FILES_MAX_BINARY_READ_BYTES,
+	WORKSPACE_FILES_TRANSFER_TIMEOUT_MS,
+} from '@nexus-terminal/shared/remote/files/values';
 import {
 	WORKSPACE_SUSPEND_MAX_HISTORY_PAGE_BYTES,
 	WORKSPACE_SUSPEND_MAX_JSON_BYTES,
@@ -165,6 +168,15 @@ interface WorkspaceSocketLogContext {
 
 const OPEN_TIMEOUT_MS = 10_000;
 const REQUEST_TIMEOUT_MS = 30_000;
+
+function requestTimeout(type: string): number {
+	// Bulk operations have a server-owned deadline. Leave the ordinary response
+	// window for its terminal result instead of abandoning them after 30 seconds.
+	return type === 'filesystem.remove' || type === 'upload.prepare'
+		? WORKSPACE_FILES_TRANSFER_TIMEOUT_MS + REQUEST_TIMEOUT_MS
+		: REQUEST_TIMEOUT_MS;
+}
+
 const HIGH_FREQUENCY_OPERATIONS = new Set([
 	'terminal.input',
 	'terminal.resize',
@@ -466,7 +478,7 @@ export class WorkspaceSocket {
 			if (!socket || socket.readyState !== WebSocket.OPEN) {
 				return Promise.reject(new WorkspaceDispatchFailure('not_connected'));
 			}
-			return this.requestInternal<unknown>(type, requestId, payload, false, REQUEST_TIMEOUT_MS, socket, signal);
+			return this.requestInternal<unknown>(type, requestId, payload, false, requestTimeout(type), socket, signal);
 		};
 	}
 
@@ -536,7 +548,7 @@ export class WorkspaceSocket {
 		requestId: string,
 		payload: object,
 		expectBinary: boolean,
-		timeoutMs = REQUEST_TIMEOUT_MS,
+		timeoutMs = requestTimeout(type),
 		expectedSocket?: WebSocket,
 		signal?: AbortSignal,
 	): Promise<T | { data: T; bytes: Uint8Array }> {

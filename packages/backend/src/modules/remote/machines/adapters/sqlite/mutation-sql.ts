@@ -50,10 +50,8 @@ export class SqliteMachineMutationStorage implements MachineMutationStorage {
 
 	acquire(
 		claim: StoredMutationClaim,
-		maxClaims: number,
-		maxHistory: number,
 		authority?: { digest: string; admit(identity: number | null): void },
-	): Promise<'acquired' | 'conflict' | 'limit_exceeded'> {
+	): Promise<'acquired' | 'conflict'> {
 		return this.db.transaction(async (tx) => {
 			if (authority) {
 				authority.admit(await this.identity(tx, authority.digest));
@@ -65,23 +63,6 @@ export class SqliteMachineMutationStorage implements MachineMutationStorage {
 				if (await tx.one('SELECT claim_id FROM remote_machine_mutations WHERE resource_key=?', [key])) {
 					return 'conflict';
 				}
-			}
-			const resources = await tx.one('SELECT COUNT(*) AS total FROM remote_machine_mutations');
-			const history = await tx.one(
-				"SELECT COUNT(*) AS total FROM remote_machine_mutation_claims WHERE state!='released'",
-			);
-			if (
-				!resources ||
-				!history ||
-				typeof resources.total !== 'number' ||
-				!Number.isSafeInteger(resources.total) ||
-				typeof history.total !== 'number' ||
-				!Number.isSafeInteger(history.total)
-			) {
-				throw new Error('Corrupt mutation count');
-			}
-			if (resources.total + claim.keys.length > maxClaims || history.total >= maxHistory) {
-				return 'limit_exceeded';
 			}
 			await tx.run(
 				"INSERT INTO remote_machine_mutation_claims(id,owner_id,origin,targets_json,resource_count,state,revision,created_at) VALUES(?,?,?,?,?,'held',1,?)",

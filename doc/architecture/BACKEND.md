@@ -285,7 +285,7 @@ Shared wire 与内部观测事实独立定义；HTTP/WS 投影逐字段构造，
 | 日志/checkpoint 技术事实                               | 有界字节范围、偏移/修订、模式与视口                                       | sessions Model + Platform 本机日志/terminal 技术契约           | Model 字段投影；Service 持有页大小/保留/恢复政策；WS/HTTP 安全输出                               |
 | 关联 Files 资源                                        | workspaceId、会话绑定与附件实例                                           | `remote/files/model/file-types.ts`                             | Workspace Service 调用 FileService 的实例绑定 release；Files Service 自行管理任务                |
 
-Files请求/完整成功结果和ready/error事件统一由Shared remote/files/workspace及codec表达；正式浏览/编辑/预览消费者已在F1-C2-B1迁移，不留转导出兼容桥。metadata的accessedAt/modifiedAt由SFTP Model转换为Unix毫秒后投影，前端不二次换算。目录20,000项、搜索500项的结果上限由Shared values唯一维护，后端遍历队列/并发策略仍归Files。正式下载与上传port已迁Shared；上传完整回执/终态按原附件投影，failed.message使用Shared有限RemoteFileErrorCode，内部FileUploadEvent仍归Files Model；独立服务器传输HTTP也已接Shared；完整页面继续C2-D。
+Files请求/完整成功结果和ready/error事件统一由Shared remote/files/workspace及codec表达；正式浏览/编辑/预览消费者已在F1-C2-B1迁移，不留转导出兼容桥。metadata的accessedAt/modifiedAt由SFTP Model转换为Unix毫秒后投影，前端不二次换算。目录列表不设置条目数量门槛，完整响应仍按Shared的8MiB字节预算；搜索500项的结果上限由Shared values唯一维护，后端遍历队列/并发策略仍归Files。正式下载与上传port已迁Shared；上传完整回执/终态按原附件投影，failed.message使用Shared有限RemoteFileErrorCode，内部FileUploadEvent仍归Files Model；独立服务器传输HTTP也已接Shared；完整页面继续C2-D。
 
 内部复用应用类型在所属 `model/*-types.ts`；存储契约在 storage；技术契约在 Platform；后端跨模块类型在 public；双端契约按 [Shared 架构](SHARED.md) 归属。类型与实现分开，低层不反向引用上层。Remote 内部会话关闭原因归 sessions/model，后端公开原因独立定义；内部 Model/Service 不引用本模块 public 类型。
 
@@ -467,7 +467,7 @@ Workspace WS 的输出暂停/恢复同时绑定 workspaceId 与 attachmentId，�
 
 二进制读取的允许类型、容量和初始范围由 Service 确定，Model/Platform 按明确字节范围读取；空文件不创建无界流，短读不能伪报完整成功，后续追加不扩张本次范围。范围确定不等于内容快照；失败、提前终止和消费者断开都须收敛底层读取。
 
-R2 后，Files Service 的 `runAdmitted` 统一限定二进制数据及 final 帧发送期限，Service 将同一有效 signal/剩余期限交给 Interface 的 NXW1/backpressure 发送循环；Interface 不再独立无限等待。应用交付联合类型 `FileBinaryPiece`/回调归 Files Model 类型 owner，Interface 仅投影具体帧。Workspace `ping` 调用 Service 核对登录身份、配置指纹、资源权威状态及 Workspace ID 并续期；失效绑定不继续发布成功。Files Service 对普通 Workspace 保留 64 个含 opening/closing 的预约，独立 HTTP Files 另有 8 个名额，晚到清理与无法确认的关闭仍占对应名额，避免错误释放。
+R2 后，Files Service 的 `runAdmitted` 统一限定二进制数据及 final 帧发送期限，Service 将同一有效 signal/剩余期限交给 Interface 的 NXW1/backpressure 发送循环；Interface 不再独立无限等待。应用交付联合类型 `FileBinaryPiece`/回调归 Files Model 类型 owner，Interface 仅投影具体帧。Workspace `ping` 调用 Service 核对登录身份、配置指纹、资源权威状态及 Workspace ID 并续期；失效绑定不继续发布成功。Files Service 不按Workspace attachment或独立HTTP Files数量拒绝创建；opening/closing、晚到清理与无法确认的关闭继续追踪至实际完成，不因移除准入门槛而丢弃资源。
 
 R2 二次审核：Workspace `connect` 的 Targets `get` 不再由 Interface 在容量/期限之外等待，Files Service 在第一次 await 前预留 workspaceId 和 64 槽，将身份/Targets 查找/SSH open 置于同一个可中断的建连期限；返回 `WorkspaceFileAttachment.connectionName` 的应用事实，WS Interface 仅投影。关闭期间底层 SSH cleanup 可能无界，不能以强制短路伪称已清理；WS 心跳和断开先失效绑定、交还确定失败，Service 对迟到资源、关闭 Promise 和清理错误持续负责，**只有确认释放成功才归还名额**。测试夹具的 Service 构造调用已同步注入 Targets public 查询；慢查、竞态与失败清理的精确验收范围见 testing；受控 Service 队列、晚构造及64预约证据不替代真实传输故障。
 
@@ -481,7 +481,7 @@ B2 源码已包含独立 HTTP 文件下载 ticket/GET/HEAD/目录 ZIP 和 binary
 
 本批没有把旧传输实现照搬为远端通用命令：旧跨机器执行曾将私钥临时放在远端机器上、使用包含密码的命令参数，新 copy/move 使用独立的 SFTP 源/目标技术资源；未知副作用不自动重放。旧上传传输层异步触发 append，但其 Service 本来有串行队列；新 binary WS 在技术接收层额外显式串行并受背压/字节上限控制。旧目录 ZIP 遍历与短期下载票据活跃流过期等隐患均增加有界 owner 处理。跨不同登录 token 的同用户 Workspace 源资源改经 Access authenticateDigest 校验原会话有效性及当前请求者身份；原 bearer 不保留。Model 的 SFTP readlink/symlink 支撑保留链接本体，目录复制后显式恢复 mode，旧隐式跟随 symlink 的行为不照搬。
 
-B2 archive 由 Service 决定输入/成员安全/任务/取消与发布；file-archive-model 将应用参数/结果和错误显式转换，Platform archive native Adapter 持有 shell 命令、原生列表及退出码解码；FileResource 管 SSH/SFTP 技术资源：压缩通过原生 `zip`、GNU `tar` 直接在远端写带格式后缀的私有 `.part`，由 SFTP 确认后 rename/replace；支持归档输出位于所选源目录内部，不做源树预扫描，直接将所选路径交给原生工具递归处理，不设置压缩总条目数或目录深度上限，命令明确排除旧目标和临时项。解压先用远端原生 `cp --reflink=auto --no-dereference` 建立权限受限的私有归档快照并经 SFTP 核验文件类型/大小，`unzip`/`zipinfo` 或 GNU `tar` 对该快照分别列出简略成员名与详细成员元数据并逐项交叉检查名称/类型/大小（GNU tar 顶层 `./` 不占发布条目预算），实际提取使用同一份快照，按规范化路径、非目录祖先、重复名称、特殊成员、20k 项/64 GiB 声明展开预算与 64 层深度校验，GNU tar 使用 `--no-overwrite-dir` 防止根条目改写私有 stage 权限，先提取至私有 stage，再由 SFTP 复核每一项的真实类型、实际文件大小、总展开体积/层级及 setuid/setgid 权限位，并预检查目标路径类型冲突后发布；原生提取显式排除 symlink/hardlink，只提取普通文件和目录；应用校验通过后，符号链接经 FileResource/SFTP 创建，TAR 硬链接由 ArchiveModel → native Adapter 的 `ln -P` 创建，避免提取中沿归档链接写入；设备/特权成员仍在提取前拒绝。源可能并发变化，预检不等于文件快照；保留 unknown 退役、取消与进度边界。密码执行器按实施方案 D12 保留原生 zip/unzip `-P`：密码经 POSIX shell quote 直接拼入原生命令参数，与旧正式实现一致；接受 SSH command string 和工具 argv 中包含密码，不额外导出密码环境变量，不记录完整命令或回传诊断。无需新增归档 PTY、Python 或 Expect；现有 Model 转换不变。B10 核对密码/失败/秘密日志行为；不承诺 AES 兼容。
+B2 archive 由 Service 决定输入/成员安全/任务/取消与发布；file-archive-model 将应用参数/结果和错误显式转换，Platform archive native Adapter 持有 shell 命令、原生列表及退出码解码；FileResource 管 SSH/SFTP 技术资源：压缩通过原生 `zip`、GNU `tar` 直接在远端写带格式后缀的私有 `.part`，由 SFTP 确认后 rename/replace；支持归档输出位于所选源目录内部，不做源树预扫描，直接将所选路径交给原生工具递归处理，不设置压缩总条目数或目录深度上限，命令明确排除旧目标和临时项。解压先用远端原生 `cp --reflink=auto --no-dereference` 建立权限受限的私有归档快照并经 SFTP 核验文件类型/大小，`unzip`/`zipinfo` 或 GNU `tar` 对该快照分别列出简略成员名与详细成员元数据并逐项交叉检查名称/类型/大小（GNU tar 顶层 `./` 不占发布条目预算），实际提取使用同一份快照，按规范化路径、非目录祖先、重复名称、特殊成员、安全整数大小，不按成员数量、深度或固定64GiB展开量拒绝，GNU tar 使用 `--no-overwrite-dir` 防止根条目改写私有 stage 权限，先提取至私有 stage，再由 SFTP 复核每一项的真实类型、实际文件大小及 setuid/setgid 权限位，并预检查目标路径类型冲突后发布；原生提取显式排除 symlink/hardlink，只提取普通文件和目录；应用校验通过后，符号链接经 FileResource/SFTP 创建，TAR 硬链接由 ArchiveModel → native Adapter 的 `ln -P` 创建，避免提取中沿归档链接写入；设备/特权成员仍在提取前拒绝。源可能并发变化，预检不等于文件快照；保留 unknown 退役、取消与进度边界。密码执行器按实施方案 D12 保留原生 zip/unzip `-P`：密码经 POSIX shell quote 直接拼入原生命令参数，与旧正式实现一致；接受 SSH command string 和工具 argv 中包含密码，不额外导出密码环境变量，不记录完整命令或回传诊断。无需新增归档 PTY、Python 或 Expect；现有 Model 转换不变。B10 核对密码/失败/秘密日志行为；不承诺 AES 兼容。
 
 SFTP 单次元数据请求的技术上限唯一归 Platform SSH 契约，FileResource Model 将应用剩余期限限制到该上限；上传字节流仍使用完整传输期限，不把总任务预算当作单次 RPC 预算。同目标移动在目标不存在时优先 rename；已有普通文件或目录走既有 staged copy/merge，全部复制确认后再删除来源，类型冲突仍拒绝。
 
@@ -495,7 +495,7 @@ Native Adapter 将原始工具退出码归一为 NativeArchiveOperationOutcome�
 
 mutation 技术结果区分 `not_started / failed / unknown`；远端 command channel 建立也使用同样派发分类。已派发后取消、deadline 或连接终止不证明远端回滚，unknown 资源退役且不自动重试。写入已生效后的读取或结果校验失败同样保持未知结果，不能按普通未写入失败处理。确定失败尽力清理临时项；unknown 时不继续发可能与晚到 mutation 竞争的清理命令，因此真实服务器可能残留私有 temp/backup，B10 必须核对。整体停机有界、原子 nofollow、原子 CAS 和文件快照不能凭接口宣称。
 
-远端能力按实施方案 D13 保持现有 SSH/SFTP 和原生工具要求，不部署新增 helper 或特权/文件系统配额。路径检查与发布间的同权限并发替换窗口、解压期间无总磁盘硬配额均为明确接受的能力限制；64 GiB 是声明/事后展开量的应用预算。保留私有 snapshot/stage、成员拒绝、逐项复查、结果确认及清理失败追踪，不将这些机制描述为强隔离或实时磁盘限额。
+远端能力按实施方案 D13 保持现有 SSH/SFTP 和原生工具要求，不部署新增 helper 或特权/文件系统配额。路径检查与发布间的同权限并发替换窗口、解压期间无总磁盘硬配额均为明确接受的能力限制；不另设固定展开体积拒绝门槛。保留私有 snapshot/stage、成员拒绝、逐项复查、结果确认及清理失败追踪，不将这些机制描述为强隔离或实时磁盘限额。
 
 原 Python 版 `dir_fd`/`O_NOFOLLOW` 解压审查为历史记录，不构成原生 CLI 安全保证。当前原生工具排除全部归档内链接，安全相对 symlink 和指向归档普通文件的 TAR hardlink 在独立步骤恢复；device/特权节点和危险链接拒绝；通过私有 staging + SFTP 类型检查限制已知攻击面，但最终目标目录替换仍存在竞态；取消或断线后只在能确认远端命令结束时尝试清理 staging，不能宣称所有资源已原子清理。原生命令退出 marker/进度解析、POSIX/DOS 属性、ZIP 加密及目录合并需 B10 验证。旧正式实现本来不支持 AES；Python 迁移中间方案不是旧功能基线。Model SSH stdout 按行白名单解析，stderr 独立 drain 且不回显。Service upload/copy/move/archive 仍统一阻止活跃 taskId 冲突、复查异步身份与任务实例。
 
@@ -507,7 +507,7 @@ file-copy以256 KiB固定窗口聚合读取，逐窗等待stage append确认，�
 
 压缩源递归归原生 ZIP/TAR 工具，不在 Files Service 或 SFTP 重复遍历；删除源树计数/深度预算、特殊节点清单及其 `FileArchiveSources` 类型。Native Adapter 的条目输出仅转换成展示进度，不作为源树完整性的证明；随机原生命令结束标记与进程退出结果负责完成判定，Service 确认临时产物后发布，非零无密码 ZIP 仍须独立 `zip -T` 核验才可返回 `verified_warning`。特殊节点遵循工具行为：ZIP 跳过 FIFO/socket，GNU tar 保留 FIFO 元数据并忽略 socket；解压仍独立拒绝特殊成员。原生命令已退出、尚未尝试发布且私有输出已删除/确认不存在时，具名 `FileArchiveDiscarded` 表示确定失败，沿既有 RemoteFileFailure 分类结算机器突变名额并发送普通失败；专属资源关闭失败仍覆盖为清理未知，已经尝试rename/replace或原始未知错误不降级。错误不公开原始工具输出或远端路径。
 
-Files Service 统一维护每 Workspace 16 个 prepare/upload/copy-move/archive 活跃名额，排队与清理失败任务计入总数；同步检查后立即登记，prepare 收尾释放名额，已完成 allowlist 独立缓存。FileArchiveModel 将 NativeArchiveFailure.cleanup_failed 显式转换为模块具名清理失败，不以普通 unknown 抹除生命周期事实。
+Files Service 不以prepare/upload/copy-move/archive任务数量拒绝操作；同步登记后交给原写入队列，同组16项只作为调度窗口，超出者排队。清理失败任务和未确认资源继续追踪，已完成allowlist按有效期清理；目录准备不设置单批/累计目录数量门槛。FileArchiveModel 将 NativeArchiveFailure.cleanup_failed 显式转换为模块具名清理失败，不以普通 unknown 抹除生命周期事实。
 
 Files 操作在准入后、串行排队前登记 active/inFlight，关闭和 quiesce 覆盖排队与执行，追踪到 finally 退订和解锁完成。尚未执行的排队请求取消不退役健康 Workspace，也不提前解除前序门禁；入场认证等待归既有 authorizing owner。跨 Workspace copy/move 的私有任务记录双端归属，任一端关闭取消任务，双端关闭都汇总关联清理失败；控制协议、任务 ID 和授权仍归原目标端。上传任务用独立discarding状态区分清理已开始与最终块已接纳：取消/断流先停止接纳，原worker排空WRITE、关闭并删除stage，重复取消等待同一settlement，字节通道关闭不再次中断租约。首次断流仍为unknown；提交后的取消与真实清理失败不因该状态放宽。
 
@@ -954,7 +954,7 @@ Agent tools 持有 Run-local 项目目录；Remote machines 持有受管远端�
 
 ### 2. 子功能与目录
 
-Agent tools/{model,service,storage,adapters/sqlite}/tool-project-* 分别持有应用类型/转换、目录用例、存储契约与真实 SQL；tools/service/tool-definitions 和 tool-input 持有受信声明/严格参数，ToolModel 持有 Remote 请求/结果/失败转换。Remote machines 对应层的 mutation-* 持有应用身份/转换、准入政策、存储接口和 SQLite 事务，migrations 仅安装 Adapter。128 个 endpoint 占用、单次最多两个 endpoint 是 Remote Service 政策；目录256 UTF-8 bytes、子目录深度8、四份文件/每份8 KiB 是 Agent 项目用例限制，不是新增 HTTP 容量。
+Agent tools/{model,service,storage,adapters/sqlite}/tool-project-* 分别持有应用类型/转换、目录用例、存储契约与真实 SQL；tools/service/tool-definitions 和 tool-input 持有受信声明/严格参数，ToolModel 持有 Remote 请求/结果/失败转换。Remote machines 对应层的 mutation-* 持有应用身份/转换、准入政策、存储接口和 SQLite 事务，migrations 仅安装 Adapter。endpoint占用不设全局数量门槛，单次最多两个endpoint对应源/目标是Remote Service政策；目录256 UTF-8 bytes、子目录深度8、四份文件/每份8 KiB 是 Agent 项目用例限制，不是新增 HTTP 容量。
 
 ### 3. 依赖方向
 
@@ -1324,7 +1324,7 @@ Shared 仅定义安全观察、明确证据写命令/释放命令、完整响应
 
 ### 6. 数据、事务与并发
 
-remote_machine_mutations 只持有活跃资源锁；新增 mutation_claims 与 mutation_evidence 两张持久表保留阻断/释放历史。正常已确认操作释放并移除临时 claim，blocked/released 证据不自动清除。最多128活跃资源、4096未释放claim、每claim 16份证据；released历史只保留审计，不占准入配额，未确认占用不能循环覆盖。记录证据、推进 claim 修订同事务，释放核对原 claim 修订与最新 evidence 身份、完整锁集并原子移除锁/保存 released。读取和恢复写入在实际事务入场及交付/提交前检查原管理员会话；末次复查失败回滚本次写入。会话摘要的同步技术失败同样在Model转换。只修改初始 v1，无旧库兼容。
+remote_machine_mutations 只持有活跃资源锁；新增 mutation_claims 与 mutation_evidence 两张持久表保留阻断/释放历史。正常已确认操作释放并移除临时 claim，blocked/released 证据不自动清除。活跃资源和未释放claim不设全局数量门槛，每claim保留16份证据的协议预算；released历史保留审计，未确认占用不能循环覆盖；快照校验同步移除全局计数限制，仍核对完整锁集与证据。记录证据、推进 claim 修订同事务，释放核对原 claim 修订与最新 evidence 身份、完整锁集并原子移除锁/保存 released。读取和恢复写入在实际事务入场及交付/提交前检查原管理员会话；末次复查失败回滚本次写入。会话摘要的同步技术失败同样在Model转换。只修改初始 v1，无旧库兼容。
 
 ### 7. 生命周期与失败
 
@@ -1468,7 +1468,7 @@ Remote register 安装 `/api/v1/transfers/send`、`status`、`status/:taskId`、
 
 ### 6. 数据、事务与并发
 
-任务列表维持进程内语义，32 个在途/unknown、100 个已确认终态；unknown 不裁剪。最多5个互不冲突父任务并行，父内子项串行；父期限1小时含排队，单子项最多5分钟。每个子项在源/目标真实 endpoint 的持久突变围栏取得后才执行，保存可关联子任务的 claim ID；重启 held 转 blocked，不重派。列表重启后清空不代表远端结束，恢复依据归已有机器突变观察/证据/释放接口。无新迁移或伪造持久任务表。
+任务列表维持进程内语义，不按32个在途/unknown任务拒绝，保留最新100个已确认终态；unknown不裁剪。最多5个互不冲突父任务并行，父内子项串行；父期限1小时含排队，单子项最多5分钟。每个子项在源/目标真实 endpoint 的持久突变围栏取得后才执行，保存可关联子任务的 claim ID；重启 held 转 blocked，不重派。列表重启后清空不代表远端结束，恢复依据归已有机器突变观察/证据/释放接口。无新迁移或伪造持久任务表。
 
 ### 7. 生命周期与失败
 

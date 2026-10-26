@@ -46,10 +46,8 @@ export interface MachineMutationStorage {
 	ownExecution(work: () => Promise<void>): Promise<void>;
 	acquire(
 		claim: StoredMutationClaim,
-		maxClaims: number,
-		maxHistory: number,
 		authority?: { digest: string; admit(identity: number | null): void },
-	): Promise<'acquired' | 'conflict' | 'limit_exceeded'>;
+	): Promise<'acquired' | 'conflict'>;
 	settle(id: string, keys: string[], blocked: boolean, now: number): Promise<void>;
 	reconcile(now: number): Promise<void>;
 	list(

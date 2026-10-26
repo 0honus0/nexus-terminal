@@ -26,7 +26,6 @@ import {
 	WORKSPACE_DOWNLOAD_MAX_JSON_BYTES,
 } from '@nexus-terminal/shared/remote/transfers/values';
 
-const ACTIVE_DOWNLOAD_LIMIT = 8;
 const DOWNLOAD_DEADLINE_MS = 60 * 60 * 1000;
 const HEAD_DEADLINE_MS = 30_000;
 
@@ -139,7 +138,6 @@ function downloadSink<TPlan>(
 
 /** Old route method/path remain stable; streams do not flow through JSON helpers. */
 export function createFileDownloadHttpRoutes(files: RemoteFileService): HttpRoute[] {
-	let active = 0;
 	const issueTicket: HttpRoute = {
 		method: 'POST',
 		path: '/api/v1/sftp/download-ticket',
@@ -213,7 +211,6 @@ export function createFileDownloadHttpRoutes(files: RemoteFileService): HttpRout
 			if (ctx.request.aborted || response.destroyed) {
 				cancelled();
 			}
-			let admitted = false;
 			try {
 				const ticket = ctx.query.get('ticket');
 				const id = ticket === null ? connectionId(ctx.query.get('connectionId')) : 0;
@@ -223,13 +220,6 @@ export function createFileDownloadHttpRoutes(files: RemoteFileService): HttpRout
 					throw new RemoteFileFailure('invalid_input');
 				}
 				const kind = ticket === null && ctx.query.get('disposition') === 'inline' ? 'inline' : 'attachment';
-				if (method === 'GET') {
-					if (active >= ACTIVE_DOWNLOAD_LIMIT) {
-						throw new RemoteFileFailure('limit_exceeded');
-					}
-					active++;
-					admitted = true;
-				}
 
 				const plan = async (plan: FileDownloadPlan) => {
 					if (controller.signal.aborted) {
@@ -351,9 +341,6 @@ export function createFileDownloadHttpRoutes(files: RemoteFileService): HttpRout
 				}
 			} finally {
 				clearTimeout(deadline);
-				if (admitted) {
-					active--;
-				}
 				ctx.request.off('aborted', cancelled);
 				response.off('close', closed);
 			}
@@ -383,18 +370,12 @@ export function createFileDownloadHttpRoutes(files: RemoteFileService): HttpRout
 			if (ctx.request.aborted || response.destroyed) {
 				aborted();
 			}
-			let admitted = false;
 			try {
 				const targetId = connectionId(ctx.query.get('connectionId'));
 				const filePath = ctx.query.get('remotePath');
 				if (!filePath) {
 					throw new RemoteFileFailure('invalid_input');
 				}
-				if (active >= ACTIVE_DOWNLOAD_LIMIT) {
-					throw new RemoteFileFailure('limit_exceeded');
-				}
-				active++;
-				admitted = true;
 				await files.downloadDirectory(
 					ctx.cookie(ACCESS_SESSION_COOKIE_NAME),
 					ctx.query.get('sessionId'),
@@ -423,9 +404,6 @@ export function createFileDownloadHttpRoutes(files: RemoteFileService): HttpRout
 				}
 			} finally {
 				clearTimeout(deadline);
-				if (admitted) {
-					active--;
-				}
 				ctx.request.off('aborted', aborted);
 				response.off('close', closed);
 			}

@@ -12,14 +12,7 @@ import {
 } from '../model/file-task-types.js';
 import { FileArchiveModel } from '../model/file-archive-model.js';
 
-import {
-	ARCHIVE_MAX_ENTRIES as LIMIT,
-	ARCHIVE_MAX_BYTES as UNPACK_BYTES,
-	ARCHIVE_MAX_DEPTH as MAX_DEPTH,
-	validateListing,
-	resolveLinkTargets,
-	resolveHardlinkTargets,
-} from '../file-archive-rules.js';
+import { validateListing, resolveLinkTargets, resolveHardlinkTargets } from '../file-archive-rules.js';
 
 const CLEANUP_MS = 5_000;
 
@@ -425,8 +418,6 @@ export async function decompressRemoteArchive(
 		const unseen = new Set(members.keys());
 		const implicitDirs = new Set<string>();
 		const stagedMetadata = new Map<string, FileInfo>();
-		let extractedFiles = 0;
-		let extractedBytes = 0;
 		for (const name of members.keys()) {
 			const parts = name.split('/');
 			for (let i = 1; i < parts.length; i++) {
@@ -476,17 +467,10 @@ export async function decompressRemoteArchive(
 			await checkStageDirectory(prefix);
 			for (const entry of await resource.scan({
 				path: dir,
-				maxEntries: LIMIT + 1,
 				timeoutMs: Math.min(remaining(), 300_000),
 				signal,
 			})) {
-				if (++extractedFiles > LIMIT) {
-					throw new RemoteFileFailure('limit_exceeded');
-				}
 				const name = prefix ? prefix + '/' + entry.name : entry.name;
-				if (name.split('/').length > MAX_DEPTH + 1) {
-					throw new RemoteFileFailure('limit_exceeded');
-				}
 				const kind = members.get(name)?.kind ?? (implicitDirs.has(name) ? 'directory' : null);
 				if (!kind || kind !== entry.info.kind) {
 					throw new RemoteFileFailure('invalid_input');
@@ -511,10 +495,6 @@ export async function decompressRemoteArchive(
 					const claimed = members.get(name);
 					if (!claimed || entry.info.size !== claimed.size) {
 						throw new RemoteFileFailure('invalid_input');
-					}
-					extractedBytes += entry.info.size;
-					if (extractedBytes > UNPACK_BYTES) {
-						throw new RemoteFileFailure('limit_exceeded');
 					}
 				}
 				if (!Number.isSafeInteger(entry.info.modifiedAt) || entry.info.modifiedAt < 0) {
@@ -648,7 +628,6 @@ export async function decompressRemoteArchive(
 			await checkStageDirectory(prefix);
 			for (const entry of await resource.scan({
 				path: dir,
-				maxEntries: LIMIT + 1,
 				timeoutMs: Math.min(remaining(), 300_000),
 				signal,
 			})) {

@@ -59,12 +59,7 @@ export class MachineMutationModel {
 		}
 	}
 
-	acquire(
-		claim: MachineMutationClaim,
-		maxClaims: number,
-		maxHistory: number,
-		actor?: MutationRecoveryActor,
-	): Promise<'acquired' | 'conflict' | 'limit_exceeded'> {
+	acquire(claim: MachineMutationClaim, actor?: MutationRecoveryActor): Promise<'acquired' | 'conflict'> {
 		return storage(() =>
 			this.owner.acquire(
 				{
@@ -78,8 +73,6 @@ export class MachineMutationModel {
 					})),
 					now: Date.now(),
 				},
-				maxClaims,
-				maxHistory,
 				actor
 					? {
 							digest: actor.digest,

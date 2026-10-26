@@ -21,9 +21,7 @@ function groupByClaim(rows: readonly SqlRow[], ids: ReadonlySet<string>): Map<st
 }
 
 /** Fixed current table/column coverage owned by remote; no runtime schema discovery. */
-export function registerRemoteSnapshot(
-	admitCapacity: (claims: number, resources: number) => void,
-): SnapshotRegistration {
+export function registerRemoteSnapshot(): SnapshotRegistration {
 	const tables: SnapshotTable[] = [
 		{
 			name: 'remote_machine_mutation_claims',
@@ -63,7 +61,6 @@ export function registerRemoteSnapshot(
 			const claims = rows.get('remote_machine_mutation_claims') ?? [];
 			const evidence = rows.get('remote_machine_mutation_evidence') ?? [];
 			const locks = rows.get('remote_machine_mutations') ?? [];
-			admitCapacity(claims.filter((claim) => claim.state !== 'released').length, locks.length);
 			const ids = new Set(
 				claims.map((row) => {
 					if (typeof row.id !== 'string') {

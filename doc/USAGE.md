@@ -337,12 +337,12 @@ HTML终端背景在同页会话切换时保留实例；离开Workspace后，重�
 
 | 范围               | 限制                                                       |
 | ------------------ | ---------------------------------------------------------- |
-| Workspace 文件操作 | 16 个准备/上传/复制移动/归档操作，控制 WS 64 个请求        |
+| Workspace 文件操作 | 准备/上传/复制移动/归档不按任务数拒绝；控制 WS 64 个请求   |
 | 上传目录 batch     | 准备完成起30分钟，过期后须显式重新选择上传                 |
 | 活跃上传           | 5 分钟无有效块或写入无法收敛则失败并清理临时文件           |
-| GET/ZIP 下载       | 单用户部署共用 8 个在途任务，满载 429；HEAD 不打开流       |
+| GET/ZIP 下载       | 不按全局下载数量拒绝，按流背压；HEAD 不打开流              |
 | 下载预读           | 每流 16 KiB × 最多 64 块，约 1 MiB；按顺序输出，支持 Range |
-| 递归搜索           | 8 个并行目录、500 个结果、5,000 个扫描目录                 |
+| 递归搜索           | 8 个并行目录、最多返回500个结果，不限制扫描目录总数        |
 | 上传目录准备       | 新后端先完整校验计划，再逐项准备，全部成功后才上传文件     |
 
 - 正式Workspace下载已接Shared：文件取得同源短期票据，目录直接流式ZIP；票据初始有效期300秒，完整JSON请求/响应最多32KiB。离开/停用文件面板或原附件断开后，晚到票据不再触发下载；浏览器接管后的保存进度不由页面确认，取消页面等待不证明浏览器下载停止。
@@ -418,7 +418,7 @@ PDF 缩放或容器宽度变化后的异步页定位保留当前横向滚动位�
 | 文本      | 有效 UTF-8 原文 ≤16 MiB；拒绝 NUL/明显控制字符；读取/保存普通文件，不把现有符号链接当文本目标。完整 JSON 请求/响应另按转义后的 Shared wire 预算约束                                                                    |
 | 保存      | 同目录独占临时文件；预期新建时用标准 SFTP rename，目标已存在则失败，新文件默认 0600；覆盖已有文件才走 replace，并保留原 mode。客户端提交 `expectedSha256=null` 表示预期不存在，或提交读取所得 SHA-256 表示预期现有版本 |
 | 基础操作  | rename 要求目标预检不存在且不主动覆盖；remove 删除单个文件或符号链接自身；mkdir 只建单层目录；rmdir 只删空目录，不递归                                                                                                 |
-| 资源/期限 | 单实例 8 个，闲置约 2 分钟；JSON body 接收仍受 Platform 约 15 秒 request timeout，完整解码后单次打开/读写/基础操作的认证、指纹复查和多步文件流程约 30 秒                                                               |
+| 资源/期限 | 不设独立资源数量门槛，闲置约 2 分钟；JSON body 接收仍受 Platform 约 15 秒 request timeout，完整解码后单次打开/读写/基础操作的认证、指纹复查和多步文件流程约 30 秒                                                      |
 
 绑定当前会话、目标及配置指纹，敏感操作前后复查。hash/metadata 预检只能尽力发现冲突，SSH/SFTP 不提供本批所需的原子 CAS；普通 rename 也不宣称跨所有服务器的原子 no-overwrite。覆盖已有文件优先使用服务器的 OpenSSH POSIX rename 替换；不支持时使用 backup→rename→cleanup 回退，其恢复/清理也不保证跨断线原子完成。
 
@@ -426,7 +426,7 @@ PDF 缩放或容器宽度变化后的异步页定位保留当前横向滚动位�
 
 ### backend-next 的旧 Workspace Files 子协议
 
-当前仍是源码开发入口，R2 已将 Workspace 文件 attachment 的 64 个含 pending/closing 准入名额与独立 HTTP Files 的 8 个名额分开。名额由 Files Service 持有，资源关闭真正完成后才归还，清理无法确认时不提前释放；两个入口不复用活跃 SFTP lease。有效的 `workspace.ping` 会重新核对登录会话、文件资源/目标指纹并续期，失效则拒绝并开始清理。二进制数据与 0-byte final 帧的背压等待均受同一文件操作的取消和约 30 秒期限约束，不在 Service 返回后再作无限等待。B10已有限验证Service排队撤销、执行前身份/指纹复查、晚构造的64预约及失败保留；Access/SFTP为受控接缝，真实传输并发与故障继续验收，不能把Files-only接口当完整正式Workspace。
+Workspace 文件 attachment 与独立 HTTP Files 不再按资源数量拒绝创建；Files Service 仍追踪 opening、active、closing 和清理未确认的资源至真实关闭，两个入口不复用活跃 SFTP lease。有效的 `workspace.ping` 会重新核对登录会话、文件资源/目标指纹并续期，失效则拒绝并开始清理。二进制数据与 0-byte final 帧的背压等待均受同一文件操作的取消和约 30 秒期限约束，不在 Service 返回后再作无限等待。B10已有限验证Service排队撤销、执行前身份/指纹复查、晚构造资源及失败保留；Access/SFTP为受控接缝，真实传输并发与故障继续验收，不能把Files-only接口当完整正式Workspace。
 
 为保持正式 Files 消费者的现有通信入口，backend-next 已安装 `/ws/workspace` 的 Files 子协议源码：fresh `workspace.connect`、`workspace.ping`、`filesystem.list/search/stat/readBinary/cancelRead/writeText/createDirectory/createFile/remove/rename/chmod/realpath`，以及 `filesystem.ready/error`。请求/响应继续使用旧 `{type,requestId?,payload?}` / `type=response + payload.ok/data/error` 外壳；控制消息上限 1 MiB、最多 64 个在途请求。binary read 单请求最多 64 MiB、同 socket 最多 4 个，NXW1 response frame 每帧最多 256 KiB；数据结束后先发 0-byte final frame，再发 JSON success。取消只停止当前读取 owner，不证明远端瞬时停止。读取范围固定为开始时的文件大小，后续追加不扩大本次读取；空文件只发送 final，短读报失败，固定范围不代表内容快照。断开后的资源释放绑定原 owner，不要求失效会话重新认证。独立 Files/PTY HTTP 开启接口在响应真正完成前保留断连清理（取得资源后最多等待 15 秒交付），不能以 send 返回判定交付完成。Workspace attachment 撤销时丢弃尚未派发的终端输入，重附着者不会继承旧输入；已写入远端的输入无法撤回。
 
@@ -434,7 +434,7 @@ PDF 缩放或容器宽度变化后的异步页定位保留当前横向滚动位�
 
 旧事件面复查确认只有 `filesystem.ready/error`：保存、新建、删除、重命名、chmod 等 mutation 的完成由对应 request/response 表达，旧 Backend/Protocol 没有独立 `filesystem.changed` / file-modified 事件。R1 不为“修改通知”臆造新 WS 消息；界面在 mutation 响应后的刷新/失效仍由前端用例负责。
 
-旧 Workspace Files 路径按 POSIX 绝对路径及 NUL 拒绝规则规范化，不套用上表新 HTTP 的 4096-byte 路径产品限制。list/stat 继续返回旧 metadata（含 uid/gid/atime/mtime 与 file/directory/symlink 标识）；search 保留 500 结果、5000 目录（含待遍历队列）、8 并发及子目录消失时跳过并标明截断，单目录最多扫描 20,000 项；root 或其他目录读取故障明确失败。Workspace 列目录最多 20,000 项；普通递归 remove 单批最多访问 20,000 个节点、根目录为第 0 层且最多向下 64 层。超过容量明确失败；已经发生部分删除时保留 operation_unknown，不自动重试。普通 remove 对目录做 symlink-safe 递归删除且缺失路径视为 no-op；批量按输入顺序执行；明确 force 的目录依次尝试 `rm -rf`、`sudo rm -rf`。write/create 保留已知 iconv 编码、未知编码回退 UTF-8、输入 BOM 处理和 UTF-16LE/BE BOM。
+旧 Workspace Files 路径按 POSIX 绝对路径及 NUL 拒绝规则规范化，不套用上表新 HTTP 的 4096-byte 路径产品限制。list/stat 继续返回旧 metadata（含 uid/gid/atime/mtime 与 file/directory/symlink 标识）；search 保留500结果、8并发及子目录消失时跳过并标明截断，不设置扫描目录总数或单目录条目门槛；root或其他目录读取故障明确失败。Workspace列目录不设条目数量门槛，仍校验完整8MiB响应。普通递归remove不限制节点总数或目录深度；已经发生部分删除后失败仍保留operation_unknown，不自动重试。批量删除和上传目录准备由前端等待原1小时后端期限及最终回执，不再在30秒时提前提示失败。普通 remove 对目录做 symlink-safe 递归删除且缺失路径视为 no-op；批量按输入顺序执行；明确 force 的目录依次尝试 `rm -rf`、`sudo rm -rf`。write/create 保留已知 iconv 编码、未知编码回退 UTF-8、输入 BOM 处理和 UTF-16LE/BE BOM。
 
 旧 `RemoteTextWriter` 的“已有目标 metadata 读取失败也静默继续保存”**不再由后端兼容**：目标不存在仍是正常新文件情况，但目标存在时 stat/metadata 失败直接返回真实失败。正式前端在 F1 联调时须显式刷新/重新载入并由用户决定再次保存，不依赖后端吞错或自动重放未知写入。
 
@@ -442,17 +442,17 @@ R1/R2 只补齐 Files 子协议的 fresh attachment、受认证存活续期与�
 
 ### Backend B2 传输开发入口（源码已收口、行为待验）
 
-B2 源码阶段已收口，行为验收统一留 B10；本节覆盖 Files 传输，终端、重附着和挂起恢复见 Workspace/挂起章节，正式上传/下载已接新契约，服务器传输及整体页面仍在F1后续。已有源码入口：POST /api/v1/sftp/download-ticket、GET/HEAD /api/v1/sftp/download、GET /api/v1/sftp/download-directory、独立 /ws/uploads 与 Workspace 的 upload.prepare/start/cancel/abort、transfer.copyMove/cancel。短期下载票据绑定原会话摘要、原活动文件资源实例、Workspace、目标、路径、大小/修改时间及来源 IP；直接下载接受单段 Range 或 suffix Range，206 返回 Content-Range，无法满足范围返回 416；HEAD 不读取正文，响应以流式背压和客户端关闭取消收敛。ZIP 目录下载使用有界递归、真实路径祖先去环和流式压缩，不预先缓冲整个压缩包；消费者断开或失败后，生产者和源读取者一起停止并收尾。
+B2 源码阶段已收口，行为验收统一留 B10；本节覆盖 Files 传输，终端、重附着和挂起恢复见 Workspace/挂起章节，正式上传/下载已接新契约，服务器传输及整体页面仍在F1后续。已有源码入口：POST /api/v1/sftp/download-ticket、GET/HEAD /api/v1/sftp/download、GET /api/v1/sftp/download-directory、独立 /ws/uploads 与 Workspace 的 upload.prepare/start/cancel/abort、transfer.copyMove/cancel。短期下载票据绑定原会话摘要、原活动文件资源实例、Workspace、目标、路径、大小/修改时间及来源 IP；直接下载接受单段 Range 或 suffix Range，206 返回 Content-Range，无法满足范围返回 416；HEAD 不读取正文，响应以流式背压和客户端关闭取消收敛。ZIP 目录下载不限制条目总数或目录深度，使用真实路径祖先去环和流式压缩，不预先缓冲整个压缩包；消费者断开或失败后，生产者和源读取者一起停止并收尾。
 
 对照旧 `sftp.routes.ts` 再核实：非票据 GET `/download` 遇目录时也应直接流式 ZIP，HEAD `/download` 遇目录只返回 ZIP 类型头；inline 预览超出大小限制须明确返回 413 而非并发配额 429。旧版本未实现 ETag、If-Range、Last-Modified 条件下载，不为这些不存在的旧契约增加猜测性兼容。B2 已补上述源码路径，但响应流、断线和实际浏览器行为仍需 B10。
 
 下载票据在认证、资源和指纹复查成功后才登记；HEAD/GET（含空文件、Range）只有完成响应收尾后才续期，最终 flush 失败不按成功续期。Workspace 的下载操作及票据 claim 覆盖整个交付，显式关闭或取消也覆盖 final 等待。定长下载保留最后1字节至源读取及最终授权复查完成，再随响应结束交付；空文件不附加字节。服务器完成响应收尾不替代客户端确认文件完整；断流后核对结果，不以 headers 或进度 100% 判成功。HTTP inline 预览最多 20 MiB，按 Shared 容量定义；前端各格式可以采用更低预算。
 
-B2 每个 Workspace 的准备、上传、copy/move 与归档共用 16 个活跃任务名额，排队任务及清理失败的保留任务也占用名额；满载返回 limit_exceeded。相同 prepareId 正在执行时返回 conflict，准备完成后 allowlist 不继续占用活跃任务名额。
+每个 Workspace 的准备、上传、copy/move 与归档不按固定任务数量拒绝；写入按原文件变更队列调度，同组最多16项，其余等待下一组，不丢任务。相同 prepareId 正在执行时返回 conflict；准备完成后的 allowlist 按有效期清理。
 
-上传使用独立 SFTP lease、同目录随机私有 staged 文件，按 WS binary 顺序写入，完成最后一块后提交、校验并发送 transfer.upload 终态；零字节文件不要求前端另开上传 socket。upload.prepare 单批最多 20,000 个目录，建立限定根目录的相对路径 allowlist；cancel/abort、超时、断线不能证明已派发写入回滚，未知完成保留 operation_unknown 而不自动重试。未知上传可能保留临时文件并阻止同主机其他 Workspace、路径的后续写入；原 Workspace 的健康读取、终端与其他 SSH 端点（host/port）不因此失效。先核对原资源和实际文件，再按机器突变恢复流程处理，不反复重传。SFTP copy/move 使用文件/目录遍历、独立读写 lease、copy 后确认，move 在全部目标确认后删除源；中途可能已有副作用时按 unknown 对待。复制以最多256 KiB内存批次写入，进度只计已确认数据；上传取消停止派发后续写入批次，并等待在途批次和临时文件清理确认。
+上传使用独立 SFTP lease、同目录随机私有 staged 文件，按 WS binary 顺序写入，完成最后一块后提交、校验并发送 transfer.upload 终态；零字节文件不要求前端另开上传 socket。upload.prepare 不设置目录项数量门槛，建立限定根目录的相对路径 allowlist；cancel/abort、超时、断线不能证明已派发写入回滚，未知完成保留 operation_unknown 而不自动重试。未知上传可能保留临时文件并阻止同主机其他 Workspace、路径的后续写入；原 Workspace 的健康读取、终端与其他 SSH 端点（host/port）不因此失效。先核对原资源和实际文件，再按机器突变恢复流程处理，不反复重传。SFTP copy/move、目录ZIP下载和普通递归删除不设置20,000项或64层门槛，批量复制/压缩不再限制64个来源；实际路径仍受POSIX路径和协议字节容量约束。SFTP copy/move 使用文件/目录遍历、独立读写 lease、copy 后确认，move 在全部目标确认后删除源；中途可能已有副作用时按 unknown 对待。复制以最多256 KiB内存批次写入，读写流共用完整传输期限，不再被元数据RPC的5分钟期限提前中断，进度只计已确认数据；上传取消停止派发后续写入批次，并等待在途批次和临时文件清理确认。
 
-上传 start 即使携带 prepareId，也重新检查实际父目录；prepare 创建部分目录后失败按 operation_unknown 反馈。目录准备最多4个独立根分支并行，共享隐式父目录的路径串行处理；每条路径仍重新检查完整父链。失败后停止新分支并等待在途创建结束，已经创建的目录不自动回滚。传输路径及 prepare 拼接后的完整路径均不超过 4096 UTF-8 bytes，超限在派发前拒绝；旧 Workspace 基础文件路径政策不变。独立上传、copy/move 和归档取消只收尾自己的资源，健康 Workspace 可继续使用；显式关闭 Workspace 仍中止关联任务，包括正在排队的写操作；尚未执行的排队请求取消不会关闭健康 Workspace。跨 Workspace copy/move 任一端关闭都会中止任务，双端均追踪关联清理失败。上传临时文件、copy/move staged 文件、归档输出/stage/snapshot 清理失败，或独立资源在打开或关闭阶段无法确认清理时，安全出口返回 operation_unknown，任务 ID、任务名额及所属 Workspace 预约名额继续保留，关闭不得虚报成功；终态任务拒绝晚追加或再次取消，不自动重试。旧 attachment 的迟到传输事件不进入新 attachment。
+上传 start 即使携带 prepareId，也重新检查实际父目录；prepare 创建部分目录后失败按 operation_unknown 反馈。目录准备最多4个独立根分支并行，共享隐式父目录的路径串行处理；每条路径仍重新检查完整父链。失败后停止新分支并等待在途创建结束，已经创建的目录不自动回滚。传输路径及 prepare 拼接后的完整路径均不超过 4096 UTF-8 bytes，超限在派发前拒绝；旧 Workspace 基础文件路径政策不变。独立上传、copy/move 和归档取消只收尾自己的资源，健康 Workspace 可继续使用；显式关闭 Workspace 仍中止关联任务，包括正在排队的写操作；尚未执行的排队请求取消不会关闭健康 Workspace。跨 Workspace copy/move 任一端关闭都会中止任务，双端均追踪关联清理失败。上传临时文件、copy/move staged 文件、归档输出/stage/snapshot 清理失败，或独立资源在打开或关闭阶段无法确认清理时，安全出口返回 operation_unknown，任务 ID、在途资源及所属 Workspace 的关联继续保留，关闭不得虚报成功；终态任务拒绝晚追加或再次取消，不自动重试。旧 attachment 的迟到传输事件不进入新 attachment。
 
 同一已存目标与配置指纹的 copy/move 在写入前检查整批计划：父目录链接别名先规范化，源链接叶节点仍保留本体；目标与任一源相等或互为祖先/后代时拒绝，原始同路径 move 仍不做修改。冲突时重新选择目标或拆分意图，不自动换入口重试。跨目标 move 删除源前，源权限改变也停止并保留整项 unknown；删除子项造成的目录大小/mtime 变化不算外部改写。不同目标 ID 的同主机别名、bind mount 及并发路径交换不构成已解决的原子快照保证。
 
@@ -462,21 +462,21 @@ B2 归档执行器采用远端原生 `zip`、`unzip`/`zipinfo`、GNU `tar`，不
 
 压缩直接将所选路径交给远端原生 `zip` / GNU `tar` 递归处理，不提前遍历目录树，不设置压缩总条目数或目录深度上限。进度中的文件数来自工具输出，仅供展示；完成依据实际命令退出状态与产物检查，不依赖预扫描计数。归档先写同目录带正确格式后缀的私有 `.part`，完成检查后 rename/replace；仅无密码 ZIP 的非零退出可在独立 `zip -T` 校验成功后携带 warning 提交，加密 ZIP 和其他失败不发布。压缩源可包含输出目录，命令按字面量排除临时归档和旧目标，路径含 `*`、`?`、`[]` 或反斜线也不作为排除通配符。特殊文件按工具原生行为处理：ZIP 跳过 FIFO/socket 等不可收录项，GNU tar 可保存 FIFO 元数据并跳过 socket；不读取 FIFO 内容。只有远端命令确定结束才尝试清理临时输出。命令明确失败、尚未发布且私有临时输出已清理时，提示普通压缩失败，后续任务可继续；退出、清理或发布结果未知仍要求核对，不自动重试。
 
-同一 Workspace 中，同一真实目录下的普通文件可并行压缩到不同的新文件，最多16项；输出不能同时是另一任务的输入。目录/链接源、覆盖既有目标、解压及其他写操作仍排队，共用原整机持久围栏。各任务独立取消：压缩命令已派发但尚未启动 writer 时，请求远端 TERM 并等待实际退出和完整输出，确认未越过写入标记、独立资源已关闭才报告 cancelled；同组其余任务继续。无退出证据、已启动 writer 或清理不明仍保留 unknown，不推定回滚。正常写入结果继续等待整组资源排空和围栏结算。此补修待远程 Actions 验证。
+同一 Workspace 中，同一真实目录下的普通文件可并行压缩到不同的新文件，每组最多16项，后续任务排队而非拒绝；输出不能同时是另一任务的输入。目录/链接源、覆盖既有目标、解压及其他写操作仍排队，共用原整机持久围栏。各任务独立取消：压缩命令已派发但尚未启动 writer 时，请求远端 TERM 并等待实际退出和完整输出，确认未越过写入标记、独立资源已关闭才报告 cancelled；同组其余任务继续。无退出证据、已启动 writer 或清理不明仍保留 unknown，不推定回滚。正常写入结果继续等待整组资源排空和围栏结算。此补修待远程 Actions 验证。
 
-解压先用 GNU `cp --reflink=auto --no-dereference` 创建同目录私有快照，核对类型/大小；成员预检与提取使用同一份快照。预检交叉核对名称、类型、大小，拒绝绝对/越界、重复名称和非目录祖先，预算包含隐式目录、硬链接逻辑大小，最多 20,000 项、64 GiB 与 64 层。原生工具只提取普通文件和目录；符号链接与 TAR 硬链接排除后单独创建，再经 SFTP 核对完整 stage 后合并发布。只有链接的归档也有实际恢复路径。
+解压先用 GNU `cp --reflink=auto --no-dereference` 创建同目录私有快照，核对类型/大小；成员预检与提取使用同一份快照。预检交叉核对名称、类型、大小，拒绝绝对/越界、重复名称和非目录祖先，不设置成员数量、目录深度或固定64GiB展开体积门槛，逐文件核对安全整数大小与真实stage内容。后台发送到服务器不再按32个在途任务拒绝，原5任务调度窗口保留，超出者排队，unknown记录不循环覆盖。原生工具只提取普通文件和目录；符号链接与 TAR 硬链接排除后单独创建，再经 SFTP 核对完整 stage 后合并发布。只有链接的归档也有实际恢复路径。
 
-符号链接仅允许归档根内的相对目标，保留原 target 字符串；支持有界的叶节点链接链和根内悬空链接，拒绝循环、越界、将链接作目录以及经过现有特殊节点的目标。路径中的 `..` 逐段检查，不以字符串规范化代替实际路径前提。TAR 硬链接必须最终指向归档内声明的普通文件，真实创建硬链接，不静默复制；不一致权限、循环及非文件目标拒绝。设备及 setuid/setgid 成员仍以 `UNSUPPORTED_ENTRY` 拒绝。不同对象类型不互相覆盖；归档内的链接、目录及文件都计入进度。
+符号链接仅允许归档根内的相对目标，保留原 target 字符串；支持叶节点链接链和根内悬空链接，拒绝循环、越界、将链接作目录以及经过现有特殊节点的目标。路径中的 `..` 逐段检查，不以字符串规范化代替实际路径前提。TAR 硬链接必须最终指向归档内声明的普通文件，真实创建硬链接，不静默复制；不一致权限、循环及非文件目标拒绝。设备及 setuid/setgid 成员仍以 `UNSUPPORTED_ENTRY` 拒绝。不同对象类型不互相覆盖；归档内的链接、目录及文件都计入进度。
 
 密码 ZIP 使用原生 `zip/unzip -P` 的 ZipCrypto，与旧正式方案一致：密码经 shell 转义后直接作为命令参数，**会出现在 SSH 命令字符串及远端 zip/unzip 子进程 argv 中**，此方式已明确保留。不会额外通过环境变量传递密码，不记录完整命令或回传原始诊断；不需要 Python、Expect 或交互 PTY，不提供 AES 兼容承诺。私有 stage/SFTP 检查不提供 `dir_fd/O_NOFOLLOW` 原子隔离；同 SSH 权限的并发替换仍可能产生竞态。取消、断线或超时不等于回滚，未知结果不自动重放，也不冒险清理仍可能在使用的快照。本机OpenSSH下三格式往返、ZipCrypto正确/错误密码及部分链接/属性已验证；跨主机、断流取消和其余终态故障仍待B10。
 
 跨 Workspace copy/move 也已增加对源会话原 token 摘要的 Access 复验，允许当前请求会话与源 Workspace 是同用户的不同有效登录会话，无需保存原始 token；源会话撤销后应拒绝。SFTP 技术层支持 readlink/symlink，复制保留链接对象而不静默跟随目标，目录复制后尝试恢复 mode。旧版本在符号链接上隐式跟随可能改变对象类型或陷入目录循环，新实现明确纠正。
 
-copy/move 还原旧行为：目标为普通文件时以 staged replace 覆盖，已有普通目录递归合并，同目标移动在目标不存在时优先 SFTP rename；已有普通文件或目录走复制确认后删除来源（同路径不重复复制）；复制后恢复来源 mode 与访问/修改时间，并校验类型、大小、mode、mtime。应用时间戳用毫秒，Model 转换为 SFTP 所需 Unix 秒，不能将毫秒直接提交远端。批量请求如果包含同名目标冲突、重复源或父子源路径，**在首次远端创建前明确拒绝**，避免旧循环先部分覆盖或移动后再失败。符号链接目标已存在仍明确拒绝，避免偷偷跟随或覆盖其他文件类型；复制成功的符号链接也计入 completedFiles 并产生逐项进度事件。**能力范围已确定**：保持现有 SSH/SFTP 与原生工具部署要求，不新增远端 helper 或文件系统配额；不提供并发发布原子隔离或解压过程总磁盘硬配额。20,000 项、64 层、64 GiB 是成员预检及事后结果预算，不能防止解压期间磁盘先超量；保留结果检查和失败反馈。本机OpenSSH下ZIP/TAR链接、普通mode/mtime和部分正常终态已验证；其他格式属性及故障仍待验收。正式前端 Files 运行时已对接 Shared；路由和源码完成不代表完整行为验收。B10已验证本机OpenSSH/SFTP、三格式归档、普通Range/票据下载、多块上传及同主机跨Workspace复制/移动；WS大流背压、晚到cleanup、跨主机及取消/断流故障仍待验。
+copy/move 还原旧行为：目标为普通文件时以 staged replace 覆盖，已有普通目录递归合并，同目标移动在目标不存在时优先 SFTP rename；已有普通文件或目录走复制确认后删除来源（同路径不重复复制）；复制后恢复来源 mode 与访问/修改时间，并校验类型、大小、mode、mtime。应用时间戳用毫秒，Model 转换为 SFTP 所需 Unix 秒，不能将毫秒直接提交远端。批量请求如果包含同名目标冲突、重复源或父子源路径，**在首次远端创建前明确拒绝**，避免旧循环先部分覆盖或移动后再失败。符号链接目标已存在仍明确拒绝，避免偷偷跟随或覆盖其他文件类型；复制成功的符号链接也计入 completedFiles 并产生逐项进度事件。**能力范围已确定**：保持现有 SSH/SFTP 与原生工具部署要求，不新增远端 helper 或文件系统配额；不提供并发发布原子隔离或解压过程总磁盘硬配额。实际可用空间由远端文件系统决定，应用不提供解压期间磁盘配额；逐成员大小/类型、路径与权限仍校验，磁盘不足等真实工具错误正常反馈。本机OpenSSH下ZIP/TAR链接、普通mode/mtime和部分正常终态已验证；其他格式属性及故障仍待验收。正式前端 Files 运行时已对接 Shared；路由和源码完成不代表完整行为验收。B10已验证本机OpenSSH/SFTP、三格式归档、普通Range/票据下载、多块上传及同主机跨Workspace复制/移动；WS大流背压、晚到cleanup、跨主机及取消/断流故障仍待验。
 
 解压现在逐项检查并发布所有成员，目标目录不存在也不整树移动；发布前复查 stage 根/父目录、普通文件大小/mtime/mode 和链接目标。新建目录先允许 owner 遍历，再恢复归档属性；隐式目录仅在本次新建时恢复属性，已有隐式目录保持原属性。发现变化会停止并保留 unknown，不自动重试；原生列表临时文件删除无法确认时同样报告 unknown；逐项 SFTP 检查仍不提供原子隔离。下载 GET（含目录 ZIP）从准入到最终响应 flush 共用 1 小时期限，HEAD 为 30 秒，超时终止未完成响应并归还名额；排队写入在开始执行前复查当前权限，撤销后不沿用排队前的授权。
 
-普通文件下载 GET 使用原 Workspace/会话/路径的相同授权，但实际字节流在独立 SFTP 租约上读取并在请求结束或取消后回收。高 RTT 链路允许限定窗口内按偏移并行读取，响应仍严格按原文件顺序传输并校验完整字节；HEAD 只需元数据，不占用额外字节流。原最长传输期限、鉴权中途撤销、下载 ticket、背压、并发名额与清理失败不可冒充成功的规则不变。用户明确取消未提交上传时，须等待已经派发的写入确认并删除暂存文件才返回确认；已派发提交或断流的不确定结果仍提示 unknown。以上源码修改尚待下一轮八组 Actions 验收。
+普通文件下载 GET 使用原 Workspace/会话/路径的相同授权，但实际字节流在独立 SFTP 租约上读取并在请求结束或取消后回收。高 RTT 链路允许限定窗口内按偏移并行读取，响应仍严格按原文件顺序传输并校验完整字节；HEAD 只需元数据，不占用额外字节流。原最长传输期限、鉴权中途撤销、下载 ticket、背压与清理失败不可冒充成功的规则不变。用户明确取消未提交上传时，须等待已经派发的写入确认并删除暂存文件才返回确认；已派发提交或断流的不确定结果仍提示 unknown。以上源码修改尚待下一轮八组 Actions 验收。
 
 新的前端 Workspace 上传队列每个会话同时启动最多六个独立 SSH/SFTP 上传，剩余任务保持排队，不放弃或提前标记完成；需要在远程十文件拖入、冲突 apply-to-all、取消/断流场景单独验证。后台 Agent Job 不继承单次工具调用结束后的超时取消源，而是由其 Run 结束/撤销以及独立的 Job 期限共同约束；受限的 shell 执行及权限校验不变。SSH 挂起会话 `originalWorkspaceId` 记录首次标记时的 ID，不因后续恢复重写，前端前台恢复用稳定 suspended session ID 与当前 Workspace 重新关联。以上为源码拟修复行为，尚待远程独立断言。
 
@@ -490,7 +490,7 @@ Workspace 的 SFTP 列表和直接文件操作按 POSIX 字面量保留引号、
 
 设备及 setuid/setgid 成员使用 Shared `UNSUPPORTED_ENTRY`；危险链接在派发前使用 `invalid_input`，已有目标类型冲突明确拒绝；已派发后的不确定副作用保留 `operation_unknown`，不把已发生的远端工作误报为未执行。正式前端专用提示在 F1 对接。链接恢复已经有源码，不代表实机兼容和安全验收通过；密码 argv 可见是已接受的执行方式；并发发布限制仍保留。旧正式版没有 AES 支持。
 
-下载票据过期后拒绝新的 GET/HEAD 准入，已经接纳的慢下载可继续；成功完成续期，重复释放不会影响其他请求。目录 ZIP 长读在输出时按 5 秒间隔复查身份，撤销后停止继续交付。上传流绑定具体任务实例，同 ID 新任务不能接收旧流数据；准备配额在串行操作内判断。跨目标 move 在开始删除前复查所有源的类型、大小、mode、mtime 与链接目标，逐项删除前再次复查（目录删除子项后的大小/mtime 不比较）；观测到源变化时停止删除并报告 unknown，保留已复制的目标，不自动重试。这些检查不能识别同大小/mtime 的内容替换，也不能消除检查与删除间的 SFTP 竞争窗口。
+下载票据过期后拒绝新的 GET/HEAD 准入，已经接纳的慢下载可继续；成功完成续期，重复释放不会影响其他请求。目录 ZIP 长读在输出时按 5 秒间隔复查身份，撤销后停止继续交付。上传流绑定具体任务实例，同 ID 新任务不能接收旧流数据；准备批次按串行操作核对身份和路径。跨目标 move 在开始删除前复查所有源的类型、大小、mode、mtime 与链接目标，逐项删除前再次复查（目录删除子项后的大小/mtime 不比较）；观测到源变化时停止删除并报告 unknown，保留已复制的目标，不自动重试。这些检查不能识别同大小/mtime 的内容替换，也不能消除检查与删除间的 SFTP 竞争窗口。
 
 B2 传输任务的请求标识现在由同一 Workspace 内的 upload、copy/move、archive **统一拒绝同时活跃的重名标识**；上传追加和各类取消在 await 身份验证后复查活跃任务仍是同一实例，防止晚到身份结果作用于已经结束或同 ID 新建的任务。SSH 归档 stdout 与 stderr 分别处理：仅白名单协议行进入进度/终态，stderr 在 Model 层排空，不收集或传给客户端，以免远端错误输出堵塞技术通道。上述真实取消、错帧、符号链接交换及大规模解压行为仍须 B10 检验。
 
@@ -1133,7 +1133,7 @@ Tool 账本派发、原子消费批准或完成事务的确认未知时，不补
 2. POST /:id/evidence，提交 {expectedRevision,outcome,producerStopped:true,resourcesStopped:true,observedAt,note}。outcome 为 applied/not_applied/partially_applied，observedAt 为不早于 blockedAt 的毫秒时间，note 最多1024 UTF-8字节，写清独立核对依据，不含秘密或原始命令。证据明确来自管理员，不冒充自动技术测量；保存后取得新 claim 修订和 evidence ID。
 3. 再 POST /:id/release，提交 {expectedRevision,evidenceId,confirmed:true}，引用最新证据和新修订；冲突重新查询，不能套用新版本自动重试。解除与锁移除同事务，原证据和 Tool/Job/Run 的 unknown 历史不变。需要再次执行时另建新意图，不恢复旧任务。
 
-每个 claim 最多16份证据，最多4096条未释放claim、128个活跃资源；已明确释放的历史不占准入额度，原阻断/释放与人工证据继续保留，不覆盖未知占用。完整 JSON 请求16KiB、响应8MiB。证据或释放响应中断、存储/审计失败可能已提交，先 GET 核对，不自动重放；恢复写入暂停后只读查询仍可用。每步在实际事务入场及读取交付/写入提交前复核原管理员会话，末次复查失败回滚本项写入；记录 REMOTE_MUTATION_EVIDENCE_RECORDED/REMOTE_MUTATION_RELEASED 审计。备份包含阻断与恢复证据，恢复不自动重派。
+每个 claim 最多16份证据，不设置未释放claim或活跃资源的全局数量门槛；独立服务器的操作不会因其它服务器记录较多而拒绝，原阻断/释放与人工证据继续保留，不覆盖未知占用。完整 JSON 请求16KiB、响应8MiB。证据或释放响应中断、存储/审计失败可能已提交，先 GET 核对，不自动重放；恢复写入暂停后只读查询仍可用。每步在实际事务入场及读取交付/写入提交前复核原管理员会话，末次复查失败回滚本项写入；记录 REMOTE_MUTATION_EVIDENCE_RECORDED/REMOTE_MUTATION_RELEASED 审计。备份包含阻断与恢复证据，恢复不自动重派。
 
 设置 → 数据 → 诊断与恢复（高级）默认折叠；展开后只展示宿主诊断与机器突变恢复。宿主诊断只读展示运行时、运行时长、驻留内存、主线程堆内存、数据库版本和采集时间，并在内部折叠展示 prom-client（官方后继包 `@prometheus-io/client`） 进程及模块资源明细；机器突变恢复保持权威列表、独立证据与释放入口。插件安装恢复、插件数据迁移、已安装版本和运行态核对的当前前端入口已移除，后端接口暂时保留。两个保留分区在进入或重新激活时自动读取，读取失败通过全局 Toast 提示，正文不保留常驻刷新按钮。
 

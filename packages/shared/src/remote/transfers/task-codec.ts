@@ -7,7 +7,6 @@ import {
 	WORKSPACE_ARCHIVE_TOOLS,
 	WORKSPACE_TRANSFER_MAX_PATH_BYTES,
 	WORKSPACE_TRANSFER_MAX_TASK_ID_BYTES,
-	WORKSPACE_TRANSFER_MAX_SOURCES,
 } from './values.js';
 import { InvalidWorkspaceTransferPayload } from './workspace-codec.js';
 
@@ -101,7 +100,6 @@ export function readWorkspaceCopyMoveEvent(input: unknown): WorkspaceCopyMoveEve
 				(value.mode !== 'copy' && value.mode !== 'move') ||
 				!Array.isArray(value.sourcePaths) ||
 				!value.sourcePaths.length ||
-				value.sourcePaths.length > WORKSPACE_TRANSFER_MAX_SOURCES ||
 				!Array.isArray(value.items) ||
 				value.items.length !== value.sourcePaths.length ||
 				typeof value.crossSession !== 'boolean'

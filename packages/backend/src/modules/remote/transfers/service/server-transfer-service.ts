@@ -23,7 +23,6 @@ interface TaskOwner {
 	failure: unknown;
 }
 
-const MAX_ACTIVE = 32;
 const MAX_HISTORY = 100;
 const MAX_CONCURRENT = 5;
 const TASK_DEADLINE_MS = 60 * 60 * 1000;
@@ -137,13 +136,6 @@ export class ServerTransferService {
 			throw new ServerTransferFailure('shutting_down');
 		}
 		this.prune();
-		if (
-			this.preparing.size +
-				[...this.records.values()].filter((owner) => !final(owner.task) || owner.running).length >=
-			MAX_ACTIVE
-		) {
-			throw new ServerTransferFailure('limit_exceeded');
-		}
 		const controller = new AbortController();
 		const inputSignal = AbortSignal.any([signal, controller.signal, AbortSignal.timeout(60_000)]);
 		const pending = Promise.resolve().then(async () => {

@@ -9,12 +9,6 @@ import {
 	type FileArchiveHardlink,
 } from './model/file-task-types.js';
 
-export const ARCHIVE_MAX_ENTRIES = 20_000;
-
-export const ARCHIVE_MAX_BYTES = 64 * 1024 * 1024 * 1024;
-
-export const ARCHIVE_MAX_DEPTH = 64;
-
 export const ARCHIVE_UNSAFE_CHARACTER = /[\x00-\x1f\x7f]/u;
 
 /** Interpret a native listing only when it agrees with the independently
@@ -27,14 +21,10 @@ export function validateListing(
 	format: ArchiveFormat,
 	archive: string,
 ): Map<string, FileArchiveEntry> {
-	// GNU tar may include the archive root "./", which is not itself a
-	// published member. Permit that one listing record without consuming
-	// the application member budget.
-	if (names.length > ARCHIVE_MAX_ENTRIES + (format === 'zip' ? 0 : 1) || names.length !== modes.length) {
+	if (names.length !== modes.length) {
 		throw new RemoteFileFailure('invalid_input');
 	}
 	const members = new Map<string, FileArchiveEntry>();
-	let expanded = 0;
 	for (let i = 0; i < names.length; i++) {
 		const raw = names[i];
 		const metadata = modes[i];
@@ -67,16 +57,9 @@ export function validateListing(
 		if (parts.some((p) => !p || p === '.' || p === '..')) {
 			throw new RemoteFileFailure('invalid_input');
 		}
-		if (parts.length > ARCHIVE_MAX_DEPTH + 1) {
-			throw new RemoteFileFailure('limit_exceeded');
-		}
 		name = parts.join('/');
 		if (members.has(name) || name === path.posix.basename(archive)) {
 			throw new RemoteFileFailure('invalid_input');
-		}
-		expanded += metadata.size;
-		if (expanded > ARCHIVE_MAX_BYTES) {
-			throw new RemoteFileFailure('limit_exceeded');
 		}
 		members.set(name, {
 			kind: metadata.kind === 'hardlink' ? 'file' : metadata.kind,
@@ -87,20 +70,10 @@ export function validateListing(
 			linkTarget: metadata.linkTarget,
 		});
 	}
-	if (members.size > ARCHIVE_MAX_ENTRIES) {
-		throw new RemoteFileFailure('limit_exceeded');
-	}
-	const nodes = new Set(members.keys());
 	for (const [name] of members) {
 		const components = name.split('/');
 		for (let i = 1; i < components.length; i++) {
 			const parentName = components.slice(0, i).join('/');
-			if (!nodes.has(parentName)) {
-				if (nodes.size >= ARCHIVE_MAX_ENTRIES) {
-					throw new RemoteFileFailure('limit_exceeded');
-				}
-				nodes.add(parentName);
-			}
 			const parent = members.get(parentName);
 			if (parent && parent.kind !== 'directory') {
 				throw new RemoteFileFailure('invalid_input');
@@ -124,9 +97,6 @@ export function resolveLinkTargets(members: ReadonlyMap<string, FileArchiveEntry
 		while (link?.kind === 'symlink') {
 			if (visited.has(current)) {
 				throw new RemoteFileFailure('invalid_input');
-			}
-			if (visited.size >= ARCHIVE_MAX_DEPTH) {
-				throw new RemoteFileFailure('limit_exceeded');
 			}
 			visited.add(current);
 			const target = link.linkTarget;
@@ -152,9 +122,6 @@ export function resolveLinkTargets(members: ReadonlyMap<string, FileArchiveEntry
 				} else if (part && part !== '.') {
 					components.push(part);
 				}
-				if (components.length > ARCHIVE_MAX_DEPTH + 1) {
-					throw new RemoteFileFailure('limit_exceeded');
-				}
 				const traversed = components.join('/') || '.';
 				if (i < parts.length - 1) {
 					const ancestor = members.get(traversed);
@@ -177,7 +144,6 @@ export function resolveHardlinkTargets(
 	members: ReadonlyMap<string, FileArchiveEntry>,
 ): Map<string, FileArchiveHardlink> {
 	const targets = new Map<string, FileArchiveHardlink>();
-	let expanded = 0;
 	for (const [name, member] of members) {
 		if (member.hardlink) {
 			const visited = new Set([name]);
@@ -204,9 +170,6 @@ export function resolveHardlinkTargets(
 				) {
 					throw new RemoteFileFailure('invalid_input');
 				}
-				if (visited.size >= ARCHIVE_MAX_DEPTH) {
-					throw new RemoteFileFailure('limit_exceeded');
-				}
 				visited.add(normalized);
 				const next = members.get(normalized);
 				if (!next || next.kind !== 'file') {
@@ -219,10 +182,6 @@ export function resolveHardlinkTargets(
 				throw new RemoteFileFailure('invalid_input');
 			}
 			targets.set(name, { target, size: link.size });
-		}
-		expanded += targets.get(name)?.size ?? member.size;
-		if (expanded > ARCHIVE_MAX_BYTES) {
-			throw new RemoteFileFailure('limit_exceeded');
 		}
 	}
 	return targets;

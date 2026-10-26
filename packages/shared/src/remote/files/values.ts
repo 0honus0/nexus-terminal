@@ -41,11 +41,12 @@ export type RemoteFileErrorCode = (typeof REMOTE_FILE_ERROR_CODES)[number];
 
 export type RemoteFileKind = 'file' | 'directory' | 'symlink' | 'other';
 
+/** Existing end-to-end deadline for bulk file operations; clients wait for its explicit result. */
+export const WORKSPACE_FILES_TRANSFER_TIMEOUT_MS = 60 * 60 * 1000;
+
 export const WORKSPACE_FILES_MAX_BINARY_READS = 4;
 
 export const WORKSPACE_FILES_MAX_BINARY_READ_BYTES = 64 * 1024 * 1024;
-
-export const WORKSPACE_FILES_MAX_LIST_ENTRIES = 20_000;
 
 /** A listing may exceed the ordinary 1 MiB WS send queue; keep a separate finite response envelope. */
 export const WORKSPACE_FILES_MAX_LIST_RESPONSE_BYTES = 8 * 1024 * 1024;

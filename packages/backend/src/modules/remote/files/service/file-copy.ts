@@ -10,8 +10,6 @@ import {
 	type FileByteSource,
 } from '../model/file-types.js';
 
-const MAX_TREE_DEPTH = 64;
-const MAX_TRANSFER_ENTRIES = 20_000;
 const RPC_TIMEOUT_MS = 300_000;
 const COPY_WRITE_WINDOW_BYTES = 256 * 1024;
 
@@ -22,7 +20,6 @@ interface CopyContext {
 	signal: AbortSignal;
 	transferredBytes: number;
 	completedFiles: number;
-	visitedEntries: number;
 	mutationStarted: boolean;
 	onMutation(): void;
 	completedSources: Array<{ path: string; info: FileInfo; linkTarget?: string }>;
@@ -127,7 +124,7 @@ async function copyOneFile(ctx: CopyContext, from: string, to: string, info: Fil
 	ctx.onMutation();
 	const stage = await ctx.destination.openUploadStage({
 		path: to,
-		timeoutMs: Math.min(ctx.remaining(), RPC_TIMEOUT_MS),
+		timeoutMs: ctx.remaining(),
 		signal: ctx.signal,
 		mode: info.mode & 0o7777,
 	});
@@ -135,7 +132,7 @@ async function copyOneFile(ctx: CopyContext, from: string, to: string, info: Fil
 	try {
 		const source = await ctx.source.openRead({
 			path: from,
-			timeoutMs: Math.min(ctx.remaining(), RPC_TIMEOUT_MS),
+			timeoutMs: ctx.remaining(),
 			signal: ctx.signal,
 			length: info.size,
 			maxBytes: info.size,
@@ -251,17 +248,8 @@ async function copyOneLink(ctx: CopyContext, from: string, to: string, info: Fil
 	return { path: to, name: path.posix.basename(to), info: result };
 }
 
-async function copyOne(
-	ctx: CopyContext,
-	from: string,
-	to: string,
-	depth: number,
-	scannedInfo?: FileInfo,
-): Promise<FilePathEntry> {
+async function copyOne(ctx: CopyContext, from: string, to: string, scannedInfo?: FileInfo): Promise<FilePathEntry> {
 	ctx.signal.throwIfAborted();
-	if (depth > MAX_TREE_DEPTH || ++ctx.visitedEntries > MAX_TRANSFER_ENTRIES) {
-		throw new RemoteFileFailure('limit_exceeded');
-	}
 	// READDIR already provides lstat metadata for each child. Reuse that
 	// observation; a second lstat is another race, not a file snapshot.
 	// Move still revalidates every source before beginning deletion.
@@ -296,13 +284,12 @@ async function copyOne(
 		path: from,
 		timeoutMs: Math.min(ctx.remaining(), RPC_TIMEOUT_MS),
 		signal: ctx.signal,
-		maxEntries: Math.max(1, MAX_TRANSFER_ENTRIES - ctx.visitedEntries + 1),
 	});
 	for (const entry of entries) {
 		if (entry.name === '.' || entry.name === '..' || entry.name.includes('/')) {
 			throw new RemoteFileFailure('invalid_input');
 		}
-		await copyOne(ctx, path.posix.join(from, entry.name), path.posix.join(to, entry.name), depth + 1, entry.info);
+		await copyOne(ctx, path.posix.join(from, entry.name), path.posix.join(to, entry.name), entry.info);
 	}
 	// SFTP mkdir obeys remote umask; restore the source permissions after
 	// creating children rather than reporting a directory with changed mode.
@@ -382,7 +369,6 @@ export async function copyRemoteEntries(
 		onProgress,
 		transferredBytes: 0,
 		completedFiles: 0,
-		visitedEntries: 0,
 		mutationStarted: false,
 		onMutation,
 		completedSources: [],
@@ -465,7 +451,7 @@ export async function copyRemoteEntries(
 				// Existing files/directories use the verified copy/merge and source
 				// deletion workflow; ordinary SFTP rename cannot overwrite or merge.
 			}
-			items.push(await copyOne(ctx, sourcePath, destinationPath, 0));
+			items.push(await copyOne(ctx, sourcePath, destinationPath));
 		}
 		if (mode === 'move') {
 			for (const item of ctx.completedSources) {

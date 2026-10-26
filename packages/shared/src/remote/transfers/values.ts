@@ -20,10 +20,6 @@ export const WORKSPACE_TRANSFER_MAX_PATH_BYTES = REMOTE_FILE_MAX_PATH_BYTES;
 
 export const WORKSPACE_TRANSFER_MAX_TASK_ID_BYTES = 512;
 
-export const WORKSPACE_TRANSFER_MAX_SOURCES = 64;
-
-export const WORKSPACE_UPLOAD_MAX_PREPARE_DIRECTORIES = 20_000;
-
 /** Unicode code points, matching the archive password input policy. */
 export const WORKSPACE_ARCHIVE_MAX_PASSWORD_CODE_POINTS = 128;
 

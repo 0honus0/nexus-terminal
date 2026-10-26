@@ -113,7 +113,7 @@ transfers/workspace定义完整Upload请求/回执/事件及精确request/respon
 
 Remote Files 的路径字节容量由 files/values 唯一定义，transfers/values 以 WORKSPACE_TRANSFER_MAX_PATH_BYTES 引用同一值，保留协议语境而不复制数字。传输派生完整路径由后端 Service 校验；这一约束不扩大到原本不使用该预算的旧 Workspace 基础文件契约。任务 finished、清理失败追踪、名额保留与 attachment 实例绑定是私有生命周期，不增加 Shared wire 字段。
 
-R2 没有新增双端 wire 字段或重新定义容量：Workspace 的 64 个附件预约与独立 HTTP Files 的 8 个名额是各自后端资源 owner 的私有配额，不能错误迁入 Shared；`FileBinaryPiece` 和有效取消/期限交付属于 Remote 内部应用契约，NXW1 frame 仍只归 Shared binary encoder。
+R2 没有新增双端 wire 字段或重新定义容量：Workspace附件与独立HTTP Files由各自后端owner追踪生命周期，不再以固定资源计数拒绝，不能错误迁入Shared；`FileBinaryPiece` 和有效取消/期限交付属于 Remote 内部应用契约，NXW1 frame 仍只归 Shared binary encoder。
 
 B2 已建立 `remote/transfers` 子域：`http.ts`/纯 `http-codec.ts` 定义 download-ticket 的真正前后端 body/结果，`workspace.ts`/纯 `workspace-codec.ts` 定义 upload.prepare/start/cancel/abort、二进制 upload stream 参数及 copy/move、archive 的请求与完整事件。ZIP/Range 是已定义的 HTTP 行为，单独使用 Content-Range、Content-Disposition 和状态码；server-side ticket、task map、WebSocket 技术队列上限、SFTP lease、私有目录扫描配额不能伪装成 Shared 双端业务对象。旧 archive WS 已由 Workspace Interface 严格解码并投影，Service 以逐项计数事件填充原 progress 联合，安全拒绝码保持原含义。密码传给远端工具的方式、原生 zip/unzip/tar 依赖和任务队列属于后端私有实现，密码请求字段及对外容量仍归 Shared；源码接通不等于真实旧前端全链路已通过。旧 Protocol 包仅留作历史参考，正式前端已移除依赖，不在 Shared 新增同义新旧桥接层。
 
@@ -147,7 +147,7 @@ Agent Provider 列表新增纯 `readAgentProviderListResponse`，基于既有 Pr
 
 Remote Files B1 当前真实写消费者是 backend-next HTTP；已有 `remote-next` 前端 transport 继续只读消费同一 read-text/容量契约，未增加 mutation 方法或界面。Shared 变更因此要求现有只读消费者继续编译，但不把后端 B1 描述成前端写入已迁移。
 
-Workspace Files Shared 契约由 backend-next 的 `/ws/workspace` Files adapter 生产。正式Frontend普通终端与Files浏览/编辑/预览已消费Shared；files/workspace-codec覆盖请求、完整成功结果、metadata及ready/error有限事件，旧Files应用DTO已删除。20,000目录项/500搜索结果由Shared values唯一维护，遍历并发/目录队列仍属后端私有策略。Files时间为Unix毫秒，不沿用连接时间的秒换算。上传完整回执/事件已接正式能力；Workspace复制/移动/归档已接完整codec；跨服务器HTTP任务已接server-*完整契约；挂起HTTP/WS与监控/Docker WS已接Shared；观测HTTP/配置及桌面仍待对应C2子阶段；旧 Backend 与二进制 codec 从 Git 历史追溯，不增加旧路径到 Shared 的兼容转导出。正式前端已切换 Shared，当前统一 E2E 仍待验收。R1 不改前端 transport/controller/view。
+Workspace Files Shared 契约由 backend-next 的 `/ws/workspace` Files adapter 生产。正式Frontend普通终端与Files浏览/编辑/预览已消费Shared；files/workspace-codec覆盖请求、完整成功结果、metadata及ready/error有限事件，旧Files应用DTO已删除。目录列表不设条目数量门槛，完整8MiB响应字节预算与500搜索结果由Shared values唯一维护；复制/压缩来源和upload.prepare目录同样不再重复限制数量，完整WS消息字节预算仍有效，遍历并发/目录队列仍属后端私有策略。Files时间为Unix毫秒，不沿用连接时间的秒换算。上传完整回执/事件已接正式能力；Workspace复制/移动/归档已接完整codec；跨服务器HTTP任务已接server-*完整契约；挂起HTTP/WS与监控/Docker WS已接Shared；观测HTTP/配置及桌面仍待对应C2子阶段；旧 Backend 与二进制 codec 从 Git 历史追溯，不增加旧路径到 Shared 的兼容转导出。正式前端已切换 Shared，当前统一 E2E 仍待验收。R1 不改前端 transport/controller/view。
 
 ## 6. 数据、事务与并发
 

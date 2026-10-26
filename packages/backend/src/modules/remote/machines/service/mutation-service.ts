@@ -2,7 +2,6 @@ import type { Logger } from '../../../../platform/logging/logger.js';
 import { logDiagnostic } from '../../../../platform/logging/diagnostic-log.js';
 import { createHash, randomUUID } from 'node:crypto';
 import type { MutationOrigin } from '@nexus-terminal/shared/remote/mutations/values';
-import { MAX_MUTATION_CLAIMS, MAX_MUTATION_RESOURCES } from '../mutation-rules.js';
 import type { MachineMutationModel } from '../model/mutation-model.js';
 import type { MachineMutationTarget, MutationRecoveryActor } from '../model/mutation-types.js';
 import { MachineMutationRejection } from '../model/mutation-types.js';
@@ -71,7 +70,7 @@ export class MachineMutationService {
 			ownerId: this.ownerId,
 			targets: targets.map((target) => ({ targetId: target.targetId, fingerprint: target.fingerprint })),
 		};
-		const acquired = await this.model.acquire(claim, MAX_MUTATION_RESOURCES, MAX_MUTATION_CLAIMS, actor);
+		const acquired = await this.model.acquire(claim, actor);
 		if (acquired !== 'acquired') {
 			logDiagnostic(this.logger, 'warn', 'MUTATION_ADMISSION_REJECTED', {
 				claimId: id,

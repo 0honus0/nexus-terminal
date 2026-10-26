@@ -6,8 +6,6 @@ import {
 	WORKSPACE_UPLOAD_MAX_CHUNK_BYTES,
 	WORKSPACE_DOWNLOAD_TICKET_TTL_SECONDS,
 	WORKSPACE_ARCHIVE_MAX_PASSWORD_CODE_POINTS,
-	WORKSPACE_UPLOAD_MAX_PREPARE_DIRECTORIES,
-	WORKSPACE_TRANSFER_MAX_SOURCES,
 } from '@nexus-terminal/shared/remote/transfers/values';
 import { selectDownloadRange } from './file-download-rules.js';
 import { createHash, randomUUID } from 'node:crypto';
@@ -22,7 +20,7 @@ import {
 	REMOTE_FILE_MAX_TEXT_BYTES,
 	REMOTE_FILE_MAX_PATH_BYTES,
 	WORKSPACE_FILES_MAX_BINARY_READ_BYTES,
-	WORKSPACE_FILES_MAX_LIST_ENTRIES,
+	WORKSPACE_FILES_TRANSFER_TIMEOUT_MS,
 } from '@nexus-terminal/shared/remote/files/values';
 import {
 	RemoteFileFailure,
@@ -88,15 +86,11 @@ interface WorkspaceFileScope {
 	authority: WorkspaceFileAuthority;
 }
 
-/** Server-owned admission/lifecycle policy; not wire budgets. */
-const MAX_FILE_RESOURCES = 8;
-const MAX_REMOVE_ENTRIES = 20_000;
-const MAX_REMOVE_DEPTH = 64;
-const MAX_WORKSPACE_ATTACHMENTS = 64;
-const MAX_WORKSPACE_TRANSFERS = 16;
+/** Scheduling and lifecycle policy; task counts do not reject otherwise valid work. */
+const MUTATION_BATCH_SIZE = 16;
 const FILE_IDLE_MS = 2 * 60 * 1000;
 const FILE_OPERATION_MS = 30 * 1000;
-const FILE_TRANSFER_MS = 60 * 60 * 1000;
+const FILE_TRANSFER_MS = WORKSPACE_FILES_TRANSFER_TIMEOUT_MS;
 const FILE_UPLOAD_IDLE_MS = 5 * 60 * 1000;
 const FILE_CLOSE_REPLAY_MS = 2 * 60 * 1000;
 const MAX_RECENTLY_CLOSED_FILES = 128;
@@ -376,9 +370,6 @@ export class RemoteFileService {
 				if (this.workspaceReservations.has(workspaceId)) {
 					throw new RemoteFileFailure('conflict');
 				}
-				if (this.workspaceReservations.size >= MAX_WORKSPACE_ATTACHMENTS) {
-					throw new RemoteFileFailure('limit_exceeded');
-				}
 				this.workspaceReservations.add(workspaceId);
 				reserved = true;
 			}
@@ -395,21 +386,6 @@ export class RemoteFileService {
 				}
 				connectionName = target.name;
 			} else {
-				const independentOwners = [...this.owners.values()].filter(
-					(record) => record.workspaceId === undefined,
-				).length;
-				const independentClosing = [...this.closing.values()].filter(
-					(record) => record.workspaceId === undefined,
-				).length;
-				if (
-					independentOwners +
-						this.independentOpening.size +
-						independentClosing +
-						this.unconfirmedIndependentClosures.size >=
-					MAX_FILE_RESOURCES
-				) {
-					throw new RemoteFileFailure('limit_exceeded');
-				}
 				this.independentOpening.add(controller);
 			}
 			if (workspace && !workspace.authority.isCurrent()) {
@@ -474,7 +450,7 @@ export class RemoteFileService {
 				expiresAt: Date.now() + FILE_IDLE_MS,
 				active: new Map(),
 				inFlight: new Set(),
-				mutations: new FileMutationQueue(MAX_WORKSPACE_TRANSFERS),
+				mutations: new FileMutationQueue(MUTATION_BATCH_SIZE),
 				closePromise: null,
 			};
 			this.owners.set(id, record);
@@ -1308,17 +1284,6 @@ export class RemoteFileService {
 		return workspaceId + '\0' + id;
 	}
 
-	private requireTransferCapacity(workspaceId: string): void {
-		const tasks = [...this.uploads.values(), ...this.copyMoves.values(), ...this.archives.values()];
-		const active = tasks.filter((task) => task.workspaceId === workspaceId).length;
-		const preparing = [...this.preparingUploads.values()].filter(
-			(owner) => owner.workspaceId === workspaceId,
-		).length;
-		if (active + preparing >= MAX_WORKSPACE_TRANSFERS) {
-			throw new RemoteFileFailure('limit_exceeded');
-		}
-	}
-
 	/** Prepare only paths inside the chosen Workspace base; no remote symlink traversal. */
 	prepareUpload(
 		token: string | null,
@@ -1328,12 +1293,7 @@ export class RemoteFileService {
 		directories: readonly string[],
 		signal?: AbortSignal,
 	): Promise<{ preparedDirectories: number }> {
-		if (
-			!prepareId ||
-			prepareId.length > 512 ||
-			!Array.isArray(directories) ||
-			directories.length > WORKSPACE_UPLOAD_MAX_PREPARE_DIRECTORIES
-		) {
+		if (!prepareId || prepareId.length > 512 || !Array.isArray(directories)) {
 			throw new RemoteFileFailure('invalid_input');
 		}
 		const root = remoteTransferPath(basePath);
@@ -1353,7 +1313,6 @@ export class RemoteFileService {
 		if (this.preparingUploads.has(preparationKey)) {
 			throw new RemoteFileFailure('conflict');
 		}
-		this.requireTransferCapacity(workspaceId);
 		this.preparingUploads.set(preparationKey, { workspaceId, ownerId: record.id });
 		return this.run(
 			token,
@@ -1363,17 +1322,6 @@ export class RemoteFileService {
 					if (prepared.expiresAt <= Date.now()) {
 						this.preparedUploads.delete(key);
 					}
-				}
-				const ownerBatches = [...this.preparedUploads.entries()].filter(
-					([, item]) => item.workspaceId === workspaceId && item.ownerId === record.id,
-				);
-				const existing = this.preparedUploads.get(this.uploadKey(workspaceId, prepareId));
-				const totalPrepared = ownerBatches.reduce((sum, [, item]) => sum + item.directories.size, 0);
-				if (
-					(!existing && ownerBatches.length >= 64) ||
-					totalPrepared - (existing?.directories.size ?? 0) + paths.size > 100_000
-				) {
-					throw new RemoteFileFailure('limit_exceeded');
 				}
 				const remaining = this.remaining(ms, abort, record.id);
 				let changed = false;
@@ -1594,7 +1542,6 @@ export class RemoteFileService {
 		if (this.uploads.has(key) || this.copyMoves.has(key) || this.archives.has(key)) {
 			throw new RemoteFileFailure('conflict');
 		}
-		this.requireTransferCapacity(workspaceId);
 		let complete!: () => void;
 		let fail!: (cause: unknown) => void;
 		const completion = new Promise<void>((resolve, reject) => {
@@ -2000,8 +1947,7 @@ export class RemoteFileService {
 			requestId.length > 512 ||
 			!['copy', 'move'].includes(mode) ||
 			!Array.isArray(sourcePaths) ||
-			sourcePaths.length < 1 ||
-			sourcePaths.length > WORKSPACE_TRANSFER_MAX_SOURCES
+			sourcePaths.length < 1
 		) {
 			throw new RemoteFileFailure('invalid_input');
 		}
@@ -2019,7 +1965,6 @@ export class RemoteFileService {
 		if (this.copyMoves.has(key) || this.uploads.has(key) || this.archives.has(key)) {
 			throw new RemoteFileFailure('conflict');
 		}
-		this.requireTransferCapacity(workspaceId);
 		const task: RunningCopyMove = {
 			finished: false,
 			cleanupFailure: null,
@@ -2188,7 +2133,6 @@ export class RemoteFileService {
 		if (this.archives.has(key) || this.copyMoves.has(key) || this.uploads.has(key)) {
 			throw new RemoteFileFailure('conflict');
 		}
-		this.requireTransferCapacity(workspaceId);
 		const operation = input.kind;
 		const task: RunningArchive = {
 			finished: false,
@@ -2239,7 +2183,7 @@ export class RemoteFileService {
 				}
 				const sources =
 					input.kind === 'compress' ? input.sources.map((source) => remoteTransferPath(source, true)) : [];
-				if (input.kind === 'compress' && (!sources.length || sources.length > WORKSPACE_TRANSFER_MAX_SOURCES)) {
+				if (input.kind === 'compress' && !sources.length) {
 					throw new RemoteFileFailure('invalid_input');
 				}
 				let warning: string | undefined;
@@ -2707,7 +2651,6 @@ export class RemoteFileService {
 						path: normalized,
 						timeoutMs: ms,
 						signal: abort,
-						maxEntries: WORKSPACE_FILES_MAX_LIST_ENTRIES,
 					})
 				).map((item) => {
 					const result: FilePathEntry = {
@@ -2948,11 +2891,7 @@ export class RemoteFileService {
 		signal: AbortSignal,
 		ancestors: ReadonlySet<string>,
 		changed: { value: boolean },
-		budget: { entries: number },
 	): Promise<void> {
-		if (ancestors.size > MAX_REMOVE_DEPTH || ++budget.entries > MAX_REMOVE_ENTRIES) {
-			throw new RemoteFileFailure('limit_exceeded');
-		}
 		const info = await this.optionalStat(resource, filePath, false, remaining, signal);
 		if (info === null) {
 			return;
@@ -2972,17 +2911,8 @@ export class RemoteFileService {
 			path: filePath,
 			timeoutMs: remaining(),
 			signal,
-			maxEntries: Math.max(1, MAX_REMOVE_ENTRIES - budget.entries),
 		})) {
-			await this.removeTree(
-				resource,
-				path.posix.join(filePath, entry.name),
-				remaining,
-				signal,
-				next,
-				changed,
-				budget,
-			);
+			await this.removeTree(resource, path.posix.join(filePath, entry.name), remaining, signal, next, changed);
 		}
 		await resource.rmdir({ path: filePath, timeoutMs: remaining(), signal });
 		changed.value = true;
@@ -3043,14 +2973,13 @@ export class RemoteFileService {
 			async (resource, ms, abort) => {
 				const remaining = this.remaining(ms, abort, id);
 				const changed = { value: false };
-				const budget = { entries: 0 };
 				for (const item of normalized) {
 					try {
 						if (forced.has(item)) {
 							await this.forceRemoveTree(resource, item, remaining, abort);
 							changed.value = true;
 						} else {
-							await this.removeTree(resource, item, remaining, abort, new Set(), changed, budget);
+							await this.removeTree(resource, item, remaining, abort, new Set(), changed);
 						}
 					} catch (cause) {
 						throw changed.value && !isUnknown(cause)
@@ -3061,6 +2990,7 @@ export class RemoteFileService {
 			},
 			signal,
 			true,
+			FILE_TRANSFER_MS,
 		);
 	}
 

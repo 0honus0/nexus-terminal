@@ -33,18 +33,14 @@ try {
 		const id = 'fixture-' + String(index).padStart(2, '0');
 		const key = createHash('sha256').update(id).digest('hex');
 		assert.equal(
-			await storage.acquire(
-				{
-					id,
-					keys: [key],
-					ownerId: randomUUID(),
-					origin: index % 2 ? 'agent' : 'files',
-					targets: [{ targetId: index, fingerprint: key }],
-					now: Date.now() - 10000,
-				},
-				64,
-				100,
-			),
+			await storage.acquire({
+				id,
+				keys: [key],
+				ownerId: randomUUID(),
+				origin: index % 2 ? 'agent' : 'files',
+				targets: [{ targetId: index, fingerprint: key }],
+				now: Date.now() - 10000,
+			}),
 			'acquired',
 		);
 		await storage.settle(id, [key], true, Date.now() - 5000);

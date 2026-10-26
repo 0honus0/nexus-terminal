@@ -1,12 +1,8 @@
 import path from 'node:path';
-import {
-	WORKSPACE_FILES_MAX_SEARCH_ENTRIES,
-	WORKSPACE_FILES_MAX_LIST_ENTRIES,
-} from '@nexus-terminal/shared/remote/files/values';
+import { WORKSPACE_FILES_MAX_SEARCH_ENTRIES } from '@nexus-terminal/shared/remote/files/values';
 import { RemoteFileFailure, type FileEntry, type FileResource, type FileSearchResult } from '../model/file-types.js';
 
 /** Server-owned traversal policy, independent of wire budgets. */
-const SEARCH_DIRECTORIES = 5000;
 const SEARCH_CONCURRENCY = 8;
 
 type ScannedDirectory =
@@ -22,19 +18,17 @@ export async function searchFiles(
 ): Promise<FileSearchResult> {
 	const queue = [root];
 	const items: FileSearchResult['items'] = [];
-	let scannedDirectories = 0;
 	let truncated = false;
 	let nextId = 0;
 	const pending = new Map<number, Promise<ScannedDirectory>>();
 	try {
 		while ((queue.length || pending.size) && items.length < WORKSPACE_FILES_MAX_SEARCH_ENTRIES) {
-			while (queue.length && pending.size < SEARCH_CONCURRENCY && scannedDirectories < SEARCH_DIRECTORIES) {
+			while (queue.length && pending.size < SEARCH_CONCURRENCY) {
 				const directory = queue.shift();
 				if (directory === undefined) {
 					break;
 				}
 				const requestId = nextId++;
-				scannedDirectories += 1;
 				pending.set(
 					requestId,
 					resource
@@ -42,7 +36,6 @@ export async function searchFiles(
 							path: directory,
 							timeoutMs: remaining(),
 							signal: abort,
-							maxEntries: WORKSPACE_FILES_MAX_LIST_ENTRIES,
 						})
 						.then(
 							(entries) => ({ status: 'ok', id: requestId, directory, entries }),
@@ -89,11 +82,7 @@ export async function searchFiles(
 					}
 				}
 				if (entry.info.kind === 'directory') {
-					if (queue.length + scannedDirectories < SEARCH_DIRECTORIES) {
-						queue.push(fullPath);
-					} else {
-						truncated = true;
-					}
+					queue.push(fullPath);
 				}
 			}
 		}
