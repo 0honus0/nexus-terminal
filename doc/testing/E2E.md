@@ -1957,3 +1957,9 @@ a0cb4f49正式40319856905全部质量/构建/Docker和8个分片通过，新增�
 ### Agent 输入框上方独立控件（2026-10-26，本地静态）
 
 按用户最新布局要求将Token、回到最新、上一条/下一条状态块移至form之前；只保留各自全局控件，无整条底色或边框。原footer透明表面保留。composer容器声明从form移到既有外层agent-composer-area，使上方控件和输入工具栏继续按相同可用宽度响应式收缩，不依赖整个聊天面板宽度；form测量ref、提交、键盘、详情弹层和导航条件/事件保持。两轮源码复核包含窄屏容器查询、Popover portal、按钮类型及既有E2E定位无失效消费，USAGE共同外框描述已按最新选择更新。根check、前端build、全量format:all:check与diff通过，证据`/tmp/nexus-agent-controls-{check,build,format}.log`。按D17未运行本地行为或视觉测试，不将旧轮次494项PASS当作本轮结果；未提交、推送、发布或部署。
+
+### Agent 控件与紧凑网络读数交付（2026-10-26，正式远程通过）
+
+产品提交 `7865bfc159b0ca750f80d06f93d01125576c695d` 的正式 [E2E 40355305638](https://github.com/0honus0/nexus-terminal/actions/runs/40355305638) 全绿：质量、格式、生产构建、Docker 部署 smoke 和全部 8 分片成功，共 494 项首次通过，无重试或 flaky。日志 `/tmp/nexus-ui-dev-e2e.log`；不把功能回归扩大为专项视觉验收。`a797ecd2` 只自动更新测试耗时估计，无产品代码差异，已快进同步。
+
+用户随后授权的 [dev amd64 发布 40357533124](https://github.com/0honus0/nexus-terminal/actions/runs/40357533124) 成功，生产依赖审计通过。发布标签为 `ghcr.io/0honus0/nexus-terminal:dev` 和 `sha-a797ecd2bf79`，索引摘要 `sha256:5bff81c96b9d8cbd6f9e39f97a12ac00014d7f8c2d2a23126bae97527352a488`。通过 `docker buildx imagetools inspect` 核对实际平台 `linux/amd64`，镜像配置 OCI revision 精确为 `a797ecd2bf7967541e5ee52acfa031fd683d5845`；附属 `unknown/unknown` 清单为 BuildKit attestation。证据 `/tmp/nexus-ui-dev-publish.log` 与 `/tmp/nexus-ui-dev-image-config.json`。未更新服务器容器，个人截图增删未提交。

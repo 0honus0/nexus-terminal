@@ -3565,3 +3565,9 @@ a0cb4f49/40319856905完整通过（含质量、Docker及全部8分片），3381d
 | 职责归属 | 原模板和现有容器查询owner，控件沿用全局UI                               |
 | 类型归属 | 无新增类型/状态/协议，Token和消息位置计算保持                           |
 | 完成证据 | 两轮复核完成；根check、前端build、全量格式/diff通过；视觉未实测，不发布 |
+
+### 本批提交、远程验收与 dev amd64 发布（2026-10-26，已完成）
+
+按用户最新授权，本批三项 UI 调整已提交推送为 `7865bfc1`。正式 [E2E 40355305638](https://github.com/0honus0/nexus-terminal/actions/runs/40355305638) 全绿：质量、格式、生产构建、Docker 部署 smoke 及 8 个分片共 494 项通过，无重试或 flaky。`a797ecd2` 仅自动更新测试耗时估计，已快进同步。上述三节“源码完成／不发布”为各自实现阶段的状态，本节记录其最新交付状态；专项视觉仍未单独验收。
+
+[dev amd64 发布 40357533124](https://github.com/0honus0/nexus-terminal/actions/runs/40357533124) 成功，生产依赖审计通过；`ghcr.io/0honus0/nexus-terminal:dev` 及 `sha-a797ecd2bf79` 已发布。镜像索引摘要 `sha256:5bff81c96b9d8cbd6f9e39f97a12ac00014d7f8c2d2a23126bae97527352a488`，实际运行平台 `linux/amd64`，OCI revision 为 `a797ecd2bf7967541e5ee52acfa031fd683d5845`。四表收口：功能对应原三项授权、职责保持原组件、类型与协议无变化、静态及正式远程证据齐全。未更新生产容器，用户自行增删截图保持原状。
