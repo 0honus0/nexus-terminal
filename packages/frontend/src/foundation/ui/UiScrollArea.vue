@@ -23,7 +23,7 @@
 		<UiButton
 			v-if="scrolled"
 			class="ui-scroll-area__back"
-			appearance="soft"
+			appearance="glass"
 			tone="neutral"
 			icon-only
 			:aria-label="backToTopLabel"
@@ -51,12 +51,5 @@
 		right: 12px;
 		bottom: 12px;
 		border-radius: 50%;
-		border: 1px solid color-mix(in srgb, var(--border-color) 75%, var(--link-active-color));
-		background: color-mix(in srgb, var(--card-bg-color) 86%, var(--link-active-color));
-		color: var(--text-color);
-		box-shadow: 0 3px 12px rgb(0 0 0 / 16%);
-	}
-	.ui-scroll-area__back:hover {
-		background: color-mix(in srgb, var(--card-bg-color) 78%, var(--link-active-color));
 	}
 </style>

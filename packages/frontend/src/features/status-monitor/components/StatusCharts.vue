@@ -426,7 +426,7 @@
 		<div
 			v-if="tooltip"
 			role="tooltip"
-			class="status-history-tooltip"
+			class="status-history-tooltip ui-glass-panel"
 			:style="{ left: tooltip.left, top: tooltip.top }"
 		>
 			<strong>{{ tooltip.time }}</strong>
@@ -441,14 +441,11 @@
 		z-index: 1001;
 		max-width: min(240px, calc(100vw - 16px));
 		padding: 6px 10px;
-		border: 1px solid var(--border-color);
 		border-radius: 6px;
-		background: var(--card-bg-color);
 		color: var(--text-color);
 		font-size: 12px;
 		line-height: 24px;
 		pointer-events: none;
-		box-shadow: 0 4px 12px rgb(0 0 0 / 15%);
 	}
 
 	.status-history-chart {

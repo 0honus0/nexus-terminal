@@ -1689,3 +1689,14 @@ Context预压缩现状：checkpoint工具需要实际context.compact授权，摘
 6. **数据、事务与并发**：状态随xterm解析更新，快照仍等待输出解析；软重置清当前区域、RIS与resize清两套区域，返回普通缓冲区清备用区域。
 7. **生命周期与失败**：原tracker统一释放parser/resize/buffer监听，沿原快照失败与清理路径；仅补齐活动屏幕区域，不承诺序列化任意未闭合ANSI解析状态或非活动屏幕的自定义区域。
 8. **当前能力与验收**：真实Codex分块数据在15个输出边界经双端实际实现回放，校准等价ANSI调色板编码后可见单元格无差异；后端9项定向回归、静态证据与实机边界见testing。运行中的旧Backend尚未加载本轮代码，不据此宣称端到端修复已实机验收。
+
+### 终端 VS Code TypeAhead 技术边界
+
+1. 职责与范围：TerminalView 独占每个 xterm 的预测实例，不更改 UI 样式，不发送预测数据至远端。
+2. 目录：`features/terminal/vendor/vscode-typeahead` 保留 Microsoft MIT 算法、固定来源 SHA 和适配说明；`xterm-attributes.ts` 集中验证 xterm 私有当前 SGR、光标可见性及滚动区域。
+3. 依赖：TerminalView → vendor → xterm/mitt；不引入 VS Code 平台、遥测、设置服务或反向依赖 Workspace。
+4. 类型与转换：TerminalChannel 可选 onInputSent 为技术 Port，只发布修饰键转换后且 WebSocket 实际接受的输入，拒绝/未发送内容不参与预测；无 Shared/存储契约变化。
+5. 入口：Workspace adapter 成功 sendConnected 后通知订阅，Surface 转发；View 仅在可见、可输入的实时画面启用。按样本延迟/准确率选择预测，首字符先确认，Unicode/粘贴和复杂模式等待真实回显。
+6. 并发：本地预测、远端输出和撤销经同一个 xterm 解析队列；远端 ACK 保留原始字节及原回调，只在真实解析后释放。预测不可替代服务器输出或重放输入。
+7. 生命周期：失活/后台、断线/错误、历史、resize、PTY替换和快照先撤销；snapshot 等待解析屏障；销毁取消 timer/标题订阅与样本订阅。旧 epoch 排队输入失效。备用屏幕、隐藏光标、原点/插入模式和滚动区内不预测；滚动区下方的普通输入行可参与，但不预测跨行滚动。
+8. 验收：定向算法回放、真实 Codex 捕获流和组件/传输回归分别记录 testing/E2E；类型/构建不能代表真实弱网所有程序通过。不新增远端 helper 或改变现有输入流控。

@@ -157,7 +157,7 @@
 			<h1 class="ui-catalog-title audit-title">{{ t('auditLog.title') }}</h1>
 
 			<div class="audit-header-actions">
-				<div class="audit-tabs" role="tablist" :aria-label="t('auditLog.title')">
+				<div class="audit-tabs ui-glass-panel" role="tablist" :aria-label="t('auditLog.title')">
 					<button
 						id="audit-tab-logs"
 						type="button"
@@ -424,9 +424,7 @@
 		align-items: center;
 		gap: 2px;
 		padding: 3px;
-		border: 1px solid var(--ui-hairline);
 		border-radius: 11px;
-		background: color-mix(in srgb, var(--text-color) 3%, transparent);
 	}
 
 	.audit-tab {
@@ -459,9 +457,9 @@
 	}
 
 	.audit-tab--active {
-		background: color-mix(in srgb, var(--card-bg-color) 82%, var(--app-bg-color));
+		background: color-mix(in srgb, var(--link-active-color) 12%, var(--glass-fill));
 		color: var(--text-color);
-		box-shadow: 0 1px 5px -4px color-mix(in srgb, var(--text-color) 36%, transparent);
+		box-shadow: var(--glass-inset-highlight);
 	}
 
 	.audit-panel {

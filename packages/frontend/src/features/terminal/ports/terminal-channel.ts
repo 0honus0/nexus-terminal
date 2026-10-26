@@ -8,6 +8,8 @@ export interface TerminalHistoryPage {
 export interface TerminalChannel {
 	sendInput(data: string): void | Promise<void>;
 	resize(viewport: TerminalViewport): void | Promise<void>;
+	/** Actual bytes accepted by the transport, after keyboard modifiers. */
+	onInputSent?(handler: (data: string) => void): () => void;
 	onOutput(handler: (output: TerminalOutput) => void): () => void;
 	onClose(handler: (reason?: string) => void): () => void;
 	onError(handler: (message: string) => void): () => void;

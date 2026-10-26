@@ -56,6 +56,7 @@
     "dompurify": "catalog:",
     "jschardet": "^3.1.4",
     "marked": "^18.0.14",
+    "mitt": "^3.0.1",
     "monaco-editor": "^0.56.0",
     "pdfjs-dist": "^6.4.299",
     "pinia": "^4.0.3",

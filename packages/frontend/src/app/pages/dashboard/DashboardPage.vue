@@ -677,14 +677,13 @@
 						<UiListToolbar
 							v-model="search"
 							:search-label="t('dashboard.searchConnectionsPlaceholder')"
-							class="dashboard-toolbar dashboard-status-toolbar"
+							class="dashboard-status-toolbar"
 						>
 							<div class="min-w-0 sm:min-w-32">
 								<UiSelect
 									v-model="tagId"
 									:options="tagFilterOptions"
 									class="dashboard-filter-select-gen2 text-xs sm:text-sm"
-									style="--ui-control-height: 2.375rem"
 									text-align="center"
 									:aria-label="t('dashboard.filterByTag')"
 								/>
@@ -694,13 +693,12 @@
 									v-model="sort"
 									:options="sortOptions"
 									class="dashboard-filter-select-gen2 text-xs sm:text-sm"
-									style="--ui-control-height: 2.375rem"
 									text-align="center"
 									:aria-label="t('dashboard.sortBy')"
 								/>
 							</div>
 							<UiButton
-								appearance="soft"
+								appearance="glass"
 								tone="neutral"
 								icon-only
 								class="!h-10 !w-10 shrink-0 text-xs"
@@ -1021,16 +1019,22 @@
 		scrollbar-gutter: auto;
 	}
 
-	.dashboard-toolbar.dashboard-status-toolbar {
+	.dashboard-status-surface .dashboard-status-toolbar {
 		position: sticky;
 		top: 0;
 		z-index: 4;
 		margin: 0;
 		padding: 4px 0;
 		border: 0;
-		background: color-mix(in srgb, var(--app-bg-color) 94%, transparent);
+		background: transparent;
 		box-shadow: none;
-		backdrop-filter: blur(10px);
+		-webkit-backdrop-filter: none;
+		backdrop-filter: none;
+	}
+
+	.dashboard-status-toolbar :deep(.ui-search-input),
+	.dashboard-status-toolbar :deep(.ui-select) {
+		--ui-control-height: 2.5rem;
 	}
 
 	.dashboard-result-count {
@@ -1039,7 +1043,7 @@
 
 	.dashboard-manage-link {
 		display: inline-flex;
-		height: 2.375rem;
+		height: 2.5rem;
 		align-items: center;
 		justify-content: center;
 		gap: 6px;
@@ -1418,12 +1422,6 @@
 			overflow-y: auto;
 			scrollbar-gutter: stable;
 		}
-	}
-
-	.dashboard-toolbar {
-		border: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
-		background: color-mix(in srgb, var(--input-bg-color) 84%, var(--card-bg-color));
-		box-shadow: inset 0 1px 0 color-mix(in srgb, white 8%, transparent);
 	}
 
 	@media (max-width: 639px) {

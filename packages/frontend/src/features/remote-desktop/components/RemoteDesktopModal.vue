@@ -469,7 +469,7 @@
 			:class="
 				fullscreen
 					? 'remote-desktop-panel-fullscreen rounded-none border-0 bg-black shadow-none'
-					: 'rounded-lg border border-border bg-background shadow-xl'
+					: 'ui-glass-panel rounded-lg'
 			"
 		>
 			<header v-if="!fullscreen" class="flex shrink-0 items-center justify-between border-b border-border p-3">
@@ -788,13 +788,17 @@
 		border: 0 !important;
 		border-radius: 0 !important;
 		background: #000;
+		background-image: none;
 		box-shadow: none !important;
+		-webkit-backdrop-filter: none;
+		backdrop-filter: none;
 	}
 
 	.remote-display-container {
 		isolation: isolate;
 		position: relative;
 		overflow: hidden;
+		background: #000;
 	}
 
 	.remote-desktop-panel-fullscreen .remote-display-container {

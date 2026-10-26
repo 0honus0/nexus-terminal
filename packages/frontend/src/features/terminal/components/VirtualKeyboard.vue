@@ -172,9 +172,9 @@
 
 <template>
 	<UiSurface
-		surface="plain"
+		surface="glass-chrome"
 		radius="control"
-		class="mobile-virtual-keyboard virtual-keyboard-bar"
+		class="mobile-virtual-keyboard virtual-keyboard-bar ui-glass-chrome"
 		role="toolbar"
 		:aria-label="t('terminal.virtualKeyboard.label')"
 		:data-page="page"
@@ -221,7 +221,6 @@
 		padding-bottom: max(4px, env(safe-area-inset-bottom));
 		border-top: 1px solid var(--ui-hairline);
 		border-radius: 0;
-		background: var(--glass-nav-fill);
 		user-select: none;
 		-webkit-user-select: none;
 		-webkit-touch-callout: none;

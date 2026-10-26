@@ -46,6 +46,7 @@
     "online": "Online",
     "networkInterfaceFallback": "Network interface",
     "historyRange": "History range",
+    "copyIp": "Copy IP",
     "copyIpError": "Failed to copy IP address",
     "load": "Load",
     "failures": {

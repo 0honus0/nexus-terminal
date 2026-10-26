@@ -92,7 +92,7 @@
 <template>
 	<div class="agent-settings-panel space-y-3 sm:space-y-4">
 		<div
-			class="agent-settings-master rounded-xl border border-border bg-card px-3.5 py-2.5 sm:px-4 sm:py-3 shadow-xs"
+			class="agent-settings-master ui-glass-panel rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3"
 			:aria-busy="execution.busy.value"
 		>
 			<div class="agent-settings-master__heading">
@@ -151,11 +151,11 @@
 				v-for="group in groups"
 				:key="group.id"
 				type="button"
-				class="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl px-1.5 py-2 text-center text-xs font-medium transition-all sm:gap-2 sm:px-3 sm:py-2.5"
+				class="ui-glass-chrome flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl px-1.5 py-2 text-center text-xs font-medium transition-all sm:gap-2 sm:px-3 sm:py-2.5"
 				:class="
 					activeGroup === group.id
-						? 'border border-border/70 bg-header/65 font-semibold text-foreground shadow-xs backdrop-blur-md'
-						: 'border border-border/40 bg-card/40 text-text-secondary shadow-2xs backdrop-blur-xs hover:border-border/60 hover:bg-header/40 hover:text-foreground'
+						? 'border border-border/70 font-semibold text-foreground shadow-xs'
+						: 'border border-border/40 text-text-secondary shadow-2xs hover:border-border/60 hover:bg-header/40 hover:text-foreground'
 				"
 				:aria-current="activeGroup === group.id ? 'page' : undefined"
 				@click="selectGroup(group.id)"

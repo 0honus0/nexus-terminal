@@ -345,12 +345,12 @@
 						v-if="showIp && host"
 						type="button"
 						class="live-state host-button status-touch-target"
-						:title="host"
+						:title="t('statusMonitor.copyIp')"
+						:aria-label="t('statusMonitor.copyIp') + ': ' + host"
 						@click="copyHost"
 					>
 						<i class="status-dot"></i>
 						<span class="host-name">{{ host }}</span>
-						<i class="fas fa-copy host-copy" aria-hidden="true"></i>
 					</button>
 					<span v-else class="live-state"
 						><i class="status-dot"></i><span class="live-label">{{ t('statusMonitor.online') }}</span></span

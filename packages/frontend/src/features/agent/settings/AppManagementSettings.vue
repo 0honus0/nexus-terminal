@@ -97,12 +97,12 @@
 </script>
 <template>
 	<section
-		:class="embedded ? 'min-w-0' : 'overflow-hidden rounded-2xl border border-border bg-card shadow-xs'"
+		:class="embedded ? 'min-w-0' : 'ui-glass-panel overflow-hidden rounded-2xl'"
 		:aria-label="t('agent.settings.apps.title')"
 	>
 		<div
 			v-if="!embedded"
-			class="agent-settings-head flex flex-wrap items-center justify-between gap-3 border-b border-border bg-header/50 px-4 py-3.5 sm:px-5 sm:py-4"
+			class="agent-settings-head ui-glass-chrome flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3.5 sm:px-5 sm:py-4"
 		>
 			<div class="flex items-center gap-2.5">
 				<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">

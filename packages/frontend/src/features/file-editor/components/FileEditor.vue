@@ -351,7 +351,7 @@
 </script>
 <template>
 	<section ref="root" class="file-editor-container" :class="{ 'has-close-button': showCloseButton }">
-		<div class="file-editor-header">
+		<div class="file-editor-header ui-glass-chrome">
 			<div class="file-editor-tabs" role="tablist">
 				<div
 					v-for="tab in editorSession.tabs.value"
@@ -468,7 +468,7 @@
 			{{ filesystemFailureMessage(editorSession.active.value.error, t) }}
 		</p>
 
-		<footer v-if="editorSession.active.value" class="editor-footer">
+		<footer v-if="editorSession.active.value" class="editor-footer ui-glass-chrome">
 			<div v-if="editorSession.active.value" class="editor-footer-identity">
 				<span class="editor-file-icon" aria-hidden="true">
 					<i class="fas fa-file-lines"></i>
@@ -624,7 +624,6 @@
 <style scoped>
 	.file-editor-container {
 		--editor-bg: color-mix(in srgb, var(--app-bg-color, #212529) 88%, #0d0f12);
-		--editor-chrome: color-mix(in srgb, var(--card-bg-color, #2b3035) 48%, transparent);
 		--editor-chrome-raised: color-mix(in srgb, var(--card-bg-color, #2b3035) 72%, transparent);
 		--editor-chrome-hover: color-mix(
 			in srgb,
@@ -655,9 +654,6 @@
 		flex: none;
 		align-items: stretch;
 		border-bottom: 1px solid var(--editor-border);
-		background: var(--editor-chrome);
-		-webkit-backdrop-filter: var(--glass-backdrop-filter, blur(18px) saturate(160%));
-		backdrop-filter: var(--glass-backdrop-filter, blur(18px) saturate(160%));
 	}
 
 	.file-editor-tabs {
@@ -868,9 +864,6 @@
 		gap: 0.6rem;
 		padding: 0.4rem 0.55rem;
 		border-top: 1px solid var(--editor-border);
-		background: color-mix(in srgb, var(--editor-chrome) 86%, transparent);
-		-webkit-backdrop-filter: var(--glass-backdrop-filter, blur(18px) saturate(160%));
-		backdrop-filter: var(--glass-backdrop-filter, blur(18px) saturate(160%));
 	}
 
 	.file-editor-container.has-close-button .editor-footer {

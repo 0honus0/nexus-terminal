@@ -50,7 +50,7 @@
 </script>
 
 <template>
-	<div class="file-editor-search-bar" role="search">
+	<div class="file-editor-search-bar ui-glass-chrome" role="search">
 		<UiSearchInput
 			ref="inputRef"
 			:model-value="props.query"
@@ -117,9 +117,6 @@
 		gap: 0.3rem;
 		padding: 0.28rem 0.55rem;
 		border-bottom: 1px solid var(--editor-border);
-		background: color-mix(in srgb, var(--editor-chrome) 88%, transparent);
-		-webkit-backdrop-filter: var(--glass-backdrop-filter, blur(18px) saturate(160%));
-		backdrop-filter: var(--glass-backdrop-filter, blur(18px) saturate(160%));
 	}
 
 	.file-editor-search-input {

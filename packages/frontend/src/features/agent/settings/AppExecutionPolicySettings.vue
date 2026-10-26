@@ -22,10 +22,10 @@
 </script>
 
 <template>
-	<section :class="embedded ? 'min-w-0' : 'overflow-hidden rounded-2xl border border-border bg-card shadow-xs'">
+	<section :class="embedded ? 'min-w-0' : 'ui-glass-panel overflow-hidden rounded-2xl'">
 		<div
 			class="agent-settings-head flex flex-wrap items-center justify-between gap-3"
-			:class="embedded ? 'justify-end pb-3' : 'border-b border-border bg-header/50 px-4 py-3 sm:px-5'"
+			:class="embedded ? 'justify-end pb-3' : 'ui-glass-chrome border-b border-border px-4 py-3 sm:px-5'"
 		>
 			<div v-if="!embedded" class="flex items-center gap-1.5">
 				<h3 class="text-sm font-semibold text-foreground">{{ t('agent.settings.executionPolicy.title') }}</h3>

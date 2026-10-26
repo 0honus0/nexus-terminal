@@ -1,5 +1,5 @@
 <script setup lang="ts">
-	import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+	import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import {
 		UiBadge,
@@ -64,6 +64,7 @@
 		discover,
 		test,
 		resetModel,
+		resetAllModels,
 		matchModels,
 		preserveModelTools,
 	} = useProviderManagement({ available: () => props.active });
@@ -106,14 +107,17 @@
 		resize.stopResize();
 		resized.value = false;
 	});
-	const query = ref('');
-	const selected = ref<string[]>([]);
+	type ProviderModelGroupKind = 'chat' | 'images';
+	const discoveredQuery = reactive<Record<ProviderModelGroupKind, string>>({ chat: '', images: '' });
+	const discoveredSelection = reactive<Record<ProviderModelGroupKind, string[]>>({ chat: [], images: [] });
 	const expandedModels = ref<Set<number>>(new Set());
 	watch(
 		draft,
 		() => {
-			selected.value = [];
-			query.value = '';
+			discoveredQuery.chat = '';
+			discoveredQuery.images = '';
+			discoveredSelection.chat = [];
+			discoveredSelection.images = [];
 			showApiKey.value = false;
 			resized.value = false;
 			validationAttempted.value = false;
@@ -128,15 +132,16 @@
 			deleting.value = null;
 			testingProviderId.value = null;
 			showApiKey.value = false;
-			query.value = '';
-			selected.value = [];
+			discoveredQuery.chat = '';
+			discoveredQuery.images = '';
+			discoveredSelection.chat = [];
+			discoveredSelection.images = [];
 		},
 	});
-	const visibleDiscovered = computed(() =>
-		discovered.value.filter((item) => item.id.toLowerCase().includes(query.value.toLowerCase())),
-	);
 	const currentProvider = computed(() => providers.value.find((provider) => provider.id === draft.value?.id));
-	const modelGroups = computed(() => {
+	const modelGroups = computed<
+		Array<{ kind: ProviderModelGroupKind; items: Array<{ model: ProviderModelDraft; index: number }> }>
+	>(() => {
 		const provider = draft.value;
 		const entries = provider?.models.map((model, index) => ({ model, index })) ?? [];
 		return [
@@ -374,12 +379,19 @@
 		if (model?.id) await matchModels([model]);
 	}
 
-	async function addSelected(): Promise<void> {
+	function visibleDiscovered(kind: ProviderModelGroupKind): DiscoveredProviderModel[] {
+		const value = discoveredQuery[kind].trim().toLowerCase();
+		return discovered.value.filter((item) => item.id.toLowerCase().includes(value));
+	}
+
+	async function addSelected(kind: ProviderModelGroupKind): Promise<void> {
 		if (!draft.value) {
 			return;
 		}
 		const additions = discovered.value.filter(
-			(found) => selected.value.includes(found.id) && !draft.value?.models.some((model) => model.id === found.id),
+			(found) =>
+				discoveredSelection[kind].includes(found.id) &&
+				!draft.value?.models.some((model) => model.id === found.id),
 		);
 		if (draft.value.models.length + additions.length > AGENT_PROVIDER_MODEL_LIMIT) {
 			notice.value = 'capacity';
@@ -388,9 +400,20 @@
 		const added: ProviderModelDraft[] = [];
 		for (const found of additions) {
 			const model = appendModel(found);
-			if (model) added.push(model);
+			if (model) {
+				if (kind === 'images') {
+					model.protocol = 'images';
+					model.supportsImageGeneration = true;
+					model.sources.supportsImageGeneration = 'manual';
+				} else {
+					model.protocol = draft.value.protocol === 'images' ? 'chat-completions' : undefined;
+				}
+				added.push(model);
+			}
 		}
-		selected.value = [];
+		const addedIds = new Set(additions.map((found) => found.id));
+		discoveredSelection.chat = discoveredSelection.chat.filter((id) => !addedIds.has(id));
+		discoveredSelection.images = discoveredSelection.images.filter((id) => !addedIds.has(id));
 		await matchModels(added);
 	}
 
@@ -462,11 +485,11 @@
 		}
 	}
 
-	function toggleSelected(id: string, checked: boolean): void {
-		const next = new Set(selected.value);
+	function toggleSelected(kind: ProviderModelGroupKind, id: string, checked: boolean): void {
+		const next = new Set(discoveredSelection[kind]);
 		if (checked) next.add(id);
 		else next.delete(id);
-		selected.value = [...next];
+		discoveredSelection[kind] = [...next];
 	}
 
 	function hasDraftModel(id: string): boolean {
@@ -626,11 +649,11 @@
 
 <template>
 	<section
-		class="relative z-20 rounded-2xl border border-border bg-card shadow-xs transition-all"
+		class="ui-glass-panel relative z-20 rounded-2xl transition-all"
 		:aria-label="t('agent.settings.providerManagement.title')"
 	>
 		<div
-			class="agent-settings-head flex items-center justify-between gap-2 rounded-t-2xl border-b border-border bg-header/50 px-4 py-3 sm:gap-3 sm:px-5 sm:py-3.5"
+			class="agent-settings-head ui-glass-chrome flex items-center justify-between gap-2 rounded-t-2xl border-b border-border px-4 py-3 sm:gap-3 sm:px-5 sm:py-3.5"
 		>
 			<div class="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
 				<h3 class="min-w-0 truncate text-sm font-semibold text-foreground">
@@ -1117,6 +1140,20 @@
 							</h4>
 							<UiButton
 								type="button"
+								appearance="ghost"
+								density="compact"
+								class="provider-models-reset-all shrink-0 whitespace-nowrap"
+								:disabled="busy || draft.models.length === 0"
+								:title="t('agent.settings.providerManagement.resetAllParameters')"
+								:aria-label="t('agent.settings.providerManagement.resetAllParameters')"
+								@click="resetAllModels"
+								><i class="fa-solid fa-rotate-left text-[10px]" aria-hidden="true"></i
+								><span class="provider-models-reset-all__label">{{
+									t('agent.settings.providerManagement.resetAllParameters')
+								}}</span></UiButton
+							>
+							<UiButton
+								type="button"
 								appearance="soft"
 								density="compact"
 								class="shrink-0 whitespace-nowrap"
@@ -1271,63 +1308,79 @@
 										</div>
 									</div>
 								</div>
+								<div v-if="discovered.length" class="space-y-2.5 border-t border-border/25 pt-3">
+									<div class="flex flex-wrap items-center justify-between gap-2">
+										<h6 class="text-[11px] font-semibold text-foreground">
+											{{ t('agent.settings.providers.discoveredModels') }}
+										</h6>
+										<UiBadge tone="primary" appearance="ghost" density="compact">{{
+											t('agent.settings.providers.discoveryCount', {
+												count: visibleDiscovered(group.kind).length,
+											})
+										}}</UiBadge>
+									</div>
+									<p class="text-[11px] leading-relaxed text-text-secondary">
+										{{ t('agent.settings.providerManagement.discoveredGroupHint') }}
+									</p>
+									<UiFormField
+										:label="t('agent.settings.providerManagement.filter')"
+										:for-id="`discovered-model-filter-${group.kind}`"
+									>
+										<UiInput
+											:id="`discovered-model-filter-${group.kind}`"
+											v-model="discoveredQuery[group.kind]"
+											autocomplete="off"
+										/>
+									</UiFormField>
+									<div class="grid max-h-40 gap-1.5 overflow-auto sm:grid-cols-2">
+										<label
+											v-for="found in visibleDiscovered(group.kind)"
+											:key="found.id"
+											class="flex min-w-0 items-center gap-2 rounded-lg bg-card/55 px-2.5 py-1.5 text-xs"
+											:class="hasDraftModel(found.id) ? 'cursor-default' : 'cursor-pointer'"
+										>
+											<span
+												v-if="hasDraftModel(found.id)"
+												class="provider-discovered-check flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] bg-success text-white"
+												:aria-label="`${found.id} · ${t('agent.settings.providers.configuredModels')}`"
+											>
+												<i class="fa-solid fa-check text-[8px]" aria-hidden="true"></i>
+											</span>
+											<UiCheckbox
+												v-else
+												:model-value="discoveredSelection[group.kind].includes(found.id)"
+												:disabled="blocked || !draft"
+												@update:model-value="toggleSelected(group.kind, found.id, $event)"
+											/>
+											<span class="truncate font-mono">{{ found.id }}</span>
+										</label>
+									</div>
+									<div class="flex justify-end">
+										<UiButton
+											type="button"
+											appearance="solid"
+											tone="primary"
+											:disabled="
+												blocked ||
+												!draft ||
+												discoveredSelection[group.kind].length === 0 ||
+												draft.models.length >= AGENT_PROVIDER_MODEL_LIMIT
+											"
+											@click="addSelected(group.kind)"
+										>
+											{{
+												t('agent.settings.providers.addSelected', {
+													count: discoveredSelection[group.kind].length,
+												})
+											}}
+										</UiButton>
+									</div>
+								</div>
 							</div>
 						</div>
 					</section>
 				</fieldset>
 			</form>
-			<div
-				v-if="draft && discovered.length"
-				class="mt-4 space-y-3 rounded-xl border border-primary/25 bg-primary/5 p-3.5"
-			>
-				<div class="flex flex-wrap items-center justify-between gap-2">
-					<h4 class="text-xs font-semibold text-foreground">
-						{{ t('agent.settings.providers.discoveredModels') }}
-					</h4>
-					<UiBadge tone="primary" appearance="ghost" density="compact">{{
-						t('agent.settings.providers.discoveryCount', { count: discovered.length })
-					}}</UiBadge>
-				</div>
-				<UiFormField :label="t('agent.settings.providerManagement.filter')" for-id="discovered-model-filter">
-					<UiInput id="discovered-model-filter" v-model="query" autocomplete="off" />
-				</UiFormField>
-				<div class="grid max-h-48 gap-1.5 overflow-auto sm:grid-cols-2">
-					<label
-						v-for="found in visibleDiscovered"
-						:key="found.id"
-						class="flex min-w-0 items-center gap-2 rounded-lg bg-card/70 px-2.5 py-1.5 text-xs"
-						:class="hasDraftModel(found.id) ? 'cursor-default' : 'cursor-pointer'"
-						><span
-							v-if="hasDraftModel(found.id)"
-							class="provider-discovered-check flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] bg-success text-white"
-							:aria-label="`${found.id} · ${t('agent.settings.providers.configuredModels')}`"
-						>
-							<i class="fa-solid fa-check text-[8px]" aria-hidden="true"></i>
-						</span>
-						<UiCheckbox
-							v-else
-							:model-value="selected.includes(found.id)"
-							:disabled="blocked || !draft"
-							@update:model-value="toggleSelected(found.id, $event)"
-						/><span class="truncate font-mono">{{ found.id }}</span></label
-					>
-				</div>
-				<div class="flex justify-end">
-					<UiButton
-						type="button"
-						appearance="solid"
-						tone="primary"
-						:disabled="
-							blocked ||
-							!draft ||
-							selected.length === 0 ||
-							draft.models.length >= AGENT_PROVIDER_MODEL_LIMIT
-						"
-						@click="addSelected"
-						>{{ t('agent.settings.providers.addSelected', { count: selected.length }) }}</UiButton
-					>
-				</div>
-			</div>
 			<template #footer>
 				<UiFormActions>
 					<UiButton

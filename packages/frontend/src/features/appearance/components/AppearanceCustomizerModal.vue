@@ -129,10 +129,10 @@
 		>
 			<div
 				ref="dialog"
-				class="absolute flex h-full w-full flex-col overflow-hidden rounded-lg bg-background text-foreground shadow-[0px_0px_15px_rgb(0_0_0_/_0.15)] md:h-[85vh] md:max-h-[700px] md:w-[90%] md:max-w-[1000px]"
+				class="ui-glass-panel absolute flex h-full w-full flex-col overflow-hidden rounded-lg text-foreground md:h-[85vh] md:max-h-[700px] md:w-[90%] md:max-w-[1000px]"
 			>
 				<header
-					class="flex shrink-0 cursor-move items-center justify-between border-b border-border bg-header px-4 py-3"
+					class="ui-glass-chrome flex shrink-0 cursor-move items-center justify-between border-b border-border px-4 py-3"
 					@mousedown="startDrag"
 				>
 					<h2 class="m-0 text-lg text-foreground md:text-xl">{{ t('styleCustomizer.title') }}</h2>
@@ -142,7 +142,7 @@
 				</header>
 
 				<div class="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
-					<div class="appearance-customizer-mobile-nav">
+					<div class="appearance-customizer-mobile-nav ui-glass-chrome">
 						<UiPopover
 							:ariaLabel="t(activeTabDefinition.label)"
 							placement="bottom"
@@ -199,7 +199,7 @@
 					</div>
 
 					<nav
-						class="appearance-customizer-nav appearance-customizer-nav--desktop border-border bg-header md:border-r"
+						class="appearance-customizer-nav appearance-customizer-nav--desktop ui-glass-chrome border-border md:border-r"
 						role="tablist"
 						:aria-label="t('settings.appearance.title')"
 					>
@@ -248,7 +248,9 @@
 					</main>
 				</div>
 
-				<footer class="flex shrink-0 flex-wrap justify-end gap-2 border-t border-border bg-footer p-3 md:p-4">
+				<footer
+					class="ui-glass-chrome flex shrink-0 flex-wrap justify-end gap-2 border-t border-border p-3 md:p-4"
+				>
 					<UiButton
 						v-if="activeTab === 'ui'"
 						type="button"
@@ -283,7 +285,6 @@
 		width: 100%;
 		padding: 10px 12px;
 		border-bottom: 1px solid color-mix(in srgb, var(--border-color) 48%, transparent);
-		background: color-mix(in srgb, var(--header-bg-color) 72%, transparent);
 	}
 
 	.appearance-customizer-mobile-trigger {
@@ -294,15 +295,16 @@
 		width: min(100%, 360px);
 		min-height: 46px;
 		padding: 7px 10px;
-		border: 1px solid color-mix(in srgb, var(--link-active-color) 24%, var(--border-color));
+		border: 1px solid var(--glass-border-color);
 		border-radius: 12px;
-		background: color-mix(in srgb, var(--card-bg-color) 72%, var(--link-active-color) 10%);
+		background-color: color-mix(in srgb, var(--link-active-color) 8%, var(--glass-fill));
+		background-image: var(--glass-sheen-image);
 		color: var(--text-color);
 		text-align: left;
 		cursor: pointer;
-		box-shadow:
-			inset 0 1px 0 color-mix(in srgb, white 8%, transparent),
-			0 8px 18px -18px rgb(0 0 0 / 42%);
+		box-shadow: var(--glass-rim-shadow);
+		-webkit-backdrop-filter: var(--ui-glass-filter);
+		backdrop-filter: var(--ui-glass-filter);
 		transition:
 			background-color 140ms ease,
 			border-color 140ms ease;
@@ -320,8 +322,8 @@
 	}
 
 	.appearance-customizer-mobile-trigger:hover {
-		border-color: color-mix(in srgb, var(--link-active-color) 34%, var(--border-color));
-		background: color-mix(in srgb, var(--card-bg-color) 68%, var(--link-active-color) 14%);
+		border-color: var(--ui-hairline-strong);
+		background-color: color-mix(in srgb, var(--link-active-color) 12%, var(--glass-fill));
 	}
 
 	.appearance-customizer-mobile-trigger__label {
@@ -365,9 +367,6 @@
 		z-index: 1100;
 		width: min(calc(100vw - 24px), 360px);
 		padding: 6px;
-		border-color: color-mix(in srgb, var(--border-color) 58%, transparent);
-		background: color-mix(in srgb, var(--header-bg-color) 92%, transparent);
-		box-shadow: 0 18px 48px -26px rgb(0 0 0 / 72%);
 	}
 
 	.appearance-customizer-nav {
@@ -424,13 +423,14 @@
 	}
 
 	.appearance-customizer-nav__item[data-active] {
-		border-color: color-mix(in srgb, var(--link-active-color) 24%, var(--border-color));
-		background: color-mix(in srgb, var(--card-bg-color) 72%, var(--link-active-color) 12%);
+		border-color: var(--glass-border-color);
+		background-color: color-mix(in srgb, var(--link-active-color) 11%, var(--glass-fill));
+		background-image: var(--glass-sheen-image);
 		color: var(--text-color);
 		font-weight: 600;
-		box-shadow:
-			inset 0 1px 0 color-mix(in srgb, white 9%, transparent),
-			0 8px 18px -18px rgb(0 0 0 / 42%);
+		box-shadow: var(--glass-rim-shadow);
+		-webkit-backdrop-filter: var(--ui-glass-filter);
+		backdrop-filter: var(--ui-glass-filter);
 	}
 
 	.appearance-customizer-nav__item[data-active]::after {

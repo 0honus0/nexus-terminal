@@ -252,7 +252,6 @@
 							:ariaLabel="t('connections.moreActions')"
 							:title="t('connections.moreActions')"
 							align="end"
-							surface="solid"
 							icon-only
 							triggerAppearance="soft"
 							density="comfortable"
@@ -318,7 +317,7 @@
 				</div>
 
 				<div class="connection-summary" role="group" :aria-label="t('dashboard.protocolDistribution')">
-					<div class="connection-summary__stat connection-summary__stat--total">
+					<div class="connection-summary__stat connection-summary__stat--total ui-glass-panel">
 						<span class="connection-summary__icon" aria-hidden="true">
 							<i class="fas fa-link"></i>
 						</span>
@@ -328,7 +327,7 @@
 					<div
 						v-for="item in connectionTypeSummary"
 						:key="item.type"
-						class="connection-summary__stat"
+						class="connection-summary__stat ui-glass-panel"
 						:class="`connection-summary__stat--${item.type.toLowerCase()}`"
 					>
 						<span
@@ -794,23 +793,22 @@
 		gap: 14px;
 		padding: 14px 18px;
 		border-radius: 14px;
-		background: color-mix(in srgb, var(--card-bg-color) 78%, var(--app-bg-color));
 	}
 
 	.connection-summary__stat--total {
-		background: color-mix(in srgb, var(--link-active-color) 6%, var(--card-bg-color));
+		background-color: color-mix(in srgb, var(--link-active-color) 5%, var(--glass-fill));
 	}
 
 	.connection-summary__stat--ssh {
-		background: color-mix(in srgb, var(--link-active-color) 4%, var(--card-bg-color));
+		background-color: color-mix(in srgb, var(--link-active-color) 4%, var(--glass-fill));
 	}
 
 	.connection-summary__stat--rdp {
-		background: color-mix(in srgb, #5f7cfa 5%, var(--card-bg-color));
+		background-color: color-mix(in srgb, #5f7cfa 5%, var(--glass-fill));
 	}
 
 	.connection-summary__stat--vnc {
-		background: color-mix(in srgb, #d8679b 5%, var(--card-bg-color));
+		background-color: color-mix(in srgb, #d8679b 5%, var(--glass-fill));
 	}
 
 	.connection-summary__icon {

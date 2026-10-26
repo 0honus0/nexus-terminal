@@ -690,7 +690,7 @@
 		@wheel.stop
 	>
 		<header
-			class="agent-hub-header flex h-11 shrink-0 touch-none select-none items-center justify-between gap-2.5 border-b border-border/45 bg-header/45 px-3 backdrop-blur-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/45"
+			class="agent-hub-header ui-glass-chrome flex h-11 shrink-0 touch-none select-none items-center justify-between gap-2.5 border-b border-border/45 px-3 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/45"
 			:class="state.maximized ? '' : 'cursor-move'"
 			:tabindex="state.maximized ? -1 : 0"
 			:aria-label="$t('agent.hub.moveHandle')"
@@ -785,7 +785,7 @@
 			<div class="flex shrink-0 items-center gap-1.5" @pointerdown.stop>
 				<!-- 悬浮微胶囊分段器 (Segmented Control) -->
 				<nav
-					class="agent-hub-view-switch flex shrink-0 items-center rounded-md bg-header/45 p-0.5 backdrop-blur-xs"
+					class="agent-hub-view-switch ui-glass-chrome flex shrink-0 items-center rounded-md p-0.5"
 					:aria-label="$t('agent.hub.views')"
 				>
 					<UiButton
@@ -985,15 +985,6 @@
 		line-height: 1.25;
 		font-weight: 500;
 		letter-spacing: -0.012em;
-	}
-
-	.agent-hub-header {
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--color-header) 82%, var(--color-background)) 0%,
-			color-mix(in srgb, var(--color-header) 62%, var(--color-background)) 58%,
-			color-mix(in srgb, var(--color-header) 34%, var(--color-background)) 100%
-		);
 	}
 
 	.agent-app-tab-active {

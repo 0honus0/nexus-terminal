@@ -46,6 +46,7 @@
     "online": "オンライン",
     "networkInterfaceFallback": "ネットワークインターフェース",
     "historyRange": "履歴範囲",
+    "copyIp": "IP をコピー",
     "copyIpError": "IP アドレスのコピーに失敗しました",
     "load": "負荷",
     "failures": {

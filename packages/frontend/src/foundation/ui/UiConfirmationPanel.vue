@@ -43,6 +43,7 @@
 		:focus-on-open="focusOnOpen"
 		:restore-focus="restoreFocus"
 		:backdrop-trigger="backdropTrigger"
+		overlay-class="ui-confirmation-overlay"
 		panel-class="ui-confirmation-panel"
 		role="dialog"
 		:aria-modal="true"

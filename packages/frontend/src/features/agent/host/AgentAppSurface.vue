@@ -654,7 +654,7 @@
 	>
 		<aside
 			id="agent-thread-sidebar"
-			class="agent-thread-sidebar flex min-h-0 flex-col overflow-hidden border-r border-border/45 bg-header/30 backdrop-blur-xs"
+			class="agent-thread-sidebar ui-glass-chrome flex min-h-0 flex-col overflow-hidden border-r border-border/45"
 			:class="{ 'is-open': threadDrawerOpen }"
 			:inert="threadsOverlay ? !threadDrawerOpen : !threadSidebarVisible"
 		>
@@ -672,7 +672,7 @@
 		<main class="agent-conversation-pane relative flex min-h-0 min-w-0 flex-col overflow-hidden bg-background">
 			<div class="agent-conversation-ambient pointer-events-none absolute inset-0 z-0 opacity-70"></div>
 			<header
-				class="relative z-10 flex h-10 shrink-0 items-center gap-2 border-b border-border/50 bg-header/40 px-3.5 backdrop-blur-xs"
+				class="ui-glass-chrome relative z-10 flex h-10 shrink-0 items-center gap-2 border-b border-border/50 px-3.5"
 			>
 				<UiButton
 					density="compact"
@@ -894,9 +894,7 @@
 							{{ chatError }}
 						</UiInlineNotice>
 					</div>
-					<footer
-						class="agent-composer-footer relative z-10 shrink-0 bg-background/90 px-4 pb-4 pt-2 backdrop-blur-xs"
-					>
+					<footer class="agent-composer-footer ui-glass-chrome relative z-10 shrink-0 px-4 pb-4 pt-2">
 						<div class="mx-auto max-w-3xl">
 							<div v-if="inputArtifacts.length" class="mb-2 flex flex-wrap gap-1.5">
 								<UiButton
@@ -999,7 +997,7 @@
 									required
 								></textarea>
 								<div
-									class="agent-composer-toolbar flex min-h-10 flex-nowrap items-center justify-between gap-1.5 border-t border-border/35 bg-header/25 px-2 py-1 backdrop-blur-xs"
+									class="agent-composer-toolbar ui-glass-chrome flex min-h-10 flex-nowrap items-center justify-between gap-1.5 border-t border-border/35 px-2 py-1"
 								>
 									<div
 										class="agent-toolbar-controls flex min-w-0 flex-1 flex-nowrap items-center gap-1"
@@ -1445,7 +1443,7 @@
 			:thread-id="thread.id"
 			:active="active"
 			:visible="memoryRailVisible"
-			class="agent-task-rail min-h-0 overflow-y-auto border-l border-border/50 bg-background p-3"
+			class="agent-task-rail ui-glass-chrome min-h-0 overflow-y-auto border-l border-border/50 p-3"
 			@close="memoryRailVisible = false"
 			@proposed="memoryProposed"
 			@summary="memorySummary"
@@ -1453,7 +1451,7 @@
 		<aside
 			v-if="run && taskRailVisible"
 			id="agent-task-rail"
-			class="agent-task-rail min-h-0 overflow-y-auto border-l border-border/50 bg-background p-3"
+			class="agent-task-rail ui-glass-chrome min-h-0 overflow-y-auto border-l border-border/50 p-3"
 			:aria-label="t('agent.tasks.title')"
 		>
 			<button

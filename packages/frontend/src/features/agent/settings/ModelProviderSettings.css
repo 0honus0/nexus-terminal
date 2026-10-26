@@ -170,6 +170,12 @@
 	background: color-mix(in srgb, var(--link-active-color) 10%, transparent);
 }
 
+@media (max-width: 639px) {
+	.provider-models-reset-all__label {
+		display: none;
+	}
+}
+
 .provider-model-delete {
 	color: var(--ui-text-muted);
 	transition:

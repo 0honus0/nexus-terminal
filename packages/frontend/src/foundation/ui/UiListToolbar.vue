@@ -4,7 +4,7 @@
 	defineProps<{ searchLabel: string; placeholder?: string }>();
 </script>
 <template>
-	<div class="ui-list-toolbar">
+	<div data-ui="list-toolbar" data-ui-gen="2" class="ui-list-toolbar ui-glass-panel">
 		<UiSearchInput
 			v-model="search"
 			density="comfortable"
@@ -21,10 +21,7 @@
 		gap: 8px;
 		margin: 8px;
 		padding: 10px;
-		border: 1px solid var(--ui-hairline);
 		border-radius: 12px;
-		background: color-mix(in srgb, var(--card-bg-color) 90%, var(--app-bg-color));
-		box-shadow: inset 0 1px 0 rgb(255 255 255 / 8%);
 	}
 	.ui-list-toolbar__filters {
 		display: flex;

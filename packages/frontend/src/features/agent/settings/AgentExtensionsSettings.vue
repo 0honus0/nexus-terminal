@@ -36,8 +36,8 @@
 </script>
 
 <template>
-	<section class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
-		<header class="flex min-w-0 items-center gap-3 border-b border-border bg-header/25 px-3 sm:px-4">
+	<section class="ui-glass-panel overflow-hidden rounded-2xl">
+		<header class="ui-glass-chrome flex min-w-0 items-center gap-3 border-b border-border px-3 sm:px-4">
 			<nav
 				class="extensions-tabs grid min-w-0 flex-1 grid-cols-4"
 				role="tablist"

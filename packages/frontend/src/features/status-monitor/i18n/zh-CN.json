@@ -46,6 +46,7 @@
     "networkInterfaceFallback": "网卡",
     "historyRange": "历史时间范围",
     "closeTrend": "关闭趋势图",
+    "copyIp": "复制 IP",
     "copyIpError": "复制 IP 失败",
     "load": "负载",
     "failures": {

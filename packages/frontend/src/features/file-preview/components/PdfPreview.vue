@@ -669,7 +669,7 @@
 			></button>
 			<aside
 				:aria-label="t('fileManager.preview.pdfOutline')"
-				class="pdf-outline-drawer absolute inset-y-0 left-0 z-20 flex w-[min(82vw,18rem)] flex-col border-r border-border bg-header/95 shadow-xl sm:relative sm:inset-auto sm:z-auto sm:w-52 sm:shrink-0 sm:translate-x-0 sm:pointer-events-auto sm:shadow-none"
+				class="pdf-outline-drawer ui-glass-chrome absolute inset-y-0 left-0 z-20 flex w-[min(82vw,18rem)] flex-col border-r border-border shadow-xl sm:relative sm:inset-auto sm:z-auto sm:w-52 sm:shrink-0 sm:translate-x-0 sm:pointer-events-auto sm:shadow-none"
 				:class="outlineOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'"
 				:style="desktop && !desktopOutlineVisible ? { display: 'none' } : undefined"
 				:aria-hidden="desktop ? !desktopOutlineVisible : !outlineOpen"

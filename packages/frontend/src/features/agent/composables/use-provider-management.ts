@@ -11,7 +11,7 @@ import {
 	saveManagedProvider,
 	testManagedProvider,
 } from '../api/provider-management-api';
-import { getModelRegistryStatus, resolveModelRegistry } from '../api/registry-api';
+import { getModelRegistryStatus, refreshModelRegistry, resolveModelRegistry } from '../api/registry-api';
 import type { ModelRegistryDefaults } from '../model/registry-types';
 import { AgentManagementFailure } from '../model/management-failure';
 import { createProviderDraft } from '../model/provider-mapper';
@@ -40,12 +40,36 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 		() =>
 			['saved', 'deleted', 'discovered', 'parametersRestored'].includes(notice.value)
 				? 'success'
-				: ['noModels', 'noRegistry', 'registryRefreshNeeded', 'parametersRestoredNoDefaults'].includes(
-							notice.value,
-					  )
+				: [
+							'noModels',
+							'noRegistry',
+							'registryRefreshNeeded',
+							'parametersRestoredNoDefaults',
+							'parametersRestoredSomeMissing',
+					  ].includes(notice.value)
 					? 'info'
 					: 'error',
 		() => failureCause,
+		() => {
+			if (
+				(notice.value !== 'registryRefreshNeeded' && notice.value !== 'noRegistry') ||
+				!draft.value?.models.length
+			) {
+				return undefined;
+			}
+			return {
+				key: 'provider-model-registry-refresh',
+				label: t('agent.settings.providerManagement.refreshRegistry'),
+
+				disabled: () => busy.value || refreshRequired.value,
+
+				onClick: () => {
+					const currentDraft = draft.value;
+					if (!currentDraft) return;
+					void matchModels([...currentDraft.models], { refreshRegistry: true });
+				},
+			};
+		},
 	);
 	const loaded = ref(false);
 	let generation = 0;
@@ -317,7 +341,10 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 		}
 	}
 
-	async function matchModels(models: ProviderModelDraft[]): Promise<void> {
+	async function matchModels(
+		models: ProviderModelDraft[],
+		options: { refreshRegistry?: boolean } = {},
+	): Promise<void> {
 		const currentDraft = draft.value;
 		if (!currentDraft || blocked.value) return;
 		const selected = models
@@ -326,7 +353,9 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 		if (!selected.length) return;
 		await perform(
 			async (signal) => {
-				const status = await getModelRegistryStatus(signal);
+				const status = options.refreshRegistry
+					? await refreshModelRegistry(signal)
+					: await getModelRegistryStatus(signal);
 				const matches: Array<{ item: (typeof selected)[number]; value: ModelRegistryDefaults | null }> = [];
 				for (let index = 0; index < selected.length; index += 4) {
 					if (signal.aborted) return { status, matches: [] };
@@ -367,6 +396,37 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 		);
 	}
 
+	function restoreModelParameters(
+		model: ProviderModelDraft,
+		value: ModelRegistryDefaults | null,
+		fallbackProtocol: Provider['protocol'],
+	): void {
+		const protocol = model.protocol;
+		const effectiveProtocol = protocol ?? fallbackProtocol;
+		configuredTools.delete(toRaw(model));
+		model.sources = {};
+		model.contextWindow = undefined;
+		model.maxOutputTokens = undefined;
+		model.supportsTools = false;
+		model.supportsImageInput = undefined;
+		model.supportsImageGeneration = undefined;
+		model.supportsFileInput = undefined;
+		model.supportsPromptCacheKey = undefined;
+		model.reasoningEfforts = undefined;
+		model.defaultReasoningEffort = undefined;
+		model.reasoningMandatory = undefined;
+		if (value) applyRegistry(model, value, 'replace');
+		if (protocol !== undefined) model.protocol = protocol;
+		if (effectiveProtocol === 'images') {
+			model.supportsTools = false;
+			model.sources.supportsTools = 'manual';
+			if (model.supportsImageGeneration === undefined) {
+				model.supportsImageGeneration = true;
+				model.sources.supportsImageGeneration = 'manual';
+			}
+		}
+	}
+
 	async function resetModel(model: ProviderModelDraft): Promise<void> {
 		if (!draft.value || blocked.value) return;
 		const currentDraft = draft.value;
@@ -381,31 +441,52 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 					JSON.stringify(model) !== before
 				)
 					return;
-				const protocol = model.protocol;
-				const effectiveProtocol = protocol ?? currentDraft.protocol;
-				configuredTools.delete(toRaw(model));
-				model.sources = {};
-				model.contextWindow = undefined;
-				model.maxOutputTokens = undefined;
-				model.supportsTools = false;
-				model.supportsImageInput = undefined;
-				model.supportsImageGeneration = undefined;
-				model.supportsFileInput = undefined;
-				model.supportsPromptCacheKey = undefined;
-				model.reasoningEfforts = undefined;
-				model.defaultReasoningEffort = undefined;
-				model.reasoningMandatory = undefined;
-				if (value) applyRegistry(model, value, 'replace');
-				if (protocol !== undefined) model.protocol = protocol;
-				if (effectiveProtocol === 'images') {
-					model.supportsTools = false;
-					model.sources.supportsTools = 'manual';
-					if (model.supportsImageGeneration === undefined) {
-						model.supportsImageGeneration = true;
-						model.sources.supportsImageGeneration = 'manual';
-					}
-				}
+				restoreModelParameters(model, value, currentDraft.protocol);
 				notice.value = value ? 'parametersRestored' : 'parametersRestoredNoDefaults';
+			},
+			false,
+		);
+	}
+
+	async function resetAllModels(): Promise<void> {
+		const currentDraft = draft.value;
+		if (!currentDraft || blocked.value) return;
+		const selected = currentDraft.models.map((model) => ({
+			model,
+			id: model.id.trim(),
+			before: JSON.stringify(model),
+		}));
+		if (!selected.length) return;
+		await perform(
+			async (signal) => {
+				const matches: Array<{ item: (typeof selected)[number]; value: ModelRegistryDefaults | null }> = [];
+				for (let index = 0; index < selected.length; index += 4) {
+					if (signal.aborted) return { matches: [] };
+					const batch = await Promise.all(
+						selected.slice(index, index + 4).map(async (item) => ({
+							item,
+							value: item.id ? await resolveModelRegistry(item.id, signal) : null,
+						})),
+					);
+					matches.push(...batch);
+				}
+				return { matches };
+			},
+			({ matches }) => {
+				let missingDefaults = false;
+				for (const { item, value } of matches) {
+					if (
+						draft.value !== currentDraft ||
+						!currentDraft.models.includes(item.model) ||
+						item.model.id.trim() !== item.id ||
+						JSON.stringify(item.model) !== item.before
+					) {
+						continue;
+					}
+					restoreModelParameters(item.model, value, currentDraft.protocol);
+					if (!value) missingDefaults = true;
+				}
+				notice.value = missingDefaults ? 'parametersRestoredSomeMissing' : 'parametersRestored';
 			},
 			false,
 		);
@@ -441,6 +522,7 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 		discover,
 		test,
 		resetModel,
+		resetAllModels,
 		matchModels,
 		preserveModelTools,
 	};

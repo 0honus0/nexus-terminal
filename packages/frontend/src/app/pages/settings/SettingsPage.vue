@@ -240,7 +240,7 @@
 						{{ t(group.titleKey) }}
 					</h2>
 					<div
-						class="settings-mobile-group ui-solid-panel overflow-hidden rounded-2xl divide-y divide-border/60"
+						class="settings-mobile-group ui-glass-panel overflow-hidden rounded-2xl divide-y divide-border/60"
 					>
 						<button
 							v-for="item in group.items"
@@ -286,7 +286,7 @@
 			>
 				<!-- 移动端：顶部紧凑导航栏 (单行高度，居中选项，右侧不设冗余标签，放不下时右侧隐藏/可滑动) -->
 				<div
-					class="settings-mobile-toolbar ui-solid-panel mt-2 flex items-center gap-2 rounded-xl p-1.5 lg:hidden shrink-0 w-full overflow-hidden"
+					class="settings-mobile-toolbar ui-glass-panel mt-2 flex items-center gap-2 rounded-xl p-1.5 lg:hidden shrink-0 w-full overflow-hidden"
 				>
 					<button
 						type="button"
@@ -339,7 +339,7 @@
 				<!-- 桌面端左侧悬浮控制岛 (Desktop Vertically Centered Floating Island) -->
 				<aside class="hidden lg:flex flex-col justify-center shrink-0 w-64 xl:w-72 h-full py-4 select-none">
 					<div
-						class="settings-sidebar rounded-[20px] p-3.5 xl:p-4 flex flex-col justify-between min-h-[560px] xl:min-h-[620px] max-h-[calc(100dvh-4rem)] overflow-y-auto overscroll-y-contain no-scrollbar"
+						class="settings-sidebar ui-glass-panel rounded-[20px] p-3.5 xl:p-4 flex flex-col justify-between min-h-[560px] xl:min-h-[620px] max-h-[calc(100dvh-4rem)] overflow-y-auto overscroll-y-contain no-scrollbar"
 					>
 						<div class="space-y-3.5 xl:space-y-4">
 							<div class="settings-sidebar__head flex items-center gap-2.5 px-2.5 pt-1 pb-2">
@@ -505,7 +505,7 @@
 							v-show="active === 'data'"
 							class="ui-settings-group settings-maintenance"
 						>
-							<summary class="flex cursor-pointer list-none items-center gap-3">
+							<summary class="ui-glass-chrome flex cursor-pointer list-none items-center gap-3">
 								<span class="ui-settings-group__icon" aria-hidden="true">
 									<i class="fa-solid fa-screwdriver-wrench"></i>
 								</span>
@@ -561,9 +561,7 @@
 	}
 
 	.settings-sidebar {
-		border: 1px solid color-mix(in srgb, var(--border-color) 48%, transparent);
-		background: color-mix(in srgb, var(--card-bg-color) 70%, var(--app-bg-color));
-		box-shadow: 0 24px 64px -58px color-mix(in srgb, var(--text-color) 48%, transparent);
+		border-radius: 20px;
 	}
 
 	.settings-sidebar__head {
@@ -600,8 +598,6 @@
 	.settings-maintenance > summary {
 		padding: 16px 18px;
 		border-radius: 16px;
-		background: color-mix(in srgb, var(--card-bg-color) 68%, var(--app-bg-color));
-		box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-rim) 44%, transparent);
 	}
 
 	.settings-maintenance__heading {
@@ -634,9 +630,7 @@
 	}
 
 	.settings-mobile-toolbar {
-		border-color: color-mix(in srgb, var(--border-color) 45%, transparent);
-		background: color-mix(in srgb, var(--card-bg-color) 72%, var(--app-bg-color));
-		box-shadow: none;
+		border-radius: 12px;
 	}
 
 	/* Settings actions are used repeatedly across long forms. Give the shared buttons a larger
@@ -693,10 +687,6 @@
 
 	.settings-page :deep(.settings-surface > h2) {
 		display: none;
-	}
-
-	.settings-page :deep(#settings-panel-workspace .workspace-preferences__field) {
-		padding: 8px 4px;
 	}
 
 	@media (max-width: 1023px) {

@@ -259,8 +259,12 @@ button.live-state {
 		border-color 120ms ease;
 }
 .live-state.host-button {
-	min-block-size: calc(28px / var(--status-scale, 1));
-	min-height: calc(28px / var(--status-scale, 1));
+	gap: calc(3px / var(--status-scale, 1));
+	min-block-size: calc(22px / var(--status-scale, 1));
+	min-height: calc(22px / var(--status-scale, 1));
+	padding: calc(1px / var(--status-scale, 1)) calc(4px / var(--status-scale, 1));
+	border-radius: calc(5px / var(--status-scale, 1));
+	font-size: 0.68em;
 }
 button.live-state:hover,
 button.live-state:focus-visible {
@@ -285,16 +289,6 @@ button.live-state:focus-visible {
 	font-family: var(--font-mono);
 	text-overflow: ellipsis;
 	white-space: nowrap;
-}
-.host-copy {
-	flex: none;
-	font-size: 0.78em;
-	opacity: 0.45;
-	transition: opacity 120ms ease;
-}
-.host-button:hover .host-copy,
-.host-button:focus-visible .host-copy {
-	opacity: 0.88;
 }
 .monitor-content {
 	display: flex;
@@ -816,11 +810,6 @@ button.live-state:focus-visible {
 		opacity: 0.45;
 	}
 }
-@container status-content (max-width: 170px) {
-	.host-copy {
-		display: none;
-	}
-}
 @container status-content (max-width: 150px) {
 	.monitor-header,
 	.monitor-content {
@@ -853,9 +842,6 @@ button.live-state:focus-visible {
 	}
 	.metric-value > span {
 		font-size: 0.62em;
-	}
-	.host-copy {
-		display: none;
 	}
 }
 @container status-content (max-width: 118px) {
@@ -991,14 +977,11 @@ button.live-state:focus-visible {
 .status-monitor--mobile-overlay .monitor-header .live-state {
 	max-width: 56%;
 	min-width: 0;
-	min-block-size: calc(28px / var(--status-scale, 1));
-	min-height: calc(28px / var(--status-scale, 1));
-	padding-inline: calc(8px / var(--status-scale, 1));
-	border-radius: calc(9px / var(--status-scale, 1));
-	font-size: calc(11px / var(--status-scale, 1));
-}
-.status-monitor--mobile-overlay .host-copy {
-	display: none;
+	min-block-size: calc(24px / var(--status-scale, 1));
+	min-height: calc(24px / var(--status-scale, 1));
+	padding-inline: calc(5px / var(--status-scale, 1));
+	border-radius: calc(6px / var(--status-scale, 1));
+	font-size: calc(9px / var(--status-scale, 1));
 }
 .status-monitor--mobile-overlay .status-loading-head {
 	font-size: calc(12px / var(--status-scale, 1));
@@ -1011,12 +994,13 @@ button.live-state:focus-visible {
 	}
 	.status-monitor .host-button.status-touch-target {
 		position: relative;
-		min-block-size: calc(28px / var(--status-scale, 1));
-		min-height: calc(28px / var(--status-scale, 1));
+		min-block-size: calc(22px / var(--status-scale, 1));
+		min-height: calc(22px / var(--status-scale, 1));
+		min-width: 0;
 	}
 	.status-monitor .host-button.status-touch-target::before {
 		position: absolute;
-		inset: calc(-8px / var(--status-scale, 1)) 0;
+		inset: calc(-11px / var(--status-scale, 1)) calc(-6px / var(--status-scale, 1));
 		content: '';
 	}
 }

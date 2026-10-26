@@ -93,10 +93,13 @@
 		gap: 3px;
 		min-width: 0;
 		padding: 3px;
-		border: 1px solid color-mix(in srgb, var(--border-color) 56%, transparent);
+		border: 1px solid var(--glass-border-color);
 		border-radius: var(--ui-control-radius);
-		background: color-mix(in srgb, var(--header-bg-color) 56%, var(--app-bg-color));
-		box-shadow: inset 0 1px 2px color-mix(in srgb, var(--text-color) 5%, transparent);
+		background-color: var(--glass-fill);
+		background-image: var(--glass-sheen-image);
+		box-shadow: var(--glass-rim-shadow);
+		-webkit-backdrop-filter: var(--ui-glass-filter);
+		backdrop-filter: var(--ui-glass-filter);
 	}
 
 	.ui-segmented__option {
@@ -119,13 +122,15 @@
 	}
 
 	.ui-segmented__option:hover:not(:disabled) {
-		background: color-mix(in srgb, var(--card-bg-color) 76%, var(--app-bg-color));
+		background: color-mix(in srgb, var(--card-bg-color) 54%, transparent);
 		color: var(--text-color);
 	}
 
 	.ui-segmented__option[data-active] {
-		background: color-mix(in srgb, var(--link-active-color) 13%, var(--card-bg-color));
-		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--link-active-color) 22%, transparent);
+		background: color-mix(in srgb, var(--link-active-color) 13%, var(--glass-fill));
+		box-shadow:
+			inset 0 0 0 1px color-mix(in srgb, var(--link-active-color) 22%, transparent),
+			var(--glass-inset-highlight);
 		color: var(--link-active-color);
 	}
 

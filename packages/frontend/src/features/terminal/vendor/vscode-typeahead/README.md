@@ -1,0 +1,10 @@
+# VS Code terminal TypeAhead
+
+Source: [microsoft/vscode](https://github.com/microsoft/vscode/blob/ae11932c6109d3977d78f2fe8937d861e246151d/src/vs/workbench/contrib/terminalContrib/typeAhead/browser/terminalTypeAheadAddon.ts), commit `ae11932c6109d3977d78f2fe8937d861e246151d`, MIT (included in LICENSE.txt).
+Original source SHA-256: `bf3f34d73113af6f06536357bd7830964cb70ad6f14124cd8cf6ab6950d47064`.
+
+`prediction.ts` adapts the upstream cursor, prediction timeline, character/backspace/navigation matching and latency statistics. Nexus supplies a serialized xterm host, transport-accepted input, lifecycle reset and parser barriers. VS Code configuration, dependency injection, telemetry and predictive dim styling are omitted. Events use mitt. Prediction never sends input or persists terminal data.
+
+The port fixes gradual string matching offsets, finite EOF character handling and SGR restoration (reset, RGB channels, strikethrough and overline). It preserves remote cursor visibility and restores erased blank-cell attributes. Input below a restricted scrolling region can be predicted without crossing its margins. `xterm-attributes.ts` owns validated xterm 6 private current-SGR/cursor/margin access; unsupported shapes disable prediction. Unicode, paste, alternate buffers, mouse tracking, origin/insert mode, input inside restricted scroll margins, line wrapping and known full-screen titles use real remote echo. The first character on an unvalidated input line is tentative, following upstream's conservative strategy; this is a heuristic, not remote ECHO-mode knowledge.
+
+Integration owner: TerminalView. Reset before geometry changes, history, disconnection, page suspension and snapshots; snapshots must wait for reset parsing. Flow acknowledgements still use original remote byte counts. Upstream updates must review all local adaptations and terminal lifecycle regressions; this is vendored code, not an automatically upgraded VS Code dependency.

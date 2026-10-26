@@ -93,7 +93,8 @@ async function connectTcp(
 	ownSocket: (socket: Duplex) => void,
 ): Promise<Duplex> {
 	deadline.remaining();
-	const socket = net.connect({ host, port });
+	// Interactive SSH writes are often one character; do not wait for another packet or an ACK.
+	const socket = net.connect({ host, port, noDelay: true });
 	ownSocket(socket);
 	return new Promise((resolve, reject) => {
 		let settled = false;
@@ -435,6 +436,8 @@ async function connectClient(
 				finish(error instanceof Error ? error : new Error('SSH connection refused', { cause: error }));
 			}
 		});
+		// Direct clients own a TCP socket; forwarded clients inherit the outer hop TCP policy.
+		client.setNoDelay(true);
 		return client;
 	} catch (error) {
 		client.destroy();

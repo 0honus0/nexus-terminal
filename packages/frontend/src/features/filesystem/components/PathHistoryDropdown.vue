@@ -56,7 +56,7 @@
 <template>
 	<div
 		v-if="visible"
-		class="path-history-dropdown absolute right-0 top-full z-40 mt-1 overflow-y-auto text-sm"
+		class="path-history-dropdown ui-glass-panel absolute right-0 top-full z-40 mt-1 overflow-y-auto text-sm"
 		@mousedown.prevent
 	>
 		<UiLoadingState
@@ -116,12 +116,7 @@
 		max-height: max(92px, min(18rem, calc(100cqh - 3rem)));
 		min-width: 0;
 		padding: 4px;
-		border: 1px solid color-mix(in srgb, var(--border-color) 42%, transparent);
 		border-radius: 10px;
-		background: color-mix(in srgb, var(--card-bg-color, var(--app-bg-color)) 94%, transparent);
-		box-shadow: 0 10px 28px rgb(0 0 0 / 24%);
-		-webkit-backdrop-filter: blur(12px);
-		backdrop-filter: blur(12px);
 		scrollbar-width: thin;
 		scrollbar-color: color-mix(in srgb, var(--text-color) 22%, transparent) transparent;
 	}

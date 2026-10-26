@@ -19,6 +19,7 @@
 	import { trackTerminalRuntimeModes, type TerminalRuntimeModeTracker } from '../model/terminalRuntimeModes';
 	import { serializeTerminalSnapshot } from '../model/terminalSnapshot';
 	import { createTerminalOutputWriter } from '../model/terminalOutputWriter';
+	import { TerminalTypeAhead } from '../vendor/vscode-typeahead/prediction';
 	import {
 		createTerminalSessionState,
 		RESET_REMOTE_PTY_DISPLAY,
@@ -59,6 +60,8 @@
 	const searchTerm = terminalState.searchTerm;
 	const renderedFontSize = ref(props.fontSize);
 	let terminal: Terminal | undefined;
+	let typeAhead: TerminalTypeAhead | undefined;
+	let predictionResizePending = false;
 	let renderedConnectionFailure: string | undefined;
 
 	const renderConnectionFailure = (): void => {
@@ -184,6 +187,40 @@
 		// Resize through the public API without FitAddon clearing the renderer first.
 		// This keeps the current prompt visible while xterm reflows and the PTY redraws.
 		if (terminal.cols !== dimensions.cols || terminal.rows !== dimensions.rows) {
+			if (typeAhead) {
+				if (predictionResizePending) return;
+				predictionResizePending = true;
+				const target = terminal;
+				const generation = terminalState.remotePtyGeneration.value;
+				void typeAhead.reset().then(() => {
+					predictionResizePending = false;
+					if (
+						disposed ||
+						terminal !== target ||
+						restoringBaseline ||
+						restoringSnapshot ||
+						generation !== terminalState.remotePtyGeneration.value
+					)
+						return;
+					// Remeasure after draining predictions; a drag may have moved again.
+					const current = fit?.proposeDimensions();
+					if (
+						current &&
+						Number.isFinite(current.cols) &&
+						Number.isFinite(current.rows) &&
+						element.isConnected &&
+						element.clientWidth > 0 &&
+						element.clientHeight > 0 &&
+						viewActive &&
+						props.active &&
+						document.visibilityState === 'visible'
+					) {
+						target.resize(current.cols, current.rows);
+						fitAndResize();
+					}
+				});
+				return;
+			}
 			terminal.resize(dimensions.cols, dimensions.rows);
 		}
 		terminalState.replaceGeometry(terminal.cols, terminal.rows);
@@ -232,6 +269,7 @@
 	});
 	onDeactivated(() => {
 		viewActive = false;
+		void typeAhead?.reset();
 		resetInteractions();
 	});
 
@@ -245,6 +283,7 @@
 
 	const suspendPresentation = () => {
 		// Mobile browsers may omit touchcancel when freezing a page.
+		void typeAhead?.reset();
 		resetInteractions();
 		terminal?.blur();
 		if (geometryFrame !== undefined) window.cancelAnimationFrame(geometryFrame);
@@ -377,7 +416,10 @@
 			if (enteringHistory) {
 				// Divert new output while draining xterm's async write queue.
 				// Otherwise a late live write lands in the history buffer.
-				historyEntryTask = outputWriter.drain();
+				historyEntryTask = (async () => {
+					await outputWriter.drain();
+					await typeAhead?.reset();
+				})();
 				await historyEntryTask;
 				if (!terminal || generation !== historyViewGeneration) return;
 				historyLiveSnapshot = `${serializeTerminalSnapshot(
@@ -622,10 +664,16 @@
 			for (const consumed of deferredOutputConsumers.splice(0)) consumed();
 			if (terminal) {
 				terminal.options.scrollback = props.scrollback;
-				terminal.write(RESET_REMOTE_PTY_DISPLAY, () => {
-					runtimeModes?.reset();
-					syncSearchDecorations();
-				});
+				const target = terminal;
+
+				const resetDisplay = () =>
+					target.write(RESET_REMOTE_PTY_DISPLAY, () => {
+						runtimeModes?.reset();
+						syncSearchDecorations();
+					});
+
+				if (typeAhead) typeAhead.barrier(resetDisplay);
+				else resetDisplay();
 			}
 		},
 		{ flush: 'sync' },
@@ -1270,16 +1318,23 @@
 		else syncSearchDecorations();
 	});
 
-	const outputWriter = createTerminalOutputWriter((data, consumed) => terminal!.write(data, consumed));
+	const outputWriter = createTerminalOutputWriter((data, consumed) => {
+		if (typeAhead) typeAhead.write(data, consumed);
+		else terminal?.write(data, consumed);
+	});
 
 	const serializeAfterDrain = async (): Promise<string> => {
 		if (disposed || !terminal) return terminalState.restoreSnapshot();
 		await outputWriter.drain();
+		await typeAhead?.reset();
 		return liveReplaySnapshot();
 	};
 
 	const handleTerminalOutput = ({ data, consumed, viewport }: TerminalOutput): void => {
-		if (viewport) restoringBaseline = true;
+		if (viewport) {
+			restoringBaseline = true;
+			void typeAhead?.reset();
+		}
 		const decoded = terminalState.decodeOutput(data);
 		activatePagedHistoryMode();
 		if (historyBrowsing || historyRebuilding) {
@@ -1305,7 +1360,10 @@
 	watch(
 		() => props.active,
 		(active) => {
-			if (!active) resetInteractions();
+			if (!active) {
+				void typeAhead?.reset();
+				resetInteractions();
+			}
 			if (active) scheduleGeometryFit();
 			if (active) outputWriter.flush();
 		},
@@ -1568,6 +1626,26 @@
 		});
 
 		fitAndResize();
+		typeAhead = new TerminalTypeAhead(terminal);
+		cleanup.push(
+			props.channel.onInputSent?.((data) => {
+				if (
+					!disposed &&
+					props.inputEnabled &&
+					props.active &&
+					viewActive &&
+					document.visibilityState === 'visible' &&
+					!predictionResizePending &&
+					!restoringBaseline &&
+					!restoringSnapshot &&
+					!historyBrowsing &&
+					!historyRebuilding &&
+					!historyLoading
+				) {
+					typeAhead?.input(data);
+				}
+			}) ?? (() => undefined),
+		);
 		stopOutput = props.channel.onOutput(handleTerminalOutput);
 		cleanup.push(
 			terminal.onData((data) => {
@@ -1615,9 +1693,13 @@
 				});
 			}) ?? (() => undefined),
 			props.channel.onClose((reason) => {
+				void typeAhead?.reset();
 				emit('closed', reason);
 			}),
-			props.channel.onError((message) => emit('error', message)),
+			props.channel.onError((message) => {
+				void typeAhead?.reset();
+				emit('error', message);
+			}),
 		);
 		cleanup.push(
 			terminal.onSelectionChange(() => {
@@ -1666,6 +1748,7 @@
 	watch(
 		() => [props.inputEnabled, acceptsKeyboardInput.value] as const,
 		([enabled, acceptsInput]) => {
+			if (!enabled) void typeAhead?.reset();
 			if (!enabled) resetInteractions();
 			if (terminal) {
 				terminal.options.disableStdin = !acceptsInput;
@@ -1690,6 +1773,7 @@
 
 	onBeforeUnmount(() => {
 		disposed = true;
+		typeAhead?.stop();
 		historyViewGeneration += 1;
 		resetInteractions();
 		stopOutput?.();
@@ -1699,6 +1783,7 @@
 			terminalState.captureSnapshot(
 				outputWriter
 					.drain()
+					.then(() => typeAhead?.reset())
 					.then(() => {
 						const snapshot = liveReplaySnapshot();
 						for (const consumed of deferredOutputConsumers.splice(0)) consumed();
@@ -1830,7 +1915,7 @@
 		</template>
 		<div
 			v-if="device.supportsTouchInteraction.value && mobileClipboardMenu.visible"
-			class="mobile-terminal-clipboard-menu"
+			class="mobile-terminal-clipboard-menu ui-glass-panel"
 			:style="{ left: `${mobileClipboardMenu.x}px`, top: `${mobileClipboardMenu.y}px` }"
 			@pointerdown.stop
 			@click.stop

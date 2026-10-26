@@ -283,6 +283,8 @@
 
 		resize: (viewport) => runtimeTerminalChannel.resize(viewport),
 
+		onInputSent: (handler) => runtimeTerminalChannel.onInputSent?.(handler) ?? (() => undefined),
+
 		onOutput: (handler) => runtimeTerminalChannel.onOutput(handler),
 
 		onClose: (handler) => runtimeTerminalChannel.onClose(handler),
@@ -1300,7 +1302,7 @@
 		<nav
 			v-if="!mobile && sidebars.left.length"
 			data-workspace-sidebar
-			class="relative z-10 flex w-10 shrink-0 flex-col border-r border-border bg-header/60 py-1"
+			class="ui-glass-chrome relative z-10 flex w-10 shrink-0 flex-col border-r border-border py-1"
 		>
 			<button
 				v-for="pane in sidebars.left"
@@ -1614,7 +1616,7 @@
 		<nav
 			v-if="!mobile && sidebars.right.length"
 			data-workspace-sidebar
-			class="relative z-10 flex w-10 shrink-0 flex-col border-l border-border bg-header/60 py-1"
+			class="ui-glass-chrome relative z-10 flex w-10 shrink-0 flex-col border-l border-border py-1"
 		>
 			<button
 				v-for="pane in sidebars.right"

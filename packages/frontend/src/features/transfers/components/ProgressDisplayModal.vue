@@ -248,7 +248,7 @@
 		>
 			<div class="transfer-progress-panel mx-auto flex min-h-0 w-full flex-1 flex-col overflow-hidden">
 				<div
-					class="transfer-progress-header grid flex-shrink-0 grid-cols-[1.75rem_minmax(0,1fr)_1.75rem] items-center gap-2 px-4 py-3 sm:px-5"
+					class="transfer-progress-header ui-glass-chrome grid flex-shrink-0 grid-cols-[1.75rem_minmax(0,1fr)_1.75rem] items-center gap-2 px-4 py-3 sm:px-5"
 					:class="!mobile ? (drag.dragging.value ? 'cursor-grabbing select-none' : 'cursor-move') : ''"
 					@pointerdown="drag.startDragging"
 				>
@@ -597,7 +597,6 @@
 	}
 	.transfer-progress-header {
 		border-bottom: 1px solid var(--ui-hairline);
-		background: color-mix(in srgb, var(--header-bg-color) 36%, transparent);
 	}
 	.progress-display-content {
 		scrollbar-gutter: stable;

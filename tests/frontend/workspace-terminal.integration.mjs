@@ -148,11 +148,20 @@ try {
 			const socket = await make();
 			const channel = createTerminalChannel(socket);
 			let inputErrors = 0;
+			const sentInputs = [];
+			const stopInputSent = channel.onInputSent((data) => sentInputs.push(data));
 			channel.onError(() => (inputErrors += 1));
 			channel.sendInput('\ud800');
 			channel.sendInput('中'.repeat(90000));
 			expect(inputErrors === 2, 'malformed Unicode and oversized input rejected locally');
 			channel.sendInput('accepted input');
+			expect(
+				JSON.stringify(sentInputs) === JSON.stringify(['accepted input']),
+				'only accepted input reaches prediction observers',
+			);
+			stopInputSent();
+			channel.sendInput('unsubscribed input');
+			expect(sentInputs.length === 1, 'prediction observer is removed on unsubscribe');
 			let invalidResize = false;
 			try {
 				channel.resize({ columns: 1, rows: 24 });
@@ -244,7 +253,7 @@ try {
 	});
 	assert.deepEqual(
 		calls.filter((call) => call.type === 'terminal.input').map((call) => call.payload.data),
-		['accepted input'],
+		['accepted input', 'unsubscribed input'],
 	);
 	assert.deepEqual(
 		calls.filter((call) => call.type === 'terminal.resize').map((call) => call.payload),

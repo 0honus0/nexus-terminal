@@ -1689,3 +1689,14 @@ Context预压缩现状：checkpoint工具需要实际context.compact授权，摘
 6. **数据、事务与并发**：状态随xterm解析更新，快照仍等待输出解析；软重置清当前区域、RIS与resize清两套区域，返回普通缓冲区清备用区域。
 7. **生命周期与失败**：原tracker统一释放parser/resize/buffer监听，沿原快照失败与清理路径；仅补齐活动屏幕区域，不承诺序列化任意未闭合ANSI解析状态或非活动屏幕的自定义区域。
 8. **当前能力与验收**：真实Codex分块数据在15个输出边界经双端实际实现回放，校准等价ANSI调色板编码后可见单元格无差异；后端9项定向回归、静态证据与实机边界见testing。运行中的旧Backend尚未加载本轮代码，不据此宣称端到端修复已实机验收。
+
+### SSH交互输入的小包延迟与授权检查
+
+1. **职责与范围**：减少远端真实回显路径的额外等待，保持原UI、终端字节语义与背压；不引入本地预测回显。
+2. **子功能与目录**：Platform ssh2/ssh-route负责TCP策略，Remote interfaces/ws/workspace-files负责请求授权入口。
+3. **依赖方向**：直接复用Node net的noDelay及ssh2公开setNoDelay，Service/Shared不持有厂商客户端。
+4. **类型与转换**：无新协议、应用、存储类型；原严格解码及owner映射保留。
+5. **入口与安装**：代理TCP创建时指定noDelay；每个SSH客户端ready后启用setNoDelay，直连跳板也覆盖，forward channel继承其外层TCP策略。
+6. **数据、事务与并发**：terminal.input/resize经requireTerminal完整授权，flow按原pending-resume规则完整授权；这三个操作跳过dispatch外层的重复校验，其它操作继续原围栏；不缓存身份或授权。
+7. **生命周期与失败**：权限撤销、挂起租约到期及attachment变化仍由allowed检查；SSH选项设置失败沿原catch销毁客户端，连接阶段统一保留原资源owner与取消收敛；不改发送顺序、输出窗口和消费ACK。
+8. **当前能力与验收**：源码及静态证据见PLAN/testing；没有实测数据时不承诺具体毫秒改善，TCP策略对已有连接不追溯生效，须新建SSH连接；高RTT下真实回显仍需网络往返。

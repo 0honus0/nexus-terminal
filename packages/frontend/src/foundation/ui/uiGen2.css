@@ -2,7 +2,7 @@
  * Foundation UI Gen 2
  *
  * Component recipes stay scoped to data-ui-gen="2". Product surfaces use the
- * semantic ui-glass-panel or ui-solid-* classes below so pages share materials
+ * semantic ui-glass-panel, ui-glass-chrome or ui-solid-* classes below so pages share materials
  * without copying component internals or reviving a second component layer.
  */
 :root {
@@ -42,18 +42,12 @@
 		background-color: var(--glass-fill);
 	}
 
-	.ui-solid-panel,
 	.ui-solid-inset,
 	.ui-solid-item {
 		border: 1px solid var(--border-color);
 		background-image: none;
 		-webkit-backdrop-filter: none;
 		backdrop-filter: none;
-	}
-
-	.ui-solid-panel {
-		background-color: var(--card-bg-color);
-		box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
 	}
 
 	.ui-solid-inset {
@@ -72,6 +66,18 @@
 	.ui-solid-item:hover {
 		background-color: var(--header-bg-color);
 		border-color: var(--border-hover-color);
+	}
+
+	/*
+	 * Chrome material for docked headers, footers and sidebars. Ownership of
+	 * border width, radius and layout stays with the component.
+	 */
+	.ui-glass-chrome {
+		background-color: var(--glass-nav-fill);
+		background-image: var(--glass-sheen-image);
+		box-shadow: var(--glass-inset-highlight);
+		-webkit-backdrop-filter: var(--ui-glass-filter);
+		backdrop-filter: var(--ui-glass-filter);
 	}
 }
 
@@ -194,6 +200,8 @@
 	color: var(--text-color);
 	border: 1px solid var(--glass-border-color);
 	box-shadow: 0 16px 48px -24px rgb(0 0 0 / 28%);
+	-webkit-backdrop-filter: none;
+	backdrop-filter: none;
 }
 
 .ui-form-section {
@@ -214,9 +222,10 @@
 }
 
 .ui-surface--raised {
-	border: 1px solid var(--ui-hairline);
-	background: var(--ui-fill-raised);
-	box-shadow: var(--ui-glass-highlight), var(--ui-shadow-raised);
+	border: 1px solid var(--glass-border-color);
+	background-color: var(--glass-fill);
+	background-image: var(--glass-sheen-image);
+	box-shadow: var(--glass-shadow);
 	-webkit-backdrop-filter: var(--ui-glass-filter);
 	backdrop-filter: var(--ui-glass-filter);
 }
@@ -235,9 +244,10 @@
 	border-radius: var(--ui-panel-radius);
 	border-color: var(--glass-border-color);
 	background-color: var(--glass-fill);
+	background-image: var(--glass-sheen-image);
 	box-shadow: var(--glass-shadow);
-	-webkit-backdrop-filter: var(--ui-glass-filter);
-	backdrop-filter: var(--ui-glass-filter);
+	-webkit-backdrop-filter: var(--glass-backdrop-filter);
+	backdrop-filter: var(--glass-backdrop-filter);
 }
 
 .ui-token-input {
@@ -784,8 +794,12 @@
 }
 
 .ui-button--glass {
-	--ui-button-glass-fill: color-mix(in srgb, var(--card-bg-color) 14%, transparent);
-	--ui-button-glass-fill-hover: color-mix(in srgb, var(--card-bg-color) 27%, transparent);
+	--ui-button-glass-fill: var(--glass-fill);
+	--ui-button-glass-fill-hover: color-mix(in srgb, var(--card-bg-color) 54%, transparent);
+	background-image: var(--glass-sheen-image);
+	box-shadow: var(--glass-shadow);
+	-webkit-backdrop-filter: var(--ui-glass-filter);
+	backdrop-filter: var(--ui-glass-filter);
 }
 
 .ui-button--solid:not(:disabled):hover,
@@ -1016,6 +1030,20 @@
 	--input-disabled-bg-color: transparent;
 	--input-disabled-text-color: currentColor;
 	--input-disabled-border-color: transparent;
+}
+
+.ui-input.ui-search-input:not(.ui-input--disabled):not(.ui-input--invalid) {
+	border-color: var(--glass-border-color);
+	background-color: var(--glass-fill);
+	background-image: var(--glass-sheen-image);
+	box-shadow: var(--glass-inset-highlight), var(--ui-shadow-inset);
+	-webkit-backdrop-filter: var(--ui-glass-filter);
+	backdrop-filter: var(--ui-glass-filter);
+}
+
+.ui-input.ui-search-input:not(.ui-input--disabled):not(.ui-input--invalid):hover {
+	border-color: var(--ui-hairline-strong);
+	background-color: color-mix(in srgb, var(--card-bg-color) 54%, transparent);
 }
 
 .ui-input__control {
@@ -1749,15 +1777,16 @@
 	justify-content: space-between;
 	gap: var(--ui-control-gap);
 	padding-inline: var(--ui-control-padding-inline);
-	border: 1px solid var(--ui-hairline);
-	background: var(--ui-fill-inset);
+	border: 1px solid var(--glass-border-color);
+	background-color: var(--glass-fill);
+	background-image: var(--glass-sheen-image);
 	color: var(--ui-text);
-	box-shadow: var(--ui-glass-highlight), var(--ui-shadow-inset);
+	box-shadow: var(--glass-shadow);
 	font-size: var(--ui-control-font-size);
 	text-align: start;
 	cursor: pointer;
-	-webkit-backdrop-filter: var(--ui-glass-control-filter);
-	backdrop-filter: var(--ui-glass-control-filter);
+	-webkit-backdrop-filter: var(--ui-glass-filter);
+	backdrop-filter: var(--ui-glass-filter);
 }
 
 .ui-select--fit-longest {
@@ -1790,7 +1819,7 @@
 
 .ui-select__trigger:not(:disabled):hover {
 	border-color: var(--ui-hairline-strong);
-	background: var(--ui-fill-inset-hover);
+	background-color: color-mix(in srgb, var(--card-bg-color) 54%, transparent);
 }
 
 /*
@@ -2265,15 +2294,16 @@ body:has(.app-header) .ui-notification-host {
 	flex-direction: column;
 	overflow: hidden;
 	padding: 12px 13px 11px;
-	border: 1px solid color-mix(in srgb, var(--ui-notification-accent) 20%, var(--border-color));
+	border: 1px solid color-mix(in srgb, var(--ui-notification-accent) 24%, var(--glass-border-color));
 	border-radius: 14px;
 	color: var(--ui-text);
-	background:
-		linear-gradient(180deg, color-mix(in srgb, var(--ui-notification-accent) 5%, transparent), transparent 72%),
-		color-mix(in srgb, var(--app-bg-color) 88%, var(--card-bg-color));
-	box-shadow:
-		inset 0 1px 0 color-mix(in srgb, white 9%, transparent),
-		0 16px 32px -26px rgb(0 0 0 / 58%);
+	background-color: var(--glass-fill);
+	background-image:
+		linear-gradient(180deg, color-mix(in srgb, var(--ui-notification-accent) 7%, transparent), transparent 72%),
+		var(--glass-sheen-image);
+	box-shadow: var(--glass-shadow);
+	-webkit-backdrop-filter: var(--ui-glass-filter);
+	backdrop-filter: var(--ui-glass-filter);
 }
 
 .ui-notification[data-kind='success'] {
@@ -2326,7 +2356,7 @@ body:has(.app-header) .ui-notification-host {
 	justify-content: flex-end;
 	margin-top: 9px;
 	padding-top: 8px;
-	border-top: 1px solid color-mix(in srgb, var(--ui-notification-accent) 12%, var(--border-color));
+	border-top: 1px solid color-mix(in srgb, var(--ui-notification-accent) 12%, var(--glass-border-color));
 }
 
 .ui-notification__action {
@@ -2452,6 +2482,7 @@ body:has(.app-header) .ui-notification-host {
 	.ui-surface--raised,
 	.ui-surface--inset,
 	.ui-glass-panel,
+	.ui-glass-chrome,
 	.ui-overlay-panel,
 	.ui-context-menu,
 	.ui-info-hint,
@@ -2531,16 +2562,26 @@ body:has(.app-header) .ui-notification-host {
 		box-shadow: none;
 	}
 }
+.ui-confirmation-overlay {
+	background-color: color-mix(in srgb, var(--overlay-bg-color) 46%, transparent);
+	-webkit-backdrop-filter: blur(10px) saturate(130%);
+	backdrop-filter: blur(10px) saturate(130%);
+}
 .ui-confirmation-panel {
-	width: min(500px, calc(100vw - 32px));
+	width: min(440px, calc(100vw - 32px));
 	max-height: calc(100dvh - 32px);
 	overflow-y: auto;
-	border-radius: var(--ui-panel-radius);
-	background-image: radial-gradient(
-		120% 90% at 5% 0%,
-		color-mix(in srgb, var(--link-active-color) 7%, transparent),
-		transparent 58%
-	);
+	border: 1px solid color-mix(in srgb, var(--glass-rim) 24%, transparent);
+	border-radius: 16px;
+	color: var(--ui-text);
+	background-color: color-mix(in srgb, var(--app-bg-color) 82%, transparent);
+	background-image: var(--glass-sheen-image);
+	box-shadow:
+		inset 0 1px 0 color-mix(in srgb, var(--glass-rim) 34%, transparent),
+		0 1px 2px rgb(0 0 0 / 7%),
+		0 28px 80px -30px rgb(0 0 0 / 42%);
+	-webkit-backdrop-filter: blur(30px) saturate(175%);
+	backdrop-filter: blur(30px) saturate(175%);
 }
 
 .ui-confirmation-panel__body {
@@ -2555,8 +2596,8 @@ body:has(.app-header) .ui-notification-host {
 	display: flex;
 	justify-content: flex-end;
 	gap: 10px;
-	padding: 14px 22px 18px;
-	border-top: 1px solid color-mix(in srgb, var(--glass-border-color) 72%, transparent);
+	padding: 0 22px 18px;
+	border-top: 0;
 }
 
 .ui-button--action-confirmation {
@@ -2636,6 +2677,7 @@ body:has(.app-header) .ui-notification-host {
 	color: inherit;
 }
 .ui-confirmation-panel__title {
+	color: var(--ui-text);
 	font-size: 16px;
 	font-weight: 620;
 	line-height: 1.35;
@@ -2644,7 +2686,7 @@ body:has(.app-header) .ui-notification-host {
 	margin-top: 6px;
 	font-size: 12.5px;
 	line-height: 1.55;
-	color: var(--ui-text-muted);
+	color: color-mix(in srgb, var(--ui-text) 74%, transparent);
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 	text-wrap: pretty;

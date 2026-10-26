@@ -125,7 +125,7 @@
 </script>
 
 <template>
-	<div class="z-20 shrink-0 border-t border-border bg-header/95">
+	<div class="ui-glass-chrome z-20 shrink-0 border-t border-border">
 		<WorkspaceCommandBar
 			class="!h-auto border-b border-border"
 			:model-value="commandDraft"

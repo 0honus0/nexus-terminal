@@ -4,6 +4,7 @@ interface TerminalLifecycleHarness {
 	mount(): Promise<void>;
 	unmount(): void;
 	output(data: string | number[]): void;
+	input(data: string): void;
 	active(value: boolean): Promise<void>;
 	paste(): Promise<boolean>;
 	releaseClipboard(value: string): void;
@@ -58,6 +59,7 @@ async function mountTerminalHarness(page: Page): Promise<void> {
 		let app: { mount(host: HTMLElement): void; unmount(): void } | null = null;
 		let terminalApi: { paste(): Promise<boolean>; serialize(): Promise<string>; scrollToBottom(): void } | null =
 			null;
+		const inputHandlers = new Set<(data: string) => void>();
 		const outputHandlers = new Set<(output: { data: string | Uint8Array; consumed(): void }) => void>();
 		let resolveClipboard: ((value: string) => void) | null = null;
 		let resolveHistory: ((value: { data: Uint8Array; hasMore: boolean }) => void) | null = null;
@@ -92,7 +94,12 @@ async function mountTerminalHarness(page: Page): Promise<void> {
 							onReady: () => resolveReady(),
 
 							channel: {
-								sendInput: (data: string) => harness.inputs.push(data),
+								sendInput: (data: string) => harness.input(data),
+
+								onInputSent(handler: (data: string) => void) {
+									inputHandlers.add(handler);
+									return () => inputHandlers.delete(handler);
+								},
 
 								resize: () => undefined,
 
@@ -134,6 +141,11 @@ async function mountTerminalHarness(page: Page): Promise<void> {
 			unmount() {
 				app?.unmount();
 				app = null;
+			},
+
+			input(data) {
+				harness.inputs.push(data);
+				for (const handler of inputHandlers) handler(data);
 			},
 
 			output(data) {
@@ -482,4 +494,67 @@ test('a completed synchronized frame renders before the next frame opens', async
 	await expect(rows).not.toContainText('NEXT_UNFINISHED_FRAME');
 	await page.evaluate(() => window.__terminalLifecycle.output('\x1b[?2026l'));
 	await expect(rows).toContainText('NEXT_UNFINISHED_FRAME');
+});
+
+async function trainTerminalEcho(page: Page): Promise<void> {
+	await mountTerminalHarness(page);
+	await page.evaluate(() => window.__terminalLifecycle.output('$ '));
+	await expect(page.locator('#terminal-lifecycle-host .xterm-rows')).toContainText('$ ');
+	// Each sample represents a genuine transport delay, not a forced predictor flag.
+	await page.evaluate(async () => {
+		const harness = window.__terminalLifecycle;
+		for (const char of 'abcdefgh') {
+			harness.input(char);
+			await new Promise((resolve) => setTimeout(resolve, char === 'a' ? 650 : 70));
+			harness.output(char);
+			await new Promise((resolve) => setTimeout(resolve, 30));
+		}
+	});
+	await expect(page.locator('#terminal-lifecycle-host .xterm-rows')).toContainText('$ abcdefgh');
+}
+
+test('slow terminal echo predicts typed characters and corrects a different remote result', async ({ page }) => {
+	await trainTerminalEcho(page);
+	const rows = page.locator('#terminal-lifecycle-host .xterm-rows');
+	await page.evaluate(() => window.__terminalLifecycle.input('i'));
+	await expect(rows).toContainText('$ abcdefghi');
+	await page.evaluate(() => window.__terminalLifecycle.output('X'));
+	await expect(rows).toContainText('$ abcdefghX');
+	await expect(rows).not.toContainText('$ abcdefghi');
+	expect(await page.evaluate(() => window.__terminalLifecycle.inputs.join(''))).toBe('abcdefghi');
+	await expect.poll(() => page.evaluate(() => window.__terminalLifecycle.consumed)).toBe(10);
+});
+
+test('terminal snapshot and remount exclude unconfirmed local echo', async ({ page }) => {
+	await trainTerminalEcho(page);
+	const rows = page.locator('#terminal-lifecycle-host .xterm-rows');
+	await page.evaluate(() => window.__terminalLifecycle.input('i'));
+	await expect(rows).toContainText('$ abcdefghi');
+	const snapshot = await page.evaluate(() => window.__terminalLifecycle.serialize());
+	expect(snapshot).toContain('$ abcdefgh');
+	expect(snapshot).not.toContain('abcdefghi');
+	await page.evaluate(async () => {
+		window.__terminalLifecycle.unmount();
+		await window.__terminalLifecycle.mount();
+		window.__terminalLifecycle.output('i');
+	});
+	await expect(rows).toContainText('$ abcdefghi');
+	await expect(rows).not.toContainText('abcdefghii');
+});
+
+test('a password prompt and paste never display unconfirmed terminal input', async ({ page }) => {
+	await trainTerminalEcho(page);
+	const rows = page.locator('#terminal-lifecycle-host .xterm-rows');
+	await page.evaluate(() => window.__terminalLifecycle.output('\r\nPassword: '));
+	await expect(rows).toContainText('Password: ');
+	await page.evaluate(() => {
+		for (const char of 'secret') window.__terminalLifecycle.input(char);
+	});
+	const snapshot = await page.evaluate(() => window.__terminalLifecycle.serialize());
+	expect(snapshot).toContain('Password: ');
+	expect(snapshot).not.toContain('secret');
+	await page.evaluate(() => window.__terminalLifecycle.input('PASTED_CONTENT'));
+	expect(await page.evaluate(() => window.__terminalLifecycle.serialize())).not.toContain('PASTED_CONTENT');
+	await page.evaluate(() => window.__terminalLifecycle.output('PASTED_CONTENT'));
+	await expect(rows).toContainText('PASTED_CONTENT');
 });

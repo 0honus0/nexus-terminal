@@ -3,7 +3,7 @@
 </script>
 
 <template>
-	<article class="ui-solid-item ui-management-card">
+	<article class="ui-glass-panel ui-management-card">
 		<div class="ui-management-card__body"><slot /></div>
 		<UiActionGroup layout="management"><slot name="actions" /></UiActionGroup>
 	</article>

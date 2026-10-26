@@ -308,6 +308,9 @@ importers:
       marked:
         specifier: ^18.0.14
         version: 18.0.14
+      mitt:
+        specifier: ^3.0.1
+        version: 3.0.1
       monaco-editor:
         specifier: ^0.56.0
         version: 0.56.0(patch_hash=c23d454741b9c602522924706171e4362a6cf35302051169b54531f4484538e7)

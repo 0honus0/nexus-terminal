@@ -21,6 +21,7 @@
 	const confirm = (notification: UiNotification): void => {
 		if (notification.action) {
 			notification.action.onClick();
+			store.remove(notification.id);
 			return;
 		}
 		store.remove(notification.id);

@@ -219,11 +219,11 @@
 
 <template>
 	<section
-		class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs transition-all"
+		class="ui-glass-panel overflow-hidden rounded-2xl transition-all"
 		:aria-label="t('agent.settings.browserRuntime.title')"
 	>
 		<div
-			class="agent-settings-head flex flex-wrap items-center justify-between gap-3 rounded-t-2xl bg-header/35 px-4 py-3 sm:px-5 sm:py-3.5"
+			class="agent-settings-head ui-glass-chrome flex flex-wrap items-center justify-between gap-3 rounded-t-2xl px-4 py-3 sm:px-5 sm:py-3.5"
 			:class="{ 'border-b border-border': targets.length > 0 }"
 		>
 			<div class="flex items-center gap-2">

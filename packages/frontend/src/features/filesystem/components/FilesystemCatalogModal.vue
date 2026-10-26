@@ -324,7 +324,7 @@
 		role="dialog"
 		:aria-label="t('favoritePaths.title')"
 		:style="panelStyle"
-		class="favorite-paths-popover fixed z-50 flex flex-col overflow-hidden rounded-md border border-border/50 bg-background shadow-lg"
+		class="favorite-paths-popover ui-glass-panel fixed z-50 flex flex-col overflow-hidden rounded-md"
 	>
 		<div class="flex shrink-0 items-center gap-2 p-2">
 			<div class="min-w-0 flex-grow">

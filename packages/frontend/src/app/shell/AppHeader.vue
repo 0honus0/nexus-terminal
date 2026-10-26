@@ -121,7 +121,7 @@
 <template>
 	<header
 		v-if="route.name !== 'Workspace' || preferences.values.value.navBarVisible"
-		class="app-header sticky top-0 z-30 shrink-0"
+		class="app-header ui-glass-chrome sticky top-0 z-30 shrink-0"
 	>
 		<nav class="app-navigation" :aria-label="t('common.primaryNavigation')">
 			<RouterLink to="/" class="app-brand" :aria-label="t('nav.dashboard')">
@@ -220,7 +220,6 @@
 	.app-header {
 		height: var(--app-header-height);
 		padding: calc(6px + env(safe-area-inset-top, 0px)) 8px 6px;
-		background: var(--app-bg-color);
 	}
 	.app-navigation {
 		display: grid;

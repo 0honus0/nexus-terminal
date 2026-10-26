@@ -334,10 +334,15 @@ class WorkspaceFilesSession {
 	}
 
 	private async dispatch(request: WorkspaceProtocolRequest): Promise<unknown> {
+		// These handlers validate the exact owner themselves, including pending-resume rules for flow.
+		// Repeating that async identity lookup for every keystroke adds work without another boundary.
+		const checksTerminalOwner =
+			request.type === 'terminal.input' || request.type === 'terminal.resize' || request.type === 'terminal.flow';
 		// The FileService authenticates and checks each SFTP resource on its own,
 		// but the shared Workspace WS must also fence requests from a superseded
 		// attachment. Old sockets cannot keep mutating Files after a handoff.
 		if (
+			!checksTerminalOwner &&
 			this.workspaceId &&
 			this.attachmentId &&
 			request.type !== 'workspace.resumeAck' &&

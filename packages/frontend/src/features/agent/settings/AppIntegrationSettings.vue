@@ -42,10 +42,10 @@
 	</AppIntegrationEditor>
 	<section
 		v-else
-		:class="embedded ? 'min-w-0' : 'overflow-hidden rounded-2xl border border-border bg-card shadow-xs'"
+		:class="embedded ? 'min-w-0' : 'ui-glass-panel overflow-hidden rounded-2xl'"
 		:aria-label="t('agent.settings.integrationManagement.title')"
 	>
-		<div class="agent-settings-head flex items-center gap-2 bg-header/35 px-4 py-3 sm:px-5 sm:py-3.5">
+		<div class="agent-settings-head ui-glass-chrome flex items-center gap-2 px-4 py-3 sm:px-5 sm:py-3.5">
 			<h3 class="text-sm font-semibold text-foreground">{{ t('agent.settings.integrationManagement.title') }}</h3>
 			<UiInfoHint :text="t('agent.settings.integrationManagement.description')" />
 		</div>

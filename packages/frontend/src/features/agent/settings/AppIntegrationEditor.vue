@@ -110,9 +110,7 @@
 </script>
 <template>
 	<section
-		:class="
-			embedded ? 'min-w-0' : 'overflow-hidden rounded-2xl border border-border bg-card shadow-xs transition-all'
-		"
+		:class="embedded ? 'min-w-0' : 'ui-glass-panel overflow-hidden rounded-2xl transition-all'"
 		:aria-label="t('agent.settings.integrationManagement.title')"
 	>
 		<div
@@ -121,7 +119,7 @@
 				embedded
 					? 'justify-end pb-3'
 					: [
-							'rounded-t-2xl bg-header/35 px-4 py-3 sm:px-5 sm:py-3.5',
+							'ui-glass-chrome rounded-t-2xl px-4 py-3 sm:px-5 sm:py-3.5',
 							{ 'border-b border-border': items.length > 0 },
 						]
 			"

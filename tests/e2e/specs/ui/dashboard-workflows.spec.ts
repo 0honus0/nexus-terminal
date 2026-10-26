@@ -694,7 +694,7 @@ test('dashboard filters connections and persists tag and sort preferences across
 		await step('sort field and order persist independently from the connection data', async () => {
 			await selectUiOption(tagFilter(page), '');
 			await selectUiOption(sortFilter(page), 'name');
-			await dashboard.locator('.dashboard-toolbar button').last().click();
+			await dashboard.locator('.dashboard-status-toolbar button').last().click();
 
 			await page.reload();
 			const finalDashboard = dashboardRoot(page);

@@ -207,11 +207,11 @@
 		@close="attemptClose"
 	>
 		<div
-			class="layout-configurator-dialog pointer-events-auto relative flex h-auto max-h-[90dvh] min-h-[600px] w-auto min-w-[800px] max-w-[95vw] cursor-default flex-col overflow-auto rounded-lg bg-background text-foreground shadow-xl"
+			class="layout-configurator-dialog ui-glass-panel pointer-events-auto relative flex h-auto max-h-[90dvh] min-h-[600px] w-auto min-w-[800px] max-w-[95vw] cursor-default flex-col overflow-auto rounded-lg text-foreground"
 			role="dialog"
 			:aria-label="t('layoutConfigurator.title')"
 		>
-			<header class="flex items-center justify-between border-b border-border bg-header p-4">
+			<header class="ui-glass-chrome flex items-center justify-between border-b border-border p-4">
 				<h2 class="m-0 text-lg font-semibold">{{ t('layoutConfigurator.title') }}</h2>
 				<UiButton
 					appearance="ghost"

@@ -62,7 +62,7 @@
 </script>
 
 <template>
-	<section class="overflow-hidden rounded-2xl bg-card/65 shadow-xs" :aria-label="t(sectionTitle)">
+	<section class="ui-glass-panel overflow-hidden rounded-2xl" :aria-label="t(sectionTitle)">
 		<div class="agent-settings-head flex min-w-0 items-start justify-between gap-3 px-4 pb-0 pt-4 sm:px-5 sm:pt-5">
 			<div class="flex min-w-0 items-center gap-1.5">
 				<h3 class="text-sm font-semibold text-foreground">{{ t(sectionTitle) }}</h3>

@@ -110,10 +110,7 @@
 	align-items: center;
 	min-width: 180px;
 	overflow: hidden;
-	border: 1px solid var(--border-color);
 	border-radius: 0.65rem;
-	background: var(--app-bg-color);
-	box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
 	touch-action: manipulation;
 }
 

@@ -1802,3 +1802,23 @@ e2f66bdf对应 https://github.com/0honus0/nexus-terminal/actions/runs/4026284297
 持久回归：`tests/backend/remote/backend-next-terminal.integration.mjs`新增7个真实xterm快照接续场景（普通/备用屏、DECOM、非法区域忽略、软重置、RIS、resize），断言后续滚动后的完整屏幕字符/背景及底部输入区保留；连同原两项共9项通过。检查命令：`node --test tests/backend/remote/backend-next-terminal.integration.mjs`。既有SSH fullscreen E2E保留几何顺序断言，尚未运行本轮远程Actions。
 
 证据：`/tmp/nexus-codex-region-tests.log`、`/tmp/nexus-codex-factory-replay.log`、`/tmp/nexus-codex-browser-replay-result.json`、`/tmp/nexus-codex-delayed-private-result.log`。原始流仅放/tmp，不提交对话内容或Cookie。源码复核两轮覆盖几何、解析屏障、scroll region与监听生命周期；末轮check/build/全量format/diff日志分别为`/tmp/nexus-codex-region-{check,build,format}.log`。实机原截图尚未稳定复现，旧Backend进程尚未加载本轮代码，不能宣称新版本端到端恢复通过；非活动缓冲区区域和任意未闭合ANSI解析状态不在本轮快照保证内。无UI设计变更；按用户后续授权提交本次修复，未推送或部署重启。
+
+### 终端逐字符真实回显优化（2026-10-26）
+
+源码沿前端onData→sendConnected→WS terminal.input→requireTerminal→Workspace.write→ssh2 channel及原输出链核对：前端发送/前台输出没有固定防抖；Workspace WS入口仅派发任务，不等待文件操作执行完成，不能把Platform串行消息接收误判为终端等待目录请求完成。确认SSH底层TCP未关闭Nagle，且input/resize/flow原先均重复完整授权。修正原SSH route的直连/跳板客户端与代理TCP的noDelay，并只去除上述控制操作外层重复授权；具体处理器仍完整检查身份、phase、精确attachment与挂起租约。
+
+两轮源码复核覆盖：直连/跳板/HTTP及SOCKS代理的真实socket归属；ssh2公开setNoDelay对forward channel的无操作及外层策略；ready后设置失败的原catch销毁；输入/resize/flow在未连接、pending ACK、被接管、失效Cookie/租约过期时的授权与拒绝路径。无UI/Shared/存储变化，不添加本地预测字符，未改在途容量或输出流控。
+
+本批沿PLAN D17不新增/运行本地行为、浏览器或E2E。待远程/明确授权专项：普通Shell与Codex、中文输入/退格/方向键在直连、跳板和HTTP/SOCKS代理及高RTT下的键入至远端回显分位延迟；大输出/文件传输并行时的交互；原身份失效、接管与pending ACK拒绝用例。已有SSH连接不会因源码修改改变TCP选项，需加载新版Backend后新建SSH再验证。静态证据：根check（含Backend包级check）及Backend/Shared build通过，本批文件ESLint/Prettier及diff通过；全量format失败项仅为并行工作区的AppIntegrationEditor.vue、SafetyNetworkSettings.vue、UiInlineNotice.vue、WorkspaceLayoutRenderer.vue，未代为格式化。日志`/tmp/nexus-terminal-echo-{check,build,format}.log`，本批文件检查见`/tmp/nexus-terminal-echo-scope-format.log`。未重启、提交推送或修改其它工作区UI/Agent文件。
+
+### VS Code TypeAhead 移植定向验证（2026-10-26）
+
+本轮沿用户对 api.honus.top 的终端/高延时专项授权，未运行全量本地 E2E、模型请求或修改真实 SSH 文件。复用 VS Code 固定提交 ae11932c6109d3977d78f2fe8937d861e246151d 的 MIT 核心，来源和适配差异见前端 vendor README。
+
+定向算法回放 `/tmp/nexus-typeahead-verify.mjs` 使用实际新增模块及真实 headless xterm：11项通过，覆盖学习后本地回显、匹配不重复、不匹配回滚、首字符未确认的密码提示、退格/左右移动、snapshot撤销及晚到回显、Unicode/粘贴、备用屏/隐藏光标/滚动区内停用、分片SGR、超时、旧epoch及ACK唯一、首次RTT超过500ms可学习，以及Codex式滚动区下方输入。结果 `/tmp/nexus-typeahead-verify.log`。首次加空白格属性恢复时定向断言发现撤销遗留可序列化的空格，改为带原背景的ECH恢复，重跑通过；不把失败轮记为PASS。
+
+复用此前真实Codex捕获流，通过实际TypeAhead模块逐块与无预测的xterm比较；先制造待确认字符，再输入真实重绘。16块、126×34屏幕逐块字符/宽度/前背景/粗体/反色均零差异，最终光标坐标及显隐一致，结果 `/tmp/nexus-typeahead-codex.log`。不把录制重放称为真实Codex交互全覆盖。
+
+独立临时Chromium访问 https://api.honus.top，在登录页面挂载真实TerminalView隔离测试实例，无账号或SSH资源写入。抽取既有终端生命周期场景及新增3个TypeAhead场景，使用正式源模块及真实浏览器断言；13项通过：前后台重挂载与原始ACK、鼠标模式清理、UTF-8跨重挂载、PTY替换、历史snapshot排空/慢游标、后台顺序、无rAF同步TUI/尺寸、预测与不同远端结果校正、snapshot/重挂载不保留预测及密码/粘贴不预显。日志 `/tmp/nexus-typeahead-browser.log`；这是定向执行，不是正式远程Actions。新增回归位于 `tests/e2e/specs/ui/terminal-lifecycle.spec.ts`，传输观察者拒绝/退订断言同步至既有 `tests/frontend/workspace-terminal.integration.mjs`（后者仅静态检查，未运行其服务集成）。临时工具最初遇到esbuild虚拟模块external和已有Chromium版本路径问题，修正工具后执行，未修改项目测试配置。
+
+两轮源码复核覆盖实际派发/手机修饰键、唯一发送、原始字节流控、首字符与异常序列、样本/超时、解析队列、后台/历史/断线/resize及PTY generation、挂起snapshot和订阅/定时器清理。正常UI template/style本批无变更，保留其它并行UI/Agent修改。根check（含Backend包级check）、Frontend生产build、新增E2E严格tsc、既有JS语法及本批ESLint/Prettier/diff检查通过，日志 `/tmp/nexus-typeahead-{check,build,e2e-types,scope-format}.log`；全量format仅受并行修改的UiInlineNotice.vue格式阻塞（`/tmp/nexus-typeahead-all-format.log`），未代为调整。未提交、推送、重启或部署；Android真机、任意全屏程序、所有超高RTT/代理与长时交互仍不在本次实机保证内。

@@ -506,7 +506,7 @@
 					node.component === 'terminal' && session.recoveryRequired.value && session.state.value === 'error'
 				"
 				role="alert"
-				class="absolute inset-x-2 bottom-2 z-10 rounded border border-border bg-background p-3 text-sm text-foreground shadow"
+				class="ui-glass-panel absolute inset-x-2 bottom-2 z-10 rounded p-3 text-sm text-foreground"
 			>
 				{{ ownershipMessage }}
 			</div>
@@ -515,9 +515,7 @@
 				role="status"
 				class="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center"
 			>
-				<span
-					class="rounded-full border border-border/70 bg-background/90 px-3 py-1.5 text-xs text-foreground shadow-sm"
-				>
+				<span class="ui-glass-chrome rounded-full border border-border/70 px-3 py-1.5 text-xs text-foreground">
 					<UiSpinner class="mr-1" density="compact" />
 					{{ t(`workspace.sessionState.${session.state.value}`) }}
 				</span>
@@ -544,7 +542,7 @@
 	}
 	:deep(.splitpanes__splitter) {
 		position: relative;
-		z-index: 30;
+		z-index: 40;
 		box-sizing: border-box;
 		background: transparent !important;
 		background-image: none !important;

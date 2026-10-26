@@ -22,7 +22,7 @@
 
 <template>
 	<section
-		class="ui-settings-group"
+		class="ui-settings-group ui-glass-panel"
 		:data-tone="props.tone"
 		:data-compact="props.compact || undefined"
 		:data-body-empty="!slots.default || undefined"

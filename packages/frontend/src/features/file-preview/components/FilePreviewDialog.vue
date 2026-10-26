@@ -72,7 +72,7 @@
 		data-file-preview-dialog
 		class="file-preview-dialog relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-background text-foreground"
 	>
-		<div v-if="active" class="file-preview-header">
+		<div v-if="active" class="file-preview-header ui-glass-chrome">
 			<div
 				v-if="session.tabs.value.length"
 				role="tablist"
@@ -124,7 +124,7 @@
 			<slot />
 		</div>
 
-		<footer v-if="active && activeTab" class="file-preview-footer">
+		<footer v-if="active && activeTab" class="file-preview-footer ui-glass-chrome">
 			<div class="file-preview-statusbar">
 				<i class="fas fa-file-lines" aria-hidden="true"></i>
 				<span class="file-preview-path" :title="activeTab.path">{{ activeTab.path }}</span>
@@ -165,9 +165,6 @@
 		flex: 0 0 auto;
 		align-items: stretch;
 		border-bottom: 1px solid var(--border-color);
-		background: color-mix(in srgb, var(--header-bg-color) 82%, transparent);
-		-webkit-backdrop-filter: var(--glass-backdrop-filter, blur(18px) saturate(160%));
-		backdrop-filter: var(--glass-backdrop-filter, blur(18px) saturate(160%));
 	}
 
 	.file-preview-tabs {
@@ -264,9 +261,6 @@
 		gap: 0.35rem 0.6rem;
 		padding: 0.3rem 0.55rem;
 		border-top: 1px solid var(--border-color);
-		background: color-mix(in srgb, var(--header-bg-color) 82%, transparent);
-		-webkit-backdrop-filter: var(--glass-backdrop-filter, blur(18px) saturate(160%));
-		backdrop-filter: var(--glass-backdrop-filter, blur(18px) saturate(160%));
 	}
 
 	.file-preview-toolbar {

@@ -41,30 +41,38 @@
 
 <style scoped>
 	.ui-inline-notice {
+		--ui-inline-notice-accent: var(--link-active-color);
 		display: flex;
 		min-width: 0;
 		align-items: flex-start;
 		gap: 9px;
 		padding: 10px 12px;
+		border: 1px solid color-mix(in srgb, var(--ui-inline-notice-accent) 22%, var(--glass-border-color));
 		border-radius: 11px;
-		background: color-mix(in srgb, var(--link-active-color) 8%, transparent);
-		color: color-mix(in srgb, var(--link-active-color) 76%, var(--text-color));
+		background-color: var(--glass-fill);
+		background-image:
+			linear-gradient(180deg, color-mix(in srgb, var(--ui-inline-notice-accent) 7%, transparent), transparent 72%),
+			var(--glass-sheen-image);
+		box-shadow: var(--glass-rim-shadow);
+		color: color-mix(in srgb, var(--ui-inline-notice-accent) 76%, var(--text-color));
 		font-size: 12px;
 		line-height: 1.55;
+		-webkit-backdrop-filter: var(--ui-glass-filter);
+		backdrop-filter: var(--ui-glass-filter);
 	}
 
 	.ui-inline-notice[data-tone='success'] {
-		background: color-mix(in srgb, var(--status-success-color) 9%, transparent);
+		--ui-inline-notice-accent: var(--status-success-color);
 		color: var(--status-success-color);
 	}
 
 	.ui-inline-notice[data-tone='warning'] {
-		background: color-mix(in srgb, var(--status-warning-color) 10%, transparent);
+		--ui-inline-notice-accent: var(--status-warning-color);
 		color: var(--status-warning-color);
 	}
 
 	.ui-inline-notice[data-tone='danger'] {
-		background: color-mix(in srgb, var(--status-error-color) 9%, transparent);
+		--ui-inline-notice-accent: var(--status-error-color);
 		color: var(--status-error-color);
 	}
 

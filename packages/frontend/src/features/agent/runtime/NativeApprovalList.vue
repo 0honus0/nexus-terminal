@@ -109,7 +109,7 @@
 		<article
 			v-for="approval in approvals"
 			:key="approval.id"
-			class="overflow-hidden rounded-2xl border border-warning/25 bg-card/90 shadow-xs backdrop-blur-sm"
+			class="ui-glass-panel overflow-hidden rounded-2xl border-warning/25"
 		>
 			<div class="flex items-start gap-3 p-3.5">
 				<span

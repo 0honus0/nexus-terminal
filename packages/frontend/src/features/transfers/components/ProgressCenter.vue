@@ -239,7 +239,7 @@
 			]"
 			:style="{ left: `${position.x}px`, top: `${position.y}px`, width: `${width}px`, height: `${height}px` }"
 		>
-			<header class="transfer-progress-header shrink-0" @pointerdown="drag.startDragging">
+			<header class="transfer-progress-header ui-glass-chrome shrink-0" @pointerdown="drag.startDragging">
 				<template v-if="presentationMode === 'upload'">
 					<div class="flex min-w-0 flex-1 items-center gap-2">
 						<h4 class="m-0 min-w-0 flex-1 truncate text-sm font-semibold">
@@ -581,10 +581,6 @@
 		border-bottom: 1px solid var(--ui-hairline);
 		padding: 9px 11px;
 		cursor: grab;
-		background: color-mix(in srgb, var(--header-bg-color) 48%, transparent);
-	}
-	.transfer-progress-window--archive .transfer-progress-header {
-		background: color-mix(in srgb, var(--header-bg-color) 48%, transparent);
 	}
 	.dragging .transfer-progress-header {
 		cursor: grabbing;

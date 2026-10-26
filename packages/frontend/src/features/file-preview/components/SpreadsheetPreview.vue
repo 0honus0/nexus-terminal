@@ -284,7 +284,7 @@
 					<div
 						v-if="columnsTruncated"
 						role="status"
-						class="sticky bottom-0 border-t border-border bg-header/95 px-4 py-2 text-xs text-text-secondary backdrop-blur"
+						class="ui-glass-chrome sticky bottom-0 border-t border-border px-4 py-2 text-xs text-text-secondary"
 					>
 						{{
 							t('fileManager.preview.spreadsheetLimited', {

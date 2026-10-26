@@ -34,6 +34,7 @@ interface WorkspaceTerminalGate {
 }
 
 export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceTerminalGate): TerminalChannel => {
+	const inputSentHandlers = new Set<(data: string) => void>();
 	const outputHandlers = new Set<(output: TerminalOutput) => void>();
 	const inputErrorHandlers = new Set<(message: string) => void>();
 
@@ -114,10 +115,15 @@ export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceT
 				return;
 			}
 			try {
-				if (!socket.sendConnected('terminal.input', toTerminalInputRequest(data))) notifyInputError();
+				if (!socket.sendConnected('terminal.input', toTerminalInputRequest(data))) {
+					notifyInputError();
+					return;
+				}
 			} catch {
 				notifyInputError();
+				return;
 			}
+			for (const handler of inputSentHandlers) handler(data);
 		},
 
 		resize: (viewport: TerminalViewport) => {
@@ -125,6 +131,11 @@ export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceT
 			gate?.rememberResize({ columns: request.columns, rows: request.rows });
 			if (gate && !gate.canSend()) return;
 			socket.sendConnected('terminal.resize', request);
+		},
+
+		onInputSent(handler) {
+			inputSentHandlers.add(handler);
+			return () => inputSentHandlers.delete(handler);
 		},
 
 		onOutput(handler) {

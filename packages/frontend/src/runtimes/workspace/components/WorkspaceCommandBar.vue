@@ -264,7 +264,7 @@
 <template>
 	<form
 		ref="root"
-		class="command-bar-root flex w-full items-center overflow-hidden bg-background"
+		class="command-bar-root ui-glass-chrome flex w-full items-center overflow-hidden"
 		:class="mobile ? 'command-bar-root--mobile' : 'command-bar-root--desktop'"
 		@submit.prevent="submit"
 	>
@@ -499,7 +499,6 @@
 		container-name: command-bar-pane;
 		width: 100%;
 		min-width: 0;
-		background: var(--app-bg-color);
 	}
 
 	.command-bar-root--desktop {

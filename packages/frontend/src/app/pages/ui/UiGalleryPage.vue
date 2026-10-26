@@ -450,9 +450,10 @@
 			<UiSurface class="p-5">
 				<h2 class="text-sm font-semibold">Surfaces & popover</h2>
 				<p class="mt-1 text-xs text-text-secondary">
-					Every Gen 2 surface uses the same transparent glass system with distinct raised and inset depth.
+					Every Gen 2 surface uses the same transparent glass system with distinct panel, chrome and inset
+					depth.
 				</p>
-				<div class="mt-4 grid gap-3 sm:grid-cols-3">
+				<div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
 					<UiSurface surface="plain" class="border border-dashed border-border p-4">
 						<div class="text-xs font-medium">Plain</div>
 						<div class="mt-1 text-[11px] text-text-secondary">No decorative surface.</div>
@@ -466,6 +467,10 @@
 						<div class="mt-1 text-[11px] text-text-secondary">
 							Inset glass for controls and compact wells.
 						</div>
+					</UiSurface>
+					<UiSurface surface="glass-chrome" radius="control" class="border border-border/60 p-4">
+						<div class="text-xs font-medium">Chrome</div>
+						<div class="mt-1 text-[11px] text-text-secondary">Docked headers, footers and sidebars.</div>
 					</UiSurface>
 				</div>
 				<div class="mt-5">

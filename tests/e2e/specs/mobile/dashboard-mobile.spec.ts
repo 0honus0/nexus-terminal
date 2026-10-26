@@ -179,7 +179,7 @@ test('mobile dashboard reflows without horizontal overflow or cramped control ro
 			expect(localResourcesBox).not.toBeNull();
 			expect(localResourcesBox!.y).toBeGreaterThanOrEqual(statsBox!.y + statsBox!.height - 1);
 
-			const toolbar = dashboard.locator('.dashboard-toolbar');
+			const toolbar = dashboard.locator('.dashboard-status-toolbar');
 			const searchBox = await connectionPanel(page).getByRole('searchbox').boundingBox();
 			const tagBox = await tagFilter(page).boundingBox();
 			const sortBox = await sortFilter(page).boundingBox();

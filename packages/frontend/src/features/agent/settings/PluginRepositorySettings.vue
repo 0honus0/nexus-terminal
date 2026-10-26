@@ -388,7 +388,7 @@
 				<div
 					v-for="group in filteredCatalogGroups"
 					:key="group.key"
-					class="overflow-hidden rounded-xl bg-header/25 transition-all duration-200"
+					class="ui-glass-chrome overflow-hidden rounded-xl transition-all duration-200"
 				>
 					<div
 						role="button"
@@ -464,20 +464,7 @@
 						</div>
 					</div>
 
-					<div
-						v-if="isGroupExpanded(group.key)"
-						class="space-y-1 border-t border-border/30 bg-background/25 px-3 sm:px-4"
-					>
-						<div class="flex items-center justify-between px-1 text-xs text-text-secondary font-medium">
-							<div class="flex items-center gap-1.5">
-								<i class="fa-solid fa-puzzle-piece text-[10px] text-primary" aria-hidden="true"></i>
-								<span>{{ t('agent.settings.plugins.repositoryPlugins') }}</span>
-							</div>
-							<span class="font-mono text-[11px]">{{
-								t('agent.settings.plugins.pluginCount', { count: group.packages.length })
-							}}</span>
-						</div>
-
+					<div v-if="isGroupExpanded(group.key)" class="space-y-1 px-3 pb-1 sm:px-4">
 						<div class="grid grid-cols-1">
 							<div
 								v-for="{ package: entry, catalog, official, source } in group.packages"

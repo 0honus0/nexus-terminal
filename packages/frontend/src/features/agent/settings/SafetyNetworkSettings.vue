@@ -161,12 +161,9 @@
 	});
 </script>
 <template>
-	<section
-		class="rounded-2xl border border-border bg-card shadow-xs transition-all"
-		:aria-label="t('agent.settings.appManagement.denylist')"
-	>
+	<section class="ui-glass-panel rounded-2xl transition-all" :aria-label="t('agent.settings.appManagement.denylist')">
 		<div
-			class="agent-settings-head flex flex-wrap items-center justify-between gap-3 rounded-t-2xl border-b border-border bg-header/50 px-4 py-3 sm:px-5 sm:py-3.5"
+			class="agent-settings-head ui-glass-chrome flex flex-wrap items-center justify-between gap-3 rounded-t-2xl border-b border-border px-4 py-3 sm:px-5 sm:py-3.5"
 		>
 			<div>
 				<div class="flex flex-wrap items-center gap-2.5">
