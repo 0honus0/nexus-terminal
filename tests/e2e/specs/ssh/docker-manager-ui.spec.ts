@@ -394,7 +394,10 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
 			const clampedSizes = await split
 				.locator(':scope > .splitpanes__pane')
 				.evaluateAll((panes) => panes.map((pane) => Number.parseFloat((pane as HTMLElement).style.height)));
-			expect(clampedSizes.reduce((total, size) => total + size, 0)).toBeCloseTo(100, 2);
+			// ResizeObserver reports fractional CSS pixels while clientHeight is integral.
+			// Keep the total within one rendered pixel instead of subpixel percentage equality.
+			const totalPixels = (clampedSizes.reduce((total, size) => total + size, 0) * splitBox.height) / 100;
+			expect(Math.abs(totalPixels - splitBox.height)).toBeLessThanOrEqual(1);
 			expect(clampedSizes[0]).toBeCloseTo(24, 1);
 			expect(await height(commandPane)).toBeGreaterThanOrEqual(37);
 			expect(await height(commandPane)).toBeLessThanOrEqual(43);

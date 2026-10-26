@@ -938,7 +938,7 @@ test('reopening a completed clarification restores history and explicit follow-u
 });
 
 test('image tool shows a persisted preview and download without model-authored Markdown', async ({ request, page }) => {
-	const task = await prepareNativeTask(request, page, ['artifacts.read', 'artifacts.write']);
+	const task = await prepareNativeTask(request, page, ['context.read', 'artifacts.read', 'artifacts.write']);
 	await requestAgentJson(
 		request,
 		{

@@ -1706,7 +1706,7 @@
 		<div
 			v-else-if="showProgressRestoreButton"
 			ref="progressRestoreButton"
-			class="z-30 touch-none select-none shadow-lg"
+			class="z-50 touch-none select-none shadow-lg"
 			:class="progressRestoreDrag.dragging.value ? 'cursor-grabbing' : 'cursor-move'"
 			:style="progressRestoreButtonStyle"
 			@pointerdown="progressRestoreDrag.startDragging"

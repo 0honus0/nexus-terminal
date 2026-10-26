@@ -1849,3 +1849,5 @@ e2f66bdf对应 https://github.com/0honus0/nexus-terminal/actions/runs/4026284297
 - 传输取消：独立传输 lease 仅在获取阶段转发取消；流式 stage 等待已派发 WRITE 后用独立清理期限删除临时文件，保持真正网络故障的 unknown/清理错误。既有 Progress Display 取消与后续 baseline reset 回归验证。
 
 本地静态检查与正式远程 Actions 证据在本次实施方案记录；未通过前不视为发布验收。
+
+40296789507回归补正：图片受控场景显式授予context.read以读取图片模型列表；布局极限百分比换算为CSS像素误差≤1px（观察器与整数clientHeight取整），仍严格断言终端最小24%和指令栏37–43px。Progress Display用例继续真实点击拖动后的恢复按钮；仅修复按钮被分隔条遮挡的层级。已派发复制取消应显示Result unknown与核对源/目标提示，手动Remove后消失，不把受理取消等同于远端回滚；后续隔离reset必须成功。

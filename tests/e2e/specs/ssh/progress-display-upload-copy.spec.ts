@@ -156,6 +156,12 @@ test('registered copy progress hides and cancels through the shared Progress Dis
 			await expect(task).toContainText('Copy');
 			await expect(task.getByRole('button', { name: 'Cancel', exact: true })).toBeEnabled();
 			await task.getByRole('button', { name: 'Cancel', exact: true }).click();
+			// A dispatched copy has a conservative unknown result on cancellation;
+			// cancellation acceptance must not erase it or suggest remote rollback.
+			await expect(task).toContainText('Result unknown');
+			await expect(task).toContainText('Check the source and destination');
+			await expect(task.getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(0);
+			await task.getByRole('button', { name: 'Remove', exact: true }).click();
 			await expect(task).toBeHidden({ timeout: 10_000 });
 			await closeProgressDisplay(modal);
 			await reopenConnectedFileManager(page);
