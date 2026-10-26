@@ -1719,3 +1719,7 @@ Context预压缩现状：checkpoint工具需要实际context.compact授权，摘
 ### 自动图片预览（2026-10-26）
 
 image_generate 仅负责生成并保存 App 文件，返回给模型的结果只有 id、name、sizeBytes；工具说明不要求模型拼接预览或下载 Markdown。服务端从已完成工具的持久结果投影 generatedImageId，前端使用 App ID 与文件 ID 自动显示现有图片预览和下载入口。Base64 只经生成服务落盘，不写入聊天或工具列表。待批准、失败或 unknown 不产生成功预览；刷新后仍可从工具记录恢复，文件读取继续执行原会话与 App 授权。直接 Images 对话仍由程序生成展示内容，不依赖文字模型。
+
+Workspace 传输失败呈现：原 TransferController 保留 error/unknown 真实结算，WorkspaceSessionSurface 与 WorkspacePage 通过 transfers 的 `isProgressTaskVisible` 统一过滤浮动进度、恢复按钮与隐藏任务列表。各操作原等待回执的 owner 发出 Toast，上传在批次完成回执中通知，准备失败只由原提交 catch 通知，不重复订阅同一错误。密码拒绝仍进入原重输流程。此展示过滤不取消远端任务、不解除机器突变未知围栏。
+
+Splitpanes 连续拖动的生命周期补丁：mouseup 立即解除本次全局拖动监听，100ms click 防抖只保留 dragging 标记；新 mousedown 清除上次定时器，卸载清理监听和定时器，防止旧拖动延迟收尾解除新拖动的监听。正常尺寸和布局不变。

@@ -38,3 +38,7 @@ export const transferTaskWarningDescriptor = (task: TransferTask): TransferMessa
 			return task.warning ? { key: 'progressCenter.warning.partialFailure' } : null;
 	}
 };
+
+/** Failed outcomes are delivered through Toast; task settlement stays in the controller. */
+export const isProgressTaskVisible = (task: TransferTask): boolean =>
+	task.status !== 'error' && task.status !== 'unknown';

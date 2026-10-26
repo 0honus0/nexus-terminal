@@ -191,7 +191,7 @@ test('desktop Progress Display floats above the workspace without resizing the t
 		await expect(row(page, 'copy-source.txt')).toBeVisible({ timeout: 30_000 });
 		// Destination visibility may precede final metadata verification and lease
 		// close. Completed client tasks retire after their server terminal event;
-		// unknown/error tasks remain observable in Progress Display.
+		// unknown/error outcomes use Toast and leave progress presentation.
 		const settledDisplay = await openDesktopProgressDisplay(page);
 		await expect(
 			settledDisplay.locator('.hidden-progress-task-row').filter({ hasText: 'copy-source.txt' }),

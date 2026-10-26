@@ -505,6 +505,8 @@ file-copy 由 Service 在首次副作用前预检整批目标与源的重叠。�
 
 file-copy以256 KiB固定窗口聚合读取，逐窗等待stage append确认，保持顺序、背压与失败时原迭代器排空/关闭，不并发调用stage。upload协议帧仍最多1 MiB，Service内部按512 KiB批次写入，每批开始前检查discarding；取消不abort独立lease，只停止后续批次，当前批次确认后由原worker清理stage，不将部分帧计为完整progress。
 
+归档源预检由 Files Service 持有，`FileArchiveSources` 独立区分全部遍历量、可归档条目数和跳过的特殊节点路径。目录内的特殊节点由原生 ZIP/TAR 字面量排除参数跳过；直接选择特殊节点仍以 `UNSUPPORTED_ENTRY` 拒绝。条目计数与已发布文件检查继续验证，警告经既有 `verified_warning` 安全投影，不把远端路径或原始工具输出作为前端错误正文。
+
 Files Service 统一维护每 Workspace 16 个 prepare/upload/copy-move/archive 活跃名额，排队与清理失败任务计入总数；同步检查后立即登记，prepare 收尾释放名额，已完成 allowlist 独立缓存。FileArchiveModel 将 NativeArchiveFailure.cleanup_failed 显式转换为模块具名清理失败，不以普通 unknown 抹除生命周期事实。
 
 Files 操作在准入后、串行排队前登记 active/inFlight，关闭和 quiesce 覆盖排队与执行，追踪到 finally 退订和解锁完成。尚未执行的排队请求取消不退役健康 Workspace，也不提前解除前序门禁；入场认证等待归既有 authorizing owner。跨 Workspace copy/move 的私有任务记录双端归属，任一端关闭取消任务，双端关闭都汇总关联清理失败；控制协议、任务 ID 和授权仍归原目标端。上传任务用独立discarding状态区分清理已开始与最终块已接纳：取消/断流先停止接纳，原worker排空WRITE、关闭并删除stage，重复取消等待同一settlement，字节通道关闭不再次中断租约。首次断流仍为unknown；提交后的取消与真实清理失败不因该状态放宽。

@@ -1851,3 +1851,11 @@ e2f66bdf对应 https://github.com/0honus0/nexus-terminal/actions/runs/4026284297
 本地静态检查与正式远程 Actions 证据在本次实施方案记录；未通过前不视为发布验收。
 
 40296789507回归补正：图片受控场景显式授予context.read以读取图片模型列表；布局极限百分比换算为CSS像素误差≤1px（观察器与整数clientHeight取整），仍严格断言终端最小24%和指令栏37–43px。Progress Display用例继续真实点击拖动后的恢复按钮；仅修复按钮被分隔条遮挡的层级。已派发复制取消应显示Result unknown与核对源/目标提示，手动Remove后消失，不把受理取消等同于远端回滚；后续隔离reset必须成功。
+
+### ZIP特殊节点与连续拖动补修（2026-10-26）
+
+- 生产只读日志：ssh.honus.top / pve_debian两次压缩在inspectSources非常规文件预检以invalid_input失败；尚未发布本轮ZIP代码，未宣称生产实测通过。
+- 原生Info-ZIP实测：普通文件、空目录、FIFO和Unix socket组成的目录，zip退出18，FIFO被忽略、socket报警且添加日志不等于实际入包；GNU tar忽略socket但收录FIFO。归档Service使用既有字面量排除参数统一跳过嵌套特殊节点，保留warning。
+- 新正式回归：archive-cancel-recovery校验ZIP和tar.gz实际条目/内容与verified_warning；progress-display-archive验证真实来源删除后压缩失败Toast、两处进度无残留、恢复来源后仍能压缩；复制取消保留unknown Toast且不显示失败卡片。
+- 40298917003失败复核：图片用例传错分页before游标，实际工具生成成功；分片6 trace显示第二次拖动发生在前次100ms延迟解绑前，旧timer中断新拖动。分别修复测试参数和Splitpanes真实事件生命周期，不弱化交互断言。
+- 本轮本地：根check、完整build、全量format:all:check与受影响E2E严格tsc通过（日志/tmp/nexus-zip-{check,build,lint,types}.log）；正式Actions待当前提交完整回归，镜像待全绿发布。

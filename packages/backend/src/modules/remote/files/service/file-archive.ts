@@ -8,6 +8,7 @@ import {
 	type ArchiveFormat,
 	type FileArchiveEntry,
 	type FileCompressionFootprint,
+	type FileArchiveSources,
 } from '../model/file-task-types.js';
 import { FileArchiveModel } from '../model/file-archive-model.js';
 
@@ -92,29 +93,36 @@ async function inspectSources(
 	excluded: ReadonlySet<string>,
 	remaining: () => number,
 	signal: AbortSignal,
-): Promise<number> {
+): Promise<FileArchiveSources> {
 	let count = 0;
+	let visited = 0;
+	const skippedPaths: string[] = [];
 
 	async function visit(name: string, metadata: FileInfo, depth: number): Promise<void> {
 		if (excluded.has(name)) {
 			return;
 		}
-		if (depth > MAX_DEPTH || ++count > LIMIT) {
+		if (depth > MAX_DEPTH || ++visited > LIMIT) {
 			throw new RemoteFileFailure('limit_exceeded');
 		}
 		if (metadata.kind !== 'file' && metadata.kind !== 'directory' && metadata.kind !== 'symlink') {
-			throw new RemoteFileFailure('invalid_input');
+			if (depth === 0) {
+				throw new ArchiveRejection('UNSUPPORTED_ENTRY');
+			}
+			skippedPaths.push(name);
+			return;
 		}
+		count++;
 		if (metadata.kind !== 'directory') {
 			return;
 		}
 		const children = await resource.scan({
 			path: name,
-			maxEntries: Math.max(1, LIMIT - count + 1),
+			maxEntries: Math.max(1, LIMIT - visited + 1),
 			timeoutMs: Math.min(remaining(), 300_000),
 			signal,
 		});
-		if (count + children.length > LIMIT) {
+		if (visited + children.length > LIMIT) {
 			throw new RemoteFileFailure('limit_exceeded');
 		}
 		for (const child of children) {
@@ -143,7 +151,7 @@ async function inspectSources(
 		});
 		await visit(name, metadata, 0);
 	}
-	return count;
+	return { entryCount: count, skippedPaths };
 }
 
 async function inspect(
@@ -214,7 +222,7 @@ export async function compressRemoteArchive(
 	// Keep the real remote filename identical to the SFTP commit source.
 	const extension = format === 'zip' ? '.part.zip' : format === 'tar.gz' ? '.part.tar.gz' : '.part.tar.bz2';
 	const temporary = path.posix.join(root, '.nexus-archive-' + randomUUID() + extension);
-	const expected = await inspectSources(resource, paths, new Set([temporary, destination]), remaining, signal);
+	const inspected = await inspectSources(resource, paths, new Set([temporary, destination]), remaining, signal);
 	await new FileArchiveModel(resource).prepare(format, 'compress', remaining, signal);
 	// Archive entries are emitted relative to the working directory; Info-ZIP
 	// omits the leading "./", while GNU tar retains it. Exclude both variants
@@ -222,7 +230,12 @@ export async function compressRemoteArchive(
 	// and replacing an existing archive does not include its previous bytes.
 	const relativeOutput = path.posix.relative(workingDirectory, temporary);
 	const relativePrevious = path.posix.relative(workingDirectory, destination);
-	const excluded = [relativeOutput, relativePrevious];
+	const expected = inspected.entryCount;
+	const excluded = [
+		relativeOutput,
+		relativePrevious,
+		...inspected.skippedPaths.map((name) => path.posix.relative(workingDirectory, name)),
+	];
 	let count = 0;
 	let finished = false;
 	let nativeEnded = false;
@@ -295,8 +308,8 @@ export async function compressRemoteArchive(
 		if (saved.kind !== 'file' || saved.size !== staged.size) {
 			throw new RemoteFileFailure('operation_unknown');
 		}
-		if (warning) {
-			onWarning(warning);
+		if (warning || inspected.skippedPaths.length) {
+			onWarning(warning ?? 'Archive skipped unsupported special files: ' + inspected.skippedPaths.length);
 		}
 		return count;
 	} catch (cause) {

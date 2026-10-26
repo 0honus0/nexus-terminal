@@ -257,3 +257,27 @@ test('a sidebar FileManager can unmount without orphaning its hidden archive tas
 		await updateTestSidebar(context.request, originalSidebar);
 	}
 });
+
+test('archive failure uses Toast and leaves both progress views without a failed task', async ({ page, context }) => {
+	await openFileManager(page, context);
+	const fs = await import('node:fs/promises');
+	const path = await import('node:path');
+	// Keep the real browser listing stale while the source disappears remotely.
+	await fs.unlink(path.resolve('.tmp/ssh-root/archive-source.txt'));
+	await startZipCompression(page, 'archive-source.txt');
+	await expect(page.getByRole('alert').filter({ hasText: 'Compression failed' })).toBeVisible();
+	await expect(visibleProgressTask(page, 'archive-source.zip')).toHaveCount(0);
+	await expect(visibleProgressCenter(page)).toHaveCount(0);
+	await closeConnectedFileManager(page);
+	await expect(page.getByRole('button', { name: /^Progress Display \(/ })).toHaveCount(0);
+	const display = await openProgressDisplay(page);
+	await expect(hiddenTask(display, 'archive-source.zip')).toHaveCount(0);
+	await closeProgressDisplay(display);
+	await expect(fs.stat(path.resolve('.tmp/ssh-root/archive-source.zip'))).rejects.toThrow();
+	// A deterministic refusal must not poison the next real archive operation.
+	await fs.writeFile(path.resolve('.tmp/ssh-root/archive-source.txt'), 'after source restored\n');
+	await reopenConnectedFileManager(page);
+	await refreshFileManager(page);
+	await startZipCompression(page, 'archive-source.txt');
+	await expect(row(page, 'archive-source.zip')).toBeVisible({ timeout: 30_000 });
+});

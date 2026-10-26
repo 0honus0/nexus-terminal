@@ -968,7 +968,7 @@ test('image tool shows a persisted preview and download without model-authored M
 	const tools = await requestAgentJson(
 		request,
 		{ method: 'GET', path: `/apps/${task.app.id}/threads/${task.thread.id}/tools?limit=100` },
-		(value) => readAgentThreadToolsResponse(value, task.app.id, task.thread.id, 100),
+		(value) => readAgentThreadToolsResponse(value, task.app.id, null, 100),
 	);
 	const imageTool = tools.items.find((tool) => tool.toolName === 'image_generate');
 	expect(imageTool?.state).toBe('completed');

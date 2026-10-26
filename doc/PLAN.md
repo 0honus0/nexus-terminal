@@ -3367,3 +3367,13 @@ HTTP 框架暂缓、Zod 已取消；ACP 保持，Docker 保留 SSH CLI。这些�
 本轮远程故障复核：质量检查为 UiInlineNotice 格式问题；IP 按钮和两组模型筛选为用例定位失效；RDP 创建回执为导航引发 CDP 响应体竞态，改为单次路由获取并转发回执；传输取消为实际资源生命周期错误，取消错误销毁目标写通道，导致 stage 无法回收并累积 shutdown 失败。独立传输获取时转发取消，获取完成后由操作 signal 停止后续动作，目标 stage 保留已派发 WRITE 确认与临时文件清理机会，不绕过真实故障、不重放复制。现有取消测试和后续 reset 共同回归。
 
 42415d16 正式回归（40296789507）：质量检查、分片2/3/4/5/8通过；原IP/模型定位/RDP回执及baseline 503级联已消失。新增图片用例漏授予 image_models_list 的 context.read，补齐测试授权；分隔栏极限总和偏差0.0328%不足1px，按ResizeObserver小数像素与clientHeight整数差使用1px几何断言。另定位真实交互问题：z:40分隔条遮挡z:30进度恢复按钮，按钮提升至既有浮窗下方z:50，仅修正点击层级；复制已派发后取消仍按现有unknown契约保留任务，用例验证提示和手动移除，不改变远端结果语义。传输取消后资源清理已不再污染后续reset。待下一SHA完整回归及发布。
+
+## 当前增量：ZIP目录特殊文件与失败任务Toast
+
+① 用户确认ssh.honus.top / pve_debian的ZIP目录压缩失败；远程日志两次invalid_input准确落在inspectSources非常规文件预检；② 原Files归档Service负责遍历、排除与完整性计数，原transfers及Workspace展示owner负责Toast；③ 不更换归档引擎、不修改UI设计，现有zip/tar继续执行；④ 新内部扫描结果类型归file-task-types，跨边界无新参数；⑤ 扫描嵌套socket/FIFO等特殊文件生成显式exclude并警告，直接选择特殊文件仍拒绝；⑥ 分离遍历容量与归档条目计数，继续校验安全文件名、深度和最终计数，已存在输出仍排除；⑦ 原取消/清理/unknown保留，失败只退出进度展示，上传补充单次Toast，密码审批保持原流程；⑧ 增加含Unix socket/FIFO目录ZIP回归及失败Toast/无残留弹窗回归，静态后正式Actions通过再发布。
+
+四表：功能对应目录压缩和错误反馈；职责归原Files/Transfer/Workspace；类型仅内部扫描结果及展示投影；完成证据待源码复核、检查、正式E2E。
+
+增量复核：原生ZIP实测FIFO忽略、socket导致exit18且adding行包含未收录项；Heavrnl上游直接zip-r并将非0报失败，不能靠原生默认忽略保证本项目计数/提交契约。继续使用原生-x/--exclude字面量排除，不自研压缩。远程分片6 trace确认：第一次mouseup后100ms延迟解绑全局事件，第二次mousedown在60ms内开始，旧timer将第二次mousemove监听移除；修复原库事件生命周期，不放松双向拖动断言。图片分片1为用例把threadId误传before游标，改为null；真实生成路径已完成。
+
+源码两次复核：①正常/拒绝/特殊节点/取消/未知/清理沿原Files调用链审核，遍历与入包计数分开且原native参数转义复用；②失败任务展示投影不改变Controller或后端围栏，上传准备catch与回执失败Toast分别只通知一次，密码失败保留重输；Splitpanes源码和实际加载dist同步维护，定时器和监听卸载回收。根check、完整build、全量格式、E2E严格类型通过；待当前SHA远程全部分片与Docker smoke，再发布amd dev。

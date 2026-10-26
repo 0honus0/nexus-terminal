@@ -23,7 +23,11 @@ export type { ServerTransfersController } from './composables/useServerTransfers
 
 export { createTransferController } from './state/transferController';
 
-export { transferTaskErrorDescriptor, transferTaskWarningDescriptor } from './presentation-transfer-message';
+export {
+	isProgressTaskVisible,
+	transferTaskErrorDescriptor,
+	transferTaskWarningDescriptor,
+} from './presentation-transfer-message';
 
 export type { TransferMessageDescriptor } from './presentation-transfer-message';
 

@@ -28,6 +28,7 @@
 		loadProgressDisplayModal,
 		TransferFailure,
 		transferTaskErrorDescriptor,
+		isProgressTaskVisible,
 		useServerTransfers,
 		type FileClipboardOperation,
 		type ProgressSource,
@@ -361,12 +362,16 @@
 			.filter(
 				(session) =>
 					progressVisibility.value[session.id] === false &&
-					session.transferController.tasks.value.some((task) => task.status !== 'cancelled'),
+					session.transferController.tasks.value.some(
+						(task) => task.status !== 'cancelled' && isProgressTaskVisible(task),
+					),
 			)
 			.map((session) => ({
 				id: session.id,
 				label: session.connection.name || session.connection.host,
-				tasks: session.transferController.tasks.value.filter((task) => task.status !== 'cancelled'),
+				tasks: session.transferController.tasks.value.filter(
+					(task) => task.status !== 'cancelled' && isProgressTaskVisible(task),
+				),
 			})),
 	);
 	const progressDisplaySources = hiddenProgressSources;

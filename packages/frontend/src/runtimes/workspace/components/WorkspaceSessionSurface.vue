@@ -46,6 +46,7 @@
 		TransferFailure,
 		loadSendFilesModal,
 		transferTaskErrorDescriptor,
+		isProgressTaskVisible,
 		loadUploadConflictModal,
 		type WorkspaceArchiveErrorCode,
 		type SendFileSource,
@@ -173,6 +174,7 @@
 	};
 
 	const transfers = props.session.transferController;
+	const progressTasks = computed(() => transfers.tasks.value.filter(isProgressTaskVisible));
 	const documentMode = ref<'editor' | 'preview'>('editor');
 	const editorSession = computed(() => props.sharedEditorSession ?? props.session.editorController);
 	const editorScopeLabel = computed(() => props.session.connection.name || props.session.connection.host);
@@ -432,7 +434,7 @@
 				},
 	);
 	const showProgressRestoreButton = computed(
-		() => transfers.tasks.value.length > 0 && !progressVisible.value && !fileManagerPopupVisible.value,
+		() => progressTasks.value.length > 0 && !progressVisible.value && !fileManagerPopupVisible.value,
 	);
 
 	const restoreHiddenProgress = (): void => {
@@ -880,6 +882,13 @@
 			const taskIds = await controller.startUploadBatch(files, { scopeId: session.id, path }, directories);
 			void Promise.all(taskIds.map((id) => controller.waitForTask(id)))
 				.then(async (tasks) => {
+					if (fileView.isCurrent(permission) && props.session === session) {
+						for (const task of tasks) {
+							if (!isProgressTaskVisible(task)) {
+								feedback.notifyError(transferErrorMessage(task));
+							}
+						}
+					}
 					if (
 						fileView.isCurrent(permission) &&
 						props.session === session &&
@@ -1695,8 +1704,8 @@
 		</UiModal>
 
 		<ProgressCenter
-			v-if="transfers.tasks.value.length && progressVisible && !fileManagerPopupVisible"
-			:tasks="transfers.tasks.value"
+			v-if="progressTasks.length && progressVisible && !fileManagerPopupVisible"
+			:tasks="progressTasks"
 			:source-label="session.connection.name || session.connection.host"
 			@cancel="transfers.cancel"
 			@cancel-all="transfers.cancelAll"
@@ -1718,7 +1727,7 @@
 				:class="progressRestoreDrag.dragging.value ? 'cursor-grabbing' : 'cursor-move'"
 				@click="restoreHiddenProgress"
 			>
-				{{ t('progressCenter.title') }} ({{ transfers.tasks.value.length }})
+				{{ t('progressCenter.title') }} ({{ progressTasks.length }})
 			</UiButton>
 		</div>
 		<SendFilesModal
@@ -1807,8 +1816,8 @@
 			/>
 			<template #overlay-content>
 				<ProgressCenter
-					v-if="transfers.tasks.value.length && progressVisible"
-					:tasks="transfers.tasks.value"
+					v-if="progressTasks.length && progressVisible"
+					:tasks="progressTasks"
 					:source-label="session.connection.name || session.connection.host"
 					:teleport="false"
 					@cancel="transfers.cancel"

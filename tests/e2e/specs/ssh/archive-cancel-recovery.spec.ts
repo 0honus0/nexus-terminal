@@ -297,3 +297,70 @@ test('cancelling one concurrent archive leaves the other archive able to complet
 		await closeWebSocket(workspace.socket);
 	}
 });
+
+test('folder archives exclude Unix sockets and FIFOs while preserving normal files', async ({ request }) => {
+	await loginAsInitialAdmin(request);
+	const workspace = await openWorkspaceSession(request, await ensureTestSshConnection(request));
+	const name = 'as-' + crypto.randomUUID().slice(0, 8);
+	const root = path.resolve('.tmp/ssh-root', name);
+	const fs = await import('node:fs/promises');
+	const net = await import('node:net');
+	const server = net.createServer();
+	try {
+		await fs.mkdir(path.join(root, 'empty'), { recursive: true });
+		await fs.writeFile(path.join(root, 'ordinary.txt'), 'ordinary archive content\n');
+		await promisify(execFile)('mkfifo', [path.join(root, 'pipe')]);
+		await new Promise<void>((resolve, reject) => {
+			server.once('error', reject);
+			server.listen(path.join(root, 'live.sock'), resolve);
+		});
+		await waitForFilesystemReady(workspace.socket);
+		for (const format of ['zip', 'tar.gz'] as const) {
+			const id = crypto.randomUUID();
+			const destination = '/' + name + '.' + format;
+			const terminal = waitForJson(
+				workspace.socket,
+				(message) =>
+					message.type === 'transfer.archive' &&
+					message.payload?.requestId === id &&
+					['completed', 'failed', 'cancelled'].includes(message.payload?.type),
+			);
+			expect(
+				await requestWorkspace(
+					workspace.socket,
+					'transfer.compress',
+					{
+						sources: ['/' + name],
+						destination,
+						format,
+					},
+					id,
+				),
+			).toEqual({ started: true });
+			const result = (await terminal).payload;
+			expect(result).toMatchObject({ type: 'completed', path: destination, warning: 'verified_warning' });
+			const archive = path.resolve('.tmp/ssh-root', destination.slice(1));
+			const listing = await promisify(execFile)(
+				format === 'zip' ? 'unzip' : 'tar',
+				format === 'zip' ? ['-Z1', archive] : ['-tzf', archive],
+			);
+			expect(listing.stdout.trim().split('\n')).toHaveLength(3);
+			expect(listing.stdout).toContain(name + '/ordinary.txt');
+			expect(listing.stdout).toContain(name + '/empty/');
+			expect(listing.stdout).not.toContain('live.sock');
+			expect(listing.stdout).not.toContain('/pipe');
+			const content = await promisify(execFile)(
+				format === 'zip' ? 'unzip' : 'tar',
+				format === 'zip'
+					? ['-p', archive, name + '/ordinary.txt']
+					: ['-xOzf', archive, './' + name + '/ordinary.txt'],
+			);
+			expect(content.stdout).toBe('ordinary archive content\n');
+		}
+	} finally {
+		if (server.listening) {
+			await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+		}
+		await closeWebSocket(workspace.socket);
+	}
+});
