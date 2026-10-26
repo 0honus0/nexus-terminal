@@ -3379,3 +3379,5 @@ HTTP 框架暂缓、Zod 已取消；ACP 保持，Docker 保留 SSH CLI。这些�
 源码两次复核：①正常/拒绝/特殊节点/取消/未知/清理沿原Files调用链审核，遍历与入包计数分开且原native参数转义复用；②失败任务展示投影不改变Controller或后端围栏，上传准备catch与回执失败Toast分别只通知一次，密码失败保留重输；Splitpanes源码和实际加载dist同步维护，定时器和监听卸载回收。根check、完整build、全量格式、E2E严格类型通过；待当前SHA远程全部分片与Docker smoke，再发布amd dev。
 
 33e1cb77远程40302424259：质量/Docker和分片1/2/4/7/8通过，图片自动预览通过。分片5新增失败Toast用例未关闭驻留Toast就点击被遮挡的文件管理器关闭按钮，补真实关闭Toast流程；分片6快速极限恢复时仍受100ms dragging全页pointer-events屏障影响，保护仅延续到当前同步click结束的下一任务，保持原拖动断言；分片3既有PDF横滚用例偶发，trace显示scrollbar已613px而后续最后一次缩放尺寸才到，晚到页锚定left0覆盖横滚。几何锚定保留实际当前横向位置，主动跳页原行为不变，原用例不放宽。待下一SHA完整回归。
+
+最终四表收口：功能对应含图片自动预览、归档特殊节点及失败Toast/无残留、连续拖动与PDF横滚，均在正式远程通过；职责维持Files/原生工具/Transfer呈现/PDF锚定原owner；Shared未增加临时兼容字段，内部扫描计数类型唯一；源码两轮审核、根check、完整build/后续受影响前端build、格式及严格E2E类型通过。7d66cacb的40304902706完整469/469首跑通过、零重试/flaky；7f8ff3ff为CI耗时记录，无产品差异。发布40306499771成功，dev与sha-7f8ff3ff9e54的linux/amd64平台、OCI revision与digest核对完成，证据见testing/E2E。本轮源码、完整回归和镜像交付完成，不更新生产容器。
