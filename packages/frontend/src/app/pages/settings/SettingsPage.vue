@@ -558,8 +558,6 @@
 <style scoped>
 	.settings-page {
 		background: var(--app-bg-color);
-		--settings-card-bg: color-mix(in srgb, var(--card-bg-color) 58%, var(--app-bg-color));
-		--settings-card-bg-strong: color-mix(in srgb, var(--card-bg-color) 74%, var(--app-bg-color));
 	}
 
 	.settings-sidebar {
@@ -697,29 +695,8 @@
 		display: none;
 	}
 
-	.settings-page :deep(#settings-panel-workspace .workspace-preferences__group) {
-		overflow: hidden;
-		border: 0 !important;
-		border-radius: 16px;
-		background: var(--settings-card-bg);
-	}
-
-	.settings-page :deep(#settings-panel-workspace .workspace-preferences__group > div:first-child),
-	.settings-page :deep(#settings-panel-workspace .workspace-preferences__group > summary) {
-		border-bottom: 0 !important;
-		padding: 14px 16px 4px;
-	}
-
 	.settings-page :deep(#settings-panel-workspace .workspace-preferences__field) {
 		padding: 8px 4px;
-	}
-
-	.settings-page :deep(#settings-panel-workspace .workspace-preferences__group .border-t) {
-		border-top: 0 !important;
-	}
-
-	.settings-page :deep(#settings-panel-workspace .workspace-preferences__group > form > div:last-child) {
-		padding: 8px 16px 14px;
 	}
 
 	@media (max-width: 1023px) {

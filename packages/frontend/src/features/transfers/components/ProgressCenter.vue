@@ -703,26 +703,6 @@
 		font-size: 12px;
 		color: var(--text-color-secondary);
 	}
-	.archive-stop-button {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: 7px;
-		border: 1px solid color-mix(in srgb, var(--color-error) 40%, transparent);
-		border-radius: 8px;
-		background: color-mix(in srgb, var(--color-error) 12%, transparent);
-		padding: 7px 10px;
-		color: var(--color-error);
-		font-size: 12px;
-		font-weight: 600;
-	}
-	.archive-stop-button:hover:not(:disabled) {
-		background: color-mix(in srgb, var(--color-error) 20%, transparent);
-	}
-	.archive-stop-button:disabled {
-		cursor: wait;
-		opacity: 0.65;
-	}
 	.progress-scrollbar::-webkit-scrollbar {
 		width: 6px;
 	}

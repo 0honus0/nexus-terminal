@@ -1047,10 +1047,6 @@
 		border-radius: 0.625rem;
 	}
 
-	.workspace-connection-list--launchpad .workspace-connection-refresh {
-		width: 2.75rem;
-	}
-
 	.workspace-connection-list--launchpad .workspace-connection-toolbar > .workspace-connection-add {
 		height: 2.5rem;
 		padding-inline: 0.75rem;

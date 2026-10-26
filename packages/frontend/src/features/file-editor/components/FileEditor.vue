@@ -632,7 +632,6 @@
 			var(--link-active-color, #a06cd5) 6%
 		);
 		--editor-border: color-mix(in srgb, var(--border-color, #495057) 46%, transparent);
-		--editor-border-strong: color-mix(in srgb, var(--border-color, #495057) 70%, transparent);
 		--editor-text: var(--text-color, #e9ecef);
 		--editor-muted: var(--text-color-secondary, #adb5bd);
 		--editor-accent: var(--link-active-color, #bd8cff);

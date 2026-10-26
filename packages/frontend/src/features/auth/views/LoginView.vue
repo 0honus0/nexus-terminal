@@ -815,11 +815,6 @@
 		border-color: var(--auth-accent);
 	}
 
-	.login-security {
-		display: grid;
-		gap: 8px;
-	}
-
 	.login-error {
 		margin: -4px 0 0;
 		--status-error-color: var(--auth-danger);
@@ -903,7 +898,6 @@
 		border-color: color-mix(in srgb, var(--auth-accent) 36%, var(--auth-line-strong));
 	}
 
-	.login-passkey :deep(.ui-button__icon),
 	.login-passkey :deep(svg) {
 		width: 17px;
 		height: 17px;

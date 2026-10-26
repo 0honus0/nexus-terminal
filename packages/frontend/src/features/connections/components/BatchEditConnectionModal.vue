@@ -313,17 +313,6 @@
 		font-weight: 500;
 	}
 
-	.connection-batch__error {
-		margin-top: 12px;
-		padding: 9px 12px;
-		border-radius: 9px;
-		background: color-mix(in srgb, var(--status-error-color) 10%, transparent);
-		color: var(--status-error-color);
-		font-size: 12px;
-		line-height: 1.5;
-		text-align: center;
-	}
-
 	.connection-batch__footer {
 		display: flex;
 		flex: 0 0 auto;

@@ -568,22 +568,6 @@
 		line-height: 1.6;
 	}
 
-	.plugin-data__notice {
-		display: flex;
-		gap: 8px;
-		align-items: flex-start;
-		padding: 8px 9px;
-		border-radius: 8px;
-		background: color-mix(in srgb, var(--link-active-color) 6%, transparent);
-		color: var(--text-color-secondary);
-		font-size: 10px;
-		line-height: 1.5;
-	}
-
-	.plugin-data__notice > i {
-		margin-top: 2px;
-	}
-
 	.plugin-data__toolbar,
 	.plugin-data__actions,
 	.plugin-data__key-row {

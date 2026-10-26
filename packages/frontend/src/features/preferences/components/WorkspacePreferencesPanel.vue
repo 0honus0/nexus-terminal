@@ -732,28 +732,11 @@
 		width: 108px;
 	}
 
-	.workspace-preferences__interval-field {
-		align-self: start;
-	}
-
-	.workspace-preferences__interval-input {
-		width: min(100%, 16rem);
-	}
-
 	.workspace-preferences__hint {
 		margin-top: 5px;
 		color: var(--text-color-secondary);
 		font-size: 11px;
 		line-height: 1.55;
-	}
-
-	.workspace-preferences__footer {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: flex-end;
-		gap: 10px;
-		margin-top: 14px;
 	}
 
 	@media (max-width: 760px) {

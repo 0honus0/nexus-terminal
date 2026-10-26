@@ -1747,3 +1747,11 @@ e2f66bdf对应 https://github.com/0honus0/nexus-terminal/actions/runs/4026284297
 全部分片原始日志/tmp/nexus-e2e-job-121381919{843,879,881,884,905,923,973}.log及/tmp/nexus-e2e-job-121381920218.log；本轮目标ESLint、严格tsc、格式和diff通过（/tmp/nexus-e2e-round4-{lint,types,format}.log）。源码两轮复审完成；没有本地行为/E2E运行，没有更改UI设计。远程CI自动提交0f44d2b3只刷新duration-estimates，已快进同步。
 
 本次代码审核、提交推送与远程E2E修复已完成。未部署、重启或发布应用镜像；初始v1数据库签名变化仍按H-12/D14使用新数据目录，不提供旧开发数据兼容。个人未跟踪截图不属于代码交付，保持原状。真实生产代理/Android后台等专项不因CI通过而扩大宣称已验。
+
+## 前端无效CSS清理（2026-10-26，源码及静态）
+
+范围：仅删除无实际消费者的样式，不修改UI效果、模板/脚本或交互。复用已安装的Vue compiler-sfc、PostCSS与selector parser做临时审查（/tmp/nexus-css-audit.cjs），扫描91个样式源、2663条规则并得到126个候选选择器。工具输出不是删除依据；人工逐一排除模板字符串、Vue Transition/Router和第三方DOM后，清理21个无引用类名对应的39个选择器，其中35条完整规则及2个由此空置的容器查询；混合选择器保留仍使用的分支及原声明。另删3个无消费者的局部变量。全局主题token、动态类及PDF.js内部变量保留。
+
+涉及首页旧搜索/容器、Settings旧Workspace分组、Agent旧原生滑块/配置/历史控件、模型旧输入框、已取消的内联提示、快捷指令旧信息区和传输旧停止按钮等12个原样式owner。两轮源码复核核对实际消费者和全部diff；静态AST对照工具/tmp/nexus-css-review.cjs证实每个已改Vue文件的template/script/scriptSetup内容、style属性，以及全部保留选择器的声明值/顺序/at-rule条件与HEAD一致，仅排除明确批准清理项。结果/tmp/nexus-css-cleanup-review.log。
+
+根check（含Backend包级类型检查）、Frontend生产build、全量format:all:check和git diff --check通过，日志/tmp/nexus-css-cleanup-{check,build,format}.log。临时扫描首两次因独立/tmp脚本无法解析pnpm间接依赖而失败，改用已安装依赖的实际解析路径后通过，未增加依赖或修改项目配置。按D17未运行本地行为/浏览器/E2E，不将静态AST对照冒充视觉回归；前轮463项PASS仍只对应其原提交。本次未提交、推送、部署或重启，未改个人未跟踪截图。

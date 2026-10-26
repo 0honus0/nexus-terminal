@@ -810,8 +810,7 @@
 	}
 	.quick-commands-controls,
 	.quick-command-list-area,
-	.quick-command-row,
-	.quick-command-info {
+	.quick-command-row {
 		min-width: 0;
 	}
 	.quick-command-group-toggle {
