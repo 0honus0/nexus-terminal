@@ -926,8 +926,13 @@ button.live-state:focus-visible {
 	}
 }
 @container status-content (max-height: 210px) {
+	.monitor-content:not(.has-history) {
+		padding-inline: min(0.4rem, 3cqw);
+	}
 	.metric-row {
 		padding-block: calc(2px / var(--status-scale, 1));
+		padding-inline: calc(5px / var(--status-scale, 1));
+		column-gap: calc(4px / var(--status-scale, 1));
 	}
 	.metric-body {
 		gap: 0;
@@ -940,12 +945,15 @@ button.live-state:focus-visible {
 	.metric-reading {
 		display: block;
 		margin-left: auto;
-		font-size: 0.76em;
+		font-size: 0.72em;
+	}
+	.metric-name {
+		font-size: 0.68em;
 	}
 	.network-row .metric-body {
 		flex-direction: row;
 		align-items: center;
-		gap: 0.45em;
+		gap: 0.25em;
 	}
 	.network-row .metric-topline {
 		flex: 0 0 auto;
@@ -956,21 +964,21 @@ button.live-state:focus-visible {
 		flex-wrap: nowrap;
 		align-items: center;
 		justify-content: flex-end;
-		gap: 0.5em;
+		gap: 0.2em;
 	}
 	.rate {
 		flex: 0 1 auto;
-		gap: 0.2em;
+		gap: 0.15em;
 		padding: 0;
 	}
 	.rate > i {
-		font-size: 0.65em;
+		font-size: 0.6em;
 	}
 	.rate > b {
-		font-size: 0.76em;
+		font-size: min(0.66em, max(calc(9px / var(--status-scale, 1)), 4.6cqw));
 	}
 	.rate + .rate {
-		padding-left: 0.5em;
+		padding-left: 0.25em;
 	}
 	.status-loading-card--network {
 		grid-template-rows: minmax(0, 1fr);

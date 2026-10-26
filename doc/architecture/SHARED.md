@@ -24,7 +24,7 @@ B7.1 核心设置的 GET/PUT、CAPTCHA 专项 PUT、安全视图、secret keep/c
 
 ### 远端依赖契约
 
-`remote/tools/{values,model,http,http-codec}` 精确导出有限工具/包管理器/提权/安全失败、检测与安装对象和严格 unknown 解码。检查以 tools 或 transfer 联合表达；transfer 由后端根据真实对端凭据决定 sshpass。安装只接短期 planId 与可选单行密码，不接 shell/任意包名。完整请求 64 KiB、响应 16 KiB、密码 8192 UTF-8 bytes，包含 JSON 最坏转义余量；计划 ID、目标及缺失工具关联由 codec/客户端分别核对。内部指纹、会话摘要、机器句柄和计划 registry 不公开。remote/mutations 的来源增加 tools，实际后端围栏和前端恢复面板共同消费。
+`remote/tools/{values,model,http,http-codec}` 精确导出有限工具/包管理器/提权/安全失败、检测与安装对象和严格 unknown 解码。检查以 tools 或 transfer 联合表达；transfer 由后端根据真实对端凭据决定 sshpass，auto检查默认rsync，客户端明确跳过安装后才检查SCP。tools/values的archiveToolRequirements由前端准备与后端ArchiveModel共同消费，覆盖格式压缩器及核验/快照/发布辅助工具；transfers/values的归档工具取值同步包含gzip/bzip2/cp/ln/grep，严格失败codec保留实际缺失名称。安装只接短期 planId 与可选单行密码，不接 shell/任意包名。完整请求 64 KiB、响应 16 KiB、密码 8192 UTF-8 bytes，包含 JSON 最坏转义余量；计划 ID、目标及缺失工具关联由 codec/客户端分别核对。内部指纹、会话摘要、机器句柄和计划 registry 不公开。remote/mutations 的来源增加 tools，实际后端围栏和前端恢复面板共同消费。
 
 `agent/tools/{values,model,http,http-codec}.ts` 持有有限状态、安全 Tool 审计对象（含modelStepIndex）、单项路径、事件分页和严格 unknown 解码，提供精确包出口。实际消费者为新后端 HTTP/public 和应用/存储基础值；正式前端native-audit-api及实际界面已消费。参数、结果正文、providerCallId、私密摘要及持久预算留 Backend runs。事件游标使用状态 revision，不使用 operationRevision；默认 50、最多 100 项，完整 JSON 响应最多 128 KiB。codec 校验目标 ID/version 成对、修订/时间关系及同工具事件顺序；持有请求上下文的消费者还须核对 App/Run/Tool、after/limit 和空页游标。
 

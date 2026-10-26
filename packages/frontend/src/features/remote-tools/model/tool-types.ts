@@ -16,7 +16,14 @@ export type ToolRequirement =
 			method: ServerTransferMethod;
 	  };
 
-export type ToolPreparation = 'ready' | 'deferred' | 'cancelled';
+export interface TransferToolRequirement {
+	sourceId: number;
+	targetIds: readonly number[];
+	method: ServerTransferMethod;
+	directories: boolean;
+}
+
+export type ToolPreparation = 'ready' | 'deferred' | 'declined' | 'cancelled';
 
 export interface ToolOffer {
 	targetId: number;

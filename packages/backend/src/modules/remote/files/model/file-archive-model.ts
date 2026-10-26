@@ -1,3 +1,4 @@
+import { archiveToolRequirements } from '@nexus-terminal/shared/remote/tools/values';
 import {
 	NativeArchiveCommands,
 	parseNativeArchiveListing,
@@ -74,8 +75,8 @@ export class FileArchiveModel {
 	): Promise<void> {
 		try {
 			await this.perform(() =>
-				this.commands.requireTool(
-					format === 'zip' ? (operation === 'compress' ? 'zip' : 'unzip') : 'tar',
+				this.commands.requireTools(
+					archiveToolRequirements(format, operation).map((tool) => tool),
 					remaining,
 					signal,
 				),

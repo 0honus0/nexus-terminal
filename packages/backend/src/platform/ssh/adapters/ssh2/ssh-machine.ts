@@ -25,6 +25,7 @@ interface CommandChannelOptions {
 	signal?: AbortSignal;
 	cancelWhenAborted?: boolean;
 	abortMode?: MachineCommandAbortMode;
+	pty?: MachinePty;
 }
 
 const CHANNEL_OPEN_TIMEOUT_MS = 30000;
@@ -268,7 +269,7 @@ class ConnectedMachine implements MachineConnection {
 
 	private async createCommandChannel(
 		command: string,
-		{ signal, cancelWhenAborted = true, abortMode = 'close' }: CommandChannelOptions,
+		{ signal, cancelWhenAborted = true, abortMode = 'close', pty }: CommandChannelOptions,
 	): Promise<SshCommandChannel> {
 		if (!command) {
 			throw new Error('Empty SSH command');
@@ -276,8 +277,18 @@ class ConnectedMachine implements MachineConnection {
 		if (signal?.aborted) {
 			throw new MachineDispatchFailure('not_started', { cause: signal.reason });
 		}
+		if (pty && (!Number.isInteger(pty.columns) || !Number.isInteger(pty.rows) || pty.columns < 1 || pty.rows < 1)) {
+			throw new Error('Invalid SSH command PTY dimensions');
+		}
 		const channel = await this.openChannel(
-			(client, callback) => client.exec(command, { pty: false }, callback),
+			(client, callback) =>
+				client.exec(
+					command,
+					{
+						pty: pty ? { term: pty.term ?? 'dumb', cols: pty.columns, rows: pty.rows } : false,
+					},
+					callback,
+				),
 			// A pending exec may already be remote. Signal mode must retain its late
 			// channel to request termination and drain the result, rather than discard it.
 			abortMode === 'signal' ? undefined : signal,
@@ -318,8 +329,9 @@ class ConnectedMachine implements MachineConnection {
 		command: string,
 		signal?: AbortSignal,
 		abortMode: MachineCommandAbortMode = 'close',
+		pty?: MachinePty,
 	): Promise<MachineCommand> {
-		return this.createCommandChannel(command, { signal, abortMode });
+		return this.createCommandChannel(command, { signal, abortMode, pty });
 	}
 
 	async execute(command: string, options: MachineExecuteOptions): Promise<MachineCommandResult> {

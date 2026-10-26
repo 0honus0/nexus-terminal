@@ -19,6 +19,7 @@
 	import { useFeedback } from '@/shared/feedback/public';
 	import { useAuthenticatedViewScope } from '@/shared/session/public';
 	import { loadRemoteDirectoryPicker } from '@/features/filesystem/public';
+	import { useRemoteTools, RemoteToolInstallDialog } from '@/features/remote-tools/public';
 	import { useRuntimeFeatureCapabilities, type ConnectionSummary } from '@/shared/capabilities/public';
 	import { useServerTransfersStore, serverTransferFailureKey } from '../store/serverTransfers.store';
 	import type { SendFileSource, ServerTransferTask } from '../model/server-transfer-types';
@@ -34,6 +35,7 @@
 	const emit = defineEmits<{ close: []; sent: [task: ServerTransferTask] }>();
 	const { t } = useI18n();
 	const feedback = useFeedback();
+	const toolInstaller = useRemoteTools();
 	const capabilities = useRuntimeFeatureCapabilities();
 	const connections = capabilities.connections;
 	const tags = capabilities.tags;
@@ -85,6 +87,10 @@
 	const selectedConnections = computed(() =>
 		sshConnections.value.filter((connection) => selected.value.has(connection.id)),
 	);
+	const toolTargetName = computed(() => {
+		const target = connections.items.value.find((item) => item.id === toolInstaller.offer.value?.targetId);
+		return target?.name || target?.host;
+	});
 	const browseTarget = computed(() =>
 		selectedConnections.value.find((connection) => String(connection.id) === browseTargetId.value),
 	);
@@ -272,7 +278,22 @@
 				signal.aborted
 			)
 				return;
-			if (current !== generation || !props.visible || signal.aborted) {
+			if (
+				!(await toolInstaller.prepareTransfer(
+					{
+						sourceId: command.sourceConnectionId,
+						targetIds: selectedConnections.value
+							.filter((target) => target.route === 'direct')
+							.map((target) => target.id),
+						method: command.transferMethod,
+						directories: command.sourceItems.some((item) => item.type === 'directory'),
+					},
+					signal,
+				)) ||
+				current !== generation ||
+				!props.visible ||
+				signal.aborted
+			) {
 				return;
 			}
 			const task = await transfers.send(command, signal);
@@ -295,6 +316,14 @@
 </script>
 
 <template>
+	<RemoteToolInstallDialog
+		:offer="toolInstaller.offer.value"
+		:busy="toolInstaller.busy.value"
+		:allow-fallback="toolInstaller.allowFallback.value"
+		:target-name="toolTargetName"
+		@approve="toolInstaller.approve"
+		@cancel="toolInstaller.cancel"
+	/>
 	<UiOverlayPanel
 		:visible="visible"
 		:z-index="70"

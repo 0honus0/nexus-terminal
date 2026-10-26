@@ -24,6 +24,7 @@
 	import { defaultTerminalTheme, useAppearance } from '@/features/appearance/public';
 	import { useCommandHistory } from '@/features/command-history/public';
 	import { remoteDesktopLauncher } from '@/features/remote-desktop/public';
+	import { useRemoteTools, RemoteToolInstallDialog } from '@/features/remote-tools/public';
 	import {
 		loadProgressDisplayModal,
 		TransferFailure,
@@ -73,6 +74,12 @@
 	const router = useRouter();
 	const { t } = useI18n();
 	const feedback = useFeedback();
+	const clipboardTools = useRemoteTools();
+	const clipboardToolTargetName = computed(() => {
+		const targetId = clipboardTools.offer.value?.targetId;
+		const session = registry.orderedSessions.value.find((item) => item.connection.id === targetId);
+		return session?.connection.name || session?.connection.host;
+	});
 
 	const transferErrorMessage = (task: TransferTask): string => {
 		const descriptor = transferTaskErrorDescriptor(task);
@@ -471,8 +478,37 @@
 					registry.fileClipboard.value.value?.generation !== snapshot.generation
 				)
 					return;
+				if (target.connection.route === 'direct') {
+					const preparation = new AbortController();
+					const stopWatching = watch(
+						() => current() && registry.fileClipboard.value.value?.generation === snapshot.generation,
+						(valid) => {
+							if (!valid) {
+								preparation.abort();
+							}
+						},
+						{ flush: 'sync' },
+					);
+					try {
+						if (
+							!(await clipboardTools.prepareTransfer(
+								{
+									sourceId: source.connection.id,
+									targetIds: [target.connection.id],
+									method: 'auto',
+									directories: snapshot.items.some((item) => item.type === 'directory'),
+								},
+								AbortSignal.any([permission, preparation.signal]),
+							))
+						) {
+							return;
+						}
+					} finally {
+						stopWatching();
+					}
+				}
 			}
-			if (!current()) return;
+			if (!current() || registry.fileClipboard.value.value?.generation !== snapshot.generation) return;
 			const taskId = await target.transferController.copyMove({
 				kind: snapshot.operation === 'cut' ? 'move' : 'copy',
 				sources: snapshot.items.map((item) => ({ scopeId: source.id, path: item.path })),
@@ -1257,6 +1293,14 @@
 		class="flex min-h-0 flex-col overflow-hidden bg-background"
 		:class="preferences.values.value.navBarVisible ? 'h-[calc(100dvh-var(--app-header-height))]' : 'h-dvh'"
 	>
+		<RemoteToolInstallDialog
+			:offer="clipboardTools.offer.value"
+			:busy="clipboardTools.busy.value"
+			:allow-fallback="clipboardTools.allowFallback.value"
+			:target-name="clipboardToolTargetName"
+			@approve="clipboardTools.approve"
+			@cancel="clipboardTools.cancel"
+		/>
 		<WorkspaceTabBar
 			:sessions="registry.orderedSessions.value"
 			:active-id="registry.activeId.value"

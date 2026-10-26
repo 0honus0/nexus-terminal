@@ -150,3 +150,41 @@ test('Registry is read without requiring public network refresh or invented mode
 	expect(status.entryCount).toBe(0);
 	expect(status.lastAttemptAt).toBeNull();
 });
+
+for (const modelId of ['e2e-image-moderation', 'e2e-image-policy']) {
+	test(`image provider probe reports content filtering for ${modelId} without a retry`, async ({ request }) => {
+		await loginAsInitialAdmin(request);
+		const provider = await requestAgentJson(
+			request,
+			{
+				method: 'POST',
+				path: '/ai/providers',
+				status: 201,
+				data: {
+					kind: 'openai-compatible',
+					displayName: 'E2E image moderation probe',
+					baseUrl: E2E_URLS.openAiProviderOrigin + '/v1',
+					protocol: 'images',
+					models: [{ id: modelId, supportsTools: false, supportsImageGeneration: true }],
+					enabled: true,
+					credential: 'e2e-provider-secret',
+				},
+			},
+			readAgentProviderView,
+		);
+		const result = await requestAgentJson(
+			request,
+			{
+				method: 'POST',
+				path: '/ai/providers/' + provider.id + '/test',
+				data: { modelId },
+			},
+			readAgentProviderTestResponse,
+		);
+		expect(result).toMatchObject({ ok: false, errorCode: 'PROVIDER_CONTENT_FILTERED' });
+		expect(JSON.stringify(result)).not.toContain('E2E_PRIVATE_VENDOR_BODY');
+		const attempts = await request.get(E2E_URLS.openAiProviderOrigin + '/image-requests');
+		expect(attempts.status()).toBe(200);
+		expect(await attempts.json()).toEqual({ [modelId]: 1 });
+	});
+}

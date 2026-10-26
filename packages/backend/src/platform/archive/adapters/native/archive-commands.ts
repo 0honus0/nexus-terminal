@@ -1,3 +1,5 @@
+import { toolProbe } from '../../../tools/tool-probe.js';
+import type { InstallableTool } from '../../../tools/tool-port.js';
 import { NativeArchiveFailure, type NativeArchiveMember } from '../../archive-port.js';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -54,20 +56,31 @@ function listingCleanupFailure(result: ListingCleanupResult): NativeArchiveFailu
 export class NativeArchiveCommands {
 	constructor(private readonly runner: ArchiveCommandRunner) {}
 
-	async requireTool(tool: 'zip' | 'unzip' | 'tar', remaining: () => number, signal: AbortSignal): Promise<void> {
-		const outcome = await this.runner.executeLines(
-			'command -v ' + tool + ' >/dev/null 2>&1',
-			signal,
-			remaining(),
-			() => {
+	async requireTools(tools: readonly InstallableTool[], remaining: () => number, signal: AbortSignal): Promise<void> {
+		let missing: InstallableTool | undefined;
+		let ready = false;
+		const script = [
+			...tools.map(
+				(tool) =>
+					'{ ' + toolProbe(tool) + '; } || { printf "NEXUS_ARCHIVE_MISSING:' + tool + '\\n"; exit 127; }',
+			),
+			'printf "NEXUS_ARCHIVE_TOOLS_READY\\n"',
+		].join('\n');
+		const outcome = await this.runner.executeLines(script, signal, remaining(), (line) => {
+			const tool = tools.find((item) => line === 'NEXUS_ARCHIVE_MISSING:' + item);
+			if (tool && !missing && !ready) {
+				missing = tool;
+			} else if (line === 'NEXUS_ARCHIVE_TOOLS_READY' && !missing && !ready) {
+				ready = true;
+			} else {
 				throw new NativeArchiveFailure('invalid_output');
-			},
-		);
+			}
+		});
 		if (outcome.status !== 'completed') {
-			throw new NativeArchiveFailure(
-				outcome.exitCode === 1 || outcome.exitCode === 127 ? 'missing_tool' : 'rejected',
-				tool,
-			);
+			throw new NativeArchiveFailure(outcome.exitCode === 127 && missing ? 'missing_tool' : 'rejected', missing);
+		}
+		if (!ready || missing) {
+			throw new NativeArchiveFailure('invalid_output');
 		}
 	}
 

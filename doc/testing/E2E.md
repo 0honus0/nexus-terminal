@@ -1963,3 +1963,45 @@ a0cb4f49正式40319856905全部质量/构建/Docker和8个分片通过，新增�
 产品提交 `7865bfc159b0ca750f80d06f93d01125576c695d` 的正式 [E2E 40355305638](https://github.com/0honus0/nexus-terminal/actions/runs/40355305638) 全绿：质量、格式、生产构建、Docker 部署 smoke 和全部 8 分片成功，共 494 项首次通过，无重试或 flaky。日志 `/tmp/nexus-ui-dev-e2e.log`；不把功能回归扩大为专项视觉验收。`a797ecd2` 只自动更新测试耗时估计，无产品代码差异，已快进同步。
 
 用户随后授权的 [dev amd64 发布 40357533124](https://github.com/0honus0/nexus-terminal/actions/runs/40357533124) 成功，生产依赖审计通过。发布标签为 `ghcr.io/0honus0/nexus-terminal:dev` 和 `sha-a797ecd2bf79`，索引摘要 `sha256:5bff81c96b9d8cbd6f9e39f97a12ac00014d7f8c2d2a23126bae97527352a488`。通过 `docker buildx imagetools inspect` 核对实际平台 `linux/amd64`，镜像配置 OCI revision 精确为 `a797ecd2bf7967541e5ee52acfa031fd683d5845`；附属 `unknown/unknown` 清单为 BuildKit attestation。证据 `/tmp/nexus-ui-dev-publish.log` 与 `/tmp/nexus-ui-dev-image-config.json`。未更新服务器容器，个人截图增删未提交。
+
+### 文件管理器路径栏垂直对齐（2026-10-26，本地静态）
+
+路径原生输入框使用 flex stretch 跟随栏内高度、清除原生 margin，行高由 1 改为 normal，保留栏高、字体大小及各响应式断点。两轮源码复核确认左侧图标与父层 items-center、输入/导航/历史事件及焦点反馈保持。根 check、前端 build、全量 format:all:check 与 git diff --check 通过；日志 `/tmp/nexus-path-align-{check,build,format}.log`。按 D17 未执行本地行为或视觉测试，不沿用前轮 Actions 作为本次对齐修复的行为证据。未提交、发布或部署。
+
+### 跨服务器安装准备与 SCP 性能（2026-10-26）
+
+根因：amd 缺 rsync，RemoteFileModel 将 auto 强制映射为 rsync，阻断 Native adapter 原有 SCP 候选，退至 SFTP 中转。现在原样传递 auto，复制与发送复用已有远端依赖确认；用户跳过 rsync 安装后，普通文件再检查 SCP，跳过 SCP 后才中转。自动目录在 rsync 不可用时保留 SFTP 链接语义；不为此扫描目录。仅 SCP 单文件控制通道启用 PTY，原生百分比换算字节，最终仍核验目标；sshpass 仅包装 SCP 的 SSH 子进程，0700私有启动脚本与原凭据一起清理。
+
+真实限定专项：源 pve_debian `/root/.hermes.zip` 1,665,738,475 bytes，目标 amd 的独占临时目录，原用户源与目标文件未改。原生 SCP 3.179秒/524 MB/s；最新 NativeServerTransfer 自动选scp，含探测/清理3.953秒/421 MB/s，原生进度32%/66%/100%；同文件 copyRemoteEntries SFTP中转10.222秒/163 MB/s，测试Node CPU user8.96秒/system3.25秒。两种路径及原生样本 SHA-256均与源一致，文件数据未损坏。SFTP对照进程位于VM，并非生产容器，未复现生产50 MB/s，不能以此作为浏览器端到端或稳定吞吐承诺。证据 `/tmp/nexus-transfer-{native,relay}-perf-result.json` 与 `/tmp/nexus-transfer-perf-hashes.json`；已清理本次自建临时数据及含凭据的临时测试脚本，原文件保留。
+
+两轮源码审核覆盖安装跳过/失活/离页、网络拒绝延后、重复确认、auto选择、链接语义、SCP认证/原生进度/清理、已派发失败不换路径及fixture真实SCP进程与虚拟路径映射。根check、完整双端build、新回归严格tsc、fixture `node --check`、全量格式及diff检查通过，日志 `/tmp/nexus-transfer-final-{check,build,types,format}.log`。新正式回归覆盖两个协议入口rsync/scp/sftp，页面安装rsync、跳过改SCP、两工具都跳过改中转，保留真实字节/SHA及零SFTP READ断言；本地未运行这些E2E，待新SHA正式Actions，不引用前轮494项PASS。CDP9223/9224仍是未认证的api登录页，浏览器入口未验；未重启后端、提交、推送或发布。
+
+### 远端工具默认选择、归档依赖与安装全流程（2026-10-26，本地静态）
+
+逐项核对跨服务器粘贴、发送、ZIP/tar.gz/tar.bz2压缩与解压、普通SFTP文件操作、目录下载、服务器状态、Docker和Agent执行。修正ToolService的auto检查提前选择现有SCP、跳过默认rsync安装提示的问题，客户端严格验证预期工具；前后端共用archiveToolRequirements，归档一次只读预检包含压缩器及校验/快照/链接工具，早于写入；Native/Installer共用GNU能力探测；Shared缺失工具名取值补齐gzip/bzip2/grep/cp/ln，失败事件保留具体原因。普通SFTP不依赖这些可选工具，下载打包由后端归档库处理；Docker daemon与用户自定义命令没有相同默认候选/安装遗漏，本轮不改变其交互或自动安装策略。
+
+新增remote-tool-flows：HTTP auto默认rsync安装计划；协议侧缺gzip/bzip2与ZIP逐项缺zipinfo/od/grep/cp/ln，验证COMMAND_NOT_FOUND/实际工具名及零归档进程；页面ZIP/tar.gz/tar.bz2安装后真实输出内容，root/免密sudo/密码sudo，错误密码、安装退出失败、成功退出但工具仍缺失、取消、无包管理器/无权限，以及存在非GNU tar时安装再继续。ZIP解压辅助工具安装后验证实际UTF-8内容；安装前/失败后均无原操作派发。扩充direct-and-relay-transfer的发送页面rsync安装、跳过改SCP、再安装SCP与离页不派发，保留真实方法/内容哈希；目录回退验证嵌套和根符号链接保留。包管理器安装由受控SSH夹具模拟，传输、原生压缩解压和文件读写仍真实执行；不在CI宿主实际apt安装或修改软件源。
+
+两轮源码审核覆盖全部依赖消费者、Model/Platform隔离、协议字段、默认工具优先、取消/未知结果、提权密码stdin、工具安装后再次核验及测试夹具。复核修正新用例同target/peer ID非法前置与夹具对普通命令身份的影响，保持产品UI。根check、Shared/Backend及Frontend构建通过，日志 `/tmp/nexus-all-tools-{final-check,backend-build,frontend-build}.log`；新增/修改E2E严格TypeScript、fixture node语法与diff通过。21份生成的工具/归档脚本通过sh -n，16组夹具提权/缺工具/无包管理器变体通过bash -n，均未执行脚本内容，证据 `/tmp/nexus-all-tools-shell-syntax.log`。全量格式通过，日志 `/tmp/nexus-all-tools-final-format.log`；E2E类型结果 `/tmp/nexus-all-tools-final-e2e-types.log`。最初前端检查发现未重建Shared导出和残留清单赋值，修正并完整检查通过；首次格式检查发现夹具两处函数间距，已修正。
+
+按D17未运行本地行为或E2E。本批新增场景待新SHA正式Actions，不能引用旧494项或上轮真机SCP吞吐作为本批验收；未重启、提交、推送、发布或部署。前轮路径栏修改与个人截图增删保留。
+
+### 图片生成 HTTP 400 内容审核拒绝（2026-10-26）
+
+用户指定 ssh.honus.top 的图片失败已通过宿主只读日志及 SQLite 关联：部署镜像 revision 为 a797ecd2bf7967541e5ee52acfa031fd683d5845，Run `25e2515b-f3bb-4e29-8ac7-c08af21c2cda` 的 image_generate 使用 gpt-image-2.5，约 43 秒后失败。对应上游 Images 请求在 UTC 16:44:56 返回 HTTP 400，日志明确说明安全系统拒绝并标记 sexual；发生在供应商生成接口，未进入 Artifact 保存或前端预览。未重放该提示词、未发起付费验证、未修改生产记录或部署。生产日志未保留返回 JSON 的结构化 code，因此该字段的线上透传仍需后续实际拒绝请求核对，不把日志中的 message 当作稳定错误协议。
+
+源码在 SDK Adapter 识别结构化 moderation_blocked/content_policy_violation，Provider Model 转换到已有 PROVIDER_CONTENT_FILTERED，Run 使用 model_content_filtered；设置与聊天的三语文案说明请求或生成结果遭内容审核拒绝。SDK 原始正文和 cause 不进入协议或日志正文，未知 code 不通过正文字符串推断。依据为 [OpenAI 图片内容审核文档](https://developers.openai.com/api/docs/guides/image-generation#content-moderation)。不改变图片不重试及已派发 unknown 的现有规则，不改 UI 布局、样式或控件。
+
+新增正式远程待测场景：
+
+- `agent/functional-regressions.spec.ts`：分别验证 moderation_blocked、content_policy_violation、以及正文包含已知代码但 code 未知的 HTTP 400；必须返回对应安全失败码、不泄漏 fixture 私有正文、无 generatedImageId 或成功图片预览；重载保留提示且图片请求仍只有一次。
+- `agent/provider.spec.ts`：两种已知拒绝在图片模型测试中返回 PROVIDER_CONTENT_FILTERED，不泄漏私有正文、不重试。
+- 原图片成功用例保留，继续验证生成后的自动预览、下载字节和刷新恢复。图片 fixture 仅增加有限错误场景与独立计数，不使用真实上游或生产提示词。
+
+两轮源码审核完成：第一轮核对 SDK→Model→Run/设置的有限失败转换、cause 与原取消/清理/不重试语义；第二轮核对图片落盘先后、首个失败与持久失败投影、重载无重发、未知 code 安全兜底，并补齐诊断日志 content_filtered 白名单。根 `pnpm run check`、双端 build、`pnpm run format:all:check`、新增用例严格 TypeScript、fixture `node --check` 和 `git diff --check` 均通过；证据为 `/tmp/nexus-image-rejection-final-{check,backend-build,frontend-build,e2e-types}.log` 与 `/tmp/nexus-image-rejection-format.log`。按 D17 未执行本地行为测试，新增 5 个用例尚未在远程 Actions 验证；未部署，不将源码或静态通过作为线上修复验收。
+
+### 矮服务器状态面板网络读数间距（2026-10-27）
+
+已读取用户 doc 截图：服务器状态处于矮面板单行模式，网络上下行读数均出现省略号。用户授权缩小左右留白与字体；改动仅在原 `max-height:210px` 容器分支，收紧非趋势内容边距、卡片内距、图标/标签/上下行间隔，并将速率字号结合实际容器宽度计算。正常高度布局、趋势内容留白、速率格式、配色和完整 title/aria-label 保留。
+
+两轮源码复核覆盖容器查询、极窄面板隐藏图标规则、趋势选择器优先级与原状态缩放：数值字体只调整本层，上限不因缩小面板而反向增大；不增加 JS 测量或采样请求。根 `pnpm run check`、前端构建、`pnpm run format:all:check` 及 `git diff --check` 全部通过，日志为 `/tmp/nexus-status-compact-{check,build,format}.log`；遵循 D17 不运行本地视觉/浏览器或行为测试。本批实际待验为截图尺寸下两项速率与单位无截断，及宽窄拖动、滚轮缩放、展开趋势后的原布局。

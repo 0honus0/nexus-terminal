@@ -10,13 +10,13 @@
 
 ### 远端工具安装
 
-1. **职责与范围**：Remote tools 管理用户确认的远端依赖安装，供确实依赖系统工具的归档预检消费；服务器发送已改为执行时选择直传或SFTP中转，不再强制预安装。仅安装服务器固定白名单工具，不开放任意命令、包名或仓库配置。
+1. **职责与范围**：Remote tools 管理用户确认的远端依赖安装，供归档、跨服务器粘贴及服务器发送的依赖准备消费；传输缺少首选工具时先确认安装，用户跳过才检查下一种直传工具，均不可用则SFTP中转。仅安装服务器固定白名单工具，不开放任意命令、包名或仓库配置。
 2. **子功能与目录**：`remote/tools/{service,model}` 持计划、授权和应用能力；`platform/tools` 持包管理器检测、固定包映射、提权认证及技术执行。HTTP 仍归 Remote interfaces。
 3. **依赖方向**：HTTP → tools Service → tools Model → machines Model / Platform；Service 复用原 MachineMutationService，安装与文件、Docker、Agent 远端突变按真实 endpoint 互斥。
 4. **类型与转换**：Shared remote/tools 定义有限工具、包管理器、提权方式、安全检查/安装契约；独立应用对象归 tools/model，技术对象归 Platform；HTTP 与 Model 分别白名单投影。sudo 密码仅写入 SSH stdin，不进入命令参数、持久化、公开结果或日志。
-5. **入口与安装**：认证 POST `/api/v1/remote/tools/check` 只读检测并签发短期计划；POST `/api/v1/remote/tools/install` 绑定原计划及原登录确认安装。register 安装并纳入 quiesce/close。
+5. **入口与安装**：认证 POST `/api/v1/remote/tools/check` 只读检测并签发短期计划，auto只准备默认rsync，不提前替用户选SCP；POST `/api/v1/remote/tools/install` 绑定原计划及原登录确认安装。register 安装并纳入 quiesce/close。
 6. **数据、事务与并发**：计划只在内存有效五分钟，绑定目标指纹、会话摘要及缺失工具；消费后不能重放安装。实际安装先取得持久机器突变 claim 并事务复查身份，再复查配置及工具。重启不恢复执行；未知 claim 保留至人工恢复。
-7. **生命周期与失败**：Service 追踪全操作至 SSH 关闭及 claim 结算，包命令输出有界消费。断连、超时和取消不证明远端安装停止，派发后无确定退出保持 unknown，不自动重试。认证失败发生于包命令之前，可重新检查再确认；安装退出后仍重新查找工具。前端原操作仅在依赖确认可用且原视图身份有效时派发。
+7. **生命周期与失败**：Service 追踪全操作至 SSH 关闭及 claim 结算，包命令输出有界消费。断连、超时和取消不证明远端安装停止，派发后无确定退出保持 unknown，不自动重试。认证失败发生于包命令之前，可重新检查再确认；安装退出后仍重新查找工具。前端原操作仅在依赖确认可用且原视图身份有效时派发。归档前后端共用Shared的archiveToolRequirements，Platform toolProbe统一查找及GNU tar/cp/ln能力检查；ArchiveModel显式传递有限技术工具名，所有依赖合并为一次只读SSH命令，早于压缩写入或解压快照。辅助工具缺失经COMMAND_NOT_FOUND和具体工具名回传，不被协议丢弃。
 8. **当前能力与验收**：实现进度见 PLAN；root、sudo 免密/密码、apt/dnf/yum/apk/zypper/pacman 支持在固定映射范围内，无管理员权限或未知系统明确拒绝。保留原生归档能力要求与并发窗口，不承诺包管理器事务回滚。行为验收遵守 D17。
 
 ### B9 Targets 导入补齐（源码收口，行为待 B10）
@@ -422,6 +422,8 @@ Platform 的 SQL Executor 契约在 `storage/sqlite/sql-types.ts`；版本表 Ad
 B1 Files mutation 不新增数据库或 SQL。单个文件资源由 Service 串行执行操作，但远端 SFTP 预检与后续 mutation 之间仍存在服务器侧竞争窗口；`expectedSha256` 的两次复查只提供尽力冲突检测，不是事务/CAS。目录项 rename 的目标不存在预检同样不是原子 no-overwrite 保证。
 
 Access 的失败窗口/封禁计算在 sessions/login-failure-rules，Adapter 只读取、解码计数并原子写回。Targets 的 connections/ssh-graph-rules 根据同事务图快照覆盖拟修改边，再校验成环、深度、展开数量及受影响祖先；Adapter 读图及写关系，Model 持有回调转换，register 同时装配普通写入与导入/克隆路径。Agent 的 runs/run-rules 同样独立于 Model，版本/状态判断继续在事务内执行。Targets 可信解析在同一 SQL 快照读取目标、凭据与路由，Model 计算指纹并在解密前核对 expectedFingerprint；先读指纹后重新解析不能替代同快照检查。指纹不替代 Host Key 信任，也不证明后续配置永不变化。
+
+StatusMonitor 的矮面板单行模式由原 status-content 高度容器查询持有紧凑边距、卡片内距和字号；速率字体直接结合容器宽度与现有 status-scale 计算，不叠加父级缩小，不新增 JS 测量、状态或断点。正常高度、趋势面板留白和原监控采样/趋势生命周期保持。
 
 ## 7. 生命周期与失败
 

@@ -3,14 +3,22 @@ import { useI18n } from 'vue-i18n';
 import { useFeedback } from '@/shared/feedback/public';
 import { useAuthenticatedViewScope } from '@/shared/session/public';
 import { remoteToolApi } from '../api/tool-api';
-import { ToolInstallFailure, type ToolRequirement, type ToolOffer, type ToolPreparation } from '../model/tool-types';
+import {
+	ToolInstallFailure,
+	type ToolRequirement,
+	type ToolOffer,
+	type ToolPreparation,
+	type TransferToolRequirement,
+} from '../model/tool-types';
 
 export function useRemoteTools() {
 	const { t } = useI18n();
 	const feedback = useFeedback();
 	const offer = shallowRef<ToolOffer | null>(null);
 	const busy = ref(false);
+	const allowFallback = ref(false);
 	let pending = false;
+	let transferPending = false;
 	let decide: ((value: string | undefined | null) => void) | null = null;
 	const scope = useAuthenticatedViewScope();
 
@@ -34,6 +42,7 @@ export function useRemoteTools() {
 			return 'cancelled';
 		}
 		pending = true;
+		allowFallback.value = input.kind === 'transfer';
 		try {
 			let checked: ToolOffer;
 			try {
@@ -57,7 +66,7 @@ export function useRemoteTools() {
 			if (!checked.missing.length) {
 				return 'ready';
 			}
-			if (!checked.planId) {
+			if (!checked.planId && input.kind !== 'transfer') {
 				throw new ToolInstallFailure('unsupported');
 			}
 			offer.value = checked;
@@ -76,8 +85,14 @@ export function useRemoteTools() {
 					abort();
 				}
 			});
-			if (password === null || signal.aborted) {
+			if (signal.aborted) {
 				return 'cancelled';
+			}
+			if (password === null) {
+				return input.kind === 'transfer' ? 'declined' : 'cancelled';
+			}
+			if (!checked.planId) {
+				throw new ToolInstallFailure('unsupported');
 			}
 			busy.value = true;
 			await remoteToolApi.install(checked, password, signal);
@@ -92,10 +107,54 @@ export function useRemoteTools() {
 		} finally {
 			offer.value = null;
 			busy.value = false;
+			allowFallback.value = false;
 			pending = false;
 			decide = null;
 		}
 	}
 
-	return { offer, busy, prepare, approve, cancel };
+	async function prepareTransfer(input: TransferToolRequirement, signal: AbortSignal): Promise<boolean> {
+		if (transferPending || signal.aborted) {
+			return false;
+		}
+		transferPending = true;
+		try {
+			for (const targetId of input.targetIds) {
+				const methods: Array<'rsync' | 'scp'> = input.method === 'auto' ? ['rsync'] : [input.method];
+				if (input.method === 'auto' && !input.directories) {
+					methods.push('scp');
+				}
+				for (const method of methods) {
+					let declined = false;
+					for (const side of ['source', 'target'] as const) {
+						const result = await prepare(
+							{
+								kind: 'transfer',
+								targetId: side === 'source' ? input.sourceId : targetId,
+								peerId: side === 'source' ? targetId : input.sourceId,
+								side,
+								method,
+							},
+							signal,
+						);
+						if (result === 'cancelled' || signal.aborted) {
+							return false;
+						}
+						if (result === 'declined' || result === 'deferred') {
+							declined = result === 'declined';
+							break;
+						}
+					}
+					if (!declined) {
+						break;
+					}
+				}
+			}
+			return !signal.aborted;
+		} finally {
+			transferPending = false;
+		}
+	}
+
+	return { offer, busy, allowFallback, prepare, prepareTransfer, approve, cancel };
 }

@@ -12,6 +12,7 @@ export function toProviderRequestFailure(error: unknown): AgentFailure {
 	}
 	const codes = {
 		http: 'PROVIDER_HTTP_ERROR',
+		content_filtered: 'PROVIDER_CONTENT_FILTERED',
 		dns: 'PROVIDER_DNS_FAILED',
 		tls: 'PROVIDER_TLS_FAILED',
 		network: 'PROVIDER_NETWORK_FAILED',

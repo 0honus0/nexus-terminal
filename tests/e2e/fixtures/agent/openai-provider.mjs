@@ -10,6 +10,7 @@ let checkpointResponses = 0;
 let releaseBrowserCompletion;
 let browserCompletionReleased = false;
 let browserCompletionHeld = false;
+const imageRequests = new Map();
 
 const readJson = async (request) => {
 	const chunks = [];
@@ -43,6 +44,7 @@ const server = http.createServer(async (request, response) => {
 			return;
 		}
 		checkpointResponses = 0;
+		imageRequests.clear();
 		browserCompletionReleased = false;
 		response.writeHead(204).end();
 		return;
@@ -69,6 +71,11 @@ const server = http.createServer(async (request, response) => {
 	if (request.method === 'GET' && request.url === '/health') {
 		response.writeHead(200, { 'Content-Type': 'application/json' });
 		response.end(JSON.stringify({ ok: true, checkpointResponses }));
+		return;
+	}
+	if (request.method === 'GET' && request.url === '/image-requests') {
+		response.writeHead(200, { 'Content-Type': 'application/json' });
+		response.end(JSON.stringify(Object.fromEntries(imageRequests)));
 		return;
 	}
 
@@ -177,6 +184,26 @@ const server = http.createServer(async (request, response) => {
 			return;
 		}
 		const image = await readJson(request);
+		imageRequests.set(image.model, (imageRequests.get(image.model) ?? 0) + 1);
+		const rejections = {
+			'e2e-image-moderation': 'moderation_blocked',
+			'e2e-image-policy': 'content_policy_violation',
+			'e2e-image-unknown-rejection': 'unknown_vendor_code',
+		};
+		if (Object.hasOwn(rejections, image.model)) {
+			response.writeHead(400, { 'Content-Type': 'application/json' });
+			response.end(
+				JSON.stringify({
+					error: {
+						code: rejections[image.model],
+						type: 'image_generation_user_error',
+						// Unknown codes must not be inferred from free-text messages.
+						message: 'moderation_blocked content_policy_violation E2E_PRIVATE_VENDOR_BODY',
+					},
+				}),
+			);
+			return;
+		}
 		if (image.model !== 'e2e-image' || image.prompt !== 'E2E deterministic image') {
 			response.writeHead(422).end();
 			return;

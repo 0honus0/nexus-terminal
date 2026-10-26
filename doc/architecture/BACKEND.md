@@ -10,13 +10,13 @@
 
 ### 远端工具安装
 
-1. **职责与范围**：Remote tools 管理用户确认的远端依赖安装，供确实依赖系统工具的归档预检消费；服务器发送已改为执行时选择直传或SFTP中转，不再强制预安装。仅安装服务器固定白名单工具，不开放任意命令、包名或仓库配置。
+1. **职责与范围**：Remote tools 管理用户确认的远端依赖安装，供归档、跨服务器粘贴及服务器发送的依赖准备消费；传输缺少首选工具时先确认安装，用户跳过才检查下一种直传工具，均不可用则SFTP中转。仅安装服务器固定白名单工具，不开放任意命令、包名或仓库配置。
 2. **子功能与目录**：`remote/tools/{service,model}` 持计划、授权和应用能力；`platform/tools` 持包管理器检测、固定包映射、提权认证及技术执行。HTTP 仍归 Remote interfaces。
 3. **依赖方向**：HTTP → tools Service → tools Model → machines Model / Platform；Service 复用原 MachineMutationService，安装与文件、Docker、Agent 远端突变按真实 endpoint 互斥。
 4. **类型与转换**：Shared remote/tools 定义有限工具、包管理器、提权方式、安全检查/安装契约；独立应用对象归 tools/model，技术对象归 Platform；HTTP 与 Model 分别白名单投影。sudo 密码仅写入 SSH stdin，不进入命令参数、持久化、公开结果或日志。
-5. **入口与安装**：认证 POST `/api/v1/remote/tools/check` 只读检测并签发短期计划；POST `/api/v1/remote/tools/install` 绑定原计划及原登录确认安装。register 安装并纳入 quiesce/close。
+5. **入口与安装**：认证 POST `/api/v1/remote/tools/check` 只读检测并签发短期计划，auto只准备默认rsync，不提前替用户选SCP；POST `/api/v1/remote/tools/install` 绑定原计划及原登录确认安装。register 安装并纳入 quiesce/close。
 6. **数据、事务与并发**：计划只在内存有效五分钟，绑定目标指纹、会话摘要及缺失工具；消费后不能重放安装。实际安装先取得持久机器突变 claim 并事务复查身份，再复查配置及工具。重启不恢复执行；未知 claim 保留至人工恢复。
-7. **生命周期与失败**：Service 追踪全操作至 SSH 关闭及 claim 结算，包命令输出有界消费。断连、超时和取消不证明远端安装停止，派发后无确定退出保持 unknown，不自动重试。认证失败发生于包命令之前，可重新检查再确认；安装退出后仍重新查找工具。前端原操作仅在依赖确认可用且原视图身份有效时派发。
+7. **生命周期与失败**：Service 追踪全操作至 SSH 关闭及 claim 结算，包命令输出有界消费。断连、超时和取消不证明远端安装停止，派发后无确定退出保持 unknown，不自动重试。认证失败发生于包命令之前，可重新检查再确认；安装退出后仍重新查找工具。前端原操作仅在依赖确认可用且原视图身份有效时派发。归档前后端共用Shared的archiveToolRequirements，Platform toolProbe统一查找及GNU tar/cp/ln能力检查；ArchiveModel显式传递有限技术工具名，所有依赖合并为一次只读SSH命令，早于压缩写入或解压快照。辅助工具缺失经COMMAND_NOT_FOUND和具体工具名回传，不被协议丢弃。
 8. **当前能力与验收**：实现进度见 PLAN；root、sudo 免密/密码、apt/dnf/yum/apk/zypper/pacman 支持在固定映射范围内，无管理员权限或未知系统明确拒绝。保留原生归档能力要求与并发窗口，不承诺包管理器事务回滚。行为验收遵守 D17。
 
 ### B9 Targets 导入补齐（源码收口，行为待 B10）
@@ -438,6 +438,8 @@ Provider 配置提交后中止本进程关联请求；获取凭据后、dispatch
 技术 Adapter 持有响应体、reader 和迭代器清理，取消失败仍尝试 releaseLock，异常 cause 留内部。ModelResponseBody独立观察reader.closed；cancel拒绝仅在与已errored reader的原始错误为同一对象时视为重复读取错误，不再虚报cleanup_failed；底层cancel拒绝与releaseLock失败仍保留。Run在辅助资源排空阶段失败后独立尝试主步骤unknown CAS，原步骤未知提交异常不进入此补写路径；标题清理和终态结算双失败保留全部因果，聚合诊断沿原有限错误码投影。Registry下载同样保留清理失败；Provider/Registry在清理失败后拒绝新网络工作并在模块close上报，Registry无人订阅后的持久写入失败也保留并阻断重试。Model 等待技术迭代自然退出及清理完成后才发布唯一 finished/stop；缺失/重复终态、断流、拒绝/工具输出、未知事件、空正文和不一致快照都不能成功。Provider probe 与 Run 共用SDK请求和事件投影，前者仍受 512 KiB/16 token 限额，不授予执行权。
 
 OpenAI官方Node SDK处理SSE换行、分帧、JSON和DONE，项目不另写SSE解析器。ModelSdkRequest在SDK解码前有界读取并严格验证UTF-8，网络总量8MiB、正文总量2MiB独立限制；ModelStreamProjection验证SDK保留的event名称与载荷，并限制解码后普通事件JSON为128KiB、Responses重复完整内容的done/completed快照为8MiB。SDK忽略的注释和分隔符仍计网络总量，不再声明独立注释帧上限；正式终态和SDK迭代正常结束共同确认完成，不自行要求可见的DONE事件。
+
+ModelSdkRequest 只按 SDK APIError 的结构化 moderation_blocked/content_policy_violation 精确 code 将拒绝归为技术 content_filtered；Provider Model 显式转成已有 PROVIDER_CONTENT_FILTERED，Run 继续投影 model_content_filtered，设置和聊天沿用原失败展示入口。未知 code 保留原 HTTP 分类，不按 message 或审核正文推断。原 cause 留内部，日志与协议不公开原始供应商正文、提示词或审核分类；失败不改变图片不重试及已派发 unknown 的原生命周期。
 
 ### Provider 生命周期与失败
 
@@ -1724,9 +1726,9 @@ image_generate 仅负责生成并保存 App 文件，返回给模型的结果只
 2. **子功能与目录**：复用files/service/file-copy、files/model/file-model、transfers/model/server-transfer-model和platform/transfers/adapters/native-transfer；不增加第二套凭据或SSH实现。
 3. **依赖方向**：FileService→RemoteFileModel→ServerTransferModel→NativeTransferPort，技术句柄不进入Files Service；复用原机器Resolver和已信任主机公钥。
 4. **类型与转换**：Files内部直接复制请求/回调归file-task-types；Native回调归transfer-port；Model逐字段映射，Shared原WS totalBytes/totalKnown承载进度；Shared实际方法增加sftp，严格codec及双端消费者同版迁移。
-5. **入口与安装**：原transfer.copyMove入口不变；发送移除多余的前置工具检测/安装，归档保留实际依赖安装；register给FileModel注入同一ServerTransferModel。跨目标auto优先rsync，显式发送可选scp；源侧SSH探测先于目标文件变更，工具/版本、路由或源到目标连接不满足时回退中转，同目标保留SFTP文件操作。发送与剪贴板均消费copyRemoteEntries和RemoteFileModel.copyDirect。
+5. **入口与安装**：原transfer.copyMove入口不变；发送和跨服务器粘贴复用原Remote Tools安装确认，归档保留实际依赖安装；register给FileModel注入同一ServerTransferModel。跨目标auto完整传入原生适配器，优先rsync，普通文件再选scp；缺工具先确认安装，跳过才进入下一候选，目录auto缺rsync时保留SFTP链接语义，显式发送可选scp；源侧SSH探测先于目标文件变更，工具/版本、路由或源到目标连接不满足时回退中转，同目标保留SFTP文件操作。发送与剪贴板均消费copyRemoteEntries和RemoteFileModel.copyDirect。
 6. **数据与并发**：不改变双Workspace权限及机器突变围栏；只读取选择根元数据即可计算文件批总量。目录复制由rsync遍历，移动为安全删除保存源元数据，全部目标完成后复查再删源。
-7. **生命周期与失败**：原生进程有同任务期限/取消，实际退出与临时凭据清理由Native owner确认；只对not_started的连接/工具/端点不满足回退；直传已经派发、清理或结果未知不换方式重传。每任务对已确定不互通的目标记住中转选择，不重复逐项探测。部分发布、源删除或清理未确认仍为unknown，不自动重试。
+7. **生命周期与失败**：原生进程有同任务期限/取消，实际退出与临时凭据清理由Native owner确认；只对not_started的连接/工具/端点不满足回退；直传已经派发、清理或结果未知不换方式重传。SCP单文件通过SSH PTY读取OpenSSH原生进度，按源lstat大小换算字节；认证用0700临时ssh-client启动脚本包装SSH子进程，保持SCP前台进度；所有私有临时凭据均在同一清理owner收尾。安装等待受原登录/页面/源目标会话有效性及取消信号约束。每任务对已确定不互通的目标记住中转选择，不重复逐项探测。部分发布、源删除或清理未确认仍为unknown，不自动重试。
 8. **当前能力与验收**：源码已接线，正式消费者与新增远程Actions用例覆盖单文件进度、内容、目录、移动和取消；生产网络吞吐未测，静态不代表实际速度。
 
 复制与上传准备的父目录事实仅在当前任务Set内复用；共享分支祖先只读取一次，同分支串行、不同分支仍按原窗口执行。任务结束不跨任务缓存，实际上传写入仍复查完整祖先。Agent读取/搜索的下一次inspectInfo已完整鉴权，删除紧邻该调用的重复validate，不删除跨异步操作的复查。

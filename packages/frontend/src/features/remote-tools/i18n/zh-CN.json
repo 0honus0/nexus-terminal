@@ -23,6 +23,9 @@
       "limit_exceeded": "当前安装请求较多，请稍后重试。",
       "shutting_down": "服务正在停止，请稍后重试。",
       "protocol_failure": "工具检测响应无效，请刷新后重试。"
-    }
+    },
+    "skipInstall": "暂不安装",
+    "fallbackNotice": "跳过安装将尝试其它可用直传工具；直传不可用时通过服务器中转。",
+    "unavailableConfirm": "服务器 {target} 缺少 {tools}，当前没有可用的软件包管理器或安装权限，可跳过安装继续。"
   }
 }

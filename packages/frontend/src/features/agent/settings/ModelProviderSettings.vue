@@ -604,7 +604,7 @@
 			PROVIDER_RESPONSE_EMPTY: 'providerResponse',
 			PROVIDER_STREAM_TRUNCATED: 'providerResponse',
 			PROVIDER_OUTPUT_TRUNCATED: 'providerResponse',
-			PROVIDER_CONTENT_FILTERED: 'providerRejected',
+			PROVIDER_CONTENT_FILTERED: 'providerContentFiltered',
 			PROVIDER_HTTP_ERROR: 'providerUpstream',
 		};
 		return t('agent.apiErrors.' + (key[code] ?? 'providerRequest'));

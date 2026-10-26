@@ -991,3 +991,68 @@ test('image tool shows a persisted preview and download without model-authored M
 		.poll(() => preview.evaluate((node: HTMLImageElement) => node.complete && node.naturalWidth > 0))
 		.toBe(true);
 });
+
+for (const scenario of [
+	{ modelId: 'e2e-image-moderation', failureCode: 'model_content_filtered' },
+	{ modelId: 'e2e-image-policy', failureCode: 'model_content_filtered' },
+	{ modelId: 'e2e-image-unknown-rejection', failureCode: 'model_request_rejected' },
+] as const) {
+	test(`image tool classifies ${scenario.modelId} without retries, leaked body or a success preview`, async ({
+		request,
+		page,
+	}) => {
+		const task = await prepareNativeTask(request, page, ['context.read', 'artifacts.read', 'artifacts.write']);
+		await requestAgentJson(
+			request,
+			{
+				method: 'POST',
+				path: '/ai/providers',
+				status: 201,
+				data: {
+					kind: 'openai-compatible',
+					displayName: 'E2E rejected image provider',
+					baseUrl: E2E_URLS.openAiProviderOrigin + '/v1',
+					protocol: 'images',
+					models: [{ id: scenario.modelId, supportsTools: false, supportsImageGeneration: true }],
+					enabled: true,
+					credential: 'e2e-provider-secret',
+				},
+			},
+			readAgentProviderView,
+		);
+		const hub = await openNativeTask(task);
+		const run = await startNativeTask(task, 'E2E_AUTOMATIC_IMAGE_PREVIEW');
+		const approval = await waitNativeApproval(task, run.id, 'image_generate');
+		await resolveNativeApproval(task, approval, 'approved');
+		const finished = await finishNativeTask(task, run.id);
+		expect(finished.run.status).toBe('unknown');
+		expect(finished.run.failure).toEqual({ code: scenario.failureCode, toolName: 'image_generate' });
+		expect(finished.text).not.toContain('Image generated and saved.');
+		expect(JSON.stringify(finished)).not.toContain('E2E_PRIVATE_VENDOR_BODY');
+		const tools = await requestAgentJson(
+			request,
+			{ method: 'GET', path: `/apps/${task.app.id}/threads/${task.thread.id}/tools?limit=100` },
+			(value) => readAgentThreadToolsResponse(value, task.app.id, null, 100),
+		);
+		expect(tools.items.find((tool) => tool.toolName === 'image_generate')).toMatchObject({
+			state: 'unknown',
+			generatedImageId: null,
+		});
+		const message =
+			scenario.failureCode === 'model_content_filtered'
+				? 'The model service rejected the request or generated result during content safety checks. Revise the prompt before submitting again.'
+				: 'The model service rejected the request. Check the request content, model type and capability configuration.';
+		await expect(hub).toContainText(message);
+		await expect(hub.locator('.agent-generated-image')).toHaveCount(0);
+		await expect(hub).not.toContainText('E2E_PRIVATE_VENDOR_BODY');
+		const attempts = await request.get(E2E_URLS.openAiProviderOrigin + '/image-requests');
+		expect(attempts.status()).toBe(200);
+		expect(await attempts.json()).toEqual({ [scenario.modelId]: 1 });
+		await page.reload();
+		await openNativeTask(task);
+		await expect(hub).toContainText(message);
+		await expect(hub.locator('.agent-generated-image')).toHaveCount(0);
+		const afterReload = await request.get(E2E_URLS.openAiProviderOrigin + '/image-requests');
+		expect(await afterReload.json()).toEqual({ [scenario.modelId]: 1 });
+	});
+}

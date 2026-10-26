@@ -5,7 +5,12 @@
 	import { isToolPassword } from '@nexus-terminal/shared/remote/tools/values';
 	import type { ToolOffer } from '../model/tool-types';
 
-	const props = defineProps<{ offer: ToolOffer | null; busy: boolean; targetName?: string }>();
+	const props = defineProps<{
+		offer: ToolOffer | null;
+		busy: boolean;
+		targetName?: string;
+		allowFallback?: boolean;
+	}>();
 	const emit = defineEmits<{ approve: [password?: string]; cancel: [] }>();
 	const { t } = useI18n();
 	const password = ref('');
@@ -34,7 +39,7 @@
 	);
 
 	function approve(): void {
-		if (props.busy || invalid.value) {
+		if (props.busy || invalid.value || !props.offer?.planId) {
 			return;
 		}
 		const value = needsPassword.value ? password.value : undefined;
@@ -57,7 +62,7 @@
 		<form v-if="offer" class="space-y-4" @submit.prevent="approve">
 			<p class="break-words">
 				{{
-					t('remoteTools.confirm', {
+					t(offer.planId ? 'remoteTools.confirm' : 'remoteTools.unavailableConfirm', {
 						target: targetName || String(offer.targetId),
 						tools: offer.missing.join(', '),
 						manager: offer.manager,
@@ -65,7 +70,12 @@
 				}}
 			</p>
 			<p class="text-sm text-text-secondary">{{ t('remoteTools.notice') }}</p>
-			<UiFormField v-if="needsPassword && !busy" :label="t('remoteTools.password')" :for-id="passwordId">
+			<p v-if="allowFallback" class="text-sm text-text-secondary">{{ t('remoteTools.fallbackNotice') }}</p>
+			<UiFormField
+				v-if="needsPassword && offer.planId && !busy"
+				:label="t('remoteTools.password')"
+				:for-id="passwordId"
+			>
 				<UiInput
 					:id="passwordId"
 					v-model="password"
@@ -76,10 +86,17 @@
 			</UiFormField>
 			<UiInlineLoading v-if="busy" :label="t('remoteTools.installing')" />
 			<UiFormActions>
-				<UiButton :disabled="busy" @click="emit('cancel')">{{ t('common.cancel') }}</UiButton>
-				<UiButton type="submit" tone="primary" appearance="solid" :disabled="busy || invalid" :loading="busy">{{
-					t('remoteTools.install')
+				<UiButton :disabled="busy" @click="emit('cancel')">{{
+					allowFallback ? t('remoteTools.skipInstall') : t('common.cancel')
 				}}</UiButton>
+				<UiButton
+					type="submit"
+					tone="primary"
+					appearance="solid"
+					:disabled="busy || invalid || !offer.planId"
+					:loading="busy"
+					>{{ t('remoteTools.install') }}</UiButton
+				>
 			</UiFormActions>
 		</form>
 	</UiModal>

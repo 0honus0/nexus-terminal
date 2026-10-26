@@ -123,6 +123,7 @@ export class ModelNetworkFailure extends Error {
 	constructor(
 		readonly kind:
 			| 'http'
+			| 'content_filtered'
 			| 'dns'
 			| 'tls'
 			| 'network'

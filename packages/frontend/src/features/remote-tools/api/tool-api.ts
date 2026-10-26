@@ -63,15 +63,7 @@ export const remoteToolApi = {
 						method: input.method,
 					};
 		const value = await request('check', readRemoteToolCheckRequest(command), signal, readRemoteToolCheck);
-		const transferTool =
-			input.kind === 'transfer' && input.method === 'auto'
-				? value.tools.find((tool) => tool === 'scp' || tool === 'rsync')
-				: input.kind === 'transfer' && input.method === 'scp'
-					? 'scp'
-					: 'rsync';
-		if (input.kind === 'transfer' && !transferTool) {
-			throw new ToolInstallFailure('protocol_failure');
-		}
+		const transferTool = input.kind === 'transfer' && input.method === 'scp' ? 'scp' : 'rsync';
 		const expected =
 			input.kind === 'tools' ? input.tools : [transferTool, ...(input.side === 'source' ? ['ssh'] : [])];
 		if (

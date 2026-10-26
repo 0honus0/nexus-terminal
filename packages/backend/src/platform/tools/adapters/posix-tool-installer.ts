@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { toolProbe } from '../tool-probe.js';
 import type { MachineConnection, MachineCommandResult } from '../../ssh/ssh-port.js';
 import { MachineDispatchFailure } from '../../ssh/ssh-port.js';
 import {
@@ -20,24 +21,6 @@ const sshPackages: Record<PackageManager, string> = {
 	apk: 'openssh-client-default',
 	zypper: 'openssh-clients',
 	pacman: 'openssh',
-};
-
-const executables: Record<InstallableTool, string> = {
-	ssh: 'ssh',
-	scp: 'scp',
-	sshpass: 'sshpass',
-	rsync: 'rsync',
-	zip: 'zip',
-	unzip: 'unzip',
-	zipinfo: 'zipinfo',
-	tar: 'tar',
-	gzip: 'gzip',
-	bzip2: 'bzip2',
-	xz: 'xz',
-	cp: 'cp',
-	ln: 'ln',
-	od: 'od',
-	grep: 'grep',
 };
 
 function quote(value: string): string {
@@ -117,14 +100,7 @@ export class PosixToolInstaller implements RemoteToolInstaller {
 		scope: ToolExecutionScope,
 	): Promise<ToolEnvironment> {
 		const command = [
-			...tools.map((tool) => {
-				const executable = quote(executables[tool]);
-				const probe =
-					tool === 'tar' || tool === 'cp' || tool === 'ln'
-						? 'case "$(' + executable + ' --version 2>/dev/null)" in *GNU*) true ;; *) false ;; esac'
-						: 'command -v ' + executable + ' >/dev/null 2>&1';
-				return '{ ' + probe + '; } || printf "%s\\n" ' + quote('missing:' + tool);
-			}),
+			...tools.map((tool) => '{ ' + toolProbe(tool) + '; } || printf "%s\\n" ' + quote('missing:' + tool)),
 			'if [ "$(id -u)" = 0 ]; then printf "privilege:root\\n"; elif command -v sudo >/dev/null 2>&1; then if sudo -n -- true </dev/null >/dev/null 2>&1; then printf "privilege:sudo\\n"; else printf "privilege:password\\n"; fi; else printf "privilege:unavailable\\n"; fi',
 			'for manager in apt-get dnf yum apk zypper pacman; do if command -v "$manager" >/dev/null 2>&1; then printf "manager:%s\\n" "$manager"; break; fi; done',
 			'printf "complete\\n"',

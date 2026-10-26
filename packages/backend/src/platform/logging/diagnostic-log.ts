@@ -55,6 +55,7 @@ export function bindDiagnosticContext<Args extends unknown[], Result>(
 
 const safeFailureKinds = new Set([
 	'http',
+	'content_filtered',
 	'dns',
 	'tls',
 	'network',

@@ -68,6 +68,13 @@ let transferForcedExit = false;
 let transferPeerProbes = 0;
 let nativeTransfersStarted = 0;
 let nativeTransfersExited = 0;
+const remoteToolsMissing = new Set();
+const remoteToolsIncompatible = new Set();
+let remoteToolManagerAvailable = true;
+let remoteToolInstalls = 0;
+let remoteToolInstallResult = 'success';
+let remoteToolPrivilege = 'root';
+let remoteToolPasswordReceived = false;
 let sftpReadDelayMs = 0;
 let sftpReadBlocked = false;
 const sftpReadWaiters = new Set();
@@ -159,7 +166,7 @@ function resolveRemotePath(remotePath = '.') {
 	// exec and then write them over SFTP. Both channels must address that same
 	// private directory; ordinary fixture files remain inside the virtual root.
 	if (
-		/^\/tmp\/nexus-transfer-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}(?:\/(?:key|known_hosts))?$/.test(
+		/^\/tmp\/nexus-transfer-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}(?:\/(?:key|known_hosts|ssh-client))?$/.test(
 			remotePath,
 		)
 	) {
@@ -714,6 +721,13 @@ function resetControls() {
 	transferPeerProbes = 0;
 	nativeTransfersStarted = 0;
 	nativeTransfersExited = 0;
+	remoteToolsMissing.clear();
+	remoteToolsIncompatible.clear();
+	remoteToolManagerAvailable = true;
+	remoteToolInstalls = 0;
+	remoteToolInstallResult = 'success';
+	remoteToolPrivilege = 'root';
+	remoteToolPasswordReceived = false;
 	sftpReadDelayMs = 0;
 	sftpDelayedReadCount = 0;
 	sftpReadBytesPerSecond = 0;
@@ -1215,7 +1229,56 @@ function buildStatusFixture() {
 	].join('\n');
 }
 
-function runRemoteCommand(command, stream, session) {
+function runRemoteCommand(command, stream, session, pty = false) {
+	const installMarker = /NEXUS_INSTALL_[a-f0-9-]+/.exec(command);
+	if (installMarker) {
+		remoteToolInstalls++;
+
+		const finishInstall = () => {
+			if (remoteToolInstallResult === 'failed') {
+				finishExec(stream, installMarker[0] + '\n', '', 1);
+				return;
+			}
+			if (remoteToolInstallResult === 'success') {
+				// Match exact fixed package operands inside the quoted sh script.
+				const decoded = command.replaceAll("'\\''", "'");
+				for (const tool of new Set([...remoteToolsMissing, ...remoteToolsIncompatible])) {
+					const packageName = ['ssh', 'scp'].includes(tool)
+						? 'openssh-client'
+						: ['cp', 'ln', 'od'].includes(tool)
+							? 'coreutils'
+							: tool === 'zipinfo'
+								? 'unzip'
+								: tool === 'xz'
+									? 'xz-utils'
+									: tool;
+					if (decoded.includes("'" + packageName + "'")) {
+						remoteToolsMissing.delete(tool);
+						remoteToolsIncompatible.delete(tool);
+					}
+				}
+			}
+			finishExec(stream, installMarker[0] + '\n');
+		};
+
+		if (command.startsWith('sudo -S ')) {
+			let input = '';
+			let settled = false;
+			stream.on('data', (chunk) => {
+				if (settled) return;
+				input += chunk.toString();
+				if (!input.includes('\n')) return;
+				settled = true;
+				remoteToolPasswordReceived = true;
+				if (input === 'e2e-sudo-password\n') finishInstall();
+				else finishExec(stream, '', 'Fixture authentication rejected\n', 1);
+				input = '';
+			});
+		} else {
+			finishInstall();
+		}
+		return;
+	}
 	if (/(?:^|\s)ssh\s/u.test(command) && command.endsWith("'true'")) {
 		transferPeerProbes++;
 		if (transferPeerBlocked) {
@@ -1223,7 +1286,8 @@ function runRemoteCommand(command, stream, session) {
 			return;
 		}
 	}
-	const nativeTransfer = command.startsWith('LC_ALL=C rsync ');
+	const nativeScp = command.startsWith('LC_ALL=C scp ');
+	const nativeTransfer = command.startsWith('LC_ALL=C rsync ') || nativeScp;
 	if (nativeTransfer) {
 		nativeTransfersStarted++;
 		if (transferForcedExit) {
@@ -1231,7 +1295,11 @@ function runRemoteCommand(command, stream, session) {
 			finishExec(stream, '', 'Fixture transfer failed after dispatch\n', 23);
 			return;
 		}
-		if (transferBandwidth > 0) command = command.replace('rsync ', `rsync --bwlimit=${transferBandwidth} `);
+		if (transferBandwidth > 0) {
+			command = nativeScp
+				? command.replace('scp -O ', `scp -l ${transferBandwidth * 8} -O `)
+				: command.replace('rsync ', `rsync --bwlimit=${transferBandwidth} `);
+		}
 	}
 
 	if (command.includes('__NEXUS_STATUS_')) {
@@ -1314,7 +1382,9 @@ function runRemoteCommand(command, stream, session) {
 		.replace(/\s+>\s*\/dev\/null\s+2>&1\s*$/, '')
 		.replace(/["']/g, '')
 		.trim();
-	const isArchivePreflightCommand = /^(?:command -v|which)\s+(?:zip|tar|unzip)\s*$/.test(normalizedArchivePreflight);
+	const isArchivePreflightCommand =
+		command.includes('NEXUS_ARCHIVE_TOOLS_READY') ||
+		/^(?:command -v|which)\s+(?:zip|tar|unzip)\s*$/.test(normalizedArchivePreflight);
 	const preflightHoldPrefix = isArchivePreflightCommand
 		? `while [ -f ${JSON.stringify(archivePreflightHoldPath)} ]; do sleep 0.05; done; `
 		: '';
@@ -1323,12 +1393,51 @@ function runRemoteCommand(command, stream, session) {
 		: '';
 	const delayPrefix = archiveExecDelayMs > 0 && isArchiveCommand ? `sleep ${archiveExecDelayMs / 1000}; ` : '';
 	const delayedCommand = `${preflightHoldPrefix}${holdPrefix}${delayPrefix}${executableCommand}`;
-	const child = spawn('/bin/bash', ['-lc', `${virtualShellPrelude}\n${delayedCommand}`], {
-		cwd: rootDir,
-		env: { ...process.env, HOME: rootDir, TERM: 'xterm-256color', NEXUS_E2E_ROOT: rootDir },
-		stdio: ['pipe', 'pipe', 'pipe'],
-		detached: true,
-	});
+	const missingCases = [
+		...remoteToolsMissing,
+		...(!remoteToolManagerAvailable ? ['apt-get', 'dnf', 'yum', 'apk', 'zypper', 'pacman'] : []),
+	]
+		.map((tool) => `'-v:${tool}'`)
+		.join('|');
+	const sudoCase =
+		remoteToolPrivilege === 'password' || remoteToolPrivilege === 'sudo'
+			? "'-v:sudo') return 0 ;;"
+			: remoteToolPrivilege === 'unavailable'
+				? "'-v:sudo') return 1 ;;"
+				: '';
+	const missingPrelude = `command() { case "$1:$2" in ${missingCases ? missingCases + ') return 1 ;;' : ''} ${sudoCase} esac; builtin command "$@"; };`;
+	const isToolInspection = command.includes('privilege:root') && command.includes('manager:%s');
+	const privilegePrelude = !isToolInspection
+		? ''
+		: remoteToolPrivilege === 'root'
+			? 'id() { if [ "$1" = -u ]; then printf "0\\n"; else builtin command id "$@"; fi; };'
+			: 'id() { if [ "$1" = -u ]; then printf "1000\\n"; else builtin command id "$@"; fi; }; sudo() { return 1; };';
+	const sudoPrelude = isToolInspection && remoteToolPrivilege === 'sudo' ? 'sudo() { return 0; };' : '';
+	const incompatiblePrelude = [...remoteToolsIncompatible]
+		.map(
+			(tool) =>
+				`${tool}() { if [ "$1" = --version ]; then printf "BusyBox\\n"; else builtin command ${tool} "$@"; fi; };`,
+		)
+		.join('\n');
+	const shellCommand = `${virtualShellPrelude}\n${missingPrelude}\n${privilegePrelude}\n${sudoPrelude}\n${incompatiblePrelude}\n${delayedCommand}`;
+	const usePty = nativeScp && pty;
+	const child = spawn(
+		usePty ? 'script' : '/bin/bash',
+		usePty
+			? [
+					'-qefc',
+					'/bin/bash -lc ' + "'" + shellCommand.replaceAll("'", "'\\''") + "'",
+					'--echo=never',
+					'/dev/null',
+				]
+			: ['-lc', shellCommand],
+		{
+			cwd: rootDir,
+			env: { ...process.env, HOME: rootDir, TERM: 'xterm-256color', NEXUS_E2E_ROOT: rootDir },
+			stdio: ['pipe', 'pipe', 'pipe'],
+			detached: true,
+		},
+	);
 
 	let acknowledgedTerminationSignal = null;
 
@@ -1423,11 +1532,15 @@ const sshServer = new Server({ hostKeys: [hostKey] }, (client) => {
 	client.on('ready', () => {
 		client.on('session', (accept) => {
 			const session = accept();
-			session.on('pty', (acceptPty) => acceptPty());
+			let pty = false;
+			session.on('pty', (acceptPty) => {
+				pty = true;
+				acceptPty();
+			});
 			session.on('window-change', (acceptWindowChange) => acceptWindowChange?.());
 			session.on('shell', (acceptShell) => attachShell(session, acceptShell));
 			session.on('exec', (acceptExec, _rejectExec, info) =>
-				runRemoteCommand(info.command, acceptExec(), session),
+				runRemoteCommand(info.command, acceptExec(), session, pty),
 			);
 			session.on('sftp', (acceptSftp) => attachSftp(session, acceptSftp));
 		});
@@ -1580,6 +1693,55 @@ const controlServer = http.createServer(async (req, res) => {
 			}
 			res.writeHead(200, { 'content-type': 'application/json' });
 			res.end(JSON.stringify({ transferPeerProbes, nativeTransfersStarted, nativeTransfersExited }));
+			return;
+		}
+		if (requestUrl.pathname === '/remote-tools' && (req.method === 'GET' || req.method === 'POST')) {
+			if (req.method === 'POST') {
+				remoteToolInstallResult = ['failed', 'incomplete'].includes(requestUrl.searchParams.get('install'))
+					? requestUrl.searchParams.get('install')
+					: 'success';
+				remoteToolPrivilege = ['password', 'sudo', 'unavailable'].includes(
+					requestUrl.searchParams.get('privilege'),
+				)
+					? requestUrl.searchParams.get('privilege')
+					: 'root';
+				remoteToolManagerAvailable = requestUrl.searchParams.get('manager') !== 'none';
+				remoteToolsIncompatible.clear();
+				for (const tool of (requestUrl.searchParams.get('incompatible') || '').split(',')) {
+					if (['tar', 'cp', 'ln'].includes(tool)) remoteToolsIncompatible.add(tool);
+				}
+				remoteToolsMissing.clear();
+				for (const tool of (requestUrl.searchParams.get('missing') || '').split(',')) {
+					if (
+						[
+							'rsync',
+							'scp',
+							'ssh',
+							'sshpass',
+							'zip',
+							'unzip',
+							'zipinfo',
+							'tar',
+							'gzip',
+							'bzip2',
+							'xz',
+							'cp',
+							'ln',
+							'od',
+							'grep',
+						].includes(tool)
+					)
+						remoteToolsMissing.add(tool);
+				}
+			}
+			res.writeHead(200, { 'content-type': 'application/json' });
+			res.end(
+				JSON.stringify({
+					missing: [...remoteToolsMissing],
+					installs: remoteToolInstalls,
+					passwordReceived: remoteToolPasswordReceived,
+				}),
+			);
 			return;
 		}
 		if (req.method === 'GET' && requestUrl.pathname === '/health') {

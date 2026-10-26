@@ -50,7 +50,18 @@ export const WORKSPACE_ARCHIVE_ERROR_CODES: readonly WorkspaceArchiveErrorCode[]
 	'UNSUPPORTED_ENTRY',
 ];
 
-export const WORKSPACE_ARCHIVE_TOOLS = ['zip', 'unzip', 'zipinfo', 'tar', 'od'] as const;
+export const WORKSPACE_ARCHIVE_TOOLS = [
+	'zip',
+	'unzip',
+	'zipinfo',
+	'tar',
+	'gzip',
+	'bzip2',
+	'od',
+	'grep',
+	'cp',
+	'ln',
+] as const;
 
 export type WorkspaceArchiveTool = (typeof WORKSPACE_ARCHIVE_TOOLS)[number];
 

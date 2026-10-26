@@ -23,6 +23,9 @@
       "limit_exceeded": "Too many tool requests. Please try again later.",
       "shutting_down": "The service is stopping. Please try again later.",
       "protocol_failure": "Invalid tool detection response. Refresh and try again."
-    }
+    },
+    "skipInstall": "Skip installation",
+    "fallbackNotice": "Skipping installation tries another available direct transfer tool, then relays through the server if needed.",
+    "unavailableConfirm": "Server {target} needs {tools}, but no supported package manager or installation permission is available. You can skip installation and continue."
   }
 }

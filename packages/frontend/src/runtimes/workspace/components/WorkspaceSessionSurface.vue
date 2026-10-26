@@ -32,7 +32,7 @@
 	import { useAuthenticatedViewScope } from '@/shared/session/public';
 	import { RuntimeErrorBoundary, useFeedback } from '@/shared/feedback/public';
 	import { useRemoteTools, RemoteToolInstallDialog } from '@/features/remote-tools/public';
-	import type { RemoteTool } from '@nexus-terminal/shared/remote/tools/values';
+	import { archiveToolRequirements } from '@nexus-terminal/shared/remote/tools/values';
 	import { loadFilePreview, previewKindFor } from '@/features/file-preview/public';
 	import { loadFileEditor, type FileEditorSessionController } from '@/features/file-editor/public';
 	import {
@@ -1150,15 +1150,7 @@
 			}
 		}
 		if (format !== null) {
-			let tools: RemoteTool[];
-			if (format === 'zip') {
-				tools = requestContext.kind === 'compress' ? ['zip'] : ['unzip', 'zipinfo', 'od', 'grep', 'cp', 'ln'];
-			} else {
-				tools = ['tar', format === 'tar.gz' ? 'gzip' : 'bzip2'];
-				if (requestContext.kind === 'decompress') {
-					tools.push('cp', 'ln', 'od');
-				}
-			}
+			const tools = archiveToolRequirements(format, requestContext.kind);
 			if (
 				(await toolInstaller.prepare(
 					{ kind: 'tools', targetId: requestContext.session.connection.id, tools },

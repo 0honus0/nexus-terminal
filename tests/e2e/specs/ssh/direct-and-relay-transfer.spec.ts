@@ -1,7 +1,8 @@
 import { createServer, connect, type Socket } from 'node:net';
 import { once } from 'node:events';
 import { createHash } from 'node:crypto';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, symlink, lstat, readlink } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
@@ -64,8 +65,9 @@ async function target(request: APIRequestContext, port: number): Promise<number>
 }
 
 for (const entrypoint of ['clipboard', 'send'] as const) {
-	for (const blocked of [false, true]) {
-		test(`${entrypoint}: ${blocked ? 'isolated peers relay' : 'reachable peers transfer directly'} with live single-file progress and exact bytes`, async ({
+	for (const route of ['rsync', 'scp', 'relay'] as const) {
+		const blocked = route === 'relay';
+		test(`${entrypoint}: ${route} route has live single-file progress and exact bytes`, async ({
 			request,
 		}, testInfo) => {
 			test.setTimeout(90_000);
@@ -110,6 +112,13 @@ for (const entrypoint of ['clipboard', 'send'] as const) {
 				expect(
 					(await fetch(`${E2E_SSH.controlUrl}/sftp/read-network?ms=${blocked ? 20 : 0}`, { method: 'POST' }))
 						.ok,
+				).toBe(true);
+				expect(
+					(
+						await fetch(`${E2E_SSH.controlUrl}/remote-tools?missing=${route === 'scp' ? 'rsync' : ''}`, {
+							method: 'POST',
+						})
+					).ok,
 				).toBe(true);
 				const start = performance.now();
 				if (entrypoint === 'clipboard') {
@@ -173,7 +182,7 @@ for (const entrypoint of ['clipboard', 'send'] as const) {
 								observedLive ||= next.overallProgress > 0 && next.overallProgress < 100;
 								expect(['failed', 'unknown', 'partially-completed']).not.toContain(next.status);
 								if (next.status === 'completed')
-									expect(next.subTasks[0]?.transferMethodUsed).toBe(blocked ? 'sftp' : 'rsync');
+									expect(next.subTasks[0]?.transferMethodUsed).toBe(blocked ? 'sftp' : route);
 								return next.status;
 							},
 							{ timeout: 45_000, intervals: [100] },
@@ -285,8 +294,9 @@ for (const outcome of ['failed', 'cancelled'] as const) {
 	});
 }
 
-for (const blocked of [false, true]) {
-	test(`clipboard UI: ${blocked ? 'relayed' : 'direct'} cross-server paste displays live byte progress and completes the exact file`, async ({
+for (const scenario of ['direct', 'relay', 'install-rsync', 'skip-rsync', 'skip-all'] as const) {
+	const blocked = scenario === 'relay' || scenario === 'skip-all';
+	test(`clipboard UI: ${scenario} cross-server paste displays live byte progress and completes the exact file`, async ({
 		page,
 		context,
 	}, testInfo) => {
@@ -334,6 +344,11 @@ for (const blocked of [false, true]) {
 					)
 				).ok,
 			).toBe(true);
+			const missing =
+				scenario === 'skip-all' ? 'rsync,scp' : scenario === 'direct' || scenario === 'relay' ? '' : 'rsync';
+			expect((await fetch(`${E2E_SSH.controlUrl}/remote-tools?missing=${missing}`, { method: 'POST' })).ok).toBe(
+				true,
+			);
 			// Both sessions are connected before copying: leaving Workspace deliberately clears its clipboard.
 			await connectTestSshFromConnectionsPage(page, sourceId);
 			await page.getByRole('button', { name: 'New Connection Tab', exact: true }).click();
@@ -393,6 +408,23 @@ for (const blocked of [false, true]) {
 				const confirmation = page.getByRole('dialog', { name: 'Please confirm', exact: true });
 				await expect(confirmation).toBeVisible();
 				await confirmation.getByRole('button', { name: 'Confirm', exact: true }).click();
+				if (scenario === 'install-rsync' || scenario === 'skip-rsync' || scenario === 'skip-all') {
+					const install = page.getByRole('dialog', { name: 'Install required tools', exact: true });
+					await expect(install).toBeVisible();
+					await expect(install).toContainText('rsync');
+					expect(taskEvents).toEqual([]);
+					await install
+						.getByRole('button', {
+							name: scenario === 'install-rsync' ? 'Install and continue' : 'Skip installation',
+							exact: true,
+						})
+						.click();
+					if (scenario === 'skip-all') {
+						await expect(install).toContainText('scp');
+						await install.getByRole('button', { name: 'Skip installation', exact: true }).click();
+					}
+					await expect(install).toBeHidden();
+				}
 				const card = visibleProgressTask(page, filename);
 				await expect(card).toBeVisible();
 				await expect
@@ -442,6 +474,8 @@ for (const blocked of [false, true]) {
 				expect(digest(await readFile(path.join(root, filename)))).toBe(digest(bytes));
 				const peer = await (await fetch(`${E2E_SSH.controlUrl}/transfer-peer`)).json();
 				const reads = await (await fetch(`${E2E_SSH.controlUrl}/sftp/read-network`)).json();
+				const tools = await (await fetch(`${E2E_SSH.controlUrl}/remote-tools`)).json();
+				expect(tools.installs).toBe(scenario === 'install-rsync' ? 1 : 0);
 				expect(peer.nativeTransfersStarted).toBe(blocked ? 0 : 1);
 				expect(reads.sftpReadResponseBytes).toBe(blocked ? bytes.length : 0);
 				await testInfo.attach('clipboard-ui-progress', {
@@ -458,3 +492,163 @@ for (const blocked of [false, true]) {
 		}
 	});
 }
+
+for (const scenario of ['install-rsync', 'skip-rsync', 'install-scp', 'leave'] as const) {
+	test(`send UI: ${scenario} waits for tool preparation before creating the background task`, async ({
+		page,
+		context,
+	}) => {
+		await loginAsInitialAdmin(context.request);
+		await configureSshE2eSettings(context.request);
+		const sourceId = await target(context.request, E2E_SSH.port);
+		const destinationId = await target(context.request, E2E_SSH.transferTargetPort);
+		const health = await (await fetch(`${E2E_SSH.controlUrl}/health`)).json();
+		const root = String(health.rootDir);
+		const filename = 'send-install-package.zip';
+		const bytes = Buffer.alloc(512 * 1024, 0x61);
+		await writeFile(path.join(root, filename), bytes);
+		await connectTestSshFromConnectionsPage(page, sourceId);
+		await openConnectedFileManager(page);
+		expect(
+			(
+				await fetch(
+					`${E2E_SSH.controlUrl}/remote-tools?missing=${scenario === 'install-scp' ? 'rsync,scp' : 'rsync'}`,
+					{ method: 'POST' },
+				)
+			).ok,
+		).toBe(true);
+		let sent: ReturnType<typeof readServerTransferSnapshot> | undefined;
+		await page.route('**/api/v1/transfers/send', async (route) => {
+			const response = await route.fetch();
+			expect(response.status()).toBe(202);
+			sent = readServerTransferSnapshot(await response.json());
+			await route.fulfill({ response });
+		});
+		try {
+			await rightClickRow(page, filename);
+			await clickMenuItem(page, 'Send to servers');
+			const modal = page.getByRole('dialog', { name: 'Send Files', exact: true });
+			await expect(modal).toBeVisible();
+			const targetRow = modal.locator('li').filter({ hasText: `Transfer peer ${E2E_SSH.transferTargetPort}` });
+			await expect(targetRow).toHaveCount(1);
+			await targetRow.click();
+			await modal.getByLabel('Target Path', { exact: true }).click();
+			const picker = page.getByRole('dialog', { name: 'Select destination directory', exact: true });
+			await expect(picker).toBeVisible();
+			await picker.getByRole('button', { name: 'folder-seed', exact: true }).click();
+			await picker.getByRole('button', { name: 'Use this directory', exact: true }).click();
+			await modal.getByRole('button', { name: 'Send', exact: true }).click();
+			const trust = page.getByRole('dialog', { name: 'Please confirm', exact: true });
+			await expect(trust).toBeVisible();
+			await trust.getByRole('button', { name: 'Confirm', exact: true }).click();
+			const install = page.getByRole('dialog', { name: 'Install required tools', exact: true });
+			await expect(install).toBeVisible();
+			await expect(install).toContainText('rsync');
+			expect(sent).toBeUndefined();
+			if (scenario === 'leave') {
+				await page.goto('/connections');
+				await expect(install).toHaveCount(0);
+				expect(sent).toBeUndefined();
+				expect(existsSync(path.join(root, 'folder-seed', filename))).toBe(false);
+			} else {
+				await install
+					.getByRole('button', {
+						name: scenario === 'install-rsync' ? 'Install and continue' : 'Skip installation',
+						exact: true,
+					})
+					.click();
+				if (scenario === 'install-scp') {
+					await expect(install).toContainText('scp');
+					expect(sent).toBeUndefined();
+					await install.getByRole('button', { name: 'Install and continue', exact: true }).click();
+				}
+				await expect(install).toBeHidden();
+				await expect(modal).toBeHidden();
+				await expect.poll(() => sent?.taskId).toBeTruthy();
+				const task = sent;
+				if (!task) {
+					throw new Error('Missing send receipt after tool preparation');
+				}
+				await expect
+					.poll(
+						async () => {
+							const response = await context.request.get(`/api/v1/transfers/status/${task.taskId}`);
+							expect(response.status()).toBe(200);
+							const current = readServerTransferSnapshot(await response.json());
+							expect(['failed', 'unknown', 'partially-completed']).not.toContain(current.status);
+							if (current.status === 'completed')
+								expect(current.subTasks[0]?.transferMethodUsed).toBe(
+									scenario === 'install-rsync' ? 'rsync' : 'scp',
+								);
+							return current.status;
+						},
+						{ timeout: 30000 },
+					)
+					.toBe('completed');
+				expect(
+					createHash('sha256')
+						.update(await readFile(path.join(root, 'folder-seed', filename)))
+						.digest('hex'),
+				).toBe(createHash('sha256').update(bytes).digest('hex'));
+			}
+			const tools = await (await fetch(`${E2E_SSH.controlUrl}/remote-tools`)).json();
+			expect(tools.installs).toBe(scenario === 'install-rsync' || scenario === 'install-scp' ? 1 : 0);
+			expect(await readFile(path.join(root, filename))).toEqual(bytes);
+		} finally {
+			expect((await fetch(`${E2E_SSH.controlUrl}/remote-tools`, { method: 'POST' })).ok).toBe(true);
+		}
+	});
+}
+
+test('auto directory fallback preserves nested and root symlinks when rsync is unavailable', async ({ request }) => {
+	await loginAsInitialAdmin(request);
+	const sourceId = await target(request, E2E_SSH.port);
+	const destinationId = await target(request, E2E_SSH.transferTargetPort);
+	const health = await (await fetch(`${E2E_SSH.controlUrl}/health`)).json();
+	const root = String(health.rootDir);
+	await mkdir(path.join(root, 'tool-directory'));
+	await writeFile(path.join(root, 'tool-directory', 'data.txt'), 'link-preserving-copy\n');
+	await symlink('data.txt', path.join(root, 'tool-directory', 'nested-link.txt'));
+	await symlink('tool-directory/data.txt', path.join(root, 'root-link.txt'));
+	expect((await fetch(`${E2E_SSH.controlUrl}/remote-tools?missing=rsync`, { method: 'POST' })).ok).toBe(true);
+	const source = await openWorkspaceSession(request, sourceId);
+	const destination = await openWorkspaceSession(request, destinationId);
+	try {
+		await Promise.all([waitForFilesystemReady(source.socket), waitForFilesystemReady(destination.socket)]);
+		const id = crypto.randomUUID();
+		const ended = waitForJson(
+			destination.socket,
+			(message) =>
+				message.type === 'transfer.copyMove' &&
+				message.payload?.requestId === id &&
+				['completed', 'failed'].includes(message.payload?.type),
+		);
+		await requestWorkspace(
+			destination.socket,
+			'transfer.copyMove',
+			{
+				mode: 'copy',
+				sourceWorkspaceId: source.workspaceId,
+				sources: ['/tool-directory', '/root-link.txt'],
+				destination: '/folder-seed',
+			},
+			id,
+		);
+		expect((await ended).payload?.type).toBe('completed');
+		const copied = path.join(root, 'folder-seed');
+		expect(await readFile(path.join(copied, 'tool-directory', 'data.txt'), 'utf8')).toBe('link-preserving-copy\n');
+		for (const [name, target] of [
+			['tool-directory/nested-link.txt', 'data.txt'],
+			['root-link.txt', 'tool-directory/data.txt'],
+		]) {
+			expect((await lstat(path.join(copied, name))).isSymbolicLink()).toBe(true);
+			expect(await readlink(path.join(copied, name))).toBe(target);
+		}
+		expect(await readlink(path.join(root, 'root-link.txt'))).toBe('tool-directory/data.txt');
+		const peer = await (await fetch(`${E2E_SSH.controlUrl}/transfer-peer`)).json();
+		expect(peer.nativeTransfersStarted).toBe(0);
+	} finally {
+		await Promise.allSettled([closeWebSocket(source.socket), closeWebSocket(destination.socket)]);
+		expect((await fetch(`${E2E_SSH.controlUrl}/remote-tools`, { method: 'POST' })).ok).toBe(true);
+	}
+});

@@ -1,3 +1,5 @@
+import type { WorkspaceArchiveFormat, WorkspaceArchiveOperation, WorkspaceArchiveTool } from '../transfers/values.js';
+
 export const REMOTE_TOOLS = [
 	'ssh',
 	'scp',
@@ -60,4 +62,19 @@ export function isToolPassword(value: unknown): value is string {
 	return (
 		bytes.length <= TOOL_PASSWORD_MAX_BYTES && new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes) === value
 	);
+}
+
+/** Includes tools used by verification and publication, not just the archive writer. */
+export function archiveToolRequirements(
+	format: WorkspaceArchiveFormat,
+	operation: WorkspaceArchiveOperation,
+): WorkspaceArchiveTool[] {
+	if (format === 'zip') {
+		return operation === 'compress' ? ['zip', 'unzip'] : ['unzip', 'zipinfo', 'od', 'grep', 'cp', 'ln'];
+	}
+	return [
+		'tar',
+		format === 'tar.gz' ? 'gzip' : 'bzip2',
+		...(operation === 'decompress' ? (['cp', 'ln', 'od'] as const) : []),
+	];
 }

@@ -108,7 +108,7 @@ export class RemoteFileModel {
 					},
 				],
 				remoteTargetPath: input.destinationDirectory,
-				transferMethod: input.method === 'auto' ? 'rsync' : input.method,
+				transferMethod: input.method,
 			};
 			const plan = await this.transfers.prepare(command);
 			if (

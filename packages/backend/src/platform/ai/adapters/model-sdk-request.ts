@@ -30,6 +30,11 @@ export function modelSdkFailure(error: unknown, signal: AbortSignal): ModelNetwo
 		return failure('timeout');
 	}
 	if (error instanceof OpenAI.APIError && error.status !== undefined) {
+		// Inspect structured provider codes only. Messages can contain prompts or
+		// credentials and are neither a stable classification nor safe diagnostics.
+		if (error.code === 'moderation_blocked' || error.code === 'content_policy_violation') {
+			return new ModelNetworkFailure('content_filtered', error.status, { cause: error });
+		}
 		return new ModelNetworkFailure('http', error.status, { cause: error });
 	}
 	if (error instanceof SyntaxError) {

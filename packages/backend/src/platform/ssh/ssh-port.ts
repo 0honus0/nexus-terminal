@@ -200,7 +200,12 @@ export interface MachineSftpLease {
 export interface MachineConnection {
 	readonly isOpen: boolean;
 	openShell(pty: MachinePty, signal?: AbortSignal): Promise<MachineShell>;
-	openRawCommand(command: string, signal?: AbortSignal, abortMode?: MachineCommandAbortMode): Promise<MachineCommand>;
+	openRawCommand(
+		command: string,
+		signal?: AbortSignal,
+		abortMode?: MachineCommandAbortMode,
+		pty?: MachinePty,
+	): Promise<MachineCommand>;
 	execute(command: string, options: MachineExecuteOptions): Promise<MachineCommandResult>;
 	openSftp(signal?: AbortSignal): Promise<MachineSftpLease>;
 	onClose(listener: (reason: 'disconnected') => void): () => void;

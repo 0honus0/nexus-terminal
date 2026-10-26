@@ -76,20 +76,11 @@ export class RemoteToolService {
 				extras.push('sshpass');
 			}
 		}
-		let method: 'rsync' | 'scp' = intent.method === 'scp' ? 'scp' : 'rsync';
-		const probes: RemoteTool[] = intent.method === 'auto' ? ['rsync', 'scp', ...extras] : [method, ...extras];
-		const local = await this.model.inspect({ targetId: intent.targetId, tools: probes }, scope);
-		if (intent.method === 'auto') {
-			const peer = await this.model.inspect({ targetId: intent.peerId, tools: ['rsync', 'scp'] }, scope);
-			if (
-				(local.missing.includes('rsync') || peer.missing.includes('rsync')) &&
-				!local.missing.includes('scp') &&
-				!peer.missing.includes('scp')
-			) {
-				method = 'scp';
-			}
-		}
+		// Auto prepares the preferred tool first. Only an explicit user decline
+		// in the consumer advances to another transfer method.
+		const method = intent.method === 'scp' ? 'scp' : 'rsync';
 		const tools: RemoteTool[] = [method, ...extras];
+		const local = await this.model.inspect({ targetId: intent.targetId, tools }, scope);
 		return {
 			targetId: local.targetId,
 			fingerprint: local.fingerprint,

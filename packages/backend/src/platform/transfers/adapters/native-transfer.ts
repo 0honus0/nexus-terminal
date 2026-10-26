@@ -78,11 +78,11 @@ export class NativeServerTransfer implements NativeTransferPort {
 				signal: input.signal,
 				timeoutMs: Math.min(15_000, input.deadline - Date.now()),
 			});
-			if (
-				(info.isSymbolicLink && method !== 'rsync') ||
-				info.isDirectory !== input.directory ||
-				(!info.isDirectory && !info.isFile && !info.isSymbolicLink)
-			) {
+			if (info.isSymbolicLink && method !== 'rsync') {
+				// SCP dereferences links; retain SFTP's link-preserving fallback.
+				throw new NativeTransferFailure('tool_missing', 'not_started');
+			}
+			if (info.isDirectory !== input.directory || (!info.isDirectory && !info.isFile && !info.isSymbolicLink)) {
 				throw new NativeTransferFailure('command_failed', 'not_started');
 			}
 			await input.validate();
@@ -116,6 +116,16 @@ export class NativeServerTransfer implements NativeTransferPort {
 			// peer reachability/authentication before any destination mutation;
 			// the caller may relay only when this probe definitively fails.
 			const { prefix, options } = this.sshOptions(input, directory);
+			if (method === 'scp') {
+				// Keep scp in the foreground of its PTY. Wrapping scp itself in
+				// sshpass creates another session and disables OpenSSH's meter.
+				await fs.writeFile(directory + '/ssh-client', Buffer.from('#!/bin/sh\nexec ' + prefix + 'ssh "$@"\n'), {
+					flags: 'wx',
+					mode: 0o700,
+					signal: input.signal,
+					timeoutMs: Math.min(15_000, input.deadline - Date.now()),
+				});
+			}
 			const peer =
 				prefix +
 				'ssh ' +
@@ -132,7 +142,11 @@ export class NativeServerTransfer implements NativeTransferPort {
 			}
 			await input.validate();
 			input.onMethod(method);
-			const transfer = await this.transfer(input, this.command(input, method, directory));
+			const transfer = await this.transfer(
+				input,
+				this.command(input, method, directory),
+				method === 'scp' && info.isFile ? info.size : undefined,
+			);
 			if (!transfer) {
 				throw new NativeTransferFailure('command_failed', 'failed');
 			}
@@ -151,7 +165,7 @@ export class NativeServerTransfer implements NativeTransferPort {
 			if (created) {
 				try {
 					const cleanup = await input.source.execute(
-						`rm -f -- ${quote(directory + '/key')} ${quote(directory + '/known_hosts')} && rmdir -- ${quote(directory)}`,
+						`rm -f -- ${quote(directory + '/key')} ${quote(directory + '/known_hosts')} ${quote(directory + '/ssh-client')} && rmdir -- ${quote(directory)}`,
 						{ timeoutMs: 15_000, maxOutputBytes: 1024 },
 					);
 					if (cleanup.outcome.status !== 'completed') {
@@ -181,13 +195,20 @@ export class NativeServerTransfer implements NativeTransferPort {
 		return result;
 	}
 
-	private async transfer(input: NativeTransferRequest, command: string): Promise<boolean> {
+	private async transfer(input: NativeTransferRequest, command: string, scpFileBytes?: number): Promise<boolean> {
 		const remaining = input.deadline - Date.now();
 		if (remaining <= 0) {
 			throw new NativeTransferFailure('transport_lost', 'not_started');
 		}
 		const signal = AbortSignal.any([input.signal, AbortSignal.timeout(remaining)]);
-		const running = await input.source.openRawCommand(command, signal, 'signal');
+		// OpenSSH emits its native progress meter only to a terminal. Only the
+		// control channel gets a PTY; file bytes still travel directly over SSH.
+		const running = await input.source.openRawCommand(
+			command,
+			signal,
+			'signal',
+			scpFileBytes === undefined ? undefined : { columns: 160, rows: 24, term: 'dumb' },
+		);
 		let stopStderr: (() => void) | undefined;
 		let lines: Interface | undefined;
 		try {
@@ -196,6 +217,16 @@ export class NativeServerTransfer implements NativeTransferPort {
 			running.writable.end();
 			for await (const line of lines) {
 				if (signal.aborted) {
+					continue;
+				}
+				if (scpFileBytes !== undefined) {
+					const scp = /\s(\d{1,3})%\s+[\d.]+[KMGTPE]?B\s+[\d.]+[KMGTPE]?B\/s\s+/u.exec(line);
+					if (scp) {
+						const percent = Number(scp[1]);
+						if (percent <= 100) {
+							input.onProgress(Math.floor((scpFileBytes * percent) / 100), percent);
+						}
+					}
 					continue;
 				}
 				// LC_ALL=C pins rsync's numeric format. Ignore filenames and
@@ -266,6 +297,11 @@ export class NativeServerTransfer implements NativeTransferPort {
 				throw new NativeTransferFailure('tool_missing', 'not_started');
 			}
 		}
+		if (input.method === 'auto' && input.directory) {
+			// Recursive SCP follows nested symlinks. Auto must preserve directory
+			// contents like rsync/SFTP without scanning the tree in advance.
+			throw new NativeTransferFailure('tool_missing', 'not_started');
+		}
 		for (const machine of [input.source, input.target]) {
 			if (!(await run(input, machine, 'command -v scp >/dev/null 2>&1'))) {
 				throw new NativeTransferFailure('tool_missing', 'not_started');
@@ -332,9 +368,10 @@ export class NativeServerTransfer implements NativeTransferPort {
 			);
 		}
 		return (
-			prefix +
-			'scp -O -p -q ' +
+			'LC_ALL=C scp -O -p ' +
 			[
+				'-S',
+				directory + '/ssh-client',
 				...options,
 				'-P',
 				String(input.port),

@@ -573,7 +573,7 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 				await expect(trustConfirmation).toBeVisible();
 				await trustConfirmation.getByRole('button', { name: 'Confirm', exact: true }).click();
 				await expect(modal).toBeHidden();
-				expect(transferToolChecks).toBe(0);
+				expect(transferToolChecks).toBe(4);
 				releaseInitialTransferList?.();
 				releaseInitialTransferList = undefined;
 			},
