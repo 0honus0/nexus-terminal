@@ -37,12 +37,6 @@ export type FileArchiveOperation = WorkspaceArchiveOperation;
 
 export type FileArchiveErrorCode = WorkspaceArchiveErrorCode;
 
-/** Archiveable entry count and explicit exclusions found during source preflight. */
-export interface FileArchiveSources {
-	entryCount: number;
-	skippedPaths: string[];
-}
-
 export type ArchiveFormat = WorkspaceArchiveFormat;
 
 export type FileArchiveEvent =

@@ -1863,3 +1863,11 @@ e2f66bdf对应 https://github.com/0honus0/nexus-terminal/actions/runs/4026284297
 33e1cb77 / [40302424259](https://github.com/0honus0/nexus-terminal/actions/runs/40302424259) 实际结果：质量与Docker通过，分片1/2/4/7/8通过。生成图片的预览/下载/刷新持久化通过；新Unix socket/FIFO目录ZIP与tar.gz内容校验通过；复制取消unknown Toast/隐藏失败任务通过。分片5仅新增用例没有先关闭驻留Toast导致后续点击被遮挡，修测试正常关闭流程；分片6首跑极限恢复在松手后97ms开始，100ms全页pointer-events保护吞掉mousedown，重试通过但整轮按flaky拒绝，补丁将保护缩至同步click结束后的下一任务；分片3原PDF横向滚动首跑失败、重试通过，trace记录scrollbar613px后最终缩放宽度才更新至1284px，晚到几何锚定重置left0，修复仅几何锚定保留当前横向滚动。既有产品UI模板/样式未变，原双向拖动与PDF横滚断言保留，待下一SHA完整回归。
 
 最终产品源码 `7d66cacb397412b199ddd98cd246c4ec53336ef6` 的 [40304902706](https://github.com/0honus0/nexus-terminal/actions/runs/40304902706) 全绿：质量、Docker部署smoke、8个正式分片共469/469首次通过，零重试/零flaky。图片自动预览/下载/刷新、Unix socket/FIFO目录ZIP与tar.gz实际内容、压缩失败Toast及恢复后新任务、复制取消unknown Toast、连续双向/极限拖动、PDF横向滚动均通过。自动提交 `7f8ff3ff` 只更新 duration-estimates，无产品源码差异。linux/amd64 dev发布 [40306499771](https://github.com/0honus0/nexus-terminal/actions/runs/40306499771) 成功；`dev` 与 `sha-7f8ff3ff9e54` 已发布，OCI revision `7f8ff3ff9e54594a991e48451baafacb63991125`、实际平台 `linux/amd64` 核对通过，index digest `sha256:eeadf1ada289d8061b9fffb5dc6f80e70aa1fc9e745c5ec51acc6978e70b8196`。`unknown/unknown` 附属清单为BuildKit证明，并非ARM运行时。未部署生产。
+
+### 原生压缩直接递归与限制移除（2026-10-26）
+
+生产只读核对：后端已运行revision `7f8ff3ff9e54594a991e48451baafacb63991125`，最新压缩失败为 `limit_exceeded`，位置 `/dist/modules/remote/files/model/file-resource.js:436`，对应 `scanEntries` 的应用条目预算；不是旧镜像未更新。本轮直接移除压缩源树预扫描、20,000条目/64层预算和原生进度固定上限，不新增替代阈值。所选路径直接交给原生ZIP/TAR；进度为工具输出观察，成功由退出及产物核验决定。无UI源码变更。人工规则H-20及工程规则E-08.1同步，防止无实测依据新增限制。
+
+正式回归新增：20,005个文件及70层子目录压缩，检查ZIP实际条目、末项/深层文件正文、完成后SFTP stat，并通过夹具OPENDIR观察断言压缩不遍历SFTP目录；既有socket/FIFO用例改为验证原生行为，ZIP跳过两者并核验warning，TAR保留FIFO元数据、跳过socket，普通文件正文保持。取消/后续压缩与目标位于源目录内的既有断言保留。
+
+两轮源码复核覆盖Service→Model→Native完整参数迁移、无人消费类型删除、随机原生退出标记与进度隔离、非零ZIP独立zip -T、临时输出字面量排除、取消/未知与清理；未以进度数作为源树完整性证明。静态检查：根check、完整构建（前端无后续源码变化）、最终Backend构建、全量format:all:check、变更E2E严格TypeScript及git diff --check通过。最终日志 `/tmp/nexus-native-archive-{check,backend-build,format,e2e-types}.log`；本轮正式远程Actions尚待执行，不沿用前轮469项通过作为本轮证据。未更新生产容器。

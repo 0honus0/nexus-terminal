@@ -219,7 +219,6 @@ export class NativeArchiveCommands {
 		temporary: string,
 		excluded: readonly string[],
 		format: NativeArchiveFormat,
-		maxEntries: number,
 		remaining: () => number,
 		signal: AbortSignal,
 		onProgress: (count: number) => void,
@@ -254,18 +253,16 @@ export class NativeArchiveCommands {
 			// A complete, drained remote exit without this marker proves no writer was launched.
 			'printf ' + quote(beforeWriteMarker + '\n') + ' || exit 78',
 			'(' + native + ' 2>&1; printf ' + quote(sentinel + '%s\n') + ' "$?") |',
-			'{ count=0; overflow=0; while IFS= read -r line; do',
+			'{ count=0; while IFS= read -r line; do',
 			'  case "$line" in',
 			'    ' + quote(sentinel) + '*)',
 			'      status=${line#*:}',
 			"      printf 'NEXUS_ARCHIVE_EXIT\\n'",
-			'      if [ "$overflow" = 1 ]; then exit 79; fi',
 			'      if [ "$status" = 0 ]; then printf ' +
 				quote('NEXUS_ARCHIVE_COUNT:%s\n') +
 				' "$count"; else exit "$status"; fi',
 			'      ;;',
 			format === 'zip' ? "    '  adding: '*)" : "    './'*)",
-			'      if [ "$count" -ge ' + maxEntries + ' ]; then overflow=1; continue; fi',
 			'      count=$((count + 1))',
 			'      printf ' + quote('NEXUS_ARCHIVE_PROGRESS:%s\n') + ' "$count"',
 			'      ;;',
@@ -284,13 +281,7 @@ export class NativeArchiveCommands {
 				const end = /^NEXUS_ARCHIVE_COUNT:(\d+)$/u.exec(line);
 				if (line === 'NEXUS_ARCHIVE_EXIT' && !writerExited && !finished) {
 					writerExited = true;
-				} else if (
-					progress &&
-					!writerExited &&
-					!finished &&
-					Number(progress[1]) === count + 1 &&
-					count < maxEntries
-				) {
+				} else if (progress && !writerExited && !finished && Number(progress[1]) === count + 1) {
 					count++;
 					onProgress(count);
 				} else if (end && writerExited && !finished && Number(end[1]) === count) {

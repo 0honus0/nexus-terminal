@@ -3381,3 +3381,16 @@ HTTP 框架暂缓、Zod 已取消；ACP 保持，Docker 保留 SSH CLI。这些�
 33e1cb77远程40302424259：质量/Docker和分片1/2/4/7/8通过，图片自动预览通过。分片5新增失败Toast用例未关闭驻留Toast就点击被遮挡的文件管理器关闭按钮，补真实关闭Toast流程；分片6快速极限恢复时仍受100ms dragging全页pointer-events屏障影响，保护仅延续到当前同步click结束的下一任务，保持原拖动断言；分片3既有PDF横滚用例偶发，trace显示scrollbar已613px而后续最后一次缩放尺寸才到，晚到页锚定left0覆盖横滚。几何锚定保留实际当前横向位置，主动跳页原行为不变，原用例不放宽。待下一SHA完整回归。
 
 最终四表收口：功能对应含图片自动预览、归档特殊节点及失败Toast/无残留、连续拖动与PDF横滚，均在正式远程通过；职责维持Files/原生工具/Transfer呈现/PDF锚定原owner；Shared未增加临时兼容字段，内部扫描计数类型唯一；源码两轮审核、根check、完整build/后续受影响前端build、格式及严格E2E类型通过。7d66cacb的40304902706完整469/469首跑通过、零重试/flaky；7f8ff3ff为CI耗时记录，无产品差异。发布40306499771成功，dev与sha-7f8ff3ff9e54的linux/amd64平台、OCI revision与digest核对完成，证据见testing/E2E。本轮源码、完整回归和镜像交付完成，不更新生产容器。
+
+## 当前增量：原生压缩与人工限制规则
+
+1. 范围：用户报告pve_debian新版仍失败，生产revision已为7f8ff3ff；最新日志limit_exceeded准确位于SftpFileResource.scanEntries应用扫描预算。用户明确移除压缩条目/深度限制，并要求直接交给工具递归，不重复扫描。
+2. 目录：Files Service保留输入/输出冲突、工具准备、临时产物和发布；FileArchiveModel转换应用命令；Native Adapter执行远端原生ZIP/TAR。
+3. 依赖：Service→Model→Platform方向不变；移除源树SFTP扫描，不保留新scanStream或无人消费类型。
+4. 类型：删除FileArchiveSources及compress固定maxEntries参数，实际工具输出数仅作展示，不以计数相等判成功；Shared和前端契约不变。
+5. 入口：原transfer.compress不变，zip/tar、密码、输出位于源目录内及字面量排除继续；特殊节点按原生工具语义，ZIP跳过FIFO/socket，TAR可保存FIFO元数据，解压策略独立。
+6. 数据并发：不预读完整源树、不缓存目录数组、不递归持有SFTP句柄；保留现有任务准入、退出确认及突变围栏；本次不新增/收紧限制。
+7. 生命周期：原总任务期限/取消和实际远端退出确认继续；进度不替代成功证据，非零无密码ZIP独立zip -T验证后才可warning提交；未知结果和清理错误不降级。
+8. 验收：超过20,000文件及64层目录真实ZIP内容、零SFTP目录扫描、完成后文件读取回归；原生ZIP/TAR特殊文件行为、原有取消/浏览恢复保持。根check、构建、格式/类型、两次审核后远程完整E2E，未实测不声称生产通过。人工规则新增H-20，工程容量规则引用H-20。
+
+四表：功能对应原生目录压缩、原生特殊文件行为及无预扫描；职责归原Files/Model/native；边界逐字段转换无兼容残留，FileArchiveSources和maxEntries参数已清理；两轮源码审核、根check、完整构建/最终Backend构建、格式与E2E严格类型通过，正式远程回归待当前提交，不复用旧PASS。证据见testing/E2E。

@@ -298,7 +298,7 @@ test('cancelling one concurrent archive leaves the other archive able to complet
 	}
 });
 
-test('folder archives exclude Unix sockets and FIFOs while preserving normal files', async ({ request }) => {
+test('native folder archives preserve normal files with tool-specific special file handling', async ({ request }) => {
 	await loginAsInitialAdmin(request);
 	const workspace = await openWorkspaceSession(request, await ensureTestSshConnection(request));
 	const name = 'as-' + crypto.randomUUID().slice(0, 8);
@@ -338,17 +338,24 @@ test('folder archives exclude Unix sockets and FIFOs while preserving normal fil
 				),
 			).toEqual({ started: true });
 			const result = (await terminal).payload;
-			expect(result).toMatchObject({ type: 'completed', path: destination, warning: 'verified_warning' });
+			expect(result).toMatchObject({ type: 'completed', path: destination });
+			if (format === 'zip') {
+				expect(result.warning).toBe('verified_warning');
+			}
 			const archive = path.resolve('.tmp/ssh-root', destination.slice(1));
 			const listing = await promisify(execFile)(
 				format === 'zip' ? 'unzip' : 'tar',
 				format === 'zip' ? ['-Z1', archive] : ['-tzf', archive],
 			);
-			expect(listing.stdout.trim().split('\n')).toHaveLength(3);
+			expect(listing.stdout.trim().split('\n')).toHaveLength(format === 'zip' ? 3 : 4);
 			expect(listing.stdout).toContain(name + '/ordinary.txt');
 			expect(listing.stdout).toContain(name + '/empty/');
 			expect(listing.stdout).not.toContain('live.sock');
-			expect(listing.stdout).not.toContain('/pipe');
+			if (format === 'zip') {
+				expect(listing.stdout).not.toContain('/pipe');
+			} else {
+				expect(listing.stdout).toContain('/pipe');
+			}
 			const content = await promisify(execFile)(
 				format === 'zip' ? 'unzip' : 'tar',
 				format === 'zip'
@@ -362,5 +369,76 @@ test('folder archives exclude Unix sockets and FIFOs while preserving normal fil
 			await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
 		}
 		await closeWebSocket(workspace.socket);
+	}
+});
+
+test('native folder compression skips SFTP traversal for over twenty thousand entries and sixty-four levels', async ({
+	request,
+}) => {
+	test.setTimeout(120_000);
+	await loginAsInitialAdmin(request);
+	const workspace = await openWorkspaceSession(request, await ensureTestSshConnection(request));
+	const name = 'large-' + crypto.randomUUID().slice(0, 8);
+	const root = path.resolve('.tmp/ssh-root', name);
+	const fs = await import('node:fs/promises');
+	const fileCount = 20_005;
+	try {
+		await fs.mkdir(root);
+		for (let index = 0; index < fileCount; index++) {
+			await fs.writeFile(path.join(root, `entry-${index}.txt`), index === fileCount - 1 ? 'last entry\n' : '');
+		}
+		const nestedDirectories = Array.from({ length: 70 }, () => 'd');
+		const nested = path.join(root, ...nestedDirectories);
+		await fs.mkdir(nested, { recursive: true });
+		await fs.writeFile(path.join(nested, 'deep.txt'), 'deep archive content\n');
+		await waitForFilesystemReady(workspace.socket);
+		expect((await fetch(`${E2E_SSH.controlUrl}/sftp/readdir-delay?ms=1`, { method: 'POST' })).ok).toBe(true);
+		const beforeScanResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/readdir-delay`);
+		expect(beforeScanResponse.ok).toBe(true);
+		const beforeScan = await beforeScanResponse.json();
+		const id = crypto.randomUUID();
+		const destination = '/' + name + '.zip';
+		const terminal = waitForJson(
+			workspace.socket,
+			(message) =>
+				message.type === 'transfer.archive' &&
+				message.payload?.requestId === id &&
+				['completed', 'failed', 'cancelled'].includes(message.payload?.type),
+			90_000,
+		);
+		expect(
+			await requestWorkspace(
+				workspace.socket,
+				'transfer.compress',
+				{ sources: ['/' + name], destination, format: 'zip' },
+				id,
+			),
+		).toEqual({ started: true });
+		expect((await terminal).payload).toMatchObject({ type: 'completed', path: destination });
+		const afterScanResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/readdir-delay`);
+		expect(afterScanResponse.ok).toBe(true);
+		expect((await afterScanResponse.json()).sftpDelayedDirectoryOpens).toBe(beforeScan.sftpDelayedDirectoryOpens);
+		const archive = path.resolve('.tmp/ssh-root', destination.slice(1));
+		const listing = await promisify(execFile)('unzip', ['-Z1', archive]);
+		expect(listing.stdout.trim().split('\n')).toHaveLength(fileCount + nestedDirectories.length + 2);
+		const content = await promisify(execFile)('unzip', ['-p', archive, `${name}/entry-${fileCount - 1}.txt`]);
+		expect(content.stdout).toBe('last entry\n');
+		const deepContent = await promisify(execFile)('unzip', [
+			'-p',
+			archive,
+			[name, ...nestedDirectories, 'deep.txt'].join('/'),
+		]);
+		expect(deepContent.stdout).toBe('deep archive content\n');
+		expect(
+			await requestWorkspace(workspace.socket, 'filesystem.stat', {
+				path: `/${name}/entry-${fileCount - 1}.txt`,
+			}),
+		).toMatchObject({ path: `/${name}/entry-${fileCount - 1}.txt`, metadata: { isFile: true, size: 11 } });
+	} finally {
+		try {
+			await fetch(`${E2E_SSH.controlUrl}/sftp/readdir-delay?ms=0`, { method: 'POST' });
+		} finally {
+			await closeWebSocket(workspace.socket);
+		}
 	}
 });
