@@ -367,6 +367,14 @@ const server = http.createServer(async (request, response) => {
 		return;
 	}
 	if (latestUserText.includes('E2E_REGRESSION_DEADLINE_SENTINEL')) {
+		const refusal = messages.find(
+			(message) => message.role === 'tool' && message.tool_call_id === 'call_e2e_regression',
+		);
+		if (refusal) {
+			const result = JSON.parse(refusal.content);
+			regressionResponse(response, { content: 'DELEGATION_REJECTED:' + result.failureCode });
+			return;
+		}
 		const args = {
 			profile: 'explore',
 			objective: 'Return 42.',

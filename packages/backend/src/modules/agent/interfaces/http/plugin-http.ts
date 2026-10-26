@@ -426,7 +426,6 @@ export function createPluginContentRoutes(
 
 	return [
 		sdk('/sdk/frontend-v1.mjs', () => 'frontend-v1.mjs'),
-		sdk('/sdk/agent/*modulePath', (ctx) => 'agent/' + ctx.params.modulePath),
 		{
 			method: 'GET',
 			path: '/plugins/:appId/:version/:grant/*assetPath',

@@ -28,6 +28,7 @@ import {
 	readAgentMemoryResponse,
 } from '../../../../packages/shared/src/agent/memory/http-codec';
 import { readAgentErrorResponse, readAgentId } from '../../../../packages/shared/src/agent/http-codec';
+import { readAgentThreadToolsResponse } from '../../../../packages/shared/src/agent/tools/http-codec';
 import { readAgentRunStepResponse } from '../../../../packages/shared/src/agent/runs/http-codec';
 import { readAgentBrowserConfiguration } from '../../../../packages/shared/src/agent/integrations/browser-http-codec';
 
@@ -577,15 +578,11 @@ test('SSH search enforces file and byte bounds and never follows a symlink to th
 
 	const cancelAndRefresh = async (id: string) => {
 		await cancelNativeTask(task, id);
-		// Unknown runs deliberately stop polling. Observe the external cancellation through the real UI.
-		await openNativeTaskPanel(page);
-		const panel = page.getByRole('complementary', { name: 'Tasks', exact: true });
-		const { result } = await captureNativeCommand(task, 'agent.runs.get', () =>
-			panel.getByTitle('Refresh current state', { exact: true }).click(),
-		);
-		if (result.method !== 'agent.runs.get' || result.value === null) throw new Error('Unexpected refreshed run');
-		expect(result.value.id).toBe(id);
-		expect(result.value.status).toBe('cancelled');
+		// Reopen through the real workspace restore path after an external cancellation.
+		await openNativeTask(task);
+		const restored = await readNativeRun(task, id);
+		expect(restored.id).toBe(id);
+		expect(restored.status).toBe('cancelled');
 		await expect(
 			page.getByRole('dialog', { name: 'Agent', exact: true }).getByRole('button', { name: 'Send', exact: true }),
 		).toBeVisible();
@@ -893,24 +890,33 @@ for (const fixture of regressionInputs.memoryProposals) {
 
 for (const boundary of ['absolute', 'duration'] as const) {
 	test(`delegation rejects invalid ${boundary} deadline without creating a child`, async ({ request, page }) => {
-		// Unknown tool effects deliberately fence subsequent Runs in this app.
-		// Each rejected boundary is a separate isolated fixture rather than
-		// retrying a second Run against an app with an unresolved first Run.
+		// Invalid delegation arguments are rejected before creating a child;
+		// the model receives the definite tool refusal and can finish its reply.
 		const task = await prepareNativeTask(request, page, ['app.intents.exchange']);
 		await openNativeTask(task);
 		const created = await startNativeTask(task, `E2E_REGRESSION_DEADLINE_SENTINEL boundary=${boundary}`);
 		const result = await finishNativeTask(task, created.id);
-		expect(result.run.status).toBe('unknown');
+		expect(result.run.status).toBe('completed');
+		expect(result.text).toBe('DELEGATION_REJECTED:tool_invalid_input');
 		const step = await requestAgentJson(
 			request,
 			{ method: 'GET', path: `/apps/${task.app.id}/runs/${created.id}/steps/1` },
 			readAgentRunStepResponse,
 		);
-		// The provider's untrusted delegation payload reached the dispatch
-		// boundary before the invalid deadline was rejected. The step and Run
-		// must both retain the unknown outcome; neither may fabricate a proven
-		// successful provider completion or a child effect.
-		expect(step.state).toBe('unknown');
+		// The model response itself is complete. The rejected tool proposal
+		// must not fabricate a Child or an unknown remote effect.
+		expect(step.state).toBe('completed');
+		const tools = await requestAgentJson(
+			request,
+			{ method: 'GET', path: `/apps/${task.app.id}/threads/${task.thread.id}/tools?limit=20` },
+			(raw) => readAgentThreadToolsResponse(raw, task.app.id, null, 20),
+		);
+		expect(tools.items).toHaveLength(1);
+		expect(tools.items[0]).toMatchObject({
+			runId: created.id,
+			toolName: 'collaboration_delegate',
+			state: 'failed',
+		});
 		const children = await requestAgentWorkspace(request, task.app, {
 			method: 'agent.subagents.list',
 			params: { runId: created.id },

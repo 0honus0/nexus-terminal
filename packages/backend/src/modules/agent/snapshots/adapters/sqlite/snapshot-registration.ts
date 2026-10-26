@@ -431,13 +431,13 @@ export function registerAgentSnapshot(
 		{
 			name: 'agent_runs',
 			columns: [
-				'approval_mode',
 				'id',
 				'user_id',
 				'app_id',
 				'thread_id',
 				'thread_sequence',
 				'run_kind',
+				'approval_mode',
 				'status',
 				'version',
 				'input_text',

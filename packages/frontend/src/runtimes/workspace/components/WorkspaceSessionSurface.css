@@ -14,3 +14,11 @@
 		padding-left: max(1.5rem, env(safe-area-inset-left)) !important;
 	}
 }
+.document-popup-resize-handle {
+	/* Transparent handle padding must not intercept the adjacent preview action. */
+	pointer-events: none;
+}
+
+.document-popup-resize-handle :deep(.ui-resize-handle__icon) {
+	pointer-events: auto;
+}

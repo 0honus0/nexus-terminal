@@ -165,7 +165,7 @@ async function captureWorkspaceEvidence(page: Page, testInfo: TestInfo, name: 'b
 	expect(metrics.tabScroller?.right).toBeLessThanOrEqual(metrics.viewport.width + 1);
 }
 
-test('initial SSH failure removes its connecting tab without automatic retry', async ({ page, context }) => {
+test('initial SSH failure retains its terminal error and waits for explicit retry', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
 
@@ -236,8 +236,10 @@ test('initial SSH failure removes its connecting tab without automatic retry', a
 		await expect.poll(() => workspaceConnectIds.length, { timeout: 15_000 }).toBe(1);
 
 		const tabs = page.locator('.terminal-tab-shell').getByRole('tab');
-		await expect(tabs).toHaveCount(0, { timeout: 15_000 });
-		await expect(page.getByRole('heading', { name: 'New session', exact: true })).toBeVisible();
+		await expect(tabs).toHaveCount(1);
+		const terminal = page.locator('.terminal-inner-container:visible');
+		await expect(terminal.locator('.xterm-rows')).toContainText('Connection failed', { timeout: 15_000 });
+		await expect(terminal.locator('.xterm-rows')).toContainText('Press any key to reconnect');
 
 		expect(
 			await page.evaluate(
@@ -248,6 +250,11 @@ test('initial SSH failure removes its connecting tab without automatic retry', a
 		const failedWorkspaceId = workspaceConnectIds[0]!;
 		await page.waitForTimeout(3_000);
 		expect(workspaceConnectIds).toEqual([failedWorkspaceId]);
+		await terminal.locator('.xterm-helper-textarea').focus();
+		await page.keyboard.press('x');
+		await expect.poll(() => workspaceConnectIds.length).toBe(2);
+		await expect(tabs).toHaveCount(1);
+		await expect(terminal.locator('.xterm-rows')).toContainText('Press any key to reconnect');
 	} finally {
 		const remove = await context.request.delete(`/api/v1/targets/connections/${connectionId}`, {
 			headers: { Origin: E2E_URLS.frontendOrigin },

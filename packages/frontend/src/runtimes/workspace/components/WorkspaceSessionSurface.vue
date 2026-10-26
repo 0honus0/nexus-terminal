@@ -1859,7 +1859,7 @@
 				/>
 				<UiResizeHandle
 					v-if="!mobile"
-					class="absolute bottom-0 right-0 z-30"
+					class="document-popup-resize-handle absolute bottom-0 right-0 z-30"
 					:title="documentPopupResizeLabel"
 					:aria-label="documentPopupResizeLabel"
 					@pointerdown.stop="startDocumentPopupResize"

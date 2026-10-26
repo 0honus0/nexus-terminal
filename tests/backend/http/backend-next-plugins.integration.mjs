@@ -289,7 +289,8 @@ await test(
 				);
 				const sdk = await f.anonymous('GET', '/sdk/frontend-v1.mjs');
 				expectStatus(sdk, 200);
-				assert.match(sdk.bytes.toString('utf8'), /import/u);
+				assert.match(sdk.bytes.toString('utf8'), /export\s*\{\s*connectNexusPlugin/u);
+				assert.doesNotMatch(sdk.bytes.toString('utf8'), /from ['"](?:@nexus-terminal|semver|\.\/agent)/u);
 				expectStatus(
 					await f.anonymous(
 						'GET',

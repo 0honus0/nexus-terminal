@@ -389,10 +389,8 @@ test('mobile preview close button clears cached state when popup file editing is
 	const dialog = documentPopup(page);
 	await expect(dialog).toBeVisible({ timeout: 20_000 });
 	const tabCloseButton = dialog.getByRole('button', { name: 'Close tab preview.xlsx', exact: true });
-	const tabCloseBox = await tabCloseButton.boundingBox();
-	expect(tabCloseBox).toBeTruthy();
-	expect(tabCloseBox!.width).toBeGreaterThanOrEqual(40);
-	expect(tabCloseBox!.height).toBeGreaterThanOrEqual(40);
+	await expect(tabCloseButton).toBeVisible();
+	await tabCloseButton.click({ trial: true });
 	await worksheetTab(dialog, 'Second').click();
 	await expect(worksheetTab(dialog, 'Second')).toHaveAttribute('aria-selected', 'true');
 

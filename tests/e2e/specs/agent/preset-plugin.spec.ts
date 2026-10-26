@@ -892,7 +892,6 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 			.locator('details')
 			.filter({ has: page.locator(':scope > summary').filter({ hasText: /^Step and tool audit$/ }) });
 		await audit.getByLabel('Step index', { exact: true }).fill('1');
-		await audit.getByRole('button', { name: 'Refresh current state', exact: true }).first().click();
 		await expect(audit).toContainText('step.completed');
 		await expect(audit).toContainText('Input / output tokens');
 		await captureFunctionalScreenshot(page, 'agent-installed-native-run.png', {

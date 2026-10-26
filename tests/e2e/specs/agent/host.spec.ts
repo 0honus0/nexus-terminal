@@ -820,6 +820,12 @@ test('Agent settings surface exposes the current control plane and saves explici
 		.getByRole('button', { name: 'Add model manually', exact: true })
 		.click();
 	await form.getByRole('textbox', { name: 'Model ID', exact: true }).fill('e2e-model');
+	const registryRead = page.waitForResponse(
+		(response) => new URL(response.url()).pathname === '/api/v1/agent/ai/model-registry',
+	);
+	await form.getByRole('textbox', { name: 'Model ID', exact: true }).press('Tab');
+	await registryRead;
+	await expect(form.locator('fieldset').first()).toBeEnabled();
 	await form.getByRole('spinbutton', { name: 'Context window', exact: true }).fill('131072');
 	await form.getByRole('spinbutton', { name: 'Maximum output tokens', exact: true }).fill('128');
 	await form.getByRole('checkbox', { name: 'Supports tools', exact: true }).check();
@@ -855,7 +861,8 @@ test('Agent settings surface exposes the current control plane and saves explici
 	).toBeVisible();
 	await dismissToasts(page);
 	await testDialog.getByRole('button', { name: 'Close', exact: true }).click();
-	await card.getByRole('button', { name: 'Discover and record models', exact: true }).click();
+	await card.getByRole('button', { name: 'Edit', exact: true }).click();
+	await editor.getByRole('button', { name: 'Discover and record models', exact: true }).click();
 	await expect(editor.getByRole('textbox', { name: 'Filter discovered models', exact: true })).toBeVisible();
 	const protocol = form.locator('#provider-protocol');
 	await selectUiOption(protocol, 'responses');

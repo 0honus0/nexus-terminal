@@ -1715,3 +1715,13 @@ D17：不新增/运行本地行为、浏览器/E2E或付费图片请求。现有
 提交1f21e469推送dev，正式工作流 https://github.com/0honus0/nexus-terminal/actions/runs/40259908812 。质量作业通过；Docker独立后端构建失败在model-sdk-request的内置fetch/Undici Dispatcher类型冲突（Node26的undici-types与显式Undici7不同），不是UI或测试断言问题。完整Docker日志/tmp/nexus-e2e-40259908812-docker.log。
 
 修复后工作区Backend build通过（/tmp/nexus-undici-boundary-build.log）；复制backend/shared源码及固定锁文件至/tmp/nexus-backend-isolated-review，严格filtered安装后build亦通过（/tmp/nexus-undici-isolated-{install,build}.log）。此隔离构建不含Frontend DOM类型，未做本地行为测试。远程Docker实际构建/启动和8个功能分片待下一轮确认，不将编译通过记为运行通过。
+
+### 首轮功能失败分类（40259908812）
+
+通过分片4/5/7。产品：备份503（agent_runs approval_mode登记位置与PRAGMA顺序不符）、Custom SDK连接中（trace确认/sdk/common/version.js缺失CORS响应，静态白名单漏新SemVer依赖；改为esbuild单模块交付）、预览刷新点击被透明缩放padding截获（仅修命中，无外观调整）。
+
+测试：模型发现入口移动及ID自动匹配禁用期输入竞态；审计自动加载后原手动刷新按钮已删除；ACP取消仍定位折叠详情旧按钮；首次SSH失败已按用户要求保留终端与按键重连；手机预览旧40px尺寸预设不适用于已授权新设计；外部Run取消使用重新进入正式会话恢复；委派非法参数当前为确定拒绝并反馈模型，夹具必须消费错误而非持续重发直到80次预算耗尽。保留拒绝无Child、唯一失败工具和模型完整回复断言。
+
+完整失败作业日志在/tmp/nexus-e2e-40259908812-shard{3,8}.log及/tmp/nexus-e2e-job-121370361{720,744,763}.log；分片3的截图/trace下载/tmp/nexus-e2e-40259908812-artifacts3。未用本地浏览器或行为测试替代远程证据。
+
+本批两轮源码复审完成；静态比较56张Agent表的建表列与备份注册顺序，修正后全部一致。根check、Shared/Backend/Frontend build、全量format、变更E2E严格tsc、JS与SDK产物语法检查、git diff --check通过，日志/tmp/nexus-e2e-round2-{check,build,format,types}.log。初轮静态发现SDK资产早返回缺花括号、工具列表decoder调用参数不完整，均修正重跑；不计作通过。SSH首次失败用例还验证3秒无自动重试、显式按键才发第二次连接且保持单个tab。待推送本批并远程全量复验。

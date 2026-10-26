@@ -247,7 +247,7 @@ for (const decision of ['denied', 'cancelled'] as const) {
 		const runId = runResult.value.run.id;
 		await expect(hub.getByRole('textbox', { name: 'Task input', exact: true })).toHaveValue('');
 		await openNativeTaskPanel(page);
-		await expect(hub.getByRole('button', { name: 'Request cancellation', exact: true })).toBeEnabled();
+		await expect(hub.getByRole('button', { name: 'Cancel run', exact: true })).toBeEnabled();
 
 		const readRun = async () => {
 			const result = await requestAgentWorkspace(request, app, { method: 'agent.runs.get', params: { runId } });
@@ -316,7 +316,7 @@ for (const decision of ['denied', 'cancelled'] as const) {
 						new URL(item.url()).pathname === `/api/v1/agent/apps/${app.id}/workspace` &&
 						item.request().postDataJSON()?.request?.method === 'agent.runs.cancel',
 				);
-				await hub.getByRole('button', { name: 'Request cancellation', exact: true }).click();
+				await hub.getByRole('button', { name: 'Cancel run', exact: true }).click();
 				const cancellationResponse = await cancellation;
 				expect(cancellationResponse.status()).toBe(200);
 				expect(acceptedBodies.has('agent.runs.cancel')).toBe(true);

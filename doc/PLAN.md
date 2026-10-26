@@ -3192,3 +3192,16 @@ HTTP 框架暂缓、Zod 已取消；ACP 保持，Docker 保留 SSH CLI。这些�
 首轮提交1f21e469已推送；远程40259908812质量检查通过，Docker独立后端构建暴露Node内置fetch的Dispatcher与显式Undici Agent版本不一致。修正在原Platform模型SDK传输owner：普通请求继续内置fetch；图片任务独享Agent与同版本undiciFetch配套，逐字段投影JSON请求，用原响应reader适配Node/标准流，校验二进制块并继续统一取消、容量、UTF-8与清理。无业务/Shared/存储/UI变化，不修改超时或重试政策。
 
 四表增量：功能对应保留图片Run绝对期限和普通池；职责仍为ModelSdkRequest唯一技术owner；类型在Platform明确区分两套技术接口，不断言或放宽编译；完成证据为工作区Backend build及/tmp隔离backend+shared安装/build通过，根check/格式与远程分片待收口。两轮源码复核覆盖请求体投影、header处理、取消、字节验证和dispatcher销毁。USAGE图片期限说明仍符合实际。
+
+### 首轮功能分片修正（2026-10-26）
+
+40259908812的4/5/7分片通过；其余失败按源码、日志和trace分类集中修复，不改UI设计。八节增量：① 范围为备份、插件SDK及旧测试入口；② 原snapshot-registration、plugin-sdk-assets、WorkspaceSessionSurface owner；③ SDK构建复用成熟esbuild解析Shared及semver依赖，不复制算法/手写依赖白名单；④ Snapshot列严格匹配真实顺序，无协议/存储变化；⑤ SDK只交付原frontend-v1.mjs，删除无人消费的拆模块交付路由；⑥ 既有握手/授权/消息围栏不变，预览缩放透明padding不截获相邻刷新按钮，图标保持原位置/尺寸/外观；⑦ 继续统一取消清理，不放宽CORS/iframe沙箱或失败判据；⑧ 静态与远程全量E2E复验，禁本地行为。
+
+| 审核表   | 当前结论                                                                                                       |
+| -------- | -------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 备份503为列顺序错位；Custom SDK connecting为漏交付common/version及semver；预览刷新为缩放透明区域遮挡。         |
+| 职责归属 | 备份修声明、SDK构建交付完整依赖、预览仅修命中区域；其它过期定位/断言在测试owner迁移。                          |
+| 类型归属 | 无Shared或应用类型变动；SDK不再运行时替换import/维护白名单，浏览器依赖由esbuild编译。                          |
+| 完成证据 | 两轮复审、56表静态列比对、根check/双端build/格式/E2E严格tsc及语法检查通过；SDK产物135.8KiB；远程全量复验待验。 |
+
+测试迁移：模型发现进入编辑器，模型ID失焦后等待真实匹配完成再填参数；审计展开自动读，不点击已删除刷新按钮；ACP取消使用聊天原Cancel run入口；SSH首次失败保留错误终端等待按键而非删除tab；手机预览保留关闭/重开/清状态的功能验证，删除旧设计40px尺寸预设；外部取消后通过重新进入正式会话核对；无效委派参数按当前确定拒绝反馈给模型，夹具消费tool_invalid_input后结束，并断言模型step完成、唯一工具failed、没有Child，避免错误夹具循环80次耗尽预算。其余未知副作用断言保留。
