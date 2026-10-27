@@ -2099,3 +2099,11 @@ CI 机器人 `440cb9e9271f16ac7c3eccb20437a25cf1e679be` 仅更新测试耗时估
 正式 [40447142849](https://github.com/0honus0/nexus-terminal/actions/runs/40447142849)，源码 `451e37a9d4b94f6f4617bdfc4ecd08628cf353a9`：526 项首次通过，0 failed/skipped/retry/flaky；后端 122、浏览器 404，质量、Docker smoke、8 个测试 runner 全成功。日志 `/tmp/nexus-slowest-final.log`，运行/作业元数据 `/tmp/nexus-slowest-final-run.json`。验证码过期/拒绝/新 token 成功的整例从133秒降至8.8秒，资源缓存过期32→1.4秒、桌面票据过期31→0.181秒；原125秒真实空闲SSH回归仍126秒通过，拆分场景功能清单不减。
 
 墙钟以 GitHub createdAt→updatedAt 比较：620秒原始基线→532秒上一阶段→477秒本轮（03:58:35→04:06:32 UTC），本轮再降55秒/10.3%，累计降143秒/23.1%。本轮准备61秒，后端301秒、浏览器各312/330/395/362/311/381/375秒；最慢测试作业441→395秒。累计有效作业2992秒，相对上一轮3228秒降低7.3%，不视作精确计费，截图条件跳过作业不计入。Node Date-only MockTimers 和真实跨域 hCaptcha SDK 的 Playwright Clock 均已整链验证；并发仍1后端+7浏览器，原关闭/unknown隔离保留。自动提交 `de824567` 仅刷新耗时估计并已同步。未发布或部署，用户截图未提交。
+
+## E2E 功能目录与剩余前端计时等待（2026-10-27，待远程验收）
+
+基线40447142849完整477秒、526项首次通过。当前最重文件为跨服务器传输约181秒，重组为 `ssh/cross-server-transfer/{protocol,clipboard-ui,send-ui}.spec.ts` 与唯一 `fixtures.ts`；同一功能统一维护，原分片器递归发现、按文件实测耗时自动均衡，保持单例内顺序和原数据隔离。原native rsync/SCP/relay、安装/跳过与离页流程、实时非零进度、完整8MiB字节/SHA及软链接断言不缩减；未移到后端组，避免让既有单后端runner成为新瓶颈。
+
+手机状态订阅在已验证短期复用后用Playwright Clock推进30秒原idle timer，再核对真实status.stop与重开真实采样。压缩取消使用同一官方Clock跨原30秒边界，真实远端preflight hold保持；新增测试专用preflight进程开始/退出计数，取消前确认真实命令已进入，释放后等实际进程退出代替固定4秒。不修改产品超时、布局或正常交互；原125秒SSH空闲覆盖、首次Trace/录像/截图与8个runner保持。
+
+静态清单比较项目/标题集合完全一致，共526项；传输五个顶层参数化/普通测试声明AST与原文件一致（仅移除一个未使用变量绑定，保留其await创建），所有原断言保持。两轮源码审核核对嵌套目录全部import、配置递归发现与单例重置、Clock安装顺序和真实进程计数；原archive/processes响应不变，新计数独立测试端点。根check、目标E2E严格tsc（含noUnusedLocals）、夹具node --check及diff通过，日志 `/tmp/nexus-e2e-more-{check,types}.log`；全量格式结果与正式新SHA待回填。

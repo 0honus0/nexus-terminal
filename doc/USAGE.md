@@ -16,7 +16,7 @@ GitHub Actions 的 `Clean old Actions and container versions` 仅支持手动 Ru
 
 `pnpm test:e2e:backend` 运行真实后端 API、WebSocket 与 SSH/SFTP 协议测试，不启动前端和浏览器服务；`pnpm test:e2e:browser` 运行浏览器与真实后端的集成测试。`pnpm test:e2e` 运行全部用例。后端独立命令只构建后端与 Shared，不依赖前端构建；浏览器及全量命令构建应用与测试专用客户端。后者仅存在于测试产物，正式发布构建不包含它。
 
-Actions 默认总共 8 个测试 runner，分为 1 个后端和 7 个浏览器 runner；单个 runner 仍串行，组内继续按实测耗时分片。同一提交只集中构建一次再分发；浏览器使用正式前端构建的 Vite preview，HTTP/WS 仍转发真实后端。每例保留独立数据库和资源关闭检查，失败保留首次 Trace、截图、录像与日志；重试通过仍阻止 CI 通过。正式验收完整运行两组及 Docker smoke，不以某一组通过代替全部功能验收。测试时机和最新证据见 [E2E](testing/E2E.md)。 验证验证码 SDK 过期使用 Playwright 官方虚拟时钟；后端票据和缓存 TTL 使用 Node 内置 MockTimers 仅推进 Date，不改变产品超时或网络定时器。SSH 空闲两分钟仍用真实时间，独立场景与拆分后的 Agent 回归按实测耗时分片，保持原功能覆盖。
+Actions 默认总共 8 个测试 runner，分为 1 个后端和 7 个浏览器 runner；单个 runner 仍串行，组内继续按实测耗时分片。 复杂功能使用一个目录下的多份测试文件和共享夹具（如 `ssh/cross-server-transfer/`）；分片器递归发现文件，按上次实测耗时自动均衡，CI通过后更新估计，不需手工登记到某个runner。有执行顺序依赖的步骤保留在同一个测试内。同一提交只集中构建一次再分发；浏览器使用正式前端构建的 Vite preview，HTTP/WS 仍转发真实后端。每例保留独立数据库和资源关闭检查，失败保留首次 Trace、截图、录像与日志；重试通过仍阻止 CI 通过。正式验收完整运行两组及 Docker smoke，不以某一组通过代替全部功能验收。测试时机和最新证据见 [E2E](testing/E2E.md)。 验证验证码 SDK 过期使用 Playwright 官方虚拟时钟；后端票据和缓存 TTL 使用 Node 内置 MockTimers 仅推进 Date，不改变产品超时或网络定时器。SSH 空闲两分钟仍用真实时间，独立场景与拆分后的 Agent 回归按实测耗时分片，保持原功能覆盖。
 
 ## 每版产品行为维护
 

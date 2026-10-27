@@ -94,6 +94,8 @@ let sftpReadHandlesClosed = 0;
 let archiveExecDelayMs = 0;
 let archiveCommandsStarted = 0;
 let archiveCommandsExited = 0;
+let archivePreflightsStarted = 0;
+let archivePreflightsExited = 0;
 let dockerContainerPresent = true;
 let dockerContainerState = 'running';
 const activeSshClients = new Set();
@@ -756,6 +758,8 @@ function resetControls() {
 	archiveExecDelayMs = 0;
 	archiveCommandsStarted = 0;
 	archiveCommandsExited = 0;
+	archivePreflightsStarted = 0;
+	archivePreflightsExited = 0;
 	openedSftpChannels = 0;
 }
 
@@ -1492,6 +1496,7 @@ function runRemoteCommand(command, stream, session, pty = false) {
 	};
 
 	if (isArchiveCommand) archiveCommandsStarted += 1;
+	if (isArchivePreflightCommand) archivePreflightsStarted += 1;
 	session.on('signal', onSignal);
 	child.stdout.on('data', (chunk) => stream.write(chunk));
 	child.stderr.on('data', (chunk) => stream.stderr.write(chunk));
@@ -1504,6 +1509,7 @@ function runRemoteCommand(command, stream, session, pty = false) {
 	child.on('close', (code, signal) => {
 		if (nativeTransfer) nativeTransfersExited++;
 		if (isArchiveCommand) archiveCommandsExited += 1;
+		if (isArchivePreflightCommand) archivePreflightsExited += 1;
 		session.off('signal', onSignal);
 		// The SSH wire strips SIG and the ssh2 client restores it. Preserve the
 		// accepted signal even if bash converted the terminated wait to code 143.
@@ -2019,6 +2025,11 @@ const controlServer = http.createServer(async (req, res) => {
 				: 0;
 			res.writeHead(200, { 'content-type': 'application/json' });
 			res.end(JSON.stringify({ archiveExecDelayMs }));
+			return;
+		}
+		if (req.method === 'GET' && requestUrl.pathname === '/archive/preflight-processes') {
+			res.writeHead(200, { 'content-type': 'application/json' });
+			res.end(JSON.stringify({ started: archivePreflightsStarted, exited: archivePreflightsExited }));
 			return;
 		}
 		if (req.method === 'GET' && requestUrl.pathname === '/archive/processes') {

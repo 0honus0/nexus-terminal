@@ -16,6 +16,7 @@ import { step, slowStep } from '../../support/steps';
 const MOBILE_LONG_FILENAME = `mobile-long-name-${'x'.repeat(180)}.txt`;
 
 test('mobile SSH workspace keeps terminal space and exposes touch-only tools', async ({ page, context }) => {
+	await page.clock.install();
 	const sentFrames: string[] = [];
 	page.on('websocket', (socket) => {
 		socket.on('framesent', (event) => {
@@ -132,7 +133,8 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
 		);
 		await modal.getByRole('button', { name: 'Close', exact: true }).click();
 		await expect(modal).toBeHidden();
-		// The subscription survives a short close/reopen, then stops after its idle window.
+		// Execute the real idle timer after verifying the short close/reopen retained its subscription.
+		await page.clock.fastForward(30_100);
 		await expect
 			.poll(() => countStatusControls('status.stop'), { timeout: 35_000 })
 			.toBeGreaterThan(stopsBeforeOpen);
