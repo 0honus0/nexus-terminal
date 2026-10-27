@@ -108,7 +108,7 @@ export async function compressRemoteArchive(
 	remaining: () => number,
 	signal: AbortSignal,
 	onMutation: () => void,
-	onProgress: (fileCount: number) => void,
+	onProgress: (fileCount: number, totalFiles?: number, processedBytes?: number) => void,
 	onWarning: (warning: string) => void,
 	password?: string,
 ): Promise<number> {
@@ -262,7 +262,7 @@ export async function decompressRemoteArchive(
 	remaining: () => number,
 	signal: AbortSignal,
 	onMutation: () => void,
-	onProgress: (fileCount: number) => void,
+	onProgress: (fileCount: number, totalFiles?: number, processedBytes?: number) => void,
 	password?: string,
 ): Promise<number> {
 	if (format !== 'zip' && password !== undefined) {
@@ -376,6 +376,7 @@ export async function decompressRemoteArchive(
 				},
 				remaining,
 				signal,
+				(processedBytes) => onProgress(0, undefined, processedBytes),
 				password,
 			);
 		} catch (cause) {
@@ -679,7 +680,7 @@ export async function decompressRemoteArchive(
 					await resource.rmdir({ path: from, timeoutMs: Math.min(remaining(), 300_000), signal });
 					if (members.has(name)) {
 						count++;
-						onProgress(count);
+						onProgress(count, members.size);
 					}
 				} else {
 					if (
@@ -696,7 +697,7 @@ export async function decompressRemoteArchive(
 						await resource.rename(move);
 					}
 					count++;
-					onProgress(count);
+					onProgress(count, members.size);
 				}
 			}
 		}

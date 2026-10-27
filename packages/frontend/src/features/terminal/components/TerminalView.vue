@@ -294,8 +294,34 @@
 
 	const restorePresentation = () => {
 		if (disposed || document.visibilityState !== 'visible') return;
+		// A frozen Android page can omit touchcancel/pagehide and leave both a
+		// read-only textarea and an old, deferred layout frame behind.
+		resetInteractions();
+		if (terminal) terminal.options.disableStdin = !acceptsKeyboardInput.value;
+		if (geometryFrame !== undefined) window.cancelAnimationFrame(geometryFrame);
+		geometryFrame = undefined;
 		outputWriter.flush();
-		scheduleGeometrySync();
+		forceGeometrySync = true;
+		fitAndResize();
+		scheduleGeometryFit();
+	};
+
+	let windowWasBlurred = false;
+
+	const onWindowBlur = () => {
+		windowWasBlurred = true;
+	};
+
+	const onWindowFocus = () => {
+		if (windowWasBlurred) {
+			windowWasBlurred = false;
+			restorePresentation();
+		} else {
+			// A regular focus must not cancel a live touch selection or IME.
+			forceGeometrySync = true;
+			fitAndResize();
+			scheduleGeometryFit();
+		}
 	};
 
 	const onVisibilityChange = () => {
@@ -1736,7 +1762,8 @@
 		window.addEventListener('pageshow', restorePresentation);
 		window.visualViewport?.addEventListener('resize', scheduleContainerResize);
 		window.visualViewport?.addEventListener('scroll', scheduleContainerResize);
-		window.addEventListener('focus', scheduleGeometrySync);
+		window.addEventListener('blur', onWindowBlur);
+		window.addEventListener('focus', onWindowFocus);
 		document.fonts.addEventListener('loadingdone', scheduleGeometrySync);
 		void document.fonts.ready.then(() => {
 			if (terminal && root.value?.isConnected) scheduleGeometrySync();
@@ -1815,7 +1842,8 @@
 		window.removeEventListener('pageshow', restorePresentation);
 		window.visualViewport?.removeEventListener('resize', scheduleContainerResize);
 		window.visualViewport?.removeEventListener('scroll', scheduleContainerResize);
-		window.removeEventListener('focus', scheduleGeometrySync);
+		window.removeEventListener('blur', onWindowBlur);
+		window.removeEventListener('focus', onWindowFocus);
 		document.fonts.removeEventListener('loadingdone', scheduleGeometrySync);
 		if (geometryFrame !== undefined) window.cancelAnimationFrame(geometryFrame);
 		clearTimeout(geometryResizeTimer);

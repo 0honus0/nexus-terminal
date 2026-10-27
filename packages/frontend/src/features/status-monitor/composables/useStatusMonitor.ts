@@ -64,6 +64,7 @@ export function createStatusMonitorSession(channel: StatusChannel, maxSamples = 
 		},
 		(failure) => {
 			if (desiredSampling()) {
+				sequence += 1;
 				error.value = failure.code;
 			}
 		},
@@ -87,6 +88,8 @@ export function createStatusMonitorSession(channel: StatusChannel, maxSamples = 
 					}
 					return;
 				}
+				// A resumed subscription does not provide samples for the stopped interval.
+				if (current.value) sequence += 1;
 				sampling = true;
 				await channel.start();
 			})

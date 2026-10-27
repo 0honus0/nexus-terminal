@@ -5,7 +5,10 @@
 	import { useDraggablePosition, useResizeHandle } from '@/foundation/interaction';
 	import { UiButton, UiEmptyState, UiResizeHandle } from '@/foundation/ui';
 	import type { TransferTask } from '../model/transfer-types';
-	import { transferTaskErrorDescriptor, transferTaskWarningDescriptor } from '../presentation-transfer-message';
+	import {
+		formatTransferBytes as formatBytes,
+		isIndeterminateArchiveProgress as archiveIndeterminate,
+	} from '../model/progress-presentation';
 
 	interface ProgressWindowGeometry {
 		width: number;
@@ -73,27 +76,12 @@
 		return 'mixed';
 	});
 
-	const formatBytes = (bytes: number): string => {
-		const value = Math.max(0, bytes);
-		if (value >= 1024 ** 3) return `${(value / 1024 ** 3).toFixed(1)} GB`;
-		if (value >= 1024 ** 2) return `${(value / 1024 ** 2).toFixed(1)} MB`;
-		if (value >= 1024) return `${(value / 1024).toFixed(1)} KB`;
-		return `${Math.round(value)} B`;
-	};
-
 	const currentFilename = (task: TransferTask): string => {
 		const value = task.currentFile || task.label;
 		return value.split(/[\/]/).filter(Boolean).at(-1) || value;
 	};
 
 	const archiveLabel = (task: TransferTask): string => t(`progressCenter.kind.${task.kind}`);
-
-	const localizedTransferMessage = (descriptor: ReturnType<typeof transferTaskErrorDescriptor>): string =>
-		descriptor ? t(descriptor.key, descriptor.params ?? {}) : '';
-
-	const taskError = (task: TransferTask): string => localizedTransferMessage(transferTaskErrorDescriptor(task));
-
-	const taskWarning = (task: TransferTask): string => localizedTransferMessage(transferTaskWarningDescriptor(task));
 
 	const totalBytesWritten = () => props.tasks.reduce((sum, task) => sum + Math.max(0, task.bytesWritten), 0);
 
@@ -420,14 +408,6 @@
 					>
 						<i class="fas fa-times" aria-hidden="true"></i>
 					</UiButton>
-					<span v-if="task.error || task.errorKind" class="col-span-3 break-words text-xs text-error">{{
-						taskError(task)
-					}}</span>
-					<span
-						v-else-if="task.warning || task.warningKind"
-						class="col-span-3 break-words text-xs text-warning"
-						>{{ taskWarning(task) }}</span
-					>
 				</li>
 			</ul>
 
@@ -451,6 +431,9 @@
 							<span>{{
 								t('fileManager.archiveProgress.filesProcessed', { count: task.completedFiles })
 							}}</span>
+							<span v-if="task.bytesWritten > 0" class="font-mono text-text-secondary">{{
+								formatBytes(task.bytesWritten)
+							}}</span>
 							<span v-if="task.totalFiles !== null" class="font-mono text-text-secondary"
 								>{{ task.completedFiles }}/{{ task.totalFiles }}</span
 							>
@@ -460,11 +443,16 @@
 							role="progressbar"
 							aria-valuemin="0"
 							aria-valuemax="100"
-							:aria-valuenow="Math.round(task.progress)"
+							:aria-valuenow="archiveIndeterminate(task) ? undefined : Math.round(task.progress)"
 						>
 							<div
 								class="archive-progress-value"
-								:style="{ transform: `scaleX(${Math.max(0, Math.min(100, task.progress)) / 100})` }"
+								:class="archiveIndeterminate(task) ? 'animate-pulse' : ''"
+								:style="{
+									transform: archiveIndeterminate(task)
+										? 'scaleX(1)'
+										: `scaleX(${Math.max(0, Math.min(100, task.progress)) / 100})`,
+								}"
 							></div>
 						</div>
 					</div>
@@ -486,10 +474,6 @@
 					<UiButton v-else appearance="ghost" density="compact" @click="emit('remove', task.id)">
 						<i class="fas fa-times" aria-hidden="true"></i>{{ t('common.remove') }}
 					</UiButton>
-					<p v-if="task.error || task.errorKind" class="m-0 text-xs text-error">{{ taskError(task) }}</p>
-					<p v-if="task.warning || task.warningKind" class="m-0 text-xs text-warning">
-						{{ taskWarning(task) }}
-					</p>
 				</li>
 			</ul>
 
@@ -506,6 +490,9 @@
 						<span class="min-w-0 flex-1 truncate" :title="task.currentFile || task.label"
 							>{{ t(`progressCenter.kind.${task.kind}`) }} · {{ currentFilename(task) }}</span
 						>
+						<span v-if="task.transferMethodUsed" class="shrink-0 text-text-secondary" data-transfer-method>
+							{{ task.transferMethodUsed }}
+						</span>
 						<span class="shrink-0 tabular-nums">{{ Math.round(task.progress * 10) / 10 }}%</span>
 					</div>
 					<div
@@ -524,7 +511,7 @@
 					</div>
 					<div class="mt-1 flex items-center justify-between gap-2 text-[11px] text-text-secondary">
 						<span :class="task.status === 'error' ? 'text-error' : ''">{{
-							task.error || task.errorKind ? taskError(task) : t(`progressCenter.status.${task.status}`)
+							t(`progressCenter.status.${task.status}`)
 						}}</span>
 						<span class="shrink-0 tabular-nums">
 							<template v-if="task.totalBytes > 0"

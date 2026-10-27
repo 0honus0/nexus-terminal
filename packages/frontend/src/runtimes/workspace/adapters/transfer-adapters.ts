@@ -169,6 +169,7 @@ export function createWorkspaceTransferAdapter(
 							event.percent ??
 							(event.totalFiles ? Math.round((event.fileCount / event.totalFiles) * 100) : 0),
 						completedFiles: event.fileCount,
+						bytesWritten: event.processedBytes,
 						totalFiles: event.totalFiles ?? null,
 						currentFile: event.currentFile,
 					});
@@ -181,6 +182,7 @@ export function createWorkspaceTransferAdapter(
 						totalBytes: event.totalKnown ? event.totalBytes : 0,
 						completedFiles: event.completedFiles,
 						totalFiles: event.totalKnown ? event.totalFiles : null,
+						transferMethodUsed: event.transferMethodUsed,
 						currentFile: event.currentFile,
 					});
 				}

@@ -29,6 +29,7 @@
 		loadProgressDisplayModal,
 		TransferFailure,
 		transferTaskErrorDescriptor,
+		transferTaskWarningDescriptor,
 		isProgressTaskVisible,
 		useServerTransfers,
 		type FileClipboardOperation,
@@ -96,21 +97,28 @@
 		viewportFrame = undefined;
 	};
 
+	const syncViewport = () => {
+		if (!workspaceActive || document.visibilityState !== 'visible') return;
+		const viewport = window.visualViewport;
+		const element = viewportRoot.value;
+		if (!device.supportsTouchInteraction.value || !viewport || !element?.isConnected) {
+			visibleWorkspaceHeight.value = undefined;
+			return;
+		}
+		// 100dvh need not shrink for the software keyboard. Keep the existing layout
+		// inside the visible viewport so ResizeObserver can fit the terminal correctly.
+		const height = viewport.height + viewport.offsetTop - element.getBoundingClientRect().top;
+		if (Number.isFinite(height) && height > 0) visibleWorkspaceHeight.value = Math.floor(height);
+	};
+
 	const scheduleViewportSync = () => {
+		// Keyboard geometry must not wait for an animation frame left over from
+		// before a browser freeze. The next frame only settles subsequent layout.
+		syncViewport();
 		if (!workspaceActive || document.visibilityState !== 'visible' || viewportFrame !== undefined) return;
 		viewportFrame = window.requestAnimationFrame(() => {
 			viewportFrame = undefined;
-			if (!workspaceActive || document.visibilityState !== 'visible') return;
-			const viewport = window.visualViewport;
-			const element = viewportRoot.value;
-			if (!device.supportsTouchInteraction.value || !viewport || !element?.isConnected) {
-				visibleWorkspaceHeight.value = undefined;
-				return;
-			}
-			// 100dvh need not shrink for the software keyboard. Keep the existing layout
-			// inside the visible viewport so ResizeObserver can fit the terminal correctly.
-			const height = viewport.height + viewport.offsetTop - element.getBoundingClientRect().top;
-			if (Number.isFinite(height) && height > 0) visibleWorkspaceHeight.value = Math.floor(height);
+			syncViewport();
 		});
 	};
 
@@ -530,6 +538,8 @@
 				return;
 			}
 			if (task.status !== 'completed' && task.status !== 'partial') return;
+			const warning = transferTaskWarningDescriptor(task);
+			if (warning) feedback.notifyWarning(t(warning.key, warning.params ?? {}));
 			if (snapshot.operation === 'cut' && task.status === 'completed')
 				registry.fileClipboard.clear(snapshot.generation);
 			// Refresh is a read after the confirmed mutation; its failure must not suggest replaying the move.
@@ -1048,6 +1058,7 @@
 			cancelViewportSync();
 			return;
 		}
+		cancelViewportSync();
 		scheduleViewportSync();
 		void recoverForegroundSessions();
 	};
@@ -1203,6 +1214,7 @@
 		document.addEventListener('visibilitychange', handleDocumentVisibilityChange);
 		window.addEventListener('online', handleBrowserOnline);
 		window.addEventListener('pageshow', handleDocumentVisibilityChange);
+		window.addEventListener('focus', scheduleViewportSync);
 		window.visualViewport?.addEventListener('resize', scheduleViewportSync);
 		window.visualViewport?.addEventListener('scroll', scheduleViewportSync);
 		scheduleViewportSync();
@@ -1273,6 +1285,7 @@
 		window.removeEventListener('keyup', handleGlobalKeyup, true);
 		window.removeEventListener('online', handleBrowserOnline);
 		window.removeEventListener('pageshow', handleDocumentVisibilityChange);
+		window.removeEventListener('focus', scheduleViewportSync);
 		window.visualViewport?.removeEventListener('resize', scheduleViewportSync);
 		window.visualViewport?.removeEventListener('scroll', scheduleViewportSync);
 		document.removeEventListener('visibilitychange', handleDocumentVisibilityChange);
@@ -1332,7 +1345,6 @@
 			:sources="progressDisplaySources"
 			:server-transfers="serverTransfers.items.value"
 			:server-transfers-loading="serverTransfers.loading.value"
-			:server-transfers-error="serverTransfers.error.value"
 			:mobile="device.isMobile.value"
 			@close="progressDisplayVisible = false"
 			@restore="restoreProgressSource"

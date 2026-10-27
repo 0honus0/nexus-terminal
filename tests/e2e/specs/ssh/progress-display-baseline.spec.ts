@@ -580,7 +580,7 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 		);
 
 		await slowStep(
-			'the central display exposes a real partial multi-target task, method/error details and final remove action',
+			'the central display exposes a real partial multi-target task, method details, failure Toast and final remove action',
 			async () => {
 				const display = page.getByRole('dialog', { name: 'Progress Display', exact: true });
 				await expect(display).toBeVisible({ timeout: 10_000 });
@@ -603,7 +603,12 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 				});
 				await expect(subTasks.getByText('Completed', { exact: true })).toBeVisible({ timeout: 20_000 });
 				await expect(subTasks.getByText('Failed', { exact: true })).toBeVisible({ timeout: 20_000 });
-				await expect(subTasks).toContainText('Error:');
+				await expect(subTasks).not.toContainText('Error:');
+				const failureToast = page.getByRole('alert').filter({ hasText: 'seed.txt:' });
+				await expect(failureToast).toBeVisible();
+				await expect(failureToast).toContainText(
+					/seed\.txt: (Could not connect to the source or target\.|The remote transfer failed and may have written partial files\. Check the target\.)/,
+				);
 
 				await taskCard.getByRole('button', { name: 'Remove', exact: true }).click();
 				await expect(taskCard).toHaveCount(0);

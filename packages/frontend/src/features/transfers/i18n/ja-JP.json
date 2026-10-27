@@ -57,6 +57,7 @@
     "title": "ファイル転送進捗",
     "loading": "転送タスクを読み込み中...",
     "errorLoadingTitle": "読み込みエラー",
+    "itemFailure": "{file}: {error}",
     "errorLoading": "転送タスクの読み込みに失敗しました：{error}",
     "error": {
       "unknown": "不明なエラー",

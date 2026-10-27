@@ -159,6 +159,8 @@ for (const scenario of ['direct', 'relay', 'install-rsync', 'skip-rsync', 'skip-
 				await expect
 					.poll(() => card.getByRole('progressbar').getAttribute('aria-valuenow'), { timeout: 30_000 })
 					.toMatch(/^(?:[1-9]|[1-9][0-9])$/);
+				const expectedMethod = blocked ? 'sftp' : scenario === 'skip-rsync' ? 'scp' : 'rsync';
+				await expect(card.locator('[data-transfer-method]')).toHaveText(expectedMethod);
 				const id = await card.getAttribute('data-task-id');
 				expect(id).toBeTruthy();
 				await expect
@@ -195,6 +197,14 @@ for (const scenario of ['direct', 'relay', 'install-rsync', 'skip-rsync', 'skip-
 							event.transferredBytes < bytes.length,
 					),
 				).toBe(true);
+				expect(
+					taskEvents.some(
+						(event) =>
+							event.requestId === id &&
+							event.type === 'progress' &&
+							event.transferMethodUsed === expectedMethod,
+					),
+				).toBe(true);
 				const actual = await readFile(path.join(root, 'folder-seed', filename));
 
 				const digest = (value: Buffer) => createHash('sha256').update(value).digest('hex');
@@ -207,6 +217,65 @@ for (const scenario of ['direct', 'relay', 'install-rsync', 'skip-rsync', 'skip-
 				expect(tools.installs).toBe(scenario === 'install-rsync' ? 1 : 0);
 				expect(peer.nativeTransfersStarted).toBe(blocked ? 0 : 1);
 				expect(reads.sftpReadResponseBytes).toBe(blocked ? bytes.length : 0);
+				if (scenario === 'skip-rsync' || scenario === 'skip-all') {
+					// Reuse the clipboard for a second operation. A declined install must not reappear.
+					const install = page.getByRole('dialog', { name: 'Install required tools', exact: true });
+					let reopened = false;
+					const checkDialog = page.waitForEvent('response', (response) =>
+						response.url().includes('/remote/tools/check'),
+					);
+					await openCurrentDirectoryContextMenu(page);
+					await clickMenuItem(page, 'Paste');
+					await expect(confirmation).toBeVisible();
+					await confirmation.getByRole('button', { name: 'Confirm', exact: true }).click();
+					await checkDialog;
+					await expect
+						.poll(
+							async () => {
+								reopened ||= await install.isVisible();
+								return taskEvents.filter((event) => event.type === 'completed').length;
+							},
+							{ timeout: 45_000 },
+						)
+						.toBe(2);
+					expect(reopened).toBe(false);
+					const second = taskEvents.find((event) => event.type === 'completed' && event.requestId !== id);
+					expect(second).toBeDefined();
+					expect(
+						taskEvents.some(
+							(event) =>
+								event.requestId === second?.requestId &&
+								event.type === 'progress' &&
+								event.transferMethodUsed === expectedMethod,
+						),
+					).toBe(true);
+					expect(digest(await readFile(path.join(root, 'folder-seed', filename)))).toBe(digest(bytes));
+				}
+				if (scenario === 'skip-rsync') {
+					// A manual installation after declining must be discovered automatically.
+					expect((await fetch(`${E2E_SSH.controlUrl}/remote-tools?missing=`, { method: 'POST' })).ok).toBe(
+						true,
+					);
+					await openCurrentDirectoryContextMenu(page);
+					await clickMenuItem(page, 'Paste');
+					await expect(confirmation).toBeVisible();
+					await confirmation.getByRole('button', { name: 'Confirm', exact: true }).click();
+					await expect
+						.poll(() => taskEvents.filter((event) => event.type === 'completed').length, {
+							timeout: 45_000,
+						})
+						.toBe(3);
+					const third = taskEvents.filter((event) => event.type === 'completed').at(-1);
+					expect(
+						taskEvents.some(
+							(event) =>
+								event.requestId === third?.requestId &&
+								event.type === 'progress' &&
+								event.transferMethodUsed === 'rsync',
+						),
+					).toBe(true);
+					expect(digest(await readFile(path.join(root, 'folder-seed', filename)))).toBe(digest(bytes));
+				}
 				await testInfo.attach('clipboard-ui-progress', {
 					body: JSON.stringify({ blocked, samples, taskEvents, peer, reads }),
 					contentType: 'application/json',

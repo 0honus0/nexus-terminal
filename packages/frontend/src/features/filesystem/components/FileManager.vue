@@ -858,10 +858,6 @@
 		void activate(entry);
 	};
 
-	const preserveListFocusOnMouseOpen = (event: MouseEvent): void => {
-		if (document.activeElement === listScroller.value) event.preventDefault();
-	};
-
 	const focusFileListFromPointer = (event: PointerEvent): void => {
 		const target = event.target;
 		if (target instanceof Element && target.closest('button, a, input, textarea, select, [contenteditable="true"]'))
@@ -2114,7 +2110,6 @@
 							@dragleave="clearRemoteDragTarget(entry.path)"
 							@drop="entry.metadata.isDirectory && dropRemote($event, entry.path)"
 							@contextmenu.stop="openContext($event, entry)"
-							@mousedown="preserveListFocusOnMouseOpen"
 							@click="clickEntry($event, entry)"
 							@dblclick="doubleClickEntry($event, entry)"
 							@pointerdown="longPress.start($event, entry)"
@@ -2140,12 +2135,7 @@
 										]"
 										aria-hidden="true"
 									></i>
-									<button
-										type="button"
-										class="file-row-name-button"
-										:data-file-path="entry.path"
-										@mousedown="preserveListFocusOnMouseOpen"
-									>
+									<button type="button" class="file-row-name-button" :data-file-path="entry.path">
 										<span class="file-row-name-label">{{ displayEntryName(entry) }}</span>
 									</button>
 								</div>

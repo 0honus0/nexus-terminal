@@ -21,6 +21,7 @@ export type FileCopyMoveEvent =
 			completedFiles: number;
 			totalFiles: number;
 			totalKnown: boolean;
+			transferMethodUsed?: ServerTransferMethodUsed;
 			currentFile?: string;
 	  }
 	| {
@@ -49,6 +50,7 @@ export type FileArchiveEvent =
 			operation: FileArchiveOperation;
 			requestId: string;
 			fileCount: number;
+			processedBytes?: number;
 			totalFiles?: number;
 			percent?: number;
 			currentFile?: string;
@@ -87,9 +89,11 @@ export type FileDirectCopy = (
 	directory: boolean,
 	onProgress: (bytes: number) => void,
 	onMutation: () => void,
+	onMethod: (method: ServerTransferMethodUsed) => void,
 ) => Promise<boolean>;
 
 export interface CopyProgress {
+	transferMethodUsed?: ServerTransferMethodUsed;
 	totalBytes: number;
 	totalFiles: number;
 	totalKnown: boolean;

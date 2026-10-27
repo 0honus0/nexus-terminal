@@ -50,13 +50,8 @@ export const formatStatusRate = (bytesPerSecond?: number): string => {
 	return `${(value / 1024 ** 3).toFixed(1)} GB/s`;
 };
 
-export const formatStatusRateAxis = (bytesPerSecond: number): string => {
+export const formatStatusRateAxis = (bytesPerSecond: number, unit: number): string => {
 	const value = Math.max(0, Number.isFinite(bytesPerSecond) ? bytesPerSecond : 0);
-	if (value >= 1024 ** 2) {
-		return `${(value / 1024 ** 2).toFixed(value >= 10 * 1024 ** 2 ? 0 : 1)}M`;
-	}
-	if (value >= 1024) {
-		return `${(value / 1024).toFixed(value >= 10 * 1024 ? 0 : 1)}K`;
-	}
-	return `${Math.round(value)}`;
+	const suffix = unit === 1024 ** 3 ? 'G' : unit === 1024 ** 2 ? 'M' : unit === 1024 ? 'K' : '';
+	return `${Number((value / unit).toFixed(2))}${suffix}`;
 };

@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n';
 import { useFeedback } from '@/shared/feedback/public';
 import { useAuthenticatedViewScope } from '@/shared/session/public';
 import { remoteToolApi } from '../api/tool-api';
+import { hasDeclinedTool, rememberDeclinedTools } from '../model/tool-preferences';
 import {
 	ToolInstallFailure,
 	type ToolRequirement,
@@ -32,7 +33,11 @@ export function useRemoteTools() {
 		}
 	}
 
-	async function prepare(input: ToolRequirement, external: AbortSignal): Promise<ToolPreparation> {
+	async function prepare(
+		input: ToolRequirement,
+		external: AbortSignal,
+		rememberFallback = false,
+	): Promise<ToolPreparation> {
 		if (pending) {
 			return 'cancelled';
 		}
@@ -66,6 +71,9 @@ export function useRemoteTools() {
 			if (!checked.missing.length) {
 				return 'ready';
 			}
+			if (rememberFallback && checked.missing.every((tool) => hasDeclinedTool(checked.targetId, tool))) {
+				return 'declined';
+			}
 			if (!checked.planId && input.kind !== 'transfer') {
 				throw new ToolInstallFailure('unsupported');
 			}
@@ -89,6 +97,9 @@ export function useRemoteTools() {
 				return 'cancelled';
 			}
 			if (password === null) {
+				if (rememberFallback) {
+					rememberDeclinedTools(checked.targetId, checked.missing);
+				}
 				return input.kind === 'transfer' ? 'declined' : 'cancelled';
 			}
 			if (!checked.planId) {
@@ -136,6 +147,7 @@ export function useRemoteTools() {
 								method,
 							},
 							signal,
+							true,
 						);
 						if (result === 'cancelled' || signal.aborted) {
 							return false;

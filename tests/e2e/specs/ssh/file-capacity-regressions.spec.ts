@@ -4,7 +4,11 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { readWorkspaceFileListResponse } from '../../../../packages/shared/src/remote/files/workspace-codec';
-import { readWorkspaceCopyMoveEvent } from '../../../../packages/shared/src/remote/transfers/task-codec';
+import {
+	readWorkspaceArchiveEvent,
+	readWorkspaceCopyMoveEvent,
+} from '../../../../packages/shared/src/remote/transfers/task-codec';
+import type { WorkspaceArchiveEvent } from '../../../../packages/shared/src/remote/transfers/workspace';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { E2E_SSH, ensureTestSshConnection } from '../../support/ssh';
 import {
@@ -110,7 +114,17 @@ test('copy, extract, directory download and recursive delete accept a seventy-le
 		for (const source of sources.slice(0, 64))
 			expect(await readFile(path.join(root, 'target', path.posix.basename(source)), 'utf8')).toBe(source);
 		const archiveId = crypto.randomUUID();
-		const archived = transferOutcome(workspace.socket, 'transfer.archive', archiveId);
+		const archiveProgress: Extract<WorkspaceArchiveEvent, { type: 'progress' }>[] = [];
+		const archived = waitForJson(
+			workspace.socket,
+			(message) => {
+				if (message.type !== 'transfer.archive' || message.payload?.requestId !== archiveId) return false;
+				const event = readWorkspaceArchiveEvent(message.payload);
+				if (event.type === 'progress') archiveProgress.push(event);
+				return event.type === 'completed' || event.type === 'failed' || event.type === 'cancelled';
+			},
+			120_000,
+		).then((message) => message.payload);
 		await requestWorkspace(
 			workspace.socket,
 			'transfer.compress',
@@ -118,6 +132,22 @@ test('copy, extract, directory download and recursive delete accept a seventy-le
 			archiveId,
 		);
 		expect(await archived).toMatchObject({ type: 'completed' });
+		const liveProgress = archiveProgress.filter((event) => (event.percent ?? 0) > 0 && (event.percent ?? 0) < 100);
+		expect(new Set(liveProgress.map((event) => event.percent)).size).toBeGreaterThan(1);
+		const finalProgress = archiveProgress.at(-1);
+		const expectedEntries = sources.length + nested.length + 1;
+		expect(finalProgress).toMatchObject({ percent: 100, fileCount: expectedEntries, totalFiles: expectedEntries });
+		let previousPercent = 0;
+		for (const event of archiveProgress) {
+			expect(event.percent).toBeGreaterThanOrEqual(previousPercent);
+			previousPercent = event.percent ?? 0;
+		}
+		for (const event of liveProgress) {
+			expect(event.totalFiles).toBe(expectedEntries);
+			expect(event.fileCount).toBeGreaterThan(0);
+			expect(event.fileCount).toBeLessThanOrEqual(expectedEntries);
+		}
+		expect(archiveProgress.slice(0, -1).some((event) => event.percent === 100)).toBe(false);
 		await requestWorkspace(workspace.socket, 'filesystem.remove', { paths: sources }, undefined, 60_000);
 		const extractId = crypto.randomUUID();
 		const extracted = transferOutcome(workspace.socket, 'transfer.archive', extractId);
@@ -271,3 +301,60 @@ test('sparse TAR larger than sixty-four GiB extracts without an arbitrary expand
 		await closeWebSocket(workspace.socket);
 	}
 });
+
+for (const format of ['tar.gz', 'tar.bz2'] as const) {
+	test(`${format} reports native byte progress for a single large file during compression and extraction`, async ({
+		request,
+	}) => {
+		await loginAsInitialAdmin(request);
+		const workspace = await openWorkspaceSession(request, await ensureTestSshConnection(request));
+		const name = 'tar-progress-' + crypto.randomUUID().slice(0, 8);
+		const root = path.resolve('.tmp/ssh-root', name);
+		const bytes = Buffer.alloc(4 * 1024 * 1024, 0x7b);
+		await mkdir(root);
+		await writeFile(path.join(root, 'large.bin'), bytes);
+		try {
+			await waitForFilesystemReady(workspace.socket);
+			for (const operation of ['compress', 'decompress'] as const) {
+				const requestId = crypto.randomUUID();
+				const events: Extract<WorkspaceArchiveEvent, { type: 'progress' }>[] = [];
+				const done = waitForJson(
+					workspace.socket,
+					(message) => {
+						if (message.type !== 'transfer.archive' || message.payload?.requestId !== requestId)
+							return false;
+						const event = readWorkspaceArchiveEvent(message.payload);
+						if (event.type === 'progress') events.push(event);
+						return event.type === 'completed' || event.type === 'failed' || event.type === 'cancelled';
+					},
+					60_000,
+				);
+				await requestWorkspace(
+					workspace.socket,
+					'transfer.' + operation,
+					operation === 'compress'
+						? { sources: [`/${name}/large.bin`], destination: `/${name}/large.${format}`, format }
+						: { source: `/${name}/large.${format}` },
+					requestId,
+				);
+				expect((await done).payload).toMatchObject({ type: 'completed' });
+				const native = events.filter((event) => event.processedBytes !== undefined);
+				expect(native.length).toBeGreaterThan(1);
+				let previous = 0;
+				for (const event of native) {
+					expect(event.processedBytes).toBeGreaterThan(previous);
+					previous = event.processedBytes ?? 0;
+					expect(event.percent).not.toBe(100);
+				}
+				expect(events.at(-1)).toMatchObject({ percent: 100, fileCount: 1, totalFiles: 1 });
+				expect(events.slice(0, -1).some((event) => event.percent === 100)).toBe(false);
+				expect(await readFile(path.join(root, 'large.bin'))).toEqual(bytes);
+				if (operation === 'compress') {
+					await requestWorkspace(workspace.socket, 'filesystem.remove', { paths: [`/${name}/large.bin`] });
+				}
+			}
+		} finally {
+			await closeWebSocket(workspace.socket);
+		}
+	});
+}

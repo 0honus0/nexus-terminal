@@ -141,7 +141,7 @@ export class FileArchiveModel {
 		format: ArchiveFormat,
 		remaining: () => number,
 		signal: AbortSignal,
-		onProgress: (count: number) => void,
+		onProgress: (count: number, totalFiles?: number, processedBytes?: number) => void,
 		password?: string,
 	): Promise<FileArchiveCompression> {
 		return this.perform(async () => {
@@ -153,7 +153,7 @@ export class FileArchiveModel {
 				format,
 				remaining,
 				signal,
-				onProgress,
+				(count, totalFiles, processedBytes) => onProgress(count, totalFiles, processedBytes),
 				password,
 			);
 			return {
@@ -169,6 +169,7 @@ export class FileArchiveModel {
 		plan: FileArchiveExtractionPlan,
 		remaining: () => number,
 		signal: AbortSignal,
+		onProgress: (processedBytes: number) => void,
 		password?: string,
 	): Promise<FileArchiveExtraction> {
 		return this.perform(async () => {
@@ -182,6 +183,7 @@ export class FileArchiveModel {
 				},
 				remaining,
 				signal,
+				(processedBytes) => onProgress(processedBytes),
 				password,
 			);
 			return {

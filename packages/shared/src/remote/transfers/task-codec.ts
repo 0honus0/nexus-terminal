@@ -1,3 +1,4 @@
+import { SERVER_TRANSFER_METHODS_USED } from './server-values.js';
 import { readWorkspaceFileEntry } from '../files/workspace-codec.js';
 import { REMOTE_FILE_ERROR_CODES } from '../files/values.js';
 import { isWellFormedFileText } from '../files/text-codec.js';
@@ -83,6 +84,13 @@ export function readWorkspaceCopyMoveEvent(input: unknown): WorkspaceCopyMoveEve
 				totalFiles,
 				totalKnown: value.totalKnown,
 			};
+			if (value.transferMethodUsed !== undefined) {
+				const method = SERVER_TRANSFER_METHODS_USED.find((item) => item === value.transferMethodUsed);
+				if (!method) {
+					throw new InvalidWorkspaceTransferPayload();
+				}
+				result.transferMethodUsed = method;
+			}
 			if (value.currentFile !== undefined) {
 				result.currentFile = path(value.currentFile);
 			}
@@ -152,6 +160,9 @@ export function readWorkspaceArchiveEvent(input: unknown): WorkspaceArchiveEvent
 		case 'progress': {
 			const fileCount = count(value.fileCount);
 			const result: WorkspaceArchiveEvent = { type: 'progress', operation, requestId, fileCount };
+			if (value.processedBytes !== undefined) {
+				result.processedBytes = count(value.processedBytes);
+			}
 			if (value.totalFiles !== undefined) {
 				result.totalFiles = count(value.totalFiles);
 				if (fileCount > result.totalFiles) {

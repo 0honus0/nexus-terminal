@@ -2155,3 +2155,55 @@ CI 机器人 `440cb9e9271f16ac7c3eccb20437a25cf1e679be` 仅更新测试耗时估
 首轮main正式40498800461仅新增两例失败，原526项通过，质量/Docker通过；已按日志和trace区分：快照包含合法SGR，不能对原始ANSI做连续纯文本匹配，改为真实重挂载验证文字；右边界场景大批输入仅约14ms回显，24样本窗口被真实低延迟覆盖，按既有策略正常停用预测，测试改为沿训练同样延迟70ms交付批量回显。不改产品、不削减文字/输入唯一/ACK/边界断言、不扩大期限；全量528项重新验收后再发布。
 
 正式收口：[40499973200](https://github.com/0honus0/nexus-terminal/actions/runs/40499973200) 验证main/89772b6484bf6090100db2b80784c23641bf9934，528项全部首次通过、无failed/retry/skipped/flaky，质量/格式、Docker smoke及8分片成功。新增分包控制/连续退格与右边界回归分别2.7/2.8秒，完整日志 `/tmp/nexus-terminal-echo-main-pass.log`；首轮失败日志 `/tmp/nexus-terminal-echo-main-failed.log` 与trace `/tmp/nexus-terminal-echo-traces` 保留原失败证据。机器人7d5ddbae只更新耗时，随后正式发布 [40500930565](https://github.com/0honus0/nexus-terminal/actions/runs/40500930565) 成功。只读GHCR核对dev及sha-7d5ddbaebf50同摘要sha256:16b65d1534c4ac2006c2b78df69f1edbad59f02cc999783ebaa96d026874b8b6，应用manifest为linux/amd64（另含unknown/unknown证明manifest），config revision=7d5ddbaebf50f696a54f48fe8579a0719bd2b274，无arm64应用manifest。日志 `/tmp/nexus-terminal-echo-publish.log`，核对结果 `/tmp/nexus-terminal-echo-published-image.json`。按用户授权推送main并发布amd dev完成，未部署服务器或修改个人截图，不把浏览器回归扩展为全部真实网络/Android环境验收。
+
+## ZIP 压缩中间进度（2026-10-27，静态完成、行为待验）
+
+根因：取消源目录预扫描后，压缩期间只有 fileCount，没有总数或 percent，原前端按 0% 展示。Native zip 改为 -dc，采集它已有扫描的已处理/剩余条目，Model 逐参数转交，FileService 沿原 transfer.archive 发出 totalFiles/percent；发布验证前不足 100%，成功后才 100%。前端布局/CSS/协议未改，无新工具或二次目录扫描。进度按条目，单大文件内部无连续字节百分比，tar 仍只报告计数，不伪造时间进度。
+
+既有 file-capacity-regressions 的 65 来源/70 层目录往返场景增加对真实 WS 进度的严格 Shared 解码、多个中间百分比、原生总条目数、单调增长和终态前不足 100% 断言，原完整内容/删除/下载/解压断言保留；目标仍 5 项，没有新增固定等待。按 PLAN D17 未运行行为测试，不能据此称远程进度已实测。
+
+根 check、Backend 生产 build、全量格式、目标 E2E 严格类型和 --list 通过，日志 `/tmp/nexus-zip-progress-{check,build,format,types,list}.log`；两轮源码核对包含 Info-ZIP DisplayRunningStats 在添加条目前打印 completed/remaining 的顺序、Shell 仅拆数值而不计算不可信字段、JS 安全整数降级、回执前缓存和失败/取消原出口。最后源码微调后再次目标类型/lint/格式，日志 `/tmp/nexus-zip-progress-final-{types,lint,format}.log`。尚未提交/推送/发布。
+
+### 传输进度提示统一 Toast（2026-10-27）
+
+浮动进度、隐藏任务及服务器传输详情移除行内警告/错误说明；本地原任务回执补完成警告通知，后台 store 按快照状态/错误变化通知，列表加载和取消/移除失败使用 Toast。两轮源码复核覆盖上传、移动、剪贴板、归档密码重输、后台读取/写入、身份代次及网络错误去重，保留原进度、状态、操作和 CSS。既有 progress-display-baseline 真实多目标场景继续验证成功目标内容、失败目标状态及 rsync 方法，改为检查文件名和具体失败原因的全局 Toast，且任务详情没有 Error 行内说明。
+
+根 `pnpm run check`、Frontend build、目标严格 E2E tsc 与 Playwright `--list`（原 5 项）通过；日志 `/tmp/nexus-progress-toast-{check,build,types,list}.log`。全量格式结果记录于 `/tmp/nexus-progress-toast-format.log`。遵循 D17，未执行本地行为或远程 Actions，不宣称真实浏览器验收通过；本轮未提交/发布。
+
+### 状态趋势真实采样与紧凑刻度（2026-10-27）
+
+用户明确授权启动测试环境并通过 CDP 专项验收，本轮复用已在运行的 3001/9998 环境和 172.30.30.11:9223 中登录 api.honus.top 的浏览器。真实 amd SSH 五类指标 × 1/5/10/30 分钟共 20 组验证窗口跨度、样本在窗内及网络整档刻度；短历史不被压成不可见单点，时间左侧不足部分仍为空。截图 `/tmp/nexus-network-30-final.png`，日志 `/tmp/nexus-trend-real-cdp.log`。前端热更新期间会重挂组件，测试最终版本重新连接后完成，不将中断轮次计为通过。
+
+在同一浏览器隔离挂载实际 StatusCharts 组件，使用可区分的真实时间坐标和合成数值，验证短历史、单点、空历史、仅 Tx、间断/缺测及 1800 条完整历史，共 60 组范围/指标组合；校验首尾、单点/孤立点、绘制断点、空指标仍按最新监控时间推进、刻度无重复、等距命中或上下行样本不齐时 Tooltip 仅显示同一时间数据，退出销毁隔离实例。该部分为合成数据专项，不冒充 30 分钟真实采样验收。日志 `/tmp/nexus-trend-cdp-check.log`。原会话 controller 隔离通道核对失败及停止后恢复连续性序号间隔为 2、start=2/stop=1，保留历史 3 条；定时回调由测试显式调用，不等待真实 30 秒。
+
+源码两轮复核覆盖有界历史/首尾与缺测、原采样 owner/30 秒订阅宽限、当前样本时间权威、最近时间交互/等距点、自动纵轴与低流量、主题及卸载；标题行缩至 16px、标题 10px、时间选项 9px/20px、网络纵轴 8px，缩放继续使用既有 inverse scale。根 check、Frontend build、全量格式通过，日志 `/tmp/nexus-trend-final-{check,build,format}.log`；既有两例 E2E `--list` 与严格类型通过，日志 `/tmp/nexus-trend-final-list.log`、`/tmp/nexus-trend-types.log`。既有时间轴场景加强短历史第一条真实采样保留，并同步已授权时间控件字号断言；响应式场景增加趋势标题行高度断言，防止关闭按钮受全局 min-height 再次撑大。CDP 发现最初仅改 height 时仍为 38.4px，补局部 min-width/min-height 后实测标题行和关闭按钮均为 16px。未运行全量本地或远程 E2E，本轮未提交、推送、发布或部署。
+
+### 2026-10-27：传输安装偏好、实际工具、TAR 进度与原生文件拖动
+
+新增/扩展远程用例：cross-server-transfer/clipboard-ui 的 SCP/SFTP 跳过安装分支，再次复制不重复弹窗，仍验证协议实际方法、内容摘要；SCP 分支继续模拟后来手动安装，第三次自动重新识别 rsync。保留原字节进度、单调性、直传/中转计数及内容断言。file-capacity-regressions 新增 tar.gz/tar.bz2 单个 4 MiB 文件压缩/解压原生中间字节及发布后 100%；file-manager-navigation 新增精确 VMA.ZST 文件名的真实鼠标起拖，不用合成 dragstart 代替，核对 payload、点击焦点与方向键。
+
+CDP 专项复用 `172.30.30.11:9223`，api.honus.top 新建隔离页挂载正式 composable/组件，工具检查响应受控且不执行安装或实际远端写入。确认第一次跳过→SCP、再次/刷新不询问、显式传输共享偏好、其它服务器独立、失活取消不记忆、后来安装重新探测到 rsync；进度显示 rsync/scp/sftp，归档未知总量显示真实字节与不定进度，已知总量恢复百分比。脚本及结果 `/tmp/nexus-tool-choice-cdp.{cjs,log}`。
+
+正式 FileManager 配合真实鼠标修前复现：先选中文件，第二次 mousedown 被 preventDefault，未产生 dragstart；修后产生精确远端路径 payload，文件元数据使用大文件大小但不实际创建大文件。扩展核对选中/未选中起拖、列表焦点、Ctrl/Shift 多选、方向键/Enter、双击和右键菜单均通过，未改 CSS、触摸分支或业务权限。记录 `/tmp/nexus-file-drag-{before,after,review}.log`、脚本 `/tmp/nexus-file-drag-cdp.cjs`。初次扩展隔离页未加载全局 CSS，菜单后的滚动等待超时；按正式入口加载原全局 CSS 后通过，没有据此修改菜单实现。
+
+两轮源码复核覆盖偏好取消/身份围栏、自动探测不锁工具、全部 WS/Shared decoder/adapter/controller/后台方法消费者、TAR 字节单位/数字解码、未知总量、退出哨兵缺失不能报完成及原取消/清理 owner。根 check、完整双端 build、目标严格 tsc、测试 ESLint 及 --list（19 项）通过，日志 `/tmp/nexus-{tool-choice,tar-drag}-*.log`；最终前端构建、全量格式与 diff 结果记录于 `/tmp/nexus-transfer-final-*.log`。未执行本地或远程完整 E2E，也未执行真实原生 TAR 归档验收；浏览器隔离验证不等同于真实服务器整链通过。本轮不提交、推送或发布。
+
+### 2026-10-27：趋势静默断采样与安卓前台恢复
+
+前轮趋势修复只处理序号不连续，漏掉“序号连续但时间相隔约 22 分钟”的情况。现在按完整保留历史的实际正向连续间隔下中位数识别明显时间断点（大于两倍），再按所选窗口过滤；不删除旧点、不补造历史、不改变采样频率。既有时间轴 spec 增加真实 SSH/WS 入口注入五个受控采样时间的场景：各范围首个真实时间正确，30 分钟画布保留上下行颜色，但中间无采样区没有两种颜色的连线。此为时序故障注入，不冒充真实等待 22 分钟。
+
+手机恢复补齐 pageshow/visibility 及失焦后的聚焦清理，恢复输入资格和 inputmode，取消旧布局帧并立即拟合；工作区 visualViewport 立即测量，保留下一帧收敛。普通聚焦不清理活动触摸/IME，不主动弹键盘、不合成 composition 事件、不重发输入；当前未就绪仍只读。keyboard-geometry 新增真实 SSH 场景，模拟 touchstart 后漏发结束事件、旧 rAF 阻塞和仅可视视口缩小，保留真实 transport/timer，断言恢复 textarea、缩小/恢复行数、真实 terminal.input 与命令输出。
+
+CDP 复用 172.30.30.11:9223，在 api.honus.top 自建隔离页挂载正式 StatusCharts/TerminalView，不改用户页，不访问实际 SSH 或安装工具。20 组范围/指标验证真实 Chart.js 分段：30 分钟两段，其余范围一段；画布读回 Rx 168/Tx 68 个匹配色像素，中段 0 个；中断触摸留下 readOnly/inputmode=none 后，动画帧保持延迟时 pageshow 恢复实际 xterm 输入并发送缩小行数；未就绪恢复仍只读且不派发输入。脚本/日志 `/tmp/nexus-resume-trend-cdp.{cjs,log}`。初始测试错误地等待 xterm 隐藏 textarea 可见，以及让上下行相同数值完全重叠而要求两种颜色，已修正测试入口/数据，没有因此修改产品。工作区整合用例及真实安卓系统键盘仍待远程/实机验收，组件专项不扩大为其通过。
+
+两轮源码复核完成。根 check、前端生产 build、全量 format:all:check、目标严格 tsc（含 noUnusedLocals）、目标 ESLint、Playwright --list（四项）及 diff 通过，日志 `/tmp/nexus-resume-trend-{check,build,format,types,lint,list}.log`。首次静态发现两处新函数缺少间隔，已修正后重跑通过。未运行本地或远程完整 E2E，后端未重启，未提交、推送或发布；用户截图增删保持。
+
+### 2026-10-27：发布前本地正式入口整链专项
+
+用户本轮授权启动测试环境并验证本批修改，随后提交 main、完整远程 E2E 通过后发布 amd64 dev，最后停测试环境。本地使用独立 `/tmp/nexus-release-data-*` 数据目录、3001 正式后端、原9998 Vite 和专用22222 SSH夹具，不覆盖旧实例/生产数据。CDP 使用用户指定9223 Chrome的新隔离Context访问 api.honus.top，创建临时测试账户/目标与夹具文件。
+
+正式页面完成 SSH 连接、输入输出、文件管理器路径切换及精确 VMA.ZST 文件名原生拖动；正式 Workspace WS 执行 tar.gz/tar.bz2 压缩和解压，每步4条递增原生字节事件，4 MiB随机内容完整一致，终态前无100%；ZIP保留多个中间百分比。脚本最后经正式关闭标签入口确认会话关闭，临时文件清理；早轮仅测试清理误传空 workspace.close 与关闭按钮大小写错误，修正测试后完整通过，未因此修改产品。日志 `/tmp/nexus-release-live-cdp-final.log`。
+
+完整桌面 Workspace 经真实 WS/SSH 注入五条受控时间样本，1/5/10/30的窗口及真实首点正确；30分钟画布实际 Rx91/Tx44 个匹配色像素，中段0，无跨22分钟空白斜线。完整手机 Workspace 模拟中断touch、旧rAF延期及仅visualViewport变化，实际PTY行数42→25→42，帧未恢复时真实输入已派发，恢复后真实SSH命令输出正确；正式关闭测试标签。日志 `/tmp/nexus-release-{trend-live,mobile}-cdp.log`，截图 `/tmp/nexus-release-live-{desktop,trend,mobile}.png`。此为受控故障时序，不视作真实安卓系统IME或等待22分钟采样验收。
+
+安装偏好与三种工具显示再次通过正式 composable/组件隔离专项，日志 `/tmp/nexus-release-tool-choice-cdp.log`；工具缺失/后来安装为测试页受控HTTP，不冒充真实远端包安装。源码两轮审核沿全部 Shared decoder/mapper、原生退出/清理、偏好取消/身份围栏、历史/输入就绪/几何屏障，未发现新增功能缺口。正式完整远程 E2E 与发布仍待本次 main SHA，不用本地专项代替全绿门禁。

@@ -15,6 +15,10 @@ import type {
 	NativeArchiveMembers,
 } from '../../archive-port.js';
 
+// GNU tar checkpoints count records before I/O. One record is the native default 20 × 512 bytes.
+const TAR_RECORD_BYTES = 20 * 512;
+const TAR_CHECKPOINT_RECORDS = 100;
+
 const MAX_LISTING_BYTES = 8 * 1024 * 1024;
 // POSIX sh uses 512-byte units; some shells use 1024. Both must accommodate
 // the decoded budget while bounding each remote metadata file before reading it.
@@ -234,21 +238,29 @@ export class NativeArchiveCommands {
 		format: NativeArchiveFormat,
 		remaining: () => number,
 		signal: AbortSignal,
-		onProgress: (count: number) => void,
+		onProgress: (count: number, totalFiles?: number, processedBytes?: number) => void,
 		password?: string,
 	): Promise<NativeArchiveCompression> {
 		const tool = format === 'zip' ? 'zip' : 'tar';
+		const checkpointMarker = 'NEXUS_TAR_RECORD_' + randomUUID().replaceAll('-', '') + ':';
+		const checkpoints =
+			' --blocking-factor=20 --checkpoint=' +
+			TAR_CHECKPOINT_RECORDS +
+			' --checkpoint-action=' +
+			quote('echo=' + checkpointMarker + '%u') +
+			' ';
 		const args = paths.map((source) => quote('./' + path.posix.relative(workingDirectory, source)));
 		const native =
 			format === 'zip'
-				? 'zip -yr ' +
+				? 'zip -yr -dc ' +
 					(password === undefined ? '' : '-P ' + quote(password) + ' ') +
 					quote(temporary) +
 					' ' +
 					args.join(' ') +
 					' -x ' +
 					excluded.flatMap((name) => [quote(zipLiteral(name)), quote(zipLiteral('./' + name))]).join(' ')
-				: 'tar --no-wildcards --anchored ' +
+				: 'tar --no-wildcards --anchored' +
+					checkpoints +
 					excluded.map((name) => '--exclude=' + quote('./' + name)).join(' ') +
 					' -c' +
 					(format === 'tar.gz' ? 'z' : 'j') +
@@ -275,9 +287,32 @@ export class NativeArchiveCommands {
 				quote('NEXUS_ARCHIVE_COUNT:%s\n') +
 				' "$count"; else exit "$status"; fi',
 			'      ;;',
-			format === 'zip' ? "    '  adding: '*)" : "    './'*)",
+			...(format === 'zip'
+				? []
+				: [
+						'    *' + quote(checkpointMarker) + '*)',
+						'      records=${line##*' + checkpointMarker + '}',
+						'      case "$records" in \'\'|*[!0-9]*) ;; *) printf \'NEXUS_ARCHIVE_RECORDS:%s\\n\' "$records" ;; esac',
+						'      ;;',
+					]),
+			format === 'zip' ? "    *'  adding: '*)" : "    './'*)",
 			'      count=$((count + 1))',
-			'      printf ' + quote('NEXUS_ARCHIVE_PROGRESS:%s\n') + ' "$count"',
+			...(format === 'zip'
+				? [
+						// -dc reports completed/remaining entries from zip's existing scan.
+						// Split only the numeric prefix; never execute or expand a filename.
+						'      stats=${line%%"  adding: "*}',
+						'      done=${stats%%/*}; left=${stats#*/}; totals=',
+						'      set -f; set -- $done $left',
+						'      if [ "$#" = 2 ]; then',
+						'        case "$1$2" in',
+						'          *[!0-9]*) ;;',
+						'          *) totals=:$1:$2 ;;',
+						'        esac',
+						'      fi',
+						'      printf ' + quote('NEXUS_ARCHIVE_PROGRESS:%s%s\n') + ' "$count" "$totals"',
+					]
+				: ['      printf ' + quote('NEXUS_ARCHIVE_PROGRESS:%s\n') + ' "$count"']),
 			'      ;;',
 			'  esac',
 			'done; }',
@@ -285,18 +320,34 @@ export class NativeArchiveCommands {
 		let count = 0;
 		let finished = false;
 		let writerExited = false;
+		let processedBytes = 0;
 		const outcome = await this.runner.executeLines(
 			shell(script),
 			signal,
 			remaining(),
 			(line) => {
-				const progress = /^NEXUS_ARCHIVE_PROGRESS:(\d+)$/u.exec(line);
+				const progress = /^NEXUS_ARCHIVE_PROGRESS:(\d+)(?::(\d+):(\d+))?$/u.exec(line);
+				const records = /^NEXUS_ARCHIVE_RECORDS:(\d+)$/u.exec(line);
 				const end = /^NEXUS_ARCHIVE_COUNT:(\d+)$/u.exec(line);
 				if (line === 'NEXUS_ARCHIVE_EXIT' && !writerExited && !finished) {
 					writerExited = true;
+				} else if (records && format !== 'zip' && !writerExited && !finished) {
+					const bytes = (Number(records[1]) - 1) * TAR_RECORD_BYTES;
+					if (Number.isSafeInteger(bytes) && bytes > processedBytes) {
+						processedBytes = bytes;
+						onProgress(count, undefined, bytes);
+					}
 				} else if (progress && !writerExited && !finished && Number(progress[1]) === count + 1) {
 					count++;
-					onProgress(count);
+					const totalFiles =
+						progress[2] === undefined ? undefined : Number(progress[2]) + Number(progress[3]);
+					// Progress is advisory: malformed native totals must not fail a real archive.
+					onProgress(
+						count,
+						Number.isSafeInteger(totalFiles) && totalFiles !== undefined && totalFiles >= count
+							? totalFiles
+							: undefined,
+					);
 				} else if (end && writerExited && !finished && Number(end[1]) === count) {
 					finished = true;
 				} else {
@@ -313,9 +364,18 @@ export class NativeArchiveCommands {
 		plan: NativeArchiveExtractionPlan,
 		remaining: () => number,
 		signal: AbortSignal,
+		onProgress: (processedBytes: number) => void,
 		password?: string,
 	): Promise<NativeArchiveExtraction> {
 		const { snapshot, stage, format, excludedMembers } = plan;
+		const checkpointMarker = 'NEXUS_TAR_RECORD_' + randomUUID().replaceAll('-', '') + ':';
+		const sentinel = 'NEXUS_TAR_EXIT_' + randomUUID().replaceAll('-', '') + ':';
+		const checkpoints =
+			' --blocking-factor=20 --checkpoint=' +
+			TAR_CHECKPOINT_RECORDS +
+			' --checkpoint-action=' +
+			quote('echo=' + checkpointMarker + '%u') +
+			' ';
 		const tool = format === 'zip' ? 'unzip' : 'tar';
 		const native =
 			format === 'zip'
@@ -328,7 +388,8 @@ export class NativeArchiveCommands {
 					(excludedMembers.length
 						? ' -x ' + excludedMembers.map((name) => quote(zipLiteral(name))).join(' ')
 						: '')
-				: 'tar --no-same-owner --same-permissions --no-overwrite-dir --no-wildcards --anchored ' +
+				: 'tar --no-same-owner --same-permissions --no-overwrite-dir --no-wildcards --anchored' +
+					checkpoints +
 					[...new Set(excludedMembers.flatMap((name) => [name, path.posix.normalize(name)]))]
 						.map((name) => '--exclude=' + quote(name))
 						.join(' ') +
@@ -368,15 +429,35 @@ export class NativeArchiveCommands {
 					]
 				: []),
 			'mkdir -m 700 -- ' + quote(stage) + ' || exit 78',
-			...(plan.hasContent ? [native + ' >/dev/null 2>&1 || exit 78'] : []),
+			...(plan.hasContent
+				? format === 'zip'
+					? [native + ' >/dev/null 2>&1 || exit 78']
+					: [
+							'(' + native + ' 2>&1; printf ' + quote(sentinel + '%s\n') + ' "$?") |',
+							'{ exited=0; while IFS= read -r line; do case "$line" in',
+							'  *' + quote(checkpointMarker) + '*)',
+							'    records=${line##*' + checkpointMarker + '}',
+							'    case "$records" in \'\'|*[!0-9]*) ;; *) printf \'NEXUS_ARCHIVE_RECORDS:%s\\n\' "$records" ;; esac ;;',
+							'  ' + quote(sentinel) + '*) [ "${line#*:}" = 0 ] || exit 78; exited=1 ;;',
+							'esac; done; [ "$exited" = 1 ]; } || exit 78',
+						]
+				: []),
 			"printf 'NEXUS_ARCHIVE_COUNT:0\\n'",
 		].join('\n');
 		let done = false;
+		let processedBytes = 0;
 		let passwordError: 'password_required' | 'invalid_password' | null = null;
 		let missingTool: string | null = null;
 		const outcome = await this.runner.executeLines(shell(script), signal, remaining(), (line) => {
 			const missing = /^NEXUS_ARCHIVE_MISSING:([a-z]+)$/u.exec(line);
-			if (missing && !done && !passwordError && !missingTool && requiredTools.includes(missing[1] ?? '')) {
+			const records = /^NEXUS_ARCHIVE_RECORDS:(\d+)$/u.exec(line);
+			if (records && format !== 'zip' && !done && !passwordError && !missingTool) {
+				const bytes = (Number(records[1]) - 1) * TAR_RECORD_BYTES;
+				if (Number.isSafeInteger(bytes) && bytes > processedBytes) {
+					processedBytes = bytes;
+					onProgress(bytes);
+				}
+			} else if (missing && !done && !passwordError && !missingTool && requiredTools.includes(missing[1] ?? '')) {
 				missingTool = missing[1] ?? null;
 			} else if (line === 'NEXUS_ARCHIVE_COUNT:0' && !done && !passwordError && !missingTool) {
 				done = true;

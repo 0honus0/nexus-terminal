@@ -213,6 +213,7 @@ export function createTransferController(channel: TransferChannel): TransferCont
 				completedFiles: event.completedFiles ?? task.completedFiles,
 				totalFiles: event.totalFiles ?? task.totalFiles,
 				currentFile: event.currentFile ?? task.currentFile,
+				transferMethodUsed: event.transferMethodUsed ?? task.transferMethodUsed,
 			});
 			return;
 		}

@@ -2022,12 +2022,13 @@ export class RemoteFileService {
 													completedFiles: progress.completedFiles,
 													totalFiles: progress.totalFiles,
 													totalKnown: progress.totalKnown,
+													transferMethodUsed: progress.transferMethodUsed,
 													currentFile: progress.currentFile,
 												}),
 											() => {
 												dispatchedMutation = true;
 											},
-											(from, directory, onProgress, onMutation) =>
+											(from, directory, onProgress, onMutation, onMethod) =>
 												this.model.copyDirect({
 													sourceTargetId: source.targetId,
 													sourceFingerprint: source.fingerprint,
@@ -2047,7 +2048,7 @@ export class RemoteFileService {
 
 													onProgress,
 
-													onMethod: () => undefined,
+													onMethod,
 
 													onMutation,
 												}),
@@ -2219,8 +2220,17 @@ export class RemoteFileService {
 						task.mutationStarted = true;
 					};
 
-					const onProgress = (fileCount: number) => {
-						emit({ type: 'progress', operation, requestId, fileCount });
+					const onProgress = (fileCount: number, totalFiles?: number, processedBytes?: number) => {
+						const progress: FileArchiveEvent = { type: 'progress', operation, requestId, fileCount };
+						if (processedBytes !== undefined) {
+							progress.processedBytes = processedBytes;
+						}
+						if (totalFiles !== undefined) {
+							progress.totalFiles = totalFiles;
+							// Only verified publication may report 100%; native output counts entries.
+							progress.percent = totalFiles > 0 ? Math.min(99, (fileCount / totalFiles) * 100) : 0;
+						}
+						emit(progress);
 					};
 
 					return input.kind === 'compress'

@@ -1,3 +1,4 @@
+import type { ServerTransferMethodUsed } from '@nexus-terminal/shared/remote/transfers/server-values';
 import type { ComputedRef, Ref } from 'vue';
 import type {
 	WorkspaceUploadConflictPolicy,
@@ -75,6 +76,7 @@ export interface TransferTask {
 	completedFiles: number;
 	totalFiles: number | null;
 	currentFile?: string;
+	transferMethodUsed?: ServerTransferMethodUsed;
 	error?: string;
 	errorKind?: TransferErrorKind;
 	errorCode?: WorkspaceArchiveErrorCode;
@@ -130,6 +132,7 @@ export type TransferEvent =
 			completedFiles?: number;
 			totalFiles?: number | null;
 			currentFile?: string;
+			transferMethodUsed?: ServerTransferMethodUsed;
 	  }
 	| { type: 'completed'; id: string; warning?: string; warningKind?: TransferWarningKind }
 	| { type: 'paused'; id: string }

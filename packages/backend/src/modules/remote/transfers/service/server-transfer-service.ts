@@ -534,7 +534,7 @@ export class ServerTransferService {
 					input.onProgress(progress.transferredBytes, percent);
 				},
 				onMutation,
-				async (from, directory, onProgress, dispatched) => {
+				async (from, directory, onProgress, dispatched, onMethod) => {
 					if (relayOnly) {
 						input.onMethod('sftp');
 						return false;
@@ -560,6 +560,7 @@ export class ServerTransferService {
 
 						onMethod: (selected) => {
 							method = selected;
+							onMethod(selected);
 							input.onMethod(selected);
 						},
 

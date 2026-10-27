@@ -57,6 +57,7 @@
     "title": "文件传输进度",
     "loading": "正在加载传输任务...",
     "errorLoadingTitle": "加载错误",
+    "itemFailure": "{file}：{error}",
     "errorLoading": "加载传输任务失败：{error}",
     "error": {
       "unknown": "未知错误",

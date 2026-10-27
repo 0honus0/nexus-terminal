@@ -72,9 +72,10 @@ test('status history preserves the full selected time range with fresh samples a
 		expect(sampleWindow.first).toBeGreaterThanOrEqual(sampleWindow.start);
 		expect(sampleWindow.first).toBeLessThanOrEqual(sampleWindow.end);
 		expect(sampleWindow.end).toBeLessThanOrEqual(Date.now() + 1_000);
-		// Downsampling may retain a later sample in the first bucket. Measure
-		// leading empty time against the original CPU samples from the wire.
+		// Keep the first real sample even when a 30-minute window contains
+		// only a few seconds of data; never fold those samples into one bucket.
 		const earliestSample = Math.min(...sampleTimestamps);
+		expect(sampleWindow.first).toBe(earliestSample);
 		expect(earliestSample).toBeGreaterThanOrEqual(sampleWindow.start);
 		expect(earliestSample).toBeGreaterThan(sampleWindow.start);
 	}
@@ -116,7 +117,7 @@ test('status history preserves the full selected time range with fresh samples a
 			await button.click();
 			await expect(chart).toHaveAttribute('data-range-minutes', String(range));
 			const fontSize = await button.evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
-			expect(fontSize * scale).toBeCloseTo(10, 1);
+			expect(fontSize * scale).toBeCloseTo(9, 1);
 		}
 		await canvas.hover({ position: { x: 200, y: 30 } });
 		await expect(tooltip).toBeVisible();
@@ -149,4 +150,88 @@ test('status history preserves the full selected time range with fresh samples a
 	}
 	await history.locator('.history-close').click();
 	await expect(tooltip).toHaveCount(0);
+});
+
+test('status history never connects a silent timestamp gap with consecutive sample sequences', async ({
+	page,
+	context,
+}) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	await loginAsInitialAdmin(context.request);
+	await configureSshE2eSettings(context.request);
+	await resetTestSshFilesystem();
+	const connectionId = await ensureTestSshConnection(context.request);
+	let injected = false;
+	let end = 0;
+	await page.routeWebSocket('**/ws/workspace', (socket) => {
+		const server = socket.connectToServer();
+		server.onMessage((message) => {
+			if (typeof message === 'string') {
+				const frame = readWorkspaceMessage(JSON.parse(message));
+				if (frame.type === 'status.sample') {
+					if (injected) return;
+					injected = true;
+					const sample = readRemoteStatusSample(frame.payload);
+					end = sample.timestamp;
+					// Real status transport, controlled elapsed times. No stop/error
+					// event or missing metric can provide the old sequence-gap fix.
+					const times = [end - 22 * 60_000 - 3_000, end - 22 * 60_000, end - 6_000, end - 3_000, end];
+					for (const [index, timestamp] of times.entries()) {
+						const payload = Object.assign({}, sample, {
+							timestamp,
+							netRxRate: (index + 1) * 10_240,
+							netTxRate: (index + 1) * 5_120,
+						});
+						socket.send(JSON.stringify({ type: 'status.sample', payload }));
+					}
+					return;
+				}
+			}
+			socket.send(message);
+		});
+	});
+	await connectTestSshFromConnectionsPage(page, connectionId);
+	const monitor = page.locator('.status-monitor:visible').first();
+	await expect(monitor.locator('.network-row')).toBeVisible();
+	await monitor.locator('.network-row').click();
+	const history = monitor.locator('.history-card');
+	const chart = history.locator('.status-history-chart');
+	for (const range of [1, 5, 10, 30]) {
+		await history.getByRole('button', { name: `${range}m`, exact: true }).click();
+		await expect(chart).toHaveAttribute('data-range-minutes', String(range));
+		await expect(chart).toHaveAttribute('data-window-end', String(end));
+		await expect(chart).toHaveAttribute(
+			'data-visible-start',
+			String(range === 30 ? end - 22 * 60_000 - 3_000 : end - 6_000),
+		);
+	}
+	// Read the actual rendered canvas: both network colors must exist, but
+	// neither may cross the middle of the unsampled 22-minute interval.
+	await expect
+		.poll(() =>
+			chart.locator('canvas').evaluate((element) => {
+				const canvas = element as HTMLCanvasElement;
+				const context = canvas.getContext('2d');
+				if (!context) throw new Error('Chart canvas unavailable');
+				const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+				const counts = { rx: 0, tx: 0, gap: 0 };
+				for (let index = 0; index < pixels.length; index += 4) {
+					if (pixels[index + 3] < 100) continue;
+					const rx =
+						Math.abs(pixels[index] - 16) < 10 &&
+						Math.abs(pixels[index + 1] - 185) < 10 &&
+						Math.abs(pixels[index + 2] - 129) < 10;
+					const tx =
+						Math.abs(pixels[index] - 59) < 10 &&
+						Math.abs(pixels[index + 1] - 130) < 10 &&
+						Math.abs(pixels[index + 2] - 246) < 10;
+					if (rx) counts.rx += 1;
+					if (tx) counts.tx += 1;
+					const x = (index / 4) % canvas.width;
+					if ((rx || tx) && x > canvas.width * 0.4 && x < canvas.width * 0.6) counts.gap += 1;
+				}
+				return counts.rx > 0 && counts.tx > 0 && counts.gap === 0;
+			}),
+		)
+		.toBe(true);
 });

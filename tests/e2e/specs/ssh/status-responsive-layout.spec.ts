@@ -170,6 +170,9 @@ test('server status keeps values aligned and contained in narrow, short and zoom
 			}
 			const close = history.getByRole('button', { name: '关闭趋势图', exact: true });
 			await expect(close).toBeVisible();
+			// Global button minimums must not stretch the compact title/close row.
+			const headingBox = (await history.locator('.history-heading').boundingBox())!;
+			expect(headingBox.height).toBeLessThanOrEqual(17);
 			await expect(history.locator('.history-current')).toHaveText('4.2%');
 
 			const canvas = chart.locator('canvas');

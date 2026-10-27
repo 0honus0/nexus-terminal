@@ -434,3 +434,5 @@ providers/model的AgentProviderModelInput允许可选capabilitySources，取值�
 ### 生成图片工具投影
 
 AgentToolView.generatedImageId 为必填 nullable 文件 UUID，只能在 completed image_generate 非空；Shared codec 严格验证状态与工具类型。应用 Model、StoredToolOperation 与前端 NativeTool 各自声明，通过 SQLite→Model→register→HTTP→frontend 白名单转换。工具列表不暴露原始结果、模型参数、URL 或 Base64。
+
+Workspace 传输进度：copyMove.progress 的 transferMethodUsed 为选定工具的实际事实，取值复用 ServerTransferMethodUsed（rsync/scp/sftp），准备期尚未选定时省略；archive.progress 的 processedBytes 为 TAR 原生未压缩记录处理字节，非压缩包大小。task-codec 分别严格校验枚举和非负安全整数，双端 WS 投影与客户端 adapter 逐字段映射；未知总量不伪造 totalFiles 或百分比。

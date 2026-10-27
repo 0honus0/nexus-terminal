@@ -1,3 +1,4 @@
+import type { ServerTransferMethodUsed } from '@nexus-terminal/shared/remote/transfers/server-values';
 import type { CopyProgress, FileDirectCopy } from '../model/file-task-types.js';
 import path from 'node:path';
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
@@ -15,6 +16,7 @@ const COPY_WRITE_WINDOW_BYTES = 256 * 1024;
 const COPY_WRITE_WINDOWS = 4;
 
 interface CopyContext {
+	transferMethodUsed?: ServerTransferMethodUsed;
 	source: FileResource;
 	destination: FileResource;
 	remaining(): number;
@@ -36,6 +38,7 @@ function reportProgress(ctx: CopyContext, currentFile: string): void {
 		ctx.totalKnown = false;
 	}
 	ctx.onProgress({
+		transferMethodUsed: ctx.transferMethodUsed,
 		transferredBytes: ctx.transferredBytes,
 		completedFiles: ctx.completedFiles,
 		totalBytes: ctx.totalKnown ? ctx.totalBytes : ctx.transferredBytes,
@@ -429,6 +432,10 @@ async function copyDirectRoot(
 			ctx.mutationStarted = true;
 			ctx.onMutation();
 		},
+		(method) => {
+			ctx.transferMethodUsed = method;
+			reportProgress(ctx, from);
+		},
 	);
 	if (!transferred) {
 		return null;
@@ -583,6 +590,7 @@ export async function copyRemoteEntries(
 		for (const sourcePath of paths) {
 			const destinationPath = path.posix.join(destinationDirectory, path.posix.basename(sourcePath));
 			if (mode === 'move' && sameTarget) {
+				ctx.transferMethodUsed = 'sftp';
 				if (destinationPath === sourcePath) {
 					// Legacy same-path move was a no-op, not a copy conflict.
 					continue;
@@ -619,7 +627,12 @@ export async function copyRemoteEntries(
 					directTransfer = undefined;
 				}
 			}
-			items.push(copied ?? (await copyOne(ctx, sourcePath, destinationPath, rootInfo)));
+			if (copied === null) {
+				ctx.transferMethodUsed = 'sftp';
+				reportProgress(ctx, sourcePath);
+				copied = await copyOne(ctx, sourcePath, destinationPath, rootInfo);
+			}
+			items.push(copied);
 		}
 		if (mode === 'move') {
 			for (const item of ctx.completedSources) {

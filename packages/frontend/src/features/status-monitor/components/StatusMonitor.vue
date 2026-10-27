@@ -477,6 +477,7 @@
 						</header>
 						<StatusCharts
 							:history="monitor.history.value"
+							:sample-timestamp="monitor.current.value.timestamp"
 							:metric="selectedMetric"
 							:range-minutes="historyRange"
 							:scale="localScale"

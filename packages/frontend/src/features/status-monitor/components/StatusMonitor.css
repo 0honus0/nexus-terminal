@@ -646,13 +646,13 @@ button.live-state:focus-visible {
 	align-items: center;
 	gap: 0.45em;
 	min-width: 0;
-	min-height: calc(17px / var(--status-scale, 1));
+	min-height: calc(16px / var(--status-scale, 1));
 }
 .history-heading > strong {
 	flex: 1 1 auto;
 	min-width: 0;
 	overflow: hidden;
-	font-size: 1em;
+	font-size: calc(10px / var(--status-scale, 1));
 	font-weight: 620;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -672,14 +672,16 @@ button.live-state:focus-visible {
 	flex: none;
 	align-items: center;
 	justify-content: center;
-	width: calc(22px / var(--status-scale, 1));
-	height: calc(22px / var(--status-scale, 1));
+	width: calc(16px / var(--status-scale, 1));
+	height: calc(16px / var(--status-scale, 1));
+	min-width: 0;
+	min-height: 0;
 	padding: 0;
 	border: 0;
 	border-radius: 0.32em;
 	background: transparent;
 	color: var(--status-muted);
-	font-size: calc(10px / var(--status-scale, 1));
+	font-size: calc(9px / var(--status-scale, 1));
 	cursor: pointer;
 }
 .history-close:hover {
@@ -694,7 +696,7 @@ button.live-state:focus-visible {
 	padding: calc(2px / var(--status-scale, 1));
 	border-radius: 999px;
 	background: color-mix(in srgb, var(--status-text) 5%, transparent);
-	font-size: calc(10px / var(--status-scale, 1));
+	font-size: calc(9px / var(--status-scale, 1));
 	line-height: 1;
 }
 .range-tabs button {
@@ -702,8 +704,8 @@ button.live-state:focus-visible {
 	align-items: center;
 	justify-content: center;
 	min-width: 0;
-	height: calc(22px / var(--status-scale, 1));
-	min-height: calc(22px / var(--status-scale, 1));
+	height: calc(20px / var(--status-scale, 1));
+	min-height: calc(20px / var(--status-scale, 1));
 	padding: 0 calc(5px / var(--status-scale, 1));
 	border: 0;
 	border-radius: 999px;

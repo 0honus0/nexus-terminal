@@ -57,6 +57,7 @@
     "title": "File Transfer Progress",
     "loading": "Loading transfer tasks...",
     "errorLoadingTitle": "Loading Error",
+    "itemFailure": "{file}: {error}",
     "errorLoading": "Failed to load transfer tasks: {error}",
     "error": {
       "unknown": "Unknown error",

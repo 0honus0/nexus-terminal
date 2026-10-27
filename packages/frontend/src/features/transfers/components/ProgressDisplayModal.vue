@@ -7,10 +7,10 @@
 	import { useI18n } from 'vue-i18n';
 	import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
 	import { useDraggablePosition } from '@/foundation/interaction';
-	import { UiButton, UiEmptyState, UiLoadingState, UiInlineNotice, UiOverlayPanel, UiSpinner } from '@/foundation/ui';
+	import { UiButton, UiEmptyState, UiLoadingState, UiOverlayPanel, UiSpinner } from '@/foundation/ui';
 	import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
 	import type { ProgressSource, TransferTask } from '../model/transfer-types';
-	import { transferTaskErrorDescriptor, transferTaskWarningDescriptor } from '../presentation-transfer-message';
+	import { formatTransferBytes, isIndeterminateArchiveProgress } from '../model/progress-presentation';
 	import type { ServerTransferTask } from '../model/server-transfer-types';
 
 	const props = withDefaults(
@@ -19,14 +19,12 @@
 			sources: readonly ProgressSource[];
 			serverTransfers?: readonly ServerTransferTask[];
 			serverTransfersLoading?: boolean;
-			serverTransfersError?: string;
 			mobile?: boolean;
 		}>(),
 		{
 			serverTransfers: () => [],
 
 			serverTransfersLoading: false,
-			serverTransfersError: '',
 			mobile: false,
 		},
 	);
@@ -139,13 +137,6 @@
 	const activeCount = (source: ProgressSource) => source.tasks.filter((task) => !done(task.status)).length;
 
 	const normalizedProgress = (task: TransferTask) => Math.max(0, Math.min(100, task.progress));
-
-	const localizedTransferMessage = (descriptor: ReturnType<typeof transferTaskErrorDescriptor>): string =>
-		descriptor ? t(descriptor.key, descriptor.params ?? {}) : '';
-
-	const taskError = (task: TransferTask): string => localizedTransferMessage(transferTaskErrorDescriptor(task));
-
-	const taskWarning = (task: TransferTask): string => localizedTransferMessage(transferTaskWarningDescriptor(task));
 
 	const sourceTitle = (source: ProgressSource): string => {
 		const kinds = new Set(source.tasks.map((task) => task.kind));
@@ -344,6 +335,13 @@
 												{{ t(`progressCenter.kind.${task.kind}`) }}
 											</span>
 											<span
+												v-if="task.transferMethodUsed"
+												class="shrink-0 text-[11px] text-text-secondary"
+												data-transfer-method
+											>
+												{{ task.transferMethodUsed }}
+											</span>
+											<span
 												class="min-w-0 flex-1 truncate text-xs font-medium"
 												:title="task.label"
 												>{{ task.label }}</span
@@ -385,28 +383,32 @@
 												role="progressbar"
 												aria-valuemin="0"
 												aria-valuemax="100"
-												:aria-valuenow="Math.round(normalizedProgress(task))"
+												:aria-valuenow="
+													isIndeterminateArchiveProgress(task)
+														? undefined
+														: Math.round(normalizedProgress(task))
+												"
 											>
 												<span
 													class="server-progress-value"
-													:style="{ transform: `scaleX(${normalizedProgress(task) / 100})` }"
+													:class="isIndeterminateArchiveProgress(task) ? 'animate-pulse' : ''"
+													:style="{
+														transform: isIndeterminateArchiveProgress(task)
+															? 'scaleX(1)'
+															: `scaleX(${normalizedProgress(task) / 100})`,
+													}"
 												></span>
 											</div>
 											<span
 												class="w-11 shrink-0 text-right text-[11px] tabular-nums text-text-secondary"
 											>
-												{{ normalizedProgress(task).toFixed(1) }}%
+												{{
+													isIndeterminateArchiveProgress(task)
+														? formatTransferBytes(task.bytesWritten)
+														: `${normalizedProgress(task).toFixed(1)}%`
+												}}
 											</span>
 										</div>
-										<p
-											v-if="task.warning || task.warningKind"
-											class="mb-0 mt-1 text-[11px] text-warning"
-										>
-											{{ taskWarning(task) }}
-										</p>
-										<p v-if="task.error || task.errorKind" class="mb-0 mt-1 text-[11px] text-error">
-											{{ taskError(task) }}
-										</p>
 									</div>
 								</div>
 							</article>
@@ -425,12 +427,6 @@
 							:bordered="false"
 							:title="t('transferProgressModal.loading')"
 						/>
-						<UiInlineNotice v-else-if="serverTransfersError" tone="danger">
-							<strong>{{ t('transferProgressModal.errorLoadingTitle') }}</strong>
-							<p class="m-0">
-								{{ t('transferProgressModal.errorLoading', { error: t(serverTransfersError) }) }}
-							</p>
-						</UiInlineNotice>
 						<UiEmptyState
 							v-else-if="!serverTransfers.length"
 							dense
@@ -557,16 +553,6 @@
 											<p v-if="subTask.transferMethodUsed">
 												<strong>{{ t('transferProgressModal.subTask.method') }}:</strong>
 												{{ subTask.transferMethodUsed }}
-											</p>
-											<p
-												v-if="
-													(subTask.status === 'failed' || subTask.status === 'unknown') &&
-													subTask.error
-												"
-												class="text-error"
-											>
-												<strong>{{ t('transferProgressModal.subTask.error') }}:</strong>
-												{{ t('serverTransferErrors.' + subTask.error) }}
 											</p>
 										</li>
 									</ul>

@@ -1,3 +1,4 @@
+import type { ServerTransferMethodUsed } from './server-values.js';
 import type { WorkspaceFileEntry } from '../files/workspace.js';
 
 import type {
@@ -66,6 +67,8 @@ export type WorkspaceArchiveEvent =
 			operation: WorkspaceArchiveOperation;
 			requestId: string;
 			fileCount: number;
+			/** Uncompressed TAR record bytes processed; archive size/total may be unknown. */
+			processedBytes?: number;
 			totalFiles?: number;
 			percent?: number;
 			currentFile?: string;
@@ -96,6 +99,7 @@ export type WorkspaceCopyMoveEvent =
 			completedFiles: number;
 			totalFiles: number;
 			totalKnown: boolean;
+			transferMethodUsed?: ServerTransferMethodUsed;
 			currentFile?: string;
 	  }
 	| {

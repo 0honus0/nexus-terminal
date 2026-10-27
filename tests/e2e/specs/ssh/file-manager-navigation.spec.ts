@@ -884,3 +884,55 @@ test('file-manager terminal path sync does not pollute bash command history with
 		await closeWebSocket(workspace.socket);
 	}
 });
+
+test('a selected VMA Zstandard backup keeps keyboard selection and starts a native filename drag', async ({
+	page,
+	context,
+}) => {
+	await loginAsInitialAdmin(context.request);
+	await configureSshE2eSettings(context.request);
+	await resetTestSshFilesystem();
+	const filename = 'vzdump-qemu-100-2026_10_07-17_24_32.vma.zst';
+	await writeFile(path.resolve('.tmp/ssh-root', filename), 'native drag regression');
+	await connectTestSshFromConnectionsPage(page, await ensureTestSshConnection(context.request));
+	await openConnectedFileManager(page);
+	const entry = row(page, filename);
+	const button = entry.locator('.file-row-name-button');
+	await button.click();
+	await expect(entry).toHaveClass(/is-selected/);
+	await expect(activeFileManagerList(page)).toBeFocused();
+	await entry.evaluate((element) => {
+		element.addEventListener(
+			'dragstart',
+			(event) => {
+				if (event instanceof DragEvent) {
+					element.setAttribute(
+						'data-drag-payload',
+						event.dataTransfer?.getData('application/x-nexus-remote-files') ?? '',
+					);
+				}
+			},
+			{ once: true },
+		);
+	});
+	const box = await button.boundingBox();
+	expect(box).not.toBeNull();
+	if (!box) throw new Error('Filename is not actionable');
+	await page.mouse.move(box.x + 10, box.y + box.height / 2);
+	await page.mouse.down();
+	try {
+		await page.mouse.move(box.x + 80, box.y + box.height / 2 + 8, { steps: 8 });
+		await expect(entry).toHaveAttribute('data-drag-payload', '/' + filename);
+	} finally {
+		await page.keyboard.press('Escape');
+		await page.mouse.up();
+	}
+	// The drag must not turn a binary backup into an accidental preview request.
+	await expect(page.getByRole('dialog', { name: /preview/i })).toHaveCount(0);
+	await button.click();
+	await expect(activeFileManagerList(page)).toBeFocused();
+	await page.keyboard.press('ArrowUp');
+	await expect(entry).not.toHaveClass(/is-selected/);
+	await page.keyboard.press('ArrowDown');
+	await expect(entry).toHaveClass(/is-selected/);
+});

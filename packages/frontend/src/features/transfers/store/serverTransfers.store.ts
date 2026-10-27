@@ -1,5 +1,8 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
+import { isNetworkFailure } from '@/client/http/network-failure';
+import { useFeedback } from '@/shared/feedback/public';
+import { translateUi as t } from '@/shared/i18n/public';
 import { registerAuthenticatedSessionReset } from '@/shared/session/public';
 import { serverTransfersApi } from '../api/server-transfers-api';
 import { toTransferTask } from '../model/server-transfer-mapper';
@@ -16,6 +19,7 @@ export function serverTransferFailureKey(cause: unknown): string {
 }
 
 export const useServerTransfersStore = defineStore('serverTransfers', () => {
+	const feedback = useFeedback();
 	const items = ref<ServerTransferTask[]>([]);
 	const loading = ref(false);
 	const error = ref('');
@@ -36,6 +40,34 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
 	let readFailed = false;
 	const writes = new Set<AbortController>();
 	const mutations = new Map<string, Promise<void>>();
+
+	function notifyTaskFailures(next: readonly ServerTransferTask[]): void {
+		const previous = new Map(items.value.map((task) => [task.taskId, task]));
+		for (const task of next) {
+			const before = previous.get(task.taskId);
+			if (
+				['failed', 'partially-completed', 'unknown'].includes(task.status) &&
+				before?.status !== task.status &&
+				!task.subTasks.some((item) => item.status === 'failed' || item.status === 'unknown')
+			) {
+				feedback.notifyError(
+					t('serverTransferErrors.' + (task.status === 'unknown' ? 'operation_unknown' : 'transfer_failed')),
+				);
+			}
+			for (const subTask of task.subTasks) {
+				if (subTask.status !== 'failed' && subTask.status !== 'unknown') continue;
+				const old = before?.subTasks.find((item) => item.subTaskId === subTask.subTaskId);
+				if (old?.status === subTask.status && old.error === subTask.error) continue;
+				const code = subTask.error ?? (subTask.status === 'unknown' ? 'operation_unknown' : 'internal_failure');
+				feedback.notifyError(
+					t('transferProgressModal.itemFailure', {
+						file: subTask.sourceItemName,
+						error: t('serverTransferErrors.' + code),
+					}),
+				);
+			}
+		}
+	}
 
 	function clearPollingTimer(): void {
 		window.clearTimeout(timer);
@@ -137,6 +169,7 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
 						const next = await serverTransfersApi.list(active.signal);
 						if (currentEpoch === epoch && current === generation) {
 							readFailed = false;
+							notifyTaskFailures(next);
 							items.value = next;
 							if (!sendBlocked.value) {
 								error.value = '';
@@ -144,8 +177,12 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
 						}
 					} catch (cause) {
 						if (currentEpoch === epoch && current === generation && !active.signal.aborted) {
+							const key = serverTransferFailureKey(cause);
+							if ((!readFailed || error.value !== key) && !isNetworkFailure(cause)) {
+								feedback.notifyError(t('transferProgressModal.errorLoading', { error: t(key) }));
+							}
 							readFailed = true;
-							error.value = serverTransferFailureKey(cause);
+							error.value = key;
 						}
 					}
 				} while (currentEpoch === epoch && refreshQueued);
@@ -221,8 +258,9 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
 					await load({ background: true, ensureFresh: true });
 				}
 			} catch (cause) {
-				if (currentEpoch === epoch) {
+				if (currentEpoch === epoch && !controller.signal.aborted) {
 					error.value = serverTransferFailureKey(cause);
+					if (!isNetworkFailure(cause)) feedback.notifyError(t(error.value));
 				}
 			} finally {
 				writes.delete(controller);

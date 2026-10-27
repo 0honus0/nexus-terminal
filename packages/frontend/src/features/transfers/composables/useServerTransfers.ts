@@ -7,7 +7,6 @@ export interface ServerTransfersController {
 	items: ComputedRef<readonly ServerTransferTask[]>;
 	progressTasks: ComputedRef<readonly TransferTask[]>;
 	loading: ComputedRef<boolean>;
-	error: ComputedRef<string>;
 	cancel(taskId: string): Promise<void>;
 	remove(taskId: string): Promise<void>;
 	cancelAll(): Promise<void>;
@@ -23,7 +22,6 @@ export function useServerTransfers(): ServerTransfersController {
 		items: computed<readonly ServerTransferTask[]>(() => store.items),
 		progressTasks: computed<readonly TransferTask[]>(() => store.progressTasks),
 		loading: computed(() => store.loading),
-		error: computed(() => store.error),
 		cancel: store.cancel.bind(store),
 		remove: store.remove.bind(store),
 		cancelAll: store.cancelAll.bind(store),

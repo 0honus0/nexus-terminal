@@ -1645,6 +1645,7 @@ class WorkspaceFilesSession {
 					completedFiles: event.completedFiles,
 					totalFiles: event.totalFiles,
 					totalKnown: event.totalKnown,
+					transferMethodUsed: event.transferMethodUsed,
 					currentFile: event.currentFile,
 				};
 				break;
@@ -1689,6 +1690,7 @@ class WorkspaceFilesSession {
 					operation: event.operation,
 					requestId: event.requestId,
 					fileCount: event.fileCount,
+					processedBytes: event.processedBytes,
 					totalFiles: event.totalFiles,
 					percent: event.percent,
 					currentFile: event.currentFile,

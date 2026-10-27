@@ -46,6 +46,7 @@
 		TransferFailure,
 		loadSendFilesModal,
 		transferTaskErrorDescriptor,
+		transferTaskWarningDescriptor,
 		isProgressTaskVisible,
 		loadUploadConflictModal,
 		type WorkspaceArchiveErrorCode,
@@ -171,6 +172,12 @@
 	const transferErrorMessage = (task: TransferTask): string => {
 		const descriptor = transferTaskErrorDescriptor(task);
 		return descriptor ? t(descriptor.key, descriptor.params ?? {}) : t('progressCenter.error.unknown');
+	};
+
+	const notifyTransferWarning = (task: TransferTask): void => {
+		if (task.status !== 'completed' && task.status !== 'partial') return;
+		const warning = transferTaskWarningDescriptor(task);
+		if (warning) feedback.notifyWarning(t(warning.key, warning.params ?? {}));
 	};
 
 	const transfers = props.session.transferController;
@@ -886,6 +893,8 @@
 						for (const task of tasks) {
 							if (!isProgressTaskVisible(task)) {
 								feedback.notifyError(transferErrorMessage(task));
+							} else {
+								notifyTransferWarning(task);
 							}
 						}
 					}
@@ -962,6 +971,7 @@
 				return;
 			}
 			if (task.status === 'completed' || task.status === 'partial') {
+				notifyTransferWarning(task);
 				await session.filesystemState.browser.refresh();
 			} else if (task.status === 'error' || task.status === 'unknown') {
 				feedback.notifyError(transferErrorMessage(task));
@@ -1097,6 +1107,7 @@
 					return;
 				}
 				if (task.status === 'completed' || task.status === 'partial') {
+					notifyTransferWarning(task);
 					await requestContext.session.filesystemState.browser.refresh();
 					return;
 				}

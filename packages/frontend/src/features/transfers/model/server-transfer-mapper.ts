@@ -49,12 +49,14 @@ export function toTransferTask(task: ServerTransferTask): TransferTask {
 					? 'error'
 					: task.status;
 	const names = task.payload.sourceItems.map((item) => item.name);
+	const methods = new Set(task.subTasks.map((item) => item.transferMethodUsed).filter((item) => item !== null));
 	return {
 		id: task.taskId,
 		kind: 'transfer',
 		label: `${names.slice(0, 3).join(', ')}${names.length > 3 ? ' +' + (names.length - 3) : ''} → ${task.payload.remoteTargetPath}`,
 		status,
 		progress: task.overallProgress,
+		transferMethodUsed: methods.size === 1 ? methods.values().next().value : undefined,
 		bytesWritten: 0,
 		totalBytes: 0,
 		completedFiles: task.subTasks.filter((item) => item.status === 'completed').length,

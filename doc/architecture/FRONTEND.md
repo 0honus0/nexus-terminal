@@ -425,6 +425,8 @@ Access 的失败窗口/封禁计算在 sessions/login-failure-rules，Adapter �
 
 StatusMonitor 的矮面板单行模式由原 status-content 高度容器查询持有紧凑边距、卡片内距和字号；速率字体直接结合容器宽度与现有 status-scale 计算，不叠加父级缩小，不新增 JS 测量、状态或断点。正常高度、趋势面板留白和原监控采样/趋势生命周期保持。
 
+状态趋势直接用会话现有有界历史的真实时间/数值交给 Chart.js，不按所选窗口宽度平均或取最大值，以免短历史折叠及峰值时间偏移。所有指标共享最新监控采样作为时间右端；序号不连续、时间倒退或实际相邻间隔大于完整历史正向连续间隔下中位数的两倍时，插入仅供绘制的空值；判据在范围过滤前计算，避免窗口改变断点。历史不足以区分正常采样与静默时不捏造采样频率，仍保留序号断点；订阅实际恢复与采样失败由原会话 owner 推进连续性序号，短暂标签切换不打断仍存活订阅。Chart.js 最近时间交互和外部 Tooltip 按同一时间过滤，缺测上下行不按数组索引混合。纵轴步长与二进制单位共同计算，保留原自动范围迟滞；曲线使用单调插值，单点及孤立点显式绘制。
+
 ## 7. 生命周期与失败
 
 Remote Files 的 upload.prepare 在单一原机器突变claim内先准备根目录，再按根下第一段分组；最多4个worker处理互不重叠的分支，同一分支按路径长度串行。每次创建仍由ensureRemoteDirectory检查完整父链，不缓存stat作后续授权。首个失败停止未派发路径，所有在途worker排空后才结算；混合失败保留全部cause、清理失败类别和unknown，部分创建失败仍保留原保守围栏。allowlist只包含请求路径及根，不把隐式父目录加入可上传范围。
@@ -1722,8 +1724,18 @@ Context预压缩现状：checkpoint工具需要实际context.compact授权，摘
 
 image_generate 仅负责生成并保存 App 文件，返回给模型的结果只有 id、name、sizeBytes；工具说明不要求模型拼接预览或下载 Markdown。服务端从已完成工具的持久结果投影 generatedImageId，前端使用 App ID 与文件 ID 自动显示现有图片预览和下载入口。Base64 只经生成服务落盘，不写入聊天或工具列表。待批准、失败或 unknown 不产生成功预览；刷新后仍可从工具记录恢复，文件读取继续执行原会话与 App 授权。直接 Images 对话仍由程序生成展示内容，不依赖文字模型。
 
-Workspace 传输失败呈现：原 TransferController 保留 error/unknown 真实结算，WorkspaceSessionSurface 与 WorkspacePage 通过 transfers 的 `isProgressTaskVisible` 统一过滤浮动进度、恢复按钮与隐藏任务列表。各操作原等待回执的 owner 发出 Toast，上传在批次完成回执中通知，准备失败只由原提交 catch 通知，不重复订阅同一错误。密码拒绝仍进入原重输流程。此展示过滤不取消远端任务、不解除机器突变未知围栏。
+Workspace 传输失败呈现：原 TransferController 保留 error/unknown 真实结算，WorkspaceSessionSurface 与 WorkspacePage 通过 transfers 的 `isProgressTaskVisible` 统一过滤浮动进度、恢复按钮与隐藏任务列表。各操作原等待回执的 owner 发出 Toast，上传在批次完成回执中通知，准备失败只由原提交 catch 通知，不重复订阅同一错误。密码拒绝仍进入原重输流程。此展示过滤不取消远端任务、不解除机器突变未知围栏。所有进度视图不再附加错误/警告段落，完成警告由原回执 owner 通过 Toast 通知。后台 serverTransfers store 比较当前快照的子任务状态与错误码发布安全失败 Toast，列表读取及取消/移除错误同样走 feedback；身份/代次/取消保护保持，网络错误交原全局通知，不新增轮询或重复监听。
 
 Splitpanes 连续拖动的生命周期补丁：mouseup 立即解除本次全局拖动监听，click 保护仅保留到本次同步 click 结束后的下一任务；新 mousedown 清除上次定时器，卸载清理监听和定时器，防止旧拖动延迟收尾解除新拖动的监听，且不保留100ms全页pointer-events屏障。正常尺寸和布局不变。
 
 PDF 的异步页定位显式区分主动跳页与缩放/尺寸锚定：前者保持原重置横向位置，后者在实际应用时读取当前scrollLeft，避免PDF.js晚到尺寸和锚定覆盖用户已经作出的横向滚动。不调整模板、滚动条或样式。
+
+### 自动传输的安装偏好与工具事实
+
+remote-tools/model/tool-preferences 通过 foundation/browser 的版本化本地存储，按认证 userId、targetId、工具保存明确的“暂不安装”。偏好只影响 prepareTransfer 的安装询问，不替代实时 check、不改变后端工具可用性或直传/中转策略；归档准备不读取该偏好。prepare 在等待后先复查取消/身份，再保存拒绝，失活取消不保存；不持久化密码、planId 或安装授权。Workspace copy progress 的 transferMethodUsed 经原 adapter/controller 投影至现有进度行；后台发送复用 subTasks 实际方法，同一方法可在汇总行显示，混合方法保留各子任务详情。不依据用户请求的 auto 值伪造实际工具。
+
+FileManager 的桌面文件行不拦截 mousedown 默认行为，保留浏览器原生 HTML5 拖动；clickEntry 仍在点击完成后将焦点交回列表，原键盘和多选 owner 不变，根节点既有 user-select:none 防止文字选择。归档 processedBytes 投影至任务 bytesWritten，未知总量使用现有进度条的不定动画和实际字节，已知总量仍按原百分比显示；不增加源文件扫描或新的容量上限。
+
+### 浏览器前台恢复与可视键盘几何
+
+TerminalView 在 pageshow、恢复可见及失焦后的窗口重新聚焦时清理未完成触摸、恢复 inputmode/readOnly，并依据当前连接状态设置 xterm disableStdin；普通聚焦不清理正在进行的手势或输入法。取消旧 geometryFrame 后立即拟合，并保留下一帧收敛；预测撤销、快照与 PTY generation 原屏障仍先于真实 resize。WorkspacePage 在 visualViewport resize/scroll、前台恢复和聚焦时同步读取可视高度，再合并下一帧测量，避免旧 rAF 阻塞键盘自适应；隐藏/卸载取消旧帧并解除监听。呈现恢复不等待网络存活检查，不主动唤起键盘、不合成输入法提交事件，也不重发终端输入。原 UI 样式、布局与连接就绪语义保持。
