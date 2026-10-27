@@ -73,3 +73,18 @@ export async function restartTestBackend(): Promise<void> {
 	expect(response.ok, 'Isolated backend restart failed: HTTP ' + response.status).toBe(true);
 	expect(await response.json()).toEqual({ reset: true, mode: 'restart' });
 }
+
+/** Advance backend Date only; the per-test baseline restores it after successful application close. */
+export async function advanceTestBackendClock(advanceMs: number): Promise<void> {
+	const token = process.env.NEXUS_E2E_CONTROL_TOKEN;
+	if (!token) throw new Error('NEXUS_E2E_CONTROL_TOKEN is required');
+	const response = await fetch(E2E_URLS.backendControlOrigin + '/clock', {
+		method: 'POST',
+		headers: { 'X-Nexus-E2E-Control': token, 'Content-Type': 'application/json' },
+		body: JSON.stringify({ advanceMs }),
+		signal: AbortSignal.timeout(60_000),
+	});
+	expect(response.ok, 'Isolated backend clock advance failed: HTTP ' + response.status).toBe(true);
+	const result: unknown = await response.json();
+	expect(result).toEqual({ now: expect.any(Number) });
+}

@@ -2085,3 +2085,13 @@ CI 机器人 `440cb9e9271f16ac7c3eccb20437a25cf1e679be` 仅更新测试耗时估
 首轮分组行为结果：4 个浏览器分片成功，其余失败均为测试环境入口偏差。backend 的 3 项 RDP 用例由 CommonJS 辅助器固定前端端口造成；browser 另有 4 项客户端场景与 19 项终端生命周期场景仍直接导入开发源码/解析开发版 Vue 模块。此前搜索输出截断遗漏这些入口，已完整核对全部 `/src/` 浏览器导入：改为两个测试专用 Vite library entries，包含真实客户端、真实 TerminalView、同一 Vue runtime、原 i18n 与会话状态，并加载真实终端 CSS；原功能断言不删、不放宽。RDP 辅助器按 suite 选择与 TS 配置相同的公开后端/前端端口，保留 Origin、票据与拒绝断言。构建配置位于 frontend/build，仅 E2E 命令调用，正式构建不包含这些入口。原日志 `/tmp/nexus-split-job-121985799{276,301,304,338}.log`，修复后的全量行为仍待下一轮。
 
 第二轮 40443702665：质量、集中构建、Docker smoke 与完整后端 122 项通过，RDP 端口修复已验证。浏览器受同一测试打包配置问题影响：Vite library 模式默认保留 process.env.NODE_ENV，打包 Vue 后出现浏览器 process 未定义。测试专用配置显式将该值定义为 production，重新构建后全部测试 bundle 中已无 process.env 引用；不添加 process polyfill 或修改产品逻辑。库入口类型/全量格式及构建通过，证据 `/tmp/nexus-split-{types-final,format-adapt,clients-build4}.log`。共享 artifact 上传增加官方 overwrite:true，完整 rerun 重建同名产物，失败分片单独 rerun 仍可读取原 SHA 产物。下一轮 runner 指纹不变，可测热缓存完整结果。
+
+## 最耗时任务优化（2026-10-27，待远程验收）
+
+上一阶段正式 [40444825177](https://github.com/0honus0/nexus-terminal/actions/runs/40444825177) 在 899d4107 上 526 项首次通过、0 skipped/retry/flaky，完整墙钟 532 秒；原基线 40437638548 为 620 秒。新基线尚不满足用户提速目标。
+
+本轮将 125 秒 CAPTCHA SDK 过期等待改为 Playwright 官方 Clock，真实跨域组件、供应商验证、过期后不派发、拒绝后清 token 和新 token 成功断言全部保留。后端 30 秒资源缓存和 31 秒桌面票据过期使用 Node 内置 MockTimers 仅推进 Date，网络和清理时钟保持真实；成功关闭原应用后恢复，关闭失败保持围栏。资源缓存增加过期前命中断言。
+
+最大 Agent 文件按部署修复、文件搜索、会话交付、记忆、图片拆分，原测试正文不变，公共辅助归唯一文件。SSH 两分钟真实空闲场景独立文件保留 125 秒真实等待和完整文件操作断言。已有耗时清单按上次成功日志逐项迁移并扣除被替换的固定等待，无新调度器或 runner 并发。静态清单确认前后均 526 项，按项目和测试标题比较完全相等；本地按 D17 不运行行为测试。新版本静态、两轮审核与正式远程墙钟待回填。
+
+本轮静态：根 check、完整 format:all:check、变更 E2E 严格 tsc（含 noUnusedLocals）、夹具 node --check 与 diff 通过，日志 `/tmp/nexus-slowest-{check,format-check,types}.log`。两轮源码复核确认控制仅本地随机令牌可用、输入白名单、真实定时器不被虚拟、关闭失败不恢复基线；Agent 拆分的所有顶层测试/参数化声明 AST 与原文件一致，完整测试标题集合不变。耗时计划仅用于调度，不作为实测提速结论。

@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { mock } from 'node:test';
 import { randomBytes } from 'node:crypto';
 import { mkdtemp, rm, mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -39,6 +40,13 @@ let resetting = null;
 /** @type {Promise<void> | null} */
 let shutdown = null;
 let failed = false;
+let clockEnabled = false;
+
+function restoreClock() {
+	if (!clockEnabled) return;
+	mock.timers.reset();
+	clockEnabled = false;
+}
 
 /**
  * Keep technical locations and finite codes, never exception messages or arbitrary properties.
@@ -77,6 +85,8 @@ async function closeApplication() {
 		await application.close();
 		application = null;
 	}
+	// Restore only after the original application has successfully released its resources.
+	restoreClock();
 	if (directory) {
 		await rm(directory, { recursive: true, force: true });
 		directory = null;
@@ -147,6 +157,7 @@ async function restartApplication() {
 	if (!application || !directory) throw new Error('E2E application unavailable');
 	await application.close();
 	application = null;
+	restoreClock();
 	if (!shutdown) await openApplication();
 }
 
@@ -168,25 +179,29 @@ function startReset(mode) {
 
 /**
  * @param {import('node:http').IncomingMessage} request
- * @returns {Promise<'seed' | 'empty' | 'restart' | null>}
+ * @returns {Promise<unknown>}
  */
-async function resetMode(request) {
+async function readControlBody(request) {
 	let body = '';
 	for await (const chunk of request) {
 		body += chunk.toString('utf8');
 		if (Buffer.byteLength(body) > 1024) return null;
 	}
-	let value;
 	try {
-		value = JSON.parse(body);
+		return JSON.parse(body);
 	} catch {
 		return null;
 	}
+}
+
+/** @param {unknown} value */
+function resetMode(value) {
 	if (
 		value === null ||
 		typeof value !== 'object' ||
 		Array.isArray(value) ||
 		Object.keys(value).length !== 1 ||
+		!('mode' in value) ||
 		(value.mode !== 'empty' && value.mode !== 'seed' && value.mode !== 'restart')
 	)
 		return null;
@@ -212,7 +227,7 @@ async function handleControl(request, response) {
 		return;
 	}
 	if (
-		(request.url !== '/reset' && request.url !== '/restart') ||
+		(request.url !== '/reset' && request.url !== '/restart' && request.url !== '/clock') ||
 		request.method !== 'POST' ||
 		request.headers['x-nexus-e2e-control'] !== controlToken ||
 		request.headers.origin !== undefined
@@ -224,7 +239,39 @@ async function handleControl(request, response) {
 		response.writeHead(503).end();
 		return;
 	}
-	const mode = await resetMode(request);
+	const value = await readControlBody(request);
+	// Recheck after reading: clock changes and baseline replacement cannot race.
+	if (shutdown || failed || resetting) {
+		response.writeHead(503).end();
+		return;
+	}
+	if (request.url === '/clock') {
+		if (
+			value === null ||
+			typeof value !== 'object' ||
+			Array.isArray(value) ||
+			Object.keys(value).length !== 1 ||
+			!('advanceMs' in value) ||
+			typeof value.advanceMs !== 'number' ||
+			!Number.isSafeInteger(value.advanceMs) ||
+			value.advanceMs <= 0 ||
+			!Number.isSafeInteger(Date.now() + value.advanceMs)
+		) {
+			response.writeHead(400).end();
+			return;
+		}
+		const now = Date.now() + value.advanceMs;
+		if (!clockEnabled) {
+			// Only Date is virtual: SSH, TCP, aborts and cleanup timers remain real.
+			mock.timers.enable({ apis: ['Date'], now });
+			clockEnabled = true;
+		} else {
+			mock.timers.setTime(now);
+		}
+		response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ now }));
+		return;
+	}
+	const mode = resetMode(value);
 	if (request.url === '/restart' && mode !== 'restart') {
 		response.writeHead(400).end();
 		return;

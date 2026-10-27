@@ -288,6 +288,8 @@ test('login CAPTCHA clears expired/rejected verification and succeeds after a fr
 	request,
 }, testInfo) => {
 	test.setTimeout(240_000);
+	// Install before navigation so the real provider's cross-origin frames share the clock.
+	await page.clock.install();
 	await prepareCaptchaLogin(request, VALID_HCAPTCHA);
 
 	const evidence: Array<Record<string, unknown>> = [];
@@ -300,9 +302,11 @@ test('login CAPTCHA clears expired/rejected verification and succeeds after a fr
 				await page.locator('#password').fill(E2E_ADMIN.password);
 				await completeHcaptchaTestWidget(page);
 
-				// hCaptcha documents a 120 second default token expiry. Wait for the real
-				// provider callback instead of shortening time or mutating application state.
-				await page.waitForTimeout(125_000);
+				// Run the actual SDK expiry timer across its documented 120 second boundary.
+				// Do not invoke callbacks or mutate the application's CAPTCHA state.
+				await page.clock.fastForward(125_000);
+				// Later real provider tokens must use current wall time. Timer time stays monotonic.
+				await page.clock.setSystemTime(new Date());
 
 				const loginRequest = page
 					.waitForRequest(

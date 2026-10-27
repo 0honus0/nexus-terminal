@@ -5,6 +5,7 @@ import path from 'node:path';
 import { request as playwrightRequest } from '@playwright/test';
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { E2E_ADMIN, loginAsInitialAdmin } from '../../support/auth';
+import { advanceTestBackendClock } from '../../support/settings';
 import { E2E_URLS, E2E_PORTS } from '../../support/test-env';
 const {
 	openRemoteDesktopWebSocket,
@@ -187,7 +188,7 @@ test('expired, unknown, and oversized remote desktop tickets are rejected', asyn
 
 	const connectionId = await createRdpConnection(request, 'E2E RDP expired ticket');
 	const expiringTicket = await createSessionTicket(request, connectionId);
-	await new Promise((resolve) => setTimeout(resolve, 31_000));
+	await advanceTestBackendClock(31_000);
 	const expired = (await waitForRemoteDesktopTicketRejection(expiringTicket, cookie)) as {
 		code: number;
 		reason: string;

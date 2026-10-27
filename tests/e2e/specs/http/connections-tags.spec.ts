@@ -1,3 +1,4 @@
+import { advanceTestBackendClock } from '../../support/settings';
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { E2E_SSH, createTestSshConnection, trustTestSshHostKey } from '../../support/ssh';
@@ -193,9 +194,10 @@ test('SSH resource cache expires at the effective startup cadence including coll
 		const first = readSshResourceStatus(await firstResponse.json());
 		expect(first.status).toBeDefined();
 		expect(Date.now() - startedAt).toBeGreaterThan(50);
-		await new Promise((resolve) =>
-			setTimeout(resolve, Math.max(0, first.checkedAt + intervalMs + 100 - Date.now())),
-		);
+		const cachedResponse = await request.get('/api/v1/system/ssh-resources/' + id);
+		expect(cachedResponse.ok()).toBe(true);
+		expect(readSshResourceStatus(await cachedResponse.json())).toEqual(first);
+		await advanceTestBackendClock(intervalMs + 100);
 		const secondResponse = await request.get('/api/v1/system/ssh-resources/' + id);
 		expect(secondResponse.ok()).toBe(true);
 		const second = readSshResourceStatus(await secondResponse.json());
