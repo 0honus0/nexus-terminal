@@ -2132,8 +2132,12 @@ CI 机器人 `440cb9e9271f16ac7c3eccb20437a25cf1e679be` 仅更新测试耗时估
 
 完整墙钟06:06:37→06:13:18 UTC，共401秒（6分41秒）；对比462秒减少61秒/13.2%，相对最初620秒减少35.3%。最慢测试作业383→367秒；有效作业总计2927秒，相对3093秒减少5.4%，不视作精确计费。测试执行仍有波动，不能将整个61秒都归因于重叠；本轮未新增作业或测试runner，也未减少真实SSH空闲、弱网、字节/进度或未知结果覆盖。耗时机器人56407f6f已快进同步。全量/失败分片重跑和构建失败/取消等分支仅有源码审核，未额外进行行为注入；当前证据不扩大至这些分支。未发布或部署，个人截图保持。
 
-## E2E 成功传输进度限速（2026-10-27，待验收）
+## E2E 成功传输进度限速（2026-10-27，已验收）
 
 40459146818的protocol成功原生路线单例约13秒、clipboard-ui五条路线每例约15秒；其中真实8MiB样本的1MiB/s夹具传输本身占数秒。本轮只将成功进度场景的rsync/SCP及UI relay现有限速提高至原生3MiB/s、relay 4MiB/s；原生命令约一秒输出一次，保留多次中间采样窗口，保留SSH读延迟和专门2Mbps/10Mbps等弱网profile；取消/失败路线原512KiB/s不变。保持8MiB数据、完整SHA、真实中间进度、UI至少两个不同百分比/单调增长、安装/跳过/真实方法和未知结果断言。无产品/UI/调度变更。根check、严格目标tsc（含noUnusedLocals）、全量格式、diff及526项项目/标题Counter比对通过，日志 `/tmp/nexus-e2e-transfer-rate-{check,types,format}.log`。两轮源码审核确认仅成功路线参数变化，原8MiB/至少两个不同UI百分比/单调进度/SHA/方法断言不变；耗时清单仅扣除按带宽变化推算的等待差额，作为调度种子，正式526项及总耗时待验，不将参数推算写成实测收益；本地按D17仅静态，不发布部署。
 
 首轮40460877397失败：clipboard-ui的direct/install-rsync/skip-rsync三条路线在中间进度locator读取处超时，relay/skip-all及protocol通过。原生UI夹具速率恢复已验收的1MiB/s以保留可观察窗口，protocol 3MiB/s与UI relay 4MiB/s保持；所有原断言、数据量与期限保持。修复后正式全量待验，不能把先前静态通过或部分分片通过当作验收。
+
+正式验收 [40469028918](https://github.com/0honus0/nexus-terminal/actions/runs/40469028918)：源码e621b2bef1cf22317eb95682ed648c7cb62d5df5，526项首次通过（122后端/404浏览器），0 failed/retry/skipped/flaky，质量/格式、Docker smoke与8个测试runner全成功。direct/install-rsync/skip-rsync均约14秒；relay/skip-all分别8.9/8.1秒，保留至少两个不同真实UI中间百分比、单调进度与完整SHA断言。修复静态日志 `/tmp/nexus-e2e-transfer-fix-{check,types}.log`；526项清单 `/tmp/nexus-e2e-transfer-fix-list.json` 与前版Counter相等；变更格式和diff通过。8分片正式日志 `/tmp/nexus-e2e-transfer-fix-122*.log`，最终运行元数据 `/tmp/nexus-e2e-transfer-fix-final-run.json`，Docker日志 `/tmp/nexus-e2e-transfer-fix-smoke.log`。
+
+最终墙钟07:45:22→07:56:24 UTC，662秒（11分02秒）；开头约94秒等待，Docker Chromium安装07:47:16→07:55:23耗487秒，8测试分片07:53:21已全部完成。不能宣称本轮整体更快，也不移除安装/部署验证来换取速度。PR运行仅生成耗时建议artifact，不自动写入dev。按最新用户要求修复成功后收口，不再扩展优化或发布部署。
