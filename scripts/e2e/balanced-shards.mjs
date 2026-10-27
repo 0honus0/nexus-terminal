@@ -18,7 +18,8 @@ const defaultDurationMs = 10_000;
 // Deliberate unknown descendant effects must retain their backend shutdown
 // fence. Give that full E2E scenario its own application lifetime instead of
 // trying to reset or force-close a backend with unconfirmed Run effects.
-const isolatedUnknownSpec = 'specs/agent/preset-plugin.spec.ts';
+const isolatedUnknownSpec = 'specs/agent/plugin/subagent-lifecycle.spec.ts';
+const isolatedInvalidToolSpec = 'specs/agent/plugin/native-surface.spec.ts';
 const isolatedUnknownTitle =
 	'Nexus Agent subagent lifecycle preserves tool batches and reclaims child Browser contexts';
 const isolatedInvalidToolTitle =
@@ -188,14 +189,21 @@ function run(plan, rawShard) {
 			throw new Error('Missing E2E application build: ' + file);
 	}
 	const isolatedPlugin = shard.specs.includes(isolatedUnknownSpec);
+	const isolatedInvalidTool = shard.specs.includes(isolatedInvalidToolSpec);
 	const isolatedAcp = shard.specs.includes(isolatedAcpSpec);
 	const suffixes = [
-		'regular',
-		...(isolatedPlugin ? ['invalid-tool', 'unknown'] : []),
+		...(shard.specs.some(
+			(spec) => spec !== isolatedUnknownSpec && spec !== isolatedInvalidToolSpec && spec !== isolatedAcpSpec,
+		) || isolatedAcp
+			? ['regular']
+			: []),
+		...(isolatedInvalidTool ? ['invalid-tool'] : []),
+		...(isolatedPlugin ? ['unknown'] : []),
 		...(isolatedAcp ? ['acp-cancelled'] : []),
 	];
 	const isolatedTitles = [
-		...(isolatedPlugin ? [isolatedInvalidToolTitle, isolatedUnknownTitle] : []),
+		...(isolatedInvalidTool ? [isolatedInvalidToolTitle] : []),
+		...(isolatedPlugin ? [isolatedUnknownTitle] : []),
 		...(isolatedAcp ? [isolatedAcpCancelledTitle] : []),
 	];
 	const outcomes = [];
@@ -206,7 +214,7 @@ function run(plan, rawShard) {
 			suffix === 'unknown'
 				? [isolatedUnknownSpec, '--grep', isolatedUnknownTitle]
 				: suffix === 'invalid-tool'
-					? [isolatedUnknownSpec, '--grep', isolatedInvalidToolTitle]
+					? [isolatedInvalidToolSpec, '--grep', isolatedInvalidToolTitle]
 					: suffix === 'acp-cancelled'
 						? [isolatedAcpSpec, '--grep', isolatedAcpCancelledTitle]
 						: [
@@ -244,7 +252,11 @@ function run(plan, rawShard) {
 		}
 	}
 	const merged = Object.assign({}, ...durations);
-	for (const spec of [...(isolatedPlugin ? [isolatedUnknownSpec] : []), ...(isolatedAcp ? [isolatedAcpSpec] : [])]) {
+	for (const spec of [
+		...(isolatedPlugin ? [isolatedUnknownSpec] : []),
+		...(isolatedInvalidTool ? [isolatedInvalidToolSpec] : []),
+		...(isolatedAcp ? [isolatedAcpSpec] : []),
+	]) {
 		// Isolating one case must preserve all actual runs and their combined
 		// timing, rather than overwriting the spec with the final phase's time.
 		const timings = durations.map((part) => part[spec]).filter((value) => Number.isFinite(value));

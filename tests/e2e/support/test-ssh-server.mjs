@@ -45,6 +45,8 @@ const PASSWORD = 'e2e-password';
 const DOCKER_CONTAINER_ID = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 let statusSample = 0;
 let sftpWriteDelayMs = 0;
+let sftpWriteBlocked = false;
+const sftpWriteWaiters = new Set();
 let sftpRealpathBlocked = false;
 let sftpRealpathDeny = false;
 const sftpRealpathWaiters = new Set();
@@ -1061,6 +1063,18 @@ function attachSftp(session, accept) {
 		sftpWriteBytes += data.length;
 		sftpPeakPendingWrites = Math.max(sftpPeakPendingWrites, sftpPendingWrites);
 		try {
+			if (sftpWriteBlocked) {
+				// Retain this real WRITE until explicitly released, including after channel
+				// close. Cancellation must not erase the outstanding callback observation.
+				await new Promise((resolve) => {
+					const release = () => {
+						sftpWriteWaiters.delete(release);
+						resolve();
+					};
+
+					sftpWriteWaiters.add(release);
+				});
+			}
 			if (sftpWriteDelayMs > 0) {
 				await new Promise((resolve) => setTimeout(resolve, sftpWriteDelayMs));
 			}
@@ -1809,7 +1823,25 @@ const controlServer = http.createServer(async (req, res) => {
 			res.end(JSON.stringify({ blocked: sftpReadBlocked, pending: sftpReadWaiters.size }));
 			return;
 		}
+		if (requestUrl.pathname === '/sftp/write-hold' && (req.method === 'POST' || req.method === 'GET')) {
+			if (req.method === 'POST') {
+				sftpWriteBlocked = requestUrl.searchParams.get('blocked') === '1';
+				if (!sftpWriteBlocked) for (const release of [...sftpWriteWaiters]) release();
+			}
+			res.writeHead(200, { 'content-type': 'application/json' });
+			res.end(
+				JSON.stringify({
+					blocked: sftpWriteBlocked,
+					held: sftpWriteWaiters.size,
+					pending: sftpPendingWrites,
+					requests: sftpWriteRequests,
+				}),
+			);
+			return;
+		}
 		if (req.method === 'POST' && requestUrl.pathname === '/reset') {
+			sftpWriteBlocked = false;
+			for (const release of [...sftpWriteWaiters]) release();
 			sftpReadBlocked = false;
 			for (const release of [...sftpReadWaiters]) release();
 			sftpRealpathBlocked = false;

@@ -2100,10 +2100,18 @@ CI 机器人 `440cb9e9271f16ac7c3eccb20437a25cf1e679be` 仅更新测试耗时估
 
 墙钟以 GitHub createdAt→updatedAt 比较：620秒原始基线→532秒上一阶段→477秒本轮（03:58:35→04:06:32 UTC），本轮再降55秒/10.3%，累计降143秒/23.1%。本轮准备61秒，后端301秒、浏览器各312/330/395/362/311/381/375秒；最慢测试作业441→395秒。累计有效作业2992秒，相对上一轮3228秒降低7.3%，不视作精确计费，截图条件跳过作业不计入。Node Date-only MockTimers 和真实跨域 hCaptcha SDK 的 Playwright Clock 均已整链验证；并发仍1后端+7浏览器，原关闭/unknown隔离保留。自动提交 `de824567` 仅刷新耗时估计并已同步。未发布或部署，用户截图未提交。
 
-## E2E 功能目录与剩余前端计时等待（2026-10-27，待远程验收）
+## E2E 功能目录与剩余前端计时等待（2026-10-27，已验收）
 
 基线40447142849完整477秒、526项首次通过。当前最重文件为跨服务器传输约181秒，重组为 `ssh/cross-server-transfer/{protocol,clipboard-ui,send-ui}.spec.ts` 与唯一 `fixtures.ts`；同一功能统一维护，原分片器递归发现、按文件实测耗时自动均衡，保持单例内顺序和原数据隔离。原native rsync/SCP/relay、安装/跳过与离页流程、实时非零进度、完整8MiB字节/SHA及软链接断言不缩减；未移到后端组，避免让既有单后端runner成为新瓶颈。
 
 手机状态订阅在已验证短期复用后用Playwright Clock推进30秒原idle timer，再核对真实status.stop与重开真实采样。压缩取消使用同一官方Clock跨原30秒边界，真实远端preflight hold保持；新增测试专用preflight进程开始/退出计数，取消前确认真实命令已进入，释放后等实际进程退出代替固定4秒。不修改产品超时、布局或正常交互；原125秒SSH空闲覆盖、首次Trace/录像/截图与8个runner保持。
 
-静态清单比较项目/标题集合完全一致，共526项；传输五个顶层参数化/普通测试声明AST与原文件一致（仅移除一个未使用变量绑定，保留其await创建），所有原断言保持。两轮源码审核核对嵌套目录全部import、配置递归发现与单例重置、Clock安装顺序和真实进程计数；原archive/processes响应不变，新计数独立测试端点。根check、目标E2E严格tsc（含noUnusedLocals）、夹具node --check及diff通过，日志 `/tmp/nexus-e2e-more-{check,types}.log`；全量格式结果与正式新SHA待回填。
+静态清单比较项目/标题集合完全一致，共526项；传输五个顶层参数化/普通测试声明AST与原文件一致（仅移除一个未使用变量绑定，保留其await创建），所有原断言保持。两轮源码审核核对嵌套目录全部import、配置递归发现与单例重置、Clock安装顺序和真实进程计数；原archive/processes响应不变，新计数独立测试端点。根check、目标E2E严格tsc（含noUnusedLocals）、夹具node --check及diff通过，日志 `/tmp/nexus-e2e-more-{check,types}.log`；全量format:all:check亦通过，日志 `/tmp/nexus-e2e-more-format-check.log`。
+
+正式 [40454422925](https://github.com/0honus0/nexus-terminal/actions/runs/40454422925)，源码76a28b1e9626588d29d8d64fa2d90a41a4a60937：526项首次通过（122后端/404浏览器），0 failed/skipped/retry/flaky，质量/构建/Docker smoke/全部8个测试runner成功。传输新三文件18项全部通过；手机状态订阅5.4秒、归档取消3.8秒。完整日志 `/tmp/nexus-e2e-more-final.log`，元数据 `/tmp/nexus-e2e-more-final-run.json`。完整墙钟05:16:57→05:24:37 UTC，共460秒，比477秒减少17秒/3.6%，相对620秒原始基线减少25.8%。后端299秒，浏览器340/293/296/332/281/366/338秒，最慢395→366秒；累计有效作业2799秒，比2992秒少6.5%，不等于精确计费。准备作业72秒、质量99秒，均存在运行波动；均衡为基于历史耗时的近似，不能保证完全等时。CI耗时提交a5d445b9已同步；未发布镜像或部署，个人截图保持。
+
+## E2E 复制取消与插件分片（2026-10-27，待远程验收）
+
+优先处理最新实测39秒复制取消和约119秒Agent插件大文件。复制场景改用测试SSH的真实WRITE gate，取消前确认已有写入进入，前端Clock跨32秒原清理边界后确认原WRITE仍阻塞；明确释放后等待真实pending归零及对应任务WS终态，再保留第二文件不存在断言。gate不会因channel close清掉观测，reset先释放再停止旧SSH并等待真实I/O归零。原延迟写入接口及其它消费者不变，产品期限不变。
+
+插件统一归agent/plugin目录，分为repository/custom-surface/browser-lifecycle/subagent-lifecycle/native-run/native-surface六份spec和唯一fixtures；8个原测试AST逐项对比完全一致。未知Child副作用与invalid-tool仍各用独立后端进程；只是让原分片器能分别安排两份spec，不取消关闭围栏。完整静态清单仍526项，项目/标题Counter与上一版一致。按上次逐例实测迁移耗时估计，复制文件仅扣除替换的36秒固定等待，作为调度估计而非实际提速结论。根check、严格测试tsc（含noUnusedLocals）、Node语法、全量格式及diff通过；日志 `/tmp/nexus-e2e-large-{check,types,format}.log`。两轮源码审核覆盖递归发现/导入、隔离spec全部消费者、逐例重置、gate取消后保留与真实终态收敛；静态7浏览器分片预计306.7–309.5秒，不代表实测。新SHA正式全量行为与耗时待验，不发布部署。
