@@ -175,7 +175,7 @@ B4.2 安全错误扩展 `challenge_expired`、`not_found`、`limit_exceeded`，�
 
 B6.2C ACP的公开观察复用agent/governance的kind:acp_permission、安全批准对象和agent/tools状态事件；已有Shared codec由后端HTTP真实消费。新ACP argv/prompt/原始更新、父权限关联存储和活waiter仅后端消费，不建立无人消费Shared DTO。内部许可子操作的completed仅表示许可响应交付，不等同远端动作成功；正式前端F-R22后置。
 
-Provider/Registry错误码、步骤状态/事件/失败码唯一归对应values；Provider test失败采用有限取值及受限HTTP状态参数，Registry resolve/delete完整query在http/codec，SQLite行解码也校验基础取值。Provider Shared 与新后端已接线；静态检查结果集中见 testing 最新复审。B5/B6/B7 原执行链和协议已有源码；外围能力B8与恢复B9的Shared/后端已接线；正式前端F1及行为B10仍待完成。
+Agent runs/values 的 tool_resource_not_found 与 tool_remote_permission_denied 区分远端资源缺失/权限拒绝、SSH 目标不可用及 Agent 授权失败；持久结果、详情 codec 与三语显示共同引用有限取值。Provider/Registry错误码、步骤状态/事件/失败码唯一归对应values；Provider test失败采用有限取值及受限HTTP状态参数，Registry resolve/delete完整query在http/codec，SQLite行解码也校验基础取值。Provider Shared 与新后端已接线；静态检查结果集中见 testing 最新复审。B5/B6/B7 原执行链和协议已有源码；外围能力B8与恢复B9的Shared/后端已接线；正式前端F1及行为B10仍待完成。
 
 Access因素Shared与新后端已接线，正式密码/TOTP/Passkey登录、改密、因素管理及CAPTCHA/IP安全面板已消费Shared；其余前端业务留F1。B10 已验证部分 TOTP/Chromium 虚拟认证器 WebAuthn 正常与拒绝链，TOTP 并发单次消费通过；其余数据库并发/期限/容量继续验收，核心持久配置已接线并在重启生效，执行配置与Operations审计/通知已接线；B10已有环回HTTP/Telegram协议、实际SMTP及Access事件分发的有限交付证据，完整故障专项继续待验、正式前端待F1。
 

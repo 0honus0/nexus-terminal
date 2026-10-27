@@ -95,6 +95,8 @@ export const AGENT_RUN_FAILURE_CODES = [
 	'tool_timeout',
 	'tool_invalid_input',
 	'tool_target_unavailable',
+	'tool_resource_not_found',
+	'tool_remote_permission_denied',
 	'tool_host_untrusted',
 	'tool_command_failed',
 	'tool_limit_exceeded',

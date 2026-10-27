@@ -2015,3 +2015,33 @@ a0cb4f49正式40319856905全部质量/构建/Docker和8个分片通过，新增�
 最终回归确认：clipboard/send 原生 SCP 分别 13 秒/11 秒首次完成；页面 relay、skip-rsync、skip-all 均 16 秒首次完成；发送入口准备/安装/跳过/离页、目录及根相对符号链接回退通过。工具依赖与提权流程、归档格式/辅助工具、两种已知图片内容审核码与未知码安全兜底，以及原图片成功预览均通过；图片拒绝不重放、不泄漏上游正文或生成伪成功预览。此处行为验收不等于状态面板截图尺寸的专项视觉验收。
 
 `0695d0bf1f24fb21d157924d620c8fb458dc7177` 只自动刷新测试耗时估计，已快进同步，无产品代码差异。[dev amd64 发布 40383423178](https://github.com/0honus0/nexus-terminal/actions/runs/40383423178) 已成功，生产依赖审计通过。标签 `ghcr.io/0honus0/nexus-terminal:dev` 与 `sha-0695d0bf1f24` 的索引摘要均为 `sha256:059d333a3fa22f81c4fbae18d0b8053c4c3234dfd0dc5649a010e5c7235df0fb`；实际镜像平台 `linux/amd64`，OCI revision 精确为 `0695d0bf1f24fb21d157924d620c8fb458dc7177`，附属 unknown/unknown 项为 BuildKit attestation。证据为 `/tmp/nexus-release-publish-full.log`、`/tmp/nexus-release-image-inspect.txt` 和 `/tmp/nexus-release-image-config.json`。本轮不更新服务器容器，个人截图增删未提交。
+
+### Agent 会话列表删除按钮居中（2026-10-27，本地静态）
+
+NativeThreadPanel 列表行为 items-stretch，全局 UiButton 固定高度配 my-1 使右侧按钮靠上；按钮改用 self-center 并移除垂直外边距，按整行居中。全局按钮尺寸/危险色、禁用态、再次点击确认及选择/搜索事件保持，USAGE 对应章节已同步。两轮源码复核、根 check、Frontend build、全量 format:all:check 及 diff 通过，日志 `/tmp/nexus-thread-delete-align-{check,build,format}.log`。遵循 D17 未执行本地浏览器或行为测试，桌面/手机实际视觉待验；不以之前 526 项通过作为本次样式验收，未提交推送或发布。
+
+### Agent 工具卡片调用详情（2026-10-27）
+
+本批新增单调用认证 GET，卡片展开后展示完整格式化参数 JSON 与持久失败码对应说明；加载失败仅重读详情，取消/未知不宣称远端回滚。源码两轮核对范围为 user/App/Run/tool 身份、Shared 严格解码、逐字段投影、原列表容量、失败码白名单、页面失活/卸载取消及 revision 晚响应保护；没有 schema 改动。
+
+按 PLAN D17 未新增或运行本地行为/浏览器/E2E。正式远程待验：成功/失败/取消/未知调用，空对象与长参数/Unicode/换行/HTML 字符，失败详情读取后重试，展开/收起与切换会话/账号时的旧响应，以及执行中卡片状态更新；身份错配和越权应拒绝。本批根 `pnpm check`、双端 `pnpm build`、`pnpm format:all:check` 和 `git diff --check` 通过，日志为 `/tmp/nexus-tool-details-{check,build,format}.log`；不引用前批 526 项通过作为本批验收。
+
+### Agent PHP/Typecho 规划任务与资源错误分类（2026-10-26）
+
+本轮按用户明确要求，只读核对 ssh.honus.top 所在线上指定线程 `4b7dd2b9-bdfc-4064-8c16-e1cd21471938`、Run `8cd50043-c9dc-40f4-ad0a-9dc3abdc3f0c`。原提示要求“先定好计划”：Run completed，12 个模型步骤、15 次只读工具调用，无部署/启停/写入工具；其中 1 次 `file_list /home/honus/product/npm` failed，持久结果为 tool_target_unavailable，随后同 SSH 的正确父目录与 Compose 读取成功。宿主只读 ls 确认该路径不存在，实际目录为 `/home/honus/product/nginx_proxy_manager`，因此这是资源 not_found 被误报目标不可用，不能据此认定 SSH 断线。
+
+计划明确注明仅从 Compose 判断结构且待核对运行态，未声称已完成迁移。本轮宿主只读 `docker ps -a --filter name=typecho` 与端口 20000 查询均为空，`joyqi/typecho:1.3.0-php7.4-apache` 镜像仍在；实施前应先核对实际站点来源，不能直接照“从当前容器导出”执行。没有启动镜像、恢复容器或修改生产数据。原参数与配置不落入公开日志/本文，不保留含凭据的诊断正文。
+
+修复范围：ToolModel 保留 Remote not_found/forbidden 的独立具名拒绝，Run 投影资源不存在/远端权限拒绝安全码，Shared 有限码和三语原因同步；原可恢复只读失败继续反馈模型，身份失效、App 未授权、写入未知及清理失败不降级，file_list 说明通过父目录真实名称定位。两轮源码审核核对完整调用链与全部拒绝消费者。本批根 `pnpm check`、双端 `pnpm build`、`pnpm format:all:check` 与 `git diff --check` 通过，日志 `/tmp/nexus-agent-resource-failure-{check,build,format}.log`；按 D17 未新增/执行本地行为测试，新代码未部署、未正式 E2E。待远程覆盖缺失路径后继续读取、缺失 SSH 目标、远端权限拒绝与 App 撤权区分，以及写入派发后失败/清理异常的 unknown 围栏和卡片新码展示。
+
+### 服务器状态卡片左右留白（2026-10-26）
+
+用户授权收紧卡片左右外侧空隙，原 StatusMonitor.css 同步修改指标与加载列表水平 padding，去掉窄栏内容覆盖并同步矮栏骨架。两轮源码核对普通/150px/118px 窄栏、210px/270px 矮栏、趋势与手机覆盖次序；卡片内部间距、纵向尺寸、触控区域和数据逻辑保持。根 `pnpm check`、前端构建、全量格式及 `git diff --check` 通过，日志 `/tmp/nexus-status-card-inset-{check,build,format}.log`。按 D17 未运行本地浏览器或行为测试，真实宽窄/矮栏/手机及加载切换视觉待验；未提交发布。
+
+### 文件管理器 `..` 返回行紧凑高度（2026-10-26）
+
+用户授权缩小父目录返回行：只为父行单元格设置更小垂直 padding，移除父行名称原有底部留白；其他文件行、缩放、点击/键盘、20ms 预加载、右键和拖入不变。两轮源码核对全部可见列单元格与 CSS 优先级，父行仍独立于虚拟条目和 spacer，不修改虚拟文件行尺寸。根 `pnpm check`、前端 `pnpm build:frontend`、`pnpm format:all:check` 与 `git diff --check` 通过，日志 `/tmp/nexus-file-parent-row-{check,build,format}.log`；按 D17 未运行本地行为或浏览器。待正式远程验证宽窄栏与行缩放、父目录跳转、键盘/右键/拖入以及大目录滚动；未提交发布。
+
+### 工具详情及界面细节本批正式回归（2026-10-27，待远程）
+
+本轮补充既有图片成功/三类拒绝用例，验证持久工具详情、错误 Run 返回 404、展开卡片后的格式化参数与安全失败码，不改变图片预览、下载、内容审核及不重试断言。其余源码静态证据见上述各节。用户授权整批提交推送，完整正式 E2E 成功后发布 dev linux/amd64；不更新生产容器。

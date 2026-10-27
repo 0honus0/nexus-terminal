@@ -28,7 +28,10 @@ import {
 	readAgentMemoryResponse,
 } from '../../../../packages/shared/src/agent/memory/http-codec';
 import { readAgentErrorResponse, readAgentId } from '../../../../packages/shared/src/agent/http-codec';
-import { readAgentThreadToolsResponse } from '../../../../packages/shared/src/agent/tools/http-codec';
+import {
+	readAgentToolCallDetails,
+	readAgentThreadToolsResponse,
+} from '../../../../packages/shared/src/agent/tools/http-codec';
 import { readAgentBrowserConfiguration } from '../../../../packages/shared/src/agent/integrations/browser-http-codec';
 
 test.use({ actionTimeout: 10_000 });
@@ -973,6 +976,25 @@ test('image tool shows a persisted preview and download without model-authored M
 	const imageTool = tools.items.find((tool) => tool.toolName === 'image_generate');
 	expect(imageTool?.state).toBe('completed');
 	expect(imageTool?.generatedImageId).toMatch(/^[a-f0-9-]{36}$/);
+	if (!imageTool) throw new Error('Expected persisted image tool');
+	const toolPath = { appId: task.app.id, runId: run.id, toolId: imageTool.id };
+	const details = await requestAgentJson(
+		request,
+		{ method: 'GET', path: `/apps/${task.app.id}/runs/${run.id}/tools/${imageTool.id}` },
+		(value) => readAgentToolCallDetails(value, toolPath),
+	);
+	expect(details.tool).toEqual(imageTool);
+	expect(details.failureCode).toBeNull();
+	expect(JSON.parse(details.argumentsJson)).toEqual(expect.objectContaining({ prompt: expect.any(String) }));
+	const wrongRun = await request.get(`/api/v1/agent/apps/${task.app.id}/runs/${randomUUID()}/tools/${imageTool.id}`);
+	expect(wrongRun.status()).toBe(404);
+	const toolCard = hub.locator('[data-tool-name="image_generate"]');
+	await hub.locator('details.group\\/tools > summary').click();
+	await toolCard.locator('summary').click();
+	await expect(toolCard.locator('[data-tool-arguments]')).toHaveText(
+		JSON.stringify(JSON.parse(details.argumentsJson), null, 2),
+	);
+
 	const root = `/api/v1/agent/apps/${task.app.id}/artifacts/${imageTool?.generatedImageId}`;
 	const preview = hub.locator('.agent-generated-image img');
 	await expect(preview).toHaveAttribute('src', root + '/preview');
@@ -1038,6 +1060,22 @@ for (const scenario of [
 			state: 'unknown',
 			generatedImageId: null,
 		});
+		const rejectedTool = tools.items.find((tool) => tool.toolName === 'image_generate');
+		if (!rejectedTool) throw new Error('Expected persisted rejected image tool');
+		const details = await requestAgentJson(
+			request,
+			{ method: 'GET', path: `/apps/${task.app.id}/runs/${run.id}/tools/${rejectedTool.id}` },
+			(value) => readAgentToolCallDetails(value, { appId: task.app.id, runId: run.id, toolId: rejectedTool.id }),
+		);
+		expect(details.failureCode).toBe(scenario.failureCode);
+		expect(JSON.stringify(details)).not.toContain('E2E_PRIVATE_VENDOR_BODY');
+		await hub.locator('details.group\\/tools > summary').click();
+		const toolCard = hub.locator('[data-tool-name="image_generate"]');
+		await toolCard.locator('summary').click();
+		await expect(toolCard.locator('[data-tool-arguments]')).toHaveText(
+			JSON.stringify(JSON.parse(details.argumentsJson), null, 2),
+		);
+		await expect(toolCard).toContainText(scenario.failureCode);
 		const message =
 			scenario.failureCode === 'model_content_filtered'
 				? 'The model service rejected the request or generated result during content safety checks. Revise the prompt before submitting again.'

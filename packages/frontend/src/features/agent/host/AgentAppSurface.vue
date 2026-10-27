@@ -842,6 +842,7 @@
 								</div>
 							</article>
 							<NativeToolActivityList
+								:active="active"
 								:tools="toolsByEntry.assigned.get(index) ?? []"
 								:connections="connections"
 							/>
@@ -863,7 +864,11 @@
 								</p>
 							</div>
 						</article>
-						<NativeToolActivityList :tools="toolsByEntry.orphan" :connections="connections" />
+						<NativeToolActivityList
+							:active="active"
+							:tools="toolsByEntry.orphan"
+							:connections="connections"
+						/>
 						<NativeApprovalHistoryList :approvals="approvalsByEntry.orphan" :connections="connections" />
 						<div v-if="toolCursor !== null" class="mx-auto flex w-full max-w-3xl justify-center">
 							<UiButton

@@ -597,6 +597,18 @@ export function registerAgent(
 				return run === null ? null : toRunView(run);
 			}),
 
+		getToolCall: (userId, appId, runId, toolId) =>
+			boundary(async () => {
+				const value = await runs.getToolCall(userId, appId, runId, toolId);
+				return value === null
+					? null
+					: {
+							tool: toToolView(value),
+							argumentsJson: value.argumentsJson,
+							failureCode: value.failureCode,
+						};
+			}),
+
 		listThreadTools: (userId, appId, threadId, before, limit) =>
 			boundary(async () => {
 				const result = await runs.listThreadTools(userId, appId, threadId, before, limit);

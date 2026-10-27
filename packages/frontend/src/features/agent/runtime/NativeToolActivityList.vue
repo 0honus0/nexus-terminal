@@ -1,16 +1,31 @@
 <script setup lang="ts">
-	import { computed } from 'vue';
+	import { computed, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiBadge } from '@/foundation/ui';
 	import type { ConnectionSummary } from '@/features/connections/public';
 	import type { NativeTool } from '../model/native-run-types';
+	import NativeToolCallDetails from './NativeToolCallDetails.vue';
 	import AgentMessageBody from '../ai/AgentMessageBody.vue';
 	import { formatToolSummary, toolCommandPreview } from './native-tool-summary';
 
 	const props = defineProps<{
 		tools: NativeTool[];
+		active: boolean;
 		connections: ConnectionSummary[];
 	}>();
+	const expanded = ref(false);
+	const openTools = ref(new Set<string>());
+
+	function toggleTool(event: Event, id: string): void {
+		if (!(event.currentTarget instanceof HTMLDetailsElement)) return;
+		if (event.currentTarget.open) openTools.value.add(id);
+		else openTools.value.delete(id);
+	}
+
+	function toggleGroup(event: Event): void {
+		if (event.currentTarget instanceof HTMLDetailsElement) expanded.value = event.currentTarget.open;
+	}
+
 	const { t, te, locale } = useI18n();
 
 	const connectionLabels = computed(() => {
@@ -110,7 +125,7 @@
 <template>
 	<section v-if="tools.length" class="mx-auto w-full max-w-3xl">
 		<AgentMessageBody v-for="tool in generatedImages" :key="tool.id" :text="imageMarkdown(tool)" />
-		<details class="group/tools">
+		<details class="group/tools" @toggle="toggleGroup">
 			<summary
 				class="flex cursor-pointer list-none items-center gap-2.5 rounded-lg px-2 py-1.5 text-[11px] text-text-secondary transition-colors select-none hover:bg-header/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
 			>
@@ -146,7 +161,7 @@
 					:data-tool-name="tool.toolName"
 					:data-tool-state="tool.state"
 				>
-					<details class="group/tool">
+					<details class="group/tool" @toggle="toggleTool($event, tool.id)">
 						<summary
 							class="flex cursor-pointer list-none items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] transition-colors select-none hover:bg-header/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
 						>
@@ -183,6 +198,11 @@
 							</span>
 						</summary>
 						<div class="mb-1.5 ml-7 rounded-xl bg-header/25 px-3 py-2.5 ring-1 ring-inset ring-border/30">
+							<NativeToolCallDetails
+								v-if="expanded && openTools.has(tool.id)"
+								:tool="tool"
+								:active="active"
+							/>
 							<div v-if="commandPreview(tool)" class="mb-2.5 min-w-0">
 								<p class="text-text-secondary/75">{{ t('agent.approvals.command') }}</p>
 								<pre

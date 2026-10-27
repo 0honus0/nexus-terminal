@@ -1,15 +1,18 @@
 import {
 	readAgentThreadToolsPath,
+	readAgentToolCallPath,
+	readAgentToolCallDetails,
 	readAgentThreadToolsQuery,
 	readAgentThreadToolsResponse,
 } from '@nexus-terminal/shared/agent/tools/http-codec';
+import { InvalidAgentPayload } from '@nexus-terminal/shared/agent/http-codec';
 import { AGENT_MAX_JSON_BODY_BYTES } from '@nexus-terminal/shared/agent/values';
 import {
 	AGENT_TOOL_LIST_DEFAULT_LIMIT,
 	AGENT_TOOL_MAX_RESPONSE_BYTES,
 } from '@nexus-terminal/shared/agent/tools/values';
 import { fromNativeTool } from '../model/native-run-mapper';
-import type { NativeTool, NativePage } from '../model/native-run-types';
+import type { NativeTool, NativePage, NativeToolCallDetails } from '../model/native-run-types';
 import { AgentManagementFailure } from '../model/management-failure';
 import { requestAgentManagement } from './management-request';
 
@@ -42,4 +45,22 @@ export async function listNativeThreadTools(
 		},
 	});
 	return { items: value.items.map(fromNativeTool), nextCursor: value.nextCursor };
+}
+
+export async function getNativeToolCallDetails(tool: NativeTool, signal: AbortSignal): Promise<NativeToolCallDetails> {
+	const path = readAgentToolCallPath({ appId: tool.appId, runId: tool.runId, toolId: tool.id });
+	const value = await requestAgentManagement({
+		method: 'GET',
+		path: '/apps/' + path.appId + '/runs/' + path.runId + '/tools/' + path.toolId,
+		maxRequestBytes: AGENT_MAX_JSON_BODY_BYTES,
+		maxResponseBytes: AGENT_TOOL_MAX_RESPONSE_BYTES,
+		signal,
+
+		decode(input) {
+			const details = readAgentToolCallDetails(input, path);
+			if (details.tool.revision < tool.revision) throw new InvalidAgentPayload();
+			return details;
+		},
+	});
+	return { tool: fromNativeTool(value.tool), argumentsJson: value.argumentsJson, failureCode: value.failureCode };
 }

@@ -455,6 +455,8 @@ export class ToolModel {
 				error.code === 'remote_unavailable' ||
 				error.code === 'host_key_untrusted' ||
 				error.code === 'not_text' ||
+				error.code === 'not_found' ||
+				error.code === 'forbidden' ||
 				error.code === 'command_failed'
 			) {
 				throw new ToolOperationRefusal(error.code, { cause: error });
@@ -462,11 +464,9 @@ export class ToolModel {
 			const code =
 				error.code === 'limit_exceeded'
 					? 'limit_exceeded'
-					: error.code === 'not_found'
-						? 'not_found'
-						: error.code === 'conflict' || error.code === 'stale_target'
-							? 'version_conflict'
-							: 'invalid_input';
+					: error.code === 'conflict' || error.code === 'stale_target'
+						? 'version_conflict'
+						: 'invalid_input';
 			throw new AgentFailure(code, {
 				cause:
 					validationFailure === null

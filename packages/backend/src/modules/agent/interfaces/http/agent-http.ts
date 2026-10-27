@@ -4,11 +4,12 @@ import { AGENT_APP_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/scope
 import { readAgentAppStateUpdateRequest } from '@nexus-terminal/shared/agent/scope/http-codec';
 import {
 	parseAgentToolListCursor,
+	readAgentToolCallPath,
 	readAgentThreadToolsPath,
 	readAgentThreadToolsQuery,
 } from '@nexus-terminal/shared/agent/tools/http-codec';
 import { AGENT_TOOL_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/tools/values';
-import type { AgentToolView } from '@nexus-terminal/shared/agent/tools/model';
+import type { AgentToolView, AgentToolCallDetails } from '@nexus-terminal/shared/agent/tools/model';
 import type { AgentThreadToolsResponse } from '@nexus-terminal/shared/agent/tools/http';
 import { agentErrorStatus } from './agent-http-status.js';
 import { InvalidAgentPayload, encodeAgentJson } from '@nexus-terminal/shared/agent/http-codec';
@@ -68,6 +69,7 @@ type AgentHttpResponse =
 	| AgentCancelRunResponse
 	| AgentRunEventsResponse
 	| AgentToolView
+	| AgentToolCallDetails
 	| AgentThreadToolsResponse
 	| AgentErrorResponse;
 
@@ -410,6 +412,26 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 		const path = runPath(ctx);
 		const result = await agent.getRun(userId, path.appId, path.runId);
 		await deliver(ctx, result === null ? 404 : 200, result === null ? { code: 'not_found' } : toRun(result));
+	});
+	add(routes, 'GET', '/apps/:appId/runs/:runId/tools/:toolId', access, async (ctx, userId) => {
+		const path = readAgentToolCallPath({
+			appId: ctx.params.appId,
+			runId: ctx.params.runId,
+			toolId: ctx.params.toolId,
+		});
+		const result = await agent.getToolCall(userId, path.appId, path.runId, path.toolId);
+		await deliver(
+			ctx,
+			result === null ? 404 : 200,
+			result === null
+				? { code: 'not_found' }
+				: {
+						tool: toTool(result.tool),
+						argumentsJson: result.argumentsJson,
+						failureCode: result.failureCode,
+					},
+			AGENT_TOOL_MAX_RESPONSE_BYTES,
+		);
 	});
 	add(
 		routes,

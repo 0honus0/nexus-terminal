@@ -429,7 +429,7 @@ export function toolDefinitions(): ToolDefinition[] {
 			name: 'file_list',
 			version: '2.0.0',
 			description:
-				'List up to 200 entries at an absolute SSH directory. Oversized directories fail; symlinks are listed but never followed.',
+				'List up to 200 entries at an absolute SSH directory. Use exact names from parent listings to resolve abbreviated or uncertain locations; do not assume a service name is its directory name. A tool_resource_not_found result means the requested resource does not exist, not that SSH is disconnected: inspect the nearest known parent before choosing another path. Oversized directories fail; symlinks are listed but never followed.',
 			capability: 'file.read',
 			risk: 'read',
 			mutation: false,

@@ -1,3 +1,4 @@
+import type { AgentRunFailureCode } from '@nexus-terminal/shared/agent/runs/values';
 import type { AgentToolState } from '@nexus-terminal/shared/agent/tools/values';
 import type { AgentApprovalRisk, AgentCapability } from '@nexus-terminal/shared/agent/governance/values';
 
@@ -24,6 +25,7 @@ export interface ToolOperation {
 	/** Saved image owned by this App; only populated for a completed image_generate. */
 	generatedImageId: string | null;
 	resultText: string | null;
+	failureCode: AgentRunFailureCode | null;
 	createdAt: number;
 	updatedAt: number;
 }

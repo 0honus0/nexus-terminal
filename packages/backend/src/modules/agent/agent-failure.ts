@@ -95,7 +95,7 @@ export class ToolOperationRefusal extends Error {
 		readonly code:
 			| Extract<
 					import('@nexus-terminal/shared/remote/files/values').RemoteFileErrorCode,
-					'remote_unavailable' | 'host_key_untrusted' | 'not_text'
+					'remote_unavailable' | 'host_key_untrusted' | 'not_text' | 'not_found' | 'forbidden'
 			  >
 			| 'command_failed',
 		options?: ErrorOptions,

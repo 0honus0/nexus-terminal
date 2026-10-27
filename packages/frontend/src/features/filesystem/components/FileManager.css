@@ -483,6 +483,10 @@
 	vertical-align: middle;
 }
 
+.file-row--parent .file-row-cell {
+	padding-block: calc(3px * var(--file-row-scale));
+}
+
 .file-row-name {
 	padding-left: 8px;
 	padding-right: 4px;
@@ -537,6 +541,7 @@
 }
 
 .file-row-parent-content .file-row-name-label {
+	padding-block: 0;
 	font-weight: 540;
 }
 

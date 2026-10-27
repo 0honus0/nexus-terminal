@@ -75,6 +75,10 @@ export function runFailureCode(error: unknown, tool = false, timedOut = false): 
 				return 'tool_host_untrusted';
 			case 'remote_unavailable':
 				return 'tool_target_unavailable';
+			case 'not_found':
+				return 'tool_resource_not_found';
+			case 'forbidden':
+				return 'tool_remote_permission_denied';
 			case 'command_failed':
 				return 'tool_command_failed';
 			case 'not_text':

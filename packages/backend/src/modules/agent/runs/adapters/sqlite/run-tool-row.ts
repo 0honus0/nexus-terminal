@@ -1,3 +1,4 @@
+import { AGENT_RUN_FAILURE_CODES, type AgentRunFailureCode } from '@nexus-terminal/shared/agent/runs/values';
 import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
 import { AGENT_TOOL_STATES } from '@nexus-terminal/shared/agent/tools/values';
 import {
@@ -42,6 +43,23 @@ function generatedImageId(toolName: unknown, state: unknown, resultText: string 
 		return invalid();
 	}
 	return id(result.id);
+}
+
+/** Only a server-recorded, finite failure code can leave the private result body. */
+function failureCode(state: unknown, resultText: string | null): AgentRunFailureCode | null {
+	if ((state !== 'failed' && state !== 'unknown') || resultText === null) {
+		return null;
+	}
+	let result: unknown;
+	try {
+		result = JSON.parse(resultText);
+	} catch {
+		return null;
+	}
+	if (result === null || typeof result !== 'object' || Array.isArray(result) || !('failureCode' in result)) {
+		return null;
+	}
+	return AGENT_RUN_FAILURE_CODES.find((code) => code === result.failureCode) ?? null;
 }
 
 export function readToolOperation(row: Record<string, unknown>): StoredToolOperation {
@@ -110,6 +128,7 @@ export function readToolOperation(row: Record<string, unknown>): StoredToolOpera
 		revision,
 		state,
 		resultText,
+		failureCode: failureCode(state, resultText),
 		generatedImageId: generatedImageId(row.tool_name, state, resultText),
 		createdAt,
 		updatedAt,

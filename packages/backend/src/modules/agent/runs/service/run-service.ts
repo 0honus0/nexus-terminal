@@ -11,7 +11,7 @@ import {
 	AGENT_REASONING_EFFORTS,
 } from '@nexus-terminal/shared/agent/providers/values';
 import { AGENT_TOOL_LIST_MAX_LIMIT } from '@nexus-terminal/shared/agent/tools/values';
-import type { ToolListCursor, ToolListPage } from '../model/run-tool-types.js';
+import type { ToolListCursor, ToolListPage, ToolOperation } from '../model/run-tool-types.js';
 import type { RunToolModel } from '../model/run-tool-model.js';
 import { createHash, randomUUID } from 'node:crypto';
 import type { RunModel } from '../model/run-model.js';
@@ -294,6 +294,13 @@ export class RunService {
 		validateScope(userId, appId);
 		validateAgentId(runId);
 		return this.model.get(userId, appId, runId);
+	}
+
+	getToolCall(userId: number, appId: string, runId: string, toolId: string): Promise<ToolOperation | null> {
+		validateScope(userId, appId);
+		validateAgentId(runId);
+		validateAgentId(toolId);
+		return this.tools.get({ userId, appId, runId, id: toolId });
 	}
 
 	listThreadTools(

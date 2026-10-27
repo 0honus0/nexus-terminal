@@ -41,6 +41,7 @@ export function fromStoredTool(row: StoredToolOperation): ToolOperation {
 		state: row.state,
 		generatedImageId: row.generatedImageId,
 		resultText: row.resultText,
+		failureCode: row.failureCode,
 		createdAt: row.createdAt,
 		updatedAt: row.updatedAt,
 	};

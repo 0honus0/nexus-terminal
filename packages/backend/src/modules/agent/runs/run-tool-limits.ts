@@ -1,5 +1,7 @@
 /** Private journal budgets; public summary budgets belong to their Shared protocol. */
-export const TOOL_ARGUMENT_MAX_BYTES = 16 * 1024;
+import { AGENT_TOOL_ARGUMENT_MAX_BYTES } from '@nexus-terminal/shared/agent/tools/values';
+
+export const TOOL_ARGUMENT_MAX_BYTES = AGENT_TOOL_ARGUMENT_MAX_BYTES;
 
 export const TOOL_RESULT_MAX_BYTES = 256 * 1024;
 

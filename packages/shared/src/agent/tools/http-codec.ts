@@ -1,4 +1,4 @@
-import { AGENT_RUN_STEP_MAX_COUNT } from '../runs/values.js';
+import { AGENT_RUN_STEP_MAX_COUNT, AGENT_RUN_FAILURE_CODES } from '../runs/values.js';
 import { agentRecord, agentInteger, agentText, readAgentId, InvalidAgentPayload } from '../http-codec.js';
 import {
 	AGENT_CAPABILITIES,
@@ -13,10 +13,45 @@ import {
 	AGENT_TOOL_LIST_DEFAULT_LIMIT,
 	AGENT_TOOL_LIST_MAX_LIMIT,
 	AGENT_TOOL_MAX_RESPONSE_BYTES,
+	AGENT_TOOL_ARGUMENT_MAX_BYTES,
 } from './values.js';
 import type { AgentToolState } from './values.js';
-import type { AgentThreadToolsPath, AgentThreadToolsQuery, AgentThreadToolsResponse } from './http.js';
-import type { AgentToolView } from './model.js';
+import type {
+	AgentThreadToolsPath,
+	AgentThreadToolsQuery,
+	AgentThreadToolsResponse,
+	AgentToolCallPath,
+} from './http.js';
+import type { AgentToolView, AgentToolCallDetails } from './model.js';
+
+export function readAgentToolCallPath(input: unknown): AgentToolCallPath {
+	const row = agentRecord(input, ['appId', 'runId', 'toolId']);
+	return { appId: readAgentId(row.appId), runId: readAgentId(row.runId), toolId: readAgentId(row.toolId) };
+}
+
+export function readAgentToolCallDetails(input: unknown, path: AgentToolCallPath): AgentToolCallDetails {
+	const row = agentRecord(input, ['tool', 'argumentsJson', 'failureCode'], AGENT_TOOL_MAX_RESPONSE_BYTES);
+	const tool = readTool(row.tool);
+	if (tool.appId !== path.appId || tool.runId !== path.runId || tool.id !== path.toolId) {
+		throw new InvalidAgentPayload();
+	}
+	const argumentsJson = agentText(row.argumentsJson, AGENT_TOOL_ARGUMENT_MAX_BYTES);
+	let parameters: unknown;
+	try {
+		parameters = JSON.parse(argumentsJson);
+	} catch {
+		throw new InvalidAgentPayload();
+	}
+	if (parameters === null || typeof parameters !== 'object' || Array.isArray(parameters)) {
+		throw new InvalidAgentPayload();
+	}
+	const failureCode =
+		row.failureCode === null ? null : AGENT_RUN_FAILURE_CODES.find((code) => code === row.failureCode);
+	if (failureCode === undefined || (failureCode !== null && tool.state !== 'failed' && tool.state !== 'unknown')) {
+		throw new InvalidAgentPayload();
+	}
+	return { tool, argumentsJson, failureCode };
+}
 
 function state(input: unknown): AgentToolState {
 	const result = AGENT_TOOL_STATES.find((value) => value === input);

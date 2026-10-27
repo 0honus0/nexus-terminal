@@ -251,7 +251,7 @@ Port 文件表达 Platform 的技术能力及技术输入/输出，不是新增�
 
 ## 4. 类型与转换
 
-ToolOperation/ToolInspectionCommand/ToolIdentity 归 runs/model；StoredToolOperation/StoredToolInspection/StoredToolIdentity 归 runs/storage，各边界逐字段转换。ApprovalRequest 只指定操作身份及审批种类，不接受自报 hash、风险、能力或摘要；这些事实从当前持久操作生成。Shared agent/tools 的 values/model/http/http-codec 定义有限状态、安全审计对象和分页；参数/结果正文、providerCallId 与私密摘要保持内部。ToolEvent/Page 归 runs/model，StoredToolEvent/Page 归 runs/storage，不继承 Shared 对象。
+ToolOperation/ToolInspectionCommand/ToolIdentity 归 runs/model；StoredToolOperation/StoredToolInspection/StoredToolIdentity 归 runs/storage，各边界逐字段转换。ApprovalRequest 只指定操作身份及审批种类，不接受自报 hash、风险、能力或摘要；这些事实从当前持久操作生成。Shared agent/tools 的 values/model/http/http-codec 定义有限状态、安全审计对象和分页；参数仅经绑定用户/App/Run/tool 的单调用认证详情接口按需读取；原始结果正文、providerCallId 与私密摘要保持内部。ToolEvent/Page 归 runs/model，StoredToolEvent/Page 归 runs/storage，不继承 Shared 对象。
 
 ### B5.2 模型流表示
 
@@ -689,7 +689,7 @@ Root owner → tools Service → ToolModel → Targets public listEntries；Root
 | 检查、许可、结果 → 存储 | runs/governance Model / storage           | 对应 Model                | SQLite Adapter |
 | 线程工具状态 → 公开     | Shared tools                              | register 与 HTTP 独立投影 | 聊天工具卡片   |
 
-connectionIds 是必填的最多 50 个唯一正整数，空数组表示没有选中目标，选择不等于授权。modelStepIndex 公开；providerCallId、参数、结果正文及 encrypted reasoning 留内部。工具结果仅有 id/name/host/port/username，Targets 的 type/version 只用于内部过滤与复查，不读取凭据。
+connectionIds 是必填的最多 50 个唯一正整数，空数组表示没有选中目标，选择不等于授权。modelStepIndex 公开；完整模型参数只通过单调用认证详情读取；providerCallId、原始结果正文及 encrypted reasoning 留内部。工具结果仅有 id/name/host/port/username，Targets 的 type/version 只用于内部过滤与复查，不读取凭据。
 
 ### 5. 入口与安装
 

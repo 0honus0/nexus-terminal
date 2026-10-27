@@ -1768,6 +1768,14 @@
       "conversation": "线程正文",
       "windowed": "为控制页面内存，较早的正文分片已移出显示窗口；服务器记录仍保留。重新选择线程可从头读取。",
       "toolActivity": "工具调用",
+      "toolCallDetails": {
+        "title": "调用详情",
+        "arguments": "调用参数",
+        "loadFailed": "无法读取本次调用详情，请重试。",
+        "failed": "该工具调用失败，未记录更具体的原因。请核对下方参数。",
+        "unknown": "该工具调用结果未知；请核对远端状态，不要直接重复执行。",
+        "cancelled": "该工具调用已取消；取消不代表远端操作已回滚。"
+      },
       "toolAction": {
         "create": "创建",
         "replace": "替换",
@@ -1888,6 +1896,8 @@
         "tool_timeout": "工具 {tool} 执行超时。",
         "tool_invalid_input": "工具 {tool} 的参数或文件类型不符合要求。",
         "tool_target_unavailable": "工具 {tool} 的目标连接不存在或暂时不可用。",
+        "tool_resource_not_found": "工具 {tool} 请求的远端文件、目录或资源不存在，请核对实际路径或资源标识。",
+        "tool_remote_permission_denied": "远端拒绝工具 {tool} 访问该资源，请检查 SSH 用户及资源权限。",
         "tool_host_untrusted": "工具 {tool} 的 SSH 主机公钥尚未受信任，请先连接并确认公钥。",
         "tool_command_failed": "工具 {tool} 的远端命令执行失败。",
         "tool_limit_exceeded": "工具 {tool} 超出执行预算或输出容量限制。",

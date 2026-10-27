@@ -1,7 +1,8 @@
 import type { AgentToolState } from './values.js';
 import type { AgentApprovalRisk, AgentCapability } from '../governance/values.js';
+import type { AgentRunFailureCode } from '../runs/values.js';
 
-/** Safe tool state and generated image reference; arguments and raw results stay private. */
+/** Tool list projection; arguments are read separately through authenticated single-call details. */
 export interface AgentToolView {
 	id: string;
 	appId: string;
@@ -23,4 +24,11 @@ export interface AgentToolView {
 	generatedImageId: string | null;
 	createdAt: number;
 	updatedAt: number;
+}
+
+/** Authenticated single-call details; no injected credentials or raw result body. */
+export interface AgentToolCallDetails {
+	tool: AgentToolView;
+	argumentsJson: string;
+	failureCode: AgentRunFailureCode | null;
 }

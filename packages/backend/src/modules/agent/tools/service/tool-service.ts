@@ -40,7 +40,11 @@ import { TOOL_RESULT_MAX_BYTES } from '../../runs/run-tool-limits.js';
 function recoverableToolError(error: unknown): boolean {
 	return (
 		(error instanceof AgentFailure && (error.code === 'invalid_input' || error.code === 'not_found')) ||
-		(error instanceof ToolOperationRefusal && (error.code === 'not_text' || error.code === 'command_failed'))
+		(error instanceof ToolOperationRefusal &&
+			(error.code === 'not_text' ||
+				error.code === 'command_failed' ||
+				error.code === 'not_found' ||
+				error.code === 'forbidden'))
 	);
 }
 

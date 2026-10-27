@@ -1768,6 +1768,14 @@
       "conversation": "Thread conversation",
       "windowed": "Earlier body chunks have left this bounded display window. Server records remain; select the thread again to read from the beginning.",
       "toolActivity": "Tool calls",
+      "toolCallDetails": {
+        "title": "Call details",
+        "arguments": "Call arguments",
+        "loadFailed": "Could not load this call. Please retry.",
+        "failed": "This tool call failed without a more specific recorded reason. Check the arguments below.",
+        "unknown": "The result of this tool call is unknown. Check the remote state before repeating it.",
+        "cancelled": "This tool call was cancelled. Cancellation does not prove the remote operation was rolled back."
+      },
       "toolAction": {
         "create": "Create",
         "replace": "Replace",
@@ -1888,6 +1896,8 @@
         "tool_timeout": "Tool {tool} timed out.",
         "tool_invalid_input": "Tool {tool} received invalid arguments or an unsupported file type.",
         "tool_target_unavailable": "The target for tool {tool} is missing or unavailable.",
+        "tool_resource_not_found": "The remote file, directory, or resource requested by tool {tool} does not exist. Check the actual path or resource ID.",
+        "tool_remote_permission_denied": "The remote server denied tool {tool} access to this resource. Check the SSH user and resource permissions.",
         "tool_host_untrusted": "The SSH host key for tool {tool} is not trusted. Connect and confirm the key first.",
         "tool_command_failed": "The remote command for tool {tool} failed.",
         "tool_limit_exceeded": "Tool {tool} exceeded its execution budget or output limit.",

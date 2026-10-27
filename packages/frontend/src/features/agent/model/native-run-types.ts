@@ -167,6 +167,12 @@ export interface NativeTool {
 	updatedAt: number;
 }
 
+export interface NativeToolCallDetails {
+	tool: NativeTool;
+	argumentsJson: string;
+	failureCode: AgentRunFailureCode | null;
+}
+
 export interface NativePage<T, Cursor> {
 	items: T[];
 	nextCursor: Cursor;

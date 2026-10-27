@@ -266,7 +266,7 @@
 					:appearance="confirmingDeleteId === item.id ? 'soft' : 'ghost'"
 					tone="danger"
 					icon-only
-					class="my-1 mr-1 shrink-0"
+					class="mr-1 shrink-0 self-center"
 					:title="
 						confirmingDeleteId === item.id
 							? t('agent.operations.confirmDeleteThread')

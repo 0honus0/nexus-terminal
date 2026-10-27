@@ -1,3 +1,4 @@
+import type { AgentRunFailureCode } from '@nexus-terminal/shared/agent/runs/values';
 import type { StoredExecutionSettings, StoredExecutionUsage } from '../../execution/storage/execution-storage.js';
 import type { AgentRunStatus } from '@nexus-terminal/shared/agent/runs/values';
 import type { AgentToolState } from '@nexus-terminal/shared/agent/tools/values';
@@ -27,6 +28,7 @@ export interface StoredToolOperation {
 	/** Saved image owned by this App; only populated for a completed image_generate. */
 	generatedImageId: string | null;
 	resultText: string | null;
+	failureCode: AgentRunFailureCode | null;
 	createdAt: number;
 	updatedAt: number;
 }

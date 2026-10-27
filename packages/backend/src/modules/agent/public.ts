@@ -1,3 +1,4 @@
+import type { AgentToolCallDetails } from '@nexus-terminal/shared/agent/tools/model';
 import type { AgentReasoningEffort } from '@nexus-terminal/shared/agent/providers/values';
 import type { AgentAppView, AgentAppDefinitionView, AgentThreadView } from '@nexus-terminal/shared/agent/scope/model';
 import type { AgentRunUsageView, AgentRunView } from '@nexus-terminal/shared/agent/runs/model';
@@ -69,6 +70,7 @@ export interface AgentStateApi {
 	createRun(input: AgentCreateRunInput): Promise<AgentCreateRunResult>;
 	cancelRun(input: AgentCancelRunInput): Promise<AgentCancelRunResult>;
 	getRun(userId: number, appId: string, runId: string): Promise<AgentRunView | null>;
+	getToolCall(userId: number, appId: string, runId: string, toolId: string): Promise<AgentToolCallDetails | null>;
 	listThreadTools(
 		userId: number,
 		appId: string,
