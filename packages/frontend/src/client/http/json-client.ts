@@ -15,8 +15,13 @@ export interface JsonRequest {
 async function readJson(response: Response, maxBytes: number): Promise<unknown> {
 	if (response.status === 204) {
 		const length = response.headers.get('content-length');
-		if (response.body !== null || (length !== null && length !== '0')) {
+		if (length !== null && length !== '0') {
 			return rejectResponse(response, new HttpRequestFailure('protocol_failure', 'unknown'));
+		}
+		// Browsers can expose an empty stream for 204 (including intercepted
+		// requests). Validate the actual bytes instead of assuming a null handle.
+		if (response.body !== null && (await readResponseBytes(response, maxBytes)).byteLength !== 0) {
+			throw new HttpRequestFailure('protocol_failure', 'unknown');
 		}
 		return undefined;
 	}

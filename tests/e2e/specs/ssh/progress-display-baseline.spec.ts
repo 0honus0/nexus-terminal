@@ -610,7 +610,13 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 					/seed\.txt: (Could not connect to the source or target\.|The remote transfer failed and may have written partial files\. Check the target\.)/,
 				);
 
+				const removed = page.waitForResponse(
+					(response) =>
+						response.request().method() === 'DELETE' &&
+						/\/api\/v1\/transfers\/[^/]+$/u.test(new URL(response.url()).pathname),
+				);
 				await taskCard.getByRole('button', { name: 'Remove', exact: true }).click();
+				expect((await removed).status()).toBe(204);
 				await expect(taskCard).toHaveCount(0);
 				await closeProgressDisplay(display);
 			},

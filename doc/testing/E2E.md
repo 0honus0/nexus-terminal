@@ -2207,3 +2207,7 @@ CDP 复用 172.30.30.11:9223，在 api.honus.top 自建隔离页挂载正式 Sta
 完整桌面 Workspace 经真实 WS/SSH 注入五条受控时间样本，1/5/10/30的窗口及真实首点正确；30分钟画布实际 Rx91/Tx44 个匹配色像素，中段0，无跨22分钟空白斜线。完整手机 Workspace 模拟中断touch、旧rAF延期及仅visualViewport变化，实际PTY行数42→25→42，帧未恢复时真实输入已派发，恢复后真实SSH命令输出正确；正式关闭测试标签。日志 `/tmp/nexus-release-{trend-live,mobile}-cdp.log`，截图 `/tmp/nexus-release-live-{desktop,trend,mobile}.png`。此为受控故障时序，不视作真实安卓系统IME或等待22分钟采样验收。
 
 安装偏好与三种工具显示再次通过正式 composable/组件隔离专项，日志 `/tmp/nexus-release-tool-choice-cdp.log`；工具缺失/后来安装为测试页受控HTTP，不冒充真实远端包安装。源码两轮审核沿全部 Shared decoder/mapper、原生退出/清理、偏好取消/身份围栏、历史/输入就绪/几何屏障，未发现新增功能缺口。正式完整远程 E2E 与发布仍待本次 main SHA，不用本地专项代替全绿门禁。
+
+首轮 main 0512a45e 的40547420086有两例失败：新增状态标题断言错误要求所有缩放下整行≤17px，但数值读数保留原0.82em随面板缩放，1.6倍时真实行高21.825px；修正测试为关闭按钮16px及标题不被额外撑高，不改产品CSS。服务器传输移除是实际通用HTTP读取问题：DELETE真实返回204，浏览器却暴露非null的空ReadableStream，原readJson误拒绝成protocol_failure，后端已删除但本地卡片保留。本轮CDP受控204复现bodyNull=false/text为空，修正为按既有容量读取并验证真实零字节，保留非法Content-Length和非空正文拒绝；原移除E2E补实际DELETE204回执断言，卡片消失断言不减。其它分片首次通过，未发布；新SHA完整回归待验。
+
+修正后 CDP `/tmp/nexus-release-remove-proof.log` 真实暴露空流的DELETE返回成功；`/tmp/nexus-release-204-boundaries.log` 验证null正文、未声明长度空流、声明0空流均成功，非空正文和非法长度保持protocol_failure。`pnpm run check`、`pnpm run format:all:check`、前端正式构建及两项回归严格TypeScript检查全部通过；补充修正沿HTTP读取/清理/错误分类及测试响应等待完成两轮源码审核。通用204修复恢复原删除行为，USAGE原传输任务说明仍符合实际。
