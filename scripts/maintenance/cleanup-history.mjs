@@ -8,9 +8,8 @@ export default async function cleanup({ github, context, core }) {
 	const packagePath = `${packageRoute}/packages/container/{package_name}/versions`;
 	const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, { owner, repo, per_page: 100 });
 	const currentRun = Number(context.runId);
-	if (runs.some((run) => run.id !== currentRun && run.status !== 'completed')) {
-		throw new Error('Wait for other Actions runs to finish before cleaning their history and runner caches.');
-	}
+	const activeRuns = runs.filter((run) => run.id !== currentRun && run.status !== 'completed');
+	for (const run of activeRuns) core.info(`Keep active run ${run.id}: ${run.status}`);
 
 	async function versions(packageName) {
 		try {
@@ -88,7 +87,7 @@ export default async function cleanup({ github, context, core }) {
 	}
 
 	await verifyChannels();
-	const retainedRuns = new Set([currentRun]);
+	const retainedRuns = new Set([currentRun, ...activeRuns.map((run) => run.id)]);
 	for (const run of runs) {
 		if (retainedRevisions.has(run.head_sha) && run.conclusion === 'success') retainedRuns.add(run.id);
 	}
@@ -105,20 +104,47 @@ export default async function cleanup({ github, context, core }) {
 	);
 	for (const [tag, version] of channelVersions) core.info(`Keep ${tag}: ${version.name}`);
 
+	let deletedArtifacts = 0;
+	let deletedRuns = 0;
 	for (const artifact of obsoleteArtifacts) {
+		const runId = artifact.workflow_run?.id;
+		if (!runId) {
+			core.info(`Keep artifact ${artifact.id}: owning run is unavailable.`);
+			continue;
+		}
+		const fresh = await github.rest.actions.getWorkflowRun({ owner, repo, run_id: runId });
+		if (fresh.data.status !== 'completed') {
+			core.info(`Keep artifact ${artifact.id}: run ${runId} is ${fresh.data.status}.`);
+			continue;
+		}
 		await github.rest.actions.deleteArtifact({ owner, repo, artifact_id: artifact.id });
+		deletedArtifacts += 1;
 	}
 	for (const run of obsoleteRuns) {
 		const fresh = await github.rest.actions.getWorkflowRun({ owner, repo, run_id: run.id });
-		if (fresh.data.status !== 'completed') throw new Error('A historical run was restarted; stop cleanup.');
+		if (fresh.data.status !== 'completed') {
+			core.info(`Keep restarted run ${run.id}: ${fresh.data.status}`);
+			continue;
+		}
 		await github.rest.actions.deleteWorkflowRun({ owner, repo, run_id: run.id });
+		deletedRuns += 1;
 	}
-	for (const cache of caches) {
+	const freshRuns = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
+		owner,
+		repo,
+		per_page: 100,
+	});
+	const hasActiveRuns = freshRuns.some((run) => run.id !== currentRun && run.status !== 'completed');
+	const removableCaches = hasActiveRuns ? [] : caches;
+	const removableImages = hasActiveRuns ? [] : obsoleteImages;
+	const removableRunnerVersions = hasActiveRuns ? [] : runnerVersions;
+	if (hasActiveRuns) core.info('Other runs are active; keep image versions and Actions caches for this cleanup.');
+	for (const cache of removableCaches) {
 		await github.rest.actions.deleteActionsCacheById({ owner, repo, cache_id: cache.id });
 	}
 	for (const [packageName, candidates] of [
-		['nexus-terminal', obsoleteImages],
-		['nexus-terminal-e2e-runner', runnerVersions],
+		['nexus-terminal', removableImages],
+		['nexus-terminal-e2e-runner', removableRunnerVersions],
 	]) {
 		for (const version of candidates) {
 			await verifyChannels();
@@ -133,15 +159,15 @@ export default async function cleanup({ github, context, core }) {
 	await core.summary
 		.addHeading('Manual cleanup complete')
 		.addRaw(
-			'Kept latest/dev and all referenced platform/attestation manifests, their successful runs, the newest successful E2E and this cleanup run. Removed other snapshotted runs/artifacts and all snapshotted Actions/runner image caches.\n',
+			'Kept latest/dev and all referenced platform/attestation manifests, their successful runs, the newest successful E2E and this cleanup run. Removed eligible completed runs/artifacts. Active or restarted runs and their artifacts were retained; image versions and caches were retained when other runs were active.\n',
 		)
 		.addTable([
 			['Deleted resource', 'Count'],
-			['Product image versions', String(obsoleteImages.length)],
-			['Runner image versions', String(runnerVersions.length)],
-			['Actions runs', String(obsoleteRuns.length)],
-			['Artifacts', String(obsoleteArtifacts.length)],
-			['Actions caches', String(caches.length)],
+			['Product image versions', String(removableImages.length)],
+			['Runner image versions', String(removableRunnerVersions.length)],
+			['Actions runs', String(deletedRuns)],
+			['Artifacts', String(deletedArtifacts)],
+			['Actions caches', String(removableCaches.length)],
 		])
 		.write();
 }
