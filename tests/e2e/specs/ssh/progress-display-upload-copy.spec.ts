@@ -155,6 +155,11 @@ test('registered copy progress hides and cancels through the shared Progress Dis
 			await expect(task).toBeVisible();
 			await expect(task).toContainText('Copy');
 			await expect(task.getByRole('button', { name: 'Cancel', exact: true })).toBeEnabled();
+			// A published task can still be waiting for its remote resource. Only
+			// cancellation after a real write must report an unknown remote outcome.
+			await expect
+				.poll(async () => Number(await task.getByRole('progressbar').getAttribute('aria-valuenow')))
+				.toBeGreaterThan(0);
 			await task.getByRole('button', { name: 'Cancel', exact: true }).click();
 			// Preserve the unknown remote outcome in the Toast, while failed tasks
 			// leave both progress surfaces without suggesting remote rollback.

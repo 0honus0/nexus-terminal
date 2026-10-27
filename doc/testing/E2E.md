@@ -2053,3 +2053,7 @@ NativeThreadPanel 列表行为 items-stretch，全局 UiButton 固定高度配 m
 ### 手动清理 workflow（2026-10-27，静态待验）
 
 新增 cleanup-history.yml 与维护脚本；仅手动触发，无 schedule/push/release。源码审核两轮核对包/仓库范围、latest/dev 多层 manifest 与证明闭包、渠道移动围栏、历史运行/产物保留、缓存删除、活跃运行与权限失败路径。只读实际 GHCR 核实 dev 索引包含 amd64 manifest 与 unknown/unknown attestation，不能只保留有标签的索引版本。未执行删除、未运行本地行为测试；实际清理与权限验证仍待手动运行。
+
+### Actions 恢复及复制取消竞态（2026-10-27）
+
+手动触发已恢复：40436334225 验证 7810d6ad，检查/格式/构建、Docker smoke 和 7 个分片成功；第 4 分片用例 registered copy progress 首次失败、重试通过，flaky 门禁正确拒绝，不能称全绿。截图与调用日志显示 Cancel 后任务直接消失且没有 unknown Toast。沿 FileService 核对：dispatchedMutation=false 的已取消任务应返回 cancelled；任务注册与实际远端写入之间存在正常异步间隔。用例先等待非零字节进度再点击 Cancel，以进入其声称验证的写入后 unknown 分支；原 Toast/隐藏任务/源文件断言、超时及产品 UI 保留。其余本批工具参数与失败卡片新增断言所在分片已通过，最终仍待修复提交完整正式回归。

@@ -3750,3 +3750,7 @@ a0cb4f49/40319856905完整通过（含质量、Docker及全部8分片），3381d
 用户要求先创建 workflow，仅手动触发；清理旧 artifact、镜像和 Actions 历史，并允许删除缓存。八节设计：① 维护归仓库自动化，不进入产品模块；② workflow 调用 scripts/maintenance 唯一执行脚本；③ 复用官方 actions/github-script 的 Octokit 分页、GitHub REST 与 GHCR Registry API；④ 不新增双端/内部业务契约；⑤ 仅 workflow_dispatch，最小 contents:read、actions/packages:write；⑥ 镜像先解析 latest/dev 递归 manifest 闭包，快照具体资源 ID 后删除，保留渠道关联成功运行和最近成功 E2E；⑦ 其它运行未结束时退出，镜像标签移动或解析/权限失败停止，已完成删除不虚构回滚；⑧ 仅清理本仓库运行/产物/缓存、nexus-terminal 旧版本及 E2E runner 缓存，不触碰其它包、产品 UI 或实例数据。
 
 四表：功能对应为手动清理和两渠道保留；职责归属为 workflow+独立维护脚本；类型归属为脚本局部无业务契约；完成证据为静态语法、ESLint、格式、源码双轮审核及保留 manifest 的只读 Registry 核对。按最新指令先创建，不执行删除；远程实际删除待后续手动触发。
+
+## 本轮 E2E 首次取消时序修复（2026-10-27）
+
+正式运行 40436334225 的 8 分片中 7 绿、1 分片因一次 flaky 被门禁拒绝。根因在 registered copy progress 用例：进度任务注册不代表远端写入派发，立刻取消可安全返回 cancelled；断言却固定要求 unknown Toast。真实 owner FileService 已按 dispatchedMutation 区分，产品无错误，不改 UI 或业务围栏。测试在取消前等待真实非零字节进度，稳定进入原本要验证的“写入后取消”分支，保留原 Toast、任务消失及源文件存在断言，不扩大超时、不跳过。静态后推送并重新完整回归，绿灯后发布 amd64 dev；清理 workflow 仍只创建未执行。
