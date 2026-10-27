@@ -76,7 +76,9 @@ const reservePort = async () => {
 try {
 	const build = spawnSync(
 		process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
-		['--filter', '@nexus-terminal/e2e', 'build'],
+		process.env.NEXUS_E2E_SUITE === 'backend'
+			? ['run', 'build:backend']
+			: ['--filter', '@nexus-terminal/e2e', 'build'],
 		{
 			cwd: repoRoot,
 			stdio: 'inherit',

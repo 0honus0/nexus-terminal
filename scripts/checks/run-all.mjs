@@ -3,10 +3,11 @@
 import { spawnSync } from 'node:child_process';
 
 const checks = [
+	// Backend check builds Shared declarations before either consumer checks its imports.
+	['Backend type check', ['--filter', '@nexus-terminal/backend', 'check']],
 	['Frontend ESLint', ['run', 'lint:frontend']],
 	['Backend ESLint', ['run', 'lint:backend']],
 	['Frontend type check', ['--filter', '@nexus-terminal/frontend', 'exec', 'vue-tsc', '--noEmit']],
-	['Backend type check', ['--filter', '@nexus-terminal/backend', 'check']],
 ];
 
 for (const [name, args] of checks) {

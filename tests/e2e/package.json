@@ -16,7 +16,7 @@
     "test:docs": "pnpm run build && node support/run-functional-screenshots.mjs",
     "test:ingress": "playwright test --config=playwright.ingress.config.ts",
     "test:list": "playwright test --list",
-    "test:backend": "NEXUS_E2E_SUITE=backend pnpm test",
+    "test:backend": "pnpm --workspace-root run build:backend && NEXUS_E2E_SUITE=backend playwright test",
     "test:browser": "NEXUS_E2E_SUITE=browser pnpm test"
   },
   "devDependencies": {

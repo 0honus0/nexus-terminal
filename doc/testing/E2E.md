@@ -2077,3 +2077,7 @@ CI 机器人 `440cb9e9271f16ac7c3eccb20437a25cf1e679be` 仅更新测试耗时估
 基线 E2E 40437638548 墙钟约 620 秒；按其实测用例耗时 backend 串行约 395 秒、browser 约 2788 秒，默认同 8 runner 采用 1/7。真实新耗时与冷/热 runner image 待远程 Actions，不把理论估计写成提速结论。本地仅执行静态列举、检查与构建，按 D17 不运行行为测试。
 
 静态已通过：根 `pnpm run check`、正式双端 build、测试客户端 Vite build、变更 E2E 严格 TypeScript、Node 脚本语法、`git diff --check`。日志 `/tmp/nexus-split-{root-check,build,clients-build,e2e-types}.log`。两轮源码复审覆盖配置、唯一清单、各启动命令、共享 artifact 目录、同源校验、夹具关闭/重置/复制与 reporter；未发现需更改产品接口或 UI 的项。正式 Actions 待推送后执行，全部首次通过才收口。
+
+首轮 40442149074 的质量作业暴露旧根检查的干净环境顺序依赖：Frontend vue-tsc 在 Backend check 生成 Shared 声明之前运行；旧 workflow 额外 Backend check 曾掩盖它。本地既有 dist 无法暴露该问题。修复为根 check 先执行含 Shared build 的 Backend check，再执行双端 lint 和 Frontend vue-tsc，检查项不减；不恢复重复检查。后端独立命令及未预构建的后端分片/远程入口只构建后端和 Shared，不因前端构建失败而阻断手动协议回归；完整 CI 仍要求两组、全量构建、质量与 Docker 同时成功。
+
+修复后的根检查及全量格式复核通过：`/tmp/nexus-split-root-check-order.log`、`/tmp/nexus-split-format-final.log`。另以 `/tmp/nexus-split-clean-check` 独立安装冻结依赖，不复制任何 dist，执行根检查全部通过（`/tmp/nexus-split-clean-check.log`）；初次 offline 安装因隔离目录无元数据缓存失败，改为正常冻结安装后成功。以上仅静态验证，没有本地行为执行。

@@ -162,7 +162,7 @@ function run(plan, rawShard) {
 	if (process.env.NEXUS_E2E_PREBUILT !== '1') {
 		const built = spawnSync(
 			process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
-			['--filter', '@nexus-terminal/e2e', 'build'],
+			suite === 'backend' ? ['run', 'build:backend'] : ['--filter', '@nexus-terminal/e2e', 'build'],
 			{
 				cwd: repoRoot,
 				stdio: 'inherit',
@@ -175,8 +175,7 @@ function run(plan, rawShard) {
 	for (const file of [
 		'backend/dist/bootstrap/create-app.js',
 		'shared/dist/access/http.js',
-		'frontend/dist/index.html',
-		'frontend/dist/__e2e__/browser-clients.js',
+		...(suite === 'backend' ? [] : ['frontend/dist/index.html', 'frontend/dist/__e2e__/browser-clients.js']),
 	]) {
 		if (!fs.existsSync(path.join(repoRoot, 'packages', file)))
 			throw new Error('Missing E2E application build: ' + file);
