@@ -57,7 +57,7 @@ test('server transfer pagination reads beyond 160 records and still rejects repe
 	});
 	await page.goto('/connections');
 	const ids = await page.evaluate(async () => {
-		const modulePath = '/src/features/transfers/api/server-transfers-api.ts';
+		const modulePath = '/__e2e__/browser-clients.js';
 		const {
 			serverTransfersApi,
 		}: typeof import('../../../../packages/frontend/src/features/transfers/api/server-transfers-api') =
@@ -68,7 +68,7 @@ test('server transfer pagination reads beyond 160 records and still rejects repe
 	expect(cursors).toHaveLength(21);
 	repeat = true;
 	const failure = await page.evaluate(async () => {
-		const modulePath = '/src/features/transfers/api/server-transfers-api.ts';
+		const modulePath = '/__e2e__/browser-clients.js';
 		const {
 			serverTransfersApi,
 		}: typeof import('../../../../packages/frontend/src/features/transfers/api/server-transfers-api') =

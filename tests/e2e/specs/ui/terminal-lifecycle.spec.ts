@@ -33,17 +33,10 @@ declare global {
 
 async function mountTerminalHarness(page: Page): Promise<void> {
 	await page.goto('/login');
+	await page.addStyleTag({ url: '/__e2e__/browser-terminal.css' });
 	await page.evaluate(async () => {
-		const componentUrl = '/src/features/terminal/components/TerminalView.vue';
-		const source = await fetch(componentUrl).then((response) => response.text());
-		const vueUrl = source.match(/from\s+['"]([^'"]*\/vue\.js[^'"]*)['"]/)?.[1];
-		if (!vueUrl) throw new Error('Cannot resolve the terminal component Vue runtime.');
-		const vue = await import(vueUrl);
-		const { default: TerminalView } = await import(componentUrl);
-		const i18nUrl = '/src/app/i18n/index.ts';
-		const { default: i18n } = await import(i18nUrl);
-		const stateUrl = '/src/features/terminal/state/terminalSessionState.ts';
-		const { createTerminalSessionState } = await import(stateUrl);
+		const modulePath = '/__e2e__/browser-terminal.js';
+		const { vue, TerminalView, i18n, createTerminalSessionState } = await import(modulePath);
 		const state = createTerminalSessionState();
 		const properties = vue.reactive({ active: true });
 		const host = document.createElement('div');

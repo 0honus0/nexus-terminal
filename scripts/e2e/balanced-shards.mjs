@@ -175,7 +175,14 @@ function run(plan, rawShard) {
 	for (const file of [
 		'backend/dist/bootstrap/create-app.js',
 		'shared/dist/access/http.js',
-		...(suite === 'backend' ? [] : ['frontend/dist/index.html', 'frontend/dist/__e2e__/browser-clients.js']),
+		...(suite === 'backend'
+			? []
+			: [
+					'frontend/dist/index.html',
+					'frontend/dist/__e2e__/browser-clients.js',
+					'frontend/dist/__e2e__/browser-terminal.js',
+					'frontend/dist/__e2e__/browser-terminal.css',
+				]),
 	]) {
 		if (!fs.existsSync(path.join(repoRoot, 'packages', file)))
 			throw new Error('Missing E2E application build: ' + file);

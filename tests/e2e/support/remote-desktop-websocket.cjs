@@ -3,9 +3,13 @@ const { createRequire } = require('node:module');
 
 const requireFromBackend = createRequire(path.resolve(__dirname, '../../../packages/backend/package.json'));
 const { WebSocket } = requireFromBackend('ws');
-const frontendPort = Number(process.env.NEXUS_E2E_FRONTEND_PORT || 4173);
-const targetOrigin = `http://localhost:${frontendPort}`;
-const targetWebSocketOrigin = `ws://localhost:${frontendPort}`;
+const publicPort = Number(
+	process.env.NEXUS_E2E_SUITE === 'backend'
+		? process.env.NEXUS_E2E_BACKEND_PORT || 3001
+		: process.env.NEXUS_E2E_FRONTEND_PORT || 4173,
+);
+const targetOrigin = `http://localhost:${publicPort}`;
+const targetWebSocketOrigin = `ws://localhost:${publicPort}`;
 
 const createSocket = (ticket, cookie) =>
 	new WebSocket(`${targetWebSocketOrigin}/ws/remote-desktop?ticket=${encodeURIComponent(ticket)}`, {

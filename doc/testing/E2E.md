@@ -2070,7 +2070,7 @@ CI 机器人 `440cb9e9271f16ac7c3eccb20437a25cf1e679be` 仅更新测试耗时估
 
 参考 [Grafana 构建分发](https://github.com/grafana/grafana/blob/main/.github/workflows/pr-e2e-tests.yml)、[Playwright fixtures](https://playwright.dev/docs/test-fixtures)、[项目分组](https://playwright.dev/docs/test-projects)与原生 failOnFlakyTests。未增加 Actions 总并发、放宽超时、删断言或修改产品 UI。现有按耗时分片只增加 backend/browser 清单过滤，未来未登记文件默认保留在浏览器组，不漏测。
 
-静态列举（`playwright test --list --reporter=json`，未运行场景）确认 all 526、backend 122、browser 404，两个分组全集与 all 完全相同，无交集；移动撤权测试只改变文件，不减少场景。backend 直接使用配置的 localhost 后端 Origin；原非配置 127.0.0.1 Host 拒绝仍验证。浏览器使用 preview，Vite 8.3.4 源码确认继承 server.proxy。两个直接加载客户端的浏览器用例改用测试专用 Vite bundle，仍执行真实客户端与原断言，不把测试代码加入正式发布。
+静态列举（`playwright test --list --reporter=json`，未运行场景）确认 all 526、backend 122、browser 404，两个分组全集与 all 完全相同，无交集；移动撤权测试只改变文件，不减少场景。backend 直接使用配置的 localhost 后端 Origin；原非配置 127.0.0.1 Host 拒绝仍验证。浏览器使用 preview，Vite 8.3.4 源码确认继承 server.proxy。直接加载客户端的浏览器用例改用测试专用 Vite bundle，仍执行真实客户端与原断言，不把测试代码加入正式发布。
 
 共享构建 artifact 保留 shared/backend/frontend 的 dist 目录，download 到 packages 后原相对依赖不变；每次下载来自同一个工作流 SHA。原应用关闭与未知/清理失败围栏不动，仅跳过不依赖的外部夹具重置。SSH 文档样本进程内生成一次再复制到各例目录，不硬链接可变文件；相对/失效符号链接原样保留。原生 failOnFlakyTests 替换 reporter 状态覆盖，首次失败 Trace/截图/录像继续保留。
 
@@ -2081,3 +2081,5 @@ CI 机器人 `440cb9e9271f16ac7c3eccb20437a25cf1e679be` 仅更新测试耗时估
 首轮 40442149074 的质量作业暴露旧根检查的干净环境顺序依赖：Frontend vue-tsc 在 Backend check 生成 Shared 声明之前运行；旧 workflow 额外 Backend check 曾掩盖它。本地既有 dist 无法暴露该问题。修复为根 check 先执行含 Shared build 的 Backend check，再执行双端 lint 和 Frontend vue-tsc，检查项不减；不恢复重复检查。后端独立命令及未预构建的后端分片/远程入口只构建后端和 Shared，不因前端构建失败而阻断手动协议回归；完整 CI 仍要求两组、全量构建、质量与 Docker 同时成功。
 
 修复后的根检查及全量格式复核通过：`/tmp/nexus-split-root-check-order.log`、`/tmp/nexus-split-format-final.log`。另以 `/tmp/nexus-split-clean-check` 独立安装冻结依赖，不复制任何 dist，执行根检查全部通过（`/tmp/nexus-split-clean-check.log`）；初次 offline 安装因隔离目录无元数据缓存失败，改为正常冻结安装后成功。以上仅静态验证，没有本地行为执行。
+
+首轮分组行为结果：4 个浏览器分片成功，其余失败均为测试环境入口偏差。backend 的 3 项 RDP 用例由 CommonJS 辅助器固定前端端口造成；browser 另有 4 项客户端场景与 19 项终端生命周期场景仍直接导入开发源码/解析开发版 Vue 模块。此前搜索输出截断遗漏这些入口，已完整核对全部 `/src/` 浏览器导入：改为两个测试专用 Vite library entries，包含真实客户端、真实 TerminalView、同一 Vue runtime、原 i18n 与会话状态，并加载真实终端 CSS；原功能断言不删、不放宽。RDP 辅助器按 suite 选择与 TS 配置相同的公开后端/前端端口，保留 Origin、票据与拒绝断言。构建配置位于 frontend/build，仅 E2E 命令调用，正式构建不包含这些入口。原日志 `/tmp/nexus-split-job-121985799{276,301,304,338}.log`，修复后的全量行为仍待下一轮。

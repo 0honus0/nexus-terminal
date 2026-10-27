@@ -381,7 +381,7 @@ test('Agent window state resets every user-scoped layout field before an empty u
 	await page.goto('/connections');
 
 	const state = await page.evaluate(async () => {
-		const modulePath = '/src/features/agent/host/window-manager.ts';
+		const modulePath = '/__e2e__/browser-clients.js';
 		const {
 			createAgentWindowManager,
 		}: typeof import('../../../../packages/frontend/src/features/agent/host/window-manager') = await import(
@@ -436,7 +436,7 @@ test('Agent layout preferences use the authenticated user namespace and reject o
 	await loginAsInitialAdmin(context.request);
 	await page.goto('/connections');
 	const result = await page.evaluate(async () => {
-		const modulePath = '/src/features/agent/host/window-manager.ts';
+		const modulePath = '/__e2e__/browser-clients.js';
 		const {
 			createAgentWindowManager,
 		}: typeof import('../../../../packages/frontend/src/features/agent/host/window-manager') = await import(

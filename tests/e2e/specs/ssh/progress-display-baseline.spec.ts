@@ -501,8 +501,8 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 				await expect(sendButton).toBeDisabled();
 				await page.evaluate(
 					async ({ targetId, parent }) => {
-						const connectionsModule = '/src/features/connections/api/connections-api.ts';
-						const directoryModule = '/src/features/transfers/model/server-transfer-directory.ts';
+						const connectionsModule = '/__e2e__/browser-clients.js';
+						const directoryModule = '/__e2e__/browser-clients.js';
 						const {
 							connectionsApi,
 						}: typeof import('../../../../packages/frontend/src/features/connections/api/connections-api') =

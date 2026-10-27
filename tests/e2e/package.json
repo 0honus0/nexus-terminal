@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "pnpm --workspace-root run build && pnpm run build:clients",
-    "build:clients": "pnpm --filter @nexus-terminal/frontend exec vite build --config ../../tests/e2e/vite.browser-clients.config.mjs",
+    "build:clients": "pnpm --filter @nexus-terminal/frontend exec vite build --config build/e2e-browser-clients.ts",
     "test": "pnpm run build && playwright test",
     "test:auth": "pnpm test --project=auth",
     "test:http": "pnpm test --project=http",
