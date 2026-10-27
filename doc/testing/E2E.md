@@ -2086,12 +2086,16 @@ CI 机器人 `440cb9e9271f16ac7c3eccb20437a25cf1e679be` 仅更新测试耗时估
 
 第二轮 40443702665：质量、集中构建、Docker smoke 与完整后端 122 项通过，RDP 端口修复已验证。浏览器受同一测试打包配置问题影响：Vite library 模式默认保留 process.env.NODE_ENV，打包 Vue 后出现浏览器 process 未定义。测试专用配置显式将该值定义为 production，重新构建后全部测试 bundle 中已无 process.env 引用；不添加 process polyfill 或修改产品逻辑。库入口类型/全量格式及构建通过，证据 `/tmp/nexus-split-{types-final,format-adapt,clients-build4}.log`。共享 artifact 上传增加官方 overwrite:true，完整 rerun 重建同名产物，失败分片单独 rerun 仍可读取原 SHA 产物。下一轮 runner 指纹不变，可测热缓存完整结果。
 
-## 最耗时任务优化（2026-10-27，待远程验收）
+## 最耗时任务优化（2026-10-27，正式全量通过）
 
 上一阶段正式 [40444825177](https://github.com/0honus0/nexus-terminal/actions/runs/40444825177) 在 899d4107 上 526 项首次通过、0 skipped/retry/flaky，完整墙钟 532 秒；原基线 40437638548 为 620 秒。新基线尚不满足用户提速目标。
 
 本轮将 125 秒 CAPTCHA SDK 过期等待改为 Playwright 官方 Clock，真实跨域组件、供应商验证、过期后不派发、拒绝后清 token 和新 token 成功断言全部保留。后端 30 秒资源缓存和 31 秒桌面票据过期使用 Node 内置 MockTimers 仅推进 Date，网络和清理时钟保持真实；成功关闭原应用后恢复，关闭失败保持围栏。资源缓存增加过期前命中断言。
 
-最大 Agent 文件按部署修复、文件搜索、会话交付、记忆、图片拆分，原测试正文不变，公共辅助归唯一文件。SSH 两分钟真实空闲场景独立文件保留 125 秒真实等待和完整文件操作断言。已有耗时清单按上次成功日志逐项迁移并扣除被替换的固定等待，无新调度器或 runner 并发。静态清单确认前后均 526 项，按项目和测试标题比较完全相等；本地按 D17 不运行行为测试。新版本静态、两轮审核与正式远程墙钟待回填。
+最大 Agent 文件按部署修复、文件搜索、会话交付、记忆、图片拆分，原测试正文不变，公共辅助归唯一文件。SSH 两分钟真实空闲场景独立文件保留 125 秒真实等待和完整文件操作断言。已有耗时清单按上次成功日志逐项迁移并扣除被替换的固定等待，无新调度器或 runner 并发。静态清单确认前后均 526 项，按项目和测试标题比较完全相等；本地按 D17 不运行行为测试。新版本静态、两轮审核与正式远程结果如下。
 
 本轮静态：根 check、完整 format:all:check、变更 E2E 严格 tsc（含 noUnusedLocals）、夹具 node --check 与 diff 通过，日志 `/tmp/nexus-slowest-{check,format-check,types}.log`。两轮源码复核确认控制仅本地随机令牌可用、输入白名单、真实定时器不被虚拟、关闭失败不恢复基线；Agent 拆分的所有顶层测试/参数化声明 AST 与原文件一致，完整测试标题集合不变。耗时计划仅用于调度，不作为实测提速结论。
+
+正式 [40447142849](https://github.com/0honus0/nexus-terminal/actions/runs/40447142849)，源码 `451e37a9d4b94f6f4617bdfc4ecd08628cf353a9`：526 项首次通过，0 failed/skipped/retry/flaky；后端 122、浏览器 404，质量、Docker smoke、8 个测试 runner 全成功。日志 `/tmp/nexus-slowest-final.log`，运行/作业元数据 `/tmp/nexus-slowest-final-run.json`。验证码过期/拒绝/新 token 成功的整例从133秒降至8.8秒，资源缓存过期32→1.4秒、桌面票据过期31→0.181秒；原125秒真实空闲SSH回归仍126秒通过，拆分场景功能清单不减。
+
+墙钟以 GitHub createdAt→updatedAt 比较：620秒原始基线→532秒上一阶段→477秒本轮（03:58:35→04:06:32 UTC），本轮再降55秒/10.3%，累计降143秒/23.1%。本轮准备61秒，后端301秒、浏览器各312/330/395/362/311/381/375秒；最慢测试作业441→395秒。累计有效作业2992秒，相对上一轮3228秒降低7.3%，不视作精确计费，截图条件跳过作业不计入。Node Date-only MockTimers 和真实跨域 hCaptcha SDK 的 Playwright Clock 均已整链验证；并发仍1后端+7浏览器，原关闭/unknown隔离保留。自动提交 `de824567` 仅刷新耗时估计并已同步。未发布或部署，用户截图未提交。
