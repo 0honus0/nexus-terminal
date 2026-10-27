@@ -154,6 +154,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: e2e-application-${{ github.sha }}
+          overwrite: true
           path: |
             packages/shared/dist/
             packages/backend/dist/

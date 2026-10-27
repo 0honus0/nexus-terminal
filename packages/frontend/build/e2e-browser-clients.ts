@@ -5,6 +5,8 @@ import vue from '@vitejs/plugin-vue';
 // Invoked only by the E2E build; production builds never include these entries.
 export default defineConfig({
 	publicDir: false,
+	// Vite library mode preserves NODE_ENV for consumers; this consumer is the browser itself.
+	define: { 'process.env.NODE_ENV': JSON.stringify('production') },
 	resolve: {
 		alias: { '@': fileURLToPath(new URL('../src', import.meta.url)) },
 	},
