@@ -227,8 +227,6 @@
       "commandFailed": "リモートファイルコマンドが失敗しました。ディレクトリ権限と必要なコマンドを確認してください。"
     },
     "notifications": {
-      "terminalPathQueued": "フォアグラウンドコマンドの実行中です。シェルのプロンプトが戻った後に安全に実行されます。",
-      "terminalPathChanged": "ターミナルのディレクトリを {path} に変更しました",
       "copySuccess": "コピーに成功しました",
       "moveSuccess": "移動に成功しました",
       "cdCommandSent": "CD コマンドがターミナルに送信されました",

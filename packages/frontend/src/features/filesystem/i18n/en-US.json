@@ -227,8 +227,6 @@
       "commandFailed": "The remote file command failed. Check directory permissions and required commands."
     },
     "notifications": {
-      "terminalPathQueued": "A foreground command is running. The directory change is safely queued until the shell prompt returns.",
-      "terminalPathChanged": "Terminal directory changed to {path}",
       "copySuccess": "Copy successful",
       "moveSuccess": "Move successful",
       "cdCommandSent": "CD command sent to terminal",

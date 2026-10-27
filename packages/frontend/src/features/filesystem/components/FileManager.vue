@@ -1396,7 +1396,7 @@
 		);
 	};
 
-	const changeTerminalPath = async (path: string, showSuccess: boolean): Promise<void> => {
+	const changeTerminalPath = async (path: string): Promise<void> => {
 		const permission = view.capture();
 		const directory = props.terminalDirectory;
 		if (!directory || permission.aborted || changingTerminalPath.value) {
@@ -1407,16 +1407,7 @@
 
 		changingTerminalPath.value = true;
 		try {
-			const result = await directory.changeDirectory(path, {
-				onQueued: ({ waitingForPrompt }) => {
-					if (isCurrent() && waitingForPrompt) {
-						feedback.notifyInfo(t('fileManager.notifications.terminalPathQueued'));
-					}
-				},
-			});
-			if (isCurrent() && showSuccess) {
-				feedback.notifySuccess(t('fileManager.notifications.terminalPathChanged', { path: result.path }));
-			}
+			await directory.changeDirectory(path);
 		} catch (cause) {
 			if (isCurrent()) {
 				feedback.notifyError(terminalDirectoryErrorMessage(cause));
@@ -1432,7 +1423,7 @@
 		if (browser.loading.value) {
 			return;
 		}
-		return changeTerminalPath(browser.path.value, true);
+		return changeTerminalPath(browser.path.value);
 	};
 
 	const openPathHistory = async () => {
@@ -1603,7 +1594,7 @@
 		await enqueueNavigation(() => loadPath(path, draftRevision));
 	};
 
-	const sendPathToTerminal = (path: string) => changeTerminalPath(path, false);
+	const sendPathToTerminal = (path: string) => changeTerminalPath(path);
 
 	const download = async (entries: RemoteFileEntry[]) => {
 		context.value = null;

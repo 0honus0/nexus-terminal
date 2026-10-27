@@ -227,8 +227,6 @@
       "commandFailed": "远端文件命令执行失败，请核对目录权限及所需命令是否可用。"
     },
     "notifications": {
-      "terminalPathQueued": "前台命令正在运行，目录切换已安全排队，将在 Shell 返回提示符后执行。",
-      "terminalPathChanged": "终端目录已切换到 {path}",
       "copySuccess": "复制成功",
       "moveSuccess": "移动成功",
       "cdCommandSent": "CD 命令已发送到终端",

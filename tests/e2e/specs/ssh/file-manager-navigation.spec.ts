@@ -714,9 +714,8 @@ test('file-manager and terminal path sync survive shell metacharacters and a del
 		await expect(row(page, 'inside.txt')).toBeVisible();
 
 		await cdToTerminal.click();
-		await expect(page.getByText(`Terminal directory changed to ${SPECIAL_PATH}`, { exact: true })).toBeVisible({
-			timeout: 10_000,
-		});
+		await expect(cdToTerminal).toBeEnabled({ timeout: 10_000 });
+		await expect(page.getByText(`Terminal directory changed to ${SPECIAL_PATH}`, { exact: true })).toHaveCount(0);
 
 		await navigateViaPathInput(page, '/');
 		await syncFromTerminal.click();
@@ -728,9 +727,10 @@ test('file-manager and terminal path sync survive shell metacharacters and a del
 		await navigateViaPathInput(page, DELETED_CWD_PATH);
 		await expect(row(page, 'inside.txt')).toBeVisible();
 		await cdToTerminal.click();
-		await expect(page.getByText(`Terminal directory changed to ${DELETED_CWD_PATH}`, { exact: true })).toBeVisible({
-			timeout: 10_000,
-		});
+		await expect(cdToTerminal).toBeEnabled({ timeout: 10_000 });
+		await expect(page.getByText(`Terminal directory changed to ${DELETED_CWD_PATH}`, { exact: true })).toHaveCount(
+			0,
+		);
 
 		const removeResponse = await fetch(
 			`${E2E_SSH.controlUrl}/remove-path?path=${encodeURIComponent(DELETED_CWD_PATH)}`,
