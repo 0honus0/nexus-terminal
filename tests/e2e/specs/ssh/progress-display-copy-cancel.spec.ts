@@ -1,4 +1,7 @@
-import { readWorkspaceMessage } from '../../../../packages/shared/src/remote/workspace/workspace-codec';
+import {
+	readWorkspaceMessage,
+	readWorkspaceRequest,
+} from '../../../../packages/shared/src/remote/workspace/workspace-codec';
 import { readWorkspaceCopyMoveEvent } from '../../../../packages/shared/src/remote/transfers/task-codec';
 import { expect, test } from '../../support/fixtures';
 import { closeConnectedFileManager, reopenConnectedFileManager, E2E_SSH } from '../../support/ssh';
@@ -25,13 +28,24 @@ async function writeState(): Promise<{ held: number; pending: number; requests: 
 test('copy remains cancelled after a long remote write stall', async ({ page, context }) => {
 	test.setTimeout(65_000);
 	const terminalEvents = new Map<string, string>();
+	const copyRequests = new Set<string>();
+	const cancelling = new Set<string>();
 	page.on('websocket', (socket) => {
 		if (!new URL(socket.url()).pathname.endsWith('/ws/workspace')) return;
+		socket.on('framesent', ({ payload }) => {
+			if (typeof payload !== 'string') return;
+			const message = readWorkspaceRequest(JSON.parse(payload));
+			if (message.type === 'transfer.copyMove') {
+				if (!message.requestId) throw new Error('Copy request has no task ID');
+				copyRequests.add(message.requestId);
+			}
+		});
 		socket.on('framereceived', ({ payload }) => {
 			if (typeof payload !== 'string') return;
 			const message = readWorkspaceMessage(JSON.parse(payload));
 			if (message.type !== 'transfer.copyMove') return;
 			const event = readWorkspaceCopyMoveEvent(message.payload);
+			if (event.type === 'cancelling') cancelling.add(event.requestId);
 			if (event.type === 'completed' || event.type === 'cancelled' || event.type === 'failed') {
 				terminalEvents.set(event.requestId, event.type);
 			}
@@ -60,10 +74,11 @@ test('copy remains cancelled after a long remote write stall', async ({ page, co
 		const modal = await openProgressDisplay(page);
 		const task = hiddenTask(modal, sourceName);
 		await expect(task).toBeVisible();
-		const taskId = await task.getAttribute('data-task-id');
-		expect(taskId).toBeTruthy();
+		await expect.poll(() => copyRequests.size).toBe(1);
+		const taskId = [...copyRequests][0]!;
 		await expect.poll(async () => (await writeState()).held).toBeGreaterThan(0);
 		await task.getByRole('button', { name: 'Cancel', exact: true }).click();
+		await expect.poll(() => cancelling.has(taskId)).toBe(true);
 		await closeProgressDisplay(modal);
 
 		// Old code forgot cancellation after 30s. Keep the first write blocked beyond that
@@ -72,7 +87,7 @@ test('copy remains cancelled after a long remote write stall', async ({ page, co
 		await expect.poll(async () => (await writeState()).held).toBeGreaterThan(0);
 		await fetch(`${E2E_SSH.controlUrl}/sftp/write-hold?blocked=0`, { method: 'POST' });
 		await expect.poll(async () => (await writeState()).pending).toBe(0);
-		await expect.poll(() => terminalEvents.get(taskId!)).toMatch(/^(failed|cancelled)$/);
+		await expect.poll(() => terminalEvents.get(taskId)).toMatch(/^(failed|cancelled)$/);
 
 		await reopenConnectedFileManager(page);
 		await refreshFileManager(page);

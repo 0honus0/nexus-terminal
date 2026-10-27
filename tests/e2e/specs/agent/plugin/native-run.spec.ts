@@ -120,12 +120,12 @@ test('remote signed Nexus Agent plugin installs, registers an Agent definition, 
 	});
 	await step('file_read uses the selected SSH capability and returns an actual content hash', async () => {
 		const report = JSON.parse((await execute(`E2E_NATIVE_PLUGIN_READ connection=${connectionId}`)).text);
-		const bytes = await readFile(path.resolve(__dirname, '../../.tmp/ssh-root/seed.txt'));
+		const bytes = await readFile(path.resolve(__dirname, '../../../.tmp/ssh-root/seed.txt'));
 		expect(report.text).toBe(bytes.toString('utf8'));
 		expect(report.sha256).toBe(createHash('sha256').update(bytes).digest('hex'));
 	});
 	await step('identical commands in distinct tool calls execute as two deliberate operations', async () => {
-		const proof = path.resolve(__dirname, '../../.tmp/ssh-root/duplicate-proof.txt');
+		const proof = path.resolve(__dirname, '../../../.tmp/ssh-root/duplicate-proof.txt');
 		await rm(proof, { force: true });
 		try {
 			const result = await execute(`E2E_NATIVE_PLUGIN_DUPLICATE connection=${connectionId}`, ['shell_execute']);

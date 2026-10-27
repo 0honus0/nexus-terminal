@@ -2115,3 +2115,5 @@ CI 机器人 `440cb9e9271f16ac7c3eccb20437a25cf1e679be` 仅更新测试耗时估
 优先处理最新实测39秒复制取消和约119秒Agent插件大文件。复制场景改用测试SSH的真实WRITE gate，取消前确认已有写入进入，前端Clock跨32秒原清理边界后确认原WRITE仍阻塞；明确释放后等待真实pending归零及对应任务WS终态，再保留第二文件不存在断言。gate不会因channel close清掉观测，reset先释放再停止旧SSH并等待真实I/O归零。原延迟写入接口及其它消费者不变，产品期限不变。
 
 插件统一归agent/plugin目录，分为repository/custom-surface/browser-lifecycle/subagent-lifecycle/native-run/native-surface六份spec和唯一fixtures；8个原测试AST逐项对比完全一致。未知Child副作用与invalid-tool仍各用独立后端进程；只是让原分片器能分别安排两份spec，不取消关闭围栏。完整静态清单仍526项，项目/标题Counter与上一版一致。按上次逐例实测迁移耗时估计，复制文件仅扣除替换的36秒固定等待，作为调度估计而非实际提速结论。根check、严格测试tsc（含noUnusedLocals）、Node语法、全量格式及diff通过；日志 `/tmp/nexus-e2e-large-{check,types,format}.log`。两轮源码审核覆盖递归发现/导入、隔离spec全部消费者、逐例重置、gate取消后保留与真实终态收敛；静态7浏览器分片预计306.7–309.5秒，不代表实测。新SHA正式全量行为与耗时待验，不发布部署。
+
+首轮40456075048中7个测试分片成功，第6分片有两处测试改动错误：插件native-run移动目录后两条__dirname相对夹具路径未加一层；复制取消错误读取隐藏任务行不存在的data-task-id。修正前者至原真实ssh-root，后者从严格解码的真实WS transfer.copyMove请求关联ID，同时等待真实cancelling事件后再推进Clock，避免取消请求尚未被后端接纳。产品源码/UI无改动、功能断言及期限不减；修复后类型/格式与新SHA正式全量仍待验，失败轮不计提速证据。
