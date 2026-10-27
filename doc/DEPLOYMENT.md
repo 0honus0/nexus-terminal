@@ -118,3 +118,7 @@ scripts/build/build.sh docker
 ```
 
 启动命令还需从受控环境注入实例密钥和公开 Origin。Docker 使用 `alpine:latest`、APK 最新 `nodejs-current/nginx`，命中缓存不会刷新系统包；刷新用 `docker build --pull --no-cache .`。后端构建 Shared 后通过 `deploy --prod` 交付，不再构建 Protocol。发布与远程 E2E 仍按当前实施方案执行。
+
+## 手动清理发布历史与缓存
+
+维护入口为 `.github/workflows/cleanup-history.yml`，只有 workflow_dispatch。执行内容、保留范围、权限及失败恢复见 [USAGE](USAGE.md#仓库手动清理)。先完成其它 E2E/发布任务再手动运行；首次在 GitHub 注册新 workflow 需要该文件存在于默认分支。不会触发镜像构建、更新服务器或删除实例数据。

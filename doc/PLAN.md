@@ -3744,3 +3744,9 @@ a0cb4f49/40319856905完整通过（含质量、Docker及全部8分片），3381d
 用户明确授权本批全部代码提交推送、完成正式远程 E2E 后发布 dev amd64。范围为工具调用详情及安全失败分类、已授权的会话删除按钮/服务器状态外侧留白/父目录行高度；个人截图增删不提交，不更新生产容器。复用前述八节设计和四表；补充图片成功及拒绝场景的详情认证读取、错 Run 拒绝、格式化参数与安全失败码卡片断言。按 D17 不在本地执行行为或浏览器测试。静态审核后提交推送；若远程失败，区分产品/夹具/断言根因修复，不改 UI 设计；完整成功后发布并核对平台、revision 与摘要，最终证据记入 E2E。
 
 当前交付状态：代码 `22718980` 已推送，根 check、全量格式及变更 E2E 严格类型检查通过。GitHub 手动触发正式 E2E 持续返回 HTTP 422（Actions has been disabled for this repository），尽管仓库 enabled=true 且工作流 active；工作流显式 enable 后仍拒绝。证据见 E2E 本批章节。完整回归与 dev amd64 发布均待平台恢复，不以旧 PASS 代替，不提前发布。
+
+## 手动清理 workflow（2026-10-27）
+
+用户要求先创建 workflow，仅手动触发；清理旧 artifact、镜像和 Actions 历史，并允许删除缓存。八节设计：① 维护归仓库自动化，不进入产品模块；② workflow 调用 scripts/maintenance 唯一执行脚本；③ 复用官方 actions/github-script 的 Octokit 分页、GitHub REST 与 GHCR Registry API；④ 不新增双端/内部业务契约；⑤ 仅 workflow_dispatch，最小 contents:read、actions/packages:write；⑥ 镜像先解析 latest/dev 递归 manifest 闭包，快照具体资源 ID 后删除，保留渠道关联成功运行和最近成功 E2E；⑦ 其它运行未结束时退出，镜像标签移动或解析/权限失败停止，已完成删除不虚构回滚；⑧ 仅清理本仓库运行/产物/缓存、nexus-terminal 旧版本及 E2E runner 缓存，不触碰其它包、产品 UI 或实例数据。
+
+四表：功能对应为手动清理和两渠道保留；职责归属为 workflow+独立维护脚本；类型归属为脚本局部无业务契约；完成证据为静态语法、ESLint、格式、源码双轮审核及保留 manifest 的只读 Registry 核对。按最新指令先创建，不执行删除；远程实际删除待后续手动触发。

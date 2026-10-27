@@ -59,6 +59,8 @@ scripts/*
 !scripts/format/**
 !scripts/patches/
 !scripts/patches/**
+!scripts/maintenance/
+!scripts/maintenance/**
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
 

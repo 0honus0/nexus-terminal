@@ -2049,3 +2049,7 @@ NativeThreadPanel 列表行为 items-stretch，全局 UiButton 固定高度配 m
 本批代码已提交推送 `22718980`。最终根检查、全量格式、变更 E2E 严格 TypeScript 与 diff 检查通过，日志 `/tmp/nexus-final-release-{check,format,e2e-types}.log`；临时 TypeScript 配置首次缺少 Node 类型路径，修正配置后通过。源码构建证据沿上述各节，未执行本地行为测试。
 
 正式远程回归被 GitHub 平台阻断：2026-10-27 UTC，push 后没有创建新运行，手动 dispatch 两次均返回 HTTP 422 `Actions has been disabled for this repository`。仓库 Actions permissions.enabled=true、E2E 工作流 state=active、当前账号有 admin 权限；显式启用工作流后仍被拒绝，因此不是测试失败，不能宣称本批通过。账户计费/平台限制尚无法证实，当前令牌无 user scope，计费接口不可读；未更改令牌或账户设置。需所有者在 GitHub 恢复 Actions 可执行状态后再触发本批完整 E2E，通过后发布 dev amd64。镜像未发布，生产容器未更新。
+
+### 手动清理 workflow（2026-10-27，静态待验）
+
+新增 cleanup-history.yml 与维护脚本；仅手动触发，无 schedule/push/release。源码审核两轮核对包/仓库范围、latest/dev 多层 manifest 与证明闭包、渠道移动围栏、历史运行/产物保留、缓存删除、活跃运行与权限失败路径。只读实际 GHCR 核实 dev 索引包含 amd64 manifest 与 unknown/unknown attestation，不能只保留有标签的索引版本。未执行删除、未运行本地行为测试；实际清理与权限验证仍待手动运行。
