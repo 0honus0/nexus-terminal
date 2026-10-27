@@ -60,7 +60,7 @@ for (const scenario of ['direct', 'relay', 'install-rsync', 'skip-rsync', 'skip-
 		try {
 			expect(
 				(
-					await fetch(`${E2E_SSH.controlUrl}/transfer-peer?blocked=${blocked ? 1 : 0}&bandwidth=3072`, {
+					await fetch(`${E2E_SSH.controlUrl}/transfer-peer?blocked=${blocked ? 1 : 0}&bandwidth=1024`, {
 						method: 'POST',
 					})
 				).ok,

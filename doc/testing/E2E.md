@@ -2135,3 +2135,5 @@ CI 机器人 `440cb9e9271f16ac7c3eccb20437a25cf1e679be` 仅更新测试耗时估
 ## E2E 成功传输进度限速（2026-10-27，待验收）
 
 40459146818的protocol成功原生路线单例约13秒、clipboard-ui五条路线每例约15秒；其中真实8MiB样本的1MiB/s夹具传输本身占数秒。本轮只将成功进度场景的rsync/SCP及UI relay现有限速提高至原生3MiB/s、relay 4MiB/s；原生命令约一秒输出一次，保留多次中间采样窗口，保留SSH读延迟和专门2Mbps/10Mbps等弱网profile；取消/失败路线原512KiB/s不变。保持8MiB数据、完整SHA、真实中间进度、UI至少两个不同百分比/单调增长、安装/跳过/真实方法和未知结果断言。无产品/UI/调度变更。根check、严格目标tsc（含noUnusedLocals）、全量格式、diff及526项项目/标题Counter比对通过，日志 `/tmp/nexus-e2e-transfer-rate-{check,types,format}.log`。两轮源码审核确认仅成功路线参数变化，原8MiB/至少两个不同UI百分比/单调进度/SHA/方法断言不变；耗时清单仅扣除按带宽变化推算的等待差额，作为调度种子，正式526项及总耗时待验，不将参数推算写成实测收益；本地按D17仅静态，不发布部署。
+
+首轮40460877397失败：clipboard-ui的direct/install-rsync/skip-rsync三条路线在中间进度locator读取处超时，relay/skip-all及protocol通过。原生UI夹具速率恢复已验收的1MiB/s以保留可观察窗口，protocol 3MiB/s与UI relay 4MiB/s保持；所有原断言、数据量与期限保持。修复后正式全量待验，不能把先前静态通过或部分分片通过当作验收。
