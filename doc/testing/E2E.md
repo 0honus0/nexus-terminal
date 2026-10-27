@@ -2110,10 +2110,14 @@ CI 机器人 `440cb9e9271f16ac7c3eccb20437a25cf1e679be` 仅更新测试耗时估
 
 正式 [40454422925](https://github.com/0honus0/nexus-terminal/actions/runs/40454422925)，源码76a28b1e9626588d29d8d64fa2d90a41a4a60937：526项首次通过（122后端/404浏览器），0 failed/skipped/retry/flaky，质量/构建/Docker smoke/全部8个测试runner成功。传输新三文件18项全部通过；手机状态订阅5.4秒、归档取消3.8秒。完整日志 `/tmp/nexus-e2e-more-final.log`，元数据 `/tmp/nexus-e2e-more-final-run.json`。完整墙钟05:16:57→05:24:37 UTC，共460秒，比477秒减少17秒/3.6%，相对620秒原始基线减少25.8%。后端299秒，浏览器340/293/296/332/281/366/338秒，最慢395→366秒；累计有效作业2799秒，比2992秒少6.5%，不等于精确计费。准备作业72秒、质量99秒，均存在运行波动；均衡为基于历史耗时的近似，不能保证完全等时。CI耗时提交a5d445b9已同步；未发布镜像或部署，个人截图保持。
 
-## E2E 复制取消与插件分片（2026-10-27，待远程验收）
+## E2E 复制取消与插件分片（2026-10-27，已验收）
 
 优先处理最新实测39秒复制取消和约119秒Agent插件大文件。复制场景改用测试SSH的真实WRITE gate，取消前确认已有写入进入，前端Clock跨32秒原清理边界后确认原WRITE仍阻塞；明确释放后等待真实pending归零及对应任务WS终态，再保留第二文件不存在断言。gate不会因channel close清掉观测，reset先释放再停止旧SSH并等待真实I/O归零。原延迟写入接口及其它消费者不变，产品期限不变。
 
 插件统一归agent/plugin目录，分为repository/custom-surface/browser-lifecycle/subagent-lifecycle/native-run/native-surface六份spec和唯一fixtures；8个原测试AST逐项对比完全一致。未知Child副作用与invalid-tool仍各用独立后端进程；只是让原分片器能分别安排两份spec，不取消关闭围栏。完整静态清单仍526项，项目/标题Counter与上一版一致。按上次逐例实测迁移耗时估计，复制文件仅扣除替换的36秒固定等待，作为调度估计而非实际提速结论。根check、严格测试tsc（含noUnusedLocals）、Node语法、全量格式及diff通过；日志 `/tmp/nexus-e2e-large-{check,types,format}.log`。两轮源码审核覆盖递归发现/导入、隔离spec全部消费者、逐例重置、gate取消后保留与真实终态收敛；静态7浏览器分片预计306.7–309.5秒，不代表实测。新SHA正式全量行为与耗时待验，不发布部署。
 
 首轮40456075048中7个测试分片成功，第6分片有两处测试改动错误：插件native-run移动目录后两条__dirname相对夹具路径未加一层；复制取消错误读取隐藏任务行不存在的data-task-id。修正前者至原真实ssh-root，后者从严格解码的真实WS transfer.copyMove请求关联ID，同时等待真实cancelling事件后再推进Clock，避免取消请求尚未被后端接纳。产品源码/UI无改动、功能断言及期限不减；修复后类型/格式与新SHA正式全量仍待验，失败轮不计提速证据。
+
+最终正式 [40457002804](https://github.com/0honus0/nexus-terminal/actions/runs/40457002804) 验证f3586ec1a5fbf32b36a582dd436a206c61d35d7c：526项首次通过（后端122/浏览器404），0 failed/skipped/retry/flaky，质量、构建准备、Docker smoke与8测试runner全部成功。修复后严格tsc `/tmp/nexus-e2e-large-types-fix.log`、目标ESLint/Prettier和diff通过，正式质量作业再次覆盖根check与全量格式。复制取消从39秒降至3.8秒，原生插件完整Run18秒、六份插件文件全部通过；真实SSH空闲仍完整验证。日志 `/tmp/nexus-e2e-large-final.log`、元数据 `/tmp/nexus-e2e-large-final-run.json`，单分片证据 `/tmp/nexus-e2e-large-browser6.log`。
+
+完整墙钟05:44:10→05:51:52 UTC，共462秒（7分42秒）；上轮460秒，本轮没有整体提速证据。准备60秒、质量120秒、Docker78秒、后端335秒；浏览器352/359/347/348/357/383/343秒，累计有效作业3093秒，比上轮2799秒增加10.5%，不等于计费。同526项测试时间合计约2084→2286秒，尽管复制取消省35秒，说明其它真实执行整体变慢；不能仅凭两轮断言CPU或平台根因。最慢分片包含两次额外隔离启动（Child、ACP），保留原清理/未知围栏，后续优先剖析初始化与生命周期开销。本轮成功耗时更新作业无新提交，不虚构自动同步。源码已推送dev，未发布镜像或部署，用户截图增删不提交。
