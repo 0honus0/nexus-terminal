@@ -2057,3 +2057,11 @@ NativeThreadPanel 列表行为 items-stretch，全局 UiButton 固定高度配 m
 ### Actions 恢复及复制取消竞态（2026-10-27）
 
 手动触发已恢复：40436334225 验证 7810d6ad，检查/格式/构建、Docker smoke 和 6 个分片成功；第 4 分片用例 registered copy progress 首次失败、重试通过，flaky 门禁正确拒绝，不能称全绿。截图与调用日志显示 Cancel 后任务直接消失且没有 unknown Toast。沿 FileService 核对：dispatchedMutation=false 的已取消任务应返回 cancelled；任务注册与实际远端写入之间存在正常异步间隔。用例先等待非零字节进度再点击 Cancel，以进入其声称验证的写入后 unknown 分支；原 Toast/隐藏任务/源文件断言、超时及产品 UI 保留。第 1 分片另有 4 项新工具详情用例失败：按 data-tool-name 同时匹配工具与审批历史 summary，严格定位正确报错；新增 data-tool-state 限定实际工具卡片，保留完整参数/失败码断言。详情认证读取、wrong Run 404 和安全码解码已先于页面定位通过，卡片显示断言仍待修复后的完整远程回归。
+
+### 本批正式 E2E 与 dev amd64 交付（2026-10-27，完成）
+
+GitHub Actions 限制已恢复。测试修复提交 `441dcc740660d337b6e7480bbb1f891a90a3079d` 的正式 [E2E 40437638548](https://github.com/0honus0/nexus-terminal/actions/runs/40437638548) 全绿：检查/格式/双端构建、Docker smoke 和 8 分片全部成功，共 526 项通过；完整日志 `/tmp/nexus-final-green-e2e.log` 核对失败、重试、flaky 均为 0。此前失败分别来自工具/审批同名定位和复制写入前取消的错误前提，均修在测试，未修改产品 UI、断言目标或超时。工具详情认证读取、错误 Run 拒绝、格式化参数、安全失败码和原图片成功/拒绝流程均通过。
+
+CI 机器人 `440cb9e9271f16ac7c3eccb20437a25cf1e679be` 仅更新测试耗时估计，已快进同步，无产品代码变化。正式 [dev amd64 发布 40438690356](https://github.com/0honus0/nexus-terminal/actions/runs/40438690356) 成功，生产依赖审计通过。`ghcr.io/0honus0/nexus-terminal:dev` 和 `sha-440cb9e9271f` 索引摘要均为 `sha256:953b6ef14d7a02cca8076625706aa1bced9a774ed18618152872937f8b8cea64`；唯一实际平台为 linux/amd64，OCI revision 精确为上述机器人提交，unknown/unknown 项为证明 manifest。证据 `/tmp/nexus-final-dev-publish.log` 与 `/tmp/nexus-final-dev-image.json`。未更新生产容器，个人截图增删不提交。
+
+手动清理 workflow 随 `cb9d1df3` 提交，脚本 node --check、ESLint、Prettier 和 diff 通过，完整 E2E 的仓库检查亦通过。依据用户最新“先创建”指令未触发清理，远程实际删除/包管理权限尚待手动验收；workflow 文件仅在 dev，GitHub 的手动入口首次注册仍要求默认分支存在该文件，未擅自合并 main。
