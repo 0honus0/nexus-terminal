@@ -60,7 +60,7 @@ for (const scenario of ['direct', 'relay', 'install-rsync', 'skip-rsync', 'skip-
 		try {
 			expect(
 				(
-					await fetch(`${E2E_SSH.controlUrl}/transfer-peer?blocked=${blocked ? 1 : 0}&bandwidth=1024`, {
+					await fetch(`${E2E_SSH.controlUrl}/transfer-peer?blocked=${blocked ? 1 : 0}&bandwidth=3072`, {
 						method: 'POST',
 					})
 				).ok,
@@ -68,7 +68,7 @@ for (const scenario of ['direct', 'relay', 'install-rsync', 'skip-rsync', 'skip-
 			expect(
 				(
 					await fetch(
-						`${E2E_SSH.controlUrl}/sftp/read-network?ms=${blocked ? 40 : 0}&bytesPerSecond=${blocked ? 1024 * 1024 : 0}`,
+						`${E2E_SSH.controlUrl}/sftp/read-network?ms=${blocked ? 40 : 0}&bytesPerSecond=${blocked ? 4 * 1024 * 1024 : 0}`,
 						{ method: 'POST' },
 					)
 				).ok,

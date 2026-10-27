@@ -27,6 +27,9 @@ for (const entrypoint of ['clipboard', 'send'] as const) {
 			await loginAsInitialAdmin(request);
 			// A second TCP endpoint reaches the same real SSH fixture. Distinct
 			// source/destination paths let native rsync transfer actual bytes.
+			// A 3 MiB/s native rate leaves multiple one-second progress samples without spending
+			// eight seconds on every successful 8 MiB transfer. Dedicated weak-network
+			// profiles and cancellation stalls keep their original rates.
 			const sockets = new Set<Socket>();
 			const proxy = createServer((client) => {
 				const upstream = connect(E2E_SSH.port, E2E_SSH.host);
@@ -57,7 +60,7 @@ for (const entrypoint of ['clipboard', 'send'] as const) {
 				await writeFile(sourcePath, bytes);
 				expect(
 					(
-						await fetch(`${E2E_SSH.controlUrl}/transfer-peer?blocked=${blocked ? 1 : 0}&bandwidth=1024`, {
+						await fetch(`${E2E_SSH.controlUrl}/transfer-peer?blocked=${blocked ? 1 : 0}&bandwidth=3072`, {
 							method: 'POST',
 						})
 					).ok,
