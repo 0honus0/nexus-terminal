@@ -988,7 +988,7 @@ test('image tool shows a persisted preview and download without model-authored M
 	expect(JSON.parse(details.argumentsJson)).toEqual(expect.objectContaining({ prompt: expect.any(String) }));
 	const wrongRun = await request.get(`/api/v1/agent/apps/${task.app.id}/runs/${randomUUID()}/tools/${imageTool.id}`);
 	expect(wrongRun.status()).toBe(404);
-	const toolCard = hub.locator('[data-tool-name="image_generate"]');
+	const toolCard = hub.locator('[data-tool-name="image_generate"][data-tool-state]');
 	await hub.locator('details.group\\/tools > summary').click();
 	await toolCard.locator('summary').click();
 	await expect(toolCard.locator('[data-tool-arguments]')).toHaveText(
@@ -1070,7 +1070,7 @@ for (const scenario of [
 		expect(details.failureCode).toBe(scenario.failureCode);
 		expect(JSON.stringify(details)).not.toContain('E2E_PRIVATE_VENDOR_BODY');
 		await hub.locator('details.group\\/tools > summary').click();
-		const toolCard = hub.locator('[data-tool-name="image_generate"]');
+		const toolCard = hub.locator('[data-tool-name="image_generate"][data-tool-state]');
 		await toolCard.locator('summary').click();
 		await expect(toolCard.locator('[data-tool-arguments]')).toHaveText(
 			JSON.stringify(JSON.parse(details.argumentsJson), null, 2),

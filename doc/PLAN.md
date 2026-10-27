@@ -3753,4 +3753,6 @@ a0cb4f49/40319856905完整通过（含质量、Docker及全部8分片），3381d
 
 ## 本轮 E2E 首次取消时序修复（2026-10-27）
 
-正式运行 40436334225 的 8 分片中 7 绿、1 分片因一次 flaky 被门禁拒绝。根因在 registered copy progress 用例：进度任务注册不代表远端写入派发，立刻取消可安全返回 cancelled；断言却固定要求 unknown Toast。真实 owner FileService 已按 dispatchedMutation 区分，产品无错误，不改 UI 或业务围栏。测试在取消前等待真实非零字节进度，稳定进入原本要验证的“写入后取消”分支，保留原 Toast、任务消失及源文件存在断言，不扩大超时、不跳过。静态后推送并重新完整回归，绿灯后发布 amd64 dev；清理 workflow 仍只创建未执行。
+正式运行 40436334225 的 8 分片中 6 绿，第 4 分片因一次 flaky 被门禁拒绝、第 1 分片有 4 项新详情卡片定位失败。根因在 registered copy progress 用例：进度任务注册不代表远端写入派发，立刻取消可安全返回 cancelled；断言却固定要求 unknown Toast。真实 owner FileService 已按 dispatchedMutation 区分，产品无错误，不改 UI 或业务围栏。测试在取消前等待真实非零字节进度，稳定进入原本要验证的“写入后取消”分支，保留原 Toast、任务消失及源文件存在断言，不扩大超时、不跳过。静态后推送并重新完整回归，绿灯后发布 amd64 dev；清理 workflow 仍只创建未执行。
+
+第 1 分片根因：新增定位仅按 data-tool-name，工具调用与审批历史都有同名属性，导致严格定位命中两个 summary。按工具卡片独有 data-tool-state 收紧定位，保留完整参数/安全失败码断言，不使用 first/强制点击，不改产品 UI。修正先前不完整的分片统计后再次完整回归。

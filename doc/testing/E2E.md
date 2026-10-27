@@ -2056,4 +2056,4 @@ NativeThreadPanel 列表行为 items-stretch，全局 UiButton 固定高度配 m
 
 ### Actions 恢复及复制取消竞态（2026-10-27）
 
-手动触发已恢复：40436334225 验证 7810d6ad，检查/格式/构建、Docker smoke 和 7 个分片成功；第 4 分片用例 registered copy progress 首次失败、重试通过，flaky 门禁正确拒绝，不能称全绿。截图与调用日志显示 Cancel 后任务直接消失且没有 unknown Toast。沿 FileService 核对：dispatchedMutation=false 的已取消任务应返回 cancelled；任务注册与实际远端写入之间存在正常异步间隔。用例先等待非零字节进度再点击 Cancel，以进入其声称验证的写入后 unknown 分支；原 Toast/隐藏任务/源文件断言、超时及产品 UI 保留。其余本批工具参数与失败卡片新增断言所在分片已通过，最终仍待修复提交完整正式回归。
+手动触发已恢复：40436334225 验证 7810d6ad，检查/格式/构建、Docker smoke 和 6 个分片成功；第 4 分片用例 registered copy progress 首次失败、重试通过，flaky 门禁正确拒绝，不能称全绿。截图与调用日志显示 Cancel 后任务直接消失且没有 unknown Toast。沿 FileService 核对：dispatchedMutation=false 的已取消任务应返回 cancelled；任务注册与实际远端写入之间存在正常异步间隔。用例先等待非零字节进度再点击 Cancel，以进入其声称验证的写入后 unknown 分支；原 Toast/隐藏任务/源文件断言、超时及产品 UI 保留。第 1 分片另有 4 项新工具详情用例失败：按 data-tool-name 同时匹配工具与审批历史 summary，严格定位正确报错；新增 data-tool-state 限定实际工具卡片，保留完整参数/失败码断言。详情认证读取、wrong Run 404 和安全码解码已先于页面定位通过，卡片显示断言仍待修复后的完整远程回归。
