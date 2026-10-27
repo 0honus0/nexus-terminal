@@ -559,9 +559,15 @@ test('fragmented terminal controls and repeated backspace preserve pending local
 	await expect(rows).toContainText('$ abcdefghi');
 	await expect(rows).not.toContainText('abcdefghij');
 	expect(await page.evaluate(() => window.__terminalLifecycle.inputs)).toEqual([...'abcdefghijkl', '\x7f\x7f\x7f']);
-	const snapshot = await page.evaluate(() => window.__terminalLifecycle.serialize());
-	expect(snapshot).toContain('$ abcdefghi');
-	expect(snapshot).not.toContain('abcdefghij');
+	// The serialized text contains legitimate SGR between differently colored cells.
+	// Restore it through xterm and check the visible content instead of comparing raw ANSI.
+	await page.evaluate(async () => {
+		await window.__terminalLifecycle.serialize();
+		window.__terminalLifecycle.unmount();
+		await window.__terminalLifecycle.mount();
+	});
+	await expect(rows).toContainText('$ abcdefghi');
+	await expect(rows).not.toContainText('abcdefghij');
 });
 
 test('terminal line edge keeps accepted predictions and permits deletion toward the prompt', async ({ page }) => {
@@ -575,7 +581,12 @@ test('terminal line edge keeps accepted predictions and permits deletion toward 
 		for (const char of fill) window.__terminalLifecycle.input(char);
 	}, fill);
 	await expect(rows).toContainText(prefix);
-	await page.evaluate((fill) => window.__terminalLifecycle.output(fill), fill);
+	await page.evaluate(async (fill) => {
+		// Keep this bulk sample on the same delayed link as training. An immediate
+		// echo legitimately disables prediction once it replaces the latency window.
+		await new Promise((resolve) => setTimeout(resolve, 70));
+		window.__terminalLifecycle.output(fill);
+	}, fill);
 	await waitForEchoFrame(page, 10);
 	await page.evaluate(() => window.__terminalLifecycle.input('z'));
 	await expect(rows).toContainText(prefix + 'z');
