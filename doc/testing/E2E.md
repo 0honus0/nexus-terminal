@@ -2121,3 +2121,9 @@ CI 机器人 `440cb9e9271f16ac7c3eccb20437a25cf1e679be` 仅更新测试耗时估
 最终正式 [40457002804](https://github.com/0honus0/nexus-terminal/actions/runs/40457002804) 验证f3586ec1a5fbf32b36a582dd436a206c61d35d7c：526项首次通过（后端122/浏览器404），0 failed/skipped/retry/flaky，质量、构建准备、Docker smoke与8测试runner全部成功。修复后严格tsc `/tmp/nexus-e2e-large-types-fix.log`、目标ESLint/Prettier和diff通过，正式质量作业再次覆盖根check与全量格式。复制取消从39秒降至3.8秒，原生插件完整Run18秒、六份插件文件全部通过；真实SSH空闲仍完整验证。日志 `/tmp/nexus-e2e-large-final.log`、元数据 `/tmp/nexus-e2e-large-final-run.json`，单分片证据 `/tmp/nexus-e2e-large-browser6.log`。
 
 完整墙钟05:44:10→05:51:52 UTC，共462秒（7分42秒）；上轮460秒，本轮没有整体提速证据。准备60秒、质量120秒、Docker78秒、后端335秒；浏览器352/359/347/348/357/383/343秒，累计有效作业3093秒，比上轮2799秒增加10.5%，不等于计费。同526项测试时间合计约2084→2286秒，尽管复制取消省35秒，说明其它真实执行整体变慢；不能仅凭两轮断言CPU或平台根因。最慢分片包含两次额外隔离启动（Child、ACP），保留原清理/未知围栏，后续优先剖析初始化与生命周期开销。本轮成功耗时更新作业无新提交，不虚构自动同步。源码已推送dev，未发布镜像或部署，用户截图增删不提交。
+
+## E2E 构建与容器准备重叠（2026-10-27，待验收）
+
+实测40457002804：准备作业60秒；最慢分片后置的容器初始化28.3秒、依赖链接6.6秒、产物下载4.3秒。原依赖将共享构建与全部容器准备串行。本轮将同一次完整构建移入既有quality作业、先上传产物再执行原根检查和全量格式；镜像准备作业提前结束，让8个测试runner同时准备。作业数量与测试并发不变，不改UI/产品/测试断言/隔离生命周期。
+
+等待复用官方github-script的分页API和既有p-retry，库实查1037stars；只为未上传重试，错误类别明确，权限/网络错误和构建已结束而产物缺失直接失败，外层原Actions作业期限保持。产物按当前run、SHA、latest构建job的run_attempt匹配：完整重跑使用新attempt，单独重跑失败分片可复用同run原成功构建；最终官方download-artifact按不可变artifact ID下载，不搜索其它运行。参考Grafana的集中构建分发与GitHub官方API；质量/Docker仍是全绿及耗时更新的必需门禁。根check、全量format:all:check、脚本node --check、actionlint与diff通过，日志 `/tmp/nexus-e2e-overlap-{check,format,actionlint}.log`；静态清单项目/标题Counter保持526项。两轮源码审核覆盖构建先后/质量门禁、当前run/SHA/attempt绑定、全量/失败分片重跑、权限/取消/缺失产物与既有job期限；保持质量作业原显示名，避免改变既有检查名消费者。正式新SHA全量与墙钟待验，不发布部署。
