@@ -21,6 +21,7 @@ interface TerminalLifecycleHarness {
 	cursorResets: number;
 	historyRequests: number;
 	inputs: string[];
+	readonly columns: number;
 	consumed: number;
 	listeners: number;
 }
@@ -68,6 +69,10 @@ async function mountTerminalHarness(page: Page): Promise<void> {
 
 			deferAnimationFrames() {
 				window.requestAnimationFrame = () => -++harness.animationFrameRequests;
+			},
+
+			get columns() {
+				return state.geometry.value?.columns ?? 0;
 			},
 
 			get listeners() {
@@ -516,6 +521,87 @@ test('slow terminal echo predicts typed characters and corrects a different remo
 	await expect(rows).not.toContainText('$ abcdefghi');
 	expect(await page.evaluate(() => window.__terminalLifecycle.inputs.join(''))).toBe('abcdefghi');
 	await expect.poll(() => page.evaluate(() => window.__terminalLifecycle.consumed)).toBe(10);
+});
+
+async function waitForEchoFrame(page: Page, consumed: number): Promise<void> {
+	await expect.poll(() => page.evaluate(() => window.__terminalLifecycle.consumed)).toBe(consumed);
+	// Inspect a painted state after parsing, not the old DOM or an intermediate key.
+	await page.evaluate(
+		() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+	);
+}
+
+test('fragmented terminal controls and repeated backspace preserve pending local echo', async ({ page }) => {
+	await trainTerminalEcho(page);
+	const rows = page.locator('#terminal-lifecycle-host .xterm-rows');
+	await page.evaluate(() => {
+		for (const char of 'ijkl') window.__terminalLifecycle.input(char);
+	});
+	await expect(rows).toContainText('$ abcdefghijkl');
+	await page.evaluate(() => window.__terminalLifecycle.output('\x1b[3'));
+	await waitForEchoFrame(page, 10);
+	await expect(rows).toContainText('$ abcdefghijkl');
+	await page.evaluate(() => window.__terminalLifecycle.output('2mij\x1b[?2'));
+	await waitForEchoFrame(page, 11);
+	await expect(rows).toContainText('$ abcdefghijkl');
+	await page.evaluate(() => window.__terminalLifecycle.output('5hkl'));
+	await waitForEchoFrame(page, 12);
+	await expect(rows).toContainText('$ abcdefghijkl');
+	// One accepted keyboard event can contain repeated DEL; it is still sent only once.
+	await page.evaluate(() => window.__terminalLifecycle.input('\x7f\x7f\x7f'));
+	await expect(rows).toContainText('$ abcdefghi');
+	await expect(rows).not.toContainText('abcdefghij');
+	await page.evaluate(() => window.__terminalLifecycle.output('\x1b[?25h'));
+	await waitForEchoFrame(page, 13);
+	await expect(rows).not.toContainText('abcdefghij');
+	await page.evaluate(() => window.__terminalLifecycle.output('\b \b\b \b\b \b'));
+	await waitForEchoFrame(page, 14);
+	await expect(rows).toContainText('$ abcdefghi');
+	await expect(rows).not.toContainText('abcdefghij');
+	expect(await page.evaluate(() => window.__terminalLifecycle.inputs)).toEqual([...'abcdefghijkl', '\x7f\x7f\x7f']);
+	const snapshot = await page.evaluate(() => window.__terminalLifecycle.serialize());
+	expect(snapshot).toContain('$ abcdefghi');
+	expect(snapshot).not.toContain('abcdefghij');
+});
+
+test('terminal line edge keeps accepted predictions and permits deletion toward the prompt', async ({ page }) => {
+	await trainTerminalEcho(page);
+	const rows = page.locator('#terminal-lifecycle-host .xterm-rows');
+	const columns = await page.evaluate(() => window.__terminalLifecycle.columns);
+	expect(columns).toBeGreaterThan(12);
+	const fill = 'x'.repeat(columns - 12);
+	const prefix = '$ abcdefgh' + fill;
+	await page.evaluate((fill) => {
+		for (const char of fill) window.__terminalLifecycle.input(char);
+	}, fill);
+	await expect(rows).toContainText(prefix);
+	await page.evaluate((fill) => window.__terminalLifecycle.output(fill), fill);
+	await waitForEchoFrame(page, 10);
+	await page.evaluate(() => window.__terminalLifecycle.input('z'));
+	await expect(rows).toContainText(prefix + 'z');
+	await page.evaluate(() => window.__terminalLifecycle.output('z'));
+	await waitForEchoFrame(page, 11);
+	// At columns - 1 a leftward edit must not hit the forward-wrap guard.
+	await page.evaluate(() => window.__terminalLifecycle.input('\x7f'));
+	await expect(rows).not.toContainText(prefix + 'z');
+	await expect(rows).toContainText(prefix);
+	await page.evaluate(() => window.__terminalLifecycle.output('\b \b'));
+	await waitForEchoFrame(page, 12);
+	// Reaching the unpredicted wrap must keep the already displayed z.
+	await page.evaluate(() => {
+		window.__terminalLifecycle.input('z');
+		window.__terminalLifecycle.input('y');
+		window.__terminalLifecycle.output('');
+	});
+	// Drain both local keys without matching/clearing the prediction timeline.
+	await waitForEchoFrame(page, 13);
+	await expect(rows).toContainText(prefix + 'z');
+	await page.evaluate(() => window.__terminalLifecycle.output('zy'));
+	await waitForEchoFrame(page, 14);
+	await expect(rows).toContainText(prefix + 'zy');
+	const snapshot = await page.evaluate(() => window.__terminalLifecycle.serialize());
+	expect(snapshot).toContain(prefix + 'zy');
+	expect(await page.evaluate(() => window.__terminalLifecycle.inputs.join(''))).toBe('abcdefgh' + fill + 'z\x7fzy');
 });
 
 test('terminal snapshot and remount exclude unconfirmed local echo', async ({ page }) => {

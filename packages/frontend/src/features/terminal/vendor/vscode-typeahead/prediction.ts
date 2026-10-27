@@ -221,6 +221,11 @@ class StringReader {
 		return this._input.slice(this.index);
 	}
 
+	get hasIncompleteControlSequence() {
+		// A network frame may end before a CSI final byte (including SGR/DECTCEM/DSR).
+		return /^\x1b(?:\[[0-9;?]*)?$/.test(this.rest);
+	}
+
 	constructor(private readonly _input: string) {}
 
 	/**
@@ -404,7 +409,7 @@ class CharacterPrediction implements IPrediction {
 		// remove any styling CSI before checking the char
 		while (input.eatRe(CSI_STYLE_RE)) {}
 
-		if (input.eof) {
+		if (input.eof || input.hasIncompleteControlSequence) {
 			return MatchResult.Buffer;
 		}
 
@@ -823,6 +828,14 @@ class PredictionTimeline {
 
 		ReadLoop: while (this._expected.length && reader.remaining > 0) {
 			emitPredictionOmitted();
+			// Cursor visibility/report frames contain no echo to match. In particular,
+			// testing a backspace against EOF would incorrectly roll back every delete.
+			if (reader.eof) break;
+			if (reader.hasIncompleteControlSequence) {
+				this._inputBuffer = reader.rest;
+				reader.index = input.length;
+				break;
+			}
 
 			const expected = this._expected[0];
 			if (!expected) break;
@@ -1148,17 +1161,34 @@ export class TerminalTypeAhead {
 
 	input(data: string): void {
 		if (this.stopped) return;
+		// Some keyboards deliver repeat deletion as one accepted input event.
+		// Separate predictions so each rollback reads cells after the preceding erase.
+		if (data.length > 1 && /^\x7f+$/.test(data)) {
+			for (const char of data) this.input(char);
+			return;
+		}
 		const epoch = this.epoch;
 		this.enqueue(() => {
 			if (this.stopped || epoch !== this.epoch) return;
 			if (
 				!this.canPredict() ||
-				this.timeline.tentativeCursor(this.terminal.buffer.active).x >= this.terminal.cols - 1 ||
 				(data.length > 1 && !/^\x1b(?:\[?[0-9]*(?:;[35])?O?[DC]|[bf])$/.test(data)) ||
 				/[^\x00-\x7f]/.test(data) ||
 				(data.length === 1 && !/^[\x20-\x7e\x7f\r]$/.test(data))
 			) {
 				this.clear();
+				return;
+			}
+			const pending = this.timeline.peekEnd();
+			if (pending instanceof TentativeBoundary && pending.inner instanceof HardBoundary) return;
+			if (
+				/^[\x20-\x7e]$/.test(data) &&
+				this.timeline.tentativeCursor(this.terminal.buffer.active).x >= this.terminal.cols - 1
+			) {
+				// A wrap is not predictable here, but older accepted characters must not
+				// disappear just because the next key reached the edge. Let real echo settle them.
+				this.timeline.addBoundary(this.terminal.buffer.active, new HardBoundary());
+				this.deferClearing();
 				return;
 			}
 			if (!this.timeline.length) {

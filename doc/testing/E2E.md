@@ -2145,3 +2145,9 @@ CI 机器人 `440cb9e9271f16ac7c3eccb20437a25cf1e679be` 仅更新测试耗时估
 ## 手动清理活跃运行修复验收（2026-10-27）
 
 原40483067327因任意其它未完成Actions全局拒绝而失败。脚本现在保留活跃运行/产物，删除前复查重启；有其它活跃任务时跳过镜像和缓存清理，真实权限与manifest异常仍失败。正式 [40483588668](https://github.com/0honus0/nexus-terminal/actions/runs/40483588668) 在c49663a5上成功，141条旧运行和684个历史产物实际删除，保留当前clean、渠道源码成功记录和最新成功E2E。34749067364从2026-09-13起queued且无job，本次仍保留，没有自行取消；因此99个旧产品版本、61个runner版本、769个缓存保留，实际镜像/缓存删除分支仍未验证。latest/dev递归manifest和HEAD校验成功，日志 `/tmp/nexus-cleanup-success.log`。脚本语法、ESLint、Prettier、actionlint和diff通过，源码两轮复核，无产品/UI变更。
+
+## 快速输入回跳与连续退格（2026-10-27，源码及静态完成）
+
+本地dev的TerminalTypeAhead修正：未完成CSI保留至下包、仅光标显隐/报告的包不触发退格空匹配失败；右边界仅限制前向打印，触边不立即撤回旧预测而由HardBoundary等待真实回显；连续DEL按解析顺序逐字预测，原输入仍只派发一次。原双解析屏障、reset/失活/resize/快照撤销与复杂模式保守策略保持，无UI或协议变更。源码两轮复核完成，未用关闭预测或放宽期限规避。
+
+既有terminal-lifecycle增加两个场景：快速连续输入经拆分SGR/DECTCEM与光标独立帧确认，批量退格保持已删内容并核对ACK和唯一输入；按实际列宽填充到右边界，删除不触发向前换行保护，下一字符触边时此前字符不消失，最后真回显及快照无重影。静态目标清单21项，严格目标tsc通过。根check、Frontend生产build、全量格式、目标ESLint/Prettier/diff通过，日志 `/tmp/nexus-typeahead-fix-{check,build,types,format,final-types}.log`；用例清单 `/tmp/nexus-typeahead-fix-list.log`。按D17未运行本地行为/E2E，远程及真实用户网络表现仍待验，不将源码推理或编译PASS称为复现/实测修复。用户未要求提交推送，留在dev工作区，个人截图保持。

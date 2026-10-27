@@ -1699,7 +1699,7 @@ Context预压缩现状：checkpoint工具需要实际context.compact授权，摘
 3. 依赖：TerminalView → vendor → xterm/mitt；不引入 VS Code 平台、遥测、设置服务或反向依赖 Workspace。
 4. 类型与转换：TerminalChannel 可选 onInputSent 为技术 Port，只发布修饰键转换后且 WebSocket 实际接受的输入，拒绝/未发送内容不参与预测；无 Shared/存储契约变化。
 5. 入口：Workspace adapter 成功 sendConnected 后通知订阅，Surface 转发；View 仅在可见、可输入的实时画面启用。按样本延迟/准确率选择预测，首字符先确认，Unicode/粘贴和复杂模式等待真实回显。
-6. 并发：本地预测、远端输出和撤销经同一个 xterm 解析队列；远端 ACK 保留原始字节及原回调，只在真实解析后释放。预测不可替代服务器输出或重放输入。
+6. 并发：本地预测、远端输出和撤销经同一个 xterm 解析队列；远端 ACK 保留原始字节及原回调，只在真实解析后释放。部分CSI与仅光标显隐/报告帧不作为回显不匹配；连续DEL按解析顺序逐字读取撤销信息；右边界仅约束向前打印，未确认换行通过HardBoundary保留已有显示至真实输出收敛。预测不可替代服务器输出或重放输入。
 7. 生命周期：失活/后台、断线/错误、历史、resize、PTY替换和快照先撤销；snapshot 等待解析屏障；销毁取消 timer/标题订阅与样本订阅。旧 epoch 排队输入失效。备用屏幕、隐藏光标、原点/插入模式和滚动区内不预测；滚动区下方的普通输入行可参与，但不预测跨行滚动。
 8. 验收：定向算法回放、真实 Codex 捕获流和组件/传输回归分别记录 testing/E2E；类型/构建不能代表真实弱网所有程序通过。不新增远端 helper 或改变现有输入流控。
 
