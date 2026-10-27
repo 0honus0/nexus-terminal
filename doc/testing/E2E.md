@@ -2065,3 +2065,15 @@ GitHub Actions 限制已恢复。测试修复提交 `441dcc740660d337b6e7480bbb1
 CI 机器人 `440cb9e9271f16ac7c3eccb20437a25cf1e679be` 仅更新测试耗时估计，已快进同步，无产品代码变化。正式 [dev amd64 发布 40438690356](https://github.com/0honus0/nexus-terminal/actions/runs/40438690356) 成功，生产依赖审计通过。`ghcr.io/0honus0/nexus-terminal:dev` 和 `sha-440cb9e9271f` 索引摘要均为 `sha256:953b6ef14d7a02cca8076625706aa1bced9a774ed18618152872937f8b8cea64`；唯一实际平台为 linux/amd64，OCI revision 精确为上述机器人提交，unknown/unknown 项为证明 manifest。证据 `/tmp/nexus-final-dev-publish.log` 与 `/tmp/nexus-final-dev-image.json`。未更新生产容器，个人截图增删不提交。
 
 手动清理 workflow 随 `cb9d1df3` 提交，脚本 node --check、ESLint、Prettier 和 diff 通过，完整 E2E 的仓库检查亦通过。依据用户最新“先创建”指令未触发清理，远程实际删除/包管理权限尚待手动验收；workflow 文件仅在 dev，GitHub 的手动入口首次注册仍要求默认分支存在该文件，未擅自合并 main。
+
+## E2E 依赖拆分与构建复用（2026-10-27）
+
+参考 [Grafana 构建分发](https://github.com/grafana/grafana/blob/main/.github/workflows/pr-e2e-tests.yml)、[Playwright fixtures](https://playwright.dev/docs/test-fixtures)、[项目分组](https://playwright.dev/docs/test-projects)与原生 failOnFlakyTests。未增加 Actions 总并发、放宽超时、删断言或修改产品 UI。现有按耗时分片只增加 backend/browser 清单过滤，未来未登记文件默认保留在浏览器组，不漏测。
+
+静态列举（`playwright test --list --reporter=json`，未运行场景）确认 all 526、backend 122、browser 404，两个分组全集与 all 完全相同，无交集；移动撤权测试只改变文件，不减少场景。backend 直接使用配置的 localhost 后端 Origin；原非配置 127.0.0.1 Host 拒绝仍验证。浏览器使用 preview，Vite 8.3.4 源码确认继承 server.proxy。两个直接加载客户端的浏览器用例改用测试专用 Vite bundle，仍执行真实客户端与原断言，不把测试代码加入正式发布。
+
+共享构建 artifact 保留 shared/backend/frontend 的 dist 目录，download 到 packages 后原相对依赖不变；每次下载来自同一个工作流 SHA。原应用关闭与未知/清理失败围栏不动，仅跳过不依赖的外部夹具重置。SSH 文档样本进程内生成一次再复制到各例目录，不硬链接可变文件；相对/失效符号链接原样保留。原生 failOnFlakyTests 替换 reporter 状态覆盖，首次失败 Trace/截图/录像继续保留。
+
+基线 E2E 40437638548 墙钟约 620 秒；按其实测用例耗时 backend 串行约 395 秒、browser 约 2788 秒，默认同 8 runner 采用 1/7。真实新耗时与冷/热 runner image 待远程 Actions，不把理论估计写成提速结论。本地仅执行静态列举、检查与构建，按 D17 不运行行为测试。
+
+静态已通过：根 `pnpm run check`、正式双端 build、测试客户端 Vite build、变更 E2E 严格 TypeScript、Node 脚本语法、`git diff --check`。日志 `/tmp/nexus-split-{root-check,build,clients-build,e2e-types}.log`。两轮源码复审覆盖配置、唯一清单、各启动命令、共享 artifact 目录、同源校验、夹具关闭/重置/复制与 reporter；未发现需更改产品接口或 UI 的项。正式 Actions 待推送后执行，全部首次通过才收口。

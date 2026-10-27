@@ -9,6 +9,11 @@ const e2eRoot = path.join(repoRoot, 'tests/e2e');
 const specsRoot = path.join(e2eRoot, 'specs');
 const estimatesPath = path.join(scriptDir, 'duration-estimates.json');
 const projectNames = ['auth', 'http', 'agent', 'websocket', 'ui', 'ssh', 'mobile'];
+const suite = process.env.NEXUS_E2E_SUITE ?? 'all';
+if (!['all', 'backend', 'browser'].includes(suite)) throw new Error('Invalid NEXUS_E2E_SUITE');
+const backendSpecs = new Set(
+	JSON.parse(fs.readFileSync(path.join(e2eRoot, 'backend-specs.json'), 'utf8')).map((spec) => 'specs/' + spec),
+);
 const defaultDurationMs = 10_000;
 // Deliberate unknown descendant effects must retain their backend shutdown
 // fence. Give that full E2E scenario its own application lifetime instead of
@@ -65,7 +70,7 @@ function discoverSpecs() {
 			}
 		}
 	}
-	return specs.sort();
+	return specs.filter((spec) => suite === 'all' || backendSpecs.has(spec) === (suite === 'backend')).sort();
 }
 
 function median(values) {
@@ -153,6 +158,29 @@ function run(plan, rawShard) {
 		'.bin',
 		process.platform === 'win32' ? 'playwright.cmd' : 'playwright',
 	);
+	// CI supplies this exact revision's artifact. Isolated lifetimes restart without recompiling.
+	if (process.env.NEXUS_E2E_PREBUILT !== '1') {
+		const built = spawnSync(
+			process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
+			['--filter', '@nexus-terminal/e2e', 'build'],
+			{
+				cwd: repoRoot,
+				stdio: 'inherit',
+				env: process.env,
+			},
+		);
+		if (built.error) throw built.error;
+		if (built.status !== 0) throw new Error('E2E application build failed');
+	}
+	for (const file of [
+		'backend/dist/bootstrap/create-app.js',
+		'shared/dist/access/http.js',
+		'frontend/dist/index.html',
+		'frontend/dist/__e2e__/browser-clients.js',
+	]) {
+		if (!fs.existsSync(path.join(repoRoot, 'packages', file)))
+			throw new Error('Missing E2E application build: ' + file);
+	}
 	const isolatedPlugin = shard.specs.includes(isolatedUnknownSpec);
 	const isolatedAcp = shard.specs.includes(isolatedAcpSpec);
 	const suffixes = [

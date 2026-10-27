@@ -25,15 +25,19 @@ export const resetE2EBaseline = async (mode: E2EDatabaseMode) => {
 	await baseExpect(response.json()).resolves.toEqual({ reset: true, mode });
 };
 
-async function resetExternalFixtures(): Promise<void> {
+async function resetExternalFixtures(file: string): Promise<void> {
 	// The previous application must close successfully before these shared
 	// controls change. Never erase an unknown-effect or resource-cleanup fence.
-	const origins = [
-		E2E_URLS.openAiProviderOrigin,
-		E2E_URLS.pluginRepositoryOrigin,
-		E2E_URLS.deploymentPageOrigin,
-		E2E_URLS.browserControlOrigin,
-	];
+	const origins =
+		process.env.NEXUS_E2E_SUITE === 'backend' && !file.includes('/agent/')
+			? []
+			: [
+					E2E_URLS.openAiProviderOrigin,
+					E2E_URLS.pluginRepositoryOrigin,
+					...(process.env.NEXUS_E2E_SUITE === 'backend'
+						? []
+						: [E2E_URLS.deploymentPageOrigin, E2E_URLS.browserControlOrigin]),
+				];
 	const results = await Promise.allSettled(
 		origins.map(async (origin) => {
 			const response = await fetch(origin + '/reset', {
@@ -53,10 +57,18 @@ async function resetExternalFixtures(): Promise<void> {
 export const test = base.extend<E2EFixtures>({
 	e2eDatabaseMode: ['seed', { option: true }],
 	_e2eTestReset: [
-		async ({ e2eDatabaseMode }, use) => {
+		async ({ e2eDatabaseMode }, use, testInfo) => {
 			await resetE2EBaseline(e2eDatabaseMode);
-			await resetTestSshFilesystem();
-			await resetExternalFixtures();
+			const file = testInfo.file.replaceAll('\\', '/');
+			const protocolWithoutSsh =
+				process.env.NEXUS_E2E_SUITE === 'backend' &&
+				!file.includes('/ssh/') &&
+				!file.includes('/websocket/') &&
+				!['connections-tags', 'webhook-secret-contract', 'rdp-remoteapp', 'ssh-key-audit-failure'].some(
+					(name) => file.endsWith('/' + name + '.spec.ts'),
+				);
+			if (!protocolWithoutSsh) await resetTestSshFilesystem();
+			await resetExternalFixtures(file);
 
 			await use();
 		},

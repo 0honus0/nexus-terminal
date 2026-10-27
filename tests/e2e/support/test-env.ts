@@ -26,13 +26,16 @@ export const E2E_PORTS = {
 	deploymentPage: parsePort('NEXUS_E2E_DEPLOYMENT_PAGE_PORT', 29097),
 } as const;
 
+const publicPort = process.env.NEXUS_E2E_SUITE === 'backend' ? E2E_PORTS.backend : E2E_PORTS.frontend;
+
 export const E2E_URLS = {
 	backendOrigin: `http://127.0.0.1:${E2E_PORTS.backend}`,
 	backendControlOrigin: `http://127.0.0.1:${E2E_PORTS.backendControl}`,
 	backendWsOrigin: `ws://127.0.0.1:${E2E_PORTS.backend}`,
-	frontendOrigin: `http://localhost:${E2E_PORTS.frontend}`,
-	frontendLoopbackOrigin: `http://127.0.0.1:${E2E_PORTS.frontend}`,
-	frontendWsOrigin: `ws://localhost:${E2E_PORTS.frontend}`,
+	// Protocol-only projects use the real backend listener with its configured public Host.
+	frontendOrigin: `http://localhost:${publicPort}`,
+	frontendLoopbackOrigin: `http://127.0.0.1:${publicPort}`,
+	frontendWsOrigin: `ws://localhost:${publicPort}`,
 	desktopControlOrigin: `http://127.0.0.1:${E2E_PORTS.desktopControl}`,
 	sshControlOrigin: `http://127.0.0.1:${E2E_PORTS.sshControl}`,
 	pluginRepositoryOrigin: `http://127.0.0.1:${E2E_PORTS.pluginRepository}`,

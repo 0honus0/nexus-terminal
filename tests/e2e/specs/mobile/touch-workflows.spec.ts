@@ -42,7 +42,7 @@ test('remote touch supports switchable native direct and touchpad input', async 
 	await page.goto('/login');
 
 	const result = await page.evaluate(async () => {
-		const modulePath = '/src/features/remote-desktop/adapters/desktop-touch.ts';
+		const modulePath = '/__e2e__/browser-clients.js';
 		const { attachDesktopTouch } = await import(/* @vite-ignore */ modulePath);
 		const calls: Array<{
 			x: number;

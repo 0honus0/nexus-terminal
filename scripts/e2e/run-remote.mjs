@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import path from 'node:path';
@@ -74,6 +74,16 @@ const reservePort = async () => {
 };
 
 try {
+	const build = spawnSync(
+		process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
+		['--filter', '@nexus-terminal/e2e', 'build'],
+		{
+			cwd: repoRoot,
+			stdio: 'inherit',
+		},
+	);
+	if (build.error) throw build.error;
+	if (build.status !== 0) throw new Error('E2E application build failed');
 	for (const name of portNames) {
 		if (!assignedPorts.has(name)) {
 			assignedPorts.set(name, await reservePort());

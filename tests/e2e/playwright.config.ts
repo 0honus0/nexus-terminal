@@ -1,15 +1,19 @@
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig, devices, type PlaywrightTestConfig, type PlaywrightTestProject } from '@playwright/test';
 import path from 'node:path';
 import { E2E_PORTS, E2E_URLS } from './support/test-env';
 import { E2E_ADMIN } from './support/test-identity';
+import backendSpecs from './backend-specs.json';
 
 const e2eRoot = __dirname;
 const repoRoot = path.resolve(e2eRoot, '../..');
 const testDataDir = path.join(e2eRoot, '.tmp', 'backend-data');
 process.env.NEXUS_E2E_CONTROL_TOKEN ??= randomBytes(32).toString('hex');
 const isCI = Boolean(process.env.CI);
+const suite = process.env.NEXUS_E2E_SUITE ?? 'all';
+if (!['all', 'backend', 'browser'].includes(suite)) throw new Error('Invalid NEXUS_E2E_SUITE');
+const backendOnly = suite === 'backend';
 const e2ePluginPrivateKeyPem = readFileSync(
 	path.join(e2eRoot, 'fixtures', 'agent', 'keys', 'official-e2e-private.pem'),
 	'utf8',
@@ -39,10 +43,12 @@ const backendEnv: Record<string, string> = {
 export default defineConfig({
 	testDir: './specs',
 	fullyParallel: false,
+	forbidOnly: isCI,
 	// Run the full selected suite even when earlier tests fail; CI reports failure only after all results are collected.
 	maxFailures: 0,
 	workers: 1,
 	retries: isCI ? 1 : 0,
+	failOnFlakyTests: isCI,
 	globalTimeout: isCI ? 15 * 60_000 : 0,
 	timeout: isCI ? 120_000 : 0,
 	expect: { timeout: 10_000 },
@@ -92,93 +98,105 @@ export default defineConfig({
 			testMatch: /mobile\/.*\.spec\.ts/,
 			use: { ...devices['Pixel 7'] },
 		},
-	],
-	webServer: [
-		{
-			command: 'node fixtures/agent/deployment-page.mjs',
-			cwd: e2eRoot,
-			env: { ...inheritedEnv, NEXUS_E2E_DEPLOYMENT_PAGE_PORT: String(E2E_PORTS.deploymentPage) },
-			url: `${E2E_URLS.deploymentPageOrigin}/state`,
-			reuseExistingServer: false,
-			timeout: 30_000,
-			stdout: 'pipe',
-			stderr: 'pipe',
-		},
-		{
-			command: 'node support/test-browser-server.mjs',
-			cwd: e2eRoot,
-			env: {
-				...inheritedEnv,
-				NEXUS_E2E_BROWSER_CONTROL_PORT: String(E2E_PORTS.browserControl),
-				NEXUS_E2E_BROWSER_CDP_PORT: String(E2E_PORTS.browserCdp),
+	].flatMap<PlaywrightTestProject>((project) => {
+		const matches = backendSpecs.filter((spec) => project.testMatch.test(spec)).map((spec) => '**/' + spec);
+		if (backendOnly) return matches.length ? [{ ...project, testMatch: matches }] : [];
+		return [{ ...project, testIgnore: suite === 'browser' ? backendSpecs.map((spec) => '**/' + spec) : [] }];
+	}),
+	webServer: (
+		[
+			{
+				command: 'node fixtures/agent/deployment-page.mjs',
+				cwd: e2eRoot,
+				env: { ...inheritedEnv, NEXUS_E2E_DEPLOYMENT_PAGE_PORT: String(E2E_PORTS.deploymentPage) },
+				url: `${E2E_URLS.deploymentPageOrigin}/state`,
+				reuseExistingServer: false,
+				timeout: 30_000,
+				stdout: 'pipe',
+				stderr: 'pipe',
 			},
-			url: `${E2E_URLS.browserControlOrigin}/contexts`,
-			reuseExistingServer: false,
-			timeout: 30_000,
-			stdout: 'pipe',
-			stderr: 'pipe',
-		},
-		{
-			command: 'node fixtures/agent/openai-provider.mjs',
-			cwd: e2eRoot,
-			env: inheritedEnv,
-			url: `${E2E_URLS.openAiProviderOrigin}/health`,
-			reuseExistingServer: false,
-			timeout: 30_000,
-			stdout: 'pipe',
-			stderr: 'pipe',
-		},
-		{
-			command: 'node fixtures/agent/plugin-repository.mjs',
-			cwd: e2eRoot,
-			env: pluginRepositoryEnv,
-			url: `${E2E_URLS.pluginRepositoryOrigin}/health`,
-			reuseExistingServer: false,
-			timeout: 30_000,
-			stdout: 'pipe',
-			stderr: 'pipe',
-		},
-		{
-			command: 'node support/test-desktop-server.mjs',
-			gracefulShutdown: { signal: 'SIGTERM', timeout: 5_000 },
-			cwd: e2eRoot,
-			url: `${E2E_URLS.desktopControlOrigin}/health`,
-			reuseExistingServer: false,
-			timeout: 30_000,
-			stdout: 'pipe',
-			stderr: 'pipe',
-		},
-		{
-			command: 'node support/test-ssh-server.mjs',
-			cwd: e2eRoot,
-			url: `${E2E_URLS.sshControlOrigin}/health`,
-			reuseExistingServer: false,
-			timeout: 30_000,
-			stdout: 'pipe',
-			stderr: 'pipe',
-		},
-		{
-			command: `${pnpmCommand} --filter @nexus-terminal/backend build && node support/backend-server.mjs`,
-			cwd: e2eRoot,
-			env: backendEnv,
-			url: `${E2E_URLS.backendControlOrigin}/health`,
-			reuseExistingServer: false,
-			timeout: 120_000,
-			stdout: 'pipe',
-			stderr: 'pipe',
-		},
-		{
-			command: `${pnpmCommand} run dev --host 127.0.0.1 --port ${E2E_PORTS.frontend} --strictPort`,
-			cwd: path.join(repoRoot, 'packages/frontend'),
-			env: {
-				...backendEnv,
-				NEXUS_VITE_CACHE_DIR: path.join(e2eRoot, '.tmp', 'vite-cache'),
+			{
+				command: 'node support/test-browser-server.mjs',
+				cwd: e2eRoot,
+				env: {
+					...inheritedEnv,
+					NEXUS_E2E_BROWSER_CONTROL_PORT: String(E2E_PORTS.browserControl),
+					NEXUS_E2E_BROWSER_CDP_PORT: String(E2E_PORTS.browserCdp),
+				},
+				url: `${E2E_URLS.browserControlOrigin}/contexts`,
+				reuseExistingServer: false,
+				timeout: 30_000,
+				stdout: 'pipe',
+				stderr: 'pipe',
 			},
-			url: `${E2E_URLS.frontendLoopbackOrigin}/login`,
-			reuseExistingServer: false,
-			timeout: 120_000,
-			stdout: 'pipe',
-			stderr: 'pipe',
-		},
-	],
+			{
+				command: 'node fixtures/agent/openai-provider.mjs',
+				cwd: e2eRoot,
+				env: inheritedEnv,
+				url: `${E2E_URLS.openAiProviderOrigin}/health`,
+				reuseExistingServer: false,
+				timeout: 30_000,
+				stdout: 'pipe',
+				stderr: 'pipe',
+			},
+			{
+				command: 'node fixtures/agent/plugin-repository.mjs',
+				cwd: e2eRoot,
+				env: pluginRepositoryEnv,
+				url: `${E2E_URLS.pluginRepositoryOrigin}/health`,
+				reuseExistingServer: false,
+				timeout: 30_000,
+				stdout: 'pipe',
+				stderr: 'pipe',
+			},
+			{
+				command: 'node support/test-desktop-server.mjs',
+				gracefulShutdown: { signal: 'SIGTERM', timeout: 5_000 },
+				cwd: e2eRoot,
+				url: `${E2E_URLS.desktopControlOrigin}/health`,
+				reuseExistingServer: false,
+				timeout: 30_000,
+				stdout: 'pipe',
+				stderr: 'pipe',
+			},
+			{
+				command: 'node support/test-ssh-server.mjs',
+				cwd: e2eRoot,
+				url: `${E2E_URLS.sshControlOrigin}/health`,
+				reuseExistingServer: false,
+				timeout: 30_000,
+				stdout: 'pipe',
+				stderr: 'pipe',
+			},
+			{
+				command: 'node support/backend-server.mjs',
+				cwd: e2eRoot,
+				env: backendEnv,
+				url: `${E2E_URLS.backendControlOrigin}/health`,
+				reuseExistingServer: false,
+				timeout: 120_000,
+				stdout: 'pipe',
+				stderr: 'pipe',
+			},
+			{
+				command: `${pnpmCommand} run preview --host 127.0.0.1 --port ${E2E_PORTS.frontend} --strictPort`,
+				cwd: path.join(repoRoot, 'packages/frontend'),
+				env: {
+					...backendEnv,
+				},
+				url: `${E2E_URLS.frontendLoopbackOrigin}/login`,
+				reuseExistingServer: false,
+				timeout: 120_000,
+				stdout: 'pipe',
+				stderr: 'pipe',
+			},
+		] satisfies NonNullable<PlaywrightTestConfig['webServer']>
+	).filter((server) => {
+		if (!backendOnly) return true;
+		return (
+			!['node fixtures/agent/deployment-page.mjs', 'node support/test-browser-server.mjs'].includes(
+				server.command,
+			) && !server.command.includes(' run preview ')
+		);
+	}),
 });

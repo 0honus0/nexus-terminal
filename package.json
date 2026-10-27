@@ -30,7 +30,9 @@
     "test:frontend-auth": "pnpm --filter @nexus-terminal/backend build && node tests/frontend/auth.integration.mjs",
     "test:frontend-targets": "pnpm --filter @nexus-terminal/backend build && node tests/frontend/targets.integration.mjs",
     "test:backend": "pnpm --filter @nexus-terminal/backend test",
-    "lint:backend": "eslint packages/backend/src"
+    "lint:backend": "eslint packages/backend/src",
+    "test:e2e:backend": "pnpm --filter @nexus-terminal/e2e test:backend",
+    "test:e2e:browser": "pnpm --filter @nexus-terminal/e2e test:browser"
   },
   "repository": {
     "type": "git",

@@ -23,7 +23,6 @@ export default class MirroredLogReporter implements Reporter {
 	private testDir = '';
 	private logRoot = '';
 	private fileByTestId = new Map<string, string>();
-	private unexpectedFirstAttempts = new Map<string, string>();
 	private specOrder = new Map<string, number>();
 	private startedSpecs = new Set<string>();
 	private totalSpecs = 0;
@@ -130,14 +129,6 @@ export default class MirroredLogReporter implements Reporter {
 			}
 		}
 
-		if (
-			result.retry === 0 &&
-			test.expectedStatus === 'passed' &&
-			(result.status === 'failed' || result.status === 'timedOut' || result.status === 'interrupted')
-		) {
-			this.unexpectedFirstAttempts.set(test.id, test.titlePath().filter(Boolean).join(' > '));
-		}
-
 		const marker = result.status === 'passed' ? '✓' : result.status === 'skipped' ? '○' : '✗';
 		this.consoleLog(
 			`[E2E] ${marker} ${this.consoleTitle(test)} — ${result.status} (${this.formatDuration(result.duration)})`,
@@ -151,22 +142,6 @@ export default class MirroredLogReporter implements Reporter {
 		const elapsed = this.runStartedAt > 0 ? Date.now() - this.runStartedAt : result.duration;
 		this.consoleLog(`\n[E2E] Finished: ${result.status} in ${this.formatDuration(elapsed)}`);
 		this.writeSpecDurations();
-		if (this.unexpectedFirstAttempts.size === 0) return;
-
-		const summaryFile = path.join(this.logRoot, '_flaky-tests.log');
-		const summary = [
-			'E2E run contained tests that failed on their first attempt.',
-			'Retries are retained for diagnostics, but flaky tests fail CI.',
-			'',
-			...Array.from(this.unexpectedFirstAttempts.values()).map((title) => `- ${title}`),
-			'',
-		].join('\n');
-		fs.writeFileSync(summaryFile, summary, 'utf8');
-
-		// Playwright permits reporters to override the final run status. Keep retry
-		// artifacts/logs for diagnosis while preventing a retry-pass from producing
-		// a misleading green CI run.
-		if (result.status === 'passed') return { status: 'failed' as const };
 	}
 
 	private writeSpecDurations(): void {

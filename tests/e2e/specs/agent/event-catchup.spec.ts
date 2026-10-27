@@ -116,14 +116,12 @@ test('production native event client rejects duplicate pages and retains its sup
 	const read = () =>
 		page.evaluate(
 			async ({ appId, runId }) => {
-				const path = '/src/features/agent/api/native-run-api.ts';
-				const { listNativeEvents } = await import(/* @vite-ignore */ path);
+				const path = '/__e2e__/browser-clients.js';
+				const { listNativeEvents, AgentManagementFailure } = await import(/* @vite-ignore */ path);
 				try {
 					const result = await listNativeEvents({ appId, appVersion: 1 }, runId, 7);
 					return { status: 'ok', cursor: result.nextCursor, runId: result.items[0]?.runId };
 				} catch (cause) {
-					const failurePath = '/src/features/agent/model/management-failure.ts';
-					const { AgentManagementFailure } = await import(/* @vite-ignore */ failurePath);
 					if (
 						!(cause instanceof AgentManagementFailure) ||
 						!(cause instanceof Error) ||

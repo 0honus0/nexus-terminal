@@ -76,6 +76,7 @@ jobs:
       packages: write
     outputs:
       image: ${{ steps.image.outputs.image }}
+      matrix: ${{ steps.matrix.outputs.value }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -88,6 +89,21 @@ jobs:
           image="$E2E_RUNNER_REPOSITORY:latest"
           echo "image=$image" >> "$GITHUB_OUTPUT"
           echo "Using E2E runner image $image"
+
+      - name: Split protocol and browser runners
+        id: matrix
+        env:
+          RUNNERS: ${{ github.event_name == 'workflow_dispatch' && inputs.playwright_runners || '8' }}
+        run: |
+          node --input-type=module <<'JS'
+          import { appendFileSync } from 'node:fs';
+          const total = Number(process.env.RUNNERS);
+          const include = [
+            ...Array.from({ length: 1 }, (_, index) => ({ suite: 'backend', shard: index + 1, shards: 1 })),
+            ...Array.from({ length: total - 1 }, (_, index) => ({ suite: 'browser', shard: index + 1, shards: total - 1 })),
+          ];
+          appendFileSync(process.env.GITHUB_OUTPUT, `value=${JSON.stringify({ include })}\n`);
+          JS
 
       - name: Check for runner image update
         id: check
@@ -122,8 +138,31 @@ jobs:
           E2E_RUNNER_REPOSITORY: ghcr.io/${{ github.repository_owner }}/nexus-terminal-e2e-runner
         run: scripts/e2e/build-runner-image.sh
 
+      - name: Set up pnpm and Node.js for shared test build
+        uses: pnpm/setup@v2
+        with:
+          runtime: node@latest
+          cache: true
+          install: false
+
+      - name: Build test application once
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @nexus-terminal/e2e build
+
+      - name: Upload tested application build
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-application-${{ github.sha }}
+          path: |
+            packages/shared/dist/
+            packages/backend/dist/
+            packages/frontend/dist/
+          if-no-files-found: error
+          retention-days: 1
+
   quality:
-    name: Checks, format, and build
+    name: Checks and format
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -140,22 +179,14 @@ jobs:
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check independent backend types
-        run: pnpm --filter @nexus-terminal/backend check
-
       - name: Run standard checks serially
         run: pnpm run check
 
       - name: Check formatting
         run: pnpm run format:all:check
 
-      - name: Build production packages
-        run: |
-          pnpm --filter @nexus-terminal/backend build
-          pnpm --filter @nexus-terminal/frontend build
-
   playwright:
-    name: Playwright shard ${{ matrix.shard }}
+    name: Playwright ${{ matrix.suite }} shard ${{ matrix.shard }}
     needs: e2e-runner-image
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -166,12 +197,13 @@ jobs:
         password: ${{ github.token }}
       options: --ipc=host
     env:
+      NEXUS_E2E_SUITE: ${{ matrix.suite }}
+      NEXUS_E2E_PREBUILT: '1'
       E2E_CAPTURE_SCREENSHOTS: ${{ github.event_name == 'workflow_dispatch' && inputs.refresh_screenshots && '1' || '0' }}
       E2E_SCREENSHOT_OUTPUT_DIR: .tmp/functional-screenshots
     strategy:
       fail-fast: false
-      matrix:
-        shard: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.playwright_runners == '6' && '[1,2,3,4,5,6]' || github.event_name == 'workflow_dispatch' && inputs.playwright_runners == '7' && '[1,2,3,4,5,6,7]' || github.event_name == 'workflow_dispatch' && inputs.playwright_runners == '9' && '[1,2,3,4,5,6,7,8,9]' || github.event_name == 'workflow_dispatch' && inputs.playwright_runners == '10' && '[1,2,3,4,5,6,7,8,9,10]' || '[1,2,3,4,5,6,7,8]') }}
+      matrix: ${{ fromJSON(needs.e2e-runner-image.outputs.matrix) }}
 
     steps:
       - name: Checkout repository
@@ -188,6 +220,12 @@ jobs:
             pnpm --filter @nexus-terminal/e2e exec playwright install --only-shell chromium
           fi
 
+      - name: Download tested application build
+        uses: actions/download-artifact@v8
+        with:
+          name: e2e-application-${{ github.sha }}
+          path: packages
+
       - name: Run balanced E2E shard ${{ matrix.shard }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -197,7 +235,7 @@ jobs:
           set -o pipefail
           mkdir -p tests/e2e/.tmp
           node scripts/e2e/balanced-shards.mjs run \
-            --shards "${{ github.event_name == 'workflow_dispatch' && inputs.playwright_runners || '8' }}" \
+            --shards "${{ matrix.shards }}" \
             --shard "${{ matrix.shard }}" \
             2>&1 | tee tests/e2e/.tmp/shard-server.log
 
@@ -205,7 +243,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: e2e-timings-${{ matrix.shard }}-${{ github.run_attempt }}
+          name: e2e-timings-${{ matrix.suite }}-${{ matrix.shard }}-${{ github.run_attempt }}
           path: tests/e2e/test-results/spec-durations.json
           if-no-files-found: error
           retention-days: 7
@@ -214,7 +252,7 @@ jobs:
         if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.refresh_screenshots }}
         uses: actions/upload-artifact@v7
         with:
-          name: e2e-screenshots-${{ matrix.shard }}-${{ github.run_attempt }}
+          name: e2e-screenshots-${{ matrix.suite }}-${{ matrix.shard }}-${{ github.run_attempt }}
           path: tests/e2e/.tmp/functional-screenshots/*.png
           if-no-files-found: ignore
           retention-days: 7
@@ -223,7 +261,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: e2e-shard-${{ matrix.shard }}-${{ github.run_attempt }}
+          name: e2e-shard-${{ matrix.suite }}-${{ matrix.shard }}-${{ github.run_attempt }}
           include-hidden-files: true
           path: |
             tests/e2e/logs/

@@ -13,6 +13,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const e2eRoot = path.resolve(__dirname, '..');
 const repoRoot = path.resolve(e2eRoot, '../..');
 const rootDir = path.join(e2eRoot, '.tmp', 'ssh-root');
+const templateDir = path.join(e2eRoot, '.tmp', 'ssh-root-template');
+let templateReady = false;
 const shellRcPath = path.join(e2eRoot, '.tmp', 'ssh-bashrc');
 const archiveExecHoldPath = path.join(e2eRoot, '.tmp', 'archive-exec-hold.flag');
 const archivePreflightHoldPath = path.join(e2eRoot, '.tmp', 'archive-preflight-hold.flag');
@@ -628,6 +630,12 @@ function writeSqlitePreviewFixture(destination) {
 async function resetRoot() {
 	await fsp.rm(archiveExecHoldPath, { force: true });
 	await fsp.rm(rootDir, { recursive: true, force: true });
+	if (templateReady) {
+		// Copy bytes, never hard-link mutable test files. Keep relative and broken symlinks literal.
+		await fsp.cp(templateDir, rootDir, { recursive: true, verbatimSymlinks: true });
+		resetControls();
+		return;
+	}
 	await fsp.mkdir(path.join(rootDir, 'folder-seed'), { recursive: true });
 	await fsp.mkdir(path.join(rootDir, 'force-delete-e2e', 'nested'), { recursive: true });
 	await fsp.writeFile(path.join(rootDir, 'force-delete-e2e', 'nested', 'blocked.txt'), 'force-delete-e2e\n', 'utf8');
@@ -691,6 +699,9 @@ fi
 	await fsp.symlink('预览-测试.png', path.join(rootDir, 'image-link.png'));
 	await fsp.symlink('missing-target.png', path.join(rootDir, 'stale-image-link.png'));
 	await fsp.chmod(path.join(rootDir, 'seed.txt'), 0o644);
+	await fsp.rm(templateDir, { recursive: true, force: true });
+	await fsp.cp(rootDir, templateDir, { recursive: true, verbatimSymlinks: true });
+	templateReady = true;
 	resetControls();
 }
 
