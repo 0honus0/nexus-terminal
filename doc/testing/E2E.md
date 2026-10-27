@@ -2045,3 +2045,7 @@ NativeThreadPanel 列表行为 items-stretch，全局 UiButton 固定高度配 m
 ### 工具详情及界面细节本批正式回归（2026-10-27，待远程）
 
 本轮补充既有图片成功/三类拒绝用例，验证持久工具详情、错误 Run 返回 404、展开卡片后的格式化参数与安全失败码，不改变图片预览、下载、内容审核及不重试断言。其余源码静态证据见上述各节。用户授权整批提交推送，完整正式 E2E 成功后发布 dev linux/amd64；不更新生产容器。
+
+本批代码已提交推送 `22718980`。最终根检查、全量格式、变更 E2E 严格 TypeScript 与 diff 检查通过，日志 `/tmp/nexus-final-release-{check,format,e2e-types}.log`；临时 TypeScript 配置首次缺少 Node 类型路径，修正配置后通过。源码构建证据沿上述各节，未执行本地行为测试。
+
+正式远程回归被 GitHub 平台阻断：2026-10-27 UTC，push 后没有创建新运行，手动 dispatch 两次均返回 HTTP 422 `Actions has been disabled for this repository`。仓库 Actions permissions.enabled=true、E2E 工作流 state=active、当前账号有 admin 权限；显式启用工作流后仍被拒绝，因此不是测试失败，不能宣称本批通过。账户计费/平台限制尚无法证实，当前令牌无 user scope，计费接口不可读；未更改令牌或账户设置。需所有者在 GitHub 恢复 Actions 可执行状态后再触发本批完整 E2E，通过后发布 dev amd64。镜像未发布，生产容器未更新。
