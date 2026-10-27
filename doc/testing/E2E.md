@@ -2141,3 +2141,7 @@ CI 机器人 `440cb9e9271f16ac7c3eccb20437a25cf1e679be` 仅更新测试耗时估
 正式验收 [40469028918](https://github.com/0honus0/nexus-terminal/actions/runs/40469028918)：源码e621b2bef1cf22317eb95682ed648c7cb62d5df5，526项首次通过（122后端/404浏览器），0 failed/retry/skipped/flaky，质量/格式、Docker smoke与8个测试runner全成功。direct/install-rsync/skip-rsync均约14秒；relay/skip-all分别8.9/8.1秒，保留至少两个不同真实UI中间百分比、单调进度与完整SHA断言。修复静态日志 `/tmp/nexus-e2e-transfer-fix-{check,types}.log`；526项清单 `/tmp/nexus-e2e-transfer-fix-list.json` 与前版Counter相等；变更格式和diff通过。8分片正式日志 `/tmp/nexus-e2e-transfer-fix-122*.log`，最终运行元数据 `/tmp/nexus-e2e-transfer-fix-final-run.json`，Docker日志 `/tmp/nexus-e2e-transfer-fix-smoke.log`。
 
 最终墙钟07:45:22→07:56:24 UTC，662秒（11分02秒）；开头约94秒等待，Docker Chromium安装07:47:16→07:55:23耗487秒，8测试分片07:53:21已全部完成。不能宣称本轮整体更快，也不移除安装/部署验证来换取速度。PR运行仅生成耗时建议artifact，不自动写入dev。按最新用户要求修复成功后收口，不再扩展优化或发布部署。
+
+## 手动清理活跃运行修复验收（2026-10-27）
+
+原40483067327因任意其它未完成Actions全局拒绝而失败。脚本现在保留活跃运行/产物，删除前复查重启；有其它活跃任务时跳过镜像和缓存清理，真实权限与manifest异常仍失败。正式 [40483588668](https://github.com/0honus0/nexus-terminal/actions/runs/40483588668) 在c49663a5上成功，141条旧运行和684个历史产物实际删除，保留当前clean、渠道源码成功记录和最新成功E2E。34749067364从2026-09-13起queued且无job，本次仍保留，没有自行取消；因此99个旧产品版本、61个runner版本、769个缓存保留，实际镜像/缓存删除分支仍未验证。latest/dev递归manifest和HEAD校验成功，日志 `/tmp/nexus-cleanup-success.log`。脚本语法、ESLint、Prettier、actionlint和diff通过，源码两轮复核，无产品/UI变更。
