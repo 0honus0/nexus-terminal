@@ -1,140 +1,122 @@
 import { expect, test } from '../../support/fixtures';
-import { E2E_ADMIN, loginAsInitialAdmin } from '../../support/auth';
-import { E2E_SSH } from '../../support/ssh';
-import { step, slowStep } from '../../support/steps';
+import { E2E_ADMIN, getUiPreferences, loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
+import { createTestSshConnection, trustTestSshHostKey } from '../../support/ssh';
+import { readConnectionList, readConnectionView } from '../../../../packages/shared/src/targets/connections/http-codec';
+import { readBackupError, readBackupImportResponse } from '../../../../packages/shared/src/system/backups/http-codec';
+import { installTestPlugin } from '../../support/plugins';
+import { BACKUP_MAX_SNAPSHOT_BYTES } from '../../../../packages/shared/src/system/backups/values';
+import { SealedBytes } from '../../../../packages/backend/src/platform/security/sealed-bytes';
+import { E2E_URLS } from '../../support/test-env';
+import { slowStep, step } from '../../support/steps';
 
 const BACKUP_CONNECTION_NAME = 'E2E Backup SSH';
-const BACKUP_MAGIC = 'NEXUS_TERMINAL_BACKUP_V1\n';
+const headers = { Origin: E2E_URLS.frontendOrigin };
 
 test('full backup restores settings and connection data', async ({ request }) => {
-  await loginAsInitialAdmin(request);
+	await loginAsInitialAdmin(request);
+	await trustTestSshHostKey(request);
+	let backup = Buffer.alloc(0);
+	let connectionId = 0;
+	await step('prepare data that must survive backup and restore', async () => {
+		const response = await request.get('/api/v1/targets/connections');
+		expect(response.ok()).toBeTruthy();
+		for (const connection of readConnectionList(await response.json())) {
+			if (connection.name === BACKUP_CONNECTION_NAME) {
+				expect(
+					(await request.delete('/api/v1/targets/connections/' + connection.id, { headers })).ok(),
+				).toBeTruthy();
+			}
+		}
+		connectionId = await createTestSshConnection(request, BACKUP_CONNECTION_NAME);
+		await updateUiPreferences(request, (preferences) => {
+			preferences.showPopupFileManager = true;
+		});
+	});
 
-  await step('prepare data that must survive backup and restore', async () => {
-    const currentConnections = await request.get('/api/v1/connections');
-    expect(currentConnections.ok()).toBeTruthy();
-    for (const connection of (await currentConnections.json()) as Array<{ id: number; name?: string }>) {
-      if (connection.name === BACKUP_CONNECTION_NAME) {
-        expect((await request.delete(`/api/v1/connections/${connection.id}`)).ok()).toBeTruthy();
-      }
-    }
+	await slowStep('export an encrypted full backup', async () => {
+		const response = await request.post('/api/v1/settings/backup/export', {
+			headers,
+			data: { password: E2E_ADMIN.password },
+		});
+		expect(response.status()).toBe(200);
+		expect(response.headers()['content-disposition']).toContain('.nexus-backup');
+		backup = Buffer.from(await response.body());
+		expect(backup.length).toBeGreaterThan(100);
+		expect(backup.subarray(0, 10).toString('ascii')).toBe('NXSEALED2\n');
+		expect(backup.toString('utf8')).not.toContain('e2e-password');
+		expect(backup.toString('utf8')).not.toContain(BACKUP_CONNECTION_NAME);
+	});
 
-    const create = await request.post('/api/v1/connections', {
-      data: {
-        name: BACKUP_CONNECTION_NAME,
-        type: 'SSH',
-        host: E2E_SSH.host,
-        port: E2E_SSH.port,
-        username: E2E_SSH.username,
-        authMethod: 'password',
-        password: E2E_SSH.password,
-      },
-    });
-    expect(create.status()).toBe(201);
+	await slowStep('a foreign-instance backup rejects a wrong password without changing live data', async () => {
+		// Re-seal the real snapshot without this instance's wrapping key, exercising the
+		// cross-instance password path rather than corrupting authenticated envelope bytes.
+		const codec = new SealedBytes(BACKUP_MAX_SNAPSHOT_BYTES, null);
+		const snapshot = await codec.decode(backup, E2E_ADMIN.password);
+		let foreign: Uint8Array;
+		try {
+			foreign = await codec.encode(snapshot, E2E_ADMIN.password);
+		} finally {
+			snapshot.fill(0);
+		}
+		try {
+			const response = await request.post('/api/v1/settings/backup/import', {
+				headers,
+				multipart: {
+					password: 'definitely-not-the-password',
+					backupFile: {
+						name: 'foreign.nexus-backup',
+						mimeType: 'application/octet-stream',
+						buffer: Buffer.from(foreign),
+					},
+				},
+			});
+			expect(response.status()).toBe(401);
+			expect(readBackupError(await response.json()).code).toBe('invalid_password');
+			const current = await request.get('/api/v1/targets/connections/' + connectionId);
+			expect(current.status()).toBe(200);
+			expect(readConnectionView(await current.json()).name).toBe(BACKUP_CONNECTION_NAME);
+		} finally {
+			foreign.fill(0);
+		}
+	});
 
-    const setting = await request.put('/api/v1/settings', {
-      data: { showPopupFileManager: true },
-    });
-    expect(setting.ok()).toBeTruthy();
-  });
+	await step('destroy the backed up data', async () => {
+		expect((await request.delete('/api/v1/targets/connections/' + connectionId, { headers })).ok()).toBeTruthy();
+		await updateUiPreferences(request, (preferences) => {
+			preferences.showPopupFileManager = false;
+		});
+	});
 
-  let backup: Buffer;
-  await slowStep('export an encrypted full backup', async () => {
-    const response = await request.post('/api/v1/settings/backup/export', {
-      data: { password: E2E_ADMIN.password },
-    });
-    expect(response.ok()).toBeTruthy();
-    expect(response.headers()['content-disposition']).toContain('.nexus-backup');
-    backup = Buffer.from(await response.body());
-    expect(backup.length).toBeGreaterThan(100);
-    expect(backup.subarray(0, BACKUP_MAGIC.length).toString('utf8')).toBe(BACKUP_MAGIC);
-    const envelope = JSON.parse(backup.subarray(BACKUP_MAGIC.length).toString('utf8')) as {
-      format?: string;
-      version?: number;
-      passwordKdf?: { algorithm?: string; iterations?: number };
-      payload?: { iv?: string; ciphertext?: string; tag?: string };
-    };
-    expect(envelope).toMatchObject({
-      format: 'nexus-terminal-backup',
-      version: 1,
-      passwordKdf: { algorithm: 'pbkdf2-sha256', iterations: 210_000 },
-      payload: { iv: expect.any(String), ciphertext: expect.any(String), tag: expect.any(String) },
-    });
-    expect(envelope).not.toHaveProperty('tables');
-    expect(backup.toString('utf8')).not.toContain('e2e-password');
-  });
+	await slowStep('import the backup and restore the data', async () => {
+		const response = await request.post('/api/v1/settings/backup/import', {
+			headers,
+			multipart: {
+				password: E2E_ADMIN.password,
+				backupFile: {
+					name: 'e2e.nexus-backup',
+					mimeType: 'application/octet-stream',
+					buffer: backup,
+				},
+			},
+		});
+		expect(response.status()).toBe(200);
+		const receipt = readBackupImportResponse(await response.json());
+		expect(receipt.restoredTables).toBeGreaterThan(0);
+		expect(receipt.restoredRows).toBeGreaterThan(0);
+		expect(receipt.cleanupPending).toBe(false);
+	});
 
-  await step('a wrong password is rejected for a password-protected backup', async () => {
-    const envelope = JSON.parse(backup!.subarray(BACKUP_MAGIC.length).toString('utf8')) as {
-      instanceWrappedKey: { ciphertext: string };
-    };
-    const wrappedCiphertext = Buffer.from(envelope.instanceWrappedKey.ciphertext, 'base64');
-    wrappedCiphertext[0] ^= 1;
-    envelope.instanceWrappedKey.ciphertext = wrappedCiphertext.toString('base64');
-    const invalidBackup = Buffer.from(`${BACKUP_MAGIC}${JSON.stringify(envelope)}`, 'utf8');
-    const response = await request.post('/api/v1/settings/backup/import', {
-      multipart: {
-        password: 'definitely-not-the-password',
-        backupFile: {
-          name: 'invalid-password.nexus-backup',
-          mimeType: 'application/octet-stream',
-          buffer: invalidBackup,
-        },
-      },
-    });
-    expect(response.status()).toBe(400);
-    await expect(response.json()).resolves.toMatchObject({ code: 'INVALID_BACKUP_PASSWORD' });
-  });
+	await slowStep('verify preferences and encrypted connection credentials survived restore', async () => {
+		expect((await getUiPreferences(request)).preferences.showPopupFileManager).toBe(true);
+		const response = await request.get('/api/v1/targets/connections/' + connectionId);
+		expect(response.status()).toBe(200);
+		expect(readConnectionView(await response.json()).name).toBe(BACKUP_CONNECTION_NAME);
+		const connectionTest = await request.post('/api/v1/targets/connections/' + connectionId + '/test', { headers });
+		expect(connectionTest.status()).toBe(200);
+		await expect(connectionTest.json()).resolves.toMatchObject({ status: 'ok' });
+	});
 
-  await step('destroy the backed up data', async () => {
-    const connections = await request.get('/api/v1/connections');
-    const target = ((await connections.json()) as Array<{ id: number; name?: string }>).find(
-      (connection) => connection.name === BACKUP_CONNECTION_NAME,
-    );
-    expect(target).toBeTruthy();
-    expect((await request.delete(`/api/v1/connections/${target!.id}`)).ok()).toBeTruthy();
-    expect((await request.put('/api/v1/settings', { data: { showPopupFileManager: false } })).ok()).toBeTruthy();
-  });
-
-  await slowStep('import the backup and restore the data', async () => {
-    const response = await request.post('/api/v1/settings/backup/import', {
-      multipart: {
-        password: E2E_ADMIN.password,
-        backupFile: {
-          name: 'e2e.nexus-backup',
-          mimeType: 'application/octet-stream',
-          buffer: backup!,
-        },
-      },
-    });
-    expect(response.ok()).toBeTruthy();
-    await expect(response.json()).resolves.toMatchObject({ message: '备份导入成功。' });
-  });
-
-  await slowStep('verify settings and encrypted connection credentials survived restore', async () => {
-    const settings = await request.get('/api/v1/settings');
-    expect(settings.ok()).toBeTruthy();
-    await expect(settings.json()).resolves.toMatchObject({ showPopupFileManager: true });
-
-    const connections = await request.get('/api/v1/connections');
-    expect(connections.ok()).toBeTruthy();
-    const restored = ((await connections.json()) as Array<{ id: number; name?: string }>).find(
-      (connection) => connection.name === BACKUP_CONNECTION_NAME,
-    );
-    expect(restored).toBeTruthy();
-
-    const connectionTest = await request.post(`/api/v1/connections/${restored!.id}/test`);
-    expect(connectionTest.ok()).toBeTruthy();
-    await expect(connectionTest.json()).resolves.toMatchObject({ success: true });
-  });
-
-  await slowStep('verify signed Agent plugin staging still works after full backup restore', async () => {
-    const csrfResponse = await request.get('/api/v1/agent/security/csrf');
-    expect(csrfResponse.ok()).toBeTruthy();
-    const csrf = (await csrfResponse.json()) as { data: { token: string } };
-    const install = await request.post('/api/v1/agent/onboarding/recommended-plugin/install', {
-      headers: { 'X-Nexus-CSRF': csrf.data.token },
-      data: {},
-    });
-    expect(install.ok(), await install.text()).toBeTruthy();
-  });
+	await slowStep('verify signed Agent plugin installation still works after full backup restore', async () => {
+		expect((await installTestPlugin(request, 'nexus.agent')).definitionId).toBe('nexus.agent');
+	});
 });

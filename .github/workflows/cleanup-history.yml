@@ -1,0 +1,30 @@
+name: Clean old Actions and container versions
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+  packages: write
+
+concurrency:
+  group: publish-ghcr-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Keep latest and dev only
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Clean old versions, runs, artifacts and caches
+        uses: actions/github-script@v9
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          script: |
+            const { default: cleanup } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/maintenance/cleanup-history.mjs`);
+            await cleanup({ github, context, core });

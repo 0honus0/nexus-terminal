@@ -1,63 +1,189 @@
 @media (min-width: 640px) and (pointer: fine) {
-  :global(.provider-add-panel) {
-    width: min(36rem, calc(100vw - 2rem));
-    min-width: min(32rem, calc(100vw - 2rem));
-    min-height: min(30rem, calc(100dvh - 2rem));
-    max-width: calc(100vw - 2rem);
-    max-height: calc(100dvh - 2rem);
-    resize: none;
-  }
+	:global(.provider-add-panel) {
+		width: min(36rem, calc(100vw - 2rem));
+		min-width: min(32rem, calc(100vw - 2rem));
+		min-height: min(30rem, calc(100dvh - 2rem));
+		max-width: calc(100vw - 2rem);
+		max-height: calc(100dvh - 2rem);
+		resize: none;
+	}
+}
+
+:global(.provider-add-content) {
+	padding-inline: 0 0.25rem;
+	scrollbar-gutter: stable;
+}
+
+:global(.provider-add-panel > header),
+:global(.provider-add-panel > footer) {
+	/* 与滚动内容右边缘对齐：稳定滚动条 8px + 内容右内边距 4px */
+	margin-inline-end: calc(0.25rem + 8px);
 }
 
 @media (max-width: 639px), (pointer: coarse) {
-  .provider-add-resize-handle {
-    display: none;
-  }
+	.provider-add-resize-handle {
+		display: none;
+	}
+
+	:global(.provider-add-content) {
+		padding-inline: 0;
+		scrollbar-gutter: auto;
+		scrollbar-width: none;
+		-ms-overflow-style: none;
+	}
+
+	:global(.provider-add-panel > header),
+	:global(.provider-add-panel > footer) {
+		margin-inline-end: 0;
+	}
+
+	:global(.provider-add-content::-webkit-scrollbar) {
+		display: none;
+		width: 0;
+		height: 0;
+	}
 }
 
-.provider-modal-input {
-  border: 1px solid color-mix(in srgb, var(--border-color) 58%, transparent);
-  background: color-mix(in srgb, var(--input-bg-color) 30%, transparent);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, white 18%, transparent),
-    inset 0 1px 2px color-mix(in srgb, var(--text-color) 7%, transparent);
-  -webkit-backdrop-filter: blur(8px) saturate(140%);
-  backdrop-filter: blur(8px) saturate(140%);
-  transition:
-    background-color 140ms ease,
-    border-color 140ms ease,
-    box-shadow 140ms ease;
+.provider-card-main {
+	container: provider-card / inline-size;
 }
 
-.provider-modal-input:hover {
-  border-color: color-mix(in srgb, var(--border-hover-color) 72%, transparent);
-  background: color-mix(in srgb, var(--input-bg-color) 38%, transparent);
+.provider-card-actions :deep(.ui-button:disabled) {
+	border-color: transparent;
+	background: transparent;
+	color: var(--ui-text-muted);
+	box-shadow: none;
+	opacity: 0.45;
 }
 
-.provider-modal-input:focus {
-  border-color: color-mix(in srgb, var(--link-active-color) 58%, var(--border-color));
-  background: color-mix(in srgb, var(--input-bg-color) 42%, transparent);
-  box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--link-active-color) 10%, transparent),
-    inset 0 1px 0 color-mix(in srgb, white 20%, transparent),
-    inset 0 1px 2px color-mix(in srgb, var(--text-color) 7%, transparent);
+.provider-edit-label {
+	display: none;
 }
 
-.provider-modal-input::placeholder {
-  color: color-mix(in srgb, var(--text-color-secondary) 72%, transparent);
+.provider-discovered-check {
+	box-shadow: inset 0 1px 0 rgb(255 255 255 / 28%);
 }
 
-.configured-models-pane {
-  container-name: configured-models;
-  container-type: inline-size;
+/* 设置页在 lg 以下切换为窄版布局，提供商卡片此时不再占用图标列。 */
+@media (max-width: 1023px) {
+	.provider-card-icon {
+		display: none;
+	}
 }
 
-@container configured-models (max-width: 360px) {
-  .configured-model-default-badge {
-    padding-inline: 0.4rem;
-  }
+@container provider-card (max-width: 320px) {
+	.provider-test-label {
+		display: none;
+	}
 
-  .configured-model-default-label {
-    display: none;
-  }
+	.provider-test-button {
+		width: var(--ui-control-height);
+		padding-inline: 0;
+	}
+}
+
+@container provider-card (min-width: 440px) {
+	.provider-edit-label {
+		display: inline;
+	}
+}
+
+.provider-add-label--short {
+	display: none;
+}
+
+@media (max-width: 639px) {
+	.provider-add-label--full {
+		display: none;
+	}
+
+	.provider-add-label--short {
+		display: inline;
+	}
+}
+
+/* 对话模型与图片模型分组：图标标题 + 属于该组的添加动作。 */
+.provider-model-group {
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+}
+
+.provider-model-group + .provider-model-group {
+	position: relative;
+	padding-top: 1.25rem;
+}
+
+.provider-model-group + .provider-model-group::before {
+	content: '';
+	position: absolute;
+	inset-inline: 0.25rem;
+	top: 0;
+	height: 1px;
+	background: linear-gradient(
+		to right,
+		transparent,
+		color-mix(in srgb, var(--border-color) 88%, transparent),
+		transparent
+	);
+}
+
+.provider-model-group__header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.provider-model-group__icon {
+	display: inline-flex;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	width: 1.5rem;
+	height: 1.5rem;
+	border-radius: 0.5rem;
+	background: color-mix(in srgb, var(--link-active-color) 12%, transparent);
+	color: var(--link-active-color);
+	font-size: 0.625rem;
+}
+
+.provider-model-group__title {
+	font-size: 0.75rem;
+	font-weight: 600;
+	color: var(--text-color);
+}
+
+.provider-model-group__action {
+	margin-inline-start: auto;
+}
+
+.provider-model-reset {
+	color: var(--ui-text-muted);
+	transition:
+		color 140ms ease,
+		background-color 140ms ease;
+}
+
+.provider-model-reset:not(:disabled):hover {
+	color: var(--link-active-color);
+	background: color-mix(in srgb, var(--link-active-color) 10%, transparent);
+}
+
+@media (max-width: 639px) {
+	.provider-models-reset-all__label {
+		display: none;
+	}
+}
+
+.provider-model-delete {
+	color: var(--ui-text-muted);
+	transition:
+		color 140ms ease,
+		background-color 140ms ease;
+}
+
+.provider-model-delete:not(:disabled):hover {
+	color: var(--status-error-color);
+	background: color-mix(in srgb, var(--status-error-color) 10%, transparent);
 }

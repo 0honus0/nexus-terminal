@@ -1,0 +1,3 @@
+export const TARGET_HOST_KEY_HOST_MAX_BYTES = 253;
+
+export const TARGET_HOST_KEY_FINGERPRINT_PATTERN = /^SHA256:[A-Za-z0-9+/]{43}$/u;

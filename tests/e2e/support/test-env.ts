@@ -1,39 +1,47 @@
 const parsePort = (name: string, fallback: number): number => {
-  const raw = process.env[name]?.trim();
-  if (!raw) return fallback;
-  const value = Number(raw);
-  if (!Number.isInteger(value) || value < 1 || value > 65_535) {
-    throw new Error(`${name} must be an integer between 1 and 65535.`);
-  }
-  return value;
+	const raw = process.env[name]?.trim();
+	if (!raw) return fallback;
+	const value = Number(raw);
+	if (!Number.isInteger(value) || value < 1 || value > 65_535) {
+		throw new Error(`${name} must be an integer between 1 and 65535.`);
+	}
+	return value;
 };
 
 export const E2E_PORTS = {
-  backend: parsePort('NEXUS_E2E_BACKEND_PORT', 3001),
-  frontend: parsePort('NEXUS_E2E_FRONTEND_PORT', 4173),
-  guacd: parsePort('NEXUS_E2E_GUACD_PORT', 24822),
-  guacdControl: parsePort('NEXUS_E2E_GUACD_CONTROL_PORT', 29090),
-  ssh: parsePort('NEXUS_E2E_SSH_PORT', 22222),
-  sshControl: parsePort('NEXUS_E2E_SSH_CONTROL_PORT', 22223),
-  smtp: parsePort('NEXUS_E2E_SMTP_PORT', 22224),
-  pluginRepository: parsePort('NEXUS_E2E_PLUGIN_REPOSITORY_PORT', 29092),
-  openAiProvider: parsePort('NEXUS_E2E_OPENAI_PROVIDER_PORT', 29091),
-  browserControl: parsePort('NEXUS_E2E_BROWSER_CONTROL_PORT', 29093),
-  browserCdp: parsePort('NEXUS_E2E_BROWSER_CDP_PORT', 29094),
-  deploymentPage: parsePort('NEXUS_E2E_DEPLOYMENT_PAGE_PORT', 29097),
+	backend: parsePort('NEXUS_E2E_BACKEND_PORT', 3001),
+	backendControl: parsePort('NEXUS_E2E_BACKEND_CONTROL_PORT', 29098),
+	frontend: parsePort('NEXUS_E2E_FRONTEND_PORT', 4173),
+	rdp: parsePort('NEXUS_E2E_RDP_PORT', 23389),
+	vnc: parsePort('NEXUS_E2E_VNC_PORT', 25900),
+	desktopControl: parsePort('NEXUS_E2E_DESKTOP_CONTROL_PORT', 29090),
+	ssh: parsePort('NEXUS_E2E_SSH_PORT', 22222),
+	sshTransferTarget: parsePort('NEXUS_E2E_SSH_TRANSFER_TARGET_PORT', 22225),
+	sshControl: parsePort('NEXUS_E2E_SSH_CONTROL_PORT', 22223),
+	smtp: parsePort('NEXUS_E2E_SMTP_PORT', 22224),
+	pluginRepository: parsePort('NEXUS_E2E_PLUGIN_REPOSITORY_PORT', 29092),
+	openAiProvider: parsePort('NEXUS_E2E_OPENAI_PROVIDER_PORT', 29091),
+	browserControl: parsePort('NEXUS_E2E_BROWSER_CONTROL_PORT', 29093),
+	browserCdp: parsePort('NEXUS_E2E_BROWSER_CDP_PORT', 29094),
+	deploymentPage: parsePort('NEXUS_E2E_DEPLOYMENT_PAGE_PORT', 29097),
 } as const;
 
+const publicPort = process.env.NEXUS_E2E_SUITE === 'backend' ? E2E_PORTS.backend : E2E_PORTS.frontend;
+
 export const E2E_URLS = {
-  backendOrigin: `http://127.0.0.1:${E2E_PORTS.backend}`,
-  backendWsOrigin: `ws://127.0.0.1:${E2E_PORTS.backend}`,
-  frontendOrigin: `http://localhost:${E2E_PORTS.frontend}`,
-  frontendLoopbackOrigin: `http://127.0.0.1:${E2E_PORTS.frontend}`,
-  frontendWsOrigin: `ws://127.0.0.1:${E2E_PORTS.frontend}`,
-  guacdControlOrigin: `http://127.0.0.1:${E2E_PORTS.guacdControl}`,
-  sshControlOrigin: `http://127.0.0.1:${E2E_PORTS.sshControl}`,
-  pluginRepositoryOrigin: `http://127.0.0.1:${E2E_PORTS.pluginRepository}`,
-  openAiProviderOrigin: `http://127.0.0.1:${E2E_PORTS.openAiProvider}`,
-  browserControlOrigin: `http://127.0.0.1:${E2E_PORTS.browserControl}`,
-  browserCdpOrigin: `http://127.0.0.1:${E2E_PORTS.browserCdp}`,
-  deploymentPageOrigin: `http://127.0.0.1:${E2E_PORTS.deploymentPage}`,
+	backendOrigin: `http://127.0.0.1:${E2E_PORTS.backend}`,
+	backendControlOrigin: `http://127.0.0.1:${E2E_PORTS.backendControl}`,
+	backendWsOrigin: `ws://127.0.0.1:${E2E_PORTS.backend}`,
+	// Protocol-only projects use the real backend listener with its configured public Host.
+	frontendOrigin: `http://localhost:${publicPort}`,
+	frontendLoopbackOrigin: `http://127.0.0.1:${publicPort}`,
+	frontendWsOrigin: `ws://localhost:${publicPort}`,
+	desktopControlOrigin: `http://127.0.0.1:${E2E_PORTS.desktopControl}`,
+	sshControlOrigin: `http://127.0.0.1:${E2E_PORTS.sshControl}`,
+	pluginRepositoryOrigin: `http://127.0.0.1:${E2E_PORTS.pluginRepository}`,
+	openAiProviderOrigin: `http://127.0.0.1:${E2E_PORTS.openAiProvider}`,
+	browserControlOrigin: `http://127.0.0.1:${E2E_PORTS.browserControl}`,
+	browserCdpOrigin: `http://127.0.0.1:${E2E_PORTS.browserCdp}`,
+	browserCdpEndpoint: `ws://127.0.0.1:${E2E_PORTS.browserCdp}/browser`,
+	deploymentPageOrigin: `http://127.0.0.1:${E2E_PORTS.deploymentPage}`,
 } as const;

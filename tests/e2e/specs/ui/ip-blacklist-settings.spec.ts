@@ -1,196 +1,193 @@
 import { writeFile } from 'node:fs/promises';
 import { expect, test } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { step } from '../../support/steps';
 import { E2E_ADMIN } from '../../support/test-identity';
+import { E2E_URLS } from '../../support/test-env';
+import { getTestSettings, updateTestSettings } from '../../support/settings';
+import { readAccessIpBlacklist, readAccessIpBlacklistRemove } from '../../../../packages/shared/src/access/http';
 
 const TEST_BLOCKED_IP = '198.51.100.24';
+const headers = { Origin: E2E_URLS.frontendOrigin };
 
-test('IP blacklist UI toggles protection and persists login-ban thresholds', async ({ page, context }, testInfo) => {
-  await loginAsInitialAdmin(context.request);
-  const originalResponse = await context.request.get('/api/v1/settings');
-  expect(originalResponse.ok()).toBeTruthy();
-  const original = (await originalResponse.json()) as {
-    ipBlacklistEnabled?: boolean;
-    maxLoginAttempts?: number;
-    loginBanDuration?: number;
-  };
+test('IP blacklist UI applies policy without restart and removes a blocked IP', async ({ page, context }, testInfo) => {
+	await loginAsInitialAdmin(context.request);
+	await setUiLanguage(context.request);
+	const original = await getTestSettings(context.request);
+	await updateTestSettings(context.request, (value) => {
+		value.policy.ipBlacklistEnabled = true;
+		value.policy.maxLoginAttempts = 5;
+		value.policy.loginBanDuration = 300;
+	});
+	try {
+		await page.goto('/settings');
+		await page.getByRole('tab', { name: 'IP Control', exact: true }).click();
+		const blacklist = page
+			.locator('section.ui-settings-group')
+			.filter({ has: page.getByRole('heading', { name: 'IP Blacklist Management', exact: true }) });
+		const toggle = blacklist.getByRole('switch');
+		await expect(toggle).toHaveAttribute('aria-checked', 'true');
+		await blacklist.scrollIntoViewIfNeeded();
+		const metrics = await blacklist.evaluate((element) => {
+			const box = element.getBoundingClientRect();
+			return {
+				viewport: { width: innerWidth, height: innerHeight },
+				page: {
+					clientWidth: document.documentElement.clientWidth,
+					scrollWidth: document.documentElement.scrollWidth,
+				},
+				panel: {
+					x: box.x,
+					y: box.y,
+					width: box.width,
+					height: box.height,
+					right: box.right,
+					bottom: box.bottom,
+				},
+			};
+		});
+		await writeFile(testInfo.outputPath('ip-blacklist-before.metrics.json'), JSON.stringify(metrics, null, 2));
+		await captureFunctionalScreenshot(page, 'security-ip-blacklist-settings.png', {
+			viewport: { width: 1440, height: 900 },
+		});
+		await page.setViewportSize({ width: 320, height: 667 });
+		await expect
+			.poll(() =>
+				page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+			)
+			.toBe(true);
+		await captureFunctionalScreenshot(page, 'security-ip-blacklist-settings-narrow.png');
+		await page.setViewportSize({ width: 1280, height: 720 });
 
-  const normalize = await context.request.put('/api/v1/settings', {
-    data: {
-      ipBlacklistEnabled: true,
-      maxLoginAttempts: 5,
-      loginBanDuration: 300,
-    },
-  });
-  expect(normalize.ok()).toBeTruthy();
+		async function savePolicy(button: import('@playwright/test').Locator): Promise<void> {
+			const response = page.waitForResponse(
+				(value) => value.url().endsWith('/api/v1/settings') && value.request().method() === 'PUT',
+			);
+			await button.click();
+			expect((await response).ok()).toBe(true);
+			await expect(toggle).toBeEnabled();
+			await expect(page.locator('.ui-notification[data-kind="success"]').last()).toContainText(
+				'Saved and applied.',
+			);
+		}
 
-  try {
-    await page.goto('/settings');
-    await page.getByRole('tab', { name: 'IP Control', exact: true }).click();
-    const blacklist = page
-      .locator('section')
-      .filter({ has: page.getByRole('heading', { name: 'IP Blacklist Management', exact: true }) })
-      .last();
-    const toggle = blacklist.getByRole('checkbox');
-    await expect(blacklist).toBeVisible();
-    await expect(toggle).toHaveAttribute('aria-checked', 'true');
-    await blacklist.scrollIntoViewIfNeeded();
-    const beforeMetrics = await blacklist.evaluate((element) => {
-      const box = element.getBoundingClientRect();
-      const controls = [...element.querySelectorAll('input,button')].map((control) => {
-        const rect = control.getBoundingClientRect();
-        return {
-          x: rect.x,
-          y: rect.y,
-          width: rect.width,
-          height: rect.height,
-          right: rect.right,
-          bottom: rect.bottom,
-        };
-      });
-      return {
-        viewport: { width: window.innerWidth, height: window.innerHeight },
-        page: {
-          clientWidth: document.documentElement.clientWidth,
-          scrollWidth: document.documentElement.scrollWidth,
-        },
-        panel: {
-          x: box.x,
-          y: box.y,
-          width: box.width,
-          height: box.height,
-          right: box.right,
-          bottom: box.bottom,
-        },
-        controls,
-      };
-    });
-    await writeFile(testInfo.outputPath('ip-blacklist-before.metrics.json'), JSON.stringify(beforeMetrics, null, 2));
-    await captureFunctionalScreenshot(page, 'security-ip-blacklist-settings.png', {
-      viewport: { width: 1440, height: 900 },
-    });
-    await page.setViewportSize({ width: 320, height: 667 });
-    await expect
-      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
-      .toBe(true);
-    await captureFunctionalScreenshot(page, 'security-ip-blacklist-settings-narrow.png');
-    await page.setViewportSize({ width: 1280, height: 720 });
-
-    await step('disable and re-enable the blacklist switch through the UI', async () => {
-      await toggle.click();
-      await expect(toggle).toHaveAttribute('aria-checked', 'false');
-      await expect(blacklist.locator('#maxLoginAttempts')).toHaveCount(0);
-      await expect(blacklist).toContainText('Disabled');
-      await expect
-        .poll(async () => {
-          const settings = await context.request.get('/api/v1/settings');
-          return ((await settings.json()) as { ipBlacklistEnabled?: boolean }).ipBlacklistEnabled;
-        })
-        .toBe(false);
-
-      await toggle.click();
-      await expect(toggle).toHaveAttribute('aria-checked', 'true');
-      await expect
-        .poll(async () => {
-          const settings = await context.request.get('/api/v1/settings');
-          return ((await settings.json()) as { ipBlacklistEnabled?: boolean }).ipBlacklistEnabled;
-        })
-        .toBe(true);
-    });
-
-    await step('keep invalid blacklist thresholds local with visible validation errors', async () => {
-      await blacklist.locator('#maxLoginAttempts').fill('');
-      const invalidMaxResponse = page
-        .waitForRequest((request) => request.url().endsWith('/api/v1/settings') && request.method() === 'PUT', {
-          timeout: 1_000,
-        })
-        .catch(() => undefined);
-      await blacklist.getByRole('button', { name: 'Save', exact: true }).click();
-      await expect(blacklist).toContainText('Max failed attempts must be a positive integer.');
-      expect(await invalidMaxResponse).toBeUndefined();
-
-      await blacklist.locator('#maxLoginAttempts').fill('5');
-      await blacklist.locator('#loginBanDuration').fill('');
-      const invalidDurationResponse = page
-        .waitForRequest((request) => request.url().endsWith('/api/v1/settings') && request.method() === 'PUT', {
-          timeout: 1_000,
-        })
-        .catch(() => undefined);
-      await blacklist.getByRole('button', { name: 'Save', exact: true }).click();
-      await expect(blacklist).toContainText('Ban duration must be a positive integer (seconds).');
-      expect(await invalidDurationResponse).toBeUndefined();
-      await blacklist.locator('#loginBanDuration').fill('300');
-    });
-
-    await step('save login failure threshold and ban duration', async () => {
-      await blacklist.locator('#maxLoginAttempts').fill('2');
-      await blacklist.locator('#loginBanDuration').fill('420');
-      await blacklist.getByRole('button', { name: 'Save', exact: true }).click();
-      await expect
-        .poll(async () => {
-          const response = await context.request.get('/api/v1/settings');
-          const data = (await response.json()) as { maxLoginAttempts?: number; loginBanDuration?: number };
-          return [Number(data.maxLoginAttempts), Number(data.loginBanDuration)];
-        })
-        .toEqual([2, 420]);
-    });
-
-    await step('remove a real blocked IP through the UI confirmation flow', async () => {
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        const failedLogin = await context.request.post('/api/v1/auth/login', {
-          headers: { 'x-forwarded-for': TEST_BLOCKED_IP },
-          data: { username: E2E_ADMIN.username, password: 'not-the-password', rememberMe: false },
-        });
-        expect(failedLogin.status()).toBe(401);
-      }
-      const blocked = await context.request.get('/api/v1/settings/ip-blacklist');
-      expect(blocked.ok()).toBeTruthy();
-      await expect(blocked.json()).resolves.toMatchObject({
-        entries: [expect.objectContaining({ ip: TEST_BLOCKED_IP, attempts: 2 })],
-      });
-
-      await page.reload();
-      await page.getByRole('tab', { name: 'IP Control', exact: true }).click();
-      const reloaded = blacklist;
-      const row = reloaded.locator('tbody tr').filter({ hasText: TEST_BLOCKED_IP });
-      await expect(row).toBeVisible();
-      await row.getByRole('button', { name: 'Remove', exact: true }).click();
-      const dialog = page.getByRole('dialog');
-      await expect(dialog).toContainText(TEST_BLOCKED_IP);
-      const removePromise = page.waitForResponse(
-        (response) =>
-          response.url().endsWith(`/api/v1/settings/ip-blacklist/${TEST_BLOCKED_IP}`) &&
-          response.request().method() === 'DELETE',
-      );
-      await dialog.getByRole('button', { name: 'Confirm', exact: true }).click();
-      expect((await removePromise).ok()).toBeTruthy();
-      await expect(reloaded).toContainText('No IP addresses are currently in the blacklist.');
-      const afterRemove = await context.request.get('/api/v1/settings/ip-blacklist');
-      await expect(afterRemove.json()).resolves.toMatchObject({ entries: [] });
-    });
-
-    await step('reload keeps the saved blacklist thresholds visible', async () => {
-      await page.reload();
-      await page.getByRole('tab', { name: 'IP Control', exact: true }).click();
-      const reloaded = blacklist;
-      await expect(reloaded.locator('#maxLoginAttempts')).toHaveValue('2');
-      await expect(reloaded.locator('#loginBanDuration')).toHaveValue('420');
-      await reloaded.scrollIntoViewIfNeeded();
-      await captureFunctionalScreenshot(page, 'security-ip-blacklist-updated.png', {
-        viewport: { width: 1440, height: 900 },
-      });
-    });
-  } finally {
-    const restore = await context.request.put('/api/v1/settings', {
-      data: {
-        ipBlacklistEnabled: original.ipBlacklistEnabled ?? true,
-        maxLoginAttempts: original.maxLoginAttempts ?? 5,
-        loginBanDuration: original.loginBanDuration ?? 300,
-      },
-    });
-    expect(restore.ok()).toBeTruthy();
-    await context.request.delete(`/api/v1/settings/ip-blacklist/${TEST_BLOCKED_IP}`).catch(() => undefined);
-  }
+		await step('toggle saves only its own field and preserves neighbouring drafts', async () => {
+			const before = await getTestSettings(context.request);
+			await blacklist.locator('#maxLoginAttempts').fill('3');
+			await blacklist.locator('#loginBanDuration').fill('360');
+			await savePolicy(toggle);
+			await expect(toggle).toHaveAttribute('aria-checked', 'false');
+			await expect(blacklist.locator('#maxLoginAttempts')).toHaveCount(0);
+			const disabled = await getTestSettings(context.request);
+			expect(disabled.version).toBe(before.version + 1);
+			expect(disabled.policy).toEqual({ ...before.policy, ipBlacklistEnabled: false });
+			await savePolicy(toggle);
+			const enabled = await getTestSettings(context.request);
+			expect(enabled.version).toBe(disabled.version + 1);
+			expect(enabled.policy).toEqual(before.policy);
+			await expect(blacklist.locator('#maxLoginAttempts')).toHaveValue('3');
+			await expect(blacklist.locator('#loginBanDuration')).toHaveValue('360');
+		});
+		await step('invalid thresholds do not dispatch a policy mutation', async () => {
+			const before = await getTestSettings(context.request);
+			await blacklist.locator('#maxLoginAttempts').fill('0');
+			await blacklist.locator('button[type="submit"]').click();
+			expect(
+				await blacklist
+					.locator('#maxLoginAttempts')
+					.evaluate((input: HTMLInputElement) => input.validity.valid),
+			).toBe(false);
+			expect((await getTestSettings(context.request)).version).toBe(before.version);
+			await blacklist.locator('#maxLoginAttempts').fill('5');
+			await blacklist.locator('#loginBanDuration').fill('0');
+			await blacklist.locator('button[type="submit"]').click();
+			expect(
+				await blacklist
+					.locator('#loginBanDuration')
+					.evaluate((input: HTMLInputElement) => input.validity.valid),
+			).toBe(false);
+			expect((await getTestSettings(context.request)).version).toBe(before.version);
+		});
+		await step('save thresholds and activate the policy immediately', async () => {
+			await blacklist.locator('#maxLoginAttempts').fill('2');
+			await blacklist.locator('#loginBanDuration').fill('420');
+			await savePolicy(blacklist.locator('button[type="submit"]'));
+			const saved = await getTestSettings(context.request);
+			expect(saved.policy).toMatchObject({ maxLoginAttempts: 2, loginBanDuration: 420 });
+			expect(saved.effectiveVersion).toBe(original.requiresRestart ? original.effectiveVersion : saved.version);
+			expect(saved.requiresRestart).toBe(original.requiresRestart);
+		});
+		await step('produce a real ban without restart and remove it through the UI', async () => {
+			const active = await getTestSettings(context.request);
+			expect(active.effectiveVersion).toBe(original.requiresRestart ? original.effectiveVersion : active.version);
+			expect(active.requiresRestart).toBe(original.requiresRestart);
+			for (let attempt = 0; attempt < 2; attempt += 1) {
+				const failed = await context.request.post('/api/v1/auth/login', {
+					headers: { ...headers, 'X-Forwarded-For': TEST_BLOCKED_IP },
+					data: { username: E2E_ADMIN.username, password: 'not-the-password', rememberMe: false },
+				});
+				expect(failed.status()).toBe(401);
+			}
+			const response = await context.request.get('/api/v1/settings/ip-blacklist');
+			expect(response.ok()).toBe(true);
+			expect(readAccessIpBlacklist(await response.json()).entries).toEqual([
+				expect.objectContaining({ ip: TEST_BLOCKED_IP, attempts: 2 }),
+			]);
+			await page.reload();
+			await page.getByRole('tab', { name: 'IP Control', exact: true }).click();
+			const row = blacklist.locator('tbody tr').filter({ hasText: TEST_BLOCKED_IP });
+			await expect(row).toBeVisible();
+			const removed = page.waitForResponse(
+				(value) =>
+					value.url().endsWith('/api/v1/settings/ip-blacklist') && value.request().method() === 'DELETE',
+			);
+			await row.getByRole('button', { name: 'Remove', exact: true }).click();
+			// Removing a banned address is a destructive security mutation;
+			// the owner intentionally waits for a separate user confirmation.
+			const confirm = page.getByRole('dialog', { name: 'Please confirm' });
+			await expect(confirm).toContainText(TEST_BLOCKED_IP);
+			await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
+			const result = await removed;
+			expect(result.ok()).toBe(true);
+			// The Settings panel reloads after removal, which can retire the
+			// browser-owned DELETE body. Confirm the original 2xx receipt and
+			// independently verify the ban is absent in the persisted list.
+			const persisted = await context.request.get('/api/v1/settings/ip-blacklist');
+			expect(persisted.ok()).toBe(true);
+			expect(
+				readAccessIpBlacklist(await persisted.json()).entries.some((entry) => entry.ip === TEST_BLOCKED_IP),
+			).toBe(false);
+			await expect(blacklist).toContainText('No IP addresses are currently in the blacklist.');
+		});
+		await page.reload();
+		await page.getByRole('tab', { name: 'IP Control', exact: true }).click();
+		await expect(blacklist.locator('#maxLoginAttempts')).toHaveValue('2');
+		await expect(blacklist.locator('#loginBanDuration')).toHaveValue('420');
+		await captureFunctionalScreenshot(page, 'security-ip-blacklist-updated.png', {
+			viewport: { width: 1440, height: 900 },
+		});
+	} finally {
+		const failures: unknown[] = [];
+		try {
+			await updateTestSettings(context.request, (value) => {
+				value.policy.ipBlacklistEnabled = original.policy.ipBlacklistEnabled;
+				value.policy.maxLoginAttempts = original.policy.maxLoginAttempts;
+				value.policy.loginBanDuration = original.policy.loginBanDuration;
+			});
+		} catch (cause) {
+			failures.push(cause);
+		}
+		try {
+			const removed = await context.request.delete('/api/v1/settings/ip-blacklist', {
+				headers,
+				data: { ip: TEST_BLOCKED_IP },
+			});
+			expect(removed.ok()).toBe(true);
+			readAccessIpBlacklistRemove(await removed.json());
+		} catch (cause) {
+			failures.push(cause);
+		}
+		if (failures.length) throw new AggregateError(failures, 'IP policy cleanup failed');
+	}
 });

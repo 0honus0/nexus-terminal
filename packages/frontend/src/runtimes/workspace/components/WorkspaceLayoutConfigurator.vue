@@ -1,399 +1,441 @@
 <script setup lang="ts">
-  import { computed, ref, toRaw, watch } from 'vue';
-  import draggable from 'vuedraggable';
-  import { useI18n } from 'vue-i18n';
-  import { structurallyEqual } from '@/foundation/data';
-  import { UiOverlayPanel } from '@/foundation/ui';
-  import { useFeedback } from '@/shared/feedback/public';
-  import WorkspaceLayoutNodeEditor from './WorkspaceLayoutNodeEditor.vue';
-  import {
-    createDefaultWorkspaceLayout,
-    type WorkspaceLayoutNodeState,
-    type WorkspacePaneNameDto,
-    type WorkspaceSidebarConfigDto,
-  } from '../layout/workspaceLayout';
-  import { useWorkspaceUiState } from '../state/workspaceUiState';
+	import type { WorkspaceLayoutNodeState } from '../model/presentation-types';
+	import type { WorkspacePane } from '@nexus-terminal/shared/preferences/presentation/values';
+	import type { WorkspaceSidebar } from '../model/presentation-types';
 
-  type DragItem = WorkspaceLayoutNodeState | WorkspacePaneNameDto;
+	import { computed, ref, watch } from 'vue';
+	import draggable from 'vuedraggable';
+	import { useI18n } from 'vue-i18n';
+	import { structurallyEqual } from '@/foundation/data';
+	import { UiButton, UiOverlayPanel, UiSwitch } from '@/foundation/ui';
+	import { useAuthenticatedViewScope } from '@/shared/session/public';
+	import { useFeedback, preferenceFailureMessage } from '@/shared/feedback/public';
+	import WorkspaceLayoutNodeEditor from './WorkspaceLayoutNodeEditor.vue';
+	import { cloneWorkspaceLayout, createDefaultWorkspaceLayout } from '../layout/workspaceLayout';
+	import { useWorkspaceUiState } from '../state/workspaceUiState';
 
-  const props = defineProps<{ visible: boolean; layoutLocked?: boolean }>();
-  const emit = defineEmits<{ close: []; layoutLocked: [locked: boolean] }>();
-  const { t } = useI18n();
-  const feedback = useFeedback();
-  const { layout: workspaceLayout } = useWorkspaceUiState();
-  const draft = ref<WorkspaceLayoutNodeState>(createDefaultWorkspaceLayout());
-  const sidebar = ref<WorkspaceSidebarConfigDto>({ left: [], right: [] });
-  const originalDraft = ref<WorkspaceLayoutNodeState>(createDefaultWorkspaceLayout());
-  const originalSidebar = ref<WorkspaceSidebarConfigDto>({ left: [], right: [] });
-  const saving = ref(false);
+	type DragItem = WorkspaceLayoutNodeState | WorkspacePane;
 
-  const clone = <T,>(value: T): T => {
-    const unproxy = (candidate: unknown): unknown => {
-      const raw = toRaw(candidate);
-      if (Array.isArray(raw)) return raw.map(unproxy);
-      if (raw && typeof raw === 'object')
-        return Object.fromEntries(Object.entries(raw).map(([key, nested]) => [key, unproxy(nested)]));
-      return raw;
-    };
-    return unproxy(value) as T;
-  };
+	const props = defineProps<{ visible: boolean; layoutLocked?: boolean }>();
+	const emit = defineEmits<{ close: []; layoutLocked: [locked: boolean] }>();
+	const { t } = useI18n();
+	const feedback = useFeedback();
+	const { layout: workspaceLayout } = useWorkspaceUiState();
+	const draft = ref<WorkspaceLayoutNodeState>(createDefaultWorkspaceLayout());
+	const sidebar = ref<WorkspaceSidebar>({ left: [], right: [] });
+	const originalDraft = ref<WorkspaceLayoutNodeState>(createDefaultWorkspaceLayout());
+	const originalSidebar = ref<WorkspaceSidebar>({ left: [], right: [] });
+	const saving = ref(false);
+	const needsRefresh = ref(false);
+	const originalVersion = ref(0);
+	const view = useAuthenticatedViewScope({
+		available: () => props.visible,
 
-  watch(
-    () => props.visible,
-    (visible) => {
-      if (!visible) return;
-      draft.value = clone(workspaceLayout.tree.value);
-      sidebar.value = clone(workspaceLayout.sidebars.value);
-      originalDraft.value = clone(workspaceLayout.tree.value);
-      originalSidebar.value = clone(workspaceLayout.sidebars.value);
-    },
-    { immediate: true },
-  );
+		onRevoke: () => {
+			saving.value = false;
+		},
+	});
 
-  const mainPanes = computed(() => {
-    const result = new Set<WorkspacePaneNameDto>();
-    const visit = (node: WorkspaceLayoutNodeState): void => {
-      if (node.type === 'pane' && node.component) result.add(node.component);
-      else for (const child of node.children ?? []) visit(child);
-    };
-    visit(draft.value);
-    return result;
-  });
+	watch(
+		() => props.visible,
+		(visible) => {
+			if (!visible) return;
+			originalVersion.value = workspaceLayout.version.value;
+			draft.value = cloneWorkspaceLayout(workspaceLayout.tree.value);
+			sidebar.value = {
+				left: [...workspaceLayout.sidebars.value.left],
+				right: [...workspaceLayout.sidebars.value.right],
+			};
+			originalDraft.value = cloneWorkspaceLayout(workspaceLayout.tree.value);
+			originalSidebar.value = {
+				left: [...workspaceLayout.sidebars.value.left],
+				right: [...workspaceLayout.sidebars.value.right],
+			};
+		},
+		{ immediate: true },
+	);
 
-  const hasChanges = computed(
-    () =>
-      !structurallyEqual(draft.value, originalDraft.value) || !structurallyEqual(sidebar.value, originalSidebar.value),
-  );
-  const allUsedPanes = computed(
-    () => new Set<WorkspacePaneNameDto>([...mainPanes.value, ...sidebar.value.left, ...sidebar.value.right]),
-  );
-  const availablePanes = computed(() =>
-    workspaceLayout.paneNames.filter((pane) => pane !== 'terminal' || !allUsedPanes.value.has('terminal')),
-  );
+	const mainPanes = computed(() => {
+		const result = new Set<WorkspacePane>();
 
-  const paneLabel = (pane: WorkspacePaneNameDto): string => t(`layout.pane.${pane}`);
-  const clonePane = (pane: WorkspacePaneNameDto): WorkspaceLayoutNodeState => ({
-    id: crypto.randomUUID(),
-    type: 'pane',
-    component: pane,
-    size: 25,
-  });
+		const visit = (node: WorkspaceLayoutNodeState): void => {
+			if (node.type === 'pane' && node.component) result.add(node.component);
+			else for (const child of node.children ?? []) visit(child);
+		};
 
-  const normalizeSidebar = (side: 'left' | 'right', items: DragItem[]): WorkspacePaneNameDto[] => {
-    const other = side === 'left' ? sidebar.value.right : sidebar.value.left;
-    const next: WorkspacePaneNameDto[] = [];
-    for (const item of items) {
-      const pane = typeof item === 'string' ? item : item.type === 'pane' ? item.component : undefined;
-      if (!pane || next.includes(pane) || other.includes(pane)) continue;
-      next.push(pane);
-    }
-    return next;
-  };
+		visit(draft.value);
+		return result;
+	});
 
-  const leftSidebar = computed<DragItem[]>({
-    get: () => sidebar.value.left,
-    set: (items) => {
-      sidebar.value = { ...sidebar.value, left: normalizeSidebar('left', items) };
-    },
-  });
-  const rightSidebar = computed<DragItem[]>({
-    get: () => sidebar.value.right,
-    set: (items) => {
-      sidebar.value = { ...sidebar.value, right: normalizeSidebar('right', items) };
-    },
-  });
+	const hasChanges = computed(
+		() =>
+			!structurallyEqual(draft.value, originalDraft.value) ||
+			!structurallyEqual(sidebar.value, originalSidebar.value),
+	);
+	const allUsedPanes = computed(
+		() => new Set<WorkspacePane>([...mainPanes.value, ...sidebar.value.left, ...sidebar.value.right]),
+	);
+	const availablePanes = computed(() =>
+		workspaceLayout.paneNames.filter((pane) => pane !== 'terminal' || !allUsedPanes.value.has('terminal')),
+	);
 
-  const canMoveToSidebar = (event: { draggedContext?: { element?: DragItem } }): boolean => {
-    const item = event.draggedContext?.element;
-    return Boolean(typeof item === 'string' || (item && typeof item === 'object' && item.type === 'pane'));
-  };
+	const paneLabel = (pane: WorkspacePane): string => t(`layout.pane.${pane}`);
 
-  const removeSidebarPane = (side: 'left' | 'right', index: number): void => {
-    const next = [...sidebar.value[side]];
-    next.splice(index, 1);
-    sidebar.value = { ...sidebar.value, [side]: next };
-  };
+	const clonePane = (pane: WorkspacePane): WorkspaceLayoutNodeState => ({
+		id: crypto.randomUUID(),
+		type: 'pane',
+		component: pane,
+		size: 25,
+	});
 
-  const toggleLayoutLock = (): void => emit('layoutLocked', !Boolean(props.layoutLocked));
-  const attemptClose = async (): Promise<void> => {
-    if (hasChanges.value) {
-      const confirmed = await feedback.confirm({ message: t('layoutConfigurator.confirmClose') });
-      if (!confirmed) return;
-    }
-    emit('close');
-  };
-  const reset = async (): Promise<void> => {
-    const confirmed = await feedback.confirm({ message: t('layoutConfigurator.confirmReset') });
-    if (!confirmed) return;
-    draft.value = createDefaultWorkspaceLayout();
-    sidebar.value = { left: ['connections', 'dockerManager'], right: [] };
-  };
-  const save = async (): Promise<void> => {
-    saving.value = true;
-    try {
-      await workspaceLayout.save(clone(draft.value), clone(sidebar.value));
-      emit('close');
-    } catch (cause) {
-      feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      saving.value = false;
-    }
-  };
+	const normalizeSidebar = (side: 'left' | 'right', items: DragItem[]): WorkspacePane[] => {
+		const other = side === 'left' ? sidebar.value.right : sidebar.value.left;
+		const next: WorkspacePane[] = [];
+		for (const item of items) {
+			const pane = typeof item === 'string' ? item : item.type === 'pane' ? item.component : undefined;
+			if (!pane || next.includes(pane) || other.includes(pane)) continue;
+			next.push(pane);
+		}
+		return next;
+	};
+
+	const leftSidebar = computed<DragItem[]>({
+		get: () => sidebar.value.left,
+
+		set: (items) => {
+			sidebar.value = { ...sidebar.value, left: normalizeSidebar('left', items) };
+		},
+	});
+	const rightSidebar = computed<DragItem[]>({
+		get: () => sidebar.value.right,
+
+		set: (items) => {
+			sidebar.value = { ...sidebar.value, right: normalizeSidebar('right', items) };
+		},
+	});
+
+	const canMoveToSidebar = (event: { draggedContext?: { element?: DragItem } }): boolean => {
+		const item = event.draggedContext?.element;
+		return Boolean(typeof item === 'string' || (item && typeof item === 'object' && item.type === 'pane'));
+	};
+
+	const removeSidebarPane = (side: 'left' | 'right', index: number): void => {
+		const next = [...sidebar.value[side]];
+		next.splice(index, 1);
+		sidebar.value = { ...sidebar.value, [side]: next };
+	};
+
+	const toggleLayoutLock = (): void => emit('layoutLocked', !Boolean(props.layoutLocked));
+
+	const attemptClose = async (): Promise<void> => {
+		const signal = view.capture();
+		if (hasChanges.value) {
+			const confirmed = await feedback.confirm({ message: t('layoutConfigurator.confirmClose') });
+			if (!confirmed || !view.isCurrent(signal)) return;
+		}
+		emit('close');
+	};
+
+	const reset = async (): Promise<void> => {
+		const signal = view.capture();
+		const confirmed = await feedback.confirm({ message: t('layoutConfigurator.confirmReset') });
+		if (!confirmed || !view.isCurrent(signal)) return;
+		draft.value = createDefaultWorkspaceLayout();
+		sidebar.value = { left: ['connections', 'dockerManager'], right: [] };
+	};
+
+	const refresh = async (): Promise<void> => {
+		if (saving.value) return;
+		const signal = view.capture();
+		if (signal.aborted) return;
+		saving.value = true;
+		try {
+			await workspaceLayout.load(true);
+			if (!view.isCurrent(signal)) return;
+			originalVersion.value = workspaceLayout.version.value;
+			draft.value = cloneWorkspaceLayout(workspaceLayout.tree.value);
+			originalDraft.value = cloneWorkspaceLayout(draft.value);
+			sidebar.value = {
+				left: [...workspaceLayout.sidebars.value.left],
+				right: [...workspaceLayout.sidebars.value.right],
+			};
+			originalSidebar.value = { left: [...sidebar.value.left], right: [...sidebar.value.right] };
+			needsRefresh.value = false;
+		} catch (cause) {
+			if (view.isCurrent(signal)) {
+				needsRefresh.value = true;
+				feedback.notifyError(preferenceFailureMessage(cause, t));
+			}
+		} finally {
+			if (view.isCurrent(signal)) saving.value = false;
+		}
+	};
+
+	const save = async (): Promise<void> => {
+		if (saving.value) return;
+		const signal = view.capture();
+		if (signal.aborted) return;
+		saving.value = true;
+		try {
+			await workspaceLayout.save(
+				cloneWorkspaceLayout(draft.value),
+				{ left: [...sidebar.value.left], right: [...sidebar.value.right] },
+				originalVersion.value,
+				signal,
+			);
+			if (!view.isCurrent(signal)) return;
+			needsRefresh.value = false;
+			emit('close');
+		} catch (cause) {
+			if (view.isCurrent(signal)) {
+				needsRefresh.value = true;
+				feedback.notifyError(preferenceFailureMessage(cause, t));
+			}
+		} finally {
+			if (view.isCurrent(signal)) saving.value = false;
+		}
+	};
 </script>
 
 <template>
-  <UiOverlayPanel
-    :visible="visible"
-    :z-index="1000"
-    :surface="false"
-    overlay-class="!p-0"
-    :close-on-escape="true"
-    @close="attemptClose"
-  >
-    <div
-      class="layout-configurator-dialog pointer-events-auto relative flex h-auto max-h-[90dvh] min-h-[600px] w-auto min-w-[800px] max-w-[95vw] cursor-default flex-col overflow-auto rounded-lg bg-background text-foreground shadow-xl"
-      role="dialog"
-      :aria-label="t('layoutConfigurator.title')"
-    >
-      <header class="flex items-center justify-between border-b border-border bg-header p-4">
-        <h2 class="m-0 text-lg font-semibold">{{ t('layoutConfigurator.title') }}</h2>
-        <button
-          type="button"
-          class="border-0 bg-transparent p-0 text-2xl leading-none text-text-secondary hover:text-foreground"
-          :title="t('common.close')"
-          :aria-label="t('common.close')"
-          @click="attemptClose"
-        >
-          ×
-        </button>
-      </header>
+	<UiOverlayPanel
+		:visible="visible"
+		:z-index="1000"
+		:surface="false"
+		overlay-class="!p-0"
+		:close-on-escape="true"
+		@close="attemptClose"
+	>
+		<div
+			class="layout-configurator-dialog ui-glass-panel pointer-events-auto relative flex h-auto max-h-[90dvh] min-h-[600px] w-auto min-w-[800px] max-w-[95vw] cursor-default flex-col overflow-auto rounded-lg text-foreground"
+			role="dialog"
+			:aria-label="t('layoutConfigurator.title')"
+		>
+			<header class="ui-glass-chrome flex items-center justify-between border-b border-border p-4">
+				<h2 class="m-0 text-lg font-semibold">{{ t('layoutConfigurator.title') }}</h2>
+				<UiButton
+					appearance="ghost"
+					density="compact"
+					icon-only
+					:title="t('common.close')"
+					:aria-label="t('common.close')"
+					@click="attemptClose"
+				>
+					<i class="fas fa-times" aria-hidden="true"></i>
+				</UiButton>
+			</header>
 
-      <main class="grid min-h-[450px] flex-1 grid-cols-[220px_minmax(0,1fr)] gap-6 overflow-y-auto p-6">
-        <section class="flex min-w-[200px] flex-col overflow-y-auto border-r border-border pr-6">
-          <h3 class="mb-4 mt-0 text-base font-semibold text-text-secondary">
-            {{ t('layoutConfigurator.availablePanes') }}
-          </h3>
-          <draggable
-            :list="availablePanes"
-            tag="ul"
-            class="layout-available-panes m-0 flex-grow list-none p-0"
-            :item-key="(pane: WorkspacePaneNameDto) => pane"
-            :group="{ name: 'workspace-layout-items', pull: 'clone', put: false }"
-            :sort="false"
-            :clone="clonePane"
-          >
-            <template #item="{ element: pane }">
-              <li
-                class="mb-2 flex cursor-grab select-none items-center rounded border border-border bg-background-alt p-2 text-sm transition-colors hover:bg-header active:cursor-grabbing"
-              >
-                <i class="fas fa-grip-vertical mr-2 text-text-alt" aria-hidden="true"></i>
-                <span class="min-w-0 truncate">{{ paneLabel(pane) }}</span>
-              </li>
-            </template>
-            <template #footer>
-              <li v-if="!availablePanes.length" class="p-2 text-sm italic text-text-alt">
-                {{ t('layoutConfigurator.noAvailablePanes') }}
-              </li>
-            </template>
-          </draggable>
-        </section>
+			<main class="grid min-h-[450px] flex-1 grid-cols-[220px_minmax(0,1fr)] gap-6 overflow-y-auto p-6">
+				<section class="flex min-w-[200px] flex-col overflow-y-auto border-r border-border pr-6">
+					<h3 class="mb-4 mt-0 text-base font-semibold text-text-secondary">
+						{{ t('layoutConfigurator.availablePanes') }}
+					</h3>
+					<draggable
+						:list="availablePanes"
+						tag="ul"
+						class="layout-available-panes m-0 flex-grow list-none p-0"
+						:item-key="(pane: WorkspacePane) => pane"
+						:group="{ name: 'workspace-layout-items', pull: 'clone', put: false }"
+						:sort="false"
+						:clone="clonePane"
+					>
+						<template #item="{ element: pane }">
+							<li
+								class="mb-2 flex cursor-grab select-none items-center rounded border border-border bg-background-alt p-2 text-sm transition-colors hover:bg-header active:cursor-grabbing"
+							>
+								<i class="fas fa-grip-vertical mr-2 text-text-alt" aria-hidden="true"></i>
+								<span class="min-w-0 truncate">{{ paneLabel(pane) }}</span>
+							</li>
+						</template>
+						<template #footer>
+							<li v-if="!availablePanes.length" class="p-2 text-sm italic text-text-alt">
+								{{ t('layoutConfigurator.noAvailablePanes') }}
+							</li>
+						</template>
+					</draggable>
+				</section>
 
-        <div class="flex min-w-[350px] flex-col">
-          <section class="flex min-h-0 flex-1 flex-col">
-            <div class="mb-4 flex items-center justify-between gap-4">
-              <h3 class="m-0 text-base font-semibold text-text-secondary">
-                {{ t('layoutConfigurator.layoutPreview') }}
-              </h3>
-              <div class="flex items-center gap-2">
-                <label
-                  id="layout-lock-label"
-                  class="cursor-pointer select-none text-sm text-text-secondary"
-                  @click="toggleLayoutLock"
-                >
-                  {{ t('layoutConfigurator.lockLayout') }}
-                </label>
-                <button
-                  type="button"
-                  role="switch"
-                  :aria-checked="Boolean(layoutLocked)"
-                  aria-labelledby="layout-lock-label"
-                  :class="[
-                    'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
-                    layoutLocked ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600',
-                  ]"
-                  @click="toggleLayoutLock"
-                >
-                  <span
-                    aria-hidden="true"
-                    :class="[
-                      'pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200',
-                      layoutLocked ? 'translate-x-5' : 'translate-x-0',
-                    ]"
-                  ></span>
-                </button>
-              </div>
-            </div>
+				<div class="flex min-w-[350px] flex-col">
+					<section class="flex min-h-0 flex-1 flex-col">
+						<div class="mb-4 flex items-center justify-between gap-4">
+							<h3 class="m-0 text-base font-semibold text-text-secondary">
+								{{ t('layoutConfigurator.layoutPreview') }}
+							</h3>
+							<div class="flex items-center gap-2">
+								<label
+									id="layout-lock-label"
+									class="cursor-pointer select-none text-sm text-text-secondary"
+									@click="toggleLayoutLock"
+								>
+									{{ t('layoutConfigurator.lockLayout') }}
+								</label>
+								<UiSwitch
+									:model-value="Boolean(layoutLocked)"
+									aria-labelledby="layout-lock-label"
+									@update:model-value="toggleLayoutLock"
+								/>
+							</div>
+						</div>
 
-            <div
-              data-layout-main-tree
-              class="flex min-h-[250px] flex-1 flex-col overflow-auto rounded border-2 border-dashed border-border-alt bg-background-alt p-4"
-            >
-              <WorkspaceLayoutNodeEditor v-model="draft" :root="true" :used-main-panes="mainPanes" class="flex-grow" />
-            </div>
-            <div class="mt-4 flex gap-2">
-              <button type="button" class="secondary-action" @click="reset">
-                {{ t('layoutConfigurator.resetDefault') }}
-              </button>
-            </div>
-          </section>
+						<div
+							data-layout-main-tree
+							class="flex min-h-[250px] flex-1 flex-col overflow-auto rounded border-2 border-dashed border-border-alt bg-background-alt p-4"
+						>
+							<WorkspaceLayoutNodeEditor
+								v-model="draft"
+								:root="true"
+								:used-main-panes="mainPanes"
+								class="flex-grow"
+							/>
+						</div>
+						<div class="mt-4 flex gap-2">
+							<UiButton appearance="soft" density="compact" @click="reset">
+								{{ t('layoutConfigurator.resetDefault') }}
+							</UiButton>
+						</div>
+					</section>
 
-          <div class="mt-4 grid min-h-[150px] grid-cols-2 gap-6 border-t border-border pt-4">
-            <section class="flex min-w-0 flex-col">
-              <h3 class="mb-4 mt-0 text-base font-semibold text-text-secondary">
-                {{ t('layoutConfigurator.leftSidebar') }}
-              </h3>
-              <draggable
-                v-model="leftSidebar"
-                tag="ul"
-                class="layout-sidebar-list m-0 min-h-[120px] flex-1 list-none overflow-y-auto rounded border border-dashed border-border-alt bg-background-alt p-2"
-                :item-key="(item: DragItem) => (typeof item === 'string' ? item : (item.component ?? item.id))"
-                :group="{ name: 'workspace-layout-items' }"
-                :move="canMoveToSidebar"
-              >
-                <template #item="{ element: pane, index }">
-                  <li
-                    class="mb-2 flex cursor-grab select-none items-center rounded border border-border bg-header p-2 text-sm active:cursor-grabbing"
-                  >
-                    <i class="fas fa-grip-vertical mr-2 shrink-0 text-text-alt" aria-hidden="true"></i>
-                    <span class="min-w-0 flex-1 truncate">{{
-                      paneLabel(typeof pane === 'string' ? pane : pane.component)
-                    }}</span>
-                    <button
-                      type="button"
-                      class="sidebar-remove"
-                      :title="t('common.remove')"
-                      :aria-label="t('common.remove')"
-                      @click.stop="removeSidebarPane('left', index)"
-                    >
-                      ×
-                    </button>
-                  </li>
-                </template>
-                <template #footer>
-                  <li
-                    v-if="!sidebar.left.length"
-                    class="flex min-h-[50px] items-center justify-center p-4 text-center text-sm italic text-text-alt"
-                  >
-                    {{ t('layoutConfigurator.dropHere') }}
-                  </li>
-                </template>
-              </draggable>
-            </section>
+					<div class="mt-4 grid min-h-[150px] grid-cols-2 gap-6 border-t border-border pt-4">
+						<section class="flex min-w-0 flex-col">
+							<h3 class="mb-4 mt-0 text-base font-semibold text-text-secondary">
+								{{ t('layoutConfigurator.leftSidebar') }}
+							</h3>
+							<draggable
+								v-model="leftSidebar"
+								tag="ul"
+								class="layout-sidebar-list m-0 min-h-[120px] flex-1 list-none overflow-y-auto rounded border border-dashed border-border-alt bg-background-alt p-2"
+								:item-key="
+									(item: DragItem) => (typeof item === 'string' ? item : (item.component ?? item.id))
+								"
+								:group="{ name: 'workspace-layout-items' }"
+								:move="canMoveToSidebar"
+							>
+								<template #item="{ element: pane, index }">
+									<li
+										class="mb-2 flex cursor-grab select-none items-center rounded border border-border bg-header p-2 text-sm active:cursor-grabbing"
+									>
+										<i
+											class="fas fa-grip-vertical mr-2 shrink-0 text-text-alt"
+											aria-hidden="true"
+										></i>
+										<span class="min-w-0 flex-1 truncate">{{
+											paneLabel(typeof pane === 'string' ? pane : pane.component)
+										}}</span>
+										<UiButton
+											appearance="ghost"
+											tone="danger"
+											density="compact"
+											icon-only
+											class="sidebar-remove"
+											:title="t('common.remove')"
+											:aria-label="t('common.remove')"
+											@click.stop="removeSidebarPane('left', index)"
+										>
+											<i class="fas fa-times" aria-hidden="true"></i>
+										</UiButton>
+									</li>
+								</template>
+								<template #footer>
+									<li
+										v-if="!sidebar.left.length"
+										class="flex min-h-[50px] items-center justify-center p-4 text-center text-sm italic text-text-alt"
+									>
+										{{ t('layoutConfigurator.dropHere') }}
+									</li>
+								</template>
+							</draggable>
+						</section>
 
-            <section class="flex min-w-0 flex-col">
-              <h3 class="mb-4 mt-0 text-base font-semibold text-text-secondary">
-                {{ t('layoutConfigurator.rightSidebar') }}
-              </h3>
-              <draggable
-                v-model="rightSidebar"
-                tag="ul"
-                class="layout-sidebar-list m-0 min-h-[120px] flex-1 list-none overflow-y-auto rounded border border-dashed border-border-alt bg-background-alt p-2"
-                :item-key="(item: DragItem) => (typeof item === 'string' ? item : (item.component ?? item.id))"
-                :group="{ name: 'workspace-layout-items' }"
-                :move="canMoveToSidebar"
-              >
-                <template #item="{ element: pane, index }">
-                  <li
-                    class="mb-2 flex cursor-grab select-none items-center rounded border border-border bg-header p-2 text-sm active:cursor-grabbing"
-                  >
-                    <i class="fas fa-grip-vertical mr-2 shrink-0 text-text-alt" aria-hidden="true"></i>
-                    <span class="min-w-0 flex-1 truncate">{{
-                      paneLabel(typeof pane === 'string' ? pane : pane.component)
-                    }}</span>
-                    <button
-                      type="button"
-                      class="sidebar-remove"
-                      :title="t('common.remove')"
-                      :aria-label="t('common.remove')"
-                      @click.stop="removeSidebarPane('right', index)"
-                    >
-                      ×
-                    </button>
-                  </li>
-                </template>
-                <template #footer>
-                  <li
-                    v-if="!sidebar.right.length"
-                    class="flex min-h-[50px] items-center justify-center p-4 text-center text-sm italic text-text-alt"
-                  >
-                    {{ t('layoutConfigurator.dropHere') }}
-                  </li>
-                </template>
-              </draggable>
-            </section>
-          </div>
-        </div>
-      </main>
+						<section class="flex min-w-0 flex-col">
+							<h3 class="mb-4 mt-0 text-base font-semibold text-text-secondary">
+								{{ t('layoutConfigurator.rightSidebar') }}
+							</h3>
+							<draggable
+								v-model="rightSidebar"
+								tag="ul"
+								class="layout-sidebar-list m-0 min-h-[120px] flex-1 list-none overflow-y-auto rounded border border-dashed border-border-alt bg-background-alt p-2"
+								:item-key="
+									(item: DragItem) => (typeof item === 'string' ? item : (item.component ?? item.id))
+								"
+								:group="{ name: 'workspace-layout-items' }"
+								:move="canMoveToSidebar"
+							>
+								<template #item="{ element: pane, index }">
+									<li
+										class="mb-2 flex cursor-grab select-none items-center rounded border border-border bg-header p-2 text-sm active:cursor-grabbing"
+									>
+										<i
+											class="fas fa-grip-vertical mr-2 shrink-0 text-text-alt"
+											aria-hidden="true"
+										></i>
+										<span class="min-w-0 flex-1 truncate">{{
+											paneLabel(typeof pane === 'string' ? pane : pane.component)
+										}}</span>
+										<UiButton
+											appearance="ghost"
+											tone="danger"
+											density="compact"
+											icon-only
+											class="sidebar-remove"
+											:title="t('common.remove')"
+											:aria-label="t('common.remove')"
+											@click.stop="removeSidebarPane('right', index)"
+										>
+											<i class="fas fa-times" aria-hidden="true"></i>
+										</UiButton>
+									</li>
+								</template>
+								<template #footer>
+									<li
+										v-if="!sidebar.right.length"
+										class="flex min-h-[50px] items-center justify-center p-4 text-center text-sm italic text-text-alt"
+									>
+										{{ t('layoutConfigurator.dropHere') }}
+									</li>
+								</template>
+							</draggable>
+						</section>
+					</div>
+				</div>
+			</main>
 
-      <footer class="flex justify-end gap-3 border-t border-border bg-header p-4">
-        <button type="button" class="secondary-action" @click="attemptClose">{{ t('common.cancel') }}</button>
-        <button type="button" class="primary-action" :disabled="!hasChanges || saving" @click="save">
-          {{ saving ? t('common.saving') : t('common.save') }}{{ hasChanges ? '*' : '' }}
-        </button>
-      </footer>
-    </div>
-  </UiOverlayPanel>
+			<footer class="flex justify-end gap-3 border-t border-border bg-header p-4">
+				<UiButton
+					v-if="needsRefresh || workspaceLayout.error.value"
+					appearance="soft"
+					density="compact"
+					:disabled="saving"
+					@click="refresh"
+				>
+					{{ t('common.refresh') }}
+				</UiButton>
+				<UiButton appearance="ghost" density="compact" @click="attemptClose">
+					{{ t('common.cancel') }}
+				</UiButton>
+				<UiButton
+					appearance="solid"
+					tone="primary"
+					density="compact"
+					:disabled="!hasChanges || saving"
+					@click="save"
+				>
+					{{ saving ? t('common.saving') : t('common.save') }}{{ hasChanges ? '*' : '' }}
+				</UiButton>
+			</footer>
+		</div>
+	</UiOverlayPanel>
 </template>
 
 <style scoped>
-  .secondary-action,
-  .primary-action {
-    border: 1px solid var(--border-color);
-    border-radius: 0.25rem;
-    padding: 0.5rem 1rem;
-    font-size: 0.875rem;
-    transition:
-      background-color 0.15s ease,
-      opacity 0.15s ease;
-  }
-  .secondary-action {
-    background: var(--button-bg-color);
-    color: var(--button-text-color);
-  }
-  .secondary-action:hover {
-    background: var(--button-hover-bg-color);
-  }
-  .primary-action {
-    border-color: transparent;
-    background: var(--link-active-color);
-    color: white;
-  }
-  .primary-action:hover:not(:disabled) {
-    background: var(--button-hover-bg-color);
-  }
-  .primary-action:disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
-  }
-  .sidebar-remove {
-    display: inline-flex;
-    width: 1.5rem;
-    height: 1.5rem;
-    flex: 0 0 1.5rem;
-    align-items: center;
-    justify-content: center;
-    border-radius: 0.2rem;
-    color: var(--text-color-secondary);
-    font-size: 1rem;
-    line-height: 1;
-  }
-  .sidebar-remove:hover {
-    background: color-mix(in srgb, var(--status-error-color) 10%, transparent);
-    color: var(--status-error-color);
-  }
-  :deep(.sortable-ghost) {
-    border: 1px dashed var(--link-active-color) !important;
-    background: color-mix(in srgb, var(--link-active-color) 12%, transparent) !important;
-    opacity: 0.45;
-  }
+	.sidebar-remove {
+		--ui-control-height: 1.5rem;
+		--ui-control-radius: 0.25rem;
+		flex: 0 0 1.5rem;
+		font-size: 0.72rem;
+	}
+	:deep(.sortable-ghost) {
+		border: 1px dashed var(--link-active-color) !important;
+		background: color-mix(in srgb, var(--link-active-color) 12%, transparent) !important;
+		opacity: 0.45;
+	}
 </style>

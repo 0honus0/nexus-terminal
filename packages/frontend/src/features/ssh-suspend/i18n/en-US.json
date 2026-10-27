@@ -1,7 +1,7 @@
 {
   "suspendedSshSessions": {
     "modalTitle": "Suspended SSH Sessions",
-    "searchPlaceholder": "Search sessions (name, connection name)",
+    "searchPlaceholder": "Search sessions",
     "loading": "Loading suspended sessions...",
     "noResults": "No suspended sessions found matching your criteria.",
     "tooltip": {
@@ -28,7 +28,8 @@
   },
   "sshSuspend": {
     "prompts": {
-      "confirmTakeover": "Session \"{name}\" is currently owned by another device. Take over this same SSH session? The existing owner will be disconnected."
+      "confirmTakeover": "Session \"{name}\" is currently owned by another device. Take over this same SSH session? The existing owner will be disconnected.",
+      "confirmRemove": "Remove suspended session \"{name}\"? A terminal in use stays connected and is only unmarked. An unused background session will be terminated."
     },
     "notifications": {
       "markedForSuspendInfo": "Session {id} is marked for suspend. It will be suspended when the tab closes or the application exits.",
@@ -42,6 +43,7 @@
       "terminatedSuccess": "Suspended session \"{name}\" terminated successfully.",
       "terminateError": "Failed to terminate suspended session: {error}",
       "entryRemovedSuccess": "Suspended session entry \"{name}\" removed successfully.",
+      "attachedEntryRemovedSuccess": "Session \"{name}\" is no longer suspended. The terminal in use stays connected.",
       "entryRemovedError": "Failed to remove suspended session entry: {error}",
       "nameEditedSuccess": "Suspended session name updated to \"{name}\".",
       "nameEditedError": "Failed to edit suspended session name: {error}",
@@ -55,6 +57,35 @@
       "autoTerminated": "Suspended session \"{name}\" was auto-terminated by the backend due to: {reason}",
       "logExportSuccess": "Suspended session log {name} has started downloading.",
       "logExportError": "Failed to export suspended session log: {error}"
+    },
+    "errors": {
+      "invalid_input": "Invalid input.",
+      "invalid_body": "Invalid request body.",
+      "unauthenticated": "Please sign in again.",
+      "forbidden": "Permission denied.",
+      "not_found": "Session not found. Read the latest state.",
+      "conflict": "Session changed or an operation is in progress. Read the latest state.",
+      "limit_exceeded": "Capacity limit reached.",
+      "operation_unknown": "Operation outcome is unknown. Read and verify the latest state before another action. No automatic retry.",
+      "remote_unavailable": "Remote service unavailable.",
+      "request_timeout": "Request timed out.",
+      "request_failed": "Request failed. Read the latest state.",
+      "read_failed": "Suspended session data is temporarily unavailable. Refresh or try again later.",
+      "protocol_failure": "Invalid response. Read the latest state.",
+      "cancelled": "Operation cancelled.",
+      "invalid_json": "Invalid request body.",
+      "body_too_large": "Capacity limit reached.",
+      "unsupported_media_type": "Invalid request body.",
+      "csrf_rejected": "Permission denied.",
+      "invalid_host": "Permission denied.",
+      "invalid_path": "Invalid input.",
+      "internal_failure": "Operation outcome is unknown. Read and verify the latest state before another action. No automatic retry."
+    },
+    "recover": "Read latest state and verify",
+    "reasons": {
+      "retention_expired": "Retention period expired",
+      "takeover": "Another workspace took ownership",
+      "lease_expired": "Session ownership lease expired"
     }
   }
 }

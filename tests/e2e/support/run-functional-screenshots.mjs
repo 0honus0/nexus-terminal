@@ -13,37 +13,37 @@ fs.rmSync(stagingDir, { recursive: true, force: true });
 fs.mkdirSync(stagingDir, { recursive: true });
 
 const result = spawnSync(
-  path.join(e2eRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'playwright.cmd' : 'playwright'),
-  ['test'],
-  {
-    cwd: e2eRoot,
-    env: {
-      ...process.env,
-      E2E_CAPTURE_SCREENSHOTS: '1',
-      E2E_SCREENSHOT_OUTPUT_DIR: stagingDir,
-    },
-    stdio: 'inherit',
-  },
+	path.join(e2eRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'playwright.cmd' : 'playwright'),
+	['test'],
+	{
+		cwd: e2eRoot,
+		env: {
+			...process.env,
+			E2E_CAPTURE_SCREENSHOTS: '1',
+			E2E_SCREENSHOT_OUTPUT_DIR: stagingDir,
+		},
+		stdio: 'inherit',
+	},
 );
 
 if ((result.status ?? 1) !== 0) process.exit(result.status ?? 1);
 
 const screenshots = fs
-  .readdirSync(stagingDir)
-  .filter((name) => name.endsWith('.png'))
-  .sort();
+	.readdirSync(stagingDir)
+	.filter((name) => name.endsWith('.png'))
+	.sort();
 
 if (screenshots.length === 0) {
-  console.error('No functional screenshots were produced by the E2E run.');
-  process.exit(1);
+	console.error('No functional screenshots were produced by the E2E run.');
+	process.exit(1);
 }
 
 fs.mkdirSync(targetDir, { recursive: true });
 for (const entry of fs.readdirSync(targetDir, { withFileTypes: true })) {
-  if (entry.isFile() && entry.name.endsWith('.png')) fs.rmSync(path.join(targetDir, entry.name));
+	if (entry.isFile() && entry.name.endsWith('.png')) fs.rmSync(path.join(targetDir, entry.name));
 }
 for (const filename of screenshots) {
-  fs.copyFileSync(path.join(stagingDir, filename), path.join(targetDir, filename));
+	fs.copyFileSync(path.join(stagingDir, filename), path.join(targetDir, filename));
 }
 
 console.log(`Updated ${screenshots.length} functional screenshots in ${targetDir}:`);

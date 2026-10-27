@@ -1,7 +1,7 @@
 {
   "suspendedSshSessions": {
     "modalTitle": "挂起的 SSH 会话",
-    "searchPlaceholder": "搜索会话（名称、连接名称）",
+    "searchPlaceholder": "搜索会话",
     "loading": "正在加载挂起的会话...",
     "noResults": "没有找到符合条件的挂起会话。",
     "tooltip": {
@@ -28,7 +28,8 @@
   },
   "sshSuspend": {
     "prompts": {
-      "confirmTakeover": "会话“{name}”当前由另一台设备使用。是否接管同一个 SSH 会话？原设备将被断开。"
+      "confirmTakeover": "会话“{name}”当前由另一台设备使用。是否接管同一个 SSH 会话？原设备将被断开。",
+      "confirmRemove": "确认移除挂起会话“{name}”？正在使用的终端只取消挂起并保持连接，无人使用的后台会话将被终止。"
     },
     "notifications": {
       "markedForSuspendInfo": "会话 {id} 已标记为挂起。关闭标签页时，该会话将被挂起。",
@@ -42,6 +43,7 @@
       "terminatedSuccess": "已成功终止挂起的会话 \"{name}\"。",
       "terminateError": "终止挂起的会话失败: {error}",
       "entryRemovedSuccess": "已成功移除挂起的会话条目 \"{name}\"。",
+      "attachedEntryRemovedSuccess": "已取消会话 \"{name}\" 的挂起，正在使用的终端保持连接。",
       "entryRemovedError": "移除挂起的会话条目失败: {error}",
       "nameEditedSuccess": "已挂起会话名称已更新为 \"{name}\"。",
       "nameEditedError": "编辑已挂起会话名称失败: {error}",
@@ -55,6 +57,35 @@
       "autoTerminated": "已挂起的会话 \"{name}\" 因以下原因被后端自动终止: {reason}",
       "logExportSuccess": "已挂起会话日志 {name} 已开始下载。",
       "logExportError": "导出已挂起会话日志失败: {error}"
+    },
+    "errors": {
+      "invalid_input": "输入无效。",
+      "invalid_body": "请求格式无效。",
+      "unauthenticated": "请重新登录。",
+      "forbidden": "没有操作权限。",
+      "not_found": "会话不存在，请读取最新状态。",
+      "conflict": "会话状态已改变或操作正在进行，请读取最新状态。",
+      "limit_exceeded": "已达到容量限制。",
+      "operation_unknown": "操作结果未知，请读取最新状态并核对后再操作，不会自动重试。",
+      "remote_unavailable": "远端暂不可用。",
+      "request_timeout": "请求超时。",
+      "request_failed": "请求失败，请读取最新状态。",
+      "read_failed": "暂时无法读取挂起会话数据，请稍后刷新或重试。",
+      "protocol_failure": "响应无效，请读取最新状态。",
+      "cancelled": "操作已取消。",
+      "invalid_json": "请求格式无效。",
+      "body_too_large": "已达到容量限制。",
+      "unsupported_media_type": "请求格式无效。",
+      "csrf_rejected": "没有操作权限。",
+      "invalid_host": "没有操作权限。",
+      "invalid_path": "输入无效。",
+      "internal_failure": "操作结果未知，请读取最新状态并核对后再操作，不会自动重试。"
+    },
+    "recover": "读取最新状态并核对",
+    "reasons": {
+      "retention_expired": "已超过保留期限",
+      "takeover": "会话已由另一工作区接管",
+      "lease_expired": "会话所有权租约已失效"
     }
   }
 }

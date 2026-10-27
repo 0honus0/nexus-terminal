@@ -58,11 +58,23 @@
     "primaryNavigation": "主导航",
     "clear": "清除",
     "create": "创建",
-    "value": "值"
+    "value": "值",
+    "personalDataFailure": "个人数据请求失败，请重新读取。",
+    "personalDataUnknown": "操作结果未知。请重新读取列表并核对，再编辑或重复操作。",
+    "personalDataConflict": "记录已变化或不存在。请重新读取列表，再打开编辑窗口。",
+    "personalDataInvalid": "请检查输入内容及容量限制。",
+    "refresh": "刷新",
+    "pagination": "分页"
   },
   "header": {
     "hide": "隐藏",
     "show": "显示顶部导航"
+  },
+  "appUpdate": {
+    "title": "新版本已就绪",
+    "description": "更新已在后台完成。刷新页面即可使用最新版本。",
+    "later": "稍后",
+    "apply": "立即更新"
   },
   "time": {
     "unknown": "未知时间",

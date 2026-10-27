@@ -9,8 +9,52 @@
     "endOfList": "已显示全部记录",
     "loadMore": "加载更多",
     "subtitle": "查看登录、安全变更和连接操作，了解系统中发生了什么。",
+    "tabs": {
+      "logs": "操作记录",
+      "deliveries": "通知投递"
+    },
+    "deliveries": {
+      "title": "通知投递记录",
+      "hint": "排队和已派发仅表示受理，不代表发送成功。结果未知时不会自动重发。",
+      "loadedOnly": "已加载 {loaded} 条投递",
+      "unknownCount": "{count} 条结果未知",
+      "empty": "暂无投递记录。",
+      "statusLabel": "投递状态",
+      "channel": "通知渠道",
+      "channelUnavailable": "渠道已不可用",
+      "updated": "更新于 {time}",
+      "statusShort": {
+        "queued": "已排队",
+        "dispatched": "已派发",
+        "sent": "已发送",
+        "failed": "发送失败",
+        "unknown": "结果未知"
+      },
+      "status": {
+        "queued": "已排队",
+        "dispatched": "已派发，等待结果",
+        "sent": "已发送",
+        "failed": "发送失败",
+        "unknown": "投递结果未知，请核对接收端后再操作"
+      }
+    },
     "refresh": "刷新",
     "reset": "重置",
+    "filters": {
+      "timeRange": "时间范围",
+      "allTime": "全部时间",
+      "last24Hours": "最近 24 小时",
+      "last7Days": "最近 7 天",
+      "last30Days": "最近 30 天",
+      "clear": "清除筛选"
+    },
+    "httpStatus": {
+      "success": "成功",
+      "redirect": "重定向",
+      "unauthorized": "未授权",
+      "failed": "失败",
+      "recorded": "已记录"
+    },
     "emptyHint": "试试其他关键词，或重置筛选条件。",
     "unknownAction": "其他操作",
     "detailsHint": "展开查看操作记录",
@@ -22,7 +66,10 @@
     "previousPage": "上一页",
     "nextPage": "下一页",
     "pageNumber": "页码",
-    "status": { "danger": "操作失败", "warning": "未获授权" },
+    "status": {
+      "danger": "操作失败",
+      "warning": "未获授权"
+    },
     "fields": {
       "username": "操作账号",
       "userId": "用户编号",
@@ -50,9 +97,12 @@
       "proposalId": "提案编号",
       "action": "操作",
       "count": "数量",
-      "path": "路径"
+      "path": "路径",
+      "subjectId": "对象",
+      "route": "路由",
+      "statusCode": "HTTP状态"
     },
-    "searchPlaceholder": "搜索详细信息...",
+    "searchPlaceholder": "搜索事件、对象或路由…",
     "noLogs": "未找到审计日志记录。",
     "table": {
       "timestamp": "发生时间",
@@ -65,7 +115,6 @@
       "AGENT_MEMORY_PUBLISHED": "Agent 记忆已发布",
       "AGENT_MEMORY_REJECTED": "Agent 记忆审核未通过",
       "AGENT_MEMORY_REVOKED": "Agent 记忆已撤回",
-      "AGENT_MEMORY_IMPORTED": "Agent 记忆已导入",
       "LOGIN_SUCCESS": "登录成功",
       "LOGIN_FAILURE": "登录失败",
       "LOGOUT": "登出",
@@ -101,10 +150,39 @@
       "PASSKEY_DELETE_UNAUTHORIZED": "Passkey 删除未授权",
       "PASSKEY_NAME_UPDATED": "Passkey 名称已更新",
       "PASSKEY_NAME_UPDATE_UNAUTHORIZED": "Passkey 名称更新未授权",
-      "CAPTCHA_SETTINGS_UPDATED": "CAPTCHA 设置已更新"
+      "CAPTCHA_SETTINGS_UPDATED": "CAPTCHA 设置已更新",
+      "AGENT_APPROVAL_REQUIRED": "Agent 等待审批",
+      "AGENT_ATTENTION_REQUIRED": "Agent 需要关注",
+      "AGENT_RUN_COMPLETED": "Agent 运行完成",
+      "AGENT_RUN_FAILED": "Agent 运行失败",
+      "AGENT_RUN_INTERRUPTED": "Agent 运行中断",
+      "IP_BLOCKED": "IP 已封禁",
+      "HTTP_MUTATION": "数据已更新",
+      "HTTP_MUTATION_FAILED": "数据更新失败",
+      "AGENT_EXECUTION_SETTINGS_UPDATED": "Agent 执行设置已更新",
+      "AGENT_ARTIFACT_CREATED": "Agent 文件已创建",
+      "AGENT_ARTIFACT_DELETED": "Agent 文件已删除",
+      "REMOTE_MUTATION_EVIDENCE_RECORDED": "远程变更凭据已记录",
+      "REMOTE_MUTATION_RELEASED": "远程变更凭据已释放"
+    },
+    "scopes": {
+      "pathHistory": "路径历史",
+      "commandHistory": "命令历史",
+      "connections": "连接配置",
+      "proxies": "代理配置",
+      "sshKeys": "SSH 密钥",
+      "tags": "标签",
+      "notifications": "通知设置",
+      "settings": "系统设置",
+      "agent": "Agent",
+      "account": "账户与安全",
+      "system": "系统数据"
     },
     "allActions": "全部操作",
+    "scopedMutation": "{context}已更新",
+    "scopedMutationFailed": "{context}更新失败",
     "parseErrorRaw": "解析失败 — 原始值：{raw}",
-    "loadFailed": "加载审计日志失败。"
+    "loadFailed": "加载审计日志失败。",
+    "loadedOnly": "已加载 {loaded} 条记录"
   }
 }

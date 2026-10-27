@@ -1,114 +1,239 @@
 import { defineStore } from 'pinia';
-import { apiErrorStatus } from '@/client/http';
-import { logger } from '@/client/logging/logger';
-import { authApi } from '../api/authApi';
+import { createAccessApi } from '../api/access-api';
+import { createPasskeyCeremony } from '../adapters/browser-passkey';
+import { toAuthUser } from '../model/auth-mapper';
+import { authApi } from '../api/auth-api';
+import { AuthRequestFailure } from '../model/auth-failure';
 import type {
-  AuthSessionState,
-  AuthUserDto,
-  AuthLoginRequestDto,
-  AuthLoginResultViewModel,
-  AuthSetupRequestDto,
-  SetupState,
-} from '../model/auth';
+	AuthSessionState,
+	PasskeyLoginInput,
+	AuthUser,
+	AuthLoginRequest,
+	AuthLoginResult,
+	AuthSetupRequest,
+	SetupState,
+} from '../model/auth-types';
 
 interface AuthStoreState {
-  setupState: SetupState;
-  sessionState: AuthSessionState;
-  user: AuthUserDto | null;
-  pendingSecondFactor: boolean;
+	setupState: SetupState;
+	sessionState: AuthSessionState;
+	user: AuthUser | null;
+	pendingSecondFactor: boolean;
+	setupGeneration: number;
+	sessionGeneration: number;
 }
 
+// Browser ceremonies belong to their Store instance, outside serializable application state.
+const passkeyCeremonies = new WeakMap<object, AbortController>();
+
 export const useAuthStore = defineStore('auth', {
-  state: (): AuthStoreState => ({
-    setupState: 'unknown',
-    sessionState: 'unknown',
-    user: null,
-    pendingSecondFactor: false,
-  }),
+	state: (): AuthStoreState => ({
+		setupState: 'unknown',
+		sessionState: 'unknown',
+		user: null,
+		pendingSecondFactor: false,
+		setupGeneration: 0,
+		sessionGeneration: 0,
+	}),
 
-  actions: {
-    async resolveSetupState(force = false): Promise<SetupState> {
-      if (!force && this.setupState !== 'unknown') return this.setupState;
-      try {
-        this.setupState = (await authApi.needsSetup()) ? 'required' : 'complete';
-      } catch {
-        logger.warn('Setup state probe failed; using compatibility fallback');
-        // Legacy bootstrap kept the application navigable when the setup probe
-        // itself was unavailable. Backend route/auth policy remains authoritative.
-        this.setupState = 'complete';
-      }
-      if (this.setupState === 'required') {
-        this.sessionState = 'anonymous';
-        this.user = null;
-        this.pendingSecondFactor = false;
-      }
-      return this.setupState;
-    },
+	actions: {
+		async resolveSetupState(force = false): Promise<SetupState> {
+			if (!force && this.setupState !== 'unknown') {
+				return this.setupState;
+			}
+			const generation = ++this.setupGeneration;
+			try {
+				const required = await authApi.needsSetup();
+				if (generation !== this.setupGeneration) {
+					return this.setupState;
+				}
+				this.setupState = required ? 'required' : 'complete';
+				if (required) {
+					this.invalidateSession();
+				}
+			} catch {
+				if (generation === this.setupGeneration) {
+					this.setupState = 'unknown';
+				}
+			}
+			return this.setupState;
+		},
 
-    async resolveSession(force = false): Promise<AuthSessionState> {
-      if (!force && this.sessionState !== 'unknown') return this.sessionState;
-      try {
-        const user = await authApi.readSession();
-        this.user = user;
-        this.sessionState = user ? 'authenticated' : 'anonymous';
-        if (!user) this.pendingSecondFactor = false;
-      } catch {
-        logger.debug('Auth session probe failed; treating session as anonymous');
-        this.user = null;
-        this.sessionState = 'anonymous';
-        this.pendingSecondFactor = false;
-      }
-      return this.sessionState;
-    },
+		async resolveSession(force = false): Promise<AuthSessionState> {
+			if (!force && this.sessionState !== 'unknown') {
+				return this.sessionState;
+			}
+			passkeyCeremonies.get(this)?.abort();
+			const generation = ++this.sessionGeneration;
+			try {
+				const user = await authApi.readSession();
+				if (generation !== this.sessionGeneration) {
+					return this.sessionState;
+				}
+				this.user = user;
+				this.sessionState = user ? 'authenticated' : 'anonymous';
+				if (user) {
+					this.pendingSecondFactor = false;
+				}
+			} catch {
+				if (generation === this.sessionGeneration) {
+					this.user = null;
+					this.sessionState = 'unknown';
+				}
+			}
+			return this.sessionState;
+		},
 
-    async setup(credentials: AuthSetupRequestDto): Promise<void> {
-      await authApi.setup(credentials);
-      this.setupState = 'complete';
-      this.sessionState = 'anonymous';
-      this.user = null;
-      this.pendingSecondFactor = false;
-    },
+		beginAuthentication(): number {
+			passkeyCeremonies.get(this)?.abort();
+			this.setupGeneration += 1;
+			this.sessionGeneration += 1;
+			this.user = null;
+			this.sessionState = 'unknown';
+			this.pendingSecondFactor = false;
+			return this.sessionGeneration;
+		},
 
-    async login(credentials: AuthLoginRequestDto): Promise<AuthLoginResultViewModel> {
-      const result = await authApi.login(credentials);
-      if (result.status === 'two-factor-required') {
-        this.sessionState = 'anonymous';
-        this.user = null;
-        this.pendingSecondFactor = true;
-        logger.debug('Login requires second-factor verification');
-        return result;
-      }
+		assertCurrent(generation: number): void {
+			if (generation !== this.sessionGeneration) {
+				throw new AuthRequestFailure('cancelled', 'unknown');
+			}
+		},
 
-      this.sessionState = 'authenticated';
-      this.user = result.user;
-      this.pendingSecondFactor = false;
-      return result;
-    },
+		async setup(credentials: AuthSetupRequest): Promise<void> {
+			const generation = this.beginAuthentication();
+			this.setupState = 'unknown';
+			await authApi.setup(credentials);
+			this.assertCurrent(generation);
+			this.setupState = 'complete';
+			this.sessionState = 'anonymous';
+		},
 
-    async verifyTwoFactor(token: string): Promise<AuthUserDto> {
-      if (!this.pendingSecondFactor) throw new Error('No two-factor login challenge is active.');
-      try {
-        const user = await authApi.verifyTwoFactor(token);
-        this.sessionState = 'authenticated';
-        this.user = user;
-        this.pendingSecondFactor = false;
-        return user;
-      } catch (error) {
-        if (apiErrorStatus(error) === 400) this.pendingSecondFactor = false;
-        logger.debug({ statusCode: apiErrorStatus(error) }, 'Frontend second-factor verification failed');
-        throw error;
-      }
-    },
+		async login(credentials: AuthLoginRequest): Promise<AuthLoginResult> {
+			const generation = this.beginAuthentication();
+			const result = await authApi.login(credentials);
+			this.assertCurrent(generation);
+			this.setupState = 'complete';
+			if (result.status === 'two-factor-required') {
+				this.sessionState = 'anonymous';
+				this.pendingSecondFactor = true;
+			} else {
+				this.sessionState = 'authenticated';
+				this.user = result.user;
+			}
+			return result;
+		},
 
-    invalidateSession(): void {
-      this.sessionState = 'anonymous';
-      this.user = null;
-      this.pendingSecondFactor = false;
-    },
+		async loginWithPasskey(input: PasskeyLoginInput, signal?: AbortSignal): Promise<AuthUser> {
+			const generation = this.beginAuthentication();
+			const controller = new AbortController();
+			passkeyCeremonies.set(this, controller);
+			const operationSignal = signal ? AbortSignal.any([controller.signal, signal]) : controller.signal;
+			try {
+				const api = createAccessApi().passkeys;
+				const options = await api.authenticationOptions(input.username, operationSignal);
+				this.assertCurrent(generation);
+				const credential = await createPasskeyCeremony().authenticate(options, operationSignal);
+				this.assertCurrent(generation);
+				const result = await api.authenticate(credential, input.rememberMe, operationSignal);
+				this.assertCurrent(generation);
+				const user = toAuthUser(result.user);
+				this.user = user;
+				this.sessionState = 'authenticated';
+				this.setupState = 'complete';
+				return user;
+			} finally {
+				if (passkeyCeremonies.get(this) === controller) {
+					passkeyCeremonies.delete(this);
+				}
+			}
+		},
 
-    async logout(): Promise<void> {
-      await authApi.logout();
-      this.invalidateSession();
-    },
-  },
+		async verifyTwoFactor(token: string): Promise<AuthUser> {
+			if (!this.pendingSecondFactor) {
+				throw new AuthRequestFailure('challenge_expired', 'not_dispatched');
+			}
+			const generation = ++this.sessionGeneration;
+			try {
+				const user = await authApi.verifyTwoFactor(token);
+				this.assertCurrent(generation);
+				this.sessionState = 'authenticated';
+				this.user = user;
+				this.pendingSecondFactor = false;
+				return user;
+			} catch (cause) {
+				if (generation === this.sessionGeneration && cause instanceof AuthRequestFailure) {
+					if (cause.code === 'challenge_expired' || cause.code === 'unauthenticated') {
+						this.pendingSecondFactor = false;
+					}
+				}
+				throw cause;
+			}
+		},
+
+		invalidateSession(): void {
+			passkeyCeremonies.get(this)?.abort();
+			this.sessionGeneration += 1;
+			this.sessionState = 'anonymous';
+			this.user = null;
+			this.pendingSecondFactor = false;
+		},
+
+		async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+			const generation = ++this.sessionGeneration;
+			try {
+				await authApi.changePassword(currentPassword, newPassword);
+				this.assertCurrent(generation);
+				this.invalidateSession();
+			} catch (cause) {
+				if (
+					generation === this.sessionGeneration &&
+					cause instanceof AuthRequestFailure &&
+					cause.status === 401 &&
+					cause.code === 'unauthenticated'
+				) {
+					this.invalidateSession();
+				}
+				if (
+					generation === this.sessionGeneration &&
+					(!(cause instanceof AuthRequestFailure) || cause.outcome === 'unknown')
+				) {
+					// An unconfirmed password write may have revoked every server session.
+					this.sessionGeneration += 1;
+					this.sessionState = 'unknown';
+					this.user = null;
+					this.pendingSecondFactor = false;
+				}
+				throw cause;
+			}
+		},
+
+		async logout(): Promise<void> {
+			const before = this.user;
+			const generation = this.beginAuthentication();
+			try {
+				await authApi.logout();
+				this.assertCurrent(generation);
+				this.invalidateSession();
+			} catch (cause) {
+				this.assertCurrent(generation);
+				// The owner teardown above is deliberate even when logout failed.
+				// Do not silently assume that a lost HTTP response means the server
+				// kept the cookie. A read-only status check may explicitly restore
+				// an unchanged principal; otherwise remain unauthenticated/unknown.
+				let current: AuthUser | null;
+				try {
+					current = await authApi.readSession();
+				} catch (readFailure) {
+					throw new AggregateError([cause, readFailure], 'Logout and session verification failed');
+				}
+				this.assertCurrent(generation);
+				if (current && before && current.id === before.id) {
+					this.user = current;
+					this.sessionState = 'authenticated';
+				}
+				throw cause;
+			}
+		},
+	},
 });

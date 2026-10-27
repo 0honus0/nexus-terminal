@@ -1,400 +1,222 @@
-import type { AgentJsonValueDto } from '@nexus-terminal/protocol/agent-common';
-import { agentApi, toAgentApiError, type AgentPluginFrontendDescriptorDto } from '../api/agent-api';
-import { PluginAgentSdkDispatcher } from './agent-dispatcher';
-import {
-  PLUGIN_FRONTEND_AGENT_RPC_METHODS,
-  PLUGIN_FRONTEND_BACKEND_RPC_METHODS,
-  PLUGIN_FRONTEND_BINARY_RPC_METHODS,
-  PLUGIN_FRONTEND_MUTATION_RPC_METHODS,
-  PLUGIN_FRONTEND_PROTOCOL_VERSION,
-  PLUGIN_FRONTEND_RPC_METHODS,
-  PLUGIN_APP_INTENT_ARTIFACT_CHUNK_BYTES,
-  type PluginFrontendAgentRpcMethod,
-  type PluginFrontendBackendRpcMethod,
-  type PluginFrontendBinaryRpcMethod,
-  type PluginFrontendRpcMethod,
-  type PluginFrontendRunEvent,
-} from './protocol';
+import { agentRecord, encodeAgentJson } from '@nexus-terminal/shared/agent/http-codec';
+import { readAgentPluginRpcEnvelope } from '@nexus-terminal/shared/agent/plugins/frontend-rpc-codec';
+import type {
+	AgentPluginRpcEnvelope,
+	AgentPluginRpcResponse,
+} from '@nexus-terminal/shared/agent/plugins/frontend-events';
+import { AGENT_PLUGIN_MAX_FRONTEND_MESSAGE_BYTES } from '@nexus-terminal/shared/agent/plugins/values';
+import { requestPluginFrontendRpc } from '../api/plugin-runtime-api';
+import { AgentManagementFailure } from '../model/management-failure';
+import type { PluginFrontendDescriptor } from '../model/plugin-types';
 
-const PROTOCOL_VERSION = PLUGIN_FRONTEND_PROTOCOL_VERSION;
-const MAX_IN_FLIGHT = 8;
-const textEncoder = new TextEncoder();
-const allowedMethods = new Set<PluginFrontendRpcMethod>(PLUGIN_FRONTEND_RPC_METHODS);
-const backendMethods = new Set<PluginFrontendRpcMethod>(PLUGIN_FRONTEND_BACKEND_RPC_METHODS);
-const agentMethods = new Set<PluginFrontendRpcMethod>(PLUGIN_FRONTEND_AGENT_RPC_METHODS);
-const binaryMethods = new Set<PluginFrontendRpcMethod>(PLUGIN_FRONTEND_BINARY_RPC_METHODS);
-const mutationMethods = new Set<PluginFrontendRpcMethod>(PLUGIN_FRONTEND_MUTATION_RPC_METHODS);
-const operationIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const maxInFlight = 32;
 
-interface PluginReadyMessage {
-  type: 'nexus.plugin.ready';
-  protocol: typeof PLUGIN_FRONTEND_PROTOCOL_VERSION;
-}
-
-interface PluginAckMessage {
-  type: 'nexus.plugin.ack';
-  protocol: typeof PLUGIN_FRONTEND_PROTOCOL_VERSION;
-  nonce: string;
-  seq: 0;
-}
-
-interface PluginRequestMessage {
-  type: 'nexus.plugin.request';
-  protocol: typeof PLUGIN_FRONTEND_PROTOCOL_VERSION;
-  nonce: string;
-  seq: number;
-  id: string;
-  method: PluginFrontendRpcMethod;
-  params: AgentJsonValueDto;
-}
-
-type PluginPortMessage = PluginAckMessage | PluginRequestMessage;
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const serializedBytes = (value: unknown): number => {
-  try {
-    return textEncoder.encode(JSON.stringify(value)).byteLength;
-  } catch {
-    return Number.POSITIVE_INFINITY;
-  }
-};
-
-const transferBytes = (transfer: readonly Transferable[]): number =>
-  transfer.reduce<number>((total, value) => total + (value instanceof ArrayBuffer ? value.byteLength : 0), 0);
-
-const hasOnlyKeys = (record: Record<string, unknown>, allowed: readonly string[]): boolean =>
-  Object.keys(record).every((key) => allowed.includes(key));
-
-const nonce = (): string => {
-  const bytes = new Uint8Array(24);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
-};
-
-const errorResponse = (request: PluginRequestMessage, code: string, operationId?: string) => ({
-  type: 'nexus.plugin.response' as const,
-  protocol: PROTOCOL_VERSION,
-  nonce: request.nonce,
-  seq: request.seq,
-  id: request.id,
-  ok: false,
-  error: { code, ...(operationId ? { operationId } : {}) },
-});
-
+/** Owns the iframe MessagePort and forwards the current Shared protocol under one expiring grant. */
 export class PluginFrontendHostBridge {
-  private readonly bridgeNonce = nonce();
-  private readonly pending = new Map<string, AbortController>();
-  private readonly agent: PluginAgentSdkDispatcher;
-  private port: MessagePort | null = null;
-  private connected = false;
-  private closed = false;
-  private lastSequence = 0;
-  private handshakeTimer: number | null = null;
-  private resolveHandshake: (() => void) | null = null;
-  private rejectHandshake: ((error: Error) => void) | null = null;
+	private readonly nonce = crypto.randomUUID();
+	private readonly pending = new Map<string, AbortController>();
+	private port: MessagePort | null = null;
+	private lastSequence = 0;
+	private connected = false;
+	private closed = false;
+	private handshake: Promise<void> | null = null;
+	private resolveHandshake: (() => void) | null = null;
+	private rejectHandshake: ((cause: Error) => void) | null = null;
+	private handshakeTimer: ReturnType<typeof setTimeout> | null = null;
+	private expiryTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(
-    private readonly iframe: HTMLIFrameElement,
-    private readonly appId: string,
-    private readonly descriptor: AgentPluginFrontendDescriptorDto,
-    private readonly onDisconnected?: () => void,
-  ) {
-    this.agent = new PluginAgentSdkDispatcher(appId, (event) => this.postRunEvent(event));
-  }
+	constructor(
+		private readonly iframe: HTMLIFrameElement,
+		private readonly descriptor: PluginFrontendDescriptor,
+		private readonly onClosed?: () => void,
+	) {}
 
-  start(): Promise<void> {
-    if (this.closed) return Promise.reject(new Error('PLUGIN_BRIDGE_CLOSED'));
-    if (this.connected) return Promise.resolve();
-    window.addEventListener('message', this.onWindowMessage);
-    return new Promise<void>((resolve, reject) => {
-      this.resolveHandshake = resolve;
-      this.rejectHandshake = reject;
-      this.handshakeTimer = window.setTimeout(() => {
-        this.failHandshake(new Error('PLUGIN_BRIDGE_HANDSHAKE_TIMEOUT'));
-      }, this.descriptor.requestTimeoutMs);
-    });
-  }
+	start(): Promise<void> {
+		if (this.closed) {
+			return Promise.reject(new Error('Plugin bridge closed'));
+		}
+		if (this.handshake) {
+			return this.handshake;
+		}
+		this.handshake = new Promise<void>((resolve, reject) => {
+			this.resolveHandshake = resolve;
+			this.rejectHandshake = reject;
+		});
+		window.addEventListener('message', this.onReady);
+		this.handshakeTimer = setTimeout(() => this.close(), this.descriptor.requestTimeoutMs);
+		this.expiryTimer = setTimeout(
+			() => this.close(),
+			Math.max(0, Math.min(2147483647, this.descriptor.expiresAt - Date.now())),
+		);
+		return this.handshake;
+	}
 
-  close(): void {
-    this.closeInternal(false);
-  }
+	private readonly onReady = (event: MessageEvent<unknown>): void => {
+		if (this.closed || event.source !== this.iframe.contentWindow) {
+			return;
+		}
+		try {
+			const row = agentRecord(event.data, ['type', 'protocol']);
+			if (row.type !== 'nexus.plugin.ready' || row.protocol !== 1) {
+				return;
+			}
+		} catch {
+			return;
+		}
+		if (this.port) {
+			this.close();
+			return;
+		}
+		const channel = new MessageChannel();
+		this.port = channel.port1;
+		this.port.addEventListener('message', this.onMessage);
+		this.port.addEventListener('messageerror', this.onMessageError);
+		this.port.start();
+		try {
+			this.iframe.contentWindow?.postMessage(
+				{ type: 'nexus.plugin.init', protocol: 1, nonce: this.nonce, appId: this.descriptor.appId },
+				'*',
+				[channel.port2],
+			);
+		} catch {
+			channel.port2.close();
+			this.close();
+		}
+	};
 
-  private closeInternal(notifyDisconnected: boolean): void {
-    if (this.closed) return;
-    const wasConnected = this.connected;
-    this.closed = true;
-    window.removeEventListener('message', this.onWindowMessage);
-    if (this.handshakeTimer !== null) window.clearTimeout(this.handshakeTimer);
-    this.handshakeTimer = null;
-    this.agent.close();
-    this.port?.close();
-    this.port = null;
-    for (const controller of this.pending.values()) controller.abort();
-    this.pending.clear();
-    if (!wasConnected) this.rejectHandshake?.(new Error('PLUGIN_BRIDGE_CLOSED'));
-    this.resolveHandshake = null;
-    this.rejectHandshake = null;
-    if (notifyDisconnected && wasConnected) {
-      try {
-        this.onDisconnected?.();
-      } catch {
-        // Lifecycle notification must not escape the transport shutdown path.
-      }
-    }
-  }
+	private readonly onMessageError = (): void => {
+		this.close();
+	};
 
-  private disconnect(): void {
-    this.closeInternal(true);
-  }
+	private readonly onMessage = (event: MessageEvent<unknown>): void => {
+		if (this.closed) {
+			return;
+		}
+		if (!this.connected) {
+			try {
+				const row = agentRecord(event.data, ['type', 'protocol', 'nonce', 'seq']);
+				if (
+					row.type !== 'nexus.plugin.ack' ||
+					row.protocol !== 1 ||
+					row.nonce !== this.nonce ||
+					row.seq !== 0
+				) {
+					throw new Error('Invalid plugin handshake');
+				}
+				this.connected = true;
+				if (this.handshakeTimer) {
+					clearTimeout(this.handshakeTimer);
+					this.handshakeTimer = null;
+				}
+				this.resolveHandshake?.();
+				this.resolveHandshake = null;
+				this.rejectHandshake = null;
+			} catch {
+				this.close();
+			}
+			return;
+		}
+		let request: AgentPluginRpcEnvelope;
+		try {
+			encodeAgentJson(event.data, this.descriptor.maxMessageBytes);
+			request = readAgentPluginRpcEnvelope(event.data);
+			if (
+				request.nonce !== this.nonce ||
+				request.seq <= this.lastSequence ||
+				this.pending.has(request.id) ||
+				this.descriptor.expiresAt <= Date.now()
+			) {
+				throw new Error('Invalid plugin sequence or identity');
+			}
+			this.lastSequence = request.seq;
+		} catch {
+			this.close();
+			return;
+		}
+		if (this.pending.size >= maxInFlight) {
+			this.post(this.failure(request, 'limit_exceeded'));
+			return;
+		}
+		const abort = new AbortController();
+		this.pending.set(request.id, abort);
+		void this.dispatch(request, abort);
+	};
 
-  private readonly onWindowMessage = (event: MessageEvent<unknown>): void => {
-    if (this.closed || this.connected || this.port) return;
-    const source = this.iframe.contentWindow;
-    if (!source || event.source !== source || event.origin !== 'null') return;
-    if (!isRecord(event.data) || event.data.type !== 'nexus.plugin.ready' || event.data.protocol !== PROTOCOL_VERSION)
-      return;
-    const ready = event.data as unknown as PluginReadyMessage;
-    if (ready.protocol !== PROTOCOL_VERSION) return;
+	private failure(
+		request: AgentPluginRpcEnvelope,
+		code: 'limit_exceeded' | 'invalid_input' | 'operation_unknown',
+	): AgentPluginRpcResponse {
+		return {
+			type: 'nexus.plugin.response',
+			protocol: 1,
+			nonce: request.nonce,
+			id: request.id,
+			seq: request.seq,
+			ok: false,
+			error: { code },
+		};
+	}
 
-    const channel = new MessageChannel();
-    this.port = channel.port1;
-    this.port.addEventListener('message', this.onPortMessage);
-    this.port.addEventListener('messageerror', this.onPortError);
-    this.port.start();
-    source.postMessage({ type: 'nexus.plugin.init', protocol: PROTOCOL_VERSION, nonce: this.bridgeNonce }, '*', [
-      channel.port2,
-    ]);
-  };
+	private async dispatch(request: AgentPluginRpcEnvelope, abort: AbortController): Promise<void> {
+		try {
+			const result = await requestPluginFrontendRpc(this.descriptor, request, abort.signal);
+			if (!this.closed && !abort.signal.aborted && this.pending.get(request.id) === abort) {
+				this.post(result);
+			}
+		} catch (cause) {
+			if (!this.closed && !abort.signal.aborted && this.pending.get(request.id) === abort) {
+				const failure = cause instanceof AgentManagementFailure ? cause : null;
+				this.post(
+					this.failure(
+						request,
+						failure?.outcome === 'not_dispatched' ? 'invalid_input' : 'operation_unknown',
+					),
+				);
+			}
+		} finally {
+			if (this.pending.get(request.id) === abort) {
+				this.pending.delete(request.id);
+			}
+		}
+	}
 
-  private readonly onPortError = (): void => {
-    this.disconnect();
-  };
+	private post(value: AgentPluginRpcResponse): void {
+		if (this.closed || !this.connected || this.descriptor.expiresAt <= Date.now()) {
+			return;
+		}
+		try {
+			encodeAgentJson(value, Math.min(this.descriptor.maxMessageBytes, AGENT_PLUGIN_MAX_FRONTEND_MESSAGE_BYTES));
+			this.port?.postMessage(value);
+		} catch {
+			this.close();
+		}
+	}
 
-  private readonly onPortMessage = (event: MessageEvent<unknown>): void => {
-    if (this.closed || !this.port || serializedBytes(event.data) > this.descriptor.maxMessageBytes) {
-      this.disconnect();
-      return;
-    }
-    if (!isRecord(event.data) || event.data.protocol !== PROTOCOL_VERSION || event.data.nonce !== this.bridgeNonce) {
-      this.disconnect();
-      return;
-    }
-
-    if (!this.connected) {
-      if (event.data.type !== 'nexus.plugin.ack' || event.data.seq !== 0) {
-        this.disconnect();
-        return;
-      }
-      this.connected = true;
-      window.removeEventListener('message', this.onWindowMessage);
-      if (this.handshakeTimer !== null) window.clearTimeout(this.handshakeTimer);
-      this.handshakeTimer = null;
-      this.resolveHandshake?.();
-      this.resolveHandshake = null;
-      this.rejectHandshake = null;
-      return;
-    }
-
-    if (event.data.type !== 'nexus.plugin.request') return;
-    const message = event.data as unknown as PluginPortMessage;
-    if (!('method' in message) || !this.validRequest(message)) {
-      this.disconnect();
-      return;
-    }
-    this.lastSequence = message.seq;
-    void this.forward(message);
-  };
-
-  private validRequest(message: PluginRequestMessage): boolean {
-    return (
-      Number.isSafeInteger(message.seq) &&
-      message.seq === this.lastSequence + 1 &&
-      typeof message.id === 'string' &&
-      message.id.length > 0 &&
-      message.id.length <= 128 &&
-      !this.pending.has(message.id) &&
-      allowedMethods.has(message.method) &&
-      (!mutationMethods.has(message.method) || operationIdPattern.test(message.id)) &&
-      serializedBytes(message.params) <= this.descriptor.maxMessageBytes
-    );
-  }
-
-  private async forward(request: PluginRequestMessage): Promise<void> {
-    if (!this.port) return;
-    if (this.pending.size >= MAX_IN_FLIGHT) {
-      this.post(errorResponse(request, 'HOST_RPC_BUSY'));
-      return;
-    }
-    const controller = new AbortController();
-    const isMutation = mutationMethods.has(request.method);
-    this.pending.set(request.id, controller);
-    let timer: number | null = null;
-    try {
-      const execution = (async (): Promise<{ result: unknown; transfer: Transferable[] }> => {
-        if (backendMethods.has(request.method)) {
-          return {
-            result: await agentApi.pluginFrontendRpc(
-              this.appId,
-              this.descriptor.version,
-              request.method as PluginFrontendBackendRpcMethod,
-              request.params,
-              isMutation ? request.id : undefined,
-              controller.signal,
-            ),
-            transfer: [],
-          };
-        }
-        if (agentMethods.has(request.method)) {
-          await this.assertDescriptorVersion(controller.signal);
-          if (this.closed) throw new Error('PLUGIN_BRIDGE_CLOSED');
-          return {
-            result: await this.agent.dispatch(
-              request.method as PluginFrontendAgentRpcMethod,
-              request.params,
-              isMutation ? request.id : undefined,
-            ),
-            transfer: [],
-          };
-        }
-        if (binaryMethods.has(request.method)) {
-          await this.assertDescriptorVersion(controller.signal);
-          if (this.closed) throw new Error('PLUGIN_BRIDGE_CLOSED');
-          const binary = await this.dispatchBinary(
-            request.method as PluginFrontendBinaryRpcMethod,
-            request.params,
-            controller.signal,
-          );
-          return { result: binary.result, transfer: binary.transfer };
-        }
-        throw new Error('PLUGIN_FRONTEND_RPC_METHOD_DENIED');
-      })().then(
-        (value) => ({ kind: 'result' as const, value }),
-        (cause: unknown) => ({ kind: 'error' as const, cause }),
-      );
-      const timeout = new Promise<{ kind: 'timeout' }>((resolve) => {
-        timer = window.setTimeout(() => {
-          resolve({ kind: 'timeout' });
-          controller.abort();
-        }, this.descriptor.requestTimeoutMs);
-      });
-      const outcome = await Promise.race([execution, timeout]);
-      if (outcome.kind === 'timeout') {
-        this.post(
-          errorResponse(
-            request,
-            isMutation ? 'HOST_RPC_OUTCOME_UNKNOWN' : 'HOST_RPC_TIMEOUT',
-            isMutation ? request.id : undefined,
-          ),
-        );
-        return;
-      }
-      if (outcome.kind === 'error') {
-        const cause = outcome.cause;
-        const apiError = toAgentApiError(cause);
-        const code =
-          cause instanceof Error && /^PLUGIN_[A-Z0-9_]+$/.test(cause.message)
-            ? cause.message
-            : /^(?:APP_INTENT_|PLUGIN_FRONTEND_)[A-Z0-9_]+$/.test(apiError.code)
-              ? apiError.code
-              : 'HOST_RPC_FAILED';
-        this.post(errorResponse(request, code));
-        if (code === 'PLUGIN_FRONTEND_VERSION_STALE') this.disconnect();
-        return;
-      }
-      const { result, transfer } = outcome.value;
-      const response = {
-        type: 'nexus.plugin.response' as const,
-        protocol: PROTOCOL_VERSION,
-        nonce: this.bridgeNonce,
-        seq: request.seq,
-        id: request.id,
-        ok: true,
-        result,
-      };
-      if (serializedBytes(response) + transferBytes(transfer) > this.descriptor.maxMessageBytes) {
-        this.post(errorResponse(request, 'HOST_RPC_RESPONSE_TOO_LARGE'));
-      } else {
-        this.post(response, transfer);
-      }
-    } finally {
-      if (timer !== null) window.clearTimeout(timer);
-      this.pending.delete(request.id);
-    }
-  }
-
-  private async assertDescriptorVersion(signal: AbortSignal): Promise<void> {
-    await agentApi.pluginFrontendRpc(this.appId, this.descriptor.version, 'host.appInfo', {}, undefined, signal);
-  }
-
-  private async dispatchBinary(
-    method: PluginFrontendBinaryRpcMethod,
-    params: AgentJsonValueDto,
-    signal: AbortSignal,
-  ): Promise<{ result: ArrayBuffer; transfer: Transferable[] }> {
-    if (method !== 'intents.artifacts.readRange' || !isRecord(params)) {
-      throw new Error('PLUGIN_FRONTEND_RPC_INVALID');
-    }
-    if (!hasOnlyKeys(params, ['receiptId', 'artifactId', 'start', 'endInclusive'])) {
-      throw new Error('PLUGIN_FRONTEND_RPC_INVALID');
-    }
-    if (
-      typeof params.receiptId !== 'string' ||
-      typeof params.artifactId !== 'string' ||
-      !Number.isSafeInteger(params.start) ||
-      !Number.isSafeInteger(params.endInclusive)
-    ) {
-      throw new Error('PLUGIN_FRONTEND_RPC_INVALID');
-    }
-    const start = Number(params.start);
-    const endInclusive = Number(params.endInclusive);
-    const expectedBytes = endInclusive - start + 1;
-    if (start < 0 || endInclusive < start || expectedBytes > PLUGIN_APP_INTENT_ARTIFACT_CHUNK_BYTES) {
-      throw new Error('PLUGIN_FRONTEND_RPC_INVALID');
-    }
-    const content = await agentApi.readReceivedAppIntentArtifactRange(
-      this.appId,
-      params.receiptId,
-      params.artifactId,
-      start,
-      endInclusive,
-      signal,
-    );
-    if (content.byteLength !== expectedBytes || content.byteLength > PLUGIN_APP_INTENT_ARTIFACT_CHUNK_BYTES) {
-      throw new Error('APP_INTENT_ARTIFACT_RANGE_INVALID');
-    }
-    return { result: content, transfer: [content] };
-  }
-
-  private postRunEvent(event: PluginFrontendRunEvent): void {
-    this.post({
-      type: 'nexus.plugin.event',
-      protocol: PROTOCOL_VERSION,
-      nonce: this.bridgeNonce,
-      channel: 'agent.run',
-      ...event,
-    });
-  }
-
-  private post(message: unknown, transfer: Transferable[] = []): void {
-    if (
-      !this.closed &&
-      this.port &&
-      serializedBytes(message) + transferBytes(transfer) <= this.descriptor.maxMessageBytes
-    ) {
-      try {
-        this.port.postMessage(message, transfer);
-      } catch {
-        this.disconnect();
-      }
-    }
-  }
-
-  private failHandshake(error: Error): void {
-    this.rejectHandshake?.(error);
-    this.resolveHandshake = null;
-    this.rejectHandshake = null;
-    this.close();
-  }
+	close(): void {
+		if (this.closed) {
+			return;
+		}
+		this.closed = true;
+		window.removeEventListener('message', this.onReady);
+		if (this.handshakeTimer) {
+			clearTimeout(this.handshakeTimer);
+			this.handshakeTimer = null;
+		}
+		if (this.expiryTimer) {
+			clearTimeout(this.expiryTimer);
+			this.expiryTimer = null;
+		}
+		for (const abort of this.pending.values()) {
+			abort.abort();
+		}
+		this.pending.clear();
+		this.port?.removeEventListener('message', this.onMessage);
+		this.port?.removeEventListener('messageerror', this.onMessageError);
+		this.port?.close();
+		this.port = null;
+		this.rejectHandshake?.(new Error('Plugin bridge closed'));
+		this.resolveHandshake = null;
+		this.rejectHandshake = null;
+		this.onClosed?.();
+	}
 }

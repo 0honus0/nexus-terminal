@@ -7,13 +7,14 @@
       "selectFiles": "选择文件（任意类型）"
     },
     "start": {
-      "title": "连接与会话",
+      "title": "新建会话",
       "description": "恢复挂起会话，或选择连接开启新的终端。",
       "connections": "发起连接",
       "back": "返回当前终端"
     },
     "terminal": {
-      "reconnectingMsg": "正在尝试重新连接..."
+      "reconnectingMsg": "正在尝试重新连接...",
+      "ownershipUnknown": "连接所有权结果未知，已停止自动重试。请关闭此标签后重新建立连接；这不表示原远端进程已停止。"
     },
     "title": "工作区",
     "sessions": "{count} 个会话",
@@ -77,8 +78,9 @@
     "emptyContainer": "空容器"
   },
   "commandInputBar": {
-    "desktopPlaceholder": "命令",
-    "placeholder": "输入命令后回车",
+    "commandLabel": "终端命令",
+    "searchLabel": "在终端中搜索",
+    "moreActions": "更多命令操作",
     "searchPlaceholder": "在终端中搜索...",
     "openSearch": "打开终端搜索",
     "closeSearch": "关闭终端搜索",

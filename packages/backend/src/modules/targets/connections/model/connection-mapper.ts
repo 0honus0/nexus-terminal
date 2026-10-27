@@ -1,0 +1,99 @@
+import type { ConnectionData, StoredConnection, StoredSshGraphSnapshot } from '../storage/connection-storage.js';
+import type {
+	ConnectionMetadata,
+	ConnectionSnapshot,
+	ConnectionRelationshipFacts,
+	SshGraphSnapshot,
+} from './connection-types.js';
+
+export function fromStoredRelationships(value: ConnectionData): ConnectionRelationshipFacts {
+	return {
+		type: value.type,
+		route: value.route,
+		proxyId: value.proxyId,
+		jumpIds: value.jumpIds.map((id) => id),
+		tagIds: value.tagIds.map((id) => id),
+	};
+}
+
+export function fromStoredGraph(value: StoredSshGraphSnapshot): SshGraphSnapshot {
+	return {
+		nodes: value.nodes.map((node) => ({ id: node.id, type: node.type, route: node.route })),
+		edges: value.edges.map((edge) => ({
+			connectionId: edge.connectionId,
+			position: edge.position,
+			jumpConnectionId: edge.jumpConnectionId,
+		})),
+	};
+}
+
+/** Explicit application/storage projection, even while field representations match. */
+export function toStorage(value: ConnectionMetadata): ConnectionData {
+	return {
+		name: value.name,
+		type: value.type,
+		host: value.host,
+		port: value.port,
+		username: value.username,
+		route: value.route,
+		proxyId: value.proxyId,
+		notes: value.notes,
+		tagIds: [...value.tagIds],
+		jumpIds: [...value.jumpIds],
+	};
+}
+
+export function fromStorage(value: StoredConnection): ConnectionSnapshot {
+	return {
+		id: value.id,
+		version: value.version,
+		createdAt: value.createdAt,
+		updatedAt: value.updatedAt,
+		lastConnectedAt: value.lastConnectedAt,
+		name: value.name,
+		type: value.type,
+		host: value.host,
+		port: value.port,
+		username: value.username,
+		route: value.route,
+		proxyId: value.proxyId,
+		notes: value.notes,
+		tagIds: [...value.tagIds],
+		jumpIds: [...value.jumpIds],
+	};
+}
+
+export function toStoragePatch(changes: Partial<ConnectionMetadata>): Partial<ConnectionData> {
+	const patch: Partial<ConnectionData> = {};
+	if (changes.name !== undefined) {
+		patch.name = changes.name;
+	}
+	if (changes.type !== undefined) {
+		patch.type = changes.type;
+	}
+	if (changes.host !== undefined) {
+		patch.host = changes.host;
+	}
+	if (changes.port !== undefined) {
+		patch.port = changes.port;
+	}
+	if (changes.username !== undefined) {
+		patch.username = changes.username;
+	}
+	if (changes.route !== undefined) {
+		patch.route = changes.route;
+	}
+	if (changes.proxyId !== undefined) {
+		patch.proxyId = changes.proxyId;
+	}
+	if (changes.notes !== undefined) {
+		patch.notes = changes.notes;
+	}
+	if (changes.tagIds !== undefined) {
+		patch.tagIds = [...changes.tagIds];
+	}
+	if (changes.jumpIds !== undefined) {
+		patch.jumpIds = [...changes.jumpIds];
+	}
+	return patch;
+}

@@ -25,8 +25,11 @@
     "logging": {
       "title": "ログレベル",
       "frontendLabel": "フロントエンドのログレベル:",
+      "frontendTitle": "フロントエンドのログレベル",
       "backendLabel": "バックエンドのログレベル:",
-      "description": "診断とパフォーマンス調査用です。DEBUG/TRACE では詳細な実行情報を出力し、パフォーマンス統計は DEBUG または TRACE の場合のみ出力します。変更はすぐに反映されます。"
+      "backendTitle": "バックエンドのログレベル",
+      "description": "診断とパフォーマンス調査用です。DEBUG/TRACE では詳細な実行情報を出力し、パフォーマンス統計は DEBUG または TRACE の場合のみ出力します。変更はすぐに反映されます。",
+      "effective": "現在の有効レベル: {level}"
     },
     "popupEditor": {
       "title": "ポップアップファイルエディター",
@@ -55,7 +58,7 @@
     "language": {
       "title": "言語設定",
       "selectLabel": "インターフェース言語:",
-      "saveButton": "言語を保存",
+      "saveButton": "保存",
       "success": {
         "saved": "言語設定を保存しました。"
       },
@@ -113,6 +116,13 @@
       "showQuickCommandTagsTitle": "クイックコマンドタグを表示",
       "showQuickCommandTagsLabel": "クイックコマンドリストにタグを表示",
       "showQuickCommandTagsDescription": "無効にすると、クイックコマンドリストのタグが非表示になり、検索から除外されます。",
+      "workspaceTabButtons": {
+        "title": "ターミナル右上のボタン",
+        "suspendedSessions": "保留セッション",
+        "headerToggle": "ヘッダー表示",
+        "progress": "進捗転送",
+        "layoutConfigurator": "レイアウト設定"
+      },
       "quickCommandsCollapsibleSearchTitle": "クイックコマンド検索",
       "quickCommandsCollapsibleSearchLabel": "検索ボックスを既定で検索ボタンに折りたたむ",
       "quickCommandsCollapsibleSearchDescription": "既定では無効です。有効にすると、クイックコマンドパネルには検索ボタンだけが表示され、クリックすると検索ボックスが展開されます。",
@@ -152,9 +162,7 @@
         "commands": "ターミナルとコマンド",
         "commandsHint": "ターミナル操作、コマンドパネル、タグ、表示密度。",
         "monitoring": "ダッシュボードと監視",
-        "monitoringHint": "ローカル/リモートリソース、更新間隔、状態監視、Docker。",
-        "advanced": "レイアウトと詳細設定",
-        "advancedHint": "利用頻度の低いワークスペースのレイアウト設定。"
+        "monitoringHint": "ローカル/リモートリソース、更新間隔、状態監視、Docker。"
       }
     },
     "statusMonitorShowIp": {
@@ -206,6 +214,32 @@
       "loadFailed": "設定の読み込みに失敗しました: {error}",
       "saved": "設定を保存しました。",
       "saveFailed": "設定の保存に失敗しました: {error}"
+    },
+    "monitoring": {
+      "title": "監視の基本設定",
+      "hint": "管理者のみ変更できます。周期は1～86400秒で、保存時に適用されます。実行中の測定は完了後に新しい間隔を使用します。表示切替はリモート測定を変更しません。",
+      "effective": "現在有効：測定間隔 {status}秒 · ホストキャッシュTTL／概要更新 {host}秒",
+      "status": "測定間隔（秒）",
+      "host": "ホストキャッシュTTL／概要更新（秒）",
+      "secondsUnit": "秒",
+      "refresh": "読み取り専用で再読込して確認",
+      "feedback": {
+        "saved": "保存して適用しました。",
+        "conflict": "設定バージョンが競合しました。再読込して確認後に保存してください。",
+        "unknown": "結果を確認できません。保存を繰り返さず、再読込して確認してください。",
+        "invalid_input": "範囲内の整数周期を入力してください。",
+        "unauthenticated": "セッションが失効しました。再ログインしてください。",
+        "forbidden": "基本設定は管理者のみ表示・変更できます。",
+        "version_conflict": "バージョンが競合しました。再読込して確認してください。",
+        "limit_exceeded": "設定の容量上限を超えました。",
+        "storage_unavailable": "ストレージを利用できません。読み取り専用で確認してください。",
+        "operation_unknown": "保存結果が不明です。読み取り専用で確認してください。",
+        "internal_failure": "設定サービスに異常が発生しました。再読込して確認してください。",
+        "unavailable": "設定を利用できません。再読込してください。",
+        "request_failed": "読み取りに失敗しました。再読込してください。",
+        "protocol_failure": "応答が無効です。再読込してください。",
+        "cancelled": "リクエストを中止しました。再読込してください。"
+      }
     }
   }
 }

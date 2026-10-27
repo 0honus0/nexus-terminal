@@ -1,317 +1,399 @@
-import type { WorkspaceSuspendAutoTerminatedEventDto } from '@nexus-terminal/protocol/workspace';
-import { computed, ref, type ComputedRef, type Ref } from 'vue';
+import type { SuspendedAutoTermination } from '../model/suspended-session-types';
+import { computed, ref, shallowRef } from 'vue';
+import type { SuspendedRemovalDisposition } from '@nexus-terminal/shared/remote/suspend/values';
 import { defineStore, storeToRefs } from 'pinia';
-import { apiErrorMessage, apiErrorStatus } from '@/client/http';
-import { logger } from '@/client/logging/logger';
 import { registerAuthenticatedSessionReset } from '@/shared/session/public';
-import { sshSuspendApi } from '../api/sshSuspendApi';
-import type { SuspendedSessionDto } from '../model/sshSuspend';
-export type { WorkspaceSuspendAutoTerminatedEventDto };
+import { suspendedSessionsApi } from '../api/suspended-sessions-api';
+import { subscribeSuspendedCatalog } from '../api/suspended-catalog-stream';
+import { SuspendedRequestFailure } from '../model/suspended-session-types';
+import type {
+	SuspendedSession,
+	SuspendedSessionsController,
+	SuspendedSessionsLoadOptions,
+	SuspendedSessionsLoadResult,
+} from '../model/suspended-session-types';
 
-const BASE_POLL_MS = 1_500;
-const IDLE_POLL_MS = 10_000;
-const MAX_POLL_MS = 60_000;
-const ERROR_POLL_MS = 10_000;
-const HANDOFF_REFRESH_DELAYS_MS = [0, 120, 300, 650, 1_200] as const;
+import type { SuspendedAutoTerminationViewModel } from '../model/suspended-session-types';
 
-export type SuspendedAutoTerminationViewModel = WorkspaceSuspendAutoTerminatedEventDto & {
-  name?: string;
-};
-
-export interface SuspendedSessionsLoadOptions {
-  silent?: boolean;
-  force?: boolean;
-}
-
-export interface SuspendedSessionsLoadResult {
-  ok: boolean;
-  status?: number;
-}
-
-export interface SuspendedSessionsController {
-  sessions: Ref<SuspendedSessionDto[]>;
-  search: Ref<string>;
-  loading: Ref<boolean>;
-  error: Ref<string | null>;
-  filtered: ComputedRef<SuspendedSessionDto[]>;
-  load(options?: SuspendedSessionsLoadOptions): Promise<SuspendedSessionsLoadResult>;
-  startPolling(): void;
-  stopPolling(): void;
-  rename(session: SuspendedSessionDto, name: string): Promise<string>;
-  remove(session: SuspendedSessionDto): Promise<void>;
-  exportLog(id: string): Promise<string>;
+export function suspendedFailureKey(cause: unknown, operation: 'read' | 'mutation' = 'mutation'): string {
+	if (!(cause instanceof SuspendedRequestFailure)) {
+		return 'sshSuspend.errors.request_failed';
+	}
+	if (operation === 'read' && (cause.code === 'operation_unknown' || cause.code === 'internal_failure')) {
+		return 'sshSuspend.errors.read_failed';
+	}
+	return (
+		'sshSuspend.errors.' +
+		(operation === 'mutation' && cause.outcome === 'unknown' ? 'operation_unknown' : cause.code)
+	);
 }
 
 export const useSuspendedSessionsStore = defineStore('suspended-sessions', () => {
-  const sessions = ref<SuspendedSessionDto[]>([]);
-  const loading = ref(false);
-  const error = ref<string | null>(null);
-  let loaded = false;
-  let catalogGeneration = 0;
-  let loadPromise: Promise<{ ok: boolean; status?: number }> | null = null;
-  let pollTimer: number | undefined;
-  let pollIntervalMs = BASE_POLL_MS;
-  let pollConsumers = 0;
-  let handoffRefreshSequence = 0;
-  const handoffRefreshes = new Map<string, number>();
+	const sessions = ref<SuspendedSession[]>([]);
+	const loading = ref(false);
+	const error = ref<string | null>(null);
+	const errorCause = shallowRef<unknown>();
+	const blockedIds = ref(new Set<string>());
+	let epoch = 0;
+	let generation = 0;
+	let unknownRevision = 0;
+	let loaded = false;
+	let readPromise: Promise<SuspendedSessionsLoadResult> | null = null;
+	let readController: AbortController | null = null;
+	let refreshQueued = false;
+	let stopStream: (() => void) | undefined;
+	let streamRevision = 0;
+	const syncOwners = new Set<symbol>();
+	const writes = new Map<string, AbortController>();
+	const downloads = new Set<AbortController>();
+	const handledAutoTerminations = new Set<string>();
 
-  const handledAutoTerminations = new Set<string>();
-  const handledAutoTerminationOrder: string[] = [];
+	function invalidate(): void {
+		generation += 1;
+		readController?.abort();
+	}
 
-  function applySuspendedAutoTermination(
-    event: WorkspaceSuspendAutoTerminatedEventDto,
-  ): SuspendedAutoTerminationViewModel | null {
-    const id = event.suspendedSessionId.trim();
-    if (!id || handledAutoTerminations.has(id)) return null;
-    handledAutoTerminations.add(id);
-    handledAutoTerminationOrder.push(id);
-    while (handledAutoTerminationOrder.length > 128) {
-      const oldest = handledAutoTerminationOrder.shift();
-      if (oldest) handledAutoTerminations.delete(oldest);
-    }
-    const session = sessions.value.find((item) => item.id === id);
-    if (!session) {
-      logger.debug(
-        { suspendedSessionId: id, reason: event.reason, failureKind: 'suspended_session_not_found_in_catalog' },
-        'Suspended Workspace auto-termination referenced an unknown catalog session',
-      );
-    }
-    return {
-      suspendedSessionId: id,
-      reason: event.reason,
-      ...(session ? { name: session.customName ?? session.connectionName } : {}),
-    };
-  }
+	function applySuspendedAutoTermination(event: SuspendedAutoTermination): SuspendedAutoTerminationViewModel | null {
+		if (handledAutoTerminations.has(event.suspendedSessionId)) {
+			return null;
+		}
+		handledAutoTerminations.add(event.suspendedSessionId);
+		if (handledAutoTerminations.size > 128) {
+			const first = handledAutoTerminations.values().next();
+			if (!first.done) {
+				handledAutoTerminations.delete(first.value);
+			}
+		}
+		const session = sessions.value.find((item) => item.id === event.suspendedSessionId);
+		return {
+			suspendedSessionId: event.suspendedSessionId,
+			reason: event.reason,
+			name: session?.customName ?? session?.connectionName,
+		};
+	}
 
-  const load = async (options: SuspendedSessionsLoadOptions = {}): Promise<SuspendedSessionsLoadResult> => {
-    if (loaded && !options.force && !options.silent) return { ok: true };
-    if (loadPromise) {
-      const pending = loadPromise;
-      if (!options.force) return pending;
-      await pending;
-      if (loadPromise) return loadPromise;
-    }
+	function load(options: SuspendedSessionsLoadOptions = {}): Promise<SuspendedSessionsLoadResult> {
+		if (readPromise) {
+			if (options.force) {
+				invalidate();
+				refreshQueued = true;
+			}
+			return readPromise;
+		}
+		if (loaded && !options.force && !options.silent) {
+			return Promise.resolve({ ok: true });
+		}
+		const currentEpoch = epoch;
+		loading.value = !loaded && !options.silent;
+		const pending = Promise.resolve()
+			.then(async () => {
+				let result: SuspendedSessionsLoadResult = { ok: false };
+				do {
+					result = { ok: false };
+					refreshQueued = false;
+					if (currentEpoch !== epoch) {
+						return { ok: false };
+					}
+					const current = generation;
+					const controller = new AbortController();
+					readController = controller;
+					try {
+						const incoming = await suspendedSessionsApi.list(controller.signal);
+						if (currentEpoch !== epoch || current !== generation) {
+							continue;
+						}
+						sessions.value = incoming;
+						loaded = true;
+						if (!blockedIds.value.size) {
+							errorCause.value = undefined;
+							error.value = null;
+						}
+						result = { ok: true };
+					} catch (cause) {
+						if (currentEpoch === epoch && current === generation && !controller.signal.aborted) {
+							if (!blockedIds.value.size) {
+								errorCause.value = cause;
+								error.value = suspendedFailureKey(cause, 'read');
+							}
+							result = {
+								ok: false,
+								status: cause instanceof SuspendedRequestFailure ? cause.status : undefined,
+							};
+						}
+					}
+				} while (currentEpoch === epoch && refreshQueued);
+				return result;
+			})
+			.finally(() => {
+				if (currentEpoch === epoch && readPromise === pending) {
+					readPromise = null;
+					readController = null;
+					loading.value = false;
+				}
+			});
+		readPromise = pending;
+		return pending;
+	}
 
-    const generation = catalogGeneration;
-    loadPromise = (async () => {
-      if (!options.silent) {
-        // Refreshing a shared, already-loaded catalog must not replace its cards
-        // with a loading placeholder when another layout mounts the panel.
-        loading.value = !loaded;
-        error.value = null;
-      }
-      try {
-        const incoming = await sshSuspendApi.list();
-        if (generation !== catalogGeneration) return { ok: true };
-        sessions.value = incoming;
-        loaded = true;
-        if (!options.silent) error.value = null;
-        return { ok: true };
-      } catch (cause) {
-        const status = apiErrorStatus(cause);
-        logger.debug(
-          {
-            err: cause,
-            status,
-            silent: Boolean(options.silent),
-            force: Boolean(options.force),
-            failureKind: status === 404 ? 'suspended_catalog_not_found' : 'suspended_catalog_load_failed',
-          },
-          'Suspended Workspace catalog load failed',
-        );
-        if (generation === catalogGeneration && !options.silent)
-          error.value = apiErrorMessage(cause, 'Failed to load suspended SSH sessions.');
-        return { ok: false, status };
-      } finally {
-        if (generation === catalogGeneration && !options.silent) loading.value = false;
-        if (generation === catalogGeneration) loadPromise = null;
-      }
-    })();
+	function resetSuspendedSessionsCatalog(): void {
+		epoch += 1;
+		invalidate();
+		for (const controller of [...writes.values(), ...downloads]) {
+			controller.abort();
+		}
+		writes.clear();
+		downloads.clear();
+		syncOwners.clear();
+		stopStream?.();
+		stopStream = undefined;
+		loaded = false;
+		readPromise = null;
+		readController = null;
+		refreshQueued = false;
+		sessions.value = [];
+		loading.value = false;
+		error.value = null;
+		errorCause.value = undefined;
+		blockedIds.value = new Set();
+		handledAutoTerminations.clear();
+	}
 
-    return loadPromise;
-  };
+	async function mutation<T>(
+		session: SuspendedSession,
+		work: (signal: AbortSignal) => Promise<T>,
+		apply: (value: T) => void,
+		signal?: AbortSignal,
+	): Promise<T> {
+		if (signal?.aborted) {
+			throw new SuspendedRequestFailure('cancelled', 'not_dispatched');
+		}
+		if (writes.has(session.id) || blockedIds.value.has(session.id)) {
+			throw new SuspendedRequestFailure('conflict', 'not_dispatched');
+		}
+		const currentEpoch = epoch;
+		const controller = new AbortController();
+		writes.set(session.id, controller);
+		const revision = streamRevision;
+		invalidate();
+		try {
+			const value = await work(signal ? AbortSignal.any([controller.signal, signal]) : controller.signal);
+			if (currentEpoch === epoch) {
+				invalidate();
+				if (revision === streamRevision) {
+					apply(value);
+				}
+			}
+			return value;
+		} catch (cause) {
+			if (currentEpoch === epoch) {
+				if (!(cause instanceof SuspendedRequestFailure) || cause.outcome === 'unknown') {
+					unknownRevision += 1;
+					blockedIds.value.add(session.id);
+				}
+				errorCause.value = undefined;
+				error.value = blockedIds.value.size
+					? 'sshSuspend.errors.operation_unknown'
+					: suspendedFailureKey(cause);
+			}
+			throw cause;
+		} finally {
+			if (currentEpoch === epoch && writes.get(session.id) === controller) {
+				writes.delete(session.id);
+			}
+		}
+	}
 
-  const resetSuspendedSessionsCatalog = (): void => {
-    catalogGeneration += 1;
-    handoffRefreshSequence += 1;
-    handoffRefreshes.clear();
-    if (pollTimer !== undefined) window.clearTimeout(pollTimer);
-    pollTimer = undefined;
-    pollConsumers = 0;
-    pollIntervalMs = BASE_POLL_MS;
-    loaded = false;
-    loadPromise = null;
-    sessions.value = [];
-    loading.value = false;
-    error.value = null;
-    handledAutoTerminations.clear();
-    handledAutoTerminationOrder.length = 0;
-  };
+	function removeSuspendedSessionFromCatalog(id: string): void {
+		invalidate();
+		sessions.value = sessions.value.filter((session) => session.id !== id);
+	}
 
-  const refreshSuspendedSessionsCatalog = (): Promise<{ ok: boolean; status?: number }> =>
-    load({ silent: true, force: true });
+	function rename(session: SuspendedSession, name: string, signal?: AbortSignal): Promise<string> {
+		return mutation(
+			session,
+			(active) => suspendedSessionsApi.rename(session.id, name, active),
+			(value) => {
+				const current = sessions.value.find((item) => item.id === session.id);
+				if (current) {
+					current.customName = value || undefined;
+				}
+			},
+			signal,
+		);
+	}
 
-  const removeSuspendedSessionFromCatalog = (id: string): void => {
-    sessions.value = sessions.value.filter((session) => session.id !== id);
-  };
+	function remove(session: SuspendedSession, signal?: AbortSignal): Promise<SuspendedRemovalDisposition> {
+		return mutation(
+			session,
+			(token) => suspendedSessionsApi.remove(session.id, token),
+			() => removeSuspendedSessionFromCatalog(session.id),
+			signal,
+		);
+	}
 
-  const refreshSuspendedSessionsAfterHandoff = (workspaceId: string): void => {
-    const normalizedWorkspaceId = workspaceId.trim();
-    if (!normalizedWorkspaceId) return;
-    const sequence = ++handoffRefreshSequence;
-    handoffRefreshes.set(normalizedWorkspaceId, sequence);
+	/** Explicit user read-back; polling never grants permission to repeat an unknown intent. */
+	async function recover(): Promise<SuspendedSessionsLoadResult> {
+		const currentEpoch = epoch;
+		const revision = unknownRevision;
+		const result = await load({ force: true });
+		if (result.ok && currentEpoch === epoch && revision === unknownRevision && writes.size === 0) {
+			blockedIds.value.clear();
+			errorCause.value = undefined;
+			error.value = null;
+		}
+		return result;
+	}
 
-    void (async () => {
-      let previousDelay = 0;
-      for (const delay of HANDOFF_REFRESH_DELAYS_MS) {
-        if (handoffRefreshes.get(normalizedWorkspaceId) !== sequence) return;
-        const waitMs = delay - previousDelay;
-        previousDelay = delay;
-        if (waitMs > 0) await new Promise((resolve) => window.setTimeout(resolve, waitMs));
-        if (handoffRefreshes.get(normalizedWorkspaceId) !== sequence) return;
+	function startSync(): () => void {
+		const owner = Symbol();
+		syncOwners.add(owner);
+		if (!stopStream) {
+			const currentEpoch = epoch;
+			loading.value = !loaded;
+			stopStream = subscribeSuspendedCatalog(
+				(incoming) => {
+					if (currentEpoch !== epoch || !syncOwners.size) {
+						return;
+					}
+					streamRevision += 1;
+					invalidate();
+					sessions.value = incoming;
+					loaded = true;
+					loading.value = false;
+					if (!blockedIds.value.size) {
+						error.value = null;
+						errorCause.value = undefined;
+					}
+				},
+				(cause) => {
+					if (currentEpoch === epoch && syncOwners.size && !blockedIds.value.size) {
+						loading.value = false;
+						errorCause.value = cause;
+						error.value = suspendedFailureKey(cause, 'read');
+					}
+				},
+			);
+		}
+		return () => {
+			syncOwners.delete(owner);
+			if (!syncOwners.size) {
+				stopStream?.();
+				stopStream = undefined;
+				loading.value = false;
+			}
+		};
+	}
 
-        const result = await load({ silent: true, force: true });
-        if (
-          result.ok &&
-          sessions.value.some(
-            (session) => session.status === 'active' && session.originalWorkspaceId === normalizedWorkspaceId,
-          )
-        )
-          break;
-      }
-      if (handoffRefreshes.get(normalizedWorkspaceId) === sequence) handoffRefreshes.delete(normalizedWorkspaceId);
-    })();
-  };
+	function refreshSuspendedSessionsAfterHandoff(workspaceId: string): void {
+		if (
+			!stopStream &&
+			!sessions.value.some(
+				(session) => session.originalWorkspaceId === workspaceId && session.status === 'active',
+			)
+		) {
+			void load({ silent: true, force: true });
+		}
+	}
 
-  const findSuspendedSessionByOriginalWorkspace = (workspaceId: string): SuspendedSessionDto | undefined =>
-    sessions.value.find((session) => session.status === 'active' && session.originalWorkspaceId === workspaceId);
+	async function exportLog(id: string, signal?: AbortSignal): Promise<string> {
+		if (signal?.aborted) {
+			throw new SuspendedRequestFailure('cancelled', 'not_dispatched');
+		}
+		const controller = new AbortController();
+		downloads.add(controller);
+		try {
+			return await suspendedSessionsApi.exportLog(
+				id,
+				signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
+			);
+		} finally {
+			downloads.delete(controller);
+		}
+	}
 
-  const schedulePoll = (): void => {
-    if (pollConsumers <= 0 || pollTimer !== undefined) return;
-    pollTimer = window.setTimeout(async () => {
-      pollTimer = undefined;
-      if (pollConsumers <= 0) return;
-      const result = await load({ silent: true, force: true });
-      pollIntervalMs =
-        result.status === 429
-          ? Math.min(pollIntervalMs * 2, MAX_POLL_MS)
-          : result.ok
-            ? sessions.value.some((session) => session.status === 'active')
-              ? BASE_POLL_MS
-              : IDLE_POLL_MS
-            : Math.min(Math.max(pollIntervalMs, ERROR_POLL_MS), MAX_POLL_MS);
-      schedulePoll();
-    }, pollIntervalMs);
-  };
-
-  const startPolling = (): void => {
-    pollConsumers += 1;
-    schedulePoll();
-  };
-
-  const stopPolling = (): void => {
-    pollConsumers = Math.max(0, pollConsumers - 1);
-    if (pollConsumers > 0) return;
-    if (pollTimer !== undefined) window.clearTimeout(pollTimer);
-    pollTimer = undefined;
-    pollIntervalMs = BASE_POLL_MS;
-  };
-
-  return {
-    sessions,
-    loading,
-    error,
-    load,
-    startPolling,
-    stopPolling,
-    applySuspendedAutoTermination,
-    resetSuspendedSessionsCatalog,
-    refreshSuspendedSessionsCatalog,
-    removeSuspendedSessionFromCatalog,
-    refreshSuspendedSessionsAfterHandoff,
-    findSuspendedSessionByOriginalWorkspace,
-  };
+	return {
+		exportLog,
+		sessions,
+		loading,
+		error,
+		errorCause,
+		blockedIds,
+		load,
+		recover,
+		rename,
+		remove,
+		startSync,
+		applySuspendedAutoTermination,
+		resetSuspendedSessionsCatalog,
+		removeSuspendedSessionFromCatalog,
+		refreshSuspendedSessionsAfterHandoff,
+	};
 });
 
 export const applySuspendedAutoTermination = (
-  event: WorkspaceSuspendAutoTerminatedEventDto,
+	event: SuspendedAutoTermination,
 ): SuspendedAutoTerminationViewModel | null => useSuspendedSessionsStore().applySuspendedAutoTermination(event);
+
 export const resetSuspendedSessionsCatalog = (): void => useSuspendedSessionsStore().resetSuspendedSessionsCatalog();
+
+export const startSuspendedSessionsSync = (): (() => void) => useSuspendedSessionsStore().startSync();
+
 registerAuthenticatedSessionReset('suspended-sessions-cache', resetSuspendedSessionsCatalog);
+
 export const refreshSuspendedSessionsCatalog = (): Promise<SuspendedSessionsLoadResult> =>
-  useSuspendedSessionsStore().refreshSuspendedSessionsCatalog();
+	useSuspendedSessionsStore().load({ silent: true, force: true });
+
 export const removeSuspendedSessionFromCatalog = (id: string): void =>
-  useSuspendedSessionsStore().removeSuspendedSessionFromCatalog(id);
+	useSuspendedSessionsStore().removeSuspendedSessionFromCatalog(id);
+
 export const refreshSuspendedSessionsAfterHandoff = (workspaceId: string): void =>
-  useSuspendedSessionsStore().refreshSuspendedSessionsAfterHandoff(workspaceId);
-export const findSuspendedSessionByOriginalWorkspace = (workspaceId: string): SuspendedSessionDto | undefined =>
-  useSuspendedSessionsStore().findSuspendedSessionByOriginalWorkspace(workspaceId);
+	useSuspendedSessionsStore().refreshSuspendedSessionsAfterHandoff(workspaceId);
+
+export const findSuspendedSessionByOriginalWorkspace = (workspaceId: string): SuspendedSession | undefined =>
+	useSuspendedSessionsStore().sessions.find(
+		(session) => session.status === 'active' && session.originalWorkspaceId === workspaceId,
+	);
+
+export const findSuspendedSessionById = (suspendedSessionId: string): SuspendedSession | undefined =>
+	useSuspendedSessionsStore().sessions.find(
+		(session) => session.status === 'active' && session.id === suspendedSessionId,
+	);
 
 export function useSuspendedSessions(): SuspendedSessionsController {
-  const store = useSuspendedSessionsStore();
-  const { sessions, loading, error } = storeToRefs(store);
-  const { load, startPolling, stopPolling } = store;
-  const search = ref('');
-  const filtered = computed(() => {
-    const term = search.value.trim().toLowerCase();
-    if (!term) return sessions.value;
-    return sessions.value.filter((session) =>
-      `${session.customName ?? ''} ${session.connectionName}`.toLowerCase().includes(term),
-    );
-  });
+	const store = useSuspendedSessionsStore();
+	const { sessions, loading, error, errorCause } = storeToRefs(store);
+	const search = ref('');
+	const filtered = computed(() => {
+		const term = search.value.trim().toLowerCase();
+		if (!term) {
+			return sessions.value;
+		}
+		return sessions.value.filter((session) =>
+			((session.customName ?? '') + ' ' + session.connectionName).toLowerCase().includes(term),
+		);
+	});
+	let stop: (() => void) | undefined;
+	return {
+		sessions,
+		search,
+		loading,
+		error,
+		errorCause,
+		filtered,
+		load: store.load,
+		recover: store.recover,
 
-  async function rename(session: SuspendedSessionDto, name: string): Promise<string> {
-    try {
-      const authoritativeName = await sshSuspendApi.rename(session.id, name);
-      session.customName = authoritativeName.trim() || undefined;
-      return authoritativeName;
-    } catch (cause) {
-      logger.debug(
-        {
-          err: cause,
-          suspendedSessionId: session.id,
-          originalWorkspaceId: session.originalWorkspaceId,
-          status: apiErrorStatus(cause),
-          failureKind: 'suspended_session_rename_failed',
-        },
-        'Suspended Workspace rename failed',
-      );
-      throw cause;
-    }
-  }
+		startSync: () => {
+			stop ??= store.startSync();
+		},
 
-  async function remove(session: SuspendedSessionDto): Promise<void> {
-    try {
-      if (session.status === 'active') await sshSuspendApi.terminate(session.id);
-      else await sshSuspendApi.removeDisconnected(session.id);
-      removeSuspendedSessionFromCatalog(session.id);
-    } catch (cause) {
-      logger.debug(
-        {
-          err: cause,
-          suspendedSessionId: session.id,
-          originalWorkspaceId: session.originalWorkspaceId,
-          sessionStatus: session.status,
-          status: apiErrorStatus(cause),
-          failureKind: 'suspended_session_remove_failed',
-        },
-        'Suspended Workspace removal failed',
-      );
-      throw cause;
-    }
-  }
+		stopSync: () => {
+			stop?.();
+			stop = undefined;
+		},
 
-  return {
-    sessions,
-    search,
-    loading,
-    error,
-    filtered,
-    load,
-    startPolling,
-    stopPolling,
-    rename,
-    remove,
-    exportLog: sshSuspendApi.exportLog,
-  };
+		rename: store.rename,
+		remove: store.remove,
+		exportLog: store.exportLog,
+	};
 }

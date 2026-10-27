@@ -2,6 +2,8 @@ import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import App from './App.vue';
 import { setUnauthorizedHandler } from '@/client/http';
+import { setNetworkFailureHandler } from '@/client/http/network-failure';
+import { useFeedback } from '@/shared/feedback/public';
 import { createAuthNavigationFacade } from '@/features/auth/public';
 import { createAppRouter } from './router';
 import i18n from './i18n';
@@ -19,12 +21,14 @@ const router = createAppRouter(pinia);
 const auth = createAuthNavigationFacade(pinia);
 
 setUnauthorizedHandler(async () => {
-  if (!auth.authenticated) return;
-  auth.invalidateSession();
-  if (router.currentRoute.value.name !== 'Login') await router.replace({ name: 'Login' });
+	if (!auth.authenticated) return;
+	auth.invalidateSession();
+	if (router.currentRoute.value.name !== 'Login') await router.replace({ name: 'Login' });
 });
 
 app.use(pinia);
+const feedback = useFeedback();
+setNetworkFailureHandler(() => feedback.notifyError(i18n.global.t('feedback.networkUnavailable'), 0));
 app.use(i18n);
 app.use(router);
 app.mount('#app');

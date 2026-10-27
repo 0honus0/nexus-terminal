@@ -1,84 +1,72 @@
 import { computed, ref } from 'vue';
-import type { WorkspaceFocusConfigDto } from '@nexus-terminal/protocol/settings';
+import type { WorkspaceFocusConfig } from '../model/presentation-types';
 import type { WorkspaceSettingsRepository } from '../ports/workspace-settings-repository';
 
 export const workspaceFocusTargets = [
-  'quickCommandsSearch',
-  'commandHistorySearch',
-  'fileManagerSearch',
-  'commandInput',
-  'terminalSearch',
-  'connectionListSearch',
-  'fileEditorActive',
-  'fileManagerPathInput',
+	'quickCommandsSearch',
+	'commandHistorySearch',
+	'fileManagerSearch',
+	'commandInput',
+	'terminalSearch',
+	'connectionListSearch',
+	'fileEditorActive',
+	'fileManagerPathInput',
 ] as const;
 
-type WorkspaceFocusTarget = (typeof workspaceFocusTargets)[number];
-const isFocusTarget = (value: string): value is WorkspaceFocusTarget =>
-  workspaceFocusTargets.includes(value as WorkspaceFocusTarget);
-
 export const normalizeWorkspaceFocusShortcut = (value: string): string | null => {
-  const match = value.trim().match(/^Alt\+([A-Za-z0-9])$/);
-  return match ? `Alt+${match[1]!.toUpperCase()}` : null;
+	const match = value.trim().match(/^Alt\+([A-Za-z0-9])$/);
+	return match ? `Alt+${match[1]?.toUpperCase()}` : null;
 };
 
-const defaultConfig = (): WorkspaceFocusConfigDto => ({ sequence: [...workspaceFocusTargets], shortcuts: {} });
-const configShape = (value: unknown): value is WorkspaceFocusConfigDto => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const candidate = value as Partial<WorkspaceFocusConfigDto>;
-  return (
-    Array.isArray(candidate.sequence) &&
-    candidate.sequence.every((id) => typeof id === 'string' && isFocusTarget(id)) &&
-    new Set(candidate.sequence).size === candidate.sequence.length &&
-    Boolean(candidate.shortcuts && typeof candidate.shortcuts === 'object' && !Array.isArray(candidate.shortcuts))
-  );
-};
+export function cloneWorkspaceFocus(value: WorkspaceFocusConfig): WorkspaceFocusConfig {
+	return { sequence: value.sequence.map((id) => id), shortcuts: Object.fromEntries(Object.entries(value.shortcuts)) };
+}
 
-const normalizeLoadedConfig = (value: unknown): WorkspaceFocusConfigDto | null => {
-  if (!configShape(value)) return null;
-  const shortcuts: WorkspaceFocusConfigDto['shortcuts'] = {};
-  for (const [id, item] of Object.entries(value.shortcuts)) {
-    if (!isFocusTarget(id) || !item || typeof item !== 'object' || Array.isArray(item)) continue;
-    const shortcut = (item as { shortcut?: unknown }).shortcut;
-    if (shortcut === undefined) continue;
-    if (typeof shortcut !== 'string') continue;
-    const normalized = normalizeWorkspaceFocusShortcut(shortcut);
-    if (normalized) shortcuts[id] = { shortcut: normalized };
-  }
-  return { sequence: [...value.sequence], shortcuts };
-};
+export const createWorkspaceFocusController = (
+	settingsRepository: WorkspaceSettingsRepository,
+	capturePermission: () => AbortSignal,
+) => {
+	const config = ref<WorkspaceFocusConfig>({ sequence: [...workspaceFocusTargets], shortcuts: {} });
+	const loaded = ref(false);
+	const version = ref(0);
+	let revision = 0;
+	return {
+		resetState(): void {
+			revision++;
+			loaded.value = false;
+			version.value = 0;
+			config.value = { sequence: [...workspaceFocusTargets], shortcuts: {} };
+		},
 
-const validConfigForSave = (value: WorkspaceFocusConfigDto): boolean => {
-  if (!configShape(value)) return false;
-  return Object.entries(value.shortcuts).every(([id, item]) => {
-    if (!isFocusTarget(id) || !item || typeof item !== 'object' || Array.isArray(item)) return false;
-    return item.shortcut === undefined || normalizeWorkspaceFocusShortcut(item.shortcut) === item.shortcut;
-  });
-};
+		config,
+		loaded: computed(() => loaded.value),
+		version: computed(() => version.value),
 
-export const createWorkspaceFocusController = (settingsRepository: WorkspaceSettingsRepository) => {
-  const config = ref<WorkspaceFocusConfigDto>(defaultConfig());
-  const loaded = ref(false);
+		async load(force = false): Promise<void> {
+			if (loaded.value && !force) return;
+			const permission = capturePermission();
+			const originalRevision = ++revision;
+			const value = await settingsRepository.loadFocus(force);
+			if (permission.aborted || revision !== originalRevision) return;
+			config.value = cloneWorkspaceFocus(value.focus);
+			version.value = value.version;
+			loaded.value = true;
+		},
 
-  const workspaceFocus = {
-    config,
-    loaded: computed(() => loaded.value),
-    async load(force = false): Promise<void> {
-      if (loaded.value && !force) return;
-      const loadedConfig = await settingsRepository.loadFocus();
-      config.value = normalizeLoadedConfig(loadedConfig) ?? defaultConfig();
-      loaded.value = true;
-    },
-    async save(next: WorkspaceFocusConfigDto): Promise<void> {
-      if (!validConfigForSave(next)) throw new Error('Invalid focus switcher configuration.');
-      const request: WorkspaceFocusConfigDto = next;
-      await settingsRepository.saveFocus(request);
-      config.value = structuredClone(next);
-      loaded.value = true;
-    },
-  };
-
-  return workspaceFocus;
+		async save(
+			next: WorkspaceFocusConfig,
+			expectedVersion = version.value,
+			permission = capturePermission(),
+		): Promise<void> {
+			const focus = cloneWorkspaceFocus(next);
+			const originalRevision = ++revision;
+			const result = await settingsRepository.saveFocus({ version: expectedVersion, focus }, permission);
+			if (permission?.aborted || revision !== originalRevision) return;
+			config.value = focus;
+			version.value = result;
+			loaded.value = true;
+		},
+	};
 };
 
 export type WorkspaceFocusController = ReturnType<typeof createWorkspaceFocusController>;

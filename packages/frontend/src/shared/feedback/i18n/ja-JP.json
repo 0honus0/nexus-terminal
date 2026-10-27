@@ -2,6 +2,23 @@
   "feedback": {
     "confirmTitle": "確認してください",
     "alertTitle": "お知らせ",
-    "close": "閉じる"
+    "close": "閉じる",
+    "toast": {
+      "successTitle": "操作が完了しました",
+      "errorTitle": "操作に失敗しました",
+      "warningTitle": "注意",
+      "infoTitle": "お知らせ",
+      "acknowledge": "わかりました"
+    },
+    "networkUnavailable": "接続が不安定か、サービスを利用できません。接続を確認してください。操作を送信した場合は、再実行する前に結果を確認してください。",
+    "settingsReload": {
+      "title": "設定の更新が必要です",
+      "description": "{count} 個の設定モジュールを読み取れないか、読み取り結果が古くなっています。再読み込みしても未確認の書き込みは再実行されません。",
+      "failed": "一部の設定を読み取れませんでした。接続を確認して再試行してください。",
+      "later": "後で",
+      "reload": "設定を再読み込み",
+      "open": "設定の更新が必要です",
+      "indicator": "{count} 個の設定モジュールを更新する必要があります"
+    }
   }
 }

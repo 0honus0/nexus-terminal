@@ -20,6 +20,8 @@
     "shortcutHint": "Focus a field and press Alt + a letter or digit to assign a direct focus shortcut. Backspace or Delete clears it.",
     "shortcutSettings": "Shortcut Settings",
     "noInputsAvailable": "No configurable inputs available",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
     "altSwitchHint": "Hint: Press the Alt key to quickly switch focus between configured input sources."
   }
 }

@@ -2,6 +2,17 @@
   "proxies": {
     "title": "Proxy Management",
     "addProxy": "Add New Proxy",
+    "listTitle": "Proxy List",
+    "searchPlaceholder": "Search name, host or username",
+    "filterType": "Filter by proxy type",
+    "allTypes": "All types",
+    "authenticated": "Authenticated",
+    "noAuthentication": "No authentication",
+    "noMatches": "No proxies match the current search or filter.",
+    "summary": {
+      "label": "Proxy overview",
+      "total": "Total Proxies"
+    },
     "loading": "Loading proxies...",
     "error": "Failed to load proxies: {error}",
     "noProxies": "No proxies yet. Click 'Add New Proxy' to create one!",
@@ -12,6 +23,9 @@
     "form": {
       "title": "Add New Proxy",
       "titleEdit": "Edit Proxy",
+      "sectionBasic": "Basic information",
+      "sectionEndpoint": "Network address",
+      "sectionCredentials": "Authentication",
       "name": "Name:",
       "type": "Type:",
       "host": "Host/IP:",
@@ -37,6 +51,20 @@
     "errors": {
       "deleteFailed": "Failed to delete proxy: {error}"
     },
-    "updatedAt": "Last Updated"
+    "updatedAt": "Last Updated",
+    "refresh": "Refresh and review",
+    "failures": {
+      "failed": "The operation failed. Please try again later.",
+      "unknown": "The result is unknown and may already be saved. Refresh and review before submitting again.",
+      "unauthenticated": "Your session has expired. Sign in again.",
+      "forbidden": "Only administrators can perform this operation.",
+      "version_conflict": "The record has changed. Refresh and review before editing again.",
+      "not_found": "The record no longer exists. Refresh the list.",
+      "reference_in_use": "A connection references this item. Remove the reference first.",
+      "invalid_input": "Invalid or oversized input. Check the name, port and credentials.",
+      "recovery_required": "Refresh and review the current state before making changes.",
+      "request_pending": "An operation is in progress. Wait for it to finish.",
+      "limit_exceeded": "The collection exceeds its limit. Reduce its size before refreshing."
+    }
   }
 }

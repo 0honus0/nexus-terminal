@@ -2,6 +2,23 @@
   "feedback": {
     "confirmTitle": "Please confirm",
     "alertTitle": "Notice",
-    "close": "Close"
+    "close": "Close",
+    "toast": {
+      "successTitle": "Success",
+      "errorTitle": "Something went wrong",
+      "warningTitle": "Attention",
+      "infoTitle": "Notice",
+      "acknowledge": "Got it"
+    },
+    "networkUnavailable": "The connection is unstable or the service is unavailable. Check your connection and try again. If you submitted an operation, verify its result before repeating it.",
+    "settingsReload": {
+      "title": "Settings need an update",
+      "description": "{count} settings modules could not be read or have stale reads. Reloading will not replay unconfirmed writes.",
+      "failed": "Some settings still could not be read. Check the connection and try again.",
+      "later": "Later",
+      "reload": "Reload settings",
+      "open": "Settings need an update",
+      "indicator": "{count} settings modules need an update"
+    }
   }
 }

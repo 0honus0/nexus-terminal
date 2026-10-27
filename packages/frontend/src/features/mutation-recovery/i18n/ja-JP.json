@@ -1,0 +1,56 @@
+{
+  "mutationRecovery": {
+    "title": "マシン変更の復旧",
+    "warning": "解除は実行制限のみを取り除きます。元の操作の再試行や成功の証明ではありません。先にリモートの実際の影響を独立して確認してください。",
+    "refresh": "確定状態を更新",
+    "refreshRequired": "書き込みは停止中です。状態を更新し確認してから新しい操作を開始してください。",
+    "failed": "要求に失敗しました。状態を更新して確認してください。",
+    "unknown": "結果は不明です。この操作を繰り返さず、更新してリモートの影響を確認してください。",
+    "required": "生成元と関連リソースの停止を確認し、結果、有効な確認日時、証拠の説明を入力してください。",
+    "more": "さらに読み込む",
+    "recoveryAllowed": "復旧可能",
+    "evidence": "独立した証拠を記録",
+    "producerStopped": "生成元の停止を独立して確認しました",
+    "resourcesStopped": "関連リソースの停止を独立して確認しました",
+    "outcome": "確認結果",
+    "choose": "明示的に選択",
+    "observedAt": "確認日時",
+    "note": "証拠の説明",
+    "record": "証拠を記録",
+    "selectEvidence": "解除に使用する証拠",
+    "release": "実行制限を解除",
+    "releaseConfirm": "選択した証拠で実行制限を解除しますか？元の操作の再試行や成功の確認ではありません。",
+    "blockedBadge": "書き込み停止中",
+    "itemCount": "確認待ち {count} 件",
+    "queueLabel": "確定リスト",
+    "queueTitle": "実行制限",
+    "noItems": "復旧項目はありません",
+    "noItemsDescription": "現在、手動確認や解除が必要なマシン変更はありません。",
+    "detailLabel": "復旧の詳細",
+    "revision": "状態リビジョン",
+    "createdAt": "作成日時",
+    "targets": "対象リソース",
+    "noTargets": "対象リソースは記録されていません。",
+    "evidenceRecords": "独立した証拠",
+    "noEvidence": "独立した証拠はまだ記録されていません。",
+    "evidenceHelp": "停止確認、確認結果、日時、説明のすべてを管理者が独立して確認する必要があります。",
+    "releaseTitle": "制限の解除",
+    "releaseHelp": "証拠を記録した後、最新の証拠を明示的に選択して個別に解除します。",
+    "origins": {
+      "files": "ファイル",
+      "docker": "Docker",
+      "agent": "Agent",
+      "tools": "ツールのインストール"
+    },
+    "states": {
+      "held": "保持中",
+      "blocked": "停止中",
+      "released": "解除済み"
+    },
+    "outcomes": {
+      "applied": "適用済み",
+      "not_applied": "未適用",
+      "partially_applied": "一部適用"
+    }
+  }
+}

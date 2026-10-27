@@ -7,13 +7,14 @@
       "selectFiles": "ファイルを選択（すべての種類）"
     },
     "start": {
-      "title": "接続とセッション",
+      "title": "新しいセッション",
       "description": "保留中のセッションを再開するか、接続を選んでターミナルを開きます。",
       "connections": "接続を開始",
       "back": "ターミナルに戻る"
     },
     "terminal": {
-      "reconnectingMsg": "再接続を試行中..."
+      "reconnectingMsg": "再接続を試行中...",
+      "ownershipUnknown": "接続の所有権を確認できないため、自動再試行を停止しました。このタブを閉じてから新しく接続してください。元のリモートプロセスは動作中の可能性があります。"
     },
     "title": "ワークスペース",
     "sessions": "{count} セッション",
@@ -77,8 +78,9 @@
     "emptyContainer": "空のコンテナー"
   },
   "commandInputBar": {
-    "desktopPlaceholder": "コマンド",
-    "placeholder": "ここにコマンドを入力して Enter キーを押すと、ターミナルに送信されます...",
+    "commandLabel": "ターミナルコマンド",
+    "searchLabel": "ターミナル内を検索",
+    "moreActions": "その他のコマンド操作",
     "searchPlaceholder": "ターミナル内で検索...",
     "openSearch": "ターミナル検索を開く",
     "closeSearch": "ターミナル検索を閉じる",

@@ -1,285 +1,209 @@
+import { advanceTestBackendClock } from '../../support/settings';
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
-import { E2E_SSH, resetTestSshFilesystem } from '../../support/ssh';
+import { E2E_SSH, createTestSshConnection, trustTestSshHostKey } from '../../support/ssh';
 import { closeWebSocket, openWorkspaceSession } from '../../support/ws';
+import { E2E_URLS } from '../../support/test-env';
 import { step } from '../../support/steps';
+import {
+	readConnectionView,
+	readConnectionMutation,
+} from '../../../../packages/shared/src/targets/connections/http-codec';
+import { readConnectionTestResponse } from '../../../../packages/shared/src/targets/connections/test-codec';
+import { readTagView, readTagConnectionsResponse } from '../../../../packages/shared/src/targets/tags/http-codec';
+import {
+	readSshResourceStatus,
+	readSshResourceStatusList,
+} from '../../../../packages/shared/src/remote/monitoring/http-codec';
+import { readSettingsResponse } from '../../../../packages/shared/src/preferences/configuration/http-codec';
+
+const headers = { Origin: E2E_URLS.frontendOrigin };
+const root = '/api/v1/targets';
 
 test('connection update, tags, clone, credentials, and delete form a complete lifecycle', async ({ request }) => {
-  await loginAsInitialAdmin(request);
-
-  let connectionId = 0;
-  let cloneId = 0;
-  let tagId = 0;
-
-  await step('create a tagged SSH connection', async () => {
-    const tag = await request.post('/api/v1/tags', { data: { name: 'E2E Connection Tag' } });
-    expect(tag.status()).toBe(201);
-    tagId = ((await tag.json()) as { tag: { id: number } }).tag.id;
-
-    const create = await request.post('/api/v1/connections', {
-      data: {
-        name: 'E2E Lifecycle SSH',
-        type: 'SSH',
-        host: E2E_SSH.host,
-        port: E2E_SSH.port,
-        username: E2E_SSH.username,
-        authMethod: 'password',
-        password: E2E_SSH.password,
-        notes: 'created by lifecycle e2e',
-      },
-    });
-    expect(create.status()).toBe(201);
-    connectionId = ((await create.json()) as { connection: { id: number } }).connection.id;
-
-    const assignTag = await request.post('/api/v1/connections/add-tag', {
-      data: { connectionIds: [connectionId], tagId: tagId },
-    });
-    expect(assignTag.ok()).toBeTruthy();
-  });
-
-  await step('update non-credential fields without losing the encrypted password', async () => {
-    const update = await request.put(`/api/v1/connections/${connectionId}`, {
-      data: {
-        name: 'E2E Lifecycle SSH Updated',
-        notes: 'updated without resending password',
-      },
-    });
-    expect(update.ok()).toBeTruthy();
-    await expect(update.json()).resolves.toMatchObject({
-      connection: {
-        id: connectionId,
-        name: 'E2E Lifecycle SSH Updated',
-        notes: 'updated without resending password',
-      },
-    });
-
-    const connectionTest = await request.post(`/api/v1/connections/${connectionId}/test`);
-    expect(connectionTest.ok()).toBeTruthy();
-    await expect(connectionTest.json()).resolves.toMatchObject({ success: true });
-  });
-
-  await step('clone preserves SSH credentials and tag associations', async () => {
-    const clone = await request.post(`/api/v1/connections/${connectionId}/clone`, {
-      data: { name: 'E2E Lifecycle SSH Clone' },
-    });
-    expect(clone.status()).toBe(201);
-    const cloned = (
-      (await clone.json()) as {
-        connection: { id: number; name: string; tagIds?: number[] };
-      }
-    ).connection;
-    cloneId = cloned.id;
-    expect(cloned.name).toBe('E2E Lifecycle SSH Clone');
-    expect(cloned.tagIds).toContain(tagId);
-
-    const cloneTest = await request.post(`/api/v1/connections/${cloneId}/test`);
-    expect(cloneTest.ok()).toBeTruthy();
-    await expect(cloneTest.json()).resolves.toMatchObject({ success: true });
-  });
-
-  await step('deleting the original does not damage the clone', async () => {
-    expect((await request.delete(`/api/v1/connections/${connectionId}`)).ok()).toBeTruthy();
-    expect((await request.get(`/api/v1/connections/${connectionId}`)).status()).toBe(404);
-
-    const clone = await request.get(`/api/v1/connections/${cloneId}`);
-    expect(clone.ok()).toBeTruthy();
-    await expect(clone.json()).resolves.toMatchObject({
-      id: cloneId,
-      name: 'E2E Lifecycle SSH Clone',
-    });
-    expect((await request.post(`/api/v1/connections/${cloneId}/test`)).ok()).toBeTruthy();
-  });
-
-  await step('cleanup clone and tag', async () => {
-    expect((await request.delete(`/api/v1/connections/${cloneId}`)).ok()).toBeTruthy();
-    expect((await request.delete(`/api/v1/tags/${tagId}`)).ok()).toBeTruthy();
-  });
+	await loginAsInitialAdmin(request);
+	await trustTestSshHostKey(request);
+	const tagResponse = await request.post(root + '/tags', { headers, data: { name: 'E2E Connection Tag' } });
+	expect(tagResponse.status()).toBe(201);
+	const tag = readTagView(await tagResponse.json());
+	const connectionId = await createTestSshConnection(request, 'E2E Lifecycle SSH');
+	let cloneId: number | null = null;
+	let originalDeleted = false;
+	try {
+		await step('assign a tag and update metadata without losing the stored password', async () => {
+			const assigned = await request.post(root + '/connections/add-tag', {
+				headers,
+				data: { connectionIds: [connectionId], tagId: tag.id },
+			});
+			expect(assigned.ok()).toBe(true);
+			expect(readTagConnectionsResponse(await assigned.json())).toEqual({ updated: true });
+			const current = await request.get(root + '/connections/' + connectionId);
+			expect(current.ok()).toBe(true);
+			const connection = readConnectionView(await current.json());
+			expect(connection.tagIds).toContain(tag.id);
+			const updated = await request.put(root + '/connections/' + connectionId, {
+				headers,
+				data: {
+					version: connection.version,
+					changes: { name: 'E2E Lifecycle SSH Updated', notes: 'updated without resending password' },
+				},
+			});
+			expect(updated.ok()).toBe(true);
+			expect(readConnectionMutation(await updated.json())).toMatchObject({
+				status: 'updated',
+				value: {
+					id: connectionId,
+					name: 'E2E Lifecycle SSH Updated',
+					notes: 'updated without resending password',
+					version: connection.version + 1,
+				},
+			});
+			const tested = await request.post(root + '/connections/' + connectionId + '/test', { headers });
+			expect(tested.ok()).toBe(true);
+			expect(readConnectionTestResponse(await tested.json()).status).toBe('ok');
+		});
+		await step('clone preserves credentials and tag associations', async () => {
+			const response = await request.post(root + '/connections/' + connectionId + '/clone', {
+				headers,
+				data: { name: 'E2E Lifecycle SSH Clone' },
+			});
+			expect(response.status()).toBe(201);
+			const clone = readConnectionView(await response.json());
+			cloneId = clone.id;
+			expect(clone.id).not.toBe(connectionId);
+			expect(clone.tagIds).toContain(tag.id);
+			const tested = await request.post(root + '/connections/' + clone.id + '/test', { headers });
+			expect(tested.ok()).toBe(true);
+			expect(readConnectionTestResponse(await tested.json()).status).toBe('ok');
+		});
+		await step('deleting the original leaves the clone readable and usable', async () => {
+			expect((await request.delete(root + '/connections/' + connectionId, { headers })).ok()).toBe(true);
+			originalDeleted = true;
+			expect((await request.get(root + '/connections/' + connectionId)).status()).toBe(404);
+			const response = await request.get(root + '/connections/' + cloneId);
+			expect(response.ok()).toBe(true);
+			expect(readConnectionView(await response.json())).toMatchObject({
+				id: cloneId,
+				name: 'E2E Lifecycle SSH Clone',
+			});
+			expect((await request.post(root + '/connections/' + cloneId + '/test', { headers })).ok()).toBe(true);
+		});
+	} finally {
+		const cleanup = await Promise.allSettled([
+			...(originalDeleted
+				? []
+				: [
+						request
+							.delete(root + '/connections/' + connectionId, { headers })
+							.then((response) => expect(response.ok()).toBe(true)),
+					]),
+			...(cloneId === null
+				? []
+				: [
+						request
+							.delete(root + '/connections/' + cloneId, { headers })
+							.then((response) => expect(response.ok()).toBe(true)),
+					]),
+		]);
+		const tagCleanup = await request.delete(root + '/tags/' + tag.id, { headers });
+		expect(tagCleanup.ok()).toBe(true);
+		const failures = cleanup.filter((result) => result.status === 'rejected');
+		if (failures.length)
+			throw new AggregateError(
+				failures.map((result) => result.reason),
+				'Connection cleanup failed',
+			);
+	}
 });
 
 test('new SSH connections appear in resource status immediately', async ({ request }) => {
-  await loginAsInitialAdmin(request);
-
-  const connectionName = 'E2E SSH Resource Cache Invalidation';
-  const host = E2E_SSH.host;
-  const port = E2E_SSH.port;
-  let connectionId = 0;
-
-  const existingConnections = await request.get('/api/v1/connections');
-  expect(existingConnections.ok()).toBeTruthy();
-  const existing = (await existingConnections.json()) as Array<{ id: number; name?: string }>;
-  for (const connection of existing.filter((item) => item.name === connectionName)) {
-    expect((await request.delete(`/api/v1/connections/${connection.id}`)).ok()).toBeTruthy();
-  }
-
-  try {
-    await step('prime the snapshot cache before adding a new SSH host', async () => {
-      const primed = await request.get('/api/v1/system/ssh-resources');
-      expect(primed.ok()).toBeTruthy();
-      const resources = (await primed.json()) as Array<{ host: string; port: number }>;
-      expect(resources.some((resource) => resource.host === host && resource.port === port)).toBeFalsy();
-    });
-
-    await step('newly configured host bypasses the old snapshot cache immediately', async () => {
-      const create = await request.post('/api/v1/connections', {
-        data: {
-          name: connectionName,
-          type: 'SSH',
-          host,
-          port,
-          username: E2E_SSH.username,
-          authMethod: 'password',
-          password: E2E_SSH.password,
-        },
-      });
-      expect(create.status()).toBe(201);
-      connectionId = ((await create.json()) as { connection: { id: number } }).connection.id;
-
-      const refreshed = await request.get('/api/v1/system/ssh-resources');
-      expect(refreshed.ok()).toBeTruthy();
-      const resources = (await refreshed.json()) as Array<{
-        connectionId: number;
-        host: string;
-        port: number;
-        checkedAt: number;
-        status?: { cpuPercent: number };
-      }>;
-      const resource = resources.find((item) => item.host === host && item.port === port);
-      expect(resource).toBeDefined();
-      expect(resource?.connectionId).toBe(connectionId);
-      expect(resource?.status?.cpuPercent).toBeGreaterThanOrEqual(0);
-
-      const individual = await request.get(`/api/v1/system/ssh-resources/${connectionId}`);
-      expect(individual.ok()).toBeTruthy();
-      await expect(individual.json()).resolves.toMatchObject({
-        key: `${host.toLowerCase()}:${port}`,
-        connectionId,
-        checkedAt: resource?.checkedAt,
-      });
-    });
-  } finally {
-    if (connectionId) {
-      expect((await request.delete(`/api/v1/connections/${connectionId}`)).ok()).toBeTruthy();
-    }
-  }
+	await loginAsInitialAdmin(request);
+	await trustTestSshHostKey(request);
+	const primed = await request.get('/api/v1/system/ssh-resources');
+	expect(primed.ok()).toBe(true);
+	expect(
+		readSshResourceStatusList(await primed.json()).some(
+			(resource) => resource.host === E2E_SSH.host && resource.port === E2E_SSH.port,
+		),
+	).toBe(false);
+	const id = await createTestSshConnection(request, 'E2E SSH Resource Cache Invalidation');
+	try {
+		const response = await request.get('/api/v1/system/ssh-resources');
+		expect(response.ok()).toBe(true);
+		const resource = readSshResourceStatusList(await response.json()).find((item) => item.connectionId === id);
+		expect(resource).toBeDefined();
+		expect(resource?.status?.cpuPercent).toBeGreaterThanOrEqual(0);
+		const individual = await request.get('/api/v1/system/ssh-resources/' + id);
+		expect(individual.ok()).toBe(true);
+		expect(readSshResourceStatus(await individual.json())).toEqual(resource);
+	} finally {
+		expect((await request.delete(root + '/connections/' + id, { headers })).ok()).toBe(true);
+	}
 });
 
-test('background SSH resource refresh does not change recent connection time', async ({ request }) => {
-  await loginAsInitialAdmin(request);
-  await resetTestSshFilesystem();
-
-  const name = 'E2E SSH Resource Does Not Touch Recent Time';
-  let connectionId = 0;
-  try {
-    const create = await request.post('/api/v1/connections', {
-      data: {
-        name,
-        type: 'SSH',
-        host: E2E_SSH.host,
-        port: E2E_SSH.port,
-        username: E2E_SSH.username,
-        authMethod: 'password',
-        password: E2E_SSH.password,
-      },
-    });
-    expect(create.status()).toBe(201);
-    connectionId = ((await create.json()) as { connection: { id: number } }).connection.id;
-
-    const readConnection = async () => {
-      const response = await request.get(`/api/v1/connections/${connectionId}`);
-      expect(response.ok()).toBeTruthy();
-      return (await response.json()) as {
-        connection?: { lastConnectedAt: number | null };
-        lastConnectedAt?: number | null;
-      };
-    };
-    const lastConnected = (value: Awaited<ReturnType<typeof readConnection>>) =>
-      value.connection?.lastConnectedAt ?? value.lastConnectedAt ?? null;
-
-    expect(lastConnected(await readConnection())).toBeNull();
-
-    const resources = await request.get('/api/v1/system/ssh-resources');
-    expect(resources.ok()).toBeTruthy();
-    const resourceRows = (await resources.json()) as Array<{ connectionId: number; status?: unknown }>;
-    expect(resourceRows.some((row) => row.connectionId === connectionId && row.status)).toBeTruthy();
-
-    // Resource collection establishes a real SSH transport in the background, but it is
-    // not a user connection and therefore must not make every dashboard card look recently used.
-    expect(lastConnected(await readConnection())).toBeNull();
-
-    const workspace = await openWorkspaceSession(request, connectionId);
-    try {
-      await expect.poll(async () => lastConnected(await readConnection()), { timeout: 10_000 }).not.toBeNull();
-    } finally {
-      await closeWebSocket(workspace.socket);
-    }
-  } finally {
-    if (connectionId) await request.delete(`/api/v1/connections/${connectionId}`);
-  }
+test('background resource collection leaves metadata unchanged while Workspace reports user connection time', async ({
+	request,
+}) => {
+	await loginAsInitialAdmin(request);
+	await trustTestSshHostKey(request);
+	const id = await createTestSshConnection(request, 'E2E SSH Resource Does Not Touch Metadata');
+	try {
+		const before = await request.get(root + '/connections/' + id);
+		expect(before.ok()).toBe(true);
+		const original = readConnectionView(await before.json());
+		const resources = await request.get('/api/v1/system/ssh-resources');
+		expect(resources.ok()).toBe(true);
+		expect(
+			readSshResourceStatusList(await resources.json()).some(
+				(row) => row.connectionId === id && row.status !== undefined,
+			),
+		).toBe(true);
+		const after = await request.get(root + '/connections/' + id);
+		expect(after.ok()).toBe(true);
+		expect(readConnectionView(await after.json())).toEqual(original);
+		const workspace = await openWorkspaceSession(request, id);
+		try {
+			expect(workspace.lastConnectedAt).toBeGreaterThan(0);
+			const connectedResponse = await request.get(root + '/connections/' + id);
+			expect(connectedResponse.ok()).toBe(true);
+			const connected = readConnectionView(await connectedResponse.json());
+			expect(connected.lastConnectedAt).toBeGreaterThan(0);
+			expect(connected.version).toBe(original.version);
+			expect(connected.updatedAt).toBe(original.updatedAt);
+		} finally {
+			await closeWebSocket(workspace.socket);
+		}
+	} finally {
+		expect((await request.delete(root + '/connections/' + id, { headers })).ok()).toBe(true);
+	}
 });
 
-test('SSH resource status refreshes at the configured cadence even when collection takes time', async ({ request }) => {
-  await loginAsInitialAdmin(request);
-  await resetTestSshFilesystem();
-
-  const connectionName = 'E2E SSH Resource Refresh Cadence';
-  const originalSettingsResponse = await request.get('/api/v1/settings');
-  expect(originalSettingsResponse.ok()).toBeTruthy();
-  const originalSettings = (await originalSettingsResponse.json()) as { remoteHostRefreshIntervalSeconds?: number };
-
-  const existingConnections = await request.get('/api/v1/connections');
-  expect(existingConnections.ok()).toBeTruthy();
-  const existing = (await existingConnections.json()) as Array<{ id: number; name?: string }>;
-  for (const connection of existing.filter((item) => item.name === connectionName)) {
-    expect((await request.delete(`/api/v1/connections/${connection.id}`)).ok()).toBeTruthy();
-  }
-
-  let connectionId = 0;
-  try {
-    const create = await request.post('/api/v1/connections', {
-      data: {
-        name: connectionName,
-        type: 'SSH',
-        host: E2E_SSH.host,
-        port: E2E_SSH.port,
-        username: E2E_SSH.username,
-        authMethod: 'password',
-        password: E2E_SSH.password,
-      },
-    });
-    expect(create.status()).toBe(201);
-    connectionId = ((await create.json()) as { connection: { id: number } }).connection.id;
-
-    const intervalUpdate = await request.put('/api/v1/settings', {
-      data: { remoteHostRefreshIntervalSeconds: 2 },
-    });
-    expect(intervalUpdate.ok()).toBeTruthy();
-
-    const firstStartedAt = Date.now();
-    const firstResponse = await request.get('/api/v1/system/ssh-resources');
-    expect(firstResponse.ok()).toBeTruthy();
-    const firstDurationMs = Date.now() - firstStartedAt;
-    expect(firstDurationMs).toBeGreaterThan(50);
-    const firstResources = (await firstResponse.json()) as Array<{ host: string; port: number; checkedAt: number }>;
-    const firstResource = firstResources.find((item) => item.host === E2E_SSH.host && item.port === E2E_SSH.port);
-    expect(firstResource).toBeDefined();
-
-    const targetElapsedMs = 2050;
-    const remainingMs = Math.max(0, targetElapsedMs - (Date.now() - firstStartedAt));
-    if (remainingMs > 0) await new Promise((resolve) => setTimeout(resolve, remainingMs));
-
-    const secondResponse = await request.get('/api/v1/system/ssh-resources');
-    expect(secondResponse.ok()).toBeTruthy();
-    const secondResources = (await secondResponse.json()) as Array<{ host: string; port: number; checkedAt: number }>;
-    const secondResource = secondResources.find((item) => item.host === E2E_SSH.host && item.port === E2E_SSH.port);
-    expect(secondResource).toBeDefined();
-    expect(secondResource!.checkedAt).toBeGreaterThan(firstResource!.checkedAt);
-  } finally {
-    const restoreSettings = await request.put('/api/v1/settings', {
-      data: { remoteHostRefreshIntervalSeconds: originalSettings.remoteHostRefreshIntervalSeconds ?? 30 },
-    });
-    expect(restoreSettings.ok()).toBeTruthy();
-    if (connectionId) {
-      expect((await request.delete(`/api/v1/connections/${connectionId}`)).ok()).toBeTruthy();
-    }
-  }
+test('SSH resource cache expires at the effective startup cadence including collection time', async ({ request }) => {
+	test.setTimeout(150_000);
+	await loginAsInitialAdmin(request);
+	await trustTestSshHostKey(request);
+	const settings = await request.get('/api/v1/settings');
+	expect(settings.ok()).toBe(true);
+	const intervalMs =
+		readSettingsResponse(await settings.json()).effectiveMonitoring.remoteHostRefreshIntervalSeconds * 1000;
+	const id = await createTestSshConnection(request, 'E2E SSH Resource Refresh Cadence');
+	try {
+		const startedAt = Date.now();
+		const firstResponse = await request.get('/api/v1/system/ssh-resources/' + id);
+		expect(firstResponse.ok()).toBe(true);
+		const first = readSshResourceStatus(await firstResponse.json());
+		expect(first.status).toBeDefined();
+		expect(Date.now() - startedAt).toBeGreaterThan(50);
+		const cachedResponse = await request.get('/api/v1/system/ssh-resources/' + id);
+		expect(cachedResponse.ok()).toBe(true);
+		expect(readSshResourceStatus(await cachedResponse.json())).toEqual(first);
+		await advanceTestBackendClock(intervalMs + 100);
+		const secondResponse = await request.get('/api/v1/system/ssh-resources/' + id);
+		expect(secondResponse.ok()).toBe(true);
+		const second = readSshResourceStatus(await secondResponse.json());
+		expect(second.status).toBeDefined();
+		expect(second.checkedAt).toBeGreaterThan(first.checkedAt);
+	} finally {
+		expect((await request.delete(root + '/connections/' + id, { headers })).ok()).toBe(true);
+	}
 });

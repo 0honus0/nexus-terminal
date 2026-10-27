@@ -39,18 +39,14 @@ services:
     container_name: nexus-core-no-runner-frontend-$suffix
   backend:
     container_name: nexus-core-no-runner-backend-$suffix
-  guacd:
-    container_name: nexus-core-no-runner-guacd-$suffix
 networks:
   nexus-terminal-network:
     name: nexus-core-no-runner-network-$suffix
 EOF_OVERRIDE
 mkdir -p "$data_dir"
-cat >"$data_dir/.env" <<'EOF_SECRETS'
-SESSION_SECRET=core-no-runner-session-secret-2026-0000000000000000000000000000
-ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-EOF_SECRETS
-chmod 0777 "$data_dir"; chmod 0600 "$data_dir/.env"
+chmod 0700 "$data_dir"
+# Ephemeral test key, injected through the same required setting as deployment.
+set_env NEXUS_ENCRYPTION_KEY "$(node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))")"
 set_env NEXUS_IMAGE_REPOSITORY "$repo"
 set_env NEXUS_IMAGE_TAG "$tag"
 set_env NEXUS_HTTP_PORT 0
@@ -62,7 +58,7 @@ grep -v '^COMPOSE_PROFILES=' "$env_file" >"$env_file.tmp" || true; mv "$env_file
 services="$(compose config --services)"
 printf '%s\n' "$services" | grep -qx frontend
 printf '%s\n' "$services" | grep -qx backend
-printf '%s\n' "$services" | grep -qx guacd
+if printf '%s\n' "$services" | grep -qx guacd; then echo 'Default Compose unexpectedly includes guacd.' >&2; exit 1; fi
 if printf '%s\n' "$services" | grep -qx agent-runner; then echo 'Default Compose unexpectedly includes agent-runner.' >&2; exit 1; fi
 compose up -d
 for _ in {1..60}; do
@@ -71,9 +67,9 @@ for _ in {1..60}; do
   [[ "$b" == *healthy* && "$f" == *healthy* ]] && break
   sleep 1
 done
-compose exec -T backend wget -q -O - http://127.0.0.1:3001/api/v1/status | grep -q '"status":"ok"'
 compose exec -T backend node --input-type=module - <<'NODE'
 import { existsSync } from 'node:fs';
+import { readSystemHealthResponse } from '@nexus-terminal/shared/system/status/http-codec';
 const retired = [
   '/app/dist/infrastructure/agent/workspace-runtime/runner-http.adapter.js',
   '/app/dist/modules/agent/workspace-runtime/workspace-runtime.service.js',
@@ -81,8 +77,12 @@ const retired = [
 for (const modulePath of retired) {
   if (existsSync(modulePath)) throw new Error(`Retired Agent Workspace module still shipped: ${modulePath}`);
 }
-const status = await fetch('http://127.0.0.1:3001/api/v1/status');
+const origin = new URL(process.env.NEXUS_PUBLIC_ORIGIN);
+const status = await fetch('http://127.0.0.1:3001/api/v1/status', {
+  headers: { 'X-Forwarded-Host': origin.host, 'X-Forwarded-Proto': origin.protocol.slice(0, -1) },
+});
 if (!status.ok) throw new Error(`Backend health returned ${status.status}`);
+readSystemHealthResponse(await status.json());
 console.log('Production Backend starts without a Runner or Agent Workspace execution modules.');
 NODE
 failed=0

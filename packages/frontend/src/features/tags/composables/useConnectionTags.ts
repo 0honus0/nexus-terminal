@@ -1,31 +1,22 @@
-import { computed, type ComputedRef } from 'vue';
-import { registerAuthenticatedSessionReset } from '@/shared/session/public';
-import type { ConnectionTagDto } from '../model/tag';
+import { computed } from 'vue';
+import type { ConnectionTagsController } from '../model/tag-types';
 import { useTagsStore } from '../store/tags.store';
 
-export interface ConnectionTagsController {
-  tags: ComputedRef<ConnectionTagDto[]>;
-  loaded: ComputedRef<boolean>;
-  load(force?: boolean): Promise<ConnectionTagDto[]>;
-  revalidate(maxAgeMs?: number): Promise<ConnectionTagDto[]>;
-  create(name: string): Promise<ConnectionTagDto>;
-  rename(id: number, name: string): Promise<ConnectionTagDto>;
-  remove(id: number): Promise<void>;
-}
-
 export function useConnectionTags(): ConnectionTagsController {
-  const store = useTagsStore();
-  return {
-    tags: computed(() => store.items),
-    loaded: computed(() => store.loaded),
-    load: store.load.bind(store),
-    revalidate: store.revalidate.bind(store),
-    create: store.create.bind(store),
-    rename: store.rename.bind(store),
-    remove: store.remove.bind(store),
-  };
+	const store = useTagsStore();
+	return {
+		tags: computed(() => store.items),
+		loaded: computed(() => store.loaded),
+		busy: computed(() => store.busy),
+		needsRefresh: computed(() => store.needsRefresh),
+		load: store.load,
+		revalidate: store.revalidate,
+		create: store.create,
+		rename: store.rename,
+		remove: store.remove,
+		ensure: store.ensure,
+		setConnections: store.setConnections,
+	};
 }
 
 export const resetConnectionTagsCache = (): void => useTagsStore().reset();
-
-registerAuthenticatedSessionReset('connection-tags-cache', resetConnectionTagsCache);

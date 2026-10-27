@@ -2,6 +2,23 @@
   "feedback": {
     "confirmTitle": "请确认",
     "alertTitle": "提示",
-    "close": "关闭"
+    "close": "关闭",
+    "toast": {
+      "successTitle": "操作成功",
+      "errorTitle": "操作失败",
+      "warningTitle": "请注意",
+      "infoTitle": "提示",
+      "acknowledge": "知道了"
+    },
+    "networkUnavailable": "网络连接不稳定或服务暂时不可用，请检查连接后重试。若刚才提交了操作，请先核对结果，避免重复执行。",
+    "settingsReload": {
+      "title": "设置需要更新",
+      "description": "有 {count} 个设置模块的读取已失效或失败。重新读取不会重放未确认的写入。",
+      "failed": "仍有设置未能读取，请检查连接后重试。",
+      "later": "稍后",
+      "reload": "重新读取",
+      "open": "设置需要更新",
+      "indicator": "有 {count} 个设置模块需要更新"
+    }
   }
 }

@@ -1,55 +1,37 @@
 <script setup lang="ts">
-  import { computed, onMounted } from 'vue';
-  import { useI18n } from 'vue-i18n';
-  import { UiTokenInput, type UiTokenOption } from '@/foundation/ui';
-  import { useFeedback } from '@/shared/feedback/public';
-  import { useConnectionTags } from '../composables/useConnectionTags';
+	import { computed } from 'vue';
+	import { useI18n } from 'vue-i18n';
+	import { UiButton, UiTokenInput, type UiTokenOption } from '@/foundation/ui';
+	import { useTagPicker } from '../composables/use-tag-picker';
 
-  const model = defineModel<number[]>({ default: () => [] });
-  const tags = useConnectionTags();
-  const feedback = useFeedback();
-  const { t } = useI18n();
-
-  onMounted(() => {
-    void tags
-      .load()
-      .catch((cause) =>
-        feedback.notifyError(t('tags.error', { error: cause instanceof Error ? cause.message : String(cause) })),
-      );
-  });
-  const options = computed<UiTokenOption[]>(() => tags.tags.value.map((tag) => ({ value: tag.id, label: tag.name })));
-  const create = async (name: string) => {
-    const existing = tags.tags.value.find((tag) => tag.name.toLowerCase() === name.trim().toLowerCase());
-    const tag = existing ?? (await tags.create(name));
-    if (!model.value.includes(tag.id)) model.value = [...model.value, tag.id];
-  };
-  const deleteGlobally = async (option: UiTokenOption) => {
-    const tag = tags.tags.value.find((item) => item.id === Number(option.value));
-    if (!tag) return;
-    if (!(await feedback.confirm({ message: t('tags.prompts.confirmDelete', { name: tag.name }), destructive: true })))
-      return;
-    try {
-      await tags.remove(tag.id);
-      model.value = model.value.filter((id) => id !== tag.id);
-      feedback.notifySuccess(t('tags.deleteSuccess', { name: tag.name }));
-    } catch (cause) {
-      feedback.notifyError(
-        t('tags.deleteFailed', { name: tag.name, error: cause instanceof Error ? cause.message : String(cause) }),
-      );
-    }
-  };
+	const model = defineModel<number[]>({ default: () => [] });
+	const { data, pending, message, refresh, create, remove, updateSelection } = useTagPicker(model);
+	const { t } = useI18n();
+	const options = computed<UiTokenOption[]>(() => data.tags.value.map((tag) => ({ value: tag.id, label: tag.name })));
 </script>
 
 <template>
-  <UiTokenInput
-    v-model="model"
-    :options="options"
-    :placeholder="t('tags.inputPlaceholder')"
-    :remove-token-label="t('tags.removeSelection')"
-    :delete-option-label="t('tags.deleteTagGlobally')"
-    allow-custom
-    allow-option-delete
-    @create="create"
-    @delete-option="deleteGlobally"
-  />
+	<div class="space-y-2">
+		<UiButton
+			v-if="message || data.needsRefresh.value"
+			type="button"
+			:disabled="pending || data.busy.value"
+			@click="refresh"
+		>
+			{{ t('tags.refresh') }}
+		</UiButton>
+		<UiTokenInput
+			:model-value="model"
+			@update:model-value="updateSelection"
+			:disabled="pending || data.busy.value || data.needsRefresh.value"
+			:options="options"
+			:placeholder="t('tags.inputPlaceholder')"
+			:remove-token-label="t('tags.removeSelection')"
+			:delete-option-label="t('tags.deleteTagGlobally')"
+			allow-custom
+			allow-option-delete
+			@create="create"
+			@delete-option="remove($event.value)"
+		/>
+	</div>
 </template>

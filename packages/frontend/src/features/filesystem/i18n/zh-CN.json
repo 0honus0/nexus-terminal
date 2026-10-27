@@ -1,9 +1,18 @@
 {
   "fileManager": {
+    "directoryPicker": {
+      "title": "选择目标目录",
+      "select": "使用此目录",
+      "root": "根目录",
+      "empty": "没有可浏览的子目录",
+      "unavailable": "目录内容尚未加载，可刷新或返回根目录重试；已确认的目录仍可选择。",
+      "notDirectory": "所选位置不是目录。"
+    },
     "modalTitle": "文件管理器",
     "resizePopup": "调整文件管理器窗口大小",
     "currentPath": "当前路径",
     "loading": "正在加载目录...",
+    "connecting": "正在连接…",
     "emptyDirectory": "目录为空",
     "uploadTasks": "上传任务",
     "uploadSpeed": "总速度",
@@ -139,6 +148,10 @@
       "modified": "修改时间",
       "time": "时间"
     },
+    "sort": {
+      "ascending": "升序",
+      "descending": "降序"
+    },
     "uploadStatus": {
       "cancelled": "已取消",
       "conflict": "等待处理同名文件",
@@ -195,7 +208,23 @@
       "commandNotFoundCompress": "服务器上缺少 '{command}' 命令，无法完成压缩操作。",
       "commandNotFoundDecompress": "服务器上缺少 '{command}' 命令，无法完成解压操作。",
       "genericCommandNotFound": "服务器上缺少 '{command}' 命令，无法完成 '{operation}' 操作。",
-      "copyPathFailed": "复制路径失败"
+      "copyPathFailed": "复制路径失败",
+      "terminalPathChangeUnknown": "终端目录切换结果未知，请先读取当前目录确认，不要直接重复操作。",
+      "operationUnknown": "操作可能已改变远端文件。请刷新并核对实际路径，再决定是否重新操作。",
+      "notConnected": "文件会话尚未就绪，请重新连接后操作。",
+      "invalidResponse": "无法确认文件响应，请刷新读取当前状态。",
+      "capacityExceeded": "文件、目录或操作请求超过容量限制，请缩小读取范围或拆分操作。",
+      "requestRejected": "文件操作被拒绝，请核对权限及当前文件状态。",
+      "notFound": "未找到文件或活动文件会话。请刷新目录；若仍失败，请重新连接 SSH 会话。",
+      "permissionDenied": "没有权限访问或修改此路径，请核对远端文件及目录权限。",
+      "sessionExpired": "登录会话已失效，请重新登录。",
+      "fileConflict": "文件状态已变化或目标已存在，请刷新目录后核对再操作。",
+      "targetChanged": "连接配置已变化，请重新连接 SSH 会话。",
+      "hostKeyUntrusted": "远端主机密钥尚未确认，请重新连接并核对主机密钥。",
+      "remoteUnavailable": "远端文件服务不可用或读取超时。请重试读取；若仍失败，请重新连接 SSH 会话。",
+      "invalidInput": "文件路径、内容或操作参数无效，请核对后重试。",
+      "notText": "此文件无法作为文本读取。",
+      "commandFailed": "远端文件命令执行失败，请核对目录权限及所需命令是否可用。"
     },
     "notifications": {
       "terminalPathQueued": "前台命令正在运行，目录切换已安全排队，将在 Shell 返回提示符后执行。",
@@ -211,7 +240,8 @@
     },
     "warnings": {
       "moveSameDirectory": "不能在同一目录下剪切和粘贴。",
-      "crossHostDeleteFailed": "目标主机复制成功，但源文件删除失败：{error}"
+      "crossHostDeleteFailed": "目标主机复制成功，但源文件删除失败：{error}",
+      "transferRefreshFailed": "文件操作已完成，但目录刷新失败。请只读刷新核对，不要重复操作。"
     },
     "prompts": {
       "enterFolderName": "请输入新文件夹的名称:",

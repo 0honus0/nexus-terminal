@@ -1,50 +1,50 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
+import type { AppearanceUpdateRequest } from '../../../../packages/shared/src/preferences/appearance/http';
+import { getTestAppearance, updateTestAppearance } from '../../support/appearance';
 
 test('unrelated appearance updates preserve the saved terminal animation until explicitly cleared', async ({
-  request,
+	request,
 }) => {
-  await loginAsInitialAdmin(request);
-  const originalResponse = await request.get('/api/v1/appearance');
-  expect(originalResponse.ok()).toBeTruthy();
-  const original = await originalResponse.json();
-  const html =
-    '<canvas id="animation"></canvas><script>requestAnimationFrame(function frame(){requestAnimationFrame(frame)})</script>';
-  try {
-    const applied = await request.put('/api/v1/appearance', {
-      data: { terminalCustomHtml: html, terminalBackgroundEnabled: true },
-    });
-    expect(applied.ok()).toBeTruthy();
-    expect((await applied.json()).terminalCustomHtml).toBe(html);
-    for (const patch of [
-      { terminalFontSize: 17 },
-      { terminalBackgroundEnabled: false },
-      { terminalBackgroundEnabled: true },
-      { terminalBackgroundOverlayOpacity: 0.25 },
-    ]) {
-      const updated = await request.put('/api/v1/appearance', { data: patch });
-      expect(updated.ok()).toBeTruthy();
-      expect((await updated.json()).terminalCustomHtml).toBe(html);
-      const persisted = await request.get('/api/v1/appearance');
-      expect(persisted.ok()).toBeTruthy();
-      expect((await persisted.json()).terminalCustomHtml).toBe(html);
-    }
-    const cleared = await request.put('/api/v1/appearance', { data: { terminalCustomHtml: null } });
-    expect(cleared.ok()).toBeTruthy();
-    expect((await cleared.json()).terminalCustomHtml).toBe('');
-    expect((await (await request.get('/api/v1/appearance')).json()).terminalCustomHtml).toBe('');
-  } finally {
-    expect(
-      (
-        await request.put('/api/v1/appearance', {
-          data: {
-            terminalCustomHtml: original.terminalCustomHtml,
-            terminalBackgroundEnabled: original.terminalBackgroundEnabled,
-            terminalFontSize: original.terminalFontSize,
-            terminalBackgroundOverlayOpacity: original.terminalBackgroundOverlayOpacity,
-          },
-        })
-      ).ok(),
-    ).toBeTruthy();
-  }
+	await loginAsInitialAdmin(request);
+	const original = await getTestAppearance(request);
+	const html =
+		'<canvas id="animation"></canvas><script>requestAnimationFrame(function frame(){requestAnimationFrame(frame)})</script>';
+	try {
+		const applied = await updateTestAppearance(request, (input) => {
+			input.terminalCustomHtml = html;
+			input.terminalBackgroundEnabled = true;
+		});
+		expect(applied.terminalCustomHtml).toBe(html);
+		for (const change of [
+			(input: AppearanceUpdateRequest) => {
+				input.terminalFontSize = 17;
+			},
+			(input: AppearanceUpdateRequest) => {
+				input.terminalBackgroundEnabled = false;
+			},
+			(input: AppearanceUpdateRequest) => {
+				input.terminalBackgroundEnabled = true;
+			},
+			(input: AppearanceUpdateRequest) => {
+				input.terminalBackgroundOverlayOpacity = 0.25;
+			},
+		]) {
+			const updated = await updateTestAppearance(request, change);
+			expect(updated.terminalCustomHtml).toBe(html);
+			expect((await getTestAppearance(request)).terminalCustomHtml).toBe(html);
+		}
+		const cleared = await updateTestAppearance(request, (input) => {
+			input.terminalCustomHtml = '';
+		});
+		expect(cleared.terminalCustomHtml).toBe('');
+		expect((await getTestAppearance(request)).terminalCustomHtml).toBe('');
+	} finally {
+		await updateTestAppearance(request, (input) => {
+			input.terminalCustomHtml = original.terminalCustomHtml;
+			input.terminalBackgroundEnabled = original.terminalBackgroundEnabled;
+			input.terminalFontSize = original.terminalFontSize;
+			input.terminalBackgroundOverlayOpacity = original.terminalBackgroundOverlayOpacity;
+		});
+	}
 });

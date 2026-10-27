@@ -19,7 +19,7 @@ RUN npm install --global "pnpm@${PNPM_VERSION}" \
   && pnpm dlx "playwright@${PLAYWRIGHT_VERSION}" install --with-deps --only-shell chromium \
   && apt-get update \
   && apt-get upgrade -y \
-  && apt-get install -y --no-install-recommends bzip2 ca-certificates git openssh-client rsync sshpass unzip zip \
+  && apt-get install -y --no-install-recommends bzip2 ca-certificates git openssh-client rsync sshpass unzip zip xrdp tigervnc-standalone-server tigervnc-tools xterm xdotool xclip fonts-dejavu-core openssl \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/* /root/.cache
 
@@ -27,9 +27,10 @@ WORKDIR /workspace
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY scripts/patches ./scripts/patches
+COPY packages/frontend/vendor ./packages/frontend/vendor
 COPY packages/backend/package.json packages/backend/package.json
+COPY packages/shared/package.json packages/shared/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
-COPY packages/protocol/package.json packages/protocol/package.json
 COPY tests/e2e/package.json tests/e2e/package.json
 RUN apt-get update \
   && apt-get install -y --no-install-recommends g++ make python3 \

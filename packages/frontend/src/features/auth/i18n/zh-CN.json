@@ -2,10 +2,22 @@
   "auth": {
     "login": {
       "title": "用户登录",
+      "heading": "欢迎回来",
+      "heroLine1": "一处登录",
+      "heroLine2": "连接每一台主机",
       "username": "用户名",
+      "usernamePlaceholder": "输入用户名",
       "password": "密码",
+      "passwordPlaceholder": "输入密码",
       "loginButton": "登录",
       "loggingIn": "正在登录...",
+      "or": "或",
+      "showPassword": "显示密码",
+      "hidePassword": "隐藏密码",
+      "themeToLight": "切换浅色主题",
+      "themeToDark": "切换深色主题",
+      "twoFactorHeading": "两步验证",
+      "twoFactorSubheading": "输入身份验证器中的 6 位验证码。",
       "twoFactorPrompt": "请输入两步验证码:",
       "verifyButton": "验证",
       "rememberMe": "记住我",
@@ -41,6 +53,17 @@
         "fieldsRequired": "用户名和密码不能为空。",
         "generic": "设置过程中发生错误，请检查服务器日志。"
       }
+    },
+    "errors": {
+      "generic": "认证请求未完成，请稍后重试。",
+      "unknown": "结果尚未确认。请先刷新登录状态，勿直接重复提交。",
+      "invalidInput": "请检查输入格式与长度。",
+      "credentials": "用户名、密码或验证码不正确。",
+      "expired": "登录挑战已失效，请重新登录。",
+      "rateLimited": "请求过于频繁，请稍后重试。",
+      "captcha": "CAPTCHA 验证失败，请重新完成验证。",
+      "initialized": "账号已初始化，请刷新后登录。",
+      "cancelled": "此操作已失效，请检查当前登录状态。"
     }
   }
 }

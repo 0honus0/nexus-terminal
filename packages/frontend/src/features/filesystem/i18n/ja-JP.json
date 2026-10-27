@@ -1,9 +1,18 @@
 {
   "fileManager": {
+    "directoryPicker": {
+      "title": "転送先ディレクトリを選択",
+      "select": "このディレクトリを使用",
+      "root": "ルートディレクトリ",
+      "empty": "参照できるサブディレクトリはありません",
+      "unavailable": "内容を読み込めません。更新するかルートに戻って再試行してください。確認済みのディレクトリは選択できます。",
+      "notDirectory": "選択した場所はディレクトリではありません。"
+    },
     "modalTitle": "ファイルマネージャー",
     "resizePopup": "ファイルマネージャーのウィンドウサイズを変更",
     "currentPath": "現在のパス",
     "loading": "ディレクトリをロード中...",
+    "connecting": "接続中…",
     "emptyDirectory": "ディレクトリは空です",
     "uploadTasks": "アップロードタスク",
     "uploadSpeed": "合計速度",
@@ -139,6 +148,10 @@
       "modified": "変更日",
       "time": "時間"
     },
+    "sort": {
+      "ascending": "昇順",
+      "descending": "降順"
+    },
     "uploadStatus": {
       "cancelled": "キャンセルされました",
       "conflict": "同名ファイルの選択待ち",
@@ -195,7 +208,23 @@
       "commandNotFoundCompress": "サーバーにコマンド '{command}' が見つからないため、圧縮操作を完了できません。",
       "commandNotFoundDecompress": "サーバーにコマンド '{command}' が見つからないため、解凍操作を完了できません。",
       "genericCommandNotFound": "サーバーにコマンド '{command}' が見つからないため、'{operation}' 操作を完了できません。",
-      "copyPathFailed": "パスのコピーに失敗しました"
+      "copyPathFailed": "パスのコピーに失敗しました",
+      "terminalPathChangeUnknown": "ディレクトリ変更の結果を確認できません。再操作の前に現在のディレクトリを読み取ってください。",
+      "operationUnknown": "リモートファイルが変更された可能性があります。更新して実際のパスを確認してから再操作してください。",
+      "notConnected": "ファイルセッションの準備ができていません。再接続してください。",
+      "invalidResponse": "ファイルの応答を検証できませんでした。更新して現在の状態を確認してください。",
+      "capacityExceeded": "ファイル、ディレクトリ、または要求が容量制限を超えています。読み取り範囲を狭めるか、操作を分けてください。",
+      "requestRejected": "ファイル操作が拒否されました。権限と現在のファイル状態を確認してください。",
+      "notFound": "ファイルまたは有効なファイルセッションが見つかりません。ディレクトリを更新し、解決しない場合は SSH セッションを再接続してください。",
+      "permissionDenied": "このパスへのアクセスが拒否されました。リモートのファイルとディレクトリの権限を確認してください。",
+      "sessionExpired": "ログインセッションが無効になりました。再度ログインしてください。",
+      "fileConflict": "ファイルの状態が変わったか、宛先が既に存在します。ディレクトリを更新して確認してください。",
+      "targetChanged": "接続設定が変更されました。SSH セッションを再接続してください。",
+      "hostKeyUntrusted": "リモートホスト鍵の確認が必要です。再接続してホスト鍵を確認してください。",
+      "remoteUnavailable": "リモートファイルサービスが利用できないか、読み取りがタイムアウトしました。読み取りを再試行し、解決しない場合は SSH セッションを再接続してください。",
+      "invalidInput": "ファイルパス、内容、または操作パラメーターが無効です。確認して再試行してください。",
+      "notText": "このファイルはテキストとして読み取れません。",
+      "commandFailed": "リモートファイルコマンドが失敗しました。ディレクトリ権限と必要なコマンドを確認してください。"
     },
     "notifications": {
       "terminalPathQueued": "フォアグラウンドコマンドの実行中です。シェルのプロンプトが戻った後に安全に実行されます。",
@@ -211,7 +240,8 @@
     },
     "warnings": {
       "moveSameDirectory": "同じディレクトリ内で切り取りと貼り付けはできません。",
-      "crossHostDeleteFailed": "コピー先へのコピーは成功しましたが、コピー元ファイルの削除に失敗しました: {error}"
+      "crossHostDeleteFailed": "コピー先へのコピーは成功しましたが、コピー元ファイルの削除に失敗しました: {error}",
+      "transferRefreshFailed": "ファイル操作は完了しましたが、一覧の更新に失敗しました。操作を繰り返さず、一覧を再読み込みして確認してください。"
     },
     "prompts": {
       "enterFolderName": "新しいフォルダーの名前を入力してください:",

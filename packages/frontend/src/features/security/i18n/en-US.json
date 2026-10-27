@@ -82,7 +82,8 @@
         "registrationFailed": "Passkey registration failed.",
         "deleteFailedGeneral": "Failed to delete Passkey. Please try again.",
         "fetchFailed": "Failed to load Passkeys.",
-        "nameUpdateFailed": "Failed to update Passkey name."
+        "nameUpdateFailed": "Failed to update Passkey name.",
+        "refreshAfterChange": "Change confirmed, but the key list could not be refreshed. Read the latest list before another change."
       },
       "success": {
         "registered": "New Passkey registered successfully!",
@@ -144,6 +145,20 @@
       },
       "hcaptchaProviderName": "hCaptcha",
       "recaptchaProviderName": "Google reCAPTCHA"
+    },
+    "configuration": {
+      "saved": "Saved. Restart the server to apply this configuration.",
+      "savedLive": "Saved and applied.",
+      "restart": "CAPTCHA or Passkey site changes take effect after a server restart.",
+      "conflict": "The configuration has changed. Reload it and review before saving again.",
+      "unknown": "The result is unknown. Reload the saved configuration before making another change.",
+      "refreshAfterChange": "The change was confirmed, but refreshing failed. Reload to check the current state.",
+      "hostname": "Expected CAPTCHA hostname",
+      "hasSecret": "A secret is stored; its value is never returned.",
+      "noSecret": "No secret is stored.",
+      "keepSecret": "Keep stored secret",
+      "clearSecret": "Clear stored secret",
+      "replaceSecret": "Replace stored secret"
     }
   }
 }

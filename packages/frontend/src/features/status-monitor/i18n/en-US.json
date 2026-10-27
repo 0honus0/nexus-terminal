@@ -3,7 +3,8 @@
     "closeTrend": "Close trend chart",
     "title": "Server Status",
     "errorPrefix": "Error:",
-    "loading": "Waiting for data...",
+    "loading": "Reading status…",
+    "connecting": "Connecting…",
     "cpuModelLabel": "CPU Model:",
     "osLabel": "OS:",
     "cpuLabel": "CPU:",
@@ -45,7 +46,23 @@
     "online": "Online",
     "networkInterfaceFallback": "Network interface",
     "historyRange": "History range",
+    "copyIp": "Copy IP",
     "copyIpError": "Failed to copy IP address",
-    "load": "Load"
+    "load": "Load",
+    "failures": {
+      "invalid_input": "Invalid request.",
+      "unauthenticated": "Sign in again.",
+      "forbidden": "Administrator permission required.",
+      "not_found": "The resource no longer exists.",
+      "conflict": "State changed. Read the latest status before continuing.",
+      "limit_exceeded": "Observation capacity exceeded.",
+      "host_key_untrusted": "Confirm the host key before continuing.",
+      "operation_unknown": "The command result is unknown. Do not repeat it; inspect the remote state first.",
+      "remote_unavailable": "The remote observation is unavailable.",
+      "command_failed": "The remote command failed.",
+      "stale_target": "The target configuration changed. Reconnect.",
+      "not_text": "The returned content is not text.",
+      "protocol_failure": "The response could not be verified. Read the remote state before continuing."
+    }
   }
 }

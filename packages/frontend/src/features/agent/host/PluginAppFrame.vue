@@ -1,110 +1,133 @@
 <script setup lang="ts">
-  import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
-  import { agentApi, type AgentPluginFrontendDescriptorDto } from '../api/agent-api';
-  import { PluginFrontendHostBridge } from '../plugin-sdk/host-bridge';
-  import { PLUGIN_FRONTEND_PROTOCOL_VERSION } from '../plugin-sdk/protocol';
+	import { nextTick, onActivated, onDeactivated, ref, watch } from 'vue';
+	import { getPluginFrontendDescriptor } from '../api/plugin-runtime-api';
+	import type { PluginFrontendDescriptor } from '../model/plugin-types';
+	import { PluginFrontendHostBridge } from '../plugin-sdk/host-bridge';
+	import { useAuthenticatedViewScope } from '@/shared/session/use-authenticated-view-scope';
+	import { UiLoadingState } from '@/foundation/ui';
 
-  const props = defineProps<{ appId: string; version: string }>();
-  const iframe = ref<HTMLIFrameElement | null>(null);
-  const descriptor = ref<AgentPluginFrontendDescriptorDto | null>(null);
-  const status = ref<'loading' | 'connecting' | 'ready' | 'unavailable'>('loading');
-  let bridge: PluginFrontendHostBridge | null = null;
-  let generation = 0;
-  let suppressedFrameLoad: HTMLIFrameElement | null = null;
+	const props = defineProps<{ appId: string; version: string; visible: boolean }>();
+	const iframe = ref<HTMLIFrameElement | null>(null);
+	const descriptor = ref<PluginFrontendDescriptor | null>(null);
+	const status = ref<'loading' | 'connecting' | 'ready' | 'unavailable'>('loading');
+	const active = ref(true);
+	let generation = 0;
+	let bridge: PluginFrontendHostBridge | null = null;
+	let request: AbortController | null = null;
+	const scope = useAuthenticatedViewScope({
+		available: () => active.value && props.visible,
 
-  const disposeBridge = (): void => {
-    bridge?.close();
-    bridge = null;
-  };
+		onRevoke() {
+			generation += 1;
+			request?.abort();
+			bridge?.close();
+			bridge = null;
+			descriptor.value = null;
+			status.value = 'unavailable';
+		},
+	});
 
-  const load = async (): Promise<void> => {
-    const current = ++generation;
-    disposeBridge();
-    descriptor.value = null;
-    status.value = 'loading';
-    try {
-      const next = await agentApi.pluginFrontend(props.appId);
-      if (current !== generation) return;
-      if (
-        next.appId !== props.appId ||
-        next.version !== props.version ||
-        next.sandbox !== 'allow-scripts' ||
-        next.protocolVersion !== PLUGIN_FRONTEND_PROTOCOL_VERSION ||
-        !next.sdkVersion ||
-        next.sdkVersion.length > 128 ||
-        /[\0\r\n]/.test(next.sdkVersion)
-      ) {
-        throw new Error('PLUGIN_FRONTEND_DESCRIPTOR_INVALID');
-      }
-      descriptor.value = next;
-      status.value = 'connecting';
-      await nextTick();
-      if (current !== generation) return;
-      const frame = iframe.value;
-      if (!frame) throw new Error('PLUGIN_FRONTEND_FRAME_MISSING');
-      let nextBridge: PluginFrontendHostBridge;
-      nextBridge = new PluginFrontendHostBridge(frame, props.appId, next, () => {
-        if (current !== generation || bridge !== nextBridge) return;
-        queueMicrotask(() => {
-          if (current === generation && bridge === nextBridge) void load();
-        });
-      });
-      bridge = nextBridge;
-      const connected = nextBridge.start();
-      suppressedFrameLoad = frame;
-      frame.src = next.url;
-      await connected;
-      if (current !== generation || bridge !== nextBridge) return;
-      status.value = 'ready';
-    } catch {
-      if (current !== generation) return;
-      disposeBridge();
-      descriptor.value = null;
-      status.value = 'unavailable';
-    }
-  };
+	async function load(): Promise<void> {
+		const signal = scope.capture();
+		if (!scope.isCurrent(signal)) {
+			return;
+		}
+		const current = ++generation;
+		request?.abort();
+		request = new AbortController();
+		const pending = request;
+		bridge?.close();
+		bridge = null;
+		descriptor.value = null;
+		status.value = 'loading';
+		try {
+			const value = await getPluginFrontendDescriptor(props.appId, AbortSignal.any([signal, pending.signal]));
+			if (!scope.isCurrent(signal) || current !== generation) {
+				return;
+			}
+			if (value.version !== props.version) {
+				throw new Error('Plugin version changed');
+			}
+			descriptor.value = value;
+			status.value = 'connecting';
+			await nextTick();
+			if (!scope.isCurrent(signal) || current !== generation) {
+				return;
+			}
+			const frame = iframe.value;
+			if (!frame) {
+				throw new Error('Missing plugin frame');
+			}
+			const owner = new PluginFrontendHostBridge(frame, value, () => {
+				if (current === generation) {
+					bridge = null;
+					descriptor.value = null;
+					status.value = 'unavailable';
+				}
+			});
+			bridge = owner;
+			const connected = owner.start();
+			try {
+				frame.src = value.url;
+			} catch {
+				owner.close();
+			}
+			await connected;
+			if (!scope.isCurrent(signal) || current !== generation || bridge !== owner) {
+				return;
+			}
+			status.value = 'ready';
+		} catch {
+			if (!scope.isCurrent(signal) || current !== generation) {
+				return;
+			}
+			bridge?.close();
+			bridge = null;
+			descriptor.value = null;
+			status.value = 'unavailable';
+		}
+	}
 
-  const onFrameLoad = (event: Event): void => {
-    const loadedFrame = event.currentTarget;
-    if (loadedFrame instanceof HTMLIFrameElement && suppressedFrameLoad === loadedFrame) {
-      suppressedFrameLoad = null;
-      return;
-    }
-    if (status.value !== 'ready' || !descriptor.value) return;
-    void load();
-  };
-
-  watch(
-    () => [props.appId, props.version] as const,
-    () => void load(),
-    { immediate: true },
-  );
-
-  onBeforeUnmount(() => {
-    generation += 1;
-    disposeBridge();
-  });
+	watch(
+		() => [props.appId, props.version, props.visible],
+		() => {
+			void load();
+		},
+		{ immediate: true },
+	);
+	onDeactivated(() => {
+		active.value = false;
+	});
+	onActivated(() => {
+		active.value = true;
+		if (!descriptor.value) {
+			void load();
+		}
+	});
 </script>
-
 <template>
-  <div class="relative h-full min-h-0 bg-background">
-    <iframe
-      v-if="descriptor"
-      ref="iframe"
-      class="h-full w-full border-0 bg-background"
-      sandbox="allow-scripts"
-      referrerpolicy="no-referrer"
-      :title="$t('agent.pluginFrontend.frameTitle')"
-      @load="onFrameLoad"
-    ></iframe>
-    <div
-      v-if="status !== 'ready'"
-      class="absolute inset-0 flex items-center justify-center bg-background p-6 text-center text-sm text-text-secondary"
-      role="status"
-    >
-      <span v-if="status === 'loading'">{{ $t('agent.pluginFrontend.loading') }}</span>
-      <span v-else-if="status === 'connecting'">{{ $t('agent.pluginFrontend.connecting') }}</span>
-      <span v-else>{{ $t('agent.pluginFrontend.unavailable') }}</span>
-    </div>
-  </div>
+	<div class="relative h-full min-h-0 bg-background">
+		<iframe
+			v-if="descriptor"
+			ref="iframe"
+			class="h-full w-full border-0 bg-background"
+			sandbox="allow-scripts"
+			referrerpolicy="no-referrer"
+			:title="$t('agent.pluginFrontend.frameTitle')"
+		/>
+		<UiLoadingState
+			v-if="status === 'loading' || status === 'connecting'"
+			class="absolute inset-0 h-full w-full bg-background"
+			compact
+			:bordered="false"
+			:title="$t(status === 'loading' ? 'agent.pluginFrontend.loading' : 'agent.pluginFrontend.connecting')"
+		/>
+		<div
+			v-else-if="status !== 'ready'"
+			class="absolute inset-0 flex items-center justify-center bg-background p-6 text-center text-sm text-text-secondary"
+			role="status"
+		>
+			{{ $t('agent.pluginFrontend.unavailable') }}
+		</div>
+	</div>
 </template>

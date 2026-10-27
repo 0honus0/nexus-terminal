@@ -1,0 +1,171 @@
+diff --git a/dist/splitpanes.esm.js b/dist/splitpanes.esm.js
+index 68f7a5f6d43bc1d326858f4855fd0dbf7077cf98..d0d60995d0b4dde1e946c25371484caa15269780 100644
+--- a/dist/splitpanes.esm.js
++++ b/dist/splitpanes.esm.js
+@@ -57,7 +57,9 @@ var y = /* @__PURE__ */ Object.assign({ inheritAttrs: !1 }, {
+ 			document.addEventListener("mousemove", k, { passive: !1 }), document.addEventListener("mouseup", A), "ontouchstart" in window && (document.addEventListener("touchmove", k, { passive: !1 }), document.addEventListener("touchend", A));
+ 		}, D = () => {
+ 			document.removeEventListener("mousemove", k, { passive: !1 }), document.removeEventListener("mouseup", A), "ontouchstart" in window && (document.removeEventListener("touchmove", k, { passive: !1 }), document.removeEventListener("touchend", A));
+-		}, O = (e, t) => {
++		}, dragEndTimer = null, O = (e, t) => {
++			clearTimeout(dragEndTimer);
++			w.value.dragging = !1;
+ 			let n = e.target.closest(".splitpanes__splitter");
+ 			if (n) {
+ 				let { left: t, top: r } = n.getBoundingClientRect(), { clientX: i, clientY: a } = "ontouchstart" in window && e.touches ? e.touches[0] : e;
+@@ -69,9 +71,9 @@ var y = /* @__PURE__ */ Object.assign({ inheritAttrs: !1 }, {
+ 				L(F(e)), $("resize", { event: e }, !0);
+ 			}));
+ 		}, A = (e) => {
+-			w.value.dragging && (window.getSelection()?.removeAllRanges(), $("resized", { event: e }, !0)), w.value.mouseDown = !1, w.value.activeSplitter = null, setTimeout(() => {
+-				w.value.dragging = !1, D(), document.documentElement.style.cursor = "";
+-			}, 100);
++			w.value.dragging && (window.getSelection()?.removeAllRanges(), $("resized", { event: e }, !0)), w.value.mouseDown = !1, w.value.activeSplitter = null, D(), document.documentElement.style.cursor = "", dragEndTimer = setTimeout(() => {
++				w.value.dragging = !1;
++			}, 0);
+ 		}, j = (e, t) => {
+ 			"ontouchstart" in window && (e.preventDefault(), T.value.splitter === t ? (clearTimeout(T.value.timeoutId), T.value.timeoutId = null, M(e, t), T.value.splitter = null) : (T.value.splitter = t, T.value.timeoutId = setTimeout(() => T.value.splitter = null, 500))), w.value.dragging || $("splitter-click", {
+ 				event: e,
+@@ -128,9 +130,22 @@ var y = /* @__PURE__ */ Object.assign({ inheritAttrs: !1 }, {
+ 				nextReachedMinPanes: 0
+ 			}, r = 0 + (s.pushOtherPanes ? 0 : n.prevPanesSize), i = 100 - (s.pushOtherPanes ? 0 : n.nextPanesSize);
+ 			e = Math.max(Math.min(e, i), r);
+-			let a = [t, t + 1], o = y.value[a[0]] || null, c = y.value[a[1]] || null, l = o !== null && o.max < 100 && e >= o.max + n.prevPanesSize, u = c !== null && c.max < 100 && e <= 100 - (c.max + B(t + 1));
++			let a = [t, t + 1], o = y.value[a[0]] || null, c = y.value[a[1]] || null, l = o !== null && o.max < 100 && e >= o.max + n.prevPanesSize, u = c !== null && c.max < 100 && e <= 100 - (c.max + n.nextPanesSize);
+ 			if (l || u) {
+-				l ? (o.size = o.max, c.size = Math.min(Math.max(100 - o.max - n.prevPanesSize - n.nextPanesSize, c.min), c.max)) : (o.size = Math.min(Math.max(100 - c.max - n.prevPanesSize - B(t + 1), o.min), o.max), c.size = c.max);
++				l ? (o.size = o.max, c.size = Math.min(Math.max(100 - o.max - n.prevPanesSize - n.nextPanesSize, c.min), c.max)) : (o.size = Math.min(Math.max(100 - c.max - n.prevPanesSize - n.nextPanesSize, o.min), o.max), c.size = c.max);
++				// Preserve bounded intermediate panes while pushing remaining movement.
++				if (s.pushOtherPanes) {
++					const step = l ? -1 : 1;
++					const donor = l ? c : o;
++					let remaining = Math.max(0, l ? e - z(t) - o.size : z(t) + o.size - e);
++					for (let index = t + (step < 0 ? -1 : 2); index >= 0 && index < y.value.length && remaining > 0; index += step) {
++						const pane = y.value[index];
++						const amount = Math.min(remaining, Math.max(0, pane.max - pane.size), Math.max(0, donor.size - donor.min));
++						pane.size += amount;
++						donor.size -= amount;
++						remaining -= amount;
++					}
++				}
+ 				return;
+ 			}
+ 			if (s.pushOtherPanes) {
+@@ -146,7 +161,7 @@ var y = /* @__PURE__ */ Object.assign({ inheritAttrs: !1 }, {
+ 					i > r[0] && i <= n && (t.size = t.min, e.prevReachedMinPanes += t.min);
+ 				}), r[0] === void 0) return e.prevReachedMinPanes = 0, y.value[0].size = y.value[0].min, y.value.forEach((t, r) => {
+ 					r > 0 && r <= n && (t.size = t.min, e.prevReachedMinPanes += t.min);
+-				}), y.value[r[1]].size = 100 - e.prevReachedMinPanes - y.value[0].min - e.prevPanesSize - e.nextPanesSize, null;
++				}), y.value[r[1]].size = 100 - e.prevReachedMinPanes - y.value[0].min - e.nextPanesSize, null;
+ 				e.prevPanesSize = z(r[0]);
+ 			}
+ 			return t > 100 - e.nextPanesSize - y.value[r[1]].min && (r[1] = H(n).index, e.nextReachedMinPanes = 0, r[1] > n + 1 && y.value.forEach((t, i) => {
+@@ -254,7 +269,7 @@ var y = /* @__PURE__ */ Object.assign({ inheritAttrs: !1 }, {
+ 			});
+ 		})), l(() => {
+ 			U(), K(), Z(), $("ready"), C.value = !0;
+-		}), c(() => C.value = !1);
++		}), c(() => { C.value = !1; clearTimeout(dragEndTimer); D(); if (w.value.mouseDown) document.documentElement.style.cursor = ""; });
+ 		let ae = () => {
+ 			let { class: e, ...t } = p;
+ 			return i("div", {
+diff --git a/src/components/splitpanes/splitpanes.vue b/src/components/splitpanes/splitpanes.vue
+index 02643569a3c1d827e844b4486297dee6891f9bab..59b1956f9e8fccab5767b68b7f2a32b0dc2bed70 100644
+--- a/src/components/splitpanes/splitpanes.vue
++++ b/src/components/splitpanes/splitpanes.vue
+@@ -46,6 +46,8 @@ const splitterTaps = ref({ // Used to detect double click on touch devices.
+   timeoutId: null
+ })
+ 
++let dragEndTimer = null
++
+ const splitpanesClasses = computed(() => ({
+   [`splitpanes splitpanes--${props.horizontal ? 'horizontal' : 'vertical'}`]: true,
+   'splitpanes--dragging': touch.value.dragging,
+@@ -76,6 +78,8 @@ const unbindEvents = () => {
+ }
+ 
+ const onMouseDown = (event, splitterIndex) => {
++  clearTimeout(dragEndTimer)
++  touch.value.dragging = false
+   // Store the cursor offset within the splitter to keep the cursor in the same position while dragging.
+   const splitterEl = event.target.closest('.splitpanes__splitter')
+   if (splitterEl) {
+@@ -115,11 +119,11 @@ const onMouseUp = event => {
+   touch.value.activeSplitter = null
+   // Keep dragging flag until click event is finished (click happens immediately after mouseup)
+   // in order to prevent emitting `splitter-click` event if splitter was dragged.
+-  setTimeout(() => {
+-    touch.value.dragging = false
+-    unbindEvents()
+-    document.documentElement.style.cursor = ''
+-  }, 100)
++  // Detach this drag immediately. Release the CSS pointer-event guard just
++  // after the synchronous click, so it cannot swallow the next real drag.
++  unbindEvents()
++  document.documentElement.style.cursor = ''
++  dragEndTimer = setTimeout(() => { touch.value.dragging = false }, 0)
+ }
+ 
+ // If touch device, detect double tap manually (2 taps separated by less than 500ms).
+@@ -241,7 +245,7 @@ const calculatePanesSizeFromDragPercentage = dragPercentage => {
+   let paneAfter = panes.value[panesToResize[1]] || null
+ 
+   const paneBeforeMaxReached = paneBefore !== null && paneBefore.max < 100 && (dragPercentage >= (paneBefore.max + sums.prevPanesSize))
+-  const paneAfterMaxReached = paneAfter !== null && paneAfter.max < 100 && (dragPercentage <= 100 - (paneAfter.max + sumNextPanesSize(splitterIndex + 1)))
++  const paneAfterMaxReached = paneAfter !== null && paneAfter.max < 100 && (dragPercentage <= 100 - (paneAfter.max + sums.nextPanesSize))
+   // Prevent dragging beyond pane max.
+   if (paneBeforeMaxReached || paneAfterMaxReached) {
+     if (paneBeforeMaxReached) {
+@@ -249,9 +253,27 @@ const calculatePanesSizeFromDragPercentage = dragPercentage => {
+       paneAfter.size = Math.min(Math.max(100 - paneBefore.max - sums.prevPanesSize - sums.nextPanesSize, paneAfter.min), paneAfter.max)
+     }
+     else {
+-      paneBefore.size = Math.min(Math.max(100 - paneAfter.max - sums.prevPanesSize - sumNextPanesSize(splitterIndex + 1), paneBefore.min), paneBefore.max)
++      paneBefore.size = Math.min(Math.max(100 - paneAfter.max - sums.prevPanesSize - sums.nextPanesSize, paneBefore.min), paneBefore.max)
+       paneAfter.size = paneAfter.max
+     }
++    // A max-constrained intermediate pane must not trap a pushing splitter.
++    // Transfer only the remaining distance to siblings that can grow, taking
++    // the identical amount from the opposite pane so the total stays constant.
++    if (props.pushOtherPanes) {
++      const step = paneBeforeMaxReached ? -1 : 1
++      const donor = paneBeforeMaxReached ? paneAfter : paneBefore
++      let remaining = Math.max(0, paneBeforeMaxReached
++        ? dragPercentage - sumPrevPanesSize(splitterIndex) - paneBefore.size
++        : sumPrevPanesSize(splitterIndex) + paneBefore.size - dragPercentage)
++      for (let index = splitterIndex + (step < 0 ? -1 : 2);
++        index >= 0 && index < panes.value.length && remaining > 0; index += step) {
++        const pane = panes.value[index]
++        const amount = Math.min(remaining, Math.max(0, pane.max - pane.size), Math.max(0, donor.size - donor.min))
++        pane.size += amount
++        donor.size -= amount
++        remaining -= amount
++      }
++    }
+     return
+   }
+ 
+@@ -301,7 +323,7 @@ const doPushOtherPanes = (sums, dragPercentage) => {
+           sums.prevReachedMinPanes += pane.min
+         }
+       })
+-      panes.value[panesToResize[1]].size = 100 - sums.prevReachedMinPanes - panes.value[0].min - sums.prevPanesSize - sums.nextPanesSize
++      panes.value[panesToResize[1]].size = 100 - sums.prevReachedMinPanes - panes.value[0].min - sums.nextPanesSize
+       return null
+     }
+     sums.prevPanesSize = sumPrevPanesSize(panesToResize[0])
+@@ -725,7 +747,12 @@ onMounted(() => {
+ })
+ 
+ // Prevent emitting console warnings on hot reloading.
+-onBeforeUnmount(() => (ready.value = false))
++onBeforeUnmount(() => {
++  ready.value = false
++  clearTimeout(dragEndTimer)
++  unbindEvents()
++  if (touch.value.mouseDown) document.documentElement.style.cursor = ''
++})
+ 
+ const render = () => {
+   const { class: attrClass, ...restAttrs } = attrs

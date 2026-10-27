@@ -1,0 +1,529 @@
+import type { AgentModelCapabilityField } from '@nexus-terminal/shared/agent/providers/values';
+import { useI18n } from 'vue-i18n';
+import { useFeedbackMessage } from '@/shared/feedback/public';
+import { nextTick, computed, onActivated, onMounted, ref, toRaw, watch } from 'vue';
+import { useAuthenticatedViewScope } from '@/shared/session/use-authenticated-view-scope';
+import {
+	deleteManagedProvider,
+	discoverManagedProvider,
+	discoverProviderEndpoint,
+	listManagedProviders,
+	saveManagedProvider,
+	testManagedProvider,
+} from '../api/provider-management-api';
+import { getModelRegistryStatus, refreshModelRegistry, resolveModelRegistry } from '../api/registry-api';
+import type { ModelRegistryDefaults } from '../model/registry-types';
+import { AgentManagementFailure } from '../model/management-failure';
+import { createProviderDraft } from '../model/provider-mapper';
+import type {
+	DiscoveredProviderModel,
+	Provider,
+	ProviderDraft,
+	ProviderModelDraft,
+	ProviderTestResult,
+} from '../model/provider-types';
+import { agentHostEvents } from '../events/agent-host-events';
+
+export function useProviderManagement(options: { available?: () => boolean } = {}) {
+	const providers = ref<Provider[]>([]);
+	const draft = ref<ProviderDraft | null>(null);
+	const discovered = ref<DiscoveredProviderModel[]>([]);
+	const testResult = ref<ProviderTestResult | null>(null);
+	const busy = ref(false);
+	const refreshRequired = ref(true);
+	const notice = ref('');
+	let failureCause: unknown;
+	const configuredTools = new WeakSet<ProviderModelDraft>();
+	const { t } = useI18n();
+	useFeedbackMessage(
+		() => (notice.value ? t('agent.settings.providerManagement.' + notice.value) : ''),
+		() =>
+			['saved', 'deleted', 'discovered', 'parametersRestored'].includes(notice.value)
+				? 'success'
+				: [
+							'noModels',
+							'noRegistry',
+							'registryRefreshNeeded',
+							'parametersRestoredNoDefaults',
+							'parametersRestoredSomeMissing',
+					  ].includes(notice.value)
+					? 'info'
+					: 'error',
+		() => failureCause,
+		() => {
+			if (
+				(notice.value !== 'registryRefreshNeeded' && notice.value !== 'noRegistry') ||
+				!draft.value?.models.length
+			) {
+				return undefined;
+			}
+			return {
+				key: 'provider-model-registry-refresh',
+				label: t('agent.settings.providerManagement.refreshRegistry'),
+
+				disabled: () => busy.value || refreshRequired.value,
+
+				onClick: () => {
+					const currentDraft = draft.value;
+					if (!currentDraft) return;
+					void matchModels([...currentDraft.models], { refreshRegistry: true });
+				},
+			};
+		},
+	);
+	const loaded = ref(false);
+	let generation = 0;
+	const scope = useAuthenticatedViewScope({
+		available: options.available,
+
+		onRevoke() {
+			generation += 1;
+			providers.value = [];
+			draft.value = null;
+			discovered.value = [];
+			testResult.value = null;
+			busy.value = false;
+			loaded.value = false;
+			refreshRequired.value = true;
+			notice.value = '';
+			failureCause = undefined;
+		},
+	});
+	const blocked = computed(() => busy.value || refreshRequired.value);
+
+	function edit(provider: Provider | null): void {
+		if (blocked.value) {
+			return;
+		}
+		const next = createProviderDraft(provider);
+		// A new provider never has a stored secret, so the form starts in replace mode
+		// instead of exposing a meaningless keep/clear action.
+		if (provider === null) next.credential = { action: 'replace', value: '' };
+		for (const model of next.models) configuredTools.add(toRaw(model));
+		draft.value = next;
+		discovered.value = [];
+		testResult.value = null;
+		notice.value = '';
+		failureCause = undefined;
+	}
+
+	function cancel(): void {
+		if (busy.value) {
+			return;
+		}
+		draft.value = null;
+		discovered.value = [];
+		testResult.value = null;
+	}
+
+	async function perform<T>(
+		action: (signal: AbortSignal) => Promise<T>,
+		accept: (value: T) => void,
+		mutation: boolean,
+	): Promise<void> {
+		if (busy.value || (mutation && refreshRequired.value)) {
+			return;
+		}
+		const signal = scope.capture();
+		if (!scope.isCurrent(signal)) {
+			return;
+		}
+		const current = ++generation;
+		busy.value = true;
+		notice.value = '';
+		failureCause = undefined;
+		testResult.value = null;
+		try {
+			const value = await action(signal);
+			if (generation !== current || !scope.isCurrent(signal)) {
+				return;
+			}
+			accept(value);
+		} catch (cause) {
+			if (generation !== current || !scope.isCurrent(signal)) {
+				return;
+			}
+			failureCause = cause;
+			const failure = cause instanceof AgentManagementFailure ? cause : null;
+			if (failure?.code === 'version_conflict' || failure?.code === 'provider_configuration_stale') {
+				notice.value = 'conflict';
+			} else if (failure?.code === 'invalid_input') {
+				notice.value = 'invalid';
+			} else if (failure?.code === 'provider_in_use') {
+				notice.value = 'inUse';
+			} else {
+				notice.value = mutation && (!failure || failure.outcome === 'unknown') ? 'unknown' : 'failed';
+			}
+			if (mutation && (!failure || failure.outcome !== 'not_dispatched')) {
+				refreshRequired.value = true;
+			}
+		} finally {
+			if (generation === current && scope.isCurrent(signal)) {
+				busy.value = false;
+			}
+		}
+	}
+
+	async function load(): Promise<void> {
+		await perform(
+			listManagedProviders,
+			(value) => {
+				providers.value = value;
+				draft.value = null;
+				discovered.value = [];
+				loaded.value = true;
+				refreshRequired.value = false;
+			},
+			false,
+		);
+	}
+
+	async function save(): Promise<void> {
+		if (!draft.value || blocked.value) {
+			return;
+		}
+		const original = draft.value;
+		const input = structuredClone(toRaw(draft.value));
+		await perform(
+			(signal) => saveManagedProvider(input, signal),
+			(value) => {
+				providers.value = [value, ...providers.value.filter((item) => item.id !== value.id)];
+				draft.value = null;
+				discovered.value = [];
+				notice.value = 'saved';
+				agentHostEvents.emit('configuration-changed', { origin: 'local' });
+			},
+			true,
+		);
+		// A dispatched credential is never retained for an accidental second submission.
+		if (draft.value === original) {
+			draft.value.credential = { action: 'keep' };
+		}
+	}
+
+	async function setEnabled(provider: Provider, enabled: boolean): Promise<void> {
+		if (blocked.value || draft.value !== null || provider.enabled === enabled) {
+			return;
+		}
+		const input = createProviderDraft(provider);
+		input.enabled = enabled;
+		await perform(
+			(signal) => saveManagedProvider(input, signal),
+			(value) => {
+				providers.value = providers.value.map((item) => (item.id === value.id ? value : item));
+				notice.value = 'saved';
+				agentHostEvents.emit('configuration-changed', { origin: 'local' });
+			},
+			true,
+		);
+	}
+
+	async function remove(provider: Provider): Promise<void> {
+		if (draft.value !== null) {
+			return;
+		}
+		await perform(
+			(signal) => deleteManagedProvider(provider, signal),
+			() => {
+				providers.value = providers.value.filter((item) => item.id !== provider.id);
+				notice.value = 'deleted';
+				agentHostEvents.emit('configuration-changed', { origin: 'local' });
+			},
+			true,
+		);
+	}
+
+	async function discover(provider: Provider | null): Promise<void> {
+		if (blocked.value) {
+			return;
+		}
+		const input = draft.value === null ? null : structuredClone(toRaw(draft.value));
+		if (provider !== null && input !== null && input.id !== provider.id) {
+			return;
+		}
+		if (!provider && (!input || input.id !== null)) {
+			return;
+		}
+		discovered.value = [];
+		await perform(
+			async (signal) => {
+				if (provider) {
+					const found = await discoverManagedProvider(provider.id, signal);
+					const updated = await listManagedProviders(signal);
+					return { found, updated };
+				}
+				if (!input) {
+					throw new AgentManagementFailure('invalid_input', 'not_dispatched');
+				}
+				const found = await discoverProviderEndpoint(
+					input.baseUrl,
+					input.credential.action === 'replace' ? input.credential.value : undefined,
+					signal,
+				);
+				return { found, updated: null };
+			},
+			(value) => {
+				discovered.value = value.found;
+				if (provider && value.updated) {
+					providers.value = value.updated;
+					if (draft.value === null) {
+						const selected = value.updated.find((item) => item.id === provider.id);
+						draft.value = selected ? createProviderDraft(selected) : null;
+					}
+					agentHostEvents.emit('configuration-changed', { origin: 'local' });
+				}
+				notice.value = value.found.length === 0 ? 'noModels' : 'discovered';
+			},
+			true,
+		);
+	}
+
+	async function test(provider: Provider, modelId: string): Promise<void> {
+		if (draft.value !== null) {
+			return;
+		}
+		await perform(
+			(signal) => testManagedProvider(provider.id, modelId, signal),
+			(value) => {
+				testResult.value = value;
+			},
+			true,
+		);
+	}
+
+	function preserveModelTools(model: ProviderModelDraft): void {
+		configuredTools.add(toRaw(model));
+	}
+
+	function applyRegistry(model: ProviderModelDraft, value: ModelRegistryDefaults, mode: 'missing' | 'replace'): void {
+		const replace = mode === 'replace';
+
+		function apply<K extends AgentModelCapabilityField>(field: K, value: ProviderModelDraft[K]): void {
+			model[field] = value;
+			if (value === undefined) delete model.sources[field];
+			else model.sources[field] = 'registry';
+		}
+
+		if (value.supportsImageGeneration === true && (replace || model.protocol === undefined))
+			model.protocol = 'images';
+		const observed = discovered.value.find((item) => item.id === model.id)?.capabilities;
+		if (replace || model.contextWindow === undefined) apply('contextWindow', value.contextWindow);
+		if (replace || model.maxOutputTokens === undefined) apply('maxOutputTokens', value.maxOutputTokens);
+		if (
+			value.supportsTools !== undefined &&
+			(replace || (!configuredTools.has(toRaw(model)) && observed?.supportsTools === undefined))
+		) {
+			apply('supportsTools', value.supportsTools);
+		}
+		configuredTools.add(toRaw(model));
+		if (replace || model.supportsImageInput === undefined) apply('supportsImageInput', value.supportsImageInput);
+		if (replace || model.supportsImageGeneration === undefined)
+			apply('supportsImageGeneration', value.supportsImageGeneration);
+		if (replace || model.supportsFileInput === undefined) apply('supportsFileInput', value.supportsFileInput);
+		if (replace || model.supportsPromptCacheKey === undefined)
+			apply('supportsPromptCacheKey', value.supportsPromptCacheKey);
+		if (replace || model.reasoningEfforts === undefined) {
+			apply(
+				'reasoningEfforts',
+				value.reasoningEfforts?.map((effort) => effort),
+			);
+		}
+		if (
+			(replace || model.defaultReasoningEffort === undefined) &&
+			(value.defaultReasoningEffort === undefined ||
+				model.reasoningEfforts?.includes(value.defaultReasoningEffort))
+		) {
+			apply('defaultReasoningEffort', value.defaultReasoningEffort);
+		}
+		if (replace || model.reasoningMandatory === undefined) {
+			if (value.reasoningMandatory !== true || model.reasoningEfforts?.length)
+				apply('reasoningMandatory', value.reasoningMandatory);
+		}
+	}
+
+	async function matchModels(
+		models: ProviderModelDraft[],
+		options: { refreshRegistry?: boolean } = {},
+	): Promise<void> {
+		const currentDraft = draft.value;
+		if (!currentDraft || blocked.value) return;
+		const selected = models
+			.filter((model) => currentDraft.models.includes(model) && model.id.trim())
+			.map((model) => ({ model, id: model.id, before: JSON.stringify(model) }));
+		if (!selected.length) return;
+		await perform(
+			async (signal) => {
+				const status = options.refreshRegistry
+					? await refreshModelRegistry(signal)
+					: await getModelRegistryStatus(signal);
+				const matches: Array<{ item: (typeof selected)[number]; value: ModelRegistryDefaults | null }> = [];
+				for (let index = 0; index < selected.length; index += 4) {
+					if (signal.aborted) return { status, matches: [] };
+					const batch = await Promise.all(
+						selected.slice(index, index + 4).map(async (item) => ({
+							item,
+							value: status.entryCount > 0 ? await resolveModelRegistry(item.id, signal) : null,
+						})),
+					);
+					matches.push(...batch);
+				}
+				return { status, matches };
+			},
+			({ status, matches }) => {
+				if (draft.value !== currentDraft) return;
+				let missing = false;
+				for (const { item, value } of matches) {
+					if (
+						!currentDraft.models.includes(item.model) ||
+						item.model.id !== item.id ||
+						JSON.stringify(item.model) !== item.before
+					)
+						continue;
+					if (value) applyRegistry(item.model, value, 'missing');
+					else missing = true;
+				}
+				if (
+					status.activeSource === 'unavailable' ||
+					status.lastSuccessAt === null ||
+					status.lastErrorCode !== null
+				) {
+					notice.value = 'registryRefreshNeeded';
+				} else if (missing) {
+					notice.value = 'noRegistry';
+				}
+			},
+			false,
+		);
+	}
+
+	function restoreModelParameters(
+		model: ProviderModelDraft,
+		value: ModelRegistryDefaults | null,
+		fallbackProtocol: Provider['protocol'],
+	): void {
+		const protocol = model.protocol;
+		const effectiveProtocol = protocol ?? fallbackProtocol;
+		configuredTools.delete(toRaw(model));
+		model.sources = {};
+		model.contextWindow = undefined;
+		model.maxOutputTokens = undefined;
+		model.supportsTools = false;
+		model.supportsImageInput = undefined;
+		model.supportsImageGeneration = undefined;
+		model.supportsFileInput = undefined;
+		model.supportsPromptCacheKey = undefined;
+		model.reasoningEfforts = undefined;
+		model.defaultReasoningEffort = undefined;
+		model.reasoningMandatory = undefined;
+		if (value) applyRegistry(model, value, 'replace');
+		if (protocol !== undefined) model.protocol = protocol;
+		if (effectiveProtocol === 'images') {
+			model.supportsTools = false;
+			model.sources.supportsTools = 'manual';
+			if (model.supportsImageGeneration === undefined) {
+				model.supportsImageGeneration = true;
+				model.sources.supportsImageGeneration = 'manual';
+			}
+		}
+	}
+
+	async function resetModel(model: ProviderModelDraft): Promise<void> {
+		if (!draft.value || blocked.value) return;
+		const currentDraft = draft.value;
+		const id = model.id.trim();
+		const before = JSON.stringify(model);
+		await perform(
+			(signal) => (id ? resolveModelRegistry(id, signal) : Promise.resolve(null)),
+			(value) => {
+				if (
+					draft.value !== currentDraft ||
+					!currentDraft.models.includes(model) ||
+					JSON.stringify(model) !== before
+				)
+					return;
+				restoreModelParameters(model, value, currentDraft.protocol);
+				notice.value = value ? 'parametersRestored' : 'parametersRestoredNoDefaults';
+			},
+			false,
+		);
+	}
+
+	async function resetAllModels(): Promise<void> {
+		const currentDraft = draft.value;
+		if (!currentDraft || blocked.value) return;
+		const selected = currentDraft.models.map((model) => ({
+			model,
+			id: model.id.trim(),
+			before: JSON.stringify(model),
+		}));
+		if (!selected.length) return;
+		await perform(
+			async (signal) => {
+				const matches: Array<{ item: (typeof selected)[number]; value: ModelRegistryDefaults | null }> = [];
+				for (let index = 0; index < selected.length; index += 4) {
+					if (signal.aborted) return { matches: [] };
+					const batch = await Promise.all(
+						selected.slice(index, index + 4).map(async (item) => ({
+							item,
+							value: item.id ? await resolveModelRegistry(item.id, signal) : null,
+						})),
+					);
+					matches.push(...batch);
+				}
+				return { matches };
+			},
+			({ matches }) => {
+				let missingDefaults = false;
+				for (const { item, value } of matches) {
+					if (
+						draft.value !== currentDraft ||
+						!currentDraft.models.includes(item.model) ||
+						item.model.id.trim() !== item.id ||
+						JSON.stringify(item.model) !== item.before
+					) {
+						continue;
+					}
+					restoreModelParameters(item.model, value, currentDraft.protocol);
+					if (!value) missingDefaults = true;
+				}
+				notice.value = missingDefaults ? 'parametersRestoredSomeMissing' : 'parametersRestored';
+			},
+			false,
+		);
+	}
+
+	function loadInitial(): void {
+		if (!loaded.value && (options.available?.() ?? true)) {
+			void load();
+		}
+	}
+
+	watch(() => options.available?.() ?? true, loadInitial);
+	onMounted(loadInitial);
+	onActivated(async () => {
+		await nextTick();
+		loadInitial();
+	});
+	return {
+		providers,
+		draft,
+		discovered,
+		testResult,
+		busy,
+		blocked,
+		refreshRequired,
+		notice,
+		edit,
+		cancel,
+		load,
+		save,
+		setEnabled,
+		remove,
+		discover,
+		test,
+		resetModel,
+		resetAllModels,
+		matchModels,
+		preserveModelTools,
+	};
+}

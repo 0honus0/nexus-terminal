@@ -4,63 +4,63 @@ import { useFilesystemBrowser, type FilesystemBrowserController } from './useFil
 import { useFilesystemCatalog } from './useFilesystemCatalog';
 
 export interface FilesystemSessionState {
-  browser: FilesystemBrowserController;
-  ensureLoaded(): Promise<void>;
-  dispose(): void;
+	browser: FilesystemBrowserController;
+	ensureLoaded(): Promise<void>;
+	dispose(): void;
 }
 
 export function createFilesystemSessionState(channel: FilesystemChannel, initialPath = '.'): FilesystemSessionState {
-  const browser = useFilesystemBrowser(channel, initialPath.startsWith('/') ? initialPath : '/');
-  const catalog = useFilesystemCatalog();
-  let initialRecorded = false;
-  let initialLoad: Promise<void> | null = null;
-  let disposed = false;
+	const browser = useFilesystemBrowser(channel, initialPath.startsWith('/') ? initialPath : '/');
+	const catalog = useFilesystemCatalog();
+	let initialRecorded = false;
+	let initialLoad: Promise<void> | null = null;
+	let disposed = false;
 
-  const recordPath = (path: string) => {
-    if (disposed || !path) return;
-    void catalog.recordPath(path).catch(() => undefined);
-  };
+	const recordPath = (path: string) => {
+		if (disposed || !path) return;
+		void catalog.recordPath(path).catch(() => undefined);
+	};
 
-  const stopPathWatch = watch(
-    browser.path,
-    (path) => {
-      if (initialRecorded) recordPath(path);
-    },
-    { flush: 'sync' },
-  );
+	const stopPathWatch = watch(
+		browser.path,
+		(path) => {
+			if (initialRecorded) recordPath(path);
+		},
+		{ flush: 'sync' },
+	);
 
-  const ensureLoaded = async (): Promise<void> => {
-    if (!browser.loaded.value) {
-      if (!initialLoad) {
-        browser.error.value = null;
-        browser.loading.value = true;
-        const task = (async () => {
-          let target = initialPath;
-          try {
-            target = (await channel.realpath(initialPath)).path;
-          } catch {
-            target = initialPath.startsWith('/') ? initialPath : '/';
-          }
-          await browser.load(target);
-        })();
-        initialLoad = task.finally(() => {
-          initialLoad = null;
-        });
-      }
-      await initialLoad;
-    }
-    if (!browser.error.value && !initialRecorded) {
-      initialRecorded = true;
-      recordPath(browser.path.value);
-    }
-  };
+	const ensureLoaded = async (): Promise<void> => {
+		if (!browser.loaded.value) {
+			if (!initialLoad) {
+				browser.error.value = null;
+				browser.loading.value = true;
+				const task = (async () => {
+					let target = initialPath;
+					try {
+						target = (await channel.realpath(initialPath)).path;
+					} catch {
+						target = initialPath.startsWith('/') ? initialPath : '/';
+					}
+					await browser.load(target);
+				})();
+				initialLoad = task.finally(() => {
+					initialLoad = null;
+				});
+			}
+			await initialLoad;
+		}
+		if (!browser.error.value && !initialRecorded) {
+			initialRecorded = true;
+			recordPath(browser.path.value);
+		}
+	};
 
-  const dispose = () => {
-    if (disposed) return;
-    disposed = true;
-    stopPathWatch();
-    browser.dispose();
-  };
+	const dispose = () => {
+		if (disposed) return;
+		disposed = true;
+		stopPathWatch();
+		browser.dispose();
+	};
 
-  return { browser, ensureLoaded, dispose };
+	return { browser, ensureLoaded, dispose };
 }

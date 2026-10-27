@@ -30,37 +30,23 @@ services:
         required: false
     environment:
       NODE_ENV: production
-      # Backend has no published port; the one ingress hop is Frontend Nginx.
-      TRUST_PROXY: ${TRUST_PROXY:-1}
-      PORT: 3001
-      APP_NAME: ${APP_NAME:-Nexus Terminal}
-      GUACD_HOST: guacd
-      GUACD_PORT: 4822
-      RP_ID: ${RP_ID:-}
-      RP_ORIGIN: ${RP_ORIGIN:-}
+      # Only Frontend is published; keep the Backend network isolated.
+      NEXUS_HOST: 0.0.0.0
+      NEXUS_PORT: 3001
+      NEXUS_DB_PATH: /app/data/nexus-terminal.db
+      NEXUS_ENCRYPTION_KEY: ${NEXUS_ENCRYPTION_KEY:?Set a persistent base64 32-byte key in .env}
       NEXUS_PUBLIC_ORIGIN: ${NEXUS_PUBLIC_ORIGIN:-http://localhost:18111}
-      # Plugin/SDK 与 API/WebSocket 复用 Backend 3001 listener；不再需要独立 Plugin 端口配置。
-      # 默认 nexus.agent（Operations + Developer Skills）以及 nexus.fullstack 等 first-party App 都是独立签名 Plugin，不编译进 Nexus 主镜像。
-      # 这里只允许替换官方 catalog/mirror 地址；Publisher 信任根由 Nexus Host 固定 pin。
-      NEXUS_AGENT_OFFICIAL_PLUGIN_CATALOG_URL: ${NEXUS_AGENT_OFFICIAL_PLUGIN_CATALOG_URL:-https://github.com/0honus0/nexus-agent-plugins/releases/latest/download/catalog.json}
+      NEXUS_TRUSTED_PROXIES: loopback,${NEXUS_TRUSTED_PROXIES:-uniquelocal}
     volumes:
-      - ./data:/app/data
-    depends_on:
-      guacd:
-        condition: service_started
+      - ${NEXUS_DATA_DIR:-./data}:/app/data
     healthcheck:
-      test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1:$${PORT:-3001}/api/v1/status']
+      test:
+        - CMD-SHELL
+        - 'wget -q -O /dev/null --header="Host: $${NEXUS_PUBLIC_ORIGIN#*://}" --header="X-Forwarded-Proto: $${NEXUS_PUBLIC_ORIGIN%%:*}" http://127.0.0.1:3001/api/v1/status'
       interval: 10s
       timeout: 3s
       retries: 10
       start_period: 20s
-
-  guacd:
-    image: ${GUACD_IMAGE:-guacamole/guacd:latest}
-    container_name: nexus-terminal-guacd
-    restart: unless-stopped
-    networks:
-      - nexus-terminal-network
 
 networks:
   nexus-terminal-network:

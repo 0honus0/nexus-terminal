@@ -2,122 +2,139 @@ import { randomUUID } from 'node:crypto';
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { E2E_SSH } from '../../support/ssh';
+import {
+	createTestNotification,
+	listTestNotifications,
+	removeTestNotification,
+	deliverTestNotification,
+	notificationHeaders,
+	NOTIFICATIONS_PATH,
+} from '../../support/notifications';
+import { readNotificationResponse, readOperationsError } from '../../../../packages/shared/src/operations/http-codec';
+import type { NotificationConfigInput } from '../../../../packages/shared/src/operations/notifications/http';
 
 const cases = [
-  { name: 'automatic credential names redact case-insensitively', kind: 'redact' },
-  { name: 'null preserves an existing secret using different header casing', kind: 'preserve' },
-  { name: 'null cannot preserve a public header', kind: 'public-null' },
-  { name: 'null cannot create an unknown secret header', kind: 'unknown-null' },
-  { name: 'custom secret classification cannot be removed while retaining null', kind: 'unmark' },
-  { name: 'invalid custom secret header name is rejected atomically', kind: 'invalid-name' },
-  { name: 'non-string header values are rejected atomically', kind: 'invalid-value' },
-  {
-    name: 'case-colliding custom headers cannot expose a retained secret by removing its classification',
-    kind: 'case-collision',
-  },
-  { name: 'reversed case-colliding headers cannot bypass secret edit rejection', kind: 'reverse-collision' },
+	{ name: 'every webhook header value is redacted regardless of its name or casing', kind: 'redact' },
+	{ name: 'explicit keep preserves credentials using different header casing', kind: 'preserve' },
+	{ name: 'null cannot stand in for an explicit public header command', kind: 'public-null' },
+	{ name: 'null cannot create an unknown secret header', kind: 'unknown-null' },
+	{ name: 'legacy secret classification is rejected instead of exposing retained values', kind: 'unmark' },
+	{ name: 'invalid custom secret header name is rejected atomically', kind: 'invalid-name' },
+	{ name: 'non-string replacement values are rejected atomically', kind: 'invalid-value' },
+	{ name: 'case-colliding edits cannot expose retained credentials', kind: 'case-collision' },
+	{ name: 'reversing case-colliding edits cannot bypass rejection', kind: 'reverse-collision' },
 ] as const;
 
-test('case-colliding headers are rejected on create and unsaved delivery without persisting a channel', async ({
-  request,
-}) => {
-  await loginAsInitialAdmin(request);
-  const name = `E2E Header Collision ${randomUUID()}`;
-  const config = {
-    url: `${E2E_SSH.controlUrl}/e2e-notification-webhook-secrets?phase=original`,
-    method: 'POST',
-    headers: { Authorization: 'Bearer e2e-original', authorization: 'Bearer e2e-replacement' },
-  };
-  const created = await request.post('/api/v1/notifications', {
-    data: { name, channelType: 'webhook', enabled: false, enabledEvents: [], config },
-  });
-  expect(created.status(), await created.text()).toBe(400);
-  const sent = await request.post('/api/v1/notifications/test-unsaved', { data: { channelType: 'webhook', config } });
-  expect(sent.status(), await sent.text()).toBe(400);
-  expect((await sent.json()).message).toContain('config.headers');
-  const listed = await request.get('/api/v1/notifications');
-  expect(listed.ok()).toBeTruthy();
-  expect(((await listed.json()) as Array<{ name: string }>).some((channel) => channel.name === name)).toBe(false);
+function config(): Extract<NotificationConfigInput, { kind: 'webhook' }> {
+	return {
+		kind: 'webhook',
+		url: `${E2E_SSH.controlUrl}/e2e-notification-webhook-secrets?phase=original`,
+		method: 'POST',
+		bodyTemplate: null,
+		headers: [
+			{ name: 'Authorization', value: { action: 'replace', value: 'Bearer e2e-original' } },
+			{ name: 'X-E2E-Private', value: { action: 'replace', value: 'private-original' } },
+			{ name: 'X-Public', value: { action: 'replace', value: 'visible' } },
+			{ name: 'X-Api-Key', value: { action: 'replace', value: 'key-original' } },
+			{ name: 'Cookie', value: { action: 'replace', value: 'cookie-original' } },
+		],
+	};
+}
+
+test('case-colliding headers are rejected on create and unsaved delivery without persistence', async ({ request }) => {
+	await loginAsInitialAdmin(request);
+	const name = `E2E Header Collision ${randomUUID()}`;
+	const input = config();
+	input.headers.push({ name: 'authorization', value: { action: 'replace', value: 'Bearer e2e-replacement' } });
+	for (const [path, data] of [
+		[NOTIFICATIONS_PATH, { name, enabled: false, events: [], config: input }],
+		[NOTIFICATIONS_PATH + '/test-unsaved', { config: input }],
+	] as const) {
+		const response = await request.post(path, { headers: notificationHeaders, data });
+		expect(response.status()).toBe(400);
+		expect(readOperationsError(await response.json()).code).toBe('invalid_input');
+	}
+	expect((await listTestNotifications(request)).some((value) => value.name === name)).toBe(false);
 });
 
 for (const scenario of cases) {
-  test(scenario.name, async ({ request }) => {
-    await loginAsInitialAdmin(request);
-    const name = `E2E Secret Contract ${randomUUID()}`;
-    const secret = 'Bearer e2e-original';
-    const url = `${E2E_SSH.controlUrl}/e2e-notification-webhook-secrets?phase=original`;
-    const created = await request.post('/api/v1/notifications', {
-      data: {
-        channelType: 'webhook',
-        name,
-        enabled: false,
-        enabledEvents: [],
-        config: {
-          url,
-          method: 'POST',
-          headers: {
-            Authorization: secret,
-            'X-E2E-Private': 'private-original',
-            'X-Public': 'visible',
-            'X-Api-Key': 'key-original',
-            Cookie: 'cookie-original',
-          },
-          secretHeaderNames: ['X-E2E-Private'],
-        },
-      },
-    });
-    expect(created.status(), await created.text()).toBe(201);
-    const initial = (await created.json()) as { id: number; config: { headers: Record<string, string | null> } };
-    try {
-      expect(JSON.stringify(initial)).not.toContain(secret);
-      expect(initial.config.headers).toMatchObject({
-        Authorization: null,
-        'X-E2E-Private': null,
-        'X-Api-Key': null,
-        Cookie: null,
-        'X-Public': 'visible',
-      });
-      if (scenario.kind !== 'redact') {
-        const changes: Record<string, unknown> = {
-          preserve: { headers: { authorization: null, 'x-e2e-private': null, 'X-Public': 'visible' } },
-          'public-null': { headers: { 'X-Public': null } },
-          'unknown-null': { headers: { 'X-New-Secret': null } },
-          unmark: { headers: initial.config.headers, secretHeaderNames: [] },
-          'invalid-name': { secretHeaderNames: ['invalid header'] },
-          'invalid-value': { headers: { Authorization: 123 } },
-          'case-collision': {
-            headers: { 'X-E2E-Private': 'public-replacement', 'x-e2e-private': null, Authorization: null },
-            secretHeaderNames: [],
-          },
-          'reverse-collision': {
-            headers: { 'x-e2e-private': null, 'X-E2E-Private': 'public-replacement', Authorization: null },
-            secretHeaderNames: [],
-          },
-        };
-        const updated = await request.put(`/api/v1/notifications/${initial.id}`, {
-          data: {
-            name: `${name} edited`,
-            config: { url, ...(changes[scenario.kind] as object) },
-          },
-        });
-        const updateBody = await updated.text();
-        expect(updateBody).not.toContain('private-original');
-        expect(updated.status(), updateBody).toBe(scenario.kind === 'preserve' ? 200 : 400);
-        if (scenario.kind === 'preserve') expect(JSON.stringify(await updated.json())).not.toContain(secret);
-      }
-      const listed = await request.get('/api/v1/notifications');
-      expect(listed.ok()).toBeTruthy();
-      const stored = (
-        (await listed.json()) as Array<{ id: number; name: string; config: { headers: Record<string, string | null> } }>
-      ).find((item) => item.id === initial.id)!;
-      expect(stored.name).toBe(scenario.kind === 'preserve' ? `${name} edited` : name);
-      expect(JSON.stringify(stored)).not.toContain(secret);
-      if (scenario.kind !== 'preserve') expect(stored.config.headers).toEqual(initial.config.headers);
-      const sent = await request.post(`/api/v1/notifications/${initial.id}/test`);
-      expect(sent.ok(), await sent.text()).toBeTruthy();
-    } finally {
-      const deleted = await request.delete(`/api/v1/notifications/${initial.id}`);
-      expect(deleted.ok()).toBeTruthy();
-    }
-  });
+	test(scenario.name, async ({ request }) => {
+		await loginAsInitialAdmin(request);
+		const name = `E2E Secret Contract ${randomUUID()}`;
+		const initial = await createTestNotification(request, { name, enabled: false, events: [], config: config() });
+		try {
+			expect(initial.config.kind).toBe('webhook');
+			if (initial.config.kind !== 'webhook') throw new Error('Unexpected notification kind');
+			expect(initial.config.headers).toEqual(
+				config().headers.map((header) => ({ name: header.name, hasValue: true })),
+			);
+			const redacted = JSON.stringify(initial);
+			for (const secret of [
+				'Bearer e2e-original',
+				'private-original',
+				'key-original',
+				'cookie-original',
+				'visible',
+			])
+				expect(redacted).not.toContain(secret);
+			if (scenario.kind !== 'redact') {
+				const keep = { action: 'keep' };
+				const replacement = { action: 'replace', value: 'public-replacement' };
+				const changes: Record<string, object> = {
+					preserve: {
+						headers: [
+							{ name: 'authorization', value: keep },
+							{ name: 'x-e2e-private', value: keep },
+							{ name: 'X-Public', value: keep },
+						],
+					},
+					'public-null': { headers: [{ name: 'X-Public', value: null }] },
+					'unknown-null': { headers: [{ name: 'X-New-Secret', value: null }] },
+					unmark: { secretHeaderNames: [] },
+					'invalid-name': { headers: [{ name: 'invalid header', value: keep }] },
+					'invalid-value': { headers: [{ name: 'Authorization', value: { action: 'replace', value: 123 } }] },
+					'case-collision': {
+						headers: [
+							{ name: 'X-E2E-Private', value: replacement },
+							{ name: 'x-e2e-private', value: keep },
+						],
+					},
+					'reverse-collision': {
+						headers: [
+							{ name: 'x-e2e-private', value: keep },
+							{ name: 'X-E2E-Private', value: replacement },
+						],
+					},
+				};
+				const updated = await request.put(NOTIFICATIONS_PATH + '/' + initial.id, {
+					headers: notificationHeaders,
+					data: {
+						expectedVersion: initial.version,
+						name: `${name} edited`,
+						enabled: false,
+						events: [],
+						config: { ...config(), ...changes[scenario.kind] },
+					},
+				});
+				expect(updated.status()).toBe(scenario.kind === 'preserve' ? 200 : 400);
+				const body: unknown = await updated.json();
+				expect(JSON.stringify(body)).not.toContain('private-original');
+				if (scenario.kind === 'preserve') {
+					const saved = readNotificationResponse(body).setting;
+					expect(saved.version).toBe(initial.version + 1);
+				} else expect(readOperationsError(body).code).toBe('invalid_input');
+			}
+			const stored = (await listTestNotifications(request)).find((item) => item.id === initial.id);
+			expect(stored).toBeDefined();
+			if (!stored) throw new Error('Notification disappeared');
+			expect(stored.name).toBe(scenario.kind === 'preserve' ? `${name} edited` : name);
+			expect(stored.version).toBe(initial.version + (scenario.kind === 'preserve' ? 1 : 0));
+			expect(JSON.stringify(stored)).not.toContain('Bearer e2e-original');
+			if (scenario.kind !== 'preserve') expect(stored.config).toEqual(initial.config);
+			await deliverTestNotification(request, initial.id);
+		} finally {
+			const current = (await listTestNotifications(request)).find((item) => item.id === initial.id);
+			if (current) await removeTestNotification(request, current);
+		}
+	});
 }

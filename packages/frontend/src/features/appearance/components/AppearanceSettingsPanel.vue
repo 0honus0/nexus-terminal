@@ -1,122 +1,232 @@
 <script setup lang="ts">
-  import { computed, onMounted, ref, watch } from 'vue';
-  import { useI18n } from 'vue-i18n';
-  import { UiButton, UiInput } from '@/foundation/ui';
-  import { defaultWindowThemeColor } from '../config/default-theme';
-  import { useAppearanceStore } from '../store/appearance.store';
+	import { computed, ref, watch } from 'vue';
+	import { useI18n } from 'vue-i18n';
+	import { UiButton, UiFormField, UiInput, UiSettingsGroup } from '@/foundation/ui';
+	import { useSettingsReloadSource, useFeedbackMessage } from '@/shared/feedback/public';
+	import { useAuthenticatedViewScope } from '@/shared/session/public';
+	import { defaultWindowThemeColor } from '../config/default-theme';
+	import { useAppearanceStore } from '../store/appearance.store';
+	import { useAppearanceEditor } from '../composables/use-appearance-editor';
+	const emit = defineEmits<{ customize: [] }>();
+	const props = withDefaults(defineProps<{ active?: boolean }>(), { active: true });
+	const { t } = useI18n();
+	const store = useAppearanceStore();
+	const editor = useAppearanceEditor({ available: () => props.active });
+	const scope = useAuthenticatedViewScope({ available: () => props.active });
+	const draft = ref(defaultWindowThemeColor);
+	const saving = editor.busy;
+	const loadError = ref(false);
+	let failureCause: unknown;
+	useFeedbackMessage(
+		() => (props.active && loadError.value ? t('settings.appearance.loadFailed') : ''),
+		undefined,
+		() => failureCause,
+	);
+	let baseline: number | null = null;
+	let original = defaultWindowThemeColor;
 
-  const emit = defineEmits<{ customize: [] }>();
-  const { t } = useI18n();
-  const store = useAppearanceStore();
-  const draft = ref(defaultWindowThemeColor);
-  const saving = ref(false);
-  const loadError = ref(false);
-  const status = ref<'saved' | 'error' | null>(null);
-  const normalize = (value: string): string | null => {
-    const trimmed = value.trim();
-    return /^#[0-9a-f]{6}$/i.test(trimmed) ? trimmed.toUpperCase() : null;
-  };
-  const valid = computed(() => normalize(draft.value) !== null);
-  const sync = (): void => {
-    draft.value = (store.settings.windowThemeColor ?? defaultWindowThemeColor).toUpperCase();
-    status.value = null;
-  };
-  watch(() => store.settings.windowThemeColor, sync);
-  onMounted(async () => {
-    try {
-      await store.load();
-    } catch {
-      loadError.value = true;
-    } finally {
-      sync();
-    }
-  });
-  const save = async (): Promise<void> => {
-    const value = normalize(draft.value);
-    if (!value || saving.value) return;
-    saving.value = true;
-    status.value = null;
-    try {
-      await store.update({ windowThemeColor: value });
-      draft.value = value;
-      status.value = 'saved';
-    } catch {
-      status.value = 'error';
-    } finally {
-      saving.value = false;
-    }
-  };
-  const reset = async (): Promise<void> => {
-    draft.value = defaultWindowThemeColor;
-    await save();
-  };
-  const pick = (event: Event): void => {
-    draft.value = (event.target as HTMLInputElement).value.toUpperCase();
-    status.value = null;
-  };
+	const normalize = (value: string): string | null =>
+		/^#[0-9a-f]{6}$/iu.test(value.trim()) ? value.trim().toUpperCase() : null;
+
+	const valid = computed(() => normalize(draft.value) !== null);
+	const dirty = computed(() => draft.value !== original);
+	useSettingsReloadSource({
+		id: 'appearance-settings',
+
+		pending: () => !store.busy && (store.blocked || loadError.value),
+
+		reload: refresh,
+	});
+
+	function sync(): void {
+		if (!store.snapshot) {
+			return;
+		}
+		draft.value = store.snapshot.windowThemeColor;
+		original = draft.value;
+		baseline = store.snapshot.version;
+	}
+
+	watch(
+		() => store.snapshot,
+		() => {
+			if (baseline === null || draft.value === original) {
+				sync();
+			}
+		},
+		{ immediate: true },
+	);
+
+	async function refresh(): Promise<void> {
+		const signal = scope.capture();
+		try {
+			await store.load(true, signal);
+			if (scope.isCurrent(signal)) {
+				loadError.value = false;
+				sync();
+			}
+		} catch (cause) {
+			if (scope.isCurrent(signal)) {
+				failureCause = cause;
+				loadError.value = true;
+			}
+		}
+	}
+
+	watch(
+		() => props.active,
+		(active) => {
+			if (active) {
+				const signal = scope.capture();
+				void store
+					.load(false, signal)
+					.then(() => {
+						if (scope.isCurrent(signal)) {
+							loadError.value = false;
+							if (baseline === null || draft.value === original) {
+								sync();
+							}
+						}
+					})
+					.catch((cause) => {
+						if (scope.isCurrent(signal)) {
+							failureCause = cause;
+							loadError.value = true;
+						}
+					});
+			}
+		},
+		{ immediate: true },
+	);
+
+	async function save(): Promise<void> {
+		const value = normalize(draft.value);
+		const version = baseline;
+		if (!value || version === null || !props.active) {
+			return;
+		}
+		const signal = scope.capture();
+		const saved = await editor.run(() => store.update({ windowThemeColor: value }, version, signal));
+		if (scope.isCurrent(signal)) {
+			if (saved) {
+				sync();
+			}
+		}
+	}
+
+	async function reset(): Promise<void> {
+		draft.value = defaultWindowThemeColor;
+		await save();
+	}
+
+	function pick(event: Event): void {
+		if (event.target instanceof HTMLInputElement) {
+			draft.value = event.target.value.toUpperCase();
+		}
+	}
 </script>
 
 <template>
-  <section class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-    <h2 class="border-b border-border bg-header/60 px-6 py-4 text-lg font-semibold text-foreground">
-      {{ t('settings.category.appearance') }}
-    </h2>
-    <div class="space-y-6 p-6">
-      <p v-if="loadError" class="rounded border border-error/40 bg-error/5 p-3 text-sm text-error">
-        {{ t('settings.appearance.loadFailed') }}
-      </p>
-      <div>
-        <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.appearance.title') }}</h3>
-        <p class="mb-4 text-sm text-text-secondary">{{ t('settings.appearance.description') }}</p>
-        <UiButton appearance="solid" tone="primary" @click="emit('customize')">
-          {{ t('settings.appearance.customizeButton') }}
-        </UiButton>
-      </div>
+	<section class="settings-surface">
+		<div class="ui-settings-groups">
+			<UiSettingsGroup
+				class="appearance-intro-card"
+				:title="t('settings.appearance.title')"
+				icon="fa-solid fa-palette"
+				tone="accent"
+				compact
+			>
+				<template #actions>
+					<UiButton appearance="solid" tone="primary" @click="emit('customize')">
+						{{ t('settings.appearance.customizeButton') }}
+					</UiButton>
+				</template>
+			</UiSettingsGroup>
 
-      <hr class="border-border/50" />
-
-      <div>
-        <h3 class="mb-3 text-base font-semibold text-foreground">
-          {{ t('settings.appearance.windowThemeColor.title') }}
-        </h3>
-        <p class="mb-4 text-sm text-text-secondary">{{ t('settings.appearance.windowThemeColor.description') }}</p>
-        <label for="windowThemeColorInput" class="mb-2 block text-sm font-medium text-foreground">
-          {{ t('settings.appearance.windowThemeColor.label') }}
-        </label>
-        <div class="flex flex-wrap items-center gap-3">
-          <input
-            type="color"
-            :value="draft"
-            class="h-10 w-14 cursor-pointer rounded border border-border bg-background"
-            @input="pick"
-          />
-          <UiInput
-            id="windowThemeColorInput"
-            v-model="draft"
-            maxlength="7"
-            spellcheck="false"
-            autocomplete="off"
-            class="h-10 !w-32 font-mono"
-            @input="status = null"
-            @keyup.enter="save"
-          />
-          <UiButton appearance="solid" tone="primary" :disabled="saving || !valid" :loading="saving" @click="save">
-            {{ t('settings.appearance.windowThemeColor.save') }}
-          </UiButton>
-          <UiButton :disabled="saving" @click="reset">
-            {{ t('settings.appearance.windowThemeColor.reset') }}
-          </UiButton>
-        </div>
-        <p v-if="!valid" class="mt-2 text-sm text-error">
-          {{ t('settings.appearance.windowThemeColor.invalid') }}
-        </p>
-        <p v-else-if="status === 'saved'" class="mt-2 text-sm text-success">
-          {{ t('settings.appearance.windowThemeColor.saved') }}
-        </p>
-        <p v-else-if="status === 'error'" class="mt-2 text-sm text-error">
-          {{ t('settings.appearance.windowThemeColor.saveFailed') }}
-        </p>
-      </div>
-    </div>
-  </section>
+			<UiSettingsGroup
+				:title="t('settings.appearance.windowThemeColor.title')"
+				icon="fa-solid fa-window-maximize"
+				tone="info"
+			>
+				<template #actions>
+					<UiButton
+						:appearance="dirty ? 'solid' : 'soft'"
+						:tone="dirty ? 'primary' : 'neutral'"
+						:disabled="saving || !valid || !dirty"
+						:loading="saving"
+						@click="save"
+					>
+						{{ t('settings.appearance.windowThemeColor.save') }}
+					</UiButton>
+					<UiButton :disabled="saving" @click="reset">
+						{{ t('settings.appearance.windowThemeColor.reset') }}
+					</UiButton>
+				</template>
+				<UiFormField :label="t('settings.appearance.windowThemeColor.label')" for-id="windowThemeColorInput">
+					<div class="flex flex-wrap items-center gap-3">
+						<label
+							class="appearance-color-picker"
+							:aria-label="t('settings.appearance.windowThemeColor.label')"
+							:title="t('settings.appearance.windowThemeColor.label')"
+						>
+							<input
+								:disabled="saving || store.busy || store.blocked || !store.loaded"
+								type="color"
+								:value="draft"
+								class="sr-only"
+								@input="pick"
+							/>
+							<span class="appearance-color-picker__ring" :style="{ '--swatch-color': draft }"></span>
+						</label>
+						<UiInput
+							id="windowThemeColorInput"
+							:disabled="saving || store.busy || store.blocked || !store.loaded"
+							v-model="draft"
+							maxlength="7"
+							spellcheck="false"
+							autocomplete="off"
+							class="h-10 !w-32 font-mono"
+							@keyup.enter="save"
+						/>
+					</div>
+					<p v-if="!valid" class="mt-2 text-sm text-error">
+						{{ t('settings.appearance.windowThemeColor.invalid') }}
+					</p>
+				</UiFormField>
+			</UiSettingsGroup>
+		</div>
+	</section>
 </template>
+
+<style scoped>
+	.appearance-intro-card {
+		padding-block: 10px;
+	}
+
+	.appearance-color-picker {
+		display: grid;
+		width: 42px;
+		height: 42px;
+		flex: 0 0 auto;
+		place-items: center;
+		border: 1px solid var(--glass-border-color);
+		border-radius: 12px;
+		background: var(--input-bg-color);
+		box-shadow: var(--glass-inset-highlight);
+		cursor: pointer;
+	}
+
+	.appearance-color-picker:focus-within {
+		border-color: var(--input-focus-border-color);
+		box-shadow: 0 0 0 3px var(--input-focus-glow);
+	}
+
+	.appearance-color-picker__ring {
+		width: 28px;
+		height: 28px;
+		border: 1px solid color-mix(in srgb, var(--text-color) 18%, transparent);
+		border-radius: 8px;
+		background: var(--swatch-color);
+		box-shadow: inset 0 1px 0 rgb(255 255 255 / 22%);
+	}
+</style>

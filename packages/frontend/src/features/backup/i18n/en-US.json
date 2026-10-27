@@ -11,11 +11,24 @@
       "selectFile": "Select a backup file.",
       "imported": "Backup imported.",
       "importFailed": "Backup import failed.",
-      "importedWithCounts": "Backup imported: restored {rows} data rows and {files} files. Reloading the application.",
-      "description": "Export connections, proxies, SSH keys, tags, Quick Commands, themes, appearance and Workspace settings, background files and custom HTML themes. Account credentials, Passkeys, audit logs and IP ban records are excluded.",
+      "importedWithCounts": "Backup restored: {rows} rows and {files} files. Reload before using the restored data.",
+      "description": "Export the current business configuration, Agent state, audit/notification records and referenced background, Artifact and plugin files. Account credentials, Passkeys and active resources are excluded.",
       "importDescription": "Backups from this instance can be imported while signed in without a backup password. Backups from another instance require the login password used when that backup was exported. Import replaces the backed-up business data and custom theme files.",
       "backupFile": "Backup file",
-      "backupPasswordHelp": "Leave blank for a backup created by this instance. For a cross-instance restore, enter the password used when the backup was exported."
+      "chooseFile": "Choose file",
+      "noFileSelected": "No file selected",
+      "backupPasswordHelp": "Leave blank for a backup created by this instance. For a cross-instance restore, enter the password used when the backup was exported.",
+      "confirmImport": "Restore this backup and replace all backed-up business data? Verify the target instance first. Existing active resources will close.",
+      "restoreStateTitle": "Backup restoration",
+      "restoring": "Restoring. Keep this application open until the result is confirmed.",
+      "cleanupPending": "Restoration is confirmed; old-file cleanup remains pending. Reload to continue with the restored state.",
+      "reload": "Reload application",
+      "unknown": "The restoration result is unknown. Do not submit the import again.",
+      "unknownRecovery": "Keep the server data intact. Reconcile through server restart and read-only inspection before further changes.",
+      "invalidPassword": "The password is incorrect.",
+      "invalidInput": "Check the password and select a non-empty current backup no larger than 100 MiB.",
+      "busy": "Another backup is in progress or the source changed. Read the current state before trying again.",
+      "operationFailed": "The backup request failed. Verify authentication and server availability."
     }
   }
 }

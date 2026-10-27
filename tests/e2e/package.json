@@ -3,18 +3,21 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "seed:refresh": "pnpm --filter @nexus-terminal/backend exec tsx -- ../../tests/e2e/support/create-seed.ts",
-    "test": "playwright test",
-    "test:auth": "playwright test --project=auth",
-    "test:http": "playwright test --project=http",
-    "test:agent": "playwright test --project=agent",
-    "test:websocket": "playwright test --project=websocket",
-    "test:ui": "playwright test --project=ui",
-    "test:ssh": "playwright test --project=ssh",
-    "test:mobile": "playwright test --project=mobile",
-    "test:docs": "node support/run-functional-screenshots.mjs",
+    "build": "pnpm --workspace-root run build && pnpm run build:clients",
+    "build:clients": "pnpm --filter @nexus-terminal/frontend exec vite build --config build/e2e-browser-clients.ts",
+    "test": "pnpm run build && playwright test",
+    "test:auth": "pnpm test --project=auth",
+    "test:http": "pnpm test --project=http",
+    "test:agent": "pnpm test --project=agent",
+    "test:websocket": "pnpm test --project=websocket",
+    "test:ui": "pnpm test --project=ui",
+    "test:ssh": "pnpm test --project=ssh",
+    "test:mobile": "pnpm test --project=mobile",
+    "test:docs": "pnpm run build && node support/run-functional-screenshots.mjs",
     "test:ingress": "playwright test --config=playwright.ingress.config.ts",
-    "test:list": "playwright test --list"
+    "test:list": "playwright test --list",
+    "test:backend": "pnpm --workspace-root run build:backend && NEXUS_E2E_SUITE=backend playwright test",
+    "test:browser": "NEXUS_E2E_SUITE=browser pnpm test"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0"

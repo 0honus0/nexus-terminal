@@ -2,11 +2,21 @@
   "semi": true,
   "singleQuote": true,
   "printWidth": 120,
-  "tabWidth": 2,
+  "tabWidth": 4,
+  "useTabs": true,
   "trailingComma": "all",
   "arrowParens": "always",
   "bracketSpacing": true,
   "endOfLine": "lf",
   "proseWrap": "preserve",
-  "vueIndentScriptAndStyle": true
+  "vueIndentScriptAndStyle": true,
+  "overrides": [
+    {
+      "files": ["**/*.json", "**/*.yml", "**/*.yaml"],
+      "options": {
+        "tabWidth": 2,
+        "useTabs": false
+      }
+    }
+  ]
 }

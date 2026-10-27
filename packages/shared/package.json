@@ -1,0 +1,883 @@
+{
+  "name": "@nexus-terminal/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "check": "tsc --noEmit"
+  },
+  "exports": {
+    "./remote/tools/values": {
+      "types": "./dist/remote/tools/values.d.ts",
+      "default": "./dist/remote/tools/values.js"
+    },
+    "./remote/tools/model": {
+      "types": "./dist/remote/tools/model.d.ts",
+      "default": "./dist/remote/tools/model.js"
+    },
+    "./remote/tools/http": {
+      "types": "./dist/remote/tools/http.d.ts",
+      "default": "./dist/remote/tools/http.js"
+    },
+    "./remote/tools/http-codec": {
+      "types": "./dist/remote/tools/http-codec.d.ts",
+      "default": "./dist/remote/tools/http-codec.js"
+    },
+    "./agent/tools/model": {
+      "types": "./dist/agent/tools/model.d.ts",
+      "default": "./dist/agent/tools/model.js"
+    },
+    "./agent/tools/http": {
+      "types": "./dist/agent/tools/http.d.ts",
+      "default": "./dist/agent/tools/http.js"
+    },
+    "./agent/tools/http-codec": {
+      "types": "./dist/agent/tools/http-codec.d.ts",
+      "default": "./dist/agent/tools/http-codec.js"
+    },
+    "./agent/tools/values": {
+      "types": "./dist/agent/tools/values.d.ts",
+      "default": "./dist/agent/tools/values.js"
+    },
+    "./agent/governance/values": {
+      "types": "./dist/agent/governance/values.d.ts",
+      "default": "./dist/agent/governance/values.js"
+    },
+    "./agent/governance/model": {
+      "types": "./dist/agent/governance/model.d.ts",
+      "default": "./dist/agent/governance/model.js"
+    },
+    "./agent/governance/http": {
+      "types": "./dist/agent/governance/http.d.ts",
+      "default": "./dist/agent/governance/http.js"
+    },
+    "./agent/governance/http-codec": {
+      "types": "./dist/agent/governance/http-codec.d.ts",
+      "default": "./dist/agent/governance/http-codec.js"
+    },
+    "./agent/providers/values": {
+      "types": "./dist/agent/providers/values.d.ts",
+      "default": "./dist/agent/providers/values.js"
+    },
+    "./agent/providers/model": {
+      "types": "./dist/agent/providers/model.d.ts",
+      "default": "./dist/agent/providers/model.js"
+    },
+    "./agent/providers/http": {
+      "types": "./dist/agent/providers/http.d.ts",
+      "default": "./dist/agent/providers/http.js"
+    },
+    "./agent/providers/http-codec": {
+      "types": "./dist/agent/providers/http-codec.d.ts",
+      "default": "./dist/agent/providers/http-codec.js"
+    },
+    "./agent/providers/registry": {
+      "types": "./dist/agent/providers/registry.d.ts",
+      "default": "./dist/agent/providers/registry.js"
+    },
+    "./agent/http": {
+      "types": "./dist/agent/http.d.ts",
+      "default": "./dist/agent/http.js"
+    },
+    "./agent/scope/values": {
+      "types": "./dist/agent/scope/values.d.ts",
+      "default": "./dist/agent/scope/values.js"
+    },
+    "./agent/scope/model": {
+      "types": "./dist/agent/scope/model.d.ts",
+      "default": "./dist/agent/scope/model.js"
+    },
+    "./agent/scope/http": {
+      "types": "./dist/agent/scope/http.d.ts",
+      "default": "./dist/agent/scope/http.js"
+    },
+    "./agent/scope/http-codec": {
+      "types": "./dist/agent/scope/http-codec.d.ts",
+      "default": "./dist/agent/scope/http-codec.js"
+    },
+    "./agent/runs/values": {
+      "types": "./dist/agent/runs/values.d.ts",
+      "default": "./dist/agent/runs/values.js"
+    },
+    "./agent/runs/model": {
+      "types": "./dist/agent/runs/model.d.ts",
+      "default": "./dist/agent/runs/model.js"
+    },
+    "./agent/runs/http": {
+      "types": "./dist/agent/runs/http.d.ts",
+      "default": "./dist/agent/runs/http.js"
+    },
+    "./agent/runs/http-codec": {
+      "types": "./dist/agent/runs/http-codec.d.ts",
+      "default": "./dist/agent/runs/http-codec.js"
+    },
+    "./access/http": {
+      "types": "./dist/access/http.d.ts",
+      "default": "./dist/access/http.js"
+    },
+    "./access/factors/http": {
+      "types": "./dist/access/factors/http.d.ts",
+      "default": "./dist/access/factors/http.js"
+    },
+    "./access/model": {
+      "types": "./dist/access/model.d.ts",
+      "default": "./dist/access/model.js"
+    },
+    "./remote/sessions/events": {
+      "types": "./dist/remote/sessions/events.d.ts",
+      "default": "./dist/remote/sessions/events.js"
+    },
+    "./remote/sessions/http": {
+      "types": "./dist/remote/sessions/http.d.ts",
+      "default": "./dist/remote/sessions/http.js"
+    },
+    "./remote/sessions/model": {
+      "types": "./dist/remote/sessions/model.d.ts",
+      "default": "./dist/remote/sessions/model.js"
+    },
+    "./remote/transfers/workspace": {
+      "types": "./dist/remote/transfers/workspace.d.ts",
+      "default": "./dist/remote/transfers/workspace.js"
+    },
+    "./remote/transfers/workspace-codec": {
+      "types": "./dist/remote/transfers/workspace-codec.d.ts",
+      "default": "./dist/remote/transfers/workspace-codec.js"
+    },
+    "./remote/transfers/http": {
+      "types": "./dist/remote/transfers/http.d.ts",
+      "default": "./dist/remote/transfers/http.js"
+    },
+    "./remote/transfers/http-codec": {
+      "types": "./dist/remote/transfers/http-codec.d.ts",
+      "default": "./dist/remote/transfers/http-codec.js"
+    },
+    "./targets/connections/http-codec": {
+      "types": "./dist/targets/connections/http-codec.d.ts",
+      "default": "./dist/targets/connections/http-codec.js"
+    },
+    "./targets/connections/http": {
+      "types": "./dist/targets/connections/http.d.ts",
+      "default": "./dist/targets/connections/http.js"
+    },
+    "./targets/connections/model": {
+      "types": "./dist/targets/connections/model.d.ts",
+      "default": "./dist/targets/connections/model.js"
+    },
+    "./targets/connections/values": {
+      "types": "./dist/targets/connections/values.d.ts",
+      "default": "./dist/targets/connections/values.js"
+    },
+    "./targets/host-keys/http-codec": {
+      "types": "./dist/targets/host-keys/http-codec.d.ts",
+      "default": "./dist/targets/host-keys/http-codec.js"
+    },
+    "./targets/host-keys/http": {
+      "types": "./dist/targets/host-keys/http.d.ts",
+      "default": "./dist/targets/host-keys/http.js"
+    },
+    "./targets/host-keys/model": {
+      "types": "./dist/targets/host-keys/model.d.ts",
+      "default": "./dist/targets/host-keys/model.js"
+    },
+    "./targets/http": {
+      "types": "./dist/targets/http.d.ts",
+      "default": "./dist/targets/http.js"
+    },
+    "./targets/proxies/http-codec": {
+      "types": "./dist/targets/proxies/http-codec.d.ts",
+      "default": "./dist/targets/proxies/http-codec.js"
+    },
+    "./targets/proxies/http": {
+      "types": "./dist/targets/proxies/http.d.ts",
+      "default": "./dist/targets/proxies/http.js"
+    },
+    "./targets/proxies/model": {
+      "types": "./dist/targets/proxies/model.d.ts",
+      "default": "./dist/targets/proxies/model.js"
+    },
+    "./targets/proxies/values": {
+      "types": "./dist/targets/proxies/values.d.ts",
+      "default": "./dist/targets/proxies/values.js"
+    },
+    "./targets/ssh-keys/http-codec": {
+      "types": "./dist/targets/ssh-keys/http-codec.d.ts",
+      "default": "./dist/targets/ssh-keys/http-codec.js"
+    },
+    "./targets/ssh-keys/http": {
+      "types": "./dist/targets/ssh-keys/http.d.ts",
+      "default": "./dist/targets/ssh-keys/http.js"
+    },
+    "./targets/ssh-keys/model": {
+      "types": "./dist/targets/ssh-keys/model.d.ts",
+      "default": "./dist/targets/ssh-keys/model.js"
+    },
+    "./targets/tags/http-codec": {
+      "types": "./dist/targets/tags/http-codec.d.ts",
+      "default": "./dist/targets/tags/http-codec.js"
+    },
+    "./targets/tags/http": {
+      "types": "./dist/targets/tags/http.d.ts",
+      "default": "./dist/targets/tags/http.js"
+    },
+    "./targets/tags/values": {
+      "types": "./dist/targets/tags/values.d.ts",
+      "default": "./dist/targets/tags/values.js"
+    },
+    "./targets/tags/model": {
+      "types": "./dist/targets/tags/model.d.ts",
+      "default": "./dist/targets/tags/model.js"
+    },
+    "./targets/values": {
+      "types": "./dist/targets/values.d.ts",
+      "default": "./dist/targets/values.js"
+    },
+    "./remote/sessions/values": {
+      "types": "./dist/remote/sessions/values.d.ts",
+      "default": "./dist/remote/sessions/values.js"
+    },
+    "./access/values": {
+      "types": "./dist/access/values.d.ts",
+      "default": "./dist/access/values.js"
+    },
+    "./remote/files/values": {
+      "types": "./dist/remote/files/values.d.ts",
+      "default": "./dist/remote/files/values.js"
+    },
+    "./remote/files/model": {
+      "types": "./dist/remote/files/model.d.ts",
+      "default": "./dist/remote/files/model.js"
+    },
+    "./remote/files/http": {
+      "types": "./dist/remote/files/http.d.ts",
+      "default": "./dist/remote/files/http.js"
+    },
+    "./remote/files/http-codec": {
+      "types": "./dist/remote/files/http-codec.d.ts",
+      "default": "./dist/remote/files/http-codec.js"
+    },
+    "./remote/files/workspace": {
+      "types": "./dist/remote/files/workspace.d.ts",
+      "default": "./dist/remote/files/workspace.js"
+    },
+    "./remote/files/workspace-codec": {
+      "types": "./dist/remote/files/workspace-codec.d.ts",
+      "default": "./dist/remote/files/workspace-codec.js"
+    },
+    "./remote/workspace/workspace": {
+      "types": "./dist/remote/workspace/workspace.d.ts",
+      "default": "./dist/remote/workspace/workspace.js"
+    },
+    "./remote/workspace/workspace-codec": {
+      "types": "./dist/remote/workspace/workspace-codec.d.ts",
+      "default": "./dist/remote/workspace/workspace-codec.js"
+    },
+    "./remote/workspace/workspace-binary": {
+      "types": "./dist/remote/workspace/workspace-binary.d.ts",
+      "default": "./dist/remote/workspace/workspace-binary.js"
+    },
+    "./remote/workspace/values": {
+      "types": "./dist/remote/workspace/values.d.ts",
+      "default": "./dist/remote/workspace/values.js"
+    },
+    "./remote/terminal/workspace": {
+      "types": "./dist/remote/terminal/workspace.d.ts",
+      "default": "./dist/remote/terminal/workspace.js"
+    },
+    "./remote/terminal/workspace-codec": {
+      "types": "./dist/remote/terminal/workspace-codec.d.ts",
+      "default": "./dist/remote/terminal/workspace-codec.js"
+    },
+    "./remote/suspend/workspace": {
+      "types": "./dist/remote/suspend/workspace.d.ts",
+      "default": "./dist/remote/suspend/workspace.js"
+    },
+    "./remote/suspend/workspace-codec": {
+      "types": "./dist/remote/suspend/workspace-codec.d.ts",
+      "default": "./dist/remote/suspend/workspace-codec.js"
+    },
+    "./remote/suspend/http": {
+      "types": "./dist/remote/suspend/http.d.ts",
+      "default": "./dist/remote/suspend/http.js"
+    },
+    "./agent/http-codec": {
+      "types": "./dist/agent/http-codec.d.ts",
+      "default": "./dist/agent/http-codec.js"
+    },
+    "./agent/values": {
+      "types": "./dist/agent/values.d.ts",
+      "default": "./dist/agent/values.js"
+    },
+    "./remote/transfers/values": {
+      "types": "./dist/remote/transfers/values.d.ts",
+      "default": "./dist/remote/transfers/values.js"
+    },
+    "./remote/files/text-codec": {
+      "types": "./dist/remote/files/text-codec.d.ts",
+      "default": "./dist/remote/files/text-codec.js"
+    },
+    "./remote/suspend/values": {
+      "types": "./dist/remote/suspend/values.d.ts",
+      "default": "./dist/remote/suspend/values.js"
+    },
+    "./remote/monitoring/values": {
+      "types": "./dist/remote/monitoring/values.d.ts",
+      "default": "./dist/remote/monitoring/values.js"
+    },
+    "./remote/monitoring/model": {
+      "types": "./dist/remote/monitoring/model.d.ts",
+      "default": "./dist/remote/monitoring/model.js"
+    },
+    "./remote/monitoring/http": {
+      "types": "./dist/remote/monitoring/http.d.ts",
+      "default": "./dist/remote/monitoring/http.js"
+    },
+    "./remote/monitoring/events": {
+      "types": "./dist/remote/monitoring/events.d.ts",
+      "default": "./dist/remote/monitoring/events.js"
+    },
+    "./remote/docker/values": {
+      "types": "./dist/remote/docker/values.d.ts",
+      "default": "./dist/remote/docker/values.js"
+    },
+    "./remote/docker/workspace": {
+      "types": "./dist/remote/docker/workspace.d.ts",
+      "default": "./dist/remote/docker/workspace.js"
+    },
+    "./remote/docker/workspace-codec": {
+      "types": "./dist/remote/docker/workspace-codec.d.ts",
+      "default": "./dist/remote/docker/workspace-codec.js"
+    },
+    "./system/status/model": {
+      "types": "./dist/system/status/model.d.ts",
+      "default": "./dist/system/status/model.js"
+    },
+    "./system/status/http": {
+      "types": "./dist/system/status/http.d.ts",
+      "default": "./dist/system/status/http.js"
+    },
+    "./system/status/values": {
+      "types": "./dist/system/status/values.d.ts",
+      "default": "./dist/system/status/values.js"
+    },
+    "./remote/monitoring/http-codec": {
+      "types": "./dist/remote/monitoring/http-codec.d.ts",
+      "default": "./dist/remote/monitoring/http-codec.js"
+    },
+    "./remote/desktop/values": {
+      "types": "./dist/remote/desktop/values.d.ts",
+      "default": "./dist/remote/desktop/values.js"
+    },
+    "./remote/desktop/http": {
+      "types": "./dist/remote/desktop/http.d.ts",
+      "default": "./dist/remote/desktop/http.js"
+    },
+    "./remote/desktop/http-codec": {
+      "types": "./dist/remote/desktop/http-codec.d.ts",
+      "default": "./dist/remote/desktop/http-codec.js"
+    },
+    "./system/status/http-codec": {
+      "types": "./dist/system/status/http-codec.d.ts",
+      "default": "./dist/system/status/http-codec.js"
+    },
+    "./agent/collaboration/values": {
+      "types": "./dist/agent/collaboration/values.d.ts",
+      "default": "./dist/agent/collaboration/values.js"
+    },
+    "./agent/collaboration/model": {
+      "types": "./dist/agent/collaboration/model.d.ts",
+      "default": "./dist/agent/collaboration/model.js"
+    },
+    "./agent/collaboration/http": {
+      "types": "./dist/agent/collaboration/http.d.ts",
+      "default": "./dist/agent/collaboration/http.js"
+    },
+    "./agent/collaboration/http-codec": {
+      "types": "./dist/agent/collaboration/http-codec.d.ts",
+      "default": "./dist/agent/collaboration/http-codec.js"
+    },
+    "./preferences/configuration/values": {
+      "types": "./dist/preferences/configuration/values.d.ts",
+      "default": "./dist/preferences/configuration/values.js"
+    },
+    "./preferences/configuration/model": {
+      "types": "./dist/preferences/configuration/model.d.ts",
+      "default": "./dist/preferences/configuration/model.js"
+    },
+    "./preferences/configuration/http": {
+      "types": "./dist/preferences/configuration/http.d.ts",
+      "default": "./dist/preferences/configuration/http.js"
+    },
+    "./preferences/configuration/http-codec": {
+      "types": "./dist/preferences/configuration/http-codec.d.ts",
+      "default": "./dist/preferences/configuration/http-codec.js"
+    },
+    "./preferences/history/values": {
+      "types": "./dist/preferences/history/values.d.ts",
+      "default": "./dist/preferences/history/values.js"
+    },
+    "./preferences/history/model": {
+      "types": "./dist/preferences/history/model.d.ts",
+      "default": "./dist/preferences/history/model.js"
+    },
+    "./preferences/history/http": {
+      "types": "./dist/preferences/history/http.d.ts",
+      "default": "./dist/preferences/history/http.js"
+    },
+    "./preferences/history/http-codec": {
+      "types": "./dist/preferences/history/http-codec.d.ts",
+      "default": "./dist/preferences/history/http-codec.js"
+    },
+    "./preferences/favorites/values": {
+      "types": "./dist/preferences/favorites/values.d.ts",
+      "default": "./dist/preferences/favorites/values.js"
+    },
+    "./preferences/favorites/model": {
+      "types": "./dist/preferences/favorites/model.d.ts",
+      "default": "./dist/preferences/favorites/model.js"
+    },
+    "./preferences/favorites/http": {
+      "types": "./dist/preferences/favorites/http.d.ts",
+      "default": "./dist/preferences/favorites/http.js"
+    },
+    "./preferences/favorites/http-codec": {
+      "types": "./dist/preferences/favorites/http-codec.d.ts",
+      "default": "./dist/preferences/favorites/http-codec.js"
+    },
+    "./preferences/commands/values": {
+      "types": "./dist/preferences/commands/values.d.ts",
+      "default": "./dist/preferences/commands/values.js"
+    },
+    "./preferences/commands/model": {
+      "types": "./dist/preferences/commands/model.d.ts",
+      "default": "./dist/preferences/commands/model.js"
+    },
+    "./preferences/commands/http": {
+      "types": "./dist/preferences/commands/http.d.ts",
+      "default": "./dist/preferences/commands/http.js"
+    },
+    "./preferences/commands/http-codec": {
+      "types": "./dist/preferences/commands/http-codec.d.ts",
+      "default": "./dist/preferences/commands/http-codec.js"
+    },
+    "./preferences/presentation/values": {
+      "types": "./dist/preferences/presentation/values.d.ts",
+      "default": "./dist/preferences/presentation/values.js"
+    },
+    "./preferences/presentation/model": {
+      "types": "./dist/preferences/presentation/model.d.ts",
+      "default": "./dist/preferences/presentation/model.js"
+    },
+    "./preferences/presentation/http": {
+      "types": "./dist/preferences/presentation/http.d.ts",
+      "default": "./dist/preferences/presentation/http.js"
+    },
+    "./preferences/presentation/http-codec": {
+      "types": "./dist/preferences/presentation/http-codec.d.ts",
+      "default": "./dist/preferences/presentation/http-codec.js"
+    },
+    "./agent/memory/values": {
+      "types": "./dist/agent/memory/values.d.ts",
+      "default": "./dist/agent/memory/values.js"
+    },
+    "./agent/memory/model": {
+      "types": "./dist/agent/memory/model.d.ts",
+      "default": "./dist/agent/memory/model.js"
+    },
+    "./agent/memory/http": {
+      "types": "./dist/agent/memory/http.d.ts",
+      "default": "./dist/agent/memory/http.js"
+    },
+    "./agent/memory/http-codec": {
+      "types": "./dist/agent/memory/http-codec.d.ts",
+      "default": "./dist/agent/memory/http-codec.js"
+    },
+    "./agent/artifacts/values": {
+      "types": "./dist/agent/artifacts/values.d.ts",
+      "default": "./dist/agent/artifacts/values.js"
+    },
+    "./agent/artifacts/model": {
+      "types": "./dist/agent/artifacts/model.d.ts",
+      "default": "./dist/agent/artifacts/model.js"
+    },
+    "./agent/artifacts/http": {
+      "types": "./dist/agent/artifacts/http.d.ts",
+      "default": "./dist/agent/artifacts/http.js"
+    },
+    "./agent/artifacts/http-codec": {
+      "types": "./dist/agent/artifacts/http-codec.d.ts",
+      "default": "./dist/agent/artifacts/http-codec.js"
+    },
+    "./agent/execution/values": {
+      "types": "./dist/agent/execution/values.d.ts",
+      "default": "./dist/agent/execution/values.js"
+    },
+    "./agent/execution/model": {
+      "types": "./dist/agent/execution/model.d.ts",
+      "default": "./dist/agent/execution/model.js"
+    },
+    "./agent/execution/http": {
+      "types": "./dist/agent/execution/http.d.ts",
+      "default": "./dist/agent/execution/http.js"
+    },
+    "./agent/execution/http-codec": {
+      "types": "./dist/agent/execution/http-codec.d.ts",
+      "default": "./dist/agent/execution/http-codec.js"
+    },
+    "./operations/http-codec": {
+      "types": "./dist/operations/http-codec.d.ts",
+      "default": "./dist/operations/http-codec.js"
+    },
+    "./operations/values": {
+      "types": "./dist/operations/values.d.ts",
+      "default": "./dist/operations/values.js"
+    },
+    "./operations/audit/http": {
+      "types": "./dist/operations/audit/http.d.ts",
+      "default": "./dist/operations/audit/http.js"
+    },
+    "./operations/audit/model": {
+      "types": "./dist/operations/audit/model.d.ts",
+      "default": "./dist/operations/audit/model.js"
+    },
+    "./operations/logging/http": {
+      "types": "./dist/operations/logging/http.d.ts",
+      "default": "./dist/operations/logging/http.js"
+    },
+    "./operations/logging/model": {
+      "types": "./dist/operations/logging/model.d.ts",
+      "default": "./dist/operations/logging/model.js"
+    },
+    "./operations/logging/values": {
+      "types": "./dist/operations/logging/values.d.ts",
+      "default": "./dist/operations/logging/values.js"
+    },
+    "./operations/notifications/http": {
+      "types": "./dist/operations/notifications/http.d.ts",
+      "default": "./dist/operations/notifications/http.js"
+    },
+    "./operations/notifications/model": {
+      "types": "./dist/operations/notifications/model.d.ts",
+      "default": "./dist/operations/notifications/model.js"
+    },
+    "./operations/notifications/values": {
+      "types": "./dist/operations/notifications/values.d.ts",
+      "default": "./dist/operations/notifications/values.js"
+    },
+    "./system/diagnostics/values": {
+      "types": "./dist/system/diagnostics/values.d.ts",
+      "default": "./dist/system/diagnostics/values.js"
+    },
+    "./system/diagnostics/model": {
+      "types": "./dist/system/diagnostics/model.d.ts",
+      "default": "./dist/system/diagnostics/model.js"
+    },
+    "./system/diagnostics/http": {
+      "types": "./dist/system/diagnostics/http.d.ts",
+      "default": "./dist/system/diagnostics/http.js"
+    },
+    "./system/diagnostics/http-codec": {
+      "types": "./dist/system/diagnostics/http-codec.d.ts",
+      "default": "./dist/system/diagnostics/http-codec.js"
+    },
+    "./common/http-codec": {
+      "types": "./dist/common/http-codec.d.ts",
+      "default": "./dist/common/http-codec.js"
+    },
+    "./preferences/themes/values": {
+      "types": "./dist/preferences/themes/values.d.ts",
+      "default": "./dist/preferences/themes/values.js"
+    },
+    "./preferences/themes/model": {
+      "types": "./dist/preferences/themes/model.d.ts",
+      "default": "./dist/preferences/themes/model.js"
+    },
+    "./preferences/themes/http": {
+      "types": "./dist/preferences/themes/http.d.ts",
+      "default": "./dist/preferences/themes/http.js"
+    },
+    "./preferences/themes/http-codec": {
+      "types": "./dist/preferences/themes/http-codec.d.ts",
+      "default": "./dist/preferences/themes/http-codec.js"
+    },
+    "./preferences/appearance/values": {
+      "types": "./dist/preferences/appearance/values.d.ts",
+      "default": "./dist/preferences/appearance/values.js"
+    },
+    "./preferences/appearance/model": {
+      "types": "./dist/preferences/appearance/model.d.ts",
+      "default": "./dist/preferences/appearance/model.js"
+    },
+    "./preferences/appearance/http": {
+      "types": "./dist/preferences/appearance/http.d.ts",
+      "default": "./dist/preferences/appearance/http.js"
+    },
+    "./preferences/appearance/http-codec": {
+      "types": "./dist/preferences/appearance/http-codec.d.ts",
+      "default": "./dist/preferences/appearance/http-codec.js"
+    },
+    "./preferences/html-themes/values": {
+      "types": "./dist/preferences/html-themes/values.d.ts",
+      "default": "./dist/preferences/html-themes/values.js"
+    },
+    "./preferences/html-themes/model": {
+      "types": "./dist/preferences/html-themes/model.d.ts",
+      "default": "./dist/preferences/html-themes/model.js"
+    },
+    "./preferences/html-themes/http": {
+      "types": "./dist/preferences/html-themes/http.d.ts",
+      "default": "./dist/preferences/html-themes/http.js"
+    },
+    "./preferences/html-themes/http-codec": {
+      "types": "./dist/preferences/html-themes/http-codec.d.ts",
+      "default": "./dist/preferences/html-themes/http-codec.js"
+    },
+    "./agent/integrations/values": {
+      "types": "./dist/agent/integrations/values.d.ts",
+      "default": "./dist/agent/integrations/values.js"
+    },
+    "./agent/integrations/model": {
+      "types": "./dist/agent/integrations/model.d.ts",
+      "default": "./dist/agent/integrations/model.js"
+    },
+    "./agent/integrations/http": {
+      "types": "./dist/agent/integrations/http.d.ts",
+      "default": "./dist/agent/integrations/http.js"
+    },
+    "./agent/integrations/http-codec": {
+      "types": "./dist/agent/integrations/http-codec.d.ts",
+      "default": "./dist/agent/integrations/http-codec.js"
+    },
+    "./agent/integrations/browser-values": {
+      "types": "./dist/agent/integrations/browser-values.d.ts",
+      "default": "./dist/agent/integrations/browser-values.js"
+    },
+    "./agent/integrations/browser-model": {
+      "types": "./dist/agent/integrations/browser-model.d.ts",
+      "default": "./dist/agent/integrations/browser-model.js"
+    },
+    "./agent/integrations/browser-http": {
+      "types": "./dist/agent/integrations/browser-http.d.ts",
+      "default": "./dist/agent/integrations/browser-http.js"
+    },
+    "./agent/integrations/browser-http-codec": {
+      "types": "./dist/agent/integrations/browser-http-codec.d.ts",
+      "default": "./dist/agent/integrations/browser-http-codec.js"
+    },
+    "./agent/plugins/values": {
+      "types": "./dist/agent/plugins/values.d.ts",
+      "default": "./dist/agent/plugins/values.js"
+    },
+    "./agent/plugins/model": {
+      "types": "./dist/agent/plugins/model.d.ts",
+      "default": "./dist/agent/plugins/model.js"
+    },
+    "./agent/plugins/http": {
+      "types": "./dist/agent/plugins/http.d.ts",
+      "default": "./dist/agent/plugins/http.js"
+    },
+    "./agent/plugins/http-codec": {
+      "types": "./dist/agent/plugins/http-codec.d.ts",
+      "default": "./dist/agent/plugins/http-codec.js"
+    },
+    "./agent/plugins/events": {
+      "types": "./dist/agent/plugins/events.d.ts",
+      "default": "./dist/agent/plugins/events.js"
+    },
+    "./agent/plugins/rpc-codec": {
+      "types": "./dist/agent/plugins/rpc-codec.d.ts",
+      "default": "./dist/agent/plugins/rpc-codec.js"
+    },
+    "./agent/plugins/repository-model": {
+      "types": "./dist/agent/plugins/repository-model.d.ts",
+      "default": "./dist/agent/plugins/repository-model.js"
+    },
+    "./agent/plugins/repository-http": {
+      "types": "./dist/agent/plugins/repository-http.d.ts",
+      "default": "./dist/agent/plugins/repository-http.js"
+    },
+    "./agent/plugins/repository-http-codec": {
+      "types": "./dist/agent/plugins/repository-http-codec.d.ts",
+      "default": "./dist/agent/plugins/repository-http-codec.js"
+    },
+    "./agent/plugins/backend-sdk": {
+      "types": "./dist/agent/plugins/backend-sdk.d.ts",
+      "default": "./dist/agent/plugins/backend-sdk.js"
+    },
+    "./agent/plugins/intent-values": {
+      "types": "./dist/agent/plugins/intent-values.d.ts",
+      "default": "./dist/agent/plugins/intent-values.js"
+    },
+    "./agent/plugins/intent-model": {
+      "types": "./dist/agent/plugins/intent-model.d.ts",
+      "default": "./dist/agent/plugins/intent-model.js"
+    },
+    "./agent/plugins/intent-http": {
+      "types": "./dist/agent/plugins/intent-http.d.ts",
+      "default": "./dist/agent/plugins/intent-http.js"
+    },
+    "./agent/plugins/intent-http-codec": {
+      "types": "./dist/agent/plugins/intent-http-codec.d.ts",
+      "default": "./dist/agent/plugins/intent-http-codec.js"
+    },
+    "./agent/plugins/runtime-values": {
+      "types": "./dist/agent/plugins/runtime-values.d.ts",
+      "default": "./dist/agent/plugins/runtime-values.js"
+    },
+    "./agent/plugins/runtime-model": {
+      "types": "./dist/agent/plugins/runtime-model.d.ts",
+      "default": "./dist/agent/plugins/runtime-model.js"
+    },
+    "./agent/plugins/runtime-http-codec": {
+      "types": "./dist/agent/plugins/runtime-http-codec.d.ts",
+      "default": "./dist/agent/plugins/runtime-http-codec.js"
+    },
+    "./agent/plugins/runtime-http": {
+      "types": "./dist/agent/plugins/runtime-http.d.ts",
+      "default": "./dist/agent/plugins/runtime-http.js"
+    },
+    "./agent/plugins/frontend-events": {
+      "types": "./dist/agent/plugins/frontend-events.d.ts",
+      "default": "./dist/agent/plugins/frontend-events.js"
+    },
+    "./agent/plugins/frontend-rpc-codec": {
+      "types": "./dist/agent/plugins/frontend-rpc-codec.d.ts",
+      "default": "./dist/agent/plugins/frontend-rpc-codec.js"
+    },
+    "./agent/plugins/migration-model": {
+      "types": "./dist/agent/plugins/migration-model.d.ts",
+      "default": "./dist/agent/plugins/migration-model.js"
+    },
+    "./agent/plugins/migration-http-codec": {
+      "types": "./dist/agent/plugins/migration-http-codec.d.ts",
+      "default": "./dist/agent/plugins/migration-http-codec.js"
+    },
+    "./agent/plugins/migration-http": {
+      "types": "./dist/agent/plugins/migration-http.d.ts",
+      "default": "./dist/agent/plugins/migration-http.js"
+    },
+    "./agent/plugins/frontend-sdk": {
+      "types": "./dist/agent/plugins/frontend-sdk.d.ts",
+      "default": "./dist/agent/plugins/frontend-sdk.js"
+    },
+    "./system/backups/values": {
+      "types": "./dist/system/backups/values.d.ts",
+      "default": "./dist/system/backups/values.js"
+    },
+    "./system/backups/http": {
+      "types": "./dist/system/backups/http.d.ts",
+      "default": "./dist/system/backups/http.js"
+    },
+    "./system/backups/http-codec": {
+      "types": "./dist/system/backups/http-codec.d.ts",
+      "default": "./dist/system/backups/http-codec.js"
+    },
+    "./remote/mutations/values": {
+      "types": "./dist/remote/mutations/values.d.ts",
+      "default": "./dist/remote/mutations/values.js"
+    },
+    "./remote/mutations/model": {
+      "types": "./dist/remote/mutations/model.d.ts",
+      "default": "./dist/remote/mutations/model.js"
+    },
+    "./remote/mutations/http": {
+      "types": "./dist/remote/mutations/http.d.ts",
+      "default": "./dist/remote/mutations/http.js"
+    },
+    "./remote/mutations/http-codec": {
+      "types": "./dist/remote/mutations/http-codec.d.ts",
+      "default": "./dist/remote/mutations/http-codec.js"
+    },
+    "./targets/connections/test-http": {
+      "types": "./dist/targets/connections/test-http.d.ts",
+      "default": "./dist/targets/connections/test-http.js"
+    },
+    "./targets/connections/test-codec": {
+      "types": "./dist/targets/connections/test-codec.d.ts",
+      "default": "./dist/targets/connections/test-codec.js"
+    },
+    "./targets/host-keys/values": {
+      "types": "./dist/targets/host-keys/values.d.ts",
+      "default": "./dist/targets/host-keys/values.js"
+    },
+    "./targets/ssh-keys/values": {
+      "types": "./dist/targets/ssh-keys/values.d.ts",
+      "default": "./dist/targets/ssh-keys/values.js"
+    },
+    "./access/factors/http-codec": {
+      "types": "./dist/access/factors/http-codec.d.ts",
+      "default": "./dist/access/factors/http-codec.js"
+    },
+    "./access/factors/passkey-codec": {
+      "types": "./dist/access/factors/passkey-codec.d.ts",
+      "default": "./dist/access/factors/passkey-codec.js"
+    },
+    "./remote/terminal/values": {
+      "types": "./dist/remote/terminal/values.d.ts",
+      "default": "./dist/remote/terminal/values.js"
+    },
+    "./remote/transfers/task-codec": {
+      "types": "./dist/remote/transfers/task-codec.d.ts",
+      "default": "./dist/remote/transfers/task-codec.js"
+    },
+    "./remote/transfers/server-values": {
+      "types": "./dist/remote/transfers/server-values.d.ts",
+      "default": "./dist/remote/transfers/server-values.js"
+    },
+    "./remote/transfers/server-model": {
+      "types": "./dist/remote/transfers/server-model.d.ts",
+      "default": "./dist/remote/transfers/server-model.js"
+    },
+    "./remote/transfers/server-http": {
+      "types": "./dist/remote/transfers/server-http.d.ts",
+      "default": "./dist/remote/transfers/server-http.js"
+    },
+    "./remote/transfers/server-codec": {
+      "types": "./dist/remote/transfers/server-codec.d.ts",
+      "default": "./dist/remote/transfers/server-codec.js"
+    },
+    "./remote/suspend/events": {
+      "types": "./dist/remote/suspend/events.d.ts",
+      "default": "./dist/remote/suspend/events.js"
+    },
+    "./remote/suspend/http-codec": {
+      "types": "./dist/remote/suspend/http-codec.d.ts",
+      "default": "./dist/remote/suspend/http-codec.js"
+    },
+    "./remote/suspend/workspace-result-codec": {
+      "types": "./dist/remote/suspend/workspace-result-codec.d.ts",
+      "default": "./dist/remote/suspend/workspace-result-codec.js"
+    },
+    "./remote/monitoring/workspace": {
+      "types": "./dist/remote/monitoring/workspace.d.ts",
+      "default": "./dist/remote/monitoring/workspace.js"
+    },
+    "./remote/monitoring/workspace-codec": {
+      "types": "./dist/remote/monitoring/workspace-codec.d.ts",
+      "default": "./dist/remote/monitoring/workspace-codec.js"
+    },
+    "./agent/scope/workspace-http": {
+      "types": "./dist/agent/scope/workspace-http.d.ts",
+      "default": "./dist/agent/scope/workspace-http.js"
+    },
+    "./agent/scope/workspace-http-codec": {
+      "types": "./dist/agent/scope/workspace-http-codec.d.ts",
+      "default": "./dist/agent/scope/workspace-http-codec.js"
+    },
+    "./agent/runs/events": {
+      "types": "./dist/agent/runs/events.d.ts",
+      "default": "./dist/agent/runs/events.js"
+    },
+    "./common/version": {
+      "types": "./dist/common/version.d.ts",
+      "default": "./dist/common/version.js"
+    }
+  },
+  "devDependencies": {
+    "@types/semver": "^7.8.0",
+    "typescript": "catalog:node-build"
+  },
+  "dependencies": {
+    "semver": "7.8.5"
+  }
+}

@@ -1,115 +1,55 @@
 <script setup lang="ts">
-  import { ref } from 'vue';
-  import { useI18n } from 'vue-i18n';
-  import { UiModal } from '@/foundation/ui';
-  import { useFeedback } from '@/shared/feedback/public';
-  import ConnectionForm from './ConnectionForm.vue';
-  import { useConnections } from '../composables/useConnections';
-  import type { ConnectionDto, ConnectionFormInput, ConnectionFormUpdate } from '../model/connection';
-
-  const props = defineProps<{ visible: boolean; connection?: ConnectionDto | null }>();
-  const emit = defineEmits<{ close: []; saved: [connection: ConnectionDto]; deleted: [id: number] }>();
-  const { t } = useI18n();
-  const feedback = useFeedback();
-  const data = useConnections();
-  const loading = ref(false);
-
-  const save = async (input: ConnectionFormInput | Partial<ConnectionFormInput>) => {
-    if (loading.value) return;
-    loading.value = true;
-    try {
-      const connection = props.connection
-        ? await data.update(props.connection.id, input as ConnectionFormUpdate)
-        : await data.create(input as ConnectionFormInput);
-      emit('saved', connection);
-      emit('close');
-    } catch (cause) {
-      const error = cause instanceof Error ? cause.message : String(cause);
-      feedback.notifyError(
-        t(props.connection ? 'connections.errors.updateFailed' : 'connections.errors.createFailed', { error }),
-      );
-    } finally {
-      loading.value = false;
-    }
-  };
-
-  const saveMany = async (inputs: ConnectionFormInput[]) => {
-    if (loading.value || inputs.length === 0) return;
-    loading.value = true;
-    let successCount = 0;
-    let errorCount = 0;
-    let firstError = '';
-    let last: ConnectionDto | null = null;
-    try {
-      for (const input of inputs) {
-        try {
-          last = await data.create(input);
-          successCount += 1;
-        } catch (cause) {
-          errorCount += 1;
-          if (!firstError) firstError = cause instanceof Error ? cause.message : String(cause);
-        }
-      }
-
-      if (last) emit('saved', last);
-      if (errorCount > 0) {
-        const message = t('connections.form.errorBatchAddResult', {
-          successCount,
-          errorCount,
-          firstErrorEncountered: firstError,
-        });
-        if (successCount > 0) feedback.notifyWarning(message);
-        else feedback.notifyError(message);
-        return;
-      }
-
-      feedback.notifySuccess(t('connections.form.successBatchAddResult', { successCount }));
-      emit('close');
-    } finally {
-      loading.value = false;
-    }
-  };
-
-  const remove = async () => {
-    const connection = props.connection;
-    if (!connection || loading.value) return;
-    if (
-      !(await feedback.confirm({
-        message: t('connections.prompts.confirmDelete', { name: connection.name || connection.host }),
-        destructive: true,
-      }))
-    )
-      return;
-    loading.value = true;
-    try {
-      await data.remove(connection.id);
-      emit('deleted', connection.id);
-      emit('close');
-    } catch (cause) {
-      feedback.notifyError(
-        t('connections.errors.deleteFailed', { error: cause instanceof Error ? cause.message : String(cause) }),
-      );
-    } finally {
-      loading.value = false;
-    }
-  };
+	import { useI18n } from 'vue-i18n';
+	import { UiButton, UiLoadingState, UiModal } from '@/foundation/ui';
+	import ConnectionForm from './ConnectionForm.vue';
+	import { useConnectionEditor } from '../composables/use-connection-editor';
+	import type { ConnectionSummary } from '../model/connection-types';
+	const props = defineProps<{ visible: boolean; connection?: ConnectionSummary | null }>();
+	const emit = defineEmits<{ close: []; saved: [connection: ConnectionSummary]; deleted: [id: number] }>();
+	const { t } = useI18n();
+	const { snapshot, credential, loading, ready, data, refresh, save, saveMany, saveCredential, remove } =
+		useConnectionEditor(props, emit);
 </script>
-
 <template>
-  <UiModal
-    :visible="visible"
-    :z-index="150"
-    panel-class="ui-form-surface !max-w-3xl !max-h-[92dvh] !p-4 sm:!p-6 lg:!p-7"
-    content-class="!overflow-hidden !py-0"
-    @close="emit('close')"
-  >
-    <ConnectionForm
-      :connection="connection ?? null"
-      :loading="loading"
-      @submit="save"
-      @submit-many="saveMany"
-      @cancel="emit('close')"
-      @delete="remove"
-    />
-  </UiModal>
+	<UiModal
+		:visible="visible"
+		:z-index="150"
+		panel-class="ui-form-surface !max-w-3xl !p-4 sm:!p-6 lg:!p-7"
+		:panel-style="{ height: 'min(760px, calc(100dvh - 2rem))', maxHeight: 'calc(100dvh - 2rem)' }"
+		content-class="!flex !min-h-0 !flex-1 !flex-col !overflow-hidden !py-0"
+		@close="emit('close')"
+	>
+		<UiLoadingState
+			v-if="loading && !ready"
+			class="min-h-48"
+			compact
+			:bordered="false"
+			:title="t('common.loading')"
+		/>
+		<div v-else-if="!ready" class="space-y-4 py-4">
+			<div class="flex flex-wrap justify-end gap-2">
+				<UiButton type="button" :disabled="loading" @click="refresh">
+					{{ t('connections.refresh') }}
+				</UiButton>
+				<UiButton type="button" @click="emit('close')">{{ t('common.close') }}</UiButton>
+			</div>
+		</div>
+		<div v-else class="flex min-h-0 flex-1 flex-col gap-3">
+			<div v-if="data.needsRefresh.value" class="flex justify-end">
+				<UiButton type="button" density="compact" :disabled="loading" @click="refresh">
+					{{ t('connections.refresh') }}
+				</UiButton>
+			</div>
+			<ConnectionForm
+				:connection="snapshot"
+				:credential="credential"
+				:loading="loading || data.needsRefresh.value"
+				@submit="save"
+				@submit-many="saveMany"
+				@credential="saveCredential"
+				@cancel="emit('close')"
+				@delete="remove"
+			/>
+		</div>
+	</UiModal>
 </template>

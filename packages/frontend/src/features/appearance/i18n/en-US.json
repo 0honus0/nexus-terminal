@@ -186,5 +186,14 @@
         "saveFailed": "Failed to save the window title bar color."
       }
     }
+  },
+  "appearanceNext": {
+    "failed": "The appearance operation failed. Refresh the saved state before trying again.",
+    "unknown": "The result is unknown. Do not repeat the operation; refresh and check the saved state.",
+    "conflict": "The saved version changed. Refresh and review your changes.",
+    "refreshRequired": "Refresh the saved appearance and libraries before making further changes. Refresh discards editor drafts.",
+    "invalid": "Invalid appearance input or capacity exceeded.",
+    "cleanupPending": "The background was saved, but old-file cleanup is still pending.",
+    "refresh": "Refresh"
   }
 }

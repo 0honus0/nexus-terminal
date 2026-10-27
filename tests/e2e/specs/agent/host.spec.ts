@@ -1,2017 +1,1269 @@
+import { dismissToasts } from '../../support/feedback';
+import {
+	readAgentProviderView,
+	readAgentProviderListResponse,
+	readAgentProviderDeleteResponse,
+} from '../../../../packages/shared/src/agent/providers/http-codec';
+import { readAgentExecutionSettingsResponse } from '../../../../packages/shared/src/agent/execution/http-codec';
+import {
+	readAgentAppListResponse,
+	readAgentAppDefinitionListResponse,
+	readAgentAppResponse,
+} from '../../../../packages/shared/src/agent/scope/http-codec';
+import { readAgentGrantView } from '../../../../packages/shared/src/agent/governance/http-codec';
+import { readAgentErrorResponse } from '../../../../packages/shared/src/agent/http-codec';
+import { readAgentPluginRecommended } from '../../../../packages/shared/src/agent/plugins/repository-http-codec';
+import {
+	readAgentWorkspaceRequest,
+	readAgentWorkspaceResponse,
+} from '../../../../packages/shared/src/agent/scope/workspace-http-codec';
+import type { AgentWorkspaceRequest } from '../../../../packages/shared/src/agent/scope/workspace-http';
+import {
+	openAgentConversations,
+	openAgentHub,
+	selectAgentExtensionsSection,
+	selectAgentSettingsGroup,
+	createTestAgentApp,
+	enableTestAgentExecution,
+	requestAgentWorkspace,
+	requestAgentJson,
+	createAgentProvider,
+	prepareAgentRun,
+} from '../../support/agent';
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
-import { step } from '../../support/steps';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { E2E_URLS } from '../../support/test-env';
-import { addTaskProvider, addProviderModel } from '../../fixtures/agent/task-ui';
+import { expectUiSelectValue, selectUiOption } from '../../support/ui-select';
 test.use({ actionTimeout: 10_000 });
-import type {
-  APIRequestContext,
-  Locator,
-  Page,
-  WebSocket as PlaywrightWebSocket,
-  WebSocketRoute,
-} from '@playwright/test';
-
-// Gen2 selects render a listbox trigger instead of a native <select>, so the
-// value is driven by picking an option rather than by selectOption().
-const pickGen2Option = async (trigger: Locator, option: string): Promise<void> => {
-  await trigger.click();
-  await trigger.page().getByRole('option', { name: option, exact: true }).click();
-};
-
-type AgentEnvelope<T> = { data: T; requestId: string };
-type AgentErrorEnvelope = { error: { code: string; message: string }; requestId: string };
-
-type AppSummary = {
-  id: string;
-  displayName: string;
-  version: string;
-  stateVersion: number;
-  enabled: boolean;
-  health: string;
-  healthReason: string | null;
-  runningRuns: number;
-  pendingApprovals: number;
-  pendingBudgetRequests: number;
-};
-
-type AgentFeatureSettingsView = {
-  revision: number;
-  effectiveSettings: { feature: { enabled: boolean } };
-};
-
 test('Agent launcher stays passive until the user explicitly opens the Hub', async ({ page, context }) => {
-  await loginAsInitialAdmin(context.request);
-  await setUiLanguage(context.request);
-  await enableAgentWithRecommendedNexusAgent(context.request);
+	await loginAsInitialAdmin(context.request);
+	await setUiLanguage(context.request);
+	await createTestAgentApp(context.request);
+	await enableTestAgentExecution(context.request);
 
-  await page.goto('/connections');
+	await page.goto('/connections');
 
-  const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
-  const hub = page.locator('section[aria-label="Agent"]');
-  await expect(launcher).toBeVisible();
-  await expect(hub).toHaveCount(0);
+	const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
+	const hub = page.locator('section[aria-label="Agent"]');
+	await expect(launcher).toBeVisible();
+	await expect(hub).toHaveCount(0);
 
-  await page.getByRole('button', { name: 'Add New Connection', exact: true }).click({ trial: true });
+	await page.getByRole('button', { name: 'Add New Connection', exact: true }).click({ trial: true });
 
-  await launcher.click();
-  await expect(hub).toBeVisible();
+	await launcher.click();
+	await expect(hub).toBeVisible();
 });
 
 test('Agent launcher moves immediately on drag and opens only on click', async ({ page, context }) => {
-  await loginAsInitialAdmin(context.request);
-  await setUiLanguage(context.request);
-  await enableAgentWithRecommendedNexusAgent(context.request);
-  await page.goto('/connections');
+	await loginAsInitialAdmin(context.request);
+	await setUiLanguage(context.request);
+	await createTestAgentApp(context.request);
+	await enableTestAgentExecution(context.request);
+	await page.goto('/connections');
 
-  const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
-  const launcherPosition = async () =>
-    launcher.locator('..').evaluate((element) => {
-      const style = getComputedStyle(element);
-      return { right: Number.parseFloat(style.right), bottom: Number.parseFloat(style.bottom) };
-    });
-  const hub = page.locator('section[aria-label="Agent"]');
-  await expect(launcher).toBeVisible();
-  const initial = await launcher.boundingBox();
-  const initialPosition = await launcherPosition();
-  expect(initial).toBeTruthy();
+	const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
 
-  await page.mouse.move(initial!.x + initial!.width / 2, initial!.y + initial!.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(initial!.x + initial!.width / 2 - 90, initial!.y + initial!.height / 2 - 80, {
-    steps: 4,
-  });
-  await page.mouse.up();
+	const launcherPosition = async () =>
+		launcher.locator('..').evaluate((element) => {
+			const style = getComputedStyle(element);
+			return { right: Number.parseFloat(style.right), bottom: Number.parseFloat(style.bottom) };
+		});
 
-  const moved = await launcher.boundingBox();
-  expect(moved).toBeTruthy();
-  expect(moved!.x).toBeLessThan(initial!.x - 60);
-  expect(moved!.y).toBeLessThan(initial!.y - 50);
-  const movedPosition = await launcherPosition();
-  await expect(hub).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Reset position' })).toHaveCount(0);
+	const hub = page.locator('section[aria-label="Agent"]');
+	await expect(launcher).toBeVisible();
+	const initial = await launcher.boundingBox();
+	const initialPosition = await launcherPosition();
+	expect(initial).toBeTruthy();
 
-  await page.reload();
-  await expect(launcher).toBeVisible();
-  expect(await launcherPosition()).toEqual(movedPosition);
+	await page.mouse.move(initial!.x + initial!.width / 2, initial!.y + initial!.height / 2);
+	await page.mouse.down();
+	await page.mouse.move(initial!.x + initial!.width / 2 - 90, initial!.y + initial!.height / 2 - 80, {
+		steps: 4,
+	});
+	await page.mouse.up();
 
-  await launcher.click({ button: 'right' });
-  expect(await launcherPosition()).toEqual(initialPosition);
+	const moved = await launcher.boundingBox();
+	expect(moved).toBeTruthy();
+	expect(moved!.x).toBeLessThan(initial!.x - 60);
+	expect(moved!.y).toBeLessThan(initial!.y - 50);
+	const movedPosition = await launcherPosition();
+	await expect(hub).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Reset position' })).toHaveCount(0);
 
-  await launcher.click();
-  await expect(hub).toBeVisible();
+	await page.reload();
+	await expect(launcher).toBeVisible();
+	expect(await launcherPosition()).toEqual(movedPosition);
+
+	await launcher.click({ button: 'right' });
+	expect(await launcherPosition()).toEqual(initialPosition);
+
+	await launcher.click();
+	await expect(hub).toBeVisible();
 });
 
 test('Agent launcher docks on either edge, restores its side and expands on focus', async ({ page, context }) => {
-  await loginAsInitialAdmin(context.request);
-  await setUiLanguage(context.request);
-  await enableAgentWithRecommendedNexusAgent(context.request);
-  await page.goto('/connections');
-  const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
-  const hub = page.locator('section[aria-label="Agent"]');
-  await expect(launcher).toBeVisible();
+	await loginAsInitialAdmin(context.request);
+	await setUiLanguage(context.request);
+	await createTestAgentApp(context.request);
+	await enableTestAgentExecution(context.request);
+	await page.goto('/connections');
+	const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
+	const hub = page.locator('section[aria-label="Agent"]');
+	await expect(launcher).toBeVisible();
 
-  for (const side of ['left', 'right'] as const) {
-    const initial = (await launcher.boundingBox())!;
-    const width = await page.evaluate(() => document.documentElement.clientWidth);
-    await page.mouse.move(initial.x + initial.width / 2, initial.y + initial.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(side === 'left' ? 22 : width - 22, initial.y + initial.height / 2 - 40, { steps: 5 });
-    await page.mouse.up();
-    await page.mouse.move(width / 2, 50);
-    await expect(hub).toHaveCount(0);
-    await page.reload();
-    await expect(launcher).toBeVisible();
-    const restoredWidth = await page.evaluate(() => innerWidth);
-    const hiddenX = side === 'left' ? -22 : restoredWidth - 22;
-    await expect.poll(async () => Math.round((await launcher.boundingBox())!.x)).toBe(hiddenX);
-    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await launcher.focus();
-    await expect
-      .poll(async () => Math.round((await launcher.boundingBox())!.x))
-      .toBe(side === 'left' ? 0 : restoredWidth - 44);
-    await launcher.evaluate((button) => (button as HTMLButtonElement).blur());
-    await expect.poll(async () => Math.round((await launcher.boundingBox())!.x)).toBe(hiddenX);
-    await launcher.click({ button: 'right' });
-  }
-  await launcher.press('Enter');
-  await expect(hub).toBeVisible();
+	for (const side of ['left', 'right'] as const) {
+		const initial = (await launcher.boundingBox())!;
+		const width = await page.evaluate(() => document.documentElement.clientWidth);
+		await page.mouse.move(initial.x + initial.width / 2, initial.y + initial.height / 2);
+		await page.mouse.down();
+		await page.mouse.move(side === 'left' ? 22 : width - 22, initial.y + initial.height / 2 - 40, { steps: 5 });
+		await page.mouse.up();
+		await page.mouse.move(width / 2, 50);
+		await expect(hub).toHaveCount(0);
+		await page.reload();
+		await expect(launcher).toBeVisible();
+		const restoredWidth = await page.evaluate(() => innerWidth);
+		const hiddenX = side === 'left' ? -22 : restoredWidth - 22;
+		await expect.poll(async () => Math.round((await launcher.boundingBox())!.x)).toBe(hiddenX);
+		await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+		await launcher.focus();
+		await expect
+			.poll(async () => Math.round((await launcher.boundingBox())!.x))
+			.toBe(side === 'left' ? 0 : restoredWidth - 44);
+		await launcher.evaluate((button) => (button as HTMLButtonElement).blur());
+		await expect.poll(async () => Math.round((await launcher.boundingBox())!.x)).toBe(hiddenX);
+		await launcher.click({ button: 'right' });
+	}
+	await launcher.press('Enter');
+	await expect(hub).toBeVisible();
 });
 
 test.describe('touch Agent launcher', () => {
-  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+	test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
 
-  test('touch launcher docks half-hidden and opens from its exposed half', async ({ page, context }) => {
-    await loginAsInitialAdmin(context.request);
-    await setUiLanguage(context.request);
-    await enableAgentWithRecommendedNexusAgent(context.request);
-    await page.goto('/connections');
-    const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
-    const hub = page.locator('section[aria-label="Agent"]');
-    await expect(launcher).toBeVisible();
-    const initial = (await launcher.boundingBox())!;
-    const y = initial.y + 22 - 60;
-    await launcher.dispatchEvent('pointerdown', {
-      pointerType: 'touch',
-      pointerId: 1,
-      isPrimary: true,
-      clientX: initial.x + 22,
-      clientY: initial.y + 22,
-      button: 0,
-      buttons: 1,
-    });
-    await launcher.dispatchEvent('pointermove', {
-      pointerType: 'touch',
-      pointerId: 1,
-      isPrimary: true,
-      clientX: 22,
-      clientY: y,
-      buttons: 1,
-    });
-    await launcher.dispatchEvent('pointerup', {
-      pointerType: 'touch',
-      pointerId: 1,
-      isPrimary: true,
-      clientX: 22,
-      clientY: y,
-      button: 0,
-      buttons: 0,
-    });
-    await expect(hub).toHaveCount(0);
-    await expect.poll(async () => Math.round((await launcher.boundingBox())!.x)).toBe(-22);
-    await page.reload();
-    await expect(launcher).toBeVisible();
-    await expect.poll(async () => Math.round((await launcher.boundingBox())!.x)).toBe(-22);
-    await page.touchscreen.tap(11, (await launcher.boundingBox())!.y + 22);
-    await expect(hub).toBeVisible();
-  });
+	test('touch launcher docks half-hidden and opens from its exposed half', async ({ page, context }) => {
+		await loginAsInitialAdmin(context.request);
+		await setUiLanguage(context.request);
+		await createTestAgentApp(context.request);
+		await enableTestAgentExecution(context.request);
+		await page.goto('/connections');
+		const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
+		const hub = page.locator('section[aria-label="Agent"]');
+		await expect(launcher).toBeVisible();
+		const initial = (await launcher.boundingBox())!;
+		const y = initial.y + 22 - 60;
+		await launcher.dispatchEvent('pointerdown', {
+			pointerType: 'touch',
+			pointerId: 1,
+			isPrimary: true,
+			clientX: initial.x + 22,
+			clientY: initial.y + 22,
+			button: 0,
+			buttons: 1,
+		});
+		await launcher.dispatchEvent('pointermove', {
+			pointerType: 'touch',
+			pointerId: 1,
+			isPrimary: true,
+			clientX: 22,
+			clientY: y,
+			buttons: 1,
+		});
+		await launcher.dispatchEvent('pointerup', {
+			pointerType: 'touch',
+			pointerId: 1,
+			isPrimary: true,
+			clientX: 22,
+			clientY: y,
+			button: 0,
+			buttons: 0,
+		});
+		await expect(hub).toHaveCount(0);
+		await expect.poll(async () => Math.round((await launcher.boundingBox())!.x)).toBe(-22);
+		await page.reload();
+		await expect(launcher).toBeVisible();
+		await expect.poll(async () => Math.round((await launcher.boundingBox())!.x)).toBe(-22);
+		await page.touchscreen.tap(11, (await launcher.boundingBox())!.y + 22);
+		await expect(hub).toBeVisible();
+	});
 
-  test('touch drag moves the launcher without opening the Hub', async ({ page, context }) => {
-    await loginAsInitialAdmin(context.request);
-    await setUiLanguage(context.request);
-    await enableAgentWithRecommendedNexusAgent(context.request);
-    await page.goto('/connections');
+	test('touch drag moves the launcher without opening the Hub', async ({ page, context }) => {
+		await loginAsInitialAdmin(context.request);
+		await setUiLanguage(context.request);
+		await createTestAgentApp(context.request);
+		await enableTestAgentExecution(context.request);
+		await page.goto('/connections');
 
-    const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
-    const hub = page.locator('section[aria-label="Agent"]');
-    await expect(launcher).toBeVisible();
-    const initial = await launcher.boundingBox();
-    expect(initial).toBeTruthy();
-    const startX = initial!.x + initial!.width / 2;
-    const startY = initial!.y + initial!.height / 2;
-    await launcher.dispatchEvent('pointerdown', {
-      pointerType: 'touch',
-      pointerId: 1,
-      isPrimary: true,
-      clientX: startX,
-      clientY: startY,
-      button: 0,
-      buttons: 1,
-    });
-    await launcher.dispatchEvent('pointermove', {
-      pointerType: 'touch',
-      pointerId: 1,
-      isPrimary: true,
-      clientX: startX - 45,
-      clientY: startY - 40,
-      buttons: 1,
-    });
-    await launcher.dispatchEvent('pointermove', {
-      pointerType: 'touch',
-      pointerId: 1,
-      isPrimary: true,
-      clientX: startX - 90,
-      clientY: startY - 80,
-      buttons: 1,
-    });
-    await launcher.dispatchEvent('pointerup', {
-      pointerType: 'touch',
-      pointerId: 1,
-      isPrimary: true,
-      clientX: startX - 90,
-      clientY: startY - 80,
-      button: 0,
-      buttons: 0,
-    });
+		const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
+		const hub = page.locator('section[aria-label="Agent"]');
+		await expect(launcher).toBeVisible();
+		const initial = await launcher.boundingBox();
+		expect(initial).toBeTruthy();
+		const startX = initial!.x + initial!.width / 2;
+		const startY = initial!.y + initial!.height / 2;
+		await launcher.dispatchEvent('pointerdown', {
+			pointerType: 'touch',
+			pointerId: 1,
+			isPrimary: true,
+			clientX: startX,
+			clientY: startY,
+			button: 0,
+			buttons: 1,
+		});
+		await launcher.dispatchEvent('pointermove', {
+			pointerType: 'touch',
+			pointerId: 1,
+			isPrimary: true,
+			clientX: startX - 45,
+			clientY: startY - 40,
+			buttons: 1,
+		});
+		await launcher.dispatchEvent('pointermove', {
+			pointerType: 'touch',
+			pointerId: 1,
+			isPrimary: true,
+			clientX: startX - 90,
+			clientY: startY - 80,
+			buttons: 1,
+		});
+		await launcher.dispatchEvent('pointerup', {
+			pointerType: 'touch',
+			pointerId: 1,
+			isPrimary: true,
+			clientX: startX - 90,
+			clientY: startY - 80,
+			button: 0,
+			buttons: 0,
+		});
 
-    const moved = await launcher.boundingBox();
-    expect(moved).toBeTruthy();
-    expect(moved!.x).toBeLessThan(initial!.x - 60);
-    expect(moved!.y).toBeLessThan(initial!.y - 50);
-    await expect(hub).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Reset position' })).toHaveCount(0);
+		const moved = await launcher.boundingBox();
+		expect(moved).toBeTruthy();
+		expect(moved!.x).toBeLessThan(initial!.x - 60);
+		expect(moved!.y).toBeLessThan(initial!.y - 50);
+		await expect(hub).toHaveCount(0);
+		await expect(page.getByRole('button', { name: 'Reset position' })).toHaveCount(0);
 
-    await launcher.tap();
-    await expect(hub).toBeVisible();
-  });
+		await launcher.tap();
+		await expect(hub).toBeVisible();
+	});
 });
 
 test('Agent Hub native buttons keep a 24px physical pointer-target floor', async ({ page, context }) => {
-  await loginAsInitialAdmin(context.request);
-  await setUiLanguage(context.request);
-  await enableAgentWithRecommendedNexusAgent(context.request);
-  await page.goto('/connections');
-  await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
+	await loginAsInitialAdmin(context.request);
+	await setUiLanguage(context.request);
+	await createTestAgentApp(context.request);
+	await enableTestAgentExecution(context.request);
+	await page.goto('/connections');
+	await openAgentHub(page);
 
-  const hub = page.locator('section[aria-label="Agent"]');
-  await expect(hub).toBeVisible();
-  const undersized = await hub.locator('button').evaluateAll((buttons) =>
-    buttons
-      .filter((button) => {
-        const style = getComputedStyle(button);
-        return style.display !== 'none' && style.visibility !== 'hidden' && button.getClientRects().length > 0;
-      })
-      .map((button) => {
-        const rect = button.getBoundingClientRect();
-        return {
-          width: rect.width,
-          height: rect.height,
-          label: button.getAttribute('aria-label') ?? button.getAttribute('title') ?? button.textContent?.trim() ?? '',
-        };
-      })
-      .filter(({ width, height }) => width < 24 || height < 24),
-  );
-  expect(undersized).toEqual([]);
+	const hub = page.locator('section[aria-label="Agent"]');
+	await expect(hub).toBeVisible();
+	const undersized = await hub.locator('button').evaluateAll((buttons) =>
+		buttons
+			.filter((button) => {
+				const style = getComputedStyle(button);
+				return style.display !== 'none' && style.visibility !== 'hidden' && button.getClientRects().length > 0;
+			})
+			.map((button) => {
+				const rect = button.getBoundingClientRect();
+				return {
+					width: rect.width,
+					height: rect.height,
+					label:
+						button.getAttribute('aria-label') ??
+						button.getAttribute('title') ??
+						button.textContent?.trim() ??
+						'',
+				};
+			})
+			.filter(({ width, height }) => width < 24 || height < 24),
+	);
+	expect(undersized).toEqual([]);
 
-  const resizeHandle = hub.locator('button[data-ui="resize-handle"]');
-  const resizeBox = await resizeHandle.boundingBox();
-  expect(resizeBox).toBeTruthy();
-  expect(resizeBox!.width).toBeGreaterThanOrEqual(24);
-  expect(resizeBox!.height).toBeGreaterThanOrEqual(24);
+	const resizeHandle = hub.locator('button[data-ui="resize-handle"]');
+	const resizeBox = await resizeHandle.boundingBox();
+	expect(resizeBox).toBeTruthy();
+	expect(resizeBox!.width).toBeGreaterThanOrEqual(24);
+	expect(resizeBox!.height).toBeGreaterThanOrEqual(24);
 });
 
 test('Agent Hub resizing keeps its current center and its bottom-right handle follows the pointer', async ({
-  page,
-  context,
+	page,
+	context,
 }) => {
-  await page.setViewportSize({ width: 1440, height: 1000 });
-  await loginAsInitialAdmin(context.request);
-  await setUiLanguage(context.request);
-  await enableAgentWithRecommendedNexusAgent(context.request);
-  await page.goto('/connections');
-  await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
-  const hub = page.locator('section[aria-label="Agent"]');
-  await expect(hub).toBeVisible();
-  const handle = hub.locator('button[data-ui="resize-handle"]');
-  const bounds = async () => {
-    const box = await hub.boundingBox();
-    expect(box).toBeTruthy();
-    return box!;
-  };
-  const resize = async (dx: number, dy: number) => {
-    const box = await handle.boundingBox();
-    expect(box).toBeTruthy();
-    const x = box!.x + box!.width / 2;
-    const y = box!.y + box!.height / 2;
-    await page.mouse.move(x, y);
-    await page.mouse.down();
-    await page.mouse.move(x + dx, y + dy, { steps: 8 });
-    await page.mouse.up();
-  };
-  const expectCenteredSize = async (before: Awaited<ReturnType<typeof bounds>>, dw: number, dh: number) => {
-    await expect.poll(async () => (await bounds()).width).toBeCloseTo(before.width + dw, 0);
-    await expect.poll(async () => (await bounds()).height).toBeCloseTo(before.height + dh, 0);
-    const after = await bounds();
-    expect(after.x + after.width / 2).toBeCloseTo(before.x + before.width / 2, 0);
-    expect(after.y + after.height / 2).toBeCloseTo(before.y + before.height / 2, 0);
-    return after;
-  };
+	await page.setViewportSize({ width: 1440, height: 1000 });
+	await loginAsInitialAdmin(context.request);
+	await setUiLanguage(context.request);
+	await createTestAgentApp(context.request);
+	await enableTestAgentExecution(context.request);
+	await page.goto('/connections');
+	await openAgentHub(page);
+	const hub = page.locator('section[aria-label="Agent"]');
+	await expect(hub).toBeVisible();
+	const handle = hub.locator('button[data-ui="resize-handle"]');
 
-  const initial = await bounds();
-  await resize(-80, -60);
-  const shrunk = await expectCenteredSize(initial, -160, -120);
-  expect(shrunk.x + shrunk.width).toBeCloseTo(initial.x + initial.width - 80, 0);
-  expect(shrunk.y + shrunk.height).toBeCloseTo(initial.y + initial.height - 60, 0);
+	const bounds = async () => {
+		const box = await hub.boundingBox();
+		expect(box).toBeTruthy();
+		return box!;
+	};
 
-  // Moving the window establishes a new center; resizing must not snap back
-  // to the viewport center or the position from the previous resize.
-  const header = hub.locator('header').first();
-  const headerBox = await header.boundingBox();
-  expect(headerBox).toBeTruthy();
-  const headerX = headerBox!.x + 24;
-  const headerY = headerBox!.y + headerBox!.height / 2;
-  await page.mouse.move(headerX, headerY);
-  await page.mouse.down();
-  await page.mouse.move(headerX + 40, headerY + 60, { steps: 8 });
-  await page.mouse.up();
-  await expect.poll(async () => (await bounds()).x).toBeCloseTo(shrunk.x + 40, 0);
-  const moved = await bounds();
-  await resize(30, 20);
-  const grown = await expectCenteredSize(moved, 60, 40);
+	const resize = async (dx: number, dy: number) => {
+		const box = await handle.boundingBox();
+		expect(box).toBeTruthy();
+		const x = box!.x + box!.width / 2;
+		const y = box!.y + box!.height / 2;
+		await page.mouse.move(x, y);
+		await page.mouse.down();
+		await page.mouse.move(x + dx, y + dy, { steps: 8 });
+		await page.mouse.up();
+	};
 
-  await handle.focus();
-  await page.keyboard.press('ArrowLeft');
-  const keyboardResized = await expectCenteredSize(grown, -32, 0);
-  await resize(500, 500);
-  const maxWidth =
-    2 * Math.min(keyboardResized.x + keyboardResized.width / 2, 1440 - keyboardResized.x - keyboardResized.width / 2);
-  const maxHeight =
-    2 * Math.min(keyboardResized.y + keyboardResized.height / 2, 1000 - keyboardResized.y - keyboardResized.height / 2);
-  const limited = await expectCenteredSize(
-    keyboardResized,
-    maxWidth - keyboardResized.width,
-    maxHeight - keyboardResized.height,
-  );
-  expect(limited.x).toBeGreaterThanOrEqual(0);
-  expect(limited.y).toBeGreaterThanOrEqual(0);
-  expect(limited.x + limited.width).toBeLessThanOrEqual(1440);
-  expect(limited.y + limited.height).toBeLessThanOrEqual(1000);
+	const expectCenteredSize = async (before: Awaited<ReturnType<typeof bounds>>, dw: number, dh: number) => {
+		await expect.poll(async () => (await bounds()).width).toBeCloseTo(before.width + dw, 0);
+		await expect.poll(async () => (await bounds()).height).toBeCloseTo(before.height + dh, 0);
+		const after = await bounds();
+		expect(after.x + after.width / 2).toBeCloseTo(before.x + before.width / 2, 0);
+		expect(after.y + after.height / 2).toBeCloseTo(before.y + before.height / 2, 0);
+		return after;
+	};
+
+	const initial = await bounds();
+	await resize(-80, -60);
+	const shrunk = await expectCenteredSize(initial, -160, -120);
+	expect(shrunk.x + shrunk.width).toBeCloseTo(initial.x + initial.width - 80, 0);
+	expect(shrunk.y + shrunk.height).toBeCloseTo(initial.y + initial.height - 60, 0);
+
+	// Moving the window establishes a new center; resizing must not snap back
+	// to the viewport center or the position from the previous resize.
+	const header = hub.locator('header').first();
+	const headerBox = await header.boundingBox();
+	expect(headerBox).toBeTruthy();
+	const headerX = headerBox!.x + 24;
+	const headerY = headerBox!.y + headerBox!.height / 2;
+	await page.mouse.move(headerX, headerY);
+	await page.mouse.down();
+	await page.mouse.move(headerX + 40, headerY + 60, { steps: 8 });
+	await page.mouse.up();
+	await expect.poll(async () => (await bounds()).x).toBeCloseTo(shrunk.x + 40, 0);
+	const moved = await bounds();
+	await resize(30, 20);
+	const grown = await expectCenteredSize(moved, 60, 40);
+
+	await handle.focus();
+	await page.keyboard.press('ArrowLeft');
+	const keyboardResized = await expectCenteredSize(grown, -32, 0);
+	await resize(500, 500);
+	const maxWidth =
+		2 *
+		Math.min(keyboardResized.x + keyboardResized.width / 2, 1440 - keyboardResized.x - keyboardResized.width / 2);
+	const maxHeight =
+		2 *
+		Math.min(keyboardResized.y + keyboardResized.height / 2, 1000 - keyboardResized.y - keyboardResized.height / 2);
+	const limited = await expectCenteredSize(
+		keyboardResized,
+		maxWidth - keyboardResized.width,
+		maxHeight - keyboardResized.height,
+	);
+	expect(limited.x).toBeGreaterThanOrEqual(0);
+	expect(limited.y).toBeGreaterThanOrEqual(0);
+	expect(limited.x + limited.width).toBeLessThanOrEqual(1440);
+	expect(limited.y + limited.height).toBeLessThanOrEqual(1000);
 });
 
 test('Agent window state resets every user-scoped layout field before an empty user restore', async ({
-  page,
-  context,
+	page,
+	context,
 }) => {
-  await loginAsInitialAdmin(context.request);
-  await page.goto('/connections');
+	await loginAsInitialAdmin(context.request);
+	await page.goto('/connections');
 
-  const state = await page.evaluate(async () => {
-    const modulePath = '/src/features/agent/host/window-manager.ts';
-    const { createAgentWindowManager } = (await import(modulePath)) as {
-      createAgentWindowManager: () => {
-        state: {
-          status: string;
-          bounds: { x: number; y: number; width: number; height: number };
-          maximized: boolean;
-          activeAppId: string | null;
-          recentAppIds: string[];
-          hubView: string;
-          launcherPosition: { right: number; bottom: number };
-          launcherDock: 'left' | 'right' | null;
-          threadSidebarVisible: boolean;
-          taskRailVisible: boolean;
-        };
-        openHub(input?: { appId?: string }): void;
-        switchApp(input: { appId: string }): void;
-        setHubView(view: 'conversation' | 'files'): void;
-        setThreadSidebarVisible(visible: boolean): void;
-        setTaskRailVisible(visible: boolean): void;
-        setLauncherPosition(position: { right: number; bottom: number }): void;
-        dockLauncher(side: 'left' | 'right'): void;
-        setBounds(bounds: { x: number; y: number; width: number; height: number }): void;
-        toggleMaximize(): void;
-        reset(): void;
-        restoreForUser(userId: number): void;
-      };
-    };
-    const agentWindowManager = createAgentWindowManager();
-    const snapshot = () => JSON.parse(JSON.stringify(agentWindowManager.state)) as typeof agentWindowManager.state;
-    const dirty = () => {
-      agentWindowManager.openHub({ appId: 'nexus.agent' });
-      agentWindowManager.switchApp({ appId: 'another.app' });
-      agentWindowManager.setHubView('files');
-      agentWindowManager.setThreadSidebarVisible(false);
-      agentWindowManager.setTaskRailVisible(true);
-      agentWindowManager.setLauncherPosition({ right: 111, bottom: 222 });
-      agentWindowManager.dockLauncher('left');
-      agentWindowManager.setBounds({ x: 12, y: 18, width: 700, height: 600 });
-      agentWindowManager.toggleMaximize();
-    };
+	const state = await page.evaluate(async () => {
+		const modulePath = '/__e2e__/browser-clients.js';
+		const {
+			createAgentWindowManager,
+		}: typeof import('../../../../packages/frontend/src/features/agent/host/window-manager') = await import(
+			modulePath
+		);
 
-    dirty();
-    agentWindowManager.reset();
-    const afterReset = snapshot();
+		const agentWindowManager = createAgentWindowManager();
 
-    dirty();
-    const emptyUserId = 2_147_483_000;
-    localStorage.removeItem(`nexus.agent.surface.user.${emptyUserId}.v1`);
-    agentWindowManager.restoreForUser(emptyUserId);
-    const afterEmptyUserRestore = snapshot();
+		const snapshot = () => JSON.parse(JSON.stringify(agentWindowManager.state)) as typeof agentWindowManager.state;
 
-    return { afterReset, afterEmptyUserRestore };
-  });
+		const dirty = () => {
+			agentWindowManager.openHub({ appId: '00000000-0000-4000-8000-000000000001' });
+			agentWindowManager.switchApp({ appId: '00000000-0000-4000-8000-000000000002' });
+			agentWindowManager.setHubView('files');
+			agentWindowManager.setLauncherPosition({ right: 111, bottom: 222 });
+			agentWindowManager.dockLauncher('left');
+			agentWindowManager.setBounds({ x: 12, y: 18, width: 700, height: 600 });
+			agentWindowManager.toggleMaximize();
+		};
 
-  const expected = {
-    status: 'closed',
-    bounds: { x: 80, y: 16, width: 1180, height: 740 },
-    maximized: false,
-    activeAppId: null,
-    recentAppIds: [],
-    hubView: 'conversation',
-    launcherPosition: { right: 22, bottom: 24 },
-    launcherDock: null,
-    threadSidebarVisible: true,
-    taskRailVisible: false,
-  };
-  expect(state.afterReset).toEqual(expected);
-  expect(state.afterEmptyUserRestore).toEqual(expected);
+		dirty();
+		agentWindowManager.reset();
+		const afterReset = snapshot();
+
+		dirty();
+		const emptyUserId = 2_147_483_000;
+		localStorage.removeItem(`nexus.agent.surface.user.${emptyUserId}.v2`);
+		agentWindowManager.restoreForUser(emptyUserId);
+		const afterEmptyUserRestore = snapshot();
+
+		return { afterReset, afterEmptyUserRestore };
+	});
+
+	const expected = {
+		status: 'closed',
+		bounds: { x: 80, y: 16, width: 1180, height: 740 },
+		maximized: false,
+		activeAppId: null,
+		recentAppIds: [],
+		hubView: 'conversation',
+		launcherPosition: { right: 22, bottom: 24 },
+		launcherDock: null,
+	};
+	expect(state.afterReset).toEqual(expected);
+	expect(state.afterEmptyUserRestore).toEqual(expected);
 });
 
-test('Agent view preferences use the authenticated user namespace and discard legacy global keys', async ({
-  page,
-  context,
+test('Agent layout preferences use the authenticated user namespace and reject obsolete or malformed data', async ({
+	page,
+	context,
 }) => {
-  await loginAsInitialAdmin(context.request);
-  await setUiLanguage(context.request);
-  await enableAgentWithRecommendedNexusAgent(context.request);
-  const authStatus = await context.request.get('/api/v1/auth/status');
-  expect(authStatus.ok(), await authStatus.text()).toBeTruthy();
-  const {
-    user: { id: userId },
-  } = (await authStatus.json()) as { user: { id: number } };
-  const otherUserId = userId + 1_000_000;
+	await loginAsInitialAdmin(context.request);
+	await page.goto('/connections');
+	const result = await page.evaluate(async () => {
+		const modulePath = '/__e2e__/browser-clients.js';
+		const {
+			createAgentWindowManager,
+		}: typeof import('../../../../packages/frontend/src/features/agent/host/window-manager') = await import(
+			modulePath
+		);
+		const firstId = '00000000-0000-4000-8000-000000000001';
+		const secondId = '00000000-0000-4000-8000-000000000002';
+		const currentUser = 2_147_482_001;
+		const otherUser = currentUser + 1;
 
-  await page.goto('/connections');
-  await page.evaluate(
-    ({ currentUserId, untouchedUserId }) => {
-      localStorage.setItem('nexus.agent.thread-list-scale.v1', '1.3');
-      localStorage.setItem(`nexus.agent.thread-list-scale.user.${currentUserId}.v1`, '0.9');
-      localStorage.setItem(`nexus.agent.thread-list-scale.user.${untouchedUserId}.v1`, '1.3');
+		const key = (userId: number) => `nexus.agent.surface.user.${userId}.v2`;
 
-      localStorage.setItem(
-        'nexus.agent.task-rail-order.v1',
-        JSON.stringify(['history', 'background', 'targets', 'plan', 'approvals', 'progress']),
-      );
-      localStorage.setItem(
-        `nexus.agent.task-rail-order.user.${currentUserId}.v1`,
-        JSON.stringify(['progress', 'plan', 'approvals', 'targets', 'background', 'history']),
-      );
-      localStorage.setItem(
-        `nexus.agent.task-rail-order.user.${untouchedUserId}.v1`,
-        JSON.stringify(['history', 'background', 'targets', 'approvals', 'plan', 'progress']),
-      );
-    },
-    { currentUserId: userId, untouchedUserId: otherUserId },
-  );
-
-  await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
-  const hub = page.locator('section[aria-label="Agent"]');
-  await expect(hub).toBeVisible();
-  await expect(hub.getByText('90%', { exact: true }).first()).toBeVisible();
-  await hub.getByRole('button', { name: 'Show or hide task panel', exact: true }).click();
-  await expect(hub.locator('#agent-task-rail')).toBeVisible();
-
-  const expectedCurrentRail = JSON.stringify(['progress', 'plan', 'approvals', 'targets', 'background', 'history']);
-  const expectedOtherRail = JSON.stringify(['history', 'background', 'targets', 'approvals', 'plan', 'progress']);
-  await expect
-    .poll(() =>
-      page.evaluate(
-        ({ currentUserId, untouchedUserId }) => ({
-          legacyScale: localStorage.getItem('nexus.agent.thread-list-scale.v1'),
-          legacyRail: localStorage.getItem('nexus.agent.task-rail-order.v1'),
-          currentScale: localStorage.getItem(`nexus.agent.thread-list-scale.user.${currentUserId}.v1`),
-          otherScale: localStorage.getItem(`nexus.agent.thread-list-scale.user.${untouchedUserId}.v1`),
-          currentRail: localStorage.getItem(`nexus.agent.task-rail-order.user.${currentUserId}.v1`),
-          otherRail: localStorage.getItem(`nexus.agent.task-rail-order.user.${untouchedUserId}.v1`),
-        }),
-        { currentUserId: userId, untouchedUserId: otherUserId },
-      ),
-    )
-    .toEqual({
-      legacyScale: null,
-      legacyRail: null,
-      currentScale: '0.9',
-      otherScale: '1.3',
-      currentRail: expectedCurrentRail,
-      otherRail: expectedOtherRail,
-    });
-
-  await hub.getByRole('button', { name: 'List zoom', exact: true }).click();
-  await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
-
-  await expect
-    .poll(() =>
-      page.evaluate(
-        ({ currentUserId, untouchedUserId }) => ({
-          currentScale: localStorage.getItem(`nexus.agent.thread-list-scale.user.${currentUserId}.v1`),
-          otherScale: localStorage.getItem(`nexus.agent.thread-list-scale.user.${untouchedUserId}.v1`),
-        }),
-        { currentUserId: userId, untouchedUserId: otherUserId },
-      ),
-    )
-    .toEqual({ currentScale: '1', otherScale: '1.3' });
+		const current = createAgentWindowManager();
+		current.openHub({ appId: firstId });
+		current.setBounds({ x: 100, y: 50, width: 700, height: 500 });
+		current.setHubView('files');
+		current.setLauncherPosition({ right: 100, bottom: 150 });
+		current.persistForUser(currentUser);
+		const currentRaw = localStorage.getItem(key(currentUser));
+		const other = createAgentWindowManager();
+		other.openHub({ appId: secondId });
+		other.persistForUser(otherUser);
+		const otherRaw = localStorage.getItem(key(otherUser));
+		current.restoreForUser(otherUser);
+		const otherApp = current.state.activeAppId;
+		current.restoreForUser(currentUser);
+		const snapshot = JSON.parse(JSON.stringify(current.state));
+		localStorage.setItem(
+			key(currentUser),
+			JSON.stringify({ schemaVersion: 2, bounds: { x: 0, y: 0, width: -1, height: 500 } }),
+		);
+		current.restoreForUser(currentUser);
+		const malformed = {
+			active: current.state.activeAppId,
+			removed: localStorage.getItem(key(currentUser)) === null,
+		};
+		localStorage.setItem(`nexus.agent.surface.user.${currentUser}.v1`, currentRaw ?? '');
+		current.restoreForUser(currentUser);
+		const obsoleteIgnored = current.state.activeAppId === null;
+		return {
+			firstId,
+			secondId,
+			otherApp,
+			snapshot,
+			malformed,
+			obsoleteIgnored,
+			otherUnchanged: localStorage.getItem(key(otherUser)) === otherRaw,
+		};
+	});
+	expect(result.otherApp).toBe(result.secondId);
+	expect(result.snapshot).toMatchObject({
+		activeAppId: result.firstId,
+		recentAppIds: [result.firstId],
+		hubView: 'files',
+		bounds: { x: 100, y: 50, width: 700, height: 500 },
+		launcherPosition: { right: 100, bottom: 150 },
+	});
+	expect(result.malformed).toEqual({ active: null, removed: true });
+	expect(result.obsoleteIgnored).toBe(true);
+	expect(result.otherUnchanged).toBe(true);
 });
 
-test('Agent revisits a loaded conversation without blocking on a fresh history round trip', async ({
-  page,
-  context,
+test('Agent thread selection retains its identity while authoritative history is pending', async ({
+	page,
+	context,
 }) => {
-  await loginAsInitialAdmin(context.request);
-  await setUiLanguage(context.request);
-  await enableAgentWithRecommendedNexusAgent(context.request);
-  const csrf = await csrfToken(context.request);
-  const createThread = async (title: string): Promise<{ id: string }> => {
-    const response = await context.request.post('/api/v1/apps/nexus.agent/threads', {
-      headers: { 'X-Nexus-CSRF': csrf },
-      data: { title },
-    });
-    expect(response.status(), await response.text()).toBe(201);
-    return ((await response.json()) as AgentEnvelope<{ id: string }>).data;
-  };
-  const first = await createThread(`E2E Cached Conversation A ${Date.now()}`);
-  const second = await createThread(`E2E Cached Conversation B ${Date.now()}`);
+	await loginAsInitialAdmin(context.request);
+	await setUiLanguage(context.request);
+	const app = await createTestAgentApp(context.request);
+	await enableTestAgentExecution(context.request);
 
-  let holdFirstRefresh = false;
-  let heldRequests = 0;
-  let releaseRefresh: (() => void) | undefined;
-  const refreshGate = new Promise<void>((resolve) => {
-    releaseRefresh = resolve;
-  });
-  await page.route(`**/api/v1/apps/nexus.agent/threads/${first.id}/entries*`, async (route) => {
-    if (holdFirstRefresh) {
-      heldRequests += 1;
-      await refreshGate;
-    }
-    await route.continue();
-  });
-  await page.route('**/api/v1/apps/nexus.agent/runs*', async (route) => {
-    const url = new URL(route.request().url());
-    if (holdFirstRefresh && url.searchParams.get('threadId') === first.id) {
-      heldRequests += 1;
-      await refreshGate;
-    }
-    await route.continue();
-  });
+	const create = async (title: string) => {
+		const result = await requestAgentWorkspace(context.request, app, {
+			method: 'agent.threads.create',
+			params: { autoTitle: false, operationId: randomUUID(), title },
+		});
+		if (result.method !== 'agent.threads.create') throw new Error('Unexpected thread confirmation');
+		return result.value;
+	};
 
-  await page.goto('/connections');
-  await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
-  const hub = page.locator('section[aria-label="Agent"]');
-  await expect(hub).toBeVisible();
-  const firstThread = hub.getByRole('button').filter({ hasText: 'E2E Cached Conversation A' });
-  const secondThread = hub.getByRole('button').filter({ hasText: 'E2E Cached Conversation B' });
-  await expect(firstThread).toBeVisible();
-  await expect(secondThread).toBeVisible();
+	const first = await create('E2E Conversation A');
+	const second = await create('E2E Conversation B');
+	let held = 0;
 
-  await firstThread.click();
-  await expect(firstThread).toHaveAttribute('aria-current', 'true');
-  await expect(hub.getByText('Loading conversation...', { exact: true })).toBeHidden();
-  await secondThread.click();
-  await expect(secondThread).toHaveAttribute('aria-current', 'true');
-  await expect(hub.getByText('Loading conversation...', { exact: true })).toBeHidden();
+	let release = () => {};
 
-  holdFirstRefresh = true;
-  await firstThread.click();
-  await expect.poll(() => heldRequests).toBeGreaterThanOrEqual(2);
-  await expect(firstThread).toHaveAttribute('aria-current', 'true');
-  // The authoritative ledger/run refresh is deliberately stalled, but the cached conversation
-  // must remain visible instead of regressing to the full-screen loading state.
-  await expect(hub.getByText('Loading conversation...', { exact: true })).toBeHidden();
-
-  releaseRefresh?.();
-  await expect(firstThread).toBeEnabled();
+	const gate = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	let hold = false;
+	const workspacePath = `**/api/v1/agent/apps/${app.id}/workspace`;
+	await page.route(workspacePath, async (route) => {
+		const body = readAgentWorkspaceRequest(route.request().postDataJSON());
+		if (
+			hold &&
+			(body.request.method === 'agent.threads.entries' || body.request.method === 'agent.runs.list') &&
+			body.request.params.threadId === first.id
+		) {
+			held += 1;
+			await gate;
+		}
+		await route.continue();
+	});
+	try {
+		await page.goto('/connections');
+		await openAgentHub(page);
+		const hub = page.locator('section[aria-label="Agent"]');
+		await openAgentConversations(page);
+		const threads = hub.locator('#agent-thread-sidebar');
+		const firstButton = threads.getByRole('button').filter({ has: page.getByText(first.title, { exact: true }) });
+		const secondButton = threads.getByRole('button').filter({ has: page.getByText(second.title, { exact: true }) });
+		await secondButton.click();
+		await expect(
+			hub.locator('.agent-conversation-pane > header').getByText(second.title, { exact: true }),
+		).toBeVisible();
+		await openAgentConversations(page);
+		await expect(firstButton).toBeEnabled();
+		hold = true;
+		await openAgentConversations(page);
+		await firstButton.click();
+		await expect.poll(() => held).toBe(2);
+		await expect(
+			hub.locator('.agent-conversation-pane > header').getByText(first.title, { exact: true }),
+		).toBeVisible();
+		await openAgentConversations(page);
+		await expect(secondButton).toBeDisabled();
+		release();
+		await openAgentConversations(page);
+		await expect(secondButton).toBeEnabled();
+		await secondButton.click();
+		await expect(
+			hub.locator('.agent-conversation-pane > header').getByText(second.title, { exact: true }),
+		).toBeVisible();
+	} finally {
+		release();
+		await page.unroute(workspacePath);
+	}
 });
 
-test('Agent create-thread Retry reuses the same idempotency key after an unknown outcome', async ({
-  page,
-  context,
+test('Agent create-thread Retry retains the exact operation after an unknown outcome and requires inspection', async ({
+	page,
+	context,
 }) => {
-  await loginAsInitialAdmin(context.request);
-  await setUiLanguage(context.request);
-  await enableAgentWithRecommendedNexusAgent(context.request);
-  const csrf = await csrfToken(context.request);
+	await loginAsInitialAdmin(context.request);
+	await setUiLanguage(context.request);
+	const app = await createTestAgentApp(context.request);
+	await enableTestAgentExecution(context.request);
 
-  const seed = await context.request.post('/api/v1/apps/nexus.agent/threads', {
-    headers: { 'X-Nexus-CSRF': csrf },
-    data: { title: `E2E Idempotency Seed ${Date.now()}` },
-  });
-  expect(seed.status(), await seed.text()).toBe(201);
+	const list = async () => {
+		const result = await requestAgentWorkspace(context.request, app, {
+			method: 'agent.threads.list',
+			params: { after: null, limit: 50 },
+		});
+		if (result.method !== 'agent.threads.list') throw new Error('Unexpected thread list');
+		return result.value.items;
+	};
 
-  const beforeResponse = await context.request.get('/api/v1/apps/nexus.agent/threads?limit=100');
-  expect(beforeResponse.ok(), await beforeResponse.text()).toBeTruthy();
-  const before = (await beforeResponse.json()) as AgentEnvelope<{ items: Array<{ id: string }> }>;
-
-  let createAttempts = 0;
-  const idempotencyKeys: string[] = [];
-  await page.route('**/api/v1/apps/nexus.agent/threads', async (route) => {
-    if (route.request().method() !== 'POST') {
-      await route.continue();
-      return;
-    }
-
-    createAttempts += 1;
-    idempotencyKeys.push(route.request().headers()['idempotency-key'] ?? '');
-    if (createAttempts === 1) {
-      const committed = await route.fetch();
-      expect(committed.status(), await committed.text()).toBe(201);
-      await route.fulfill({
-        status: 502,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          error: { code: 'UPSTREAM_RESPONSE_LOST', message: 'simulated response loss after commit' },
-        }),
-      });
-      return;
-    }
-    await route.continue();
-  });
-
-  await page.goto('/connections');
-  await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
-  const hub = page.locator('section[aria-label="Agent"]');
-  await expect(hub).toBeVisible();
-  await hub.getByTitle('New', { exact: true }).click();
-
-  await expect.poll(() => createAttempts).toBe(1);
-  const retry = hub.getByRole('button', { name: 'Retry', exact: true });
-  await expect(retry).toBeVisible();
-  await retry.click();
-
-  await expect.poll(() => createAttempts).toBe(2);
-  expect(idempotencyKeys[0]).toMatch(/^[0-9a-f-]{36}$/i);
-  expect(idempotencyKeys[1]).toBe(idempotencyKeys[0]);
-
-  const afterResponse = await context.request.get('/api/v1/apps/nexus.agent/threads?limit=100');
-  expect(afterResponse.ok(), await afterResponse.text()).toBeTruthy();
-  const after = (await afterResponse.json()) as AgentEnvelope<{ items: Array<{ id: string }> }>;
-  expect(after.data.items).toHaveLength(before.data.items.length + 1);
-
-  await page.unroute('**/api/v1/apps/nexus.agent/threads');
+	const before = await list();
+	const attempts: AgentWorkspaceRequest[] = [];
+	const workspacePath = `**/api/v1/agent/apps/${app.id}/workspace`;
+	await page.route(workspacePath, async (route) => {
+		const body = readAgentWorkspaceRequest(route.request().postDataJSON());
+		if (body.request.method !== 'agent.threads.create') {
+			await route.continue();
+			return;
+		}
+		attempts.push(body);
+		if (attempts.length === 1) {
+			const committed = await route.fetch();
+			expect(committed.status()).toBe(200);
+			readAgentWorkspaceResponse(await committed.json(), app.id, body);
+			await route.abort('connectionreset');
+		} else {
+			await route.continue();
+		}
+	});
+	await page.goto('/connections');
+	await openAgentHub(page);
+	const hub = page.locator('section[aria-label="Agent"]');
+	await openAgentConversations(page);
+	const threads = hub.locator('#agent-thread-sidebar');
+	await threads.getByRole('button', { name: 'New', exact: true }).click();
+	await expect.poll(() => attempts.length).toBe(1);
+	const retry = threads.getByRole('button', { name: 'Retry after checking state', exact: true });
+	await expect(retry).toBeDisabled();
+	await threads.getByRole('button', { name: 'Inspect original intention', exact: true }).click();
+	await expect(retry).toBeEnabled();
+	expect(await list()).toHaveLength(before.length + 1);
+	await retry.click();
+	await expect.poll(() => attempts.length).toBe(2);
+	expect(attempts[1]).toEqual(attempts[0]);
+	expect(attempts[0].request.method).toBe('agent.threads.create');
+	if (attempts[0].request.method !== 'agent.threads.create') throw new Error('Unexpected operation');
+	expect(attempts[0].request.params.title).toBe('Untitled thread');
+	expect(attempts[0].request.params.operationId).toMatch(/^[0-9a-f-]{36}$/u);
+	await expect(retry).toHaveCount(0);
+	expect(await list()).toHaveLength(before.length + 1);
+	await page.unroute(workspacePath);
 });
 
-test('Agent feature enable opens one global floating window that survives route navigation', async ({
-  page,
-  context,
+test('Agent execution setting gates the launcher and its global window', async ({ page, context }) => {
+	await loginAsInitialAdmin(context.request);
+	await setUiLanguage(context.request);
+	const app = await createTestAgentApp(context.request);
+	const original = await requestAgentJson(
+		context.request,
+		{ method: 'GET', path: '/execution-settings' },
+		readAgentExecutionSettingsResponse,
+	);
+	if (original.settings.enabled) {
+		await requestAgentJson(
+			context.request,
+			{
+				method: 'PUT',
+				path: '/execution-settings',
+				data: {
+					expectedVersion: original.settings.version,
+					enabled: false,
+					limits: original.settings.limits,
+				},
+			},
+			readAgentExecutionSettingsResponse,
+		);
+	}
+	await page.goto('/settings?tab=agent');
+	await selectAgentSettingsGroup(page, 'runtime');
+	const enable = page.getByRole('switch', { name: 'Agent feature', exact: true });
+	await expect(enable).toBeEnabled();
+	await expect(enable).not.toBeChecked();
+	const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
+	const hub = page.locator('section[aria-label="Agent"]');
+	await expect(launcher).toHaveCount(0);
+	await expect(hub).toHaveCount(0);
+	const save = page.waitForResponse(
+		(response) =>
+			new URL(response.url()).pathname === '/api/v1/agent/execution-settings' &&
+			response.request().method() === 'PUT',
+	);
+	await enable.click();
+	expect((await save).status()).toBe(200);
+	await expect(enable).toBeChecked();
+	await expect(launcher).toBeVisible();
+	await launcher.click();
+	await expect(hub).toBeVisible();
+	await expect(hub).toContainText(app.name);
+	await expect(hub).not.toContainText('Execution is disabled');
+	await captureFunctionalScreenshot(page, 'agent-native-enabled.png', { viewport: { width: 1440, height: 900 } });
+	const bounds = await hub.boundingBox();
+	expect(bounds).not.toBeNull();
+	await expect
+		.poll(() =>
+			page.evaluate(() => ({
+				root: document.documentElement.style.overflow,
+				body: document.body.style.overflow,
+			})),
+		)
+		.toEqual({ root: 'hidden', body: 'hidden' });
+	for (const [name, pathname] of [
+		['Connections', '/connections'],
+		['Dashboard', '/'],
+		['Settings', '/settings'],
+	]) {
+		const settingsRead =
+			pathname === '/settings'
+				? page.waitForResponse(
+						(response) =>
+							new URL(response.url()).pathname === '/api/v1/agent/execution-settings' &&
+							response.request().method() === 'GET',
+					)
+				: null;
+		await page
+			.locator('.app-nav-links')
+			.getByRole('link', { name, exact: true })
+			.evaluate((element) => (element as HTMLAnchorElement).click());
+		if (settingsRead) expect((await settingsRead).status()).toBe(200);
+		await expect.poll(() => new URL(page.url()).pathname).toBe(pathname);
+		await expect(hub).toBeVisible();
+		await expect(launcher).toHaveCount(0);
+		expect(await hub.boundingBox()).toEqual(bounds);
+	}
+	await hub.getByRole('button', { name: 'Minimize Agent', exact: true }).click();
+	await expect(hub).toBeHidden();
+	await page.locator('[role="tab"][aria-controls="settings-panel-agent"]:visible').click();
+	await selectAgentSettingsGroup(page, 'runtime');
+	await expect(enable).toBeEnabled();
+	await expect(enable).toBeChecked();
+	await dismissToasts(page);
+	const disabledSave = page.waitForResponse(
+		(response) =>
+			new URL(response.url()).pathname === '/api/v1/agent/execution-settings' &&
+			response.request().method() === 'PUT',
+	);
+	await enable.click();
+	expect((await disabledSave).status()).toBe(200);
+	await expect(enable).not.toBeChecked();
+	await expect(launcher).toHaveCount(0);
+	await expect(hub).toHaveCount(0);
+});
+
+test('Agent settings load independently of retired Runner endpoints and expose current Browser and ACP owners', async ({
+	page,
+	context,
 }) => {
-  await loginAsInitialAdmin(context.request);
-  await setUiLanguage(context.request);
-  const initialSettingsResponse = await context.request.get('/api/v1/agent/settings');
-  expect(initialSettingsResponse.ok(), await initialSettingsResponse.text()).toBeTruthy();
-  const settings = ((await initialSettingsResponse.json()) as AgentEnvelope<AgentFeatureSettingsView>).data;
-  expect(settings.effectiveSettings.feature.enabled).toBe(false);
-  await page.goto('/settings?tab=agent');
-
-  const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
-  const hub = page.getByRole('dialog', { name: 'Agent', exact: true });
-  const panel = page.locator('#settings-panel-agent');
-  await expect(panel).toBeVisible();
-  await expect(launcher).toHaveCount(0);
-  await expect(hub).toHaveCount(0);
-
-  await panel.getByRole('button', { name: 'Enable Agent', exact: true }).click();
-  const onboarding = page.getByRole('dialog', { name: 'Enable Agent with Nexus Agent', exact: true });
-  await expect(onboarding).toBeVisible();
-  await expect(onboarding.getByText('Nexus Agent', { exact: true })).toBeVisible();
-  await expect(onboarding.getByText('v1.0.0', { exact: true })).toBeVisible();
-  await captureFunctionalScreenshot(page, 'agent-onboarding-nexus-agent.png', {
-    viewport: { width: 1440, height: 900 },
-  });
-  await onboarding.getByRole('button', { name: 'Install Nexus Agent & enable Agent', exact: true }).click();
-
-  await expect(onboarding).toHaveCount(0, { timeout: 15_000 });
-  await expect(panel.getByRole('button', { name: 'Disable Agent', exact: true })).toBeVisible();
-  await expect(launcher).toBeVisible({ timeout: 10_000 });
-  await launcher.click();
-  await expect(hub).toBeVisible({ timeout: 10_000 });
-  await expect(launcher).toHaveCount(0);
-  const settingsBounds = await hub.boundingBox();
-  expect(settingsBounds).not.toBeNull();
-  await expect
-    .poll(() =>
-      page.evaluate(() => ({
-        rootOverflow: document.documentElement.style.overflow,
-        rootOverscroll: document.documentElement.style.overscrollBehavior,
-        bodyOverflow: document.body.style.overflow,
-        bodyOverscroll: document.body.style.overscrollBehavior,
-      })),
-    )
-    .toEqual({
-      rootOverflow: 'hidden',
-      rootOverscroll: 'none',
-      bodyOverflow: 'hidden',
-      bodyOverscroll: 'none',
-    });
-  const backgroundScrollBefore = await page.evaluate(() => window.scrollY);
-  await page.mouse.move(
-    settingsBounds!.x + Math.min(settingsBounds!.width - 1, settingsBounds!.width / 2),
-    settingsBounds!.y + Math.min(settingsBounds!.height - 1, settingsBounds!.height / 2),
-  );
-  await page.mouse.wheel(0, 1_200);
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(backgroundScrollBefore);
-
-  const installations = await context.request.get('/api/v1/agent/plugins/installations');
-  expect(installations.ok(), await installations.text()).toBeTruthy();
-  await expect(installations.json()).resolves.toMatchObject({
-    data: expect.arrayContaining([
-      expect.objectContaining({ appId: 'nexus.agent', version: '1.0.0', status: 'installed' }),
-    ]),
-  });
-
-  await page
-    .getByRole('link', { name: 'Connections', exact: true })
-    .evaluate((element) => (element as HTMLAnchorElement).click());
-  await expect(page).toHaveURL(/\/connections$/);
-  await expect(hub).toBeVisible();
-  await expect(launcher).toHaveCount(0);
-  const connectionsBounds = await hub.boundingBox();
-  expect(connectionsBounds).toEqual(settingsBounds);
-
-  await page
-    .locator('.app-nav-links')
-    .getByRole('link', { name: 'Dashboard', exact: true })
-    .evaluate((element) => (element as HTMLAnchorElement).click());
-  await expect(page).toHaveURL(/\/$/);
-  await expect(hub).toBeVisible();
-  await expect(launcher).toHaveCount(0);
+	await loginAsInitialAdmin(context.request);
+	await setUiLanguage(context.request);
+	const obsoleteRequests: string[] = [];
+	await page.route('**/api/v1/agent/workspace-runtime/**', (route) => {
+		obsoleteRequests.push(route.request().url());
+		return route.abort();
+	});
+	await page.goto('/settings?tab=agent');
+	const panel = page.locator('#settings-panel-agent');
+	for (const [group, name] of [
+		['models', 'Model providers'],
+		['runtime', 'Execution and performance'],
+	] as const) {
+		await selectAgentSettingsGroup(page, group);
+		await expect(panel.getByRole('region', { name, exact: true })).toBeVisible();
+	}
+	await selectAgentExtensionsSection(page, 'integrations');
+	await expect(panel.getByRole('region', { name: 'MCP / ACP integrations', exact: true })).toBeVisible();
+	await selectAgentSettingsGroup(page, 'runtime');
+	await expect(panel.getByRole('region', { name: 'CDP', exact: true })).toBeVisible();
+	await expect(panel.getByRole('heading', { name: 'Workspace dev environment', exact: true })).toHaveCount(0);
+	expect(obsoleteRequests).toEqual([]);
 });
 
-test('Agent settings load without Runner Workspace availability and preserve Browser/ACP settings', async ({
-  page,
-  context,
+test('Agent settings surface exposes the current control plane and saves explicit Provider capabilities', async ({
+	page,
+	context,
 }) => {
-  await loginAsInitialAdmin(context.request);
-  await setUiLanguage(context.request);
-  await enableAgentWithRecommendedNexusAgent(context.request);
-  const obsoleteRequests: string[] = [];
-  await page.route('**/api/v1/agent/workspace-runtime/**', (route) => {
-    obsoleteRequests.push(route.request().url());
-    return route.abort();
-  });
-  await page.goto('/settings?tab=agent');
-  const panel = page.locator('#settings-panel-agent');
-  await expect(panel.getByRole('heading', { name: 'Model providers', exact: true })).toBeVisible();
-  await panel.getByRole('button', { name: 'Execution & Integrations', exact: true }).click();
-  await expect(panel.getByRole('heading', { name: 'Execution and performance', exact: true })).toBeVisible();
-  await expect(panel.getByRole('heading', { name: 'CDP', exact: true })).toBeAttached();
-  await expect(panel.getByRole('heading', { name: 'ACP Integrations', exact: true })).toBeAttached();
-  await expect(panel.getByRole('heading', { name: 'Workspace dev environment', exact: true })).toHaveCount(0);
-  expect(obsoleteRequests).toEqual([]);
+	await loginAsInitialAdmin(context.request);
+	await setUiLanguage(context.request);
+	await createTestAgentApp(context.request);
+	await page.goto('/settings?tab=agent');
+	const panel = page.locator('#settings-panel-agent');
+	for (const [group, name] of [
+		['models', 'Model providers'],
+		['runtime', 'Execution and performance'],
+		['runtime', 'CDP'],
+	] as const) {
+		await selectAgentSettingsGroup(page, group);
+		await expect(panel.getByRole('region', { name, exact: true })).toBeVisible();
+	}
+	await selectAgentExtensionsSection(page, 'apps');
+	await expect(panel.getByRole('region', { name: 'Agent apps', exact: true })).toBeVisible();
+	await selectAgentExtensionsSection(page, 'integrations');
+	await expect(panel.getByRole('region', { name: 'MCP / ACP integrations', exact: true })).toBeVisible();
+	await selectAgentSettingsGroup(page, 'safety');
+	await expect(panel.getByRole('region', { name: 'Agent global target denylist', exact: true })).toBeVisible();
+	await expect(panel.getByRole('region', { name: 'Memory management', exact: true })).toHaveCount(0);
+	await selectAgentSettingsGroup(page, 'models');
+	const providers = panel.getByRole('region', { name: 'Model providers', exact: true });
+
+	const readSavedProvider = async () => {
+		// Save closes/re-renders the browser editor, so the intercepted POST/PATCH
+		// response body is not a durable CDP read target. Read the one persisted
+		// provider instead of replaying a credential-bearing mutation.
+		const items = await requestAgentJson(
+			context.request,
+			{ method: 'GET', path: '/ai/providers' },
+			readAgentProviderListResponse,
+		);
+		const matches = items.filter((item) => item.displayName === 'Settings UI Provider');
+		expect(matches).toHaveLength(1);
+		return matches[0]!;
+	};
+
+	await providers.getByRole('button', { name: 'Add provider', exact: true }).click();
+	const editor = page.getByRole('dialog').filter({ has: page.locator('#provider-editor') });
+	const form = editor.locator('form');
+	await form.getByRole('textbox', { name: 'Name', exact: true }).fill('Settings UI Provider');
+	await form.getByRole('textbox', { name: 'API endpoint', exact: true }).fill(E2E_URLS.openAiProviderOrigin + '/v1');
+	await expect(form.getByRole('combobox', { name: 'Credential action', exact: true })).toHaveCount(0);
+	await form.locator('input[type="password"]').fill('e2e-provider-secret');
+	const enabled = form.getByRole('switch', { name: 'Enabled', exact: true });
+	if ((await enabled.getAttribute('aria-checked')) !== 'true') await enabled.click();
+	await form
+		.locator('.provider-model-group')
+		.filter({ has: page.getByRole('heading', { name: 'Chat models', exact: true }) })
+		.getByRole('button', { name: 'Add model manually', exact: true })
+		.click();
+	await form.getByRole('textbox', { name: 'Model ID', exact: true }).fill('e2e-model');
+	const registryRead = page.waitForResponse(
+		(response) => new URL(response.url()).pathname === '/api/v1/agent/ai/model-registry',
+	);
+	await form.getByRole('textbox', { name: 'Model ID', exact: true }).press('Tab');
+	await registryRead;
+	await expect(form.locator('fieldset').first()).toBeEnabled();
+	await form.getByRole('spinbutton', { name: 'Context window', exact: true }).fill('131072');
+	await form.getByRole('spinbutton', { name: 'Maximum output tokens', exact: true }).fill('128');
+	await form.getByRole('checkbox', { name: 'Supports tools', exact: true }).check();
+	await form.getByRole('checkbox', { name: 'Low', exact: true }).check();
+	await form.getByRole('checkbox', { name: 'High', exact: true }).check();
+	await selectUiOption(form.getByRole('combobox', { name: 'Default effort', exact: true }), 'high');
+	const creation = page.waitForResponse(
+		(response) =>
+			new URL(response.url()).pathname === '/api/v1/agent/ai/providers' && response.request().method() === 'POST',
+	);
+	await editor.getByRole('button', { name: 'Save', exact: true }).click();
+	const receipt = await creation;
+	expect(receipt.status()).toBe(201);
+	let provider = await readSavedProvider();
+	expect(provider.models[0]).toMatchObject({
+		id: 'e2e-model',
+		contextWindow: 131072,
+		maxOutputTokens: 128,
+		supportsTools: true,
+		reasoningEfforts: ['low', 'high'],
+		defaultReasoningEffort: 'high',
+	});
+	expect(JSON.stringify(provider)).not.toContain('e2e-provider-secret');
+	await expect(form).toHaveCount(0);
+	const card = providers
+		.locator('article')
+		.filter({ has: page.getByRole('heading', { name: 'Settings UI Provider', exact: true }) });
+	await card.getByRole('button', { name: 'Models & test (1)', exact: true }).click();
+	const testDialog = page.getByRole('dialog', { name: 'Configured models & test', exact: true });
+	await testDialog.getByRole('button', { name: 'Send real connection test', exact: true }).click();
+	await expect(
+		page.locator('.ui-notification[data-kind="success"]').filter({ hasText: /Test succeeded in/ }),
+	).toBeVisible();
+	await dismissToasts(page);
+	await testDialog.getByRole('button', { name: 'Close', exact: true }).click();
+	await card.getByRole('button', { name: 'Edit', exact: true }).click();
+	await editor.getByRole('button', { name: 'Update model list', exact: true }).click();
+	await expect(editor.locator('#discovered-model-filter-chat')).toBeVisible();
+	await expect(editor.locator('#discovered-model-filter-images')).toBeVisible();
+	const protocol = form.locator('#provider-protocol');
+	await selectUiOption(protocol, 'responses');
+	const update = page.waitForResponse(
+		(response) =>
+			new URL(response.url()).pathname === `/api/v1/agent/ai/providers/${provider.id}` &&
+			response.request().method() === 'PATCH',
+	);
+	await editor.getByRole('button', { name: 'Save', exact: true }).click();
+	const updated = await update;
+	expect(updated.status()).toBe(200);
+	const previousVersion = provider.version;
+	provider = await readSavedProvider();
+	expect(provider.version).toBe(previousVersion + 1);
+	expect(provider.protocol).toBe('responses');
+	await expect(form).toHaveCount(0);
+	await card.getByRole('button', { name: 'Edit', exact: true }).click();
+	await selectUiOption(protocol, 'chat-completions');
+	const providerPath = `**/api/v1/agent/ai/providers/${provider.id}`;
+	await page.route(providerPath, async (route) => {
+		if (route.request().method() === 'PATCH')
+			await route.fulfill({ status: 500, json: { code: 'internal_failure' } });
+		else await route.continue();
+	});
+	await editor.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(
+		page.locator('.ui-notification[data-kind="error"]').filter({
+			hasText: 'Outcome unknown. Read current state; do not repeat creation, discovery or paid tests.',
+		}),
+	).toBeVisible();
+	await expect(editor.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await dismissToasts(page);
+	await page.unroute(providerPath);
+	await editor.getByRole('button', { name: 'Read again (discard draft)', exact: true }).click();
+	await card.getByRole('button', { name: 'Edit', exact: true }).click();
+	await expectUiSelectValue(protocol, 'responses');
+	await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
+	await captureFunctionalScreenshot(page, 'agent-settings-models.png', { viewport: { width: 1440, height: 900 } });
+	await selectAgentSettingsGroup(page, 'runtime');
+	await panel.getByRole('region', { name: 'Execution and performance', exact: true }).scrollIntoViewIfNeeded();
+	await captureFunctionalScreenshot(page, 'agent-settings-runtime.png', { viewport: { width: 1440, height: 900 } });
 });
 
-test('Agent settings surface exposes the production control plane and captures functional evidence', async ({
-  page,
-  context,
+test('Subagents inherit main Agent limits without independent model settings', async ({ page, context }) => {
+	await loginAsInitialAdmin(context.request);
+	await setUiLanguage(context.request);
+	let provider = await createAgentProvider(context.request);
+	const original = await requestAgentJson(
+		context.request,
+		{ method: 'GET', path: '/execution-settings' },
+		readAgentExecutionSettingsResponse,
+	);
+	provider = await requestAgentJson(
+		context.request,
+		{
+			method: 'PATCH',
+			path: `/ai/providers/${provider.id}`,
+			data: { expectedVersion: provider.version, displayName: 'Changed provider' },
+		},
+		readAgentProviderView,
+	);
+	await page.goto('/settings?tab=agent');
+	await selectAgentSettingsGroup(page, 'safety');
+	const execution = page.getByRole('region', { name: 'Subagents', exact: true });
+	await requestAgentJson(
+		context.request,
+		{ method: 'DELETE', path: `/ai/providers/${provider.id}?expectedVersion=${provider.version}` },
+		readAgentProviderDeleteResponse,
+	);
+	// Normal reads load on entry; the recovery button is reserved for failed/unknown state.
+	await page.reload();
+	await selectAgentSettingsGroup(page, 'safety');
+	await expect(
+		execution.getByText(
+			'Subagents inherit the main Agent model, tools and execution limits, sharing family budgets and the main task deadline.',
+			{ exact: true },
+		),
+	).toBeVisible();
+	await expect(execution.getByRole('combobox')).toHaveCount(0);
+	const current = await requestAgentJson(
+		context.request,
+		{ method: 'GET', path: '/execution-settings' },
+		readAgentExecutionSettingsResponse,
+	);
+	expect(current.settings).toEqual(original.settings);
+	expect(current.settings).not.toHaveProperty('profiles');
+});
+
+test('Agent Host preserves an open surface when a directory refresh fails and recovers through explicit read', async ({
+	page,
+	context,
 }) => {
-  await loginAsInitialAdmin(context.request);
-  await setUiLanguage(context.request);
-  await enableAgentWithRecommendedNexusAgent(context.request);
-  await page.goto('/settings?tab=agent');
-
-  const panel = page.locator('#settings-panel-agent');
-  await expect(panel).toBeVisible();
-  const settingsNavigation = panel.getByRole('navigation', { name: 'Agent settings sections', exact: true });
-  await expect(settingsNavigation).toBeVisible();
-  await expect(settingsNavigation.getByRole('button', { name: 'Models & Budget', exact: true })).toBeVisible();
-  await expect(settingsNavigation.getByRole('button', { name: 'Apps and extensions', exact: true })).toBeVisible();
-  await expect(settingsNavigation.getByRole('button', { name: 'Execution & Integrations', exact: true })).toBeVisible();
-  await expect(settingsNavigation.getByRole('button', { name: 'Safety and system', exact: true })).toBeVisible();
-  await expect(panel.getByRole('button', { name: 'Disable Agent', exact: true })).toBeVisible();
-  const providersHeading = panel.getByRole('heading', { name: 'Model providers', exact: true });
-  await expect(providersHeading).toBeVisible();
-  await captureFunctionalScreenshot(page, 'agent-settings-models.png', { viewport: { width: 1440, height: 900 } });
-
-  const providersSection = providersHeading.locator('xpath=ancestor::section[1]');
-  await providersSection.getByRole('button', { name: 'Add provider', exact: true }).first().click();
-  const addProvider = page.getByRole('dialog', { name: 'Add Model Provider', exact: true });
-  await expect(addProvider).toBeVisible();
-  const providerField = (label: string) => addProvider.getByLabel(label, { exact: false }).first();
-  await providerField('Display name').fill('Settings UI Provider');
-  await providerField('Base URL').fill(`${E2E_URLS.openAiProviderOrigin}/v1`);
-  await providerField('Credential').fill('e2e-provider-secret');
-  await addProvider.getByRole('textbox', { name: 'Model ID *', exact: true }).fill('e2e-model');
-  await providerField('Context window').fill('8192');
-  await providerField('Maximum output tokens').fill('128');
-  await addProvider.getByRole('button', { name: 'Save & Add', exact: true }).click();
-  await expect(addProvider).toHaveCount(0);
-  const providerName = providersSection.getByText('Settings UI Provider', { exact: true });
-  await expect(providerName).toBeVisible();
-  const providerCard = providerName.locator('xpath=ancestor::article[1]');
-  await expect(providerCard.getByLabel('Protocol', { exact: true })).toHaveCount(0);
-  await providerCard.getByRole('button', { name: 'Models & test (1)', exact: true }).click();
-  const protocolModels = page.getByRole('dialog', { name: 'Configured models & test', exact: true });
-  await protocolModels.getByRole('button', { name: 'Capabilities', exact: true }).click();
-  const protocolDialog = page.getByRole('dialog', { name: 'Model capabilities', exact: true });
-  const protocolSelect = protocolDialog.getByLabel('Protocol', { exact: true });
-  await expect(protocolSelect).toContainText('Chat Completions');
-  await page.route('**/api/v1/agent/ai/providers/*', async (route) => {
-    if (route.request().method() === 'PATCH' && route.request().postData()?.includes('"protocol":"responses"')) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    }
-    await route.continue();
-  });
-  const protocolSaved = page.waitForResponse(
-    (response) => response.url().includes('/api/v1/agent/ai/providers/') && response.request().method() === 'PATCH',
-  );
-  await pickGen2Option(protocolSelect, 'Responses API');
-  await expect(protocolSelect).toContainText('Responses API');
-  await protocolDialog.getByRole('button', { name: 'Save', exact: true }).click();
-  expect((await protocolSaved).ok()).toBeTruthy();
-  await expect(protocolDialog).toBeHidden();
-  await page.unroute('**/api/v1/agent/ai/providers/*');
-  await protocolModels.getByRole('button', { name: 'Capabilities', exact: true }).click();
-  await expect(protocolSelect).toContainText('Responses API');
-
-  await page.route('**/api/v1/agent/ai/providers/*', async (route) => {
-    if (route.request().method() === 'PATCH' && route.request().postData()?.includes('"protocol":"chat-completions"')) {
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      await route.fulfill({
-        status: 500,
-        contentType: 'application/json',
-        body: JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'forced protocol failure' } }),
-      });
-      return;
-    }
-    await route.continue();
-  });
-  const failedProtocolPatch = page.waitForResponse(
-    (response) => response.url().includes('/api/v1/agent/ai/providers/') && response.request().method() === 'PATCH',
-  );
-  await pickGen2Option(protocolSelect, 'Chat Completions');
-  await protocolDialog.getByRole('button', { name: 'Save', exact: true }).click();
-  expect((await failedProtocolPatch).status()).toBe(500);
-  await expect(protocolDialog).toBeVisible();
-  const errorToast = page.locator('.bg-red-600').last();
-  await expect(errorToast).toBeVisible();
-  await expect(errorToast).toBeHidden({ timeout: 7_500 });
-  await page.unroute('**/api/v1/agent/ai/providers/*');
-  await protocolDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await protocolModels.getByRole('button', { name: 'Capabilities', exact: true }).click();
-  await expect(protocolSelect).toContainText('Responses API');
-  await protocolDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await protocolModels.getByRole('button', { name: 'Close', exact: true }).click();
-
-  const defaultModel = providersSection.getByRole('combobox', {
-    name: 'Default model for new runs',
-    exact: true,
-  });
-  await expect(defaultModel).toBeEnabled();
-  await defaultModel.click();
-  const defaultOption = page
-    .getByRole('option')
-    .filter({ hasText: 'e2e-model' })
-    .filter({ hasText: 'Settings UI Provider' });
-  await expect(defaultOption).toBeVisible();
-  const defaultModelSaved = page.waitForResponse(
-    (response) => response.url().includes('/api/v1/agent/settings') && response.request().method() === 'PATCH',
-  );
-  await defaultOption.click();
-  expect((await defaultModelSaved).ok()).toBeTruthy();
-  await expect(defaultModel).toContainText('e2e-model');
-  const savedSettings = await context.request.get('/api/v1/agent/settings');
-  expect(savedSettings.ok(), await savedSettings.text()).toBeTruthy();
-  await expect(savedSettings.json()).resolves.toMatchObject({
-    data: { requestedSettings: { model: { defaultModelId: 'e2e-model' } } },
-  });
-
-  await providersSection.getByRole('button', { name: 'Models & test (1)', exact: true }).click();
-  const testModels = page.getByRole('dialog', { name: 'Configured models & test', exact: true });
-  await expect(testModels).toBeVisible();
-  const modelRow = testModels
-    .getByText('e2e-model', { exact: true })
-    .locator('xpath=ancestor::div[contains(@class, "rounded-xl")][1]');
-  await modelRow.getByRole('button', { name: 'Test', exact: true }).click();
-  await expect(modelRow).toContainText(/\d+ms/);
-  await testModels.getByRole('button', { name: 'Close', exact: true }).click();
-
-  await expect(providersSection.getByText('Model registry', { exact: true })).toBeVisible();
-  await expect(providersSection.getByRole('button', { name: 'Update now', exact: true })).toBeVisible();
-
-  await providersSection.getByRole('button', { name: 'Update models', exact: true }).click();
-  const customModelInput = providersSection.getByPlaceholder('Add custom model ID manually', { exact: true });
-  await expect(customModelInput).toBeVisible();
-  await customModelInput.fill('e2e-custom-no-metadata');
-  await customModelInput.locator('xpath=..').getByRole('button', { name: 'Add model', exact: true }).click();
-
-  const capabilityDialog = page.getByRole('dialog', { name: 'Model capabilities', exact: true });
-  await expect(capabilityDialog).toBeVisible();
-  await expect(capabilityDialog.getByText('e2e-custom-no-metadata', { exact: true })).toBeVisible();
-  const capabilityField = (label: string) => capabilityDialog.getByLabel(label, { exact: true });
-  await capabilityField('Context window').fill('32768');
-  await capabilityField('Maximum output tokens').fill('4096');
-  await capabilityDialog.getByRole('checkbox', { name: 'Reasoning levels', exact: true }).check();
-  await capabilityDialog.getByRole('button', { name: 'low', exact: true }).click();
-  await capabilityDialog.getByRole('button', { name: 'high', exact: true }).click();
-  await pickGen2Option(capabilityDialog.getByLabel('Default effort'), 'high');
-  const capabilitySaved = page.waitForResponse(
-    (response) => response.url().includes('/api/v1/agent/ai/providers/') && response.request().method() === 'PATCH',
-  );
-  await capabilityDialog.getByRole('button', { name: 'Save', exact: true }).click();
-  expect((await capabilitySaved).ok()).toBeTruthy();
-  await expect(capabilityDialog).toHaveCount(0);
-
-  const configuredProviders = await context.request.get('/api/v1/agent/ai/providers');
-  expect(configuredProviders.ok(), await configuredProviders.text()).toBeTruthy();
-  await expect(configuredProviders.json()).resolves.toMatchObject({
-    data: [
-      expect.objectContaining({
-        displayName: 'Settings UI Provider',
-        models: expect.arrayContaining([
-          expect.objectContaining({
-            id: 'e2e-custom-no-metadata',
-            contextWindow: 32768,
-            maxOutputTokens: 4096,
-            reasoningEfforts: ['low', 'high'],
-            defaultReasoningEffort: 'high',
-          }),
-        ]),
-      }),
-    ],
-  });
-
-  const configuredModelsPanel = providersSection
-    .getByText('Configured models', { exact: true })
-    .locator('xpath=ancestor::div[contains(@class, "rounded-xl")][1]');
-  await expect(configuredModelsPanel.getByRole('button', { name: 'Remove all', exact: true })).toHaveCount(1);
-  await expect(configuredModelsPanel.getByRole('checkbox', { name: 'Select all', exact: true })).toHaveCount(0);
-  await expect(configuredModelsPanel.getByRole('button', { name: /Remove selected/ })).toHaveCount(0);
-
-  await providersSection.getByRole('button', { name: 'Add fallback model', exact: true }).click();
-  const customFallbackOption = page
-    .getByRole('button')
-    .filter({ hasText: 'e2e-custom-no-metadata' })
-    .filter({ hasText: 'Settings UI Provider' });
-  const fallbackSaved = page.waitForResponse(
-    (response) => response.url().includes('/api/v1/agent/settings') && response.request().method() === 'PATCH',
-  );
-  await customFallbackOption.click();
-  expect((await fallbackSaved).ok()).toBeTruthy();
-  await expect(page.getByText('Fallback chain updated and saved', { exact: true })).toBeVisible();
-
-  await settingsNavigation.getByRole('button', { name: 'Execution & Integrations', exact: true }).click();
-  await expect(panel.getByRole('heading', { name: 'Execution and performance', exact: true })).toBeVisible();
-  await expect(panel.getByRole('heading', { name: 'Workspace dev environment', exact: true })).toHaveCount(0);
-  await expect(panel.getByRole('heading', { name: 'CDP', exact: true })).toBeAttached();
-  await expect(panel.getByRole('heading', { name: 'ACP Integrations', exact: true })).toBeAttached();
-  await expect(panel.getByRole('heading', { name: 'Artifacts and storage', exact: true })).toBeAttached();
-  await captureFunctionalScreenshot(page, 'agent-settings-runtime.png', { viewport: { width: 1440, height: 900 } });
-
-  await settingsNavigation.getByRole('button', { name: 'Apps and extensions', exact: true }).click();
-  await expect(panel.getByRole('heading', { name: 'Agent apps', exact: true })).toBeVisible();
-  await expect(panel.getByRole('heading', { name: 'Installable apps and skills', exact: true })).toBeVisible();
-  await expect(panel.getByRole('heading', { name: 'Plugin / App execution budget', exact: true })).toBeVisible();
-  const agentAppsSection = panel
-    .getByRole('heading', { name: 'Agent apps', exact: true })
-    .locator('xpath=ancestor::section[1]');
-  await agentAppsSection.getByRole('button', { name: 'Configure Policies', exact: true }).click();
-  const allGranted = agentAppsSection.getByRole('button', { name: 'Disable all capabilities', exact: true });
-  await expect(allGranted).toContainText('Disable');
-  await expect(allGranted.locator('.fa-check')).toBeVisible();
-
-  const firstCapability = agentAppsSection.getByRole('checkbox').first();
-  await expect(firstCapability).toBeChecked();
-  await firstCapability.uncheck();
-  const partiallyGranted = agentAppsSection.getByRole('button', { name: 'Enable all capabilities', exact: true });
-  await expect(partiallyGranted).toContainText('Enable');
-  await expect(partiallyGranted.locator('.fa-minus')).toBeVisible();
-
-  await partiallyGranted.click();
-  const restoredAll = agentAppsSection.getByRole('button', { name: 'Disable all capabilities', exact: true });
-  await expect(restoredAll.locator('.fa-check')).toBeVisible();
-
-  await restoredAll.click();
-  const noneGranted = agentAppsSection.getByRole('button', { name: 'Enable all capabilities', exact: true });
-  await expect(noneGranted).toContainText('Enable');
-  await expect(noneGranted.locator('.fa-check')).toHaveCount(0);
-  await expect(noneGranted.locator('.fa-minus')).toHaveCount(0);
-  await noneGranted.click();
-  await expect(
-    agentAppsSection.getByRole('button', { name: 'Disable all capabilities', exact: true }).locator('.fa-check'),
-  ).toBeVisible();
-
-  await settingsNavigation.getByRole('button', { name: 'Safety and system', exact: true }).click();
-  await expect(panel.getByRole('heading', { name: 'Globally blocked targets', exact: true })).toBeVisible();
-  await expect(panel.getByRole('heading', { name: 'System guardrails', exact: true })).toBeVisible();
-  const subagents = panel.getByRole('heading', { name: 'Subagents', exact: true });
-  await subagents.scrollIntoViewIfNeeded();
-  await expect(subagents).toBeVisible();
-  await expect(panel.getByText('Phase 3', { exact: true })).toBeVisible();
-  const subagentSection = subagents.locator('xpath=ancestor::section[1]');
-  await subagentSection.getByRole('button', { name: 'Add profile', exact: true }).click();
-  await expect(subagentSection.getByLabel('Profile ID', { exact: true })).toHaveValue('worker-1');
-  await expect(subagentSection.getByLabel('Role', { exact: true })).toHaveValue('Bounded child agent');
-  await subagentSection.getByRole('button', { name: 'Save profiles', exact: true }).click();
-  await expect(subagentSection.getByLabel('Profile ID', { exact: true })).toHaveValue('worker-1');
-
-  await captureFunctionalScreenshot(page, 'agent-settings-plugins-security.png', {
-    viewport: { width: 1440, height: 900 },
-  });
-
-  await page.setViewportSize({ width: 720, height: 900 });
-  await page.goto('/settings?tab=agent');
-  const narrowPanel = page.locator('#settings-panel-agent');
-  const narrowNavigation = narrowPanel.getByRole('navigation', { name: 'Agent settings sections', exact: true });
-  await expect(narrowNavigation).toBeVisible();
-  await narrowNavigation.getByRole('button', { name: 'Execution & Integrations', exact: true }).click();
-  await expect(narrowPanel.getByRole('heading', { name: 'Workspace dev environment', exact: true })).toHaveCount(0);
-  await expect(narrowPanel.getByRole('heading', { name: 'CDP', exact: true })).toBeAttached();
-  await expect(narrowPanel.getByRole('heading', { name: 'ACP Integrations', exact: true })).toBeAttached();
-  const horizontalExcess = await page.evaluate(() =>
-    Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
-  );
-  expect(horizontalExcess).toBeLessThanOrEqual(1);
+	await loginAsInitialAdmin(context.request);
+	await setUiLanguage(context.request);
+	const app = await createTestAgentApp(context.request);
+	await enableTestAgentExecution(context.request);
+	await page.goto('/connections');
+	await openAgentHub(page);
+	const hub = page.locator('section[aria-label="Agent"]');
+	await openAgentConversations(page);
+	await hub.locator('#agent-thread-sidebar').getByRole('button', { name: 'New', exact: true }).click();
+	const prompt = hub.getByRole('textbox', { name: 'Task input', exact: true });
+	await prompt.fill('Unsaved local prompt');
+	const appsPath = '**/api/v1/agent/apps';
+	await page.route(appsPath, (route) => route.fulfill({ status: 503, json: { code: 'storage_unavailable' } }));
+	await hub.getByRole('button', { name: 'Minimize Agent', exact: true }).click();
+	await openAgentHub(page);
+	const failure = page.getByRole('alert').filter({
+		hasText: 'Conversations and App information are temporarily unavailable. Check your connection and try again.',
+	});
+	await expect(failure).toBeVisible();
+	await expect(hub).toBeVisible();
+	await expect(prompt).toHaveValue('Unsaved local prompt');
+	await page.unroute(appsPath);
+	await dismissToasts(page);
+	await hub.getByRole('button', { name: 'Minimize Agent', exact: true }).click();
+	const recovered = page.waitForResponse(
+		(response) =>
+			new URL(response.url()).pathname === '/api/v1/agent/apps' && response.request().method() === 'GET',
+	);
+	await openAgentHub(page);
+	expect((await recovered).ok()).toBe(true);
+	await expect(failure).toHaveCount(0);
+	await expect(hub).toContainText(app.name);
+	await expect(prompt).toHaveValue('Unsaved local prompt');
 });
 
-test('fallback settings drop stale models and provider deletion repairs the default route', async ({
-  page,
-  context,
+test('durable Run events catch up over authenticated workspace reads without a Host subscription', async ({
+	request,
 }) => {
-  await loginAsInitialAdmin(context.request);
-  await setUiLanguage(context.request);
-  await enableAgentWithRecommendedNexusAgent(context.request);
-  const csrf = await csrfToken(context.request);
-  const headers = { 'X-Nexus-CSRF': csrf };
-  const model = (id: string) => ({ id, contextWindow: 8192, maxOutputTokens: 128, supportsTools: true });
-  let primary = await addTaskProvider(page, 'Fallback Primary', 'primary-model');
-  primary = await addProviderModel(page, 'stale-fallback');
-  primary = await addProviderModel(page, 'valid-fallback');
-  const backup = await addTaskProvider(page, 'Fallback Backup', 'backup-model');
-
-  const initialSettings = await context.request.get('/api/v1/agent/settings');
-  expect(initialSettings.ok(), await initialSettings.text()).toBeTruthy();
-  const initial = (
-    (await initialSettings.json()) as AgentEnvelope<{
-      revision: number;
-    }>
-  ).data;
-  const seededSettings = await context.request.patch('/api/v1/agent/settings', {
-    headers,
-    data: {
-      patch: {
-        model: {
-          defaultProviderId: primary.id,
-          defaultModelId: 'primary-model',
-          fallbackModels: [
-            { providerId: primary.id, modelId: 'stale-fallback' },
-            { providerId: primary.id, modelId: 'valid-fallback' },
-          ],
-        },
-      },
-      expectedVersion: initial.revision,
-    },
-  });
-  expect(seededSettings.ok(), await seededSettings.text()).toBeTruthy();
-
-  const removedStaleModel = await context.request.patch(`/api/v1/agent/ai/providers/${primary.id}`, {
-    headers,
-    data: {
-      models: [model('primary-model'), model('valid-fallback')],
-      expectedVersion: primary.version,
-    },
-  });
-  expect(removedStaleModel.ok(), await removedStaleModel.text()).toBeTruthy();
-  primary = (
-    (await removedStaleModel.json()) as AgentEnvelope<{
-      id: string;
-      version: number;
-      displayName: string;
-      models: ReturnType<typeof model>[];
-    }>
-  ).data;
-
-  const staleSettings = await context.request.get('/api/v1/agent/settings');
-  expect(staleSettings.ok(), await staleSettings.text()).toBeTruthy();
-  await expect(staleSettings.json()).resolves.toMatchObject({
-    data: {
-      requestedSettings: {
-        model: {
-          fallbackModels: [
-            { providerId: primary.id, modelId: 'stale-fallback' },
-            { providerId: primary.id, modelId: 'valid-fallback' },
-          ],
-        },
-      },
-    },
-  });
-
-  await page.goto('/settings?tab=agent');
-  const providersSection = page
-    .getByRole('heading', { name: 'Model providers', exact: true })
-    .locator('xpath=ancestor::section[1]');
-  const primaryCard = providersSection
-    .locator('article')
-    .filter({ has: page.getByText('Fallback Primary', { exact: true }) });
-  await expect(primaryCard).toBeVisible();
-  await expect(primaryCard.getByText('Fallback Primary', { exact: true })).toBeVisible();
-  await expect(providersSection.getByText('stale-fallback', { exact: true })).toHaveCount(0);
-
-  const validFallbackRow = providersSection.locator('li').filter({ hasText: 'valid-fallback' }).filter({
-    hasText: 'Fallback Primary',
-  });
-  await expect(validFallbackRow).toBeVisible();
-  const normalizedOff = page.waitForResponse(
-    (response) => response.url().includes('/api/v1/agent/settings') && response.request().method() === 'PATCH',
-  );
-  await validFallbackRow.getByRole('button', { name: 'Remove', exact: true }).click();
-  expect((await normalizedOff).ok()).toBeTruthy();
-  const afterNormalize = await context.request.get('/api/v1/agent/settings');
-  expect(afterNormalize.ok(), await afterNormalize.text()).toBeTruthy();
-  await expect(afterNormalize.json()).resolves.toMatchObject({
-    data: { requestedSettings: { model: { fallbackModels: [] } } },
-  });
-
-  await providersSection.getByRole('button', { name: 'Add fallback model', exact: true }).click();
-  const fallbackOption = page
-    .getByRole('button')
-    .filter({ hasText: 'valid-fallback' })
-    .filter({ hasText: 'Fallback Primary' });
-  await expect(fallbackOption).toBeVisible();
-  const restoredFallback = page.waitForResponse(
-    (response) => response.url().includes('/api/v1/agent/settings') && response.request().method() === 'PATCH',
-  );
-  await fallbackOption.click();
-  expect((await restoredFallback).ok()).toBeTruthy();
-  const afterRestore = await context.request.get('/api/v1/agent/settings');
-  expect(afterRestore.ok(), await afterRestore.text()).toBeTruthy();
-  await expect(afterRestore.json()).resolves.toMatchObject({
-    data: {
-      requestedSettings: {
-        model: { fallbackModels: [{ providerId: primary.id, modelId: 'valid-fallback' }] },
-      },
-    },
-  });
-
-  await primaryCard.getByTitle('Delete Provider').click();
-  const confirmDelete = page.getByRole('dialog', { name: 'Delete Provider', exact: true });
-  await expect(confirmDelete).toBeVisible();
-  await expect(
-    confirmDelete.getByText('Are you sure you want to delete provider Fallback Primary? This cannot be undone.', {
-      exact: true,
-    }),
-  ).toBeVisible();
-  const deleted = page.waitForResponse(
-    (response) =>
-      response.url().includes(`/api/v1/agent/ai/providers/${primary.id}`) && response.request().method() === 'DELETE',
-  );
-  const repairedSettings = page.waitForResponse(
-    (response) => response.url().includes('/api/v1/agent/settings') && response.request().method() === 'PATCH',
-  );
-  await confirmDelete.getByRole('button', { name: 'Delete Provider', exact: true }).click();
-  expect((await deleted).ok()).toBeTruthy();
-  expect((await repairedSettings).ok()).toBeTruthy();
-  await expect(primaryCard).toHaveCount(0);
-
-  const finalSettings = await context.request.get('/api/v1/agent/settings');
-  expect(finalSettings.ok(), await finalSettings.text()).toBeTruthy();
-  await expect(finalSettings.json()).resolves.toMatchObject({
-    data: {
-      requestedSettings: {
-        model: {
-          defaultProviderId: backup.id,
-          defaultModelId: 'backup-model',
-          fallbackModels: [],
-        },
-      },
-    },
-  });
+	await loginAsInitialAdmin(request);
+	const { app, thread, input } = await prepareAgentRun(request);
+	const created = await requestAgentWorkspace(request, app, {
+		method: 'agent.runs.create',
+		params: { threadId: thread.id, operationId: randomUUID(), input },
+	});
+	if (created.method !== 'agent.runs.create') throw new Error('Unexpected Run receipt');
+	const runId = created.value.run.id;
+	const first = await requestAgentWorkspace(request, app, {
+		method: 'agent.runs.events',
+		params: { runId, after: 0, limit: 1 },
+	});
+	if (first.method !== 'agent.runs.events') throw new Error('Unexpected event page');
+	expect(first.value.items.map((event) => event.type)).toEqual(['run.created']);
+	await expect
+		.poll(async () => {
+			const read = await requestAgentWorkspace(request, app, { method: 'agent.runs.get', params: { runId } });
+			return read.method === 'agent.runs.get' ? read.value?.status : null;
+		})
+		.toBe('completed');
+	const next = await requestAgentWorkspace(request, app, {
+		method: 'agent.runs.events',
+		params: { runId, after: first.value.nextCursor, limit: 100 },
+	});
+	if (next.method !== 'agent.runs.events') throw new Error('Unexpected catch-up page');
+	expect(next.value.items.map((event) => event.type)).toEqual(['run.started', 'run.completed']);
+	expect(next.value.items.every((event) => event.sequence > first.value.nextCursor)).toBe(true);
+	const caughtUp = await requestAgentWorkspace(request, app, {
+		method: 'agent.runs.events',
+		params: { runId, after: next.value.nextCursor, limit: 100 },
+	});
+	if (caughtUp.method !== 'agent.runs.events') throw new Error('Unexpected final page');
+	expect(caughtUp.value).toEqual({ items: [], nextCursor: next.value.nextCursor });
 });
 
-const csrfToken = async (request: import('@playwright/test').APIRequestContext): Promise<string> => {
-  const response = await request.get('/api/v1/agent/security/csrf');
-  expect(response.ok(), await response.text()).toBeTruthy();
-  expect(response.headers()['cache-control']).toContain('no-store');
-  const serverTimeMilliseconds = Number(response.headers()['x-agent-server-time-ms']);
-  expect(Number.isSafeInteger(serverTimeMilliseconds) && serverTimeMilliseconds > 0).toBeTruthy();
-  const body = (await response.json()) as AgentEnvelope<{ token: string }>;
-  expect(body.requestId).toBe(response.headers()['x-request-id']);
-  expect(body.data.token).toMatch(/^[0-9a-f]{64}$/);
-  return body.data.token;
-};
-
-const enableAgentWithRecommendedNexusAgent = async (request: APIRequestContext): Promise<AppSummary> => {
-  const csrf = await csrfToken(request);
-  const installed = await request.post('/api/v1/agent/onboarding/recommended-plugin/install', {
-    headers: { 'X-Nexus-CSRF': csrf },
-    data: {},
-  });
-  expect(installed.ok(), await installed.text()).toBeTruthy();
-  const installedBody = (await installed.json()) as AgentEnvelope<{ app: AppSummary; installedNow: boolean }>;
-  const settingsResponse = await request.get('/api/v1/agent/settings');
-  expect(settingsResponse.ok(), await settingsResponse.text()).toBeTruthy();
-  const settings = ((await settingsResponse.json()) as AgentEnvelope<AgentFeatureSettingsView>).data;
-  if (!settings.effectiveSettings.feature.enabled) {
-    const enabled = await request.patch('/api/v1/agent/settings', {
-      headers: { 'X-Nexus-CSRF': csrf },
-      data: { patch: { feature: { enabled: true } }, expectedVersion: settings.revision },
-    });
-    expect(enabled.ok(), await enabled.text()).toBeTruthy();
-  }
-  return installedBody.data.app;
-};
-
-const openHostAgentSubscription = async (page: Page, cursor: number, key: string): Promise<void> => {
-  await page.evaluate(
-    ({ startCursor, probeKey }) =>
-      new Promise<void>((resolve, reject) => {
-        const socket = new WebSocket(`${window.location.origin.replace(/^http/, 'ws')}/ws/agent`);
-        const subscriptionId = `e2e-${probeKey}`;
-        const requestId = `subscribe-${probeKey}`;
-        const state = { socket, messages: [] as unknown[] };
-        const probes = ((
-          globalThis as typeof globalThis & { __agentWsProbes?: Record<string, typeof state> }
-        ).__agentWsProbes ??= {});
-        probes[probeKey] = state;
-        const timeout = window.setTimeout(
-          () => reject(new Error('Timed out opening Agent WebSocket subscription')),
-          10_000,
-        );
-        socket.addEventListener('open', () => {
-          socket.send(
-            JSON.stringify({
-              type: 'subscribe',
-              requestId,
-              payload: { subscriptionId, channel: 'host', cursor: startCursor },
-            }),
-          );
-        });
-        socket.addEventListener('message', (event) => {
-          const message = JSON.parse(String(event.data)) as { type?: string; requestId?: string };
-          state.messages.push(message);
-          if (message.type === 'subscribed' && message.requestId === requestId) {
-            window.clearTimeout(timeout);
-            resolve();
-          }
-        });
-        socket.addEventListener('error', () => {
-          window.clearTimeout(timeout);
-          reject(new Error('Agent WebSocket failed to open'));
-        });
-        socket.addEventListener('close', (event) => {
-          if (socket.readyState !== WebSocket.OPEN) {
-            window.clearTimeout(timeout);
-            if (state.messages.length === 0)
-              reject(new Error(`Agent WebSocket closed before subscribe: ${event.code}`));
-          }
-        });
-      }),
-    { startCursor: cursor, probeKey: key },
-  );
-};
-
-const waitForDurableAgentSequence = async (page: Page, key: string, after: number): Promise<number> => {
-  await page.waitForFunction(
-    ({ probeKey, minimum }) => {
-      const probes = (
-        globalThis as typeof globalThis & {
-          __agentWsProbes?: Record<string, { messages: Array<{ type?: string; payload?: unknown }> }>;
-        }
-      ).__agentWsProbes;
-      const messages = probes?.[probeKey]?.messages ?? [];
-      return messages.some((message) => {
-        if (message.type !== 'event' || !message.payload || typeof message.payload !== 'object') return false;
-        const payload = message.payload as { durability?: string; sequence?: number };
-        return payload.durability === 'durable' && typeof payload.sequence === 'number' && payload.sequence > minimum;
-      });
-    },
-    { probeKey: key, minimum: after },
-  );
-  return page.evaluate(
-    ({ probeKey, minimum }) => {
-      const probes = (
-        globalThis as typeof globalThis & {
-          __agentWsProbes?: Record<string, { messages: Array<{ type?: string; payload?: unknown }> }>;
-        }
-      ).__agentWsProbes;
-      for (const message of probes?.[probeKey]?.messages ?? []) {
-        if (message.type !== 'event' || !message.payload || typeof message.payload !== 'object') continue;
-        const payload = message.payload as { durability?: string; sequence?: number };
-        if (payload.durability === 'durable' && typeof payload.sequence === 'number' && payload.sequence > minimum) {
-          return payload.sequence;
-        }
-      }
-      throw new Error('Durable Agent event not found');
-    },
-    { probeKey: key, minimum: after },
-  );
-};
-
-const closeAgentSubscription = async (page: Page, key: string): Promise<void> => {
-  await page.evaluate(async (probeKey) => {
-    const probes = (
-      globalThis as typeof globalThis & {
-        __agentWsProbes?: Record<string, { socket: WebSocket }>;
-      }
-    ).__agentWsProbes;
-    const socket = probes?.[probeKey]?.socket;
-    if (!socket || socket.readyState === WebSocket.CLOSED) return;
-    await new Promise<void>((resolve) => {
-      socket.addEventListener('close', () => resolve(), { once: true });
-      socket.close(1000, 'E2E probe complete');
-    });
-  }, key);
-};
-
-const waitForAgentSubscribed = async (socket: PlaywrightWebSocket): Promise<void> =>
-  new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error('Timed out waiting for Agent WebSocket subscribed acknowledgement'));
-    }, 10_000);
-    const onFrame = ({ payload }: { payload: string | Buffer }): void => {
-      try {
-        const message = JSON.parse(typeof payload === 'string' ? payload : payload.toString('utf8')) as {
-          type?: string;
-        };
-        if (message.type !== 'subscribed') return;
-        cleanup();
-        resolve();
-      } catch {
-        // Ignore unrelated/non-JSON frames; the Agent protocol itself will reject malformed payloads.
-      }
-    };
-    const onClose = (): void => {
-      cleanup();
-      reject(new Error('Agent WebSocket closed before subscribed acknowledgement'));
-    };
-    const cleanup = (): void => {
-      clearTimeout(timeout);
-      socket.off('framereceived', onFrame);
-      socket.off('close', onClose);
-    };
-    socket.on('framereceived', onFrame);
-    socket.on('close', onClose);
-  });
-
-const setNexusAgentEnabledFromApi = async (
-  request: APIRequestContext,
-  enabled: boolean,
-  expectedVersion: number,
-  csrf: string,
-): Promise<AppSummary> => {
-  const response = await request.patch('/api/v1/agent/apps/nexus.agent', {
-    headers: { 'X-Nexus-CSRF': csrf },
-    data: { enabled, expectedVersion },
-  });
-  expect(response.ok(), await response.text()).toBeTruthy();
-  return ((await response.json()) as AgentEnvelope<AppSummary>).data;
-};
-
-const setNexusAgentEnabledFromPage = async (
-  page: Page,
-  enabled: boolean,
-  expectedVersion: number,
-): Promise<AppSummary> =>
-  page.evaluate(
-    async ({ targetEnabled, version }) => {
-      const csrfResponse = await fetch('/api/v1/agent/security/csrf', { credentials: 'same-origin' });
-      const csrfText = await csrfResponse.text();
-      if (!csrfResponse.ok) throw new Error(csrfText);
-      const csrf = JSON.parse(csrfText) as { data: { token: string } };
-      const response = await fetch('/api/v1/agent/apps/nexus.agent', {
-        method: 'PATCH',
-        credentials: 'same-origin',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Nexus-CSRF': csrf.data.token,
-        },
-        body: JSON.stringify({ enabled: targetEnabled, expectedVersion: version }),
-      });
-      const text = await response.text();
-      if (!response.ok) throw new Error(text);
-      return (JSON.parse(text) as { data: AppSummary }).data;
-    },
-    { targetEnabled: enabled, version: expectedVersion },
-  );
-
-test('Agent Host reconnects automatically and catches up durable Host events', async ({ page, context }) => {
-  await loginAsInitialAdmin(context.request);
-  await setUiLanguage(context.request);
-  await enableAgentWithRecommendedNexusAgent(context.request);
-
-  let blockAgentReconnects = false;
-  let connectedAgentRoute: WebSocketRoute | undefined;
-  let agentConnectionAttempts = 0;
-  await page.routeWebSocket('**/ws/agent', async (route) => {
-    agentConnectionAttempts += 1;
-    if (blockAgentReconnects) {
-      await route.close({ code: 1012, reason: 'E2E controlled disconnect' });
-      return;
-    }
-    route.connectToServer();
-    connectedAgentRoute = route;
-  });
-
-  const apps = await context.request.get('/api/v1/agent/apps');
-  expect(apps.ok(), await apps.text()).toBeTruthy();
-  const appsBody = (await apps.json()) as AgentEnvelope<AppSummary[]>;
-  let agentApp = appsBody.data.find((app) => app.id === 'nexus.agent')!;
-  const originalEnabled = agentApp.enabled;
-  const csrf = await csrfToken(context.request);
-  if (!agentApp.enabled) {
-    agentApp = await setNexusAgentEnabledFromApi(context.request, true, agentApp.stateVersion, csrf);
-  }
-
-  const initialSocketPromise = page.waitForEvent('websocket', {
-    predicate: (socket) => new URL(socket.url()).pathname === '/ws/agent',
-  });
-  await page.goto('/connections');
-  const initialSocket = await initialSocketPromise;
-  await waitForAgentSubscribed(initialSocket);
-
-  const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
-  const hub = page.locator('section[aria-label="Agent"]');
-  await launcher.click();
-  await expect(hub).toBeVisible();
-
-  try {
-    blockAgentReconnects = true;
-    expect(connectedAgentRoute).toBeDefined();
-    await connectedAgentRoute!.close({ code: 1012, reason: 'E2E controlled disconnect' });
-    await expect.poll(() => agentConnectionAttempts, { timeout: 5_000 }).toBeGreaterThan(1);
-
-    agentApp = await setNexusAgentEnabledFromApi(context.request, false, agentApp.stateVersion, csrf);
-    await expect(hub).toBeVisible();
-
-    blockAgentReconnects = false;
-    await expect(hub).toHaveCount(0, { timeout: 15_000 });
-  } finally {
-    blockAgentReconnects = false;
-    if (agentApp.enabled !== originalEnabled) {
-      agentApp = await setNexusAgentEnabledFromApi(context.request, originalEnabled, agentApp.stateVersion, csrf);
-    }
-  }
-});
-
-test('Agent WebSocket replays durable Host events after a disconnect', async ({ page, context }) => {
-  await loginAsInitialAdmin(context.request);
-  await enableAgentWithRecommendedNexusAgent(context.request);
-  await page.goto('/connections');
-
-  const summary = await context.request.get('/api/v1/agent/summary');
-  expect(summary.ok(), await summary.text()).toBeTruthy();
-  const summaryBody = (await summary.json()) as AgentEnvelope<{ eventCursor: number }>;
-  const initialCursor = summaryBody.data.eventCursor;
-
-  const apps = await context.request.get('/api/v1/agent/apps');
-  expect(apps.ok(), await apps.text()).toBeTruthy();
-  const appsBody = (await apps.json()) as AgentEnvelope<AppSummary[]>;
-  const agentApp = appsBody.data.find((app) => app.id === 'nexus.agent')!;
-  const originalEnabled = agentApp.enabled;
-
-  await openHostAgentSubscription(page, initialCursor, 'first');
-  const toggled = await setNexusAgentEnabledFromPage(page, !originalEnabled, agentApp.stateVersion);
-  const firstSequence = await waitForDurableAgentSequence(page, 'first', initialCursor);
-  await closeAgentSubscription(page, 'first');
-
-  const restored = await setNexusAgentEnabledFromPage(page, originalEnabled, toggled.stateVersion);
-  expect(restored.enabled).toBe(originalEnabled);
-
-  await openHostAgentSubscription(page, firstSequence, 'second');
-  const replayedSequence = await waitForDurableAgentSequence(page, 'second', firstSequence);
-  expect(replayedSequence).toBeGreaterThan(firstSequence);
-  await closeAgentSubscription(page, 'second');
-
-  const retiredHostSse = await context.request.get('/api/v1/agent/events?cursor=0');
-  expect(retiredHostSse.status()).toBe(410);
-  await expect(retiredHostSse.json()).resolves.toMatchObject({
-    error: { code: 'AGENT_STREAM_PROTOCOL_REPLACED' },
-  });
-
-  const retiredRunSse = await context.request.get(
-    '/api/v1/apps/nexus.agent/runs/00000000-0000-4000-8000-000000000000/events?cursor=0',
-  );
-  expect(retiredRunSse.status()).toBe(410);
-  await expect(retiredRunSse.json()).resolves.toMatchObject({
-    error: { code: 'AGENT_STREAM_PROTOCOL_REPLACED' },
-  });
-});
-
-test('Agent Host event stream elects one cross-tab leader', async ({ page, context }) => {
-  await loginAsInitialAdmin(context.request);
-  await enableAgentWithRecommendedNexusAgent(context.request);
-  const csrf = await csrfToken(context.request);
-
-  const leaderSocketPromise = page.waitForEvent('websocket', {
-    predicate: (socket) => new URL(socket.url()).pathname === '/ws/agent',
-  });
-  await page.goto('/connections');
-  const leaderSocket = await leaderSocketPromise;
-  await waitForAgentSubscribed(leaderSocket);
-
-  const follower = await context.newPage();
-  let followerSockets = 0;
-  follower.on('websocket', (socket) => {
-    if (new URL(socket.url()).pathname === '/ws/agent') followerSockets += 1;
-  });
-  await follower.goto('/connections');
-  await expect(follower.getByRole('button', { name: 'Open Agent', exact: true })).toBeVisible();
-  await follower.getByRole('button', { name: 'Open Agent', exact: true }).click();
-  await expect(follower.locator('section[aria-label="Agent"]')).toBeVisible();
-  await follower.waitForTimeout(750);
-  expect(followerSockets).toBe(0);
-
-  const externalThreadTitle = `E2E Cross-tab Thread ${Date.now()}`;
-  const createdThread = await context.request.post('/api/v1/apps/nexus.agent/threads', {
-    headers: { 'X-Nexus-CSRF': csrf },
-    data: { title: externalThreadTitle },
-  });
-  expect(createdThread.status(), await createdThread.text()).toBe(201);
-  await expect(follower.getByText(externalThreadTitle, { exact: true })).toBeVisible();
-
-  await page.close();
-  await expect.poll(() => followerSockets, { timeout: 10_000 }).toBe(1);
-  await follower.close();
-});
-
-test('Agent configuration changes propagate across tabs without overwriting dirty settings drafts', async ({
-  page,
-  context,
+test('Agent tabs own independent local drafts and observe external threads through explicit reads', async ({
+	page,
+	context,
 }) => {
-  await loginAsInitialAdmin(context.request);
-  await setUiLanguage(context.request);
-  await enableAgentWithRecommendedNexusAgent(context.request);
-
-  const openPerformanceSettings = async (target: Page): Promise<Locator> => {
-    await target.goto('/settings?tab=agent');
-    const panel = target.locator('#settings-panel-agent');
-    await expect(panel).toBeVisible();
-    await panel.getByRole('button', { name: 'Execution & Integrations', exact: true }).click();
-    const section = panel
-      .getByRole('heading', { name: 'Execution and performance', exact: true })
-      .locator('xpath=ancestor::section[1]');
-    await expect(section).toBeVisible();
-    return section;
-  };
-
-  const leaderSection = await openPerformanceSettings(page);
-  const follower = await context.newPage();
-  const followerSection = await openPerformanceSettings(follower);
-  const leaderInput = leaderSection.getByRole('spinbutton', { name: 'Agent execution concurrency', exact: false });
-  const followerInput = followerSection.getByRole('spinbutton', { name: 'Agent execution concurrency', exact: false });
-
-  const currentValue = Number(await leaderInput.inputValue());
-  const minValue = Number((await leaderInput.getAttribute('min')) ?? '1');
-  const maxValue = Number((await leaderInput.getAttribute('max')) ?? String(Math.max(currentValue + 2, 3)));
-  const alternatives = Array.from({ length: maxValue - minValue + 1 }, (_, index) => minValue + index).filter(
-    (value) => value !== currentValue,
-  );
-  expect(alternatives.length).toBeGreaterThanOrEqual(2);
-  const leaderTarget = alternatives[0]!;
-  const followerDraft = alternatives[1]!;
-
-  await follower.evaluate(async () => {
-    const { agentHostEvents } = await import('/src/features/agent/events/agent-host-events.ts');
-    const state = window as typeof window & {
-      __agentConfigurationOrigins?: string[];
-      __stopAgentConfigurationProbe?: () => void;
-    };
-    state.__stopAgentConfigurationProbe?.();
-    state.__agentConfigurationOrigins = [];
-    state.__stopAgentConfigurationProbe = agentHostEvents.on('configuration-changed', (event) => {
-      state.__agentConfigurationOrigins?.push(event.origin);
-    });
-  });
-
-  await followerInput.fill(String(followerDraft));
-  await expect(followerSection.getByText('Concurrency changed, click save', { exact: true })).toBeVisible();
-
-  await leaderInput.fill(String(leaderTarget));
-  await leaderSection.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(leaderSection.getByText('Current concurrency settings are in effect', { exact: true })).toBeVisible();
-
-  await expect
-    .poll(() =>
-      follower.evaluate(
-        () => (window as typeof window & { __agentConfigurationOrigins?: string[] }).__agentConfigurationOrigins ?? [],
-      ),
-    )
-    .toContain('external');
-  await expect(followerInput).toHaveValue(String(followerDraft));
-  await expect(followerSection).toContainText(`Effective ${leaderTarget} · system limit`);
-  await expect(followerSection.getByText('Concurrency changed, click save', { exact: true })).toBeVisible();
-
-  await leaderInput.fill(String(currentValue));
-  await leaderSection.getByRole('button', { name: 'Save', exact: true }).click();
-  await follower.close();
+	await loginAsInitialAdmin(context.request);
+	await setUiLanguage(context.request);
+	const app = await createTestAgentApp(context.request);
+	await enableTestAgentExecution(context.request);
+	const initialThread = await requestAgentWorkspace(context.request, app, {
+		method: 'agent.threads.create',
+		params: { autoTitle: false, operationId: randomUUID(), title: 'Shared initial conversation' },
+	});
+	if (initialThread.method !== 'agent.threads.create') throw new Error('Unexpected initial thread');
+	let sockets = 0;
+	context.on('page', (opened) =>
+		opened.on('websocket', (socket) => {
+			if (new URL(socket.url()).pathname === '/ws/agent') sockets += 1;
+		}),
+	);
+	page.on('websocket', (socket) => {
+		if (new URL(socket.url()).pathname === '/ws/agent') sockets += 1;
+	});
+	await page.goto('/connections');
+	await openAgentHub(page);
+	const follower = await context.newPage();
+	try {
+		await follower.goto('/connections');
+		await openAgentHub(follower);
+		await openAgentConversations(page);
+		await openAgentConversations(follower);
+		const firstHub = page.locator('section[aria-label="Agent"]');
+		const secondHub = follower.locator('section[aria-label="Agent"]');
+		const secondThreads = secondHub.locator('#agent-thread-sidebar');
+		await firstHub
+			.locator('#agent-thread-sidebar')
+			.getByRole('button')
+			.filter({ has: page.getByText(initialThread.value.title, { exact: true }) })
+			.click();
+		await secondThreads
+			.getByRole('button')
+			.filter({ has: follower.getByText(initialThread.value.title, { exact: true }) })
+			.click();
+		const firstDraft = firstHub.getByRole('textbox', { name: 'Task input', exact: true });
+		const secondDraft = secondHub.getByRole('textbox', { name: 'Task input', exact: true });
+		await secondDraft.fill('Follower draft');
+		await firstDraft.fill('Leader draft');
+		const result = await requestAgentWorkspace(context.request, app, {
+			method: 'agent.threads.create',
+			params: { autoTitle: false, operationId: randomUUID(), title: 'External thread' },
+		});
+		if (result.method !== 'agent.threads.create') throw new Error('Unexpected thread');
+		await secondHub.getByRole('button', { name: 'Minimize Agent', exact: true }).click();
+		await openAgentHub(follower);
+		await openAgentConversations(follower);
+		await expect(
+			secondThreads.getByRole('button').filter({ has: follower.getByText('External thread', { exact: true }) }),
+		).toBeVisible();
+		await expect(secondDraft).toHaveValue('Follower draft');
+		await expect(firstDraft).toHaveValue('Leader draft');
+		expect(sockets).toBe(0);
+	} finally {
+		await follower.close();
+	}
 });
 
-test('Agent WebSocket bounds concurrent sockets per authenticated session', async ({ page, context }) => {
-  await loginAsInitialAdmin(context.request);
-  const hostSocketPromise = page.waitForEvent('websocket', {
-    predicate: (socket) => new URL(socket.url()).pathname === '/ws/agent',
-  });
-  await page.goto('/connections');
-  const hostSocket = await hostSocketPromise;
-  await waitForAgentSubscribed(hostSocket);
-
-  const outcomes = await page.evaluate(async () => {
-    const url = `${window.location.origin.replace(/^http/, 'ws')}/ws/agent`;
-    const sockets = [new WebSocket(url), new WebSocket(url), new WebSocket(url)];
-    const results = await Promise.all(
-      sockets.map(
-        (socket) =>
-          new Promise<'open' | 'rejected'>((resolve) => {
-            let settled = false;
-            const finish = (result: 'open' | 'rejected') => {
-              if (settled) return;
-              settled = true;
-              resolve(result);
-            };
-            const timer = window.setTimeout(() => finish('rejected'), 5_000);
-            socket.addEventListener('open', () => {
-              window.clearTimeout(timer);
-              finish('open');
-            });
-            socket.addEventListener('error', () => {
-              window.clearTimeout(timer);
-              finish('rejected');
-            });
-            socket.addEventListener('close', () => {
-              window.clearTimeout(timer);
-              if (socket.readyState !== WebSocket.OPEN) finish('rejected');
-            });
-          }),
-      ),
-    );
-    for (const socket of sockets) {
-      if (socket.readyState === WebSocket.OPEN) socket.close(1000, 'E2E socket limit probe complete');
-    }
-    return results;
-  });
-
-  expect(outcomes.filter((outcome) => outcome === 'open')).toHaveLength(2);
-  expect(outcomes.filter((outcome) => outcome === 'rejected')).toHaveLength(1);
+test('concurrent Agent settings preserve dirty drafts and reject their original stale version', async ({
+	page,
+	context,
+}) => {
+	await loginAsInitialAdmin(context.request);
+	await setUiLanguage(context.request);
+	await page.goto('/settings?tab=agent');
+	const follower = await context.newPage();
+	try {
+		await follower.goto('/settings?tab=agent');
+		await selectAgentSettingsGroup(page, 'runtime');
+		await selectAgentSettingsGroup(follower, 'runtime');
+		const leader = page.getByRole('region', { name: 'Execution and performance', exact: true });
+		const other = follower.getByRole('region', { name: 'Execution and performance', exact: true });
+		// Lowering Concurrent Runs alone violates the execution contract if
+		// model-call capacity still equals the current maximum run capacity.
+		// Use the independently editable (and bounded by Runs) model-call limit
+		// to exercise the same concurrent CAS conflict without invalid input.
+		const leaderInput = leader.getByRole('textbox', { name: 'Concurrent model calls', exact: true });
+		const otherInput = other.getByRole('textbox', { name: 'Concurrent model calls', exact: true });
+		const original = Number(await leaderInput.inputValue());
+		const current = await requestAgentJson(
+			context.request,
+			{ method: 'GET', path: '/execution-settings' },
+			readAgentExecutionSettingsResponse,
+		);
+		const maximum = current.settings.hardLimits.maxConcurrentModelCalls;
+		const runs = Number(await leader.getByRole('textbox', { name: 'Concurrent Runs', exact: true }).inputValue());
+		const alternatives = Array.from({ length: Math.min(maximum, runs) }, (_, index) => index + 1).filter(
+			(value) => value !== original,
+		);
+		expect(alternatives.length).toBeGreaterThanOrEqual(2);
+		await otherInput.fill(String(alternatives[1]));
+		await leaderInput.fill(String(alternatives[0]));
+		const leaderSave = page.waitForResponse(
+			(response) =>
+				new URL(response.url()).pathname === '/api/v1/agent/execution-settings' &&
+				response.request().method() === 'PUT',
+		);
+		await leader.getByRole('button', { name: 'Save', exact: true }).click();
+		expect((await leaderSave).status()).toBe(200);
+		await expect(
+			page.locator('.ui-notification[data-kind="success"]').filter({ hasText: 'Settings saved.' }),
+		).toBeVisible();
+		await expect(otherInput).toHaveValue(String(alternatives[1]));
+		const conflict = follower.waitForResponse(
+			(response) =>
+				new URL(response.url()).pathname === '/api/v1/agent/execution-settings' &&
+				response.request().method() === 'PUT',
+		);
+		await other.getByRole('button', { name: 'Save', exact: true }).click();
+		expect((await conflict).status()).toBe(409);
+		await expect(
+			follower
+				.locator('.ui-notification')
+				.filter({ hasText: 'The version changed. Read saved settings and review a new draft.' }),
+		).toBeVisible();
+		await expect(otherInput).toHaveValue(String(alternatives[1]));
+		await expect(other.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+		await follower.getByRole('button', { name: 'Reload settings', exact: true }).click();
+		await expect(otherInput).toHaveValue(String(alternatives[0]));
+	} finally {
+		await follower.close();
+	}
 });
 
-test('Agent Host installs Nexus Agent safely and persists explicit lifecycle/settings choices', async ({ request }) => {
-  await step('Agent APIs use their own authenticated error envelope', async () => {
-    const anonymous = await request.get('/api/v1/agent/apps');
-    expect(anonymous.status()).toBe(401);
-    const body = (await anonymous.json()) as AgentErrorEnvelope;
-    expect(body.error.code).toBe('AUTH_REQUIRED');
-    expect(body.requestId).toBe(anonymous.headers()['x-request-id']);
-  });
+test('retired Agent Host subscriptions reject every connection without blocking native authenticated reads', async ({
+	page,
+	context,
+}) => {
+	await loginAsInitialAdmin(context.request);
+	const created = await createTestAgentApp(context.request);
+	await page.goto('/connections');
+	const outcomes = await page.evaluate(async () =>
+		Promise.all(
+			Array.from(
+				{ length: 4 },
+				() =>
+					new Promise<string>((resolve, reject) => {
+						const socket = new WebSocket(location.origin.replace(/^http/u, 'ws') + '/ws/agent');
+						const timer = setTimeout(() => {
+							socket.close();
+							reject(new Error('Retired Agent subscription did not reject'));
+						}, 5000);
+						socket.addEventListener(
+							'open',
+							() => {
+								clearTimeout(timer);
+								socket.close();
+								resolve('opened');
+							},
+							{ once: true },
+						);
+						socket.addEventListener(
+							'close',
+							() => {
+								clearTimeout(timer);
+								resolve('rejected');
+							},
+							{ once: true },
+						);
+					}),
+			),
+		),
+	);
+	expect(outcomes).toEqual(['rejected', 'rejected', 'rejected', 'rejected']);
+	const apps = await requestAgentJson(context.request, { method: 'GET', path: '/apps' }, readAgentAppListResponse);
+	// The native app and the built-in product app can coexist. The removed
+	// WebSocket subscriptions must not mutate or conceal this authenticated
+	// app directory; verify the exact app created for this scenario.
+	expect(apps.filter((app) => app.id === created.id)).toEqual([created]);
+});
 
-  await loginAsInitialAdmin(request);
-  const csrf = await csrfToken(request);
-  const mutationHeaders = { 'X-Nexus-CSRF': csrf };
-
-  let agentApp!: AppSummary;
-
-  await step('Nexus Agent is absent from the Host until the signed first-party Plugin is installed', async () => {
-    const core = await request.get('/api/v1/status');
-    expect(core.ok(), await core.text()).toBeTruthy();
-
-    const before = await request.get('/api/v1/agent/apps');
-    expect(before.ok(), await before.text()).toBeTruthy();
-    const beforeBody = (await before.json()) as AgentEnvelope<AppSummary[]>;
-    expect(beforeBody.data.some((app) => app.id === 'nexus.agent')).toBe(false);
-
-    const recommendation = await request.get('/api/v1/agent/onboarding/recommended-plugin');
-    expect(recommendation.ok(), await recommendation.text()).toBeTruthy();
-    await expect(recommendation.json()).resolves.toMatchObject({
-      data: {
-        appId: 'nexus.agent',
-        installed: false,
-        availableVersion: '1.0.0',
-        displayName: 'Nexus Agent',
-      },
-    });
-
-    const installed = await request.post('/api/v1/agent/onboarding/recommended-plugin/install', {
-      headers: mutationHeaders,
-      data: {},
-    });
-    expect(installed.status(), await installed.text()).toBe(201);
-    await expect(installed.json()).resolves.toMatchObject({ data: { installedNow: true } });
-
-    await step(
-      'installed Nexus Agent recommendation stays local when the official catalog is unavailable',
-      async () => {
-        const disabled = await request.post(`${E2E_URLS.pluginRepositoryOrigin}/control/official-catalog/disable`);
-        expect(disabled.status(), await disabled.text()).toBe(204);
-        try {
-          const localRecommendation = await request.get('/api/v1/agent/onboarding/recommended-plugin');
-          expect(localRecommendation.ok(), await localRecommendation.text()).toBeTruthy();
-          await expect(localRecommendation.json()).resolves.toMatchObject({
-            data: {
-              appId: 'nexus.agent',
-              installed: true,
-              installedVersion: '1.0.0',
-              availableVersion: '1.0.0',
-              enabled: true,
-            },
-          });
-        } finally {
-          const enabled = await request.post(`${E2E_URLS.pluginRepositoryOrigin}/control/official-catalog/enable`);
-          expect(enabled.status(), await enabled.text()).toBe(204);
-        }
-      },
-    );
-    const response = await request.get('/api/v1/agent/apps');
-    expect(response.ok(), await response.text()).toBeTruthy();
-    const body = (await response.json()) as AgentEnvelope<AppSummary[]>;
-    expect(body.requestId).toBe(response.headers()['x-request-id']);
-    agentApp = body.data.find((app) => app.id === 'nexus.agent')!;
-    expect(agentApp).toMatchObject({
-      id: 'nexus.agent',
-      displayName: 'Nexus Agent',
-      version: '1.0.0',
-      enabled: true,
-      health: 'healthy',
-      healthReason: null,
-      runningRuns: 0,
-      pendingApprovals: 0,
-      pendingBudgetRequests: 0,
-    });
-    expect(JSON.stringify(body)).not.toContain('factory');
-    expect(JSON.stringify(body)).not.toContain('app.manifest.json');
-  });
-
-  await step(
-    'live integration and Browser resource capabilities are declared and default-granted without requiring Runner',
-    async () => {
-      const response = await request.get('/api/v1/agent/apps/nexus.agent/grants');
-      expect(response.ok(), await response.text()).toBeTruthy();
-      const body = (await response.json()) as AgentEnvelope<{
-        capabilityDefinitions: Array<{ id: string }>;
-        grants: Array<{ capability: string }>;
-      }>;
-      const declaredCapabilities = body.data.capabilityDefinitions.map((definition) => definition.id);
-      const grantedCapabilities = body.data.grants.map((grant) => grant.capability);
-      expect(declaredCapabilities).toContain('integration.mcp.read');
-      expect(declaredCapabilities).toContain('integration.mcp.invoke');
-      expect(declaredCapabilities).toContain('integration.acp.invoke');
-      expect(declaredCapabilities).toContain('browser.read');
-      expect(declaredCapabilities).toContain('browser.interact');
-      expect(declaredCapabilities).not.toContain('workspace.manage');
-      expect(grantedCapabilities).toContain('integration.acp.invoke');
-      expect(grantedCapabilities).toContain('browser.read');
-      expect(grantedCapabilities).toContain('browser.interact');
-    },
-  );
-
-  await step('Agent mutations reject missing CSRF and stale CAS versions', async () => {
-    const missingCsrf = await request.patch('/api/v1/agent/apps/nexus.agent', {
-      data: { enabled: false, expectedVersion: agentApp.stateVersion },
-    });
-    expect(missingCsrf.status()).toBe(403);
-    await expect(missingCsrf.json()).resolves.toMatchObject({ error: { code: 'CSRF_REJECTED' } });
-
-    const disabled = await request.patch('/api/v1/agent/apps/nexus.agent', {
-      headers: mutationHeaders,
-      data: { enabled: false, expectedVersion: agentApp.stateVersion },
-    });
-    expect(disabled.ok(), await disabled.text()).toBeTruthy();
-    const disabledBody = (await disabled.json()) as AgentEnvelope<AppSummary>;
-    expect(disabledBody.data).toMatchObject({ id: 'nexus.agent', enabled: false, health: 'disabled' });
-
-    const restored = await request.post('/api/v1/agent/onboarding/recommended-plugin/install', {
-      headers: mutationHeaders,
-      data: {},
-    });
-    expect(restored.status(), await restored.text()).toBe(201);
-    const restoredBody = (await restored.json()) as AgentEnvelope<{ app: AppSummary; installedNow: boolean }>;
-    expect(restoredBody.data).toMatchObject({
-      installedNow: false,
-      app: { id: 'nexus.agent', enabled: true, health: 'healthy', healthReason: null },
-    });
-
-    const stale = await request.patch('/api/v1/agent/apps/nexus.agent', {
-      headers: mutationHeaders,
-      data: { enabled: false, expectedVersion: agentApp.stateVersion },
-    });
-    expect(stale.status()).toBe(409);
-    await expect(stale.json()).resolves.toMatchObject({ error: { code: 'STATE_CONFLICT' } });
-    agentApp = restoredBody.data.app;
-  });
-
-  await step(
-    'Agent settings patch preserves Hard Limits and explicit feature choice through the host state',
-    async () => {
-      const before = await request.get('/api/v1/agent/settings');
-      expect(before.ok(), await before.text()).toBeTruthy();
-      const beforeBody = (await before.json()) as AgentEnvelope<{
-        requestedSettings: { feature: { enabled: boolean }; hardLimits: { maxConcurrentRuntimes: number } };
-        effectiveSettings: { feature: { enabled: boolean } };
-        hardLimits: { maxConcurrentRuntimes: number };
-        availability: { state: string };
-        revision: number;
-      }>;
-      expect(beforeBody.data).toMatchObject({
-        requestedSettings: { feature: { enabled: false } },
-        effectiveSettings: { feature: { enabled: false } },
-        hardLimits: { maxConcurrentRuntimes: 4 },
-        availability: { state: 'disabled' },
-        revision: 1,
-      });
-
-      const directHardLimit = await request.patch('/api/v1/agent/settings', {
-        headers: mutationHeaders,
-        data: {
-          patch: { hardLimits: { maxConcurrentRuntimes: 5 } },
-          expectedVersion: beforeBody.data.revision,
-        },
-      });
-      expect(directHardLimit.status()).toBe(400);
-      await expect(directHardLimit.json()).resolves.toMatchObject({ error: { code: 'VALIDATION_FAILED' } });
-
-      const enabled = await request.patch('/api/v1/agent/settings', {
-        headers: mutationHeaders,
-        data: { patch: { feature: { enabled: true } }, expectedVersion: beforeBody.data.revision },
-      });
-      expect(enabled.ok(), await enabled.text()).toBeTruthy();
-      const enabledBody = (await enabled.json()) as AgentEnvelope<{
-        effectiveSettings: { feature: { enabled: boolean } };
-        availability: { state: string };
-        revision: number;
-      }>;
-      expect(enabledBody.data).toMatchObject({
-        effectiveSettings: { feature: { enabled: true } },
-        availability: { state: 'enabled' },
-        revision: 2,
-      });
-
-      const reread = await request.get('/api/v1/agent/settings');
-      expect(reread.ok(), await reread.text()).toBeTruthy();
-      await expect(reread.json()).resolves.toMatchObject({
-        data: { effectiveSettings: { feature: { enabled: true } }, revision: enabledBody.data.revision },
-      });
-
-      const disabled = await request.patch('/api/v1/agent/settings', {
-        headers: mutationHeaders,
-        data: { patch: { feature: { enabled: false } }, expectedVersion: enabledBody.data.revision },
-      });
-      expect(disabled.ok(), await disabled.text()).toBeTruthy();
-      await expect(disabled.json()).resolves.toMatchObject({
-        data: { effectiveSettings: { feature: { enabled: false } }, availability: { state: 'disabled' }, revision: 3 },
-      });
-    },
-  );
-
-  await step('Browser targets remain configurable while retired Workspace ACP profiles are rejected', async () => {
-    const before = await request.get('/api/v1/agent/settings');
-    expect(before.ok(), await before.text()).toBeTruthy();
-    const beforeBody = (await before.json()) as AgentEnvelope<{ revision: number }>;
-    const updated = await request.patch('/api/v1/agent/settings', {
-      headers: mutationHeaders,
-      data: {
-        patch: {
-          browser: {
-            targets: [
-              {
-                id: 'direct-chrome',
-                endpoints: [
-                  {
-                    scope: 'external-network',
-                    via: 'backend',
-                    url: 'http://127.0.0.1:9222',
-                    priority: 10,
-                    allowPlaintext: true,
-                    verifyTls: true,
-                  },
-                ],
-                allowedUrlPatterns: ['https://example.com'],
-              },
-            ],
-          },
-        },
-        expectedVersion: beforeBody.data.revision,
-      },
-    });
-    expect(updated.ok(), await updated.text()).toBeTruthy();
-    await expect(updated.json()).resolves.toMatchObject({
-      data: {
-        requestedSettings: {
-          browser: {
-            targets: [
-              {
-                id: 'direct-chrome',
-                endpoints: [{ scope: 'external-network', via: 'backend', url: 'http://127.0.0.1:9222/' }],
-              },
-            ],
-          },
-        },
-      },
-    });
-
-    const retiredProfile = await request.patch('/api/v1/agent/settings', {
-      headers: mutationHeaders,
-      data: {
-        patch: { workspaceRuntime: { acpProfiles: [{ id: 'local-acp', argv: ['agent'], cwd: '/workspace' }] } },
-        expectedVersion: beforeBody.data.revision + 1,
-      },
-    });
-    expect(retiredProfile.status(), await retiredProfile.text()).toBe(400);
-
-    const retired = await request.post('/api/v1/apps/nexus.agent/integrations', {
-      headers: { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
-      data: {
-        kind: 'acp',
-        enabled: true,
-        configuration: {
-          displayName: 'Retired ACP',
-          transport: 'workspace-profile',
-          profileId: 'local-acp',
-          protocolVersion: '1',
-        },
-      },
-    });
-    expect(retired.status(), await retired.text()).toBe(400);
-    const retiredProfileField = await request.post('/api/v1/apps/nexus.agent/integrations', {
-      headers: { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
-      data: {
-        kind: 'acp',
-        enabled: true,
-        configuration: {
-          displayName: 'Obsolete SSH ACP Profile',
-          transport: 'ssh',
-          profileId: 'obsolete',
-          argv: ['agent', '--acp'],
-          cwd: '/srv/project',
-          protocolVersion: '1',
-        },
-      },
-    });
-    expect(retiredProfileField.status(), await retiredProfileField.text()).toBe(400);
-    const created = await request.post('/api/v1/apps/nexus.agent/integrations', {
-      headers: { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
-      data: {
-        kind: 'acp',
-        enabled: true,
-        configuration: {
-          displayName: 'SSH ACP',
-          transport: 'ssh',
-          argv: ['agent', '--acp'],
-          cwd: '/srv/project',
-          protocolVersion: '1',
-        },
-      },
-    });
-    expect(created.status(), await created.text()).toBe(201);
-    const createdBody = (await created.json()) as AgentEnvelope<{ id: string; kind: string; version: number }>;
-    expect(createdBody.data).toMatchObject({ kind: 'acp', version: 1 });
-
-    const listed = await request.get('/api/v1/apps/nexus.agent/integrations?kind=acp');
-    expect(listed.ok(), await listed.text()).toBeTruthy();
-    await expect(listed.json()).resolves.toMatchObject({
-      data: [
-        {
-          id: createdBody.data.id,
-          kind: 'acp',
-          enabled: true,
-          configuration: { transport: 'ssh', cwd: '/srv/project', argv: ['agent', '--acp'] },
-        },
-      ],
-    });
-
-    const removed = await request.delete(
-      `/api/v1/apps/nexus.agent/integrations/${encodeURIComponent(createdBody.data.id)}?expectedVersion=${createdBody.data.version}`,
-      { headers: mutationHeaders },
-    );
-    expect(removed.ok(), await removed.text()).toBeTruthy();
-  });
-
-  await step('retired Workspace management APIs reject requests without rewriting settings', async () => {
-    const before = await request.get('/api/v1/agent/settings');
-    expect(before.ok(), await before.text()).toBeTruthy();
-    const baseline = await before.json();
-    const mutationHeaders = { 'X-Nexus-CSRF': await csrfToken(request) };
-    const retiredMutations = [
-      'setup/preview',
-      'setup/confirm',
-      'tool-packs/node/22/install',
-      'tool-packs/node/22/uninstall/preview',
-      'tool-packs/node/22/uninstall/confirm',
-      'runtime-cleanup/preview',
-      'runtime-cleanup/confirm',
-      'settings/reset/preview',
-      'settings/reset/confirm',
-      'cache-cleanup',
-    ];
-    for (const uri of retiredMutations) {
-      const response = await request.post(`/api/v1/agent/workspace-runtime/${uri}`, {
-        headers: mutationHeaders,
-        data: { expectedVersion: baseline.data.revision, confirmationId: randomUUID() },
-      });
-      expect(response.status(), await response.text()).toBe(404);
-    }
-    for (const uri of ['storage', 'commands/obsolete']) {
-      const response = await request.get(`/api/v1/agent/workspace-runtime/${uri}`);
-      expect(response.status(), await response.text()).toBe(404);
-    }
-    const after = await request.get('/api/v1/agent/settings');
-    expect(after.ok(), await after.text()).toBeTruthy();
-    expect((await after.json()).data.revision).toBe(baseline.data.revision);
-  });
+test('Agent App lifecycle uses safe contracts, explicit grants and original state versions', async ({ request }) => {
+	const anonymous = await request.get('/api/v1/agent/apps');
+	expect(anonymous.status()).toBe(401);
+	expect(readAgentErrorResponse(await anonymous.json())).toEqual({ code: 'unauthenticated' });
+	await loginAsInitialAdmin(request);
+	const definitions = await requestAgentJson(
+		request,
+		{ method: 'GET', path: '/app-definitions' },
+		readAgentAppDefinitionListResponse,
+	);
+	const native = definitions.find((item) => item.id === 'nexus.terminal');
+	expect(native).toMatchObject({ version: '1.8.0', defaultEnabled: true });
+	const app = await createTestAgentApp(request);
+	const grants = await requestAgentJson(
+		request,
+		{ method: 'GET', path: `/apps/${app.id}/grants` },
+		readAgentGrantView,
+	);
+	expect(grants.grants).toEqual([]);
+	expect(grants.definitions.map((definition) => definition.id)).toContain('integration.acp.invoke');
+	const disabled = await requestAgentJson(
+		request,
+		{ method: 'PATCH', path: `/apps/${app.id}`, data: { enabled: false, expectedVersion: app.version } },
+		readAgentAppResponse,
+	);
+	expect(disabled).toMatchObject({ id: app.id, enabled: false, version: app.version + 1 });
+	const stale = await request.patch(`/api/v1/agent/apps/${app.id}`, {
+		headers: { Origin: E2E_URLS.frontendOrigin },
+		data: { enabled: true, expectedVersion: app.version },
+	});
+	expect(stale.status()).toBe(409);
+	expect(readAgentErrorResponse(await stale.json())).toEqual({ code: 'version_conflict' });
+	const enabled = await requestAgentJson(
+		request,
+		{ method: 'PATCH', path: `/apps/${app.id}`, data: { enabled: true, expectedVersion: disabled.version } },
+		readAgentAppResponse,
+	);
+	expect(enabled.version).toBe(disabled.version + 1);
+	const currentGrants = await requestAgentJson(
+		request,
+		{ method: 'GET', path: `/apps/${app.id}/grants` },
+		readAgentGrantView,
+	);
+	expect(currentGrants.grants).toEqual(grants.grants);
+	expect(currentGrants.policyRevision).toBe(grants.policyRevision + 2);
+	for (const path of ['/security/csrf', '/settings', '/summary']) {
+		const retired = await request.get('/api/v1/agent' + path);
+		expect(retired.status(), path).toBe(404);
+	}
+	// Recommended onboarding is a live first-version Plugin endpoint, not a
+	// retired Agent Host compatibility route. An offline external catalog has
+	// an explicit provider-unavailable failure, not an invented 404 contract.
+	const recommended = await request.get('/api/v1/agent/onboarding/recommended-plugin');
+	if (recommended.status() === 200) {
+		readAgentPluginRecommended(await recommended.json());
+	} else {
+		expect(recommended.status()).toBe(503);
+		expect(readAgentErrorResponse(await recommended.json())).toEqual({ code: 'provider_unavailable' });
+	}
 });

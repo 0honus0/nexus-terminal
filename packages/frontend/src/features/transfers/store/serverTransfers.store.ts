@@ -1,161 +1,280 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { registerAuthenticatedSessionReset } from '@/shared/session/public';
-import { apiErrorMessage } from '@/client/http';
-import { logger } from '@/client/logging/logger';
-import { serverTransfersApi } from '../api/serverTransfersApi';
-import { toTransferTask, type SendFilesRequestDto, type ServerTransferTaskDto } from '../model/serverTransfer';
+import { serverTransfersApi } from '../api/server-transfers-api';
+import { toTransferTask } from '../model/server-transfer-mapper';
+import { ServerTransferRequestFailure } from '../model/server-transfer-types';
+import type { SendFilesCommand, ServerTransferTask } from '../model/server-transfer-types';
+
+export function serverTransferFailureKey(cause: unknown): string {
+	if (!(cause instanceof ServerTransferRequestFailure)) {
+		return 'serverTransferErrors.internal_failure';
+	}
+	return cause.outcome === 'unknown'
+		? 'serverTransferErrors.operation_unknown'
+		: 'serverTransferErrors.' + cause.code;
+}
 
 export const useServerTransfersStore = defineStore('serverTransfers', () => {
-  const items = ref<ServerTransferTaskDto[]>([]);
-  const loading = ref(false);
-  const error = ref('');
-  let timer: number | undefined;
-  let refreshInFlight: Promise<void> | undefined;
-  let pendingRefresh = false;
-  let pendingRefreshBackground = true;
-  let freshnessGeneration = 0;
-  let sessionGeneration = 0;
-  const reset = () => {
-    sessionGeneration += 1;
-    freshnessGeneration += 1;
-    stopPolling();
-    items.value = [];
-    loading.value = false;
-    error.value = '';
-    pendingRefresh = false;
-    pendingRefreshBackground = true;
-    refreshInFlight = undefined;
-  };
+	const items = ref<ServerTransferTask[]>([]);
+	const loading = ref(false);
+	const error = ref('');
+	const sendBlocked = ref(false);
+	const progressTasks = computed(() => items.value.map(toTransferTask).sort((a, b) => b.createdAt - a.createdAt));
+	const hasActiveTasks = computed(() =>
+		items.value.some((task) => ['queued', 'in-progress', 'cancelling'].includes(task.status)),
+	);
+	let epoch = 0;
+	let generation = 0;
+	let timer: number | undefined;
+	let pollingEnabled = false;
+	let pollingIntervalMs = 2000;
+	let readController: AbortController | null = null;
+	let readPromise: Promise<void> | null = null;
+	let refreshQueued = false;
+	let refreshOnResume = false;
+	let readFailed = false;
+	const writes = new Set<AbortController>();
+	const mutations = new Map<string, Promise<void>>();
 
-  const progressTasks = computed(() => items.value.map(toTransferTask).sort((a, b) => b.createdAt - a.createdAt));
-  const invalidateInFlightRefresh = () => {
-    freshnessGeneration += 1;
-  };
+	function clearPollingTimer(): void {
+		window.clearTimeout(timer);
+		timer = undefined;
+	}
 
-  type LoadOptions = { background?: boolean; ensureFresh?: boolean };
+	function stopPolling(): void {
+		pollingEnabled = false;
+		refreshOnResume = false;
+		clearPollingTimer();
+		document.removeEventListener('visibilitychange', syncPollingVisibility);
+		window.removeEventListener('pageshow', syncPollingVisibility);
+		window.removeEventListener('online', syncPollingVisibility);
+		window.removeEventListener('offline', syncPollingVisibility);
+	}
 
-  const performLoad = async (background: boolean, generation: number): Promise<void> => {
-    const showLoading = !background;
-    if (showLoading) loading.value = true;
-    if (generation === freshnessGeneration) error.value = '';
-    try {
-      const nextItems = await serverTransfersApi.list();
-      // A mutation may invalidate a poll while it is still in flight. Do not let that
-      // older response overwrite the optimistic/newer state before the queued refresh.
-      if (generation === freshnessGeneration) items.value = nextItems;
-    } catch (cause) {
-      if (generation === freshnessGeneration) {
-        logger.debug({ background }, 'Server transfer refresh failed');
-        error.value = apiErrorMessage(cause, 'Failed to load transfer tasks.');
-      }
-    } finally {
-      if (showLoading && generation === freshnessGeneration) loading.value = false;
-    }
-  };
+	function syncPollingVisibility(): void {
+		clearPollingTimer();
+		if (!pollingEnabled) return;
+		if (document.hidden || !navigator.onLine) {
+			// Only the status read is cancelled; server tasks and mutation owners continue.
+			refreshOnResume ||= readPromise !== null || hasActiveTasks.value || readFailed;
+			invalidate();
+			refreshQueued = false;
+			return;
+		}
+		if (!refreshOnResume && !hasActiveTasks.value && !readFailed) return;
+		refreshOnResume = false;
+		void load({ background: true, ensureFresh: true });
+	}
 
-  const runRefreshLoop = async (initialBackground: boolean): Promise<void> => {
-    const epoch = sessionGeneration;
-    let background = initialBackground;
-    try {
-      while (true) {
-        pendingRefresh = false;
-        pendingRefreshBackground = true;
-        const generation = freshnessGeneration;
-        await performLoad(background, generation);
-        if (epoch !== sessionGeneration) return;
-        if (!pendingRefresh) return;
-        // Keep an existing foreground load visible through its queued refresh, and
-        // upgrade a background refresh if any queued caller explicitly needs foreground loading.
-        background = background && pendingRefreshBackground;
-      }
-    } finally {
-      if (epoch === sessionGeneration) refreshInFlight = undefined;
-    }
-  };
+	function schedulePolling(): void {
+		clearPollingTimer();
+		if (!pollingEnabled || document.hidden || !navigator.onLine || readPromise || !hasActiveTasks.value) {
+			return;
+		}
+		timer = window.setTimeout(() => {
+			timer = undefined;
+			if (pollingEnabled && !document.hidden && navigator.onLine) {
+				void load({ background: true });
+			}
+		}, pollingIntervalMs);
+	}
 
-  const load = (options: LoadOptions = {}): Promise<void> => {
-    const background = Boolean(options.background);
-    if (options.ensureFresh) {
-      invalidateInFlightRefresh();
-      if (refreshInFlight) {
-        pendingRefresh = true;
-        pendingRefreshBackground = pendingRefreshBackground && background;
-        logger.trace({ background }, 'Server transfer refresh queued behind in-flight refresh');
-        return refreshInFlight;
-      }
-    }
-    if (refreshInFlight) return refreshInFlight;
-    refreshInFlight = runRefreshLoop(background);
-    return refreshInFlight;
-  };
+	function reset(): void {
+		epoch += 1;
+		generation += 1;
+		stopPolling();
+		readController?.abort();
+		for (const controller of writes) {
+			controller.abort();
+		}
+		writes.clear();
+		mutations.clear();
+		readPromise = null;
+		readController = null;
+		refreshQueued = false;
+		readFailed = false;
+		items.value = [];
+		loading.value = false;
+		error.value = '';
+		sendBlocked.value = false;
+	}
 
-  const send = async (request: SendFilesRequestDto): Promise<ServerTransferTaskDto> => {
-    const epoch = sessionGeneration;
-    const task = await serverTransfersApi.send(request);
-    if (epoch !== sessionGeneration) return task;
-    invalidateInFlightRefresh();
-    items.value = [task, ...items.value.filter((item) => item.taskId !== task.taskId)];
-    logger.debug(
-      { taskId: task.taskId, status: task.status, subTaskCount: task.subTasks.length },
-      'Server transfer task queued in UI',
-    );
-    return task;
-  };
+	function invalidate(): void {
+		generation += 1;
+		readController?.abort();
+	}
 
-  const cancel = async (taskId: string): Promise<void> => {
-    const epoch = sessionGeneration;
-    const task = items.value.find((item) => item.taskId === taskId);
-    logger.debug({ taskId, currentStatus: task?.status }, 'Server transfer cancellation dispatch');
-    invalidateInFlightRefresh();
-    if (task && !['completed', 'failed', 'partially-completed', 'cancelled'].includes(task.status)) {
-      task.status = 'cancelling';
-    }
-    await serverTransfersApi.cancel(taskId);
-    if (epoch !== sessionGeneration) return;
-    void load({ background: true, ensureFresh: true });
-  };
+	function load(options: { background?: boolean; ensureFresh?: boolean } = {}): Promise<void> {
+		if (document.hidden) {
+			refreshOnResume = true;
+			return Promise.resolve();
+		}
+		if (readPromise) {
+			if (options.ensureFresh) {
+				invalidate();
+				refreshQueued = true;
+			}
+			return readPromise;
+		}
+		clearPollingTimer();
+		const currentEpoch = epoch;
+		if (!options.background) {
+			loading.value = true;
+		}
+		const pending = Promise.resolve()
+			.then(async () => {
+				if (currentEpoch !== epoch || document.hidden) {
+					return;
+				}
+				do {
+					refreshQueued = false;
+					if (document.hidden) return;
+					const current = generation;
+					const active = new AbortController();
+					readController = active;
+					try {
+						const next = await serverTransfersApi.list(active.signal);
+						if (currentEpoch === epoch && current === generation) {
+							readFailed = false;
+							items.value = next;
+							if (!sendBlocked.value) {
+								error.value = '';
+							}
+						}
+					} catch (cause) {
+						if (currentEpoch === epoch && current === generation && !active.signal.aborted) {
+							readFailed = true;
+							error.value = serverTransferFailureKey(cause);
+						}
+					}
+				} while (currentEpoch === epoch && refreshQueued);
+			})
+			.finally(() => {
+				if (currentEpoch === epoch && readPromise === pending) {
+					readPromise = null;
+					readController = null;
+					loading.value = false;
+					schedulePolling();
+				}
+			});
+		readPromise = pending;
+		return pending;
+	}
 
-  const remove = async (taskId: string): Promise<void> => {
-    const epoch = sessionGeneration;
-    await serverTransfersApi.remove(taskId);
-    if (epoch !== sessionGeneration) return;
-    invalidateInFlightRefresh();
-    items.value = items.value.filter((item) => item.taskId !== taskId);
-  };
+	async function send(command: SendFilesCommand, signal?: AbortSignal): Promise<ServerTransferTask> {
+		if (sendBlocked.value) {
+			throw new ServerTransferRequestFailure('operation_unknown', 'unknown');
+		}
+		const currentEpoch = epoch;
+		const controller = new AbortController();
+		writes.add(controller);
+		invalidate();
+		try {
+			const task = await serverTransfersApi.send(
+				command,
+				signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
+			);
+			if (currentEpoch === epoch) {
+				invalidate();
+				items.value = [task, ...items.value.filter((item) => item.taskId !== task.taskId)];
+			}
+			return task;
+		} catch (cause) {
+			if (currentEpoch === epoch) {
+				sendBlocked.value ||= !(cause instanceof ServerTransferRequestFailure) || cause.outcome === 'unknown';
+				error.value = sendBlocked.value
+					? 'serverTransferErrors.operation_unknown'
+					: serverTransferFailureKey(cause);
+				if (sendBlocked.value) {
+					void load({ background: true, ensureFresh: true });
+				}
+			}
+			throw cause;
+		} finally {
+			writes.delete(controller);
+			if (currentEpoch === epoch) {
+				schedulePolling();
+			}
+		}
+	}
 
-  const cancelAll = async (): Promise<void> => {
-    const active = items.value.filter(
-      (item) => !['completed', 'failed', 'partially-completed', 'cancelled', 'cancelling'].includes(item.status),
-    );
-    await Promise.allSettled(active.map((item) => cancel(item.taskId)));
-  };
+	function mutate(taskId: string, operation: 'cancel' | 'remove'): Promise<void> {
+		const existing = mutations.get(taskId);
+		if (existing) {
+			return existing;
+		}
+		const currentEpoch = epoch;
+		const controller = new AbortController();
+		writes.add(controller);
+		invalidate();
+		const pending = Promise.resolve().then(async () => {
+			try {
+				await serverTransfersApi[operation](taskId, controller.signal);
+				if (currentEpoch !== epoch) {
+					return;
+				}
+				invalidate();
+				if (operation === 'remove') {
+					items.value = items.value.filter((item) => item.taskId !== taskId);
+				} else {
+					await load({ background: true, ensureFresh: true });
+				}
+			} catch (cause) {
+				if (currentEpoch === epoch) {
+					error.value = serverTransferFailureKey(cause);
+				}
+			} finally {
+				writes.delete(controller);
+				if (currentEpoch === epoch && mutations.get(taskId) === pending) {
+					mutations.delete(taskId);
+					schedulePolling();
+				}
+			}
+		});
+		mutations.set(taskId, pending);
+		return pending;
+	}
 
-  const startPolling = (intervalMs = 2000): (() => void) => {
-    window.clearInterval(timer);
-    void load();
-    timer = window.setInterval(() => void load({ background: true }), Math.max(1000, intervalMs));
-    return stopPolling;
-  };
+	const cancel = (taskId: string): Promise<void> => mutate(taskId, 'cancel');
 
-  function stopPolling(): void {
-    window.clearInterval(timer);
-    timer = undefined;
-  }
+	const remove = (taskId: string): Promise<void> => mutate(taskId, 'remove');
 
-  return {
-    reset,
-    items,
-    progressTasks,
-    loading,
-    error,
-    load,
-    send,
-    cancel,
-    remove,
-    cancelAll,
-    startPolling,
-    stopPolling,
-  };
+	async function cancelAll(): Promise<void> {
+		const ids = items.value
+			.filter((item) => ['queued', 'in-progress'].includes(item.status))
+			.map((item) => item.taskId);
+		await Promise.all(ids.map(cancel));
+	}
+
+	function startPolling(intervalMs = 2000): () => void {
+		stopPolling();
+		pollingEnabled = true;
+		pollingIntervalMs = Math.max(1000, intervalMs);
+		document.addEventListener('visibilitychange', syncPollingVisibility);
+		window.addEventListener('pageshow', syncPollingVisibility);
+		window.addEventListener('online', syncPollingVisibility);
+		window.addEventListener('offline', syncPollingVisibility);
+		if (!document.hidden && navigator.onLine) void load();
+		else refreshOnResume = true;
+		return stopPolling;
+	}
+
+	return {
+		reset,
+		items,
+		progressTasks,
+		loading,
+		error,
+		sendBlocked,
+		load,
+		send,
+		cancel,
+		remove,
+		cancelAll,
+		startPolling,
+		stopPolling,
+	};
 });
+
 registerAuthenticatedSessionReset('server-transfers-cache', () => useServerTransfersStore().reset());

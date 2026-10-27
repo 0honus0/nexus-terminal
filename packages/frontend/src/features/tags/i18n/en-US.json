@@ -15,6 +15,26 @@
     "updateSuccess": "Tag updated successfully.",
     "deleteSuccess": "Tag \"{name}\" deleted successfully.",
     "deleteFailed": "Failed to delete tag \"{name}\": {error}",
-    "errorDelete": "Error deleting tag: {error}"
+    "errorDelete": "Error deleting tag: {error}",
+    "refresh": "Refresh and review",
+    "renameOnly": "Save tag name",
+    "saveAssociations": "Replace associations",
+    "confirmReplace": "Replace all connections assigned to this tag with the current selection? This replaces the complete set.",
+    "associationsSaved": "Tag associations saved. The connection list will reload.",
+    "reopenToRefresh": "Close this panel, refresh the connection and tag lists, then reopen to review before writing again.",
+    "failures": {
+      "failed": "The operation failed. Please try again later.",
+      "unknown": "The result is unknown and may already be saved. Refresh and review before submitting again.",
+      "unauthenticated": "Your session has expired. Sign in again.",
+      "forbidden": "Only administrators can perform this operation.",
+      "version_conflict": "The record has changed. Refresh and review before editing again.",
+      "not_found": "The record no longer exists. Refresh the list.",
+      "reference_in_use": "A connection references this item. Remove the reference first.",
+      "invalid_input": "Invalid or oversized input. Check the tag name (128 UTF-8 bytes), tag count and selected connections.",
+      "recovery_required": "Refresh and review the current state before making changes.",
+      "request_pending": "An operation is in progress. Wait for it to finish.",
+      "limit_exceeded": "The collection exceeds its limit. Reduce its size before refreshing."
+    },
+    "partialCreation": "Created {count} tags; later creations did not finish. Refresh and review before submitting the group again."
   }
 }

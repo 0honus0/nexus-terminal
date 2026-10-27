@@ -3,7 +3,8 @@
     "closeTrend": "トレンドグラフを閉じる",
     "title": "サーバー状態",
     "errorPrefix": "エラー:",
-    "loading": "データを待機中...",
+    "loading": "状態を取得中…",
+    "connecting": "接続中…",
     "cpuModelLabel": "CPU モデル:",
     "osLabel": "OS:",
     "cpuLabel": "CPU:",
@@ -45,7 +46,23 @@
     "online": "オンライン",
     "networkInterfaceFallback": "ネットワークインターフェース",
     "historyRange": "履歴範囲",
+    "copyIp": "IP をコピー",
     "copyIpError": "IP アドレスのコピーに失敗しました",
-    "load": "負荷"
+    "load": "負荷",
+    "failures": {
+      "invalid_input": "リクエストが無効です。",
+      "unauthenticated": "再度ログインしてください。",
+      "forbidden": "管理者権限が必要です。",
+      "not_found": "リソースが存在しません。",
+      "conflict": "状態が変化しました。最新の状態を確認してください。",
+      "limit_exceeded": "監視の容量上限に達しました。",
+      "host_key_untrusted": "先にホストキーを確認してください。",
+      "operation_unknown": "コマンドの結果は不明です。繰り返さず、リモートの状態を確認してください。",
+      "remote_unavailable": "リモートの監視を利用できません。",
+      "command_failed": "リモートコマンドが失敗しました。",
+      "stale_target": "接続先の設定が変化しました。再接続してください。",
+      "not_text": "返された内容はテキストではありません。",
+      "protocol_failure": "応答を検証できません。先にリモートの状態を確認してください。"
+    }
   }
 }

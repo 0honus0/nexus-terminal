@@ -1,13 +1,17 @@
 export const loadQuickCommandsPanel = () => import('./components/QuickCommandsPanel.vue');
+
 export { useQuickCommands } from './composables/useQuickCommands';
-export type { QuickCommandsController } from './composables/useQuickCommands';
+
+export type { QuickCommandsController } from './model/quick-command-types';
+
 export type {
-  ExecuteCommandIntent,
-  QuickCommandExpansion,
-  QuickCommandDto,
-  QuickCommandGroup,
-  QuickCommandFormInput,
-  QuickCommandSort,
-  QuickCommandTagDto,
-} from './model/quickCommand';
-export { expandQuickCommand } from './model/quickCommand';
+	ExecuteCommandIntent,
+	QuickCommandExpansion,
+	QuickCommandSummary,
+	QuickCommandGroup,
+	QuickCommandFormInput,
+	QuickCommandSort,
+	QuickCommandTagSummary,
+} from './model/quick-command-types';
+
+export { expandQuickCommand } from './model/quick-command-expansion';

@@ -1,30 +1,81 @@
 export { default as UiOverlayPanel } from './UiOverlayPanel.vue';
+
 export { overlayStack } from './overlayStack';
+
 export type { OverlayStackRegistration } from './overlayStack';
+
 export { default as UiTokenInput } from './UiTokenInput.vue';
+
 export type { UiTokenOption } from './UiTokenInput.vue';
+
 export { default as UiBadge } from './UiBadge.vue';
+
 export { default as UiButton } from './UiButton.vue';
+
 export { default as UiActionGroup } from './UiActionGroup.vue';
+
 export { default as UiScrollArea } from './UiScrollArea.vue';
+
 export { default as UiConfirmationPanel } from './UiConfirmationPanel.vue';
+
 export { default as UiCheckbox } from './UiCheckbox.vue';
+
 export { default as UiContextMenu } from './UiContextMenu.vue';
+
+export { default as UiContextMenuItem } from './UiContextMenuItem.vue';
+
 export { default as UiDialog } from './UiDialog.vue';
+
 export { default as UiEmptyState } from './UiEmptyState.vue';
+
 export { default as UiFormField } from './UiFormField.vue';
+
+export { default as UiFormActions } from './UiFormActions.vue';
+
 export { default as UiInfoHint } from './UiInfoHint.vue';
+
+export { default as UiInlineNotice } from './UiInlineNotice.vue';
+
 export { default as UiTooltip } from './UiTooltip.vue';
+
 export { default as UiInput } from './UiInput.vue';
+
+export { default as UiListToolbar } from './UiListToolbar.vue';
+
+export { default as UiLoadingState } from './UiLoadingState.vue';
+
+export { default as UiInlineLoading } from './UiInlineLoading.vue';
+
 export { default as UiModal } from './UiModal.vue';
+
 export { default as UiManagementCard } from './UiManagementCard.vue';
+
+export { default as UiNumberInput } from './UiNumberInput.vue';
+
+export { default as UiPagination } from './UiPagination.vue';
+
 export { default as UiPopover } from './UiPopover.vue';
+
 export { default as UiResizeHandle } from './UiResizeHandle.vue';
+
+export { default as UiSearchInput } from './UiSearchInput.vue';
+
 export { default as UiSelect } from './UiSelect.vue';
+
+export { default as UiSegmentedControl } from './UiSegmentedControl.vue';
+
+export { default as UiSettingsGroup } from './UiSettingsGroup.vue';
+
 export { default as UiSlider } from './UiSlider.vue';
+
 export { default as UiSpinner } from './UiSpinner.vue';
+
 export { default as UiSurface } from './UiSurface.vue';
+
 export { default as UiSwitch } from './UiSwitch.vue';
+
 export { default as UiTable } from './UiTable.vue';
+
 export { default as UiTextarea } from './UiTextarea.vue';
+
 export type { UiAppearance, UiDensity, UiSelectOption, UiSelectValue, UiSurfaceKind, UiTone } from './uiTypes';

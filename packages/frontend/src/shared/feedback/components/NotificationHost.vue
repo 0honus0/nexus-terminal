@@ -1,53 +1,86 @@
 <script setup lang="ts">
-  import { storeToRefs } from 'pinia';
-  import { useI18n } from 'vue-i18n';
-  import { useNotificationStore } from '../store/notification.store';
+	import { storeToRefs } from 'pinia';
+	import { useI18n } from 'vue-i18n';
+	import { UiButton } from '@/foundation/ui';
+	import type { NotificationKind, UiNotification } from '../model';
+	import { useNotificationStore } from '../store/notification.store';
 
-  const { t } = useI18n();
-  const store = useNotificationStore();
-  const { notifications } = storeToRefs(store);
+	const { t } = useI18n();
+	const store = useNotificationStore();
+	const { notifications } = storeToRefs(store);
 
-  const iconClass = (kind: string): string => {
-    if (kind === 'success') return 'fas fa-check-circle';
-    if (kind === 'error') return 'fas fa-times-circle';
-    if (kind === 'warning') return 'fas fa-exclamation-triangle';
-    return 'fas fa-info-circle';
-  };
+	const titleFor = (kind: NotificationKind): string => t(`feedback.toast.${kind}Title`);
+
+	const actionTone = (kind: NotificationKind): 'primary' | 'success' | 'warning' | 'danger' => {
+		if (kind === 'success') return 'success';
+		if (kind === 'warning') return 'warning';
+		if (kind === 'error') return 'danger';
+		return 'primary';
+	};
+
+	const confirm = (notification: UiNotification): void => {
+		if (notification.action) {
+			notification.action.onClick();
+			store.remove(notification.id);
+			return;
+		}
+		store.remove(notification.id);
+	};
 </script>
 
 <template>
-  <div class="fixed right-4 top-4 z-[1100] flex flex-col items-end" aria-live="polite">
-    <TransitionGroup
-      tag="div"
-      enter-active-class="transition duration-500 ease-out"
-      enter-from-class="translate-x-8 opacity-0"
-      enter-to-class="translate-x-0 opacity-95"
-      leave-active-class="transition duration-500 ease-in"
-      leave-from-class="translate-x-0 opacity-95"
-      leave-to-class="translate-x-8 opacity-0"
-    >
-      <div
-        v-for="notification in notifications"
-        :key="notification.id"
-        class="mb-2 flex min-w-[250px] max-w-[400px] items-center rounded p-3 text-white opacity-95 shadow-md"
-        :class="{
-          'bg-green-600': notification.kind === 'success',
-          'bg-red-600': notification.kind === 'error',
-          'bg-blue-600': notification.kind === 'info',
-          'bg-yellow-500 text-gray-800': notification.kind === 'warning',
-        }"
-      >
-        <i :class="[iconClass(notification.kind), 'relative top-px mr-3 text-lg !text-white']" aria-hidden="true" />
-        <span class="flex-grow break-words text-sm">{{ notification.message }}</span>
-        <button
-          type="button"
-          class="ml-4 border-none bg-transparent p-1 text-lg leading-none opacity-70 hover:opacity-100"
-          @click="store.remove(notification.id)"
-        >
-          <span aria-hidden="true">&times;</span>
-          <span class="sr-only">{{ t('feedback.close') }}</span>
-        </button>
-      </div>
-    </TransitionGroup>
-  </div>
+	<div
+		class="ui-notification-host pointer-events-none fixed inset-x-5 z-[1100] flex flex-col items-stretch sm:left-auto sm:right-4 sm:w-[288px]"
+		aria-live="polite"
+	>
+		<TransitionGroup
+			tag="div"
+			enter-active-class="transition duration-200 ease-out motion-reduce:transition-none"
+			enter-from-class="translate-x-2 opacity-0"
+			enter-to-class="translate-x-0 opacity-100"
+			leave-active-class="transition duration-200 ease-in motion-reduce:transition-none"
+			leave-from-class="translate-x-0 opacity-100"
+			leave-to-class="translate-x-2 opacity-0"
+			class="flex w-full flex-col items-stretch"
+		>
+			<div
+				v-for="notification in notifications"
+				:key="notification.id"
+				:role="notification.kind === 'error' ? 'alert' : undefined"
+				data-ui-gen="2"
+				class="ui-notification pointer-events-auto mb-2"
+				:data-kind="notification.kind"
+			>
+				<div class="ui-notification__header">
+					<strong class="ui-notification__title">{{ titleFor(notification.kind) }}</strong>
+					<UiButton
+						type="button"
+						appearance="ghost"
+						density="compact"
+						icon-only
+						class="ui-notification__close"
+						:aria-label="t('feedback.close')"
+						:title="t('feedback.close')"
+						@click="store.remove(notification.id)"
+					>
+						<i class="fas fa-xmark" aria-hidden="true"></i>
+					</UiButton>
+				</div>
+				<p class="ui-notification__message">{{ notification.message }}</p>
+				<div class="ui-notification__action-row">
+					<UiButton
+						type="button"
+						appearance="soft"
+						:tone="actionTone(notification.kind)"
+						density="compact"
+						class="ui-notification__action"
+						:disabled="notification.action?.disabled() ?? false"
+						@click="confirm(notification)"
+					>
+						{{ notification.action?.label ?? t('feedback.toast.acknowledge') }}
+					</UiButton>
+				</div>
+			</div>
+		</TransitionGroup>
+	</div>
 </template>

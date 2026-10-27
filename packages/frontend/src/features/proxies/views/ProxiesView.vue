@@ -1,131 +1,208 @@
 <script setup lang="ts">
-  import { onMounted, ref } from 'vue';
-  import { useI18n } from 'vue-i18n';
-  import { UiButton, UiEmptyState, UiManagementCard, UiModal } from '@/foundation/ui';
-  import { useFeedback } from '@/shared/feedback/public';
-  import ProxyForm from '../components/ProxyForm.vue';
-  import { useProxies } from '../composables/useProxies';
-  import type { ProxyDto, ProxyCreateRequestDto } from '../model/proxy';
-  const { t } = useI18n();
-  const data = useProxies();
-  const feedback = useFeedback();
-  const modal = ref(false);
-  const editing = ref<ProxyDto | null>(null);
-  const loading = ref(false);
-  const loadError = ref('');
-  const initialLoading = ref(true);
-  onMounted(async () => {
-    initialLoading.value = true;
-    loadError.value = '';
-    try {
-      await data.load();
-    } catch (cause) {
-      loadError.value = cause instanceof Error ? cause.message : String(cause);
-    } finally {
-      initialLoading.value = false;
-    }
-  });
-  const openAdd = () => {
-    editing.value = null;
-    modal.value = true;
-  };
-  const save = async (input: Partial<ProxyCreateRequestDto>) => {
-    loading.value = true;
-    try {
-      if (editing.value) await data.update(editing.value.id, input);
-      else await data.create(input as ProxyCreateRequestDto);
-      modal.value = false;
-    } catch (cause) {
-      feedback.notifyError(
-        t(editing.value ? 'proxies.form.errorUpdate' : 'proxies.form.errorAdd', {
-          error: cause instanceof Error ? cause.message : String(cause),
-        }),
-      );
-    } finally {
-      loading.value = false;
-    }
-  };
-  const remove = async (p: ProxyDto) => {
-    if (!(await feedback.confirm({ message: t('proxies.prompts.confirmDelete', { name: p.name }), destructive: true })))
-      return;
-    try {
-      await data.remove(p.id);
-    } catch (cause) {
-      feedback.notifyError(
-        t('proxies.errors.deleteFailed', { error: cause instanceof Error ? cause.message : String(cause) }),
-      );
-    }
-  };
+	import { computed, ref } from 'vue';
+	import { useI18n } from 'vue-i18n';
+	import { UiBadge, UiButton, UiEmptyState, UiLoadingState, UiModal, UiSearchInput, UiSelect } from '@/foundation/ui';
+	import ProxyForm from '../components/ProxyForm.vue';
+	import { useProxyManagement } from '../composables/use-proxy-management';
+
+	const { t } = useI18n();
+	const { data, modal, editing, loading, refresh, open, save, remove } = useProxyManagement();
+	const search = ref('');
+	const typeFilter = ref<'all' | 'SOCKS5' | 'HTTP'>('all');
+
+	const filtered = computed(() => {
+		const query = search.value.trim().toLowerCase();
+		return data.proxies.value.filter((proxy) => {
+			if (typeFilter.value !== 'all' && proxy.type !== typeFilter.value) return false;
+			if (!query) return true;
+			return `${proxy.name} ${proxy.type} ${proxy.host} ${proxy.port} ${proxy.username ?? ''}`
+				.toLowerCase()
+				.includes(query);
+		});
+	});
+
+	const summary = computed(() => {
+		const proxies = data.proxies.value;
+		return [
+			{
+				key: 'total',
+				label: t('proxies.summary.total'),
+				value: proxies.length,
+				icon: 'fa-solid fa-network-wired',
+				tone: 'primary',
+			},
+			{
+				key: 'socks5',
+				label: 'SOCKS5',
+				value: proxies.filter((proxy) => proxy.type === 'SOCKS5').length,
+				icon: 'fa-solid fa-shuffle',
+				tone: 'accent',
+			},
+			{
+				key: 'http',
+				label: 'HTTP',
+				value: proxies.filter((proxy) => proxy.type === 'HTTP').length,
+				icon: 'fa-solid fa-globe',
+				tone: 'info',
+			},
+		];
+	});
 </script>
+
 <template>
-  <div class="p-4 text-foreground">
-    <div class="mx-auto max-w-6xl">
-      <h2 class="mb-4 border-b border-border pb-2 text-xl font-semibold text-foreground">{{ t('proxies.title') }}</h2>
-      <UiButton v-if="!modal" type="button" appearance="solid" class="mb-4" @click="openAdd">
-        {{ t('proxies.addProxy') }}
-      </UiButton>
+	<main class="ui-catalog-page">
+		<div class="ui-catalog-shell">
+			<h1 class="ui-catalog-title">{{ t('proxies.title') }}</h1>
 
-      <div class="mt-4">
-        <div
-          v-if="initialLoading && data.proxies.value.length === 0"
-          class="ui-solid-inset mb-4 rounded-lg p-4 text-center text-text-secondary italic"
-        >
-          {{ t('proxies.loading') }}
-        </div>
-        <div v-else-if="loadError" class="mb-4 rounded border-l-4 border-error bg-error/10 p-4 text-error">
-          {{ t('proxies.error', { error: loadError }) }}
-        </div>
-        <UiEmptyState
-          v-else-if="data.proxies.value.length === 0"
-          class="mb-4"
-          icon="fa-solid fa-network-wired"
-          :description="t('proxies.noProxies')"
-        />
-        <div v-else class="mt-4 grid gap-4">
-          <UiManagementCard v-for="proxy in data.proxies.value" :key="proxy.id">
-            <div class="min-w-0 flex-grow space-y-1">
-              <div class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">
-                <strong class="min-w-0 break-words text-base font-semibold text-foreground">{{ proxy.name }}</strong>
-                <span
-                  class="rounded-full border border-border/60 bg-card/20 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-text-secondary"
-                  >{{ proxy.type }}</span
-                >
-              </div>
-              <div class="break-all text-sm text-text-secondary sm:break-normal">
-                <i class="fas fa-server mr-1 text-xs opacity-70" aria-hidden="true" /> {{ proxy.host }}:{{ proxy.port }}
-              </div>
-              <div v-if="proxy.username" class="break-all text-sm text-text-secondary sm:break-normal">
-                <i class="fas fa-user mr-1 text-xs opacity-70" aria-hidden="true" /> {{ proxy.username }}
-              </div>
-            </div>
-            <template #actions>
-              <UiButton
-                type="button"
-                appearance="soft"
-                @click="
-                  editing = proxy;
-                  modal = true;
-                "
-              >
-                <i class="fas fa-pencil-alt mr-1 text-xs" aria-hidden="true" />{{ t('proxies.actions.edit') }}
-              </UiButton>
-              <UiButton type="button" appearance="ghost" tone="danger" @click="remove(proxy)">
-                <i class="fas fa-trash-alt mr-1 text-xs" aria-hidden="true" />{{ t('proxies.actions.delete') }}
-              </UiButton>
-            </template>
-          </UiManagementCard>
-        </div>
-      </div>
+			<div class="ui-catalog-actions">
+				<UiButton
+					type="button"
+					appearance="solid"
+					tone="primary"
+					:disabled="loading || data.busy.value || data.needsRefresh.value || Boolean(modal)"
+					@click="open()"
+				>
+					<i class="fas fa-plus" aria-hidden="true"></i>
+					{{ t('proxies.addProxy') }}
+				</UiButton>
+			</div>
 
-      <UiModal
-        :visible="modal"
-        :close-on-backdrop="false"
-        panel-class="ui-form-surface w-[calc(100vw-2rem)] max-w-lg sm:min-w-[350px]"
-        content-class="!py-0"
-        @close="modal = false"
-      >
-        <ProxyForm :proxy="editing" :loading="loading" @submit="save" @cancel="modal = false" />
-      </UiModal>
-    </div>
-  </div>
+			<div
+				class="ui-catalog-summary ui-catalog-summary--three"
+				role="group"
+				:aria-label="t('proxies.summary.label')"
+			>
+				<div v-for="item in summary" :key="item.key" class="ui-catalog-stat" :data-tone="item.tone">
+					<span class="ui-catalog-stat__icon" aria-hidden="true"><i :class="item.icon"></i></span>
+					<span class="ui-catalog-stat__label">{{ item.label }}</span>
+					<strong class="ui-catalog-stat__value">{{ item.value }}</strong>
+				</div>
+			</div>
+
+			<section class="ui-catalog-panel" aria-labelledby="proxy-list-title">
+				<header class="ui-catalog-panel__head">
+					<div class="ui-catalog-panel__title">
+						<span class="ui-catalog-panel__mark" aria-hidden="true">
+							<i class="fas fa-route"></i>
+						</span>
+						<h2 id="proxy-list-title">
+							{{ t('proxies.listTitle') }}
+							<span class="ui-catalog-panel__count">{{ filtered.length }}</span>
+						</h2>
+					</div>
+				</header>
+
+				<div class="ui-catalog-toolbar ui-catalog-toolbar--proxy">
+					<UiSearchInput
+						v-model="search"
+						density="comfortable"
+						:placeholder="t('proxies.searchPlaceholder')"
+						:aria-label="t('common.search')"
+						:clear-label="t('common.clear')"
+					/>
+					<UiSelect
+						v-model="typeFilter"
+						density="comfortable"
+						text-align="center"
+						:aria-label="t('proxies.filterType')"
+					>
+						<option value="all">{{ t('proxies.allTypes') }}</option>
+						<option value="SOCKS5">SOCKS5</option>
+						<option value="HTTP">HTTP</option>
+					</UiSelect>
+				</div>
+				<div v-if="data.needsRefresh.value" class="mb-3 flex justify-end">
+					<UiButton type="button" density="compact" :disabled="loading" @click="refresh">
+						{{ t('proxies.refresh') }}
+					</UiButton>
+				</div>
+
+				<UiLoadingState
+					v-if="loading && data.proxies.value.length === 0"
+					class="min-h-[240px]"
+					:bordered="false"
+					:title="t('proxies.loading')"
+				/>
+				<UiEmptyState
+					v-else-if="filtered.length === 0"
+					class="min-h-[240px]"
+					:bordered="false"
+					:icon="search || typeFilter !== 'all' ? 'fas fa-magnifying-glass' : 'fas fa-route'"
+					:title="data.proxies.value.length === 0 ? t('proxies.noProxies') : t('proxies.noMatches')"
+				/>
+				<ul v-else class="ui-catalog-list">
+					<li v-for="proxy in filtered" :key="proxy.id">
+						<article class="ui-catalog-card">
+							<span
+								class="ui-catalog-card__icon"
+								:data-tone="proxy.type === 'HTTP' ? 'info' : 'accent'"
+								aria-hidden="true"
+							>
+								<i :class="proxy.type === 'HTTP' ? 'fas fa-globe' : 'fas fa-shuffle'"></i>
+							</span>
+							<div class="ui-catalog-card__content">
+								<div class="ui-catalog-card__heading">
+									<strong class="ui-catalog-card__name">{{ proxy.name }}</strong>
+									<UiBadge appearance="ghost" density="compact">{{ proxy.type }}</UiBadge>
+									<UiBadge v-if="proxy.username" tone="primary" appearance="ghost" density="compact">
+										{{ t('proxies.authenticated') }}
+									</UiBadge>
+								</div>
+								<code class="ui-catalog-card__address">{{ proxy.host }}:{{ proxy.port }}</code>
+								<div class="ui-catalog-card__meta">
+									<span class="ui-catalog-card__meta-item">
+										<i class="fas fa-user" aria-hidden="true"></i>
+										{{ proxy.username || t('proxies.noAuthentication') }}
+									</span>
+								</div>
+							</div>
+							<div class="ui-catalog-card__actions">
+								<UiButton
+									type="button"
+									appearance="soft"
+									icon-only
+									density="comfortable"
+									class="ui-catalog-card__action"
+									:disabled="loading || data.busy.value || data.needsRefresh.value"
+									:aria-label="t('proxies.actions.edit')"
+									:title="t('proxies.actions.edit')"
+									@click="open(proxy)"
+								>
+									<i class="fas fa-pen" aria-hidden="true"></i>
+									<span class="ui-catalog-card__action-label">{{ t('proxies.actions.edit') }}</span>
+								</UiButton>
+								<UiButton
+									type="button"
+									appearance="soft"
+									tone="danger"
+									icon-only
+									density="comfortable"
+									class="ui-catalog-card__action"
+									:disabled="loading || data.busy.value || data.needsRefresh.value"
+									:aria-label="t('proxies.actions.delete')"
+									:title="t('proxies.actions.delete')"
+									@click="remove(proxy)"
+								>
+									<i class="fas fa-trash-alt" aria-hidden="true"></i>
+									<span class="ui-catalog-card__action-label">{{ t('proxies.actions.delete') }}</span>
+								</UiButton>
+							</div>
+						</article>
+					</li>
+				</ul>
+			</section>
+
+			<UiModal
+				:visible="Boolean(modal)"
+				:z-index="150"
+				:close-on-backdrop="false"
+				panel-class="ui-form-surface !max-w-xl !p-4 sm:!p-6"
+				:panel-style="{ height: 'min(650px, calc(100dvh - 2rem))', maxHeight: 'calc(100dvh - 2rem)' }"
+				content-class="!flex !min-h-0 !flex-1 !flex-col !overflow-hidden !py-0"
+				@close="!loading && (modal = false)"
+			>
+				<ProxyForm v-if="modal" :proxy="editing" :loading="loading" @submit="save" @cancel="modal = false" />
+			</UiModal>
+		</div>
+	</main>
 </template>

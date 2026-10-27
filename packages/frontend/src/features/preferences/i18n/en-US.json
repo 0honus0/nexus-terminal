@@ -25,8 +25,11 @@
     "logging": {
       "title": "Log levels",
       "frontendLabel": "Frontend log level:",
+      "frontendTitle": "Frontend log level",
       "backendLabel": "Backend log level:",
-      "description": "Controls diagnostic and performance logging. DEBUG/TRACE emit more runtime detail; performance samples are emitted only at DEBUG or TRACE. Changes take effect immediately."
+      "backendTitle": "Backend log level",
+      "description": "Controls diagnostic and performance logging. DEBUG/TRACE emit more runtime detail; performance samples are emitted only at DEBUG or TRACE. Changes take effect immediately.",
+      "effective": "Effective level: {level}"
     },
     "popupEditor": {
       "title": "Popup File Editor",
@@ -55,7 +58,7 @@
     "language": {
       "title": "Language Settings",
       "selectLabel": "Interface Language:",
-      "saveButton": "Save Language",
+      "saveButton": "Save",
       "success": {
         "saved": "Language settings saved successfully."
       },
@@ -113,6 +116,13 @@
       "showQuickCommandTagsTitle": "Show Quick Command Tags",
       "showQuickCommandTagsLabel": "Show tags in quick command list",
       "showQuickCommandTagsDescription": "Disable to hide tags in the quick command list and exclude them from search.",
+      "workspaceTabButtons": {
+        "title": "Terminal top-right actions",
+        "suspendedSessions": "Suspended sessions",
+        "headerToggle": "Header visibility",
+        "progress": "Transfer progress",
+        "layoutConfigurator": "Layout settings"
+      },
       "quickCommandsCollapsibleSearchTitle": "Quick Command Search",
       "quickCommandsCollapsibleSearchLabel": "Collapse the search box into a search button by default",
       "quickCommandsCollapsibleSearchDescription": "Disabled by default. When enabled, the Quick Commands panel shows a search button until you click it to expand the search box.",
@@ -152,9 +162,7 @@
         "commands": "Terminal & commands",
         "commandsHint": "Terminal interaction, command panels, tags, and display density.",
         "monitoring": "Dashboard & monitoring",
-        "monitoringHint": "Local/remote resource cards, refresh intervals, status monitor, and Docker.",
-        "advanced": "Layout & advanced",
-        "advancedHint": "Low-frequency workspace layout controls."
+        "monitoringHint": "Local/remote resource cards, refresh intervals, status monitor, and Docker."
       }
     },
     "statusMonitorShowIp": {
@@ -206,6 +214,32 @@
       "loadFailed": "Failed to load preferences: {error}",
       "saved": "Preferences saved.",
       "saveFailed": "Failed to save preferences: {error}"
+    },
+    "monitoring": {
+      "title": "Core monitoring settings",
+      "hint": "Administrators only. Intervals are 1–86400 seconds and apply on save; active samples finish before using the new interval. Display toggles do not control remote sampling.",
+      "effective": "Effective: sample interval {status}s · host cache TTL / overview refresh {host}s",
+      "status": "Sampling interval (seconds)",
+      "host": "Host cache TTL / overview refresh (seconds)",
+      "secondsUnit": "s",
+      "refresh": "Reload and review without writing",
+      "feedback": {
+        "saved": "Saved and applied.",
+        "conflict": "Configuration version conflict. Reload and review before saving again.",
+        "unknown": "Result unconfirmed. Reload and review without repeating the write.",
+        "invalid_input": "Enter integer intervals within the allowed range.",
+        "unauthenticated": "Session expired. Sign in again.",
+        "forbidden": "Only administrators can view or change core settings.",
+        "version_conflict": "Configuration version conflict. Reload to review.",
+        "limit_exceeded": "Configuration capacity exceeded.",
+        "storage_unavailable": "Storage is unavailable. Reload to review.",
+        "operation_unknown": "The save result is unknown. Reload to review.",
+        "internal_failure": "Configuration service failed. Reload to review.",
+        "unavailable": "Configuration is temporarily unavailable. Reload to retry.",
+        "request_failed": "Reading failed. Reload to retry.",
+        "protocol_failure": "Invalid response. Reload to retry.",
+        "cancelled": "Request cancelled. Reload to retry."
+      }
     }
   }
 }

@@ -1,9 +1,18 @@
 {
   "fileManager": {
+    "directoryPicker": {
+      "title": "Select destination directory",
+      "select": "Use this directory",
+      "root": "Root directory",
+      "empty": "No subdirectories to browse",
+      "unavailable": "Directory contents not loaded. Refresh or return to root to retry. A confirmed directory can still be selected.",
+      "notDirectory": "The selected location is not a directory."
+    },
     "modalTitle": "File Manager",
     "resizePopup": "Resize file manager window",
     "currentPath": "Current Path",
     "loading": "Loading directory...",
+    "connecting": "Connecting…",
     "emptyDirectory": "Directory is empty",
     "uploadTasks": "Upload Tasks",
     "uploadSpeed": "Total speed",
@@ -139,6 +148,10 @@
       "modified": "Modified",
       "time": "Time"
     },
+    "sort": {
+      "ascending": "Ascending",
+      "descending": "Descending"
+    },
     "uploadStatus": {
       "cancelled": "Cancelled",
       "conflict": "Waiting for conflict choice",
@@ -195,7 +208,23 @@
       "commandNotFoundCompress": "Command '{command}' not found on server, cannot complete compression.",
       "commandNotFoundDecompress": "Command '{command}' not found on server, cannot complete decompression.",
       "genericCommandNotFound": "Command '{command}' not found on server, cannot complete '{operation}' operation.",
-      "copyPathFailed": "Failed to copy path"
+      "copyPathFailed": "Failed to copy path",
+      "terminalPathChangeUnknown": "The directory change result is unknown. Read the current directory before trying again.",
+      "operationUnknown": "The operation may have changed remote files. Refresh and check the actual paths before trying again.",
+      "notConnected": "The file session is not ready. Reconnect before operating on files.",
+      "invalidResponse": "The file response could not be verified. Refresh to read the current state.",
+      "capacityExceeded": "The file, directory, or request exceeds its capacity. Read a smaller scope or split the operation.",
+      "requestRejected": "The file operation was rejected. Check access and the current file state.",
+      "notFound": "The file or active file session was not found. Refresh the directory; if this persists, reconnect the SSH session.",
+      "permissionDenied": "Access to this path was denied. Check remote file and directory permissions.",
+      "sessionExpired": "Your login session has expired. Sign in again.",
+      "fileConflict": "The file changed or the destination already exists. Refresh and check before continuing.",
+      "targetChanged": "The connection configuration changed. Reconnect the SSH session.",
+      "hostKeyUntrusted": "The remote host key needs confirmation. Reconnect and verify the host key.",
+      "remoteUnavailable": "The remote file service is unavailable or the read timed out. Retry reading; if this persists, reconnect the SSH session.",
+      "invalidInput": "The file path, content, or operation parameters are invalid. Check them and try again.",
+      "notText": "This file cannot be read as text.",
+      "commandFailed": "The remote file command failed. Check directory permissions and required commands."
     },
     "notifications": {
       "terminalPathQueued": "A foreground command is running. The directory change is safely queued until the shell prompt returns.",
@@ -211,7 +240,8 @@
     },
     "warnings": {
       "moveSameDirectory": "Cannot cut and paste in the same directory.",
-      "crossHostDeleteFailed": "The target copy succeeded, but deleting the source files failed: {error}"
+      "crossHostDeleteFailed": "The target copy succeeded, but deleting the source files failed: {error}",
+      "transferRefreshFailed": "The file operation completed, but refreshing the directory failed. Refresh to check the result without repeating the operation."
     },
     "prompts": {
       "enterFolderName": "Enter the name for the new folder:",

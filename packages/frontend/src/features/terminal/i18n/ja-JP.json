@@ -1,5 +1,9 @@
 {
   "terminal": {
+    "connectionFailed": "接続に失敗しました：{reason}",
+    "connectionClosed": "接続が切断されました",
+    "retryConnection": "任意のキーを押して再接続…",
+    "retryConnectionTouch": "ターミナルをタップするか、任意のキーを押して再接続…",
     "inputRejected": "接続が利用できない、入力が大きすぎる、または送信バッファが満杯のため、端末入力を送信できませんでした。拒否された入力は自動再送されません。",
     "search": {
       "open": "ターミナルを検索",

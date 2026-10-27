@@ -25,8 +25,11 @@
     "logging": {
       "title": "日志等级",
       "frontendLabel": "前端日志等级:",
+      "frontendTitle": "前端日志等级",
       "backendLabel": "后端日志等级:",
-      "description": "用于排查和性能调试。DEBUG/TRACE 会输出更详细的运行信息；性能统计仅在 DEBUG 或 TRACE 时输出。修改后立即生效。"
+      "backendTitle": "后端日志等级",
+      "description": "用于排查和性能调试。DEBUG/TRACE 会输出更详细的运行信息；性能统计仅在 DEBUG 或 TRACE 时输出。修改后立即生效。",
+      "effective": "当前生效级别：{level}"
     },
     "popupEditor": {
       "title": "弹窗文件编辑器",
@@ -55,7 +58,7 @@
     "language": {
       "title": "语言设置",
       "selectLabel": "界面语言:",
-      "saveButton": "保存语言",
+      "saveButton": "保存",
       "success": {
         "saved": "语言设置已成功保存。"
       },
@@ -113,6 +116,13 @@
       "showQuickCommandTagsTitle": "显示快捷指令标签",
       "showQuickCommandTagsLabel": "在快捷指令列表中显示标签",
       "showQuickCommandTagsDescription": "关闭后将隐藏快捷指令列表中的标签，并从搜索中排除标签。",
+      "workspaceTabButtons": {
+        "title": "终端右上角按钮",
+        "suspendedSessions": "挂起会话",
+        "headerToggle": "顶栏显隐",
+        "progress": "进度传输",
+        "layoutConfigurator": "配置布局"
+      },
       "quickCommandsCollapsibleSearchTitle": "快捷指令搜索框",
       "quickCommandsCollapsibleSearchLabel": "默认将搜索框折叠为搜索按钮",
       "quickCommandsCollapsibleSearchDescription": "默认关闭。开启后快捷指令面板只显示搜索按钮，点击后再展开搜索框。",
@@ -152,9 +162,7 @@
         "commands": "终端与指令",
         "commandsHint": "终端交互、指令面板、标签和显示密度。",
         "monitoring": "首页与监控",
-        "monitoringHint": "本机/远程资源、刷新间隔、状态监控和 Docker。",
-        "advanced": "布局与高级设置",
-        "advancedHint": "低频使用的工作区布局控制，默认收起。"
+        "monitoringHint": "本机/远程资源、刷新间隔、状态监控和 Docker。"
       }
     },
     "statusMonitorShowIp": {
@@ -206,6 +214,32 @@
       "loadFailed": "加载偏好设置失败：{error}",
       "saved": "偏好设置已保存。",
       "saveFailed": "保存偏好设置失败：{error}"
+    },
+    "monitoring": {
+      "title": "监控核心配置",
+      "hint": "仅管理员可修改。周期为1–86400秒，保存即生效；在途采样结束后使用新间隔。显示开关不改变远端采样。",
+      "effective": "当前生效：采样间隔 {status} 秒 · 主机缓存 TTL / 概览刷新 {host} 秒",
+      "status": "监控采样间隔（秒）",
+      "host": "主机缓存 TTL / 概览刷新（秒）",
+      "secondsUnit": "秒",
+      "refresh": "只读重新加载并核对",
+      "feedback": {
+        "saved": "已保存并生效。",
+        "conflict": "配置版本冲突。请先只读重新加载，核对后再保存。",
+        "unknown": "结果未确认。先只读重新加载并核对，不要重复保存。",
+        "invalid_input": "请输入范围内的整数周期。",
+        "unauthenticated": "会话已失效，请重新登录。",
+        "forbidden": "只有管理员可以查看或修改核心配置。",
+        "version_conflict": "配置版本冲突，请先只读核对。",
+        "limit_exceeded": "配置超出容量限制。",
+        "storage_unavailable": "存储不可用，请先只读核对。",
+        "operation_unknown": "保存结果未知，请先只读核对。",
+        "internal_failure": "配置服务异常，请先只读核对。",
+        "unavailable": "配置服务暂时不可用，请重新加载。",
+        "request_failed": "读取失败，请重新加载。",
+        "protocol_failure": "响应无效，请重新加载。",
+        "cancelled": "请求已取消，请重新加载。"
+      }
     }
   }
 }

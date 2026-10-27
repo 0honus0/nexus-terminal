@@ -31,6 +31,7 @@
       "removeConfirm": "确定要移除 {name} 吗？"
     },
     "waitingForSsh": "等待 SSH 连接...",
+    "moreActions": "更多操作",
     "stats": {
       "noData": "无可用状态数据。",
       "cpu": "CPU 使用率",
@@ -38,6 +39,22 @@
       "netIO": "网络 I/O",
       "blockIO": "磁盘 I/O",
       "pids": "进程数"
-    }
+    },
+    "failures": {
+      "invalid_input": "请求无效。",
+      "unauthenticated": "请重新登录。",
+      "forbidden": "需要管理员权限。",
+      "not_found": "资源已不存在。",
+      "conflict": "状态已变化，请先读取最新状态。",
+      "limit_exceeded": "观测容量已达上限。",
+      "host_key_untrusted": "请先确认主机密钥。",
+      "operation_unknown": "命令结果未知，请勿重复操作，先核对远端状态。",
+      "remote_unavailable": "远端观测暂不可用。",
+      "command_failed": "远端命令执行失败。",
+      "stale_target": "目标配置已变化，请重新连接。",
+      "not_text": "返回内容不是文本。",
+      "protocol_failure": "响应无法验证，请先核对远端状态。"
+    },
+    "reconcile": "只读核对最新状态"
   }
 }

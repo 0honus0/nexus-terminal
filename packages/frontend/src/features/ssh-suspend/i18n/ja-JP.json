@@ -1,7 +1,7 @@
 {
   "suspendedSshSessions": {
     "modalTitle": "中断された SSH セッション",
-    "searchPlaceholder": "セッションを検索（名前、接続名など）",
+    "searchPlaceholder": "セッションを検索",
     "loading": "中断されたセッションを読み込み中...",
     "noResults": "条件に一致する中断セッションはありません。",
     "tooltip": {
@@ -28,7 +28,8 @@
   },
   "sshSuspend": {
     "prompts": {
-      "confirmTakeover": "セッション「{name}」は別のデバイスで使用中です。同じ SSH セッションを引き継ぎますか？現在の所有デバイスは切断されます。"
+      "confirmTakeover": "セッション「{name}」は別のデバイスで使用中です。同じ SSH セッションを引き継ぎますか？現在の所有デバイスは切断されます。",
+      "confirmRemove": "中断セッション「{name}」を削除しますか？使用中の端末は中断マークのみ解除し、接続を維持します。未使用のバックグラウンドセッションは終了します。"
     },
     "notifications": {
       "markedForSuspendInfo": "セッション {id} は中断マークが付けられました。タブを閉じるかアプリケーションを終了すると中断されます。",
@@ -42,6 +43,7 @@
       "terminatedSuccess": "中断されたセッション「{name}」は正常に終了しました。",
       "terminateError": "中断されたセッションの終了に失敗しました: {error}",
       "entryRemovedSuccess": "中断されたセッションエントリ「{name}」は正常に削除されました。",
+      "attachedEntryRemovedSuccess": "セッション「{name}」の中断マークを解除しました。使用中の端末は接続を維持します。",
       "entryRemovedError": "中断されたセッションエントリの削除に失敗しました: {error}",
       "nameEditedSuccess": "中断されたセッション名は「{name}」に更新されました。",
       "nameEditedError": "中断されたセッション名の編集に失敗しました: {error}",
@@ -55,6 +57,35 @@
       "autoTerminated": "中断されたセッション「{name}」は、理由: {reason} によりバックエンドによって自動終了されました。",
       "logExportSuccess": "Suspended session log {name} has started downloading.",
       "logExportError": "Failed to export suspended session log: {error}"
+    },
+    "errors": {
+      "invalid_input": "入力が無効です。",
+      "invalid_body": "リクエスト形式が無効です。",
+      "unauthenticated": "再ログインしてください。",
+      "forbidden": "操作権限がありません。",
+      "not_found": "セッションが見つかりません。最新状態を取得してください。",
+      "conflict": "状態が変わったか操作中です。最新状態を取得してください。",
+      "limit_exceeded": "容量制限に達しました。",
+      "operation_unknown": "操作結果は不明です。最新状態を取得して確認してから操作してください。自動再試行はしません。",
+      "remote_unavailable": "リモートサービスを利用できません。",
+      "request_timeout": "リクエストがタイムアウトしました。",
+      "request_failed": "リクエストに失敗しました。最新状態を取得してください。",
+      "read_failed": "中断セッションのデータを取得できません。更新するか、しばらくしてから再試行してください。",
+      "protocol_failure": "応答が無効です。最新状態を取得してください。",
+      "cancelled": "操作をキャンセルしました。",
+      "invalid_json": "リクエスト形式が無効です。",
+      "body_too_large": "容量制限に達しました。",
+      "unsupported_media_type": "リクエスト形式が無効です。",
+      "csrf_rejected": "操作権限がありません。",
+      "invalid_host": "操作権限がありません。",
+      "invalid_path": "入力が無効です。",
+      "internal_failure": "操作結果は不明です。最新状態を取得して確認してから操作してください。自動再試行はしません。"
+    },
+    "recover": "最新状態を取得して確認",
+    "reasons": {
+      "retention_expired": "保持期間が終了しました",
+      "takeover": "別のワークスペースが所有権を取得しました",
+      "lease_expired": "セッションの所有権リースが失効しました"
     }
   }
 }
