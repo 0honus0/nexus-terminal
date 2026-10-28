@@ -2235,3 +2235,5 @@ Monaco旧补丁无法直接应用于0.57，基于新原生文件重建原剪裁�
 最终`pnpm run check`、`pnpm run build`（双端）、`pnpm run format:all:check`、`pnpm install --frozen-lockfile`、`git diff --check`通过；`pnpm audit --json`各等级0漏洞，最终outdated仅剩jschardet。新版Playwright静态发现533例/134文件，runner-image-info正确读取1.64.1/11.28.9。证据`/tmp/nexus-deps-final-{check,build,format-check,frozen,audit,outdated,test-list,runner}.log/json`及`/tmp/nexus-deps-monaco-patch-check.log`（实际文件后缀各依其内容）。未启动测试环境，未执行本批浏览器/完整远程E2E，未发布；前批进度UI改动与个人截图保留。
 
 依赖升级首轮main fffd7b8e / 40612625396：质量、Docker及其它7分片通过；browser1新增隐藏入口断言失败，日志显示`Progress Display (0%) `直至`(100%) `均有末尾模板空白。Playwright toHaveText使用正则时不做字符串空白规范化，严格行尾断言误拒绝，随后上传结束入口消失。修正测试为toHaveAccessibleName，按按钮实际语义名称断言0–100整数百分比，保留原可见、拖动/记忆、恢复及取消的全部断言；不改模板或UI。此前库升级与产品显示没有对应失败证据，不回退依赖。
+
+main 98ceac0f 完整回归 [40614218253](https://github.com/0honus0/nexus-terminal/actions/runs/40614218253) 成功：533个Playwright用例全部首次通过，无失败或flaky，质量/格式及Docker smoke通过；原隐藏入口百分比/拖动/恢复/取消链路本轮通过。修改测试ESLint、严格tsc、Prettier和diff检查通过，源码两轮核对断言只过滤无语义模板空白且仍要求0–100百分比，没有改动产品UI。CI后继f481bab9仅更新耗时估计。证据 `/tmp/nexus-percent-assert-final-e2e.log`；本次未发布镜像或更新远程部署。
