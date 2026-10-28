@@ -2217,3 +2217,5 @@ CDP 复用 172.30.30.11:9223，在 api.honus.top 自建隔离页挂载正式 Sta
 新增收藏默认路径回归加入file-manager-navigation：初次新增等于当前浏览路径，仍可手改并保存；编辑保持已保存值；导航至收藏目录后再新增默认更新到该目录且名称重置，取消不写入。源码核对FileManager传入browser.path唯一事实，openAdd只在打开时赋值，编辑/保存/身份撤销不变；不增加请求、watch或UI样式。
 
 main 2c73f686 完整远程40608135532成功：质量/格式、Docker smoke及全部8分片首次通过，桌面映射和收藏定位修正已验收。新增默认路径独立完成两轮源码审核、pnpm run check及归档/文件管理专项严格TypeScript检查；因追加功能，发布等待包含该功能的新main SHA完整回归。
+
+最终交付：main 53671c68 的完整远程 [40608930071](https://github.com/0honus0/nexus-terminal/actions/runs/40608930071) 成功，533个Playwright用例全部通过（含独立Agent变体），质量/格式及Docker smoke通过，无flaky。包含新增收藏默认当前目录的实际新增/编辑/导航后重新新增断言。CI随后仅更新duration-estimates为dda619db，产品源码无变化；[40609690539](https://github.com/0honus0/nexus-terminal/actions/runs/40609690539) 成功发布linux/amd64，`ghcr.io/0honus0/nexus-terminal:dev`、`sha-dda619db127a`，digest `sha256:fef7ddd68111d99f83036de21139a7a5d05cf523e86c38a366e874224b8a7808`。未部署生产。收口检查本地前端/后端/SSH夹具进程均已退出，9998/3001/22222/22223/22224/22225无监听。个人截图增删未纳入提交。
