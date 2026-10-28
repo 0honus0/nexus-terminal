@@ -2257,3 +2257,7 @@ main 98ceac0f 完整回归 [40614218253](https://github.com/0honus0/nexus-termin
 本轮按用户补充授权将归档活动状态的“取消／取消中”与终态“移除”统一放到各任务标题最右侧；复制/移动/混合模式底部“取消”也移至对应标题右侧，删除旧底部操作容器。上传和批量取消原已在同排/窗头，保留原入口。第一轮源码审核逐一核对按钮条件、emit类型/ID、取消中文字及禁用；第二轮核对互斥分支、标题min-w-0/flex-1/truncate、按钮shrink-0、所有任务模式与底部容器无残余。不新增CSS、协议、状态或后端改动。
 
 本轮根check、前端build、全量format检查、git diff --check均通过，日志 `/tmp/nexus-progress-actions-{check,build,format-check}.log`。按D17本轮未运行浏览器或行为测试，不复用此前CDP或533项E2E作为本轮证据；待验为归档活动/取消中/完成、复制移动及混合列表、长文件名与280px窄窗的同排显示与原按钮功能。
+
+### 任务标题操作正式远程回归通过
+
+用户授权提交推送并等待E2E。main产品提交 `a726e6c3cc0df8cc5e3e05615e0490f1b15a4587`，正式 [40662321872](https://github.com/0honus0/nexus-terminal/actions/runs/40662321872) success：质量/格式、Docker deployment smoke、1个后端和7个浏览器分片全部成功，共533项首次通过，无flaky。各次测试报告通过数为64、64、40、1、1、1、124、57、64、48、69；完整日志 `/tmp/nexus-progress-actions-remote-e2e.log`。截图更新作业按默认输入跳过，不代表已进行截图专项验收；更多窄窗视觉仍待专项。CI随后仅更新duration estimates（`df36b6e2`），无产品代码变更。本轮不发布镜像、不更新生产环境，个人截图增删保持原样。
