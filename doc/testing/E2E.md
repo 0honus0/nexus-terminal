@@ -2213,3 +2213,7 @@ CDP 复用 172.30.30.11:9223，在 api.honus.top 自建隔离页挂载正式 Sta
 修正后 CDP `/tmp/nexus-release-remove-proof.log` 真实暴露空流的DELETE返回成功；`/tmp/nexus-release-204-boundaries.log` 验证null正文、未声明长度空流、声明0空流均成功，非空正文和非法长度保持protocol_failure。`pnpm run check`、`pnpm run format:all:check`、前端正式构建及两项回归严格TypeScript检查全部通过；补充修正沿HTTP读取/清理/错误分类及测试响应等待完成两轮源码审核。通用204修复恢复原删除行为，USAGE原传输任务说明仍符合实际。
 
 第二轮40549848325：HTTP204移除与缩放标题所在2、5分片通过。1分片普通31例通过后，独立Agent用例的桌面夹具启动因X_SetInputFocus BadMatch退出（0 tests）；Xterm标题建立时尚未映射，原search不检查可见，改为在原waitFor内search --onlyvisible、设置并核对焦点。4分片80例通过、1例flaky导致fail-on-flaky：收藏弹层缩小窗口后读取旧右界1153，原poll宽度320在resize前后恒成立；改为poll完整宽高/边界直到既有弹层异步碰撞定位完成，仍保留原8/952px和318–322宽度条件，不修改产品UI。不发布失败轮次。
+
+新增收藏默认路径回归加入file-manager-navigation：初次新增等于当前浏览路径，仍可手改并保存；编辑保持已保存值；导航至收藏目录后再新增默认更新到该目录且名称重置，取消不写入。源码核对FileManager传入browser.path唯一事实，openAdd只在打开时赋值，编辑/保存/身份撤销不变；不增加请求、watch或UI样式。
+
+main 2c73f686 完整远程40608135532成功：质量/格式、Docker smoke及全部8分片首次通过，桌面映射和收藏定位修正已验收。新增默认路径独立完成两轮源码审核、pnpm run check及归档/文件管理专项严格TypeScript检查；因追加功能，发布等待包含该功能的新main SHA完整回归。

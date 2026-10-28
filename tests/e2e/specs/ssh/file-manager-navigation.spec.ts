@@ -515,6 +515,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
 
 		const addDialog = page.getByRole('dialog', { name: 'Add New Favorite Path', exact: true });
 		await expect(addDialog).toBeVisible();
+		await expect(addDialog.locator('#favPath-path')).toHaveValue(await pathInput(page).inputValue());
 		await addDialog.locator('#favPath-name').fill(FAVORITE_NAME);
 		await addDialog.locator('#favPath-path').fill(FAVORITE_PATH);
 		await addDialog.getByRole('button', { name: 'Save', exact: true }).click();
@@ -563,6 +564,12 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
 		await expect(pathInput(page)).toHaveValue(FAVORITE_PATH, { timeout: 20_000 });
 
 		favorites = await openFavorites();
+		await favorites.getByRole('button', { name: 'Add new favorite path', exact: true }).click();
+		await expect(addDialog).toBeVisible();
+		await expect(addDialog.locator('#favPath-path')).toHaveValue(FAVORITE_PATH);
+		await expect(addDialog.locator('#favPath-name')).toHaveValue('');
+		await addDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+		await expect(addDialog).toBeHidden();
 		favoriteItem = favorites.getByRole('listitem').filter({ hasText: FAVORITE_NAME });
 		await favoriteItem.click({ button: 'right' });
 		favoriteContext = page.getByRole('menu');

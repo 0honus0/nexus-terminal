@@ -272,6 +272,7 @@ Workspace 在首个附件可以进行终端输入前，以同一次隐藏命令�
 ### 个人历史与收藏协议
 
 - 命令历史与路径历史保留原 `/api/v1/command-history`、`/api/v1/path-history` 的 GET/POST/DELETE 方法；仅当前用户可读写。POST分别为 `{command}` / `{path}`，按原值去重并更新时间；10,000命令/2,000路径同事务修剪，同秒保留本次记录；记录时间在实际写事务中生成，时钟回退不使本次记录被当成旧项裁剪。单条4 KiB、请求32 KiB；GET用offset/limit（默认100、最多100）返回entries/nextOffset，按时间/ID升序，完整响应4 MiB。新增返回id，删除返回deleted，清空返回count；不执行命令。分页不是跨请求快照，写入/清空后从首页刷新。生产者仍是前端HTTP，后端Workspace不自动记录。
+- 在文件管理器打开收藏并新增时，路径默认填入当前浏览目录，可继续编辑；取消后重新新增会重新读取当前目录，不沿用上次草稿。编辑已有收藏仍读取该收藏保存的路径。
 - `/api/v1/favorite-paths` 保留收藏 CRUD、`PUT /:id/update-last-used` 及按name/lastUsedAt排序。列表默认100、每页最多100，返回entries/nextOffset；最多2,000条/用户，名称可null（256 bytes）、路径4 KiB，请求32 KiB/响应4 MiB。编辑/删除/更新时间都必填expectedVersion；修改返回favoritePath，删除返回deleted。其他用户记录视为not_found，版本冲突重新读取，unknown仅核对、不自动重放。写入时间由实际事务生成，编辑及使用时间不会因排队或系统时钟回退而倒退。正式Files收藏与路径历史、命令历史面板直接消费Shared分页和有限回执。收藏冲突或结果未知时，关闭并重新打开收藏列表以只读核对，再重新编辑；历史写入未知先重新打开路径历史或刷新命令历史，不自动重复提交。认证撤销清空本地个人数据与草稿。
 
 ## 终端

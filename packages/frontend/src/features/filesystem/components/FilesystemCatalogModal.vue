@@ -147,7 +147,7 @@
 	const openAdd = (): void => {
 		editing.value = null;
 		form.name = '';
-		form.path = '';
+		form.path = props.currentPath;
 		errorMessage.value = '';
 		formVisible.value = true;
 	};
