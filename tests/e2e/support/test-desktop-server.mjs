@@ -223,10 +223,15 @@ try {
 		path.join(directory, 'typed.txt'),
 	]);
 	await waitFor(
-		() => x('search', '--name', 'Nexus-E2E-Desktop'),
-		(value) => value.length > 0,
+		() => {
+			// Xterm sets its title before mapping the window. X_SetInputFocus
+			// rejects an unmapped window with BadMatch; wait for a viewable one.
+			const windowId = x('search', '--onlyvisible', '--name', '^Nexus-E2E-Desktop$').split('\n')[0];
+			x('windowfocus', windowId);
+			return x('getwindowfocus') === windowId;
+		},
+		(value) => value,
 	);
-	x('windowfocus', x('search', '--name', 'Nexus-E2E-Desktop').split('\n')[0]);
 	await writeFile(
 		path.join(directory, 'xrdp.ini'),
 		`[Globals]\nini_version=1\nfork=true\nport=tcp://127.0.0.1:${rdpPort}\nsecurity_layer=tls\ncertificate=${directory}/cert.pem\nkey_file=${directory}/key.pem\ncrypt_level=high\nmax_bpp=32\nbitmap_cache=true\nbitmap_compression=true\nallow_channels=true\nautorun=vnc\n[Logging]\nLogFile=${directory}/xrdp.log\nLogLevel=DEBUG\nEnableSyslog=false\n[Channels]\nrdpdr=true\nrdpsnd=true\ncliprdr=true\ndrdynvc=true\n[vnc]\nname=Fixture\nlib=libvnc.so\nusername=na\npassword=askb10-pass\nip=127.0.0.1\nport=${vncPort}\n`,

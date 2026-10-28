@@ -2211,3 +2211,5 @@ CDP 复用 172.30.30.11:9223，在 api.honus.top 自建隔离页挂载正式 Sta
 首轮 main 0512a45e 的40547420086有两例失败：新增状态标题断言错误要求所有缩放下整行≤17px，但数值读数保留原0.82em随面板缩放，1.6倍时真实行高21.825px；修正测试为关闭按钮16px及标题不被额外撑高，不改产品CSS。服务器传输移除是实际通用HTTP读取问题：DELETE真实返回204，浏览器却暴露非null的空ReadableStream，原readJson误拒绝成protocol_failure，后端已删除但本地卡片保留。本轮CDP受控204复现bodyNull=false/text为空，修正为按既有容量读取并验证真实零字节，保留非法Content-Length和非空正文拒绝；原移除E2E补实际DELETE204回执断言，卡片消失断言不减。其它分片首次通过，未发布；新SHA完整回归待验。
 
 修正后 CDP `/tmp/nexus-release-remove-proof.log` 真实暴露空流的DELETE返回成功；`/tmp/nexus-release-204-boundaries.log` 验证null正文、未声明长度空流、声明0空流均成功，非空正文和非法长度保持protocol_failure。`pnpm run check`、`pnpm run format:all:check`、前端正式构建及两项回归严格TypeScript检查全部通过；补充修正沿HTTP读取/清理/错误分类及测试响应等待完成两轮源码审核。通用204修复恢复原删除行为，USAGE原传输任务说明仍符合实际。
+
+第二轮40549848325：HTTP204移除与缩放标题所在2、5分片通过。1分片普通31例通过后，独立Agent用例的桌面夹具启动因X_SetInputFocus BadMatch退出（0 tests）；Xterm标题建立时尚未映射，原search不检查可见，改为在原waitFor内search --onlyvisible、设置并核对焦点。4分片80例通过、1例flaky导致fail-on-flaky：收藏弹层缩小窗口后读取旧右界1153，原poll宽度320在resize前后恒成立；改为poll完整宽高/边界直到既有弹层异步碰撞定位完成，仍保留原8/952px和318–322宽度条件，不修改产品UI。不发布失败轮次。

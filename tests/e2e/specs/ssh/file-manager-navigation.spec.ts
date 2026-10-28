@@ -495,7 +495,14 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
 		expect(favoritePresentation.radius).toBeGreaterThan(0);
 
 		await page.setViewportSize({ width: 960, height: 760 });
-		await expect.poll(async () => (await favorites.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(318);
+		// Width is already 320px before resize. Wait for the popover's async
+		// collision positioning, rather than accepting the old viewport's box.
+		await expect
+			.poll(async () => {
+				const box = await favorites.boundingBox();
+				return box !== null && box.width >= 318 && box.width <= 322 && box.x >= 8 && box.x + box.width <= 952;
+			})
+			.toBe(true);
 		const compactFavoriteBox = await favorites.boundingBox();
 		expect(compactFavoriteBox).toBeTruthy();
 		expect(compactFavoriteBox!.width).toBeLessThanOrEqual(322);
