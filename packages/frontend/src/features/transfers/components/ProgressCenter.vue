@@ -428,7 +428,19 @@
 							{{ archiveLabel(task) }} {{ task.label }}
 						</span>
 						<UiButton
-							v-if="done(task.status)"
+							v-if="!done(task.status)"
+							appearance="ghost"
+							tone="danger"
+							density="compact"
+							class="shrink-0"
+							:disabled="task.status === 'cancelling'"
+							@click="emit('cancel', task.id)"
+						>
+							<i class="fas fa-stop" aria-hidden="true"></i
+							>{{ task.status === 'cancelling' ? t('progressCenter.cancelling') : t('common.cancel') }}
+						</UiButton>
+						<UiButton
+							v-else
 							appearance="ghost"
 							density="compact"
 							class="shrink-0"
@@ -471,17 +483,6 @@
 						<i class="far fa-file-lines" aria-hidden="true"></i
 						><span class="truncate">{{ currentFilename(task) }}</span>
 					</div>
-					<UiButton
-						v-if="!done(task.status)"
-						appearance="ghost"
-						tone="danger"
-						density="compact"
-						:disabled="task.status === 'cancelling'"
-						@click="emit('cancel', task.id)"
-					>
-						<i class="fas fa-stop" aria-hidden="true"></i
-						>{{ task.status === 'cancelling' ? t('progressCenter.cancelling') : t('common.cancel') }}
-					</UiButton>
 				</li>
 			</ul>
 
@@ -502,6 +503,16 @@
 							{{ task.transferMethodUsed }}
 						</span>
 						<span class="shrink-0 tabular-nums">{{ Math.round(task.progress * 10) / 10 }}%</span>
+						<UiButton
+							v-if="!done(task.status)"
+							appearance="ghost"
+							tone="danger"
+							density="compact"
+							class="shrink-0 text-xs"
+							@click="emit('cancel', task.id)"
+						>
+							{{ t('common.cancel') }}
+						</UiButton>
 					</div>
 					<div
 						class="transfer-progress-track"
@@ -530,17 +541,6 @@
 							>
 							<template v-else>{{ formatBytes(task.bytesWritten) }}</template>
 						</span>
-					</div>
-					<div v-if="!done(task.status)" class="mt-1 flex justify-end">
-						<UiButton
-							appearance="ghost"
-							tone="danger"
-							density="compact"
-							class="justify-self-end text-xs"
-							@click="emit('cancel', task.id)"
-						>
-							{{ t('common.cancel') }}
-						</UiButton>
 					</div>
 				</li>
 			</ul>

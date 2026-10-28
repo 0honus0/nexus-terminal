@@ -2251,3 +2251,9 @@ main 98ceac0f 完整回归 [40614218253](https://github.com/0honus0/nexus-termin
 最终脚本 `/tmp/nexus-warning-acceptance.cjs`，日志 `/tmp/nexus-warning-acceptance-final.log`，退出0：勾选后取消，下一次仍提示且复选框重置；勾选确认后真实服务器发送完成，目标文件内容一致；刷新后通过另一入口跨服务器粘贴，直接完成且无重复安全弹窗，目标内容一致；未捕获浏览器 pageerror。两条实际传输均使用真实后端和SSH夹具，不 mock 成功响应；测试文件及自建附件已清理。初次脚本被正常自动打开的传输进度弹窗遮挡，修正脚本按实际层级关闭弹窗后最终通过，未修改产品交互。
 
 人工查看 `/tmp/nexus-warning-checkbox-desktop.png`、`/tmp/nexus-warning-checkbox-mobile.png`（393px viewport），标签/勾选及两按钮完整，手机弹窗未横向溢出。实际200px状态栏截图 `/tmp/nexus-warning-network-200.png` 和受控118px窄栏 `/tmp/nexus-warning-network-118.png` 中上下行均完整，居中且分隔线两侧有留白；受控240/320px DOM测量无文字截断，但截图受到原父栏裁剪，不作为宽栏视觉通过证据。该专项不等同正式全量E2E；跨用户、其它主题及更大字号未验，不复用前批PASS。本轮启动的测试后端、前端及SSH夹具均已停止，并确认对应端口无监听。
+
+## 任务操作全部移至标题行（2026-10-28）
+
+本轮按用户补充授权将归档活动状态的“取消／取消中”与终态“移除”统一放到各任务标题最右侧；复制/移动/混合模式底部“取消”也移至对应标题右侧，删除旧底部操作容器。上传和批量取消原已在同排/窗头，保留原入口。第一轮源码审核逐一核对按钮条件、emit类型/ID、取消中文字及禁用；第二轮核对互斥分支、标题min-w-0/flex-1/truncate、按钮shrink-0、所有任务模式与底部容器无残余。不新增CSS、协议、状态或后端改动。
+
+本轮根check、前端build、全量format检查、git diff --check均通过，日志 `/tmp/nexus-progress-actions-{check,build,format-check}.log`。按D17本轮未运行浏览器或行为测试，不复用此前CDP或533项E2E作为本轮证据；待验为归档活动/取消中/完成、复制移动及混合列表、长文件名与280px窄窗的同排显示与原按钮功能。
