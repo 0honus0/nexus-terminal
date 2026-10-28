@@ -2219,3 +2219,17 @@ CDP 复用 172.30.30.11:9223，在 api.honus.top 自建隔离页挂载正式 Sta
 main 2c73f686 完整远程40608135532成功：质量/格式、Docker smoke及全部8分片首次通过，桌面映射和收藏定位修正已验收。新增默认路径独立完成两轮源码审核、pnpm run check及归档/文件管理专项严格TypeScript检查；因追加功能，发布等待包含该功能的新main SHA完整回归。
 
 最终交付：main 53671c68 的完整远程 [40608930071](https://github.com/0honus0/nexus-terminal/actions/runs/40608930071) 成功，533个Playwright用例全部通过（含独立Agent变体），质量/格式及Docker smoke通过，无flaky。包含新增收藏默认当前目录的实际新增/编辑/导航后重新新增断言。CI随后仅更新duration-estimates为dda619db，产品源码无变化；[40609690539](https://github.com/0honus0/nexus-terminal/actions/runs/40609690539) 成功发布linux/amd64，`ghcr.io/0honus0/nexus-terminal:dev`、`sha-dda619db127a`，digest `sha256:fef7ddd68111d99f83036de21139a7a5d05cf523e86c38a366e874224b8a7808`。未部署生产。收口检查本地前端/后端/SSH夹具进程均已退出，9998/3001/22222/22223/22224/22225无监听。个人截图增删未纳入提交。
+
+### 归档标题移除与隐藏入口百分比（2026-10-28）
+
+归档ProgressCenter终态“移除”移动至任务标题右侧，保留done条件与原remove(task.id)，活动取消/未知副作用处理不变；标题flex-1/min-w-0截断、按钮shrink-0，无局部新样式。WorkspaceSessionSurface对现有progressTasks的已报告进度钳位后等权平均，空列表为0且入口原条件不显示，单任务跟随其百分比；原hide/restore/拖动与身份生命周期不变。原上传隐藏入口E2E补“Progress Display (xx%)”断言，保留拖动与恢复全链路。
+
+两轮源码复核覆盖终态/活动分支、窄标题、任务变更与原事件owner；pnpm run check、前端正式build、修改E2E严格TypeScript检查及git diff --check通过，日志 `/tmp/nexus-progress-title-{check,build,tsc}.log`。未启动测试环境或执行本批浏览器/远程E2E，既有533例不作为本批验收。pnpm run format:all:check通过，日志 `/tmp/nexus-progress-title-format-check.log`；随后记录文档经Prettier再次格式化。
+
+### 项目依赖维护（2026-10-28）
+
+递归outdated初始30项，更新29项直接依赖、catalog、pnpm锁文件及pnpm11.28.9。包括Vue/编译器3.5.44、Vite8.3.5、Monaco0.57.0、Pino10.4.0、Undici8.12.3、MCP2.4.0、OpenAI7.45.0、Playwright1.64.1。jschardet4.1实读安装包README的迁移说明：置信度分布变化与原<0.9中文回退不兼容；实构建其chunk gzip709.66KB，因此回留3.1.4，不在依赖升级中改动编码判据。pnpm12未迁移；vendor IronRDP/SheetJS来源不变。
+
+Monaco旧补丁无法直接应用于0.57，基于新原生文件重建原剪裁祖先边界/上下翻转修复，保留新版contentsMaxHeight；旧0.56补丁移除。原版0.57包实际patch成功，与node_modules已应用文件cmp一致，无丢失上游新逻辑；xterm/splitpanes补丁原样保留。两轮源码审核核对catalog/清单/lock、Node engine、logger/Agent调用、补丁和CI指纹消费者，USAGE原产品说明仍适用，部署章节同步pnpm/Undici/Playwright要求。
+
+最终`pnpm run check`、`pnpm run build`（双端）、`pnpm run format:all:check`、`pnpm install --frozen-lockfile`、`git diff --check`通过；`pnpm audit --json`各等级0漏洞，最终outdated仅剩jschardet。新版Playwright静态发现533例/134文件，runner-image-info正确读取1.64.1/11.28.9。证据`/tmp/nexus-deps-final-{check,build,format-check,frozen,audit,outdated,test-list,runner}.log/json`及`/tmp/nexus-deps-monaco-patch-check.log`（实际文件后缀各依其内容）。未启动测试环境，未执行本批浏览器/完整远程E2E，未发布；前批进度UI改动与个人截图保留。

@@ -182,6 +182,13 @@
 
 	const transfers = props.session.transferController;
 	const progressTasks = computed(() => transfers.tasks.value.filter(isProgressTaskVisible));
+	const hiddenProgressPercent = computed(() => {
+		const tasks = progressTasks.value;
+		if (!tasks.length) return 0;
+		return Math.round(
+			tasks.reduce((sum, task) => sum + Math.max(0, Math.min(100, task.progress)), 0) / tasks.length,
+		);
+	});
 	const documentMode = ref<'editor' | 'preview'>('editor');
 	const editorSession = computed(() => props.sharedEditorSession ?? props.session.editorController);
 	const editorScopeLabel = computed(() => props.session.connection.name || props.session.connection.host);
@@ -1730,7 +1737,7 @@
 				:class="progressRestoreDrag.dragging.value ? 'cursor-grabbing' : 'cursor-move'"
 				@click="restoreHiddenProgress"
 			>
-				{{ t('progressCenter.title') }} ({{ progressTasks.length }})
+				{{ t('progressCenter.title') }} ({{ hiddenProgressPercent }}%)
 			</UiButton>
 		</div>
 		<SendFilesModal

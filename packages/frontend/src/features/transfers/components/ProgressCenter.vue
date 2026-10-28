@@ -423,8 +423,19 @@
 					:data-task-status="task.status"
 					class="archive-progress-body"
 				>
-					<div class="min-w-0 truncate text-xs font-semibold" :title="task.label">
-						{{ archiveLabel(task) }} {{ task.label }}
+					<div class="flex min-w-0 items-center gap-2">
+						<span class="min-w-0 flex-1 truncate text-xs font-semibold" :title="task.label">
+							{{ archiveLabel(task) }} {{ task.label }}
+						</span>
+						<UiButton
+							v-if="done(task.status)"
+							appearance="ghost"
+							density="compact"
+							class="shrink-0"
+							@click="emit('remove', task.id)"
+						>
+							<i class="fas fa-times" aria-hidden="true"></i>{{ t('common.remove') }}
+						</UiButton>
 					</div>
 					<div class="space-y-1.5">
 						<div class="flex items-center justify-between gap-4 text-xs">
@@ -470,9 +481,6 @@
 					>
 						<i class="fas fa-stop" aria-hidden="true"></i
 						>{{ task.status === 'cancelling' ? t('progressCenter.cancelling') : t('common.cancel') }}
-					</UiButton>
-					<UiButton v-else appearance="ghost" density="compact" @click="emit('remove', task.id)">
-						<i class="fas fa-times" aria-hidden="true"></i>{{ t('common.remove') }}
 					</UiButton>
 				</li>
 			</ul>
