@@ -1,10 +1,11 @@
 <script setup lang="ts">
-	import { computed } from 'vue';
+	import { computed, useId } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiConfirmationPanel } from '@/foundation/ui';
+	import { UiButton, UiCheckbox, UiConfirmationPanel } from '@/foundation/ui';
 	import { useDialogStore } from '../store/dialog.store';
 
 	const store = useDialogStore();
+	const checkboxId = useId();
 	const { t } = useI18n();
 
 	const title = computed(
@@ -54,6 +55,19 @@
 				<span class="ui-confirmation-panel__detail-value">{{ detail.value }}</span>
 			</div>
 		</div>
+		<label
+			v-if="store.state.checkboxLabel"
+			:for="checkboxId"
+			class="flex items-center gap-2 text-sm cursor-pointer"
+		>
+			<UiCheckbox
+				:id="checkboxId"
+				:model-value="store.state.checkboxChecked"
+				:disabled="store.state.loading"
+				@update:model-value="store.setCheckboxChecked"
+			/>
+			<span>{{ store.state.checkboxLabel }}</span>
+		</label>
 		<template #actions>
 			<UiButton
 				v-if="store.state.kind === 'confirm'"

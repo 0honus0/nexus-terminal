@@ -2237,3 +2237,17 @@ Monaco旧补丁无法直接应用于0.57，基于新原生文件重建原剪裁�
 依赖升级首轮main fffd7b8e / 40612625396：质量、Docker及其它7分片通过；browser1新增隐藏入口断言失败，日志显示`Progress Display (0%) `直至`(100%) `均有末尾模板空白。Playwright toHaveText使用正则时不做字符串空白规范化，严格行尾断言误拒绝，随后上传结束入口消失。修正测试为toHaveAccessibleName，按按钮实际语义名称断言0–100整数百分比，保留原可见、拖动/记忆、恢复及取消的全部断言；不改模板或UI。此前库升级与产品显示没有对应失败证据，不回退依赖。
 
 main 98ceac0f 完整回归 [40614218253](https://github.com/0honus0/nexus-terminal/actions/runs/40614218253) 成功：533个Playwright用例全部首次通过，无失败或flaky，质量/格式及Docker smoke通过；原隐藏入口百分比/拖动/恢复/取消链路本轮通过。修改测试ESLint、严格tsc、Prettier和diff检查通过，源码两轮核对断言只过滤无语义模板空白且仍要求0–100百分比，没有改动产品UI。CI后继f481bab9仅更新耗时估计。证据 `/tmp/nexus-percent-assert-final-e2e.log`；本次未发布镜像或更新远程部署。
+
+## 直传安全提示记忆与网络读数对齐（2026-10-28）
+
+范围：跨服务器粘贴、“发送到服务器”的凭据确认共用“下次不再提醒”；网络速率等宽半栏内居中。两轮源码审核：第一轮追踪两个入口到公共确认 composable、Feedback store/host 与 browser storage，核对取消、替换弹窗、signal、用户切换及原 generation 保护；第二轮核对持久化仅在确认且勾选时发生，三语言标签、全局 UiCheckbox 关联标签，以及普通/极窄/矮栏和趋势 CSS 的覆盖关系。未更改后端、工具探测或传输派发协议。
+
+静态证据：根 `pnpm run check`、前端 build、全量格式及 `git diff --check`；日志 `/tmp/nexus-transfer-warning-{check,build,format-check}.log`。行为按 D17 未新增或执行本地测试，真实交互/视觉及正式远程回归待后续授权；不复用上一批 533 项 PASS 作为本轮证据。待验：未勾选仍提示；勾选取消仍提示；勾选确认后两个入口及刷新不再提示；其它用户仍提示；失活不派发；不同宽高/缩放下速率完整显示。
+
+### 本轮授权 CDP 专项验收
+
+用户追加“使用cdp确认下效果”，作为本轮 D17 限定例外。CDP 为 `172.30.30.11:9223`，实际访问 `https://api.honus.top`；原测试服务已停止且页面 502，本轮复用隔离 `/tmp/nexus-release-data-YdlpzU`，启动本地后端3001、Vite9998和真实SSH夹具22222/22225。仅操作自建浏览器 context、测试连接和唯一命名的临时文件，未使用生产SSH目标。
+
+最终脚本 `/tmp/nexus-warning-acceptance.cjs`，日志 `/tmp/nexus-warning-acceptance-final.log`，退出0：勾选后取消，下一次仍提示且复选框重置；勾选确认后真实服务器发送完成，目标文件内容一致；刷新后通过另一入口跨服务器粘贴，直接完成且无重复安全弹窗，目标内容一致；未捕获浏览器 pageerror。两条实际传输均使用真实后端和SSH夹具，不 mock 成功响应；测试文件及自建附件已清理。初次脚本被正常自动打开的传输进度弹窗遮挡，修正脚本按实际层级关闭弹窗后最终通过，未修改产品交互。
+
+人工查看 `/tmp/nexus-warning-checkbox-desktop.png`、`/tmp/nexus-warning-checkbox-mobile.png`（393px viewport），标签/勾选及两按钮完整，手机弹窗未横向溢出。实际200px状态栏截图 `/tmp/nexus-warning-network-200.png` 和受控118px窄栏 `/tmp/nexus-warning-network-118.png` 中上下行均完整，居中且分隔线两侧有留白；受控240/320px DOM测量无文字截断，但截图受到原父栏裁剪，不作为宽栏视觉通过证据。该专项不等同正式全量E2E；跨用户、其它主题及更大字号未验，不复用前批PASS。本轮启动的测试后端、前端及SSH夹具均已停止，并确认对应端口无监听。

@@ -523,6 +523,7 @@ button.live-state:focus-visible {
 .rate {
 	display: flex;
 	align-items: center;
+	justify-content: center;
 	gap: calc(4px / var(--status-scale, 1));
 	min-width: 0;
 	padding: calc(1px / var(--status-scale, 1)) 0;

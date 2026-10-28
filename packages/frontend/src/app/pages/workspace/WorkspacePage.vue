@@ -32,6 +32,7 @@
 		transferTaskWarningDescriptor,
 		isProgressTaskVisible,
 		useServerTransfers,
+		useTransferCredentialConfirmation,
 		type FileClipboardOperation,
 		type ProgressSource,
 		type TransferTask,
@@ -75,6 +76,7 @@
 	const router = useRouter();
 	const { t } = useI18n();
 	const feedback = useFeedback();
+	const confirmTransferCredentials = useTransferCredentialConfirmation();
 	const clipboardTools = useRemoteTools();
 	const clipboardToolTargetName = computed(() => {
 		const targetId = clipboardTools.offer.value?.targetId;
@@ -477,11 +479,7 @@
 		try {
 			if (source.connection.id !== target.connection.id) {
 				if (
-					!(await feedback.confirm({
-						message: t('sendFilesModal.credentialTrustWarning'),
-						destructive: true,
-						signal: permission,
-					})) ||
+					!(await confirmTransferCredentials(permission)) ||
 					!current() ||
 					registry.fileClipboard.value.value?.generation !== snapshot.generation
 				)

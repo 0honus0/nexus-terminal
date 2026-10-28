@@ -25,6 +25,10 @@ export interface DialogDetail {
 }
 
 export interface ConfirmDialogOptions {
+	checkbox?: {
+		label: string;
+		onChange(checked: boolean): void;
+	};
 	signal?: AbortSignal;
 	title?: string;
 	message: string;

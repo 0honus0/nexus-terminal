@@ -16,6 +16,8 @@ interface DialogState {
 	icon?: string;
 	details: DialogDetail[];
 	loading: boolean;
+	checkboxLabel: string;
+	checkboxChecked: boolean;
 }
 
 export const useDialogStore = defineStore('shared-dialog', () => {
@@ -31,8 +33,11 @@ export const useDialogStore = defineStore('shared-dialog', () => {
 		icon: undefined,
 		details: [],
 		loading: false,
+		checkboxLabel: '',
+		checkboxChecked: false,
 	});
 
+	let checkboxChanged: ((checked: boolean) => void) | undefined;
 	let resolveCurrent: ((value: boolean) => void) | undefined;
 	let detachAbort: (() => void) | undefined;
 
@@ -65,6 +70,9 @@ export const useDialogStore = defineStore('shared-dialog', () => {
 		if (options.signal?.aborted) {
 			return Promise.resolve(false);
 		}
+		state.checkboxLabel = options.checkbox?.label ?? '';
+		state.checkboxChecked = false;
+		checkboxChanged = options.checkbox?.onChange;
 		state.kind = 'confirm';
 		state.title = options.title;
 		state.message = options.message;
@@ -78,6 +86,9 @@ export const useDialogStore = defineStore('shared-dialog', () => {
 	};
 
 	const alert = async (options: AlertDialogOptions): Promise<void> => {
+		state.checkboxLabel = '';
+		state.checkboxChecked = false;
+		checkboxChanged = undefined;
 		state.kind = 'alert';
 		state.title = options.title;
 		state.message = options.message;
@@ -95,6 +106,9 @@ export const useDialogStore = defineStore('shared-dialog', () => {
 		detachAbort = undefined;
 		resolveCurrent?.(result);
 		resolveCurrent = undefined;
+		state.checkboxLabel = '';
+		state.checkboxChecked = false;
+		checkboxChanged = undefined;
 		state.visible = false;
 		state.loading = false;
 		state.tone = undefined;
@@ -110,6 +124,11 @@ export const useDialogStore = defineStore('shared-dialog', () => {
 		accept: () => finish(true),
 
 		cancel: () => finish(false),
+
+		setCheckboxChecked: (checked: boolean): void => {
+			state.checkboxChecked = checked;
+			checkboxChanged?.(checked);
+		},
 
 		setLoading: (loading: boolean) => {
 			state.loading = loading;

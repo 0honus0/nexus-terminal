@@ -55,3 +55,5 @@ export type {
 } from './model/transfer-types';
 
 export type { SendFileSource, SendFilesCommand, ServerTransferTask } from './model/server-transfer-types';
+
+export { useTransferCredentialConfirmation } from './composables/useTransferCredentialConfirmation';

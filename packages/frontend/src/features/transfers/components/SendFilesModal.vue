@@ -22,6 +22,7 @@
 	import { useRemoteTools, RemoteToolInstallDialog } from '@/features/remote-tools/public';
 	import { useRuntimeFeatureCapabilities, type ConnectionSummary } from '@/shared/capabilities/public';
 	import { useServerTransfersStore, serverTransferFailureKey } from '../store/serverTransfers.store';
+	import { useTransferCredentialConfirmation } from '../composables/useTransferCredentialConfirmation';
 	import type { SendFileSource, ServerTransferTask } from '../model/server-transfer-types';
 	import { readServerTransferDirectory, rememberServerTransferDirectory } from '../model/server-transfer-directory';
 
@@ -35,6 +36,7 @@
 	const emit = defineEmits<{ close: []; sent: [task: ServerTransferTask] }>();
 	const { t } = useI18n();
 	const feedback = useFeedback();
+	const confirmTransferCredentials = useTransferCredentialConfirmation();
 	const toolInstaller = useRemoteTools();
 	const capabilities = useRuntimeFeatureCapabilities();
 	const connections = capabilities.connections;
@@ -268,11 +270,7 @@
 		};
 		try {
 			if (
-				!(await feedback.confirm({
-					message: t('sendFilesModal.credentialTrustWarning'),
-					destructive: true,
-					signal,
-				})) ||
+				!(await confirmTransferCredentials(signal)) ||
 				current !== generation ||
 				!props.visible ||
 				signal.aborted
