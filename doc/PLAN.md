@@ -4001,3 +4001,5 @@ a0cb4f49/40319856905完整通过（含质量、Docker及全部8分片），3381d
 | 职责归属 | 各workspace清单、catalog/lock唯一解析；原logger/network/editor adapter不增加兼容包装。                                                |
 | 类型归属 | 原Shared及模块类型不变，依赖类型由实际包提供；Monaco补丁仅技术层。                                                                    |
 | 完成证据 | 最终check、双端build、全量格式、frozen安装及零漏洞审计通过；Playwright发现533例，Monaco补丁cmp一致；两轮源码审核完成，浏览器E2E待验。 |
+
+依赖升级首轮远程40612625396只有新增隐藏入口百分比断言失败：UI文本末尾模板空白，toHaveText的正则不规范化空白，0%到100%均被错误拒绝。修正为toHaveAccessibleName验证用户可见语义，仍要求0–100整数百分比；不改产品UI/业务逻辑。质量、Docker及其它7分片已通过，新提交重新完整回归。

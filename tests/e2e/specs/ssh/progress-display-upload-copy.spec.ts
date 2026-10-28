@@ -51,7 +51,7 @@ test('registered upload progress can hide, restore, and cancel from Progress Dis
 		await step('the small hidden-progress button itself drags freely and remembers its position', async () => {
 			const button = page.getByRole('button', { name: /^Progress Display \(/ });
 			await expect(button).toBeVisible();
-			await expect(button).toHaveText(/^Progress Display \(\d{1,3}%\)$/u);
+			await expect(button).toHaveAccessibleName(/^Progress Display \((?:100|[1-9]?\d)%\)$/u);
 			const before = await button.boundingBox();
 			expect(before).toBeTruthy();
 

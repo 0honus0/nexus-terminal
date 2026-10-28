@@ -2233,3 +2233,5 @@ main 2c73f686 完整远程40608135532成功：质量/格式、Docker smoke及全
 Monaco旧补丁无法直接应用于0.57，基于新原生文件重建原剪裁祖先边界/上下翻转修复，保留新版contentsMaxHeight；旧0.56补丁移除。原版0.57包实际patch成功，与node_modules已应用文件cmp一致，无丢失上游新逻辑；xterm/splitpanes补丁原样保留。两轮源码审核核对catalog/清单/lock、Node engine、logger/Agent调用、补丁和CI指纹消费者，USAGE原产品说明仍适用，部署章节同步pnpm/Undici/Playwright要求。
 
 最终`pnpm run check`、`pnpm run build`（双端）、`pnpm run format:all:check`、`pnpm install --frozen-lockfile`、`git diff --check`通过；`pnpm audit --json`各等级0漏洞，最终outdated仅剩jschardet。新版Playwright静态发现533例/134文件，runner-image-info正确读取1.64.1/11.28.9。证据`/tmp/nexus-deps-final-{check,build,format-check,frozen,audit,outdated,test-list,runner}.log/json`及`/tmp/nexus-deps-monaco-patch-check.log`（实际文件后缀各依其内容）。未启动测试环境，未执行本批浏览器/完整远程E2E，未发布；前批进度UI改动与个人截图保留。
+
+依赖升级首轮main fffd7b8e / 40612625396：质量、Docker及其它7分片通过；browser1新增隐藏入口断言失败，日志显示`Progress Display (0%) `直至`(100%) `均有末尾模板空白。Playwright toHaveText使用正则时不做字符串空白规范化，严格行尾断言误拒绝，随后上传结束入口消失。修正测试为toHaveAccessibleName，按按钮实际语义名称断言0–100整数百分比，保留原可见、拖动/记忆、恢复及取消的全部断言；不改模板或UI。此前库升级与产品显示没有对应失败证据，不回退依赖。
