@@ -14,7 +14,11 @@
     },
     "terminal": {
       "reconnectingMsg": "正在尝试重新连接...",
-      "ownershipUnknown": "连接所有权结果未知，已停止自动重试。请关闭此标签后重新建立连接；这不表示原远端进程已停止。"
+      "ownershipUnknown": "连接所有权结果未知，已停止自动重试。请关闭此标签后重新建立连接；这不表示原远端进程已停止。",
+      "confirmReset": "重置“{name}”的终端？将关闭当前 SSH 会话并建立新终端，清空终端画面和命令草稿，传输与未保存编辑可能受影响。后台进程不保证结束。",
+      "resetUnavailable": "仅可重置已连接且未标记挂起的终端；已标记挂起的会话请先取消保留。",
+      "resetCloseUnconfirmed": "无法确认旧会话已关闭，已停止重置，未新建会话。请核对远端任务状态后关闭此标签。",
+      "resetFailed": "终端重置失败，请核对会话与远端任务状态。"
     },
     "title": "工作区",
     "sessions": "{count} 个会话",
@@ -128,7 +132,8 @@
       "closeRight": "关闭右侧标签页",
       "closeLeft": "关闭左侧标签页",
       "suspendSession": "挂起会话",
-      "unmarkForSuspend": "取消挂起"
+      "unmarkForSuspend": "取消挂起",
+      "resetTerminal": "重置终端"
     },
     "closeTabTooltip": "关闭标签页",
     "newTabTooltip": "新建连接标签页",

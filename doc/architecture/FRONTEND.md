@@ -1739,3 +1739,14 @@ FileManager 的桌面文件行不拦截 mousedown 默认行为，保留浏览器
 ### 浏览器前台恢复与可视键盘几何
 
 TerminalView 在 pageshow、恢复可见及失焦后的窗口重新聚焦时清理未完成触摸、恢复 inputmode/readOnly，并依据当前连接状态设置 xterm disableStdin；普通聚焦不清理正在进行的手势或输入法。取消旧 geometryFrame 后立即拟合，并保留下一帧收敛；预测撤销、快照与 PTY generation 原屏障仍先于真实 resize。WorkspacePage 在 visualViewport resize/scroll、前台恢复和聚焦时同步读取可视高度，再合并下一帧测量，避免旧 rAF 阻塞键盘自适应；隐藏/卸载取消旧帧并解除监听。呈现恢复不等待网络存活检查，不主动唤起键盘、不合成输入法提交事件，也不重发终端输入。原 UI 样式、布局与连接就绪语义保持。
+
+### 手动重置 SSH 终端
+
+1. 职责与范围：用户确认后关闭当前SSH会话并新建Shell，不检测程序卡死、不自动重放输入或终止独立后台进程。
+2. 子功能与目录：沿原WorkspaceTabBar、WorkspacePage、session Runtime/Registry及workspace i18n，不新增模块或远端helper。
+3. 依赖方向：TabBar只发布意图，Page持确认和页面signal，Registry持标签及替换，RuntimeSession持远端关闭和未知结果围栏。
+4. 类型与转换：内部WorkspaceResetOutcome归workspace model，复用Shared workspace.close请求/响应，不增加通信契约。
+5. 入口与安装：SSH标签右键/长按菜单重置，复用全局确认框；仅已连接、未标记挂起且无未知围栏的会话可用，派发前再次核对。
+6. 数据、事务与并发：按原Runtime实例及runtime generation核对异步结果，同会话在途重置共享Promise；关闭成功后复用原scope清理，在原顺序插入新标签，后台标签重置不改变当前选择。
+7. 生命周期与失败：收到closed才新建；detached、unknown及关闭异常保留原标签并停止重建；用户关闭原标签、认证代次失效或页面失活后不再创建新会话，已确认关闭的资源仍完成清理。新连接失败保留原有错误/重试状态，旧连接的画面、草稿和生命周期不迁移至新PTY。原实例的重置意图抑制关闭等待期间的按键重连提示，未知关闭仍呈现既有围栏说明。
+8. 当前能力与验收：行为和影响见USAGE的SSH会话章节，源码/静态/CDP证据分别归PLAN/testing，不把手动恢复视为任意程序退出或通用卡死检测保证。

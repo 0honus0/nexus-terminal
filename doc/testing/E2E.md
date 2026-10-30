@@ -2261,3 +2261,29 @@ main 98ceac0f 完整回归 [40614218253](https://github.com/0honus0/nexus-termin
 ### 任务标题操作正式远程回归通过
 
 用户授权提交推送并等待E2E。main产品提交 `a726e6c3cc0df8cc5e3e05615e0490f1b15a4587`，正式 [40662321872](https://github.com/0honus0/nexus-terminal/actions/runs/40662321872) success：质量/格式、Docker deployment smoke、1个后端和7个浏览器分片全部成功，共533项首次通过，无flaky。各次测试报告通过数为64、64、40、1、1、1、124、57、64、48、69；完整日志 `/tmp/nexus-progress-actions-remote-e2e.log`。截图更新作业按默认输入跳过，不代表已进行截图专项验收；更多窄窗视觉仍待专项。CI随后仅更新duration estimates（`df36b6e2`），无产品代码变更。本轮不发布镜像、不更新生产环境，个人截图增删保持原样。
+
+## nethogs 全接口停顿与退出输入专项（2026-10-30）
+
+用户授权启动测试环境、经 CDP 访问 api.honus.top，并明确测试 SSH。干净 main `09e6c79871bf4e831aa9fbc83a1f931f0fba474b`；本机 Node v22.23.1、pnpm 11.28.9、Playwright 1.64.1。全部临时数据、实例密钥、工具、缓存和日志集中 `/tmp/nexus-nethogs-20261030/`，目录0700，凭据和原始流限制访问，不进入仓库。依赖 frozen 安装通过；ssh2 可选原生加速因没有 make 未构建，JS实现正常；Backend build及正式启动通过。3001后端/9998 Vite使此前502的指定站点恢复200，CDP `172.30.30.11:9223` 使用自建context，不操作用户原页面。
+
+用户先给19902后更正9902。前者hermes无nethogs，测试使用仅解压在上述目录的Debian包；更正后停止该机测试，其结果不计AMD验收。9902主机honus已有nethogs 0.8.8-1，未安装或修改远端文件及系统配置，只建立专用测试目标/连接、运行工具和只读观察。
+
+默认命令捕获82条Ethernet提示，第一幅统计画面距首条提示51.247秒，最长无新输出80.483秒；主机接口观察为87–89项，进程约95–99%单核CPU。正式网页观察300秒（末段结束自有全接口进程），无WS断线或pageerror，最终7,320字节全部确认。绕过项目的独立ssh2直连90秒也复现，约34.8秒产生第一幅统计画面，随后超过55秒没有新输出。直连轮与网页轮有重叠，不能据此比较精确性能或推断唯一内部热点，但证明该停顿独立于项目渲染链发生。
+
+正式网页运行 `nethogs enp35s0` 连续120秒按秒刷新，无断线或pageerror，最终12,046字节全部确认。该网卡由目标实际出口路由核实；仅代表该接口，不能冒充所有容器网络覆盖。此轮Ctrl+C未退出，不记退出通过；另建连接运行15秒后按q退出，随后真实printf的 `NETHOGS_TEST_FINISHED` 标记及Shell提示符完整回显。日志为 `logs/reproduce-amd.log`、`logs/direct-baseline.log`、`logs/reproduce-interface.log`、`logs/reproduce-exit.log`；原始帧及截图均在专用目录。
+
+用户补充默认命令下Ctrl+C与q均不响应。独立自有nethogs专项在发送两键后，通过远端Python只读FIONREAD验证：TTY输入队列保留2字节，ISIG=false、ICANON=false，退出管道无数据，程序尚未读取输入。说明按键已到远端，不能将Ctrl+C等同SIGINT。上游v0.8.8的cui.cpp将键盘读取放在ui_tick，q调用quit_cb写退出管道；main.cpp先对全部接口dp_dispatch再处理UI，仅无数据轮次调用wait_for_next_trigger读取该管道，存在抓包繁忙时输入/退出延迟。上游文件仅保存在tools供核对，未修改远端nethogs；底层热点和所有发行版补丁未进一步剖析，不夸大为完整工具修复。日志 `logs/verify-interrupt.log`、`logs/verify-tty-mode.log`。测试使用自有预先标记PID，按comm复核后SIGTERM清理，不批量终止其他任务；最后只读ps确认无遗留nethogs。
+
+本轮没有改项目源码/UI/协议/容量或部署生产，只补USAGE操作说明及PLAN证据。原“自动重连”未复现；不将单网卡运行方式调整称为项目修复。流程静态审核另发现TypeAhead action异常可使串行队列processing保持true，属于待故障验证的独立异常收口风险。测试服务和全部专用目录按用户要求保留，未提交、推送、运行全量E2E或删除现场。
+
+### 手动重置终端专项（2026-10-30）
+
+用户最后选择只新增手动恢复，不实施通用检测。源码沿SSH标签右键/长按菜单、全局确认、RuntimeSession/Registry和原workspace.close链；三语同步。确认前不关闭，原实例收到明确closed才清理scope并按原标签顺序建立新Shell；后台标签重置保留当前选择。detached/unknown拒绝新建并保留原标签/未知提示，挂起标记禁用入口；原实例重置意图避免关闭过程中显示无法执行的“按键重连”，结束后移除旧进度呈现记录。新增 `tests/e2e/specs/ssh/terminal-reset.spec.ts` 覆盖确认取消、等待输入的前台命令、标签替换、其他Shell变量保留及新Shell变量隔离；仅做严格类型检查，未执行正式夹具/全量E2E。
+
+最终CDP脚本为专用目录的 `verify-reset.cjs` / `verify-reset-mobile.cjs`，日志 `logs/reset-cdp-release.log` / `logs/reset-cdp-mobile.log`，均退出0。通过 `api.honus.top` 连接9902真实SSH，原始模式程序设置TTY raw后等待、不消费输入，重置后原PID已不存在，新Shell真实执行printf，输出标记由远端变量组装，不能被命令回显满足；其他标签的环境变量和输入正常，标签顺序/选择不变。通过持有真实关闭回执验证先关闭后新建并合并重复重置；确认框取消无close请求；挂起禁用/取消标记通过；确认期间原标签被关闭后不新建；关闭期间页面signal取消后完成旧资源清理且不新建；真实远端close成功后注入客户端回执丢失，旧标签进入error/未知围栏，无新connect且无误导按键重连提示。全部自建标签和测试进程收尾，无pageerror。
+
+393×852触屏context经CDP真实touchStart/touchEnd长按打开菜单，重置确认框及两个按钮均完整处于viewport，取消后同一Shell仍connected；桌面1440×1000及393px截图人工检查通过，沿用既有全局UI。截图 `reset-confirm-desktop.png`、`reset-menu-mobile.png`、`reset-confirm-mobile.png`、`reset-close-unconfirmed.png` 留专用目录。
+
+本轮目标机 `command -v/type nethogs`、包路径及dpkg查询均未找到nethogs，与前次0.8.8-1实测不同；未推断变化原因或安装系统包。本轮使用不写远端文件的临时Python程序复现原始模式不读输入，不能称为最新nethogs实机恢复通过。初次原命令验证因此未覆盖；早期Shared构建也触发过Vite热更新，相关轮次不计验收。开发模块注入脚本曾因Vite时间戳/资源时序未取得真实Registry而失败，已改用实际加载的模块URL，最终轮次覆盖全部上述断言，不改产品以适配脚本。
+
+最终静态：根 `pnpm run check`（含Backend包级检查/Shared构建、双端ESLint及Frontend vue-tsc）与 `pnpm run build:frontend` 通过，日志 `logs/reset-release-check.log` / `logs/reset-release-build.log`；目标测试 `tsc --ignoreConfig --noEmit --strict --noUnusedLocals --target ES2023 --module ESNext --moduleResolution Bundler --esModuleInterop --skipLibCheck --types node` 通过，日志 `logs/reset-test-types.log`；全量 `format:all:check` 通过，日志 `logs/reset-release-format.log`，最终 `git diff --check` 通过；只读进程核对未发现自建原始模式测试进程遗留，日志 `logs/reset-remote-cleanup.log`。两轮源码复核覆盖错误回执、pending Promise/cleanup归属、原实例/认证generation、signal取消、清理失败阻止新建及新连接失败保留错误标签。测试后台3001、Vite9998及全部现场仍保留，未提交、推送或生产部署。扩大范围尚未验证：真实网络丢包/休眠、各发行版后台进程信号语义、传输进行中重置和编辑保存竞争；不声称重置必定终止所有远端后代进程。

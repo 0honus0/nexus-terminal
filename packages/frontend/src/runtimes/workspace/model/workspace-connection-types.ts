@@ -10,6 +10,8 @@ export interface WorkspaceConnectionState {
 
 export type WorkspaceCloseOutcome = 'closed' | 'detached' | 'unknown';
 
+export type WorkspaceResetOutcome = 'reset' | 'unavailable' | 'close_unconfirmed';
+
 export interface WorkspaceConnection extends WorkspaceConnectionState {
 	replayedBytes: number;
 }

@@ -358,7 +358,9 @@
 				class="min-h-0 flex-1"
 				:input-enabled="session.state.value === 'connected'"
 				:connection-failure="
-					!session.recoveryRequired.value && ['error', 'disconnected'].includes(session.state.value)
+					!session.recoveryRequired.value &&
+					!session.resetRequested.value &&
+					['error', 'disconnected'].includes(session.state.value)
 						? session.statusMessage.value || t('terminal.connectionClosed')
 						: undefined
 				"

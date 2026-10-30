@@ -3,7 +3,7 @@ import type { SuspendedAutoTermination } from '@/features/ssh-suspend/public';
 import { computed, nextTick, ref, shallowReactive } from 'vue';
 import { logger } from '@/client/logging/logger';
 import { registerAuthenticatedSessionReset } from '@/shared/session/public';
-import type { WorkspaceCloseOutcome } from '../model/workspace-connection-types';
+import type { WorkspaceCloseOutcome, WorkspaceResetOutcome } from '../model/workspace-connection-types';
 import type { ConnectionSummary } from '@/features/connections/public';
 import {
 	applySuspendedAutoTermination,
@@ -24,6 +24,7 @@ const fileClipboard = createFileClipboardController();
 const sharedEditorSession = createFileEditorSession();
 const suspendAutoTerminationNotice = ref<SuspendedAutoTerminationViewModel | null>(null);
 const resumeInFlight = new Map<string, Promise<WorkspaceRuntimeSession>>();
+const resetInFlight = new Map<string, Promise<WorkspaceResetOutcome>>();
 const pendingDisposals = new Set<Promise<WorkspaceCloseOutcome>>();
 let runtimeGeneration = 0;
 
@@ -298,6 +299,48 @@ export const workspaceRuntimeRegistry = {
 		options: WorkspaceSuspendResumeOptions = {},
 	): Promise<WorkspaceRuntimeSession> {
 		return runResume(suspended, connection, replaceWorkspaceId, options);
+	},
+
+	reset(id: string, signal: AbortSignal): Promise<WorkspaceResetOutcome> {
+		const existing = resetInFlight.get(id);
+		if (existing) return existing;
+		const previous = sessions.get(id);
+		if (signal.aborted || !previous?.canResetTerminal) return Promise.resolve('unavailable');
+		const generation = runtimeGeneration;
+
+		const isCurrent = () => generation === runtimeGeneration && sessions.get(id) === previous;
+
+		const task = (async (): Promise<WorkspaceResetOutcome> => {
+			if (!(await previous.closeForReset())) return 'close_unconfirmed';
+			if (!isCurrent()) return 'unavailable';
+			await previous.dispose('Terminal reset');
+			if (!isCurrent()) return 'unavailable';
+			const index = order.value.indexOf(id);
+			if (index < 0) return 'unavailable';
+			const selectedId = activeId.value;
+			await removeRuntime(id, 'Terminal reset');
+			if (signal.aborted || generation !== runtimeGeneration) return 'unavailable';
+			const session = new WorkspaceRuntimeSession(previous.connection, {
+				onSuspendedAutoTerminated: handleSuspendedAutoTerminated,
+			});
+			add(session, index);
+			if (selectedId !== id) restoreActive(selectedId, null);
+			try {
+				await session.connect();
+				if (sessions.get(session.id) !== session) return 'unavailable';
+				return 'reset';
+			} catch (cause) {
+				if (sessions.get(session.id) !== session) return 'unavailable';
+				// As with initial open, retain the new tab's runtime-owned retry/failure state.
+				if (session.state.value === 'error') return 'reset';
+				removeRuntime(session.id, 'Reset Workspace connection failed');
+				throw cause;
+			}
+		})().finally(() => {
+			if (resetInFlight.get(id) === task) resetInFlight.delete(id);
+		});
+		resetInFlight.set(id, task);
+		return task;
 	},
 
 	activate(id: string): void {

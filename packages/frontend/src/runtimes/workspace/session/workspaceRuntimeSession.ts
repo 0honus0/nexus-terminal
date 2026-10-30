@@ -64,6 +64,7 @@ export class WorkspaceRuntimeSession {
 	readonly markedForSuspendAt = ref<string | null>(null);
 	readonly hasConnected = ref(false);
 	readonly recoveryRequired = ref(false);
+	readonly resetRequested = ref(false);
 	readonly commandDraft = ref('');
 	readonly socket: WorkspaceSocket;
 	readonly adapters: WorkspaceCapabilityAdapters;
@@ -810,6 +811,36 @@ export class WorkspaceRuntimeSession {
 		}
 		if (this.state.value !== 'connected') {
 			this.reconnectNow({ automatic: true });
+		}
+	}
+
+	get canResetTerminal(): boolean {
+		return (
+			this.connection.type === 'SSH' &&
+			this.state.value === 'connected' &&
+			!this.markedForSuspend.value &&
+			!this.recoveryRequired.value &&
+			!this.resetRequested.value &&
+			!this.disposed &&
+			!this.closing &&
+			!this.suspendMutation
+		);
+	}
+
+	async closeForReset(): Promise<boolean> {
+		this.resetRequested.value = true;
+		let confirmed = false;
+		try {
+			confirmed = (await this.close('Terminal reset requested')) === 'closed';
+			return confirmed;
+		} finally {
+			// Detaching or losing the close receipt does not prove the old PTY stopped.
+			// Keep its tab fenced instead of starting another remote workspace.
+			if (!confirmed && !this.disposed) {
+				this.recoveryRequired.value = true;
+				this.statusMessage.value = 'operation_unknown';
+				this.state.value = 'error';
+			}
 		}
 	}
 

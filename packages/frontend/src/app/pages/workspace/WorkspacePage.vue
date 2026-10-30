@@ -738,6 +738,38 @@
 		await flushed;
 	};
 
+	const resettingSessions = new Set<string>();
+
+	const resetSession = async (id: string): Promise<void> => {
+		const signal = pageScope.signal;
+		const session = registry.sessions.get(id);
+		if (!isPageCurrent(signal) || !session?.canResetTerminal || resettingSessions.has(id)) return;
+		resettingSessions.add(id);
+		try {
+			const accepted = await feedback.confirm({
+				message: t('workspace.terminal.confirmReset', { name: session.connection.name }),
+				signal,
+			});
+			if (!accepted || !isPageCurrent(signal) || registry.sessions.get(id) !== session) return;
+			await flushWorkspacePresentation();
+			if (!isPageCurrent(signal) || registry.sessions.get(id) !== session) return;
+			const outcome = await registry.reset(id, signal);
+			if (!isPageCurrent(signal)) return;
+			if (outcome === 'close_unconfirmed') feedback.notifyError(t('workspace.terminal.resetCloseUnconfirmed'));
+			else if (outcome === 'unavailable') feedback.notifyError(t('workspace.terminal.resetUnavailable'));
+		} catch (cause) {
+			logger.error({ err: cause, workspaceId: id }, 'Workspace terminal reset failed');
+			if (isPageCurrent(signal)) feedback.notifyError(t('workspace.terminal.resetFailed'));
+		} finally {
+			resettingSessions.delete(id);
+			if (!registry.sessions.has(id)) {
+				const next = { ...progressVisibility.value };
+				delete next[id];
+				progressVisibility.value = next;
+			}
+		}
+	};
+
 	const closeOtherSessions = async (id: string) => {
 		const flushed = flushWorkspacePresentation();
 		registry.closeOthers(id);
@@ -1323,6 +1355,7 @@
 			:show-workspace-layout-configurator="preferences.values.value.showWorkspaceLayoutConfigurator"
 			@activate="activateSession"
 			@close="closeSession"
+			@reset="resetSession"
 			@close-others="closeOtherSessions"
 			@close-right="closeSessionsToRight"
 			@close-left="closeSessionsToLeft"

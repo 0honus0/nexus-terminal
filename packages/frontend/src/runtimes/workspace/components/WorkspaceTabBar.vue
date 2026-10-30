@@ -29,6 +29,7 @@
 	const emit = defineEmits<{
 		activate: [id: string];
 		close: [id: string];
+		reset: [id: string];
 		closeOthers: [id: string];
 		closeRight: [id: string];
 		closeLeft: [id: string];
@@ -116,11 +117,14 @@
 		dropTarget.value = null;
 	};
 
-	const runContextAction = (action: 'close' | 'closeOthers' | 'closeRight' | 'closeLeft' | 'toggleSuspend'): void => {
+	const runContextAction = (
+		action: 'close' | 'reset' | 'closeOthers' | 'closeRight' | 'closeLeft' | 'toggleSuspend',
+	): void => {
 		const id = context.value?.session.id;
 		context.value = null;
 		if (!id) return;
 		if (action === 'close') emit('close', id);
+		else if (action === 'reset') emit('reset', id);
 		else if (action === 'closeOthers') emit('closeOthers', id);
 		else if (action === 'closeRight') emit('closeRight', id);
 		else if (action === 'closeLeft') emit('closeLeft', id);
@@ -280,6 +284,14 @@
 	</div>
 
 	<UiContextMenu v-if="context" :visible="true" :x="context.x" :y="context.y" :width="220" @close="context = null">
+		<UiContextMenuItem
+			v-if="context.session.connection.type === 'SSH'"
+			:disabled="!context.session.canResetTerminal"
+			:title="!context.session.canResetTerminal ? t('workspace.terminal.resetUnavailable') : undefined"
+			@click="runContextAction('reset')"
+		>
+			{{ t('tabs.contextMenu.resetTerminal') }}
+		</UiContextMenuItem>
 		<UiContextMenuItem v-if="contextCanToggleSuspend" @click="runContextAction('toggleSuspend')">
 			{{ t(contextMarkedForSuspend ? 'tabs.contextMenu.unmarkForSuspend' : 'tabs.contextMenu.suspendSession') }}
 		</UiContextMenuItem>

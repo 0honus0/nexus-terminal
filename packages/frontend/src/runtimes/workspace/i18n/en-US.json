@@ -14,7 +14,11 @@
     },
     "terminal": {
       "reconnectingMsg": "Attempting to reconnect...",
-      "ownershipUnknown": "Connection ownership is unknown; automatic retries stopped. Close this tab before opening a new connection. The original remote process may still be running."
+      "ownershipUnknown": "Connection ownership is unknown; automatic retries stopped. Close this tab before opening a new connection. The original remote process may still be running.",
+      "confirmReset": "Reset the terminal for “{name}”? This closes the current SSH session and opens a new terminal, clearing its screen and command draft. Transfers and unsaved edits may be affected. Background processes may continue running.",
+      "resetUnavailable": "Only connected terminals without a suspend mark can be reset. Unmark suspended sessions first.",
+      "resetCloseUnconfirmed": "The old session could not be confirmed closed. Reset stopped without opening a new session. Check remote tasks before closing this tab.",
+      "resetFailed": "Terminal reset failed. Check the session and remote task status."
     },
     "title": "Workspace",
     "sessions": "{count} sessions",
@@ -128,7 +132,8 @@
       "closeRight": "Close Tabs to the Right",
       "closeLeft": "Close Tabs to the Left",
       "suspendSession": "Suspend Session",
-      "unmarkForSuspend": "Unmark Suspend"
+      "unmarkForSuspend": "Unmark Suspend",
+      "resetTerminal": "Reset Terminal"
     },
     "closeTabTooltip": "Close Tab",
     "newTabTooltip": "New Connection Tab",
