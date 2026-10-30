@@ -280,7 +280,7 @@ TargetConnectionView 的 lastConnectedAt 为必填 Unix 毫秒或 null，readCon
 
 connections/http 的导入写命令新增独立密码/Key引用/内联私钥联合与代理密码意图；文件按同一新格式数组读取，不增加旧密文/旧字段转换。values 唯一拥有 connectionsFile、每批50项、1MiB文件/JSON、16KiB multipart余量及64KiB私钥。import/codecs 严格解码，Backend及正式Connections transport/新文件导入已共同消费；浏览器读取文件后发送JSON items，multipart接口仍是独立生产入口。
 
-connections/test-http、test-codec 独立定义未保存输入、成功latencyMs、有限安全失败及严格codec并精确export；values拥有512KiB完整测试正文。内部应用/存储/可信明文端点独立，Shared不定义存储快照、已解析秘密或运行句柄。TargetErrorCode新增operation_unknown，不能把提交结果未知降为可安全重试的普通失败。正式双端已接通，真实SSH握手及故障覆盖见testing，未覆盖环境仍独立待验。
+connections/test-http、test-codec 独立定义未保存输入、成功latencyMs、有限安全失败及严格codec并精确export；values拥有512KiB完整测试正文。失败联合的host_key_untrusted分支必须包含hostKey，复用host-keys/model的TargetHostKeyChallenge与严格解码；其他失败禁止携带该字段，不兼容仅错误码的旧分支。Backend从真实握手具名错误投影挑战，Frontend解码后转为独立应用错误，确认及重新测试由connections Model持有。内部应用/存储/可信明文端点独立，Shared不定义存储快照、已解析秘密或运行句柄。TargetErrorCode新增operation_unknown，不能把提交结果未知降为可安全重试的普通失败。正式双端已接通，真实SSH握手及故障覆盖见testing，未覆盖环境仍独立待验。
 
 ### B9 Targets 标签关联
 

@@ -6,7 +6,7 @@ import type { HostKeyTrustRequest } from './host-key-types';
 
 let confirmationTail: Promise<void> = Promise.resolve();
 
-/** Batch-opened Workspaces share the dialog without replacing one another's confirmation. */
+/** Workspace opens and connection tests share the dialog without replacing another confirmation. */
 export async function confirmConnectionHostKey(input: HostKeyTrustRequest, signal: AbortSignal): Promise<boolean> {
 	if (signal.aborted) {
 		return false;
@@ -36,7 +36,7 @@ export async function confirmConnectionHostKey(input: HostKeyTrustRequest, signa
 	}
 }
 
-/** Confirmation is scoped to the live Workspace; cancellation never establishes trust. */
+/** Confirmation belongs to the caller's live scope; cancellation never establishes trust. */
 async function confirmPresentedHostKey(input: HostKeyTrustRequest, signal: AbortSignal): Promise<boolean> {
 	if (signal.aborted) {
 		return false;

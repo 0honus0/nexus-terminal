@@ -152,7 +152,7 @@ Proxy 删除结果未知时，列表继续显示最后一次已确认的代理�
 
 每项的连接、凭据、内联私钥、代理与标签同事务提交；一项失败不会留下部分记录，其他项继续，按原序返回 `items` 的安全结果。文件中非法项返回 `invalid_input`；文件整体无效、超容量或 JSON 请求形状无效则整批拒绝。已有代理先校验持久记录，损坏记录安全拒绝，不作为可复用配置；仅在用户名一致且不携带新密码时复用，新秘密冲突返回 `conflict`，不覆盖原代理；同名私钥冲突也明确拒绝。导入中途失去身份/权限会停止后续项并返回401/403，已经提交的项不撤销；最后一项等待期间超时也不再返回整批成功。导入不是幂等操作，`operation_unknown`、会话过期、超时或响应中断可能已有部分提交，先查询核对，不自动重传。操作观察复用 Operations；观察事件不替代逐项提交回执。
 
-`POST /api/v1/targets/connections/:id/test` 测试已保存 SSH 连接，`POST /api/v1/targets/connections/test-unsaved` 接收 host/port/username、authentication 和明确 direct/proxy/jump 路由及引用。未保存测试支持密码（允许空字符串）、已有 SSH Key 或直接私钥，不创建数据库连接。仅进行 SSH 握手，不开启命令、PTY 或 SFTP；所有跳板与目标须通过已有 Host Key 信任，未知密钥先独立核对并确认。成功返回 `{status:'ok',latencyMs}`，且本地传输已关闭；失败只返回有限安全错误码，不回传供应商错误正文。最多8个在途，完整请求期限15秒；取消后仍等待真实资源收敛，清理失败阻断新的测试并在停机汇总。SSH 测试审计复用 `SSH_CONNECT_SUCCESS/FAILURE`。正式 ConnectionsView/ConnectionForm 已消费该协议及三语安全提示。编辑窗口测试的是已保存配置；新建窗口测试当前未保存输入，不持久化。
+`POST /api/v1/targets/connections/:id/test` 测试已保存 SSH 连接，`POST /api/v1/targets/connections/test-unsaved` 接收 host/port/username、authentication 和明确 direct/proxy/jump 路由及引用。未保存测试支持密码（允许空字符串）、已有 SSH Key 或直接私钥，不创建数据库连接。仅进行 SSH 握手，不开启命令、PTY 或 SFTP；所有跳板与目标须通过 Host Key 信任。连接列表及新建/编辑窗口点击测试后，未信任或密钥变更会显示现有指纹确认框，独立核实后确认信任即可继续测试，无需先打开终端；取消不保存信任、不继续测试、不显示本次成功结果。多跳逐个确认各主机，同一端点再次拒绝时停止，不循环确认；离开页面、关闭表单或身份失效后不继续旧测试。成功返回 `{status:'ok',latencyMs}`，且本地传输已关闭；失败返回有限安全错误码，`host_key_untrusted` 必须带本次握手的 `hostKey`（host、port、fingerprint、expectedFingerprint），不回传供应商错误正文。最多8个在途，每次请求期限15秒，确认等待不保留SSH连接；取消后仍等待真实资源收敛，清理失败阻断新的测试并在停机汇总。SSH 测试审计复用 `SSH_CONNECT_SUCCESS/FAILURE`。编辑窗口测试的是已保存配置；新建窗口捕获测试开始时的当前输入，不持久化连接或凭据。
 
 ## SSH 会话
 

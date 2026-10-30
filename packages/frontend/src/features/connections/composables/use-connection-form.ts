@@ -22,6 +22,7 @@ import type {
 } from '../model/connection-types';
 import { ConnectionTestFailure } from '../model/connection-errors';
 import { connectionTestApi } from '../api/connection-test-api';
+import { testConnectionWithHostKeyConfirmation } from '../model/connection-test';
 import { useConnections } from './useConnections';
 
 export function useConnectionForm(
@@ -189,9 +190,16 @@ export function useConnectionForm(
 		testing.value = true;
 		testResult.value = null;
 		try {
-			const latencyMs = props.connection
-				? await connectionTestApi.saved(props.connection.id, signal)
-				: await connectionTestApi.unsaved(toUnsavedTest(form.value), signal);
+			let run: () => Promise<number>;
+			if (props.connection) {
+				const id = props.connection.id;
+				run = () => connectionTestApi.saved(id, signal);
+			} else {
+				const input = toUnsavedTest(form.value);
+				run = () => connectionTestApi.unsaved(input, signal);
+			}
+			const latencyMs = await testConnectionWithHostKeyConfirmation(run, signal);
+			if (latencyMs === null) return;
 			if (current === generation && !signal.aborted) {
 				testResult.value = { success: true, message: t('connections.test.success'), latencyMs };
 			}

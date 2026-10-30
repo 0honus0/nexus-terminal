@@ -16,6 +16,7 @@ import {
 } from '../http.js';
 import { CONNECTION_ROUTES, CONNECTION_TEST_ERROR_CODES, CONNECTION_TEST_BODY_MAX_BYTES } from './values.js';
 import type { UnsavedSshTestInput, ConnectionTestResponse, ConnectionTestFailureResponse } from './test-http.js';
+import { readHostKeyChallenge } from '../host-keys/http-codec.js';
 
 export function readUnsavedSshTest(input: unknown): UnsavedSshTestInput {
 	if (new TextEncoder().encode(JSON.stringify(input)).byteLength > CONNECTION_TEST_BODY_MAX_BYTES) {
@@ -76,6 +77,12 @@ export function readConnectionTestResponse(input: unknown): ConnectionTestRespon
 }
 
 export function readConnectionTestFailure(input: unknown): ConnectionTestFailureResponse {
-	const row = targetObject(input, ['code']);
-	return { code: targetOption(row.code, CONNECTION_TEST_ERROR_CODES) };
+	const row = targetObject(input, ['code', 'hostKey'], ['code']);
+	const code = targetOption(row.code, CONNECTION_TEST_ERROR_CODES);
+	if (code === 'host_key_untrusted') {
+		targetObject(row, ['code', 'hostKey']);
+		return { code, hostKey: readHostKeyChallenge(row.hostKey) };
+	}
+	targetObject(row, ['code']);
+	return { code };
 }

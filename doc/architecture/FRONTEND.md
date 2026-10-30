@@ -40,7 +40,7 @@ Targets的Proxy/SSH Key/Tag列表在HTTP出口使用Shared管理集合预算（1
 4. **类型与转换**：Shared connections/test-http、test-codec 和 values 拥有完整请求、结果/错误、容量。Remote HTTP→内部应用、TestModel→Targets public、Targets public→内部应用、Model→独立存储均逐字段投影；未保存解析没有虚构 ID/fingerprint，明文仅存在受信后端输出和写命令，不进入公开响应。
 5. **入口与安装**：Remote register 安装 POST /api/v1/targets/connections/:id/test、/test-unsaved。Access 是当前管理员身份权威；同一入场不重复认证，引用/Host Key 异步读取后、交付前仍复验。全局 Operations 观察 SSH_CONNECT_SUCCESS/FAILURE。
 6. **数据、事务与并发**：引用的 Key/Proxy/Jump 在单一快照读取，递归环/深度/展开预算受约束。未保存请求不写数据库；每个测试使用独立机器，不借用普通 Workspace/Agent 资源。存储不存在/引用拒绝在 Model 转换，不由 Adapter 实例化应用错误。
-7. **生命周期与失败**：HTTP 及真实任务均受15秒期限和断连/停机取消约束，最多8个在途。原 owner 等待实际 connect/close，未收敛任务不归还配额；关闭失败保留句柄/原因并阻断新测试，所有在途排空后汇总。成功必须完成本地关闭和当前身份复验；Host Key 未受信明确失败，没有自动信任或重试。
+7. **生命周期与失败**：HTTP 及真实任务均受15秒期限和断连/停机取消约束，最多8个在途。原 owner 等待实际 connect/close，未收敛任务不归还配额；关闭失败保留句柄/原因并阻断新测试，所有在途排空后汇总。成功必须完成本地关闭和当前身份复验；Host Key 未受信明确拒绝并投影本次握手挑战，交付前复验身份；前端可在用户明确确认信任后发起新测试，不自动信任。
 8. **当前能力与验收**：保存/未保存握手、Shared、路由、审计观察及关闭链已接线，静态证据归 testing；真实 SSH/代理/跳板、取消/关闭和权限交错均待 B10，正式前端待 F1；B9整体源码结论见实施方案/testing，不将本子链或静态通过当行为验收。
 
 B6.2B 的 ToolCall 账本、审批消费及文件/Shell/Docker工具源码已接线。账本归原 runs 聚合，governance 拥有审批政策与单次许可。目录、诊断及文件只读工具的可信检查、执行消费者与模型反馈已接线；受审批文件突变、Shell/当前 Run 后台 Job/Docker 已接线，ACP Runtime、独立权限及直接 Root/Child 协作已接线；执行设置、上下文与预算已接入 governed 政策，行为待 B10。
@@ -1750,3 +1750,7 @@ TerminalView 在 pageshow、恢复可见及失焦后的窗口重新聚焦时清�
 6. 数据、事务与并发：按原Runtime实例及runtime generation核对异步结果，同会话在途重置共享Promise；关闭成功后复用原scope清理，在原顺序插入新标签，后台标签重置不改变当前选择。
 7. 生命周期与失败：收到closed才新建；detached、unknown及关闭异常保留原标签并停止重建；用户关闭原标签、认证代次失效或页面失活后不再创建新会话，已确认关闭的资源仍完成清理。新连接失败保留原有错误/重试状态，旧连接的画面、草稿和生命周期不迁移至新PTY。原实例的重置意图抑制关闭等待期间的按键重连提示，未知关闭仍呈现既有围栏说明。
 8. 当前能力与验收：行为和影响见USAGE的SSH会话章节，源码/静态/CDP证据分别归PLAN/testing，不把手动恢复视为任意程序退出或通用卡死检测保证。
+
+### SSH 测试的主机密钥确认
+
+连接列表/批量测试与保存/未保存表单共用connections/model/connection-test的确认流程。API严格解码HTTP状态及Shared挑战联合，逐字段转为内部ConnectionTestHostKeyFailure，不持有弹窗；Model复用host-key-trust的全局确认和信任写入，只在明确确认后重新握手。未保存草稿在首次请求捕获，取消不续测、不遗留成功状态，页面/认证失效由原signal与generation阻止后续操作。多跳按实际host/port分别确认；同一端点再次拒绝或指纹已等于预期时直接失败，避免重复确认循环。等待人工确认不持有SSH连接，不创建Workspace或保存未保存连接；信任写入确认丢失仍复用原只读核对，不自动重写。原布局、控件及文案不变，实机证据与覆盖边界见testing。

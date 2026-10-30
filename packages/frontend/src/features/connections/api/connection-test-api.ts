@@ -7,8 +7,11 @@ import {
 	readConnectionTestResponse,
 	readConnectionTestFailure,
 } from '@nexus-terminal/shared/targets/connections/test-codec';
-import type { UnsavedSshTestInput } from '@nexus-terminal/shared/targets/connections/test-http';
-import { ConnectionTestFailure } from '../model/connection-errors';
+import type {
+	UnsavedSshTestInput,
+	ConnectionTestFailureResponse,
+} from '@nexus-terminal/shared/targets/connections/test-http';
+import { ConnectionTestFailure, ConnectionTestHostKeyFailure } from '../model/connection-errors';
 import type { ConnectionTestErrorCode } from '@nexus-terminal/shared/targets/connections/values';
 
 function failureStatus(code: ConnectionTestErrorCode): number {
@@ -60,16 +63,24 @@ async function test(path: string, input: () => unknown, signal?: AbortSignal): P
 		throw new ConnectionTestFailure(cause instanceof HttpRequestFailure ? cause.code : 'request_failed', { cause });
 	}
 	if (response.status >= 400) {
-		let code: ConnectionTestErrorCode;
+		let failure: ConnectionTestFailureResponse;
 		try {
-			code = readConnectionTestFailure(response.body).code;
-			if (failureStatus(code) !== response.status) {
+			failure = readConnectionTestFailure(response.body);
+			if (failureStatus(failure.code) !== response.status) {
 				throw new InvalidTargetPayload();
 			}
 		} catch (cause) {
 			throw new ConnectionTestFailure('protocol_failure', { cause });
 		}
-		throw new ConnectionTestFailure(code);
+		if (failure.code === 'host_key_untrusted') {
+			throw new ConnectionTestHostKeyFailure({
+				host: failure.hostKey.host,
+				port: failure.hostKey.port,
+				fingerprint: failure.hostKey.fingerprint,
+				expectedFingerprint: failure.hostKey.expectedFingerprint,
+			});
+		}
+		throw new ConnectionTestFailure(failure.code);
 	}
 	try {
 		if (response.status !== 200) {

@@ -12,6 +12,7 @@ import {
 import type { ConnectionSummary, ConnectionBatchCommand, ConnectionTestSummary } from '../model/connection-types';
 import { connectionTestApi } from '../api/connection-test-api';
 import { ConnectionTestFailure } from '../model/connection-errors';
+import { testConnectionWithHostKeyConfirmation } from '../model/connection-test';
 import { useConnections } from './useConnections';
 
 export function useConnectionManagement() {
@@ -110,8 +111,13 @@ export function useConnectionManagement() {
 		const current = generation;
 		const signal = controller.signal;
 		testing.value.add(item.id);
+		testResults.value.delete(item.id);
 		try {
-			const latencyMs = await connectionTestApi.saved(item.id, signal);
+			const latencyMs = await testConnectionWithHostKeyConfirmation(
+				() => connectionTestApi.saved(item.id, signal),
+				signal,
+			);
+			if (latencyMs === null) return;
 			if (current === generation && !signal.aborted) {
 				testResults.value.set(item.id, { success: true, message: t('connections.test.success'), latencyMs });
 			}

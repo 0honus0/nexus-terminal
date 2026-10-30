@@ -11,6 +11,7 @@ import type { MachineConnection } from '../../../../platform/ssh/ssh-port.js';
 import { RemoteHostKeyUntrustedError } from './machine-errors.js';
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 import { ConnectionTestFailure } from '../../connection-test-failure.js';
+import { ConnectionTestHostKeyFailure } from './connection-test-errors.js';
 
 function toDraft(value: UnsavedConnectionTest): TrustedUnsavedSshRequest {
 	const auth = value.authentication;
@@ -48,14 +49,18 @@ function failure(cause: unknown, aborted: boolean): ConnectionTestFailure {
 			{ cause },
 		);
 	}
-	return new ConnectionTestFailure(
-		cause instanceof RemoteHostKeyUntrustedError
-			? 'host_key_untrusted'
-			: aborted
-				? 'unavailable'
-				: 'connection_failed',
-		{ cause },
-	);
+	if (cause instanceof RemoteHostKeyUntrustedError) {
+		return new ConnectionTestHostKeyFailure(
+			{
+				host: cause.hostKey.host,
+				port: cause.hostKey.port,
+				fingerprint: cause.hostKey.fingerprint,
+				expectedFingerprint: cause.hostKey.expectedFingerprint,
+			},
+			cause,
+		);
+	}
+	return new ConnectionTestFailure(aborted ? 'unavailable' : 'connection_failed', { cause });
 }
 
 /** Only the conversion boundary sees the transport. A successful test never opens a channel. */
@@ -81,6 +86,10 @@ export class ConnectionTestModel {
 						).machine
 					: await this.machines.openUnsaved(toDraft(command.target), options);
 		} catch (cause) {
+			if (cause instanceof RemoteHostKeyUntrustedError) {
+				await scope.validate();
+				scope.signal.throwIfAborted();
+			}
 			throw failure(cause, scope.signal.aborted);
 		}
 		const latencyMs = Math.max(0, Math.round(performance.now() - started));

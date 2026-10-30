@@ -2287,3 +2287,13 @@ main 98ceac0f 完整回归 [40614218253](https://github.com/0honus0/nexus-termin
 本轮目标机 `command -v/type nethogs`、包路径及dpkg查询均未找到nethogs，与前次0.8.8-1实测不同；未推断变化原因或安装系统包。本轮使用不写远端文件的临时Python程序复现原始模式不读输入，不能称为最新nethogs实机恢复通过。初次原命令验证因此未覆盖；早期Shared构建也触发过Vite热更新，相关轮次不计验收。开发模块注入脚本曾因Vite时间戳/资源时序未取得真实Registry而失败，已改用实际加载的模块URL，最终轮次覆盖全部上述断言，不改产品以适配脚本。
 
 最终静态：根 `pnpm run check`（含Backend包级检查/Shared构建、双端ESLint及Frontend vue-tsc）与 `pnpm run build:frontend` 通过，日志 `logs/reset-release-check.log` / `logs/reset-release-build.log`；目标测试 `tsc --ignoreConfig --noEmit --strict --noUnusedLocals --target ES2023 --module ESNext --moduleResolution Bundler --esModuleInterop --skipLibCheck --types node` 通过，日志 `logs/reset-test-types.log`；全量 `format:all:check` 通过，日志 `logs/reset-release-format.log`，最终 `git diff --check` 通过；只读进程核对未发现自建原始模式测试进程遗留，日志 `logs/reset-remote-cleanup.log`。两轮源码复核覆盖错误回执、pending Promise/cleanup归属、原实例/认证generation、signal取消、清理失败阻止新建及新连接失败保留错误标签。测试后台3001、Vite9998及全部现场仍保留，未提交、推送或生产部署。扩大范围尚未验证：真实网络丢包/休眠、各发行版后台进程信号语义、传输进行中重置和编辑保存竞争；不声称重置必定终止所有远端后代进程。
+
+### SSH 测试主机密钥确认专项（2026-10-30）
+
+终端恢复已按用户要求提交038855a1；本批修复连接测试丢失实际Host Key挑战的问题。沿用独立测试数据库、3001 Backend、9998 Vite及api.honus.top，CDP为172.30.30.11:9223，真实SSH目标为honus.top:9902。Backend按本批源码重新构建后启动；所有脚本、日志、截图和私有状态继续集中在 `/tmp/nexus-nethogs-20261030/`，服务和目录保留至用户通知清理。未推送或部署生产。
+
+最终脚本 `verify-ssh-test-trust.cjs` 退出0，日志 `logs/ssh-trust-cdp-final.log`。首次422挑战的实际指纹与独立保留的主机公钥扫描哈希一致后才确认。连接列表取消不写信任、不重试、不保留旧成功；确认后422→信任写入→200真实握手。已信任仅单次请求，无弹窗。只在隔离测试库注入错误pin验证密钥变更，弹窗含新旧指纹及danger警示，取消保留旧pin，明确确认后替换并成功。编辑保存凭据表单、新建未保存表单均完成确认重试；未保存连接目录前后相同，无连接保存或凭据写入。离页取消不信任/续测；注入缺少挑战的旧错误码响应得到protocol_failure，无信任框；与预期相同的指纹拒绝只测试一次，不循环询问。全部分支无pageerror，finally恢复测试前原始主机信任并仅关闭自建浏览器context。
+
+截图 `ssh-test-first-trust.png`、`ssh-test-changed-trust.png` 已人工核对，目标、指纹和操作完整显示，沿用既有确认框。初轮脚本尝试点击被弹窗遮挡的导航而超时，修正测试为触发真实SPA离页生命周期后最终轮次通过，产品UI未改。
+
+根 `pnpm run check` 与双端 `pnpm run build` 通过，日志 `logs/ssh-trust-check.log`、`logs/ssh-trust-build.log`。新增正式回归 `tests/e2e/specs/ssh/connection-test-host-key.spec.ts` 覆盖保存首次/变更密钥的取消与确认，以及未保存测试不建记录；同步targets.integration对具名挑战和HTTP状态的断言。目标测试严格tsc通过（`logs/ssh-trust-test-types.log`），`node --check tests/frontend/targets.integration.mjs`、全量 `pnpm run format:all:check`（`logs/ssh-trust-format.log`）及 `git diff --check` 均通过。构建后Shared codec定向断言验证合法挑战与普通错误，并拒绝缺失挑战、非法端口/指纹、嵌套额外字段、非主机错误携带挑战及外泄cause，日志 `logs/ssh-trust-codec.log`。正式夹具/全量E2E未运行；代理/多跳真实环境、并发密钥更换、确认写入丢失及权限撤销交错不扩大为本轮实测通过。

@@ -4,6 +4,7 @@ import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
 import type { ConnectionTestService } from '../../machines/service/connection-test-service.js';
 import type { ConnectionTestCommand, UnsavedConnectionTest } from '../../machines/model/connection-test-types.js';
 import { ConnectionTestFailure } from '../../connection-test-failure.js';
+import { ConnectionTestHostKeyFailure } from '../../machines/model/connection-test-errors.js';
 import { InvalidTargetPayload, targetNumber } from '@nexus-terminal/shared/targets/http';
 import { CONNECTION_TEST_BODY_MAX_BYTES } from '@nexus-terminal/shared/targets/connections/values';
 import type { ConnectionTestErrorCode } from '@nexus-terminal/shared/targets/connections/values';
@@ -87,10 +88,22 @@ async function handle(context: HttpRouteContext, owner: ConnectionTestService, s
 		if (error instanceof HttpInputFailure) {
 			throw error;
 		}
+		if (error instanceof ConnectionTestHostKeyFailure && !controller.signal.aborted) {
+			context.send(422, {
+				code: 'host_key_untrusted',
+				hostKey: {
+					host: error.hostKey.host,
+					port: error.hostKey.port,
+					fingerprint: error.hostKey.fingerprint,
+					expectedFingerprint: error.hostKey.expectedFingerprint,
+				},
+			} satisfies ConnectionTestFailureResponse);
+			return;
+		}
 		const code =
 			error instanceof InvalidTargetPayload
 				? 'invalid_input'
-				: error instanceof ConnectionTestFailure
+				: error instanceof ConnectionTestFailure && error.code !== 'host_key_untrusted'
 					? error.code
 					: controller.signal.aborted
 						? 'unavailable'

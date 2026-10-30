@@ -1,4 +1,5 @@
 import type { ConnectionRoute, ConnectionTestErrorCode } from './values.js';
+import type { TargetHostKeyChallenge } from '../host-keys/model.js';
 
 export interface UnsavedSshTestInput {
 	host: string;
@@ -19,6 +20,6 @@ export interface ConnectionTestResponse {
 	latencyMs: number;
 }
 
-export interface ConnectionTestFailureResponse {
-	code: ConnectionTestErrorCode;
-}
+export type ConnectionTestFailureResponse =
+	| { code: 'host_key_untrusted'; hostKey: TargetHostKeyChallenge }
+	| { code: Exclude<ConnectionTestErrorCode, 'host_key_untrusted'> };

@@ -1686,14 +1686,20 @@ try {
 						try {
 							await work();
 						} catch (cause) {
-							if (cause instanceof ConnectionTestFailure && cause.code === code) return;
+							if (cause instanceof ConnectionTestFailure && cause.code === code) return cause;
 							throw cause;
 						}
 						throw Error('Expected connection test failure: ' + code);
 					}
 
-					await testFailure(() => connectionTestApi.saved(sshId), 'host_key_untrusted');
-					check(true, 'real saved SSH test refuses unknown host key');
+					const untrusted = await testFailure(() => connectionTestApi.saved(sshId), 'host_key_untrusted');
+					check(
+						untrusted.hostKey.host === '127.0.0.1' &&
+							untrusted.hostKey.port === ssh.port &&
+							untrusted.hostKey.fingerprint === ssh.fingerprint &&
+							untrusted.hostKey.expectedFingerprint === null,
+						'real saved SSH test preserves the unknown host key challenge',
+					);
 					await hostKeysApi.confirm({ host: '127.0.0.1', port: ssh.port, fingerprint: ssh.fingerprint });
 					check(
 						Number.isFinite(await connectionTestApi.saved(sshId)),
@@ -1803,7 +1809,20 @@ try {
 					check(true, 'credential read validates request identity', controlled);
 					window.fetch = (url, options) =>
 						String(url).endsWith('/test')
-							? Promise.resolve(response({ code: 'host_key_untrusted' }, 500))
+							? Promise.resolve(
+									response(
+										{
+											code: 'host_key_untrusted',
+											hostKey: {
+												host: '127.0.0.1',
+												port: ssh.port,
+												fingerprint: ssh.fingerprint,
+												expectedFingerprint: null,
+											},
+										},
+										500,
+									),
+								)
 							: original(url, options);
 					await testFailure(() => connectionTestApi.saved(sshId), 'protocol_failure');
 					check(true, 'SSH test rejects mismatched status and safe error', controlled);
