@@ -378,22 +378,27 @@ test('file previews and text editor protect historical file-opening regressions'
 		await captureFunctionalScreenshot(page, 'file-manager-editor.png', { viewport: { width: 1440, height: 900 } });
 	});
 
-	await step('desktop text editor searches Monaco content through the shared editor toolbar', async () => {
+	await step('desktop text editor opens Monaco native find from the toolbar and keyboard', async () => {
 		const editor = editorView(page);
 		const searchButton = editor.getByRole('button', { name: 'Search in document', exact: true });
 		await expect(searchButton).toBeVisible();
 		await searchButton.click();
-		const searchBar = editor.locator('.file-editor-search-bar');
-		await expect(searchBar).toBeVisible();
-		const findInput = searchBar.getByRole('searchbox', { name: 'Search in document', exact: true });
+		const searchBar = editor.locator('.monaco-editor .find-widget');
+		await expect(searchBar).toHaveAttribute('aria-hidden', 'false');
+		const findInput = searchBar.getByRole('textbox', { name: 'Find', exact: true });
 		await expect(findInput).toBeFocused();
 		await findInput.fill('plain-no-extension');
 		await expect(findInput).toHaveValue('plain-no-extension');
-		await expect(searchBar.locator('.file-editor-search-count')).toHaveText('1/1');
-		await expect(editor.locator('.monaco-editor .file-editor-search-match')).toHaveText('plain-no-extension');
+		await expect(searchBar.locator('.matchesCount')).toHaveText('1 of 1');
+		await expect(editor.locator('.monaco-editor .currentFindMatch')).toHaveCount(1);
 		await page.keyboard.press('Escape');
-		await expect(searchBar).toBeHidden();
-		await expect(editor.locator('.monaco-editor .file-editor-search-match')).toHaveCount(0);
+		await expect(searchBar).toHaveAttribute('aria-hidden', 'true');
+		await editor.locator('.monaco-editor .view-lines').click({ position: { x: 20, y: 10 } });
+		await page.keyboard.press('ControlOrMeta+f');
+		await expect(searchBar).toHaveAttribute('aria-hidden', 'false');
+		await expect(findInput).toBeFocused();
+		await page.keyboard.press('Escape');
+		await expect(searchBar).toHaveAttribute('aria-hidden', 'true');
 	});
 
 	await step('editor popup resize keeps Monaco visible and usable', async () => {

@@ -114,7 +114,12 @@ export interface ConnectionUsage {
 
 export interface ConnectionMutations {
 	create(data: ConnectionMetadata): Promise<ConnectionSnapshot>;
-	update(id: number, version: number, changes: Partial<ConnectionMetadata>): Promise<ConnectionMutation>;
+	update(
+		id: number,
+		version: number,
+		changes: Partial<ConnectionMetadata>,
+		credential?: TargetCredentialInput | null,
+	): Promise<ConnectionMutation>;
 	clone(id: number, name: string): Promise<ConnectionSnapshot | null>;
 	delete(id: number): Promise<boolean>;
 	setTags(id: number, version: number, tags: number[]): Promise<ConnectionMutation>;

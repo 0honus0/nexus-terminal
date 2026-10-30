@@ -203,8 +203,9 @@ export const useConnectionsStore = defineStore('connections', () => {
 		snapshot: ConnectionSummary,
 		input: TargetConnectionChanges,
 		signal?: AbortSignal,
+		credential?: TargetCredentialInput | null,
 	): Promise<ConnectionSummary> {
-		return mutate((scope) => connectionsApi.update(snapshot, input, scope), save, signal);
+		return mutate((scope) => connectionsApi.update(snapshot, input, scope, credential), save, signal);
 	}
 
 	function remove(id: number, signal?: AbortSignal): Promise<void> {

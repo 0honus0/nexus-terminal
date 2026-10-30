@@ -1,3 +1,8 @@
+import type {
+	ConnectionCredentialWrite,
+	CredentialWriteValidator,
+} from '../../storage/connection-credential-storage.js';
+import { writeCredentialInTransaction } from './connection-credential-sql.js';
 import {
 	TARGET_CONNECTION_NAME_MAX_BYTES,
 	TARGET_CONNECTION_MAX_JUMPS,
@@ -187,6 +192,7 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 		private readonly db: SqliteRuntime,
 		private readonly validateGraph: ConnectionGraphValidator,
 		private readonly validateTypeChange: ConnectionTypeChangeValidator,
+		private readonly validateCredential: CredentialWriteValidator,
 	) {}
 
 	async listEntries(ids: number[]): Promise<StoredCatalogEntry[]> {
@@ -255,7 +261,12 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 		return this.db.transaction((tx) => insertConnectionInTransaction(tx, data, this.validateGraph));
 	}
 
-	update(id: number, expectedVersion: number, changes: Partial<ConnectionData>): Promise<MutationResult> {
+	update(
+		id: number,
+		expectedVersion: number,
+		changes: Partial<ConnectionData>,
+		credential?: ConnectionCredentialWrite | null,
+	): Promise<MutationResult> {
 		return this.db.transaction(async (tx) => {
 			const old = await readConnection(tx, id);
 			if (!old) {
@@ -263,6 +274,12 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 			}
 			if (old.version !== expectedVersion) {
 				return { status: 'version_conflict' };
+			}
+			if (expectedVersion === Number.MAX_SAFE_INTEGER) {
+				throw new Error('Connection version exhausted');
+			}
+			if (credential !== undefined) {
+				this.validateCredential(changes.type ?? old.type, credential?.kind ?? null);
 			}
 			this.validateTypeChange({
 				previousType: old.type,
@@ -286,6 +303,11 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 				return { status: 'version_conflict' };
 			}
 			await writeRelationships(tx, id, merged, this.validateGraph);
+			if (credential === null) {
+				await tx.run('DELETE FROM connection_credentials WHERE connection_id=?', [id]);
+			} else if (credential !== undefined) {
+				await writeCredentialInTransaction(tx, id, credential, timestamp);
+			}
 			return { status: 'updated', value: await readRequiredConnection(tx, id) };
 		});
 	}

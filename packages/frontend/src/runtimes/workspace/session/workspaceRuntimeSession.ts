@@ -804,7 +804,8 @@ export class WorkspaceRuntimeSession {
 			return;
 		}
 		if (this.state.value === 'connected') {
-			await this.socket.checkLiveness();
+			if (this.markedForSuspend.value) await this.startSuspendOwnerHeartbeat(true);
+			else await this.socket.checkLiveness();
 		}
 		if (this.disposed || this.closing || document.visibilityState !== 'visible') {
 			return;
@@ -1144,9 +1145,9 @@ export class WorkspaceRuntimeSession {
 		this.dockerController.workspaceDisconnected();
 	}
 
-	private startSuspendOwnerHeartbeat(): void {
+	private startSuspendOwnerHeartbeat(revalidate = false): Promise<void> {
 		this.clearSuspendOwnerHeartbeat();
-		if (!this.markedForSuspend.value) return;
+		if (!this.markedForSuspend.value) return Promise.resolve();
 		const generation = this.heartbeatGeneration;
 		const lifecycle = this.lifecycleGeneration;
 		const controller = new AbortController();
@@ -1170,7 +1171,8 @@ export class WorkspaceRuntimeSession {
 			this.clearSuspendOwnerHeartbeat();
 			this.markCapabilitiesDisconnected();
 			this.socket.close('Suspended lease unavailable');
-			this.statusMessage.value = 'lease_expired';
+			// Only suspend.revoked carries an authoritative lease-expired reason.
+			this.statusMessage.value = 'operation_unknown';
 		};
 
 		const armDeadline = () => {
@@ -1213,8 +1215,9 @@ export class WorkspaceRuntimeSession {
 			}
 		};
 
-		armDeadline();
-		void renew();
+		// Foreground recovery first asks the server; a queued local deadline is not current ownership evidence.
+		if (!revalidate) armDeadline();
+		return renew();
 	}
 
 	private clearSuspendOwnerHeartbeat(): void {

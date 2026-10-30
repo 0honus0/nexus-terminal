@@ -1884,12 +1884,14 @@ try {
 					);
 					fill('conn-password', 'replacement secret');
 					await nextTick();
-					button('connections.saveCredential').click();
+					document
+						.querySelector('form.connection-form')
+						.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
 					await until(() => !editingVisible.value);
 					editingUi.close();
 					check(
 						(await connectionsApi.get(formal.id)).version === formal.version + 1,
-						'formal credential action independently advances original CAS',
+						'formal save atomically advances metadata and credential CAS',
 					);
 					for (const mode of ['script', 'range']) {
 						const visible = ref(true);
@@ -2123,7 +2125,7 @@ try {
 					managementUi.close();
 					for (const locale of ['en-US', 'zh-CN', 'ja-JP']) {
 						check(
-							i18n.global.te('connections.separateSaves', locale) &&
+							i18n.global.te('connections.batchSeparateSaves', locale) &&
 								i18n.global.te('connections.testFailures.host_key_untrusted', locale),
 							'connection edit and SSH recovery translations: ' + locale,
 							controlled,

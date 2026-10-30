@@ -1,3 +1,4 @@
+import type { ConnectionCredentialInput } from '../model/connection-credential-types.js';
 import { CONNECTION_TYPES, TARGET_CONNECTION_NAME_MAX_BYTES } from '@nexus-terminal/shared/targets/connections/values';
 import { TargetFailure } from '../../target-failure.js';
 import type {
@@ -7,7 +8,12 @@ import type {
 	ConnectionCatalogEntry,
 } from '../model/connection-types.js';
 import type { ConnectionModel } from '../model/connection-model.js';
-import { validateConnection, normalizeConnectionChanges, validateConnectionTagCount } from '../connection-rules.js';
+import {
+	validateConnection,
+	normalizeConnectionChanges,
+	validateConnectionTagCount,
+	validateConnectionCredential,
+} from '../connection-rules.js';
 import { validateTargetId as validateId, validateTargetText } from '../../target-validation.js';
 
 export class ConnectionService {
@@ -34,15 +40,23 @@ export class ConnectionService {
 		return this.model.create(validateConnection(data));
 	}
 
-	async update(id: number, version: number, changes: Partial<ConnectionMetadata>): Promise<ConnectionMutation> {
+	async update(
+		id: number,
+		version: number,
+		changes: Partial<ConnectionMetadata>,
+		credential?: ConnectionCredentialInput | null,
+	): Promise<ConnectionMutation> {
 		validateId(id);
 		validateId(version);
 		const old = await this.model.get(id);
 		if (!old) {
 			return { status: 'not_found' };
 		}
+		if (credential != null) {
+			validateConnectionCredential(credential);
+		}
 		const update = normalizeConnectionChanges(old, changes);
-		return this.model.update(id, version, update);
+		return this.model.update(id, version, update, credential);
 	}
 
 	clone(id: number, name: string): Promise<ConnectionSnapshot | null> {

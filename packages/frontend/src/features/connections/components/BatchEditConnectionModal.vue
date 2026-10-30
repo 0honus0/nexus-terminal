@@ -155,7 +155,7 @@
 			<fieldset :disabled="loading" class="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pr-1 sm:pr-3">
 				<p class="connection-batch__hint">
 					<i class="fas fa-circle-info" aria-hidden="true" />
-					<span>{{ t('connections.separateSaves') }}</span>
+					<span>{{ t('connections.batchSeparateSaves') }}</span>
 				</p>
 				<section class="ui-form-section connection-batch__section">
 					<div class="connection-batch__section-title">

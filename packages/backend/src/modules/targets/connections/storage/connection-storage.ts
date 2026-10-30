@@ -1,3 +1,4 @@
+import type { ConnectionCredentialWrite } from './connection-credential-storage.js';
 import type { ConnectionRoute, ConnectionType } from '@nexus-terminal/shared/targets/connections/values';
 
 export interface StoredCatalogEntry {
@@ -39,7 +40,12 @@ export interface ConnectionStorage {
 	list(): Promise<StoredConnection[]>;
 	get(id: number): Promise<StoredConnection | null>;
 	create(data: ConnectionData): Promise<StoredConnection>;
-	update(id: number, expectedVersion: number, changes: Partial<ConnectionData>): Promise<MutationResult>;
+	update(
+		id: number,
+		expectedVersion: number,
+		changes: Partial<ConnectionData>,
+		credential?: ConnectionCredentialWrite | null,
+	): Promise<MutationResult>;
 	clone(id: number, name: string): Promise<StoredConnection | null>;
 	delete(id: number): Promise<boolean>;
 	setTags(id: number, expectedVersion: number, tagIds: number[]): Promise<MutationResult>;

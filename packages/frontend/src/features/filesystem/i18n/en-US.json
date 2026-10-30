@@ -227,6 +227,7 @@
       "commandFailed": "The remote file command failed. Check directory permissions and required commands."
     },
     "notifications": {
+      "terminalWaitingForPrompt": "Waiting for the shell prompt. If you have unfinished input, press Ctrl+C to clear the line; the directory will then change automatically. If a command is running, wait for it to finish.",
       "copySuccess": "Copy successful",
       "moveSuccess": "Move successful",
       "cdCommandSent": "CD command sent to terminal",

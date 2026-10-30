@@ -2,11 +2,15 @@
 
 当前验收基线：后端重构、正式前端 Shared 适配及远程八组回归已收口，具体 SHA、覆盖与仍未验证的外部/扩大故障范围统一见 [E2E](../testing/E2E.md#当前验收基线)，后续任务见 [PLAN](../PLAN.md)。下文 B/F 阶段名仅定位设计来源；原阶段的静态或有限行为证据不扩大为当前全量保证，历史“待 B10/F1”不表示重启已完成迁移。
 
-当前设计同时记录本地未提交实现；新增目录选择、依赖安装和基础组件接入不自动纳入上述历史验收基线。产品行为见 [USAGE](../USAGE.md)，源码、静态检查和待验范围分别见 [PLAN](../PLAN.md) 与 testing。
+当前设计同时记录尚未纳入全量验收的专项实现；新增目录选择、依赖安装和基础组件接入不自动纳入上述历史验收基线。产品行为见 [USAGE](../USAGE.md)，源码、静态检查和待验范围分别见 [PLAN](../PLAN.md) 与 testing。
 
 本文约束新后端及后续功能的放置和依赖。开发前由 [AGENTS](../AGENTS.md) 读取 [人工规则](../rules/HUMAN.md)、[工程经验](../rules/ENGINEERING.md) 与 [编码规范](../rules/CODE_STYLE.md)。按 [模块模板](MODULE_TEMPLATE.md) 维护下面八个章节，不复制人工规则和编码列表。
 
 ## 1. 职责与范围
+
+### 终端目录等待提示
+
+FileManager 沿原 TerminalDirectoryPort.changeDirectory 的 onQueued 消费 waitingForPrompt；仅当前视图与原目录能力仍有效时通知一次。真实等待期间提示未执行输入可按 Ctrl+C 清行后自动切换，已有前台命令则等待结束；不推断一定有草稿，不自动清行或保存输入。服务端排队、完成验证、失败与未知结果契约不变，正常成功静默。无新状态 owner、协议或技术资源；专项证据归 testing。
 
 ### 复制任务总进度呈现
 
@@ -18,6 +22,28 @@
 6. **数据、事务与并发**：不维护第二份进度；已知总项数时与累计大小并存，未知总量不编造分母或递归扫描。
 7. **生命周期与失败**：原取消、隐藏、终态过滤及未知结果围栏不变，无新增资源。
 8. **当前能力与验收**：操作见 USAGE 复制章节；静态与指定站点 CDP 的组件受控任务验证证据归 testing，不扩大为真实跨服务器复制验收。
+
+### 普通文本原生查找
+
+1. **职责与范围**：仅file-editor普通文本查找由Monaco/CodeMirror各自管理，file-preview和文件列表搜索保持现状。
+2. **子功能与目录**：FileEditor转发底部搜索按钮；MonacoEditor调用actions.find，CodeMirrorMobileEditor调用openSearchPanel；删除自定义FileEditorSearchBar和无消费者的搜索状态接口。
+3. **依赖方向**：FileEditor→对应编辑器→已安装的库原生能力，不在父组件复制匹配状态或拦截全局Ctrl+F。
+4. **类型与转换**：单文件组件引用只要求focus/openSearch本地能力，无Shared、Backend或存储类型变更。
+5. **入口与安装**：桌面右上角原生查找，手机原生搜索面板；底部按钮与正文焦点内快捷键共用原生能力。Codicon/find贡献仍在Monaco初始化前加载。
+6. **数据、事务与并发**：匹配和高亮由库持有，不维护第二份匹配缓存或定时同步；替换沿原编辑草稿和显式保存链。
+7. **生命周期与失败**：原editor/view销毁回收原生查找；不改变文档加载、只读、保存、缩放和标签生命周期。
+8. **当前能力与验收**：USAGE文件管理器章节描述操作；专项CDP及静态证据归testing，其他预览不随本次恢复回退。
+
+### 单连接凭据编辑与挂起前台恢复
+
+1. **职责与范围**：Connections表单持编辑意图，Workspace Runtime持续租生命周期，Page持权威目录驱动的恢复；不增加自动卡死检测。
+2. **子功能与目录**：沿connections form/editor/store/API、workspace RuntimeSession和WorkspacePage，目录复用ssh-suspend既有store。
+3. **依赖方向**：表单→应用store→API→Shared；Page→既有RuntimeRegistry和ssh-suspend公开能力，不引入第二份会话权威。
+4. **类型与转换**：更新提交显式传递可选credential，API构造Shared请求；空密码保留，明确勾选清除才发送null。草稿测试捕获当前输入，已保存密码不回显。
+5. **入口与安装**：单连接编辑一次确认保存，移除独立凭据按钮和分开保存说明，保留测试信息提示；批量模式不变。前台恢复复用visibilitychange/pageshow入口。
+6. **数据、事务与并发**：前台续租先向服务器复验再安排本地deadline；Page观察目录active/available集合变化，串行复用原reconcile与resumeReplacing，不新增轮询及超时。
+7. **生命周期与失败**：generation、原实例、signal和可见性保护保留；续租无法确认显示operation_unknown，lease_expired仅来自服务端撤销。目录晚到仍恢复原PTY，其他owner不得静默接管。表单取消/失活清理秘密与旧测试。
+8. **当前能力与验收**：USAGE连接管理/SSH挂起章节说明操作；CDP受控后台与真实SSH证据见testing，不能等同所有移动系统休眠实机验收。
 
 ### 远端工具安装
 

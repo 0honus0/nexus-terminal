@@ -304,24 +304,23 @@ test('mobile CodeMirror search opens from the editor header and highlights remot
 		await expect(editor.locator('.cm-editor')).toHaveClass(/cm-focused/);
 	});
 
-	await step('Search opens the shared editor search and decorates CodeMirror text', async () => {
+	await step('Search opens the native CodeMirror panel and highlights text', async () => {
 		const editor = page
 			.locator('[data-document-mode][data-workspace-active="true"]:visible .file-editor-container')
 			.first();
 		await editor.getByRole('button', { name: 'Search in document', exact: true }).click();
-		const searchPanel = editor.locator('.file-editor-search-bar');
+		const searchPanel = editor.locator('.cm-search');
 		await expect(searchPanel).toBeVisible();
-		const searchInput = searchPanel.getByRole('searchbox', { name: 'Search in document', exact: true });
+		const searchInput = searchPanel.getByRole('textbox', { name: 'Find', exact: true });
 		await expect(searchInput).toBeFocused();
 		await searchInput.fill('plain-no-extension');
 		await searchInput.press('End');
 		await expect(searchInput).toHaveValue('plain-no-extension');
-		await expect(searchPanel.locator('.file-editor-search-count')).toHaveText('1/1');
-		await expect(editor.locator('.cm-editor .file-editor-search-match')).toHaveText('plain-no-extension');
+		await expect(editor.locator('.cm-editor .cm-searchMatch')).toHaveText('plain-no-extension');
 		await captureFunctionalScreenshot(page, 'mobile-editor-search.png');
 		await searchInput.press('Escape');
 		await expect(searchPanel).toBeHidden();
-		await expect(editor.locator('.cm-editor .file-editor-search-match')).toHaveCount(0);
+		await expect(editor.locator('.cm-editor .cm-searchMatch')).toHaveCount(0);
 	});
 
 	await step('closing the popup returns to the terminal instead of leaving an empty editor pane', async () => {

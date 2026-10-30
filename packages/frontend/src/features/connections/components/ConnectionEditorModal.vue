@@ -7,8 +7,10 @@
 	const props = defineProps<{ visible: boolean; connection?: ConnectionSummary | null }>();
 	const emit = defineEmits<{ close: []; saved: [connection: ConnectionSummary]; deleted: [id: number] }>();
 	const { t } = useI18n();
-	const { snapshot, credential, loading, ready, data, refresh, save, saveMany, saveCredential, remove } =
-		useConnectionEditor(props, emit);
+	const { snapshot, credential, loading, ready, data, refresh, save, saveMany, remove } = useConnectionEditor(
+		props,
+		emit,
+	);
 </script>
 <template>
 	<UiModal
@@ -46,7 +48,6 @@
 				:loading="loading || data.needsRefresh.value"
 				@submit="save"
 				@submit-many="saveMany"
-				@credential="saveCredential"
 				@cancel="emit('close')"
 				@delete="remove"
 			/>

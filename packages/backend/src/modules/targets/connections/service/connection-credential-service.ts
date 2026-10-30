@@ -1,6 +1,5 @@
-import { TARGET_CONNECTION_PASSWORD_MAX_BYTES } from '@nexus-terminal/shared/targets/connections/values';
-import { TargetFailure } from '../../target-failure.js';
-import { validateTargetId, validateTargetText } from '../../target-validation.js';
+import { validateConnectionCredential } from '../connection-rules.js';
+import { validateTargetId } from '../../target-validation.js';
 import type {
 	ConnectionCredentialInput,
 	CredentialMutation,
@@ -19,18 +18,8 @@ export class ConnectionCredentialService {
 	async set(id: number, version: number, input: ConnectionCredentialInput): Promise<CredentialMutation> {
 		validateTargetId(id);
 		validateTargetId(version);
-		if (input.kind === 'ssh_key') {
-			validateTargetId(input.sshKeyId);
-			return this.model.set(id, version, { kind: 'ssh_key', sshKeyId: input.sshKeyId });
-		}
-		if (input.kind !== 'password' || !input.password) {
-			throw new TargetFailure('invalid_input');
-		}
-		validateTargetText(input.password, TARGET_CONNECTION_PASSWORD_MAX_BYTES);
-		return this.model.set(id, version, {
-			kind: 'password',
-			password: input.password,
-		});
+		validateConnectionCredential(input);
+		return this.model.set(id, version, input);
 	}
 
 	clear(id: number, version: number): Promise<CredentialMutation> {

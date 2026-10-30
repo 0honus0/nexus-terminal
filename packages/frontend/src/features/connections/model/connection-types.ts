@@ -53,7 +53,8 @@ export type ConnectionImportReceipt =
 	{ index: number; status: 'ok'; id: number } | { index: number; status: 'error'; code: TargetErrorCode };
 
 export type ConnectionSubmission =
-	{ kind: 'create'; input: TargetImportInput } | { kind: 'update'; changes: TargetConnectionInput };
+	| { kind: 'create'; input: TargetImportInput }
+	| { kind: 'update'; changes: TargetConnectionInput; credential?: TargetCredentialInput | null };
 
 export type ConnectionBatchCommand =
 	| { kind: 'metadata'; changes: TargetConnectionChanges }
@@ -79,6 +80,7 @@ export interface ConnectionsController {
 		snapshot: ConnectionSummary,
 		changes: TargetConnectionChanges,
 		signal?: AbortSignal,
+		credential?: TargetCredentialInput | null,
 	): Promise<ConnectionSummary>;
 	remove(id: number, signal?: AbortSignal): Promise<void>;
 	clone(id: number, name: string, signal?: AbortSignal): Promise<ConnectionSummary>;

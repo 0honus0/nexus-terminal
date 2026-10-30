@@ -64,6 +64,7 @@ export const connectionsApi = {
 		snapshot: ConnectionSummary,
 		changes: TargetConnectionChanges,
 		signal?: AbortSignal,
+		credential?: TargetCredentialInput | null,
 	): Promise<ConnectionSummary> {
 		const id = snapshot.id;
 		const version = snapshot.version;
@@ -75,7 +76,11 @@ export const connectionsApi = {
 
 			input: () => {
 				targetNumber(id);
-				return readConnectionUpdateRequest({ version, changes });
+				return readConnectionUpdateRequest({
+					version,
+					changes,
+					...(credential === undefined ? {} : { credential }),
+				});
 			},
 
 			decode: (value) => {

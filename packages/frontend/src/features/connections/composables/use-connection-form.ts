@@ -34,7 +34,6 @@ export function useConnectionForm(
 	emit: {
 		(event: 'submit', value: ConnectionSubmission): void;
 		(event: 'submitMany', value: TargetImportInput[]): void;
-		(event: 'credential', value: TargetCredentialInput | null): void;
 	},
 ) {
 	const { t } = useI18n();
@@ -44,6 +43,7 @@ export function useConnectionForm(
 	const proxies = capabilities.proxies;
 	const sshKeys = capabilities.sshKeys;
 	const form = ref(toConnectionDraft(props.connection ?? null));
+	const removeSavedCredential = ref(false);
 	const scriptMode = ref(false);
 	const script = ref('');
 	const testing = ref(false);
@@ -62,6 +62,7 @@ export function useConnectionForm(
 			form.value.authMethod = 'key';
 			form.value.sshKeyId = props.credential.credential.sshKeyId;
 		}
+		removeSavedCredential.value = false;
 		scriptMode.value = false;
 		script.value = '';
 		testing.value = false;
@@ -119,7 +120,12 @@ export function useConnectionForm(
 				if (hosts.length !== 1) {
 					throw new InvalidTargetPayload();
 				}
-				emit('submit', { kind: 'update', changes: toConnectionInput(form.value) });
+				const credential = credentialEdit();
+				emit('submit', {
+					kind: 'update',
+					changes: toConnectionInput(form.value),
+					...(credential === undefined ? {} : { credential }),
+				});
 				return;
 			}
 			const credential = toConnectionCredential(form.value);
@@ -164,21 +170,19 @@ export function useConnectionForm(
 		}
 	}
 
-	function saveCredential(): void {
-		if (props.loading) {
-			return;
+	function credentialEdit(): TargetCredentialInput | null | undefined {
+		if (removeSavedCredential.value) return null;
+		if (form.value.type === 'SSH' && form.value.authMethod === 'key') {
+			if (
+				props.credential?.credential.kind === 'ssh_key' &&
+				form.value.sshKeyId === props.credential.credential.sshKeyId
+			)
+				return undefined;
+			return toConnectionCredential(form.value);
 		}
-		try {
-			emit('credential', toConnectionCredential(form.value));
-		} catch (cause) {
-			failure(cause);
-		}
-	}
-
-	function clearCredential(): void {
-		if (!props.loading) {
-			emit('credential', null);
-		}
+		if (form.value.password === '' && props.credential?.credential.kind === 'ssh_key')
+			throw new InvalidTargetPayload();
+		return form.value.password === '' ? undefined : toConnectionCredential(form.value);
 	}
 
 	async function test(): Promise<void> {
@@ -189,13 +193,28 @@ export function useConnectionForm(
 		const signal = controller.signal;
 		testing.value = true;
 		testResult.value = null;
+		submitError.value = '';
 		try {
 			let run: () => Promise<number>;
-			if (props.connection) {
-				const id = props.connection.id;
+			if (props.connection && credentialEdit() === undefined && form.value.authMethod === 'password') {
+				const saved = props.connection;
+				const draft = toConnectionInput(form.value);
+				if (
+					draft.host !== saved.host ||
+					draft.port !== saved.port ||
+					draft.username !== saved.username ||
+					draft.route !== saved.route ||
+					draft.proxyId !== saved.proxyId ||
+					JSON.stringify(draft.jumpIds) !== JSON.stringify(saved.jumpIds)
+				) {
+					submitError.value = t('connections.form.testPasswordRequired');
+					return;
+				}
+				const id = saved.id;
 				run = () => connectionTestApi.saved(id, signal);
 			} else {
 				const input = toUnsavedTest(form.value);
+				if (removeSavedCredential.value) input.authentication = { kind: 'password', password: '' };
 				run = () => connectionTestApi.unsaved(input, signal);
 			}
 			const latencyMs = await testConnectionWithHostKeyConfirmation(run, signal);
@@ -219,6 +238,18 @@ export function useConnectionForm(
 			}
 		}
 	}
+
+	watch(
+		form,
+		() => {
+			testResult.value = null;
+			submitError.value = '';
+		},
+		{ deep: true },
+	);
+	watch(removeSavedCredential, () => {
+		testResult.value = null;
+	});
 
 	const availableJumpHosts = computed(() =>
 		connections.connections.value.filter((item) => item.type === 'SSH' && item.id !== props.connection?.id),
@@ -266,7 +297,6 @@ export function useConnectionForm(
 		removeJumpHost,
 		submit,
 		test,
-		saveCredential,
-		clearCredential,
+		removeSavedCredential,
 	};
 }

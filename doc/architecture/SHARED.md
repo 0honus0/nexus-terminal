@@ -4,7 +4,7 @@
 
 当前验收基线：后端重构、正式前端 Shared 适配及远程八组回归已收口，具体 SHA、覆盖与仍未验证的外部/扩大故障范围统一见 [E2E](../testing/E2E.md#当前验收基线)，后续任务见 [PLAN](../PLAN.md)。下文 B/F 阶段名仅定位设计来源；原阶段的静态或有限行为证据不扩大为当前全量保证，历史“待 B10/F1”不表示重启已完成迁移。
 
-当前设计同时记录本地未提交实现；新增目录选择、依赖安装和基础组件接入不自动纳入上述历史验收基线。产品行为见 [USAGE](../USAGE.md)，源码、静态检查和待验范围分别见 [PLAN](../PLAN.md) 与 testing。
+当前设计同时记录尚未纳入全量验收的专项实现；新增目录选择、依赖安装和基础组件接入不自动纳入上述历史验收基线。产品行为见 [USAGE](../USAGE.md)，源码、静态检查和待验范围分别见 [PLAN](../PLAN.md) 与 testing。
 
 本文按 [模块模板](MODULE_TEMPLATE.md) 定义双端契约职责。人工约束见 [HUMAN](../rules/HUMAN.md)，开发入口见 [AGENTS](../AGENTS.md)。
 
@@ -21,6 +21,17 @@ B4.1 Access 的双端范围是管理员初始化、密码登录、明确的认�
 B7.1 核心设置的 GET/PUT、CAPTCHA 专项 PUT、安全视图、secret keep/clear/replace、CAS 与 saved/effective 激活状态归 Shared preferences/configuration；公开 CAPTCHA 读取复用 Access 契约。后端生产者及正式CAPTCHA/IP/采样配置面板的Preferences transport/mapper已消费；Dashboard消费启动生效监控投影。公开CAPTCHA读取不替代管理快照，其他Preferences正式消费者已接Shared，本轮完整行为仍待远程回归。
 
 ## 2. 子功能与目录
+
+### 单连接更新的凭据意图
+
+1. **职责与范围**：targets/connections拥有双端消费的连接更新请求；不公开秘密存储表示。
+2. **子功能与目录**：沿http.ts与http-codec.ts，复用TargetCredentialInput和现有credential解码。
+3. **依赖方向**：Backend HTTP与Frontend API共同消费Shared；Shared不依赖应用Model或SQLite。
+4. **类型与转换**：TargetConnectionUpdateRequest新增可选credential，字段省略表示保留、null表示清除、有限对象表示替换。codec区分缺字段与显式undefined，拒绝额外字段；应用/存储仍分别白名单转换。
+5. **入口与安装**：现有PUT连接请求消费；独立凭据端点及批量消费者保持真实用途，不保留旧单编辑双保存分支。
+6. **数据、事务与并发**：version与changes和credential绑定一次CAS；Shared仅定义意图，原子性由Backend SQLite保证，无新增协议预算。
+7. **生命周期与失败**：既有安全错误和未知结果语义沿用，密码仅在写请求，不加入连接视图、凭据摘要或错误正文。
+8. **当前能力与验收**：双端、editor/store、脚本和测试消费者同步；静态与定向行为证据见testing。
 
 ### 远端依赖契约
 

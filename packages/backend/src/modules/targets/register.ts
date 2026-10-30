@@ -103,7 +103,13 @@ export function registerTargets({ sqlite, secrets }: TargetsRegistrationOptions)
 	const managementStorage = new SqliteManagementStorage(sqlite);
 	const management = new ManagementService(new ManagementModel(managementStorage, new SecureSessionTokens()));
 	const model = new ConnectionModel(
-		new ConnectionSqliteAdapter(sqlite, validateStoredConnectionGraph, validateStoredConnectionTypeChange),
+		new ConnectionSqliteAdapter(
+			sqlite,
+			validateStoredConnectionGraph,
+			validateStoredConnectionTypeChange,
+			validateStoredCredentialWrite,
+		),
+		secrets,
 	);
 	const service = new ConnectionService(model);
 	const desktopTargets = new DesktopTargetService(
@@ -185,9 +191,20 @@ export function registerTargets({ sqlite, secrets }: TargetsRegistrationOptions)
 		create: (input) =>
 			targetsBoundary(async () => toConnectionView(await service.create(toConnectionInput(input)))),
 
-		update: (id, version, changes) =>
+		update: (id, version, changes, credential) =>
 			targetsBoundary(async () =>
-				toConnectionMutation(await service.update(id, version, toConnectionPatch(changes))),
+				toConnectionMutation(
+					await service.update(
+						id,
+						version,
+						toConnectionPatch(changes),
+						credential === undefined
+							? undefined
+							: credential === null
+								? null
+								: toCredentialInput(credential),
+					),
+				),
 			),
 
 		clone: (id, name) =>

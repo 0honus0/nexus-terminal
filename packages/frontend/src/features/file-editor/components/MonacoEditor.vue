@@ -14,7 +14,6 @@
 	import 'monaco-editor/basic-languages/monaco.contribution';
 	import 'monaco-editor/language/json/monaco.contribution';
 	import { useWheelScale } from '@/foundation/interaction';
-	import type { EditorSearchController, EditorSearchState } from '../model/editor';
 	// Monaco keeps these services internal; its own comment action reads the same configuration service.
 	// @ts-ignore internal Monaco ESM module
 	import { StandaloneServices } from 'monaco-editor/editor/standalone/browser/standaloneServices';
@@ -263,76 +262,8 @@
 	const root = ref<HTMLElement | null>(null);
 	let editor: monaco.editor.IStandaloneCodeEditor | undefined;
 	let model: monaco.editor.ITextModel | undefined;
-	const SEARCH_MATCH_LIMIT = 10_000;
-	let searchQuery = '';
-	let searchMatches: monaco.editor.FindMatch[] = [];
-	let searchIndex = -1;
-	let searchDecorations: monaco.editor.IEditorDecorationsCollection | undefined;
 
 	const focusEditor = (): void => editor?.focus();
-
-	const searchState = (): EditorSearchState => ({
-		current: searchMatches.length > 0 ? searchIndex + 1 : 0,
-		total: searchMatches.length,
-	});
-
-	const selectSearchMatch = (index: number): void => {
-		const activeEditor = editor;
-		const match = searchMatches[index];
-		if (!activeEditor || !match) return;
-		searchIndex = index;
-		activeEditor.setSelection(match.range);
-		activeEditor.revealRangeInCenterIfOutsideViewport(match.range);
-	};
-
-	const setSearchQuery = (query: string): EditorSearchState => {
-		const activeEditor = editor;
-		const activeModel = model;
-		searchQuery = query;
-		searchMatches = [];
-		searchIndex = -1;
-		if (!activeEditor || !activeModel || !query) {
-			searchDecorations?.clear();
-			return searchState();
-		}
-		searchMatches = activeModel.findMatches(query, false, false, false, null, false, SEARCH_MATCH_LIMIT);
-		searchDecorations ??= activeEditor.createDecorationsCollection();
-		searchDecorations.set(
-			searchMatches.map((match) => ({
-				range: match.range,
-				options: { inlineClassName: 'file-editor-search-match' },
-			})),
-		);
-		if (searchMatches.length === 0) return searchState();
-		const selection = activeEditor.getSelection();
-		const selectionOffset = selection ? activeModel.getOffsetAt(selection.getStartPosition()) : 0;
-		const nextIndex = searchMatches.findIndex(
-			(match) => activeModel.getOffsetAt(match.range.getStartPosition()) >= selectionOffset,
-		);
-		selectSearchMatch(nextIndex >= 0 ? nextIndex : 0);
-		return searchState();
-	};
-
-	const findNextSearch = (query: string): EditorSearchState => {
-		if (query !== searchQuery || (searchMatches.length === 0 && query)) return setSearchQuery(query);
-		if (searchMatches.length === 0) return searchState();
-		selectSearchMatch((searchIndex + 1) % searchMatches.length);
-		return searchState();
-	};
-
-	const findPreviousSearch = (query: string): EditorSearchState => {
-		if (query !== searchQuery || (searchMatches.length === 0 && query)) return setSearchQuery(query);
-		if (searchMatches.length === 0) return searchState();
-		selectSearchMatch((searchIndex - 1 + searchMatches.length) % searchMatches.length);
-		return searchState();
-	};
-
-	const clearSearch = (): void => {
-		searchQuery = '';
-		searchMatches = [];
-		searchIndex = -1;
-		searchDecorations?.clear();
-	};
 
 	let resizeObserver: ReturnType<typeof useResizeObserver> | undefined;
 	let layoutFrame: number | undefined;
@@ -479,21 +410,17 @@
 		resizeObserver = undefined;
 		if (layoutFrame !== undefined) cancelAnimationFrame(layoutFrame);
 		layoutFrame = undefined;
-		searchDecorations?.clear();
-		searchDecorations = undefined;
 		editor?.dispose();
 		model?.dispose();
 		model = undefined;
 	});
 	defineExpose({
 		focus: focusEditor,
-		setSearchQuery,
-		findNextSearch,
-		findPreviousSearch,
-		clearSearch,
+
+		openSearch: () => editor?.getAction('actions.find')?.run(),
 
 		toggleComment: () => (editor ? toggleEditorComment(editor) : Promise.resolve(false)),
-	} satisfies EditorSearchController & { focus: () => void; toggleComment: () => Promise<boolean> });
+	});
 </script>
 
 <template>
@@ -513,11 +440,5 @@
 		min-height: 0;
 		overflow: hidden;
 		text-align: left;
-	}
-
-	.monaco-editor-container :deep(.file-editor-search-match) {
-		border-radius: 2px;
-		background: color-mix(in srgb, var(--editor-accent, #bd8cff) 34%, transparent);
-		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--editor-accent, #bd8cff) 46%, transparent);
 	}
 </style>

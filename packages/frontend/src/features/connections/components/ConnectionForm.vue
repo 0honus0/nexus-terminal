@@ -7,6 +7,7 @@
 		UiButton,
 		UiFormActions,
 		UiFormField,
+		UiCheckbox,
 		UiInfoHint,
 		UiInput,
 		UiInlineNotice,
@@ -18,7 +19,7 @@
 	import type { UiSelectOption } from '@/foundation/ui';
 	import { useConnectionForm } from '../composables/use-connection-form';
 	import type { ConnectionSummary, ConnectionSubmission, CredentialSummary } from '../model/connection-types';
-	import type { TargetImportInput, TargetCredentialInput } from '@nexus-terminal/shared/targets/connections/http';
+	import type { TargetImportInput } from '@nexus-terminal/shared/targets/connections/http';
 	const props = defineProps<{
 		connection?: ConnectionSummary | null;
 		credential?: CredentialSummary | null;
@@ -27,7 +28,6 @@
 	const emit = defineEmits<{
 		submit: [value: ConnectionSubmission];
 		submitMany: [values: TargetImportInput[]];
-		credential: [value: TargetCredentialInput | null];
 		cancel: [];
 		delete: [];
 	}>();
@@ -49,8 +49,7 @@
 		removeJumpHost,
 		submit,
 		test,
-		saveCredential,
-		clearCredential,
+		removeSavedCredential,
 	} = useConnectionForm(props, emit);
 
 	const jumpHostOptions = (index: number): UiSelectOption[] =>
@@ -150,12 +149,14 @@
 							<UiInput
 								id="conn-password"
 								v-model="form.password"
+								:disabled="removeSavedCredential"
+								:placeholder="connection ? t('connections.form.keepPassword') : undefined"
 								type="password"
 								autocomplete="new-password"
 							/>
 						</UiFormField>
 						<UiFormField v-else :label="t('connections.form.sshKey')">
-							<SshKeySelector v-model="form.sshKeyId" />
+							<SshKeySelector v-model="form.sshKeyId" :disabled="removeSavedCredential" />
 							<p
 								v-if="credential?.credential.kind === 'ssh_key'"
 								class="mt-1 text-xs text-text-secondary"
@@ -173,17 +174,19 @@
 						<UiInput
 							:id="form.type === 'RDP' ? 'conn-password-rdp' : 'conn-password-vnc'"
 							v-model="form.password"
+							:disabled="removeSavedCredential"
+							:placeholder="connection ? t('connections.form.keepPassword') : undefined"
 							type="password"
 							autocomplete="new-password"
 						/>
 					</UiFormField>
-					<div v-if="connection" class="flex flex-wrap gap-2">
-						<UiButton type="button" @click="saveCredential">{{ t('connections.saveCredential') }}</UiButton
-						><UiButton type="button" tone="danger" @click="clearCredential">{{
-							t('connections.clearCredential')
-						}}</UiButton>
-						<p class="text-sm text-text-secondary">{{ t('connections.separateSaves') }}</p>
-					</div>
+					<label
+						v-if="connection && credential && credential.credential.kind !== 'none'"
+						class="flex items-center gap-2 text-sm"
+					>
+						<UiCheckbox v-model="removeSavedCredential" />
+						<span>{{ t('connections.clearCredential') }}</span>
+					</label>
 				</section>
 
 				<section class="ui-form-section connection-form__section space-y-5">

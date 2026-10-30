@@ -6,11 +6,7 @@ import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
 import { TargetRequestFailure, targetErrorKey } from '@/client/targets/target-types';
 import { readConnectionImportRequest } from '@nexus-terminal/shared/targets/connections/http-codec';
 import { TARGET_CONNECTION_IMPORT_MAX_ITEMS } from '@nexus-terminal/shared/targets/connections/values';
-import type {
-	TargetImportInput,
-	TargetCredentialInput,
-	TargetImportItem,
-} from '@nexus-terminal/shared/targets/connections/http';
+import type { TargetImportInput, TargetImportItem } from '@nexus-terminal/shared/targets/connections/http';
 import { connectionsApi } from '../api/connections-api';
 import type {
 	ConnectionSummary,
@@ -171,7 +167,7 @@ export function useConnectionEditor(
 				if (!original) {
 					throw new TargetRequestFailure('invalid_input', 'not_dispatched');
 				}
-				await data.update(original, value.changes, signal);
+				await data.update(original, value.changes, signal, value.credential);
 				await finish(signal, original.id);
 			} else {
 				const result = await importItems([value.input], signal);
@@ -262,30 +258,6 @@ export function useConnectionEditor(
 		});
 	}
 
-	function saveCredential(value: TargetCredentialInput | null): Promise<void> {
-		return execute(async (signal) => {
-			const original = snapshot.value;
-			if (!original || !credential.value || credential.value.version !== original.version) {
-				throw new TargetRequestFailure('version_conflict', 'confirmed');
-			}
-			if (
-				value === null &&
-				!(await feedback.confirm({
-					signal,
-					message: t('connections.clearCredentialPrompt'),
-					destructive: true,
-				}))
-			) {
-				return;
-			}
-			if (signal.aborted) {
-				return;
-			}
-			await data.setCredential(original, value, signal);
-			await finish(signal, original.id);
-		});
-	}
-
 	function remove(): Promise<void> {
 		return execute(async (signal) => {
 			const original = snapshot.value;
@@ -345,7 +317,6 @@ export function useConnectionEditor(
 		refresh,
 		save,
 		saveMany,
-		saveCredential,
 		remove,
 	};
 }

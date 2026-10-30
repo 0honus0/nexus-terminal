@@ -44,6 +44,7 @@ export type TargetImportItem = { status: 'ok'; id: number } | { status: 'error';
 export interface TargetConnectionUpdateRequest {
 	version: number;
 	changes: TargetConnectionChanges;
+	credential?: TargetCredentialInput | null;
 }
 
 export interface TargetConnectionTagsRequest {

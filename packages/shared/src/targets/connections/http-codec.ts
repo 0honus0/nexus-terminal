@@ -170,8 +170,14 @@ export function readConnectionChanges(input: unknown): TargetConnectionChanges {
 }
 
 export function readConnectionUpdateRequest(input: unknown): TargetConnectionUpdateRequest {
-	const row = targetObject(input, ['version', 'changes']);
-	return { version: targetNumber(row.version), changes: readConnectionChanges(row.changes) };
+	const row = targetObject(input, ['version', 'changes', 'credential'], ['version', 'changes']);
+	return {
+		version: targetNumber(row.version),
+		changes: readConnectionChanges(row.changes),
+		...(Object.hasOwn(row, 'credential')
+			? { credential: row.credential === null ? null : readCredentialInput(row.credential) }
+			: {}),
+	};
 }
 
 export function readConnectionTagsRequest(input: unknown): TargetConnectionTagsRequest {

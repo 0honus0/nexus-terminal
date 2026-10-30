@@ -1,6 +1,6 @@
 <script setup lang="ts">
 	import { filesystemFailureMessage } from '@/features/filesystem/public';
-	import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+	import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import {
 		UiBadge,
@@ -15,7 +15,6 @@
 	import { useDeviceCapabilities } from '@/foundation/browser';
 	import { focusRegistry } from '@/shared/focus/public';
 	import { useFeedback } from '@/shared/feedback/public';
-	import FileEditorSearchBar from './FileEditorSearchBar.vue';
 
 	const loadMonacoEditor = () => import('./MonacoEditor.vue');
 
@@ -25,7 +24,7 @@
 	const CodeMirrorMobileEditor = defineAsyncComponent(loadCodeMirrorMobileEditor);
 	import { createFileEditorSession, type FileEditorSessionController } from '../composables/useFileEditorSession';
 	import type { FileDocumentPort } from '../ports/file-document-port';
-	import type { EditorLineEnding, EditorSearchController, EditorSearchState } from '../model/editor';
+	import type { EditorLineEnding } from '../model/editor';
 
 	const encodingOptions = [
 		['utf-8', 'UTF-8'],
@@ -91,17 +90,11 @@
 		},
 	});
 	const root = ref<HTMLElement | null>(null);
-	type SearchableEditor = EditorSearchController & { focus?: () => void };
+	type SearchableEditor = { focus?: () => void; openSearch?: () => void };
 	const mobileEditor = ref<SearchableEditor | null>(null);
 	const desktopEditor = ref<SearchableEditor | null>(null);
-	const searchBar = ref<{ focus?: () => void } | null>(null);
 	const context = ref<{ id: string; x: number; y: number } | null>(null);
-	const searchOpen = ref(false);
-	const searchQuery = ref('');
-	const searchCurrent = ref(0);
-	const searchTotal = ref(0);
 	let unregisterFocus: (() => void) | undefined;
-	let searchSyncTimer: number | undefined;
 
 	const LARGE_FILE_CHARACTER_THRESHOLD = 2 * 1024 * 1024;
 	const content = computed({
@@ -161,53 +154,10 @@
 		void save().catch(() => undefined);
 	};
 
-	const emptySearchState = (): EditorSearchState => ({ current: 0, total: 0 });
-
-	const activeEditor = (): SearchableEditor | null =>
-		device.isMobile.value ? mobileEditor.value : desktopEditor.value;
-
-	const applySearchState = (state: EditorSearchState): void => {
-		searchCurrent.value = state.current;
-		searchTotal.value = state.total;
-	};
-
-	const syncSearchWithEditor = (delay = 0): void => {
-		if (searchSyncTimer !== undefined) window.clearTimeout(searchSyncTimer);
-		searchSyncTimer = window.setTimeout(() => {
-			searchSyncTimer = undefined;
-			if (!searchOpen.value) return;
-			applySearchState(activeEditor()?.setSearchQuery(searchQuery.value) ?? emptySearchState());
-		}, delay);
-	};
-
 	const openSearch = (): void => {
 		if (!editorSession.active.value) return;
-		searchOpen.value = true;
-		void nextTick(() => {
-			searchBar.value?.focus?.();
-			syncSearchWithEditor();
-		});
-	};
-
-	const closeSearch = (): void => {
-		searchOpen.value = false;
-		searchCurrent.value = 0;
-		searchTotal.value = 0;
-		activeEditor()?.clearSearch();
-		activeEditor()?.focus?.();
-	};
-
-	const updateSearchQuery = (query: string): void => {
-		searchQuery.value = query;
-		applySearchState(activeEditor()?.setSearchQuery(query) ?? emptySearchState());
-	};
-
-	const findNextSearchMatch = (): void => {
-		applySearchState(activeEditor()?.findNextSearch(searchQuery.value) ?? emptySearchState());
-	};
-
-	const findPreviousSearchMatch = (): void => {
-		applySearchState(activeEditor()?.findPreviousSearch(searchQuery.value) ?? emptySearchState());
+		if (device.isMobile.value) mobileEditor.value?.openSearch?.();
+		else desktopEditor.value?.openSearch?.();
 	};
 
 	const confirmDiscardIfDirty = async (): Promise<boolean> => {
@@ -281,19 +231,6 @@
 
 	const handleEditorKeydown = (event: KeyboardEvent) => {
 		if (!root.value?.getClientRects().length) return;
-		if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'f') {
-			if (!editorSession.active.value) return;
-			event.preventDefault();
-			event.stopPropagation();
-			openSearch();
-			return;
-		}
-		if (event.key === 'Escape' && searchOpen.value) {
-			event.preventDefault();
-			event.stopPropagation();
-			closeSearch();
-			return;
-		}
 		if (!event.altKey) return;
 		if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
 		if (editorSession.tabs.value.length <= 1) return;
@@ -301,26 +238,6 @@
 		event.stopPropagation();
 		editorSession.activateRelative(event.key === 'ArrowLeft' ? -1 : 1);
 	};
-
-	watch(
-		() => [editorSession.activeId.value, device.isMobile.value] as const,
-		() => {
-			if (!searchOpen.value) return;
-			syncSearchWithEditor(80);
-		},
-	);
-	watch(activeEditor, () => {
-		if (searchOpen.value) syncSearchWithEditor(80);
-	});
-	watch(
-		() => editorSession.active.value,
-		(active) => {
-			if (active || !searchOpen.value) return;
-			searchOpen.value = false;
-			searchCurrent.value = 0;
-			searchTotal.value = 0;
-		},
-	);
 
 	onMounted(() => {
 		unregisterFocus = focusRegistry.register(
@@ -337,7 +254,6 @@
 	});
 	onBeforeUnmount(() => {
 		unregisterFocus?.();
-		if (searchSyncTimer !== undefined) window.clearTimeout(searchSyncTimer);
 		window.removeEventListener('keydown', handleEditorKeydown, true);
 	});
 	defineExpose({
@@ -398,18 +314,6 @@
 				<i class="fas fa-xmark" aria-hidden="true"></i>
 			</UiButton>
 		</div>
-
-		<FileEditorSearchBar
-			v-if="searchOpen && editorSession.active.value"
-			ref="searchBar"
-			:query="searchQuery"
-			:current="searchCurrent"
-			:total="searchTotal"
-			@update:query="updateSearchQuery"
-			@previous="findPreviousSearchMatch"
-			@next="findNextSearchMatch"
-			@close="closeSearch"
-		/>
 
 		<div class="editor-content-area">
 			<UiLoadingState

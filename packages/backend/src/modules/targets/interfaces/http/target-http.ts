@@ -233,7 +233,7 @@ export function createTargetsRoutes(
 	});
 	addRoute(routes, 'PUT', '/connections/:id', access, management, async (ctx) => {
 		const row = readConnectionUpdateRequest(await ctx.json());
-		const result = await targets.update(id(ctx), row.version, row.changes);
+		const result = await targets.update(id(ctx), row.version, row.changes, row.credential);
 		status(ctx, result, toConnectionMutation(result));
 	});
 	addRoute(routes, 'DELETE', '/connections/:id', access, management, async (ctx) => {

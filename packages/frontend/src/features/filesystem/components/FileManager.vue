@@ -1402,8 +1402,17 @@
 		const isCurrent = () => view.isCurrent(permission) && directory === props.terminalDirectory;
 
 		changingTerminalPath.value = true;
+		let waitingNoticeShown = false;
 		try {
-			await directory.changeDirectory(path);
+			await directory.changeDirectory(path, {
+				onQueued: ({ waitingForPrompt }) => {
+					if (!waitingForPrompt || waitingNoticeShown || !isCurrent()) {
+						return;
+					}
+					waitingNoticeShown = true;
+					feedback.notifyInfo(t('fileManager.notifications.terminalWaitingForPrompt'));
+				},
+			});
 		} catch (cause) {
 			if (isCurrent()) {
 				feedback.notifyError(terminalDirectoryErrorMessage(cause));

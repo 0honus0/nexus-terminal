@@ -44,13 +44,7 @@ export class ConnectionCredentialModel {
 	}
 
 	async set(id: number, version: number, value: ConnectionCredentialInput): Promise<CredentialMutation> {
-		const command: ConnectionCredentialWrite =
-			value.kind === 'password'
-				? {
-						kind: 'password',
-						encryptedPassword: encryptTargetSecret(this.secrets, value.password, 'connection:password'),
-					}
-				: { kind: 'ssh_key', sshKeyId: value.sshKeyId };
+		const command = toStoredCredentialWrite(value, this.secrets);
 		try {
 			return toApplicationMutation(await this.storage.set(id, version, command).catch(targetModelFailure));
 		} catch (error) {
@@ -71,3 +65,12 @@ export class ConnectionCredentialModel {
 export const validateStoredCredentialWrite: CredentialWriteValidator = (connectionType, kind) => {
 	validateCredentialAssignment({ connectionType, kind });
 };
+
+export function toStoredCredentialWrite(
+	value: ConnectionCredentialInput,
+	secrets: SecretBox | null,
+): ConnectionCredentialWrite {
+	return value.kind === 'password'
+		? { kind: 'password', encryptedPassword: encryptTargetSecret(secrets, value.password, 'connection:password') }
+		: { kind: 'ssh_key', sshKeyId: value.sshKeyId };
+}

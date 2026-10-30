@@ -216,10 +216,10 @@ test('SSH key management UI adds, renames without replacing private key, and del
 		await form.locator('#conn-password').fill(E2E_SSH.password);
 		const updatePromise = page.waitForResponse(
 			(response) =>
-				response.url().endsWith(`/api/v1/targets/connections/${connectionId}/credential`) &&
+				response.url().endsWith(`/api/v1/targets/connections/${connectionId}`) &&
 				response.request().method() === 'PUT',
 		);
-		await form.getByRole('button', { name: 'Save credentials only', exact: true }).click();
+		await form.getByRole('button', { name: 'Confirm Edit', exact: true }).click();
 		expect((await updatePromise).ok()).toBeTruthy();
 		await expect(form).toBeHidden({ timeout: 15_000 });
 
@@ -297,6 +297,7 @@ test('SSH key selector and manager surface key-list loading failures without ove
 	await expect(form.getByText('Options could not be loaded. Refresh and review.', { exact: true })).toBeVisible();
 	await form.getByRole('button', { name: 'Manage SSH Keys', exact: true }).click();
 	const modal = keyManager(page);
+	await expect(modal).toBeVisible();
 	await expect(
 		page
 			.locator('.ui-notification[data-kind="error"]')

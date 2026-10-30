@@ -1,3 +1,8 @@
+import type { SecretBox } from '../../../../platform/security/secret-box.js';
+import type { ConnectionCredentialInput } from './connection-credential-types.js';
+import { toStoredCredentialWrite } from './connection-credential-model.js';
+import { ConnectionCredentialStorageRefusal } from '../storage/connection-credential-storage.js';
+import { TargetFailure } from '../../target-failure.js';
 import { targetModelFailure } from '../../model/target-technical-failure.js';
 import { validateConnectionGraph, validateConnectionSnapshot } from '../ssh-graph-rules.js';
 import { validateConnectionTypeChange, validateConnection } from '../connection-rules.js';
@@ -45,7 +50,10 @@ export const validateStoredConnectionGraph: ConnectionGraphValidator = (connecti
 };
 
 export class ConnectionModel {
-	constructor(private readonly storage: Readonly<ConnectionStorage>) {}
+	constructor(
+		private readonly storage: Readonly<ConnectionStorage>,
+		private readonly secrets: SecretBox | null,
+	) {}
 
 	async listEntries(ids: number[]): Promise<ConnectionCatalogEntry[]> {
 		return (await this.storage.listEntries(ids.map((id) => id)).catch(targetModelFailure)).map((row) => ({
@@ -72,9 +80,29 @@ export class ConnectionModel {
 		return fromStorage(await this.storage.create(toStorage(data)).catch(targetModelFailure));
 	}
 
-	async update(id: number, version: number, changes: Partial<ConnectionMetadata>): Promise<ConnectionMutation> {
+	async update(
+		id: number,
+		version: number,
+		changes: Partial<ConnectionMetadata>,
+		credential?: ConnectionCredentialInput | null,
+	): Promise<ConnectionMutation> {
 		const patch = toStoragePatch(changes);
-		return toApplicationMutation(await this.storage.update(id, version, patch).catch(targetModelFailure));
+		const write =
+			credential === undefined
+				? undefined
+				: credential === null
+					? null
+					: toStoredCredentialWrite(credential, this.secrets);
+		try {
+			return toApplicationMutation(
+				await this.storage.update(id, version, patch, write).catch(targetModelFailure),
+			);
+		} catch (cause) {
+			if (cause instanceof ConnectionCredentialStorageRefusal) {
+				throw new TargetFailure('reference_not_found', { cause });
+			}
+			throw cause;
+		}
 	}
 
 	async clone(id: number, name: string): Promise<ConnectionSnapshot | null> {

@@ -40,6 +40,7 @@
 	import type { RemoteFileEntry } from '@/features/filesystem/public';
 	import {
 		loadSuspendedSessionsModal,
+		useSuspendedSessions,
 		findSuspendedSessionByOriginalWorkspace,
 		findSuspendedSessionById,
 		refreshSuspendedSessionsCatalog,
@@ -134,6 +135,7 @@
 	const history = useCommandHistory();
 	const serverTransfers = useServerTransfers();
 	const registry = workspaceRuntimeRegistry;
+	const suspendedCatalog = useSuspendedSessions();
 	const SESSION_RECONCILE_ATTEMPTS = 10;
 	const SESSION_RECONCILE_DELAY_MS = 400;
 	let sessionReconcilePromise: Promise<void> | null = null;
@@ -1080,6 +1082,20 @@
 			) {
 				void reconcileDisconnectedWorkspaceSessions();
 			}
+		},
+	);
+
+	// Availability can change after the short handoff reconciliation has finished.
+	// Observe the authoritative transition without polling or taking over another owner.
+	watch(
+		() =>
+			suspendedCatalog.sessions.value
+				.filter((session) => session.status === 'active' && session.ownershipState === 'available')
+				.map((session) => session.id)
+				.sort()
+				.join(','),
+		() => {
+			void reconcileDisconnectedWorkspaceSessions();
 		},
 	);
 

@@ -2,7 +2,7 @@
 
 当前验收基线：后端重构、正式前端 Shared 适配及远程八组回归已收口，具体 SHA、覆盖与仍未验证的外部/扩大故障范围统一见 [E2E](../testing/E2E.md#当前验收基线)，后续任务见 [PLAN](../PLAN.md)。下文 B/F 阶段名仅定位设计来源；原阶段的静态或有限行为证据不扩大为当前全量保证，历史“待 B10/F1”不表示重启已完成迁移。
 
-当前设计同时记录本地未提交实现；新增目录选择、依赖安装和基础组件接入不自动纳入上述历史验收基线。产品行为见 [USAGE](../USAGE.md)，源码、静态检查和待验范围分别见 [PLAN](../PLAN.md) 与 testing。
+当前设计同时记录尚未纳入全量验收的专项实现；新增目录选择、依赖安装和基础组件接入不自动纳入上述历史验收基线。产品行为见 [USAGE](../USAGE.md)，源码、静态检查和待验范围分别见 [PLAN](../PLAN.md) 与 testing。
 
 本文约束新后端及后续功能的放置和依赖。开发前由 [AGENTS](../AGENTS.md) 读取 [人工规则](../rules/HUMAN.md)、[工程经验](../rules/ENGINEERING.md) 与 [编码规范](../rules/CODE_STYLE.md)。按 [模块模板](MODULE_TEMPLATE.md) 维护下面八个章节，不复制人工规则和编码列表。
 
@@ -2298,6 +2298,38 @@ main 98ceac0f 完整回归 [40614218253](https://github.com/0honus0/nexus-termin
 
 根 `pnpm run check` 与双端 `pnpm run build` 通过，日志 `logs/ssh-trust-check.log`、`logs/ssh-trust-build.log`。新增正式回归 `tests/e2e/specs/ssh/connection-test-host-key.spec.ts` 覆盖保存首次/变更密钥的取消与确认，以及未保存测试不建记录；同步targets.integration对具名挑战和HTTP状态的断言。目标测试严格tsc通过（`logs/ssh-trust-test-types.log`），`node --check tests/frontend/targets.integration.mjs`、全量 `pnpm run format:all:check`（`logs/ssh-trust-format.log`）及 `git diff --check` 均通过。构建后Shared codec定向断言验证合法挑战与普通错误，并拒绝缺失挑战、非法端口/指纹、嵌套额外字段、非主机错误携带挑战及外泄cause，日志 `logs/ssh-trust-codec.log`。正式夹具/全量E2E未运行；代理/多跳真实环境、并发密钥更换、确认写入丢失及权限撤销交错不扩大为本轮实测通过。
 
+### 后台挂起恢复与密码单次保存专项（2026-10-30）
+
+用户授权继续修改并通过CDP验证；沿用 `/tmp/nexus-nethogs-20261030/` 的独立数据库、Backend3001、Vite9998，CDP `172.30.30.11:9223` 访问 `https://api.honus.top`，实际SSH为honus.top:9902。仅操作自建context、临时连接及原PTY变量，无生产配置、容器或系统文件写入；服务与专用目录按用户要求继续保留。
+
+根因源码核对：编辑的配置提交原先不包含密码，另有独立凭据按钮；编辑测试始终读取已保存的凭据。现在单次PUT同时提交配置与可选凭据，共用原版本事务，空密码省略、勾选清除才发送null，新密码测试使用当前草稿。移除独立凭据操作与分开保存说明，保留测试信息浮层。挂起前台恢复先向服务端复验控制权，失败未知与明确租约撤销分开；Page观察权威available集合，在最初等待结束后仍能恢复原PTY，不静默接管。
+
+最终 `verify-suspend-password.cjs` / `logs/suspend-password-cdp-final.log` 退出0：真实错误密码握手失败；输入正确密码草稿测试成功而配置版本不变；一次保存只有一个PUT和一次版本推进，已保存SSH测试成功；密码留空改备注后仍可握手；不存在密钥引用使名称/凭据/版本一起回滚；旧CAS不能覆盖密码或配置；勾选清除和主保存一起删除凭据。截图 `password-edit-simplified.png` 已人工核对，密码遮罩、清除勾选、单保存及保留的信息图标完整。
+
+同一脚本先使本地deadline过期但服务端owner仍有效，前台复验后不关闭健康附件。随后受控隐藏页面并停止JS续租49秒，由真实Backend独立执行45秒租约；恢复可见后自动恢复原PTY，读取先前Shell变量完全相同，workspace.connect总数仍为1。另注入续租响应失败，并在原目录store将真实available快照暂存7秒，使短暂轮询结束时仍见attached；此时旧标签保持error/disconnected而不新建Shell，释放快照后自动恢复，变量保留，耗时约7.28秒，错误为operation_unknown。所有自建资源解除挂起并关闭，无pageerror。该控制覆盖协议/状态链，不等同真实Android操作系统冻结或弱网全量验收。初轮脚本对引用错误HTTP预期误写422（实际404），延迟脚本曾只允许disconnected而实际error；修正测试预期后最终通过，未据此修改产品。
+
+两轮源码审核：第一轮沿HTTP严格解码、公开入口投影、Service凭据政策、Model加密及SQLite CAS/关系/凭据同事务追踪，确认失败回滚及明文不进入结果；第二轮沿编辑/取消/失活、旧signal和generation、前台续租/本地deadline、目录延迟/其他owner、串行reconcile及后台标签选择复核。原45秒服务端租约、15秒续租及既有恢复次数均未扩大。USAGE和三份架构同步。
+
+新增正式回归 `tests/e2e/specs/ssh/connection-password-edit.spec.ts` 覆盖错误密码、草稿测试取消不保存、一次保存配置及密码、留空保留、引用失败/旧CAS回滚和明确清除；原密钥切换及frontend integration消费者同步。目标测试严格tsc（含noUnusedLocals，显式Backend @types路径）与integration脚本语法检查通过，日志 `logs/suspend-password-test-types.log`。本轮未运行正式夹具或全量E2E；代理/多跳、不同移动系统真实锁屏、并发接管/权限撤销交错仍待扩大验收，不引用旧批次全量PASS。
+
+补充 `verify-password-cancel-mobile.cjs` / `logs/password-cancel-mobile.log` 退出0：393×852触屏context四个底部动作完整处于viewport；正确草稿测试成功后取消，保存版本及原错误密码均未改变；改端口但不输入密码时明确要求当前密码且无旧配置测试请求；勾选清除后取消仍保留凭据，无PUT及pageerror。桌面及手机截图已人工核对。后续按用户明确范围恢复保留“当前保存的凭据”状态说明，只移除清除凭据后的分开保存说明。
+
+Shared编译后codec定向断言通过（`logs/suspend-password-codec.log`）：省略保留、null清除、密码/密钥替换、密码空白原样保留，并拒绝显式undefined、空密码、非法ID和额外字段。
+
+最终根 `pnpm run check`、双端 `pnpm run build` 及恢复保留状态说明后的 `pnpm run build:frontend` 全部通过；日志 `logs/suspend-password-final-check.log`、`logs/suspend-password-final-build.log`、`logs/suspend-password-final-frontend-build.log`。全量 `pnpm run format:all:check` 和最终 `git diff --check` 通过，格式日志 `logs/suspend-password-final-format.log`。当前改动未提交、推送或部署生产，原测试服务与证据目录继续保留。
+
+### 普通文本原生查找恢复专项（2026-10-30）
+
+用户明确仅恢复基本文本查找，不回退图片及其它文件预览。沿用 `/tmp/nexus-nethogs-20261030/`、Backend3001/Vite9998，CDP `172.30.30.11:9223` 实际访问 `https://api.honus.top`，自建桌面1440×1000和393×852触屏context连接honus.top:9902；通过正式文件管理器只读打开 `/etc/hosts`，未修改目标文件、测试偏好或生产部署。File-preview、filesystem产品源码无本批diff，前批密码/挂起改动保留。
+
+源码两轮复核：先追踪FileEditor底部按钮→Monaco actions.find / CodeMirror openSearchPanel、原生快捷键和关闭；再核对父级Ctrl+F全局拦截、自建高亮/缓存/定时器/状态接口及消费者全部删除，原editor/view销毁仍负责库资源。保留Codicon、find贡献加载以及加载/保存/缩放/标签逻辑。USAGE及Frontend八节架构已同步。替换仍由原编辑器更新本地草稿，经原显式保存写入；本批只读验收未执行替换或保存。
+
+最终脚本 `verify-native-find.cjs` 退出0，日志 `logs/native-find-cdp.log`：桌面底部搜索打开Monaco原生Find/Replace，输入自动聚焦，匹配计数/高亮、大小写开关、全词开关、正则 `^127\.0\.0\.1` 各分支实际生效；Escape关闭后点击正文Ctrl+F再次打开并聚焦，再次Escape关闭。手机打开原生CodeMirror面板，输入/匹配高亮、下一项选中、大小写/正则控件、Escape关闭及正文Ctrl+F重开通过。两端没有dirty标记、写文件请求或pageerror，自有SSH会话均关闭。截图 `native-find-desktop.png` / `native-find-mobile.png` 已人工核对：桌面紧凑VS Code查找框，窄栏保留原生布局；手机自带搜索区完整显示。
+
+初轮脚本错误假设当前桌面使用文件管理器弹窗，实际是分栏；后续定位曾使用input而Monaco实际是textarea，并把原生translateY收起误当DOM不可见。最终使用Find可访问名称和aria-hidden契约，并在手机文件管理器关闭后操作下层编辑器；没有为脚本修改产品样式或强制点击。正式桌面/移动回归只同步原生查找消费者，目标严格tsc通过，日志 `logs/native-find-test-types.log`；未运行正式夹具/全量E2E，图片等预览没有扩大为本轮行为验收。
+
+根 `pnpm run check`、前端 `pnpm run build:frontend`、目标测试严格tsc、全量 `pnpm run format:all:check` 和最终 `git diff --check` 通过；日志分别为 `logs/native-find-check.log`、`logs/native-find-build.log`、`logs/native-find-test-types.log`、`logs/native-find-format.log`。所有脚本、截图和日志仍在原专用目录，服务按用户要求保留，未提交或推送。
+
 ## 复制任务总进度标注专项（2026-10-30）
 
 沿用户指定 `https://api.honus.top` 与 CDP `172.30.30.11:9223`，在自建桌面1440×1000与393×852触屏context加载当前Vite实际ProgressCenter组件，以受控TransferTask模拟三文件累计进度。使用真实Vue/i18n模块和原全局样式，不修改保存配置或远端文件；本轮只验呈现，不称为真实跨服务器传输验收。
@@ -2305,3 +2337,11 @@ main 98ceac0f 完整回归 [40614218253](https://github.com/0honus0/nexus-termin
 `/tmp/nexus-nethogs-20261030/verify-total-progress.cjs` 两端通过：first.zip切换second.zip时，完整任务标题保留，35%/350MB/1项累进为60%/600MB/2项，总量1000MB/3项保留；当前文件独立且进度条可访问名称为Overall progress。完成项数与字节并存；后台传输无字节时只显示项数，未知总量不编造分母；混合下载及上传不加总进度/当前文件文案；中英日文案、取消与隐藏事件、视口边界及无pageerror均通过。证据 `logs/total-progress-cdp.log`、`total-progress-{desktop,mobile}.png`，截图已检查。实际累计公式及后台子任务平均口径保持原实现，不扩大为字节加权变更。
 
 首次静态检查只报新helper缺少声明空行，已按原ESLint修正。最终根check、前端build、全量format及diff通过；日志 `logs/total-progress-{check,build,format}.log`。未运行全量E2E。测试服务和专用目录继续保留，未推送或部署生产。本批只提交进度呈现及其文档，前批未提交的挂起/密码/原生查找变更保留原工作区。
+
+## 终端目录等待清行提示与全部本地变更提交（2026-10-30）
+
+用户最终撤销草稿保留方案，要求仅提示清行并提交全部本地改动。Native Shell/Model/Service/Port 的本轮草稿试验已完整撤回至原实现；最终仅 FileManager 消费现有 onQueued.waitingForPrompt，在当前有效视图中显示一次原 feedback 信息提示。提示同时区分未执行输入（Ctrl+C 清行后原请求自动切换）与前台命令（等待正常结束），不自动清行/保存草稿，不改变后端或 UI 布局。
+
+沿原专用目录、Backend3001/Vite9998、`https://api.honus.top` 和 CDP `172.30.30.11:9223`，`verify-directory-hint.cjs` 自建桌面与393px触屏context连接原测试SSH。两端通过：输入带光标移动的未执行printf后，按钮等待、信息提示一次、实际目录保持；手动Ctrl+C后同requestId收到directoryChanged且真实cwd变为/etc；正常提示符下切换/tmp无通知；sleep前台命令正常完成后自动切换/etc，无中断或pageerror。截图 `directory-hint-{desktop,mobile}.png` 已核对，日志 `logs/directory-hint-cdp.log`。只读现有目录及自有PTY，无远端文件写入，所有自建会话已关闭。
+
+本次根check、双端build、四个已修改E2E的严格tsc及targets.integration脚本语法通过；日志 `logs/directory-hint-{check,build,test-types}.log`。最终全量format及diff通过，记录于 `logs/directory-hint-format.log`，未运行全量E2E。此前密码编辑、挂起恢复与文本原生查找的专项证据仍分别见上文，不扩大为本轮重复实测；按用户本次要求一并提交这些已验证的本地变更。保留专用测试目录、工具和服务，未推送、发布或部署生产。

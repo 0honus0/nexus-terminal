@@ -227,6 +227,7 @@
       "commandFailed": "远端文件命令执行失败，请核对目录权限及所需命令是否可用。"
     },
     "notifications": {
+      "terminalWaitingForPrompt": "正在等待终端提示符。若有未执行的输入，请按 Ctrl+C 清空当前行，随后会自动切换目录；若命令正在运行，请等待结束。",
       "copySuccess": "复制成功",
       "moveSuccess": "移动成功",
       "cdCommandSent": "CD 命令已发送到终端",

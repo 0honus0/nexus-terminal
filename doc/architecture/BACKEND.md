@@ -2,11 +2,22 @@
 
 当前验收基线：后端重构、正式前端 Shared 适配及远程八组回归已收口，具体 SHA、覆盖与仍未验证的外部/扩大故障范围统一见 [E2E](../testing/E2E.md#当前验收基线)，后续任务见 [PLAN](../PLAN.md)。下文 B/F 阶段名仅定位设计来源；原阶段的静态或有限行为证据不扩大为当前全量保证，历史“待 B10/F1”不表示重启已完成迁移。
 
-当前设计同时记录本地未提交实现；新增目录选择、依赖安装和基础组件接入不自动纳入上述历史验收基线。产品行为见 [USAGE](../USAGE.md)，源码、静态检查和待验范围分别见 [PLAN](../PLAN.md) 与 testing。
+当前设计同时记录尚未纳入全量验收的专项实现；新增目录选择、依赖安装和基础组件接入不自动纳入上述历史验收基线。产品行为见 [USAGE](../USAGE.md)，源码、静态检查和待验范围分别见 [PLAN](../PLAN.md) 与 testing。
 
 本文约束新后端及后续功能的放置和依赖。开发前由 [AGENTS](../AGENTS.md) 读取 [人工规则](../rules/HUMAN.md)、[工程经验](../rules/ENGINEERING.md) 与 [编码规范](../rules/CODE_STYLE.md)。按 [模块模板](MODULE_TEMPLATE.md) 维护下面八个章节，不复制人工规则和编码列表。
 
 ## 1. 职责与范围
+
+### 连接配置与凭据原子更新
+
+1. **职责与范围**：Targets connections持有单连接元数据及可选凭据编辑，Remote握手和Workspace不变。
+2. **子功能与目录**：沿connections的Service/Model/storage/SQLite及interfaces/http；复用credential Model的密文转换和Adapter现有凭据写入helper。
+3. **依赖方向**：HTTP→Targets公开入口→ConnectionService→ConnectionModel→ConnectionStorage；SQL仅Adapter，秘密加密仅Model。
+4. **类型与转换**：Shared更新请求可选credential，省略保留、null清除、对象替换；入口逐字段转换独立应用输入，Model转换为存储密文命令，读取摘要仍不含密码。
+5. **入口与安装**：PUT /api/v1/targets/connections/:id使用同一原版本；register给原Model安装SecretBox并给Adapter安装凭据规则回调。独立凭据端点仍供批量编辑使用。
+6. **数据、事务与并发**：原SQLite CAS事务同时写配置、关系和凭据；凭据类型或密钥引用拒绝回滚整项。版本只增加一次，无新表或迁移；版本达到安全整数上限拒绝写入。
+7. **生命周期与失败**：沿原身份和版本校验；Model将存储引用拒绝转为安全应用错误。提交回执未知先只读核对，不重放；不得记录明文。
+8. **当前能力与验收**：单保存行为见USAGE连接管理；定向真实SSH及回滚证据见testing，未将其扩大为全量回归。
 
 ### 远端工具安装
 

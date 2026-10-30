@@ -1,12 +1,13 @@
 import {
 	TARGET_CONNECTION_NAME_MAX_BYTES,
+	TARGET_CONNECTION_PASSWORD_MAX_BYTES,
 	TARGET_CONNECTION_MAX_TAGS,
 	TARGET_CONNECTION_MAX_JUMPS,
 	TARGET_CONNECTION_HOST_MAX_BYTES,
 	TARGET_CONNECTION_USERNAME_MAX_BYTES,
 	TARGET_CONNECTION_NOTES_MAX_BYTES,
 } from '@nexus-terminal/shared/targets/connections/values';
-import type { CredentialAssignment } from './model/connection-credential-types.js';
+import type { ConnectionCredentialInput, CredentialAssignment } from './model/connection-credential-types.js';
 import { TargetFailure } from '../target-failure.js';
 import type { ConnectionMetadata, ConnectionTypeChange } from './model/connection-types.js';
 import { validateTargetId, validateTargetText } from '../target-validation.js';
@@ -100,4 +101,15 @@ export function validateCredentialAssignment(command: CredentialAssignment): voi
 	if (command.connectionType !== 'SSH' && command.kind === 'ssh_key') {
 		throw new TargetFailure('invalid_input');
 	}
+}
+
+export function validateConnectionCredential(input: ConnectionCredentialInput): void {
+	if (input.kind === 'ssh_key') {
+		validateTargetId(input.sshKeyId);
+		return;
+	}
+	if (input.kind !== 'password' || !input.password) {
+		throw new TargetFailure('invalid_input');
+	}
+	validateTargetText(input.password, TARGET_CONNECTION_PASSWORD_MAX_BYTES);
 }
