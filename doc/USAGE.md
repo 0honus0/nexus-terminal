@@ -2,7 +2,7 @@
 
 本文统一记录正式产品的功能、操作、限制和失败恢复。当前唯一后端为 `packages/backend`（原 backend-next）；统一 E2E 未验范围仍单独保留。部署命令见 [DEPLOYMENT](DEPLOYMENT.md)，设计见 [Frontend](architecture/FRONTEND.md) / [Backend](architecture/BACKEND.md)，开发流程见 [AGENTS](AGENTS.md)。
 
-本页按当前本地源码维护，包含尚未提交的功能和界面调整；不代表已发布版本。具体测试 SHA、执行范围与未验项见 [验证记录](testing/E2E.md)，后续工作见 [实施计划](PLAN.md)。
+本页按当前本地源码维护，包含尚未发布的功能和界面调整；不代表已发布版本。具体测试 SHA、执行范围与未验项见 [验证记录](testing/E2E.md)，后续工作见 [实施计划](PLAN.md)。
 
 当前前后端共同消费的业务取值与通信契约统一位于 `packages/shared`；旧 `packages/protocol` 已删除，不保留兼容包。
 

@@ -2346,10 +2346,16 @@ Shared编译后codec定向断言通过（`logs/suspend-password-codec.log`）：
 
 本次根check、双端build、四个已修改E2E的严格tsc及targets.integration脚本语法通过；日志 `logs/directory-hint-{check,build,test-types}.log`。最终全量format及diff通过，记录于 `logs/directory-hint-format.log`，未运行全量E2E。此前密码编辑、挂起恢复与文本原生查找的专项证据仍分别见上文，不扩大为本轮重复实测；按用户本次要求一并提交这些已验证的本地变更。保留专用测试目录、工具和服务，未推送、发布或部署生产。
 
+## 当前验收基线
+
+最新完整远程 [41050797589](https://github.com/0honus0/nexus-terminal/actions/runs/41050797589) 验证 `main/3b98d81fd99b9ce76b8fef4fd0b6a47d0074e1b6`：538个独立场景全部首次通过，零失败、重试、flaky与跳过，质量检查、Docker smoke与8个测试分片全部成功。当前已实现功能以该SHA及上述实际场景范围为准；先前外部硬件、扩大故障与实机保证限制不因夹具回归被取消。后继 `72b2fa55` 仅自动维护耗时估算，无产品源码差异；本次未发布或部署。
+
 ## E2E 连接选项加载失败提示（2026-10-30）
 
 main/96ea73b2 的远程 [41049355889](https://github.com/0honus0/nexus-terminal/actions/runs/41049355889) 只有 browser shard 7 一项失败（同组57通过），其余7个测试分片、质量与Docker smoke通过。失败为 ssh-key-management 的320px密钥加载失败场景，首次与重试均在 options_failed 提示消失处失败；日志 `logs/e2e-41049355889-failed.log`，作业元数据 `e2e-41049355889-jobs.json`，继续保存在原专用目录。
 
 根因是新form深度watch将普通草稿变化同时当成清除submitError的依据；列表失败已到达后点击SSH Key，错误被误清空。修复删除这一次清空，保留testResult随草稿失效，显式测试/提交及reset仍按原路径清除旧操作提示，不改变UI、契约或错误处理。既有用例先等真实选项错误，再切换认证、修改名称并分别断言错误保留；原管理器网络Toast和320px无溢出断言保留，没有删除场景、延长超时或放宽断言。
 
-两轮源码复核覆盖初始加载先后、字段deepwatch、显式操作清错、reset和旧异步代次；本轮不运行本地行为/E2E；根check、前端build、目标严格tsc、全量format与diff通过，按D17/D18提交推送，整轮远程验证待收口。日志 `logs/e2e-options-{check,build,test-types,format}.log`；不发布或部署，原测试现场保留。
+两轮源码复核覆盖初始加载先后、字段deepwatch、显式操作清错、reset和旧异步代次；本轮不运行本地行为/E2E；根check、前端build、目标严格tsc、全量format与diff通过，按D17/D18提交推送，整轮远程验证见下方收口。日志 `logs/e2e-options-{check,build,test-types,format}.log`；不发布或部署，原测试现场保留。
+
+修复提交 `3b98d81f` 的新远程 [41050797589](https://github.com/0honus0/nexus-terminal/actions/runs/41050797589) 完整成功。原SSH key selector/manager失败项首次通过；各轮passed计数48+1、71+1、53+1、60、66、55、58、124，共538，日志中的538条passed标题互不重复；无failed测试事件，也无failed/flaky/skipped摘要，未重试场景。质量、Docker、8测试分片及耗时维护均成功。完整日志 `logs/e2e-options-41050797589.log`、汇总 `e2e-options-summary.json`、作业与产物元数据同目录；额外维护提交 `72b2fa55` 已fast-forward到本地，仅变更duration-estimates。全部测试服务和专用目录继续按用户要求保留。本次最后仅提交验收文档，不触发发布或部署。
