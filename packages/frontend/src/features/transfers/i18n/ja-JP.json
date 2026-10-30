@@ -1,5 +1,8 @@
 {
   "progressCenter": {
+    "overallProgress": "全体の進捗",
+    "currentFile": "現在のファイル：{file}",
+    "completedItems": "完了：{completed} / {total} 件",
     "title": "進捗表示",
     "hiddenTitle": "非表示の進捗",
     "hiddenSourceHint": "各カードは非表示のタスクを表し、カード内をスクロールして詳細を確認できます。",

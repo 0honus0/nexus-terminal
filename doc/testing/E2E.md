@@ -2297,3 +2297,11 @@ main 98ceac0f 完整回归 [40614218253](https://github.com/0honus0/nexus-termin
 截图 `ssh-test-first-trust.png`、`ssh-test-changed-trust.png` 已人工核对，目标、指纹和操作完整显示，沿用既有确认框。初轮脚本尝试点击被弹窗遮挡的导航而超时，修正测试为触发真实SPA离页生命周期后最终轮次通过，产品UI未改。
 
 根 `pnpm run check` 与双端 `pnpm run build` 通过，日志 `logs/ssh-trust-check.log`、`logs/ssh-trust-build.log`。新增正式回归 `tests/e2e/specs/ssh/connection-test-host-key.spec.ts` 覆盖保存首次/变更密钥的取消与确认，以及未保存测试不建记录；同步targets.integration对具名挑战和HTTP状态的断言。目标测试严格tsc通过（`logs/ssh-trust-test-types.log`），`node --check tests/frontend/targets.integration.mjs`、全量 `pnpm run format:all:check`（`logs/ssh-trust-format.log`）及 `git diff --check` 均通过。构建后Shared codec定向断言验证合法挑战与普通错误，并拒绝缺失挑战、非法端口/指纹、嵌套额外字段、非主机错误携带挑战及外泄cause，日志 `logs/ssh-trust-codec.log`。正式夹具/全量E2E未运行；代理/多跳真实环境、并发密钥更换、确认写入丢失及权限撤销交错不扩大为本轮实测通过。
+
+## 复制任务总进度标注专项（2026-10-30）
+
+沿用户指定 `https://api.honus.top` 与 CDP `172.30.30.11:9223`，在自建桌面1440×1000与393×852触屏context加载当前Vite实际ProgressCenter组件，以受控TransferTask模拟三文件累计进度。使用真实Vue/i18n模块和原全局样式，不修改保存配置或远端文件；本轮只验呈现，不称为真实跨服务器传输验收。
+
+`/tmp/nexus-nethogs-20261030/verify-total-progress.cjs` 两端通过：first.zip切换second.zip时，完整任务标题保留，35%/350MB/1项累进为60%/600MB/2项，总量1000MB/3项保留；当前文件独立且进度条可访问名称为Overall progress。完成项数与字节并存；后台传输无字节时只显示项数，未知总量不编造分母；混合下载及上传不加总进度/当前文件文案；中英日文案、取消与隐藏事件、视口边界及无pageerror均通过。证据 `logs/total-progress-cdp.log`、`total-progress-{desktop,mobile}.png`，截图已检查。实际累计公式及后台子任务平均口径保持原实现，不扩大为字节加权变更。
+
+首次静态检查只报新helper缺少声明空行，已按原ESLint修正。最终根check、前端build、全量format及diff通过；日志 `logs/total-progress-{check,build,format}.log`。未运行全量E2E。测试服务和专用目录继续保留，未推送或部署生产。本批只提交进度呈现及其文档，前批未提交的挂起/密码/原生查找变更保留原工作区。

@@ -1,5 +1,8 @@
 {
   "progressCenter": {
+    "overallProgress": "Overall progress",
+    "currentFile": "Current file: {file}",
+    "completedItems": "Completed: {completed} / {total} items",
     "title": "Progress Display",
     "hiddenTitle": "Hidden progress",
     "hiddenSourceHint": "Each card represents a hidden task; scroll within the card to view details.",

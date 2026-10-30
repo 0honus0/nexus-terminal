@@ -1,5 +1,8 @@
 {
   "progressCenter": {
+    "overallProgress": "总进度",
+    "currentFile": "当前文件：{file}",
+    "completedItems": "已完成：{completed} / {total} 项",
     "title": "进度显示",
     "hiddenTitle": "已隐藏的进度",
     "hiddenSourceHint": "每个卡片代表一个隐藏任务，卡片内可滚动查看明细。",

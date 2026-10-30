@@ -67,12 +67,14 @@
 		['completed', 'cancelled', 'skipped', 'partial', 'unknown', 'error'].includes(status);
 
 	const activeTasks = computed(() => sorted.value.filter((task) => !done(task.status)));
+
+	const isTransferTask = (task: TransferTask): boolean => ['copy', 'move', 'transfer'].includes(task.kind);
+
 	const presentationMode = computed<'upload' | 'archive' | 'transfer' | 'mixed'>(() => {
 		if (sorted.value.length && sorted.value.every((task) => task.kind === 'upload')) return 'upload';
 		if (sorted.value.length && sorted.value.every((task) => task.kind === 'compress' || task.kind === 'decompress'))
 			return 'archive';
-		if (sorted.value.length && sorted.value.every((task) => ['copy', 'move', 'transfer'].includes(task.kind)))
-			return 'transfer';
+		if (sorted.value.length && sorted.value.every(isTransferTask)) return 'transfer';
 		return 'mixed';
 	});
 
@@ -496,13 +498,19 @@
 					class="transfer-mixed-row mb-2 last:mb-0"
 				>
 					<div class="mb-1 flex min-w-0 items-center gap-2 text-xs">
-						<span class="min-w-0 flex-1 truncate" :title="task.currentFile || task.label"
-							>{{ t(`progressCenter.kind.${task.kind}`) }} · {{ currentFilename(task) }}</span
+						<span
+							class="min-w-0 flex-1 truncate"
+							:title="isTransferTask(task) ? task.label : task.currentFile || task.label"
+							>{{ t(`progressCenter.kind.${task.kind}`) }} ·
+							{{ isTransferTask(task) ? task.label : currentFilename(task) }}</span
 						>
 						<span v-if="task.transferMethodUsed" class="shrink-0 text-text-secondary" data-transfer-method>
 							{{ task.transferMethodUsed }}
 						</span>
-						<span class="shrink-0 tabular-nums">{{ Math.round(task.progress * 10) / 10 }}%</span>
+						<span class="shrink-0 tabular-nums">
+							<template v-if="isTransferTask(task)">{{ t('progressCenter.overallProgress') }} </template>
+							{{ Math.round(task.progress * 10) / 10 }}%
+						</span>
 						<UiButton
 							v-if="!done(task.status)"
 							appearance="ghost"
@@ -515,8 +523,16 @@
 						</UiButton>
 					</div>
 					<div
+						v-if="isTransferTask(task) && task.currentFile"
+						class="mb-1 truncate text-[11px] text-text-secondary"
+						:title="task.currentFile"
+					>
+						{{ t('progressCenter.currentFile', { file: currentFilename(task) }) }}
+					</div>
+					<div
 						class="transfer-progress-track"
 						role="progressbar"
+						:aria-label="isTransferTask(task) ? t('progressCenter.overallProgress') : undefined"
 						aria-valuemin="0"
 						aria-valuemax="100"
 						:aria-valuenow="Math.round(task.progress)"
@@ -532,14 +548,24 @@
 						<span :class="task.status === 'error' ? 'text-error' : ''">{{
 							t(`progressCenter.status.${task.status}`)
 						}}</span>
-						<span class="shrink-0 tabular-nums">
+						<span class="min-w-0 text-right tabular-nums">
+							<span v-if="isTransferTask(task) && task.totalFiles !== null" class="block">
+								{{
+									t('progressCenter.completedItems', {
+										completed: task.completedFiles,
+										total: task.totalFiles,
+									})
+								}}
+							</span>
 							<template v-if="task.totalBytes > 0"
 								>{{ formatBytes(task.bytesWritten) }} / {{ formatBytes(task.totalBytes) }}</template
 							>
-							<template v-else-if="task.totalFiles !== null"
+							<template v-else-if="!isTransferTask(task) && task.totalFiles !== null"
 								>{{ task.completedFiles }} / {{ task.totalFiles }}</template
 							>
-							<template v-else>{{ formatBytes(task.bytesWritten) }}</template>
+							<template v-else-if="task.bytesWritten > 0 || task.totalFiles === null">{{
+								formatBytes(task.bytesWritten)
+							}}</template>
 						</span>
 					</div>
 				</li>
