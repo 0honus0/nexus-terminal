@@ -2345,3 +2345,11 @@ Shared编译后codec定向断言通过（`logs/suspend-password-codec.log`）：
 沿原专用目录、Backend3001/Vite9998、`https://api.honus.top` 和 CDP `172.30.30.11:9223`，`verify-directory-hint.cjs` 自建桌面与393px触屏context连接原测试SSH。两端通过：输入带光标移动的未执行printf后，按钮等待、信息提示一次、实际目录保持；手动Ctrl+C后同requestId收到directoryChanged且真实cwd变为/etc；正常提示符下切换/tmp无通知；sleep前台命令正常完成后自动切换/etc，无中断或pageerror。截图 `directory-hint-{desktop,mobile}.png` 已核对，日志 `logs/directory-hint-cdp.log`。只读现有目录及自有PTY，无远端文件写入，所有自建会话已关闭。
 
 本次根check、双端build、四个已修改E2E的严格tsc及targets.integration脚本语法通过；日志 `logs/directory-hint-{check,build,test-types}.log`。最终全量format及diff通过，记录于 `logs/directory-hint-format.log`，未运行全量E2E。此前密码编辑、挂起恢复与文本原生查找的专项证据仍分别见上文，不扩大为本轮重复实测；按用户本次要求一并提交这些已验证的本地变更。保留专用测试目录、工具和服务，未推送、发布或部署生产。
+
+## E2E 连接选项加载失败提示（2026-10-30）
+
+main/96ea73b2 的远程 [41049355889](https://github.com/0honus0/nexus-terminal/actions/runs/41049355889) 只有 browser shard 7 一项失败（同组57通过），其余7个测试分片、质量与Docker smoke通过。失败为 ssh-key-management 的320px密钥加载失败场景，首次与重试均在 options_failed 提示消失处失败；日志 `logs/e2e-41049355889-failed.log`，作业元数据 `e2e-41049355889-jobs.json`，继续保存在原专用目录。
+
+根因是新form深度watch将普通草稿变化同时当成清除submitError的依据；列表失败已到达后点击SSH Key，错误被误清空。修复删除这一次清空，保留testResult随草稿失效，显式测试/提交及reset仍按原路径清除旧操作提示，不改变UI、契约或错误处理。既有用例先等真实选项错误，再切换认证、修改名称并分别断言错误保留；原管理器网络Toast和320px无溢出断言保留，没有删除场景、延长超时或放宽断言。
+
+两轮源码复核覆盖初始加载先后、字段deepwatch、显式操作清错、reset和旧异步代次；本轮不运行本地行为/E2E；根check、前端build、目标严格tsc、全量format与diff通过，按D17/D18提交推送，整轮远程验证待收口。日志 `logs/e2e-options-{check,build,test-types,format}.log`；不发布或部署，原测试现场保留。

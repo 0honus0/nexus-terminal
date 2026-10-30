@@ -243,7 +243,6 @@ export function useConnectionForm(
 		form,
 		() => {
 			testResult.value = null;
-			submitError.value = '';
 		},
 		{ deep: true },
 	);

@@ -293,8 +293,12 @@ test('SSH key selector and manager surface key-list loading failures without ove
 	await page.goto('/connections');
 	await page.getByRole('button', { name: 'Add New Connection', exact: true }).click();
 	const form = page.locator('form.connection-form');
+	const optionsError = form.getByText('Options could not be loaded. Refresh and review.', { exact: true });
+	await expect(optionsError).toBeVisible();
 	await form.getByRole('radio', { name: 'SSH Key', exact: true }).click();
-	await expect(form.getByText('Options could not be loaded. Refresh and review.', { exact: true })).toBeVisible();
+	await expect(optionsError).toBeVisible();
+	await form.locator('#conn-name').fill('Keep option-loading failure visible');
+	await expect(optionsError).toBeVisible();
 	await form.getByRole('button', { name: 'Manage SSH Keys', exact: true }).click();
 	const modal = keyManager(page);
 	await expect(modal).toBeVisible();
