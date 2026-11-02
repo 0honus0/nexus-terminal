@@ -236,7 +236,7 @@ class WorkspaceFilesSession {
 				}
 			});
 		});
-		channel.onMessage(async (raw) => {
+		channel.onMessage((raw) => {
 			this.accept(raw);
 		});
 		channel.onClose(async () => {

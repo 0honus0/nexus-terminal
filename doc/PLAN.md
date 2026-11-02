@@ -4279,3 +4279,5 @@ SQL只读排查确认：2026-10-29 的 Hermes 排障中，`shell_execute` 约45�
 | 职责归属 | 两轮源码审核通过：WS捕获原身份、完整wire计量及派发前复验；原Service/Shell写入；关闭与晚结果有明确owner。                              |
 | 类型归属 | 批次仅本文件私有实现类型，复用原 Shared 解码/字节容量及具名安全错误；没有新协议或阈值。                                               |
 | 完成证据 | 8项定向测试通过，覆盖192条输入、原字节边界、空输入、多字节、撤权、关闭、收尾竞态与旧附件晚授权；完整静态/远程继续验收，全部证据保留。 |
+
+本轮补充设计：真实OpenSSH定向复现WS_INPUT_QUEUE_EXCEEDED（64条仅3072字节），说明协议owner前还有Platform异步链，把同步解码/准入的通知强行延后。① Platform WebSocketChannel持有传输队列；② 原HttpWebSocketChannel.onMessage允许void或Promise，全部消费者同步核对；③ 同步回调立即完成，异步回调仍串行背压；④ 技术类型只在Platform，Workspace显式注册同步accept；⑤ 不扩大64条/字节门槛，不解析业务类型；⑥ 真实异步等待仍占原预算并追踪，失败终止原socket、独立收尾；⑦ queue drain防重入，关闭/停机不再派发，保留binary暂停恢复；⑧ 增补技术通道同步突发、异步排序/溢出/失败回归，并重新跑真实OpenSSH及完整远程。新增SSH测试显式选用现有真实PTY模式，保留CRLF完整输出断言；普通pipe Bash只有LF，之前新测试此前提不正确。

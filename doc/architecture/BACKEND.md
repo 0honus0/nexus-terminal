@@ -1762,3 +1762,5 @@ TAR 进度沿既有 NativeArchiveCommands → FileArchiveModel → Files Service
 WorkspaceFilesSession 为无 requestId 的 terminal.input 持有独立的串行批次 owner；每条先沿 Shared 解码并捕获原 workspaceId/attachmentId/generation，同附件相邻输入在原单次256KiB内合并。待派发和正在鉴权的完整消息字节计入既有 WORKSPACE_TERMINAL_MAX_IN_FLIGHT_BYTES（1MiB），空输入也计实际 envelope 字节；普通 RPC 和有 requestId 的输入保留原64个并发准入。没有新增时间、数量或字节阈值。
 
 原 worker 每批调用 Workspaces.allowed，await 后再次核对 lifetime、附件与 generation，随后只调用原 WorkspaceService.write 一次；实际 Shell 背压及1MiB缓冲仍归 WorkspaceService。旧附件输入不交给重附着者，不因协议拒绝自动重派；关闭先停止准入，聚合等待 worker 与原 releaseWorkspace。批次类型只在本文件使用，未新增 Shared、Service 或存储契约。原OSC52零间隔输入与真实SSH/WS突发通知回归负责验证顺序和无截断，不以放慢测试或扩大通用RPC名额换绿。
+
+Platform HttpWebSocketChannel.onMessage显式区分void与Promise：同步协议准入在当前帧完成，不制造微任务等待；异步回调仍串行排队、占用原64条/字节预算并由HTTP追踪。技术层只持文本/二进制队列，不识别terminal.input；防重入排空，异常先终止socket再释放，关闭/停机后的消息不再派发，二进制高水位及CLOSING恢复读取保持。Workspace注册同步accept，协议任务及输入鉴权分别由原owner追踪。

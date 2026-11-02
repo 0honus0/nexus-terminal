@@ -50,7 +50,7 @@ export interface HttpServerOptions extends HttpBindings {
 export interface HttpWebSocketChannel {
 	send(value: string): boolean;
 	sendBinary(value: Uint8Array): boolean;
-	onMessage(listener: (value: string) => Promise<void>): void;
+	onMessage(listener: (value: string) => void | Promise<void>): void;
 	/** Optional, route-selected binary ingress. Default channels reject binary input. */
 	onBinary(listener: (value: Uint8Array) => Promise<void>): void;
 	onClose(listener: () => Promise<void>): void;

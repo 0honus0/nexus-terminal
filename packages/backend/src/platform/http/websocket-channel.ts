@@ -19,16 +19,20 @@ interface WebSocketChannelOptions {
 	onClosed(): void;
 }
 
+type WebSocketInput =
+	{ kind: 'text'; value: string; bytes: number } | { kind: 'binary'; value: Uint8Array; bytes: number };
+
 /** One socket owns its queue, callbacks, flow control and graceful completion. */
 export function createWebSocketChannel(ws: WebSocket, options: WebSocketChannelOptions): HttpWebSocketChannel {
 	const textSendBudget = Math.min(
 		MAX_WEBSOCKET_FRAME_BYTES,
 		Math.max(MAX_WEBSOCKET_BUFFER_BYTES, options.maxBufferedTextBytes ?? MAX_WEBSOCKET_BUFFER_BYTES),
 	);
-	let listener: ((value: string) => Promise<void>) | null = null;
+	let listener: ((value: string) => void | Promise<void>) | null = null;
 	let binaryListener: ((value: Uint8Array) => Promise<void>) | null = null;
 	let closing: (() => Promise<void>) | null = null;
-	let incoming = Promise.resolve();
+	const incoming: WebSocketInput[] = [];
+	let draining = false;
 	let queuedMessages = 0;
 	let queuedBytes = 0;
 	let finishing: Promise<void> | null = null;
@@ -42,6 +46,63 @@ export function createWebSocketChannel(ws: WebSocket, options: WebSocketChannelO
 				readyState: ws.readyState,
 			});
 		}
+	};
+
+	const releaseInput = (bytes: number) => {
+		queuedMessages -= 1;
+		queuedBytes -= bytes;
+		// Final upload callbacks can close while ingress is paused. Resume in
+		// CLOSING too so the peer's close frame can complete the handshake.
+		if (binaryListener && queuedBytes < MAX_WEBSOCKET_INPUT_BYTES / 4 && ws.readyState !== WebSocket.CLOSED) {
+			ws.resume();
+		}
+	};
+
+	const failInput = (error: unknown) => {
+		logDiagnostic(options.logger, 'error', 'WS_MESSAGE_HANDLER_FAILED', {}, error);
+		ws.terminate();
+	};
+
+	const drainInputs = () => {
+		if (draining) {
+			return;
+		}
+		draining = true;
+		while (incoming.length) {
+			const message = incoming.shift();
+			if (!message) {
+				break;
+			}
+			try {
+				let task: void | Promise<void> = undefined;
+				if (!finishing && options.isAccepting() && ws.readyState === WebSocket.OPEN) {
+					task =
+						message.kind === 'binary'
+							? binaryListener?.(Uint8Array.from(message.value))
+							: listener?.(message.value);
+				}
+				if (task !== undefined) {
+					const complete = () => {
+						releaseInput(message.bytes);
+						draining = false;
+						drainInputs();
+					};
+
+					const current = task
+						.then(complete, (error: unknown) => {
+							failInput(error);
+							complete();
+						})
+						.catch(failInput);
+					options.trackTask(current);
+					return;
+				}
+			} catch (error) {
+				failInput(error);
+			}
+			releaseInput(message.bytes);
+		}
+		draining = false;
 	};
 
 	// Protocol and transport errors belong to this socket, not the process.
@@ -90,38 +151,14 @@ export function createWebSocketChannel(ws: WebSocket, options: WebSocketChannelO
 			if (binaryListener && queuedBytes >= MAX_WEBSOCKET_INPUT_BYTES / 2) {
 				ws.pause();
 			}
-			const current = incoming.then(async () => {
-				try {
-					if (!finishing && options.isAccepting() && ws.readyState === WebSocket.OPEN) {
-						if (binary !== null) {
-							await binaryListener?.(Uint8Array.from(binary));
-						} else {
-							await listener?.(data.toString());
-						}
-					}
-				} finally {
-					queuedMessages -= 1;
-					queuedBytes -= bytes;
-					// A successful final upload chunk may close the socket *inside* its
-					// append callback while the ingress reader remains paused at high
-					// water. A paused WebSocket cannot consume the peer's Close frame,
-					// so resume in CLOSING too; otherwise a completed upload can hang
-					// until the close watchdog times out despite committed file bytes.
-					if (
-						binaryListener &&
-						queuedBytes < MAX_WEBSOCKET_INPUT_BYTES / 4 &&
-						ws.readyState !== WebSocket.CLOSED
-					) {
-						ws.resume();
-					}
-				}
-			});
-			incoming = current.catch((error: unknown) => {
-				logDiagnostic(options.logger, 'error', 'WS_MESSAGE_HANDLER_FAILED', {}, error);
-				ws.terminate();
-			});
-			// One chain per socket, rather than tracking every ancestor Promise.
-			options.trackTask(current.catch(() => undefined));
+			incoming.push(
+				binary === null
+					? { kind: 'text', value: data.toString(), bytes }
+					: { kind: 'binary', value: binary, bytes },
+			);
+			// Synchronous protocol admission finishes before the next frame. Only
+			// actual async work retains a queue slot and blocks following messages.
+			drainInputs();
 		}),
 	);
 	ws.on(

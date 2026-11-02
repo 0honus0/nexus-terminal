@@ -464,6 +464,10 @@ test('raw terminal output needs no acknowledgement and clean requests remain usa
 
 test('one-way terminal input bursts preserve every character beyond the RPC concurrency count', async ({ request }) => {
 	await loginAsInitialAdmin(request);
+	await resetTestSshFilesystem();
+	// CRLF assertions require the fixture's real PTY, rather than pipe-backed Bash.
+	const configured = await fetch(E2E_SSH.controlUrl + '/shell/startup-pty?echo=off', { method: 'POST' });
+	expect(configured.ok).toBeTruthy();
 	const connectionId = await ensureTestSshConnection(request);
 	const workspace = await openWorkspaceSession(request, connectionId, `input-burst-${crypto.randomUUID()}`);
 	const failures: string[] = [];

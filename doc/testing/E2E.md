@@ -2458,3 +2458,9 @@ node --test --test-concurrency=1 \
 修复归原WorkspaceFilesSession：无回执输入复用原Shared解码，捕获原附件和代次，串行合并并按完整wire字节占用既有1MiB预算，批次不超过原256KiB；每批重新鉴权，await后复验关闭/身份，断线不重放。有回执输入及普通RPC继续64个名额。新增backend-next-terminal-input.integration.mjs的8项定向测试通过（input-burst-owner-regression-final.log）：192条逐字通知精确有序、活跃鉴权与排队共用预算、空输入envelope、多字节批次、撤权、关闭等待、worker收尾微任务交错和旧附件晚授权不误投新附件。该测试直接调用真实WS协议owner，Workspaces/channel为受控能力，不能冒充真实SSH；首次夹具遗漏订阅与resumeOutput能力，补齐夹具后通过，未为夹具放宽产品代码。另新增正式SSH/WS突发通知用例，原OSC52零间隔输入保持，正式发现为137文件/545项。
 
 本轮最终根check、Shared随Backend构建、双端build、目标严格tsc（protocol/http容量/terminal-ui，含noUnusedLocals）、全量format:all:check及git diff --check通过，日志input-burst-{check,build,types,format}-final.log；最终Backend产物重跑8项owner测试通过。没有运行本地全量E2E，完整远程8分片及发布继续验收，未更新生产。
+
+第三轮 [41452555703](https://github.com/0honus0/nexus-terminal/actions/runs/41452555703)（514cb946）中，质量、Docker smoke、全部7个browser分片通过，OSC52首次通过且无flaky；backend仅新突发输入测试失败。该spec使用默认pipe Bash却硬等CRLF，修正为显式开启夹具已有真实PTY模式，保留完整marker断言。backend失败日志及完整artifacts保留原目录，不能把本轮记作全绿。
+
+随后本地真实OpenSSH+完整HTTP/WS复验又发现独立传输缺口：159帧在同一网络批次触发Platform的WS_INPUT_QUEUE_EXCEEDED，64条仅3072字节便断开；原8项owner测试未经过技术通道，未覆盖该层。失败日志input-burst-real-openssh{,-second}.log、数据库/密钥均保留。修复原Platform通道，让同步回调立即释放、真正的异步回调保持原容量和顺序；Workspace注册同步accept，不改阈值。初版通道6项加WS owner8项共14项通过，真实OpenSSH同159帧完整CRLF marker、零protocol.error、后续suspend.list通过，证据input-burst-channel-regression.log和input-burst-real-openssh-final.log；只对本机自建daemon与数据库操作，应用/SSH正常关闭但文件保留，原Vite未停止。最终补充防重入及CLOSING读取验证和静态结果继续回填。
+
+最终通道7项与WS owner8项共15项全部通过（input-burst-channel-regression-final.log）；真实OpenSSH在最终Backend产物上再次通过159帧、精确CRLF输出、零协议拒绝及后续查询（input-burst-real-openssh-current.log）。根check、双端build、目标严格tsc、全量format及diff通过，日志input-burst-channel-{check,build,format}-final.log和input-burst-pty-types.log。onMessage的Agent、PTY、upload、catalog消费者逐一核对，保留原异步串行等待；只有Workspace原同步准入声明为void。完整远程继续验收，未发布或部署。
