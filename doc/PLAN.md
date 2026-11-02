@@ -4369,3 +4369,7 @@ SQL只读排查确认：2026-10-29 的 Hermes 排障中，`shell_execute` 约45�
 第二轮847fb6a5的41486648381质量、Docker及7分片成功，手机搜索已通过，仅拖动取消用例失败。trace截图显示选择较低文件后列表滚动，上方目标行仍有DOM盒但被列表裁剪，裸CDP不会执行定位器自动滚动；原坐标落在实际目标之外，无法据此判断右键取消失败。moveTo先scrollIntoViewIfNeeded再取坐标，右键取消前明确确认有效目标is-drop-target，导航继续核对最终路径；不删原移动、源保留及右键断言。定向受控CDP中目标可见时右键清空选择且未移动；故意裁剪时不产生目标高亮，分别保留drag-touch-diagnostic.log和drag-clipped-target.log。当前补丁待静态及第三轮完整远程回归，发布仍待通过。
 
 第三轮补丁提交前：Node v22.23.1、集中工具pnpm 11.28.10，根check、全量format:all:check、变更E2E严格tsc和git diff --check通过；日志e2e-clip-check-final.log、e2e-clip-format.log、e2e-clip-types-final.log。首次手工tsc未指定Node类型目录而失败，显式使用仓库Backend现有@types后通过，未改依赖或类型配置。仅既有测试和本阶段证据变更，产品构建由本轮Actions统一核对。
+
+第三轮ff440403/41489494982质量、Docker与7分片成功，原取消前步骤已通过，同用例第二级目录停留在/hover-target。trace显示deep已可见且不busy，但无有效悬停高亮。受控CDP缩小列表并按正式脚本滚动/快速移动可复现目标不高亮；首次到达可能仅产生dragenter，进入新目录后旧位置与新行相同也可能没有真实移动。按Chromium原生拖放语义在moveTo末尾于目标内再移动1px，实际交付dragover，不改产品或等待时长。drag-same-coordinate.log为基线失败，drag-same-coordinate-fixed.log完整通过同坐标连续导航与取消；裁剪列表对照见drag-rapid-no-observation.log/drag-clipped-fixed.log。后续第四轮完整回归及发布待回填。
+
+第四轮提交前根check、变更E2E严格tsc、全量format和diff通过（e2e-dragover-*.log）。受控同触屏/裁剪列表完整链drag-complete-fixed.log通过取消、连续两级、两个上级及兄弟目录唯一放置，原文件夹与文件两个源保持；首次运行受Vite重优化导航中断，完成构建后重跑通过，不记首次为产品失败或成功。原USAGE拖动/取消操作仍符合实际，无产品行为差异。

@@ -846,6 +846,9 @@ test.describe('remote drag move on touch-capable desktop', () => {
 					startY + ((box.y + box.height / 2 - startY) * step) / 10,
 				);
 			}
+			// Chromium can deliver only dragenter on arrival, including when navigation
+			// replaces the row under the pointer. Move inside it to deliver dragover.
+			await move(box.x + box.width / 2 + 1, box.y + box.height / 2 + 1);
 		};
 
 		const begin = async (): Promise<void> => {
