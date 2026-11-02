@@ -4,7 +4,13 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { ToolJobModel } from '../model/tool-job-model.js';
 import type { ToolJob, ToolJobScope, ToolJobPreparation, ToolJobResult } from '../model/tool-job-types.js';
 import type { ToolJobControlInput, ToolTarget } from '../model/tool-types.js';
-import { AgentFailure, ToolExecutionUnknown, ToolCleanupFailure, isAgentDrainFailure } from '../../agent-failure.js';
+import {
+	AgentFailure,
+	ToolExecutionUnknown,
+	ToolCleanupFailure,
+	ToolOperationRefusal,
+	isAgentDrainFailure,
+} from '../../agent-failure.js';
 
 interface OwnedJob {
 	job: ToolJob;
@@ -15,7 +21,9 @@ interface OwnedJob {
 	validate: (signal: AbortSignal) => Promise<void>;
 	pending: Promise<void> | null;
 	failure: unknown;
+	refusal: ToolOperationRefusal | null;
 	cleanupFailed: boolean;
+	onFailure(error: unknown): void;
 	unsubscribe(): void;
 }
 
@@ -29,7 +37,33 @@ function sameScope(job: ToolJob, scope: ToolJobScope): boolean {
 	return job.userId === scope.userId && job.appId === scope.appId && job.runId === scope.runId;
 }
 
-/** Run-owned background execution. Every remote Promise remains owned through durable settlement and cleanup. */
+function resultView(result: ToolJobResult | null) {
+	return result === null
+		? null
+		: result.status === 'not_started'
+			? { status: result.status }
+			: {
+					status: result.status,
+					exitCode: result.exitCode,
+					signal: result.signal,
+					stdout: result.stdout,
+					stderr: result.stderr,
+					truncated: result.truncated,
+				};
+}
+
+function snapshot(job: ToolJob): string {
+	return JSON.stringify({
+		jobId: job.id,
+		state: job.state,
+		revision: job.revision,
+		result: resultView(job.result),
+		createdAt: job.createdAt,
+		updatedAt: job.updatedAt,
+	});
+}
+
+/** Run-owned Shell execution. Every remote Promise remains owned through durable settlement and cleanup. */
 export class ToolJobService {
 	private readonly jobs = new Map<string, OwnedJob>();
 	private reservations = 0;
@@ -52,7 +86,7 @@ export class ToolJobService {
 			throw new AgentFailure('limit_exceeded');
 		}
 		this.reservations++;
-		const deadline = Date.now() + input.timeoutMs;
+		const deadline = input.deadlineAt;
 		try {
 			signal.throwIfAborted();
 			const job = await this.model.create(
@@ -66,7 +100,7 @@ export class ToolJobService {
 					fingerprint: target.fingerprint,
 					policyRevision,
 				},
-				64,
+				input.maxHistory,
 			);
 			const controller = new AbortController();
 
@@ -85,7 +119,9 @@ export class ToolJobService {
 				validate,
 				pending: null,
 				failure: null,
+				refusal: null,
 				cleanupFailed: false,
+				onFailure: input.onFailure,
 
 				unsubscribe: () => signal.removeEventListener('abort', abort),
 			});
@@ -106,20 +142,31 @@ export class ToolJobService {
 			throw new AgentFailure('internal_failure');
 		}
 		item.timer = setTimeout(() => item.controller.abort(), Math.max(1, item.deadline - Date.now()));
-		item.pending = Promise.resolve().then(() =>
-			withDiagnosticContext({ jobId: item.job.id, runId: item.job.runId }, () => this.execute(item)),
-		);
-		void item.pending.catch((error: unknown) => {
-			logDiagnostic(
-				this.logger,
-				'error',
-				'AGENT_JOB_TASK_FAILED',
-				{ jobId: item.job.id, runId: item.job.runId },
-				error,
+		item.pending = Promise.resolve()
+			.then(() => withDiagnosticContext({ jobId: item.job.id, runId: item.job.runId }, () => this.execute(item)))
+			.then(
+				() => {
+					if (item.job.state === 'unknown') {
+						item.onFailure(new ToolExecutionUnknown());
+					}
+				},
+				(error: unknown) => {
+					logDiagnostic(
+						this.logger,
+						'error',
+						'AGENT_JOB_TASK_FAILED',
+						{ jobId: item.job.id, runId: item.job.runId },
+						error,
+					);
+					item.failure = error;
+					item.cleanupFailed = hasCleanupFailure(error);
+					// Notify only after execution and its monitor/cleanup have settled.
+					// The Run callback stops admission; it never waits on this Promise.
+					item.onFailure(error);
+					throw error;
+				},
 			);
-			item.failure = error;
-			item.cleanupFailed = hasCleanupFailure(error);
-		});
+		void item.pending.catch(() => undefined);
 	}
 
 	private async execute(item: OwnedJob): Promise<void> {
@@ -204,6 +251,9 @@ export class ToolJobService {
 			try {
 				if (!confirmed && !(error instanceof ToolExecutionUnknown)) {
 					item.job = await this.model.change(item.job, 'failed', { status: 'not_started' });
+					if (error instanceof ToolOperationRefusal) {
+						item.refusal = error;
+					}
 				} else {
 					item.job = await this.model.change(item.job, 'unknown', null);
 				}
@@ -239,24 +289,100 @@ export class ToolJobService {
 		return job;
 	}
 
+	private checkFailure(id: string): void {
+		const item = this.jobs.get(id);
+		if (item && item.failure !== null) {
+			throw item.failure;
+		}
+		if (item?.refusal) {
+			throw item.refusal;
+		}
+	}
+
+	private async settled(job: ToolJob): Promise<void> {
+		const item = this.jobs.get(job.id);
+		if (item?.pending && job.state !== 'queued' && job.state !== 'dispatched') {
+			// A durable terminal row may precede the owner's final cleanup/late failure.
+			await item.pending;
+		}
+		this.checkFailure(job.id);
+		if (job.state === 'unknown') {
+			throw new ToolExecutionUnknown();
+		}
+	}
+
+	private async waitFor(
+		scope: ToolJobScope,
+		target: ToolTarget,
+		id: string,
+		waitMs: number,
+		signal: AbortSignal,
+		validate: () => Promise<void>,
+	): Promise<ToolJob> {
+		const deadline = Date.now() + waitMs;
+		let job = await this.owned(scope, target, id);
+		while ((job.state === 'queued' || job.state === 'dispatched') && Date.now() < deadline) {
+			this.checkFailure(id);
+			try {
+				await delay(Math.max(1, Math.min(250, deadline - Date.now())), undefined, { signal });
+			} catch (error) {
+				if (signal.aborted) {
+					if (signal.reason instanceof ToolExecutionUnknown) {
+						throw signal.reason;
+					}
+					throw new AgentFailure('provider_unavailable', { cause: error });
+				}
+				throw error;
+			}
+			await validate();
+			job = await this.owned(scope, target, id);
+		}
+		await validate();
+		await this.settled(job);
+		await validate();
+		return job;
+	}
+
+	async foreground(
+		scope: ToolJobScope,
+		target: ToolTarget,
+		id: string,
+		waitMs: number,
+		signal: AbortSignal,
+		validate: () => Promise<void>,
+	): Promise<string> {
+		const job = await this.waitFor(scope, target, id, waitMs, signal, validate);
+		if (job.result !== null && job.result.status !== 'not_started') {
+			return JSON.stringify(resultView(job.result));
+		}
+		logDiagnostic(this.logger, 'debug', 'AGENT_SHELL_YIELDED', {
+			jobId: job.id,
+			runId: job.runId,
+			state: job.state,
+		});
+		return snapshot(job);
+	}
+
 	async control(
 		scope: ToolJobScope,
 		target: ToolTarget,
 		input: ToolJobControlInput,
 		signal: AbortSignal,
 		validate: () => Promise<void>,
+		waitBudgetMs: number,
 	): Promise<string> {
 		await validate();
 		if (input.action === 'list') {
-			const records = await this.model.list(scope, target.id, 64);
-			if (records.length > 64) {
-				throw new AgentFailure('limit_exceeded');
+			const records = await this.model.list(scope, target.id, 64, input.offset);
+			const jobs = records
+				.slice(0, 64)
+				.filter((job) => job.targetVersion === target.version && job.fingerprint === target.fingerprint);
+			for (const job of jobs) {
+				await this.settled(job);
 			}
-			const jobs = records.filter(
-				(job) => job.targetVersion === target.version && job.fingerprint === target.fingerprint,
-			);
 			await validate();
 			return JSON.stringify({
+				nextOffset: records.length > 64 ? input.offset + 64 : null,
 				jobs: jobs.map((job) => ({
 					jobId: job.id,
 					state: job.state,
@@ -283,43 +409,20 @@ export class ToolJobService {
 				throw new AgentFailure('operation_unknown');
 			}
 		} else if (input.action === 'wait') {
-			const deadline = Date.now() + input.waitSeconds * 1000;
-			while ((job.state === 'queued' || job.state === 'dispatched') && Date.now() < deadline) {
-				try {
-					await delay(Math.max(1, Math.min(250, deadline - Date.now())), undefined, { signal });
-				} catch (error) {
-					if (signal.aborted) {
-						throw new AgentFailure('provider_unavailable', { cause: error });
-					}
-					throw error;
-				}
-				await validate();
-				job = await this.owned(scope, target, job.id);
-			}
+			job = await this.waitFor(
+				scope,
+				target,
+				job.id,
+				Math.min(input.waitSeconds * 1000, waitBudgetMs),
+				signal,
+				validate,
+			);
 		}
 		job = await this.owned(scope, target, job.id);
 		await validate();
-		const result = job.result;
-		return JSON.stringify({
-			jobId: job.id,
-			state: job.state,
-			revision: job.revision,
-			result:
-				result === null
-					? null
-					: result.status === 'not_started'
-						? { status: result.status }
-						: {
-								status: result.status,
-								exitCode: result.exitCode,
-								signal: result.signal,
-								stdout: result.stdout,
-								stderr: result.stderr,
-								truncated: result.truncated,
-							},
-			createdAt: job.createdAt,
-			updatedAt: job.updatedAt,
-		});
+		await this.settled(job);
+		await validate();
+		return snapshot(job);
 	}
 
 	async drain(scope: ToolJobScope): Promise<void> {

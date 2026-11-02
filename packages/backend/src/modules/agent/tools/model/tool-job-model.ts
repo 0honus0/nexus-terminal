@@ -90,8 +90,10 @@ export class ToolJobModel {
 		return record === null ? null : fromStorage(record);
 	}
 
-	async list(value: ToolJobScope, connectionId: number, limit: number): Promise<ToolJob[]> {
-		return (await agentStorage(() => this.storage.list(scope(value), connectionId, limit))).map(fromStorage);
+	async list(value: ToolJobScope, connectionId: number, limit: number, offset: number): Promise<ToolJob[]> {
+		return (await agentStorage(() => this.storage.list(scope(value), connectionId, limit, offset))).map(
+			fromStorage,
+		);
 	}
 
 	async change(

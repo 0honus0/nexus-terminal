@@ -168,12 +168,12 @@ export class SqliteToolJobStorage implements ToolJobStorage {
 		return this.db.transaction((tx) => get(tx, scope, id));
 	}
 
-	list(scope: StoredJobScope, connectionId: number, limit: number): Promise<StoredToolJob[]> {
+	list(scope: StoredJobScope, connectionId: number, limit: number, offset: number): Promise<StoredToolJob[]> {
 		return this.db.transaction(async (tx) =>
 			(
 				await tx.all(
-					'SELECT * FROM agent_tool_jobs WHERE user_id=? AND app_id=? AND run_id=? AND connection_id=? ORDER BY created_at,id LIMIT ?',
-					[scope.userId, scope.appId, scope.runId, connectionId, limit + 1],
+					'SELECT * FROM agent_tool_jobs WHERE user_id=? AND app_id=? AND run_id=? AND connection_id=? ORDER BY created_at,id LIMIT ? OFFSET ?',
+					[scope.userId, scope.appId, scope.runId, connectionId, limit + 1, offset],
 				)
 			).map(readToolJob),
 		);
@@ -199,7 +199,7 @@ export class SqliteToolJobStorage implements ToolJobStorage {
 			}
 			if (input.state === 'dispatched') {
 				const owner = await tx.one(
-					`SELECT t.id FROM agent_run_tools t JOIN agent_runs r ON r.id=t.run_id WHERE t.id=? AND t.state='completed' AND r.status='running'`,
+					`SELECT t.id FROM agent_run_tools t JOIN agent_runs r ON r.id=t.run_id WHERE t.id=? AND t.state IN ('dispatched','completed') AND r.status='running'`,
 					[current.id],
 				);
 				if (!owner || current.state !== 'queued' || resultText !== null) {

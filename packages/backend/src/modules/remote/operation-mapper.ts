@@ -4,6 +4,7 @@ import { RemoteFileFailure } from './files/model/file-types.js';
 import { ObservationFailure } from './monitoring/model/observation-types.js';
 import { RemoteHostKeyUntrustedError } from './machines/model/machine-errors.js';
 import { RemoteResourceCleanupFailure } from './resource-errors.js';
+import { MachineMutationAdmissionFailure } from './machines/model/mutation-types.js';
 import type { RemoteMachineOperationService } from './machines/service/operation-service.js';
 import type { MachineOperationScope } from './machines/model/operation-types.js';
 import type { RemoteMachineOperationScope, RemoteMachineOperations } from './public.js';
@@ -26,6 +27,9 @@ async function boundary<T>(work: () => Promise<T>): Promise<T> {
 	} catch (error) {
 		if (error instanceof RemoteResourceCleanupFailure) {
 			throw new RemoteMachineOperationError('cleanup_failed');
+		}
+		if (error instanceof MachineMutationAdmissionFailure) {
+			throw new RemoteMachineOperationError(error.reason === 'blocked' ? 'mutation_blocked' : 'mutation_busy');
 		}
 		if (error instanceof RemoteFileFailure) {
 			throw new RemoteMachineOperationError(error.code);

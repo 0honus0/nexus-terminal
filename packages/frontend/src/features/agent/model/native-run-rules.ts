@@ -9,7 +9,12 @@ import type {
 } from './native-run-types';
 
 export function isNativeRunActive(run: NativeRun | NativeChild): boolean {
-	return run.status === 'pending' || run.status === 'running' || run.status === 'unknown';
+	return run.status === 'pending' || run.status === 'running';
+}
+
+/** An unconfirmed effect has stopped execution but still requires explicit closure. */
+export function canCancelNativeRun(run: NativeRun | NativeChild): boolean {
+	return isNativeRunActive(run) || run.status === 'unknown';
 }
 
 export function compareNativeEntryCursor(left: NativeEntryCursor, right: NativeEntryCursor): number {

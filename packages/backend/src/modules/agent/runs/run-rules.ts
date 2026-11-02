@@ -7,10 +7,11 @@ export function mayFinishModelStep(
 	result: RunStepFinish,
 	hasUnsettledTools: boolean,
 	hasUnsettledChildren: boolean,
+	hasActiveJobs: boolean,
 ): boolean {
 	return (
 		result.state !== 'completed' ||
-		(!hasUnsettledTools && (result.finishReason !== 'stop' || !hasUnsettledChildren))
+		(!hasUnsettledTools && (result.finishReason !== 'stop' || (!hasUnsettledChildren && !hasActiveJobs)))
 	);
 }
 

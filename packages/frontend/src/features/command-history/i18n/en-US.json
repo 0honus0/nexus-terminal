@@ -22,7 +22,7 @@
       "sentToAllSessions": "Command sent to {count} sessions.",
       "noActiveSshSessions": "No active SSH sessions to send command to."
     },
-    "addFailed": "Command was sent, but saving it to history failed: {error}",
+    "addFailed": "Command sent; saving to history could not be confirmed: {error}",
     "loadFailed": "Failed to load command history: {error}",
     "deleteFailed": "Failed to delete history entry: {error}",
     "clearFailed": "Failed to clear command history: {error}"

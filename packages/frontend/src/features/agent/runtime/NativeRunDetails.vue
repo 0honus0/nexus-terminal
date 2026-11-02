@@ -8,7 +8,7 @@
 		NativeEvent,
 		NativeRunAction,
 	} from '../model/native-run-types';
-	import { isNativeRunActive } from '../model/native-run-rules';
+	import { canCancelNativeRun } from '../model/native-run-rules';
 
 	defineProps<{
 		run: NativeRun;
@@ -55,7 +55,7 @@
 					</div>
 				</div>
 				<UiButton
-					v-if="isNativeRunActive(run)"
+					v-if="canCancelNativeRun(run)"
 					density="compact"
 					appearance="soft"
 					tone="danger"
@@ -99,7 +99,7 @@
 						</div>
 					</div>
 					<UiButton
-						v-if="isNativeRunActive(item)"
+						v-if="canCancelNativeRun(item)"
 						density="compact"
 						appearance="soft"
 						tone="danger"

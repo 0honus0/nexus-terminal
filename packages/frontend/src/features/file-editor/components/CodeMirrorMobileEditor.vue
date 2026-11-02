@@ -1,5 +1,6 @@
 <script setup lang="ts">
 	import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+	import { useI18n } from 'vue-i18n';
 	import { Compartment, EditorState, type ChangeSpec, type Extension } from '@codemirror/state';
 	import { EditorView, drawSelection, dropCursor, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view';
 	import { defaultKeymap, history, historyKeymap, toggleComment } from '@codemirror/commands';
@@ -13,7 +14,16 @@
 		LanguageDescription,
 	} from '@codemirror/language';
 	import { autocompletion, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
-	import { highlightSelectionMatches, openSearchPanel, search, searchKeymap } from '@codemirror/search';
+	import {
+		closeSearchPanel,
+		getSearchQuery,
+		highlightSelectionMatches,
+		openSearchPanel,
+		search,
+		searchKeymap,
+		searchPanelOpen,
+		setSearchQuery,
+	} from '@codemirror/search';
 	import { vscodeDark } from '@uiw/codemirror-theme-vscode';
 	import { languages } from '@codemirror/language-data';
 
@@ -161,9 +171,11 @@
 	}>();
 
 	const root = ref<HTMLElement | null>(null);
+	const { t, locale } = useI18n();
 	const languageCompartment = new Compartment();
 	const presentationCompartment = new Compartment();
 	const editableCompartment = new Compartment();
+	const searchLocaleCompartment = new Compartment();
 	let view: EditorView | undefined;
 	let mounted = false;
 	let syncing = false;
@@ -171,6 +183,21 @@
 	let languageGeneration = 0;
 	let pinchStartDistance = 0;
 	let pinchStartFontSize = props.fontSize;
+
+	const searchPhrases = (): Extension =>
+		EditorState.phrases.of({
+			Find: t('fileEditor.search.find'),
+			Replace: t('fileEditor.search.replace'),
+			next: t('fileEditor.search.next'),
+			previous: t('fileEditor.search.previous'),
+			all: t('fileEditor.search.all'),
+			'match case': t('fileEditor.search.matchCase'),
+			regexp: t('fileEditor.search.regexp'),
+			'by word': t('fileEditor.search.wholeWord'),
+			replace: t('fileEditor.search.replace'),
+			'replace all': t('fileEditor.search.replaceAll'),
+			close: t('fileEditor.search.close'),
+		});
 
 	const presentationExtension = (): Extension =>
 		EditorView.theme({
@@ -227,6 +254,7 @@
 					languageCompartment.of(initialLanguage),
 					presentationCompartment.of(presentationExtension()),
 					editableCompartment.of(EditorView.editable.of(!props.readOnly)),
+					searchLocaleCompartment.of(searchPhrases()),
 					vscodeDark,
 					lineNumbers(),
 					EditorView.lineWrapping,
@@ -313,6 +341,16 @@
 		() => props.readOnly,
 		(readOnly) => view?.dispatch({ effects: editableCompartment.reconfigure(EditorView.editable.of(!readOnly)) }),
 	);
+	watch(locale, () => {
+		if (!view) return;
+		const query = searchPanelOpen(view.state) ? getSearchQuery(view.state) : undefined;
+		if (query) closeSearchPanel(view);
+		view.dispatch({ effects: searchLocaleCompartment.reconfigure(searchPhrases()) });
+		if (query) {
+			openSearchPanel(view);
+			view.dispatch({ effects: setSearchQuery.of(query) });
+		}
+	});
 	watch(
 		() => [props.scrollTop ?? 0, props.scrollLeft ?? 0] as const,
 		([scrollTop, scrollLeft]) => {
@@ -395,5 +433,157 @@
 
 	.codemirror-mobile-editor-container :deep(.cm-selectionBackground) {
 		background-color: #5264ac !important;
+	}
+
+	.codemirror-mobile-editor-container :deep(.cm-panels-bottom) {
+		border-top: 1px solid #454545;
+		background: #252526;
+		color: #cccccc;
+	}
+
+	.codemirror-mobile-editor-container :deep(.cm-search) {
+		display: grid;
+		grid-template-columns: repeat(8, minmax(0, 1fr));
+		align-items: center;
+		gap: 6px;
+		padding: 8px;
+		font-family: var(--font-family-sans-serif);
+		font-size: 13px;
+		line-height: 1.4;
+	}
+
+	.codemirror-mobile-editor-container :deep(.cm-search input),
+	.codemirror-mobile-editor-container :deep(.cm-search button),
+	.codemirror-mobile-editor-container :deep(.cm-search label) {
+		min-width: 0;
+		margin: 0;
+		font-family: inherit;
+	}
+
+	.codemirror-mobile-editor-container :deep(.cm-search .cm-textfield) {
+		box-sizing: border-box;
+		width: 100%;
+		height: 32px;
+		padding: 4px 7px;
+		border: 1px solid #555555;
+		border-radius: 3px;
+		outline: none;
+		background: #3c3c3c;
+		color: #eeeeee;
+		font-size: 16px;
+		line-height: 22px;
+	}
+
+	.codemirror-mobile-editor-container :deep(.cm-search .cm-textfield::placeholder) {
+		color: #aaaaaa;
+	}
+
+	.codemirror-mobile-editor-container :deep(.cm-search .cm-textfield:focus) {
+		border-color: var(--editor-accent, #007fd4);
+	}
+
+	.codemirror-mobile-editor-container :deep(.cm-search button) {
+		position: static;
+		display: inline-flex;
+		height: 32px;
+		align-items: center;
+		justify-content: center;
+		padding: 0 4px;
+		border: 1px solid transparent;
+		border-radius: 3px;
+		background: none;
+		box-shadow: none;
+		color: #cccccc;
+		font-size: 12px;
+		line-height: 1.2;
+		white-space: normal;
+	}
+
+	.codemirror-mobile-editor-container :deep(.cm-search button:hover),
+	.codemirror-mobile-editor-container :deep(.cm-search button:active) {
+		background: #3c3c3c;
+	}
+
+	.codemirror-mobile-editor-container :deep(.cm-search button:focus-visible) {
+		outline: 1px solid var(--editor-accent, #007fd4);
+		outline-offset: -1px;
+	}
+
+	.codemirror-mobile-editor-container :deep(.cm-search input[name='search']) {
+		grid-area: 1 / 1 / 2 / 5;
+	}
+
+	.codemirror-mobile-editor-container :deep(.cm-search button[name='prev']) {
+		grid-area: 1 / 5;
+		font-size: 0;
+	}
+
+	.codemirror-mobile-editor-container :deep(.cm-search button[name='next']) {
+		grid-area: 1 / 6;
+		font-size: 0;
+	}
+
+	.codemirror-mobile-editor-container :deep(.cm-search button[name='prev']::before) {
+		content: '↑';
+		font-size: 18px;
+	}
+
+	.codemirror-mobile-editor-container :deep(.cm-search button[name='next']::before) {
+		content: '↓';
+		font-size: 18px;
+	}
+
+	.codemirror-mobile-editor-container :deep(.cm-search button[name='select']) {
+		grid-area: 1 / 7;
+	}
+
+	.codemirror-mobile-editor-container :deep(.cm-search button[name='close']) {
+		position: static;
+		grid-area: 1 / 8;
+		width: 100%;
+		font-size: 22px;
+	}
+
+	.codemirror-mobile-editor-container :deep(.cm-search label) {
+		display: flex;
+		align-items: center;
+		gap: 5px;
+		font-size: 12px;
+		white-space: normal;
+	}
+
+	.codemirror-mobile-editor-container :deep(.cm-search label:nth-of-type(1)) {
+		grid-area: 2 / 1 / 3 / 4;
+	}
+
+	.codemirror-mobile-editor-container :deep(.cm-search label:nth-of-type(2)) {
+		grid-area: 2 / 4 / 3 / 6;
+	}
+
+	.codemirror-mobile-editor-container :deep(.cm-search label:nth-of-type(3)) {
+		grid-area: 2 / 6 / 3 / 9;
+	}
+
+	.codemirror-mobile-editor-container :deep(.cm-search input[type='checkbox']) {
+		width: 15px;
+		height: 15px;
+		flex: none;
+		accent-color: var(--editor-accent, #007fd4);
+	}
+
+	.codemirror-mobile-editor-container :deep(.cm-search br) {
+		display: none;
+	}
+
+	.codemirror-mobile-editor-container :deep(.cm-search input[name='replace']) {
+		grid-area: 3 / 1 / 4 / 5;
+	}
+
+	.codemirror-mobile-editor-container :deep(.cm-search button[name='replace']) {
+		grid-area: 3 / 5 / 4 / 7;
+	}
+
+	.codemirror-mobile-editor-container :deep(.cm-search button[name='replaceAll']) {
+		grid-area: 3 / 7 / 4 / 9;
 	}
 </style>

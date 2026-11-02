@@ -531,6 +531,127 @@ async function waitForEchoFrame(page: Page, consumed: number): Promise<void> {
 	);
 }
 
+test('terminal jitter keeps visible input until remote echo confirms or corrects it', async ({ page }) => {
+	await trainTerminalEcho(page);
+	const rows = page.locator('#terminal-lifecycle-host .xterm-rows');
+	await page.evaluate(() => window.__terminalLifecycle.input('i'));
+	await expect(rows).toContainText('$ abcdefghi');
+	// Model an RTT spike beyond the learned cleanup deadline, without a wall-clock sleep.
+	await page.clock.install();
+	await page.clock.fastForward(2000);
+	await expect(rows).toContainText('$ abcdefghi');
+	await page.evaluate(() => window.__terminalLifecycle.output('i'));
+	await waitForEchoFrame(page, 10);
+	await expect(rows).toContainText('$ abcdefghi');
+	await page.evaluate(() => window.__terminalLifecycle.input('\x7f'));
+	await expect(rows).not.toContainText('abcdefghi');
+	await page.clock.fastForward(4000);
+	await expect(rows).not.toContainText('abcdefghi');
+	await page.evaluate(() => window.__terminalLifecycle.output('\b \b'));
+	await waitForEchoFrame(page, 11);
+	await expect(rows).toContainText('$ abcdefgh');
+	expect(await page.evaluate(() => window.__terminalLifecycle.inputs.join(''))).toBe('abcdefghi\x7f');
+});
+
+test('terminal deletes pending typing immediately and late echo cannot resurrect edited characters', async ({
+	page,
+}) => {
+	await trainTerminalEcho(page);
+	const rows = page.locator('#terminal-lifecycle-host .xterm-rows');
+	await page.evaluate(() => {
+		for (const char of 'ijkl') window.__terminalLifecycle.input(char);
+	});
+	await expect(rows).toContainText('$ abcdefghijkl');
+	await page.evaluate(() => {
+		window.__terminalLifecycle.input('\x7f\x7f');
+		window.__terminalLifecycle.input('X');
+	});
+	await expect(rows).toContainText('$ abcdefghijX', { timeout: 400 });
+	await expect(rows).not.toContainText('abcdefghijk');
+	const frames = ['ij', '\x1b[32mk', 'l', '\x1b[0', 'm', '\b \b', '\b\x1b[', 'K', '\x1b[0mX'];
+	for (const [index, frame] of frames.entries()) {
+		await page.evaluate((frame) => window.__terminalLifecycle.output(frame), frame);
+		await waitForEchoFrame(page, 10 + index);
+		await expect(rows).toContainText('$ abcdefghijX');
+		await expect(rows).not.toContainText('abcdefghijk');
+	}
+	expect(await page.evaluate(() => window.__terminalLifecycle.inputs)).toEqual([...'abcdefghijkl', '\x7f\x7f', 'X']);
+	await page.evaluate(async () => {
+		await window.__terminalLifecycle.serialize();
+		window.__terminalLifecycle.unmount();
+		await window.__terminalLifecycle.mount();
+	});
+	await expect(rows).toContainText('$ abcdefghijX');
+	await expect(rows).not.toContainText('abcdefghijk');
+});
+
+test('terminal corrects remote disagreement after pending typing was deleted', async ({ page }) => {
+	await trainTerminalEcho(page);
+	const rows = page.locator('#terminal-lifecycle-host .xterm-rows');
+	await page.evaluate(() => {
+		for (const char of 'ijk') window.__terminalLifecycle.input(char);
+		window.__terminalLifecycle.input('\x7f\x7f');
+	});
+	await expect(rows).toContainText('$ abcdefghi');
+	await expect(rows).not.toContainText('abcdefghij');
+	await page.evaluate(() => window.__terminalLifecycle.output('ijQ'));
+	await waitForEchoFrame(page, 10);
+	await expect(rows).toContainText('$ abcdefghijQ');
+	await page.evaluate(() => window.__terminalLifecycle.output('\b \b\b \b'));
+	await waitForEchoFrame(page, 11);
+	await expect(rows).toContainText('$ abcdefghi');
+	await expect(rows).not.toContainText('abcdefghij');
+});
+
+test('terminal snapshot restores confirmed typing while its later deletion is still pending', async ({ page }) => {
+	await trainTerminalEcho(page);
+	const rows = page.locator('#terminal-lifecycle-host .xterm-rows');
+	await page.evaluate(() => window.__terminalLifecycle.output('\r\n$ '));
+	await waitForEchoFrame(page, 10);
+	await page.evaluate(() => {
+		for (const char of 'ijk') window.__terminalLifecycle.input(char);
+		window.__terminalLifecycle.input('\x7f\x7f');
+	});
+	// The first character of this new row remains tentative. A coalesced echo
+	// confirms the typing, but the local deletion still must not enter a snapshot.
+	await page.evaluate(() => window.__terminalLifecycle.output('\x1b[32mijk'));
+	await waitForEchoFrame(page, 11);
+	await expect(rows).not.toContainText('$ ij');
+	const snapshot = await page.evaluate(() => window.__terminalLifecycle.serialize());
+	expect(snapshot).toContain('ijk');
+	await page.evaluate(async () => {
+		window.__terminalLifecycle.unmount();
+		await window.__terminalLifecycle.mount();
+	});
+	await expect(rows).toContainText('$ ijk');
+	await page.evaluate(() => window.__terminalLifecycle.output('\b \b\b \b'));
+	await waitForEchoFrame(page, 12);
+	await expect(rows).not.toContainText('$ ij');
+	await expect(rows).toContainText('$ i');
+});
+
+test('terminal held deletion crosses pending and confirmed text without waiting for echo batches', async ({ page }) => {
+	await trainTerminalEcho(page);
+	const rows = page.locator('#terminal-lifecycle-host .xterm-rows');
+	await page.evaluate(() => {
+		for (const char of 'ijklmnopqrstuvwx') window.__terminalLifecycle.input(char);
+	});
+	await expect(rows).toContainText('$ abcdefghijklmnopqrstuvwx');
+	await page.evaluate(() => window.__terminalLifecycle.input('\x7f'.repeat(20)));
+	await expect(rows).not.toContainText('abcde', { timeout: 400 });
+	await expect(rows).toContainText('$ abcd');
+	for (const [index, frame] of ['ijkl', 'mnopqrstuvwx', '\b\x1b[K'.repeat(10), '\b \b'.repeat(10)].entries()) {
+		await page.evaluate((frame) => window.__terminalLifecycle.output(frame), frame);
+		await waitForEchoFrame(page, 10 + index);
+		await expect(rows).toContainText('$ abcd');
+		await expect(rows).not.toContainText('abcde');
+	}
+	expect(await page.evaluate(() => window.__terminalLifecycle.inputs)).toEqual([
+		...'abcdefghijklmnopqrstuvwx',
+		'\x7f'.repeat(20),
+	]);
+});
+
 test('fragmented terminal controls and repeated backspace preserve pending local echo', async ({ page }) => {
 	await trainTerminalEcho(page);
 	const rows = page.locator('#terminal-lifecycle-host .xterm-rows');

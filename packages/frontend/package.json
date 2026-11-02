@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@babel/runtime": "^8.0.8",
+    "@babel/runtime": "^8.0.10",
     "@codemirror/autocomplete": "^6.20.4",
     "@codemirror/commands": "^6.11.1",
     "@codemirror/lang-cpp": "^6.0.3",
@@ -54,7 +54,7 @@
     "date-fns": "^4.4.0",
     "docx-preview": "0.4.1",
     "dompurify": "catalog:",
-    "jschardet": "^3.1.4",
+    "jschardet": "^4.1.0",
     "marked": "^18.1.2",
     "mitt": "^3.0.1",
     "monaco-editor": "^0.57.0",
@@ -68,7 +68,7 @@
     "tailwindcss": "^4.3.3",
     "vue": "^3.5.44",
     "vue-chartjs": "^5.3.4",
-    "vue-i18n": "^11.4.16",
+    "vue-i18n": "^11.4.17",
     "vue-router": "^5.4.0",
     "vue-virtual-scroller": "^3.0.5",
     "vue3-recaptcha2": "^1.8.0",
@@ -83,6 +83,6 @@
     "@vue/compiler-sfc": "^3.5.44",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "vite": "^8.3.5",
-    "vue-tsc": "^3.3.13"
+    "vue-tsc": "^3.3.14"
   }
 }

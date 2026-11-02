@@ -1,4 +1,13 @@
 import type { MutationState, MutationOrigin, MutationOutcome } from '@nexus-terminal/shared/remote/mutations/values';
+import { RemoteFileFailure } from '../../files/model/file-types.js';
+
+/** Admission refused before work began; existing Files callers retain HTTP conflict semantics. */
+export class MachineMutationAdmissionFailure extends RemoteFileFailure {
+	constructor(readonly reason: 'busy' | 'blocked') {
+		super('conflict');
+		this.name = 'MachineMutationAdmissionFailure';
+	}
+}
 
 /** A confirmed application refusal may release a claim after its resources have closed. */
 export class MachineMutationRejection extends Error {

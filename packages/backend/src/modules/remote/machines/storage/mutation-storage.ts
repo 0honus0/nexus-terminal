@@ -47,7 +47,7 @@ export interface MachineMutationStorage {
 	acquire(
 		claim: StoredMutationClaim,
 		authority?: { digest: string; admit(identity: number | null): void },
-	): Promise<'acquired' | 'conflict'>;
+	): Promise<'acquired' | 'conflict' | 'blocked'>;
 	settle(id: string, keys: string[], blocked: boolean, now: number): Promise<void>;
 	reconcile(now: number): Promise<void>;
 	list(

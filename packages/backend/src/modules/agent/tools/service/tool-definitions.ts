@@ -1,4 +1,5 @@
 import { AGENT_ARTIFACT_MAX_BYTES } from '@nexus-terminal/shared/agent/artifacts/values';
+import { AGENT_EXECUTION_LIMIT_MAXIMA } from '@nexus-terminal/shared/agent/execution/values';
 import { browserTools } from './browser-tools.js';
 import { mcpTools } from './mcp-tools.js';
 import { collaborationTools } from './collaboration-tools.js';
@@ -251,7 +252,7 @@ export function toolDefinitions(): ToolDefinition[] {
 			name: 'shell_execute',
 			version: '2.0.0',
 			description:
-				'Execute an explicitly approved command on a selected SSH machine. kind=argv requires argv only (up to 128 args, 8 KiB total); kind=shell requires executable script only (8 KiB). cwd is an optional absolute path. mode is foreground or background (default foreground). All execution is destructive-risk approval, not text-based safety inference. Foreground returns bounded output and actual exit status; background returns an accepted Job ID, not process health. Both use a 45-second complete task deadline and 32 KiB combined captured output. Background belongs to this exact Run (Root or Child); query/wait/cancel with shell_job_control. Root end drains Jobs; no detached uptime promise, no replay of unknown effects.',
+				'Execute one explicitly approved SSH command: kind=argv requires argv only (128 args/8 KiB); kind=shell requires script only (8 KiB). Optional absolute cwd. mode defaults to foreground; background immediately returns an accepted Job ID. Foreground waits yieldSeconds (default frozen toolTimeoutSeconds, bounded by that setting); 0 yields immediately. If complete, returns actual exit status and bounded stdout/stderr; otherwise returns a running Job ID. Waiting expiry does NOT cancel execution. Both modes execute within the original Run lifetime, with 32 KiB combined output capture. Use shell_job_control wait/status on that SAME Job until terminal; do not rerun a command because it yielded, or finish the Run while needed Jobs remain active. Cancel only when work is no longer needed. Run end/cancellation/revocation drains Jobs; no detached service or rollback promise. Narrow expensive searches using paths and exclusions before execution.',
 			capability: 'shell.execute',
 			risk: 'destructive',
 			mutation: true,
@@ -263,6 +264,13 @@ export function toolDefinitions(): ToolDefinition[] {
 					{ name: 'script', kind: 'text', required: false, allowEmpty: false, maxBytes: 8192 },
 					{ name: 'cwd', kind: 'text', required: false, allowEmpty: false, maxBytes: 256 },
 					{ name: 'mode', kind: 'text', required: false, allowEmpty: false, maxBytes: 10 },
+					{
+						name: 'yieldSeconds',
+						kind: 'integer',
+						required: false,
+						minimum: 0,
+						maximum: AGENT_EXECUTION_LIMIT_MAXIMA.toolTimeoutSeconds,
+					},
 				],
 			},
 		},
@@ -270,7 +278,7 @@ export function toolDefinitions(): ToolDefinition[] {
 			name: 'shell_job_control',
 			version: '2.0.0',
 			description:
-				'List/status/wait/cancel background Jobs owned by this user/App/Run and selected SSH target version. list omits jobId; other actions require the exact UUID. waitSeconds is only for wait, default 10 and maximum 30; expiry leaves the Job running. Cancel requires its own approval and cannot promise remote process rollback. A dispatched Job is an intent, not a verified healthy service. No cross-Run or old sessionId access.',
+				'List/status/wait/cancel Shell Jobs, including foreground calls that yielded, owned by this user/App/Run and target version. list omits jobId; optional offset follows nextOffset (64 items per page). Other actions require the exact Job UUID. waitSeconds only for wait, default 10/max 30 and bounded by frozen toolTimeoutSeconds. Wait expiry leaves the SAME Job running; continue waiting when its result is needed, without re-executing the command. Cancel requires its own approval and cannot promise remote rollback. dispatched is intent, not verified health. No cross-Run/session access.',
 			capability: 'shell.execute',
 			risk: 'read',
 			mutation: false,
@@ -280,6 +288,13 @@ export function toolDefinitions(): ToolDefinition[] {
 					{ name: 'action', kind: 'text', required: true, allowEmpty: false, maxBytes: 6 },
 					{ name: 'jobId', kind: 'text', required: false, allowEmpty: false, maxBytes: 36 },
 					{ name: 'waitSeconds', kind: 'integer', required: false, minimum: 1, maximum: 30 },
+					{
+						name: 'offset',
+						kind: 'integer',
+						required: false,
+						minimum: 0,
+						maximum: AGENT_EXECUTION_LIMIT_MAXIMA.maxToolExecutions,
+					},
 				],
 			},
 		},

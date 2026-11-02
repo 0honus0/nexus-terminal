@@ -1,4 +1,5 @@
 import { AGENT_ARTIFACT_MAX_BYTES } from '@nexus-terminal/shared/agent/artifacts/values';
+import { AGENT_EXECUTION_LIMIT_MAXIMA } from '@nexus-terminal/shared/agent/execution/values';
 import { isAgentPluginVersion } from '@nexus-terminal/shared/agent/plugins/values';
 import { browserInput } from './browser-input.js';
 import { collaborationInput } from './collaboration-tools.js';
@@ -314,6 +315,13 @@ export function toolInput(definition: ToolDefinition, argumentsJson: string): To
 		if (mode !== 'foreground' && mode !== 'background') {
 			throw new AgentFailure('invalid_input');
 		}
+		const yieldSeconds =
+			value.yieldSeconds === undefined
+				? null
+				: integer(value.yieldSeconds, 0, AGENT_EXECUTION_LIMIT_MAXIMA.toolTimeoutSeconds);
+		if (mode === 'background' && yieldSeconds !== null) {
+			throw new AgentFailure('invalid_input');
+		}
 		if (value.kind === 'argv') {
 			if (value.script !== undefined) {
 				throw new AgentFailure('invalid_input');
@@ -326,12 +334,19 @@ export function toolInput(definition: ToolDefinition, argumentsJson: string): To
 			) {
 				throw new AgentFailure('invalid_input');
 			}
-			return { kind: 'shell', connectionId, command: { kind: 'argv', argv }, cwd, mode };
+			return { kind: 'shell', connectionId, command: { kind: 'argv', argv }, cwd, mode, yieldSeconds };
 		}
 		if (value.kind !== 'shell' || value.argv !== undefined) {
 			throw new AgentFailure('invalid_input');
 		}
-		return { kind: 'shell', connectionId, command: { kind: 'shell', script: text(value.script, 8192) }, cwd, mode };
+		return {
+			kind: 'shell',
+			connectionId,
+			command: { kind: 'shell', script: text(value.script, 8192) },
+			cwd,
+			mode,
+			yieldSeconds,
+		};
 	}
 	if (definition.name === 'shell_job_control') {
 		const action = value.action;
@@ -340,7 +355,8 @@ export function toolInput(definition: ToolDefinition, argumentsJson: string): To
 		}
 		if (
 			(action === 'list' && value.jobId !== undefined) ||
-			(action !== 'wait' && value.waitSeconds !== undefined)
+			(action !== 'wait' && value.waitSeconds !== undefined) ||
+			(action !== 'list' && value.offset !== undefined)
 		) {
 			throw new AgentFailure('invalid_input');
 		}
@@ -355,6 +371,10 @@ export function toolInput(definition: ToolDefinition, argumentsJson: string): To
 			jobId,
 			waitSeconds:
 				action === 'wait' ? (value.waitSeconds === undefined ? 10 : integer(value.waitSeconds, 1, 30)) : 0,
+			offset:
+				action === 'list' && value.offset !== undefined
+					? integer(value.offset, 0, AGENT_EXECUTION_LIMIT_MAXIMA.maxToolExecutions)
+					: 0,
 		};
 	}
 	if (definition.name === 'machine_docker_inspect' || definition.name === 'machine_docker_control') {

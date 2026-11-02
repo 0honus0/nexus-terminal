@@ -1,6 +1,10 @@
-.terminal-inner-container {
+.terminal-container {
 	box-sizing: border-box;
+	/* FitAddon measures its parent's CSS height without subtracting parent padding. */
 	padding: 4px 5px 3px;
+}
+
+.terminal-inner-container {
 	overflow: hidden;
 }
 

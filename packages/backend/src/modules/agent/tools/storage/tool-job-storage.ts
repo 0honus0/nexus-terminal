@@ -56,7 +56,7 @@ export interface StoredJobChange {
 export interface ToolJobStorage {
 	create(input: StoredJobCreate): Promise<StoredToolJob | 'version_conflict' | 'limit_exceeded'>;
 	get(scope: StoredJobScope, id: string): Promise<StoredToolJob | null>;
-	list(scope: StoredJobScope, connectionId: number, limit: number): Promise<StoredToolJob[]>;
+	list(scope: StoredJobScope, connectionId: number, limit: number, offset: number): Promise<StoredToolJob[]>;
 	change(input: StoredJobChange): Promise<StoredToolJob | 'version_conflict'>;
 	reconcile(): Promise<void>;
 }

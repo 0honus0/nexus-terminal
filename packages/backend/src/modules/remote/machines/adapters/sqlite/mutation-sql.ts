@@ -51,18 +51,21 @@ export class SqliteMachineMutationStorage implements MachineMutationStorage {
 	acquire(
 		claim: StoredMutationClaim,
 		authority?: { digest: string; admit(identity: number | null): void },
-	): Promise<'acquired' | 'conflict'> {
+	): Promise<'acquired' | 'conflict' | 'blocked'> {
 		return this.db.transaction(async (tx) => {
 			if (authority) {
 				authority.admit(await this.identity(tx, authority.digest));
 			}
-			if (await tx.one('SELECT id FROM remote_machine_mutation_claims WHERE id=?', [claim.id])) {
-				return 'conflict';
-			}
+			const existing = await tx.one('SELECT state FROM remote_machine_mutation_claims WHERE id=?', [claim.id]);
+			let occupied = existing !== null;
+			let blocked = existing?.state === 'blocked';
 			for (const key of claim.keys) {
-				if (await tx.one('SELECT claim_id FROM remote_machine_mutations WHERE resource_key=?', [key])) {
-					return 'conflict';
-				}
+				const lock = await tx.one('SELECT state FROM remote_machine_mutations WHERE resource_key=?', [key]);
+				occupied ||= lock !== null;
+				blocked ||= lock?.state === 'blocked';
+			}
+			if (occupied) {
+				return blocked ? 'blocked' : 'conflict';
 			}
 			await tx.run(
 				"INSERT INTO remote_machine_mutation_claims(id,owner_id,origin,targets_json,resource_count,state,revision,created_at) VALUES(?,?,?,?,?,'held',1,?)",

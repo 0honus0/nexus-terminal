@@ -3,10 +3,15 @@ import net from 'node:net';
 import type { EventEmitter } from 'node:events';
 import type { Duplex } from 'node:stream';
 import type { MachineEndpoint, MachineProxy, MachineConnectOptions } from '../../ssh-port.js';
-import { MachineConnectionFailure } from '../../ssh-port.js';
+import { MachineConnectionFailure, MACHINE_CONNECT_MAX_TIMEOUT_MS } from '../../ssh-port.js';
+
+interface ConnectedClient {
+	readonly client: Client;
+	readonly transport: Duplex;
+}
 
 export interface ConnectedRoute {
-	readonly clients: Client[];
+	readonly clients: ConnectedClient[];
 	readonly sockets: Duplex[];
 	readonly primary: Client;
 	assertOpen(): void;
@@ -25,7 +30,11 @@ function abortCause(signal: AbortSignal): Error {
 }
 
 function createConnectDeadline(options: MachineConnectOptions): Deadline {
-	if (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs <= 0 || options.timeoutMs > 300000) {
+	if (
+		!Number.isSafeInteger(options.timeoutMs) ||
+		options.timeoutMs <= 0 ||
+		options.timeoutMs > MACHINE_CONNECT_MAX_TIMEOUT_MS
+	) {
 		throw new Error('SSH connection timeout out of range');
 	}
 	const controller = new AbortController();
@@ -205,6 +214,8 @@ async function readBytes(socket: Duplex, bytes: number, deadline: Deadline): Pro
 		const data = (chunk: Buffer) => {
 			const wanted = bytes - received;
 			if (chunk.length > wanted) {
+				// unshift on a flowing stream can re-enter this listener before cleanup.
+				socket.pause();
 				socket.unshift(chunk.subarray(wanted));
 			}
 			collected.push(chunk.subarray(0, wanted));
@@ -351,7 +362,7 @@ async function openProxyTunnel(
 
 function createConnectConfig(
 	endpoint: MachineEndpoint,
-	socket: Duplex | null,
+	socket: Duplex,
 	deadline: Deadline,
 	verifyHostKey: MachineConnectOptions['verifyHostKey'],
 ): ConnectConfig {
@@ -374,15 +385,13 @@ function createConnectConfig(
 			config.passphrase = authentication.passphrase;
 		}
 	}
-	if (socket !== null) {
-		config.sock = socket;
-	}
+	config.sock = socket;
 	return config;
 }
 
 async function connectClient(
 	endpoint: MachineEndpoint,
-	socket: Duplex | null,
+	socket: Duplex,
 	deadline: Deadline,
 	verifyHostKey: MachineConnectOptions['verifyHostKey'],
 	ownClient: (client: Client) => void,
@@ -448,7 +457,7 @@ async function connectClient(
 export async function openSshRoute(endpoint: MachineEndpoint, options: MachineConnectOptions): Promise<ConnectedRoute> {
 	const stages = expandRoute(endpoint);
 	const deadline = createConnectDeadline(options);
-	const clients: Client[] = [];
+	const clients: ConnectedClient[] = [];
 	const sockets: Duplex[] = [];
 	const monitors = new Set<() => void>();
 
@@ -476,21 +485,21 @@ export async function openSshRoute(endpoint: MachineEndpoint, options: MachineCo
 		monitor(socket);
 	};
 
-	const ownClient = (client: Client) => {
-		clients.push(client);
-		monitor(client);
-	};
-
 	try {
 		for (const stage of stages) {
-			const previous = clients.length ? clients[clients.length - 1] : null;
-			let socket: Duplex | null = null;
+			const previous = clients.length ? clients[clients.length - 1].client : null;
+			let socket: Duplex;
 			if (stage.route.kind === 'proxy') {
 				socket = await openProxyTunnel(stage, stage.route.proxy, previous, deadline, ownSocket);
 			} else if (previous) {
 				socket = await openForwardChannel(previous, stage.host, stage.port, deadline, ownSocket);
+			} else {
+				socket = await connectTcp(stage.host, stage.port, deadline, ownSocket);
 			}
-			await connectClient(stage, socket, deadline, options.verifyHostKey, ownClient);
+			await connectClient(stage, socket, deadline, options.verifyHostKey, (client) => {
+				clients.push({ client, transport: socket });
+				monitor(client);
+			});
 			deadline.remaining();
 		}
 		if (deadline.signal.aborted) {
@@ -499,7 +508,7 @@ export async function openSshRoute(endpoint: MachineEndpoint, options: MachineCo
 		return {
 			clients,
 			sockets,
-			primary: clients[clients.length - 1],
+			primary: clients[clients.length - 1].client,
 
 			assertOpen() {
 				if (deadline.signal.aborted) {
@@ -517,7 +526,7 @@ export async function openSshRoute(endpoint: MachineEndpoint, options: MachineCo
 		const failures: unknown[] = [];
 		for (const resource of [...clients].reverse()) {
 			try {
-				resource.destroy();
+				resource.client.destroy();
 			} catch (cleanup) {
 				failures.push(cleanup);
 			}

@@ -2359,3 +2359,90 @@ main/96ea73b2 的远程 [41049355889](https://github.com/0honus0/nexus-terminal/
 两轮源码复核覆盖初始加载先后、字段deepwatch、显式操作清错、reset和旧异步代次；本轮不运行本地行为/E2E；根check、前端build、目标严格tsc、全量format与diff通过，按D17/D18提交推送，整轮远程验证见下方收口。日志 `logs/e2e-options-{check,build,test-types,format}.log`；不发布或部署，原测试现场保留。
 
 修复提交 `3b98d81f` 的新远程 [41050797589](https://github.com/0honus0/nexus-terminal/actions/runs/41050797589) 完整成功。原SSH key selector/manager失败项首次通过；各轮passed计数48+1、71+1、53+1、60、66、55、58、124，共538，日志中的538条passed标题互不重复；无failed测试事件，也无failed/flaky/skipped摘要，未重试场景。质量、Docker、8测试分片及耗时维护均成功。完整日志 `logs/e2e-options-41050797589.log`、汇总 `e2e-options-summary.json`、作业与产物元数据同目录；额外维护提交 `72b2fa55` 已fast-forward到本地，仅变更duration-estimates。全部测试服务和专用目录继续按用户要求保留。本次最后仅提交验收文档，不触发发布或部署。
+
+### 2026-11-02：弱网输入回退与删除停顿专项
+
+基线为main `beff7a99`，起始工作区干净。本轮使用Node v22.23.1、隔离工具pnpm 11.28.9和仓库Playwright 1.64.1；CDP `172.30.30.11:9223`，页面 `https://api.honus.top`，前端Vite9998。原临时目录与服务在当前环境已不存在，重建 `/tmp/nexus-nethogs-20261030/` 保存全部脚本、工具、缓存、截图和日志，仅启动前端，不启动后端或修改远端数据。每项使用自有浏览器context并关闭；不复用用户页或登录数据。
+
+修复前CDP挂载真实TerminalView，沿onInputSent及onOutput回放：学习延迟后将回显延迟1600ms，已显示i撤回；输入ijkl后立即DEL两次，在旧字符回显前仍显示ijkl；退格前SGR被拆包时误判Failure，已删除内容重现。证据 `baseline.log`、`delete-style-baseline.log`。第一版修复复核还发现新行首探测在合并回显中解锁generation时，删除的撤销单元格尚未解析，快照漏还原已确认jk；证据 `rollback-baseline.log`，最终保留配对字符及真实样式修正。早期脚本CommonJS转换动态import导致的__importStar缺失已改为保留ES动态import，不作为产品失败。
+
+最终 `final-regression.log` 的10项均通过、pageerror为空：原慢回显分歧校正；新增抖动输入与退格保留（官方虚拟时钟推进2秒/4秒）；新增未确认输入后立即删除/替换，旧回显及分包SGR/退格到达时内容不复活；新增远端实际文字分歧校正；新增合并回显后的快照/重挂载还原确认内容；新增20次DEL跨未确认与已确认文字、真实两种Bash退格模式分批确认；原颜色/光标分包与多DEL；原行尾保护；原未确认快照隔离；原密码首字符与粘贴保护。回放复用正式terminal-lifecycle的函数及测试正文，仅将浏览器模块地址替换为Vite源码入口、去掉构建产物CSS地址，未运行完整测试夹具。输入记录断言保持每次输入只派发一次，输出消费次数逐包核对。
+
+源码两轮审核覆盖可见预测不因沉默超时撤销、不可见探测及失效timer、同代字符/删除覆盖和真实样式、匹配成功/分包/失败、合并回显与snapshot/reset、原始ACK和Transport派发链；不增加新期限、重发或UI变更。根 `pnpm run check`、`pnpm run build:frontend`、目标严格tsc（含noUnusedLocals）、Playwright静态列举26项、全量 `pnpm run format:all:check` 与 `git diff --check` 通过；日志分别 `check.log`、`build.log`、`e2e-types.log`、`e2e-list.log`、`format.log`。本轮验证为受控延迟/分包的真实组件回放，未验证真实SSH网络抖动、全部Shell/TUI或完整远程Actions，不以旧538项PASS替代本轮证据；未提交、推送或部署。目录与前端服务继续保留，等待用户明确删除。
+
+## 安卓普通文本查找呈现专项（2026-11-02）
+
+指定站点api.honus.top的独立CDP context挂载真实FileEditor与内存文档，Android14 UA/touch模拟。修复前英文渐变默认面板证据mobile-search-before._，修复后mobile-search-after._，脚本mobile-search.cjs，均位于 `/tmp/nexus-nethogs-20261030/`。三语×320/360/393px、横屏及缩小高度共15组合，无控件重叠、越界或横向溢出；查找3项、大小写2项、正则2项、前后导航、切换语言保留正则query、替换全部只改草稿、关闭/重开/Escape通过，pageerror为空。深色面板输入16px、按钮32px，导航及关闭独立占位；桌面Monaco、文件列表搜索和其他预览未改。未使用真实安卓设备或真实软键盘，缩小视口不等同真机输入法验收。静态结果见下方本轮最终记录。
+
+## 命令历史恢复与 SSH 半关闭专项（2026-11-02）
+
+指定站点CDP使用独立context、真实store/API/Shared和完全拦截的历史接口，不向生产写入。`/tmp/nexus-nethogs-20261030/history-recovery.cjs` 与同名log验证：首次POST已在夹具保存但丢回执；下一次新意图GET→POST→GET、旧POST仅一次；恢复GET失败不发送新POST；普通load成功恢复；读取中撤权不派发；reset后旧读取和旧写不污染新scope；两个新意图共享串行恢复、各POST一次。另提取当前WorkspacePage的真实sendCommand正文，以esbuild仅去类型后在CDP执行，挂载真实NotificationHost和store：显示准确未知提示、刷新动作只读，两个终端命令及追加各一次，无pageerror。终端adapter为内存记录，未据此宣称真实SSH整页回归。正式command-history-management新增真实SSH丢失201回执用例，观察WS输入、POST次数、GET先于下一次写入及原界面提示，静态检查通过后留远程E2E。原app-lifecycle消费者同步无参load。
+
+`tests/backend/remote/backend-next-ssh-close.integration.mjs` 使用真实ssh2 Server/Client和本机TCP中继，认证后丢弃数据且不回应FIN；仅运行这个Adapter定向文件，不启动应用后端或全量套件。`ssh-close-regression.log` 五项通过：直连、HTTP代理、SOCKS5代理、跳板半关闭和正常关闭，并断言并发close共享Promise。原2秒结束等待＋2秒强制关闭确认不变。回归发现代理readBytes在流动状态unshift会同步重入、HTTP握手超时；归还多余字节前pause后HTTP/SOCKS5均通过，早期失败见ssh-close-handshake.log。本轮未重启或更新生产容器，未把SSH清理失败当作历史写入失败的证据。
+
+生产日志与只读库元数据调查见指定目录history-investigation.md：最近24小时7次历史POST全部201且responseFinished，最近两条已落库，原始客户端故障触发点仍不确定；上述修复针对已独立复现的缺陷。本轮最终根 `pnpm run check`、`pnpm run build:backend`、`pnpm run build:frontend`、`pnpm run format:all:check`、`git diff --check` 均通过，日志history-ssh-check.log、history-ssh-backend-build.log、history-ssh-frontend-build.log、history-ssh-format-check.log位于指定目录。两个改动E2E文件严格tsc（含noUnusedLocals、显式Node类型）通过，Playwright只列举28项，日志history-ssh-e2e-types.log和history-ssh-e2e-list.log；新增Node用例及原app-lifecycle语法检查通过。初次检查发现新夹具函数空行不符合项目ESLint、目标tsc漏显式Node类型，已分别修正格式和检查参数后通过，未放宽规则。未执行正式全量/远程E2E，未验证真机软键盘、生产SSH关闭故障全集或原始报错现场；未提交、推送或部署。测试临时目录及前端服务按要求保留。
+
+## Agent Shell 等待/执行分离与旧围栏拒绝专项（2026-11-02）
+
+生产仅使用指定SSH和Node只读SQLite查询（readOnly/query_only），没有更新记录、重放原命令、重启或部署。指定临时目录内agent-db-{inventory,details,chain}.jsonl确认同一线程2026-10-29三个Run，目标为fxm/connection 7：首轮完成；第二轮shell_execute从取得突变占用至unknown约45.136秒，持久failureCode=tool_timeout，原claim保持blocked；第三轮新shell_execute约35ms即因原claim被拒绝，却误记tool_state_changed/unknown。24个模型步骤全部completed，诊断结果里Hermes的429/503及NameError不能算作Nexus模型故障。当前容器11月1日才启动，10月29日stdout已不在现容器中，不能确定原长命令内部哪个子步骤耗时或证明远端进程已停止。旧生产claim未解除。
+
+采用OpenAI Docs技能读取[官方Codex Prompting Guide](https://developers.openai.com/cookbook/examples/gpt-5/codex_prompting_guide)：该文明确exec_command启动持续PTY、write_stdin可输入或轮询原session。另核对[官方Shell指南](https://developers.openai.com/api/docs/guides/tools-shell)的exit/timeout和捕获结果区分。Nexus实现借鉴持续任务标识与后续观察，复用现有Job，不声称复制Codex内部实现，也不新增交互TTY或持续输出能力。
+
+定向运行命令（非本地全量E2E）：`TMPDIR=/tmp/nexus-nethogs-20261030 NODE_COMPILE_CACHE=/tmp/nexus-nethogs-20261030/node-compile-cache node --test --test-concurrency=1 tests/backend/http/backend-next-agent-shell-yield.integration.mjs tests/backend/remote/backend-next-machine-admission.integration.mjs tests/backend/storage/backend-next-authority-monitor.integration.mjs`。模型输出为本机HTTP夹具，不调用付费模型；应用HTTP/治理/SQLite/Run/Job与独立OpenSSH真实执行。最终agent-yield-regression-final.log共18项PASS，零失败/跳过：前台和后台以1秒等待预算运行3秒命令并多次续查，副作用各一次；yieldSeconds=0可查询、短命令保留原非零/双输出结果；held与blocked新命令均failed且未启动、原claim及修订不变；前台交回后的撤权、原Run3秒总预算及未知效果围栏；多资源blocked优先于held且无部分占用；650秒调用预算传到命令但SSH握手仍最多原300秒（通过真实应用owner与受控技术Port观测参数，不等待650秒）；65项Job列表分页；ACP/Job真实1秒权限监测的晚到存储失败/执行失败及清理汇总。
+
+第二轮并发回归发现新的前台交付竞态：Job读取dispatched版本后，原工具完成交付导致revision变化，监测错误中止原命令。修复仅容忍同哈希、单次dispatched→completed交付后只读重验，未重派命令。保留失败夹具数据库nexus-agent-shell-yield-8SxchA用于核对；最终定向回归及确定性交错测试覆盖成功、撤权、哈希变化、修订异常、失败终态与存储拒绝。另一个测试夹具初次使用非哈希资源键，被真实存储解码器正确拒绝，已改为实际64位SHA-256，不放宽产品解码。
+
+指定api.honus.top/CDP独立context挂载真实NativeToolCallDetails，拦截且仅模拟两次详情GET，沿真实HTTP/Shared codec验证busy/blocked在原区域显示“尚未执行”及“机器突变恢复”，三语无漏键、pageerror为0。证据agent-errors-cdp.cjs/log；未登录用户会话或调用生产执行接口，不把前端夹具当已部署Agent验收。所有脚本、数据库、SSH测试夹具、缓存和日志均保留在原专用目录；自建SSH daemon/客户端和应用实例已正常关闭。
+
+本轮最终根check、Shared check、Shared/Backend/Frontend build、全量format及diff均通过，结果见agent-check-final.log、agent-shared-check.log、agent-backend-build-final.log、agent-frontend-build-final.log、agent-format-check-final.log。USAGE与双端/Shared架构已同步，工具模型私有Job参数未另建Shared DTO。未运行全量/远程Actions、真实付费模型或原生产Hermes命令，不承诺任意远端派生进程可停止；未知效果恢复仍需独立核对。未提交、推送或部署，前端及专用目录继续保留。
+
+## Agent 工具故障后总任务结束等待（2026-11-02）
+
+本轮在原专用目录 `/tmp/nexus-nethogs-20261030/` 保留全部夹具、日志和缓存。使用 Node 22.23.1、pnpm 11.28.9；TMPDIR 和 NODE_COMPILE_CACHE 均指向该目录。只运行以下定向回归，不执行本地全量 E2E：
+
+```bash
+node --test --test-concurrency=1 \
+  tests/backend/http/backend-next-agent-job-failure.integration.mjs \
+  tests/backend/http/backend-next-agent-ledger-faults.integration.mjs \
+  tests/backend/http/backend-next-agent-shell-yield.integration.mjs \
+  tests/backend/remote/backend-next-machine-admission.integration.mjs \
+  tests/backend/storage/backend-next-authority-monitor.integration.mjs
+```
+
+`agent-task-stop-regression-transport.log`：35 项 PASS，零失败、取消或跳过。新故障场景通过真实应用 HTTP/治理/SQLite/SSH，只脚本化本机模型输出：实际 SSH 进程写入一次后按原 `/proc` 出生身份终止，验证前台、Job wait、后台模型流及无关审批等待自动结束；没有手动取消、模型收尾响应、执行期限或重启参与唤醒。断流 Job 保留 unknown/blocked，Root 进入终态，原待审批工具 superseded，模型不再请求或重复轮询；重启不重放，仍能从原 Job 查到具体原因。Child 故障只停止原 Root/族，另一 Run 的模型仍可完成；已取消 Run 的晚 Job unknown 不覆盖 cancelled。
+
+另以真实 TCP relay 切断 SSH 传输，确认 Root 已进入 unknown 并关闭模型等待时，按原出生身份核对的远端进程仍然存活，副作用仅一次，机器围栏仍 blocked；之后由测试 owner 独立终止原 helper。该场景直接验证本地停止等待不证明远端停止，不能把真实未知改写为确定失败。
+
+新增实际主机信任拒绝验证：命令从未执行，工具和 Job 均 failed/not_started，Root failed/tool_host_untrusted，无机器围栏。原长命令多次 yield、快速非零退出、held/blocked 拒绝和绝对 Run 期限用例继续通过。对 Job 终态写入注入确认丢失，原模型流自动关闭，Job 没有猜测补写，原异常可从关闭汇总确认；重启只围栏不重发。实际工具派发、审批消费、完成事务先提交再丢回执的三项回归新增“重启前 Root 已 unknown”断言，原工具没有补偿写入，完成结果及单次文件效果保持。真实间隔权限监控的晚存储/清理失败只在监控收敛后通知一次；未知 Job 四种查询均抛具名失败。
+
+指定 `api.honus.top` CDP 独立 context 挂载实际 NativeToolCallDetails，经真实 HTTP/Shared codec 只拦截一次详情 GET，验证 tool_result_unconfirmed 在中文、英语、日语原错误区均明确任务已停止，无漏键和 pageerror。实际 native-run-rules 验证 unknown 不再算执行活跃，但保留显式结束资格；composer/详情/订阅/续发调用链同步核对，没有新增控件或改变布局。脚本与输出为 `agent-task-stop-cdp.cjs`、`agent-task-stop-cdp-final.log`。这是前端隔离验证，不代表生产已部署或真实供应商验收；没有用户会话、生产命令或业务写入。
+
+根 `pnpm run check`、Shared check、Backend/Shared build 和最终 Frontend/Shared build 通过，证据为 `agent-task-stop-check-final.log`、`agent-task-stop-shared-check.log`、`agent-task-stop-backend-build-final.log`、`agent-task-stop-frontend-build-final.log`；全量 `pnpm run format:all:check` 和 `git diff --check` 通过，格式日志为 `agent-task-stop-format-check-final.log`。新增 SSH helper、daemon、应用及 CDP context 均关闭，原用户要求保留的 Vite 和临时目录继续保留。未提交、推送、部署或解除生产旧围栏。完全不可写的数据库仍不能保证提交终态；保留原错误和恢复事实，不以本机故障注入宣称覆盖真实断电或持久介质故障。
+
+## 手机终端自适应底部越界（2026-11-02）
+
+沿用 main beff7a99 的现有未提交工作区、Node 22.23.1/pnpm 11.28.9、原 Vite9998 及专用 `/tmp/nexus-nethogs-20261030/`；指定 `https://api.honus.top` / CDP `172.30.30.11:9223`，独立 context 挂载真实 WorkspaceLayoutRenderer、TerminalView、WorkspaceMobileTools，内存 TerminalChannel 记录真实拟合行列，无 SSH/生产数据写入。不是生产整页或真机输入法验收。
+
+修前 `mobile-terminal-geometry.cjs before` 的 42 组高度/字号/键盘开关中，键盘关闭有 7 组超出内容区 1–4px，开启也有 9 组超出；实际容器没有越界，是 FitAddon 把父元素上下 7px 内边距算入可用行高。原边距移至外层 terminal-container，拟合父节点无内边距。修后同 42 组全部通过，另 `mobile-terminal-geometry-extra.cjs extra` 的 320/360px、横屏和宽屏共 8 组通过，`desktop-terminal-geometry.cjs extra` 的真实非触屏桌面 context 1280/1920px、14/16px 字体 4 组通过。屏幕底边全部在终端内容范围内，页面错误为零；输出日志为同名 before/after/extra/desktop 文件，均在专用目录。mobile-terminal-geometry-keyboard-off/on.png 已人工检查末行文字完整、原边距及底部控件位置。自有 context 已关闭，保留原 Vite 和目录。
+
+既有 mobile/keyboard-geometry 回归补充 gap 非负及虚拟键盘开关后 screen.bottom 不越过内容底边/工具栏顶边的断言，未启动正式全量 E2E。目标严格 tsc（含 noUnusedLocals、Node 类型路径、TS6 --ignoreConfig）通过；首次命令缺 --ignoreConfig 被 TS6 拒绝，修正命令后通过，未放宽代码校验。根 check、前端 build、全量格式和 git diff --check 通过；日志为 mobile-terminal-geometry-check/build/e2e-types/format-check.log。没有新增监听、延迟、协议或数量限制，未提交、推送或部署。
+
+## 服务器状态趋势时间轴与加载呈现（2026-11-02）
+
+同一 main beff7a99 未提交工作区、原 Node22/pnpm11 工具、Vite9998 和 `/tmp/nexus-nethogs-20261030/`。指定站点/CDP 的独立 context 挂载真实 StatusMonitor/StatusCharts，提供只读内存样本与控制器，拦截真实 StatusCharts.vue 模块请求以保持加载，释放后加载原模块；不假造图表组件、不调用生产 SSH/采样接口、不修改用户配置。脚本 status-trend-layout.cjs，日志 status-trend-layout-before/after.log，截图 status-trend-loading-before/after.png 和 status-trend-chart-before/after.png，均在原目录。
+
+基线在 180/294/393px、0.65/1/1.6 倍及四种时间范围共 36 组确认：X 轴默认占 23.6 CSS px，屏幕占位随缩放从约 15.3 到 37.8px；加载直接显示左侧 15px 转圈。修后禁用 tick 留白，时间文字/间距抵消父缩放，36 组屏幕轴高均约 13.6px、零倾斜，完整时间跨度保留、曲线仍有可用高度。另核对网络四范围数据逐点等于原样本，真实鼠标悬浮同时展示同一时刻的上下行值。初次加载的同区域网格/提示、三语、prefers-reduced-motion 静止及骨架切换后 top/height 差异小于 1px 均通过；截图人工核对，无 pageerror。骨架仅装饰网格，不伪造指标曲线。
+
+前两轮脚本分别遇到 Vite 热更新查询参数绕过精确路径匹配，以及根 check 重建 Shared 引起 Vite 页面刷新；调整拦截只匹配 pathname，并在会产生写入的静态构建完成后重跑。脚本还纠正 emulateMedia 所属 page API；这些均是验证脚本/执行时序问题，最终记录为新的独立 context 全部 PASS，未修改产品来适配夹具。
+
+本轮根 check、前端 build、全量 format:all:check 与 git diff --check 通过，日志 status-trend-check/build/format-check.log；没有新增正式低影响样式测试或执行全量 E2E。用户授权仅改变趋势时间轴和加载呈现，其余卡片/标题/选项及数据转换不变。指定 CDP 为隔离组件验证，不代表真机、生产整页或新部署验收；自建 context 已关闭，保留原 Vite 与专用目录，未提交、推送或部署。
+
+## 依赖升级与 main dev 发布（2026-11-02，远程验收进行中）
+
+本轮基线 main/beff7a991caa09b3a8bd70a90f494ed05da54027；用户确认从 main 发布 dev/amd64，包含当前会话全部已授权未提交修复。最近失败的更新工作流 [41422400796](https://github.com/0honus0/nexus-terminal/actions/runs/41422400796) 在生产依赖审计失败，后续 E2E 调度未执行；不能把此前完整通过的 41050797589 当成本轮结果。原始 job 日志为专用目录的 dependency-update-job.log。
+
+沿用 Node 22.23.1、隔离 pnpm 11.28.10，所有缓存、脚本和日志放 `/tmp/nexus-nethogs-20261030/`，pnpm store 继续用 cache/pnpm-store。稳定直接依赖升级，并保留三个现有库补丁；follow-redirects 锁定 1.16.2。readdir-glob 与三个开发工具消费者分别定向使用 minimatch 11.0.3，其上游的实际 Minimatch/glob API 已核对，没有忽略公告或放宽审计。最终 install、dedupe、frozen install 成功，生产及完整依赖审计 info/low/moderate/high/critical 全零，证据 dependencies-{install,dedupe,frozen}-final.log 和 dependency-audit-{prod,all}-final.json。
+
+升级后根 check、Shared check、Backend/Frontend build、全量 format:all:check 和 git diff --check 通过，日志 dependencies-check-final.log、dependencies-shared-check-final.log、dependencies-build-final.log、dependencies-format-final.log。archiver 真正 glob 嵌套及隐藏文件，生成有效 ZIP，见 dependency-archive-smoke.mjs/log 与 dependency-archive-fixture/；该夹具也保留。指定 api.honus.top/CDP 的自有 context 运行实际编辑器 decodeEditorDocument，UTF-8、GB18030、Shift-JIS、带 BOM 的 UTF-16LE 均还原完整原文，无 pageerror，证据 dependency-encoding-cdp-final.log。初次脚本只匹配双引号，未匹配 Vite 的单引号动态导入，已修正验证脚本后通过，未为此修改产品。所有自有 context 已关闭；原 Vite 与专用目录保留。
+
+这些是依赖兼容及静态证据；完整远程 8 分片、Docker smoke 与实际 dev 发布尚待新提交运行。未更新生产容器。

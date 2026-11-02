@@ -97,11 +97,20 @@ export class ToolOperationRefusal extends Error {
 					import('@nexus-terminal/shared/remote/files/values').RemoteFileErrorCode,
 					'remote_unavailable' | 'host_key_untrusted' | 'not_text' | 'not_found' | 'forbidden'
 			  >
-			| 'command_failed',
+			| 'command_failed'
+			| import('../remote/public-errors.js').MachineMutationAdmissionCode,
 		options?: ErrorOptions,
 	) {
 		super('Agent tool refused: ' + code, options);
 		this.name = 'ToolOperationRefusal';
+	}
+}
+
+/** The remote mutation owner proves that this operation never entered execution. */
+export class ToolMutationAdmissionRefusal extends ToolOperationRefusal {
+	constructor(code: import('../remote/public-errors.js').MachineMutationAdmissionCode, options?: ErrorOptions) {
+		super(code, options);
+		this.name = 'ToolMutationAdmissionRefusal';
 	}
 }
 

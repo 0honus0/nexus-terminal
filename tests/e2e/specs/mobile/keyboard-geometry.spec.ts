@@ -40,6 +40,7 @@ test('mobile terminal restores fitted rows and sends geometry after keyboard-siz
 		const gap = await terminal.evaluate(
 			(element) => element.clientHeight - element.querySelector('.xterm-screen')!.getBoundingClientRect().height,
 		);
+		expect(gap).toBeGreaterThanOrEqual(0);
 		expect(gap).toBeLessThan(30);
 		// Exercise xterm's own textarea, rather than the separate command bar.
 		// insertText models an input event without a desktop keydown sequence;
@@ -51,6 +52,20 @@ test('mobile terminal restores fitted rows and sends geometry after keyboard-siz
 		await page.keyboard.insertText(`printf 'KEYBOARD_%s_%s\\n' INPUT_OK ${cycle}`);
 		await page.keyboard.press('Enter');
 		await expect(terminal.locator('.xterm-rows')).toContainText(`KEYBOARD_INPUT_OK_${cycle}`);
+	}
+	const keyboardToggle = page.getByRole('button', { name: /(?:Show|Hide) virtual keyboard/, exact: true });
+	for (const visible of [true, false]) {
+		if ((await keyboardToggle.getAttribute('aria-pressed')) !== String(visible)) await keyboardToggle.click();
+		await expect(keyboardToggle).toHaveAttribute('aria-pressed', String(visible));
+		await expect
+			.poll(() =>
+				terminal.evaluate((element) => {
+					const screen = element.querySelector('.xterm-screen')!.getBoundingClientRect();
+					const tools = document.querySelector('.command-bar-root--mobile')!.getBoundingClientRect();
+					return screen.bottom - Math.min(element.getBoundingClientRect().bottom, tools.top);
+				}),
+			)
+			.toBeLessThanOrEqual(0);
 	}
 });
 

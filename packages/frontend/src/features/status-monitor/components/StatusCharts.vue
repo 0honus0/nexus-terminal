@@ -329,12 +329,15 @@
 				ticks: {
 					color: chartTheme.value.text,
 					maxTicksLimit: windowSpanMs.value <= 60_000 ? 3 : 4,
-					font: { size: 8 },
+					font: { size: 8 / props.scale },
+					padding: 2 / props.scale,
+					minRotation: 0,
+					maxRotation: 0,
 					align: 'inner',
 
 					callback: (value) => formatAxisTime(Number(value)),
 				},
-				grid: { display: false },
+				grid: { display: false, drawTicks: false },
 				border: { color: chartTheme.value.grid },
 			},
 			y:

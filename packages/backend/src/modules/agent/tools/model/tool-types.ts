@@ -44,6 +44,7 @@ export type ToolInput =
 			command: ToolCommand;
 			cwd: string | null;
 			mode: 'foreground' | 'background';
+			yieldSeconds: number | null;
 	  }
 	| ({ kind: 'job'; connectionId: number } & ToolJobControlInput)
 	| { kind: 'docker_inspect'; connectionId: number; containerId: string }
@@ -90,12 +91,22 @@ export interface ToolOperationScope {
 	permission?: (input: ToolAcpPermission, signal: AbortSignal) => Promise<ToolAcpPermissionResponse>;
 }
 
+export interface ToolExecutionScope {
+	userId: number;
+	appId: string;
+	runId: string;
+	modelStepIndex: number;
+	deadlineAt: number;
+	onBackgroundFailure(error: unknown): void;
+}
+
 export type ToolCommand = { kind: 'argv'; argv: string[] } | { kind: 'shell'; script: string };
 
 export interface ToolJobControlInput {
 	action: 'list' | 'status' | 'wait' | 'cancel';
 	jobId: string | null;
 	waitSeconds: number;
+	offset: number;
 }
 
 export interface ToolAcpPermission {

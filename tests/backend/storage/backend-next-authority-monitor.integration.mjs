@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { AcpPermissionService } from '../../../packages/backend/dist/modules/agent/tools/service/acp-permission-service.js';
 import { ToolJobService } from '../../../packages/backend/dist/modules/agent/tools/service/tool-job-service.js';
+import { ToolService } from '../../../packages/backend/dist/modules/agent/tools/service/tool-service.js';
 import {
 	AgentFailure,
 	ToolExecutionUnknown,
@@ -20,6 +21,101 @@ function gate() {
 const scope = { userId: 1, appId: randomUUID(), runId: randomUUID() };
 const target = { id: 1, version: 1, fingerprint: 'controlled-target' };
 const result = { status: 'completed', exitCode: 0, signal: null, stdout: 'done', stderr: '', truncated: false };
+
+await test('Shell Job authority tolerates only its own dispatched-to-delivered revision race', async () => {
+	const original = { ...scope, id: randomUUID(), state: 'dispatched', revision: 2, operationHash: 'a'.repeat(64) };
+	for (const mode of [
+		'delivered',
+		'policy-revoked',
+		'hash-changed',
+		'unexpected-revision',
+		'terminal-failed',
+		'storage-failed',
+	]) {
+		let checks = 0;
+		const storageFailure = new AgentFailure('storage_unavailable');
+		const delivered = {
+			...original,
+			state: mode === 'terminal-failed' ? 'failed' : 'completed',
+			revision: mode === 'unexpected-revision' ? 4 : 3,
+			operationHash: mode === 'hash-changed' ? 'b'.repeat(64) : original.operationHash,
+		};
+		const service = {
+			verify: ToolService.prototype.verify,
+			journal: {
+				async get() {
+					if (mode === 'storage-failed') {
+						throw storageFailure;
+					}
+					return delivered;
+				},
+			},
+			governance: {
+				async toolAuthority(identity, task) {
+					checks++;
+					assert.equal(task.policyRevision, 1);
+					return checks === 1 || mode === 'policy-revoked' ? null : { operation: delivered };
+				},
+			},
+		};
+		const work = ToolService.prototype.verifyJob.call(service, original, 1, new AbortController().signal);
+		if (mode === 'delivered') {
+			await work;
+			assert.equal(checks, 2);
+		} else {
+			await assert.rejects(work, (error) =>
+				mode === 'storage-failed'
+					? error === storageFailure
+					: error instanceof AgentFailure && error.code === 'version_conflict',
+			);
+			assert.equal(checks, mode === 'policy-revoked' ? 2 : 1);
+		}
+	}
+});
+
+await test('Shell Job list paginates beyond the former history cap without losing a continuation', async () => {
+	const jobs = Array.from({ length: 65 }, (_, index) => ({
+		...scope,
+		id: randomUUID(),
+		connectionId: target.id,
+		targetVersion: target.version,
+		fingerprint: target.fingerprint,
+		state: 'completed',
+		revision: 1,
+		createdAt: index,
+		updatedAt: index,
+	}));
+	const service = new ToolJobService({
+		async list(_scope, _target, limit, offset) {
+			return jobs.slice(offset, offset + limit + 1);
+		},
+	});
+	const first = JSON.parse(
+		await service.control(
+			scope,
+			target,
+			{ action: 'list', jobId: null, waitSeconds: 0, offset: 0 },
+			new AbortController().signal,
+			async () => {},
+			1000,
+		),
+	);
+	assert.equal(first.jobs.length, 64);
+	assert.equal(first.nextOffset, 64);
+	const second = JSON.parse(
+		await service.control(
+			scope,
+			target,
+			{ action: 'list', jobId: null, waitSeconds: 0, offset: first.nextOffset },
+			new AbortController().signal,
+			async () => {},
+			1000,
+		),
+	);
+	assert.equal(second.jobs.length, 1);
+	assert.equal(second.jobs[0].jobId, jobs[64].id);
+	assert.equal(second.nextOffset, null);
+});
 
 function contains(value, failure) {
 	return (
@@ -130,6 +226,7 @@ for (const mode of ['success', 'late-storage-failure', 'execution-and-storage-fa
 		const authorityFailure = new AgentFailure('storage_unavailable');
 		const operationFailure = new ToolCleanupFailure();
 		const changes = [];
+		const notifications = [];
 		const job = {
 			...scope,
 			id: randomUUID(),
@@ -160,7 +257,12 @@ for (const mode of ['success', 'late-storage-failure', 'execution-and-storage-fa
 				target,
 				policyRevision: 1,
 				signal: new AbortController().signal,
-				timeoutMs: 30000,
+				deadlineAt: Date.now() + 30000,
+				maxHistory: 64,
+
+				onFailure(error) {
+					notifications.push(error);
+				},
 
 				async validate() {
 					validations += 1;
@@ -193,6 +295,7 @@ for (const mode of ['success', 'late-storage-failure', 'execution-and-storage-fa
 		}
 		await new Promise((resolve) => setImmediate(resolve));
 		assert.deepEqual(changes, ['dispatched'], 'no durable terminal state while authority remains in flight');
+		assert.deepEqual(notifications, [], 'No failure is delivered before monitor and cleanup settle');
 		let drained = false;
 		const drain = service.drain(scope).then(
 			() => (drained = true),
@@ -207,12 +310,48 @@ for (const mode of ['success', 'late-storage-failure', 'execution-and-storage-fa
 		const outcome = await drain;
 		if (mode === 'success') {
 			assert.deepEqual(changes, ['dispatched', 'completed']);
+			assert.deepEqual(notifications, []);
 		} else {
 			assert.deepEqual(changes, ['dispatched'], 'no guessed follow-up settlement after storage failure');
 			assert.ok(contains(outcome, authorityFailure));
+			assert.equal(notifications.length, 1);
+			assert.ok(contains(notifications[0], authorityFailure));
 			if (mode === 'execution-and-storage-failure') {
 				assert.ok(contains(outcome, operationFailure));
 			}
 		}
+	});
+}
+
+for (const action of ['list', 'status', 'wait', 'cancel']) {
+	await test('Unknown Job ' + action + ' stops observation instead of returning a pollable result', async () => {
+		const job = {
+			...scope,
+			id: randomUUID(),
+			connectionId: target.id,
+			targetVersion: target.version,
+			fingerprint: target.fingerprint,
+			state: 'unknown',
+		};
+		const service = new ToolJobService({
+			async get() {
+				return job;
+			},
+
+			async list() {
+				return [job];
+			},
+		});
+		await assert.rejects(
+			service.control(
+				scope,
+				target,
+				{ action, jobId: job.id, waitSeconds: 30, offset: 0 },
+				new AbortController().signal,
+				async () => {},
+				1000,
+			),
+			ToolExecutionUnknown,
+		);
 	});
 }

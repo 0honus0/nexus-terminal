@@ -14,13 +14,11 @@ export const useCommandHistoryStore = defineStore('command-history', () => {
 	let queue: Promise<unknown> = Promise.resolve();
 	let scope = new AbortController();
 	let blocked = false;
-	let recoveryRevision = 0;
 
 	function reset(): void {
 		scope.abort();
 		scope = new AbortController();
 		blocked = false;
-		recoveryRevision += 1;
 		items.value = [];
 		search.value = '';
 		loading.value = false;
@@ -51,34 +49,26 @@ export const useCommandHistoryStore = defineStore('command-history', () => {
 		return task;
 	}
 
-	function load(recover = false): Promise<void> {
-		const revision = recoveryRevision;
-		return enqueue(async (signal) => {
-			loading.value = true;
-			if (!blocked) {
-				error.value = null;
-			}
-			try {
-				const next = await commandHistoryApi.list(signal);
-				if (signal.aborted) {
-					return;
-				}
-				items.value = next.sort((a, b) => b.timestamp - a.timestamp);
-				if (recover && revision === recoveryRevision) {
-					blocked = false;
-					error.value = null;
-				}
-			} catch (cause) {
-				if (!signal.aborted) {
-					error.value = cause;
-				}
-				throw cause;
-			} finally {
-				if (!signal.aborted) {
-					loading.value = false;
-				}
-			}
-		});
+	async function refresh(signal: AbortSignal): Promise<void> {
+		loading.value = true;
+		if (!blocked) error.value = null;
+		try {
+			const next = await commandHistoryApi.list(signal);
+			if (signal.aborted) return;
+			items.value = next.sort((a, b) => b.timestamp - a.timestamp);
+			// Reads and writes share this queue, so no unknown write can overtake this read.
+			blocked = false;
+			error.value = null;
+		} catch (cause) {
+			if (!signal.aborted) error.value = cause;
+			throw cause;
+		} finally {
+			if (!signal.aborted) loading.value = false;
+		}
+	}
+
+	function load(): Promise<void> {
+		return enqueue(refresh);
 	}
 
 	function mutate(operation: (signal: AbortSignal) => Promise<void>, permission?: AbortSignal): Promise<void> {
@@ -86,8 +76,9 @@ export const useCommandHistoryStore = defineStore('command-history', () => {
 			if (permission?.aborted) {
 				throw new PreferenceRequestFailure('cancelled', 'not_dispatched');
 			}
-			if (blocked) {
-				throw new PreferenceRequestFailure('refresh_required', 'not_dispatched');
+			if (blocked) await refresh(signal);
+			if (signal.aborted || permission?.aborted) {
+				throw new PreferenceRequestFailure('cancelled', 'not_dispatched');
 			}
 			try {
 				await operation(signal);
@@ -96,7 +87,6 @@ export const useCommandHistoryStore = defineStore('command-history', () => {
 					error.value = cause;
 					if (cause instanceof PreferenceRequestFailure && cause.outcome === 'unknown') {
 						blocked = true;
-						recoveryRevision += 1;
 					}
 				}
 				throw cause;

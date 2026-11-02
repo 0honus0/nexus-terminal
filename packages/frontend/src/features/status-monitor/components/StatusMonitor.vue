@@ -7,6 +7,7 @@
 	import { useWheelScale } from '@/foundation/interaction';
 	import { useFeedback } from '@/shared/feedback/public';
 	import { useStatusMonitor } from '../composables/useStatusMonitor';
+	import StatusChartLoading from './StatusChartLoading.vue';
 	import {
 		formatStatusDiskPair,
 		formatStatusMemoryPair,
@@ -18,7 +19,7 @@
 	const StatusCharts = defineAsyncComponent({
 		loader: () => import('./StatusCharts.vue'),
 
-		loadingComponent: UiSpinner,
+		loadingComponent: StatusChartLoading,
 		delay: 120,
 	});
 

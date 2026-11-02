@@ -213,8 +213,11 @@ export class RunStepModel {
 		return projectResult(
 			await this.changes.after(command.userId, command.appId, () =>
 				agentStorage(() =>
-					this.storage.finish(toStorageMutation(command), stored, (hasUnsettledTools, hasUnsettledChildren) =>
-						mayFinishModelStep(result, hasUnsettledTools, hasUnsettledChildren),
+					this.storage.finish(
+						toStorageMutation(command),
+						stored,
+						(hasUnsettledTools, hasUnsettledChildren, hasActiveJobs) =>
+							mayFinishModelStep(result, hasUnsettledTools, hasUnsettledChildren, hasActiveJobs),
 					),
 				),
 			),

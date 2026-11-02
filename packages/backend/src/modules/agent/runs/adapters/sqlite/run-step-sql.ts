@@ -225,7 +225,8 @@ export async function validateRunStepRecovery(reader: SqlReader): Promise<void> 
 		    OR (s.state='completed' AND s.finish_reason='stop' AND s.expected_run_version!=r.version)
 		    OR (s.state IN ('failed','unknown') AND r.status!='cancelled' AND s.expected_run_version!=r.version)
 		    OR (s.state='failed' AND r.status NOT IN ('failed','cancelled')
-		        AND NOT (r.status='unknown' AND EXISTS(SELECT 1 FROM agent_run_tools t WHERE t.run_id=r.id AND t.state='unknown')))
+		        AND NOT (r.status='unknown' AND (EXISTS(SELECT 1 FROM agent_run_tools t WHERE t.run_id=r.id AND t.state='unknown')
+		          OR EXISTS(SELECT 1 FROM agent_tool_jobs j WHERE j.run_id=r.id AND j.state='unknown'))))
 		    OR (s.state='unknown' AND r.status NOT IN ('unknown','cancelled'))
 		    OR (r.run_kind='root' AND NOT EXISTS (SELECT 1 FROM agent_command_idempotency i
 		      WHERE i.run_id=r.id AND i.user_id=r.user_id AND i.app_id=r.app_id
@@ -563,21 +564,25 @@ export class SqliteRunStepStorage implements RunStepStorage {
 	finish(
 		command: StepVersionedScope,
 		result: StepFinish,
-		maySettle: (hasUnsettledTools: boolean, hasUnsettledChildren: boolean) => boolean,
+		maySettle: (hasUnsettledTools: boolean, hasUnsettledChildren: boolean, hasActiveJobs: boolean) => boolean,
 	): Promise<StepWriteResult> {
 		if (result.state === 'failed' && result.failureCode !== 'DISPATCH_NOT_STARTED') {
 			throw new Error('Invalid model failure classification');
 		}
 		return this.mutate(command, ['reserved', 'dispatched'], async (tx, current) => {
 			const unsettled = await tx.one(
-				"SELECT 1 FROM agent_run_tools WHERE run_id=? AND state IN ('inspected','dispatched','unknown') LIMIT 1",
-				[command.runId],
+				"SELECT 1 FROM agent_run_tools WHERE run_id=? AND state IN ('inspected','dispatched','unknown') UNION ALL SELECT 1 FROM agent_tool_jobs WHERE run_id=? AND state='unknown' LIMIT 1",
+				[command.runId, command.runId],
 			);
 			const children = await tx.one(
-				"SELECT 1 FROM agent_run_children c JOIN agent_runs r ON r.id=c.run_id WHERE c.parent_id=? AND (r.status IN ('pending','running','unknown') OR EXISTS(SELECT 1 FROM agent_run_tools t WHERE t.run_id=r.id AND t.state IN ('inspected','dispatched','unknown'))) LIMIT 1",
+				"SELECT 1 FROM agent_run_children c JOIN agent_runs r ON r.id=c.run_id WHERE c.parent_id=? AND (r.status IN ('pending','running','unknown') OR EXISTS(SELECT 1 FROM agent_run_tools t WHERE t.run_id=r.id AND t.state IN ('inspected','dispatched','unknown')) OR EXISTS(SELECT 1 FROM agent_tool_jobs j WHERE j.run_id=r.id AND j.state IN ('queued','dispatched','unknown'))) LIMIT 1",
 				[command.runId],
 			);
-			if (!maySettle(unsettled !== null, children !== null)) {
+			const jobs = await tx.one(
+				"SELECT 1 FROM agent_tool_jobs WHERE run_id=? AND state IN ('queued','dispatched') LIMIT 1",
+				[command.runId],
+			);
+			if (!maySettle(unsettled !== null, children !== null, jobs !== null)) {
 				return 'step_conflict';
 			}
 			if (current.state === 'reserved' && result.state === 'unknown') {
@@ -663,8 +668,8 @@ export class SqliteRunStepStorage implements RunStepStorage {
 					return 'step_conflict';
 				}
 				const unsettled = await tx.one(
-					"SELECT 1 FROM agent_run_tools WHERE run_id=? AND state IN ('dispatched','unknown') UNION ALL SELECT 1 FROM agent_run_children c JOIN agent_runs r ON r.id=c.run_id WHERE c.parent_id=? AND r.status IN ('running','unknown') LIMIT 1",
-					[command.runId, command.runId],
+					"SELECT 1 FROM agent_run_tools WHERE run_id=? AND state IN ('dispatched','unknown') UNION ALL SELECT 1 FROM agent_tool_jobs WHERE run_id=? AND state IN ('dispatched','unknown') UNION ALL SELECT 1 FROM agent_run_children c JOIN agent_runs r ON r.id=c.run_id WHERE c.parent_id=? AND (r.status IN ('running','unknown') OR EXISTS(SELECT 1 FROM agent_tool_jobs j WHERE j.run_id=r.id AND j.state IN ('dispatched','unknown'))) LIMIT 1",
+					[command.runId, command.runId, command.runId],
 				);
 				const state = decide(unsettled !== null);
 				await advanceRun(tx, command, 'running', state, state === 'unknown' ? 'run.unknown' : 'run.failed');

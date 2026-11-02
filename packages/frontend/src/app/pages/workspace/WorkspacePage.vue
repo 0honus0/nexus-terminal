@@ -675,9 +675,16 @@
 				await history.add(value, signal);
 			} catch (cause) {
 				if (!isCurrent()) return;
-				feedback.notifyError(
-					t('commandHistory.addFailed', { error: cause instanceof Error ? cause.message : String(cause) }),
-				);
+				feedback.notifyError(t('commandHistory.addFailed', { error: preferenceFailureMessage(cause, t) }), 0, {
+					key: 'command-history',
+					label: t('common.refresh'),
+
+					disabled: () => !isCurrent(),
+
+					onClick: () => {
+						if (isCurrent()) void history.load().catch(() => undefined);
+					},
+				});
 			}
 		}
 	};

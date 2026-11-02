@@ -103,3 +103,57 @@ test('command history UI searches, copies, re-runs, and deletes real terminal hi
 			.toBeFalsy();
 	});
 });
+
+test('lost history receipt never resends the terminal command and the next save recovers by reading', async ({
+	page,
+	context,
+}) => {
+	await loginAsInitialAdmin(context.request);
+	await configureSshE2eSettings(context.request);
+	const connectionId = await ensureTestSshConnection(context.request);
+	const terminalInputs: string[] = [];
+	page.on('websocket', (socket) => {
+		socket.on('framesent', ({ payload }) => {
+			if (typeof payload !== 'string' || !payload.startsWith('{')) return;
+			const event = JSON.parse(payload);
+			if (event.type === 'terminal.input') terminalInputs.push(event.payload.data);
+		});
+	});
+	await connectTestSshFromConnectionsPage(page, connectionId);
+	const commandA = "printf 'HISTORY_LOST_RECEIPT_A\\n'";
+	const commandB = "printf 'HISTORY_LOST_RECEIPT_B\\n'";
+	const requests: string[] = [];
+	await page.route('**/api/v1/command-history**', async (route) => {
+		const request = route.request();
+		if (request.method() === 'POST') {
+			const command = request.postDataJSON().command;
+			requests.push('POST:' + command);
+			if (command === commandA) {
+				const response = await route.fetch();
+				expect(response.status()).toBe(201);
+				await route.abort('failed');
+				return;
+			}
+		} else if (request.method() === 'GET') requests.push('GET');
+		await route.continue();
+	});
+	const input = page.locator('input.command-bar-input');
+	await input.fill(commandA);
+	await input.press('Enter');
+	const outcome = page
+		.getByRole('alert')
+		.filter({ hasText: 'Command sent; saving to history could not be confirmed:' });
+	await expect(outcome).toContainText('The result is unknown.');
+	await expect(outcome.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
+	await expect(outcome).not.toContainText('Personal data request failed');
+	const offset = requests.length;
+	await input.fill(commandB);
+	await input.press('Enter');
+	const history = page.locator('.command-history-root').filter({ visible: true }).first();
+	await expect(history.locator('li[data-history-id]').filter({ hasText: 'HISTORY_LOST_RECEIPT_A' })).toBeVisible();
+	await expect(history.locator('li[data-history-id]').filter({ hasText: 'HISTORY_LOST_RECEIPT_B' })).toBeVisible();
+	expect(requests.slice(offset)).toEqual(['GET', 'POST:' + commandB, 'GET']);
+	expect(requests.filter((value) => value === 'POST:' + commandA)).toHaveLength(1);
+	expect(terminalInputs.filter((value) => value === commandA + '\r')).toHaveLength(1);
+	expect(terminalInputs.filter((value) => value === commandB + '\r')).toHaveLength(1);
+});

@@ -161,6 +161,8 @@ Proxy 删除结果未知时，列表继续显示最后一次已确认的代理�
 
 终端输入立即发送并使用远端PTY真实回显；SSH直连、跳板及HTTP/SOCKS代理底层TCP关闭小包合并，减少逐字符输入的额外等待。输入仍逐次校验会话及当前控制权，不缓存授权。实际回显速度仍受浏览器到后端、后端到SSH服务器的往返延迟与远端程序影响。
 
+关闭 SSH 时先请求正常结束；对端只完成半关闭时会强制关闭本次连接的实际传输流，再等待关闭确认。无法确认时仍提示清理失败，不据此重发命令或重建会话；直连、代理和跳板使用同一清理规则。
+
 远端程序无法退出时，可右键 SSH 标签（移动端长按）选择“重置终端”，确认后关闭旧 SSH 会话并在原标签位置建立新终端。重置会清空终端画面和命令草稿，传输与未保存编辑可能受影响；独立后台进程不保证结束。取消确认不执行重置，其他标签的会话与当前选择保留。仅已连接、未标记挂起且无未知结果围栏的会话可重置，已标记挂起的会话需先取消保留。未收到旧会话关闭成功的明确回执时停止重置，不新建第二个会话；提示关闭结果无法确认后，先核对远端任务再关闭旧标签。新连接失败保留其标签及既有错误恢复入口；本功能由用户手动触发，不检测卡死或自动终止任务。
 
 运行 `nethogs` 后输出大量 `Ethernet link detected`、随后长时间没有统计画面时，可先限定实际要监控的网卡，例如 `nethogs enp35s0`；网卡名以目标服务器为准。默认全接口采集在存在大量容器网桥和虚拟网卡的主机上可能很慢，`q` 也可能等待抓包轮次结束才能处理；工具改变 TTY 模式后，Ctrl+C 不一定产生中断信号。退出无响应时，可通过另一条 SSH 连接核对本次进程的 PID，再对该进程发送 SIGTERM，避免批量结束其他人的任务。排查时分别核对远端程序是否继续产生输出、SSH/工作区连接状态和终端消费确认，避免将远端工具停顿直接判断为终端渲染故障。指定网卡只统计对应接口，不代表全部容器网络。
@@ -189,6 +191,7 @@ Proxy 删除结果未知时，列表继续显示最后一次已确认的代理�
 
 ### 自动重连
 
+- 手机终端会按底部工具栏上方的实际内容区域自适应行列数；内置虚拟键盘开启或关闭、横竖屏切换及软键盘改变可视高度后，最后一行保持在终端区域内，原有内容边距和工具栏位置保留。
 - 异常断线约 120 秒内保留原 SSH/PTY、压缩及复制/移动任务，优先续接并补回输出/结果，不重新 SSH 登录替换终端。
 - 回到前台、恢复网络或返回终端时检查存活；正常链路不重连，并发恢复共用一次请求。布局重建等待显示快照期间若原PTY结束，不会把旧PTY画面恢复到新终端。
 - 手机切后台及返回前台时都会清理未结束的触摸和临时键盘禁用状态，避免浏览器漏发触摸结束事件后无法输入；返回后立即重新测量并刷新终端，不等待旧动画帧或网络存活检查。输入资格以当前连接是否就绪为准，连接尚未就绪不会提前开放输入。Android 软键盘开关按实际可视高度调整工作区，收起后恢复；恢复过程不主动弹键盘，轻点终端或使用原聚焦入口打开，失败时轻点也可请求原重连，提示同时说明轻点与按键两种方式；失败等待时输入框可聚焦并唤起软键盘，键盘或输入法输入仅触发重连，不会发送到SSH，连接中仍禁用输入。后台冻结或网络断开仍可能需要续接，不保证浏览器持续维持连接。
@@ -279,7 +282,7 @@ Workspace 在首个附件可以进行终端输入前，以同一次隐藏命令�
 
 - 命令历史与路径历史保留原 `/api/v1/command-history`、`/api/v1/path-history` 的 GET/POST/DELETE 方法；仅当前用户可读写。POST分别为 `{command}` / `{path}`，按原值去重并更新时间；10,000命令/2,000路径同事务修剪，同秒保留本次记录；记录时间在实际写事务中生成，时钟回退不使本次记录被当成旧项裁剪。单条4 KiB、请求32 KiB；GET用offset/limit（默认100、最多100）返回entries/nextOffset，按时间/ID升序，完整响应4 MiB。新增返回id，删除返回deleted，清空返回count；不执行命令。分页不是跨请求快照，写入/清空后从首页刷新。生产者仍是前端HTTP，后端Workspace不自动记录。
 - 在文件管理器打开收藏并新增时，路径默认填入当前浏览目录，可继续编辑；取消后重新新增会重新读取当前目录，不沿用上次草稿。编辑已有收藏仍读取该收藏保存的路径。
-- `/api/v1/favorite-paths` 保留收藏 CRUD、`PUT /:id/update-last-used` 及按name/lastUsedAt排序。列表默认100、每页最多100，返回entries/nextOffset；最多2,000条/用户，名称可null（256 bytes）、路径4 KiB，请求32 KiB/响应4 MiB。编辑/删除/更新时间都必填expectedVersion；修改返回favoritePath，删除返回deleted。其他用户记录视为not_found，版本冲突重新读取，unknown仅核对、不自动重放。写入时间由实际事务生成，编辑及使用时间不会因排队或系统时钟回退而倒退。正式Files收藏与路径历史、命令历史面板直接消费Shared分页和有限回执。收藏冲突或结果未知时，关闭并重新打开收藏列表以只读核对，再重新编辑；历史写入未知先重新打开路径历史或刷新命令历史，不自动重复提交。认证撤销清空本地个人数据与草稿。
+- `/api/v1/favorite-paths` 保留收藏 CRUD、`PUT /:id/update-last-used` 及按name/lastUsedAt排序。列表默认100、每页最多100，返回entries/nextOffset；最多2,000条/用户，名称可null（256 bytes）、路径4 KiB，请求32 KiB/响应4 MiB。编辑/删除/更新时间都必填expectedVersion；修改返回favoritePath，删除返回deleted。其他用户记录视为not_found，版本冲突重新读取，unknown仅核对、不自动重放。写入时间由实际事务生成，编辑及使用时间不会因排队或系统时钟回退而倒退。正式Files收藏与路径历史、命令历史面板直接消费Shared分页和有限回执。收藏冲突或结果未知时，关闭并重新打开收藏列表以只读核对，再重新编辑；路径历史写入未知先重新打开列表核对；命令历史写入未知时提示无法确认保存，可点错误通知的“刷新”只读核对。下一次新的命令历史保存、删除或清空会先读取服务器列表，成功后才执行本次新操作；读取失败不派发本次写入，后续再操作会重新核对。普通重新读取成功也能恢复保存，不自动重复未知写入或终端命令。认证撤销清空本地个人数据与草稿。
 
 ## 终端
 
@@ -310,7 +313,7 @@ Workspace收到畸形JSON/二进制帧、重复响应元数据或终帧后的额
 - 前台输出直接解析，后台按 80ms 或 512 KiB 合并；重绘使用动画帧及每批一次 100ms 兜底，DEC 2026 完整画面结束时提交，Codex CLI 等程序的计时随收到的输出更新，无需点击触发。浏览器冻结不触发自动重发。
 - 恢复实时画面不等待历史游标重置；新翻页等待重置，旧页面不能覆盖新画面。旧历史写入后按更新后的滚动范围定位，避免跳回尾部；命令栏成功发送命令后回到实时输出，多会话发送对各个成功目标分别恢复。
 - 重连、前台恢复和字体加载后同步尺寸；隐藏时保留最近有效尺寸，恢复按可见区域测量。
-- 弱网输入采用 VS Code TypeAhead 预测：积累回显样本后，在延迟较高且匹配有效时，常见英文字符、退格和左右移动可先显示，再由真实远端输出确认或校正。新输入行首字符等待确认；中文、粘贴及不支持的控制模式继续等待远端回显。复杂全屏应用按缓冲区、光标和滚动区域保守停用，不能保证所有 TUI 都能预测。快速输入接近行尾时保留已显示内容，分包的颜色/光标控制信息不会单独撤回输入；连续退格可逐字本地显示，但跨行、提示符边界或远端重绘仍以真实回显为准。输入只发送一次，断线、后台、尺寸变化及保存快照前撤回未确认内容，不写入历史或挂起快照；无需远端安装额外服务。
+- 弱网输入采用 VS Code TypeAhead 预测：积累回显样本后，在延迟较高且匹配有效时，常见英文字符、退格和左右移动可先显示，再由真实远端输出确认或校正。新输入行首字符等待确认；中文、粘贴及不支持的控制模式继续等待远端回显。复杂全屏应用按缓冲区、光标和滚动区域保守停用，不能保证所有 TUI 都能预测。快速输入接近行尾时保留已显示内容，分包的颜色/光标控制信息不会单独撤回输入；同一行尾的连续输入与退格可衔接本地显示，晚到的输入回显不会重新画出已删除的字符；网络抖动期间保留已显示的待确认编辑，收到不同回显时再校正。跨行、提示符边界或远端重绘仍以真实回显为准。输入只发送一次，断线、后台、尺寸变化及保存快照前撤回未确认内容，不写入历史或挂起快照；无需远端安装额外服务。
 
 HTML终端背景在同页会话切换时保留实例；离开Workspace后，重新进入时在可见尺寸下重载沙箱文档，避免只初始化一次的主题以零尺寸启动。
 
@@ -395,6 +398,7 @@ HTML终端背景在同页会话切换时保留实例；离开Workspace后，重�
 ### 编辑、预览与失败恢复
 
 - Workspace 文件资源随原 SSH 会话管理，不因两分钟没有文件操作而失效；独立 HTTP 文件资源仍保留两分钟闲置限制。会话、目标配置或权限失效时仍拒绝操作。
+- 手机普通文本编辑器的查找面板使用深色紧凑布局，查找与导航、匹配选项、替换分别排列，随应用语言切换；支持原生大小写、正则、全词、全部选择及替换。替换只修改草稿，仍须主动保存。
 - HTML/HTM 与其他普通文本使用在线编辑器打开；文件读取失败在当前操作提示具体原因，保留工作区和已打开文档，不用整个工作区的“发生错误”页面替代读取失败。
 - 预览/编辑的二进制读取、下载票据准备、下载类型探测和目录 ZIP 各自使用原 Workspace 跟踪的独立 SFTP 资源。取消预览、停止目录下载或离开页面时，只收尾对应读取资源；后续目录浏览、编辑和下载继续使用原文件会话。读取任务及资源关闭实际完成后才结束，不把浏览器中断视为远端已释放。
 - 错误提示区分权限不足、文件/活动文件会话不存在、连接配置变化、远端不可用、冲突及登录失效。读取失败可先刷新目录；活动文件会话已经失效时重新连接 SSH。写入结果未知时仍须先核对远端状态，不自动重试写入。
@@ -790,7 +794,7 @@ B10已验证真实子进程在quiesce内的SDK调用被拒绝且无晚写入、h
 
 ### 新后端项目目录与突变占用（源码已接线，行为待 B10）
 
-- 当前Agent移除 ssh_session_open/list/close 和 sessionId，使用独立45秒 Remote 任务及当前 Run 的 Job/取消管理，不继承 shell cwd/env，不共享 Root/Child 活跃连接。
+- 当前Agent移除 ssh_session_open/list/close 和 sessionId，使用独立 Remote 任务及当前 Run 的 Job/取消管理，不继承 shell cwd/env，不共享 Root/Child 活跃连接。
 - project_directory_bind v2 参数 connectionId/directory；read 参数 connectionId/可选 path；clear 只有 connectionId。目录绝对路径≤256 UTF-8 bytes，read 仅允许绑定根及深度≤8的子目录。未绑定返回空上下文；目标 version/fingerprint 变化报冲突，重新绑定须独立批准。绑定按 Run 独立保存，删除 Run/connection 清理，不沿用旧 Thread 共享。
 - 从绑定根到选定子目录读取不区分大小写的 AGENT.md/AGENTS.md，最多4份、每份≤8 KiB，拒绝链接、超量和越界；返回 path/scopePath/text/sha256。指导是不可信工具数据，不自动变为系统提示、Shell cwd 或权限；bind/clear 需要当前 file.read 与单次批准，read 需要当前只读授权。
 - Agent 文件/Shell/Job/ACP/Docker、普通 Files/上传/复制移动/归档/权限修改与 Workspace Docker 按 lowercase host+port 共用持久独占占用。不同连接ID、用户或凭据不能绕过同一文本 endpoint；跨主机复制/移动原子占用两端。冲突直接拒绝，不设跨endpoint数量上限，不自动排队/重试；同资源已有 Files 队列保留。
@@ -841,7 +845,7 @@ App 返回必填非空 definitionId/definitionVersion、capabilities、enabled/v
 
 新后端还提供v2只读工具：`machine_diagnostics_read({connectionId})`读取所选SSH机器的CPU百分比、内存/磁盘bytes及1/5/15分钟load指标，generatedAt为毫秒（CPU以同一任务两次采样差值计算），不读取宿主诊断；`file_read({connectionId,path})`读取整个UTF-8文件（最多32KiB，含captured-content SHA-256），不支持旧offset；`file_list({connectionId,path})`最多200条/48KiB metadata，超额拒绝；`file_search({connectionId,path,query,maxResults?})`做区分大小写字面量内容搜索，不接受旧regex/glob/contextLines。maxResults默认20、最多100，每行首匹配，行/UTF-16列从1开始；发现超量匹配时返回truncated。搜索最多100文件、100目录、8层和2MiB，超遍历/编码预算失败，不截断伪报完整结果；非文本文件跳过，文件单项超过32KiB则失败。
 
-新后端 file_write v2 参数为 {connectionId,path,content,expectedSha256}：绝对路径最多256 UTF-8 bytes，content最多8KiB且允许空文本，完整参数JSON最多16KiB。新建必须传 expectedSha256: 'absent'；替换必须传 file_read 返回的原内容小写SHA-256。每次写入生成独立审批；按需询问时人工批准，全授权时在原权限范围自动批准。审批摘要只含动作、路径、字节数及哈希，不展示正文。B10已在本机OpenSSH验证真实创建、0600权限、并发同键决议与单次消费；拒绝会以failed结束Run，不再请求模型；等待中取消或撤权不创建文件，加入denylist围栏Run。尚未验证派发后断流、写入未知与跨主机故障。拒绝、过期、撤权或取消停止等待；批准需在当前权限/目标版本有效时消费一次，不能授权下一次写入。新建权限0600，替换保留普通权限，不保留特殊权限位，不提供旧mode参数。使用同目录暂存、提交后回读确认；哈希预检并非远端原子CAS，存在跨调用竞争窗口。暂存/提交/确认/最终交付或清理不能确认时记录unknown，不自动重放；需人工核对远端文件与临时文件。读写任务共用8个名额，整项最长45秒，清理未确认仍占名额。
+新后端 file_write v2 参数为 {connectionId,path,content,expectedSha256}：绝对路径最多256 UTF-8 bytes，content最多8KiB且允许空文本，完整参数JSON最多16KiB。新建必须传 expectedSha256: 'absent'；替换必须传 file_read 返回的原内容小写SHA-256。每次写入生成独立审批；按需询问时人工批准，全授权时在原权限范围自动批准。审批摘要只含动作、路径、字节数及哈希，不展示正文。B10已在本机OpenSSH验证真实创建、0600权限、并发同键决议与单次消费；拒绝会以failed结束Run，不再请求模型；等待中取消或撤权不创建文件，加入denylist围栏Run。尚未验证派发后断流、写入未知与跨主机故障。拒绝、过期、撤权或取消停止等待；批准需在当前权限/目标版本有效时消费一次，不能授权下一次写入。新建权限0600，替换保留普通权限，不保留特殊权限位，不提供旧mode参数。使用同目录暂存、提交后回读确认；哈希预检并非远端原子CAS，存在跨调用竞争窗口。暂存/提交/确认/最终交付或清理不能确认时记录unknown，不自动重放；需人工核对远端文件与临时文件。读写任务共用8个名额，整项受冻结工具预算约束（默认45秒），清理未确认仍占名额。
 
 新后端 file_inspect v2 参数为 {connectionId,path}，返回规范路径、kind、fingerprint、fileCount、directoryCount、bytes，不返回内容。允许普通文件（含二进制）与目录；最多100文件/100目录、深度8、单文件1MiB、累计2MiB、元数据256KiB；超过预算整项拒绝，不截断。指纹包含相对路径、权限/所有者、大小/修改时间及文件内容哈希，不是原子文件系统快照。
 
@@ -849,17 +853,21 @@ file_patch v2 参数为 {connectionId,path,expectedSha256,oldText,newText}，原
 
 file_move v2 参数为 {connectionId,path,destinationPath,expectedFingerprint}，file_delete v2 参数为 {connectionId,path,expectedFingerprint,scope}，指纹来自 file_inspect。移动目的必须不存在，拒绝同路径/祖先关系；删除 scope:'entry' 仅普通文件或空目录，scope:'tree' 明确递归删除。路径各最多256 UTF-8 bytes，不允许控制字符、根目录、链接或特殊节点。移动/删除采用上述有界目录预算，每项独立审批；patch/move 要 file.write，delete 要 file.delete 且为 destructive，inspect 要 file.read。删除逐节点复查，部分执行或提交后确认失败为 unknown，不自动重放，人工核对源、目的和剩余树。全部工具参数完整JSON最多16KiB，审批摘要不包含文件正文。
 
-shell_execute v2 参数为 {connectionId,kind,argv?,script?,cwd?,mode?}：kind:'argv' 只允许 argv（最多128项、原始UTF-8合计8KiB），kind:'shell' 只允许可执行 script（8KiB）。cwd 可选绝对路径，最多256 bytes；mode 默认 foreground，也可 background。所有执行均需 shell.execute 和独立 destructive 人工批准，不根据命令文本推断安全。前台返回真实退出状态、stdout/stderr（合计捕获32KiB）和 truncated；非零退出是确认的命令失败。后台返回 {jobId,accepted:true}，只表示受理，不表示进程健康或成功。完整参数JSON最多16KiB，结果最多256KiB，包含转义预算。
+shell_execute v2 参数为 {connectionId,kind,argv?,script?,cwd?,mode?,yieldSeconds?}：kind:'argv' 只允许 argv（最多128项、原始UTF-8合计8KiB），kind:'shell' 只允许可执行 script（8KiB）。cwd 可选绝对路径，最多256 bytes；mode 默认 foreground，也可 background。所有执行均需 shell.execute 和独立 destructive 人工批准，不根据命令文本推断安全。前台在等待窗口内完成时返回真实退出状态、stdout/stderr（合计捕获32KiB）和 truncated；非零退出是确认的命令失败。yieldSeconds默认冻结toolTimeoutSeconds（默认45秒），允许0立即交回，不能超过冻结工具等待预算；仅foreground可传。等待到期而任务未完成时返回原jobId与queued/dispatched状态，不中断命令，模型通过shell_job_control继续查询/等待同一任务，禁止因等待到期重跑命令。后台返回 {jobId,accepted:true}，只表示受理，不表示进程健康或成功。完整参数JSON最多16KiB，结果最多256KiB，包含转义预算。
 
-shell_job_control v2 使用 {connectionId,action,jobId?,waitSeconds?}。list 不传 jobId；status/wait/cancel 使用原 Shell 工具账本 UUID，只操作当前 user/App/Run（Root 或 Child 各自隔离）、目标版本和指纹一致的 Job。list/status/wait 需当前 shell.execute；cancel 还需独立 control 批准。wait 默认10秒、最多30秒，等待结束不取消 Job。状态为 queued/dispatched/completed/failed/unknown；dispatched 是派发意图，非进程健康。每 Run 最多64条历史，全后端最多8个活跃 Job预约，远端与文件任务仍共用8个资源名额。后台属于实际 Run，Root/Child 各自在结束/取消时收尾自己的 Job，Root 最终收尾覆盖整族；unknown 子任务阻止 Root 成功。启动将 queued 转 failed/not_started、dispatched 转 unknown，不重放。权限每秒复查，撤权/过期取消并等待收尾。每个 Job 从 launch 到远端执行最长45秒，不提供旧24小时后台服务承诺；本地取消或 SSH 关闭不证明远端子进程停止。Job 执行未知时 Root 不报成功；未被用户取消的 Root 在结束收尾时进入 unknown，已取消的 Root 保留 cancelled 和原 Job 的 unknown 证据。
+shell_job_control v2 使用 {connectionId,action,jobId?,waitSeconds?,offset?}。list 不传 jobId，offset仅用于list（默认0），每页最多64项并返回nextOffset；status/wait/cancel 使用原 Shell 工具账本 UUID，只操作当前 user/App/Run（Root 或 Child 各自隔离）、目标版本和指纹一致的 Job。list/status/wait 需当前 shell.execute；cancel 还需独立 control 批准。wait 默认10秒、最多30秒，同时受冻结toolTimeoutSeconds等待预算约束，等待结束不取消Job。状态为 queued/dispatched/completed/failed/unknown；dispatched 是派发意图，非进程健康。每Run历史条数受原冻结maxToolExecutions限制，全后端最多8个活跃Job预约，远端与文件任务仍共用8个资源名额。后台属于实际 Run，Root/Child 各自在结束/取消时收尾自己的 Job，Root 最终收尾覆盖整族；unknown 子任务阻止 Root 成功。启动将 queued 转 failed/not_started、dispatched 转 unknown，不重放。权限每秒复查，撤权/过期取消并等待收尾。前台/后台Shell均使用原Run的绝对执行截止时间，等待及续查不会延长总预算；取消、权限失效或Run结束仍会收尾，不提供脱离Run的长期后台服务承诺；本地取消或 SSH 关闭不证明远端子进程停止。Job 执行结果未确认时立即停止所属 Run/族的等待，未被用户取消的 Root 进入 unknown 终态；已取消的 Root 保留 cancelled 和原 Job 的 unknown 证据。
 
-machine_docker_inspect v2 使用 {connectionId,containerId}，要求完整小写64位hex容器ID，返回 containerId/state/image/fingerprint。machine_docker_control v2 使用 {connectionId,containerId,action,expectedFingerprint}，action 为 start/stop/restart/remove，指纹取自 inspect。两者需 machine.docker.manage；control 独立批准，remove 为 destructive，其余 mutate。执行前核对指纹，后核对请求状态或容器不存在；并发窗口不提供原子CAS，派发/后验未知不得自动重放。Docker 与其他独立远端任务共用45秒整项期限。B10 已通过真实 Docker/SSH 核对四种控制、逐次独立审批、状态变化拒绝、等待审批取消及重建不重派；不保证与其他客户端操作的原子 CAS。
+Job 的执行结果无法确认时，会立即通知所属 Run，停止模型请求和待审批工具的等待；Child 的此类故障也会停止 Root 及同族任务，其他 Run 不受影响。查询不再把 unknown 当作可以继续轮询的执行状态。任务进入终态，未消费的审批失效，并在原错误区域说明“任务已停止，远端操作可能仍在运行”。重启后仍从原 Job 记录展示原因，不自动重试或释放机器占用。这里的“结果无法确认”仅表示无法证明远端是否完成，不等于命令仍在本地等待；继续同一线程前仍需用原结束入口关闭该 Run，结束不解除机器围栏。已确认的非零退出保留退出码和输出，主机公钥未信任等确定未执行的拒绝记为 failed。工具派发、审批消费或完成的数据库回执丢失时，也会独立结束已确认模型步骤所属的总任务，不重试原工具写入或自动继续执行。
+
+主机已有任务正在执行时，新命令提示“尚未执行：该主机有其他任务正在执行”；已有旧任务效果未确认时提示先在“机器突变恢复”核对并恢复。两者都不会把被拒绝的新命令记成新的执行未知，也不会自动解除旧围栏或重跑原命令。
+
+machine_docker_inspect v2 使用 {connectionId,containerId}，要求完整小写64位hex容器ID，返回 containerId/state/image/fingerprint。machine_docker_control v2 使用 {connectionId,containerId,action,expectedFingerprint}，action 为 start/stop/restart/remove，指纹取自 inspect。两者需 machine.docker.manage；control 独立批准，remove 为 destructive，其余 mutate。执行前核对指纹，后核对请求状态或容器不存在；并发窗口不提供原子CAS，派发/后验未知不得自动重放。Docker使用冻结工具整项期限（默认45秒）。B10 已通过真实 Docker/SSH 核对四种控制、逐次独立审批、状态变化拒绝、等待审批取消及重建不重派；不保证与其他客户端操作的原子 CAS。
 
 新后端 acp_execute v2 使用 {connectionId,argv,cwd,prompt}，仅通过独立SSH调用远端已安装的ACP v1程序。argv最多128项、原始UTF-8合计8KiB，cwd为必填绝对路径且最多256bytes，prompt最多8KiB，完整参数JSON最多16KiB。不接受旧integrationId/target/Workspace/profile，也不自动安装程序或添加本机回落。需当前 integration.acp.invoke、选中目标和独立destructive人工批准；当前调用参数绑定批准，内置声明不授予grant。
 
 ACP派发前目标指纹变化返回conflict，重新读取目标并发起新意图；已派发后的结果不确定仍保留operation_unknown，不自动重放。
 
-ACP执行初始化、创建新会话、提交prompt并收集文本更新；输出最多32KiB，超限整项失败而非截断伪报完整。整项最长45秒，包含内部权限等待，跨层传递剩余期限；独立远端任务共用8名额。stopReason明确返回end_turn/max_tokens/max_turn_requests/refusal/cancelled，协议完成不代表远端副作用已被业务验证或程序处于OS沙箱。
+ACP执行初始化、创建新会话、提交prompt并收集文本更新；输出最多32KiB，超限整项失败而非截断伪报完整。整项受冻结工具期限约束（默认45秒），包含内部权限等待，跨层传递剩余期限；独立远端任务共用8名额。stopReason明确返回end_turn/max_tokens/max_turn_requests/refusal/cancelled，协议完成不代表远端副作用已被业务验证或程序处于OS沙箱。
 
 每个受支持的ACP内部权限请求生成独立acp_inner_permission工具操作和kind:acp_permission批准，绑定父调用、会话/请求/远端toolCall身份、目标版本、原输入哈希及独立修订。父批准只允许启动程序，不能批准内部动作。只支持allow_once/reject_once；没有allow_once选项直接取消，不支持allow_always。direct文件/terminal请求拒绝。读取现有审批列表/单项并resolve后，执行方仍须在当前权限有效时原子消费一次，确认许可响应已发送才记录交付；该子操作completed表示许可已交付，不保证远端内部动作成功。审计摘要不展示rawInput或prompt正文，远端title/kind仅是未受信说明。
 
@@ -867,7 +875,7 @@ ACP执行初始化、创建新会话、提交prompt并收集文本更新；输�
 
 以上写入链须 governed 准入；源码接线不表示 B10 已通过；正式前端的参数及审批呈现调整统一留F1。
 
-路径必须绝对，拒绝`..`和符号链接跟随；目录可显示symlink条目。读取前后复查版本、指纹、选中与授权。hash只描述捕获内容，不保证远端并发原子快照；已开始的读取不能因撤权追溯撤回，但结果交付仍会拒绝。每个远端操作受冻结 toolTimeoutSeconds 与 Root 剩余期限共同限制，取消等待实际资源收尾；不自动重放unknown。当前工具执行须 governed 准入，没有运行测试，正式前端已同步Shared字段及安全提示。
+路径必须绝对，拒绝`..`和符号链接跟随；目录可显示symlink条目。读取前后复查版本、指纹、选中与授权。hash只描述捕获内容，不保证远端并发原子快照；已开始的读取不能因撤权追溯撤回，但结果交付仍会拒绝。不可续查的远端操作受冻结toolTimeoutSeconds与Root剩余期限共同限制，Shell的等待窗口和实际Run执行期限按上文分别处理，取消等待实际资源收尾；不自动重放unknown。当前工具执行须 governed 准入，没有运行测试，正式前端已同步Shared字段及安全提示。
 
 ### 新后端 Root/Child 与协作（默认执行关闭）
 
@@ -1004,7 +1012,7 @@ version 为已保存版本；effectiveVersion 为最近一次全部字段均与�
 - 连接列表顶部只保留搜索与添加入口，搜索提示统一为“搜索连接”。宽栏直接显示分组连接、管理标签和删除分组操作，窄栏收进“分组操作”菜单。连接行在空间足够时显示名称、主机摘要与最近使用时间，极窄栏退回单行名称；启动页同时显示连接类型。点击连接，右键编辑/克隆/删除，批量连接确认与标签管理保持不变。
 - 命令历史不再放常驻刷新按钮；搜索、紧凑模式和清空位于标题工具区，空态、无匹配和读取态使用统一状态组件。历史行显示命令与时间，点击执行，右键可复制、删除或发送到全部会话；清空仍先确认。
 - Docker 使用统一容器卡片，窄栏保留启动、停止、重启和“更多操作”（移除、进入、日志），宽栏直接显示全部动作；展开后显示统计。读取、未连接、Docker 不可用和空列表均有独立状态，移除仍二次确认。
-- 文件编辑器顶部保留标签与文件路径；编码、换行、保存状态、搜索、重载、保存和关闭统一放在底部工具栏，编码选择器按最长编码名称自适应宽度，窄栏按可用空间换行。桌面 Monaco 与手机 CodeMirror 共用查找栏，支持匹配计数、上一个/下一个、Enter/Shift+Enter 导航和 Esc 关闭；编辑正文、草稿与保存结果仍由原会话持有。
+- 文件编辑器顶部保留标签与文件路径；编码、换行、保存状态、搜索、重载、保存和关闭统一放在底部工具栏，编码选择器按最长编码名称自适应宽度，窄栏按可用空间换行。桌面 Monaco 使用原生 VSCode 风格查找，保留匹配计数；手机 CodeMirror 使用适配窄屏的原生深色查找/替换面板。两者支持上一个/下一个、Enter/Shift+Enter 导航和 Esc 关闭；编辑正文、草稿与保存结果仍由原会话持有。
 
 ### 界面偏好、布局与焦点
 
@@ -1131,6 +1139,8 @@ POST 使用 {name,content}；PUT 使用 {expectedVersion,content}，DELETE 使�
 Workspace服务器状态使用透明外层表面，不绘制整块外框或底色；标题分隔线与内部指标卡边界保留；指标卡区域收紧左右外侧留白，加载骨架使用同样的紧凑边距，窄栏和矮栏继续自适应。顶部主机状态使用小圆角芯片和加粗主机名，较窄面板隐藏复制装饰以完整显示名称。面板宽度允许时，CPU、内存、Swap 与磁盘使用 2×2 等边方形卡片，卡片内按图标/标题、详情、百分比和进度条重排，容量详情随可用宽度缩放并换行而不省略；网络使用通栏卡片，左侧图标跨标题与速率两行垂直居中。更窄的纵向面板保持单列卡片，避免压缩文字。网络标题与上下行速率保持紧凑但清晰的分隔；矮面板将上下行速率放到“网络”标题右侧同排显示；收紧面板与卡片左右留白、图标和上下行间隔，标签与百分比略缩小，网络数值按面板实际宽度自适应字号，优先显示完整数值与单位，避免省略号遮住速率。字体只在数值处调整，不叠加父级缩放；加载骨架沿用单行排列。趋势模式下网卡名贴网络行右缘显示；趋势标题与 1/5/10/30 分钟选项使用更紧凑的字号和行高，缩放面板时保持清晰及原键盘选择入口。连接中或首轮采样时显示紧凑加载标题与五张低对比骨架卡，骨架尺寸随窄、中、宽栏与最终指标布局一致，不使用大块“等待数据”占位。未连接、拒绝主机信任、取消或断开后停止加载并留白，不显示指标和趋势；成功连接且取得样本后恢复原监控视图。具体连接失败与任意键重试提示只在终端输出，已连接时的采样失败仍显示原安全错误，不自动信任。
 
 服务器状态趋势选择 1/5/10/30 分钟时，横轴始终覆盖对应的完整时间范围，右端为最新采样时间，左端为对应分钟前；连接时间较短或历史不足时左侧留空，不缩短时间范围、不补造采样数据。各范围保留真实采样的数值和时间，短历史不合并成隐藏的单点；单样本和断点两侧的孤立样本显示小点。缺测、采样失败或停止后恢复保留断点；采样序号连续但实际时间明显中断时，也按完整历史的常规采样间隔断开曲线，不跨空白画斜线，不删除先前的真实样本，各时间范围采用相同判据；选中指标缺测时横轴仍跟随最新监控采样。悬浮提示只显示同一采样时刻的数据，不按不同序列的数组位置拼接上下行。
+
+趋势图下方的时间刻度保持紧凑单行，面板缩放后仍维持相同的文字和间距占位，给曲线保留更多高度。图表加载时在原绘图区显示淡色网格与居中加载提示，使用轻微呼吸效果；系统开启减少动态效果时停止动画，加载完成后原位显示真实曲线。
 
 服务器状态趋势的网络纵轴使用同一组 B/K/M/G 二进制单位和整档步长，避免十进制字节刻度转成 4.8M、9.5M 等不直观读数；纵轴文字更紧凑，空闲时保留 0、1 两档，不重复显示相同刻度。各时间范围仍按可见流量自动缩放。
 

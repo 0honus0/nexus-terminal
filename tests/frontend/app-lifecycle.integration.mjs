@@ -476,7 +476,7 @@ try {
 		);
 		for (let index = 0; index < 102; index++) await commandHistoryApi.add('history-page-' + index);
 		const history = useCommandHistoryStore();
-		await history.load(true);
+		await history.load();
 		expect(
 			history.items.length === 102 && history.items.some((item) => item.command === 'history-page-0'),
 			'command history follows actual Shared pagination',

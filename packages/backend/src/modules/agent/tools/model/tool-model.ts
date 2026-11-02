@@ -15,6 +15,7 @@ import { TargetOperationError } from '../../../targets/public-errors.js';
 import {
 	AgentFailure,
 	ToolOperationRefusal,
+	ToolMutationAdmissionRefusal,
 	ToolExecutionUnknown,
 	ToolCleanupFailure,
 	isAgentDrainFailure,
@@ -133,6 +134,7 @@ export class ToolModel {
 			ToolInput,
 			| { kind: 'connections' }
 			| { kind: 'job' }
+			| { kind: 'shell' }
 			| { kind: 'collaboration' }
 			| { kind: 'project' }
 			| { kind: 'result' }
@@ -150,9 +152,6 @@ export class ToolModel {
 		>,
 		scope: ToolOperationScope,
 	): Promise<string> {
-		if (input.kind === 'shell') {
-			return JSON.stringify(await this.command(input, scope));
-		}
 		let validationFailure: unknown = null;
 		let permissionFailure: unknown = null;
 
@@ -429,6 +428,9 @@ export class ToolModel {
 			throw validationFailure;
 		}
 		if (error instanceof RemoteMachineOperationError) {
+			if (error.code === 'mutation_busy' || error.code === 'mutation_blocked') {
+				throw new ToolMutationAdmissionRefusal(error.code, { cause: error });
+			}
 			if (error.code === 'cleanup_failed') {
 				throw new ToolCleanupFailure({
 					cause:

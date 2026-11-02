@@ -3,6 +3,7 @@ import type { Logger } from '../../../logging/logger.js';
 import { logDiagnostic, withDiagnosticContext } from '../../../logging/diagnostic-log.js';
 import { Client, type ClientChannel, type SFTPWrapper } from 'ssh2';
 import type { EventEmitter } from 'node:events';
+import type { Duplex } from 'node:stream';
 import {
 	MachineDispatchFailure,
 	type MachineConnection,
@@ -32,7 +33,7 @@ const CHANNEL_OPEN_TIMEOUT_MS = 30000;
 const COMMAND_TERMINATION_TIMEOUT_MS = 5000;
 const CLIENT_CLOSE_TIMEOUT_MS = 2000;
 
-function closeClient(client: Client, isClosed: () => boolean): Promise<void> {
+function closeClient(client: Client, transport: Duplex, isClosed: () => boolean): Promise<void> {
 	if (isClosed()) {
 		return Promise.resolve();
 	}
@@ -58,13 +59,14 @@ function closeClient(client: Client, isClosed: () => boolean): Promise<void> {
 
 		client.once('close', closed);
 		timer = setTimeout(() => {
-			// Destroy requests termination; only the transport close event confirms it.
+			// ssh2.destroy() can skip a half-closed stream after end(); destroy the owned transport.
+			// Only the client close event confirms protocol cleanup.
 			timer = setTimeout(
 				() => finish(new Error('SSH client close confirmation unknown')),
 				CLIENT_CLOSE_TIMEOUT_MS,
 			);
 			try {
-				client.destroy();
+				transport.destroy();
 			} catch (error) {
 				finish(error);
 			}
@@ -73,7 +75,7 @@ function closeClient(client: Client, isClosed: () => boolean): Promise<void> {
 			client.end();
 		} catch (error) {
 			try {
-				client.destroy();
+				transport.destroy();
 			} catch (cleanup) {
 				finish(new AggregateError([error, cleanup], 'SSH client close failed'));
 				return;
@@ -114,7 +116,7 @@ class ConnectedMachine implements MachineConnection {
 			});
 		};
 
-		route.clients.forEach(monitor);
+		route.clients.forEach(({ client }) => monitor(client));
 		route.sockets.forEach(monitor);
 		// Install the live owner before removing construction-time monitoring.
 		route.releaseMonitors();
@@ -533,8 +535,8 @@ class ConnectedMachine implements MachineConnection {
 			[...this.leases].map((lease) => Promise.resolve().then(() => lease.close())),
 		);
 		const clientResults = await Promise.allSettled(
-			this.route.clients.map((client) =>
-				Promise.resolve().then(() => closeClient(client, () => this.closedClients.has(client))),
+			this.route.clients.map(({ client, transport }) =>
+				Promise.resolve().then(() => closeClient(client, transport, () => this.closedClients.has(client))),
 			),
 		);
 		for (const socket of this.route.sockets) {
@@ -601,7 +603,7 @@ export class Ssh2MachineFactory implements MachineSshFactory {
 			return new ConnectedMachine(route, this.logger, sshId);
 		} catch (error) {
 			const failures: unknown[] = [];
-			for (const resource of [...route.clients, ...route.sockets]) {
+			for (const resource of [...route.clients.map(({ client }) => client), ...route.sockets]) {
 				try {
 					resource.destroy();
 				} catch (cleanup) {

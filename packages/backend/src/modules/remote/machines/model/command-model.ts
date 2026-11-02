@@ -1,6 +1,6 @@
 import type { RemoteMachineModel } from './machine-model.js';
 import type { CommandPort, NativeCommand } from '../../../../platform/commands/command-port.js';
-import { MachineDispatchFailure } from '../../../../platform/ssh/ssh-port.js';
+import { MachineDispatchFailure, MACHINE_CONNECT_MAX_TIMEOUT_MS } from '../../../../platform/ssh/ssh-port.js';
 import { TargetOperationError } from '../../../targets/public-errors.js';
 import { RemoteHostKeyUntrustedError } from './machine-errors.js';
 import { RemoteFileFailure } from '../../files/model/file-types.js';
@@ -27,7 +27,7 @@ export class MachineCommandModel {
 			const opened = await this.machines.open({
 				targetId: scope.targetId,
 				expectedFingerprint: scope.fingerprint,
-				timeoutMs: scope.timeoutMs,
+				timeoutMs: Math.min(scope.timeoutMs, MACHINE_CONNECT_MAX_TIMEOUT_MS),
 				signal: scope.signal,
 
 				validate: () => scope.validate(),

@@ -101,7 +101,7 @@ docker compose up -d --remove-orphans
 
 ## 构建与开发
 
-使用 Node.js Current 和根 `packageManager` 指定的 pnpm。 当前锁定 pnpm 11.28.9，依赖更新后仍使用 `--frozen-lockfile` 安装；Undici 8 要求 Node.js ≥22.19.0，推荐继续使用 Current。Playwright 已更新至1.64.1，手工测试环境需按锁定版本重新安装对应浏览器；CI runner镜像指纹由清单、锁文件及补丁生成，会自动重建，不能复用旧浏览器版本。
+使用 Node.js Current 和根 `packageManager` 指定的 pnpm。 当前锁定 pnpm 11.28.10，依赖更新后仍使用 `--frozen-lockfile` 安装；Undici 8 要求 Node.js ≥22.19.0，推荐继续使用 Current。Playwright 已更新至1.64.1，手工测试环境需按锁定版本重新安装对应浏览器；CI runner镜像指纹由清单、锁文件及补丁生成，会自动重建，不能复用旧浏览器版本。
 
 ```bash
 pnpm install --frozen-lockfile
@@ -109,6 +109,8 @@ pnpm run build
 pnpm run check
 pnpm run format:all:check
 ```
+
+传递依赖的安全 override 按真实消费者限定：readdir-glob、ESLint、@eslint/config-array 和 @typescript-eslint/typescript-estree 使用 minimatch 11，避免继续解析受影响的旧版本；升级这些上游包时需同步核对其导出、glob 匹配和审计结果。jschardet 4 沿文件编辑器原动态导入使用，支持现有编码识别接口。
 
 单包用 `build:backend` / `build:frontend`。直接启动后端须提供 `NEXUS_DB_PATH`、`NEXUS_ENCRYPTION_KEY`、`NEXUS_PUBLIC_ORIGIN`；默认绑定 `127.0.0.1:3001`。
 

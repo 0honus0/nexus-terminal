@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -84,6 +84,7 @@ for (const phase of ['read-dispatch', 'approval-dispatch', 'completion']) {
 					(value) => value === 1,
 					'Original SQLite transaction completed before acknowledgement was lost',
 				);
+				await f.wait(run, 'unknown');
 				await f.restart({ verifyCloseFailure: (error) => causes(error).has(lost) });
 				assert.equal(compensations, 0, 'Unknown durable commit cannot trigger speculative Tool settlement');
 				assert.equal(f.calls.length, 1, 'No next model step or automatic operation replay');
@@ -101,14 +102,7 @@ for (const phase of ['read-dispatch', 'approval-dispatch', 'completion']) {
 			} finally {
 				t.mock.restoreAll();
 				const failures = [];
-				if (f) {
-					try {
-						await f.close();
-					} catch (error) {
-						failures.push(error);
-					}
-				}
-				for (const close of [() => sshd?.close(), () => rm(directory, { recursive: true, force: true })]) {
+				for (const close of [() => f?.close(), () => sshd?.close()]) {
 					try {
 						await close();
 					} catch (error) {

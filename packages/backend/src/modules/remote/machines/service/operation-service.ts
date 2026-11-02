@@ -93,7 +93,8 @@ export class RemoteMachineOperationService {
 			!scope.fingerprint ||
 			!Number.isSafeInteger(scope.timeoutMs) ||
 			scope.timeoutMs < 1 ||
-			scope.timeoutMs > 45000
+			// Node timers cannot represent a longer deadline; policy belongs to the caller.
+			scope.timeoutMs > 2_147_483_647
 		) {
 			throw new RemoteFileFailure('invalid_input');
 		}

@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { MutationOrigin } from '@nexus-terminal/shared/remote/mutations/values';
 import type { MachineMutationModel } from '../model/mutation-model.js';
 import type { MachineMutationTarget, MutationRecoveryActor } from '../model/mutation-types.js';
-import { MachineMutationRejection } from '../model/mutation-types.js';
+import { MachineMutationRejection, MachineMutationAdmissionFailure } from '../model/mutation-types.js';
 import { RemoteFileFailure } from '../../files/model/file-types.js';
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 import { ArchiveRejection } from '../../files/model/file-task-types.js';
@@ -77,7 +77,7 @@ export class MachineMutationService {
 				origin,
 				reason: acquired,
 			});
-			throw new RemoteFileFailure(acquired);
+			throw new MachineMutationAdmissionFailure(acquired === 'blocked' ? 'blocked' : 'busy');
 		}
 		logDiagnostic(this.logger, 'info', 'MUTATION_CLAIM_ACQUIRED', {
 			claimId: id,

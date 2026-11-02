@@ -1,5 +1,8 @@
 import type { Readable, Writable } from 'node:stream';
 
+/** Existing route/handshake ceiling; command execution has its own caller-owned deadline. */
+export const MACHINE_CONNECT_MAX_TIMEOUT_MS = 300_000;
+
 /**
  * Technical machine inputs: deliberately no Connection ID, Workspace, Agent,
  * user identity, approval or configuration fingerprint.

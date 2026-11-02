@@ -6,6 +6,7 @@ import {
 	ProviderRequestFailure,
 	ToolOperationRefusal,
 	ToolCapabilityDenied,
+	ToolExecutionUnknown,
 } from '../agent-failure.js';
 
 /** Finite diagnostics only: never persist an exception message or vendor response. */
@@ -22,6 +23,9 @@ export function runFailureCode(error: unknown, tool = false, timedOut = false): 
 	}
 	if (isAgentStorageStatementFailure(error)) {
 		return 'execution_storage_failed';
+	}
+	if (error instanceof ToolExecutionUnknown) {
+		return 'tool_result_unconfirmed';
 	}
 	if (error instanceof ProviderRequestFailure) {
 		switch (error.errorCode) {
@@ -71,6 +75,10 @@ export function runFailureCode(error: unknown, tool = false, timedOut = false): 
 			return 'execution_failed';
 		}
 		switch (error.code) {
+			case 'mutation_busy':
+				return 'tool_machine_busy';
+			case 'mutation_blocked':
+				return 'tool_machine_blocked';
 			case 'host_key_untrusted':
 				return 'tool_host_untrusted';
 			case 'remote_unavailable':

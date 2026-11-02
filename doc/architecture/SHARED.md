@@ -94,9 +94,11 @@ Shared 不依赖 Backend、Frontend、具体 Adapter 或运行时；不访问数
 
 Run 创建请求必填 connectionIds（最多 50 个唯一正整数），与 model 一起由后端严格解码。空数组不是授权；不存在缺字段兼容。工具轮允许零正文，最终 stop 仍要求正文。参数、结果正文、供应商调用身份与 reasoning 不进入 Shared；正式选择器和多步 UI 留 F1。
 
-Agent新增的模型私有诊断/文件/Shell/Docker工具输入、结果、后台Job状态及RemoteMachineOperations后端出口没有前端HTTP消费者，留对应Backend应用/public owner；不因工具目录增加就在Shared复制其内部对象。安全审计仍消费既有Shared工具契约，正式前端操作差异归F-R18–F-R21。后台Shell的公开工具completed仅表示受理回执已持久化，真实执行状态归独立Job；不把受理解释为进程健康或Root成功。
+Agent新增的模型私有诊断/文件/Shell/Docker工具输入、结果、后台Job状态及RemoteMachineOperations后端出口没有前端HTTP消费者，留对应Backend应用/public owner；不因工具目录增加就在Shared复制其内部对象。安全审计仍消费既有Shared工具契约，正式前端操作差异归F-R18–F-R21。后台Shell的公开工具completed仅表示受理回执已持久化，真实执行状态归独立Job；不把受理解释为进程健康或Root成功。前台Shell等待到期也返回原Job，yieldSeconds及Job分页仅属于后端/模型工具协议。Run/tool安全失败取值在agent/runs/values统一增加tool_machine_busy/tool_machine_blocked；HTTP codec与持久解码复用该有限集合，前端NativeToolCallDetails及AgentAppSurface沿原错误区域映射三语文案，不新增UI。
 
 B6.2E 项目目录工具与机器突变占用仅有后端模型/Remote 消费者：ProjectScope/Binding/Guidance 与 claim/storage 留各自内部 owner，不建立 Shared 目录正文、凭据或 row。既有 Shared 工具安全审计和 Remote 错误继续双端消费；正式前端差异见 F-R24，未来恢复接口必须随真实路由补齐 Shared 和投影。
+
+Agent Run/Tool 的有限安全原因包含 tool_result_unconfirmed：任务已停止，远端执行结果无法确认，需核对远端后再决定后续操作。后端 Job 事实经 RunModel 投影，HTTP/WS 和持久诊断解码复用 runs/values，前端原错误区域提供三语文案；不把内部 Job 的失败回调或执行对象加入 Shared。
 
 ## 4. 类型与转换
 

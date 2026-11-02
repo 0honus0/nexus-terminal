@@ -16,6 +16,18 @@
     "lineEndingCr": "CR",
     "resizePopup": "エディターウィンドウのサイズを変更",
     "saveFile": "ファイルを保存",
-    "toggleComment": "コメントを切り替え"
+    "toggleComment": "コメントを切り替え",
+    "search": {
+      "find": "検索",
+      "replace": "置換",
+      "next": "次の一致",
+      "previous": "前の一致",
+      "all": "すべて",
+      "matchCase": "大文字と小文字を区別",
+      "regexp": "正規表現",
+      "wholeWord": "単語単位",
+      "replaceAll": "すべて置換",
+      "close": "検索を閉じる"
+    }
   }
 }

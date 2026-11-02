@@ -241,6 +241,29 @@ export class RunExecutionOwner {
 		}
 	}
 
+	private failToolTask(command: RunExecutionCommand, signal: AbortSignal, toolName: string, error: unknown): void {
+		let runId = command.runId;
+		let task = this.tasks.get(runId);
+		if (!task || task.controller.signal !== signal || signal.aborted) {
+			return;
+		}
+		// A Child's unconfirmed effect also fences its Root and siblings. Resolve
+		// only this exact live family; an old Job cannot interrupt a later Run.
+		while (task && task.userId === command.userId && task.appId === command.appId) {
+			this.runs.rememberFailure(command.userId, command.appId, runId, {
+				code: runFailureCode(error, true),
+				toolName,
+			});
+			task.controller.abort(error);
+			this.abort(command.userId, command.appId, runId);
+			if (task.parentId === null) {
+				break;
+			}
+			runId = task.parentId;
+			task = this.tasks.get(runId);
+		}
+	}
+
 	async drainChildren(scope: { userId: number; appId: string; runId: string }): Promise<void> {
 		const children = [...this.tasks.entries()].filter(
 			([, task]) => task.parentId === scope.runId && task.userId === scope.userId && task.appId === scope.appId,
@@ -410,27 +433,31 @@ export class RunExecutionOwner {
 					Promise.resolve().then(() => this.tools.drainRun(scope)),
 				]);
 				const failures = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
-				if (failures.length) {
-					throw new AggregateError(failures, 'Run resources failed to drain');
+				try {
+					const state = await this.runs.get(command.userId, command.appId, command.runId);
+					if (state && ['completed', 'failed', 'cancelled', 'unknown'].includes(state.status)) {
+						await this.events.publish({
+							key: 'run:' + state.id + ':' + state.version,
+							event:
+								state.status === 'completed'
+									? 'AGENT_RUN_COMPLETED'
+									: state.status === 'failed'
+										? 'AGENT_RUN_FAILED'
+										: state.status === 'unknown'
+											? 'AGENT_ATTENTION_REQUIRED'
+											: 'AGENT_RUN_INTERRUPTED',
+							userId: command.userId,
+							subjectId: state.id,
+							sourceIp: null,
+							route: null,
+							statusCode: null,
+						});
+					}
+				} catch (error) {
+					failures.push(error);
 				}
-				const state = await this.runs.get(command.userId, command.appId, command.runId);
-				if (state && ['completed', 'failed', 'cancelled', 'unknown'].includes(state.status)) {
-					await this.events.publish({
-						key: 'run:' + state.id + ':' + state.version,
-						event:
-							state.status === 'completed'
-								? 'AGENT_RUN_COMPLETED'
-								: state.status === 'failed'
-									? 'AGENT_RUN_FAILED'
-									: state.status === 'unknown'
-										? 'AGENT_ATTENTION_REQUIRED'
-										: 'AGENT_RUN_INTERRUPTED',
-						userId: command.userId,
-						subjectId: state.id,
-						sourceIp: null,
-						route: null,
-						statusCode: null,
-					});
+				if (failures.length) {
+					throw aggregateToolFailures(failures, 'Run resource drain or terminal notification failed');
 				}
 			} catch (cleanup) {
 				if (failure !== null) {
@@ -634,6 +661,10 @@ export class RunExecutionOwner {
 								appId: command.appId,
 								runId: command.runId,
 								modelStepIndex: step.stepIndex,
+								deadlineAt: command.deadlineAt,
+
+								onBackgroundFailure: (error) =>
+									this.failToolTask(command, signal, proposal.toolName, error),
 							},
 							proposal,
 							signal,
@@ -701,15 +732,17 @@ export class RunExecutionOwner {
 					},
 					error,
 				);
-				if (isAgentDrainFailure(error) && !(error instanceof ToolExecutionUnknown)) {
-					throw error;
-				}
 				try {
-					await this.steps.endRoot(this.mutation(command, step), signal.aborted);
+					// This model step's completed revision is confirmed. An independent
+					// Tool/auxiliary commit failure must stop its Root without retrying
+					// that operation's unknown write or guessing whether it succeeded.
+					const uncertain =
+						signal.aborted || (isAgentDrainFailure(error) && !isAgentStorageStatementFailure(error));
+					await this.steps.endRoot(this.mutation(command, step), uncertain);
 				} catch (settlement) {
 					throw new AggregateError([error, settlement], 'Tool failure and Root settlement failed');
 				}
-				if (error instanceof ToolExecutionUnknown) {
+				if (isAgentDrainFailure(error)) {
 					throw error;
 				}
 				return;

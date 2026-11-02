@@ -47,6 +47,7 @@ import {
 	appendNativeConversationEntries,
 	compareNativeEntryCursor,
 	isNativeRunActive,
+	canCancelNativeRun,
 	mergeNativeTools,
 	nativeModelKey,
 } from '../model/native-run-rules';
@@ -427,7 +428,7 @@ export function useNativeRuns(
 					throw new AgentManagementFailure('protocol_failure', 'unknown');
 				// A Run can finish after the body read but before the status read. At its terminal state,
 				// read the final durable entries again instead of leaving the reply behind its cursor.
-				const stopped = !isNativeRunActive(latest) || latest.status === 'unknown';
+				const stopped = !isNativeRunActive(latest);
 				const body =
 					stopped && latest.version > selected.version
 						? await listNativeEntries(current, selectedThread.id, entryCursor.value, signal)
@@ -579,8 +580,7 @@ export function useNativeRuns(
 				operation.refreshRequired.value = false;
 			}
 		}
-		if (!value.more && run.value && (!isNativeRunActive(run.value) || run.value.status === 'unknown'))
-			stopUpdates();
+		if (!value.more && run.value && !isNativeRunActive(run.value)) stopUpdates();
 	}
 
 	watch(operation.busy, (busy) => {
@@ -588,11 +588,7 @@ export function useNativeRuns(
 	});
 	watch(operation.refreshRequired, (required) => {
 		if (required && !awaitingConfirmedUpdate) stopUpdates();
-		else if (
-			awaitingConfirmedUpdate ||
-			(run.value && isNativeRunActive(run.value) && run.value.status !== 'unknown')
-		)
-			startUpdates();
+		else if (awaitingConfirmedUpdate || (run.value && isNativeRunActive(run.value))) startUpdates();
 	});
 
 	async function readMessages(value: NativeChild, more = false): Promise<void> {
@@ -657,7 +653,7 @@ export function useNativeRuns(
 		const selected = thread.value;
 		if (!active() || !canStart() || !input || !selected) return;
 		if (followUp) {
-			if (!run.value || isNativeRunActive(run.value)) return;
+			if (!run.value || canCancelNativeRun(run.value)) return;
 			await mutate({ kind: 'append', run: run.value, input });
 		} else await mutate({ kind: 'create', threadId: selected.id, input });
 	}

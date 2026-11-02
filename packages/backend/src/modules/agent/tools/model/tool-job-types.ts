@@ -47,11 +47,13 @@ export type ToolJobResult =
 	  };
 
 export interface ToolJobPreparation {
-	timeoutMs: number;
+	deadlineAt: number;
+	maxHistory: number;
 	operation: ToolOperation;
 	target: ToolTarget;
 	policyRevision: number;
 	signal: AbortSignal;
 	work(signal: AbortSignal, timeoutMs: number): Promise<Exclude<ToolJobResult, { status: 'not_started' }>>;
 	validate(signal: AbortSignal): Promise<void>;
+	onFailure(error: unknown): void;
 }

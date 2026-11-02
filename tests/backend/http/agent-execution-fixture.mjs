@@ -208,6 +208,10 @@ export async function openAgentExecution(directory, sshd) {
 		database,
 		close,
 
+		get heldModelCount() {
+			return held.size;
+		},
+
 		openWorkspace() {
 			return openWorkspace(address, cookie);
 		},

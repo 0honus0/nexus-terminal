@@ -89,10 +89,8 @@ export interface RunEventPageRecord {
 
 export type StoredCancelRunDecision = 'cancel' | 'already_cancelled' | 'version_conflict' | 'active_run_conflict';
 
-export interface StoredRunFailure {
-	code: AgentRunFailureCode;
-	toolName: string;
-}
+export type StoredRunFailure =
+	{ kind: 'job_unknown'; toolName: string } | { kind: 'tool'; code: AgentRunFailureCode; toolName: string };
 
 export interface RunStorage {
 	failure(userId: number, appId: string, runId: string): Promise<StoredRunFailure | null>;

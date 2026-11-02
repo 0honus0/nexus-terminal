@@ -22,7 +22,7 @@
       "sentToAllSessions": "指令已发送到 {count} 个会话。",
       "noActiveSshSessions": "没有活动的 SSH 会话可发送指令。"
     },
-    "addFailed": "指令已发送，但保存到历史记录失败：{error}",
+    "addFailed": "指令已发送，历史记录未能确认保存：{error}",
     "loadFailed": "加载命令历史失败：{error}",
     "deleteFailed": "删除历史记录失败：{error}",
     "clearFailed": "清空命令历史失败：{error}"

@@ -16,6 +16,18 @@
     "lineEndingCr": "CR",
     "resizePopup": "Resize editor window",
     "saveFile": "Save File",
-    "toggleComment": "Toggle Comment"
+    "toggleComment": "Toggle Comment",
+    "search": {
+      "find": "Find",
+      "replace": "Replace",
+      "next": "next",
+      "previous": "previous",
+      "all": "all",
+      "matchCase": "match case",
+      "regexp": "regexp",
+      "wholeWord": "by word",
+      "replaceAll": "replace all",
+      "close": "close"
+    }
   }
 }

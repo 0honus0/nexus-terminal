@@ -1894,6 +1894,8 @@
       "failureReasons": {
         "tool_not_authorized": "Tool {tool} was not authorized. Check App capability grants, selected SSH targets and current configuration.",
         "tool_timeout": "Tool {tool} timed out.",
+        "tool_machine_busy": "Tool {tool} did not execute: another task is using this machine. Wait for that task to finish.",
+        "tool_machine_blocked": "Tool {tool} did not execute: an earlier task on this machine has unconfirmed effects. Review it in Machine mutation recovery before starting new work; do not replay the unknown command.",
         "tool_invalid_input": "Tool {tool} received invalid arguments or an unsupported file type.",
         "tool_target_unavailable": "The target for tool {tool} is missing or unavailable.",
         "tool_resource_not_found": "The remote file, directory, or resource requested by tool {tool} does not exist. Check the actual path or resource ID.",
@@ -1904,6 +1906,7 @@
         "tool_state_changed": "Configuration, permissions or target state for tool {tool} changed. Refresh before proceeding.",
         "tool_approval_expired": "Approval for tool {tool} was denied, expired or invalidated.",
         "tool_failed": "Tool {tool} failed. No more specific reason was recorded.",
+        "tool_result_unconfirmed": "The execution result of tool {tool} could not be confirmed. The run has stopped. The remote operation may still be running; check its state before executing it again.",
         "model_auth_failed": "Model authentication or access failed. Check the API key and model permissions.",
         "model_rate_limited": "The model service is rate limited or out of quota.",
         "model_timeout": "The model service request timed out.",

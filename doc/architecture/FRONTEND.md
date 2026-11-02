@@ -29,9 +29,9 @@ FileManager 沿原 TerminalDirectoryPort.changeDirectory 的 onQueued 消费 wai
 2. **子功能与目录**：FileEditor转发底部搜索按钮；MonacoEditor调用actions.find，CodeMirrorMobileEditor调用openSearchPanel；删除自定义FileEditorSearchBar和无消费者的搜索状态接口。
 3. **依赖方向**：FileEditor→对应编辑器→已安装的库原生能力，不在父组件复制匹配状态或拦截全局Ctrl+F。
 4. **类型与转换**：单文件组件引用只要求focus/openSearch本地能力，无Shared、Backend或存储类型变更。
-5. **入口与安装**：桌面右上角原生查找，手机原生搜索面板；底部按钮与正文焦点内快捷键共用原生能力。Codicon/find贡献仍在Monaco初始化前加载。
+5. **入口与安装**：桌面右上角原生查找，手机原生搜索面板由CodeMirrorMobileEditor局部样式适配深色三行网格，EditorState.phrases消费既有三语资源；底部按钮与正文焦点内快捷键共用原生能力。Codicon/find贡献仍在Monaco初始化前加载。
 6. **数据、事务与并发**：匹配和高亮由库持有，不维护第二份匹配缓存或定时同步；替换沿原编辑草稿和显式保存链。
-7. **生命周期与失败**：原editor/view销毁回收原生查找；不改变文档加载、只读、保存、缩放和标签生命周期。
+7. **生命周期与失败**：应用语言切换时重建原生面板并保留库的query、替换文本与选项，原editor/view销毁回收原生查找；不改变文档加载、只读、保存、缩放和标签生命周期。
 8. **当前能力与验收**：USAGE文件管理器章节描述操作；专项CDP及静态证据归testing，其他预览不随本次恢复回退。
 
 ### 单连接凭据编辑与挂起前台恢复
@@ -784,7 +784,7 @@ Remote register暴露operations，不新增HTTP路由；Agent register接入Targ
 
 ### 7. 生命周期与失败
 
-RemoteMachineOperationService统一8个名额和45秒整项期限，计入排队/实际读取/关闭及清理失败；Root等待整个工具Promise。停机停止准入、abort所有任务并等待实际收尾；清理失败占名额并汇总因果，安全出口仅带cleanup_failed。请求方治理/存储失败经Model保留原类别，不被Remote安全兜底误改成输入失败。读前/读后复查目标指纹、版本、政策和操作，最终政策检查在异步目标检查之后；结果持久再反馈，unknown不重试。
+RemoteMachineOperationService统一8个名额，完整期限由调用方传入（普通工具冻结预算默认45秒，Shell使用原Run剩余期限），计入排队/实际读取/关闭及清理失败；Root等待整个工具Promise。停机停止准入、abort所有任务并等待实际收尾；清理失败占名额并汇总因果，安全出口仅带cleanup_failed。请求方治理/存储失败经Model保留原类别，不被Remote安全兜底误改成输入失败。读前/读后复查目标指纹、版本、政策和操作，最终政策检查在异步目标检查之后；结果持久再反馈，unknown不重试。
 
 ### 8. 当前能力与验收
 
@@ -825,7 +825,7 @@ Agent ToolModel 仅消费 Targets 与 Remote public。Remote Model 仅消费技�
 
 ### 7. 生命周期与失败
 
-审批轮询由 RunExecutionOwner 的工具调用持有，timer 跟随 AbortSignal 取消，不建立脱离 Root 的后台等待。每轮复查当前授权，批准后先复查目标再单次消费；停机关闭会取消等待。远端整项最多 45 秒，共用 8 个名额，清理失败仍占名额。临时写入开始即有副作用；准备、提交、回读、最终授权或释放失败不能冒充未写入。unknown 不重放，暂存 discard 和资源 close 都尝试，失败保留原因与未收敛证据；确认持久结果之后才反馈模型。
+审批轮询由 RunExecutionOwner 的工具调用持有，timer 跟随 AbortSignal 取消，不建立脱离 Root 的后台等待。每轮复查当前授权，批准后先复查目标再单次消费；停机关闭会取消等待。远端整项受冻结工具预算约束（默认45秒），共用8个名额，清理失败仍占名额。临时写入开始即有副作用；准备、提交、回读、最终授权或释放失败不能冒充未写入。unknown 不重放，暂存 discard 和资源 close 都尝试，失败保留原因与未收敛证据；确认持久结果之后才反馈模型。
 
 ### 8. 当前能力与验收
 
@@ -866,7 +866,7 @@ Agent→ToolModel→Remote public；Remote Service→文件应用能力→FileMo
 
 ### 7. 生命周期与失败
 
-复用8混合名额与45秒完整期限。快照最多100文件/100目录、深度8、单文件1MiB/累计2MiB、元数据256KiB，队列也计预算；每文件按预检长度读取，目录导航项在技术 Adapter 过滤，重复节点拒绝；不跟随链接，二进制文件可hash，不输出内容。patch 原文件/结果最多32KiB，oldText/newText各4KiB且完整JSON16KiB；唯一非空oldText可替换为空，零次/多次/相同替换拒绝。首次远端变更后任意节点拒绝、权限变化、取消、确认或释放失败不能报完整成功。原owner追踪全部资源/清理，未知无重放。
+复用8混合名额与冻结工具完整期限（默认45秒）。快照最多100文件/100目录、深度8、单文件1MiB/累计2MiB、元数据256KiB，队列也计预算；每文件按预检长度读取，目录导航项在技术 Adapter 过滤，重复节点拒绝；不跟随链接，二进制文件可hash，不输出内容。patch 原文件/结果最多32KiB，oldText/newText各4KiB且完整JSON16KiB；唯一非空oldText可替换为空，零次/多次/相同替换拒绝。首次远端变更后任意节点拒绝、权限变化、取消、确认或释放失败不能报完整成功。原owner追踪全部资源/清理，未知无重放。
 
 ### 8. 当前能力与验收
 
@@ -880,7 +880,7 @@ N15 同批实现 Shell 前台/后台、Job list/status/wait/cancel 和 Docker in
 
 ### 2. 子功能与目录
 
-ToolService 持有声明/审批/派发及工具资源排空的失败汇总。全部子失败均属 ToolExecutionUnknown 时保留该类别（清理未确认保留 ToolCleanupFailure），由 RunExecutionOwner CAS 收口 unknown；混合存储/内部失败保留 AggregateError，不猜测后续状态写入。tools/service/tool-job-service 持有有限后台任务、轮询权限、等待与收尾，tools/model/tool-job-model 做独立存储转换，tools/storage 及 adapters/sqlite 持久身份/状态。Remote machines/model/command-model 转换应用命令、结果与 SSH 生命周期，platform/commands Adapter 持有 POSIX argv/cwd/script 语法。Docker 复用 ObservationModel 和 NativeDockerAdapter，OperationService 持有原状态前提及后验政策。
+ToolService 持有声明/审批/派发及工具资源排空的失败汇总。全部子失败均属 ToolExecutionUnknown 时保留该类别（清理未确认保留 ToolCleanupFailure），由 RunExecutionOwner CAS 收口 unknown；混合存储/内部失败保留 AggregateError，不猜测后续状态写入。tools/service/tool-job-service 持有前台/后台 Shell 的持续任务、轮询权限、等待与收尾，tools/model/tool-job-model 做独立存储转换，tools/storage 及 adapters/sqlite 持久身份/状态。Remote machines/model/command-model 转换应用命令、结果与 SSH 生命周期，platform/commands Adapter 持有 POSIX argv/cwd/script 语法。Docker 复用 ObservationModel 和 NativeDockerAdapter，OperationService 持有原状态前提及后验政策。
 
 ### 3. 依赖方向
 
@@ -892,15 +892,15 @@ Agent Service→ToolModel→Remote public→独立 OperationService→Command/Ob
 
 ### 5. 入口与安装
 
-新增 shell_execute v2、shell_job_control v2、machine_docker_inspect/control v2。执行与取消分别单次批准；状态/列表/等待只读且需当前 shell.execute；Docker 要 machine.docker.manage，remove 为 destructive。Job prepare 在原工具单次消费后持久 queued，原工具完成提交确认后才 launch，Job dispatched 提交确认后才发 SSH；数据库 unknown 不派发或自动重试。
+新增 shell_execute v2、shell_job_control v2、machine_docker_inspect/control v2。执行与取消分别单次批准；状态/列表/等待只读且需当前 shell.execute；Docker 要 machine.docker.manage，remove 为 destructive。Shell在原工具单次消费后持久queued；foreground可在原工具dispatched期间launch并等待，background在原工具受理回执提交确认后launch。Job dispatched提交确认后才发SSH，两个模式均在当前Run/原工具授权下执行；数据库unknown不派发或自动重试。foreground在yield窗口内完成保持原退出结果，否则把同一个Job交给shell_job_control查询，不再派发命令。Job权限监测允许原工具dispatched→completed且revision恰好加一、operationHash不变的交付竞态：仅重新读取并校验一次当前权威，不放宽目标、政策、审批或真实终态；拒绝和存储失败仍保留原类别。
 
 ### 6. 数据、事务与并发
 
-更新唯一 v1 初始化：新增 agent_tool_jobs；id 绑定原工具记录，完整 scope/目标版本/命令身份独立持久化。queued/dispatched→completed/failed/unknown 使用 CAS；重启 queued 确认未派发为 failed，dispatched 为 unknown，不恢复技术句柄或自动重放。最多8后台槽、每Run最多64历史项；派发前预留终态结算的版本空间，启动恢复的批量递增先完整检查耗尽。Docker 必须传完整64hex ID与 inspect 指纹（id/state/image/created），控制前复核，控制后确认目标状态/不存在；跨调用外部竞争窗口明确保留。
+更新唯一 v1 初始化：新增 agent_tool_jobs；id 绑定原工具记录，完整 scope/目标版本/命令身份独立持久化。queued/dispatched→completed/failed/unknown 使用 CAS；重启 queued 确认未派发为 failed，dispatched 为 unknown，不恢复技术句柄或自动重放。最多8活跃Shell槽；历史项受原冻结maxToolExecutions约束，不因前台转Job引入64次执行上限；list按64项分页并返回nextOffset；派发前预留终态结算的版本空间，启动恢复的批量递增先完整检查耗尽。Docker 必须传完整64hex ID与 inspect 指纹（id/state/image/created），控制前复核，控制后确认目标状态/不存在；跨调用外部竞争窗口明确保留。
 
 ### 7. 生命周期与失败
 
-Shell argv≤128项、总8KiB，script≤8KiB，cwd≤256bytes，完整参数JSON≤16KiB；stdout/stderr合计32KiB有界捕获，明确truncated，完整结果可容纳最坏JSON转义。Remote 仍共用8任务/45秒整项期限，后台不突破原限制；等待最多30秒，等待超时不取消Job。每个后台任务、权限监测、timer/listener/Promise均有原owner；完整期限包含Job持久准备和等待启动，派发前再次核对剩余时间；每秒复查原批准/目标/当前权威，终态结算前先停止并等待权限监控收敛，失效取消后等真实收尾。根取消/结束/停机统一drain；清理失败保留配额和原因。Shell非零退出是已确认命令失败，SSH派发未知、取消、后验失败和清理失败不得报远端回滚。
+Shell argv≤128项、总8KiB，script≤8KiB，cwd≤256bytes，完整参数JSON≤16KiB；stdout/stderr合计32KiB有界捕获，明确truncated，完整结果可容纳最坏JSON转义。Remote仍共用8任务，Shell的实际执行截止时间来自原Run的绝对deadlineAt，不随yield/续查重置。foreground的yieldSeconds可为0，默认冻结toolTimeoutSeconds并以其封顶；窗口到期仅返回Job快照，不abort。job wait默认10秒、最多30秒且受冻结工具等待预算约束，到期同样保留执行。不可续查的其它工具仍使用冻结工具执行期限（默认45秒），Remote不再额外把合法配置硬截为45秒。连接握手单独遵守Platform既有300秒技术上限，命令消耗Run剩余期限。每个任务、权限监测、timer/listener/Promise均有原owner；派发前再次核对剩余时间；每秒复查原批准/目标/当前权威，终态结算前先停止并等待权限监控收敛，失效取消后等真实收尾。根取消/结束/停机统一drain；清理失败保留配额和原因。Shell非零退出是已确认命令失败，SSH派发未知、取消、后验失败和清理失败不得报远端回滚。工具说明要求模型在需要结果时继续等待原Job，不能因yield重跑或提前结束Run。模型主动结束Run仍沿原收尾政策取消剩余Job。已有held/blocked由Mutation SQLite在获取全部资源的同一事务分类，具名准入拒绝经Remote public/ToolModel映射为tool_machine_busy/tool_machine_blocked，新操作failed且没有新副作用；原blocked证据保留，只能沿现有恢复流程核对。
 
 ### 8. 当前能力与验收
 
@@ -934,7 +934,7 @@ Agent ToolService→ToolModel→Remote public→OperationService→MachineAcpMod
 
 ### 7. 生命周期与失败
 
-复用8混合名额/45秒整项期限；每父最多64受支持权限操作、逐请求当前权限复查，等待不得延长任务期限。argv最多128项/8KiB，cwd256bytes、prompt8KiB、完整工具参数16KiB；单NDJSON消息256KiB、总输入8MiB、文本输出32KiB。技术流的pending请求、writer/reader、监听、权限Promise和关闭结果均由原owner追踪。prompt派发后失败/取消为unknown；初始化前拒绝区分未启动业务prompt与远端程序已经启动。关闭保留全部原因，不能吞错；本地关闭不证明远端进程停止。
+复用8混合名额/冻结工具整项期限（默认45秒）；每父最多64受支持权限操作、逐请求当前权限复查，等待不得延长任务期限。argv最多128项/8KiB，cwd256bytes、prompt8KiB、完整工具参数16KiB；单NDJSON消息256KiB、总输入8MiB、文本输出32KiB。技术流的pending请求、writer/reader、监听、权限Promise和关闭结果均由原owner追踪。prompt派发后失败/取消为unknown；初始化前拒绝区分未启动业务prompt与远端程序已经启动。关闭保留全部原因，不能吞错；本地关闭不证明远端进程停止。
 
 ### 8. 当前能力与验收
 
@@ -1025,7 +1025,7 @@ remote_machine_mutations 按 SHA-256([lowercase host,port]) 唯一。ID/user/凭
 
 占用涵盖实际操作、远端结果确认、独立资源清理和最终授权复查；后台 Job 在实际执行时持有，受理回执不持有假执行占用。确定结果/拒绝且清理完成释放；operation_unknown、未知异常或清理失败保留 blocked。拒绝的归档操作必须由原归档 owner 完成私有临时项清理，Host Key 拒绝不等于已执行突变。结算失败保留未知，不在未知释放后猜测第二次写入；清理与结算双失败仍保留 RemoteResourceCleanupFailure 供停机 owner 汇总。重启将 held 保守转 blocked，不恢复执行、不按 TTL 自动释放。
 
-项目读取共用45秒整项期限，绑定只在指导读取及当前授权复查后提交；目标 version/fingerprint 改变拒绝旧上下文，不隐式重绑定。占用不是 OS 隔离：交互 PTY、外部客户端、后台派生进程不受此数据库锁控制，命令退出/SSH close 不能证明派生进程停止。已确认远端结果后的响应丢失不自动重放副作用。
+项目读取共用冻结工具整项期限（默认45秒），绑定只在指导读取及当前授权复查后提交；目标 version/fingerprint 改变拒绝旧上下文，不隐式重绑定。占用不是 OS 隔离：交互 PTY、外部客户端、后台派生进程不受此数据库锁控制，命令退出/SSH close 不能证明派生进程停止。已确认远端结果后的响应丢失不自动重放副作用。
 
 ### 8. 当前能力与验收
 
@@ -1738,8 +1738,8 @@ Context预压缩现状：checkpoint工具需要实际context.compact授权，摘
 3. 依赖：TerminalView → vendor → xterm/mitt；不引入 VS Code 平台、遥测、设置服务或反向依赖 Workspace。
 4. 类型与转换：TerminalChannel 可选 onInputSent 为技术 Port，只发布修饰键转换后且 WebSocket 实际接受的输入，拒绝/未发送内容不参与预测；无 Shared/存储契约变化。
 5. 入口：Workspace adapter 成功 sendConnected 后通知订阅，Surface 转发；View 仅在可见、可输入的实时画面启用。按样本延迟/准确率选择预测，首字符先确认，Unicode/粘贴和复杂模式等待真实回显。
-6. 并发：本地预测、远端输出和撤销经同一个 xterm 解析队列；远端 ACK 保留原始字节及原回调，只在真实解析后释放。部分CSI与仅光标显隐/报告帧不作为回显不匹配；连续DEL按解析顺序逐字读取撤销信息；右边界仅约束向前打印，未确认换行通过HardBoundary保留已有显示至真实输出收敛。预测不可替代服务器输出或重放输入。
-7. 生命周期：失活/后台、断线/错误、历史、resize、PTY替换和快照先撤销；snapshot 等待解析屏障；销毁取消 timer/标题订阅与样本订阅。旧 epoch 排队输入失效。备用屏幕、隐藏光标、原点/插入模式和滚动区内不预测；滚动区下方的普通输入行可参与，但不预测跨行滚动。
+6. 并发：本地预测、远端输出和撤销经同一个 xterm 解析队列；远端 ACK 保留原始字节及原回调，只在真实解析后释放。部分CSI与仅光标显隐/报告帧不作为回显不匹配；退格前分包的SGR样式等待后续回显匹配并保留真实样式；连续DEL按解析顺序逐字读取撤销信息；右边界仅约束向前打印，未确认换行通过HardBoundary保留已有显示至真实输出收敛。同一行尾删除与尚未确认的字符建立覆盖关系，确认旧字符时只保留其样式，不重画已删文字；配对字符记录真实回显样式，合并回显解锁generation时即使单元格尚未解析，撤销删除仍可还原已确认内容。预测不可替代服务器输出或重放输入。
+7. 生命周期：失活/后台、断线/错误、历史、resize、PTY替换和快照先撤销；snapshot 等待解析屏障；超时仅清理不可见探测，已显示的待确认编辑由实际回显或生命周期重置收敛；超时回调在串行队列中复验原timer身份，避免旧回调清除新输入。销毁取消 timer/标题订阅与样本订阅。旧 epoch 排队输入失效。备用屏幕、隐藏光标、原点/插入模式和滚动区内不预测；滚动区下方的普通输入行可参与，但不预测跨行滚动。
 8. 验收：定向算法回放、真实 Codex 捕获流和组件/传输回归分别记录 testing/E2E；类型/构建不能代表真实弱网所有程序通过。不新增远端 helper 或改变现有输入流控。
 
 ### 工作区固定命令栏与纵向分隔条
@@ -1775,7 +1775,20 @@ FileManager 的桌面文件行不拦截 mousedown 默认行为，保留浏览器
 
 ### 浏览器前台恢复与可视键盘几何
 
+TerminalView 的原 4px/5px/3px 内容边距归外层 terminal-container；供 FitAddon 测量的 terminal-inner-container 保持无内边距，百分比高度和宽度使用外层扣除边距后的内容盒。FitAddon 会扣除 xterm 自身边距，但不扣其父元素的边距；因此不能把外层总高度当作可用行高。原 ResizeObserver、typeahead reset、快照及 PTY resize 屏障继续持有尺寸更新，内置键盘只参与 Surface 原有 flex 高度分配。
+
 TerminalView 在 pageshow、恢复可见及失焦后的窗口重新聚焦时清理未完成触摸、恢复 inputmode/readOnly，并依据当前连接状态设置 xterm disableStdin；普通聚焦不清理正在进行的手势或输入法。取消旧 geometryFrame 后立即拟合，并保留下一帧收敛；预测撤销、快照与 PTY generation 原屏障仍先于真实 resize。WorkspacePage 在 visualViewport resize/scroll、前台恢复和聚焦时同步读取可视高度，再合并下一帧测量，避免旧 rAF 阻塞键盘自适应；隐藏/卸载取消旧帧并解除监听。呈现恢复不等待网络存活检查，不主动唤起键盘、不合成输入法提交事件，也不重发终端输入。原 UI 样式、布局与连接就绪语义保持。
+
+### 服务器状态趋势时间轴与加载
+
+1. 职责与范围：StatusCharts 持时间轴显示，StatusMonitor 的异步组件持加载；不改变采样和历史保留。
+2. 子功能与目录：沿 features/status-monitor/components，StatusChartLoading 只呈现加载网格和提示，不画模拟曲线。
+3. 依赖方向：StatusMonitor → 原异步 StatusCharts → Chart.js/vue-chartjs；加载组件仅依赖原 i18n。
+4. 类型与转换：无新协议、共享或模型类型；原 history → TimedChartPoint 转换不变，加载组件不透传业务属性到 DOM。
+5. 入口与安装：原指标点击打开趋势及范围切换不变；X 轴禁用 tick 留白，标签水平显示，字体与间距抵消父面板缩放。
+6. 数据、事务与并发：历史和最新时间仍归原 session controller；加载无自己的采样/请求/缓存或持久状态。
+7. 生命周期与失败：复用 defineAsyncComponent 的原 delay、模块缓存及异常传播；加载网格用 CSS 呼吸效果，prefers-reduced-motion 下静止，无新增计时器或监听。
+8. 当前能力与验收：只调整时间刻度占位与趋势加载呈现；范围、孤立点、缺测断线及 tooltip 保持原逻辑，指定 CDP 与静态结果见 testing。
 
 ### 手动重置 SSH 终端
 
@@ -1791,3 +1804,18 @@ TerminalView 在 pageshow、恢复可见及失焦后的窗口重新聚焦时清�
 ### SSH 测试的主机密钥确认
 
 连接列表/批量测试与保存/未保存表单共用connections/model/connection-test的确认流程。API严格解码HTTP状态及Shared挑战联合，逐字段转为内部ConnectionTestHostKeyFailure，不持有弹窗；Model复用host-key-trust的全局确认和信任写入，只在明确确认后重新握手。未保存草稿在首次请求捕获，取消不续测、不遗留成功状态，页面/认证失效由原signal与generation阻止后续操作。多跳按实际host/port分别确认；同一端点再次拒绝或指纹已等于预期时直接失败，避免重复确认循环。等待人工确认不持有SSH连接，不创建Workspace或保存未保存连接；信任写入确认丢失仍复用原只读核对，不自动重写。原布局、控件及文案不变，实机证据与覆盖边界见testing。
+
+### 命令历史未知写入恢复
+
+1. **职责与范围**：command-history store拥有历史队列和未知写入阻断，WorkspacePage拥有终端发送完成后的追加及其安全提示。
+2. **子功能与目录**：沿command-history原store/API/Panel和WorkspacePage，复用shared/feedback的preferenceFailureMessage及现有通知刷新动作。
+3. **依赖方向**：Page→feature controller→store→API→既有Shared；不把错误正文或技术结果传入Shared。
+4. **类型与转换**：PreferenceRequestFailure的code/outcome使用既有安全mapper；load无需恢复标记参数，正式Panel和集成消费者同步。
+5. **入口与安装**：发送成功后历史追加失败提示“未能确认保存”及具体安全原因，通知可只读刷新；面板原搜索、紧凑、清空及行操作不变。
+6. **数据、事务与并发**：读取和写入共享单一队列；阻断时新写入先在当前任务内读取，成功才清除阻断并执行新意图，不递归排入同一队列。不自动重放未知追加。
+7. **生命周期与失败**：读取后复核原scope和permission；reset取消旧scope、替换队列并清空缓存，晚返回不能发布。恢复读取失败保留阻断；未知写入继续阻断，普通读取成功同样恢复。追加确认后读取失败单独记录，不误报追加失败或重发命令。
+8. **当前能力与验收**：USAGE个人历史说明操作与恢复；CDP隔离故障及静态证据归testing，新实际SSH回执丢失E2E待远程执行，生产原始触发原因未据此确认。
+
+### Agent 执行结果未确认
+
+Run/Tool 安全原因增加 tool_result_unconfirmed，继续由 AgentAppSurface 与 NativeToolCallDetails 在原错误区域呈现三语说明。后台 Job 故障由后端结束所属 Run/族并失效待审批工具。isNativeRunActive 仅表示 pending/running，unknown 停止状态订阅等待；canCancelNativeRun 另保留 unknown 的显式结束资格，原 composer/详情结束入口与续发保护同步消费，避免把已停止的执行与尚未人工结束的围栏混为一谈。不新增等待计时、重试入口或 UI 布局。明确说明任务已停止、远端可能仍在运行，并要求核对后再操作。状态与原因通过原 HTTP/WS codec 读取，历史重读不派发命令。

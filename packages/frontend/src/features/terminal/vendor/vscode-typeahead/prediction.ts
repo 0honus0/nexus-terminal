@@ -15,6 +15,7 @@ const enum VT {
 }
 
 const CSI_STYLE_RE = /^\x1b\[[0-9;]*m/;
+const CSI_STYLES_RE = /\x1b\[[0-9;]*m/g;
 const CSI_MOVE_RE = /^\x1b\[?([0-9]*)(;[35])?O?([DC])/;
 const NOT_WORD_RE = /[^a-z0-9]/i;
 
@@ -365,6 +366,8 @@ const isTenativeCharacterPrediction = (p: unknown): p is TentativeBoundary & { i
  */
 class CharacterPrediction implements IPrediction {
 	readonly affectsStyle = true;
+	erased = false;
+	private confirmedEcho?: string;
 
 	appliedAt?: {
 		pos: ICoordinate;
@@ -373,6 +376,14 @@ class CharacterPrediction implements IPrediction {
 	};
 
 	constructor(private readonly _char: string) {}
+
+	confirmEcho(attributes: string): void {
+		this.confirmedEcho = attributes + this._char;
+	}
+
+	restoreEcho(fallbackAttributes: string): string {
+		return this.confirmedEcho ?? fallbackAttributes + this._char;
+	}
 
 	apply(_: IBuffer, cursor: Cursor) {
 		const cell = cursor.getCell();
@@ -398,6 +409,11 @@ class CharacterPrediction implements IPrediction {
 	rollForwards(cursor: Cursor, input: string) {
 		if (!this.appliedAt) {
 			return ''; // not applied
+		}
+		if (this.erased) {
+			// A later local delete already covers this character. Confirm its echo
+			// without painting it over the user's newer edit; retain server styling.
+			return input.match(CSI_STYLES_RE)?.join('') ?? '';
 		}
 
 		return cursor.clone().moveTo(this.appliedAt.pos) + input;
@@ -431,6 +447,7 @@ class CharacterPrediction implements IPrediction {
 }
 
 class BackspacePrediction implements IPrediction {
+	private erasedCharacter?: CharacterPrediction;
 	protected _appliedAt?: {
 		pos: ICoordinate;
 		oldAttributes: string;
@@ -439,6 +456,21 @@ class BackspacePrediction implements IPrediction {
 	};
 
 	constructor(private readonly _terminal: Terminal) {}
+
+	eraseCharacter(prediction: CharacterPrediction): boolean {
+		const erased = this._appliedAt;
+		const character = prediction.appliedAt;
+		if (
+			!erased?.isLastChar ||
+			!character ||
+			erased.pos.x - 1 !== character.pos.x ||
+			erased.pos.y + erased.pos.baseY !== character.pos.y + character.pos.baseY
+		)
+			return false;
+		this.erasedCharacter = prediction;
+		prediction.erased = true;
+		return true;
+	}
 
 	apply(_: IBuffer, cursor: Cursor) {
 		// at eol if everything to the right is whitespace (zsh will emit a "clear line" code in this case)
@@ -460,18 +492,25 @@ class BackspacePrediction implements IPrediction {
 		}
 
 		const { oldAttributes, oldChar, pos } = this._appliedAt;
-		if (!oldChar) {
-			return cursor.moveTo(pos) + VT.DeleteChar;
-		}
-
-		return oldAttributes + oldChar + cursor.moveTo(pos) + attributesToSeq(readCurrentAttributes(this._terminal));
+		// A generation can be unlocked by a coalesced echo before xterm has parsed
+		// its cells. The paired character retains the confirmed text and styling.
+		const restore = this.erasedCharacter?.restoreEcho(oldAttributes) ?? oldAttributes + (oldChar || VT.DeleteChar);
+		return (
+			cursor.moveTo({ x: pos.x - 1, y: pos.y, baseY: pos.baseY }) +
+			restore +
+			cursor.moveTo(pos) +
+			attributesToSeq(readCurrentAttributes(this._terminal))
+		);
 	}
 
-	rollForwards() {
-		return '';
+	rollForwards(_: Cursor, input: string) {
+		return input.match(CSI_STYLES_RE)?.join('') ?? '';
 	}
 
 	matches(input: StringReader) {
+		const startIndex = input.index;
+		while (input.eatRe(CSI_STYLE_RE)) {}
+		if (input.eof || input.hasIncompleteControlSequence) return MatchResult.Buffer;
 		if (this._appliedAt?.isLastChar) {
 			const r1 = input.eatGradually(`\b${VT.Csi}K`);
 			if (r1 !== MatchResult.Failure) {
@@ -484,6 +523,7 @@ class BackspacePrediction implements IPrediction {
 			}
 		}
 
+		input.index = startIndex;
 		return MatchResult.Failure;
 	}
 }
@@ -742,6 +782,13 @@ class PredictionTimeline {
 		return this._showPredictions;
 	}
 
+	get hasVisiblePredictions() {
+		return (
+			this._showPredictions &&
+			this._currentGenerationPredictions.some((prediction) => !(prediction instanceof TentativeBoundary))
+		);
+	}
+
 	get length() {
 		return this._expected.length;
 	}
@@ -818,6 +865,7 @@ class PredictionTimeline {
 
 		const reader = new StringReader(input);
 		const startingGen = this._expected[0]?.gen;
+		let serverAttributes = attributesToSeq(readCurrentAttributes(this.terminal));
 
 		const emitPredictionOmitted = () => {
 			const omit = reader.eatRe(PREDICTION_OMIT_RE);
@@ -847,6 +895,8 @@ class PredictionTimeline {
 					// if the input character matches what the next prediction expected, undo
 					// the prediction and write the real character out.
 					const eaten = input.slice(beforeTestReaderIndex, reader.index);
+					serverAttributes += eaten.match(CSI_STYLES_RE)?.join('') ?? '';
+					if (prediction instanceof CharacterPrediction) prediction.confirmEcho(serverAttributes);
 					if (gen === startingGen) {
 						output += prediction.rollForwards?.(cursor, eaten);
 					} else {
@@ -939,12 +989,26 @@ class PredictionTimeline {
 		this._expected.push({ gen: this._currentGen, p: prediction });
 		this.events.emit('added', prediction);
 
-		if (this._currentGen !== this._expected[0]?.gen) {
-			prediction.apply(buffer, this.tentativeCursor(buffer));
-			return false;
+		const visibleGeneration = this._currentGen === this._expected[0]?.gen;
+		const text = prediction.apply(
+			buffer,
+			visibleGeneration ? this.physicalCursor(buffer) : this.tentativeCursor(buffer),
+		);
+		if (prediction instanceof BackspacePrediction) {
+			for (let i = this._expected.length - 2; i >= 0; i--) {
+				const previous = this._expected[i];
+				if (!previous || previous.gen !== this._currentGen) break;
+				if (
+					previous.p instanceof CharacterPrediction &&
+					!previous.p.erased &&
+					prediction.eraseCharacter(previous.p)
+				) {
+					break;
+				}
+			}
 		}
+		if (!visibleGeneration) return false;
 
-		const text = prediction.apply(buffer, this.physicalCursor(buffer));
 		this._tenativeCursor = undefined; // next read will get or clone the physical cursor
 
 		if (this._showPredictions && text) {
@@ -1249,14 +1313,27 @@ export class TerminalTypeAhead {
 
 	private deferClearing(): void {
 		clearTimeout(this.timer);
-		if (!this.timeline.length || this.timeline.peekStart()?.clearAfterTimeout === false || this.stopped) return;
-		this.timer = setTimeout(
+		this.timer = undefined;
+		// Silence alone cannot invalidate accepted, visible input on a jittery link.
+		// Expire only invisible probes; real output or lifecycle resets reconcile edits.
+		if (
+			!this.timeline.length ||
+			this.timeline.hasVisiblePredictions ||
+			this.timeline.peekStart()?.clearAfterTimeout === false ||
+			this.stopped
+		)
+			return;
+		const timer = setTimeout(
 			() => {
-				void this.reset();
+				this.enqueue(() => {
+					if (this.stopped || this.timer !== timer || this.timeline.hasVisiblePredictions) return;
+					this.clear();
+				});
 			},
 			// Allow the first real sample on very high RTT links before using learned latency.
 			Math.max(this.stats.sampleSize ? 500 : 5000, this.stats.maxLatency * 1.5),
 		);
+		this.timer = timer;
 	}
 
 	private predictInput(data: string): void {
@@ -1314,7 +1391,9 @@ export class TerminalTypeAhead {
 			if (reader.eatCharCode(127)) {
 				// backspace
 				const previous = this.timeline.peekEnd();
-				if (previous && previous instanceof CharacterPrediction) {
+				const cursor = this.timeline.tentativeCursor(buffer);
+				const atEnd = !cursor.getLine()?.translateToString(undefined, cursor.x).trim();
+				if (previous instanceof CharacterPrediction && !atEnd) {
 					this.timeline.addBoundary();
 				}
 

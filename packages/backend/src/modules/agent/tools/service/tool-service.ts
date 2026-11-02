@@ -24,13 +24,15 @@ import type { RunToolProposal } from '../../runs/model/run-types.js';
 import type { ToolOperation } from '../../runs/model/run-tool-types.js';
 import type { GovernanceService } from '../../governance/service/governance-service.js';
 import type { ToolAuthority } from '../../governance/model/governance-types.js';
-import type { ToolInput, ToolDefinition, ToolTarget } from '../model/tool-types.js';
+import type { ToolInput, ToolDefinition, ToolTarget, ToolExecutionScope } from '../model/tool-types.js';
 import type { ExecutionService } from '../../execution/service/execution-service.js';
+import type { ExecutionLimits } from '../../execution/model/execution-types.js';
 import { toolDefinitions } from './tool-definitions.js';
 import { toolInput } from './tool-input.js';
 import {
 	AgentFailure,
 	ToolOperationRefusal,
+	ToolMutationAdmissionRefusal,
 	ToolExecutionUnknown,
 	isAgentDrainFailure,
 	aggregateToolFailures,
@@ -50,6 +52,9 @@ function recoverableToolError(error: unknown): boolean {
 
 function interrupted(signal: AbortSignal): void {
 	if (signal.aborted) {
+		if (signal.reason instanceof ToolExecutionUnknown) {
+			throw signal.reason;
+		}
 		throw new AgentFailure('provider_unavailable');
 	}
 }
@@ -210,11 +215,7 @@ export class ToolService {
 		private readonly images: ProviderImageService,
 	) {}
 
-	async execute(
-		scope: { userId: number; appId: string; runId: string; modelStepIndex: number },
-		proposal: RunToolProposal,
-		signal: AbortSignal,
-	): Promise<string> {
+	async execute(scope: ToolExecutionScope, proposal: RunToolProposal, signal: AbortSignal): Promise<string> {
 		const configuration = await this.settings.frozen(scope.userId, scope.appId, scope.runId);
 		const trusted = definition(proposal);
 		let prepared: {
@@ -292,10 +293,11 @@ export class ToolService {
 				throw new AgentFailure('version_conflict');
 			}
 			current = admitted.operation;
-			// Paid image generation uses the Run's remaining deadline, including file publication.
-			// The ordinary tool timeout is intended for short tool operations.
+			// Resumable Shell work is Run-owned. Its wait window must never abort execution.
 			taskSignal =
-				input.kind === 'image_generate'
+				input.kind === 'image_generate' ||
+				input.kind === 'shell' ||
+				(input.kind === 'job' && input.action === 'wait')
 					? signal
 					: AbortSignal.any([signal, AbortSignal.timeout(configuration.limits.toolTimeoutSeconds * 1000)]);
 			const result = await this.perform(
@@ -304,10 +306,10 @@ export class ToolService {
 				current,
 				admitted.policy.revision,
 				taskSignal,
-				configuration.limits.toolTimeoutSeconds * 1000,
+				configuration.limits,
 				configuration.limits.maxToolOutputBytes,
 				validateIntegration,
-				signal,
+				{ signal, deadlineAt: scope.deadlineAt, onBackgroundFailure: scope.onBackgroundFailure },
 			);
 			interrupted(taskSignal);
 			if (Buffer.byteLength(result.text, 'utf8') > TOOL_RESULT_MAX_BYTES) {
@@ -355,7 +357,13 @@ export class ToolService {
 				settled = await this.journal.finish({
 					identity: { userId: scope.userId, appId: scope.appId, runId: scope.runId, id: current.id },
 					expectedRevision: current.revision,
-					state: current.state === 'inspected' || recoverable ? 'failed' : 'unknown',
+					state:
+						current.state === 'inspected' ||
+						recoverable ||
+						error instanceof ToolMutationAdmissionRefusal ||
+						(input.kind === 'shell' && error instanceof ToolOperationRefusal)
+							? 'failed'
+							: 'unknown',
 					resultText: JSON.stringify({
 						failureCode: runFailureCode(error, true, taskSignal?.aborted === true && !signal.aborted),
 					}),
@@ -485,11 +493,13 @@ export class ToolService {
 		operation: ToolOperation,
 		revision: number,
 		signal: AbortSignal,
-		timeoutMs: number,
+		limits: ExecutionLimits,
 		previewBytes: number,
 		validateIntegration: () => Promise<void>,
-		runSignal: AbortSignal,
+		run: { signal: AbortSignal; deadlineAt: number; onBackgroundFailure(error: unknown): void },
 	): Promise<{ text: string; targets: { id: number; version: number }[] }> {
+		const timeoutMs = limits.toolTimeoutSeconds * 1000;
+
 		const validate = async () => {
 			await validateIntegration();
 			if (target) {
@@ -744,13 +754,14 @@ export class ToolService {
 				const text = await this.jobs.control(
 					{ userId: operation.userId, appId: operation.appId, runId: operation.runId },
 					target,
-					{ action: input.action, jobId: input.jobId, waitSeconds: input.waitSeconds },
+					{ action: input.action, jobId: input.jobId, waitSeconds: input.waitSeconds, offset: input.offset },
 					signal,
 					validate,
+					timeoutMs,
 				);
 				return { text, targets: [{ id: target.id, version: target.version }] };
 			}
-			if (input.kind === 'shell' && input.mode === 'background') {
+			if (input.kind === 'shell') {
 				const jobValidate = async (jobSignal: AbortSignal) => {
 					const current = await this.journal.get({
 						userId: operation.userId,
@@ -762,18 +773,18 @@ export class ToolService {
 						throw new AgentFailure('version_conflict');
 					}
 					await this.model.validateTarget(target);
-					await this.verify(current, revision, jobSignal);
+					await this.verifyJob(current, revision, jobSignal);
 				};
 
 				const text = await this.jobs.prepare({
 					operation,
 					target,
 					policyRevision: revision,
-					// The accepted background Job belongs to the Run, not to the
-					// completed shell_execute invocation's tool timeout signal. The
-					// JobService owns its independent bounded deadline and Root drain.
-					signal: runSignal,
-					timeoutMs,
+					// Every yield keeps the original absolute Run deadline.
+					signal: run.signal,
+					deadlineAt: run.deadlineAt,
+					maxHistory: limits.maxToolExecutions,
+					onFailure: run.onBackgroundFailure,
 
 					work: (jobSignal, timeoutMs) =>
 						this.model.command(input, {
@@ -788,6 +799,20 @@ export class ToolService {
 
 					validate: jobValidate,
 				});
+				if (input.mode === 'foreground') {
+					this.jobs.launch(operation.id);
+					return {
+						text: await this.jobs.foreground(
+							{ userId: operation.userId, appId: operation.appId, runId: operation.runId },
+							target,
+							operation.id,
+							Math.min(input.yieldSeconds ?? limits.toolTimeoutSeconds, limits.toolTimeoutSeconds) * 1000,
+							signal,
+							validate,
+						),
+						targets: [{ id: target.id, version: target.version }],
+					};
+				}
 				return { text, targets: [{ id: target.id, version: target.version }] };
 			}
 			const text = await this.model.perform(input, {
@@ -835,6 +860,37 @@ export class ToolService {
 		const failures = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
 		if (failures.length) {
 			throw aggregateToolFailures(failures, 'Tool resources failed to drain');
+		}
+	}
+
+	private async verifyJob(operation: ToolOperation, policyRevision: number, signal: AbortSignal): Promise<void> {
+		try {
+			await this.verify(operation, policyRevision, signal);
+		} catch (error) {
+			if (
+				!(error instanceof AgentFailure) ||
+				error.code !== 'version_conflict' ||
+				operation.state !== 'dispatched'
+			) {
+				throw error;
+			}
+			const delivered = await this.journal.get({
+				userId: operation.userId,
+				appId: operation.appId,
+				runId: operation.runId,
+				id: operation.id,
+			});
+			if (
+				!delivered ||
+				delivered.state !== 'completed' ||
+				delivered.revision !== operation.revision + 1 ||
+				delivered.operationHash !== operation.operationHash
+			) {
+				throw error;
+			}
+			// Foreground delivery advances the tool revision while this Job stays active.
+			// Revalidate that one known transition; policy, target and approval still must pass.
+			await this.verify(delivered, policyRevision, signal);
 		}
 	}
 

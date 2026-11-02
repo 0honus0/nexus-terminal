@@ -139,7 +139,7 @@
 			disabled: () => loading.value,
 
 			onClick: () => {
-				void store.load(true).catch(() => undefined);
+				void store.load().catch(() => undefined);
 			},
 		});
 	});

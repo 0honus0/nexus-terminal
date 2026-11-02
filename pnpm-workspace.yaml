@@ -3,8 +3,8 @@ packages:
   - tests/e2e
 
 catalog:
-  '@types/node': ^26.6.5
-  axios: ^1.20.0
+  '@types/node': ^26.6.6
+  axios: ^1.21.0
   dompurify: ^3.4.17
   pino: ^10.4.0
   puppeteer-core: 25.16.0
@@ -15,6 +15,10 @@ catalogs:
 
 overrides:
   dompurify: 'catalog:'
+  'readdir-glob>minimatch': ^11.0.3
+  'eslint>minimatch': ^11.0.3
+  '@eslint/config-array>minimatch': ^11.0.3
+  '@typescript-eslint/typescript-estree>minimatch': ^11.0.3
 
 allowBuilds:
   bcrypt: true

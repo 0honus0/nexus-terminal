@@ -108,7 +108,7 @@ export interface RunStepStorage {
 	finish(
 		command: StepVersionedScope,
 		result: StepFinish,
-		maySettle: (hasUnsettledTools: boolean, hasUnsettledChildren: boolean) => boolean,
+		maySettle: (hasUnsettledTools: boolean, hasUnsettledChildren: boolean, hasActiveJobs: boolean) => boolean,
 	): Promise<StepWriteResult>;
 	get(userId: number, appId: string, runId: string, stepIndex: number): Promise<StoredRunStep | null>;
 	/** Startup reconciliation: reserved was not dispatched, dispatched is unknown. */

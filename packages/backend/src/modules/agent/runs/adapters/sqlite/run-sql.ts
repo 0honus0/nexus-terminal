@@ -463,6 +463,17 @@ export class SqliteRunStorage implements RunStorage {
 	}
 
 	async failure(userId: number, appId: string, runId: string): Promise<StoredRunFailure | null> {
+		const job = await this.db.one(
+			`SELECT t.tool_name FROM agent_tool_jobs j JOIN agent_run_tools t ON t.id=j.id
+			 JOIN agent_runs r ON r.id=? AND r.user_id=j.user_id AND r.app_id=j.app_id
+			 WHERE j.user_id=? AND j.app_id=? AND j.state='unknown' AND r.status IN ('failed','unknown')
+			 AND (j.run_id=r.id OR EXISTS(SELECT 1 FROM agent_run_children c WHERE c.run_id=j.run_id AND c.parent_id=r.id))
+			 ORDER BY j.updated_at,j.id LIMIT 1`,
+			[runId, userId, appId],
+		);
+		if (job) {
+			return { kind: 'job_unknown', toolName: stringValue(job.tool_name) };
+		}
 		const row = await this.db.one(
 			`SELECT t.tool_name,t.result_text FROM agent_run_tools t JOIN agent_runs r ON r.id=t.run_id
 			 WHERE t.user_id=? AND t.app_id=? AND t.run_id=? AND r.status IN ('failed','unknown')
@@ -476,7 +487,7 @@ export class SqliteRunStorage implements RunStorage {
 		// Fencing and recovery can leave a terminal tool without a known
 		// failure cause. Do not invent one from its current permissions.
 		if (row.result_text === null) {
-			return { code: 'tool_failed', toolName };
+			return { kind: 'tool', code: 'tool_failed', toolName };
 		}
 		const value: unknown = JSON.parse(stringValue(row.result_text));
 		if (!value || typeof value !== 'object' || Array.isArray(value) || !('failureCode' in value)) {
@@ -486,7 +497,7 @@ export class SqliteRunStorage implements RunStorage {
 		if (!code) {
 			throw new Error('Corrupt tool failure code');
 		}
-		return { code, toolName };
+		return { kind: 'tool', code, toolName };
 	}
 
 	async get(userId: number, appId: string, runId: string): Promise<StoredRun | null> {

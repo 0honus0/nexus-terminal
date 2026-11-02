@@ -22,7 +22,7 @@
       "sentToAllSessions": "コマンドは {count} 個のセッションに送信されました。",
       "noActiveSshSessions": "コマンドを送信するアクティブな SSH セッションはありません。"
     },
-    "addFailed": "コマンドは送信されましたが、履歴への保存に失敗しました: {error}",
+    "addFailed": "コマンドは送信されましたが、履歴への保存を確認できませんでした：{error}",
     "loadFailed": "コマンド履歴の読み込みに失敗しました: {error}",
     "deleteFailed": "履歴の削除に失敗しました: {error}",
     "clearFailed": "コマンド履歴の消去に失敗しました: {error}"

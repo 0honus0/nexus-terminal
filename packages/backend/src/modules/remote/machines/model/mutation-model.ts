@@ -59,7 +59,7 @@ export class MachineMutationModel {
 		}
 	}
 
-	acquire(claim: MachineMutationClaim, actor?: MutationRecoveryActor): Promise<'acquired' | 'conflict'> {
+	acquire(claim: MachineMutationClaim, actor?: MutationRecoveryActor): Promise<'acquired' | 'conflict' | 'blocked'> {
 		return storage(() =>
 			this.owner.acquire(
 				{

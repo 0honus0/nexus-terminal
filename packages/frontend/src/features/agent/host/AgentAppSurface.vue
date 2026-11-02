@@ -5,7 +5,7 @@
 	import { UiButton, UiCheckbox, UiEmptyState, UiLoadingState, UiInlineNotice } from '@/foundation/ui';
 	import { useI18n } from 'vue-i18n';
 	import { useNativeRuns } from '../composables/use-native-runs';
-	import { isNativeRunActive, nativeModelKey } from '../model/native-run-rules';
+	import { canCancelNativeRun, nativeModelKey } from '../model/native-run-rules';
 	import NativeThreadPanel from './NativeThreadPanel.vue';
 	import NativeInputArtifacts from '../files/NativeInputArtifacts.vue';
 	import AgentConfigPopover from '../files/AgentConfigPopover.vue';
@@ -428,7 +428,7 @@
 		);
 	}
 
-	const activeRun = computed(() => run.value !== null && isNativeRunActive(run.value));
+	const runNeedsClosure = computed(() => run.value !== null && canCancelNativeRun(run.value));
 	const sendDisabled = computed(
 		() =>
 			blocked.value ||
@@ -438,7 +438,7 @@
 			!thread.value ||
 			!modelKey.value ||
 			!draft.value.trim() ||
-			activeRun.value,
+			runNeedsClosure.value,
 	);
 
 	async function applyThreadSelection(): Promise<void> {
@@ -549,7 +549,7 @@
 	);
 
 	function submitComposer(): void {
-		if (!thread.value || activeRun.value) {
+		if (!thread.value || runNeedsClosure.value) {
 			return;
 		}
 		keepPinnedToBottom.value = true;
@@ -557,7 +557,7 @@
 	}
 
 	function stopRun(): void {
-		if (run.value && isNativeRunActive(run.value)) {
+		if (run.value && canCancelNativeRun(run.value)) {
 			void runtime.mutate({ kind: 'cancel', run: run.value });
 		}
 	}
@@ -1246,7 +1246,7 @@
 										</AgentConfigPopover>
 										<!-- Run 级批准策略：新 Run 创建时冻结，运行中只读 -->
 										<AgentConfigPopover
-											:disabled="blocked || activeRun"
+											:disabled="blocked || runNeedsClosure"
 											:trigger-selected="selectedConfig === 'approval'"
 											@open-change="selectConfigControl('approval', $event)"
 											:ariaLabel="t('agent.operations.approvalMode')"
@@ -1275,7 +1275,11 @@
 													}}
 												</span>
 												<i
-													:class="activeRun ? 'fa-solid fa-lock' : 'fa-solid fa-chevron-down'"
+													:class="
+														runNeedsClosure
+															? 'fa-solid fa-lock'
+															: 'fa-solid fa-chevron-down'
+													"
 													class="agent-config-affordance text-[11px] text-text-secondary"
 													aria-hidden="true"
 												></i>
@@ -1292,7 +1296,7 @@
 																? 'border-success/25 bg-success/[0.06] text-foreground'
 																: 'border-transparent text-text-secondary hover:bg-card/70'
 														"
-														:disabled="blocked || activeRun"
+														:disabled="blocked || runNeedsClosure"
 														@click="
 															approvalMode = 'ask';
 															close(true);
@@ -1326,7 +1330,7 @@
 																? 'border-warning/25 bg-warning/[0.06] text-foreground'
 																: 'border-transparent text-text-secondary hover:bg-card/70'
 														"
-														:disabled="blocked || activeRun"
+														:disabled="blocked || runNeedsClosure"
 														@click="
 															approvalMode = 'full_access';
 															close(true);
@@ -1372,7 +1376,7 @@
 											"
 										/>
 										<UiButton
-											v-if="activeRun"
+											v-if="runNeedsClosure"
 											density="compact"
 											appearance="soft"
 											tone="danger"

@@ -1879,7 +1879,7 @@
 <template>
 	<div
 		ref="wrapper"
-		class="relative h-full min-h-0 w-full overflow-hidden"
+		class="terminal-container relative h-full min-h-0 w-full overflow-hidden"
 		:class="{ 'has-text-stroke': visual?.textStroke?.enabled, 'has-text-shadow': visual?.textShadow?.enabled }"
 		:style="terminalStyle"
 		:data-font-size="renderedFontSize"

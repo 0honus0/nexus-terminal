@@ -1894,6 +1894,8 @@
       "failureReasons": {
         "tool_not_authorized": "工具 {tool} 未获执行许可，请检查 App 能力授权、所选 SSH 目标及当前配置。",
         "tool_timeout": "工具 {tool} 执行超时。",
+        "tool_machine_busy": "工具 {tool} 尚未执行：该主机有其他任务正在执行，请等待原任务结束后再操作。",
+        "tool_machine_blocked": "工具 {tool} 尚未执行：该主机有执行结果未确认的旧任务，请先在“机器突变恢复”中核对并恢复；请勿直接重跑未知命令。",
         "tool_invalid_input": "工具 {tool} 的参数或文件类型不符合要求。",
         "tool_target_unavailable": "工具 {tool} 的目标连接不存在或暂时不可用。",
         "tool_resource_not_found": "工具 {tool} 请求的远端文件、目录或资源不存在，请核对实际路径或资源标识。",
@@ -1904,6 +1906,7 @@
         "tool_state_changed": "工具 {tool} 的配置、权限或目标状态已变化，请重新读取后操作。",
         "tool_approval_expired": "工具 {tool} 的审批未通过、已过期或已失效。",
         "tool_failed": "工具 {tool} 执行失败，未记录到更具体的原因。",
+        "tool_result_unconfirmed": "工具 {tool} 的执行结果无法确认，任务已停止。远端操作可能仍在运行，请先核对远端状态，勿直接重复执行。",
         "model_auth_failed": "模型认证失败或无访问权限，请检查 API 密钥和模型授权。",
         "model_rate_limited": "模型服务触发限流或额度不足。",
         "model_timeout": "调用模型服务超时。",
