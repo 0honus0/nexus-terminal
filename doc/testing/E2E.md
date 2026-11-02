@@ -2446,3 +2446,9 @@ node --test --test-concurrency=1 \
 升级后根 check、Shared check、Backend/Frontend build、全量 format:all:check 和 git diff --check 通过，日志 dependencies-check-final.log、dependencies-shared-check-final.log、dependencies-build-final.log、dependencies-format-final.log。archiver 真正 glob 嵌套及隐藏文件，生成有效 ZIP，见 dependency-archive-smoke.mjs/log 与 dependency-archive-fixture/；该夹具也保留。指定 api.honus.top/CDP 的自有 context 运行实际编辑器 decodeEditorDocument，UTF-8、GB18030、Shift-JIS、带 BOM 的 UTF-16LE 均还原完整原文，无 pageerror，证据 dependency-encoding-cdp-final.log。初次脚本只匹配双引号，未匹配 Vite 的单引号动态导入，已修正验证脚本后通过，未为此修改产品。所有自有 context 已关闭；原 Vite 与专用目录保留。
 
 这些是依赖兼容及静态证据；完整远程 8 分片、Docker smoke 与实际 dev 发布尚待新提交运行。未更新生产容器。
+
+升级后另复跑既有 Agent/SSH 定向场景（原 35 项加 SSH 半关闭），dependencies-agent-ssh-regression.log 共 36 项通过，零失败、取消或跳过，使用真实隔离 HTTP/SQLite/SSH 与本机模型夹具；临时数据库保留，原 Vite 未停止。
+
+首轮远程 [41446828166](https://github.com/0honus0/nexus-terminal/actions/runs/41446828166) 在产品提交 27598ee0 上完成：检查/格式、Docker smoke 和 5 个 browser 分片通过；backend1、browser3、browser7 分别有一项失败，首次和重试同因。mutation-capacity 夹具在 reconcile 后仍期待 conflict，实际新契约为 blocked；terminal-ui 仍从旧 inner 节点读取 4/5/3/5px，间距已按此前修复移至外层；reconnect-ui 假设正确拟合列数一定超过 80，但 1280px 桌面实际分栏宽度正确对应 80 列。日志 e2e-41446828166-{backend-1,browser-3,browser-7}.log，browser7 全部诊断包含失败截图/trace 保存在 e2e-41446828166-browser-7-artifacts/；截图已核对。
+
+修复仅同步这三个真实测试消费者：保留 4100 项容量、held 冲突、reconcile/snapshot 和未知围栏断言，明确 blocked；间距检查改读外层并同时检查 inner 零 padding 及屏幕四边在内容区域内；重连改为实际窗口放宽时列数增加、恢复后原尺寸一致，保留其全部后台/唤醒/重连及协议画面断言。没有改变产品 UI、降低断言、扩大超时或跳过测试。修复后根 check、目标严格 tsc（含 noUnusedLocals）、全量格式和 diff 通过，正式发现保持 137 文件/544 项，未删除或跳过场景；4100 项真实 SQLite 容量夹具通过。证据 e2e-repair-{check,types-final,format-check,discovery,mutation-capacity}.log。严格 tsc 同时发现 terminal-ui 一条旧的未使用导入，已删除后重新通过。仅测试/文档变化，无产品源码变化，复用本轮相同产品构建；完整远程结果继续回填。

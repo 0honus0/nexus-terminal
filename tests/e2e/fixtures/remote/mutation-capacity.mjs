@@ -47,8 +47,8 @@ try {
 		claims.length,
 	);
 	await assert.rejects(storage.settle('released-endpoint', claims[0].keys, false, Date.now()));
-	assert.equal(await storage.acquire({ ...claims[1], id: 'still-blocked-endpoint' }), 'conflict');
-	console.log('Verified 4100 independent claims, snapshot integrity and endpoint conflict preservation');
+	assert.equal(await storage.acquire({ ...claims[1], id: 'still-blocked-endpoint' }), 'blocked');
+	console.log('Verified 4100 independent claims, snapshot integrity and held/blocked endpoint preservation');
 } finally {
 	await db.close();
 }

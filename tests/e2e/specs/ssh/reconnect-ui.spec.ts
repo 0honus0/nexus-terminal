@@ -546,8 +546,19 @@ test('a failed SSH reconnect waits for a key and then reconnects immediately', a
 			await expect.poll(() => openedWebSockets).toBeGreaterThanOrEqual(1);
 			await expect.poll(() => workspaceConnectResponses, { timeout: 20_000 }).toBeGreaterThanOrEqual(1);
 			await expect.poll(() => latestTerminalViewport).toBeTruthy();
-			expect(latestTerminalViewport!.columns).toBeGreaterThan(80);
+			expect(latestTerminalViewport!.columns).toBeGreaterThan(0);
 			expect(latestTerminalViewport!.rows).toBeGreaterThan(0);
+			// A correctly fitted split pane can be exactly 80 columns. Verify actual
+			// responsive fitting instead of confusing that size with xterm's default.
+			const initialViewport = { ...latestTerminalViewport! };
+			const browserViewport = page.viewportSize()!;
+			await page.setViewportSize({
+				...browserViewport,
+				width: browserViewport.width + Math.floor(browserViewport.width / 4),
+			});
+			await expect.poll(() => latestTerminalViewport?.columns).toBeGreaterThan(initialViewport.columns);
+			await page.setViewportSize(browserViewport);
+			await expect.poll(() => latestTerminalViewport).toEqual(initialViewport);
 		});
 
 		const fittedViewport = { ...latestTerminalViewport! };

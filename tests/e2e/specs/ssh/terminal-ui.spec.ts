@@ -1,5 +1,4 @@
 import { networkFailureToast } from '../../support/feedback';
-import { readPreferencesUpdate } from '../../../../packages/shared/src/preferences/presentation/http-codec';
 import { getTestFocus, updateTestFocus } from '../../support/presentation';
 import { readAppearanceView } from '../../../../packages/shared/src/preferences/appearance/http-codec';
 import { updateTestAppearance } from '../../support/appearance';
@@ -411,6 +410,13 @@ async function captureTerminalEvidence(page: Page, testInfo: TestInfo, name: 'be
 			terminalFontSize: terminal?.getAttribute('data-font-size') ?? '',
 			terminalBackground: terminalStyle?.backgroundColor ?? '',
 			inner: rect(inner),
+			screen: rect(inner?.querySelector('.xterm-screen')),
+			outerPadding: {
+				top: terminalStyle?.paddingTop ?? '',
+				right: terminalStyle?.paddingRight ?? '',
+				bottom: terminalStyle?.paddingBottom ?? '',
+				left: terminalStyle?.paddingLeft ?? '',
+			},
 			innerPadding: {
 				top: innerStyle?.paddingTop ?? '',
 				right: innerStyle?.paddingRight ?? '',
@@ -447,7 +453,12 @@ async function captureTerminalEvidence(page: Page, testInfo: TestInfo, name: 'be
 	expect(metrics.terminal?.height).toBeGreaterThan(100);
 	expect(metrics.inner?.width).toBeGreaterThan(0);
 	expect(metrics.inner?.height).toBeGreaterThan(0);
-	expect(metrics.innerPadding).toEqual({ top: '4px', right: '5px', bottom: '3px', left: '5px' });
+	expect(metrics.outerPadding).toEqual({ top: '4px', right: '5px', bottom: '3px', left: '5px' });
+	expect(metrics.innerPadding).toEqual({ top: '0px', right: '0px', bottom: '0px', left: '0px' });
+	expect(metrics.screen?.x).toBeGreaterThanOrEqual(metrics.inner!.x);
+	expect(metrics.screen?.y).toBeGreaterThanOrEqual(metrics.inner!.y);
+	expect(metrics.screen?.right).toBeLessThanOrEqual(metrics.inner!.right);
+	expect(metrics.screen?.bottom).toBeLessThanOrEqual(metrics.inner!.bottom);
 	expect(Number(metrics.terminalFontSize)).toBeGreaterThan(0);
 	expect(metrics.commandBar?.x).toBeGreaterThanOrEqual(0);
 	expect(metrics.commandBar?.right).toBeLessThanOrEqual(metrics.viewport.width + 1);
