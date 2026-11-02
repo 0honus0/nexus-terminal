@@ -2437,7 +2437,7 @@ node --test --test-concurrency=1 \
 
 本轮根 check、前端 build、全量 format:all:check 与 git diff --check 通过，日志 status-trend-check/build/format-check.log；没有新增正式低影响样式测试或执行全量 E2E。用户授权仅改变趋势时间轴和加载呈现，其余卡片/标题/选项及数据转换不变。指定 CDP 为隔离组件验证，不代表真机、生产整页或新部署验收；自建 context 已关闭，保留原 Vite 与专用目录，未提交、推送或部署。
 
-## 依赖升级与 main dev 发布（2026-11-02，远程验收进行中）
+## 依赖升级与 main dev 发布（2026-11-02，完成）
 
 本轮基线 main/beff7a991caa09b3a8bd70a90f494ed05da54027；用户确认从 main 发布 dev/amd64，包含当前会话全部已授权未提交修复。最近失败的更新工作流 [41422400796](https://github.com/0honus0/nexus-terminal/actions/runs/41422400796) 在生产依赖审计失败，后续 E2E 调度未执行；不能把此前完整通过的 41050797589 当成本轮结果。原始 job 日志为专用目录的 dependency-update-job.log。
 
@@ -2464,3 +2464,9 @@ node --test --test-concurrency=1 \
 随后本地真实OpenSSH+完整HTTP/WS复验又发现独立传输缺口：159帧在同一网络批次触发Platform的WS_INPUT_QUEUE_EXCEEDED，64条仅3072字节便断开；原8项owner测试未经过技术通道，未覆盖该层。失败日志input-burst-real-openssh{,-second}.log、数据库/密钥均保留。修复原Platform通道，让同步回调立即释放、真正的异步回调保持原容量和顺序；Workspace注册同步accept，不改阈值。初版通道6项加WS owner8项共14项通过，真实OpenSSH同159帧完整CRLF marker、零protocol.error、后续suspend.list通过，证据input-burst-channel-regression.log和input-burst-real-openssh-final.log；只对本机自建daemon与数据库操作，应用/SSH正常关闭但文件保留，原Vite未停止。最终补充防重入及CLOSING读取验证和静态结果继续回填。
 
 最终通道7项与WS owner8项共15项全部通过（input-burst-channel-regression-final.log）；真实OpenSSH在最终Backend产物上再次通过159帧、精确CRLF输出、零协议拒绝及后续查询（input-burst-real-openssh-current.log）。根check、双端build、目标严格tsc、全量format及diff通过，日志input-burst-channel-{check,build,format}-final.log和input-burst-pty-types.log。onMessage的Agent、PTY、upload、catalog消费者逐一核对，保留原异步串行等待；只有Workspace原同步准入声明为void。完整远程继续验收，未发布或部署。
+
+第四轮完整远程 [41455018366](https://github.com/0honus0/nexus-terminal/actions/runs/41455018366) 在8996615593c0ad96eece7f6d6eb33d9f828b5f4d上全绿：质量、Docker smoke、backend及全部7个browser分片成功。backend125项，browser各51/63/62/52/59/71/62项，共545项，零失败/跳过/flaky；browser1包含普通48项与三组独立入口场景各1项，统计全部notice，不能漏掉后续三组。新PTY逐字159帧319ms通过，原零间隔OSC52首次1.9s通过。完整8个job日志为e2e-41455018366-{backend-1,browser-1..7}.log，状态与逐分片统计为e2e-41455018366-status.json、e2e-41455018366-verification.json。
+
+CI随后自动提交fb54344459e61f17b831df5e6f3854ff9919ae3d，只改变scripts/e2e/duration-estimates.json。fetch/diff及Docker COPY输入核对没有产品、依赖或镜像构建输入变化，保存e2e-tested-build-inputs.txt/dev-publish-build-inputs.txt；发布使用该main HEAD，不声称bot新SHA直接跑过E2E。[41456251490](https://github.com/0honus0/nexus-terminal/actions/runs/41456251490)生产审计及镜像发布均成功；workflow日志和状态为publish-41456251490-{prepare,image}.log、publish-41456251490-status.json。未使用release/latest渠道。
+
+直接用docker buildx imagetools只读核验GHCR：ghcr.io/0honus0/nexus-terminal:dev与sha-fb54344459e6指向相同摘要sha256:98148fc6ea192e42d2d8e2a7504d468dd8406b9841392397e7d6641c74dbca21，排除证明清单后的唯一运行平台为linux/amd64，config OS/arch与OCI revision=fb54344459e61f17b831df5e6f3854ff9919ae3d、version=sha-fb54344459e6均匹配。证据dev-publication-verification.json/log、dev-image-after*.json/txt及immutable清单，全部保存在/tmp/nexus-nethogs-20261030/。该验证不启动或替换生产容器；原Vite PID5849及测试目录按用户要求保留。最终仅回填文档并提交，不重复触发无产品差异的全量E2E。
