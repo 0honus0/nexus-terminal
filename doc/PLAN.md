@@ -4351,29 +4351,17 @@ SQL只读排查确认：2026-10-29 的 Hermes 排障中，`shell_execute` 约45�
 | 类型归属 | 原组件props、TerminalChannel、feedback、Provider/Integration/ManagedApp及Plugin契约保持；无新复用类型或边界，测试仅观察真实DOM焦点。                                                                                                                 |
 | 完成证据 | before/after.json、after.log及global.log均记录；后两项ALL PASS，真实三组件×三宽度及主机密钥/提示/备份/三按钮截图通过，无pageerror；正式mobile回归已补且严格tsc通过，未运行完整E2E；根check/前端build/全量格式/diff均通过，实机软键盘动画待手机复核。 |
 
-## 本批 UI 修复推送、远程 E2E 与发布（2026-11-02，进行中）
+## 本批 UI 修复推送、远程 E2E 与发布（2026-11-02，完成）
 
-用户明确要求“推送修复e2e 发布版本”，授权提交并推送当前已完成的拖动悬停/右键取消、手机编辑器两行底栏、终端点击焦点及全局确认面板变更，运行完整远程E2E并修复真实失败，通过后使用原发布流程。发布渠道已向用户询问；未收到更改时沿上次main→dev/amd64，不自行更新生产容器。保留全部测试环境和目录；本批日志集中/tmp/nexus-publish-ui-fixes-20261102。适用H-09/H-11/H-13.1及E-03/E-07/E-10/E-12，后续E2E修复保持已确认UI。
+用户授权提交并推送本批文件拖动悬停/右键取消、手机编辑器两行底栏、终端点击焦点与全局确认面板修复，修复远程E2E并发布。沿既有main→dev/amd64流程，不更新生产容器；测试环境、Vite和集中目录均按用户要求保留。适用H-09/H-11/H-13.1及E-03/E-07/E-10/E-12；测试修复未改变已确认UI。
 
-设计八节：① 各原feature及Foundation持修复，现有Actions持回归和发布；② 沿原组件、既有E2E及工作流，不新建发布系统；③ 原owner/调用链保持；④ 无新Shared/存储契约；⑤ 提交main触发完整8分片、质量与Docker，失败据真实日志在owner修复；⑥ 不跳过断言或凭空增加超时，不覆盖远程变更，CI耗时提交仅快进并核对实际差异；⑦ 通过后核对发布来源SHA与已验产品一致，等待真实发布结束并读取Registry平台/revision/digest；⑧ 完成远程回归、发布证据和四表，保留实机软键盘动画验收边界。
+设计八节：① 产品由原feature/Foundation拥有，回归/发布由原Actions拥有；② 沿既有组件、测试、工作流；③ 原调用链不增层；④ 无新Shared/存储契约，鼠标菜单依据实际PointerEvent来源区分；⑤ 测试通过实际多选入口、滚动目标及目标内第二次移动交付dragover，保持全部原断言；⑥ 不扩大超时、不跳过场景，鼠标菜单关闭后立即重选；⑦ 保留真实触摸/笔长按保护和原资源清理；⑧ 完整8分片/质量/Docker成功后发布并核对Registry架构/revision/digest。
 
-| 审核表   | 判据与状态                                                                                                                                             |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 功能对应 | 本地四项修复及既有回归已核对，指定CDP与前阶段静态通过；完整远程待运行。                                                                                |
-| 职责归属 | 产品修复留原组件/能力owner，回归/发布使用原Actions；失败不以改动UI或跳过用例处理。                                                                     |
-| 类型归属 | 现有props、原TerminalChannel/文件能力及反馈契约保持；CI技术结果仅用于验证与发布关联。                                                                  |
-| 完成证据 | 08b6b2b5已推送；首轮41484802901质量/Docker及7分片成功，browser 6的两项测试入口/几何前提失败，已修正并保留原断言，静态后重跑完整E2E；发布待通过后执行。 |
+| 审核表   | 最终结论与证据                                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 四项既有修复已推送；新拖动回归沿触屏多选真实入口，手机搜索读取真实按钮几何；修复触屏电脑鼠标右键后800ms内首次选择被长按保护误吞。USAGE文件章节同步，已确认视觉效果保持。                                                                                                                                                                                                                                               |
+| 职责归属 | 测试坐标/dragover交付归原E2E驱动；产品输入来源判断归FileManager.openContext，Foundation手势原触发/松手保护及清理保持。连续两级、两个上级、右键取消与真实SFTP最终移动由原链验收。                                                                                                                                                                                                                                       |
+| 类型归属 | 原组件props、TerminalChannel、文件能力与反馈契约保持；MouseEvent经PointerEvent实例/pointerType缩窄，无新协议/类型/存储。                                                                                                                                                                                                                                                                                               |
+| 完成证据 | main/ed59258e2f6a5261ba17235d61ce4dc463fe4f93的41494011094完整547场景首次通过，无失败/重试；质量、Docker和8分片成功。根check、前端build、严格tsc、全量format/diff与受控CDP前后对照通过。发布41495174680成功，源c9c358351912f84c86424e6b5e096b0d8cebbd3f仅追加自动耗时估算。dev与sha-c9c358351912的linux/amd64、revision/version及digest相同：sha256:70dd507001cff8ad3749616e1d7b93005da2ff2ed34d0ffeeb034e6005e6152a。 |
 
-首轮两项失败首次/重试均一致：拖动测试在hasTouch=true时先普通点击目录，实际已进入/hover-source，再用Control寻找原目录文件而超时；改为显式多选模式，重建选择并确认两个源和原目录后拖动。手机搜索既有用例读取.editor-actions.boundingBox，但两行布局的display:contents无盒；改测真实footer和三个按钮的对齐、顺序及全部边界，不修改产品UI。日志及trace留本批目录；原动作、源文件保留/移动、鼠标右键取消和搜索高亮断言保留。
-
-第二轮847fb6a5的41486648381质量、Docker及7分片成功，手机搜索已通过，仅拖动取消用例失败。trace截图显示选择较低文件后列表滚动，上方目标行仍有DOM盒但被列表裁剪，裸CDP不会执行定位器自动滚动；原坐标落在实际目标之外，无法据此判断右键取消失败。moveTo先scrollIntoViewIfNeeded再取坐标，右键取消前明确确认有效目标is-drop-target，导航继续核对最终路径；不删原移动、源保留及右键断言。定向受控CDP中目标可见时右键清空选择且未移动；故意裁剪时不产生目标高亮，分别保留drag-touch-diagnostic.log和drag-clipped-target.log。当前补丁待静态及第三轮完整远程回归，发布仍待通过。
-
-第三轮补丁提交前：Node v22.23.1、集中工具pnpm 11.28.10，根check、全量format:all:check、变更E2E严格tsc和git diff --check通过；日志e2e-clip-check-final.log、e2e-clip-format.log、e2e-clip-types-final.log。首次手工tsc未指定Node类型目录而失败，显式使用仓库Backend现有@types后通过，未改依赖或类型配置。仅既有测试和本阶段证据变更，产品构建由本轮Actions统一核对。
-
-第三轮ff440403/41489494982质量、Docker与7分片成功，原取消前步骤已通过，同用例第二级目录停留在/hover-target。trace显示deep已可见且不busy，但无有效悬停高亮。受控CDP缩小列表并按正式脚本滚动/快速移动可复现目标不高亮；首次到达可能仅产生dragenter，进入新目录后旧位置与新行相同也可能没有真实移动。按Chromium原生拖放语义在moveTo末尾于目标内再移动1px，实际交付dragover，不改产品或等待时长。drag-same-coordinate.log为基线失败，drag-same-coordinate-fixed.log完整通过同坐标连续导航与取消；裁剪列表对照见drag-rapid-no-observation.log/drag-clipped-fixed.log。后续第四轮完整回归及发布待回填。
-
-第四轮提交前根check、变更E2E严格tsc、全量format和diff通过（e2e-dragover-*.log）。受控同触屏/裁剪列表完整链drag-complete-fixed.log通过取消、连续两级、两个上级及兄弟目录唯一放置，原文件夹与文件两个源保持；首次运行受Vite重优化导航中断，完成构建后重跑通过，不记首次为产品失败或成功。原USAGE拖动/取消操作仍符合实际，无产品行为差异。
-
-第四轮8599670a/41492022020已通过取消与连续两级导航，仅同用例第三段重新选择失败；其余7分片、质量和Docker成功。沿FileManager.openContext→longPress.suppressClick→clickEntry.consumeClick确认产品问题：supportsTouchInteraction使鼠标右键也进入800ms长按抑制，Escape后立即点击第一个源被吞。第五轮设计：① 状态与事件归原FileManager/longPress；② 沿原组件，不改基础手势实现；③ 输入事件→组件→原选择/手势；④ 原MouseEvent用PointerEvent实例及pointerType缩窄，无新契约；⑤ 仅touch/pen原生菜单追加抑制，鼠标/键盘不追加；⑥ 不增加等待或第二份状态；⑦ 原触摸长按、取消/失活/清理保持；⑧ 同CDP菜单关闭后立即重选基线drag-context-reselection-before.log实际失败，修复后验证原完整链，静态/构建及第五轮全量Actions待回填。原E2E已覆盖菜单Escape后新拖动，不增加隐藏等待；USAGE及前端架构同步。
-
-第五轮提交前：同一脚本基线在菜单关闭后source首次选择失败；修复后drag-context-reselection-after-final.log完整通过立即重新选择、连续两级、两个上级及兄弟目录唯一放置。首次after与Shared构建并行，Vite热重载使已挂载受控页面销毁，该次不计验收；构建结束后最终脚本通过。根check、前端build、全量format及diff全部通过（e2e-context-check/build/format.log）；两次源码复审确认只按真实PointerEvent来源区分，原useLongPressGesture触发/松手的抑制与清理保留，鼠标/键盘不再误入触摸保护，无UI样式差异。正式现有E2E已覆盖同一路径，完整Actions待运行。
+各轮失败、trace/截图及根因、静态输出与受控验证记录统一见testing末节及/tmp/nexus-publish-ui-fixes-20261102。保留真实手机软键盘动画的实机验收边界；CDP与完整Actions不扩大为所有设备保证。Registry实际核对通过，日志publication-verification.log；发布与本阶段收口完成，无剩余源码/回归任务。未删除保留目录或更新生产容器；后续新任务仍按用户指令。

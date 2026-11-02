@@ -2348,7 +2348,7 @@ Shared编译后codec定向断言通过（`logs/suspend-password-codec.log`）：
 
 ## 当前验收基线
 
-最新完整远程 [41050797589](https://github.com/0honus0/nexus-terminal/actions/runs/41050797589) 验证 `main/3b98d81fd99b9ce76b8fef4fd0b6a47d0074e1b6`：538个独立场景全部首次通过，零失败、重试、flaky与跳过，质量检查、Docker smoke与8个测试分片全部成功。当前已实现功能以该SHA及上述实际场景范围为准；先前外部硬件、扩大故障与实机保证限制不因夹具回归被取消。后继 `72b2fa55` 仅自动维护耗时估算，无产品源码差异；本次未发布或部署。
+最新完整远程 [41494011094](https://github.com/0honus0/nexus-terminal/actions/runs/41494011094) 验证 `main/ed59258e2f6a5261ba17235d61ce4dc463fe4f93`：547个场景全部首次通过，零失败、重试、flaky与跳过，质量检查、Docker smoke与8个测试分片全部成功。当前已实现功能以该SHA和实际场景范围为准；先前外部硬件、扩大故障与实机保证限制保留。后继 `c9c358351912f84c86424e6b5e096b0d8cebbd3f` 仅自动维护耗时估算，已按diff核对无产品源码差异；本轮dev/amd64发布结果见文末专项记录。
 
 ## E2E 连接选项加载失败提示（2026-10-30）
 
@@ -2529,7 +2529,7 @@ global-confirmation.cjs/global.log在api.honus.top/__global_confirmation_probe__
 
 最终静态：根pnpm run check（Backend包级/Shared构建、双端ESLint与Frontend类型）、前端生产build、全量format:all:check及git diff --check全部通过，日志check.log/build.log/format.log保存在上述专用目录。最后仅补本段并定向核对文档格式；没有重复无变化的完整E2E或发布。
 
-## 本批 UI 修复远程 E2E 与发布（2026-11-02，进行中）
+## 本批 UI 修复远程 E2E 与发布（2026-11-02，完成）
 
 用户授权推送、修复E2E并发布，08b6b2b58a6d8aa5f121816bd112fb05b800673d已推送main。首轮41484802901质量、Docker及7个测试分片成功，browser 6出现两项首次/重试相同失败：新增拖动多选初始化点击hover-source后，触屏桌面正常单击导航到/hover-source，随后寻找原目录hover-one.txt超时；既有touch-advanced搜索用例读取display:contents的.editor-actions.boundingBox得到null。失败截图/页面快照与源码分别确认真实路径和无盒语义，属于测试前提，不改产品UI。
 
@@ -2548,3 +2548,7 @@ global-confirmation.cjs/global.log在api.honus.top/__global_confirmation_probe__
 第四轮8599670a/41492022020已通过取消与连续两级导航，仅同用例第三段重新选择失败；其余7分片、质量和Docker成功。沿FileManager.openContext→longPress.suppressClick→clickEntry.consumeClick确认产品问题：supportsTouchInteraction使鼠标右键也进入800ms长按抑制，Escape后立即点击第一个源被吞。第五轮设计：① 状态与事件归原FileManager/longPress；② 沿原组件，不改基础手势实现；③ 输入事件→组件→原选择/手势；④ 原MouseEvent用PointerEvent实例及pointerType缩窄，无新契约；⑤ 仅touch/pen原生菜单追加抑制，鼠标/键盘不追加；⑥ 不增加等待或第二份状态；⑦ 原触摸长按、取消/失活/清理保持；⑧ 同CDP菜单关闭后立即重选基线drag-context-reselection-before.log实际失败，修复后验证原完整链，静态/构建及第五轮全量Actions待回填。原E2E已覆盖菜单Escape后新拖动，不增加隐藏等待；USAGE及前端架构同步。
 
 第五轮提交前：同一脚本基线在菜单关闭后source首次选择失败；修复后drag-context-reselection-after-final.log完整通过立即重新选择、连续两级、两个上级及兄弟目录唯一放置。首次after与Shared构建并行，Vite热重载使已挂载受控页面销毁，该次不计验收；构建结束后最终脚本通过。根check、前端build、全量format及diff全部通过（e2e-context-check/build/format.log）；两次源码复审确认只按真实PointerEvent来源区分，原useLongPressGesture触发/松手的抑制与清理保留，鼠标/键盘不再误入触摸保护，无UI样式差异。正式现有E2E已覆盖同一路径，完整Actions待运行。
+
+第五轮最终完整远程41494011094成功，验收SHA ed59258e2f6a5261ba17235d61ce4dc463fe4f93。全部547场景首次通过，无失败/重试/flaky/跳过；各分片场景数：backend1=125、browser1=58、2=41、3=69、4=61、5=60、6=68、7=65。既有失败分片6完整通过，真实SFTP多选源连续导航、右键取消、菜单关闭立即重新选择、双上级及兄弟目录最终移动均通过。质量和Docker成功；完整原始日志e2e-full-41494011094.log、最终元数据e2e-result-41494011094.json与计数e2e-summary-41494011094.json保留。自动c9c35835只更新scripts/e2e/duration-estimates.json，核对后快进。发布41495174680使用main/c9c358351912f84c86424e6b5e096b0d8cebbd3f、dev/amd，等待Registry最终核对，不更新生产容器。
+
+最终发布 [41495174680](https://github.com/0honus0/nexus-terminal/actions/runs/41495174680) 成功：Prepare publication（含high级生产依赖审计）及Publish Unified Image全部成功，源SHA c9c358351912f84c86424e6b5e096b0d8cebbd3f。通过docker buildx imagetools实际读取ghcr.io/0honus0/nexus-terminal的dev与sha-c9c358351912：两者digest均为sha256:70dd507001cff8ad3749616e1d7b93005da2ff2ed34d0ffeeb034e6005e6152a，仅linux/amd64（排除attestation条目），OCI revision和version分别严格等于发布SHA和固定标签。publication-verification.json/log及两标签Manifest/Image、publication-result-41495174680.json为真实Registry证据。所有本轮CDP自有context已关闭，未更新生产容器，未删除原Vite、测试环境、工具和集中目录，等待用户后续清理指令。最终收口仅PLAN/testing文档，产品与已验/已发布SHA保持一致。
