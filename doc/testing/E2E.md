@@ -2470,3 +2470,13 @@ node --test --test-concurrency=1 \
 CI随后自动提交fb54344459e61f17b831df5e6f3854ff9919ae3d，只改变scripts/e2e/duration-estimates.json。fetch/diff及Docker COPY输入核对没有产品、依赖或镜像构建输入变化，保存e2e-tested-build-inputs.txt/dev-publish-build-inputs.txt；发布使用该main HEAD，不声称bot新SHA直接跑过E2E。[41456251490](https://github.com/0honus0/nexus-terminal/actions/runs/41456251490)生产审计及镜像发布均成功；workflow日志和状态为publish-41456251490-{prepare,image}.log、publish-41456251490-status.json。未使用release/latest渠道。
 
 直接用docker buildx imagetools只读核验GHCR：ghcr.io/0honus0/nexus-terminal:dev与sha-fb54344459e6指向相同摘要sha256:98148fc6ea192e42d2d8e2a7504d468dd8406b9841392397e7d6641c74dbca21，排除证明清单后的唯一运行平台为linux/amd64，config OS/arch与OCI revision=fb54344459e61f17b831df5e6f3854ff9919ae3d、version=sha-fb54344459e6均匹配。证据dev-publication-verification.json/log、dev-image-after*.json/txt及immutable清单，全部保存在/tmp/nexus-nethogs-20261030/。该验证不启动或替换生产容器；原Vite PID5849及测试目录按用户要求保留。最终仅回填文档并提交，不重复触发无产品差异的全量E2E。
+
+## 手动清理 Actions API 瞬时失败（2026-11-02，远程待验）
+
+用户要求解决另一条Actions失败。实际为手动清理[41461823321](https://github.com/0honus0/nexus-terminal/actions/runs/41461823321)，job125332537068已解析latest/dev并计划删除旧资源，DELETE artifact13145138530返回GitHub HTTP500；github-script@v9 retries默认0，直接中断，不能推断此前删除已回滚。原生产和dev镜像均无故障证据。
+
+改动只在cleanup-history workflow及原maintenance owner：按github-script官方示例配置3次单请求退避，不自建重试库或重跑整个脚本；精确DELETE返回404视为已不存在、单独统计，只有成功回执计为本次删除，权限或最终5xx仍失败。运行读取404保留无法复验的artifact；包版本删除request.retries=0，避免退避后绕过verifyChannels。原latest/dev manifest闭包、最新绿E2E、关联成功运行、当前/活跃/重启运行与缓存保护保持。
+
+scripts/maintenance/cleanup-history.test.mjs使用真实脚本和受控GitHub/GHCR能力，8项PASS：渠道及共享平台/attestation/成功证据保留、五类DELETE404继续且统计不虚增、403/最终500传播、运行读取404、活跃及重新启动保护、渠道移动停止。该无依赖Node测试作为手动workflow首步骤执行，失败阻止真实删除。另以官方Octokit Core7.0.6和retry8.1.1验证5组实际插件请求，并核对github-script@v9锁文件后用准确的retry8.1.0复验通过：500→204成功，500后404最终可分类，403最终拒绝，镜像请求retries=0单次派发，持续500按3次重试耗尽；实际请求尝试数依次2/4/4/1/4，不能把上游exempt说明当作永久拒绝始终只发一次的证据。最初夹具误期待第二组只调用2次，修正为实测插件行为后全部通过，没有更改产品以匹配夹具。
+
+本地Node22.23.1、隔离pnpm11.28.10，根check、全量format:all:check、目标ESLint/Prettier、node --check与git diff --check通过；没有业务包源码或依赖变化，不重复应用build/全量E2E。工具与日志集中/tmp/nexus-actions-cleanup-20261102，任务完成后按用户清理要求删除。远程工作流和保留镜像核验继续回填，不更新生产容器。

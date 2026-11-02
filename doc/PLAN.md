@@ -4283,3 +4283,16 @@ SQL只读排查确认：2026-10-29 的 Hermes 排障中，`shell_execute` 约45�
 本轮补充设计：真实OpenSSH定向复现WS_INPUT_QUEUE_EXCEEDED（64条仅3072字节），说明协议owner前还有Platform异步链，把同步解码/准入的通知强行延后。① Platform WebSocketChannel持有传输队列；② 原HttpWebSocketChannel.onMessage允许void或Promise，全部消费者同步核对；③ 同步回调立即完成，异步回调仍串行背压；④ 技术类型只在Platform，Workspace显式注册同步accept；⑤ 不扩大64条/字节门槛，不解析业务类型；⑥ 真实异步等待仍占原预算并追踪，失败终止原socket、独立收尾；⑦ queue drain防重入，关闭/停机不再派发，保留binary暂停恢复；⑧ 增补技术通道同步突发、异步排序/溢出/失败回归，并重新跑真实OpenSSH及完整远程。新增SSH测试显式选用现有真实PTY模式，保留CRLF完整输出断言；普通pipe Bash只有LF，之前新测试此前提不正确。
 
 交付收口：完整远程41455018366验证源码8996615593c0ad96eece7f6d6eb33d9f828b5f4d；CI随后只提交duration-estimates.json，发布源码为main/fb54344459e61f17b831df5e6f3854ff9919ae3d。源码差异与Docker COPY输入核对一致，不把bot SHA称为直接跑过E2E。41456251490成功发布ghcr.io/0honus0/nexus-terminal:dev及sha-fb54344459e6，Registry摘要均为sha256:98148fc6ea192e42d2d8e2a7504d468dd8406b9841392397e7d6641c74dbca21，唯一运行平台linux/amd64，OCI revision/version完全匹配。生产容器未更新，专用目录与Vite5849保留；本轮没有待实施项，不自动清理或部署。
+
+## 手动清理 Actions 瞬时失败恢复（2026-11-02，进行中）
+
+失败41461823321在删除旧artifact 13145138530时收到GitHub HTTP500，github-script默认retries=0，整轮停止；保留latest/dev解析均已成功。适用H-09/H-11/H-13/H-14/H-20、E-06/E-07/E-10/E-11。沿用户解决该手动工作流失败的要求修复、提交推送并重跑原清理，不扩大删除范围或改动生产。临时工具/日志集中/tmp/nexus-actions-cleanup-20261102，完成后清除。
+
+设计八节：① cleanup-history持候选/保留/删除状态，github-script官方Octokit负责请求重试；② 沿原workflow+maintenance脚本，独立Node定向测试；③ 仅调用GitHub/GHCR，复用上游retry库，不新增产品依赖；④ 局部资源ID/HTTP status，无Shared或双端迁移；⑤ 仍仅workflow_dispatch；⑥ 同一ID删除幂等，404记已不存在，不冒充本轮删除；原活跃运行与渠道保护保留，权限等永久错误仍失败；⑦ 依据实测500与官方示例配置3次指数退避，包版本DELETE关闭隐式重试以保留每次派发前渠道复查，运行读取404保留无法复验的artifact；⑧ 定向覆盖删除404、永久拒绝、耗尽5xx、渠道移动、活跃/重启保护及准确统计，根检查/格式与远程真实清理，核对保留镜像和最近绿E2E仍可读。
+
+| 审核表   | 判据与状态                                                                                                 |
+| -------- | ---------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 单请求恢复、五类DELETE的404准确计数、权限/耗尽拒绝与原渠道/活跃保护通过8项回归，已接入手动workflow首步骤。 |
+| 职责归属 | 官方Octokit重试；脚本维持候选/身份复查及汇总，禁止整轮盲重试。                                             |
+| 类型归属 | 仅脚本局部HTTP能力和资源ID，不改变产品/Shared契约。                                                        |
+| 完成证据 | 两轮源码审核、8项脚本回归、官方Octokit插件5组故障验证、根check/全量格式及diff通过；远程清理待新提交执行。  |

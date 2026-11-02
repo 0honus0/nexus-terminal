@@ -104,6 +104,35 @@ export default async function cleanup({ github, context, core }) {
 	);
 	for (const [tag, version] of channelVersions) core.info(`Keep ${tag}: ${version.name}`);
 
+	let alreadyAbsent = 0;
+
+	async function deleteIfPresent(description, remove) {
+		try {
+			await remove();
+			return true;
+		} catch (error) {
+			// DELETE may have committed before a transient error triggered a retry.
+			// Only the exact resource's absence is an idempotent success.
+			if (error?.status !== 404) {
+				throw error;
+			}
+			core.info(`Already absent: ${description}.`);
+			alreadyAbsent += 1;
+			return false;
+		}
+	}
+
+	async function currentRunState(runId) {
+		try {
+			return (await github.rest.actions.getWorkflowRun({ owner, repo, run_id: runId })).data;
+		} catch (error) {
+			if (error?.status !== 404) {
+				throw error;
+			}
+			return null;
+		}
+	}
+
 	let deletedArtifacts = 0;
 	let deletedRuns = 0;
 	for (const artifact of obsoleteArtifacts) {
@@ -112,22 +141,40 @@ export default async function cleanup({ github, context, core }) {
 			core.info(`Keep artifact ${artifact.id}: owning run is unavailable.`);
 			continue;
 		}
-		const fresh = await github.rest.actions.getWorkflowRun({ owner, repo, run_id: runId });
-		if (fresh.data.status !== 'completed') {
-			core.info(`Keep artifact ${artifact.id}: run ${runId} is ${fresh.data.status}.`);
+		const fresh = await currentRunState(runId);
+		if (!fresh) {
+			core.info(`Keep artifact ${artifact.id}: run ${runId} is no longer available for verification.`);
 			continue;
 		}
-		await github.rest.actions.deleteArtifact({ owner, repo, artifact_id: artifact.id });
-		deletedArtifacts += 1;
+		if (fresh.status !== 'completed') {
+			core.info(`Keep artifact ${artifact.id}: run ${runId} is ${fresh.status}.`);
+			continue;
+		}
+		if (
+			await deleteIfPresent(`artifact ${artifact.id}`, () =>
+				github.rest.actions.deleteArtifact({ owner, repo, artifact_id: artifact.id }),
+			)
+		) {
+			deletedArtifacts += 1;
+		}
 	}
 	for (const run of obsoleteRuns) {
-		const fresh = await github.rest.actions.getWorkflowRun({ owner, repo, run_id: run.id });
-		if (fresh.data.status !== 'completed') {
-			core.info(`Keep restarted run ${run.id}: ${fresh.data.status}`);
+		const fresh = await currentRunState(run.id);
+		if (!fresh) {
+			core.info(`Keep run ${run.id}: already unavailable.`);
 			continue;
 		}
-		await github.rest.actions.deleteWorkflowRun({ owner, repo, run_id: run.id });
-		deletedRuns += 1;
+		if (fresh.status !== 'completed') {
+			core.info(`Keep restarted run ${run.id}: ${fresh.status}`);
+			continue;
+		}
+		if (
+			await deleteIfPresent(`run ${run.id}`, () =>
+				github.rest.actions.deleteWorkflowRun({ owner, repo, run_id: run.id }),
+			)
+		) {
+			deletedRuns += 1;
+		}
 	}
 	const freshRuns = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
 		owner,
@@ -139,8 +186,17 @@ export default async function cleanup({ github, context, core }) {
 	const removableImages = hasActiveRuns ? [] : obsoleteImages;
 	const removableRunnerVersions = hasActiveRuns ? [] : runnerVersions;
 	if (hasActiveRuns) core.info('Other runs are active; keep image versions and Actions caches for this cleanup.');
+	let deletedCaches = 0;
+	let deletedImages = 0;
+	let deletedRunnerVersions = 0;
 	for (const cache of removableCaches) {
-		await github.rest.actions.deleteActionsCacheById({ owner, repo, cache_id: cache.id });
+		if (
+			await deleteIfPresent(`cache ${cache.id}`, () =>
+				github.rest.actions.deleteActionsCacheById({ owner, repo, cache_id: cache.id }),
+			)
+		) {
+			deletedCaches += 1;
+		}
 	}
 	for (const [packageName, candidates] of [
 		['nexus-terminal', removableImages],
@@ -148,11 +204,22 @@ export default async function cleanup({ github, context, core }) {
 	]) {
 		for (const version of candidates) {
 			await verifyChannels();
-			await github.request(`DELETE ${packagePath}/{package_version_id}`, {
-				...packageOwner,
-				package_name: packageName,
-				package_version_id: version.id,
-			});
+			const removed = await deleteIfPresent(`${packageName} version ${version.id}`, () =>
+				github.request(`DELETE ${packagePath}/{package_version_id}`, {
+					...packageOwner,
+					package_name: packageName,
+					package_version_id: version.id,
+					// Retrying here would bypass verifyChannels after the backoff.
+					request: { retries: 0 },
+				}),
+			);
+			if (removed) {
+				if (packageName === 'nexus-terminal') {
+					deletedImages += 1;
+				} else {
+					deletedRunnerVersions += 1;
+				}
+			}
 		}
 	}
 	await verifyChannels();
@@ -163,11 +230,12 @@ export default async function cleanup({ github, context, core }) {
 		)
 		.addTable([
 			['Deleted resource', 'Count'],
-			['Product image versions', String(removableImages.length)],
-			['Runner image versions', String(removableRunnerVersions.length)],
+			['Product image versions', String(deletedImages)],
+			['Runner image versions', String(deletedRunnerVersions)],
 			['Actions runs', String(deletedRuns)],
 			['Artifacts', String(deletedArtifacts)],
-			['Actions caches', String(removableCaches.length)],
+			['Actions caches', String(deletedCaches)],
+			['Already absent (not counted as deleted)', String(alreadyAbsent)],
 		])
 		.write();
 }

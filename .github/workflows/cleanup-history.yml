@@ -20,11 +20,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      - name: Verify cleanup retention and failure handling
+        run: node --test scripts/maintenance/cleanup-history.test.mjs
+
       - name: Clean old versions, runs, artifacts and caches
         uses: actions/github-script@v9
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
+          retries: 3
           script: |
             const { default: cleanup } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/maintenance/cleanup-history.mjs`);
             await cleanup({ github, context, core });
