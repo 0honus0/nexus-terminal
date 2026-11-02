@@ -833,6 +833,9 @@ test.describe('remote drag move on touch-capable desktop', () => {
 
 		const moveTo = async (target: Locator): Promise<void> => {
 			await expect(target).toBeVisible();
+			// Raw CDP does not perform locator actionability scrolling. After selecting
+			// a lower file, directory rows may still exist outside the list's clip.
+			await target.scrollIntoViewIfNeeded();
 			const box = await target.boundingBox();
 			if (!box) throw new Error('Drag target has no visible bounds');
 			const startX = x;
@@ -878,6 +881,7 @@ test.describe('remote drag move on touch-capable desktop', () => {
 			await step('right click clears selection and cancels pending hover navigation', async () => {
 				await begin();
 				await moveTo(row(page, 'hover-target'));
+				await expect(row(page, 'hover-target')).toHaveClass(/\bis-drop-target\b/);
 				await cancel();
 				await page.waitForTimeout(2200);
 				await expect(pathInput(page)).toHaveValue('/');

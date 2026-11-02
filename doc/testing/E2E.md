@@ -2536,3 +2536,7 @@ global-confirmation.cjs/global.log在api.honus.top/__global_confirmation_probe__
 修复仅既有测试owner：拖动begin先通过实际多选按钮重建干净选择，明确两个源已选和路径仍为/后才开始原CDP拖动；取消、连续进入/上层、兄弟目录放置和最终源/内容断言保留。手机搜索改测真实footer及三个按钮，保留同排/顺序且补四边界，不恢复无意义的容器盒；原弹窗边距、CodeMirror尺寸、搜索高亮与后续行为断言保留。严格tsc、定向Prettier、diff通过；根检查与全量格式后推送新SHA完整重跑，不运行本地全量E2E、不扩超时/跳过用例。
 
 全部元数据/失败日志、e2e-shard-browser-6-1解压trace/error-context/截图、后续运行与发布核对集中/tmp/nexus-publish-ui-fixes-20261102；旧目录与Vite按用户要求保留。完整远程成功和发布来源/digest待回填，不将旧CDP或其他7分片通过当整轮成功。
+
+第二轮847fb6a5/41486648381：质量、Docker及7分片成功，手机搜索恢复，browser 6仅拖动取消首次/重试失败。trace的根目录文件选择使列表向下滚动，hover-target坐标已在可视裁剪之外；裸Input.dispatchMouseEvent不含Playwright动作自动滚动。受控同touch条件目标可见时可正常清选择且无moveTo（drag-touch-diagnostic.log）；故意裁剪的drag-clipped-target.log未出现目标高亮，作为失败前提证据，不计通过。第三轮修复moveTo先滚目标再读bounds，右键取消前断言有效目标is-drop-target（返回源目录仍允许导航但不是放置目标），保留全部导航/取消/实际移动断言。未改UI、产品或超时，静态及完整Actions结果待回填。
+
+第三轮补丁提交前：Node v22.23.1、集中工具pnpm 11.28.10，根check、全量format:all:check、变更E2E严格tsc和git diff --check通过；日志e2e-clip-check-final.log、e2e-clip-format.log、e2e-clip-types-final.log。首次手工tsc未指定Node类型目录而失败，显式使用仓库Backend现有@types后通过，未改依赖或类型配置。仅既有测试和本阶段证据变更，产品构建由本轮Actions统一核对。

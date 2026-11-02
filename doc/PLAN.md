@@ -4365,3 +4365,7 @@ SQL只读排查确认：2026-10-29 的 Hermes 排障中，`shell_execute` 约45�
 | 完成证据 | 08b6b2b5已推送；首轮41484802901质量/Docker及7分片成功，browser 6的两项测试入口/几何前提失败，已修正并保留原断言，静态后重跑完整E2E；发布待通过后执行。 |
 
 首轮两项失败首次/重试均一致：拖动测试在hasTouch=true时先普通点击目录，实际已进入/hover-source，再用Control寻找原目录文件而超时；改为显式多选模式，重建选择并确认两个源和原目录后拖动。手机搜索既有用例读取.editor-actions.boundingBox，但两行布局的display:contents无盒；改测真实footer和三个按钮的对齐、顺序及全部边界，不修改产品UI。日志及trace留本批目录；原动作、源文件保留/移动、鼠标右键取消和搜索高亮断言保留。
+
+第二轮847fb6a5的41486648381质量、Docker及7分片成功，手机搜索已通过，仅拖动取消用例失败。trace截图显示选择较低文件后列表滚动，上方目标行仍有DOM盒但被列表裁剪，裸CDP不会执行定位器自动滚动；原坐标落在实际目标之外，无法据此判断右键取消失败。moveTo先scrollIntoViewIfNeeded再取坐标，右键取消前明确确认有效目标is-drop-target，导航继续核对最终路径；不删原移动、源保留及右键断言。定向受控CDP中目标可见时右键清空选择且未移动；故意裁剪时不产生目标高亮，分别保留drag-touch-diagnostic.log和drag-clipped-target.log。当前补丁待静态及第三轮完整远程回归，发布仍待通过。
+
+第三轮补丁提交前：Node v22.23.1、集中工具pnpm 11.28.10，根check、全量format:all:check、变更E2E严格tsc和git diff --check通过；日志e2e-clip-check-final.log、e2e-clip-format.log、e2e-clip-types-final.log。首次手工tsc未指定Node类型目录而失败，显式使用仓库Backend现有@types后通过，未改依赖或类型配置。仅既有测试和本阶段证据变更，产品构建由本轮Actions统一核对。
