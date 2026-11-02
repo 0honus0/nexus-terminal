@@ -1863,3 +1863,14 @@ Run/Tool 安全原因增加 tool_result_unconfirmed，继续由 AgentAppSurface 
 6. **数据与并发**：焦点直接读取浏览器事实，不维护第二份keyboard-open状态或增加延时；长按/选区拖动/双指手势仍沿显式抑制入口。
 7. **生命周期与失败**：touchcancel、就绪变化、失活与卸载仍由原resetInteractions恢复输入模式/清理timer；尺寸变化只测量，不为点击重建输入节点。
 8. **当前能力与验收**：USAGE终端章节描述操作；指定CDP覆盖真实xterm焦点、输入、鼠标报告、长按与滚动，真实手机软键盘动画仍需设备验收，证据归testing。
+
+### 触屏桌面鼠标右键后的选择
+
+1. **职责与范围**：FileManager区分实际输入来源，鼠标右键后立即允许选择，触摸/笔长按继续防误触。
+2. **子功能与目录**：原FileManager.openContext与Foundation.useLongPressGesture保持唯一owner，不新增手势状态。
+3. **依赖方向**：业务组件消费DOM PointerEvent与既有手势能力，不把设备触屏能力当作本次输入来源。
+4. **类型与转换**：沿原MouseEvent参数，通过PointerEvent实例与pointerType缩窄，无新复用类型/协议。
+5. **入口与安装**：只有实际touch/pen的原生contextmenu追加suppressClick，鼠标和键盘菜单不追加。
+6. **数据与并发**：原选择、菜单、原生拖动和固定源由原owner持有，无新增期限或第二份状态。
+7. **生命周期与失败**：原长按触发及松手的抑制仍归手势组件，原失活/撤销清理不变，不修改样式。
+8. **当前能力与验收**：同触屏CDP基线复现鼠标菜单后吞第一次选择，修复及既有完整拖动回归证据见testing；真实SFTP由本轮Actions核对。

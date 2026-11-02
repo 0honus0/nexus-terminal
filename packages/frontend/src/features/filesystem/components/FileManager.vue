@@ -1773,7 +1773,8 @@
 		event.preventDefault();
 		if (!browser.selected.value.has(entry.path) && !event.ctrlKey && !event.metaKey && !event.shiftKey)
 			browser.select(entry, 'only');
-		if (device.supportsTouchInteraction.value) longPress.suppressClick();
+		if (event instanceof PointerEvent && (event.pointerType === 'touch' || event.pointerType === 'pen'))
+			longPress.suppressClick();
 		compressSubmenu.value = null;
 		context.value = { scope: 'entry', entry, x: event.clientX, y: event.clientY };
 	};

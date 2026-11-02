@@ -4373,3 +4373,7 @@ SQL只读排查确认：2026-10-29 的 Hermes 排障中，`shell_execute` 约45�
 第三轮ff440403/41489494982质量、Docker与7分片成功，原取消前步骤已通过，同用例第二级目录停留在/hover-target。trace显示deep已可见且不busy，但无有效悬停高亮。受控CDP缩小列表并按正式脚本滚动/快速移动可复现目标不高亮；首次到达可能仅产生dragenter，进入新目录后旧位置与新行相同也可能没有真实移动。按Chromium原生拖放语义在moveTo末尾于目标内再移动1px，实际交付dragover，不改产品或等待时长。drag-same-coordinate.log为基线失败，drag-same-coordinate-fixed.log完整通过同坐标连续导航与取消；裁剪列表对照见drag-rapid-no-observation.log/drag-clipped-fixed.log。后续第四轮完整回归及发布待回填。
 
 第四轮提交前根check、变更E2E严格tsc、全量format和diff通过（e2e-dragover-*.log）。受控同触屏/裁剪列表完整链drag-complete-fixed.log通过取消、连续两级、两个上级及兄弟目录唯一放置，原文件夹与文件两个源保持；首次运行受Vite重优化导航中断，完成构建后重跑通过，不记首次为产品失败或成功。原USAGE拖动/取消操作仍符合实际，无产品行为差异。
+
+第四轮8599670a/41492022020已通过取消与连续两级导航，仅同用例第三段重新选择失败；其余7分片、质量和Docker成功。沿FileManager.openContext→longPress.suppressClick→clickEntry.consumeClick确认产品问题：supportsTouchInteraction使鼠标右键也进入800ms长按抑制，Escape后立即点击第一个源被吞。第五轮设计：① 状态与事件归原FileManager/longPress；② 沿原组件，不改基础手势实现；③ 输入事件→组件→原选择/手势；④ 原MouseEvent用PointerEvent实例及pointerType缩窄，无新契约；⑤ 仅touch/pen原生菜单追加抑制，鼠标/键盘不追加；⑥ 不增加等待或第二份状态；⑦ 原触摸长按、取消/失活/清理保持；⑧ 同CDP菜单关闭后立即重选基线drag-context-reselection-before.log实际失败，修复后验证原完整链，静态/构建及第五轮全量Actions待回填。原E2E已覆盖菜单Escape后新拖动，不增加隐藏等待；USAGE及前端架构同步。
+
+第五轮提交前：同一脚本基线在菜单关闭后source首次选择失败；修复后drag-context-reselection-after-final.log完整通过立即重新选择、连续两级、两个上级及兄弟目录唯一放置。首次after与Shared构建并行，Vite热重载使已挂载受控页面销毁，该次不计验收；构建结束后最终脚本通过。根check、前端build、全量format及diff全部通过（e2e-context-check/build/format.log）；两次源码复审确认只按真实PointerEvent来源区分，原useLongPressGesture触发/松手的抑制与清理保留，鼠标/键盘不再误入触摸保护，无UI样式差异。正式现有E2E已覆盖同一路径，完整Actions待运行。
