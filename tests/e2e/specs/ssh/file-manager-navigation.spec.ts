@@ -846,8 +846,16 @@ test.describe('remote drag move on touch-capable desktop', () => {
 		};
 
 		const begin = async (): Promise<void> => {
+			// Touch-capable desktops use single-click navigation; select sources through
+			// the actual multi-select mode instead of desktop modifier clicks.
+			const exitMultiSelect = manager(page).getByRole('button', { name: 'Exit Multi-Select Mode', exact: true });
+			if (await exitMultiSelect.isVisible()) await exitMultiSelect.click();
+			await manager(page).getByRole('button', { name: 'Enter Multi-Select Mode', exact: true }).click();
 			await row(page, 'hover-source').click();
-			await row(page, 'hover-one.txt').click({ modifiers: ['Control'] });
+			await row(page, 'hover-one.txt').click();
+			await expect(row(page, 'hover-source')).toHaveClass(/\bis-selected\b/);
+			await expect(row(page, 'hover-one.txt')).toHaveClass(/\bis-selected\b/);
+			await expect(pathInput(page)).toHaveValue('/');
 			await moveTo(row(page, 'hover-one.txt'));
 			await press('left', true);
 			await move(x + 12, y + 2);

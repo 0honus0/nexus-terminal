@@ -275,18 +275,26 @@ test('mobile CodeMirror search opens from the editor header and highlights remot
 		const searchBox = await editor.getByRole('button', { name: 'Search in document', exact: true }).boundingBox();
 		const refreshBox = await editor.getByRole('button', { name: 'Refresh remote file', exact: true }).boundingBox();
 		const saveBox = await editor.getByRole('button', { name: 'Save', exact: true }).boundingBox();
-		const actionsBox = await editor.locator('.editor-actions').boundingBox();
+		// The mobile actions wrapper uses display: contents; its actual buttons
+		// participate in the footer grid and must stay inside that visible box.
+		const footerBox = await editor.locator('.editor-footer').boundingBox();
 		expect(searchBox).toBeTruthy();
 		expect(refreshBox).toBeTruthy();
 		expect(saveBox).toBeTruthy();
-		expect(actionsBox).toBeTruthy();
+		expect(footerBox).toBeTruthy();
 		const searchCenterY = searchBox!.y + searchBox!.height / 2;
 		const refreshCenterY = refreshBox!.y + refreshBox!.height / 2;
 		const saveCenterY = saveBox!.y + saveBox!.height / 2;
 		expect(Math.abs(searchCenterY - refreshCenterY)).toBeLessThanOrEqual(1);
 		expect(Math.abs(refreshCenterY - saveCenterY)).toBeLessThanOrEqual(1);
 		expect(searchBox!.x + searchBox!.width).toBeLessThanOrEqual(refreshBox!.x + 1);
-		expect(saveBox!.x + saveBox!.width).toBeLessThanOrEqual(actionsBox!.x + actionsBox!.width + 1);
+		expect(refreshBox!.x + refreshBox!.width).toBeLessThanOrEqual(saveBox!.x + 1);
+		for (const button of [searchBox!, refreshBox!, saveBox!]) {
+			expect(button.x).toBeGreaterThanOrEqual(footerBox!.x);
+			expect(button.x + button.width).toBeLessThanOrEqual(footerBox!.x + footerBox!.width + 1);
+			expect(button.y).toBeGreaterThanOrEqual(footerBox!.y);
+			expect(button.y + button.height).toBeLessThanOrEqual(footerBox!.y + footerBox!.height + 1);
+		}
 
 		const contentAreaBox = await editor.locator('.editor-content-area').boundingBox();
 		const codeMirrorBox = await editor.locator('.cm-editor').boundingBox();

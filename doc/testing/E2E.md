@@ -2528,3 +2528,11 @@ global-confirmation.cjs/global.log在api.honus.top/__global_confirmation_probe__
 最终源码复审覆盖TerminalView触摸/长按/取消/就绪/失活清理、基础确认面板及所有五处直接消费者和feedback全部调用入口、三个迁移组件及原删除版本/排空/数据清理回调；无新状态owner、通信或存储变化，普通表单/管理UI保留。Node22.23.1、复用pnpm11.28.10在根执行pnpm run check、pnpm run build:frontend、pnpm run format:all:check、mobile/touch-workflows严格tsc及git diff --check均退出0；check.log/build.log/format.log/e2e-types.log留集中目录。最终只回填文档，再定向Prettier及diff检查；无提交、推送或部署。
 
 最终静态：根pnpm run check（Backend包级/Shared构建、双端ESLint与Frontend类型）、前端生产build、全量format:all:check及git diff --check全部通过，日志check.log/build.log/format.log保存在上述专用目录。最后仅补本段并定向核对文档格式；没有重复无变化的完整E2E或发布。
+
+## 本批 UI 修复远程 E2E 与发布（2026-11-02，进行中）
+
+用户授权推送、修复E2E并发布，08b6b2b58a6d8aa5f121816bd112fb05b800673d已推送main。首轮41484802901质量、Docker及7个测试分片成功，browser 6出现两项首次/重试相同失败：新增拖动多选初始化点击hover-source后，触屏桌面正常单击导航到/hover-source，随后寻找原目录hover-one.txt超时；既有touch-advanced搜索用例读取display:contents的.editor-actions.boundingBox得到null。失败截图/页面快照与源码分别确认真实路径和无盒语义，属于测试前提，不改产品UI。
+
+修复仅既有测试owner：拖动begin先通过实际多选按钮重建干净选择，明确两个源已选和路径仍为/后才开始原CDP拖动；取消、连续进入/上层、兄弟目录放置和最终源/内容断言保留。手机搜索改测真实footer及三个按钮，保留同排/顺序且补四边界，不恢复无意义的容器盒；原弹窗边距、CodeMirror尺寸、搜索高亮与后续行为断言保留。严格tsc、定向Prettier、diff通过；根检查与全量格式后推送新SHA完整重跑，不运行本地全量E2E、不扩超时/跳过用例。
+
+全部元数据/失败日志、e2e-shard-browser-6-1解压trace/error-context/截图、后续运行与发布核对集中/tmp/nexus-publish-ui-fixes-20261102；旧目录与Vite按用户要求保留。完整远程成功和发布来源/digest待回填，不将旧CDP或其他7分片通过当整轮成功。
