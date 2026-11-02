@@ -2585,24 +2585,37 @@ body:has(.app-header) .ui-notification-host {
 }
 
 .ui-confirmation-panel__body {
-	display: flex;
-	align-items: flex-start;
+	display: grid;
 	gap: 14px;
-	padding: 22px 22px 16px;
+	padding: 22px 22px 20px;
 	overflow-wrap: anywhere;
+}
+
+.ui-confirmation-panel__heading {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 12px;
 }
 
 .ui-action-group[data-layout='confirmation'] {
 	display: flex;
+	flex-wrap: wrap;
 	justify-content: flex-end;
 	gap: 10px;
-	padding: 0 22px 18px;
-	border-top: 0;
+	padding: 14px 22px 18px;
+	border-top: 1px solid color-mix(in srgb, var(--border-color) 48%, transparent);
+	background: color-mix(in srgb, var(--card-bg-color) 20%, transparent);
 }
 
 .ui-button--action-confirmation {
 	min-height: 44px;
 	min-width: 96px;
+	height: auto;
+	padding-block: 10px;
+	line-height: 1.4;
+	white-space: normal;
+	overflow-wrap: anywhere;
 }
 
 .ui-form-actions {
@@ -2628,23 +2641,6 @@ body:has(.app-header) .ui-notification-host {
 		flex: 1;
 		min-height: 44px;
 	}
-	.ui-confirmation-panel__body {
-		padding: 19px 18px 15px;
-	}
-	.ui-confirmation-panel__details {
-		margin: 0;
-		padding: 13px;
-	}
-	.ui-confirmation-panel__content {
-		padding: 0 18px 16px;
-	}
-	.ui-action-group[data-layout='confirmation'] {
-		padding: 13px 18px 17px;
-	}
-	.ui-button--action-confirmation {
-		flex: 1;
-		min-width: 0;
-	}
 	.ui-form-actions {
 		width: 100%;
 	}
@@ -2656,12 +2652,12 @@ body:has(.app-header) .ui-notification-host {
 
 .ui-confirmation-panel__icon {
 	display: grid;
-	width: 42px;
-	height: 42px;
+	width: 36px;
+	height: 36px;
 	flex-shrink: 0;
 	place-items: center;
 	border: 1px solid color-mix(in srgb, currentColor 22%, var(--glass-border-color));
-	border-radius: 14px;
+	border-radius: 11px;
 	color: var(--link-active-color);
 	background: color-mix(in srgb, currentColor 9%, var(--ui-fill-raised));
 	box-shadow: var(--ui-glass-highlight), var(--ui-shadow-inset);
@@ -2677,15 +2673,16 @@ body:has(.app-header) .ui-notification-host {
 	color: inherit;
 }
 .ui-confirmation-panel__title {
+	min-width: 0;
 	color: var(--ui-text);
 	font-size: 16px;
 	font-weight: 620;
 	line-height: 1.35;
 }
 .ui-confirmation-panel__description {
-	margin-top: 6px;
-	font-size: 12.5px;
-	line-height: 1.55;
+	margin: 0;
+	font-size: 13px;
+	line-height: 1.75;
 	color: color-mix(in srgb, var(--ui-text) 74%, transparent);
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
@@ -2693,6 +2690,9 @@ body:has(.app-header) .ui-notification-host {
 }
 .ui-confirmation-panel__content {
 	padding: 0 22px 18px;
+}
+.ui-confirmation-panel__content:empty {
+	display: none;
 }
 .ui-confirmation-panel__details {
 	display: grid;
@@ -2738,6 +2738,25 @@ body:has(.app-header) .ui-notification-host {
 .ui-confirmation-panel__detail[data-tone='danger'] .ui-confirmation-panel__detail-value {
 	color: var(--status-error-color);
 }
+@media (max-width: 639px) {
+	.ui-confirmation-panel__body {
+		gap: 12px;
+		padding: 18px 18px 20px;
+	}
+	.ui-confirmation-panel__details {
+		padding: 12px;
+	}
+	.ui-confirmation-panel__content {
+		padding: 0 18px 16px;
+	}
+	.ui-action-group[data-layout='confirmation'] {
+		padding: 14px 18px 18px;
+	}
+	.ui-button--action-confirmation {
+		flex: 1 1 96px;
+		min-width: 0;
+	}
+}
 .ui-action-group[data-layout='management'] {
 	display: grid;
 	grid-auto-flow: column;
@@ -2782,10 +2801,5 @@ body:has(.app-header) .ui-notification-host {
 	}
 	.ui-button--action-batch:nth-child(4) {
 		margin-left: auto;
-	}
-}
-@media (max-width: 639px) {
-	.ui-confirmation-panel__content {
-		padding: 0 20px 20px;
 	}
 }

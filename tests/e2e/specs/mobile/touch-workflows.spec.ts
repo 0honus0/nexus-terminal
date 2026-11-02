@@ -477,6 +477,30 @@ test('mobile shared Progress Display opens an empty catalog and returns to the t
 	await expect(page.locator('input.command-bar-input')).toBeEnabled();
 });
 
+test('mobile terminal taps preserve the focused keyboard input', async ({ page, context }) => {
+	await connectMobileSsh(page, context.request);
+	const terminal = page.locator('.terminal-inner-container');
+	const input = terminal.locator('.xterm-helper-textarea');
+	await terminal.tap({ position: { x: 80, y: 40 } });
+	await expect(input).toBeFocused();
+	// Observe the actual DOM focus transitions, not only focus after touchend.
+	const blurCount = await input.evaluateHandle((element) => {
+		const observation = { count: 0 };
+		element.addEventListener('blur', () => observation.count++);
+		return observation;
+	});
+	try {
+		for (let index = 0; index < 3; index++) {
+			await terminal.tap({ position: { x: 80, y: 40 } });
+			await expect(input).toBeFocused();
+			await expect(input).toHaveJSProperty('readOnly', false);
+		}
+		expect(await blurCount.evaluate((observation) => observation.count)).toBe(0);
+	} finally {
+		await blurCount.dispose();
+	}
+});
+
 test('mobile virtual keyboard Ctrl modifier reaches the live SSH input stream', async ({ page, context }) => {
 	await connectMobileSsh(page, context.request);
 
@@ -573,6 +597,40 @@ test('mobile file manager multi-select prevents accidental opens and single tap 
 			.poll(async () => editor.locator('.cm-content').innerText(), { timeout: 15_000 })
 			.toContain('plain-no-extension');
 
+		const footerLayout = await editor.locator('.editor-footer').evaluate((footer) => {
+			const bounds = (selector: string) => {
+				const element = footer.querySelector<HTMLElement>(selector);
+				if (!element) throw new Error(`Editor footer is missing ${selector}`);
+				return element.getBoundingClientRect();
+			};
+
+			const identity = bounds('.editor-footer-identity');
+			const path = bounds('.editor-path-label');
+			const meta = bounds('.editor-footer-meta');
+			const scope = footer.querySelector('.editor-scope')?.getBoundingClientRect();
+			const controls = [...footer.querySelectorAll<HTMLElement>('[role="combobox"], .editor-action-button')].map(
+				(control) => control.getBoundingClientRect(),
+			);
+			return {
+				pathWidth: path.width,
+				identityOverflow: Math.max(0, (scope?.right ?? path.right) - identity.right),
+				pathScopeOverlap: scope ? Math.max(0, path.right - scope.left) : 0,
+				rowSeparation: meta.top - identity.bottom,
+				controlRows:
+					Math.max(...controls.map((rect) => rect.top)) - Math.min(...controls.map((rect) => rect.top)),
+				controlsOverflow: Math.max(
+					0,
+					...controls.map((rect) => rect.right - footer.getBoundingClientRect().right),
+				),
+			};
+		});
+		expect(footerLayout.pathWidth).toBeGreaterThan(80);
+		expect(footerLayout.identityOverflow).toBeLessThanOrEqual(1);
+		expect(footerLayout.pathScopeOverlap).toBeLessThanOrEqual(1);
+		expect(footerLayout.rowSeparation).toBeGreaterThanOrEqual(0);
+		expect(footerLayout.controlRows).toBeLessThanOrEqual(1);
+		expect(footerLayout.controlsOverflow).toBeLessThanOrEqual(1);
+
 		for (const [control, optionValue, selectedValue] of [
 			['.encoding-select:not(.line-ending-select)', 'utf-16le', 'utf-8'],
 			['.line-ending-select', 'crlf', 'lf'],
@@ -585,13 +643,16 @@ test('mobile file manager multi-select prevents accidental opens and single tap 
 			expect(triggerBox).toBeTruthy();
 			expect(menuBox).toBeTruthy();
 			expect(Math.abs(menuBox!.width - triggerBox!.width)).toBeLessThanOrEqual(1);
+			if (control === '.line-ending-select') {
+				const labelOverflow = await option
+					.locator('.ui-select__item-label')
+					.evaluate((label) => label.scrollWidth - label.clientWidth);
+				expect(labelOverflow).toBeLessThanOrEqual(1);
+			}
 			// Labels may ellipsize in a trigger-width popup; their accessible names remain complete.
 			await expect(option).toHaveAccessibleName(optionValue === 'utf-16le' ? /UTF-16 LE/ : /CRLF/);
 			await page.locator(`[role="option"][data-value="${selectedValue}"]`).click();
 		}
-		expect(
-			await editor.locator('.editor-actions').evaluate((actions) => actions.scrollWidth - actions.clientWidth),
-		).toBeLessThanOrEqual(1);
 		await captureFunctionalScreenshot(page, 'mobile-file-editor.png');
 
 		const viewport = page.viewportSize();

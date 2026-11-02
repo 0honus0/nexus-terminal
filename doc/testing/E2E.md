@@ -2484,3 +2484,47 @@ scripts/maintenance/cleanup-history.test.mjs使用真实脚本和受控GitHub/GH
 修复提交6f20c9d5ab0e29b5460335f57df726d2427184dc后，手动工作流[41468963720](https://github.com/0honus0/nexus-terminal/actions/runs/41468963720)及job125357193266的回归/真实清理全部成功。15:10:35–15:13:38 UTC日志计划29个旧运行/190个产物并完成；事后仓库仅剩本次清理、成功发布41456251490、成功E2E41455018366及排队E2E34749067364，artifacts为12个。因34749067364仍queued，明确跳过123个候选产品版本、70个runner版本及888个cache，属于原活跃保护，不是失败或已删除；未取消旧排队任务。原失败运行按既有历史清理策略已删除。
 
 清理前后用docker buildx imagetools inspect实际核对latest=sha256:10dde94e2ef020a823d42643d980f175a915c108a4c36c3d69dca8c0264b4724、dev=sha256:98148fc6ea192e42d2d8e2a7504d468dd8406b9841392397e7d6641c74dbca21，均未变化；当前E2E及发布记录API仍success。新增本地日志、npm工具/缓存、Octokit故障夹具全部集中/tmp/nexus-actions-cleanup-20261102，完成后删除，长期证据以本段与保留的远程成功工作流为准。只改维护脚本/工作流及文档，没有UI、产品包、依赖或生产改动，不重新发布镜像或执行无关全量E2E。
+
+## 文件拖动悬停导航与右键取消（2026-11-02）
+
+FileManager 的内部原生拖动在目录行和 `..` 行停留2秒进入，导航保留本次原始条目，当前目录空白松手沿原moveTo链派发。右键取消清空拖动源、选择、悬停等待和目标；不更改当前浏览目录，也不派发移动。文档级捕获右键drag/dragover/drop覆盖源节点因导航移除、容器外及快速松手，失活/断线/换通道/卸载清理计时与监听。保留原快速drop、移动过滤、外部上传和UI。
+
+通过指定 `http://172.30.30.11:9223` CDP、Chrome156，在 `https://api.honus.top/__file_drag_probe__` 独立自有context挂载当前Vite编译的真实FileManager、真实useFilesystemBrowser及样式/i18n。仅目录Port和moveTo消费者受控，没有连接真实SSH或移动用户文件。8组PASS：文件夹连续进入两级后空白放置只发一次原源移动；原目录即时右键取消清选择且2秒后不导航；两级后右键保留当前路径且不移动；多选文件返回两个上级（含源目录）再进入兄弟目录仍保留两个源；自身悬停拒绝及快速drop；换行重置2秒；视图失活；断线。无pageerror，截图drag-final.png。工具、日志及缓存集中 `/tmp/nexus-file-drag-navigation-20261102`，验收记录为verify.log。
+
+测试驱动核对：Playwright1.64.1的DragManager接管拖动时RawMouse.down直接忽略第二鼠标键，RawMouse.up改为drop，不能用page.mouse右键结果推断产品故障。受控验收和新增正式回归改用Chromium原生Input.dispatchMouseEvent，保留buttons左+右组合；实际DOM的drop可仍显示原生move效果，但产品必须无moveTo派发。测试初轮的expect导入和裸CDP移动步数问题已修正，不计为产品通过证据；最终verify.log为8组完整PASS。
+
+正式 `tests/e2e/specs/ssh/file-manager-navigation.spec.ts` 新增实际SSH夹具断言，覆盖待导航右键、两级后取消、常规右键恢复、多选文件/文件夹通过两级上级与兄弟目录、源删除及文件夹内容保留；原触控桌面快速移动/上级移回断言完整保留。新正式用例尚未在完整后端/SSH E2E运行，不把Port受控验证称为远端文件移动验收。未提交、推送或部署。
+
+最终静态检查：根 `pnpm run check`（Backend包级含Shared构建、双端ESLint、Frontend类型）及 `pnpm run build:frontend` 通过，日志check-final.log/build-final.log；变更E2E的严格tsc（strict/noUnusedLocals、ES2023、Bundler）通过，日志e2e-types-final.log。新增测试的函数间空行已按原ESLint规则修正，全量 `pnpm run format:all:check` 与 `git diff --check` 通过；本轮不运行完整本地E2E或触发发布。自有CDP context在finally关闭；Vite9998和集中测试目录按用户要求保留，等待用户通知删除。
+
+## 手机编辑器底栏两行布局（2026-11-02）
+
+用户报告路径及amd服务器名遮挡、换行符太窄，随后要求最多两行且保持紧凑。基线通过指定CDP在390px手机、16px边距的真实FileEditor受控挂载复现：原路径可见宽度仅3.33px；320px时路径0px，scope超出identity范围；换行符被原窄屏规则压至49.59px。原footer强制nowrap，identity与元信息/按钮竞争且overflow裁剪；换行符固定3.1rem。只改组件560px容器查询：两行Grid、首行路径/服务器与保存状态分别让位，第二行编码占剩余空间、5rem换行符与原三个动作按钮。低高度且极窄容器的原紧凑模式显式恢复flex；没有改共享UiSelect、色彩、编辑/保存逻辑或宽屏布局。
+
+指定 `http://172.30.30.11:9223`、Chrome156，以Android UA/触摸与320/360/390/420/560/880px viewport，通过 `https://api.honus.top/__editor_footer_probe__` 独立context挂载真实FileEditor、createFileEditorSession、CodeMirror、UI/FontAwesome和既有darkUiTheme；仅FileDocumentPort为受控读取/保存。最终前五种宽度footer分别约66–69px，均只有两行，路径206.84–443.64px，换行符80px，服务器无裁剪，三个实际按钮与两个下拉同排且在footer内；880px仍为原单行。CRLF选项文字完整、实际选择转换草稿并在点击保存后以CRLF交付一次Port回调。saving/saved/error三态在320/390/560px共9组均不挤第三行，保存中选择与保存禁用；长路径/文件名/服务器名3组、无scope状态通过。无pageerror。测试中修正隔离挂载的Pinia安装和#app全局min-height影响后，以最终after.log/after.json与after-{320,390,880}.png为证据；不把测试挂载尺寸错误当作产品越界原因。
+
+原mobile/touch-workflows正式用例补路径/服务器不遮挡、首行/次行分离、所有实际控件同排及CRLF菜单文字不截断断言；用实际按钮范围替代display:contents容器无布局盒后的空泛scrollWidth检查，保留原菜单宽度、选项名称、CodeMirror打开与弹窗边距断言。正式手机/SSH E2E尚未运行，本轮不连接真实SSH、不保存用户文件，不提交/推送/部署。工具和产物集中/tmp/nexus-mobile-editor-footer-20261102，复用原Vite9998，保留先前拖动功能变更与测试现场。
+
+本轮静态收口：根 `pnpm run check`（Backend包级/Shared构建、双端ESLint、Frontend类型）及前端生产构建通过，日志check.log/build.log；变更mobile E2E严格tsc通过，日志e2e-types.log；全量format与diff结果记录在format.log。所有自有CDP context在finally关闭，原Vite与两轮集中测试目录按用户要求保留，未新增后端进程。
+
+## 重置/删除共用确认弹窗布局（2026-11-02）
+
+用户要求优化重置终端、删除等确认弹窗并提供截图。基线为原UiConfirmationPanel：图标占正文左列，默认slot即使仅Vue条件注释也留18px（手机20px）内容padding；同一手机content样式存在重复覆盖。改为标题/图标同行、整行正文，描述字号13px/行高1.75，空content用:empty隐藏；确认按钮区有细分隔和浅底，手机等宽且44px高。只改Foundation原组件及确认选择器，统一其手机规则，没有改文案、按钮名称、store、用例或上传冲突行为，之前拖动及编辑器变更保留。
+
+通过指定CDP172.30.30.11:9223、Chrome156，在api.honus.top/__confirmation_probe__自有context挂载真实DialogHost/useDialogStore、UiConfirmationPanel与真实UploadConflictModal，加载三语产品文案、UI/FontAwesome及既有主题。重置采用原workspace.terminal.confirmReset（amd），删除采用原confirmDeleteFile（.gitattributes），只完成本地确认Promise，不执行SSH重置或远端删除。桌面1280与手机390/320两场景共6组截图与几何PASS：正文宽度分别由338/256/186增加为394/312/242px；空白内容块由18/20变为0；无横向溢出，按钮44px高、手机等宽，确认顺序不变。附加覆盖确定/取消返回、Escape/焦点恢复、长路径与详情、复选回调、loading防关闭、signal取消、实际上传冲突中止回调及apply-to-all、英/日长文案与浅色主题，最终after.log为ALL PASS且无pageerror。脚本初轮误用“跳过”而真实按钮为“中止此文件”，修正测试定位后完整通过，未改产品文案。
+
+before/after-{reset,delete}-{1280,390,320}.png为实际面板截图；after-details-320、after-upload-320、after-reset-{en-US,ja-JP}及after-delete-light-390另存集中目录/tmp/nexus-confirmation-layout-20261102，几何记录before.json/after.json。本轮不增加读取源码的自定义测试或重复全量本地E2E；正式SSH重置和文件删除尚未执行，不把组件确认回调视为这些远端操作验收。所有自有CDP context在finally关闭，原Vite9998及先前目录继续保留，不提交/推送/部署。
+
+## 手机终端点击键盘跳动与全局确认消费者（2026-11-02）
+
+本轮main/78997c1a及既有未提交拖动/编辑器/确认布局变更之上，用户确认终端普通输入和htop点击均导致软键盘反复跳动，并要求排查后统一全部同类确认弹窗。沿TerminalView触摸→xterm textarea→TUI鼠标链核对：原handleTouchStart每次无条件suppressMobileSoftKeyboard，将readOnly=true/inputmode=none并blur；touchend又恢复和focus。指定CDP172.30.30.11:9223/Chrome156的390×844触屏context，通过api.honus.top/__terminal_focus_probe__挂载真实TerminalView与xterm、受控TerminalChannel：连续三次真实触摸基线记录三组blur/focus和输入属性切换，输入节点始终相同。修复以document.activeElement为事实，已聚焦输入普通按下不抑制，未聚焦及长按选区沿原策略，不新增延时或第二份键盘状态。
+
+集中目录/tmp/nexus-mobile-keyboard-focus-20261102的verify.cjs、before.json/log、after.json/log记录修复前后；修复后三次触摸focus/blur事件与输入属性变更均为零。实际xterm启用alternate buffer、1000/1006鼠标报告后，两次触摸各发送一次SGR按下/松开且零失焦；普通abc输入、IME期间点击不打断焦点、键盘关闭时滚动不聚焦、长按选字关闭键盘并弹菜单、退出选区后点按恢复输入、touchcancel、视口缩放和inputEnabled变更恢复均PASS，最终ALL PASS且无pageerror。脚本首次加载触发Vite依赖重新优化导致导航中断，重跑取得基线；选区后测试点落在菜单内，改为真实空白位置后通过，未改产品菜单行为。正式mobile/touch-workflows新增连续点击时监听真实blur、断言零失焦及readOnly恢复；只做类型检查，不运行完整E2E。桌面触屏CDP不等同真实Android/iOS软键盘动画或真实htop/SSH执行，实机验收保留。
+
+基础面板原已覆盖全部feedback.confirm/alert及UploadConflictModal；全仓消费者复核发现Agent的ModelProviderSettings删除、AppIntegrationEditor删除、AppManagementSettings卸载仍拼装UiModal，现统一改为UiConfirmationPanel，直接传原文案、风险、禁用/加载/关闭条件和原回调。普通表单/管理弹窗、开发页原生window.confirm与行内二次确认不属于本次同类面板；不增加业务定点CSS。全部标题/正文/操作区规则留Foundation，取消在危险确认之前。真实卸载排空的三个英文按钮在320px初测出现面板2px、按钮11/21px溢出；共用操作组改为可换行，手机复用原96px按钮基准，长文案允许换行且最小44px，最终两取消操作同排、继续卸载独占下一排，全部溢出为0，未隐藏任何操作。
+
+global-confirmation.cjs/global.log在api.honus.top/__global_confirmation_probe__挂载真实DialogHost及上述三真实组件，Pinia、三语与既有主题。GET用严格契约受控响应，所有写请求均本地拦截，绝不发送远端删除；ModelProvider/Integration取消零请求，确认各一次原DELETE路径（原版本参数由源码复核）；卸载调用原retire、取消排空标志及busy时Escape/按钮保护均PASS。主机密钥详情、单按钮提示、备份导入，以及三个组件×1280/390/320几何/截图、排空英文三按钮均无横向溢出，最终ALL PASS且无pageerror。截图global-{host-key,alert,backup}-390、global-{ModelProviderSettings,AppIntegrationEditor,AppManagementSettings}-{1280,390,320}和global-uninstall-draining-320均留集中目录；原确认六组、确认取消、详情/复选/loading、signal撤销、上传冲突和英日/浅色回归在基础样式最终改动后重跑，confirmation-final.log为ALL PASS。同类确认面板覆盖的是呈现和本地回调，不代验真实远端删除/卸载；自有context均finally关闭，Vite及测试目录按用户要求保留。
+
+最终源码复审覆盖TerminalView触摸/长按/取消/就绪/失活清理、基础确认面板及所有五处直接消费者和feedback全部调用入口、三个迁移组件及原删除版本/排空/数据清理回调；无新状态owner、通信或存储变化，普通表单/管理UI保留。Node22.23.1、复用pnpm11.28.10在根执行pnpm run check、pnpm run build:frontend、pnpm run format:all:check、mobile/touch-workflows严格tsc及git diff --check均退出0；check.log/build.log/format.log/e2e-types.log留集中目录。最终只回填文档，再定向Prettier及diff检查；无提交、推送或部署。
+
+最终静态：根pnpm run check（Backend包级/Shared构建、双端ESLint与Frontend类型）、前端生产build、全量format:all:check及git diff --check全部通过，日志check.log/build.log/format.log保存在上述专用目录。最后仅补本段并定向核对文档格式；没有重复无变化的完整E2E或发布。

@@ -5,6 +5,7 @@
 		UiBadge,
 		UiButton,
 		UiCheckbox,
+		UiConfirmationPanel,
 		UiEmptyState,
 		UiFormActions,
 		UiFormField,
@@ -1397,36 +1398,23 @@
 				</UiFormActions>
 			</template>
 		</UiModal>
-		<UiModal
+		<UiConfirmationPanel
 			:visible="deleting !== null"
 			:title="t('agent.settings.providerManagement.deleteTitle')"
-			panel-class="max-w-md rounded-2xl p-5"
+			:description="t('agent.settings.providerManagement.deleteConfirm', { name: deleting?.name })"
+			tone="danger"
+			icon="fas fa-exclamation-triangle"
 			@close="deleting = null"
 		>
-			<div class="flex items-start gap-3">
-				<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-error/10 text-error">
-					<i class="fa-solid fa-triangle-exclamation text-base" aria-hidden="true"></i>
-				</div>
-				<p class="text-sm leading-relaxed">
-					{{ t('agent.settings.providerManagement.deleteConfirm', { name: deleting?.name }) }}
-				</p>
-			</div>
-			<template #footer
-				><UiFormActions>
-					<UiButton
-						type="button"
-						appearance="solid"
-						tone="danger"
-						:disabled="blocked"
-						@click="confirmDelete"
-						>{{ t('common.delete') }}</UiButton
-					>
-					<UiButton type="button" appearance="soft" tone="neutral" @click="deleting = null">{{
-						t('common.cancel')
-					}}</UiButton>
-				</UiFormActions></template
-			>
-		</UiModal>
+			<template #actions>
+				<UiButton type="button" appearance="soft" tone="neutral" @click="deleting = null">{{
+					t('common.cancel')
+				}}</UiButton>
+				<UiButton type="button" appearance="solid" tone="danger" :disabled="blocked" @click="confirmDelete">{{
+					t('common.delete')
+				}}</UiButton>
+			</template>
+		</UiConfirmationPanel>
 	</section>
 </template>
 

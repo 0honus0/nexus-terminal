@@ -1,15 +1,7 @@
 <script setup lang="ts">
 	import { computed, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import {
-		UiBadge,
-		UiButton,
-		UiEmptyState,
-		UiFormActions,
-		UiInfoHint,
-		UiInlineNotice,
-		UiModal,
-	} from '@/foundation/ui';
+	import { UiBadge, UiButton, UiConfirmationPanel, UiEmptyState, UiInfoHint, UiInlineNotice } from '@/foundation/ui';
 	import type { useAppManagement } from '../composables/use-app-management';
 	import type { usePluginManagement } from '../composables/use-plugin-management';
 	import type { ManagedApp } from '../model/app-management-types';
@@ -261,10 +253,17 @@
 			/>
 		</div>
 	</section>
-	<UiModal
+	<UiConfirmationPanel
 		:visible="active && Boolean(uninstallApp && uninstallInstallation)"
 		:title="t('agent.settings.apps.uninstallConfirmTitle')"
-		panel-class="max-w-md p-5 rounded-2xl"
+		:description="
+			t('agent.settings.apps.uninstallConfirmPrompt', {
+				name: uninstallApp?.name,
+				version: uninstallApp?.definitionVersion,
+			})
+		"
+		tone="danger"
+		icon="fas fa-exclamation-triangle"
 		:close-on-backdrop="!props.plugins.operation.busy.value"
 		:close-on-escape="!props.plugins.operation.busy.value"
 		@close="uninstallAppId = ''"
@@ -276,14 +275,6 @@
 					<p class="font-mono text-xs text-text-secondary">v{{ uninstallApp?.definitionVersion }}</p>
 				</div>
 			</UiInlineNotice>
-			<p class="text-xs leading-relaxed text-text-secondary">
-				{{
-					t('agent.settings.apps.uninstallConfirmPrompt', {
-						name: uninstallApp?.name,
-						version: uninstallApp?.definitionVersion,
-					})
-				}}
-			</p>
 			<p class="text-xs leading-relaxed text-text-secondary">
 				{{ t('agent.settings.plugins.uninstallDataHint') }}
 			</p>
@@ -297,45 +288,43 @@
 				@changed="props.plugins.load"
 			/>
 		</div>
-		<template #footer>
-			<UiFormActions>
-				<UiButton
-					type="button"
-					appearance="solid"
-					tone="danger"
-					:loading="props.plugins.operation.busy.value"
-					:disabled="blocked || uninstallApp?.enabled"
-					@click="confirmUninstall()"
-				>
-					<i class="fa-regular fa-trash-can" aria-hidden="true"></i>
-					{{
-						t(
-							uninstallInstallation?.status === 'draining'
-								? 'agent.settings.plugins.continueUninstall'
-								: 'agent.settings.apps.uninstall',
-						)
-					}}
-				</UiButton>
-				<UiButton
-					v-if="uninstallInstallation?.status === 'draining'"
-					type="button"
-					appearance="soft"
-					tone="neutral"
-					:disabled="blocked"
-					@click="confirmUninstall(true)"
-					>{{ t('agent.pluginManagement.cancelRetirement') }}</UiButton
-				>
-				<UiButton
-					type="button"
-					appearance="soft"
-					tone="neutral"
-					:disabled="props.plugins.operation.busy.value"
-					@click="uninstallAppId = ''"
-					>{{ t('common.cancel') }}</UiButton
-				>
-			</UiFormActions>
+		<template #actions>
+			<UiButton
+				v-if="uninstallInstallation?.status === 'draining'"
+				type="button"
+				appearance="soft"
+				tone="neutral"
+				:disabled="blocked"
+				@click="confirmUninstall(true)"
+				>{{ t('agent.pluginManagement.cancelRetirement') }}</UiButton
+			>
+			<UiButton
+				type="button"
+				appearance="soft"
+				tone="neutral"
+				:disabled="props.plugins.operation.busy.value"
+				@click="uninstallAppId = ''"
+				>{{ t('common.cancel') }}</UiButton
+			>
+			<UiButton
+				type="button"
+				appearance="solid"
+				tone="danger"
+				:loading="props.plugins.operation.busy.value"
+				:disabled="blocked || uninstallApp?.enabled"
+				@click="confirmUninstall()"
+			>
+				<i class="fa-regular fa-trash-can" aria-hidden="true"></i>
+				{{
+					t(
+						uninstallInstallation?.status === 'draining'
+							? 'agent.settings.plugins.continueUninstall'
+							: 'agent.settings.apps.uninstall',
+					)
+				}}
+			</UiButton>
 		</template>
-	</UiModal>
+	</UiConfirmationPanel>
 </template>
 
 <style scoped>

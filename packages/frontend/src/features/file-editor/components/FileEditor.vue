@@ -867,6 +867,8 @@
 
 	@container file-editor-pane (max-width: 560px) {
 		.editor-footer {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) repeat(3, auto);
 			gap: 0.28rem;
 			padding: 0.35rem 0.45rem;
 		}
@@ -876,17 +878,53 @@
 		}
 
 		.editor-footer-identity {
-			flex-basis: 8rem;
+			min-width: 0;
+			grid-area: 1 / 1 / 2 / -1;
+		}
+
+		.editor-footer:has(.save-status) .editor-footer-identity {
+			grid-column-end: -2;
+		}
+
+		.editor-path-label {
+			flex: 1 1 auto;
+		}
+
+		.editor-path-name {
+			max-width: 100%;
+			overflow: hidden;
+			text-overflow: ellipsis;
 		}
 
 		.editor-footer-meta {
-			flex: 0 0 auto;
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) 5rem;
+			grid-area: 2 / 1;
+		}
+
+		.encoding-select:not(.line-ending-select) {
+			width: 100%;
+			max-width: none;
+			grid-template-columns: minmax(0, 1fr);
 		}
 
 		.line-ending-select {
-			width: 3.5rem;
-			max-width: 3.5rem;
-			flex-basis: 3.5rem;
+			width: 5rem;
+			max-width: 5rem;
+			flex-basis: 5rem;
+		}
+
+		.editor-actions {
+			display: contents;
+		}
+
+		.editor-action-button {
+			grid-row: 2;
+		}
+
+		.save-status {
+			grid-area: 1 / -2 / 2 / -1;
+			justify-self: end;
 		}
 	}
 
@@ -894,12 +932,6 @@
 		.tab-item {
 			max-width: 11rem;
 			padding-inline: 0.45rem 0.3rem;
-		}
-
-		.line-ending-select {
-			width: 3.1rem;
-			max-width: 3.1rem;
-			flex-basis: 3.1rem;
 		}
 
 		.save-status span {
@@ -910,24 +942,11 @@
 			padding-inline: 0.28rem;
 		}
 
-		.editor-path-directory {
-			display: none;
-		}
-
-		.editor-footer-identity {
-			min-width: 0;
-			flex: 1 1 4.5rem;
-		}
-
 		.editor-path-label,
 		.editor-path-name {
 			min-width: 0;
 			overflow: hidden;
 			text-overflow: ellipsis;
-		}
-
-		.editor-actions {
-			flex: 0 0 auto;
 		}
 
 		.editor-save-label {
@@ -963,6 +982,7 @@
 		}
 
 		.editor-footer {
+			display: flex;
 			justify-content: center;
 			padding: 0.25rem;
 		}
@@ -972,6 +992,7 @@
 		}
 
 		.editor-actions {
+			display: flex;
 			width: auto;
 			justify-content: center;
 		}

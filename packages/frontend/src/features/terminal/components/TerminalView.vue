@@ -1210,7 +1210,9 @@
 			mobileTouchScrollActive = false;
 			mobileTouchScrollLastY = touch.clientY;
 			mobileTouchScrollRemainder = 0;
-			suppressMobileSoftKeyboard();
+			// A tap on an already focused terminal must not close and reopen the IME.
+			// Keep suppression for unfocused gestures so scrolling cannot summon it.
+			if (document.activeElement !== terminal?.textarea) suppressMobileSoftKeyboard();
 			closeMobileClipboardMenu(true);
 			mobileLongPressTriggered = false;
 			mobileTouchMoved = false;

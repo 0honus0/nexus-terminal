@@ -51,11 +51,11 @@
 		@close="$emit('close')"
 	>
 		<div class="ui-confirmation-panel__body">
-			<div class="ui-confirmation-panel__icon" :data-tone="tone"><i :class="icon" aria-hidden="true" /></div>
-			<div class="min-w-0 flex-1">
+			<div class="ui-confirmation-panel__heading">
+				<div class="ui-confirmation-panel__icon" :data-tone="tone"><i :class="icon" aria-hidden="true" /></div>
 				<h3 :id="titleId" class="ui-confirmation-panel__title">{{ title }}</h3>
-				<p v-if="description" class="ui-confirmation-panel__description">{{ description }}</p>
 			</div>
+			<p v-if="description" class="ui-confirmation-panel__description">{{ description }}</p>
 		</div>
 		<div v-if="$slots.default" class="ui-confirmation-panel__content"><slot /></div>
 		<UiActionGroup layout="confirmation"><slot name="actions" /></UiActionGroup>

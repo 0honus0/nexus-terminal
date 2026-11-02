@@ -1819,3 +1819,47 @@ TerminalView 在 pageshow、恢复可见及失焦后的窗口重新聚焦时清�
 ### Agent 执行结果未确认
 
 Run/Tool 安全原因增加 tool_result_unconfirmed，继续由 AgentAppSurface 与 NativeToolCallDetails 在原错误区域呈现三语说明。后台 Job 故障由后端结束所属 Run/族并失效待审批工具。isNativeRunActive 仅表示 pending/running，unknown 停止状态订阅等待；canCancelNativeRun 另保留 unknown 的显式结束资格，原 composer/详情结束入口与续发保护同步消费，避免把已停止的执行与尚未人工结束的围栏混为一谈。不新增等待计时、重试入口或 UI 布局。明确说明任务已停止、远端可能仍在运行，并要求核对后再操作。状态与原因通过原 HTTP/WS codec 读取，历史重读不派发命令。
+
+### 文件拖动悬停导航
+
+1. **职责与范围**：FileManager持有一次内部拖动的原始条目和悬停手势；browser只持当前目录快照，目录变化清选择不清本次拖动源。
+2. **子功能与目录**：沿原FileManager组件和Filesystem browser，不新增导航/移动状态仓库。
+3. **依赖方向**：原生DragEvent→FileManager→原navigationQueue/loadPath→browser/FilesystemChannel；最终drop仍通过原moveTo事件交给Workspace。
+4. **类型与转换**：节点、坐标和计时器只属于组件局部记录；原RemoteFileEntry和双端契约不变。
+5. **入口与安装**：文件夹行及`..`行停留2秒进入；返回源父目录允许仅导航，文件/空白区域不触发悬停进入；当前目录空白放置接续原移动流程；拖动中右键取消、清空选择并关闭菜单，当前浏览目录保留。
+6. **数据与并发**：同目标的dragover不重置等待，更换目标重计时；派发导航前检查同一拖动、原通道/视图/目录、有效目录行及真实指针命中，自身/源目录后代禁止进入。
+7. **生命周期与失败**：离开行、目录改变、drop/dragend、视图撤销、换通道和卸载取消等待及滚动；导航后保留拖动，最终移动仍使用原过滤/确认/失败链，不由悬停派发文件修改。文档级捕获原生drag/dragover/drop及pointerdown/contextmenu的右键状态，覆盖目录外与快速松手；所有监听随组件卸载移除。
+8. **当前能力与验收**：操作见USAGE文件管理章节；静态、受控CDP和真实SSH分别记录于testing，不扩大有限验证范围。
+
+### 文件编辑器窄屏底栏
+
+1. **职责与范围**：FileEditor拥有路径/服务器、编码/换行符及操作按钮的底栏排版；原编辑会话仍持有文档和保存状态。
+2. **子功能与目录**：沿features/file-editor/components/FileEditor.vue的既有容器查询，不增加响应式布局组件或共享UI规则。
+3. **依赖方向**：Workspace的弹窗/嵌入容器→FileEditor→原UiSelect/UiButton/session，依赖不变。
+4. **类型与转换**：纯CSS调整，无模型、协议或类型迁移。
+5. **入口与安装**：沿原560px容器断点为路径/服务器保留独立行，目录可截断、文件名优先、服务器留出独立空间；第二行固定编码/换行符及搜索/刷新/保存，编码使用剩余空间，换行符保留5rem，最多两行；保存状态占首行右侧，路径布局为它让位，宽屏仍沿原单行布局。
+6. **数据与并发**：不增加测量、状态、计时或网络请求；编码/换行符、草稿和保存串行语义不变。
+7. **生命周期与失败**：只读/保存中禁用、错误提示、选择菜单portal和视口碰撞仍归原owner；极小且低矮容器的原紧凑规则保留。
+8. **当前能力与验收**：操作说明归USAGE编辑章节，指定CDP的遮挡前后几何、菜单/保存行为和静态证据归testing，正式移动端SSH回归单列实际执行范围。
+
+### 共用确认弹窗排版
+
+1. **职责与范围**：Foundation的UiConfirmationPanel持有确认弹窗布局和风险配色，shared/feedback的DialogHost/store持有确认状态，原用例持有最终动作。
+2. **子功能与目录**：沿foundation/ui/UiConfirmationPanel.vue与uiGen2.css确认选择器；DialogHost覆盖全部feedback确认/提示，UploadConflictModal和Agent的ModelProviderSettings、AppIntegrationEditor、AppManagementSettings直接共用基础确认面板；普通表单Dialog与管理/批量按钮保留各自职责。
+3. **依赖方向**：用例→feedback→DialogHost→确认面板/Overlay/ActionGroup；上传冲突及Agent受控确认直接消费原面板，不在业务组件复制标题、正文和操作区排版。
+4. **类型与转换**：复用原title/description/tone/icon和default/actions槽；无新增类型、边界或持久化。
+5. **入口与安装**：图标和标题为紧凑标题行，正文独占全宽；空默认槽不产生留白，详情/复选项仍在正文之后；底部细分隔及浅底对齐按钮，手机同排等宽且至少44px高，复用原96px按钮基准换行，多操作与长文案不挤出面板。
+6. **数据与并发**：纯模板/CSS，取消位于危险确认之前，不改变原文案、风险语义或状态更新，不新增请求/计时器；原删除版本/排空与数据清理流程仍由原owner负责。
+7. **生命周期与失败**：原Overlay焦点恢复、Escape/背景关闭、loading防关闭、signal取消与上传冲突选择回调保留；长内容沿原最大高度滚动，不推断已确认等于远端操作成功。
+8. **当前能力与验收**：用户操作见USAGE通知管理；真实组件截图、CDP受控结果及静态检查记录于testing，截图不执行SSH重置或文件删除。
+
+### 手机终端普通点击与输入焦点
+
+1. **职责与范围**：TerminalView拥有触摸手势与xterm输入焦点，普通点按不能中断已聚焦输入及IME。
+2. **子功能与目录**：沿terminal/components/TerminalView的handleTouchStart、suppress/restoreMobileSoftKeyboard，不增加公共焦点服务。
+3. **依赖方向**：触摸→TerminalView→xterm及原TerminalChannel，TUI兼容鼠标事件仍交由xterm发送。
+4. **类型与转换**：原DOM TouchEvent、textarea及TerminalChannel不变，无Shared/Backend迁移。
+5. **入口与安装**：单指按下以document.activeElement判断；已聚焦textarea不切readOnly/inputmode、不blur，未聚焦手势保留键盘抑制，普通松手恢复输入。
+6. **数据与并发**：焦点直接读取浏览器事实，不维护第二份keyboard-open状态或增加延时；长按/选区拖动/双指手势仍沿显式抑制入口。
+7. **生命周期与失败**：touchcancel、就绪变化、失活与卸载仍由原resetInteractions恢复输入模式/清理timer；尺寸变化只测量，不为点击重建输入节点。
+8. **当前能力与验收**：USAGE终端章节描述操作；指定CDP覆盖真实xterm焦点、输入、鼠标报告、长按与滚动，真实手机软键盘动画仍需设备验收，证据归testing。

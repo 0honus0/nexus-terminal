@@ -4,6 +4,7 @@
 	import {
 		UiBadge,
 		UiButton,
+		UiConfirmationPanel,
 		UiEmptyState,
 		UiFormActions,
 		UiFormField,
@@ -409,38 +410,37 @@
 			</UiFormActions>
 		</template>
 	</UiModal>
-	<UiModal
+	<UiConfirmationPanel
 		:visible="active && itemToDelete !== undefined"
 		:title="t('agent.settings.integrationManagement.confirmDelete')"
+		:description="
+			t('agent.settings.integrationManagement.deletePrompt', { name: itemToDelete?.configuration.name })
+		"
+		tone="danger"
+		icon="fas fa-exclamation-triangle"
 		:close-on-backdrop="!operation.busy.value"
 		:close-on-escape="!operation.busy.value"
-		panel-class="ui-form-surface !w-[calc(100vw-2rem)] !max-w-lg !p-4 sm:!p-6"
 		@close="deleteId = null"
 	>
-		<p class="text-sm leading-relaxed text-text-secondary">
-			{{ t('agent.settings.integrationManagement.deletePrompt', { name: itemToDelete?.configuration.name }) }}
-		</p>
-		<template #footer>
-			<UiFormActions>
-				<UiButton
-					type="button"
-					appearance="solid"
-					tone="danger"
-					:disabled="blocked || !itemToDelete"
-					@click="itemToDelete && remove(itemToDelete)"
-					>{{ t('common.delete') }}</UiButton
-				>
-				<UiButton
-					type="button"
-					appearance="soft"
-					tone="neutral"
-					:disabled="operation.busy.value"
-					@click="deleteId = null"
-					>{{ t('common.cancel') }}</UiButton
-				>
-			</UiFormActions>
+		<template #actions>
+			<UiButton
+				type="button"
+				appearance="soft"
+				tone="neutral"
+				:disabled="operation.busy.value"
+				@click="deleteId = null"
+				>{{ t('common.cancel') }}</UiButton
+			>
+			<UiButton
+				type="button"
+				appearance="solid"
+				tone="danger"
+				:disabled="blocked || !itemToDelete"
+				@click="itemToDelete && remove(itemToDelete)"
+				>{{ t('common.delete') }}</UiButton
+			>
 		</template>
-	</UiModal>
+	</UiConfirmationPanel>
 
 	<UiModal
 		:visible="active && editorOpen"

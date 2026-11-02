@@ -784,6 +784,137 @@ test('file-manager and terminal path sync survive shell metacharacters and a del
 test.describe('remote drag move on touch-capable desktop', () => {
 	test.use({ hasTouch: true });
 
+	test('hover navigation preserves selected sources and right click cancels before or after navigation', async ({
+		page,
+		context,
+	}) => {
+		await loginAsInitialAdmin(context.request);
+		await configureSshE2eSettings(context.request);
+		await resetTestSshFilesystem();
+		await mkdir(path.resolve('.tmp/ssh-root/hover-source'), { recursive: true });
+		await mkdir(path.resolve('.tmp/ssh-root/hover-target/deep'), { recursive: true });
+		await mkdir(path.resolve('.tmp/ssh-root/hover-other'), { recursive: true });
+		await writeFile(path.resolve('.tmp/ssh-root/hover-source/inside.txt'), 'folder drag source');
+		await writeFile(path.resolve('.tmp/ssh-root/hover-one.txt'), 'file drag source');
+		await connectTestSshFromConnectionsPage(page, await ensureTestSshConnection(context.request));
+		await openConnectedFileManager(page);
+
+		// Playwright intercepts native drags and ignores a second mouse button while dragging.
+		// Raw CDP preserves the left+right button chord delivered by Chromium to DragEvent.buttons.
+		const cdp = await context.newCDPSession(page);
+		let x = 0;
+		let y = 0;
+		let buttons = 0;
+
+		const move = async (nextX: number, nextY: number): Promise<void> => {
+			x = nextX;
+			y = nextY;
+			await cdp.send('Input.dispatchMouseEvent', {
+				type: 'mouseMoved',
+				x,
+				y,
+				button: buttons & 1 ? 'left' : 'none',
+				buttons,
+			});
+		};
+
+		const press = async (button: 'left' | 'right', down: boolean): Promise<void> => {
+			const mask = button === 'left' ? 1 : 2;
+			buttons = down ? buttons | mask : buttons & ~mask;
+			await cdp.send('Input.dispatchMouseEvent', {
+				type: down ? 'mousePressed' : 'mouseReleased',
+				x,
+				y,
+				button,
+				buttons,
+				clickCount: 1,
+			});
+		};
+
+		const moveTo = async (target: Locator): Promise<void> => {
+			await expect(target).toBeVisible();
+			const box = await target.boundingBox();
+			if (!box) throw new Error('Drag target has no visible bounds');
+			const startX = x;
+			const startY = y;
+			for (let step = 1; step <= 10; step++) {
+				await move(
+					startX + ((box.x + box.width / 2 - startX) * step) / 10,
+					startY + ((box.y + box.height / 2 - startY) * step) / 10,
+				);
+			}
+		};
+
+		const begin = async (): Promise<void> => {
+			await row(page, 'hover-source').click();
+			await row(page, 'hover-one.txt').click({ modifiers: ['Control'] });
+			await moveTo(row(page, 'hover-one.txt'));
+			await press('left', true);
+			await move(x + 12, y + 2);
+		};
+
+		const hoverInto = async (target: Locator, destination: string): Promise<void> => {
+			await moveTo(target);
+			await expect(pathInput(page)).toHaveValue(destination);
+		};
+
+		const cancel = async (): Promise<void> => {
+			await press('right', true);
+			await press('right', false);
+			await press('left', false);
+			await expect(page.getByRole('menu')).toHaveCount(0);
+			await expect(manager(page).locator('tr.is-selected')).toHaveCount(0);
+		};
+
+		try {
+			await step('right click clears selection and cancels pending hover navigation', async () => {
+				await begin();
+				await moveTo(row(page, 'hover-target'));
+				await cancel();
+				await page.waitForTimeout(2200);
+				await expect(pathInput(page)).toHaveValue('/');
+				await expect(row(page, 'hover-one.txt')).toBeVisible();
+				await expect(row(page, 'hover-source')).toBeVisible();
+			});
+			await step('right click after two levels leaves the current directory without moving sources', async () => {
+				await begin();
+				await hoverInto(row(page, 'hover-target'), '/hover-target');
+				await hoverInto(row(page, 'deep'), '/hover-target/deep');
+				await cancel();
+				await expect(pathInput(page)).toHaveValue('/hover-target/deep');
+				await expect(row(page, 'hover-one.txt')).toHaveCount(0);
+				await navigateViaPathInput(page, '/');
+				await expect(row(page, 'hover-one.txt')).toBeVisible();
+				await expect(row(page, 'hover-source')).toBeVisible();
+				await row(page, 'hover-one.txt').click({ button: 'right' });
+				await expect(page.getByRole('menu')).toBeVisible();
+				await page.keyboard.press('Escape');
+			});
+			await step('a new drag keeps both sources through parents and moves them into a sibling', async () => {
+				await begin();
+				await hoverInto(row(page, 'hover-target'), '/hover-target');
+				await hoverInto(row(page, 'deep'), '/hover-target/deep');
+				await hoverInto(parentRow(page), '/hover-target');
+				await hoverInto(parentRow(page), '/');
+				await hoverInto(row(page, 'hover-other'), '/hover-other');
+				const box = await activeFileManagerList(page).boundingBox();
+				if (!box) throw new Error('File list has no visible bounds');
+				await move(box.x + box.width / 2, box.y + box.height - 18);
+				await move(x + 1, y + 1);
+				await press('left', false);
+				await expect(row(page, 'hover-one.txt')).toBeVisible({ timeout: 20_000 });
+				await expect(row(page, 'hover-source')).toBeVisible();
+				await navigateViaPathInput(page, '/hover-other/hover-source');
+				await expect(row(page, 'inside.txt')).toBeVisible();
+				await navigateViaPathInput(page, '/');
+				await expect(row(page, 'hover-one.txt')).toHaveCount(0);
+				await expect(row(page, 'hover-source')).toHaveCount(0);
+			});
+		} finally {
+			await cdp.detach();
+		}
+	});
+
 	test('embedded File Manager moves a remote file into a folder and back through the parent row', async ({
 		page,
 		context,

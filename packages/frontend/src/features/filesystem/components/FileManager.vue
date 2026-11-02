@@ -126,6 +126,14 @@
 	const remoteDragTarget = ref<string | null>(null);
 	let remoteDragScrollTimer: number | undefined;
 	let remoteDragScrollDirection = 0;
+	type RemoteDragHover = {
+		destination: string;
+		element: HTMLElement;
+		x: number;
+		y: number;
+		timer: number | undefined;
+	};
+	let remoteDragHover: RemoteDragHover | undefined;
 	type FileManagerContext =
 		| { scope: 'entry'; entry: RemoteFileEntry; x: number; y: number }
 		| { scope: 'current-directory' | 'parent-directory'; destination: string; x: number; y: number };
@@ -271,6 +279,7 @@
 
 	function clearIntents(): void {
 		browser.cancelPrefetch();
+		endRemoteDrag();
 		pendingDelete = undefined;
 		clipboardPasteSerial++;
 		changingTerminalPath.value = false;
@@ -604,6 +613,13 @@
 			listViewportHeight.value = listScroller.value.clientHeight || listViewportHeight.value;
 		}
 		document.addEventListener('mousedown', handleOutsideHistory);
+		document.addEventListener('dragend', endRemoteDrag);
+		document.addEventListener('drop', endRemoteDrag);
+		document.addEventListener('contextmenu', cancelRemoteDrag, true);
+		document.addEventListener('pointerdown', cancelRemoteDrag, true);
+		document.addEventListener('drag', cancelRemoteDrag, true);
+		document.addEventListener('dragover', cancelRemoteDrag, true);
+		document.addEventListener('drop', cancelRemoteDrag, true);
 	});
 	const stopListScrollerWatch = watch(
 		listScroller,
@@ -711,10 +727,14 @@
 		document.removeEventListener('mousedown', handleOutsideHistory);
 		unregisterSearchFocus?.();
 		unregisterPathFocus?.();
-		if (remoteDragScrollTimer !== undefined) {
-			window.clearInterval(remoteDragScrollTimer);
-			remoteDragScrollTimer = undefined;
-		}
+		endRemoteDrag();
+		document.removeEventListener('dragend', endRemoteDrag);
+		document.removeEventListener('drop', endRemoteDrag);
+		document.removeEventListener('contextmenu', cancelRemoteDrag, true);
+		document.removeEventListener('pointerdown', cancelRemoteDrag, true);
+		document.removeEventListener('drag', cancelRemoteDrag, true);
+		document.removeEventListener('dragover', cancelRemoteDrag, true);
+		document.removeEventListener('drop', cancelRemoteDrag, true);
 		if (pathHistoryCloseTimer !== undefined) window.clearTimeout(pathHistoryCloseTimer);
 		if (ownsFilesystemState) filesystemState.dispose();
 		stopListScrollerWatch();
@@ -729,6 +749,7 @@
 		}
 	});
 	watch(browser.path, (path) => {
+		clearRemoteDragTarget();
 		if (!pathDraftEditing.value) pathDraft.value = path;
 		keyboardCursor.value = null;
 		resetListScroll();
@@ -1133,12 +1154,12 @@
 		void nextTick(() => void focusKeyboardCursor());
 	};
 
-	const stopRemoteDragScroll = () => {
+	function stopRemoteDragScroll(): void {
 		remoteDragScrollDirection = 0;
 		if (remoteDragScrollTimer === undefined) return;
 		window.clearInterval(remoteDragScrollTimer);
 		remoteDragScrollTimer = undefined;
-	};
+	}
 
 	const updateRemoteDragScroll = (event: DragEvent) => {
 		const scroller = listScroller.value;
@@ -1172,8 +1193,68 @@
 			return !(entry.metadata.isDirectory && destination.startsWith(`${entry.path}/`));
 		});
 
+	const remoteDragNavigationAllowed = (destination: string): boolean =>
+		draggedRemoteEntries.value.length > 0 &&
+		destination !== browser.path.value &&
+		!draggedRemoteEntries.value.some(
+			(entry) =>
+				entry.path === destination || (entry.metadata.isDirectory && destination.startsWith(`${entry.path}/`)),
+		);
+
+	function cancelRemoteDragHover(): void {
+		if (remoteDragHover?.timer !== undefined) window.clearTimeout(remoteDragHover.timer);
+		remoteDragHover = undefined;
+	}
+
+	const scheduleRemoteDragNavigation = (event: DragEvent, destination: string): void => {
+		const element = event.currentTarget;
+		if (!(element instanceof HTMLElement) || !remoteDragNavigationAllowed(destination) || browser.loading.value) {
+			cancelRemoteDragHover();
+			return;
+		}
+		if (remoteDragHover?.destination === destination && remoteDragHover.element === element) {
+			remoteDragHover.x = event.clientX;
+			remoteDragHover.y = event.clientY;
+			return;
+		}
+		cancelRemoteDragHover();
+		const hover: RemoteDragHover = {
+			destination,
+			element,
+			x: event.clientX,
+			y: event.clientY,
+			timer: undefined,
+		};
+		const entries = draggedRemoteEntries.value;
+		const origin = browser.path.value;
+		const permission = view.capture();
+		const channel = props.channel;
+		remoteDragHover = hover;
+		hover.timer = window.setTimeout(() => {
+			hover.timer = undefined;
+			void enqueueNavigation(async () => {
+				if (
+					remoteDragHover !== hover ||
+					draggedRemoteEntries.value !== entries ||
+					!view.isCurrent(permission) ||
+					props.channel !== channel ||
+					browser.path.value !== origin ||
+					browser.loading.value ||
+					!remoteDragNavigationAllowed(destination) ||
+					!element.isConnected ||
+					!element.contains(document.elementFromPoint(hover.x, hover.y))
+				)
+					return;
+				clearRemoteDragTarget();
+				browser.clearSearch();
+				await loadPath(destination);
+			});
+		}, 2000);
+	};
+
 	const startRemoteDrag = (event: DragEvent, entry: RemoteFileEntry) => {
-		if (device.isMobile.value || !event.dataTransfer) return;
+		if (device.isMobile.value || !event.dataTransfer || view.capture().aborted) return;
+		endRemoteDrag();
 		const selection = selectedEntries();
 		draggedRemoteEntries.value = browser.selected.value.has(entry.path) && selection.length ? selection : [entry];
 		keyboardCursor.value = entry.path;
@@ -1184,33 +1265,51 @@
 		);
 	};
 
-	const endRemoteDrag = () => {
-		stopRemoteDragScroll();
+	function endRemoteDrag(): void {
+		clearRemoteDragTarget();
 		draggedRemoteEntries.value = [];
-		remoteDragTarget.value = null;
-	};
+	}
 
-	const handleRemoteTargetDragOver = (event: DragEvent, destination: string) => {
-		if (!remoteDropAllowed(destination)) {
-			remoteDragTarget.value = null;
-			stopRemoteDragScroll();
-			return;
-		}
+	function cancelRemoteDrag(event: MouseEvent): boolean {
+		if (!draggedRemoteEntries.value.length || (event.button !== 2 && !(event.buttons & 2))) return false;
 		event.preventDefault();
 		event.stopPropagation();
-		if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
-		remoteDragTarget.value = destination;
+		if (event instanceof DragEvent && event.dataTransfer) event.dataTransfer.dropEffect = 'none';
+		endRemoteDrag();
+		browser.clearSelection();
+		context.value = null;
+		return true;
+	}
+
+	const handleRemoteTargetDragOver = (event: DragEvent, destination: string) => {
+		if (cancelRemoteDrag(event)) return;
+		if (!draggedRemoteEntries.value.length) return;
+		event.stopPropagation();
+		const allowed = remoteDropAllowed(destination);
+		if (allowed || remoteDragNavigationAllowed(destination)) event.preventDefault();
+		if (event.dataTransfer) event.dataTransfer.dropEffect = allowed ? 'move' : 'none';
+		remoteDragTarget.value = allowed ? destination : null;
+		scheduleRemoteDragNavigation(event, destination);
 		updateRemoteDragScroll(event);
 	};
 
-	const clearRemoteDragTarget = (destination: string) => {
-		if (remoteDragTarget.value !== destination) return;
+	function clearRemoteDragTarget(event?: DragEvent): void {
+		if (event && remoteDragHover && event.currentTarget !== remoteDragHover.element) return;
+		// Moving between the icon, label and cells of one row is still the same hover.
+		if (
+			event?.currentTarget instanceof Node &&
+			event.relatedTarget instanceof Node &&
+			event.currentTarget.contains(event.relatedTarget)
+		)
+			return;
+		cancelRemoteDragHover();
 		remoteDragTarget.value = null;
 		stopRemoteDragScroll();
-	};
+	}
 
 	const dropRemote = (event: DragEvent, destination: string) => {
-		if (!remoteDropAllowed(destination)) return;
+		if (cancelRemoteDrag(event) || view.capture().aborted) return;
+		if (!draggedRemoteEntries.value.length) return;
 		event.preventDefault();
 		event.stopPropagation();
 		const entries = draggedRemoteEntries.value.filter(
@@ -1229,7 +1328,13 @@
 	};
 
 	const handleContainerDragOver = (event: DragEvent) => {
+		if (cancelRemoteDrag(event)) return;
 		if (draggedRemoteEntries.value.length) {
+			cancelRemoteDragHover();
+			const allowed = remoteDropAllowed(browser.path.value);
+			remoteDragTarget.value = allowed ? browser.path.value : null;
+			if (allowed) event.preventDefault();
+			if (event.dataTransfer) event.dataTransfer.dropEffect = allowed ? 'move' : 'none';
 			updateRemoteDragScroll(event);
 			return;
 		}
@@ -1239,7 +1344,10 @@
 	const handleDragLeave = (event: DragEvent) => {
 		const container = event.currentTarget as HTMLElement;
 		const related = event.relatedTarget;
-		if (!(related instanceof Node) || !container.contains(related)) dragging.value = false;
+		if (!(related instanceof Node) || !container.contains(related)) {
+			dragging.value = false;
+			clearRemoteDragTarget();
+		}
 	};
 
 	const toggleMultiSelect = () => {
@@ -1718,7 +1826,7 @@
 		const permission = view.capture();
 		if (permission.aborted) return;
 		if (draggedRemoteEntries.value.length) {
-			endRemoteDrag();
+			dropRemote(event, browser.path.value);
 			return;
 		}
 		dragging.value = false;
@@ -2060,7 +2168,7 @@
 								browser.goParent();
 							"
 							@dragover="handleRemoteTargetDragOver($event, parentOf(browser.path.value))"
-							@dragleave="clearRemoteDragTarget(parentOf(browser.path.value))"
+							@dragleave="clearRemoteDragTarget"
 							@drop="dropRemote($event, parentOf(browser.path.value))"
 							@contextmenu.stop="
 								openDirectoryContext($event, 'parent-directory', parentOf(browser.path.value))
@@ -2116,7 +2224,7 @@
 							@dragstart="startRemoteDrag($event, entry)"
 							@dragend="endRemoteDrag"
 							@dragover="entry.metadata.isDirectory && handleRemoteTargetDragOver($event, entry.path)"
-							@dragleave="clearRemoteDragTarget(entry.path)"
+							@dragleave="clearRemoteDragTarget"
 							@drop="entry.metadata.isDirectory && dropRemote($event, entry.path)"
 							@contextmenu.stop="openContext($event, entry)"
 							@click="clickEntry($event, entry)"
