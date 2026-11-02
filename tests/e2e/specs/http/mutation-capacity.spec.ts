@@ -15,7 +15,7 @@ test('durable mutation claims and backup validation do not reject unrelated host
 		{ timeout: 90_000, maxBuffer: 1024 * 1024 },
 	);
 	expect(result.stdout).toContain(
-		'Verified 4100 independent claims, snapshot integrity and endpoint conflict preservation',
+		'Verified 4100 independent claims, snapshot integrity and held/blocked endpoint preservation',
 	);
 });
 

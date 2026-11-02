@@ -36,6 +36,7 @@ import {
 } from '@nexus-terminal/shared/remote/files/values';
 import {
 	WORKSPACE_TERMINAL_MAX_IN_FLIGHT_BYTES,
+	WORKSPACE_TERMINAL_MAX_INPUT_BYTES,
 	WORKSPACE_BINARY_MAX_PAYLOAD_BYTES,
 	WORKSPACE_BINARY_PROTOCOL_VERSION,
 	WORKSPACE_MAX_IN_FLIGHT_REQUESTS,
@@ -181,10 +182,22 @@ function statEntry(filePath: string, info: FileInfo): WorkspaceFileEntry {
 	};
 }
 
+interface TerminalInputBatch {
+	workspaceId: string;
+	attachmentId: string;
+	generation: number;
+	parts: string[];
+	dataBytes: number;
+	wireBytes: number;
+}
+
 class WorkspaceFilesSession {
 	private readonly lifetime = new AbortController();
 	private readonly binaryReads = new Map<string, AbortController>();
 	private inFlightRequests = 0;
+	private readonly terminalInputs: TerminalInputBatch[] = [];
+	private terminalInputBytes = 0;
+	private terminalInputTask: Promise<void> | null = null;
 	private workspaceId: string | null = null;
 	private connectionId: number | null = null;
 	private attachment: FileAttachment | null = null;
@@ -234,7 +247,14 @@ class WorkspaceFilesSession {
 			}
 			// Detach the exact attachment. The Workspace owner retains SSH/File leases
 			// across the reconnect grace window; an old WS cannot close a successor.
-			await this.releaseWorkspace();
+			const results = await Promise.allSettled([
+				this.terminalInputTask,
+				Promise.resolve().then(() => this.releaseWorkspace()),
+			]);
+			const failures = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+			if (failures.length) {
+				throw new RemoteResourceCleanupFailure(failures);
+			}
 		});
 	}
 
@@ -258,6 +278,10 @@ class WorkspaceFilesSession {
 			this.channel.close(1003, 'Invalid Workspace protocol request');
 			return;
 		}
+		if (request.type === 'terminal.input' && !request.requestId) {
+			this.acceptTerminalInput(request.payload, Buffer.byteLength(raw, 'utf8'));
+			return;
+		}
 		if (this.inFlightRequests >= WORKSPACE_MAX_IN_FLIGHT_REQUESTS) {
 			if (request.requestId) {
 				this.sendResponse(request.requestId, { ok: false, error: 'limit_exceeded' });
@@ -276,6 +300,101 @@ class WorkspaceFilesSession {
 				this.inFlightRequests -= 1;
 			});
 		void task;
+	}
+
+	private acceptTerminalInput(payload: unknown, wireBytes: number): void {
+		try {
+			const input = readWorkspaceTerminalInput(payload);
+			const workspaceId = this.requireWorkspaceId();
+			const attachmentId = this.requireAttachmentId();
+			if (this.lifetime.signal.aborted) {
+				return;
+			}
+			if (wireBytes > WORKSPACE_TERMINAL_MAX_IN_FLIGHT_BYTES - this.terminalInputBytes) {
+				throw new WorkspaceFailure('limit_exceeded');
+			}
+			const dataBytes = Buffer.byteLength(input.data, 'utf8');
+			const previous = this.terminalInputs.at(-1);
+			if (
+				previous &&
+				previous.workspaceId === workspaceId &&
+				previous.attachmentId === attachmentId &&
+				previous.generation === this.attachmentGeneration &&
+				previous.dataBytes + dataBytes <= WORKSPACE_TERMINAL_MAX_INPUT_BYTES
+			) {
+				if (input.data) {
+					previous.parts.push(input.data);
+				}
+				previous.dataBytes += dataBytes;
+				previous.wireBytes += wireBytes;
+			} else {
+				this.terminalInputs.push({
+					workspaceId,
+					attachmentId,
+					generation: this.attachmentGeneration,
+					parts: input.data ? [input.data] : [],
+					dataBytes,
+					wireBytes,
+				});
+			}
+			// Reserve before starting authentication, including framing/empty inputs.
+			this.terminalInputBytes += wireBytes;
+			this.launchTerminalInputs();
+		} catch (error) {
+			this.sendEvent('protocol.error', { operation: 'terminal.input', message: safeError(error) });
+		}
+	}
+
+	private launchTerminalInputs(): void {
+		if (this.terminalInputTask) {
+			return;
+		}
+		this.terminalInputTask = Promise.resolve()
+			.then(() => this.drainTerminalInputs())
+			.finally(() => {
+				this.terminalInputTask = null;
+				if (this.lifetime.signal.aborted) {
+					this.terminalInputs.length = 0;
+					this.terminalInputBytes = 0;
+				} else if (this.terminalInputs.length) {
+					// A message may arrive after the worker resolved but before this callback.
+					this.launchTerminalInputs();
+				}
+			});
+		void this.terminalInputTask.catch(() => undefined);
+	}
+
+	private async drainTerminalInputs(): Promise<void> {
+		try {
+			while (this.terminalInputs.length && !this.lifetime.signal.aborted) {
+				const batch = this.terminalInputs.shift();
+				if (!batch) {
+					break;
+				}
+				try {
+					const authorized = await this.workspaces.allowed(this.token, batch.workspaceId, batch.attachmentId);
+					if (this.lifetime.signal.aborted) {
+						return;
+					}
+					if (
+						!authorized ||
+						this.workspaceId !== batch.workspaceId ||
+						this.attachmentId !== batch.attachmentId ||
+						this.attachmentGeneration !== batch.generation
+					) {
+						throw new WorkspaceFailure('not_found');
+					}
+					this.workspaces.write(batch.workspaceId, batch.attachmentId, batch.parts.join(''));
+				} catch (error) {
+					this.sendEvent('protocol.error', { operation: 'terminal.input', message: safeError(error) });
+				} finally {
+					this.terminalInputBytes -= batch.wireBytes;
+				}
+			}
+		} finally {
+			this.terminalInputs.length = 0;
+			this.terminalInputBytes = 0;
+		}
 	}
 
 	private async dispatchRequest(request: WorkspaceProtocolRequest): Promise<void> {

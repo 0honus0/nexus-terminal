@@ -288,6 +288,8 @@ Workspace 在首个附件可以进行终端输入前，以同一次隐藏命令�
 
 后端每 25 秒通过 WebSocket 标准 Ping/Pong 保活，减少空闲连接被反向代理超时断开的情况；浏览器自动响应，无需页面定时器。保活不续期挂起会话或授权，也不能阻止系统休眠、网络断开造成的重连。
 
+终端连续输入按原顺序合并发送到原 SSH 附件，文件操作繁忙时不会因共用 RPC 名额而截断按键；仍遵守现有输入字节预算。断线、关闭或附件更换后不重放旧输入，明确拒绝时沿原提示处理。
+
 后台会话输出合并处理，等待上一批解析后再继续提交，以减少多个 SSH 同时刷屏的竞争；输出不丢弃、不重排，切回前台与关闭前仍刷新待处理内容，消费确认保持在解析完成之后。
 
 - 点连接立即显示等待页，连接中禁用输入，成功启用；建连失败后终端用红字输出失败原因，空一行显示“按任意键重新连接”，保持等待而不后台重复建连。聚焦终端按非修饰键触发一次重试，该按键不会发送到远端；拒绝主机信任仍需重新确认，所有权结果未知仍只能按原恢复提示处理，不因按键绕过。`＋` 打开连接/挂起启动页，不停止已有会话，后台连接完成不关闭后来打开的启动页。
@@ -473,7 +475,7 @@ PDF 缩放或容器宽度变化后的异步页定位保留当前横向滚动位�
 
 Workspace 文件 attachment 与独立 HTTP Files 不再按资源数量拒绝创建；Files Service 仍追踪 opening、active、closing 和清理未确认的资源至真实关闭，两个入口不复用活跃 SFTP lease。有效的 `workspace.ping` 会重新核对登录会话、文件资源/目标指纹并续期，失效则拒绝并开始清理。二进制数据与 0-byte final 帧的背压等待均受同一文件操作的取消和约 30 秒期限约束，不在 Service 返回后再作无限等待。B10已有限验证Service排队撤销、执行前身份/指纹复查、晚构造资源及失败保留；Access/SFTP为受控接缝，真实传输并发与故障继续验收，不能把Files-only接口当完整正式Workspace。
 
-为保持正式 Files 消费者的现有通信入口，backend-next 已安装 `/ws/workspace` 的 Files 子协议源码：fresh `workspace.connect`、`workspace.ping`、`filesystem.list/search/stat/readBinary/cancelRead/writeText/createDirectory/createFile/remove/rename/chmod/realpath`，以及 `filesystem.ready/error`。请求/响应继续使用旧 `{type,requestId?,payload?}` / `type=response + payload.ok/data/error` 外壳；控制消息上限 1 MiB、最多 64 个在途请求。binary read 单请求最多 64 MiB、同 socket 最多 4 个，NXW1 response frame 每帧最多 256 KiB；数据结束后先发 0-byte final frame，再发 JSON success。取消只停止当前读取 owner，不证明远端瞬时停止。读取范围固定为开始时的文件大小，后续追加不扩大本次读取；空文件只发送 final，短读报失败，固定范围不代表内容快照。断开后的资源释放绑定原 owner，不要求失效会话重新认证。独立 Files/PTY HTTP 开启接口在响应真正完成前保留断连清理（取得资源后最多等待 15 秒交付），不能以 send 返回判定交付完成。Workspace attachment 撤销时丢弃尚未派发的终端输入，重附着者不会继承旧输入；已写入远端的输入无法撤回。
+为保持正式 Files 消费者的现有通信入口，backend-next 已安装 `/ws/workspace` 的 Files 子协议源码：fresh `workspace.connect`、`workspace.ping`、`filesystem.list/search/stat/readBinary/cancelRead/writeText/createDirectory/createFile/remove/rename/chmod/realpath`，以及 `filesystem.ready/error`。请求/响应继续使用旧 `{type,requestId?,payload?}` / `type=response + payload.ok/data/error` 外壳；控制消息上限 1 MiB、最多 64 个在途请求。binary read 单请求最多 64 MiB、同 socket 最多 4 个，NXW1 response frame 每帧最多 256 KiB；数据结束后先发 0-byte final frame，再发 JSON success。取消只停止当前读取 owner，不证明远端瞬时停止。读取范围固定为开始时的文件大小，后续追加不扩大本次读取；空文件只发送 final，短读报失败，固定范围不代表内容快照。断开后的资源释放绑定原 owner，不要求失效会话重新认证。独立 Files/PTY HTTP 开启接口在响应真正完成前保留断连清理（取得资源后最多等待 15 秒交付），不能以 send 返回判定交付完成。Workspace attachment 撤销时丢弃尚未派发的终端输入，重附着者不会继承旧输入；已写入远端的输入无法撤回。无回执的终端按键通知按收到顺序合并派发，不占文件 RPC 的64个名额；合并后每批仍不超过256KiB，鉴权中与待派发消息按完整消息计入既有1MiB在途字节预算。每批派发重新检查原附件权限，关闭/更换附件丢弃旧输入，不自动重发被拒绝或结果未知的输入。
 
 二次审核进一步把 `workspace.connect` 的 Targets 名称查询放进 Files Service 的同一 30 秒入场预算；Workspace 的 64 槽在**首次认证/目标查询之前**就预留，取消或关闭 socket 只中断本次请求，实际 SSH 清理继续由原 Service 追踪。失效心跳不再同步等待远端 close 才返回失败；无法确认的清理不提前释放名额。底层 Targets 查询没有可取消接口时，期限只保证调用方及时失败，不能声称底层数据库查询已撤销。上述均是源码事实，B10 仍需验证慢查询、失败清理及 64/65 并发。
 

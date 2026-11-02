@@ -27,6 +27,7 @@ import {
 	WorkspaceRequestFailure,
 } from '../../support/ws';
 import { step } from '../../support/steps';
+import { WORKSPACE_MAX_IN_FLIGHT_REQUESTS } from '../../../../packages/shared/src/remote/workspace/values';
 
 const headers = { Origin: E2E_URLS.frontendOrigin };
 
@@ -457,6 +458,33 @@ test('raw terminal output needs no acknowledgement and clean requests remain usa
 		await expect(outputPromise).resolves.toContain('RAW_TERMINAL_E2E');
 		await expect(requestWorkspace(workspace.socket, 'suspend.list')).resolves.toEqual(expect.any(Array));
 	} finally {
+		await closeWebSocket(workspace.socket);
+	}
+});
+
+test('one-way terminal input bursts preserve every character beyond the RPC concurrency count', async ({ request }) => {
+	await loginAsInitialAdmin(request);
+	const connectionId = await ensureTestSshConnection(request);
+	const workspace = await openWorkspaceSession(request, connectionId, `input-burst-${crypto.randomUUID()}`);
+	const failures: string[] = [];
+
+	const observe = (data: Buffer, isBinary: boolean) => {
+		if (isBinary) return;
+		const message = JSON.parse(data.toString('utf8'));
+		if (message.type === 'protocol.error') failures.push(message.payload.message);
+	};
+
+	workspace.socket.on('message', observe);
+	try {
+		const marker = 'INPUT_BURST_' + 'x'.repeat(WORKSPACE_MAX_IN_FLIGHT_REQUESTS * 2);
+		const command = `printf '\\n%s\\n' '${marker}'\r`;
+		const output = waitForBinaryText(workspace.socket, `\r\n${marker}\r\n`);
+		for (const data of command) sendJson(workspace.socket, { type: 'terminal.input', payload: { data } });
+		await expect(output).resolves.toContain(`\r\n${marker}\r\n`);
+		expect(failures).toEqual([]);
+		await expect(requestWorkspace(workspace.socket, 'suspend.list')).resolves.toEqual(expect.any(Array));
+	} finally {
+		workspace.socket.off('message', observe);
 		await closeWebSocket(workspace.socket);
 	}
 });

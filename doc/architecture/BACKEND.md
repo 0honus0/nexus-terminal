@@ -1756,3 +1756,9 @@ image_generate 仅负责生成并保存 App 文件，返回给模型的结果只
 8. **当前能力与验收**：不承诺 SSH 断流后能证明远端停止，也不自动重派命令或释放旧围栏。定向真实 SSH/HTTP、受控存储故障、CDP 现有文案及静态检查的实际结果归 testing；不扩大为全量本地 E2E 或生产部署。
 
 TAR 进度沿既有 NativeArchiveCommands → FileArchiveModel → Files Service → WS mapper，processedBytes 表示已处理的未压缩原生记录字节。GNU tar 显式使用默认 20×512 字节记录，每 100 记录发出原生 checkpoint；记录号在 TypeScript 校验安全整数后换算，扣除尚未完成的当前记录，不增加源目录预扫描。压缩条目计数继续来自原生 verbose，解压发布总量复用已验证 members；checkpoint 不作为退出或完成凭据，解压管道必须收到私有退出哨兵及成功状态再发完成标记，失败/取消和快照清理政策不变。
+
+### Workspace 终端通知准入
+
+WorkspaceFilesSession 为无 requestId 的 terminal.input 持有独立的串行批次 owner；每条先沿 Shared 解码并捕获原 workspaceId/attachmentId/generation，同附件相邻输入在原单次256KiB内合并。待派发和正在鉴权的完整消息字节计入既有 WORKSPACE_TERMINAL_MAX_IN_FLIGHT_BYTES（1MiB），空输入也计实际 envelope 字节；普通 RPC 和有 requestId 的输入保留原64个并发准入。没有新增时间、数量或字节阈值。
+
+原 worker 每批调用 Workspaces.allowed，await 后再次核对 lifetime、附件与 generation，随后只调用原 WorkspaceService.write 一次；实际 Shell 背压及1MiB缓冲仍归 WorkspaceService。旧附件输入不交给重附着者，不因协议拒绝自动重派；关闭先停止准入，聚合等待 worker 与原 releaseWorkspace。批次类型只在本文件使用，未新增 Shared、Service 或存储契约。原OSC52零间隔输入与真实SSH/WS突发通知回归负责验证顺序和无截断，不以放慢测试或扩大通用RPC名额换绿。
