@@ -1826,7 +1826,7 @@ Run/Tool 安全原因增加 tool_result_unconfirmed，继续由 AgentAppSurface 
 2. **子功能与目录**：沿原FileManager组件和Filesystem browser，不新增导航/移动状态仓库。
 3. **依赖方向**：原生DragEvent→FileManager→原navigationQueue/loadPath→browser/FilesystemChannel；最终drop仍通过原moveTo事件交给Workspace。
 4. **类型与转换**：节点、坐标和计时器只属于组件局部记录；原RemoteFileEntry和双端契约不变。
-5. **入口与安装**：文件夹行及`..`行停留2秒进入；返回源父目录允许仅导航，文件/空白区域不触发悬停进入；当前目录空白放置接续原移动流程；拖动中右键取消、清空选择并关闭菜单，当前浏览目录保留。
+5. **入口与安装**：文件夹行及`..`行停留600ms进入；行目标以可移动或可导航统一原生dropEffect、preventDefault与高亮，返回源父目录允许仅导航且不显示禁止，文件/空白区域不触发悬停进入；当前目录空白放置接续原移动流程；拖动中右键取消、清空选择并关闭菜单，当前浏览目录保留。
 6. **数据与并发**：同目标的dragover不重置等待，更换目标重计时；派发导航前检查同一拖动、原通道/视图/目录、有效目录行及真实指针命中，自身/源目录后代禁止进入。
 7. **生命周期与失败**：离开行、目录改变、drop/dragend、视图撤销、换通道和卸载取消等待及滚动；导航后保留拖动，最终移动仍使用原过滤/确认/失败链，不由悬停派发文件修改。文档级捕获原生drag/dragover/drop及pointerdown/contextmenu的右键状态，覆盖目录外与快速松手；所有监听随组件卸载移除。
 8. **当前能力与验收**：操作见USAGE文件管理章节；静态、受控CDP和真实SSH分别记录于testing，不扩大有限验证范围。

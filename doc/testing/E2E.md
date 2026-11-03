@@ -2552,3 +2552,15 @@ global-confirmation.cjs/global.log在api.honus.top/__global_confirmation_probe__
 第五轮最终完整远程41494011094成功，验收SHA ed59258e2f6a5261ba17235d61ce4dc463fe4f93。全部547场景首次通过，无失败/重试/flaky/跳过；各分片场景数：backend1=125、browser1=58、2=41、3=69、4=61、5=60、6=68、7=65。既有失败分片6完整通过，真实SFTP多选源连续导航、右键取消、菜单关闭立即重新选择、双上级及兄弟目录最终移动均通过。质量和Docker成功；完整原始日志e2e-full-41494011094.log、最终元数据e2e-result-41494011094.json与计数e2e-summary-41494011094.json保留。自动c9c35835只更新scripts/e2e/duration-estimates.json，核对后快进。发布41495174680使用main/c9c358351912f84c86424e6b5e096b0d8cebbd3f、dev/amd，等待Registry最终核对，不更新生产容器。
 
 最终发布 [41495174680](https://github.com/0honus0/nexus-terminal/actions/runs/41495174680) 成功：Prepare publication（含high级生产依赖审计）及Publish Unified Image全部成功，源SHA c9c358351912f84c86424e6b5e096b0d8cebbd3f。通过docker buildx imagetools实际读取ghcr.io/0honus0/nexus-terminal的dev与sha-c9c358351912：两者digest均为sha256:70dd507001cff8ad3749616e1d7b93005da2ff2ed34d0ffeeb034e6005e6152a，仅linux/amd64（排除attestation条目），OCI revision和version分别严格等于发布SHA和固定标签。publication-verification.json/log及两标签Manifest/Image、publication-result-41495174680.json为真实Registry证据。所有本轮CDP自有context已关闭，未更新生产容器，未删除原Vite、测试环境、工具和集中目录，等待用户后续清理指令。最终收口仅PLAN/testing文档，产品与已验/已发布SHA保持一致。
+
+## 文件拖动父目录反馈与600ms悬停（2026-11-03）
+
+基线main/7e6a26e9，起始工作区干净；用户明确确认列表只有一个文件夹和`..`，并要求缩短进入目录的等待。沿FileManager的remoteDropAllowed/remoteDragNavigationAllowed→handleRemoteTargetDragOver与scheduleRemoteDragNavigation复核：原父目录不需实际move，但可导航；dropEffect/高亮只按move判定，导致可导航目标错误显示禁止。本轮统一行目标接受状态为可移动或可导航，原dropRemote继续独立过滤实际移动项；不更改布局/样式、容量、权限或后端，拖动源自身/后代仍拒绝。停留2000ms按用户要求缩短600ms，同目标连续dragover不重置计时。
+
+指定CDP172.30.30.11:9223/Chrome156、api.honus.top的独立自有context挂载实际FileManager/useFilesystemBrowser与原样式；仅目录Port/最终moveTo消费者受控，不连接真实SSH或移动用户文件。before.json记录从/home/work上行到/home后work行、下行到target后`..`行的原生事件处理后dropEffect均none；四次导航2007–2015ms。after.json同路径均move且is-drop-target，四次导航601–606ms；导航过程零moveTo。效果观察在真实行原监听之后读取，不在document capture的微任务中提前读取浏览器默认效果。regression.log最终ALL PASS：两种原位松手都不移动且取消待执行导航；拖动源文件夹自身保持none且不进入；600ms内右键取消后不导航/不移动；连续dragover仍在610ms导航；正常目标最终仅派发一次原源移动。全部context在finally关闭且无pageerror。
+
+工具/脚本/JSON/日志全部集中/tmp/nexus-file-drag-navigation-20261102/cursor-20261103，重启原Vite9998并复用旧缓存，保留原目录/服务等待用户通知清理。既有ssh/file-manager-navigation的hoverInto补真实dragover后dropEffect=move断言，覆盖下级、上级及返回源父目录，观察句柄/监听随本次目标finally清理，不依赖短暂高亮和600ms竞速。根check、前端build、变更E2E严格tsc通过，日志check.log/build.log/e2e-types-final.log；首次全量格式发现新测试3处声明空行，按原ESLint修正，最终结果见format-final.log及diff。未运行本地全量/远程E2E，未提交、推送或发布；上轮547通过及已发布镜像不包含当前补丁。
+
+最终全量format-final.log通过（含全部ESLint与Prettier），git diff --check通过。通过同一CDP另行运行verify-e2e-observer.cjs，直接复用正式新增观察句柄/事件逻辑，四条上下级路径都在原事件处理后读取move，解除监听与句柄后无移动、无pageerror，证据e2e-observer.log。最终仅6个预期文件变更，无新依赖或散落测试文件。
+
+用户追加授权提交推送并发布main的dev镜像。发布前复核当前6文件diff与前轮静态输出一致，HEAD/origin/main均7e6a26e9、无上游差异，git diff --check通过。完整远程E2E及发布结果待实际执行后回填，所有新增产物集中本节目录的publication/，原测试服务和目录保留。

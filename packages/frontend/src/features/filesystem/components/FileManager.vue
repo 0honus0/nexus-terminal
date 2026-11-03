@@ -1249,7 +1249,7 @@
 				browser.clearSearch();
 				await loadPath(destination);
 			});
-		}, 2000);
+		}, 600);
 	};
 
 	const startRemoteDrag = (event: DragEvent, entry: RemoteFileEntry) => {
@@ -1285,10 +1285,10 @@
 		if (cancelRemoteDrag(event)) return;
 		if (!draggedRemoteEntries.value.length) return;
 		event.stopPropagation();
-		const allowed = remoteDropAllowed(destination);
-		if (allowed || remoteDragNavigationAllowed(destination)) event.preventDefault();
-		if (event.dataTransfer) event.dataTransfer.dropEffect = allowed ? 'move' : 'none';
-		remoteDragTarget.value = allowed ? destination : null;
+		const accepted = remoteDropAllowed(destination) || remoteDragNavigationAllowed(destination);
+		if (accepted) event.preventDefault();
+		if (event.dataTransfer) event.dataTransfer.dropEffect = accepted ? 'move' : 'none';
+		remoteDragTarget.value = accepted ? destination : null;
 		scheduleRemoteDragNavigation(event, destination);
 		updateRemoteDragScroll(event);
 	};

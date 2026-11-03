@@ -868,8 +868,35 @@ test.describe('remote drag move on touch-capable desktop', () => {
 		};
 
 		const hoverInto = async (target: Locator, destination: string): Promise<void> => {
-			await moveTo(target);
-			await expect(pathInput(page)).toHaveValue(destination);
+			const feedback = await target.evaluateHandle((element) => {
+				let dropEffect: DataTransfer['dropEffect'] | null = null;
+
+				const observe = (event: Event): void => {
+					if (event instanceof DragEvent && event.dataTransfer) dropEffect = event.dataTransfer.dropEffect;
+				};
+
+				element.addEventListener('dragover', observe);
+				return {
+					get dropEffect() {
+						return dropEffect;
+					},
+
+					dispose() {
+						element.removeEventListener('dragover', observe);
+					},
+				};
+			});
+			try {
+				await moveTo(target);
+				expect(await feedback.evaluate((value) => value.dropEffect)).toBe('move');
+				await expect(pathInput(page)).toHaveValue(destination);
+			} finally {
+				try {
+					await feedback.evaluate((value) => value.dispose());
+				} finally {
+					await feedback.dispose();
+				}
+			}
 		};
 
 		const cancel = async (): Promise<void> => {
