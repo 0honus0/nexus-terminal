@@ -668,6 +668,14 @@ button.live-state:focus-visible {
 	font-weight: 650;
 	white-space: nowrap;
 }
+.history-heading--network {
+	gap: calc(3px / var(--status-scale, 1));
+}
+.history-heading--network > strong {
+	flex: none;
+	overflow: visible;
+	text-overflow: clip;
+}
 .history-close {
 	display: inline-flex;
 	flex: none;
@@ -730,15 +738,14 @@ button.live-state:focus-visible {
 	font-weight: 600;
 }
 .network-legend {
+	container: network-legend / inline-size;
 	display: flex;
-	flex: 0 1 auto;
-	flex-wrap: wrap;
+	flex: 1 1 0;
 	align-items: center;
 	justify-content: flex-end;
 	min-width: 0;
 	margin-left: auto;
-	gap: 0.25em 0.8em;
-	padding: 0 0.15em;
+	gap: 0.25em;
 	color: var(--status-muted);
 	font-family: var(--font-mono);
 	font-size: calc(11px / var(--status-scale, 1));
@@ -748,7 +755,8 @@ button.live-state:focus-visible {
 .network-legend span {
 	display: inline-flex;
 	align-items: center;
-	gap: 0.3em;
+	gap: 0.2em;
+	font-size: min(calc(11px / var(--status-scale, 1)), 6.5cqw);
 	white-space: nowrap;
 }
 .network-legend i {

@@ -439,7 +439,10 @@
 						:style="{ '--history-accent': selectedMetricColor }"
 					>
 						<header class="history-header">
-							<div class="history-heading">
+							<div
+								class="history-heading"
+								:class="{ 'history-heading--network': selectedMetric === 'network' }"
+							>
 								<strong>{{ selectedMetricTitle }}</strong>
 								<span v-if="selectedMetricValue" class="history-current">{{
 									selectedMetricValue

@@ -2584,3 +2584,11 @@ global-confirmation.cjs/global.log在api.honus.top/__global_confirmation_probe__
 通过指定CDP172.30.30.11:9223在api.honus.top/__network_trend_probe__自有context挂载真实StatusMonitor/StatusCharts与createStatusMonitorSession，真实i18n/样式/Pinia，受控Channel交付50个真实形状样本，不连接SSH或修改配置。before.json/log及before.png实测原图例在范围选项下；修改后after.log为ALL PASS：中英日×180/294/320/480/800px×1/1.6缩放30组中图例都在原标题右侧且底部不超过范围控件顶部，两个完整速率均在标题/卡片边界内、绘图区有有效高度；长速率1023.9G/s更新保留，1/5/10/30范围逐个生效，切CPU仍显示4.2%且无网络图例，切回及关闭正常。原极窄标题继续使用既有省略策略，速率不省略。无pageerror，所有自有context关闭并dispose原测试session；未影响用户原页面。截图after-294.png、after-180-zoomed.png及after-long-rates.png已人工核对，产物均在/tmp/nexus-network-trend-header-20261103。
 
 两轮源码复核确认仅原模板/CSS呈现与对应测试定位变化，无协议、采样或存储修改。Node22.23.1及现有pnpm11.28.10执行根check、前端build、全量format:all:check、既有目标E2E严格tsc均退出0，日志check.log/build.log/format.log/e2e-types.log保留；最终仅文档定向Prettier与git diff --check。本轮未运行完整本地/远程E2E；用户随后明确“推送 提交”，核对本轮7文件及既有检查证据后提交推送main。原Vite及所有保留目录继续保留。
+
+## 网络趋势最窄宽度同排与完整标题（2026-11-03）
+
+用户追加要求最窄栏位与手机同样左右同排、左侧网络趋势完整。上版同日after.json的180px记录标题溢出9px、两个速率上边界相差约18px，符合原允许省略/换行设计，本轮依最新要求调整。仅原StatusMonitor增加网络标题行class；该标题不收缩/省略，网络图例改flex:1且不换行，图例自身为inline-size容器，子项字号取原11px/scale与自身6.5cqw的较小值。右侧容器分配完完整标题和原16px关闭按钮后再调整文字，不增加JS测量/状态、数据阈值或采样行为，正常宽度原字号保持。原上下行色标、方向、完整速率/单位和下一行时间选项保留，CPU等原单值不变。
+
+集中目录/tmp/nexus-network-trend-header-20261103/narrow的verify.cjs通过指定CDP172.30.30.11:9223、api.honus.top/**network_trend_probe**，独立hasTouch context、真实StatusMonitor/StatusCharts/createStatusMonitorSession和原样式/语言，Channel只交付受控50点样本、不连接SSH或保存用户配置。最终after.log为ALL PASS：中英日×180/294/320/480/800px×1/1.6缩放30组中标题scrollWidth与clientWidth无溢出，两个速率同排、完整位于标题/卡片内且在范围控件上方。长速率1023.9G/s显示完整，1/5/10/30分钟切换、CPU4.2%及关闭通过。另使用实际UiOverlayPanel、WorkspaceMobileTools原panel/overlay类和mobile-overlay类，在320/390px×1/1.6缩放4组中验证完整标题、同排速率、图表及无横向溢出，手机截图mobile-320-1.6.png等及after-180-zoomed.png/after-294.png已检查。极窄栏速率会按可用空间缩小，标题仍保持完整；无pageerror，自有context与session均关闭。
+
+初次CDP发现原Vite9998已不在运行，仅按既有授权恢复前端并复用原缓存，日志vite.log；没有重启后端或删除旧目录。手机外壳脚本补充时括号错误已修正，最终完整执行退出0，不作为产品失败或旧版通过证据。两轮源码审核确认仅网络标题行和图例CSS改变，不修改采样、协议、模型或其它指标布局。根check、前端build、全量format:all:check、既有status-history-time-axis严格tsc退出0，日志check.log/build.log/format.log/e2e-types.log；最终文档Prettier及diff通过。本版未运行完整本地/远程E2E；用户随后明确“提交推送”，复核本轮6文件、静态/CDP证据及上游后交付main，原环境及所有专用目录继续保留。

@@ -1785,7 +1785,7 @@ TerminalView 在 pageshow、恢复可见及失焦后的窗口重新聚焦时清�
 2. 子功能与目录：沿 features/status-monitor/components，StatusChartLoading 只呈现加载网格和提示，不画模拟曲线。
 3. 依赖方向：StatusMonitor → 原异步 StatusCharts → Chart.js/vue-chartjs；加载组件仅依赖原 i18n。
 4. 类型与转换：无新协议、共享或模型类型；原 history → TimedChartPoint 转换不变，加载组件不透传业务属性到 DOM。
-5. 入口与安装：原指标点击打开趋势及范围切换不变；网络上下行图例位于原history-heading内的标题右侧，窄栏在该区域换行，范围选项仍在其下，不改变CPU等单值位置。X 轴禁用 tick 留白，标签水平显示，字体与间距抵消父面板缩放。
+5. 入口与安装：原指标点击打开趋势及范围切换不变；网络上下行图例位于原history-heading内的标题右侧；网络标题不可收缩省略，速率区作为inline-size容器使两个速率字号随自身可用宽度缩放、上限沿原11px/scale，保持单行左右布局。手机弹窗复用同一组件；范围选项仍在其下，不改变CPU等单值位置。X 轴禁用 tick 留白，标签水平显示，字体与间距抵消父面板缩放。
 6. 数据、事务与并发：历史和最新时间仍归原 session controller；加载无自己的采样/请求/缓存或持久状态。
 7. 生命周期与失败：复用 defineAsyncComponent 的原 delay、模块缓存及异常传播；加载网格用 CSS 呼吸效果，prefers-reduced-motion 下静止，无新增计时器或监听。
 8. 当前能力与验收：只调整时间刻度占位与趋势加载呈现；范围、孤立点、缺测断线及 tooltip 保持原逻辑，指定 CDP 与静态结果见 testing。
