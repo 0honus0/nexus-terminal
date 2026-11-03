@@ -2348,7 +2348,7 @@ Shared编译后codec定向断言通过（`logs/suspend-password-codec.log`）：
 
 ## 当前验收基线
 
-最新完整远程 [41494011094](https://github.com/0honus0/nexus-terminal/actions/runs/41494011094) 验证 `main/ed59258e2f6a5261ba17235d61ce4dc463fe4f93`：547个场景全部首次通过，零失败、重试、flaky与跳过，质量检查、Docker smoke与8个测试分片全部成功。当前已实现功能以该SHA和实际场景范围为准；先前外部硬件、扩大故障与实机保证限制保留。后继 `c9c358351912f84c86424e6b5e096b0d8cebbd3f` 仅自动维护耗时估算，已按diff核对无产品源码差异；本轮dev/amd64发布结果见文末专项记录。
+最新完整远程 [41563556193](https://github.com/0honus0/nexus-terminal/actions/runs/41563556193) 验证 `main/4e2b2be374ffdeb2fb502eed2598e39a02052cc5`：547个场景全部首次通过，零失败、重试、flaky与跳过，质量检查、Docker smoke与8个测试分片全部成功。本版包含父目录拖动反馈和600ms悬停修复；当前已实现功能以该SHA和实际场景范围为准，既有外部硬件、扩大故障与实机保证限制保留。后继 `0eb52704ab3dc12bac04c8c8737e897df1f09368` 仅自动维护耗时估算，按diff核对无产品源码差异；本轮main的dev/amd64发布见文末专项记录。
 
 ## E2E 连接选项加载失败提示（2026-10-30）
 
@@ -2564,3 +2564,7 @@ global-confirmation.cjs/global.log在api.honus.top/__global_confirmation_probe__
 最终全量format-final.log通过（含全部ESLint与Prettier），git diff --check通过。通过同一CDP另行运行verify-e2e-observer.cjs，直接复用正式新增观察句柄/事件逻辑，四条上下级路径都在原事件处理后读取move，解除监听与句柄后无移动、无pageerror，证据e2e-observer.log。最终仅6个预期文件变更，无新依赖或散落测试文件。
 
 用户追加授权提交推送并发布main的dev镜像。发布前复核当前6文件diff与前轮静态输出一致，HEAD/origin/main均7e6a26e9、无上游差异，git diff --check通过。完整远程E2E及发布结果待实际执行后回填，所有新增产物集中本节目录的publication/，原测试服务和目录保留。
+
+本轮提交4e2b2be374ffdeb2fb502eed2598e39a02052cc5并推送main后，完整远程[41563556193](https://github.com/0honus0/nexus-terminal/actions/runs/41563556193)成功：547场景全部首次通过，无失败/重试/flaky/跳过；backend1=125、browser1=37、2=55、3=69、4=50、5=78、6=62、7=71。新增原生dragover后dropEffect断言及上下级导航、原源保留/右键取消、最终真实SFTP移动全部通过；质量、Docker与8分片成功。真实日志和最终元数据为publication/e2e-full-41563556193.log、e2e-result-41563556193.json及e2e-summary-41563556193.json。核对自动0eb52704只改耗时估算后快进；发布41564383424使用main/0eb52704ab3dc12bac04c8c8737e897df1f09368，channel=dev、architecture=amd，发布及Registry核验已完成，详见下段。
+
+最终发布[41564383424](https://github.com/0honus0/nexus-terminal/actions/runs/41564383424)成功，包含high级生产依赖审计；来源为main/0eb52704ab3dc12bac04c8c8737e897df1f09368。实际Registry核对ghcr.io/0honus0/nexus-terminal:dev与sha-0eb52704ab3d，排除attestation后仅linux/amd64，OCI revision/version严格匹配来源SHA及固定标签，两者digest均为sha256:062d3369e34caa5633bf7c15242f4d4828a7072bc0d5cfc3e30721decf16c1dd。原始Manifest/Image、publication-verification.json/log与publication-result-41564383424.json保存在本节publication目录。验收源码仍为4e2b2be3，后续自动提交仅耗时估算、最终收口仅文档，产品代码一致；不把后继SHA称为直接跑过E2E。生产容器未更新，所有测试目录与原Vite9998继续保留，等待用户通知删除。本轮实现、远程回归与发布完成。
