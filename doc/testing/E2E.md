@@ -2576,3 +2576,11 @@ global-confirmation.cjs/global.log在api.honus.top/__global_confirmation_probe__
 通过指定CDP172.30.30.11:9223、api.honus.top/__connection_toast_probe__自有context挂载真实ConnectionForm/useConnectionForm和NotificationHost，加载真实三语/全局样式与Pinia；引用目录和测试HTTP受控，不发送真实SSH、不保存用户配置。cdp.log为ALL PASS：修改22→2200且密码为空只显示右侧warning，测试请求为零，关闭后重新点击再显示；输入临时密码后请求严格为当前2200及新密码，422 connection_failed仍在原底部红徽标；200/37ms仍为成功徽标及耗时，原延迟说明可展开，字段修改后清除旧结果。未改连接且密码留空仍调用原保存连接测试端点。非法编辑范围只弹error且零保存，关闭后再提交仍提醒；选项失败Toast不因改字段消失、表单无错误文本；卸载后晚到选项失败/测试成功均不通知。桌面1280右侧位置与320px无横向溢出通过，截图toast-desktop.png/toast-mobile.png已检查。所有自有context关闭，不影响原页面/服务。
 
 产物集中/tmp/nexus-connection-form-toast-20261103，verify.cjs/result.json/cdp.log与截图保留。首轮受Vite依赖重优化导致context销毁，第二轮脚本宽泛**/api/**误匹配源码路径，修正为/api/v1/后最终完整通过；前两次不计产品验收。根check、前端build、全量format:all:check、既有选项E2E严格tsc均退出0，日志check.log/build.log/format.log/e2e-types.log。首次静态启动未补工具PATH导致pnpm子进程找不到，补现有工具目录后通过，未新增依赖。两轮源码审核确认只替换反馈出口、保留generation/signal与原测试状态，不更改字段/按钮布局。文档定向格式与diff检查通过；本轮未运行本地全量或正式远程E2E；用户随后明确“提交推送”，核对当前6文件、原检查日志及上游后提交推送main。本次不触发镜像发布，原环境及专用目录继续保留。
+
+## 网络趋势上下行标题对齐（2026-11-03）
+
+用户要求当前网络上下行速率与CPU当前值一样放在趋势标题右侧。根因是原network-legend为history-header的第三个单列网格项，在range-tabs之后。将原图例移入history-heading、放到关闭按钮前；原flex图例增加收缩/最小宽度/右对齐与自动左边距，窄栏可在标题右侧区域将两个速率换成两行。上下行色标、方向、compactRate完整取值、11px实际字体和缩放补偿保留，CPU/其他指标、范围、Chart.js及session生命周期不变。既有status-history-time-axis只收紧图例真实定位及所属标题行断言，原字体、图表几何/范围/tooltip/关闭断言全部保留。
+
+通过指定CDP172.30.30.11:9223在api.honus.top/__network_trend_probe__自有context挂载真实StatusMonitor/StatusCharts与createStatusMonitorSession，真实i18n/样式/Pinia，受控Channel交付50个真实形状样本，不连接SSH或修改配置。before.json/log及before.png实测原图例在范围选项下；修改后after.log为ALL PASS：中英日×180/294/320/480/800px×1/1.6缩放30组中图例都在原标题右侧且底部不超过范围控件顶部，两个完整速率均在标题/卡片边界内、绘图区有有效高度；长速率1023.9G/s更新保留，1/5/10/30范围逐个生效，切CPU仍显示4.2%且无网络图例，切回及关闭正常。原极窄标题继续使用既有省略策略，速率不省略。无pageerror，所有自有context关闭并dispose原测试session；未影响用户原页面。截图after-294.png、after-180-zoomed.png及after-long-rates.png已人工核对，产物均在/tmp/nexus-network-trend-header-20261103。
+
+两轮源码复核确认仅原模板/CSS呈现与对应测试定位变化，无协议、采样或存储修改。Node22.23.1及现有pnpm11.28.10执行根check、前端build、全量format:all:check、既有目标E2E严格tsc均退出0，日志check.log/build.log/format.log/e2e-types.log保留；最终仅文档定向Prettier与git diff --check。本轮未运行完整本地/远程E2E；用户随后明确“推送 提交”，核对本轮7文件及既有检查证据后提交推送main。原Vite及所有保留目录继续保留。

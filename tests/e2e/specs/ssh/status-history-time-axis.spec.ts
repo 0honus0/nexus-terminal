@@ -128,11 +128,11 @@ test('status history preserves the full selected time range with fresh samples a
 		await page.mouse.move(1100, 800);
 		await expect(tooltip).toHaveCount(0);
 		await monitor.locator('.network-row').click();
-		const legend = page.locator('.network-legend');
+		const legend = history.locator('.history-heading .network-legend');
 		await expect(legend).toBeVisible();
 		const legendFontSize = await legend.evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
 		expect(legendFontSize * scale).toBeCloseTo(11, 1);
-		expect(await legend.evaluate((element) => Boolean(element.closest('.history-header')))).toBe(true);
+		expect(await legend.evaluate((element) => Boolean(element.closest('.history-heading')))).toBe(true);
 		const legendBox = (await legend.boundingBox())!;
 		const chartBox = (await chart.boundingBox())!;
 		expect(legendBox.x).toBeGreaterThanOrEqual(chartBox.x);

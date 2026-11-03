@@ -731,8 +731,12 @@ button.live-state:focus-visible {
 }
 .network-legend {
 	display: flex;
+	flex: 0 1 auto;
 	flex-wrap: wrap;
 	align-items: center;
+	justify-content: flex-end;
+	min-width: 0;
+	margin-left: auto;
 	gap: 0.25em 0.8em;
 	padding: 0 0.15em;
 	color: var(--status-muted);

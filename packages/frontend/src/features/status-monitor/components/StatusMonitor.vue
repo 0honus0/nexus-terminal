@@ -444,6 +444,16 @@
 								<span v-if="selectedMetricValue" class="history-current">{{
 									selectedMetricValue
 								}}</span>
+								<div v-if="selectedMetric === 'network'" class="network-legend">
+									<span
+										><i class="legend-download" aria-hidden="true"></i>↓
+										{{ compactRate(monitor.current.value.netRxRate) }}</span
+									>
+									<span
+										><i class="legend-upload" aria-hidden="true"></i>↑
+										{{ compactRate(monitor.current.value.netTxRate) }}</span
+									>
+								</div>
 								<button
 									type="button"
 									class="history-close"
@@ -464,16 +474,6 @@
 								>
 									{{ t('statusMonitor.minutes', { count: range }) }}
 								</button>
-							</div>
-							<div v-if="selectedMetric === 'network'" class="network-legend">
-								<span
-									><i class="legend-download" aria-hidden="true"></i>↓
-									{{ compactRate(monitor.current.value.netRxRate) }}</span
-								>
-								<span
-									><i class="legend-upload" aria-hidden="true"></i>↑
-									{{ compactRate(monitor.current.value.netTxRate) }}</span
-								>
 							</div>
 						</header>
 						<StatusCharts
