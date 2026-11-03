@@ -10,7 +10,6 @@
 		UiCheckbox,
 		UiInfoHint,
 		UiInput,
-		UiInlineNotice,
 		UiSegmentedControl,
 		UiSelect,
 		UiSwitch,
@@ -39,7 +38,6 @@
 		testing,
 		parsing,
 		testResult,
-		submitError,
 		proxies,
 		ConnectionTagPicker,
 		SshKeySelector,
@@ -302,8 +300,6 @@
 					<p class="mt-2 text-xs text-text-secondary">{{ t('connections.scriptHelp') }}</p>
 				</div>
 			</section>
-
-			<UiInlineNotice v-if="submitError" tone="danger">{{ submitError }}</UiInlineNotice>
 		</fieldset>
 
 		<footer class="connection-form__footer">

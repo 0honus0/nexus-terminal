@@ -1,6 +1,8 @@
 import { computed, onMounted, onBeforeUnmount, onDeactivated, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAuthSession } from '@/features/auth/public';
+import { useFeedback } from '@/shared/feedback/public';
+import { isNetworkFailure } from '@/client/http/network-failure';
 import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
 import { targetErrorKey } from '@/client/targets/target-types';
 import { InvalidTargetPayload } from '@nexus-terminal/shared/targets/http';
@@ -40,6 +42,7 @@ export function useConnectionForm(
 	const capabilities = useRuntimeFeatureCapabilities();
 	const connections = useConnections();
 	const auth = useAuthSession();
+	const feedback = useFeedback();
 	const proxies = capabilities.proxies;
 	const sshKeys = capabilities.sshKeys;
 	const form = ref(toConnectionDraft(props.connection ?? null));
@@ -49,7 +52,6 @@ export function useConnectionForm(
 	const testing = ref(false);
 	const parsing = ref(false);
 	const testResult = ref<ConnectionTestSummary | null>(null);
-	const submitError = ref('');
 	let generation = 0;
 	let controller = new AbortController();
 
@@ -68,7 +70,6 @@ export function useConnectionForm(
 		testing.value = false;
 		parsing.value = false;
 		testResult.value = null;
-		submitError.value = '';
 	}
 
 	watch(() => props.connection, reset, { immediate: true });
@@ -91,19 +92,20 @@ export function useConnectionForm(
 		const current = generation;
 		const results = await Promise.allSettled([proxies.load(), sshKeys.load(), connections.load()]);
 		if (current === generation && results.some((result) => result.status === 'rejected')) {
-			submitError.value = t('connections.failures.options_failed');
+			feedback.notifyError(t('connections.failures.options_failed'));
 		}
 	});
 
 	function failure(cause: unknown): void {
-		submitError.value = t('connections.failures.' + targetErrorKey(cause));
+		if (!isNetworkFailure(cause)) {
+			feedback.notifyError(t('connections.failures.' + targetErrorKey(cause)));
+		}
 	}
 
 	async function submit(): Promise<void> {
 		if (props.loading || parsing.value || testing.value) {
 			return;
 		}
-		submitError.value = '';
 		const current = generation;
 		try {
 			if (scriptMode.value) {
@@ -193,7 +195,6 @@ export function useConnectionForm(
 		const signal = controller.signal;
 		testing.value = true;
 		testResult.value = null;
-		submitError.value = '';
 		try {
 			let run: () => Promise<number>;
 			if (props.connection && credentialEdit() === undefined && form.value.authMethod === 'password') {
@@ -207,7 +208,7 @@ export function useConnectionForm(
 					draft.proxyId !== saved.proxyId ||
 					JSON.stringify(draft.jumpIds) !== JSON.stringify(saved.jumpIds)
 				) {
-					submitError.value = t('connections.form.testPasswordRequired');
+					feedback.notifyWarning(t('connections.form.testPasswordRequired'));
 					return;
 				}
 				const id = saved.id;
@@ -286,7 +287,6 @@ export function useConnectionForm(
 		testing,
 		parsing,
 		testResult,
-		submitError,
 		proxies,
 		ConnectionTagPicker: capabilities.tags.picker,
 		SshKeySelector: capabilities.sshKeys.selector,
