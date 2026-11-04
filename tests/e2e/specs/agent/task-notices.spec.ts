@@ -29,6 +29,11 @@ for (const width of [1280, 390, 320]) {
 			try {
 				const first = await waitNativeApproval(prepared, run.id, 'shell_execute');
 				const hub = page.getByRole('dialog', { name: 'Agent', exact: true });
+				await expect(hub.getByRole('button', { name: 'Show or hide task panel', exact: true })).toHaveAttribute(
+					'aria-expanded',
+					'true',
+				);
+				await hub.getByText('Execution details', { exact: true }).click();
 				await expect(hub.getByText('printf notice-first', { exact: true })).toBeVisible();
 				await hub.getByRole('button', { name: 'Minimize Agent', exact: true }).click();
 				const notice = page.getByRole('dialog', { name: 'Task update', exact: true });
@@ -52,7 +57,7 @@ for (const width of [1280, 390, 320]) {
 				expect(bounds.y).toBeGreaterThanOrEqual(0);
 				expect(bounds.y + bounds.height).toBeLessThanOrEqual(844);
 				const receipt = await captureNativeCommand(prepared, 'agent.approvals.resolve', () =>
-					notice.getByRole('button', { name: 'Approve', exact: true }).click(),
+					notice.getByRole('button', { name: 'Approve and run', exact: true }).click(),
 				);
 				expect(receipt.result.method).toBe('agent.approvals.resolve');
 				await expect.poll(async () => (await readNativeRun(prepared, run.id)).status).toBe('completed');
