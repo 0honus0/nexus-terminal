@@ -3,13 +3,15 @@
 	import { useI18n } from 'vue-i18n';
 	import { UiBadge } from '@/foundation/ui';
 	import type { ConnectionSummary } from '@/features/connections/public';
-	import type { NativeTool } from '../model/native-run-types';
+	import type { UiTone } from '@/foundation/ui';
+	import type { NativeApproval, NativeTool } from '../model/native-run-types';
 	import NativeToolCallDetails from './NativeToolCallDetails.vue';
 	import AgentMessageBody from '../ai/AgentMessageBody.vue';
 	import { formatToolSummary, toolCommandPreview } from './native-tool-summary';
 
 	const props = defineProps<{
 		tools: NativeTool[];
+		approvalsByTool: ReadonlyMap<string, readonly NativeApproval[]>;
 		active: boolean;
 		connections: ConnectionSummary[];
 	}>();
@@ -43,6 +45,44 @@
 		if (props.tools.some((tool) => tool.state === 'cancelled')) return 'cancelled';
 		return 'completed';
 	});
+
+	const toolApprovals = computed(() => {
+		const items = new Map<string, NativeApproval[]>();
+		for (const tool of props.tools) {
+			const approvals = (props.approvalsByTool.get(tool.id) ?? [])
+				.filter((approval) => approval.appId === tool.appId && approval.runId === tool.runId)
+				.sort(
+					(a, b) =>
+						a.inputRevision - b.inputRevision ||
+						a.policyRevision - b.policyRevision ||
+						a.requestedAt - b.requestedAt ||
+						a.id.localeCompare(b.id),
+				);
+			items.set(tool.id, approvals);
+		}
+		return items;
+	});
+
+	const currentApprovals = computed(() => {
+		const items = new Map<string, NativeApproval>();
+		for (const tool of props.tools) {
+			const matching = (toolApprovals.value.get(tool.id) ?? []).filter(
+				(approval) =>
+					approval.operationHash === tool.operationHash && approval.inputRevision === tool.operationRevision,
+			);
+			// A replaced permit must not hide the decision on its replacement.
+			const current = matching.findLast((approval) => approval.status !== 'superseded') ?? matching.at(-1);
+			if (current) items.set(tool.id, current);
+		}
+		return items;
+	});
+
+	function approvalTone(status: NativeApproval['status'] | undefined): UiTone {
+		if (status === 'approved') return 'success';
+		if (status === 'denied') return 'danger';
+		if (status === 'expired' || status === 'superseded') return 'warning';
+		return 'neutral';
+	}
 
 	const generatedImages = computed(() => props.tools.filter((tool) => tool.generatedImageId !== null));
 
@@ -160,6 +200,7 @@
 					:key="tool.id"
 					:data-tool-name="tool.toolName"
 					:data-tool-state="tool.state"
+					:data-approval-status="currentApprovals.get(tool.id)?.status"
 				>
 					<details class="group/tool" @toggle="toggleTool($event, tool.id)">
 						<summary
@@ -171,23 +212,38 @@
 							>
 								<i class="text-[9px]" :class="iconClass(tool.state)" aria-hidden="true"></i>
 							</span>
-							<code class="shrink-0 font-mono font-semibold text-foreground/85">{{ tool.toolName }}</code>
+							<code
+								class="min-w-0 truncate font-mono font-semibold text-foreground/85"
+								:title="tool.toolName"
+								>{{ tool.toolName }}</code
+							>
 							<span class="min-w-0 flex-1 truncate text-text-secondary/75" :title="summaryText(tool)">
 								{{ summaryText(tool) }}
 							</span>
-							<UiBadge
-								appearance="ghost"
-								density="compact"
-								:class="
-									tool.state === 'failed'
-										? 'text-error'
-										: tool.state === 'unknown'
-											? 'text-warning'
-											: ''
-								"
-							>
-								{{ stateLabel(tool.state) }}
-							</UiBadge>
+							<span class="flex max-w-[45%] shrink-0 flex-wrap justify-end gap-1">
+								<UiBadge
+									v-if="currentApprovals.has(tool.id)"
+									appearance="ghost"
+									density="compact"
+									:tone="approvalTone(currentApprovals.get(tool.id)?.status)"
+								>
+									<i class="fa-solid fa-shield-halved text-[9px]" aria-hidden="true"></i>
+									{{ t(`agent.approvals.status.${currentApprovals.get(tool.id)?.status}`) }}
+								</UiBadge>
+								<UiBadge
+									appearance="ghost"
+									density="compact"
+									:class="
+										tool.state === 'failed'
+											? 'text-error'
+											: tool.state === 'unknown'
+												? 'text-warning'
+												: ''
+									"
+								>
+									{{ stateLabel(tool.state) }}
+								</UiBadge>
+							</span>
 							<span
 								class="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-text-secondary/55 transition-colors group-hover:bg-background/70 group-hover:text-foreground/70"
 							>
@@ -246,6 +302,47 @@
 									</dd>
 								</div>
 							</dl>
+							<div
+								v-for="approval in toolApprovals.get(tool.id) ?? []"
+								:key="approval.id"
+								class="mt-2.5 border-t border-border/35 pt-2 text-[11px]"
+							>
+								<UiBadge appearance="ghost" density="compact" :tone="approvalTone(approval.status)">
+									{{
+										t('agent.approvals.resolved', {
+											state: t(`agent.approvals.status.${approval.status}`),
+										})
+									}}
+								</UiBadge>
+								<dl class="mt-2 grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
+									<div>
+										<dt class="text-text-secondary/75">{{ t('agent.approvals.requestedAt') }}</dt>
+										<dd class="mt-0.5 font-mono text-[10px] text-foreground">
+											{{ formatTime(approval.requestedAt * 1000) }}
+										</dd>
+									</div>
+									<div>
+										<dt class="text-text-secondary/75">{{ t('agent.approvals.decidedAt') }}</dt>
+										<dd class="mt-0.5 font-mono text-[10px] text-foreground">
+											{{
+												approval.decidedAt === null
+													? '—'
+													: formatTime(approval.decidedAt * 1000)
+											}}
+										</dd>
+									</div>
+								</dl>
+								<p
+									v-if="
+										approval.operationHash !== tool.operationHash ||
+										approval.inputRevision !== tool.operationRevision
+									"
+									class="mt-2 break-words text-text-secondary"
+								>
+									{{ approval.inspection.summary }}
+									<code class="block text-[10px]">{{ approval.operationHash }}</code>
+								</p>
+							</div>
 							<div
 								class="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/35 pt-2 font-mono text-[10px] text-text-secondary/75"
 							>

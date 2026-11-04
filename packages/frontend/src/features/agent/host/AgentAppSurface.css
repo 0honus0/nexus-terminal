@@ -57,13 +57,39 @@
 	);
 }
 .agent-conversation-scroller {
+	/* Keep the last message above the floating controls when pinned to the end. */
+	padding-bottom: 54px;
 	touch-action: pan-y;
 	-webkit-overflow-scrolling: touch;
 }
 .agent-composer-area {
+	position: relative;
 	container-type: inline-size;
 	container-name: agent-composer;
 }
+.agent-composer-status {
+	position: absolute;
+	inset-inline: 0;
+	bottom: calc(100% + 6px);
+	pointer-events: none;
+}
+
+.agent-composer-status :deep(button) {
+	pointer-events: auto;
+	background-color: var(--card-bg-color);
+	box-shadow: 0 1px 4px rgb(0 0 0 / 0.08);
+}
+
+.agent-composer-status :deep(button:hover:not(:disabled)) {
+	background-color: var(--header-bg-color);
+}
+
+.agent-composer-hint {
+	border-radius: 999px;
+	background-color: var(--card-bg-color);
+	padding: 5px 8px;
+}
+
 .agent-input-artifact {
 	max-width: min(100%, 42rem);
 	height: auto;

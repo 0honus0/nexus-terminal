@@ -1575,7 +1575,6 @@
       "command": "実行の詳細",
       "commandTruncated": "コマンドプレビューは切り詰められています。完全な引数と出力は表示されません。",
       "title": "操作の承認が必要です",
-      "historyTitle": "承認履歴",
       "acpInnerTitle": "ACP 内部操作の承認が必要です",
       "allowOnce": "今回のみ許可",
       "rejectOnce": "今回のみ拒否",
@@ -1642,7 +1641,6 @@
       "promptRunChecks": "現在の変更に最も関係するチェックやテストを実行し、明確な失敗を修正して結果をまとめてください",
       "promptAutomation": "選択された SSH プロジェクトの繰り返し作業を見つけ、具体的な自動化案を提案してください",
       "promptNextSteps": "現在のプロジェクト状態から、簡潔で優先順位付きの次のアクション一覧を作成してください",
-      "approvalHistory": "処理済みの承認",
       "reasoningDescriptions": {
         "none": "思考を無効化し標準応答",
         "minimal": "最小限の思考で高速応答",

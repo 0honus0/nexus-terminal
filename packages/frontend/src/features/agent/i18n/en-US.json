@@ -1575,7 +1575,6 @@
       "command": "Execution details",
       "commandTruncated": "The command preview was truncated; complete arguments and output remain hidden.",
       "title": "Operation requires approval",
-      "historyTitle": "Approval history",
       "acpInnerTitle": "ACP inner action requires approval",
       "allowOnce": "Allow once",
       "rejectOnce": "Reject once",
@@ -1642,7 +1641,6 @@
       "promptRunChecks": "Run the checks or tests most relevant to the current changes, fix clear failures, and summarize the results",
       "promptAutomation": "Find repetitive work in the selected SSH project and propose practical automation",
       "promptNextSteps": "Turn the current project state into a concise, prioritized checklist of next actions",
-      "approvalHistory": "Approval history",
       "reasoningDescriptions": {
         "none": "Standard response without extended thinking",
         "minimal": "Minimal thinking for ultra-fast answers",

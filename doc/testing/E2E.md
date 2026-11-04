@@ -8,6 +8,16 @@
 
 官方插件[v1.0.3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.3)已发布，main/tag均为d5dd455，发布CI成功。本体[amd dev发布41830244197](https://github.com/0honus0/nexus-terminal/actions/runs/41830244197)成功，来源为上述被测提交；后续按用户新授权维护指定实例数据库并更新镜像，见紧接的部署记录。真实运营商切网、手机软键盘、外部供应商及未列故障边界仍按[待验与外部依赖](../PLAN.md#待验与外部依赖)保留；受控回归不替代真实模型效果或吞吐实测。旧553项及更早镜像结果只保留为各自历史证据。
 
+## Agent 聊天工具状态与悬浮控件（2026-11-04，源码/静态完成）
+
+工作区基于main/c202c152，本轮仅修改前端聊天展示及对应文档；用户随后明确授权提交推送，未发布或部署。证据保留于`/home/honus/nexus-task-artifacts/agent-chat-controls-20261104`。Node v22.23.1，独立tools目录的pnpm 11.28.10（与根packageManager一致），仓库ESLint 10.14.0、Prettier 3.9.10、Vue 3.5.44；未修改依赖或锁文件。
+
+两轮源码审核：AgentAppSurface两处工具列表消费同一toolCallId审批索引；NativeToolActivityList核对App/Run、当前hash和操作版本，分别显示审批与执行状态，保留申请/处理时间及旧操作详情。删除独立审批组件及三语无消费者文案；原待审批侧栏、最小化快速批准、CAS/未知写入、当前Run审批读取和工具分页未改。既有native-surface.spec.ts的data-tool-name/data-approval-status断言现由真实工具article提供，不增加测试专用入口。控件状态行绝对定位在输入区上方，只有按钮恢复指针命中并保留自身底色；空白不占正文布局，正文底部留白覆盖28px按钮、6px间距及原20px留白。附件、Portal弹层、自动跟随和消息导航继续原生命周期，无新增请求、监听或计时器。
+
+本轮命令均退出0：`pnpm run check`（Backend/Shared及Frontend类型、双端ESLint，check.log）、`pnpm run build:frontend`（vue-tsc+生产Vite，frontend-build.log）、`pnpm run format:all:check`（全仓ESLint/Prettier，format-check.log）、`git diff --check`。源码差异审核记录source-review.diff；文档收口后另核对格式及diff。
+
+按D17未新增或运行本地行为、CDP或E2E；559项历史基线不覆盖本轮差异。待后续授权验收：320/390px与窄Agent窗的按钮可读性、空白点击/触摸滚动穿透、Token弹层与附件、上翻新消息/回到底部、批准后成功/失败、拒绝/过期/取代及工具晚加载和历史分页。
+
 ## 远程数据库维护与镜像更新（2026-11-04，已完成）
 
 用户在镜像发布后明确授权维护远程数据库及更新镜像。目标仍为指定主机的`/home/honus/product/nexus_terminal`，原双容器健康、源码4a3074da，数据库为旧plugin-apps签名；4个Agent Run均completed，29份上下文缺systemPrompt，压缩/检查点/子任务记录均0。先下载并核对已测7262e8ac的固定amd镜像digest，再用新版真实initializeSchema生成独立参考库，逐对象对照全部DDL。发现唯一结构差异为agent_run_children.max_requests仍有400的旧CHECK；保留了首轮演练拒绝证据，没有绕过结构检查或直接修改签名启动。

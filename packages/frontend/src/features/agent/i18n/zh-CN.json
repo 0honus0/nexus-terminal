@@ -1575,7 +1575,6 @@
       "command": "执行详情",
       "commandTruncated": "命令预览已截断；完整参数和输出不在界面展示。",
       "title": "需要批准的操作",
-      "historyTitle": "审批记录",
       "acpInnerTitle": "ACP 内部操作需要批准",
       "allowOnce": "允许一次",
       "rejectOnce": "拒绝一次",
@@ -1642,7 +1641,6 @@
       "promptRunChecks": "运行与当前改动最相关的检查或测试，修复明确的失败项，并汇总结果",
       "promptAutomation": "分析选定 SSH 项目中的重复工作并提出可执行的自动化方案",
       "promptNextSteps": "根据当前项目状态整理一份简洁、按优先级排序的下一步行动清单",
-      "approvalHistory": "已处理审批",
       "reasoningDescriptions": {
         "none": "关闭深度思考，直接快速回复",
         "minimal": "极轻思考，极快生成",

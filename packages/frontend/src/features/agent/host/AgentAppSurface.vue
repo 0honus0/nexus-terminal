@@ -12,7 +12,6 @@
 	import NativeRunDetails from '../runtime/NativeRunDetails.vue';
 	import NativeMemoryReview from '../runtime/NativeMemoryReview.vue';
 	import NativeApprovalList from '../runtime/NativeApprovalList.vue';
-	import NativeApprovalHistoryList from '../runtime/NativeApprovalHistoryList.vue';
 	import NativeToolActivityList from '../runtime/NativeToolActivityList.vue';
 	import AgentMessageBody from '../ai/AgentMessageBody.vue';
 	import AgentConversationWelcome from '../ai/AgentConversationWelcome.vue';
@@ -278,7 +277,6 @@
 	const toolsByEntry = computed(() => {
 		const assigned = new Map<number, NativeTool[]>();
 		const orphan: NativeTool[] = [];
-		const indexByToolId = new Map<string, number>();
 		for (const group of toolGroups.value) {
 			const first = group[0];
 			if (!first) continue;
@@ -303,22 +301,19 @@
 			if (target < 0) orphan.push(...group);
 			else {
 				assigned.set(target, [...(assigned.get(target) ?? []), ...group]);
-				for (const tool of group) indexByToolId.set(tool.id, target);
 			}
 		}
-		return { assigned, orphan, indexByToolId };
+		return { assigned, orphan };
 	});
 
-	const approvalsByEntry = computed(() => {
-		const assigned = new Map<number, NativeApproval[]>();
-		const orphan: NativeApproval[] = [];
+	const approvalsByTool = computed(() => {
+		const assigned = new Map<string, NativeApproval[]>();
 		for (const approval of approvals.value) {
-			if (approval.status === 'requested') continue;
-			const target = toolsByEntry.value.indexByToolId.get(approval.toolCallId);
-			if (target === undefined) orphan.push(approval);
-			else assigned.set(target, [...(assigned.get(target) ?? []), approval]);
+			const group = assigned.get(approval.toolCallId) ?? [];
+			group.push(approval);
+			assigned.set(approval.toolCallId, group);
 		}
-		return { assigned, orphan };
+		return assigned;
 	});
 
 	const totalTokens = computed(() => {
@@ -908,10 +903,7 @@
 							<NativeToolActivityList
 								:active="active"
 								:tools="toolsByEntry.assigned.get(index) ?? []"
-								:connections="connections"
-							/>
-							<NativeApprovalHistoryList
-								:approvals="approvalsByEntry.assigned.get(index) ?? []"
+								:approvals-by-tool="approvalsByTool"
 								:connections="connections"
 							/>
 						</template>
@@ -931,9 +923,9 @@
 						<NativeToolActivityList
 							:active="active"
 							:tools="toolsByEntry.orphan"
+							:approvals-by-tool="approvalsByTool"
 							:connections="connections"
 						/>
-						<NativeApprovalHistoryList :approvals="approvalsByEntry.orphan" :connections="connections" />
 						<div v-if="toolCursor !== null" class="mx-auto flex w-full max-w-3xl justify-center">
 							<UiButton
 								density="compact"
@@ -965,12 +957,13 @@
 									<span class="ml-1 shrink-0 opacity-60" aria-hidden="true">×</span>
 								</UiButton>
 							</div>
-							<div class="agent-composer-status mb-1.5 flex min-h-6 items-center justify-between gap-2">
+							<div class="agent-composer-status flex min-h-7 items-center justify-between gap-2">
 								<AgentConfigPopover
 									v-if="usage"
 									:ariaLabel="t('agent.tasks.totalTokens')"
 									:title="usageDetails"
 									trigger-class="agent-token-status"
+									trigger-appearance="soft"
 									panel-class="max-w-xs text-xs text-text-secondary"
 								>
 									<template #trigger>
@@ -1010,7 +1003,7 @@
 									<UiButton
 										v-if="entries.length"
 										density="compact"
-										appearance="ghost"
+										appearance="soft"
 										icon-only
 										:disabled="!canJumpPrevious"
 										:aria-label="t('agent.conversation.previousMessage')"
@@ -1022,7 +1015,7 @@
 									<UiButton
 										v-if="entries.length"
 										density="compact"
-										appearance="ghost"
+										appearance="soft"
 										icon-only
 										:disabled="!canJumpNext"
 										:aria-label="t('agent.conversation.nextMessage')"
