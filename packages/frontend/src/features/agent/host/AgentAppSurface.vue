@@ -1121,7 +1121,7 @@
 										</AgentConfigPopover>
 										<AgentConfigPopover
 											v-if="reasoningLevels.length"
-											class="agent-reasoning-control"
+											class="agent-reasoning-control shrink-0"
 											:ariaLabel="t('agent.ui.reasoning')"
 											:title="t('agent.ui.reasoning') + ': ' + reasoningDisplayLabel"
 											:disabled="blocked"
@@ -1217,28 +1217,19 @@
 											</template>
 										</AgentConfigPopover>
 										<AgentConfigPopover
-											class="agent-target-control"
+											class="agent-target-control shrink-0"
 											:ariaLabel="t('agent.nativeRun.targets')"
+											:title="t('agent.nativeRun.targets')"
 											:disabled="blocked"
 											trigger-appearance="soft"
+											trigger-variant="square"
 											:trigger-selected="selectedConfig === 'target'"
 											panel-class="w-56"
 											@open-change="selectConfigControl('target', $event)"
 										>
-											<template #trigger
-												><i class="fa-solid fa-server text-[9px]" aria-hidden="true"></i
-												><span class="agent-target-summary"
-													><span class="agent-target-label">{{
-														t('agent.nativeRun.targets')
-													}}</span
-													><span v-if="connectionIds.length" class="agent-target-count">
-														· {{ connectionIds.length }}</span
-													></span
-												><i
-													class="agent-target-affordance fa-solid fa-chevron-down text-[7px]"
-													aria-hidden="true"
-												></i
-											></template>
+											<template #trigger>
+												<i class="fa-solid fa-server text-[9px]" aria-hidden="true"></i>
+											</template>
 											<template #panel>
 												<fieldset class="min-w-0 text-xs">
 													<legend class="mb-2 text-[11px] font-medium text-text-secondary">
@@ -1309,6 +1300,7 @@
 										</AgentConfigPopover>
 										<!-- Run 级批准策略：新 Run 创建时冻结，运行中只读 -->
 										<AgentConfigPopover
+											class="shrink-0"
 											:disabled="blocked || runNeedsClosure"
 											trigger-appearance="soft"
 											:trigger-selected="selectedConfig === 'approval'"
@@ -1421,8 +1413,22 @@
 												</div>
 											</template>
 										</AgentConfigPopover>
+										<UiButton
+											v-if="runNeedsClosure"
+											density="compact"
+											appearance="soft"
+											tone="danger"
+											icon-only
+											class="agent-stop-button shrink-0"
+											:aria-label="t('agent.conversation.cancelRun')"
+											:title="t('agent.conversation.cancelRun')"
+											:disabled="blocked"
+											@click="stopRun"
+										>
+											<i class="fa-solid fa-stop text-[10px]" aria-hidden="true"></i>
+										</UiButton>
 									</div>
-									<div class="agent-composer-actions flex shrink-0 items-center gap-1.5">
+									<div class="agent-composer-actions ml-auto flex shrink-0 items-center gap-1.5">
 										<NativeInputArtifacts
 											ref="attachmentControl"
 											:key="thread.id"
@@ -1440,21 +1446,7 @@
 											"
 										/>
 										<UiButton
-											v-if="runNeedsClosure"
-											density="compact"
-											appearance="soft"
-											tone="danger"
-											icon-only
-											class="agent-stop-button shrink-0"
-											:aria-label="t('agent.conversation.cancelRun')"
-											:title="t('agent.conversation.cancelRun')"
-											:disabled="blocked"
-											@click="stopRun"
-										>
-											<i class="fa-solid fa-stop text-[10px]" aria-hidden="true"></i>
-										</UiButton>
-										<UiButton
-											v-else
+											v-if="!runNeedsClosure"
 											type="submit"
 											density="compact"
 											appearance="solid"

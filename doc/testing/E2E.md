@@ -8,6 +8,20 @@
 
 官方插件[v1.0.3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.3)仍为d5dd455，本批没有插件改动。本体[amd dev发布41872562719](https://github.com/0honus0/nexus-terminal/actions/runs/41872562719)success，dev与sha-2b0ab3db9208的digest一致，平台/revision均经实际GHCR核对，详见下节；此前指定实例的7262e8ac部署仍保持原范围，本轮不更新生产容器或数据库。真实运营商切网、手机软键盘、外部供应商及未列故障边界仍按[待验与外部依赖](../PLAN.md#待验与外部依赖)保留；受控回归不替代真实模型效果或吞吐实测。更早测试与镜像结果只保留为各自历史证据。
 
+## 手机后台恢复后的挂起目录同步（2026-11-04，源码与只读排查）
+
+用户要求排查指定实例运行中手机后台返回、重连失败后刷新列表持续加载，并确认原标签为蓝色。只读SSH核对实际Backend为2b0ab3db、17:03:29 UTC启动；没有重启、修改配置/数据库、发起应用登录或接管用户会话。日志确认最新蓝色会话17:20:46进入suspended，17:22:09完成suspend_resuming→attached，17:22:57再次断线后仍为suspended，无关闭/删除记录；这与此前普通会话17:12:23宽限期结束是不同会话，不能混为本次丢失证据。HTTP目录17:18:47及17:19:00均200，目录WS最后一次建立为17:12:50，之后手机仍有成功HTTP/终端请求。后端无本次error/fatal，Nginx错误日志为空。未导出终端正文。
+
+源码确认目录在onLine=false时跳过连接且不结束首次loading、失败后也不再排重连；目录没有NetworkInformation change监听，首份快照等待还会被heartbeat无限延后。原流现以前台真实连接结果决定失败/原退避，新增可用的网络change观察，首份快照仍用原45秒期限、收到快照后才允许心跳刷新期限。保留隐藏暂停、缓存、旧socket/revision隔离、10秒网络反馈、严格解码及unknown写入保护；未改变Workspace/PTY、租约或保留政策。唯一Store消费者、原加载结束回调、全部socket/timer/listener清理和既有正式场景已源码复审。
+
+最终根`pnpm run check`、`pnpm run build:frontend`和`pnpm run format:all:check`全部退出0，日志集中`/home/honus/nexus-task-artifacts/suspended-catalog-20261104`的check.log、build-frontend.log、format-check.log；investigation.json与frontend-requests.json保留时间线及脱敏路径/状态，backend-events.jsonl保留技术事件。文档收口另做格式及diff检查。按D17未启动浏览器/本地环境、未运行或新增行为测试；未取得手机当时onLine/visibility及控制台，不能认定上述源码缺口是现场唯一触发条件，完整后台/切网链路仍待实机复验。用户随后授权完成后提交推送，本轮与工具栏修改共同交付，不发布镜像或更新远程，产物保留。
+
+## Agent 输入工具栏图标与对齐（2026-11-04，静态检查）
+
+本轮基于main/9a324a75，仅调整AgentAppSurface及唯一NativeInputArtifacts消费者的布局。SSH目标统一使用既有square图标触发器，保留可访问名称、悬停提示和选择面板，删除旧摘要和对应隐藏规则；模型、思考、目标、权限和停止靠左，文件与发送靠右。图标及附件组不收缩，模型名称沿原flex收缩省略。复审停止/发送互斥条件、原disabled及事件、附件绑定/ready/working/unknown和Popover消费者，无状态、协议、后端、类型或依赖变化。
+
+根`pnpm run check`、`pnpm run build:frontend`和`pnpm run format:all:check`均退出0，日志为`/home/honus/nexus-task-artifacts/agent-chat-controls-20261104/icon-alignment`下的check.log、build-frontend.log和format-check.log；文档收口后另做Prettier及`git diff --check`。按D17未启动浏览器、本地业务环境或E2E，未新增行为测试，桌面/手机实际布局和附件状态下的视觉回归未验。上方559项只覆盖原SHA，不作为本轮新差异的通过证据。用户随后授权完成后提交推送，本轮与目录恢复修复共同交付，不发布或更新远程，产物保留至用户通知。
+
 ## Agent 聊天悬浮区与输入工具栏修正（2026-11-04）
 
 本批基于main/b6bd3b25。用户反馈手机Token/上下条状态行下半部分仍遮挡消息，同时要求权限/添加文件具备SSH目标同款边框、手机隐藏目标数量；授权提交推送、处理远程E2E与发布main dev，沿用linux/amd64，不更新生产。本批按D17执行源码/静态与正式远程测试，不启动本地业务环境。产物保留于`/home/honus/nexus-task-artifacts/agent-chat-controls-20261104/toolbar-followup`。

@@ -345,10 +345,6 @@
 		gap: 4px;
 	}
 
-	.agent-target-count {
-		display: none;
-	}
-
 	.agent-jump-latest {
 		padding-inline: 6px;
 	}
@@ -413,19 +409,7 @@
 }
 
 @container agent-composer (max-width: 360px) {
-	.agent-reasoning-trigger-label,
-	.agent-target-affordance {
-		display: none;
-	}
-
-	:deep(.agent-reasoning-control),
-	:deep(.agent-target-control) {
-		flex: 0 0 auto;
-	}
-}
-
-@container agent-composer (max-width: 300px) {
-	.agent-target-summary {
+	.agent-reasoning-trigger-label {
 		display: none;
 	}
 }

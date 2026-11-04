@@ -17,6 +17,8 @@ export function subscribeSuspendedCatalog(
 	let deadline: ReturnType<typeof setTimeout> | undefined;
 	const networkFeedbackSource = Symbol();
 	let retryDelay = 1000;
+	const browserConnection =
+		'connection' in navigator && navigator.connection instanceof EventTarget ? navigator.connection : undefined;
 
 	const stopSocket = () => {
 		clearTimeout(retryTimer);
@@ -50,16 +52,15 @@ export function subscribeSuspendedCatalog(
 			clearPendingNetworkFailure(networkFeedbackSource);
 		}
 		onUnavailable(cause);
-		if (document.hidden || !navigator.onLine) {
-			return;
-		}
 		retryTimer = setTimeout(connect, retryDelay + Math.floor(Math.random() * 250));
 		retryDelay = Math.min(retryDelay * 2, 30_000);
 	};
 
 	const connect = () => {
 		stopSocket();
-		if (disposed || document.hidden || !navigator.onLine) {
+		// Browser connectivity hints can remain offline while this origin is reachable.
+		// Only the actual transport result decides whether the visible catalog can load.
+		if (disposed || document.hidden) {
 			return;
 		}
 		let current: WebSocket;
@@ -71,6 +72,7 @@ export function subscribeSuspendedCatalog(
 		}
 		socket = current;
 		let revision = 0;
+		let receivedSnapshot = false;
 
 		const armDeadline = () => {
 			clearTimeout(deadline);
@@ -95,12 +97,16 @@ export function subscribeSuspendedCatalog(
 				}
 				const value: unknown = JSON.parse(message.data);
 				const event = readSuspendedCatalogEvent(value);
-				armDeadline();
 				if (event.type === 'snapshot' && event.revision > revision) {
+					receivedSnapshot = true;
 					clearPendingNetworkFailure(networkFeedbackSource);
 					revision = event.revision;
 					retryDelay = 1000;
 					onSnapshot(event.sessions.map(toSuspendedSession));
+				}
+				// Heartbeats prove transport activity, not delivery of the first catalog.
+				if (receivedSnapshot) {
+					armDeadline();
 				}
 			} catch (cause) {
 				retry(new SuspendedRequestFailure('protocol_failure', 'not_dispatched', undefined, { cause }));
@@ -122,7 +128,7 @@ export function subscribeSuspendedCatalog(
 
 	const refreshConnection = () => {
 		clearPendingNetworkFailure(networkFeedbackSource);
-		if (!document.hidden && navigator.onLine) {
+		if (!document.hidden) {
 			retryDelay = 1000;
 			connect();
 		} else {
@@ -134,6 +140,7 @@ export function subscribeSuspendedCatalog(
 	window.addEventListener('pageshow', refreshConnection);
 	window.addEventListener('online', refreshConnection);
 	window.addEventListener('offline', refreshConnection);
+	browserConnection?.addEventListener('change', refreshConnection);
 	connect();
 	return () => {
 		disposed = true;
@@ -143,5 +150,6 @@ export function subscribeSuspendedCatalog(
 		window.removeEventListener('pageshow', refreshConnection);
 		window.removeEventListener('online', refreshConnection);
 		window.removeEventListener('offline', refreshConnection);
+		browserConnection?.removeEventListener('change', refreshConnection);
 	};
 }
