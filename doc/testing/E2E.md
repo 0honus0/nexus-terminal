@@ -6,7 +6,7 @@
 
 最新完整远程 [41792075453](https://github.com/0honus0/nexus-terminal/actions/runs/41792075453) 验证 `main/07a69be818a728c97e8ea1eea2ea6a1aa74cfade`：551个场景全部通过，质量检查、Docker smoke和8个测试分片全部成功，耗时更新成功，截图更新按正常条件跳过。日志含551条 passed 记录，各分片汇总合计551，无失败/flaky/跳过场景汇总。新增缓存页恢复和安装初始化真实夹具均通过；只代表该 SHA 的实际覆盖范围。后继 `4a3074da6f8ab7e515a017f949ce03b1d059dc88` 仅自动维护耗时估算，已核对无产品源码差异。前序布局 b542640a 已由 41784731617 完整验证。
 
-当前发布 [41792924820](https://github.com/0honus0/nexus-terminal/actions/runs/41792924820) 构建上述后继 main 的 dev/linux-amd64 镜像，已成功；本轮不更新指定主机、容器或数据库。此前已完成的指定主机维护证据仍在文末。真实手机/切换运营商网络、外部供应商、安全硬件、扩大故障及持久介质边界仍按 [待验与外部依赖](../PLAN.md#待验与外部依赖) 保留；独立 Nexus Agent 1.0.2 未签名发布，不以宿主回归代替插件发布。
+当前发布 [41792924820](https://github.com/0honus0/nexus-terminal/actions/runs/41792924820) 构建上述后继 main 的 dev/linux-amd64 镜像，已成功；本轮不更新指定主机、容器或数据库。此前已完成的指定主机维护证据仍在文末。真实手机/切换运营商网络、外部供应商、安全硬件、扩大故障及持久介质边界仍按 [待验与外部依赖](../PLAN.md#待验与外部依赖) 保留；独立 Nexus Agent 1.0.2 已签名发布并核对公开产物，见下方记录；新包实际安装与模型角色效果仍未验。
 
 ## 阶段逻辑回归
 
@@ -23,6 +23,17 @@
 回归覆盖正常流程、授权/身份变化、冲突、取消、未知提交/执行、晚返回及资源关闭；按真实 owner 判断结果，不能从本地等待结束推断远端停止。每项证据注明环境、命令、输出、覆盖和未验范围，实机/外部依赖不能用静态或协议夹具代替。专用环境与产物保留至用户通知清理，凭据不进入文档或日志。
 
 ## 专项记录
+
+### 独立 Nexus Agent 1.0.2 提交发布（2026-11-04）
+
+用户要求提交发布此前精简。独立仓库 main `790ccdec91c4c88632d9f90f0378e41d0f9cc4d2` 提交六文件：两份Skill、NexusAgent manifest1.0.2、根版本与README/目录说明；[v1.0.2](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.2) 已于07:40:08Z公开并设为latest，tag与源码SHA相同。operations/developer共4687→2601 UTF-8字节（减少44.5%），不是token、延迟或准确率实测。
+
+本地 node scripts/check.mjs 通过；[validation 41793587965](https://github.com/0honus0/nexus-agent-plugins/actions/runs/41793587965)、[草稿签名41793663714](https://github.com/0honus0/nexus-agent-plugins/actions/runs/41793663714)、[正式发布41793872161](https://github.com/0honus0/nexus-agent-plugins/actions/runs/41793872161) 均成功。沿README流程先创建指向已验证main的draft，Actions使用原secret签名；下载草稿核对后公开，未取出私钥。通过匿名公网latest目录及两包均HTTP200，再核对官方publisher与Host pin、Ed25519签名、包大小/hash/URL、全文件hash及提交源码字节。Full-stack原1.0.1包hash与上一发布完全相同，未改写同版本内容。
+
+- `nexus.agent-1.0.2.tar`：SHA256 `776956d7eb44a493a486fc294eb8a28ade3a630c314c19828928e1fd32e40a2b`，恰含两份Skill，frontend/backend入口均null。
+- `nexus.fullstack-1.0.1.tar`：SHA256 `293c5b48ef67c42a5fa6ba32e4df47573fdcccb60aaff8a2ee71e608f740a36d`。
+
+全部本轮记录与下载位于 `/tmp/nexus-agent-tools-audit-20261104/release-1.0.2`：check.log、validation.json、draft-release.log、draft-verify.log、published-verify.log及release信息。未执行宿主行为/E2E、真实插件安装升级、模型调用、远端部署或镜像重发；这些产物核对不代替新包安装后的Skill检索/哈希读取和真实角色效果验收。现存用户App没有自动升级，环境与产物按用户要求保留。
 
 ### 设置读取恢复与推荐安装默认授权（2026-11-04，远程回归完成）
 
