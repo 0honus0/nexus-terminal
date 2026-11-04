@@ -1,3 +1,4 @@
+import { createTestAgentApp } from './native-agent-fixture.mjs';
 import { listAgentApprovalHistory } from './agent-approval-fixture.mjs';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -57,7 +58,6 @@ export async function openImageFixture(directory, { publicOrigin = origin, png =
 				assert.ok(selected);
 				action = { name: 'image_generate', input: { ...selected, prompt: 'A blue circle.' } };
 			}
-			const result = results.at(-1);
 			const delta = action
 				? {
 						tool_calls: [
@@ -70,12 +70,7 @@ export async function openImageFixture(directory, { publicOrigin = origin, png =
 						],
 					}
 				: {
-						content:
-							'![Generated image](' +
-							result.previewUrl +
-							')\n\n[Download image](' +
-							result.downloadUrl +
-							')',
+						content: 'Image saved.',
 					};
 			response.writeHead(200, { 'Content-Type': 'text/event-stream' });
 			response.end(
@@ -150,7 +145,7 @@ export async function openImageFixture(directory, { publicOrigin = origin, png =
 			}),
 			201,
 		);
-		const agentApp = expectStatus(await api('POST', '/api/v1/agent/apps', { name: 'Image acceptance' }), 201);
+		const agentApp = await createTestAgentApp(api, directory, 'Image acceptance');
 		const base = '/api/v1/agent/apps/' + agentApp.id;
 
 		const grants = async (capabilities) => {
@@ -175,6 +170,7 @@ export async function openImageFixture(directory, { publicOrigin = origin, png =
 			200,
 		);
 		return {
+			directory,
 			api,
 			base,
 			appId: agentApp.id,

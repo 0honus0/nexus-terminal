@@ -17,7 +17,10 @@ await test('B10 real signed sandbox, complete SDK imports and MessagePort RPC', 
 			b.requests.filter((item) => item.status !== 200),
 			[],
 		);
-		assert.ok(b.requests.filter((item) => item.path.startsWith('/sdk/')).length > 10);
+		assert.deepEqual(
+			b.requests.filter((item) => item.path.startsWith('/sdk/')),
+			[{ path: '/sdk/frontend-v1.mjs', status: 200 }],
+		);
 		assert.deepEqual(b.errors, []);
 		assert.equal(
 			await frame.evaluate(() => {

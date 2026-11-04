@@ -10,7 +10,6 @@ export interface CommandIdentity {
 }
 
 export interface CommandCount {
-	collection: 'commands' | 'tags' | 'associations';
 	count: number;
 }
 

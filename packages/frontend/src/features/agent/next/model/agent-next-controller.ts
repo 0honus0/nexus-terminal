@@ -1,4 +1,4 @@
-import type { AgentAppView, AgentThreadView } from '@nexus-terminal/shared/agent/scope/model';
+import type { AgentThreadView } from '@nexus-terminal/shared/agent/scope/model';
 import type { AgentRunEventView, AgentRunView } from '@nexus-terminal/shared/agent/runs/model';
 import type { AgentRunEventType, AgentRunStatus } from '@nexus-terminal/shared/agent/runs/values';
 import { AgentNextFailure } from '../api/agent-next-api';
@@ -7,12 +7,6 @@ import type { AgentNextApi, AgentNextFailureCode } from '../api/agent-next-api';
 export interface AgentNextUnknownWrite {
 	kind: 'create_run' | 'cancel_run';
 	operationKey: string;
-}
-
-export interface AgentNextAppState {
-	id: string;
-	name: string;
-	createdAt: number;
 }
 
 export interface AgentNextThreadState {
@@ -57,7 +51,6 @@ export interface AgentNextControllerState {
 	busy: boolean;
 	errorCode: AgentNextFailureCode | null;
 	unknownWrite: AgentNextUnknownWrite | null;
-	app: AgentNextAppState | null;
 	thread: AgentNextThreadState | null;
 	run: AgentNextRunState | null;
 	events: AgentNextEventState[];
@@ -68,10 +61,6 @@ export interface AgentNextControllerState {
 interface WriteIntent {
 	signature: string;
 	operationKey: string;
-}
-
-function toAppState(value: AgentAppView): AgentNextAppState {
-	return { id: value.id, name: value.name, createdAt: value.createdAt };
 }
 
 function toThreadState(value: AgentThreadView): AgentNextThreadState {
@@ -104,7 +93,6 @@ const freshState = (): AgentNextControllerState => ({
 	busy: false,
 	errorCode: null,
 	unknownWrite: null,
-	app: null,
 	thread: null,
 	run: null,
 	events: [],
@@ -247,21 +235,6 @@ export class AgentNextController {
 		} catch (error) {
 			this.fail(generation, controller, error);
 			return false;
-		} finally {
-			this.finish(generation, controller);
-		}
-	}
-
-	async createApp(name: string): Promise<AgentNextAppState | null> {
-		const { generation, controller } = this.begin();
-		try {
-			const app = toAppState(await this.api.createApp(name, controller.signal));
-			if (!this.active(generation, controller)) return null;
-			this.state.app = app;
-			return app;
-		} catch (error) {
-			this.fail(generation, controller, error);
-			return null;
 		} finally {
 			this.finish(generation, controller);
 		}

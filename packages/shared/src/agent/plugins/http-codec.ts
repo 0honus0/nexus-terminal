@@ -22,6 +22,7 @@ import type {
 	AgentPluginDescriptor,
 } from './model.js';
 import type {
+	AgentPluginInstallationListResponse,
 	AgentPluginDataPurgeRequest,
 	AgentPluginDataRequest,
 	AgentPluginDataDeleteRequest,
@@ -304,6 +305,25 @@ export function readAgentPluginItems<T>(input: unknown, read: (value: unknown) =
 		throw new InvalidAgentPayload();
 	}
 	return { items: row.items.map(read) };
+}
+
+export function readAgentPluginInstallationList(input: unknown): AgentPluginInstallationListResponse {
+	const row = agentRecord(input, ['items', 'retainedAppIds'], AGENT_PLUGIN_MAX_RESPONSE_BYTES);
+	if (!Array.isArray(row.items) || !Array.isArray(row.retainedAppIds)) {
+		throw new InvalidAgentPayload();
+	}
+	const items = row.items.map(readAgentPluginInstallation);
+	const retainedAppIds = row.retainedAppIds.map(readAgentId);
+	const removedIds = new Set(items.filter((item) => item.status === 'removed').map((item) => item.appId));
+	if (
+		new Set(items.map((item) => item.appId)).size !== items.length ||
+		new Set(items.map((item) => item.definitionId)).size !== items.length ||
+		new Set(retainedAppIds).size !== retainedAppIds.length ||
+		retainedAppIds.some((id) => !removedIds.has(id))
+	) {
+		throw new InvalidAgentPayload();
+	}
+	return { items, retainedAppIds };
 }
 
 export function readAgentPluginDataKey(input: unknown): string {

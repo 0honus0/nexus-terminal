@@ -15,7 +15,8 @@ import {
 } from '../../../fixtures/agent/native-task';
 import { installTestPlugin } from '../../../support/plugins';
 import { selectUiOption } from '../../../support/ui-select';
-import { openAgentConversations, requestAgentJson, requestAgentWorkspace } from '../../../support/agent';
+import { requestAgentJson } from '../../../support/agent-request';
+import { openAgentConversations, requestAgentWorkspace } from '../../../support/agent';
 import { expect, test } from '../../../support/fixtures';
 import { loginAsInitialAdmin } from '../../../support/auth';
 import { captureFunctionalScreenshot } from '../../../support/functional-screenshots';

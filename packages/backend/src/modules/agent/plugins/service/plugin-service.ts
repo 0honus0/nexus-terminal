@@ -1,7 +1,11 @@
 import type { Logger } from '../../../../platform/logging/logger.js';
 import { logDiagnostic } from '../../../../platform/logging/diagnostic-log.js';
 import type { WorkspaceInput, WorkspaceResult, WorkspaceMutation } from '../../scope/model/workspace-types.js';
-import type { PluginRuntimeObservation, PluginRuntimeAcknowledgement } from '../model/plugin-types.js';
+import type {
+	PluginRuntimeObservation,
+	PluginRuntimeAcknowledgement,
+	PluginInstallationDirectory,
+} from '../model/plugin-types.js';
 import type {
 	PluginDataSnapshot,
 	PluginDataMigration,
@@ -707,6 +711,10 @@ export class PluginService {
 
 	stages(actor: PluginActor): Promise<PluginStage[]> {
 		return this.task(() => this.model.stages(actor));
+	}
+
+	installationDirectory(actor: PluginActor): Promise<PluginInstallationDirectory> {
+		return this.task(() => this.model.installationDirectory(actor));
 	}
 
 	installations(actor: PluginActor): Promise<PluginInstallation[]> {

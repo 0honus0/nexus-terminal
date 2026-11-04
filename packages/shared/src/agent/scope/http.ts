@@ -1,10 +1,5 @@
 import type { AgentAppView, AgentThreadView } from './model.js';
 
-export interface AgentCreateAppRequest {
-	name: string;
-	definitionId?: string;
-}
-
 export interface AgentCreateThreadRequest {
 	title: string;
 }
@@ -12,8 +7,6 @@ export interface AgentCreateThreadRequest {
 export interface AgentAppPath {
 	appId: string;
 }
-
-export type AgentCreateAppResponse = AgentAppView;
 
 export type AgentCreateThreadResponse = AgentThreadView;
 

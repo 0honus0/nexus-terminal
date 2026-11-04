@@ -25,8 +25,9 @@ export const AGENT_EXECUTION_LIMIT_MAXIMA = {
 	toolTimeoutSeconds: 300,
 	maxToolOutputBytes: 262144,
 	maxTokenReservations: 8000000,
-	maxConcurrentRuns: 8,
-	maxConcurrentModelCalls: 8,
+	// Actual concurrency is admitted against saved limits; no additional fixed product ceiling.
+	maxConcurrentRuns: Number.MAX_SAFE_INTEGER,
+	maxConcurrentModelCalls: Number.MAX_SAFE_INTEGER,
 	maxChildren: 4,
 	maxMessages: 5000,
 	maxMessageBytes: 8388608,

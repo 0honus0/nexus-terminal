@@ -7,7 +7,6 @@ export function toDefinitionView(value: AppDeclaration): AgentAppDefinitionView 
 		version: value.version,
 		displayName: value.displayName,
 		capabilities: value.capabilities.map((capability) => capability),
-		defaultEnabled: value.defaultEnabled,
 	};
 }
 

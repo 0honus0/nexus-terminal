@@ -41,6 +41,36 @@ export async function invalidateAppPolicy(tx: SqlExecutor, userId: number, appId
 	);
 }
 
+export async function appsWithPolicySettings(tx: SqlExecutor, userId: number): Promise<string[]> {
+	const rows = await tx.all(
+		"SELECT app_id FROM agent_governance_policies WHERE user_id=? AND execution_overrides_json<>'{}' UNION SELECT app_id FROM agent_governance_grants WHERE user_id=?",
+		[userId, userId],
+	);
+	return rows.map((row) => {
+		if (typeof row.app_id !== 'string') {
+			throw new Error('Invalid App policy owner');
+		}
+		return row.app_id;
+	});
+}
+
+export async function clearAppPolicySettings(tx: SqlExecutor, userId: number, appId: string): Promise<void> {
+	const current = await tx.one(
+		'SELECT execution_version FROM agent_governance_policies WHERE user_id=? AND app_id=?',
+		[userId, appId],
+	);
+	if (current === null) {
+		throw new Error('Missing App policy during cleanup');
+	}
+	assertRevisionAvailable(current.execution_version);
+	await invalidateAppPolicy(tx, userId, appId);
+	await tx.run(
+		"UPDATE agent_governance_policies SET execution_overrides_json='{}',execution_version=execution_version+1 WHERE user_id=? AND app_id=?",
+		[userId, appId],
+	);
+	await tx.run('DELETE FROM agent_governance_grants WHERE user_id=? AND app_id=?', [userId, appId]);
+}
+
 export async function assertPendingApprovalRevisions(tx: SqlExecutor, userId: number, appId: string): Promise<void> {
 	const exhausted = await tx.one(
 		"SELECT id FROM agent_governance_approvals WHERE user_id=? AND app_id=? AND status='requested' AND version>=? LIMIT 1",

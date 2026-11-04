@@ -228,7 +228,10 @@ await test('B10 actual CDP Browser ownership and governed operations', { timeout
 				name: 'browser_snapshot',
 				input: { sessionId },
 			}));
-			await f.wait(other, 'unknown');
+			await f.wait(other, 'failed');
+			assert.deepEqual(JSON.parse(f.rows('agent_run_tools', other)[0].result_text), {
+				failureCode: 'tool_target_unavailable',
+			});
 			await contexts(3);
 			await f.cancel(owner);
 			await f.wait(owner, 'cancelled');

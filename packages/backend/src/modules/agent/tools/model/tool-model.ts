@@ -139,6 +139,8 @@ export class ToolModel {
 			| { kind: 'project' }
 			| { kind: 'result' }
 			| { kind: 'memory' }
+			| { kind: 'browser_targets' }
+			| { kind: 'acp_integrations' }
 			| { kind: 'image_models' }
 			| { kind: 'image_generate' }
 			| { kind: 'artifact' }

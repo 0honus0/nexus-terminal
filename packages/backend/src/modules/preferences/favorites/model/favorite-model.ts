@@ -10,7 +10,6 @@ import type {
 	FavoriteIdentity,
 	FavoriteQuery,
 	FavoriteInput,
-	FavoriteCreationFacts,
 	FavoriteUpdate,
 	FavoriteTouch,
 	FavoriteDelete,
@@ -93,13 +92,11 @@ export class FavoriteModel {
 		actor: FavoriteActor,
 		input: FavoriteInput,
 		admit: (identity: FavoriteIdentity) => void,
-		admitCount: (facts: FavoriteCreationFacts) => void,
 	): Promise<FavoriteRecord> {
 		const saved = await storage(() =>
 			this.storage.create(
 				{ userId: actor.userId, input: { name: input.name, path: input.path } },
 				this.authorization(actor, admit),
-				(count) => admitCount({ count }),
 			),
 		);
 		return committed(saved);

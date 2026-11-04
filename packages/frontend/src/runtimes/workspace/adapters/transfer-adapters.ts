@@ -1,3 +1,4 @@
+import { WORKSPACE_FILES_TRANSFER_TIMEOUT_MS } from '@nexus-terminal/shared/remote/files/values';
 import type { WorkspaceArchiveEvent, WorkspaceCopyMoveEvent } from '@nexus-terminal/shared/remote/transfers/workspace';
 import {
 	readWorkspaceArchiveCompress,
@@ -48,7 +49,7 @@ interface WorkspaceTransferAdapter {
 	dispose(): void;
 }
 
-const TASK_TIMEOUT_MS = 60 * 60 * 1000 + 30_000;
+const TASK_TIMEOUT_MS = WORKSPACE_FILES_TRANSFER_TIMEOUT_MS + 30_000;
 
 function failure(cause: unknown, dispatched: boolean): TransferFailure {
 	if (cause instanceof TransferFailure) return cause;

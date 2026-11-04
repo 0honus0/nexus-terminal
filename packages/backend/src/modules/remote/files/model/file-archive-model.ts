@@ -1,9 +1,10 @@
 import { archiveToolRequirements } from '@nexus-terminal/shared/remote/tools/values';
 import {
-	NativeArchiveCommands,
-	parseNativeArchiveListing,
-} from '../../../../platform/archive/adapters/native/archive-commands.js';
-import { NativeArchiveFailure, type NativeArchiveOperationOutcome } from '../../../../platform/archive/archive-port.js';
+	NativeArchiveFailure,
+	type ArchiveCommands,
+	type ArchiveCommandsFactory,
+	type NativeArchiveOperationOutcome,
+} from '../../../../platform/archive/archive-port.js';
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 import { FileCommandNotStarted, RemoteFileFailure, type FileResource } from './file-types.js';
 import {
@@ -19,10 +20,10 @@ import {
 
 /** Native syntax stays in Adapter; Service consumes application archive facts. */
 export class FileArchiveModel {
-	private readonly commands: NativeArchiveCommands;
+	private readonly commands: ArchiveCommands;
 
-	constructor(resource: FileResource) {
-		this.commands = new NativeArchiveCommands({
+	constructor(resource: FileResource, createCommands: ArchiveCommandsFactory) {
+		this.commands = createCommands({
 			executeLines: async (command, signal, timeoutMs, onLine, beforeWriteMarker) => {
 				const result = await resource.executeCommandLines(
 					command,
@@ -97,8 +98,7 @@ export class FileArchiveModel {
 		signal: AbortSignal,
 	): Promise<FileArchiveListing> {
 		return this.perform(async () => {
-			const listing = await this.commands.list(archive, format, remaining, signal);
-			const parsed = parseNativeArchiveListing(listing.names, listing.modes, format);
+			const parsed = await this.commands.list(archive, format, remaining, signal);
 			return {
 				names: parsed.names.map((name) => name),
 				modes: parsed.modes.map((member) => ({

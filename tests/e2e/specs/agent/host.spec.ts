@@ -1,3 +1,4 @@
+import { installTestPlugin } from '../../support/plugins';
 import { dismissToasts } from '../../support/feedback';
 import {
 	readAgentProviderView,
@@ -18,6 +19,7 @@ import {
 	readAgentWorkspaceResponse,
 } from '../../../../packages/shared/src/agent/scope/workspace-http-codec';
 import type { AgentWorkspaceRequest } from '../../../../packages/shared/src/agent/scope/workspace-http';
+import { requestAgentJson } from '../../support/agent-request';
 import {
 	openAgentConversations,
 	openAgentHub,
@@ -26,7 +28,6 @@ import {
 	createTestAgentApp,
 	enableTestAgentExecution,
 	requestAgentWorkspace,
-	requestAgentJson,
 	createAgentProvider,
 	prepareAgentRun,
 } from '../../support/agent';
@@ -639,6 +640,7 @@ test('Agent create-thread Retry retains the exact operation after an unknown out
 
 test('Agent execution setting gates the launcher and its global window', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
+	await installTestPlugin(context.request, 'nexus.agent');
 	await setUiLanguage(context.request);
 	const app = await createTestAgentApp(context.request);
 	const original = await requestAgentJson(
@@ -1201,9 +1203,7 @@ test('retired Agent Host subscriptions reject every connection without blocking 
 	);
 	expect(outcomes).toEqual(['rejected', 'rejected', 'rejected', 'rejected']);
 	const apps = await requestAgentJson(context.request, { method: 'GET', path: '/apps' }, readAgentAppListResponse);
-	// The native app and the built-in product app can coexist. The removed
-	// WebSocket subscriptions must not mutate or conceal this authenticated
-	// app directory; verify the exact app created for this scenario.
+	// Removed subscriptions must not mutate the signed plugin App directory.
 	expect(apps.filter((app) => app.id === created.id)).toEqual([created]);
 });
 
@@ -1217,9 +1217,16 @@ test('Agent App lifecycle uses safe contracts, explicit grants and original stat
 		{ method: 'GET', path: '/app-definitions' },
 		readAgentAppDefinitionListResponse,
 	);
-	const native = definitions.find((item) => item.id === 'nexus.terminal');
-	expect(native).toMatchObject({ version: '1.8.0', defaultEnabled: true });
+	expect(definitions).toEqual([]);
 	const app = await createTestAgentApp(request);
+	const installedDefinitions = await requestAgentJson(
+		request,
+		{ method: 'GET', path: '/app-definitions' },
+		readAgentAppDefinitionListResponse,
+	);
+	expect(installedDefinitions).toEqual([
+		{ id: app.definitionId, version: app.definitionVersion, displayName: app.name, capabilities: app.capabilities },
+	]);
 	const grants = await requestAgentJson(
 		request,
 		{ method: 'GET', path: `/apps/${app.id}/grants` },

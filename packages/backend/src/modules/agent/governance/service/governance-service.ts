@@ -1,4 +1,4 @@
-import type { ApprovalPage } from '../model/governance-types.js';
+import type { ApprovalPage, ToolCatalogState } from '../model/governance-types.js';
 import type { ExecutionService } from '../../execution/service/execution-service.js';
 import type { OperationsEvents } from '../../../operations/public.js';
 import type { RevokeRuns } from '../../runs/model/run-types.js';
@@ -14,6 +14,7 @@ import {
 } from '@nexus-terminal/shared/agent/governance/values';
 import type { DenylistCommand, TargetDenylist, DenylistTarget, DenylistMutation } from '../model/governance-types.js';
 import {
+	AGENT_TARGET_CAPABILITIES,
 	AGENT_CAPABILITIES,
 	AGENT_APPROVAL_TTL_SECONDS,
 	AGENT_APPROVAL_MAX_FEEDBACK_BYTES,
@@ -114,6 +115,26 @@ export class GovernanceService {
 		} finally {
 			this.pending.delete(pending);
 		}
+	}
+
+	toolCatalog(userId: number, appId: string, runId: string): Promise<ToolCatalogState | null> {
+		validateScope(userId, appId);
+		validateAgentId(runId);
+		return this.admitted(async () => {
+			const facts = await this.model.toolCatalog(userId, appId, runId);
+			if (facts === null) {
+				return null;
+			}
+			const connectionIds = facts.connectionIds.filter((id) => !facts.policy.app.deniedTargetIds.includes(id));
+			return {
+				connectionIds,
+				capabilities: AGENT_CAPABILITIES.filter((capability) =>
+					AGENT_TARGET_CAPABILITIES.includes(capability)
+						? connectionIds.some((id) => authorizationFact(facts.policy, capability, id).allowed)
+						: authorizationFact(facts.policy, capability, null).allowed,
+				),
+			};
+		});
 	}
 
 	grants(userId: number, appId: string): Promise<GrantCatalogState | null> {

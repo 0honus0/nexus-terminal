@@ -8,7 +8,6 @@ import {
 import type { AgentThreadEntryCursor, AgentThreadEntries, AgentThreadEntry } from './model.js';
 import {
 	InvalidAgentPayload,
-	isAgentRecord,
 	encodeAgentJson,
 	agentRecord,
 	agentInteger,
@@ -29,38 +28,16 @@ import type { AgentCapability } from '../governance/values.js';
 import type { AgentAppView, AgentAppDefinitionView } from './model.js';
 import type { AgentAppStateUpdateRequest } from './http.js';
 
-import type {
-	AgentAppPath,
-	AgentCreateAppRequest,
-	AgentCreateAppResponse,
-	AgentCreateThreadRequest,
-	AgentCreateThreadResponse,
-} from './http.js';
+import type { AgentAppPath, AgentCreateThreadRequest, AgentCreateThreadResponse } from './http.js';
 
 export function readAgentAppPath(input: unknown): AgentAppPath {
 	return { appId: readAgentId(agentRecord(input, ['appId']).appId) };
-}
-
-export function readAgentCreateAppRequest(input: unknown): AgentCreateAppRequest {
-	if (!isAgentRecord(input) || Object.keys(input).some((key) => key !== 'name' && key !== 'definitionId')) {
-		throw new InvalidAgentPayload();
-	}
-	encodeAgentJson(input, AGENT_MAX_JSON_BODY_BYTES);
-	const result: AgentCreateAppRequest = { name: agentText(input.name, AGENT_SCOPE_MAX_NAME_BYTES) };
-	if (input.definitionId !== undefined) {
-		result.definitionId = readDefinitionId(input.definitionId);
-	}
-	return result;
 }
 
 export function readAgentCreateThreadRequest(input: unknown): AgentCreateThreadRequest {
 	return {
 		title: agentText(agentRecord(input, ['title'], AGENT_MAX_JSON_BODY_BYTES).title, AGENT_SCOPE_MAX_NAME_BYTES),
 	};
-}
-
-export function readAgentCreateAppResponse(input: unknown): AgentCreateAppResponse {
-	return readApp(input);
 }
 
 function readDefinitionId(input: unknown): string {
@@ -139,16 +116,12 @@ export function readAgentAppDefinitionListResponse(input: unknown): AgentAppDefi
 		throw new InvalidAgentPayload();
 	}
 	const result = input.map((value) => {
-		const row = agentRecord(value, ['id', 'version', 'displayName', 'capabilities', 'defaultEnabled']);
-		if (typeof row.defaultEnabled !== 'boolean') {
-			throw new InvalidAgentPayload();
-		}
+		const row = agentRecord(value, ['id', 'version', 'displayName', 'capabilities']);
 		return {
 			id: readDefinitionId(row.id),
 			version: agentText(row.version, AGENT_APP_MAX_DEFINITION_VERSION_BYTES),
 			displayName: agentText(row.displayName, AGENT_SCOPE_MAX_NAME_BYTES),
 			capabilities: readCapabilities(row.capabilities),
-			defaultEnabled: row.defaultEnabled,
 		};
 	});
 	if (new Set(result.map((definition) => definition.id)).size !== result.length) {

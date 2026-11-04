@@ -1,11 +1,18 @@
 <script setup lang="ts">
 	import { computed, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiBadge, UiButton, UiConfirmationPanel, UiEmptyState, UiInfoHint, UiInlineNotice } from '@/foundation/ui';
+	import {
+		UiBadge,
+		UiButton,
+		UiCheckbox,
+		UiConfirmationPanel,
+		UiEmptyState,
+		UiInfoHint,
+		UiInlineNotice,
+	} from '@/foundation/ui';
 	import type { useAppManagement } from '../composables/use-app-management';
 	import type { usePluginManagement } from '../composables/use-plugin-management';
 	import type { ManagedApp } from '../model/app-management-types';
-	import PluginDataEditor from './PluginDataEditor.vue';
 	import AppGovernanceEditor from './AppGovernanceEditor.vue';
 	const { t } = useI18n();
 	const props = withDefaults(
@@ -19,6 +26,10 @@
 	);
 	const { apps, definitions, selectedId, appOperation, loadApps, toggle } = props.model;
 	const uninstallAppId = ref('');
+	const clearOnUninstall = ref(false);
+	watch(uninstallAppId, () => {
+		clearOnUninstall.value = false;
+	});
 	watch(
 		() => props.active,
 		(active) => {
@@ -26,11 +37,16 @@
 		},
 	);
 	const uninstallApp = computed(() => apps.value.find((app) => app.id === uninstallAppId.value));
-	const uninstallInstallation = computed(() =>
-		props.plugins.installations.value.find(
-			(installation) => installation.appId === uninstallAppId.value && installation.status !== 'removed',
-		),
+	const installationsByApp = computed(
+		() =>
+			new Map(
+				props.plugins.installations.value
+					.filter((installation) => installation.status !== 'removed')
+					.map((installation) => [installation.appId, installation]),
+			),
 	);
+	const uninstallInstallation = computed(() => installationsByApp.value.get(uninstallAppId.value));
+	const officialPublishers = computed(() => new Set(props.plugins.officialPublisherIds.value));
 	const enabledCount = computed(() => apps.value.filter((app) => app.enabled).length);
 	const blocked = computed(
 		() =>
@@ -66,20 +82,18 @@
 	}
 
 	function installationFor(app: ManagedApp) {
-		return props.plugins.installations.value.find((item) => item.appId === app.id && item.status !== 'removed');
+		return installationsByApp.value.get(app.id);
 	}
 
 	function isOfficial(app: ManagedApp): boolean {
 		const installation = installationFor(app);
-		return (
-			installation !== undefined && props.plugins.officialPublisherIds.value.includes(installation.publisherKeyId)
-		);
+		return installation !== undefined && officialPublishers.value.has(installation.publisherKeyId);
 	}
 
 	async function confirmUninstall(cancel = false): Promise<void> {
 		const installation = uninstallInstallation.value;
 		if (blocked.value || !installation || uninstallApp.value?.enabled) return;
-		await props.plugins.retire(installation, cancel);
+		await props.plugins.retire(installation, cancel, !cancel && clearOnUninstall.value);
 		if (!uninstallInstallation.value || cancel) uninstallAppId.value = '';
 	}
 
@@ -187,7 +201,7 @@
 								</div>
 							</div>
 						</div>
-						<div class="agent-app-actions flex shrink-0 flex-wrap items-center justify-end gap-2 self-end">
+						<div class="agent-app-actions flex shrink-0 flex-wrap items-center justify-end gap-2">
 							<UiButton
 								appearance="soft"
 								tone="neutral"
@@ -228,7 +242,7 @@
 								:title="
 									t(
 										!installationFor(app)
-											? 'agent.settings.apps.coreAppCannotUninstall'
+											? 'agent.settings.apps.installationUnavailable'
 											: app.enabled
 												? 'agent.settings.apps.uninstallDisabledHint'
 												: 'agent.settings.apps.uninstall',
@@ -278,15 +292,17 @@
 			<p class="text-xs leading-relaxed text-text-secondary">
 				{{ t('agent.settings.plugins.uninstallDataHint') }}
 			</p>
-			<PluginDataEditor
-				v-if="uninstallInstallation?.status === 'draining'"
-				:key="uninstallInstallation.appId + ':' + uninstallInstallation.revision"
-				retained-only
-				:installation="uninstallInstallation"
-				:disabled="blocked"
-				:active="active"
-				@changed="props.plugins.load"
-			/>
+			<label class="flex min-h-9 cursor-pointer items-center gap-2 text-sm">
+				<UiCheckbox
+					v-model="clearOnUninstall"
+					:disabled="props.plugins.operation.busy.value"
+					:aria-label="t('agent.settings.plugins.clearOnUninstall')"
+				/>
+				<span>{{ t('agent.settings.plugins.clearOnUninstall') }}</span>
+			</label>
+			<p v-if="clearOnUninstall" class="text-xs leading-relaxed text-text-secondary">
+				{{ t('agent.settings.plugins.clearDataScope') }}
+			</p>
 		</div>
 		<template #actions>
 			<UiButton

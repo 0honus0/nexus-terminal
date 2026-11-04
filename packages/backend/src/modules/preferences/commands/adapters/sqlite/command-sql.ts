@@ -75,15 +75,6 @@ export class SqliteCommandStorage implements CommandStorage {
 		).map(commandTagRow);
 	}
 
-	private async count(tx: SqlExecutor, userId: number, collection: 'commands' | 'tags'): Promise<number> {
-		const table = collection === 'commands' ? 'preferences_commands' : 'preferences_command_tags';
-		const row = await tx.one(`SELECT COUNT(*) AS count FROM ${table} WHERE user_id=?`, [userId]);
-		if (!row || typeof row.count !== 'number' || !Number.isSafeInteger(row.count) || row.count < 0) {
-			throw new Error('Corrupt command count');
-		}
-		return row.count;
-	}
-
 	private async hasTags(tx: SqlExecutor, userId: number, ids: readonly number[]): Promise<boolean> {
 		if (!ids.length) {
 			return true;
@@ -145,7 +136,6 @@ export class SqliteCommandStorage implements CommandStorage {
 		}
 		let id: number;
 		if (task.action === 'create') {
-			authorization.admitCount('commands', await this.count(tx, userId, 'commands'));
 			const at = Math.floor(Date.now() / 1000);
 			const saved = await tx.run(
 				'INSERT INTO preferences_commands(user_id,version,name,command,variables_json,created_at,updated_at) VALUES(?,1,?,?,?,?,?)',
@@ -233,7 +223,6 @@ export class SqliteCommandStorage implements CommandStorage {
 			}
 			id = task.id;
 		} else {
-			authorization.admitCount('tags', await this.count(tx, userId, 'tags'));
 			id = 0;
 		}
 		const duplicate = await tx.one('SELECT id FROM preferences_command_tags WHERE user_id=? AND name=? AND id<>?', [
@@ -374,7 +363,7 @@ export class SqliteCommandStorage implements CommandStorage {
 				if (current.version >= Number.MAX_SAFE_INTEGER) {
 					return { status: 'limit_exceeded' };
 				}
-				authorization.admitCount('associations', current.tagIds.length);
+				authorization.admitCount(current.tagIds.length);
 			}
 			records.push(current);
 		}

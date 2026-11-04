@@ -1,6 +1,6 @@
 import type { APIRequestContext } from '@playwright/test';
 import { expect } from '@playwright/test';
-import { requestAgentJson } from './agent';
+import { requestAgentJson } from './agent-request';
 import { E2E_URLS } from './test-env';
 import {
 	readAgentPluginRepositorySettings,

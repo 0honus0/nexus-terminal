@@ -231,6 +231,7 @@ export interface PluginStorage {
 		admit: (identity: number | null, publisher: StoredPluginPublisher | null, dataMigrated: boolean) => void,
 	): Promise<StoredPluginInstallation>;
 	installations(userId: number): Promise<StoredPluginInstallation[]>;
+	installationDirectory(userId: number): Promise<StoredPluginInstallationDirectory>;
 	install(
 		userId: number,
 		digest: string,
@@ -324,6 +325,11 @@ export interface StoredPluginInstallation {
 	revision: number;
 	createdAt: number;
 	updatedAt: number;
+}
+
+export interface StoredPluginInstallationDirectory {
+	installations: StoredPluginInstallation[];
+	retainedAppIds: string[];
 }
 
 export interface StoredPluginActivation {

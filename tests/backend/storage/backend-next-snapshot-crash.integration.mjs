@@ -14,6 +14,7 @@ import {
 	initializeSnapshotRestoreSchema,
 } from '../../../packages/backend/dist/platform/storage/sqlite/adapters/snapshot-restore-sql.js';
 import { createApp } from '../../../packages/backend/dist/bootstrap/create-app.js';
+import { resolveDataPaths } from '../../../packages/backend/dist/bootstrap/data-paths.js';
 import { send, expectStatus, origin } from '../remote/openssh-fixture.mjs';
 
 async function killedAt(directory, phase) {
@@ -52,7 +53,7 @@ async function killedAt(directory, phase) {
 async function fixture(t, originals = true) {
 	const directory = await mkdtemp(join(tmpdir(), 'nexus-b10-snapshot-crash-'));
 	const path = join(directory, 'state.db');
-	const roots = new Map(['appearance', 'artifacts', 'plugins'].map((name) => [name, path + '.' + name]));
+	const roots = new Map(Object.entries(resolveDataPaths(path)));
 	let db;
 	t.after(async () => {
 		try {
@@ -238,6 +239,7 @@ for (const phase of ['staged', 'published']) {
 	await test(`Actual application startup reconciles ${phase} SIGKILL before opening HTTP`, async (t) => {
 		const directory = await mkdtemp(join(tmpdir(), 'nexus-b10-snapshot-startup-'));
 		const path = join(directory, 'state.db');
+		const roots = new Map(Object.entries(resolveDataPaths(path)));
 		let app;
 		t.after(async () => {
 			try {
@@ -249,9 +251,9 @@ for (const phase of ['staged', 'published']) {
 		app = await createApp(path);
 		await app.close();
 		app = undefined;
-		for (const root of ['appearance', 'artifacts', 'plugins']) {
-			await mkdir(path + '.' + root, { recursive: true });
-			await writeFile(join(path + '.' + root, 'original.txt'), 'original:' + root);
+		for (const [root, location] of roots) {
+			await mkdir(location, { recursive: true });
+			await writeFile(join(location, 'original.txt'), 'original:' + root);
 		}
 		await killedAt(directory, phase);
 		app = await createApp(path);
@@ -262,9 +264,9 @@ for (const phase of ['staged', 'published']) {
 			trustedProxies: [],
 		});
 		expectStatus(await send(address, '', 'GET', '/api/v1/status'), 200);
-		for (const root of ['appearance', 'artifacts', 'plugins']) {
-			assert.deepEqual(await readdir(path + '.' + root), ['original.txt']);
-			assert.equal(await readFile(join(path + '.' + root, 'original.txt'), 'utf8'), 'original:' + root);
+		for (const [root, location] of roots) {
+			assert.deepEqual(await readdir(location), ['original.txt']);
+			assert.equal(await readFile(join(location, 'original.txt'), 'utf8'), 'original:' + root);
 		}
 		assert.deepEqual(
 			(await readdir(directory)).filter((name) => name.includes('.restore-')),

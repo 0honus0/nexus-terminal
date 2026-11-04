@@ -1,3 +1,4 @@
+import { createTestAgentApp } from './native-agent-fixture.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createHash, randomUUID } from 'node:crypto';
@@ -32,8 +33,23 @@ await test(
 						.filter((entry) => entry.role === 'assistant')
 						.map((entry) => entry.text)
 						.join('');
-					const preview = text.match(/!\[Generated image\]\(([^)]+)\)/)?.[1];
-					const download = text.match(/\[Download image\]\(([^)]+)\)/)?.[1];
+					let preview;
+					let download;
+					if (model === 'text-model') {
+						const tools = expectStatus(
+							await f.api('GET', f.base + '/threads/' + thread.id + '/tools'),
+							200,
+						).items;
+						const generated = tools.find((tool) => tool.toolName === 'image_generate');
+						assert.equal(generated.state, 'completed');
+						assert.match(generated.generatedImageId, /^[a-f0-9-]{36}$/);
+						preview = f.base + '/artifacts/' + generated.generatedImageId + '/preview';
+						download = f.base + '/artifacts/' + generated.generatedImageId + '/content';
+						assert.equal(text, 'Image saved.');
+					} else {
+						preview = text.match(/!\[Generated image\]\(([^)]+)\)/)?.[1];
+						download = text.match(/\[Download image\]\(([^)]+)\)/)?.[1];
+					}
 					assert.ok(preview?.endsWith('/preview'), text);
 					assert.equal(download, preview.replace(/preview$/, 'content'));
 					const image = await f.api('GET', preview);
@@ -52,10 +68,7 @@ await test(
 					assert.equal(partial.status, 206);
 					assert.deepEqual(partial.bytes, f.png.subarray(0, 8));
 					assert.equal((await f.api('GET', preview, undefined, { Cookie: '' })).status, 401);
-					const otherApp = expectStatus(
-						await f.api('POST', '/api/v1/agent/apps', { name: 'Other image scope' }),
-						201,
-					);
+					const otherApp = await createTestAgentApp(f.api, directory, 'Other image scope');
 					assert.equal((await f.api('GET', preview.replace(f.appId, otherApp.id))).status, 404);
 					const path = preview.replace(/\/preview$/, '');
 					const listed = expectStatus(await f.api('GET', f.base + '/artifacts'), 200).items;

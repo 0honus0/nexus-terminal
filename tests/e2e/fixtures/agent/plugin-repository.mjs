@@ -5,6 +5,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildNativePluginPackage } from '../../../support/native-plugin-package.mjs';
 
 const current = path.dirname(fileURLToPath(import.meta.url));
 const host = process.env.NEXUS_E2E_PLUGIN_REPOSITORY_HOST?.trim() || '127.0.0.1';
@@ -126,7 +127,6 @@ const catalog = {
 		},
 	],
 };
-const catalogBytes = Buffer.from(`${JSON.stringify(catalog, null, 2)}\n`, 'utf8');
 const officialCatalog = {
 	schemaVersion: 1,
 	publishers: catalog.publishers,
@@ -140,12 +140,47 @@ const packageByUrl = new Map([
 	[`/packages/${unsafePackageName}`, unsafePackageBytes],
 ]);
 
-const server = http.createServer((request, response) => {
+const dynamicPackages = [];
+const server = http.createServer(async (request, response) => {
+	if (request.method === 'POST' && request.url === '/native-package') {
+		try {
+			const chunks = [];
+			for await (const chunk of request) chunks.push(chunk);
+			const { name } = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+			if (typeof name !== 'string' || !name.trim()) {
+				response.writeHead(400).end();
+				return;
+			}
+			const { metadata, bytes } = await buildNativePluginPackage(temp, name, keyPath);
+			const packageUrl = '/packages/' + metadata.appId + '.tar';
+			packageByUrl.set(packageUrl, bytes);
+			dynamicPackages.push({
+				appId: metadata.appId,
+				version: metadata.version,
+				sdkVersion: metadata.sdkVersion,
+				nexus: metadata.nexus,
+				displayName: metadata.displayName,
+				description: 'Signed isolated native Agent fixture',
+				packageUrl: publicBaseUrl + packageUrl,
+				sha256: metadata.sha256,
+				sizeBytes: metadata.sizeBytes,
+				publisherKeyId: metadata.publisherKeyId,
+			});
+			response.writeHead(201, { 'Content-Type': 'application/json' });
+			response.end(JSON.stringify({ appId: metadata.appId }));
+		} catch (error) {
+			console.error('Native package fixture failed', error);
+			response.writeHead(500).end();
+		}
+		return;
+	}
 	if (request.method === 'POST' && request.url === '/reset') {
 		if (hangingProviderResponses.size) {
 			response.writeHead(409).end();
 			return;
 		}
+		for (const entry of dynamicPackages) packageByUrl.delete(new URL(entry.packageUrl).pathname);
+		dynamicPackages.length = 0;
 		officialCatalogEnabled = true;
 		response.writeHead(204).end();
 		return;
@@ -232,6 +267,9 @@ const server = http.createServer((request, response) => {
 		return;
 	}
 	if (request.method === 'GET' && request.url === '/catalog.json') {
+		const catalogBytes = Buffer.from(
+			JSON.stringify({ ...catalog, packages: catalog.packages.concat(dynamicPackages) }),
+		);
 		response.writeHead(200, {
 			'Content-Type': 'application/json',
 			'Content-Length': String(catalogBytes.byteLength),

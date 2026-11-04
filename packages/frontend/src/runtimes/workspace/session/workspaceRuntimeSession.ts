@@ -1,5 +1,6 @@
 import { ref, type Ref } from 'vue';
 import { logger } from '@/client/logging/logger';
+import { WebSocketConnectionFailure } from '@/client/websocket';
 import { refreshConnection, confirmConnectionHostKey, type ConnectionSummary } from '@/features/connections/public';
 import {
 	createTerminalSessionState,
@@ -29,7 +30,11 @@ import {
 	type WorkspaceSuspendedConnection,
 	type WorkspaceSuspendResumeOptions,
 } from '../model/workspace-suspend-types';
-import { WorkspaceDispatchFailure, WorkspaceRequestFailure } from '../model/workspace-error-types';
+import {
+	WorkspaceDispatchFailure,
+	WorkspaceRequestFailure,
+	WorkspaceRequestTimeout,
+} from '../model/workspace-error-types';
 import { toSuspendedAutoTermination, type SuspendedAutoTermination } from '@/features/ssh-suspend/public';
 import { WorkspaceSocket, type WorkspaceAttachmentRequest } from '../protocol/workspaceSocket';
 import {
@@ -372,16 +377,33 @@ export class WorkspaceRuntimeSession {
 				'Workspace runtime connection failed',
 			);
 			this.markCapabilitiesDisconnected();
+			// A failed transport is recoverable until creation/ownership confirmation
+			// becomes unknown. Explicit server refusals still require user action,
+			// except a resume that is waiting for the old attachment to detach.
+			const recoverable =
+				cause instanceof WebSocketConnectionFailure ||
+				cause instanceof WorkspaceRequestTimeout ||
+				(cause instanceof WorkspaceDispatchFailure && cause.code === 'not_connected') ||
+				(cause instanceof WorkspaceRequestFailure &&
+					cause.operation === 'workspace.resume' &&
+					(cause.code === 'conflict' || cause.code === 'remote_unavailable'));
+			const retryAutomatically = recoverable && !this.recoveryRequired.value;
+			// The failed attempt owns cleanup and retry scheduling. Its local close
+			// must not schedule an earlier timer or overwrite the final failure state.
 			this.waitingForRetry = true;
-			this.immediateReconnectRequested = false;
+			if (!retryAutomatically) {
+				this.immediateReconnectRequested = false;
+			}
 			this.clearReconnectTimer();
 			if (!this.closing) {
 				this.socket.close('Workspace connection failed');
 			}
+			this.waitingForRetry = !retryAutomatically;
 			if (!this.disposed && !this.closing) {
 				this.state.value = 'error';
 				this.statusMessage.value = error.message;
 			}
+			this.scheduleReconnect();
 			throw error;
 		}
 	}
@@ -508,15 +530,24 @@ export class WorkspaceRuntimeSession {
 		this.assertConnectionActive();
 		// Flow confirms rendered bytes. Only this separate ACK commits ownership.
 		this.recoveryRequired.value = true;
-		readWorkspaceEmptyResponse(
-			await requestAttached(
+		let acknowledgement: unknown;
+		try {
+			acknowledgement = await requestAttached(
 				'workspace.resumeAck',
 				readWorkspaceResumeAck({
 					resumeToken: result.resumeToken,
 					attachmentGeneration: result.attachmentGeneration,
 				}),
-			),
-		);
+			);
+		} catch (cause) {
+			if (cause instanceof WorkspaceDispatchFailure && generation === this.lifecycleGeneration) {
+				// Nothing reached send: the server still owns only a provisional resume.
+				// A lost ACK response must retain the fence instead.
+				this.recoveryRequired.value = false;
+			}
+			throw cause;
+		}
+		readWorkspaceEmptyResponse(acknowledgement);
 		this.assertConnectionGeneration(generation);
 		this.commitAttachment(result, requestAttached);
 		return result;

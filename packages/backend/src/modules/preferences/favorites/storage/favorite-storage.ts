@@ -52,11 +52,7 @@ export type FavoriteDeletion = { status: 'deleted' } | { status: 'not_found' } |
 export interface FavoriteStorage {
 	list(userId: number, sortBy: FavoritePathSort, offset: number, limit: number): Promise<StoredFavorite[]>;
 	get(userId: number, id: number): Promise<StoredFavorite | null>;
-	create(
-		command: FavoriteCreateCommand,
-		authorization: FavoriteAuthorization,
-		admitCount: (count: number) => void,
-	): Promise<StoredFavorite>;
+	create(command: FavoriteCreateCommand, authorization: FavoriteAuthorization): Promise<StoredFavorite>;
 	update(command: FavoriteUpdateCommand, authorization: FavoriteAuthorization): Promise<FavoriteMutation>;
 	touch(command: FavoriteTouchCommand, authorization: FavoriteAuthorization): Promise<FavoriteMutation>;
 	delete(command: FavoriteVersionCommand, authorization: FavoriteAuthorization): Promise<FavoriteDeletion>;

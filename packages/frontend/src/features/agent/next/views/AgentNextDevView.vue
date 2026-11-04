@@ -17,7 +17,6 @@
 		busy: false,
 		errorCode: null,
 		unknownWrite: null,
-		app: null,
 		thread: null,
 		run: null,
 		events: [],
@@ -39,7 +38,6 @@
 	let authGeneration = 0;
 	let authRequest: AbortController | null = null;
 
-	const appName = ref('');
 	const appId = ref('');
 	const threadTitle = ref('');
 	const threadId = ref('');
@@ -166,13 +164,6 @@
 		}
 	}
 
-	async function createApp(): Promise<void> {
-		const created = await controller.createApp(appName.value);
-		if (created) {
-			appId.value = created.id;
-		}
-	}
-
 	async function createThread(): Promise<void> {
 		const created = await controller.createThread(appId.value, threadTitle.value);
 		if (created) {
@@ -293,12 +284,6 @@
 
 			<section class="space-y-3 rounded border p-4">
 				<h2 class="font-semibold">{{ t('agentNext.scopeTitle') }}</h2>
-				<form class="grid gap-2 sm:grid-cols-[1fr_auto]" @submit.prevent="createApp">
-					<input v-model="appName" class="border p-2" :placeholder="t('agentNext.appName')" required />
-					<button class="rounded border px-3 py-2" :disabled="state.busy">
-						{{ t('agentNext.createApp') }}
-					</button>
-				</form>
 				<label class="block">
 					{{ t('agentNext.appId') }}
 					<input v-model="appId" class="block w-full border p-2" autocomplete="off" />

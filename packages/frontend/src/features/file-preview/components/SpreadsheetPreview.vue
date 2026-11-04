@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { PRESENTATION_PREFERENCE_BOUNDS } from '@nexus-terminal/shared/preferences/presentation/values';
 	import { computed, nextTick, onMounted, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import FilePreviewDialog from './FilePreviewDialog.vue';
@@ -30,8 +31,21 @@
 	const search = ref('');
 	const searchIndex = ref(-1);
 
-	const rowsPerPage = computed(() => Math.min(2000, Math.max(10, Number(props.rowsPerPage) || 500)));
-	const maxColumns = computed(() => Math.min(200, Math.max(5, Number(props.maxColumns) || 100)));
+	const rowsPerPage = computed(() =>
+		Math.min(
+			PRESENTATION_PREFERENCE_BOUNDS.spreadsheetPreviewRowsPerPage.max,
+			Math.max(
+				PRESENTATION_PREFERENCE_BOUNDS.spreadsheetPreviewRowsPerPage.min,
+				Number(props.rowsPerPage) || 500,
+			),
+		),
+	);
+	const maxColumns = computed(() =>
+		Math.min(
+			PRESENTATION_PREFERENCE_BOUNDS.spreadsheetPreviewMaxColumns.max,
+			Math.max(PRESENTATION_PREFERENCE_BOUNDS.spreadsheetPreviewMaxColumns.min, Number(props.maxColumns) || 100),
+		),
+	);
 	const sheets = ref<ReturnType<typeof parseSpreadsheetPreview>>([]);
 	const parseError = ref<string | null>(null);
 

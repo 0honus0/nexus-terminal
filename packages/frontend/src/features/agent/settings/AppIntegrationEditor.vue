@@ -136,39 +136,46 @@
 				>
 				<UiInfoHint :text="t('agent.settings.integrationManagement.description')" />
 			</div>
-			<div class="flex flex-wrap items-center gap-2">
+			<div class="flex min-w-0 flex-1 basis-full items-center gap-2 sm:basis-0">
 				<slot name="app-selector" />
-				<UiButton
-					type="button"
-					appearance="soft"
-					tone="neutral"
-					icon-only
-					:loading="operation.busy.value"
-					:disabled="operation.busy.value"
-					:aria-label="t('agent.settings.integrationManagement.reload')"
-					@click="load"
-				>
-					<i class="fa-solid fa-arrows-rotate text-xs" aria-hidden="true"></i>
-				</UiButton>
-				<UiButton
-					v-if="pendingCreate"
-					type="button"
-					:disabled="operation.busy.value"
-					@click="editorOpen = true"
-					>{{ t('common.edit') }}</UiButton
-				>
-				<UiButton
-					v-else
-					type="button"
-					appearance="solid"
-					tone="primary"
-					class="shrink-0"
-					:disabled="blocked || items.length >= AGENT_INTEGRATION_MAX_ITEMS"
-					@click="resetDraft"
-				>
-					<i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i
-					>{{ t('agent.settings.integrationManagement.create') }}
-				</UiButton>
+				<div class="ml-auto flex shrink-0 items-center gap-2">
+					<UiButton
+						type="button"
+						appearance="soft"
+						tone="neutral"
+						icon-only
+						:loading="operation.busy.value"
+						:disabled="operation.busy.value"
+						:aria-label="t('agent.settings.integrationManagement.reload')"
+						@click="load"
+					>
+						<i class="fa-solid fa-arrows-rotate text-xs" aria-hidden="true"></i>
+					</UiButton>
+					<UiButton
+						v-if="pendingCreate"
+						type="button"
+						:disabled="operation.busy.value"
+						@click="editorOpen = true"
+						>{{ t('common.edit') }}</UiButton
+					>
+					<UiButton
+						v-else
+						type="button"
+						appearance="solid"
+						tone="primary"
+						class="shrink-0"
+						:aria-label="t('agent.settings.integrationManagement.create')"
+						:title="t('agent.settings.integrationManagement.create')"
+						:disabled="blocked || items.length >= AGENT_INTEGRATION_MAX_ITEMS"
+						@click="resetDraft"
+					>
+						<i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i>
+						<span class="hidden min-[360px]:inline">{{
+							t('agent.settings.integrationManagement.create')
+						}}</span>
+						<span class="min-[360px]:hidden">{{ t('common.create') }}</span>
+					</UiButton>
+				</div>
 			</div>
 		</div>
 		<div

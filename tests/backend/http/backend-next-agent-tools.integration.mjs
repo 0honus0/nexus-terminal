@@ -1,3 +1,4 @@
+import { createTestAgentApp } from './native-agent-fixture.mjs';
 import { listAgentApprovalHistory } from './agent-approval-fixture.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -280,7 +281,7 @@ await test('B10 Agent tool approval, actual SSH effects and revocation', { timeo
 			}),
 			201,
 		);
-		agentApp = expectStatus(await api('POST', '/api/v1/agent/apps', { name: 'Tools fixture' }), 201);
+		agentApp = await createTestAgentApp(api, directory, 'Tools fixture');
 		await grants(true);
 		const settings = expectStatus(await api('GET', '/api/v1/agent/execution-settings'), 200).settings;
 		expectStatus(
@@ -319,11 +320,14 @@ await test('B10 Agent tool approval, actual SSH effects and revocation', { timeo
 				for (const path of [
 					'/steps/1',
 					'/steps/1/events?after=0&limit=50',
-					'/tools/' + approval.toolCallId,
 					'/tools/' + approval.toolCallId + '/events?after=0&limit=50',
 				]) {
 					expectStatus(await api('GET', runPath(run) + path), 404);
 				}
+				const details = expectStatus(await api('GET', runPath(run) + '/tools/' + approval.toolCallId), 200);
+				assert.equal(details.tool.id, approval.toolCallId);
+				assert.equal(details.failureCode, null);
+				assert.equal(JSON.parse(details.argumentsJson).content, content);
 				assert.equal(expectStatus(await resolve(approval, 'approved', key), 200).status, 'approved');
 				assert.equal(calls.length, 2);
 				assert.ok(calls[1].messages.some((message) => message.role === 'tool'));

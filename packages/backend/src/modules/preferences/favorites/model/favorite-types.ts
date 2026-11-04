@@ -41,10 +41,6 @@ export interface FavoritePage {
 	nextOffset: number | null;
 }
 
-export interface FavoriteCreationFacts {
-	count: number;
-}
-
 export interface FavoriteTouch {
 	id: number;
 	expectedVersion: number;

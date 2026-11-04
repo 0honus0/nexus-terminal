@@ -25,7 +25,6 @@ import {
 	COMMAND_MAX_VARIABLES,
 	COMMAND_VARIABLE_MAX_BYTES,
 	COMMAND_BATCH_MAX_ENTRIES,
-	COMMAND_MAX_ENTRIES,
 	COMMAND_REQUEST_MAX_BYTES,
 	COMMAND_RESPONSE_MAX_BYTES,
 	COMMAND_PAGE_MAX_ENTRIES,
@@ -151,7 +150,7 @@ export function readCommandTagUpdate(input: unknown): CommandTagUpdateRequest {
 }
 
 function readGroupMembers(value: unknown): Array<{ id: number; expectedVersion: number }> {
-	if (!Array.isArray(value) || value.length > COMMAND_MAX_ENTRIES) {
+	if (!Array.isArray(value)) {
 		throw new InvalidCommandPayload();
 	}
 	const commands = value.map((raw: unknown) => {
@@ -220,7 +219,7 @@ export function readCommandQuery(query: URLSearchParams, tags = false): CommandL
 	}
 	return {
 		sortBy,
-		offset: integer(Number(query.get('offset') ?? '0'), 0, COMMAND_MAX_ENTRIES),
+		offset: integer(Number(query.get('offset') ?? '0'), 0),
 		limit: integer(Number(query.get('limit') ?? String(COMMAND_PAGE_MAX_ENTRIES)), 1, COMMAND_PAGE_MAX_ENTRIES),
 	};
 }
@@ -280,7 +279,7 @@ function page(input: unknown, query: CommandListQuery): { rows: unknown[]; nextO
 	) {
 		throw new InvalidCommandPayload();
 	}
-	const nextOffset = value.nextOffset === null ? null : integer(value.nextOffset, 1, 2000);
+	const nextOffset = value.nextOffset === null ? null : integer(value.nextOffset, 1);
 	if (
 		nextOffset !== null &&
 		(value.entries.length !== query.limit || nextOffset !== query.offset + value.entries.length)

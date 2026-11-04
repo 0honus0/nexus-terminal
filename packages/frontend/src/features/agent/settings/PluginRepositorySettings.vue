@@ -5,6 +5,7 @@
 		UiBadge,
 		UiButton,
 		UiCheckbox,
+		UiConfirmationPanel,
 		UiEmptyState,
 		UiInfoHint,
 		UiInlineNotice,
@@ -20,6 +21,7 @@
 		PluginRepositories,
 		PluginPublisher,
 		PluginInstallation,
+		PluginVersion,
 	} from '../model/plugin-types';
 	import { useOperationFeedback } from '@/shared/feedback/public';
 	import type { ManagedApp } from '../model/app-management-types';
@@ -33,6 +35,9 @@
 		blocked: boolean;
 		publishers: PluginPublisher[];
 		installations: PluginInstallation[];
+		versions: PluginVersion[];
+		retainedAppIds: string[];
+		clearing: boolean;
 		apps: ManagedApp[];
 		active: boolean;
 	}>();
@@ -41,6 +46,7 @@
 		trust: [label: string, pem: string];
 		recommend: [];
 		officialPublishers: [keyIds: string[]];
+		clearData: [installation: PluginInstallation];
 	}>();
 	const { t } = useI18n();
 	const feedback = useOperationFeedback('agent.settings.plugin-market');
@@ -50,6 +56,56 @@
 	const repositoryUrl = ref('');
 	const searchQuery = ref('');
 	const catalogs = ref<CatalogSource[]>([]);
+	const clearAppId = ref('');
+	const clearAppName = ref('');
+	const installationsByDefinition = computed(
+		() => new Map(props.installations.map((installation) => [installation.definitionId, installation])),
+	);
+	const retainedApps = computed(() => new Set(props.retainedAppIds));
+	const appsById = computed(() => new Map(props.apps.map((app) => [app.id, app])));
+	const trustedPublishers = computed(
+		() =>
+			new Set(
+				props.publishers
+					.filter((publisher) => publisher.revokedAt === null)
+					.map((publisher) => publisher.keyId),
+			),
+	);
+	const clearInstallation = computed(() =>
+		props.installations.find(
+			(installation) => installation.appId === clearAppId.value && installation.status === 'removed',
+		),
+	);
+	const retainedOutsideCatalog = computed(() => {
+		const catalogIds = new Set(
+			catalogs.value.flatMap((source) => source.catalog.packages.map((entry) => entry.definitionId)),
+		);
+		const versions = new Map(props.versions.map((version) => [version.packageHash, version]));
+		const query = searchQuery.value.trim().toLowerCase();
+		return props.installations
+			.filter(
+				(installation) =>
+					installation.status === 'removed' &&
+					retainedApps.value.has(installation.appId) &&
+					!catalogIds.has(installation.definitionId),
+			)
+			.map((installation) => ({
+				installation,
+				name: versions.get(installation.packageHash)?.manifest.displayName ?? installation.definitionId,
+			}))
+			.filter(
+				(item) =>
+					!query ||
+					item.name.toLowerCase().includes(query) ||
+					item.installation.definitionId.toLowerCase().includes(query),
+			);
+	});
+	watch(
+		() => props.active && retainedApps.value.has(clearAppId.value),
+		(visible) => {
+			if (!visible) clearAppId.value = '';
+		},
+	);
 	const unknown = ref(false);
 	const acknowledged = ref(false);
 	let writeIntent: symbol | null = null;
@@ -133,24 +189,41 @@
 	defineExpose({ reload, busy: operation.busy });
 
 	function publisherTrusted(keyId: string): boolean {
-		return props.publishers.some((publisher) => publisher.keyId === keyId && publisher.revokedAt === null);
+		return trustedPublishers.value.has(keyId);
 	}
 
 	function prepare(entry: PluginCatalogEntry, source: string | null): void {
 		if (locked.value || !entry.compatible) return;
-		if (
-			source === null &&
-			entry.definitionId === 'nexus.agent' &&
-			!props.installations.some((item) => item.definitionId === entry.definitionId && item.status !== 'removed')
-		)
-			emit('recommend');
+		if (source === null && entry.definitionId === 'nexus.agent' && !installedFor(entry)) emit('recommend');
 		else emit('prepare', entry, source);
 	}
 
 	function installedFor(entry: PluginCatalogEntry): PluginInstallation | undefined {
-		return props.installations.find(
-			(installation) => installation.definitionId === entry.definitionId && installation.status !== 'removed',
-		);
+		const installation = installationsByDefinition.value.get(entry.definitionId);
+		return installation?.status !== 'removed' ? installation : undefined;
+	}
+
+	function retainedFor(entry: PluginCatalogEntry): PluginInstallation | undefined {
+		const installation = installationsByDefinition.value.get(entry.definitionId);
+		return installation?.status === 'removed' && retainedApps.value.has(installation.appId)
+			? installation
+			: undefined;
+	}
+
+	function requestClearData(entry: PluginCatalogEntry): void {
+		const installation = retainedFor(entry);
+		if (locked.value || !installation) return;
+		requestClearRetained(installation, entry.displayName);
+	}
+
+	function requestClearRetained(installation: PluginInstallation, name: string): void {
+		if (props.blocked || !retainedApps.value.has(installation.appId)) return;
+		clearAppName.value = name;
+		clearAppId.value = installation.appId;
+	}
+
+	function confirmClearData(): void {
+		if (!props.blocked && clearInstallation.value) emit('clearData', clearInstallation.value);
 	}
 
 	function catalogEntryState(entry: PluginCatalogEntry): { label: string; tone: UiTone } {
@@ -167,7 +240,7 @@
 		if (installation.version !== entry.version) {
 			return { label: t('agent.settings.plugins.stateUpgrade'), tone: 'primary' };
 		}
-		const app = props.apps.find((item) => item.id === installation.appId);
+		const app = appsById.value.get(installation.appId);
 		if (app?.enabled) {
 			return { label: t('agent.settings.plugins.stateEnabled'), tone: 'success' };
 		}
@@ -179,6 +252,7 @@
 
 	function catalogEntryAction(entry: PluginCatalogEntry): string {
 		const installation = installedFor(entry);
+		if (retainedFor(entry)) return t('agent.settings.plugins.reinstall');
 		if (!installation) return t('agent.settings.plugins.prepareRemote');
 		if (installation.version !== entry.version) return t('agent.settings.plugins.prepareUpgrade');
 		return t('agent.settings.plugins.reverifyPackage');
@@ -507,6 +581,9 @@
 											<UiBadge :tone="catalogEntryState(entry).tone" density="compact">{{
 												catalogEntryState(entry).label
 											}}</UiBadge>
+											<UiBadge v-if="retainedFor(entry)" tone="warning" density="compact">
+												{{ t('agent.settings.plugins.hasRetainedData') }}
+											</UiBadge>
 											<span class="hidden md:inline font-mono text-[11px] text-text-secondary/60">
 												{{ entry.definitionId }}
 											</span>
@@ -558,6 +635,16 @@
 
 									<div class="flex items-center gap-1.5">
 										<UiButton
+											v-if="retainedFor(entry)"
+											type="button"
+											appearance="soft"
+											tone="danger"
+											:disabled="locked"
+											@click="requestClearData(entry)"
+										>
+											{{ t('agent.settings.plugins.deleteData') }}
+										</UiButton>
+										<UiButton
 											appearance="soft"
 											tone="neutral"
 											v-if="!official && !publisherTrusted(entry.publisherKeyId)"
@@ -602,8 +689,39 @@
 				</div>
 			</div>
 
+			<div
+				v-for="item in retainedOutsideCatalog"
+				:key="item.installation.appId"
+				class="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-border/35 py-3"
+			>
+				<div class="min-w-0 space-y-1">
+					<div class="flex flex-wrap items-center gap-2">
+						<span class="text-sm font-semibold text-foreground">{{ item.name }}</span>
+						<UiBadge tone="warning" density="compact">{{
+							t('agent.settings.plugins.hasRetainedData')
+						}}</UiBadge>
+					</div>
+					<p class="text-xs text-text-secondary">
+						{{ t('agent.settings.plugins.retainedSourceUnavailable') }}
+					</p>
+				</div>
+				<UiButton
+					type="button"
+					appearance="soft"
+					tone="danger"
+					:disabled="blocked"
+					@click="requestClearRetained(item.installation, item.name)"
+				>
+					{{ t('agent.settings.plugins.deleteData') }}
+				</UiButton>
+			</div>
 			<UiEmptyState
-				v-else-if="catalogs.length > 0 && searchQuery"
+				v-if="
+					catalogs.length > 0 &&
+					searchQuery &&
+					!filteredCatalogGroups.length &&
+					!retainedOutsideCatalog.length
+				"
 				class="mt-3.5 border-t border-border pt-4 pb-4"
 				compact
 				:bordered="false"
@@ -627,5 +745,31 @@
 				>{{ t('agent.pluginManagement.newIntent') }}</UiButton
 			>
 		</UiInlineNotice>
+		<UiConfirmationPanel
+			:visible="active && Boolean(clearInstallation) && retainedApps.has(clearAppId)"
+			:title="t('agent.settings.plugins.clearDataTitle')"
+			:description="t('agent.settings.plugins.clearDataPrompt', { name: clearAppName })"
+			tone="danger"
+			:close-on-backdrop="!clearing"
+			:close-on-escape="!clearing"
+			@close="clearAppId = ''"
+		>
+			<p class="text-sm leading-relaxed text-text-secondary">{{ t('agent.settings.plugins.clearDataScope') }}</p>
+			<template #actions>
+				<UiButton type="button" :disabled="clearing" @click="clearAppId = ''">{{
+					t('common.cancel')
+				}}</UiButton>
+				<UiButton
+					type="button"
+					appearance="solid"
+					tone="danger"
+					:loading="clearing"
+					:disabled="blocked"
+					@click="confirmClearData"
+				>
+					{{ t('agent.settings.plugins.deleteData') }}
+				</UiButton>
+			</template>
+		</UiConfirmationPanel>
 	</section>
 </template>

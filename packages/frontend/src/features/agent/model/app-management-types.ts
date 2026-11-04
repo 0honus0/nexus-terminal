@@ -24,7 +24,6 @@ export interface AppDefinition {
 	version: string;
 	name: string;
 	capabilities: AgentCapability[];
-	defaultEnabled: boolean;
 }
 
 export type AppGrantScope =

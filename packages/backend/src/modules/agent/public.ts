@@ -64,8 +64,7 @@ export interface AgentStateApi {
 		enabled: boolean,
 		expectedVersion: number,
 	): Promise<AgentAppView | null>;
-	listAppDefinitions(): Promise<AgentAppDefinitionView[]>;
-	createApp(userId: number, name: string, definitionId?: string): Promise<AgentAppView>;
+	listAppDefinitions(userId: number): Promise<AgentAppDefinitionView[]>;
 	createThread(userId: number, appId: string, title: string): Promise<AgentThreadView | null>;
 	createRun(input: AgentCreateRunInput): Promise<AgentCreateRunResult>;
 	cancelRun(input: AgentCancelRunInput): Promise<AgentCancelRunResult>;

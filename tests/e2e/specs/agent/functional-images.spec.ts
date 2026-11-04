@@ -8,7 +8,7 @@ import {
 	waitNativeApproval,
 	resolveNativeApproval,
 } from '../../fixtures/agent/native-task';
-import { requestAgentJson } from '../../support/agent';
+import { requestAgentJson } from '../../support/agent-request';
 import { E2E_URLS } from '../../support/test-env';
 import { readAgentProviderView } from '../../../../packages/shared/src/agent/providers/http-codec';
 import {

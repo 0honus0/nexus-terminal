@@ -30,18 +30,15 @@ export async function readDefinition(tx: SqlReader, row: Record<string, unknown>
 		Buffer.byteLength(version, 'utf8') > AGENT_APP_MAX_DEFINITION_VERSION_BYTES ||
 		!displayName.trim() ||
 		Buffer.byteLength(displayName, 'utf8') > AGENT_SCOPE_MAX_NAME_BYTES ||
-		!/^[a-f0-9]{64}$/u.test(contentHash) ||
-		(row.source_kind !== 'builtin' && row.source_kind !== 'plugin')
+		!/^[a-f0-9]{64}$/u.test(contentHash)
 	) {
 		throw new Error('Corrupt App declaration');
 	}
-	boolean(row.installed);
 	return {
 		id,
 		version,
 		contentHash,
 		displayName,
-		defaultEnabled: boolean(row.default_enabled),
 		capabilities: await capabilities(tx, id, version),
 	};
 }
@@ -86,21 +83,14 @@ async function capabilities(tx: SqlReader, definitionId: string, version: string
 export async function readApp(tx: SqlReader, row: Record<string, unknown>): Promise<AppRecord> {
 	const definitionId = text(row.definition_id);
 	const definitionVersion = text(row.definition_version);
-	const definition = await tx.one(
-		'SELECT installed,source_kind FROM agent_app_definitions WHERE id=? AND version=?',
-		[definitionId, definitionVersion],
-	);
+	const definition = await tx.one('SELECT 1 FROM agent_app_definitions WHERE id=? AND version=?', [
+		definitionId,
+		definitionVersion,
+	]);
 	if (definition === null) {
 		throw new Error('Missing App declaration');
 	}
-	if (definition.source_kind !== 'builtin' && definition.source_kind !== 'plugin') {
-		throw new Error('Corrupt App declaration source');
-	}
-	const declared =
-		boolean(definition.installed) &&
-		(definition.source_kind === 'builtin' ||
-			(definition.source_kind === 'plugin' &&
-				(await pluginTrust(tx, integer(row.user_id, 1), text(row.id), definitionVersion))));
+	const declared = await pluginTrust(tx, integer(row.user_id, 1), text(row.id), definitionVersion);
 	const enabled = boolean(row.enabled);
 	if (enabled && !declared) {
 		throw new Error('Enabled App has no installed declaration');

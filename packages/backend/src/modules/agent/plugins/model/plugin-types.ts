@@ -82,6 +82,11 @@ export interface PluginInstallation {
 	updatedAt: number;
 }
 
+export interface PluginInstallationDirectory {
+	installations: PluginInstallation[];
+	retainedAppIds: string[];
+}
+
 export interface PluginData {
 	key: string;
 	version: number;

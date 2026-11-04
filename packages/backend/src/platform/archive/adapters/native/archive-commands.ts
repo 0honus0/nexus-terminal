@@ -5,8 +5,8 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type {
 	ArchiveCommandRunner,
+	ArchiveCommands,
 	NativeArchiveFormat,
-	NativeArchiveListing,
 	NativeArchiveCompression,
 	NativeArchiveExtraction,
 	NativeArchiveExtractionPlan,
@@ -57,7 +57,7 @@ function listingCleanupFailure(result: ListingCleanupResult): NativeArchiveFailu
 	});
 }
 
-export class NativeArchiveCommands {
+export class NativeArchiveCommands implements ArchiveCommands {
 	constructor(private readonly runner: ArchiveCommandRunner) {}
 
 	async requireTools(tools: readonly InstallableTool[], remaining: () => number, signal: AbortSignal): Promise<void> {
@@ -93,7 +93,7 @@ export class NativeArchiveCommands {
 		format: NativeArchiveFormat,
 		remaining: () => number,
 		signal: AbortSignal,
-	): Promise<NativeArchiveListing> {
+	): Promise<NativeArchiveMembers> {
 		const directory = path.posix.dirname(archive);
 		const suffix = randomUUID();
 		const names = path.posix.join(directory, '.nexus-archive-list-' + suffix + '.part');
@@ -219,15 +219,16 @@ export class NativeArchiveCommands {
 			throw new NativeArchiveFailure('invalid_output');
 		}
 
+		let namesText: string;
+		let modesText: string;
 		try {
 			const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
-			return {
-				names: decoder.decode(Uint8Array.from(nameBytes)),
-				modes: decoder.decode(Uint8Array.from(modeBytes)),
-			};
+			namesText = decoder.decode(Uint8Array.from(nameBytes));
+			modesText = decoder.decode(Uint8Array.from(modeBytes));
 		} catch (cause) {
 			throw new NativeArchiveFailure('invalid_output', undefined, { cause });
 		}
+		return parseNativeArchiveListing(namesText, modesText, format);
 	}
 
 	async compress(
@@ -599,7 +600,7 @@ export class NativeArchiveCommands {
 	}
 }
 
-export function parseNativeArchiveListing(
+function parseNativeArchiveListing(
 	namesText: string,
 	modesText: string,
 	format: NativeArchiveFormat,

@@ -53,7 +53,7 @@ export type StoredCommandResult =
 export interface CommandAuthorization {
 	sessionDigest: string;
 	admit(userId: number | null): void;
-	admitCount(collection: 'commands' | 'tags' | 'associations', count: number): void;
+	admitCount(count: number): void;
 }
 
 export interface CommandStorage {

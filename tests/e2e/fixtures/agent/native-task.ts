@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { expect, type APIRequestContext, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
+import { requestAgentJson } from '../../support/agent-request';
 import {
 	openAgentConversations,
 	openAgentHub,
 	prepareAgentRun,
-	requestAgentJson,
 	requestAgentWorkspace,
 	selectAgentModel,
 } from '../../support/agent';

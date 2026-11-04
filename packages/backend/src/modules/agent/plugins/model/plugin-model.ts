@@ -1,4 +1,5 @@
 import type { PluginRuntimeObservation, PluginRuntimeAcknowledgement } from './plugin-types.js';
+import type { PluginInstallationDirectory } from './plugin-types.js';
 import type { PluginDataSnapshot, PluginDataMigration, PluginDataMigrationResult } from './plugin-migration-types.js';
 import type { PluginRuntimeLease } from './plugin-types.js';
 import { intentToStorage } from './plugin-intent-model.js';
@@ -897,6 +898,14 @@ export class PluginModel {
 
 	async installations(actor: PluginActor): Promise<PluginInstallation[]> {
 		return (await storage(() => this.storage.installations(actor.userId))).map(installation);
+	}
+
+	async installationDirectory(actor: PluginActor): Promise<PluginInstallationDirectory> {
+		const directory = await storage(() => this.storage.installationDirectory(actor.userId));
+		return {
+			installations: directory.installations.map(installation),
+			retainedAppIds: directory.retainedAppIds.map((id) => id),
+		};
 	}
 
 	async install(

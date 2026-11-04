@@ -4,7 +4,6 @@ import type {
 	AgentPluginStage,
 	AgentPluginInstallation,
 	AgentPluginVersion,
-	AgentPluginData,
 	AgentPluginDataPurge,
 } from '@nexus-terminal/shared/agent/plugins/model';
 import type {
@@ -13,10 +12,6 @@ import type {
 	AgentPluginRecommended,
 	AgentPluginRepositorySettings,
 } from '@nexus-terminal/shared/agent/plugins/repository-model';
-import type {
-	AgentPluginDataSnapshot,
-	AgentPluginDataMigrationResult,
-} from '@nexus-terminal/shared/agent/plugins/migration-model';
 import type {
 	PluginPublisher,
 	PluginManifest,
@@ -27,10 +22,7 @@ import type {
 	PluginCatalogEntry,
 	PluginRecommendation,
 	PluginRepositories,
-	PluginDataValue,
-	PluginDataSnapshot,
 	PluginDataPurge,
-	PluginDataMigrationResult,
 } from './plugin-types';
 
 export function fromPluginPublisher(value: AgentPluginPublisher): PluginPublisher {
@@ -133,24 +125,6 @@ export function fromPluginRecommendation(value: AgentPluginRecommended): PluginR
 	};
 }
 
-export function fromPluginData(value: AgentPluginData): PluginDataValue {
-	return { key: value.key, version: value.version, valueJson: value.valueJson, updatedAt: value.updatedAt };
-}
-
-export function fromPluginDataSnapshot(value: AgentPluginDataSnapshot): PluginDataSnapshot {
-	return { appId: value.appId, revision: value.revision, items: value.items.map(fromPluginData) };
-}
-
 export function fromPluginDataPurge(value: AgentPluginDataPurge): PluginDataPurge {
 	return { revision: value.revision, deletedKeys: value.deletedKeys, updatedAt: value.updatedAt };
-}
-
-export function fromPluginDataMigration(value: AgentPluginDataMigrationResult): PluginDataMigrationResult {
-	return {
-		appId: value.appId,
-		operationId: value.operationId,
-		revision: value.revision,
-		changedKeys: value.changedKeys,
-		updatedAt: value.updatedAt,
-	};
 }

@@ -1,9 +1,5 @@
 import { PreferencesTasks } from '../../preferences-lifecycle.js';
-import {
-	COMMAND_PAGE_MAX_ENTRIES,
-	COMMAND_MAX_TAGS,
-	COMMAND_MAX_ENTRIES,
-} from '@nexus-terminal/shared/preferences/commands/values';
+import { COMMAND_PAGE_MAX_ENTRIES, COMMAND_MAX_TAGS } from '@nexus-terminal/shared/preferences/commands/values';
 import type { CommandModel } from '../model/command-model.js';
 import type {
 	CommandActor,
@@ -18,8 +14,6 @@ import type {
 import { prepareCommandTask } from '../command-rules.js';
 import { CommandFailure } from '../../command-failure.js';
 
-const COLLECTION_LIMITS = { commands: COMMAND_MAX_ENTRIES, tags: 200, associations: COMMAND_MAX_TAGS };
-
 function admit(actor: CommandActor, identity: CommandIdentity): void {
 	if (identity.userId === null) {
 		throw new CommandFailure('unauthenticated');
@@ -30,7 +24,7 @@ function admit(actor: CommandActor, identity: CommandIdentity): void {
 }
 
 function admitCount(facts: CommandCount): void {
-	if (facts.count >= COLLECTION_LIMITS[facts.collection]) {
+	if (facts.count >= COMMAND_MAX_TAGS) {
 		throw new CommandFailure('limit_exceeded');
 	}
 }
@@ -52,11 +46,10 @@ export class CommandService {
 		return this.tasks.run(work);
 	}
 
-	private validateQuery(query: CommandQuery, maximum: number): void {
+	private validateQuery(query: CommandQuery): void {
 		if (
 			!Number.isSafeInteger(query.offset) ||
 			query.offset < 0 ||
-			query.offset > maximum ||
 			!Number.isSafeInteger(query.limit) ||
 			query.limit < 1 ||
 			query.limit > COMMAND_PAGE_MAX_ENTRIES
@@ -67,7 +60,7 @@ export class CommandService {
 
 	list(actor: CommandActor, query: CommandQuery): Promise<CommandPage> {
 		return this.run(actor, async () => {
-			this.validateQuery(query, COLLECTION_LIMITS.commands);
+			this.validateQuery(query);
 			const rows = await this.model.list(actor.userId, {
 				sortBy: query.sortBy,
 				offset: query.offset,
@@ -82,7 +75,7 @@ export class CommandService {
 
 	listTags(actor: CommandActor, query: CommandQuery): Promise<CommandTagPage> {
 		return this.run(actor, async () => {
-			this.validateQuery(query, COLLECTION_LIMITS.tags);
+			this.validateQuery(query);
 			const rows = await this.model.listTags(actor.userId, {
 				sortBy: query.sortBy,
 				offset: query.offset,

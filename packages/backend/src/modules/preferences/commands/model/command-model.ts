@@ -147,7 +147,7 @@ export class CommandModel {
 
 				admit: (userId) => admit({ userId }),
 
-				admitCount: (collection, count) => admitCount({ collection, count }),
+				admitCount: (count) => admitCount({ count }),
 			};
 			return this.storage.mutate(actor.userId, toStorage(task), authorization);
 		});

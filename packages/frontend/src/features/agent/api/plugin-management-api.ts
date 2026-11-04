@@ -2,6 +2,7 @@ import { agentRecord, readAgentId } from '@nexus-terminal/shared/agent/http-code
 import {
 	readAgentPluginInstall,
 	readAgentPluginInstallation,
+	readAgentPluginInstallationList,
 	readAgentPluginItems,
 	readAgentPluginPublisher,
 	readAgentPluginPublisherView,
@@ -28,6 +29,7 @@ import type {
 	PluginCatalog,
 	PluginCatalogEntry,
 	PluginInstallation,
+	PluginInstallationDirectory,
 	PluginPublisher,
 	PluginRecommendation,
 	PluginRepositories,
@@ -118,16 +120,19 @@ export async function revokePluginPublisher(original: PluginPublisher, signal?: 
 	return fromPluginPublisher(value);
 }
 
-export async function listPluginInstallations(signal?: AbortSignal): Promise<PluginInstallation[]> {
+export async function listPluginInstallations(signal?: AbortSignal): Promise<PluginInstallationDirectory> {
 	const value = await requestAgentManagement({
 		...budgets,
 		method: 'GET',
 		path: '/plugins/installations',
 		signal,
 
-		decode: (value) => readAgentPluginItems(value, readAgentPluginInstallation),
+		decode: readAgentPluginInstallationList,
 	});
-	return value.items.map(fromPluginInstallation);
+	return {
+		installations: value.items.map(fromPluginInstallation),
+		retainedAppIds: value.retainedAppIds.map((id) => id),
+	};
 }
 
 export async function listPluginVersions(signal?: AbortSignal): Promise<PluginVersion[]> {

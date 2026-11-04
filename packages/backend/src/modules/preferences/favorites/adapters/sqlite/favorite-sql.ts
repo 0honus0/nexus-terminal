@@ -52,19 +52,8 @@ export class SqliteFavoriteStorage implements FavoriteStorage {
 		return row === null ? null : favoriteRow(row);
 	}
 
-	create(
-		command: FavoriteCreateCommand,
-		authorization: FavoriteAuthorization,
-		admitCount: (count: number) => void,
-	): Promise<StoredFavorite> {
+	create(command: FavoriteCreateCommand, authorization: FavoriteAuthorization): Promise<StoredFavorite> {
 		return this.write(authorization, async (tx) => {
-			const count = await tx.one('SELECT COUNT(*) AS count FROM preferences_favorites WHERE user_id=?', [
-				command.userId,
-			]);
-			if (!count || typeof count.count !== 'number' || !Number.isSafeInteger(count.count) || count.count < 0) {
-				throw new Error('Corrupt favorite count');
-			}
-			admitCount(count.count);
 			const at = Math.floor(Date.now() / 1000);
 			const inserted = await tx.run(
 				'INSERT INTO preferences_favorites(user_id,version,name,path,created_at,updated_at) VALUES(?,1,?,?,?,?)',

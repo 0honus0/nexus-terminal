@@ -1,7 +1,8 @@
 import regressionInputs from '../../fixtures/agent/regression-inputs.json';
 import { expect, test } from '../../support/fixtures';
 import { prepareNativeTask, openNativeTask, startNativeTask, finishNativeTask } from '../../fixtures/agent/native-task';
-import { requestAgentJson, requestAgentWorkspace } from '../../support/agent';
+import { requestAgentJson } from '../../support/agent-request';
+import { requestAgentWorkspace } from '../../support/agent';
 import {
 	readAgentMemoryListResponse,
 	readAgentMemoryResponse,

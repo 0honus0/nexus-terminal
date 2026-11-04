@@ -14,10 +14,12 @@ export interface ToolDefinition {
 export type ToolInputField = { name: string; required: boolean } & (
 	| { kind: 'integer'; minimum: number; maximum: number }
 	| { kind: 'texts'; maxItems: number; maxItemBytes: number }
-	| { kind: 'text'; maxBytes: number; allowEmpty: boolean }
+	| { kind: 'text'; maxBytes: number; allowEmpty: boolean; choices?: readonly string[] }
 );
 
 export type ToolInput =
+	| { kind: 'browser_targets' }
+	| { kind: 'acp_integrations' }
 	| { kind: 'image_models'; offset: number }
 	| { kind: 'image_generate'; input: import('../../providers/model/provider-types.js').ProviderImageRequest }
 	| { kind: 'skill'; input: import('../../plugins/model/plugin-skill-types.js').PluginSkillInput }

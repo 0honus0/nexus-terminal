@@ -19,6 +19,17 @@ export type ToolAuthorityTask =
 	| { kind: 'verify'; policyRevision: number }
 	| { kind: 'complete'; policyRevision: number; resultText: string; targets: { id: number; version: number }[] };
 
+/** Advisory model catalog; actual dispatch always rechecks tool authority. */
+export interface ToolCatalogState {
+	capabilities: AgentCapability[];
+	connectionIds: number[];
+}
+
+export interface ToolCatalogFacts {
+	policy: GrantState;
+	connectionIds: number[];
+}
+
 export interface ToolAuthority {
 	operation: ToolOperation;
 	policy: GrantState;

@@ -19,11 +19,14 @@ import type {
 } from '../model/plugin-types';
 import { agentHostEvents } from '../events/agent-host-events';
 import { useAgentManagementOperation } from './use-agent-management-operation';
+import { purgePluginData } from '../api/plugin-data-api';
 
 export function usePluginManagement(available: () => boolean = () => true) {
 	const officialPublisherIds = ref<string[]>([]);
 	const publishers = ref<PluginPublisher[]>([]);
 	const installations = ref<PluginInstallation[]>([]);
+	const retainedAppIds = ref<string[]>([]);
+	let cleanupIntent: { appId: string; expectedRevision: number; operationId: string } | null = null;
 	const versions = ref<PluginVersion[]>([]);
 	const candidate = ref<PluginStage | null>(null);
 	const candidateInstallation = computed(() =>
@@ -40,6 +43,8 @@ export function usePluginManagement(available: () => boolean = () => true) {
 		officialPublisherIds.value = [];
 		publishers.value = [];
 		installations.value = [];
+		retainedAppIds.value = [];
+		if (reason !== 'view') cleanupIntent = null;
 		versions.value = [];
 		candidate.value = null;
 		label.value = '';
@@ -60,7 +65,16 @@ export function usePluginManagement(available: () => boolean = () => true) {
 			},
 			(value) => {
 				publishers.value = value.publishers;
-				installations.value = value.installations;
+				// Installation revisions cover package, lifecycle and retained-data changes.
+				// Re-reading the same snapshot must not invalidate the App directory.
+				const changed =
+					value.installations.installations.length !== installations.value.length ||
+					value.installations.installations.some((item, index) => {
+						const current = installations.value[index];
+						return current?.appId !== item.appId || current.revision !== item.revision;
+					});
+				if (changed) installations.value = value.installations.installations;
+				retainedAppIds.value = value.installations.retainedAppIds;
 				versions.value = value.versions;
 			},
 			{ write: false },
@@ -179,9 +193,52 @@ export function usePluginManagement(available: () => boolean = () => true) {
 		);
 	}
 
-	async function retire(installation: PluginInstallation, cancel: boolean): Promise<void> {
+	async function retire(installation: PluginInstallation, cancel: boolean, clearData = false): Promise<void> {
 		const original = structuredClone(toRaw(installation));
-		await write((signal) => retirePluginInstallation(original, cancel, signal));
+		let removalConfirmed = false;
+		let completed = false;
+		await write(async (signal) => {
+			const result = await retirePluginInstallation(original, cancel, signal);
+			if (!cancel) {
+				removalConfirmed = true;
+				if (clearData && !signal.aborted) {
+					const intent = {
+						appId: result.appId,
+						expectedRevision: result.revision,
+						operationId: crypto.randomUUID(),
+					};
+					cleanupIntent = intent;
+					await purgePluginData(result.appId, result.revision, intent.operationId, signal);
+					if (cleanupIntent === intent) cleanupIntent = null;
+				}
+			}
+			completed = true;
+			return result;
+		});
+		// Removal may have committed even when the separate cleanup failed. Reconcile
+		// reads only; the retained-data action owns any explicitly requested retry.
+		if (removalConfirmed && !completed) {
+			agentHostEvents.emit('host-changed', undefined);
+			await load();
+		}
+	}
+
+	async function clearData(installation: PluginInstallation): Promise<void> {
+		if (installation.status !== 'removed' || !canWrite()) return;
+		if (cleanupIntent?.appId !== installation.appId || cleanupIntent.expectedRevision !== installation.revision) {
+			cleanupIntent = {
+				appId: installation.appId,
+				expectedRevision: installation.revision,
+				operationId: crypto.randomUUID(),
+			};
+		}
+		const intent = cleanupIntent;
+		await write(
+			(signal) => purgePluginData(intent.appId, intent.expectedRevision, intent.operationId, signal),
+			() => {
+				cleanupIntent = null;
+			},
+		);
 	}
 
 	function newIntent(): void {
@@ -212,6 +269,7 @@ export function usePluginManagement(available: () => boolean = () => true) {
 		officialPublisherIds,
 		publishers,
 		installations,
+		retainedAppIds,
 		versions,
 		candidate,
 		candidateInstallation,
@@ -228,6 +286,7 @@ export function usePluginManagement(available: () => boolean = () => true) {
 		prepareCatalogEntry,
 		trustCatalogPublisher,
 		retire,
+		clearData,
 		newIntent,
 	};
 }

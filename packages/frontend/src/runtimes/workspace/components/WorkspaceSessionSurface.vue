@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { WORKSPACE_ARCHIVE_MAX_PASSWORD_CODE_POINTS } from '@nexus-terminal/shared/remote/transfers/values';
 	import type { WorkspaceLayoutNodeState } from '../model/presentation-types';
 	import type { WorkspacePane } from '@nexus-terminal/shared/preferences/presentation/values';
 	import type { WorkspaceSidebar } from '../model/presentation-types';
@@ -1025,7 +1026,7 @@
 	const archivePasswordError = computed(() => {
 		if (archiveRemoteError.value) return archiveRemoteError.value;
 		if (!archivePasswordAvailable.value || !archivePassword.value) return '';
-		if (Array.from(archivePassword.value).length > 128) {
+		if (Array.from(archivePassword.value).length > WORKSPACE_ARCHIVE_MAX_PASSWORD_CODE_POINTS) {
 			return t('fileManager.archivePassword.tooLong', { max: 128 });
 		}
 		if (/[\0\r\n]/.test(archivePassword.value)) return t('fileManager.archivePassword.invalidCharacters');

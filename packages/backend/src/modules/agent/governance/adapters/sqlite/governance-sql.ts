@@ -31,6 +31,7 @@ import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlit
 import { AGENT_APPROVAL_MAX_PAGE_ITEMS, AGENT_CAPABILITIES } from '@nexus-terminal/shared/agent/governance/values';
 import type {
 	GovernanceStorage,
+	StoredToolCatalogFacts,
 	StoredPolicyOverrides,
 	StoredPolicy,
 	StoredApproval,
@@ -321,6 +322,25 @@ export class SqliteGovernanceStorage implements GovernanceStorage {
 		return this.db.transaction(async (tx) => {
 			const policy = await currentPolicy(tx, userId, appId);
 			return policy === null ? null : { policy, settings: await executionSettings(tx, userId) };
+		});
+	}
+
+	toolCatalog(userId: number, appId: string, runId: string): Promise<StoredToolCatalogFacts | null> {
+		return this.db.transaction(async (tx) => {
+			const policy = await currentPolicy(tx, userId, appId);
+			const run = await tx.one(
+				'SELECT status,selected_connections_json FROM agent_runs WHERE id=? AND user_id=? AND app_id=?',
+				[runId, userId, appId],
+			);
+			if (policy === null || run === null || readRunStatus(run.status) !== 'running') {
+				return null;
+			}
+			const selected = readRunSelection(run.selected_connections_json);
+			const targets = await tx.all(
+				"SELECT id FROM connections WHERE type='SSH' AND id IN (SELECT value FROM json_each(?)) ORDER BY id",
+				[JSON.stringify(selected)],
+			);
+			return { policy, connectionIds: targets.map((target) => integer(target.id, 1)) };
 		});
 	}
 

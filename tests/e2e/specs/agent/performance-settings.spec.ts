@@ -2,7 +2,7 @@ import { selectAgentSettingsGroup } from '../../support/agent';
 import { dismissToasts } from '../../support/feedback';
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
-import { requestAgentJson } from '../../support/agent';
+import { requestAgentJson } from '../../support/agent-request';
 import { E2E_URLS } from '../../support/test-env';
 import { readAgentExecutionSettingsResponse } from '../../../../packages/shared/src/agent/execution/http-codec';
 

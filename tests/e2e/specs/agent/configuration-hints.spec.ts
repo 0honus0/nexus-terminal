@@ -1,7 +1,12 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
-import { enableTestAgentExecution, openAgentConversations, openAgentHub, requestAgentJson } from '../../support/agent';
-import { readAgentCreateAppResponse } from '../../../../packages/shared/src/agent/scope/http-codec';
+import { requestAgentJson } from '../../support/agent-request';
+import {
+	createTestAgentApp,
+	enableTestAgentExecution,
+	openAgentConversations,
+	openAgentHub,
+} from '../../support/agent';
 import { createTestSshConnection, ensureTestSshConnection } from '../../support/ssh';
 import { readAgentGrantView } from '../../../../packages/shared/src/agent/governance/http-codec';
 
@@ -11,16 +16,7 @@ test('native target selection preserves grants and uses the authenticated App wi
 }) => {
 	await loginAsInitialAdmin(context.request);
 	await setUiLanguage(context.request);
-	const app = await requestAgentJson(
-		context.request,
-		{
-			method: 'POST',
-			path: '/apps',
-			status: 201,
-			data: { name: 'Configuration boundaries' },
-		},
-		readAgentCreateAppResponse,
-	);
+	const app = await createTestAgentApp(context.request, 'Configuration boundaries');
 	const connectionId = await ensureTestSshConnection(context.request);
 	const secondConnectionId = await createTestSshConnection(context.request, 'Configuration boundaries secondary');
 	await enableTestAgentExecution(context.request);

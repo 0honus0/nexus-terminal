@@ -1,5 +1,5 @@
 <script setup lang="ts">
-	import { nextTick, onMounted, ref, watch } from 'vue';
+	import { onMounted, ref, watch } from 'vue';
 	import { RouterLink, useRoute, useRouter } from 'vue-router';
 	import { useI18n } from 'vue-i18n';
 	import { apiErrorMessage } from '@/client/http';
@@ -84,8 +84,9 @@
 		},
 	];
 
-	const revealActivePage = async (): Promise<void> => {
-		await nextTick();
+	let navigationObserver: ResizeObserver | undefined;
+
+	const revealActivePage = (): void => {
 		const strip = navigationLinks.value;
 		const active = strip?.querySelector<HTMLElement>('[aria-current="page"]');
 		if (!strip || !active || strip.scrollWidth <= strip.clientWidth) return;
@@ -93,10 +94,33 @@
 		strip.scrollTo({ left: active.offsetLeft - strip.clientWidth / 2 + active.offsetWidth / 2 });
 	};
 
-	watch(() => route.path, revealActivePage);
+	watch(navigationLinks, (strip, _previous, onCleanup) => {
+		if (!strip) return;
+		// Both geometry reads and scrollTo in nextTick force layout of the new page.
+		// ResizeObserver runs after layout, including font and active-link size changes.
+		const observer = new ResizeObserver(revealActivePage);
+		navigationObserver = observer;
+		observer.observe(strip);
+		for (const link of strip.querySelectorAll('a')) observer.observe(link);
+		onCleanup(() => {
+			observer.disconnect();
+			navigationObserver = undefined;
+		});
+	});
+
+	watch(
+		() => route.path,
+		() => {
+			const strip = navigationLinks.value;
+			if (!strip || !navigationObserver) return;
+			// Request an initial observation even when switching links preserves their sizes.
+			navigationObserver.unobserve(strip);
+			navigationObserver.observe(strip);
+		},
+		{ flush: 'post' },
+	);
 
 	onMounted(() => {
-		void revealActivePage();
 		if (auth.isAuthenticated.value)
 			void preferences.load().catch((cause) => logger.error({ err: cause }, 'Failed to load header preferences'));
 	});

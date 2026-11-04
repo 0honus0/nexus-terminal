@@ -56,6 +56,7 @@ import {
 	toPluginPublisher,
 	toPluginStage,
 	toPluginInstallation,
+	toPluginInstallationList,
 	toPluginVersion,
 	toPluginDescriptor,
 } from './plugin-mapper.js';
@@ -313,9 +314,9 @@ export function createPluginHttpRoutes(
 			await service.cancelRetirement(actor, readAgentId(ctx.params.appId), input.expectedRevision),
 		);
 	});
-	add('GET', '/installations', async (_ctx, actor) => ({
-		items: (await service.installations(actor)).map(toPluginInstallation),
-	}));
+	add('GET', '/installations', async (_ctx, actor) =>
+		toPluginInstallationList(await service.installationDirectory(actor)),
+	);
 	add('POST', '/install', async (ctx, actor, reader) => {
 		const input = await reader.read(readAgentPluginInstall);
 		return toPluginInstallation(await service.install(actor, input.stageId, input.expectedVersion));

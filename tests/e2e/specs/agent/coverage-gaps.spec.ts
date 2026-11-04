@@ -1,12 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
-import {
-	requestAgentJson,
-	requestAgentWorkspace,
-	createTestAgentApp,
-	enableTestAgentExecution,
-} from '../../support/agent';
+import { requestAgentJson } from '../../support/agent-request';
+import { requestAgentWorkspace, createTestAgentApp, enableTestAgentExecution } from '../../support/agent';
 import { installTestPlugin, stageTestPlugin } from '../../support/plugins';
 import { readAgentAppListResponse, readAgentAppResponse } from '../../../../packages/shared/src/agent/scope/http-codec';
 import {
@@ -27,7 +23,7 @@ import {
 } from '../../../../packages/shared/src/agent/plugins/intent-http-codec';
 import {
 	readAgentPluginInstallation,
-	readAgentPluginItems,
+	readAgentPluginInstallationList,
 } from '../../../../packages/shared/src/agent/plugins/http-codec';
 import { readAgentErrorResponse } from '../../../../packages/shared/src/agent/http-codec';
 
@@ -396,7 +392,7 @@ test('Plugin public API upgrades an installed package to a newer signed version'
 	});
 	expect(upgraded.revision).toBeGreaterThan(prepared.revision);
 	const installations = await requestAgentJson(request, { method: 'GET', path: '/plugins/installations' }, (raw) =>
-		readAgentPluginItems(raw, readAgentPluginInstallation),
+		readAgentPluginInstallationList(raw),
 	);
 	expect(installations.items).toContainEqual(upgraded);
 	const apps = await requestAgentJson(request, { method: 'GET', path: '/apps' }, readAgentAppListResponse);

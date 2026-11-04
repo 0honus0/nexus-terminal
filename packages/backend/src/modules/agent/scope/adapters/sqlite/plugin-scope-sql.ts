@@ -6,16 +6,16 @@ import { assertAppRevisionAvailable } from './app-row.js';
 
 /** Participates in the installing owner's transaction; it alone writes Scope declarations and Apps. */
 export async function activatePluginScope(tx: SqlExecutor, input: StoredPluginScopeActivation): Promise<void> {
-	const definition = await tx.one(
-		'SELECT content_hash,source_kind FROM agent_app_definitions WHERE id=? AND version=?',
-		[input.definitionId, input.definitionVersion],
-	);
+	const definition = await tx.one('SELECT content_hash FROM agent_app_definitions WHERE id=? AND version=?', [
+		input.definitionId,
+		input.definitionVersion,
+	]);
 	if (definition !== null) {
-		if (definition.source_kind !== 'plugin' || definition.content_hash !== input.contentHash) {
+		if (definition.content_hash !== input.contentHash) {
 			throw new Error('Immutable plugin declaration conflict');
 		}
 	} else {
-		await tx.run("INSERT INTO agent_app_definitions VALUES(?,?,?,?,1,0,'plugin')", [
+		await tx.run('INSERT INTO agent_app_definitions(id,version,display_name,content_hash) VALUES(?,?,?,?)', [
 			input.definitionId,
 			input.definitionVersion,
 			input.displayName,
@@ -47,7 +47,7 @@ export async function activatePluginScope(tx: SqlExecutor, input: StoredPluginSc
 		await cancelRunsInScope(tx, input.userId, input.appId, input.now);
 	} else {
 		await tx.run(
-			'INSERT INTO agent_apps(id,user_id,name,definition_id,definition_version,enabled,version,updated_at,is_default,created_at) VALUES(?,?,?,?,?,0,1,?,0,?)',
+			'INSERT INTO agent_apps(id,user_id,name,definition_id,definition_version,enabled,version,updated_at,created_at) VALUES(?,?,?,?,?,0,1,?,?)',
 			[
 				input.appId,
 				input.userId,

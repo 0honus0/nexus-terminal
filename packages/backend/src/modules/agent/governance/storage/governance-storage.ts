@@ -138,7 +138,13 @@ export interface StoredApprovalResolution {
 	feedback: string | null;
 }
 
+export interface StoredToolCatalogFacts {
+	policy: StoredPolicy;
+	connectionIds: number[];
+}
+
 export interface GovernanceStorage {
+	toolCatalog(userId: number, appId: string, runId: string): Promise<StoredToolCatalogFacts | null>;
 	toolAuthority(
 		input: StoredToolAuthorityIdentity,
 		task: StoredToolAuthorityTask,

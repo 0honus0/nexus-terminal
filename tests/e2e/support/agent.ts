@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto';
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 import { E2E_URLS } from './test-env';
-import { readAgentCreateAppResponse } from '../../../packages/shared/src/agent/scope/http-codec';
+import { requestAgentJson } from './agent-request';
+import { installTestPlugin } from './plugins';
+import { readAgentAppResponse } from '../../../packages/shared/src/agent/scope/http-codec';
 import { readAgentProviderView } from '../../../packages/shared/src/agent/providers/http-codec';
 import {
 	readAgentExecutionSettingsResponse,
@@ -19,20 +21,6 @@ import type {
 import type { AgentAppView, AgentThreadView } from '../../../packages/shared/src/agent/scope/model';
 import type { AgentProviderView } from '../../../packages/shared/src/agent/providers/model';
 import type { AgentCreateRunRequest } from '../../../packages/shared/src/agent/runs/http';
-
-export async function requestAgentJson<T>(
-	request: APIRequestContext,
-	command: { method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; path: string; data?: unknown; status?: number },
-	decode: (value: unknown) => T,
-): Promise<T> {
-	const response = await request.fetch('/api/v1/agent' + command.path, {
-		method: command.method,
-		headers: { Origin: E2E_URLS.frontendOrigin },
-		data: command.data,
-	});
-	expect(response.status(), command.method + ' ' + command.path).toBe(command.status ?? 200);
-	return decode(await response.json());
-}
 
 export async function requestAgentWorkspace(
 	request: APIRequestContext,
@@ -103,10 +91,30 @@ export async function createTestAgentApp(
 	request: APIRequestContext,
 	name = 'E2E native Agent ' + randomUUID(),
 ): Promise<AgentAppView> {
+	const response = await fetch(E2E_URLS.pluginRepositoryOrigin + '/native-package', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ name }),
+	});
+	expect(response.ok).toBe(true);
+	const created: unknown = await response.json();
+	if (typeof created !== 'object' || created === null || !('appId' in created) || typeof created.appId !== 'string') {
+		throw new Error('Invalid native plugin fixture identity');
+	}
+	const installed = await installTestPlugin(request, created.appId);
+	const app = await requestAgentJson(
+		request,
+		{ method: 'GET', path: '/apps/' + installed.appId },
+		readAgentAppResponse,
+	);
 	return requestAgentJson(
 		request,
-		{ method: 'POST', path: '/apps', data: { name }, status: 201 },
-		readAgentCreateAppResponse,
+		{
+			method: 'PATCH',
+			path: '/apps/' + app.id,
+			data: { expectedVersion: app.version, enabled: true },
+		},
+		readAgentAppResponse,
 	);
 }
 

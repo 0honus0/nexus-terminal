@@ -1,3 +1,4 @@
+import { createTestAgentApp } from './native-agent-fixture.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -210,7 +211,7 @@ await test('B10 installed backend-next HTTP, durable state and model execution',
 					).code,
 					'version_conflict',
 				);
-				agentApp = expectStatus(await api('POST', '/api/v1/agent/apps', { name: 'B10 app' }), 201);
+				agentApp = await createTestAgentApp(api, directory, 'B10 app');
 				thread = expectStatus(
 					await api('POST', `/api/v1/agent/apps/${agentApp.id}/threads`, { title: 'B10 thread' }),
 					201,
@@ -390,7 +391,7 @@ await test('B10 installed backend-next HTTP, durable state and model execution',
 					}),
 					200,
 				);
-				assert.equal(restored.restoredTables, 87);
+				assert.equal(restored.restoredTables, 88);
 				assert.ok(restored.restoredRows > 0);
 				assert.equal(typeof restored.cleanupPending, 'boolean');
 				assert.deepEqual(expectStatus(await api('GET', '/api/v1/quick-commands'), 200).entries, [command]);

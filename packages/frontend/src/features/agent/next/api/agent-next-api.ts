@@ -10,12 +10,10 @@ import { readAgentProviderListResponse } from '@nexus-terminal/shared/agent/prov
 import type { AgentProviderView } from '@nexus-terminal/shared/agent/providers/model';
 import { AGENT_PROVIDER_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/providers/values';
 import {
-	readAgentCreateAppRequest,
-	readAgentCreateAppResponse,
 	readAgentCreateThreadRequest,
 	readAgentCreateThreadResponse,
 } from '@nexus-terminal/shared/agent/scope/http-codec';
-import type { AgentAppView, AgentThreadView } from '@nexus-terminal/shared/agent/scope/model';
+import type { AgentThreadView } from '@nexus-terminal/shared/agent/scope/model';
 import {
 	readAgentCancelRunRequest,
 	readAgentCancelRunResponse,
@@ -195,11 +193,6 @@ export function createAgentNextApi(baseUrl: string) {
 				await request('GET', '/ai/providers', undefined, undefined, signal, AGENT_PROVIDER_MAX_RESPONSE_BYTES),
 				readAgentProviderListResponse,
 			),
-
-		createApp: async (name: string, signal?: AbortSignal): Promise<AgentAppView> => {
-			const body = encoded({ name }, readAgentCreateAppRequest, AGENT_MAX_JSON_BODY_BYTES);
-			return decoded(await request('POST', '/apps', body, undefined, signal), readAgentCreateAppResponse);
-		},
 
 		createThread: async (appId: string, title: string, signal?: AbortSignal): Promise<AgentThreadView> => {
 			const app = inputDecoded(() => readAgentId(appId));

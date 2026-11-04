@@ -143,10 +143,14 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 6
 				target = join(directory, 'private');
 			await writeFile(target, 'must-not-be-returned');
 			await symlink(target, path);
-			const run = await f.start('link rejection', () => tool(f, 'file_read', { path }));
-			await f.wait(run, 'unknown');
-			assert.equal(f.calls.length, 1);
-			assert.equal(f.rows('agent_run_tools', run)[0].state, 'unknown');
+			const run = await f.start('link rejection', (results) => {
+				if (!results.length) return tool(f, 'file_read', { path });
+				assert.deepEqual(results, [{ failureCode: 'tool_invalid_input' }]);
+				return {};
+			});
+			await f.wait(run, 'completed');
+			assert.equal(f.calls.length, 2);
+			assert.equal(f.rows('agent_run_tools', run)[0].state, 'failed');
 			assert.equal(await readFile(target, 'utf8'), 'must-not-be-returned');
 		});
 		await scenario('overlapping patch context refuses without editing the file', async (f, directory) => {

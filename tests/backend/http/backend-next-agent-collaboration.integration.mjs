@@ -102,7 +102,7 @@ await test('B10 actual Root/Child collaboration ownership', { timeout: 60000 }, 
 				});
 				const run = await f.start('private parent context', (results) => {
 					if (!results.length) {
-						return delegate(objective);
+						return delegate(objective, { targets: [String(f.connectionId)] });
 					}
 					if (results.length === 1) {
 						return {
@@ -121,7 +121,7 @@ await test('B10 actual Root/Child collaboration ownership', { timeout: 60000 }, 
 				const [child] = await children(f, run, 1);
 				assert.equal(child.status, 'completed');
 				assert.equal(child.parentId, run.id);
-				assert.equal(child.deadlineAt, run.deadlineAt);
+				assert.equal(child.deadlineAt, f.rows('agent_runs', run)[0].deadline_at);
 				const settings = expectStatus(await f.api('GET', '/api/v1/agent/execution-settings'), 200).settings;
 				assert.equal(
 					f.rows('agent_run_children', { id: child.id })[0].max_requests,

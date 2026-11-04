@@ -40,7 +40,6 @@ import {
 	aggregateToolFailures,
 } from '../../agent-failure.js';
 
-const MAX_RUN_ATTEMPTS = 8;
 const MAX_PENDING_RUN_WRITES = 64;
 
 interface ModelStepOutcome {
@@ -146,7 +145,7 @@ export class RunExecutionOwner {
 		try {
 			return await this.admitWrite(() =>
 				work(() => {
-					if (this.tasks.size + this.pendingCreates - 1 >= Math.min(maxRuns, MAX_RUN_ATTEMPTS)) {
+					if (this.tasks.size + this.pendingCreates - 1 >= maxRuns) {
 						throw new AgentFailure('provider_unavailable');
 					}
 				}),
@@ -833,7 +832,15 @@ export class RunExecutionOwner {
 			throw new AgentFailure('invalid_input');
 		}
 		const definitions =
-			!isImage && frozen.capabilities.supportsTools ? this.collaboration.definitions(participant) : [];
+			!isImage && frozen.capabilities.supportsTools
+				? await this.tools.availableDefinitions(
+						{ userId: command.userId, appId: command.appId, runId: command.runId },
+						this.collaboration.definitions(participant),
+					)
+				: [];
+		if (signal.aborted) {
+			return null;
+		}
 		const limits = this.contextLimits(frozen);
 		let snapshot = context.snapshot(definitions, limits);
 		if (!isImage) {

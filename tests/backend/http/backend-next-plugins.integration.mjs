@@ -1,3 +1,4 @@
+import { createTestAgentApp } from './native-agent-fixture.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createHash, generateKeyPairSync, randomUUID } from 'node:crypto';
@@ -184,10 +185,8 @@ await test(
 
 		try {
 			f = await openManagement(directory);
-			artifactApp = expectStatus(
-				await f.api('POST', '/api/v1/agent/apps', { name: 'plugin package source' }),
-				201,
-			);
+			artifactApp = await createTestAgentApp(f.api, directory, 'plugin package source');
+			const sourceInstallations = expectStatus(await f.api('GET', base + '/installations'), 200).items;
 			await t.test('anonymous publisher and install administration are denied', async () => {
 				expectStatus(await f.anonymous('GET', base + '/publishers'), 401);
 				expectStatus(await f.anonymous('GET', base + '/installations'), 401);
@@ -230,7 +229,10 @@ await test(
 			await t.test('malformed package refuses verification without installing or poisoning owner', async () => {
 				const malformed = await stage(Buffer.from('not an archive'));
 				expectStatus(await verify(malformed), 400);
-				assert.deepEqual(expectStatus(await f.api('GET', base + '/installations'), 200).items, []);
+				assert.deepEqual(
+					expectStatus(await f.api('GET', base + '/installations'), 200).items,
+					sourceInstallations,
+				);
 			});
 			await t.test(
 				'verification validates signed manifest and package files; install creates disabled App',
@@ -261,7 +263,10 @@ await test(
 					),
 					installation,
 				);
-				assert.equal(expectStatus(await f.api('GET', base + '/installations'), 200).items.length, 1);
+				assert.equal(
+					expectStatus(await f.api('GET', base + '/installations'), 200).items.length,
+					sourceInstallations.length + 1,
+				);
 			});
 			await t.test(
 				'enabling starts actual child module and signed sibling import with authenticated host storage',
@@ -400,9 +405,12 @@ await test(
 					await assertExited(child);
 					const live = await ready(3, '1.0.0');
 					assert.notEqual(live.runtime.instanceId, old.instanceId);
-					assert.deepEqual(expectStatus(await f.api('GET', base + '/installations'), 200).items, [
-						installation,
-					]);
+					assert.deepEqual(
+						expectStatus(await f.api('GET', base + '/installations'), 200).items.filter(
+							(item) => item.appId !== artifactApp.id,
+						),
+						[installation],
+					);
 				},
 			);
 			await t.test(
@@ -417,7 +425,12 @@ await test(
 						}),
 						409,
 					);
-					assert.equal(expectStatus(await f.api('GET', base + '/versions'), 200).items.length, 1);
+					assert.equal(
+						expectStatus(await f.api('GET', base + '/versions'), 200).items.filter(
+							(item) => item.manifest.id === definitionId,
+						).length,
+						1,
+					);
 				},
 			);
 			await t.test('new signed version can prepare upgrade and drain runtime before data migration', async () => {
@@ -459,7 +472,9 @@ await test(
 						expectStatus(await f.api('POST', installPath() + '/migrate-data', migration), 200),
 						result,
 					);
-					installation = expectStatus(await f.api('GET', base + '/installations'), 200).items[0];
+					installation = expectStatus(await f.api('GET', base + '/installations'), 200).items.find(
+						(item) => item.definitionId === definitionId,
+					);
 					expectStatus(
 						await f.api('POST', installPath() + '/cancel-retirement', {
 							expectedRevision: installation.revision,
@@ -523,7 +538,12 @@ await test(
 			});
 			await t.test('final restart never revives revoked publisher or removed plugin', async () => {
 				await f.restart();
-				assert.equal(expectStatus(await f.api('GET', base + '/installations'), 200).items[0].status, 'removed');
+				assert.equal(
+					expectStatus(await f.api('GET', base + '/installations'), 200).items.find(
+						(item) => item.definitionId === definitionId,
+					).status,
+					'removed',
+				);
 				assert.equal((await runtime()).state, 'closed');
 				assert.deepEqual(await readdir(f.database + '.modules'), []);
 			});

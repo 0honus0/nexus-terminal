@@ -11,7 +11,8 @@ import {
 	waitNativeApproval,
 } from '../../../fixtures/agent/native-task';
 import { configureTestPluginRepository, installTestPlugin } from '../../../support/plugins';
-import { requestAgentJson, requestAgentWorkspace } from '../../../support/agent';
+import { requestAgentJson } from '../../../support/agent-request';
+import { requestAgentWorkspace } from '../../../support/agent';
 import { readAgentErrorResponse } from '../../../../../packages/shared/src/agent/http-codec';
 import { expect, test } from '../../../support/fixtures';
 import { loginAsInitialAdmin } from '../../../support/auth';

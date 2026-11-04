@@ -14,7 +14,8 @@ import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { ensureTestSshConnection } from '../../support/ssh';
 import { selectUiOption } from '../../support/ui-select';
 import { E2E_URLS } from '../../support/test-env';
-import { prepareAgentRun, requestAgentJson, requestAgentWorkspace } from '../../support/agent';
+import { requestAgentJson } from '../../support/agent-request';
+import { prepareAgentRun, requestAgentWorkspace } from '../../support/agent';
 import { readAgentGrantView } from '../../../../packages/shared/src/agent/governance/http-codec';
 import { readAgentAppListResponse } from '../../../../packages/shared/src/agent/scope/http-codec';
 import {

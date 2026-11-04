@@ -1,3 +1,5 @@
+import type { InstallableTool } from '../tools/tool-port.js';
+
 /** Technical command facts; no Remote, Targets or Shared application objects. */
 export type NativeArchiveFormat = 'zip' | 'tar.gz' | 'tar.bz2';
 
@@ -11,11 +13,6 @@ export interface ArchiveCommandRunner {
 		onLine: (line: string) => void,
 		beforeWriteMarker?: string,
 	): Promise<NativeCommandOutcome>;
-}
-
-export interface NativeArchiveListing {
-	names: string;
-	modes: string;
 }
 
 export interface NativeArchiveMember {
@@ -48,6 +45,12 @@ export class NativeArchiveFailure extends Error {
 
 export type ZipSourceEntry =
 	{ kind: 'directory'; name: string } | { kind: 'file'; name: string; bytes: AsyncIterable<Uint8Array> };
+
+export type ZipStream = (
+	entries: (signal: AbortSignal) => AsyncIterable<ZipSourceEntry>,
+	signal: AbortSignal,
+	onChunk: (bytes: Uint8Array, signal: AbortSignal) => Promise<void>,
+) => Promise<void>;
 
 export class ZipStreamFailure extends Error {
 	constructor(options?: ErrorOptions) {
@@ -85,3 +88,61 @@ export interface NativeArchiveExtractionPlan {
 	excludedMembers: readonly string[];
 	hasContent: boolean;
 }
+
+export interface ArchiveCommands {
+	requireTools(tools: readonly InstallableTool[], remaining: () => number, signal: AbortSignal): Promise<void>;
+
+	list(
+		archive: string,
+		format: NativeArchiveFormat,
+		remaining: () => number,
+		signal: AbortSignal,
+	): Promise<NativeArchiveMembers>;
+
+	compress(
+		workingDirectory: string,
+		paths: readonly string[],
+		temporary: string,
+		excluded: readonly string[],
+		format: NativeArchiveFormat,
+		remaining: () => number,
+		signal: AbortSignal,
+		onProgress: (count: number, totalFiles?: number, processedBytes?: number) => void,
+		password?: string,
+	): Promise<NativeArchiveCompression>;
+
+	extract(
+		plan: NativeArchiveExtractionPlan,
+		remaining: () => number,
+		signal: AbortSignal,
+		onProgress: (processedBytes: number) => void,
+		password?: string,
+	): Promise<NativeArchiveExtraction>;
+
+	readZipLinkTarget(
+		snapshot: string,
+		name: string,
+		remaining: () => number,
+		signal: AbortSignal,
+		password?: string,
+	): Promise<string>;
+
+	createHardlink(
+		stage: string,
+		target: string,
+		name: string,
+		remaining: () => number,
+		signal: AbortSignal,
+	): Promise<NativeArchiveOperationOutcome>;
+
+	verifyZip(temporary: string, remaining: () => number, signal: AbortSignal): Promise<boolean>;
+
+	copySnapshot(
+		source: string,
+		snapshot: string,
+		remaining: () => number,
+		signal: AbortSignal,
+	): Promise<NativeArchiveOperationOutcome>;
+}
+
+export type ArchiveCommandsFactory = (runner: ArchiveCommandRunner) => ArchiveCommands;

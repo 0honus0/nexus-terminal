@@ -93,7 +93,7 @@ export type ModelToolProperty =
 			items: { type: 'string'; minLength: number; maxLength: number };
 	  }
 	| { type: 'integer'; minimum: number; maximum: number }
-	| { type: 'string'; minLength: number; maxLength: number };
+	| { type: 'string'; minLength: number; maxLength: number; enum?: string[] };
 
 export type ModelMessage =
 	| { role: 'user'; content: string }

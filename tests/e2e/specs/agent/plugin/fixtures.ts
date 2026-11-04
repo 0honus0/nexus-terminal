@@ -1,6 +1,7 @@
 import { readAgentBrowserConfiguration } from '../../../../../packages/shared/src/agent/integrations/browser-http-codec';
 import { resolveNativeApproval, type NativeTask } from '../../../fixtures/agent/native-task';
-import { requestAgentJson, requestAgentWorkspace } from '../../../support/agent';
+import { requestAgentJson } from '../../../support/agent-request';
+import { requestAgentWorkspace } from '../../../support/agent';
 import { readAgentAppResponse } from '../../../../../packages/shared/src/agent/scope/http-codec';
 import { expect, type APIRequestContext, type Page } from '../../../support/fixtures';
 import { E2E_URLS } from '../../../support/test-env';

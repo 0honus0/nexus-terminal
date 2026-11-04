@@ -1,4 +1,6 @@
 import type { AgentPluginRuntimeObservation } from '@nexus-terminal/shared/agent/plugins/runtime-model';
+import type { AgentPluginInstallationListResponse } from '@nexus-terminal/shared/agent/plugins/http';
+import type { PluginInstallationDirectory } from '../../plugins/model/plugin-types.js';
 import type { PluginRuntimeObservation } from '../../plugins/model/plugin-types.js';
 import { toPluginIntentInput, toPluginIntent } from './plugin-intent-mapper.js';
 import { toArtifactView } from './artifact-mapper.js';
@@ -93,6 +95,13 @@ export function toPluginInstallation(value: PluginInstallation): AgentPluginInst
 		revision: value.revision,
 		createdAt: value.createdAt,
 		updatedAt: value.updatedAt,
+	};
+}
+
+export function toPluginInstallationList(value: PluginInstallationDirectory): AgentPluginInstallationListResponse {
+	return {
+		items: value.installations.map(toPluginInstallation),
+		retainedAppIds: value.retainedAppIds.map((id) => id),
 	};
 }
 

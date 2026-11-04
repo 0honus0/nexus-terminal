@@ -215,6 +215,24 @@ export class ToolService {
 		private readonly images: ProviderImageService,
 	) {}
 
+	async availableDefinitions(
+		scope: { userId: number; appId: string; runId: string },
+		definitions: ToolDefinition[],
+	): Promise<ToolDefinition[]> {
+		const catalog = await this.governance.toolCatalog(scope.userId, scope.appId, scope.runId);
+		if (catalog === null) {
+			throw new AgentFailure('version_conflict');
+		}
+		return definitions.filter(
+			(tool) =>
+				catalog.capabilities.includes(tool.capability) &&
+				(!tool.input.fields.some((field) => field.name === 'connectionId') ||
+					catalog.connectionIds.length > 0) &&
+				(!['acp_integration_list', 'acp_integration_execute'].includes(tool.name) ||
+					catalog.connectionIds.length > 0),
+		);
+	}
+
 	async execute(scope: ToolExecutionScope, proposal: RunToolProposal, signal: AbortSignal): Promise<string> {
 		const configuration = await this.settings.frozen(scope.userId, scope.appId, scope.runId);
 		const trusted = definition(proposal);
@@ -405,6 +423,8 @@ export class ToolService {
 		await validateIntegration();
 		interrupted(signal);
 		const target =
+			input.kind === 'browser_targets' ||
+			input.kind === 'acp_integrations' ||
 			input.kind === 'image_models' ||
 			input.kind === 'image_generate' ||
 			input.kind === 'skill' ||
@@ -510,6 +530,25 @@ export class ToolService {
 		};
 
 		await validate();
+		if (input.kind === 'browser_targets') {
+			const text = await this.browser.catalog(operation.userId, signal, validate);
+			await validate();
+			return { text, targets: [] };
+		}
+		if (input.kind === 'acp_integrations') {
+			const catalog = await this.governance.toolCatalog(operation.userId, operation.appId, operation.runId);
+			if (catalog === null) {
+				throw new AgentFailure('version_conflict');
+			}
+			const text = await this.integrations.catalogAcp(
+				{ userId: operation.userId, appId: operation.appId },
+				catalog.connectionIds,
+				signal,
+				validate,
+			);
+			await validate();
+			return { text, targets: [] };
+		}
 		if (input.kind === 'image_models') {
 			const models = await this.providers.imageModels(operation.userId);
 			await validate();

@@ -6,7 +6,6 @@ export { AgentNextController } from './model/agent-next-controller';
 
 export type {
 	AgentNextAvailableModel,
-	AgentNextAppState,
 	AgentNextControllerState,
 	AgentNextEventState,
 	AgentNextRunState,

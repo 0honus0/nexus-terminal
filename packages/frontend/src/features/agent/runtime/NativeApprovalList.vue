@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { AGENT_APPROVAL_MAX_FEEDBACK_BYTES } from '@nexus-terminal/shared/agent/governance/values';
 	import { computed, onBeforeUnmount, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiBadge, UiButton, UiTextarea } from '@/foundation/ui';
@@ -254,7 +255,7 @@
 							density="compact"
 							:min-rows="2"
 							resize="none"
-							maxlength="2000"
+							:maxlength="AGENT_APPROVAL_MAX_FEEDBACK_BYTES"
 							class="w-full text-[11px]"
 							:placeholder="t('agent.approvals.feedbackPlaceholder')"
 							:aria-label="t('agent.approvals.feedbackLabel')"

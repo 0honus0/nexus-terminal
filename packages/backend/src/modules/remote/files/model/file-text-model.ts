@@ -1,14 +1,18 @@
-import { supportsEncoding, encodeText } from '../../../../platform/text/adapters/iconv/text-codec.js';
+import type { TextCodec } from '../../../../platform/text/text-codec.js';
 import { RemoteFileFailure } from './file-types.js';
 
-export function supportsFileEncoding(encoding: string): boolean {
-	return supportsEncoding(encoding);
-}
+export class FileTextModel {
+	constructor(private readonly codec: TextCodec) {}
 
-export function encodeFileText(value: string, encoding: string): Uint8Array {
-	try {
-		return Uint8Array.from(encodeText(value, encoding));
-	} catch (cause) {
-		throw new RemoteFileFailure('invalid_input', { cause });
+	supportsEncoding(encoding: string): boolean {
+		return this.codec.supportsEncoding(encoding);
+	}
+
+	encode(value: string, encoding: string): Uint8Array {
+		try {
+			return Uint8Array.from(this.codec.encodeText(value, encoding));
+		} catch (cause) {
+			throw new RemoteFileFailure('invalid_input', { cause });
+		}
 	}
 }

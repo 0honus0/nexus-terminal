@@ -3,13 +3,14 @@ import { join } from 'node:path';
 import fs from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { SqliteRuntime } from '../../../packages/backend/dist/platform/storage/sqlite/sqlite-runtime.js';
+import { resolveDataPaths } from '../../../packages/backend/dist/bootstrap/data-paths.js';
 import { NativeSnapshotRestoreFiles } from '../../../packages/backend/dist/platform/storage/sqlite/adapters/snapshot-restore-files.js';
 import { SqliteSnapshotRestore } from '../../../packages/backend/dist/platform/storage/sqlite/adapters/snapshot-restore-sql.js';
 import { SqliteTransactionAdapter } from '../../../packages/backend/dist/platform/storage/sqlite/adapters/transaction-sql.js';
 
 const [directory, phase] = process.argv.slice(2);
 const path = join(directory, 'state.db');
-const roots = new Map(['appearance', 'artifacts', 'plugins'].map((name) => [name, path + '.' + name]));
+const roots = new Map(Object.entries(resolveDataPaths(path)));
 const db = SqliteRuntime.open(path);
 const files = new NativeSnapshotRestoreFiles(path, roots);
 const sql = new SqliteSnapshotRestore(db);

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { PRESENTATION_PREFERENCE_BOUNDS } from '@nexus-terminal/shared/preferences/presentation/values';
 	import { isNetworkFailure } from '@/client/http/network-failure';
 	import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 	import { storeToRefs } from 'pinia';
@@ -110,8 +111,8 @@
 			emit('rowScale', scale);
 		},
 
-		min: 0.5,
-		max: 2.5,
+		min: PRESENTATION_PREFERENCE_BOUNDS.quickCommandRowSizeMultiplier.min,
+		max: PRESENTATION_PREFERENCE_BOUNDS.quickCommandRowSizeMultiplier.max,
 		step: 0.12,
 		precision: 2,
 		thresholdPx: 64,

@@ -86,7 +86,7 @@ export function readHistoryListQuery(query: URLSearchParams): HistoryListQuery {
 		seen.add(key);
 	}
 	return {
-		offset: bounded(Number(query.get('offset') ?? '0'), 0, 10000),
+		offset: bounded(Number(query.get('offset') ?? '0'), 0),
 		limit: bounded(Number(query.get('limit') ?? String(HISTORY_PAGE_MAX_ENTRIES)), 1, HISTORY_PAGE_MAX_ENTRIES),
 	};
 }
@@ -121,7 +121,7 @@ function page(input: unknown, field: 'command' | 'path', query: HistoryListQuery
 	if (rows.length > query.limit) {
 		throw new InvalidHistoryPayload();
 	}
-	const nextOffset = value.nextOffset === null ? null : bounded(value.nextOffset, 1, 10000);
+	const nextOffset = value.nextOffset === null ? null : bounded(value.nextOffset, 1);
 	if (nextOffset !== null && (rows.length !== query.limit || nextOffset !== query.offset + rows.length)) {
 		throw new InvalidHistoryPayload();
 	}

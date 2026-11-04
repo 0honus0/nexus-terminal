@@ -1,14 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
-import { createAgentProvider, requestAgentJson, requestAgentWorkspace } from '../../support/agent';
+import { requestAgentJson } from '../../support/agent-request';
+import { createTestAgentApp, createAgentProvider, requestAgentWorkspace } from '../../support/agent';
 import { E2E_URLS } from '../../support/test-env';
 import { readAccessNeedsSetup } from '../../../../packages/shared/src/access/http';
-import {
-	readAgentCreateAppResponse,
-	readAgentAppListResponse,
-	readAgentAppResponse,
-} from '../../../../packages/shared/src/agent/scope/http-codec';
+import { readAgentAppListResponse, readAgentAppResponse } from '../../../../packages/shared/src/agent/scope/http-codec';
 import {
 	readAgentProviderView,
 	readAgentProviderTestResponse,
@@ -22,23 +19,11 @@ test('the current first-release schema initializes a clean database through norm
 	expect(setup.ok()).toBeTruthy();
 	expect(readAccessNeedsSetup(await setup.json()).needsSetup).toBe(false);
 	const initialApps = await requestAgentJson(request, { method: 'GET', path: '/apps' }, readAgentAppListResponse);
-	expect(initialApps).toHaveLength(1);
-	expect(initialApps[0]).toMatchObject({
-		definitionId: 'nexus.terminal',
-		version: 1,
-		enabled: true,
-		executionState: 'governed',
-	});
-	const app = await requestAgentJson(
-		request,
-		{
-			method: 'POST',
-			path: '/apps',
-			status: 201,
-			data: { name: 'Current schema' },
-		},
-		readAgentCreateAppResponse,
-	);
+	expect(initialApps).toEqual([]);
+	const definitions = await request.get('/api/v1/agent/app-definitions');
+	expect(definitions.status()).toBe(200);
+	expect(await definitions.json()).toEqual([]);
+	const app = await createTestAgentApp(request, 'Current schema');
 	const thread = await requestAgentWorkspace(request, app, {
 		method: 'agent.threads.create',
 		params: { autoTitle: false, operationId: randomUUID(), title: 'Fresh thread' },
@@ -52,16 +37,7 @@ test('reopening the current schema preserves account, App, thread and encrypted 
 }) => {
 	await loginAsInitialAdmin(request);
 	const provider = await createAgentProvider(request);
-	const app = await requestAgentJson(
-		request,
-		{
-			method: 'POST',
-			path: '/apps',
-			status: 201,
-			data: { name: 'Restart persistence' },
-		},
-		readAgentCreateAppResponse,
-	);
+	const app = await createTestAgentApp(request, 'Restart persistence');
 	const command = {
 		method: 'agent.threads.create',
 		params: { autoTitle: false, operationId: randomUUID(), title: 'Retained thread' },

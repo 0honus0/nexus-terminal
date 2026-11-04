@@ -4,7 +4,7 @@ import type { CollaborationInput } from '../../runs/model/run-collaboration-type
 import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
 import { AgentFailure } from '../../agent-failure.js';
 
-const text = (name: string, maxBytes: number): ToolInputField => ({
+const text = (name: string, maxBytes: number): Extract<ToolInputField, { kind: 'text' }> => ({
 	name,
 	required: true,
 	kind: 'text',
@@ -35,12 +35,12 @@ export function collaborationTools(): ToolDefinition[] {
 			description:
 				'Create one direct Child Run from a Root, only active Children occupy the configured Child limit; completed history does not consume slots. profile=explore|review|worker; objective is an independent task, not inherited private history. targets are decimal SSH connection ID strings narrowed from Root selection. Model, tools and execution limits inherit the Root snapshot; the Root deadline and shared family budgets still apply. Optional dependencies are earlier Child UUIDs; dependencyMode=success|settled. Independent tool approval and current live grants still required. No nested delegation or automatic retry.',
 			fields: [
-				text('profile', 16),
+				{ ...text('profile', 16), choices: AGENT_CHILD_PROFILES.map((profile) => profile) },
 				text('objective', 8192),
 				texts('targets', 50, false),
 
 				texts('dependencies', 4, false),
-				text('dependencyMode', 7),
+				{ ...text('dependencyMode', 7), choices: ['success', 'settled'] },
 			],
 			mutation: true,
 		},
@@ -65,7 +65,11 @@ export function collaborationTools(): ToolDefinition[] {
 			name: 'join',
 			description:
 				'Root waits for selected direct Children, mode=all|any, at most 30 seconds. Timeout leaves children owned and running. Settled is not necessarily successful.',
-			fields: [texts('childIds', 4), text('mode', 3), integer('waitSeconds', 1, 30)],
+			fields: [
+				texts('childIds', 4),
+				{ ...text('mode', 3), choices: ['all', 'any'] },
+				integer('waitSeconds', 1, 30),
+			],
 			mutation: false,
 		},
 		{

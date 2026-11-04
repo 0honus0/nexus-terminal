@@ -1,3 +1,4 @@
+import { WORKSPACE_FILES_TRANSFER_TIMEOUT_MS } from '@nexus-terminal/shared/remote/files/values';
 import {
 	readWorkspaceUploadPrepare,
 	readWorkspaceUploadStart,
@@ -60,7 +61,7 @@ interface WorkspaceUploadAdapter {
 }
 
 const OPEN_TIMEOUT_MS = 10_000;
-const TASK_TIMEOUT_MS = 60 * 60 * 1000 + 30_000;
+const TASK_TIMEOUT_MS = WORKSPACE_FILES_TRANSFER_TIMEOUT_MS + 30_000;
 const BUFFER_HIGH_WATER = 8 * 1024 * 1024;
 const BUFFER_LOW_WATER = 2 * 1024 * 1024;
 

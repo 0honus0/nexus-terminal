@@ -1,10 +1,10 @@
 # 后端架构
 
-当前验收基线：后端重构、正式前端 Shared 适配及远程八组回归已收口，具体 SHA、覆盖与仍未验证的外部/扩大故障范围统一见 [E2E](../testing/E2E.md#当前验收基线)，后续任务见 [PLAN](../PLAN.md)。下文 B/F 阶段名仅定位设计来源；原阶段的静态或有限行为证据不扩大为当前全量保证，历史“待 B10/F1”不表示重启已完成迁移。
+当前后端为 `packages/backend`，正式前端已消费 Shared。完整远程基线、后继修改与未验范围见 [E2E](../testing/E2E.md#当前验收基线)，当前工作见 [PLAN](../PLAN.md)。下文 B 阶段编号仅保留设计定位，不代表当前施工进度。
 
 当前设计同时记录尚未纳入全量验收的专项实现；新增目录选择、依赖安装和基础组件接入不自动纳入上述历史验收基线。产品行为见 [USAGE](../USAGE.md)，源码、静态检查和待验范围分别见 [PLAN](../PLAN.md) 与 testing。
 
-本文约束新后端及后续功能的放置和依赖。开发前由 [AGENTS](../AGENTS.md) 读取 [人工规则](../rules/HUMAN.md)、[工程经验](../rules/ENGINEERING.md) 与 [编码规范](../rules/CODE_STYLE.md)。按 [模块模板](MODULE_TEMPLATE.md) 维护下面八个章节，不复制人工规则和编码列表。
+本文约束后端及后续功能的放置和依赖。开发前由 [AGENTS](../AGENTS.md) 读取 [人工规则](../rules/HUMAN.md)、[工程经验](../rules/ENGINEERING.md) 与 [编码规范](../rules/CODE_STYLE.md)。按 [模块模板](MODULE_TEMPLATE.md) 维护下面八个章节，不复制人工规则和编码列表。
 
 ## 1. 职责与范围
 
@@ -30,7 +30,7 @@
 7. **生命周期与失败**：Service 追踪全操作至 SSH 关闭及 claim 结算，包命令输出有界消费。断连、超时和取消不证明远端安装停止，派发后无确定退出保持 unknown，不自动重试。认证失败发生于包命令之前，可重新检查再确认；安装退出后仍重新查找工具。前端原操作仅在依赖确认可用且原视图身份有效时派发。归档前后端共用Shared的archiveToolRequirements，Platform toolProbe统一查找及GNU tar/cp/ln能力检查；ArchiveModel显式传递有限技术工具名，所有依赖合并为一次只读SSH命令，早于压缩写入或解压快照。辅助工具缺失经COMMAND_NOT_FOUND和具体工具名回传，不被协议丢弃。
 8. **当前能力与验收**：实现进度见 PLAN；root、sudo 免密/密码、apt/dnf/yum/apk/zypper/pacman 支持在固定映射范围内，无管理员权限或未知系统明确拒绝。保留原生归档能力要求与并发窗口，不承诺包管理器事务回滚。行为验收遵守 D17。
 
-### B9 Targets 导入补齐（源码收口，行为待 B10）
+### B9 Targets 导入补齐（源码收口，行为覆盖见 testing）
 
 Targets的Proxy/SSH Key/Tag列表在HTTP出口使用Shared管理集合预算（10,000项，Proxy完整JSON 64MiB、SSH Key/Tag各16MiB），超限返回413 limit_exceeded，不截断或交付部分列表；单项白名单仍由target-http-view持有。正式前端已消费对应Shared管理契约，其他Targets前端迁移状态归当前实施方案。
 
@@ -38,10 +38,10 @@ Targets的Proxy/SSH Key/Tag列表在HTTP出口使用Shared管理集合预算（1
 2. **子功能与目录**：沿用 import/service、model、storage、adapters/sqlite；HTTP 上传解析留 interfaces/http。SSH Key 与 Proxy 事务任务由原子功能 Adapter 提供，register 安装明确参与者，不复制 SQL。
 3. **依赖方向**：HTTP→Targets 入口→ImportService→ImportModel→独立存储任务→SQLite；Model 加密明文并投影命令，Adapter 不读取应用类型或 SecretBox。
 4. **类型与转换**：Shared connections/http 独立定义导入写命令和私钥联合，values 定义上传字段/容量；入口逐字段映射内部命令，Model 逐字段映射密文存储命令。文件是新格式的命令数组，不接受旧开发密文；结果不返回密码、文件内容或技术错误。
-5. **入口与安装**：同一 POST /api/v1/targets/connections/import 按媒体类型接 JSON items 或 multipart connectionsFile；严格 UTF-8/JSON 和项目数量校验，文件内坏项返回安全逐项错误，其余项继续。正式前端 F1 迁移文件格式和结果。
+5. **入口与安装**：同一 POST /api/v1/targets/connections/import 按媒体类型接 JSON items 或 multipart connectionsFile；严格 UTF-8/JSON 和项目数量校验，文件内坏项返回安全逐项错误，其余项继续。正式前端按当前文件格式与结果契约消费。
 6. **数据、事务与并发**：每个项目的标签、代理、内联私钥、连接与凭据同事务创建，任一拒绝全部回滚。已有代理仅在用户名相同且没有新凭据写意图时复用；秘密冲突明确拒绝，不覆盖他人配置。私钥名称唯一冲突明确返回，不自动重命名。
 7. **生命周期与失败**：上传有完整字节预算和期限，写入前复验会话；已提交后失败不冒充回滚，commit_unknown 单独表示。单项失败不自动重放，保持输入顺序返回结果；日志不得包含明文。
-8. **当前能力与验收**：导入源码及静态已收口，连接测试独立实现，完整功能对应与两轮审核见 testing；行为统一 B10，不代表后端 100%。
+8. **当前能力与验收**：导入源码及静态已收口，连接测试独立实现，完整功能对应与两轮审核见 testing；行为覆盖与待验范围见 testing，不代表后端 100%。
 
 ### B9 保存与未保存 SSH 测试（源码接线）
 
@@ -52,11 +52,11 @@ Targets的Proxy/SSH Key/Tag列表在HTTP出口使用Shared管理集合预算（1
 5. **入口与安装**：Remote register 安装 POST /api/v1/targets/connections/:id/test、/test-unsaved。Access 是当前管理员身份权威；同一入场不重复认证，引用/Host Key 异步读取后、交付前仍复验。全局 Operations 观察 SSH_CONNECT_SUCCESS/FAILURE。
 6. **数据、事务与并发**：引用的 Key/Proxy/Jump 在单一快照读取，递归环/深度/展开预算受约束。未保存请求不写数据库；每个测试使用独立机器，不借用普通 Workspace/Agent 资源。存储不存在/引用拒绝在 Model 转换，不由 Adapter 实例化应用错误。
 7. **生命周期与失败**：HTTP 及真实任务均受15秒期限和断连/停机取消约束，最多8个在途。原 owner 等待实际 connect/close，未收敛任务不归还配额；关闭失败保留句柄/原因并阻断新测试，所有在途排空后汇总。成功必须完成本地关闭和当前身份复验；Host Key 未受信明确拒绝并投影本次握手挑战，交付前复验身份；前端可在用户明确确认信任后发起新测试，不自动信任。
-8. **当前能力与验收**：保存/未保存握手、Shared、路由、审计观察及关闭链已接线，静态证据归 testing；真实 SSH/代理/跳板、取消/关闭和权限交错均待 B10，正式前端待 F1；B9整体源码结论见实施方案/testing，不将本子链或静态通过当行为验收。
+8. **当前能力与验收**：保存/未保存握手、Shared、路由、审计观察及关闭链已接线，静态证据归 testing；真实 SSH/代理/跳板、取消/关闭和权限交错均待 B10，正式前端已接线；B9整体源码结论见实施方案/testing，不将本子链或静态通过当行为验收。
 
-B6.2B 的 ToolCall 账本、审批消费及文件/Shell/Docker工具源码已接线。账本归原 runs 聚合，governance 拥有审批政策与单次许可。目录、诊断及文件只读工具的可信检查、执行消费者与模型反馈已接线；受审批文件突变、Shell/当前 Run 后台 Job/Docker 已接线，ACP Runtime、独立权限及直接 Root/Child 协作已接线；执行设置、上下文与预算已接入 governed 政策，行为待 B10。
+B6.2B 的 ToolCall 账本、审批消费及文件/Shell/Docker工具源码已接线。账本归原 runs 聚合，governance 拥有审批政策与单次许可。目录、诊断及文件只读工具的可信检查、执行消费者与模型反馈已接线；受审批文件突变、Shell/当前 Run 后台 Job/Docker 已接线，ACP Runtime、独立权限及直接 Root/Child 协作已接线；执行设置、上下文与预算已接入 governed 政策，行为覆盖见 testing。
 
-### B5.2 Root Run 执行链（源码接线，行为待 B10）
+### B5.2 Root Run 执行链（源码接线，行为覆盖见 testing）
 
 唯一 Run owner 在 `modules/agent/runs`，持有创建/取消、主状态、模型步骤、事件、幂等、执行任务和恢复。旧 Backend 的现存 Run/提交/调度/模型端口及 HTTP/WS 是功能覆盖依据，不恢复退役 Runner。主 Run 已有 pending/running/completed/failed/unknown/cancelled 源码，步骤与主状态同事务联动。模型探测和 pending 均不证明执行成功。
 
@@ -64,11 +64,11 @@ B6.2B 的 ToolCall 账本、审批消费及文件/Shell/Docker工具源码已接
 
 ### Agent Provider 与冻结输入
 
-管理 Provider、加密凭据、发现/测试模型、查询/刷新 Registry，并在创建 Root Run 时冻结模型配置与凭据代际。Run 持有完整主状态与子步骤，执行政策/工具审批 B6、上下文/预算 B7、正式前端 F1、行为验收 B10 分别承接。
+管理 Provider、加密凭据、发现/测试模型、查询/刷新 Registry，并在创建 Root Run 时冻结模型配置与凭据代际。Run 持有完整主状态与子步骤，执行政策/工具审批、上下文/预算由所属 owner 管理；正式前端已接线，行为证据见 testing。
 
 ### B4.2 Factors / Passkey 认证范围（源码阶段）
 
-Access 在 B4.1 完整密码和摘要会话之上扩展 TOTP 与 WebAuthn。Factors 只拥有部分认证、挑战、密码因素启停与凭据操作；**完整身份权威仍为 access_sessions / AccessPublicApi**。五分钟 `nexus_partial` 是独立随机 bearer，只能用于 `POST /auth/login/2fa`，不能传给普通 SSH、Agent 或其它需完整身份的路由。Passkey 登录最终直接核实 WebAuthn signature/RP/Origin/user verification 并签完整摘要会话；已经建立的完整会话不因启用新 TOTP 被隐式撤销。正式Auth/Security已对接Shared因素与配置，本机前端证据归testing；审计/通知/动态Settings已接线，行为待 B10。Preferences 持久配置已接入多 Origin/RP，HTTP/WS 选择受信站点、Factors 按对应 RP 签发并验证挑战；Passkey站点配置在重启生效，实际行为待 B10。
+Access 在 B4.1 完整密码和摘要会话之上扩展 TOTP 与 WebAuthn。Factors 只拥有部分认证、挑战、密码因素启停与凭据操作；**完整身份权威仍为 access_sessions / AccessPublicApi**。五分钟 `nexus_partial` 是独立随机 bearer，只能用于 `POST /auth/login/2fa`，不能传给普通 SSH、Agent 或其它需完整身份的路由。Passkey 登录最终直接核实 WebAuthn signature/RP/Origin/user verification 并签完整摘要会话；已经建立的完整会话不因启用新 TOTP 被隐式撤销。正式Auth/Security已对接Shared因素与配置，本机前端证据归testing；审计/通知/动态Settings已接线，行为覆盖见 testing。Preferences 持久配置已接入多 Origin/RP，HTTP/WS 选择受信站点、Factors 按对应 RP 签发并验证挑战；Passkey站点配置在重启生效，实际行为覆盖见 testing。
 
 B4.2 本轮复审：WebAuthn 技术 Port 以具名选项表达 RP/user/credential descriptors，Adapter 先对浏览器 clientDataJSON 的 challenge/Origin/type 与 assertion RP Hash、UP/UV、counter 做确定性拒绝；第三方验证仍是最终权威，无法可靠分类的供应商异常映射为不可用而非凭据失败。注册与登录 options 明确要求 User Verification（required），与最终 requireUserVerification 一致。Model 在写 challenge 之前投影技术选项，HTTP 对 options 仅维护一套可选字段白名单；HTTP 签发后的挑战 Cookie 必须交付成功，若在完成之前断开连接则撤销已提交的 challenge/TOTP setup，回收失败保留因果。交付由 Access interfaces/http/access-delivery 唯一持有：原 response、socket 和 request 共同观察，只有原传输未销毁/中断时的 finish 才结算成功；关闭后缓冲清空或迟到 finish 不解除失败撤销。所有路径解除原监听，撤销失败只执行一次并保留因果；本地 finish 不等于浏览器收件确认。源码/静态收口；当前行为范围以 testing 为准。
 
@@ -108,7 +108,7 @@ Remote 的普通 SSH Workspace 是一条持续存在的交互式 shell，而非 
 
 本机状态已有独立 System owner；Preferences 已接入核心持久设置；Operations 已持有 notifications/audit/logging，System 已提供宿主诊断；后续能力按真实业务所有权实施；Agent 的 Provider/调度/Tool/授权/审批/Job/Artifact/Memory/集成归 Agent 子功能，不复制技术底座。
 
-### Agent 上下文设计（源码接线，行为待 B10）
+### Agent 上下文设计（源码接线，行为覆盖见 testing）
 
 1. **职责与范围**：context 拥有 Root 的 Thread 历史装配、Run-local 完整工具交换及容量准入。历史保留此前 Root 的输入、步骤、工具状态与已记录结果，包含失败、取消和 unknown，不伪造缺失结果。历史转为不可信数据，不成为当前指令或授权；Child 仅取得委派输入和自身交换，不读取父 Thread 私有历史。
 2. **子功能与目录**：context/service 的 ContextHistoryService 管历史准入，ContextService 管 Run 内快照与完整交换；context-rules 管纯规则（含normal/extended窗口选择及统一完整请求估算），context-limits 管私有表示上限。context/model 持有应用类型及存储转换，context/storage 定义独立历史/快照契约，context/adapters/sqlite 持有 SQL、行/JSON 解码和快照连续性校验。
@@ -117,7 +117,7 @@ Remote 的普通 SSH Workspace 是一条持续存在的交互式 shell，而非 
 5. **入口与安装**：Agent register 安装 ContextModel/Storage 和历史 Service 到原执行 owner，无第二个执行 registry 或新 HTTP。读取历史仍位于冻结政策检查之后，每轮取得快照后才 reserve；每轮受 governed、当前版本、冻结预算及期限约束。
 6. **数据、事务与并发**：Root/Child 创建事务分配不可变 thread_sequence，历史按该序号排序，不用时间戳推断先后。Service 通过 Model 向原读取事务传入来源窗口容量与纯预算判定；Adapter 按不可变序号倒序选择最近连续完整Run后转正序，最多4096个来源、1024步骤、4096工具和512KiB原始正文，较早历史不占本轮预算但持久记录不删除，单个过大历史Run可整体省略。相容来源前缀的语义检查点仍复用，超过预算则保留原窗口。ContextService在首轮快照之前按完整序列化/Provider预算移除最旧完整历史消息及其全部来源（摘要按coveredRuns一起移除），只缩小连续后缀，不裁剪当前输入或执行中的工具交换；首轮快照后锁定来源，后续连续性仍严格校验。步骤 reserve 同事务保存 agent_model_contexts 的完整内容、来源及 SHA-256，并核对窗口内完整连续后缀的来源 user/App/Thread/sequence/version/status；后续轮与已存前缀、原步骤文本/proposals及确定工具结果经Model投影后的消息逐项一致。只更新单一初始 v1 与精确签名，不兼容旧开发库。未来恢复若修改被引用的历史步骤/结果，必须原子推进来源版本；B9 不得仅修改子账本而维持来源版本不变。
 7. **生命周期与失败**：消息与工具定义合计4MiB，不另设消息数量上限；不按normal/extended裁剪窗口，不以字节估算作为模型上下文硬拒。context-rules保留完整性和编码容量检查，其保守估算仅用于尚未报告usage的步骤预约，不是供应商精确token用量。Platform AI将最多128项工具声明与每轮最多32次调用分别限制，不以调用数量限制目录。模型输入明确标注近期历史可能省略，历史只按完整Run滑窗，不截断半组工具；本轮消息/请求自身超限仍明确拒绝；首轮确定拒绝只结算原身份/版本/创建请求且无步骤的 pending Run，后续按真实派发事实结算，存储失败保留因果且不重试。原执行 owner 管取消、围栏、unknown 与 drain；持久快照不授权重启后重新派发。
-8. **当前能力与验收**：Run-local 交换、持久 Thread 历史和逐步骤内容快照已接线；受限结果续读已接线；语义检查点、Memory/Recall、Artifact/清理与执行设置已有实际消费者。USAGE、实施四表与 testing 分别维护当前行为、任务和检查证据；全部行为待 B10，正式前端 F1。
+8. **当前能力与验收**：Run-local 交换、持久 Thread 历史和逐步骤内容快照已接线；受限结果续读已接线；语义检查点、Memory/Recall、Artifact/清理与执行设置已有实际消费者。USAGE、实施四表与 testing 分别维护当前行为、任务和检查证据；行为证据及未验范围见 testing，正式前端已接线。
 
 ### 上下文结果投影与续读（B7.3 源码）
 
@@ -125,25 +125,25 @@ Remote 的普通 SSH Workspace 是一条持续存在的交互式 shell，而非 
 2. **子功能与目录**：context/result-rules.ts持有纯投影/hash/编码容量规则；model/context-types.ts持有读取输入/页/结果，service/result-service.ts管理来源准入；无需第二份存储/文件库。
 3. **依赖方向**：ToolService→ResultService→原RunToolModel/GovernanceService；RunStepModel在存储事务回调内转换结果事实并验证相同应用投影，SQLite只读独立storage事实，不引入应用规则。
 4. **类型与转换**：ToolInput引用context应用读取类型；StoredContextToolResult归context/storage，Model逐字段转换。已有Shared治理values新增context.read，完整治理codec/后端是实际消费者；私有工具正文与ResultPage无双端消费者，不放Shared。返回页嵌套投影归ToolService。
-5. **入口与安装**：register将ResultService接原ToolService；tool_result_read v2是模型生产者，Root/Child依原工具名单缩窄。当前内置声明nexus.terminal@1.8.0明确声明context.read，grants仍默认空；新能力不自动授权。
+5. **入口与安装**：register将ResultService接原ToolService；tool_result_read v2是模型生产者，Root/Child依原工具名单缩窄。context.read 必须由签名插件显式声明，grants 初始为空；新能力不自动授权。
 6. **数据、事务与并发**：结果原文仍唯一存agent_run_tools，完成确认后才向模型投影；超过8KiB原文提供4KiB JSON编码预览（原捕获上限256KiB不变）。后续reserve同事务核对原前缀/proposals/完整确定结果，Model回调验证应用投影。续读的源SSH目标id/version进入当前结果确认事务；单一初始v1签名同步，不新增兼容迁移。
 7. **生命周期与失败**：只能读同user/App/Run较早步骤的completed记录，hash/当前原能力/批准/目标有效性复查；context.read不能代替源操作权限。目录结果在当前选择含denylist项时保守拒绝；不存在/非确定/续读递归拒绝。offset按Unicode码点，maxBytes为JSON编码文本含引号，8–4096/default4096；完整页元数据容纳在8KiB模型结果预算。由原Run/Tool owner结算、取消和关闭，不新增后台工作或重试。
-8. **当前能力与验收**：结果投影和真实工具续读源码接线；跨Run历史仍保留实际捕获正文，不能用同Run续读绕过其容量。语义检查点、Memory/Artifact已接线，所有行为待B10，正式治理/提示/结果卡片迁移归F1。
+8. **当前能力与验收**：结果投影和真实工具续读源码接线；跨Run历史仍保留实际捕获正文，不能用同Run续读绕过其容量。语义检查点、Memory/Artifact已接线，正式治理、提示与结果卡片已接线，行为覆盖见 testing。
 
-### Agent 数据与执行配置（源码接线，行为待 B10）
+### Agent 数据与执行配置（源码接线，行为覆盖见 testing）
 
 Memory 列表通过 Shared 可选 threadId → HTTP 白名单投影 → Service 独立 MemoryQuery → Model → storage 参数 → SQLite Adapter 接线。Adapter 在原读取事务核对 thread 属于当前 user/App，分页前通过来源 Run 的 thread_id 筛选，包含 Root/Child；无来源的记录不匹配，缺失或异 App 的线程为 not_found。不传参数仍是实际全 App 管理用途，不是旧协议兼容。候选原文、来源、状态和版本只由原事务持久 owner 修改；本次不改 schema、权限或人工审核政策。
 
-1. **职责与范围**：Memory 拥有候选、人工审核、撤销与受限 Recall；Artifact 拥有内容、元数据、引用、保留及清理；execution 拥有管理员执行设置、硬限制确认及 Run 冻结预算。原 RunExecutionOwner 是唯一模型任务 owner。各能力已有管理入口和真实消费者，源审与静态证据归 testing，行为待 B10。
+1. **职责与范围**：Memory 拥有候选、人工审核、撤销与受限 Recall；Artifact 拥有内容、元数据、引用、保留及清理；execution 拥有管理员执行设置、硬限制确认及 Run 冻结预算。原 RunExecutionOwner 是唯一模型任务 owner。各能力已有管理入口和真实消费者，源审与静态证据归 testing，行为覆盖见 testing。
 2. **子功能与目录**：分别放在 Agent 的 memory/artifacts/execution 子功能，沿用 service/model/storage/adapters/sqlite。context 新增 checkpoint Service/Model/SQLite；通信入口仍集中 interfaces/http。Platform blobs 只持有不透明 key、实际字节流、文件句柄和具名技术失败，不认识 App/Run、配额或保留政策。
 3. **依赖方向**：业务 Service → Model → 独立 storage/Platform → Adapter；SQL/DDL、私有行与 JSON 解码留 Adapter。execution 的纯政策决定通过 Model 转换后的同事务事实回调执行；Root/Child、Governance 与其他 Agent 子功能直接消费内部应用契约，不绕 public 包装。
-4. **类型与转换**：双端管理协议唯一归 Shared agent/{memory,artifacts,execution}；应用对象分别归所属 model，独立存储对象归 storage。HTTP 与 Model 分别白名单转换全部嵌套对象。摘要正文与内部来源快照没有新增公开对象；能力基础值包含 context.compact、memory.read、memory.propose、artifacts.read/write，内置声明当前版本 1.8.0，默认 grant 空。
+4. **类型与转换**：双端管理协议唯一归 Shared agent/{memory,artifacts,execution}；应用对象分别归所属 model，独立存储对象归 storage。HTTP 与 Model 分别白名单转换全部嵌套对象。摘要正文与内部来源快照没有新增公开对象；能力基础值包含 context.compact、memory.read、memory.propose、artifacts.read/write，这些能力仅由签名插件包声明，初始 grants 为空。
 5. **入口与安装**：register 安装管理 HTTP 和 memory_propose/recall、artifact_create/read、context_checkpoint 真实模型工具；Bootstrap 安装原 Access 提供的事务身份 reader，并创建数据库同路径派生的专用 Artifact 内容目录。核心 SQL 仍仅一个初始 v1，不兼容旧开发库；精确签名随最终结构更新。
 6. **数据、事务与并发**：Memory 提案来源、审核 CAS 在原写事务核对；期限使用实际读取后的时钟，审核耗尽版本拒绝递增；跨App记忆导入的路由、用例、存储及快照声明已移除，不保留兼容入口。持久/Shared解码一致校验创建、审核和到期关联。Artifact SQL 预留、文件独占写入/发布和 SQL 确认分别有完成判据；上传/删除领取前预留最终结算的版本空间，批量清理先验证完整计划，确认期限在实际读取后复查。删除先持久 claim，实际文件删除与结算均确认后才归还额度。硬限制 preview/confirm 在真实存储事务读取事实后取时钟，期限由 Service 决定，校验、updatedAt 与单次消费共用该次时刻；耗尽版本不递增。Root 创建同事务冻结设置，Child 同事务复制 Root 冻结模型及不可变执行设置；模型与工具准入读取全族账本，模型预算按已报告input/output usage核算，未报告保留reservation，确定未派发失败计0；不改写原预留记录，不冒充精确账单。
 7. **生命周期与失败**：所有管理任务归 AgentRequestOwner，模型/工具仍归原 Run owner。持久语义检查点绑定实际模型输入 hash 和完成工具；下一轮保留原用户请求及完整当前交换，预留事务重新验证摘要来源。未知提交不补写、不重派，导入/清理确认只消费一次；结果未知按预分配资源身份只读核对。内容流覆盖全部 yield、取消和 close，读取期间不允许清理对应文件；未确认文件/句柄清理保留资源与容量归属。
-8. **当前能力与验收**：Memory/Artifact、语义检查点、执行设置、Operations 日志/审计/通知与宿主诊断源码已接线；执行按 governed 政策核对，默认 enabled=false；启用设置不授予工具 grant 或审批。 正式前端 F1、行为 B10。
+8. **当前能力与验收**：Memory/Artifact、语义检查点、执行设置、Operations 日志/审计/通知与宿主诊断源码已接线；执行按 governed 政策核对，默认 enabled=false；启用设置不授予工具 grant 或审批。 正式前端已接线，行为证据见 testing。
 
-执行设置正式前端已消费独立四HTTP及完整Shared响应codec；独立 Profile 类型、HTTP/持久文档、前端编辑与模型目录请求全部删除。Child 继承 Root 冻结设置，Shared 最大请求容量同时约束 SQL CHECK 和持久解码。业务准入、实际工具集合、版本、占用及确认期限仍归ExecutionService和原事务；本批没有将应用类型下沉Shared或Adapter。完整Agent前端仍待后续迁移。
+执行设置正式前端已消费独立四HTTP及完整Shared响应codec；独立 Profile 类型、HTTP/持久文档、前端编辑与模型目录请求全部删除。Child 继承 Root 冻结设置，Shared 最大请求容量同时约束 SQL CHECK 和持久解码。业务准入、实际工具集合、版本、占用及确认期限仍归ExecutionService和原事务；本批没有将应用类型下沉Shared或Adapter。正式 Agent Host 已接当前 Shared。
 
 ### Shell 启动探测与提示符 Hook
 
@@ -262,7 +262,7 @@ Port 文件表达 Platform 的技术能力及技术输入/输出，不是新增�
 
 ## 4. 类型与转换
 
-ToolOperation/ToolInspectionCommand/ToolIdentity 归 runs/model；StoredToolOperation/StoredToolInspection/StoredToolIdentity 归 runs/storage，各边界逐字段转换。ApprovalRequest 只指定操作身份及审批种类，不接受自报 hash、风险、能力或摘要；这些事实从当前持久操作生成。Shared agent/tools 的 values/model/http/http-codec 定义有限状态、安全审计对象和分页；参数仅经绑定用户/App/Run/tool 的单调用认证详情接口按需读取；原始结果正文、providerCallId 与私密摘要保持内部。ToolEvent/Page 归 runs/model，StoredToolEvent/Page 归 runs/storage，不继承 Shared 对象。
+ToolOperation/ToolInspectionCommand/ToolIdentity 归 runs/model；StoredToolOperation/StoredToolInspection/StoredToolIdentity 归 runs/storage，各边界逐字段转换。ApprovalRequest 只指定操作身份及审批种类，不接受自报 hash、风险、能力或摘要；这些事实从当前持久操作生成。Shared agent/tools 的 values/model/http/http-codec 定义有限状态、工具列表与认证单调用详情；参数仅经绑定用户/App/Run/tool 的单调用认证详情接口按需读取；原始结果正文、providerCallId 与私密摘要保持内部。ToolEvent/Page 归 runs/model，StoredToolEvent/Page 归 runs/storage，不继承 Shared 对象。
 
 ### B5.2 模型流表示
 
@@ -288,15 +288,15 @@ Shared wire 与内部观测事实独立定义；HTTP/WS 投影逐字段构造，
 
 ### B3.1 唯一类型与转换
 
-| 边界                                                   | 真实输入/输出                                                             | 唯一 owner                                                     | 白名单转换/消费者                                                                                |
-| ------------------------------------------------------ | ------------------------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| WS envelope 与 connect/resume/terminal/suspend         | unknown JSON、requestId、viewport、token、generation、ACK、事件及安全失败 | Shared `remote/workspace`、`remote/terminal`、`remote/suspend` | Shared codec 严格读取；WS → sessions model 入参逐字段；WS 逐字段投影响应及事件；正式前端 F1 消费 |
-| Workspace 应用会话、attached owner、pending 恢复、游标 | 状态判别联合、身份摘要、实例 generation、任务与关闭能力                   | `remote/sessions/model/*-types.ts`                             | sessions Service 消费；Model 转为纯技术连接/日志命令，敏感值不出 HTTP                            |
-| SSH/PTY/channel/technical error                        | machine/shell 字节、开关/退出与派发结果                                   | `platform/ssh/ssh-port.ts`                                     | ssh2 Adapter 归一技术错误；sessions Model 映射具名应用失败，保留 cause                           |
-| 日志/checkpoint 技术事实                               | 有界字节范围、偏移/修订、模式与视口                                       | sessions Model + Platform 本机日志/terminal 技术契约           | Model 字段投影；Service 持有页大小/保留/恢复政策；WS/HTTP 安全输出                               |
-| 关联 Files 资源                                        | workspaceId、会话绑定与附件实例                                           | `remote/files/model/file-types.ts`                             | Workspace Service 调用 FileService 的实例绑定 release；Files Service 自行管理任务                |
+| 边界                                                   | 真实输入/输出                                                             | 唯一 owner                                                     | 白名单转换/消费者                                                                            |
+| ------------------------------------------------------ | ------------------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| WS envelope 与 connect/resume/terminal/suspend         | unknown JSON、requestId、viewport、token、generation、ACK、事件及安全失败 | Shared `remote/workspace`、`remote/terminal`、`remote/suspend` | Shared codec 严格读取；WS → sessions model 入参逐字段；WS 逐字段投影响应及事件；正式前端消费 |
+| Workspace 应用会话、attached owner、pending 恢复、游标 | 状态判别联合、身份摘要、实例 generation、任务与关闭能力                   | `remote/sessions/model/*-types.ts`                             | sessions Service 消费；Model 转为纯技术连接/日志命令，敏感值不出 HTTP                        |
+| SSH/PTY/channel/technical error                        | machine/shell 字节、开关/退出与派发结果                                   | `platform/ssh/ssh-port.ts`                                     | ssh2 Adapter 归一技术错误；sessions Model 映射具名应用失败，保留 cause                       |
+| 日志/checkpoint 技术事实                               | 有界字节范围、偏移/修订、模式与视口                                       | sessions Model + Platform 本机日志/terminal 技术契约           | Model 字段投影；Service 持有页大小/保留/恢复政策；WS/HTTP 安全输出                           |
+| 关联 Files 资源                                        | workspaceId、会话绑定与附件实例                                           | `remote/files/model/file-types.ts`                             | Workspace Service 调用 FileService 的实例绑定 release；Files Service 自行管理任务            |
 
-Files请求/完整成功结果和ready/error事件统一由Shared remote/files/workspace及codec表达；正式浏览/编辑/预览消费者已在F1-C2-B1迁移，不留转导出兼容桥。metadata的accessedAt/modifiedAt由SFTP Model转换为Unix毫秒后投影，前端不二次换算。目录列表不设置条目数量门槛，完整响应仍按Shared的8MiB字节预算；搜索500项的结果上限由Shared values唯一维护，后端遍历队列/并发策略仍归Files。正式下载与上传port已迁Shared；上传完整回执/终态按原附件投影，failed.message使用Shared有限RemoteFileErrorCode，内部FileUploadEvent仍归Files Model；独立服务器传输HTTP也已接Shared；完整页面继续C2-D。
+Files请求/完整成功结果和ready/error事件统一由Shared remote/files/workspace及codec表达；正式浏览/编辑/预览消费者已迁移，不留转导出兼容桥。metadata的accessedAt/modifiedAt由SFTP Model转换为Unix毫秒后投影，前端不二次换算。目录列表不设置条目数量门槛，完整响应仍按Shared的8MiB字节预算；搜索500项的结果上限由Shared values唯一维护，后端遍历队列/并发策略仍归Files。正式下载与上传port已迁Shared；上传完整回执/终态按原附件投影，failed.message使用Shared有限RemoteFileErrorCode，内部FileUploadEvent仍归Files Model；独立服务器传输HTTP也已接Shared；完整页面消费者已接线，验收范围见 testing。
 
 内部复用应用类型在所属 `model/*-types.ts`；存储契约在 storage；技术契约在 Platform；后端跨模块类型在 public；双端契约按 [Shared 架构](SHARED.md) 归属。类型与实现分开，低层不反向引用上层。Remote 内部会话关闭原因归 sessions/model，后端公开原因独立定义；内部 Model/Service 不引用本模块 public 类型。
 
@@ -324,7 +324,7 @@ Workspace复制失败message收窄为Shared RemoteFileErrorCode；归档失败�
 
 ## 5. 入口与安装
 
-工具只读审计安装 `GET /api/v1/agent/apps/:appId/runs/:id/tools/:toolCallId` 及 `/events`。Shared 严格解码 UUID 与 after/limit（默认 0/50，最多 100），RunService → RunToolModel → Storage 读取，register 和 HTTP 各自安全投影；Access 管理员身份在入场及异步结果交付前核验。响应最多 128 KiB，不新增工具创建/派发入口。前端 F1 待接线；目录/诊断、文件读写、Shell、Docker、Job 与 ACP 等工具的可信生产与执行源码已接线，真实权限、执行和故障行为统一留 B10。
+认证单调用详情安装 `GET /api/v1/agent/apps/:appId/runs/:runId/tools/:toolId`，线程工具列表安装 `GET /api/v1/agent/apps/:appId/threads/:threadId/tools`。Shared 严格解码身份、`before:createdAt:id` 游标和 limit（默认60、最多100）；RunService/RunToolModel 从持久账本生成安全投影，HTTP 与前端 `native-tools-api` 分别核对身份和请求关联。单调用详情允许按需读取原模型参数和安全失败码，不返回注入凭据、原始结果或供应商调用身份。旧步骤/工具事件审计接口已移除，不新增任意派发入口；Access 在入场及异步交付前核验。
 
 register 在单一 v1 初始化之后，通过 RunToolModel 收敛未完成操作，并通过 ToolJobModel 收敛 queued/dispatched Job 后再接收请求。审批 request/consume 由内部可信工具消费者调用，不对外新增任意派发入口；resolve HTTP 只产生决议，不能消费执行许可。AcpPermissionService 持有独立持久权限操作，绑定父操作与真实 runtime 请求；缺失或失效的绑定明确拒绝，不能借普通工具审批派发父操作。
 
@@ -332,7 +332,7 @@ register 在单一 v1 初始化之后，通过 RunToolModel 收敛未完成操�
 
 register 安装一个 RunModel、RunStepModel、RunModelStream、RunExecutionOwner 和 RunService；ProviderService 在配置提交后通知该执行 owner 中止对应请求。AgentRequestOwner 先停止准入，quiesce Run/Provider/Registry，再等待已准入请求、实际Registry刷新和各资源close，SQLite最后关闭。Provider端点发现也纳入同一取消owner；Provider close独立等待其持有的网络Promise并有界保留多项清理失败，模块停止及关闭逐项执行，同步抛错不跳过其余资源；Registry最后一个HTTP订阅者离开不解除实际任务追踪。初始化在迁移后 reconcileUnsettled，不重发已派发请求。
 
-状态 HTTP 统一经异步交付检查复核管理员会话，创建/取消的结果映射只负责状态码与白名单响应；交付失败不撤销已提交写入。保留创建/查询/取消/主事件 HTTP；专用步骤审计 HTTP 已移除。没有公开执行启动/步骤写入接口。既有 DEV 页消费模型候选、必填模型三字段和 Run 状态，正式前端 F1 未切换。
+状态 HTTP 统一经异步交付检查复核管理员会话，创建/取消的结果映射只负责状态码与白名单响应；交付失败不撤销已提交写入。保留创建/查询/取消/主事件 HTTP；专用步骤审计 HTTP 已移除。没有公开执行启动/步骤写入接口。DEV 页与正式 Host 均消费模型候选、必填模型三字段及 Run 状态。
 
 ### Provider 安装与接口
 
@@ -352,7 +352,7 @@ register 安装 Provider/Registry/Run owners；管理员接口前缀 `/api/v1/ag
 
 ### B3.2 入口
 
-同一 `/ws/workspace` 安装 status.start/stop、docker.status/command/stats，事件 status.sample/error；HTTP 保留 `/api/v1/system/status`、`/ssh-resources` 与 `/ssh-resources/:connectionId`。Remote/register 装配观测能力，System/register 安装本机能力；Bootstrap 仅调用模块安装入口。观测空请求codec归Shared monitoring，Docker仅消费自己的命令/统计codec，HTTP/WS仍在原协议边界白名单投影；正式前端WS与Dashboard概览HTTP已接Shared，配置消费者继续F1-C2-C2，不改变Remote/Agent各自授权政策。
+同一 `/ws/workspace` 安装 status.start/stop、docker.status/command/stats，事件 status.sample/error；HTTP 保留 `/api/v1/system/status`、`/ssh-resources` 与 `/ssh-resources/:connectionId`。Remote/register 装配观测能力，System/register 安装本机能力；Bootstrap 仅调用模块安装入口。观测空请求codec归Shared monitoring，Docker仅消费自己的命令/统计codec，HTTP/WS仍在原协议边界白名单投影；正式前端WS与Dashboard概览HTTP已接Shared，配置消费者也已接入，不改变Remote/Agent各自授权政策。
 
 ### B3.1 安装设计
 
@@ -372,7 +372,7 @@ Access 取得可信会话身份；Targets 管理出口只给非敏感对象，�
 
 Remote 会话 HTTP 仅负责协议解码和失败投影，入场身份查询与管理员授权统一由 RemoteSessionOwner 执行。读取/关闭对未认证或无权限身份抛具名失败，认证通过但资源不属于该会话时返回未找到；建连完成后再次核对权威身份，WebSocket 访问/输出也继续复查。入场去重不删除异步期间会话撤销保护。
 
-Remote 同时安装 `/ws/workspace` 的旧 Files 子协议适配层。Interface 持有旧 envelope、requestId/in-flight、binary read owner、NXW1 发送、cancel 和 ready/error；旧 WorkspaceEventHub/Protocol 复查确认没有独立 Files mutation change event，因此适配层不虚构 `filesystem.changed` 一类消息。Files Service 持有路径/编码/操作政策；Model/Platform 不知道旧 Workspace DTO。R1 恢复 fresh `workspace.connect`、`workspace.ping` 与 Files 消息；完整 `workspace.resume`、Terminal/suspend 已有 B3.1 源码，status/docker 已有 B3.2 源码，行为统一待 B10。下载/上传/传输/归档的 B2 源码已收口，行为待 B10。现有 `/api/v1/remote/files` 暂由 DEV `remote-next` 消费，后续 P1/F1 决定最终 API，不把双入口固化成长期设计。
+Remote 同时安装 `/ws/workspace` 的旧 Files 子协议适配层。Interface 持有旧 envelope、requestId/in-flight、binary read owner、NXW1 发送、cancel 和 ready/error；旧 WorkspaceEventHub/Protocol 复查确认没有独立 Files mutation change event，因此适配层不虚构 `filesystem.changed` 一类消息。Files Service 持有路径/编码/操作政策；Model/Platform 不知道旧 Workspace DTO。R1 恢复 fresh `workspace.connect`、`workspace.ping` 与 Files 消息；完整 `workspace.resume`、Terminal/suspend 已有 B3.1 源码，status/docker 已有 B3.2 源码，行为统一待 B10。下载/上传/传输/归档的 B2 源码已收口，行为覆盖见 testing。现有 `/api/v1/remote/files` 暂由 DEV `remote-next` 消费，正式页面使用 Workspace 文件能力，独立 HTTP 入口用于其真实消费者，不增加旧协议兼容包装。
 
 ## 6. 数据、事务与并发
 
@@ -414,7 +414,7 @@ Access 登录失败记录的 `last_attempt_at` 及其索引直接在第一版初
 
 ### B3.2 并发与缓存
 
-无新增业务持久化，不创建空 storage。缓存仍为本进程状态；Docker 控制与 Agent/Files 共用 Remote machines 持久突变占用，Preferences 已接入状态间隔/资源刷新持久配置。Workspace 操作绑定具体 attachment、配置 fingerprint 与原 owner；后台主机缓存当前仅供 userId=1，按 host/port 及完整可信配置指纹隔离，同配置且同登录的在途采样才共享，不同会话单独拥有采样；仅成功结果跨登录进入缓存，失败下次读取可重新采样；TTL 从采样完成计算。删除/改配置及 reset 后旧任务不可回填。首次初始化默认状态间隔 3 秒、后台 TTL 30 秒；Preferences 保存确认后热更新状态周期与后台 TTL，独立 Service 的技术安装默认不覆盖持久设置。Docker 按规范化文本 endpoint 与全部受管突变互斥，覆盖容器名称与短/完整 ID 别名；unknown/清理失败保持持久 blocked，重启不解除，恢复能力已由下述B9机器突变恢复接线，行为待B10。
+无新增业务持久化，不创建空 storage。缓存仍为本进程状态；Docker 控制与 Agent/Files 共用 Remote machines 持久突变占用，Preferences 已接入状态间隔/资源刷新持久配置。Workspace 操作绑定具体 attachment、配置 fingerprint 与原 owner；后台主机缓存当前仅供 userId=1，按 host/port 及完整可信配置指纹隔离，同配置且同登录的在途采样才共享，不同会话单独拥有采样；仅成功结果跨登录进入缓存，失败下次读取可重新采样；TTL 从采样完成计算。删除/改配置及 reset 后旧任务不可回填。首次初始化默认状态间隔 3 秒、后台 TTL 30 秒；Preferences 保存确认后热更新状态周期与后台 TTL，独立 Service 的技术安装默认不覆盖持久设置。Docker 按规范化文本 endpoint 与全部受管突变互斥，覆盖容器名称与短/完整 ID 别名；unknown/清理失败保持持久 blocked，重启不解除，恢复能力已由下述B9机器突变恢复接线，行为覆盖见 testing。
 
 Dashboard的ResourceStatusService与SystemStatusService不设全局4请求准入上限。前者复用上述主机缓存、保留单请求2主机并行与120秒等待，每次交付前复核会话及当前配置；模块自己的取消signal允许多个等待监听，退出时仍逐请求退订。后者由原Service共享一次本机采样，成功结果完成后缓存3秒，失败不缓存，逐请求在取缓存/采样前后验证管理员会话，等待最多10秒。超时只结束调用方等待，真实采样仍登记到原tasks并参与停机排空；quiesce清除缓存且晚结果不可回填。Shared、HTTP白名单映射、前端、协议容量及独立诊断入口政策不变。本机 Node Adapter 与 POSIX SSH Adapter 的根磁盘百分比统一消费 `platform/system/disk-percent.ts`，以有限非负的已用/总容量计算并限制到 0–100；`df` Capacity 只作为技术输出，不参与应用事实。
 
@@ -442,7 +442,7 @@ Remote Files 的 upload.prepare 在单一原机器突变claim内先准备根目�
 
 ### B5.2 增量执行流生命周期
 
-Run owner 在持久创建前保留本机准入：8 个尝试名额（含在途创建、资源清理失败的已结算任务），64 个在途写入。拒绝关闭/满额请求不先创建 Run。每个尝试有 5 分钟本地 Abort 期限，不能证明远端停止或计费结束。quiesce 拒绝新请求并中止任务；close 共享 Promise，等待已准入写入与任务结算，有界保留 32 个失败及超量计数。清理失败任务不提前释放名额。
+Run owner 在持久创建前按已保存并发配置保留本机准入，计入在途创建与资源清理失败任务；默认预算4/2和默认硬限制8/8不变，不另写死8个尝试门槛。64个在途写入属于该 owner 的私有排空预算。拒绝关闭/满额请求不先创建 Run；合法幂等重放不占新尝试。尝试使用创建时冻结的 deadlineAt（默认任务期限30分钟，受配置与 App 覆盖约束），本地 Abort 不能证明远端停止或计费结束。quiesce 拒绝新请求并中止任务；close 共享 Promise，等待已准入写入与任务结算，有界保留 32 个失败及超量计数。清理失败任务不提前释放名额。
 
 Provider 配置提交后中止本进程关联请求；获取凭据后、dispatch 返回后及发布每个模型事件前复查当前 Provider，复查 await 后检查 Abort。跨进程配置变更以重新读取发现，不宣称网络副作用与配置更新具有跨系统原子性。未派发失败与已派发 unknown 分开，SQLite 写入异常不误归网络失败或重复补写；双重失败保留 AggregateError。
 
@@ -534,35 +534,13 @@ Remote Files 的流 attachment 绑定具体任务实例；prepare 配额由资�
 
 ## 8. 当前能力与验收
 
-B10正在逐链验收。首批覆盖实际HTTP认证/状态、有限Run/脚本Provider、SQLite失败、同实例备份；第二批覆盖本机OpenSSH/internal-sftp/PTY、原生三格式归档及部分传输；第三批验证普通续接双阶段确认、挂起恢复/接管与注销后重新登录续接；第四批验证 TOTP、受信代理来源 HTTP/WS、CAPTCHA 受控响应与 Chromium 虚拟认证器 Passkey。后续批次已推进 Agent 工具/集成、Docker、跨实例备份、通知/外观/插件及真实 RDP/VNC；具体通过子集与未验范围唯一归 testing，不把下列源码范围或单条通过解释为模块整体验收。续接/挂起及因素的容量/期限/竞态、桌面剩余故障、插件 SDK/intents 与备份未知提交/崩溃恢复等仍待验。
+正式后端 HTTP/WS 与前端 Shared 适配已完成；远程全量通过仅对 testing 所记 SHA 有效。后继架构、容量与工具目录等本地修改未统一远程验收，具体缺口见 PLAN 和各专项记录，不把源码/静态完成解释为行为通过。
 
-B6.2B 当前落地持久账本、审批绑定、原子消费基础设施及安全工具只读审计。安全单项/事件审计 HTTP 与 Shared 后端链已接线；目录、诊断及文件只读工具的可信 ToolInspection、只读许可和持久结果反馈已接线；file_write 审批等待/消费与写入反馈已接线；文件/Shell/Docker 突变与当前 Run 后台 Job 已接线，ACP waiter及安全审批HTTP/工具事件观察已接线，直接 Child/协作已接线，项目上下文和跨Run突变占用已在B6.2E接线；外围工具及blocked恢复已由B8/B9接线，正式前端F1仍未完成；源码收口不代表模型执行已解冻。静态与源码证据见当前方案/testing，所有行为留 B10。
+Agent 的模型流、持久 Run/Step/Tool、治理审批、Child/项目上下文、Memory/Artifact、插件与集成已有实际消费者。默认执行关闭且 grants 为空，启用执行不自动授权；每步仍核对当前权限、冻结配置和任务族预算。专用步骤/工具事件审计已移除，保留聊天工具列表和认证参数详情。
 
-### B5.2 范围与延期
+Access 的因素/Passkey 主链和正式界面已接线；完整身份由 Access 事务签发，最终复验凭据 generation/counter 与挑战/改密修订。IP 与监控配置热更新，CAPTCHA/站点重启生效。真实安全硬件、公网供应商及扩大故障/存储恢复等范围以 testing 和 PLAN 明确承接，不以历史局部证据代验。
 
-B5.2 可独立完成的源码链路已具备：持久状态/步骤/事务、初始表结构、取消/恢复、通用双协议模型流、Model 转换、唯一执行 owner/准入/停机及状态消费者。当前执行由 B6/B7 已接入的 governed 政策、可信授权、冻结上下文与全族预算约束，默认 enabled=false；启用执行不授予工具权限。不把运行骨架或静态通过当作行为验收。
-
-静态门禁与四表归 testing 最新复审；网络、迁移、资源、并发等全部行为仍待 B10。正式前端、输出交付与 F-R14/F1 留后端完成后；当前施工以实施方案为准。
-
-### Provider 验收边界
-
-源码与静态证据见 testing 最新复审；行为全部留 B10。`/__agent-next` 已消费模型候选与必填 model 及 Run 状态；正式前端已消费 Shared，旧 Backend 已删除；统一 E2E 仍待验收。Run 执行 owner 已接入 B6/B7 的授权、上下文与预算；默认执行关闭，pending 或静态通过不证明 Agent 行为验收完成。
-
-### B4.2 源码与验收边界
-
-B4.2 因素/Passkey 主链、初始表结构、Shared/HTTP、登录联合与 Platform Adapter 已落源码，旧Backend从Git历史追溯；正式Frontend的密码/TOTP/Passkey登录、改密/因素管理与CAPTCHA/IP安全配置已由F1接Shared；完整设置与其他业务消费者仍待迁移。本轮安装依赖并修复真实静态失败，Shared/Backend-next/Frontend、根检查与格式门禁实际通过；四表、命令证据与未验场景归 testing。静态通过不能视为行为验收完成。核心持久 Settings 与 Operations 审计/通知已接线；外围集成配置已由 B8 接线，正式前端留 F1；实际 TOTP 客户端、RP、challenge 并发、回滚/断连、库升级均留 B10。初始表结构包含凭据 generation、匿名挑战来源约束与全局改密修订，最终签发事务复验 generation/counter/挑战修订；静态与行为门禁均不得用设计声明替代。
-
-### B4.1 Access 验收界限
-
-B4.1 已建立上述源码及安装配置入口，并完成 Review 纠正（入场例外、身份和时间边界、断连令牌、供应商 hostname、既有测试源码契约），当前静态结果归 testing，后续修改需按实际工作区重跑。B7.1 核心持久 Settings 已接通，IP/监控热更新，CAPTCHA/站点重启生效；个人偏好、Agent 执行设置与 Operations 审计/通知已有各自 owner，外观/集成/备份已由 B8 接线；B4.2 TOTP/Passkey 挑战已在新 Access 收口，密码登录对已启用因素仍拒绝降级，源码/静态已收口，仍待 B10 行为验收。全套 HTTP/WS、真实代理、受控验证码供应商、封禁并发、撤销后的长任务收敛和实机浏览器行为统一留 B10；正式 Frontend 仍消费旧 Protocol，按 F1 登记差异，不能宣称已切换。
-
-### B3.2 施工范围
-
-资源状态、Docker 和后台采样已接线，完整静态结果见实施方案/testing；正式前端 Shared 对接延至 F1，行为检查留 B10。当前施工状态与真实静态证据归实施方案/testing，不能把本段设计视为功能已通过。
-
-### B3.1 设计与验收边界
-
-本设计建立于原 `workspace.service`、`workspace-terminal.service`、shell integration、suspend coordinator/registry、ssh-suspend HTTP、log/xterm Adapter、现有 Files WS/transfer 与前端 WorkspaceSocket 实际消费者盘点；B3.1 源码及四表已收口，行为待 B10；Shared/backend-next check/build、Frontend build、根 check、格式和 diff 静态门禁须对应最终工作区重新运行。逻辑/故障/E2E 保留 B10，浏览器协议/反馈迁移与静态消费者差异进入 F1。
+### Workspace 与远程桌面保证边界
 
 Workspace 的当前源码由唯一 sessions Service 持有：64 项准入覆盖 opening、detached、resuming、closing 和 cleanup_unknown；普通恢复使用同一 SSH shell、8 MiB journal、120 秒宽限及显式 workspace.resumeAck。新建回执的terminalOffset为初始journal端点、replayedBytes为本次保留回放字节，前端由两者定位收到字节的起点；普通恢复的terminalOffset为回放终点，replayedBytes必须与请求offset对应。lastConnectedAt为Unix秒。终端累计消费归 WS attachment，未确认窗口 1 MiB；消费 ACK 与恢复所有权 ACK 分开，回放和普通输出均服从窗口。非法消费不推进计数，越界 journal offset 在创建 pending attachment 前拒绝；断开释放原消费者暂停，由原 Workspace 继续保留输出。独立 Remote HTTP/PTY 使用自己的技术 SessionService，复用 machines Model/Platform，不暴露用户 Workspace 的活跃 shell 或权限。
 
@@ -570,27 +548,11 @@ Workspace 的当前源码由唯一 sessions Service 持有：64 项准入覆盖 
 
 目录安全移除由 WorkspaceService 的 `removeSuspended` 根据当前状态决定：attached 且租约有效时共用原 unmark 清理，只删除挂起日志/checkpoint/目录和历史游标，不关闭 SSH、PTY、Files 或当前附件；suspended 才终止；已断开只删 tombstone；prepared/resuming/所有权不明则拒绝，不根据旧前端状态回退到终止。同一标记共享清理 Promise，日志或 checkpoint 清理失败保留 `operation_unknown`；成功经原附件的 `suspend.unmarked` 事件同步 ID/generation，再发布完整目录。事件监听随附件解绑/关闭释放，前端清除本地标记而不关闭终端。HTTP 回执逐字段返回请求 ID 与有限 disposition，原显式终止接口仍保留其终止语义，安全移除不隐式调用它。
 
-目录协作由 Shell Service 持有排队、替换、期限与事件；有限失败基础值归Shared remote/terminal/values，内部事件对象仍归sessions/model，WS逐字段投影。Shell Model转换应用能力，Native Shell Adapter构造Bash/Zsh命令、解析PID/提示符和字节输出。目录切换仅写入安全转义的普通 cd，按 Shell 配置记录历史，不附加内部标记/历史清理、不隐藏命令或后台输出；setup 探测仍保留独立的内部历史清理；结果分隔符不输出换行，过滤完成后用 CR/EL 重绘后续提示符；实际TTY标志确认Bash初始化原先关闭echo时，先回退隐藏提交的一行，不扫描或裁剪登录信息及普通命令的空行。每实例随机marker避免普通stdout充当prompt；未完成探测而已接收用户输入时安全拒绝迟到注入。普通Workspace响应与protocol.error使用Shared有限安全码，准入满额为limit_exceeded。真实Bash目录切换/回读及普通续接已有F1专项；其他登录脚本、Zsh及并发提示符组合仍分别待验。
+目录协作由 Shell Service 持有排队、替换、期限与事件；有限失败基础值归Shared remote/terminal/values，内部事件对象仍归sessions/model，WS逐字段投影。Shell Model转换应用能力，Native Shell Adapter构造Bash/Zsh命令、解析PID/提示符和字节输出。目录切换仅写入安全转义的普通 cd，按 Shell 配置记录历史，不附加内部标记/历史清理、不隐藏命令或后台输出；setup 探测仍保留独立的内部历史清理；结果分隔符不输出换行，过滤完成后用 CR/EL 重绘后续提示符；实际TTY标志确认Bash初始化原先关闭echo时，先回退隐藏提交的一行，不扫描或裁剪登录信息及普通命令的空行。每实例随机marker避免普通stdout充当prompt；未完成探测而已接收用户输入时安全拒绝迟到注入。普通Workspace响应与protocol.error使用Shared有限安全码，准入满额为limit_exceeded。真实Bash目录切换/回读及普通续接已有专项证据；其他登录脚本、Zsh及并发提示符组合仍分别待验。
 
-日志由技术 Adapter 串行 append/read/compact/delete，绝对 offset 不随 100 MiB 可见窗口裁剪回退；checkpoint 和 renderer 的技术资源通过 Model 隐藏。日志导出在 Service 对每个最多 64 KiB 的块复查身份和实例，技术分块归 renderer Adapter；取消与清理失败分别判断，不能把 allSettled 的完成当作释放成功。历史前页交付成功并复查原 cursor 后才推进。HTTP/WS 管理视图共用 suspend-view 白名单；当前身份、attachment/generation 和 45 秒租约在异步边界复查，2 秒 sweep 不代替实时授权。关闭、背压、导出和失败边界见第 7 节与下述当前范围。
+B3.3 的 Service 只消费 Model 创建的 DesktopPeer；Model 同步 bind 原 WS 防止首帧丢失，授权前仅有界缓冲，异步复查后才允许 TCP 派发。Platform 持有 DER、TCP/TLS、队列与背压；真实关闭确认覆盖 WS、原 socket、初始化、队列消费与 send 回调，未确认清理不提前释放槽。桥就绪不证明远端认证或画面成功；RDP 当前沿用 ignore-certificate，部署须确保目标网络可信。画面、输入、权限及资源释放的实际覆盖见 testing，不复用旧 Guacamole 证据。
 
-B3.1 源码收口不等于行为验收。实际类型、构建和格式结论以 [B3.1 收口证据](https://github.com/0honus0/nexus-terminal/blob/558c4b343ba0ef2316309d2e164b9c6075c47efc/doc/testing/%E5%90%8E%E7%AB%AF%E9%87%8D%E6%9E%84%E5%BE%85%E5%AE%9E%E6%9C%BA%E9%AA%8C%E8%AF%81.md#b31-源码阶段最终收口) 为准；B10 已验证本机 OpenSSH 的普通续接双阶段确认、普通终端消费窗口/暂停后断线回放、journal裁剪/offset拒绝、挂起 ACK/主动接管及 Files 正常链；挂起准备、消费暂停和日志积压分别持有阻断条件，取消挂起标记经WorkspaceService原resumeIfUnblocked计算是否可恢复，不能直接解除独立背压。慢日志 detach、prepared断开、自然租约到期、准备超时、历史帧失败/reset、日志文件系统拒绝向PTY收尾及导出授权/名额/断连已有有限证据；慢日志 rollback、空间耗尽、其余 Shell/VT 与清理故障仍待验证，精确范围归 testing。正式前端普通/挂起独立ACK及Shared挂起契约已接线；标记标签关闭仅脱离传输，明确取消标记后关闭才请求终止Workspace，受控与真实专项范围见testing，完整 Access/IP/2FA 源码已收口、行为待 B10。
-
-Access/Targets/Remote 与 Agent 的计划后端功能源码及 B9 逐文件审核已收口，当前职责见职责表；行为验收仍待 B10。Remote Files 已同时具备 B1 新 HTTP 读写能力及 R1 旧 Workspace Files 子协议源码：编码写入/独占新建、list/search/stat、binary read/cancel、递归/force 批量删除、rename/chmod/realpath、ready/error 均有真实调用链；A-04 machines owner、SFTP 技术失败边界及 Files Service/Model 职责已收口。R1 行为验证未运行，真实 SSH/SFTP、故障窗口和旧消费者全链路仍待 B10。
-
-R2-01–R2-05 的源码缺口已修补：背压/final 纳入同一操作截止时间，心跳按实际资源 owner 验证并续期，Workspace 64 与独立 Files 8 的预算分别计数；WS authorize 的身份查询异常沿技术握手返回服务不可用而非伪装未登录；PTY 定时/EOF 身份查询异常与正常拒绝分开，所有 unsubscribe 与 release 失败聚合进入原关闭追踪。以上仅是源码/静态完成，B10 的长背压、撤销、故障及容量行为尚未执行，不能标为已验收。
-
-B2 下载/上传/copy/move/目录 ZIP、原生归档、密码与进度、属性及链接恢复的源码已收口；D12/D13 的部署取舍已确定，B2-V01–V66 全部待 B10 行为验证。Files 子协议不等于完整 Workspace 已迁移：完整 reconnect/resume、Terminal/挂起恢复的 B3.1 源码已收口、行为待 B10；status/docker 的 B3.2 源码已收口、行为待 B10；RDP/VNC 的 B3.3 源码复审已矫正，本轮最终静态通过，行为待 B10；完整 Access/IP/2FA 源码已收口、行为待 B10。按明确决定，旧 writer 的隐式 metadata 失败容错不在后端保留，正式编辑器的显式失败处理转 F1。Agent Shared、六个 HTTP 与开发前端源码消费者已接入；真实浏览器与故障行为仍待验收，不能因静态通过就声称正式通信迁移完成。
-
-**B3.3 RDP/VNC 新后端源码**：DesktopService 持一次性票据、pending/opening/active 配额、Access/Targets 版本及周期复查；DesktopModel 转换应用事实和实例技术能力。Targets 同事务读取配置/密文，由 Model 解密并经公开 mapper 转换；connectionUsage 记录桥就绪时间。BrowserDesktopAdapter 只桥接 VNC TCP 或 RDP X224/TLS/RDCleanPath，不运行图形解码进程或 guacd。签发 HTTP 逐字段交付六字段内存会话并设置 no-store，WS 仅携带原 Cookie 和 ticket；目标由受信配置决定，不使用客户端 destination。RemoteApp UI/协议/SQL 列已删除，初始签名已更新，不兼容旧开发库/快照。完整八节见 [远程桌面专题](REMOTE_DESKTOP.md)，本版行为待远程验收。
-
-产品行为与容量以 [USAGE](../USAGE.md) 为准，当前工作见 [实施方案](../PLAN.md)，未执行真实专项见 [待实机验证](https://github.com/0honus0/nexus-terminal/blob/558c4b343ba0ef2316309d2e164b9c6075c47efc/doc/testing/%E5%90%8E%E7%AB%AF%E9%87%8D%E6%9E%84%E5%BE%85%E5%AE%9E%E6%9C%BA%E9%AA%8C%E8%AF%81.md)。新后端独立 check/build，Shared 与实际双端消费者同步检查；架构审核按模块模板和工程经验执行，静态通过不能证明真实 SSH、并发、清理与浏览器验收完成。
-
-B3.3 的 Service 只消费 Model 创建的 DesktopPeer；Model 同步 bind 原 WS 防止首帧丢失，授权前仅有界缓冲，异步复查后才允许 TCP 派发。Platform 持有 DER、TCP/TLS、队列与背压；真实关闭确认覆盖 WS、原 socket、初始化、队列消费与 send 回调，未确认清理不提前释放槽。桥就绪不证明远端认证或画面成功；RDP 当前沿用 ignore-certificate，部署须确保目标网络可信。新实现的画面、输入、权限及资源释放分别等待远程回归，不复用旧 Guacamole B10 PASS。
-
-后端功能迁移与正式前端 Shared 对接已完成，当前后端 HTTP/WS 及双端消费者经远程 Actions 回归；DEV 入口仅用于有限诊断，不能替代正式入口或扩大环境保证。
-
-B3.1 当前关闭/导出边界：Workspace Service 跟踪导出准入、60 秒完整期限、交付 sink 及实例关联取消；HTTP Interface 持有 response/pipeline，History Model 暴露应用字节源与可等待释放，Platform 只提供技术流/VT 操作。全 Remote 导出最多 2 项，清理失败保留名额。checkpoint dispose 返回共享 Promise，参与关闭确认；临时日志删除及渲染释放的具名技术失败经 Model 转为模块清理失败，HTTP/WS 都输出 operation_unknown。模块各独立 owner 并发关闭，30 秒确认截止不代表真实任务结束，晚任务继续观察；应用整体验收仍待 B10。
+B3.1 当前关闭/导出边界：Workspace Service 跟踪导出准入、60 秒完整期限、交付 sink 及实例关联取消；HTTP Interface 持有 response/pipeline，History Model 暴露应用字节源与可等待释放，Platform 只提供技术流/VT 操作。全 Remote 导出最多 2 项，清理失败保留名额。checkpoint dispose 返回共享 Promise，参与关闭确认；临时日志删除及渲染释放的具名技术失败经 Model 转为模块清理失败，HTTP/WS 都输出 operation_unknown。模块各独立 owner 并发关闭，30 秒确认截止不代表真实任务结束，晚任务继续观察；实际整体验收范围见 testing。
 
 ## B6.1 授权与审批基础（按照模块模板八节，静态/行为结论见 testing）
 
@@ -616,7 +578,7 @@ Agent 模块的 `governance` 持有每个 user/App 的 capability grant、执行
 | ------------ | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 协议→请求    | Shared `agent/governance/{values,model,http,http-codec}` | HTTP 严格读 UUID/原始类型、完整 grant/审批/执行政策字段与具名 path/header/response；Interface 将 scope 转 Model 输入，不收客户端身份或授权布尔                                  |
 | DB→应用      | governance/storage、Model types                          | SQLite Adapter 校验 schemaVersion/JSON/行的有限值及状态/期限/决议/消耗关联；Model 转换 GrantScope、政策覆盖、Approval；实际 grant replace、request/resolve 回调在同一事务内消费 |
-| 应用→协议    | Model / Shared model                                     | governance HTTP 白名单映射；只输出 tool 摘要、hash/版本，不输出 SQL 行、凭据/冻结输入；正式前端仍消费旧 Protocol（F1）                                                          |
+| 应用→协议    | Model / Shared model                                     | governance HTTP 白名单映射；只输出 tool 摘要、hash/版本，不输出 SQL 行、凭据/冻结输入；正式前端消费 Shared                                                                      |
 | App 当前授权 | governance/model 的 `AuthorizationFact`                  | 包含 user/App/capability/connectionId/revision；不复用客户端 DTO，批准不自动授权派发                                                                                            |
 | 技术资源     | Platform SQL Executor/SqliteRuntime                      | Adapter 执行事务及行解码；Policy 不由 Platform 拥有                                                                                                                             |
 
@@ -638,17 +600,17 @@ Governance Service 与 AgentRequestOwner 双层跟踪自身请求；停止新准
 
 ### 8. 当前能力与验收
 
-B6.1 的 Shared、SQLite 与 HTTP 请求/查询/变更/决议路径有源码；审批请求生产者、ACP活waiter与文件/Shell/Docker/ACP消费者已接线；安全观察采用审批HTTP/工具事件页，直接 Child/协作已接线，B7动态settings/预算已接入；外围资源B8与持久证据恢复B9已接线，行为仍待B10。旧代码实际包含 App enable/manifest/默认 grant 和详细 ToolInspection；新 App 由受信内置声明创建，默认 grant 空（fail closed）；插件manifest/运行时已由B8接线，差异登记 F1，不补虚假兼容桥。行为、真实取消/并发、SQLite 迁移与实机权限试验按 D2 登记 B10，静态命令结果限 testing 当前批次，不复用 B5.2 PASS。
+B6.1 的 Shared、SQLite 与 HTTP 请求/查询/变更/决议路径有源码；审批请求生产者、ACP活waiter与文件/Shell/Docker/ACP消费者已接线；安全观察采用审批HTTP/工具事件页，直接 Child/协作已接线，B7动态settings/预算已接入；外围资源B8与持久证据恢复B9已接线，行为仍待B10。App 唯一由真实签名插件安装创建，初始 grants 为空；插件 manifest/运行时由 Plugin owner 管理，不保留内置声明或手工创建路径。行为、真实取消/并发、SQLite 迁移与实机权限试验按 D2 登记 B10，静态命令结果限 testing 当前批次，不复用 B5.2 PASS。
 
 ## B6.2A App 声明与目标政策
 
 ### 1. 职责与范围
 
-Scope 拥有受信声明目录、UUID App 实例与启用状态；Governance 拥有 grants 和全局 Agent 目标拒绝政策；Runs 拥有持久取消围栏与实际执行资源。旧 bootstrap 未注册内置 App，插件声明来自安装版本；新内置 `nexus.terminal` 是明确新增的宿主声明，声明远程文件、命令及状态能力，默认 grant 为空，不代表这些能力已获授权或已接通 Agent 工具执行。插件包及运行时安装仍归 B8。
+Scope 拥有受信声明目录、UUID App 实例与启用状态；Governance 拥有 grants 和全局 Agent 目标拒绝政策；Runs 拥有持久取消围栏与实际执行资源。App 及声明唯一来自 Plugin 安装事务，不存在内置声明、默认实例或手工创建入口。首次目录读取为空且无写入；能力声明不代表授权，初始 grants 为空。插件包及运行时安装仍归 B8。
 
 ### 2. 子功能与目录
 
-Scope 的 service 管理受信 definition、默认初始化与生命周期任务；model 转换实例、声明与 storage 任务；SQLite Adapter 安装声明与实例。Governance 的目标政策沿现有 service/model/storage/adapters 增加 denylist。Runs 的 Adapter 提供原事务取消任务；执行 owner 在提交后中止其实际持有的尝试。
+Scope 的 service 管理受信 definition 查询、实例启停及线程用例；model 转换实例、声明与 storage 任务；Plugin Scope Adapter 在插件安装事务中创建声明与实例。Governance 的目标政策沿现有 service/model/storage/adapters 增加 denylist。Runs 的 Adapter 提供原事务取消任务；执行 owner 在提交后中止其实际持有的尝试。
 
 ### 3. 依赖方向
 
@@ -656,33 +618,33 @@ Service 消费应用事实；Model 转换 storage 契约和 Targets public 安�
 
 ### 4. 类型与转换
 
-声明来源 ID/version 是必填非空字段，与实例 UUID 分别表达；SQLite 外键绑定来源，Shared 解码拒绝缺失或 null，不保留旧无来源实例分支。Shared scope 定义双端实例、声明摘要和 CAS 请求；Governance 定义拒绝名单协议。内部对象仍归各子功能 model，存储对象仍归 storage；HTTP、public 与 Model 各自逐字段转换。能力有限值复用 governance/values；秘密、运行时句柄与默认 grant 初始化任务不进入 Shared。
+声明来源 ID/version 是必填非空字段，与实例 UUID 分别表达；SQLite 外键绑定来源，Shared 解码拒绝缺失或 null，不保留旧无来源实例分支。Shared scope 定义双端实例、声明摘要和 CAS 请求；Governance 定义拒绝名单协议。内部对象仍归各子功能 model，存储对象仍归 storage；HTTP、public 与 Model 各自逐字段转换。能力有限值复用 governance/values；秘密、运行时句柄与安装事务不进入 Shared。
 
 ### 5. 入口与安装
 
-注册器只接收服务器内置声明，客户端仅选择已注册的 definitionId。GET Apps/单项、PATCH enabled+expectedVersion、GET definitions、GET/PUT target-denylist 安装在 Agent HTTP；POST Apps 使用默认受信声明。启动同步声明，但账号默认实例在 Apps 列表入口按已认证用户初始化，避免首次安装尚无账号时写入外键。
+注册器不注入内置声明，Plugin Scope Adapter 在安装事务中创建 App/声明及初始空政策。GET Apps/单项、PATCH enabled+expectedVersion、GET definitions、GET/PUT target-denylist 安装在 Agent HTTP；不存在 POST Apps。definitions 按已认证账号筛选当前 installed 插件。Scope 每次读取核对真实插件安装与发布者信任，无内置信任旁路。
 
 ### 6. 数据、事务与并发
 
-所有相关表直接纳入唯一 v1 初始化；初始结构变更同步更新签名，不匹配的开发库明确拒绝，不自动转换或删除。启动声明同步在独立安装事务完成；实例与初始政策/grants 同事务创建；存在实例不重写默认权限；实例缺失治理政策视为完整性失败，治理读取/写入/撤销均不补建记录或返回默认政策。
+所有相关表直接纳入唯一 v1 初始化；初始结构变更同步更新签名，不匹配的开发库明确拒绝，不自动转换或删除。声明、实例与初始空治理政策在真实插件安装事务创建；启动和目录读取不创建声明或实例；重装不重写已有授权配置；实例缺失治理政策视为完整性失败，治理读取/写入/撤销均不补建记录或返回默认政策。
 
-同版本声明以完整内容指纹核对，包括默认启用及默认 grants；内容变化必须推进声明版本，指纹不公开。声明更新、禁用及 denylist 变更在各自写事务内推进围栏、失效未决审批、取消旧活动 Run。治理写入/审批决议消费同事务最新声明、启用与目标政策。新实例必须绑定受信声明，不凭名字自动绑定。
+同版本声明以签名包中的 id/version/displayName/capabilities 及内容指纹核对；内容变化必须推进声明版本，指纹不公开。声明更新、禁用及 denylist 变更在各自写事务内推进围栏、失效未决审批、取消旧活动 Run。治理写入/审批决议消费同事务最新声明、启用与目标政策。新实例必须绑定受信声明，不凭名字自动绑定。
 
 目标管理先经 Targets public 获取事实，实际持久提交再核对引用和版本；审批也持久绑定目标版本。拒绝 ID 保留到显式撤销，不随目标删除自动丢失。目标集合变化才撤销旧 Run，修改原因不撤销或触发执行复查。denylist 存储与应用时间保留毫秒，HTTP 将 changedAt 转为 Unix 秒，取消围栏直接使用原毫秒。审批 capability 必填；targetVersion 的 null 仅表示真实无目标操作。全部 Agent Model 使用同一存储失败映射 owner，存储不可用、未知提交和内部失败仍由实际异步 owner 收口。
 
 ### 7. 生命周期与失败
 
-当前内置声明仅有宿主持久状态，无插件初始化或资源 hook；enabled 只表示管理准入，executionState 为 governed，不制造 running/healthy。禁用/政策更新先提交取消围栏，再由 Run execution owner 中止具体尝试；未知提交也保守中止本地尝试，不宣称回滚或远端停止。实例/声明状态无需异步健康回写，不存在晚 health 覆盖禁用。父 owner 关闭等待已准入请求后关闭治理及执行 owner。
+Scope 的 enabled 只表示管理准入，executionState 为 governed，不制造 running/healthy；插件运行时初始化、资源 hook 与退出由独立 Plugin owner 管理。禁用/政策更新先提交取消围栏，再由 Run execution owner 中止具体尝试；未知提交也保守中止本地尝试，不宣称回滚或远端停止。实例/声明状态无需异步健康回写，不存在晚 health 覆盖禁用。父 owner 关闭等待已准入请求后关闭治理及执行 owner。
 
 ### 8. 当前能力与验收
 
-当前 B6.2A 源码按四表核验；静态证据归 testing，行为全部待 B10。Tool消费已在B6.2B接线；ACP消费已在B6.2C接线；动态预算已接入，插件运行时 B8、正式前端 F1；执行按 governed 政策核对，默认 enabled=false；启用设置不授予工具 grant 或审批。。旧声明 ID 路径改为实例 UUID，Shared 正式前端迁移登记 F1。
+当前 B6.2A 源码按四表核验；静态证据归 testing，行为覆盖与待验范围见 testing。Tool消费已在B6.2B接线；ACP消费已在B6.2C接线；动态预算、插件运行时与正式前端均已接入；执行按 governed 政策核对，默认 enabled=false；启用设置不授予工具 grant 或审批。实例身份使用 UUID，声明身份使用签名插件 id/version，两者不混用。
 
 ## B6.2B 首个可信工具链
 
 ### 1. 职责与范围
 
-首工具 machine_connection_list 提供已选中、当前授权且未被拒绝的 SSH 安全目录。RunExecutionOwner 拥有模型循环及在途任务；governance 拥有当前许可；tools 拥有服务器定义、输入校验和工具用例。旧协调器拆分不作为必须保留的设计；后续能力按实际价值重新设计，差异归实施方案 F1。
+首工具 machine_connection_list 提供已选中、当前授权且未被拒绝的 SSH 安全目录。RunExecutionOwner 拥有模型循环及在途任务；governance 拥有当前许可；tools 拥有服务器定义、输入校验和工具用例。旧协调器拆分不作为必须保留的设计；后续能力按实际价值重新设计，差异维护在 USAGE 与相关架构。
 
 ### 2. 子功能与目录
 
@@ -708,11 +670,11 @@ connectionIds 是必填的最多 50 个唯一正整数，空数组表示没有�
 
 Agent HTTP 的 AgentHttpInput 统一归 interfaces/http/agent-input.ts；Governance、Execution、Memory、Artifact、Integration、Browser 与 Plugin 共用输入失败转换。unknown JSON/Shared codec 拒绝先转应用 invalid_input，HTTP 保留400/413等原协议状态；Service、公开出口和Platform不引用该HTTP辅助类，原 mapper/Model 转换保持独立。
 
-register 将 ToolModel/ToolService 注入唯一 RunExecutionOwner；目录工具参数严格空对象，诊断及文件工具使用有界字段声明，定义由服务器提供，不新增客户端检查或派发 HTTP。步骤和工具记录保留真实模型步骤，仅供内部执行、恢复与快照校验；专用审计查询已移除。DEV 创建明确传 connectionIds:[]，正式选择器与多步 UI 留 F1。
+register 将 ToolModel/ToolService 注入唯一 RunExecutionOwner；目录工具参数严格空对象，诊断及文件工具使用有界字段声明，定义由服务器提供，不新增客户端检查或派发 HTTP。步骤和工具记录保留真实模型步骤，仅供内部执行、恢复与快照校验；专用审计查询已移除。DEV 创建明确传 connectionIds:[]，正式选择器与多步 UI 已消费当前协议。
 
 ### 6. 数据、事务与并发
 
-一个 v1 直接安装 selection、步骤创建身份/proposals、工具 modelStepIndex/result；签名为 backend-next-v1-initial-20261013-tool-rounds，拒绝旧开发结构。调用身份绑定 Run/步骤/providerCallId，允许供应商跨步骤复用 ID。工具检查必须匹配已完成工具轮的持久 proposal；派发意图与当前只读许可同事务。完成事务复查政策 revision 和所有已读取目标的版本，结果与事件原子提交；完成后交付前再复核。读取与结果提交不是整个目录的强原子快照，不保证新增/未读取对象的快照一致性。
+一个 v1 直接安装 selection、步骤创建身份/proposals、工具 modelStepIndex/result；精确签名以 `bootstrap/schema.ts` 为准，拒绝旧开发结构。调用身份绑定 Run/步骤/providerCallId，允许供应商跨步骤复用 ID。工具检查必须匹配已完成工具轮的持久 proposal；派发意图与当前只读许可同事务。完成事务复查政策 revision 和所有已读取目标的版本，结果与事件原子提交；完成后交付前再复核。读取与结果提交不是整个目录的强原子快照，不保证新增/未读取对象的快照一致性。
 
 ### 7. 生命周期与失败
 
@@ -720,13 +682,13 @@ register 将 ToolModel/ToolService 注入唯一 RunExecutionOwner；目录工具
 
 ### 8. 当前能力与验收
 
-目录首链及后续有目标只读源码已接通，两轮复审与最终静态结果归 testing。预算/上下文和 ACP 已接线；执行按 governed 政策核对，默认 enabled=false；启用设置不授予工具 grant 或审批。 实际运行尚待 B10。400 步是审计容量而非执行授权；私有历史上限 8 MiB/1024 条、参数 16 KiB、结果 256 KiB。Platform 独立约束 32 调用、参数 128 KiB、网络/请求 8 MiB、正文 2 MiB、reasoning 1 MiB。Chat 支持首片完整身份及后续参数增量，拒绝身份冲突；不承诺所有供应商碎片变体。Responses 续接保留加密 reasoning，不静默丢弃。USAGE 对应 Agent 新后端章节，全部行为留 B10。
+目录首链及后续有目标只读源码已接通，两轮复审与最终静态结果归 testing。预算/上下文和 ACP 已接线；执行按 governed 政策核对，默认 enabled=false；启用设置不授予工具 grant 或审批。 实际运行尚待 B10。400 步是审计容量而非执行授权；私有历史上限 8 MiB/1024 条、参数 16 KiB、结果 256 KiB。Platform 独立约束 32 调用、参数 128 KiB、网络/请求 8 MiB、正文 2 MiB、reasoning 1 MiB。Chat 支持首片完整身份及后续参数增量，拒绝身份冲突；不承诺所有供应商碎片变体。Responses 续接保留加密 reasoning，不静默丢弃。USAGE 对应 Agent 后端章节，全部行为留 B10。
 
 ## B6.2B 有目标只读能力
 
 ### 1. 职责与范围
 
-Agent tools拥有模型工具定义、严格输入、当前授权及持久反馈；Remote提供独立短任务的远端诊断和文件读取/列表/字面量内容搜索。不借普通Workspace会话、用户令牌或附件。旧diagnostics混合目标身份与宿主数据，新v2明确远端指标（generatedAt毫秒、CPU百分比、内存/磁盘bytes、1/5/15分钟load），同一采样key双采样取得CPU差值并在finally清理状态，宿主诊断已归System diagnostics并由ToolModel转换消费；旧任意正则搜索改为字面量，差异归F1。
+Agent tools拥有模型工具定义、严格输入、当前授权及持久反馈；Remote提供独立短任务的远端诊断和文件读取/列表/字面量内容搜索。不借普通Workspace会话、用户令牌或附件。旧diagnostics混合目标身份与宿主数据，新v2明确远端指标（generatedAt毫秒、CPU百分比、内存/磁盘bytes、1/5/15分钟load），同一采样key双采样取得CPU差值并在finally清理状态，宿主诊断已归System diagnostics并由ToolModel转换消费；旧任意正则搜索改为字面量，差异维护在 USAGE。
 
 ### 2. 子功能与目录
 
@@ -750,7 +712,7 @@ Agent ToolService→ToolModel→Targets public/TrustedSshTargetResolver与Remote
 
 ### 5. 入口与安装
 
-Remote register暴露operations，不新增HTTP路由；Agent register接入Targets resolver与RemoteMachineOperations，由唯一Root owner消费五个只读工具及受审批file_write。新增v2诊断只需connectionId；文件只需connectionId、绝对path，搜索另需query和可选maxResults。不沿用旧target/id或可空字段；正式前端差异归F-R18。
+Remote register暴露operations，不新增HTTP路由；Agent register接入Targets resolver与RemoteMachineOperations，由唯一Root owner消费五个只读工具及受审批file_write。新增v2诊断只需connectionId；文件只需connectionId、绝对path，搜索另需query和可选maxResults。不沿用旧target/id或可空字段；正式工具卡片消费当前安全投影。
 
 ### 6. 数据、事务与并发
 
@@ -803,7 +765,7 @@ Agent ToolModel 仅消费 Targets 与 Remote public。Remote Model 仅消费技�
 
 ### 8. 当前能力与验收
 
-本批 N11–N13 源码及两轮审核已完成，静态结果归 testing；所有行为待 B10，不运行测试。实际预算与来源均来自冻结输入，执行须 governed 准入。后续 N14–N16 已按新设计接通 patch/move/delete、Shell/后台 Job/Docker，前端差异归 F1。
+本批 N11–N13 源码及两轮审核已完成，静态结果归 testing；所有行为覆盖见 testing，不运行测试。实际预算与来源均来自冻结输入，执行须 governed 准入。后续 N14–N16 已按新设计接通 patch/move/delete、Shell/后台 Job/Docker，前端已消费当前契约。
 
 ## B6.2B 文件补丁、移动与删除
 
@@ -844,7 +806,7 @@ Agent→ToolModel→Remote public；Remote Service→文件应用能力→FileMo
 
 ### 8. 当前能力与验收
 
-file_inspect/patch/move/delete v2 已经沿真实工具提案、账本、审批/单次消费、Remote 独立资源与持久反馈接线；两轮源码复审覆盖预算、重复节点、元数据、部分执行及清理分支，静态证据见 testing。B10已核对真实七步文件变更、显式tree删除、哈希过期/重叠上下文/目的存在和链接拒绝；部分执行、竞争和断流仍待验，正式前端差异留F1，执行须 governed 准入。移除旧多文件diff协议并明确新逐文件操作，目录范围有界而不提供任意无界删除。
+file_inspect/patch/move/delete v2 已经沿真实工具提案、账本、审批/单次消费、Remote 独立资源与持久反馈接线；两轮源码复审覆盖预算、重复节点、元数据、部分执行及清理分支，静态证据见 testing。B10已核对真实七步文件变更、显式tree删除、哈希过期/重叠上下文/目的存在和链接拒绝；部分执行、竞争和断流仍待验，正式前端按当前安全码反馈，执行须 governed 准入。移除旧多文件diff协议并明确新逐文件操作，目录范围有界而不提供任意无界删除。
 
 ## B6.2B Shell、后台 Job 与 Docker 工具
 
@@ -878,7 +840,7 @@ Shell argv≤128项、总8KiB，script≤8KiB，cwd≤256bytes，完整参数JSO
 
 ### 8. 当前能力与验收
 
-Shell 前台/后台、Job 四动作及 Docker inspect/control 源码同批接线，两轮源码复审完成。B10已用真实OpenSSH核对Shell转义/退出/截断、Job查询/等待/取消、撤权、目标版本及重启围栏/证据释放；Docker及其他故障专项仍待验，精确证据归testing，前端差异F1。执行须 governed 准入，不建立旧Thread/sessionId桥；ACP与直接 Root/Child/协作已在 B6.2C/D 接线，剩余租约/工具继续盘点。
+Shell 前台/后台、Job 四动作及 Docker inspect/control 源码同批接线，两轮源码复审完成。B10已用真实OpenSSH核对Shell转义/退出/截断、Job查询/等待/取消、撤权、目标版本及重启围栏/证据释放；Docker及其他故障专项仍待验，精确证据归testing，前端消费当前安全码。执行须 governed 准入，不建立旧Thread/sessionId桥；ACP与直接 Root/Child/协作已在 B6.2C/D 接线，剩余租约/工具继续盘点。
 
 ## B6.2C ACP Runtime 与独立权限
 
@@ -912,7 +874,7 @@ Agent ToolService→ToolModel→Remote public→OperationService→MachineAcpMod
 
 ### 8. 当前能力与验收
 
-ACP执行、独立权限/交付确认、审批HTTP和工具事件消费者已接线。B10已验证真实SSH独立审批与取消，以及受控技术流中reader/permission未收敛时继续等待、退订/cancel同步失败的单次清理和Machine Model因果保留；writer在途等其余故障仍待验。四表/证据归testing，正式前端差异归F1。
+ACP执行、独立权限/交付确认、审批HTTP和工具事件消费者已接线。B10已验证真实SSH独立审批与取消，以及受控技术流中reader/permission未收敛时继续等待、退订/cancel同步失败的单次清理和Machine Model因果保留；writer在途等其余故障仍待验。四表/证据归testing，正式前端差异维护在 USAGE。
 
 ## B6.2D Root/Child 与协作
 
@@ -934,14 +896,14 @@ Child 是原 `runs` 中的独立 Run，不建立第二个 Runner、Root 注册�
 | ------------------------------------- | ------------------------------------------------------ | -------------------------------- | ---------------------- |
 | 模型工具 JSON → 应用输入              | tools 的未知输入解码、runs Model 的 CollaborationInput | tools/service 严格解码           | 原 ToolService         |
 | 协作应用 ↔ 持久记录/事务事实          | runs/model 与 runs/storage 各自定义                    | RunCollaborationModel 逐字段投影 | Service/纯规则、SQLite |
-| 运行与工具/Child安全审计 → 双端协议   | Shared runs/tools/governance/collaboration             | 原 register/HTTP mapper          | 已安装管理员 HTTP      |
+| Run/工具状态与 Child 观察 → 双端协议  | Shared runs/tools/governance/collaboration             | 原 register/HTTP mapper          | 已安装管理员 HTTP      |
 | Child 完成输出/协作文本 → 父/同族模型 | runs 内部应用对象                                      | 协作 Service 明确投影            | 模型工具结果           |
 
-消息和事实只是未验证文本，不能作为授权、系统指令或已验证证据。Child 列表、取消及消息元数据 HTTP 的完整契约与严格 codec 在 Shared agent/collaboration，取消复用 Shared runs 请求/header/成功联合。profile 的双端有限取值归 collaboration/values；目标 allowlist、模型历史、正文、事实与存储对象不出公开端点。正式前端消费归 F1。
+消息和事实只是未验证文本，不能作为授权、系统指令或已验证证据。Child 列表、取消及消息元数据 HTTP 的完整契约与严格 codec 在 Shared agent/collaboration，取消复用 Shared runs 请求/header/成功联合。profile 的双端有限取值归 collaboration/values；目标 allowlist、模型历史、正文、事实与存储对象不出公开端点。正式前端已消费当前安全对象。
 
 ### 5. 入口与安装
 
-当前内置声明为 `nexus.terminal@1.8.0`，包含 `app.intents.exchange` 和已接线能力，默认 grants 仍空。十个 `collaboration_*` 工具（含正文续读 `collaboration_output_read`）通过原模型工具入口使用；读操作仍需实时全局 grant，委派、取消、发送、消费和 CAS 写入需独立 ToolCall 批准。父模型/工具批准不代替 Child 自己的工具批准。没有旧 runtimeId/sessionId 桥接或新的公开 dispatcher。管理员 HTTP 安装 GET /apps/:appId/runs/:id/subagents、POST /apps/:appId/runs/:id/subagents/:childId/cancel 和 GET /apps/:appId/runs/:id/subagents/:childId/messages，完整前缀 /api/v1/agent；入场/交付分别核验 Access。列表仅 id/parentId/status/version/profile/deadlineAt；消息仅 sequence/senderId/bodyBytes/expiresAt，查询 after/limit（默认0/16，最大32），完整响应16 KiB。观察不改变模型邮箱水位。Child 取消由 RunService 验证不可变父子/user/App 归属，再复用原 Run CAS/幂等取消及审批失效，不建立第二账本。外部直接创建由受审批模型委派替代，独立 Profile 管理及 collaboration_profiles 查询工具已删除，delegate 不再接受单独 maxRequests/durationSeconds 或模型覆盖。
+`app.intents.exchange` 等能力由签名插件声明，安装后 grants 为空。十个 `collaboration_*` 工具（含正文续读 `collaboration_output_read`）通过原模型工具入口使用；读操作仍需实时全局 grant，委派、取消、发送、消费和 CAS 写入需独立 ToolCall 批准。父模型/工具批准不代替 Child 自己的工具批准。没有旧 runtimeId/sessionId 桥接或新的公开 dispatcher。管理员 HTTP 安装 GET /apps/:appId/runs/:id/subagents、POST /apps/:appId/runs/:id/subagents/:childId/cancel 和 GET /apps/:appId/runs/:id/subagents/:childId/messages，完整前缀 /api/v1/agent；入场/交付分别核验 Access。列表仅 id/parentId/status/version/profile/deadlineAt；消息仅 sequence/senderId/bodyBytes/expiresAt，查询 after/limit（默认0/16，最大32），完整响应16 KiB。观察不改变模型邮箱水位。Child 取消由 RunService 验证不可变父子/user/App 归属，再复用原 Run CAS/幂等取消及审批失效，不建立第二账本。外部直接创建由受审批模型委派替代，独立 Profile 管理及 collaboration_profiles 查询工具已删除，delegate 不再接受单独 maxRequests/durationSeconds 或模型覆盖。
 
 ### 6. 数据、事务与并发
 
@@ -957,7 +919,7 @@ Root/Child 共用冻结执行名额，排队依赖也占名额；执行准入满
 
 ### 8. 当前能力与验收
 
-委派、角色标签、依赖等待、list/join/cancel、持久消息读取/消费、共享事实 CAS 与父子收尾已接线。B7 接入共享预算、Root 冻结模型/设置继承与原执行 owner，Memory/Artifact/Browser/MCP 已接线；跨 Run 持久占用归下方 B6.2E。B10 已通过隔离新后端、实际 HTTP/SQLite/OpenSSH 的委派/join、整族取消、独立批准/错族拒绝、消息消费、事实冲突与 Child Job 未知结算子场景；完整配额/期限、未知提交与崩溃恢复仍待验。确切版本、两轮复审及命令证据归 testing，正式前端后置 F1。
+委派、角色标签、依赖等待、list/join/cancel、持久消息读取/消费、共享事实 CAS 与父子收尾已接线。B7 接入共享预算、Root 冻结模型/设置继承与原执行 owner，Memory/Artifact/Browser/MCP 已接线；跨 Run 持久占用归下方 B6.2E。B10 已通过隔离后端、实际 HTTP/SQLite/OpenSSH 的委派/join、整族取消、独立批准/错族拒绝、消息消费、事实冲突与 Child Job 未知结算子场景；完整配额/期限、未知提交与崩溃恢复仍待验。确切版本、两轮复审及命令证据归 testing，正式前端已消费当前契约。
 
 ## B6.2E 项目上下文与共享突变占用
 
@@ -981,7 +943,7 @@ Agent ToolService → ToolProjectService → ToolProjectModel → ProjectStorage
 | 项目应用 ↔ 存储            | ProjectScope/Binding/Mutation；storage StoredProject*                   | ToolProjectModel 逐字段转换，Adapter 仅解码 row                          |
 | 指导应用 ↔ Remote 后端契约 | ProjectGuidance；remote/public.operations                               | ToolModel 构造请求并逐字段生成指导结果，ToolProjectService 生成工具 JSON |
 | 突变应用 ↔ 存储/Targets    | machines/model/mutation-types；storage mutation-storage；Targets public | MachineMutationModel 解析受信 endpoint、投影命令并映射安全失败           |
-| 应用 → 双端审计            | 既有 Shared agent/tools 与 remote 安全错误                              | 既有审计/HTTP/WS mapper；目录正文、claim keys、row 不进入 Shared         |
+| 应用 → 双端安全观察        | 既有 Shared agent/tools 与 remote 安全错误                              | 既有 HTTP/WS mapper；目录正文、claim keys、row 不进入 Shared             |
 
 本版无新增目录/占用 HTTP 或 WS DTO。指导不可信，不等于授权、证据、Shell cwd 或系统指令；普通协议安全码继续使用 conflict/operation_unknown/limit_exceeded 等现有契约。
 
@@ -1003,9 +965,9 @@ remote_machine_mutations 按 SHA-256([lowercase host,port]) 唯一。ID/user/凭
 
 ### 8. 当前能力与验收
 
-受管突变准入与 Run-local 项目工具源码已接线；全部行为待 B10，执行须 governed 准入。持久 blocked 已由下述 B9 机器突变恢复接线管理员只读核对、人工证据和独立 CAS 释放；不将重启/期限/改连接ID当解除证据，原未知结果不改写。B7 已接入可配置上下文/预算及执行回接，B8 外围能力已接线；Shared 恢复契约已有后端消费者，正式前端 F1。USAGE 记录当前限制，四表/源码复审与待验场景见 testing。
+受管突变准入与 Run-local 项目工具源码已接线；全部行为覆盖见 testing，执行须 governed 准入。持久 blocked 已由下述 B9 机器突变恢复接线管理员只读核对、人工证据和独立 CAS 释放；不将重启/期限/改连接ID当解除证据，原未知结果不改写。B7 已接入可配置上下文/预算及执行回接，B8 外围能力已接线；Shared 恢复契约已有后端消费者，正式前端已接线。USAGE 记录当前限制，四表/源码复审与待验场景见 testing。
 
-## B7.1 Preferences 持久安装配置（源码已接线，行为待 B10）
+## B7.1 Preferences 持久安装配置（源码已接线，行为覆盖见 testing）
 
 ### 1. 职责与范围
 
@@ -1039,7 +1001,7 @@ Access更新原SourceAdmissionService/LoginFailurePolicy实例，后续请求采
 
 ### 8. 当前能力与验收
 
-源码安装、Shared 和四个 Settings HTTP 已接线，四表、两轮复审与静态证据归 testing。快照 Adapter 复用行解码后，经安装回调调用 Model 的解密投影及同一 configuration-rules；SQL 层不引用应用类型或规则，恢复预检拒绝无效白名单、站点或 CAPTCHA 配置。多Origin HTTP/WS仍必须校验Host、协议、同Origin来源；多RP根据当前可信Origin选用，并绑定挑战中的Origin/RP，不能取任意第一个配置。最多16个配置站点，与监听主Origin使用同一协议，HTTP仅允许localhost/127.0.0.1；不同协议须调整配置和部署后重新启动，监听校验失败不开放服务。会话身份复查与Settings CAS在同一SQLite事务；撤销先提交则设置拒绝，设置先提交则交付仍复查且不能撤回已提交配置，也不能承诺浏览器收到。正式CAPTCHA/IP及监控配置面板已消费Shared，Dashboard使用有效监控值；其余Preferences消费者仍F1-D。真实HTTP保存/CAS/重启与受控界面专项证据归testing，不代表全部运行时采样时序验收；B8外围功能已源码接线，执行须 governed 准入。
+源码安装、Shared 和四个 Settings HTTP 已接线，四表、两轮复审与静态证据归 testing。快照 Adapter 复用行解码后，经安装回调调用 Model 的解密投影及同一 configuration-rules；SQL 层不引用应用类型或规则，恢复预检拒绝无效白名单、站点或 CAPTCHA 配置。多Origin HTTP/WS仍必须校验Host、协议、同Origin来源；多RP根据当前可信Origin选用，并绑定挑战中的Origin/RP，不能取任意第一个配置。最多16个配置站点，与监听主Origin使用同一协议，HTTP仅允许localhost/127.0.0.1；不同协议须调整配置和部署后重新启动，监听校验失败不开放服务。会话身份复查与Settings CAS在同一SQLite事务；撤销先提交则设置拒绝，设置先提交则交付仍复查且不能撤回已提交配置，也不能承诺浏览器收到。正式CAPTCHA/IP及监控配置面板已消费Shared，Dashboard使用有效监控值；其余 Preferences 消费者也已接当前 Shared。真实HTTP保存/CAS/重启与受控界面专项证据归testing，不代表全部运行时采样时序验收；B8外围功能已源码接线，执行须 governed 准入。
 
 ### B7.2 偏好与个人数据设计
 
@@ -1061,11 +1023,11 @@ Shared preferences 子域持有双端请求、完整成功/失败、基础值及
 
 #### 5. 入口与安装
 
-旧实际方法/路径逐项核对，契约变更列 F-R26/F-R27；个人偏好 GET/PUT /settings/preferences 与原 layout/focus-switcher-sequence/sidebar/workspace-layout 安装，命令/标签/历史/收藏保留旧各自路径方法。register 安装各 Service/Storage、路由和生命周期，Bootstrap 只接安装入口。用户身份来自 Access，不来自 JSON/query。历史新增只是记录数据，不执行 Shell。
+旧实际方法/路径逐项核对，契约变更同步真实消费者；个人偏好 GET/PUT /settings/preferences 与原 layout/focus-switcher-sequence/sidebar/workspace-layout 安装，命令/标签/历史/收藏保留旧各自路径方法。register 安装各 Service/Storage、路由和生命周期，Bootstrap 只接安装入口。用户身份来自 Access，不来自 JSON/query。历史新增只是记录数据，不执行 Shell。
 
 #### 6. 数据、事务与并发
 
-仍只有初始 v1。每次个人数据写事务复查会话，并绑定最初认证用户；历史 upsert、更新时间、修剪同事务完成。命令与标签关联同事务，不允许部分批量成功。编辑类使用版本 CAS，存储损坏失败闭合，不默默恢复空对象。用户偏好保存立即成为读取权威；首次未保存明确 version=0，第一次 CAS 写入创建 version=1，不读取旧字典或恢复损坏数据。界面实际生效由 F1 的真实消费者负责。命令按用户最多2000、标签200、收藏2000；上限归 Service 同事务回调，SQLite 只提供事实。批量标签关联核对全部命令原版本；删除标签推进受影响命令版本，原编辑不能覆盖变化。标签组及未标记组删除均核对完整成员与指令版本；真实标签额外核对标签版本。未标记组按当前用户无标签关联的指令集合读取与删除，不持久化虚拟标签或使用伪ID；整批匹配后在同一授权事务删除，变化时无部分写入。列表有界分页、固定次序，但非跨请求快照。命令/标签/收藏的持久时间在 Adapter 完成权威读取后生成，更新不倒退；历史按同用户/类别现有最大时间防止回退导致新项误裁剪。行解码核对创建、使用与更新时间关系，命令递增在写入前拒绝版本或使用次数耗尽。
+仍只有初始 v1。每次个人数据写事务复查会话，并绑定最初认证用户；历史 upsert、更新时间、修剪同事务完成。命令与标签关联同事务，不允许部分批量成功。编辑类使用版本 CAS，存储损坏失败闭合，不默默恢复空对象。用户偏好保存立即成为读取权威；首次未保存明确 version=0，第一次 CAS 写入创建 version=1，不读取旧字典或恢复损坏数据。界面实际生效由正式 Preferences/Workspace 消费者负责。持久偏好仅接受当前完整字段，不接受旧命令栏字段或以默认值补齐缺失字段；读取与备份恢复共用该严格存储解码。命令、标签与收藏不设固定总条数上限，列表按 Shared 页容量读取；单命令标签关联仍按 Shared 的50项同事务准入，SQLite 只提供事实。组删除按完整请求1 MiB预算准入，不能超过编码预算。批量标签关联核对全部命令原版本；删除标签推进受影响命令版本，原编辑不能覆盖变化。标签组及未标记组删除均核对完整成员与指令版本；真实标签额外核对标签版本。未标记组按当前用户无标签关联的指令集合读取与删除，不持久化虚拟标签或使用伪ID；整批匹配后在同一授权事务删除，变化时无部分写入。列表有界分页、固定次序，但非跨请求快照。命令/标签/收藏的持久时间在 Adapter 完成权威读取后生成，更新不倒退；历史按同用户/类别现有最大时间防止回退导致新项误裁剪。行解码核对创建、使用与更新时间关系，命令递增在写入前拒绝版本或使用次数耗尽。
 
 #### 7. 生命周期与失败
 
@@ -1073,7 +1035,7 @@ Service 停止准入后等待已接纳真实工作，关闭不取消已提交结
 
 #### 8. 当前能力与验收
 
-B7.2 的个人偏好、命令/标签、历史及收藏源码已接线，功能源码和静态通过分开记录。正式前端留 F1，行为回归留 B10；逐项缺口、两轮审核四表及当前执行证据归实施方案和 testing，不把设计当完成。
+B7.2 的个人偏好、命令/标签、历史及收藏源码已接线，功能源码和静态通过分开记录。正式前端已接线，具体行为回归见 testing；逐项缺口、两轮审核四表及当前执行证据归实施方案和 testing，不把设计当完成。
 
 ### Operations 日志、审计与通知
 
@@ -1086,7 +1048,7 @@ Platform logging/pino-logger唯一实现原Logger契约，registerOperations安�
 5. **入口与安装**：GET/PUT /api/v1/settings/logging；GET audit-logs；GET/POST notifications、PUT/DELETE notifications/:id、POST notifications/:id/test、POST notifications/test-unsaved、GET notification-deliveries，均要求当前管理员。Bootstrap 安装 Access 事务身份读取能力、初始化日志/投递恢复，再开放监听。真实 Agent 审批/Memory/Artifact/Run 和 Remote SSH 事件从原 owner 发布，Auth/Targets/Settings 观察真实路由结果。
 6. **数据、事务与并发**：日志设置未显式写入时允许无持久行，由 LoggingService 提供 version=0/info 默认；快照导出与恢复保留该合法空表，不补写默认记录。配置 CAS 与会话复查同事务，写入时钟在读取事务事实后求值；日志/通知配置递增前拒绝安全整数耗尽，通知删除不因版本耗尽被阻止。通知行及投递行核对更新不早于创建，派发与结算均验证状态 CAS。审计 event_key 去重且核对原事件、身份、资源及路由/状态内容，不把重试时钟作为绑定内容；订阅选择通过 Model 同步回调消费事务内事件/配置/待投递事实，最多4096个 queued/dispatched，容量不足保留整个事件待分发，不丢一部分。选择采用分发时已启用的配置，且配置创建时间不晚于事件；不是业务写入时的配置快照。outbox 保存加密配置快照；禁用仅停止未来分发，删除令尚未派发项失败，已派发不撤回。审计保留最新50000条及尚未分发积压；投递保留最新50000条终态与全部在途项。业务提交与审计发布不是同一事务，崩溃可能遗漏尚未发布的业务事件，不承诺全局 exactly-once。
 7. **生命周期与失败**：HTTP 最多64个、事件发布最多256个在途任务，晚失败有界汇总。其他业务 owner 排空后 Operations 才停止发布并排空请求/事件，再取消和关闭投递。投递串行、完整截止20秒；queued → dispatched 在网络前持久，成功/确定拒绝/未知分别结算 sent/failed/unknown。重启将 dispatched 围栏为 unknown，不重发；关闭和响应体/SMTP资源失败保留因果。日志按版本单调激活，避免迟到读取恢复旧阈值。协议边界保留 HttpInputFailure 的状态/安全码，正常输入拒绝不污染事件 owner 的关闭证据；观察的是响应决定，不证明客户端收到。投递观察器唯一记录其任务失败，关闭只等待后汇总；事件owner按错误实例去重，发布与请求两条追踪链不重复登记同一失败；仅 delivery_failed/delivery_unknown 可结算为投递结果，其他故障停止派发并保留原账本。日志失败仍启动独立分发收尾。
-8. **当前能力与验收**：源码已接线，正式 UI 留 F1；安全有限事件替代任意 details，模板支持 event/subjectId/time，时间为UTC、Email为纯文本。B10已验证环回HTTP/Telegram协议、实际SMTP收发与全部/部分收件人拒绝、Access登录事件分发、配置CAS/秘密保留清除、在途关闭及重启不重发。Delivery Adapter仅按供应商结构化EENVELOPE/RCPT TO及4xx/5xx确认全部收件人在DATA前被拒，映射确定失败；部分成功和其他确认缺失仍保留unknown，清理失败不能被覆盖。真实公网供应商、TLS/SMTP认证、崩溃/满额/自然期限及其余producer仍待验，不把回执当交付成功。
+8. **当前能力与验收**：源码已接线，正式 UI 已接线；安全有限事件替代任意 details，模板支持 event/subjectId/time，时间为UTC、Email为纯文本。B10已验证环回HTTP/Telegram协议、实际SMTP收发与全部/部分收件人拒绝、Access登录事件分发、配置CAS/秘密保留清除、在途关闭及重启不重发。Delivery Adapter仅按供应商结构化EENVELOPE/RCPT TO及4xx/5xx确认全部收件人在DATA前被拒，映射确定失败；部分成功和其他确认缺失仍保留unknown，清理失败不能被覆盖。真实公网供应商、TLS/SMTP认证、崩溃/满额/自然期限及其余producer仍待验，不把回执当交付成功。
 
 ### System 宿主诊断
 
@@ -1112,11 +1074,11 @@ B7 资源收尾：Artifact 的 HTTP 下载、模型读取和上传均绑定 leas
 7. **生命周期与失败**：资源目录由原 Blob Adapter 创建；WAL/SHM、恢复日志及暂存目录仍由原 owner 清理。本次破坏性布局不兼容、不自动迁移或删除旧资源，不改变未知结果围栏和停机收尾。
 8. **当前能力与验收**：USAGE 与 DEPLOYMENT 记录新目录结构和空目录部署要求；既有备份与多实例夹具同步路径。静态结果归 testing，实际读写、在线/启动恢复及中断故障仍待远程验证。
 
-## B8 外观、外围集成与备份设计（源码收口，行为待 B10）
+## B8 外观、外围集成与备份设计（源码收口，行为覆盖见 testing）
 
 ### 1. 职责与范围
 
-Preferences 拥有终端主题、外观偏好、HTML 主题与背景引用。Agent integrations 拥有 MCP/ACP 配置和 Browser targets/session；Agent plugins 拥有可信包、安装版本、插件数据、签名 Skills、前后端 SDK/RPC 与跨 App intents。System backups 拥有全产品加密导出、候选预检、在线导入、持久恢复对账和实例重建。上述源码及两轮复核已收口，静态证据归 testing，B10仅通过已登记的有限行为子集；原功能以实际路由、Service/Adapter 和消费者为依据，正式前端 F1。
+Preferences 拥有终端主题、外观偏好、HTML 主题与背景引用。Agent integrations 拥有 MCP/ACP 配置和 Browser targets/session；Agent plugins 拥有可信包、安装版本、插件数据、签名 Skills、前后端 SDK/RPC 与跨 App intents。System backups 拥有全产品加密导出、候选预检、在线导入、持久恢复对账和实例重建。上述源码及两轮复核已收口，静态证据归 testing，B10仅通过已登记的有限行为子集；原功能以实际路由、Service/Adapter 和消费者为依据，正式前端已接线。
 
 备份是实际产品能力：旧快照包含产品/Agent 数据和 background、custom_html_theme、Artifact objects、plugins 文件，不含认证表与可重建模型目录缓存。新设计覆盖最新 owner，不导入旧 Backend/Protocol，不兼容旧开发库或旧快照表结构。现有 Artifact、Memory、Execution、Run/审批和 Remote machines 不另建一份。
 
@@ -1147,7 +1109,7 @@ System backups 通过 Access public 消费窄密码证明，通过安装契约�
 
 | 边界                        | 类型唯一 owner                                                                 | 转换 owner / 消费者                                                                                             |
 | --------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| 外观/主题/HTML/背景 HTTP    | Shared preferences/{appearance,themes,html-themes} 的完整请求/响应/基础值/容量 | Preferences interfaces 严格 unknown 解码及双向白名单；正式前端 F1 自行 wire→UI。                                |
+| 外观/主题/HTML/背景 HTTP    | Shared preferences/{appearance,themes,html-themes} 的完整请求/响应/基础值/容量 | Preferences interfaces 严格 unknown 解码及双向白名单；正式前端自行 wire→UI。                                    |
 | 集成/Browser 配置和安全观察 | Shared agent/integrations；秘密仅明确写意图及存在标志                          | Agent interfaces→应用输入，Model→独立存储/技术；管理 UI、真实模型执行与恢复链分别核对。                         |
 | 插件管理、SDK/RPC、intents  | Shared agent/plugins，复用 scope/governance/artifacts 的真实基础契约           | HTTP/静态/RPC 边界显式转换；后端内部 manifest/已安装事实/版本账本各有 model 与 storage owner。                  |
 | 备份 HTTP 与安全结果        | Shared system/backups                                                          | System interfaces 与 BackupModel；共享只包含输入、摘要、状态/错误/容量，不包含秘密、表行、解密 key 或恢复日志。 |
@@ -1160,7 +1122,7 @@ Browser 配置原来在 Agent settings；不能因名字相似把它塞进 MCP/A
 
 Preferences 安装 /api/v1/appearance、/terminal-themes 的实际对应入口；主题 JSON 导入/导出、background 二进制与 HTML 文本各有明确读取预算、媒体类型和资源收尾。HTML 内容仍只当文本交付，前端 sandbox 消费；不在后端执行，也不把可信 GitHub 来源当执行授权。
 
-Agent integrations 对应旧实际 /api/v1/apps/:appId/integrations；plugins 对应 /api/v1/agent/plugins；跨 App intents 保留独立 /agent/apps/:appId/plugin-intents 覆盖依据。Agent settings 的 Browser targets、插件 repositories 和 onboarding 推荐/安装也要有实际新消费者。允许按 D15 修改 Agent 契约，但须逐项记差异与 F1，不保留旧字段桥。
+Agent integrations 对应旧实际 /api/v1/apps/:appId/integrations；plugins 对应 /api/v1/agent/plugins；跨 App intents 保留独立 /agent/apps/:appId/plugin-intents 覆盖依据。Agent settings 的 Browser targets、插件 repositories 和 onboarding 推荐/安装也要有实际新消费者。允许按 D15 修改 Agent 契约，但须逐项记录差异并同步消费者，不保留旧字段桥。
 
 System backups 的导出已安装POST /api/v1/settings/backup/export（JSON password→二进制下载），Shared system/backups拥有请求、安全错误和容量；导入已安装 /api/v1/settings/backup/import，multipart backupFile/password，安全回执与严格 codec 同属 Shared。HTTP 输入失败以接口层具名错误保留状态码，cause 仅供诊断，不据其内容决定响应。导出验证原会话的当前密码；导入当前完整认证与输入解密分别校验。实际 method/path/header/query/multipart/binary/响应/认证预算以实施对应表收口，schema 自动汇总仍留 P1，不借施工改变该启动条件。
 
@@ -1178,7 +1140,7 @@ Artifact普通下载和插件包暂存复用ArtifactService的readGranted lease�
 
 插件包同身份/版本内容不可变；stage→verify→install、升级排空→版本切换和卸载→数据删除分别有持久判据。受信 manifest 由 Scope 安装成声明，不自动赋予 grants；撤销 publisher、App 禁用或升级围栏旧 Run/工具。intents 固定原用户、发送/接收 App 和意图内容，Artifact 引用/授予与消息创建同事务，不把收到消息解释为通用文件权限。
 
-当前导出登记87张产品表，逐次核对实际表集、声明列顺序及唯一v1签名；认证七表、模型缓存及技术schema记录明确排除，新增表或列但未登记会拒绝导出。固定表列按技术白名单投影，秘密在所属Adapter解密为受载荷保护的传递表示，System只取得字节。背景ready、Artifact ready和插件staged/verified/installed原包按真实引用采集；实际大小在读取前后核对，内容hash及插件manifest/files/entry/signature复用原解码owner验证；文件预算先包含base64膨胀及完整JSON。SQL前后快照内容hash必须相同，内容发布中或变化拒绝；这不是全应用物理一致快照。
+当前导出登记88张产品表，逐次核对实际表集、声明列顺序及唯一v1签名；认证七表、模型缓存及技术schema记录明确排除，新增表或列但未登记会拒绝导出。固定表列按技术白名单投影，秘密在所属Adapter解密为受载荷保护的传递表示，System只取得字节。背景ready、Artifact ready和插件staged/verified/installed原包按真实引用采集；实际大小在读取前后核对，内容hash及插件manifest/files/entry/signature复用原解码owner验证；文件预算先包含base64膨胀及完整JSON。SQL前后快照内容hash必须相同，内容发布中或变化拒绝；这不是全应用物理一致快照。
 
 备份覆盖集在全部本阶段 owner 确定后冻结，登记允许的表/列/文件根/敏感字段和恢复顺序，拒绝未知或缺失的必需组成，不使用过滤字段/跳过未知表兼容。数据库快照与文件不是同一物理事务；采集前后核对源版本、实际引用、大小/hash 与包内容，有限重采集仍不能宣称全系统物理快照。
 
@@ -1202,7 +1164,7 @@ HTTP 技术监听器已提供 `suspend(owner) → drain() → replace(bindings) 
 
 System 的导入 Service 已消费维护能力。Bootstrap 同时暂停外部 public 能力、HTTP/WS，排空真实请求和旧模块 owner；导入入口不进入 Operations 的全请求占位，System 只关闭状态/诊断 owner，保留当前 Backups 任务，避免自等待。旧实例退出后，重新执行模块安装，重新绑定事件、事务身份、HTTP/WS 和配置消费者；BackendApplication 的稳定能力树在每次调用时解析当前实例，缓存方法或子能力也不会继续调用旧实例。旧 Backups 在维护任务之外完成最终关闭；排空、重建或提交结果不明时保持停止准入。
 
-导入由 System BackupService 持有完整管理员身份、单名额及期限，BackupModel 解封并取得技术 SnapshotCollector.prepareImport 的一次性候选资源，interfaces/http 严格解码实际 multipart。Adapter 严格核对最新 compact JSON、精确签名/表列/标量、owner 声明的目标分区及完整文件引用；各模块 Adapter 将传递秘密用目标 SecretBox 重新保护，通知嵌套 JSON 沿用原持久 decoder。模块原解码器与窄 `SqlReader` 回调分别检查记录和关联事实，Platform 不持有产品字段或应用类型；Targets 通过 Model 转换回调复用跳板规则，整批只构建一次图；Agent 核对实际内置定义、签名插件 manifest、App/治理/Run 冻结输入和子任务。候选数据装入独立内存 SQLite Worker：DDL 只来自当前目标 schema，目标认证/明确排除的记录仅复制到隔离库，先按目标 DDL 拒绝 INTEGER/TEXT 类型强制转换及必填/主键空值，再执行真实 UNIQUE/CHECK/FK 并调用模块原跨表读取。内置终端主题与无用户的系统审计明确允许 null 用户分区，其余个人记录必须匹配目标管理员。预检不修改当前库或内容目录，结束等待隔离 Worker 关闭；一次性候选持有校验后的行与文件字节，提交或关闭时清空；输入损坏、目标资源不可用、清理未确认分别映射。该内存候选库不是持久恢复 staging；实际 commit 在维护排空后再次按当前目标认证和 schema 复验。Run/步骤沿用原恢复校验，并核对 Run/Tool 历史与当前状态、步骤正文/usage 计数；校验不能冒充实机恢复验收。
+导入由 System BackupService 持有完整管理员身份、单名额及期限，BackupModel 解封并取得技术 SnapshotCollector.prepareImport 的一次性候选资源，interfaces/http 严格解码实际 multipart。Adapter 严格核对最新 compact JSON、精确签名/表列/标量、owner 声明的目标分区及完整文件引用；各模块 Adapter 将传递秘密用目标 SecretBox 重新保护，通知嵌套 JSON 沿用原持久 decoder。模块原解码器与窄 `SqlReader` 回调分别检查记录和关联事实，Platform 不持有产品字段或应用类型；Targets 通过 Model 转换回调复用跳板规则，整批只构建一次图；Agent 核对声明与实际签名插件 manifest/包哈希一致、App/治理/Run 冻结输入和子任务。候选数据装入独立内存 SQLite Worker：DDL 只来自当前目标 schema，目标认证/明确排除的记录仅复制到隔离库，先按目标 DDL 拒绝 INTEGER/TEXT 类型强制转换及必填/主键空值，再执行真实 UNIQUE/CHECK/FK 并调用模块原跨表读取。内置终端主题与无用户的系统审计明确允许 null 用户分区，其余个人记录必须匹配目标管理员。预检不修改当前库或内容目录，结束等待隔离 Worker 关闭；一次性候选持有校验后的行与文件字节，提交或关闭时清空；输入损坏、目标资源不可用、清理未确认分别映射。该内存候选库不是持久恢复 staging；实际 commit 在维护排空后再次按当前目标认证和 schema 复验。Run/步骤沿用原恢复校验，并核对 Run/Tool 历史与当前状态、步骤正文/usage 计数；校验不能冒充实机恢复验收。
 
 ### 8. 当前能力与验收
 
@@ -1210,9 +1172,9 @@ B8 已接入 Preferences themes/appearance 的主题、设置和图片链路，�
 
 BackgroundService 共用 16 个串行在途任务，输入 producer 返回应用命令，不带 HTTP 对象；名额覆盖 multipart 消费、等待、SQL/文件发布、交付与清理，shutdown 取消 producer/读取并等待实际任务。BackgroundModel 转换独立存储事实、内容格式证据和 Blob 应用能力/失败。Adapter 负责 pending→ready/retired 和引用/版本同事务；清理只有在同事务确认无引用后开始，文件删除确认后删除元数据。启动/后续上传/停机复查无引用记录；清理失败保留有界原因、持久记录及 cleanupPending，不删除活跃内容。文件根由 Bootstrap 安装 NativeBlobStore(resolveDataPaths(db.path).appearance)，即数据库父目录下的 appearance/；不在 Service/register 拼技术路径。只维护最新初始 v1 签名。
 
-Shared 的实际预算与入口见 USAGE；字体、颜色、图片基础值/容量单独放 values，私有主题数/存储记录数/在途数归纯规则或 Service。正常失败、存储 unknown、内容发布 unknown、响应交付 unknown 分别在真实边界保留因果，不在 unknown 后自动激活 pending 或重传。HTTP 图片有完整期限、流回压、同源/no-store/CSP，旧图片不再暴露。静态和两轮源码复审证据归 testing；集成、插件 Agent host/runtime 和备份恢复源码已收口，行为统一 B10。B7 原执行链不重建。
+Shared 的实际预算与入口见 USAGE；字体、颜色、图片基础值/容量单独放 values，私有主题数/存储记录数/在途数归纯规则或 Service。正常失败、存储 unknown、内容发布 unknown、响应交付 unknown 分别在真实边界保留因果，不在 unknown 后自动激活 pending 或重传。HTTP 图片有完整期限、流回压、同源/no-store/CSP，旧图片不再暴露。静态和两轮源码复审证据归 testing；集成、插件 Agent host/runtime 和备份恢复源码已收口，行为覆盖与待验范围见 testing。B7 原执行链不重建。
 
-实现后维护 USAGE 对应外观、Agent Plugin/MCP/Browser/ACP、备份章节，并记录 F1 完整契约/状态/错误/恢复差异；正式前端尚未施工。完整两轮源码审核与最终静态检查分别记录，行为统一 B10；不把旧正式消费者或旧测试 PASS 当作新后端完成。
+USAGE 对应外观、Agent Plugin/MCP/Browser/ACP、备份章节维护操作与恢复；正式前端已消费当前契约。完整两轮源码审核与最终静态检查分别记录，行为覆盖与待验范围见 testing；不把旧正式消费者或旧测试 PASS 当作后端完成。
 
 HTML 库保持在 appearance 子功能：service/html-theme-service 管理来源/准入/覆盖政策，model/html-theme-model 转换应用、独立 storage 和目录结果；adapters/sqlite 管理文本/修订，adapters/github 解码厂商目录。17 个真实 preset 作为应用常量，无运行时旧 Backend/CWD 依赖。自定义内容与用户级修订表同事务，删除也推进修订，避免按名称删除重建后的旧 CAS 命中。列表只读摘要，不加载全部 HTML 正文；活动 HTML 内容副本独立保存。全产品备份必须包含 preferences_html_themes 和 preferences_html_revisions，而非继续寻找旧 custom_html_theme 文件目录。
 
@@ -1224,11 +1186,11 @@ HTML 库保持在 appearance 子功能：service/html-theme-service 管理来源
 
 Agent integrations有独立IntegrationService/BrowserService；HTTP mapper→应用类型，Model→独立Storage或MCP/Browser技术能力，SQLite只持有存储类型和DDL/SQL/持久JSON解码。MCP/CDP Adapter不认识App/Run/授权；MCP通用endpoint包含不透明key/generation，Browser只接受技术连接选项和应用提供的URL判定能力。真实调用进入原ToolService；Browser的Run资源由原drainRun关闭，MCP续接身份由应用owner生成并绑定原Run/输入，不直接消费远端token作为授权。
 
-插件已接 Publisher/Artifact stage/verify/install、不可变版本、安装查询、Run 退役及前端资源读取。Service owns 信任、容量、安装/升级/卸载准入；Model 转换应用、独立 Storage、包/Blob 内容和失败；Adapter 解码 manifest/签名 files，仓库Adapter将PEM的CRLF规范为LF后再交付应用，官方固定公钥核对不受等价换行影响；Platform packages 只提供惰性 TAR/Ed25519 技术能力。包条目与整个展开 TAR（包括元数据/填充）都受限。Stage 登记→Blob 发布→身份/CAS 复验→staged 分别确认；启动按完整大小/hash 对账 staging，不重放安装。专用目录为数据库路径加 `.plugins`。
+插件已接 Publisher/Artifact stage/verify/install、不可变版本、安装查询、Run 退役及前端资源读取。Service owns 信任、容量、安装/升级/卸载准入；Model 转换应用、独立 Storage、包/Blob 内容和失败；Adapter 解码 manifest/签名 files，仓库Adapter将PEM的CRLF规范为LF后再交付应用，官方固定公钥核对不受等价换行影响；Platform packages 只提供惰性 TAR/Ed25519 技术能力。包条目与整个展开 TAR（包括元数据/填充）都受限。Stage 登记→Blob 发布→身份/CAS 复验→staged 分别确认；启动按完整大小/hash 对账 staging，不重放安装。插件资源目录由 Bootstrap 的 `data-paths.ts` 从数据库父目录解析为 `plugins/`；与 `appearance/`、`artifacts/` 同属独立实例数据目录，不以数据库文件名拼接资源目录。
 
 暂存缓存政策由PluginService持有：新建前保留127条确定无引用缓存，再写入新包；Model先验相同包hash/长度、原Blob完整性与当前信任后复用verified/installed stage，不改变原ID/version，因此retirement仍精确绑定。Adapter在事务内排除versions/retirements引用和未知staging后将待回收项置failed并清除验证字段；Model先确认Blob删除再按认领版本删除行，失败保留记录且汇总所有清理因果，不把取消当作完成。不可变版本/退役包属于实际资源而非临时缓存，不能淘汰。versions列表与当前用户安装记录一对一，完整不可变版本账本保留。
 
-插件 SQLite 通过注册的 Scope 存储任务参加同一事务，实际 App/声明 SQL 仍归 Scope Adapter；不 import Scope Model/Service，不自动授予 grants。首次安装禁用 App、空授权；版本/hash/声明来源不可变，builtin 初始化只更新 builtin。当前用户安装与 publisher 信任在 Scope 读取/授权事务核对。撤销、升级和卸载由 Scope 任务禁用/围栏旧 Run，Plugin Service 等待对应 Execution owner；draining 任务持久保存，重启不重放。取消退役保持旧版本与禁用状态。
+插件 SQLite 通过注册的 Scope 存储任务参加同一事务，实际 App/声明 SQL 仍归 Scope Adapter；不 import Scope Model/Service，不自动授予 grants。首次安装禁用 App、空授权；版本/hash/声明不可变，初始数据库不含内置来源、默认启用或默认实例字段；没有旧开发库迁移或备份兼容。当前用户安装与 publisher 信任在 Scope 读取/授权事务核对。撤销、升级和卸载由 Scope 任务禁用/围栏旧 Run，Plugin Service 等待对应 Execution owner；draining 任务持久保存，重启不重放。取消退役保持旧版本与禁用状态。
 
 前端资源使用与会话/安装 revision 绑定的短期 grant 路径；Service owns 名额及交付，Model 复验存活安装、包 hash/签名并转换字节，interfaces owns MIME/CSP/no-store/stream。只交付 frontend/ 命名空间，backend/ 与签名元文件不可读；匿名资源请求仍通过 grant 和原会话事务复查。独立插件数据具有明确model/storage对象；Model逐字段转换，Adapter解码JSON和事务事实，Service判断身份、当前信任/启用、CAS与总容量。有效数据按1024个有正文键/8MiB计，删除墓碑不占有效容量但保留CAS。每键仅最新有效操作保存正文，旧ID/hash/version元数据保留；更新、迁移或清除同事务退役旧回执正文，重放已退役回执明确version_conflict。删除/迁移回执不设累计32次拒绝。有效信任额度只计未撤销发布者，撤销身份不能复活。removed安装的明确清除只清正文，推进安装修订/数据墓碑并退役账本正文，保留旧意图摘要，原清除结果可重放。安装状态基础取值引用Shared，应用与存储对象独立；Stage/Publisher/Installation在Adapter校验身份、容量、时间及状态与验证字段的关联。单调版本耗尽在写入前拒绝，覆盖配置、凭据、安装、退役、清除及迁移，读取和既有确定回执不因此失效。
 
@@ -1236,9 +1198,9 @@ Agent integrations有独立IntegrationService/BrowserService；HTTP mapper→应
 
 MCP owner统一计入已建立/建立中/关闭未确认资源，共享连接构造并取消、等待原构造；close绑定具体实例，不按当前key误关新实例。每连接仅一个固定DNS池，关闭等待池构造并执行SDK与池独立清理。Browser页面/节点按键保留组合键与原合法Key/Digit词汇，失败释放按键，聚焦前就失效旧快照。动作settleMs由工具Service选择默认250ms与Shared的0–2000ms协议范围，Model逐字段传为通用技术等待值，Node CDP Adapter执行有界空闲观察，只吸收正常TimeoutError；断开/取消仍传播。scroll的deltaX可省略为0；Shared动作取值覆盖全部15项。
 
-两端SDK、实例持久恢复、仓库/推荐、显式迁移和备份导入恢复已有源码；B8源码审核已收口。B10已验证真实签名包暂存/信任/验证/安装、独立子进程及包内依赖、Host数据CAS/幂等/墓碑、禁用/启用/正常重启、显式完整快照迁移/升级、撤销/卸载/清除，以及descriptor资源和有限HTTP RPC；原进程身份退出与物化目录清理分别核对。外观字体/CSS/HTML副本、PNG/SVG字节、HTML中文路径/同名重建/预置回退和活动终端主题删除引用也有有限整链证据；B10另已验证真实Chromium的签名sandbox/完整SDK依赖/MessagePort握手、关联失败后的写入unknown、32项等待、8订阅/回调失败收敛，以及HTTP intents创建/幂等/权限撤销/重启、140失效候选后的可见列表、100条发送容量、实际附件/Range与前端RPC分段；父页是隔离测试桥，不代表F1。B10另已验证环回仓库配置/目录/签名下载安装、固定官方公钥和兼容推荐/离线已安装查询，以及真实子进程九方法的消息/附件/撤权链；官方新包完整安装、自然到期、已在途SDK/RPC撤权、其余崩溃与完整容量故障仍待验，不能据此宣称B8或B10整体验收完成。只有最新初始v1，当前精确签名为backend-next-v1-initial-20261015-b9-mutation-evidence。
+两端SDK、实例持久恢复、仓库/推荐、显式迁移和备份导入恢复已有源码；B8源码审核已收口。B10已验证真实签名包暂存/信任/验证/安装、独立子进程及包内依赖、Host数据CAS/幂等/墓碑、禁用/启用/正常重启、显式完整快照迁移/升级、撤销/卸载/清除，以及descriptor资源和有限HTTP RPC；原进程身份退出与物化目录清理分别核对。外观字体/CSS/HTML副本、PNG/SVG字节、HTML中文路径/同名重建/预置回退和活动终端主题删除引用也有有限整链证据；B10另已验证真实Chromium的签名sandbox/完整SDK依赖/MessagePort握手、关联失败后的写入unknown、32项等待、8订阅/回调失败收敛，以及HTTP intents创建/幂等/权限撤销/重启、140失效候选后的可见列表、100条发送容量、实际附件/Range与前端RPC分段；该轮父页是隔离测试桥，不能据此扩大正式页面行为覆盖。B10另已验证环回仓库配置/目录/签名下载安装、固定官方公钥和兼容推荐/离线已安装查询，以及真实子进程九方法的消息/附件/撤权链；官方新包完整安装、自然到期、已在途SDK/RPC撤权、其余崩溃与完整容量故障仍待验，不能据此宣称B8或B10整体验收完成。只有最新初始 v1，精确签名以 `bootstrap/schema.ts` 与 DEPLOYMENT 为准，不兼容旧开发库。
 
-Browser 补齐 back/scroll/press/select/wait 和 Artifact 字节消费：Service owns 端点顺序/退避资格、会话范围、操作期限及输出 Artifact；Model 转换独立应用能力和技术动作/字节/失败，技术 DOM/CDP 对象不泄露。会话交付在最后异步阶段后复查原 Run 与取消；快照采集及节点解析后复查原快照身份，节点对象由统一 finally 释放并保留操作与清理两项因果。Artifact 读取保护覆盖实际上传，版本/hash/原工具权限复查；截图/下载经原 Artifact 发布，而非大 base64 工具结果。下载策略限定本次 context，context、拦截任务、WebSocket 关闭分别确认。管理和执行共用同一配置 owner，正式前端 F1 未施工。
+Browser 补齐 back/scroll/press/select/wait 和 Artifact 字节消费：Service owns 端点顺序/退避资格、会话范围、操作期限及输出 Artifact；Model 转换独立应用能力和技术动作/字节/失败，技术 DOM/CDP 对象不泄露。会话交付在最后异步阶段后复查原 Run 与取消；快照采集及节点解析后复查原快照身份，节点对象由统一 finally 释放并保留操作与清理两项因果。Artifact 读取保护覆盖实际上传，版本/hash/原工具权限复查；截图/下载经原 Artifact 发布，而非大 base64 工具结果。下载策略限定本次 context，context、拦截任务、WebSocket 关闭分别确认。管理和执行共用同一配置 owner，正式管理页面已接线。
 
 Integration 创建意图同事务保存首次安全回执，重放不从当前可变对象读取，删除集成不删除原回执；独立 storage receipt 无凭据正文，Model 显式转换，备份复用其 Adapter 解码器。Integration 原行/回执解码同时核对 MCP 的规范端点及私有 authority、ACP argv/cwd、身份/版本/hash/时间与 Shared 基础容量；不依赖 Shared 业务 codec。Browser 存储解码同时验证端点/明文许可/页面模式/数量和唯一性，恢复不放宽配置语义。
 
@@ -1260,7 +1222,7 @@ PluginModel将原包/存储事实、九个host方法和失败显式转换；plug
 
 PluginRepositoryService持有用户源、版本兼容/官方固定发布者、选择及推荐安装政策；所有源读写和目录/下载操作共用串行lane，防同一用户配置在下载中被替换。Model转换独立repositoryStorage/目录/内容与失败，Adapter负责持久JSON、上游JSON/相对URL/字节hash；平台BoundedFetch只执行调用方明确的有界redirect政策和响应体清理，默认仍不follow，不认识官方或Plugin。读取失败后cancel若重抛同一原错误，保留原读取失败；仅独立cancel/release异常归cleanup_failed，不将普通上游断流升级为模块排空故障。目录/下载继续进入原PluginService.stagePackage→Model→包/Blob/SQL，实际签名与请求App/version/publisher匹配先于stage副作用；安装不自动启用或授grant，已撤销官方信任不能重新登记。
 
-repositories是单一v1的最新表，读取未保存状态明确version=0，CAS/身份同事务。Bootstrap经通用包metadata Adapter按模块相对URL读取实际根package.json，并安装productVersion；不硬编码版本、依赖CWD或让Platform选择兼容政策。管理HTTP和Shared repository-{model,http,http-codec}已接真实消费者，正式前端仍F1。Repository Service同一lane串行目录/暂存和配置写入，不能把排队更新描述为已在读取中生效；SQL身份/CAS复查归原Adapter，Model显式转换。仓库stage在返回前执行真实包检查/信任验证，成功为verified；Artifact stage仍显式verify。B10有限行为覆盖环回源、严格目录/兼容性、下载hash/身份/撤销信任及注销后晚结果、推荐离线读取和子进程九方法；官方新包/自然期限及其余未验限制归testing；已在途SDK/RPC附件读取的有限验证见上节，不扩为全部插件操作。B10另验证8任务准入/溢出不派发/结算回收、包下载断流后可继续、下载中注销拒绝晚发布和关闭中止原网络读取。PluginService管理lane内的撤销排在当前stagePackage后生效，不声称即时撤销下载。仓库协议、官方推荐、SDK/生命周期差异见USAGE与F-R35；最新签名见上文，源审/静态/待验分别归testing。
+repositories是单一v1的最新表，读取未保存状态明确version=0，CAS/身份同事务。Bootstrap经通用包metadata Adapter按模块相对URL读取实际根package.json，并安装productVersion；不硬编码版本、依赖CWD或让Platform选择兼容政策。管理HTTP和Shared repository-{model,http,http-codec}已接真实消费者，正式前端已接线。Repository Service同一lane串行目录/暂存和配置写入，不能把排队更新描述为已在读取中生效；SQL身份/CAS复查归原Adapter，Model显式转换。仓库stage在返回前执行真实包检查/信任验证，成功为verified；Artifact stage仍显式verify。B10有限行为覆盖环回源、严格目录/兼容性、下载hash/身份/撤销信任及注销后晚结果、推荐离线读取和子进程九方法；官方新包/自然期限及其余未验限制归testing；已在途SDK/RPC附件读取的有限验证见上节，不扩为全部插件操作。B10另验证8任务准入/溢出不派发/结算回收、包下载断流后可继续、下载中注销拒绝晚发布和关闭中止原网络读取。PluginService管理lane内的撤销排在当前stagePackage后生效，不声称即时撤销下载。仓库协议、官方推荐、SDK 与生命周期见 USAGE；最新签名见上文，源审/静态/待验分别归testing。
 
 ### B8 运行实例持久恢复当前边界
 
@@ -1281,7 +1243,7 @@ Access已经提供窄provePassword公开能力，内部PasswordProof归authentic
 5. **入口与安装**：POST /api/v1/agent/apps/:appId/workspace 要求当前完整管理员会话、真实 App UUID、appVersion 和 request。register 安装事务身份读取及原生路由；插件继续走原 descriptor/grant 入口。正式Host与DEV原生线程／运行消费者均使用该入口，正式Host不借用插件grant。
 6. **数据、事务与并发**：原生当前会话、App 所属用户、启用/受信声明及原 App version 在实际事务前后核对；Thread 创建/改名使用稳定 operationId 与不可变回执，改名和删除绑定原线程 version。删除由 ThreadService → ThreadModel → SqliteThreadStorage.remove 执行：Adapter 在同一写事务读取全部 Root/Child 的不同状态和关联 Memory 最大版本，Model 白名单转换 ThreadRemovalFacts，Service 同步拒绝任何 pending/running/unknown（active_run_conflict）以及记忆版本耗尽（version_conflict），并提供事务实际决策时的更新时间；Adapter 不选择业务准入状态。事务依次将关联 agent_memories.source_run_id 置 NULL、版本加一且时间不倒退，删除线程或 Run 的 artifact attachments，显式移除 agent_run_children / facts / mailbox / budget_reservations 的 NO ACTION 引用，再删除全部 Run；步骤、事件、工具体、Job、审批、上下文及幂等结果按真实 FK CASCADE。协作表同时覆盖 operation_id/message_id 对待删工具的引用。最后删除该线程的 agent_thread_commands，并以 user/app/thread/version CAS 删除 agent_threads，提交前复核原身份/App。任一步拒绝或失败均回滚，不关闭 FK、不依赖延迟约束；Artifact 对象元数据和文件均不删除，Memory 正文及审核状态保留。删除不递增线程版本，允许最大安全整数的当前 CAS；不新增 schema/旧库兼容。组合调用经 ThreadModel 的事务准入能力消费同一规则，不在接口层复制 SQL 或业务判断；后台执行仍由原 Run owner 明确脱离临时请求准入并持续复验自身授权。
 7. **生命周期与失败**：Scope 入口和交付前保留当前事实复查；已成功写入后交付或复查失败返回 operation_unknown。删除也纳入原生 HTTP、插件 Service/HTTP 及交付 SDK 的写入分类：没有 operationId 仍是副作用，取消/超时/畸形或错 App 回执不能解释成未提交。读操作不授予执行权限；读列表不证明未知写入未提交。删除没有额外幂等回执或墓碑，确认后再次删除返回 not_found，不自动重放旧创建/改名或套新版本重试；未知结果保留原 threadId/expectedVersion，先只读核对。完整工作区编码预算8 MiB+1 KiB，Thread 列表最多50项，正文页遵守各自更窄预算。资源已销毁时不继续接纳新的请求步骤。
-8. **当前能力与验收**：原生18方法生产者及Shared已接线；正式Host/Run/正文/审批/Child的原消费者和独立应用转换保留，删除 UI 由前端批次接入，步骤／工具专用审计 HTTP 已移除。删除验收覆盖严格请求/回执关联、原线程/App CAS、Root及Child三种活跃状态、关联记忆版本耗尽、提交前撤权/末步SQL失败整批回滚、工具/审批等级联、记忆/Artifact保留、其他线程隔离和 foreign_key_check。当前限定隔离 SQLite 实测不代表浏览器/插件整链已验收；真实并发、提交/交付确认丢失及资源清理故障仍待对应远程或现场验证，不沿用旧 Actions PASS。
+8. **当前能力与验收**：原生18方法生产者及Shared已接线；正式Host/Run/正文/审批/Child的原消费者和独立应用转换保留，正式删除 UI 已接入，步骤／工具专用审计 HTTP 已移除。删除验收覆盖严格请求/回执关联、原线程/App CAS、Root及Child三种活跃状态、关联记忆版本耗尽、提交前撤权/末步SQL失败整批回滚、工具/审批等级联、记忆/Artifact保留、其他线程隔离和 foreign_key_check。当前限定隔离 SQLite 实测不代表浏览器/插件整链已验收；真实并发、提交/交付确认丢失及资源清理故障仍待对应远程或现场验证，不沿用旧 Actions PASS。
 
 ### B8 前端SDK与显式迁移当前边界
 
@@ -1289,7 +1251,7 @@ ThreadService持有名称归一、512个实际线程容量及明确区分的插�
 
 WorkspaceService使用原RunService与ContextHistoryService：Root列表按thread_sequence续页；entries只读Root用户输入和模型文字事件，按码点分片，不读工具/私有reasoning。SQLite技术函数nexus_text_length/slice保留NUL和Unicode；片段未完不推进后项。appendInput在原Root终态/version同事务校验后创建同Thread后续Root，原身份/version纳入幂等hash，模型/连接重新显式选择，不注入活跃上下文。
 
-前端RPC由Shared frontend-events/frontend-rpc-codec定义27方法；core events/rpc-codec/backend-sdk仍只有九方法。前端完整预算8MiB+1KiB，descriptor的maxMessageBytes同源声明；核心子预算/IPC仍512KiB。SDK由Backend构建时通过esbuild打包实际Shared及第三方依赖，以独立浏览器ESM交付；不再运行时改写import或维护拆模块白名单。frontend-sdk仅持有纯类型，窗口/MessagePort/计时器归原Frontend Adapter；Run订阅是500ms有限轮询原事件分页，不是新增WS/事件中心。退订取消原读取并等待，close共享Promise，异步回调由原订阅追踪，过期结果不发布。正式父页F1。
+前端RPC由Shared frontend-events/frontend-rpc-codec定义27方法；core events/rpc-codec/backend-sdk仍只有九方法。前端完整预算8MiB+1KiB，descriptor的maxMessageBytes同源声明；核心子预算/IPC仍512KiB。SDK由Backend构建时通过esbuild打包实际Shared及第三方依赖，以独立浏览器ESM交付；不再运行时改写import或维护拆模块白名单。frontend-sdk仅持有纯类型，窗口/MessagePort/计时器归原Frontend Adapter；Run订阅是500ms有限轮询原事件分页，不是新增WS/事件中心。退订取消原读取并等待，close共享Promise，异步回调由原订阅追踪，过期结果不发布。正式父页也已消费当前契约。
 
 组合写入经PluginModel→Storage→SQLite技术admission scope，在实际事务前后复核原会话、安装revision、启用、publisher与期限。排队操作捕获原scope；原RunExecutionOwner通过RunModel的应用任务能力明确脱离请求临时scope，再按自身持久权限执行，不意外继承浏览器grant的生命周期。最终响应前再次复查，已提交变更失去确认时返回unknown，不换意图重发。
 
@@ -1297,7 +1259,7 @@ WorkspaceService使用原RunService与ContextHistoryService：Root列表按threa
 
 ### B8 在线恢复持久边界
 
-NativeSnapshotRestoreFiles 只处理已安装的 opaque 根、暂存文件、目录切换日志及清理；SqliteSnapshotRestore 只处理技术表恢复和提交证据。所有真实 SQL/DDL 仍在 Adapter；只有一个最新初始 v1，snapshot_restore_state 是本机技术事实，排除于可携备份。87张产品表不包含认证、模型目录缓存或恢复标记。Preferences 预检除引用存在外，核对活动主题的用户或内置归属、背景的用户/用途/ready 状态；批量索引避免逐条扫描全集。
+NativeSnapshotRestoreFiles 只处理已安装的 opaque 根、暂存文件、目录切换日志及清理；SqliteSnapshotRestore 只处理技术表恢复和提交证据。所有真实 SQL/DDL 仍在 Adapter；只有一个最新初始 v1，snapshot_restore_state 是本机技术事实，排除于可携备份。88张产品表不包含认证、模型目录缓存或恢复标记。Preferences 预检除引用存在外，核对活动主题的用户或内置归属、背景的用户/用途/ready 状态；批量索引避免逐条扫描全集。
 
 文件及日志写入同步后才发布；日志在每次 rename 前保存意图，rename 后同步相关目录。删除按目标 schema 的 FK 依赖先子后父，插入使用延迟 FK；恢复数据和 restore_id/initialized 标记在同一事务提交，SQLite 明确使用 FULL 同步。提交失败后读取标记，不能用异常或断连推断回滚；标记不可读时保留现场并停止准入。仅旧内容清理失败、而当前数据与文件已确认一致时，可返回 cleanupPending 并由日志在后续启动/导入前继续清理。
 
@@ -1305,7 +1267,7 @@ B10 已在真实文件/SQLite Adapter 上验证暂存、完整发布、未提交
 
 启动先初始化当前 schema、对账恢复日志，再安装模块，防止模块先创建内容目录或读到混合状态。初始化未完成的提交保留 initialized=0，重启继续恢复初始化；新模块及传输入口准备成功后才确认初始化完成。恢复初始化不派发历史通知：queued 结算 failed、dispatched 保留 unknown，旧审计记录登记为已完成 fanout；不自动启动导入的插件 runtime。Run 未派发任务（包括没有模型步骤的 pending Root）结算失败，已派发保留 unknown，Tool/Job/远端占用沿用各自重启围栏；不接管进程或重放付费调用。
 
-POST /api/v1/settings/backup/import 保留 backupFile/password 字段，响应只包含 restoredTables/restoredRows/restoredFiles/cleanupPending；完整契约和 codec 归 Shared。正式前端差异归 F-R36，源码实现与运行行为分别验收。
+POST /api/v1/settings/backup/import 保留 backupFile/password 字段，响应只包含 restoredTables/restoredRows/restoredFiles/cleanupPending；完整契约和 codec 归 Shared。正式前端消费当前契约，源码实现与运行行为分别验收。
 
 ### B8 路由与恢复校验边界
 
@@ -1345,7 +1307,7 @@ remote_machine_mutations 只持有活跃资源锁；新增 mutation_claims 与 m
 
 ### 8. 当前能力与验收
 
-恢复子链已有源码与类型检查，B9 整体及最终静态状态见当前实施方案；行为全部留 B10。正式前端 F1 需要只读观察、人工核对和单独释放流程，不提供一键重试/自动解锁。Agent 既有 Tool/Job/Run 历史继续保留，恢复不重新启动它们。
+恢复子链已有源码与类型检查，B9 整体及最终静态状态见当前实施方案；行为覆盖与待验范围见 testing。正式恢复面板提供只读观察、人工核对和单独释放流程，不提供一键重试/自动解锁。Agent 既有 Tool/Job/Run 历史继续保留，恢复不重新启动它们。
 
 ### Targets 凭据与存储转换边界
 
@@ -1356,7 +1318,7 @@ remote_machine_mutations 只持有活跃资源锁；新增 mutation_claims 与 m
 5. **入口与安装**：register 只向 Model 安装 SecretBox；连接类型变更和凭据赋值的存储校验回调经 Model 投影后调用 connections/connection-rules。不新增公共能力。
 6. **数据、事务与并发**：SQLite 在实际更新事务读取原类型、凭据和跳板引用，再调用规则；不把检查移到事务外。连接删除由原跳板外键 RESTRICT 保持引用保护。凭据修改在副作用前拒绝安全整数版本耗尽；目录查询应用容量只在 Service 决定。
 7. **生命周期与失败**：所有 Targets 存储调用在 Model 映射具名技术失败并保留 cause；公开出口只接受应用/公开错误并安全兜底。提交或回滚未确认统一 operation_unknown，不解释为未写入；具体缺引用拒绝仍在所属 Model 转换。
-8. **当前能力与验收**：秘密省略保留、显式清空、名称/版本冲突及引用保护沿用当前语义。源码复核和静态证据见 testing，事务交错/存储故障待 B10，正式前端处理未知结果待 F1。
+8. **当前能力与验收**：秘密省略保留、显式清空、名称/版本冲突及引用保护沿用当前语义。源码复核和静态证据见 testing，事务交错/存储故障待 B10，正式前端对未知结果保留核对围栏。
 
 ### Targets 标签关联设计
 
@@ -1367,7 +1329,7 @@ remote_machine_mutations 只持有活跃资源锁；新增 mutation_claims 与 m
 5. **入口与安装**：PUT /api/v1/targets/tags/:id/connections替换，POST /api/v1/targets/connections/add-tag追加；Shared严格解码，服务器完整管理员会话准入。DELETE tags/:id保留原路径并解除关联，不额外要求先手工清空。
 6. **数据、事务与并发**：原事务检查标签与全部连接存在，重复ID合并，替换允许空数组；实际新增/移除关系的Connection版本同事务各推进一次。删除复用同一Connections事务任务；原单连接标签写入/导入/快照校验统一遵守64项协议容量。标签本身未修改可见字段时不虚增其版本。
 7. **生命周期与失败**：请求32KiB，原始ID数组最多1000项，追加非空；缺引用整项回滚。Model保留提交unknown，HTTP返回安全码；响应或审计观察不冒充原子写入凭证，不自动重试。关联请求复用下述management事务准入：在排队后的实际事务复查原管理员会话，不保留正文后重复Access查询。
-8. **当前能力与验收**：标签持久行的ID/版本、非负时间、名称UTF-8与容量由同一Adapter decoder校验；管理、导入已有标签和备份预检复用，不将坏数据重新规范化。本链源码已接线，源码/两轮复核与静态结果见实施方案及testing；正常行为/并发/故障统一B10。正式前端F1消费Shared、updated:true、容量及连接缓存刷新；不增加旧包兼容。
+8. **当前能力与验收**：标签持久行的ID/版本、非负时间、名称UTF-8与容量由同一Adapter decoder校验；管理、导入已有标签和备份预检复用，不将坏数据重新规范化。本链源码已接线，源码/两轮复核与静态结果见实施方案及testing；正常行为/并发/故障统一B10。正式前端消费 Shared、updated:true、容量及连接缓存刷新；不增加旧包兼容。
 
 ### Targets 管理事务准入
 
@@ -1378,13 +1340,13 @@ remote_machine_mutations 只持有活跃资源锁；新增 mutation_claims 与 m
 5. **入口与安装**：createTargetsRoutes接收模块内ManagementService；所有Targets管理路由在初次Access认证后进入同一准入作用域。register暴露安装身份reader方法，Bootstrap先安装再交付路由；未安装明确失败，不放行。不向TargetsPublicApi增加任意回调执行接口。
 6. **数据、事务与并发**：复用SqliteRuntime.withTransactionAdmission，在实际排队后的每个事务开始和提交前经Access原tx读取会话；必须仍是原管理员。管理CRUD、目录/凭据/Host Key/标签及导入逐项事务共用。会话撤销与写入按SQLite事务排序，不将整批导入合成一事务，也不将已提交项回滚；拒绝当前项后停止批次。
 7. **生命周期与失败**：work在事务外、准入作用域内执行；只有存储admit是事务内同步业务判断。作用域覆盖被await的HTTP用例，结束后新发起事务不再继承，已排队事务仍携带捕获的原身份校验；不作为后续独立任务的权限。HTTP读取正文后无需重复Access查询，原会话在真实事务复查；认证/权限拒绝分别401/403，存储不可用503，提交或回滚unknown保留原语义。已经提交后的响应失败仍不能证明未写入，数据交付与会话撤销也不声称跨网络原子性。
-8. **当前能力与验收**：当前31条Targets管理路由（含安全凭据GET）均使用同一准入，源码/两轮复核/静态结果见方案与testing；行为待B10。正式前端既有401/403和unknown处理在F1对接，正常业务对象不变，B10新增覆盖未安装/重复安装及作用域隔离，不添加默认绕过。Remote拥有的两条SSH测试路由仍由其原用例复查，不混入本作用域。
+8. **当前能力与验收**：当前31条Targets管理路由（含安全凭据GET）均使用同一准入，源码/两轮复核/静态结果见方案与testing；行为覆盖见 testing。正式前端按当前401/403和unknown语义处理，正常业务对象不变，B10新增覆盖未安装/重复安装及作用域隔离，不添加默认绕过。Remote拥有的两条SSH测试路由仍由其原用例复查，不混入本作用域。
 
 RemoteMachineModel 在主机校验拒绝时保存实际握手 endpoint、观测指纹和原 pin 到独立应用错误；仅 Workspace connect 的 WS 失败出口白名单投影为 Shared challenge。信任仍由 Targets 管理确认接口持久化，不自动录入；未知资源清理不能降为可重试的密钥拒绝。
 
 Targets Host Key列表HTTP与正式管理前端共同消费Shared集合上限10,000项/完整JSON16MiB，超限413 limit_exceeded且不截断。确认按host/port覆盖，移除按host/port删除，不提供指纹或版本CAS；管理前端明确提示此语义，不把读取当作写入前提保证。主机名容量唯一归Shared `targets/host-keys/values`（253 UTF-8 bytes）；HTTP codec、可信Service入口和SQLite行解码一致校验编码容量，Service另持有小写规范化及主机名准入政策。SQLite解码拒绝损坏事实，备份复用该解码器；不为旧非法记录保留兼容分支。
 
-Targets `ssh-keys/ssh-key-rules` 唯一持有密钥名称规范化，普通管理和导入共用；`target-validation` 提供模块内文本编码/容量基础校验，秘密正文不规范化。Service和纯规则消费Shared基础容量，Model保持秘密与存储转换；SQLite的Proxy/SSH Key行解码校验正ID/版本、非负时间、有效端口及公开文本编码容量，备份复用同一行解码。独立SSH Key和导入/测试私钥统一64 KiB。旧Proxy管理可存key字段，但旧SSH resolver/传输只消费用户名/密码；新设计不保留无真实运行消费者的key字段，正式前端差异归F-R40。
+Targets `ssh-keys/ssh-key-rules` 唯一持有密钥名称规范化，普通管理和导入共用；`target-validation` 提供模块内文本编码/容量基础校验，秘密正文不规范化。Service和纯规则消费Shared基础容量，Model保持秘密与存储转换；SQLite的Proxy/SSH Key行解码校验正ID/版本、非负时间、有效端口及公开文本编码容量，备份复用同一行解码。独立SSH Key和导入/测试私钥统一64 KiB。旧Proxy管理可存key字段，但旧SSH resolver/传输只消费用户名/密码；新设计不保留无真实运行消费者的key字段，正式前端已消费当前契约。
 
 Targets保存SSH解析入口同样由 `public-mappers.toStoredTargetRequest` 将Trusted请求逐字段转换为内部请求，包含可选expectedFingerprint；不能直接把public对象交给Service。SSH密文快照与未保存引用只供resolver Model实现使用，类型局部定义于该实现，不进入Service应用类型；Host Key公开确认请求直接复用Shared唯一契约，再由register白名单转内部命令。RemoteMachineModel建连后只返回独立RemoteMachineIdentity的id/fingerprint及原机器能力，不把可信解析中的明文认证、Proxy或Jump对象传给终端、Files等后继Model；完整目标仅用于本次握手转换。
 
@@ -1412,6 +1374,17 @@ Files 的二进制读取、目录 ZIP、下载类型探测及票据准备由 Rem
 8. **当前能力与验收**：源码规则见H-06、E-01.1/E-05.1/E-06.3/E-08.1；行为/容量和未知结果说明见USAGE，静态与待B10场景见testing，不将源码审查作为行为通过。
 
 压缩Adapter在首个写入前同步发送随机标记，发送失败不启动writer。Files Model选择SSH的TERM排空模式，完整读取stdout后仅将实际远端TERM退出且没有该标记映射为FileCommandNotStarted；已见标记、断流、协议失败或5秒收尾期限内未得到退出均保持unknown。Platform归一ssh2的信号名称，远端exit-signal本身仍是副作用unknown，不为Agent或其他命令改变结果分类。派发期间取消保留晚到channel并请求终止，连接关闭与信号受理不冒充实际退出；不新增远端helper或工具。
+
+### 技术装配、工具分页与安装入口
+
+1. **职责与范围**：Files Service 持有编码默认值/BOM、目录遍历和归档用例；FileTextModel、FileZipModel、FileArchiveModel 转换技术请求、结果及失败。技术命令构造、归档原始输出解析、iconv 和 ZIP 流执行由 Platform Adapter 持有。
+2. **子功能与目录**：沿原 files/model 与 service；Platform archive/archive-port 定义 ArchiveCommands、工厂和 ZipStream，text/text-codec 定义 TextCodec；不通过新转导出包装具体实现。Targets migrations 仅编排各原 schema Adapter。
+3. **依赖方向**：Service/helper → 文件应用 Model → Platform Port；Remote register 唯一选择 NativeArchiveCommands、IconvTextCodec、streamZip 并注入。Model 不引用具体 Adapter，Adapter 不引用应用类型。RemoteFileModel 暴露已注入的编码/ZIP Model，并为原 FileResource 创建绑定归档 Model。
+4. **类型与转换**：归档 list 由 Adapter 返回解析后的 NativeArchiveMembers，Model 逐字段转换为 FileArchiveListing；ZIP 条目、字节与回调保留 Model 投影。SFTP symlink 将应用参数白名单转为技术选项；WorkspaceHistoryModel 将 WorkspaceViewport 显式转为 SuspendedViewport，不以应用类型声明技术投影。工具 before 游标在 Agent 入口从公开类型转为 ToolListCursor，RunToolModel 将范围/游标逐字段转为 Storage 参数，将 StoredToolListCursor 逐字段转回；HTTP 游标编码沿原 owner。
+5. **入口与安装**：公开 HTTP/WS 不变。Bootstrap 的 applicationMigrations 唯一持有版本/签名，直接调用 initializeTargetsSchema，后者依次安装代理、标签、密钥、连接、凭据和主机信任；不保留 targets/schema 转导出或子模块迁移数组。
+6. **数据、事务与并发**：只整理装配与转换，不改变 schema/签名、SQL、版本或事务。插件数据清除仍由 Plugin Adapter 事务协调 Governance/Integration Adapter，register 仅安装技术参与者；应用准入由 Service 经 Model 的同事务事实回调执行。
+7. **生命周期与失败**：每次归档操作复用一个绑定原 FileResource 的 Model，不新建连接或后台 owner。原信号、剩余总期限、未启动/未知、清理失败与具名失败转换保持；ZIP 的 producer/readers 与原资源仍由原 owner 排空，文本编码失败仍映射 invalid_input。
+8. **当前能力与验收**：属于内部边界修正，USAGE 的文件编辑/下载/归档、Agent 工具历史及安装行为保持；完整生产消费者及夹具同步。静态检查、扫描范围和行为待验分别记录于 PLAN/testing，不把依赖扫描或编译当作全后端逐行审核或运行验收。
 
 ### Platform 传输与观测资源边界
 
@@ -1645,7 +1618,7 @@ Context预压缩现状：checkpoint工具需要实际context.compact授权，摘
 2. **目录**：原 runs/model/storage/adapters、governance/model/service/storage/adapters、interfaces HTTP/WS；错误分类 owner 为 agent-failure / agent-storage-failure。
 3. **依赖方向**：Service → Model → Storage，SQLite 在原事务读取模式，经 Model 转换交给治理规则；不从前端或工具参数推断自动批准。
 4. **类型与转换**：Shared runs/values 唯一定义 AgentApprovalMode；内部 CreateRootRunCommand / AgentRun、StoredRun / 创建命令及公开后端输入独立定义并逐字段映射。Shared 安全失败码 execution_storage_failed 不含技术正文。
-5. **入口与安装**：HTTP create、workspace create/append、public create 及 HTTP/WS RunView 同步字段；初始 v1 签名为 backend-next-v1-initial-20261025-agent-approvals，不兼容旧开发结构。
+5. **入口与安装**：HTTP create、workspace create/append、public create 及 HTTP/WS RunView 同步字段；初始 v1 签名为 backend-next-v1-initial-20261104-plugin-apps，不兼容旧开发结构。
 6. **数据与并发**：agent_runs.approval_mode 非空有限值，创建 hash 包含模式，Child 创建事务复制父模式；快照列/解码与父子关系同时验证。自动审批绑定原 operation hash/revision、policy revision、目标版本和原用户，approved 后沿原 consume/authority 事务派发，未知提交不重放。
 7. **生命周期与失败**：具名 SQL/constraint 失败区别于 commit_unknown/rollback_failed；无模型步骤的 pending 仅以原创建 hash/version CAS 结算，轮间以原 completed 步骤 CAS 结束；reserved 并发等待的确定拒绝结算 DISPATCH_NOT_STARTED。纯确定 SQL 失败聚合仍可分类，混合未知或清理失败保持原因，不推测。App/Provider/目标撤权仍逐阶段检查。
 8. **当前能力与验收**：恢复聊天批准策略的真实执行链，未改变布局/风格；按 USAGE 操作。静态和两轮源码审核见 testing，真实审批/故障/取消和空库启动验收待远程，不把编译通过视为实机通过。
@@ -1703,7 +1676,7 @@ Context预压缩现状：checkpoint工具需要实际context.compact授权，摘
 5. **入口与安装**：快照继续使用原序列化入口，已有鼠标模式后追加活动屏幕的非默认滚动边界，再恢复DECOM与光标位置，避免设置区域时光标归位。
 6. **数据、事务与并发**：状态随xterm解析更新，快照仍等待输出解析；软重置清当前区域、RIS与resize清两套区域，返回普通缓冲区清备用区域。
 7. **生命周期与失败**：原tracker统一释放parser/resize/buffer监听，沿原快照失败与清理路径；仅补齐活动屏幕区域，不承诺序列化任意未闭合ANSI解析状态或非活动屏幕的自定义区域。
-8. **当前能力与验收**：真实Codex分块数据在15个输出边界经双端实际实现回放，校准等价ANSI调色板编码后可见单元格无差异；后端9项定向回归、静态证据与实机边界见testing。运行中的旧Backend尚未加载本轮代码，不据此宣称端到端修复已实机验收。
+8. **当前能力与验收**：真实Codex分块数据在15个输出边界经双端实际实现回放，校准等价ANSI调色板编码后可见单元格无差异；后端9项定向回归、静态证据与实机边界见testing。回放不等于真实终端端到端验收，实际运行版本与实机覆盖按 testing 记录。
 
 ### SSH交互输入的小包延迟与授权检查
 
@@ -1764,3 +1737,29 @@ WorkspaceFilesSession 为无 requestId 的 terminal.input 持有独立的串行�
 原 worker 每批调用 Workspaces.allowed，await 后再次核对 lifetime、附件与 generation，随后只调用原 WorkspaceService.write 一次；实际 Shell 背压及1MiB缓冲仍归 WorkspaceService。旧附件输入不交给重附着者，不因协议拒绝自动重派；关闭先停止准入，聚合等待 worker 与原 releaseWorkspace。批次类型只在本文件使用，未新增 Shared、Service 或存储契约。原OSC52零间隔输入与真实SSH/WS突发通知回归负责验证顺序和无截断，不以放慢测试或扩大通用RPC名额换绿。
 
 Platform HttpWebSocketChannel.onMessage显式区分void与Promise：同步协议准入在当前帧完成，不制造微任务等待；异步回调仍串行排队、占用原64条/字节预算并由HTTP追踪。技术层只持文本/二进制队列，不识别terminal.input；防重入排空，异常先终止socket再释放，关闭/停机后的消息不再派发，二进制高水位及CLOSING恢复读取保持。Workspace注册同步accept，协议任务及输入鉴权分别由原owner追踪。
+
+## 插件卸载配置清除
+
+Scope 的可管理 App 查询在 LIMIT 前按 user_id/app_id 排除 removed 安装，getApp 与历史记录继续保留。Plugin installationDirectory 在同一 SQLite 事务读取安装与有实际 KV/配置的 removed ID；无 removed 时不扫描配置，其余按用户批读，避免逐项查询。PluginStorage 通过 register 安装 Governance/Integrations Adapter 的 retainedApps/clear 事务参与者，只持自己的 KV/安装 SQL；清除与安装修订递增、幂等回执同事务。清除范围为 KV 及旧操作正文、grants、execution overrides 与存活 MCP/ACP 配置/凭据；策略版本单调递增，不删除历史审批/任务/聊天/记忆/文件和必要安装墓碑。Integration 写事务拒绝 removed App，避免旧页面重新写入清掉的配置。数据清除仅允许 removed，原撤权和 runtime/Run 排空在卸载先行完成；卸载与后续清除分别确认，不宣称跨 HTTP 原子性。
+
+## 插件作为唯一 Agent App 来源
+
+1. **职责与范围**：Plugin 安装拥有 App 创建，Scope 只读取插件声明及管理实例启停/线程；没有内置应用或默认初始化。
+2. **子功能与目录**：删除 scope/service/app-definitions 和内置安装任务，沿原 plugin-scope-sql、scope model/storage 及快照 Adapter。
+3. **依赖方向**：Plugin 通过已注册 Scope 存储任务参加自身事务；Scope Adapter 核对插件信任；应用仍经 Model 转换。
+4. **类型与转换**：删除 CreateApp 应用/存储/公开契约与 Shared 创建协议；声明只含 id/version/displayName/capabilities，移除 defaultEnabled，双端白名单 mapper 同步。
+5. **入口与安装**：无 POST /agent/apps；GET /agent/app-definitions 按 authenticated userId 读取已安装插件。新库无 App/声明，GET 不写入。
+6. **数据、事务与并发**：初始定义表移除 installed/default_enabled/source_kind，实例移除 is_default 和默认索引；安装仍在同事务创建唯一 UUID、政策和声明。不迁移旧库，初始 schema 签名同步更新；快照严格匹配当前表列及已验证签名包。
+7. **生命周期与失败**：原安装未知、升级/卸载排空、授权围栏和启停 CAS 保持；任何 App 都必须通过当前插件身份信任校验，无内置旁路。
+8. **当前能力与验收**：使用说明在 Agent App/授权章节；签名插件夹具覆盖原消费者，静态、定向回归与 CDP 证据归 testing，不以静态检查代替全量 E2E。
+
+### Agent 工具声明与有限选项
+
+1. **职责与范围**：Tools声明真实可调用能力及参数提示，输入解码仍是执行前权威；模型工具目录不代替实时权限。插件仅提供角色流程，不承担宿主工具实现。
+2. **子功能与目录**：沿tools/model/tool-types、service/tool-definitions/browser-tools/collaboration-tools/mcp-tools及tool-input；模型投影沿runs/model/run-model-stream；技术schema沿platform/ai/model-port与adapters/model-request。
+3. **依赖方向**：Tools应用声明→Run Model逐字段投影→技术Port→供应商Adapter；无Adapter引应用类型、Shared DTO穿透或跨一级私有调用。
+4. **类型与转换**：文本field可声明已有有限choices；Model复制为独立string enum，Adapter核验并复制到Chat Completions/Responses schema。ToolCatalogFacts/State归Governance Model，StoredToolCatalogFacts只归storage并在Model投影policy/connectionIds，Service复用authorizationFact返回可用能力；新增目录ToolInput只属Tools内部模型，不新增Shared管理协议。仅同现有语义校验一致的值进入枚举，不改变合法调用形状；字节预算仍由输入边界实际计量，不将JSON Schema字符长度当作UTF-8精确容量。
+5. **入口与安装**：Run每步经Tools.availableDefinitions将Child白名单目录与Governance.toolCatalog交集；Governance同事务读取App政策、Run选择与现存SSH类型，沿原authorizationFact筛选能力和未被denylist禁止的目标，目录不代替实际派发授权。Browser与ACP安全目录分别归原Integration子功能owner，工具账本和授权链不旁路；浏览器/项目上下文/MCP按动作给出不同用途、输入来源和下一步，减少泛化重复说明。file_write新建使用明确字符串absent，替换使用原hash。
+6. **数据、事务与并发**：无schema变更；Governance存储新增目录事实读取并经Model白名单转换，SQL仅Adapter持有；请求hash包含实际投影后的声明，原付费请求不可变身份及独立工具账本/审批保持。
+7. **生命周期与失败**：声明精简不放宽授权、目标绑定、审批、超时、取消、未知及清理。后台Job、Root/Child、Browser/MCP/ACP仍由原owner管理，独立能力不因名字相似而合并。浏览器发现只返回目标标识/版本/URL模式，ACP只返回当前所选SSH的启用配置安全元数据；均在交付前复查原工具授权。技术历史校验允许已完成调用不在当前目录，RunModelStream仍拒绝本轮未提供的新工具提案。
+8. **当前能力与验收**：源码范围及真实消费者审核、静态证据见PLAN/testing；行为留D17远程回归，不以说明更短声称模型准确率或延迟实测改善。

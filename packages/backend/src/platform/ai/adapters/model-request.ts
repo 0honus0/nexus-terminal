@@ -70,7 +70,28 @@ function parameters(input: ModelToolDefinition['parameters']): ModelToolDefiniti
 			) {
 				throw new ModelNetworkFailure('response_invalid');
 			}
-			properties[name] = { type: 'string', minLength: field.minLength, maxLength: field.maxLength };
+			const property: ModelToolProperty = {
+				type: 'string',
+				minLength: field.minLength,
+				maxLength: field.maxLength,
+			};
+			if (field.enum !== undefined) {
+				if (
+					!Array.isArray(field.enum) ||
+					field.enum.length === 0 ||
+					new Set(field.enum).size !== field.enum.length ||
+					field.enum.some(
+						(value) =>
+							typeof value !== 'string' ||
+							Array.from(value).length < field.minLength ||
+							Array.from(value).length > field.maxLength,
+					)
+				) {
+					throw new ModelNetworkFailure('response_invalid');
+				}
+				property.enum = field.enum.map((value) => value);
+			}
+			properties[name] = property;
 		}
 	}
 	return { type: 'object', properties, required: input.required.map((name) => name), additionalProperties: false };
@@ -122,9 +143,9 @@ function responseMessages(value: ModelMessage): ResponseInputItem[] {
 	];
 }
 
+/** Historical calls may outlive their availability; new proposals use the current Run catalog. */
 function validateHistory(input: ModelStreamInput): void {
 	const pending = new Set<string>();
-	const names = new Set(input.tools.map((tool) => tool.name));
 	let bytes = 0;
 	for (const message of input.messages) {
 		bytes += Buffer.byteLength(JSON.stringify(message), 'utf8');
@@ -156,7 +177,7 @@ function validateHistory(input: ModelStreamInput): void {
 				!call.id ||
 				Buffer.byteLength(call.id, 'utf8') > 256 ||
 				pending.has(call.id) ||
-				!names.has(call.name) ||
+				!/^[a-zA-Z0-9_-]{1,64}$/u.test(call.name) ||
 				Buffer.byteLength(call.argumentsJson, 'utf8') > MODEL_TOOL_MAX_ARGUMENT_BYTES
 			) {
 				throw new ModelNetworkFailure('response_invalid');

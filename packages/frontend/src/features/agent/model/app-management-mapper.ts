@@ -40,7 +40,6 @@ export function fromAppDefinition(value: AgentAppDefinitionView): AppDefinition 
 		version: value.version,
 		name: value.displayName,
 		capabilities: value.capabilities.map((capability) => capability),
-		defaultEnabled: value.defaultEnabled,
 	};
 }
 

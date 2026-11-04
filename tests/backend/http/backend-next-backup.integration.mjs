@@ -221,9 +221,10 @@ await test(
 				'cross-instance import replaces product state and preserves destination session/listener',
 				async () => {
 					const restored = expectStatus(await restore(archive, sourcePassword), 200);
-					assert.equal(restored.restoredTables, 87);
+					assert.equal(restored.restoredTables, 88);
 					assert.ok(restored.restoredRows > 0);
-					assert.equal(restored.restoredFiles, 1);
+					// The signed source plugin package and the uploaded artifact are both restored.
+					assert.equal(restored.restoredFiles, 2);
 					assert.equal(typeof restored.cleanupPending, 'boolean');
 					assert.deepEqual(expectStatus(await api('GET', '/api/v1/quick-commands'), 200).entries, []);
 					assert.equal(expectStatus(await api('GET', '/api/v1/auth/status'), 200).isAuthenticated, true);

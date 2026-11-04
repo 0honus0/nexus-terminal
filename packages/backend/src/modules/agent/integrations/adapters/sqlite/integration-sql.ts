@@ -20,6 +20,21 @@ async function get(tx: SqlExecutor, scope: StoredIntegrationScope, id: string): 
 	return row === null ? null : integrationRow(row);
 }
 
+export async function appsWithIntegrationSettings(tx: SqlExecutor, userId: number): Promise<string[]> {
+	const rows = await tx.all('SELECT DISTINCT app_id FROM agent_integrations WHERE user_id=?', [userId]);
+	return rows.map((row) => {
+		if (typeof row.app_id !== 'string') {
+			throw new Error('Invalid integration App owner');
+		}
+		return row.app_id;
+	});
+}
+
+export async function clearAppIntegrationSettings(tx: SqlExecutor, userId: number, appId: string): Promise<void> {
+	// Creation receipts remain historical facts; live configuration and credentials are removed.
+	await tx.run('DELETE FROM agent_integrations WHERE user_id=? AND app_id=?', [userId, appId]);
+}
+
 export class SqliteIntegrationStorage implements IntegrationStorage {
 	private readIdentity: ((tx: SqlExecutor, digest: string) => Promise<number | null>) | null = null;
 
@@ -40,10 +55,10 @@ export class SqliteIntegrationStorage implements IntegrationStorage {
 		if (!this.readIdentity) {
 			throw new Error('Integration identity unavailable');
 		}
-		const app = await tx.one('SELECT enabled FROM agent_apps WHERE id=? AND user_id=?', [
-			scope.appId,
-			scope.userId,
-		]);
+		const app = await tx.one(
+			"SELECT a.enabled FROM agent_apps a WHERE a.id=? AND a.user_id=? AND NOT EXISTS (SELECT 1 FROM agent_plugin_installations p WHERE p.user_id=a.user_id AND p.app_id=a.id AND p.status='removed')",
+			[scope.appId, scope.userId],
+		);
 		const count = await tx.one('SELECT COUNT(*) AS count FROM agent_integrations WHERE user_id=? AND app_id=?', [
 			scope.userId,
 			scope.appId,

@@ -5,7 +5,7 @@
 	import { isNetworkFailure } from '@/client/http/network-failure';
 	import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
 	import { useAgentManagementOperation } from '../composables/use-agent-management-operation';
-	import { listAppDefinitions, listManagedApps } from '../api/app-management-api';
+	import { listManagedApps } from '../api/app-management-api';
 	import { listPluginInstallations, listPluginVersions } from '../api/plugin-management-api';
 	import { getExecutionSettings } from '../api/execution-api';
 	import { toHostDirectory } from '../model/host-mapper';
@@ -39,14 +39,13 @@
 	async function refresh(): Promise<void> {
 		await operation.execute(
 			async (signal) => {
-				const [apps, definitions, installations, versions, execution] = await Promise.all([
+				const [apps, installations, versions, execution] = await Promise.all([
 					listManagedApps(signal),
-					listAppDefinitions(signal),
 					listPluginInstallations(signal),
 					listPluginVersions(signal),
 					getExecutionSettings(signal),
 				]);
-				return toHostDirectory(apps, definitions, installations, versions, execution.enabled);
+				return toHostDirectory(apps, installations.installations, versions, execution.enabled);
 			},
 			(next) => {
 				directory.value = next;

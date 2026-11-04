@@ -10,7 +10,7 @@ import {
 import { selectDownloadRange } from './file-download-rules.js';
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { supportsFileEncoding, encodeFileText } from '../model/file-text-model.js';
+import type { FileTextModel } from '../model/file-text-model.js';
 import { FailureSummary } from '../../../../platform/lifecycle/failure-summary.js';
 import { RecentResults } from '../../../../platform/lifecycle/recent-results.js';
 import type { AccessPublicApi } from '../../../access/public.js';
@@ -181,15 +181,15 @@ function remoteTransferPath(value: string, destructive = false): string {
 	return normalized;
 }
 
-function safeEncoding(value: string | undefined): string {
+function safeEncoding(model: FileTextModel, value: string | undefined): string {
 	const requested = (value ?? 'utf-8').toLowerCase().replace(/[^a-z0-9]/gu, '');
-	return supportsFileEncoding(requested) ? requested : 'utf-8';
+	return model.supportsEncoding(requested) ? requested : 'utf-8';
 }
 
-function encodeText(content: string, encoding?: string): Uint8Array {
-	const normalized = safeEncoding(encoding);
+function encodeText(model: FileTextModel, content: string, encoding?: string): Uint8Array {
+	const normalized = safeEncoding(model, encoding);
 	const source = content.startsWith('\uFEFF') ? content.slice(1) : content;
-	const encoded = encodeFileText(source, normalized);
+	const encoded = model.encode(source, normalized);
 	if (normalized === 'utf16le') {
 		return Uint8Array.from(Buffer.concat([Buffer.from([0xff, 0xfe]), encoded]));
 	}
@@ -1219,6 +1219,7 @@ export class RemoteFileService {
 				const remaining = this.remaining(ms, abort, record.id);
 				await streamRemoteDirectoryZip(
 					resource,
+					this.model.zip,
 					normalized,
 					remaining,
 					abort,
@@ -2236,6 +2237,7 @@ export class RemoteFileService {
 					return input.kind === 'compress'
 						? compressRemoteArchive(
 								resource,
+								this.model.archive(resource),
 								sources,
 								archivePath,
 								format,
@@ -2250,6 +2252,7 @@ export class RemoteFileService {
 							)
 						: decompressRemoteArchive(
 								resource,
+								this.model.archive(resource),
 								archivePath,
 								format,
 								remaining,
@@ -2803,7 +2806,7 @@ export class RemoteFileService {
 		signal?: AbortSignal,
 	): Promise<void> {
 		const normalized = remotePath(filePath);
-		const bytes = encodeText(content, encoding);
+		const bytes = encodeText(this.model.text, content, encoding);
 		return this.run(
 			token,
 			id,
@@ -2837,7 +2840,7 @@ export class RemoteFileService {
 		signal?: AbortSignal,
 	): Promise<void> {
 		const normalized = remotePath(filePath);
-		const bytes = encodeText(content, encoding);
+		const bytes = encodeText(this.model.text, content, encoding);
 		return this.run(
 			token,
 			id,

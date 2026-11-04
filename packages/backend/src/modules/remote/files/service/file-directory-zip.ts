@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { streamFileZip } from '../model/file-zip-model.js';
+import type { FileZipModel } from '../model/file-zip-model.js';
 import type { FileZipEntry } from '../model/file-task-types.js';
 import { RemoteFileFailure, type FileResource } from '../model/file-types.js';
 
@@ -15,6 +15,7 @@ const SFTP_RPC_MS = 300_000;
  */
 export async function streamRemoteDirectoryZip(
 	resource: FileResource,
+	model: FileZipModel,
 	root: string,
 	remaining: () => number,
 	signal: AbortSignal,
@@ -98,7 +99,7 @@ export async function streamRemoteDirectoryZip(
 	};
 
 	await onPlan(path.posix.basename(root === '/' ? 'root' : root) + '.zip');
-	await streamFileZip(entries, signal, async (bytes, abort) => {
+	await model.stream(entries, signal, async (bytes, abort) => {
 		remaining();
 		await onChunk(bytes, abort);
 	});

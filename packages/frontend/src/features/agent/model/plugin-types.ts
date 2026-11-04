@@ -48,6 +48,11 @@ export interface PluginInstallation {
 	updatedAt: number;
 }
 
+export interface PluginInstallationDirectory {
+	installations: PluginInstallation[];
+	retainedAppIds: string[];
+}
+
 export interface PluginVersion {
 	manifest: PluginManifest;
 	packageHash: string;
@@ -86,45 +91,10 @@ export interface PluginRecommendation {
 	installation: PluginInstallation | null;
 }
 
-export interface PluginDataValue {
-	key: string;
-	version: number;
-	valueJson: string | null;
-	updatedAt: number;
-}
-
-export interface PluginDataSnapshot {
-	appId: string;
-	revision: number;
-	items: PluginDataValue[];
-}
-
 export interface PluginDataPurge {
 	revision: number;
 	deletedKeys: number;
 	updatedAt: number;
-}
-
-export interface PluginDataMigrationResult {
-	appId: string;
-	operationId: string;
-	revision: number;
-	changedKeys: number;
-	updatedAt: number;
-}
-
-export interface PluginMigrationIntent {
-	operationId: string;
-	expectedRevision: number;
-	items: { key: string; expectedVersion: number; valueJson: string | null }[];
-}
-
-export interface PluginDataIntent {
-	key: string;
-	expectedVersion: number;
-	expectedRevision: number;
-	operationId: string;
-	valueJson: string | null;
 }
 
 export interface PluginFrontendDescriptor {

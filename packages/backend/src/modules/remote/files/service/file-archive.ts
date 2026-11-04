@@ -10,7 +10,7 @@ import {
 	type FileArchiveEntry,
 	type FileCompressionFootprint,
 } from '../model/file-task-types.js';
-import { FileArchiveModel } from '../model/file-archive-model.js';
+import type { FileArchiveModel } from '../model/file-archive-model.js';
 
 import { validateListing, resolveLinkTargets, resolveHardlinkTargets } from '../file-archive-rules.js';
 
@@ -76,14 +76,13 @@ async function stat(
 }
 
 async function inspect(
-	resource: FileResource,
+	model: FileArchiveModel,
 	archive: string,
 	format: ArchiveFormat,
 	remaining: () => number,
 	signal: AbortSignal,
 	password?: string,
 ): Promise<Map<string, FileArchiveEntry>> {
-	const model = new FileArchiveModel(resource);
 	const listing = await model.list(archive, format, remaining, signal);
 	const members = validateListing(listing.names, listing.modes, format, archive);
 	for (const member of members.values()) {
@@ -102,6 +101,7 @@ async function inspect(
 
 export async function compressRemoteArchive(
 	resource: FileResource,
+	model: FileArchiveModel,
 	paths: readonly string[],
 	destination: string,
 	format: ArchiveFormat,
@@ -143,7 +143,7 @@ export async function compressRemoteArchive(
 	// Keep the real remote filename identical to the SFTP commit source.
 	const extension = format === 'zip' ? '.part.zip' : format === 'tar.gz' ? '.part.tar.gz' : '.part.tar.bz2';
 	const temporary = path.posix.join(root, '.nexus-archive-' + randomUUID() + extension);
-	await new FileArchiveModel(resource).prepare(format, 'compress', remaining, signal);
+	await model.prepare(format, 'compress', remaining, signal);
 	// Archive entries are emitted relative to the working directory; Info-ZIP
 	// omits the leading "./", while GNU tar retains it. Exclude both variants
 	// so a source tree containing the output never archives the growing file,
@@ -158,7 +158,7 @@ export async function compressRemoteArchive(
 	let warning: string | undefined;
 	try {
 		onMutation();
-		const result = await new FileArchiveModel(resource).compress(
+		const result = await model.compress(
 			workingDirectory,
 			paths,
 			temporary,
@@ -185,7 +185,7 @@ export async function compressRemoteArchive(
 			}
 			// Preserve the legacy ZIP warning result only for an independently
 			// verified archive. Other nonzero exits never publish a partial file.
-			if (!(await new FileArchiveModel(resource).verifyZip(temporary, remaining, signal))) {
+			if (!(await model.verifyZip(temporary, remaining, signal))) {
 				throw new RemoteFileFailure('remote_unavailable');
 			}
 			warning = 'Archive completed with a verified warning';
@@ -257,6 +257,7 @@ export async function compressRemoteArchive(
 
 export async function decompressRemoteArchive(
 	resource: FileResource,
+	model: FileArchiveModel,
 	source: string,
 	format: ArchiveFormat,
 	remaining: () => number,
@@ -292,7 +293,7 @@ export async function decompressRemoteArchive(
 		timeoutMs: Math.min(remaining(), 300_000),
 		signal,
 	});
-	await new FileArchiveModel(resource).prepare(format, 'decompress', remaining, signal);
+	await model.prepare(format, 'decompress', remaining, signal);
 	// Inspect and extract the same private on-host copy, rather than allowing
 	// another SFTP write to swap the original archive between the two commands.
 	// This uses native cp and keeps archive bytes off the Node.js backend.
@@ -320,7 +321,7 @@ export async function decompressRemoteArchive(
 		// The private copy is not a published user-visible mutation. A
 		// deterministic invalid archive should still produce invalid_input
 		// after its confirmed private snapshot has been cleaned.
-		const copy = await new FileArchiveModel(resource).copySnapshot(source, snapshot, remaining, signal);
+		const copy = await model.copySnapshot(source, snapshot, remaining, signal);
 		// A completed process outcome proves cp cannot write to this snapshot
 		// any longer, even if its exit code reports an error.
 		canRemoveSnapshot = true;
@@ -340,7 +341,7 @@ export async function decompressRemoteArchive(
 		// If its SSH status becomes unknown, do not race that command's cleanup.
 		let members: Map<string, FileArchiveEntry>;
 		try {
-			members = await inspect(resource, snapshot, format, remaining, signal, password);
+			members = await inspect(model, snapshot, format, remaining, signal, password);
 		} catch (cause) {
 			if (cause instanceof RemoteFileFailure && cause.code === 'operation_unknown') {
 				canRemoveSnapshot = false;
@@ -364,7 +365,7 @@ export async function decompressRemoteArchive(
 		extractionDispatched = true;
 		let result;
 		try {
-			result = await new FileArchiveModel(resource).extract(
+			result = await model.extract(
 				{
 					snapshot,
 					stage,
@@ -525,13 +526,7 @@ export async function decompressRemoteArchive(
 			) {
 				throw new RemoteFileFailure('invalid_input');
 			}
-			const result = await new FileArchiveModel(resource).createHardlink(
-				stage,
-				link.target,
-				name,
-				remaining,
-				signal,
-			);
+			const result = await model.createHardlink(stage, link.target, name, remaining, signal);
 			if (result.status === 'rejected') {
 				throw result.failure;
 			}

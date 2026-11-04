@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { PRESENTATION_PREFERENCE_BOUNDS } from '@nexus-terminal/shared/preferences/presentation/values';
 	import { computed, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { structurallyEqual } from '@/foundation/data';
@@ -146,19 +147,38 @@
 
 		if (
 			patch.dockerStatusIntervalSeconds !== undefined &&
-			!integerInRange(patch.dockerStatusIntervalSeconds, 1, 86400)
+			!integerInRange(
+				patch.dockerStatusIntervalSeconds,
+				PRESENTATION_PREFERENCE_BOUNDS.dockerStatusIntervalSeconds.min,
+				PRESENTATION_PREFERENCE_BOUNDS.dockerStatusIntervalSeconds.max,
+			)
 		)
 			return t('settings.docker.error.invalidInterval');
-		if (patch.terminalScrollbackLimit !== undefined && !integerInRange(patch.terminalScrollbackLimit, 0, 100000))
+		if (
+			patch.terminalScrollbackLimit !== undefined &&
+			!integerInRange(
+				patch.terminalScrollbackLimit,
+				PRESENTATION_PREFERENCE_BOUNDS.terminalScrollbackLimit.min,
+				PRESENTATION_PREFERENCE_BOUNDS.terminalScrollbackLimit.max,
+			)
+		)
 			return t('settings.terminalScrollback.error.invalidInput');
 		if (
 			patch.spreadsheetPreviewRowsPerPage !== undefined &&
-			!integerInRange(patch.spreadsheetPreviewRowsPerPage, 10, 2000)
+			!integerInRange(
+				patch.spreadsheetPreviewRowsPerPage,
+				PRESENTATION_PREFERENCE_BOUNDS.spreadsheetPreviewRowsPerPage.min,
+				PRESENTATION_PREFERENCE_BOUNDS.spreadsheetPreviewRowsPerPage.max,
+			)
 		)
 			return t('settings.workspace.spreadsheetPreviewLimits.invalidRows');
 		if (
 			patch.spreadsheetPreviewMaxColumns !== undefined &&
-			!integerInRange(patch.spreadsheetPreviewMaxColumns, 5, 200)
+			!integerInRange(
+				patch.spreadsheetPreviewMaxColumns,
+				PRESENTATION_PREFERENCE_BOUNDS.spreadsheetPreviewMaxColumns.min,
+				PRESENTATION_PREFERENCE_BOUNDS.spreadsheetPreviewMaxColumns.max,
+			)
 		)
 			return t('settings.workspace.spreadsheetPreviewLimits.invalidColumns');
 		return null;
@@ -302,8 +322,8 @@
 								<UiNumberInput
 									id="spreadsheetPreviewRowsPerPage"
 									v-model="form.spreadsheetPreviewRowsPerPage"
-									min="10"
-									max="2000"
+									:min="PRESENTATION_PREFERENCE_BOUNDS.spreadsheetPreviewRowsPerPage.min"
+									:max="PRESENTATION_PREFERENCE_BOUNDS.spreadsheetPreviewRowsPerPage.max"
 									step="1"
 									:disabled="savingGroup !== null || needsRefresh || loading"
 								/>
@@ -315,8 +335,8 @@
 								<UiNumberInput
 									id="spreadsheetPreviewMaxColumns"
 									v-model="form.spreadsheetPreviewMaxColumns"
-									min="5"
-									max="200"
+									:min="PRESENTATION_PREFERENCE_BOUNDS.spreadsheetPreviewMaxColumns.min"
+									:max="PRESENTATION_PREFERENCE_BOUNDS.spreadsheetPreviewMaxColumns.max"
 									step="1"
 									:disabled="savingGroup !== null || needsRefresh || loading"
 								/>
@@ -486,8 +506,8 @@
 							<UiNumberInput
 								id="terminalScrollbackLimit"
 								v-model="form.terminalScrollbackLimit"
-								min="0"
-								max="100000"
+								:min="PRESENTATION_PREFERENCE_BOUNDS.terminalScrollbackLimit.min"
+								:max="PRESENTATION_PREFERENCE_BOUNDS.terminalScrollbackLimit.max"
 								step="1"
 								:disabled="savingGroup !== null || needsRefresh || loading"
 							/>
@@ -597,8 +617,8 @@
 									icon="fa-regular fa-clock"
 									:unit="t('settings.monitoring.secondsUnit')"
 									density="compact"
-									min="1"
-									max="86400"
+									:min="PRESENTATION_PREFERENCE_BOUNDS.dockerStatusIntervalSeconds.min"
+									:max="PRESENTATION_PREFERENCE_BOUNDS.dockerStatusIntervalSeconds.max"
 									step="1"
 									:disabled="monitoringBusy"
 								/>

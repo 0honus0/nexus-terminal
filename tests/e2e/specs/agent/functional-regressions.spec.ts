@@ -13,7 +13,8 @@ import {
 	resolveNativeApproval,
 	cancelNativeTask,
 } from '../../fixtures/agent/native-task';
-import { requestAgentJson, requestAgentWorkspace } from '../../support/agent';
+import { requestAgentJson } from '../../support/agent-request';
+import { requestAgentWorkspace } from '../../support/agent';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { ensureTestSshConnection } from '../../support/ssh';
 import { installTestPlugin } from '../../support/plugins';

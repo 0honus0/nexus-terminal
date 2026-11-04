@@ -35,6 +35,11 @@ import { ConnectionTestModel } from './machines/model/connection-test-model.js';
 import { ConnectionTestService } from './machines/service/connection-test-service.js';
 import { createConnectionTestRoutes } from './interfaces/http/connection-test-http.js';
 import { RemoteFileModel } from './files/model/file-model.js';
+import { FileTextModel } from './files/model/file-text-model.js';
+import { FileZipModel } from './files/model/file-zip-model.js';
+import { NativeArchiveCommands } from '../../platform/archive/adapters/native/archive-commands.js';
+import { streamZip } from '../../platform/archive/adapters/zip/zip-stream.js';
+import { IconvTextCodec } from '../../platform/text/adapters/iconv/text-codec.js';
 import { RemoteFileService } from './files/service/file-service.js';
 import { RemoteSessionService } from './sessions/service/session-service.js';
 import type { RemoteSessions, SessionView, OpenShellRequest } from './public.js';
@@ -150,7 +155,15 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 		new NativeServerTransfer(),
 		new SecureSessionTokens(),
 	);
-	const fileModel = new RemoteFileModel(machines, options.resolver, new SecureSessionTokens(), serverTransferModel);
+	const fileModel = new RemoteFileModel(
+		machines,
+		options.resolver,
+		new SecureSessionTokens(),
+		serverTransferModel,
+		(runner) => new NativeArchiveCommands(runner),
+		new FileTextModel(new IconvTextCodec()),
+		new FileZipModel(streamZip),
+	);
 	const serverTransfers = new ServerTransferService(
 		options.access,
 		serverTransferModel,

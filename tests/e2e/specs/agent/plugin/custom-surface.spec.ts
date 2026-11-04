@@ -1,14 +1,13 @@
 import { installTestPlugin } from '../../../support/plugins';
+import { requestAgentJson } from '../../../support/agent-request';
 import {
 	selectAgentSettingsGroup,
 	selectAgentExtensionsSection,
-	requestAgentJson,
 	enableTestAgentExecution,
 } from '../../../support/agent';
 import { readAgentAppResponse } from '../../../../../packages/shared/src/agent/scope/http-codec';
 import {
-	readAgentPluginItems,
-	readAgentPluginInstallation,
+	readAgentPluginInstallationList,
 	readAgentPluginDataView,
 } from '../../../../../packages/shared/src/agent/plugins/http-codec';
 import { agentRecord } from '../../../../../packages/shared/src/agent/http-codec';
@@ -34,7 +33,7 @@ test('frontend target owns a full Custom App Surface and connects through the is
 		await enablePluginApp(request, installed.appId);
 	}
 	const installations = await requestAgentJson(request, { method: 'GET', path: '/plugins/installations' }, (raw) =>
-		readAgentPluginItems(raw, readAgentPluginInstallation),
+		readAgentPluginInstallationList(raw),
 	);
 	for (const installed of [custom, agent, fullstack]) {
 		expect(installations.items).toContainEqual(installed);

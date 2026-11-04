@@ -16,8 +16,6 @@ import type {
 } from '../model/favorite-types.js';
 import { FavoriteFailure } from '../../favorite-failure.js';
 
-const MAX_FAVORITES = 2000;
-
 function admit(actor: FavoriteActor, identity: FavoriteIdentity): void {
 	if (identity.userId === null) {
 		throw new FavoriteFailure('unauthenticated');
@@ -76,7 +74,6 @@ export class FavoriteService {
 			if (
 				!Number.isSafeInteger(query.offset) ||
 				query.offset < 0 ||
-				query.offset > MAX_FAVORITES ||
 				!Number.isSafeInteger(query.limit) ||
 				query.limit < 1 ||
 				query.limit > FAVORITE_PAGE_MAX_ENTRIES
@@ -109,16 +106,7 @@ export class FavoriteService {
 	create(actor: FavoriteActor, input: FavoriteInput): Promise<FavoriteRecord> {
 		return this.run(actor, () => {
 			validateInput(input);
-			return this.model.create(
-				actor,
-				input,
-				(identity) => admit(actor, identity),
-				(facts) => {
-					if (facts.count >= MAX_FAVORITES) {
-						throw new FavoriteFailure('limit_exceeded');
-					}
-				},
-			);
+			return this.model.create(actor, input, (identity) => admit(actor, identity));
 		});
 	}
 

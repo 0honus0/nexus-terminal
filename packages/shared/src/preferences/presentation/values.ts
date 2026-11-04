@@ -39,6 +39,17 @@ export const PRESENTATION_LAYOUT_MAX_DEPTH = 12;
 
 export const PRESENTATION_LAYOUT_MAX_NODES = 100;
 
+/** Numeric preference ranges consumed by editors, protocol and stored-record validation. */
+export const PRESENTATION_PREFERENCE_BOUNDS = {
+	terminalScrollbackLimit: { min: 0, max: 100_000 },
+	dockerStatusIntervalSeconds: { min: 1, max: 86_400 },
+	statusMonitorScale: { min: 0.65, max: 1.6 },
+	quickCommandRowSizeMultiplier: { min: 0.5, max: 2.5 },
+	fileManagerRowSizeMultiplier: { min: 0.5, max: 2 },
+	spreadsheetPreviewRowsPerPage: { min: 10, max: 2000 },
+	spreadsheetPreviewMaxColumns: { min: 5, max: 200 },
+} as const;
+
 export const PRESENTATION_ERROR_CODES = [
 	'invalid_input',
 	'unauthenticated',

@@ -124,7 +124,7 @@ export function readFavoriteQuery(query: URLSearchParams): FavoritePathListQuery
 	}
 	return {
 		sortBy,
-		offset: integer(Number(query.get('offset') ?? '0'), 0, 2000),
+		offset: integer(Number(query.get('offset') ?? '0'), 0),
 		limit: integer(Number(query.get('limit') ?? String(FAVORITE_PAGE_MAX_ENTRIES)), 1, FAVORITE_PAGE_MAX_ENTRIES),
 	};
 }
@@ -158,7 +158,7 @@ export function readFavoriteList(input: unknown, query: FavoritePathListQuery): 
 	if (new Set(entries.map((row) => row.id)).size !== entries.length) {
 		throw new InvalidFavoritePayload();
 	}
-	const nextOffset = value.nextOffset === null ? null : integer(value.nextOffset, 1, 2000);
+	const nextOffset = value.nextOffset === null ? null : integer(value.nextOffset, 1);
 	if (nextOffset !== null && (entries.length !== query.limit || nextOffset !== query.offset + entries.length)) {
 		throw new InvalidFavoritePayload();
 	}

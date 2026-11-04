@@ -80,7 +80,9 @@
 
 	async function toggleAgent(): Promise<void> {
 		if (onboarding.operation.busy.value || onboarding.visible.value) return;
-		if (props.active) await execution.toggleEnabled();
+		if (!props.active) return;
+		if (execution.saved.value?.enabled) await execution.toggleEnabled();
+		else await onboarding.request();
 	}
 
 	function selectGroup(id: SettingsGroup): void {

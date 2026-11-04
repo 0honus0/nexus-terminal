@@ -1,3 +1,4 @@
+import { createTestAgentApp } from './native-agent-fixture.mjs';
 import { listAgentApprovalHistory } from './agent-approval-fixture.mjs';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -180,7 +181,7 @@ export async function openAgentExecution(directory, sshd) {
 			}),
 			201,
 		);
-		agentApp = expectStatus(await api('POST', '/api/v1/agent/apps', { name: 'Execution fixture' }), 201);
+		agentApp = await createTestAgentApp(api, directory, 'Execution fixture');
 		await grants(['file.read', 'file.write', 'file.delete', 'shell.execute', 'machine.inspect']);
 		const settings = expectStatus(await api('GET', '/api/v1/agent/execution-settings'), 200).settings;
 		expectStatus(
@@ -307,12 +308,19 @@ export async function openAgentExecution(directory, sshd) {
 
 		rows(table, run) {
 			assert.ok(
-				['agent_run_tools', 'agent_tool_jobs', 'agent_run_model_steps', 'agent_run_children'].includes(table),
+				[
+					'agent_runs',
+					'agent_run_tools',
+					'agent_tool_jobs',
+					'agent_run_model_steps',
+					'agent_run_children',
+				].includes(table),
 			);
 			const db = new DatabaseSync(database, { readOnly: true });
 			try {
 				const order = table === 'agent_run_children' ? 'rowid' : 'created_at';
-				return db.prepare('SELECT * FROM ' + table + ' WHERE run_id=? ORDER BY ' + order).all(run.id);
+				const identity = table === 'agent_runs' ? 'id' : 'run_id';
+				return db.prepare('SELECT * FROM ' + table + ' WHERE ' + identity + '=? ORDER BY ' + order).all(run.id);
 			} finally {
 				db.close();
 			}

@@ -6,6 +6,7 @@ import type {
 import type {
 	SuspendedCheckpointFactory,
 	SuspendedTerminalCheckpoint,
+	SuspendedViewport,
 } from '../../../../platform/terminal/suspended-checkpoint-port.js';
 import { TerminalCleanupFailure } from '../../../../platform/terminal/terminal-errors.js';
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
@@ -17,7 +18,7 @@ import {
 	type WorkspaceViewport,
 } from './workspace-types.js';
 
-function viewport(value: WorkspaceViewport): WorkspaceViewport {
+function toViewport(value: WorkspaceViewport): SuspendedViewport {
 	return { columns: value.columns, rows: value.rows };
 }
 
@@ -83,7 +84,7 @@ export class WorkspaceHistoryModel {
 	createCheckpoint(initial: string | undefined, view: WorkspaceViewport): WorkspaceCheckpoint {
 		let resource: SuspendedTerminalCheckpoint;
 		try {
-			resource = this.checkpoints.create(initial, viewport(view));
+			resource = this.checkpoints.create(initial, toViewport(view));
 		} catch (cause) {
 			if (cause instanceof TerminalCleanupFailure) {
 				throw new RemoteResourceCleanupFailure([cause]);
@@ -94,9 +95,9 @@ export class WorkspaceHistoryModel {
 			write: (data) =>
 				this.boundary(() => resource.write(typeof data === 'string' ? data : Uint8Array.from(data))),
 
-			resize: (view) => this.boundary(() => resource.resize(viewport(view))),
+			resize: (view) => this.boundary(() => resource.resize(toViewport(view))),
 
-			reset: (data, view) => this.boundary(() => resource.reset(data, viewport(view))),
+			reset: (data, view) => this.boundary(() => resource.reset(data, toViewport(view))),
 
 			snapshot: () =>
 				this.boundary(async () => {
@@ -111,7 +112,7 @@ export class WorkspaceHistoryModel {
 	async openText(id: string, view: WorkspaceViewport, signal: AbortSignal): Promise<WorkspaceLogSource> {
 		return this.boundary(async () => {
 			const source = await this.logs.openRead(id);
-			const result = await this.renderer.render(source, viewport(view), signal);
+			const result = await this.renderer.render(source, toViewport(view), signal);
 
 			const boundary = <T>(operation: () => Promise<T>) => this.boundary(operation);
 

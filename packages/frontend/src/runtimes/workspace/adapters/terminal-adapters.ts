@@ -1,3 +1,4 @@
+import { WORKSPACE_DIRECTORY_CHANGE_TIMEOUT_MS } from '@nexus-terminal/shared/remote/terminal/values';
 import { readWorkspaceSuspendHistory } from '@nexus-terminal/shared/remote/suspend/workspace-codec';
 import {
 	readWorkspaceSuspendHistoryResponse,
@@ -245,7 +246,7 @@ export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceT
 	};
 };
 
-const DIRECTORY_CHANGE_COMPLETION_TIMEOUT_MS = 10 * 60 * 1000 + 5_000;
+const DIRECTORY_CHANGE_COMPLETION_TIMEOUT_MS = WORKSPACE_DIRECTORY_CHANGE_TIMEOUT_MS + 5_000;
 
 export const createTerminalDirectoryPort = (
 	socket: WorkspaceSocket,

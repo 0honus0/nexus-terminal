@@ -66,6 +66,7 @@ await test('B10 actual repository HTTP, signed downloads and configuration order
 	server.listen(0, '127.0.0.1');
 	await once(server, 'listening');
 	const f = await openPlugins(t);
+	const initialStages = expectStatus(await f.api('GET', base + '/stages'), 200).items;
 	const url = 'http://127.0.0.1:' + server.address().port + '/catalog.json';
 	const packageBytes = await f.build('repository');
 	bytes = packageBytes;
@@ -104,9 +105,10 @@ await test('B10 actual repository HTTP, signed downloads and configuration order
 		expectStatus(await f.anonymous('POST', base + '/remote/stage', {}), 401);
 		assert.equal(requests.length, 0);
 	});
-	await t.test('unconfigured source is forbidden and initial settings are not persisted defaults', async () => {
+	await t.test('unconfigured source is forbidden and the fixture restores its repository list', async () => {
 		settings = readAgentPluginRepositorySettings(expectStatus(await f.api('GET', base + '/repositories'), 200));
-		assert.deepEqual(settings, { version: 0, repositories: [], updatedAt: 0 });
+		assert.deepEqual(settings.repositories, []);
+		assert.equal(settings.version, 2, 'fixture source install configured and restored its local repository');
 		expectStatus(await read(), 403);
 		assert.equal(requests.length, 0);
 	});
@@ -124,7 +126,7 @@ await test('B10 actual repository HTTP, signed downloads and configuration order
 	}
 	await t.test('save succeeds without fetching source; stale CAS cannot overwrite', async () => {
 		settings = readAgentPluginRepositorySettings(expectStatus(await save([{ url }]), 200));
-		assert.equal(settings.version, 1);
+		assert.equal(settings.version, 3);
 		assert.equal(requests.length, 0);
 		expectStatus(await save([], 0), 409);
 		assert.deepEqual(expectStatus(await f.api('GET', base + '/repositories'), 200), settings);
@@ -230,7 +232,7 @@ await test('B10 actual repository HTTP, signed downloads and configuration order
 		catalog.packages[0].packageUrl = '/redirect-loop';
 		expectStatus(await download(), 503);
 		catalog = structuredClone(original);
-		assert.deepEqual(expectStatus(await f.api('GET', base + '/stages'), 200).items, []);
+		assert.deepEqual(expectStatus(await f.api('GET', base + '/stages'), 200).items, initialStages);
 	});
 	await t.test('catalog identity cannot relabel actual signed package version or publisher', async () => {
 		catalog.packages[0].version = '1.0.1';
@@ -241,7 +243,7 @@ await test('B10 actual repository HTTP, signed downloads and configuration order
 		catalog.packages[0].publisherKeyId = keyId;
 		expectStatus(await download(), 403);
 		catalog = structuredClone(original);
-		assert.deepEqual(expectStatus(await f.api('GET', base + '/stages'), 200).items, []);
+		assert.deepEqual(expectStatus(await f.api('GET', base + '/stages'), 200).items, initialStages);
 	});
 	await t.test('redirected real package stages, verifies and installs disabled with empty grants', async () => {
 		catalog.packages[0].packageUrl = '/redirect';
@@ -271,8 +273,13 @@ await test('B10 actual repository HTTP, signed downloads and configuration order
 		const publishers = expectStatus(await f.api('GET', base + '/publishers'), 200).items;
 		assert.notEqual(publishers[0].revokedAt, null);
 		const installed = expectStatus(await f.api('GET', base + '/installations'), 200).items;
-		assert.equal(installed.length, 1);
-		assert.equal(expectStatus(await f.api('GET', '/api/v1/agent/apps/' + installed[0].appId), 200).enabled, false);
+		assert.equal(installed.length, 2);
+		for (const installation of installed) {
+			assert.equal(
+				expectStatus(await f.api('GET', '/api/v1/agent/apps/' + installation.appId), 200).enabled,
+				false,
+			);
+		}
 	});
 	await t.test('in-flight read finishes before queued configuration update; later reads see removal', async () => {
 		mode = 'hold';

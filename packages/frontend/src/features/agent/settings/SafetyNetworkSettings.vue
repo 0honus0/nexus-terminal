@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { AGENT_DENYLIST_MAX_REASON_CODE_POINTS } from '@nexus-terminal/shared/agent/governance/values';
 	import { nextTick, computed, onActivated, onMounted, ref, toRaw } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import {
@@ -425,7 +426,7 @@
 					<UiInput
 						v-model="draft.reason"
 						type="text"
-						maxlength="512"
+						:maxlength="AGENT_DENYLIST_MAX_REASON_CODE_POINTS"
 						class="flex-1"
 						:placeholder="t('agent.settings.safety.reasonPlaceholder')"
 						:aria-label="t('agent.settings.safety.reason')"

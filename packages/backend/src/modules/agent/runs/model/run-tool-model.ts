@@ -164,12 +164,21 @@ export class RunToolModel {
 		before: ToolListCursor | null,
 		limit: number,
 	): Promise<ToolListPage | null> {
-		const page = await agentStorage(() => this.storage.listThread(input, before, limit));
+		const page = await agentStorage(() =>
+			this.storage.listThread(
+				{ userId: input.userId, appId: input.appId, threadId: input.threadId },
+				before === null ? null : { createdAt: before.createdAt, id: before.id },
+				limit,
+			),
+		);
 		return page === null
 			? null
 			: {
 					items: page.items.map(fromStoredTool),
-					nextCursor: page.nextCursor === null ? null : { ...page.nextCursor },
+					nextCursor:
+						page.nextCursor === null
+							? null
+							: { createdAt: page.nextCursor.createdAt, id: page.nextCursor.id },
 				};
 	}
 

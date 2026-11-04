@@ -104,7 +104,6 @@
         "uninstallFailed": "アプリのアンインストールに失敗しました",
         "deleteDataFailed": "アプリはアンインストールされましたが、保持データを削除できませんでした",
         "drainingNotice": "アプリのバックグラウンドタスクを排出中です...",
-        "coreAppCannotUninstall": "コア組み込みアプリはアンインストールできません",
         "categoryFiles": "ファイルとターゲット",
         "categoryExecution": "実行",
         "categoryMachine": "ホストマシン",
@@ -233,7 +232,8 @@
               }
             }
           }
-        }
+        },
+        "installationUnavailable": "プラグインのインストール情報を取得できません。再読み込みしてください。"
       },
       "plugins": {
         "title": "インストール可能な App と Skill",
@@ -260,7 +260,7 @@
         "continueUninstall": "アンインストールを続行",
         "retainedData": "アンインストール済み App の保持データ",
         "retainedDataHint": "コードのアンインストールでは AppStorage は削除されません。データ削除は別の破壊的操作です。",
-        "deleteData": "保持データを削除",
+        "deleteData": "データを削除",
         "deleteDataWarning": "この App に保持されている AppStorage を完全に削除します。プラグインコードは既にアンインストールされており、削除後に Nexus からこのデータを復元することはできません。",
         "confirmDeleteData": "完全削除を確認",
         "cancelDeleteData": "キャンセル",
@@ -311,8 +311,15 @@
         "clearSearch": "検索をクリア",
         "copied": "コピーしました",
         "copyFailed": "コピーできませんでした。再試行してください。",
-        "uninstallDataHint": "アンインストールではデータが保持されます。完全に削除するには、処理待機中にデータ削除を確認してからアンインストールを続けてください。",
-        "copy": "コピー"
+        "uninstallDataHint": "Agent App 一覧から削除されます。設定とアプリデータは再インストール用に保持され、プラグインの行から削除できます。",
+        "copy": "コピー",
+        "clearOnUninstall": "プラグイン設定とアプリデータも削除する",
+        "clearDataScope": "権限、実行予算、MCP / ACP 設定、プラグインストレージを削除します。チャット、タスク履歴、メモリ、生成ファイルは保持されます。削除したデータは復元できません。",
+        "hasRetainedData": "アプリデータあり",
+        "reinstall": "再インストール",
+        "clearDataTitle": "プラグインデータを削除",
+        "clearDataPrompt": "「{name}」の保持された設定とアプリデータを削除しますか？",
+        "retainedSourceUnavailable": "元のカタログを利用できません。保持データを削除するか、元のリポジトリを再追加して再インストールしてください。"
       },
       "hardLimits": {
         "title": "ハードリミット",
@@ -1796,6 +1803,9 @@
         "remove": "削除"
       },
       "toolLabel": {
+        "browser_targets_list": "ブラウザー接続先を一覧表示",
+        "acp_integration_list": "ACP 連携を一覧表示",
+        "acp_integration_execute": "ACP 連携を実行",
         "machine_connection_list": "利用可能な接続を一覧表示",
         "machine_diagnostics_read": "マシンリソースを読み取り",
         "host_diagnostics_read": "ホストリソースを読み取り",

@@ -104,7 +104,6 @@
         "uninstallFailed": "卸载失败",
         "deleteDataFailed": "插件已卸载，但保留数据删除失败",
         "drainingNotice": "应用正在排空后台任务中...",
-        "coreAppCannotUninstall": "内置核心应用不可卸载",
         "categoryFiles": "文件与目标",
         "categoryExecution": "执行",
         "categoryMachine": "主机",
@@ -233,7 +232,8 @@
               }
             }
           }
-        }
+        },
+        "installationUnavailable": "插件安装信息不可用，请重新读取"
       },
       "plugins": {
         "title": "可安装 App 与 Skill",
@@ -260,7 +260,7 @@
         "continueUninstall": "继续卸载",
         "retainedData": "已卸载 App 的保留数据",
         "retainedDataHint": "卸载代码不会删除 AppStorage。删除数据是单独的破坏性操作。",
-        "deleteData": "删除保留数据",
+        "deleteData": "清除数据",
         "deleteDataWarning": "这会永久删除此 App 保留的 AppStorage。插件代码已经卸载，删除后无法再从 Nexus 恢复这些数据。",
         "confirmDeleteData": "确认永久删除",
         "cancelDeleteData": "取消",
@@ -311,8 +311,15 @@
         "clearSearch": "清除搜索",
         "copied": "已复制",
         "copyFailed": "复制失败，请重试。",
-        "uninstallDataHint": "卸载默认保留插件数据。需要彻底清理时，请在排空阶段单独确认删除数据，再继续卸载。",
-        "copy": "复制"
+        "uninstallDataHint": "卸载后将从 Agent App 列表移除。默认保留配置和应用数据，可在重新安装时继续使用，也可在插件对应行清除。",
+        "copy": "复制",
+        "clearOnUninstall": "同时清除插件配置和应用数据",
+        "clearDataScope": "清除插件的能力授权、执行预算、MCP / ACP 配置及独立存储。聊天记录、任务历史、记忆和生成文件保留。清除后无法恢复。",
+        "hasRetainedData": "仍有应用数据",
+        "reinstall": "重新安装",
+        "clearDataTitle": "清除插件数据",
+        "clearDataPrompt": "确定清除“{name}”保留的配置和应用数据？",
+        "retainedSourceUnavailable": "原仓库当前不可用。可清除保留数据，重新添加或刷新原仓库后可重新安装。"
       },
       "hardLimits": {
         "title": "硬性限制",
@@ -1796,6 +1803,9 @@
         "remove": "移除"
       },
       "toolLabel": {
+        "browser_targets_list": "列出浏览器目标",
+        "acp_integration_list": "列出 ACP 集成",
+        "acp_integration_execute": "执行 ACP 集成",
         "machine_connection_list": "列出可用连接",
         "machine_diagnostics_read": "读取主机资源",
         "host_diagnostics_read": "读取本机资源",

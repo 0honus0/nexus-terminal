@@ -51,7 +51,12 @@ import { BrowserModel } from './integrations/model/browser-model.js';
 import { BrowserService } from './integrations/service/browser-service.js';
 import { createBrowserHttpRoutes } from './interfaces/http/browser-http.js';
 import { NativeMcpClient } from '../../platform/mcp/adapters/native-mcp-client.js';
-import { SqliteIntegrationStorage } from './integrations/adapters/sqlite/integration-sql.js';
+import {
+	SqliteIntegrationStorage,
+	appsWithIntegrationSettings,
+	clearAppIntegrationSettings,
+} from './integrations/adapters/sqlite/integration-sql.js';
+import { appsWithPolicySettings, clearAppPolicySettings } from './governance/adapters/sqlite/policy-write.js';
 import { IntegrationModel } from './integrations/model/integration-model.js';
 import { IntegrationService } from './integrations/service/integration-service.js';
 import { createIntegrationHttpRoutes } from './interfaces/http/integration-http.js';
@@ -92,7 +97,6 @@ import { ToolService } from './tools/service/tool-service.js';
 import { ToolModel } from './tools/model/tool-model.js';
 import { AGENT_APP_EXECUTION_STATE } from '@nexus-terminal/shared/agent/scope/values';
 import type { RunRevocationRequest } from './runs/model/run-types.js';
-import { builtinAppDefinitions } from './scope/service/app-definitions.js';
 import type { ConnectionCatalog } from '../targets/public.js';
 import { AgentFailure } from './agent-failure.js';
 import type { AgentAppView } from '@nexus-terminal/shared/agent/scope/model';
@@ -111,7 +115,7 @@ import { CapabilityRegistryModel } from './providers/registry/model/registry-mod
 import { CapabilityRegistryService } from './providers/registry/service/registry-service.js';
 import { ModelsDevCatalogAdapter } from '../../platform/ai/adapters/model-catalog.js';
 import { SqliteScopeStorage } from './scope/adapters/sqlite/scope-sql.js';
-import { ScopeModel, toStoredDefinition } from './scope/model/scope-model.js';
+import { ScopeModel } from './scope/model/scope-model.js';
 import { ScopeService } from './scope/service/scope-service.js';
 import { SqliteRunStorage } from './runs/adapters/sqlite/run-sql.js';
 import { SqliteRunStepStorage } from './runs/adapters/sqlite/run-step-sql.js';
@@ -277,6 +281,18 @@ export function registerAgent(
 		artifacts,
 	);
 	const pluginStorage = new SqlitePluginStorage(sqlite);
+	pluginStorage.installConfigurationLifecycle({
+		async retainedApps(tx, userId) {
+			const policies = await appsWithPolicySettings(tx, userId);
+			const integrations = await appsWithIntegrationSettings(tx, userId);
+			return [...policies, ...integrations];
+		},
+
+		async clear(tx, userId, appId) {
+			await clearAppPolicySettings(tx, userId, appId);
+			await clearAppIntegrationSettings(tx, userId, appId);
+		},
+	});
 	pluginStorage.installScopeLifecycle(
 		(tx, input) =>
 			activatePluginScope(tx, {
@@ -418,11 +434,8 @@ export function registerAgent(
 	);
 	const runs = new RunService(runModel, steps, execution, tools, collaboration, governance, executionSettings);
 
-	const scope = new ScopeService(
-		new ScopeModel(new SqliteScopeStorage(sqlite)),
-		builtinAppDefinitions(),
-		revoke,
-		(userId, appId) => plugins.reconcileApp(userId, appId),
+	const scope = new ScopeService(new ScopeModel(new SqliteScopeStorage(sqlite)), revoke, (userId, appId) =>
+		plugins.reconcileApp(userId, appId),
 	);
 	const threadStorage = new SqliteThreadStorage(sqlite);
 	threadStorage.installAuthorityReader(async (tx, access) => {
@@ -554,10 +567,7 @@ export function registerAgent(
 				return value === null ? null : toAppView(value);
 			}),
 
-		listAppDefinitions: () => boundary(async () => scope.definitions().map(toDefinitionView)),
-
-		createApp: (userId, name, definitionId) =>
-			boundary(async () => toAppView(await scope.createApp(userId, name, definitionId))),
+		listAppDefinitions: (userId) => boundary(async () => (await scope.declarations(userId)).map(toDefinitionView)),
 
 		createThread: (userId, appId, title) =>
 			boundary(async () => {
@@ -611,7 +621,13 @@ export function registerAgent(
 
 		listThreadTools: (userId, appId, threadId, before, limit) =>
 			boundary(async () => {
-				const result = await runs.listThreadTools(userId, appId, threadId, before, limit);
+				const result = await runs.listThreadTools(
+					userId,
+					appId,
+					threadId,
+					before === null ? null : { createdAt: before.createdAt, id: before.id },
+					limit,
+				);
 				return result === null
 					? null
 					: {
@@ -662,8 +678,6 @@ export function registerAgent(
 		// Reconcile persisted incomplete dispatches BEFORE accepting requests;
 		// never redispatch a request whose upstream effects are unknown.
 		initialize: async (mode) => {
-			await scope.initialize();
-			logDiagnostic(logger, 'info', 'AGENT_RECOVERY_STAGE_COMPLETED', { stage: 'scope', mode });
 			await steps.reconcileUnsettled(Date.now());
 			logDiagnostic(logger, 'info', 'AGENT_RECOVERY_STAGE_COMPLETED', { stage: 'steps', mode });
 			await tools.reconcileUnsettled();
@@ -701,7 +715,7 @@ export function registerAgent(
 
 /** Installation-only fixed storage coverage; no business records leave the adapter. */
 export function registerAgentBackup(secrets: SecretBox | null): SnapshotRegistration {
-	return registerAgentSnapshot(secrets, builtinAppDefinitions().map(toStoredDefinition), (value) => {
+	return registerAgentSnapshot(secrets, (value) => {
 		parsePluginSkills(fromPluginSkillFiles(value.files), value.manifest.version);
 	});
 }

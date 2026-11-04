@@ -11,13 +11,11 @@ export async function initializeAgentScopeSchema(tx: SqlExecutor): Promise<void>
 			enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1)),
 			version INTEGER NOT NULL DEFAULT 1 CHECK(version>=1),
 			updated_at INTEGER NOT NULL,
-			is_default INTEGER NOT NULL DEFAULT 0 CHECK(is_default IN (0,1)),
 			created_at INTEGER NOT NULL,
 			UNIQUE(id,user_id),
 			FOREIGN KEY(definition_id,definition_version) REFERENCES agent_app_definitions(id,version)
 		);
 		CREATE INDEX agent_apps_owner_idx ON agent_apps(user_id,id);
-		CREATE UNIQUE INDEX agent_apps_default_definition ON agent_apps(user_id,definition_id) WHERE is_default=1;
 		CREATE TABLE agent_threads(
 			id TEXT PRIMARY KEY,
 			user_id INTEGER NOT NULL,

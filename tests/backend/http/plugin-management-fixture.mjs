@@ -1,3 +1,4 @@
+import { createTestAgentApp } from './native-agent-fixture.mjs';
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -34,7 +35,7 @@ export async function openPlugins(t) {
 		}),
 		200,
 	);
-	const source = expectStatus(await f.api('POST', '/api/v1/agent/apps', { name: 'package source' }), 201);
+	const source = await createTestAgentApp(f.api, directory, 'package source', { signingKeyPath: keyPath });
 
 	async function upload(appId, bytes, name = 'plugin.tar') {
 		const base = '/api/v1/agent/apps/' + appId + '/artifacts';
@@ -143,5 +144,5 @@ window.connectTask.catch((error) => { window.connectionError = error.message; })
 		return { installation, appId: installation.appId, appPath, enabled, grants };
 	}
 
-	return { ...f, build, publisher, install, upload };
+	return { ...f, directory, source, build, publisher, install, upload };
 }

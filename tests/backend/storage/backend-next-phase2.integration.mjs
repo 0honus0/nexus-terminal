@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { createTestAgentApp } from '../http/native-agent-fixture.mjs';
+import { send } from '../remote/openssh-fixture.mjs';
+import { ACCESS_SESSION_COOKIE_NAME } from '../../../packages/shared/dist/access/values.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -13,7 +16,6 @@ import { ExecutionService } from '../../../packages/backend/dist/modules/agent/e
 import { createApp } from '../../../packages/backend/dist/bootstrap/create-app.js';
 import { SqliteRuntime } from '../../../packages/backend/dist/platform/storage/sqlite/sqlite-runtime.js';
 import { initializeSchema } from '../../../packages/backend/dist/platform/storage/sqlite/schema.js';
-import { targetMigrations } from '../../../packages/backend/dist/modules/targets/migrations.js';
 import { applicationMigrations } from '../../../packages/backend/dist/bootstrap/schema.js';
 import { SqliteAccountStorage } from '../../../packages/backend/dist/modules/access/accounts/adapters/sqlite/account-sql.js';
 import { SqliteProviderStorage } from '../../../packages/backend/dist/modules/agent/providers/adapters/sqlite/provider-sql.js';
@@ -57,7 +59,6 @@ try {
 	await once(modelServer, 'listening');
 	const dbPath = join(root, 'initial-v1.db');
 	let db = SqliteRuntime.open(dbPath);
-	assert.equal(targetMigrations.length, 1, 'unreleased schema must be a single v1 initial install');
 	assert.equal(applicationMigrations.length, 1, 'first release must have one application migration');
 	await initializeSchema(db, applicationMigrations);
 	assert.deepEqual(
@@ -84,6 +85,15 @@ try {
 	const settings = new ExecutionService(new ExecutionModel(executionStorage, tokens), async () => undefined);
 	const defaults = await settings.get(1);
 	await settings.update({ userId: 1, token: 'fixture-session' }, defaults.version, true, defaults.limits);
+	const fixtureSession = await new SessionModel(new SqliteSessionStorage(db), tokens).issue({
+		accountId: 1,
+		passwordHash: 'fixture-hash',
+		rememberMe: false,
+		expiresAt: Date.now() + 60_000,
+		source: 'fixture',
+		clearLoginAttempts: false,
+	});
+	assert.equal(fixtureSession.status, 'issued');
 	await db.close();
 	app = await createApp(dbPath, { encryptionKey: key });
 	const proxy = await app.targets.proxies.create({
@@ -161,7 +171,22 @@ try {
 		beforeCycle,
 		'graph rejection must roll back metadata and version',
 	);
-	const agentApp = await app.agent.createApp(1, 'regression');
+	const fixtureOrigin = 'http://127.0.0.1:0';
+	const address = await app.listenHttp({
+		publicOrigin: fixtureOrigin,
+		bindHost: '127.0.0.1',
+		port: 0,
+		trustedProxies: [],
+	});
+
+	const fixtureApi = (method, path, body, headers) =>
+		send(address, ACCESS_SESSION_COOKIE_NAME + '=' + fixtureSession.token, method, path, body, {
+			Host: new URL(fixtureOrigin).host,
+			Origin: fixtureOrigin,
+			...headers,
+		});
+
+	const agentApp = await createTestAgentApp(fixtureApi, root, 'regression');
 	if (!agentApp.enabled) {
 		await app.agent.setAppEnabled(1, agentApp.id, true, agentApp.version);
 	}

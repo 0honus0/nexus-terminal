@@ -180,6 +180,25 @@ export class BrowserService {
 		});
 	}
 
+	catalog(userId: number, signal: AbortSignal, validate: () => Promise<void>): Promise<string> {
+		return this.task(async (deadline) => {
+			const combined = AbortSignal.any([deadline, signal]);
+			await validate();
+			combined.throwIfAborted();
+			const configuration = await this.model.configuration(userId);
+			await validate();
+			combined.throwIfAborted();
+			return JSON.stringify({
+				targets: configuration.targets.map((target) => ({
+					targetId: target.id,
+					expectedVersion: configuration.version,
+					allowedUrlPatterns: target.allowedUrlPatterns.map((pattern) => pattern),
+				})),
+				untrusted: true,
+			});
+		});
+	}
+
 	perform(
 		owner: BrowserToolOwner,
 		input: BrowserInput,

@@ -15,11 +15,7 @@ import { agentErrorStatus } from './agent-http-status.js';
 import { InvalidAgentPayload, encodeAgentJson } from '@nexus-terminal/shared/agent/http-codec';
 import { AGENT_MAX_JSON_BODY_BYTES, AGENT_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/values';
 import { AGENT_RUN_MAX_JSON_BODY_BYTES, AGENT_RUN_IDEMPOTENCY_HEADER } from '@nexus-terminal/shared/agent/runs/values';
-import {
-	readAgentAppPath,
-	readAgentCreateAppRequest,
-	readAgentCreateThreadRequest,
-} from '@nexus-terminal/shared/agent/scope/http-codec';
+import { readAgentAppPath, readAgentCreateThreadRequest } from '@nexus-terminal/shared/agent/scope/http-codec';
 import {
 	readAgentCreateRunRequest,
 	readAgentCancelRunRequest,
@@ -309,8 +305,8 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 		['after', 'limit'],
 	);
 
-	add(routes, 'GET', '/app-definitions', access, async (ctx) => {
-		const values = await agent.listAppDefinitions();
+	add(routes, 'GET', '/app-definitions', access, async (ctx, userId) => {
+		const values = await agent.listAppDefinitions(userId);
 		await deliver(
 			ctx,
 			200,
@@ -319,7 +315,6 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 				version: value.version,
 				displayName: value.displayName,
 				capabilities: value.capabilities.map((capability) => capability),
-				defaultEnabled: value.defaultEnabled,
 			})),
 			AGENT_APP_MAX_RESPONSE_BYTES,
 		);
@@ -337,11 +332,6 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 		const input = readAgentAppStateUpdateRequest(await ctx.json());
 		const value = await agent.setAppEnabled(userId, appId, input.enabled, input.expectedVersion);
 		await deliver(ctx, value === null ? 404 : 200, value === null ? { code: 'not_found' } : toApp(value));
-	});
-	add(routes, 'POST', '/apps', access, async (ctx, userId) => {
-		const body = readAgentCreateAppRequest(await ctx.json());
-		const view = await agent.createApp(userId, body.name, body.definitionId);
-		await deliver(ctx, 201, toApp(view));
 	});
 	add(routes, 'POST', '/apps/:appId/threads', access, async (ctx, userId) => {
 		const body = readAgentCreateThreadRequest(await ctx.json());

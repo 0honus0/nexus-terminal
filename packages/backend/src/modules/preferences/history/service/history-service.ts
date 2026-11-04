@@ -48,7 +48,6 @@ export class HistoryService {
 			if (
 				!Number.isSafeInteger(query.offset) ||
 				query.offset < 0 ||
-				query.offset > RETENTION[query.kind] ||
 				!Number.isSafeInteger(query.limit) ||
 				query.limit < 1 ||
 				query.limit > HISTORY_PAGE_MAX_ENTRIES

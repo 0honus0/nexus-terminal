@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { PRESENTATION_PREFERENCE_BOUNDS } from '@nexus-terminal/shared/preferences/presentation/values';
 	import { useResizeObserver } from '@vueuse/core';
 	import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
@@ -206,8 +207,6 @@
 	watch(context, (value) => {
 		if (!value) compressSubmenu.value = null;
 	});
-	const FILE_MANAGER_SCALE_MIN = 0.5;
-	const FILE_MANAGER_SCALE_MAX = 2;
 
 	const renderedRowScale = ref(props.rowScale);
 	const changingTerminalPath = ref(false);
@@ -358,8 +357,8 @@
 			};
 		},
 
-		min: FILE_MANAGER_SCALE_MIN,
-		max: FILE_MANAGER_SCALE_MAX,
+		min: PRESENTATION_PREFERENCE_BOUNDS.fileManagerRowSizeMultiplier.min,
+		max: PRESENTATION_PREFERENCE_BOUNDS.fileManagerRowSizeMultiplier.max,
 		step: 0.08,
 		thresholdPx: 72,
 		maxStepsPerEvent: 3,

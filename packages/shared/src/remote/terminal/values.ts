@@ -1,3 +1,5 @@
+export const WORKSPACE_DIRECTORY_CHANGE_TIMEOUT_MS = 10 * 60_000;
+
 export const WORKSPACE_DIRECTORY_CHANGE_FAILURE_CODES = [
 	'replaced',
 	'prompt_timeout',

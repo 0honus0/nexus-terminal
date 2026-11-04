@@ -81,7 +81,10 @@ export function toolInput(definition: ToolDefinition, argumentsJson: string): To
 		} else if (field.kind === 'integer') {
 			integer(value[field.name], field.minimum, field.maximum);
 		} else {
-			text(value[field.name], field.maxBytes, field.allowEmpty);
+			const entry = text(value[field.name], field.maxBytes, field.allowEmpty);
+			if (field.choices !== undefined && !field.choices.includes(entry)) {
+				throw new AgentFailure('invalid_input');
+			}
 		}
 	}
 	if (definition.name === 'image_models_list') {
@@ -127,6 +130,12 @@ export function toolInput(definition: ToolDefinition, argumentsJson: string): To
 			throw new AgentFailure('invalid_input');
 		}
 		return { kind: 'skill', input: { action: 'read', name, version, sha256 } };
+	}
+	if (definition.name === 'browser_targets_list') {
+		return { kind: 'browser_targets' };
+	}
+	if (definition.name === 'acp_integration_list') {
+		return { kind: 'acp_integrations' };
 	}
 	if (definition.name.startsWith('browser_')) {
 		return { kind: 'browser', input: browserInput(definition.name, value) };

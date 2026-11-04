@@ -61,9 +61,15 @@ await test('B10 real repository admission, download revocation and shutdown', { 
 			},
 		],
 	};
-	expectStatus(await f.api('PUT', base + '/repositories', { expectedVersion: 0, repositories: [{ url }] }), 200);
+	const settings = expectStatus(await f.api('GET', base + '/repositories'), 200);
+	expectStatus(
+		await f.api('PUT', base + '/repositories', { expectedVersion: settings.version, repositories: [{ url }] }),
+		200,
+	);
 
 	const read = () => f.api('GET', base + '/remote/catalog?repositoryUrl=' + encodeURIComponent(url));
+
+	const initialStages = expectStatus(await f.api('GET', base + '/stages'), 200).items;
 
 	const download = () =>
 		f.api('POST', base + '/remote/stage', {
@@ -112,12 +118,12 @@ await test('B10 real repository admission, download revocation and shutdown', { 
 	});
 	await t.test('settled reads release all admission slots for subsequent work', async () => {
 		expectStatus(await read(), 200);
-		assert.deepEqual(expectStatus(await f.api('GET', base + '/stages'), 200).items, []);
+		assert.deepEqual(expectStatus(await f.api('GET', base + '/stages'), 200).items, initialStages);
 	});
 	await t.test('broken package response refuses publication and next download remains usable', async () => {
 		mode = 'truncate';
 		assert.equal(expectStatus(await download(), 503).code, 'provider_unavailable');
-		assert.deepEqual(expectStatus(await f.api('GET', base + '/stages'), 200).items, []);
+		assert.deepEqual(expectStatus(await f.api('GET', base + '/stages'), 200).items, initialStages);
 		mode = 'normal';
 		const staged = expectStatus(await download(), 200);
 		assert.equal(staged.status, 'verified');
@@ -136,6 +142,7 @@ await test('B10 real repository admission, download revocation and shutdown', { 
 	await t.test(
 		'publisher revocation queues behind download, then prevents installing its verified stage',
 		async () => {
+			const initialInstallations = expectStatus(await f.api('GET', base + '/installations'), 200).items;
 			mode = 'package-hold';
 			const pending = download();
 			await waiting();
@@ -156,7 +163,10 @@ await test('B10 real repository admission, download revocation and shutdown', { 
 				).code,
 				'forbidden',
 			);
-			assert.deepEqual(expectStatus(await f.api('GET', base + '/installations'), 200).items, []);
+			assert.deepEqual(
+				expectStatus(await f.api('GET', base + '/installations'), 200).items,
+				initialInstallations,
+			);
 		},
 	);
 	await t.test(

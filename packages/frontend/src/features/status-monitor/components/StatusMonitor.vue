@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { PRESENTATION_PREFERENCE_BOUNDS } from '@nexus-terminal/shared/preferences/presentation/values';
 	import type { StatusMonitorSessionController } from '../model/status-types';
 	import { computed, defineAsyncComponent, defineComponent, h, ref, type Component } from 'vue';
 	import { useI18n } from 'vue-i18n';
@@ -56,8 +57,8 @@
 		value: () => props.scale,
 
 		scale: localScale,
-		min: 0.65,
-		max: 1.6,
+		min: PRESENTATION_PREFERENCE_BOUNDS.statusMonitorScale.min,
+		max: PRESENTATION_PREFERENCE_BOUNDS.statusMonitorScale.max,
 		step: 0.1,
 		precision: 2,
 		thresholdPx: 72,

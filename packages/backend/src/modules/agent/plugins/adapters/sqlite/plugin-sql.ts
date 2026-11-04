@@ -21,6 +21,7 @@ import type {
 	StoredPluginManifest,
 	StoredPluginRecovery,
 	StoredPluginInstallation,
+	StoredPluginInstallationDirectory,
 	StoredPluginActivation,
 	StoredPluginVersion,
 	StoredPluginContentSource,
@@ -29,6 +30,11 @@ import type { AgentPluginStageStatus } from '@nexus-terminal/shared/agent/plugin
 import { PluginStorageRefusal, PluginRuntimeFenceRefusal } from '../../storage/plugin-storage.js';
 import { publisherRow, stageRow } from './plugin-row.js';
 import { pluginManifest } from '../package/plugin-manifest.js';
+
+interface PluginConfigurationLifecycle {
+	retainedApps(tx: SqlExecutor, userId: number): Promise<string[]>;
+	clear(tx: SqlExecutor, userId: number, appId: string): Promise<void>;
+}
 
 async function publishers(tx: SqlExecutor, userId: number): Promise<StoredPluginPublisher[]> {
 	return (await tx.all('SELECT * FROM agent_plugin_publishers WHERE user_id=? ORDER BY key_id', [userId])).map(
@@ -332,6 +338,10 @@ export class SqlitePluginStorage implements PluginStorage {
 				'UPDATE agent_plugin_data_operations SET value_json=NULL,retired=1 WHERE user_id=? AND app_id=?',
 				[userId, appId],
 			);
+			if (!this.configuration) {
+				throw new Error('Plugin configuration cleanup unavailable');
+			}
+			await this.configuration.clear(tx, userId, appId);
 			await tx.run(
 				'UPDATE agent_plugin_installations SET revision=revision+1,updated_at=? WHERE user_id=? AND app_id=?',
 				[now, userId, appId],
@@ -616,6 +626,14 @@ export class SqlitePluginStorage implements PluginStorage {
 
 	private activation: ((tx: SqlExecutor, input: StoredPluginActivation) => Promise<void>) | null = null;
 	private retirement: ((tx: SqlExecutor, userId: number, appId: string, now: number) => Promise<void>) | null = null;
+	private configuration: PluginConfigurationLifecycle | null = null;
+
+	installConfigurationLifecycle(configuration: PluginConfigurationLifecycle): void {
+		if (this.configuration) {
+			throw new Error('Plugin configuration lifecycle already installed');
+		}
+		this.configuration = configuration;
+	}
 
 	installScopeLifecycle(
 		activate: (tx: SqlExecutor, input: StoredPluginActivation) => Promise<void>,
@@ -634,6 +652,39 @@ export class SqlitePluginStorage implements PluginStorage {
 				userId,
 			])
 		).map(pluginInstallationRow);
+	}
+
+	installationDirectory(userId: number): Promise<StoredPluginInstallationDirectory> {
+		return this.db.transaction(async (tx) => {
+			if (!this.configuration) {
+				throw new Error('Plugin configuration lifecycle unavailable');
+			}
+			const installations = (
+				await tx.all('SELECT * FROM agent_plugin_installations WHERE user_id=? ORDER BY definition_id', [
+					userId,
+				])
+			).map(pluginInstallationRow);
+			if (!installations.some((installation) => installation.status === 'removed')) {
+				return { installations, retainedAppIds: [] };
+			}
+			const data = await tx.all(
+				'SELECT DISTINCT app_id FROM agent_plugin_data WHERE user_id=? AND value_json IS NOT NULL',
+				[userId],
+			);
+			const retained = new Set(await this.configuration.retainedApps(tx, userId));
+			for (const row of data) {
+				if (typeof row.app_id !== 'string') {
+					throw new Error('Invalid plugin data owner');
+				}
+				retained.add(row.app_id);
+			}
+			return {
+				installations,
+				retainedAppIds: installations
+					.filter((installation) => installation.status === 'removed' && retained.has(installation.appId))
+					.map((installation) => installation.appId),
+			};
+		});
 	}
 
 	install(

@@ -284,7 +284,11 @@ export class SftpFileResource implements FileResource {
 	}
 
 	symlink(targetPath: string, linkPath: string, options: { signal: AbortSignal; timeoutMs: number }): Promise<void> {
-		return this.perform(() => this.#lease.symlink(targetPath, linkPath, options), options.signal, true);
+		return this.perform(
+			() => this.#lease.symlink(targetPath, linkPath, { signal: options.signal, timeoutMs: options.timeoutMs }),
+			options.signal,
+			true,
+		);
 	}
 
 	async forceRemove(request: FileForceRemoveRequest): Promise<FileCommandOutcome> {

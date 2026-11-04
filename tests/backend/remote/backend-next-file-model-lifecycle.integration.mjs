@@ -25,13 +25,24 @@ function fixture({ openSftp, closeLease, closeMachine, openMachine } = {}) {
 			return closeMachine ? closeMachine() : Promise.resolve();
 		},
 	};
-	const model = new RemoteFileModel({
-		open: async () => {
-			calls.push('machine.open');
-			await openMachine?.();
-			return { machine, target: { id: 17, fingerprint: 'fixture-fingerprint' } };
+
+	const unused = () => assert.fail('Machine/SFTP lifecycle must not invoke unrelated file capabilities');
+
+	const model = new RemoteFileModel(
+		{
+			open: async () => {
+				calls.push('machine.open');
+				await openMachine?.();
+				return { machine, target: { id: 17, fingerprint: 'fixture-fingerprint' } };
+			},
 		},
-	});
+		{ fingerprintStored: unused },
+		{ issue: unused, digest: unused },
+		{ prepare: unused, execute: unused, validate: unused },
+		unused,
+		{ supportsEncoding: unused, encode: unused },
+		{ stream: unused },
+	);
 	return { model, calls };
 }
 

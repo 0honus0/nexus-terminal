@@ -5,8 +5,6 @@ export async function initializeAppDeclarations(tx: SqlExecutor): Promise<void> 
  CREATE TABLE agent_app_definitions(
   id TEXT NOT NULL,version TEXT NOT NULL,display_name TEXT NOT NULL,
   content_hash TEXT NOT NULL CHECK(length(content_hash)=64),
-  installed INTEGER NOT NULL CHECK(installed IN (0,1)),default_enabled INTEGER NOT NULL CHECK(default_enabled IN (0,1)),
-  source_kind TEXT NOT NULL CHECK(source_kind IN ('builtin','plugin')),
   PRIMARY KEY(id,version)
  );
  CREATE TABLE agent_app_declared_capabilities(

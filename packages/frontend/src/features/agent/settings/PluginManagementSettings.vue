@@ -4,8 +4,6 @@
 	import { UiBadge, UiButton, UiCheckbox, UiInfoHint, UiInlineNotice, UiInput, UiTextarea } from '@/foundation/ui';
 	import type { usePluginManagement } from '../composables/use-plugin-management';
 	import PluginRepositorySettings from './PluginRepositorySettings.vue';
-	import PluginDataEditor from './PluginDataEditor.vue';
-	import type { PluginInstallation } from '../model/plugin-types';
 	import type { ManagedApp } from '../model/app-management-types';
 	import type { AgentCapability } from '@nexus-terminal/shared/agent/governance/values';
 
@@ -59,14 +57,6 @@
 		},
 		{ immediate: true },
 	);
-	const removedInstallations = computed(() => installations.value.filter((item) => item.status === 'removed'));
-
-	function installationName(installation: PluginInstallation): string {
-		return (
-			versions.value.find((item) => item.packageHash === installation.packageHash)?.manifest.displayName ??
-			t('agent.settings.plugins.unknownPlugin')
-		);
-	}
 
 	function pluginCapabilityName(capability: AgentCapability): string {
 		const key = `agent.settings.apps.capabilities.${capability}.name`;
@@ -219,6 +209,9 @@
 			<PluginRepositorySettings
 				:publishers="publishers"
 				:installations="installations"
+				:versions="versions"
+				:retained-app-ids="model.retainedAppIds.value"
+				:clearing="operation.busy.value"
 				:apps="apps"
 				:active="active"
 				:blocked="blocked || candidate !== null"
@@ -226,28 +219,8 @@
 				@trust="trustCatalogPublisher"
 				@recommend="emit('recommend')"
 				@official-publishers="officialPublisherIds = $event"
+				@clear-data="model.clearData"
 			/>
-			<UiInlineNotice v-if="removedInstallations.length" tone="danger">
-				<strong class="text-xs font-semibold">{{ t('agent.settings.plugins.retainedData') }}</strong>
-				<p class="mt-1 text-[11px] text-text-secondary">{{ t('agent.settings.plugins.retainedDataHint') }}</p>
-				<div class="mt-3 space-y-2">
-					<div
-						v-for="installation in removedInstallations"
-						:key="installation.appId"
-						class="rounded-lg bg-header/25 p-3"
-					>
-						<p class="break-words text-xs">{{ installationName(installation) }}</p>
-						<PluginDataEditor
-							retained-only
-							:key="installation.appId + ':' + installation.revision"
-							:installation="installation"
-							:disabled="blocked"
-							:active="active"
-							@changed="load"
-						/>
-					</div>
-				</div>
-			</UiInlineNotice>
 
 			<div class="overflow-hidden rounded-xl bg-header/25">
 				<button

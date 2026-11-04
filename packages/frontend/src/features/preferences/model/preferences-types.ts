@@ -5,7 +5,10 @@ import type {
 	WorkspacePane,
 	CommandInputSyncTarget,
 } from '@nexus-terminal/shared/preferences/presentation/values';
-import { FRONTEND_LOG_LEVELS } from '@nexus-terminal/shared/preferences/presentation/values';
+import {
+	FRONTEND_LOG_LEVELS,
+	PRESENTATION_PREFERENCE_BOUNDS,
+} from '@nexus-terminal/shared/preferences/presentation/values';
 
 export interface UserPreferences {
 	language: PreferenceLanguage;
@@ -175,5 +178,5 @@ export const commonTimezones = [
 
 export const terminalScrollbackForRuntime = (value: number): number => {
 	if (!Number.isFinite(value) || value <= 0) return 5000;
-	return Math.min(Math.floor(value), 100000);
+	return Math.min(Math.floor(value), PRESENTATION_PREFERENCE_BOUNDS.terminalScrollbackLimit.max);
 };

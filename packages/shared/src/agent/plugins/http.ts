@@ -1,3 +1,10 @@
+import type { AgentPluginInstallation } from './model.js';
+
+export interface AgentPluginInstallationListResponse {
+	items: AgentPluginInstallation[];
+	retainedAppIds: string[];
+}
+
 export interface AgentPluginPublisherRequest {
 	label: string;
 	publicKeyPem: string;

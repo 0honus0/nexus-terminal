@@ -1,4 +1,4 @@
-import type { ApprovalPage } from './governance-types.js';
+import type { ApprovalPage, ToolCatalogFacts } from './governance-types.js';
 import { ToolCapabilityDenied } from '../../agent-failure.js';
 import { toolAuthorizationFailure } from '../governance-rules.js';
 import type { AgentOperationErrorCode } from '@nexus-terminal/shared/agent/values';
@@ -371,6 +371,16 @@ export class GovernanceModel {
 			throw new AgentFailure(result);
 		}
 		return { value: fromDenylist(result.value), revokedRuns: result.revokedRuns };
+	}
+
+	async toolCatalog(userId: number, appId: string, runId: string): Promise<ToolCatalogFacts | null> {
+		const facts = await agentStorage(() => this.storage.toolCatalog(userId, appId, runId));
+		return facts === null
+			? null
+			: {
+					policy: appState(facts.policy),
+					connectionIds: facts.connectionIds.map((id) => id),
+				};
 	}
 
 	async grants(userId: number, appId: string): Promise<GrantState | null> {

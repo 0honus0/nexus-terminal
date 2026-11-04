@@ -9,6 +9,14 @@ export class WorkspaceDispatchFailure extends Error {
 	}
 }
 
+/** No response arrived before the local deadline; this does not prove non-execution. */
+export class WorkspaceRequestTimeout extends Error {
+	constructor(readonly operation: string) {
+		super(`Workspace request timed out: ${operation}`);
+		this.name = 'WorkspaceRequestTimeout';
+	}
+}
+
 export class WorkspaceRequestFailure extends Error {
 	constructor(
 		readonly operation: string,

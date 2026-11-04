@@ -19,7 +19,6 @@ export interface AgentAppDefinitionView {
 	version: string;
 	displayName: string;
 	capabilities: AgentCapability[];
-	defaultEnabled: boolean;
 }
 
 export interface AgentThreadView {

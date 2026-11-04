@@ -1128,6 +1128,10 @@
 		if (document.visibilityState === 'visible') void recoverForegroundSessions();
 	};
 
+	// Switching between live networks does not necessarily toggle navigator.onLine.
+	const browserConnection =
+		'connection' in navigator && navigator.connection instanceof EventTarget ? navigator.connection : undefined;
+
 	const saveSidebarWidth = (pane: string, width: string) => {
 		void preferences
 			.update(
@@ -1266,6 +1270,7 @@
 		window.addEventListener('keyup', handleGlobalKeyup, true);
 		document.addEventListener('visibilitychange', handleDocumentVisibilityChange);
 		window.addEventListener('online', handleBrowserOnline);
+		browserConnection?.addEventListener('change', handleBrowserOnline);
 		window.addEventListener('pageshow', handleDocumentVisibilityChange);
 		window.addEventListener('focus', scheduleViewportSync);
 		window.visualViewport?.addEventListener('resize', scheduleViewportSync);
@@ -1337,6 +1342,7 @@
 		window.removeEventListener('keydown', handleGlobalKeydown, true);
 		window.removeEventListener('keyup', handleGlobalKeyup, true);
 		window.removeEventListener('online', handleBrowserOnline);
+		browserConnection?.removeEventListener('change', handleBrowserOnline);
 		window.removeEventListener('pageshow', handleDocumentVisibilityChange);
 		window.removeEventListener('focus', scheduleViewportSync);
 		window.visualViewport?.removeEventListener('resize', scheduleViewportSync);

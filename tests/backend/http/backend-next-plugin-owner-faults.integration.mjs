@@ -65,7 +65,10 @@ await test('The original runtime lifecycle admits 32 waiting tasks and close wai
 	let entered = 0;
 	t.mock.method(PluginModel.prototype, 'runtimeTargets', async function () {
 		const result = await targets.call(this);
-		assert.deepEqual(result, []);
+		assert.deepEqual(
+			result.map((target) => target.appId),
+			[f.source.id],
+		);
 		entered += 1;
 		await gate;
 		return result;

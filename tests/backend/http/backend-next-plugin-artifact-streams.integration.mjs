@@ -1,3 +1,4 @@
+import { createTestAgentApp } from './native-agent-fixture.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -58,7 +59,7 @@ await test(
 	{ timeout: 60000 },
 	async (t) => {
 		const f = await openPlugins(t);
-		const app = expectStatus(await f.api('POST', '/api/v1/agent/apps', { name: 'stream owner' }), 201);
+		const app = await createTestAgentApp(f.api, f.directory, 'stream owner');
 		const content = randomBytes(STREAM_FIXTURE_BYTES);
 		let artifact = await f.upload(app.id, content, 'bounded-stream.bin');
 		const path = '/api/v1/agent/apps/' + app.id + '/artifacts/' + artifact.id;

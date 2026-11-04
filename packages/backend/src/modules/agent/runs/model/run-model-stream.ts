@@ -49,7 +49,12 @@ function toModelTools(definitions: ToolDefinition[]): ModelToolDefinition[] {
 						}
 					: field.kind === 'integer'
 						? { type: 'integer', minimum: field.minimum, maximum: field.maximum }
-						: { type: 'string', minLength: field.allowEmpty ? 0 : 1, maxLength: field.maxBytes };
+						: {
+								type: 'string',
+								minLength: field.allowEmpty ? 0 : 1,
+								maxLength: field.maxBytes,
+								...(field.choices === undefined ? {} : { enum: field.choices.map((choice) => choice) }),
+							};
 		}
 		return {
 			name: tool.name,

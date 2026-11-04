@@ -14,6 +14,10 @@ import type { TrustedSshTargetResolver } from '../../../targets/public.js';
 import type { RemoteMachineModel } from '../../machines/model/machine-model.js';
 import { RemoteFileFailure, type FileResource } from './file-types.js';
 import { SftpFileResource } from './file-resource.js';
+import type { ArchiveCommandsFactory } from '../../../../platform/archive/archive-port.js';
+import { FileArchiveModel } from './file-archive-model.js';
+import type { FileTextModel } from './file-text-model.js';
+import type { FileZipModel } from './file-zip-model.js';
 
 export class RemoteFileModel {
 	constructor(
@@ -21,7 +25,14 @@ export class RemoteFileModel {
 		private readonly resolver: TrustedSshTargetResolver,
 		private readonly tokens: SessionTokens,
 		private readonly transfers: ServerTransferModel,
+		private readonly createArchiveCommands: ArchiveCommandsFactory,
+		readonly text: FileTextModel,
+		readonly zip: FileZipModel,
 	) {}
+
+	archive(resource: FileResource): FileArchiveModel {
+		return new FileArchiveModel(resource, this.createArchiveCommands);
+	}
 
 	private failure(cause: unknown): Error {
 		if (

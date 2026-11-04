@@ -2,7 +2,7 @@ import { initializeOperationsSchema } from '../modules/operations/migrations.js'
 import { initializePreferencesSchema } from '../modules/preferences/migrations.js';
 import { initializeRemoteSchema } from '../modules/remote/migrations.js';
 import type { SchemaMigration } from '../platform/storage/sqlite/schema-types.js';
-import { targetMigrations, initializeHostKeySchema } from '../modules/targets/schema.js';
+import { initializeTargetsSchema } from '../modules/targets/migrations.js';
 import { initializeAccessSchema } from '../modules/access/migrations.js';
 import { initializeAgentSchema } from '../modules/agent/migrations.js';
 import { initializeSnapshotRestoreSchema } from '../platform/storage/sqlite/adapters/snapshot-restore-sql.js';
@@ -11,11 +11,10 @@ import { initializeSnapshotRestoreSchema } from '../platform/storage/sqlite/adap
 export const applicationMigrations: readonly SchemaMigration[] = [
 	{
 		version: 1,
-		signature: 'backend-next-v1-initial-20261025-agent-approvals',
+		signature: 'backend-next-v1-initial-20261104-plugin-apps',
 
 		async apply(tx) {
-			await targetMigrations[0].apply(tx);
-			await initializeHostKeySchema(tx);
+			await initializeTargetsSchema(tx);
 			await initializeAccessSchema(tx);
 			await initializeAgentSchema(tx);
 			await initializeRemoteSchema(tx);

@@ -36,7 +36,11 @@ import {
 	readWorkspaceProtocolError,
 	readWorkspaceEmptyResponse,
 } from '@nexus-terminal/shared/remote/workspace/workspace-codec';
-import { WorkspaceRequestFailure, WorkspaceDispatchFailure } from '../model/workspace-error-types';
+import {
+	WorkspaceRequestFailure,
+	WorkspaceDispatchFailure,
+	WorkspaceRequestTimeout,
+} from '../model/workspace-error-types';
 import type {
 	WorkspaceMonitoringRequests,
 	WorkspaceMonitoringResponses,
@@ -59,7 +63,7 @@ import {
 	readWorkspaceTerminalFlow,
 } from '@nexus-terminal/shared/remote/terminal/workspace-codec';
 import { logger } from '@/client/logging/logger';
-import { openWebSocket } from '@/client/websocket';
+import { openWebSocket, WebSocketConnectionFailure } from '@/client/websocket';
 import { decodeWorkspaceBinaryFrame } from '@nexus-terminal/shared/remote/workspace/workspace-binary';
 import { readWorkspaceFileReadBinaryRequest } from '@nexus-terminal/shared/remote/files/workspace-codec';
 import {
@@ -312,7 +316,9 @@ export class WorkspaceSocket {
 			this.rejectOpening = rejectOpening;
 
 			openTimer = window.setTimeout(() => {
-				const error = new Error('Workspace WebSocket connection timed out.');
+				const error = new WebSocketConnectionFailure({
+					cause: new Error('Workspace WebSocket connection timed out.'),
+				});
 				logger.warn(
 					this.context({ pendingRequests: this.pending.size, failureKind: 'transport_open_timeout' }),
 					'Workspace WebSocket open timed out',
@@ -361,7 +367,7 @@ export class WorkspaceSocket {
 				}
 			};
 			socket.onerror = () => {
-				const error = new Error('Workspace WebSocket connection failed.');
+				const error = new WebSocketConnectionFailure();
 				logger.debug(
 					this.context({
 						pendingRequests: this.pending.size,
@@ -379,9 +385,11 @@ export class WorkspaceSocket {
 				}
 			};
 			socket.onclose = (event) => {
-				const error = new Error(
-					`Workspace WebSocket closed (${event.code}${event.reason ? `: ${event.reason}` : ''}).`,
-				);
+				const error = new WebSocketConnectionFailure({
+					cause: new Error(
+						`Workspace WebSocket closed (${event.code}${event.reason ? `: ${event.reason}` : ''}).`,
+					),
+				});
 				// A close-before-open must settle open(); otherwise callers can remain in "connecting"
 				// forever because the request timeout starts only after the socket has opened.
 				const closeContext = this.context({
@@ -594,7 +602,7 @@ export class WorkspaceSocket {
 					}),
 					'Workspace request timed out',
 				);
-				(pending?.reject ?? reject)(new Error(`Workspace request timed out: ${type}`));
+				(pending?.reject ?? reject)(new WorkspaceRequestTimeout(type));
 			}, timeoutMs);
 			this.pending.set(requestId, {
 				operation: type,

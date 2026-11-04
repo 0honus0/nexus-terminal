@@ -33,8 +33,9 @@
 			<UiSelect
 				v-if="apps.length > 1"
 				v-model="selectedAppId"
-				class="w-40"
+				class="min-w-0 flex-1 sm:flex-[0_1_10rem]"
 				:aria-label="t('agent.settings.appManagement.chooseApp')"
+				:title="apps.find((app) => app.id === selectedAppId)?.name"
 			>
 				<option v-for="app in apps" :key="app.id" :value="app.id">{{ app.name }}</option>
 			</UiSelect>

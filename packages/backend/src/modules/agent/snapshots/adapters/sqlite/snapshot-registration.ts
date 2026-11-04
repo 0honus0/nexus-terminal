@@ -25,7 +25,6 @@ import { participant } from '../../../runs/adapters/sqlite/run-participant-sql.j
 import { frozenFromRun } from '../../../runs/adapters/sqlite/run-sql.js';
 import { validateRunStepRecovery } from '../../../runs/adapters/sqlite/run-step-sql.js';
 import { readBrowserConfiguration } from '../../../integrations/adapters/sqlite/browser-sql.js';
-import type { StoredDefinition } from '../../../scope/storage/scope-storage.js';
 import { validateSnapshotDeclarations } from './snapshot-declarations.js';
 import { validateSnapshotHistory } from './snapshot-history.js';
 
@@ -53,7 +52,6 @@ function secretColumns(table: string, row: SqlRow): ReadonlyMap<string, string> 
 /** Fixed current table/column coverage owned by agent; no runtime schema discovery. */
 export function registerAgentSnapshot(
 	secrets: SecretBox | null,
-	definitions: readonly StoredDefinition[],
 	admitPackage: (value: DecodedPluginPackage) => void,
 ): SnapshotRegistration {
 	const packages = new NativePluginPackageDecoder(new NativePackageReader(), new NativePackageSignature());
@@ -532,7 +530,7 @@ export function registerAgentSnapshot(
 		},
 		{
 			name: 'agent_app_definitions',
-			columns: ['id', 'version', 'display_name', 'content_hash', 'installed', 'default_enabled', 'source_kind'],
+			columns: ['id', 'version', 'display_name', 'content_hash'],
 		},
 		{ name: 'agent_app_declared_capabilities', columns: ['definition_id', 'definition_version', 'capability'] },
 		{
@@ -546,7 +544,6 @@ export function registerAgentSnapshot(
 				'enabled',
 				'version',
 				'updated_at',
-				'is_default',
 				'created_at',
 			],
 		},
@@ -642,7 +639,7 @@ export function registerAgentSnapshot(
 		validate(rows) {
 			validateAgentSnapshotDocuments(rows);
 			validateSnapshotHistory(rows);
-			validateSnapshotDeclarations(rows, definitions);
+			validateSnapshotDeclarations(rows);
 			for (const row of rows.get('agent_artifacts') ?? []) {
 				artifactRow(row);
 				if (row.status === 'staging' || row.status === 'deleting') {

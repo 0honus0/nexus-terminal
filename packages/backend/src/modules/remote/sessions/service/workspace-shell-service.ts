@@ -10,7 +10,7 @@ interface DirectoryChange {
 	timer: ReturnType<typeof setTimeout>;
 }
 
-const DIRECTORY_TIMEOUT_MS = 10 * 60_000;
+import { WORKSPACE_DIRECTORY_CHANGE_TIMEOUT_MS } from '@nexus-terminal/shared/remote/terminal/values';
 const CONTROL = /[\u0000-\u001f\u007f-\u009f]/u;
 
 export class WorkspaceShellService {
@@ -77,7 +77,7 @@ export class WorkspaceShellService {
 				}
 				this.pending = null;
 				this.publish({ type: 'failed', requestId, message: 'prompt_timeout' });
-			}, DIRECTORY_TIMEOUT_MS),
+			}, WORKSPACE_DIRECTORY_CHANGE_TIMEOUT_MS),
 		};
 		pending.timer.unref();
 		this.pending = pending;

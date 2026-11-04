@@ -1,5 +1,6 @@
 import {
 	PREFERENCE_LANGUAGES,
+	PRESENTATION_PREFERENCE_BOUNDS,
 	DESKTOP_WINDOW_MIN_WIDTH,
 	DESKTOP_WINDOW_MIN_HEIGHT,
 	DESKTOP_WINDOW_MAX_DIMENSION,
@@ -31,10 +32,26 @@ export function validatePresentation(value: PresentationData): void {
 		Number.isSafeInteger(value) && value >= min && value <= max;
 
 	if (
-		!integer(prefs.terminalScrollbackLimit, 0, 100000) ||
-		!integer(prefs.dockerStatusIntervalSeconds, 1, 86400) ||
-		!integer(prefs.spreadsheetPreviewRowsPerPage, 10, 2000) ||
-		!integer(prefs.spreadsheetPreviewMaxColumns, 5, 200)
+		!integer(
+			prefs.terminalScrollbackLimit,
+			PRESENTATION_PREFERENCE_BOUNDS.terminalScrollbackLimit.min,
+			PRESENTATION_PREFERENCE_BOUNDS.terminalScrollbackLimit.max,
+		) ||
+		!integer(
+			prefs.dockerStatusIntervalSeconds,
+			PRESENTATION_PREFERENCE_BOUNDS.dockerStatusIntervalSeconds.min,
+			PRESENTATION_PREFERENCE_BOUNDS.dockerStatusIntervalSeconds.max,
+		) ||
+		!integer(
+			prefs.spreadsheetPreviewRowsPerPage,
+			PRESENTATION_PREFERENCE_BOUNDS.spreadsheetPreviewRowsPerPage.min,
+			PRESENTATION_PREFERENCE_BOUNDS.spreadsheetPreviewRowsPerPage.max,
+		) ||
+		!integer(
+			prefs.spreadsheetPreviewMaxColumns,
+			PRESENTATION_PREFERENCE_BOUNDS.spreadsheetPreviewMaxColumns.min,
+			PRESENTATION_PREFERENCE_BOUNDS.spreadsheetPreviewMaxColumns.max,
+		)
 	) {
 		throw new PresentationFailure('invalid_input');
 	}
@@ -50,19 +67,31 @@ export function validatePresentation(value: PresentationData): void {
 		typeof prefs.showWorkspaceProgress !== 'boolean' ||
 		typeof prefs.showWorkspaceLayoutConfigurator !== 'boolean' ||
 		typeof prefs.dockerDefaultExpand !== 'boolean' ||
-		!number(prefs.statusMonitorScale, 0.65, 1.6) ||
+		!number(
+			prefs.statusMonitorScale,
+			PRESENTATION_PREFERENCE_BOUNDS.statusMonitorScale.min,
+			PRESENTATION_PREFERENCE_BOUNDS.statusMonitorScale.max,
+		) ||
 		typeof prefs.dashboardShowLocalResources !== 'boolean' ||
 		typeof prefs.dashboardShowRemoteResources !== 'boolean' ||
 		typeof prefs.workspaceSidebarPersistent !== 'boolean' ||
 		typeof prefs.showStatusMonitorIpAddress !== 'boolean' ||
 		typeof prefs.quickCommandsCollapsibleSearch !== 'boolean' ||
 		typeof prefs.quickCommandsCompactMode !== 'boolean' ||
-		!number(prefs.quickCommandRowSizeMultiplier, 0.5, 2.5) ||
+		!number(
+			prefs.quickCommandRowSizeMultiplier,
+			PRESENTATION_PREFERENCE_BOUNDS.quickCommandRowSizeMultiplier.min,
+			PRESENTATION_PREFERENCE_BOUNDS.quickCommandRowSizeMultiplier.max,
+		) ||
 		typeof prefs.terminalRightClickCopyPaste !== 'boolean' ||
 		typeof prefs.layoutLocked !== 'boolean' ||
 		typeof prefs.navBarVisible !== 'boolean' ||
 		typeof prefs.fileManagerShowDeleteConfirmation !== 'boolean' ||
-		!number(prefs.fileManagerRowSizeMultiplier, 0.5, 2) ||
+		!number(
+			prefs.fileManagerRowSizeMultiplier,
+			PRESENTATION_PREFERENCE_BOUNDS.fileManagerRowSizeMultiplier.min,
+			PRESENTATION_PREFERENCE_BOUNDS.fileManagerRowSizeMultiplier.max,
+		) ||
 		!integer(prefs.rdpModalWidth, DESKTOP_WINDOW_MIN_WIDTH, DESKTOP_WINDOW_MAX_DIMENSION) ||
 		!integer(prefs.rdpModalHeight, DESKTOP_WINDOW_MIN_HEIGHT, DESKTOP_WINDOW_MAX_DIMENSION) ||
 		!integer(prefs.vncModalWidth, DESKTOP_WINDOW_MIN_WIDTH, DESKTOP_WINDOW_MAX_DIMENSION) ||

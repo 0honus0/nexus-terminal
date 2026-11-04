@@ -25,7 +25,6 @@ import type {
 	ArtifactStorageTotals,
 	ArtifactContent,
 } from '../model/artifact-types.js';
-const TOTAL_BYTES = 512 * 1024 * 1024;
 
 function identity(actor: ArtifactActor): (value: number | null) => void {
 	return (value) => {
@@ -37,12 +36,7 @@ function identity(actor: ArtifactActor): (value: number | null) => void {
 	};
 }
 
-function admit(
-	actor: ArtifactActor,
-	bytes = 0,
-	creation = false,
-	maxBytes = TOTAL_BYTES,
-): (facts: ArtifactFacts) => void {
+function admit(actor: ArtifactActor, creation?: { bytes: number; maxBytes: number }): (facts: ArtifactFacts) => void {
 	return (facts) => {
 		identity(actor)(facts.identityUserId);
 		if (!facts.appExists) {
@@ -51,7 +45,7 @@ function admit(
 		if (!facts.appEnabled) {
 			throw new AgentFailure('app_disabled');
 		}
-		if (creation && facts.totalBytes + bytes > maxBytes) {
+		if (creation && facts.totalBytes + creation.bytes > creation.maxBytes) {
 			throw new AgentFailure('limit_exceeded');
 		}
 	};
@@ -437,7 +431,7 @@ export class ArtifactService {
 				if (facts.settingsVersion !== configuration.version) {
 					throw new AgentFailure('version_conflict');
 				}
-				admit(actor, input.declaredBytes, true, configuration.limits.maxArtifactBytes)(facts);
+				admit(actor, { bytes: input.declaredBytes, maxBytes: configuration.limits.maxArtifactBytes })(facts);
 			},
 		);
 	}

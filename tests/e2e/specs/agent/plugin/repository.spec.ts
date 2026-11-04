@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { configureTestPluginRepository, installTestPlugin, stageTestPlugin } from '../../../support/plugins';
-import { selectAgentExtensionsSection, requestAgentJson, enableTestAgentExecution } from '../../../support/agent';
+import { requestAgentJson } from '../../../support/agent-request';
+import { selectAgentExtensionsSection, enableTestAgentExecution } from '../../../support/agent';
 import { readAgentAppListResponse } from '../../../../../packages/shared/src/agent/scope/http-codec';
 import {
 	readAgentPluginItems,
+	readAgentPluginInstallationList,
 	readAgentPluginStageView,
 	readAgentPluginInstallation,
 	readAgentPluginDataView,
@@ -77,7 +79,7 @@ test('official plugin source cannot be overridden by a configured third-party re
 		(raw) => expect(readAgentErrorResponse(raw)).toEqual({ code: 'invalid_input' }),
 	);
 	const installations = await requestAgentJson(request, { method: 'GET', path: '/plugins/installations' }, (raw) =>
-		readAgentPluginItems(raw, readAgentPluginInstallation),
+		readAgentPluginInstallationList(raw),
 	);
 	expect(installations.items).toEqual([]);
 	const officialRead = page.waitForRequest(
@@ -132,6 +134,15 @@ test('uninstalled plugin retained AppStorage can be permanently deleted', async 
 		readAgentPluginInstallation,
 	);
 	expect(removed.status).toBe('removed');
+	const apps = await requestAgentJson(request, { method: 'GET', path: '/apps' }, readAgentAppListResponse);
+	expect(apps.some((item) => item.id === app.id)).toBe(false);
+	const retained = await requestAgentJson(
+		request,
+		{ method: 'GET', path: '/plugins/installations' },
+		readAgentPluginInstallationList,
+	);
+	expect(retained.items).toContainEqual(removed);
+	expect(retained.retainedAppIds).toContain(app.id);
 	const purge = { expectedRevision: removed.revision, operationId: randomUUID() };
 	const deleted = await requestAgentJson(
 		request,
@@ -140,6 +151,12 @@ test('uninstalled plugin retained AppStorage can be permanently deleted', async 
 	);
 	expect(deleted.deletedKeys).toBe(1);
 	expect(deleted.revision).toBe(removed.revision + 1);
+	const cleared = await requestAgentJson(
+		request,
+		{ method: 'GET', path: '/plugins/installations' },
+		readAgentPluginInstallationList,
+	);
+	expect(cleared.retainedAppIds).not.toContain(app.id);
 	const replay = await requestAgentJson(
 		request,
 		{ method: 'POST', path: path + '/delete-data', data: purge },

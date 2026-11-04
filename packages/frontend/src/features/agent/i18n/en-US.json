@@ -104,7 +104,6 @@
         "uninstallFailed": "Failed to uninstall app",
         "deleteDataFailed": "The app was uninstalled, but retained data could not be deleted",
         "drainingNotice": "App is draining background tasks...",
-        "coreAppCannotUninstall": "Core builtin app cannot be uninstalled",
         "categoryFiles": "Files & Targets",
         "categoryExecution": "Execution",
         "categoryMachine": "Host Machine",
@@ -233,7 +232,8 @@
               }
             }
           }
-        }
+        },
+        "installationUnavailable": "Plugin installation is unavailable. Reload before continuing."
       },
       "plugins": {
         "title": "Installable apps and skills",
@@ -260,7 +260,7 @@
         "continueUninstall": "Continue uninstall",
         "retainedData": "Uninstalled app data",
         "retainedDataHint": "Uninstalling code does not delete AppStorage. Data deletion is a separate destructive action.",
-        "deleteData": "Delete retained data",
+        "deleteData": "Clear data",
         "deleteDataWarning": "This permanently deletes the retained AppStorage for this app. Plugin code is already uninstalled and this data cannot be recovered from Nexus after deletion.",
         "confirmDeleteData": "Confirm permanent deletion",
         "cancelDeleteData": "Cancel",
@@ -311,8 +311,15 @@
         "clearSearch": "Clear search",
         "copied": "Copied",
         "copyFailed": "Unable to copy. Please try again.",
-        "uninstallDataHint": "Uninstalling preserves plugin data. To erase it, confirm data deletion while draining, then continue uninstalling.",
-        "copy": "Copy"
+        "uninstallDataHint": "The plugin will leave the Agent App list. Settings and app data are kept by default for reinstallation and can be cleared from its plugin row.",
+        "copy": "Copy",
+        "clearOnUninstall": "Also clear plugin settings and app data",
+        "clearDataScope": "Clear capability grants, execution budgets, MCP / ACP settings, and plugin storage. Chats, task history, memories, and generated files are kept. Cleared data cannot be restored.",
+        "hasRetainedData": "App data retained",
+        "reinstall": "Reinstall",
+        "clearDataTitle": "Clear plugin data",
+        "clearDataPrompt": "Clear the retained settings and app data for “{name}”?",
+        "retainedSourceUnavailable": "The original catalog is unavailable. Clear retained data here, or restore the repository to reinstall."
       },
       "hardLimits": {
         "title": "Hard Limits",
@@ -1796,6 +1803,9 @@
         "remove": "Remove"
       },
       "toolLabel": {
+        "browser_targets_list": "List browser targets",
+        "acp_integration_list": "List ACP integrations",
+        "acp_integration_execute": "Run ACP integration",
         "machine_connection_list": "List available connections",
         "machine_diagnostics_read": "Read machine resources",
         "host_diagnostics_read": "Read host resources",

@@ -169,6 +169,39 @@ export class IntegrationService {
 		});
 	}
 
+	catalogAcp(
+		actor: { userId: number; appId: string },
+		connectionIds: number[],
+		signal: AbortSignal,
+		validate: () => Promise<void>,
+	): Promise<string> {
+		return this.task(actor.appId, async (deadline) => {
+			const combined = AbortSignal.any([deadline, signal]);
+			await validate();
+			combined.throwIfAborted();
+			const records = await this.model.list(actor);
+			await validate();
+			combined.throwIfAborted();
+			return JSON.stringify({
+				integrations: records.flatMap((record) =>
+					record.enabled &&
+					record.configuration.kind === 'acp' &&
+					connectionIds.includes(record.configuration.connectionId)
+						? [
+								{
+									integrationId: record.id,
+									version: record.version,
+									displayName: record.configuration.displayName,
+									connectionId: record.configuration.connectionId,
+								},
+							]
+						: [],
+				),
+				untrusted: true,
+			});
+		});
+	}
+
 	async acp(
 		actor: { userId: number; appId: string },
 		input: AcpIntegrationInvocation,
