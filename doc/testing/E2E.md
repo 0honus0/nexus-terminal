@@ -4,13 +4,13 @@
 
 ## 当前验收基线
 
-最新完整远程 [41812361893](https://github.com/0honus0/nexus-terminal/actions/runs/41812361893) 验证 `main/ac314e5892ebfc8010498efd42a136e293c2da53`：553个场景全部通过，质量检查、Docker smoke和8个测试分片全部成功，耗时估算任务成功，截图更新按正常条件跳过。日志核对553条唯一passed记录，零失败、重复执行、flaky或跳过场景汇总。覆盖本轮全部累积源码及新增硬限制配置回归；不代表实际800次模型压力、真实弱网/手机、远端RDP或未列边界实测。该轮后继f789446f只更新PLAN/testing，不改变被测产品源码；本次手动任务只上传新的耗时估算产物，没有自动提交。当前未提交宿主工作区增加Agent最小化提醒及执行/插件扩展，独立插件已发布1.0.3；各自源码/静态与待验见下方，不纳入此553项通过范围。
+最新完整远程 [41828020189](https://github.com/0honus0/nexus-terminal/actions/runs/41828020189) 验证 `main/7262e8ac31e414d4de8b8f99102cee681e376961`：559个场景全部一次通过，质量检查、生产构建、Docker smoke及8个测试分片全部成功；耗时产物任务成功，截图更新按正常条件跳过。日志核对559条唯一passed记录，零失败、重试、flaky或跳过。Backend129项，Browser1–7分别32/44/72/64/64/87/67项（包含隔离场景）；新增三个整链wrapper内另覆盖23个模型/上下文、4个签名插件及3个调度子场景，不重复加到559个Playwright场景中。后继文档收口不改变被测源码。
 
-上一轮发布 [41792924820](https://github.com/0honus0/nexus-terminal/actions/runs/41792924820) 的 dev/linux-amd64 镜像仍基于 `4a3074da6f8ab7e515a017f949ce03b1d059dc88`；本轮没有发布镜像或更新指定主机、容器、数据库。此前指定主机维护证据仍在文末。真实手机/切换运营商网络、外部供应商、安全硬件、扩大故障及持久介质边界仍按 [待验与外部依赖](../PLAN.md#待验与外部依赖) 保留；独立 Nexus Agent 1.0.2 的签名发布/产物证据见下方记录，正式远程受控插件夹具不能替代公网新包实际安装和模型角色效果。
+官方插件[v1.0.3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.3)已发布，main/tag均为d5dd455，发布CI成功。本体[amd dev发布41830244197](https://github.com/0honus0/nexus-terminal/actions/runs/41830244197)成功，来源为上述被测提交；未更新远程主机、容器或用户数据库。真实运营商切网、手机软键盘、外部供应商及未列故障边界仍按[待验与外部依赖](../PLAN.md#待验与外部依赖)保留；受控回归不替代真实模型效果或吞吐实测。旧553项及更早镜像结果只保留为各自历史证据。
 
-## Agent 执行补充回归与 amd dev 交付（2026-11-04，进行中）
+## Agent 执行补充回归与 amd dev 交付（2026-11-04，已完成）
 
-用户最新授权补充E2E、提交推送plugin与本体，并在完整远程测试通过后发布main的amd dev。宿主从f789446f工作区接续，保留最小化提醒及全部六项执行优化；官方插件d5dd455/v1.0.3已发布，复核main与tag、公开Release一致且插件工作区干净。本轮不更新远程部署、用户数据库或运行本地行为测试。产物集中`/tmp/nexus-agent-flow-e2e-release-20261104`。
+用户最新授权补充E2E、提交推送plugin与本体，并在完整远程测试通过后发布main的amd dev。宿主从f789446f工作区接续，保留最小化提醒及全部六项执行优化；官方插件d5dd455/v1.0.3已发布，复核main与tag、公开Release一致且插件工作区干净。本轮不更新远程部署、用户数据库或运行本地行为测试。实施产物原集中`/tmp/nexus-agent-flow-e2e-release-20261104`；用户通知E2E完成后续接时原目录不在当前环境，最终远程日志/清单/统计重新保存至`/home/honus/nexus-task-artifacts/agent-flow-release-20261104`，继续保留至用户通知。
 
 新增正式入口`agent/execution-flow.spec.ts`纳入backend分片，运行真实应用HTTP/SQLite/OpenSSH/签名包与隔离子进程回归；模型HTTP只控制供应商输出。23项模型/上下文场景覆盖双协议宿主指引与Skill元数据、实际快照内容/hash、精确Skill正文读取、明确4xx拒绝、429最多三次总尝试及成功恢复、408/409/5xx和连接无响应不重放、Unicode流前缀/工具边界、半流断开和取消后运输关闭。四项插件场景覆盖role/工具子集、逐步hook、独立进程与文件访问隔离、单次批准/原operationId、错误hash派发前拒绝、撤权未消费，以及畸形结果保留原未知与实例退役后新意图。三项调度场景使用真实ToolService及工具分类，控制I/O屏障核对并行预算、完成原序、exclusive前后隔离、失败/取消停止补位与已启动任务收敛；它们是调度隔离回归，不冒充真实SSH吞吐实测。
 
@@ -21,6 +21,10 @@
 首轮完整远程 [41825149177](https://github.com/0honus0/nexus-terminal/actions/runs/41825149177) 对应 a85f5f41：质量、Docker smoke和browser1–6通过；backend新增两项整链wrapper未启动成功，runner仅安装OpenSSH客户端，现补齐openssh-server并附加子进程stdout/stderr诊断；调度wrapper通过。browser7的1280px通知场景因任务栏与Transcript均呈现同一命令而严格定位失败，现将审批详情与命令断言限定在Tasks区域；保留全部行为断言和产品UI。其余两种通知视口通过。上述修复静态检查后重新提交，等待完整远程验证；本轮尚未发布本体镜像。
 
 第二轮完整远程 [41826647057](https://github.com/0honus0/nexus-terminal/actions/runs/41826647057) 对应64367aa7：质量、Docker smoke及7个browser分片全部通过，包含1280/390/320px通知场景；backend原有场景和调度通过，模型23子场景中22项通过。剩余Responses夹具漏发assistant role、完成status和完整output快照；插件夹具backendEntry使用了被正式契约拒绝的根目录路径。按真实协议补齐SSE，插件入口改为backend/index.mjs，不修改应用校验、不放宽断言或超时；继续完整远程复验。失败stdout/stderr已保存在backend-round2产物。
+
+第三轮完整远程[41828020189](https://github.com/0honus0/nexus-terminal/actions/runs/41828020189)验证7262e8ac，559项全部一次通过；新增模型整链11秒、签名插件隔离/审批4.5秒、调度456毫秒通过，三种视口通知分别14/13/13秒。上述两轮失败均已复验解决，未修改产品UI、放宽断言、跳过场景或增加超时。质量含根check/全仓格式和正式双端生产构建，Docker smoke同轮通过。本次手动完整任务不自动提交耗时文件，发布冻结在同一被测SHA；最终远程完整日志、job清单和统计为e2e-run.log/e2e-run.json/e2e-summary.json。未将受控模型HTTP和调度gate回归当作实际吞吐或模型质量实测。
+
+发布[41830244197](https://github.com/0honus0/nexus-terminal/actions/runs/41830244197)全部成功，生产依赖审计通过；`ghcr.io/0honus0/nexus-terminal:dev`及`sha-7262e8ac31e4`的index digest均为 `sha256:b4f1c34743e3428a167b651e5aacddbc99e83b8942d04766b19e65387006b3e5`，唯一真实平台linux/amd64，平台manifest为 `sha256:d5c0bb6d0335849ac2cbdcf7424a228883a188b09d4d204d83a808331e206819`。匿名GHCR下载校验manifest/config的SHA256、两标签digest、平台和OCI revision，源码精确为7262e8ac31e414d4de8b8f99102cee681e376961；脚本/输出为verify-image.py及image-verification.json，token只驻内存。插件main/tag及v1.0.3 Release再次只读复核一致，发布CI41821088972成功。本体全部源码/测试已提交推送，最终仅PLAN/testing收口，未更新远程部署或用户数据库。
 
 ## Agent 执行与插件扩展（2026-11-04，源码静态及插件发布）
 
