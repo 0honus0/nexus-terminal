@@ -49,7 +49,7 @@
     "specs/mobile/suspend-resume-ui.spec.ts": 69092,
     "specs/mobile/terminal-output-scheduling.spec.ts": 2577,
     "specs/mobile/terminal-touch.spec.ts": 14411,
-    "specs/mobile/touch-advanced.spec.ts": 31562,
+    "specs/mobile/touch-advanced.spec.ts": 33635,
     "specs/mobile/touch-preview-progress.spec.ts": 32518,
     "specs/mobile/touch-workflows.spec.ts": 21673,
     "specs/ssh/archive-cancel-recovery.spec.ts": 8835,
