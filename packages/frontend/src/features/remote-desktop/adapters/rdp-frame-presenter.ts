@@ -100,7 +100,34 @@ export function attachRdpFramePresenter(canvas: HTMLCanvasElement, onFailure: (c
 			}
 		}
 		damage.push(current);
-		if (damage.length > MAX_DAMAGE_REGIONS) damage = [damage.reduce(union)];
+		if (damage.length <= MAX_DAMAGE_REGIONS) return;
+		// Keep sparse updates sparse: collapsing every region can upload almost the entire desktop.
+		let first = 0;
+		let second = 1;
+		let leastExtra = Infinity;
+		for (let left = 0; left < damage.length; left++) {
+			const a = damage[left];
+			if (!a) continue;
+			for (let right = left + 1; right < damage.length; right++) {
+				const b = damage[right];
+				if (!b) continue;
+				const combinedArea =
+					(Math.max(a.right, b.right) - Math.min(a.left, b.left)) *
+					(Math.max(a.bottom, b.bottom) - Math.min(a.top, b.top));
+				const extra = combinedArea - area(a) - area(b);
+				if (extra < leastExtra) {
+					leastExtra = extra;
+					first = left;
+					second = right;
+				}
+			}
+		}
+		const a = damage[first];
+		const b = damage[second];
+		if (a && b) {
+			damage[first] = union(a, b);
+			damage.splice(second, 1);
+		}
 	}
 
 	function prepare(): void {

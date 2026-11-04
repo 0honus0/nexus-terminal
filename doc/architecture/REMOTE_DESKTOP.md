@@ -79,13 +79,31 @@ RDP Adapter 的输入事务按完整字符计数，每批最多 32 字符（按�
 ### 重绘与接收调度
 
 1. **职责与范围**：减少重复的远端分辨率重建，保持 RDP 协议消息边界；不改窗口、画面质量、输入及协议内容，不承诺消除网络造成的渐进更新。
-2. **子功能与目录**：rdp-desktop 持有最新显示请求、上次有效尺寸和短期 timer；BrowserDesktopPeer 持有未完成的 RDP 消息残片。固定 SDK 0.7.0 的 softbuffer 负责像素生成，rdp-frame-presenter 在当前实例 Canvas 的 2D context 上合并已解码像素；不修改全局 prototype。
+2. **子功能与目录**：rdp-desktop 持有最新显示请求、上次有效尺寸和短期 timer；BrowserDesktopPeer 持有未完成的 RDP 消息残片。固定上游构建的 ironrdp-web Canvas 将提取后的变化区域交给 putImageData，rdp-frame-presenter 在当前实例 Canvas 的 2D context 上合并已解码像素；不修改全局 prototype。
 3. **依赖方向**：前端仍经窄 Peer 能力请求尺寸，SDK 类型只在 Adapter；后端只识别 TPKT、Fast-Path 与 CredSSP DER 的长度，不解码图形、凭据、丢弃或重放 PDU。VNC 保持原逐块转发。
 4. **类型与转换**：复用 RemoteDesktopDisplay，DPI 映射为原 100–500% 有效整数缩放；SDK DesktopSize 读取后释放。Buffer 仅在 Platform，不扩散到 Shared。
 5. **入口与安装**：原 resize、connect、forward 和 stop 路径安装调度，无新配置、路由或依赖；无需升级或重编译 WASM。
 6. **数据、事务与并发**：尺寸变化静默 150ms 后提交最新值，相同宽高及有效缩放跳过；建连以 SDK 协商尺寸和 100% 初始缩放建立基准，非默认 DPI 仍请求更新。TLS 流按完整协议消息逐条发送 WebSocket；HYBRID_EX额外按实际协商状态识别一次四字节认证结果，不按任意字节数或 I/O 轮次合并；避免 SDK 握手结束时丢弃同一 WS 消息中的后续预读数据。完整消息立即发送，不设凑批 timer；保留原发送水位和有界缓冲，DER 消息受原 2 MiB 单帧预算约束。
-7. **生命周期与失败**：关闭取消尺寸 timer 并清空未完成残片；晚建连不重新调度。resize 失败不记录为已提交，本地提交记录不代表远端已确认应用；非法长度、发送错误关闭原桥，并等待所有已派发发送回调与 socket 真实收敛。活跃传输保持完整字节顺序，不重放失败消息。像素 presenter 单实例保留最多 32 MiB 底图，只复制 dirty region，临近且合并面积至多原面积 1.3 倍时合并；最多 32 个区域，超量合成一个外包矩形，不积压中间帧。animation frame 一次提交最新像素，不改 SDK 读取/输入节奏；后台无 animation frame 时继续更新同一有界底图。尺寸赋值即使数值相同也清空 Canvas，因此在当前 canvas 实例拦截 width/height setter 清理旧底图与回调。超预算/分配 RangeError 回退直接绘制，非支持的像素输入先提交待绘内容再回退原生校验；异步提交异常走原连接失败出口。关闭取消回调、释放底图并恢复原实例方法/属性，不保留全局监听或计时器。
+7. **生命周期与失败**：关闭取消尺寸 timer 并清空未完成残片；晚建连不重新调度。resize 失败不记录为已提交，本地提交记录不代表远端已确认应用；非法长度、发送错误关闭原桥，并等待所有已派发发送回调与 socket 真实收敛。活跃传输保持完整字节顺序，不重放失败消息。像素 presenter 单实例保留最多 32 MiB 底图，只复制 dirty region，临近且合并面积至多原面积 1.3 倍时合并；最多 32 个区域，超量时只合并新增重绘面积最小的一对，不将全部分散变化直接扩成整屏外包矩形；扫描范围由原区域预算约束，不积压中间帧。同一 animation frame 提交全部区域的最新像素，不改 SDK 读取/输入节奏；后台无 animation frame 时继续更新同一有界底图。尺寸赋值即使数值相同也清空 Canvas，因此在当前 canvas 实例拦截 width/height setter 清理旧底图与回调。超预算/分配 RangeError 回退直接绘制，非支持的像素输入先提交待绘内容再回退原生校验；异步提交异常走原连接失败出口。关闭取消回调、释放底图并恢复原实例方法/属性，不保留全局监听或计时器。
 8. **当前能力与验收**：两轮源码及静态/构建证据归 testing；真实拖动/全屏/恢复、DPI、弱网大画面、混合 PDU 与关闭失败留远程回归。不更改主线程解码或宣称获得视频编码/Worker 解码能力。
+
+### 绘制能力与性能方向
+
+当前固定 IronRDP 构建由 `ironrdp-web/session.rs` 在主线程处理 PDU、维护 DecodedImage，再由 image.rs 提取变化区域、canvas.rs 构造 ImageData 并调用 putImageData。较高或较宽的变化区域可能按完整图像行提取，之后本项目 presenter 再复制到整张底图并记录 dirty region。SDK交付的 ImageData 引用 WASM 内存，后续解码可复用它，因此保存到本地底图必须在接收时完成，不能仅保留引用等下一帧再读。同一 animation frame 可合并已收到的更新，但 SDK 未向应用公开远端整帧完成回调，跨多个浏览器帧到达的区域仍会渐进显示；不能把 PDU 或 TLS chunk 当成完整画面帧。单实例 32 MiB 合并底图预算外采用直接绘制，较大画面也可能失去本地合并。
+
+该构建默认 `legacy_graphics=false`，已有位图 codec 协商；同时固定 `ConnectionType::Lan`、`compression_type=None`、`support_dyn_vc_gfx_protocol=false`。现有 SessionBuilder 扩展没有应用可用的 RDPGFX/H.264/Worker 绘制开关。`legacyGraphics(true)` 面向旧服务器的无 codec 位图模式，不是加速模式；库内部存在某种解码代码也不证明当前 Web 客户端已协商并消费该通道。当前不能宣称浏览器视频解码或硬件加速已启用。
+
+noVNC 1.7.0 自身持有 backbuffer、damage bounds 与有序 render queue，在 FramebufferUpdate 全部矩形处理完成后 flip，并在下一次更新前等待未完成的异步绘制，避免本地队列无限堆积。它默认协商 CopyRect、Tight、TightPNG、ZRLE 等；浏览器支持 WebCodecs H.264 时也会声明对应 encoding，但仍需服务器选择。项目未覆盖 qualityLevel=6、compressionLevel=2 的库默认值。没有真实协商/网络记录时，不能判定当前服务器使用哪种编码，或认定提高压缩一定更快；压缩、图像质量、服务器与客户端 CPU 存在取舍。
+
+已核对的外部接入依据：
+
+- [IronRDP 官方 Web 接入](https://github.com/Devolutions/IronRDP/blob/62246b364a0282bab85087f658a81fe4207b6b31/web-client/iron-remote-desktop/src/services/remote-desktop.service.ts) 通过 SessionBuilder.renderCanvas 和 extension 配置原 SDK；[固定构建的 session 配置](https://github.com/Devolutions/IronRDP/blob/62246b364a0282bab85087f658a81fe4207b6b31/crates/ironrdp-web/src/session.rs) 才决定实际图形能力。
+- [Devolutions Gateway 的 RDP 接入](https://github.com/Devolutions/devolutions-gateway/blob/0e65dc2637f29d8e84dbfd326ce887960f5ca2a0/webapp/apps/gateway-ui/src/client/app/modules/web-client/rdp/web-client-rdp.component.ts) 使用同一 IronRDP Backend 与官方 Web component，并对动态尺寸做 debounce；没有在该接入中发现可直接移植的视频绘制开关。其 VNC 使用另一 Iron VNC SDK，不作为本项目 noVNC 的直接接入依据。
+- [Cockpit Machines 的 noVNC 接入](https://github.com/cockpit-project/cockpit-machines/blob/c03f14ae4abb8175c3a9b53d75db53905b55d3c0/src/components/vm/consoles/VncConsole.tsx) 直接配置 RFB 的缩放/远端尺寸等公开能力，不包装私有显示队列；[noVNC Display](https://github.com/novnc/noVNC/blob/v1.7.0/core/display.js) 与 [RFB](https://github.com/novnc/noVNC/blob/v1.7.0/core/rfb.js) 是本项目已安装版本的真实绘制 owner。
+
+本地 presenter 保留 ImageData 底图与 rAF 提交，超过原32区域预算时按最小新增重绘面积两两合并，减少分散小块引发的大面积重绘；仍在同一浏览器帧提交全部区域，保留最新像素、透明替换和原分配/不支持输入回退。原生 Canvas backbuffer/drawImage 与零复制行视图均未采用；基准数据、环境和验收边界归 [testing](../testing/E2E.md#rdpvnc-绘制性能验证2026-11-04)。
+
+真实端到端定位仍需测量接收间隔、解码主线程耗时、分辨率与协商编码，覆盖静态文本、拖窗和大面积滚动。VNC优先核对协商及服务器能力，保留库自身提交边界；不额外延迟协议或绘制、不盲目改质量/压缩默认值。RDPGFX/视频及 Worker 属于 SDK/构建能力评估，不能通过应用层假开关实现。
 
 ## 8. 当前能力与验收
 

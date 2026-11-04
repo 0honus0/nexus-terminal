@@ -8,6 +8,37 @@
 
 当前发布 [41792924820](https://github.com/0honus0/nexus-terminal/actions/runs/41792924820) 构建上述后继 main 的 dev/linux-amd64 镜像，已成功；本轮不更新指定主机、容器或数据库。此前已完成的指定主机维护证据仍在文末。真实手机/切换运营商网络、外部供应商、安全硬件、扩大故障及持久介质边界仍按 [待验与外部依赖](../PLAN.md#待验与外部依赖) 保留；独立 Nexus Agent 1.0.2 已签名发布并核对公开产物，见下方记录；新包实际安装与模型角色效果仍未验。
 
+## RDP/VNC 绘制性能验证（2026-11-04）
+
+本轮先做源码/依赖/参考项目核对，随后按用户新增授权运行定向浏览器/CDP验证并修改RDP presenter，基线仍为 `main/848f9c14` 加前序未提交 SSH 连接优化；仅修改RDP presenter的超量区域合并；VNC实现、依赖、UI和远端保持。源码和元数据集中 `/tmp/nexus-rdp-render-performance-20261104`，按用户要求保留；来源均为公开 GitHub，只读获取，不含连接凭据。
+
+核对安装的 noVNC 1.7.0 的 core/rfb.js、display.js、H.264 decoder，固定 IronRDP `62246b364a0282bab85087f658a81fe4207b6b31` 的 canvas/image/session 及官方 Web 接入，并以已安装 JS 的三参数 putImageData binding 交叉确认。参考 Devolutions Gateway `0e65dc2637f29d8e84dbfd326ce887960f5ca2a0` 的 RDP/VNC 接入及 Cockpit Machines `c03f14ae4abb8175c3a9b53d75db53905b55d3c0` 的 VncConsole。Gateway VNC 使用 Iron VNC，不当作 noVNC 相同库证据；本项目 noVNC 使用者对照为 Cockpit。
+
+两轮源码复核：第一轮沿项目 controller/Adapter/presenter/透明桥及 SDK 追踪输出顺序，第二轮核对实际 RDP build_config、公开 SDK 扩展、上游 Canvas 和 noVNC FBU/异步队列/编码能力。架构 softbuffer 旧描述已更正。实现复核覆盖超过32区域后的像素覆盖、合并扫描上界、WASM内存复用、清空/尺寸变化/关闭、分配失败和不支持输入回退；没有新增限制或额外像素底图。
+
+### 浏览器性能及像素证据
+
+Node v22.23.1、puppeteer-core 25.16.0、HeadlessChrome 156.0.8078.47，独立环回HTTP服务、CDP和浏览器profile均在上述目录；浏览器实际为SwiftShader/软件Canvas，无硬件GPU。基线是改前真实presenter快照，最终候选由 `benchmark-final.mjs` 直接编译工作区真实模块；源码快照 `final-source.ts` 保留。主脚本退出0、日志无PAGE ERROR；原始数据 `final-benchmark-results.json`、环境 `final-benchmark-environment.json`、汇总 `final-summary.{json,txt}`。
+
+先比较原生Canvas backbuffer、零复制行视图、只合并新区域与全区域最小面积配对。Canvas方案像素正确，但4K条带CPU中位数7.2→15.9ms，未采用；行视图无稳定收益，只合并新区域无法稳定保留4K分散更新的收益，均未进入产品。最终保留原像素底图，只在超量时合并新增重绘面积最小的一对，扫描最多33个区域的528对，恢复至原32区域预算。
+
+最终108轮：3种分辨率×6场景×3轮×基线/候选交错顺序。每轮54帧，前9帧暖机，统计45帧；每格为3轮每帧CPU耗时中位数的中位数（ms，改前→改后）。CPU口径为同步像素入队/复制加rAF内原生Canvas提交，不包含等待下一帧、RDP解码/传输或完整浏览器合成。
+
+| 更新场景             | 1920×1080 | 2560×1440 | 3840×2160 |
+| -------------------- | --------- | --------- | --------- |
+| 分散小块，64×48×96   | 4.0→4.1   | 6.5→6.1   | 12.8→6.4  |
+| 窗口块，320×180×12   | 3.2→2.9   | 4.0→4.0   | 4.6→4.5   |
+| 全宽条带，64行×12    | 3.2→3.1   | 4.7→4.8   | 7.7→7.8   |
+| 文字，64×20×1        | 0.1→0.1   | 0.1→0.1   | 0.1→0.1   |
+| 640×480内局部小块×96 | 1.7→1.9   | 1.8→2.0   | 2.0→2.0   |
+| 高密度小块×384       | 9.0→9.0   | 10.9→11.3 | 19.0→18.4 |
+
+4K分散更新每帧平均提交面积8,081,311→1,396,117像素（减少82.7%），调用1→32次但均在同一rAF完成，CPU中位数减少50%。其它场景改善有限；局部更新与部分密集场景有0.1–0.4ms的耗时上浮，未把这些变化报告为普遍提速。4K高密度更新仍超过16.7ms帧预算；未测真实服务器、网络、解码、硬件GPU或端到端帧率，不能宣称真实RDP速度翻倍或消除逐块刷新。
+
+13项像素/生命周期验证通过：分别对改前和最终模块与原生putImageData逐字节比对部分/重叠/透明/负裁剪、输入立即清零模拟WASM复用、超过32个分散区域及未更新间隙、尺寸重建和同尺寸width/height清空、小数输入原生回退、待绘时关闭及实例方法/属性恢复、RangeError与超过32MiB后的同步直接绘制。另运行已安装noVNC 1.7.0真实Display，确认dirty在backbuffer且flip前不可见、flip后呈现；该项不等同VNC网络或编码性能验证。
+
+根 `pnpm run check`、`pnpm run build:frontend`、`pnpm run format:all:check` 均退出0，日志为本目录check.log/build.log/format.log；最终文档目标Prettier与 `git diff --check` 通过。真实模块与测量快照SHA256均为 `bec03c828988b3c459b48ea1f19007aa60744f65a52a0be2a67dd548c3184153`。本轮未运行全量E2E或远端部署，全部自建浏览器/环回服务由脚本关闭，测试目录与产物保留至用户通知。
+
 ## 阶段逻辑回归
 
 先按 PLAN 决定项核对本批授权和真实受影响调用链，再选择验证；D17 的默认路径为源码审核、静态检查后按明确授权执行远程 GitHub Actions。下列命令是入口说明，不表示本批已经执行或获得额外测试授权。
