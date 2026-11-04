@@ -1620,8 +1620,8 @@
       "testFailed": "Connection failed. Check the model, endpoint and credentials, then retry.",
       "createFailed": "Could not add provider. Check the form and error below, then retry.",
       "reasoning": "Reasoning effort",
-      "reasoningDefault": "Default effort",
-      "reasoningDefaultShort": "Default",
+      "reasoningAutomatic": "No effort specified; the model chooses the reasoning level.",
+      "reasoningAutomaticShort": "Auto",
       "reasoningLevels": {
         "none": "None",
         "minimal": "Minimal",

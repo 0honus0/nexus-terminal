@@ -366,13 +366,16 @@
 			(effort) => model.reasoningEfforts.includes(effort) && (!model.reasoningMandatory || effort !== 'none'),
 		);
 	});
+	const effectiveReasoningEffort = computed(
+		() => reasoningEffort.value || selectedModel.value?.defaultReasoningEffort,
+	);
 	const reasoningDisplayLabel = computed(() =>
-		reasoningEffort.value
-			? t(`agent.ui.reasoningLevels.${reasoningEffort.value}`)
-			: t('agent.ui.reasoningDefaultShort'),
+		effectiveReasoningEffort.value
+			? t(`agent.ui.reasoningLevels.${effectiveReasoningEffort.value}`)
+			: t('agent.ui.reasoningAutomaticShort'),
 	);
 	const activeReasoningIndex = computed(() => {
-		const effort = reasoningEffort.value || selectedModel.value?.defaultReasoningEffort;
+		const effort = effectiveReasoningEffort.value;
 		if (!effort) return 0;
 		const index = reasoningLevels.value.indexOf(effort);
 		return index === -1 ? 0 : index;
@@ -385,11 +388,13 @@
 		if (count <= 1) return 50;
 		return Math.round(5 + (activeReasoningIndex.value / (count - 1)) * 90);
 	});
-	const reasoningIntense = computed(() => reasoningEffort.value === 'max' || reasoningEffort.value === 'xhigh');
+	const reasoningIntense = computed(
+		() => effectiveReasoningEffort.value === 'max' || effectiveReasoningEffort.value === 'xhigh',
+	);
 	const reasoningDescription = computed(() =>
-		reasoningEffort.value
-			? t(`agent.ui.reasoningDescriptions.${reasoningEffort.value}`)
-			: t('agent.ui.reasoningDefault'),
+		effectiveReasoningEffort.value
+			? t(`agent.ui.reasoningDescriptions.${effectiveReasoningEffort.value}`)
+			: t('agent.ui.reasoningAutomatic'),
 	);
 	const reasoningTrack = ref<HTMLElement | null>(null);
 	let reasoningPointerId: number | null = null;

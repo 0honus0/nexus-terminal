@@ -16,6 +16,8 @@
 
 复审覆盖AgentAppSurface模板/CSS、AgentConfigPopover、UiPopover/UiButton、ArtifactPicker及唯一NativeInputArtifacts消费者，含桌面、各容器档、短窗口、olderHidden、无用量提示、有附件及busy/disabled/选中状态。没有新增测量、计时/监听、请求、状态、类型或Shared/后端/数据库变化。旧CDP与559项结果保持原SHA范围，不作本轮视觉验收；最终根`pnpm run check`、`pnpm run build:frontend`及`pnpm run format:all:check`均退出0（check.log、build-frontend.log、format-check.log），最后文档另做Prettier与diff检查。提交推送后的完整远程E2E及amd dev发布结果继续回填；真实手机软键盘及新布局的像素/触摸专项未验。
 
+用户在首轮远程运行期间追加思考强度显示要求。源码确认滑块已按模型默认定位，但按钮文字/说明及高强度配色仅读取手动覆盖；Surface现用effectiveReasoningEffort统一上述只读呈现，显式选择优先、当前模型默认其次。三语未配置分支改为“自动”及供应商自行选择的说明，移除旧ui.reasoningDefault/Short无消费者文案；供应商编辑器的默认等级设置仍保留。原useNativeRuns在模型切换时清覆盖、未手选时省略reasoningEffort请求字段及在途Run冻结不变，不将显示默认写成用户新覆盖。追加后再次执行根check、前端生产build及全仓ESLint/Prettier，均退出0（check-reasoning.log、build-reasoning.log、format-reasoning.log）；最终文档另做格式/diff复核。统一有效等级、三语唯一消费者、模型切换及captureInput省略/手选分支已复审；最终远程运行另行回填。
+
 ## 终端工具栏响应优化（2026-11-04，浏览器及远程回归通过）
 
 基线main/fff92dfa，用户要求优化终端“隐藏、进度显示、配置布局”点击卡顿。源码确认导航显示原来等待队列与HTTP回执，两个弹窗首次点击才导入，进度窗nextTick读取几何可能强制同步布局。PreferencesStore增加导航预览/revision，values仍为已确认快照；AppHeader和WorkspacePage显示、高度、按钮及下次切换消费同一有效值，原串行CAS、冲突/unknown围栏不变。旧finally不清新预览，permission撤销立即收尾，Presentation重置隔离旧身份。

@@ -1620,8 +1620,8 @@
       "testFailed": "连接失败，请检查模型、地址与凭据后重试。",
       "createFailed": "未能添加，请检查填写内容及下方错误后重试。",
       "reasoning": "思考强度",
-      "reasoningDefault": "默认思考",
-      "reasoningDefaultShort": "默认",
+      "reasoningAutomatic": "未指定思考强度，由模型自行选择",
+      "reasoningAutomaticShort": "自动",
       "reasoningLevels": {
         "none": "无",
         "minimal": "极低",
