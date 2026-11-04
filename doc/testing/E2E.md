@@ -8,7 +8,17 @@
 
 官方插件[v1.0.3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.3)已发布，main/tag均为d5dd455，发布CI成功。本体[amd dev发布41830244197](https://github.com/0honus0/nexus-terminal/actions/runs/41830244197)成功，来源为上述被测提交；后续按用户新授权维护指定实例数据库并更新镜像，见紧接的部署记录。真实运营商切网、手机软键盘、外部供应商及未列故障边界仍按[待验与外部依赖](../PLAN.md#待验与外部依赖)保留；受控回归不替代真实模型效果或吞吐实测。旧553项及更早镜像结果只保留为各自历史证据。
 
-## Agent 聊天工具状态与悬浮控件（2026-11-04，源码/静态完成）
+## 插件市场更新确认弹窗（2026-11-04，限定浏览器验收通过）
+
+工作区基于main/d81823bb，将PluginManagementSettings顶部候选包确认区移入共用UiModal；安装及两步升级继续使用原契约。用户明确授权“本地两个修改都用浏览器验证下 没问题提交推送”，作为D17的限定例外。证据保留于`/home/honus/nexus-task-artifacts/plugin-market-modal-20261104`。Node v22.23.1、pnpm 11.28.10、Playwright 1.64.1、Chromium 156，经本机CDP连接实际`https://api.honus.top`；前端当前源码9998，后端3001使用独立空数据库，自建29192仓库提供真实签名1.0.0/2.0.0包，不读取用户数据库或操作生产。
+
+两轮源码审核覆盖prepare→stage→candidate→弹窗→原install/prepare-upgrade/upgrade→确认及load；保留签名、能力、技术详情、CAS和unknown围栏。候选包关闭只清展示，不撤销draining。原UiModal负责Portal、焦点进入和短屏正文滚动，组件在校验请求禁用原按钮前记录触发元素，弹窗关闭且原视图可写后恢复焦点；失活丢弃引用。首轮真实浏览器发现取消后焦点丢失，已在调用方修复并整轮复验，未更改共享基础组件。
+
+`runtime/acceptance.mjs`与`browser-acceptance.json`记录15项PASS：桌面取消/Escape/遮罩及焦点归还、busy安装禁止三种关闭、确认安装自动关闭；中英日各390×844/320×720/320×480共9组尺寸与按钮完整性；短屏展开技术详情后正文滚动且footer可达；准备升级409后弹窗内重读；真实prepare成功但仅丢弃浏览器回执后保留unknown围栏，重读核实draining、不自动finish，显式确认新意图后完成升级并保留原App身份。请求记录核对最终upgrade只发送一次，无pageerror。截图、几何和`browser-acceptance-trace.zip`同目录。
+
+验收脚本修正了隐藏同名元素定位、按真实翻译定位及“短内容必须溢出”的不当假设，保留各次失败产物；产品未为这些测试假设改动。焦点修复后重新执行根`pnpm run check`和前端生产build均通过（final-check.log、final-frontend-build.log）；全仓格式及diff按最终收口日志记录。未运行本地全套E2E，既有559项只保持原SHA覆盖；离开页签/登出晚回执、并发升级/卸载及真实手机软键盘仍未覆盖。本批只提交推送，不发布或部署。
+
+## Agent 聊天工具状态与悬浮控件（2026-11-04，限定浏览器验收通过）
 
 工作区基于main/c202c152，本轮仅修改前端聊天展示及对应文档；用户随后明确授权提交推送，未发布或部署。证据保留于`/home/honus/nexus-task-artifacts/agent-chat-controls-20261104`。Node v22.23.1，独立tools目录的pnpm 11.28.10（与根packageManager一致），仓库ESLint 10.14.0、Prettier 3.9.10、Vue 3.5.44；未修改依赖或锁文件。
 
@@ -16,7 +26,9 @@
 
 本轮命令均退出0：`pnpm run check`（Backend/Shared及Frontend类型、双端ESLint，check.log）、`pnpm run build:frontend`（vue-tsc+生产Vite，frontend-build.log）、`pnpm run format:all:check`（全仓ESLint/Prettier，format-check.log）、`git diff --check`。源码差异审核记录source-review.diff；文档收口后另核对格式及diff。
 
-按D17未新增或运行本地行为、CDP或E2E；559项历史基线不覆盖本轮差异。待后续授权验收：320/390px与窄Agent窗的按钮可读性、空白点击/触摸滚动穿透、Token弹层与附件、上翻新消息/回到底部、批准后成功/失败、拒绝/过期/取代及工具晚加载和历史分页。
+用户本轮明确授权后，在与上节相同的真实站点/CDP和隔离空库中补验，产物位于`/home/honus/nexus-task-artifacts/plugin-market-modal-20261104`。使用真实签名Native App、正式隔离插件进程与真实审批账本；29193只提供受控模型SSE与签名包，不调用付费模型、不连接SSH。`runtime/chat-acceptance.mjs`与`chat-browser-acceptance.json`记录8项PASS：批准按钮发送原审批hash/version，单一工具article同时显示approved/completed与申请/决定时间；拒绝显示denied及后端实际failed，不伪报成功；独立Approval history不存在。桌面Token弹层、上一条/下一条/最新真实滚动通过，空白区域实际命中下方正文P元素，点击与滚轮事件穿透；历史阅读位置在普通窗口尺寸变化后保留。390/320px触屏context分别覆盖Token/导航、空白触摸点击穿透及滚轮、合并状态与按钮无横向溢出，末条正文位于控件上方。截图及trace已保存并目视核对，pageerror为0。
+
+浏览器脚本按实际文案、任务侧栏遮罩和已存在线程调整定位；拒绝后的工具状态按真实账本failed核对，空白命中点限定在正文与控件真实重叠区域。期间根check重建Shared触发Vite热重载的一轮已作废，构建结束后重新完整通过；各次失败产物保留，不把脚本假设修正称为产品修复。本轮未修改聊天源码。手机触摸滚动的完整手势/真实软键盘、运行中上翻新消息、附件、批准后执行失败、过期/取代和历史分页扩大组合仍待专项，559项历史基线不覆盖本次新差异。
 
 ## 远程数据库维护与镜像更新（2026-11-04，已完成）
 

@@ -1,10 +1,20 @@
 <script setup lang="ts">
 	import { computed, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiBadge, UiButton, UiCheckbox, UiInfoHint, UiInlineNotice, UiInput, UiTextarea } from '@/foundation/ui';
+	import {
+		UiBadge,
+		UiButton,
+		UiCheckbox,
+		UiInfoHint,
+		UiInlineNotice,
+		UiInput,
+		UiModal,
+		UiTextarea,
+	} from '@/foundation/ui';
 	import type { usePluginManagement } from '../composables/use-plugin-management';
 	import PluginRepositorySettings from './PluginRepositorySettings.vue';
 	import type { ManagedApp } from '../model/app-management-types';
+	import type { PluginCatalogEntry } from '../model/plugin-types';
 	import type { AgentCapability } from '@nexus-terminal/shared/agent/governance/values';
 
 	const { t, te } = useI18n();
@@ -50,6 +60,22 @@
 	} = props.model;
 	const showPublishers = ref(false);
 	const blocked = computed(() => !props.active || !canWrite());
+	let candidateTrigger: HTMLElement | null = null;
+	watch(
+		() => [candidate.value, blocked.value, props.active] as const,
+		([stage, blocked, active]) => {
+			if (!active) {
+				candidateTrigger = null;
+				return;
+			}
+			if (stage || blocked) return;
+			const trigger = candidateTrigger;
+			candidateTrigger = null;
+			if (trigger?.isConnected) trigger.focus({ preventScroll: true });
+		},
+		{ flush: 'post' },
+	);
+
 	watch(
 		() => [props.active, props.revision] as const,
 		([active, revision], previous) => {
@@ -57,6 +83,17 @@
 		},
 		{ immediate: true },
 	);
+
+	async function prepareCandidate(entry: PluginCatalogEntry, source: string | null): Promise<void> {
+		// Preparing disables the source button before the modal can capture its focus.
+		candidateTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		await prepareCatalogEntry(entry, source);
+	}
+
+	function closeCandidate(): void {
+		if (operation.busy.value) return;
+		candidate.value = null;
+	}
 
 	function pluginCapabilityName(capability: AgentCapability): string {
 		const key = `agent.settings.apps.capabilities.${capability}.name`;
@@ -81,7 +118,7 @@
 			</div>
 		</div>
 		<div :class="embedded ? 'space-y-4' : 'space-y-5 p-4 sm:p-5'">
-			<UiInlineNotice v-if="operation.refreshRequired.value" tone="warning" compact>
+			<UiInlineNotice v-if="!candidate && operation.refreshRequired.value" tone="warning" compact>
 				{{ t('agent.settings.appManagement.refreshRequired') }}
 				<template #actions>
 					<UiButton type="button" density="compact" :disabled="operation.busy.value" @click="load">{{
@@ -90,7 +127,7 @@
 				</template>
 			</UiInlineNotice>
 
-			<UiInlineNotice v-if="mutationUnknown" tone="warning">
+			<UiInlineNotice v-if="!candidate && mutationUnknown" tone="warning">
 				<p>{{ t('agent.pluginManagement.unknown') }}</p>
 				<UiCheckbox v-model="acknowledged">{{ t('agent.pluginManagement.acknowledge') }}</UiCheckbox>
 				<UiButton
@@ -101,111 +138,6 @@
 				>
 			</UiInlineNotice>
 
-			<div
-				v-if="candidate"
-				class="rounded-xl border border-primary/50 bg-primary/5 p-4 shadow-xs ring-1 ring-primary/20"
-			>
-				<div class="flex items-center justify-between gap-2 border-b border-border pb-2.5">
-					<div class="flex items-center gap-2 text-xs font-semibold text-foreground">
-						<div class="flex h-6 w-6 items-center justify-center rounded-md bg-primary/20 text-primary">
-							<i class="fa-solid fa-box-open text-xs" aria-hidden="true"></i>
-						</div>
-						{{ t('agent.settings.plugins.package') }}
-					</div>
-					<UiBadge tone="success" density="compact">{{
-						t('agent.settings.plugins.signatureVerified')
-					}}</UiBadge>
-				</div>
-				<p class="mt-2 text-xs leading-relaxed text-text-secondary">
-					{{ t('agent.settings.plugins.packageHint') }}
-				</p>
-				<div class="mt-3 rounded-lg bg-header/25 p-3.5">
-					<div class="flex flex-wrap items-center justify-between gap-2">
-						<span class="text-sm font-bold text-foreground">{{ candidate.manifest?.displayName }}</span
-						><span
-							class="rounded-md border border-border/60 bg-header/40 px-2 py-0.5 font-mono text-xs text-text-secondary"
-							>v{{ candidate.manifest?.version }}</span
-						>
-					</div>
-					<div class="mt-2 flex flex-wrap gap-1.5 text-[11px]">
-						<span
-							v-for="capability in candidate.manifest?.capabilities ?? []"
-							:key="capability"
-							class="inline-flex items-center gap-1 rounded-md border border-border/60 bg-card px-2 py-1 text-text-secondary"
-						>
-							<i class="fa-solid fa-key text-[9px] text-primary/70" aria-hidden="true"></i>
-							{{ pluginCapabilityName(capability) }}
-						</span>
-						<span
-							class="inline-flex items-center gap-1 rounded-md border border-border/60 bg-card px-2 py-1 text-text-secondary"
-						>
-							<i class="fa-solid fa-right-left text-[9px] text-primary/70" aria-hidden="true"></i>
-							{{
-								t('agent.settings.plugins.intentCount', {
-									count: candidate.manifest?.intents.length ?? 0,
-								})
-							}}
-						</span>
-						<span
-							class="inline-flex items-center gap-1 rounded-md border border-border/60 bg-card px-2 py-1 text-text-secondary"
-						>
-							<i class="fa-solid fa-desktop text-[9px]" aria-hidden="true"></i>
-							UI:
-							{{
-								candidate.manifest?.frontendEntry
-									? t('agent.settings.plugins.present')
-									: t('agent.settings.plugins.absent')
-							}}
-						</span>
-						<span
-							class="inline-flex items-center gap-1 rounded-md border border-border/60 bg-card px-2 py-1 text-text-secondary"
-						>
-							<i class="fa-solid fa-server text-[9px]" aria-hidden="true"></i>
-							Backend:
-							{{
-								candidate.manifest?.backendEntry
-									? t('agent.settings.plugins.present')
-									: t('agent.settings.plugins.absent')
-							}}
-						</span>
-					</div>
-					<details class="mt-2 text-[10px] text-text-secondary">
-						<summary class="cursor-pointer">{{ t('agent.pluginManagement.technicalDetails') }}</summary>
-						<dl class="mt-1.5 space-y-1 break-all font-mono">
-							<div>publisher: {{ candidate.publisherKeyId }}</div>
-							<div>package: {{ candidate.packageHash }}</div>
-							<div>stage: {{ candidate.id }}</div>
-							<div>size: {{ candidate.sizeBytes }} B</div>
-						</dl>
-					</details>
-					<div class="mt-3.5 flex justify-end gap-2 border-t border-border pt-3">
-						<UiButton
-							type="button"
-							appearance="ghost"
-							:disabled="operation.busy.value"
-							@click="candidate = null"
-							>{{ t('common.cancel') }}</UiButton
-						><UiButton
-							type="button"
-							appearance="solid"
-							tone="primary"
-							:disabled="blocked"
-							@click="applyCandidate"
-							><i class="fa-solid fa-download text-xs" aria-hidden="true"></i
-							>{{
-								t(
-									candidateInstallation
-										? candidateInstallation.status === 'draining'
-											? 'agent.pluginManagement.upgrade'
-											: 'agent.pluginManagement.prepareUpgrade'
-										: 'agent.pluginManagement.install',
-								)
-							}}</UiButton
-						>
-					</div>
-				</div>
-			</div>
-
 			<PluginRepositorySettings
 				:publishers="publishers"
 				:installations="installations"
@@ -215,7 +147,7 @@
 				:apps="apps"
 				:active="active"
 				:blocked="blocked || candidate !== null"
-				@prepare="prepareCatalogEntry"
+				@prepare="prepareCandidate"
 				@trust="trustCatalogPublisher"
 				@recommend="emit('recommend')"
 				@official-publishers="officialPublisherIds = $event"
@@ -300,5 +232,146 @@
 				</form>
 			</div>
 		</div>
+		<UiModal
+			v-if="candidate"
+			:visible="active"
+			:title="t('agent.settings.plugins.package')"
+			panel-class="!w-[calc(100vw-2rem)] !max-w-xl !p-4 sm:!p-6"
+			content-class="space-y-3"
+			:close-on-backdrop="!operation.busy.value"
+			:close-on-escape="!operation.busy.value"
+			:focus-on-open="true"
+			@close="closeCandidate"
+		>
+			<template #header>
+				<div class="flex w-full min-w-0 flex-wrap items-center justify-between gap-2">
+					<div class="flex items-center gap-2 text-xs font-semibold text-foreground">
+						<div class="flex h-6 w-6 items-center justify-center rounded-md bg-primary/20 text-primary">
+							<i class="fa-solid fa-box-open text-xs" aria-hidden="true"></i>
+						</div>
+						<h2 class="text-sm font-semibold">{{ t('agent.settings.plugins.package') }}</h2>
+					</div>
+					<UiBadge tone="success" density="compact">{{
+						t('agent.settings.plugins.signatureVerified')
+					}}</UiBadge>
+				</div>
+			</template>
+			<template v-if="candidate">
+				<UiInlineNotice v-if="operation.refreshRequired.value" tone="warning" compact>
+					{{ t('agent.settings.appManagement.refreshRequired') }}
+					<template #actions>
+						<UiButton type="button" density="compact" :disabled="operation.busy.value" @click="load">{{
+							t('agent.pluginManagement.reload')
+						}}</UiButton>
+					</template>
+				</UiInlineNotice>
+
+				<UiInlineNotice v-if="mutationUnknown" tone="warning">
+					<p>{{ t('agent.pluginManagement.unknown') }}</p>
+					<UiCheckbox v-model="acknowledged">{{ t('agent.pluginManagement.acknowledge') }}</UiCheckbox>
+					<UiButton
+						type="button"
+						:disabled="operation.busy.value || operation.refreshRequired.value || !acknowledged"
+						@click="newIntent"
+						>{{ t('agent.pluginManagement.newIntent') }}</UiButton
+					>
+				</UiInlineNotice>
+				<p class="mt-2 text-xs leading-relaxed text-text-secondary">
+					{{ t('agent.settings.plugins.packageHint') }}
+				</p>
+				<div class="mt-3 rounded-lg bg-header/25 p-3.5">
+					<div class="flex flex-wrap items-center justify-between gap-2">
+						<span class="min-w-0 max-w-full text-sm font-bold text-foreground [overflow-wrap:anywhere]">{{
+							candidate.manifest?.displayName
+						}}</span
+						><span
+							class="max-w-full break-all rounded-md border border-border/60 bg-header/40 px-2 py-0.5 font-mono text-xs text-text-secondary"
+							>v{{ candidate.manifest?.version }}</span
+						>
+					</div>
+					<div class="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+						<span
+							v-for="capability in candidate.manifest?.capabilities ?? []"
+							:key="capability"
+							class="inline-flex items-center gap-1 rounded-md border border-border/60 bg-card px-2 py-1 text-text-secondary"
+						>
+							<i class="fa-solid fa-key text-[9px] text-primary/70" aria-hidden="true"></i>
+							{{ pluginCapabilityName(capability) }}
+						</span>
+						<span
+							class="inline-flex items-center gap-1 rounded-md border border-border/60 bg-card px-2 py-1 text-text-secondary"
+						>
+							<i class="fa-solid fa-right-left text-[9px] text-primary/70" aria-hidden="true"></i>
+							{{
+								t('agent.settings.plugins.intentCount', {
+									count: candidate.manifest?.intents.length ?? 0,
+								})
+							}}
+						</span>
+						<span
+							class="inline-flex items-center gap-1 rounded-md border border-border/60 bg-card px-2 py-1 text-text-secondary"
+						>
+							<i class="fa-solid fa-desktop text-[9px]" aria-hidden="true"></i>
+							UI:
+							{{
+								candidate.manifest?.frontendEntry
+									? t('agent.settings.plugins.present')
+									: t('agent.settings.plugins.absent')
+							}}
+						</span>
+						<span
+							class="inline-flex items-center gap-1 rounded-md border border-border/60 bg-card px-2 py-1 text-text-secondary"
+						>
+							<i class="fa-solid fa-server text-[9px]" aria-hidden="true"></i>
+							Backend:
+							{{
+								candidate.manifest?.backendEntry
+									? t('agent.settings.plugins.present')
+									: t('agent.settings.plugins.absent')
+							}}
+						</span>
+					</div>
+					<details class="mt-2 text-[10px] text-text-secondary">
+						<summary class="cursor-pointer">{{ t('agent.pluginManagement.technicalDetails') }}</summary>
+						<dl class="mt-1.5 space-y-1 break-all font-mono">
+							<div>publisher: {{ candidate.publisherKeyId }}</div>
+							<div>package: {{ candidate.packageHash }}</div>
+							<div>stage: {{ candidate.id }}</div>
+							<div>size: {{ candidate.sizeBytes }} B</div>
+						</dl>
+					</details>
+				</div>
+			</template>
+			<template #footer>
+				<div class="flex flex-wrap items-center justify-end gap-2">
+					<UiButton
+						type="button"
+						appearance="soft"
+						class="max-w-full whitespace-nowrap"
+						:disabled="operation.busy.value"
+						@click="closeCandidate"
+						>{{ t('common.cancel') }}</UiButton
+					><UiButton
+						type="button"
+						appearance="solid"
+						tone="primary"
+						class="max-w-full whitespace-nowrap"
+						:loading="operation.busy.value"
+						:disabled="blocked"
+						@click="applyCandidate"
+						><i v-if="!operation.busy.value" class="fa-solid fa-download text-xs" aria-hidden="true"></i
+						>{{
+							t(
+								candidateInstallation
+									? candidateInstallation.status === 'draining'
+										? 'agent.pluginManagement.upgrade'
+										: 'agent.pluginManagement.prepareUpgrade'
+									: 'agent.pluginManagement.install',
+							)
+						}}</UiButton
+					>
+				</div>
+			</template>
+		</UiModal>
 	</section>
 </template>
