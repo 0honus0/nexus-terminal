@@ -64,6 +64,7 @@ export interface PreferencesController {
 	savePanelScale(kind: PanelScaleKind, scale: number, permission: AbortSignal): Promise<void>;
 	saveWorkspacePreference(key: WorkspacePreferenceKey, value: boolean, permission: AbortSignal): Promise<void>;
 	values: ComputedRef<UserPreferences>;
+	navBarVisible: ComputedRef<boolean>;
 	version: ComputedRef<number>;
 	loaded: ComputedRef<boolean>;
 	load(force?: boolean, fallbackLanguage?: string): Promise<UserPreferences>;

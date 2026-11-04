@@ -27,7 +27,7 @@
 		type ConnectionSummary,
 	} from '@/features/connections/public';
 	import { useConnectionTags, type TagSummary } from '@/features/tags/public';
-	import { targetErrorKey } from '@/client/targets/target-types';
+	import { TargetRequestFailure, targetErrorKey } from '@/client/targets/target-types';
 	import { useFeedback } from '@/shared/feedback/public';
 	import WorkspaceTagGroupManager from './WorkspaceTagGroupManager.vue';
 	import { focusRegistry } from '@/shared/focus/public';
@@ -86,6 +86,7 @@
 	let loadFailureCause: unknown;
 	watch([loadError, tagLoadFailed, loading], () => {
 		if (!auth.isAuthenticated.value || loading.value || isNetworkFailure(loadFailureCause)) return;
+		if (loadFailureCause instanceof TargetRequestFailure && loadFailureCause.code === 'cancelled') return;
 		const message = loadError.value || (tagLoadFailed.value ? t('workspaceConnectionList.tagLoadFailed') : '');
 		if (!message) return;
 		feedback.notifyError(message, 0, {

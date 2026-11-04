@@ -393,6 +393,17 @@ usePluginManagement 持已确认安装快照；相同 appId/revision 序列不�
 7. **生命周期与失败**：原 signal/current scope 屏蔽晚返回与 finally；真实读失败、冲突和未确认写继续提供原重新读取入口，重读失败不开放写入。
 8. **当前能力与验收**：USAGE 同步返回页面与失败恢复行为；新增缓存往返及原真实失败回归的正式 Actions 证据见 testing，静态与设备视觉证据分开。
 
+## 工作区工具栏的响应调度
+
+1. **职责与范围**：减少导航切换的网络等待与弹窗首次打开的模块/布局等待；保持工具栏、弹窗、终端绘制和尺寸收敛设计。
+2. **子功能与目录**：沿preferences/store/preferences.store与PreferencesController、AppHeader/WorkspacePage、WorkspaceTabBar和transfers/ProgressDisplayModal，不建立额外持久偏好或弹窗缓存。
+3. **依赖方向**：TabBar仅发代码预加载事件；WorkspacePage使用原功能公开loader，defineAsyncComponent仍按实际打开挂载。PreferencesStore持临时导航预览，AppHeader和Page消费同一计算值。
+4. **类型与转换**：PreferencesController.navBarVisible为本地有效值，values仍是已确认偏好；预览不进入Shared、持久快照、完整表单草稿或请求mapper。无新后端契约/依赖。
+5. **入口与安装**：导航点击先更新本地有效值，再沿原saveWorkspacePreference串行CAS；指针进入、获得焦点和按下弹窗按钮仅提前导入对应模块，不挂载组件或读取业务数据。
+6. **数据与并发**：导航预览按代次关联最新点击，旧保存完成不撤销新预览；最后意图成功或失败后回到已确认快照，未知结果仍由原队列阻断且不重放。Presentation重置清除预览并撤销旧代次。
+7. **生命周期与失败**：失效permission不创建预览，原permission撤销立即清除对应预览且finally移除监听；异步finally只处理原代次。进度弹窗通过一次性ResizeObserver通知在布局后定位，视口resize只请求下一次观察，拖动/位置缓存/手机规则保留；卸载断开观察与监听。预加载失败仅留内部原因，显式打开继续由原异步组件处理失败。
+8. **当前能力与验收**：USAGE记录导航的即时反馈与保存失败恢复；限定CDP回归、受控回执延迟采样和静态证据见PLAN/testing，真实设备、生产网络及大量任务下的完整profile单列未验。
+
 ## 工作区尺寸自动保存的冲突核对
 
 1. **职责与范围**：WorkspaceLayoutController持当前预览和上次确认的本地尺寸，PresentationStore持持久快照、串行队列和恢复围栏；仅尺寸自动保存允许确定冲突后的有限恢复，不扩大到表单写入。
@@ -412,5 +423,5 @@ usePluginManagement 持已确认安装快照；相同 appId/revision 序列不�
 4. **类型与转换**：原连接摘要、Shared 请求/回执、mapper 及 Promise 保持不变，无新增协议/类型。
 5. **入口与安装**：首次挂载及 KeepAlive 后的新连接查询无需等待 layout/focus 读取；先消费一次性路由查询，再沿原连接摘要刷新和 openConnection 派发。
 6. **数据、事务与并发**：template 的 layout.loaded 挂载门禁保留；Runtime 已有 pre-mount 输出缓冲及消费窗口继续持字节，挂载后按原顺序解析，不丢输出、不提前开放输入。首次前台恢复仍等待布局和查询动作完成。
-7. **生命周期与失败**：loadQueryActions 的原页面 signal/current 检查阻止失活或注销后的晚返回派发；布局失败走原设置重读入口，连接仍由 Registry/Runtime 持有关闭、未知结果和恢复，不因布局慢创建第二份 SSH。
+7. **生命周期与失败**：loadQueryActions 的原页面 signal/current 检查阻止失活或注销后的晚返回派发；布局失败走原设置重读入口，连接仍由 Registry/Runtime 持有关闭、未知结果和恢复，不因布局慢创建第二份 SSH。WorkspaceConnectionList只对具名TargetRequestFailure/cancelled过滤被单条配置刷新取代的旧列表读取通知，保留真实读取失败的原刷新提示，不修改Store快照与请求时序。
 8. **当前能力与验收**：消除布局读取与连接流程之间的代码串行依赖，真实收益取决于读取与握手耗时；USAGE 见终端章节，静态/构建及待验边界归 PLAN/testing。

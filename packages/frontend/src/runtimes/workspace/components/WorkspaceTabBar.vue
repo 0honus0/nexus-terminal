@@ -38,7 +38,9 @@
 		newSession: [];
 		toggleHeader: [];
 		openProgress: [];
+		preloadProgress: [];
 		openLayoutConfigurator: [];
+		preloadLayoutConfigurator: [];
 		openSuspended: [];
 	}>();
 
@@ -265,6 +267,9 @@
 					class="relative flex h-full items-center justify-center border-l border-border px-3 text-text-secondary transition-colors duration-150 hover:bg-border hover:text-foreground"
 					:title="t('terminalTabBar.progressDisplay')"
 					:aria-label="t('terminalTabBar.progressDisplay')"
+					@pointerenter="emit('preloadProgress')"
+					@pointerdown="emit('preloadProgress')"
+					@focus="emit('preloadProgress')"
 					@click="emit('openProgress')"
 				>
 					<i class="fas fa-tasks text-sm" aria-hidden="true"></i>
@@ -275,6 +280,9 @@
 					class="flex h-full items-center justify-center border-l border-border px-3 text-text-secondary transition-colors duration-150 hover:bg-border hover:text-foreground"
 					:title="t('layout.configure')"
 					:aria-label="t('layout.configure')"
+					@pointerenter="emit('preloadLayoutConfigurator')"
+					@pointerdown="emit('preloadLayoutConfigurator')"
+					@focus="emit('preloadLayoutConfigurator')"
 					@click="emit('openLayoutConfigurator')"
 				>
 					<i class="fas fa-th-large text-sm" aria-hidden="true"></i>

@@ -127,7 +127,7 @@
 	};
 
 	const preferences = usePreferences();
-	watch(() => [preferences.values.value.navBarVisible, device.supportsTouchInteraction.value], scheduleViewportSync, {
+	watch(() => [preferences.navBarVisible.value, device.supportsTouchInteraction.value], scheduleViewportSync, {
 		flush: 'post',
 	});
 	const appearance = useAppearance();
@@ -189,6 +189,19 @@
 			t('sshSuspend.notifications.autoTerminated', { name, reason: t(`sshSuspend.reasons.${notice.reason}`) }),
 		);
 	});
+
+	const preloadProgressDisplay = (): void => {
+		void loadProgressDisplayModal().catch((cause) =>
+			logger.debug({ err: cause }, 'Progress display preload failed'),
+		);
+	};
+
+	const preloadLayoutConfigurator = (): void => {
+		void loadWorkspaceLayoutConfigurator().catch((cause) =>
+			logger.debug({ err: cause }, 'Layout configurator preload failed'),
+		);
+	};
+
 	const surfaces = new Map<string, SurfaceApi>();
 	const suspendedVisible = ref(false);
 	const connectionPickerVisible = ref(false);
@@ -1177,11 +1190,7 @@
 		const permission = pageScope.signal;
 		if (!isPageCurrent(permission)) return;
 		try {
-			await preferences.saveWorkspacePreference(
-				'navBarVisible',
-				!preferences.values.value.navBarVisible,
-				permission,
-			);
+			await preferences.saveWorkspacePreference('navBarVisible', !preferences.navBarVisible.value, permission);
 		} catch (cause) {
 			reportPreferenceSaveError(cause, { permission });
 		}
@@ -1399,7 +1408,7 @@
 		ref="viewportRoot"
 		:style="visibleWorkspaceHeight === undefined ? undefined : { maxHeight: `${visibleWorkspaceHeight}px` }"
 		class="flex min-h-0 flex-col overflow-hidden bg-background"
-		:class="preferences.values.value.navBarVisible ? 'h-[calc(100dvh-var(--app-header-height))]' : 'h-dvh'"
+		:class="preferences.navBarVisible.value ? 'h-[calc(100dvh-var(--app-header-height))]' : 'h-dvh'"
 	>
 		<RemoteToolInstallDialog
 			:offer="clipboardTools.offer.value"
@@ -1413,7 +1422,7 @@
 			:sessions="registry.orderedSessions.value"
 			:active-id="registry.activeId.value"
 			:mobile="device.isMobile.value"
-			:nav-bar-visible="preferences.values.value.navBarVisible"
+			:nav-bar-visible="preferences.navBarVisible.value"
 			:show-workspace-suspended-sessions="preferences.values.value.showWorkspaceSuspendedSessions"
 			:show-workspace-header-toggle="preferences.values.value.showWorkspaceHeaderToggle"
 			:show-workspace-progress="preferences.values.value.showWorkspaceProgress"
@@ -1428,6 +1437,8 @@
 			@reorder="registry.move"
 			@new-session="connectionPickerVisible = true"
 			@toggle-header="toggleHeader"
+			@preload-progress="preloadProgressDisplay"
+			@preload-layout-configurator="preloadLayoutConfigurator"
 			@open-progress="progressDisplayVisible = true"
 			@open-layout-configurator="layoutConfiguratorVisible = true"
 			@open-suspended="

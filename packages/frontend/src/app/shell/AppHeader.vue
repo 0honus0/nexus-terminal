@@ -144,7 +144,7 @@
 
 <template>
 	<header
-		v-if="route.name !== 'Workspace' || preferences.values.value.navBarVisible"
+		v-if="route.name !== 'Workspace' || preferences.navBarVisible.value"
 		class="app-header ui-glass-chrome sticky top-0 z-30 shrink-0"
 	>
 		<nav class="app-navigation" :aria-label="t('common.primaryNavigation')">

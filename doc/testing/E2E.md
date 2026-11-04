@@ -8,6 +8,26 @@
 
 官方插件[v1.0.3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.3)已发布，main/tag均为d5dd455，发布CI成功。本体[amd dev发布41830244197](https://github.com/0honus0/nexus-terminal/actions/runs/41830244197)成功，来源为上述被测提交；后续按用户新授权维护指定实例数据库并更新镜像，见紧接的部署记录。真实运营商切网、手机软键盘、外部供应商及未列故障边界仍按[待验与外部依赖](../PLAN.md#待验与外部依赖)保留；受控回归不替代真实模型效果或吞吐实测。旧553项及更早镜像结果只保留为各自历史证据。
 
+## 终端工具栏响应优化（2026-11-04，限定浏览器回归通过）
+
+基线main/fff92dfa，用户要求优化终端“隐藏、进度显示、配置布局”点击卡顿。源码确认导航显示原来等待队列与HTTP回执，两个弹窗首次点击才导入，进度窗nextTick读取几何可能强制同步布局。PreferencesStore增加导航预览/revision，values仍为已确认快照；AppHeader和WorkspacePage显示、高度、按钮及下次切换消费同一有效值，原串行CAS、冲突/unknown围栏不变。旧finally不清新预览，permission撤销立即收尾，Presentation重置隔离旧身份。
+
+TabBar在pointerenter/focus/pointerdown通过Page调用原公开loader，仅预加载代码、不挂载或读取业务数据；实际打开继续defineAsyncComponent及原草稿/取消流程。进度窗通过测量前断开的单次ResizeObserver布局后定位，保留拖动/位置缓存/手机规则，卸载清observer和resize监听。未改CSS、正常UI、终端fit/字体/尺寸算法、任务容量或Backend/Shared/数据库。
+
+初期按D17完成两轮源码审核及静态检查，check.log的3处函数空行已按原ESLint修正；check-final.log、build-frontend.log、format-all.log与docs-format.log通过。用户随后明确“实测 提交推送发布amd main dev”，本轮据此执行限定CDP与真实本机SSH回归；在提交推送及完整远程E2E通过后发布main的dev/linux/amd64，不更新生产容器或用户数据库。产物集中`/home/honus/nexus-task-artifacts/workspace-toolbar-performance-20261104`，保留至用户通知。
+
+环境Node22.23.1、pnpm11.28.10、Playwright1.64.1及Chromium156，经CDP127.0.0.1:29222访问真实https://api.honus.top；Vite9998/Backend3001、临时SSH41011、随机账号、数据库和浏览器profile均为本轮独立runtime。真实Store/Controller/API与SQLite、SSH正常执行；拦截只延迟或丢弃已取得的真实回执，以及一次具名503读取故障，不伪造保存成功、不重放写入。
+
+最终runtime/acceptance.mjs整组15项PASS，acceptance-final-2.log与browser-acceptance.json记录零pageerror：预加载无挂载/业务请求；进度首次打开/位置初始化/Escape；键盘布局打开/改草稿/取消确认/放弃关闭；800ms延迟回执前导航即时反馈；三次点击串行且两份旧回执不回退；真实409回退与阻断/重读；已成功保存但丢回执为unknown、无重放、只读恢复；离页撤销排队写；进度拖动/重开位置及缩小视口约束、快速开关；真实SSH输入与两次导航后尺寸保持；320/390px触屏真实SSH、延迟回执导航及进度布局/关闭；正常列表取消不误报而真实503仍有刷新入口；真实退出登录撤销旧预览/排队写，重新登录恢复已确认配置。截图已目视核对，toolbar-trace-*.zip、请求及回执记录保留。
+
+扩展实测发现启动时单条配置刷新会取消旧列表读取，WorkspaceConnectionList仍将具名cancelled转成失败Toast。现仅过滤该只读取消通知，Store快照、刷新时序与其它失败不变；initial-error-diagnostic.log记录修复前调用源，initial-error-fixed.log记录修复后零通知，整组15项再次通过。源码复审覆盖8个改动源码的消费者、预览/确认隔离、撤销/重置/旧finally、module事件链和RO收尾、具名取消与真实失败。脚本初期的Vue节点归属、整页刷新重建终端、250条资源时序缓冲、确认弹层定位/真实文案及登出的link角色已按真实入口修正，所有失败产物保留，没有为测试修改UI或强制点击。
+
+本轮点击时序以click捕获时间至首个确认目标DOM的requestAnimationFrame回调计，不等于完整屏幕呈现或终端吞吐。最终15项回归中，800ms真实回执持有期间隐藏为8.8ms，已预加载进度窗44.1ms、布局窗32ms；无/有位置及两类弹窗均保留正常流程。另尝试Vite插件切换旧源码做对照，但全图失效/页面重载后旧模块未成功建立SSH基线，comparison*.log仅保留诊断；没有可用旧版对照结果，不宣称端到端倍数提升。候选代码已恢复并补拍layout-desktop.png。
+
+最后补丁后根`pnpm run check`（check-acceptance.log）、`pnpm run build:frontend`（build-acceptance.log）、`pnpm run format:all:check`（format-acceptance.log）全部退出0，文档另做Prettier/diff复核。同步origin/main仅新增501ee855的CI耗时估计，未改本轮被测产品源码。测试结束已停止自有浏览器/前后端及SSH夹具，9998/3001/29222/41011无监听，目录与全部产物保留。远程E2E及amd dev发布待本轮提交推送后执行，实际运行与镜像证据继续在本节收口。
+
+未验范围：真实手机软键盘、生产网络/多设备、多标签及大量真实传输任务压力、完整主线程长任务profile、预加载下载失败后的恢复；不把本轮rAF/DOM时序或软件渲染模拟扩为所有设备耗时保证。
+
 ## 工作区尺寸自动保存冲突（2026-11-04，限定浏览器回归通过）
 
 只读排查指定远程实例：生产revision为7262e8ac，14:26:26.894及14:26:51.367 UTC的PUT /api/v1/settings/layout返回409（auditId1504/1506），此前及间隔内preferences写入成功。SQLite只读核对presentation记录仍存在、version136；共有4个有效登录会话，但日志未含请求expectedVersion/浏览器身份，不能据此认定具体页面或设备。未改远程数据、设置或容器。原始日志与脱敏审计元数据保留于`/home/honus/nexus-task-artifacts/personal-data-conflict-20261104`。

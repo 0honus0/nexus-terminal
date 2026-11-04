@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { computed, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { setFrontendLogLevel } from '@/client/logging/logger';
 import { PreferenceRequestFailure } from '@/client/preferences/preference-request';
 import { usePresentationStore } from './presentation.store';
@@ -15,8 +15,20 @@ import { projectPreferences } from '../model/presentation-mapper';
 export const usePreferencesStore = defineStore('preferences', () => {
 	const presentation = usePresentationStore();
 	const values = computed(() => presentation.snapshot?.preferences ?? defaultPreferences);
+	const navigationPreview = ref<boolean | null>(null);
+	const navBarVisible = computed(() => navigationPreview.value ?? values.value.navBarVisible);
+	let navigationRevision = 0;
 	const loaded = computed(() => presentation.snapshot !== null);
 	const version = computed(() => presentation.snapshot?.version ?? 0);
+	watch(
+		loaded,
+		(isLoaded) => {
+			if (isLoaded) return;
+			navigationRevision++;
+			navigationPreview.value = null;
+		},
+		{ flush: 'sync' },
+	);
 	watch(
 		() => values.value.frontendLogLevel,
 		(level) => setFrontendLogLevel(level),
@@ -49,11 +61,30 @@ export const usePreferencesStore = defineStore('preferences', () => {
 		value: boolean,
 		permission: AbortSignal,
 	): Promise<void> {
-		await presentation.saveWorkspacePreference(key, value, permission);
+		if (key !== 'navBarVisible' || permission.aborted || !loaded.value || presentation.blocked) {
+			await presentation.saveWorkspacePreference(key, value, permission);
+			return;
+		}
+		const revision = ++navigationRevision;
+
+		const clearPreview = (): void => {
+			// A revoked page or older receipt must not replace a newer click's preview.
+			if (navigationRevision === revision) navigationPreview.value = null;
+		};
+
+		navigationPreview.value = value;
+		permission.addEventListener('abort', clearPreview, { once: true });
+		try {
+			await presentation.saveWorkspacePreference(key, value, permission);
+		} finally {
+			permission.removeEventListener('abort', clearPreview);
+			clearPreview();
+		}
 	}
 
 	return {
 		values,
+		navBarVisible,
 		version,
 		loaded,
 		load,

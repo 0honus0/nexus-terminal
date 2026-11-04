@@ -6,6 +6,7 @@ export function usePreferences(): PreferencesController {
 	const store = usePreferencesStore();
 	return {
 		values: computed(() => store.values),
+		navBarVisible: computed(() => store.navBarVisible),
 		loaded: computed(() => store.loaded),
 		version: computed(() => store.version),
 		load: store.load.bind(store),

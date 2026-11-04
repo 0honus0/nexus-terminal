@@ -3,7 +3,7 @@
 		ServerTransferItemStatus,
 		ServerTransferTaskStatus,
 	} from '@nexus-terminal/shared/remote/transfers/server-values';
-	import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+	import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
 	import { useDraggablePosition } from '@/foundation/interaction';
@@ -60,6 +60,7 @@
 	const panelContent = ref<HTMLElement | null>(null);
 	const position = ref({ x: VIEWPORT_MARGIN, y: VIEWPORT_MARGIN });
 	const positionInitialized = ref(false);
+	let positionObserver: ResizeObserver | undefined;
 
 	const panelElement = (): HTMLElement | null => panelContent.value?.parentElement ?? null;
 
@@ -76,25 +77,25 @@
 		writeStoredValue(progressDisplayPositionStorage, position.value);
 	};
 
-	const restorePosition = async (): Promise<void> => {
+	const syncPosition = (): void => {
 		if (props.mobile) return;
-		await nextTick();
 		const element = panelElement();
 		if (!element) return;
-
-		let next = { x: element.getBoundingClientRect().left, y: element.getBoundingClientRect().top };
-		const saved = readStoredValue(progressDisplayPositionStorage);
-		if (saved) next = saved;
+		let next = position.value;
+		if (!positionInitialized.value) {
+			const rect = element.getBoundingClientRect();
+			next = readStoredValue(progressDisplayPositionStorage) ?? { x: rect.left, y: rect.top };
+		}
 		position.value = clampPosition(next, element);
+		if (positionInitialized.value) savePosition();
 		positionInitialized.value = true;
 	};
 
-	const clampRestoredPosition = (): void => {
-		if (props.mobile || !positionInitialized.value) return;
+	const requestPositionSync = (): void => {
+		if (props.mobile) return;
 		const element = panelElement();
 		if (!element) return;
-		position.value = clampPosition(position.value, element);
-		savePosition();
+		positionObserver?.observe(element);
 	};
 
 	const drag = useDraggablePosition({
@@ -126,10 +127,20 @@
 	});
 
 	onMounted(() => {
-		void restorePosition();
-		window.addEventListener('resize', clampRestoredPosition);
+		if (props.mobile) return;
+		// Measure after layout, without forcing the terminal and all panes to lay out during opening.
+		positionObserver = new ResizeObserver(() => {
+			positionObserver?.disconnect();
+			syncPosition();
+		});
+		requestPositionSync();
+		window.addEventListener('resize', requestPositionSync);
 	});
-	onBeforeUnmount(() => window.removeEventListener('resize', clampRestoredPosition));
+	onBeforeUnmount(() => {
+		positionObserver?.disconnect();
+		positionObserver = undefined;
+		window.removeEventListener('resize', requestPositionSync);
+	});
 
 	const done = (status: TransferTask['status']) =>
 		['completed', 'cancelled', 'skipped', 'partial', 'unknown', 'error'].includes(status);
