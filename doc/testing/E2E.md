@@ -4,9 +4,9 @@
 
 ## 当前验收基线
 
-最新完整远程 [41778130423](https://github.com/0honus0/nexus-terminal/actions/runs/41778130423) 验证 `main/fd41a0fee0f9355543a660185a7ef39c5bd83cd7`：549个场景全部首次通过，零失败、重试、flaky与跳过，质量检查、Docker smoke和8个测试分片全部成功。本版包含前序插件唯一App来源/卸载清除、架构与容量同步、工具目录及网络自动恢复变更；通过范围以该 SHA 和实际场景为准。后继 `4aa3b49e9e5a957d0d9125b9e70162c5a595f7b3` 仅自动维护耗时估算，已核对无产品源码差异。
+最新完整远程 [41792075453](https://github.com/0honus0/nexus-terminal/actions/runs/41792075453) 验证 `main/07a69be818a728c97e8ea1eea2ea6a1aa74cfade`：551个场景全部通过，质量检查、Docker smoke和8个测试分片全部成功，耗时更新成功，截图更新按正常条件跳过。日志含551条 passed 记录，各分片汇总合计551，无失败/flaky/跳过场景汇总。新增缓存页恢复和安装初始化真实夹具均通过；只代表该 SHA 的实际覆盖范围。后继 `4a3074da6f8ab7e515a017f949ce03b1d059dc88` 仅自动维护耗时估算，已核对无产品源码差异。前序布局 b542640a 已由 41784731617 完整验证。
 
-本轮 main dev/amd64 发布及指定主机维护进展见文末交付记录。真实手机/切换运营商网络、外部供应商、安全硬件、扩大故障及持久介质边界仍按 [待验与外部依赖](../PLAN.md#待验与外部依赖) 保留；独立 Nexus Agent 1.0.2 未签名发布，不以宿主回归代替插件发布。
+当前发布 [41792924820](https://github.com/0honus0/nexus-terminal/actions/runs/41792924820) 构建上述后继 main 的 dev/linux-amd64 镜像，已成功；本轮不更新指定主机、容器或数据库。此前已完成的指定主机维护证据仍在文末。真实手机/切换运营商网络、外部供应商、安全硬件、扩大故障及持久介质边界仍按 [待验与外部依赖](../PLAN.md#待验与外部依赖) 保留；独立 Nexus Agent 1.0.2 未签名发布，不以宿主回归代替插件发布。
 
 ## 阶段逻辑回归
 
@@ -24,7 +24,7 @@
 
 ## 专项记录
 
-### 设置读取恢复与推荐安装默认授权（2026-11-04，进行中）
+### 设置读取恢复与推荐安装默认授权（2026-11-04，远程回归完成）
 
 用户继续授权只读排查指定 Nexus 主机；本轮 SSH 仅读取 backend 最近3小时/最多5000行 Compose 日志，未修改远端文件、配置、数据库或容器。实际日志66行，范围07:01:09.324Z–07:08:49.789Z，未找到对应设置 GET 失败，execution-settings PUT 为200且 responseFinished=true；其余为 SSH 资源取消与 suspended socket 关闭，不能据此认定设置请求根因，也不能从无日志证明请求全部成功。产物 `/tmp/nexus-agent-market-release-20261104/remote-{backend,ssh}.log`，SSH stderr 为空。
 
@@ -32,9 +32,15 @@
 
 推荐新装的初始启用/全部声明授权经 Service 决策、Model 投影进入原安装事务，SSH 目标能力为全部 SSH 范围，Runtime 启动后才确认；普通安装、升级和已装复用不恢复权限。回归新增缓存页往返无写入，并由正式 Playwright 调用真实签名包/SQLite 的内部初始化夹具，核对启用、完整授权/目标范围、运行态、撤权后幂等复用和普通安装空授权。该夹具不冒充官方签名包或替换 pinned key；官方新包真实验收仍待 D16。
 
-两轮源码审核完成；根 check、双端 build、全量格式检查均退出0，日志分别为本轮目录 check.log/build.log/format.log，diff 检查通过。新增正式远程 Actions 结果待回填；不运行本地行为/CDP/E2E，不沿用上一轮通过担保新增行为。
+两轮源码审核完成；根 check、双端 build、全量格式检查均退出0，日志分别为本轮目录 check.log/build.log/format.log，diff 检查通过。正式远程 41792075453 对 07a69be8 完整通过551场景，新增缓存往返1.6秒、安装初始化2.6秒，原真实读失败保护1.1秒；日志 e2e.log/e2e-result.json/e2e-watch.log。不运行本地行为/CDP/E2E，不沿用上一轮通过担保新增行为。
 
 以下记录按原执行范围保留；当时的“当前”“待验”“未提交/发布”等指该轮时点，最终产品行为以 USAGE 与当前源码为准。架构正文已移回对应架构文档，避免把设计误当测试证据。
+
+### 本轮 dev 镜像发布（2026-11-04，完成）
+
+[41792924820](https://github.com/0honus0/nexus-terminal/actions/runs/41792924820) 成功发布 main `4a3074da6f8ab7e515a017f949ce03b1d059dc88` 的 linux/amd64 镜像。生产依赖审计成功；构建日志确认 OCI revision 与上述 SHA 一致，平台 linux/amd64，两个标签 `ghcr.io/0honus0/nexus-terminal:dev`、`:sha-4a3074da6f8a` 推送同一 digest `sha256:7593bb061d77afae1aeedfec09c0f57f7ca13882ad04f1feb36bafc6b09c90bb`。测试 SHA 07a69be8 与发布 SHA 之间只有 CI 耗时估算变更，无产品源码差异。发布证据 publish.log/publish-result.json/publish-watch.log 留本轮目录。
+
+遵守用户“不更新远程”：本轮仅早先 SSH 只读日志排查，没有远端拉取镜像、重启、部署或数据库维护；生产主机仍保持此前部署。未创建稳定版 tag/Release，未发布独立 Nexus Agent 新签名包。测试产物保留至用户通知。
 
 ### Agent 安装与插件仓库布局（2026-11-04，源码及静态）
 
