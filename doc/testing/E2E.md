@@ -4,11 +4,11 @@
 
 ## 当前验收基线
 
-最新完整远程 [41828020189](https://github.com/0honus0/nexus-terminal/actions/runs/41828020189) 验证 `main/7262e8ac31e414d4de8b8f99102cee681e376961`：559个场景全部一次通过，质量检查、生产构建、Docker smoke及8个测试分片全部成功；耗时产物任务成功，截图更新按正常条件跳过。日志核对559条唯一passed记录，零失败、重试、flaky或跳过。Backend129项，Browser1–7分别32/44/72/64/64/87/67项（包含隔离场景）；新增三个整链wrapper内另覆盖23个模型/上下文、4个签名插件及3个调度子场景，不重复加到559个Playwright场景中。后继文档收口不改变被测源码。
+最新完整远程 [41865585558](https://github.com/0honus0/nexus-terminal/actions/runs/41865585558) 验证 `main/1a31cfa54228391ab4237db87c5ea76c70cf26d1`：559个场景全部一次通过，质量检查、双端生产构建、Docker smoke及8个测试分片的完整原始日志均通过，零失败、重试或跳过。Backend129项，Browser1–7分别49/63/57/54/73/57/77项（包含隔离场景）。同期GitHub Actions官方故障使workflow/job API尚未同步完成状态，本次通过结论依据完整job日志，不将API结论记为success。CI后继e71cf820仅更新耗时估算，产品源码一致；最终文档收口不改变被测源码。
 
-官方插件[v1.0.3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.3)已发布，main/tag均为d5dd455，发布CI成功。本体[amd dev发布41830244197](https://github.com/0honus0/nexus-terminal/actions/runs/41830244197)成功，来源为上述被测提交；后续按用户新授权维护指定实例数据库并更新镜像，见紧接的部署记录。真实运营商切网、手机软键盘、外部供应商及未列故障边界仍按[待验与外部依赖](../PLAN.md#待验与外部依赖)保留；受控回归不替代真实模型效果或吞吐实测。旧553项及更早镜像结果只保留为各自历史证据。
+官方插件[v1.0.3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.3)已发布，main/tag均为d5dd455，发布CI成功。本体最新[amd dev发布41867087587](https://github.com/0honus0/nexus-terminal/actions/runs/41867087587)完整日志确认推送完成，GHCR已核验dev/固定标签、linux/amd64平台、digest和e71cf820源码revision；workflow API同样受上述故障影响，未记为官方success。此前指定实例数据库维护与7262e8ac镜像部署仍保持原范围，本轮没有更新生产容器或数据库。真实运营商切网、手机软键盘、外部供应商及未列故障边界仍按[待验与外部依赖](../PLAN.md#待验与外部依赖)保留；受控回归不替代真实模型效果或吞吐实测。更早测试与镜像结果只保留为各自历史证据。
 
-## 终端工具栏响应优化（2026-11-04，限定浏览器回归通过）
+## 终端工具栏响应优化（2026-11-04，浏览器及远程回归通过）
 
 基线main/fff92dfa，用户要求优化终端“隐藏、进度显示、配置布局”点击卡顿。源码确认导航显示原来等待队列与HTTP回执，两个弹窗首次点击才导入，进度窗nextTick读取几何可能强制同步布局。PreferencesStore增加导航预览/revision，values仍为已确认快照；AppHeader和WorkspacePage显示、高度、按钮及下次切换消费同一有效值，原串行CAS、冲突/unknown围栏不变。旧finally不清新预览，permission撤销立即收尾，Presentation重置隔离旧身份。
 
@@ -24,7 +24,11 @@ TabBar在pointerenter/focus/pointerdown通过Page调用原公开loader，仅预�
 
 本轮点击时序以click捕获时间至首个确认目标DOM的requestAnimationFrame回调计，不等于完整屏幕呈现或终端吞吐。最终15项回归中，800ms真实回执持有期间隐藏为8.8ms，已预加载进度窗44.1ms、布局窗32ms；无/有位置及两类弹窗均保留正常流程。另尝试Vite插件切换旧源码做对照，但全图失效/页面重载后旧模块未成功建立SSH基线，comparison*.log仅保留诊断；没有可用旧版对照结果，不宣称端到端倍数提升。候选代码已恢复并补拍layout-desktop.png。
 
-最后补丁后根`pnpm run check`（check-acceptance.log）、`pnpm run build:frontend`（build-acceptance.log）、`pnpm run format:all:check`（format-acceptance.log）全部退出0，文档另做Prettier/diff复核。同步origin/main仅新增501ee855的CI耗时估计，未改本轮被测产品源码。测试结束已停止自有浏览器/前后端及SSH夹具，9998/3001/29222/41011无监听，目录与全部产物保留。远程E2E及amd dev发布待本轮提交推送后执行，实际运行与镜像证据继续在本节收口。
+最后补丁后根`pnpm run check`（check-acceptance.log）、`pnpm run build:frontend`（build-acceptance.log）、`pnpm run format:all:check`（format-acceptance.log）全部退出0，文档另做Prettier/diff复核。同步origin/main仅新增501ee855的CI耗时估计，未改本轮被测产品源码。测试结束已停止自有浏览器/前后端及SSH夹具，9998/3001/29222/41011无监听，目录与全部产物保留。
+
+修复提交`1a31cfa54228391ab4237db87c5ea76c70cf26d1`已推送main，正式远程[E2E 41865585558](https://github.com/0honus0/nexus-terminal/actions/runs/41865585558)的质量检查（含双端生产构建）、Docker smoke及8个分片完整原始日志均通过。按正式Reporter格式核对559条唯一passed记录，无失败、重试或跳过；Backend129项，Browser1–7分别49/63/57/54/73/57/77项，包含分片内独立运行的隔离场景。GitHub同期[Actions官方故障](https://stspg.io/pjgptg3cfc6n)导致workflow/job API尚未同步完成状态，不能把该API状态记为success；通过依据为各job完整日志、测试结束汇总及上传产物。证据为e2e-backend-1.log、e2e-browser-1至7.log、e2e-quality.log、e2e-smoke.log、e2e-verification.json与官方故障记录。
+
+CI后继`e71cf8204b0d5de9349ce4ac6be8b9b19154cbbd`仅更新scripts/e2e/duration-estimates.json，已核对diff后快进；产品源码与被测修复一致，不将后继SHA称为直接执行过E2E。随后由main触发[amd dev发布41867087587](https://github.com/0honus0/nexus-terminal/actions/runs/41867087587)，生产依赖审计通过；完整publish-prepare.log/publish-image.log确认构建、双标签推送及收尾完成，无job error。实际匿名Registry核验`ghcr.io/0honus0/nexus-terminal:dev`与`sha-e71cf8204b0d`的index digest均为`sha256:c0ae6315d414165d199b41096f871a0bc8b1b2c01c19e06d7aa9862dfc4f0ed2`，排除证明manifest后只有linux/amd64；平台manifest为`sha256:68fe70829d13a21ea4e1af383abdaecf6a7946536d682292dc562195dfb50066`。manifest/config的SHA256、OCI revision及version全部与发布源和固定标签一致，见runtime/verify-image.mjs及image-verification.json，token只在内存。发布workflow API尚未同步完成状态，此处只声明原始日志及实际产物核验完成。本轮源码、验收与镜像交付完成，最终仅提交PLAN/testing收口；生产容器和数据库未更新，自有测试进程已停止，产物按用户要求保留。
 
 未验范围：真实手机软键盘、生产网络/多设备、多标签及大量真实传输任务压力、完整主线程长任务profile、预加载下载失败后的恢复；不把本轮rAF/DOM时序或软件渲染模拟扩为所有设备耗时保证。
 
