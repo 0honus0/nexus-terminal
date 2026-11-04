@@ -16,7 +16,9 @@
 
 新增两项正式回归：coverage-gaps公共API核对全部15项高于旧上界的硬限制、普通预算和App覆盖持久化，并拒绝超硬限制、非安全整数及超Node计时器输入；performance-settings核对真实界面硬限制800→普通预算800→重载读回，两次保存之间默认预算不改变。没有运行实际800次模型调用，不把配置验收等同请求压力验证。更新既有恢复硬限制注释，不再把默认值称作协议上界；原功能断言保持。
 
-本地根check与双端生产build退出0（check.log/build.log）；新E2E消费者严格TypeScript检查退出0（e2e-types.log，显式使用Backend Node类型目录；首次未配置Node类型的调用失败已修正命令）。全量格式检查首轮发现新增测试两处函数空行，已按原规则修正；最终格式/diff、提交SHA、Actions运行及各分片结果待本轮回填，旧551场景不担保当前工作区。
+本地根check与双端生产build退出0（check.log/build.log）；新E2E消费者严格TypeScript检查退出0（e2e-types.log，显式使用Backend Node类型目录；首次未配置Node类型的调用失败已修正命令）。全量格式检查首轮发现新增测试两处函数空行，已按原规则修正；最终全量格式/diff通过。64bca706已提交并推送main（首次GitHub commit_refs_rules服务失败，重试成功）；推送未自动触发任务，手动启动正式41811345271，源码SHA一致，8个分片且不更新截图。第一轮完整结果见下，旧551场景不担保当前工作区。
+
+第一轮41811345271已结束：质量、Docker smoke、Backend与browser1/3/4/6通过，browser2/5/7共4项失败：functional-memory的两项非法期限委派、subagent-lifecycle和native-run均在首次/重试出现首个模型步骤model_response_invalid。三分片日志和完整trace/截图分别下载到本批目录browser-{2,5,7}-1；MODEL_STREAM_SETTLED定位Platform model-request.parameters，源码确认数组工具声明maxItems仍固定拒绝>128。协作dependencies/join/cancel已扩大声明范围，导致包含这些工具的整个模型请求在网络派发前失败。移除这个无底层依据的声明门槛，保留正安全整数、范围关系、完整请求编码容量和工具实际参数校验；原native-run完整Skill/批量/文件/Shell/取消断言保留，不改UI或扩大超时。USAGE/架构同步，Backend check/build、单文件ESLint及定向格式均退出0，日志为fix-backend-check.log、fix-backend-build.log、fix-eslint.log及fix-format-check.log；最终格式/diff及下一轮完整正式回归待回填。
 
 ## 终端连接等待优化（2026-11-04，源码及静态）
 

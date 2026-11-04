@@ -1618,7 +1618,7 @@ Context预压缩现状：checkpoint工具需要实际context.compact授权，摘
 2. **子功能与目录**：沿execution/values、Governance、Memory Recall、context/result-rules、Run Collaboration、Tool Job、Integration/Browser及RemoteMachineOperationService，不新增兼容入口。
 3. **依赖方向**：两端控件/codec与SQLite解码消费同一Shared表示范围；Platform MCP只持SDK实际计时器上界，不借Agent策略。业务owner持冻结预算，Adapter持真实资源和SQL。
 4. **类型与转换**：独立应用/存储/Shared对象与白名单mapper保持；完整HTTP/WS响应形状不变。移除Child历史条数常量，响应编码预算保持2064384bytes，独立于工具额度；批量Child预览过大时省略正文而保留原文读取能力。
-5. **入口与安装**：全部硬限制仍沿原preview/confirm和普通预算保存；默认值不变，不自动增额。Recall输入/工具定义不再额外限20，预览只在未指定预算时默认8KiB，不再强制截到8KiB；Child依赖/join/cancel不再限4，Shell Job列表offset按64项页预留加法空间。
+5. **入口与安装**：全部硬限制仍沿原preview/confirm和普通预算保存；默认值不变，不自动增额。Recall输入/工具定义不再额外限20，预览只在未指定预算时默认8KiB，不再强制截到8KiB；Child依赖/join/cancel不再限4，Platform模型工具声明的数组maxItems只校验正安全整数和范围关系，不再另限128；实际参数仍由完整编码预算与工具owner校验。Shell Job列表offset按64项页预留加法空间。
 6. **数据、事务与并发**：Recall候选窗口至少覆盖请求条数；Token、消息及文件总量比较改为剩余额度减法，避免大额度加法精度问题。Artifact总空间与HTTP Range使用正安全整数，期限换算校验Date TimeClip边界。没有新增DDL，本批沿前序更新的v1签名，旧库仍需明确维护。
 7. **生命周期与失败**：Remote活跃操作/Job不再固定8，Integration/Browser待处理及Browser会话不再固定16，原实际资源、冲突、失败留存、停机排空与故障保护保持。工具运行的外部signal包含冻结超时/Run期限，Integration/Browser不另套60秒总期限；MCP SDK每次请求显式使用其Node计时器最大表示值，由外部signal提前取消，不能用timeout=0冒充禁用（SDK实际会创建0ms计时器）。Browser导航/返回禁用独立导航计时器，原scope负责取消并关闭，CDP单次控制/握手/清理期限保持，避免无界等待收尾。
 8. **当前能力与验收**：安全整数不代表无限资源；工具单次捕获256KiB、参数16KiB、分页/完整编码与Browser二进制表示仍独立保护，不改成总量预算或无界缓冲。按D17仅源码/静态/构建，实际大配置、>8/>16并发及>60秒工具行为待正式回归；USAGE与testing分别持操作与证据。

@@ -30,12 +30,12 @@ function parameters(input: ModelToolDefinition['parameters']): ModelToolDefiniti
 			throw new ModelNetworkFailure('response_invalid');
 		}
 		if (field.type === 'array') {
+			// The tool owner sets cardinality; schema metadata only needs valid numeric bounds.
 			if (
 				!Number.isSafeInteger(field.minItems) ||
 				!Number.isSafeInteger(field.maxItems) ||
 				field.minItems < 1 ||
 				field.maxItems < field.minItems ||
-				field.maxItems > 128 ||
 				field.items.type !== 'string' ||
 				!Number.isSafeInteger(field.items.minLength) ||
 				!Number.isSafeInteger(field.items.maxLength) ||
