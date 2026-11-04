@@ -66,7 +66,6 @@ function snapshot(job: ToolJob): string {
 /** Run-owned Shell execution. Every remote Promise remains owned through durable settlement and cleanup. */
 export class ToolJobService {
 	private readonly jobs = new Map<string, OwnedJob>();
-	private reservations = 0;
 
 	constructor(
 		private readonly model: ToolJobModel,
@@ -75,65 +74,50 @@ export class ToolJobService {
 
 	async prepare(input: ToolJobPreparation): Promise<string> {
 		const { operation, target, policyRevision, signal, work, validate } = input;
-		const occupied = [...this.jobs.values()].filter(
-			(item) =>
-				item.job.state === 'queued' ||
-				item.job.state === 'dispatched' ||
-				item.failure !== null ||
-				item.cleanupFailed,
-		).length;
-		if (this.reservations + occupied >= 8) {
-			throw new AgentFailure('limit_exceeded');
-		}
-		this.reservations++;
 		const deadline = input.deadlineAt;
-		try {
-			signal.throwIfAborted();
-			const job = await this.model.create(
-				{
-					id: operation.id,
-					userId: operation.userId,
-					appId: operation.appId,
-					runId: operation.runId,
-					connectionId: target.id,
-					targetVersion: target.version,
-					fingerprint: target.fingerprint,
-					policyRevision,
-				},
-				input.maxHistory,
-			);
-			const controller = new AbortController();
+		signal.throwIfAborted();
+		const job = await this.model.create(
+			{
+				id: operation.id,
+				userId: operation.userId,
+				appId: operation.appId,
+				runId: operation.runId,
+				connectionId: target.id,
+				targetVersion: target.version,
+				fingerprint: target.fingerprint,
+				policyRevision,
+			},
+			input.maxHistory,
+		);
+		const controller = new AbortController();
 
-			const abort = () => controller.abort();
+		const abort = () => controller.abort();
 
-			signal.addEventListener('abort', abort, { once: true });
-			if (signal.aborted) {
-				abort();
-			}
-			this.jobs.set(job.id, {
-				job,
-				controller,
-				work,
-				deadline,
-				timer: null,
-				validate,
-				pending: null,
-				failure: null,
-				refusal: null,
-				cleanupFailed: false,
-				onFailure: input.onFailure,
-
-				unsubscribe: () => signal.removeEventListener('abort', abort),
-			});
-			logDiagnostic(this.logger, 'info', 'AGENT_JOB_ACCEPTED', {
-				jobId: job.id,
-				runId: job.runId,
-				connectionId: job.connectionId,
-			});
-			return JSON.stringify({ jobId: job.id, accepted: true });
-		} finally {
-			this.reservations--;
+		signal.addEventListener('abort', abort, { once: true });
+		if (signal.aborted) {
+			abort();
 		}
+		this.jobs.set(job.id, {
+			job,
+			controller,
+			work,
+			deadline,
+			timer: null,
+			validate,
+			pending: null,
+			failure: null,
+			refusal: null,
+			cleanupFailed: false,
+			onFailure: input.onFailure,
+
+			unsubscribe: () => signal.removeEventListener('abort', abort),
+		});
+		logDiagnostic(this.logger, 'info', 'AGENT_JOB_ACCEPTED', {
+			jobId: job.id,
+			runId: job.runId,
+			connectionId: job.connectionId,
+		});
+		return JSON.stringify({ jobId: job.id, accepted: true });
 	}
 
 	launch(id: string): void {

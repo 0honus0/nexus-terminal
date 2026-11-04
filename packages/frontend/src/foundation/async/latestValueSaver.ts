@@ -2,7 +2,7 @@ export interface LatestValueSaverOptions<T> {
 	delayMs: number;
 	save: (value: T) => Promise<void>;
 	onPendingChange?: (pending: boolean) => void;
-	onError?: (error: unknown) => void;
+	onError?: (error: unknown, value: T) => void;
 }
 
 export interface LatestValueSaver<T> {
@@ -60,7 +60,7 @@ export function createLatestValueSaver<T>(options: LatestValueSaverOptions<T>): 
 				try {
 					await options.save(value);
 				} catch (error) {
-					options.onError?.(error);
+					options.onError?.(error, value);
 				}
 			}
 		})().finally(() => {

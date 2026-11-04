@@ -4,7 +4,7 @@ import { AGENT_CHILD_PROFILES } from '@nexus-terminal/shared/agent/collaboration
 import { CollaborationStorageRefusal } from '../../storage/run-collaboration-storage.js';
 import type { StoredCollaborationAuthority } from '../../storage/run-collaboration-storage.js';
 import { toolOperation } from './run-tool-row.js';
-import { AGENT_RUN_STATUSES, AGENT_RUN_STEP_MAX_COUNT } from '@nexus-terminal/shared/agent/runs/values';
+import { AGENT_RUN_STATUSES, AGENT_RUN_STEP_MAX_INDEX } from '@nexus-terminal/shared/agent/runs/values';
 import type { SqlExecutor, SqlReader } from '../../../../../platform/storage/sqlite/sql-types.js';
 import type { StoredParticipant, StoredParticipantScope } from '../../storage/run-collaboration-storage.js';
 
@@ -75,7 +75,8 @@ export async function participant(tx: SqlReader, scope: StoredParticipantScope):
 			output: null,
 			outputBytes: 0,
 			tools: [],
-			maxRequests: AGENT_RUN_STEP_MAX_COUNT,
+			// Root requests are admitted by its frozen family ledger, not a separate step quota.
+			maxRequests: AGENT_RUN_STEP_MAX_INDEX,
 			deadline: storedInteger(row.deadline_at, 1),
 			dependencies: [],
 			dependencyMode: 'success',
@@ -95,8 +96,7 @@ export async function participant(tx: SqlReader, scope: StoredParticipantScope):
 		(status === 'completed') !== (row.output_text !== null) ||
 		(row.output_text !== null &&
 			(storedInteger(row.output_bytes, 1) > AGENT_RUN_STEP_MAX_TEXT_BYTES ||
-				storedInteger(row.output_bytes, 1) < Buffer.byteLength(storedText(row.output_text), 'utf8'))) ||
-		storedStrings(row.dependencies_json).length > 4
+				storedInteger(row.output_bytes, 1) < Buffer.byteLength(storedText(row.output_text), 'utf8')))
 	) {
 		throw new Error('Corrupt participant limits or terminal output');
 	}

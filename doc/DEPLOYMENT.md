@@ -41,7 +41,7 @@ docker compose logs --tail=100 backend
 
 数据库文件的父目录即实例数据目录；每个实例使用独立目录。资源目录不再拼接 `.db.appearance/.db.artifacts/.db.plugins`，本次布局为破坏性升级，不自动迁移旧目录或混用旧数据库；以新的空数据目录启动，旧目录需由操作者自行保管，程序不删除旧数据。Compose 的数据库固定为容器内 `/app/data/nexus-terminal.db`，通过 `.env` 的 `NEXUS_DATA_DIR` 配置宿主目录，默认仍为 `./data`。运行中可能出现 SQLite WAL/SHM、恢复日志和临时目录，勿手动清除正在使用的恢复文件。
 
-当前首版数据库仅保留 v1 完整结构；当前结构包含远端依赖安装的 `tools` 机器突变来源、Agent Images 协议、上下文摘要/自动标题、模型响应收讫标记和 Run 级批准策略，结构签名为 `backend-next-v1-initial-20261104-plugin-apps`。即使旧开发库也标为 v1，亦不能据此视为兼容；启用当前工作区构建前使用独立空数据目录并保管原目录与密钥，不把旧库/旧快照直接混入新实例。程序不会自动删除旧数据或执行开发期升级。
+当前首版数据库仅保留 v1 完整结构；当前结构包含远端依赖安装的 `tools` 机器突变来源、Agent Images 协议、上下文摘要/自动标题、模型响应收讫标记、Run 级批准策略和子任务模型请求数的正安全整数约束，结构签名为 `backend-next-v1-initial-20261104-model-request-range`。即使旧开发库也标为 v1，亦不能据此视为兼容；启用当前工作区构建前使用独立空数据目录并保管原目录与密钥，不把旧库/旧快照直接混入新实例。程序不会自动删除旧数据或执行开发期升级。
 
 首次 Passkey 站点从公开 Origin 推导；多站点可用 `NEXUS_PASSKEY_SITES` JSON 初始化。CAPTCHA 和 Passkey 站点配置在设置页维护，按界面提示重启激活；IP 白名单、登录封禁策略、监控周期和资源缓存 TTL 保存后热更新。白名单保存前确认当前来源仍被允许，保留部署恢复入口。插件仓库与信任 Publisher 由管理接口配置，不使用旧 catalog 环境变量。写操作依赖当前会话、同源 Origin/Fetch Metadata，不使用旧 CSRF token 端点。
 
@@ -124,3 +124,35 @@ scripts/build/build.sh docker
 ## 手动清理发布历史与缓存
 
 维护入口为 `.github/workflows/cleanup-history.yml`，只有 workflow_dispatch。执行内容、保留范围、权限及失败恢复见 [USAGE](USAGE.md#仓库手动清理)。先完成其它 E2E/发布任务再手动运行；首次在 GitHub 注册新 workflow 需要该文件存在于默认分支。不会触发镜像构建、更新服务器或删除实例数据。
+
+### 1. 职责与范围
+
+`cleanup-history.mjs` 是仓库维护策略和删除执行的唯一 owner，仅面向当前仓库 Actions，以及归属核对通过的两个固定容器包 `nexus-terminal`、`nexus-terminal-e2e-runner`。不涉及产品数据、GitHub Release 或 Git 标签删除。
+
+### 2. 子功能与目录
+
+既有 `scripts/maintenance/cleanup-history.mjs` 持有逐包检查、manifest 闭包、Actions 保留和资源删除；同目录 `cleanup-history.test.mjs` 提供隔离 GitHub/GHCR 回归。工作流只装配手动入口、权限和前置检查。
+
+### 3. 依赖方向
+
+工作流调用脚本；脚本使用 github-script 提供的 Octokit/context/core，以及 Node fetch 访问 GHCR。不依赖产品 Backend、Frontend 或 Shared，不新增运行时服务。
+
+### 4. 类型与转换
+
+GitHub REST 包元数据中的 repository.id 必须与当前仓库 ID 相同；版本 ID 用于精确删除，版本 name 作为 SHA256 manifest digest。GHCR 的索引、平台和证明引用在各包独立遍历，标签通过 HEAD 的 docker-content-digest 复查；配置中合法 OCI revision 汇入关联成功运行的保留集合。token 仅在内存持有并注册日志脱敏，不进入产物。
+
+### 5. 入口与安装
+
+仍只有 `workflow_dispatch`，需要 `contents: read`、`actions: write`、`packages: write` 和两个包的仓库 Actions 管理权限。运行先执行维护回归，再检查全部保留集合，最后删除；没有新安装点或产品协议。
+
+### 6. 数据、事务与并发
+
+各包现有 main/dev/latest 为保留根，递归保留其平台及证明 manifest；共用 digest 的其它标签随版本保留。允许部分标签不存在，包404或空包跳过；有版本却没有保护根时停止。每次版本删除前复查两个包全部保护标签，结束时再查；移动、消失或新出现都停止旧计划。包版本 DELETE 无条件比较接口，多个 API 删除也不是事务，无法撤销已完成的删除。原 workflow 与发布共用按 ref 的 concurrency；另有活跃 Actions 时跳过镜像和缓存删除，但这不提供跨 ref 或外部发布的原子互斥。
+
+### 7. 生命周期与失败
+
+当前/活跃运行、保留 revision 的成功运行及最近成功 E2E 留存；旧运行和产物删除前重新确认其运行状态。只有精确 DELETE 的404计为已不存在，其他失败传播；无法确认所属运行的产物保留。包版本删除禁用隐式重试，重跑必须重新检查渠道和计划。失败后按日志核对已删资源，不能把请求失败当作删除未发生。
+
+### 8. 当前能力与验收
+
+两个固定包保留规则及保护分支由既有维护回归覆盖；实际执行证据与未验权限见 [testing](testing/E2E.md#两包镜像清理保留规则2026-11-04)。本地夹具不证明线上清理已执行，实际删除数量以手动工作流运行摘要为准。

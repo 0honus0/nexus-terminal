@@ -119,7 +119,7 @@ export class ExecutionService {
 		}
 		if (
 			usage.modelRequests >= settings.limits.maxModelRequests ||
-			usage.reservedTokens + tokens > settings.limits.maxTokenReservations
+			tokens > settings.limits.maxTokenReservations - usage.reservedTokens
 		) {
 			throw new AgentFailure('limit_exceeded');
 		}

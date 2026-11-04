@@ -207,8 +207,7 @@ export class MemoryService {
 			!input.query.trim() ||
 			Buffer.byteLength(input.query, 'utf8') > 4096 ||
 			!Number.isSafeInteger(input.limit) ||
-			input.limit < 1 ||
-			input.limit > 20
+			input.limit < 1
 		) {
 			throw new AgentFailure('invalid_input');
 		}
@@ -221,7 +220,7 @@ export class MemoryService {
 		if (terms.length > 32) {
 			throw new AgentFailure('invalid_input');
 		}
-		const candidates = await this.model.recall(actor, Date.now, 64, admit(actor));
+		const candidates = await this.model.recall(actor, Date.now, Math.max(64, limit), admit(actor));
 		const ranked = candidates
 			.map((memory) => ({
 				memory,

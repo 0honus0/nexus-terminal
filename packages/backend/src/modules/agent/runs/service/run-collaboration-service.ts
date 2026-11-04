@@ -1,4 +1,5 @@
 import { capturedResultHash, resultPage } from '../../context/result-rules.js';
+import { TOOL_RESULT_MAX_BYTES } from '../run-tool-limits.js';
 import type { ExecutionService } from '../../execution/service/execution-service.js';
 import { validateAgentId, validateUserId } from '../../agent-validation.js';
 import { createHash, randomUUID } from 'node:crypto';
@@ -33,6 +34,20 @@ function view(value: Participant) {
 		maxRequests: value.maxRequests,
 		deadline: value.deadline,
 	};
+}
+
+/** Keep large Child batches within the existing tool envelope; full output stays readable separately. */
+function childViews(children: Participant[]): ReturnType<typeof view>[] {
+	const items = children.map(view);
+	if (Buffer.byteLength(JSON.stringify({ ready: false, children: items }), 'utf8') > TOOL_RESULT_MAX_BYTES) {
+		for (const item of items) {
+			if (item.output !== null && item.output.length > 0) {
+				item.output = '';
+				item.outputTruncated = true;
+			}
+		}
+	}
+	return items;
 }
 
 function factView(value: CollaborationFact | null) {
@@ -124,7 +139,7 @@ export class RunCollaborationService {
 			}
 			const items = children.slice(after + 1, after + 1 + input.limit);
 			result = {
-				children: items.map(view),
+				children: childViews(items),
 				nextCursor: after + 1 + items.length < children.length ? (items.at(-1)?.id ?? null) : null,
 			};
 		} else if (input.action === 'output_read') {
@@ -164,9 +179,9 @@ export class RunCollaborationService {
 			if (input.action === 'cancel') {
 				await this.cancelChildren(scope, input.childIds, authority);
 				result = {
-					children: (await this.model.children(scope))
-						.filter((child) => input.childIds.includes(child.id))
-						.map(view),
+					children: childViews(
+						(await this.model.children(scope)).filter((child) => input.childIds.includes(child.id)),
+					),
 				};
 			} else {
 				const deadline = Math.min(Date.now() + input.waitSeconds * 1000, parent.deadline);
@@ -180,7 +195,7 @@ export class RunCollaborationService {
 							? items.every((child) => isSettled(child.status))
 							: items.some((child) => isSettled(child.status));
 					if (ready || Date.now() >= deadline) {
-						result = { ready, children: items.map(view) };
+						result = { ready, children: childViews(items) };
 						break;
 					}
 					await delay(Math.min(250, Math.max(1, deadline - Date.now())), undefined, { signal });

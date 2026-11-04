@@ -4,7 +4,7 @@ import { AgentFailure } from '../agent-failure.js';
 import { TOOL_RESULT_MAX_BYTES } from '../runs/run-tool-limits.js';
 import type { ResultReadInput, ResultPage } from './model/context-types.js';
 
-/** Private model representation budgets, independent of execution capture limits. */
+/** Default preview size; an explicitly configured model preview budget takes precedence. */
 export const RESULT_MODEL_MAX_BYTES = 8 * 1024;
 
 export const RESULT_PAGE_MAX_BYTES = 4 * 1024;
@@ -17,7 +17,7 @@ function previewLimit(previewBytes: number): number {
 	if (!Number.isSafeInteger(previewBytes) || previewBytes < 1) {
 		throw new AgentFailure('invalid_input');
 	}
-	return Math.max(1024, Math.min(RESULT_MODEL_MAX_BYTES, previewBytes));
+	return Math.max(1024, previewBytes);
 }
 
 /** Offset is Unicode code points; reserve model preview capacity for the complete page envelope. */

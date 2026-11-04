@@ -42,11 +42,12 @@ export class IntegrationService {
 		}
 	}
 
-	private task<T>(key: string, work: (signal: AbortSignal) => Promise<T>): Promise<T> {
-		if (this.closing || this.pending.size >= 16) {
+	private task<T>(key: string, work: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T> {
+		if (this.closing) {
 			return Promise.reject(new AgentFailure('provider_unavailable'));
 		}
-		const deadline = AbortSignal.any([this.stop.signal, AbortSignal.timeout(60000)]);
+		// Runtime callers own their configured total deadline; management retains its request deadline.
+		const deadline = AbortSignal.any([this.stop.signal, signal ?? AbortSignal.timeout(60000)]);
 		const task = (this.lanes.get(key) ?? Promise.resolve()).then(() => {
 			if (this.closing || deadline.aborted) {
 				throw new AgentFailure('provider_unavailable');
@@ -136,37 +137,41 @@ export class IntegrationService {
 		signal: AbortSignal,
 		validate: () => Promise<void>,
 	): Promise<string> {
-		return this.task(input.id ?? actor.appId, async (deadline) => {
-			const combined = AbortSignal.any([deadline, signal]);
-			await validate();
-			combined.throwIfAborted();
-			if (input.id === null) {
-				const records = await this.model.list({ userId: actor.userId, appId: actor.appId });
+		return this.task(
+			input.id ?? actor.appId,
+			async (deadline) => {
+				const combined = AbortSignal.any([deadline, signal]);
+				await validate();
+				combined.throwIfAborted();
+				if (input.id === null) {
+					const records = await this.model.list({ userId: actor.userId, appId: actor.appId });
+					await validate();
+					combined.throwIfAborted();
+					return JSON.stringify({
+						integrations: records
+							.filter((item) => item.configuration.kind === 'mcp')
+							.map((item) => ({
+								id: item.id,
+								version: item.version,
+								displayName: item.configuration.displayName,
+								enabled: item.enabled,
+							})),
+						untrusted: true,
+					});
+				}
+				const result = await this.model.catalog(actor, input.id, input.version, combined);
 				await validate();
 				combined.throwIfAborted();
 				return JSON.stringify({
-					integrations: records
-						.filter((item) => item.configuration.kind === 'mcp')
-						.map((item) => ({
-							id: item.id,
-							version: item.version,
-							displayName: item.configuration.displayName,
-							enabled: item.enabled,
-						})),
+					integrationId: result.integration.id,
+					version: result.integration.version,
+					schemaHash: result.schemaHash,
+					catalog: result.catalog,
 					untrusted: true,
 				});
-			}
-			const result = await this.model.catalog(actor, input.id, input.version, combined);
-			await validate();
-			combined.throwIfAborted();
-			return JSON.stringify({
-				integrationId: result.integration.id,
-				version: result.integration.version,
-				schemaHash: result.schemaHash,
-				catalog: result.catalog,
-				untrusted: true,
-			});
-		});
+			},
+			signal,
+		);
 	}
 
 	catalogAcp(
@@ -175,31 +180,35 @@ export class IntegrationService {
 		signal: AbortSignal,
 		validate: () => Promise<void>,
 	): Promise<string> {
-		return this.task(actor.appId, async (deadline) => {
-			const combined = AbortSignal.any([deadline, signal]);
-			await validate();
-			combined.throwIfAborted();
-			const records = await this.model.list(actor);
-			await validate();
-			combined.throwIfAborted();
-			return JSON.stringify({
-				integrations: records.flatMap((record) =>
-					record.enabled &&
-					record.configuration.kind === 'acp' &&
-					connectionIds.includes(record.configuration.connectionId)
-						? [
-								{
-									integrationId: record.id,
-									version: record.version,
-									displayName: record.configuration.displayName,
-									connectionId: record.configuration.connectionId,
-								},
-							]
-						: [],
-				),
-				untrusted: true,
-			});
-		});
+		return this.task(
+			actor.appId,
+			async (deadline) => {
+				const combined = AbortSignal.any([deadline, signal]);
+				await validate();
+				combined.throwIfAborted();
+				const records = await this.model.list(actor);
+				await validate();
+				combined.throwIfAborted();
+				return JSON.stringify({
+					integrations: records.flatMap((record) =>
+						record.enabled &&
+						record.configuration.kind === 'acp' &&
+						connectionIds.includes(record.configuration.connectionId)
+							? [
+									{
+										integrationId: record.id,
+										version: record.version,
+										displayName: record.configuration.displayName,
+										connectionId: record.configuration.connectionId,
+									},
+								]
+							: [],
+					),
+					untrusted: true,
+				});
+			},
+			signal,
+		);
 	}
 
 	async acp(
@@ -232,97 +241,112 @@ export class IntegrationService {
 		signal: AbortSignal,
 		validate: () => Promise<void>,
 	): Promise<string> {
-		return this.task(input.id, async (deadline) => {
-			for (const [key, pending] of this.inputs) {
-				if (pending.expiresAt <= Date.now()) {
-					this.inputs.delete(key);
+		return this.task(
+			input.id,
+			async (deadline) => {
+				for (const [key, pending] of this.inputs) {
+					if (pending.expiresAt <= Date.now()) {
+						this.inputs.delete(key);
+					}
 				}
-			}
-			let remoteRequestState: string | null = null;
-			if (input.resume !== null) {
-				const state = input.resume.requestState;
-				const pending = state === null ? undefined : this.inputs.get(state);
-				if (
-					!pending ||
-					pending.userId !== actor.userId ||
-					pending.appId !== actor.appId ||
-					pending.runId !== actor.runId ||
-					pending.id !== input.id ||
-					pending.version !== input.version ||
-					pending.schemaHash !== input.schemaHash ||
-					pending.kind !== input.kind ||
-					pending.name !== input.name ||
-					pending.argumentsJson !== input.argumentsJson
-				) {
-					throw new AgentFailure('version_conflict');
-				}
-				// Consumption precedes remote dispatch; uncertainty cannot replay this response automatically.
-				remoteRequestState = pending.remoteRequestState;
-				this.inputs.delete(state ?? '');
-			}
-			if (this.inputs.size + this.inputReservations >= MAX_PENDING_INPUTS) {
-				throw new AgentFailure('limit_exceeded');
-			}
-			// Reserve before dispatch: a remote effect must not fail local continuation admission afterwards.
-			this.inputReservations++;
-			try {
-				const command: IntegrationInvocation = {
-					id: input.id,
-					version: input.version,
-					schemaHash: input.schemaHash,
-					kind: input.kind,
-					name: input.name,
-					argumentsJson: input.argumentsJson,
-					resume:
-						input.resume === null
-							? null
-							: { requestState: remoteRequestState, inputResponsesJson: input.resume.inputResponsesJson },
-				};
-				const combined = AbortSignal.any([signal, deadline]);
-				const result = await this.model.invoke(actor, command, combined, validate, (record, catalog, hash) => {
-					const found =
-						input.kind === 'tool'
-							? catalog.tools.some((item) => item.name === input.name)
-							: input.kind === 'resource'
-								? catalog.resources.some((item) => item.uri === input.name)
-								: catalog.prompts.some((item) => item.name === input.name);
-					if (!record.enabled || hash !== input.schemaHash || !found) {
+				let remoteRequestState: string | null = null;
+				if (input.resume !== null) {
+					const state = input.resume.requestState;
+					const pending = state === null ? undefined : this.inputs.get(state);
+					if (
+						!pending ||
+						pending.userId !== actor.userId ||
+						pending.appId !== actor.appId ||
+						pending.runId !== actor.runId ||
+						pending.id !== input.id ||
+						pending.version !== input.version ||
+						pending.schemaHash !== input.schemaHash ||
+						pending.kind !== input.kind ||
+						pending.name !== input.name ||
+						pending.argumentsJson !== input.argumentsJson
+					) {
 						throw new AgentFailure('version_conflict');
 					}
-				});
-				if (this.closing || combined.aborted) {
-					throw input.kind === 'tool' ? new ToolExecutionUnknown() : new AgentFailure('provider_unavailable');
+					// Consumption precedes remote dispatch; uncertainty cannot replay this response automatically.
+					remoteRequestState = pending.remoteRequestState;
+					this.inputs.delete(state ?? '');
 				}
-				let requestState: string | null = null;
-				if (result.kind === 'input_required') {
-					requestState = randomUUID();
-					this.inputs.set(requestState, {
-						userId: actor.userId,
-						appId: actor.appId,
-						runId: actor.runId,
+				if (this.inputs.size + this.inputReservations >= MAX_PENDING_INPUTS) {
+					throw new AgentFailure('limit_exceeded');
+				}
+				// Reserve before dispatch: a remote effect must not fail local continuation admission afterwards.
+				this.inputReservations++;
+				try {
+					const command: IntegrationInvocation = {
 						id: input.id,
 						version: input.version,
 						schemaHash: input.schemaHash,
 						kind: input.kind,
 						name: input.name,
 						argumentsJson: input.argumentsJson,
-						requestState,
-						remoteRequestState: result.requestState,
-						expiresAt: Date.now() + PENDING_INPUT_TTL_MS,
-					});
-				}
-				return result.kind === 'complete'
-					? JSON.stringify({ kind: 'complete', resultJson: result.resultJson, untrusted: true })
-					: JSON.stringify({
-							kind: 'input_required',
+						resume:
+							input.resume === null
+								? null
+								: {
+										requestState: remoteRequestState,
+										inputResponsesJson: input.resume.inputResponsesJson,
+									},
+					};
+					const combined = AbortSignal.any([signal, deadline]);
+					const result = await this.model.invoke(
+						actor,
+						command,
+						combined,
+						validate,
+						(record, catalog, hash) => {
+							const found =
+								input.kind === 'tool'
+									? catalog.tools.some((item) => item.name === input.name)
+									: input.kind === 'resource'
+										? catalog.resources.some((item) => item.uri === input.name)
+										: catalog.prompts.some((item) => item.name === input.name);
+							if (!record.enabled || hash !== input.schemaHash || !found) {
+								throw new AgentFailure('version_conflict');
+							}
+						},
+					);
+					if (this.closing || combined.aborted) {
+						throw input.kind === 'tool'
+							? new ToolExecutionUnknown()
+							: new AgentFailure('provider_unavailable');
+					}
+					let requestState: string | null = null;
+					if (result.kind === 'input_required') {
+						requestState = randomUUID();
+						this.inputs.set(requestState, {
+							userId: actor.userId,
+							appId: actor.appId,
+							runId: actor.runId,
+							id: input.id,
+							version: input.version,
+							schemaHash: input.schemaHash,
+							kind: input.kind,
+							name: input.name,
+							argumentsJson: input.argumentsJson,
 							requestState,
-							inputRequestsJson: result.inputRequestsJson,
-							untrusted: true,
+							remoteRequestState: result.requestState,
+							expiresAt: Date.now() + PENDING_INPUT_TTL_MS,
 						});
-			} finally {
-				this.inputReservations--;
-			}
-		});
+					}
+					return result.kind === 'complete'
+						? JSON.stringify({ kind: 'complete', resultJson: result.resultJson, untrusted: true })
+						: JSON.stringify({
+								kind: 'input_required',
+								requestState,
+								inputRequestsJson: result.inputRequestsJson,
+								untrusted: true,
+							});
+				} finally {
+					this.inputReservations--;
+				}
+			},
+			signal,
+		);
 	}
 
 	drainRun(owner: { userId: number; appId: string; runId: string }): void {

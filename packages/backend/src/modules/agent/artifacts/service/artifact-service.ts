@@ -3,6 +3,7 @@ import type { OperationsEvents } from '../../../operations/public.js';
 import type { ExecutionService } from '../../execution/service/execution-service.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
+import { AGENT_EXECUTION_MAX_EXPIRY_MS } from '@nexus-terminal/shared/agent/execution/values';
 import {
 	AGENT_ARTIFACT_MAX_CLEANUP_ITEMS,
 	AGENT_ARTIFACT_MAX_BYTES,
@@ -45,7 +46,7 @@ function admit(actor: ArtifactActor, creation?: { bytes: number; maxBytes: numbe
 		if (!facts.appEnabled) {
 			throw new AgentFailure('app_disabled');
 		}
-		if (creation && facts.totalBytes + creation.bytes > creation.maxBytes) {
+		if (creation && creation.bytes > creation.maxBytes - facts.totalBytes) {
 			throw new AgentFailure('limit_exceeded');
 		}
 	};
@@ -420,12 +421,16 @@ export class ArtifactService {
 				? await this.settings.get(actor.userId)
 				: await this.settings.frozen(actor.userId, actor.appId, actor.runId);
 		const now = Date.now();
+		const expiresAt = now + configuration.limits.artifactTtlSeconds * 1000;
+		if (!Number.isSafeInteger(expiresAt) || expiresAt > AGENT_EXECUTION_MAX_EXPIRY_MS) {
+			throw new AgentFailure('invalid_input');
+		}
 		return this.model.create(
 			actor,
 			randomUUID(),
 			{ name: input.name, mediaType: input.mediaType, declaredBytes: input.declaredBytes },
 			kind(input.mediaType),
-			now + configuration.limits.artifactTtlSeconds * 1000,
+			expiresAt,
 			now,
 			(facts) => {
 				if (facts.settingsVersion !== configuration.version) {

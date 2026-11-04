@@ -1,4 +1,4 @@
-import { AGENT_RUN_STEP_MAX_COUNT, AGENT_RUN_FAILURE_CODES } from '../runs/values.js';
+import { AGENT_RUN_STEP_MAX_INDEX, AGENT_RUN_FAILURE_CODES } from '../runs/values.js';
 import { agentRecord, agentInteger, agentText, readAgentId, InvalidAgentPayload } from '../http-codec.js';
 import {
 	AGENT_CAPABILITIES,
@@ -163,7 +163,7 @@ function readTool(input: unknown): AgentToolView {
 		id: readAgentId(row.id),
 		appId: readAgentId(row.appId),
 		runId: readAgentId(row.runId),
-		modelStepIndex: agentInteger(row.modelStepIndex, 1, AGENT_RUN_STEP_MAX_COUNT),
+		modelStepIndex: agentInteger(row.modelStepIndex, 1, AGENT_RUN_STEP_MAX_INDEX),
 		toolName: agentText(row.toolName, AGENT_APPROVAL_MAX_TOOL_NAME_BYTES),
 		toolVersion: agentText(row.toolVersion, AGENT_APPROVAL_MAX_TOOL_VERSION_BYTES),
 		capability,

@@ -82,7 +82,7 @@ export class RemoteMachineOperationService {
 		work: (signal: AbortSignal, remaining: () => number, validate: () => Promise<void>) => Promise<T>,
 		mutation = false,
 	): Promise<T> {
-		if (this.closing || this.tasks.size + this.cleanupFailures.length >= 8) {
+		if (this.closing || this.cleanupFailures.length >= 8) {
 			throw new RemoteFileFailure('remote_unavailable');
 		}
 		if (

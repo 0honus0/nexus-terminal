@@ -75,14 +75,16 @@
 	});
 
 	watch(error, (cause) => {
-		if (!cause || isNetworkFailure(cause)) return;
+		const signal = view.capture();
+		if (!cause || !view.isCurrent(signal) || isNetworkFailure(cause)) return;
 		feedback.notifyError(preferenceFailureMessage(cause, t), 0, {
 			key: 'quick-commands',
 			label: t('common.refresh'),
 
-			disabled: () => loading.value,
+			disabled: () => loading.value || !view.isCurrent(signal),
 
 			onClick: () => {
+				if (!view.isCurrent(signal)) return;
 				void store.load(true).catch(() => undefined);
 			},
 		});

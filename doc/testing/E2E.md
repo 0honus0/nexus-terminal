@@ -8,6 +8,24 @@
 
 当前发布 [41792924820](https://github.com/0honus0/nexus-terminal/actions/runs/41792924820) 构建上述后继 main 的 dev/linux-amd64 镜像，已成功；本轮不更新指定主机、容器或数据库。此前已完成的指定主机维护证据仍在文末。真实手机/切换运营商网络、外部供应商、安全硬件、扩大故障及持久介质边界仍按 [待验与外部依赖](../PLAN.md#待验与外部依赖) 保留；独立 Nexus Agent 1.0.2 已签名发布并核对公开产物，见下方记录；新包实际安装与模型角色效果仍未验。
 
+## 累积变更审核与正式远程 E2E（2026-11-04，进行中）
+
+用户最新要求审核当前全部变更、修复残余并推送解决正式远程E2E。本批从main/ce7c135e及累积50个文件工作区继续，不回退前序修改；保留已有RDP提交，覆盖SSH连接、注销反馈、维护清理、终端响应和Agent可编辑硬限制。仅授权正式远程Actions，本地仍不新增行为/CDP/全量E2E、不操作用户数据库或发布镜像。证据集中 `/tmp/nexus-change-review-e2e-20261104`，保留所有前序产物。
+
+两轮源码审核按PLAN当前四表完成：Shared范围、完整codec、存储/冻结/治理覆盖、实际预算准入和配置消费者；大数减法、时间表示、Child批量预览与单次容量；真实Job/MCP/Browser/Remote任务归属、排队/取消/晚返回/故障排空；认证撤销通知、保存回调原signal、重新激活；无预测输出快路径、预测/reset屏障、字号同帧合并及远端resize去重；ssh2默认认证与公钥签名算法回退；两个GHCR包归属、保护标签与递归manifest、删除前复核。未发现需要恢复旧固定产品上界的底层依据。清理架构里残余Remote8任务和有效预览8KiB的相反说明；既有16任务准入测试已同步，保留关闭排空和同key顺序断言。
+
+新增两项正式回归：coverage-gaps公共API核对全部15项高于旧上界的硬限制、普通预算和App覆盖持久化，并拒绝超硬限制、非安全整数及超Node计时器输入；performance-settings核对真实界面硬限制800→普通预算800→重载读回，两次保存之间默认预算不改变。没有运行实际800次模型调用，不把配置验收等同请求压力验证。更新既有恢复硬限制注释，不再把默认值称作协议上界；原功能断言保持。
+
+本地根check与双端生产build退出0（check.log/build.log）；新E2E消费者严格TypeScript检查退出0（e2e-types.log，显式使用Backend Node类型目录；首次未配置Node类型的调用失败已修正命令）。全量格式检查首轮发现新增测试两处函数空行，已按原规则修正；最终格式/diff、提交SHA、Actions运行及各分片结果待本轮回填，旧551场景不担保当前工作区。
+
+## 终端连接等待优化（2026-11-04，源码及静态）
+
+基线 `main/848f9c14`，本轮工作区修改；Node v22.23.1、pnpm 11.28.10，pnpm 路径沿用 `/tmp/nexus-integration-toolbar-20261104/tools/node_modules/.bin`。新产物集中 `/tmp/nexus-terminal-connect-performance-20261104`，保留至用户通知。仅调整 Platform SSH 认证顺序和 WorkspacePage 初始化并行，不修改 UI、协议、期限、主机信任或远端部署。
+
+源码依据：当前 ssh2/lib/client.js 默认以 none 开始认证，项目已有明确密码/私钥；createConnectConfig 改为已配置方法优先、none 后备，保留库内公钥算法回退。正常凭据成功路径每跳少一次认证往返属于协议链推断，尚无真实耗时测量。WorkspacePage 初次与缓存激活的查询动作与布局读取并行；终端仍由 layout.loaded 挂载，已有 channel 缓冲和消费窗口持有挂载前输出。Files 原已后台初始化，prompt/setup 原已合并为一次 PTY 提交，保持其开放输入前完成的顺序。
+
+两轮源码复核覆盖密码/私钥/none、主机信任及各跳配置、失败/取消/关闭、慢布局与读取失败、失活/注销晚返回、连接中前台恢复和普通/挂起恢复；未新增资源/轮询/自动重试。根 `pnpm run check`、`pnpm run build`（Backend → Frontend）、`pnpm run format:all:check` 全部退出0，分别留 check.log/build.log/format.log；最终文档单独格式和 `git diff --check` 通过。按 D17 未新增/运行本地行为、CDP、E2E 或真实 SSH 性能验证；慢布局下首屏及完整输出、各种认证服务器、多跳与端到端耗时仍待正式回归/实测，历史551场景不覆盖本轮修改。
+
 ## RDP/VNC 绘制性能验证（2026-11-04）
 
 本轮先做源码/依赖/参考项目核对，随后按用户新增授权运行定向浏览器/CDP验证并修改RDP presenter，基线仍为 `main/848f9c14` 加前序未提交 SSH 连接优化；仅修改RDP presenter的超量区域合并；VNC实现、依赖、UI和远端保持。源码和元数据集中 `/tmp/nexus-rdp-render-performance-20261104`，按用户要求保留；来源均为公开 GitHub，只读获取，不含连接凭据。
@@ -38,6 +56,54 @@ Node v22.23.1、puppeteer-core 25.16.0、HeadlessChrome 156.0.8078.47，独立�
 13项像素/生命周期验证通过：分别对改前和最终模块与原生putImageData逐字节比对部分/重叠/透明/负裁剪、输入立即清零模拟WASM复用、超过32个分散区域及未更新间隙、尺寸重建和同尺寸width/height清空、小数输入原生回退、待绘时关闭及实例方法/属性恢复、RangeError与超过32MiB后的同步直接绘制。另运行已安装noVNC 1.7.0真实Display，确认dirty在backbuffer且flip前不可见、flip后呈现；该项不等同VNC网络或编码性能验证。
 
 根 `pnpm run check`、`pnpm run build:frontend`、`pnpm run format:all:check` 均退出0，日志为本目录check.log/build.log/format.log；最终文档目标Prettier与 `git diff --check` 通过。真实模块与测量快照SHA256均为 `bec03c828988b3c459b48ea1f19007aa60744f65a52a0be2a67dd548c3184153`。本轮未运行全量E2E或远端部署，全部自建浏览器/环回服务由脚本关闭，测试目录与产物保留至用户通知。
+
+## 主动退出的错误提示隔离（2026-11-04，源码与静态）
+
+用户反馈正常退出弹“操作失败／个人数据请求失败，请重新读取”。源码确认：useAuthenticatedViewScope的available/activated原先能在认证已撤销后重新建立scope；个人历史/快捷指令的error观察未核对view，通知的重读动作也未绑定原意图；LatestValueSaver失败回调只有error，工作区自动保存及字体回调未核对原permission；App尺寸保存原先允许null身份开始并与null比较。这些都是退出窗口的错误发布入口，当前没有用户浏览器抓包，不将任一单独路径当作已实机证实的唯一触发。
+
+修复：无会话视图保持撤销，attach才可恢复新scope；上述观察与重读绑定原view；通用保存器回传原T，Workspace及layout按原permission过滤晚回调，列宽/侧栏/显隐等在派发前检查；App尺寸保存要求已认证用户。保留全局feedback、AppHeader真实退出失败和状态核对，未将取消伪装为成功或自动重试未知写入。原样保留SSH/RDP变更；本批检查覆盖合并后的工作区，RDP单独提交按用户新增授权收口。
+
+已完成两轮源码复核：第一轮沿auth.beginAuthentication→App同步生命周期→stores/view撤销→错误观察/保存回调，第二轮核对首次匿名挂载、attach、logout失败恢复、重复激活、切用户、旧signal和刷新动作、layout与全部7个LatestValueSaver消费者、远程桌面null身份及真实错误出口。按PLAN D17未新增/运行本地行为、CDP或E2E；前序RDP108轮与13项像素证据只覆盖绘制，不能当作退出回归。根 `pnpm run check`、`pnpm run build:frontend` 和 `pnpm run format:all:check` 均退出0（check.log/build.log/format.log），最终文档格式与 `git diff --check` 通过；本批产物集中 `/tmp/nexus-logout-feedback-20261104`，环境和前序产物保留至用户通知。
+
+## 两包镜像清理保留规则（2026-11-04）
+
+基线 main/ce7c135e 加前序 SSH 与退出提示隔离未提交变更；本批只修改既有手动清理 workflow、维护脚本及对应文档。两个固定 GHCR 包各自保留现有 main/dev/latest 及平台/证明 manifest 闭包，校验 repository.id；允许部分保护标签未发布，有版本但无保护根时拒绝。原当前/活跃/重启 Actions 保护、关联成功证据、精确404统计及失败传播保持。两轮源码复核覆盖固定包范围、User/Org 路径、包归属、包缺失/空包、独立 digest 集合、渠道变化及无条件删除的并发窗口；核对当前 runner 发布脚本只推送 latest。
+
+沿既有 workflow 的前置维护夹具执行 `node --test scripts/maintenance/cleanup-history.test.mjs`，22项全部通过；真实调用维护脚本，外部 GitHub/GHCR 全部 mock，不访问网络或删除远端资源。覆盖两包三渠道和闭包、跨包同 digest、部分/仅 main 标签、同 digest 多标签、两包分别归属错误/无保护根、Org、缺 runner、渠道移动和新增、重复标签、保留 manifest 读取失败，以及既有404/403/500、活跃/重启运行和不可核验产物。两脚本 node --check、根 `pnpm run check`、`pnpm run format:all:check` 及 `git diff --check` 均退出0，对应 tests.log/check.log/format.log；最终文档单独格式与 diff 通过。本批未启动产品、CDP 或全量 E2E，未重复运行产品构建。
+
+环境 Node v22.23.1、pnpm 11.28.10，日志集中 `/tmp/nexus-cleanup-retention-20261104`，保留至用户通知。本机只读 GitHub 包查询返回403（缺 read:packages），未提权、未运行清理、未提交推送或触发 workflow；真实包权限及线上删除尚未验证，不以本地夹具冒充线上清理结果。
+
+## 终端翻页与缩放响应（2026-11-04，源码与静态）
+
+基线 main/ce7c135e 加前序 SSH、退出提示和清理工作流未提交变更；本批只修改 TerminalView、TypeAhead vendor host 及对应文档。源码核对当前 xterm 6 WriteBuffer 在12ms片段内连续解析，原 host 却逐块在前后插入解析屏障，即使没有预测也串行等待；FitAddon.proposeDimensions 读取布局和计算样式，原字体手势每事件修改字号后立即 fit，主题更新同样重新测量。本批不是实测性能复现，不报告 FPS 或毫秒收益。
+
+实现：TypeAhead队列头为输出且无预测时保留原beforeServerInput/回调，直接提交xterm；输入、reset和有预测的输出保持双解析屏障，之后排队的无预测输出可继续直接提交。缩放继续同步更新本地目标字号和保存意图，只在几何帧应用最新字号；预测撤销在途不重复测量，完成后核对原PTY/可见性并读取最新字号。主题观察与字体族/scrollback观察拆开。没有改滚轮累积/方向/步进、100ms容器resize合并、无清屏fit、同尺寸PTY去重、本地字号预览和串行保存；用户强调的缩放抖动作为关键待验项保留。
+
+两轮源码复核沿输出→预测→xterm解析→原始ACK，输入/批量DEL→预测、reset/barrier→快照/PTY替换/历史，以及滚轮/捏合→本地字号→Workspace预览/LatestValueSaver→appearance保存→props反馈→几何复测；覆盖同步解析回调、预测清空后的排队输出、CSI分包、旧epoch、页面隐藏/失活/卸载、快照原始尺寸、缩放中途旧保存回执、最后一次字号和ResizeObserver回调。既有terminal-ui的连续缩放/旧回执/关闭前保存与mobile pinch场景已核对，未改变断言或测试配置。
+
+按PLAN D17未新增/运行本地行为、CDP、性能脚本或E2E。根 `pnpm run check`、`pnpm run build:frontend`、`pnpm run format:all:check` 均退出0，日志分别为check.log/build.log/format.log；最终文档格式与 `git diff --check` 通过。日志集中 `/tmp/nexus-terminal-response-20261104`，Node v22.23.1、pnpm 11.28.10。未提交推送、未重启或部署；真实手机捏合、持续滚轮与窗口拖动无回退/抖动、全屏程序翻页、弱网预测及大历史的实际性能仍待正式回归或实机验证。
+
+## 可编辑硬限制与固定门槛清理（2026-11-04，源码审核）
+
+用户要求继续去除可编辑硬限制之外无底层依据的常量上界。沿前序模型请求数修复及当前未提交工作区实施，默认预算、默认硬限制和UI不变，未提交推送、部署或操作数据库。产物集中 `/tmp/nexus-editable-hard-limits-20261104`，保留至用户通知。
+
+源码修改：全部15项设置范围以Shared为唯一owner，数量、Token及累计字节仅受正安全整数表示约束；活动时间和工具超时保留Node/SSH最大单次延时2147483647ms的明确技术边界；Artifact期限按Date TimeClip校验。不再额外固定工具4000、Child4、消息5000/8MiB、Recall20/32KiB、文件10GiB/30天。Governance、双端控件/codec及SQLite解码沿同一取值消费；冻结预算、真实占用、原CAS及未知围栏继续生效。Token、消息和文件容量以剩余额度减法比较，Artifact Range容纳16位安全整数，Job分页offset预留64项加法空间。
+
+直接消费者同步：Recall输入及候选窗口支持请求条数，模型预览不再强制8KiB；Child依赖与join/cancel不再额外限4，批量预览超出原工具外壳时省略正文并保留续读；Child完整响应容量保持2064384bytes，移除从工具额度派生的历史条数与乘法。Remote/Job活跃8、MCP/Browser待处理及Browser会话16门槛移除，真实任务追踪、冲突、故障证据和停机排空保留。运行MCP/Browser调用使用原冻结工具signal，不再另套60秒总期限；SDK实际无条件创建timer，故MCP设置其最大可表示延时而由外部signal取消，Browser导航关闭独立计时器，连接/单次控制与清理期限保持。单次参数16KiB、捕获256KiB、分页/完整编码及私有管理/缓存容量保留，不承诺无界响应或任意并发。
+
+两轮源码审核覆盖15项设置保存/确认/冻结/撤权与App缩窄、Root/Child族账本、大数比较和SQL表示、Recall与预览、Child批次副作用后交付、Job准备/取消/晚收尾、MCP/Browser排队/期限/关闭。核对既有HTTP/Storage/Frontend/E2E消费者：旧16任务准入断言已改为允许独立第17项进入，仍保留同key排队、关闭后拒绝、实际晚结果排空及共享close断言；小批Child正文断言和128个MCP连接/续接容量断言仍保持。此项仅修改既有消费者，不新增或运行行为测试。
+
+Shared check、根check（Shared build、Backend check、双端ESLint及Frontend vue-tsc）、双端生产build、全量format:all:check全部退出0，日志分别为shared-check.log、repository-check.log、build.log、format-check.log。既有测试消费者修改后的定向语法/ESLint及最终文档格式/diff结果见final-review.log。按PLAN D17未运行行为、CDP、本地E2E或实际模型请求，大配置、超过8/16并发及60秒调用仍待正式回归。数据库沿前序v1签名变更，不兼容旧开发库；本批未再变更DDL，实际旧库维护仍未执行。
+
+## 模型请求数硬限制可调整（2026-11-04，源码审核）
+
+用户希望把硬限制模型请求数设为800，却提示最大400。基线 main/ce7c135e 加前序本地SSH、退出提示、维护与终端响应变更；本批未提交推送。源码确认Shared AGENT_EXECUTION_LIMIT_MAXIMA.maxModelRequests=400被前端硬限制QuantityInput、HTTP codec、ExecutionService与存储行解码共同消费；另有AGENT_RUN_STEP_MAX_COUNT=400限制Run循环、Root Participant、步骤存储和工具详情解码，Governance有效覆盖也另写400。Git历史指向1f21e469的执行契约调整，未发现供应商或底层库规定请求数400的依据。
+
+修复：Shared模型请求数只保留Number.MAX_SAFE_INTEGER表示边界；步骤常量改名AGENT_RUN_STEP_MAX_INDEX并从同一基础取值派生，全部消费者同步；执行循环取消独立步骤上限，Root依赖冻结族账本，Child仍继承实际预算。Governance范围映射Shared，App覆盖仍在事务核对已保存硬限制。前端控件、Shared编解码和SQLite解码沿原引用自动同步，默认普通预算80、默认硬限制400及其余字段额度不变。新库Child max_requests CHECK同源放宽；初始v1签名同步更新为backend-next-v1-initial-20261104-model-request-range；旧开发库因签名不匹配在启动时拒绝，原CHECK不会自动改写，部署前须明确维护表约束与签名或使用独立空目录；旧快照不兼容，不操作实际用户库。
+
+两轮源码审核覆盖硬限制预览/确认→设置重读→普通预算保存→App覆盖→Root冻结→Child继承→步骤reserve/工具元数据/共享用量→上下文摘要与命名计费，含800、原400默认、低于预算拒绝、非法/非安全整数、CAS与未知结果围栏；旧步骤常量与模型请求数固定400的真实消费者已全仓复查，剩余400仅默认值。Shared check、根check、双端build及全量format:all:check均退出0，日志为shared-check.log/repository-check.log/build.log/format-check.log。初始v1签名同步后再次执行Backend check/build及该文件ESLint，均退出0，日志为final-backend-check.log/final-backend-build.log/final-eslint.log；最终文档格式和git diff检查通过。按D17未新增/执行行为、CDP、本地E2E或真实模型请求，不以源码审核声称已经实跑800次。
+
+环境Node v22.23.1、pnpm11.28.10，日志集中 `/tmp/nexus-agent-model-request-limit-20261104`，保留至用户通知。待正式回归：800硬限制保存重读后设置有效预算；>400步骤后继续工具调用及HTTP详情解码；Root/Child/摘要共享额度按实际配置拒绝下一次；非法输入/并发配置变化/旧库CHECK维护。
 
 ## 阶段逻辑回归
 

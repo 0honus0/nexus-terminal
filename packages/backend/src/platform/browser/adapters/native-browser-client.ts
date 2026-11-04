@@ -287,10 +287,11 @@ class NativeBrowserSession implements BrowserSession {
 					throw new BrowserFailure('url_denied');
 				}
 				this.invalidate();
-				await this.page.goto(action.url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+				// The enclosing operation signal owns the configured timeout and closes on cancellation.
+				await this.page.goto(action.url, { waitUntil: 'domcontentloaded', timeout: 0 });
 			} else if (action.kind === 'back') {
 				this.invalidate();
-				await this.page.goBack({ waitUntil: 'domcontentloaded', timeout: 60000 });
+				await this.page.goBack({ waitUntil: 'domcontentloaded', timeout: 0 });
 			} else if (action.kind === 'scroll') {
 				this.invalidate();
 				await this.cdp.send('Input.dispatchMouseEvent', {

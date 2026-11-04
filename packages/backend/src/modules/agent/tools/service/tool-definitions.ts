@@ -174,14 +174,20 @@ export function toolDefinitions(): ToolDefinition[] {
 			name: 'memory_recall',
 			version: '2.0.0',
 			description:
-				'Search up to 64 recent published, unexpired App Memories with up to 32 terms. Returns at most 20 items/32 KiB of untrusted reference text.',
+				'Search recent published, unexpired App Memories with up to 32 terms. Requested items and reference bytes are bounded by the frozen Recall budgets and the tool result envelope.',
 			capability: 'memory.read',
 			risk: 'read',
 			mutation: false,
 			input: {
 				fields: [
 					{ name: 'query', kind: 'text', required: true, allowEmpty: false, maxBytes: 4096 },
-					{ name: 'limit', kind: 'integer', required: false, minimum: 1, maximum: 20 },
+					{
+						name: 'limit',
+						kind: 'integer',
+						required: false,
+						minimum: 1,
+						maximum: AGENT_EXECUTION_LIMIT_MAXIMA.maxRecallItems,
+					},
 				],
 			},
 		},
@@ -319,7 +325,7 @@ export function toolDefinitions(): ToolDefinition[] {
 						kind: 'integer',
 						required: false,
 						minimum: 0,
-						maximum: AGENT_EXECUTION_LIMIT_MAXIMA.maxToolExecutions,
+						maximum: Number.MAX_SAFE_INTEGER - 64,
 					},
 				],
 			},

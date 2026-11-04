@@ -3,6 +3,9 @@ import type { McpClient, McpEndpoint, McpCatalog, McpRequest, McpReply } from '.
 import { McpFailure } from '../mcp-client.js';
 import { McpFetch } from './mcp-fetch.js';
 
+/** The SDK always schedules a timer; caller signals own the configured deadline. */
+const MCP_REQUEST_TIMER_MAX_MS = 2 ** 31 - 1;
+
 function encoded(input: unknown, maxBytes = 8 * 1024 * 1024): string {
 	const result = JSON.stringify(input);
 	if (result === undefined || Buffer.byteLength(result, 'utf8') > maxBytes) {
@@ -238,13 +241,17 @@ export class NativeMcpClient implements McpClient {
 			const capabilities = client.getServerCapabilities();
 			const [tools, resources, prompts] = await Promise.all([
 				capabilities?.tools
-					? client.listTools(undefined, { signal, timeout: 60000, cacheMode: 'refresh' })
+					? client.listTools(undefined, { signal, timeout: MCP_REQUEST_TIMER_MAX_MS, cacheMode: 'refresh' })
 					: Promise.resolve({ tools: [] }),
 				capabilities?.resources
-					? client.listResources(undefined, { signal, timeout: 60000, cacheMode: 'refresh' })
+					? client.listResources(undefined, {
+							signal,
+							timeout: MCP_REQUEST_TIMER_MAX_MS,
+							cacheMode: 'refresh',
+						})
 					: Promise.resolve({ resources: [] }),
 				capabilities?.prompts
-					? client.listPrompts(undefined, { signal, timeout: 60000, cacheMode: 'refresh' })
+					? client.listPrompts(undefined, { signal, timeout: MCP_REQUEST_TIMER_MAX_MS, cacheMode: 'refresh' })
 					: Promise.resolve({ prompts: [] }),
 			]);
 			if (tools.tools.length > 256 || resources.resources.length > 2048 || prompts.prompts.length > 512) {
@@ -290,7 +297,7 @@ export class NativeMcpClient implements McpClient {
 							requestState: request.resume.requestState ?? undefined,
 							inputResponses: objectJson(request.resume.inputResponsesJson),
 						};
-			const options = { signal, timeout: 60000, allowInputRequired: true as const };
+			const options = { signal, timeout: MCP_REQUEST_TIMER_MAX_MS, allowInputRequired: true as const };
 			let result: unknown;
 			// SDK operation types omit its negotiated input_required extension; assert only at this third-party boundary.
 			if (request.kind === 'tool') {

@@ -85,7 +85,7 @@ test('Hard Limit preview and confirm commit exactly once through the public Agen
 		readAgentExecutionSettingsResponse,
 	);
 	expect(after).toEqual(saved);
-	// Raising back to the actual protocol ceiling also requires a fresh, single-use confirmation.
+	// Restoring the saved hard limit also requires a fresh, single-use confirmation.
 	const increase = await requestAgentJson(
 		request,
 		{
@@ -111,6 +111,131 @@ test('Hard Limit preview and confirm commit exactly once through the public Agen
 	);
 	expect(restored.settings.version).toBe(saved.version + 1);
 	expect(restored.settings.hardLimits).toEqual(before.hardLimits);
+});
+
+test('editable hard limits persist above defaults while budgets and App policy retain their actual constraints', async ({
+	request,
+}) => {
+	await prepare(request);
+	const app = await createTestAgentApp(request);
+	const { settings: before } = await requestAgentJson(
+		request,
+		{ method: 'GET', path: '/execution-settings' },
+		readAgentExecutionSettingsResponse,
+	);
+	const proposed = {
+		maxModelRequests: 800,
+		maxToolExecutions: 8000,
+		maxActiveSeconds: 86400,
+		toolTimeoutSeconds: 600,
+		maxToolOutputBytes: 1048576,
+		maxTokenReservations: 16000000,
+		maxConcurrentRuns: 16,
+		maxConcurrentModelCalls: 12,
+		maxChildren: 12,
+		maxMessages: 10000,
+		maxMessageBytes: 16777216,
+		maxRecallItems: 100,
+		maxRecallBytes: 1048576,
+		maxArtifactBytes: 21474836480,
+		artifactTtlSeconds: 5184000,
+	};
+	const { confirmation } = await requestAgentJson(
+		request,
+		{
+			method: 'POST',
+			path: '/execution-settings/hard-limits/preview',
+			data: { expectedVersion: before.version, proposed },
+		},
+		readAgentHardLimitPreviewResponse,
+	);
+	const { settings: raised } = await requestAgentJson(
+		request,
+		{ method: 'POST', path: '/execution-settings/hard-limits/confirm', data: { confirmationId: confirmation.id } },
+		readAgentExecutionSettingsResponse,
+	);
+	expect(raised.hardLimits).toEqual(proposed);
+	expect(raised.limits).toEqual(before.limits);
+	const { settings: saved } = await requestAgentJson(
+		request,
+		{
+			method: 'PUT',
+			path: '/execution-settings',
+			data: { expectedVersion: raised.version, enabled: raised.enabled, limits: proposed },
+		},
+		readAgentExecutionSettingsResponse,
+	);
+	expect(saved.limits).toEqual(proposed);
+	expect(
+		(
+			await requestAgentJson(
+				request,
+				{ method: 'GET', path: '/execution-settings' },
+				readAgentExecutionSettingsResponse,
+			)
+		).settings,
+	).toEqual(saved);
+
+	const path = `/apps/${app.id}/execution-policy`;
+	const policy = await requestAgentJson(request, { method: 'GET', path }, readAgentExecutionPolicyView);
+	const overrides = {
+		maxModelRequests: 800,
+		maxActiveExecutionSeconds: 86400,
+		toolTimeoutSeconds: 600,
+		maxToolOutputBytes: 1048576,
+		maxRecallItems: 100,
+		maxRecallBytes: 1048576,
+		maxSubagentMessages: 10000,
+		maxSubagentMessageBytes: 16777216,
+	};
+	const updated = await requestAgentJson(
+		request,
+		{ method: 'PUT', path, data: { expectedVersion: policy.version, overrides } },
+		readAgentExecutionPolicyView,
+	);
+	expect(updated.overrides).toEqual(overrides);
+	expect(updated.effective).toMatchObject(overrides);
+
+	for (const invalid of [
+		{ ...proposed, maxModelRequests: Number.MAX_SAFE_INTEGER + 1 },
+		{ ...proposed, toolTimeoutSeconds: 2147484, maxActiveSeconds: 2147484 },
+	]) {
+		const rejected = await requestAgentJson(
+			request,
+			{
+				method: 'POST',
+				path: '/execution-settings/hard-limits/preview',
+				status: 400,
+				data: { expectedVersion: saved.version, proposed: invalid },
+			},
+			readAgentErrorResponse,
+		);
+		expect(rejected.code).toBe('invalid_input');
+	}
+	const overBudget = await requestAgentJson(
+		request,
+		{
+			method: 'PUT',
+			path: '/execution-settings',
+			status: 400,
+			data: {
+				expectedVersion: saved.version,
+				enabled: saved.enabled,
+				limits: { ...proposed, maxModelRequests: 801 },
+			},
+		},
+		readAgentErrorResponse,
+	);
+	expect(overBudget.code).toBe('invalid_input');
+	expect(
+		(
+			await requestAgentJson(
+				request,
+				{ method: 'GET', path: '/execution-settings' },
+				readAgentExecutionSettingsResponse,
+			)
+		).settings,
+	).toEqual(saved);
 });
 
 test('per-App execution policy persists overrides and rejects stale or over-limit writes', async ({ request }) => {

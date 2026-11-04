@@ -2,6 +2,7 @@ import { AGENT_GOVERNANCE_MAX_RESPONSE_BYTES } from '../governance/values.js';
 import { AGENT_THREAD_ENTRIES_MAX_RESPONSE_BYTES } from '../scope/values.js';
 import { AGENT_COLLABORATION_MAX_RESPONSE_BYTES } from '../collaboration/values.js';
 import { AGENT_MAX_RESPONSE_BYTES } from '../values.js';
+import { AGENT_EXECUTION_LIMIT_MAXIMA } from '../execution/values.js';
 
 export const AGENT_APPROVAL_MODES = ['ask', 'full_access'] as const;
 
@@ -45,8 +46,8 @@ export const AGENT_RUN_IDEMPOTENCY_HEADER = 'Idempotency-Key';
 /** Public audit byte counters use the same bound as the durable model-step output. */
 export const AGENT_RUN_STEP_MAX_TEXT_BYTES = 2 * 1024 * 1024;
 
-/** Journal capacity, not an authorization or per-Run execution budget. */
-export const AGENT_RUN_STEP_MAX_COUNT = 400;
+/** Numeric index representation only; the saved family budget controls execution. */
+export const AGENT_RUN_STEP_MAX_INDEX = AGENT_EXECUTION_LIMIT_MAXIMA.maxModelRequests;
 
 export const AGENT_RUN_STEP_FINISH_REASONS = ['stop', 'tool_calls'] as const;
 

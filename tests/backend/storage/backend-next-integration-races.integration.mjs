@@ -395,7 +395,7 @@ await test('An integration synchronous drain failure does not skip independent J
 	assert.deepEqual(error.errors, [integrationFailure, jobFailure, browserFailure]);
 });
 
-await test('Integration task admission counts queued same-key work and close drains actual late work', async (t) => {
+await test('Integration queues preserve per-key ordering and close drains actual late work', async (t) => {
 	const release = gate();
 	t.after(() => release.resolve());
 	const entered = gate();
@@ -422,8 +422,14 @@ await test('Integration task admission counts queued same-key work and close dra
 		),
 	);
 	await entered.promise;
-	await assert.rejects(service.get(actor, 'other-integration'), { code: 'provider_unavailable' });
-	assert.equal(reads, 1, 'fifteen same-key tasks remain queued, consuming admission');
+	tasks.push(
+		service.get(actor, 'other-integration').then(
+			(value) => ({ value }),
+			(error) => ({ error }),
+		),
+	);
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.equal(reads, 2, 'independent work starts while fifteen same-key tasks remain queued');
 	const firstClose = service.close();
 	assert.strictEqual(firstClose, service.close());
 	void firstClose.then(() => {
@@ -435,9 +441,9 @@ await test('Integration task admission counts queued same-key work and close dra
 	assert.equal(closes, 0, 'model must not close ahead of an already-dispatched read');
 	release.resolve();
 	const outcomes = await Promise.all(tasks);
-	assert.equal(outcomes.filter((outcome) => outcome.value).length, 1);
-	assert.ok(outcomes.slice(1).every((outcome) => outcome.error?.code === 'provider_unavailable'));
+	assert.equal(outcomes.filter((outcome) => outcome.value).length, 2);
+	assert.ok(outcomes.slice(1, 16).every((outcome) => outcome.error?.code === 'provider_unavailable'));
 	await firstClose;
-	assert.equal(reads, 1, 'queued work is not dispatched after quiesce');
+	assert.equal(reads, 2, 'queued work is not dispatched after quiesce');
 	assert.equal(closes, 1);
 });

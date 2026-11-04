@@ -1,5 +1,5 @@
 import { onActivated, onBeforeUnmount, onDeactivated, watch } from 'vue';
-import { registerAuthenticatedSessionReset } from './authenticatedSessionLifecycle';
+import { authenticatedSessionLifecycle, registerAuthenticatedSessionOwner } from './authenticatedSessionLifecycle';
 
 export type ViewRevocation = 'session' | 'view' | 'disposed';
 
@@ -20,6 +20,7 @@ export function useAuthenticatedViewScope(
 	let disposed = false;
 	const available = options.available ?? (() => true);
 	const retainOnView = options.retainOnView ?? false;
+	if (authenticatedSessionLifecycle.userId === null) scope.abort();
 
 	function revoke(reason: ViewRevocation): void {
 		scope.abort();
@@ -27,12 +28,21 @@ export function useAuthenticatedViewScope(
 	}
 
 	function activate(): void {
-		if (!disposed && active && available() && scope.signal.aborted) {
+		if (
+			!disposed &&
+			active &&
+			authenticatedSessionLifecycle.userId !== null &&
+			available() &&
+			scope.signal.aborted
+		) {
 			scope = new AbortController();
 		}
 	}
 
-	const unregister = registerAuthenticatedSessionReset('view-' + crypto.randomUUID(), () => revoke('session'));
+	const unregister = registerAuthenticatedSessionOwner('view-' + crypto.randomUUID(), (event) => {
+		if (event.type === 'attach') activate();
+		else revoke('session');
+	});
 	watch(
 		available,
 		(value) => {
@@ -62,6 +72,11 @@ export function useAuthenticatedViewScope(
 		capture: (): AbortSignal => scope.signal,
 
 		isCurrent: (signal: AbortSignal): boolean =>
-			!disposed && active && (available() || retainOnView) && scope.signal === signal && !signal.aborted,
+			!disposed &&
+			active &&
+			authenticatedSessionLifecycle.userId !== null &&
+			(available() || retainOnView) &&
+			scope.signal === signal &&
+			!signal.aborted,
 	};
 }

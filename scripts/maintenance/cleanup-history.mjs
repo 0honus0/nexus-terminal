@@ -11,79 +11,111 @@ export default async function cleanup({ github, context, core }) {
 	const activeRuns = runs.filter((run) => run.id !== currentRun && run.status !== 'completed');
 	for (const run of activeRuns) core.info(`Keep active run ${run.id}: ${run.status}`);
 
-	async function versions(packageName) {
-		try {
-			return await github.paginate(`GET ${packagePath}`, {
-				...packageOwner,
-				package_name: packageName,
-				per_page: 100,
-			});
-		} catch (error) {
-			if (error.status === 404) return [];
-			throw error;
-		}
-	}
-
-	const productVersions = await versions('nexus-terminal');
-	const runnerVersions = await versions('nexus-terminal-e2e-runner');
-	const channelVersions = new Map();
-	for (const tag of ['latest', 'dev']) {
-		const version = productVersions.find((item) => item.metadata.container.tags.includes(tag));
-		if (!version) throw new Error(`Missing ${tag} image; refusing to clean without both channel roots.`);
-		channelVersions.set(tag, version);
-	}
-
-	const image = `${owner.toLowerCase()}/nexus-terminal`;
-	const tokenResponse = await fetch(`https://ghcr.io/token?service=ghcr.io&scope=repository:${image}:pull`, {
-		headers: {
-			Authorization: `Basic ${Buffer.from(`${context.actor}:${process.env.GITHUB_TOKEN}`).toString('base64')}`,
-		},
-	});
-	if (!tokenResponse.ok) throw new Error(`Registry authentication failed: HTTP ${tokenResponse.status}`);
-	const { token } = await tokenResponse.json();
-	if (typeof token !== 'string' || !token) throw new Error('Registry did not return a pull token.');
-	core.setSecret(token);
-	const headers = {
-		Authorization: `Bearer ${token}`,
-		Accept: 'application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json',
-	};
-	const retainedDigests = new Set();
+	const protectedTags = ['main', 'dev', 'latest'];
 	const retainedRevisions = new Set();
 
-	async function retainManifest(digest) {
-		if (!/^sha256:[a-f0-9]{64}$/.test(digest)) throw new Error('Invalid manifest digest.');
-		if (retainedDigests.has(digest)) return;
-		retainedDigests.add(digest);
-		const response = await fetch(`https://ghcr.io/v2/${image}/manifests/${digest}`, { headers });
-		if (!response.ok) throw new Error(`Cannot inspect retained manifest: HTTP ${response.status}`);
-		const manifest = await response.json();
-		if (Array.isArray(manifest.manifests)) {
-			for (const child of manifest.manifests) await retainManifest(child.digest);
-		} else if (manifest.config?.digest) {
-			if (!/^sha256:[a-f0-9]{64}$/.test(manifest.config.digest)) throw new Error('Invalid config digest.');
-			const configResponse = await fetch(`https://ghcr.io/v2/${image}/blobs/${manifest.config.digest}`, {
-				headers,
+	async function inspectPackage(packageName) {
+		let metadata;
+		try {
+			metadata = await github.request(`GET ${packageRoute}/packages/container/{package_name}`, {
+				...packageOwner,
+				package_name: packageName,
 			});
-			if (!configResponse.ok)
-				throw new Error(`Cannot inspect retained image config: HTTP ${configResponse.status}`);
-			const config = await configResponse.json();
-			const revision = config.config?.Labels?.['org.opencontainers.image.revision'];
-			if (typeof revision === 'string' && /^[a-f0-9]{40}$/.test(revision)) retainedRevisions.add(revision);
-		} else {
-			throw new Error('Unrecognized retained manifest; refusing partial retention.');
+		} catch (error) {
+			if (error.status === 404) return null;
+			throw error;
 		}
-	}
+		if (!Number.isSafeInteger(repository.data.id) || metadata.data.repository?.id !== repository.data.id) {
+			throw new Error(`Package ${packageName} is not linked to this repository; refusing cleanup.`);
+		}
+		const versions = await github.paginate(`GET ${packagePath}`, {
+			...packageOwner,
+			package_name: packageName,
+			per_page: 100,
+		});
+		if (!versions.length) return null;
+		const channels = new Map();
+		for (const tag of protectedTags) {
+			const matches = versions.filter((item) => item.metadata.container.tags.includes(tag));
+			if (matches.length > 1) throw new Error(`Ambiguous ${packageName}:${tag} image; refusing cleanup.`);
+			if (matches.length) channels.set(tag, matches[0]);
+		}
+		if (!channels.size) throw new Error(`No main/dev/latest root for ${packageName}; refusing cleanup.`);
 
-	for (const version of channelVersions.values()) await retainManifest(version.name);
+		const image = `${owner.toLowerCase()}/${packageName}`;
+		const tokenResponse = await fetch(`https://ghcr.io/token?service=ghcr.io&scope=repository:${image}:pull`, {
+			headers: {
+				Authorization: `Basic ${Buffer.from(`${context.actor}:${process.env.GITHUB_TOKEN}`).toString('base64')}`,
+			},
+		});
+		if (!tokenResponse.ok) throw new Error(`Registry authentication failed: HTTP ${tokenResponse.status}`);
+		const { token } = await tokenResponse.json();
+		if (typeof token !== 'string' || !token) throw new Error('Registry did not return a pull token.');
+		core.setSecret(token);
+		const headers = {
+			Authorization: `Bearer ${token}`,
+			Accept: 'application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json',
+		};
+		const retainedDigests = new Set();
 
-	// Refresh channel roots before each image deletion, including children shared by two versions.
-	async function verifyChannels() {
-		for (const [tag, version] of channelVersions) {
-			const response = await fetch(`https://ghcr.io/v2/${image}/manifests/${tag}`, { method: 'HEAD', headers });
-			if (!response.ok || response.headers.get('docker-content-digest') !== version.name) {
-				throw new Error('A channel moved during cleanup. Stop and rerun against the new images.');
+		async function retainManifest(digest) {
+			if (!/^sha256:[a-f0-9]{64}$/.test(digest)) throw new Error('Invalid manifest digest.');
+			if (retainedDigests.has(digest)) return;
+			retainedDigests.add(digest);
+			const response = await fetch(`https://ghcr.io/v2/${image}/manifests/${digest}`, { headers });
+			if (!response.ok) throw new Error(`Cannot inspect retained manifest: HTTP ${response.status}`);
+			const manifest = await response.json();
+			if (Array.isArray(manifest.manifests)) {
+				for (const child of manifest.manifests) await retainManifest(child.digest);
+			} else if (manifest.config?.digest) {
+				if (!/^sha256:[a-f0-9]{64}$/.test(manifest.config.digest)) throw new Error('Invalid config digest.');
+				const configResponse = await fetch(`https://ghcr.io/v2/${image}/blobs/${manifest.config.digest}`, {
+					headers,
+				});
+				if (!configResponse.ok)
+					throw new Error(`Cannot inspect retained image config: HTTP ${configResponse.status}`);
+				const config = await configResponse.json();
+				const revision = config.config?.Labels?.['org.opencontainers.image.revision'];
+				if (typeof revision === 'string' && /^[a-f0-9]{40}$/.test(revision)) retainedRevisions.add(revision);
+			} else {
+				throw new Error('Unrecognized retained manifest; refusing partial retention.');
 			}
 		}
+
+		for (const version of channels.values()) await retainManifest(version.name);
+
+		async function verifyChannels() {
+			// Also check absent protected tags: creating main/dev/latest must stop a stale deletion plan.
+			for (const tag of protectedTags) {
+				const version = channels.get(tag);
+				const response = await fetch(`https://ghcr.io/v2/${image}/manifests/${tag}`, {
+					method: 'HEAD',
+					headers,
+				});
+				if (!version && response.status === 404) continue;
+				if (!response.ok || response.headers.get('docker-content-digest') !== version?.name) {
+					throw new Error('A channel moved during cleanup. Stop and rerun against the new images.');
+				}
+			}
+		}
+
+		return {
+			name: packageName,
+			channels,
+			obsoleteVersions: versions.filter((version) => !retainedDigests.has(version.name)),
+			verifyChannels,
+		};
+	}
+
+	const packages = [];
+	for (const name of ['nexus-terminal', 'nexus-terminal-e2e-runner']) {
+		const inspected = await inspectPackage(name);
+		if (inspected) packages.push(inspected);
+	}
+
+	// Recheck both packages before every image deletion; package DELETE has no conditional digest guard.
+	async function verifyChannels() {
+		for (const item of packages) await item.verifyChannels();
 	}
 
 	await verifyChannels();
@@ -96,13 +128,17 @@ export default async function cleanup({ github, context, core }) {
 	if (newestGreenE2e) retainedRuns.add(newestGreenE2e.id);
 	const artifacts = await github.paginate(github.rest.actions.listArtifactsForRepo, { owner, repo, per_page: 100 });
 	const caches = await github.paginate(github.rest.actions.getActionsCacheList, { owner, repo, per_page: 100 });
-	const obsoleteImages = productVersions.filter((version) => !retainedDigests.has(version.name));
+	const obsoleteImages = packages.find((item) => item.name === 'nexus-terminal')?.obsoleteVersions ?? [];
+	const obsoleteRunnerVersions =
+		packages.find((item) => item.name === 'nexus-terminal-e2e-runner')?.obsoleteVersions ?? [];
 	const obsoleteRuns = runs.filter((run) => !retainedRuns.has(run.id));
 	const obsoleteArtifacts = artifacts.filter((artifact) => !retainedRuns.has(artifact.workflow_run?.id));
 	core.info(
-		`Plan: delete ${obsoleteImages.length} product versions, ${runnerVersions.length} runner versions, ${obsoleteRuns.length} runs, ${obsoleteArtifacts.length} artifacts and ${caches.length} caches.`,
+		`Plan: delete ${obsoleteImages.length} product versions, ${obsoleteRunnerVersions.length} runner versions, ${obsoleteRuns.length} runs, ${obsoleteArtifacts.length} artifacts and ${caches.length} caches.`,
 	);
-	for (const [tag, version] of channelVersions) core.info(`Keep ${tag}: ${version.name}`);
+	for (const item of packages) {
+		for (const [tag, version] of item.channels) core.info(`Keep ${item.name}:${tag}: ${version.name}`);
+	}
 
 	let alreadyAbsent = 0;
 
@@ -184,7 +220,7 @@ export default async function cleanup({ github, context, core }) {
 	const hasActiveRuns = freshRuns.some((run) => run.id !== currentRun && run.status !== 'completed');
 	const removableCaches = hasActiveRuns ? [] : caches;
 	const removableImages = hasActiveRuns ? [] : obsoleteImages;
-	const removableRunnerVersions = hasActiveRuns ? [] : runnerVersions;
+	const removableRunnerVersions = hasActiveRuns ? [] : obsoleteRunnerVersions;
 	if (hasActiveRuns) core.info('Other runs are active; keep image versions and Actions caches for this cleanup.');
 	let deletedCaches = 0;
 	let deletedImages = 0;
@@ -226,7 +262,7 @@ export default async function cleanup({ github, context, core }) {
 	await core.summary
 		.addHeading('Manual cleanup complete')
 		.addRaw(
-			'Kept latest/dev and all referenced platform/attestation manifests, their successful runs, the newest successful E2E and this cleanup run. Removed eligible completed runs/artifacts. Active or restarted runs and their artifacts were retained; image versions and caches were retained when other runs were active.\n',
+			'Kept existing main/dev/latest roots in nexus-terminal and nexus-terminal-e2e-runner, all referenced platform/attestation manifests, their successful runs, the newest successful E2E and this cleanup run. Removed eligible completed runs/artifacts. Active or restarted runs and their artifacts were retained; image versions and caches were retained when other runs were active.\n',
 		)
 		.addTable([
 			['Deleted resource', 'Count'],

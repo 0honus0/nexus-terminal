@@ -166,6 +166,7 @@
 		if (
 			disposed ||
 			!viewActive ||
+			predictionResizePending ||
 			restoringBaseline ||
 			restoringSnapshot ||
 			!terminal ||
@@ -182,13 +183,14 @@
 			element.clientHeight <= 0
 		)
 			return;
+		// Wheel/pinch bursts share one geometry frame; only apply their latest size.
+		terminal.options.fontSize = renderedFontSize.value;
 		const dimensions = fit.proposeDimensions();
 		if (!dimensions || !Number.isFinite(dimensions.cols) || !Number.isFinite(dimensions.rows)) return;
 		// Resize through the public API without FitAddon clearing the renderer first.
 		// This keeps the current prompt visible while xterm reflows and the PTY redraws.
 		if (terminal.cols !== dimensions.cols || terminal.rows !== dimensions.rows) {
 			if (typeAhead) {
-				if (predictionResizePending) return;
 				predictionResizePending = true;
 				const target = terminal;
 				const generation = terminalState.remotePtyGeneration.value;
@@ -202,12 +204,7 @@
 						generation !== terminalState.remotePtyGeneration.value
 					)
 						return;
-					// Remeasure after draining predictions; a drag may have moved again.
-					const current = fit?.proposeDimensions();
 					if (
-						current &&
-						Number.isFinite(current.cols) &&
-						Number.isFinite(current.rows) &&
 						element.isConnected &&
 						element.clientWidth > 0 &&
 						element.clientHeight > 0 &&
@@ -215,8 +212,13 @@
 						props.active &&
 						document.visibilityState === 'visible'
 					) {
-						target.resize(current.cols, current.rows);
-						fitAndResize();
+						// Both the pane and requested font may change during the barrier.
+						target.options.fontSize = renderedFontSize.value;
+						const current = fit?.proposeDimensions();
+						if (current && Number.isFinite(current.cols) && Number.isFinite(current.rows)) {
+							target.resize(current.cols, current.rows);
+							fitAndResize();
+						}
 					}
 				});
 				return;
@@ -1161,11 +1163,7 @@
 
 		precision: 0,
 
-		onApply: (size) => {
-			if (!terminal) return;
-			terminal.options.fontSize = size;
-			fitAndResize();
-		},
+		onApply: () => scheduleGeometryFit(),
 
 		onChange: (size) => emit('fontSizeChange', size),
 
@@ -1789,13 +1787,19 @@
 	);
 
 	watch(
-		() => [props.fontFamily, resolvedTheme.value, props.scrollback] as const,
+		() => [props.fontFamily, props.scrollback] as const,
 		() => {
 			if (!terminal) return;
 			terminal.options.fontFamily = props.fontFamily;
-			terminal.options.theme = resolvedTheme.value;
 			terminal.options.scrollback = historyBrowsing ? HISTORY_WINDOW_SCROLLBACK_LINES : liveScrollbackLimit();
-			fitAndResize();
+			scheduleGeometryFit();
+		},
+	);
+
+	watch(
+		resolvedTheme,
+		(theme) => {
+			if (terminal) terminal.options.theme = theme;
 		},
 		{ deep: true },
 	);

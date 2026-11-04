@@ -16,7 +16,7 @@ import {
 import { currentParticipant, assertRunRevisionAvailable } from './run-participant-sql.js';
 import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
 import { readStepProposals } from './run-step-proposals.js';
-import { AGENT_RUN_STEP_MAX_TEXT_BYTES, AGENT_RUN_STEP_MAX_COUNT } from '@nexus-terminal/shared/agent/runs/values';
+import { AGENT_RUN_STEP_MAX_TEXT_BYTES, AGENT_RUN_STEP_MAX_INDEX } from '@nexus-terminal/shared/agent/runs/values';
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import { frozenFromRun } from './run-sql.js';
@@ -97,7 +97,7 @@ export function decodeStep(row: Record<string, unknown>): StoredRunStep {
 		throw new Error('Corrupt Run model step terminal fields');
 	}
 	if (
-		whole(row.step_index, 1) > AGENT_RUN_STEP_MAX_COUNT ||
+		whole(row.step_index, 1) > AGENT_RUN_STEP_MAX_INDEX ||
 		textBytes > AGENT_RUN_STEP_MAX_TEXT_BYTES ||
 		(finishReason === 'stop' && textBytes === 0) ||
 		(state === 'reserved' && (textBytes !== 0 || inputTokens !== undefined))
@@ -316,7 +316,7 @@ export class SqliteRunStepStorage implements RunStepStorage {
 			if (
 				!Number.isSafeInteger(command.stepIndex) ||
 				command.stepIndex < 1 ||
-				command.stepIndex > AGENT_RUN_STEP_MAX_COUNT ||
+				command.stepIndex > AGENT_RUN_STEP_MAX_INDEX ||
 				(await step(tx, command)) !== null
 			) {
 				return { status: 'step_conflict' };

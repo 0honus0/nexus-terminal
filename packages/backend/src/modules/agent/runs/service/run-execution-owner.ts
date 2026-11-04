@@ -28,7 +28,6 @@ import type {
 	RunModelDelta,
 } from '../model/run-types.js';
 import type { ToolService } from '../../tools/service/tool-service.js';
-import { AGENT_RUN_STEP_MAX_COUNT } from '@nexus-terminal/shared/agent/runs/values';
 import type { ProviderModel } from '../../providers/model/provider-model.js';
 import type { ProviderRecord } from '../../providers/model/provider-types.js';
 import {
@@ -617,7 +616,7 @@ export class RunExecutionOwner {
 	): Promise<void> {
 		let version = command.version;
 		let previous: RunModelStep | null = null;
-		for (let stepIndex = 1; stepIndex <= Math.min(AGENT_RUN_STEP_MAX_COUNT, maxRequests); stepIndex++) {
+		for (let stepIndex = 1; stepIndex <= maxRequests; stepIndex++) {
 			let outcome: ModelStepOutcome | null;
 			try {
 				outcome = await this.executeStep(
@@ -690,11 +689,7 @@ export class RunExecutionOwner {
 					}
 					results.push({ providerCallId: proposal.providerCallId, content });
 				}
-				if (
-					signal.aborted ||
-					Date.now() >= command.deadlineAt ||
-					stepIndex === Math.min(AGENT_RUN_STEP_MAX_COUNT, maxRequests)
-				) {
+				if (signal.aborted || Date.now() >= command.deadlineAt || stepIndex === maxRequests) {
 					throw new AgentFailure('limit_exceeded');
 				}
 				context.appendExchange({

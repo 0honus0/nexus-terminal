@@ -118,11 +118,12 @@ export class BrowserService {
 		});
 	}
 
-	private task<T>(work: (signal: AbortSignal) => Promise<T>): Promise<T> {
-		if (this.closing || this.pending.size >= 16) {
+	private task<T>(work: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T> {
+		if (this.closing) {
 			return Promise.reject(new AgentFailure('provider_unavailable'));
 		}
-		const deadline = AbortSignal.any([this.stop.signal, AbortSignal.timeout(60000)]);
+		// Tool calls inherit the configured Run/tool signal, including time spent queued.
+		const deadline = AbortSignal.any([this.stop.signal, signal ?? AbortSignal.timeout(60000)]);
 		const task = this.lane.then(() => {
 			if (this.closing || deadline.aborted) {
 				throw new AgentFailure('provider_unavailable');
@@ -196,7 +197,7 @@ export class BrowserService {
 				})),
 				untrusted: true,
 			});
-		});
+		}, signal);
 	}
 
 	perform(
@@ -210,9 +211,6 @@ export class BrowserService {
 			await validate();
 			combined.throwIfAborted();
 			if (input.action === 'open') {
-				if (this.sessions.size >= 16) {
-					throw new AgentFailure('limit_exceeded');
-				}
 				const config = await this.model.configuration(owner.userId);
 				const target = config.targets.find((item) => item.id === input.targetId);
 				if (!target) {
@@ -345,7 +343,7 @@ export class BrowserService {
 			await validate();
 			combined.throwIfAborted();
 			return JSON.stringify(result);
-		});
+		}, signal);
 	}
 
 	async drainRun(owner: BrowserOwner): Promise<void> {

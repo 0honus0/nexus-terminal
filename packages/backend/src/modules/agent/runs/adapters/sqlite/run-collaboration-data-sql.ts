@@ -129,7 +129,7 @@ export class CollaborationDataSql {
 			if (
 				!total ||
 				storedInteger(total.total) >= maxMessages ||
-				storedInteger(total.bytes) + Buffer.byteLength(body, 'utf8') > maxBytes
+				Buffer.byteLength(body, 'utf8') > maxBytes - storedInteger(total.bytes)
 			) {
 				throw new CollaborationStorageRefusal('limit_exceeded');
 			}

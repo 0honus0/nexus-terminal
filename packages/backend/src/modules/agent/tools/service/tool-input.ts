@@ -250,7 +250,8 @@ export function toolInput(definition: ToolDefinition, argumentsJson: string): To
 			kind: 'memory',
 			action: 'recall',
 			query: text(value.query, 4096),
-			limit: value.limit === undefined ? 10 : integer(value.limit, 1, 20),
+			limit:
+				value.limit === undefined ? 10 : integer(value.limit, 1, AGENT_EXECUTION_LIMIT_MAXIMA.maxRecallItems),
 		};
 	}
 	if (definition.name.startsWith('collaboration_')) {
@@ -382,7 +383,7 @@ export function toolInput(definition: ToolDefinition, argumentsJson: string): To
 				action === 'wait' ? (value.waitSeconds === undefined ? 10 : integer(value.waitSeconds, 1, 30)) : 0,
 			offset:
 				action === 'list' && value.offset !== undefined
-					? integer(value.offset, 0, AGENT_EXECUTION_LIMIT_MAXIMA.maxToolExecutions)
+					? integer(value.offset, 0, Number.MAX_SAFE_INTEGER - 64)
 					: 0,
 		};
 	}

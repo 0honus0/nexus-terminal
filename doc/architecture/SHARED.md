@@ -18,7 +18,7 @@
 4. **类型与转换**：Presentation 数值范围以同一字段名的 min/max 定义，独立各层对象投影保持；分页 offset/nextOffset 使用安全非负整数与原请求关联，不再绑定集合总数。密码按 Unicode 码点，字节预算继续按 UTF-8 完整编码计算。
 5. **入口与安装**：沿既有偏好、快捷命令、标签与收藏 HTTP/前端分页消费者，无新路由或旧协议兼容；Shared build 先于双端检查。
 6. **数据、事务与并发**：分页集合不设固定总条数；单页与请求/响应编码预算仍生效。组删除动态接收完整成员快照并同事务校验后删除；单命令标签数与批量关联单次预算仍按现行 Shared。移除收藏与命令/标签创建的总数 COUNT，不改变身份/版本/引用事务核对。历史保留政策不混作分页读限制。
-7. **生命周期与失败**：前端等待从服务端 Shared 总期限派生并保留现有交付余量，超时仍不证明远端结束；Agent 的 Run/模型并发配置仅受正安全整数表示约束，实际活跃准入使用管理员保存的预算与硬限制；默认预算4/2与默认硬限制8/8保持，不自动增额。未派发/未知及原资源 owner 收尾保持。
+7. **生命周期与失败**：前端等待从服务端 Shared 总期限派生并保留现有交付余量，超时仍不证明远端结束；Agent 的 Run/模型并发配置仅受正安全整数表示约束，实际活跃准入使用管理员保存的预算与硬限制；默认预算4/2与默认硬限制8/8保持，不自动增额。模型请求数同样只保留正安全整数表示边界，默认预算80/默认硬限制400与管理员可调整范围分别持有；步骤索引AGENT_RUN_STEP_MAX_INDEX、工具元数据解码、治理和SQLite解码同步，不再另有固定400步门槛。其余可编辑额度同样移除默认值构成的固定上界；只有活动/工具整秒使用Node与SSH的2147483647ms实际计时器表示边界，Artifact期限使用Date表示边界。默认预算及默认硬限制仍归Backend策略；Artifact总空间/长度/Range随安全整数范围同步，完整编码容量独立保留。未派发/未知及原资源 owner 收尾保持。
 8. **当前能力与验收**：产品说明、真实 UI/API/Model/Adapter、codec 与测试消费者同步；不更改视觉设计，不宣称动态数量等于无限内存容量。静态与未执行行为分别见 PLAN/testing，执行 D17。
 
 **B5.1 Agent Provider**：新增 Provider 管理、模型能力来源/冲突、models.dev 能力注册表、OpenAI-compatible 发现与真实测试的双端线契约，以及 Run 创建的模型选择引用；仅传公开视图（`hasCredential`、版本/修订），不传明文或密文。B5.1 不让 Shared 持有 Run 的内部不可变冻结存储、模型 SSE、网络失败原因或内部冻结的执行政策。
@@ -233,7 +233,7 @@ Agent file_inspect/patch/move/delete 的模型私有命令、树节点及内容�
 
 ### B6.2D 协作契约边界
 
-`agent/collaboration/{values,model,http,http-codec}.ts` 定义已安装的 Child 列表、路径及消息元数据页、有限 profile 和容量，包出口精确列出。Child历史集合上界由任务族工具预算推导（4000），完整响应为每Child512bytes加16KiB封装；消息元数据每页仍最多32项；取消复用 runs 的 expectedVersion/Idempotency-Key/成功联合与安全错误。严格 codec 检查字段、UUID、取值、唯一 Child/父归属和有序游标。后端 register/HTTP 各自白名单投影，Service 保持独立应用对象，Model 转独立 storage。十个模型协作工具的目标缩窄、正文/事实和上下文仍属私有 owner；观察 HTTP 不暴露正文、不推进模型扫描/消费水位。正式界面已消费安全投影，行为验收仍按 testing 的实际覆盖。
+`agent/collaboration/{values,model,http,http-codec}.ts` 定义已安装的 Child 列表、路径及消息元数据页、有限 profile 和容量，包出口精确列出。Child历史不再按默认工具4000次设集合上界；完整响应保持原2064384bytes的单次编码预算，独立于用户可调整总额度，不随安全整数上界乘法膨胀；消息元数据每页仍最多32项；取消复用 runs 的 expectedVersion/Idempotency-Key/成功联合与安全错误。严格 codec 检查字段、UUID、取值、唯一 Child/父归属和有序游标。后端 register/HTTP 各自白名单投影，Service 保持独立应用对象，Model 转独立 storage。十个模型协作工具的目标缩窄、正文/事实和上下文仍属私有 owner；观察 HTTP 不暴露正文、不推进模型扫描/消费水位。正式界面已消费安全投影，行为验收仍按 testing 的实际覆盖。
 
 ## Preferences 个人数据契约
 
@@ -380,7 +380,7 @@ Provider 协议统一为 chat-completions/responses/images；配置与目录中�
 
 agent/runs/events持AgentRunSubscription、subscribe初始游标、按序ACK、update/heartbeat判别联合与严格unknown解码。query拒绝未知/重复字段和非十进制版本。update含当前Thread正文增量页及可为null的Thread/Run/用量/事件/审批/子任务状态；首帧必须含状态。codec复用原子域解码，核对App/Run/Thread、事件游标/版本、子任务父关联、正文连续码点位置与more含义；revision为连接内连续序号，重连重置，不能代替持久正文/事件游标。
 
-容量归runs/values：命令1KiB；完整输出按原审批8MiB、正文512KiB、事件32KiB、由最大工具预算推导的子任务元数据容量加8KiB封装，合计按runs/values公式计算；最多16页且总编码字节不超过输出预算的未ACK窗口。达到窗口只暂停发送至确认，不拒绝业务Run。各端严格引用同一命令/帧/待接纳容量，底层WS另留心跳余量。没有新的模型执行或变更命令，消息不含凭据、原始供应商帧或数据库行；推送不能作为授权。
+容量归runs/values：命令1KiB；完整输出按原审批8MiB、正文512KiB、事件32KiB、独立的子任务元数据响应容量加8KiB封装，合计按runs/values公式计算；最多16页且总编码字节不超过输出预算的未ACK窗口。达到窗口只暂停发送至确认，不拒绝业务Run。各端严格引用同一命令/帧/待接纳容量，底层WS另留心跳余量。没有新的模型执行或变更命令，消息不含凭据、原始供应商帧或数据库行；推送不能作为授权。
 
 ### 公共版本校验
 

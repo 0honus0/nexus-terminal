@@ -8,9 +8,13 @@
 
 ## 仓库手动清理
 
-GitHub Actions 的 `Clean old Actions and container versions` 仅支持手动 Run workflow，不随推送、发布或定时任务执行。保留 `nexus-terminal` 镜像当前 `latest`、`dev` 及它们递归引用的平台和证明 manifest；同 digest 的版本标签随之保留。删除其余发布镜像版本、旧运行及产物、全部 Actions 缓存和 `nexus-terminal-e2e-runner` 镜像缓存，后续 E2E 会重建缓存。保留两个渠道对应源码的成功记录、最近成功 E2E 及本次清理记录。其它仓库或账号下的镜像、运行中的服务和实例数据不受影响。
+GitHub Actions 的 `Clean old Actions and container versions` 仅支持手动 Run workflow，不随推送、发布或定时任务执行。镜像清理仅限当前仓库关联的 `nexus-terminal` 和 `nexus-terminal-e2e-runner` 两个 GHCR 包；逐包核对仓库归属，分别保留现有 `main`、`dev`、`latest` 标签对应版本及其递归引用的平台和证明 manifest。其余旧发布版本、sha 标签版本和无标签版本均为清理候选；与保留版本共用 digest 的其它标签随版本保留。允许部分保护标签尚未发布（runner 当前只发布 `latest`）；有版本却没有任何保护标签的包会使清理停止，不整包盲删。
 
-清理时保留排队、运行中及重新启动的 Actions 和所属产物，不因它们存在而使整次维护失败；有其它活跃任务时，本次保留镜像版本及 Actions 缓存，待任务结束后手动重跑即可清理。任一渠道缺失、保留镜像无法完整解析或标签在清理中发生变化时停止，不盲删。清理需要仓库 Actions 写权限及两个 GHCR 包的管理权限，包设置须允许此仓库的 Actions 管理访问。GitHub API单次请求遇到瞬时服务错误时由官方Octokit最多重试3次并指数退避；权限/参数错误仍会失败，不降为成功或绕过权限。删除同一资源时404视为已不存在，单独计数，不冒充本轮删除；读取所属运行为404时保留无法重新确认状态的artifact。镜像版本删除不做隐式重试，保持每次派发前核对渠道，失败后手动重跑重新计算保留集合。重试耗尽或其它失败仍可能已经删除部分旧资源，按运行日志核对权限和状态后手动重跑；不会恢复已删除历史。
+同时清理旧 Actions 运行及产物、全部 Actions 缓存；保留上述镜像源码对应的成功记录、最近成功 E2E 及本次清理记录。其它包、GitHub Releases、Git 标签、运行中的服务和实例数据不在镜像清理范围内。清理时保留排队、运行中及重新启动的 Actions 和所属产物；有其它活跃任务时，本次保留镜像版本及 Actions 缓存，待任务结束后手动重跑。
+
+保留镜像无法完整解析、包未关联本仓库或任一保护标签在清理中移动、消失或从缺失变为存在时停止。每次镜像版本删除前复查两个包的保护标签，结束时再次确认；GitHub API 不提供条件删除，复查与删除之间仍存在并发窗口，操作前应先完成其它发布任务。
+
+清理需要仓库 Actions 写权限及两个 GHCR 包的管理权限，包设置须允许此仓库的 Actions 管理访问。GitHub API 单次请求遇到瞬时服务错误时由官方 Octokit 最多重试3次并指数退避；权限/参数错误仍会失败，不降为成功或绕过权限。删除同一资源时404视为已不存在，单独计数，不冒充本轮删除；读取所属运行为404时保留无法重新确认状态的 artifact。镜像版本删除不做隐式重试，保持每次派发前核对渠道，失败后手动重跑重新计算保留集合。重试耗尽或其它失败仍可能已经删除部分旧资源，按运行日志核对权限和状态后手动重跑；不会恢复已删除历史。
 
 ## 开发回归分组
 
@@ -289,9 +293,13 @@ Workspace 在首个附件可以进行终端输入前，以同一次隐藏命令�
 
 ## 终端
 
+从首页或连接列表进入工作区时，连接与工作区布局读取并行启动，终端按保存的布局就绪后显示，连接完成前仍禁用输入。SSH 优先使用所配置的密码或私钥，减少认证探测等待；主机密钥信任仍需按原流程确认。实际速度仍受网络、跳板和服务器登录脚本影响。
+
 后端每 25 秒通过 WebSocket 标准 Ping/Pong 保活，减少空闲连接被反向代理超时断开的情况；浏览器自动响应，无需页面定时器。保活不续期挂起会话或授权，也不能阻止系统休眠、网络断开造成的重连。
 
 终端连续输入按原顺序合并发送到原 SSH 附件，文件操作繁忙时不会因共用 RPC 名额而截断按键；仍遵守现有输入字节预算。断线、关闭或附件更换后不重放旧输入，明确拒绝时沿原提示处理。
+
+终端翻页与连续重绘在没有待确认预测时，直接交给终端自身按顺序解析；有待校正输入时仍保留预测与真实输出的同步。滚轮或双指连续缩放将同一帧内的变化合并为最终字号；已有缩放步进、上下限及最新字号保存规则保持，尺寸相同不重复触发远端调整，切换主题不再额外测量行列。实际响应仍受浏览器渲染、历史长度和远端程序影响。
 
 后台会话输出合并处理，等待上一批解析后再继续提交，以减少多个 SSH 同时刷屏的竞争；输出不丢弃、不重排，切回前台与关闭前仍刷新待处理内容，消费确认保持在解析完成之后。
 
@@ -646,7 +654,7 @@ OpenAI-compatible支持管理员配置的HTTP(S)地址，discovery/test/run使�
 
 Root读取同Thread的持久历史，保留失败、取消、unknown和真实工具结果；Child不继承父私有历史。历史、摘要和工具结果都是不可信数据，不授予权限。模型按冻结预算生成语义检查点，不通过关键词或截断伪造摘要；来源变化、摘要失败或无法安全压缩时明确失败，原始历史保留。
 
-模型历史使用最近连续窗口：最多4096个Root、1024步骤、4096工具和4 MiB原始正文；从最新完整Run向前保留，超出窗口的较早内容不注入本轮，单个历史Run超过窗口则本轮不注入它及更早历史，不阻断新对话。原始对话和内部运行记录不删除，模型会收到近期历史可能省略的说明；窗口内来源仍逐项核对版本和状态，兼容的语义检查点继续复用。首轮会继续按完整编码容量缩小近期历史，并同步缩小来源核对范围；不删除原记录，不裁剪当前用户输入或半组工具。首轮成功预留后固定历史来源，后续步骤不靠删旧来源绕过连续性校验。不另设每Run消息条数上限，消息及工具定义合计4 MiB，用于限制后端处理与快照内存；不把字节数当精确token数拒绝模型窗口。完整请求完整性与编码容量在派发前核验，不静默重跑工具。工具结果账本最多256 KiB；直接投影超过8 KiB时给出带hash的预览，`tool_result_read`在原权限下按Unicode码点续读已捕获内容，不能恢复未捕获数据。正文UI使用独立的Run序号／步骤／事件／码点偏移游标，不把审计字节数当正文。
+模型历史使用最近连续窗口：最多4096个Root、1024步骤、4096工具和4 MiB原始正文；从最新完整Run向前保留，超出窗口的较早内容不注入本轮，单个历史Run超过窗口则本轮不注入它及更早历史，不阻断新对话。原始对话和内部运行记录不删除，模型会收到近期历史可能省略的说明；窗口内来源仍逐项核对版本和状态，兼容的语义检查点继续复用。首轮会继续按完整编码容量缩小近期历史，并同步缩小来源核对范围；不删除原记录，不裁剪当前用户输入或半组工具。首轮成功预留后固定历史来源，后续步骤不靠删旧来源绕过连续性校验。不另设每Run消息条数上限，消息及工具定义合计4 MiB，用于限制后端处理与快照内存；不把字节数当精确token数拒绝模型窗口。完整请求完整性与编码容量在派发前核验，不静默重跑工具。工具结果账本最多256 KiB；模型可见结果按已保存的工具输出预算投影，超过该预算时给出带hash的预览，`tool_result_read`在原权限下按Unicode码点续读已捕获内容，不能恢复未捕获数据。正文UI使用独立的Run序号／步骤／事件／码点偏移游标，不把审计字节数当正文。
 
 ### 审批、协作与 Browser
 
@@ -862,7 +870,7 @@ App 返回必填非空 definitionId/definitionVersion、capabilities、enabled/v
 
 后端还提供v2只读工具：`machine_diagnostics_read({connectionId})`读取所选SSH机器的CPU百分比、内存/磁盘bytes及1/5/15分钟load指标，generatedAt为毫秒（CPU以同一任务两次采样差值计算），不读取宿主诊断；`file_read({connectionId,path})`读取整个UTF-8文件（最多32KiB，含captured-content SHA-256），不支持旧offset；`file_list({connectionId,path})`最多200条/48KiB metadata，超额拒绝；`file_search({connectionId,path,query,maxResults?})`做区分大小写字面量内容搜索，不接受旧regex/glob/contextLines。maxResults默认20、最多100，每行首匹配，行/UTF-16列从1开始；发现超量匹配时返回truncated。搜索最多100文件、100目录、8层和2MiB，超遍历/编码预算失败，不截断伪报完整结果；非文本文件跳过，文件单项超过32KiB则失败。
 
-后端 file_write v2 参数为 {connectionId,path,content,expectedSha256}：绝对路径最多256 UTF-8 bytes，content最多8KiB且允许空文本，完整参数JSON最多16KiB。新建必须传 expectedSha256: 'absent'；替换必须传 file_read 返回的原内容小写SHA-256。每次写入生成独立审批；按需询问时人工批准，全授权时在原权限范围自动批准。审批摘要只含动作、路径、字节数及哈希，不展示正文。B10已在本机OpenSSH验证真实创建、0600权限、并发同键决议与单次消费；拒绝会以failed结束Run，不再请求模型；等待中取消或撤权不创建文件，加入denylist围栏Run。尚未验证派发后断流、写入未知与跨主机故障。拒绝、过期、撤权或取消停止等待；批准需在当前权限/目标版本有效时消费一次，不能授权下一次写入。新建权限0600，替换保留普通权限，不保留特殊权限位，不提供旧mode参数。使用同目录暂存、提交后回读确认；哈希预检并非远端原子CAS，存在跨调用竞争窗口。暂存/提交/确认/最终交付或清理不能确认时记录unknown，不自动重放；需人工核对远端文件与临时文件。读写任务共用8个名额，整项受冻结工具预算约束（默认45秒），清理未确认仍占名额。
+后端 file_write v2 参数为 {connectionId,path,content,expectedSha256}：绝对路径最多256 UTF-8 bytes，content最多8KiB且允许空文本，完整参数JSON最多16KiB。新建必须传 expectedSha256: 'absent'；替换必须传 file_read 返回的原内容小写SHA-256。每次写入生成独立审批；按需询问时人工批准，全授权时在原权限范围自动批准。审批摘要只含动作、路径、字节数及哈希，不展示正文。B10已在本机OpenSSH验证真实创建、0600权限、并发同键决议与单次消费；拒绝会以failed结束Run，不再请求模型；等待中取消或撤权不创建文件，加入denylist围栏Run。尚未验证派发后断流、写入未知与跨主机故障。拒绝、过期、撤权或取消停止等待；批准需在当前权限/目标版本有效时消费一次，不能授权下一次写入。新建权限0600，替换保留普通权限，不保留特殊权限位，不提供旧mode参数。使用同目录暂存、提交后回读确认；哈希预检并非远端原子CAS，存在跨调用竞争窗口。暂存/提交/确认/最终交付或清理不能确认时记录unknown，不自动重放；需人工核对远端文件与临时文件。读写任务按已保存的执行预算和真实资源追踪动态接纳，不另设8个活跃任务门槛；整项受冻结工具预算约束（默认45秒），清理未确认继续追踪并保留故障证据。
 
 后端 file_inspect v2 参数为 {connectionId,path}，返回规范路径、kind、fingerprint、fileCount、directoryCount、bytes，不返回内容。允许普通文件（含二进制）与目录；最多100文件/100目录、深度8、单文件1MiB、累计2MiB、元数据256KiB；超过预算整项拒绝，不截断。指纹包含相对路径、权限/所有者、大小/修改时间及文件内容哈希，不是原子文件系统快照。
 
@@ -872,7 +880,7 @@ file_move v2 参数为 {connectionId,path,destinationPath,expectedFingerprint}�
 
 shell_execute v2 参数为 {connectionId,kind,argv?,script?,cwd?,mode?,yieldSeconds?}：kind:'argv' 只允许 argv（最多128项、原始UTF-8合计8KiB），kind:'shell' 只允许可执行 script（8KiB）。cwd 可选绝对路径，最多256 bytes；mode 默认 foreground，也可 background。所有执行均需 shell.execute 和独立 destructive 人工批准，不根据命令文本推断安全。前台在等待窗口内完成时返回真实退出状态、stdout/stderr（合计捕获32KiB）和 truncated；非零退出是确认的命令失败。yieldSeconds默认冻结toolTimeoutSeconds（默认45秒），允许0立即交回，不能超过冻结工具等待预算；仅foreground可传。等待到期而任务未完成时返回原jobId与queued/dispatched状态，不中断命令，模型通过shell_job_control继续查询/等待同一任务，禁止因等待到期重跑命令。后台返回 {jobId,accepted:true}，只表示受理，不表示进程健康或成功。完整参数JSON最多16KiB，结果最多256KiB，包含转义预算。
 
-shell_job_control v2 使用 {connectionId,action,jobId?,waitSeconds?,offset?}。list 不传 jobId，offset仅用于list（默认0），每页最多64项并返回nextOffset；status/wait/cancel 使用原 Shell 工具账本 UUID，只操作当前 user/App/Run（Root 或 Child 各自隔离）、目标版本和指纹一致的 Job。list/status/wait 需当前 shell.execute；cancel 还需独立 control 批准。wait 默认10秒、最多30秒，同时受冻结toolTimeoutSeconds等待预算约束，等待结束不取消Job。状态为 queued/dispatched/completed/failed/unknown；dispatched 是派发意图，非进程健康。每Run历史条数受原冻结maxToolExecutions限制，全后端最多8个活跃Job预约，远端与文件任务仍共用8个资源名额。后台属于实际 Run，Root/Child 各自在结束/取消时收尾自己的 Job，Root 最终收尾覆盖整族；unknown 子任务阻止 Root 成功。启动将 queued 转 failed/not_started、dispatched 转 unknown，不重放。权限每秒复查，撤权/过期取消并等待收尾。前台/后台Shell均使用原Run的绝对执行截止时间，等待及续查不会延长总预算；取消、权限失效或Run结束仍会收尾，不提供脱离Run的长期后台服务承诺；本地取消或 SSH 关闭不证明远端子进程停止。Job 执行结果未确认时立即停止所属 Run/族的等待，未被用户取消的 Root 进入 unknown 终态；已取消的 Root 保留 cancelled 和原 Job 的 unknown 证据。
+shell_job_control v2 使用 {connectionId,action,jobId?,waitSeconds?,offset?}。list 不传 jobId，offset仅用于list（默认0），每页最多64项并返回nextOffset；status/wait/cancel 使用原 Shell 工具账本 UUID，只操作当前 user/App/Run（Root 或 Child 各自隔离）、目标版本和指纹一致的 Job。list/status/wait 需当前 shell.execute；cancel 还需独立 control 批准。wait 默认10秒、最多30秒，同时受冻结toolTimeoutSeconds等待预算约束，等待结束不取消Job。状态为 queued/dispatched/completed/failed/unknown；dispatched 是派发意图，非进程健康。每Run历史条数受原冻结maxToolExecutions限制，活跃Job与远端/文件任务动态追踪，不另设固定8个活跃任务门槛。后台属于实际 Run，Root/Child 各自在结束/取消时收尾自己的 Job，Root 最终收尾覆盖整族；unknown 子任务阻止 Root 成功。启动将 queued 转 failed/not_started、dispatched 转 unknown，不重放。权限每秒复查，撤权/过期取消并等待收尾。前台/后台Shell均使用原Run的绝对执行截止时间，等待及续查不会延长总预算；取消、权限失效或Run结束仍会收尾，不提供脱离Run的长期后台服务承诺；本地取消或 SSH 关闭不证明远端子进程停止。Job 执行结果未确认时立即停止所属 Run/族的等待，未被用户取消的 Root 进入 unknown 终态；已取消的 Root 保留 cancelled 和原 Job 的 unknown 证据。
 
 Job 的执行结果无法确认时，会立即通知所属 Run，停止模型请求和待审批工具的等待；Child 的此类故障也会停止 Root 及同族任务，其他 Run 不受影响。查询不再把 unknown 当作可以继续轮询的执行状态。任务进入终态，未消费的审批失效，并在原错误区域说明“任务已停止，远端操作可能仍在运行”。重启后仍从原 Job 记录展示原因，不自动重试或释放机器占用。这里的“结果无法确认”仅表示无法证明远端是否完成，不等于命令仍在本地等待；继续同一线程前仍需用原结束入口关闭该 Run，结束不解除机器围栏。已确认的非零退出保留退出码和输出，主机公钥未信任等确定未执行的拒绝记为 failed。工具派发、审批消费或完成的数据库回执丢失时，也会独立结束已确认模型步骤所属的总任务，不重试原工具写入或自动继续执行。
 
@@ -884,7 +892,7 @@ machine_docker_inspect v2 使用 {connectionId,containerId}，要求完整小写
 
 ACP派发前目标指纹变化返回conflict，重新读取目标并发起新意图；已派发后的结果不确定仍保留operation_unknown，不自动重放。
 
-ACP执行初始化、创建新会话、提交prompt并收集文本更新；输出最多32KiB，超限整项失败而非截断伪报完整。整项受冻结工具期限约束（默认45秒），包含内部权限等待，跨层传递剩余期限；独立远端任务共用8名额。stopReason明确返回end_turn/max_tokens/max_turn_requests/refusal/cancelled，协议完成不代表远端副作用已被业务验证或程序处于OS沙箱。
+ACP执行初始化、创建新会话、提交prompt并收集文本更新；输出最多32KiB，超限整项失败而非截断伪报完整。整项受冻结工具期限约束（默认45秒），包含内部权限等待，跨层传递剩余期限；独立远端任务按冻结预算和真实资源占用接纳。stopReason明确返回end_turn/max_tokens/max_turn_requests/refusal/cancelled，协议完成不代表远端副作用已被业务验证或程序处于OS沙箱。
 
 每个受支持的ACP内部权限请求生成独立acp_inner_permission工具操作和kind:acp_permission批准，绑定父调用、会话/请求/远端toolCall身份、目标版本、原输入哈希及独立修订。父批准只允许启动程序，不能批准内部动作。只支持allow_once/reject_once；没有allow_once选项直接取消，不支持allow_always。direct文件/terminal请求拒绝。读取现有审批列表/单项并resolve后，执行方仍须在当前权限有效时原子消费一次，确认许可响应已发送才记录交付；该子操作completed表示许可已交付，不保证远端内部动作成功。审计摘要不展示rawInput或prompt正文，远端title/kind仅是未受信说明。
 
@@ -899,9 +907,9 @@ ACP执行初始化、创建新会话、提交prompt并收集文本更新；输�
 后端提供十个模型工具：`collaboration_delegate/list/output_read/join/cancel/message_send/message_read/message_consume/fact_read/fact_write`（每项都使用完整 `collaboration_` 前缀）。必须显式授予 `app.intents.exchange`；委派、取消、发送、消费和写事实分别批准，读取也须当前授权。父批准不授予 Child 远端工具许可。正式Host提供子任务状态／取消和只读消息元数据观察，执行按 governed 政策核对，默认 enabled=false；启用设置不授予工具 grant 或审批。正式前端已消费当前契约；当前验证范围见 testing。
 
 - Root 的直接 Child 按活跃数限制（默认4），已完成且排空的 Child 释放名额，不支持嵌套。Root/Child/依赖等待仍共用冻结配置中的执行名额；执行准入满载拒绝，模型派发并发忙则等待空位，沿用原任务期限和取消，不重放付费请求。Child 直接复制 Root 冻结的模型与执行设置，继承 Root 绝对期限和模型请求上限，不单独分配请求数或运行秒数；全族模型请求、工具调用和 token reservation 共用预算，委派不会额外增加额度。
-- delegate 参数为 profile、objective、dependencyMode 及可选 targets/dependencies。profile=explore|review|worker 仅为角色标签，不再管理独立模型、工具或预算；Child 继承主 Agent 工具集合，但不提供嵌套委派及 Root 专属 join/cancel。所有工具仍受实时权限、目标范围、访问模式和逐次审批约束，继承不扩大权限。objective 为独立任务（最多8 KiB），不复制父私有历史；targets 为选中 SSH ID 的十进制字符串子集（最多50项，省略表示无目标），dependencies 为最多四个此前 Child UUID，success 要求成功、settled 接受终态。完整工具参数 JSON 最多16 KiB，不能只看单字段上限。
-- list/join 返回安全状态及 Child 最后正文预览（最多1024个字符），并带完整字节数及省略标记；list 支持 after/limit，每页最多16项。Child 正文沿模型步骤容量保存（最多2 MiB），可用 collaboration_output_read 按码点 offset 续读，每页最多4 KiB，并返回原文 SHA-256。正文只是模型生成结果，不是已验证证据。join 只由 Root 发起，childIds 必须为其直接 Child，mode=all|any，waitSeconds 为1–30；超时不停止 Child。父成功前等待全部 Child 实际资源收尾；已明确失败或取消且排空的 Child 可以由父总结处理，仍运行或效果未知的 Child 阻止父成功。纯执行未知结算为 unknown，存储提交未知保留原状态供恢复对账，不能自动重放。cancel 独立批准后围栏并等待本地清理；持久围栏确认失败时仍停止并等待原Child任务，保留未知结果与清理失败，不承诺远端进程回滚。
-- message_send 使用 recipientId/body/ttlSeconds，只能发给当前族内仍活跃的其他参与者；body 最多8 KiB，TTL为1–300秒。全族最多累计256条/512 KiB原始正文，过期与已消费记录仍计累计配额。接纳不等于消费；不使用旧 runtimeId/任意 JSON/artifactRefs。
+- delegate 参数为 profile、objective、dependencyMode 及可选 targets/dependencies。profile=explore|review|worker 仅为角色标签，不再管理独立模型、工具或预算；Child 继承主 Agent 工具集合，但不提供嵌套委派及 Root 专属 join/cancel。所有工具仍受实时权限、目标范围、访问模式和逐次审批约束，继承不扩大权限。objective 为独立任务（最多8 KiB），不复制父私有历史；targets 为选中 SSH ID 的十进制字符串子集（最多50项，省略表示无目标），dependencies 为此前 Child UUID，不再另限四个；数量仍须符合完整参数字节容量，success 要求成功、settled 接受终态。完整工具参数 JSON 最多16 KiB，不能只看单字段上限。
+- list/join 返回安全状态及 Child 最后正文预览（最多1024个字符），并带完整字节数及省略标记；list 支持 after/limit，每页最多16项。Child 正文沿模型步骤容量保存（最多2 MiB），可用 collaboration_output_read 按码点 offset 续读，每页最多4 KiB，并返回原文 SHA-256。正文只是模型生成结果，不是已验证证据。join 只由 Root 发起，childIds 必须为其直接 Child，mode=all|any，waitSeconds 为1–30；超时不停止 Child。父成功前等待全部 Child 实际资源收尾；已明确失败或取消且排空的 Child 可以由父总结处理，仍运行或效果未知的 Child 阻止父成功。纯执行未知结算为 unknown，存储提交未知保留原状态供恢复对账，不能自动重放。join/cancel 的 childIds 不再额外限制四个，仍逐项核对归属及完整参数容量；批量返回超出单次工具结果容量时省略正文预览并保留省略标记，完整正文仍可续读。cancel 独立批准后围栏并等待本地清理；持久围栏确认失败时仍停止并等待原Child任务，保留未知结果与清理失败，不承诺远端进程回滚。
+- message_send 使用 recipientId/body/ttlSeconds，只能发给当前族内仍活跃的其他参与者；body 最多8 KiB，TTL为1–300秒。全族累计条数和原始正文字节数由冻结配置控制（默认256条/512 KiB），过期与已消费记录仍计累计配额。接纳不等于消费；不使用旧 runtimeId/任意 JSON/artifactRefs。
 - message_read 使用 after/limit（每页1–4条），只读自己的持久邮箱；按服务端 nextCursor 继续，过期文本被省略，但扫描进度保留。message_consume 使用 through/expectedConsumed CAS，只能确认已经连续扫描的范围，跳页不能确认未读间隙。
 - fact_read 使用 key；fact_write 使用 key/value/expectedVersion，0表示创建，更新必须匹配当前版本。key 最多128 UTF-8 bytes，value 最多8 KiB，全族最多128 keys。消息和事实均是未验证文本，不能作为权限或可信指令。
 - 取消、撤权、Provider变更和停机收尾全族；存储失败仍尝试本地清理并保留失败原因。提交未知不猜测、不重新派发；重启不恢复活 waiter 或旧付费请求，未派发 Child 失败、已运行 Child 保守 unknown。冲突需读取当前状态后由新意图决定下一步，不能自动换键重放。
@@ -934,7 +942,7 @@ iframe descriptor 的 maxMessageBytes 对齐完整前端 RPC 预算（8 MiB + 1 
 
 ### 后端执行设置
 
-模型请求数、工具执行次数的可配置上界分别恢复为400、4000，用户保存的较小预算仍生效。普通参数错误、资源不存在等确定工具失败会作为工具结果交回模型，允许修正后继续；权限、审批、取消、清理失败和结果未知仍按原保护处理。工具输出配置限制模型预览，预览保留至少1 KiB引用外壳空间、最多8 KiB；超过预览的完整结果保存在原工具账本（最多256 KiB），可通过 tool_result_read 续读，不再因超过默认64 KiB直接结束任务。普通结果与Child输出的续读页会按当前模型预览额度自动缩小，并留出JSON外壳空间，避免续读页再次被截断；nextOffset按实际返回文本推进。不可变结果的hash不匹配作为参数错误反馈模型，读取仍先核对原授权。
+模型请求数的默认预算为80、默认硬限制为400；硬限制可由管理员改为800等正安全整数，不再额外限制为400，也不叠加400步的运行上限。修改硬限制不自动增加普通预算：先保存硬限制，再按需要修改并保存实际模型请求预算；App覆盖只能缩窄全局实际预算。其余可编辑硬限制同样不再被默认值充当固定产品上界，普通预算和默认值保持。普通参数错误、资源不存在等确定工具失败会作为工具结果交回模型，允许修正后继续；权限、审批、取消、清理失败和结果未知仍按原保护处理。工具输出配置限制模型预览，预览按配置分配，保留至少1 KiB引用外壳空间，不再另卡8 KiB；超过预览的完整结果保存在原工具账本（最多256 KiB），可通过 tool_result_read 续读，不再因超过默认64 KiB直接结束任务。普通结果与Child输出的续读页会按当前模型预览额度自动缩小，并留出JSON外壳空间，避免续读页再次被截断；nextOffset按实际返回文本推进。不可变结果的hash不匹配作为参数错误反馈模型，读取仍先核对原授权。
 
 无效的额度输入每次点击保存都会显示错误 Toast，关闭提示后再次保存仍会提示；校验未通过不发送保存请求。Agent 窗口打开时全局 Toast 仍可关闭、确认及执行恢复动作，通知不受背景交互锁定影响。
 
@@ -943,6 +951,10 @@ iframe descriptor 的 maxMessageBytes 对齐完整前端 RPC 预算（8 MiB + 1 
 正式 Agent 设置恢复顶部启用／停用入口；15 项额度分别归入“模型与预算”“执行与集成”的性能／存储和“安全与防护”的子任务卡片。四处共用同一设置草稿和版本，保存提交完整配置；有未保存草稿时不允许切换总开关。子任务卡片仅管理直接子任务数量、协作消息条数和消息总字节数，并说明继承主 Agent；独立角色启用、模型、工具白名单、请求数及秒数设置已移除。文件浏览与清理从悬浮窗口的“文件”入口操作，普通附件从会话输入区的文件选择器上传，不在设置重复铺开文件库。执行设置不再加载独立子模型目录，完整 JSON 最多128 KiB。秒和字节单位在字段标注；带单位输入支持 K/M/G 等缩写。输入超出现行字段上下限时显示允许的最小／最大值，只有无法解析的文本才提示格式错误。
 
 并发 Run 与模型调用数按已保存配置准入，不另叠加固定 8 的可配置上限；默认预算仍为4／2，默认硬限制仍为8／8。管理员可按资源调整硬限制，再保存预算，模型调用并发不能超过 Run 并发；系统不会自动增加并发。
+
+数量、累计字节和Token等额度仅保留JavaScript/JSON正安全整数表示边界，不再额外固定工具4000次、Token800万、Child4个、协作消息5000条/8MiB、Recall20条/32KiB或文件总空间10GiB。实际执行仍由已保存的任务族预算、真实占用、Token和时间共同准入。活动时间与工具超时目前受Node/SSH单次计时器2147483647毫秒的真实表示约束，整秒最大2147483（约24.9天），不再限7200/300秒；Artifact期限不再限30天，但生成的绝对到期时间必须在ECMAScript Date可表示范围内。新库的子任务请求数约束同步使用此边界；初始v1结构签名同步更新，旧开发库启动时拒绝；部署前须明确维护原400的表CHECK和结构签名，或按部署文档使用独立空目录，本版不自动改库。
+
+Recall工具请求的条数不再另限20，候选读取至少覆盖本次请求条数；返回条数/总字节按冻结预算和单次工具结果容量核对。MCP/Browser的运行调用使用已配置工具/Run信号，不再另套60秒完整调用期限；管理请求仍保留原期限，连接握手、CDP单次控制请求和清理仍使用各技术owner的期限。MCP/Browser待处理任务及Browser运行会话动态追踪，不另按16项拒绝；全局执行准入、目标冲突、撤权、取消和未确认清理保护继续生效。单次参数/结果捕获、HTTP/WS完整编码、分页和Browser二进制表示容量独立保留，不是任务族总额度；大额度不等于单条响应可以无限扩大。
 
 在“模型与预算”展开“硬限制”直接编辑完整上限；修改硬限制时普通预算锁定，修改普通预算时硬限制锁定。点击“保存”一次提交，不再显示预览或二次确认面板；服务端拒绝低于预算或实际占用的值。冲突、写后断流或结果未知阻止下一次写入；点击“读取已保存设置”放弃草稿并核对服务端，读取失败不会解锁，不自动重发保存。离页、卸载或身份撤销清除原草稿并隔离晚响应。旧聚合预算/并发/子任务控件已移除；正式管理及运行页已接Shared，整体行为回归仍待最终远程Actions E2E。
 
@@ -1222,6 +1234,8 @@ Linux 内存与 Swap 直接读取内核的 `/proc/meminfo`，优先使用 `MemAv
 多个并行主机同时返回同一种认证、权限或容量失败时，保留对应错误码和 HTTP 状态，不改报一般网络不可用；真实资源清理失败仍优先按结果未知处理，不被普通拒绝掩盖。
 
 ## 安全与认证
+
+主动退出登录会撤销旧会话的读取、自动保存与通知意图，不因这些正常取消弹出“操作失败”或“个人数据请求失败，请重新读取”。退出后旧通知的“重新读取”不能继续请求旧个人数据；重新登录重新建立当前会话。退出接口本身失败仍显示错误并核对会话状态，未确认写入不视为回滚，也不自动重放。
 
 IP 黑名单开关切换即保存并热更新，只提交该开关，保留且不提交相邻白名单、次数与时长草稿；白名单和封禁参数保存也无需重启。明确失败恢复原开关，冲突或结果未知先刷新核对。
 

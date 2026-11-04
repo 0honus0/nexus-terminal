@@ -257,8 +257,8 @@ export const createWorkspaceLayoutController = (
 			}
 		},
 
-		onError: (cause) => {
-			if (!scope.signal.aborted) {
+		onError: (cause, { permission }) => {
+			if (!scope.signal.aborted && !permission.aborted) {
 				error.value = cause;
 				logger.error({ err: cause }, 'Failed to persist resized workspace layout');
 			}

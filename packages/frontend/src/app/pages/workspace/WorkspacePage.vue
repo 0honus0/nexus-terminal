@@ -17,7 +17,7 @@
 	import { useDeviceCapabilities } from '@/foundation/browser';
 	import { createLatestValueSaver } from '@/foundation/async';
 	import { useFeedback, preferenceFailureMessage } from '@/shared/feedback/public';
-	import { registerAuthenticatedSessionReset } from '@/shared/session/public';
+	import { authenticatedSessionLifecycle, registerAuthenticatedSessionReset } from '@/shared/session/public';
 	import { focusRegistry, normalizeShortcut, shortcutFromKeyboardEvent } from '@/shared/focus/public';
 	import { refreshConnection, type ConnectionSummary } from '@/features/connections/public';
 	import { terminalScrollbackForRuntime, usePreferences } from '@/features/preferences/public';
@@ -144,6 +144,7 @@
 	let pageScope = new AbortController();
 
 	const isPageCurrent = (signal: AbortSignal): boolean =>
+		authenticatedSessionLifecycle.userId !== null &&
 		workspaceActive &&
 		router.currentRoute.value.name === 'Workspace' &&
 		pageScope.signal === signal &&
@@ -158,6 +159,7 @@
 	};
 
 	const activatePageActions = (): void => {
+		if (authenticatedSessionLifecycle.userId === null) return;
 		workspaceActive = true;
 		if (pageScope.signal.aborted) pageScope = new AbortController();
 	};
@@ -207,10 +209,16 @@
 	);
 	const progressVisibility = ref<Record<string, boolean>>({});
 
-	const reportPreferenceSaveError = (cause: unknown) =>
+	const reportPreferenceSaveError = (cause: unknown, { permission }: { permission: AbortSignal }): void => {
+		if (!isPageCurrent(permission)) return;
 		feedback.notifyError(
 			t('settings.preferences.saveFailed', { error: cause instanceof Error ? cause.message : String(cause) }),
 		);
+	};
+
+	const reportAppearanceSaveError = (_cause: unknown, { permission }: { permission: AbortSignal }): void => {
+		if (isPageCurrent(permission)) feedback.notifyError(t('common.errorOccurred'));
+	};
 
 	watch(
 		() =>
@@ -294,7 +302,7 @@
 			}
 		},
 
-		onError: () => feedback.notifyError(t('common.errorOccurred')),
+		onError: reportAppearanceSaveError,
 	});
 	const editorFontSaver = createLatestValueSaver<{ size: number; permission: AbortSignal }>({
 		delayMs: 240,
@@ -308,7 +316,7 @@
 			}
 		},
 
-		onError: () => feedback.notifyError(t('common.errorOccurred')),
+		onError: reportAppearanceSaveError,
 	});
 	const mobileEditorFontSaver = createLatestValueSaver<{
 		size: number;
@@ -325,7 +333,7 @@
 			}
 		},
 
-		onError: () => feedback.notifyError(t('common.errorOccurred')),
+		onError: reportAppearanceSaveError,
 	});
 
 	const scheduleStatusScale = (scale: number) => {
@@ -339,9 +347,11 @@
 	};
 
 	const saveFileManagerColumnWidths = (widths: Record<string, number>) => {
+		const permission = pageScope.signal;
+		if (!isPageCurrent(permission)) return;
 		void preferences
-			.update({ fileManagerColWidths: widths }, preferences.version.value, pageScope.signal)
-			.catch(reportPreferenceSaveError);
+			.update({ fileManagerColWidths: widths }, preferences.version.value, permission)
+			.catch((cause) => reportPreferenceSaveError(cause, { permission }));
 	};
 
 	const updateTerminalFontSize = (size: number) => {
@@ -1133,35 +1143,47 @@
 		'connection' in navigator && navigator.connection instanceof EventTarget ? navigator.connection : undefined;
 
 	const saveSidebarWidth = (pane: string, width: string) => {
+		const permission = pageScope.signal;
+		if (!isPageCurrent(permission)) return;
 		void preferences
 			.update(
 				{ sidebarPaneWidths: { ...preferences.values.value.sidebarPaneWidths, [pane]: width } },
 				preferences.version.value,
-				pageScope.signal,
+				permission,
 			)
-			.catch(reportPreferenceSaveError);
+			.catch((cause) => reportPreferenceSaveError(cause, { permission }));
 	};
 
 	const updateQuickCommandCompactMode = (compact: boolean) => {
+		const permission = pageScope.signal;
+		if (!isPageCurrent(permission)) return;
 		void preferences
-			.update({ quickCommandsCompactMode: compact }, preferences.version.value, pageScope.signal)
-			.catch(reportPreferenceSaveError);
+			.update({ quickCommandsCompactMode: compact }, preferences.version.value, permission)
+			.catch((cause) => reportPreferenceSaveError(cause, { permission }));
 	};
 
 	const updateLayoutLocked = async (locked: boolean) => {
+		const permission = pageScope.signal;
+		if (!isPageCurrent(permission)) return;
 		try {
-			await preferences.saveWorkspacePreference('layoutLocked', locked, pageScope.signal);
+			await preferences.saveWorkspacePreference('layoutLocked', locked, permission);
 		} catch {
-			feedback.notifyError(t('layoutConfigurator.lockUpdateError'));
+			if (isPageCurrent(permission)) feedback.notifyError(t('layoutConfigurator.lockUpdateError'));
 		}
 	};
 
 	const toggleHeader = async () => {
-		await preferences.saveWorkspacePreference(
-			'navBarVisible',
-			!preferences.values.value.navBarVisible,
-			pageScope.signal,
-		);
+		const permission = pageScope.signal;
+		if (!isPageCurrent(permission)) return;
+		try {
+			await preferences.saveWorkspacePreference(
+				'navBarVisible',
+				!preferences.values.value.navBarVisible,
+				permission,
+			);
+		} catch (cause) {
+			reportPreferenceSaveError(cause, { permission });
+		}
 	};
 
 	const refreshWorkspaceSettings = async (): Promise<void> => {
@@ -1277,9 +1299,10 @@
 		window.visualViewport?.addEventListener('scroll', scheduleViewportSync);
 		scheduleViewportSync();
 		stopServerTransferPolling = serverTransfers.startPolling();
-		// The layout is needed before mounting a terminal; the remaining settings can settle while
-		// the provisional session connects. Appearance changes are reactive, including its background.
+		// Only terminal mounting needs the layout. Start query connections while settings load;
+		// the runtime buffers pre-mount output and the template retains the layout.loaded gate.
 		const layoutLoad = workspaceLayout.load();
+		const queryActions = loadQueryActions();
 		void Promise.allSettled([workspaceFocus.load(), appearance.load(), history.load()]);
 		void preferences.load().catch((cause) => {
 			if (isPageCurrent(signal)) feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
@@ -1288,7 +1311,7 @@
 			if (isPageCurrent(signal)) feedback.notifyError(preferenceFailureMessage(cause, t));
 		});
 		if (!isPageCurrent(signal)) return;
-		await loadQueryActions();
+		await queryActions;
 		if (isPageCurrent(signal) && document.visibilityState === 'visible') {
 			void recoverForegroundSessions();
 		}
@@ -1303,6 +1326,7 @@
 			return;
 		}
 		const permission = pageScope.signal;
+		void loadQueryActions();
 		if (!workspaceLayout.loaded.value) {
 			const signal = pageScope.signal;
 			await Promise.all([workspaceLayout.load(), workspaceFocus.load()]).catch((cause) => {
@@ -1316,7 +1340,6 @@
 		void nextTick(() => {
 			if (isPageCurrent(signal) && id === registry.activeId.value) surfaces.get(id ?? '')?.fitTerminal?.();
 		});
-		void loadQueryActions();
 		void recoverForegroundSessions();
 	});
 	onDeactivated(() => {

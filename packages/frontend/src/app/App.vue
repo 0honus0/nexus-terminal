@@ -112,10 +112,10 @@
 
 	const saveRemoteDesktopSize = async (size: { width: number; height: number }): Promise<void> => {
 		const type = remoteDesktopConnection.value?.type;
-		if (!type || desktopSizeSaving.value) {
+		const user = auth.user.value;
+		if (!type || !user || !auth.isAuthenticated.value || desktopSizeSaving.value) {
 			return;
 		}
-		const user = auth.user.value;
 		// Pointer coordinates can be fractional; narrow viewports can also be smaller
 		// than the persisted preference range. Keep the displayed window viewport-bound.
 		const width = Math.min(

@@ -336,7 +336,7 @@ export function readAgentArtifactDownloadRange(
 	if (value === undefined) {
 		return { start: 0, endInclusive: sizeBytes - 1, partial: false };
 	}
-	if (typeof value !== 'string' || !/^bytes=[0-9]{1,15}-[0-9]{0,15}$/u.test(value) || sizeBytes === 0) {
+	if (typeof value !== 'string' || !/^bytes=[0-9]{1,16}-[0-9]{0,16}$/u.test(value) || sizeBytes === 0) {
 		throw new InvalidAgentPayload();
 	}
 	const parts = value.slice(6).split('-');

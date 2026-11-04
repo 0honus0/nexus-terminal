@@ -39,7 +39,7 @@ export function collaborationTools(): ToolDefinition[] {
 				text('objective', 8192),
 				texts('targets', 50, false),
 
-				texts('dependencies', 4, false),
+				texts('dependencies', Number.MAX_SAFE_INTEGER, false),
 				{ ...text('dependencyMode', 7), choices: ['success', 'settled'] },
 			],
 			mutation: true,
@@ -66,7 +66,7 @@ export function collaborationTools(): ToolDefinition[] {
 			description:
 				'Root waits for selected direct Children, mode=all|any, at most 30 seconds. Timeout leaves children owned and running. Settled is not necessarily successful.',
 			fields: [
-				texts('childIds', 4),
+				texts('childIds', Number.MAX_SAFE_INTEGER),
 				{ ...text('mode', 3), choices: ['all', 'any'] },
 				integer('waitSeconds', 1, 30),
 			],
@@ -76,7 +76,7 @@ export function collaborationTools(): ToolDefinition[] {
 			name: 'cancel',
 			description:
 				'Root fences direct Children and waits for local cleanup. Requires independent approval. Cancellation is not remote rollback.',
-			fields: [texts('childIds', 4)],
+			fields: [texts('childIds', Number.MAX_SAFE_INTEGER)],
 			mutation: true,
 		},
 		{

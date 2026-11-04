@@ -1,7 +1,6 @@
 import { agentRecord, agentInteger, readAgentId, InvalidAgentPayload } from '../http-codec.js';
 import { AGENT_RUN_STATUSES } from '../runs/values.js';
 import {
-	AGENT_CHILD_MAX_LIST,
 	AGENT_CHILD_PROFILES,
 	AGENT_MESSAGE_METADATA_MAX_BODY_BYTES,
 	AGENT_COLLABORATION_MESSAGE_MAX_PAGE,
@@ -43,7 +42,7 @@ export function readAgentMessageMetadataQuery(query: URLSearchParams): AgentMess
 
 export function readAgentChildrenResponse(input: unknown): AgentChildrenResponse {
 	const row = agentRecord(input, ['items'], AGENT_COLLABORATION_MAX_RESPONSE_BYTES);
-	if (!Array.isArray(row.items) || row.items.length > AGENT_CHILD_MAX_LIST) {
+	if (!Array.isArray(row.items)) {
 		throw new InvalidAgentPayload();
 	}
 	const items = row.items.map((input: unknown) => {

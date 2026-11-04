@@ -1165,7 +1165,7 @@ export class TerminalTypeAhead {
 	private readonly timeline: PredictionTimeline;
 	private readonly stats: PredictionStats;
 	private lastRow?: { y: number; startingX: number; endingX: number; charState: CharPredictState };
-	private readonly queue: Array<() => void> = [];
+	private readonly queue: Array<{ action: () => void; requiresParsedBuffer: boolean }> = [];
 	private processing = false;
 	private stopped = false;
 	private epoch = 0;
@@ -1191,24 +1191,34 @@ export class TerminalTypeAhead {
 		});
 	}
 
-	private enqueue(action: () => void): void {
-		this.queue.push(action);
+	private enqueue(action: () => void, requiresParsedBuffer = true): void {
+		this.queue.push({ action, requiresParsedBuffer });
 		this.pump();
 	}
 
 	private pump(): void {
 		if (this.processing) return;
-		const action = this.queue.shift();
-		if (!action) return;
-		this.processing = true;
-		// Observe the parsed cursor and cells, including previous local writes.
-		this.terminal.write('', () => {
-			action();
-			this.terminal.write('', () => {
+		while (this.queue.length) {
+			const task = this.queue.shift();
+			if (!task) return;
+			this.processing = true;
+			// With no predictions, beforeServerInput only clears bookkeeping. Let
+			// xterm batch and time-slice remote output without per-chunk barriers.
+			if (!task.requiresParsedBuffer && !this.timeline.length) {
+				task.action();
 				this.processing = false;
-				this.pump();
+				continue;
+			}
+			// Prediction, reconciliation and reset still need parsed cursor/cells.
+			this.terminal.write('', () => {
+				task.action();
+				this.terminal.write('', () => {
+					this.processing = false;
+					this.pump();
+				});
 			});
-		});
+			return;
+		}
 	}
 
 	private canPredict(): boolean {
@@ -1275,7 +1285,7 @@ export class TerminalTypeAhead {
 			if (this.timeline.revision !== revision) this.lastRow = undefined;
 			this.terminal.write(output, consumed);
 			this.deferClearing();
-		});
+		}, false);
 	}
 
 	private clear(): void {

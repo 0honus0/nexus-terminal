@@ -61,6 +61,28 @@ Workspace RuntimeSession 持普通与挂起附件的连接/续租，Registry 持
 
 ## 前端专项设计
 
+### 认证撤销后的通知隔离
+
+1. **职责与范围**：正常退出取消原个人数据意图，不向登录页发布旧视图的请求失败；真实退出接口失败仍由AppHeader提示。
+2. **子功能与目录**：shared/session拥有视图scope；命令历史/快捷指令组件拥有错误观察与刷新动作；WorkspacePage、布局controller和App拥有各自保存回调。
+3. **依赖方向**：组件读取session公开能力；foundation保存器只回传原T，不引用认证或业务模块；后端/Shared契约保持。
+4. **类型与转换**：LatestValueSaver.onError(error,value)绑定失败原值，工作区按原permission判断通知资格；无新协议或错误码。
+5. **入口与安装**：既有useAuthenticatedViewScope在无会话时从已取消scope开始，attach可建立新scope，logout/切用户/销毁撤销；激活和available变化不能在无会话时重新准入。
+6. **数据与并发**：通知及其重新读取动作核对原signal；尺寸、字体、缩放、列宽/侧栏与布局保存均不把晚失败关联到后来激活的页面。不改写入队列、CAS和未知结果围栏。
+7. **生命周期与失败**：退出时清除原视图意图，原请求仍由store追踪收口；当前有效会话真实失败继续通知。远程桌面尺寸保存要求真实认证用户，避免null身份相等误报。
+8. **当前能力与验收**：产品操作见USAGE安全与认证；本批按D17仅源码/静态和构建，真实退出/在途故障与重新登录待正式回归，具体证据归testing。
+
+### 终端输出与缩放调度
+
+1. **职责与范围**：减少终端翻页/连续输出和缩放的重复调度，不改变 DOM renderer、文字效果、滚动行为或协议。
+2. **子功能与目录**：TerminalView 持字体目标值及几何 rAF；vendor/vscode-typeahead 的 TerminalTypeAhead 持有输入、输出和重置的有序队列。
+3. **依赖方向**：View → 现有 FitAddon/TypeAhead → xterm；不引入新依赖、渲染器或跨功能调度器。
+4. **类型与转换**：队列任务的 action/requiresParsedBuffer 为 vendor 单文件内部类型；字体继续消费 renderedFontSize，复用既有 Port resize 和原始输出 consumed 回调。
+5. **入口与安装**：滚轮、触控捏合和外部字号变化共用原 useWheelScale；onApply 只请求一次几何帧，在可见且恢复完成后应用最新字号。主题观察只更新配色，字体族/scrollback 变化沿原几何入口。
+6. **数据、事务与并发**：队列头为纯远端输出且无待匹配预测时，可直接按顺序提交 xterm；存在预测、输入或 reset/barrier 时仍等待前后解析屏障。切换快路径时继续执行原 beforeServerInput，保留分包内容、revision与样本清理；不跨过排队输入/重置。xterm 自身持有异步解析及时间切片，真实解析后才返回原 ACK。
+7. **生命周期与失败**：视图失活/隐藏不应用待显示字号，激活/恢复重新调度；快照恢复先按原尺寸完成再fit，预测撤销屏障后的几何复测也读取最新字号。原rAF/timer注销、PTY generation、历史/快照及预测stop语义保持。
+8. **当前能力与验收**：代码消除无预测输出的额外屏障和同帧重复字号应用，未实测端到端延迟/帧率；产品操作见USAGE终端章节，静态证据与待验场景归PLAN/testing。
+
 ### 终端目录等待提示
 
 FileManager 沿原 TerminalDirectoryPort.changeDirectory 的 onQueued 消费 waitingForPrompt；仅当前视图与原目录能力仍有效时通知一次。真实等待期间提示未执行输入可按 Ctrl+C 清行后自动切换，已有前台命令则等待结束；不推断一定有草稿，不自动清行或保存输入。服务端排队、完成验证、失败与未知结果契约不变，正常成功静默。无新状态 owner、协议或技术资源；专项证据归 testing。
@@ -337,3 +359,14 @@ usePluginManagement 持已确认安装快照；相同 appId/revision 序列不�
 6. **数据、事务与并发**：原 busy/读写围栏阻止并发；失活清理旧错误，返回只读核对后才解除写入围栏，不重放原写入。
 7. **生命周期与失败**：原 signal/current scope 屏蔽晚返回与 finally；真实读失败、冲突和未确认写继续提供原重新读取入口，重读失败不开放写入。
 8. **当前能力与验收**：USAGE 同步返回页面与失败恢复行为；新增缓存往返及原真实失败回归的正式 Actions 证据见 testing，静态与设备视觉证据分开。
+
+## 工作区连接与布局并行初始化
+
+1. **职责与范围**：WorkspacePage 并行启动独立的连接查询动作与设置读取，终端仍等待原保存布局就绪后挂载；不修改布局及操作入口。
+2. **子功能与目录**：沿 `app/pages/workspace/WorkspacePage.vue` 的 onMounted/onActivated 与 loadQueryActions，不新增状态仓库或异步包装层。
+3. **依赖方向**：Page → Registry/RuntimeSession → WorkspaceSocket；布局仍由原 workspaceLayout owner 读取，终端经既有功能 Port 接收输出。
+4. **类型与转换**：原连接摘要、Shared 请求/回执、mapper 及 Promise 保持不变，无新增协议/类型。
+5. **入口与安装**：首次挂载及 KeepAlive 后的新连接查询无需等待 layout/focus 读取；先消费一次性路由查询，再沿原连接摘要刷新和 openConnection 派发。
+6. **数据、事务与并发**：template 的 layout.loaded 挂载门禁保留；Runtime 已有 pre-mount 输出缓冲及消费窗口继续持字节，挂载后按原顺序解析，不丢输出、不提前开放输入。首次前台恢复仍等待布局和查询动作完成。
+7. **生命周期与失败**：loadQueryActions 的原页面 signal/current 检查阻止失活或注销后的晚返回派发；布局失败走原设置重读入口，连接仍由 Registry/Runtime 持有关闭、未知结果和恢复，不因布局慢创建第二份 SSH。
+8. **当前能力与验收**：消除布局读取与连接流程之间的代码串行依赖，真实收益取决于读取与握手耗时；USAGE 见终端章节，静态/构建及待验边界归 PLAN/testing。

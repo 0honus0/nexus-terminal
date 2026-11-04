@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   cleanup:
-    name: Keep latest and dev only
+    name: Keep main, dev and latest in project images
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

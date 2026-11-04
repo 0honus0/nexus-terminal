@@ -134,3 +134,39 @@ test('Recall byte quantities distinguish range errors from invalid syntax', asyn
 
 	await recall.fill(original);
 });
+
+test('hard-limit editing saves 800 model requests and then allows an 800-request budget', async ({ page, context }) => {
+	await loginAsInitialAdmin(context.request);
+	await setUiLanguage(context.request);
+	await page.goto('/settings?tab=agent');
+	await selectAgentSettingsGroup(page, 'models');
+	const budget = page.getByRole('region', { name: 'Budget and context', exact: true });
+	await budget.locator('summary').click();
+	const inputs = budget.getByRole('textbox', { name: 'Model requests', exact: true });
+	await expect(inputs).toHaveCount(2);
+
+	const read = async () =>
+		(
+			await requestAgentJson(
+				context.request,
+				{ method: 'GET', path: '/execution-settings' },
+				readAgentExecutionSettingsResponse,
+			)
+		).settings;
+
+	const before = await read();
+	await inputs.nth(1).fill('800');
+	await expect(inputs.first()).toBeDisabled();
+	await budget.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect.poll(async () => (await read()).hardLimits.maxModelRequests).toBe(800);
+	expect((await read()).limits).toEqual(before.limits);
+	await expect(inputs.first()).toBeEnabled();
+	await inputs.first().fill('800');
+	await budget.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect.poll(async () => (await read()).limits.maxModelRequests).toBe(800);
+	await page.reload();
+	await selectAgentSettingsGroup(page, 'models');
+	await budget.locator('summary').click();
+	await expect(inputs.first()).toHaveValue('800');
+	await expect(inputs.nth(1)).toHaveValue('800');
+});

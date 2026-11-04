@@ -1,5 +1,6 @@
 import type { AgentOperationErrorCode } from '@nexus-terminal/shared/agent/values';
 import type { AgentRunStatus } from '@nexus-terminal/shared/agent/runs/values';
+import { AGENT_EXECUTION_LIMIT_MAXIMA } from '@nexus-terminal/shared/agent/execution/values';
 import type { ToolOperation } from '../runs/model/run-tool-types.js';
 import type { RunFrozenInput } from '../runs/model/run-types.js';
 import type { ProviderRecord } from '../providers/model/provider-types.js';
@@ -150,14 +151,14 @@ export function grantChangeDecision(
 export const HARD_EXECUTION_LIMITS: Readonly<
 	Record<Exclude<keyof PolicyOverrides, 'contextCompactionMode' | 'contextProfile'>, number>
 > = {
-	maxModelRequests: 400,
-	maxActiveExecutionSeconds: 7200,
-	toolTimeoutSeconds: 300,
-	maxToolOutputBytes: 262144,
-	maxRecallItems: 20,
-	maxRecallBytes: 32768,
-	maxSubagentMessages: 5000,
-	maxSubagentMessageBytes: 8388608,
+	maxModelRequests: AGENT_EXECUTION_LIMIT_MAXIMA.maxModelRequests,
+	maxActiveExecutionSeconds: AGENT_EXECUTION_LIMIT_MAXIMA.maxActiveSeconds,
+	toolTimeoutSeconds: AGENT_EXECUTION_LIMIT_MAXIMA.toolTimeoutSeconds,
+	maxToolOutputBytes: AGENT_EXECUTION_LIMIT_MAXIMA.maxToolOutputBytes,
+	maxRecallItems: AGENT_EXECUTION_LIMIT_MAXIMA.maxRecallItems,
+	maxRecallBytes: AGENT_EXECUTION_LIMIT_MAXIMA.maxRecallBytes,
+	maxSubagentMessages: AGENT_EXECUTION_LIMIT_MAXIMA.maxMessages,
+	maxSubagentMessageBytes: AGENT_EXECUTION_LIMIT_MAXIMA.maxMessageBytes,
 };
 
 export function validOverrides(value: PolicyOverrides): boolean {

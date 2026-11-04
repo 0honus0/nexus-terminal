@@ -377,10 +377,14 @@ function createConnectConfig(
 		hostVerifier: (key: Buffer) =>
 			verifyHostKey(endpoint.host, endpoint.port, Buffer.isBuffer(key) ? key : Buffer.from(key)),
 	};
+	// ssh2 otherwise probes none before sending known credentials, adding a round trip per hop.
+	// Keep none as a fallback for servers that intentionally allow unauthenticated access.
 	if (authentication.kind === 'password') {
 		config.password = authentication.password;
+		config.authHandler = ['password', 'none'];
 	} else {
 		config.privateKey = authentication.privateKey;
+		config.authHandler = ['publickey', 'none'];
 		if (authentication.passphrase !== null) {
 			config.passphrase = authentication.passphrase;
 		}
