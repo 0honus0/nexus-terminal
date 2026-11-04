@@ -1,3 +1,4 @@
+import type { PluginAgentCatalog } from '../../plugins/model/plugin-contribution-types.js';
 import pRetry from 'p-retry';
 import { ModelCapacityBusy, isAgentStorageStatementFailure } from '../../agent-failure.js';
 import { TitleSession } from '../../scope/service/title-session.js';
@@ -42,6 +43,7 @@ import {
 const MAX_PENDING_RUN_WRITES = 64;
 
 interface ModelStepOutcome {
+	pluginCatalog: PluginAgentCatalog | null;
 	definitions: ToolDefinition[];
 	step: RunModelStep;
 	text: string;
@@ -616,6 +618,7 @@ export class RunExecutionOwner {
 	): Promise<void> {
 		let version = command.version;
 		let previous: RunModelStep | null = null;
+		let pluginCatalog: PluginAgentCatalog | null = null;
 		for (let stepIndex = 1; stepIndex <= maxRequests; stepIndex++) {
 			let outcome: ModelStepOutcome | null;
 			try {
@@ -628,6 +631,7 @@ export class RunExecutionOwner {
 					signal,
 					compaction,
 					title,
+					pluginCatalog,
 				);
 			} catch (error) {
 				// A definite local rejection between rounds must settle the Root.
@@ -646,31 +650,31 @@ export class RunExecutionOwner {
 			if (outcome.terminal.finishReason === 'stop') {
 				return;
 			}
+			pluginCatalog = outcome.pluginCatalog;
 			const { step, terminal } = outcome;
 			try {
-				const results: { providerCallId: string; content: string }[] = [];
-				for (const proposal of terminal.proposals) {
-					compaction.assertHealthy();
-					let content: string;
-					try {
-						content = await this.tools.execute(
-							{
-								userId: command.userId,
-								appId: command.appId,
-								runId: command.runId,
-								modelStepIndex: step.stepIndex,
-								deadlineAt: command.deadlineAt,
+				compaction.assertHealthy();
+				if (!outcome.pluginCatalog) {
+					throw new AgentFailure('internal_failure');
+				}
+				const results = await this.tools.executeBatch(
+					{
+						pluginCatalog: outcome.pluginCatalog,
+						userId: command.userId,
+						appId: command.appId,
+						runId: command.runId,
+						modelStepIndex: step.stepIndex,
+						deadlineAt: command.deadlineAt,
 
-								onBackgroundFailure: (error) =>
-									this.failToolTask(command, signal, proposal.toolName, error),
-							},
-							proposal,
-							signal,
-						);
-					} catch (error) {
+						onBackgroundFailure: (error, toolName) =>
+							this.failToolTask(command, signal, toolName ?? 'tool_batch', error),
+					},
+					terminal.proposals,
+					signal,
+					(error, toolName) => {
 						this.runs.rememberFailure(command.userId, command.appId, command.runId, {
 							code: runFailureCode(error, true),
-							toolName: proposal.toolName,
+							toolName,
 						});
 						logDiagnostic(
 							this.logger,
@@ -679,16 +683,15 @@ export class RunExecutionOwner {
 							{
 								runId: command.runId,
 								stepIndex: step.stepIndex,
-								toolName: proposal.toolName,
+								toolName,
 								failureCode: runFailureCode(error, true),
 								aborted: signal.aborted,
 							},
 							error,
 						);
-						throw error;
-					}
-					results.push({ providerCallId: proposal.providerCallId, content });
-				}
+					},
+				);
+
 				if (signal.aborted || Date.now() >= command.deadlineAt || stepIndex === maxRequests) {
 					throw new AgentFailure('limit_exceeded');
 				}
@@ -813,6 +816,7 @@ export class RunExecutionOwner {
 		signal: AbortSignal,
 		compaction: CompactionSession,
 		title: TitleSession,
+		pluginCatalog: PluginAgentCatalog | null,
 	): Promise<ModelStepOutcome | null> {
 		if (signal.aborted) {
 			return null;
@@ -826,13 +830,19 @@ export class RunExecutionOwner {
 		if (isImage && Buffer.byteLength(command.prompt, 'utf8') > 16000) {
 			throw new AgentFailure('invalid_input');
 		}
-		const definitions =
-			!isImage && frozen.capabilities.supportsTools
-				? await this.tools.availableDefinitions(
-						{ userId: command.userId, appId: command.appId, runId: command.runId },
-						this.collaboration.definitions(participant),
-					)
-				: [];
+		const toolStep = !isImage
+			? await this.tools.prepareStep(
+					{ userId: command.userId, appId: command.appId, runId: command.runId },
+					frozen.capabilities.supportsTools ? this.collaboration.definitions(participant) : [],
+					command.prompt,
+					stepIndex,
+					signal,
+					pluginCatalog,
+				)
+			: null;
+		const definitions = toolStep?.definitions ?? [];
+		context.setInstructions(toolStep?.systemPrompt ?? '');
+
 		if (signal.aborted) {
 			return null;
 		}
@@ -854,7 +864,7 @@ export class RunExecutionOwner {
 				runId: command.runId,
 				stepIndex,
 				expectedRunVersion: version,
-				requestHash: this.stream.requestHash(frozen, messages, definitions),
+				requestHash: this.stream.requestHash(frozen, messages, definitions, undefined, snapshot.systemPrompt),
 				creationHash: command.requestHash,
 				now: Date.now(),
 			},
@@ -990,13 +1000,28 @@ export class RunExecutionOwner {
 		try {
 			// Dispatch awaited SQLite; reread revocation before opening the network.
 			await this.providers.guardCurrent(provider);
+			if (toolStep) {
+				await this.tools.validateStep(
+					{ userId: command.userId, appId: command.appId },
+					toolStep.pluginCatalog,
+					signal,
+				);
+			}
 			if (signal.aborted) {
 				throw new AgentFailure('provider_unavailable');
 			}
 			logDiagnostic(this.logger, 'debug', 'AGENT_MODEL_STREAM_STARTED', { runId: command.runId, stepIndex });
 			const events = isImage
 				? this.imageEvents(command, frozen, current, signal)
-				: this.stream.stream(frozen, messages, definitions, credential, signal);
+				: this.stream.stream(
+						frozen,
+						messages,
+						definitions,
+						credential,
+						signal,
+						undefined,
+						snapshot.systemPrompt,
+					);
 			for await (const event of events) {
 				// Also fence configuration changes made by a different server process.
 				await this.providers.guardCurrent(provider);
@@ -1056,7 +1081,13 @@ export class RunExecutionOwner {
 							result.step.runVersion,
 						);
 					}
-					return { step: result.step, text, terminal: event, definitions };
+					return {
+						step: result.step,
+						text,
+						terminal: event,
+						definitions,
+						pluginCatalog: toolStep?.pluginCatalog ?? null,
+					};
 				}
 				const result =
 					event.kind === 'text'
@@ -1092,6 +1123,33 @@ export class RunExecutionOwner {
 				{ runId: command.runId, stepIndex, aborted: signal.aborted, failureCode: runFailureCode(error) },
 				error,
 			);
+			if (error instanceof ProviderRequestFailure && error.outcome === 'rejected' && !signal.aborted) {
+				const scope = { userId: command.userId, appId: command.appId, runId: command.runId };
+				const closed = await Promise.allSettled([
+					Promise.resolve().then(() => title.close()),
+					Promise.resolve().then(() => compaction.close()),
+					Promise.resolve().then(() => this.collaboration.drain(scope)),
+					Promise.resolve().then(() => this.tools.drainRun(scope)),
+				]);
+				const failures = closed.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+				if (failures.length) {
+					await this.settleUnknownStep(
+						command,
+						current,
+						title,
+						aggregateToolFailures(failures, 'Refused model request resource drain failed'),
+					);
+					return null;
+				}
+				const result = await this.steps.finish(this.mutation(command, current), {
+					state: 'failed',
+					failureCode: 'PROVIDER_REQUEST_REJECTED',
+				});
+				if (result.status === 'step_conflict') {
+					await this.settleUnknownStep(command, current, title, null);
+				}
+				return null;
+			}
 			if (drainingResources || error instanceof ToolExecutionUnknown) {
 				// The main response has not attempted its terminal write. An
 				// independent auxiliary drain failure cannot skip that CAS, even

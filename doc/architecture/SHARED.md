@@ -468,3 +468,14 @@ plugins/http 的 AgentPluginInstallationListResponse 为 GET /plugins/installati
 ### 插件 App 目录契约
 
 App 来源仅为真实签名插件安装；删除 AgentCreateAppRequest/Response 及其 codec，App 单项仍消费 readAgentAppResponse。AgentAppDefinitionView 只保留 id/version/displayName/capabilities，删除无意义的默认启用字段；HTTP 与 Workspace 复用同一严格 decoder，双端 mapper 及测试消费者同步，不接受旧字段或旧创建接口。Shared 不含内置 ID、迁移事实或签名秘密。
+
+## Agent 插件贡献与模型拒绝
+
+1. **职责与范围**：agent/plugins/agent-extension为签名包与隔离后端的真实SDK契约；governance/values增加plugin.invoke，runs/values增加PROVIDER_REQUEST_REJECTED，分别供双端授权展示及后端步骤消费者使用。
+2. **子功能与目录**：沿现有agent/plugins、governance和runs，不将宿主系统提示、调度池、存储快照或运行实例放入Shared。
+3. **依赖方向**：Backend包Adapter、隔离RPC Adapter和插件Backend SDK消费同一解码/类型；Frontend复用能力基础值和原授权编辑器。SDK type-only依赖不把宿主实现交付插件。
+4. **类型与转换**：贡献精确字段schemaVersion=1/role/toolNames(null或唯一名称数组)/beforeStep/tools(name/description唯一数组)；context请求为kind/runId/stepIndex/prompt，tool请求为kind/runId/stepIndex/operationId/name/argumentsJson，结果只含text。UUID、正安全整数、名称及JSON对象严格解码，完整编码沿原512KiB IPC预算预留1KiB封装。
+5. **入口与安装**：Shared包导出agent-extension及BackendModule可选agent(input,signal)方法；前后端设置和官方Full-stack示例同步。SDK版本仍1，官方新包下载要求Host 1.0.3，不转换旧贡献格式。
+6. **数据、事务与并发**：Shared只定义外部形状，不执行授权、事务或版本检查；插件可选贡献表示该App是否提供此能力，不是历史兼容分支。模型步骤失败码与底层HTTP状态分别表达，不将供应商错误正文公开。
+7. **生命周期与失败**：插件上下文、声明和结果不是授权；实时grant、安装revision、单次审批、派发意图及未知收尾由Backend原owner保证。取消signal不表示远端副作用回滚。
+8. **当前能力与验收**：源码、静态与包构建记录归testing；真实子进程调用、撤权/升级、并发故障与模型效果仍待D17专项，不复用历史553项回归结论。

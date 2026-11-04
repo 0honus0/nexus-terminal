@@ -284,12 +284,9 @@ export class ModelSdkRequest {
 						},
 						failure,
 					);
-					// Certificate errors cannot improve with backoff. Other pre-response
-					// connection failures use the SDK's limited retry policy.
-					if (failure.kind === 'tls' || this.signal.aborted) {
-						throw this.failLocally(failure);
-					}
-					throw failure;
+					// No response does not prove that a paid request was never accepted.
+					// Stop SDK retries and preserve the original technical failure.
+					throw this.failLocally(failure);
 				}
 				try {
 					this.accepted = response.ok;
@@ -322,12 +319,9 @@ export class ModelSdkRequest {
 						throw new ModelNetworkFailure('response_invalid');
 					}
 					const responseHeaders = new Headers([...response.headers]);
-					// A compatible provider cannot force retries for authentication or
-					// input failures via x-should-retry. Backoff itself remains SDK-owned.
-					const transient = [408, 409, 429].includes(response.status) || response.status >= 500;
-					if (!transient) {
-						responseHeaders.set('x-should-retry', 'false');
-					}
+					// Only explicit rate-limit refusal is safe to retry. Gateway failures
+					// and missing responses may hide accepted work; provider headers cannot override this.
+					responseHeaders.set('x-should-retry', response.status === 429 ? 'true' : 'false');
 					return new Response(this.responseBody?.stream ?? null, {
 						status: response.status,
 						statusText: response.statusText,

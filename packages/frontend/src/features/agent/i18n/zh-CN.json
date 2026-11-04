@@ -231,6 +231,10 @@
                 "desc": "通过声明的 App Intent 向其它 App 发送或接收数据"
               }
             }
+          },
+          "plugin.invoke": {
+            "name": "插件工具",
+            "desc": "调用当前应用声明的隔离后端工具；仍需当前授权和单次审批。"
           }
         },
         "installationUnavailable": "插件安装信息不可用，请重新读取"
@@ -1966,6 +1970,28 @@
         "storage_unavailable": "后端暂时无法读取或写入数据，请检查服务状态。",
         "internal_failure": "后端处理发生内部错误，请检查后端日志。"
       }
+    },
+    "taskNotice": {
+      "title": "任务更新",
+      "approval": "等待你的批准",
+      "needsReview": "需要核对",
+      "dismiss": "收起本条提醒",
+      "view": "查看任务",
+      "pendingApprovals": "有 {count} 项待审批",
+      "approvalCount": "{count} 项待审批",
+      "more": "还有 {count} 条更新",
+      "toolCount": "工具调用：{count} 次",
+      "unknownHint": "任务已停止，请打开会话核对执行结果。",
+      "status": {
+        "pending": "任务已接收",
+        "running": "任务正在执行",
+        "completed": "任务已完成",
+        "failed": "任务执行失败",
+        "unknown": "执行结果需要核对",
+        "cancelled": "任务已取消"
+      },
+      "detailsHint": "打开任务查看执行详情。",
+      "viewDetails": "详情"
     }
   }
 }

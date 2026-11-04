@@ -5,7 +5,13 @@ import { isPluginIntentRpc } from './plugin-intent-service.js';
 import type { PluginIntentService } from './plugin-intent-service.js';
 import type { PluginIntentActor } from '../model/plugin-intent-types.js';
 import { FailureSummary } from '../../../../platform/lifecycle/failure-summary.js';
-import { AgentFailure, aggregateAgentFailures, isAgentDrainFailure } from '../../agent-failure.js';
+import {
+	AgentFailure,
+	ToolExecutionUnknown,
+	ToolCleanupFailure,
+	aggregateAgentFailures,
+	isAgentDrainFailure,
+} from '../../agent-failure.js';
 import type { PluginModel } from '../model/plugin-model.js';
 import type {
 	PluginRuntimeOwner,
@@ -16,6 +22,7 @@ import type {
 	PluginPublisher,
 } from '../model/plugin-types.js';
 import { authorizePluginContent, decidePluginData } from './plugin-rules.js';
+import type { PluginAgentInvocation } from '../model/plugin-contribution-types.js';
 
 interface RuntimeConstruction {
 	userId: number;
@@ -27,9 +34,70 @@ interface RuntimeConstruction {
 }
 
 export class PluginRuntimeService {
+	invokeAgent(
+		userId: number,
+		appId: string,
+		revision: number,
+		input: PluginAgentInvocation,
+		signal: AbortSignal,
+		timeoutMs: number,
+	): Promise<string> {
+		const deadline = Date.now() + timeoutMs;
+		const lifetime = AbortSignal.any([signal, this.stopSignal.signal, AbortSignal.timeout(timeoutMs)]);
+		return this.track(async () => {
+			const key = userId + ':' + appId;
+			if (this.starts.has(key) || !this.owners.has(key)) {
+				await this.start(userId, appId, lifetime);
+			}
+			const owner = this.owners.get(key);
+			if (!owner || owner.closing || owner.revision !== revision) {
+				throw new AgentFailure('version_conflict');
+			}
+			const combined = AbortSignal.any([lifetime, owner.stop.signal]);
+			const pending = owner.agentLane.then(async () => {
+				if (combined.aborted || Date.now() >= deadline || owner.closing || !owner.instance) {
+					throw new AgentFailure('provider_unavailable');
+				}
+				await this.model.runtimeInstallation(userId, appId, (current, publisher, enabled) => {
+					authorizePluginContent(current, publisher, enabled);
+					if (current.revision !== revision) {
+						throw new AgentFailure('version_conflict');
+					}
+				});
+				if (combined.aborted || owner.closing || Date.now() >= deadline) {
+					throw new AgentFailure('provider_unavailable');
+				}
+				return owner.instance.agent(input, combined, Math.max(1, deadline - Date.now()));
+			});
+			owner.agentLane = pending.then(
+				() => undefined,
+				() => undefined,
+			);
+			owner.pending.add(pending);
+			try {
+				return await pending;
+			} catch (error) {
+				if (error instanceof ToolExecutionUnknown) {
+					// The Run owns uncertain effects; retire the instance independently.
+					try {
+						await this.closeBoundOwner(owner);
+					} catch (cleanup) {
+						throw new ToolCleanupFailure({
+							cause: new AggregateError([error, cleanup], 'Plugin invocation and retirement unconfirmed'),
+						});
+					}
+				}
+				throw error;
+			} finally {
+				owner.pending.delete(pending);
+			}
+		}, true);
+	}
+
 	private readonly starts = new Map<string, RuntimeConstruction>();
 	private readonly owners = new Map<string, PluginRuntimeOwner>();
 	private reservedSlots = 0;
+	private managementTasks = 0;
 	private readonly pending = new Set<Promise<unknown>>();
 	private readonly stopSignal = new AbortController();
 	private closing = false;
@@ -123,6 +191,7 @@ export class PluginRuntimeService {
 		}
 		const instanceId = randomUUID();
 		const owner: PluginRuntimeOwner = {
+			agentLane: Promise.resolve(),
 			instanceId,
 			userId,
 			appId,
@@ -463,22 +532,33 @@ export class PluginRuntimeService {
 		}
 	}
 
-	private track<T>(work: () => Promise<T>): Promise<T> {
-		if (this.closing || this.pending.size >= 32) {
+	private track<T>(work: () => Promise<T>, runInvocation = false): Promise<T> {
+		if (this.closing || (!runInvocation && this.managementTasks >= 32)) {
 			return Promise.reject(new AgentFailure('provider_unavailable'));
 		}
 		const task = Promise.resolve().then(work);
 		this.pending.add(task);
-		void task.then(
-			() => this.pending.delete(task),
-			(error) => {
-				this.pending.delete(task);
-				if (isAgentDrainFailure(error)) {
-					this.failures.record(error);
-					this.quiesce();
-				}
-			},
-		);
+		if (!runInvocation) {
+			this.managementTasks++;
+		}
+
+		const untrack = () => {
+			this.pending.delete(task);
+			if (!runInvocation) {
+				this.managementTasks--;
+			}
+		};
+
+		void task.then(untrack, (error) => {
+			untrack();
+			if (
+				isAgentDrainFailure(error) &&
+				!(error instanceof ToolExecutionUnknown && !(error instanceof ToolCleanupFailure))
+			) {
+				this.failures.record(error);
+				this.quiesce();
+			}
+		});
 		return task;
 	}
 

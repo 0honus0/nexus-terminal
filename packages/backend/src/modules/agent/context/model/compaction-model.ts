@@ -24,7 +24,7 @@ function toStored(command: CompactionCommand): StoredCompactionCommand {
 		creationHash: command.creationHash,
 		requestHash: command.requestHash,
 		now: command.now,
-		snapshot: toStoredContext(command.snapshot.messages, command.snapshot.sources),
+		snapshot: toStoredContext(command.snapshot.messages, command.snapshot.sources, command.snapshot.systemPrompt),
 		cut: command.cut,
 		estimatedTokens: command.estimatedTokens,
 	};

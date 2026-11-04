@@ -195,6 +195,7 @@ class NodeModuleInstance implements IsolatedModuleInstance {
 			}
 			if (
 				message.ok &&
+				item.method !== 'invoke' &&
 				(item.method === 'health' ? typeof message.value !== 'boolean' : message.value !== null)
 			) {
 				throw new ModuleRuntimeFailure('protocol_invalid');
@@ -231,20 +232,58 @@ class NodeModuleInstance implements IsolatedModuleInstance {
 		);
 	}
 
-	private control(method: string, deadline?: number): Promise<unknown> {
+	private control(
+		method: string,
+		deadline?: number,
+		inputJson?: string,
+		timeoutMs = 15000,
+		signal?: AbortSignal,
+	): Promise<unknown> {
 		if (this.failure || this.pending.size >= 8 || this.sequence >= Number.MAX_SAFE_INTEGER) {
 			return Promise.reject(this.failure ?? new ModuleRuntimeFailure('unavailable'));
 		}
 		const id = ++this.sequence;
 		const result = new Promise<unknown>((resolve, reject) => {
-			const timer = setTimeout(() => this.fail(new ModuleRuntimeFailure('execution_unknown')), 15000);
+			const timer = setTimeout(() => this.fail(new ModuleRuntimeFailure('execution_unknown')), timeoutMs);
 			this.pending.set(id, { method, resolve, reject, timer });
 		});
 		void result.catch(() => undefined);
+
+		const abort = () => {
+			void this.write({ kind: 'cancel', id }).catch(() => undefined);
+		};
+
 		void this.write(
-			deadline === undefined ? { kind: 'control', id, method } : { kind: 'control', id, method, deadline },
+			inputJson !== undefined
+				? { kind: 'control', id, method, input: JSON.parse(inputJson) }
+				: deadline === undefined
+					? { kind: 'control', id, method }
+					: { kind: 'control', id, method, deadline },
 		);
-		return result;
+		signal?.addEventListener('abort', abort, { once: true });
+		if (signal?.aborted) {
+			abort();
+		}
+		return result.finally(() => signal?.removeEventListener('abort', abort));
+	}
+
+	invoke(inputJson: string, signal: AbortSignal, timeoutMs: number): Promise<unknown> {
+		if (this.closing || signal.aborted) {
+			return Promise.reject(new ModuleRuntimeFailure('unavailable'));
+		}
+		try {
+			const input: unknown = JSON.parse(inputJson);
+			if (
+				Buffer.byteLength(
+					JSON.stringify({ kind: 'control', id: Number.MAX_SAFE_INTEGER, method: 'invoke', input }) + '\n',
+				) > MAX_MESSAGE_BYTES
+			) {
+				throw new ModuleRuntimeFailure('protocol_invalid');
+			}
+		} catch (cause) {
+			return Promise.reject(new ModuleRuntimeFailure('protocol_invalid', { cause }));
+		}
+		return this.control('invoke', undefined, inputJson, timeoutMs, signal);
 	}
 
 	async activate(): Promise<void> {

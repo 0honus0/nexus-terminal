@@ -105,6 +105,9 @@ importers:
       otplib:
         specifier: 13.6.0
         version: 13.6.0
+      p-limit:
+        specifier: 3.1.0
+        version: 3.1.0
       p-retry:
         specifier: ^8.0.1
         version: 8.0.1
@@ -244,6 +247,9 @@ importers:
       '@devolutions/iron-remote-desktop-rdp':
         specifier: file:vendor/ironrdp/iron-remote-desktop-rdp-62246b364a02.tgz
         version: file:packages/frontend/vendor/ironrdp/iron-remote-desktop-rdp-62246b364a02.tgz
+      '@floating-ui/vue':
+        specifier: 2.0.1
+        version: 2.0.1(vue@3.5.44(@typescript/typescript6@6.0.2))
       '@fortawesome/fontawesome-free':
         specifier: ^7.3.1
         version: 7.3.1

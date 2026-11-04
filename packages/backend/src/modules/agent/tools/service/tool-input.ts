@@ -87,6 +87,22 @@ export function toolInput(definition: ToolDefinition, argumentsJson: string): To
 			}
 		}
 	}
+	if (definition.name === 'plugin_tool_call') {
+		const name = text(value.name, 64),
+			version = text(value.version, 64),
+			sha256 = text(value.sha256, 64);
+		const argumentsJson = text(value.argumentsJson, 128 * 1024);
+		let args: unknown;
+		try {
+			args = JSON.parse(argumentsJson);
+		} catch {
+			throw new AgentFailure('invalid_input');
+		}
+		if (!/^[a-z][a-z0-9_]{0,63}$/u.test(name) || !/^[a-f0-9]{64}$/u.test(sha256) || !isRecord(args)) {
+			throw new AgentFailure('invalid_input');
+		}
+		return { kind: 'plugin', name, version, sha256, argumentsJson };
+	}
 	if (definition.name === 'image_models_list') {
 		return {
 			kind: 'image_models',

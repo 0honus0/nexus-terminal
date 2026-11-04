@@ -4,9 +4,61 @@
 
 ## 当前验收基线
 
-最新完整远程 [41812361893](https://github.com/0honus0/nexus-terminal/actions/runs/41812361893) 验证 `main/ac314e5892ebfc8010498efd42a136e293c2da53`：553个场景全部通过，质量检查、Docker smoke和8个测试分片全部成功，耗时估算任务成功，截图更新按正常条件跳过。日志核对553条唯一passed记录，零失败、重复执行、flaky或跳过场景汇总。覆盖本轮全部累积源码及新增硬限制配置回归；不代表实际800次模型压力、真实弱网/手机、远端RDP或未列边界实测。后续文档收口只更新PLAN/testing，不改变被测产品源码；本次手动任务只上传新的耗时估算产物，没有自动提交。
+最新完整远程 [41812361893](https://github.com/0honus0/nexus-terminal/actions/runs/41812361893) 验证 `main/ac314e5892ebfc8010498efd42a136e293c2da53`：553个场景全部通过，质量检查、Docker smoke和8个测试分片全部成功，耗时估算任务成功，截图更新按正常条件跳过。日志核对553条唯一passed记录，零失败、重复执行、flaky或跳过场景汇总。覆盖本轮全部累积源码及新增硬限制配置回归；不代表实际800次模型压力、真实弱网/手机、远端RDP或未列边界实测。该轮后继f789446f只更新PLAN/testing，不改变被测产品源码；本次手动任务只上传新的耗时估算产物，没有自动提交。当前未提交宿主工作区增加Agent最小化提醒及执行/插件扩展，独立插件已发布1.0.3；各自源码/静态与待验见下方，不纳入此553项通过范围。
 
 上一轮发布 [41792924820](https://github.com/0honus0/nexus-terminal/actions/runs/41792924820) 的 dev/linux-amd64 镜像仍基于 `4a3074da6f8ab7e515a017f949ce03b1d059dc88`；本轮没有发布镜像或更新指定主机、容器、数据库。此前指定主机维护证据仍在文末。真实手机/切换运营商网络、外部供应商、安全硬件、扩大故障及持久介质边界仍按 [待验与外部依赖](../PLAN.md#待验与外部依赖) 保留；独立 Nexus Agent 1.0.2 的签名发布/产物证据见下方记录，正式远程受控插件夹具不能替代公网新包实际安装和模型角色效果。
+
+## Agent 执行补充回归与 amd dev 交付（2026-11-04，进行中）
+
+用户最新授权补充E2E、提交推送plugin与本体，并在完整远程测试通过后发布main的amd dev。宿主从f789446f工作区接续，保留最小化提醒及全部六项执行优化；官方插件d5dd455/v1.0.3已发布，复核main与tag、公开Release一致且插件工作区干净。本轮不更新远程部署、用户数据库或运行本地行为测试。产物集中`/tmp/nexus-agent-flow-e2e-release-20261104`。
+
+新增正式入口`agent/execution-flow.spec.ts`纳入backend分片，运行真实应用HTTP/SQLite/OpenSSH/签名包与隔离子进程回归；模型HTTP只控制供应商输出。23项模型/上下文场景覆盖双协议宿主指引与Skill元数据、实际快照内容/hash、精确Skill正文读取、明确4xx拒绝、429最多三次总尝试及成功恢复、408/409/5xx和连接无响应不重放、Unicode流前缀/工具边界、半流断开和取消后运输关闭。四项插件场景覆盖role/工具子集、逐步hook、独立进程与文件访问隔离、单次批准/原operationId、错误hash派发前拒绝、撤权未消费，以及畸形结果保留原未知与实例退役后新意图。三项调度场景使用真实ToolService及工具分类，控制I/O屏障核对并行预算、完成原序、exclusive前后隔离、失败/取消停止补位与已启动任务收敛；它们是调度隔离回归，不冒充真实SSH吞吐实测。
+
+`agent/task-notices.spec.ts`新增1280/390/320px正式浏览器场景：最小化本身不弹、新审批变化才弹、后台焦点保持、卡片边界、快速批准的原回执、完成预览/8秒收起、再次最小化不补弹旧完成。测试复用原UI入口及严格Workspace回执，未改产品布局。模型脚本及签名包夹具支持本批场景；既有消费者参数和正常断言保留。
+
+提交前静态：Node22.23.1、pnpm11.28.10；根check、双端build、Shared check及新E2E严格TypeScript检查退出0，日志check.log/build.log/shared-check.log/e2e-types.log。首次手工tsc触发新版TS显式文件与tsconfig冲突，按工具要求加`--ignoreConfig`后通过，未放宽strict或改依赖。最终全仓ESLint/Prettier与diff通过，format.log保留；最终新增wrapper的显式TAP reporter修改再做定向格式/lint及类型核对。此时尚无本轮远程行为PASS或新镜像，不使用旧553项证明当前工作区。
+
+## Agent 执行与插件扩展（2026-11-04，源码静态及插件发布）
+
+宿主基线main/f789446f及前序未提交最小化提醒；Node v22.23.1、pnpm 11.28.10。本轮按用户“全部修改”、工具接口可破坏性更新、插件更新后发布及同后端格式的授权实施。产物集中 `/tmp/nexus-agent-flow-plugin-implementation-20261104`，全部原目录保留；无本轮本地行为/浏览器/CDP/E2E、真实模型请求或用户数据库维护。宿主未提交推送、未发镜像、未部署。
+
+前置只读参考固定为DeepSeek Harness `8bd073392eef6f54e921a093b95076248eb08cbb`（core/tools的batch/pipeline、core/agent-loop、skill/tool-skill、architecture文档）、pi-mono `0efe50cb6dde31b19fb5931c96db0e7562b788e2`（agent-loop）及官方插件 `790ccdec91c4c88632d9f90f0378e41d0f9cc4d2`。参考源码保留 `/tmp/nexus-agent-flow-plugin-audit-20261104`；没有安装/执行外部项目，不将其性能结论套到本项目。
+
+| 功能            | 最终调用链与审核覆盖                                                                                                                                                                                                                                                                                                                                                      |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 指引及Skill目录 | Run→prepareStep→Plugins签名目录→Context快照/预算/hash→Chat system / Responses instructions；同Run缓存首次验签目录、每轮和派发前复核安装revision。Skill仅注入元数据，正文精确读取；usage锚点、自动压缩及存储展开保留当前systemPrompt。                                                                                                                                     |
+| 工具调度        | Run→executeBatch→逐项准入/审批/账本；显式parallel读取经p-limit有界重叠，exclusive为屏障，结果原序；失败/取消停止排队补位，已启动项allSettled排空，原工具名/失败码诊断保留；未派发排队取消不伪造独立失败，多项确定拒绝不因聚合被误分类为存储/资源未知。没有照搬DSH固定并发10。                                                                                             |
+| 文本合批        | RunModelStream→Platform modelTextBatches→原appendText事务→事件；复用16ms节奏及128KiB帧预算，最多一个预读。控制/完成/已知断流先交付前缀；取消先停止真实producer，再等待预读/return；仅已分类取消免于二次报错，独立晚失败及cleanup_failed保留。                                                                                                                             |
+| 审批唤醒        | Governance.subscribe/RunChanges→watch→普通Tool/ACP内部许可；先订阅再读取，dirty避免丢唤醒；通知不代替事务授权，仍保留1秒跨进程/到期复核，finally退订/清timer。                                                                                                                                                                                                            |
+| 模型拒绝        | Platform响应阶段→ModelNetworkFailure→ProviderRequestFailure→Run failed与Shared步骤码；仅开流前明确4xx拒绝可确定失败，先排空辅助/Job/Child。429沿SDK原退避，所有其它HTTP状态禁止重试，连接无响应停止SDK重试；5xx/超时/半流/清理未确认保留unknown，不被后一次拒绝抹除。                                                                                                     |
+| 插件贡献        | agent.json严格解码→Model应用投影→签名目录→受审批plugin_tool_call→绑定实例agent RPC；role/toolNames/beforeStep/tools，context.read与plugin.invoke各自复核，实例内串行、期限含启动/排队、pending/停机/晚结果归原owner；Run调用不复用管理队列32项门槛，活跃实例不重复构造/整包验签。工具效果未知但实例已确认关闭时保留Run效果围栏；只有资源/存储未确认才保留实例并阻断模块。 |
+
+两轮审核覆盖全部新增/修改的Context/Tools/Governance/Plugins/Run、Shared SDK/能力/失败取值、Platform模型/隔离协议，以及前端能力选择/三语消费者。Model和Adapter白名单转换独立；SQL仍只在Adapter。新systemPrompt为快照必填，v1结构签名变为 `backend-next-v1-initial-20261104-agent-instructions`，未兼容、迁移或删除旧开发库。历史角色与运行中输入规则未改变；前序最小化提醒保留。
+
+静态执行：首轮ToolModel联合遗漏、格式、合批reader类型推导以及最后一轮错误导入均已修正。`check-6.log`、`check-final-2.log`根check退出0；`build-final-2.log`双端生产构建及`shared-check.log`类型退出0；`format-final.log`全仓ESLint/Prettier退出0。最后诊断/HTTP重试/取消与实例准入修补后，`closeout-check.log`根check及`closeout-build.log`双端生产构建退出0，`closeout-shared-check.log`Shared类型退出0；最终后端`final-backend-check.log`/`final-backend-build.log`退出0，最后相关文件ESLint通过。`final-format.log`全仓ESLint/Prettier及`final-diff.log`退出0；收口文档另做定向Prettier/diff。中途一次E2E文档格式未整理的失败已由最终格式通过覆盖。没有新增/运行本轮行为测试，静态结果不替代运行验收。
+
+独立插件源码在专用目录plugins worktree，提交 `d5dd455e209fffb86433cedb7044c507a0d848b3` 已推送main。Nexus Agent 1.0.3贡献简短角色与原两份Skill；Full-stack 1.0.3贡献上下文钩子及backend_status只读App KV示例。复制后端Prettier配置及函数空行规则，统一Tab/单引号/分号/120列/控制语句括号、JSON/YAML两空格；仓库增加format/lint/check脚本，Validate/Release均执行冻结锁安装及格式/lint/包校验。`plugin-check-release.log`退出0，远程[41820776547](https://github.com/0honus0/nexus-agent-plugins/actions/runs/41820776547)验证精确源码，draft签名构建[41820876070](https://github.com/0honus0/nexus-agent-plugins/actions/runs/41820876070)成功。
+
+发布[v1.0.3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.3)已公开为latest，发布事件的[41821088972](https://github.com/0honus0/nexus-agent-plugins/actions/runs/41821088972)再次构建成功。draft下载先核对Ed25519官方pin/签名、全部文件hash/大小、catalog URL/版本与逐文件提交源码，再公开；latest目录及两包匿名HTTP200，public复核同样签名及源码。产物/元数据/脚本与核验日志在release-1.0.3。两包均要求Host>=1.0.3，现有安装必须显式升级，不存在旧协议转换。
+
+| 公开包                    | 大小        | SHA-256                                                          |
+| ------------------------- | ----------- | ---------------------------------------------------------------- |
+| nexus.agent-1.0.3.tar     | 20480 bytes | 904a2238a05ccfd393c2faa61d53e22bc41044dbd67e8809d2061c53e456f6de |
+| nexus.fullstack-1.0.3.tar | 20480 bytes | 633775837fe37b675a21e4c65b8d15bed2c3d2f6205a93f8cfc07e826409ace6 |
+
+待正式验收：中文任务Skill选择及正文按需读取；目录更新/撤权、上下文容量/压缩/快照；读取并发与exclusive排序、取消/混合失败/排空；普通与ACP批准/拒绝/期限/CAS/跨进程；429退避、明确拒绝与5xx/断流不重放；上下文/工具RPC及畸形输出、超时、升级/卸载/发布者撤权；实际首字、事务次数、吞吐和取消延迟。签名包核验不证明运行行为或性能，不沿用历史553项或旧插件安装证据代验。
+
+## Agent 最小化任务提醒（2026-11-04，源码/静态）
+
+基线main/f789446f，本批未提交工作区。用户授权最小化时的小型任务更新/快速审批卡片，并明确仅变化时短暂弹出，不常驻。仅新原生任务提醒UI及Host/runtime观察，原完整窗口、后端与Shared不变；按PLAN D17不新增/运行行为、浏览器/CDP或本地/远程E2E，不发布部署或操作数据库。553项正式通过只属于ac314e58，不能用于担保本批提醒。日志集中 `/tmp/nexus-agent-task-notices-20261104`，保留全部现有产物。
+
+实现：复用当前Surface/useNativeRuns的原任务订阅，最小化继续、标签隐藏/关闭/卸载/身份撤销停止；Host实例登记带注销保护的任务投影，只按Run身份/状态、审批身份/版本和语义失败变化触发，正文/用量/语言/审批排序不会反复弹。初始历史终态只作基线；同任务合并、多任务排队，新审批优先但不替换悬停/键盘操作中的卡片。8秒收起，悬停/键盘操作或标签隐藏暂停；触摸点击不会因悬停/焦点永久暂停。待审批标记保留，按最近expiresAt单个本地timer更新过期标记/按钮，不增加服务端轮询。
+
+快速动作复查当前Run/Thread、审批版本/hash/期限和blocked，调用原mutate意图、CAS和operationId，不开放最小化创建/续发/取消或未知重试。过期、冲突、未知时进入完整会话核对。卡片只呈现安全摘要/目标/风险与有限结果预览，用量未到不补0；正文保持纯文本，不执行模型HTML。定位使用已安装Floating UI 2.0.1，Frontend新增直接依赖，lock仅新增该importer引用，无包版本升级；原Popover因全局FocusScope/DismissableLayer不适用于自动提醒，最终没有引入其焦点/键盘/背景副作用。保持328px最大卡片，实际宽高由定位库/视口收缩；手机按钮整枚换行，不在按钮内拆字。
+
+两轮源码复核：第一轮沿minimized→runtime available/canReadUpdates→原订阅→投影→Host变化/合并→通知→原审批mutate；第二轮核对空Run在途、首个历史快照、完成/unknown与剩余正文、多个App/版本、App卸载/登出、语义失败与语言变化、过期/CAS/双击/未知、队列切换/触摸焦点和计时清理，以及定位监听释放/无自动聚焦/卡片内Esc/贴边标记。初次类型命令错误地从根调用vue-tsc，已改为Frontend包入口；首个实现的时钟API不匹配安装版本，最终删除额外时钟，统一使用Host的过期时点。首轮根check发现定位中apply声明间距，已按原规则修正。最终 `pnpm run check` 与 `pnpm run build:frontend` 均退出0（check-final.log/build-final.log）；全量 `pnpm run format:all:check` 和 `git diff --check` 通过，最终文档定向格式复核通过。未提交/推送，本批产物保留。
+
+待正式回归：只有真实任务变化短暂弹、8秒后隐藏且流式输出不复活、最小化本身不弹/旧历史不补弹、多App合并/审批优先/关闭单条、浏览器隐藏/恢复与终态续读、批准/拒绝/多审批及过期/冲突/未知写、登出与旧卸载不影响新实例、终端持续输入/其它弹窗焦点不受影响、桌面贴边/拖动和320/390px手机三语布局/真实软键盘。无本批浏览器截图或行为PASS，不以源码/构建替代实机验收。
 
 ## 累积变更审核与正式远程 E2E（2026-11-04，已完成）
 

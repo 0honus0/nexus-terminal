@@ -59,6 +59,7 @@ export function useNativeRuns(
 	active: () => boolean,
 	threadBusy: () => boolean,
 	canStart: () => boolean,
+	observeMinimized: () => boolean,
 ) {
 	const capabilities = useRuntimeFeatureCapabilities();
 	const threadApi = createNativeThreadApi();
@@ -169,7 +170,7 @@ export function useNativeRuns(
 				run.value = originalRun;
 			}
 		},
-		active,
+		() => active() || (observeMinimized() && run.value !== null),
 		{ retainOnView: true, notifySuccess: false, notifyFailure: false, notifyFailureDetails: true },
 	);
 	const connections = computed(() =>
@@ -513,7 +514,7 @@ export function useNativeRuns(
 	function canReadUpdates(): boolean {
 		return (
 			!disposed &&
-			active() &&
+			(active() || observeMinimized()) &&
 			!document.hidden &&
 			scope.value !== null &&
 			run.value !== null &&
@@ -659,8 +660,11 @@ export function useNativeRuns(
 	}
 
 	async function mutate(action: NativeRunAction | null, retry = false): Promise<void> {
-		if (!active() || operation.busy.value || threadBusy() || operation.refreshRequired.value || !scope.value)
+		// Minimized controls can decide an existing approval, never create, append or retry work.
+		const available = active() || (observeMinimized() && action?.kind === 'approve' && !retry);
+		if (!available || operation.busy.value || threadBusy() || operation.refreshRequired.value || !scope.value) {
 			return;
+		}
 		if (pending.value !== null && (!retry || !inspected.value)) return;
 		if (pending.value === null) {
 			if (!action) return;
@@ -755,7 +759,7 @@ export function useNativeRuns(
 	document.addEventListener('visibilitychange', onVisibility);
 	window.addEventListener('pageshow', onVisibility);
 	watch(
-		active,
+		() => active() || (observeMinimized() && run.value !== null),
 		(value) => {
 			if (!value) stopUpdates();
 			else if (scope.value === null) void readScope();

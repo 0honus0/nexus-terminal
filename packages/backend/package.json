@@ -1,6 +1,6 @@
 {
   "name": "@nexus-terminal/backend",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "type": "module",
   "scripts": {
@@ -26,6 +26,7 @@
     "nodemailer": "^10.3.1",
     "openai": "7.47.0",
     "otplib": "13.6.0",
+    "p-limit": "3.1.0",
     "p-retry": "^8.0.1",
     "pino": "catalog:",
     "proxy-addr": "^2.0.8",

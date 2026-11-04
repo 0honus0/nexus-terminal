@@ -50,5 +50,6 @@ export async function expandAutomaticContext(
 	return {
 		messages: [...record.source.messages.slice(0, record.cut), ...context.messages.slice(offset)],
 		sources: context.sources,
+		systemPrompt: context.systemPrompt,
 	};
 }

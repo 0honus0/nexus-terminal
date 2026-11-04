@@ -231,6 +231,10 @@
                 "desc": "宣言された App Intent を通じて他の App とデータを送受信します"
               }
             }
+          },
+          "plugin.invoke": {
+            "name": "プラグインツール",
+            "desc": "現在のアプリが宣言した隔離バックエンドツールを呼び出します。権限と呼び出しごとの承認が必要です。"
           }
         },
         "installationUnavailable": "プラグインのインストール情報を取得できません。再読み込みしてください。"
@@ -1966,6 +1970,28 @@
         "storage_unavailable": "バックエンドのデータストレージを一時的に利用できません。",
         "internal_failure": "バックエンドで内部エラーが発生しました。ログを確認してください。"
       }
+    },
+    "taskNotice": {
+      "title": "タスクの更新",
+      "approval": "承認が必要です",
+      "needsReview": "確認が必要です",
+      "dismiss": "この通知を閉じる",
+      "view": "タスクを開く",
+      "pendingApprovals": "承認待ち {count} 件",
+      "approvalCount": "承認待ち {count} 件",
+      "more": "他に {count} 件の更新",
+      "toolCount": "ツール呼び出し：{count} 回",
+      "unknownHint": "タスクは停止しました。会話を開いて実行結果を確認してください。",
+      "status": {
+        "pending": "タスクを受け付けました",
+        "running": "タスクを実行中",
+        "completed": "タスクが完了しました",
+        "failed": "タスクに失敗しました",
+        "unknown": "実行結果を確認してください",
+        "cancelled": "タスクをキャンセルしました"
+      },
+      "detailsHint": "タスクを開いて詳細を確認できます。",
+      "viewDetails": "詳細"
     }
   }
 }

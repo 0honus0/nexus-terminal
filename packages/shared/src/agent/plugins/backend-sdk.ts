@@ -1,5 +1,6 @@
 import type { AgentPluginRpcInput, AgentPluginRpcResult } from './events.js';
 import type { AgentErrorResponse } from '../http.js';
+import type { AgentPluginAgentRequest, AgentPluginAgentResult } from './agent-extension.js';
 
 export interface AgentPluginBackendContext {
 	protocol: 1;
@@ -23,6 +24,10 @@ export interface AgentPluginBackendActivation {
 }
 
 export interface AgentPluginBackendModule {
+	agent?(
+		input: AgentPluginAgentRequest,
+		signal: AbortSignal,
+	): Promise<AgentPluginAgentResult> | AgentPluginAgentResult;
 	activate?(input: AgentPluginBackendActivation): Promise<void> | void;
 	health?(): Promise<boolean> | boolean;
 	quiesce?(deadlineUnixMs: number): Promise<void> | void;

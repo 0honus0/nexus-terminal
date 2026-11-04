@@ -132,6 +132,7 @@ export class ToolModel {
 	async perform(
 		input: Exclude<
 			ToolInput,
+			| { kind: 'plugin' }
 			| { kind: 'connections' }
 			| { kind: 'job' }
 			| { kind: 'shell' }

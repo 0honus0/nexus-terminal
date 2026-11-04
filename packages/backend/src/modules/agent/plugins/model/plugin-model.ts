@@ -18,7 +18,13 @@ import type { BlobStore } from '../../../../platform/blobs/blob-store.js';
 import { BlobFailure } from '../../../../platform/blobs/blob-store.js';
 import type { PackageSignature } from '../../../../platform/packages/package-reader.js';
 import type { PluginPackageDecoder } from '../storage/plugin-package.js';
-import { AgentFailure, AgentResourceFenced, ToolCleanupFailure, aggregateAgentFailures } from '../../agent-failure.js';
+import {
+	AgentFailure,
+	AgentResourceFenced,
+	ToolCleanupFailure,
+	ToolExecutionUnknown,
+	aggregateAgentFailures,
+} from '../../agent-failure.js';
 import { agentStorage } from '../../agent-storage-failure.js';
 import type {
 	StoredPluginData,
@@ -614,6 +620,21 @@ export class PluginModel {
 		}
 		return {
 			installation: installation(source.installation),
+			agentContribution:
+				decoded.agentContribution === null
+					? null
+					: {
+							role: decoded.agentContribution.role,
+							toolNames:
+								decoded.agentContribution.toolNames === null
+									? null
+									: decoded.agentContribution.toolNames.map((name) => name),
+							beforeStep: decoded.agentContribution.beforeStep,
+							tools: decoded.agentContribution.tools.map((tool) => ({
+								name: tool.name,
+								description: tool.description,
+							})),
+						},
 			manifest: manifest(decoded.manifest),
 			files: decoded.files.map((file) => ({ path: file.path, bytes: file.bytes.slice(), sha256: file.sha256 })),
 		};
@@ -813,6 +834,32 @@ export class PluginModel {
 			exited,
 
 			activate: () => call(() => owned.activate()),
+
+			agent: async (input, signal, timeoutMs) => {
+				try {
+					const command =
+						input.kind === 'context'
+							? { kind: input.kind, runId: input.runId, stepIndex: input.stepIndex, prompt: input.prompt }
+							: {
+									kind: input.kind,
+									runId: input.runId,
+									stepIndex: input.stepIndex,
+									operationId: input.operationId,
+									name: input.name,
+									argumentsJson: input.argumentsJson,
+								};
+					const result = await owned.agent(command, signal, timeoutMs);
+					return result.text;
+				} catch (error) {
+					if (
+						error instanceof ModuleRuntimeFailure &&
+						(error.kind === 'execution_unknown' || error.kind === 'protocol_invalid')
+					) {
+						throw new ToolExecutionUnknown({ cause: error });
+					}
+					runtimeFailure(error);
+				}
+			},
 
 			health: () => call(() => owned.health()),
 

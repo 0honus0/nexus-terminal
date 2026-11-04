@@ -50,9 +50,14 @@ export interface PluginBackendInstance {
 
 	activate(): Promise<void>;
 	health(): Promise<boolean>;
+	agent(input: PluginRuntimeAgentInput, signal: AbortSignal, timeoutMs: number): Promise<{ text: string }>;
 	quiesce(deadline: number): Promise<void>;
 	close(): Promise<void>;
 }
+
+export type PluginRuntimeAgentInput =
+	| { kind: 'context'; runId: string; stepIndex: number; prompt: string }
+	| { kind: 'tool'; runId: string; stepIndex: number; operationId: string; name: string; argumentsJson: string };
 
 export interface PluginBackendRuntime {
 	recover(): Promise<void>;

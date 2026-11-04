@@ -123,7 +123,7 @@ export class RunStepModel {
 							requestHash: command.requestHash,
 							creationHash: command.creationHash,
 							now: command.now,
-							context: toStoredContext(context.messages, context.sources),
+							context: toStoredContext(context.messages, context.sources, context.systemPrompt),
 							estimatedTokens,
 						},
 						authorizeExecution,

@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import type { ToolDefinition } from '../../tools/model/tool-types.js';
 import { toProviderRequestFailure } from '../../providers/model/provider-network-failure.js';
 import { AgentFailure, ProviderRequestFailure } from '../../agent-failure.js';
+import { modelTextBatches } from '../../../../platform/ai/model-text-batches.js';
 import {
 	TOOL_PROPOSAL_MAX_COUNT,
 	TOOL_ARGUMENT_MAX_BYTES,
@@ -78,11 +79,13 @@ export class RunModelStream {
 		messages: RunModelMessage[],
 		definitions: ToolDefinition[],
 		maxOutputTokens = frozen.capabilities.maxOutputTokens,
+		systemPrompt = '',
 	): string {
 		return createHash('sha256')
 			.update(
 				JSON.stringify([
-					1,
+					2,
+					systemPrompt,
 					frozen.providerId,
 					frozen.providerVersion,
 					frozen.credentialRevision,
@@ -110,6 +113,7 @@ export class RunModelStream {
 		credential: string | null,
 		signal: AbortSignal,
 		maxOutputTokens = frozen.capabilities.maxOutputTokens,
+		systemPrompt = '',
 	): AsyncIterable<RunModelDelta> {
 		if (frozen.executionPolicy !== 'governed' || frozen.protocol === 'images' || maxOutputTokens === undefined) {
 			throw new AgentFailure('provider_unavailable');
@@ -123,20 +127,26 @@ export class RunModelStream {
 			let hasVisibleText = false;
 			let textBytes = 0;
 			let terminal: Extract<RunModelDelta, { kind: 'finished' }> | null = null;
-			const events = this.network.stream(
-				{
-					baseUrl: frozen.baseUrl,
-					protocol: frozen.protocol,
-					modelId: frozen.modelId,
-					credential,
-					maxOutputTokens,
-					usesReasoning: Boolean(frozen.capabilities.reasoningEfforts?.length),
-					...(frozen.capabilities.defaultReasoningEffort === undefined
-						? {}
-						: { reasoningEffort: frozen.capabilities.defaultReasoningEffort }),
-					messages: messages.map(toModelMessage),
-					tools: toModelTools(definitions),
-				},
+			const controller = new AbortController();
+			const events = modelTextBatches(
+				this.network.stream(
+					{
+						systemPrompt,
+						baseUrl: frozen.baseUrl,
+						protocol: frozen.protocol,
+						modelId: frozen.modelId,
+						credential,
+						maxOutputTokens,
+						usesReasoning: Boolean(frozen.capabilities.reasoningEfforts?.length),
+						...(frozen.capabilities.defaultReasoningEffort === undefined
+							? {}
+							: { reasoningEffort: frozen.capabilities.defaultReasoningEffort }),
+						messages: messages.map(toModelMessage),
+						tools: toModelTools(definitions),
+					},
+					AbortSignal.any([signal, controller.signal]),
+				),
+				() => controller.abort(),
 				signal,
 			);
 			for await (const event of events) {

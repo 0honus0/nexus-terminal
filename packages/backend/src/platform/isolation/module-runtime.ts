@@ -10,6 +10,7 @@ export interface IsolatedModuleInstance {
 
 	activate(): Promise<void>;
 	health(): Promise<boolean>;
+	invoke(inputJson: string, signal: AbortSignal, timeoutMs: number): Promise<unknown>;
 	quiesce(deadline: number): Promise<void>;
 	close(): Promise<void>;
 }

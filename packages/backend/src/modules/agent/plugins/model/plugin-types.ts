@@ -127,6 +127,7 @@ export interface PluginDataPurge {
 }
 
 export interface PluginPackageSource {
+	agentContribution: import('./plugin-contribution-types.js').PluginAgentContribution | null;
 	installation: PluginInstallation;
 	manifest: PluginManifest;
 	files: { path: string; bytes: Uint8Array; sha256: string }[];
@@ -137,6 +138,11 @@ export interface PluginRuntimeInstance {
 
 	activate(): Promise<void>;
 	health(): Promise<boolean>;
+	agent(
+		input: import('./plugin-contribution-types.js').PluginAgentInvocation,
+		signal: AbortSignal,
+		timeoutMs: number,
+	): Promise<string>;
 	quiesce(deadline: number): Promise<void>;
 	close(): Promise<void>;
 }
@@ -149,6 +155,7 @@ export interface PluginRuntimeLease {
 }
 
 export interface PluginRuntimeOwner {
+	agentLane: Promise<void>;
 	instanceId: string;
 	userId: number;
 	appId: string;

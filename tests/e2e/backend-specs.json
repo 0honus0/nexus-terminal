@@ -1,5 +1,6 @@
 [
   "agent/coverage-gaps.spec.ts",
+  "agent/execution-flow.spec.ts",
   "http/appearance-background.spec.ts",
   "http/architecture-contracts.spec.ts",
   "http/auth-api.spec.ts",

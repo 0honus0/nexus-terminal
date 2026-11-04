@@ -20,7 +20,7 @@ export function hasUnknown(error) {
 }
 
 /** Only Provider output is scripted; execution, authorization and persistence stay real. */
-export async function openAgentExecution(directory, sshd) {
+export async function openAgentExecution(directory, sshd, options = {}) {
 	const database = join(directory, 'state.db');
 	const encryptionKey = randomBytes(32);
 	const programs = new Map();
@@ -41,39 +41,81 @@ export async function openAgentExecution(directory, sshd) {
 				chunks.push(chunk);
 			}
 			const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-			const key = body.messages.findLast((message) => message.role === 'user').content;
+			const messages = body.messages ?? body.input;
+			const key = messages.findLast((message) => message.role === 'user').content;
 			const program = programs.get(key);
 			assert.ok(program, 'Unknown fixture program');
-			const results = body.messages
-				.filter((message) => message.role === 'tool')
-				.map((message) => JSON.parse(message.content));
+			const results = messages
+				.filter((message) => message.role === 'tool' || message.type === 'function_call_output')
+				.map((message) => JSON.parse(message.content ?? message.output));
 			calls.push({ key, body, authorization: request.headers.authorization });
 			const action = await program(results, body);
+			if (action.status) {
+				response.writeHead(action.status, {
+					'Content-Type': 'application/json',
+					'Retry-After': '0.01',
+					'x-should-retry': 'true',
+				});
+				response.end(JSON.stringify({ error: { message: 'Controlled provider refusal', code: action.code } }));
+				return;
+			}
+			if (action.disconnect) {
+				response.destroy();
+				return;
+			}
 			response.writeHead(200, { 'Content-Type': 'text/event-stream' });
 			response.flushHeaders();
+			if (body.input) {
+				assert.ok(!action.name && !action.calls && !action.hold);
+				for (const event of [
+					{
+						type: 'response.created',
+						response: { id: 'resp_flow', created_at: 1700000000, model: body.model },
+					},
+					{ type: 'response.output_item.added', output_index: 0, item: { type: 'message', id: 'msg_flow' } },
+					{
+						type: 'response.output_text.delta',
+						item_id: 'msg_flow',
+						output_index: 0,
+						delta: action.text ?? 'Fixture finished',
+					},
+					{ type: 'response.output_item.done', output_index: 0, item: { type: 'message', id: 'msg_flow' } },
+					{ type: 'response.completed', response: { usage: { input_tokens: 100, output_tokens: 32 } } },
+				]) {
+					response.write('data: ' + JSON.stringify(event) + '\n\n');
+				}
+				response.end();
+				return;
+			}
+			for (const text of action.chunks ?? []) {
+				response.write(
+					'data: ' +
+						JSON.stringify({ choices: [{ index: 0, delta: { content: text }, finish_reason: null }] }) +
+						'\n\n',
+				);
+			}
 			if (action.hold) {
 				held.add(response);
 				response.once('close', () => held.delete(response));
 				return;
 			}
-			const delta = action.name
+			const batch = action.calls ?? (action.name ? [{ name: action.name, input: action.input }] : []);
+			const delta = batch.length
 				? {
-						tool_calls: [
-							{
-								index: 0,
-								id: 'call_' + results.length,
-								type: 'function',
-								function: { name: action.name, arguments: JSON.stringify(action.input) },
-							},
-						],
+						tool_calls: batch.map((call, index) => ({
+							index,
+							id: 'call_' + (results.length + index),
+							type: 'function',
+							function: { name: call.name, arguments: JSON.stringify(call.input) },
+						})),
 					}
-				: { content: 'Fixture finished' };
+				: { content: action.text ?? 'Fixture finished' };
 			response.end(
 				'data: ' +
 					JSON.stringify({ choices: [{ index: 0, delta, finish_reason: null }] }) +
 					'\n\ndata: ' +
 					JSON.stringify({
-						choices: [{ index: 0, delta: {}, finish_reason: action.name ? 'tool_calls' : 'stop' }],
+						choices: [{ index: 0, delta: {}, finish_reason: batch.length ? 'tool_calls' : 'stop' }],
 						usage: { prompt_tokens: 100, completion_tokens: 32 },
 					}) +
 					'\n\ndata: [DONE]\n\n',
@@ -174,14 +216,14 @@ export async function openAgentExecution(directory, sshd) {
 				kind: 'openai-compatible',
 				displayName: 'B10 execution',
 				baseUrl: 'http://127.0.0.1:' + model.address().port + '/v1',
-				protocol: 'chat-completions',
+				protocol: options.protocol ?? 'chat-completions',
 				models: [{ id: 'fixture', contextWindow: 131072, maxOutputTokens: 256, supportsTools: true }],
 				enabled: true,
 				credential: 'isolated-secret',
 			}),
 			201,
 		);
-		agentApp = await createTestAgentApp(api, directory, 'Execution fixture');
+		agentApp = await createTestAgentApp(api, directory, 'Execution fixture', options.plugin);
 		await grants(['file.read', 'file.write', 'file.delete', 'shell.execute', 'machine.inspect']);
 		const settings = expectStatus(await api('GET', '/api/v1/agent/execution-settings'), 200).settings;
 		expectStatus(
@@ -234,6 +276,12 @@ export async function openAgentExecution(directory, sshd) {
 						JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }) +
 						'\n\ndata: [DONE]\n\n',
 				);
+			}
+		},
+
+		failModels() {
+			for (const response of held) {
+				response.destroy();
 			}
 		},
 

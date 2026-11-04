@@ -871,6 +871,10 @@
     "./common/version": {
       "types": "./dist/common/version.d.ts",
       "default": "./dist/common/version.js"
+    },
+    "./agent/plugins/agent-extension": {
+      "types": "./dist/agent/plugins/agent-extension.d.ts",
+      "default": "./dist/agent/plugins/agent-extension.js"
     }
   },
   "devDependencies": {

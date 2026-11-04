@@ -73,7 +73,7 @@ async function main(): Promise<void> {
 	const imported: unknown = await import(pathToFileURL(entry).href);
 	const exports = record(imported);
 	const module = exports.default === undefined ? exports : record(exports.default);
-	for (const name of ['activate', 'health', 'quiesce', 'dispose']) {
+	for (const name of ['activate', 'health', 'quiesce', 'dispose', 'agent']) {
 		if (module[name] !== undefined && typeof module[name] !== 'function') {
 			throw new Error('Invalid lifecycle export');
 		}
@@ -83,6 +83,7 @@ async function main(): Promise<void> {
 	let active = false;
 	let lastControl = 0;
 	let controls = 0;
+	const invocations = new Map<number, AbortController>();
 
 	const control = async (message: Record<string, unknown>) => {
 		const method = message.method;
@@ -95,6 +96,18 @@ async function main(): Promise<void> {
 					await module.activate(activation);
 				}
 				active = true;
+			} else if (method === 'invoke') {
+				if (!active || closing || typeof module.agent !== 'function' || !isRecord(message.input)) {
+					throw new Error('Agent extension unavailable');
+				}
+				const controller = invocations.get(Number(message.id));
+				if (!controller) {
+					throw new Error('Missing invocation');
+				}
+				controller.signal.throwIfAborted();
+				const value: unknown = await module.agent(message.input, controller.signal);
+				await write({ kind: 'result', id: message.id, ok: true, value });
+				return;
 			} else if (method === 'health') {
 				const value: unknown = typeof module.health === 'function' ? await module.health() : true;
 				if (typeof value !== 'boolean') {
@@ -121,6 +134,10 @@ async function main(): Promise<void> {
 			}
 		} catch {
 			await write({ kind: 'result', id: message.id, ok: false });
+		} finally {
+			if (typeof message.id === 'number') {
+				invocations.delete(message.id);
+			}
 		}
 	};
 
@@ -140,7 +157,12 @@ async function main(): Promise<void> {
 			if (typeof message.id !== 'number' || !Number.isSafeInteger(message.id) || message.id < 1) {
 				throw new Error('Invalid message identity');
 			}
-			if (message.kind === 'host.result') {
+			if (message.kind === 'cancel') {
+				if (Object.keys(message).length !== 2) {
+					throw new Error('Invalid cancellation');
+				}
+				invocations.get(message.id)?.abort();
+			} else if (message.kind === 'host.result') {
 				if (Object.keys(message).length !== 3 || !Object.hasOwn(message, 'value')) {
 					throw new Error('Invalid host result');
 				}
@@ -153,8 +175,9 @@ async function main(): Promise<void> {
 			} else if (message.kind === 'control') {
 				if (
 					typeof message.method !== 'string' ||
-					!['activate', 'health', 'quiesce', 'dispose'].includes(message.method) ||
-					Object.keys(message).length !== (message.method === 'quiesce' ? 4 : 3) ||
+					!['activate', 'health', 'quiesce', 'dispose', 'invoke'].includes(message.method) ||
+					Object.keys(message).length !== (['quiesce', 'invoke'].includes(message.method) ? 4 : 3) ||
+					(message.method === 'invoke' && !isRecord(message.input)) ||
 					(message.method === 'quiesce' &&
 						(typeof message.deadline !== 'number' ||
 							!Number.isSafeInteger(message.deadline) ||
@@ -167,6 +190,9 @@ async function main(): Promise<void> {
 				}
 				lastControl = message.id;
 				controls++;
+				if (message.method === 'invoke') {
+					invocations.set(message.id, new AbortController());
+				}
 				lane = lane.then(() => control(message)).finally(() => controls--);
 				void lane.catch(() => process.exit(1));
 			} else {

@@ -5,7 +5,7 @@ import { expectStatus } from '../remote/openssh-fixture.mjs';
 
 /** Installs through the ordinary trust, repository, verification and installation flow. */
 export async function createTestAgentApp(api, directory, name, options = {}) {
-	const { metadata, bytes } = await buildNativePluginPackage(directory, name, options.signingKeyPath);
+	const { metadata, bytes } = await buildNativePluginPackage(directory, name, options.signingKeyPath, options);
 	let baseUrl;
 	const server = createServer((request, response) => {
 		if (request.url === '/catalog.json') {

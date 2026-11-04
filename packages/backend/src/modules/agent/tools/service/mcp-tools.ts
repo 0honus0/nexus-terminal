@@ -25,6 +25,7 @@ export function mcpTools(): ToolDefinition[] {
 		capability: kind === 'tool' ? 'integration.mcp.invoke' : 'integration.mcp.read',
 		risk: kind === 'tool' ? 'mutate' : 'read',
 		mutation: kind === 'tool',
+		scheduling: 'exclusive',
 		input: {
 			fields: [
 				text('integrationId', 36),
@@ -45,6 +46,7 @@ export function mcpTools(): ToolDefinition[] {
 		capability: 'integration.mcp.read',
 		risk: 'read',
 		mutation: false,
+		scheduling: 'exclusive',
 		input: {
 			fields: [
 				text('integrationId', 36, false),
@@ -60,6 +62,7 @@ export function mcpTools(): ToolDefinition[] {
 		capability: 'integration.acp.invoke',
 		risk: 'read',
 		mutation: false,
+		scheduling: 'exclusive',
 		input: { fields: [] },
 	});
 	tools.push({
@@ -70,6 +73,7 @@ export function mcpTools(): ToolDefinition[] {
 		capability: 'integration.acp.invoke',
 		risk: 'destructive',
 		mutation: true,
+		scheduling: 'exclusive',
 		input: {
 			fields: [
 				text('integrationId', 36),

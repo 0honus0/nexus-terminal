@@ -125,6 +125,7 @@ export function collaborationTools(): ToolDefinition[] {
 		capability: 'app.intents.exchange',
 		risk: value.mutation ? 'control' : 'read',
 		mutation: value.mutation,
+		scheduling: 'exclusive',
 		input: { fields: value.fields },
 	}));
 }

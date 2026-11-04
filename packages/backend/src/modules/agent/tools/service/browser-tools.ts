@@ -127,6 +127,7 @@ export function browserTools(): ToolDefinition[] {
 		capability: 'browser.read',
 		risk: 'read',
 		mutation: false,
+		scheduling: 'exclusive',
 		input: { fields: [] },
 	};
 	return [
@@ -138,6 +139,7 @@ export function browserTools(): ToolDefinition[] {
 			capability: item.read ? 'browser.read' : 'browser.interact',
 			risk: item.read ? 'read' : 'control',
 			mutation: !item.read,
+			scheduling: 'exclusive',
 			input: {
 				fields: ['navigate', 'back', 'scroll', 'press', 'select', 'click', 'type', 'upload'].includes(
 					item.action,

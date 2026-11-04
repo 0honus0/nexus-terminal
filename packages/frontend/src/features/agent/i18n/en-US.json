@@ -231,6 +231,10 @@
                 "desc": "Send or receive data with other apps through declared App Intents"
               }
             }
+          },
+          "plugin.invoke": {
+            "name": "Plugin tools",
+            "desc": "Invoke isolated backend tools declared by this App, subject to current grants and per-call approval."
           }
         },
         "installationUnavailable": "Plugin installation is unavailable. Reload before continuing."
@@ -1966,6 +1970,28 @@
         "storage_unavailable": "Backend data storage is temporarily unavailable. Check service status.",
         "internal_failure": "An internal backend error occurred. Check backend logs."
       }
+    },
+    "taskNotice": {
+      "title": "Task update",
+      "approval": "Your approval is needed",
+      "needsReview": "Review needed",
+      "dismiss": "Dismiss this update",
+      "view": "View task",
+      "pendingApprovals": "{count} pending approvals",
+      "approvalCount": "{count} pending",
+      "more": "{count} more updates",
+      "toolCount": "Tool calls: {count}",
+      "unknownHint": "The task has stopped. Open the conversation to check the outcome.",
+      "status": {
+        "pending": "Task received",
+        "running": "Task in progress",
+        "completed": "Task completed",
+        "failed": "Task failed",
+        "unknown": "Check execution outcome",
+        "cancelled": "Task cancelled"
+      },
+      "detailsHint": "Open the task for details.",
+      "viewDetails": "Details"
     }
   }
 }

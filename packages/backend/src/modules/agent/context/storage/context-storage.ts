@@ -20,6 +20,7 @@ export interface StoredContextSource {
 }
 
 export interface StoredContextSnapshot {
+	systemPrompt: string;
 	messages: StoredContextMessage[];
 	sources: StoredContextSource[];
 }

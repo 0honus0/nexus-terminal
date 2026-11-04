@@ -205,6 +205,7 @@ export class OpenAiCompatibleAdapter implements ModelNetworkPort {
 		let ended = false;
 		let finalEvents: ModelStreamEvent[] = [];
 		const controller = new AbortController();
+		let responseOpened = false;
 		try {
 			const sdkResponse =
 				input.protocol === 'responses'
@@ -214,12 +215,9 @@ export class OpenAiCompatibleAdapter implements ModelNetworkPort {
 						});
 			// Keep event names supplied by the SDK so named failures or mismatched
 			// Responses events cannot masquerade as successful text deltas.
-			const stream = Stream.fromSSEResponse<unknown>(
-				await sdkResponse.asResponse(),
-				controller,
-				request.client,
-				true,
-			);
+			const response = await sdkResponse.asResponse();
+			responseOpened = true;
+			const stream = Stream.fromSSEResponse<unknown>(response, controller, request.client, true);
 			for await (const event of stream) {
 				if (signal.aborted) {
 					throw new ModelNetworkFailure('timeout');
@@ -235,6 +233,17 @@ export class OpenAiCompatibleAdapter implements ModelNetworkPort {
 			ended = true;
 		} catch (error) {
 			primary = modelSdkFailure(error, signal);
+			if (
+				!responseOpened &&
+				!signal.aborted &&
+				(primary.kind === 'http' || primary.kind === 'content_filtered') &&
+				[400, 401, 403, 404, 405, 413, 415, 422, 429].includes(primary.httpStatus ?? 0)
+			) {
+				primary = new ModelNetworkFailure(primary.kind, primary.httpStatus, {
+					cause: primary,
+					outcome: 'rejected',
+				});
+			}
 			throw primary;
 		} finally {
 			controller.abort();

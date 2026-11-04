@@ -12,6 +12,8 @@ import type {
 	PluginDataMigrationResult,
 } from '../model/plugin-migration-types.js';
 import { parsePluginSkills } from '../plugin-skill-rules.js';
+import type { PluginAgentCatalog, PluginAgentInvocation } from '../model/plugin-contribution-types.js';
+import { fromPluginSkillFiles } from '../model/plugin-model.js';
 import type { PluginSkillInput } from '../model/plugin-skill-types.js';
 import { validateAgentId } from '../../agent-validation.js';
 import {
@@ -30,7 +32,13 @@ import {
 	AGENT_PLUGIN_MAX_ARCHIVE_BYTES,
 	AGENT_PLUGIN_MAX_ASSET_BYTES,
 } from '@nexus-terminal/shared/agent/plugins/values';
-import { AgentFailure, aggregateAgentFailures, isAgentDrainFailure } from '../../agent-failure.js';
+import {
+	AgentFailure,
+	ToolExecutionUnknown,
+	ToolCleanupFailure,
+	aggregateAgentFailures,
+	isAgentDrainFailure,
+} from '../../agent-failure.js';
 import type { PluginModel } from '../model/plugin-model.js';
 import type {
 	PluginRpcInput,
@@ -156,6 +164,7 @@ export class PluginService {
 
 	private readonly runtime: PluginRuntimeService;
 	private readonly pending = new Set<Promise<unknown>>();
+	private managementTasks = 0;
 	private readonly failures: unknown[] = [];
 	private readonly stop = new AbortController();
 	private lane: Promise<unknown> = Promise.resolve();
@@ -655,8 +664,12 @@ export class PluginService {
 		return this.trackTask(work, this.lane);
 	}
 
-	private trackTask<T>(work: (signal: AbortSignal) => Promise<T>, predecessor?: Promise<unknown>): Promise<T> {
-		if (this.closing || this.pending.size >= 8) {
+	private trackTask<T>(
+		work: (signal: AbortSignal) => Promise<T>,
+		predecessor?: Promise<unknown>,
+		runRead = false,
+	): Promise<T> {
+		if (this.closing || (!runRead && this.managementTasks >= 8)) {
 			return Promise.reject(new AgentFailure('provider_unavailable'));
 		}
 		const deadline = AbortSignal.any([this.stop.signal, AbortSignal.timeout(60000)]);
@@ -673,17 +686,28 @@ export class PluginService {
 			);
 		}
 		this.pending.add(task);
-		void task.then(
-			() => this.pending.delete(task),
-			(error) => {
-				logDiagnostic(this.logger, 'warn', 'PLUGIN_OPERATION_FAILED', {}, error);
-				this.pending.delete(task);
-				if (isAgentDrainFailure(error)) {
-					this.failures.push(error);
-					this.quiesce();
-				}
-			},
-		);
+		if (!runRead) {
+			this.managementTasks++;
+		}
+
+		const untrack = () => {
+			this.pending.delete(task);
+			if (!runRead) {
+				this.managementTasks--;
+			}
+		};
+
+		void task.then(untrack, (error) => {
+			logDiagnostic(this.logger, 'warn', 'PLUGIN_OPERATION_FAILED', {}, error);
+			untrack();
+			if (
+				isAgentDrainFailure(error) &&
+				!(error instanceof ToolExecutionUnknown && !(error instanceof ToolCleanupFailure))
+			) {
+				this.failures.push(error);
+				this.quiesce();
+			}
+		});
 		return task;
 	}
 
@@ -949,6 +973,81 @@ export class PluginService {
 				},
 				parsePluginSkills,
 			),
+		);
+	}
+
+	agentCatalog(scope: { userId: number; appId: string }, signal: AbortSignal): Promise<PluginAgentCatalog> {
+		return this.trackTask(
+			async (ownerSignal) => {
+				const source = await this.model.packageSource(
+					scope.userId,
+					scope.appId,
+					AbortSignal.any([ownerSignal, signal]),
+					authorizePluginContent,
+				);
+				const agentFile = source.files.find((file) => file.path === 'agent.json');
+				return {
+					revision: source.installation.revision,
+					version: source.installation.version,
+					sha256: agentFile?.sha256 ?? null,
+					contribution: source.agentContribution,
+					skills: parsePluginSkills(fromPluginSkillFiles(source.files), source.installation.version),
+				};
+			},
+			undefined,
+			true,
+		);
+	}
+
+	assertAgentCatalog(scope: { userId: number; appId: string }, revision: number, signal: AbortSignal): Promise<void> {
+		return this.trackTask(
+			async (ownerSignal) => {
+				const current = await this.model.runtimeInstallation(scope.userId, scope.appId, authorizePluginContent);
+				if (current.revision !== revision) {
+					throw new AgentFailure('version_conflict');
+				}
+				if (ownerSignal.aborted || signal.aborted) {
+					throw new AgentFailure('provider_unavailable');
+				}
+			},
+			undefined,
+			true,
+		);
+	}
+
+	invokeAgent(
+		scope: { userId: number; appId: string },
+		catalog: PluginAgentCatalog,
+		input: PluginAgentInvocation,
+		signal: AbortSignal,
+		timeoutMs: number,
+	): Promise<string> {
+		const contribution = catalog.contribution;
+		if (
+			!contribution ||
+			(input.kind === 'context'
+				? !contribution.beforeStep
+				: !contribution.tools.some((tool) => tool.name === input.name))
+		) {
+			return Promise.reject(new AgentFailure('forbidden'));
+		}
+		return this.trackTask(
+			async (ownerSignal) => {
+				const combined = AbortSignal.any([signal, ownerSignal]);
+				await this.assertAgentCatalog(scope, catalog.revision, combined);
+				const text = await this.runtime.invokeAgent(
+					scope.userId,
+					scope.appId,
+					catalog.revision,
+					input,
+					combined,
+					timeoutMs,
+				);
+				await this.assertAgentCatalog(scope, catalog.revision, combined);
+				return text;
+			},
+			undefined,
+			true,
 		);
 	}
 

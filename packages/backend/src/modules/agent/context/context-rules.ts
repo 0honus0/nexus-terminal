@@ -82,6 +82,7 @@ export function validateContextBudget(
 	messages: RunModelMessage[],
 	definitions: ToolDefinition[],
 	limits: ContextLimits,
+	systemPrompt = '',
 ): void {
 	if (
 		(limits.contextWindow !== undefined &&
@@ -102,7 +103,7 @@ export function validateContextBudget(
 	// resources; they are not an authoritative model context-token count.
 	const messageBytes = contextBytes(messages);
 	const toolBytes = Buffer.byteLength(JSON.stringify(definitions), 'utf8');
-	if (messageBytes + toolBytes > CONTEXT_MAX_BYTES) {
+	if (messageBytes + toolBytes + Buffer.byteLength(JSON.stringify(systemPrompt)) > CONTEXT_MAX_BYTES) {
 		throw new ContextLimitExceeded();
 	}
 }

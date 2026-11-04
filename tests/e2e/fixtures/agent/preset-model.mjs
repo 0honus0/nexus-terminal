@@ -111,6 +111,14 @@ export function respondPresetModel(messages, userText, response, send) {
 		);
 	} else if (userText.includes('E2E_NATIVE_PLUGIN_READ')) {
 		sequence([['plugin_read', 'file_read', { connectionId, path: '/seed.txt' }]], () => result('plugin_read'));
+	} else if (userText.includes('E2E_NATIVE_PLUGIN_NOTICES')) {
+		sequence(
+			[
+				['notice_first', 'shell_execute', shell('printf notice-first')],
+				['notice_second', 'shell_execute', shell('printf notice-second')],
+			],
+			() => 'NOTICE_COMPLETED',
+		);
 	} else if (userText.includes('E2E_NATIVE_PLUGIN_APPROVAL')) {
 		sequence([['plugin_shell', 'shell_execute', shell('printf approval-e2e')]], () => result('plugin_shell'));
 	} else if (userText.includes('E2E_NATIVE_PLUGIN_CHILD_BATCH')) {

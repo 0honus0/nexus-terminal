@@ -80,12 +80,15 @@ function resourceFenced(error: unknown): boolean {
 
 /** Safe application failure translated by Model, not a vendor exception. */
 export class ProviderRequestFailure extends AgentFailure {
+	readonly outcome: 'rejected' | 'unknown';
+
 	constructor(
 		readonly errorCode: AgentProviderFailureCode,
-		options?: ErrorOptions,
+		options?: ErrorOptions & { outcome?: 'rejected' | 'unknown' },
 	) {
 		super('provider_request_failed', options);
 		this.name = 'ProviderRequestFailure';
+		this.outcome = options?.outcome ?? 'unknown';
 	}
 }
 

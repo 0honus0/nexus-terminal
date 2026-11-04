@@ -28,5 +28,5 @@ export function toProviderRequestFailure(error: unknown): AgentFailure {
 		error.kind === 'http' && status !== undefined && Number.isSafeInteger(status) && status >= 100 && status <= 599
 			? `PROVIDER_HTTP_${status}`
 			: codes[error.kind];
-	return new ProviderRequestFailure(code, { cause: error });
+	return new ProviderRequestFailure(code, { cause: error, outcome: error.outcome });
 }

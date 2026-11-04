@@ -17,6 +17,12 @@ import { contextBytes, copyContextMessage, validateContextBudget, exchangeMessag
 /** One instance per Run. Child instances contain only their own delegated input. */
 export class ContextService {
 	private messages: RunModelMessage[];
+	private systemPrompt = '';
+
+	setInstructions(value: string): void {
+		this.systemPrompt = value;
+	}
+
 	private readonly sources: ContextSource[];
 	private readonly historySources: number[];
 	private historyAdjustable = true;
@@ -131,6 +137,7 @@ export class ContextService {
 			return;
 		}
 		this.usageAnchor = {
+			systemPrompt: this.systemPrompt,
 			messages: this.messages.slice(0, this.messages.length - toolCount).map(copyContextMessage),
 			definitions: JSON.stringify(definitions),
 			tokens: inputTokens + outputTokens,
@@ -141,12 +148,13 @@ export class ContextService {
 		const anchor = this.usageAnchor;
 		if (
 			anchor &&
+			anchor.systemPrompt === this.systemPrompt &&
 			anchor.definitions === JSON.stringify(definitions) &&
 			JSON.stringify(this.messages.slice(0, anchor.messages.length)) === JSON.stringify(anchor.messages)
 		) {
 			return anchor.tokens + estimateMessages(this.messages.slice(anchor.messages.length));
 		}
-		return estimateMessages(this.messages) + estimateTools(definitions);
+		return estimateMessages(this.messages) + estimateTools(definitions) + Math.ceil(this.systemPrompt.length / 4);
 	}
 
 	private retainedPrompt(alreadyPresent: boolean): RunModelMessage[] {
@@ -181,9 +189,10 @@ export class ContextService {
 	}
 
 	snapshot(definitions: ToolDefinition[], limits: ContextLimits): ContextSnapshot {
-		this.fitInitialHistory(() => validateContextBudget(this.messages, definitions, limits));
+		this.fitInitialHistory(() => validateContextBudget(this.messages, definitions, limits, this.systemPrompt));
 		this.historyAdjustable = false;
 		return {
+			systemPrompt: this.systemPrompt,
 			messages: this.messages.map(copyContextMessage),
 			sources: this.sources.map((source) => ({
 				runId: source.runId,

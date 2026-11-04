@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { AGENT_CAPABILITIES } from '../../packages/shared/dist/agent/governance/values.js';
 
 /** Signed native-surface fixture; no host declaration or test-only product API. */
-export async function buildNativePluginPackage(directory, name, signingKeyPath) {
+export async function buildNativePluginPackage(directory, name, signingKeyPath, extension = {}) {
 	const id = 'test.native-' + randomUUID();
 	const source = join(directory, id);
 	await mkdir(source, { recursive: true });
@@ -29,9 +29,19 @@ export async function buildNativePluginPackage(directory, name, signingKeyPath) 
 			capabilities: [...AGENT_CAPABILITIES],
 			intents: [],
 			frontendEntry: null,
-			backendEntry: null,
+			backendEntry: extension.backend ? 'backend.mjs' : null,
 		}),
 	);
+	if (extension.contribution) {
+		await writeFile(join(content, 'agent.json'), JSON.stringify(extension.contribution));
+	}
+	if (extension.backend) {
+		await writeFile(join(content, 'backend.mjs'), extension.backend);
+	}
+	if (extension.skill) {
+		await mkdir(join(content, 'skills', 'flow'), { recursive: true });
+		await writeFile(join(content, 'skills', 'flow', 'SKILL.md'), extension.skill);
+	}
 	const output = join(source, 'plugin.tar');
 	const metadata = JSON.parse(
 		execFileSync(

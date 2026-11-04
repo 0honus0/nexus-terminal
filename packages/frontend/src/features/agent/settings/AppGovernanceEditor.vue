@@ -42,6 +42,7 @@
 		'memory.read': 'data',
 		'memory.propose': 'data',
 		'app.intents.exchange': 'data',
+		'plugin.invoke': 'integration',
 	};
 
 	const CAPABILITY_ICONS: Partial<Record<AgentCapability, string>> = {
@@ -64,6 +65,7 @@
 		'memory.read': 'fa-solid fa-brain',
 		'memory.propose': 'fa-solid fa-lightbulb',
 		'app.intents.exchange': 'fa-solid fa-right-left',
+		'plugin.invoke': 'fa-solid fa-puzzle-piece',
 	};
 
 	const props = defineProps<{ app: ManagedApp; active: boolean }>();

@@ -23,6 +23,7 @@ export interface ContextSource {
 }
 
 export interface ContextSnapshot {
+	systemPrompt: string;
 	messages: RunModelMessage[];
 	sources: ContextSource[];
 }
@@ -97,6 +98,7 @@ export interface ThreadEntries {
 }
 
 export interface ContextUsageAnchor {
+	systemPrompt: string;
 	messages: RunModelMessage[];
 	definitions: string;
 	tokens: number;

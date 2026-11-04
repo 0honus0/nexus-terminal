@@ -5,7 +5,7 @@
 	import { UiButton, UiCheckbox, UiEmptyState, UiLoadingState, UiInlineNotice } from '@/foundation/ui';
 	import { useI18n } from 'vue-i18n';
 	import { useNativeRuns } from '../composables/use-native-runs';
-	import { canCancelNativeRun, nativeModelKey } from '../model/native-run-rules';
+	import { canCancelNativeRun, isNativeRunActive, nativeModelKey } from '../model/native-run-rules';
 	import NativeThreadPanel from './NativeThreadPanel.vue';
 	import NativeInputArtifacts from '../files/NativeInputArtifacts.vue';
 	import AgentConfigPopover from '../files/AgentConfigPopover.vue';
@@ -19,6 +19,8 @@
 	import type { NativeThread } from '../model/native-thread-types';
 	import { formatAgentNumber } from '../locale-format';
 	import type { NativeApproval, NativeModel, NativeTool } from '../model/native-run-types';
+	import type { AgentTaskActivity } from '../model/task-activity-types';
+	import { useAgentHostState } from './agent-host-state';
 	import { AGENT_REASONING_EFFORTS, type AgentReasoningEffort } from '@nexus-terminal/shared/agent/providers/values';
 
 	const props = defineProps<{
@@ -30,6 +32,7 @@
 		active: boolean;
 	}>();
 	const { t, locale } = useI18n();
+	const host = useAgentHostState();
 	const layoutRoot = ref<HTMLElement | null>(null);
 	const composer = ref<HTMLElement | null>(null);
 	const { width: composerWidth } = useElementSize(composer);
@@ -81,6 +84,7 @@
 		() => props.active,
 		() => threadBusy.value || bindingBusy.value,
 		() => props.executionEnabled,
+		() => host.windowManager.state.status === 'minimized' && props.executionEnabled,
 	);
 	const {
 		operation,
@@ -193,6 +197,66 @@
 			runId: current.id,
 		});
 	});
+	const activityRegistration = host.registerTaskActivity();
+	const activityTargets = computed(
+		() => new Map(connections.value.map((connection) => [connection.id, connection.name || connection.host])),
+	);
+	const taskActivity = computed<AgentTaskActivity | null>(() => {
+		const current = run.value;
+		const selected = thread.value;
+		if (!current || !selected) {
+			return null;
+		}
+		const preview =
+			current.status === 'completed'
+				? (entries.value.findLast((entry) => entry.runId === current.id && entry.role === 'assistant')?.text ??
+					'')
+				: '';
+		return {
+			appId: props.appId,
+			appVersion: props.appVersion,
+			threadTitle: selected.title,
+			runId: current.id,
+			status: current.status,
+			preview: preview.slice(0, 360),
+			approvals: isNativeRunActive(current) ? pendingApprovals.value : [],
+			targetLabels: activityTargets.value,
+			toolExecutions: usage.value?.toolExecutions ?? null,
+			blocked: blocked.value,
+			failureKey: JSON.stringify([
+				operation.failureMessage.value ? operation.notice.value : '',
+				current.failure?.code ?? null,
+				current.failure?.toolName ?? null,
+			]),
+			failureMessage:
+				operation.failureMessage.value ||
+				(current.failure
+					? t('agent.nativeRun.failureReasons.' + current.failure.code, { tool: current.failure.toolName })
+					: ''),
+
+			open(): void {
+				if (run.value?.id !== current.id || thread.value?.id !== selected.id) {
+					return;
+				}
+				taskRailVisible.value = pendingApprovals.value.length > 0;
+				host.windowManager.switchApp({ appId: props.appId });
+				host.windowManager.openHub({ appId: props.appId });
+			},
+
+			decide(approval, decision): void {
+				if (run.value?.id !== current.id || thread.value?.id !== selected.id || blocked.value) {
+					return;
+				}
+				const latest = approvals.value.find((item) => item.id === approval.id);
+				if (!latest || latest.version !== approval.version || latest.operationHash !== approval.operationHash) {
+					return;
+				}
+				void runtime.mutate({ kind: 'approve', approval: latest, decision, feedback: '' });
+			},
+		};
+	});
+	watch(taskActivity, (activity) => activityRegistration.update(activity), { immediate: true, flush: 'post' });
+	onBeforeUnmount(() => activityRegistration.dispose());
 
 	const toolGroups = computed<NativeTool[][]>(() => {
 		const groups = new Map<string, NativeTool[]>();

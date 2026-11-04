@@ -1,4 +1,11 @@
 import type { AgentCapability, AgentApprovalRisk } from '@nexus-terminal/shared/agent/governance/values';
+import type { PluginAgentCatalog } from '../../plugins/model/plugin-contribution-types.js';
+
+export interface ToolStepContext {
+	definitions: ToolDefinition[];
+	systemPrompt: string;
+	pluginCatalog: PluginAgentCatalog;
+}
 
 /** Server-owned definition. Model proposals never supply capability, version or risk. */
 export interface ToolDefinition {
@@ -8,6 +15,7 @@ export interface ToolDefinition {
 	capability: AgentCapability;
 	risk: AgentApprovalRisk;
 	mutation: boolean;
+	scheduling: 'parallel' | 'exclusive';
 	input: { fields: ToolInputField[] };
 }
 
@@ -18,6 +26,7 @@ export type ToolInputField = { name: string; required: boolean } & (
 );
 
 export type ToolInput =
+	| { kind: 'plugin'; name: string; version: string; sha256: string; argumentsJson: string }
 	| { kind: 'browser_targets' }
 	| { kind: 'acp_integrations' }
 	| { kind: 'image_models'; offset: number }
@@ -94,12 +103,13 @@ export interface ToolOperationScope {
 }
 
 export interface ToolExecutionScope {
+	pluginCatalog: PluginAgentCatalog;
 	userId: number;
 	appId: string;
 	runId: string;
 	modelStepIndex: number;
 	deadlineAt: number;
-	onBackgroundFailure(error: unknown): void;
+	onBackgroundFailure(error: unknown, toolName?: string): void;
 }
 
 export type ToolCommand = { kind: 'argv'; argv: string[] } | { kind: 'shell'; script: string };

@@ -67,7 +67,7 @@ export const AGENT_RUN_STEP_EVENT_TYPES = [
 
 export type AgentRunStepEventType = (typeof AGENT_RUN_STEP_EVENT_TYPES)[number];
 
-export type AgentRunStepFailureCode = 'DISPATCH_NOT_STARTED';
+export type AgentRunStepFailureCode = 'DISPATCH_NOT_STARTED' | 'PROVIDER_REQUEST_REJECTED';
 
 export const AGENT_RUN_STREAM_MAX_COMMAND_BYTES = 1024;
 

@@ -1,3 +1,7 @@
+import {
+	readAgentPluginAgentRequest,
+	readAgentPluginAgentResult,
+} from '@nexus-terminal/shared/agent/plugins/agent-extension';
 import type {
 	AgentPluginBackendContext,
 	AgentPluginBackendReply,
@@ -9,7 +13,7 @@ import { encodeAgentJson } from '@nexus-terminal/shared/agent/http-codec';
 import { AGENT_PLUGIN_MAX_MESSAGE_BYTES } from '@nexus-terminal/shared/agent/plugins/values';
 import { InvalidAgentPayload } from '@nexus-terminal/shared/agent/http-codec';
 import type { PluginBackendRuntime, PluginBackendInstance, PluginRuntimeReply } from '../../storage/plugin-runtime.js';
-import type { ModuleRuntime } from '../../../../../platform/isolation/module-runtime.js';
+import { ModuleRuntimeFailure, type ModuleRuntime } from '../../../../../platform/isolation/module-runtime.js';
 
 function intent(value: StoredPluginIntent): AgentPluginIntentReceipt {
 	return {
@@ -258,6 +262,28 @@ export class NativePluginBackendRuntime implements PluginBackendRuntime {
 			exited: instance.exited,
 
 			activate: () => instance.activate(),
+
+			agent: async (input, signal, timeoutMs) => {
+				const command =
+					input.kind === 'context'
+						? { kind: input.kind, runId: input.runId, stepIndex: input.stepIndex, prompt: input.prompt }
+						: {
+								kind: input.kind,
+								runId: input.runId,
+								stepIndex: input.stepIndex,
+								operationId: input.operationId,
+								name: input.name,
+								argumentsJson: input.argumentsJson,
+							};
+				const request = readAgentPluginAgentRequest(command);
+				const result = await instance.invoke(JSON.stringify(request), signal, timeoutMs);
+				try {
+					const value = readAgentPluginAgentResult(result);
+					return { text: value.text };
+				} catch (cause) {
+					throw new ModuleRuntimeFailure('execution_unknown', { cause });
+				}
+			},
 
 			health: () => instance.health(),
 

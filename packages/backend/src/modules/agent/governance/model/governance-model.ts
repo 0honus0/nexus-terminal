@@ -232,6 +232,10 @@ const policyFacts = (stored: StoredPolicy, settings: StoredExecutionSettings | n
 });
 
 export class GovernanceModel {
+	subscribe(userId: number, appId: string, wake: () => void): () => void {
+		return this.changes.subscribe(userId, appId, wake, wake);
+	}
+
 	constructor(
 		private readonly storage: GovernanceStorage,
 		private readonly targets: ConnectionCatalog,

@@ -101,6 +101,7 @@ export type ModelMessage =
 	| { role: 'tool'; callId: string; content: string };
 
 export interface ModelStreamInput extends ModelProbe {
+	systemPrompt?: string;
 	messages: ModelMessage[];
 	tools: ModelToolDefinition[];
 }
@@ -120,6 +121,9 @@ export interface ModelNetworkPort {
 }
 
 export class ModelNetworkFailure extends Error {
+	/** Only an actual pre-stream refusal response proves this request was rejected. */
+	readonly outcome: 'rejected' | 'unknown';
+
 	constructor(
 		readonly kind:
 			| 'http'
@@ -134,9 +138,10 @@ export class ModelNetworkFailure extends Error {
 			| 'too_large'
 			| 'cleanup_failed',
 		readonly httpStatus?: number,
-		options?: ErrorOptions,
+		options?: ErrorOptions & { outcome?: 'rejected' | 'unknown' },
 	) {
 		super('Model network: ' + kind, options);
 		this.name = 'ModelNetworkFailure';
+		this.outcome = options?.outcome ?? 'unknown';
 	}
 }

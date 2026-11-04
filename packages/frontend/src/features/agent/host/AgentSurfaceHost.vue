@@ -15,12 +15,15 @@
 	import AgentLauncher from './AgentLauncher.vue';
 	import { agentHostEvents } from '../events/agent-host-events';
 	import { provideAgentHostState } from './agent-host-state';
+	import { useAgentTaskNotices } from './use-agent-task-notices';
 
 	const auth = useRuntimeFeatureCapabilities().auth;
 	const { t } = useI18n();
 	const feedback = useFeedback();
-	const { windowManager } = provideAgentHostState();
+	const host = provideAgentHostState();
+	const { windowManager } = host;
 	const directory = ref<HostDirectory | null>(null);
+	const taskNotices = useAgentTaskNotices(host, () => directory.value);
 	let userId: number | null = null;
 	const operation = useAgentManagementOperation(
 		(reason) => {
@@ -123,6 +126,13 @@
 			<AgentHubWindow v-if="directory" :directory="directory" @layout-change="persistLayout" />
 			<AgentLauncher
 				v-if="windowManager.state.status !== 'visible' || !directory"
+				:notice="taskNotices.notice.value"
+				:queued-count="taskNotices.queuedCount.value"
+				:pending-approval-count="taskNotices.pendingApprovalCount.value"
+				:notice-time="taskNotices.now.value"
+				@notice-dismiss="taskNotices.dismiss"
+				@notice-hover="taskNotices.hovered.value = $event"
+				@notice-focus="taskNotices.focused.value = $event"
 				@layout-change="persistLayout"
 			/>
 		</template>

@@ -69,7 +69,7 @@ export function decodeContextSnapshot(json: unknown): StoredContextSnapshot {
 		throw new Error('Corrupt context snapshot capacity');
 	}
 	const parsed: unknown = JSON.parse(json);
-	const value = object(parsed, ['messages', 'sources']);
+	const value = object(parsed, ['messages', 'sources', 'systemPrompt']);
 	if (
 		!Array.isArray(value.messages) ||
 		value.messages.length === 0 ||
@@ -78,8 +78,13 @@ export function decodeContextSnapshot(json: unknown): StoredContextSnapshot {
 	) {
 		throw new Error('Corrupt context snapshot shape');
 	}
+	const systemPrompt = storedText(value.systemPrompt);
 	const messages = value.messages.map((raw: unknown) => message(raw));
-	if (messages[0].role !== 'user' || Buffer.byteLength(JSON.stringify(messages)) > CONTEXT_MAX_BYTES) {
+	if (
+		messages[0].role !== 'user' ||
+		Buffer.byteLength(JSON.stringify(messages)) + Buffer.byteLength(JSON.stringify(systemPrompt)) >
+			CONTEXT_MAX_BYTES
+	) {
 		throw new Error('Corrupt context message bounds');
 	}
 	const pending = new Set<string>();
@@ -122,7 +127,7 @@ export function decodeContextSnapshot(json: unknown): StoredContextSnapshot {
 		}
 		return { runId, version: storedInteger(item.version, 1), sequence: next, status };
 	});
-	return { messages, sources };
+	return { messages, sources, systemPrompt };
 }
 
 export function contextContentHash(json: string): string {

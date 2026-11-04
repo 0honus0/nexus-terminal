@@ -2,6 +2,7 @@ import type { PackageReader, PackageSignature } from '../../../../../platform/pa
 import type { PluginPackageDecoder, DecodedPluginPackage } from '../../storage/plugin-package.js';
 import { PluginPackageFailure } from '../../storage/plugin-package.js';
 import { pluginManifest, pluginEntry } from './plugin-manifest.js';
+import { pluginContribution } from './plugin-contribution.js';
 
 function isRecord(input: unknown): input is Record<string, unknown> {
 	return input !== null && typeof input === 'object' && !Array.isArray(input);
@@ -86,6 +87,25 @@ export class NativePluginPackageDecoder implements PluginPackageDecoder {
 				}
 			}
 			const publicKey = resolveKey(list.publisherKeyId);
+			const agentFile = filesByPath.get('agent.json');
+			const agentContribution = agentFile ? pluginContribution(agentFile.bytes) : null;
+			if (
+				agentContribution &&
+				(agentContribution.beforeStep || agentContribution.tools.length > 0) &&
+				manifest.backendEntry === null
+			) {
+				throw new PluginPackageFailure();
+			}
+			if (agentContribution?.beforeStep && !manifest.capabilities.includes('context.read')) {
+				throw new PluginPackageFailure();
+			}
+			if (
+				agentContribution &&
+				agentContribution.tools.length > 0 &&
+				!manifest.capabilities.includes('plugin.invoke')
+			) {
+				throw new PluginPackageFailure();
+			}
 			const signatureValid =
 				publicKey !== null &&
 				this.signature.normalize(publicKey).id === list.publisherKeyId &&
@@ -96,6 +116,7 @@ export class NativePluginPackageDecoder implements PluginPackageDecoder {
 					signatureFile.bytes,
 				);
 			return {
+				agentContribution,
 				manifest,
 				publisherKeyId: list.publisherKeyId,
 				signatureValid,

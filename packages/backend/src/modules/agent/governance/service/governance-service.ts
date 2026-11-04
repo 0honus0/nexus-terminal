@@ -56,6 +56,46 @@ import { AgentFailure, isAgentDrainFailure } from '../../agent-failure.js';
  * No unowned timer: expiry is committed at each access or decision in the original transaction.
  */
 export class GovernanceService {
+	/** Subscribe before reading authority so a concurrent decision cannot be lost. */
+	watch(userId: number, appId: string): { wait(signal: AbortSignal): Promise<void>; close(): void } {
+		let changed = false;
+		let notify: (() => void) | null = null;
+		const stop = this.model.subscribe(userId, appId, () => {
+			changed = true;
+			notify?.();
+		});
+		return {
+			wait: async (signal) => {
+				if (changed || signal.aborted) {
+					changed = false;
+					return;
+				}
+				await new Promise<void>((resolve) => {
+					const done = () => {
+						clearTimeout(timer);
+						signal.removeEventListener('abort', done);
+						notify = null;
+						changed = false;
+						resolve();
+					};
+
+					// Preserve the existing cross-process/expiry check interval.
+					const timer = setTimeout(done, 1000);
+					notify = done;
+					signal.addEventListener('abort', done, { once: true });
+					if (changed || signal.aborted) {
+						done();
+					}
+				});
+			},
+
+			close: () => {
+				stop();
+				notify?.();
+			},
+		};
+	}
+
 	private readonly pending = new Set<Promise<unknown>>();
 	private closing = false;
 	private closePromise: Promise<void> | null = null;

@@ -1,13 +1,50 @@
 <script setup lang="ts">
 	import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+	import { autoUpdate, flip, offset, shift, size, useFloating } from '@floating-ui/vue';
 	import { useAgentHostState } from './agent-host-state';
+	import AgentTaskNotice from './AgentTaskNotice.vue';
+	import type { AgentTaskActivity } from '../model/task-activity-types';
 
-	const props = defineProps<{ paused?: boolean }>();
-	const emit = defineEmits<{ layoutChange: [] }>();
+	const props = defineProps<{
+		paused?: boolean;
+		notice: AgentTaskActivity | null;
+		queuedCount: number;
+		pendingApprovalCount: number;
+		noticeTime: number;
+	}>();
+	const emit = defineEmits<{
+		layoutChange: [];
+		noticeDismiss: [];
+		noticeHover: [value: boolean];
+		noticeFocus: [value: boolean];
+	}>();
 	const { windowManager: agentWindowManager } = useAgentHostState();
 
 	const position = computed(() => agentWindowManager.state.launcherPosition);
 	const dock = computed(() => agentWindowManager.state.launcherDock);
+
+	const launcherElement = ref<HTMLElement | null>(null);
+	const noticeElement = ref<HTMLElement | null>(null);
+	const { floatingStyles, isPositioned } = useFloating(launcherElement, noticeElement, {
+		open: computed(() => props.notice !== null),
+		placement: computed(() => (dock.value === 'left' ? 'top-start' : 'top-end')),
+		strategy: 'fixed',
+		transform: false,
+		middleware: [
+			offset(12),
+			flip({ padding: 12 }),
+			shift({ padding: 12 }),
+			size({
+				padding: 12,
+
+				apply({ availableHeight, availableWidth, elements }): void {
+					elements.floating.style.maxHeight = `${Math.max(0, availableHeight)}px`;
+					elements.floating.style.maxWidth = `${Math.max(0, availableWidth)}px`;
+				},
+			}),
+		],
+		whileElementsMounted: autoUpdate,
+	});
 
 	const DRAG_START_PX = 6;
 
@@ -114,6 +151,20 @@
 		agentWindowManager.clampLauncherPosition();
 	};
 
+	function onNoticeFocusOut(event: FocusEvent): void {
+		const next = event.relatedTarget;
+		if (
+			event.currentTarget instanceof HTMLElement &&
+			(!(next instanceof Node) || !event.currentTarget.contains(next))
+		) {
+			emit('noticeFocus', false);
+		}
+	}
+
+	function onNoticeFocusIn(event: FocusEvent): void {
+		emit('noticeFocus', event.target instanceof HTMLElement && event.target.matches(':focus-visible'));
+	}
+
 	onMounted(() => {
 		agentWindowManager.clampLauncherPosition();
 		window.addEventListener('resize', handleViewportResize);
@@ -121,11 +172,14 @@
 
 	onBeforeUnmount(() => {
 		window.removeEventListener('resize', handleViewportResize);
+		emit('noticeHover', false);
+		emit('noticeFocus', false);
 	});
 </script>
 
 <template>
 	<div
+		ref="launcherElement"
 		class="fixed z-30 h-11 w-11"
 		:class="{ 'overflow-hidden': dock !== null }"
 		:style="{
@@ -174,12 +228,66 @@
 				</svg>
 			</div>
 
-			<!-- 状态与任务数字指示徽标 -->
+			<span
+				v-if="pendingApprovalCount"
+				class="absolute top-0 h-2.5 w-2.5 rounded-full bg-warning ring-2 ring-background"
+				:class="dock === 'right' ? 'left-1' : 'right-0'"
+				role="img"
+				:aria-label="$t('agent.taskNotice.pendingApprovals', { count: pendingApprovalCount })"
+				data-agent-pending-approval
+			></span>
 		</button>
 	</div>
+	<Teleport to="body">
+		<div
+			v-if="notice"
+			ref="noticeElement"
+			class="agent-task-notice ui-surface ui-glass-panel"
+			:style="[floatingStyles, { visibility: isPositioned ? 'visible' : 'hidden' }]"
+			role="dialog"
+			:aria-label="$t('agent.taskNotice.title')"
+			@keydown.esc.stop.prevent="emit('noticeDismiss')"
+			@pointerenter="emit('noticeHover', $event.pointerType !== 'touch')"
+			@pointerleave="emit('noticeHover', false)"
+			@focusin="onNoticeFocusIn"
+			@focusout="onNoticeFocusOut"
+		>
+			<AgentTaskNotice
+				:activity="notice"
+				:queued-count="queuedCount"
+				:now="noticeTime"
+				@dismiss="emit('noticeDismiss')"
+			/>
+		</div>
+	</Teleport>
 </template>
 
 <style scoped>
+	.agent-task-notice {
+		z-index: 31;
+		width: min(328px, calc(100vw - 24px));
+		max-height: calc(100dvh - 24px);
+		overflow-y: auto;
+		overscroll-behavior: contain;
+		border: 1px solid var(--color-border);
+		border-radius: 18px;
+		box-shadow:
+			var(--ui-glass-highlight),
+			0 12px 40px rgb(0 0 0 / 16%);
+		outline: none;
+		animation: task-notice-enter 160ms ease-out;
+	}
+	@keyframes task-notice-enter {
+		from {
+			opacity: 0;
+			transform: translateY(4px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
 	.agent-launcher {
 		position: relative;
 		display: grid;
@@ -231,6 +339,9 @@
 		opacity: 0.5;
 	}
 	@media (prefers-reduced-motion: reduce) {
+		.agent-task-notice {
+			animation: none;
+		}
 		.agent-launcher {
 			transition: none;
 		}

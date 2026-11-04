@@ -81,7 +81,11 @@ export function decodeStep(row: Record<string, unknown>): StoredRunStep {
 		throw new Error('Corrupt Run model step token usage');
 	}
 	const failureCode = row.failure_code === null ? undefined : row.failure_code;
-	if (failureCode !== undefined && failureCode !== 'DISPATCH_NOT_STARTED') {
+	if (
+		failureCode !== undefined &&
+		failureCode !== 'DISPATCH_NOT_STARTED' &&
+		failureCode !== 'PROVIDER_REQUEST_REJECTED'
+	) {
 		throw new Error('Corrupt Run model failure classification');
 	}
 	const textBytes = whole(row.text_bytes, 0);
@@ -100,7 +104,8 @@ export function decodeStep(row: Record<string, unknown>): StoredRunStep {
 		whole(row.step_index, 1) > AGENT_RUN_STEP_MAX_INDEX ||
 		textBytes > AGENT_RUN_STEP_MAX_TEXT_BYTES ||
 		(finishReason === 'stop' && textBytes === 0) ||
-		(state === 'reserved' && (textBytes !== 0 || inputTokens !== undefined))
+		(state === 'reserved' && (textBytes !== 0 || inputTokens !== undefined)) ||
+		(failureCode === 'PROVIDER_REQUEST_REJECTED' && (textBytes !== 0 || inputTokens !== undefined))
 	) {
 		throw new Error('Corrupt Run model step output bounds');
 	}
@@ -566,7 +571,11 @@ export class SqliteRunStepStorage implements RunStepStorage {
 		result: StepFinish,
 		maySettle: (hasUnsettledTools: boolean, hasUnsettledChildren: boolean, hasActiveJobs: boolean) => boolean,
 	): Promise<StepWriteResult> {
-		if (result.state === 'failed' && result.failureCode !== 'DISPATCH_NOT_STARTED') {
+		if (
+			result.state === 'failed' &&
+			result.failureCode !== 'DISPATCH_NOT_STARTED' &&
+			result.failureCode !== 'PROVIDER_REQUEST_REJECTED'
+		) {
 			throw new Error('Invalid model failure classification');
 		}
 		return this.mutate(command, ['reserved', 'dispatched'], async (tx, current) => {
@@ -584,6 +593,13 @@ export class SqliteRunStepStorage implements RunStepStorage {
 			);
 			if (!maySettle(unsettled !== null, children !== null, jobs !== null)) {
 				return 'step_conflict';
+			}
+			if (
+				result.state === 'failed' &&
+				result.failureCode === 'PROVIDER_REQUEST_REJECTED' &&
+				(current.state !== 'dispatched' || current.textBytes !== 0)
+			) {
+				throw new Error('A provider refusal requires a dispatched request without response text');
 			}
 			if (current.state === 'reserved' && result.state === 'unknown') {
 				throw new Error('An undispatched model step cannot have unknown remote side effects');

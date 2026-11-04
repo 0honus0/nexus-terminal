@@ -189,40 +189,38 @@ export class AcpPermissionService {
 				throw new AgentFailure('approval_stale');
 			}
 			let allowed = false;
-			while (true) {
-				await validate(signal);
-				const valid = await this.governance.toolAuthority(toolAuthorityIdentity(current), {
-					kind: 'inspect',
-					policyRevision: revision,
-				});
-				const latest = await this.governance.approval(parent.userId, parent.appId, approval.id);
-				if (!valid || !latest || Date.now() >= latest.expiresAt * 1000) {
-					throw new AgentFailure('approval_stale');
-				}
-				if (latest.status === 'approved') {
-					current = await this.governance.consume({
-						userId: parent.userId,
-						appId: parent.appId,
-						approvalId: latest.id,
-						expectedVersion: latest.version,
+			const changes = this.governance.watch(parent.userId, parent.appId);
+			try {
+				while (true) {
+					await validate(signal);
+					const valid = await this.governance.toolAuthority(toolAuthorityIdentity(current), {
+						kind: 'inspect',
+						policyRevision: revision,
 					});
-					allowed = true;
-					break;
-				}
-				if (latest.status === 'denied') {
-					break;
-				}
-				if (latest.status !== 'requested') {
-					throw new AgentFailure('approval_stale');
-				}
-				try {
-					await delay(1000, undefined, { signal });
-				} catch (cause) {
-					if (signal.aborted) {
-						throw new AgentFailure('approval_stale', { cause });
+					const latest = await this.governance.approval(parent.userId, parent.appId, approval.id);
+					if (!valid || !latest || Date.now() >= latest.expiresAt * 1000) {
+						throw new AgentFailure('approval_stale');
 					}
-					throw cause;
+					if (latest.status === 'approved') {
+						current = await this.governance.consume({
+							userId: parent.userId,
+							appId: parent.appId,
+							approvalId: latest.id,
+							expectedVersion: latest.version,
+						});
+						allowed = true;
+						break;
+					}
+					if (latest.status === 'denied') {
+						break;
+					}
+					if (latest.status !== 'requested') {
+						throw new AgentFailure('approval_stale');
+					}
+					await changes.wait(signal);
 				}
+			} finally {
+				changes.close();
 			}
 			let delivered = false;
 			return {

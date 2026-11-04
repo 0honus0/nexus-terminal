@@ -222,7 +222,10 @@ export function chatModelRequest(input: ModelStreamInput): ChatCompletionCreateP
 	}));
 	return {
 		model: input.modelId,
-		messages: input.messages.map(chatMessage),
+		messages: [
+			...(input.systemPrompt ? [{ role: 'system' as const, content: input.systemPrompt }] : []),
+			...input.messages.map(chatMessage),
+		],
 		stream: true,
 		stream_options: { include_usage: true },
 		...(input.usesReasoning
@@ -244,6 +247,7 @@ export function responseModelRequest(input: ModelStreamInput): ResponseCreatePar
 	return {
 		model: input.modelId,
 		input: input.messages.flatMap(responseMessages),
+		...(input.systemPrompt ? { instructions: input.systemPrompt } : {}),
 		max_output_tokens: input.maxOutputTokens,
 		stream: true,
 		store: false,

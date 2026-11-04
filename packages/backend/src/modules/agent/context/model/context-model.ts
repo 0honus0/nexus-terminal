@@ -11,8 +11,13 @@ import type {
 } from './context-types.js';
 
 /** The single application→context journal projection, consumed by RunStepModel. */
-export function toStoredContext(messages: RunModelMessage[], sources: ContextSource[]): StoredContextSnapshot {
+export function toStoredContext(
+	messages: RunModelMessage[],
+	sources: ContextSource[],
+	systemPrompt: string,
+): StoredContextSnapshot {
 	return {
+		systemPrompt,
 		messages: messages.map((message): StoredContextMessage => {
 			if (message.role === 'user') {
 				return { role: 'user', content: message.content };

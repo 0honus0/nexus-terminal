@@ -8,6 +8,17 @@
 
 ## 1. 职责与范围
 
+### Agent 请求指引、调度与插件贡献
+
+1. **职责与范围**：Run仍为单轮和Root/Child执行owner；Context保存每步完整宿主指引及当前插件/Skill目录；Tools调度明确独立的读取，Plugins持签名声明和隔离调用，不开放替换模型、存储或执行循环的插件钩子。
+2. **子功能与目录**：context/agent-instructions持宿主指引，ContextService替换而非累加本轮指引；ToolService.prepareStep组合当前目录、权限裁剪和可选beforeStep贡献，executeBatch持滚动池与exclusive屏障；GovernanceService.watch持审批唤醒；Platform ai/model-text-batches持传输文本合批。
+3. **依赖方向**：Run→Tools/Context/Governance/Plugins应用能力；Model逐字段转换storage/Platform，签名包Adapter解码agent.json，隔离ModuleRuntime仅接通用JSON调用和取消，不反向依赖Agent类型。
+4. **类型与转换**：SDK agent-extension严格解码贡献及context/tool请求、text结果；应用PluginAgentContribution/Catalog/Invocation和存储贡献/调用独立定义，边界白名单转换。ContextSnapshot/StoredContextSnapshot必填systemPrompt；请求hash含指引，记录完整快照并计算编码容量与Token估计，压缩保留当前指引，测量锚点只在指引完全一致时复用。
+5. **入口与安装**：每步请求经prepareStep，Chat使用system消息、Responses使用instructions。插件可无agent.json；有贡献时声明role、可空toolNames、beforeStep和具名tools。工具调用经plugin_tool_call及独立plugin.invoke全局grant/单次批准；上下文钩子需要context.read。角色、目录、Skill和钩子结果均不作为权限。
+6. **数据、事务与并发**：新v1结构签名拒绝缺指引快照的开发库；不自动迁移旧JSON。工具结果按模型原顺序提交下一轮；只有显式parallel定义重叠，其余为屏障，并发不超过当前批次及冻结总工具预算。管理任务独立计算原Service8项/Runtime32项准入，Run读取与调用归Run预算和真实任务owner，避免并发目录/工具挤占管理名额；活跃实例复用，不为每次调用重新读取验签整个包。审批通知只唤醒原事务检查，保留1秒跨进程/过期复核。
+7. **生命周期与失败**：失败/取消停止补位并等待已启动项；插件调用绑定安装revision，实例内串行、计入原pending和排空，完整期限包含启动/排队。取消发往原隔离实例，不以本地等待结束证明停止；未知工具结果与存储未知分别映射，原实例关闭与Run效果围栏分开：已确认关闭时只保留Run未知效果，清理或存储未确认才保留实例并阻断模块。流合批沿已有16ms交付节奏及128KiB帧容量，控制/完成/已知断流前交付已收到前缀；预读任务、timer和iterator.return均有owner，清理失败保留类别。只有已收到且未开流的明确400/401/403/404/405/413/415/422/429拒绝可按failed结算；只有429可在同一步原期限内沿SDK既有退避；5xx、超时、半流和未知副作用仍保留unknown。
+8. **当前能力与验收**：六项源码与双端契约的静态及构建证据归testing；不声称测得吞吐、响应时间或模型质量改善。历史角色与运行中输入保持现有产品规则，D17下并发/审批/断流、插件安装升级与真实模型效果待正式专项验收。
+
 ### 连接配置与凭据原子更新
 
 1. **职责与范围**：Targets connections持有单连接元数据及可选凭据编辑，Remote握手和Workspace不变。
@@ -115,7 +126,7 @@ Remote 的普通 SSH Workspace 是一条持续存在的交互式 shell，而非 
 3. **依赖方向**：原 RunExecutionOwner → ContextHistoryService → ContextModel → ContextStorage/SQLite；每轮再由 ContextService → RunStepModel → RunStepStorage/SQLite 同事务保存快照。Context 不引用执行 Service，Adapter 不引入应用 Model/Service 类型；模型请求编码仍由原 RunModelStream/Platform AI 转换。
 4. **类型与转换**：消息/proposal/reasoning 应用类型唯一归 Run；History/Source/Snapshot 归 context/model，独立存储对象归 context/storage，Model 对全部嵌套字段逐项转换。基础状态引用已有 Shared values；内部快照无双端消费者，不新增 Shared/public 对象。跨 Run 不复用加密 reasoning；同 Run 续接保留供应商需要的完整 reasoning。
 5. **入口与安装**：Agent register 安装 ContextModel/Storage 和历史 Service 到原执行 owner，无第二个执行 registry 或新 HTTP。读取历史仍位于冻结政策检查之后，每轮取得快照后才 reserve；每轮受 governed、当前版本、冻结预算及期限约束。
-6. **数据、事务与并发**：Root/Child 创建事务分配不可变 thread_sequence，历史按该序号排序，不用时间戳推断先后。Service 通过 Model 向原读取事务传入来源窗口容量与纯预算判定；Adapter 按不可变序号倒序选择最近连续完整Run后转正序，最多4096个来源、1024步骤、4096工具和512KiB原始正文，较早历史不占本轮预算但持久记录不删除，单个过大历史Run可整体省略。相容来源前缀的语义检查点仍复用，超过预算则保留原窗口。ContextService在首轮快照之前按完整序列化/Provider预算移除最旧完整历史消息及其全部来源（摘要按coveredRuns一起移除），只缩小连续后缀，不裁剪当前输入或执行中的工具交换；首轮快照后锁定来源，后续连续性仍严格校验。步骤 reserve 同事务保存 agent_model_contexts 的完整内容、来源及 SHA-256，并核对窗口内完整连续后缀的来源 user/App/Thread/sequence/version/status；后续轮与已存前缀、原步骤文本/proposals及确定工具结果经Model投影后的消息逐项一致。只更新单一初始 v1 与精确签名，不兼容旧开发库。未来恢复若修改被引用的历史步骤/结果，必须原子推进来源版本；B9 不得仅修改子账本而维持来源版本不变。
+6. **数据、事务与并发**：Root/Child 创建事务分配不可变 thread_sequence，历史按该序号排序，不用时间戳推断先后。Service 通过 Model 向原读取事务传入来源窗口容量与纯预算判定；Adapter 按不可变序号倒序选择最近连续完整Run后转正序，最多4096个来源、1024步骤、4096工具和4MiB原始正文，较早历史不占本轮预算但持久记录不删除，单个过大历史Run可整体省略。相容来源前缀的语义检查点仍复用，超过预算则保留原窗口。ContextService在首轮快照之前按完整序列化/Provider预算移除最旧完整历史消息及其全部来源（摘要按coveredRuns一起移除），只缩小连续后缀，不裁剪当前输入或执行中的工具交换；首轮快照后锁定来源，后续连续性仍严格校验。步骤 reserve 同事务保存 agent_model_contexts 的完整内容、来源及 SHA-256，并核对窗口内完整连续后缀的来源 user/App/Thread/sequence/version/status；后续轮与已存前缀、原步骤文本/proposals及确定工具结果经Model投影后的消息逐项一致。只更新单一初始 v1 与精确签名，不兼容旧开发库。未来恢复若修改被引用的历史步骤/结果，必须原子推进来源版本；B9 不得仅修改子账本而维持来源版本不变。
 7. **生命周期与失败**：消息与工具定义合计4MiB，不另设消息数量上限；不按normal/extended裁剪窗口，不以字节估算作为模型上下文硬拒。context-rules保留完整性和编码容量检查，其保守估算仅用于尚未报告usage的步骤预约，不是供应商精确token用量。Platform AI将最多128项工具声明与每轮最多32次调用分别限制，不以调用数量限制目录。模型输入明确标注近期历史可能省略，历史只按完整Run滑窗，不截断半组工具；本轮消息/请求自身超限仍明确拒绝；首轮确定拒绝只结算原身份/版本/创建请求且无步骤的 pending Run，后续按真实派发事实结算，存储失败保留因果且不重试。原执行 owner 管取消、围栏、unknown 与 drain；持久快照不授权重启后重新派发。
 8. **当前能力与验收**：Run-local 交换、持久 Thread 历史和逐步骤内容快照已接线；受限结果续读已接线；语义检查点、Memory/Recall、Artifact/清理与执行设置已有实际消费者。USAGE、实施四表与 testing 分别维护当前行为、任务和检查证据；行为证据及未验范围见 testing，正式前端已接线。
 
@@ -461,7 +472,7 @@ Provider 配置提交后中止本进程关联请求；获取凭据后、dispatch
 
 OpenAI官方Node SDK处理SSE换行、分帧、JSON和DONE，项目不另写SSE解析器。ModelSdkRequest在SDK解码前有界读取并严格验证UTF-8，网络总量8MiB、正文总量2MiB独立限制；ModelStreamProjection验证SDK保留的event名称与载荷，并限制解码后普通事件JSON为128KiB、Responses重复完整内容的done/completed快照为8MiB。SDK忽略的注释和分隔符仍计网络总量，不再声明独立注释帧上限；正式终态和SDK迭代正常结束共同确认完成，不自行要求可见的DONE事件。
 
-ModelSdkRequest 只按 SDK APIError 的结构化 moderation_blocked/content_policy_violation 精确 code 将拒绝归为技术 content_filtered；Provider Model 显式转成已有 PROVIDER_CONTENT_FILTERED，Run 继续投影 model_content_filtered，设置和聊天沿用原失败展示入口。未知 code 保留原 HTTP 分类，不按 message 或审核正文推断。原 cause 留内部，日志与协议不公开原始供应商正文、提示词或审核分类；失败不改变图片不重试及已派发 unknown 的原生命周期。
+ModelSdkRequest 只按 SDK APIError 的结构化 moderation_blocked/content_policy_violation 精确 code 将拒绝归为技术 content_filtered；Provider Model 显式转成已有 PROVIDER_CONTENT_FILTERED，Run 继续投影 model_content_filtered，设置和聊天沿用原失败展示入口。未知 code 保留原 HTTP 分类，不按 message 或审核正文推断。原 cause 留内部，日志与协议不公开原始供应商正文、提示词或审核分类；图片仍不重试；文本开流前已确认的明确拒绝按failed结算，半流或结果不明仍保留unknown。
 
 ### Provider 生命周期与失败
 
@@ -1531,7 +1542,7 @@ Platform AI的ModelStreamProjection消费SDK已解码事件，持有Chat Complet
 4. **类型与转换**：SDK类型不能代替外部运行时校验；事件/模型/图片在Adapter以unknown检查实际消费字段并白名单投影。标准可选字段不作每帧必填，额外choice元数据有界忽略，拒绝未知执行输出。
 5. **入口与安装**：原Bootstrap安装不变，使用client.chat.completions.create、responses.create、images.generate和models.list；流通过公开asResponse及SDK Stream.fromSSEResponse保留事件名，模型测试复用同一路径。models.list只取当前响应，不迭代自动分页。
 6. **数据、事务与并发**：不改变表或Shared契约；SDK不管理工具执行、幂等记录或授权。请求由SDK编码，派发前限制实际编码字节，模型声明和工具/正文/续接容量保持原owner。
-7. **生命周期与失败**：文本流及probe的maxRetries=2，发现/图片为0；退避/Retry-After由官方SDK负责。仅连接故障与408/409/429/5xx可重试，TLS证书错误与本地失败中止专用signal，非临时HTTP失败强制禁止重试。成功响应后不重试SSE/投影失败；应用持原完整期限，所有尝试共用累计响应字节预算。同一逻辑模型步骤最多3次HTTP派发，不重放工具。logLevel=off、拒绝重定向，原AbortSignal与本地停止重试signal组合并传给SDK；原始fetch只用应用signal，避免停止SDK重试时先破坏尚待排空的reader，传输总期限仍归应用。禁用环境organization/project自动继承，无凭据时移除占位Authorization。每个响应有独立ModelResponseBody、reader/decoder和关闭Promise，SDK重试前重新等待上一响应关闭；清理失败阻断下一次派发，不能覆盖旧资源。Reader按需读取，总量在SDK缓冲/JSON解码前检查；关闭Promise在取消前保存，SDK忽略的传输或清理失败仍由原owner记录并在close抛出，不提前交付completed或释放Run名额。不证明远端停止，不自动重放已取得成功响应的请求或未知Run。
+7. **生命周期与失败**：文本流及probe的maxRetries=2，发现/图片为0；退避/Retry-After由官方SDK负责。仅已收到的429明确限流拒绝可沿SDK退避，所有其它HTTP状态强制禁止重试；连接无响应、TLS和本地失败中止专用signal。408/409/5xx及缺失响应可能隐藏已接受的付费请求，不能重放，也不能因后一次拒绝抹除前一次未知。成功响应后不重试SSE/投影失败；应用持原完整期限，所有尝试共用累计响应字节预算。同一逻辑模型步骤最多3次HTTP派发，不重放工具。logLevel=off、拒绝重定向，原AbortSignal与本地停止重试signal组合并传给SDK；原始fetch只用应用signal，避免停止SDK重试时先破坏尚待排空的reader，传输总期限仍归应用。禁用环境organization/project自动继承，无凭据时移除占位Authorization。每个响应有独立ModelResponseBody、reader/decoder和关闭Promise，SDK重试前重新等待上一响应关闭；清理失败阻断下一次派发，不能覆盖旧资源。Reader按需读取，总量在SDK缓冲/JSON解码前检查；关闭Promise在取消前保存，SDK忽略的传输或清理失败仍由原owner记录并在close抛出，不提前交付completed或释放Run名额。不证明远端停止，不自动重放已取得成功响应的请求或未知Run。
 8. **当前能力与验收**：迁移进度/静态证据和远程待验见PLAN/testing；UI不变；原生浏览器增量更新由下述Run变更订阅负责，SDK的供应商SSE与浏览器WS分属不同边界。
 
 ### Agent Run 正文与状态流
