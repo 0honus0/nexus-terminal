@@ -4,11 +4,11 @@
 
 ## 当前验收基线
 
-最新完整远程 [41792075453](https://github.com/0honus0/nexus-terminal/actions/runs/41792075453) 验证 `main/07a69be818a728c97e8ea1eea2ea6a1aa74cfade`：551个场景全部通过，质量检查、Docker smoke和8个测试分片全部成功，耗时更新成功，截图更新按正常条件跳过。日志含551条 passed 记录，各分片汇总合计551，无失败/flaky/跳过场景汇总。新增缓存页恢复和安装初始化真实夹具均通过；只代表该 SHA 的实际覆盖范围。后继 `4a3074da6f8ab7e515a017f949ce03b1d059dc88` 仅自动维护耗时估算，已核对无产品源码差异。前序布局 b542640a 已由 41784731617 完整验证。
+最新完整远程 [41812361893](https://github.com/0honus0/nexus-terminal/actions/runs/41812361893) 验证 `main/ac314e5892ebfc8010498efd42a136e293c2da53`：553个场景全部通过，质量检查、Docker smoke和8个测试分片全部成功，耗时估算任务成功，截图更新按正常条件跳过。日志核对553条唯一passed记录，零失败、重复执行、flaky或跳过场景汇总。覆盖本轮全部累积源码及新增硬限制配置回归；不代表实际800次模型压力、真实弱网/手机、远端RDP或未列边界实测。后续文档收口只更新PLAN/testing，不改变被测产品源码；本次手动任务只上传新的耗时估算产物，没有自动提交。
 
-当前发布 [41792924820](https://github.com/0honus0/nexus-terminal/actions/runs/41792924820) 构建上述后继 main 的 dev/linux-amd64 镜像，已成功；本轮不更新指定主机、容器或数据库。此前已完成的指定主机维护证据仍在文末。真实手机/切换运营商网络、外部供应商、安全硬件、扩大故障及持久介质边界仍按 [待验与外部依赖](../PLAN.md#待验与外部依赖) 保留；独立 Nexus Agent 1.0.2 已签名发布并核对公开产物，见下方记录；新包实际安装与模型角色效果仍未验。
+上一轮发布 [41792924820](https://github.com/0honus0/nexus-terminal/actions/runs/41792924820) 的 dev/linux-amd64 镜像仍基于 `4a3074da6f8ab7e515a017f949ce03b1d059dc88`；本轮没有发布镜像或更新指定主机、容器、数据库。此前指定主机维护证据仍在文末。真实手机/切换运营商网络、外部供应商、安全硬件、扩大故障及持久介质边界仍按 [待验与外部依赖](../PLAN.md#待验与外部依赖) 保留；独立 Nexus Agent 1.0.2 的签名发布/产物证据见下方记录，正式远程受控插件夹具不能替代公网新包实际安装和模型角色效果。
 
-## 累积变更审核与正式远程 E2E（2026-11-04，进行中）
+## 累积变更审核与正式远程 E2E（2026-11-04，已完成）
 
 用户最新要求审核当前全部变更、修复残余并推送解决正式远程E2E。本批从main/ce7c135e及累积50个文件工作区继续，不回退前序修改；保留已有RDP提交，覆盖SSH连接、注销反馈、维护清理、终端响应和Agent可编辑硬限制。仅授权正式远程Actions，本地仍不新增行为/CDP/全量E2E、不操作用户数据库或发布镜像。证据集中 `/tmp/nexus-change-review-e2e-20261104`，保留所有前序产物。
 
@@ -18,7 +18,9 @@
 
 本地根check与双端生产build退出0（check.log/build.log）；新E2E消费者严格TypeScript检查退出0（e2e-types.log，显式使用Backend Node类型目录；首次未配置Node类型的调用失败已修正命令）。全量格式检查首轮发现新增测试两处函数空行，已按原规则修正；最终全量格式/diff通过。64bca706已提交并推送main（首次GitHub commit_refs_rules服务失败，重试成功）；推送未自动触发任务，手动启动正式41811345271，源码SHA一致，8个分片且不更新截图。第一轮完整结果见下，旧551场景不担保当前工作区。
 
-第一轮41811345271已结束：质量、Docker smoke、Backend与browser1/3/4/6通过，browser2/5/7共4项失败：functional-memory的两项非法期限委派、subagent-lifecycle和native-run均在首次/重试出现首个模型步骤model_response_invalid。三分片日志和完整trace/截图分别下载到本批目录browser-{2,5,7}-1；MODEL_STREAM_SETTLED定位Platform model-request.parameters，源码确认数组工具声明maxItems仍固定拒绝>128。协作dependencies/join/cancel已扩大声明范围，导致包含这些工具的整个模型请求在网络派发前失败。移除这个无底层依据的声明门槛，保留正安全整数、范围关系、完整请求编码容量和工具实际参数校验；原native-run完整Skill/批量/文件/Shell/取消断言保留，不改UI或扩大超时。USAGE/架构同步，Backend check/build、单文件ESLint及定向格式均退出0，日志为fix-backend-check.log、fix-backend-build.log、fix-eslint.log及fix-format-check.log；最终格式/diff及下一轮完整正式回归待回填。
+第一轮41811345271已结束：质量、Docker smoke、Backend与browser1/3/4/6通过，browser2/5/7共4项失败：functional-memory的两项非法期限委派、subagent-lifecycle和native-run均在首次/重试出现首个模型步骤model_response_invalid。三分片日志和完整trace/截图分别下载到本批目录browser-{2,5,7}-1；MODEL_STREAM_SETTLED定位Platform model-request.parameters，源码确认数组工具声明maxItems仍固定拒绝>128。协作dependencies/join/cancel已扩大声明范围，导致包含这些工具的整个模型请求在网络派发前失败。移除这个无底层依据的声明门槛，保留正安全整数、范围关系、完整请求编码容量和工具实际参数校验；原native-run完整Skill/批量/文件/Shell/取消断言保留，不改UI或扩大超时。USAGE/架构同步，Backend check/build、单文件ESLint及定向格式均退出0，日志为fix-backend-check.log、fix-backend-build.log、fix-eslint.log及fix-format-check.log；最终单文件ESLint、定向格式和diff通过后以ac314e58提交推送。
+
+最终源码ac314e58的根check与全量格式复核退出0（final-check.log/final-format.log），修复后Backend build已通过。推送的自动任务41812350189延迟出现；手动41812361893按同一main并发策略替代并取消前者，保留后一完整任务，没有把取消算作功能失败。完整任务结果见当前基线：全部553项一次通过，首轮4项失败与新增2项配置回归均通过，未修改UI、正常断言或超时。完整日志run-41812361893.log、job清单run-41812361893.json和统计final-e2e-summary.json均在本批目录；额外核对passed场景唯一性553/553，无重复/失败/flaky/跳过。维护脚本22项隔离回归沿既有证据，未执行线上清理。最终仅PLAN/testing收口提交，不发布或部署，测试环境与所有产物保留至用户通知。
 
 ## 终端连接等待优化（2026-11-04，源码及静态）
 
