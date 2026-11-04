@@ -20,6 +20,8 @@
 
 首轮完整远程 [41825149177](https://github.com/0honus0/nexus-terminal/actions/runs/41825149177) 对应 a85f5f41：质量、Docker smoke和browser1–6通过；backend新增两项整链wrapper未启动成功，runner仅安装OpenSSH客户端，现补齐openssh-server并附加子进程stdout/stderr诊断；调度wrapper通过。browser7的1280px通知场景因任务栏与Transcript均呈现同一命令而严格定位失败，现将审批详情与命令断言限定在Tasks区域；保留全部行为断言和产品UI。其余两种通知视口通过。上述修复静态检查后重新提交，等待完整远程验证；本轮尚未发布本体镜像。
 
+第二轮完整远程 [41826647057](https://github.com/0honus0/nexus-terminal/actions/runs/41826647057) 对应64367aa7：质量、Docker smoke及7个browser分片全部通过，包含1280/390/320px通知场景；backend原有场景和调度通过，模型23子场景中22项通过。剩余Responses夹具漏发assistant role、完成status和完整output快照；插件夹具backendEntry使用了被正式契约拒绝的根目录路径。按真实协议补齐SSE，插件入口改为backend/index.mjs，不修改应用校验、不放宽断言或超时；继续完整远程复验。失败stdout/stderr已保存在backend-round2产物。
+
 ## Agent 执行与插件扩展（2026-11-04，源码静态及插件发布）
 
 宿主基线main/f789446f及前序未提交最小化提醒；Node v22.23.1、pnpm 11.28.10。本轮按用户“全部修改”、工具接口可破坏性更新、插件更新后发布及同后端格式的授权实施。产物集中 `/tmp/nexus-agent-flow-plugin-implementation-20261104`，全部原目录保留；无本轮本地行为/浏览器/CDP/E2E、真实模型请求或用户数据库维护。宿主未提交推送、未发镜像、未部署。

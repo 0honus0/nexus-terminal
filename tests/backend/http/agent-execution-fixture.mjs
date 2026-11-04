@@ -67,20 +67,39 @@ export async function openAgentExecution(directory, sshd, options = {}) {
 			response.flushHeaders();
 			if (body.input) {
 				assert.ok(!action.name && !action.calls && !action.hold);
+				const text = action.text ?? 'Fixture finished';
+				const item = {
+					type: 'message',
+					id: 'msg_flow',
+					role: 'assistant',
+					content: [{ type: 'output_text', text }],
+				};
 				for (const event of [
 					{
 						type: 'response.created',
 						response: { id: 'resp_flow', created_at: 1700000000, model: body.model },
 					},
-					{ type: 'response.output_item.added', output_index: 0, item: { type: 'message', id: 'msg_flow' } },
+					{
+						type: 'response.output_item.added',
+						output_index: 0,
+						item: { type: 'message', id: item.id, role: 'assistant', content: [] },
+					},
 					{
 						type: 'response.output_text.delta',
 						item_id: 'msg_flow',
 						output_index: 0,
-						delta: action.text ?? 'Fixture finished',
+						delta: text,
 					},
-					{ type: 'response.output_item.done', output_index: 0, item: { type: 'message', id: 'msg_flow' } },
-					{ type: 'response.completed', response: { usage: { input_tokens: 100, output_tokens: 32 } } },
+					{ type: 'response.output_text.done', item_id: item.id, output_index: 0, text },
+					{ type: 'response.output_item.done', output_index: 0, item },
+					{
+						type: 'response.completed',
+						response: {
+							status: 'completed',
+							output: [item],
+							usage: { input_tokens: 100, output_tokens: 32 },
+						},
+					},
 				]) {
 					response.write('data: ' + JSON.stringify(event) + '\n\n');
 				}

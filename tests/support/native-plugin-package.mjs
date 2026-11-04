@@ -29,14 +29,15 @@ export async function buildNativePluginPackage(directory, name, signingKeyPath, 
 			capabilities: [...AGENT_CAPABILITIES],
 			intents: [],
 			frontendEntry: null,
-			backendEntry: extension.backend ? 'backend.mjs' : null,
+			backendEntry: extension.backend ? 'backend/index.mjs' : null,
 		}),
 	);
 	if (extension.contribution) {
 		await writeFile(join(content, 'agent.json'), JSON.stringify(extension.contribution));
 	}
 	if (extension.backend) {
-		await writeFile(join(content, 'backend.mjs'), extension.backend);
+		await mkdir(join(content, 'backend'));
+		await writeFile(join(content, 'backend', 'index.mjs'), extension.backend);
 	}
 	if (extension.skill) {
 		await mkdir(join(content, 'skills', 'flow'), { recursive: true });
