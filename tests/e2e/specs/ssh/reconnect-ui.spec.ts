@@ -340,7 +340,10 @@ test('hidden terminals consume sustained output without animation frames or reco
 	expect(connectRequests).toBe(initialConnects);
 });
 
-test('transport resume retains terminal output and the active SSH input line', async ({ page, context }) => {
+test('transport resume retries failed handshakes and retains terminal output and active SSH input', async ({
+	page,
+	context,
+}) => {
 	test.setTimeout(60_000);
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
@@ -349,11 +352,19 @@ test('transport resume retains terminal output and the active SSH input line', a
 	await page.addInitScript(() => {
 		const NativeWebSocket = window.WebSocket;
 		const sockets: WebSocket[] = [];
-		Object.assign(window, { __resumeTestSockets: sockets });
+		const failures = { remaining: 0, rejected: 0 };
+		Object.assign(window, { __resumeTestSockets: sockets, __resumeTestFailures: failures });
 		window.WebSocket = class extends NativeWebSocket {
 			constructor(url: string | URL, protocols?: string | string[]) {
 				super(url, protocols);
-				if (new URL(String(url)).pathname === '/ws/workspace') sockets.push(this);
+				if (new URL(String(url)).pathname !== '/ws/workspace') return;
+				sockets.push(this);
+				if (failures.remaining > 0) {
+					failures.remaining -= 1;
+					failures.rejected += 1;
+					// Abort the real opening handshake; recovery must survive more than one transport failure.
+					this.close();
+				}
 			}
 		};
 	});
@@ -370,11 +381,23 @@ test('transport resume retains terminal output and the active SSH input line', a
 	await page.keyboard.type("printf 'RESUMED_SSH_INPUT");
 	await expect(rows).toContainText("printf 'RESUMED_SSH_INPUT");
 	await page.evaluate(() => {
-		const sockets = (window as unknown as { __resumeTestSockets: WebSocket[] }).__resumeTestSockets;
-		sockets.at(-1)!.close(4000, 'E2E transport interruption');
+		const state = window as typeof window & {
+			__resumeTestSockets: WebSocket[];
+			__resumeTestFailures: { remaining: number; rejected: number };
+		};
+		state.__resumeTestFailures.remaining = 2;
+		state.__resumeTestSockets.at(-1)!.close(4000, 'E2E transport interruption');
 	});
 	await expect(tab).not.toHaveAttribute('data-session-state', 'connected');
 	await expect(tab).toHaveAttribute('data-session-state', 'connected', { timeout: 30_000 });
+	expect(
+		await page.evaluate(() => {
+			const state = window as typeof window & {
+				__resumeTestFailures: { remaining: number; rejected: number };
+			};
+			return state.__resumeTestFailures;
+		}),
+	).toEqual({ remaining: 0, rejected: 2 });
 	await expect(rows).toContainText('RETAINED_SSH_OUTPUT');
 	await expect(rows).toContainText("printf 'RESUMED_SSH_INPUT");
 	await input.focus();

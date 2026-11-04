@@ -4,6 +4,7 @@ import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { requestAgentJson } from '../../support/agent-request';
 import { E2E_URLS } from '../../support/test-env';
+import { installTestPlugin } from '../../support/plugins';
 import { readAgentExecutionSettingsResponse } from '../../../../packages/shared/src/agent/execution/http-codec';
 
 test('execution settings validate before dispatch, save the original CAS and reject retired capacity fields', async ({
@@ -12,6 +13,8 @@ test('execution settings validate before dispatch, save the original CAS and rej
 }) => {
 	await loginAsInitialAdmin(context.request);
 	await setUiLanguage(context.request);
+	// This test edits execution settings; first-enable installation is covered by onboarding.spec.
+	await installTestPlugin(context.request, 'nexus.agent');
 	const initial = await requestAgentJson(
 		context.request,
 		{

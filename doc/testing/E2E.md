@@ -1049,3 +1049,13 @@ WorkspaceTabBar仅将原挂起菜单项移到重置之前，原条件、事件�
 静态结果：check.log 根 check 退出0（Backend/Shared 构建、双端类型与 ESLint）；build.log Frontend vue-tsc 与 Vite 生产构建退出0；format.log 全仓 ESLint/Prettier 退出0；git diff --check 通过。仅文档收口后另做目标格式复核，不把构建当网络切换实测。
 
 待远程/实机验证：多次 WebSocket 打开失败后网络恢复；准备续接中断线/超时、旧附件 conflict 及原 PTY 身份/输出游标；确认未派发与确认已发送回执丢失的区别；onLine 始终为 true 的 Wi-Fi/移动网络切换；离线暂停/上线提前恢复、后台/返回前台、多标签与连续切网不重复续接；主机信任取消、密码/权限/目标失效仍需明确操作；挂起目录可用转换仍不抢占其它 owner；关闭/注销/卸载无重连残留。现有专用目录与产物保留至用户通知清理。
+
+## main dev 交付与数据库维护（2026-11-04，进行中）
+
+用户授权提交推送、修复正式远程 E2E、发布 main dev amd64，并更新指定 Nexus 实例及手动维护数据库；另确认删除新版已移除、不再需要的数据。前序全部已授权变更提交 `4fa936c2`，首轮 [41777130159](https://github.com/0honus0/nexus-terminal/actions/runs/41777130159) 的质量、Docker smoke 与 Backend 分片通过，7个 Browser 分片全部有失败，主要源于同一 pending 目录准入错误，首轮不可发布。
+
+已确认失败：工具目录读取要求 Run 已 running，但首次模型步骤是在读取目录后才 reserve 并将 pending 转为 running，导致只读对话及子任务入口直接 configuration_changed。修复仅允许 pending/running 读取当前授权目录；真实工具派发的 running/权限复查不变。SSH 原有回归补强为连续两次真实 WebSocket 打开阶段关闭，之后自动续接原输出与未完成输入。
+
+源码复核沿目录 SQL→Model→Governance→Tools→Run reserve/dispatch：初次准备允许 pending，不接受任何终态或 unknown；目录裁剪不替代派发授权。重连测试只注入本次创建的两个连接中断，不重发 SSH 输入或修改产品界面。另两处测试基线同步：首启 Modal 按现存标题 Enable Agent with Nexus Agent 定位；执行设置独立用例先安装签名 Nexus Agent，再验收总开关 CAS，首启确认/取消由专项完整保留。根 check 通过，目标 ESLint/格式与 diff 收口，正式远程结果随后记录。
+
+数据库只读对照确认仅定义表删除 installed/default_enabled/source_kind、实例删除 is_default 及默认唯一索引，结构签名更新。指定主机部署目录下 `maintenance/20261104-main-dev` 保存维护脚本和副本演练；演练成功核对全部结构、各表保留行数、完整性与外键。线上维护仍待最终 E2E 和镜像发布，操作前停止本应用、备份整个 data/配置与原镜像信息。旧 builtin 的1会话/2任务/1附件及关联行经真实 FK 闭包归档删除，其它 App/账户/连接/配置保留。未扩大为自动开发库迁移。

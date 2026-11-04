@@ -32,7 +32,7 @@ test('first enable requires installation confirmation and cancellation or confir
 	});
 	await page.goto('/settings?tab=agent');
 	const toggle = page.getByRole('switch', { name: 'Agent feature', exact: true });
-	const modal = page.getByRole('dialog', { name: 'Install Nexus Agent & enable Agent', exact: true });
+	const modal = page.getByRole('dialog', { name: 'Enable Agent with Nexus Agent', exact: true });
 	await expect(toggle).toBeEnabled();
 	await expect(toggle).not.toBeChecked();
 	await toggle.click();
@@ -85,7 +85,7 @@ test('unavailable recommendation does not install or enable Agent', async ({ pag
 	await failed;
 	await expect(toggle).toBeEnabled();
 	await expect(toggle).not.toBeChecked();
-	await expect(page.getByRole('dialog', { name: 'Install Nexus Agent & enable Agent', exact: true })).toHaveCount(0);
+	await expect(page.getByRole('dialog', { name: 'Enable Agent with Nexus Agent', exact: true })).toHaveCount(0);
 	expect(writes).toEqual([]);
 	expect(await requestAgentJson(context.request, { method: 'GET', path: '/apps' }, readAgentAppListResponse)).toEqual(
 		[],

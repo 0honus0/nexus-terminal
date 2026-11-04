@@ -332,7 +332,12 @@ export class SqliteGovernanceStorage implements GovernanceStorage {
 				'SELECT status,selected_connections_json FROM agent_runs WHERE id=? AND user_id=? AND app_id=?',
 				[runId, userId, appId],
 			);
-			if (policy === null || run === null || readRunStatus(run.status) !== 'running') {
+			if (policy === null || run === null) {
+				return null;
+			}
+			const status = readRunStatus(run.status);
+			// The first catalog is read before reserving the model step transitions pending to running.
+			if (status !== 'pending' && status !== 'running') {
 				return null;
 			}
 			const selected = readRunSelection(run.selected_connections_json);
