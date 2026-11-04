@@ -50,6 +50,14 @@
 		removeSavedCredential,
 	} = useConnectionForm(props, emit);
 
+	const usesSshKey = computed(() => form.value.type === 'SSH' && form.value.authMethod === 'key');
+	const passwordInputId = computed(() => {
+		if (form.value.type === 'SSH') {
+			return 'conn-password';
+		}
+		return form.value.type === 'RDP' ? 'conn-password-rdp' : 'conn-password-vnc';
+	});
+
 	const jumpHostOptions = (index: number): UiSelectOption[] =>
 		jumpHostsForIndex(index).map((host) => ({
 			value: host.id,
@@ -132,59 +140,57 @@
 							})
 						}}
 					</p>
-					<template v-if="form.type === 'SSH'">
-						<div>
-							<label class="mb-1 block text-sm font-medium text-text-secondary">{{
-								t('connections.form.authMethod')
-							}}</label>
-							<UiSegmentedControl
-								v-model="form.authMethod"
-								:options="authMethodOptions"
-								:label="t('connections.form.authMethod')"
+					<div v-if="form.type === 'SSH'">
+						<label class="mb-1 block text-sm font-medium text-text-secondary">{{
+							t('connections.form.authMethod')
+						}}</label>
+						<UiSegmentedControl
+							v-model="form.authMethod"
+							:options="authMethodOptions"
+							:label="t('connections.form.authMethod')"
+						/>
+					</div>
+					<UiFormField
+						:label="
+							usesSshKey
+								? t('connections.form.sshKey')
+								: form.type === 'VNC'
+									? t('connections.form.vncPassword')
+									: t('connections.form.password')
+						"
+					>
+						<div class="flex min-w-0 items-center gap-3">
+							<SshKeySelector
+								v-if="usesSshKey"
+								v-model="form.sshKeyId"
+								class="min-w-0 flex-1"
+								:disabled="removeSavedCredential"
 							/>
-						</div>
-						<UiFormField v-if="form.authMethod === 'password'" :label="t('connections.form.password')">
 							<UiInput
-								id="conn-password"
+								v-else
+								:id="passwordInputId"
 								v-model="form.password"
+								class="min-w-0 flex-1"
 								:disabled="removeSavedCredential"
 								:placeholder="connection ? t('connections.form.keepPassword') : undefined"
 								type="password"
 								autocomplete="new-password"
 							/>
-						</UiFormField>
-						<UiFormField v-else :label="t('connections.form.sshKey')">
-							<SshKeySelector v-model="form.sshKeyId" :disabled="removeSavedCredential" />
-							<p
-								v-if="credential?.credential.kind === 'ssh_key'"
-								class="mt-1 text-xs text-text-secondary"
+							<label
+								v-if="connection && credential && credential.credential.kind !== 'none'"
+								class="flex shrink-0 items-center gap-2 whitespace-nowrap text-sm"
 							>
-								{{ t('connections.form.keyUpdateNoteSelected') }}
-							</p>
-						</UiFormField>
-					</template>
-					<UiFormField
-						v-else
-						:label="
-							form.type === 'RDP' ? t('connections.form.password') : t('connections.form.vncPassword')
-						"
-					>
-						<UiInput
-							:id="form.type === 'RDP' ? 'conn-password-rdp' : 'conn-password-vnc'"
-							v-model="form.password"
-							:disabled="removeSavedCredential"
-							:placeholder="connection ? t('connections.form.keepPassword') : undefined"
-							type="password"
-							autocomplete="new-password"
-						/>
+								<UiCheckbox v-model="removeSavedCredential" />
+								<span>{{ t('connections.clearCredential') }}</span>
+							</label>
+						</div>
+						<p
+							v-if="usesSshKey && credential?.credential.kind === 'ssh_key'"
+							class="mt-1 text-xs text-text-secondary"
+						>
+							{{ t('connections.form.keyUpdateNoteSelected') }}
+						</p>
 					</UiFormField>
-					<label
-						v-if="connection && credential && credential.credential.kind !== 'none'"
-						class="flex items-center gap-2 text-sm"
-					>
-						<UiCheckbox v-model="removeSavedCredential" />
-						<span>{{ t('connections.clearCredential') }}</span>
-					</label>
 				</section>
 
 				<section class="ui-form-section connection-form__section space-y-5">

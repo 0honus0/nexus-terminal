@@ -8,6 +8,10 @@
 
 官方插件[v1.0.3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.3)已发布，main/tag均为d5dd455，发布CI成功。本体[amd dev发布41830244197](https://github.com/0honus0/nexus-terminal/actions/runs/41830244197)成功，来源为上述被测提交；后续按用户新授权维护指定实例数据库并更新镜像，见紧接的部署记录。真实运营商切网、手机软键盘、外部供应商及未列故障边界仍按[待验与外部依赖](../PLAN.md#待验与外部依赖)保留；受控回归不替代真实模型效果或吞吐实测。旧553项及更早镜像结果只保留为各自历史证据。
 
+## 连接编辑清除凭据布局（2026-11-04，静态检查）
+
+基于main/fac0f2ee，ConnectionForm将清除凭据勾选项移到密码输入框右侧，SSH密钥模式放在选择框右侧。源码核对原输入ID、凭据可见条件、清除后禁用、密码留空保留及保存/取消调用链；复用原UiInput/UiCheckbox，输入可收缩，清除项不换行，无新请求或状态owner。USAGE及PLAN同步。用户随后要求审查代码并提交推送；第二轮复核表单→提交→原版本更新及现有E2E定位，未发现本批新增逻辑问题，未新增源码修改。按D17未运行浏览器或行为测试；320px手机、三语呈现及真实保存回归仍待验。根`pnpm run check`、前端生产build、全仓ESLint/Prettier及`git diff --check`均通过；日志集中于`/home/honus/nexus-task-artifacts/connection-credential-layout-20261104`。
+
 ## 插件市场更新确认弹窗（2026-11-04，限定浏览器验收通过）
 
 工作区基于main/d81823bb，将PluginManagementSettings顶部候选包确认区移入共用UiModal；安装及两步升级继续使用原契约。用户明确授权“本地两个修改都用浏览器验证下 没问题提交推送”，作为D17的限定例外。证据保留于`/home/honus/nexus-task-artifacts/plugin-market-modal-20261104`。Node v22.23.1、pnpm 11.28.10、Playwright 1.64.1、Chromium 156，经本机CDP连接实际`https://api.honus.top`；前端当前源码9998，后端3001使用独立空数据库，自建29192仓库提供真实签名1.0.0/2.0.0包，不读取用户数据库或操作生产。
