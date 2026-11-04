@@ -9,5 +9,7 @@ export interface StoredPluginScopeActivation {
 	displayName: string;
 	contentHash: string;
 	capabilities: AgentCapability[];
+	enabled: boolean;
+	grantedCapabilities: AgentCapability[] | null;
 	now: number;
 }

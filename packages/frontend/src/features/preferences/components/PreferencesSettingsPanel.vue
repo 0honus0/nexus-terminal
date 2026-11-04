@@ -41,8 +41,8 @@
 		id: 'preferences-system',
 
 		pending: () =>
-			(!loading.value && (needsRefresh.value || Boolean(loadError.value))) ||
-			(!backendLogging.busy.value && backendLogging.needsRefresh.value),
+			(!loading.value && Boolean(loadError.value)) ||
+			(!backendLogging.busy.value && backendLogging.needsRefresh.value && Boolean(backendLogging.message.value)),
 
 		reload: async () => {
 			const requests: Promise<unknown>[] = [];

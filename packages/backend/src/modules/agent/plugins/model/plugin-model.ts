@@ -1,5 +1,5 @@
 import type { PluginRuntimeObservation, PluginRuntimeAcknowledgement } from './plugin-types.js';
-import type { PluginInstallationDirectory } from './plugin-types.js';
+import type { PluginAppInitialization, PluginInstallationDirectory } from './plugin-types.js';
 import type { PluginDataSnapshot, PluginDataMigration, PluginDataMigrationResult } from './plugin-migration-types.js';
 import type { PluginRuntimeLease } from './plugin-types.js';
 import { intentToStorage } from './plugin-intent-model.js';
@@ -918,7 +918,7 @@ export class PluginModel {
 			stage: PluginStage,
 			publisher: PluginPublisher | null,
 			current: PluginInstallation | null,
-		) => void,
+		) => PluginAppInitialization,
 	): Promise<PluginInstallation> {
 		return installation(
 			await storage(() =>
@@ -929,13 +929,19 @@ export class PluginModel {
 					version,
 					appId,
 					Date.now(),
-					(userId, row, key, current) =>
-						admit(
+					(userId, row, key, current) => {
+						const initialization = admit(
 							userId,
 							stage(row),
 							key === null ? null : publisher(key),
 							current === null ? null : installation(current),
-						),
+						);
+						return {
+							enabled: initialization.enabled,
+							grantedCapabilities:
+								initialization.grantedCapabilities?.map((capability) => capability) ?? null,
+						};
+					},
 				),
 			),
 		);

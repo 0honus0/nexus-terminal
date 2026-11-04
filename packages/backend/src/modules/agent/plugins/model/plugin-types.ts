@@ -13,6 +13,11 @@ export interface PluginActor {
 
 export type DrainPluginRuns = (userId: number, appId: string) => Promise<void>;
 
+export interface PluginAppInitialization {
+	enabled: boolean;
+	grantedCapabilities: AgentCapability[] | null;
+}
+
 export interface PluginVersion {
 	manifest: PluginManifest;
 	packageHash: string;

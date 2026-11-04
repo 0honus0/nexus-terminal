@@ -19,6 +19,11 @@ export interface StoredPluginPublisher {
 	revokedAt: number | null;
 }
 
+export interface StoredPluginAppInitialization {
+	enabled: boolean;
+	grantedCapabilities: AgentCapability[] | null;
+}
+
 export interface StoredPluginManifest {
 	schemaVersion: 1;
 	id: string;
@@ -244,7 +249,7 @@ export interface PluginStorage {
 			stage: StoredPluginStage,
 			publisher: StoredPluginPublisher | null,
 			current: StoredPluginInstallation | null,
-		) => void,
+		) => StoredPluginAppInitialization,
 	): Promise<StoredPluginInstallation>;
 	stages(userId: number): Promise<StoredPluginStage[]>;
 	recovery(): Promise<StoredPluginRecovery[]>;
@@ -340,6 +345,8 @@ export interface StoredPluginActivation {
 	displayName: string;
 	contentHash: string;
 	capabilities: import('@nexus-terminal/shared/agent/governance/values').AgentCapability[];
+	enabled: boolean;
+	grantedCapabilities: AgentCapability[] | null;
 	now: number;
 }
 

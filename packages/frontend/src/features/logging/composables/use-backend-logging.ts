@@ -1,6 +1,6 @@
 import { useFeedback } from '@/shared/feedback/public';
 import { isNetworkFailure } from '@/client/http/network-failure';
-import { onMounted, ref, shallowRef } from 'vue';
+import { nextTick, onActivated, onMounted, ref, shallowRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { type BackendLogLevel } from '@nexus-terminal/shared/operations/logging/values';
 import { useAuthenticatedViewScope } from '@/shared/session/public';
@@ -62,6 +62,10 @@ export function useBackendLogging() {
 	}
 
 	onMounted(() => execute());
+	onActivated(async () => {
+		await nextTick();
+		if (needsRefresh.value) await execute();
+	});
 
 	return { snapshot, level, busy, needsRefresh, message, execute };
 }

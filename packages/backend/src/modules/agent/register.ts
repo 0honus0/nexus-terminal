@@ -303,6 +303,8 @@ export function registerAgent(
 				displayName: input.displayName,
 				contentHash: input.contentHash,
 				capabilities: input.capabilities.map((item) => item),
+				enabled: input.enabled,
+				grantedCapabilities: input.grantedCapabilities?.map((capability) => capability) ?? null,
 				now: input.now,
 			}),
 		retirePluginScope,

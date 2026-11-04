@@ -1,11 +1,25 @@
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 import type { StoredPluginScopeActivation } from '../../storage/plugin-scope-storage.js';
-import { initializeAppPolicy, invalidateAppPolicy } from '../../../governance/adapters/sqlite/policy-write.js';
+import {
+	initializeAppPolicy,
+	invalidateAppPolicy,
+	replaceAppGrants,
+} from '../../../governance/adapters/sqlite/policy-write.js';
+import type { StoredGrant } from '../../../governance/storage/governance-storage.js';
+import { AGENT_TARGET_CAPABILITIES } from '@nexus-terminal/shared/agent/governance/values';
 import { cancelRunsInScope } from '../../../runs/adapters/sqlite/run-fence.js';
 import { assertAppRevisionAvailable } from './app-row.js';
 
 /** Participates in the installing owner's transaction; it alone writes Scope declarations and Apps. */
 export async function activatePluginScope(tx: SqlExecutor, input: StoredPluginScopeActivation): Promise<void> {
+	const grants: StoredGrant[] = (input.grantedCapabilities ?? []).map((capability) => ({
+		capability,
+		schemaVersion: 2,
+		scope: AGENT_TARGET_CAPABILITIES.includes(capability)
+			? { kind: 'targets', sshMode: 'all' }
+			: { kind: 'global' },
+		grantedAt: input.now,
+	}));
 	const definition = await tx.one('SELECT content_hash FROM agent_app_definitions WHERE id=? AND version=?', [
 		input.definitionId,
 		input.definitionVersion,
@@ -37,28 +51,33 @@ export async function activatePluginScope(tx: SqlExecutor, input: StoredPluginSc
 			throw new Error('Plugin App ownership conflict');
 		}
 		assertAppRevisionAvailable(current.version);
-		// Activation preserves grants but disables the App. New version never inherits a running lease.
-		await tx.run('UPDATE agent_apps SET definition_version=?,enabled=0,version=version+1,updated_at=? WHERE id=?', [
+		// A version change never inherits a running lease. Only a confirmed onboarding install supplies new grants.
+		await tx.run('UPDATE agent_apps SET definition_version=?,enabled=?,version=version+1,updated_at=? WHERE id=?', [
 			input.definitionVersion,
+			input.enabled ? 1 : 0,
 			input.now,
 			input.appId,
 		]);
 		await invalidateAppPolicy(tx, input.userId, input.appId);
+		if (input.grantedCapabilities !== null) {
+			await replaceAppGrants(tx, input.userId, input.appId, grants);
+		}
 		await cancelRunsInScope(tx, input.userId, input.appId, input.now);
 	} else {
 		await tx.run(
-			'INSERT INTO agent_apps(id,user_id,name,definition_id,definition_version,enabled,version,updated_at,created_at) VALUES(?,?,?,?,?,0,1,?,?)',
+			'INSERT INTO agent_apps(id,user_id,name,definition_id,definition_version,enabled,version,updated_at,created_at) VALUES(?,?,?,?,?,?,1,?,?)',
 			[
 				input.appId,
 				input.userId,
 				input.displayName,
 				input.definitionId,
 				input.definitionVersion,
+				input.enabled ? 1 : 0,
 				input.now,
 				input.now,
 			],
 		);
-		await initializeAppPolicy(tx, input.userId, input.appId, []);
+		await initializeAppPolicy(tx, input.userId, input.appId, grants);
 	}
 }
 

@@ -23,6 +23,7 @@ import type {
 	StoredPluginInstallation,
 	StoredPluginInstallationDirectory,
 	StoredPluginActivation,
+	StoredPluginAppInitialization,
 	StoredPluginVersion,
 	StoredPluginContentSource,
 } from '../../storage/plugin-storage.js';
@@ -699,7 +700,7 @@ export class SqlitePluginStorage implements PluginStorage {
 			stage: StoredPluginStage,
 			publisher: StoredPluginPublisher | null,
 			current: StoredPluginInstallation | null,
-		) => void,
+		) => StoredPluginAppInitialization,
 	): Promise<StoredPluginInstallation> {
 		return this.db.transaction(async (tx) => {
 			const staged = await stage(tx, userId, stageId);
@@ -716,7 +717,7 @@ export class SqlitePluginStorage implements PluginStorage {
 				[userId, manifest.id],
 			);
 			const current = currentRow === null ? null : pluginInstallationRow(currentRow);
-			admit(await this.identity(tx, digest), staged, trusted, current);
+			const initialization = admit(await this.identity(tx, digest), staged, trusted, current);
 			if (current?.status === 'draining') {
 				const pending = await tx.one(
 					'SELECT stage_id,stage_version FROM agent_plugin_retirements WHERE user_id=? AND app_id=?',
@@ -773,6 +774,8 @@ export class SqlitePluginStorage implements PluginStorage {
 				displayName: manifest.displayName,
 				contentHash: staged.packageHash,
 				capabilities: manifest.capabilities.map((item) => item),
+				enabled: initialization.enabled,
+				grantedCapabilities: initialization.grantedCapabilities?.map((capability) => capability) ?? null,
 				now,
 			});
 			await tx.run(

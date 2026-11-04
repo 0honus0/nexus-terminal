@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 import { openPlugins } from './plugin-management-fixture.mjs';
 import { expectStatus, until } from '../remote/openssh-fixture.mjs';
 import { OFFICIAL_PLUGIN_SOURCE } from '../../../packages/backend/dist/modules/agent/plugins/service/plugin-source.js';
+import { PluginService } from '../../../packages/backend/dist/modules/agent/plugins/service/plugin-service.js';
 import {
 	readAgentPluginCatalog,
 	readAgentPluginRecommended,
@@ -16,6 +17,51 @@ import {
 const base = '/api/v1/agent/plugins';
 const recommendedPath = '/api/v1/agent/onboarding/recommended-plugin';
 const product = createRequire(new URL('../../../package.json', import.meta.url))('./package.json');
+
+await test('B10 onboarding initialization commits enabled App and full declared grants without restoring revoked grants', async (t) => {
+	const f = await openPlugins(t);
+	const install = PluginService.prototype.install;
+	let initialize = true;
+	// Exercise the internal onboarding decision with a real signed package and SQLite transaction.
+	// This is not an official-publisher installation and does not replace or relax its pinned key.
+	t.mock.method(PluginService.prototype, 'install', function (actor, stageId, version, options) {
+		return install.call(this, actor, stageId, version, initialize ? { enableWithDeclaredGrants: true } : options);
+	});
+	const capabilities = ['file.read', 'shell.execute', 'machine.inspect', 'context.read'];
+	const plugin = await f.install('onboarding-initialization', {
+		capabilities,
+		enabled: false,
+		backend: 'export function activate() {}\nexport function health() { return true; }',
+	});
+	assert.equal(expectStatus(await f.api('GET', plugin.appPath), 200).enabled, true);
+	const grants = expectStatus(await f.api('GET', plugin.appPath + '/grants'), 200).grants;
+	assert.deepEqual(grants.map((grant) => grant.capability).sort(), capabilities.toSorted());
+	for (const grant of grants) {
+		assert.deepEqual(
+			grant.scope,
+			['file.read', 'shell.execute'].includes(grant.capability)
+				? { kind: 'targets', targets: { ssh: { mode: 'all' } } }
+				: { kind: 'global' },
+		);
+	}
+	assert.equal(
+		expectStatus(await f.api('GET', base + '/installations/' + plugin.appId + '/runtime'), 200).state,
+		'active',
+	);
+	await plugin.grants([]);
+	await plugin.enabled(false);
+	const stage = expectStatus(await f.api('GET', base + '/stages'), 200).items.find(
+		(item) => item.manifest?.id === plugin.installation.definitionId,
+	);
+	assert.ok(stage);
+	expectStatus(await f.api('POST', base + '/install', { stageId: stage.id, expectedVersion: stage.version }), 200);
+	assert.equal(expectStatus(await f.api('GET', plugin.appPath), 200).enabled, false);
+	assert.deepEqual(expectStatus(await f.api('GET', plugin.appPath + '/grants'), 200).grants, []);
+	initialize = false;
+	const ordinary = await f.install('ordinary-initialization', { capabilities, enabled: false });
+	assert.equal(expectStatus(await f.api('GET', ordinary.appPath), 200).enabled, false);
+	assert.deepEqual(expectStatus(await f.api('GET', ordinary.appPath + '/grants'), 200).grants, []);
+});
 
 await test('B10 actual repository HTTP, signed downloads and configuration ordering', { timeout: 60000 }, async (t) => {
 	let catalog;

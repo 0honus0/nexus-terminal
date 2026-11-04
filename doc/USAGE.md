@@ -620,7 +620,7 @@ DEV `/__agent-next` 仍提供独立协议诊断，不作为正式入口或行为
 
 ### Provider 与模型配置
 
-顶部“Agent 功能”开关关闭时直接保存；首次开启先检查 Nexus Agent 安装，未安装则显示官方推荐插件确认弹窗，已安装则复用。读取期间保持可见并显示加载状态，读取失败时禁用开关并可只读重试。取消不安装、不修改开关，确认安装成功后才启用总开关；安装结果未知时先只读核对，不自动重装。后端的插件初始停用且没有授权，仍需在应用卡片中单独启用和授予能力；总开关不代替应用权限。官方目录不可用时显示失败，不伪造推荐信息或安装进度。
+顶部“Agent 功能”开关关闭时直接保存；首次开启先检查 Nexus Agent 安装，未安装则显示官方推荐插件确认弹窗，已安装则复用。读取期间保持可见并显示加载状态，读取失败时禁用开关并可只读重试。取消不安装、不修改开关，确认安装成功后才启用总开关；安装结果未知时先只读核对，不自动重装。确认从此引导新装 Nexus Agent 时，安装事务同时启用 App 并授予当前签名包声明的全部能力，文件/Shell 能力覆盖全部 SSH 目标；已有安装保留当前启停和授权。普通市场安装仍默认停用、空授权。目标禁用名单、本次 Run 选择和批准策略继续生效，总开关不代替应用权限。官方目录不可用时显示失败，不伪造推荐信息或安装进度。
 
 预算与存储沿用单位快捷输入（K/M/G、k/M、m/h）及底部保存栏；窄屏下状态提示可换行，保存按钮固定在右侧，不换成单独的左对齐行。单位换算结果必须是范围内的安全整数，空值、非整数量或超限输入不会发送保存请求。编辑展示保留精确数值，不因缩写或四舍五入改变预算。四个分类共用同一份版本化草稿。
 
@@ -742,7 +742,7 @@ MCP／ACP 集成选择应用后以卡片列表展示名称、启用状态、MCP 
 
 同版本且同hash的“重新核验”只完成核验，不进入准备升级。准备升级后切页、刷新或取消本地候选，可重新选择原版本继续原升级；原stage ID/version保持不变，仍需当前安装修订、受信发布者及退役绑定全部匹配。
 
-- 新签名 manifest 的 frontendEntry/backendEntry 显式可空，分别限定 `frontend/` 与 `backend/`，不转换旧包。安装经 Scope 同事务写入不可变声明和用户 App，初始禁用、空 grant；签名不代替授权。撤销 publisher 同事务禁用对应 App/围栏 Run，再取消本地任务。
+- 新签名 manifest 的 frontendEntry/backendEntry 显式可空，分别限定 `frontend/` 与 `backend/`，不转换旧包。安装经 Scope 同事务写入不可变声明和用户 App，普通安装初始禁用、空 grant；启用 Agent 引导中的推荐安装按用户确认同时启用和授予全部声明能力，签名本身不代替授权。撤销 publisher 同事务禁用对应 App/围栏 Run，再取消本地任务。
 - `POST /installations/:appId/upgrade` 提交 expectedRevision、stageId、expectedStageVersion；`DELETE /installations/:appId` 卸载，`POST /installations/:appId/cancel-retirement` 取消退役，后两者传 expectedRevision。先持久 draining/围栏，再分别启动并等待原 Run 与 runtime 收尾；一项失败仍收尾另一项。失败保留 draining，按当前 revision 查询/继续原操作，不能自动换意图重试。取消保留旧版本且不自动启用；重启不重放退役或工具。当前覆盖 Run、前端内容、独立持久数据和后端runtime；数据迁移使用下述明确流程，不执行旧migrate回调。
 - `GET /installations/:appId/descriptor` 为当前已启用、受信安装发放30分钟资源地址，绑定会话与安装revision。`/plugins/:appId/:version/:grant/<frontend asset>` 每文件16 MiB，no-store、sandbox/CSP，不提供后端代码或签名元文件。SDK入口 `/sdk/frontend-v1.mjs` 交付构建时打包完整依赖的独立浏览器模块；父页通过认证 `POST /installations/:appId/frontend/rpc` 转发 `{grant,envelope}`，严格关联nonce/id/seq/method/App。前端RPC完整JSON为8 MiB+1 KiB；原核心方法仍有512 KiB子预算，后端IPC仍512 KiB。单次等待30秒、最多32个待响应；写入超时、协议失败或关闭后保留原operationId与输入，不自动重发。B10已用隔离父页在真实Chromium加载签名iframe和完整SDK依赖，验证握手、32项等待、8订阅、晚响应及回调失败收敛；协议损坏后的已提交写入保留unknown及原operationId。正式父页桥已消费当前 Shared；隔离父页的历史证据仍只证明其原执行范围。
 - 前端 SDK 通过 `/sdk/frontend-v1.mjs` 交付包含依赖的独立浏览器模块，无需插件配置依赖映射。前端SDK的request已有27个方法（subagents.messages只返回序号/发送者/正文长度/期限，不输出模型私有mailbox正文；approvals只输出安全inspection）：原host/storage/intents九方法，加definitions/providers.list、threads.list/create/rename/delete/entries、runs.list/get/events/create/appendInput/cancel、subagents.list/messages/cancel、approvals.list/resolve。Thread列表最多50项，新增UUID operationId、create必填autoTitle（false保留调用方标题，true允许首次消息自动命名）和rename expectedVersion；每App最多512个实际Thread；重命名等线程意图不再按累计4096次拒绝，保留操作身份及原提交快照用于幂等核对。entries只读取Root的用户输入和assistant文字，不含工具正文、凭据或私有reasoning；每页最多16片，每片4096 Unicode码点/16 KiB，完整512 KiB，以服务器四段码点游标续读，支持emoji/NUL，分片未读完不跳到后项。
@@ -815,7 +815,7 @@ B10已验证真实子进程在quiesce内的SDK调用被拒绝且无晚写入、h
 
 全局禁用名单保存完整连接集合（最多50项）和本次原因，原因必填，清空名单也须填写；保存会给全部条目应用本次原因。授权不能覆盖禁用名单；全局范围与“聊天中选择的目标不绕过 Host 阻断”说明集中在标题旁的信息提示中，不再占用独立正文行。每个编辑区域独立只读恢复；冲突或结果未知后先点对应“重新读取”，读取失败不解除写入阻止。此批仅完成源码/静态适配，按D17留最终远程Actions E2E验收。
 
-Agent 没有内置应用。App 与能力声明唯一来自当前账号安装的签名插件；新环境的 App 与声明目录均为空，读取目录不产生写入。开启 Agent 总开关时，尚未安装 Nexus Agent 则弹出官方插件安装确认；取消、目录读取失败或安装失败均不开启。已经安装则复用现有安装，不重复下载。安装成功后再开启总开关，插件仍初始停用、授权为空，需到 Agent App 中单独启用和授权。声明 ID 与 App 实例 UUID 分开，重启不恢复撤回的权限；治理操作缺失必需政策记录时安全失败，不静默补权限。
+Agent 没有内置应用。App 与能力声明唯一来自当前账号安装的签名插件；新环境的 App 与声明目录均为空，读取目录不产生写入。开启 Agent 总开关时，尚未安装 Nexus Agent 则弹出官方插件安装确认；取消、目录读取失败或安装失败均不开启。已经安装则复用现有安装，不重复下载。通过此引导新装成功时，插件已启用并获得当前包声明的全部能力，文件/Shell 能力授权全部 SSH 目标，然后才开启总开关。已安装复用不重新启用或恢复撤回的授权；普通市场安装、升级不自动授予能力。目标禁用名单、Run 目标选择和批准策略仍生效。声明 ID 与 App 实例 UUID 分开，重启不恢复撤回的权限；治理操作缺失必需政策记录时安全失败，不静默补权限。
 
 安装确认弹窗的安全提示与按钮分开显示；桌面安装与取消并排，手机安装和取消各占一行，按钮文字保持单行。
 
@@ -918,7 +918,7 @@ Artifact 位于 /api/v1/agent/apps/:appId/artifacts；先 POST name/mediaType/de
 
 模型工具 memory_recall/propose、artifact_create/read 与 context_checkpoint 使用独立当前能力和必要审批。Artifact 续读按字节 offset 返回 base64；Memory 和摘要均是不可信数据，不能成为授权。语义检查点按冻结 aggressive/balanced/conservative 限制摘要至来源字节的35%/50%/75%，只在完成原步骤工具组后替换已绑定输入前缀，原用户请求和完整当前交换保留；没有开启模型派发就不会伪造摘要。
 
-正式插件管理支持受信发布者、仓库包下载/暂存/核验、已核验包安装、安装实例的准备升级/draining/完成升级/卸载/取消退役，以及官方/指定仓库目录、仓库配置和推荐安装。包需新 manifest 和有效签名；新安装默认关闭、授权为空，启用与授权到 App 管理完成。插件页面没有本地上传入口，文件库的普通附件上传独立保留；未知暂存不自动重放。更新后先读取对应目录；未知结果须核对安装/包/运行态，明确新意图才继续。
+正式插件管理支持受信发布者、仓库包下载/暂存/核验、已核验包安装、安装实例的准备升级/draining/完成升级/卸载/取消退役，以及官方/指定仓库目录、仓库配置和推荐安装。包需新 manifest 和有效签名；普通市场新安装默认关闭、授权为空，启用与授权到 App 管理完成；启用 Agent 引导的推荐安装在确认后同时启用并授予全部声明能力。插件页面没有本地上传入口，文件库的普通附件上传独立保留；未知暂存不自动重放。更新后先读取对应目录；未知结果须核对安装/包/运行态，明确新意图才继续。
 
 插件仓库标题右侧可刷新目录，下方输入仓库地址并添加，搜索框独立筛选插件；手机窄面板使用刷新图标，地址输入独占一行，添加按钮位于下一行右侧。长仓库地址在行内省略，仍可复制完整地址或删除配置；插件介绍自然换行，较窄的设置面板将校验、信任及数据清理按钮排在介绍下方，文字保持在完整按钮内。
 
@@ -1011,6 +1011,8 @@ Agent模块最多64个在途请求，停机同时中止发现/探测和Registry�
 - SSH/文件标签右键支持关当前/左侧/其他/右侧，分组名可点改；触摸终端规则见 [终端](#终端)。
 
 ### 核心持久设置
+
+返回缓存的设置页面时，个人偏好与后端日志会自动只读重载。正常初始化和离页造成的读取失效不显示模块失败提示；真实读取失败或写入未确认仍提示重新读取。重新读取只核对服务器当前状态，不重放未确认的写入。
 
 管理员使用 GET /api/v1/settings 读取 {version,effectiveVersion,requiresRestart,policy,effectiveMonitoring,captcha}；PUT 同路径提交完整 {expectedVersion,policy,captcha}。policy 包含 ipWhitelist、ipBlacklistEnabled、maxLoginAttempts（1–1000）、loginBanDuration（1–2592000秒）、statusMonitorIntervalSeconds / remoteHostRefreshIntervalSeconds（1–86400秒）、passkeys。白名单最多256条IP/CIDR、16 KiB；Passkey站点最多16项。未知字段、旧字符串字典、布局/外观字段均拒绝；个人偏好使用独立 /settings/preferences 与布局入口；外观使用独立设置入口。
 

@@ -24,6 +24,16 @@
 
 ## 专项记录
 
+### 设置读取恢复与推荐安装默认授权（2026-11-04，进行中）
+
+用户继续授权只读排查指定 Nexus 主机；本轮 SSH 仅读取 backend 最近3小时/最多5000行 Compose 日志，未修改远端文件、配置、数据库或容器。实际日志66行，范围07:01:09.324Z–07:08:49.789Z，未找到对应设置 GET 失败，execution-settings PUT 为200且 responseFinished=true；其余为 SSH 资源取消与 suspended socket 关闭，不能据此认定设置请求根因，也不能从无日志证明请求全部成功。产物 `/tmp/nexus-agent-market-release-20261104/remote-{backend,ssh}.log`，SSH stderr 为空。
+
+源码定位：KeepAlive 失活正常置 needsRefresh，却被 preferences-system/workspace 的 pending 当作失败；个人偏好和后端日志缺少重新激活读取，Agent 初始 refreshRequired 也可能临时误报。当前未在用户浏览器取得失败模块 ID，两个偏好面板与症状吻合，不声称远端精确证实。修复保留原只读恢复/未知写围栏与晚响应隔离，仅真实失败触发提示。
+
+推荐新装的初始启用/全部声明授权经 Service 决策、Model 投影进入原安装事务，SSH 目标能力为全部 SSH 范围，Runtime 启动后才确认；普通安装、升级和已装复用不恢复权限。回归新增缓存页往返无写入，并由正式 Playwright 调用真实签名包/SQLite 的内部初始化夹具，核对启用、完整授权/目标范围、运行态、撤权后幂等复用和普通安装空授权。该夹具不冒充官方签名包或替换 pinned key；官方新包真实验收仍待 D16。
+
+两轮源码审核完成；根 check、双端 build、全量格式检查均退出0，日志分别为本轮目录 check.log/build.log/format.log，diff 检查通过。新增正式远程 Actions 结果待回填；不运行本地行为/CDP/E2E，不沿用上一轮通过担保新增行为。
+
 以下记录按原执行范围保留；当时的“当前”“待验”“未提交/发布”等指该轮时点，最终产品行为以 USAGE 与当前源码为准。架构正文已移回对应架构文档，避免把设计误当测试证据。
 
 ### Agent 安装与插件仓库布局（2026-11-04，源码及静态）

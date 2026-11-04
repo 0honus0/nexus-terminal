@@ -37,7 +37,7 @@ Foundation 保持业务无关；具体编辑器、xterm、图表、插件 iframe
 
 ## 5. 入口与安装
 
-`app/main.ts`、bootstrap 与 router 安装全局依赖和页面；正式 Workspace 按当前身份和视图构建 runtime/功能能力。Agent Host 只匹配当前真实签名插件安装的 App/版本/hash/publisher；开启 Agent 的安装引导与总开关分别提交，安装不自动启用 App 或授予能力。DEV 页面仅作开发入口，不提供默认 App 或手工创建旁路。
+`app/main.ts`、bootstrap 与 router 安装全局依赖和页面；正式 Workspace 按当前身份和视图构建 runtime/功能能力。Agent Host 只匹配当前真实签名插件安装的 App/版本/hash/publisher；开启 Agent 的安装引导与总开关分别提交；确认引导新装时后端同时启用 App 和授予全部声明能力，普通市场安装和已有安装复用保留各自权限语义。DEV 页面仅作开发入口，不提供默认 App 或手工创建旁路。
 
 重型编辑器、预览及图表沿实际异步入口加载；加载占位不伪造业务数据。现成全局确认、Toast 和 UiSelect 由基础组件统一呈现，具体动作与恢复仍归用例 owner。
 
@@ -300,10 +300,10 @@ usePluginManagement 持已确认安装快照；相同 appId/revision 序列不�
 2. **子功能与目录**：复用原 onboarding composable/modal 和 Plugin API；Host 删除 builtin 分支和无用 definitions 请求；DEV 删除手工创建 App，仅使用已安装 App UUID。
 3. **依赖方向**：设置 → 原 composable/API → Shared；Host 按 App/installation/version 完整身份映射 surface。
 4. **类型与转换**：声明移除 defaultEnabled；删除无消费者的 DEV App 创建类型/API/翻译，原插件版本哈希与 publisher 白名单转换保持。
-5. **入口与安装**：关闭直接写总开关；开启先读推荐，未装显示 Nexus Agent 确认，已装复用，安装成功才写总开关。插件仍需单独启用与授权。引导底部安全提示独立一行；桌面安装/取消并排，手机两个按钮各占一行、文字保持单行，局部样式不修改全局 UiFormActions；手机面板使用16px内边距，标题与发布者标记可自然换行。
+5. **入口与安装**：关闭直接写总开关；开启先读推荐，未装显示 Nexus Agent 确认，已装复用，安装成功才写总开关。引导新装由后端原子初始化启用状态与完整声明授权，已有安装不重置；普通市场安装仍需单独启用与授权。引导底部安全提示独立一行；桌面安装/取消并排，手机两个按钮各占一行、文字保持单行，局部样式不修改全局 UiFormActions；手机面板使用16px内边距，标题与发布者标记可自然换行。
 6. **数据、事务与并发**：无本地默认 App/旧 ID 兼容；Host 仅匹配真实安装包 manifest、版本、hash 和 publisher；目录 Map 索引保持。
 7. **生命周期与失败**：取消/读取失败/安装失败不开启；复用 view/session generation、未知写围栏与只读核对；视图失效后的晚结果不写总开关。
-8. **当前能力与验收**：USAGE 同步首启说明；各轮定向浏览器验收与静态结果见 testing，不自动授予能力。安装按钮的新排版按 D17 留 Windows/手机实机验收。
+8. **当前能力与验收**：USAGE 同步首启说明；各轮定向浏览器验收与静态结果见 testing；推荐新装初始化全部声明授权，已有安装不自动恢复权限。安装按钮的新排版按 D17 留 Windows/手机实机验收。
 
 ## 插件仓库呈现
 
@@ -326,3 +326,14 @@ usePluginManagement 持已确认安装快照；相同 appId/revision 序列不�
 6. **数据与并发**：复用原单个连接 Promise、2/4/8/16/30秒退避及离线暂停。传输失败不设置永久 waitingForRetry，恢复中再次收到网络事件保留即时恢复意图；成功不重连已绑定附件。普通 resume 的 conflict/remote_unavailable 可等待旧附件释放后重试原凭据，不自动新建 SSH。
 7. **生命周期与失败**：新建请求或 resumeAck 已发送但确认未知仍停止重放；权限、主机信任、目标失效与协议错误仍需明确操作。只有尚未确认所有权的新 resume 可在传输中断/超时后重试，服务端在旧附件脱离时回滚准备状态；已确认附件后的激活网络失败可用已提交新凭据续接。关闭、销毁与身份撤销继续取消原资源。
 8. **当前能力与验收**：USAGE 同步网络恢复/手动重试边界；源码、静态及未运行真实行为分别归 PLAN/testing。既有 SSH 服务确定拒绝等待按键的场景继续有效，不能用网络自动恢复扩成未知提交重放或任意程序恢复保证。
+
+## 设置读取失效与缓存页面恢复
+
+1. **职责与范围**：原个人偏好 editor、后端日志和 Agent 执行设置 controller 拥有读取状态；全局 settings-reload 只汇总真实失败，不把正常初始化或视图撤销算成故障。
+2. **子功能与目录**：复用 preferences/composables/use-preferences-editor、logging/composables/use-backend-logging 和原三个设置面板；没有新状态模块。
+3. **依赖方向**：面板消费 controller 失败/忙碌状态并注册 Shared Feedback 恢复源，读取仍经原功能 API/Store。
+4. **类型与转换**：沿原应用及 Shared 请求/回执 mapper，无新协议和存储形状。
+5. **入口与安装**：mount 首读，KeepAlive 激活后等待视图 scope 恢复再按 needsRefresh 只读加载；初始化和加载中的源不触发恢复提示。
+6. **数据、事务与并发**：原 busy/读写围栏阻止并发；失活清理旧错误，返回只读核对后才解除写入围栏，不重放原写入。
+7. **生命周期与失败**：原 signal/current scope 屏蔽晚返回与 finally；真实读失败、冲突和未确认写继续提供原重新读取入口，重读失败不开放写入。
+8. **当前能力与验收**：USAGE 同步返回页面与失败恢复行为；新增缓存往返及原真实失败回归留正式 Actions 验证，静态与设备视觉证据分开。

@@ -209,7 +209,7 @@ export class PluginRepositoryService {
 				},
 				signal,
 			);
-			return this.plugins.install(actor, stage.id, stage.version);
+			return this.plugins.install(actor, stage.id, stage.version, { enableWithDeclaredGrants: true });
 		});
 	}
 

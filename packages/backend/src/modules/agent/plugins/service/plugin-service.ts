@@ -619,6 +619,7 @@ export class PluginService {
 				) {
 					throw new AgentFailure('version_conflict');
 				}
+				return { enabled: false, grantedCapabilities: null };
 			});
 		});
 	}
@@ -721,29 +722,60 @@ export class PluginService {
 		return this.task(() => this.model.installations(actor));
 	}
 
-	install(actor: PluginActor, stageId: string, version: number): Promise<PluginInstallation> {
-		return this.task(() =>
-			this.model.install(actor, stageId, version, randomUUID(), (userId, stage, publisher, current) => {
-				identity(actor, userId);
-				if (!publisher || publisher.revokedAt !== null) {
-					throw new AgentFailure('forbidden');
+	install(
+		actor: PluginActor,
+		stageId: string,
+		version: number,
+		options: { enableWithDeclaredGrants: boolean } = { enableWithDeclaredGrants: false },
+	): Promise<PluginInstallation> {
+		return this.task(async (signal) => {
+			let activateRuntime = false;
+			const installed = await this.model.install(
+				actor,
+				stageId,
+				version,
+				randomUUID(),
+				(userId, stage, publisher, current) => {
+					identity(actor, userId);
+					if (!publisher || publisher.revokedAt !== null) {
+						throw new AgentFailure('forbidden');
+					}
+					if (stage.status !== 'verified' && stage.status !== 'installed') {
+						throw new AgentFailure('version_conflict');
+					}
+					if (
+						current &&
+						current.status !== 'removed' &&
+						!(
+							current.status === 'installed' &&
+							current.version === stage.manifest?.version &&
+							current.packageHash === stage.packageHash
+						)
+					) {
+						throw new AgentFailure('version_conflict');
+					}
+					if (!stage.manifest) {
+						throw new AgentFailure('version_conflict');
+					}
+					activateRuntime = options.enableWithDeclaredGrants && current?.status !== 'installed';
+					return {
+						enabled: activateRuntime,
+						grantedCapabilities: activateRuntime
+							? stage.manifest.capabilities.map((capability) => capability)
+							: null,
+					};
+				},
+			);
+			if (activateRuntime) {
+				try {
+					await this.runtime.start(actor.userId, installed.appId, signal);
+				} catch (cause) {
+					// Installation, App state and grants are already committed; do not report a rolled-back install.
+					throw new AgentFailure('operation_unknown', { cause });
 				}
-				if (stage.status !== 'verified' && stage.status !== 'installed') {
-					throw new AgentFailure('version_conflict');
-				}
-				if (
-					current &&
-					current.status !== 'removed' &&
-					!(
-						current.status === 'installed' &&
-						current.version === stage.manifest?.version &&
-						current.packageHash === stage.packageHash
-					)
-				) {
-					throw new AgentFailure('version_conflict');
-				}
-			}),
-		);
+			}
+			return installed;
+		});
 	}
 
 	publishers(actor: PluginActor): Promise<PluginPublisher[]> {

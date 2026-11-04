@@ -1,4 +1,4 @@
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onActivated, onMounted, reactive, ref, watch } from 'vue';
 import { structurallyEqual } from '@/foundation/data';
 import { useAuthenticatedViewScope } from '@/shared/session/public';
 import { useFeedback, preferenceFailureMessage } from '@/shared/feedback/public';
@@ -14,7 +14,7 @@ export function usePreferencesEditor(translate: (key: string) => string) {
 	const form = reactive(projectPreferences(preferences.values.value));
 	const baseline = ref(projectPreferences(preferences.values.value));
 	const version = ref(preferences.version.value);
-	const loading = ref(true);
+	const loading = ref(false);
 	const saving = ref(false);
 	const needsRefresh = ref(true);
 	const loadError = ref('');
@@ -24,6 +24,7 @@ export function usePreferencesEditor(translate: (key: string) => string) {
 			loading.value = false;
 			saving.value = false;
 			needsRefresh.value = true;
+			loadError.value = '';
 		},
 	});
 
@@ -43,7 +44,7 @@ export function usePreferencesEditor(translate: (key: string) => string) {
 	);
 
 	async function refresh(): Promise<void> {
-		if (loading.value && !needsRefresh.value) return;
+		if (loading.value || saving.value) return;
 		const signal = view.capture();
 		if (signal.aborted) return;
 		loading.value = true;
@@ -87,5 +88,9 @@ export function usePreferencesEditor(translate: (key: string) => string) {
 	}
 
 	onMounted(() => refresh());
+	onActivated(async () => {
+		await nextTick();
+		if (needsRefresh.value) await refresh();
+	});
 	return { form, baseline, loading, saving, needsRefresh, loadError, dirty, refresh, save, view, preferences };
 }

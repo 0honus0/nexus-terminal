@@ -29,8 +29,9 @@
 		id: 'agent-execution-settings',
 
 		pending: () =>
+			props.active &&
 			!execution.busy.value &&
-			(execution.refreshRequired.value || Boolean(execution.notice.value && execution.notice.value !== 'saved')),
+			Boolean(execution.notice.value && execution.notice.value !== 'saved'),
 
 		reload: () => execution.perform('read'),
 	});

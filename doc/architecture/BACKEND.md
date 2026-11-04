@@ -125,7 +125,7 @@ Remote 的普通 SSH Workspace 是一条持续存在的交互式 shell，而非 
 2. **子功能与目录**：context/result-rules.ts持有纯投影/hash/编码容量规则；model/context-types.ts持有读取输入/页/结果，service/result-service.ts管理来源准入；无需第二份存储/文件库。
 3. **依赖方向**：ToolService→ResultService→原RunToolModel/GovernanceService；RunStepModel在存储事务回调内转换结果事实并验证相同应用投影，SQLite只读独立storage事实，不引入应用规则。
 4. **类型与转换**：ToolInput引用context应用读取类型；StoredContextToolResult归context/storage，Model逐字段转换。已有Shared治理values新增context.read，完整治理codec/后端是实际消费者；私有工具正文与ResultPage无双端消费者，不放Shared。返回页嵌套投影归ToolService。
-5. **入口与安装**：register将ResultService接原ToolService；tool_result_read v2是模型生产者，Root/Child依原工具名单缩窄。context.read 必须由签名插件显式声明，grants 初始为空；新能力不自动授权。
+5. **入口与安装**：register将ResultService接原ToolService；tool_result_read v2是模型生产者，Root/Child依原工具名单缩窄。context.read 必须由签名插件显式声明；普通安装 grants 初始为空，推荐新装可按用户确认初始化全部声明授权，升级不自动授予新能力。
 6. **数据、事务与并发**：结果原文仍唯一存agent_run_tools，完成确认后才向模型投影；超过8KiB原文提供4KiB JSON编码预览（原捕获上限256KiB不变）。后续reserve同事务核对原前缀/proposals/完整确定结果，Model回调验证应用投影。续读的源SSH目标id/version进入当前结果确认事务；单一初始v1签名同步，不新增兼容迁移。
 7. **生命周期与失败**：只能读同user/App/Run较早步骤的completed记录，hash/当前原能力/批准/目标有效性复查；context.read不能代替源操作权限。目录结果在当前选择含denylist项时保守拒绝；不存在/非确定/续读递归拒绝。offset按Unicode码点，maxBytes为JSON编码文本含引号，8–4096/default4096；完整页元数据容纳在8KiB模型结果预算。由原Run/Tool owner结算、取消和关闭，不新增后台工作或重试。
 8. **当前能力与验收**：结果投影和真实工具续读源码接线；跨Run历史仍保留实际捕获正文，不能用同Run续读绕过其容量。语义检查点、Memory/Artifact已接线，正式治理、提示与结果卡片已接线，行为覆盖见 testing。
@@ -1749,7 +1749,7 @@ Scope 的可管理 App 查询在 LIMIT 前按 user_id/app_id 排除 removed 安�
 3. **依赖方向**：Plugin 通过已注册 Scope 存储任务参加自身事务；Scope Adapter 核对插件信任；应用仍经 Model 转换。
 4. **类型与转换**：删除 CreateApp 应用/存储/公开契约与 Shared 创建协议；声明只含 id/version/displayName/capabilities，移除 defaultEnabled，双端白名单 mapper 同步。
 5. **入口与安装**：无 POST /agent/apps；GET /agent/app-definitions 按 authenticated userId 读取已安装插件。新库无 App/声明，GET 不写入。
-6. **数据、事务与并发**：初始定义表移除 installed/default_enabled/source_kind，实例移除 is_default 和默认索引；安装仍在同事务创建唯一 UUID、政策和声明。不迁移旧库，初始 schema 签名同步更新；快照严格匹配当前表列及已验证签名包。
+6. **数据、事务与并发**：初始定义表移除 installed/default_enabled/source_kind，实例移除 is_default 和默认索引；安装仍在同事务创建唯一 UUID、政策和声明。推荐安装的启用及全部声明授权也在此事务写入；普通安装、升级和已有安装复用不恢复权限。不迁移旧库，初始 schema 签名同步更新；快照严格匹配当前表列及已验证签名包。
 7. **生命周期与失败**：原安装未知、升级/卸载排空、授权围栏和启停 CAS 保持；任何 App 都必须通过当前插件身份信任校验，无内置旁路。
 8. **当前能力与验收**：使用说明在 Agent App/授权章节；签名插件夹具覆盖原消费者，静态、定向回归与 CDP 证据归 testing，不以静态检查代替全量 E2E。
 
@@ -1763,3 +1763,14 @@ Scope 的可管理 App 查询在 LIMIT 前按 user_id/app_id 排除 removed 安�
 6. **数据、事务与并发**：无schema变更；Governance存储新增目录事实读取并经Model白名单转换，SQL仅Adapter持有；请求hash包含实际投影后的声明，原付费请求不可变身份及独立工具账本/审批保持。
 7. **生命周期与失败**：声明精简不放宽授权、目标绑定、审批、超时、取消、未知及清理。后台Job、Root/Child、Browser/MCP/ACP仍由原owner管理，独立能力不因名字相似而合并。浏览器发现只返回目标标识/版本/URL模式，ACP只返回当前所选SSH的启用配置安全元数据；均在交付前复查原工具授权。技术历史校验允许已完成调用不在当前目录，RunModelStream仍拒绝本轮未提供的新工具提案。
 8. **当前能力与验收**：源码范围及真实消费者审核、静态证据见PLAN/testing；行为留D17远程回归，不以说明更短声称模型准确率或延迟实测改善。
+
+### 推荐安装初始化启用与声明授权
+
+1. **职责与范围**：PluginRepositoryService 的 installRecommended 是确认引导的新装入口；PluginService 决定启用/声明能力初始化，普通市场安装不接受客户端权限标记。
+2. **子功能与目录**：沿 plugins/service、model、storage、adapters/sqlite，Scope/Governance 的原事务参与者分别持有 App 和授权 SQL。
+3. **依赖方向**：Repository Service → Plugin Service → Model → Storage；register 只白名单装配存储参与者，Adapter 不依赖应用类型。
+4. **类型与转换**：PluginAppInitialization 唯一归 plugin model，StoredPluginAppInitialization 归 storage；Model 显式复制 enabled/grantedCapabilities，activation 与 Scope 的独立存储命令在 register 逐字段转换。null 保留旧授权、新建为空；数组明确替换为全部当前声明能力。SSH 目标能力存储为 targets/sshMode=all，其余为 global。无 Shared 请求形状或数据库结构变化。
+5. **入口与安装**：只有 installRecommended 传内部 enableWithDeclaredGrants；当前安装已存在时直接复用。安装提交成功再由原 Runtime owner 启动后端，前端收到确认才写 Agent 总开关。
+6. **数据、事务与并发**：原 SQLite 安装事务准入读取当前身份、阶段、发布者与安装事实后作决策；声明/App/政策/grants/安装记录同事务提交。已安装幂等返回不恢复启停/权限；升级仍停用并保留授权。保留数据后由引导确认重装才显式初始化完整声明授权。
+7. **生命周期与失败**：沿原任务 lane、期限与 Runtime owner 跟踪；事务失败回滚初始化。安装提交后的 runtime 启动失败保留 operation_unknown，不能虚报安装回滚；后续只读核对，不自动重装或写总开关。后续撤权、Run 目标、禁用名单和审批策略继续生效。
+8. **当前能力与验收**：USAGE 区分推荐新装/普通市场/升级/复用；正式回归使用真实签名夹具和 SQLite 验证内部初始化、运行态及撤权不恢复。官方 pinned key 不替换，真实官方新签名包仍按 D16 保留实机待验。

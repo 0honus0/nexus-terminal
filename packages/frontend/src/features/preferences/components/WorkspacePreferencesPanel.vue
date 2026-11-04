@@ -33,8 +33,10 @@
 		id: 'preferences-workspace',
 
 		pending: () =>
-			(!loading.value && (needsRefresh.value || Boolean(loadError.value))) ||
-			(!monitoringCore.loading.value && monitoringCore.needsRefresh.value),
+			(!loading.value && Boolean(loadError.value)) ||
+			(!monitoringCore.loading.value &&
+				monitoringCore.needsRefresh.value &&
+				Boolean(monitoringCore.feedback.value)),
 
 		reload: async () => {
 			const requests: Promise<unknown>[] = [];

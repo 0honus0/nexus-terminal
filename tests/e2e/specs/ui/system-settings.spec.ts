@@ -158,6 +158,56 @@ test('preferences load failure fences writes until an explicit successful refres
 	expect(writes).toBe(0);
 });
 
+test('cached settings reload on return without reporting normal invalidation or replaying writes', async ({
+	page,
+	context,
+}) => {
+	await loginAsInitialAdmin(context.request);
+	const original = await preferences(context.request);
+	await updateUiPreferences(context.request, (value) => {
+		value.language = 'en-US';
+		value.navBarVisible = true;
+	});
+	const reads = { preferences: 0, logging: 0 };
+	const writes: string[] = [];
+	page.on('response', (response) => {
+		if (response.request().method() !== 'GET' || !response.ok()) return;
+		if (response.url().endsWith('/api/v1/settings/preferences')) reads.preferences += 1;
+		if (response.url().endsWith('/api/v1/settings/logging')) reads.logging += 1;
+	});
+	page.on('request', (request) => {
+		if (request.method() !== 'GET' && request.url().includes('/api/v1/settings/')) writes.push(request.url());
+	});
+	try {
+		await page.goto('/settings');
+		await systemTab(page);
+		await expect(page.locator('#languageSelect')).toBeEnabled();
+		await expect.poll(() => reads.logging).toBeGreaterThan(0);
+		await workspaceTab(page);
+		await expect(page.locator('#showPopupFileManager')).toBeEnabled();
+		const before = { preferences: reads.preferences, logging: reads.logging };
+		await page.locator('.app-nav-links a[href="/connections"]').click();
+		await expect(page).toHaveURL(/\/connections/);
+		await page.locator('.app-nav-links a[href="/settings"]').click();
+		await expect(page).toHaveURL(/\/settings/);
+		await expect.poll(() => reads.preferences).toBeGreaterThan(before.preferences);
+		await expect.poll(() => reads.logging).toBeGreaterThan(before.logging);
+		await workspaceTab(page);
+		await expect(page.locator('#showPopupFileManager')).toBeEnabled();
+		await systemTab(page);
+		await expect(page.locator('#languageSelect')).toBeEnabled();
+		await expect(
+			page.locator('.ui-notification').filter({ hasText: 'Reloading will not replay unconfirmed writes.' }),
+		).toHaveCount(0);
+		expect(writes).toEqual([]);
+	} finally {
+		await updateUiPreferences(context.request, (value) => {
+			value.language = original.language;
+			value.navBarVisible = original.navBarVisible;
+		});
+	}
+});
+
 test('dashboard toggles are personal preferences while monitoring changes apply without restart', async ({
 	page,
 	context,

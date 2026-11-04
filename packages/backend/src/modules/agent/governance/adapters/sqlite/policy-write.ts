@@ -10,6 +10,16 @@ export async function initializeAppPolicy(
 ): Promise<void> {
 	await tx.run('INSERT INTO agent_governance_policies(user_id,app_id) VALUES(?,?)', [userId, appId]);
 	// Called only in the transaction that creates the App; existing defaults are never restored.
+	await replaceAppGrants(tx, userId, appId, grants);
+}
+
+export async function replaceAppGrants(
+	tx: SqlExecutor,
+	userId: number,
+	appId: string,
+	grants: StoredGrant[],
+): Promise<void> {
+	await tx.run('DELETE FROM agent_governance_grants WHERE user_id=? AND app_id=?', [userId, appId]);
 	for (const grant of grants) {
 		await tx.run(
 			'INSERT INTO agent_governance_grants(user_id,app_id,capability,schema_version,scope_json,granted_at) VALUES(?,?,?,?,?,?)',
