@@ -33,8 +33,9 @@ for (const width of [1280, 390, 320]) {
 					'aria-expanded',
 					'true',
 				);
-				await hub.getByText('Execution details', { exact: true }).click();
-				await expect(hub.getByText('printf notice-first', { exact: true })).toBeVisible();
+				const tasks = hub.getByRole('complementary', { name: 'Tasks', exact: true });
+				await tasks.getByText('Execution details', { exact: true }).click();
+				await expect(tasks.getByText('printf notice-first', { exact: true })).toBeVisible();
 				await hub.getByRole('button', { name: 'Minimize Agent', exact: true }).click();
 				const notice = page.getByRole('dialog', { name: 'Task update', exact: true });
 				await expect(notice).toHaveCount(0);

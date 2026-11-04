@@ -18,6 +18,8 @@
 
 提交前静态：Node22.23.1、pnpm11.28.10；根check、双端build、Shared check及新E2E严格TypeScript检查退出0，日志check.log/build.log/shared-check.log/e2e-types.log。首次手工tsc触发新版TS显式文件与tsconfig冲突，按工具要求加`--ignoreConfig`后通过，未放宽strict或改依赖。最终全仓ESLint/Prettier与diff通过，format.log保留；最终新增wrapper的显式TAP reporter修改再做定向格式/lint及类型核对。此时尚无本轮远程行为PASS或新镜像，不使用旧553项证明当前工作区。
 
+首轮完整远程 [41825149177](https://github.com/0honus0/nexus-terminal/actions/runs/41825149177) 对应 a85f5f41：质量、Docker smoke和browser1–6通过；backend新增两项整链wrapper未启动成功，runner仅安装OpenSSH客户端，现补齐openssh-server并附加子进程stdout/stderr诊断；调度wrapper通过。browser7的1280px通知场景因任务栏与Transcript均呈现同一命令而严格定位失败，现将审批详情与命令断言限定在Tasks区域；保留全部行为断言和产品UI。其余两种通知视口通过。上述修复静态检查后重新提交，等待完整远程验证；本轮尚未发布本体镜像。
+
 ## Agent 执行与插件扩展（2026-11-04，源码静态及插件发布）
 
 宿主基线main/f789446f及前序未提交最小化提醒；Node v22.23.1、pnpm 11.28.10。本轮按用户“全部修改”、工具接口可破坏性更新、插件更新后发布及同后端格式的授权实施。产物集中 `/tmp/nexus-agent-flow-plugin-implementation-20261104`，全部原目录保留；无本轮本地行为/浏览器/CDP/E2E、真实模型请求或用户数据库维护。宿主未提交推送、未发镜像、未部署。
