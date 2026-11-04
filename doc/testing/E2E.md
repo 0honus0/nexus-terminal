@@ -18,7 +18,7 @@
 
 前后端已更新到已测7262e8ac的`ghcr.io/0honus0/nexus-terminal:dev`，digest为`sha256:b4f1c34743e3428a167b651e5aacddbc99e83b8942d04766b19e65387006b3e5`；两容器running/healthy、OCI源码一致。公开`https://ssh.honus.top/`及`/api/v1/status`均HTTP200，状态正文为{status:"ok",service:"nexus-backend"}；自本次启动起两容器日志无warn/error/fatal。完成时间2026-11-04 12:48 UTC，未使用回滚；原镜像额外保留本地rollback-agent-flow-20261104标签，未推送该标签。未升级或重装用户现有插件。
 
-远程目录权限700，完整备份含实例密钥及用户数据，只留远程受保护目录；备份、副本、脚本、启动日志和维护记录均保留至用户通知。非敏感核验报告及脚本另存本地`/home/honus/nexus-task-artifacts/agent-flow-deploy-20261104`（deployment-result.json、post-deployment-verification.json、live-maintenance.json、backup-verification.json）；本轮是部署/数据维护验证，不扩大为真实模型、手机、SSH或RDP全业务实机验收，也未重新发布产品源码。
+远程目录权限700，完整备份含实例密钥及用户数据，维护完成时仅留远程受保护目录；用户随后明确要求清除备份，已删除pre-upgrade-data.tar.gz及rehearsal/live-verification/reference三份数据库副本（共10,698,199 bytes），同时移除本次旧回滚镜像，未清理其它镜像或当前数据。脚本、启动日志及核验记录继续保留；清理后双容器仍healthy，公开status为HTTP200，清理清单为backup-cleanup.json。非敏感核验报告及脚本另存本地`/home/honus/nexus-task-artifacts/agent-flow-deploy-20261104`（deployment-result.json、post-deployment-verification.json、live-maintenance.json、backup-verification.json）；本轮是部署/数据维护验证，不扩大为真实模型、手机、SSH或RDP全业务实机验收，也未重新发布产品源码。
 
 ## Agent 执行补充回归与 amd dev 交付（2026-11-04，已完成）
 
