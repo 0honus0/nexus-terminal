@@ -4,9 +4,9 @@
 
 ## 当前验收基线
 
-当前已记录的最新完整远程 [41563556193](https://github.com/0honus0/nexus-terminal/actions/runs/41563556193) 验证 `main/4e2b2be374ffdeb2fb502eed2598e39a02052cc5`：547个场景全部首次通过，零失败、重试、flaky与跳过，质量检查、Docker smoke与8个测试分片全部成功。本版包含父目录拖动反馈和600ms悬停修复；该轮通过范围以此 SHA 和实际场景为准，既有外部硬件、扩大故障与实机保证限制保留。后继 `0eb52704ab3dc12bac04c8c8737e897df1f09368` 仅自动维护耗时估算，按diff核对无产品源码差异；该版本 main 的 dev/amd64 发布见下文对应专项记录。
+最新完整远程 [41778130423](https://github.com/0honus0/nexus-terminal/actions/runs/41778130423) 验证 `main/fd41a0fee0f9355543a660185a7ef39c5bd83cd7`：549个场景全部首次通过，零失败、重试、flaky与跳过，质量检查、Docker smoke和8个测试分片全部成功。本版包含前序插件唯一App来源/卸载清除、架构与容量同步、工具目录及网络自动恢复变更；通过范围以该 SHA 和实际场景为准。后继 `4aa3b49e9e5a957d0d9125b9e70162c5a595f7b3` 仅自动维护耗时估算，已核对无产品源码差异。
 
-上述基线之后的本地变更未统一完成远程回归。2026-11-04 的插件卸载/安装引导和工具栏存在定向证据；架构/容量同步、最新 App 操作组对齐和工具目录审核仅完成其各自记录的源码/静态检查。独立 Nexus Agent 1.0.2 还未签名发布。当前缺口集中在 [待验与外部依赖](../PLAN.md#待验与外部依赖)，不得将历史全量通过用于担保后继修改。
+本轮 main dev/amd64 发布及指定主机维护进展见文末交付记录。真实手机/切换运营商网络、外部供应商、安全硬件、扩大故障及持久介质边界仍按 [待验与外部依赖](../PLAN.md#待验与外部依赖) 保留；独立 Nexus Agent 1.0.2 未签名发布，不以宿主回归代替插件发布。
 
 ## 阶段逻辑回归
 
@@ -1050,7 +1050,7 @@ WorkspaceTabBar仅将原挂起菜单项移到重置之前，原条件、事件�
 
 待远程/实机验证：多次 WebSocket 打开失败后网络恢复；准备续接中断线/超时、旧附件 conflict 及原 PTY 身份/输出游标；确认未派发与确认已发送回执丢失的区别；onLine 始终为 true 的 Wi-Fi/移动网络切换；离线暂停/上线提前恢复、后台/返回前台、多标签与连续切网不重复续接；主机信任取消、密码/权限/目标失效仍需明确操作；挂起目录可用转换仍不抢占其它 owner；关闭/注销/卸载无重连残留。现有专用目录与产物保留至用户通知清理。
 
-## main dev 交付与数据库维护（2026-11-04，进行中）
+## main dev 交付与数据库维护（2026-11-04，已完成）
 
 用户授权提交推送、修复正式远程 E2E、发布 main dev amd64，并更新指定 Nexus 实例及手动维护数据库；另确认删除新版已移除、不再需要的数据。前序全部已授权变更提交 `4fa936c2`，首轮 [41777130159](https://github.com/0honus0/nexus-terminal/actions/runs/41777130159) 的质量、Docker smoke 与 Backend 分片通过，7个 Browser 分片全部有失败，主要源于同一 pending 目录准入错误，首轮不可发布。
 
@@ -1058,4 +1058,20 @@ WorkspaceTabBar仅将原挂起菜单项移到重置之前，原条件、事件�
 
 源码复核沿目录 SQL→Model→Governance→Tools→Run reserve/dispatch：初次准备允许 pending，不接受任何终态或 unknown；目录裁剪不替代派发授权。重连测试只注入本次创建的两个连接中断，不重发 SSH 输入或修改产品界面。另两处测试基线同步：首启 Modal 按现存标题 Enable Agent with Nexus Agent 定位；执行设置独立用例先安装签名 Nexus Agent，再验收总开关 CAS，首启确认/取消由专项完整保留。根 check 通过，目标 ESLint/格式与 diff 收口，正式远程结果随后记录。
 
-数据库只读对照确认仅定义表删除 installed/default_enabled/source_kind、实例删除 is_default 及默认唯一索引，结构签名更新。指定主机部署目录下 `maintenance/20261104-main-dev` 保存维护脚本和副本演练；演练成功核对全部结构、各表保留行数、完整性与外键。线上维护仍待最终 E2E 和镜像发布，操作前停止本应用、备份整个 data/配置与原镜像信息。旧 builtin 的1会话/2任务/1附件及关联行经真实 FK 闭包归档删除，其它 App/账户/连接/配置保留。未扩大为自动开发库迁移。
+数据库只读对照确认仅定义表删除 installed/default_enabled/source_kind、实例删除 is_default 及默认唯一索引，结构签名更新。指定主机部署目录下 `maintenance/20261104-main-dev` 保存维护脚本和副本演练；演练成功核对全部结构、各表保留行数、完整性与外键。完成最终E2E与镜像发布后，线上维护按下方记录执行；操作前停止本应用、备份整个data/配置与原镜像信息。旧 builtin 的1会话/2任务/1附件及关联行经真实 FK 闭包归档删除，其它 App/账户/连接/配置保留。未扩大为自动开发库迁移。
+
+### 第二轮完整通过与发布
+
+修复提交 `fd41a0fe` 的正式远程 [41778130423](https://github.com/0honus0/nexus-terminal/actions/runs/41778130423) 全部success。549场景首次通过，无失败、重试、flaky或跳过：Backend125；Browser1–7分别41/61/53/57/58/94/60（含隔离场景）。质量、生产构建及Docker启动冒烟通过。连续两次真实WebSocket opening失败后自动续接原输出和未完成输入的回归17秒通过；初次SSH明确失败仍按原断言等待显式重试。首轮只读/图片/协作等任务失败、首启定位及设置安装前提均已复验通过。
+
+本地根check、Backend构建及全量格式通过，证据 `/tmp/nexus-main-dev-release-20261104/round2-{check,build,format}.log`，最后同步测试/文档的目标ESLint/Prettier及diff通过。未运行本地全量行为/CDP/E2E。各分片原日志、两轮结果与数据库维护演练保留同目录；真实运营商切网与设备休眠不因受控中断回归通过而扩大宣称。
+
+CI自动提交 `4aa3b49e` 仅更新耗时估算，已快进同步；按用户授权由main触发 [41778950373](https://github.com/0honus0/nexus-terminal/actions/runs/41778950373)，发布dev/linux-amd64，发布及远端结果如下。
+
+### 指定主机更新与维护结果
+
+发布 [41778950373](https://github.com/0honus0/nexus-terminal/actions/runs/41778950373) success，包含生产依赖审计与镜像构建/推送；镜像 `ghcr.io/0honus0/nexus-terminal:dev`（另有 `sha-4aa3b49e9e5a`），linux/amd64，digest `sha256:5fd697e3d48d67615628f65c8d39c83ba175ed1b22455cd327abf7f495b4d8c6`，OCI源码修订为 `4aa3b49e9e5a957d0d9125b9e70162c5a595f7b3`。
+
+指定主机原部署 `/home/honus/product/nexus_terminal` 已更新。先完成镜像下载/版本核对，再停止本应用、归档完整data/实例配置/Compose及原镜像信息；备份 `maintenance/20261104-main-dev/pre-upgrade-data.tar.gz` 的SHA256复核通过。维护事务删除旧builtin及真实FK关联闭包，移除4个旧字段与默认索引，核对全部最终DDL及所有表的精确保留行数后更新结构签名。没有修改应用自动迁移逻辑，也未操作其它服务。旧附件数据库记录已归档删除，其对应实体文件原已不存在，未删除其他附件。
+
+维护后仍保留1账号、7连接、1代理、原插件安装墓碑与保留KV；两项pragma检查为integrity=ok、foreign_key_check=0。前后端容器均加载上述digest/源码修订并healthy；站点 `https://ssh.honus.top/` 与 `/api/v1/status` 均HTTP200，状态正文 `{status:"ok",service:"nexus-backend"}`。两容器自本次启动起日志未发现warn/error/fatal。证据 `/tmp/nexus-main-dev-release-20261104/deployment-verification.log`；远端完整部署/启动日志、备份、维护脚本与副本均集中部署目录下 `maintenance/20261104-main-dev`，按用户要求保留至通知清理。此结果不扩大为真实设备/所有业务实机验收。
