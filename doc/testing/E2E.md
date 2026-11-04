@@ -4,9 +4,9 @@
 
 ## 当前验收基线
 
-最新完整远程 [41865585558](https://github.com/0honus0/nexus-terminal/actions/runs/41865585558) 验证 `main/1a31cfa54228391ab4237db87c5ea76c70cf26d1`：559个场景全部一次通过，质量检查、双端生产构建、Docker smoke及8个测试分片的完整原始日志均通过，零失败、重试或跳过。Backend129项，Browser1–7分别49/63/57/54/73/57/77项（包含隔离场景）。同期GitHub Actions官方故障使workflow/job API尚未同步完成状态，本次通过结论依据完整job日志，不将API结论记为success。CI后继e71cf820仅更新耗时估算，产品源码一致；最终文档收口不改变被测源码。
+最新完整远程[E2E 41871072826](https://github.com/0honus0/nexus-terminal/actions/runs/41871072826)验证`main/d059911e01ce1645ecead9eeb7aae9b8d08df92f`：559项全部一次通过，质量检查、双端生产构建、Docker smoke与8个测试分片全部success；耗时任务成功、文档截图按条件跳过。按正式Reporter核对559条唯一passed记录，无失败、重试或场景跳过。Backend129项，Browser1–7分别33/71/60/49/75/67/75项（包含隔离场景）。后继2b0ab3db只更新耗时估算，产品源码一致，不称其直接跑过本轮E2E。最终文档收口不改变被测源码。
 
-官方插件[v1.0.3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.3)已发布，main/tag均为d5dd455，发布CI成功。本体最新[amd dev发布41867087587](https://github.com/0honus0/nexus-terminal/actions/runs/41867087587)完整日志确认推送完成，GHCR已核验dev/固定标签、linux/amd64平台、digest和e71cf820源码revision；workflow API同样受上述故障影响，未记为官方success。此前指定实例数据库维护与7262e8ac镜像部署仍保持原范围，本轮没有更新生产容器或数据库。真实运营商切网、手机软键盘、外部供应商及未列故障边界仍按[待验与外部依赖](../PLAN.md#待验与外部依赖)保留；受控回归不替代真实模型效果或吞吐实测。更早测试与镜像结果只保留为各自历史证据。
+官方插件[v1.0.3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.3)仍为d5dd455，本批没有插件改动。本体[amd dev发布41872562719](https://github.com/0honus0/nexus-terminal/actions/runs/41872562719)success，dev与sha-2b0ab3db9208的digest一致，平台/revision均经实际GHCR核对，详见下节；此前指定实例的7262e8ac部署仍保持原范围，本轮不更新生产容器或数据库。真实运营商切网、手机软键盘、外部供应商及未列故障边界仍按[待验与外部依赖](../PLAN.md#待验与外部依赖)保留；受控回归不替代真实模型效果或吞吐实测。更早测试与镜像结果只保留为各自历史证据。
 
 ## Agent 聊天悬浮区与输入工具栏修正（2026-11-04）
 
@@ -14,9 +14,13 @@
 
 源码定位前轮遗漏：agent-composer-status本身绝对定位且透明，但section的12px gap与footer的桌面8px/窄屏6px或5px顶部padding使状态行下半区落在正文滚动范围外；只去底色不能透出该处不存在的正文。本轮移除滚动区/footer间距和各尺寸顶部padding，保留olderHidden提示原有下间距、输入框底部定位、状态行位置/按钮背景、正文末尾54px留白及点击穿透。无用量的静态发送提示去除胶囊底色。权限触发器显式soft，ArtifactPicker仅compact入口从ghost改soft，沿既有UiButton边框/背景；不改全局UI或其它弹层。SSH目标数量在原620px紧凑档隐藏，最窄300px档隐藏整个摘要，选择面板内数量、勾选与真实connectionIds不变。
 
-复审覆盖AgentAppSurface模板/CSS、AgentConfigPopover、UiPopover/UiButton、ArtifactPicker及唯一NativeInputArtifacts消费者，含桌面、各容器档、短窗口、olderHidden、无用量提示、有附件及busy/disabled/选中状态。没有新增测量、计时/监听、请求、状态、类型或Shared/后端/数据库变化。旧CDP与559项结果保持原SHA范围，不作本轮视觉验收；最终根`pnpm run check`、`pnpm run build:frontend`及`pnpm run format:all:check`均退出0（check.log、build-frontend.log、format-check.log），最后文档另做Prettier与diff检查。提交推送后的完整远程E2E及amd dev发布结果继续回填；真实手机软键盘及新布局的像素/触摸专项未验。
+复审覆盖AgentAppSurface模板/CSS、AgentConfigPopover、UiPopover/UiButton、ArtifactPicker及唯一NativeInputArtifacts消费者，含桌面、各容器档、短窗口、olderHidden、无用量提示、有附件及busy/disabled/选中状态。没有新增测量、计时/监听、请求、状态、类型或Shared/后端/数据库变化。旧CDP与559项结果保持原SHA范围，不作本轮视觉验收；最终根`pnpm run check`、`pnpm run build:frontend`及`pnpm run format:all:check`均退出0（check.log、build-frontend.log、format-check.log），最后文档另做Prettier与diff检查。完整远程E2E及amd dev发布均已完成，实际结果见下；真实手机软键盘及新布局的像素/触摸专项未验。
 
-用户在首轮远程运行期间追加思考强度显示要求。源码确认滑块已按模型默认定位，但按钮文字/说明及高强度配色仅读取手动覆盖；Surface现用effectiveReasoningEffort统一上述只读呈现，显式选择优先、当前模型默认其次。三语未配置分支改为“自动”及供应商自行选择的说明，移除旧ui.reasoningDefault/Short无消费者文案；供应商编辑器的默认等级设置仍保留。原useNativeRuns在模型切换时清覆盖、未手选时省略reasoningEffort请求字段及在途Run冻结不变，不将显示默认写成用户新覆盖。追加后再次执行根check、前端生产build及全仓ESLint/Prettier，均退出0（check-reasoning.log、build-reasoning.log、format-reasoning.log）；最终文档另做格式/diff复核。统一有效等级、三语唯一消费者、模型切换及captureInput省略/手选分支已复审；最终远程运行另行回填。
+用户在首轮远程运行期间追加思考强度显示要求。源码确认滑块已按模型默认定位，但按钮文字/说明及高强度配色仅读取手动覆盖；Surface现用effectiveReasoningEffort统一上述只读呈现，显式选择优先、当前模型默认其次。三语未配置分支改为“自动”及供应商自行选择的说明，移除旧ui.reasoningDefault/Short无消费者文案；供应商编辑器的默认等级设置仍保留。原useNativeRuns在模型切换时清覆盖、未手选时省略reasoningEffort请求字段及在途Run冻结不变，不将显示默认写成用户新覆盖。追加后再次执行根check、前端生产build及全仓ESLint/Prettier，均退出0（check-reasoning.log、build-reasoning.log、format-reasoning.log）；最终文档另做格式/diff复核。统一有效等级、三语唯一消费者、模型切换及captureInput省略/手选分支已复审；最终远程运行与镜像核验结果见下。
+
+首轮`379ea5f11708e641b5b56a5620f82694b98bd10b`的41870031221因追加思考等级补丁后的新push由工作流正常取消，不作为最终验收。最终`d059911e01ce1645ecead9eeb7aae9b8d08df92f`完整远程[41871072826](https://github.com/0honus0/nexus-terminal/actions/runs/41871072826)success，559项一次通过、无失败/重试/场景跳过，质量与Docker smoke同轮通过，没有修改或放宽既有测试断言。各分片计数为Backend129、Browser33/71/60/49/75/67/75；完整job日志、运行/job元数据及逐条核对为e2e-*.log、e2e-run-final.json、e2e-jobs-final.json及e2e-verification.json。源码静态与正式既有场景回归通过，新布局像素/真实手机专项仍保持未验。
+
+CI自动`2b0ab3db920892a93c3a4213c986621158fe9924`仅改scripts/e2e/duration-estimates.json，核对后快进，产品源码与d059911e一致。从main触发[amd dev发布41872562719](https://github.com/0honus0/nexus-terminal/actions/runs/41872562719)，准备（含生产依赖审计）与镜像发布均success。匿名GHCR核验`ghcr.io/0honus0/nexus-terminal:dev`及`sha-2b0ab3db9208`的index digest均为`sha256:439bd7b013170140b46b178792db77622a67d1176ca6c382f56b63b9007b7364`；排除证明manifest后仅linux/amd64，平台manifest为`sha256:0a13d915afcac2318ce0badcf78a15596e5c3561b3ceef03de1d588eec6d8fc0`。下载manifest/config并校验SHA256，OCI revision严格等于2b0ab3db920892a93c3a4213c986621158fe9924，version等于固定标签，见verify-image.mjs及image-verification.json，token只在内存。发布日志及最终运行元数据为publish-prepare.log、publish-image.log与publish-run-final.json。最终仅提交PLAN/testing收口文档，不更新生产容器或数据库，所有自有产物保留。
 
 ## 终端工具栏响应优化（2026-11-04，浏览器及远程回归通过）
 
