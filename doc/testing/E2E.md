@@ -26,6 +26,16 @@
 
 以下记录按原执行范围保留；当时的“当前”“待验”“未提交/发布”等指该轮时点，最终产品行为以 USAGE 与当前源码为准。架构正文已移回对应架构文档，避免把设计误当测试证据。
 
+### Agent 安装与插件仓库布局（2026-11-04，源码及静态）
+
+基线 main/fa71d07e，本轮本地变更；Node v22.23.1、pnpm 11.28.10（沿用 `/tmp/nexus-integration-toolbar-20261104/tools/node_modules/.bin`）。用户授权安装弹窗和仓库排版，并补充手机安装/取消各一行、按钮内不换行。AgentOnboardingModal 分离提示和动作、缩减手机面板内边距；PluginRepositorySettings 分层标题/刷新、地址/添加、搜索，按实际容器宽度排列介绍和操作，窄面板使用有可访问名称的刷新图标及独立地址行。
+
+两轮源码复核覆盖正常/加载/禁用、长名称/URL/简介、官方/第三方、保留数据及多个操作组合；所有原点击事件、安装与校验/信任/清除条件、未知围栏和取消保持原 owner。无 Shared、后端、基础按钮或持久化变更。USAGE/Frontend 同版同步。
+
+日志集中 `/tmp/nexus-agent-market-layout-20261104`：根 `pnpm run check`（check.log）、最终 `pnpm run build:frontend`（build-final.log）、两个修改组件的 ESLint（eslint-final.log）、`pnpm run format:all:check`（format.log）均退出0；首次构建也通过，最终构建覆盖源码复核后的窄面板补充。文档收口后再做目标 Prettier/diff 核对。
+
+按 D17 未新增/运行本地行为、CDP 或 E2E；Windows、320px手机、中英文及缩放下的真实几何、视觉和点击待验，不能沿用上一轮549项远程通过担保本轮布局。未提交、推送或发布；产物保留至用户通知。
+
 ### Artifact 总空间统一（2026-10-26）
 
 范围：删除单文件设置及固定16MiB Artifact/图片、8MiB截图业务上限，取消10,000项累计文件准入，读取偏移跟随Shared协议容量；生成/截图/下载预检总剩余空间，最终begin事务保证总配额。文件库增量hash与Range分段下载复用现有入口，无额外UI变更。

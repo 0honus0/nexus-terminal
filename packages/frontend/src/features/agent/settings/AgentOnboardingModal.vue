@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { computed, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiBadge, UiButton, UiFormActions, UiModal, UiSpinner } from '@/foundation/ui';
+	import { UiBadge, UiButton, UiModal, UiSpinner } from '@/foundation/ui';
 	import type { PluginCatalogEntry } from '../model/plugin-types';
 
 	const props = defineProps<{
@@ -45,19 +45,19 @@
 		:close-on-escape="!busy"
 		:focus-on-open="true"
 		:restore-focus="true"
-		panel-class="max-w-xl p-6 rounded-2xl"
+		panel-class="max-w-xl p-4 sm:p-6 rounded-2xl"
 		@close="emit('close')"
 	>
 		<template #header>
 			<div class="flex items-center justify-between w-full pr-6">
-				<div class="flex items-center gap-3">
+				<div class="flex min-w-0 items-center gap-3">
 					<div
 						class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent text-primary ring-1 ring-primary/25 shadow-xs"
 					>
 						<i class="fa-solid fa-wand-magic-sparkles text-base" aria-hidden="true"></i>
 					</div>
 					<div class="min-w-0">
-						<div class="flex items-center gap-2">
+						<div class="flex flex-wrap items-center gap-2">
 							<h2 class="text-base font-semibold text-foreground tracking-tight">
 								{{ $t('agent.settings.onboarding.title') }}
 							</h2>
@@ -238,32 +238,71 @@
 		</template>
 
 		<template #footer>
-			<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+			<div class="space-y-3">
 				<div class="flex items-center gap-1.5 text-[11px] text-text-secondary">
 					<i class="fa-solid fa-lock text-[10px] text-success"></i>
 					<span>{{ $t('agent.settings.onboarding.sandboxProtected') }}</span>
 				</div>
-				<UiFormActions>
+				<div class="agent-onboarding__actions">
 					<UiButton
 						appearance="solid"
 						tone="primary"
 						type="button"
+						class="agent-onboarding__confirm"
 						:loading="busy"
 						:disabled="busy || confirmDisabled"
 						@click="emit('confirm')"
 					>
-						<i class="fa-solid fa-download text-xs" aria-hidden="true"></i>
+						<i v-if="!busy" class="fa-solid fa-download shrink-0 text-xs" aria-hidden="true"></i>
 						<span>{{
 							busy
 								? $t('agent.settings.onboarding.installing')
 								: $t('agent.settings.onboarding.installAndEnable')
 						}}</span>
 					</UiButton>
-					<UiButton appearance="soft" tone="neutral" type="button" :disabled="busy" @click="emit('close')">
+					<UiButton
+						appearance="soft"
+						tone="neutral"
+						type="button"
+						class="agent-onboarding__cancel"
+						:disabled="busy"
+						@click="emit('close')"
+					>
 						{{ $t('agent.settings.onboarding.cancel') }}
 					</UiButton>
-				</UiFormActions>
+				</div>
 			</div>
 		</template>
 	</UiModal>
 </template>
+
+<style scoped>
+	.agent-onboarding__actions {
+		display: flex;
+		align-items: stretch;
+		justify-content: flex-end;
+		gap: 10px;
+	}
+
+	.agent-onboarding__confirm,
+	.agent-onboarding__cancel {
+		min-height: 44px;
+		height: auto;
+		padding-block: 10px;
+		line-height: 1.4;
+	}
+
+	.agent-onboarding__confirm {
+		min-width: 0;
+	}
+
+	.agent-onboarding__cancel {
+		flex-shrink: 0;
+	}
+
+	@media (max-width: 639px) {
+		.agent-onboarding__actions {
+			flex-direction: column;
+		}
+	}
+</style>

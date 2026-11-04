@@ -354,7 +354,7 @@
 	);
 </script>
 <template>
-	<section class="space-y-3">
+	<section class="plugin-market space-y-3">
 		<UiButton
 			v-if="operation.notice.value === 'failed' || operation.notice.value === 'conflict' || unknown"
 			type="button"
@@ -363,32 +363,47 @@
 			>{{ t('agent.pluginManagement.readRepositories') }}</UiButton
 		>
 		<div class="rounded-xl bg-header/25 p-3.5 sm:p-4">
-			<div class="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-				<div class="flex items-center gap-2">
+			<div class="flex items-center justify-between gap-3">
+				<div class="flex min-w-0 flex-wrap items-center gap-2">
 					<i class="fa-solid fa-boxes-stacked text-xs text-primary" aria-hidden="true"></i>
-					<h4 class="text-xs font-semibold text-foreground">
+					<h4 class="min-w-0 break-words text-xs font-semibold text-foreground">
 						{{ t('agent.settings.plugins.remoteRepositories') }}
 					</h4>
 					<UiBadge v-if="totalPluginCount > 0" tone="primary" density="compact">
 						{{ totalPluginCount }}
 					</UiBadge>
 				</div>
+				<UiButton
+					type="button"
+					appearance="ghost"
+					tone="neutral"
+					density="compact"
+					class="shrink-0"
+					:loading="operation.busy.value"
+					:disabled="locked"
+					:aria-label="t('agent.settings.plugins.refreshRemote')"
+					:title="t('agent.settings.plugins.refreshRemote')"
+					@click="reload"
+				>
+					<i v-if="!operation.busy.value" class="fa-solid fa-arrows-rotate text-xs" aria-hidden="true"></i>
+					<span class="plugin-market__refresh-label">{{ t('agent.settings.plugins.refreshRemote') }}</span>
+				</UiButton>
+			</div>
 
-				<div class="flex flex-wrap items-center gap-2">
-					<div class="w-full min-w-0 sm:w-auto sm:min-w-[280px]">
-						<UiInput
-							v-model="repositoryUrl"
-							:aria-label="t('agent.settings.plugins.repositoryUrl')"
-							density="compact"
-							class="w-full"
-							:placeholder="t('agent.settings.plugins.repositoryUrl')"
-							:disabled="locked"
-						>
-							<template #leading>
-								<i class="fa-solid fa-link" aria-hidden="true"></i>
-							</template>
-						</UiInput>
-					</div>
+			<div class="plugin-market__add mt-3">
+				<UiInput
+					v-model="repositoryUrl"
+					:aria-label="t('agent.settings.plugins.repositoryUrl')"
+					density="compact"
+					class="min-w-0 w-full"
+					:placeholder="t('agent.settings.plugins.repositoryUrl')"
+					:disabled="locked"
+				>
+					<template #leading>
+						<i class="fa-solid fa-link" aria-hidden="true"></i>
+					</template>
+				</UiInput>
+				<div class="flex items-center justify-end gap-2">
 					<UiInfoHint
 						v-if="!repositoryUrl.trim()"
 						:text="t('agent.settings.disabledReason.repositoryRequired')"
@@ -396,25 +411,12 @@
 					<UiButton
 						appearance="solid"
 						tone="primary"
+						density="compact"
 						type="button"
 						:disabled="locked || !repositoryUrl.trim()"
 						@click="addRepository"
 					>
 						{{ t('agent.settings.plugins.addRepository') }}
-					</UiButton>
-					<UiButton
-						type="button"
-						appearance="soft"
-						tone="neutral"
-						:loading="operation.busy.value"
-						:disabled="locked"
-						:aria-label="t('agent.settings.plugins.refreshRemote')"
-						@click="reload"
-					>
-						<i class="fa-solid fa-arrows-rotate text-xs" aria-hidden="true"></i>
-						<span class="hidden whitespace-nowrap min-[360px]:inline">{{
-							t('agent.settings.plugins.refreshRemote')
-						}}</span>
 					</UiButton>
 				</div>
 			</div>
@@ -434,11 +436,11 @@
 				<div
 					v-for="repository in configuredRepositories"
 					:key="repository.url"
-					class="flex max-w-full items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1 shadow-2xs text-xs"
+					class="flex min-w-0 max-w-full items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1 shadow-2xs text-xs"
 				>
 					<i class="fa-solid fa-globe text-[10px] text-primary/70" aria-hidden="true"></i>
 					<span
-						class="max-w-[24rem] sm:max-w-[36rem] truncate font-mono text-[11px] text-foreground"
+						class="min-w-0 max-w-[36rem] truncate font-mono text-[11px] text-foreground"
 						:title="repository.url"
 						>{{ repository.url }}</span
 					>
@@ -448,6 +450,7 @@
 						tone="danger"
 						density="compact"
 						icon-only
+						class="shrink-0"
 						:aria-label="t('agent.settings.plugins.removeRepository')"
 						:title="t('agent.settings.plugins.removeRepository')"
 						:disabled="locked"
@@ -487,13 +490,14 @@
 							>
 								<i class="fa-brands fa-github text-xs" aria-hidden="true"></i>
 							</div>
-							<div class="flex items-baseline gap-1.5 shrink-0">
+							<div class="flex min-w-0 items-baseline gap-1.5">
 								<span class="text-xs text-text-secondary shrink-0"
 									>{{ t('agent.settings.plugins.repositorySource') }}:</span
 								>
-								<span class="text-xs sm:text-sm font-bold text-foreground font-mono">{{
-									group.owner
-								}}</span>
+								<span
+									class="min-w-0 break-all text-xs sm:text-sm font-bold text-foreground font-mono"
+									>{{ group.owner }}</span
+								>
 							</div>
 							<UiBadge v-if="group.official" class="shrink-0" tone="primary" density="compact">
 								<i class="fa-solid fa-certificate text-[8px]" aria-hidden="true"></i>
@@ -516,7 +520,7 @@
 								type="button"
 								appearance="ghost"
 								density="compact"
-								class="max-w-full font-mono text-[11px] text-text-secondary"
+								class="plugin-market__source font-mono text-[11px] text-text-secondary"
 								:title="group.sourceUrl"
 								@click.stop="copyCatalogUrl(group.sourceUrl)"
 								@keydown.stop
@@ -531,7 +535,7 @@
 									class="text-[10px] shrink-0"
 									aria-hidden="true"
 								></i>
-								<span class="truncate max-w-[280px] sm:max-w-[420px] md:max-w-[620px] lg:max-w-[820px]">
+								<span class="min-w-0 truncate">
 									{{ group.sourceUrl }}
 								</span>
 							</UiButton>
@@ -543,9 +547,9 @@
 							<div
 								v-for="{ package: entry, catalog, official, source } in group.packages"
 								:key="`${entry.definitionId}@${entry.version}`"
-								class="flex flex-col justify-between gap-3 border-b border-border/30 py-3 last:border-b-0 sm:flex-row sm:items-center hover:bg-card/30"
+								class="plugin-market__entry border-b border-border/30 py-3 last:border-b-0 hover:bg-card/30"
 							>
-								<div class="flex items-center gap-3 min-w-0 flex-1">
+								<div class="flex items-start gap-3 min-w-0">
 									<div
 										class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm shadow-2xs transition-transform"
 										:class="
@@ -570,11 +574,12 @@
 
 									<div class="min-w-0 flex-1">
 										<div class="flex flex-wrap items-center gap-2">
-											<span class="text-xs sm:text-sm font-bold text-foreground truncate">{{
-												entry.displayName
-											}}</span>
 											<span
-												class="rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 font-mono text-[11px] text-text-secondary"
+												class="plugin-market__name text-xs sm:text-sm font-bold text-foreground"
+												>{{ entry.displayName }}</span
+											>
+											<span
+												class="max-w-full break-all rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 font-mono text-[11px] text-text-secondary"
 											>
 												v{{ entry.version }}
 											</span>
@@ -584,14 +589,16 @@
 											<UiBadge v-if="retainedFor(entry)" tone="warning" density="compact">
 												{{ t('agent.settings.plugins.hasRetainedData') }}
 											</UiBadge>
-											<span class="hidden md:inline font-mono text-[11px] text-text-secondary/60">
+											<span
+												class="plugin-market__definition font-mono text-[11px] text-text-secondary/60"
+											>
 												{{ entry.definitionId }}
 											</span>
 										</div>
 
-										<div class="mt-0.5 flex items-center gap-2 text-xs text-text-secondary">
+										<div class="mt-1 space-y-1 text-xs text-text-secondary">
 											<p
-												class="truncate text-[11px] leading-relaxed max-w-md lg:max-w-xl"
+												class="plugin-market__description text-xs leading-relaxed"
 												:title="
 													entry.definitionId === 'nexus.agent'
 														? t('agent.settings.plugins.summaryNexusAgent')
@@ -610,7 +617,7 @@
 											</p>
 											<span
 												v-if="!entry.compatible"
-												class="shrink-0 text-[11px] text-warning font-mono"
+												class="block break-all text-[11px] text-warning font-mono"
 											>
 												{{
 													t('agent.settings.plugins.compatibilityShort', {
@@ -623,65 +630,54 @@
 									</div>
 								</div>
 
-								<div
-									class="flex shrink-0 items-center justify-between gap-2.5 pt-2 sm:justify-end sm:border-0 sm:pt-0"
-								>
-									<span
-										class="hidden sm:inline-flex items-center gap-1 text-[11px] text-text-secondary/70 font-mono"
+								<div class="plugin-market__actions">
+									<UiButton
+										v-if="retainedFor(entry)"
+										type="button"
+										appearance="soft"
+										tone="danger"
+										:disabled="locked"
+										@click="requestClearData(entry)"
 									>
-										<i class="fa-solid fa-shield-check text-success text-[10px]"></i>
-										<span>Ed25519</span>
-									</span>
+										{{ t('agent.settings.plugins.deleteData') }}
+									</UiButton>
+									<UiButton
+										appearance="soft"
+										tone="neutral"
+										v-if="!official && !publisherTrusted(entry.publisherKeyId)"
+										type="button"
+										:disabled="
+											locked ||
+											!catalog.publishers.some(
+												(publisher) => publisher.keyId === entry.publisherKeyId,
+											)
+										"
+										@click="trustRemotePublisher(catalog, entry.publisherKeyId)"
+									>
+										{{ t('agent.settings.plugins.trustRemotePublisher') }}
+									</UiButton>
 
-									<div class="flex items-center gap-1.5">
-										<UiButton
-											v-if="retainedFor(entry)"
-											type="button"
-											appearance="soft"
-											tone="danger"
-											:disabled="locked"
-											@click="requestClearData(entry)"
-										>
-											{{ t('agent.settings.plugins.deleteData') }}
-										</UiButton>
-										<UiButton
-											appearance="soft"
-											tone="neutral"
-											v-if="!official && !publisherTrusted(entry.publisherKeyId)"
-											type="button"
-											:disabled="
-												locked ||
-												!catalog.publishers.some(
-													(publisher) => publisher.keyId === entry.publisherKeyId,
-												)
+									<UiButton
+										type="button"
+										:appearance="installedFor(entry) ? 'soft' : 'solid'"
+										:tone="installedFor(entry) ? 'neutral' : 'primary'"
+										:disabled="
+											locked ||
+											!entry.compatible ||
+											(!official && !publisherTrusted(entry.publisherKeyId))
+										"
+										@click="prepare(entry, source)"
+									>
+										<i
+											:class="
+												installedFor(entry)
+													? 'fa-solid fa-arrows-rotate text-[11px]'
+													: 'fa-solid fa-download text-[11px]'
 											"
-											@click="trustRemotePublisher(catalog, entry.publisherKeyId)"
-										>
-											{{ t('agent.settings.plugins.trustRemotePublisher') }}
-										</UiButton>
-
-										<UiButton
-											type="button"
-											:appearance="installedFor(entry) ? 'soft' : 'solid'"
-											:tone="installedFor(entry) ? 'neutral' : 'primary'"
-											:disabled="
-												locked ||
-												!entry.compatible ||
-												(!official && !publisherTrusted(entry.publisherKeyId))
-											"
-											@click="prepare(entry, source)"
-										>
-											<i
-												:class="
-													installedFor(entry)
-														? 'fa-solid fa-arrows-rotate text-[11px]'
-														: 'fa-solid fa-download text-[11px]'
-												"
-												aria-hidden="true"
-											></i>
-											<span>{{ catalogEntryAction(entry) }}</span>
-										</UiButton>
-									</div>
+											aria-hidden="true"
+										></i>
+										<span>{{ catalogEntryAction(entry) }}</span>
+									</UiButton>
 								</div>
 							</div>
 						</div>
@@ -773,3 +769,77 @@
 		</UiConfirmationPanel>
 	</section>
 </template>
+
+<style scoped>
+	.plugin-market {
+		min-width: 0;
+		container: plugin-market / inline-size;
+	}
+
+	.plugin-market__add {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.plugin-market__source {
+		flex-basis: 100%;
+		min-width: 0;
+		max-width: 100%;
+		justify-content: flex-start;
+	}
+
+	.plugin-market__entry {
+		display: grid;
+		min-width: 0;
+		gap: 12px;
+	}
+
+	.plugin-market__name,
+	.plugin-market__description {
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+
+	.plugin-market__definition {
+		display: none;
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+
+	.plugin-market__actions {
+		display: flex;
+		min-width: 0;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 8px;
+	}
+
+	@container plugin-market (max-width: 24rem) {
+		.plugin-market__add {
+			grid-template-columns: minmax(0, 1fr);
+		}
+
+		.plugin-market__refresh-label {
+			display: none;
+		}
+	}
+
+	@container plugin-market (min-width: 48rem) {
+		.plugin-market__entry {
+			grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+			align-items: center;
+			column-gap: 24px;
+		}
+
+		.plugin-market__actions {
+			max-width: 24rem;
+		}
+
+		.plugin-market__definition {
+			display: inline;
+		}
+	}
+</style>
