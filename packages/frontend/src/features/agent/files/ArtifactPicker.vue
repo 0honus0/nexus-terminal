@@ -100,6 +100,7 @@
 		:title="$t('agent.attachments.button', { count: modelValue.length })"
 		:disabled="disabled"
 		panel-class="w-[min(520px,calc(100vw-24px))]"
+		:trigger-appearance="compact ? 'soft' : 'ghost'"
 		:trigger-variant="compact ? 'square' : 'default'"
 		@open-change="(value) => (opened = value)"
 	>

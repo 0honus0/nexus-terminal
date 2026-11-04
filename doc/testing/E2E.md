@@ -8,6 +8,14 @@
 
 官方插件[v1.0.3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.3)已发布，main/tag均为d5dd455，发布CI成功。本体最新[amd dev发布41867087587](https://github.com/0honus0/nexus-terminal/actions/runs/41867087587)完整日志确认推送完成，GHCR已核验dev/固定标签、linux/amd64平台、digest和e71cf820源码revision；workflow API同样受上述故障影响，未记为官方success。此前指定实例数据库维护与7262e8ac镜像部署仍保持原范围，本轮没有更新生产容器或数据库。真实运营商切网、手机软键盘、外部供应商及未列故障边界仍按[待验与外部依赖](../PLAN.md#待验与外部依赖)保留；受控回归不替代真实模型效果或吞吐实测。更早测试与镜像结果只保留为各自历史证据。
 
+## Agent 聊天悬浮区与输入工具栏修正（2026-11-04）
+
+本批基于main/b6bd3b25。用户反馈手机Token/上下条状态行下半部分仍遮挡消息，同时要求权限/添加文件具备SSH目标同款边框、手机隐藏目标数量；授权提交推送、处理远程E2E与发布main dev，沿用linux/amd64，不更新生产。本批按D17执行源码/静态与正式远程测试，不启动本地业务环境。产物保留于`/home/honus/nexus-task-artifacts/agent-chat-controls-20261104/toolbar-followup`。
+
+源码定位前轮遗漏：agent-composer-status本身绝对定位且透明，但section的12px gap与footer的桌面8px/窄屏6px或5px顶部padding使状态行下半区落在正文滚动范围外；只去底色不能透出该处不存在的正文。本轮移除滚动区/footer间距和各尺寸顶部padding，保留olderHidden提示原有下间距、输入框底部定位、状态行位置/按钮背景、正文末尾54px留白及点击穿透。无用量的静态发送提示去除胶囊底色。权限触发器显式soft，ArtifactPicker仅compact入口从ghost改soft，沿既有UiButton边框/背景；不改全局UI或其它弹层。SSH目标数量在原620px紧凑档隐藏，最窄300px档隐藏整个摘要，选择面板内数量、勾选与真实connectionIds不变。
+
+复审覆盖AgentAppSurface模板/CSS、AgentConfigPopover、UiPopover/UiButton、ArtifactPicker及唯一NativeInputArtifacts消费者，含桌面、各容器档、短窗口、olderHidden、无用量提示、有附件及busy/disabled/选中状态。没有新增测量、计时/监听、请求、状态、类型或Shared/后端/数据库变化。旧CDP与559项结果保持原SHA范围，不作本轮视觉验收；最终根`pnpm run check`、`pnpm run build:frontend`及`pnpm run format:all:check`均退出0（check.log、build-frontend.log、format-check.log），最后文档另做Prettier与diff检查。提交推送后的完整远程E2E及amd dev发布结果继续回填；真实手机软键盘及新布局的像素/触摸专项未验。
+
 ## 终端工具栏响应优化（2026-11-04，浏览器及远程回归通过）
 
 基线main/fff92dfa，用户要求优化终端“隐藏、进度显示、配置布局”点击卡顿。源码确认导航显示原来等待队列与HTTP回执，两个弹窗首次点击才导入，进度窗nextTick读取几何可能强制同步布局。PreferencesStore增加导航预览/revision，values仍为已确认快照；AppHeader和WorkspacePage显示、高度、按钮及下次切换消费同一有效值，原串行CAS、冲突/unknown围栏不变。旧finally不清新预览，permission撤销立即收尾，Presentation重置隔离旧身份。

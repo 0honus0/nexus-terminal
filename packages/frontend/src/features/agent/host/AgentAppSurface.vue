@@ -840,8 +840,9 @@
 					:bordered="false"
 					:title="t('agent.operations.loading')"
 				/>
-				<section v-if="thread" class="flex min-h-0 flex-1 flex-col gap-3">
-					<p v-if="olderHidden" role="status" class="text-xs">{{ t('agent.nativeRun.windowed') }}</p>
+				<!-- No gap above the composer: the entire floating status row must overlay the scroller. -->
+				<section v-if="thread" class="flex min-h-0 flex-1 flex-col">
+					<p v-if="olderHidden" role="status" class="mb-3 text-xs">{{ t('agent.nativeRun.windowed') }}</p>
 					<div
 						ref="scroller"
 						class="agent-conversation-scroller min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-5 py-5 touch-pan-y"
@@ -940,7 +941,7 @@
 							{{ chatError }}
 						</UiInlineNotice>
 					</div>
-					<footer class="agent-composer-footer relative z-10 shrink-0 px-4 pb-4 pt-2">
+					<footer class="agent-composer-footer relative z-10 shrink-0 px-4 pb-4">
 						<div class="agent-composer-area mx-auto max-w-3xl">
 							<div v-if="inputArtifacts.length" class="mb-2 flex flex-wrap gap-1.5">
 								<UiButton
@@ -1304,6 +1305,7 @@
 										<!-- Run 级批准策略：新 Run 创建时冻结，运行中只读 -->
 										<AgentConfigPopover
 											:disabled="blocked || runNeedsClosure"
+											trigger-appearance="soft"
 											:trigger-selected="selectedConfig === 'approval'"
 											@open-change="selectConfigControl('approval', $event)"
 											:ariaLabel="t('agent.operations.approvalMode')"
