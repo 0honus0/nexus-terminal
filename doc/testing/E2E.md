@@ -6,7 +6,19 @@
 
 最新完整远程 [41828020189](https://github.com/0honus0/nexus-terminal/actions/runs/41828020189) 验证 `main/7262e8ac31e414d4de8b8f99102cee681e376961`：559个场景全部一次通过，质量检查、生产构建、Docker smoke及8个测试分片全部成功；耗时产物任务成功，截图更新按正常条件跳过。日志核对559条唯一passed记录，零失败、重试、flaky或跳过。Backend129项，Browser1–7分别32/44/72/64/64/87/67项（包含隔离场景）；新增三个整链wrapper内另覆盖23个模型/上下文、4个签名插件及3个调度子场景，不重复加到559个Playwright场景中。后继文档收口不改变被测源码。
 
-官方插件[v1.0.3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.3)已发布，main/tag均为d5dd455，发布CI成功。本体[amd dev发布41830244197](https://github.com/0honus0/nexus-terminal/actions/runs/41830244197)成功，来源为上述被测提交；未更新远程主机、容器或用户数据库。真实运营商切网、手机软键盘、外部供应商及未列故障边界仍按[待验与外部依赖](../PLAN.md#待验与外部依赖)保留；受控回归不替代真实模型效果或吞吐实测。旧553项及更早镜像结果只保留为各自历史证据。
+官方插件[v1.0.3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.3)已发布，main/tag均为d5dd455，发布CI成功。本体[amd dev发布41830244197](https://github.com/0honus0/nexus-terminal/actions/runs/41830244197)成功，来源为上述被测提交；后续按用户新授权维护指定实例数据库并更新镜像，见紧接的部署记录。真实运营商切网、手机软键盘、外部供应商及未列故障边界仍按[待验与外部依赖](../PLAN.md#待验与外部依赖)保留；受控回归不替代真实模型效果或吞吐实测。旧553项及更早镜像结果只保留为各自历史证据。
+
+## 远程数据库维护与镜像更新（2026-11-04，已完成）
+
+用户在镜像发布后明确授权维护远程数据库及更新镜像。目标仍为指定主机的`/home/honus/product/nexus_terminal`，原双容器健康、源码4a3074da，数据库为旧plugin-apps签名；4个Agent Run均completed，29份上下文缺systemPrompt，压缩/检查点/子任务记录均0。先下载并核对已测7262e8ac的固定amd镜像digest，再用新版真实initializeSchema生成独立参考库，逐对象对照全部DDL。发现唯一结构差异为agent_run_children.max_requests仍有400的旧CHECK；保留了首轮演练拒绝证据，没有绕过结构检查或直接修改签名启动。
+
+一次性维护脚本和验证脚本集中远程`maintenance/20261104-agent-flow-dev`，不增加产品兼容分支。副本演练将旧空子任务表按新版原始DDL及索引重建为当前Shared安全整数范围；29份历史快照补systemPrompt空串，原消息/sources的原始JSON后缀完整保留并重算content_hash。旧版模型适配器没有单独system消息或Responses instructions，因此不把当前指引伪写为历史指引，也不更改历史付费request_hash、任务状态或用户配置。所有表逐行哈希只排除已授权快照字段及版本签名，维护前后相等；完整性/外键检查通过，结构签名最后在同事务更新。
+
+副本经新版镜像真实readContextSnapshot全部29份解码通过后，停止本应用前后端，归档完整data、.env及Compose；逐个常规文件校验归档内容与原文件哈希一致，完整备份pre-upgrade-data.tar.gz的SHA256为`7e6388f5a8464747ae10cee278d3a5b2245a6f7661361a6c1711ba1e459db720`。随后同脚本事务维护线上，验证副本再次由新版解码；99张表行数和其它字段全部保留，最终所有DDL精确匹配新版参考库，integrity=ok、foreign_key_check=0。保留4任务/1线程/2App/2插件安装及29份上下文，不执行模型任务或重放旧请求。
+
+前后端已更新到已测7262e8ac的`ghcr.io/0honus0/nexus-terminal:dev`，digest为`sha256:b4f1c34743e3428a167b651e5aacddbc99e83b8942d04766b19e65387006b3e5`；两容器running/healthy、OCI源码一致。公开`https://ssh.honus.top/`及`/api/v1/status`均HTTP200，状态正文为{status:"ok",service:"nexus-backend"}；自本次启动起两容器日志无warn/error/fatal。完成时间2026-11-04 12:48 UTC，未使用回滚；原镜像额外保留本地rollback-agent-flow-20261104标签，未推送该标签。未升级或重装用户现有插件。
+
+远程目录权限700，完整备份含实例密钥及用户数据，只留远程受保护目录；备份、副本、脚本、启动日志和维护记录均保留至用户通知。非敏感核验报告及脚本另存本地`/home/honus/nexus-task-artifacts/agent-flow-deploy-20261104`（deployment-result.json、post-deployment-verification.json、live-maintenance.json、backup-verification.json）；本轮是部署/数据维护验证，不扩大为真实模型、手机、SSH或RDP全业务实机验收，也未重新发布产品源码。
 
 ## Agent 执行补充回归与 amd dev 交付（2026-11-04，已完成）
 
