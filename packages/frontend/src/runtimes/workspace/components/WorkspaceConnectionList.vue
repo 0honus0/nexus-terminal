@@ -82,9 +82,10 @@
 	const loading = ref(true);
 	const loadError = ref('');
 	const tagLoadFailed = ref(false);
+	const auth = useAuthSession();
 	let loadFailureCause: unknown;
 	watch([loadError, tagLoadFailed, loading], () => {
-		if (loading.value || isNetworkFailure(loadFailureCause)) return;
+		if (!auth.isAuthenticated.value || loading.value || isNetworkFailure(loadFailureCause)) return;
 		const message = loadError.value || (tagLoadFailed.value ? t('workspaceConnectionList.tagLoadFailed') : '');
 		if (!message) return;
 		feedback.notifyError(message, 0, {
@@ -98,7 +99,6 @@
 			},
 		});
 	});
-	const auth = useAuthSession();
 	let loadGeneration = 0;
 
 	function resetPanels(): void {
@@ -114,6 +114,7 @@
 	}
 
 	const load = async (force = false): Promise<void> => {
+		if (!auth.isAuthenticated.value) return;
 		const current = ++loadGeneration;
 		loading.value = true;
 		loadFailureCause = undefined;

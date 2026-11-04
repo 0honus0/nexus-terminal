@@ -8,6 +8,20 @@
 
 官方插件[v1.0.3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.3)已发布，main/tag均为d5dd455，发布CI成功。本体[amd dev发布41830244197](https://github.com/0honus0/nexus-terminal/actions/runs/41830244197)成功，来源为上述被测提交；后续按用户新授权维护指定实例数据库并更新镜像，见紧接的部署记录。真实运营商切网、手机软键盘、外部供应商及未列故障边界仍按[待验与外部依赖](../PLAN.md#待验与外部依赖)保留；受控回归不替代真实模型效果或吞吐实测。旧553项及更早镜像结果只保留为各自历史证据。
 
+## 工作区尺寸自动保存冲突（2026-11-04，限定浏览器回归通过）
+
+只读排查指定远程实例：生产revision为7262e8ac，14:26:26.894及14:26:51.367 UTC的PUT /api/v1/settings/layout返回409（auditId1504/1506），此前及间隔内preferences写入成功。SQLite只读核对presentation记录仍存在、version136；共有4个有效登录会话，但日志未含请求expectedVersion/浏览器身份，不能据此认定具体页面或设备。未改远程数据、设置或容器。原始日志与脱敏审计元数据保留于`/home/honus/nexus-task-artifacts/personal-data-conflict-20261104`。
+
+用户要求修复后，尺寸自动保存沿原队列按本地确认基线做容器整组比例三方合并，只对明确409在原任务中重读后最多再保存一次；相同目标不重复写入。结构/同组比例冲突、二次409及unknown停止；恢复读取失败保留原拒绝与读取失败cause，不误报为布局提交未知。Controller的revision隔离重读后的旧任务，失活后的已确认回执仍可推进同一布局的本地基线，保存回执不回填预览。WorkspacePage沿原Toast/刷新入口使用中英日布局文案，未改正常UI。接口消费者只涉及原Repository、Controller与Adapter，无Shared/后端/数据库变更。
+
+用户随后明确授权“浏览器回归 审核提交推送”，作为D17限定例外。基线main/9111e440，Node22.23.1、pnpm11.28.10、Playwright1.64.1，经CDP 127.0.0.1:29222访问真实https://api.honus.top；Vite9998和Backend3001使用本阶段runtime独立数据库与本机SSH44807夹具，不读取用户生产库或修改生产实例。页面A运行正式Workspace/Controller/Adapter/Store/API，页面B使用独立Pinia及真实API推进同一测试账号版本；故障拦截只控制回执及读取时机，不替换保存实现。一项真实鼠标拖分隔条，其余以正式Controller尺寸事件触发完整合批链。截图已核对桌面及320px中文Toast/原刷新按钮。
+
+最终runtime/acceptance.mjs整组17项PASS，browser-acceptance-closeout.log与browser-acceptance.json记录全部断言及零pageerror：真实拖动只保存一次、外部偏好更新后409→重读→一次成功、不同容器合并及后续保留未调整远端比例、同组尺寸/结构冲突不覆盖、同目标不重复PUT、第二次409停止；第一次及恢复写入真实成功但丢回执均unknown且不重放，恢复读取503保留已拒绝结果和两个cause；读取中离页/显式刷新/注销不重派、刷新废弃旧合批；连续拖动串行且旧回执不回写新预览，失活后确认仍推进本地基线；320px提示无横溢且实际点击刷新解除围栏并加载远端布局，注销不发新的连接列表读取且无失败Toast。登录后重新建立真实SSH并重复完整回归，未跳过故障场景。
+
+扩展回归发现并修复两处真实竞态：冲突恢复读取期间显式刷新仍可能发第二次PUT，现由Controller独立resizeScope撤销旧意图；注销清理终端时短暂挂载的WorkspaceConnectionList仍读数据并提示会话失效，现于读取及通知前核验认证。race-retest-final.log与logout-retest.log分别定向通过，随后最终17项整组复验。浏览器脚本初期的对象字段顺序比较、重复运行基线、热更新后终端已关闭等夹具假设已修正，失败产物/trace保留，不作为产品失败或最终PASS依据。
+
+源码审核覆盖唯一Repository/Adapter消费者、容器完整向量与结构、冻结基线、队列内恢复不自等待、两次写入的未知边界、revision/permission/resizeScope撤销与晚回执、注销挂载及三语文案；无Shared/后端/存储契约或正常UI变化。初期根check、前端build与全仓格式已通过；最终补丁的根check、前端生产build、全仓ESLint/Prettier及diff均通过，命令退出0，见check-closeout.log、build-frontend-closeout.log及format-closeout.log；最终文档格式另经docs-check-closeout.log核对。本轮没有运行完整本地或远程E2E，既有559项仅保持原SHA范围；三语真实呈现、真实多设备网络和高频交错拖动仍未覆盖。不发布镜像或部署，专用浏览器/前后端/SSH夹具完成后关闭，目录、隔离数据、截图与layout-browser-trace-*.zip保留至用户通知。
+
 ## 连接编辑清除凭据布局（2026-11-04，静态检查）
 
 基于main/fac0f2ee，ConnectionForm将清除凭据勾选项移到密码输入框右侧，SSH密钥模式放在选择框右侧。源码核对原输入ID、凭据可见条件、清除后禁用、密码留空保留及保存/取消调用链；复用原UiInput/UiCheckbox，输入可收缩，清除项不换行，无新请求或状态owner。USAGE及PLAN同步。用户随后要求审查代码并提交推送；第二轮复核表单→提交→原版本更新及现有E2E定位，未发现本批新增逻辑问题，未新增源码修改。按D17未运行浏览器或行为测试；320px手机、三语呈现及真实保存回归仍待验。根`pnpm run check`、前端生产build、全仓ESLint/Prettier及`git diff --check`均通过；日志集中于`/home/honus/nexus-task-artifacts/connection-credential-layout-20261104`。

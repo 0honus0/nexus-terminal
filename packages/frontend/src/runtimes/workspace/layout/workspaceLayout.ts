@@ -210,7 +210,15 @@ export const createWorkspaceLayoutController = (
 	const version = ref(0);
 	const error = ref<unknown>(null);
 	const scope = new AbortController();
+	let resizeScope = new AbortController();
 	let revision = 0;
+	// Track the acknowledged local preview, so later drags do not claim untouched remote sizes.
+	let confirmedLayout = cloneWorkspaceLayout(tree.value);
+
+	const revokeResizeTasks = (): void => {
+		resizeScope.abort();
+		resizeScope = new AbortController();
+	};
 
 	const updateContainerSizes = (
 		node: WorkspaceLayoutNodeState,
@@ -242,23 +250,34 @@ export const createWorkspaceLayoutController = (
 		return changed ? { ...node, children } : node;
 	};
 
-	const resizeSaver = createLatestValueSaver<{ layout: WorkspaceLayoutNodeState; permission: AbortSignal }>({
+	const resizeSaver = createLatestValueSaver<{
+		layout: WorkspaceLayoutNodeState;
+		permission: AbortSignal;
+		revision: number;
+	}>({
 		delayMs: 1000,
 
-		async save({ layout, permission }) {
-			if (permission.aborted) return;
+		async save({ layout, permission, revision: scheduledRevision }) {
+			if (permission.aborted || scope.signal.aborted || scheduledRevision !== revision || error.value) {
+				return;
+			}
 			const result = await settingsRepository.saveResizedLayout(
 				layout,
+				cloneWorkspaceLayout(confirmedLayout),
 				AbortSignal.any([permission, scope.signal]),
 			);
-			if (!scope.signal.aborted && !permission.aborted) {
-				version.value = result;
-				error.value = null;
+			if (!scope.signal.aborted && scheduledRevision === revision) {
+				// A confirmed write still advances our baseline if the cached page became inactive meanwhile.
+				confirmedLayout = cloneWorkspaceLayout(layout);
+				if (!permission.aborted) {
+					version.value = result;
+					error.value = null;
+				}
 			}
 		},
 
-		onError: (cause, { permission }) => {
-			if (!scope.signal.aborted && !permission.aborted) {
+		onError: (cause, { permission, revision: scheduledRevision }) => {
+			if (!scope.signal.aborted && !permission.aborted && scheduledRevision === revision) {
 				error.value = cause;
 				logger.error({ err: cause }, 'Failed to persist resized workspace layout');
 			}
@@ -270,11 +289,13 @@ export const createWorkspaceLayoutController = (
 		sidebars,
 
 		resetState(): void {
+			revokeResizeTasks();
 			revision++;
 			loaded.value = false;
 			loading.value = false;
 			version.value = 0;
 			tree.value = createDefaultWorkspaceLayout();
+			confirmedLayout = cloneWorkspaceLayout(tree.value);
 			sidebars.value = defaultSidebars();
 			error.value = null;
 		},
@@ -287,6 +308,7 @@ export const createWorkspaceLayoutController = (
 
 		async load(force = false): Promise<void> {
 			if (scope.signal.aborted || (loaded.value && !force)) return;
+			revokeResizeTasks();
 			const permission = capturePermission();
 			const originalRevision = ++revision;
 			loading.value = true;
@@ -294,6 +316,7 @@ export const createWorkspaceLayoutController = (
 				const value = await settingsRepository.loadLayout(force);
 				if (scope.signal.aborted || permission.aborted || originalRevision !== revision) return;
 				tree.value = cloneWorkspaceLayout(value.layout);
+				confirmedLayout = cloneWorkspaceLayout(value.layout);
 				sidebars.value = {
 					left: value.sidebar.left.map((pane) => pane),
 					right: value.sidebar.right.map((pane) => pane),
@@ -326,8 +349,10 @@ export const createWorkspaceLayoutController = (
 				AbortSignal.any([permission, scope.signal]),
 			);
 			if (scope.signal.aborted || permission.aborted) return;
+			revokeResizeTasks();
 			revision++;
 			tree.value = layout;
+			confirmedLayout = cloneWorkspaceLayout(layout);
 			sidebars.value = sidebar;
 			version.value = result;
 			loaded.value = true;
@@ -341,8 +366,9 @@ export const createWorkspaceLayoutController = (
 			tree.value = nextTree;
 			loaded.value = true;
 			resizeSaver.schedule({
-				permission: capturePermission(),
+				permission: AbortSignal.any([capturePermission(), resizeScope.signal]),
 				layout: cloneWorkspaceLayout(nextTree),
+				revision,
 			});
 		},
 

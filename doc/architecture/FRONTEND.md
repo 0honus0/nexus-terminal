@@ -75,13 +75,13 @@ Workspace RuntimeSession 持普通与挂起附件的连接/续租，Registry 持
 ### 认证撤销后的通知隔离
 
 1. **职责与范围**：正常退出取消原个人数据意图，不向登录页发布旧视图的请求失败；真实退出接口失败仍由AppHeader提示。
-2. **子功能与目录**：shared/session拥有视图scope；命令历史/快捷指令组件拥有错误观察与刷新动作；WorkspacePage、布局controller和App拥有各自保存回调。
+2. **子功能与目录**：shared/session拥有视图scope；命令历史/快捷指令及连接列表组件拥有错误观察与刷新动作；WorkspacePage、布局controller和App拥有各自保存回调。
 3. **依赖方向**：组件读取session公开能力；foundation保存器只回传原T，不引用认证或业务模块；后端/Shared契约保持。
 4. **类型与转换**：LatestValueSaver.onError(error,value)绑定失败原值，工作区按原permission判断通知资格；无新协议或错误码。
 5. **入口与安装**：既有useAuthenticatedViewScope在无会话时从已取消scope开始，attach可建立新scope，logout/切用户/销毁撤销；激活和available变化不能在无会话时重新准入。
 6. **数据与并发**：通知及其重新读取动作核对原signal；尺寸、字体、缩放、列宽/侧栏与布局保存均不把晚失败关联到后来激活的页面。不改写入队列、CAS和未知结果围栏。
-7. **生命周期与失败**：退出时清除原视图意图，原请求仍由store追踪收口；当前有效会话真实失败继续通知。远程桌面尺寸保存要求真实认证用户，避免null身份相等误报。
-8. **当前能力与验收**：产品操作见USAGE安全与认证；本批按D17仅源码/静态和构建，真实退出/在途故障与重新登录待正式回归，具体证据归testing。
+7. **生命周期与失败**：退出时清除原视图意图，原请求仍由store追踪收口；当前有效会话真实失败继续通知。WorkspaceConnectionList在读取准入及通知前复核认证，阻止注销清理触发新实例挂载后读取。远程桌面尺寸保存要求真实认证用户，避免null身份相等误报。
+8. **当前能力与验收**：产品操作见USAGE安全与认证；静态、正式回归及限定浏览器证据分别见testing。注销时布局恢复不重派、清理挂载连接列表不读取和无失败通知已通过专项，扩大在途故障/重新登录组合仍按PLAN待验。
 
 ### 终端输出与缩放调度
 
@@ -392,6 +392,17 @@ usePluginManagement 持已确认安装快照；相同 appId/revision 序列不�
 6. **数据、事务与并发**：原 busy/读写围栏阻止并发；失活清理旧错误，返回只读核对后才解除写入围栏，不重放原写入。
 7. **生命周期与失败**：原 signal/current scope 屏蔽晚返回与 finally；真实读失败、冲突和未确认写继续提供原重新读取入口，重读失败不开放写入。
 8. **当前能力与验收**：USAGE 同步返回页面与失败恢复行为；新增缓存往返及原真实失败回归的正式 Actions 证据见 testing，静态与设备视觉证据分开。
+
+## 工作区尺寸自动保存的冲突核对
+
+1. **职责与范围**：WorkspaceLayoutController持当前预览和上次确认的本地尺寸，PresentationStore持持久快照、串行队列和恢复围栏；仅尺寸自动保存允许确定冲突后的有限恢复，不扩大到表单写入。
+2. **子功能与目录**：沿workspaceLayout、workspace-settings-adapter、preferences/store/presentation.store及model/layout-size-merge，布局错误文案由WorkspacePage与原Toast持有。
+3. **依赖方向**：Renderer显式分隔条事件→Controller的1000ms LatestValueSaver→原Repository/Adapter→PresentationStore→原API/Shared；恢复读取在原队列任务内部完成，不递归入队等待自身。
+4. **类型与转换**：原WorkspaceLayoutNodeState和PersonalLayout各自归属不变，Repository尺寸保存显式接收预览与本地确认基线；Adapter逐字段转换，无新后端/Shared契约。
+5. **入口与安装**：按容器完整子项比例三方核对基线/本次预览/当前权威快照；节点ID、顺序、组件和方向均一致才合并。相同容器双方同时改且目标不同则拒绝，未改容器保留权威值。
+6. **数据、事务与并发**：只对confirmed/version_conflict读当前完整快照后最多再提交一次CAS；无实际变化不发PUT。连续拖动的后继任务使用前一确认的本地预览作基线，不认领未调整的远端尺寸。保存回执只发布持久快照，不回写正在拖动的预览，远端未调整尺寸在显式重读后显示。
+7. **生命周期与失败**：原scope、permission与布局revision阻止离页/身份替换/重读后的旧待保存任务及晚错误；独立resizeScope在重读、状态重置和完整布局保存确认后撤销旧尺寸意图，覆盖冲突恢复读取中的重派窗口；已派发且明确成功的回执在同一布局revision可推进本地基线，失活时不回填可见状态。初次unknown不重放；恢复读取失败保留原409与读取失败因果，二次409及真实尺寸/结构冲突维持原阻断和显式刷新。
+8. **当前能力与验收**：USAGE维护自动恢复与人工核对边界；静态结果、远程原始409及17项限定CDP回归见PLAN/testing；实际双页面、连续拖动、断流、刷新和注销边界分别记录，不扩大为全量E2E或真实多设备验收。
 
 ## 工作区连接与布局并行初始化
 

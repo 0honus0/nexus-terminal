@@ -6,7 +6,11 @@ import type {
 
 export interface WorkspaceSettingsRepository {
 	loadLayout(recover?: boolean): Promise<WorkspaceLayoutSnapshot>;
-	saveResizedLayout(layout: WorkspaceLayoutNodeState, permission?: AbortSignal): Promise<number>;
+	saveResizedLayout(
+		layout: WorkspaceLayoutNodeState,
+		baseline: WorkspaceLayoutNodeState,
+		permission?: AbortSignal,
+	): Promise<number>;
 	saveLayout(snapshot: WorkspaceLayoutSnapshot, permission?: AbortSignal): Promise<number>;
 	loadFocus(recover?: boolean): Promise<WorkspaceFocusSnapshot>;
 	saveFocus(snapshot: WorkspaceFocusSnapshot, permission?: AbortSignal): Promise<number>;

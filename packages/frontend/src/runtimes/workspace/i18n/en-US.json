@@ -43,6 +43,11 @@
       "reconnecting": "Reconnecting",
       "disconnected": "Disconnected",
       "error": "Error"
+    },
+    "layout": {
+      "conflict": "The workspace layout or pane sizes changed. This adjustment was not saved. Refresh the layout before adjusting it again.",
+      "unknown": "The layout save could not be confirmed. Refresh and verify it first; the save will not be repeated automatically.",
+      "failed": "The workspace layout could not be read or saved. Refresh it and try again."
     }
   },
   "layoutConfigurator": {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 	import { isNetworkFailure } from '@/client/http/network-failure';
+	import { PreferenceRequestFailure } from '@/client/preferences/preference-request';
 	import {
 		computed,
 		defineAsyncComponent,
@@ -1197,9 +1198,21 @@
 		}
 	};
 
+	const layoutFailureMessage = (cause: unknown): string => {
+		if (cause instanceof PreferenceRequestFailure) {
+			if (cause.outcome === 'unknown' || cause.code === 'operation_unknown') {
+				return t('workspace.layout.unknown');
+			}
+			if (cause.code === 'version_conflict' || cause.code === 'refresh_required') {
+				return t('workspace.layout.conflict');
+			}
+		}
+		return t('workspace.layout.failed');
+	};
+
 	watch(workspaceLayout.error, (cause) => {
 		if (!cause || !isPageCurrent(pageScope.signal) || isNetworkFailure(cause)) return;
-		feedback.notifyError(preferenceFailureMessage(cause, t), 0, {
+		feedback.notifyError(layoutFailureMessage(cause), 0, {
 			key: 'workspace-layout',
 			label: t('common.refresh'),
 

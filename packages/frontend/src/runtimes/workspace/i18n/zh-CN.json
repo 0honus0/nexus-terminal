@@ -43,6 +43,11 @@
       "reconnecting": "重新连接中",
       "disconnected": "已断开",
       "error": "错误"
+    },
+    "layout": {
+      "conflict": "工作区布局或面板尺寸已变化，本次调整未保存。请刷新布局后重新调整。",
+      "unknown": "无法确认布局是否已保存。请先刷新核对，系统不会自动重复保存。",
+      "failed": "读取或保存工作区布局失败，请刷新后重试。"
     }
   },
   "layoutConfigurator": {

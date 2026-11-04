@@ -2,8 +2,10 @@ import { defineStore } from 'pinia';
 import { shallowRef, ref } from 'vue';
 import { registerAuthenticatedSessionReset } from '@/shared/session/public';
 import { PreferenceRequestFailure } from '@/client/preferences/preference-request';
+import { structurallyEqual } from '@/foundation/data';
 import { presentationApi } from '../api/presentation-api';
 import { snapshotPresentationChange, projectPreferences, projectLayout } from '../model/presentation-mapper';
+import { mergeLayoutSizes } from '../model/layout-size-merge';
 import type {
 	UserPresentation,
 	PresentationChange,
@@ -11,20 +13,6 @@ import type {
 	PersonalLayout,
 	WorkspacePreferenceKey,
 } from '../model/preferences-types';
-
-function sameLayoutStructure(left: PersonalLayout, right: PersonalLayout): boolean {
-	if (left.id !== right.id) return false;
-	if (left.type === 'pane' && right.type === 'pane') return left.component === right.component;
-	if (left.type !== 'container' || right.type !== 'container') return false;
-	return (
-		left.direction === right.direction &&
-		left.children.length === right.children.length &&
-		left.children.every((child, index) => {
-			const other = right.children[index];
-			return other !== undefined && sameLayoutStructure(child, other);
-		})
-	);
-}
 
 export const usePresentationStore = defineStore('presentation', () => {
 	const snapshot = shallowRef<UserPresentation | null>(null);
@@ -88,12 +76,15 @@ export const usePresentationStore = defineStore('presentation', () => {
 		return task;
 	}
 
-	function mutate(resolveChange: () => PresentationChange, permission?: AbortSignal): Promise<UserPresentation> {
+	function mutate(
+		work: (signal: AbortSignal) => Promise<UserPresentation>,
+		permission?: AbortSignal,
+	): Promise<UserPresentation> {
 		return enqueue(async (signal) => {
 			if (permission?.aborted) throw new PreferenceRequestFailure('cancelled', 'not_dispatched');
 			if (blocked.value) throw new PreferenceRequestFailure('refresh_required', 'not_dispatched');
 			try {
-				const value = await presentationApi.update(resolveChange(), signal);
+				const value = await work(signal);
 				if (signal.aborted) throw new PreferenceRequestFailure('cancelled', 'unknown');
 				snapshot.value = value;
 				error.value = null;
@@ -116,11 +107,11 @@ export const usePresentationStore = defineStore('presentation', () => {
 
 	function update(change: PresentationChange, permission?: AbortSignal): Promise<UserPresentation> {
 		const frozen = snapshotPresentationChange(change);
-		return mutate(() => frozen, permission);
+		return mutate((signal) => presentationApi.update(frozen, signal), permission);
 	}
 
 	function savePanelScale(kind: PanelScaleKind, scale: number, permission: AbortSignal): Promise<UserPresentation> {
-		return mutate(() => {
+		return mutate((signal) => {
 			const current = snapshot.value;
 			if (!current) throw new PreferenceRequestFailure('refresh_required', 'not_dispatched');
 			const preferences = projectPreferences(current.preferences);
@@ -135,19 +126,66 @@ export const usePresentationStore = defineStore('presentation', () => {
 					preferences.quickCommandRowSizeMultiplier = scale;
 					break;
 			}
-			return { action: 'preferences', expectedVersion: current.version, preferences };
+			return presentationApi.update(
+				{ action: 'preferences', expectedVersion: current.version, preferences },
+				signal,
+			);
 		}, permission);
 	}
 
-	function saveLayoutSizes(layout: PersonalLayout, permission?: AbortSignal): Promise<UserPresentation> {
+	function saveLayoutSizes(
+		layout: PersonalLayout,
+		baseline: PersonalLayout,
+		permission?: AbortSignal,
+	): Promise<UserPresentation> {
 		const frozen = projectLayout(layout);
-		return mutate(() => {
+		const original = projectLayout(baseline);
+		return mutate(async (signal) => {
 			const current = snapshot.value;
 			if (!current) throw new PreferenceRequestFailure('refresh_required', 'not_dispatched');
-			if (!sameLayoutStructure(current.layout, frozen)) {
-				throw new PreferenceRequestFailure('version_conflict', 'not_dispatched');
+
+			function save(value: UserPresentation): Promise<UserPresentation> {
+				if (signal.aborted || permission?.aborted) {
+					throw new PreferenceRequestFailure('cancelled', 'not_dispatched');
+				}
+				const merged = mergeLayoutSizes(original, frozen, value.layout);
+				if (!merged) {
+					throw new PreferenceRequestFailure('version_conflict', 'not_dispatched');
+				}
+				if (structurallyEqual(merged, value.layout)) {
+					return Promise.resolve(value);
+				}
+				return presentationApi.update(
+					{ action: 'layout', expectedVersion: value.version, layout: merged },
+					signal,
+				);
 			}
-			return { action: 'layout', expectedVersion: current.version, layout: projectLayout(frozen) };
+
+			try {
+				return await save(current);
+			} catch (cause) {
+				if (
+					!(cause instanceof PreferenceRequestFailure) ||
+					cause.code !== 'version_conflict' ||
+					cause.outcome !== 'confirmed'
+				) {
+					throw cause;
+				}
+				if (signal.aborted || permission?.aborted) {
+					throw new PreferenceRequestFailure('cancelled', 'not_dispatched');
+				}
+				// This write was explicitly rejected. Re-read inside this task, never enqueue behind ourselves.
+				let latest: UserPresentation;
+				try {
+					latest = await presentationApi.load(signal);
+				} catch (readCause) {
+					// A failed recovery read does not turn the rejected write into an unknown commit.
+					throw new PreferenceRequestFailure('version_conflict', 'confirmed', {
+						cause: new AggregateError([cause, readCause], 'Layout conflict recovery read failed'),
+					});
+				}
+				return save(latest);
+			}
 		}, permission);
 	}
 
@@ -156,12 +194,15 @@ export const usePresentationStore = defineStore('presentation', () => {
 		value: boolean,
 		permission: AbortSignal,
 	): Promise<UserPresentation> {
-		return mutate(() => {
+		return mutate((signal) => {
 			const current = snapshot.value;
 			if (!current) throw new PreferenceRequestFailure('refresh_required', 'not_dispatched');
 			const preferences = projectPreferences(current.preferences);
 			preferences[key] = value;
-			return { action: 'preferences', expectedVersion: current.version, preferences };
+			return presentationApi.update(
+				{ action: 'preferences', expectedVersion: current.version, preferences },
+				signal,
+			);
 		}, permission);
 	}
 
