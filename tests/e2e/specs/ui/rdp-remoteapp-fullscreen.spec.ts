@@ -539,6 +539,8 @@ async function dragBy(page: Page, target: Locator, deltaX: number, deltaY: numbe
 async function exercisePointerWindow(page: Page): Promise<void> {
 	const panel = remoteWindow(page);
 	await expect(panel).toBeVisible();
+	// Connecting chrome is always shown; exercise the stable connected auto-hide interaction.
+	await expect(panel).toContainText('Connected', { timeout: 15_000 });
 
 	const initialPanelBox = await panel.boundingBox();
 	expect(initialPanelBox).toBeTruthy();
