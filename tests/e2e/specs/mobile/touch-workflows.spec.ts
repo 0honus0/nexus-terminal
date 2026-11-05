@@ -390,10 +390,10 @@ test('mobile RDP opens keyboard explicitly and persists touch mode without recon
 			}
 			await page.setViewportSize(viewport!);
 		});
-		await remoteDisplay.tap({ position: { x: 40, y: 40 } });
+		await remoteDisplay.tap({ position: { x: 40, y: 240 } });
 		await expect(keyboardInput).not.toBeFocused();
 		// Also cover the compatibility click path used by touch browsers.
-		await remoteDisplay.click({ position: { x: 40, y: 40 } });
+		await remoteDisplay.click({ position: { x: 40, y: 240 } });
 		await expect(keyboardInput).not.toBeFocused();
 		await page.getByRole('button', { name: 'Show keyboard', exact: true }).tap();
 		await expect(keyboardInput).toBeFocused();
@@ -417,14 +417,14 @@ test('mobile RDP opens keyboard explicitly and persists touch mode without recon
 		await expect(touchpadMode).toHaveAttribute('aria-pressed', 'true');
 		await expect(directMode).toHaveAttribute('aria-pressed', 'false');
 		await expect(touchpadMode).toHaveAttribute('title', /One finger: move/);
-		await remoteDisplay.tap({ position: { x: 40, y: 40 } });
+		await remoteDisplay.tap({ position: { x: 40, y: 240 } });
 		await expect(keyboardInput).not.toBeFocused();
 		expect(sessionCreateRequests).toBe(1);
 
 		await revealDesktopControls(page, true);
 		await page.getByRole('button', { name: 'Browser Fullscreen', exact: true }).tap();
 		await expect.poll(() => page.evaluate(() => Boolean(document.fullscreenElement))).toBe(true);
-		await remoteDisplay.tap({ position: { x: 40, y: 40 } });
+		await remoteDisplay.tap({ position: { x: 40, y: 240 } });
 		await expect(keyboardInput).not.toBeFocused();
 		await page.getByRole('button', { name: 'Show keyboard', exact: true }).tap();
 		await expect(keyboardInput).toBeFocused();

@@ -108,6 +108,16 @@
 		if (event.pointerType === 'mouse') toolsOpen.value = false;
 	};
 
+	const leaveToolsOnDesktop = (event: PointerEvent) => {
+		if (
+			event.pointerType === 'mouse' &&
+			event.target instanceof Element &&
+			!event.target.closest('[data-desktop-chrome], [data-desktop-edge]')
+		) {
+			toolsOpen.value = false;
+		}
+	};
+
 	const hideToolsOnDesktop = (event: PointerEvent) => {
 		if (!(event.target instanceof Element) || event.target.closest('[data-desktop-chrome], [data-desktop-edge]'))
 			return;
@@ -516,6 +526,8 @@
 					: ['ui-glass-panel rounded-lg', { 'remote-desktop-panel-floating-tools': floatingTools }]
 			"
 			@pointerdown.capture="hideToolsOnDesktop"
+			@pointermove="leaveToolsOnDesktop"
+			@pointerleave="leaveTools"
 		>
 			<button
 				v-if="floatingTools && state === 'connected' && !toolsOpen && !fileClipboardOpen"

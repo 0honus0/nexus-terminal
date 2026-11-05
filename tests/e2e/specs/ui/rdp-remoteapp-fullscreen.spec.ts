@@ -254,6 +254,9 @@ test('RDP browser client preserves settings, clipboard and browser fullscreen', 
 			const chromeBox = await chrome.boundingBox();
 			expect(chromeBox).not.toBeNull();
 			expect(chromeBox!.y).toBeCloseTo(before!.y, 0);
+			await canvas.hover({ position: { x: 180, y: 240 } });
+			await expect(chrome).toBeHidden();
+			await revealDesktopControls(page);
 			await page.mouse.move(0, 0);
 			await expect(chrome).toBeHidden();
 			const edge = panel.getByRole('button', { name: 'Show window controls', exact: true });

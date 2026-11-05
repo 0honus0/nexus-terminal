@@ -18,6 +18,12 @@
 
 环境仍为Node26.13.0/pnpm12.16.1，日志集中`/home/honus/nexus-task-artifacts/rdp-e2e-review-20261105`，未重建本机浏览器/测试数据库/Docker镜像。根check通过、E2E build（Shared/Backend/Frontend及浏览器测试客户端）通过；三个变更测试入口strict/noUnusedLocals目标tsc通过，初次typeRoots路径错误已更正，不放宽检查。全仓格式及diff收口，正式远程结果随后登记；此前559项不作为本批通过。
 
+### 首轮远程失败与修正
+
+提交79fbba4d的正式远程41971291558：质量、Docker、runner以及Backend和5个Browser分片成功，Browser3/5各失败一项。新增文件批次取消/重连/AudioContext释放4.4秒通过，真实VNC、DPI及pointer resize/minimize通过。失败1为手机原tap坐标y40落在展开的顶部工具栏，测试改为y240的真实桌面区域，保留键盘/触控/不重连断言；失败2为桌面新增悬停后移出断言，toolsOpen仍true，确认横条展开被替换后不能只靠chrome的pointerleave。Modal补面板pointermove核对桌面目标与面板pointerleave，键盘focus-within和文件面板保持原可见语义，不改UI设计。已有失败场景保留并在完整新轮核对，不重跑旧SHA冒充修复。
+
+首轮新增vendor补丁的空白context行曾触发暂存diff检查；仅规范化空context行，针对固定base重新git apply --check成功，产品源变更与实际tgz不变；新patch SHA256见vendor，归档来源记录保留原上游hash。
+
 ## Windows RDP 实测、顶部工具栏与清理（2026-11-05）
 
 基线main/75343fdd的当前未提交工作区，经用户授权在独立应用数据库、https://api.honus.top与本机CDP验证指定Windows目标。用户选择1授权临时启动Audiosrv及其依赖AudioEndpointBuilder，原状态均Stopped/Manual；仅经UAC启动和测试，结束后两项均恢复Stopped/Manual，启动类型不变。远端只创建本次TEMP下nexus-rdp-test-21b66a84，最终已删除并核对不存在，自建PowerShell/Explorer窗口已关闭。本批不提交、推送、发布或更新生产。
