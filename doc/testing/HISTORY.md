@@ -1033,3 +1033,7 @@ local-browser-final.log 的完整469项运行保留463项通过和6项失败，�
 [amd dev 发布 42081065621](https://github.com/0honus0/nexus-terminal/actions/runs/42081065621) 成功，源码 `0fa770a821324f16c7c9a62905025a41f592450d`；`ghcr.io/0honus0/nexus-terminal:dev` 与 `sha-0fa770a82132` 指向同一 index：`sha256:ffe28db0e71200d0ea08e0874db54b46d69211e1c281fe65ee7fe608c55d33d9`。从 GHCR 读取并校验 manifest/config 的 SHA-256，实际平台仅 linux/amd64，平台 digest 为 `sha256:ae6063f070cf119b00bb3e46a114bd4c00e2bf73ec33e0cf64653709d70375e8`，OCI revision 与发布源码一致。发布日志、元数据和注册表核验分别为 publish-run.log、publish-run.json、published-image.json；不把后续文档提交称为该镜像源码，未更新生产实例。
 
 发布后的 `346def40` 仅改测试证据目录，另有耗时估算和文档提交；已核对最终源码相对镜像源码的产品包、Dockerfile、锁文件、工具链和发布workflow无变化，镜像包含本次全部运行功能修改。测试目录、失败证据和专用任务目录保留至用户通知清理。
+
+## Agent 手机服务器选择图标（2026-11-05）
+
+按用户授权修正AgentAppSurface目标触发器：原来只按composer宽度超过620px显示文字，现在复用Foundation的useDeviceCapabilities，手机含横屏/宽视口始终只显示服务器图标；电脑宽输入区保留文字与已选数量，窄输入区沿原收缩规则。组件持展示判断，Foundation持设备能力，原popover选择、无障碍名称、授权及Shared/后端契约均不变，无数据库迁移。核对既有目标选择消费者并同步USAGE及前端架构；根check、完整格式和前端生产构建通过，日志为agent-tool-reuse-20261105任务目录下的target-mobile-{check,format,build}.log。此条仅记录源码与静态/构建结果，宽窄输入区专项视觉及真实手机边界仍沿PLAN保留，正式回归由推送后远程E2E执行。
