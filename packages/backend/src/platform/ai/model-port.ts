@@ -43,7 +43,7 @@ export interface ModelImageRequest {
 
 export interface ModelImageResult {
 	bytes: Uint8Array;
-	mediaType: 'image/png' | 'image/jpeg' | 'image/webp';
+	mediaType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
 }
 
 /** Success requires a completed event and normal iterator termination; EOF alone is not success. */

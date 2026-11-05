@@ -42,6 +42,7 @@ export type ToolInput =
 	| { kind: 'host_diagnostics' }
 	| { kind: 'checkpoint'; summary: string }
 	| { kind: 'artifact'; action: 'create'; name: string; content: string }
+	| { kind: 'artifact'; action: 'present'; artifactId: string }
 	| { kind: 'artifact'; action: 'read'; artifactId: string; offset: number; maxBytes: number }
 	| { kind: 'memory'; action: 'propose'; content: string }
 	| { kind: 'memory'; action: 'recall'; query: string; limit: number }
@@ -68,6 +69,7 @@ export type ToolInput =
 	  }
 	| { kind: 'connections' }
 	| { kind: 'diagnostics'; connectionId: number }
+	| { kind: 'deliver'; connectionId: number; path: string }
 	| { kind: 'read'; connectionId: number; path: string }
 	| { kind: 'list'; connectionId: number; path: string }
 	| { kind: 'inspect'; connectionId: number; path: string }
@@ -133,4 +135,9 @@ export interface ToolAcpPermission {
 export interface ToolAcpPermissionResponse {
 	decision: 'allow_once' | 'reject_once';
 	delivered(): Promise<void>;
+}
+
+export interface ToolFileContent {
+	name: string;
+	sizeBytes: number;
 }

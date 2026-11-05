@@ -11,3 +11,11 @@ export const AGENT_TOOL_MAX_RESPONSE_BYTES = 128 * 1024;
 
 /** Same existing bound as persisted model-proposed arguments. */
 export const AGENT_TOOL_ARGUMENT_MAX_BYTES = 16 * 1024;
+
+/** Only these Host tools may publish an App-owned output file reference. */
+export const AGENT_ARTIFACT_OUTPUT_TOOLS = [
+	'image_generate',
+	'artifact_create',
+	'artifact_present',
+	'file_deliver',
+] as const;

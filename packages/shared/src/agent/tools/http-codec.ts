@@ -10,6 +10,7 @@ import {
 } from '../governance/values.js';
 import {
 	AGENT_TOOL_STATES,
+	AGENT_ARTIFACT_OUTPUT_TOOLS,
 	AGENT_TOOL_LIST_DEFAULT_LIMIT,
 	AGENT_TOOL_LIST_MAX_LIMIT,
 	AGENT_TOOL_MAX_RESPONSE_BYTES,
@@ -137,7 +138,7 @@ function readTool(input: unknown): AgentToolView {
 			'operationRevision',
 			'revision',
 			'state',
-			'generatedImageId',
+			'outputArtifactId',
 			'createdAt',
 			'updatedAt',
 		],
@@ -155,8 +156,11 @@ function readTool(input: unknown): AgentToolView {
 	}
 	const operationRevision = agentInteger(row.operationRevision, 1);
 	const createdAt = agentInteger(row.createdAt);
-	const generatedImageId = row.generatedImageId === null ? null : readAgentId(row.generatedImageId);
-	if (generatedImageId !== null && (row.toolName !== 'image_generate' || row.state !== 'completed')) {
+	const outputArtifactId = row.outputArtifactId === null ? null : readAgentId(row.outputArtifactId);
+	if (
+		outputArtifactId !== null &&
+		(!AGENT_ARTIFACT_OUTPUT_TOOLS.some((name) => name === row.toolName) || row.state !== 'completed')
+	) {
 		throw new InvalidAgentPayload();
 	}
 	return {
@@ -176,7 +180,7 @@ function readTool(input: unknown): AgentToolView {
 		operationRevision,
 		revision: agentInteger(row.revision, operationRevision),
 		state: state(row.state),
-		generatedImageId,
+		outputArtifactId,
 		createdAt,
 		updatedAt: agentInteger(row.updatedAt, createdAt),
 	};

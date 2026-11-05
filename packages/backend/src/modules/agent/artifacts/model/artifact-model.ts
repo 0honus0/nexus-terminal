@@ -1,3 +1,5 @@
+import type { ContentInspector } from '../../../../platform/blobs/content-inspector.js';
+import { ContentInspectionFailure } from '../../../../platform/blobs/content-inspector.js';
 import type { SessionTokens } from '../../../../platform/security/session-tokens.js';
 import type { BlobStore } from '../../../../platform/blobs/blob-store.js';
 import { BlobFailure } from '../../../../platform/blobs/blob-store.js';
@@ -145,7 +147,54 @@ export class ArtifactModel {
 		private readonly storage: ArtifactStorage,
 		private readonly blobs: BlobStore,
 		private readonly tokens: SessionTokens,
+		private readonly inspector: ContentInspector,
 	) {}
+
+	async useDetectedContent<T>(
+		source: AsyncIterable<Uint8Array>,
+		signal: AbortSignal,
+		consume: (mediaType: string, source: AsyncIterable<Uint8Array>) => Promise<T>,
+	): Promise<T> {
+		let consumerFailure: unknown = null;
+		let sourceFailure: unknown = null;
+
+		async function* content(): AsyncIterable<Uint8Array> {
+			try {
+				yield* source;
+			} catch (error) {
+				sourceFailure = error;
+				throw error;
+			}
+		}
+
+		try {
+			return await this.inspector.use(content(), signal, async (mediaType, bytes) => {
+				try {
+					return await consume(mediaType, bytes);
+				} catch (error) {
+					consumerFailure = error;
+					throw error;
+				}
+			});
+		} catch (error) {
+			if (error instanceof ContentInspectionFailure && error.kind === 'cleanup_failed') {
+				throw new ToolCleanupFailure({ cause: error });
+			}
+			if (consumerFailure !== null) {
+				throw consumerFailure;
+			}
+			if (sourceFailure !== null) {
+				throw sourceFailure;
+			}
+			if (signal.aborted && error === signal.reason) {
+				throw new AgentFailure('provider_unavailable', { cause: error });
+			}
+			if (error instanceof AgentFailure) {
+				throw error;
+			}
+			throw new AgentFailure('internal_failure', { cause: error });
+		}
+	}
 
 	private auth(actor: ArtifactActor): StoredArtifactAuthorization {
 		if (actor.kind === 'model') {

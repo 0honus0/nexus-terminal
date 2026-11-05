@@ -18,6 +18,12 @@ export interface MachineOperationScope {
 	validate(): Promise<void>;
 }
 
+export interface FileContent {
+	path: string;
+	name: string;
+	sizeBytes: number;
+}
+
 export interface ReadTextResult {
 	path: string;
 	text: string;

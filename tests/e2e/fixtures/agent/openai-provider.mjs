@@ -1,3 +1,4 @@
+import imageData from './image-data.json' with { type: 'json' };
 import { respondPresetModel } from './preset-model.mjs';
 import { respondFunctionalModel } from './functional-model.mjs';
 import http from 'node:http';
@@ -204,7 +205,7 @@ const server = http.createServer(async (request, response) => {
 			);
 			return;
 		}
-		if (image.model !== 'e2e-image' || image.prompt !== 'E2E deterministic image') {
+		if (!['e2e-image', 'e2e-image-gif'].includes(image.model) || image.prompt !== 'E2E deterministic image') {
 			response.writeHead(422).end();
 			return;
 		}
@@ -215,7 +216,9 @@ const server = http.createServer(async (request, response) => {
 				data: [
 					{
 						b64_json:
-							'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNIWPAfAANjAgCeQrYLAAAAAElFTkSuQmCC',
+							image.model === 'e2e-image-gif'
+								? imageData.animatedGifBase64
+								: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNIWPAfAANjAgCeQrYLAAAAAElFTkSuQmCC',
 					},
 				],
 			}),

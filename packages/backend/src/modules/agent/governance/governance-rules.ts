@@ -50,6 +50,14 @@ export function toolAuthorizationFailure(operation: ToolOperation, policy: Grant
 	if (operation.targetId !== null && policy.app.deniedTargetIds.includes(operation.targetId)) {
 		return 'target_denied';
 	}
+	if (operation.toolName === 'file_deliver') {
+		if (!policy.app.capabilities.includes('artifacts.write')) {
+			return 'capability_undeclared';
+		}
+		if (!authorize(policy.grants, 'artifacts.write', null)) {
+			return 'forbidden';
+		}
+	}
 	const granted = authorize(policy.grants, operation.capability, operation.targetId);
 	return granted ? null : 'forbidden';
 }

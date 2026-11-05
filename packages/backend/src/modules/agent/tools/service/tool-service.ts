@@ -154,6 +154,8 @@ function inspectionSummary(input: ToolInput, trusted: ToolDefinition): string {
 						? input.input.path
 						: null,
 		});
+	} else if (input.kind === 'deliver') {
+		summary = JSON.stringify({ action: 'deliver', path: input.path });
 	} else if (input.kind === 'job') {
 		summary = JSON.stringify({ action: input.action, jobId: input.jobId });
 	} else if (input.kind === 'docker_control') {
@@ -246,6 +248,7 @@ export class ToolService {
 		const available = definitions.filter(
 			(tool) =>
 				catalog.capabilities.includes(tool.capability) &&
+				(tool.name !== 'file_deliver' || catalog.capabilities.includes('artifacts.write')) &&
 				(contribution?.toolNames == null || contribution.toolNames.includes(tool.name)) &&
 				(tool.name !== 'plugin_tool_call' || (contribution !== null && contribution.tools.length > 0)) &&
 				(!tool.input.fields.some((field) => field.name === 'connectionId') ||
@@ -872,6 +875,9 @@ export class ToolService {
 					sizeBytes: saved.sizeBytes,
 					sha256: saved.sha256,
 				});
+			} else if (input.action === 'present') {
+				const saved = await this.artifacts.presentTool(actor, input.artifactId);
+				text = JSON.stringify({ id: saved.id, name: saved.name, sizeBytes: saved.sizeBytes });
 			} else {
 				const page = await this.artifacts.readTool(
 					actor,
@@ -948,6 +954,44 @@ export class ToolService {
 		if (input.kind !== 'connections') {
 			if (!target) {
 				throw new AgentFailure('internal_failure');
+			}
+
+			if (input.kind === 'deliver') {
+				const actor = {
+					kind: 'tool' as const,
+					userId: operation.userId,
+					appId: operation.appId,
+					runId: operation.runId,
+					operationId: operation.id,
+					operationHash: operation.operationHash,
+				};
+				const maxBytes = await this.artifacts.availableBytes(actor, 0);
+				const saved = await this.model.consumeFile(
+					input.path,
+					maxBytes,
+					{
+						operationId: operation.id,
+						target,
+						signal,
+						timeoutMs,
+
+						validate: async () => {
+							await this.model.validateTarget(target);
+							await validate();
+						},
+					},
+					(file, source) => this.artifacts.importTool(actor, file.name, file.sizeBytes, source, signal),
+				);
+				await validate();
+				return {
+					text: JSON.stringify({
+						id: saved.id,
+						name: saved.name,
+						sizeBytes: saved.sizeBytes,
+						sha256: saved.sha256,
+					}),
+					targets: [{ id: target.id, version: target.version }],
+				};
 			}
 
 			if (input.kind === 'project') {

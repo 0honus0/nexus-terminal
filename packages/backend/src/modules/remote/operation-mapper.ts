@@ -21,36 +21,49 @@ function scope(input: RemoteMachineOperationScope): MachineOperationScope {
 	};
 }
 
+function operationFailure(error: unknown): never {
+	if (error instanceof RemoteResourceCleanupFailure) {
+		throw new RemoteMachineOperationError('cleanup_failed');
+	}
+	if (error instanceof MachineMutationAdmissionFailure) {
+		throw new RemoteMachineOperationError(error.reason === 'blocked' ? 'mutation_blocked' : 'mutation_busy');
+	}
+	if (error instanceof RemoteFileFailure) {
+		throw new RemoteMachineOperationError(error.code);
+	}
+	if (error instanceof RemoteHostKeyUntrustedError) {
+		throw new RemoteMachineOperationError('host_key_untrusted');
+	}
+	if (error instanceof ObservationFailure) {
+		switch (error.code) {
+			case 'command_failed':
+			case 'operation_unknown':
+			case 'host_key_untrusted':
+			case 'conflict':
+			case 'not_found':
+			case 'limit_exceeded':
+				throw new RemoteMachineOperationError(error.code);
+			default:
+				throw new RemoteMachineOperationError('remote_unavailable');
+		}
+	}
+	throw new RemoteMachineOperationError('remote_unavailable');
+}
+
 async function boundary<T>(work: () => Promise<T>): Promise<T> {
 	try {
 		return await work();
 	} catch (error) {
-		if (error instanceof RemoteResourceCleanupFailure) {
-			throw new RemoteMachineOperationError('cleanup_failed');
-		}
-		if (error instanceof MachineMutationAdmissionFailure) {
-			throw new RemoteMachineOperationError(error.reason === 'blocked' ? 'mutation_blocked' : 'mutation_busy');
-		}
-		if (error instanceof RemoteFileFailure) {
-			throw new RemoteMachineOperationError(error.code);
-		}
-		if (error instanceof RemoteHostKeyUntrustedError) {
-			throw new RemoteMachineOperationError('host_key_untrusted');
-		}
-		if (error instanceof ObservationFailure) {
-			switch (error.code) {
-				case 'command_failed':
-				case 'operation_unknown':
-				case 'host_key_untrusted':
-				case 'conflict':
-				case 'not_found':
-				case 'limit_exceeded':
-					throw new RemoteMachineOperationError(error.code);
-				default:
-					throw new RemoteMachineOperationError('remote_unavailable');
-			}
-		}
-		throw new RemoteMachineOperationError('remote_unavailable');
+		operationFailure(error);
+	}
+}
+
+/** Stream reads and iterator cleanup cross the same boundary as the initial request. */
+async function* fileContent(source: AsyncIterable<Uint8Array>): AsyncIterable<Uint8Array> {
+	try {
+		yield* source;
+	} catch (error) {
+		operationFailure(error);
 	}
 }
 
@@ -186,6 +199,20 @@ export function remoteOperations(service: RemoteMachineOperationService): Remote
 				});
 				return { path: value.path, status: value.status, bytes: value.bytes, sha256: value.sha256 };
 			}),
+
+		consumeFile: (input, path, maxBytes, consume) =>
+			boundary(() =>
+				service.consumeFile(scope(input), path, maxBytes, (file, source) =>
+					consume(
+						{
+							path: file.path,
+							name: file.name,
+							sizeBytes: file.sizeBytes,
+						},
+						fileContent(source),
+					),
+				),
+			),
 
 		readText: (input, path) =>
 			boundary(async () => {

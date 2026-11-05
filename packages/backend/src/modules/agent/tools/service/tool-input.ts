@@ -245,6 +245,14 @@ export function toolInput(definition: ToolDefinition, argumentsJson: string): To
 			content: text(value.content, 16384, true),
 		};
 	}
+
+	if (definition.name === 'artifact_present') {
+		const artifactId = text(value.artifactId, 36);
+		if (!AGENT_ID_PATTERN.test(artifactId)) {
+			throw new AgentFailure('invalid_input');
+		}
+		return { kind: 'artifact', action: 'present', artifactId };
+	}
 	if (definition.name === 'artifact_read') {
 		const artifactId = text(value.artifactId, 36);
 		if (!AGENT_ID_PATTERN.test(artifactId)) {
@@ -421,6 +429,10 @@ export function toolInput(definition: ToolDefinition, argumentsJson: string): To
 	const path = absolutePath(value.path, 4096);
 	if (definition.mutation && (/[\u0000-\u001f\u007f]/u.test(path) || path === '/')) {
 		throw new AgentFailure('invalid_input');
+	}
+
+	if (definition.name === 'file_deliver') {
+		return { kind: 'deliver', connectionId, path };
 	}
 	if (definition.name === 'file_inspect') {
 		return { kind: 'inspect', connectionId, path };

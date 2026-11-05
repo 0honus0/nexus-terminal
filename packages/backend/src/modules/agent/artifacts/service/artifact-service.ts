@@ -210,6 +210,37 @@ export class ArtifactService {
 		deletable(row, references, now, expired);
 	}
 
+	async presentTool(actor: ArtifactActor, artifactId: string): Promise<ArtifactRecord> {
+		scope(actor);
+		id(artifactId);
+		if (actor.kind !== 'tool') {
+			throw new AgentFailure('invalid_input');
+		}
+		return this.model.getAccessible(actor, artifactId, admit(actor), (row, enabled) => {
+			ready(row, Date.now());
+			// Chat delivery uses the current App's authenticated routes, never a cross-App URL.
+			if (!enabled || row.appId !== actor.appId) {
+				throw new AgentFailure('forbidden');
+			}
+		});
+	}
+
+	async importTool(
+		actor: ArtifactActor,
+		name: string,
+		sizeBytes: number,
+		source: AsyncIterable<Uint8Array>,
+		signal: AbortSignal,
+	): Promise<ArtifactRecord> {
+		if (actor.kind !== 'tool') {
+			throw new AgentFailure('invalid_input');
+		}
+		return this.model.useDetectedContent(source, signal, async (mediaType, bytes) => {
+			const pending = await this.begin(actor, { name, mediaType, declaredBytes: sizeBytes });
+			return this.upload(actor, pending.id, pending.version, bytes, signal);
+		});
+	}
+
 	async readTool(
 		actor: ArtifactActor,
 		artifactId: string,
@@ -378,7 +409,7 @@ export class ArtifactService {
 	) {}
 
 	/** Preflight only: begin() makes the final quota reservation inside its transaction. */
-	async availableBytes(actor: ArtifactActor): Promise<number> {
+	async availableBytes(actor: ArtifactActor, minimumBytes: 0 | 1 = 1): Promise<number> {
 		scope(actor);
 		const configuration =
 			actor.kind === 'session'
@@ -392,7 +423,7 @@ export class ArtifactService {
 				(await this.model.freeBytes()) - 64 * 1024 * 1024,
 			),
 		);
-		if (available < 1) {
+		if (available < minimumBytes) {
 			throw new AgentFailure('limit_exceeded');
 		}
 		return available;

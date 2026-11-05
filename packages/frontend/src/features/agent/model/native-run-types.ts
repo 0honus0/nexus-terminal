@@ -175,8 +175,8 @@ export interface NativeTool {
 	operationRevision: number;
 	revision: number;
 	state: AgentToolState;
-	/** Saved image owned by this App; only populated for a completed image_generate. */
-	generatedImageId: string | null;
+	/** App-owned file delivered by a completed, server-owned output tool. */
+	outputArtifactId: string | null;
 	createdAt: number;
 	updatedAt: number;
 }

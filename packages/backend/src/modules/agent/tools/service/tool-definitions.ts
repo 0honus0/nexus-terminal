@@ -79,7 +79,7 @@ export function toolDefinitions(): ToolDefinition[] {
 			mutation: true,
 			scheduling: 'exclusive',
 			description:
-				'Generate one image from prompt and save an App-owned Artifact. Select an exact model from image_models_list. Paid request requiring approval; never replay an unknown result.',
+				'Generate one image from prompt and save an App-owned Artifact. Select an exact model from image_models_list. PNG/JPEG/WebP/GIF output is accepted when supported by that provider; animation is not guaranteed. The UI displays the saved image automatically; do not construct URLs. Paid request requiring approval; never replay an unknown result.',
 			input: {
 				fields: [
 					{ name: 'providerId', kind: 'text', required: true, allowEmpty: false, maxBytes: 36 },
@@ -157,7 +157,7 @@ export function toolDefinitions(): ToolDefinition[] {
 			name: 'artifact_create',
 			version: '2.0.0',
 			description:
-				'Save up to 16 KiB of UTF-8 text as an App-owned Artifact after approval. Does not attach, retain or share it. Inspect unknown results before any new write.',
+				'Save up to 16 KiB of UTF-8 text as an App-owned Artifact after approval. The UI automatically displays a file card with preview/download controls; do not construct URLs. Does not attach, retain or share it. Inspect unknown results before any new write.',
 			capability: 'artifacts.write',
 			risk: 'mutate',
 			mutation: true,
@@ -168,6 +168,40 @@ export function toolDefinitions(): ToolDefinition[] {
 					{ name: 'content', kind: 'text', required: true, allowEmpty: true, maxBytes: 16384 },
 				],
 			},
+		},
+
+		{
+			name: 'file_deliver',
+			version: '1.0.0',
+			capability: 'file.read',
+			risk: 'mutate',
+			mutation: true,
+			scheduling: 'exclusive',
+			description:
+				'Deliver a regular file from a selected SSH target to the user. Requires file.read on that target and artifacts.write. Copies exact bytes into an App Artifact; images/GIF play inline and other files get preview/download controls automatically. Use after creating GIF/PDF/archive or other binary files with shell_execute. Absolute path, no symlinks. Do not output Base64 or construct URLs. Does not delete, attach, retain or share the source; never replay an unknown result.',
+			input: {
+				fields: [
+					{
+						name: 'connectionId',
+						kind: 'integer',
+						required: true,
+						minimum: 1,
+						maximum: Number.MAX_SAFE_INTEGER,
+					},
+					{ name: 'path', kind: 'text', required: true, allowEmpty: false, maxBytes: 4096 },
+				],
+			},
+		},
+		{
+			name: 'artifact_present',
+			version: '1.0.0',
+			capability: 'artifacts.read',
+			risk: 'read',
+			mutation: false,
+			scheduling: 'parallel',
+			description:
+				'Show an existing ready, unexpired file owned by this App to the user. Images/GIF appear inline; other files get preview/download controls. Pass the exact artifactId from a prior tool result. Does not copy, retain, attach or share the file. The UI displays it automatically; do not construct URLs or send Base64.',
+			input: { fields: [{ name: 'artifactId', kind: 'text', required: true, allowEmpty: false, maxBytes: 36 }] },
 		},
 		{
 			name: 'artifact_read',

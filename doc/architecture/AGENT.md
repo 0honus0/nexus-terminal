@@ -91,7 +91,7 @@ Memory 列表通过 Shared 可选 threadId → HTTP 白名单投影 → Service 
 2. **子功能与目录**：分别放在 Agent 的 memory/artifacts/execution 子功能，沿用 service/model/storage/adapters/sqlite。context 新增 checkpoint Service/Model/SQLite；通信入口仍集中 interfaces/http。Platform blobs 只持有不透明 key、实际字节流、文件句柄和具名技术失败，不认识 App/Run、配额或保留政策。
 3. **依赖方向**：业务 Service → Model → 独立 storage/Platform → Adapter；SQL/DDL、私有行与 JSON 解码留 Adapter。execution 的纯政策决定通过 Model 转换后的同事务事实回调执行；Root/Child、Governance 与其他 Agent 子功能直接消费内部应用契约，不绕 public 包装。
 4. **类型与转换**：双端管理协议唯一归 Shared agent/{memory,artifacts,execution}；应用对象分别归所属 model，独立存储对象归 storage。HTTP 与 Model 分别白名单转换全部嵌套对象。摘要正文与内部来源快照没有新增公开对象；能力基础值包含 context.compact、memory.read、memory.propose、artifacts.read/write，这些能力仅由签名插件包声明，初始 grants 为空。
-5. **入口与安装**：register 安装管理 HTTP 和 memory_propose/recall、artifact_create/read、context_checkpoint 真实模型工具；Bootstrap 安装原 Access 提供的事务身份 reader，并创建数据库同路径派生的专用 Artifact 内容目录。核心 SQL 仍归所属 Adapter；后续结构与数据变化按变更逐条新增迁移。
+5. **入口与安装**：register 安装管理 HTTP 和 memory_propose/recall、artifact_create/read/present、file_deliver、context_checkpoint 真实模型工具；Bootstrap 安装原 Access 提供的事务身份 reader，并创建数据库同路径派生的专用 Artifact 内容目录。核心 SQL 仍归所属 Adapter；后续结构与数据变化按变更逐条新增迁移。
 6. **数据、事务与并发**：Memory 提案来源、审核 CAS 在原写事务核对；期限使用实际读取后的时钟，审核耗尽版本拒绝递增；跨App记忆导入的路由、用例、存储及快照声明已移除，不保留兼容入口。持久/Shared解码一致校验创建、审核和到期关联。Artifact SQL 预留、文件独占写入/发布和 SQL 确认分别有完成判据；上传/删除领取前预留最终结算的版本空间，批量清理先验证完整计划，确认期限在实际读取后复查。删除先持久 claim，实际文件删除与结算均确认后才归还额度。硬限制 preview/confirm 在真实存储事务读取事实后取时钟，期限由 Service 决定，校验、updatedAt 与单次消费共用该次时刻；耗尽版本不递增。Root 创建同事务冻结设置，Child 同事务复制 Root 冻结模型及不可变执行设置；模型与工具准入读取全族账本，模型预算按已报告input/output usage核算，未报告保留reservation，确定未派发失败计0；不改写原预留记录，不冒充精确账单。
 7. **生命周期与失败**：所有管理任务归 AgentRequestOwner，模型/工具仍归原 Run owner。持久语义检查点绑定实际模型输入 hash 和完成工具；下一轮保留原用户请求及完整当前交换，预留事务重新验证摘要来源。未知提交不补写、不重派，导入/清理确认只消费一次；结果未知按预分配资源身份只读核对。内容流覆盖全部 yield、取消和 close，读取期间不允许清理对应文件；未确认文件/句柄清理保留资源与容量归属。
 8. **当前能力与验收**：Memory/Artifact、语义检查点、执行设置、Operations 日志/审计/通知与宿主诊断源码已接线；执行按 governed 政策核对，默认 enabled=false；启用设置不授予工具 grant 或审批。 正式前端已接线，行为证据见 testing。
@@ -788,7 +788,7 @@ Context预压缩现状：checkpoint工具需要实际context.compact授权，摘
 
 ### 自动图片预览
 
-image_generate 仅负责生成并保存 App 文件，返回给模型的结果只有 id、name、sizeBytes；工具说明不要求模型拼接预览或下载 Markdown。服务端从已完成工具的持久结果投影 generatedImageId，前端使用 App ID 与文件 ID 自动显示现有图片预览和下载入口。Base64 只经生成服务落盘，不写入聊天或工具列表。待批准、失败或 unknown 不产生成功预览；刷新后仍可从工具记录恢复，文件读取继续执行原会话与 App 授权。直接 Images 对话仍由程序生成展示内容，不依赖文字模型。
+image_generate、artifact_create、artifact_present、file_deliver 的可信成功结果派生 outputArtifactId，工具说明与 Host 指引明确自动展示，无需模型拼接 Markdown 地址。前端 NativeToolArtifact 以认证 API 按需读取文件元数据，使用现有图片外观或文件卡、FilePreview 和下载入口；失败与过期不伪造成功。Base64 只经生成服务落盘，不写入聊天或工具列表。待批准、失败或 unknown 不产生成功预览；刷新后仍可从工具记录恢复，文件读取继续执行原会话与 App 授权。直接 Images 对话仍由程序生成展示内容，不依赖文字模型。
 
 ### 跨Workspace服务器点对点复制
 
@@ -867,7 +867,7 @@ Scope 的可管理 App 查询在 LIMIT 前按 user_id/app_id 排除 removed 安�
 2. **子功能与目录**：沿presentation/model、storage、adapters/sqlite及interfaces/http映射；GIF只在agent/interfaces/http/artifact-http的原preview白名单增加，不新增路由/转码器。
 3. **依赖方向**：Preferences应用校验与持久JSON解码消费Shared默认/表示范围；Remote Files只接收正安全整数maxBytes，不反向依赖个人偏好或UI设置。
 4. **类型与转换**：imagePreviewMaxMiB为必填非负整数，默认20、0由前端解释为取消该项预算；Model和HTTP仍双向逐字段投影，SQLite严格解码完整字段。最大值仅保证MiB转换后字节数为安全整数，不设产品二次上限。
-5. **入口与安装**：沿GET/PUT settings/preferences；GET apps/:appId/artifacts/:artifactId/preview允许PNG/JPEG/WebP/GIF，Content-Type按已存媒体类型，nosniff、private/no-store和Range沿原实现；生成模型仍只输出PNG/JPEG/WebP。
+5. **入口与安装**：沿GET/PUT settings/preferences；GET apps/:appId/artifacts/:artifactId/preview允许PNG/JPEG/WebP/GIF，Content-Type按已存媒体类型，nosniff、private/no-store和Range沿原实现；生成响应同样允许真实PNG/JPEG/WebP/GIF，是否生成动画取决于供应商。
 6. **数据、事务与并发**：原preferences_presentation.value_json/CAS拥有持久事实，无DDL变更或隐式兼容。后续持久字段变化由所属迁移脚本转换，并验证记录版本及快照边界；业务读取不补旧JSON。文件声明大小及实际流由本次maxBytes检查，不再固定64MiB；并发、帧/队列背压和独立SFTP资源沿原owner。
 7. **生命周期与失败**：GIF流式返回原字节，原认证、文件ready/有效期/版本及持续授权复查保持；失败终止响应，不自动重试。文件读取继续绑定原Workspace身份、期限和取消/清理，调整上限不预分配该容量。浏览器可报告的复制/合并分配失败立即结束原等待、释放已缓存分块并取消未完读取，不因移除pending/timer后抛错而永久等待。
 8. **当前能力与验收**：对应USAGE文件/聊天/偏好说明；Shared/双端check和生产build保持静态证据；本轮限定CDP已验证动画、设置持久化及65MiB读取完整性，取消/身份撤销/分配失败组合留正式回归，不扩大局部证据。
@@ -937,3 +937,14 @@ WorkspaceService使用原RunService与ContextHistoryService：Root列表按threa
 组合写入经PluginModel→Storage→SQLite技术admission scope，在实际事务前后复核原会话、安装revision、启用、publisher与期限。排队操作捕获原scope；原RunExecutionOwner通过RunModel的应用任务能力明确脱离请求临时scope，再按自身持久权限执行，不意外继承浏览器grant的生命周期。最终响应前再次复查，已提交变更失去确认时返回unknown，不换意图重发。
 
 插件迁移从旧可执行migrate回调改为管理员显式快照转换：prepare-upgrade排空并停在draining→读取snapshot→提交含全部有效键/版本的完整数据集→原目标upgrade。政策、配额及取消退役限制归PluginService，Model转换及指纹，Adapter同事务核对快照版本、写数据/墓碑、推进安装revision并记录不可变migration回执。retirements.base_revision区分迁移前后；迁移已提交不允许取消退役。未知数据库提交不重跑转换或插件代码，重启保留draining。1024键/8MiB正文/52MiB完整线预算，32个迁移意图；R1/R2 全应用备份已接线，整批审核与行为验收分别执行。
+
+## 模型文件交付
+
+1. **职责与范围**：Tools 将模型产物交付给用户，Artifact 持内容/配额/期限，Remote 仅读取已选 SSH 文件。image_generate 接受真实 PNG/JPEG/WebP/GIF，动画能力取决于上游；file_deliver 可交付已有二进制，artifact_present 展示当前 App 的 ready 文件。
+2. **子功能与目录**：tools 持声明/解码/用例；Remote files 持受检流、machines 持独立资源；Platform blobs 的 ContentInspector 复用 file-type 检测；ArtifactModel 隔离技术识别。Frontend runtime 文件卡复用原 FilePreview/Artifact 下载。
+3. **依赖方向**：ToolService → ToolModel → Remote public，ToolService → ArtifactService → ArtifactModel → Platform；HTTP/Native 消费 Shared；无新文件服务器或预览引擎。
+4. **类型与转换**：Remote public 和 machines/model 各自持文件元数据/字节消费契约，边界逐字段转换；技术 MIME 检测归 Platform，应用内容归 artifacts/model。outputArtifactId 为统一文件引用，由有限可信成功工具结果派生，经 storage/Model/register/HTTP/Native 白名单转换，不公开原始工具结果或任意 URL。
+5. **入口与安装**：file_deliver(connectionId,path) 同时要求目标 file.read 与全局 artifacts.write 并按突变审批；artifact_present(artifactId) 要求 artifacts.read，不复制文件。目录与运行时同时校验，Host 指引告诉模型工具会自动展示，不拼 Markdown 地址或 Base64。
+6. **数据、事务与并发**：复用 agent_run_tools.result_text 与 Artifact begin/upload，无数据库结构或持久数据格式变化，不需要迁移。现有总空间预留、hash、版本、期限与授权事务保持；文件引用不自动 retain/share/attach。
+7. **生命周期与失败**：Remote 持读取资源直至消费者完成，逐块复查权限/取消和长度，EOF 前复查类型、大小、修改时间，再允许 Artifact 发布；拒绝目录/链接。检测仅缓冲库要求的前缀，后续流式复制；Remote 公开流在读取与 iterator 清理时同样转换安全错误，ToolModel 转为 Agent 失败；ArtifactModel 保留源读取拒绝与消费者的持久化失败，取消不冒充内部故障，真正的关闭失败仍保留并阻止虚报释放。任何失败/取消/unknown 不显示成功交付。前端按需读取元数据，元数据/预览支持取消与卸载清理，原生下载由浏览器及原认证 HTTP 流拥有，刷新从工具账本恢复。
+8. **当前能力与验收**：参考 [LibreChat](https://github.com/LibreChat-AI/LibreChat/blob/f4154b649efa37e1345ccc517a4d8d1ed2178c82/api/app/clients/tools/structured/OpenAIImageTools.js) 的工具文件引用和 [Open WebUI](https://github.com/open-webui/open-webui/blob/c38885a1a737da4968f157092f304f3b5481d0bf/src/lib/components/chat/Messages/ToolOutputFile.svelte) 的工具输出文件展示；依赖复用本项目现有 file-type、Artifact 和 FilePreview。实现与验证状态见 PLAN/testing，静态不代表真实模型和远程故障验收。

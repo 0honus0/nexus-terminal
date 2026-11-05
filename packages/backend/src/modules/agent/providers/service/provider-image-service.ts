@@ -21,7 +21,13 @@ export class ProviderImageService {
 		const result = await this.providers.generateImage(actor.userId, input, maxBytes, signal, validate);
 		await validate();
 		const extension =
-			result.mediaType === 'image/jpeg' ? 'jpg' : result.mediaType === 'image/webp' ? 'webp' : 'png';
+			result.mediaType === 'image/jpeg'
+				? 'jpg'
+				: result.mediaType === 'image/webp'
+					? 'webp'
+					: result.mediaType === 'image/gif'
+						? 'gif'
+						: 'png';
 		const value = await this.artifacts.begin(actor, {
 			name: 'generated-image.' + extension,
 			mediaType: result.mediaType,

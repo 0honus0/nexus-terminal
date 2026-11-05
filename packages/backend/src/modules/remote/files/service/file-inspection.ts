@@ -1,3 +1,4 @@
+import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { isWellFormedFileText } from '@nexus-terminal/shared/remote/files/text-codec';
@@ -8,7 +9,12 @@ import {
 } from '@nexus-terminal/shared/remote/files/values';
 import { RemoteFileFailure } from '../model/file-types.js';
 import type { FileInfo } from '../model/file-types.js';
-import type { ReadTextResult, ReadSearchResult, FileInspectionContext } from '../../machines/model/operation-types.js';
+import type {
+	ReadTextResult,
+	ReadSearchResult,
+	FileInspectionContext,
+	FileContent,
+} from '../../machines/model/operation-types.js';
 
 const MAX_TEXT_BYTES = 32 * 1024;
 const MAX_SEARCH_FILES = 100;
@@ -194,4 +200,86 @@ export async function inspectSearch(
 		}
 	}
 	return { matches, truncated: false };
+}
+
+/** Keep the resource with its owner until the consumer and EOF checks have settled. */
+export async function consumeInspectedFile<T>(
+	context: FileInspectionContext,
+	input: string,
+	maxBytes: number,
+	consume: (file: FileContent, source: AsyncIterable<Uint8Array>) => Promise<T>,
+): Promise<T> {
+	const requested = inspectionPath(input);
+	const before = await inspectInfo(context, requested);
+	if (before.kind !== 'file') {
+		throw new RemoteFileFailure('invalid_input');
+	}
+	if (!Number.isSafeInteger(maxBytes) || maxBytes < 0 || before.size > maxBytes) {
+		throw new RemoteFileFailure('limit_exceeded');
+	}
+	let completed = false;
+	let sourceFailure: unknown = null;
+
+	async function* source(): AsyncGenerator<Uint8Array, void, void> {
+		try {
+			let size = 0;
+			if (before.size > 0) {
+				const bytes = await context.resource.openRead({
+					path: requested,
+					maxBytes: before.size,
+					timeoutMs: context.remaining(),
+					signal: context.signal,
+				});
+				for await (const chunk of bytes) {
+					await context.validate();
+					if (chunk.byteLength > before.size - size) {
+						throw new RemoteFileFailure('conflict');
+					}
+					size += chunk.byteLength;
+					yield chunk;
+				}
+			}
+			const after = await inspectInfo(context, requested);
+			if (
+				after.kind !== 'file' ||
+				size !== before.size ||
+				after.size !== before.size ||
+				after.modifiedAt !== before.modifiedAt
+			) {
+				throw new RemoteFileFailure('conflict');
+			}
+			await context.validate();
+			completed = true;
+		} catch (error) {
+			sourceFailure = error;
+			throw error;
+		}
+	}
+
+	const content = source();
+	let failure: unknown = null;
+	try {
+		const result = await consume(
+			{ path: requested, name: path.posix.basename(requested), sizeBytes: before.size },
+			content,
+		);
+		if (!completed) {
+			throw new RemoteFileFailure('remote_unavailable');
+		}
+		return result;
+	} catch (error) {
+		failure = error;
+		// The importing consumer can wrap a byte-source error; the original resource
+		// owner must still retain unconfirmed SSH cleanup independently of that wrapper.
+		if (sourceFailure instanceof RemoteResourceCleanupFailure) {
+			failure = new RemoteResourceCleanupFailure(sourceFailure === error ? [error] : [sourceFailure, error]);
+		}
+		throw failure;
+	} finally {
+		try {
+			await content.return();
+		} catch (cleanup) {
+			throw new RemoteResourceCleanupFailure(failure === null ? [cleanup] : [failure, cleanup]);
+		}
+	}
 }

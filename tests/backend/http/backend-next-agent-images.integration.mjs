@@ -42,9 +42,9 @@ await test(
 						).items;
 						const generated = tools.find((tool) => tool.toolName === 'image_generate');
 						assert.equal(generated.state, 'completed');
-						assert.match(generated.generatedImageId, /^[a-f0-9-]{36}$/);
-						preview = f.base + '/artifacts/' + generated.generatedImageId + '/preview';
-						download = f.base + '/artifacts/' + generated.generatedImageId + '/content';
+						assert.match(generated.outputArtifactId, /^[a-f0-9-]{36}$/);
+						preview = f.base + '/artifacts/' + generated.outputArtifactId + '/preview';
+						download = f.base + '/artifacts/' + generated.outputArtifactId + '/content';
 						assert.equal(text, 'Image saved.');
 					} else {
 						preview = text.match(/!\[Generated image\]\(([^)]+)\)/)?.[1];

@@ -9,7 +9,7 @@ import type {
 	RemoteExecutionCommand,
 } from '../../../remote/public.js';
 import { RemoteMachineOperationError } from '../../../remote/public-errors.js';
-import type { ToolTarget, ToolOperationScope, ToolInput } from './tool-types.js';
+import type { ToolTarget, ToolOperationScope, ToolInput, ToolFileContent } from './tool-types.js';
 import type { ConnectionCatalog } from '../../../targets/public.js';
 import { TargetOperationError } from '../../../targets/public-errors.js';
 import {
@@ -18,6 +18,7 @@ import {
 	ToolMutationAdmissionRefusal,
 	ToolExecutionUnknown,
 	ToolCleanupFailure,
+	aggregateToolFailures,
 	isAgentDrainFailure,
 } from '../../agent-failure.js';
 import type { ToolConnection } from './tool-types.js';
@@ -145,6 +146,7 @@ export class ToolModel {
 			| { kind: 'image_models' }
 			| { kind: 'image_generate' }
 			| { kind: 'artifact' }
+			| { kind: 'deliver' }
 			| { kind: 'checkpoint' }
 			| { kind: 'host_diagnostics' }
 			| { kind: 'mcp' }
@@ -343,6 +345,38 @@ export class ToolModel {
 		}
 	}
 
+	async consumeFile<T>(
+		path: string,
+		maxBytes: number,
+		scope: ToolOperationScope,
+		consume: (file: ToolFileContent, source: AsyncIterable<Uint8Array>) => Promise<T>,
+	): Promise<T> {
+		let consumerFailure: unknown = null;
+		return this.withOperation(
+			scope,
+			(request) =>
+				this.operations.consumeFile(request, path, maxBytes, async (file, source) => {
+					const model = this;
+
+					async function* content(): AsyncIterable<Uint8Array> {
+						try {
+							yield* source;
+						} catch (error) {
+							model.failure(error);
+						}
+					}
+
+					try {
+						return await consume({ name: file.name, sizeBytes: file.sizeBytes }, content());
+					} catch (error) {
+						consumerFailure = error;
+						throw error;
+					}
+				}),
+			() => consumerFailure,
+		);
+	}
+
 	async command(
 		input: Extract<ToolInput, { kind: 'shell' }>,
 		scope: ToolOperationScope,
@@ -384,6 +418,7 @@ export class ToolModel {
 	private async withOperation<T>(
 		scope: ToolOperationScope,
 		work: (request: RemoteMachineOperationScope) => Promise<T>,
+		getConsumerFailure?: () => unknown,
 	): Promise<T> {
 		let validationFailure: unknown = null;
 		const request: RemoteMachineOperationScope = {
@@ -405,6 +440,22 @@ export class ToolModel {
 		try {
 			return await work(request);
 		} catch (error) {
+			const consumerFailure = getConsumerFailure?.() ?? null;
+			if (consumerFailure !== null) {
+				const failures: unknown[] = [consumerFailure];
+				if (validationFailure !== null && validationFailure !== consumerFailure) {
+					failures.push(validationFailure);
+				}
+				if (error instanceof RemoteMachineOperationError && error.code === 'cleanup_failed') {
+					throw new ToolCleanupFailure({
+						cause: new AggregateError([...failures, error], 'File import and remote cleanup failed'),
+					});
+				}
+				if (failures.length > 1 && failures.some(isAgentDrainFailure)) {
+					throw aggregateToolFailures(failures, 'File import and authority validation failed');
+				}
+				throw validationFailure ?? consumerFailure;
+			}
 			this.failure(error, validationFailure);
 		}
 	}

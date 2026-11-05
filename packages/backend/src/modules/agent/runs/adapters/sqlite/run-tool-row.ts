@@ -1,6 +1,6 @@
 import { AGENT_RUN_FAILURE_CODES, type AgentRunFailureCode } from '@nexus-terminal/shared/agent/runs/values';
 import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
-import { AGENT_TOOL_STATES } from '@nexus-terminal/shared/agent/tools/values';
+import { AGENT_ARTIFACT_OUTPUT_TOOLS, AGENT_TOOL_STATES } from '@nexus-terminal/shared/agent/tools/values';
 import {
 	TOOL_ARGUMENT_MAX_BYTES,
 	TOOL_RESULT_MAX_BYTES,
@@ -33,9 +33,13 @@ function id(value: unknown): string {
 	return typeof value === 'string' && AGENT_ID_PATTERN.test(value) ? value : invalid();
 }
 
-/** Only server-owned image generation results can publish an image reference. */
-function generatedImageId(toolName: unknown, state: unknown, resultText: string | null): string | null {
-	if (toolName !== 'image_generate' || state !== 'completed' || resultText === null) {
+/** Only successful server-owned delivery tools can publish an Artifact reference. */
+function outputArtifactId(toolName: unknown, state: unknown, resultText: string | null): string | null {
+	if (
+		!AGENT_ARTIFACT_OUTPUT_TOOLS.some((name) => name === toolName) ||
+		state !== 'completed' ||
+		resultText === null
+	) {
 		return null;
 	}
 	const result: unknown = JSON.parse(resultText);
@@ -129,7 +133,7 @@ export function readToolOperation(row: Record<string, unknown>): StoredToolOpera
 		state,
 		resultText,
 		failureCode: failureCode(state, resultText),
-		generatedImageId: generatedImageId(row.tool_name, state, resultText),
+		outputArtifactId: outputArtifactId(row.tool_name, state, resultText),
 		createdAt,
 		updatedAt,
 	};

@@ -1,3 +1,4 @@
+import { NativeContentInspector } from '../../platform/blobs/adapters/native-content-inspector.js';
 import { TitleModel } from './scope/model/title-model.js';
 import { SqliteTitleStorage } from './scope/adapters/sqlite/title-sql.js';
 import { CompactionModel } from './context/model/compaction-model.js';
@@ -179,7 +180,7 @@ function toToolView(value: ToolOperation): AgentToolView {
 		operationRevision: value.operationRevision,
 		revision: value.revision,
 		state: value.state,
-		generatedImageId: value.generatedImageId,
+		outputArtifactId: value.outputArtifactId,
 		createdAt: value.createdAt,
 		updatedAt: value.updatedAt,
 	};
@@ -262,7 +263,7 @@ export function registerAgent(
 	);
 	const artifactStorage = new SqliteArtifactStorage(sqlite);
 	const artifacts = new ArtifactService(
-		new ArtifactModel(artifactStorage, blobs, new SecureSessionTokens()),
+		new ArtifactModel(artifactStorage, blobs, new SecureSessionTokens(), new NativeContentInspector()),
 		executionSettings,
 		events,
 	);

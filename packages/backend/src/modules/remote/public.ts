@@ -165,7 +165,19 @@ export interface RemoteDockerControlResult {
 	state: string | null;
 }
 
+export interface RemoteFileContent {
+	path: string;
+	name: string;
+	sizeBytes: number;
+}
+
 export interface RemoteMachineOperations {
+	consumeFile<T>(
+		scope: RemoteMachineOperationScope,
+		path: string,
+		maxBytes: number,
+		consume: (file: RemoteFileContent, source: AsyncIterable<Uint8Array>) => Promise<T>,
+	): Promise<T>;
 	executeAcp(scope: RemoteMachineOperationScope, request: RemoteExecuteAcpRequest): Promise<RemoteExecuteAcpResult>;
 	executeCommand(
 		scope: RemoteMachineOperationScope,

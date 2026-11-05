@@ -924,3 +924,23 @@ WorkspaceTabBar仅将原挂起菜单项移到重置之前，原条件、事件�
 发布 [41778950373](https://github.com/0honus0/nexus-terminal/actions/runs/41778950373) success，包含生产依赖审计与镜像构建/推送；
 
 [完整原始记录](https://github.com/0honus0/nexus-terminal/blob/dc0b3c5f465a927e7a6c7ec44f0800fcbd757a1e/doc/testing/E2E.md#指定主机更新与维护结果)。
+
+## Agent GIF 与模型文件交付（2026-11-05，源码、静态与限定浏览器）
+
+本轮工作区基于 `745beddb308778d6a6ffe5915c9b7eb682d6f15c`，新增真实 GIF Images 响应、file_deliver、artifact_present 及文本自动文件卡；outputArtifactId 是现有工具结果的派生投影，无数据库列或持久数据格式变更，不需要迁移。参考模式固定源码链接见 [Agent 文件交付设计](../architecture/AGENT.md#模型文件交付)，未引入第二套文件库或预览引擎。
+
+环境为 Node 26.13.0 / pnpm 12.16.1；根 `pnpm run check`、`pnpm run format:all:check`、`pnpm run build`、`git diff --check` 通过。E2E TypeScript 使用 vue-tsc 和任务独立 tsconfig 检查通过；裸 tsc 不支持已有 Vue 模块入口，已改用项目相同 Vue 检查器，未放宽类型。产物集中于 `/home/honus/nexus-task-artifacts/agent-file-delivery-20261105`，保留参考源码、检查输出及真实两帧 GIF；ffmpeg 帧摘要确认两帧内容不同，此事实不代替浏览器播放验收。
+
+新增正式场景：functional-images 的 PNG/GIF 实际解码、浏览器逐帧截图变化、原字节及刷新恢复；file-delivery 的 320/390/1440px 文本文件预览/下载、展示既有文件不重复写入，SSH GIF/普通/大于采样区文件/空文件、双能力/目标/批准拒绝、链接/目录拒绝、取消与 SFTP 句柄释放。execution-flow 增加后端流式故障入口，覆盖短读/超读/修改时间变化、逐块撤权、消费失败/提前退出、原始读取与资源关闭失败及跨模块错误身份。现有 PNG 与供应商拒绝断言保持。
+
+按用户本轮“浏览器验证”授权执行限定本地浏览器，不复用上一轮 577 项通过；正式远程全组与新增后端流故障专项尚未执行，真实模型工具选择、付费 GIF 支持、网络和介质故障仍有外部依赖。本轮未提交推送、发布或部署，未修改生产数据库。
+
+### 限定浏览器验收与插件权限
+
+使用同一工具链、Playwright 1.64.1 / Chromium 1248，真实前后端生产构建、认证 HTTP/WS、签名测试插件与真实 SSH/SFTP 夹具；图片及聊天模型使用受控 Provider。运行命令为 `pnpm --filter @nexus-terminal/e2e exec playwright test --config=/home/honus/nexus-task-artifacts/agent-file-delivery-20261105/browser.config.ts agent/functional-images.spec.ts agent/file-delivery.spec.ts`。独立配置仅调整产物路径、诊断超时并移除本任务无消费者的桌面服务；未替换被测产品实现。临时文件、数据库、报告、Trace 和截图均归任务目录；SSH 文件夹具沿正式测试入口并在 finally 删除。
+
+首轮 17 项中 8 通过、9 失败：受控模型从 JSON 字符串解析路径时带上末尾引号，且窄屏测试未关闭遮挡的原任务栏；缺权限时强行返回未提供的工具，实际为 `model_response_invalid`，原测试误期望普通 failed。修正夹具并补精确路径与失败码断言；未改产品 UI 或放宽授权。第二轮扩为 19 项，12 通过、7 失败：两个测试从列表误读仅详情提供的失败码；取消采样流还暴露真正的应用故障，导致后继 5 项被原应用关闭拒绝阻断。Remote 公开字节流与 ToolModel 现在分别转换所属安全失败，ArtifactModel 保留源失败、持久化失败和真正清理失败的区别，正常取消不再记作内部故障。已补正式后端采样中断回归源码，其专项尚未执行。
+
+第三轮 19 项全部一次通过。随后错误优先级审核修正 ToolModel 在同一操作 owner 内保留权限复查、消费及持久化的真实故障，正常源流拒绝不能覆盖这些故障，真正清理失败仍独立保留；补充权限存储失败的正式后端回归源码，其专项尚未执行。最终代码重新构建后第四轮 19 项全部一次通过，无失败、重试、flaky 或跳过；JSON Reporter 逐项核对见任务目录 `browser-verification.json`，最终原日志为 `browser-round4.log`、`browser-round4.json`，四轮原日志与失败现场均保留。覆盖 320/390/1440px 文本文件卡/预览边界/原生下载/已有文件展示不重复入库/刷新恢复；SSH GIF、Markdown、256 KiB 二进制、空文件原字节及 hash；缺两项能力之一、未选目标、拒绝审批、目录和符号链接；取消 held SFTP read 后 pending/句柄归零，无成功卡且后继正常重建基线。PNG/GIF Images 均解码、下载和刷新，GIF 用浏览器逐帧截图变化确认动画；供应商三类拒绝保留原断言。最终根 check、后端及 Shared 构建和 E2E vue-tsc 通过，日志分别为 `browser-final-check.log`、`authority-fix-build-final.log`、`browser-e2e-typecheck-final.log`。
+
+只读核对官方插件 [v1.0.3 manifest](https://github.com/0honus0/nexus-agent-plugins/blob/d5dd455e209fffb86433cedb7044c507a0d848b3/plugins/nexus.agent/manifest.json) 与 [agent.json](https://github.com/0honus0/nexus-agent-plugins/blob/d5dd455e209fffb86433cedb7044c507a0d848b3/plugins/nexus.agent/agent.json)：已声明 file.read / artifacts.write / artifacts.read，toolNames 为 null，因此无需修改或重新发布该插件。显式工具白名单的第三方插件需补所需工具名；原授权撤销不自动恢复。本次浏览器消费签名受控插件，不冒充真实模型或官方发布包的运行验收。

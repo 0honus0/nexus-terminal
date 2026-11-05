@@ -1,4 +1,5 @@
-import { randomUUID } from 'node:crypto';
+import imageData from '../../fixtures/agent/image-data.json';
+import { createHash, randomUUID } from 'node:crypto';
 import { expect, test } from '../../support/fixtures';
 import {
 	prepareNativeTask,
@@ -18,79 +19,110 @@ import {
 
 test.use({ actionTimeout: 10_000 });
 
-test('image tool shows a persisted preview and download without model-authored Markdown', async ({ request, page }) => {
-	const task = await prepareNativeTask(request, page, ['context.read', 'artifacts.read', 'artifacts.write']);
-	await requestAgentJson(
+for (const format of ['png', 'gif'] as const) {
+	test(`image tool shows a persisted ${format} preview and download without model-authored Markdown`, async ({
 		request,
-		{
-			method: 'POST',
-			path: '/ai/providers',
-			status: 201,
-			data: {
-				kind: 'openai-compatible',
-				displayName: 'E2E image provider',
-				baseUrl: E2E_URLS.openAiProviderOrigin + '/v1',
-				protocol: 'images',
-				models: [{ id: 'e2e-image', supportsTools: false, supportsImageGeneration: true }],
-				enabled: true,
-				credential: 'e2e-provider-secret',
+		page,
+	}, testInfo) => {
+		const task = await prepareNativeTask(request, page, ['context.read', 'artifacts.read', 'artifacts.write']);
+		await requestAgentJson(
+			request,
+			{
+				method: 'POST',
+				path: '/ai/providers',
+				status: 201,
+				data: {
+					kind: 'openai-compatible',
+					displayName: 'E2E image provider',
+					baseUrl: E2E_URLS.openAiProviderOrigin + '/v1',
+					protocol: 'images',
+					models: [
+						{
+							id: format === 'gif' ? 'e2e-image-gif' : 'e2e-image',
+							supportsTools: false,
+							supportsImageGeneration: true,
+						},
+					],
+					enabled: true,
+					credential: 'e2e-provider-secret',
+				},
 			},
-		},
-		readAgentProviderView,
-	);
-	const hub = await openNativeTask(task);
-	const run = await startNativeTask(task, 'E2E_AUTOMATIC_IMAGE_PREVIEW');
-	const approval = await waitNativeApproval(task, run.id, 'image_generate');
-	await expect(hub.locator('.agent-generated-image')).toHaveCount(0);
-	await resolveNativeApproval(task, approval, 'approved');
-	const completed = await finishNativeTask(task, run.id);
-	expect(completed.run.status).toBe('completed');
-	expect(completed.text).toBe('Image generated and saved.');
-	const tools = await requestAgentJson(
-		request,
-		{ method: 'GET', path: `/apps/${task.app.id}/threads/${task.thread.id}/tools?limit=100` },
-		(value) => readAgentThreadToolsResponse(value, task.app.id, null, 100),
-	);
-	const imageTool = tools.items.find((tool) => tool.toolName === 'image_generate');
-	expect(imageTool?.state).toBe('completed');
-	expect(imageTool?.generatedImageId).toMatch(/^[a-f0-9-]{36}$/);
-	if (!imageTool) throw new Error('Expected persisted image tool');
-	const toolPath = { appId: task.app.id, runId: run.id, toolId: imageTool.id };
-	const details = await requestAgentJson(
-		request,
-		{ method: 'GET', path: `/apps/${task.app.id}/runs/${run.id}/tools/${imageTool.id}` },
-		(value) => readAgentToolCallDetails(value, toolPath),
-	);
-	expect(details.tool).toEqual(imageTool);
-	expect(details.failureCode).toBeNull();
-	expect(JSON.parse(details.argumentsJson)).toEqual(expect.objectContaining({ prompt: expect.any(String) }));
-	const wrongRun = await request.get(`/api/v1/agent/apps/${task.app.id}/runs/${randomUUID()}/tools/${imageTool.id}`);
-	expect(wrongRun.status()).toBe(404);
-	const toolCard = hub.locator('[data-tool-name="image_generate"][data-tool-state]');
-	await hub.locator('details.group\\/tools > summary').click();
-	await toolCard.locator('summary').click();
-	await expect(toolCard.locator('[data-tool-arguments]')).toHaveText(
-		JSON.stringify(JSON.parse(details.argumentsJson), null, 2),
-	);
+			readAgentProviderView,
+		);
+		const hub = await openNativeTask(task);
+		const run = await startNativeTask(task, 'E2E_AUTOMATIC_IMAGE_PREVIEW');
+		const approval = await waitNativeApproval(task, run.id, 'image_generate');
+		await expect(hub.locator('.agent-generated-image')).toHaveCount(0);
+		await resolveNativeApproval(task, approval, 'approved');
+		const completed = await finishNativeTask(task, run.id);
+		expect(completed.run.status).toBe('completed');
+		expect(completed.text).toBe('Image generated and saved.');
+		const tools = await requestAgentJson(
+			request,
+			{ method: 'GET', path: `/apps/${task.app.id}/threads/${task.thread.id}/tools?limit=100` },
+			(value) => readAgentThreadToolsResponse(value, task.app.id, null, 100),
+		);
+		const imageTool = tools.items.find((tool) => tool.toolName === 'image_generate');
+		expect(imageTool?.state).toBe('completed');
+		expect(imageTool?.outputArtifactId).toMatch(/^[a-f0-9-]{36}$/);
+		if (!imageTool) throw new Error('Expected persisted image tool');
+		const toolPath = { appId: task.app.id, runId: run.id, toolId: imageTool.id };
+		const details = await requestAgentJson(
+			request,
+			{ method: 'GET', path: `/apps/${task.app.id}/runs/${run.id}/tools/${imageTool.id}` },
+			(value) => readAgentToolCallDetails(value, toolPath),
+		);
+		expect(details.tool).toEqual(imageTool);
+		expect(details.failureCode).toBeNull();
+		expect(JSON.parse(details.argumentsJson)).toEqual(expect.objectContaining({ prompt: expect.any(String) }));
+		const wrongRun = await request.get(
+			`/api/v1/agent/apps/${task.app.id}/runs/${randomUUID()}/tools/${imageTool.id}`,
+		);
+		expect(wrongRun.status()).toBe(404);
+		const toolCard = hub.locator('[data-tool-name="image_generate"][data-tool-state]');
+		await hub.locator('details.group\\/tools > summary').click();
+		await toolCard.locator('summary').click();
+		await expect(toolCard.locator('[data-tool-arguments]')).toHaveText(
+			JSON.stringify(JSON.parse(details.argumentsJson), null, 2),
+		);
 
-	const root = `/api/v1/agent/apps/${task.app.id}/artifacts/${imageTool?.generatedImageId}`;
-	const preview = hub.locator('.agent-generated-image img');
-	await expect(preview).toHaveAttribute('src', root + '/preview');
-	await expect
-		.poll(() => preview.evaluate((node: HTMLImageElement) => node.complete && node.naturalWidth > 0))
-		.toBe(true);
-	await expect(hub.locator('.agent-generated-image__download')).toHaveAttribute('href', root + '/content');
-	const download = await request.get(root + '/content');
-	expect(download.status()).toBe(200);
-	expect(download.headers()['content-type']).toContain('application/octet-stream');
-	expect((await download.body()).subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
-	await page.reload();
-	await openNativeTask(task);
-	await expect(preview).toHaveAttribute('src', root + '/preview');
-	await expect
-		.poll(() => preview.evaluate((node: HTMLImageElement) => node.complete && node.naturalWidth > 0))
-		.toBe(true);
-});
+		const root = `/api/v1/agent/apps/${task.app.id}/artifacts/${imageTool?.outputArtifactId}`;
+		const preview = hub.locator('.agent-generated-image img');
+		await expect(preview).toHaveAttribute('src', root + '/preview');
+		await expect
+			.poll(() => preview.evaluate((node: HTMLImageElement) => node.complete && node.naturalWidth > 0))
+			.toBe(true);
+		await expect(hub.locator('.agent-generated-image__download')).toHaveAttribute('href', root + '/content');
+		const download = await request.get(root + '/content');
+		expect(download.status()).toBe(200);
+		expect(download.headers()['content-type']).toContain('application/octet-stream');
+		if (format === 'gif') {
+			expect(await download.body()).toEqual(Buffer.from(imageData.animatedGifBase64, 'base64'));
+			const inline = await request.get(root + '/preview');
+			expect(inline.headers()['content-type']).toContain('image/gif');
+			expect(await inline.body()).toEqual(await download.body());
+
+			// Canvas drawImage may intentionally expose an animated image's first frame;
+			// capture the actual browser rendering to verify that GIF playback advances.
+			const frame = async () =>
+				createHash('sha256')
+					.update(await preview.screenshot())
+					.digest('hex');
+
+			const first = await frame();
+			await expect.poll(frame, { timeout: 5000, intervals: [100, 200] }).not.toBe(first);
+		} else {
+			expect((await download.body()).subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+		}
+		await testInfo.attach('generated-' + format, { body: await page.screenshot(), contentType: 'image/png' });
+		await page.reload();
+		await openNativeTask(task);
+		await expect(preview).toHaveAttribute('src', root + '/preview');
+		await expect
+			.poll(() => preview.evaluate((node: HTMLImageElement) => node.complete && node.naturalWidth > 0))
+			.toBe(true);
+	});
+}
 
 for (const scenario of [
 	{ modelId: 'e2e-image-moderation', failureCode: 'model_content_filtered' },
@@ -136,7 +168,7 @@ for (const scenario of [
 		);
 		expect(tools.items.find((tool) => tool.toolName === 'image_generate')).toMatchObject({
 			state: 'unknown',
-			generatedImageId: null,
+			outputArtifactId: null,
 		});
 		const rejectedTool = tools.items.find((tool) => tool.toolName === 'image_generate');
 		if (!rejectedTool) throw new Error('Expected persisted rejected image tool');

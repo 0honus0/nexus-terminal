@@ -47,7 +47,12 @@ export async function decodeModelImage(raw: unknown, maxBytes: number): Promise<
 	}
 	const detected = await fileTypeFromBuffer(content);
 	const mediaType = detected?.mime;
-	if (mediaType !== 'image/png' && mediaType !== 'image/jpeg' && mediaType !== 'image/webp') {
+	if (
+		mediaType !== 'image/png' &&
+		mediaType !== 'image/jpeg' &&
+		mediaType !== 'image/webp' &&
+		mediaType !== 'image/gif'
+	) {
 		throw new ModelNetworkFailure('response_invalid');
 	}
 	return { bytes: content, mediaType };

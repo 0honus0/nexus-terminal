@@ -6,7 +6,7 @@
 	import type { UiTone } from '@/foundation/ui';
 	import type { NativeApproval, NativeTool } from '../model/native-run-types';
 	import NativeToolCallDetails from './NativeToolCallDetails.vue';
-	import AgentMessageBody from '../ai/AgentMessageBody.vue';
+	import NativeToolArtifact from './NativeToolArtifact.vue';
 	import { formatToolSummary, toolCommandPreview } from './native-tool-summary';
 
 	const props = defineProps<{
@@ -84,17 +84,7 @@
 		return 'neutral';
 	}
 
-	const generatedImages = computed(() => props.tools.filter((tool) => tool.generatedImageId !== null));
-
-	function imageMarkdown(tool: NativeTool): string {
-		if (tool.generatedImageId === null) return '';
-		const path =
-			'/api/v1/agent/apps/' +
-			encodeURIComponent(tool.appId) +
-			'/artifacts/' +
-			encodeURIComponent(tool.generatedImageId);
-		return '![Generated image](' + path + '/preview)';
-	}
+	const outputFiles = computed(() => props.tools.filter((tool) => tool.outputArtifactId !== null));
 
 	const failedCount = computed(() => props.tools.filter((tool) => tool.state === 'failed').length);
 
@@ -164,7 +154,13 @@
 </script>
 <template>
 	<section v-if="tools.length" class="mx-auto w-full max-w-3xl">
-		<AgentMessageBody v-for="tool in generatedImages" :key="tool.id" :text="imageMarkdown(tool)" />
+		<NativeToolArtifact
+			v-for="tool in outputFiles"
+			:key="tool.id"
+			:app-id="tool.appId"
+			:artifact-id="tool.outputArtifactId"
+			:active="active"
+		/>
 		<details class="group/tools" @toggle="toggleGroup">
 			<summary
 				class="flex cursor-pointer list-none items-center gap-2.5 rounded-lg px-2 py-1.5 text-[11px] text-text-secondary transition-colors select-none hover:bg-header/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"

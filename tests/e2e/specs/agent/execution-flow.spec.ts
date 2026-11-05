@@ -6,18 +6,23 @@ import { expect, test } from '../../support/fixtures';
 for (const [name, file, pattern] of [
 	[
 		'model outcomes, streamed prefixes and immutable instructions',
-		'backend-next-agent-flow.integration.mjs',
+		'http/backend-next-agent-flow.integration.mjs',
 		'Agent flow model outcomes',
 	],
 	[
 		'signed plugin hooks, isolated tool RPC and approvals',
-		'backend-next-agent-flow.integration.mjs',
+		'http/backend-next-agent-flow.integration.mjs',
 		'Agent signed contribution',
 	],
 	[
 		'parallel scheduling, exclusive barriers and cancellation drain',
-		'backend-next-agent-scheduling.integration.mjs',
+		'http/backend-next-agent-scheduling.integration.mjs',
 		'Agent',
+	],
+	[
+		'file delivery streams, source failures and compound authorization',
+		'remote/backend-next-file-delivery.integration.mjs',
+		'File delivery',
 	],
 ]) {
 	test('Agent execution: ' + name, async ({}, testInfo) => {
@@ -28,7 +33,7 @@ for (const [name, file, pattern] of [
 				'--test',
 				'--test-reporter=tap',
 				'--test-name-pattern=' + pattern,
-				path.resolve(__dirname, '../../../backend/http/' + file),
+				path.resolve(__dirname, '../../../backend/' + file),
 			],
 			{ timeout: 210_000, maxBuffer: 4 * 1024 * 1024 },
 		).catch(async (error: unknown) => {

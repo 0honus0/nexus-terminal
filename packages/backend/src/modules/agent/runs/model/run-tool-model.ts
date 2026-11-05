@@ -39,7 +39,7 @@ export function fromStoredTool(row: StoredToolOperation): ToolOperation {
 		operationRevision: row.operationRevision,
 		revision: row.revision,
 		state: row.state,
-		generatedImageId: row.generatedImageId,
+		outputArtifactId: row.outputArtifactId,
 		resultText: row.resultText,
 		failureCode: row.failureCode,
 		createdAt: row.createdAt,

@@ -223,7 +223,7 @@ export function fromNativeTool(value: AgentToolView): NativeTool {
 		operationRevision: value.operationRevision,
 		revision: value.revision,
 		state: value.state,
-		generatedImageId: value.generatedImageId,
+		outputArtifactId: value.outputArtifactId,
 		createdAt: value.createdAt,
 		updatedAt: value.updatedAt,
 	};

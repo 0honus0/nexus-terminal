@@ -29,9 +29,15 @@ import { RemoteFileFailure } from '../../files/model/file-types.js';
 import type { FileResource } from '../../files/model/file-types.js';
 import type { ObservationModel } from '../../monitoring/model/observation-model.js';
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
-import { inspectText, inspectDirectory, inspectSearch } from '../../files/service/file-inspection.js';
+import {
+	consumeInspectedFile,
+	inspectText,
+	inspectDirectory,
+	inspectSearch,
+} from '../../files/service/file-inspection.js';
 import type {
 	MachineOperationScope,
+	FileContent,
 	ReadTextResult,
 	ReadEntry,
 	ReadSearchResult,
@@ -224,6 +230,15 @@ export class RemoteMachineOperationService {
 
 	deletePath(scope: MachineOperationScope, request: DeletePathRequest): Promise<DeletePathResult> {
 		return this.withFiles(scope, (context) => deleteInspectedPath(context, request), true);
+	}
+
+	consumeFile<T>(
+		scope: MachineOperationScope,
+		path: string,
+		maxBytes: number,
+		consume: (file: FileContent, source: AsyncIterable<Uint8Array>) => Promise<T>,
+	): Promise<T> {
+		return this.withFiles(scope, (context) => consumeInspectedFile(context, path, maxBytes, consume));
 	}
 
 	readText(scope: MachineOperationScope, path: string): Promise<ReadTextResult> {

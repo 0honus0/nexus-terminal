@@ -173,7 +173,7 @@ export interface ProviderImageRequest {
 
 export interface ProviderImageResult {
 	bytes: Uint8Array;
-	mediaType: 'image/png' | 'image/jpeg' | 'image/webp';
+	mediaType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
 }
 
 export interface ImageArtifact {

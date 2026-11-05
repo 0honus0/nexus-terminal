@@ -29,6 +29,30 @@ export function respondFunctionalModel(messages, userText, response, send) {
 
 	const file = (path) => ({ connectionId, path });
 
+	if (userText.includes('E2E_DELIVER_FILE')) {
+		const path = /path=([^\s"\\]+)/.exec(userText)?.[1];
+		if (!path) throw new Error('Missing delivery path');
+		if (!result('deliver')) call('deliver', 'file_deliver', { connectionId, path });
+		else send(response, { content: JSON.stringify(result('deliver')) });
+		return true;
+	}
+	if (userText.includes('E2E_CREATE_DELIVERY')) {
+		if (!result('create_delivery'))
+			call('create_delivery', 'artifact_create', {
+				name: 'report.md',
+				content: '# Delivered report\nSaved by the model.\n',
+			});
+		else send(response, { content: JSON.stringify(result('create_delivery')) });
+		return true;
+	}
+	if (userText.includes('E2E_PRESENT_FILE')) {
+		const artifactId = /artifact=([a-f0-9-]{36})/.exec(userText)?.[1];
+		if (!artifactId) throw new Error('Missing artifact');
+		if (!result('present')) call('present', 'artifact_present', { artifactId });
+		else send(response, { content: JSON.stringify(result('present')) });
+		return true;
+	}
+
 	if (userText.includes('E2E_AUTOMATIC_IMAGE_PREVIEW')) {
 		const models = result('image_models');
 		if (!models) call('image_models', 'image_models_list', { offset: 0 });
