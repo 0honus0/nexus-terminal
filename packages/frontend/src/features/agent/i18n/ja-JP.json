@@ -1992,6 +1992,23 @@
       },
       "detailsHint": "タスクを開いて詳細を確認できます。",
       "viewDetails": "詳細"
+    },
+    "resources": {
+      "title": "タスクの接続",
+      "close": "接続を閉じる",
+      "connecting": "接続を準備中",
+      "operations": "実行中 {count}",
+      "backgroundJobs": "バックグラウンド {count}",
+      "expires": "アイドル接続の解放時刻：{time}",
+      "closeTitle": "タスクを停止して接続を閉じますか？",
+      "closeMessage": "進行中のタスクが {tasks} 件、実行中の操作が {operations} 件、バックグラウンドジョブが {jobs} 件あります。続行すると関連タスクを停止し、接続を解放します。送信済みのリモート操作は停止を確認できない場合があります。",
+      "stopAndClose": "停止して閉じる",
+      "states": {
+        "idle": "待機中 · 再利用可能",
+        "busy": "使用中",
+        "closing": "終了処理中",
+        "cleanup_failed": "クリーンアップ失敗"
+      }
     }
   }
 }

@@ -1,6 +1,7 @@
 import { HttpRequestFailure } from './request-failure';
 import { readResponseBytes, rejectResponse } from './response-body';
 import { clearPendingNetworkFailure, isNetworkFailure, reportNetworkFailure } from './network-failure';
+import { beginHttpDiagnostic } from '../logging/transport-diagnostics';
 
 export interface JsonRequest {
 	method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -75,6 +76,7 @@ export async function requestJson(input: JsonRequest): Promise<{ status: number;
 	let response: Response;
 	const deadline = AbortSignal.timeout(15_000);
 	const signal = input.signal ? AbortSignal.any([input.signal, deadline]) : deadline;
+	const diagnose = beginHttpDiagnostic(input.method, input.url);
 	try {
 		response = await fetch(input.url, {
 			method: input.method,
@@ -86,14 +88,17 @@ export async function requestJson(input: JsonRequest): Promise<{ status: number;
 			body,
 		});
 	} catch (cause) {
+		diagnose(null, input.signal?.aborted ? 'cancelled' : 'request_failed');
 		if (!input.signal?.aborted) reportNetworkFailure(input.method === 'GET' ? input.url : undefined, input.signal);
 		throw new HttpRequestFailure(input.signal?.aborted ? 'cancelled' : 'request_failed', 'unknown', { cause });
 	}
 	try {
 		const body = await readJson(response, input.maxResponseBytes);
 		if (input.method === 'GET') clearPendingNetworkFailure(input.url);
+		diagnose(response.status);
 		return { status: response.status, body };
 	} catch (cause) {
+		diagnose(response.status, input.signal?.aborted ? 'cancelled' : 'response_failed');
 		if (input.signal?.aborted) {
 			throw new HttpRequestFailure('cancelled', 'unknown', { cause });
 		}

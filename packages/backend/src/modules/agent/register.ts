@@ -1,3 +1,5 @@
+import { RunResourceService } from './runs/service/run-resource-service.js';
+import { createRunResourceHttpRoute } from './interfaces/http/run-resource-http.js';
 import { NativeContentInspector } from '../../platform/blobs/adapters/native-content-inspector.js';
 import { TitleModel } from './scope/model/title-model.js';
 import { SqliteTitleStorage } from './scope/adapters/sqlite/title-sql.js';
@@ -93,7 +95,7 @@ import { ToolJobService } from './tools/service/tool-job-service.js';
 import { ToolJobModel } from './tools/model/tool-job-model.js';
 import { SqliteToolJobStorage } from './tools/adapters/sqlite/tool-job-sql.js';
 import type { TrustedSshTargetResolver } from '../targets/public.js';
-import type { RemoteMachineOperations } from '../remote/public.js';
+import type { RemoteMachineOperationFactory } from '../remote/public.js';
 import { ToolService } from './tools/service/tool-service.js';
 import { ToolModel } from './tools/model/tool-model.js';
 import { AGENT_APP_EXECUTION_STATE } from '@nexus-terminal/shared/agent/scope/values';
@@ -180,7 +182,7 @@ function toToolView(value: ToolOperation): AgentToolView {
 		operationRevision: value.operationRevision,
 		revision: value.revision,
 		state: value.state,
-		outputArtifactId: value.outputArtifactId,
+		outputArtifactIds: value.outputArtifactIds.map((id) => id),
 		createdAt: value.createdAt,
 		updatedAt: value.updatedAt,
 	};
@@ -236,7 +238,7 @@ export function registerAgent(
 	secrets: SecretBox | null,
 	targets: ConnectionCatalog,
 	resolver: TrustedSshTargetResolver,
-	remoteOperations: RemoteMachineOperations,
+	remoteOperations: RemoteMachineOperationFactory,
 	blobs: BlobStore,
 	events: OperationsEvents,
 	diagnostics: HostDiagnostics,
@@ -394,7 +396,14 @@ export function registerAgent(
 		},
 		executionSettings,
 	);
-	const toolModel = new ToolModel(targets, resolver, remoteOperations, diagnostics);
+	let resources: RunResourceService | null = null;
+
+	const toolChanged = (scope: { userId: number; appId: string; runId: string }) => {
+		changes.notify(scope.userId, scope.appId);
+		resources?.changed(scope);
+	};
+
+	const toolModel = new ToolModel(targets, resolver, remoteOperations, diagnostics, toolChanged);
 	const providerService = new ProviderService(providerModel, (userId, providerId) =>
 		execution.abortProvider(userId, providerId),
 	);
@@ -403,7 +412,7 @@ export function registerAgent(
 		toolModel,
 		tools,
 		governance,
-		new ToolJobService(jobModel, logger),
+		new ToolJobService(jobModel, logger, (scope) => toolModel.touch(scope)),
 		new AcpPermissionService(tools, governance),
 		collaboration,
 		new ToolProjectService(new ToolProjectModel(new SqliteToolProjectStorage(sqlite)), toolModel),
@@ -454,11 +463,13 @@ export function registerAgent(
 	});
 	const threadModel = new ThreadModel(threadStorage, new SecureSessionTokens());
 	const threads = new ThreadService(threadModel);
-	const stream = new RunStreamService(runs, contexts, governance, collaboration, threadModel);
+	resources = new RunResourceService(runs, execution, toolService, collaboration, changes, logger);
+	const stream = new RunStreamService(runs, contexts, governance, collaboration, threadModel, resources);
 	const workspace = new WorkspaceService(scope, threads, providerService, runs, collaboration, governance, contexts);
 
 	const requests = new AgentRequestOwner([
 		changes,
+		resources,
 		execution,
 		providerService,
 		registryService,
@@ -701,6 +712,7 @@ export function registerAgent(
 
 		routes: (access) => [
 			createWorkspaceHttpRoute(access, threads, workspace, boundary),
+			createRunResourceHttpRoute(access, threads, resources, boundary),
 			...createAgentHttpRoutes(access, publicApi),
 			...createAgentProviderHttpRoutes(access, providerApi),
 			...createGovernanceHttpRoutes(access, governance, boundary),

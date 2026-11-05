@@ -1,3 +1,4 @@
+import { posixCommand } from '../../support/posix-command.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mkdtemp, mkdir, readFile, writeFile, stat } from 'node:fs/promises';
@@ -142,9 +143,8 @@ await test('Job failures stop the owning Run and its waits', { timeout: 60000 },
 							name: 'shell_execute',
 							input: {
 								connectionId: f.connectionId,
-								kind: 'argv',
-								argv: process.argv,
 								mode: 'background',
+								commands: [posixCommand(process.argv)],
 							},
 						},
 			);
@@ -185,9 +185,8 @@ await test('Job failures stop the owning Run and its waits', { timeout: 60000 },
 							name: 'shell_execute',
 							input: {
 								connectionId: f.connectionId,
-								kind: 'argv',
-								argv: process.argv,
 								...(mode === 'foreground' ? {} : { mode: 'background' }),
+								commands: [posixCommand(process.argv)],
 							},
 						};
 					if (mode === 'approval')
@@ -206,8 +205,8 @@ await test('Job failures stop the owning Run and its waits', { timeout: 60000 },
 						input: {
 							connectionId: f.connectionId,
 							action: 'wait',
-							jobId: results[0].jobId,
 							waitSeconds: 30,
+							jobIds: [results[0].jobId],
 						},
 					};
 				});
@@ -274,7 +273,7 @@ await test('Job failures stop the owning Run and its waits', { timeout: 60000 },
 			const effect = join(directory, 'must-not-execute');
 			const run = await f.start('untrusted host', () => ({
 				name: 'shell_execute',
-				input: { connectionId: f.connectionId, kind: 'argv', argv: ['touch', effect] },
+				input: { connectionId: f.connectionId, commands: [posixCommand(['touch', effect])] },
 			}));
 			await f.approve(await f.approval(run, 'shell_execute'));
 			const view = await f.wait(run, 'failed');
@@ -309,9 +308,8 @@ await test('Job failures stop the owning Run and its waits', { timeout: 60000 },
 							name: 'shell_execute',
 							input: {
 								connectionId: f.connectionId,
-								kind: 'argv',
-								argv: process.argv,
 								mode: 'background',
+								commands: [posixCommand(process.argv)],
 							},
 						},
 			);
@@ -352,17 +350,16 @@ await test('Job failures stop the owning Run and its waits', { timeout: 60000 },
 							input: {
 								connectionId: f.connectionId,
 								action: 'wait',
-								jobId: results[0].jobId,
 								waitSeconds: 30,
+								jobIds: [results[0].jobId],
 							},
 						}
 					: {
 							name: 'shell_execute',
 							input: {
 								connectionId: f.connectionId,
-								kind: 'argv',
-								argv: process.argv,
 								mode: 'background',
+								commands: [posixCommand(process.argv)],
 							},
 						},
 			);
@@ -420,7 +417,11 @@ await test('Job failures stop the owning Run and its waits', { timeout: 60000 },
 				? { hold: true }
 				: {
 						name: 'shell_execute',
-						input: { connectionId: f.connectionId, kind: 'argv', argv: process.argv, mode: 'background' },
+						input: {
+							connectionId: f.connectionId,
+							mode: 'background',
+							commands: [posixCommand(process.argv)],
+						},
 					},
 		);
 		await f.approve(await f.approval(run, 'shell_execute'));

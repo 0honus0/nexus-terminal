@@ -138,7 +138,7 @@ function readTool(input: unknown): AgentToolView {
 			'operationRevision',
 			'revision',
 			'state',
-			'outputArtifactId',
+			'outputArtifactIds',
 			'createdAt',
 			'updatedAt',
 		],
@@ -156,10 +156,17 @@ function readTool(input: unknown): AgentToolView {
 	}
 	const operationRevision = agentInteger(row.operationRevision, 1);
 	const createdAt = agentInteger(row.createdAt);
-	const outputArtifactId = row.outputArtifactId === null ? null : readAgentId(row.outputArtifactId);
+	if (!Array.isArray(row.outputArtifactIds)) {
+		throw new InvalidAgentPayload();
+	}
+	const outputArtifactIds = row.outputArtifactIds.map(readAgentId);
+	if (new Set(outputArtifactIds).size !== outputArtifactIds.length) {
+		throw new InvalidAgentPayload();
+	}
 	if (
-		outputArtifactId !== null &&
-		(!AGENT_ARTIFACT_OUTPUT_TOOLS.some((name) => name === row.toolName) || row.state !== 'completed')
+		outputArtifactIds.length > 0 &&
+		(!AGENT_ARTIFACT_OUTPUT_TOOLS.some((name) => name === row.toolName) ||
+			(row.state !== 'completed' && row.state !== 'unknown'))
 	) {
 		throw new InvalidAgentPayload();
 	}
@@ -180,7 +187,7 @@ function readTool(input: unknown): AgentToolView {
 		operationRevision,
 		revision: agentInteger(row.revision, operationRevision),
 		state: state(row.state),
-		outputArtifactId,
+		outputArtifactIds,
 		createdAt,
 		updatedAt: agentInteger(row.updatedAt, createdAt),
 	};

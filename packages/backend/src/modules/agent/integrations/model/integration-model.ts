@@ -127,6 +127,11 @@ async function storage<T>(action: () => Promise<T>): Promise<T> {
 }
 
 export class IntegrationModel {
+	private readonly sessions = new Map<
+		string,
+		{ userId: number; appId: string; runId: string; integrationId: string }
+	>();
+
 	constructor(
 		private readonly storage: IntegrationStorage,
 		private readonly secrets: SecretBox | null,
@@ -266,7 +271,20 @@ export class IntegrationModel {
 
 	private async retire(id: string): Promise<void> {
 		try {
-			await this.mcp.close(id);
+			const keys = [
+				id,
+				...[...this.sessions].filter(([, entry]) => entry.integrationId === id).map(([key]) => key),
+			];
+			const results = await Promise.allSettled(
+				keys.map(async (key) => {
+					await this.mcp.close(key);
+					this.sessions.delete(key);
+				}),
+			);
+			const failures = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+			if (failures.length) {
+				throw new ToolCleanupFailure({ cause: new AggregateError(failures, 'MCP integration release failed') });
+			}
 		} catch (error) {
 			this.networkFailure(error, false);
 		}
@@ -283,7 +301,7 @@ export class IntegrationModel {
 		const endpoint = this.endpoint(actor, row);
 		let catalog: IntegrationDiscovery;
 		try {
-			const result = await this.mcp.discover(endpoint, signal);
+			const result = await this.mcp.discover(endpoint, signal, true);
 			catalog = discovery(result);
 		} catch (error) {
 			this.networkFailure(error, false);
@@ -301,7 +319,7 @@ export class IntegrationModel {
 	}
 
 	async catalog(
-		actor: { userId: number; appId: string },
+		actor: { userId: number; appId: string; runId: string },
 		id: string,
 		version: number,
 		signal: AbortSignal,
@@ -337,7 +355,7 @@ export class IntegrationModel {
 	}
 
 	private endpoint(
-		actor: { userId: number; appId: string },
+		actor: { userId: number; appId: string } | { userId: number; appId: string; runId: string },
 		row: StoredIntegration,
 	): import('../../../../platform/mcp/mcp-client.js').McpEndpoint {
 		if (row.configuration.kind !== 'mcp') {
@@ -357,9 +375,18 @@ export class IntegrationModel {
 				throw new AgentFailure('storage_unavailable', { cause });
 			}
 		}
+		const key = 'runId' in actor ? row.id + ':' + actor.runId : row.id;
+		if ('runId' in actor) {
+			this.sessions.set(key, {
+				userId: actor.userId,
+				appId: actor.appId,
+				runId: actor.runId,
+				integrationId: row.id,
+			});
+		}
 		return {
 			client: { name: this.client.name, version: this.client.version },
-			key: row.id,
+			key,
 			generation: row.version,
 			url: row.configuration.endpoint,
 			privateAuthorities: row.configuration.privateHostExceptions.map((host) => host),
@@ -369,7 +396,7 @@ export class IntegrationModel {
 	}
 
 	async invoke(
-		actor: { userId: number; appId: string },
+		actor: { userId: number; appId: string; runId: string },
 		input: IntegrationInvocation,
 		signal: AbortSignal,
 		validate: () => Promise<void>,
@@ -419,6 +446,28 @@ export class IntegrationModel {
 		}
 	}
 
+	async drainRun(owner: { userId: number; appId: string; runId: string }): Promise<void> {
+		const entries = [...this.sessions].filter(
+			([, entry]) => entry.userId === owner.userId && entry.appId === owner.appId && entry.runId === owner.runId,
+		);
+		const results = await Promise.allSettled(
+			entries.map(async ([key]) => {
+				await this.mcp.close(key);
+				this.sessions.delete(key);
+			}),
+		);
+		const failures = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+		if (failures.length) {
+			throw new ToolCleanupFailure({ cause: new AggregateError(failures, 'Run MCP release failed') });
+		}
+	}
+
+	sessionCount(owner: { userId: number; appId: string; runId: string }): number {
+		return [...this.sessions.values()].filter(
+			(entry) => entry.userId === owner.userId && entry.appId === owner.appId && entry.runId === owner.runId,
+		).length;
+	}
+
 	async close(): Promise<void> {
 		try {
 			await this.mcp.closeAll();
@@ -428,6 +477,9 @@ export class IntegrationModel {
 	}
 
 	private networkFailure(error: unknown, mutation: boolean): never {
+		if (error instanceof ToolCleanupFailure) {
+			throw error;
+		}
 		if (error instanceof McpFailure && error.kind === 'cleanup_failed') {
 			throw new ToolCleanupFailure({ cause: error });
 		}

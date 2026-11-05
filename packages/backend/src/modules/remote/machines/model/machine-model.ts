@@ -72,6 +72,30 @@ export class RemoteMachineModel {
 		private readonly hostKeys: Pick<HostKeyManagement, 'list'>,
 	) {}
 
+	async reuseKey(request: RemoteMachineOpenRequest): Promise<string> {
+		request.signal.throwIfAborted();
+		await request.validate?.();
+		const target = await this.resolver.resolveStored({
+			targetId: request.targetId,
+			expectedFingerprint: request.expectedFingerprint,
+		});
+		const trusts = await this.hostKeys.list();
+		request.signal.throwIfAborted();
+		return createHash('sha256')
+			.update(
+				JSON.stringify([
+					request.targetId,
+					target.fingerprint,
+					trusts.map((key) => [key.host, key.port, key.fingerprint]).sort(),
+				]),
+			)
+			.digest('hex');
+	}
+
+	release(machine: MachineConnection, _reusable: boolean): Promise<void> {
+		return machine.close();
+	}
+
 	async open(request: RemoteMachineOpenRequest): Promise<OpenedRemoteMachine> {
 		const deadline = Date.now() + request.timeoutMs;
 		await request.validate?.();

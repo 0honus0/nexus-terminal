@@ -51,6 +51,8 @@ await test('Machine execution accepts a long caller budget and independently cap
 	const result = { status: 'completed', exitCode: 0, signal: null, stdout: 'done', stderr: '', truncated: false };
 	const commands = new MachineCommandModel(
 		{
+			release: (machine) => machine.close(),
+
 			async open(input) {
 				connectBudget = input.timeoutMs;
 				return {
@@ -78,11 +80,22 @@ await test('Machine execution accepts a long caller budget and independently cap
 			},
 		},
 	);
-	const service = new RemoteMachineOperationService(null, null, commands, null, {
-		async run(_id, _origin, _targets, work) {
-			return work();
+	const service = new RemoteMachineOperationService(
+		null,
+		null,
+		commands,
+		null,
+		{
+			async run(_id, _origin, _targets, work) {
+				return work();
+			},
 		},
-	});
+		{
+			quiesce() {},
+
+			async close() {},
+		},
+	);
 	try {
 		const value = await service.executeCommand(
 			{
@@ -94,7 +107,7 @@ await test('Machine execution accepts a long caller budget and independently cap
 
 				async validate() {},
 			},
-			{ command: { kind: 'argv', argv: ['true'] }, cwd: null },
+			{ commands: [{ kind: 'argv', argv: ['true'] }], cwd: null, onError: 'stop' },
 		);
 		assert.deepEqual(value, result);
 		assert.equal(connectBudget, MACHINE_CONNECT_MAX_TIMEOUT_MS);

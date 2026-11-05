@@ -34,28 +34,49 @@ export async function patchInspectedText(
 ): Promise<WriteTextResult> {
 	const filePath = mutationPath(input.path);
 	fingerprint(input.expectedSha256);
-	if (
-		!input.oldText ||
-		input.oldText === input.newText ||
-		!isWellFormedFileText(input.oldText) ||
-		!isWellFormedFileText(input.newText) ||
-		input.oldText.includes('\0') ||
-		input.newText.includes('\0') ||
-		Buffer.byteLength(input.oldText, 'utf8') > 4096 ||
-		Buffer.byteLength(input.newText, 'utf8') > 4096
-	) {
+	if (!input.edits.length) {
 		throw new RemoteFileFailure('invalid_input');
+	}
+	for (const edit of input.edits) {
+		if (
+			!edit.oldText ||
+			edit.oldText === edit.newText ||
+			!isWellFormedFileText(edit.oldText) ||
+			!isWellFormedFileText(edit.newText) ||
+			edit.oldText.includes('\0') ||
+			edit.newText.includes('\0') ||
+			Buffer.byteLength(edit.oldText, 'utf8') > 4096 ||
+			Buffer.byteLength(edit.newText, 'utf8') > 4096
+		) {
+			throw new RemoteFileFailure('invalid_input');
+		}
 	}
 	const before = await inspectText(context, filePath);
 	if (before.sha256 !== input.expectedSha256) {
 		throw new RemoteFileFailure('conflict');
 	}
-	const position = before.text.indexOf(input.oldText);
-	// Count overlapping occurrences too; repeated context is not a unique editing target.
-	if (position < 0 || before.text.indexOf(input.oldText, position + 1) !== -1) {
-		throw new RemoteFileFailure('conflict');
+	const changes = input.edits
+		.map((edit) => {
+			const start = before.text.indexOf(edit.oldText);
+			if (start < 0 || before.text.indexOf(edit.oldText, start + 1) !== -1) {
+				throw new RemoteFileFailure('conflict');
+			}
+			return { start, end: start + edit.oldText.length, replacement: edit.newText };
+		})
+		.sort((left, right) => left.start - right.start);
+	for (let index = 1; index < changes.length; index++) {
+		if (changes[index].start < changes[index - 1].end) {
+			throw new RemoteFileFailure('conflict');
+		}
 	}
-	const content = before.text.slice(0, position) + input.newText + before.text.slice(position + input.oldText.length);
+	let offset = 0;
+	const fragments: string[] = [];
+	for (const change of changes) {
+		fragments.push(before.text.slice(offset, change.start), change.replacement);
+		offset = change.end;
+	}
+	fragments.push(before.text.slice(offset));
+	const content = fragments.join('');
 	if (Buffer.byteLength(content, 'utf8') > 32 * 1024) {
 		throw new RemoteFileFailure('limit_exceeded');
 	}

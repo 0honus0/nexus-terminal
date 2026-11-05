@@ -23,7 +23,7 @@ export interface ToolOperation {
 	revision: number;
 	state: AgentToolState;
 	/** App-owned file delivered by a completed, server-owned output tool. */
-	outputArtifactId: string | null;
+	outputArtifactIds: string[];
 	resultText: string | null;
 	failureCode: AgentRunFailureCode | null;
 	createdAt: number;

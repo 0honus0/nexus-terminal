@@ -2,7 +2,7 @@ import { AGENT_RUN_STEP_MAX_TEXT_BYTES } from '@nexus-terminal/shared/agent/runs
 import type { ModelNetworkPort } from '../../../../platform/ai/model-port.js';
 import type { ModelMessage, ModelToolDefinition, ModelToolProperty } from '../../../../platform/ai/model-port.js';
 import { createHash } from 'node:crypto';
-import type { ToolDefinition } from '../../tools/model/tool-types.js';
+import type { ToolDefinition, ToolInputField } from '../../tools/model/tool-types.js';
 import { toProviderRequestFailure } from '../../providers/model/provider-network-failure.js';
 import { AgentFailure, ProviderRequestFailure } from '../../agent-failure.js';
 import { modelTextBatches } from '../../../../platform/ai/model-text-batches.js';
@@ -36,38 +36,48 @@ function toModelMessage(value: RunModelMessage): ModelMessage {
 	};
 }
 
-function toModelTools(definitions: ToolDefinition[]): ModelToolDefinition[] {
-	return definitions.map((tool) => {
-		const properties: Record<string, ModelToolProperty> = {};
-		for (const field of tool.input.fields) {
-			properties[field.name] =
-				field.kind === 'texts'
-					? {
-							type: 'array',
-							minItems: 1,
-							maxItems: field.maxItems,
-							items: { type: 'string', minLength: 0, maxLength: field.maxItemBytes },
-						}
-					: field.kind === 'integer'
-						? { type: 'integer', minimum: field.minimum, maximum: field.maximum }
-						: {
-								type: 'string',
-								minLength: field.allowEmpty ? 0 : 1,
-								maxLength: field.maxBytes,
-								...(field.choices === undefined ? {} : { enum: field.choices.map((choice) => choice) }),
-							};
+function toModelParameters(fields: ToolInputField[]): ModelToolDefinition['parameters'] {
+	const properties: Record<string, ModelToolProperty> = {};
+	for (const field of fields) {
+		if (field.kind === 'objects') {
+			properties[field.name] = {
+				type: 'array',
+				minItems: 1,
+				maxItems: field.maxItems,
+				items: toModelParameters(field.fields),
+			};
+		} else if (field.kind === 'texts') {
+			properties[field.name] = {
+				type: 'array',
+				minItems: 1,
+				maxItems: field.maxItems,
+				items: { type: 'string', minLength: 0, maxLength: field.maxItemBytes },
+			};
+		} else if (field.kind === 'integer') {
+			properties[field.name] = { type: 'integer', minimum: field.minimum, maximum: field.maximum };
+		} else {
+			properties[field.name] = {
+				type: 'string',
+				minLength: field.allowEmpty ? 0 : 1,
+				maxLength: field.maxBytes,
+				...(field.choices === undefined ? {} : { enum: field.choices.map((choice) => choice) }),
+			};
 		}
-		return {
-			name: tool.name,
-			description: tool.description,
-			parameters: {
-				type: 'object',
-				properties,
-				required: tool.input.fields.filter((field) => field.required).map((field) => field.name),
-				additionalProperties: false,
-			},
-		};
-	});
+	}
+	return {
+		type: 'object',
+		properties,
+		required: fields.filter((field) => field.required).map((field) => field.name),
+		additionalProperties: false,
+	};
+}
+
+function toModelTools(definitions: ToolDefinition[]): ModelToolDefinition[] {
+	return definitions.map((tool) => ({
+		name: tool.name,
+		description: tool.description,
+		parameters: toModelParameters(tool.input.fields),
+	}));
 }
 
 export class RunModelStream {

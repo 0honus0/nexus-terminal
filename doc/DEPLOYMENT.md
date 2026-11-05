@@ -1,6 +1,6 @@
 # 部署与更新
 
-默认使用 Docker Compose。唯一后端为 `packages/backend`，启动产物 `dist/main.js`；前后端消费 Shared。旧实现从 Git 历史读取，业务运行路径不保留旧值或旧环境变量兼容层；下一版本起的数据库升级策略见下方迁移章节。功能见 [USAGE](USAGE.md)，待验范围见 [实施方案](PLAN.md)。
+默认使用 Docker Compose。唯一后端为 `packages/backend`，启动产物 `dist/main.js`；前后端消费 Shared。旧实现从 Git 历史读取，业务运行路径不保留旧值或旧环境变量兼容层；数据库升级策略见下方迁移章节。功能见 [USAGE](USAGE.md)，待验范围见 [实施方案](PLAN.md)。
 
 ## 部署
 
@@ -41,7 +41,7 @@ docker compose logs --tail=100 backend
 
 数据库文件的父目录即实例数据目录；每个实例使用独立目录。资源目录使用 `appearance/`、`artifacts/`、`plugins/`，实例数据与密钥一起保留。Compose 的数据库固定为容器内 `/app/data/nexus-terminal.db`，通过 `.env` 的 `NEXUS_DATA_DIR` 配置宿主目录，默认仍为 `./data`。运行中可能出现 SQLite WAL/SHM、恢复日志和临时目录，勿手动清除正在使用的恢复文件。
 
-当前代码的数据库基线为 v1，结构签名为 `backend-next-v1-initial-20261105-rdp-certificates`，精确定义以 `packages/backend/src/bootstrap/schema.ts` 为准。当前实现仍只有 v1，下一版本迁移交付与验收见 [PLAN](PLAN.md#待实现与条件维护)。
+当前迁移链为 v1 初始结构、v2 Shell Job 命令批次结果转换、v3 文件交付/展示批次结果转换；精确签名见 `packages/backend/src/bootstrap/schema.ts`。更新启动时自动顺序迁移，重复启动跳过已执行记录；业务代码只读取迁移后的格式。
 
 首次 Passkey 站点从公开 Origin 推导；多站点可用 `NEXUS_PASSKEY_SITES` JSON 初始化。CAPTCHA 和 Passkey 站点配置在设置页维护，按界面提示重启激活；IP 白名单、登录封禁策略、监控周期和资源缓存 TTL 保存后热更新。白名单保存前确认当前来源仍被允许，保留部署恢复入口。插件仓库与信任 Publisher 由管理接口配置，不使用旧 catalog 环境变量。写操作依赖当前会话、同源 Origin/Fetch Metadata，不使用旧 CSRF token 端点。
 
@@ -84,7 +84,7 @@ location / {
 
 保留公开 Host/协议并启用 WebSocket。HTTPS 支持 Passkey、剪贴板等浏览器能力。代理必须传递实际观察到的来源，并用网络隔离阻止绕过；宿主 Backend 默认信任 loopback，外部代理使用精确 IP/最小 CIDR，不接受旧 hop 数配置。Compose 默认启用 IPv6，宿主不支持时同步关闭 `enable_ipv6` 和 IPv6 IPAM。
 
-## 数据库迁移（从下一版本起）
+## 数据库迁移
 
 按 [H-21](rules/HUMAN.md#人工规则列表)，每条数据库结构、CHECK 约束或持久数据变更新增一条独立迁移，使用连续版本号、固定签名和执行记录。`dev` 与 `latest` 使用同一条迁移链，不在正式发布前合并或压缩迁移；没有数据库变更时不增加空迁移。已执行或已发布的迁移及签名保持不变，后续修正追加新迁移。
 

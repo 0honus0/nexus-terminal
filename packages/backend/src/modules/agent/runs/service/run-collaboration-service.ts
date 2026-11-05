@@ -3,7 +3,6 @@ import { TOOL_RESULT_MAX_BYTES } from '../run-tool-limits.js';
 import type { ExecutionService } from '../../execution/service/execution-service.js';
 import { validateAgentId, validateUserId } from '../../agent-validation.js';
 import { createHash, randomUUID } from 'node:crypto';
-import { setTimeout as delay } from 'node:timers/promises';
 import { AgentFailure, ToolExecutionUnknown, isAgentDrainFailure } from '../../agent-failure.js';
 import type { RunCollaborationModel } from '../model/run-collaboration-model.js';
 import type {
@@ -186,19 +185,24 @@ export class RunCollaborationService {
 			} else {
 				const deadline = Math.min(Date.now() + input.waitSeconds * 1000, parent.deadline);
 				while (true) {
-					await validate();
-					const items = (await this.model.children(scope)).filter((child) =>
-						input.childIds.includes(child.id),
-					);
-					const ready =
-						input.mode === 'all'
-							? items.every((child) => isSettled(child.status))
-							: items.some((child) => isSettled(child.status));
-					if (ready || Date.now() >= deadline) {
-						result = { ready, children: childViews(items) };
-						break;
+					const wake = this.model.watch(scope, signal, deadline);
+					try {
+						await validate();
+						const items = (await this.model.children(scope)).filter((child) =>
+							input.childIds.includes(child.id),
+						);
+						const ready =
+							input.mode === 'all'
+								? items.every((child) => isSettled(child.status))
+								: items.some((child) => isSettled(child.status));
+						if (ready || Date.now() >= deadline) {
+							result = { ready, children: childViews(items) };
+							break;
+						}
+						await wake.changed;
+					} finally {
+						wake.close();
 					}
-					await delay(Math.min(250, Math.max(1, deadline - Date.now())), undefined, { signal });
 				}
 			}
 		} else if (input.action === 'send') {
@@ -368,37 +372,42 @@ export class RunCollaborationService {
 			return null;
 		}
 		while (owner.dependencies.length) {
-			if (signal.aborted || Date.now() >= owner.deadline) {
-				return null;
-			}
-			const parent = await this.model.participant({
-				userId: scope.userId,
-				appId: scope.appId,
-				runId: owner.rootId,
-			});
-			if (!parent || parent.status !== 'running') {
-				return null;
-			}
-			const dependencies = (await this.model.children(scope)).filter((child) =>
-				owner.dependencies.includes(child.id),
-			);
-			if (
-				dependencies.length !== owner.dependencies.length ||
-				(owner.dependencyMode === 'success' &&
-					dependencies.some((child) => isSettled(child.status) && child.status !== 'completed'))
-			) {
-				return null;
-			}
-			if (dependencies.every((child) => isSettled(child.status))) {
-				break;
-			}
+			const wake = this.model.watch(scope, signal, owner.deadline);
 			try {
-				await delay(250, undefined, { signal });
-			} catch (error) {
-				if (signal.aborted) {
+				if (signal.aborted || Date.now() >= owner.deadline) {
 					return null;
 				}
-				throw error;
+				const parent = await this.model.participant({
+					userId: scope.userId,
+					appId: scope.appId,
+					runId: owner.rootId,
+				});
+				if (!parent || parent.status !== 'running') {
+					return null;
+				}
+				const dependencies = (await this.model.children(scope)).filter((child) =>
+					owner.dependencies.includes(child.id),
+				);
+				if (
+					dependencies.length !== owner.dependencies.length ||
+					(owner.dependencyMode === 'success' &&
+						dependencies.some((child) => isSettled(child.status) && child.status !== 'completed'))
+				) {
+					return null;
+				}
+				if (dependencies.every((child) => isSettled(child.status))) {
+					break;
+				}
+				try {
+					await wake.changed;
+				} catch (error) {
+					if (signal.aborted) {
+						return null;
+					}
+					throw error;
+				}
+			} finally {
+				wake.close();
 			}
 		}
 		return owner;

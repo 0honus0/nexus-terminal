@@ -1,3 +1,4 @@
+import { migrateToolOutputBatches } from './runs/adapters/sqlite/run-tool-output-migration.js';
 import { initializeThreadTitles } from './scope/adapters/sqlite/title-schema.js';
 import { initializeAutomaticCompactions } from './context/adapters/sqlite/compaction-schema.js';
 import { initializePluginIntents } from './plugins/adapters/sqlite/plugin-intent-sql.js';
@@ -21,6 +22,11 @@ import { initializeModelRegistry } from './providers/registry/adapters/sqlite/re
 import { initializeAgentGovernance } from './governance/adapters/sqlite/governance-schema.js';
 import { initializeTargetDenylist } from './governance/adapters/sqlite/denylist-schema.js';
 import { initializeRunTools } from './runs/adapters/sqlite/run-tool-schema.js';
+import { migrateToolJobBatchResults } from './tools/adapters/sqlite/tool-job-batch-migration.js';
+
+export async function migrateAgentToolBatches(tx: SqlExecutor): Promise<void> {
+	await migrateToolJobBatchResults(tx);
+}
 
 /** Module installation order; SQL remains in the owning adapters. */
 export async function initializeAgentSchema(tx: SqlExecutor): Promise<void> {
@@ -47,4 +53,8 @@ export async function initializeAgentSchema(tx: SqlExecutor): Promise<void> {
 	await initializeBrowserConfiguration(tx);
 	await initializeAgentPlugins(tx);
 	await initializePluginIntents(tx);
+}
+
+export async function migrateAgentToolOutputs(tx: SqlExecutor): Promise<void> {
+	await migrateToolOutputBatches(tx);
 }

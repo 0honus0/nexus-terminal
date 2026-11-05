@@ -10,11 +10,18 @@ export type StoredToolJobResult =
 	| { status: 'not_started' }
 	| {
 			status: 'completed' | 'nonzero';
-			exitCode: number;
-			signal: string | null;
-			stdout: string;
-			stderr: string;
-			truncated: boolean;
+			commands: Array<
+				| { index: number; status: 'not_started' }
+				| {
+						index: number;
+						status: 'completed' | 'nonzero';
+						exitCode: number;
+						signal: string | null;
+						stdout: string;
+						stderr: string;
+						truncated: boolean;
+				  }
+			>;
 	  };
 
 export interface StoredToolJob {

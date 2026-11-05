@@ -1,7 +1,9 @@
+import { RESULT_PAGE_MAX_BYTES } from '../../context/result-rules.js';
 import type { Logger } from '../../../../platform/logging/logger.js';
 import { logDiagnostic, withDiagnosticContext } from '../../../../platform/logging/diagnostic-log.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { ToolJobModel } from '../model/tool-job-model.js';
+import { TOOL_RESULT_MAX_BYTES } from '../../runs/run-tool-limits.js';
 import type { ToolJob, ToolJobScope, ToolJobPreparation, ToolJobResult } from '../model/tool-job-types.js';
 import type { ToolJobControlInput, ToolTarget } from '../model/tool-types.js';
 import {
@@ -10,12 +12,20 @@ import {
 	ToolCleanupFailure,
 	ToolOperationRefusal,
 	isAgentDrainFailure,
+	aggregateToolFailures,
 } from '../../agent-failure.js';
 
 interface OwnedJob {
+	background: boolean;
+	active: boolean;
 	job: ToolJob;
 	controller: AbortController;
-	work: (signal: AbortSignal, timeoutMs: number) => Promise<Exclude<ToolJobResult, { status: 'not_started' }>>;
+	output: Array<{ commandIndex: number; stream: 'stdout' | 'stderr'; text: string }>;
+	work: (
+		signal: AbortSignal,
+		timeoutMs: number,
+		onOutput: (index: number, stream: 'stdout' | 'stderr', text: string) => void,
+	) => Promise<Exclude<ToolJobResult, { status: 'not_started' }>>;
 	deadline: number;
 	timer: ReturnType<typeof setTimeout> | null;
 	validate: (signal: AbortSignal) => Promise<void>;
@@ -44,11 +54,19 @@ function resultView(result: ToolJobResult | null) {
 			? { status: result.status }
 			: {
 					status: result.status,
-					exitCode: result.exitCode,
-					signal: result.signal,
-					stdout: result.stdout,
-					stderr: result.stderr,
-					truncated: result.truncated,
+					commands: result.commands.map((item) =>
+						item.status === 'not_started'
+							? { index: item.index, status: item.status }
+							: {
+									index: item.index,
+									status: item.status,
+									exitCode: item.exitCode,
+									signal: item.signal,
+									stdout: item.stdout,
+									stderr: item.stderr,
+									truncated: item.truncated,
+								},
+					),
 				};
 }
 
@@ -70,7 +88,13 @@ export class ToolJobService {
 	constructor(
 		private readonly model: ToolJobModel,
 		private readonly logger?: Logger,
+		private readonly changed: (scope: ToolJobScope) => void = () => {},
 	) {}
+
+	backgroundCount(scope: ToolJobScope): number {
+		return [...this.jobs.values()].filter((item) => sameScope(item.job, scope) && item.active && item.background)
+			.length;
+	}
 
 	async prepare(input: ToolJobPreparation): Promise<string> {
 		const { operation, target, policyRevision, signal, work, validate } = input;
@@ -98,6 +122,9 @@ export class ToolJobService {
 			abort();
 		}
 		this.jobs.set(job.id, {
+			background: input.background,
+			output: [],
+			active: true,
 			job,
 			controller,
 			work,
@@ -112,6 +139,7 @@ export class ToolJobService {
 
 			unsubscribe: () => signal.removeEventListener('abort', abort),
 		});
+		this.changed(job);
 		logDiagnostic(this.logger, 'info', 'AGENT_JOB_ACCEPTED', {
 			jobId: job.id,
 			runId: job.runId,
@@ -196,7 +224,11 @@ export class ToolJobService {
 				item.controller.abort();
 			}
 			item.controller.signal.throwIfAborted();
-			const result = await item.work(item.controller.signal, remainingMs);
+			const result = await item.work(item.controller.signal, remainingMs, (commandIndex, stream, text) => {
+				if (text) {
+					item.output.push({ commandIndex, stream, text });
+				}
+			});
 			confirmed = true;
 			await item.validate(item.controller.signal);
 			monitor.abort();
@@ -211,10 +243,9 @@ export class ToolJobService {
 			);
 			logDiagnostic(this.logger, result.status === 'completed' ? 'info' : 'warn', 'AGENT_JOB_SETTLED', {
 				state: item.job.state,
-				exitCode: result.exitCode,
-				stdoutBytes: Buffer.byteLength(result.stdout),
-				stderrBytes: Buffer.byteLength(result.stderr),
-				truncated: result.truncated,
+				commandCount: result.commands.length,
+				executedCount: result.commands.filter((item) => item.status !== 'not_started').length,
+				truncated: result.commands.some((item) => item.status !== 'not_started' && item.truncated),
 			});
 		} catch (error) {
 			logDiagnostic(this.logger, 'warn', 'AGENT_JOB_EXECUTION_FAILED', {}, error);
@@ -259,6 +290,8 @@ export class ToolJobService {
 				await monitoring;
 			}
 			item.unsubscribe();
+			item.active = false;
+			this.changed(item.job);
 		}
 	}
 
@@ -303,22 +336,25 @@ export class ToolJobService {
 		signal: AbortSignal,
 		validate: () => Promise<void>,
 	): Promise<ToolJob> {
-		const deadline = Date.now() + waitMs;
 		let job = await this.owned(scope, target, id);
-		while ((job.state === 'queued' || job.state === 'dispatched') && Date.now() < deadline) {
-			this.checkFailure(id);
+		if (job.state === 'queued' || job.state === 'dispatched') {
+			const pending = this.jobs.get(id)?.pending;
+			if (!pending) {
+				throw new AgentFailure('operation_unknown');
+			}
+			const waiting = new AbortController();
+			const deadline = delay(waitMs, undefined, { signal: AbortSignal.any([signal, waiting.signal]) });
 			try {
-				await delay(Math.max(1, Math.min(250, deadline - Date.now())), undefined, { signal });
+				await Promise.race([pending, deadline]);
 			} catch (error) {
 				if (signal.aborted) {
-					if (signal.reason instanceof ToolExecutionUnknown) {
-						throw signal.reason;
-					}
 					throw new AgentFailure('provider_unavailable', { cause: error });
 				}
 				throw error;
+			} finally {
+				waiting.abort();
+				await Promise.allSettled([deadline]);
 			}
-			await validate();
 			job = await this.owned(scope, target, id);
 		}
 		await validate();
@@ -338,6 +374,11 @@ export class ToolJobService {
 		const job = await this.waitFor(scope, target, id, waitMs, signal, validate);
 		if (job.result !== null && job.result.status !== 'not_started') {
 			return JSON.stringify(resultView(job.result));
+		}
+		const item = this.jobs.get(id);
+		if (item?.active) {
+			item.background = true;
+			this.changed(item.job);
 		}
 		logDiagnostic(this.logger, 'debug', 'AGENT_SHELL_YIELDED', {
 			jobId: job.id,
@@ -376,37 +417,165 @@ export class ToolJobService {
 				})),
 			});
 		}
-		if (input.jobId === null) {
+		if (!input.jobIds.length) {
 			throw new AgentFailure('invalid_input');
 		}
-		let job = await this.owned(scope, target, input.jobId);
-		const active = this.jobs.get(job.id);
-		if (input.action === 'cancel') {
-			if (active) {
-				await validate();
-				logDiagnostic(this.logger, 'info', 'AGENT_JOB_CANCEL_REQUESTED', { jobId: job.id, runId: job.runId });
-				active.controller.abort();
-				if (active.pending) {
-					await active.pending;
+		const jobs = await Promise.all(input.jobIds.map((id) => this.owned(scope, target, id)));
+		if (input.action === 'output') {
+			const pages = [];
+			let size = 128;
+			for (const job of jobs) {
+				await this.settled(job);
+				const live = this.jobs.get(job.id)?.output;
+				const events =
+					live ??
+					(job.result && job.result.status !== 'not_started'
+						? job.result.commands.flatMap((item) =>
+								item.status === 'not_started'
+									? []
+									: [
+											{ commandIndex: item.index, stream: 'stdout', text: item.stdout },
+											{ commandIndex: item.index, stream: 'stderr', text: item.stderr },
+										],
+							)
+						: []);
+				const totalBytes = events.reduce((sum, event) => sum + Buffer.byteLength(event.text), 0);
+				if (input.offset > totalBytes) {
+					throw new AgentFailure('invalid_input');
 				}
-			} else if (job.state === 'queued' || job.state === 'dispatched') {
-				throw new AgentFailure('operation_unknown');
+				const output: Array<{ commandIndex: number; stream: string; text: string }> = [];
+				let skipped = 0,
+					nextOffset = input.offset,
+					full = false;
+				let outputBytes = 2;
+				for (const event of events) {
+					const eventBytes = Buffer.byteLength(event.text);
+					if (skipped + eventBytes <= input.offset) {
+						skipped += eventBytes;
+						continue;
+					}
+					const start = Math.max(0, input.offset - skipped);
+					let text: string;
+					try {
+						text = new TextDecoder('utf-8', { fatal: true }).decode(
+							Buffer.from(event.text).subarray(start),
+						);
+					} catch (cause) {
+						throw new AgentFailure('invalid_input', { cause });
+					}
+					const last = output[output.length - 1];
+					const item =
+						last?.commandIndex === event.commandIndex && last.stream === event.stream
+							? last
+							: { commandIndex: event.commandIndex, stream: event.stream, text: '' };
+					if (item !== last) {
+						const overhead = Buffer.byteLength(JSON.stringify(item)) + (output.length ? 1 : 0);
+						if (outputBytes + overhead + 6 > RESULT_PAGE_MAX_BYTES) {
+							full = true;
+							break;
+						}
+						outputBytes += overhead;
+						output.push(item);
+					}
+					for (const point of text) {
+						const cost = Buffer.byteLength(JSON.stringify(point)) - 2;
+						if (outputBytes + cost > RESULT_PAGE_MAX_BYTES) {
+							full = true;
+							break;
+						}
+						item.text += point;
+						outputBytes += cost;
+						nextOffset += Buffer.byteLength(point);
+					}
+					skipped += eventBytes;
+					if (full) {
+						break;
+					}
+				}
+				const page = {
+					jobId: job.id,
+					state: job.state,
+					offset: input.offset,
+					nextOffset,
+					capturedBytes: totalBytes,
+					output,
+					complete: job.state !== 'queued' && job.state !== 'dispatched',
+				};
+				const bytes = Buffer.byteLength(JSON.stringify(page)) + 1;
+				if (size + bytes > TOOL_RESULT_MAX_BYTES) {
+					break;
+				}
+				pages.push(page);
+				size += bytes;
+			}
+			await validate();
+			return JSON.stringify({ jobs: pages, nextIndex: pages.length < jobs.length ? pages.length : null });
+		}
+
+		if (input.action === 'cancel') {
+			await validate();
+			for (const job of jobs) {
+				const item = this.jobs.get(job.id);
+				if (item) {
+					item.controller.abort();
+				} else if (job.state === 'queued' || job.state === 'dispatched') {
+					throw new AgentFailure('operation_unknown');
+				}
+			}
+			const outcomes = await Promise.allSettled(
+				jobs.map(async (job) => {
+					const pending = this.jobs.get(job.id)?.pending;
+					if (pending) {
+						await pending;
+					}
+				}),
+			);
+			const failures = outcomes.flatMap((outcome) => (outcome.status === 'rejected' ? [outcome.reason] : []));
+			if (failures.length) {
+				throw aggregateToolFailures(failures, 'Job group cancellation failed');
 			}
 		} else if (input.action === 'wait') {
-			job = await this.waitFor(
-				scope,
-				target,
-				job.id,
-				Math.min(input.waitSeconds * 1000, waitBudgetMs),
-				signal,
-				validate,
-			);
+			const active = jobs.filter((job) => job.state === 'queued' || job.state === 'dispatched');
+			if (input.waitMode === 'all' || active.length === jobs.length) {
+				const stop = new AbortController();
+				const combined = AbortSignal.any([signal, stop.signal]);
+				const waits = active.map((job) =>
+					this.waitFor(
+						scope,
+						target,
+						job.id,
+						Math.min(input.waitSeconds * 1000, waitBudgetMs),
+						combined,
+						validate,
+					),
+				);
+				try {
+					if (input.waitMode === 'any') {
+						await Promise.race(waits);
+					} else {
+						await Promise.all(waits);
+					}
+				} finally {
+					stop.abort();
+					await Promise.allSettled(waits);
+				}
+			}
 		}
-		job = await this.owned(scope, target, job.id);
+		const current = await Promise.all(input.jobIds.map((id) => this.owned(scope, target, id)));
+		for (const job of current) {
+			await this.settled(job);
+		}
 		await validate();
-		await this.settled(job);
-		await validate();
-		return snapshot(job);
+		return JSON.stringify({
+			jobs: current.map((job) => ({
+				jobId: job.id,
+				state: job.state,
+				revision: job.revision,
+				result: resultView(job.result),
+				createdAt: job.createdAt,
+				updatedAt: job.updatedAt,
+			})),
+		});
 	}
 
 	async drain(scope: ToolJobScope): Promise<void> {

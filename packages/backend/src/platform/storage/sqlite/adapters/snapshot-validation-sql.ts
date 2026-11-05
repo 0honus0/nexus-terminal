@@ -1,3 +1,4 @@
+import { sqliteSchemaSignature } from '../schema-signature.js';
 import { SqliteRuntime } from '../sqlite-runtime.js';
 import { SqliteFailure } from '../sqlite-errors.js';
 import type { SqlExecutor, SqlReader } from '../sql-types.js';
@@ -26,7 +27,7 @@ export class SqliteSnapshotValidation {
 		return this.source.transaction(async (tx) => {
 			signal.throwIfAborted();
 			const versions = await new SqliteSchemaAdapter(tx).versions();
-			if (versions.length !== 1 || versions[0].version !== 1 || versions[0].signature !== this.signature) {
+			if (sqliteSchemaSignature(versions) !== this.signature) {
 				throw new SnapshotFailure('invalid_registration');
 			}
 			const expected = new Set([...this.tables.map((table) => table.name), ...this.excludedTables]);

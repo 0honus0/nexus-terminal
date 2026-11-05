@@ -8,6 +8,8 @@ import { MachineMutationAdmissionFailure } from './machines/model/mutation-types
 import type { RemoteMachineOperationService } from './machines/service/operation-service.js';
 import type { MachineOperationScope } from './machines/model/operation-types.js';
 import type { RemoteMachineOperationScope, RemoteMachineOperations } from './public.js';
+import type { RemoteMachineOperationFactory } from './public.js';
+import type { RemoteMachineOperationFactoryService } from './machines/service/operation-factory-service.js';
 
 function scope(input: RemoteMachineOperationScope): MachineOperationScope {
 	return {
@@ -67,8 +69,38 @@ async function* fileContent(source: AsyncIterable<Uint8Array>): AsyncIterable<Ui
 	}
 }
 
-export function remoteOperations(service: RemoteMachineOperationService): RemoteMachineOperations {
+export function remoteOperationFactory(factory: RemoteMachineOperationFactoryService): RemoteMachineOperationFactory {
 	return {
+		create: (changed) => {
+			try {
+				const service = factory.create(changed);
+				return remoteOperations(service, () => factory.release(service));
+			} catch (error) {
+				operationFailure(error);
+			}
+		},
+	};
+}
+
+export function remoteOperations(
+	service: RemoteMachineOperationService,
+	close: () => Promise<void>,
+): RemoteMachineOperations {
+	return {
+		snapshot: () => {
+			const value = service.snapshot();
+			return {
+				sshConnections: value.connections,
+				sftpChannels: value.files,
+				activeOperations: value.active,
+				targetIds: value.targetIds.map((id) => id),
+				closing: value.closing,
+				cleanupFailed: value.cleanupFailed,
+			};
+		},
+
+		close: () => boundary(close),
+
 		executeAcp: (input, request) =>
 			boundary(async () => {
 				const value = await service.executeAcp(scope(input), {
@@ -100,20 +132,54 @@ export function remoteOperations(service: RemoteMachineOperationService): Remote
 
 		executeCommand: (input, request) =>
 			boundary(async () => {
-				const command: ExecutionCommand =
-					request.command.kind === 'argv'
-						? { kind: 'argv', argv: request.command.argv.map((arg) => arg) }
-						: { kind: 'shell', script: request.command.script };
-				const value = await service.executeCommand(scope(input), { command, cwd: request.cwd });
+				const commands: ExecutionCommand[] = request.commands.map((command) =>
+					command.kind === 'argv'
+						? { kind: 'argv', argv: command.argv.map((arg) => arg) }
+						: { kind: 'shell', script: command.script },
+				);
+				const value = await service.executeCommand(scope(input), {
+					commands,
+					cwd: request.cwd,
+					onError: request.onError,
+
+					onOutput: (index, stream, text) => request.onOutput?.(index, stream, text),
+				});
 				return {
 					status: value.status,
-					exitCode: value.exitCode,
-					signal: value.signal,
-					stdout: value.stdout,
-					stderr: value.stderr,
-					truncated: value.truncated,
+					commands: value.commands.map((item) =>
+						item.status === 'not_started'
+							? { index: item.index, status: item.status }
+							: {
+									index: item.index,
+									status: item.status,
+									exitCode: item.exitCode,
+									signal: item.signal,
+									stdout: item.stdout,
+									stderr: item.stderr,
+									truncated: item.truncated,
+								},
+					),
 				};
 			}),
+
+		inspectDockers: (input, ids) =>
+			boundary(async () =>
+				(
+					await service.inspectDockers(
+						scope(input),
+						ids.map((id) => id),
+					)
+				).map((value) =>
+					value === null
+						? null
+						: {
+								containerId: value.containerId,
+								state: value.state,
+								image: value.image,
+								fingerprint: value.fingerprint,
+							},
+				),
+			),
 
 		inspectDocker: (input, containerId) =>
 			boundary(async () => {
@@ -154,8 +220,7 @@ export function remoteOperations(service: RemoteMachineOperationService): Remote
 				const value = await service.patchText(scope(input), {
 					path: request.path,
 					expectedSha256: request.expectedSha256,
-					oldText: request.oldText,
-					newText: request.newText,
+					edits: request.edits.map((edit) => ({ oldText: edit.oldText, newText: edit.newText })),
 				});
 				return { path: value.path, status: value.status, bytes: value.bytes, sha256: value.sha256 };
 			}),
@@ -200,6 +265,12 @@ export function remoteOperations(service: RemoteMachineOperationService): Remote
 				return { path: value.path, status: value.status, bytes: value.bytes, sha256: value.sha256 };
 			}),
 
+		fileInfo: (input, path) =>
+			boundary(async () => {
+				const value = await service.fileInfo(scope(input), path);
+				return { path: value.path, name: value.name, sizeBytes: value.sizeBytes };
+			}),
+
 		consumeFile: (input, path, maxBytes, consume) =>
 			boundary(() =>
 				service.consumeFile(scope(input), path, maxBytes, (file, source) =>
@@ -213,6 +284,41 @@ export function remoteOperations(service: RemoteMachineOperationService): Remote
 					),
 				),
 			),
+
+		readTextPage: (input, request) =>
+			boundary(async () => {
+				const value = await service.readTextPage(scope(input), {
+					path: request.path,
+					offset: request.offset,
+					maxBytes: request.maxBytes,
+				});
+				return {
+					path: value.path,
+					text: value.text,
+					bytes: value.bytes,
+					sizeBytes: value.sizeBytes,
+					offset: value.offset,
+					nextOffset: value.nextOffset,
+					sha256: value.sha256,
+					pageSha256: value.pageSha256,
+					fingerprint: value.fingerprint,
+				};
+			}),
+
+		listPage: (input, request) =>
+			boundary(async () => {
+				const value = await service.listPage(scope(input), { path: request.path, after: request.after });
+				return {
+					entries: value.entries.map((entry) => ({
+						name: entry.name,
+						kind: entry.kind,
+						size: entry.size,
+						modifiedAt: entry.modifiedAt,
+					})),
+					nextAfter: value.nextAfter,
+					fingerprint: value.fingerprint,
+				};
+			}),
 
 		readText: (input, path) =>
 			boundary(async () => {
@@ -230,11 +336,17 @@ export function remoteOperations(service: RemoteMachineOperationService): Remote
 				})),
 			),
 
-		search: (input, path, query, maxResults) =>
+		search: (input, path, queries, maxResults) =>
 			boundary(async () => {
-				const value = await service.search(scope(input), path, query, maxResults);
+				const value = await service.search(
+					scope(input),
+					path,
+					queries.map((query) => query),
+					maxResults,
+				);
 				return {
 					matches: value.matches.map((match) => ({
+						queryIndex: match.queryIndex,
 						path: match.path,
 						line: match.line,
 						column: match.column,

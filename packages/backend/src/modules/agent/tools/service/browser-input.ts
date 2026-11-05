@@ -39,7 +39,26 @@ export function browserInput(name: string, value: Record<string, unknown>): Brow
 		return { action: 'close', sessionId };
 	}
 	if (action === 'snapshot') {
-		return { action: 'snapshot', sessionId, maxNodes: integer(value.maxNodes, 256) };
+		const include: ('screenshot' | 'console')[] = [];
+		if (value.include !== undefined) {
+			if (!Array.isArray(value.include)) {
+				throw new AgentFailure('invalid_input');
+			}
+			for (const item of value.include) {
+				if ((item !== 'screenshot' && item !== 'console') || include.includes(item)) {
+					throw new AgentFailure('invalid_input');
+				}
+				include.push(item);
+			}
+		}
+		return {
+			action: 'snapshot',
+			sessionId,
+			maxNodes: integer(value.maxNodes, 256),
+			include,
+			after: integer(value.after, 0),
+			limit: integer(value.limit, 50),
+		};
 	}
 	if (action === 'screenshot') {
 		return { action: 'screenshot', sessionId };

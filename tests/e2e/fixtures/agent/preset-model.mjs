@@ -43,7 +43,7 @@ export function respondPresetModel(messages, userText, response, send) {
 		}
 	};
 
-	const shell = (script) => ({ connectionId, kind: 'shell', script, mode: 'foreground' });
+	const shell = (script) => ({ connectionId, mode: 'foreground', commands: [script] });
 
 	if (userText.includes('E2E_NATIVE_PLUGIN_SKILL')) {
 		const name = userText.includes('operations') ? 'operations' : 'developer';
@@ -77,7 +77,7 @@ export function respondPresetModel(messages, userText, response, send) {
 				userText.includes('read=true')
 					? [
 							call(ids[0], 'machine_connection_list', {}),
-							call(ids[1], 'file_read', { connectionId, path: '/seed.txt' }),
+							call(ids[1], 'file_read', { connectionId, paths: ['/seed.txt'] }),
 						]
 					: ids.map((id, index) =>
 							call(id, 'collaboration_fact_write', { key: id, value: String(index), expectedVersion: 0 }),
@@ -100,7 +100,7 @@ export function respondPresetModel(messages, userText, response, send) {
 					'shell_execute',
 					shell('printf "duplicate-e2e\\n" >> "$NEXUS_E2E_ROOT/duplicate-proof.txt"'),
 				],
-				['duplicate_read', 'file_read', { connectionId, path: '/duplicate-proof.txt' }],
+				['duplicate_read', 'file_read', { connectionId, paths: ['/duplicate-proof.txt'] }],
 			],
 			() => ({
 				marker: 'DUPLICATE_OK',
@@ -110,7 +110,7 @@ export function respondPresetModel(messages, userText, response, send) {
 			}),
 		);
 	} else if (userText.includes('E2E_NATIVE_PLUGIN_READ')) {
-		sequence([['plugin_read', 'file_read', { connectionId, path: '/seed.txt' }]], () => result('plugin_read'));
+		sequence([['plugin_read', 'file_read', { connectionId, paths: ['/seed.txt'] }]], () => result('plugin_read'));
 	} else if (userText.includes('E2E_NATIVE_PLUGIN_NOTICES')) {
 		sequence(
 			[

@@ -78,7 +78,7 @@ ToolCall 账本、审批消费及文件/Shell/Docker工具源码已接线。账�
 2. **子功能与目录**：context/result-rules.ts持有纯投影/hash/编码容量规则；model/context-types.ts持有读取输入/页/结果，service/result-service.ts管理来源准入；无需第二份存储/文件库。
 3. **依赖方向**：ToolService→ResultService→原RunToolModel/GovernanceService；RunStepModel在存储事务回调内转换结果事实并验证相同应用投影，SQLite只读独立storage事实，不引入应用规则。
 4. **类型与转换**：ToolInput引用context应用读取类型；StoredContextToolResult归context/storage，Model逐字段转换。已有Shared治理values新增context.read，完整治理codec/后端是实际消费者；私有工具正文与ResultPage无双端消费者，不放Shared。返回页嵌套投影归ToolService。
-5. **入口与安装**：register将ResultService接原ToolService；tool_result_read v2是模型生产者，Root/Child依原工具名单缩窄。context.read 必须由签名插件显式声明；普通安装 grants 初始为空，推荐新装可按用户确认初始化全部声明授权，升级不自动授予新能力。
+5. **入口与安装**：register将ResultService接原ToolService；tool_result_read 批次接口是模型生产者，Root/Child依原工具名单缩窄。context.read 必须由签名插件显式声明；普通安装 grants 初始为空，推荐新装可按用户确认初始化全部声明授权，升级不自动授予新能力。
 6. **数据、事务与并发**：结果原文仍唯一存agent_run_tools，完成确认后才向模型投影；超过8KiB原文提供4KiB JSON编码预览（原捕获上限256KiB不变）。后续reserve同事务核对原前缀/proposals/完整确定结果，Model回调验证应用投影。续读的源SSH目标id/version进入当前结果确认事务；存储结构与签名同步，运行时不补旧值。
 7. **生命周期与失败**：只能读同user/App/Run较早步骤的completed记录，hash/当前原能力/批准/目标有效性复查；context.read不能代替源操作权限。目录结果在当前选择含denylist项时保守拒绝；不存在/非确定/续读递归拒绝。offset按Unicode码点，maxBytes为JSON编码文本含引号，8–4096/default4096；完整页元数据容纳在8KiB模型结果预算。由原Run/Tool owner结算、取消和关闭，不新增后台工作或重试。
 8. **当前能力与验收**：结果投影和真实工具续读源码接线；跨Run历史仍保留实际捕获正文，不能用同Run续读绕过其容量。语义检查点、Memory/Artifact已接线，正式治理、提示与结果卡片已接线，行为覆盖见 testing。
@@ -382,23 +382,23 @@ tools/model/tool-types持有声明字段、输入联合、目标及读取scope�
 
 ### 3. 依赖方向
 
-Agent ToolService→ToolModel→Targets public/TrustedSshTargetResolver与Remote public RemoteMachineOperations。Remote operation-mapper转换public与内部应用；RemoteMachineOperationService→Files/Monitoring Model→共用Platform。Bootstrap只装配正式register/public，Platform不引业务类型，Agent不深引用Remote私有实现。
+Agent ToolService→ToolModel→Targets public/TrustedSshTargetResolver；Run 的 ToolRemoteModel→Remote public RemoteMachineOperations。Remote operation-mapper转换public与内部应用；RemoteMachineOperationService→Files/Monitoring Model→共用Platform。Bootstrap只装配正式register/public，Platform不引业务类型，Agent不深引用Remote私有实现。
 
 ### 4. 类型与转换
 
-| 边界                  | 类型owner                                                                   | 转换owner                         | 实际消费者                              |
-| --------------------- | --------------------------------------------------------------------------- | --------------------------------- | --------------------------------------- |
-| 模型JSON→用例         | tools Model ToolInput                                                       | tool-input严格字段/整数/UTF-8解码 | ToolService                             |
-| 应用声明→技术schema   | ToolInputField / Platform ModelToolProperty                                 | RunModelStream                    | Chat/Responses Adapter                  |
-| Agent→Remote请求/结果 | ToolOperationScope / RemoteMachineOperations public / MachineOperationScope | ToolModel、operation-mapper逐字段 | RemoteMachineOperationService与Tool反馈 |
-| 技术读取→应用事实     | SSH/SFTP/status技术 / FileInfo/ObservationSample                            | File/Observation Model            | RemoteMachineOperationService           |
-| 工具操作→存储         | runs/governance应用 / storage                                               | 对应Model                         | tool-authority-sql                      |
+| 边界                  | 类型owner                                                                   | 转换owner                               | 实际消费者                              |
+| --------------------- | --------------------------------------------------------------------------- | --------------------------------------- | --------------------------------------- |
+| 模型JSON→用例         | tools Model ToolInput                                                       | tool-input严格字段/整数/UTF-8解码       | ToolService                             |
+| 应用声明→技术schema   | ToolInputField / Platform ModelToolProperty                                 | RunModelStream                          | Chat/Responses Adapter                  |
+| Agent→Remote请求/结果 | ToolOperationScope / RemoteMachineOperations public / MachineOperationScope | ToolRemoteModel、operation-mapper逐字段 | RemoteMachineOperationService与Tool反馈 |
+| 技术读取→应用事实     | SSH/SFTP/status技术 / FileInfo/ObservationSample                            | File/Observation Model                  | RemoteMachineOperationService           |
+| 工具操作→存储         | runs/governance应用 / storage                                               | 对应Model                               | tool-authority-sql                      |
 
 工具输入/输出是模型私有契约，当前没有双端HTTP消费者，不在Shared虚构对象；真实已有安全审计继续消费Shared。基础文件kind和安全错误值引用Shared，但各层对象独立。ToolReadFailure表达预期远端拒绝，存储、未知提交及清理失败保持收口证据。
 
 ### 5. 入口与安装
 
-Remote register暴露operations，不新增HTTP路由；Agent register接入Targets resolver与RemoteMachineOperations，由唯一Root owner消费五个只读工具及受审批file_write。新增v2诊断只需connectionId；文件只需connectionId、绝对path，搜索另需query和可选maxResults。不沿用旧target/id或可空字段；正式工具卡片消费当前安全投影。
+Remote register暴露operations，不新增HTTP路由；Agent register接入Targets resolver与RemoteMachineOperations，由唯一Root owner消费五个只读工具及受审批file_write。新增v2诊断只需connectionId；文件读取/目录/检查使用 connectionId 与 paths[]，搜索使用绝对 path、queries[] 和可选 maxResults；分页与批次结果见 API。不沿用旧target/id或可空字段；正式工具卡片消费当前安全投影。
 
 ### 6. 数据、事务与并发
 
@@ -410,13 +410,13 @@ RemoteMachineOperationService按调用方预算动态追踪活跃任务，不另
 
 ### 8. 当前能力与验收
 
-只读v2源码已接线，执行须当前 governed 准入。文件UTF-8完整读取32KiB，拒绝非文本；目录200条/48KiB metadata，超额拒绝。搜索是区分大小写字面量，每行首匹配、1起算UTF-16列；maxResults默认20/最多100，发现额外匹配才truncated。遍历最多100文件/100目录/8层/2MiB，排队也有界；symlink不跟随，路径规范化/realpath/lstat复查不构成并发原子隔离。同大小/mtime并发变化可能无法检测，SHA-256只说明实际捕获内容。结果整体256KiB，超额拒绝；32KiB单文本留足JSON最坏转义预算，搜索集合另按整体编码复核。所有行为覆盖范围见测试入口及 PLAN，四表及静态证据归实施方案/testing。
+只读工具已接线，执行须当前 governed 准入。文件按 UTF-8 字节分页、单页最多 32 KiB，拒绝非文本；目录按词典序游标每页最多 200 项。搜索是区分大小写字面量，每行首匹配、1起算UTF-16列；maxResults默认20/最多100，发现额外匹配才truncated。遍历最多100文件/100目录/8层/2MiB，排队也有界；symlink不跟随，路径规范化/realpath/lstat复查不构成并发原子隔离。同大小/mtime并发变化可能无法检测，SHA-256只说明实际捕获内容。结果整体256KiB，超额拒绝；32KiB单文本留足JSON最坏转义预算，搜索集合另按整体编码复核。所有行为覆盖范围见测试入口及 PLAN，四表及静态证据归实施方案/testing。
 
 ## 受审批的文件写入
 
 ### 1. 职责与范围
 
-Agent tools 负责首个 file_write v2：明确目标 connectionId、绝对 path、UTF-8 content、expectedSha256（新建为 absent，替换为原内容 SHA-256）。路径最多 256 UTF-8 bytes，内容最多 8 KiB（允许空文本），完整参数仍受 16 KiB 编码预算。所有写入需要当前 file.write grant 与单次人工批准；不自动推导旧内容或继承读取许可。后续文件/Shell/Docker突变已接线，ACP与直接 Child/协作已接线，剩余能力见后续阶段。
+Agent tools 的 file_write v3 使用 connectionId、items[] 和 onError；单项包含绝对 path、UTF-8 content、expectedSha256（新建为 absent，替换为原内容 SHA-256）。整批预检后逐项执行和结算。路径最多 256 UTF-8 bytes，内容最多 8 KiB（允许空文本），完整参数仍受 16 KiB 编码预算。所有写入需要当前 file.write grant 与单次人工批准；不自动推导旧内容或继承读取许可。后续文件/Shell/Docker突变已接线，ACP与直接 Child/协作已接线，剩余能力见后续阶段。
 
 ### 2. 子功能与目录
 
@@ -424,16 +424,16 @@ Agent tools 负责首个 file_write v2：明确目标 connectionId、绝对 path
 
 ### 3. 依赖方向
 
-Agent ToolModel 仅消费 Targets 与 Remote public。Remote Model 仅消费技术能力，Service 不借用户 Workspace/Files 附件。写入不引入 Agent 类型到 Remote/Platform，SQLite Adapter 不引入应用规则。
+Agent ToolModel/ToolRemoteModel 仅消费 Targets 与 Remote public。Remote Model 仅消费技术能力，Service 不借用户 Workspace/Files 附件。写入不引入 Agent 类型到 Remote/Platform，SQLite Adapter 不引入应用规则。
 
 ### 4. 类型与转换
 
-| 边界           | 类型 owner                         | 转换 owner                         | 消费者                   |
-| -------------- | ---------------------------------- | ---------------------------------- | ------------------------ |
-| 模型参数→应用  | tools/model/tool-types             | tools/service/tool-input 严格解码  | ToolService              |
-| 审批/工具→存储 | governance/model、storage 各自定义 | GovernanceModel                    | SQLite 同事务规则回调    |
-| Agent→Remote   | Remote public 独立写命令/结果      | ToolModel、Remote operation mapper | Remote operation Service |
-| 远端资源→应用  | files/model 与 machines/model      | FileModel/FileResource             | 文件写入政策             |
+| 边界           | 类型 owner                         | 转换 owner                               | 消费者                   |
+| -------------- | ---------------------------------- | ---------------------------------------- | ------------------------ |
+| 模型参数→应用  | tools/model/tool-types             | tools/service/tool-input 严格解码        | ToolService              |
+| 审批/工具→存储 | governance/model、storage 各自定义 | GovernanceModel                          | SQLite 同事务规则回调    |
+| Agent→Remote   | Remote public 独立写命令/结果      | ToolRemoteModel、Remote operation mapper | Remote operation Service |
+| 远端资源→应用  | files/model 与 machines/model      | FileModel/FileResource                   | 文件写入政策             |
 
 模型私有内容与 SHA 前提不进入 Shared；真正双端安全审批和审计继续使用已有 Shared。摘要只含动作、路径、字节数和内容哈希，不包含内容正文。
 
@@ -457,30 +457,30 @@ Agent ToolModel 仅消费 Targets 与 Remote public。Remote Model 仅消费技�
 
 ### 1. 职责与范围
 
-N14 按 D15 重设计 file_patch/move/delete，复用已有逐操作人工审批。补丁为单文件、原 SHA-256 绑定的一次唯一字面量替换；不接受旧 unified diff，多个文件由独立工具调用表达，不提供远端事务。移动与删除可处理普通文件和目录，拒绝链接/特殊节点及根目录；必须提供 file_inspect 返回的有界快照 fingerprint。递归删除必须明确 scope:tree，scope:entry 仅文件或空目录。
+N14 按 D15 重设计 file_patch/move/delete，复用已有逐操作人工审批。补丁为单文件、原 SHA-256 绑定的 edits[] 顺序唯一字面量替换；移动和删除使用 items[]，整批预检相互路径影响，逐项结算，不提供远端事务。移动与删除可处理普通文件和目录，拒绝链接/特殊节点及根目录；必须提供 file_inspect 返回的有界快照 fingerprint。递归删除必须明确 scope:tree，scope:entry 仅文件或空目录。
 
 ### 2. 子功能与目录
 
-Agent tools 的声明/严格输入/安全摘要和 ToolModel 扩展现有 owner。Remote files/service/file-snapshot 持有遍历预算与捕获快照；file-mutation 持有补丁/移动/删除的用例政策；file-write 复用暂存/确认机制。files/model 持有快照节点及计划，machines/model 持有独立短任务命令/结果，RemoteMachineOperationService 统一资源/期限/失败准入，不新建协调器。
+Agent tools 的声明/严格输入/安全摘要和 ToolRemoteModel 扩展现有 owner。Remote files/service/file-snapshot 持有遍历预算与捕获快照；file-mutation 持有补丁/移动/删除的用例政策；file-write 复用暂存/确认机制。files/model 持有快照节点及计划，machines/model 持有独立短任务命令/结果，RemoteMachineOperationService 统一资源/期限/失败准入，不新建协调器。
 
 ### 3. 依赖方向
 
-Agent→ToolModel→Remote public；Remote Service→文件应用能力→FileModel/Platform。所有新增命令/结果经过独立 public mapper，Model 不透传；路径/覆盖/递归政策不进入技术 Adapter，Service 不引用 SSH/SFTP 原始句柄。
+Agent→ToolRemoteModel→Remote public；Remote Service→文件应用能力→FileModel/Platform。所有新增命令/结果经过独立 public mapper，Model 不透传；路径/覆盖/递归政策不进入技术 Adapter，Service 不引用 SSH/SFTP 原始句柄。
 
 ### 4. 类型与转换
 
-| 边界          | 唯一 owner                                           | 转换                                 | 消费者                    |
-| ------------- | ---------------------------------------------------- | ------------------------------------ | ------------------------- |
-| 模型参数→应用 | tools/model/tool-types                               | tool-input 从 unknown 严格解码       | ToolService               |
-| Agent→Remote  | Remote public 与 machines/model/operation-types 独立 | ToolModel 与 operation-mapper 白名单 | 独立机器任务 owner        |
-| 文件快照/计划 | files/model/file-types                               | 文件应用能力返回校验事实             | snapshot/mutation Service |
-| 审批/账本     | 既有 governance/runs 应用及 storage                  | 原 Model/事务回调                    | 单次许可/持久反馈         |
+| 边界          | 唯一 owner                                           | 转换                                       | 消费者                    |
+| ------------- | ---------------------------------------------------- | ------------------------------------------ | ------------------------- |
+| 模型参数→应用 | tools/model/tool-types                               | tool-input 从 unknown 严格解码             | ToolService               |
+| Agent→Remote  | Remote public 与 machines/model/operation-types 独立 | ToolRemoteModel 与 operation-mapper 白名单 | 独立机器任务 owner        |
+| 文件快照/计划 | files/model/file-types                               | 文件应用能力返回校验事实                   | snapshot/mutation Service |
+| 审批/账本     | 既有 governance/runs 应用及 storage                  | 原 Model/事务回调                          | 单次许可/持久反馈         |
 
 模型参数、文件内容/计划及指纹无双端消费者，不放 Shared；审批/审计基础值继续引用已有 Shared。
 
 ### 5. 入口与安装
 
-新增 file_inspect 只读能力供模型取得文件/树指纹；新增三个 v2 突变声明，服务端决定风险：patch/move 为 mutate，delete 为 destructive。file_inspect 要当前 file.read，突变分别要 file.write/file.delete；读取快照不授予写入。所有操作仍由真实模型 proposal→原账本→原治理消费者执行；无新 HTTP 或正式页面。
+新增 file_inspect 只读能力供模型取得文件/树指纹；三个 v3 突变声明，服务端决定风险：patch/move 为 mutate，delete 为 destructive。file_inspect 要当前 file.read，突变分别要 file.write/file.delete；读取快照不授予写入。所有操作仍由真实模型 proposal→原账本→原治理消费者执行；无新 HTTP 或正式页面。
 
 ### 6. 数据、事务与并发
 
@@ -488,17 +488,17 @@ Agent→ToolModel→Remote public；Remote Service→文件应用能力→FileMo
 
 ### 7. 生命周期与失败
 
-复用8混合名额与冻结工具完整期限（默认45秒）。快照最多100文件/100目录、深度8、单文件1MiB/累计2MiB、元数据256KiB，队列也计预算；每文件按预检长度读取，目录导航项在技术 Adapter 过滤，重复节点拒绝；不跟随链接，二进制文件可hash，不输出内容。patch 原文件/结果最多32KiB，oldText/newText各4KiB且完整JSON16KiB；唯一非空oldText可替换为空，零次/多次/相同替换拒绝。首次远端变更后任意节点拒绝、权限变化、取消、确认或释放失败不能报完整成功。原owner追踪全部资源/清理，未知无重放。
+按冻结工具预算和真实资源动态接纳，复用冻结工具完整期限（默认45秒）。快照最多100文件/100目录、深度8、单文件1MiB/累计2MiB、元数据256KiB，队列也计预算；每文件按预检长度读取，目录导航项在技术 Adapter 过滤，重复节点拒绝；不跟随链接，二进制文件可hash，不输出内容。patch 原文件/结果最多32KiB，oldText/newText各4KiB且完整JSON16KiB；唯一非空oldText可替换为空，零次/多次/相同替换拒绝。首次远端变更后任意节点拒绝、权限变化、取消、确认或释放失败不能报完整成功。原owner追踪全部资源/清理，未知无重放。
 
 ### 8. 当前能力与验收
 
-file_inspect/patch/move/delete v2 已经沿真实工具提案、账本、审批/单次消费、Remote 独立资源与持久反馈接线；两轮源码复审覆盖预算、重复节点、元数据、部分执行及清理分支，静态证据见 testing。既有专项已核对真实七步文件变更、显式tree删除、哈希过期/重叠上下文/目的存在和链接拒绝；部分执行、竞争和断流仍待验，正式前端按当前安全码反馈，执行须 governed 准入。移除旧多文件diff协议并明确新逐文件操作，目录范围有界而不提供任意无界删除。
+file_inspect/patch/move/delete v3 已经沿真实工具提案、账本、审批/单次消费、Remote 独立资源与持久反馈接线；两轮源码复审覆盖预算、重复节点、元数据、部分执行及清理分支，静态证据见 testing。既有专项已核对真实七步文件变更、显式tree删除、哈希过期/重叠上下文/目的存在和链接拒绝；部分执行、竞争和断流仍待验，正式前端按当前安全码反馈，执行须 governed 准入。移除旧多文件diff协议并明确新逐文件操作，目录范围有界而不提供任意无界删除。
 
 ## Shell、后台 Job 与 Docker 工具
 
 ### 1. 职责与范围
 
-N15 同批实现 Shell 前台/后台、Job list/status/wait/cancel 和 Docker inspect/control。Shell 明确区分 argv 与 executable script，不用命令文本启发式判断安全；执行按 destructive 审批。Job 属于 user/App/Run/目标版本，不借普通 Workspace/sessionId，不跨 Run 接管。后台仅指模型可以继续下一轮，不是脱离 Root 的长期服务。Root 终结前取消并等待全部 Job；取消不证明远端子进程停止。
+N15 同批实现 Shell 前台/后台、Job list/status/wait/cancel/output 和 Docker inspect/control。Shell 对模型统一 commands[] 脚本批次，不用命令文本启发式判断安全；执行按 destructive 审批。Job 属于 user/App/Run/目标版本，不借普通 Workspace/sessionId，不跨 Run 接管。后台仅指模型可以继续下一轮，不是脱离 Root 的长期服务。Root 终结前取消并等待全部 Job；取消不证明远端子进程停止。
 
 ### 2. 子功能与目录
 
@@ -506,41 +506,52 @@ ToolService 持有声明/审批/派发及工具资源排空的失败汇总。全
 
 ### 3. 依赖方向
 
-Agent Service→ToolModel→Remote public→独立 OperationService→Command/Observation Model→Platform Adapter。Job Service→JobModel→Storage→SQLite Adapter；无平台业务类型，无 SQL 越层，无 Workspace 权限继承。
+Agent Service→Run 的 ToolRemoteModel→Remote public 工厂创建的 OperationService→Command/Observation Model→Run 的 MachineScopeModel→Platform Adapter。Job Service→JobModel→Storage→SQLite Adapter；无平台业务类型，无 SQL 越层，无 Workspace 权限继承。
 
 ### 4. 类型与转换
 
-工具参数与 Job 内部类型分别在 tools/model/*-types；Job storage 独立定义命令/记录及具名结果联合；持久JSON和状态/结果关联仅在SQLite Adapter解码，JobModel逐字段转换，前台/后台共用ToolModel.command的应用结果，不通过JSON往返协作。Remote public 命令/结果独立于 machines/model/operation-types，operation-mapper 与 ToolModel 白名单；Shell 技术类型只在 commands Port。新增 argv 数组 schema 经 RunModelStream 转成通用 ModelToolProperty，技术请求再次逐字段投影。只有后端/模型消费，不新增无人消费 Shared Job DTO；Docker action 复用已有 Shared 基础取值。
+工具参数与 Job 内部类型分别在 tools/model/*-types；Job storage 独立定义命令/记录及具名结果联合；持久JSON和状态/结果关联仅在SQLite Adapter解码，JobModel逐字段转换，前台/后台共用ToolRemoteModel.command的应用结果，不通过JSON往返协作。Remote public 命令/结果独立于 machines/model/operation-types，operation-mapper 与 ToolRemoteModel 白名单；Shell 技术类型只在 commands Port。字符串/对象数组 schema 经 RunModelStream 转成通用 ModelToolProperty，技术请求再次逐字段投影。只有后端/模型消费，不新增无人消费 Shared Job DTO；Docker action 复用已有 Shared 基础取值。
 
 ### 5. 入口与安装
 
-新增 shell_execute v2、shell_job_control v2、machine_docker_inspect/control v2。执行与取消分别单次批准；状态/列表/等待只读且需当前 shell.execute；Docker 要 machine.docker.manage，remove 为 destructive。Shell在原工具单次消费后持久queued；foreground可在原工具dispatched期间launch并等待，background在原工具受理回执提交确认后launch。Job dispatched提交确认后才发SSH，两个模式均在当前Run/原工具授权下执行；数据库unknown不派发或自动重试。foreground在yield窗口内完成保持原退出结果，否则把同一个Job交给shell_job_control查询，不再派发命令。Job权限监测允许原工具dispatched→completed且revision恰好加一、operationHash不变的交付竞态：仅重新读取并校验一次当前权威，不放宽目标、政策、审批或真实终态；拒绝和存储失败仍保留原类别。
+shell_execute、shell_job_control、machine_docker_inspect/control 使用 v3 批次契约。执行与取消分别单次批准；状态/列表/等待只读且需当前 shell.execute；Docker 要 machine.docker.manage，remove 为 destructive。Shell在原工具单次消费后持久queued；foreground可在原工具dispatched期间launch并等待，background在原工具受理回执提交确认后launch。Job dispatched提交确认后才发SSH，两个模式均在当前Run/原工具授权下执行；数据库unknown不派发或自动重试。foreground在yield窗口内完成保持原退出结果，否则把同一个Job交给shell_job_control查询，不再派发命令。Job权限监测允许原工具dispatched→completed且revision恰好加一、operationHash不变的交付竞态：仅重新读取并校验一次当前权威，不放宽目标、政策、审批或真实终态；拒绝和存储失败仍保留原类别。
 
 ### 6. 数据、事务与并发
 
-agent_tool_jobs 由所属 Adapter 安装；id 绑定原工具记录，完整 scope/目标版本/命令身份独立持久化。queued/dispatched→completed/failed/unknown 使用 CAS；重启 queued 确认未派发为 failed，dispatched 为 unknown，不恢复技术句柄或自动重放。最多8活跃Shell槽；历史项受原冻结maxToolExecutions约束，不因前台转Job引入64次执行上限；list按64项分页并返回nextOffset；派发前预留终态结算的版本空间，启动恢复的批量递增先完整检查耗尽。Docker 必须传完整64hex ID与 inspect 指纹（id/state/image/created），控制前复核，控制后确认目标状态/不存在；跨调用外部竞争窗口明确保留。
+agent_tool_jobs 由所属 Adapter 安装；id 绑定原工具记录，完整 scope/目标版本/命令身份独立持久化。queued/dispatched→completed/failed/unknown 使用 CAS；重启 queued 确认未派发为 failed，dispatched 为 unknown，不恢复技术句柄或自动重放。活跃 Shell 按原冻结预算和真实资源动态接纳；历史项受原冻结maxToolExecutions约束，不因前台转Job引入64次执行上限；list按64项分页并返回nextOffset；派发前预留终态结算的版本空间，启动恢复的批量递增先完整检查耗尽。Docker 必须传完整64hex ID与 inspect 指纹（id/state/image/created），控制前复核，控制后确认目标状态/不存在；跨调用外部竞争窗口明确保留。
 
 ### 7. 生命周期与失败
 
-Shell argv≤128项、总8KiB，script≤8KiB，cwd≤256bytes，完整参数JSON≤16KiB；stdout/stderr合计32KiB有界捕获，明确truncated，完整结果可容纳最坏JSON转义。Remote按冻结预算和真实资源占用动态接纳，Shell的实际执行截止时间来自原Run的绝对deadlineAt，不随yield/续查重置。foreground的yieldSeconds可为0，默认冻结toolTimeoutSeconds并以其封顶；窗口到期仅返回Job快照，不abort。job wait默认10秒、最多30秒且受冻结工具等待预算约束，到期同样保留执行。不可续查的其它工具仍使用冻结工具执行期限（默认45秒），Remote不再额外把合法配置硬截为45秒。连接握手单独遵守Platform既有300秒技术上限，命令消耗Run剩余期限。每个任务、权限监测、timer/listener/Promise均有原owner；派发前再次核对剩余时间；每秒复查原批准/目标/当前权威，终态结算前先停止并等待权限监控收敛，失效取消后等真实收尾。根取消/结束/停机统一drain；清理失败保留配额和原因。Shell非零退出是已确认命令失败，SSH派发未知、取消、后验失败和清理失败不得报远端回滚。工具说明要求模型在需要结果时继续等待原Job，不能因yield重跑或提前结束Run。模型主动结束Run仍沿原收尾政策取消剩余Job。已有held/blocked由Mutation SQLite在获取全部资源的同一事务分类，具名准入拒绝经Remote public/ToolModel映射为tool_machine_busy/tool_machine_blocked，新操作failed且没有新副作用；原blocked证据保留，只能沿现有恢复流程核对。
+Shell commands[] 原始 UTF-8 合计≤8KiB，cwd≤256bytes，完整参数JSON≤16KiB；stdout/stderr合计32KiB有界捕获，明确truncated，完整结果可容纳最坏JSON转义。Remote按冻结预算和真实资源占用动态接纳，Shell的实际执行截止时间来自原Run的绝对deadlineAt，不随yield/续查重置。foreground的yieldSeconds可为0，默认冻结toolTimeoutSeconds并以其封顶；窗口到期仅返回Job快照，不abort。job wait默认10秒、最多30秒且受冻结工具等待预算约束，到期同样保留执行。不可续查的其它工具仍使用冻结工具执行期限（默认45秒），Remote不再额外把合法配置硬截为45秒。连接握手单独遵守Platform既有300秒技术上限，命令消耗Run剩余期限。每个任务、权限监测、timer/listener/Promise均有原owner；派发前再次核对剩余时间；每秒复查原批准/目标/当前权威，终态结算前先停止并等待权限监控收敛，失效取消后等真实收尾。根取消/结束/停机统一drain；清理失败保留配额和原因。Shell非零退出是已确认命令失败，SSH派发未知、取消、后验失败和清理失败不得报远端回滚。工具说明要求模型在需要结果时继续等待原Job，不能因yield重跑或提前结束Run。模型主动结束Run仍沿原收尾政策取消剩余Job。已有held/blocked由Mutation SQLite在获取全部资源的同一事务分类，具名准入拒绝经Remote public/ToolModel映射为tool_machine_busy/tool_machine_blocked，新操作failed且没有新副作用；原blocked证据保留，只能沿现有恢复流程核对。
 
 ### 8. 当前能力与验收
 
-Shell 前台/后台、Job 四动作及 Docker inspect/control 源码同批接线，两轮源码复审完成。既有专项使用真实OpenSSH核对Shell转义/退出/截断、Job查询/等待/取消、撤权、目标版本及重启围栏/证据释放；Docker及其他故障专项仍待验，精确证据归testing，前端消费当前安全码。执行须 governed 准入，不建立旧Thread/sessionId桥；ACP与直接 Root/Child/协作已有实际消费者，资源与授权分别归所属 owner。
+Shell 前台/后台、Job 五动作及 Docker inspect/control 源码同批接线，两轮源码复审完成。既有专项使用真实OpenSSH核对Shell转义/退出/截断、Job查询/等待/取消、撤权、目标版本及重启围栏/证据释放；Docker及其他故障专项仍待验，精确证据归testing，前端消费当前安全码。执行须 governed 准入，不建立旧Thread/sessionId桥；ACP与直接 Root/Child/协作已有实际消费者，资源与授权分别归所属 owner。
+
+## Run 工具资源复用
+
+1. **职责与范围**：同一 Run 的文件、项目指引、文件交付、Shell/Job、Docker、诊断与 ACP 复用空闲 SSH；Root、Child、普通 Workspace/Files 互不共享活跃资源。传输复用不继承 shell 的 cwd/env；ACP 程序与协议会话按调用独立。MCP SDK 客户端、Browser 的 Run 会话和插件实例沿原 owner 复用，不复制缓存。
+2. **子功能与目录**：Agent tools/model/tool-model 管理 Run→ToolRemoteModel 及目标解析；tool-remote-model 唯一转换 Remote 请求/结果/失败。Remote machines/model/machine-scope-model 管理独占借用池；machines/service/operation-service 管独占文件资源池、准入及任务排空；operation-factory-service 保留全部作用域供停机兜底。
+3. **依赖方向**：ToolService/ToolProjectService→ToolModel 的 Run 能力→ToolRemoteModel→Remote public 工厂→OperationService→File/Command/Acp/Observation Model→RemoteMachineProvider→Platform SSH；Agent 不深层导入 Remote，Service 不持技术句柄。
+4. **类型与转换**：RemoteMachineOperationFactory/Operations 为后端安全 public 契约，operation-mapper 白名单转换并封装关闭错误。内部 Provider/OpenRequest/OpenedMachine 唯一归 machines/model/machine-types；Platform MachineConnection 不进入 public/Shared。Provider.release 明确区分可复用与退休，原始 provider 始终真实关闭；FileResource 的技术释放回调仅在 Model 间传递。
+5. **入口与安装**：Remote register 为工厂创建独立 MachineScopeModel 与消费它的 File/Command/Acp/Observation Model。ToolModel 按需创建一次 Run 作用域；Shell Job、ACP 和项目读取在等待前捕获该能力，晚回调只能调用原已关闭实例。RunResourceService 安装资源读取投影、10 分钟空闲回收和显式关闭；Run HTTP 与 WS 向任务侧栏投影 Shared 安全资源状态。
+6. **数据、事务与并发**：仅进程内资源，不持久化或新增迁移。空闲连接按目标有效指纹及当前主机信任摘要分组；每次借用复验授权、目标与信任，握手后再复查。并发操作先预留独占连接，再等待握手，忙时按需创建；成功文件资源保留自己的 SFTP 与连接供后续文件操作使用。资源活动续期 10 分钟；活动工具、审批及后台 Job 阻止空闲回收，不增加连接数量或并发限制。
+7. **生命周期与失败**：作用域跟随 Run；原 Job/Browser/MCP owner 先 drain，随后文件通道关闭并归还连接，最后关闭所有 SSH。配置/信任变化退休旧连接，断开的空闲文件资源在业务派发前更换；失败、取消或未确认命令不回池、不重放。等待取消可先返回，实际握手仍归原作用域追踪，晚到资源必须关闭。单项清理失败不跳过其余资源，关闭 Promise 幂等，未确认清理的 owner 与全部因果保留到全局 Remote 停机汇总。
+8. **当前能力与验收**：资源复用及 Run/全局关闭已接入现有真实消费者，产品说明见 USAGE 的 Agent SSH 章节。正式回归沿 Agent execution-flow 覆盖真实 SSH/SFTP 的握手/通道计数、独立 cwd/env、并发取消、撤权/主机信任、断线派发前替换、晚握手及清理失败；本轮执行状态与尚未验证的实机边界见 PLAN/testing，不以结构计数宣称具体延迟或吞吐改善。
 
 ## ACP Runtime 与独立权限
 
 ### 1. 职责与范围
 
-ACP通过独立SSH短任务执行远端程序，支持v1初始化、创建会话、prompt、文本更新、权限请求及取消/关闭。不借普通Workspace资源。当前调用按明确argv/cwd/prompt设计，不保留integrationId/Workspace/profile兼容参数；集成配置管理归 integrations，当前调用配置完整绑定本次批准。禁止远端ACP直接调用Nexus文件/terminal能力。
+ACP 通过当前 Run 独占借用的 SSH 连接执行独立远端程序，支持v1初始化、创建会话、prompt、文本更新、权限请求及取消/关闭。不借普通Workspace资源。当前调用按明确argv/cwd/prompt设计，不保留integrationId/Workspace/profile兼容参数；集成配置管理归 integrations，当前调用配置完整绑定本次批准。禁止远端ACP直接调用Nexus文件/terminal能力。
 
 ### 2. 子功能与目录
 
-platform/acp持有通用协议、消息关联与有限流；commands Adapter持有argv命令构造；Remote machines/model/acp-model持有SSH生命周期及技术转换，OperationService持有准入。Agent tools/service/acp-permission-service持有独立权限等待/批准/消费/监测，runs journal持有子操作及父关系，真实SQL只在runs/governance Adapter。
+platform/acp持有通用协议、消息关联与有限流；commands Adapter持有argv命令构造；Remote machines/model/acp-model持有命令生命周期及技术转换，machines/model/machine-scope-model 持有 Run 的 SSH 复用及关闭，OperationService持有准入。Agent tools/service/acp-permission-service持有独立权限等待/批准/消费/监测，runs journal持有子操作及父关系，真实SQL只在runs/governance Adapter。
 
 ### 3. 依赖方向
 
-Agent ToolService→ToolModel→Remote public→OperationService→MachineAcpModel→Platform ACP/SSH。权限回调经上述边界白名单回到Agent Service→Governance/RunToolModel→Storage→SQLite；Platform不引入Agent业务类型。父批准只授权启动远端程序，子批准只授权其绑定的单次ACP请求。
+Agent ToolService→ToolRemoteModel→Remote public→OperationService→MachineAcpModel→Platform ACP/SSH。权限回调经上述边界白名单回到Agent Service→Governance/RunToolModel→Storage→SQLite；Platform不引入Agent业务类型。父批准只授权启动远端程序，子批准只授权其绑定的单次ACP请求。
 
 ### 4. 类型与转换
 
@@ -611,25 +622,25 @@ Root/Child 共用冻结执行名额，排队依赖也占名额；执行准入满
 
 ### 1. 职责与范围
 
-Agent tools 持有 Run-local 项目目录；Remote machines 持有受管远端突变的唯一准入权威。普通 SSH Files/传输、Workspace Docker 与 Agent 文件/Shell/Job/ACP/Docker 共用占用，但不共享登录身份、批准或活跃连接。旧 ssh_session_open/list/close 仅复用 transport、没有持久 shell 状态；新设计由独立 Remote operation、Run/Job 查询取消及父生命周期替代，不保留第二连接池或 sessionId 桥接。旧 Thread 项目共享改为 Root/Child 各自绑定，当前不自动向子 Run 或系统提示注入指导。
+Agent tools 持有 Run-local 项目目录；Remote machines 持有受管远端突变的唯一准入权威。普通 SSH Files/传输、Workspace Docker 与 Agent 文件/Shell/Job/ACP/Docker 共用占用，但不共享登录身份、批准或活跃连接。Agent 通过 Run 级 Remote operation 作用域复用空闲传输，不提供 sessionId 桥接或持久 shell 状态；Run/Job 查询取消及父生命周期负责收口。旧 Thread 项目共享改为 Root/Child 各自绑定，当前不自动向子 Run 或系统提示注入指导。
 
 ### 2. 子功能与目录
 
-Agent tools/{model,service,storage,adapters/sqlite}/tool-project-* 分别持有应用类型/转换、目录用例、存储契约与真实 SQL；tools/service/tool-definitions 和 tool-input 持有受信声明/严格参数，ToolModel 持有 Remote 请求/结果/失败转换。Remote machines 对应层的 mutation-* 持有应用身份/转换、准入政策、存储接口和 SQLite 事务，migrations 仅安装 Adapter。endpoint占用不设全局数量门槛，单次最多两个endpoint对应源/目标是Remote Service政策；目录256 UTF-8 bytes、子目录深度8、四份文件/每份8 KiB 是 Agent 项目用例限制，不是新增 HTTP 容量。
+Agent tools/{model,service,storage,adapters/sqlite}/tool-project-* 分别持有应用类型/转换、目录用例、存储契约与真实 SQL；tools/service/tool-definitions 和 tool-input 持有受信声明/严格参数，ToolModel 持有 Run 作用域及目标解析，ToolRemoteModel 持有 Remote 请求/结果/失败转换。Remote machines 对应层的 mutation-* 持有应用身份/转换、准入政策、存储接口和 SQLite 事务，migrations 仅安装 Adapter。endpoint占用不设全局数量门槛，单次最多两个endpoint对应源/目标是Remote Service政策；目录256 UTF-8 bytes、子目录深度8、四份文件/每份8 KiB 是 Agent 项目用例限制，不是新增 HTTP 容量。
 
 ### 3. 依赖方向
 
-Agent ToolService → ToolProjectService → ToolProjectModel → ProjectStorage → SQLite Adapter；指导读取走 ToolModel → Remote public.operations → RemoteMachineOperationService → File/Command/Acp Model → Platform。Remote Files/Observation/Operations Service 直接复用同一 MachineMutationService → Model → Storage → SQLite Adapter。Adapter 不引用应用类型或规则实现，Platform 不定义 Agent/目标业务对象；Bootstrap 只安装 register/migrations。
+Agent ToolService → ToolProjectService → ToolProjectModel → ProjectStorage → SQLite Adapter；指导读取走 Run 的 ToolRemoteModel → Remote public.operations → RemoteMachineOperationService → File/Command/Acp Model → Platform。Remote Files/Observation/Operations Service 直接复用同一 MachineMutationService → Model → Storage → SQLite Adapter。Adapter 不引用应用类型或规则实现，Platform 不定义 Agent/目标业务对象；Bootstrap 只安装 register/migrations。
 
 ### 4. 类型与转换
 
-| 边界                       | 类型 owner                                                              | 转换 owner / 消费者                                                      |
-| -------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| 模型工具 JSON → 应用       | tools/model/tool-project-types、tool-types                              | tool-input 严格校验，ToolService 生成安全审批摘要                        |
-| 项目应用 ↔ 存储            | ProjectScope/Binding/Mutation；storage StoredProject*                   | ToolProjectModel 逐字段转换，Adapter 仅解码 row                          |
-| 指导应用 ↔ Remote 后端契约 | ProjectGuidance；remote/public.operations                               | ToolModel 构造请求并逐字段生成指导结果，ToolProjectService 生成工具 JSON |
-| 突变应用 ↔ 存储/Targets    | machines/model/mutation-types；storage mutation-storage；Targets public | MachineMutationModel 解析受信 endpoint、投影命令并映射安全失败           |
-| 应用 → 双端安全观察        | 既有 Shared agent/tools 与 remote 安全错误                              | 既有 HTTP/WS mapper；目录正文、claim keys、row 不进入 Shared             |
+| 边界                       | 类型 owner                                                              | 转换 owner / 消费者                                                            |
+| -------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| 模型工具 JSON → 应用       | tools/model/tool-project-types、tool-types                              | tool-input 严格校验，ToolService 生成安全审批摘要                              |
+| 项目应用 ↔ 存储            | ProjectScope/Binding/Mutation；storage StoredProject*                   | ToolProjectModel 逐字段转换，Adapter 仅解码 row                                |
+| 指导应用 ↔ Remote 后端契约 | ProjectGuidance；remote/public.operations                               | ToolRemoteModel 构造请求并逐字段生成指导结果，ToolProjectService 生成工具 JSON |
+| 突变应用 ↔ 存储/Targets    | machines/model/mutation-types；storage mutation-storage；Targets public | MachineMutationModel 解析受信 endpoint、投影命令并映射安全失败                 |
+| 应用 → 双端安全观察        | 既有 Shared agent/tools 与 remote 安全错误                              | 既有 HTTP/WS mapper；目录正文、claim keys、row 不进入 Shared                   |
 
 本版无新增目录/占用 HTTP 或 WS DTO。指导不可信，不等于授权、证据、Shell cwd 或系统指令；普通协议安全码继续使用 conflict/operation_unknown/limit_exceeded 等现有契约。
 
@@ -656,7 +667,7 @@ remote_machine_mutations 按 SHA-256([lowercase host,port]) 唯一。ID/user/凭
 ## Agent 安全失败诊断与 SSH 发现授权
 
 1. **职责与范围**：Run/Tool owner 记录有限故障类别；Governance 唯一决定授权，诊断不授予权限、不重派任务。
-2. **子功能与目录**：runs/run-failure-rules 分类具名应用异常；ToolModel 将 Remote 的资源 not_found/forbidden 显式转换为 ToolOperationRefusal，与目标解析不存在和 Agent 授权失败分开；Run 分别投影 tool_resource_not_found/tool_remote_permission_denied，原只读确定拒绝可交回模型继续，变更派发后的未知及清理失败围栏不变；RunModel 组合原工具日志与当前进程诊断；tool-service 在既有失败 CAS 写入安全错误结果。
+2. **子功能与目录**：runs/run-failure-rules 分类具名应用异常；ToolRemoteModel 将 Remote 的资源 not_found/forbidden 显式转换为 ToolOperationRefusal，与目标解析不存在和 Agent 授权失败分开；Run 分别投影 tool_resource_not_found/tool_remote_permission_denied，原只读确定拒绝可交回模型继续，变更派发后的未知及清理失败围栏不变；RunModel 组合原工具日志与当前进程诊断；tool-service 在既有失败 CAS 写入安全错误结果。
 3. **依赖方向**：Tool/Run Service → Run Model/Storage；Governance Model 在原事务决策回调内记录政策拒绝原因，收敛后抛具名 AgentFailure；SQLite 不引用应用错误类。
 4. **类型与转换**：Shared runs/values 持有限错误码，runs/model 持公开只读 failure；内部 RunFailure、StoredRunFailure 各归本层 owner，HTTP/WS/前端保持显式白名单转换。
 5. **入口与安装**：原 Run get 和 WS 状态投影附带 failure；列表/创建/取消快照不虚构诊断。无新接口、依赖、数据库结构或初始化签名变化。
@@ -788,7 +799,7 @@ Context预压缩现状：checkpoint工具需要实际context.compact授权，摘
 
 ### 自动图片预览
 
-image_generate、artifact_create、artifact_present、file_deliver 的可信成功结果派生 outputArtifactId，工具说明与 Host 指引明确自动展示，无需模型拼接 Markdown 地址。前端 NativeToolArtifact 以认证 API 按需读取文件元数据，使用现有图片外观或文件卡、FilePreview 和下载入口；失败与过期不伪造成功。Base64 只经生成服务落盘，不写入聊天或工具列表。待批准、失败或 unknown 不产生成功预览；刷新后仍可从工具记录恢复，文件读取继续执行原会话与 App 授权。直接 Images 对话仍由程序生成展示内容，不依赖文字模型。
+image_generate、artifact_create、artifact_present、file_deliver 的可信成功结果派生 outputArtifactIds，工具说明与 Host 指引明确自动展示，无需模型拼接 Markdown 地址。前端 NativeToolArtifact 以认证 API 按需读取文件元数据，使用现有图片外观或文件卡、FilePreview 和下载入口；失败与过期不伪造成功。Base64 只经生成服务落盘，不写入聊天或工具列表。待批准及失败不产生成功预览；unknown 批次只展示其中已确认完成的文件；刷新后仍可从工具记录恢复，文件读取继续执行原会话与 App 授权。直接 Images 对话仍由程序生成展示内容，不依赖文字模型。
 
 ### 跨Workspace服务器点对点复制
 
@@ -942,9 +953,9 @@ WorkspaceService使用原RunService与ContextHistoryService：Root列表按threa
 
 1. **职责与范围**：Tools 将模型产物交付给用户，Artifact 持内容/配额/期限，Remote 仅读取已选 SSH 文件。image_generate 接受真实 PNG/JPEG/WebP/GIF，动画能力取决于上游；file_deliver 可交付已有二进制，artifact_present 展示当前 App 的 ready 文件。
 2. **子功能与目录**：tools 持声明/解码/用例；Remote files 持受检流、machines 持独立资源；Platform blobs 的 ContentInspector 复用 file-type 检测；ArtifactModel 隔离技术识别。Frontend runtime 文件卡复用原 FilePreview/Artifact 下载。
-3. **依赖方向**：ToolService → ToolModel → Remote public，ToolService → ArtifactService → ArtifactModel → Platform；HTTP/Native 消费 Shared；无新文件服务器或预览引擎。
-4. **类型与转换**：Remote public 和 machines/model 各自持文件元数据/字节消费契约，边界逐字段转换；技术 MIME 检测归 Platform，应用内容归 artifacts/model。outputArtifactId 为统一文件引用，由有限可信成功工具结果派生，经 storage/Model/register/HTTP/Native 白名单转换，不公开原始工具结果或任意 URL。
-5. **入口与安装**：file_deliver(connectionId,path) 同时要求目标 file.read 与全局 artifacts.write 并按突变审批；artifact_present(artifactId) 要求 artifacts.read，不复制文件。目录与运行时同时校验，Host 指引告诉模型工具会自动展示，不拼 Markdown 地址或 Base64。
-6. **数据、事务与并发**：复用 agent_run_tools.result_text 与 Artifact begin/upload，无数据库结构或持久数据格式变化，不需要迁移。现有总空间预留、hash、版本、期限与授权事务保持；文件引用不自动 retain/share/attach。
-7. **生命周期与失败**：Remote 持读取资源直至消费者完成，逐块复查权限/取消和长度，EOF 前复查类型、大小、修改时间，再允许 Artifact 发布；拒绝目录/链接。检测仅缓冲库要求的前缀，后续流式复制；Remote 公开流在读取与 iterator 清理时同样转换安全错误，ToolModel 转为 Agent 失败；ArtifactModel 保留源读取拒绝与消费者的持久化失败，取消不冒充内部故障，真正的关闭失败仍保留并阻止虚报释放。任何失败/取消/unknown 不显示成功交付。前端按需读取元数据，元数据/预览支持取消与卸载清理，原生下载由浏览器及原认证 HTTP 流拥有，刷新从工具账本恢复。
+3. **依赖方向**：ToolService → ToolRemoteModel → Remote public，ToolService → ArtifactService → ArtifactModel → Platform；HTTP/Native 消费 Shared；无新文件服务器或预览引擎。
+4. **类型与转换**：Remote public 和 machines/model 各自持文件元数据/字节消费契约，边界逐字段转换；技术 MIME 检测归 Platform，应用内容归 artifacts/model。outputArtifactIds 为统一文件引用，由有限可信成功工具结果派生，经 storage/Model/register/HTTP/Native 白名单转换，不公开原始工具结果或任意 URL。
+5. **入口与安装**：file_deliver({connectionId,paths}) 同时要求目标 file.read 与全局 artifacts.write 并按突变审批；artifact_present({artifactIds}) 要求 artifacts.read，不复制文件。目录与运行时同时校验，Host 指引告诉模型工具会自动展示，不拼 Markdown 地址或 Base64。
+6. **数据、事务与并发**：复用 agent_run_tools.result_text 与 Artifact begin/upload，v3 独立迁移将历史 file_deliver/artifact_present 结果转换为批次数组。现有总空间预留、hash、版本、期限与授权事务保持；文件引用不自动 retain/share/attach。
+7. **生命周期与失败**：Remote 持读取资源直至消费者完成，逐块复查权限/取消和长度，EOF 前复查类型、大小、修改时间，再允许 Artifact 发布；拒绝目录/链接。检测仅缓冲库要求的前缀，后续流式复制；Remote 公开流在读取与 iterator 清理时同样转换安全错误，ToolRemoteModel 转为 Agent 失败；ArtifactModel 保留源读取拒绝与消费者的持久化失败，取消不冒充内部故障，真正的关闭失败仍保留并阻止虚报释放。任何失败/取消/unknown 不显示成功交付。前端按需读取元数据，元数据/预览支持取消与卸载清理，原生下载由浏览器及原认证 HTTP 流拥有，刷新从工具账本恢复。
 8. **当前能力与验收**：参考 [LibreChat](https://github.com/LibreChat-AI/LibreChat/blob/f4154b649efa37e1345ccc517a4d8d1ed2178c82/api/app/clients/tools/structured/OpenAIImageTools.js) 的工具文件引用和 [Open WebUI](https://github.com/open-webui/open-webui/blob/c38885a1a737da4968f157092f304f3b5481d0bf/src/lib/components/chat/Messages/ToolOutputFile.svelte) 的工具输出文件展示；依赖复用本项目现有 file-type、Artifact 和 FilePreview。实现与验证状态见 PLAN/testing，静态不代表真实模型和远程故障验收。

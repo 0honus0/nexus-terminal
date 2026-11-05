@@ -101,7 +101,9 @@ async function fixture(t) {
 			},
 		};
 		const value = {
-			resource: new SftpFileResource(targetId, fingerprint, machine, lease, 'server-' + targetId),
+			resource: new SftpFileResource(targetId, fingerprint, machine, lease, 'server-' + targetId, () =>
+				machine.close(),
+			),
 			dispatched,
 			applied,
 			firstEntered,

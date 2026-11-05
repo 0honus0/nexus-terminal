@@ -39,6 +39,7 @@ export interface ReadEntry {
 }
 
 export interface ReadSearchMatch {
+	queryIndex: number;
 	path: string;
 	line: number;
 	column: number;
@@ -85,8 +86,7 @@ export interface InspectPathResult {
 export interface PatchTextRequest {
 	path: string;
 	expectedSha256: string;
-	oldText: string;
-	newText: string;
+	edits: Array<{ oldText: string; newText: string }>;
 }
 
 export interface MovePathRequest {
@@ -118,17 +118,26 @@ export interface DeletePathResult {
 export type ExecutionCommand = { kind: 'argv'; argv: string[] } | { kind: 'shell'; script: string };
 
 export interface ExecuteCommandRequest {
-	command: ExecutionCommand;
+	commands: ExecutionCommand[];
 	cwd: string | null;
+	onError: 'stop' | 'continue';
+	onOutput?(index: number, stream: 'stdout' | 'stderr', text: string): void;
 }
 
 export interface ExecuteCommandResult {
 	status: 'completed' | 'nonzero';
-	exitCode: number;
-	signal: string | null;
-	stdout: string;
-	stderr: string;
-	truncated: boolean;
+	commands: Array<
+		| { index: number; status: 'not_started' }
+		| {
+				index: number;
+				status: 'completed' | 'nonzero';
+				exitCode: number;
+				signal: string | null;
+				stdout: string;
+				stderr: string;
+				truncated: boolean;
+		  }
+	>;
 }
 
 export interface DockerInspection {
@@ -179,4 +188,42 @@ export interface ExecuteAcpResult {
 export interface MachineClientIdentity {
 	name: string;
 	version: string;
+}
+
+export interface MachineResourceSnapshot {
+	connections: number;
+	files: number;
+	active: number;
+	targetIds: number[];
+	closing: boolean;
+	cleanupFailed: boolean;
+}
+
+export interface ReadTextPageRequest {
+	path: string;
+	offset: number;
+	maxBytes: number;
+}
+
+export interface ReadTextPageResult {
+	path: string;
+	text: string;
+	bytes: number;
+	sizeBytes: number;
+	offset: number;
+	nextOffset: number | null;
+	sha256: string | null;
+	pageSha256: string;
+	fingerprint: string;
+}
+
+export interface ReadDirectoryPageRequest {
+	path: string;
+	after: string;
+}
+
+export interface ReadDirectoryPageResult {
+	entries: ReadEntry[];
+	nextAfter: string | null;
+	fingerprint: string;
 }

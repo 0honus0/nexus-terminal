@@ -176,7 +176,7 @@ export interface NativeTool {
 	revision: number;
 	state: AgentToolState;
 	/** App-owned file delivered by a completed, server-owned output tool. */
-	outputArtifactId: string | null;
+	outputArtifactIds: string[];
 	createdAt: number;
 	updatedAt: number;
 }
@@ -223,6 +223,7 @@ export interface NativeRunUpdate {
 		events: NativePage<NativeEvent, number>;
 		approvals: NativeApproval[];
 		children: NativeChild[];
+		resources: import('./native-resource-types').NativeResourceSession[];
 	} | null;
 	more: boolean;
 }

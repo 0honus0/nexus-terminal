@@ -1652,7 +1652,15 @@
 		});
 
 		fitAndResize();
-		typeAhead = new TerminalTypeAhead(terminal);
+		typeAhead = new TerminalTypeAhead(terminal, (cause) => {
+			logger.error(
+				{
+					failureKind: 'terminal_prediction_failed',
+					errorType: cause instanceof Error ? cause.name : typeof cause,
+				},
+				'Terminal prediction disabled; remote input/output remains active',
+			);
+		});
 		cleanup.push(
 			props.channel.onInputSent?.((data) => {
 				if (

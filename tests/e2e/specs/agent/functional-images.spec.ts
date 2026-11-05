@@ -94,7 +94,7 @@ for (const { format, nested } of [
 		);
 		const imageTool = tools.items.find((tool) => tool.toolName === 'image_generate');
 		expect(imageTool?.state).toBe('completed');
-		expect(imageTool?.outputArtifactId).toMatch(/^[a-f0-9-]{36}$/);
+		expect(imageTool?.outputArtifactIds[0]).toMatch(/^[a-f0-9-]{36}$/);
 		if (!imageTool) throw new Error('Expected persisted image tool');
 		const toolPath = { appId: task.app.id, runId: run.id, toolId: imageTool.id };
 		const details = await requestAgentJson(
@@ -117,7 +117,7 @@ for (const { format, nested } of [
 		);
 		await hub.locator('details.group\\/tools > summary').click();
 
-		const root = `/api/v1/agent/apps/${task.app.id}/artifacts/${imageTool?.outputArtifactId}`;
+		const root = `/api/v1/agent/apps/${task.app.id}/artifacts/${imageTool?.outputArtifactIds[0]}`;
 		const preview = hub.locator('[data-tool-artifact] .agent-generated-image img');
 		await expect(preview).toHaveAttribute('src', root + '/preview');
 		await expect
@@ -204,7 +204,7 @@ for (const scenario of [
 		);
 		expect(tools.items.find((tool) => tool.toolName === 'image_generate')).toMatchObject({
 			state: 'unknown',
-			outputArtifactId: null,
+			outputArtifactIds: [],
 		});
 		const rejectedTool = tools.items.find((tool) => tool.toolName === 'image_generate');
 		if (!rejectedTool) throw new Error('Expected persisted rejected image tool');

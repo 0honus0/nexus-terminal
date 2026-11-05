@@ -1,3 +1,4 @@
+import type { RunResourceService } from './run-resource-service.js';
 import { AGENT_RUN_EVENT_MAX_LIMIT } from '@nexus-terminal/shared/agent/runs/values';
 import { AGENT_THREAD_ENTRY_MAX_PAGE } from '@nexus-terminal/shared/agent/scope/values';
 import { AgentFailure } from '../../agent-failure.js';
@@ -16,6 +17,7 @@ export class RunStreamService {
 		private readonly governance: GovernanceService,
 		private readonly collaboration: RunCollaborationService,
 		private readonly threads: ThreadModel,
+		private readonly resources: RunResourceService,
 	) {}
 
 	async read(
@@ -68,7 +70,18 @@ export class RunStreamService {
 		}
 		return {
 			body,
-			state: { thread, run, usage, events: page, approvals, children },
+			state: {
+				thread,
+				run,
+				usage,
+				events: page,
+				approvals,
+				children,
+				resources: this.resources.read(
+					{ userId, appId, runId },
+					children.map((child) => child.id),
+				),
+			},
 			more: body.items.length > 0 || page.items.length > 0 || approvals.hasMore,
 		};
 	}

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import type { NativeResourceSession } from '../model/native-resource-types';
 	import { useI18n } from 'vue-i18n';
 	import { UiBadge, UiButton } from '@/foundation/ui';
 	import type {
@@ -14,12 +15,16 @@
 		run: NativeRun;
 		events: NativeEvent[];
 		children: NativeChild[];
+		resources: NativeResourceSession[];
+		connections: Array<{ id: number; name: string }>;
+		resourcesBusy: boolean;
 		child: NativeChild | null;
 		messages: NativeMessage[];
 		disabled: boolean;
 	}>();
 	const emit = defineEmits<{
 		mutate: [action: NativeRunAction];
+		closeResource: [resource: NativeResourceSession];
 		messages: [child: NativeChild, more: boolean];
 	}>();
 	const { t, locale } = useI18n();
@@ -76,6 +81,49 @@
 					<div class="mt-0.5 font-mono text-[10px] text-foreground">{{ formatTime(run.updatedAt) }}</div>
 				</div>
 			</div>
+		</section>
+
+		<section v-if="resources.length" class="space-y-2" data-agent-resources>
+			<h4 class="px-1 text-xs font-semibold text-foreground">{{ t('agent.resources.title') }}</h4>
+			<article
+				v-for="resource in resources"
+				:key="resource.id"
+				class="rounded-xl border border-border/55 bg-card/80 p-3 shadow-xs"
+				:data-resource-state="resource.state"
+				:data-resource-id="resource.id"
+			>
+				<div class="flex items-center justify-between gap-2">
+					<UiBadge appearance="soft" density="compact">{{
+						t('agent.resources.states.' + resource.state)
+					}}</UiBadge>
+					<UiButton
+						appearance="soft"
+						density="compact"
+						tone="danger"
+						:disabled="disabled || resourcesBusy || resource.state === 'closing'"
+						@click="emit('closeResource', resource)"
+						>{{ t('agent.resources.close') }}</UiButton
+					>
+				</div>
+				<p class="mt-2 break-words text-[11px] text-foreground">
+					{{
+						resource.targetIds
+							.map((id) => connections.find((connection) => connection.id === id)?.name ?? String(id))
+							.join(' · ') || t('agent.resources.connecting')
+					}}
+				</p>
+				<div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-text-secondary">
+					<span>SSH {{ resource.sshConnections }}</span
+					><span>SFTP {{ resource.sftpChannels }}</span
+					><span>MCP {{ resource.mcpSessions }}</span
+					><span>Browser {{ resource.browserSessions }}</span>
+					<span>{{ t('agent.resources.operations', { count: resource.activeOperations }) }}</span>
+					<span>{{ t('agent.resources.backgroundJobs', { count: resource.backgroundJobs }) }}</span>
+				</div>
+				<p v-if="resource.expiresAt !== null" class="mt-2 text-[10px] text-text-secondary">
+					{{ t('agent.resources.expires', { time: formatTime(resource.expiresAt) }) }}
+				</p>
+			</article>
 		</section>
 
 		<section v-if="children.length" class="space-y-2">

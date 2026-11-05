@@ -35,7 +35,20 @@ function parameters(input: ModelToolDefinition['parameters']): ModelToolDefiniti
 				!Number.isSafeInteger(field.minItems) ||
 				!Number.isSafeInteger(field.maxItems) ||
 				field.minItems < 1 ||
-				field.maxItems < field.minItems ||
+				field.maxItems < field.minItems
+			) {
+				throw new ModelNetworkFailure('response_invalid');
+			}
+			if (field.items.type === 'object') {
+				properties[name] = {
+					type: 'array',
+					minItems: field.minItems,
+					maxItems: field.maxItems,
+					items: parameters(field.items),
+				};
+				continue;
+			}
+			if (
 				field.items.type !== 'string' ||
 				!Number.isSafeInteger(field.items.minLength) ||
 				!Number.isSafeInteger(field.items.maxLength) ||

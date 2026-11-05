@@ -17,11 +17,19 @@ function fromStoredResult(value: StoredToolJobResult): ToolJobResult {
 		? { status: value.status }
 		: {
 				status: value.status,
-				exitCode: value.exitCode,
-				signal: value.signal,
-				stdout: value.stdout,
-				stderr: value.stderr,
-				truncated: value.truncated,
+				commands: value.commands.map((item) =>
+					item.status === 'not_started'
+						? { index: item.index, status: item.status }
+						: {
+								index: item.index,
+								status: item.status,
+								exitCode: item.exitCode,
+								signal: item.signal,
+								stdout: item.stdout,
+								stderr: item.stderr,
+								truncated: item.truncated,
+							},
+				),
 			};
 }
 
@@ -30,11 +38,19 @@ function toStoredResult(value: ToolJobResult): StoredToolJobResult {
 		? { status: value.status }
 		: {
 				status: value.status,
-				exitCode: value.exitCode,
-				signal: value.signal,
-				stdout: value.stdout,
-				stderr: value.stderr,
-				truncated: value.truncated,
+				commands: value.commands.map((item) =>
+					item.status === 'not_started'
+						? { index: item.index, status: item.status }
+						: {
+								index: item.index,
+								status: item.status,
+								exitCode: item.exitCode,
+								signal: item.signal,
+								stdout: item.stdout,
+								stderr: item.stderr,
+								truncated: item.truncated,
+							},
+				),
 			};
 }
 

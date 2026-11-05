@@ -60,7 +60,14 @@ export interface BrowserSnapshot {
 export type BrowserInput =
 	| { action: 'open'; targetId: string; expectedVersion: number }
 	| { action: 'close'; sessionId: string }
-	| { action: 'snapshot'; sessionId: string; maxNodes: number }
+	| {
+			action: 'snapshot';
+			sessionId: string;
+			maxNodes: number;
+			include: ('screenshot' | 'console')[];
+			after: number;
+			limit: number;
+	  }
 	| { action: 'screenshot'; sessionId: string }
 	| { action: 'console'; sessionId: string; after: number; limit: number }
 	| { action: 'navigate'; settleMs: number; sessionId: string; url: string }

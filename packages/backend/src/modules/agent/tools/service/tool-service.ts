@@ -1,3 +1,4 @@
+import { ToolBatchExecutionUnknown } from '../model/tool-batch-failure.js';
 import { AGENT_HOST_INSTRUCTIONS } from '../../context/agent-instructions.js';
 import type { ToolStepContext } from '../model/tool-types.js';
 import type { PluginAgentCatalog } from '../../plugins/model/plugin-contribution-types.js';
@@ -37,6 +38,7 @@ import {
 	ToolOperationRefusal,
 	ToolMutationAdmissionRefusal,
 	ToolExecutionUnknown,
+	ToolCleanupFailure,
 	isAgentDrainFailure,
 	aggregateToolFailures,
 } from '../../agent-failure.js';
@@ -131,17 +133,18 @@ function inspectionSummary(input: ToolInput, trusted: ToolDefinition): string {
 			command,
 		);
 	} else if (input.kind === 'shell') {
-		const command = input.command.kind === 'argv' ? JSON.stringify(input.command.argv) : input.command.script;
+		const command = JSON.stringify(input.commands);
 		summary = summaryWithCommand(
 			{
 				action: 'execute',
 				mode: input.mode,
-				kind: input.command.kind,
+				commandCount: input.commands.length,
+				onError: input.onError,
 				cwd: input.cwd,
 				bytes: Buffer.byteLength(command, 'utf8'),
 				sha256: hash(command),
 			},
-			command,
+			input.commands.map((command, index) => `${index + 1}. ${command}`).join('\n'),
 		);
 	} else if (input.kind === 'project') {
 		summary = JSON.stringify({
@@ -155,46 +158,37 @@ function inspectionSummary(input: ToolInput, trusted: ToolDefinition): string {
 						: null,
 		});
 	} else if (input.kind === 'deliver') {
-		summary = JSON.stringify({ action: 'deliver', path: input.path });
+		summary = JSON.stringify({ action: 'deliver', paths: input.paths.map((path) => path) });
 	} else if (input.kind === 'job') {
-		summary = JSON.stringify({ action: input.action, jobId: input.jobId });
-	} else if (input.kind === 'docker_control') {
 		summary = JSON.stringify({
 			action: input.action,
-			containerId: input.containerId,
-			expectedFingerprint: input.expectedFingerprint,
+			jobIds: input.jobIds.map((id) => id),
+			waitMode: input.waitMode,
 		});
-	} else if (input.kind === 'write') {
-		summary = JSON.stringify({
-			action: input.expectedSha256 === 'absent' ? 'create' : 'replace',
-			path: input.path,
-			bytes: Buffer.byteLength(input.content, 'utf8'),
-			sha256: hash(input.content),
-			expectedSha256: input.expectedSha256,
-		});
+	} else if (
+		input.kind === 'docker_control' ||
+		input.kind === 'write' ||
+		input.kind === 'move' ||
+		input.kind === 'delete'
+	) {
+		summary = summaryWithCommand(
+			{
+				action: input.kind,
+				itemCount: input.items.length,
+				onError: input.onError,
+				sha256: hash(JSON.stringify(input.items)),
+			},
+			input.items
+				.map((item) => ('containerId' in item ? item.action + ' ' + item.containerId : item.path))
+				.join('\n'),
+		);
 	} else if (input.kind === 'patch') {
 		summary = JSON.stringify({
 			action: 'patch',
 			path: input.path,
 			expectedSha256: input.expectedSha256,
-			oldBytes: Buffer.byteLength(input.oldText, 'utf8'),
-			oldSha256: hash(input.oldText),
-			newBytes: Buffer.byteLength(input.newText, 'utf8'),
-			newSha256: hash(input.newText),
-		});
-	} else if (input.kind === 'move') {
-		summary = JSON.stringify({
-			action: 'move',
-			path: input.path,
-			destinationPath: input.destinationPath,
-			expectedFingerprint: input.expectedFingerprint,
-		});
-	} else if (input.kind === 'delete') {
-		summary = JSON.stringify({
-			action: 'delete',
-			path: input.path,
-			scope: input.scope,
-			expectedFingerprint: input.expectedFingerprint,
+			editCount: input.edits.length,
+			editsSha256: hash(JSON.stringify(input.edits)),
 		});
 	} else {
 		return trusted.description;
@@ -208,6 +202,8 @@ function inspectionSummary(input: ToolInput, trusted: ToolDefinition): string {
 
 /** Runs under RunExecutionOwner's lifetime. No independent untracked tool queue or retry. */
 export class ToolService {
+	private readonly drains = new Map<string, Promise<void>>();
+
 	constructor(
 		private readonly model: ToolModel,
 		private readonly journal: RunToolModel,
@@ -387,6 +383,21 @@ export class ToolService {
 	}
 
 	async execute(scope: ToolExecutionScope, proposal: RunToolProposal, signal: AbortSignal): Promise<string> {
+		await this.drains.get(scope.runId);
+		interrupted(signal);
+		const release = this.model.activity(scope);
+		try {
+			return await this.executeOwned(scope, proposal, signal);
+		} finally {
+			release();
+		}
+	}
+
+	private async executeOwned(
+		scope: ToolExecutionScope,
+		proposal: RunToolProposal,
+		signal: AbortSignal,
+	): Promise<string> {
 		const configuration = await this.settings.frozen(scope.userId, scope.appId, scope.runId);
 		const trusted = definition(proposal);
 		let prepared: {
@@ -444,7 +455,7 @@ export class ToolService {
 			targetId: target?.id ?? null,
 			targetVersion: target?.version ?? null,
 			risk:
-				input.kind === 'docker_control' && input.action === 'remove'
+				input.kind === 'docker_control' && input.items.some((item) => item.action === 'remove')
 					? 'destructive'
 					: input.kind === 'job' && input.action === 'cancel'
 						? 'control'
@@ -540,9 +551,16 @@ export class ToolService {
 						(input.kind === 'shell' && error instanceof ToolOperationRefusal)
 							? 'failed'
 							: 'unknown',
-					resultText: JSON.stringify({
-						failureCode: runFailureCode(error, true, taskSignal?.aborted === true && !signal.aborted),
-					}),
+					resultText:
+						error instanceof ToolBatchExecutionUnknown
+							? error.resultText
+							: JSON.stringify({
+									failureCode: runFailureCode(
+										error,
+										true,
+										taskSignal?.aborted === true && !signal.aborted,
+									),
+								}),
 				});
 			} catch (settlementError) {
 				if (settlementError instanceof AgentFailure && settlementError.code === 'version_conflict') {
@@ -791,7 +809,7 @@ export class ToolService {
 		}
 		if (input.kind === 'mcp_discovery') {
 			const text = await this.integrations.catalog(
-				{ userId: operation.userId, appId: operation.appId },
+				{ userId: operation.userId, appId: operation.appId, runId: operation.runId },
 				input.input,
 				signal,
 				validate,
@@ -876,8 +894,27 @@ export class ToolService {
 					sha256: saved.sha256,
 				});
 			} else if (input.action === 'present') {
-				const saved = await this.artifacts.presentTool(actor, input.artifactId);
-				text = JSON.stringify({ id: saved.id, name: saved.name, sizeBytes: saved.sizeBytes });
+				const items = [];
+				let bytes = 128;
+				for (const [index, artifactId] of input.artifactIds.entries()) {
+					await validate();
+					const saved = await this.artifacts.presentTool(actor, artifactId);
+					const item = {
+						index,
+						status: 'completed',
+						value: { id: saved.id, name: saved.name, sizeBytes: saved.sizeBytes },
+					};
+					const size = Buffer.byteLength(JSON.stringify(item)) + 1;
+					if (bytes + size > TOOL_RESULT_MAX_BYTES) {
+						break;
+					}
+					items.push(item);
+					bytes += size;
+				}
+				text = JSON.stringify({
+					items,
+					nextIndex: items.length < input.artifactIds.length ? items.length : null,
+				});
 			} else {
 				const page = await this.artifacts.readTool(
 					actor,
@@ -885,6 +922,7 @@ export class ToolService {
 					input.offset,
 					input.maxBytes,
 					signal,
+					input.encoding,
 				);
 				text = JSON.stringify({
 					id: page.id,
@@ -892,7 +930,9 @@ export class ToolService {
 					sizeBytes: page.sizeBytes,
 					offset: page.offset,
 					nextOffset: page.nextOffset,
+					encoding: input.encoding,
 					base64: page.base64,
+					text: page.text,
 					untrusted: true,
 				});
 			}
@@ -934,18 +974,36 @@ export class ToolService {
 			return { text, targets: [] };
 		}
 		if (input.kind === 'result') {
-			const result = await this.results.read(input.input, operation, revision, previewBytes);
+			const items = [];
+			const targets = new Map<number, { id: number; version: number }>();
+			let bytes = 128;
+			for (let index = 0; index < input.items.length; index++) {
+				await validate();
+				const result = await this.results.read(input.items[index], operation, revision, previewBytes);
+				const page = result.page;
+				const item = {
+					index,
+					toolCallId: page.toolCallId,
+					sha256: page.sha256,
+					originalBytes: page.originalBytes,
+					offset: page.offset,
+					nextOffset: page.nextOffset,
+					text: page.text,
+				};
+				const size = Buffer.byteLength(JSON.stringify(item)) + 1;
+				if (bytes + size > TOOL_RESULT_MAX_BYTES) {
+					break;
+				}
+				items.push(item);
+				bytes += size;
+				for (const target of result.targets) {
+					targets.set(target.id, { id: target.id, version: target.version });
+				}
+			}
 			await validate();
 			return {
-				text: JSON.stringify({
-					toolCallId: result.page.toolCallId,
-					sha256: result.page.sha256,
-					originalBytes: result.page.originalBytes,
-					offset: result.page.offset,
-					nextOffset: result.page.nextOffset,
-					text: result.page.text,
-				}),
-				targets: result.targets.map((target) => ({ id: target.id, version: target.version })),
+				text: JSON.stringify({ items, nextIndex: items.length < input.items.length ? items.length : null }),
+				targets: [...targets.values()],
 			};
 		}
 		if (input.kind === 'collaboration') {
@@ -957,6 +1015,7 @@ export class ToolService {
 			}
 
 			if (input.kind === 'deliver') {
+				const remote = this.model.remote(operation);
 				const actor = {
 					kind: 'tool' as const,
 					userId: operation.userId,
@@ -965,33 +1024,89 @@ export class ToolService {
 					operationId: operation.id,
 					operationHash: operation.operationHash,
 				};
-				const maxBytes = await this.artifacts.availableBytes(actor, 0);
-				const saved = await this.model.consumeFile(
-					input.path,
-					maxBytes,
-					{
-						operationId: operation.id,
-						target,
-						signal,
-						timeoutMs,
+				const operationScope = {
+					operationId: operation.id,
+					target,
+					signal,
+					timeoutMs,
 
-						validate: async () => {
-							await this.model.validateTarget(target);
-							await validate();
-						},
+					validate: async () => {
+						await this.model.validateTarget(target);
+						await validate();
 					},
-					(file, source) => this.artifacts.importTool(actor, file.name, file.sizeBytes, source, signal),
-				);
-				await validate();
-				return {
-					text: JSON.stringify({
-						id: saved.id,
-						name: saved.name,
-						sizeBytes: saved.sizeBytes,
-						sha256: saved.sha256,
-					}),
-					targets: [{ id: target.id, version: target.version }],
 				};
+				const remaining = await this.artifacts.availableBytes(actor, 0);
+				let total = 0;
+				// Read-only preflight before creating any Artifact; importing revalidates each source.
+				for (const path of input.paths) {
+					const file = await remote.fileInfo(path, operationScope);
+					total += file.sizeBytes;
+					if (total > remaining) {
+						throw new AgentFailure('limit_exceeded');
+					}
+				}
+				if (
+					Buffer.byteLength(
+						JSON.stringify(
+							input.paths.map((path, index) => ({
+								index,
+								status: 'completed',
+								value: {
+									id: 'f'.repeat(36),
+									name: path,
+									sizeBytes: Number.MAX_SAFE_INTEGER,
+									sha256: 'f'.repeat(64),
+								},
+							})),
+						),
+					) +
+						128 >
+					TOOL_RESULT_MAX_BYTES
+				) {
+					throw new AgentFailure('limit_exceeded');
+				}
+				const items: Array<{
+					index: number;
+					status: string;
+					value?: { id: string; name: string; sizeBytes: number; sha256: string | null };
+					failureCode?: string;
+				}> = [];
+				for (let index = 0; index < input.paths.length; index++) {
+					try {
+						await validate();
+						const saved = await remote.consumeFile(
+							input.paths[index],
+							await this.artifacts.availableBytes(actor, 0),
+							operationScope,
+							(file, source) =>
+								this.artifacts.importTool(actor, file.name, file.sizeBytes, source, signal),
+						);
+						items.push({
+							index,
+							status: 'completed',
+							value: { id: saved.id, name: saved.name, sizeBytes: saved.sizeBytes, sha256: saved.sha256 },
+						});
+					} catch (error) {
+						const known = error instanceof AgentFailure && !isAgentDrainFailure(error);
+						items.push({
+							index,
+							status: known ? 'failed' : 'unknown',
+							failureCode: runFailureCode(error, true),
+						});
+						for (let later = index + 1; later < input.paths.length; later++) {
+							items.push({ index: later, status: 'not_started' });
+						}
+						if (!known) {
+							if (error instanceof ToolExecutionUnknown && !(error instanceof ToolCleanupFailure)) {
+								throw new ToolBatchExecutionUnknown(JSON.stringify({ items }), error);
+							}
+							throw error;
+						}
+						break;
+					}
+				}
+				await validate();
+				return { text: JSON.stringify({ items }), targets: [{ id: target.id, version: target.version }] };
 			}
 
 			if (input.kind === 'project') {
@@ -1002,6 +1117,7 @@ export class ToolService {
 			}
 
 			if (input.kind === 'acp') {
+				const remote = this.model.remote(operation);
 				const text = await this.acp.execute(
 					operation,
 					target,
@@ -1014,7 +1130,7 @@ export class ToolService {
 						await this.verify(operation, revision, taskSignal);
 					},
 					(taskSignal, permission, timeoutMs) =>
-						this.model.perform(input, {
+						remote.perform(input, {
 							operationId: operation.id,
 							target,
 							signal: taskSignal,
@@ -1034,7 +1150,13 @@ export class ToolService {
 				const text = await this.jobs.control(
 					{ userId: operation.userId, appId: operation.appId, runId: operation.runId },
 					target,
-					{ action: input.action, jobId: input.jobId, waitSeconds: input.waitSeconds, offset: input.offset },
+					{
+						action: input.action,
+						jobIds: input.jobIds.map((id) => id),
+						waitMode: input.waitMode,
+						waitSeconds: input.waitSeconds,
+						offset: input.offset,
+					},
 					signal,
 					validate,
 					timeoutMs,
@@ -1042,6 +1164,8 @@ export class ToolService {
 				return { text, targets: [{ id: target.id, version: target.version }] };
 			}
 			if (input.kind === 'shell') {
+				const remote = this.model.remote(operation);
+
 				const jobValidate = async (jobSignal: AbortSignal) => {
 					const current = await this.journal.get({
 						userId: operation.userId,
@@ -1057,6 +1181,7 @@ export class ToolService {
 				};
 
 				const text = await this.jobs.prepare({
+					background: input.mode === 'background',
 					operation,
 					target,
 					policyRevision: revision,
@@ -1066,16 +1191,20 @@ export class ToolService {
 					maxHistory: limits.maxToolExecutions,
 					onFailure: run.onBackgroundFailure,
 
-					work: (jobSignal, timeoutMs) =>
-						this.model.command(input, {
-							operationId: operation.id,
-							target,
-							signal: jobSignal,
+					work: (jobSignal, timeoutMs, onOutput) =>
+						remote.command(
+							input,
+							{
+								operationId: operation.id,
+								target,
+								signal: jobSignal,
 
-							validate: () => jobValidate(jobSignal),
+								validate: () => jobValidate(jobSignal),
 
-							timeoutMs,
-						}),
+								timeoutMs,
+							},
+							onOutput,
+						),
 
 					validate: jobValidate,
 				});
@@ -1095,7 +1224,7 @@ export class ToolService {
 				}
 				return { text, targets: [{ id: target.id, version: target.version }] };
 			}
-			const text = await this.model.perform(input, {
+			const text = await this.model.remote(operation).perform(input, {
 				operationId: operation.id,
 				target,
 				signal,
@@ -1131,13 +1260,70 @@ export class ToolService {
 		};
 	}
 
-	async drainRun(scope: ToolJobScope): Promise<void> {
+	resource(scope: ToolJobScope): import('../model/tool-resource-types.js').ToolResourceSnapshot | null {
+		const value = this.model.resource(scope);
+		if (value === null) {
+			return null;
+		}
+		return {
+			id: value.id,
+			runId: value.runId,
+			phase: value.phase,
+			createdAt: value.createdAt,
+			lastUsedAt: value.lastUsedAt,
+			connections: value.connections,
+			files: value.files,
+			operations: value.operations,
+			targets: value.targets.map((id) => id),
+			mcpSessions: this.integrations.sessionCount(scope),
+			browserSessions: this.browser.sessionCount(scope),
+		};
+	}
+
+	backgroundCount(scope: ToolJobScope): number {
+		return this.jobs.backgroundCount(scope);
+	}
+
+	closeResource(scope: ToolJobScope, id: string): Promise<void> {
+		return this.resource(scope)?.id === id ? this.drainRun(scope) : Promise.resolve();
+	}
+
+	scopes(userId: number, appId: string): ToolJobScope[] {
+		return this.model.scopes(userId, appId);
+	}
+
+	drainRun(scope: ToolJobScope): Promise<void> {
+		const current = this.drains.get(scope.runId);
+		if (current) {
+			return current;
+		}
+		this.model.quiesceRun(scope);
+		const pending = Promise.resolve().then(() => this.drainOwned(scope));
+		this.drains.set(scope.runId, pending);
+		void pending.then(
+			() => {
+				if (this.drains.get(scope.runId) === pending) {
+					this.drains.delete(scope.runId);
+				}
+			},
+			() => {},
+		);
+		return pending;
+	}
+
+	private async drainOwned(scope: ToolJobScope): Promise<void> {
 		const results = await Promise.allSettled([
 			Promise.resolve().then(() => this.integrations.drainRun(scope)),
 			Promise.resolve().then(() => this.jobs.drain(scope)),
 			Promise.resolve().then(() => this.browser.drainRun(scope)),
 		]);
 		const failures = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+		try {
+			await this.model.drainRun(scope.runId);
+		} catch (error) {
+			failures.push(error);
+		}
+		this.model.settleDrain(scope, failures.length > 0);
 		if (failures.length) {
 			throw aggregateToolFailures(failures, 'Tool resources failed to drain');
 		}

@@ -76,7 +76,7 @@ for (const width of [320, 390, 1440]) {
 		await resolveNativeApproval(task, approval, 'approved');
 		expect((await finishNativeTask(task, created.id)).run.status).toBe('completed');
 		const record = (await tools(task)).find((tool) => tool.toolName === 'artifact_create');
-		if (!record?.outputArtifactId) throw new Error('Expected saved text file reference');
+		if (!record?.outputArtifactIds[0]) throw new Error('Expected saved text file reference');
 		const card = hub.locator('[data-tool-artifact]');
 		await expect(card).toContainText('report.md');
 		await closeTaskPanel(hub);
@@ -99,11 +99,11 @@ for (const width of [320, 390, 1440]) {
 		const downloaded = await download.path();
 		if (!downloaded) throw new Error('Expected downloaded file');
 		expect(await readFile(downloaded, 'utf8')).toBe('# Delivered report\nSaved by the model.\n');
-		const presented = await startNativeTask(task, `E2E_PRESENT_FILE artifact=${record.outputArtifactId}`);
+		const presented = await startNativeTask(task, `E2E_PRESENT_FILE artifact=${record.outputArtifactIds[0]}`);
 		expect((await finishNativeTask(task, presented.id)).run.status).toBe('completed');
 		expect((await tools(task)).find((tool) => tool.runId === presented.id)).toMatchObject({
 			toolName: 'artifact_present',
-			outputArtifactId: record.outputArtifactId,
+			outputArtifactIds: record.outputArtifactIds,
 			mutation: false,
 		});
 		expect(await artifacts(task)).toHaveLength(1);
@@ -136,7 +136,7 @@ for (const file of files) {
 			const approval = await waitNativeApproval(task, created.id, 'file_deliver');
 			expect(JSON.parse(approval.inspection.summary)).toEqual({
 				action: 'deliver',
-				path: '/file-delivery/' + file.name,
+				paths: ['/file-delivery/' + file.name],
 			});
 			await expect(hub.locator('[data-tool-artifact]')).toHaveCount(0);
 			expect(await artifacts(task)).toHaveLength(0);
@@ -153,7 +153,7 @@ for (const file of files) {
 			const record = (await tools(task)).find((tool) => tool.toolName === 'file_deliver');
 			expect(record).toMatchObject({
 				state: 'completed',
-				outputArtifactId: delivered.id,
+				outputArtifactIds: [delivered.id],
 				targetId: connectionId,
 			});
 			expect(await artifacts(task)).toEqual([
@@ -257,7 +257,7 @@ for (const missing of ['file.read', 'artifacts.write', 'selected-target', 'appro
 				expect(await tools(task)).toEqual([]);
 			}
 			expect(await artifacts(task)).toHaveLength(0);
-			expect((await tools(task)).every((tool) => tool.outputArtifactId === null)).toBe(true);
+			expect((await tools(task)).every((tool) => tool.outputArtifactIds.length === 0)).toBe(true);
 			await expect(hub.locator('[data-tool-artifact]')).toHaveCount(0);
 			expect(await readFile(path.join(project, 'sentinel.txt'), 'utf8')).toBe('keep');
 		} finally {
@@ -288,7 +288,7 @@ for (const invalid of ['directory', 'symlink']) {
 			expect((await finishNativeTask(task, run.id, ['file_deliver'])).run.status).toBe('unknown');
 			expect(await artifacts(task)).toHaveLength(0);
 			const rejected = (await tools(task)).find((tool) => tool.toolName === 'file_deliver');
-			expect(rejected?.outputArtifactId).toBeNull();
+			expect(rejected?.outputArtifactIds).toEqual([]);
 			if (!rejected) throw new Error('Expected rejected delivery record');
 			const toolPath = { appId: task.app.id, runId: run.id, toolId: rejected.id };
 			const details = await requestAgentJson(
@@ -333,7 +333,7 @@ test('cancelled delivery closes a held SSH read and publishes no success card', 
 				return handles.opened - handles.closed;
 			})
 			.toBe(0);
-		expect((await tools(task)).every((tool) => tool.outputArtifactId === null)).toBe(true);
+		expect((await tools(task)).every((tool) => tool.outputArtifactIds.length === 0)).toBe(true);
 		await expect(hub.locator('[data-tool-artifact]')).toHaveCount(0);
 		expect(await artifacts(task)).toHaveLength(0);
 	} finally {

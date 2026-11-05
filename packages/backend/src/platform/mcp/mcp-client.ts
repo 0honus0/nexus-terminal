@@ -32,7 +32,7 @@ export type McpReply =
 export interface McpClient {
 	close(key: string): Promise<void>;
 	closeAll(): Promise<void>;
-	discover(endpoint: McpEndpoint, signal: AbortSignal): Promise<McpCatalog>;
+	discover(endpoint: McpEndpoint, signal: AbortSignal, refresh?: boolean): Promise<McpCatalog>;
 	invoke(endpoint: McpEndpoint, request: McpRequest, signal: AbortSignal): Promise<McpReply>;
 }
 

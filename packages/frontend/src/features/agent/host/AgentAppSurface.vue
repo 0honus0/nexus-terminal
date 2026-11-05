@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { useAgentResourceControl } from '../composables/use-agent-resource-control';
 	import { useElementSize, useResizeObserver } from '@vueuse/core';
 	import { useResizeHandle } from '@/foundation/interaction';
 	import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type ShallowUnwrapRef } from 'vue';
@@ -109,6 +110,7 @@
 		() => props.executionEnabled,
 		() => host.windowManager.state.status === 'minimized' && props.executionEnabled,
 	);
+	const resourceControl = useAgentResourceControl(() => props.active);
 	const {
 		operation,
 		scope,
@@ -130,6 +132,7 @@
 		events,
 		approvals,
 		children,
+		resources,
 		child,
 		messages,
 		pending,
@@ -1762,11 +1765,19 @@
 				:run="run"
 				:events="events"
 				:children="children"
+				:resources="resources"
+				:connections="connections"
+				:resources-busy="resourceControl.busy.value"
 				:child="child"
 				:messages="messages"
 				:disabled="blocked"
 				@mutate="runtime.mutate($event)"
 				@messages="runtime.readMessages"
+				@close-resource="
+					(resource) =>
+						scope &&
+						resourceControl.close(scope, { kind: 'session', runId: resource.runId, sessionId: resource.id })
+				"
 			/>
 		</aside>
 		<button

@@ -247,13 +247,15 @@ export class ArtifactService {
 		offset: number,
 		maxBytes: number,
 		signal: AbortSignal,
+		encoding: 'base64' | 'utf8' = 'base64',
 	): Promise<{
 		id: string;
 		sha256: string;
 		sizeBytes: number;
 		offset: number;
 		nextOffset: number | null;
-		base64: string;
+		base64: string | null;
+		text: string | null;
 	}> {
 		scope(actor);
 		id(artifactId);
@@ -262,7 +264,7 @@ export class ArtifactService {
 			!Number.isSafeInteger(offset) ||
 			offset < 0 ||
 			!Number.isSafeInteger(maxBytes) ||
-			maxBytes < 1 ||
+			maxBytes < (encoding === 'utf8' ? 4 : 1) ||
 			maxBytes > 4096
 		) {
 			throw new AgentFailure('invalid_input');
@@ -283,7 +285,7 @@ export class ArtifactService {
 			if (offset > row.sizeBytes || row.sha256 === null) {
 				throw new AgentFailure('invalid_input');
 			}
-			const end = Math.min(row.sizeBytes, offset + maxBytes);
+			let end = Math.min(row.sizeBytes, offset + maxBytes);
 			const chunks: Uint8Array[] = [];
 			let size = 0;
 			if (end > offset) {
@@ -308,13 +310,25 @@ export class ArtifactService {
 			if (bytes.byteLength !== end - offset) {
 				throw new AgentFailure('storage_unavailable');
 			}
+			let text: string | null = null;
+			if (encoding === 'utf8') {
+				try {
+					text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes, {
+						stream: end < row.sizeBytes,
+					});
+				} catch (cause) {
+					throw new AgentFailure('invalid_input', { cause });
+				}
+				end = offset + Buffer.byteLength(text);
+			}
 			return {
 				id: row.id,
 				sha256: row.sha256,
 				sizeBytes: row.sizeBytes,
 				offset,
 				nextOffset: end < row.sizeBytes ? end : null,
-				base64: bytes.toString('base64'),
+				base64: encoding === 'base64' ? bytes.toString('base64') : null,
+				text,
 			};
 		} catch (error) {
 			if (error instanceof ToolCleanupFailure) {

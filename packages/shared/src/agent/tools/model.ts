@@ -21,7 +21,7 @@ export interface AgentToolView {
 	revision: number;
 	state: AgentToolState;
 	/** App-owned file delivered by a completed, server-owned output tool. */
-	outputArtifactId: string | null;
+	outputArtifactIds: string[];
 	createdAt: number;
 	updatedAt: number;
 }

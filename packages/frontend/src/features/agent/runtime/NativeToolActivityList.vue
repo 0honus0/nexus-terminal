@@ -84,7 +84,15 @@
 		return 'neutral';
 	}
 
-	const outputFiles = computed(() => props.tools.filter((tool) => tool.outputArtifactId !== null));
+	const outputFiles = computed(() =>
+		props.tools.flatMap((tool) =>
+			tool.outputArtifactIds.map((artifactId) => ({
+				key: tool.id + ':' + artifactId,
+				appId: tool.appId,
+				artifactId,
+			})),
+		),
+	);
 
 	const failedCount = computed(() => props.tools.filter((tool) => tool.state === 'failed').length);
 
@@ -156,9 +164,9 @@
 	<section v-if="tools.length" class="mx-auto w-full max-w-3xl">
 		<NativeToolArtifact
 			v-for="tool in outputFiles"
-			:key="tool.id"
+			:key="tool.key"
 			:app-id="tool.appId"
-			:artifact-id="tool.outputArtifactId"
+			:artifact-id="tool.artifactId"
 			:active="active"
 		/>
 		<details class="group/tools" @toggle="toggleGroup">

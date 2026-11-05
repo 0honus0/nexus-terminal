@@ -1,3 +1,4 @@
+import { sqliteSchemaSignature } from '../platform/storage/sqlite/schema-signature.js';
 import type { Logger } from '../platform/logging/logger.js';
 import { logDiagnostic } from '../platform/logging/diagnostic-log.js';
 import { readPackageVersion } from '../platform/packages/adapters/node-package-version.js';
@@ -224,7 +225,7 @@ export async function registerModules({
 				['plugins', plugins],
 			]),
 			BACKUP_MAX_SNAPSHOT_BYTES,
-			applicationMigrations[0].signature,
+			sqliteSchemaSignature(applicationMigrations),
 			registerAccessBackupExclusions(),
 			new NativeSnapshotRestoreFiles(
 				sqlite.path,

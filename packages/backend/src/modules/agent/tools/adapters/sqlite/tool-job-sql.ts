@@ -44,33 +44,68 @@ function storedResult(text: string): StoredToolJobResult {
 	}
 	if (
 		(value.status !== 'completed' && value.status !== 'nonzero') ||
-		!('exitCode' in value) ||
-		typeof value.exitCode !== 'number' ||
-		!Number.isSafeInteger(value.exitCode) ||
-		value.exitCode < 0 ||
-		(value.status === 'completed') !== (value.exitCode === 0) ||
-		!('signal' in value) ||
-		(value.signal !== null && typeof value.signal !== 'string') ||
-		!('stdout' in value) ||
-		typeof value.stdout !== 'string' ||
-		!('stderr' in value) ||
-		typeof value.stderr !== 'string' ||
-		!('truncated' in value) ||
-		typeof value.truncated !== 'boolean' ||
-		Object.keys(value).length !== 6 ||
-		Buffer.byteLength(value.stdout, 'utf8') + Buffer.byteLength(value.stderr, 'utf8') > 32 * 1024 + 4 ||
-		(value.signal !== null && Buffer.byteLength(value.signal, 'utf8') > 128)
+		Object.keys(value).length !== 2 ||
+		!('commands' in value) ||
+		!Array.isArray(value.commands) ||
+		!value.commands.length
 	) {
 		throw new Error('Corrupt stored job result');
 	}
-	return {
-		status: value.status,
-		exitCode: value.exitCode,
-		signal: value.signal,
-		stdout: value.stdout,
-		stderr: value.stderr,
-		truncated: value.truncated,
-	};
+	let outputBytes = 0;
+	let skipped = false;
+	let failed = false;
+	const commands: Exclude<StoredToolJobResult, { status: 'not_started' }>['commands'] = value.commands.map(
+		(item: unknown, index: number) => {
+			if (
+				!item ||
+				typeof item !== 'object' ||
+				!('index' in item) ||
+				item.index !== index ||
+				!('status' in item)
+			) {
+				throw new Error('Corrupt stored job command');
+			}
+			if (item.status === 'not_started' && Object.keys(item).length === 2 && failed) {
+				skipped = true;
+				return { index, status: item.status };
+			}
+			if (
+				skipped ||
+				(item.status !== 'completed' && item.status !== 'nonzero') ||
+				Object.keys(item).length !== 7 ||
+				!('exitCode' in item) ||
+				typeof item.exitCode !== 'number' ||
+				!Number.isSafeInteger(item.exitCode) ||
+				item.exitCode < 0 ||
+				(item.status === 'completed') !== (item.exitCode === 0) ||
+				!('signal' in item) ||
+				(item.signal !== null && (typeof item.signal !== 'string' || Buffer.byteLength(item.signal) > 128)) ||
+				!('stdout' in item) ||
+				typeof item.stdout !== 'string' ||
+				!('stderr' in item) ||
+				typeof item.stderr !== 'string' ||
+				!('truncated' in item) ||
+				typeof item.truncated !== 'boolean'
+			) {
+				throw new Error('Corrupt stored job command');
+			}
+			outputBytes += Buffer.byteLength(item.stdout) + Buffer.byteLength(item.stderr);
+			failed ||= item.status === 'nonzero';
+			return {
+				index,
+				status: item.status,
+				exitCode: item.exitCode,
+				signal: item.signal,
+				stdout: item.stdout,
+				stderr: item.stderr,
+				truncated: item.truncated,
+			};
+		},
+	);
+	if (outputBytes > 32 * 1024 + 4 || (value.status === 'nonzero') !== failed) {
+		throw new Error('Corrupt stored job result');
+	}
+	return { status: value.status, commands };
 }
 
 export function readToolJob(value: Record<string, unknown>): StoredToolJob {

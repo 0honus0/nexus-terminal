@@ -127,3 +127,7 @@ export const AGENT_RUN_FAILURE_CODES = [
 ] as const;
 
 export type AgentRunFailureCode = (typeof AGENT_RUN_FAILURE_CODES)[number];
+
+export const AGENT_RESOURCE_SESSION_STATES = ['idle', 'busy', 'closing', 'cleanup_failed'] as const;
+
+export type AgentResourceSessionState = (typeof AGENT_RESOURCE_SESSION_STATES)[number];

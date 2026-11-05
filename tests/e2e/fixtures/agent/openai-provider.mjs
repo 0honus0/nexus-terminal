@@ -486,9 +486,8 @@ const server = http.createServer(async (request, response) => {
 										name: 'shell_execute',
 										arguments: JSON.stringify({
 											connectionId: Number(connection[1]),
-											kind: 'shell',
-											script: 'printf browser-approval-e2e',
 											mode: 'foreground',
+											commands: ['printf browser-approval-e2e'],
 										}),
 									},
 								},

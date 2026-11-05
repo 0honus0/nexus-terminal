@@ -60,16 +60,14 @@ await test('B10 actual Docker over ordinary Workspace and governed Agent SSH', {
 
 	const inspect = (f, id) => ({
 		name: 'machine_docker_inspect',
-		input: { connectionId: f.connectionId, containerId: id },
+		input: { connectionId: f.connectionId, containerIds: [id] },
 	});
 
 	const control = (f, id, action, fingerprint) => ({
 		name: 'machine_docker_control',
 		input: {
 			connectionId: f.connectionId,
-			containerId: id,
-			action,
-			expectedFingerprint: fingerprint,
+			items: [{ containerId: id, action, expectedFingerprint: fingerprint }],
 		},
 	});
 
@@ -152,7 +150,7 @@ await test('B10 actual Docker over ordinary Workspace and governed Agent SSH', {
 				const run = await f.start('Docker full lifecycle', (results) => {
 					if (results.length === actions.length * 2) return {};
 					if (results.length % 2 === 0) return inspect(f, id);
-					const snapshot = results.at(-1);
+					const snapshot = results.at(-1).items[0];
 					assert.equal(snapshot.containerId, id);
 					assert.match(snapshot.fingerprint, /^[a-f0-9]{64}$/u);
 					return control(f, id, actions[Math.floor(results.length / 2)], snapshot.fingerprint);
@@ -176,22 +174,50 @@ await test('B10 actual Docker over ordinary Workspace and governed Agent SSH', {
 				assert.equal(f.calls.length, count);
 			},
 		);
+		await scenario('batch inspection returns only requested identities from one targeted scan', async (f, id) => {
+			const second = create(),
+				missing = 'f'.repeat(64);
+			const run = await f.start('multi Docker inspect', (results) => {
+				if (!results.length)
+					return {
+						name: 'machine_docker_inspect',
+						input: { connectionId: f.connectionId, containerIds: [id, second, missing] },
+					};
+				assert.deepEqual(
+					results[0].items.map((item) => item.failureCode ?? 'completed'),
+					['completed', 'completed', 'not_found'],
+				);
+				assert.deepEqual(
+					results[0].items.slice(0, 2).map((item) => item.containerId),
+					[id, second],
+				);
+				assert.equal(results[0].items[2].failureCode, 'not_found');
+				return {};
+			});
+			await f.wait(run, 'completed');
+		});
 		await scenario('external state drift after inspection prevents approved stale mutation', async (f, id) => {
 			const run = await f.start('Docker changed state', (results) =>
-				results.length ? control(f, id, 'remove', results[0].fingerprint) : inspect(f, id),
+				results.length > 1
+					? {}
+					: results.length
+						? control(f, id, 'remove', results[0].items[0].fingerprint)
+						: inspect(f, id),
 			);
 			const approval = await f.approval(run, 'machine_docker_control');
 			docker('start', id);
 			await f.approve(approval);
-			await f.wait(run, 'unknown');
+			await f.wait(run, 'completed');
 			assert.equal(state(id), 'running');
-			assert.equal(f.rows('agent_run_tools', run).at(-1).state, 'unknown');
+			const operation = f.rows('agent_run_tools', run).at(-1);
+			assert.equal(operation.state, 'completed');
+			assert.equal(JSON.parse(operation.result_text).items[0].failureCode, 'conflict');
 		});
 		await scenario(
 			'cancellation while awaiting approval leaves container unchanged and rejects old approval',
 			async (f, id) => {
 				const run = await f.start('Docker cancelled', (results) =>
-					results.length ? control(f, id, 'start', results[0].fingerprint) : inspect(f, id),
+					results.length ? control(f, id, 'start', results[0].items[0].fingerprint) : inspect(f, id),
 				);
 				const approval = await f.approval(run, 'machine_docker_control');
 				await f.cancel(run);
@@ -216,11 +242,11 @@ await test('B10 actual Docker over ordinary Workspace and governed Agent SSH', {
 		await scenario('missing capability never reaches Docker mutation or approval', async (f, id) => {
 			await f.grants([]);
 			const run = await f.start('Docker denied', () => control(f, id, 'remove', '0'.repeat(64)));
-			await f.wait(run, 'failed');
+			await f.wait(run, 'unknown');
 			assert.equal(state(id), 'created');
 			assert.deepEqual(
 				f.rows('agent_run_tools', run).map((row) => row.state),
-				['failed'],
+				[],
 			);
 			assert.deepEqual(await listAgentApprovalHistory(f.api, f.appId, run.id), []);
 		});

@@ -1,3 +1,4 @@
+import type { ObservationDockerInspection } from './observation-types.js';
 import type { MachineCommandExecutor } from '../../../../platform/ssh/ssh-port.js';
 import { TargetOperationError } from '../../../targets/public-errors.js';
 import { DOCKER_MAX_CONTAINERS } from '@nexus-terminal/shared/remote/docker/values';
@@ -7,7 +8,7 @@ import type { ObservationTarget } from './observation-types.js';
 import { observationTargetKey } from './observation-targets.js';
 import type { ReadDiagnostics } from '../../machines/model/operation-types.js';
 import { setTimeout as delay } from 'node:timers/promises';
-import type { RemoteMachineModel } from '../../machines/model/machine-model.js';
+import type { RemoteMachineProvider } from '../../machines/model/machine-types.js';
 import { RemoteHostKeyUntrustedError } from '../../machines/model/machine-errors.js';
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 import type { MachineStatusCollector, MachineStatus } from '../../../../platform/system/status-port.js';
@@ -91,7 +92,7 @@ function dockerStatus(value: DockerStatus): ObservedDockerStatus {
 
 export class ObservationModel {
 	constructor(
-		private readonly machines: RemoteMachineModel,
+		private readonly machines: RemoteMachineProvider,
 		private readonly collector: MachineStatusCollector,
 		private readonly docker: DockerPort,
 		private readonly catalog: Pick<ConnectionCatalog, 'list' | 'get'>,
@@ -103,7 +104,7 @@ export class ObservationModel {
 		operation: (execute: MachineCommandExecutor) => Promise<T>,
 		policy: { mutation: boolean } = { mutation: false },
 	): Promise<T> {
-		let machine: Awaited<ReturnType<RemoteMachineModel['open']>>['machine'] | null = null;
+		let machine: Awaited<ReturnType<RemoteMachineProvider['open']>>['machine'] | null = null;
 		let failure: unknown = null;
 		let value: { result: T } | null = null;
 		const deadline = Date.now() + 45000;
@@ -144,7 +145,7 @@ export class ObservationModel {
 		}
 		if (machine) {
 			try {
-				await machine.close();
+				await this.machines.release(machine, failure === null);
 			} catch (cleanup) {
 				throw new RemoteResourceCleanupFailure(failure === null ? [cleanup] : [failure, cleanup]);
 			}
@@ -313,6 +314,30 @@ export class ObservationModel {
 		} catch (cause) {
 			throw new RemoteResourceCleanupFailure([cause]);
 		}
+	}
+
+	inspectDockers(scope: ObservationScope, ids: string[]): Promise<ObservationDockerInspection[]> {
+		return this.withMachine(scope, async (execute) =>
+			(
+				await this.docker.inspectMany(
+					execute,
+					ids.map((id) => id),
+					scope.signal,
+				)
+			).map((value) => ({ id: value.id, state: value.state, image: value.image, created: value.created })),
+		);
+	}
+
+	inspectDocker(
+		scope: ObservationScope,
+		id: string,
+	): Promise<{ id: string; state: string; image: string; created: string } | null> {
+		return this.withMachine(scope, async (execute) => {
+			const value = await this.docker.inspect(execute, id, scope.signal);
+			return value === null
+				? null
+				: { id: value.id, state: value.state, image: value.image, created: value.created };
+		});
 	}
 
 	getDocker(scope: ObservationScope): Promise<ObservedDockerStatus> {

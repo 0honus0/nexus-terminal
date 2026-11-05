@@ -34,19 +34,36 @@ function id(value: unknown): string {
 }
 
 /** Only successful server-owned delivery tools can publish an Artifact reference. */
-function outputArtifactId(toolName: unknown, state: unknown, resultText: string | null): string | null {
+function outputArtifactIds(toolName: unknown, state: unknown, resultText: string | null): string[] {
 	if (
 		!AGENT_ARTIFACT_OUTPUT_TOOLS.some((name) => name === toolName) ||
-		state !== 'completed' ||
+		(state !== 'completed' && state !== 'unknown') ||
 		resultText === null
 	) {
-		return null;
+		return [];
 	}
 	const result: unknown = JSON.parse(resultText);
-	if (typeof result !== 'object' || result === null || Array.isArray(result) || !('id' in result)) {
+	if (typeof result !== 'object' || result === null || Array.isArray(result)) {
 		return invalid();
 	}
-	return id(result.id);
+	if (toolName !== 'file_deliver' && toolName !== 'artifact_present') {
+		return state === 'completed' && 'id' in result ? [id(result.id)] : [];
+	}
+	if (!('items' in result) || !Array.isArray(result.items)) {
+		return state === 'unknown' ? [] : invalid();
+	}
+	return result.items.flatMap((item: unknown) => {
+		if (typeof item !== 'object' || item === null || !('status' in item)) {
+			return invalid();
+		}
+		if (item.status !== 'completed') {
+			return [];
+		}
+		if (!('value' in item) || typeof item.value !== 'object' || item.value === null || !('id' in item.value)) {
+			return invalid();
+		}
+		return [id(item.value.id)];
+	});
 }
 
 /** Only a server-recorded, finite failure code can leave the private result body. */
@@ -133,7 +150,7 @@ export function readToolOperation(row: Record<string, unknown>): StoredToolOpera
 		state,
 		resultText,
 		failureCode: failureCode(state, resultText),
-		outputArtifactId: outputArtifactId(row.tool_name, state, resultText),
+		outputArtifactIds: outputArtifactIds(row.tool_name, state, resultText),
 		createdAt,
 		updatedAt,
 	};

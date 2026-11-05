@@ -256,6 +256,23 @@ export class RunService {
 		if (!Number.isSafeInteger(request.expectedVersion) || request.expectedVersion < 1) {
 			throw new AgentFailure('invalid_input');
 		}
+		return this.cancelOwned(request);
+	}
+
+	cancelResource(userId: number, appId: string, runId: string, sessionId: string): Promise<CancelRunResult> {
+		validateScope(userId, appId);
+		validateAgentId(runId);
+		validateOperationKey(sessionId);
+		return this.cancelOwned({ userId, appId, runId, operationKey: sessionId, expectedVersion: 'current' });
+	}
+
+	private async cancelOwned(request: {
+		userId: number;
+		appId: string;
+		runId: string;
+		operationKey: string;
+		expectedVersion: number | 'current';
+	}): Promise<CancelRunResult> {
 		const requestHash = hashCommand('cancel_run', [request.appId, request.runId, request.expectedVersion]);
 		return this.execution.admitWrite(async () => {
 			let result: CancelRunResult;

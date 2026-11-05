@@ -1,10 +1,19 @@
+import type {
+	ReadTextPageRequest,
+	ReadTextPageResult,
+	ReadDirectoryPageRequest,
+	ReadDirectoryPageResult,
+} from '../model/operation-types.js';
+import { inspectTextPage, inspectDirectoryPage } from '../../files/service/file-inspection.js';
 import type { MachineMutationService } from './mutation-service.js';
 import { isWellFormedFileText } from '@nexus-terminal/shared/remote/files/text-codec';
 import { createHash, randomUUID } from 'node:crypto';
 import type { MachineAcpModel } from '../model/acp-model.js';
 import type { ExecuteAcpRequest, ExecuteAcpResult } from '../model/operation-types.js';
 import type { MachineCommandModel } from '../model/command-model.js';
+import type { RemoteMachineScopeModel } from '../model/machine-scope-model.js';
 import type {
+	MachineResourceSnapshot,
 	ExecuteCommandRequest,
 	ExecuteCommandResult,
 	DockerInspection,
@@ -31,6 +40,8 @@ import type { ObservationModel } from '../../monitoring/model/observation-model.
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 import {
 	consumeInspectedFile,
+	inspectInfo,
+	inspectionPath,
 	inspectText,
 	inspectDirectory,
 	inspectSearch,
@@ -45,7 +56,10 @@ import type {
 	FileInspectionContext,
 } from '../model/operation-types.js';
 
-function validateCommand(input: ExecuteCommandRequest): void {
+function validateCommand(input: {
+	command: import('../model/operation-types.js').ExecutionCommand;
+	cwd: string | null;
+}): void {
 	const args = input.command.kind === 'argv' ? input.command.argv : [input.command.script];
 	const invalidProgram =
 		input.command.kind === 'argv' &&
@@ -71,9 +85,12 @@ function validateCommand(input: ExecuteCommandRequest): void {
 /** Independent machine operations never claim ordinary Workspace or Files attachments. */
 export class RemoteMachineOperationService {
 	private closing = false;
+	private cleanupFailed = false;
 	private closePromise: Promise<void> | null = null;
 	private readonly tasks = new Map<AbortController, Promise<unknown>>();
 	private readonly cleanupFailures: unknown[] = [];
+	private readonly idleFiles = new Map<string, { targetId: number; resources: FileResource[] }>();
+	private readonly retainedFiles = new Set<FileResource>();
 
 	constructor(
 		private readonly files: RemoteFileModel,
@@ -81,7 +98,21 @@ export class RemoteMachineOperationService {
 		private readonly commands: MachineCommandModel,
 		private readonly acp: MachineAcpModel,
 		private readonly mutations: MachineMutationService,
+		private readonly machines: RemoteMachineScopeModel,
+		private readonly changed: () => void = () => {},
 	) {}
+
+	snapshot(): MachineResourceSnapshot {
+		const machines = this.machines.snapshot();
+		return {
+			connections: machines.connections,
+			targetIds: machines.targetIds.map((id) => id),
+			files: this.retainedFiles.size,
+			active: this.tasks.size,
+			closing: this.closing,
+			cleanupFailed: this.cleanupFailed || this.cleanupFailures.length > 0 || machines.cleanupFailed,
+		};
+	}
 
 	private admitted<T>(
 		scope: MachineOperationScope,
@@ -165,9 +196,11 @@ export class RemoteMachineOperationService {
 				clearTimeout(timer);
 				scope.signal.removeEventListener('abort', cancel);
 				this.tasks.delete(controller);
+				this.changed();
 			}
 		});
 		this.tasks.set(controller, pending);
+		this.changed();
 		return pending;
 	}
 
@@ -181,17 +214,68 @@ export class RemoteMachineOperationService {
 			async (signal, remaining, validate) => {
 				let resource: FileResource | null = null;
 				let failure: unknown = null;
+				let reusable = false;
+				let key = '';
 				try {
-					resource = await this.files.open(scope.targetId, remaining(), signal, scope.fingerprint, validate);
+					key = await this.machines.key({
+						targetId: scope.targetId,
+						expectedFingerprint: scope.fingerprint,
+						timeoutMs: remaining(),
+						signal,
+						validate,
+					});
+					const stale = [...this.idleFiles].filter(
+						([cachedKey, entry]) => entry.targetId === scope.targetId && cachedKey !== key,
+					);
+					const closed = await Promise.allSettled(
+						stale.flatMap(([cachedKey, entry]) => {
+							this.idleFiles.delete(cachedKey);
+							return entry.resources.map((file) => Promise.resolve().then(() => this.closeFile(file)));
+						}),
+					);
+					const failures = closed.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+					if (failures.length) {
+						throw new RemoteResourceCleanupFailure(failures);
+					}
+					resource = this.idleFiles.get(key)?.resources.pop() ?? null;
+					while (resource && !resource.isOpen) {
+						const expired = resource;
+						resource = null;
+						await this.closeFile(expired);
+						resource = this.idleFiles.get(key)?.resources.pop() ?? null;
+					}
+					resource ??= await this.files.open(
+						scope.targetId,
+						remaining(),
+						signal,
+						scope.fingerprint,
+						validate,
+					);
+					this.retainedFiles.add(resource);
 					await validate();
-					return await work({ resource, signal, remaining, validate });
+					if (!resource.isOpen) {
+						throw new RemoteFileFailure('remote_unavailable');
+					}
+					const result = await work({ resource, signal, remaining, validate });
+					await validate();
+					reusable = resource.isOpen;
+					return result;
 				} catch (error) {
 					failure = error;
 					throw error;
 				} finally {
 					if (resource) {
 						try {
-							await resource.close();
+							if (reusable && !this.closing) {
+								let cached = this.idleFiles.get(key);
+								if (!cached) {
+									cached = { targetId: scope.targetId, resources: [] };
+									this.idleFiles.set(key, cached);
+								}
+								cached.resources.push(resource);
+							} else {
+								await this.closeFile(resource);
+							}
 						} catch (cleanup) {
 							throw new RemoteResourceCleanupFailure(failure === null ? [cleanup] : [failure, cleanup]);
 						}
@@ -200,6 +284,11 @@ export class RemoteMachineOperationService {
 			},
 			mutation,
 		);
+	}
+
+	private async closeFile(resource: FileResource): Promise<void> {
+		await resource.close();
+		this.retainedFiles.delete(resource);
 	}
 
 	writeText(scope: MachineOperationScope, request: WriteTextRequest): Promise<WriteTextResult> {
@@ -232,6 +321,17 @@ export class RemoteMachineOperationService {
 		return this.withFiles(scope, (context) => deleteInspectedPath(context, request), true);
 	}
 
+	fileInfo(scope: MachineOperationScope, path: string): Promise<FileContent> {
+		return this.withFiles(scope, async (context) => {
+			const requested = inspectionPath(path);
+			const info = await inspectInfo(context, requested);
+			if (info.kind !== 'file') {
+				throw new RemoteFileFailure('invalid_input');
+			}
+			return { path: requested, name: requested.slice(requested.lastIndexOf('/') + 1), sizeBytes: info.size };
+		});
+	}
+
 	consumeFile<T>(
 		scope: MachineOperationScope,
 		path: string,
@@ -239,6 +339,14 @@ export class RemoteMachineOperationService {
 		consume: (file: FileContent, source: AsyncIterable<Uint8Array>) => Promise<T>,
 	): Promise<T> {
 		return this.withFiles(scope, (context) => consumeInspectedFile(context, path, maxBytes, consume));
+	}
+
+	readTextPage(scope: MachineOperationScope, request: ReadTextPageRequest): Promise<ReadTextPageResult> {
+		return this.withFiles(scope, (context) => inspectTextPage(context, request));
+	}
+
+	listPage(scope: MachineOperationScope, request: ReadDirectoryPageRequest): Promise<ReadDirectoryPageResult> {
+		return this.withFiles(scope, (context) => inspectDirectoryPage(context, request));
 	}
 
 	readText(scope: MachineOperationScope, path: string): Promise<ReadTextResult> {
@@ -256,8 +364,13 @@ export class RemoteMachineOperationService {
 		);
 	}
 
-	search(scope: MachineOperationScope, path: string, query: string, maxResults: number): Promise<ReadSearchResult> {
-		return this.withFiles(scope, (context) => inspectSearch(context, path, query, maxResults));
+	search(
+		scope: MachineOperationScope,
+		path: string,
+		queries: string[],
+		maxResults: number,
+	): Promise<ReadSearchResult> {
+		return this.withFiles(scope, (context) => inspectSearch(context, path, queries, maxResults));
 	}
 
 	diagnose(scope: MachineOperationScope): Promise<ReadDiagnostics> {
@@ -305,7 +418,12 @@ export class RemoteMachineOperationService {
 	}
 
 	executeCommand(scope: MachineOperationScope, input: ExecuteCommandRequest): Promise<ExecuteCommandResult> {
-		validateCommand(input);
+		if (!input.commands.length || (input.onError !== 'stop' && input.onError !== 'continue')) {
+			throw new RemoteFileFailure('invalid_input');
+		}
+		for (const command of input.commands) {
+			validateCommand({ command, cwd: input.cwd });
+		}
 		return this.admitted(
 			scope,
 			(signal, remaining, validate) =>
@@ -329,11 +447,7 @@ export class RemoteMachineOperationService {
 		if (!/^[a-f0-9]{64}$/.test(containerId)) {
 			throw new RemoteFileFailure('invalid_input');
 		}
-		const status = await this.observations.getDocker(scope);
-		if (!status.available) {
-			throw new RemoteFileFailure('remote_unavailable');
-		}
-		const value = status.containers.find((row) => row.id === containerId);
+		const value = await this.observations.inspectDocker(scope, containerId);
 		if (!value) {
 			throw new RemoteFileFailure('not_found');
 		}
@@ -344,6 +458,39 @@ export class RemoteMachineOperationService {
 			.update(JSON.stringify([value.id, value.state, value.image, value.created]))
 			.digest('hex');
 		return { containerId: value.id, state: value.state, image: value.image, fingerprint };
+	}
+
+	inspectDockers(scope: MachineOperationScope, containerIds: string[]): Promise<Array<DockerInspection | null>> {
+		if (
+			!containerIds.length ||
+			new Set(containerIds).size !== containerIds.length ||
+			containerIds.some((id) => !/^[a-f0-9]{64}$/.test(id))
+		) {
+			throw new RemoteFileFailure('invalid_input');
+		}
+		return this.admitted(scope, async (signal, _remaining, validate) => {
+			const values = await this.observations.inspectDockers(
+				{ targetId: scope.targetId, fingerprint: scope.fingerprint, signal, validate },
+				containerIds,
+			);
+			return containerIds.map((containerId) => {
+				const value = values.find((item) => item.id === containerId);
+				if (!value) {
+					return null;
+				}
+				if (Buffer.byteLength(value.image) > 4096 || Buffer.byteLength(value.state) > 128) {
+					throw new RemoteFileFailure('limit_exceeded');
+				}
+				return {
+					containerId: value.id,
+					state: value.state,
+					image: value.image,
+					fingerprint: createHash('sha256')
+						.update(JSON.stringify([value.id, value.state, value.image, value.created]))
+						.digest('hex'),
+				};
+			});
+		});
 	}
 
 	inspectDocker(scope: MachineOperationScope, containerId: string): Promise<DockerInspection> {
@@ -401,11 +548,7 @@ export class RemoteMachineOperationService {
 					throw new RemoteFileFailure('operation_unknown', { cause });
 				}
 				try {
-					const after = await this.observations.getDocker(context);
-					if (!after.available) {
-						throw new RemoteFileFailure('remote_unavailable');
-					}
-					const current = after.containers.find((row) => row.id === input.containerId);
+					const current = await this.observations.inspectDocker(context, input.containerId);
 					const confirmed =
 						input.action === 'remove'
 							? !current
@@ -429,6 +572,8 @@ export class RemoteMachineOperationService {
 
 	quiesce(): void {
 		this.closing = true;
+		this.changed();
+		this.machines.quiesce();
 		for (const controller of this.tasks.keys()) {
 			controller.abort();
 		}
@@ -438,8 +583,23 @@ export class RemoteMachineOperationService {
 		if (!this.closePromise) {
 			this.closePromise = Promise.resolve().then(async () => {
 				await Promise.allSettled(this.tasks.values());
-				if (this.cleanupFailures.length) {
-					throw new RemoteResourceCleanupFailure(this.cleanupFailures);
+				const files = [...this.retainedFiles];
+				this.idleFiles.clear();
+				const released = await Promise.allSettled(
+					files.map((file) => Promise.resolve().then(() => this.closeFile(file))),
+				);
+				const failures = this.cleanupFailures.concat(
+					released.flatMap((result) => (result.status === 'rejected' ? [result.reason] : [])),
+				);
+				try {
+					await this.machines.close();
+				} catch (error) {
+					failures.push(error);
+				}
+				if (failures.length) {
+					this.cleanupFailed = true;
+					this.changed();
+					throw new RemoteResourceCleanupFailure(failures);
 				}
 			});
 			this.quiesce();

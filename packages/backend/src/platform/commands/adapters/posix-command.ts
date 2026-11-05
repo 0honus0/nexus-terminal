@@ -1,4 +1,6 @@
-import type { CommandPort, NativeCommand } from '../command-port.js';
+import type { NativeCommandBatchOptions } from '../command-port.js';
+import type { CommandPort, NativeCommand, NativeCommandBatchResult } from '../command-port.js';
+import { executePosixBatch } from './posix-command-batch.js';
 import type {
 	MachineCommandExecutor,
 	MachineExecuteOptions,
@@ -21,6 +23,21 @@ function commandText(command: NativeCommand, cwd: string | null): string {
 
 /** Source is executable only in explicit shell mode; argv never receives shell interpolation. */
 export class PosixCommandAdapter implements CommandPort {
+	executeBatch(
+		open: (command: string, signal: AbortSignal) => Promise<MachineCommand>,
+		commands: NativeCommand[],
+		cwd: string | null,
+		onError: 'stop' | 'continue',
+		options: NativeCommandBatchOptions,
+	): Promise<NativeCommandBatchResult> {
+		return executePosixBatch(
+			open,
+			commands.map((command) => commandText(command, cwd)),
+			onError,
+			options,
+		);
+	}
+
 	open(
 		open: (command: string, signal: AbortSignal) => Promise<MachineCommand>,
 		command: NativeCommand,

@@ -1,4 +1,4 @@
-import type { RemoteMachineModel } from './machine-model.js';
+import type { RemoteMachineProvider } from './machine-types.js';
 import type { CommandPort, NativeCommand } from '../../../../platform/commands/command-port.js';
 import { MachineDispatchFailure, MACHINE_CONNECT_MAX_TIMEOUT_MS } from '../../../../platform/ssh/ssh-port.js';
 import { TargetOperationError } from '../../../targets/public-errors.js';
@@ -9,7 +9,7 @@ import type { MachineOperationScope, ExecuteCommandRequest, ExecuteCommandResult
 
 export class MachineCommandModel {
 	constructor(
-		private readonly machines: RemoteMachineModel,
+		private readonly machines: RemoteMachineProvider,
 		private readonly commands: CommandPort,
 	) {}
 
@@ -19,7 +19,7 @@ export class MachineCommandModel {
 		maxOutputBytes: number,
 	): Promise<ExecuteCommandResult> {
 		const deadline = Date.now() + scope.timeoutMs;
-		let machine: Awaited<ReturnType<RemoteMachineModel['open']>>['machine'] | null = null;
+		let machine: Awaited<ReturnType<RemoteMachineProvider['open']>>['machine'] | null = null;
 		let dispatched = false;
 		let failure: unknown = null;
 		try {
@@ -39,28 +39,41 @@ export class MachineCommandModel {
 			if (remaining < 1) {
 				throw new RemoteFileFailure('remote_unavailable');
 			}
-			const command: NativeCommand =
-				input.command.kind === 'argv'
-					? { kind: 'argv', argv: input.command.argv.map((arg) => arg) }
-					: { kind: 'shell', script: input.command.script };
-			dispatched = true;
-			const result = await this.commands.execute(
-				(text, options) => opened.machine.execute(text, options),
-				command,
-				input.cwd,
-				{ timeoutMs: remaining, maxOutputBytes, signal: scope.signal },
+			const commands: NativeCommand[] = input.commands.map((command) =>
+				command.kind === 'argv'
+					? { kind: 'argv', argv: command.argv.map((arg) => arg) }
+					: { kind: 'shell', script: command.script },
 			);
-			if (result.outcome.status === 'unknown') {
-				throw new RemoteFileFailure('operation_unknown');
-			}
+			dispatched = true;
+			const result = await this.commands.executeBatch(
+				(text, signal) => opened.machine.openRawCommand(text, signal, 'signal'),
+				commands,
+				input.cwd,
+				input.onError,
+				{
+					timeoutMs: remaining,
+					maxOutputBytes,
+					signal: scope.signal,
+
+					onOutput: (index, stream, text) => input.onOutput?.(index, stream, text),
+				},
+			);
 			await scope.validate();
 			return {
-				status: result.outcome.status,
-				exitCode: result.outcome.exitCode,
-				signal: result.outcome.signal,
-				stdout: result.stdout,
-				stderr: result.stderr,
-				truncated: result.truncated,
+				status: result.results.some((item) => item.status === 'nonzero') ? 'nonzero' : 'completed',
+				commands: result.results.map((item) =>
+					item.status === 'not_started'
+						? { index: item.index, status: item.status }
+						: {
+								index: item.index,
+								status: item.status,
+								exitCode: item.exitCode,
+								signal: null,
+								stdout: item.stdout,
+								stderr: item.stderr,
+								truncated: item.truncated,
+							},
+				),
 			};
 		} catch (cause) {
 			if (cause instanceof RemoteResourceCleanupFailure || cause instanceof RemoteFileFailure) {
@@ -83,7 +96,7 @@ export class MachineCommandModel {
 		} finally {
 			if (machine) {
 				try {
-					await machine.close();
+					await this.machines.release(machine, failure === null);
 				} catch (cleanup) {
 					throw new RemoteResourceCleanupFailure(failure === null ? [cleanup] : [failure, cleanup]);
 				}

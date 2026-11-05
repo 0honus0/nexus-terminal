@@ -7,7 +7,7 @@ import { RemoteFileFailure } from '../../../packages/backend/dist/modules/remote
 import { RemoteResourceCleanupFailure } from '../../../packages/backend/dist/modules/remote/resource-errors.js';
 import { RemoteMachineOperationService } from '../../../packages/backend/dist/modules/remote/machines/service/operation-service.js';
 import { remoteOperations } from '../../../packages/backend/dist/modules/remote/operation-mapper.js';
-import { ToolModel } from '../../../packages/backend/dist/modules/agent/tools/model/tool-model.js';
+import { ToolRemoteModel } from '../../../packages/backend/dist/modules/agent/tools/model/tool-remote-model.js';
 import {
 	AgentFailure,
 	ToolCleanupFailure,
@@ -32,6 +32,8 @@ function fixture(
 		},
 
 		resource: {
+			isOpen: true,
+
 			realpath: async ({ path }) => path,
 
 			stat: async () => ({ kind: 'file', size: bytes.length, modifiedAt: changed && ++state.stats > 1 ? 2 : 1 }),
@@ -150,8 +152,15 @@ await test('File delivery stream lifecycle and compound authority', async (t) =>
 				null,
 				null,
 				null,
+				{
+					key: async () => 'fixture',
+
+					quiesce() {},
+
+					async close() {},
+				},
 			);
-			const model = new ToolModel(null, null, remoteOperations(service), null);
+			const model = new ToolRemoteModel(remoteOperations(service, () => service.close()));
 			const scope = {
 				operationId: 'delivery',
 				timeoutMs: 10000,
@@ -182,8 +191,15 @@ await test('File delivery stream lifecycle and compound authority', async (t) =>
 			null,
 			null,
 			null,
+			{
+				key: async () => 'fixture',
+
+				quiesce() {},
+
+				async close() {},
+			},
 		);
-		const model = new ToolModel(null, null, remoteOperations(service), null);
+		const model = new ToolRemoteModel(remoteOperations(service, () => service.close()));
 		const scope = {
 			operationId: 'delivery',
 			timeoutMs: 10000,
@@ -230,8 +246,15 @@ await test('File delivery stream lifecycle and compound authority', async (t) =>
 				null,
 				null,
 				null,
+				{
+					key: async () => 'fixture',
+
+					quiesce() {},
+
+					async close() {},
+				},
 			);
-			const model = new ToolModel(null, null, remoteOperations(service), null);
+			const model = new ToolRemoteModel(remoteOperations(service, () => service.close()));
 			const artifacts = new ArtifactModel(null, null, null, new NativeContentInspector());
 			const scope = {
 				operationId: 'delivery',
@@ -267,8 +290,15 @@ await test('File delivery stream lifecycle and compound authority', async (t) =>
 			null,
 			null,
 			null,
+			{
+				key: async () => 'fixture',
+
+				quiesce() {},
+
+				async close() {},
+			},
 		);
-		const model = new ToolModel(null, null, remoteOperations(service), null);
+		const model = new ToolRemoteModel(remoteOperations(service, () => service.close()));
 		const artifacts = new ArtifactModel(null, null, null, new NativeContentInspector());
 		const expected = new AgentFailure('storage_unavailable');
 		const scope = {

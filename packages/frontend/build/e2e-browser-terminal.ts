@@ -5,3 +5,6 @@ export { default as TerminalView } from '../src/features/terminal/components/Ter
 export { default as i18n } from '../src/app/i18n';
 
 export { createTerminalSessionState } from '../src/features/terminal/state/terminalSessionState';
+
+export { TerminalTypeAhead } from '../src/features/terminal/vendor/vscode-typeahead/prediction';
+export { Terminal } from '@xterm/xterm';

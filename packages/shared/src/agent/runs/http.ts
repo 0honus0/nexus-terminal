@@ -55,3 +55,16 @@ export interface AgentRunEventsResponse {
 	items: AgentRunEventView[];
 	nextCursor: number;
 }
+
+export interface AgentCloseResourcesRequest {
+	appVersion: number;
+	target: { kind: 'app' } | { kind: 'session'; runId: string; sessionId: string };
+	confirmed: boolean;
+}
+
+export interface AgentCloseResourcesResponse {
+	status: 'closed' | 'confirmation_required';
+	activeRuns: number;
+	activeOperations: number;
+	backgroundJobs: number;
+}

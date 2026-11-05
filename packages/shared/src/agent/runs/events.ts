@@ -11,7 +11,12 @@ import {
 	readAgentThreadEntryCursor,
 	readAgentThreadEntries,
 } from '../scope/http-codec.js';
-import { readAgentRunResponse, readAgentRunUsageResponse, readAgentRunEventsResponse } from './http-codec.js';
+import {
+	readAgentRunResponse,
+	readAgentRunUsageResponse,
+	readAgentRunEventsResponse,
+	readAgentResourceSession,
+} from './http-codec.js';
 import { readAgentApprovalPage, readAgentApprovalAfter } from '../governance/http-codec.js';
 import { readAgentChildrenResponse } from '../collaboration/http-codec.js';
 import type { AgentThreadView, AgentThreadEntryCursor, AgentThreadEntries } from '../scope/model.js';
@@ -59,6 +64,7 @@ export interface AgentRunStreamState {
 	events: AgentRunEventsResponse;
 	approvals: AgentApprovalPage;
 	children: AgentChildrenResponse;
+	resources: import('./model.js').AgentResourceSessionView[];
 }
 
 export interface AgentRunStreamUpdate {
@@ -128,7 +134,7 @@ export function readAgentRunStreamEvent(
 	if (row.state !== null) {
 		const value = agentRecord(
 			row.state,
-			['thread', 'run', 'usage', 'events', 'approvals', 'children'],
+			['thread', 'run', 'usage', 'events', 'approvals', 'children', 'resources'],
 			AGENT_RUN_STREAM_MAX_JSON_BYTES,
 		);
 		const thread = readAgentCreateThreadResponse(value.thread);
@@ -158,7 +164,20 @@ export function readAgentRunStreamEvent(
 		) {
 			throw new InvalidAgentPayload();
 		}
-		state = { thread, run, usage, events, approvals, children };
+		if (!Array.isArray(value.resources)) {
+			throw new InvalidAgentPayload();
+		}
+		const resources = value.resources.map(readAgentResourceSession);
+		if (
+			new Set(resources.map((resource) => resource.id)).size !== resources.length ||
+			resources.some(
+				(resource) =>
+					resource.runId !== selected.runId && !children.items.some((child) => child.id === resource.runId),
+			)
+		) {
+			throw new InvalidAgentPayload();
+		}
+		state = { thread, run, usage, events, approvals, children, resources };
 	}
 	const more =
 		body.items.length > 0 || (state !== null && (state.events.items.length > 0 || state.approvals.hasMore));

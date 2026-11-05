@@ -533,7 +533,7 @@ function toTool(value: AgentToolView): AgentToolView {
 		operationRevision: value.operationRevision,
 		revision: value.revision,
 		state: value.state,
-		outputArtifactId: value.outputArtifactId,
+		outputArtifactIds: value.outputArtifactIds.map((id) => id),
 		createdAt: value.createdAt,
 		updatedAt: value.updatedAt,
 	};

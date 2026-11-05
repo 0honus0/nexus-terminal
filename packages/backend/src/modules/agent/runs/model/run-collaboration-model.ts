@@ -1,3 +1,4 @@
+import type { CollaborationWatch } from './run-collaboration-types.js';
 import { RunChanges } from './run-changes.js';
 import { AgentFailure } from '../../agent-failure.js';
 import { agentStorage } from '../../agent-storage-failure.js';
@@ -67,6 +68,55 @@ export class RunCollaborationModel {
 		private readonly owner: RunCollaborationStorage,
 		private readonly changes = new RunChanges(),
 	) {}
+
+	watch(scope: ParticipantScope, signal: AbortSignal, deadline: number): CollaborationWatch {
+		let resolve = () => {};
+
+		let reject: (error: unknown) => void = () => {};
+
+		const changed = new Promise<void>((success, failed) => {
+			resolve = success;
+			reject = failed;
+		});
+
+		let off = () => {};
+
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		let closed = false;
+
+		const close = () => {
+			if (closed) {
+				return;
+			}
+			closed = true;
+			clearTimeout(timer);
+			off();
+			signal.removeEventListener('abort', abort);
+			resolve();
+		};
+
+		const abort = () => {
+			reject(new AgentFailure('provider_unavailable', { cause: signal.reason }));
+			close();
+		};
+
+		off = this.changes.subscribe(scope.userId, scope.appId, close, () => {
+			reject(new AgentFailure('provider_unavailable'));
+			close();
+		});
+		if (closed) {
+			// A stopped owner invokes the callback synchronously during subscription.
+			off();
+		} else {
+			timer = setTimeout(close, Math.max(0, deadline - Date.now()));
+			signal.addEventListener('abort', abort, { once: true });
+			if (signal.aborted) {
+				abort();
+			}
+		}
+		void changed.catch(() => undefined);
+		return { changed: changed, close };
+	}
 
 	async messageMetadata(scope: ParticipantScope, after: number, limit: number): Promise<MessageMetadataPage> {
 		const page = await storage(() => this.owner.messageMetadata(toScope(scope), after, limit));

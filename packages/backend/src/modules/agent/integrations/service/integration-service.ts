@@ -132,7 +132,7 @@ export class IntegrationService {
 	}
 
 	catalog(
-		actor: { userId: number; appId: string },
+		actor: { userId: number; appId: string; runId: string },
 		input: IntegrationCatalogInput,
 		signal: AbortSignal,
 		validate: () => Promise<void>,
@@ -349,12 +349,17 @@ export class IntegrationService {
 		);
 	}
 
-	drainRun(owner: { userId: number; appId: string; runId: string }): void {
+	sessionCount(owner: { userId: number; appId: string; runId: string }): number {
+		return this.model.sessionCount(owner);
+	}
+
+	async drainRun(owner: { userId: number; appId: string; runId: string }): Promise<void> {
 		for (const [key, value] of this.inputs) {
 			if (value.userId === owner.userId && value.appId === owner.appId && value.runId === owner.runId) {
 				this.inputs.delete(key);
 			}
 		}
+		await this.model.drainRun(owner);
 	}
 
 	quiesce(): void {

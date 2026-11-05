@@ -20,6 +20,22 @@ const pageContext = (): Record<string, unknown> => ({
 export const registerGlobalRuntimeDiagnostics = (): void => {
 	if (registered) return;
 	registered = true;
+	if (typeof PerformanceObserver !== 'undefined' && PerformanceObserver.supportedEntryTypes.includes('longtask')) {
+		const observer = new PerformanceObserver((list) => {
+			if (!logger.isLevelEnabled('trace') || document.hidden) return;
+			const entries = list.getEntries();
+			logger.trace(
+				{
+					...pageContext(),
+					count: entries.length,
+					totalDurationMs: Math.round(entries.reduce((total, entry) => total + entry.duration, 0)),
+					longestDurationMs: Math.round(Math.max(0, ...entries.map((entry) => entry.duration))),
+				},
+				'Frontend main thread long tasks',
+			);
+		});
+		observer.observe({ type: 'longtask', buffered: false });
+	}
 
 	window.addEventListener('error', (event) => {
 		logger.error(

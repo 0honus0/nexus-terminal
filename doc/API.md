@@ -285,25 +285,21 @@ App 返回必填非空 definitionId/definitionVersion、capabilities、enabled/v
 
 首工具 machine_connection_list 参数只能为 {}，只返回持久选中且当前授权、未在 denylist 的 SSH 连接 id/name/host/port/username，不返回凭据或非 SSH 项。参数最多 16 KiB、结果最多 256 KiB，超限失败，不截断。结果确认持久后才回送模型；工具步骤不结束 Root，最终 stop 才可成功。当前执行须 governed 准入；DEV 默认 connectionIds 为 []，正式 Host 提供目标选择与多步呈现，行为范围见 testing。
 
-后端还提供v2只读工具：`machine_diagnostics_read({connectionId})`读取所选SSH机器的CPU百分比、内存/磁盘bytes及1/5/15分钟load指标，generatedAt为毫秒（CPU以同一任务两次采样差值计算），不读取宿主诊断；`file_read({connectionId,path})`读取整个UTF-8文件（最多32KiB，含captured-content SHA-256），不支持旧offset；`file_list({connectionId,path})`最多200条/48KiB metadata，超额拒绝；`file_search({connectionId,path,query,maxResults?})`做区分大小写字面量内容搜索，不接受旧regex/glob/contextLines。maxResults默认20、最多100，每行首匹配，行/UTF-16列从1开始；发现超量匹配时返回truncated。搜索最多100文件、100目录、8层和2MiB，超遍历/编码预算失败，不截断伪报完整结果；非文本文件跳过，文件单项超过32KiB则失败。
+`machine_diagnostics_read({connectionId})` 保留当前 v2 只读诊断协议。文件工具统一使用 v3 批次输入：`file_read({connectionId,paths,offset?,maxBytes?})`、`file_list({connectionId,paths,after?})`、`file_inspect({connectionId,paths})`。结果为逐项 `items`，读取预算不足时 `nextIndex` 指示剩余路径。file_read 的 offset/nextOffset 为 UTF-8 字节位置，每页默认/最多 32 KiB，最少 4 bytes；页边界不拆分码点，pageSha256 校验本页，只有从零完整读到文件尾才提供完整 sha256。元数据 fingerprint 不是跨页原子快照。file_list 每页最多 200 条，名称词典序的 nextAfter 用于续读；遍历目录只保留当前页候选，不缓冲完整目录。file_inspect 的树预算保持最多 100 文件/100 目录、深度 8、单文件 1 MiB、累计 2 MiB；返回内容 hash 与元数据指纹，不返回文件正文。
 
-后端 file_write v2 参数为 {connectionId,path,content,expectedSha256}：绝对路径最多256 UTF-8 bytes，content最多8KiB且允许空文本，完整参数JSON最多16KiB。新建必须传 expectedSha256: 'absent'；替换必须传 file_read 返回的原内容小写SHA-256。每次写入生成独立审批；按需询问时人工批准，全授权时在原权限范围自动批准。审批摘要只含动作、路径、字节数及哈希，不展示正文。既有专项曾在本机OpenSSH验证真实创建、0600权限、并发同键决议与单次消费；拒绝会以failed结束Run，不再请求模型；等待中取消或撤权不创建文件，加入denylist围栏Run。尚未验证派发后断流、写入未知与跨主机故障。拒绝、过期、撤权或取消停止等待；批准需在当前权限/目标版本有效时消费一次，不能授权下一次写入。新建权限0600，替换保留普通权限，不保留特殊权限位，不提供旧mode参数。使用同目录暂存、提交后回读确认；哈希预检并非远端原子CAS，存在跨调用竞争窗口。暂存/提交/确认/最终交付或清理不能确认时记录unknown，不自动重放；需人工核对远端文件与临时文件。读写任务按已保存的执行预算和真实资源追踪动态接纳，不另设8个活跃任务门槛；整项受冻结工具预算约束（默认45秒），清理未确认继续追踪并保留故障证据。
+`file_search({connectionId,path,queries,maxResults?})` 一次遍历处理区分大小写的多个字面量查询，返回 queryIndex。maxResults 默认 20、最多 100，行和 UTF-16 列从 1 开始，超出结果数标记 truncated；搜索最多 100 文件、100 目录、8 层和 2 MiB，单文件 32 KiB，非文本跳过。没有旧 regex/glob/contextLines 参数。
 
-后端 file_inspect v2 参数为 {connectionId,path}，返回规范路径、kind、fingerprint、fileCount、directoryCount、bytes，不返回内容。允许普通文件（含二进制）与目录；最多100文件/100目录、深度8、单文件1MiB、累计2MiB、元数据256KiB；超过预算整项拒绝，不截断。指纹包含相对路径、权限/所有者、大小/修改时间及文件内容哈希，不是原子文件系统快照。
+写入工具为 v3：`file_write({connectionId,items:[{path,content,expectedSha256}],onError?})`；`file_patch({connectionId,path,expectedSha256,edits:[{oldText,newText}]})`；`file_move({connectionId,items:[{path,destinationPath,expectedFingerprint}],onError?})`；`file_delete({connectionId,items:[{path,expectedFingerprint,scope}],onError?})`。单条也传数组；onError 默认 stop，可选 continue。整批参数最多 16 KiB，路径最多 256 UTF-8 bytes，写入单项正文最多 8 KiB，补丁单项 oldText/newText 各最多 4 KiB。新建 expectedSha256 为 absent，替换及补丁使用完整文件哈希；oldText 非空且唯一，edits 逐次应用于同文件。删除 scope 为 entry/tree，移动目的须不存在，拒绝链接、特殊节点及重叠路径计划。首个副作用前预检整批，执行前仍复查指纹和当前授权；这不构成跨文件事务或远端原子 CAS。已确认项保留，逐项报告 completed/failed/not_started/unknown，未知结果不重放整组。新建权限 0600，替换保留普通权限，原暂存、确认和清理保证保持。
 
-file_patch v2 参数为 {connectionId,path,expectedSha256,oldText,newText}，原 SHA 来自 file_read；oldText 必须非空且在原文件中唯一出现（重叠重复也拒绝），newText 可以为空，但不能与 oldText 相同。oldText/newText 各最多4KiB，原文件/结果各最多32KiB。取消旧 unified diff/多文件请求，每个文件分别调用、审批，不承诺多文件事务。工具账本已派发后的预检拒绝也可能保守记录为 unknown；哈希过期或上下文不唯一时先核对实际文件，不自动重放。
+`shell_execute` v3 参数为 `{connectionId,commands:string[],cwd?,onError?,mode?,yieldSeconds?}`，单条命令同一路径，脚本原始 UTF-8 合计最多 8 KiB。一批使用一次 exec，各命令在独立子 Shell 中应用 cwd/env，分别捕获输出、退出码和未执行项，不创建常驻 Shell 或远端临时文件。onError 默认 stop，可选 continue；cwd 为可选绝对路径、最多 256 bytes；mode 默认 foreground，可选 background。全部需要 shell.execute 和原独立执行审批。前台 yieldSeconds 默认冻结工具等待预算，允许 0 立即交回，不超过冻结预算；后台或等待到期返回同一个 Job 的受理/运行状态，不重新执行命令。已执行结果含 commands[]、真实 stdout/stderr/退出码和 truncated，输出总捕获预算保持 32 KiB。
 
-file_move v2 参数为 {connectionId,path,destinationPath,expectedFingerprint}，file_delete v2 参数为 {connectionId,path,expectedFingerprint,scope}，指纹来自 file_inspect。移动目的必须不存在，拒绝同路径/祖先关系；删除 scope:'entry' 仅普通文件或空目录，scope:'tree' 明确递归删除。路径各最多256 UTF-8 bytes，不允许控制字符、根目录、链接或特殊节点。移动/删除采用上述有界目录预算，每项独立审批；patch/move 要 file.write，delete 要 file.delete 且为 destructive，inspect 要 file.read。删除逐节点复查，部分执行或提交后确认失败为 unknown，不自动重放，人工核对源、目的和剩余树。全部工具参数完整JSON最多16KiB，审批摘要不包含文件正文。
-
-shell_execute v2 参数为 {connectionId,kind,argv?,script?,cwd?,mode?,yieldSeconds?}：kind:'argv' 只允许 argv（最多128项、原始UTF-8合计8KiB），kind:'shell' 只允许可执行 script（8KiB）。cwd 可选绝对路径，最多256 bytes；mode 默认 foreground，也可 background。所有执行均需 shell.execute 和独立 destructive 人工批准，不根据命令文本推断安全。前台在等待窗口内完成时返回真实退出状态、stdout/stderr（合计捕获32KiB）和 truncated；非零退出是确认的命令失败。yieldSeconds默认冻结toolTimeoutSeconds（默认45秒），允许0立即交回，不能超过冻结工具等待预算；仅foreground可传。等待到期而任务未完成时返回原jobId与queued/dispatched状态，不中断命令，模型通过shell_job_control继续查询/等待同一任务，禁止因等待到期重跑命令。后台返回 {jobId,accepted:true}，只表示受理，不表示进程健康或成功。完整参数JSON最多16KiB，结果最多256KiB，包含转义预算。
-
-shell_job_control v2 使用 {connectionId,action,jobId?,waitSeconds?,offset?}。list 不传 jobId，offset仅用于list（默认0），每页最多64项并返回nextOffset；status/wait/cancel 使用原 Shell 工具账本 UUID，只操作当前 user/App/Run（Root 或 Child 各自隔离）、目标版本和指纹一致的 Job。list/status/wait 需当前 shell.execute；cancel 还需独立 control 批准。wait 默认10秒、最多30秒，同时受冻结toolTimeoutSeconds等待预算约束，等待结束不取消Job。状态为 queued/dispatched/completed/failed/unknown；dispatched 是派发意图，非进程健康。每Run历史条数受原冻结maxToolExecutions限制，活跃Job与远端/文件任务动态追踪，不另设固定8个活跃任务门槛。后台属于实际 Run，Root/Child 各自在结束/取消时收尾自己的 Job，Root 最终收尾覆盖整族；unknown 子任务阻止 Root 成功。启动将 queued 转 failed/not_started、dispatched 转 unknown，不重放。权限每秒复查，撤权/过期取消并等待收尾。前台/后台Shell均使用原Run的绝对执行截止时间，等待及续查不会延长总预算；取消、权限失效或Run结束仍会收尾，不提供脱离Run的长期后台服务承诺；本地取消或 SSH 关闭不证明远端子进程停止。Job 执行结果未确认时立即停止所属 Run/族的等待，未被用户取消的 Root 进入 unknown 终态；已取消的 Root 保留 cancelled 和原 Job 的 unknown 证据。
+`shell_job_control` v3 参数为 `{connectionId,action,jobIds?,waitMode?,waitSeconds?,offset?}`。list 不传 jobIds，按 offset/nextOffset 每页 64 项；status/wait/cancel/output 使用 jobIds 数组。waitMode 为 all/any，waitSeconds 默认 10、最多 30 且受冻结预算约束，等待到期不取消 Job。output 按 UTF-8 字节 offset 返回已捕获实时 stdout/stderr 事件、各 Job 的 nextOffset；复用返回游标避免重复日志，进程未完成也可读取。输出不会恢复超过捕获预算的字节，重启后只从持久终态结果恢复捕获内容。cancel 独立批准；所有动作只允许当前 user/App/Run、目标版本和指纹一致的 Job。权限每秒复查；原 Run 的执行截止时间不因等待/续读延长。启动将 queued 转 failed/not_started、dispatched 转 unknown，不重放；Run 最终结束、撤权或停机排空真实资源。本地取消和关 SSH 不证明远端进程停止。
 
 Job 的执行结果无法确认时，会立即通知所属 Run，停止模型请求和待审批工具的等待；Child 的此类故障也会停止 Root 及同族任务，其他 Run 不受影响。查询不再把 unknown 当作可以继续轮询的执行状态。任务进入终态，未消费的审批失效，并在原错误区域说明“任务已停止，远端操作可能仍在运行”。重启后仍从原 Job 记录展示原因，不自动重试或释放机器占用。这里的“结果无法确认”仅表示无法证明远端是否完成，不等于命令仍在本地等待；继续同一线程前仍需用原结束入口关闭该 Run，结束不解除机器围栏。已确认的非零退出保留退出码和输出，主机公钥未信任等确定未执行的拒绝记为 failed。工具派发、审批消费或完成的数据库回执丢失时，也会独立结束已确认模型步骤所属的总任务，不重试原工具写入或自动继续执行。
 
 主机已有任务正在执行时，新命令提示“尚未执行：该主机有其他任务正在执行”；已有旧任务效果未确认时提示先在“机器突变恢复”核对并恢复。两者都不会把被拒绝的新命令记成新的执行未知，也不会自动解除旧围栏或重跑原命令。
 
-machine_docker_inspect v2 使用 {connectionId,containerId}，要求完整小写64位hex容器ID，返回 containerId/state/image/fingerprint。machine_docker_control v2 使用 {connectionId,containerId,action,expectedFingerprint}，action 为 start/stop/restart/remove，指纹取自 inspect。两者需 machine.docker.manage；control 独立批准，remove 为 destructive，其余 mutate。执行前核对指纹，后核对请求状态或容器不存在；并发窗口不提供原子CAS，派发/后验未知不得自动重放。Docker使用冻结工具整项期限（默认45秒）。已通过真实 Docker/SSH 核对四种控制、逐次独立审批、状态变化拒绝、等待审批取消及重建不重派；不保证与其他客户端操作的原子 CAS。
+`machine_docker_inspect` v3 使用 `{connectionId,containerIds}`，返回定向容器逐项视图或 not_found，不读取全量 stats。`machine_docker_control` v3 使用 `{connectionId,items:[{containerId,action,expectedFingerprint}],onError?}`。容器 ID 必须为完整小写 64 位 hex；action 为 start/stop/restart/remove。两者需 machine.docker.manage；control 独立批准，remove 为 destructive。整批先预检，执行前复查指纹，完成后核对状态/删除；逐项结算且不承诺原子 CAS，未知不重放。冻结整项期限保持。
 
 后端 acp_execute v2 使用 {connectionId,argv,cwd,prompt}，仅通过独立SSH调用远端已安装的ACP v1程序。argv最多128项、原始UTF-8合计8KiB，cwd为必填绝对路径且最多256bytes，prompt最多8KiB，完整参数JSON最多16KiB。不接受旧integrationId/target/Workspace/profile，也不自动安装程序或添加本机回落。需当前 integration.acp.invoke、选中目标和独立destructive人工批准；当前调用参数绑定批准，插件能力声明不授予 grant。
 
@@ -317,7 +313,7 @@ ACP执行初始化、创建新会话、提交prompt并收集文本更新；输�
 
 以上写入链须 governed 准入；正式前端沿原工具卡片与审批区域呈现当前状态。
 
-路径必须绝对，拒绝`..`和符号链接跟随；目录可显示symlink条目。读取前后复查版本、指纹、选中与授权。hash只描述捕获内容，不保证远端并发原子快照；已开始的读取不能因撤权追溯撤回，但结果交付仍会拒绝。不可续查的远端操作受冻结toolTimeoutSeconds与Root剩余期限共同限制，Shell的等待窗口和实际Run执行期限按上文分别处理，取消等待实际资源收尾；不自动重放unknown。当前工具执行须 governed 准入，没有运行测试，正式前端已同步Shared字段及安全提示。
+路径必须绝对，拒绝`..`和符号链接跟随；目录可显示symlink条目。读取前后复查版本、指纹、选中与授权。hash只描述捕获内容，不保证远端并发原子快照；已开始的读取不能因撤权追溯撤回，但结果交付仍会拒绝。不可续查的远端操作受冻结toolTimeoutSeconds与Root剩余期限共同限制，Shell的等待窗口和实际Run执行期限按上文分别处理，取消等待实际资源收尾；不自动重放unknown。当前工具执行须 governed 准入，正式前端同步 Shared 字段及安全提示，执行证据见 testing。
 
 ## Root/Child 与协作
 
@@ -341,7 +337,7 @@ Memory 管理归 /api/v1/agent/apps/:appId/memories：列表 status/limit/offset
 
 Artifact 位于 /api/v1/agent/apps/:appId/artifacts；先 POST name/mediaType/declaredBytes，再 PUT /:artifactId/content，以 application/octet-stream 发送真实字节并带 If-Match 的带引号版本。不再另设单文件大小和累计文件数量上限，按执行设置的 Artifact 总空间准入（默认512 MiB、最大可配置10 GiB），已有文件与预留字节计入占用，并保留磁盘64 MiB余量。服务端流式校验实际长度，GET 内容支持单个 bytes=start-end Range，下载不内联执行。文件库上传分片读取并计算SHA-256，直接交付File；超过4 MiB的下载使用Range分段获取并核对同一文件版本、范围、长度与最终SHA-256，再交付Blob，不要求整体转成单个ArrayBuffer；4 MiB为传输批次而非文件上限，实际大文件仍受浏览器资源和网络期限约束。后端普通下载、插件包暂存和消息授权读取在分块交付及结束前复查原授权、ready/有效期及版本；空文件同样检查，不绕过认证。短读或超出声明范围终止交付，已交付字节不能撤回。文件库的图片/GIF 预览使用个人“工作区 → 文件”的图片大小上限，默认20 MiB、0取消限制；聊天内联GIF使用原Artifact preview入口。库 /api/v1/agent/files 与 /files/storage；App 内支持 retain、带版本删除、attachments/解除引用及 cleanup/preview、confirm。被引用或保留的文件不能清理；确认绑定资源版本、十分钟期限并只消费一次。文件发布后 SQL 失败是未知结果，预留额度不因此释放，不能自动重传或删除。
 
-模型工具 memory_recall/propose、artifact_create/read/present、file_deliver 与 context_checkpoint 使用独立当前能力和必要审批。file_deliver(connectionId,path) 将已选 SSH 普通文件流式复制到当前 App，需同时具备目标 file.read、全局 artifacts.write 和当前批准；artifact_present(artifactId) 只展示当前 App 已有 ready 文件，需 artifacts.read。成功的 image_generate/artifact_create/artifact_present/file_deliver 从持久工具结果派生 outputArtifactId，双端工具视图与严格解码同步，前端自动展示图片或复用 FilePreview 的文件卡，不接受模型自报 URL。此字段不是数据库列，无数据库迁移。Artifact 续读按字节 offset 返回 base64；Memory 和摘要均是不可信数据，不能成为授权。语义检查点按冻结 aggressive/balanced/conservative 限制摘要至来源字节的35%/50%/75%，只在完成原步骤工具组后替换已绑定输入前缀，原用户请求和完整当前交换保留；没有开启模型派发就不会伪造摘要。
+模型工具 memory_recall/propose、artifact_create/read/present、file_deliver 与 context_checkpoint 使用独立当前能力和必要审批。file_deliver({connectionId,paths}) 将已选 SSH 普通文件流式复制到当前 App，需同时具备目标 file.read、全局 artifacts.write 和当前批准；artifact_present({artifactIds}) 只展示当前 App 已有 ready 文件，需 artifacts.read。成功的 image_generate/artifact_create/artifact_present/file_deliver 从持久工具结果派生 outputArtifactIds 数组，双端工具视图与严格解码同步，前端自动展示图片或复用 FilePreview 的文件卡，不接受模型自报 URL。该字段为派生投影；迁移 v2 转换历史 Shell Job 结果，v3 转换历史交付/展示批次结果，不保留运行时旧格式兼容。Artifact 按字节 offset 续读，encoding 为 base64 或 utf8；UTF-8 页不拆分码点。tool_result_read 使用 items 数组读取原捕获结果，offset 按 Unicode 码点，返回 nextOffset 和原内容哈希；Memory 和摘要均是不可信数据，不能成为授权。语义检查点按冻结 aggressive/balanced/conservative 限制摘要至来源字节的35%/50%/75%，只在完成原步骤工具组后替换已绑定输入前缀，原用户请求和完整当前交换保留；没有开启模型派发就不会伪造摘要。
 
 ## 执行设置
 
@@ -386,7 +382,7 @@ Recall工具请求的条数不再另限20，候选读取至少覆盖本次请求
 
 图片生成有两种入口：聊天模型选择器选 Images 模型后发送图片描述，或使用文字 Agent 调用 `image_models_list` 选择已启用的图片配置，再调用 `image_generate`。工具方式需要 App 声明/授予 `context.read` 和 `artifacts.write`，图片生成属于外部付费请求及文件创建，沿原流程独立批准；直接选择图片模型沿原 Run 执行开关和预算，不伪装成工具批准。两种方式都保存为当前 App 文件，在对话中支持图片预览和下载；也可从文件库查看、保留或删除。图片测试按钮会实际生成一张测试图片并可能计费，测试图片只用于验证接口，不保存到文件库。
 
-模型能力与协议的持久约束由数据库结构校验，更新模型库不代替结构迁移；后续数据库升级见 [数据库迁移](DEPLOYMENT.md#数据库迁移从下一版本起)。
+模型能力与协议的持久约束由数据库结构校验，更新模型库不代替结构迁移；后续数据库升级见 [数据库迁移](DEPLOYMENT.md#数据库迁移)。
 
 当前接入 OpenAI 兼容 `/images/generations`，一次生成一张 PNG/JPEG/WebP/GIF（GIF 保留原字节，动画生成由供应商能力决定），不另设16 MiB图片上限，按Artifact剩余空间及磁盘余量预检，最终写入事务再次校验总配额。SDK整体解析Base64/JSON，仍受当前Node字符串/Buffer表示容量约束；Node22 x64图片原始字节约384 MiB（扣除JSON余量），处理峰值内存高于文件体积；普通流式文件上传下载不受这个字符串上限影响。默认尺寸和质量由供应商决定；只接受 base64 图片返回，不下载供应商返回的外部 URL。图片模型声明不保证网关提供该接口；网关仅支持原生/Chat 图片生成接口时需使用其兼容 Images 接口。未新增图片编辑或音视频生成。图片不计为虚构的文本实际 Token usage；直接调用受模型请求数/并发/字节估算预留约束，图片工具调用计入工具数量，正式图片生成（直接 Images 和image_generate工具）统一使用当前任务的剩余活动时长，不另套普通工具短超时或固定5分钟网络上限；当前默认任务总时长为30分钟，已消耗时间不会重置，App可缩窄该预算。手动停止、权限/配置撤销或服务关闭仍会取消；普通工具继续使用工具超时配置，设置中的单独图片模型测试最多等待5分钟。文件按原 App 容量和保留期限管理。生成后保存失败、网络中断或取消不能证明供应商未扣费或已停止，结果未知时不自动重试。预览仅显示登录后有权读取的本站栅格图片，不允许任意远程或 data URL。
 
@@ -476,7 +472,7 @@ Linux 内存与 Swap 直接读取内核的 `/proc/meminfo`，优先使用 `MemAv
 
 CAPTCHA 默认关闭，由管理员在安全设置页面启用并配置供应商、site key、secret 和准确 hostname，保存到数据库后重启生效。界面沿用供应商选择后展开对应配置和帮助链接；停用或切换供应商清除未提交密钥文本，保留／清除／替换及 hostname 使用后端语义。明确清除密钥可在停用前选择“清除”，随后停用并保存。可选的 `NEXUS_CAPTCHA_*` 环境变量仅用于数据库尚无配置时的首次初始化，后续启动读取持久配置，不覆盖页面保存值。启用时必需字段不完整会拒绝保存，`GET /api/v1/auth/captcha/config` 公开 provider 与适用 site key、不公开 secret；登录 `captchaToken` 必填且最多 4096 UTF-8 bytes。后端向 hCaptcha/Google 验证接口发真实 POST、十秒截止且不重试；启用时必须绑定 `NEXUS_PUBLIC_ORIGIN` 的准确 hostname，成功响应需要 hostname 一致；Google 仅支持 reCAPTCHA v2 checkbox，不接受 v3 score/action 响应，非 2xx 响应体即时关闭；供应商明确失败返回 `captcha_invalid`，网络/格式/超时异常返回 503 `captcha_unavailable`，不固定成功或故障静默关闭。密码与 CAPTCHA 均通过后才签发会话；客户端断连会取消待执行的网络校验/写入意图，已提交的新 token 若未交付则尽力撤销，原 Cookie 不因此失效。本地交付要求原传输仍存活时触发 finish；销毁后清空缓冲或迟到的 finish 不算交付，finish 也不保证浏览器实际收到；SQLite 提交未知仍按未知结果处理。HTTPS/Host/Origin/Fetch Metadata 检查在 Platform 的统一 HTTP/WS 边界实施。核心配置由 持久 Settings 管理，CAPTCHA/Passkey站点保存后重启生效，IP与监控配置热更新；正式CAPTCHA/IP安全面板已接版本化新契约；审计与通知正式前端已接 Shared Operations 契约，TOTP/Passkey 挑战已有 部分验证，详见下节；公网供应商、期限/配额与故障交错按 testing 保留待验。
 
-数据库初始化创建完整表结构；登录失败记录包含最后失败时间和索引。后续结构及历史数据转换从下一版本起按变更逐条迁移，dev 与 latest 使用同一版本链，见 [部署文档](DEPLOYMENT.md#数据库迁移从下一版本起)。成功登录/会话验证等存储访问至多每五分钟惰性清理过期会话与已结束且七天无新失败的黑名单行，不清除活跃封禁。SQLite 提交或回滚状态不确定返回 `operation_unknown`（503），可能已有副作用，客户端不得假定失败并重放密码修改或设置写入；重登/重新查状态由当前身份和持久事实决定。
+数据库初始化创建完整表结构；登录失败记录包含最后失败时间和索引。后续结构及历史数据转换从下一版本起按变更逐条迁移，dev 与 latest 使用同一版本链，见 [部署文档](DEPLOYMENT.md#数据库迁移)。成功登录/会话验证等存储访问至多每五分钟惰性清理过期会话与已结束且七天无新失败的黑名单行，不清除活跃封禁。SQLite 提交或回滚状态不确定返回 `operation_unknown`（503），可能已有副作用，客户端不得假定失败并重放密码修改或设置写入；重登/重新查状态由当前身份和持久事实决定。
 
 ## TOTP 与 Passkey
 
@@ -496,3 +492,7 @@ CAPTCHA 默认关闭，由管理员在安全设置页面启用并配置供应商
 GET /api/v1/settings/audit-logs 支持 event/from/to/q/limit/offset：时间为毫秒，默认50条、最多200条，以nextOffset续页。仅记录有限事件、用户/来源IP、资源ID、路由模板与状态码，不记录请求正文、Cookie、密钥或模型正文。相同事件键只接受原绑定内容，改事件、身份、资源或路由/状态返回冲突；HTTP审计记录响应决定，不保证客户端实际收到。审计保留最新50000条和尚未完成通知分发的积压；投递保留最新50000条终态及全部在途项。
 
 GET/PUT /api/v1/settings/logging 使用 {expectedVersion,level}，level为debug/info/warn/error/silent；默认info。已保存阈值启动加载，保存后立即按版本单调激活，GET同时显示effectiveLevel；版本耗尽返回version_conflict，不保存越界版本。Operations事件写有限安全元数据到stderr，失败/未知事件为warn，其余info；后端诊断与审计共用同一Pino实例及有效等级。日志配置和审计只供当前管理员，更新与会话复查同事务，冲突先刷新，未知结果不自动重放。
+
+## Agent 连接资源关闭
+
+`POST /api/v1/agent/apps/:appId/resources/close` 接收 `{appVersion,target,confirmed}`。target 为 `{kind:"app"}` 或 `{kind:"session",runId,sessionId}`。需当前 App 版本及管理员会话；未确认且存在活动 Run/操作/后台 Job 返回 confirmation_required 和计数，confirmed 后停止原任务并等待资源排空。sessionId 绑定精确资源实例，旧请求不关闭后续新实例。资源状态经原 Run WS 推送，包括连接计数、活动数、状态和 expiresAt；隐藏/最小化不调用关闭。

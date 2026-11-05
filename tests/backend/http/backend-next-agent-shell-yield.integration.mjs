@@ -1,3 +1,4 @@
+import { posixCommand } from '../../support/posix-command.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mkdtemp, mkdir, readFile, writeFile, stat } from 'node:fs/promises';
@@ -40,7 +41,7 @@ await test('Shell yield policy and mutation admission', { timeout: 60000 }, asyn
 
 	const wait = (f, jobId) => ({
 		name: 'shell_job_control',
-		input: { connectionId: f.connectionId, action: 'wait', jobId, waitSeconds: 30 },
+		input: { connectionId: f.connectionId, action: 'wait', waitSeconds: 30, jobIds: [jobId] },
 	});
 
 	const result = (f, run, name) => {
@@ -55,13 +56,9 @@ await test('Shell yield policy and mutation admission', { timeout: 60000 }, asyn
 			const effect = join(directory, 'single-effect');
 			const run = await f.start(mode + ' yield', (results) => {
 				if (!results.length) {
-					return shell(f, {
-						kind: 'shell',
-						mode,
-						script: `printf x >> '${effect}'; sleep 3; printf finished`,
-					});
+					return shell(f, { mode, commands: [`printf x >> '${effect}'; sleep 3; printf finished`] });
 				}
-				const latest = results.at(-1);
+				const latest = results.at(-1).jobs?.[0] ?? results.at(-1);
 				assert.equal(latest.jobId, results[0].jobId);
 				return latest.state === 'completed' ? {} : wait(f, results[0].jobId);
 			});
@@ -73,7 +70,7 @@ await test('Shell yield policy and mutation admission', { timeout: 60000 }, asyn
 			const operations = f.rows('agent_run_tools', run);
 			assert.ok(operations.filter((row) => row.tool_name === 'shell_job_control').length >= 2);
 			assert.ok(operations.every((row) => row.state === 'completed'));
-			assert.equal(result(f, run, 'shell_job_control').value.result.stdout, 'finished');
+			assert.equal(result(f, run, 'shell_job_control').value.jobs[0].result.commands[0].stdout, 'finished');
 			assert.deepEqual(expectStatus(await f.api('GET', '/api/v1/remote/mutations'), 200).items, []);
 		});
 	}
@@ -81,8 +78,8 @@ await test('Shell yield policy and mutation admission', { timeout: 60000 }, asyn
 	await scenario('immediate yield returns one queryable Job; fast foreground retains its result shape', async (f) => {
 		const run = await f.start('immediate yield', (results) =>
 			!results.length
-				? shell(f, { kind: 'argv', argv: ['printf', 'hello'], yieldSeconds: 0 })
-				: results.at(-1).state === 'completed'
+				? shell(f, { yieldSeconds: 0, commands: [posixCommand(['printf', 'hello'])] })
+				: (results.at(-1).jobs?.[0] ?? results.at(-1)).state === 'completed'
 					? {}
 					: wait(f, results[0].jobId),
 		);
@@ -90,19 +87,69 @@ await test('Shell yield policy and mutation admission', { timeout: 60000 }, asyn
 		await f.wait(run, 'completed');
 		assert.equal(typeof result(f, run, 'shell_execute').value.jobId, 'string');
 		const quick = await f.start('fast foreground', (results) =>
-			results.length ? {} : shell(f, { kind: 'shell', script: 'printf out; printf err >&2; exit 7' }),
+			results.length ? {} : shell(f, { commands: ['printf out; printf err >&2; exit 7'] }),
 		);
 		await f.approve(await f.approval(quick, 'shell_execute'));
 		await f.wait(quick, 'completed');
 		assert.deepEqual(result(f, quick, 'shell_execute').value, {
 			status: 'nonzero',
-			exitCode: 7,
-			signal: null,
-			stdout: 'out',
-			stderr: 'err',
-			truncated: false,
+			commands: [
+				{
+					index: 0,
+					status: 'nonzero',
+					exitCode: 7,
+					signal: null,
+					stdout: 'out',
+					stderr: 'err',
+					truncated: false,
+				},
+			],
 		});
 	});
+
+	await scenario(
+		'short live output is readable before completion and byte cursors preserve UTF-8 exactly',
+		async (f, directory) => {
+			const gate = join(directory, 'release-output');
+			const first = '短🙂',
+				tail = '尾🙂'.repeat(800);
+			let received = '',
+				offset = 0,
+				observedWhileActive = false;
+			const run = await f.start('live output cursor', async (results) => {
+				if (!results.length)
+					return shell(f, {
+						mode: 'background',
+						commands: [
+							`printf '${first}'; while [ ! -f '${gate}' ]; do sleep 0.05; done; printf '${tail}'`,
+						],
+					});
+				if (results.length > 1) {
+					const page = results.at(-1).jobs[0];
+					assert.equal(page.offset, offset);
+					offset = page.nextOffset;
+					received += page.output.map((item) => item.text).join('');
+					assert.equal(offset, Buffer.byteLength(received));
+					if (received === first && !observedWhileActive) {
+						assert.equal(page.complete, false);
+						observedWhileActive = true;
+						await writeFile(gate, 'release');
+					}
+					if (page.complete && page.nextOffset === page.capturedBytes) return {};
+				}
+				await new Promise((resolve) => setTimeout(resolve, 40));
+				return {
+					name: 'shell_job_control',
+					input: { connectionId: f.connectionId, action: 'output', jobIds: [results[0].jobId], offset },
+				};
+			});
+			await f.approve(await f.approval(run, 'shell_execute'));
+			await f.wait(run, 'completed');
+			assert.equal(observedWhileActive, true);
+			assert.equal(received, first + tail);
+			assert.equal(f.rows('agent_tool_jobs', run).length, 1);
+		},
+	);
 
 	await scenario(
 		'held and blocked admission never execute the new command or overwrite original evidence',
@@ -115,9 +162,10 @@ await test('Shell yield policy and mutation admission', { timeout: 60000 }, asyn
 				results.length
 					? { hold: true }
 					: shell(f, {
-							kind: 'shell',
 							mode: 'background',
-							script: `printf x > '${effect}'; while [ ! -f '${gate}' ]; do sleep 0.05; done; printf done > '${finished}'`,
+							commands: [
+								`trap '' HUP TERM; printf x > '${effect}'; while [ ! -f '${gate}' ]; do sleep 0.05; done; printf done > '${finished}'`,
+							],
 						}),
 			);
 			try {
@@ -141,7 +189,7 @@ await test('Shell yield policy and mutation admission', { timeout: 60000 }, asyn
 
 				async function refused(code) {
 					const next = await f.start(code, () =>
-						shell(f, { kind: 'argv', argv: ['touch', forbiddenEffect] }),
+						shell(f, { commands: [posixCommand(['touch', forbiddenEffect])] }),
 					);
 					await f.approve(await f.approval(next, 'shell_execute'));
 					const view = await f.wait(next, 'failed');
@@ -198,9 +246,10 @@ await test('Shell yield policy and mutation admission', { timeout: 60000 }, asyn
 				results.length
 					? { hold: true }
 					: shell(f, {
-							kind: 'shell',
-							script: `printf x > '${effect}'; sleep 3; printf done > '${finished}'`,
 							yieldSeconds: 0,
+							commands: [
+								`trap '' HUP TERM; printf x > '${effect}'; sleep 3; printf done > '${finished}'`,
+							],
 						}),
 			);
 			await f.approve(await f.approval(run, 'shell_execute'));
@@ -260,9 +309,10 @@ await test('Shell yield policy and mutation admission', { timeout: 60000 }, asyn
 			const run = await f.start('hard Run deadline', (results) =>
 				!results.length
 					? shell(f, {
-							kind: 'shell',
-							script: `printf x > '${effect}'; sleep 4; printf done > '${finished}'`,
 							yieldSeconds: 0,
+							commands: [
+								`trap '' HUP TERM; printf x > '${effect}'; sleep 4; printf done > '${finished}'`,
+							],
 						})
 					: wait(f, results[0].jobId),
 			);

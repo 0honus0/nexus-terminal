@@ -107,3 +107,10 @@ export interface WorkspaceObservationOwner {
 
 export type ObservationStatusEvent =
 	{ kind: 'sample'; value: ObservationSample } | { kind: 'error'; code: ObservationErrorCode };
+
+export interface ObservationDockerInspection {
+	id: string;
+	state: string;
+	image: string;
+	created: string;
+}

@@ -769,3 +769,40 @@ test('a password prompt and paste never display unconfirmed terminal input', asy
 	await page.evaluate(() => window.__terminalLifecycle.output('PASTED_CONTENT'));
 	await expect(rows).toContainText('PASTED_CONTENT');
 });
+
+test('prediction queue recovers from xterm barrier failures without acknowledging unparsed output', async ({
+	page,
+}) => {
+	await page.goto('/login');
+	const result = await page.evaluate(async () => {
+		const modulePath = '/__e2e__/browser-terminal.js';
+		const { Terminal, TerminalTypeAhead } = await import(modulePath);
+		const terminal = new Terminal({ cols: 80, rows: 24 });
+		const host = document.createElement('div');
+		document.body.append(host);
+		terminal.open(host);
+		const realWrite = terminal.write.bind(terminal);
+		let barriers = 0;
+		let failureAt = 1;
+		let failures = 0;
+		let consumed = 0;
+		terminal.write = (data: string, callback?: () => void) => {
+			if (data === '' && ++barriers === failureAt) throw new Error('Controlled xterm barrier failure');
+			realWrite(data, callback);
+		};
+		const predictor = new TerminalTypeAhead(terminal, () => failures++);
+		await predictor.reset();
+		predictor.write('first', () => consumed++);
+		await predictor.reset();
+		failureAt = barriers + 3;
+		await predictor.reset();
+		predictor.write(' second', () => consumed++);
+		await predictor.reset();
+		const text = terminal.buffer.active.getLine(0)?.translateToString(true);
+		predictor.stop();
+		terminal.dispose();
+		host.remove();
+		return { text, consumed, failures };
+	});
+	expect(result).toEqual({ text: 'first second', consumed: 2, failures: 1 });
+});

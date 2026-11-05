@@ -90,7 +90,7 @@ export type ModelToolProperty =
 			type: 'array';
 			minItems: number;
 			maxItems: number;
-			items: { type: 'string'; minLength: number; maxLength: number };
+			items: { type: 'string'; minLength: number; maxLength: number } | ModelToolDefinition['parameters'];
 	  }
 	| { type: 'integer'; minimum: number; maximum: number }
 	| { type: 'string'; minLength: number; maxLength: number; enum?: string[] };

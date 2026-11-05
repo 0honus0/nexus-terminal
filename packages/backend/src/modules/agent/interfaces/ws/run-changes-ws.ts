@@ -262,6 +262,15 @@ export function createRunChangesWebSocketRoute(
 							return;
 						}
 						cursor = fromRunStreamCursor(command.cursor);
+						await boundary(() =>
+							threads.withAdmission(actor, async () => {
+								const run = await runs.get(actor.userId, actor.appId, selected.runId);
+								actor.assertCurrent();
+								if (!run || run.threadId !== command.cursor.threadId) {
+									throw new AgentFailure('not_found');
+								}
+							}),
+						);
 					} else {
 						const oldest = pending[0];
 						if (!oldest || command.revision !== oldest.revision) {

@@ -46,7 +46,7 @@ export interface CancelRootRunCommand {
 	userId: number;
 	appId: string;
 	runId: string;
-	expectedVersion: number;
+	expectedVersion: number | 'current';
 	operationKey: string;
 	requestHash: string;
 }

@@ -1,5 +1,6 @@
 import { posix } from 'node:path';
 import type { ToolProjectModel } from '../model/tool-project-model.js';
+import type { ToolRemoteModel } from '../model/tool-remote-model.js';
 import type { ToolModel } from '../model/tool-model.js';
 import type { ProjectInput, ProjectGuidance } from '../model/tool-project-types.js';
 import type { ToolTarget, ToolOperationScope } from '../model/tool-types.js';
@@ -21,6 +22,8 @@ export class ToolProjectService {
 		signal: AbortSignal,
 		validate: () => Promise<void>,
 	): Promise<string> {
+		// Capture the Run capability before any wait, so late callbacks cannot reopen a drained scope.
+		const remote = this.remote.remote(operation);
 		const scope = {
 			userId: operation.userId,
 			appId: operation.appId,
@@ -64,7 +67,7 @@ export class ToolProjectService {
 		) {
 			throw new AgentFailure('invalid_input');
 		}
-		const instructions = await this.guidance(binding.directory, path, {
+		const instructions = await this.guidance(remote, binding.directory, path, {
 			operationId: operation.id,
 			target,
 			signal,
@@ -96,7 +99,12 @@ export class ToolProjectService {
 		});
 	}
 
-	private async guidance(root: string, path: string, scope: ToolOperationScope): Promise<ProjectGuidance[]> {
+	private async guidance(
+		remote: ToolRemoteModel,
+		root: string,
+		path: string,
+		scope: ToolOperationScope,
+	): Promise<ProjectGuidance[]> {
 		const deadline = Date.now() + scope.timeoutMs;
 
 		const request = (): ToolOperationScope => {
@@ -122,7 +130,7 @@ export class ToolProjectService {
 		const result: ProjectGuidance[] = [];
 		for (const directory of directories) {
 			await scope.validate();
-			const entries = await this.remote.projectDirectory(directory, request());
+			const entries = await remote.projectDirectory(directory, request());
 			for (const entry of entries
 				.filter((entry) => /^agents?\.md$/iu.test(entry.name))
 				.sort((a, b) => a.name.localeCompare(b.name))) {
@@ -132,7 +140,7 @@ export class ToolProjectService {
 				if (result.length >= 4 || entry.size > 8192) {
 					throw new AgentFailure('limit_exceeded');
 				}
-				const value = await this.remote.projectInstruction(posix.join(directory, entry.name), request());
+				const value = await remote.projectInstruction(posix.join(directory, entry.name), request());
 				if (value.bytes > 8192) {
 					throw new AgentFailure('limit_exceeded');
 				}

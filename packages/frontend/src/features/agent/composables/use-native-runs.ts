@@ -1,3 +1,4 @@
+import type { NativeResourceSession } from '../model/native-resource-types';
 import { mergeNativeApprovals } from '../model/native-run-rules';
 import { subscribeNativeRun } from '../api/native-run-stream';
 import type { AgentReasoningEffort } from '@nexus-terminal/shared/agent/providers/values';
@@ -96,6 +97,7 @@ export function useNativeRuns(
 	const toolCursor = ref<string | null>(null);
 	const approvals = ref<NativeApproval[]>([]);
 	const children = ref<NativeChild[]>([]);
+	const resources = ref<NativeResourceSession[]>([]);
 	const child = ref<NativeChild | null>(null);
 	const messages = ref<NativeMessage[]>([]);
 	const messageCursor = ref(0);
@@ -176,6 +178,7 @@ export function useNativeRuns(
 		eventCursor.value = 0;
 		approvals.value = [];
 		children.value = [];
+		resources.value = [];
 		child.value = null;
 		messages.value = [];
 		messageCursor.value = 0;
@@ -773,6 +776,7 @@ export function useNativeRuns(
 			eventCursor.value = value.state.events.nextCursor;
 			approvals.value = mergeNativeApprovals(approvals.value, value.state.approvals);
 			children.value = value.state.children;
+			resources.value = value.state.resources;
 			if (value.state.usage.toolExecutions !== previousExecutions || value.state.run.status !== previousStatus) {
 				scheduleToolRefresh();
 			}
@@ -784,7 +788,11 @@ export function useNativeRuns(
 		}
 		if (!value.more) {
 			finishCatchUp();
-			if (run.value && !isNativeRunActive(run.value)) {
+			if (
+				run.value &&
+				!isNativeRunActive(run.value) &&
+				resources.value.every((resource) => resource.state === 'cleanup_failed')
+			) {
 				stopUpdates();
 			}
 		}
@@ -1023,6 +1031,7 @@ export function useNativeRuns(
 		events,
 		approvals,
 		children,
+		resources,
 		child,
 		messages,
 		pending,

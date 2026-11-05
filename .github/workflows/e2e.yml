@@ -201,7 +201,7 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ github.token }}
-      options: --ipc=host
+      options: --ipc=host ${{ matrix.suite == 'backend' && '--volume=/var/run/docker.sock:/var/run/docker.sock' || '' }}
     env:
       NEXUS_E2E_SUITE: ${{ matrix.suite }}
       NEXUS_E2E_PREBUILT: '1'
@@ -248,6 +248,12 @@ jobs:
           artifact-ids: ${{ steps.application.outputs.result }}
           path: packages
           merge-multiple: true
+
+      - name: Prepare real Docker fixture
+        if: matrix.suite == 'backend'
+        run: |
+          docker version
+          docker pull alpine:latest
 
       - name: Run balanced E2E shard ${{ matrix.shard }}
         env:

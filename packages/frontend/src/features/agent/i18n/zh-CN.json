@@ -1992,6 +1992,23 @@
       },
       "detailsHint": "打开任务查看执行详情。",
       "viewDetails": "详情"
+    },
+    "resources": {
+      "title": "任务连接",
+      "close": "关闭连接",
+      "connecting": "正在准备连接",
+      "operations": "执行中 {count}",
+      "backgroundJobs": "后台任务 {count}",
+      "expires": "空闲连接回收时间：{time}",
+      "closeTitle": "停止任务并关闭连接？",
+      "closeMessage": "当前有 {tasks} 个进行中的任务、{operations} 个执行中的操作和 {jobs} 个后台任务。确认后将停止相关任务并释放连接。已经派发的远端操作可能无法确认是否停止。",
+      "stopAndClose": "停止并关闭",
+      "states": {
+        "idle": "空闲 · 可复用",
+        "busy": "使用中",
+        "closing": "正在关闭",
+        "cleanup_failed": "清理失败"
+      }
     }
   }
 }

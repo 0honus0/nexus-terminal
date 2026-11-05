@@ -1992,6 +1992,23 @@
       },
       "detailsHint": "Open the task for details.",
       "viewDetails": "Details"
+    },
+    "resources": {
+      "title": "Task connections",
+      "close": "Close connections",
+      "connecting": "Preparing connections",
+      "operations": "Active operations {count}",
+      "backgroundJobs": "Background jobs {count}",
+      "expires": "Idle connection expiry: {time}",
+      "closeTitle": "Stop tasks and close connections?",
+      "closeMessage": "There are {tasks} active tasks, {operations} active operations and {jobs} background jobs. Continuing stops related tasks and releases their connections. Already dispatched remote operations may have an unconfirmed stop outcome.",
+      "stopAndClose": "Stop and close",
+      "states": {
+        "idle": "Idle · reusable",
+        "busy": "In use",
+        "closing": "Closing",
+        "cleanup_failed": "Cleanup failed"
+      }
     }
   }
 }

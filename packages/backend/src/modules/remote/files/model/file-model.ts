@@ -11,7 +11,7 @@ import { TargetOperationError } from '../../../targets/public-errors.js';
 import { timingSafeEqual } from 'node:crypto';
 import type { MachineSftpLease } from '../../../../platform/ssh/ssh-port.js';
 import type { TrustedSshTargetResolver } from '../../../targets/public.js';
-import type { RemoteMachineModel } from '../../machines/model/machine-model.js';
+import type { RemoteMachineProvider } from '../../machines/model/machine-types.js';
 import { RemoteFileFailure, type FileResource } from './file-types.js';
 import { SftpFileResource } from './file-resource.js';
 import type { ArchiveCommandsFactory } from '../../../../platform/archive/archive-port.js';
@@ -21,7 +21,7 @@ import type { FileZipModel } from './file-zip-model.js';
 
 export class RemoteFileModel {
 	constructor(
-		private readonly machines: RemoteMachineModel,
+		private readonly machines: RemoteMachineProvider,
 		private readonly resolver: TrustedSshTargetResolver,
 		private readonly tokens: SessionTokens,
 		private readonly transfers: ServerTransferModel,
@@ -93,6 +93,7 @@ export class RemoteFileModel {
 				opened.machine,
 				lease,
 				serverKeyFingerprint,
+				(reusable) => this.machines.release(opened.machine, reusable),
 			);
 		} catch (error) {
 			const failure = this.failure(error);
@@ -105,7 +106,7 @@ export class RemoteFileModel {
 				}
 			}
 			try {
-				await opened.machine.close();
+				await this.machines.release(opened.machine, false);
 			} catch (closeError) {
 				failures.push(closeError);
 			}

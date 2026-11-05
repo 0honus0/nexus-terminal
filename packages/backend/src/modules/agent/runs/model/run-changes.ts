@@ -25,14 +25,18 @@ export class RunChanges {
 		};
 	}
 
+	notify(userId: number, appId: string, kind: RunChangeKind = 'state'): void {
+		if (this.accepting) {
+			this.events.emit(`${userId}:${appId}`, kind);
+		}
+	}
+
 	async after<T>(userId: number, appId: string, write: () => Promise<T>, kind: RunChangeKind = 'state'): Promise<T> {
 		try {
 			return await write();
 		} finally {
 			// Even an unknown commit requires a read; this never retries the mutation.
-			if (this.accepting) {
-				this.events.emit(`${userId}:${appId}`, kind);
-			}
+			this.notify(userId, appId, kind);
 		}
 	}
 

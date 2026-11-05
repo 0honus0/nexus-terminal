@@ -69,6 +69,7 @@ export class SftpFileResource implements FileResource {
 		machine: MachineConnection,
 		lease: MachineSftpLease,
 		readonly serverKeyFingerprint: string,
+		private readonly releaseMachine: (reusable: boolean) => Promise<void>,
 	) {
 		this.#machine = machine;
 		this.#lease = lease;
@@ -134,6 +135,34 @@ export class SftpFileResource implements FileResource {
 
 	scan(request: FileOperationRequest): Promise<FileEntry[]> {
 		return this.perform(() => this.scanEntries(request), request.signal);
+	}
+
+	listAfter(request: FileListRequest & { after: string }): Promise<FileEntry[]> {
+		return this.perform(async () => {
+			const entries: FileEntry[] = [];
+			for await (const row of this.#lease.scan(request.path, this.options(request))) {
+				request.signal.throwIfAborted();
+				if (row.name === '.' || row.name === '..' || row.name <= request.after) {
+					continue;
+				}
+				const entry = this.entry(row);
+				let index = entries.findIndex((value) => value.name >= entry.name);
+				if (index >= 0 && entries[index].name === entry.name) {
+					throw new RemoteFileFailure('conflict');
+				}
+				if (index < 0) {
+					index = entries.length;
+				}
+				entries.splice(index, 0, entry);
+				if (entries.length > request.maxEntries) {
+					entries.pop();
+				}
+			}
+			if (Buffer.byteLength(JSON.stringify(entries)) > request.maxMetadataBytes) {
+				throw new RemoteFileFailure('limit_exceeded');
+			}
+			return entries;
+		}, request.signal);
 	}
 
 	stat(request: FileStatRequest): Promise<FileInfo> {
@@ -807,7 +836,7 @@ export class SftpFileResource implements FileResource {
 			failures.push(error);
 		}
 		try {
-			await this.#machine.close();
+			await this.releaseMachine(this.usable && failures.length === 0);
 		} catch (error) {
 			failures.push(error);
 		}

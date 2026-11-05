@@ -84,6 +84,12 @@ export class RunExecutionOwner {
 	private closing = false;
 	private closePromise: Promise<void> | null = null;
 
+	activeRoots(userId: number, appId: string): string[] {
+		return [...this.tasks]
+			.filter(([, task]) => task.userId === userId && task.appId === appId && task.parentId === null)
+			.map(([id]) => id);
+	}
+
 	getActiveRunCount(): number {
 		return this.tasks.size;
 	}

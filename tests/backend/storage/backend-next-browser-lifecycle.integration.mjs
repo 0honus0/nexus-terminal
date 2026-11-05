@@ -279,3 +279,109 @@ await test('Browser actual CDP construction cancellation and cleanup fault owner
 		await clean();
 	});
 });
+
+await test('Browser session lanes isolate pending snapshots and configuration waits for every admitted session', async () => {
+	const { BrowserService } =
+		await import('../../../packages/backend/dist/modules/agent/integrations/service/browser-service.js');
+	const firstEntered = gate(),
+		releaseFirst = gate(),
+		secondDone = gate();
+	const sessions = [];
+	let updated = false;
+	const service = new BrowserService(
+		{
+			configuration: async () => ({
+				version: 1,
+				targets: [
+					{
+						id: 'target',
+						endpoints: [{ url: 'http://fixture', verifyTls: true, priority: 0 }],
+						allowedUrlPatterns: [],
+					},
+				],
+			}),
+
+			connect: async () => {
+				const index = sessions.length;
+				const session = {
+					closed: false,
+
+					snapshot: async () => {
+						if (index === 0) {
+							firstEntered.resolve();
+							await releaseFirst.promise;
+						} else secondDone.resolve();
+						return {
+							snapshotId: 'snapshot',
+							url: 'about:blank',
+							title: 'lane',
+							nodes: [],
+							truncated: false,
+						};
+					},
+
+					close: async () => {
+						session.closed = true;
+					},
+				};
+				sessions.push(session);
+				return session;
+			},
+
+			update: async () => {
+				updated = true;
+				return { version: 2, targets: [] };
+			},
+		},
+		null,
+	);
+	const owner = { userId: 1, appId: 'app', runId: 'run', operationId: 'first', operationHash: 'a'.repeat(64) };
+	const signal = new AbortController().signal;
+
+	const validate = async () => {};
+
+	try {
+		const first = JSON.parse(
+			await service.perform(owner, { action: 'open', targetId: 'target', expectedVersion: 1 }, signal, validate),
+		);
+		const second = JSON.parse(
+			await service.perform(
+				{ ...owner, operationId: 'second' },
+				{ action: 'open', targetId: 'target', expectedVersion: 1 },
+				signal,
+				validate,
+			),
+		);
+
+		const snapshot = (sessionId) => ({
+			action: 'snapshot',
+			sessionId,
+			maxNodes: 100,
+			include: [],
+			after: 0,
+			limit: 50,
+		});
+
+		const held = service.perform(owner, snapshot(first.sessionId), signal, validate);
+		await firstEntered.promise;
+		const independent = service.perform(owner, snapshot(second.sessionId), signal, validate);
+		await independent;
+		await secondDone.promise;
+		const update = service.update({ userId: 1 }, 1, []);
+		const stale = assert.rejects(
+			service.perform(owner, snapshot(second.sessionId), signal, validate),
+			(error) => error.code === 'not_found',
+		);
+		await new Promise((resolve) => setImmediate(resolve));
+		assert.equal(updated, false, 'configuration cannot retire a context with an admitted snapshot');
+		releaseFirst.resolve();
+		await held;
+		await update;
+		await stale;
+		assert.equal(updated, true);
+		assert.ok(sessions.every((session) => session.closed));
+	} finally {
+		releaseFirst.resolve();
+		await service.close();
+	}
+});

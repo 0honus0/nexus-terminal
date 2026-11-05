@@ -1,6 +1,6 @@
 import { AcpFailure } from '../../../../platform/acp/acp-port.js';
 import { MachineDispatchFailure } from '../../../../platform/ssh/ssh-port.js';
-import type { RemoteMachineModel } from './machine-model.js';
+import type { RemoteMachineProvider } from './machine-types.js';
 import type { MachineConnection } from '../../../../platform/ssh/ssh-port.js';
 import type { AcpPort } from '../../../../platform/acp/acp-port.js';
 import type { CommandPort } from '../../../../platform/commands/command-port.js';
@@ -17,7 +17,7 @@ import type {
 
 export class MachineAcpModel {
 	constructor(
-		private readonly machines: RemoteMachineModel,
+		private readonly machines: RemoteMachineProvider,
 		private readonly commands: CommandPort,
 		private readonly acp: AcpPort,
 	) {}
@@ -107,7 +107,7 @@ export class MachineAcpModel {
 		} finally {
 			if (machine) {
 				try {
-					await machine.close();
+					await this.machines.release(machine, failure === null);
 				} catch (cleanup) {
 					throw new RemoteResourceCleanupFailure(failure === null ? [cleanup] : [failure, cleanup]);
 				}

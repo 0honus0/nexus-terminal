@@ -4,6 +4,30 @@ import { promisify } from 'node:util';
 import { expect, test } from '../../support/fixtures';
 
 for (const [name, file, pattern] of [
+	['Docker targeted batch reads and lifecycle', 'http/backend-next-docker.integration.mjs', 'B10'],
+	[
+		'Browser per-session isolation and combined observations',
+		'http/backend-next-agent-browser.integration.mjs',
+		'B10',
+	],
+	['Browser resource cancellation and cleanup', 'storage/backend-next-browser-lifecycle.integration.mjs', 'Browser'],
+	['file batches, UTF-8 paging and cursor integrity', 'http/backend-next-agent-files.integration.mjs', 'B10 Agent'],
+	[
+		'live Job output, yielding and mutation admission',
+		'http/backend-next-agent-shell-yield.integration.mjs',
+		'Shell yield',
+	],
+	[
+		'collaboration authorization and event-driven joins',
+		'http/backend-next-agent-collaboration.integration.mjs',
+		'B10',
+	],
+	['ordered SQLite migrations, rollback and data preservation', 'storage/backend-next-phase2.integration.mjs', ''],
+	[
+		'resource expiration, confirmation and exact-session cleanup',
+		'http/backend-next-agent-resources.integration.mjs',
+		'Resource lifecycle:',
+	],
 	[
 		'model outcomes, streamed prefixes and immutable instructions',
 		'http/backend-next-agent-flow.integration.mjs',
@@ -24,6 +48,11 @@ for (const [name, file, pattern] of [
 		'remote/backend-next-file-delivery.integration.mjs',
 		'File delivery',
 	],
+	[
+		'Run resource reuse, concurrent isolation and lifecycle cleanup',
+		'remote/backend-next-machine-reuse.integration.mjs',
+		'Agent reuse:',
+	],
 ]) {
 	test('Agent execution: ' + name, async ({}, testInfo) => {
 		test.setTimeout(240_000);
@@ -32,7 +61,7 @@ for (const [name, file, pattern] of [
 			[
 				'--test',
 				'--test-reporter=tap',
-				'--test-name-pattern=' + pattern,
+				...(pattern ? ['--test-name-pattern=' + pattern] : []),
 				path.resolve(__dirname, '../../../backend/' + file),
 			],
 			{ timeout: 210_000, maxBuffer: 4 * 1024 * 1024 },

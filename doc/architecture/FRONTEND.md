@@ -247,7 +247,7 @@ FileManager 沿原 TerminalDirectoryPort.changeDirectory 的 onQueued 消费 wai
 
 ### 自动图片预览
 
-image_generate、artifact_create、artifact_present、file_deliver 的可信成功结果派生 outputArtifactId，工具说明与 Host 指引明确自动展示，无需模型拼接 Markdown 地址。前端 NativeToolArtifact 以认证 API 按需读取文件元数据，使用现有图片外观或文件卡、FilePreview 和下载入口；失败与过期不伪造成功。Base64 只经生成服务落盘，不写入聊天或工具列表。待批准、失败或 unknown 不产生成功预览；刷新后仍可从工具记录恢复，文件读取继续执行原会话与 App 授权。直接 Images 对话仍由程序生成展示内容，不依赖文字模型。
+image_generate、artifact_create、artifact_present、file_deliver 的可信成功结果派生 outputArtifactIds，工具说明与 Host 指引明确自动展示，无需模型拼接 Markdown 地址。前端 NativeToolArtifact 以认证 API 按需读取文件元数据，使用现有图片外观或文件卡、FilePreview 和下载入口；失败与过期不伪造成功。Base64 只经生成服务落盘，不写入聊天或工具列表。待批准及失败不产生成功预览；unknown 批次只展示其中已确认完成的文件；刷新后仍可从工具记录恢复，文件读取继续执行原会话与 App 授权。直接 Images 对话仍由程序生成展示内容，不依赖文字模型。
 
 Workspace 传输失败呈现：原 TransferController 保留 error/unknown 真实结算，WorkspaceSessionSurface 与 WorkspacePage 通过 transfers 的 `isProgressTaskVisible` 统一过滤浮动进度、恢复按钮与隐藏任务列表。各操作原等待回执的 owner 发出 Toast，上传在批次完成回执中通知，准备失败只由原提交 catch 通知，不重复订阅同一错误。密码拒绝仍进入原重输流程。此展示过滤不取消远端任务、不解除机器突变未知围栏。所有进度视图不再附加错误/警告段落，完成警告由原回执 owner 通过 Toast 通知。后台 serverTransfers store 比较当前快照的子任务状态与错误码发布安全失败 Toast，列表读取及取消/移除错误同样走 feedback；身份/代次/取消保护保持，网络错误交原全局通知，不新增轮询或重复监听。
 

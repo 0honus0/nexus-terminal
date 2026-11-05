@@ -1,34 +1,37 @@
-import type { ToolJobResult } from './tool-job-types.js';
-import type { ProjectDirectoryEntry, ProjectInstruction } from './tool-project-types.js';
-import type { TrustedSshTargetResolver } from '../../../targets/public.js';
+import { randomUUID } from 'node:crypto';
+import type { ToolJobScope } from './tool-job-types.js';
+import type { ToolResourceSnapshot } from './tool-resource-types.js';
+import type { TrustedSshTargetResolver, ConnectionCatalog } from '../../../targets/public.js';
 import type { HostDiagnostics } from '../../../system/public.js';
 import { SystemOperationError } from '../../../system/public-errors.js';
-import type {
-	RemoteMachineOperations,
-	RemoteMachineOperationScope,
-	RemoteExecutionCommand,
-} from '../../../remote/public.js';
-import { RemoteMachineOperationError } from '../../../remote/public-errors.js';
-import type { ToolTarget, ToolOperationScope, ToolInput, ToolFileContent } from './tool-types.js';
-import type { ConnectionCatalog } from '../../../targets/public.js';
+import type { RemoteMachineOperationFactory } from '../../../remote/public.js';
+import type { ToolTarget, ToolConnection } from './tool-types.js';
 import { TargetOperationError } from '../../../targets/public-errors.js';
-import {
-	AgentFailure,
-	ToolOperationRefusal,
-	ToolMutationAdmissionRefusal,
-	ToolExecutionUnknown,
-	ToolCleanupFailure,
-	aggregateToolFailures,
-	isAgentDrainFailure,
-} from '../../agent-failure.js';
-import type { ToolConnection } from './tool-types.js';
+import { AgentFailure, ToolOperationRefusal } from '../../agent-failure.js';
+import { ToolRemoteModel } from './tool-remote-model.js';
+import { RemoteMachineOperationError } from '../../../remote/public-errors.js';
 
 export class ToolModel {
+	private readonly resources = new Map<
+		string,
+		{
+			id: string;
+			scope: ToolJobScope;
+			openedAt: number;
+			lastUsedAt: number;
+			active: number;
+			closing: boolean;
+			cleanupFailed: boolean;
+			model: ToolRemoteModel;
+		}
+	>();
+
 	constructor(
 		private readonly targets: ConnectionCatalog,
 		private readonly resolver: TrustedSshTargetResolver,
-		private readonly operations: RemoteMachineOperations,
+		private readonly operations: RemoteMachineOperationFactory,
 		private readonly diagnostics: HostDiagnostics,
+		private readonly changed: (scope: ToolJobScope) => void = () => {},
 	) {}
 
 	async hostDiagnostics(): Promise<string> {
@@ -130,406 +133,127 @@ export class ToolModel {
 		}
 	}
 
-	async perform(
-		input: Exclude<
-			ToolInput,
-			| { kind: 'plugin' }
-			| { kind: 'connections' }
-			| { kind: 'job' }
-			| { kind: 'shell' }
-			| { kind: 'collaboration' }
-			| { kind: 'project' }
-			| { kind: 'result' }
-			| { kind: 'memory' }
-			| { kind: 'browser_targets' }
-			| { kind: 'acp_integrations' }
-			| { kind: 'image_models' }
-			| { kind: 'image_generate' }
-			| { kind: 'artifact' }
-			| { kind: 'deliver' }
-			| { kind: 'checkpoint' }
-			| { kind: 'host_diagnostics' }
-			| { kind: 'mcp' }
-			| { kind: 'mcp_discovery' }
-			| { kind: 'browser' }
-			| { kind: 'skill' }
-			| { kind: 'acp_integration' }
-		>,
-		scope: ToolOperationScope,
-	): Promise<string> {
-		let validationFailure: unknown = null;
-		let permissionFailure: unknown = null;
-
-		const validate = async () => {
+	remote(scope: ToolJobScope): ToolRemoteModel {
+		let entry = this.resources.get(scope.runId);
+		if (entry && (entry.scope.userId !== scope.userId || entry.scope.appId !== scope.appId)) {
+			throw new AgentFailure('not_found');
+		}
+		if (!entry) {
 			try {
-				await scope.validate();
+				const ownedScope = { userId: scope.userId, appId: scope.appId, runId: scope.runId };
+				entry = {
+					id: randomUUID(),
+					scope: ownedScope,
+					openedAt: Date.now(),
+					lastUsedAt: Date.now(),
+					active: 0,
+					closing: false,
+					cleanupFailed: false,
+					model: new ToolRemoteModel(this.operations.create(() => this.changed(ownedScope))),
+				};
 			} catch (error) {
-				validationFailure = error;
-				throw error;
+				if (error instanceof RemoteMachineOperationError) {
+					throw new ToolOperationRefusal('remote_unavailable', { cause: error });
+				}
+				throw new AgentFailure('internal_failure', { cause: error });
 			}
+			this.resources.set(scope.runId, entry);
+			this.changed(entry.scope);
+		}
+		if (entry.closing) {
+			throw new AgentFailure('provider_unavailable');
+		}
+		return entry.model;
+	}
+
+	activity(scope: ToolJobScope): () => void {
+		this.remote(scope);
+		const entry = this.resources.get(scope.runId);
+		if (!entry || entry.closing) {
+			throw new AgentFailure('provider_unavailable');
+		}
+		entry.active++;
+		entry.lastUsedAt = Date.now();
+		this.changed(entry.scope);
+		let released = false;
+		return () => {
+			if (released) {
+				return;
+			}
+			released = true;
+			entry.active--;
+			entry.lastUsedAt = Date.now();
+			this.changed(entry.scope);
 		};
+	}
 
-		const request: RemoteMachineOperationScope = {
-			operationId: scope.operationId,
-			targetId: scope.target.id,
-			fingerprint: scope.target.fingerprint,
-			timeoutMs: scope.timeoutMs,
-			signal: scope.signal,
-			validate,
+	touch(scope: ToolJobScope): void {
+		const entry = this.resources.get(scope.runId);
+		if (entry && entry.scope.userId === scope.userId && entry.scope.appId === scope.appId) {
+			entry.lastUsedAt = Date.now();
+			this.changed(entry.scope);
+		}
+	}
+
+	scopes(userId: number, appId: string): ToolJobScope[] {
+		return [...this.resources.values()]
+			.filter((entry) => entry.scope.userId === userId && entry.scope.appId === appId)
+			.map((entry) => ({ userId, appId, runId: entry.scope.runId }));
+	}
+
+	quiesceRun(scope: ToolJobScope): void {
+		const entry = this.resources.get(scope.runId);
+		if (entry && entry.scope.userId === scope.userId && entry.scope.appId === scope.appId) {
+			entry.closing = true;
+			this.changed(entry.scope);
+		}
+	}
+
+	resource(scope: ToolJobScope): ToolResourceSnapshot | null {
+		const entry = this.resources.get(scope.runId);
+		if (!entry || entry.scope.userId !== scope.userId || entry.scope.appId !== scope.appId) {
+			return null;
+		}
+		const value = entry.model.snapshot();
+		return {
+			id: entry.id,
+			runId: scope.runId,
+			createdAt: entry.openedAt,
+			lastUsedAt: entry.lastUsedAt,
+			mcpSessions: 0,
+			browserSessions: 0,
+			phase:
+				value.cleanupFailed || entry.cleanupFailed
+					? 'cleanup_failed'
+					: value.closing || entry.closing
+						? 'closing'
+						: value.operations > 0 || entry.active > 0
+							? 'busy'
+							: 'idle',
+			connections: value.connections,
+			files: value.files,
+			operations: Math.max(value.operations, entry.active),
+			targets: value.targets.map((id) => id),
 		};
-		try {
-			if (input.kind === 'acp') {
-				if (!scope.permission) {
-					throw new AgentFailure('internal_failure');
-				}
-				const permission = scope.permission;
-				const value = await this.operations.executeAcp(request, {
-					argv: input.argv.map((arg) => arg),
-					cwd: input.cwd,
-					prompt: input.prompt,
+	}
 
-					permission: async (value, signal) => {
-						try {
-							const response = await permission(
-								{
-									sessionId: value.sessionId,
-									toolCallId: value.toolCallId,
-									requestId: value.requestId,
-									title: value.title,
-									kind: value.kind,
-									inputJson: value.inputJson,
-								},
-								signal,
-							);
-							return {
-								decision: response.decision,
-
-								delivered: async () => {
-									try {
-										await response.delivered();
-									} catch (error) {
-										permissionFailure = error;
-										throw error;
-									}
-								},
-							};
-						} catch (error) {
-							permissionFailure = error;
-							throw error;
-						}
-					},
-				});
-				return JSON.stringify({ text: value.text, stopReason: value.stopReason });
-			}
-			if (input.kind === 'docker_inspect') {
-				const value = await this.operations.inspectDocker(request, input.containerId);
-				return JSON.stringify({
-					containerId: value.containerId,
-					state: value.state,
-					image: value.image,
-					fingerprint: value.fingerprint,
-				});
-			}
-			if (input.kind === 'docker_control') {
-				const value = await this.operations.controlDocker(request, {
-					containerId: input.containerId,
-					action: input.action,
-					expectedFingerprint: input.expectedFingerprint,
-				});
-				return JSON.stringify({ containerId: value.containerId, action: value.action, state: value.state });
-			}
-			if (input.kind === 'inspect') {
-				const value = await this.operations.inspectPath(request, input.path);
-				return JSON.stringify({
-					path: value.path,
-					kind: value.kind,
-					fingerprint: value.fingerprint,
-					fileCount: value.fileCount,
-					directoryCount: value.directoryCount,
-					bytes: value.bytes,
-				});
-			}
-			if (input.kind === 'patch') {
-				const value = await this.operations.patchText(request, {
-					path: input.path,
-					expectedSha256: input.expectedSha256,
-					oldText: input.oldText,
-					newText: input.newText,
-				});
-				return JSON.stringify({
-					path: value.path,
-					status: value.status,
-					bytes: value.bytes,
-					sha256: value.sha256,
-				});
-			}
-			if (input.kind === 'move') {
-				const value = await this.operations.movePath(request, {
-					path: input.path,
-					destinationPath: input.destinationPath,
-					expectedFingerprint: input.expectedFingerprint,
-				});
-				return JSON.stringify({
-					path: value.path,
-					destinationPath: value.destinationPath,
-					kind: value.kind,
-					fingerprint: value.fingerprint,
-				});
-			}
-			if (input.kind === 'delete') {
-				const value = await this.operations.deletePath(request, {
-					path: input.path,
-					expectedFingerprint: input.expectedFingerprint,
-					scope: input.scope,
-				});
-				return JSON.stringify({
-					path: value.path,
-					kind: value.kind,
-					fileCount: value.fileCount,
-					directoryCount: value.directoryCount,
-				});
-			}
-			if (input.kind === 'write') {
-				const value = await this.operations.writeText(request, {
-					path: input.path,
-					content: input.content,
-					expectedSha256: input.expectedSha256,
-				});
-				return JSON.stringify({
-					path: value.path,
-					status: value.status,
-					bytes: value.bytes,
-					sha256: value.sha256,
-				});
-			}
-			if (input.kind === 'diagnostics') {
-				const value = await this.operations.diagnose(request);
-				return JSON.stringify({
-					generatedAt: value.generatedAt,
-					cpuPercent: value.cpuPercent,
-					memUsedBytes: value.memUsedBytes,
-					memTotalBytes: value.memTotalBytes,
-					diskUsedBytes: value.diskUsedBytes,
-					diskTotalBytes: value.diskTotalBytes,
-					loadAverage: value.loadAverage.map((number) => number),
-				});
-			}
-			if (input.kind === 'read') {
-				const value = await this.operations.readText(request, input.path);
-				return JSON.stringify({ path: value.path, text: value.text, bytes: value.bytes, sha256: value.sha256 });
-			}
-			if (input.kind === 'list') {
-				const values = await this.operations.list(request, input.path);
-				return JSON.stringify({
-					path: input.path,
-					entries: values.map((entry) => ({
-						name: entry.name,
-						kind: entry.kind,
-						size: entry.size,
-						modifiedAt: entry.modifiedAt,
-					})),
-				});
-			}
-			const value = await this.operations.search(request, input.path, input.query, input.maxResults);
-			return JSON.stringify({
-				matches: value.matches.map((match) => ({
-					path: match.path,
-					line: match.line,
-					column: match.column,
-					text: match.text,
-				})),
-				truncated: value.truncated,
-			});
-		} catch (error) {
-			this.failure(error, validationFailure, permissionFailure);
+	async drainRun(runId: string): Promise<void> {
+		const entry = this.resources.get(runId);
+		if (entry) {
+			await entry.model.close();
 		}
 	}
 
-	async consumeFile<T>(
-		path: string,
-		maxBytes: number,
-		scope: ToolOperationScope,
-		consume: (file: ToolFileContent, source: AsyncIterable<Uint8Array>) => Promise<T>,
-	): Promise<T> {
-		let consumerFailure: unknown = null;
-		return this.withOperation(
-			scope,
-			(request) =>
-				this.operations.consumeFile(request, path, maxBytes, async (file, source) => {
-					const model = this;
-
-					async function* content(): AsyncIterable<Uint8Array> {
-						try {
-							yield* source;
-						} catch (error) {
-							model.failure(error);
-						}
-					}
-
-					try {
-						return await consume({ name: file.name, sizeBytes: file.sizeBytes }, content());
-					} catch (error) {
-						consumerFailure = error;
-						throw error;
-					}
-				}),
-			() => consumerFailure,
-		);
-	}
-
-	async command(
-		input: Extract<ToolInput, { kind: 'shell' }>,
-		scope: ToolOperationScope,
-	): Promise<Exclude<ToolJobResult, { status: 'not_started' }>> {
-		return this.withOperation(scope, async (request) => {
-			const command: RemoteExecutionCommand =
-				input.command.kind === 'argv'
-					? { kind: 'argv', argv: input.command.argv.map((arg) => arg) }
-					: { kind: 'shell', script: input.command.script };
-			const value = await this.operations.executeCommand(request, { command, cwd: input.cwd });
-			return {
-				status: value.status,
-				exitCode: value.exitCode,
-				signal: value.signal,
-				stdout: value.stdout,
-				stderr: value.stderr,
-				truncated: value.truncated,
-			};
-		});
-	}
-
-	async projectDirectory(path: string, scope: ToolOperationScope): Promise<ProjectDirectoryEntry[]> {
-		return this.withOperation(scope, async (request) =>
-			(await this.operations.list(request, path)).map((entry) => ({
-				name: entry.name,
-				kind: entry.kind,
-				size: entry.size,
-			})),
-		);
-	}
-
-	async projectInstruction(path: string, scope: ToolOperationScope): Promise<ProjectInstruction> {
-		return this.withOperation(scope, async (request) => {
-			const value = await this.operations.readText(request, path);
-			return { path: value.path, text: value.text, bytes: value.bytes, sha256: value.sha256 };
-		});
-	}
-
-	private async withOperation<T>(
-		scope: ToolOperationScope,
-		work: (request: RemoteMachineOperationScope) => Promise<T>,
-		getConsumerFailure?: () => unknown,
-	): Promise<T> {
-		let validationFailure: unknown = null;
-		const request: RemoteMachineOperationScope = {
-			operationId: scope.operationId,
-			targetId: scope.target.id,
-			fingerprint: scope.target.fingerprint,
-			signal: scope.signal,
-			timeoutMs: scope.timeoutMs,
-
-			validate: async () => {
-				try {
-					await scope.validate();
-				} catch (error) {
-					validationFailure = error;
-					throw error;
-				}
-			},
-		};
-		try {
-			return await work(request);
-		} catch (error) {
-			const consumerFailure = getConsumerFailure?.() ?? null;
-			if (consumerFailure !== null) {
-				const failures: unknown[] = [consumerFailure];
-				if (validationFailure !== null && validationFailure !== consumerFailure) {
-					failures.push(validationFailure);
-				}
-				if (error instanceof RemoteMachineOperationError && error.code === 'cleanup_failed') {
-					throw new ToolCleanupFailure({
-						cause: new AggregateError([...failures, error], 'File import and remote cleanup failed'),
-					});
-				}
-				if (failures.length > 1 && failures.some(isAgentDrainFailure)) {
-					throw aggregateToolFailures(failures, 'File import and authority validation failed');
-				}
-				throw validationFailure ?? consumerFailure;
-			}
-			this.failure(error, validationFailure);
+	settleDrain(scope: ToolJobScope, failed: boolean): void {
+		const entry = this.resources.get(scope.runId);
+		if (!entry || entry.scope.userId !== scope.userId || entry.scope.appId !== scope.appId) {
+			return;
 		}
-	}
-
-	private failure(error: unknown, validationFailure: unknown = null, permissionFailure: unknown = null): never {
-		if (
-			permissionFailure !== null &&
-			isAgentDrainFailure(permissionFailure) &&
-			!(permissionFailure instanceof ToolExecutionUnknown)
-		) {
-			const cause = new AggregateError([permissionFailure, error], 'ACP permission and execution failed');
-			if (error instanceof RemoteMachineOperationError && error.code === 'cleanup_failed') {
-				throw new ToolCleanupFailure({ cause });
-			}
-			throw cause;
+		if (failed) {
+			entry.cleanupFailed = true;
+		} else {
+			this.resources.delete(scope.runId);
 		}
-		if (
-			validationFailure !== null &&
-			!(
-				error instanceof RemoteMachineOperationError &&
-				(error.code === 'cleanup_failed' || error.code === 'operation_unknown')
-			)
-		) {
-			throw validationFailure;
-		}
-		if (error instanceof RemoteMachineOperationError) {
-			if (error.code === 'mutation_busy' || error.code === 'mutation_blocked') {
-				throw new ToolMutationAdmissionRefusal(error.code, { cause: error });
-			}
-			if (error.code === 'cleanup_failed') {
-				throw new ToolCleanupFailure({
-					cause:
-						validationFailure === null
-							? error
-							: new AggregateError(
-									[validationFailure, error],
-									'Authorization and resource cleanup failed',
-								),
-				});
-			}
-			if (error.code === 'operation_unknown') {
-				throw new ToolExecutionUnknown({
-					cause:
-						validationFailure === null
-							? error
-							: new AggregateError(
-									[validationFailure, error],
-									'Authorization and remote operation failed',
-								),
-				});
-			}
-			if (
-				error.code === 'remote_unavailable' ||
-				error.code === 'host_key_untrusted' ||
-				error.code === 'not_text' ||
-				error.code === 'not_found' ||
-				error.code === 'forbidden' ||
-				error.code === 'command_failed'
-			) {
-				throw new ToolOperationRefusal(error.code, { cause: error });
-			}
-			const code =
-				error.code === 'limit_exceeded'
-					? 'limit_exceeded'
-					: error.code === 'conflict' || error.code === 'stale_target'
-						? 'version_conflict'
-						: 'invalid_input';
-			throw new AgentFailure(code, {
-				cause:
-					validationFailure === null
-						? error
-						: new AggregateError([validationFailure, error], 'Tool authorization and operation failed'),
-			});
-		}
-		throw new AgentFailure('internal_failure', { cause: error });
+		this.changed(entry.scope);
 	}
 }

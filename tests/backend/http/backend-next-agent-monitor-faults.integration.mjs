@@ -1,3 +1,4 @@
+import { posixCommand } from '../../support/posix-command.mjs';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -79,9 +80,8 @@ for await (const line of createInterface({input:process.stdin})) {
 											}
 										: {
 												connectionId: f.connectionId,
-												kind: 'argv',
-												argv: [process.execPath, script],
 												mode: 'background',
+												commands: [posixCommand([process.execPath, script])],
 											},
 							},
 				);

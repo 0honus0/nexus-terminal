@@ -30,6 +30,8 @@ function fixture({ openSftp, closeLease, closeMachine, openMachine } = {}) {
 
 	const model = new RemoteFileModel(
 		{
+			release: (machine) => machine.close(),
+
 			open: async () => {
 				calls.push('machine.open');
 				await openMachine?.();

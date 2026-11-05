@@ -179,6 +179,8 @@ await test('ACP cancellation waits for readers and permission work despite indep
 			let closed = 0;
 			const model = new MachineAcpModel(
 				{
+					release: (machine) => machine.close(),
+
 					open: async () => ({
 						machine: {
 							close: async () => {

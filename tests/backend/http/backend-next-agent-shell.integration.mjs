@@ -1,3 +1,4 @@
+import { posixCommand } from '../../support/posix-command.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { randomUUID } from 'node:crypto';
@@ -24,27 +25,39 @@ await test('B10 resource drain preserves effect uncertainty and independent stor
 			throw failure;
 		});
 		resources.push(() => visited.push('released'));
-		await assert.rejects(
-			ToolService.prototype.drainRun.call(
-				{
-					integrations: { drainRun: resources[0] },
-					jobs: { drain: resources[1] },
-					browser: { drainRun: resources[2] ?? (() => visited.push('browser')) },
-				},
-				{ userId: 1, appId: 'app', runId: 'run' },
-			),
-			(error) => {
-				if (failures.includes(storage)) {
-					assert.ok(error instanceof AggregateError);
-					assert.deepEqual(error.errors, failures);
-				} else {
-					assert.ok(error instanceof ToolExecutionUnknown);
-					assert.equal(error instanceof ToolCleanupFailure, failures[0] instanceof AggregateError);
-					assert.deepEqual(error.cause.errors, failures);
-				}
-				return true;
+		const service = new ToolService(
+			{
+				quiesceRun() {},
+
+				drainRun() {},
+
+				settleDrain() {},
 			},
+			null,
+			null,
+			{ drain: resources[1] },
+			null,
+			null,
+			null,
+			null,
+			null,
+			null,
+			null,
+			null,
+			{ drainRun: resources[0] },
+			{ drainRun: resources[2] ?? (() => visited.push('browser')) },
 		);
+		await assert.rejects(service.drainRun({ userId: 1, appId: 'app', runId: 'run' }), (error) => {
+			if (failures.includes(storage)) {
+				assert.ok(error instanceof AggregateError);
+				assert.deepEqual(error.errors, failures);
+			} else {
+				assert.ok(error instanceof ToolExecutionUnknown);
+				assert.equal(error instanceof ToolCleanupFailure, failures[0] instanceof AggregateError);
+				assert.deepEqual(error.cause.errors, failures);
+			}
+			return true;
+		});
 		assert.ok(visited.includes('released'));
 		assert.equal(visited.length, 3);
 	}
@@ -82,7 +95,7 @@ await test('B10 actual Agent Shell and background Job lifecycles', { timeout: 60
 		const effect = join(directory, 'effect');
 		const code = `const fs=require('node:fs');fs.writeFileSync(${JSON.stringify(effect)},'started');fs.writeFileSync(${JSON.stringify(pidFile)},String(process.pid));const timer=setInterval(()=>{if(fs.existsSync(${JSON.stringify(gate)})){clearInterval(timer);process.stdout.write('released');}},25);`;
 		return {
-			input: { kind: 'argv', argv: [process.execPath, '-e', code] },
+			input: { commands: [posixCommand([process.execPath, '-e', code])] },
 
 			async started() {
 				return until(
@@ -133,31 +146,23 @@ await test('B10 actual Agent Shell and background Job lifecycles', { timeout: 60
 				const run = await f.start('argv literal', (results) =>
 					results.length
 						? {}
-						: shell(f, {
-								kind: 'argv',
-								argv: ['printf', '%s', text],
-								cwd: directory,
-							}),
+						: shell(f, { cwd: directory, commands: [posixCommand(['printf', '%s', text])] }),
 				);
 				await f.approve(await f.approval(run, 'shell_execute'));
 				await f.wait(run, 'completed');
-				assert.equal(result(f, run, 'shell_execute').value.stdout, text);
+				assert.equal(result(f, run, 'shell_execute').value.commands[0].stdout, text);
 				await assert.rejects(stat(injected), { code: 'ENOENT' });
 			},
 		);
 
 		await scenario('nonzero exit is a confirmed result with separate stdout and stderr', async (f) => {
 			const run = await f.start('nonzero', (results) =>
-				results.length
-					? {}
-					: shell(f, {
-							kind: 'shell',
-							script: 'printf out; printf err >&2; exit 7',
-						}),
+				results.length ? {} : shell(f, { commands: ['printf out; printf err >&2; exit 7'] }),
 			);
 			await f.approve(await f.approval(run, 'shell_execute'));
 			await f.wait(run, 'completed');
-			assert.deepEqual(result(f, run, 'shell_execute').value, {
+			assert.deepEqual(result(f, run, 'shell_execute').value.commands[0], {
+				index: 0,
 				status: 'nonzero',
 				exitCode: 7,
 				signal: null,
@@ -168,17 +173,27 @@ await test('B10 actual Agent Shell and background Job lifecycles', { timeout: 60
 		});
 
 		await scenario('large command output stays captured and previewed without rerunning the command', async (f) => {
+			const settings = expectStatus(await f.api('GET', '/api/v1/agent/execution-settings'), 200).settings;
+			expectStatus(
+				await f.api('PUT', '/api/v1/agent/execution-settings', {
+					expectedVersion: settings.version,
+					enabled: true,
+					limits: { ...settings.limits, maxToolOutputBytes: 4096 },
+				}),
+				200,
+			);
 			const run = await f.start('large output', (results) =>
 				results.length
 					? {}
 					: shell(f, {
-							kind: 'argv',
-							argv: [process.execPath, '-e', "process.stdout.write('x'.repeat(40000))"],
+							commands: [
+								posixCommand([process.execPath, '-e', "process.stdout.write('x'.repeat(40000))"]),
+							],
 						}),
 			);
 			await f.approve(await f.approval(run, 'shell_execute'));
 			await f.wait(run, 'completed');
-			const value = result(f, run, 'shell_execute').value;
+			const value = result(f, run, 'shell_execute').value.commands[0];
 			assert.equal(value.truncated, true);
 			assert.equal(Buffer.byteLength(value.stdout), 32768);
 			assert.equal(f.calls.length, 2);
@@ -195,12 +210,13 @@ await test('B10 actual Agent Shell and background Job lifecycles', { timeout: 60
 				const run = await f.start('background normal', (results) => {
 					if (!results.length) {
 						return shell(f, {
-							kind: 'argv',
 							mode: 'background',
-							argv: [
-								process.execPath,
-								'-e',
-								`setTimeout(()=>{require('node:fs').writeFileSync(${JSON.stringify(effect)},'done');process.stdout.write('job complete');},200)`,
+							commands: [
+								posixCommand([
+									process.execPath,
+									'-e',
+									`setTimeout(()=>{require('node:fs').writeFileSync(${JSON.stringify(effect)},'done');process.stdout.write('job complete');},200)`,
+								]),
 							],
 						});
 					}
@@ -212,7 +228,7 @@ await test('B10 actual Agent Shell and background Job lifecycles', { timeout: 60
 								input: {
 									connectionId: f.connectionId,
 									action,
-									...(action === 'list' ? {} : { jobId: results[0].jobId }),
+									...(action === 'list' ? {} : { jobIds: [results[0].jobId] }),
 									...(action === 'wait' ? { waitSeconds: 3 } : {}),
 								},
 							}
@@ -223,8 +239,11 @@ await test('B10 actual Agent Shell and background Job lifecycles', { timeout: 60
 				assert.equal(await readFile(effect, 'utf8'), 'done');
 				const job = f.rows('agent_tool_jobs', run)[0];
 				assert.equal(job.state, 'completed');
-				assert.equal(result(f, run, 'shell_job_control').value.jobId, job.id);
-				assert.equal(result(f, run, 'shell_job_control').value.result.stdout, 'job complete');
+				assert.equal(result(f, run, 'shell_job_control').value.jobs[0].jobId, job.id);
+				assert.equal(
+					result(f, run, 'shell_job_control').value.jobs[0].result.commands[0].stdout,
+					'job complete',
+				);
 				const count = f.calls.length;
 				await f.restart();
 				assert.equal(f.rows('agent_tool_jobs', run)[0].state, 'completed');
@@ -246,8 +265,8 @@ await test('B10 actual Agent Shell and background Job lifecycles', { timeout: 60
 										input: {
 											connectionId: f.connectionId,
 											action: 'wait',
-											jobId: results[0].jobId,
 											waitSeconds: 1,
+											jobIds: [results[0].jobId],
 										},
 									}
 								: { hold: true },
@@ -259,7 +278,7 @@ await test('B10 actual Agent Shell and background Job lifecycles', { timeout: 60
 						(count) => count === 3,
 						'Wait result reached model',
 					);
-					assert.equal(result(f, run, 'shell_job_control').value.state, 'dispatched');
+					assert.equal(result(f, run, 'shell_job_control').value.jobs[0].state, 'dispatched');
 					await f.cancel(run);
 					await until(
 						() => f.rows('agent_tool_jobs', run)[0].state,
@@ -351,7 +370,7 @@ await test('B10 actual Agent Shell and background Job lifecycles', { timeout: 60
 										input: {
 											connectionId: f.connectionId,
 											action: 'cancel',
-											jobId: results[0].jobId,
+											jobIds: [results[0].jobId],
 										},
 									}
 								: {},
@@ -409,7 +428,9 @@ await test('B10 actual Agent Shell and background Job lifecycles', { timeout: 60
 			'target version change rejects a pending Shell approval before any process starts',
 			async (f, directory) => {
 				const effect = join(directory, 'must-not-exist');
-				const run = await f.start('target revision', () => shell(f, { kind: 'argv', argv: ['touch', effect] }));
+				const run = await f.start('target revision', () =>
+					shell(f, { commands: [posixCommand(['touch', effect])] }),
+				);
 				const approval = await f.approval(run, 'shell_execute');
 				await f.changeTarget();
 				expectStatus(

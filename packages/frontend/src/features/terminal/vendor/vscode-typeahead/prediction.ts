@@ -795,6 +795,16 @@ class PredictionTimeline {
 
 	constructor(readonly terminal: Terminal) {}
 
+	get bufferedInput(): string {
+		return this._inputBuffer ?? '';
+	}
+
+	abandon(): void {
+		this._showPredictions = false;
+		this._inputBuffer = undefined;
+		this._clearPredictionState();
+	}
+
 	setShowPredictions(show: boolean) {
 		if (show === this._showPredictions) {
 			return;
@@ -1168,12 +1178,16 @@ export class TerminalTypeAhead {
 	private readonly queue: Array<{ action: () => void; requiresParsedBuffer: boolean }> = [];
 	private processing = false;
 	private stopped = false;
+	private failed = false;
 	private epoch = 0;
 	private title = '';
 	private timer: ReturnType<typeof setTimeout> | undefined;
 	private readonly titleSubscription;
 
-	constructor(private readonly terminal: Terminal) {
+	constructor(
+		private readonly terminal: Terminal,
+		private readonly onFailure: (error: unknown) => void = () => {},
+	) {
 		this.timeline = new PredictionTimeline(terminal);
 		this.stats = new PredictionStats(this.timeline);
 		this.titleSubscription = terminal.onTitleChange((title) => {
@@ -1205,20 +1219,68 @@ export class TerminalTypeAhead {
 			// With no predictions, beforeServerInput only clears bookkeeping. Let
 			// xterm batch and time-slice remote output without per-chunk barriers.
 			if (!task.requiresParsedBuffer && !this.timeline.length) {
-				task.action();
-				this.processing = false;
+				try {
+					task.action();
+				} catch (error) {
+					this.disable(error);
+				} finally {
+					this.processing = false;
+				}
 				continue;
 			}
-			// Prediction, reconciliation and reset still need parsed cursor/cells.
-			this.terminal.write('', () => {
-				task.action();
-				this.terminal.write('', () => {
-					this.processing = false;
-					this.pump();
-				});
-			});
+			// Every synchronous xterm failure releases the queue. Prediction errors must
+			// not permanently block later authoritative output or lifecycle resets.
+			let finished = false;
+			let applied = false;
+
+			const finish = () => {
+				if (finished) return;
+				finished = true;
+				this.processing = false;
+				this.pump();
+			};
+
+			const apply = () => {
+				if (applied) return;
+				applied = true;
+				try {
+					task.action();
+				} catch (error) {
+					this.disable(error);
+				} finally {
+					try {
+						this.terminal.write('', finish);
+					} catch (error) {
+						try {
+							this.disable(error);
+						} finally {
+							finish();
+						}
+					}
+				}
+			};
+
+			try {
+				this.terminal.write('', apply);
+			} catch (error) {
+				try {
+					this.disable(error);
+				} finally {
+					apply();
+				}
+			}
 			return;
 		}
+	}
+
+	private disable(error: unknown): void {
+		if (this.failed) return;
+		this.failed = true;
+		clearTimeout(this.timer);
+		this.timer = undefined;
+		this.timeline.abandon();
+		this.lastRow = undefined;
+		this.onFailure(error);
 	}
 
 	private canPredict(): boolean {
@@ -1234,7 +1296,7 @@ export class TerminalTypeAhead {
 	}
 
 	input(data: string): void {
-		if (this.stopped) return;
+		if (this.stopped || this.failed) return;
 		// Some keyboards deliver repeat deletion as one accepted input event.
 		// Separate predictions so each rollback reads cells after the preceding erase.
 		if (data.length > 1 && /^\x7f+$/.test(data)) {
@@ -1243,7 +1305,7 @@ export class TerminalTypeAhead {
 		}
 		const epoch = this.epoch;
 		this.enqueue(() => {
-			if (this.stopped || epoch !== this.epoch) return;
+			if (this.stopped || this.failed || epoch !== this.epoch) return;
 			if (
 				!this.canPredict() ||
 				(data.length > 1 && !/^\x1b(?:\[?[0-9]*(?:;[35])?O?[DC]|[bf])$/.test(data)) ||
@@ -1281,7 +1343,16 @@ export class TerminalTypeAhead {
 	write(data: string, consumed?: () => void): void {
 		this.enqueue(() => {
 			const revision = this.timeline.revision;
-			const output = data ? this.timeline.beforeServerInput(data) : '';
+			const buffered = this.timeline.bufferedInput;
+			let output = data;
+			if (!this.failed && data) {
+				try {
+					output = this.timeline.beforeServerInput(data);
+				} catch (error) {
+					this.disable(error);
+					output = buffered + data;
+				}
+			}
 			if (this.timeline.revision !== revision) this.lastRow = undefined;
 			this.terminal.write(output, consumed);
 			this.deferClearing();
@@ -1291,16 +1362,21 @@ export class TerminalTypeAhead {
 	private clear(): void {
 		clearTimeout(this.timer);
 		this.timer = undefined;
-		this.terminal.write(this.timeline.undoAllPredictions());
+		if (!this.failed) this.terminal.write(this.timeline.undoAllPredictions());
 		this.lastRow = undefined;
 	}
 
 	reset(): Promise<void> {
 		this.epoch++;
-		return new Promise((resolve) =>
+		return new Promise((resolve, reject) =>
 			this.enqueue(() => {
-				this.clear();
-				this.terminal.write('', resolve);
+				try {
+					this.clear();
+					this.terminal.write('', resolve);
+				} catch (error) {
+					reject(error);
+					throw error;
+				}
 			}),
 		);
 	}
@@ -1309,8 +1385,11 @@ export class TerminalTypeAhead {
 	barrier(action: () => void): void {
 		this.epoch++;
 		this.enqueue(() => {
-			this.clear();
-			this.terminal.write('', action);
+			try {
+				this.clear();
+			} finally {
+				this.terminal.write('', action);
+			}
 		});
 	}
 
@@ -1330,7 +1409,8 @@ export class TerminalTypeAhead {
 			!this.timeline.length ||
 			this.timeline.hasVisiblePredictions ||
 			this.timeline.peekStart()?.clearAfterTimeout === false ||
-			this.stopped
+			this.stopped ||
+			this.failed
 		)
 			return;
 		const timer = setTimeout(

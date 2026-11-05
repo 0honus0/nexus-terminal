@@ -61,7 +61,7 @@ export interface RemoteReadEntry {
 }
 
 export interface RemoteReadSearch {
-	matches: { path: string; line: number; column: number; text: string }[];
+	matches: { queryIndex: number; path: string; line: number; column: number; text: string }[];
 	truncated: boolean;
 }
 
@@ -100,8 +100,7 @@ export interface RemotePathSnapshot {
 export interface RemotePatchTextRequest {
 	path: string;
 	expectedSha256: string;
-	oldText: string;
-	newText: string;
+	edits: Array<{ oldText: string; newText: string }>;
 }
 
 export interface RemoteMovePathRequest {
@@ -133,17 +132,26 @@ export interface RemoteDeletePathResult {
 export type RemoteExecutionCommand = { kind: 'argv'; argv: string[] } | { kind: 'shell'; script: string };
 
 export interface RemoteExecuteCommandRequest {
-	command: RemoteExecutionCommand;
+	commands: RemoteExecutionCommand[];
 	cwd: string | null;
+	onError: 'stop' | 'continue';
+	onOutput?(index: number, stream: 'stdout' | 'stderr', text: string): void;
 }
 
 export interface RemoteExecuteCommandResult {
 	status: 'completed' | 'nonzero';
-	exitCode: number;
-	signal: string | null;
-	stdout: string;
-	stderr: string;
-	truncated: boolean;
+	commands: Array<
+		| { index: number; status: 'not_started' }
+		| {
+				index: number;
+				status: 'completed' | 'nonzero';
+				exitCode: number;
+				signal: string | null;
+				stdout: string;
+				stderr: string;
+				truncated: boolean;
+		  }
+	>;
 }
 
 export interface RemoteDockerInspection {
@@ -171,7 +179,23 @@ export interface RemoteFileContent {
 	sizeBytes: number;
 }
 
+export interface RemoteMachineOperationFactory {
+	create(changed: () => void): RemoteMachineOperations;
+}
+
+export interface RemoteMachineResourceSnapshot {
+	sshConnections: number;
+	sftpChannels: number;
+	activeOperations: number;
+	targetIds: number[];
+	closing: boolean;
+	cleanupFailed: boolean;
+}
+
 export interface RemoteMachineOperations {
+	snapshot(): RemoteMachineResourceSnapshot;
+	close(): Promise<void>;
+	fileInfo(scope: RemoteMachineOperationScope, path: string): Promise<RemoteFileContent>;
 	consumeFile<T>(
 		scope: RemoteMachineOperationScope,
 		path: string,
@@ -183,6 +207,10 @@ export interface RemoteMachineOperations {
 		scope: RemoteMachineOperationScope,
 		request: RemoteExecuteCommandRequest,
 	): Promise<RemoteExecuteCommandResult>;
+	inspectDockers(
+		scope: RemoteMachineOperationScope,
+		containerIds: string[],
+	): Promise<Array<RemoteDockerInspection | null>>;
 	inspectDocker(scope: RemoteMachineOperationScope, containerId: string): Promise<RemoteDockerInspection>;
 	controlDocker(
 		scope: RemoteMachineOperationScope,
@@ -193,12 +221,20 @@ export interface RemoteMachineOperations {
 	movePath(scope: RemoteMachineOperationScope, request: RemoteMovePathRequest): Promise<RemoteMovePathResult>;
 	deletePath(scope: RemoteMachineOperationScope, request: RemoteDeletePathRequest): Promise<RemoteDeletePathResult>;
 	writeText(scope: RemoteMachineOperationScope, request: RemoteWriteTextRequest): Promise<RemoteWriteTextResult>;
+	readTextPage(
+		scope: RemoteMachineOperationScope,
+		request: RemoteReadTextPageRequest,
+	): Promise<RemoteReadTextPageResult>;
+	listPage(
+		scope: RemoteMachineOperationScope,
+		request: RemoteReadDirectoryPageRequest,
+	): Promise<RemoteReadDirectoryPageResult>;
 	readText(scope: RemoteMachineOperationScope, path: string): Promise<RemoteReadText>;
 	list(scope: RemoteMachineOperationScope, path: string): Promise<RemoteReadEntry[]>;
 	search(
 		scope: RemoteMachineOperationScope,
 		path: string,
-		query: string,
+		queries: string[],
 		maxResults: number,
 	): Promise<RemoteReadSearch>;
 	diagnose(scope: RemoteMachineOperationScope): Promise<RemoteReadDiagnostics>;
@@ -228,4 +264,33 @@ export interface RemoteExecuteAcpRequest {
 export interface RemoteExecuteAcpResult {
 	text: string;
 	stopReason: 'end_turn' | 'max_tokens' | 'max_turn_requests' | 'refusal' | 'cancelled';
+}
+
+export interface RemoteReadTextPageRequest {
+	path: string;
+	offset: number;
+	maxBytes: number;
+}
+
+export interface RemoteReadTextPageResult {
+	path: string;
+	text: string;
+	bytes: number;
+	sizeBytes: number;
+	offset: number;
+	nextOffset: number | null;
+	sha256: string | null;
+	pageSha256: string;
+	fingerprint: string;
+}
+
+export interface RemoteReadDirectoryPageRequest {
+	path: string;
+	after: string;
+}
+
+export interface RemoteReadDirectoryPageResult {
+	entries: RemoteReadEntry[];
+	nextAfter: string | null;
+	fingerprint: string;
 }

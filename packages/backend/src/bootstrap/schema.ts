@@ -4,7 +4,11 @@ import { initializeRemoteSchema } from '../modules/remote/migrations.js';
 import type { SchemaMigration } from '../platform/storage/sqlite/schema-types.js';
 import { initializeTargetsSchema } from '../modules/targets/migrations.js';
 import { initializeAccessSchema } from '../modules/access/migrations.js';
-import { initializeAgentSchema } from '../modules/agent/migrations.js';
+import {
+	initializeAgentSchema,
+	migrateAgentToolBatches,
+	migrateAgentToolOutputs,
+} from '../modules/agent/migrations.js';
 import { initializeSnapshotRestoreSchema } from '../platform/storage/sqlite/adapters/snapshot-restore-sql.js';
 
 /** First-release schema: install the current layout atomically, without development upgrade history. */
@@ -23,4 +27,10 @@ export const applicationMigrations: readonly SchemaMigration[] = [
 			await initializeSnapshotRestoreSchema(tx);
 		},
 	},
+	{
+		version: 2,
+		signature: 'agent-shell-command-batches-20261105',
+		apply: migrateAgentToolBatches,
+	},
+	{ version: 3, signature: 'agent-artifact-output-batches-20261105', apply: migrateAgentToolOutputs },
 ];

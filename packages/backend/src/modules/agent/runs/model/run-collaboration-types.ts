@@ -118,3 +118,8 @@ export interface MessageMetadataPage {
 	items: { sequence: number; senderId: string; bodyBytes: number; expiresAt: number }[];
 	nextCursor: number;
 }
+
+export interface CollaborationWatch {
+	changed: Promise<void>;
+	close(): void;
+}

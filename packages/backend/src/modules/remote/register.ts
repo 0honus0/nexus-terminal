@@ -1,3 +1,6 @@
+import { RemoteMachineScopeModel } from './machines/model/machine-scope-model.js';
+import { RemoteMachineOperationFactoryService } from './machines/service/operation-factory-service.js';
+import type { RemoteMachineProvider } from './machines/model/machine-types.js';
 import type { Logger } from '../../platform/logging/logger.js';
 import { registerRemoteSnapshot } from './snapshots/adapters/sqlite/snapshot-registration.js';
 import type { SnapshotRegistration } from '../../platform/storage/sqlite/snapshot-types.js';
@@ -15,8 +18,8 @@ import { NdjsonAcpAdapter } from '../../platform/acp/adapters/ndjson-acp.js';
 import { MachineCommandModel } from './machines/model/command-model.js';
 import { PosixCommandAdapter } from '../../platform/commands/adapters/posix-command.js';
 import { RemoteMachineOperationService } from './machines/service/operation-service.js';
-import { remoteOperations } from './operation-mapper.js';
-import type { RemoteMachineOperations } from './public.js';
+import { remoteOperationFactory } from './operation-mapper.js';
+import type { RemoteMachineOperationFactory } from './public.js';
 import { RemoteResourceCleanupFailure } from './resource-errors.js';
 import { PosixServerStatusCollector } from '../../platform/system/adapters/posix-status.js';
 import { NativeDockerAdapter } from '../../platform/docker/adapters/native-docker.js';
@@ -102,7 +105,7 @@ interface RemoteRegistration {
 	resourceCollector: ResourceCollector;
 	prepareMonitoringConfiguration(statusIntervalSeconds: number, resourceRefreshSeconds: number): () => void;
 	publicApi: RemoteSessions;
-	operations: RemoteMachineOperations;
+	operations: RemoteMachineOperationFactory;
 	httpRoutes(): HttpRoute[];
 	webSocketRoutes(): HttpWebSocketRoute[];
 	quiesce(): void;
@@ -156,15 +159,19 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 		new NativeServerTransfer(),
 		new SecureSessionTokens(),
 	);
-	const fileModel = new RemoteFileModel(
-		machines,
-		options.resolver,
-		new SecureSessionTokens(),
-		serverTransferModel,
-		(runner) => new NativeArchiveCommands(runner),
-		new FileTextModel(new IconvTextCodec()),
-		new FileZipModel(streamZip),
-	);
+
+	const createFileModel = (provider: RemoteMachineProvider): RemoteFileModel =>
+		new RemoteFileModel(
+			provider,
+			options.resolver,
+			new SecureSessionTokens(),
+			serverTransferModel,
+			(runner) => new NativeArchiveCommands(runner),
+			new FileTextModel(new IconvTextCodec()),
+			new FileZipModel(streamZip),
+		);
+
+	const fileModel = createFileModel(machines);
 	const serverTransfers = new ServerTransferService(
 		options.access,
 		serverTransferModel,
@@ -198,20 +205,29 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 			: undefined,
 		options.logger,
 	);
-	const observationModel = new ObservationModel(
-		machines,
-		new PosixServerStatusCollector(),
-		new NativeDockerAdapter(),
-		options.targets,
-		options.resolver,
-	);
-	const operations = new RemoteMachineOperationService(
-		fileModel,
-		observationModel,
-		new MachineCommandModel(machines, new PosixCommandAdapter()),
-		new MachineAcpModel(machines, new PosixCommandAdapter(), new NdjsonAcpAdapter()),
-		mutations,
-	);
+
+	const createObservationModel = (provider: RemoteMachineProvider): ObservationModel =>
+		new ObservationModel(
+			provider,
+			new PosixServerStatusCollector(),
+			new NativeDockerAdapter(),
+			options.targets,
+			options.resolver,
+		);
+
+	const observationModel = createObservationModel(machines);
+	const operations = new RemoteMachineOperationFactoryService((changed) => {
+		const scoped = new RemoteMachineScopeModel(machines, changed);
+		return new RemoteMachineOperationService(
+			createFileModel(scoped),
+			createObservationModel(scoped),
+			new MachineCommandModel(scoped, new PosixCommandAdapter()),
+			new MachineAcpModel(scoped, new PosixCommandAdapter(), new NdjsonAcpAdapter()),
+			mutations,
+			scoped,
+			changed,
+		);
+	});
 	const observations = new RemoteObservationService(
 		options.access,
 		options.resolver,
@@ -272,7 +288,7 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 	const closeFailures: unknown[] = [];
 	return {
 		publicApi,
-		operations: remoteOperations(operations),
+		operations: remoteOperationFactory(operations),
 		resourceCollector: {
 			id: 'remote',
 

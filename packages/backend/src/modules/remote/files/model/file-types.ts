@@ -43,6 +43,7 @@ export interface FileResource {
 	readonly isOpen: boolean;
 	list(request: FileListRequest): Promise<FileEntry[]>;
 	scan(request: FileOperationRequest): Promise<FileEntry[]>;
+	listAfter(request: FileListRequest & { after: string }): Promise<FileEntry[]>;
 	stat(request: FileStatRequest): Promise<FileInfo>;
 	read(request: FileReadRequest): Promise<Uint8Array>;
 	openRead(request: FileReadRequest): Promise<FileByteSource>;

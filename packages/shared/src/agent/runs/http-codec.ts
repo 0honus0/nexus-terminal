@@ -8,6 +8,7 @@ import {
 	InvalidAgentPayload,
 } from '../http-codec.js';
 import {
+	AGENT_RESOURCE_SESSION_STATES,
 	AGENT_APPROVAL_MODES,
 	AGENT_RUN_FAILURE_CODES,
 	AGENT_RUN_EVENT_DEFAULT_AFTER,
@@ -276,5 +277,77 @@ export function readAgentRunUsageResponse(input: unknown): AgentRunUsageView {
 		reportedModelRequests,
 		modelRequests,
 		toolExecutions: agentInteger(row.toolExecutions, 0),
+	};
+}
+
+export function readAgentResourceSession(input: unknown): import('./model.js').AgentResourceSessionView {
+	const row = agentRecord(input, [
+		'id',
+		'runId',
+		'state',
+		'openedAt',
+		'sshConnections',
+		'sftpChannels',
+		'mcpSessions',
+		'browserSessions',
+		'activeOperations',
+		'backgroundJobs',
+		'targetIds',
+		'expiresAt',
+	]);
+	const state = AGENT_RESOURCE_SESSION_STATES.find((state) => state === row.state);
+	if (!state || !Array.isArray(row.targetIds)) {
+		throw new InvalidAgentPayload();
+	}
+	const targetIds = row.targetIds.map((id: unknown) => agentInteger(id, 1));
+	if (new Set(targetIds).size !== targetIds.length) {
+		throw new InvalidAgentPayload();
+	}
+	const openedAt = agentInteger(row.openedAt);
+	return {
+		id: readAgentId(row.id),
+		runId: readAgentId(row.runId),
+		state,
+		openedAt,
+		sshConnections: agentInteger(row.sshConnections),
+		sftpChannels: agentInteger(row.sftpChannels),
+		mcpSessions: agentInteger(row.mcpSessions),
+		browserSessions: agentInteger(row.browserSessions),
+		activeOperations: agentInteger(row.activeOperations),
+		backgroundJobs: agentInteger(row.backgroundJobs),
+		targetIds,
+		expiresAt: row.expiresAt === null ? null : agentInteger(row.expiresAt, openedAt),
+	};
+}
+
+export function readAgentCloseResourcesRequest(input: unknown): import('./http.js').AgentCloseResourcesRequest {
+	const row = agentRecord(input, ['appVersion', 'target', 'confirmed']);
+	if (typeof row.confirmed !== 'boolean' || !isAgentRecord(row.target)) {
+		throw new InvalidAgentPayload();
+	}
+	let target: import('./http.js').AgentCloseResourcesRequest['target'];
+	if (row.target.kind === 'app') {
+		agentRecord(row.target, ['kind']);
+		target = { kind: 'app' };
+	} else {
+		const value = agentRecord(row.target, ['kind', 'runId', 'sessionId']);
+		if (value.kind !== 'session') {
+			throw new InvalidAgentPayload();
+		}
+		target = { kind: 'session', runId: readAgentId(value.runId), sessionId: readAgentId(value.sessionId) };
+	}
+	return { appVersion: agentInteger(row.appVersion, 1), target, confirmed: row.confirmed };
+}
+
+export function readAgentCloseResourcesResponse(input: unknown): import('./http.js').AgentCloseResourcesResponse {
+	const row = agentRecord(input, ['status', 'activeRuns', 'activeOperations', 'backgroundJobs']);
+	if (row.status !== 'closed' && row.status !== 'confirmation_required') {
+		throw new InvalidAgentPayload();
+	}
+	return {
+		status: row.status,
+		activeRuns: agentInteger(row.activeRuns),
+		activeOperations: agentInteger(row.activeOperations),
+		backgroundJobs: agentInteger(row.backgroundJobs),
 	};
 }

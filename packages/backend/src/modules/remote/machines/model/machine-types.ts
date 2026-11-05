@@ -24,6 +24,12 @@ export interface OpenedRemoteMachine {
 	hostPublicKey: Uint8Array;
 }
 
+export interface RemoteMachineProvider {
+	open(request: RemoteMachineOpenRequest): Promise<OpenedRemoteMachine>;
+	/** Only a confirmed, fully cleaned operation may return its transport to an idle pool. */
+	release(machine: MachineConnection, reusable: boolean): Promise<void>;
+}
+
 export interface RemoteHostKeyChallenge {
 	host: string;
 	port: number;

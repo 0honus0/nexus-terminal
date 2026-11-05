@@ -1,3 +1,4 @@
+import { sqliteSchemaSignature } from '../schema-signature.js';
 import { createHash } from 'node:crypto';
 import type { BlobStore } from '../../../blobs/blob-store.js';
 import { BlobFailure } from '../../../blobs/blob-store.js';
@@ -76,7 +77,7 @@ export class SqliteSnapshotCollector implements SnapshotCollector {
 				...this.registrations.flatMap((registration) => registration.excludedTables ?? []),
 			]);
 			const versions = await new SqliteSchemaAdapter(tx).versions();
-			if (versions.length !== 1 || versions[0].version !== 1 || versions[0].signature !== this.schemaSignature) {
+			if (sqliteSchemaSignature(versions) !== this.schemaSignature) {
 				throw new SnapshotFailure('invalid_registration');
 			}
 			const actual = await tx.all(

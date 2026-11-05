@@ -109,10 +109,14 @@ await test('B10 actual CDP Browser ownership and governed operations', { timeout
 					}
 					if (results.length === 2) {
 						assert.equal(results[1].title, 'B10 Browser');
-						return { name: 'browser_snapshot', input: { sessionId } };
+						return { name: 'browser_snapshot', input: { sessionId, include: ['screenshot', 'console'] } };
 					}
 					if (results.length === 3) {
 						assert.ok(results[2].nodes.some((node) => node.tag === 'BUTTON'));
+						assert.ok(results[2].snapshotAt >= results[2].startedAt);
+						assert.equal(results[2].screenshot.artifact.mediaType, 'image/png');
+						assert.ok(results[2].screenshot.capturedAt >= results[2].snapshotAt);
+						assert.ok(JSON.stringify(results[2].console.entries).includes('fixture-console'));
 						return { name: 'browser_console', input: { sessionId } };
 					}
 					if (results.length === 4) {

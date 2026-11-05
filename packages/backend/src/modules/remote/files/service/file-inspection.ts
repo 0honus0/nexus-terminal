@@ -1,3 +1,9 @@
+import type {
+	ReadTextPageRequest,
+	ReadTextPageResult,
+	ReadDirectoryPageRequest,
+	ReadDirectoryPageResult,
+} from '../../machines/model/operation-types.js';
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -116,25 +122,143 @@ export async function inspectDirectory(context: FileInspectionContext, input: st
 	return entries;
 }
 
+function metadataFingerprint(info: FileInfo): string {
+	return createHash('sha256')
+		.update(JSON.stringify([info.kind, info.size, info.modifiedAt, info.mode]))
+		.digest('hex');
+}
+
+export async function inspectTextPage(
+	context: FileInspectionContext,
+	input: ReadTextPageRequest,
+): Promise<ReadTextPageResult> {
+	const requested = inspectionPath(input.path);
+	if (
+		!Number.isSafeInteger(input.offset) ||
+		input.offset < 0 ||
+		!Number.isSafeInteger(input.maxBytes) ||
+		input.maxBytes < 4 ||
+		input.maxBytes > MAX_TEXT_BYTES
+	) {
+		throw new RemoteFileFailure('invalid_input');
+	}
+	const before = await inspectInfo(context, requested);
+	if (before.kind !== 'file') {
+		throw new RemoteFileFailure('not_text');
+	}
+	if (input.offset > before.size) {
+		throw new RemoteFileFailure('invalid_input');
+	}
+	const length = Math.min(input.maxBytes, before.size - input.offset);
+	const bytes = length
+		? await context.resource.read({
+				path: requested,
+				start: input.offset,
+				length,
+				maxBytes: MAX_TEXT_BYTES,
+				timeoutMs: context.remaining(),
+				signal: context.signal,
+			})
+		: new Uint8Array();
+	const after = await inspectInfo(context, requested);
+	if (metadataFingerprint(after) !== metadataFingerprint(before) || bytes.byteLength !== length) {
+		throw new RemoteFileFailure('conflict');
+	}
+	let text: string;
+	try {
+		const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
+		text = decoder.decode(bytes, { stream: input.offset + length < before.size });
+	} catch (cause) {
+		throw new RemoteFileFailure('not_text', { cause });
+	}
+	if (text.includes('\0')) {
+		throw new RemoteFileFailure('not_text');
+	}
+	const used = Buffer.byteLength(text);
+	const next = input.offset + used;
+	const pageSha256 = createHash('sha256').update(text).digest('hex');
+	return {
+		path: requested,
+		text,
+		bytes: used,
+		sizeBytes: before.size,
+		offset: input.offset,
+		nextOffset: next < before.size ? next : null,
+		sha256: input.offset === 0 && next === before.size ? pageSha256 : null,
+		pageSha256,
+		fingerprint: metadataFingerprint(before),
+	};
+}
+
+export async function inspectDirectoryPage(
+	context: FileInspectionContext,
+	input: ReadDirectoryPageRequest,
+): Promise<ReadDirectoryPageResult> {
+	const requested = inspectionPath(input.path);
+	if (!isWellFormedFileText(input.after) || input.after.includes('/') || input.after.includes('\0')) {
+		throw new RemoteFileFailure('invalid_input');
+	}
+	const before = await inspectInfo(context, requested);
+	if (before.kind !== 'directory') {
+		throw new RemoteFileFailure('invalid_input');
+	}
+	const entries = await context.resource.listAfter({
+		path: requested,
+		after: input.after,
+		maxEntries: REMOTE_FILE_MAX_LIST_ENTRIES + 1,
+		maxMetadataBytes: REMOTE_FILE_MAX_METADATA_BYTES,
+		timeoutMs: context.remaining(),
+		signal: context.signal,
+	});
+	const after = await inspectInfo(context, requested);
+	if (metadataFingerprint(after) !== metadataFingerprint(before)) {
+		throw new RemoteFileFailure('conflict');
+	}
+	if (
+		entries.some(
+			(entry) => entry.name.includes('/') || entry.name.includes('\0') || !isWellFormedFileText(entry.name),
+		)
+	) {
+		throw new RemoteFileFailure('invalid_input');
+	}
+	const page = entries.slice(0, REMOTE_FILE_MAX_LIST_ENTRIES);
+	return {
+		entries: page.map((entry) => ({
+			name: entry.name,
+			kind: entry.info.kind,
+			size: entry.info.size,
+			modifiedAt: entry.info.modifiedAt,
+		})),
+		nextAfter: entries.length > page.length ? page[page.length - 1].name : null,
+		fingerprint: metadataFingerprint(before),
+	};
+}
+
 /** Literal content search deliberately avoids model-supplied regular expressions. */
 export async function inspectSearch(
 	context: FileInspectionContext,
 	root: string,
-	query: string,
+	queries: string[],
 	maxResults: number,
 ): Promise<ReadSearchResult> {
 	if (
-		!isWellFormedFileText(query) ||
-		!query ||
-		query.includes('\n') ||
-		query.includes('\r') ||
-		Buffer.byteLength(query, 'utf8') > 1024 ||
+		!queries.length ||
+		new Set(queries).size !== queries.length ||
+		queries.some(
+			(query) =>
+				!isWellFormedFileText(query) ||
+				!query ||
+				query.includes('\n') ||
+				query.includes('\r') ||
+				Buffer.byteLength(query, 'utf8') > 1024,
+		) ||
 		!Number.isSafeInteger(maxResults) ||
 		maxResults < 1 ||
 		maxResults > 100
 	) {
 		throw new RemoteFileFailure('invalid_input');
 	}
+
 	const normalized = inspectionPath(root);
 	const initial = await inspectInfo(context, normalized);
 	if (initial.kind !== 'file' && initial.kind !== 'directory') {
@@ -189,14 +313,16 @@ export async function inspectSearch(
 		}
 		const lines = file.text.split(/\r\n|\n|\r/u);
 		for (let index = 0; index < lines.length; index++) {
-			const column = lines[index].indexOf(query);
-			if (column < 0) {
-				continue;
+			for (let queryIndex = 0; queryIndex < queries.length; queryIndex++) {
+				const column = lines[index].indexOf(queries[queryIndex]);
+				if (column < 0) {
+					continue;
+				}
+				if (matches.length === maxResults) {
+					return { matches, truncated: true };
+				}
+				matches.push({ queryIndex, path: file.path, line: index + 1, column: column + 1, text: lines[index] });
 			}
-			if (matches.length === maxResults) {
-				return { matches, truncated: true };
-			}
-			matches.push({ path: file.path, line: index + 1, column: column + 1, text: lines[index] });
 		}
 	}
 	return { matches, truncated: false };

@@ -4,6 +4,16 @@
 
 已退役 Runner/Guacamole 的证据仅用于追溯，不能证明当前 SSH/CDP/浏览器 SDK 的行为。静态、受控 fixture、真实服务与真机结论分别判断。
 
+## Agent 工具资源复用（2026-11-05，源码与静态）
+
+本轮为 `main/2abcf49b` 基线上的未提交工作区，Node 26.13.0、pnpm 12.16.1。Remote 为每个 Run 创建独占借用的 SSH 池，顺序命令归还后复用，并发按需建连；成功文件资源保留独占 SFTP 供连续文件、项目指引与文件交付复用。Shell/Job、Docker、诊断与 ACP 消费同一作用域；每条命令的 cwd/env 仍独立，ACP 程序与协议会话不跨调用复用。MCP、Browser 和插件沿原缓存/会话 owner，无 UI、Shared 工具参数或数据库变化。
+
+两轮源码审核核对完整消费者、目标/主机信任摘要、握手后的再次校验、并发借用预留、失败/未知退休、断开空闲文件资源派发前替换，以及 Run 与全局关闭。等待取消不丢实际握手，清理失败保留 owner/因果且继续其余收尾；Job、ACP、项目读取和文件交付捕获原作用域，晚回调不新建作用域。原始 Provider 仍实际关闭普通 Workspace/Files 资源。
+
+根 `pnpm run check`、`pnpm run format:all:check`、后端生产构建、`git diff --check` 与新增 Node 场景语法检查通过；Playwright `--list` 确认 execution-flow 的5项场景包含新增资源复用入口。首次静态检查发现新增代码的花括号/函数间距问题，已按原 ESLint/Prettier 修正并完整复查。日志保留在 `/home/honus/nexus-task-artifacts/agent-tool-reuse-20261105`。
+
+新增 `backend-next-machine-reuse.integration.mjs` 的9项回归进入正式 Agent execution-flow：真实 SSH/SFTP 及 POSIX exec 覆盖握手/通道计数、cwd/env、并发取消、断线、跨 Run 隔离、项目/文件交付；ACP 使用真实协议 Adapter 与受控服务端，Docker/诊断通过技术 Port 的受控输出验证同一 SSH 链；晚握手、清理失败与在途退休使用受控资源。既有文件交付、SFTP 与 ACP 生命周期 fixture 同步新的释放契约，保留原功能断言。**按 D17 未在本地运行行为测试；本轮远程 E2E、真实目标/网络下的时延、吞吐及长时资源占用仍待验，未声明性能数字或行为通过。** 本轮未提交推送、发布镜像或改生产服务，专用产物保留至用户通知。
+
 ## 复制移动安全与同类配色扩查（2026-11-05，源码与静态）
 
 基于 `main/dc0b3c5f465a927e7a6c7ec44f0800fcbd757a1e` 的当前工作区，保留前序文档整理、连接工具栏及配色修改。按本轮授权修复原生 rsync 的 size/mtime 跳过，以及不同已保存连接抵达同服务器时 SFTP 中转的路径重叠；登录并发不改，Docker 镜像更新取消。NativeServerTransfer 增加 `--ignore-times`；Files Model 从实际受信握手公钥生成内部摘要，copyRemoteEntries 对原连接或同密钥连接在首次写入前检查整批规范路径。没有新增探测临时文件，也没有删除原安全 stage 或凭据/known_hosts 暂存；相同密钥只构成保守拒绝依据，物理文件系统身份、不同密钥/共享挂载别名和并发替换的保证边界见 Backend。
@@ -970,3 +980,19 @@ CI 后继提交 `62fb68f839f6facb5c25283a2edc0b459c9d8018` 仅修改 `scripts/e2
 再单独重跑汇总的 [attempt2](https://github.com/0honus0/nexus-terminal/actions/runs/42035960955/attempts/2) 成功；日志确认下载全部8份名称仍为 attempt1 的耗时产物，当前分支已前进时正确跳过旧估算推送。后继 `0c0355a8` 仅为CI耗时更新，已快进同步；没有发布镜像、部署实例、改数据库或更新插件。专项视觉与真实设备边界继续保留在 PLAN。
 
 原始失败、首版完整运行与失败重跑、最终两次成功的日志及元数据集中 `/home/honus/nexus-task-artifacts/e2e-timings-20261105`；逐项摘要为 `final-report-summary.json`，最终原日志为 `final-run-attempt1.log`、`final-updater-attempt2.log`，状态为 `final-run-attempt1.json`、`final-run-attempt2.json`。首次测试方法空行格式错误修正后全量格式通过，修正复制 job 后再次检查通过；证据与测试目录保留至用户通知。
+
+## Agent 工具批次与 Run 连接资源（2026-11-05）
+
+基于本体 `2abcf49b` 的当前工作区；Node 26.13.0、pnpm 12.16.1、Playwright 1.64.1，产物统一保留在 `/home/honus/nexus-task-artifacts/agent-tool-reuse-20261105`，未部署生产。SSH 串行复用、并发独占传输，SFTP 保留自己的连接；Shell 一次 exec 承载 commands[]，不使用远端临时文件或常驻 Shell。
+
+真实竞争实验使用项目 Ssh2MachineFactory 与 NdjsonAcpAdapter、本机 SSH、全局 512 KiB/s 下行限速（TCP 公平分配），每组 3 次且校验 SHA。2 MiB SFTP 与小 exec 共用传输时小命令 2074–2079ms，独立传输为 152–153ms，两组文件传输均 4.25–4.27s。2 MiB exec stdout 与已启动 ACP 并发时，权限响应共用传输为 4187–4207ms，独立传输为 52–53ms，整组完成仍 4.2–4.4s；因此整批最后返回并不能消除中间审批的等待。原始脚本/JSONL 为 ssh-contention 与 ssh-exec-acp-contention；实验只证明该环境下避免同连接背压，不保证独立带宽、主机 CPU 或跳板性能。
+
+本轮定向执行：`yield-second.log` 8 项通过；`batches-second.log` 的文件 UTF-8/目录分页、批次 patch/search/deliver/present、结果续读及 v1→v3 实际 SQLite 升级通过；Docker 旧夹具失败已修正，`isolated-third.log` 29 项全部通过，覆盖真实 2 MiB exec 与 ACP 权限并发、SSH 生命周期、Browser 会话队列/配置屏障与故障收尾、Docker 批次。保留首轮错误输出，不沿用已替换的共用连接实验结论。
+
+`check-final.log` 根检查通过；`build-e2e-final.log` Shared、双端及测试客户端构建通过。`resources-browser-second.log` 在 1280/390/320px 各验证关闭连接和关闭界面：6 项通过，截图随正式测试产物保留；最小化/取消关闭保留原 resourceId，确认停止后 Run cancelled 且资源移除。首次用例误把审批等待资源要求为 idle，已改为真实 busy 状态，未改产品 UI 绕过断言。
+
+数据库保持 v1 签名不变，独立 v2 转换 Shell Job 结果为 commands[]，v3 转换历史交付/展示结果为 items[]；正常重启执行升级并验证第二次启动不重写，迁移失败回滚由 phase2 场景验证。快照身份改为完整有序迁移链签名，不接受不同链快照。
+
+官方插件 main `7f0498cf14fa50f7a664adf892ef041c62ad7fab` 已通过 [Validate 42074435148](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42074435148)，[打包 42074606017](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42074606017) 成功；下载后验证 catalog SHA/大小、全部文件 hash 与固定发布者 Ed25519 签名。Nexus Agent 升级 1.0.4，Full-stack 保持原 1.0.3，SDK 与权限声明不变。完整 E2E、发布结论待当前实际执行后补齐。
+
+本地完整 Backend 首轮 140 项通过，1 项因 Node 不接受空 --test-name-pattern 参数而启动失败；修正 wrapper 仅在非空时传入参数后，正式相同入口重跑该项通过（local-backend-corrected.log），实际 SQLite 脚本另有 phase2-final.log。完整 Browser 持续执行，首轮交付审批摘要及 A01 Provider 夹具仍读取旧单项字段，已按 paths[]/items[].value 更新并保留首次失败，后续用当前契约验收。远程 runner 同步增加官方 Docker 29.9.2 CLI，后端分片独占其临时 Actions 主机 socket，实际 Docker 用例不跳过或换成模拟成功。

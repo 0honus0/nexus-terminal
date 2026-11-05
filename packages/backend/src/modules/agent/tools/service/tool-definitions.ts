@@ -16,6 +16,15 @@ const connection = (): ToolInputField => ({
 	maximum: Number.MAX_SAFE_INTEGER,
 });
 
+const onError = (): ToolInputField => ({
+	name: 'onError',
+	kind: 'text',
+	required: false,
+	allowEmpty: false,
+	maxBytes: 8,
+	choices: ['stop', 'continue'],
+});
+
 const path = (maxBytes = 4096): ToolInputField => ({
 	name: 'path',
 	required: true,
@@ -172,13 +181,13 @@ export function toolDefinitions(): ToolDefinition[] {
 
 		{
 			name: 'file_deliver',
-			version: '1.0.0',
+			version: '2.0.0',
 			capability: 'file.read',
 			risk: 'mutate',
 			mutation: true,
 			scheduling: 'exclusive',
 			description:
-				'Deliver a regular file from a selected SSH target to the user. Requires file.read on that target and artifacts.write. Copies exact bytes into an App Artifact; images/GIF play inline and other files get preview/download controls automatically. Use after creating GIF/PDF/archive or other binary files with shell_execute. Absolute path, no symlinks. Do not output Base64 or construct URLs. Does not delete, attach, retain or share the source; never replay an unknown result.',
+				'Deliver paths array of regular files from one SSH target; return per-item completed/failed/not_started. Preflight the whole batch; stop at the first failure. Partial successful deliveries remain available; never replay the entire batch. Requires file.read on that target and artifacts.write. Copies exact bytes into an App Artifact; images/GIF play inline and other files get preview/download controls automatically. Use after creating GIF/PDF/archive or other binary files with shell_execute. Absolute path, no symlinks. Do not output Base64 or construct URLs. Does not delete, attach, retain or share the source; never replay an unknown result.',
 			input: {
 				fields: [
 					{
@@ -188,26 +197,42 @@ export function toolDefinitions(): ToolDefinition[] {
 						minimum: 1,
 						maximum: Number.MAX_SAFE_INTEGER,
 					},
-					{ name: 'path', kind: 'text', required: true, allowEmpty: false, maxBytes: 4096 },
+					{
+						name: 'paths',
+						kind: 'texts',
+						required: true,
+						maxItems: Number.MAX_SAFE_INTEGER,
+						maxItemBytes: 4096,
+					},
 				],
 			},
 		},
 		{
 			name: 'artifact_present',
-			version: '1.0.0',
+			version: '2.0.0',
 			capability: 'artifacts.read',
 			risk: 'read',
 			mutation: false,
 			scheduling: 'parallel',
 			description:
-				'Show an existing ready, unexpired file owned by this App to the user. Images/GIF appear inline; other files get preview/download controls. Pass the exact artifactId from a prior tool result. Does not copy, retain, attach or share the file. The UI displays it automatically; do not construct URLs or send Base64.',
-			input: { fields: [{ name: 'artifactId', kind: 'text', required: true, allowEmpty: false, maxBytes: 36 }] },
+				'Show an existing ready, unexpired file owned by this App to the user. Images/GIF appear inline; other files get preview/download controls. Pass artifactIds array from prior tool results; return one completed item per file. Does not copy, retain, attach or share the file. The UI displays it automatically; do not construct URLs or send Base64.',
+			input: {
+				fields: [
+					{
+						name: 'artifactIds',
+						kind: 'texts',
+						required: true,
+						maxItems: Number.MAX_SAFE_INTEGER,
+						maxItemBytes: 36,
+					},
+				],
+			},
 		},
 		{
 			name: 'artifact_read',
 			version: '2.0.0',
 			description:
-				'Read an authorized Artifact page as base64. offset is bytes; maxBytes defaults to 4096. App-owned or attached to this Thread/Run; attachment does not grant read permission.',
+				'Read an authorized Artifact page; encoding=base64|utf8 defaults to base64. UTF-8 pages preserve codepoint boundaries (maxBytes >=4); use nextOffset. offset is bytes; maxBytes defaults to 4096. App-owned or attached to this Thread/Run; attachment does not grant read permission.',
 			capability: 'artifacts.read',
 			risk: 'read',
 			mutation: false,
@@ -217,6 +242,14 @@ export function toolDefinitions(): ToolDefinition[] {
 					{ name: 'artifactId', kind: 'text', required: true, allowEmpty: false, maxBytes: 36 },
 					{ name: 'offset', kind: 'integer', required: false, minimum: 0, maximum: AGENT_ARTIFACT_MAX_BYTES },
 					{ name: 'maxBytes', kind: 'integer', required: false, minimum: 1, maximum: 4096 },
+					{
+						name: 'encoding',
+						kind: 'text',
+						required: false,
+						allowEmpty: false,
+						maxBytes: 6,
+						choices: ['base64', 'utf8'],
+					},
 				],
 			},
 		},
@@ -255,19 +288,39 @@ export function toolDefinitions(): ToolDefinition[] {
 		},
 		{
 			name: 'tool_result_read',
-			version: '2.0.0',
+			version: '3.0.0',
 			description:
-				'Read captured_result_preview via projection.toolCallId/sha256 from an earlier step of this Run. offset/nextOffset are Unicode code points; maxBytes is encoded JSON text (8..4096, default 4096). Follow nextOffset to null. Rechecks original permission; never reruns the tool.',
+				'Accept items array of known result pages; return items plus nextIndex within the complete response budget. Read captured_result_preview via projection.toolCallId/sha256 from an earlier step of this Run. offset/nextOffset are Unicode code points; maxBytes is encoded JSON text (8..4096, default 4096). Follow nextOffset to null. Rechecks original permission; never reruns the tool.',
 			capability: 'context.read',
 			risk: 'read',
 			mutation: false,
 			scheduling: 'parallel',
 			input: {
 				fields: [
-					{ name: 'toolCallId', kind: 'text', required: true, allowEmpty: false, maxBytes: 36 },
-					{ name: 'sha256', kind: 'text', required: true, allowEmpty: false, maxBytes: 64 },
-					{ name: 'offset', kind: 'integer', required: false, minimum: 0, maximum: TOOL_RESULT_MAX_BYTES },
-					{ name: 'maxBytes', kind: 'integer', required: false, minimum: 8, maximum: RESULT_PAGE_MAX_BYTES },
+					{
+						name: 'items',
+						kind: 'objects',
+						required: true,
+						maxItems: Number.MAX_SAFE_INTEGER,
+						fields: [
+							{ name: 'toolCallId', kind: 'text', required: true, allowEmpty: false, maxBytes: 36 },
+							{ name: 'sha256', kind: 'text', required: true, allowEmpty: false, maxBytes: 64 },
+							{
+								name: 'offset',
+								kind: 'integer',
+								required: false,
+								minimum: 0,
+								maximum: TOOL_RESULT_MAX_BYTES,
+							},
+							{
+								name: 'maxBytes',
+								kind: 'integer',
+								required: false,
+								minimum: 8,
+								maximum: RESULT_PAGE_MAX_BYTES,
+							},
+						],
+					},
 				],
 			},
 		},
@@ -326,9 +379,9 @@ export function toolDefinitions(): ToolDefinition[] {
 		},
 		{
 			name: 'shell_execute',
-			version: '2.0.0',
+			version: '3.0.0',
 			description:
-				'Run argv or a shell script on the selected SSH target after approval. kind=argv requires argv; kind=shell requires script. Optional cwd is absolute. foreground yields after yieldSeconds (default frozen tool timeout); background omits yieldSeconds. If still running, use returned jobId with shell_job_control; never rerun to wait.',
+				'Execute commands (array of shell scripts; one item for one command) sequentially in one exec on the selected SSH target after approval. Each command has isolated cwd/environment/stdin and separate output/exit status; onError defaults to stop, remaining items are not_started. SSH remains reusable throughout the Run. Optional cwd is absolute. foreground yields after yieldSeconds; background omits yieldSeconds. Use returned jobId with shell_job_control, never rerun to wait.',
 			capability: 'shell.execute',
 			risk: 'destructive',
 			mutation: true,
@@ -337,15 +390,20 @@ export function toolDefinitions(): ToolDefinition[] {
 				fields: [
 					connection(),
 					{
-						name: 'kind',
-						kind: 'text',
+						name: 'commands',
+						kind: 'texts',
 						required: true,
-						allowEmpty: false,
-						maxBytes: 5,
-						choices: ['argv', 'shell'],
+						maxItems: Number.MAX_SAFE_INTEGER,
+						maxItemBytes: 8192,
 					},
-					{ name: 'argv', kind: 'texts', required: false, maxItems: 128, maxItemBytes: 8192 },
-					{ name: 'script', kind: 'text', required: false, allowEmpty: false, maxBytes: 8192 },
+					{
+						name: 'onError',
+						kind: 'text',
+						required: false,
+						allowEmpty: false,
+						maxBytes: 8,
+						choices: ['stop', 'continue'],
+					},
 					{ name: 'cwd', kind: 'text', required: false, allowEmpty: false, maxBytes: 256 },
 					{
 						name: 'mode',
@@ -367,9 +425,9 @@ export function toolDefinitions(): ToolDefinition[] {
 		},
 		{
 			name: 'shell_job_control',
-			version: '2.0.0',
+			version: '3.0.0',
 			description:
-				'Manage this Run/target Shell Jobs. list omits jobId and pages via offset/nextOffset (64/page). status/wait/cancel require jobId; only wait accepts waitSeconds (default 10, max 30 and frozen timeout). Wait expiry leaves the same Job running. Cancel requires approval; unknown results are not replayed.',
+				'Manage this Run/target Shell Jobs. list omits jobIds and pages via offset/nextOffset (64/page). status/wait/cancel/output require jobIds; output reads captured live stdout/stderr pages from byte offset (UTF-8 boundaries) and returns nextOffset per Job; reuse it to avoid repeating logs; wait for running Jobs instead of repeatedly reading an unchanged cursor. Retained terminal jobs remain readable until Run cleanup; after restart output is reconstructed from captured final results. one ID uses a one-item array. waitMode=all|any, waitSeconds defaults to 10 (max 30 and frozen timeout), shared by the whole group. Wait expiry leaves the same Job running. Cancel requires approval; unknown results are not replayed.',
 			capability: 'shell.execute',
 			risk: 'read',
 			mutation: false,
@@ -383,9 +441,23 @@ export function toolDefinitions(): ToolDefinition[] {
 						required: true,
 						allowEmpty: false,
 						maxBytes: 6,
-						choices: ['list', 'status', 'wait', 'cancel'],
+						choices: ['list', 'status', 'wait', 'cancel', 'output'],
 					},
-					{ name: 'jobId', kind: 'text', required: false, allowEmpty: false, maxBytes: 36 },
+					{
+						name: 'jobIds',
+						kind: 'texts',
+						required: false,
+						maxItems: Number.MAX_SAFE_INTEGER,
+						maxItemBytes: 36,
+					},
+					{
+						name: 'waitMode',
+						kind: 'text',
+						required: false,
+						allowEmpty: false,
+						maxBytes: 3,
+						choices: ['all', 'any'],
+					},
 					{ name: 'waitSeconds', kind: 'integer', required: false, minimum: 1, maximum: 30 },
 					{
 						name: 'offset',
@@ -399,9 +471,9 @@ export function toolDefinitions(): ToolDefinition[] {
 		},
 		{
 			name: 'machine_docker_inspect',
-			version: '2.0.0',
+			version: '3.0.0',
 			description:
-				'Read container state/image/fingerprint on a selected SSH target. Requires full lowercase 64-hex containerId; use the fingerprint for a later approved control.',
+				'Read containerIds (array of full IDs) state/image/fingerprint without full-fleet statistics on a selected SSH target. Requires full lowercase 64-hex containerId; use the fingerprint for a later approved control.',
 			capability: 'machine.docker.manage',
 			risk: 'read',
 			mutation: false,
@@ -409,15 +481,21 @@ export function toolDefinitions(): ToolDefinition[] {
 			input: {
 				fields: [
 					connection(),
-					{ name: 'containerId', kind: 'text', required: true, allowEmpty: false, maxBytes: 64 },
+					{
+						name: 'containerIds',
+						kind: 'texts',
+						required: true,
+						maxItems: Number.MAX_SAFE_INTEGER,
+						maxItemBytes: 64,
+					},
 				],
 			},
 		},
 		{
 			name: 'machine_docker_control',
-			version: '2.0.0',
+			version: '3.0.0',
 			description:
-				'Start/stop/restart/remove a container using its full ID and expectedFingerprint from machine_docker_inspect. Approval required; remove is destructive. Checks state before and after; no atomic remote CAS or replay of unknown effects.',
+				'Accept items array (one item for one operation), onError=stop|continue defaults to stop. Returns per-item completed/failed/not_started. Batch is not a transaction; never replay unknown effects. Start/stop/restart/remove a container using its full ID and expectedFingerprint from machine_docker_inspect. Approval required; remove is destructive. Checks state before and after; no atomic remote CAS or replay of unknown effects.',
 			capability: 'machine.docker.manage',
 			risk: 'mutate',
 			mutation: true,
@@ -425,37 +503,61 @@ export function toolDefinitions(): ToolDefinition[] {
 			input: {
 				fields: [
 					connection(),
-					{ name: 'containerId', kind: 'text', required: true, allowEmpty: false, maxBytes: 64 },
 					{
-						name: 'action',
-						kind: 'text',
+						name: 'items',
+						kind: 'objects',
 						required: true,
-						allowEmpty: false,
-						maxBytes: 7,
-						choices: DOCKER_ACTIONS.map((action) => action),
+						maxItems: Number.MAX_SAFE_INTEGER,
+						fields: [
+							{ name: 'containerId', kind: 'text', required: true, allowEmpty: false, maxBytes: 64 },
+							{
+								name: 'action',
+								kind: 'text',
+								required: true,
+								allowEmpty: false,
+								maxBytes: 7,
+								choices: DOCKER_ACTIONS.map((action) => action),
+							},
+							{
+								name: 'expectedFingerprint',
+								kind: 'text',
+								required: true,
+								allowEmpty: false,
+								maxBytes: 64,
+							},
+						],
 					},
-					{ name: 'expectedFingerprint', kind: 'text', required: true, allowEmpty: false, maxBytes: 64 },
+					onError(),
 				],
 			},
 		},
 		{
 			name: 'file_inspect',
-			version: '2.0.0',
+			version: '3.0.0',
 			description:
-				'Fingerprint a file or directory tree, including binary content; returns counts and fingerprint, no content. Up to 100 files/100 directories, depth 8, 1 MiB/file and 2 MiB total. Use before file_move/file_delete.',
+				'Accept paths array (one item for one path). Returns items with index/path/value or failureCode; nextIndex resumes unreturned paths within the result budget. Fingerprint a file or directory tree, including binary content; returns counts and fingerprint, no content. Up to 100 files/100 directories, depth 8, 1 MiB/file and 2 MiB total. Use before file_move/file_delete.',
 			capability: 'file.read',
 			risk: 'read',
 			mutation: false,
 			scheduling: 'parallel',
 			input: {
-				fields: [connection(), path(256)],
+				fields: [
+					connection(),
+					{
+						name: 'paths',
+						kind: 'texts',
+						required: true,
+						maxItems: Number.MAX_SAFE_INTEGER,
+						maxItemBytes: 256,
+					},
+				],
 			},
 		},
 		{
 			name: 'file_patch',
-			version: '2.0.0',
+			version: '3.0.0',
 			description:
-				'Replace one unique literal oldText with newText after approval. Use expectedSha256 from file_read. UTF-8 source/result <=32 KiB; each fragment <=4 KiB. Absolute path <=256 UTF-8 bytes, no links. No atomic remote CAS or retry after unknown effects.',
+				'Apply edits against one original file after approval; reject missing, duplicate or overlapping matches and write the complete result once. Use expectedSha256 from file_read. UTF-8 source/result <=32 KiB; each fragment <=4 KiB. Absolute path <=256 UTF-8 bytes, no links. No atomic remote CAS or retry after unknown effects.',
 			capability: 'file.write',
 			risk: 'mutate',
 			mutation: true,
@@ -465,16 +567,24 @@ export function toolDefinitions(): ToolDefinition[] {
 					connection(),
 					path(256),
 					{ name: 'expectedSha256', required: true, kind: 'text', allowEmpty: false, maxBytes: 64 },
-					{ name: 'oldText', required: true, kind: 'text', allowEmpty: false, maxBytes: 4096 },
-					{ name: 'newText', required: true, kind: 'text', allowEmpty: true, maxBytes: 4096 },
+					{
+						name: 'edits',
+						required: true,
+						kind: 'objects',
+						maxItems: Number.MAX_SAFE_INTEGER,
+						fields: [
+							{ name: 'oldText', required: true, kind: 'text', allowEmpty: false, maxBytes: 4096 },
+							{ name: 'newText', required: true, kind: 'text', allowEmpty: true, maxBytes: 4096 },
+						],
+					},
 				],
 			},
 		},
 		{
 			name: 'file_move',
-			version: '2.0.0',
+			version: '3.0.0',
 			description:
-				'Move a file or bounded tree after approval using expectedFingerprint from file_inspect. Destination must not exist; no same/ancestor paths. Absolute paths <=256 UTF-8 bytes, no links. No atomic remote CAS or replay of unknown effects.',
+				'Accept items array (one item for one operation), onError=stop|continue defaults to stop. Returns per-item completed/failed/not_started. Batch is not a transaction; never replay unknown effects. Move a file or bounded tree after approval using expectedFingerprint from file_inspect. Destination must not exist; no same/ancestor paths. Absolute paths <=256 UTF-8 bytes, no links. No atomic remote CAS or replay of unknown effects.',
 			capability: 'file.write',
 			risk: 'mutate',
 			mutation: true,
@@ -482,17 +592,32 @@ export function toolDefinitions(): ToolDefinition[] {
 			input: {
 				fields: [
 					connection(),
-					path(256),
-					{ name: 'destinationPath', required: true, kind: 'text', allowEmpty: false, maxBytes: 256 },
-					{ name: 'expectedFingerprint', required: true, kind: 'text', allowEmpty: false, maxBytes: 64 },
+					{
+						name: 'items',
+						kind: 'objects',
+						required: true,
+						maxItems: Number.MAX_SAFE_INTEGER,
+						fields: [
+							path(256),
+							{ name: 'destinationPath', required: true, kind: 'text', allowEmpty: false, maxBytes: 256 },
+							{
+								name: 'expectedFingerprint',
+								required: true,
+								kind: 'text',
+								allowEmpty: false,
+								maxBytes: 64,
+							},
+						],
+					},
+					onError(),
 				],
 			},
 		},
 		{
 			name: 'file_delete',
-			version: '2.0.0',
+			version: '3.0.0',
 			description:
-				'Delete after approval using expectedFingerprint from file_inspect. scope=entry allows a file or empty directory; tree explicitly allows recursion. Absolute path <=256 UTF-8 bytes, no links. Partial removal is unknown; no rollback or automatic replay.',
+				'Accept items array (one item for one operation), onError=stop|continue defaults to stop. Returns per-item completed/failed/not_started. Batch is not a transaction; never replay unknown effects. Delete after approval using expectedFingerprint from file_inspect. scope=entry allows a file or empty directory; tree explicitly allows recursion. Absolute path <=256 UTF-8 bytes, no links. Partial removal is unknown; no rollback or automatic replay.',
 			capability: 'file.delete',
 			risk: 'destructive',
 			mutation: true,
@@ -500,24 +625,39 @@ export function toolDefinitions(): ToolDefinition[] {
 			input: {
 				fields: [
 					connection(),
-					path(256),
-					{ name: 'expectedFingerprint', required: true, kind: 'text', allowEmpty: false, maxBytes: 64 },
 					{
-						name: 'scope',
+						name: 'items',
+						kind: 'objects',
 						required: true,
-						kind: 'text',
-						allowEmpty: false,
-						maxBytes: 5,
-						choices: ['entry', 'tree'],
+						maxItems: Number.MAX_SAFE_INTEGER,
+						fields: [
+							path(256),
+							{
+								name: 'expectedFingerprint',
+								required: true,
+								kind: 'text',
+								allowEmpty: false,
+								maxBytes: 64,
+							},
+							{
+								name: 'scope',
+								required: true,
+								kind: 'text',
+								allowEmpty: false,
+								maxBytes: 5,
+								choices: ['entry', 'tree'],
+							},
+						],
 					},
+					onError(),
 				],
 			},
 		},
 		{
 			name: 'file_write',
-			version: '2.0.0',
+			version: '3.0.0',
 			description:
-				'Create or replace one UTF-8 file (<=8 KiB) after approval. New file: expectedSha256="absent" (literal string). Replacement: exact lowercase SHA-256 from file_read. Absolute path <=256 UTF-8 bytes, no links; preserve ordinary permissions. No atomic remote CAS or replay of unknown writes.',
+				'Accept items array (one item for one operation), onError=stop|continue defaults to stop. Returns per-item completed/failed/not_started. Batch is not a transaction; never replay unknown effects. Create or replace one UTF-8 file (<=8 KiB) after approval. New file: expectedSha256="absent" (literal string). Replacement: exact lowercase SHA-256 from file_read. Absolute path <=256 UTF-8 bytes, no links; preserve ordinary permissions. No atomic remote CAS or replay of unknown writes.',
 			capability: 'file.write',
 			risk: 'mutate',
 			mutation: true,
@@ -525,9 +665,18 @@ export function toolDefinitions(): ToolDefinition[] {
 			input: {
 				fields: [
 					connection(),
-					path(256),
-					{ name: 'content', required: true, kind: 'text', allowEmpty: true, maxBytes: 8192 },
-					{ name: 'expectedSha256', required: true, kind: 'text', allowEmpty: false, maxBytes: 64 },
+					{
+						name: 'items',
+						kind: 'objects',
+						required: true,
+						maxItems: Number.MAX_SAFE_INTEGER,
+						fields: [
+							path(256),
+							{ name: 'content', required: true, kind: 'text', allowEmpty: true, maxBytes: 8192 },
+							{ name: 'expectedSha256', required: true, kind: 'text', allowEmpty: false, maxBytes: 64 },
+						],
+					},
+					onError(),
 				],
 			},
 		},
@@ -554,31 +703,56 @@ export function toolDefinitions(): ToolDefinition[] {
 		},
 		{
 			name: 'file_read',
-			version: '2.0.0',
+			version: '3.0.0',
 			description:
-				'Read a complete UTF-8 SSH file (<=32 KiB) and its captured-content SHA-256. Use an absolute path; symlinks are rejected.',
+				'Accept paths array (one item for one path). Returns items with index/path/value or failureCode; nextIndex resumes unreturned paths within the result budget. Read a UTF-8 SSH file page using byte offset and maxBytes (default 32768). nextOffset never splits UTF-8; reuse returned fingerprint to check metadata across pages. sha256 is only set for a complete file; pageSha256 hashes this page. Use an absolute path; symlinks are rejected.',
 			capability: 'file.read',
 			risk: 'read',
 			mutation: false,
 			scheduling: 'parallel',
-			input: { fields: [connection(), path()] },
+			input: {
+				fields: [
+					connection(),
+					{
+						name: 'paths',
+						kind: 'texts',
+						required: true,
+						maxItems: Number.MAX_SAFE_INTEGER,
+						maxItemBytes: 4096,
+					},
+					{ name: 'offset', kind: 'integer', required: false, minimum: 0, maximum: Number.MAX_SAFE_INTEGER },
+					{ name: 'maxBytes', kind: 'integer', required: false, minimum: 4, maximum: 32768 },
+				],
+			},
 		},
 		{
 			name: 'file_list',
-			version: '2.0.0',
+			version: '3.0.0',
 			description:
-				'List an absolute SSH directory (<=200 entries); symlinks are listed, not followed. Use exact parent-list names when resolving uncertain paths. tool_resource_not_found means the path is missing, not SSH disconnected; inspect the nearest known parent. Larger directories fail.',
+				'Accept paths array (one item for one path). Returns items with index/path/value or failureCode; nextIndex resumes unreturned paths within the result budget. List an absolute SSH directory in lexicographic pages (200 entries/page); after is the last name, nextAfter continues. Pages are not a snapshot; compare directory metadata fingerprint. symlinks are listed, not followed. Use exact parent-list names when resolving uncertain paths. tool_resource_not_found means the path is missing, not SSH disconnected; inspect the nearest known parent.',
 			capability: 'file.read',
 			risk: 'read',
 			mutation: false,
 			scheduling: 'parallel',
-			input: { fields: [connection(), path()] },
+			input: {
+				fields: [
+					connection(),
+					{
+						name: 'paths',
+						kind: 'texts',
+						required: true,
+						maxItems: Number.MAX_SAFE_INTEGER,
+						maxItemBytes: 4096,
+					},
+					{ name: 'after', kind: 'text', required: false, allowEmpty: true, maxBytes: 4096 },
+				],
+			},
 		},
 		{
 			name: 'file_search',
 			version: '2.0.0',
 			description:
-				'Search case-sensitive literal UTF-8 text in an absolute SSH path. No regex/glob; binary files skipped. Up to 100 files/100 directories, depth 8, 2 MiB total and 32 KiB/file. First match per line, UTF-16 columns; result-limit truncation is explicit.',
+				'Search queries (array of case-sensitive literals) in one traversal of an absolute SSH path. Matches include zero-based queryIndex; maxResults bounds all queries together. No regex/glob; binary files skipped. Up to 100 files/100 directories, depth 8, 2 MiB total and 32 KiB/file. First match per line, UTF-16 columns; result-limit truncation is explicit.',
 			capability: 'file.read',
 			risk: 'read',
 			mutation: false,
@@ -587,7 +761,13 @@ export function toolDefinitions(): ToolDefinition[] {
 				fields: [
 					connection(),
 					path(),
-					{ name: 'query', required: true, kind: 'text', allowEmpty: false, maxBytes: 1024 },
+					{
+						name: 'queries',
+						required: true,
+						kind: 'texts',
+						maxItems: Number.MAX_SAFE_INTEGER,
+						maxItemBytes: 1024,
+					},
 					{ name: 'maxResults', required: false, kind: 'integer', minimum: 1, maximum: 100 },
 				],
 			},

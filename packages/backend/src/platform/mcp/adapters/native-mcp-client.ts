@@ -236,22 +236,30 @@ export class NativeMcpClient implements McpClient {
 		return this.closePromise;
 	}
 
-	discover(endpoint: McpEndpoint, signal: AbortSignal): Promise<McpCatalog> {
+	discover(endpoint: McpEndpoint, signal: AbortSignal, refresh = false): Promise<McpCatalog> {
 		return this.connected(endpoint, signal, async (client, signal) => {
 			const capabilities = client.getServerCapabilities();
 			const [tools, resources, prompts] = await Promise.all([
 				capabilities?.tools
-					? client.listTools(undefined, { signal, timeout: MCP_REQUEST_TIMER_MAX_MS, cacheMode: 'refresh' })
+					? client.listTools(undefined, {
+							signal,
+							timeout: MCP_REQUEST_TIMER_MAX_MS,
+							cacheMode: refresh ? 'refresh' : 'use',
+						})
 					: Promise.resolve({ tools: [] }),
 				capabilities?.resources
 					? client.listResources(undefined, {
 							signal,
 							timeout: MCP_REQUEST_TIMER_MAX_MS,
-							cacheMode: 'refresh',
+							cacheMode: refresh ? 'refresh' : 'use',
 						})
 					: Promise.resolve({ resources: [] }),
 				capabilities?.prompts
-					? client.listPrompts(undefined, { signal, timeout: MCP_REQUEST_TIMER_MAX_MS, cacheMode: 'refresh' })
+					? client.listPrompts(undefined, {
+							signal,
+							timeout: MCP_REQUEST_TIMER_MAX_MS,
+							cacheMode: refresh ? 'refresh' : 'use',
+						})
 					: Promise.resolve({ prompts: [] }),
 			]);
 			if (tools.tools.length > 256 || resources.resources.length > 2048 || prompts.prompts.length > 512) {

@@ -1,3 +1,4 @@
+import { posixCommand } from '../../../support/posix-command.mjs';
 import { createHash, generateKeyPairSync } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -212,8 +213,9 @@ const server = http.createServer(async (request, response) => {
 								target: 'workspace',
 								id: workspaceId,
 								command: {
-									kind: 'argv',
-									argv: ['/bin/sh', '-c', 'printf ready > .queue-ready; sleep 60'],
+									commands: [
+										posixCommand(['/bin/sh', '-c', 'printf ready > .queue-ready; sleep 60']),
+									],
 								},
 								timeoutSeconds: 90,
 								mode: 'foreground',

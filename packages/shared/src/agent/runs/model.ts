@@ -36,3 +36,18 @@ export interface AgentRunUsageView {
 	modelRequests: number;
 	toolExecutions: number;
 }
+
+export interface AgentResourceSessionView {
+	id: string;
+	runId: string;
+	state: import('./values.js').AgentResourceSessionState;
+	openedAt: number;
+	sshConnections: number;
+	sftpChannels: number;
+	mcpSessions: number;
+	browserSessions: number;
+	activeOperations: number;
+	backgroundJobs: number;
+	targetIds: number[];
+	expiresAt: number | null;
+}

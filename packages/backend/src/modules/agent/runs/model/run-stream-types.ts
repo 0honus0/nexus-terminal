@@ -18,6 +18,7 @@ export interface RunStreamState {
 	events: RunEventPage;
 	approvals: ApprovalPage;
 	children: Participant[];
+	resources: import('./run-resource-types.js').RunResourceSnapshot[];
 }
 
 export interface RunStreamPage {

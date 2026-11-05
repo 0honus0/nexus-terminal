@@ -49,7 +49,8 @@ export class BrowserService {
 	private readonly pending = new Set<Promise<unknown>>();
 	private readonly stop = new AbortController();
 	private readonly failures: unknown[] = [];
-	private lane: Promise<unknown> = Promise.resolve();
+	private barrier: Promise<unknown> = Promise.resolve();
+	private readonly lanes = new Map<string, Promise<unknown>>();
 	private closing = false;
 	private closePromise: Promise<void> | null = null;
 
@@ -118,22 +119,33 @@ export class BrowserService {
 		});
 	}
 
-	private task<T>(work: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T> {
+	private task<T>(work: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal, lane?: string): Promise<T> {
 		if (this.closing) {
 			return Promise.reject(new AgentFailure('provider_unavailable'));
 		}
 		// Tool calls inherit the configured Run/tool signal, including time spent queued.
 		const deadline = AbortSignal.any([this.stop.signal, signal ?? AbortSignal.timeout(60000)]);
-		const task = this.lane.then(() => {
+		const previous = lane ? [this.barrier, this.lanes.get(lane)] : [this.barrier, ...this.lanes.values()];
+		const task = Promise.all(previous).then(() => {
 			if (this.closing || deadline.aborted) {
 				throw new AgentFailure('provider_unavailable');
 			}
 			return work(deadline);
 		});
-		this.lane = task.then(
+		const settled = task.then(
 			() => undefined,
 			() => undefined,
 		);
+		if (lane) {
+			this.lanes.set(lane, settled);
+			void settled.then(() => {
+				if (this.lanes.get(lane) === settled) {
+					this.lanes.delete(lane);
+				}
+			});
+		} else {
+			this.barrier = settled;
+		}
 		this.pending.add(task);
 		void task.then(
 			() => this.pending.delete(task),
@@ -206,144 +218,199 @@ export class BrowserService {
 		signal: AbortSignal,
 		validate: () => Promise<void>,
 	): Promise<string> {
-		return this.task(async (deadline) => {
-			const combined = AbortSignal.any([deadline, signal]);
-			await validate();
-			combined.throwIfAborted();
-			if (input.action === 'open') {
-				const config = await this.model.configuration(owner.userId);
-				const target = config.targets.find((item) => item.id === input.targetId);
-				if (!target) {
-					throw new AgentFailure('not_found');
-				}
-				if (config.version !== input.expectedVersion) {
-					throw new AgentFailure('version_conflict');
-				}
-				const capability = await this.connectTarget(target, combined);
-				try {
-					const current = await this.model.configuration(owner.userId);
-					await validate();
-					combined.throwIfAborted();
-					if (current.version !== config.version) {
+		return this.task(
+			async (deadline) => {
+				const combined = AbortSignal.any([deadline, signal]);
+				await validate();
+				combined.throwIfAborted();
+				if (input.action === 'open') {
+					const config = await this.model.configuration(owner.userId);
+					const target = config.targets.find((item) => item.id === input.targetId);
+					if (!target) {
+						throw new AgentFailure('not_found');
+					}
+					if (config.version !== input.expectedVersion) {
 						throw new AgentFailure('version_conflict');
 					}
-					const record = {
-						sessionId: randomUUID(),
-						targetId: target.id,
-						targetVersion: config.version,
-						runId: owner.runId,
-						createdAt: Date.now(),
-					};
-					this.sessions.set(record.sessionId, {
-						owner: { userId: owner.userId, appId: owner.appId, runId: owner.runId },
-						record,
-						capability,
-					});
-					return JSON.stringify({
-						sessionId: record.sessionId,
-						targetId: record.targetId,
-						targetVersion: record.targetVersion,
-						runId: record.runId,
-						createdAt: record.createdAt,
-					});
-				} catch (error) {
+					const capability = await this.connectTarget(target, combined);
 					try {
-						await capability.close();
-					} catch (cleanup) {
-						throw new ToolCleanupFailure({
-							cause: new AggregateError([error, cleanup], 'Browser admission and release failed'),
-						});
-					}
-					throw error;
-				}
-			}
-			const session = this.sessions.get(input.sessionId);
-			if (
-				!session ||
-				session.owner.userId !== owner.userId ||
-				session.owner.appId !== owner.appId ||
-				session.owner.runId !== owner.runId
-			) {
-				throw new AgentFailure('not_found');
-			}
-			if (input.action === 'close') {
-				await session.capability.close();
-				this.sessions.delete(input.sessionId);
-				return JSON.stringify({ status: 'closed' });
-			}
-			if ((await this.model.configuration(owner.userId)).version !== session.record.targetVersion) {
-				throw new AgentFailure('version_conflict');
-			}
-			let result: unknown;
-			if (input.action === 'snapshot') {
-				result = await session.capability.snapshot(input.maxNodes, combined);
-			} else if (input.action === 'screenshot') {
-				const bytes = await session.capability.screenshot(
-					await this.artifacts.availableBytes(this.actor(owner)),
-					combined,
-				);
-				await validate();
-				result = await this.saveCapture(
-					owner,
-					'screenshot-' + session.record.sessionId + '.png',
-					'image/png',
-					bytes,
-					combined,
-				);
-			} else if (input.action === 'console') {
-				result = session.capability.console(input.after, input.limit);
-			} else if (input.action === 'upload') {
-				result = await this.artifacts.useToolContent(
-					this.actor(owner),
-					input.artifactId,
-					input.expectedVersion,
-					input.sha256,
-					session.capability.maxUploadBytes,
-					combined,
-					async (content) => {
+						const current = await this.model.configuration(owner.userId);
 						await validate();
-						return session.capability.perform(
-							{
-								action: 'upload',
-								settleMs: input.settleMs,
-								sessionId: input.sessionId,
-								snapshotId: input.snapshotId,
-								nodeRef: input.nodeRef,
-								name: content.name,
-								mediaType: content.mediaType,
-								bytes: content.bytes,
-							},
+						combined.throwIfAborted();
+						if (current.version !== config.version) {
+							throw new AgentFailure('version_conflict');
+						}
+						const record = {
+							sessionId: randomUUID(),
+							targetId: target.id,
+							targetVersion: config.version,
+							runId: owner.runId,
+							createdAt: Date.now(),
+						};
+						this.sessions.set(record.sessionId, {
+							owner: { userId: owner.userId, appId: owner.appId, runId: owner.runId },
+							record,
+							capability,
+						});
+						return JSON.stringify({
+							sessionId: record.sessionId,
+							targetId: record.targetId,
+							targetVersion: record.targetVersion,
+							runId: record.runId,
+							createdAt: record.createdAt,
+						});
+					} catch (error) {
+						try {
+							await capability.close();
+						} catch (cleanup) {
+							throw new ToolCleanupFailure({
+								cause: new AggregateError([error, cleanup], 'Browser admission and release failed'),
+							});
+						}
+						throw error;
+					}
+				}
+				const session = this.sessions.get(input.sessionId);
+				if (
+					!session ||
+					session.owner.userId !== owner.userId ||
+					session.owner.appId !== owner.appId ||
+					session.owner.runId !== owner.runId
+				) {
+					throw new AgentFailure('not_found');
+				}
+				if (input.action === 'close') {
+					await session.capability.close();
+					this.sessions.delete(input.sessionId);
+					return JSON.stringify({ status: 'closed' });
+				}
+				if ((await this.model.configuration(owner.userId)).version !== session.record.targetVersion) {
+					throw new AgentFailure('version_conflict');
+				}
+				let result: unknown;
+				if (input.action === 'snapshot') {
+					const startedAt = Date.now();
+					const snapshot = await session.capability.snapshot(input.maxNodes, combined);
+					const snapshotAt = Date.now();
+					await validate();
+					let screenshot = null;
+					if (input.include.includes('screenshot')) {
+						const bytes = await session.capability.screenshot(
+							await this.artifacts.availableBytes(this.actor(owner)),
 							combined,
 						);
-					},
-				);
-			} else {
-				const reply = await session.capability.perform(
-					input.action === 'download'
-						? {
-								action: 'download',
-								sessionId: input.sessionId,
-								snapshotId: input.snapshotId,
-								nodeRef: input.nodeRef,
-								maxBytes: Math.min(
-									input.maxBytes,
-									await this.artifacts.availableBytes(this.actor(owner)),
-								),
-							}
-						: input,
-					combined,
-				);
-				if (reply.kind === 'file') {
+						await validate();
+						screenshot = {
+							capturedAt: Date.now(),
+							artifact: await this.saveCapture(
+								owner,
+								'screenshot-' + session.record.sessionId + '.png',
+								'image/png',
+								bytes,
+								combined,
+							),
+						};
+					}
 					await validate();
-					result = await this.saveCapture(owner, reply.name, reply.mediaType, reply.bytes, combined);
+					const console = input.include.includes('console')
+						? { capturedAt: Date.now(), entries: session.capability.console(input.after, input.limit) }
+						: null;
+					result = {
+						snapshotId: snapshot.snapshotId,
+						url: snapshot.url,
+						title: snapshot.title,
+						nodes: snapshot.nodes.map((node) => ({
+							ref: node.ref,
+							parentRef: node.parentRef,
+							tag: node.tag,
+							text: node.text,
+							attributes: node.attributes.map((attr) => ({ name: attr.name, value: attr.value })),
+						})),
+						truncated: snapshot.truncated,
+						startedAt,
+						snapshotAt,
+						screenshot,
+						console,
+					};
+				} else if (input.action === 'screenshot') {
+					const bytes = await session.capability.screenshot(
+						await this.artifacts.availableBytes(this.actor(owner)),
+						combined,
+					);
+					await validate();
+					result = await this.saveCapture(
+						owner,
+						'screenshot-' + session.record.sessionId + '.png',
+						'image/png',
+						bytes,
+						combined,
+					);
+				} else if (input.action === 'console') {
+					result = session.capability.console(input.after, input.limit);
+				} else if (input.action === 'upload') {
+					result = await this.artifacts.useToolContent(
+						this.actor(owner),
+						input.artifactId,
+						input.expectedVersion,
+						input.sha256,
+						session.capability.maxUploadBytes,
+						combined,
+						async (content) => {
+							await validate();
+							return session.capability.perform(
+								{
+									action: 'upload',
+									settleMs: input.settleMs,
+									sessionId: input.sessionId,
+									snapshotId: input.snapshotId,
+									nodeRef: input.nodeRef,
+									name: content.name,
+									mediaType: content.mediaType,
+									bytes: content.bytes,
+								},
+								combined,
+							);
+						},
+					);
 				} else {
-					result = { kind: 'page', url: reply.url, title: reply.title };
+					const reply = await session.capability.perform(
+						input.action === 'download'
+							? {
+									action: 'download',
+									sessionId: input.sessionId,
+									snapshotId: input.snapshotId,
+									nodeRef: input.nodeRef,
+									maxBytes: Math.min(
+										input.maxBytes,
+										await this.artifacts.availableBytes(this.actor(owner)),
+									),
+								}
+							: input,
+						combined,
+					);
+					if (reply.kind === 'file') {
+						await validate();
+						result = await this.saveCapture(owner, reply.name, reply.mediaType, reply.bytes, combined);
+					} else {
+						result = { kind: 'page', url: reply.url, title: reply.title };
+					}
 				}
-			}
-			await validate();
-			combined.throwIfAborted();
-			return JSON.stringify(result);
-		}, signal);
+				await validate();
+				combined.throwIfAborted();
+				return JSON.stringify(result);
+			},
+			signal,
+			input.action === 'open' ? 'open:' + owner.operationId : 'session:' + input.sessionId,
+		);
+	}
+
+	sessionCount(owner: BrowserOwner): number {
+		return [...this.sessions.values()].filter(
+			(session) =>
+				session.owner.userId === owner.userId &&
+				session.owner.appId === owner.appId &&
+				session.owner.runId === owner.runId,
+		).length;
 	}
 
 	async drainRun(owner: BrowserOwner): Promise<void> {

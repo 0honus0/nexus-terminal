@@ -25,15 +25,15 @@ export function respondFunctionalModel(messages, userText, response, send) {
 		send(response, { content: JSON.stringify(typeof final === 'function' ? final() : final) });
 	};
 
-	const shell = (script, mode = 'foreground') => ({ connectionId, kind: 'shell', script, mode });
+	const shell = (script, mode = 'foreground') => ({ connectionId, mode, commands: [script] });
 
-	const file = (path) => ({ connectionId, path });
+	const file = (path) => ({ path });
 
 	if (userText.includes('E2E_DELIVER_FILE')) {
 		const path = /path=([^\s"\\]+)/.exec(userText)?.[1];
 		if (!path) throw new Error('Missing delivery path');
-		if (!result('deliver')) call('deliver', 'file_deliver', { connectionId, path });
-		else send(response, { content: JSON.stringify(result('deliver')) });
+		if (!result('deliver')) call('deliver', 'file_deliver', { connectionId, paths: [path] });
+		else send(response, { content: JSON.stringify(result('deliver').items[0].value ?? result('deliver')) });
 		return true;
 	}
 	if (userText.includes('E2E_CREATE_DELIVERY')) {
@@ -48,7 +48,7 @@ export function respondFunctionalModel(messages, userText, response, send) {
 	if (userText.includes('E2E_PRESENT_FILE')) {
 		const artifactId = /artifact=([a-f0-9-]{36})/.exec(userText)?.[1];
 		if (!artifactId) throw new Error('Missing artifact');
-		if (!result('present')) call('present', 'artifact_present', { artifactId });
+		if (!result('present')) call('present', 'artifact_present', { artifactIds: [artifactId] });
 		else send(response, { content: JSON.stringify(result('present')) });
 		return true;
 	}
@@ -130,16 +130,16 @@ export function respondFunctionalModel(messages, userText, response, send) {
 	if (repair) {
 		sequence(
 			[
-				['repair_read', 'file_read', file(repair.path)],
+				['repair_read', 'file_read', { connectionId, paths: [repair.path] }],
 				['repair_before', 'shell_execute', shell(`cd "$NEXUS_E2E_ROOT${repair.root}" && ${repair.before}`)],
 				[
 					'repair_patch',
 					'file_patch',
 					() => ({
+						connectionId,
 						...file(repair.path),
-						expectedSha256: result('repair_read').sha256,
-						oldText: repair.oldText,
-						newText: repair.newText,
+						expectedSha256: result('repair_read')?.items[0].value.sha256,
+						edits: [{ oldText: repair.oldText, newText: repair.newText }],
 					}),
 				],
 				['repair_after', 'shell_execute', shell(`cd "$NEXUS_E2E_ROOT${repair.root}" && ${repair.after}`)],
@@ -154,49 +154,68 @@ export function respondFunctionalModel(messages, userText, response, send) {
 				[
 					'file_create',
 					'file_write',
-					{ ...file('/file-lifecycle/original.txt'), content: 'alpha\nkeep\n', expectedSha256: 'absent' },
+					{
+						connectionId,
+						items: [
+							{
+								...file('/file-lifecycle/original.txt'),
+								content: 'alpha\nkeep\n',
+								expectedSha256: 'absent',
+							},
+						],
+					},
 				],
-				['file_read_original', 'file_read', file('/file-lifecycle/original.txt')],
+				['file_read_original', 'file_read', { connectionId, paths: ['/file-lifecycle/original.txt'] }],
 				[
 					'file_patch',
 					'file_patch',
 					() => ({
+						connectionId,
 						...file('/file-lifecycle/original.txt'),
-						expectedSha256: result('file_read_original').sha256,
-						oldText: 'alpha',
-						newText: 'ALPHA',
+						expectedSha256: result('file_read_original')?.items[0].value.sha256,
+						edits: [{ oldText: 'alpha', newText: 'ALPHA' }],
 					}),
 				],
-				['file_patched', 'file_read', file('/file-lifecycle/original.txt')],
-				['file_inspect_original', 'file_inspect', file('/file-lifecycle/original.txt')],
+				['file_patched', 'file_read', { connectionId, paths: ['/file-lifecycle/original.txt'] }],
+				['file_inspect_original', 'file_inspect', { connectionId, paths: ['/file-lifecycle/original.txt'] }],
 				[
 					'file_move',
 					'file_move',
 					() => ({
-						...file('/file-lifecycle/original.txt'),
-						destinationPath: '/file-lifecycle/moved.txt',
-						expectedFingerprint: result('file_inspect_original').fingerprint,
+						connectionId,
+						items: [
+							{
+								...file('/file-lifecycle/original.txt'),
+								destinationPath: '/file-lifecycle/moved.txt',
+								expectedFingerprint: result('file_inspect_original')?.items[0].value.fingerprint,
+							},
+						],
 					}),
 				],
-				['file_moved', 'file_read', file('/file-lifecycle/moved.txt')],
-				['file_inspect_moved', 'file_inspect', file('/file-lifecycle/moved.txt')],
+				['file_moved', 'file_read', { connectionId, paths: ['/file-lifecycle/moved.txt'] }],
+				['file_inspect_moved', 'file_inspect', { connectionId, paths: ['/file-lifecycle/moved.txt'] }],
 				[
 					'file_delete',
 					'file_delete',
 					() => ({
-						...file('/file-lifecycle/moved.txt'),
-						expectedFingerprint: result('file_inspect_moved').fingerprint,
-						scope: 'entry',
+						connectionId,
+						items: [
+							{
+								...file('/file-lifecycle/moved.txt'),
+								expectedFingerprint: result('file_inspect_moved')?.items[0].value.fingerprint,
+								scope: 'entry',
+							},
+						],
 					}),
 				],
-				['file_remaining', 'file_list', file('/file-lifecycle')],
-				['file_preserved', 'file_read', file('/file-lifecycle/preserved.json')],
+				['file_remaining', 'file_list', { connectionId, paths: ['/file-lifecycle'] }],
+				['file_preserved', 'file_read', { connectionId, paths: ['/file-lifecycle/preserved.json'] }],
 			],
 			() => ({
-				patched: result('file_patched'),
-				moved: result('file_moved'),
-				remaining: result('file_remaining'),
-				preserved: result('file_preserved'),
+				patched: result('file_patched')?.items[0].value,
+				moved: result('file_moved')?.items[0].value,
+				remaining: result('file_remaining')?.items[0].value,
+				preserved: result('file_preserved')?.items[0].value,
 			}),
 		);
 		return true;
@@ -204,15 +223,15 @@ export function respondFunctionalModel(messages, userText, response, send) {
 	if (userText.includes('E2E_FILE_PATCH_REJECT')) {
 		sequence(
 			[
-				['reject_read', 'file_read', file('/file-lifecycle/preserved.json')],
+				['reject_read', 'file_read', { connectionId, paths: ['/file-lifecycle/preserved.json'] }],
 				[
 					'reject_patch',
 					'file_patch',
 					() => ({
+						connectionId,
 						...file('/file-lifecycle/preserved.json'),
-						expectedSha256: result('reject_read').sha256,
-						oldText: 'wrong context',
-						newText: 'must-not-write',
+						expectedSha256: result('reject_read')?.items[0].value.sha256,
+						edits: [{ oldText: 'wrong context', newText: 'must-not-write' }],
 					}),
 				],
 			],
@@ -222,7 +241,13 @@ export function respondFunctionalModel(messages, userText, response, send) {
 	}
 	if (userText.includes('E2E_SEARCH_SCAN')) {
 		sequence(
-			[['search_scan', 'file_search', { ...file('/search-scan'), query: 'SCAN_SENTINEL', maxResults: 10 }]],
+			[
+				[
+					'search_scan',
+					'file_search',
+					{ connectionId, ...file('/search-scan'), maxResults: 10, queries: ['SCAN_SENTINEL'] },
+				],
+			],
 			() => result('search_scan'),
 		);
 		return true;
@@ -230,9 +255,13 @@ export function respondFunctionalModel(messages, userText, response, send) {
 	if (userText.includes('E2E_TASK_A01_READONLY')) {
 		const files = ['AGENTS.md', 'README.md', 'package.json', 'config.json', 'server.mjs', 'data/catalog.json'];
 		sequence(
-			files.map((name, index) => ['handover_' + index, 'file_read', file('/task-a01/' + name)]),
+			files.map((name, index) => [
+				'handover_' + index,
+				'file_read',
+				{ connectionId, paths: ['/task-a01/' + name] },
+			]),
 			() => {
-				const reads = files.map((_, index) => result('handover_' + index));
+				const reads = files.map((_, index) => result('handover_' + index).items[0].value);
 				const config = JSON.parse(reads[3].text),
 					pkg = JSON.parse(reads[2].text);
 				return {
@@ -281,12 +310,12 @@ export function respondFunctionalModel(messages, userText, response, send) {
 				[
 					'deploy_status',
 					'shell_job_control',
-					() => ({ connectionId, action: 'status', jobId: result('deploy_launch').jobId }),
+					() => ({ connectionId, action: 'status', jobIds: [result('deploy_launch').jobId] }),
 				],
 				[
 					'deploy_wait',
 					'shell_job_control',
-					() => ({ connectionId, action: 'wait', jobId: result('deploy_launch').jobId, waitSeconds: 30 }),
+					() => ({ connectionId, action: 'wait', waitSeconds: 30, jobIds: [result('deploy_launch').jobId] }),
 				],
 			],
 			() => ({

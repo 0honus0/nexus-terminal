@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { useAgentResourceControl } from '../composables/use-agent-resource-control';
 	import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 	import { logger } from '@/client/logging/logger';
 	import { structurallyEqual } from '@/foundation/data';
@@ -25,6 +26,7 @@
 	const state = agentWindowManager.state;
 	const activeApp = computed(() => props.directory.apps.find((app) => app.id === state.activeAppId) ?? null);
 	const visible = computed(() => state.status === 'visible');
+	const resourceControl = useAgentResourceControl(() => visible.value);
 	const resumeRevision = ref(0);
 	watch(visible, (shown) => {
 		if (shown) resumeRevision.value += 1;
@@ -179,7 +181,7 @@
 			if (document.querySelector('[data-ui="popover-panel"][data-agent-hub-portal][data-state="open"]')) return;
 			event.preventDefault();
 			event.stopPropagation();
-			agentWindowManager.closeHub();
+			void closeHub();
 			return;
 		}
 		if (event.key !== 'Tab') return;
@@ -576,11 +578,22 @@
 		agentWindowManager.switchApp({ appId });
 	};
 
-	const closeAppTab = (appId: string, event?: Event) => {
+	async function closeHub(): Promise<void> {
+		const scopes = props.directory.apps
+			.filter((app) => app.enabled && app.surface === 'agent')
+			.map((app) => ({ appId: app.id, appVersion: app.version }));
+		if (scopes.length && !(await resourceControl.closeApps(scopes))) return;
+		agentWindowManager.closeHub();
+	}
+
+	const closeAppTab = async (appId: string, event?: Event) => {
 		event?.stopPropagation();
 		if (openAppIds.value.length <= 1) return;
 		const index = openAppIds.value.indexOf(appId);
 		if (index === -1) return;
+		const app = props.directory.apps.find((app) => app.id === appId);
+		if (app?.surface === 'agent' && !(await resourceControl.closeApps([{ appId, appVersion: app.version }])))
+			return;
 		const remaining = openAppIds.value.filter((id) => id !== appId);
 		openAppIds.value = remaining;
 		residentAppSurfaces.value = residentAppSurfaces.value.filter((resident) => resident.appId !== appId);
@@ -865,7 +878,8 @@
 						class="agent-hub-window-control agent-hub-window-close"
 						:title="$t('agent.hub.close')"
 						:aria-label="$t('agent.hub.close')"
-						@click="agentWindowManager.closeHub()"
+						:disabled="resourceControl.busy.value"
+						@click="closeHub()"
 					>
 						<i class="fa-solid fa-xmark text-xs" aria-hidden="true"></i>
 					</UiButton>

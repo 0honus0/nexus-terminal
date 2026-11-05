@@ -10,6 +10,7 @@ import { posix } from 'node:path';
 import { AgentFailure } from '../../agent-failure.js';
 import { TOOL_ARGUMENT_MAX_BYTES, TOOL_RESULT_MAX_BYTES } from '../../runs/run-tool-limits.js';
 import { isWellFormedFileText } from '@nexus-terminal/shared/remote/files/text-codec';
+import type { ToolDeleteItem } from '../model/tool-batch-types.js';
 import type { ToolDefinition, ToolInput } from '../model/tool-types.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -67,16 +68,26 @@ function texts(value: unknown, maxItems: number, maxItemBytes: number): string[]
 	return value.map((item) => text(item, maxItemBytes, true));
 }
 
-export function toolInput(definition: ToolDefinition, argumentsJson: string): ToolInput {
-	const value = object(argumentsJson);
-	if (Object.keys(value).some((key) => !definition.input.fields.some((field) => field.name === key))) {
+function validateFields(fields: ToolDefinition['input']['fields'], value: Record<string, unknown>): void {
+	if (Object.keys(value).some((key) => !fields.some((field) => field.name === key))) {
 		throw new AgentFailure('invalid_input');
 	}
-	for (const field of definition.input.fields) {
+	for (const field of fields) {
 		if (value[field.name] === undefined && !field.required) {
 			continue;
 		}
-		if (field.kind === 'texts') {
+		if (field.kind === 'objects') {
+			const items = value[field.name];
+			if (!Array.isArray(items) || !items.length || items.length > field.maxItems) {
+				throw new AgentFailure('invalid_input');
+			}
+			for (const item of items) {
+				if (!isRecord(item)) {
+					throw new AgentFailure('invalid_input');
+				}
+				validateFields(field.fields, item);
+			}
+		} else if (field.kind === 'texts') {
 			texts(value[field.name], field.maxItems, field.maxItemBytes);
 		} else if (field.kind === 'integer') {
 			integer(value[field.name], field.minimum, field.maximum);
@@ -87,6 +98,11 @@ export function toolInput(definition: ToolDefinition, argumentsJson: string): To
 			}
 		}
 	}
+}
+
+export function toolInput(definition: ToolDefinition, argumentsJson: string): ToolInput {
+	const value = object(argumentsJson);
+	validateFields(definition.input.fields, value);
 	if (definition.name === 'plugin_tool_call') {
 		const name = text(value.name, 64),
 			version = text(value.version, 64),
@@ -247,11 +263,11 @@ export function toolInput(definition: ToolDefinition, argumentsJson: string): To
 	}
 
 	if (definition.name === 'artifact_present') {
-		const artifactId = text(value.artifactId, 36);
-		if (!AGENT_ID_PATTERN.test(artifactId)) {
+		const artifactIds = texts(value.artifactIds, Number.MAX_SAFE_INTEGER, 36);
+		if (new Set(artifactIds).size !== artifactIds.length || artifactIds.some((id) => !AGENT_ID_PATTERN.test(id))) {
 			throw new AgentFailure('invalid_input');
 		}
-		return { kind: 'artifact', action: 'present', artifactId };
+		return { kind: 'artifact', action: 'present', artifactIds };
 	}
 	if (definition.name === 'artifact_read') {
 		const artifactId = text(value.artifactId, 36);
@@ -263,7 +279,9 @@ export function toolInput(definition: ToolDefinition, argumentsJson: string): To
 			action: 'read',
 			artifactId,
 			offset: value.offset === undefined ? 0 : integer(value.offset, 0, AGENT_ARTIFACT_MAX_BYTES),
-			maxBytes: value.maxBytes === undefined ? 4096 : integer(value.maxBytes, 1, 4096),
+			maxBytes:
+				value.maxBytes === undefined ? 4096 : integer(value.maxBytes, value.encoding === 'utf8' ? 4 : 1, 4096),
+			encoding: value.encoding === 'utf8' ? 'utf8' : 'base64',
 		};
 	}
 	if (definition.name === 'memory_propose') {
@@ -285,24 +303,31 @@ export function toolInput(definition: ToolDefinition, argumentsJson: string): To
 		return { kind: 'connections' };
 	}
 	if (definition.name === 'tool_result_read') {
-		const toolCallId = text(value.toolCallId, 36);
-		const sha256 = text(value.sha256, 64);
-		if (!AGENT_ID_PATTERN.test(toolCallId) || !/^[a-f0-9]{64}$/u.test(sha256)) {
+		if (!Array.isArray(value.items) || !value.items.length) {
 			throw new AgentFailure('invalid_input');
 		}
-		return {
-			kind: 'result',
-			input: {
+		const items = value.items.map((item) => {
+			if (!isRecord(item)) {
+				throw new AgentFailure('invalid_input');
+			}
+			const toolCallId = text(item.toolCallId, 36),
+				sha256 = text(item.sha256, 64);
+			if (!AGENT_ID_PATTERN.test(toolCallId) || !/^[a-f0-9]{64}$/u.test(sha256)) {
+				throw new AgentFailure('invalid_input');
+			}
+			return {
 				toolCallId,
 				sha256,
-				offset: value.offset === undefined ? 0 : integer(value.offset, 0, TOOL_RESULT_MAX_BYTES),
+				offset: item.offset === undefined ? 0 : integer(item.offset, 0, TOOL_RESULT_MAX_BYTES),
 				maxBytes:
-					value.maxBytes === undefined
+					item.maxBytes === undefined
 						? RESULT_PAGE_MAX_BYTES
-						: integer(value.maxBytes, 8, RESULT_PAGE_MAX_BYTES),
-			},
-		};
+						: integer(item.maxBytes, 8, RESULT_PAGE_MAX_BYTES),
+			};
+		});
+		return { kind: 'result', items };
 	}
+
 	const connectionId = integer(value.connectionId, 1, Number.MAX_SAFE_INTEGER);
 	if (definition.name === 'project_directory_bind') {
 		return {
@@ -356,144 +381,241 @@ export function toolInput(definition: ToolDefinition, argumentsJson: string): To
 		if (mode === 'background' && yieldSeconds !== null) {
 			throw new AgentFailure('invalid_input');
 		}
-		if (value.kind === 'argv') {
-			if (value.script !== undefined) {
-				throw new AgentFailure('invalid_input');
-			}
-			const argv = texts(value.argv, 128, 8192);
-			if (
-				!argv[0] ||
-				argv[0].startsWith('-') ||
-				argv.reduce((sum, arg) => sum + Buffer.byteLength(arg, 'utf8'), 0) > 8192
-			) {
-				throw new AgentFailure('invalid_input');
-			}
-			return { kind: 'shell', connectionId, command: { kind: 'argv', argv }, cwd, mode, yieldSeconds };
-		}
-		if (value.kind !== 'shell' || value.argv !== undefined) {
+		const commands = texts(value.commands, Number.MAX_SAFE_INTEGER, 8192);
+		if (commands.some((command) => !command.trim())) {
 			throw new AgentFailure('invalid_input');
 		}
-		return {
-			kind: 'shell',
-			connectionId,
-			command: { kind: 'shell', script: text(value.script, 8192) },
-			cwd,
-			mode,
-			yieldSeconds,
-		};
+		const onError = value.onError ?? 'stop';
+		if (onError !== 'stop' && onError !== 'continue') {
+			throw new AgentFailure('invalid_input');
+		}
+		// Reserve the existing durable result budget before dispatch, including worst-case JSON escaping.
+		const metadataBytes = Buffer.byteLength(
+			JSON.stringify(
+				commands.map((_, index) => ({
+					index,
+					status: 'nonzero',
+					exitCode: 255,
+					signal: null,
+					stdout: '',
+					stderr: '',
+					truncated: true,
+				})),
+			),
+		);
+		if (metadataBytes + 32 * 1024 * 6 + 128 > TOOL_RESULT_MAX_BYTES) {
+			throw new AgentFailure('limit_exceeded');
+		}
+		return { kind: 'shell', connectionId, commands, onError, cwd, mode, yieldSeconds };
 	}
 	if (definition.name === 'shell_job_control') {
 		const action = value.action;
-		if (action !== 'list' && action !== 'status' && action !== 'wait' && action !== 'cancel') {
-			throw new AgentFailure('invalid_input');
-		}
 		if (
-			(action === 'list' && value.jobId !== undefined) ||
-			(action !== 'wait' && value.waitSeconds !== undefined) ||
-			(action !== 'list' && value.offset !== undefined)
+			action !== 'list' &&
+			action !== 'status' &&
+			action !== 'wait' &&
+			action !== 'cancel' &&
+			action !== 'output'
 		) {
 			throw new AgentFailure('invalid_input');
 		}
-		const jobId = action === 'list' ? null : text(value.jobId, 36);
-		if (jobId !== null && !AGENT_ID_PATTERN.test(jobId)) {
+		if (
+			(action === 'list' && value.jobIds !== undefined) ||
+			(action !== 'wait' && (value.waitSeconds !== undefined || value.waitMode !== undefined)) ||
+			(action !== 'list' && action !== 'output' && value.offset !== undefined)
+		) {
+			throw new AgentFailure('invalid_input');
+		}
+		const jobIds = action === 'list' ? [] : texts(value.jobIds, Number.MAX_SAFE_INTEGER, 36);
+		if (new Set(jobIds).size !== jobIds.length || jobIds.some((id) => !AGENT_ID_PATTERN.test(id))) {
 			throw new AgentFailure('invalid_input');
 		}
 		return {
 			kind: 'job',
 			connectionId,
 			action,
-			jobId,
+			jobIds,
+			waitMode: value.waitMode === 'any' ? 'any' : 'all',
 			waitSeconds:
 				action === 'wait' ? (value.waitSeconds === undefined ? 10 : integer(value.waitSeconds, 1, 30)) : 0,
 			offset:
-				action === 'list' && value.offset !== undefined
+				(action === 'list' || action === 'output') && value.offset !== undefined
 					? integer(value.offset, 0, Number.MAX_SAFE_INTEGER - 64)
 					: 0,
 		};
 	}
-	if (definition.name === 'machine_docker_inspect' || definition.name === 'machine_docker_control') {
-		const containerId = text(value.containerId, 64);
-		if (!/^[a-f0-9]{64}$/.test(containerId)) {
+	if (definition.name === 'machine_docker_inspect') {
+		const containerIds = texts(value.containerIds, Number.MAX_SAFE_INTEGER, 64);
+		if (
+			new Set(containerIds).size !== containerIds.length ||
+			containerIds.some((id) => !/^[a-f0-9]{64}$/.test(id))
+		) {
 			throw new AgentFailure('invalid_input');
 		}
-		if (definition.name === 'machine_docker_inspect') {
-			return { kind: 'docker_inspect', connectionId, containerId };
-		}
-		const action = DOCKER_ACTIONS.find((item) => item === value.action);
-		const expectedFingerprint = text(value.expectedFingerprint, 64);
-		if (!action || !/^[a-f0-9]{64}$/.test(expectedFingerprint)) {
-			throw new AgentFailure('invalid_input');
-		}
-		return { kind: 'docker_control', connectionId, containerId, action, expectedFingerprint };
+		return { kind: 'docker_inspect', connectionId, containerIds };
 	}
+	if (['file_write', 'file_move', 'file_delete', 'machine_docker_control'].includes(definition.name)) {
+		const onError = value.onError ?? 'stop';
+		if (onError !== 'stop' && onError !== 'continue') {
+			throw new AgentFailure('invalid_input');
+		}
+		const items = value.items;
+		if (!Array.isArray(items) || !items.length || items.some((item) => !isRecord(item))) {
+			throw new AgentFailure('invalid_input');
+		}
+		const records = items.filter(isRecord);
+		if (definition.name === 'machine_docker_control') {
+			const operations = records.map((item) => {
+				const containerId = text(item.containerId, 64),
+					expectedFingerprint = text(item.expectedFingerprint, 64);
+				const action = DOCKER_ACTIONS.find((candidate) => candidate === item.action);
+				if (!action || !/^[a-f0-9]{64}$/.test(containerId) || !/^[a-f0-9]{64}$/.test(expectedFingerprint)) {
+					throw new AgentFailure('invalid_input');
+				}
+				return { containerId, expectedFingerprint, action };
+			});
+			if (new Set(operations.map((item) => item.containerId)).size !== operations.length) {
+				throw new AgentFailure('invalid_input');
+			}
+			return { kind: 'docker_control', connectionId, items: operations, onError };
+		}
+
+		const pathFor = (item: Record<string, unknown>) => {
+			const path = absolutePath(item.path, 256);
+			if (path === '/' || /[\u0000-\u001f\u007f]/u.test(path)) {
+				throw new AgentFailure('invalid_input');
+			}
+			return path;
+		};
+
+		const hashFor = (item: Record<string, unknown>) => {
+			const hash = text(item.expectedFingerprint, 64);
+			if (!/^[a-f0-9]{64}$/.test(hash)) {
+				throw new AgentFailure('invalid_input');
+			}
+			return hash;
+		};
+
+		const paths: string[] = [];
+
+		const addPath = (path: string) => {
+			if (paths.some((other) => path === other || path.startsWith(other + '/') || other.startsWith(path + '/'))) {
+				throw new AgentFailure('invalid_input');
+			}
+			paths.push(path);
+		};
+
+		if (definition.name === 'file_write') {
+			const operations = records.map((item) => {
+				const path = pathFor(item);
+				addPath(path);
+				const expectedSha256 = text(item.expectedSha256, 64);
+				if (expectedSha256 !== 'absent' && !/^[a-f0-9]{64}$/.test(expectedSha256)) {
+					throw new AgentFailure('invalid_input');
+				}
+				return { path, content: text(item.content, 8192, true), expectedSha256 };
+			});
+			return { kind: 'write', connectionId, items: operations, onError };
+		}
+		if (definition.name === 'file_move') {
+			const operations = records.map((item) => {
+				const path = pathFor(item),
+					destinationPath = absolutePath(item.destinationPath, 256);
+				if (destinationPath === '/' || /[\u0000-\u001f\u007f]/u.test(destinationPath)) {
+					throw new AgentFailure('invalid_input');
+				}
+				addPath(path);
+				addPath(destinationPath);
+				return { path, destinationPath, expectedFingerprint: hashFor(item) };
+			});
+			return { kind: 'move', connectionId, items: operations, onError };
+		}
+		const operations: ToolDeleteItem[] = records.map((item): ToolDeleteItem => {
+			const path = pathFor(item);
+			addPath(path);
+			const scope = item.scope;
+			if (scope !== 'entry' && scope !== 'tree') {
+				throw new AgentFailure('invalid_input');
+			}
+			return { path, expectedFingerprint: hashFor(item), scope };
+		});
+		return { kind: 'delete', connectionId, items: operations, onError };
+	}
+	if (definition.name === 'file_read' || definition.name === 'file_list' || definition.name === 'file_inspect') {
+		const paths = texts(value.paths, Number.MAX_SAFE_INTEGER, definition.name === 'file_inspect' ? 256 : 4096).map(
+			(item) => absolutePath(item, 4096),
+		);
+		if (new Set(paths).size !== paths.length) {
+			throw new AgentFailure('invalid_input');
+		}
+		if (definition.name === 'file_read') {
+			return {
+				kind: 'read',
+				connectionId,
+				paths,
+				offset: value.offset === undefined ? 0 : integer(value.offset, 0, Number.MAX_SAFE_INTEGER),
+				maxBytes: value.maxBytes === undefined ? 32768 : integer(value.maxBytes, 4, 32768),
+			};
+		}
+		if (definition.name === 'file_list') {
+			return {
+				kind: 'list',
+				connectionId,
+				paths,
+				after: value.after === undefined ? '' : text(value.after, 4096, true),
+			};
+		}
+		return { kind: 'inspect', connectionId, paths };
+	}
+	if (definition.name === 'file_deliver') {
+		const paths = texts(value.paths, Number.MAX_SAFE_INTEGER, 4096).map((item) => absolutePath(item, 4096));
+		if (
+			new Set(paths).size !== paths.length ||
+			paths.some((path) => path === '/' || /[\u0000-\u001f\u007f]/u.test(path))
+		) {
+			throw new AgentFailure('invalid_input');
+		}
+		return { kind: 'deliver', connectionId, paths };
+	}
+
 	const path = absolutePath(value.path, 4096);
 	if (definition.mutation && (/[\u0000-\u001f\u007f]/u.test(path) || path === '/')) {
 		throw new AgentFailure('invalid_input');
 	}
 
-	if (definition.name === 'file_deliver') {
-		return { kind: 'deliver', connectionId, path };
-	}
-	if (definition.name === 'file_inspect') {
-		return { kind: 'inspect', connectionId, path };
-	}
 	if (definition.name === 'file_patch') {
 		const expectedSha256 = text(value.expectedSha256, 64);
-		const oldText = text(value.oldText, 4096);
-		const newText = text(value.newText, 4096, true);
-		if (!/^[a-f0-9]{64}$/.test(expectedSha256) || oldText === newText) {
+		if (!/^[a-f0-9]{64}$/.test(expectedSha256) || !Array.isArray(value.edits) || !value.edits.length) {
 			throw new AgentFailure('invalid_input');
 		}
-		return { kind: 'patch', connectionId, path, expectedSha256, oldText, newText };
-	}
-	if (definition.name === 'file_move' || definition.name === 'file_delete') {
-		const expectedFingerprint = text(value.expectedFingerprint, 64);
-		if (!/^[a-f0-9]{64}$/.test(expectedFingerprint)) {
-			throw new AgentFailure('invalid_input');
-		}
-		if (definition.name === 'file_move') {
-			const destinationPath = absolutePath(value.destinationPath, 256);
-			if (
-				destinationPath === '/' ||
-				destinationPath === path ||
-				destinationPath.startsWith(path + '/') ||
-				path.startsWith(destinationPath + '/') ||
-				/[\u0000-\u001f\u007f]/u.test(destinationPath)
-			) {
+		const edits = value.edits.map((item) => {
+			if (!isRecord(item)) {
 				throw new AgentFailure('invalid_input');
 			}
-			return { kind: 'move', connectionId, path, destinationPath, expectedFingerprint };
-		}
-		if (value.scope !== 'entry' && value.scope !== 'tree') {
-			throw new AgentFailure('invalid_input');
-		}
-		return { kind: 'delete', connectionId, path, expectedFingerprint, scope: value.scope };
-	}
-	if (definition.name === 'file_write') {
-		const expectedSha256 = text(value.expectedSha256, 64);
-		if (expectedSha256 !== 'absent' && !/^[a-f0-9]{64}$/.test(expectedSha256)) {
-			throw new AgentFailure('invalid_input');
-		}
-		return { kind: 'write', connectionId, path, content: text(value.content, 8192, true), expectedSha256 };
-	}
-	if (definition.name === 'file_read') {
-		return { kind: 'read', connectionId, path };
-	}
-	if (definition.name === 'file_list') {
-		return { kind: 'list', connectionId, path };
+			const oldText = text(item.oldText, 4096),
+				newText = text(item.newText, 4096, true);
+			if (oldText === newText) {
+				throw new AgentFailure('invalid_input');
+			}
+			return { oldText, newText };
+		});
+		return { kind: 'patch', connectionId, path, expectedSha256, edits };
 	}
 	if (definition.name !== 'file_search') {
 		throw new AgentFailure('invalid_input');
 	}
-	const query = text(value.query, 1024);
-	if (query.includes('\n') || query.includes('\r')) {
+	const queries = texts(value.queries, Number.MAX_SAFE_INTEGER, 1024);
+	if (
+		new Set(queries).size !== queries.length ||
+		queries.some((query) => !query || query.includes('\n') || query.includes('\r'))
+	) {
 		throw new AgentFailure('invalid_input');
 	}
 	return {
 		kind: 'search',
 		connectionId,
 		path,
-		query,
+		queries,
 		maxResults: value.maxResults === undefined ? 20 : integer(value.maxResults, 1, 100),
 	};
 }

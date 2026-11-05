@@ -9,7 +9,8 @@ export const isLogLevel = (value: unknown): value is LogLevelDto =>
 
 export const logger = pino({
 	level: 'info',
-	browser: { asObject: true },
+	// console.trace captures a stack for every frame/request and can dominate a busy terminal.
+	browser: { asObject: true, write: { trace: (entry: object) => console.log(entry) } },
 	redact: {
 		paths: [
 			'password',
@@ -42,7 +43,7 @@ const logLevelChanged = (previousLevel: LogLevelDto, level: LogLevelDto): void =
 	}
 };
 
-export const setFrontendLogLevel = (value: unknown, announceChange = false): LogLevelDto => {
+export const setFrontendLogLevel = (value: unknown, announceChange = true): LogLevelDto => {
 	const level: LogLevelDto = isLogLevel(value) ? value : 'info';
 	const previousLevel: LogLevelDto = isLogLevel(logger.level) ? logger.level : 'info';
 	if (level === previousLevel) {

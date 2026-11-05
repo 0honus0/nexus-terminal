@@ -1,6 +1,7 @@
 import { HttpRequestFailure } from './request-failure';
 import { readResponseBytes } from './response-body';
 import { clearPendingNetworkFailure, isNetworkFailure, reportNetworkFailure } from './network-failure';
+import { beginHttpDiagnostic } from '../logging/transport-diagnostics';
 
 interface BinaryRequest {
 	method: 'GET' | 'POST' | 'PUT' | 'DELETE';
@@ -78,9 +79,11 @@ export async function requestBinary(
 		throw new HttpRequestFailure(input.signal?.aborted ? 'cancelled' : 'request_failed', 'not_dispatched');
 	}
 	let response: Response;
+	const diagnose = beginHttpDiagnostic(input.method, input.url);
 	try {
 		response = await fetch(request);
 	} catch (cause) {
+		diagnose(null, input.signal?.aborted ? 'cancelled' : 'request_failed');
 		if (!input.signal?.aborted) reportNetworkFailure(input.method === 'GET' ? input.url : undefined, input.signal);
 		throw new HttpRequestFailure(input.signal?.aborted ? 'cancelled' : 'request_failed', 'unknown', { cause });
 	}
@@ -90,8 +93,10 @@ export async function requestBinary(
 			response.status >= 400 ? input.maxErrorBytes : input.maxResponseBytes,
 		);
 		if (input.method === 'GET') clearPendingNetworkFailure(input.url);
+		diagnose(response.status);
 		return { status: response.status, headers: response.headers, bytes };
 	} catch (cause) {
+		diagnose(response.status, input.signal?.aborted ? 'cancelled' : 'response_failed');
 		if (input.signal?.aborted) {
 			throw new HttpRequestFailure('cancelled', 'unknown', { cause });
 		}

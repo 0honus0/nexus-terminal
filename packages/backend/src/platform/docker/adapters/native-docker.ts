@@ -3,6 +3,7 @@ import {
 	type DockerPort,
 	type DockerStats,
 	type DockerStatus,
+	type DockerInspection,
 	type DockerContainer,
 	type DockerPortBinding,
 	type DockerAction,
@@ -98,6 +99,39 @@ function identifier(id: string): string {
 
 /** Native CLI syntax and Docker's JSON representation stay at this boundary. */
 export class NativeDockerAdapter implements DockerPort {
+	async inspect(execute: MachineCommandExecutor, id: string, signal: AbortSignal): Promise<DockerInspection | null> {
+		return (await this.inspectMany(execute, [id], signal))[0] ?? null;
+	}
+
+	async inspectMany(
+		execute: MachineCommandExecutor,
+		ids: string[],
+		signal: AbortSignal,
+	): Promise<DockerInspection[]> {
+		if (!ids.length || new Set(ids).size !== ids.length) {
+			throw new DockerFailure('failed');
+		}
+		for (const id of ids) {
+			identifier(id);
+		}
+		const format = `'{"id":{{json .ID}},"state":{{json .State}},"image":{{json .Image}},"created":{{json .CreatedAt}}}'`;
+		const result = await execute(
+			'docker ps -a --no-trunc ' + ids.map((id) => "--filter 'id=" + id + "'").join(' ') + ' --format ' + format,
+			{ timeoutMs: 15000, maxOutputBytes: 64 * 1024, signal },
+		);
+		completed(result);
+		const seen = new Set<string>();
+		return lines(result.stdout).map((row) => {
+			const value = object(row),
+				found = text(value.id);
+			if (!ids.includes(found) || seen.has(found)) {
+				throw new DockerFailure('invalid_output');
+			}
+			seen.add(found);
+			return { id: found, state: text(value.state), image: text(value.image), created: text(value.created) };
+		});
+	}
+
 	async status(execute: MachineCommandExecutor, signal: AbortSignal): Promise<DockerStatus> {
 		const version = await execute("docker version --format '{{.Server.Version}}'", {
 			timeoutMs: 10_000,

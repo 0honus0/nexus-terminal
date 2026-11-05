@@ -39,21 +39,33 @@ export type ToolJobResult =
 	| { status: 'not_started' }
 	| {
 			status: 'completed' | 'nonzero';
-			exitCode: number;
-			signal: string | null;
-			stdout: string;
-			stderr: string;
-			truncated: boolean;
+			commands: Array<
+				| { index: number; status: 'not_started' }
+				| {
+						index: number;
+						status: 'completed' | 'nonzero';
+						exitCode: number;
+						signal: string | null;
+						stdout: string;
+						stderr: string;
+						truncated: boolean;
+				  }
+			>;
 	  };
 
 export interface ToolJobPreparation {
+	background: boolean;
 	deadlineAt: number;
 	maxHistory: number;
 	operation: ToolOperation;
 	target: ToolTarget;
 	policyRevision: number;
 	signal: AbortSignal;
-	work(signal: AbortSignal, timeoutMs: number): Promise<Exclude<ToolJobResult, { status: 'not_started' }>>;
+	work(
+		signal: AbortSignal,
+		timeoutMs: number,
+		onOutput: (index: number, stream: 'stdout' | 'stderr', text: string) => void,
+	): Promise<Exclude<ToolJobResult, { status: 'not_started' }>>;
 	validate(signal: AbortSignal): Promise<void>;
 	onFailure(error: unknown): void;
 }

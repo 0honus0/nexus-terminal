@@ -59,7 +59,6 @@ export interface CancelRunStorageCommand {
 	userId: number;
 	appId: string;
 	runId: string;
-	expectedVersion: number;
 	operationKey: string;
 	requestHash: string;
 }

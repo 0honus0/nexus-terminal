@@ -1,3 +1,4 @@
+import { posixCommand } from '../../support/posix-command.mjs';
 import { listAgentApprovalHistory } from './agent-approval-fixture.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -187,9 +188,7 @@ await test('B10 actual Root/Child collaboration ownership', { timeout: 60000 }, 
 					name: 'file_write',
 					input: {
 						connectionId: f.connectionId,
-						path,
-						content: 'forbidden after cancel',
-						expectedSha256: 'absent',
+						items: [{ path, content: 'forbidden after cancel', expectedSha256: 'absent' }],
 					},
 				}));
 				const run = await f.start('independent approval', (results) =>
@@ -334,12 +333,13 @@ await test('B10 actual Root/Child collaboration ownership', { timeout: 60000 }, 
 						name: 'shell_execute',
 						input: {
 							connectionId: f.connectionId,
-							kind: 'argv',
 							mode: 'background',
-							argv: [
-								process.execPath,
-								'-e',
-								`const fs=require('node:fs');fs.writeFileSync(${JSON.stringify(started)},'started');setTimeout(()=>fs.writeFileSync(${JSON.stringify(completed)},'done'),3000)`,
+							commands: [
+								posixCommand([
+									process.execPath,
+									'-e',
+									`process.on('SIGTERM',()=>{});process.on('SIGHUP',()=>{});const fs=require('node:fs');fs.writeFileSync(${JSON.stringify(started)},'started');setTimeout(()=>fs.writeFileSync(${JSON.stringify(completed)},'done'),3000)`,
+								]),
 							],
 						},
 					};
@@ -385,7 +385,11 @@ await test('B10 actual Root/Child collaboration ownership', { timeout: 60000 }, 
 				await f.grants(['file.read']);
 				const objective = f.program('unauthorized child', () => assert.fail('Unauthorized Child dispatched'));
 				const run = await f.start('no collaboration grant', () => delegate(objective));
-				await f.wait(run, 'failed');
+				await f.wait(run, 'unknown');
+				assert.equal(
+					f.calls[0].body.tools.some((tool) => tool.function.name === 'collaboration_delegate'),
+					false,
+				);
 				assert.deepEqual(await children(f, run, 0), []);
 				assert.equal(f.calls.length, 1);
 				assert.deepEqual(await listAgentApprovalHistory(f.api, f.appId, run.id), []);

@@ -140,11 +140,14 @@ export class RunModel {
 						userId: command.userId,
 						appId: command.appId,
 						runId: command.runId,
-						expectedVersion: command.expectedVersion,
 						operationKey: command.operationKey,
 						requestHash: command.requestHash,
 					},
-					(run) => decideCancelRootRun({ status: run.status, version: run.version }, command.expectedVersion),
+					(run) =>
+						decideCancelRootRun(
+							{ status: run.status, version: run.version },
+							command.expectedVersion === 'current' ? run.version : command.expectedVersion,
+						),
 				),
 			),
 		);

@@ -108,7 +108,14 @@ async function setup(t) {
 				}
 			},
 		};
-		return new SftpFileResource(targetId, options.fingerprint ?? fingerprint, machine, lease, 'server-' + targetId);
+		return new SftpFileResource(
+			targetId,
+			options.fingerprint ?? fingerprint,
+			machine,
+			lease,
+			'server-' + targetId,
+			() => machine.close(),
+		);
 	}
 
 	const files = new RemoteFileService(

@@ -1,4 +1,5 @@
 import type { AgentCapability, AgentApprovalRisk } from '@nexus-terminal/shared/agent/governance/values';
+import type { ToolWriteItem, ToolMoveItem, ToolDeleteItem, ToolDockerControlItem } from './tool-batch-types.js';
 import type { PluginAgentCatalog } from '../../plugins/model/plugin-contribution-types.js';
 
 export interface ToolStepContext {
@@ -22,6 +23,7 @@ export interface ToolDefinition {
 export type ToolInputField = { name: string; required: boolean } & (
 	| { kind: 'integer'; minimum: number; maximum: number }
 	| { kind: 'texts'; maxItems: number; maxItemBytes: number }
+	| { kind: 'objects'; maxItems: number; fields: ToolInputField[] }
 	| { kind: 'text'; maxBytes: number; allowEmpty: boolean; choices?: readonly string[] }
 );
 
@@ -42,42 +44,50 @@ export type ToolInput =
 	| { kind: 'host_diagnostics' }
 	| { kind: 'checkpoint'; summary: string }
 	| { kind: 'artifact'; action: 'create'; name: string; content: string }
-	| { kind: 'artifact'; action: 'present'; artifactId: string }
-	| { kind: 'artifact'; action: 'read'; artifactId: string; offset: number; maxBytes: number }
+	| { kind: 'artifact'; action: 'present'; artifactIds: string[] }
+	| {
+			kind: 'artifact';
+			action: 'read';
+			artifactId: string;
+			offset: number;
+			maxBytes: number;
+			encoding: 'base64' | 'utf8';
+	  }
 	| { kind: 'memory'; action: 'propose'; content: string }
 	| { kind: 'memory'; action: 'recall'; query: string; limit: number }
-	| { kind: 'result'; input: import('../../context/model/context-types.js').ResultReadInput }
+	| { kind: 'result'; items: import('../../context/model/context-types.js').ResultReadInput[] }
 	| { kind: 'project'; connectionId: number; input: import('./tool-project-types.js').ProjectInput }
 	| { kind: 'collaboration'; input: import('../../runs/model/run-collaboration-types.js').CollaborationInput }
 	| { kind: 'acp'; connectionId: number; argv: string[]; cwd: string; prompt: string }
 	| {
 			kind: 'shell';
 			connectionId: number;
-			command: ToolCommand;
+			commands: string[];
+			onError: 'stop' | 'continue';
 			cwd: string | null;
 			mode: 'foreground' | 'background';
 			yieldSeconds: number | null;
 	  }
 	| ({ kind: 'job'; connectionId: number } & ToolJobControlInput)
-	| { kind: 'docker_inspect'; connectionId: number; containerId: string }
-	| {
-			kind: 'docker_control';
-			connectionId: number;
-			containerId: string;
-			action: import('@nexus-terminal/shared/remote/docker/values').DockerAction;
-			expectedFingerprint: string;
-	  }
+	| { kind: 'docker_inspect'; connectionId: number; containerIds: string[] }
+	| { kind: 'docker_control'; connectionId: number; items: ToolDockerControlItem[]; onError: 'stop' | 'continue' }
 	| { kind: 'connections' }
 	| { kind: 'diagnostics'; connectionId: number }
-	| { kind: 'deliver'; connectionId: number; path: string }
-	| { kind: 'read'; connectionId: number; path: string }
-	| { kind: 'list'; connectionId: number; path: string }
-	| { kind: 'inspect'; connectionId: number; path: string }
-	| { kind: 'patch'; connectionId: number; path: string; expectedSha256: string; oldText: string; newText: string }
-	| { kind: 'move'; connectionId: number; path: string; destinationPath: string; expectedFingerprint: string }
-	| { kind: 'delete'; connectionId: number; path: string; expectedFingerprint: string; scope: 'entry' | 'tree' }
-	| { kind: 'write'; connectionId: number; path: string; content: string; expectedSha256: string }
-	| { kind: 'search'; connectionId: number; path: string; query: string; maxResults: number };
+	| { kind: 'deliver'; connectionId: number; paths: string[] }
+	| { kind: 'read'; connectionId: number; paths: string[]; offset: number; maxBytes: number }
+	| { kind: 'list'; connectionId: number; paths: string[]; after: string }
+	| { kind: 'inspect'; connectionId: number; paths: string[] }
+	| {
+			kind: 'patch';
+			connectionId: number;
+			path: string;
+			expectedSha256: string;
+			edits: Array<{ oldText: string; newText: string }>;
+	  }
+	| { kind: 'move'; connectionId: number; items: ToolMoveItem[]; onError: 'stop' | 'continue' }
+	| { kind: 'delete'; connectionId: number; items: ToolDeleteItem[]; onError: 'stop' | 'continue' }
+	| { kind: 'write'; connectionId: number; items: ToolWriteItem[]; onError: 'stop' | 'continue' }
+	| { kind: 'search'; connectionId: number; path: string; queries: string[]; maxResults: number };
 
 export interface ToolConnection {
 	id: number;
@@ -114,11 +124,10 @@ export interface ToolExecutionScope {
 	onBackgroundFailure(error: unknown, toolName?: string): void;
 }
 
-export type ToolCommand = { kind: 'argv'; argv: string[] } | { kind: 'shell'; script: string };
-
 export interface ToolJobControlInput {
-	action: 'list' | 'status' | 'wait' | 'cancel';
-	jobId: string | null;
+	action: 'list' | 'status' | 'wait' | 'cancel' | 'output';
+	jobIds: string[];
+	waitMode: 'all' | 'any';
 	waitSeconds: number;
 	offset: number;
 }

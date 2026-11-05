@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, writeFile, rm, stat, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -77,31 +78,40 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 6
 				const run = await f.start('file lifecycle', (results) => {
 					switch (results.length) {
 						case 0:
-							return tool(f, 'file_write', { path: source, content: initial, expectedSha256: 'absent' });
+							return tool(f, 'file_write', {
+								items: [{ path: source, content: initial, expectedSha256: 'absent' }],
+							});
 						case 1:
-							return tool(f, 'file_read', { path: source });
+							return tool(f, 'file_read', { paths: [source] });
 						case 2:
 							return tool(f, 'file_patch', {
 								path: source,
-								expectedSha256: results[1].sha256,
-								oldText: 'literal',
-								newText: 'replacement',
+								expectedSha256: results[1].items[0].value.sha256,
+								edits: [{ oldText: 'literal', newText: 'replacement' }],
 							});
 						case 3:
-							return tool(f, 'file_inspect', { path: source });
+							return tool(f, 'file_inspect', { paths: [source] });
 						case 4:
 							return tool(f, 'file_move', {
-								path: source,
-								destinationPath: destination,
-								expectedFingerprint: results[3].fingerprint,
+								items: [
+									{
+										path: source,
+										destinationPath: destination,
+										expectedFingerprint: results[3].items[0].value.fingerprint,
+									},
+								],
 							});
 						case 5:
-							return tool(f, 'file_inspect', { path: destination });
+							return tool(f, 'file_inspect', { paths: [destination] });
 						case 6:
 							return tool(f, 'file_delete', {
-								path: destination,
-								scope: 'entry',
-								expectedFingerprint: results[5].fingerprint,
+								items: [
+									{
+										path: destination,
+										scope: 'entry',
+										expectedFingerprint: results[5].items[0].value.fingerprint,
+									},
+								],
 							});
 						default:
 							return {};
@@ -122,21 +132,230 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 6
 				const tools = f.rows('agent_run_tools', run);
 				assert.equal(tools.length, 7);
 				assert.ok(tools.every((row) => row.state === 'completed'));
-				assert.equal(JSON.parse(tools[1].result_text).sha256, hash(initial));
+				assert.equal(JSON.parse(tools[1].result_text).items[0].value.sha256, hash(initial));
 				assert.equal(f.calls.length, 8);
 			},
 		);
+		await scenario(
+			'large UTF-8 files and directories page without gaps or duplicate entries',
+			async (f, directory) => {
+				const settings = expectStatus(await f.api('GET', '/api/v1/agent/execution-settings'), 200).settings;
+				expectStatus(
+					await f.api('PUT', '/api/v1/agent/execution-settings', {
+						expectedVersion: settings.version,
+						enabled: true,
+						limits: { ...settings.limits, maxToolOutputBytes: 256 * 1024 },
+					}),
+					200,
+				);
+				const content = '甲🙂a'.repeat(6000),
+					path = join(directory, 'large.txt'),
+					folder = join(directory, 'entries');
+				await writeFile(path, content);
+				await mkdir(folder);
+				const names = Array.from({ length: 220 }, (_, i) => 'file-' + String(i).padStart(3, '0'));
+				await Promise.all(names.map((name) => writeFile(join(folder, name), name)));
+				const pages = [],
+					entries = [];
+				const run = await f.start('paged files', (results) => {
+					if (!results.length) return tool(f, 'file_read', { paths: [path], maxBytes: 4097 });
+					const latest = results.at(-1).items[0].value;
+					if ('text' in latest) {
+						pages.push(latest);
+						assert.equal(latest.pageSha256, hash(latest.text));
+						assert.equal(latest.sha256, null);
+						assert.equal(latest.sizeBytes, Buffer.byteLength(content));
+						if (latest.nextOffset !== null)
+							return tool(f, 'file_read', { paths: [path], offset: latest.nextOffset, maxBytes: 4097 });
+						assert.equal(pages.map((page) => page.text).join(''), content);
+						assert.equal(new Set(pages.map((page) => page.fingerprint)).size, 1);
+						return tool(f, 'file_list', { paths: [folder] });
+					}
+					entries.push(...latest.entries.map((entry) => entry.name));
+					if (latest.nextAfter !== null)
+						return tool(f, 'file_list', { paths: [folder], after: latest.nextAfter });
+					assert.deepEqual(entries, names);
+					return {};
+				});
+				await f.wait(run, 'completed');
+				assert.ok(pages.length > 1);
+				assert.equal(entries.length, 220);
+			},
+		);
+		await scenario(
+			'multi-edit patch and multi-query search retain separate query matches',
+			async (f, directory) => {
+				const path = join(directory, 'multiple.txt'),
+					before = 'alpha first\nbeta second\nalpha beta',
+					after = 'A first\nB second\nalpha beta';
+				await writeFile(path, before);
+				const run = await f.start('multi edits', (results) => {
+					if (!results.length)
+						return tool(f, 'file_patch', {
+							path,
+							expectedSha256: hash(before),
+							edits: [
+								{ oldText: 'alpha first', newText: 'A first' },
+								{ oldText: 'beta second', newText: 'B second' },
+							],
+						});
+					if (results.length === 1) return tool(f, 'file_search', { path, queries: ['alpha', 'beta'] });
+					assert.deepEqual(
+						results[1].matches.map((match) => [match.queryIndex, match.line]),
+						[
+							[0, 3],
+							[1, 3],
+						],
+					);
+					return {};
+				});
+				await f.approve(await f.approval(run, 'file_patch'));
+				await f.wait(run, 'completed');
+				assert.equal(await readFile(path, 'utf8'), after);
+			},
+		);
+		await scenario(
+			'batch delivery, Artifact paging and v1-to-v3 migration preserve content across repeated startup',
+			async (f, directory) => {
+				await f.grants(['file.read', 'artifacts.read', 'artifacts.write', 'shell.execute']);
+				const paths = [join(directory, 'one.txt'), join(directory, 'two.txt')],
+					contents = ['甲🙂alpha'.repeat(20), 'second'];
+				await Promise.all(paths.map((path, index) => writeFile(path, contents[index])));
+				let received = '';
+				const run = await f.start('artifact batches', (results) => {
+					if (!results.length) return tool(f, 'file_deliver', { paths });
+					const delivered = results[0].items.map((item) => item.value);
+					if (results.length === 1)
+						return { name: 'artifact_present', input: { artifactIds: delivered.map((item) => item.id) } };
+					if (results.length === 2) {
+						assert.deepEqual(
+							results[1].items.map((item) => item.value.id),
+							delivered.map((item) => item.id),
+						);
+						return {
+							name: 'artifact_read',
+							input: { artifactId: delivered[0].id, encoding: 'utf8', maxBytes: 17 },
+						};
+					}
+					const page = results.at(-1);
+					assert.equal(page.base64, null);
+					received += page.text;
+					if (page.nextOffset !== null)
+						return {
+							name: 'artifact_read',
+							input: {
+								artifactId: delivered[0].id,
+								encoding: 'utf8',
+								maxBytes: 17,
+								offset: page.nextOffset,
+							},
+						};
+					assert.equal(received, contents[0]);
+					return {};
+				});
+				await f.approve(await f.approval(run, 'file_deliver'));
+				await f.wait(run, 'completed');
+				assert.equal(received, contents[0]);
+				const shellRun = await f.start('migration shell', (results) =>
+					results.length ? {} : tool(f, 'shell_execute', { commands: ['printf migrated'] }),
+				);
+				await f.approve(await f.approval(shellRun, 'shell_execute'));
+				await f.wait(shellRun, 'completed');
+				const job = f.rows('agent_tool_jobs', shellRun)[0],
+					original = JSON.parse(job.result_text);
+				const outputRows = f
+					.rows('agent_run_tools', run)
+					.filter((row) => ['file_deliver', 'artifact_present'].includes(row.tool_name));
+				const oldOutputs = outputRows.map((row) => JSON.parse(row.result_text).items[0].value);
+				const db = new DatabaseSync(f.database);
+				try {
+					db.exec('BEGIN');
+					for (const [index, row] of outputRows.entries())
+						db.prepare('UPDATE agent_run_tools SET result_text=? WHERE id=?').run(
+							JSON.stringify(oldOutputs[index]),
+							row.id,
+						);
+					const oldJob = { status: original.status, ...original.commands[0] };
+					delete oldJob.index;
+					db.prepare('UPDATE agent_tool_jobs SET result_text=? WHERE id=?').run(
+						JSON.stringify(oldJob),
+						job.id,
+					);
+					db.exec('DELETE FROM schema_version WHERE version>=2; COMMIT');
+				} finally {
+					db.close();
+				}
+				await f.restart();
+				await f.wait(run, 'completed');
+				assert.deepEqual(JSON.parse(f.rows('agent_tool_jobs', shellRun)[0].result_text), original);
+				for (const [index, row] of f
+					.rows('agent_run_tools', run)
+					.filter((row) => ['file_deliver', 'artifact_present'].includes(row.tool_name))
+					.entries()) {
+					assert.deepEqual(JSON.parse(row.result_text), {
+						items: [{ index: 0, status: 'completed', value: oldOutputs[index] }],
+					});
+				}
+				const migrated = f.rows('agent_run_tools', run);
+				await f.restart();
+				assert.deepEqual(f.rows('agent_run_tools', run), migrated);
+			},
+		);
+		await scenario('captured result batch reads bind source hash and code-point offsets', async (f, directory) => {
+			await f.grants(['file.read', 'context.read']);
+			const path = join(directory, 'captured.txt');
+			await writeFile(path, '甲🙂\n'.repeat(20));
+			let original;
+			const run = await f.start('result batches', (results) => {
+				if (!results.length) return tool(f, 'file_read', { paths: [path] });
+				if (results.length === 1) {
+					const row = f.rows('agent_run_tools', run)[0];
+					original = row.result_text;
+					return {
+						name: 'tool_result_read',
+						input: {
+							items: [0, 10].map((offset) => ({
+								toolCallId: row.id,
+								sha256: hash(original),
+								offset,
+								maxBytes: 80,
+							})),
+						},
+					};
+				}
+				assert.equal(results[1].items.length, 2);
+				assert.equal(results[1].nextIndex, null);
+				for (const item of results[1].items) {
+					assert.equal(
+						item.text,
+						Array.from(original)
+							.slice(item.offset, item.nextOffset ?? undefined)
+							.join(''),
+					);
+					assert.equal(item.sha256, hash(original));
+				}
+				return {};
+			});
+			await f.wait(run, 'completed');
+			assert.ok(original);
+		});
 		await scenario('stale replacement hash preserves bytes and never retries', async (f, directory) => {
 			const path = join(directory, 'stale.txt');
 			await writeFile(path, 'current');
-			const run = await f.start('stale hash', () =>
-				tool(f, 'file_write', { path, content: 'replacement', expectedSha256: hash('previous') }),
+			const run = await f.start('stale hash', (results) =>
+				results.length
+					? {}
+					: tool(f, 'file_write', {
+							items: [{ path, content: 'replacement', expectedSha256: hash('previous') }],
+						}),
 			);
 			await f.approve(await f.approval(run, 'file_write'));
-			await f.wait(run, 'unknown');
+			await f.wait(run, 'completed');
 			assert.equal(await readFile(path, 'utf8'), 'current');
-			assert.equal(f.calls.length, 1);
-			assert.equal(f.rows('agent_run_tools', run)[0].state, 'unknown');
+			assert.equal(f.calls.length, 2);
+			const operation = f.rows('agent_run_tools', run)[0];
+			assert.equal(operation.state, 'completed');
+			assert.equal(JSON.parse(operation.result_text).items[0].failureCode, 'conflict');
 		});
 		await scenario('symbolic-link read refuses without exposing its target', async (f, directory) => {
 			const path = join(directory, 'link'),
@@ -144,7 +363,7 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 6
 			await writeFile(target, 'must-not-be-returned');
 			await symlink(target, path);
 			const run = await f.start('link rejection', (results) => {
-				if (!results.length) return tool(f, 'file_read', { path });
+				if (!results.length) return tool(f, 'file_read', { paths: [path] });
 				assert.deepEqual(results, [{ failureCode: 'tool_invalid_input' }]);
 				return {};
 			});
@@ -157,7 +376,7 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 6
 			const path = join(directory, 'overlap');
 			await writeFile(path, 'aaa');
 			const run = await f.start('overlap', () =>
-				tool(f, 'file_patch', { path, expectedSha256: hash('aaa'), oldText: 'aa', newText: 'b' }),
+				tool(f, 'file_patch', { path, expectedSha256: hash('aaa'), edits: [{ oldText: 'aa', newText: 'b' }] }),
 			);
 			await f.approve(await f.approval(run, 'file_patch'));
 			await f.wait(run, 'unknown');
@@ -171,14 +390,24 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 6
 			await writeFile(destinationPath, 'destination');
 			const run = await f.start('existing destination', (results) =>
 				results.length
-					? tool(f, 'file_move', { path, destinationPath, expectedFingerprint: results[0].fingerprint })
-					: tool(f, 'file_inspect', { path }),
+					? results.length > 1
+						? {}
+						: tool(f, 'file_move', {
+								items: [
+									{
+										path,
+										destinationPath,
+										expectedFingerprint: results[0].items[0].value.fingerprint,
+									},
+								],
+							})
+					: tool(f, 'file_inspect', { paths: [path] }),
 			);
 			await f.approve(await f.approval(run, 'file_move'));
-			await f.wait(run, 'unknown');
+			await f.wait(run, 'completed');
 			assert.equal(await readFile(path, 'utf8'), 'source');
 			assert.equal(await readFile(destinationPath, 'utf8'), 'destination');
-			assert.equal(f.calls.length, 2);
+			assert.equal(f.calls.length, 3);
 		});
 		await scenario(
 			'tree deletion requires explicit scope and leaves neighboring files intact',
@@ -192,12 +421,16 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 6
 					results.length
 						? results.length === 1
 							? tool(f, 'file_delete', {
-									path,
-									scope: 'tree',
-									expectedFingerprint: results[0].fingerprint,
+									items: [
+										{
+											path,
+											scope: 'tree',
+											expectedFingerprint: results[0].items[0].value.fingerprint,
+										},
+									],
 								})
 							: {}
-						: tool(f, 'file_inspect', { path }),
+						: tool(f, 'file_inspect', { paths: [path] }),
 				);
 				const approval = await f.approval(run, 'file_delete');
 				assert.equal(approval.inspection.risk, 'destructive');
