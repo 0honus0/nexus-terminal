@@ -92,28 +92,20 @@ export async function probeRdpCertificate(
 	if (signal.aborted) {
 		throw new DesktopTransportFailure('unavailable');
 	}
-	const sockets = new Set<net.Socket>();
+	let transportSocket: net.Socket | null = null;
 	const closures: Promise<void>[] = [];
 
 	const own = <T extends net.Socket>(socket: T): T => {
-		sockets.add(socket);
-		closures.push(
-			new Promise((resolve) =>
-				socket.once('close', () => {
-					sockets.delete(socket);
-					resolve();
-				}),
-			),
-		);
+		transportSocket = socket;
+		closures.push(new Promise((resolve) => socket.once('close', () => resolve())));
 		// Late errors during destroy are owned here; active waits preserve their causes.
 		socket.on('error', () => undefined);
 		return socket;
 	};
 
 	const abort = () => {
-		for (const socket of sockets) {
-			socket.destroy();
-		}
+		// TLS owns its wrapped TCP stream. Destroying both independently races native teardown.
+		transportSocket?.destroy();
 	};
 
 	signal.addEventListener('abort', abort, { once: true });

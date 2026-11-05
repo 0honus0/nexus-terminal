@@ -25,6 +25,8 @@
 
 首轮 `fefe5a6e` / [41980431043](https://github.com/0honus0/nexus-terminal/actions/runs/41980431043)：质量、Docker 及五个浏览器分片成功；Backend/Browser1/Browser3失败。Backend新增信任事务/受控证书/取消探测用例293ms通过，真实首次证书探测使Backend进程段错误退出，后续出现控制端口拒绝连接的连带失败。原始失败日志保留本批 logs；诊断包下载遇到存储服务503，未用缺失产物代替证据。新增独立子进程的真实RDP探测用例，使用测试内原生调用检查点定位证书读取/关闭，保留原HTTP与UI断言，待新轮确认根因；当前不发布。
 
+第二轮 `4c4c19d1` / [41981161168](https://github.com/0honus0/nexus-terminal/actions/runs/41981161168) 的原生检查点确认首次及重试均完成 getPeerCertificate、X509 构造、有效期、指纹和 subject/issuer 读取；TCP destroy 与 TLS destroy 均返回后子进程异常终止，没有 probe closed。证据为 `logs/e2e-41981161168-native-annotations.json`。修正探测与实际桥的关闭归属，仅由当前最外层 socket 发起销毁，保留两层 close 跟踪；测试去掉临时原生 API 包装，保留独立子进程的取消准入和连续三次真实证书探测，等待新轮全量验证。
+
 ## RDP 证书确认与认证配置核对（2026-11-05，源码与静态）
 
 基线 main/3685742762 的本批未提交工作区。用户决定不处理会话 IP 绑定及此前第 3/5/6 项，仅只读核对远程配置、解释登录封禁，以及实现 RDP 证书取消/本次连接/记住选择。未提交推送、发布、重启测试或生产服务，也未修改远程配置、业务数据库或证书。按 PLAN D17 未执行本批浏览器、行为或 E2E；上方 560 项是此前源码的历史通过，不覆盖本批新协议、存储或弹窗。

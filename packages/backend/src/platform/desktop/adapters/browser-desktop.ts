@@ -77,6 +77,7 @@ function toBuffer(data: RawData): Buffer {
 
 class BrowserDesktopPeer implements DesktopTransportPeer {
 	private readonly sockets = new Set<net.Socket>();
+	private transportSocket: net.Socket | null = null;
 	private readonly queue: Buffer[] = [];
 	private queuedBytes = 0;
 	private destination: net.Socket | null = null;
@@ -148,9 +149,8 @@ class BrowserDesktopPeer implements DesktopTransportPeer {
 			this.queue.length = 0;
 			this.queuedBytes = 0;
 			this.rejectReady(new DesktopTransportFailure('unavailable'));
-			for (const socket of this.sockets) {
-				socket.destroy();
-			}
+			// The outer TLS socket closes its wrapped TCP stream; track both close events below.
+			this.transportSocket?.destroy();
 			if (this.ws.readyState !== this.ws.CLOSED) {
 				this.ws.terminate();
 			}
@@ -183,6 +183,7 @@ class BrowserDesktopPeer implements DesktopTransportPeer {
 
 	private own<T extends net.Socket>(socket: T): T {
 		this.sockets.add(socket);
+		this.transportSocket = socket;
 		socket.once('error', this.stop);
 		socket.once('close', () => {
 			this.sockets.delete(socket);
