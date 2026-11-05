@@ -42,6 +42,7 @@
 	const layoutRoot = ref<HTMLElement | null>(null);
 	const composer = ref<HTMLElement | null>(null);
 	const { width: composerWidth } = useElementSize(composer);
+	const showTargetLabel = computed(() => composerWidth.value > 620);
 	const threadsOverlay = ref(false);
 	const threadSidebarVisible = ref(true);
 	const threadDrawerOpen = ref(false);
@@ -303,16 +304,15 @@
 	const toolsByEntry = computed(() => {
 		const assigned = new Map<number, NativeTool[]>();
 		const orphan: NativeTool[] = [];
-		const runEntries = new Map<string, { last: number; steps: Map<number, number> }>();
+		const runEntries = new Map<string, { first: number; steps: Map<number, number> }>();
 		for (let index = 0; index < entries.value.length; index++) {
 			const entry = entries.value[index];
 			if (!entry) continue;
 			let indexes = runEntries.get(entry.runId);
 			if (!indexes) {
-				indexes = { last: index, steps: new Map() };
+				indexes = { first: index, steps: new Map() };
 				runEntries.set(entry.runId, indexes);
 			}
-			indexes.last = index;
 			if (entry.role === 'assistant') indexes.steps.set(entry.position.stepIndex, index);
 		}
 		for (const group of toolGroups.value) {
@@ -329,7 +329,8 @@
 					if (step < first.modelStepIndex) target = index;
 				}
 			}
-			target ??= indexes.last;
+			// A later summary must not move a text-free tool step and remount its images.
+			target ??= indexes.first;
 			assigned.set(target, [...(assigned.get(target) ?? []), ...group]);
 		}
 		return { assigned, orphan };
@@ -1423,13 +1424,30 @@
 											:title="t('agent.nativeRun.targets')"
 											:disabled="blocked"
 											trigger-appearance="soft"
-											trigger-variant="square"
+											:trigger-variant="showTargetLabel ? 'default' : 'square'"
 											:trigger-selected="selectedConfig === 'target'"
 											panel-class="w-56"
 											@open-change="selectConfigControl('target', $event)"
 										>
 											<template #trigger>
 												<i class="fa-solid fa-server text-[9px]" aria-hidden="true"></i>
+												<span
+													v-if="showTargetLabel"
+													class="inline-flex items-center gap-1 whitespace-nowrap"
+												>
+													<span>{{ t('agent.nativeRun.targets') }}</span>
+													<span
+														v-if="connectionIds.length"
+														class="tabular-nums text-text-secondary"
+													>
+														· {{ connectionIds.length }}
+													</span>
+												</span>
+												<i
+													v-if="showTargetLabel"
+													class="fa-solid fa-chevron-down text-[7px]"
+													aria-hidden="true"
+												></i>
 											</template>
 											<template #panel>
 												<fieldset class="min-w-0 text-xs">

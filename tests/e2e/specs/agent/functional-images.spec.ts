@@ -1,6 +1,6 @@
 import imageData from '../../fixtures/agent/image-data.json';
 import { createHash, randomUUID } from 'node:crypto';
-import { expect, test } from '../../support/fixtures';
+import { expect, test, type Locator } from '../../support/fixtures';
 import {
 	prepareNativeTask,
 	openNativeTask,
@@ -19,8 +19,35 @@ import {
 
 test.use({ actionTimeout: 10_000 });
 
-for (const format of ['png', 'gif'] as const) {
-	test(`image tool shows a persisted ${format} preview and download without model-authored Markdown`, async ({
+async function expectNestedImages(hub: Locator, root: string): Promise<void> {
+	const body = hub.locator('.agent-message-body').filter({ hasText: 'Keep this explanation.' });
+	await expect(body).toHaveCount(1);
+	await expect(body).toContainText('Inline preview:');
+	await expect(body).toContainText('Keep the suffix.');
+	await expect(body.getByRole('link', { name: 'Download GIF', exact: true })).toHaveAttribute(
+		'href',
+		root + '/content',
+	);
+	await expect(body.getByRole('link', { name: 'Redundant download', exact: true })).toHaveCount(0);
+	await expect(body.locator('.agent-generated-image__download')).toHaveCount(4);
+	await expect(body.locator('img')).toHaveCount(4);
+	await expect
+		.poll(() =>
+			body
+				.locator('img')
+				.evaluateAll((images: HTMLImageElement[]) =>
+					images.every((image) => image.complete && image.naturalWidth === 4),
+				),
+		)
+		.toBe(true);
+}
+
+for (const { format, nested } of [
+	{ format: 'png', nested: false },
+	{ format: 'gif', nested: false },
+	{ format: 'gif', nested: true },
+] as const) {
+	test(`image tool shows a persisted ${format} preview and download ${nested ? 'with nested Markdown images and surrounding text' : 'without model-authored Markdown'}`, async ({
 		request,
 		page,
 	}, testInfo) => {
@@ -50,13 +77,16 @@ for (const format of ['png', 'gif'] as const) {
 			readAgentProviderView,
 		);
 		const hub = await openNativeTask(task);
-		const run = await startNativeTask(task, 'E2E_AUTOMATIC_IMAGE_PREVIEW');
+		const run = await startNativeTask(
+			task,
+			'E2E_AUTOMATIC_IMAGE_PREVIEW' + (nested ? ` nested-images=true app=${task.app.id}` : ''),
+		);
 		const approval = await waitNativeApproval(task, run.id, 'image_generate');
 		await expect(hub.locator('.agent-generated-image')).toHaveCount(0);
 		await resolveNativeApproval(task, approval, 'approved');
 		const completed = await finishNativeTask(task, run.id);
 		expect(completed.run.status).toBe('completed');
-		expect(completed.text).toBe('Image generated and saved.');
+		if (!nested) expect(completed.text).toBe('Image generated and saved.');
 		const tools = await requestAgentJson(
 			request,
 			{ method: 'GET', path: `/apps/${task.app.id}/threads/${task.thread.id}/tools?limit=100` },
@@ -85,14 +115,19 @@ for (const format of ['png', 'gif'] as const) {
 		await expect(toolCard.locator('[data-tool-arguments]')).toHaveText(
 			JSON.stringify(JSON.parse(details.argumentsJson), null, 2),
 		);
+		await hub.locator('details.group\\/tools > summary').click();
 
 		const root = `/api/v1/agent/apps/${task.app.id}/artifacts/${imageTool?.outputArtifactId}`;
-		const preview = hub.locator('.agent-generated-image img');
+		const preview = hub.locator('[data-tool-artifact] .agent-generated-image img');
 		await expect(preview).toHaveAttribute('src', root + '/preview');
 		await expect
 			.poll(() => preview.evaluate((node: HTMLImageElement) => node.complete && node.naturalWidth > 0))
 			.toBe(true);
-		await expect(hub.locator('.agent-generated-image__download')).toHaveAttribute('href', root + '/content');
+		await expect(hub.locator('[data-tool-artifact] .agent-generated-image__download')).toHaveAttribute(
+			'href',
+			root + '/content',
+		);
+		if (nested) await expectNestedImages(hub, root);
 		const download = await request.get(root + '/content');
 		expect(download.status()).toBe(200);
 		expect(download.headers()['content-type']).toContain('application/octet-stream');
@@ -121,6 +156,7 @@ for (const format of ['png', 'gif'] as const) {
 		await expect
 			.poll(() => preview.evaluate((node: HTMLImageElement) => node.complete && node.naturalWidth > 0))
 			.toBe(true);
+		if (nested) await expectNestedImages(hub, root);
 	});
 }
 

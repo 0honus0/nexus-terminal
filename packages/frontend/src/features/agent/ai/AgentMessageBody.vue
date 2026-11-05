@@ -22,12 +22,18 @@
 			const source = image.getAttribute('src') ?? '';
 			if (!artifactPreviewUrl.test(source)) continue;
 			const downloadUrl = source.replace(/\/preview$/, '/content');
-			const paragraph = image.parentElement?.tagName === 'P' ? image.parentElement : null;
-			const anchor = paragraph ?? image;
+			const paragraph = image.closest('p');
+			const anchor = paragraph ?? image.closest('a') ?? image;
 			const mount = anchor.parentNode;
+			if (!mount) {
+				continue;
+			}
+			let previousParent = image.parentElement;
 			const linkLabel = t('agent.files.download');
 			const figure = document.createElement('figure');
 			figure.className = 'agent-generated-image';
+			// Insert while the anchor is still attached, including linked/inline images.
+			mount.insertBefore(figure, anchor);
 			figure.appendChild(image);
 			const link = document.createElement('a');
 			link.className = 'agent-generated-image__download';
@@ -43,12 +49,29 @@
 			label.textContent = linkLabel;
 			link.append(icon, label);
 			figure.appendChild(link);
-			mount?.insertBefore(figure, anchor);
-			if (paragraph && paragraph.childNodes.length === 0) paragraph.remove();
+			while (
+				previousParent &&
+				previousParent !== mount &&
+				previousParent.childElementCount === 0 &&
+				!previousParent.textContent?.trim()
+			) {
+				const parent = previousParent.parentElement;
+				previousParent.remove();
+				previousParent = parent;
+			}
 			const next = figure.nextElementSibling;
 			if (next?.tagName === 'P') {
-				const anchors = Array.from(next.querySelectorAll('a'));
-				if (anchors.length === 1 && anchors[0]?.getAttribute('href') === downloadUrl) next.remove();
+				const content = Array.from(next.childNodes).filter(
+					(node) => node.nodeType !== Node.TEXT_NODE || node.textContent?.trim(),
+				);
+				const standaloneLink = content.length === 1 ? content[0] : null;
+				if (
+					standaloneLink instanceof HTMLAnchorElement &&
+					standaloneLink.getAttribute('href') === downloadUrl &&
+					!standaloneLink.querySelector('img')
+				) {
+					next.remove();
+				}
 			}
 		}
 		return template.innerHTML;

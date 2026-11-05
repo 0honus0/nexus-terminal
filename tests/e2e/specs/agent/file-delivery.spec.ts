@@ -186,9 +186,40 @@ for (const file of files) {
 				);
 				expect((await request.get(root + '/preview')).status()).toBe(404);
 			}
+
+			const expectDeliveryBeforeSummary = async () => {
+				const summary = hub.locator('[data-agent-message]').filter({ hasText: completed.text });
+				await expect(summary).toBeVisible();
+				await expect
+					.poll(async () => {
+						const [cardBounds, summaryBounds] = await Promise.all([
+							hub.locator('[data-tool-artifact]').boundingBox(),
+							summary.boundingBox(),
+						]);
+						return (
+							cardBounds !== null &&
+							summaryBounds !== null &&
+							cardBounds.y + cardBounds.height <= summaryBounds.y
+						);
+					})
+					.toBe(true);
+			};
+
+			// Tool-only steps are displayed before the model's next step, including after reload.
+			await expectDeliveryBeforeSummary();
 			await page.reload();
 			await openNativeTask(task);
 			await expect(hub.locator('[data-tool-artifact]')).toHaveAttribute('data-artifact-id', delivered.id);
+			await expectDeliveryBeforeSummary();
+			if (file.mediaType === 'image/gif') {
+				await expect
+					.poll(() =>
+						hub
+							.locator('[data-tool-artifact] img')
+							.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth),
+					)
+					.toBe(4);
+			}
 		} finally {
 			if (runId) await cancelNativeTask(task, runId);
 			await rm(project, { recursive: true, force: true });

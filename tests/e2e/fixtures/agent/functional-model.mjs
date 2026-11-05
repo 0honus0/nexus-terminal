@@ -70,7 +70,21 @@ export function respondFunctionalModel(messages, userText, response, send) {
 			if (Object.keys(image).sort().join(',') !== 'id,name,sizeBytes') {
 				throw new Error('Image tool must return file facts without preview instructions or URLs');
 			}
-			send(response, { content: 'Image generated and saved.' });
+			if (userText.includes('nested-images=true')) {
+				const appId = /app=([a-f0-9-]{36})/.exec(userText)?.[1];
+				if (!appId) throw new Error('Missing image App');
+				const root = `/api/v1/agent/apps/${appId}/artifacts/${image.id}`;
+				send(response, {
+					content: [
+						`[![Linked GIF](${root}/preview)](${root}/content)`,
+						`Keep this explanation. [Download GIF](${root}/content)`,
+						`**![Emphasized GIF](${root}/preview)**`,
+						`[Redundant download](${root}/content)`,
+						`Inline preview: ![Inline GIF](${root}/preview) Keep the suffix.`,
+						`- [![List GIF](${root}/preview)](${root}/content)`,
+					].join('\n\n'),
+				});
+			} else send(response, { content: 'Image generated and saved.' });
 		}
 		return true;
 	}
