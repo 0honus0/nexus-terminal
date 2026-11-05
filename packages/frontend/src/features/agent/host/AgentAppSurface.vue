@@ -1632,20 +1632,6 @@
 												</div>
 											</template>
 										</AgentConfigPopover>
-										<UiButton
-											v-if="runNeedsClosure"
-											density="compact"
-											appearance="soft"
-											tone="danger"
-											icon-only
-											class="agent-stop-button shrink-0"
-											:aria-label="t('agent.conversation.cancelRun')"
-											:title="t('agent.conversation.cancelRun')"
-											:disabled="blocked"
-											@click="stopRun"
-										>
-											<i class="fa-solid fa-stop text-[10px]" aria-hidden="true"></i>
-										</UiButton>
 									</div>
 									<div class="agent-composer-actions ml-auto flex shrink-0 items-center gap-1.5">
 										<NativeInputArtifacts
@@ -1665,7 +1651,21 @@
 											"
 										/>
 										<UiButton
-											v-if="!runNeedsClosure"
+											v-if="runNeedsClosure"
+											density="compact"
+											appearance="soft"
+											tone="danger"
+											icon-only
+											class="agent-stop-button shrink-0"
+											:aria-label="t('agent.conversation.cancelRun')"
+											:title="t('agent.conversation.cancelRun')"
+											:disabled="blocked"
+											@click="stopRun"
+										>
+											<i class="fa-solid fa-stop text-[10px]" aria-hidden="true"></i>
+										</UiButton>
+										<UiButton
+											v-else
 											type="submit"
 											density="compact"
 											appearance="solid"
