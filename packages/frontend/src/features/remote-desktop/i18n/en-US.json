@@ -1,6 +1,7 @@
 {
   "remoteDesktopModal": {
     "title": "Remote Desktop",
+    "showWindowControls": "Show window controls",
     "titlePlaceholder": "Remote Desktop Connection",
     "status": {
       "fetchingToken": "Preparing remote desktop session...",
@@ -54,6 +55,19 @@
       "cancelled": "The request was cancelled.",
       "input_failed": "Input or clipboard synchronization failed.",
       "cleanup_failed": "Local cleanup could not be confirmed. Close this window before opening another desktop."
+    },
+    "fileClipboard": {
+      "title": "File clipboard",
+      "choose": "Choose local files",
+      "uploadHint": "Choose files, then press Ctrl+V in the destination folder on the remote desktop. You can also paste local files when your browser provides them.",
+      "waiting": "Files are ready. Close this panel and paste in a remote folder.",
+      "uploading": "Transferring files to the remote desktop…",
+      "uploaded": "Files transferred to the remote desktop.",
+      "downloadHint": "Copy files on the remote desktop, then download them here. Files inside folders can be downloaded individually; directories are not archived.",
+      "empty": "No files on the remote clipboard",
+      "directory": "Folder",
+      "failed": "File transfer did not complete. Check the remote clipboard and destination folder, then select or copy the files again.",
+      "download": "Download"
     }
   },
   "vncModal": {

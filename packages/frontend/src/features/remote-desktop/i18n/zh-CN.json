@@ -1,6 +1,7 @@
 {
   "remoteDesktopModal": {
     "title": "远程桌面",
+    "showWindowControls": "显示窗口操作",
     "titlePlaceholder": "远程桌面连接",
     "status": {
       "fetchingToken": "正在获取连接令牌...",
@@ -54,6 +55,19 @@
       "cancelled": "请求已取消。",
       "input_failed": "输入或剪贴板同步失败。",
       "cleanup_failed": "无法确认本地清理完成，请关闭窗口后再打开桌面。"
+    },
+    "fileClipboard": {
+      "title": "文件剪贴板",
+      "choose": "选择本地文件",
+      "uploadHint": "选择文件放入远端剪贴板，再在远程桌面的目标文件夹按 Ctrl+V 粘贴。浏览器提供文件时，也可直接粘贴本地文件。",
+      "waiting": "文件已就绪，关闭面板后在远端文件夹粘贴。",
+      "uploading": "正在向远端传输文件…",
+      "uploaded": "文件已传输到远端。",
+      "downloadHint": "在远程桌面复制文件后，在此下载到本机。文件夹中的文件可逐项下载，目录本身不打包。",
+      "empty": "远端剪贴板暂无文件",
+      "directory": "文件夹",
+      "failed": "文件传输未完成。请检查远端剪贴板和目标目录，再重新选择或复制文件。",
+      "download": "下载"
     }
   },
   "vncModal": {

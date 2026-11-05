@@ -86,3 +86,36 @@ export async function authenticateTestRdp(page: Page): Promise<void> {
 	await keyboard.dispatchEvent('keyup', { key: 'Enter', code: 'Enter' });
 	await expect.poll(readAuthenticatedSessions).toBe(before + 1);
 }
+
+export async function revealDesktopControls(page: Page, touch = false): Promise<void> {
+	const panel = page.locator('.remote-desktop-panel');
+	const edge = panel.getByRole('button', { name: 'Show window controls', exact: true });
+	if (await edge.isVisible()) {
+		if (touch) await edge.tap();
+		else await edge.hover();
+	}
+	await expect(panel.locator('header')).toBeVisible();
+}
+
+export async function observeDesktopAudioContexts(page: Page): Promise<() => Promise<AudioContextState[]>> {
+	await page.addInitScript(() => {
+		const contexts: AudioContext[] = [];
+		Object.defineProperty(window, '__nexusDesktopAudioContexts', { value: contexts });
+		window.AudioContext = new Proxy(window.AudioContext, {
+			construct(Target, args) {
+				const context = new Target(...args);
+				contexts.push(context);
+				return context;
+			},
+		});
+	});
+	return () =>
+		page.evaluate(() => {
+			const contexts: unknown = Reflect.get(window, '__nexusDesktopAudioContexts');
+			if (!Array.isArray(contexts)) throw new Error('Desktop audio observation is missing');
+			return contexts.map((context: unknown) => {
+				if (!(context instanceof AudioContext)) throw new Error('Invalid desktop audio context');
+				return context.state;
+			});
+		});
+}

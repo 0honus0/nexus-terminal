@@ -28,6 +28,10 @@ export const createBrowserDesktop: RemoteDesktopPeerFactory = (options) => {
 	return {
 		element,
 
+		get fileClipboard() {
+			return peer?.fileClipboard;
+		},
+
 		connect(session, display) {
 			if (closed || started) {
 				throw new RemoteDesktopFailure('conflict', 'not_dispatched');

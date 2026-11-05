@@ -31,6 +31,7 @@
 		REMOTE_DESKTOP_MAX_DPI,
 	} from '@nexus-terminal/shared/remote/desktop/values';
 	import { registerAuthenticatedSessionOwner } from '@/shared/session/public';
+	import RdpFileClipboard from './RdpFileClipboard.vue';
 
 	const touchModeStorage = {
 		namespace: 'remote-desktop.touch-mode',
@@ -90,6 +91,31 @@
 	const touchMode = ref<RemoteTouchMode>(readTouchMode());
 	const vncText = ref('');
 	const vncTextFocused = ref(false);
+	const fileClipboardOpen = ref(false);
+	const toolsOpen = ref(false);
+	const floatingTools = computed(() => props.connection?.type === 'RDP' && !fullscreen.value);
+
+	const revealTools = async (event: MouseEvent) => {
+		toolsOpen.value = true;
+		if (event.detail === 0) {
+			await nextTick();
+			if (!active || !props.visible || !floatingTools.value || !toolsOpen.value) return;
+			panel.value?.querySelector<HTMLElement>('[data-desktop-chrome] button:not(:disabled)')?.focus();
+		}
+	};
+
+	const leaveTools = (event: PointerEvent) => {
+		if (event.pointerType === 'mouse') toolsOpen.value = false;
+	};
+
+	const hideToolsOnDesktop = (event: PointerEvent) => {
+		if (!(event.target instanceof Element) || event.target.closest('[data-desktop-chrome], [data-desktop-edge]'))
+			return;
+		toolsOpen.value = false;
+		if (document.activeElement instanceof HTMLElement && document.activeElement.closest('[data-desktop-chrome]')) {
+			document.activeElement.blur();
+		}
+	};
 
 	let resizeObserver: ReturnType<typeof useResizeObserver> | undefined;
 	let resizeAnimationFrame: number | undefined;
@@ -212,6 +238,8 @@
 	};
 
 	const disconnect = () => {
+		fileClipboardOpen.value = false;
+		toolsOpen.value = false;
 		viewRevision += 1;
 		vncText.value = '';
 		vncTextFocused.value = false;
@@ -330,6 +358,22 @@
 	};
 
 	const handleFullscreenKeydown = (event: KeyboardEvent) => {
+		if (fileClipboardOpen.value) return;
+		if (
+			event.key === 'Escape' &&
+			floatingTools.value &&
+			document.activeElement instanceof HTMLElement &&
+			document.activeElement.closest('[data-desktop-chrome]')
+		) {
+			document.activeElement.blur();
+			toolsOpen.value = false;
+			void nextTick(() => {
+				if (active && props.visible) panel.value?.querySelector<HTMLElement>('[data-desktop-edge]')?.focus();
+			});
+			event.preventDefault();
+			event.stopPropagation();
+			return;
+		}
 		if (event.key !== 'Escape' || !fullscreen.value || document.fullscreenElement !== panel.value) return;
 		void exitFullscreen();
 	};
@@ -469,57 +513,265 @@
 			:class="
 				fullscreen
 					? 'remote-desktop-panel-fullscreen rounded-none border-0 bg-black shadow-none'
-					: 'ui-glass-panel rounded-lg'
+					: ['ui-glass-panel rounded-lg', { 'remote-desktop-panel-floating-tools': floatingTools }]
 			"
+			@pointerdown.capture="hideToolsOnDesktop"
 		>
-			<header v-if="!fullscreen" class="flex shrink-0 items-center justify-between border-b border-border p-3">
-				<h3 class="min-w-0 truncate text-base font-semibold">
-					<i
-						:class="connection?.type === 'VNC' ? 'fas fa-plug' : 'fas fa-desktop'"
-						class="mr-2 text-text-secondary"
-						aria-hidden="true"
-					></i>
-					{{ windowTitle }} - {{ connectionLabel }}
-				</h3>
-				<div class="ml-2 flex shrink-0 items-center space-x-1">
-					<UiBadge appearance="soft" density="compact" :tone="stateTone">{{ stateLabel }}</UiBadge>
-					<UiButton
-						type="button"
-						appearance="ghost"
-						density="compact"
-						icon-only
-						:title="fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')"
-						:aria-label="fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')"
-						@click="toggleFullscreen"
+			<button
+				v-if="floatingTools && state === 'connected' && !toolsOpen && !fileClipboardOpen"
+				type="button"
+				data-desktop-edge="top"
+				class="remote-desktop-edge remote-desktop-edge-top"
+				:aria-label="t('remoteDesktopModal.showWindowControls')"
+				aria-expanded="false"
+				@pointerenter="$event.pointerType === 'mouse' && (toolsOpen = true)"
+				@click="revealTools($event)"
+			>
+				<span aria-hidden="true"></span>
+			</button>
+			<div
+				class="remote-desktop-chrome"
+				data-desktop-chrome
+				:class="{
+					'remote-desktop-tools-revealed': toolsOpen || fileClipboardOpen || state !== 'connected',
+					'remote-desktop-tools-dialog': fileClipboardOpen,
+				}"
+				@pointerenter="toolsOpen = true"
+				@pointerleave="leaveTools"
+			>
+				<header
+					v-if="!fullscreen"
+					class="remote-desktop-header flex shrink-0 items-center justify-between border-b border-border p-3"
+				>
+					<h3 class="min-w-0 truncate text-base font-semibold">
+						<i
+							:class="connection?.type === 'VNC' ? 'fas fa-plug' : 'fas fa-desktop'"
+							class="mr-2 text-text-secondary"
+							aria-hidden="true"
+						></i>
+						{{ windowTitle }} - {{ connectionLabel }}
+					</h3>
+					<div class="ml-2 flex shrink-0 items-center space-x-1">
+						<UiBadge appearance="soft" density="compact" :tone="stateTone">{{ stateLabel }}</UiBadge>
+						<UiButton
+							type="button"
+							appearance="ghost"
+							density="compact"
+							icon-only
+							:title="fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')"
+							:aria-label="fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')"
+							@click="toggleFullscreen"
+						>
+							<i
+								:class="fullscreen ? 'fas fa-compress fa-sm' : 'fas fa-expand fa-sm'"
+								aria-hidden="true"
+							></i>
+						</UiButton>
+						<UiButton
+							type="button"
+							appearance="ghost"
+							density="compact"
+							icon-only
+							:title="t('common.minimize')"
+							:aria-label="t('common.minimize')"
+							@click="minimize"
+						>
+							<i class="fas fa-window-minimize fa-sm" aria-hidden="true"></i>
+						</UiButton>
+						<UiButton
+							type="button"
+							appearance="ghost"
+							density="compact"
+							icon-only
+							:title="t('common.close')"
+							:aria-label="t('common.close')"
+							@click="closeModal"
+						>
+							<i class="fas fa-times fa-lg" aria-hidden="true"></i>
+						</UiButton>
+					</div>
+				</header>
+				<footer
+					v-if="!fullscreen"
+					class="remote-desktop-footer flex shrink-0 gap-2 border-t border-border bg-header p-2 text-xs text-text-secondary"
+					:class="device.isMobile.value ? 'flex-col items-stretch' : 'flex-wrap items-center justify-between'"
+				>
+					<div
+						class="flex min-w-0 items-center gap-2"
+						:class="device.isMobile.value ? 'w-full flex-none flex-col items-stretch' : 'flex-1 flex-wrap'"
 					>
-						<i :class="fullscreen ? 'fas fa-compress fa-sm' : 'fas fa-expand fa-sm'" aria-hidden="true"></i>
-					</UiButton>
-					<UiButton
-						type="button"
-						appearance="ghost"
-						density="compact"
-						icon-only
-						:title="t('common.minimize')"
-						:aria-label="t('common.minimize')"
-						@click="minimize"
-					>
-						<i class="fas fa-window-minimize fa-sm" aria-hidden="true"></i>
-					</UiButton>
-					<UiButton
-						type="button"
-						appearance="ghost"
-						density="compact"
-						icon-only
-						:title="t('common.close')"
-						:aria-label="t('common.close')"
-						@click="closeModal"
-					>
-						<i class="fas fa-times fa-lg" aria-hidden="true"></i>
-					</UiButton>
-				</div>
-			</header>
+						<div
+							v-if="device.hasTouch.value"
+							class="flex min-w-0 flex-col gap-1"
+							:class="device.isMobile.value ? 'w-full' : ''"
+						>
+							<div
+								class="flex items-center gap-1.5"
+								:class="device.isMobile.value ? 'w-full justify-between' : ''"
+							>
+								<div class="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
+									<span class="text-[11px] text-text-muted">{{
+										t('remoteDesktopModal.touchModeLabel')
+									}}</span>
+									<UiInfoHint
+										v-if="device.isMobile.value"
+										:label="t('remoteDesktopModal.touchGuide')"
+										:text="
+											t(
+												touchMode === 'direct'
+													? 'remoteDesktopModal.touchHintDirect'
+													: 'remoteDesktopModal.touchHintTouchpad',
+											)
+										"
+										trigger="click"
+										align="start"
+									/>
+								</div>
+								<div
+									class="inline-flex shrink-0 overflow-hidden rounded border border-border"
+									role="group"
+									:aria-label="t('remoteDesktopModal.touchModeLabel')"
+								>
+									<button
+										type="button"
+										class="relative z-10 min-h-8 px-2 py-1 text-[11px] transition-colors"
+										:class="
+											touchMode === 'direct'
+												? 'bg-primary text-white'
+												: 'bg-background text-foreground hover:bg-hover'
+										"
+										:aria-pressed="touchMode === 'direct'"
+										:title="t('remoteDesktopModal.touchHintDirect')"
+										@click="setTouchMode('direct')"
+									>
+										<i class="fas fa-hand-pointer mr-1" aria-hidden="true"></i
+										>{{ t('remoteDesktopModal.touchModeDirect') }}
+									</button>
+									<button
+										type="button"
+										class="relative z-10 min-h-8 border-l border-border px-2 py-1 text-[11px] transition-colors"
+										:class="
+											touchMode === 'touchpad'
+												? 'bg-primary text-white'
+												: 'bg-background text-foreground hover:bg-hover'
+										"
+										:aria-pressed="touchMode === 'touchpad'"
+										:title="t('remoteDesktopModal.touchHintTouchpad')"
+										@click="setTouchMode('touchpad')"
+									>
+										<i class="fas fa-arrows-up-down-left-right mr-1" aria-hidden="true"></i
+										>{{ t('remoteDesktopModal.touchModeTouchpad') }}
+									</button>
+								</div>
+							</div>
+							<span v-if="!device.isMobile.value" class="text-[11px] leading-tight text-text-muted">
+								{{
+									t(
+										touchMode === 'direct'
+											? 'remoteDesktopModal.touchHintDirect'
+											: 'remoteDesktopModal.touchHintTouchpad',
+									)
+								}}
+							</span>
+						</div>
 
-			<div class="relative min-h-0 flex-1 overflow-hidden bg-black" :class="fullscreen ? 'h-full' : ''">
+						<div v-if="connection?.type === 'VNC'" class="flex min-w-[12rem] flex-1 items-center space-x-2">
+							<UiInput
+								v-model="vncText"
+								density="compact"
+								class="min-w-0 flex-1"
+								:placeholder="t('vncModal.textInputPlaceholder')"
+								:aria-label="t('vncModal.textInputPlaceholder')"
+								@focus="vncTextFocused = true"
+								@blur="releaseVncTextFocus"
+								@keydown.enter.prevent="sendVncText"
+							/>
+							<UiButton
+								type="button"
+								appearance="solid"
+								tone="primary"
+								density="compact"
+								:disabled="state !== 'connected' || !vncText"
+								:title="t('vncModal.sendButtonTitle')"
+								@mousedown.prevent
+								@click="sendVncText"
+							>
+								{{ t('common.send') }}
+							</UiButton>
+						</div>
+						<RdpFileClipboard
+							v-if="connection?.type === 'RDP'"
+							v-model:open="fileClipboardOpen"
+							:clipboard="controller.peer?.fileClipboard ?? null"
+							:enabled="state === 'connected'"
+						/>
+					</div>
+
+					<div
+						class="flex min-w-0 shrink-0 items-center gap-y-1"
+						:class="
+							device.isMobile.value
+								? 'ml-0 w-full flex-nowrap justify-end gap-x-1.5 border-t border-border/60 pt-2'
+								: 'ml-auto flex-wrap gap-x-2'
+						"
+					>
+						<label
+							:for="connection?.type === 'VNC' ? 'vnc-modal-width' : 'rdp-modal-width'"
+							class="shrink-0 whitespace-nowrap text-xs"
+						>
+							{{ t('common.width') }}:
+						</label>
+						<div class="min-w-0 w-20" :class="device.isMobile.value ? 'flex-1 max-w-20' : ''">
+							<UiNumberInput
+								:id="connection?.type === 'VNC' ? 'vnc-modal-width' : 'rdp-modal-width'"
+								v-model="modalWidth"
+								:disabled="sizeSaving"
+								density="compact"
+								:min="minPanelWidth()"
+								:max="maxPanelWidth()"
+								step="10"
+								:aria-label="t('common.width')"
+								@change="commitSize"
+							/>
+						</div>
+						<label
+							:for="connection?.type === 'VNC' ? 'vnc-modal-height' : 'rdp-modal-height'"
+							class="shrink-0 whitespace-nowrap text-xs"
+						>
+							{{ t('common.height') }}:
+						</label>
+						<div class="min-w-0 w-20" :class="device.isMobile.value ? 'flex-1 max-w-20' : ''">
+							<UiNumberInput
+								:id="connection?.type === 'VNC' ? 'vnc-modal-height' : 'rdp-modal-height'"
+								v-model="modalHeight"
+								:disabled="sizeSaving"
+								density="compact"
+								:min="minPanelHeight()"
+								:max="maxPanelHeight()"
+								step="10"
+								:aria-label="t('common.height')"
+								@change="commitSize"
+							/>
+						</div>
+						<UiButton
+							type="button"
+							appearance="solid"
+							tone="primary"
+							class="shrink-0 whitespace-nowrap"
+							:disabled="state === 'connecting'"
+							:title="t('remoteDesktopModal.reconnectTooltip')"
+							@click="connect"
+						>
+							{{ t('common.reconnect') }}
+						</UiButton>
+					</div>
+				</footer>
+			</div>
+
+			<div
+				class="remote-desktop-body relative min-h-0 flex-1 overflow-hidden bg-black"
+				:class="fullscreen ? 'h-full' : ''"
+			>
 				<div ref="display" class="remote-display-container h-full w-full overflow-hidden"></div>
 				<div v-if="device.hasTouch.value" class="absolute right-2 top-2 z-20">
 					<UiButton
@@ -590,180 +842,10 @@
 			<p
 				v-if="message && state !== 'connecting' && state !== 'error' && message !== stateLabel"
 				role="status"
-				class="shrink-0 px-3 py-1 text-xs text-text-secondary"
+				class="order-2 shrink-0 px-3 py-1 text-xs text-text-secondary"
 			>
 				{{ message }}
 			</p>
-
-			<footer
-				v-if="!fullscreen"
-				class="flex shrink-0 gap-2 border-t border-border bg-header p-2 text-xs text-text-secondary"
-				:class="device.isMobile.value ? 'flex-col items-stretch' : 'flex-wrap items-center justify-between'"
-			>
-				<div
-					class="flex min-w-0 items-center gap-2"
-					:class="device.isMobile.value ? 'w-full flex-none flex-col items-stretch' : 'flex-1 flex-wrap'"
-				>
-					<div
-						v-if="device.hasTouch.value"
-						class="flex min-w-0 flex-col gap-1"
-						:class="device.isMobile.value ? 'w-full' : ''"
-					>
-						<div
-							class="flex items-center gap-1.5"
-							:class="device.isMobile.value ? 'w-full justify-between' : ''"
-						>
-							<div class="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
-								<span class="text-[11px] text-text-muted">{{
-									t('remoteDesktopModal.touchModeLabel')
-								}}</span>
-								<UiInfoHint
-									v-if="device.isMobile.value"
-									:label="t('remoteDesktopModal.touchGuide')"
-									:text="
-										t(
-											touchMode === 'direct'
-												? 'remoteDesktopModal.touchHintDirect'
-												: 'remoteDesktopModal.touchHintTouchpad',
-										)
-									"
-									trigger="click"
-									align="start"
-								/>
-							</div>
-							<div
-								class="inline-flex shrink-0 overflow-hidden rounded border border-border"
-								role="group"
-								:aria-label="t('remoteDesktopModal.touchModeLabel')"
-							>
-								<button
-									type="button"
-									class="relative z-10 min-h-8 px-2 py-1 text-[11px] transition-colors"
-									:class="
-										touchMode === 'direct'
-											? 'bg-primary text-white'
-											: 'bg-background text-foreground hover:bg-hover'
-									"
-									:aria-pressed="touchMode === 'direct'"
-									:title="t('remoteDesktopModal.touchHintDirect')"
-									@click="setTouchMode('direct')"
-								>
-									<i class="fas fa-hand-pointer mr-1" aria-hidden="true"></i
-									>{{ t('remoteDesktopModal.touchModeDirect') }}
-								</button>
-								<button
-									type="button"
-									class="relative z-10 min-h-8 border-l border-border px-2 py-1 text-[11px] transition-colors"
-									:class="
-										touchMode === 'touchpad'
-											? 'bg-primary text-white'
-											: 'bg-background text-foreground hover:bg-hover'
-									"
-									:aria-pressed="touchMode === 'touchpad'"
-									:title="t('remoteDesktopModal.touchHintTouchpad')"
-									@click="setTouchMode('touchpad')"
-								>
-									<i class="fas fa-arrows-up-down-left-right mr-1" aria-hidden="true"></i
-									>{{ t('remoteDesktopModal.touchModeTouchpad') }}
-								</button>
-							</div>
-						</div>
-						<span v-if="!device.isMobile.value" class="text-[11px] leading-tight text-text-muted">
-							{{
-								t(
-									touchMode === 'direct'
-										? 'remoteDesktopModal.touchHintDirect'
-										: 'remoteDesktopModal.touchHintTouchpad',
-								)
-							}}
-						</span>
-					</div>
-
-					<div v-if="connection?.type === 'VNC'" class="flex min-w-[12rem] flex-1 items-center space-x-2">
-						<UiInput
-							v-model="vncText"
-							density="compact"
-							class="min-w-0 flex-1"
-							:placeholder="t('vncModal.textInputPlaceholder')"
-							:aria-label="t('vncModal.textInputPlaceholder')"
-							@focus="vncTextFocused = true"
-							@blur="releaseVncTextFocus"
-							@keydown.enter.prevent="sendVncText"
-						/>
-						<UiButton
-							type="button"
-							appearance="solid"
-							tone="primary"
-							density="compact"
-							:disabled="state !== 'connected' || !vncText"
-							:title="t('vncModal.sendButtonTitle')"
-							@mousedown.prevent
-							@click="sendVncText"
-						>
-							{{ t('common.send') }}
-						</UiButton>
-					</div>
-				</div>
-
-				<div
-					class="flex min-w-0 shrink-0 items-center gap-y-1"
-					:class="
-						device.isMobile.value
-							? 'ml-0 w-full flex-nowrap justify-end gap-x-1.5 border-t border-border/60 pt-2'
-							: 'ml-auto flex-wrap gap-x-2'
-					"
-				>
-					<label
-						:for="connection?.type === 'VNC' ? 'vnc-modal-width' : 'rdp-modal-width'"
-						class="shrink-0 whitespace-nowrap text-xs"
-					>
-						{{ t('common.width') }}:
-					</label>
-					<div class="min-w-0 w-20" :class="device.isMobile.value ? 'flex-1 max-w-20' : ''">
-						<UiNumberInput
-							:id="connection?.type === 'VNC' ? 'vnc-modal-width' : 'rdp-modal-width'"
-							v-model="modalWidth"
-							:disabled="sizeSaving"
-							density="compact"
-							:min="minPanelWidth()"
-							:max="maxPanelWidth()"
-							step="10"
-							:aria-label="t('common.width')"
-							@change="commitSize"
-						/>
-					</div>
-					<label
-						:for="connection?.type === 'VNC' ? 'vnc-modal-height' : 'rdp-modal-height'"
-						class="shrink-0 whitespace-nowrap text-xs"
-					>
-						{{ t('common.height') }}:
-					</label>
-					<div class="min-w-0 w-20" :class="device.isMobile.value ? 'flex-1 max-w-20' : ''">
-						<UiNumberInput
-							:id="connection?.type === 'VNC' ? 'vnc-modal-height' : 'rdp-modal-height'"
-							v-model="modalHeight"
-							:disabled="sizeSaving"
-							density="compact"
-							:min="minPanelHeight()"
-							:max="maxPanelHeight()"
-							step="10"
-							:aria-label="t('common.height')"
-							@change="commitSize"
-						/>
-					</div>
-					<UiButton
-						type="button"
-						appearance="solid"
-						tone="primary"
-						class="shrink-0 whitespace-nowrap"
-						:disabled="state === 'connecting'"
-						:title="t('remoteDesktopModal.reconnectTooltip')"
-						@click="connect"
-					>
-						{{ t('common.reconnect') }}
-					</UiButton>
-				</div>
-			</footer>
 
 			<UiResizeHandle
 				v-if="!fullscreen && !device.isMobile.value"
@@ -792,6 +874,98 @@
 		box-shadow: none !important;
 		-webkit-backdrop-filter: none;
 		backdrop-filter: none;
+	}
+
+	.remote-desktop-chrome {
+		display: contents;
+	}
+	.remote-desktop-body {
+		order: 1;
+	}
+	.remote-desktop-footer {
+		order: 3;
+	}
+
+	.remote-desktop-panel-floating-tools > .remote-desktop-chrome {
+		position: absolute;
+		top: 0;
+		right: 0;
+		left: 0;
+		z-index: 30;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem;
+		background: var(--color-header);
+		box-shadow: 0 3px 10px #0003;
+		opacity: 0;
+		visibility: hidden;
+		pointer-events: none;
+	}
+
+	.remote-desktop-panel-floating-tools > .remote-desktop-tools-revealed,
+	.remote-desktop-panel-floating-tools > .remote-desktop-chrome:focus-within {
+		opacity: 1;
+		visibility: visible;
+		pointer-events: auto;
+	}
+
+	.remote-desktop-panel-floating-tools > .remote-desktop-tools-dialog {
+		z-index: 1200;
+	}
+	.remote-desktop-panel-floating-tools .remote-desktop-header {
+		flex: 1 1 16rem;
+		min-width: 0;
+		padding: 0;
+		border: 0;
+	}
+	.remote-desktop-panel-floating-tools .remote-desktop-footer {
+		display: contents;
+	}
+	.remote-desktop-panel-floating-tools .remote-desktop-footer > div:first-child {
+		flex: 0 1 auto;
+		width: auto;
+	}
+	.remote-desktop-panel-floating-tools .remote-desktop-footer > div:last-child {
+		margin: 0;
+		padding: 0;
+		border: 0;
+	}
+
+	.remote-desktop-edge {
+		position: absolute;
+		left: 50%;
+		z-index: 31;
+		display: flex;
+		width: 3.5rem;
+		height: 1rem;
+		justify-content: center;
+		align-items: center;
+		transform: translateX(-50%);
+	}
+
+	.remote-desktop-edge > span {
+		width: 2rem;
+		height: 0.25rem;
+		border-radius: 999px;
+		background: #fff9;
+		box-shadow: 0 1px 4px #0008;
+	}
+
+	.remote-desktop-edge:focus-visible {
+		outline: 2px solid var(--color-primary);
+		outline-offset: -2px;
+	}
+
+	.remote-desktop-edge-top {
+		top: 0;
+	}
+
+	@media (pointer: coarse) {
+		.remote-desktop-edge {
+			height: 1.75rem;
+		}
 	}
 
 	.remote-display-container {

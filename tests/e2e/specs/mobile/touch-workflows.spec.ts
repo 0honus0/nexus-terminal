@@ -1,4 +1,4 @@
-import { authenticateTestRdp, observeDesktopBinaryTraffic } from '../../support/desktop';
+import { authenticateTestRdp, observeDesktopBinaryTraffic, revealDesktopControls } from '../../support/desktop';
 import { readTestConnectionImportId } from '../../support/targets';
 import { readConnectionList } from '../../../../packages/shared/src/targets/connections/http-codec';
 import { E2E_URLS, E2E_PORTS } from '../../support/test-env';
@@ -347,6 +347,7 @@ test('mobile RDP opens keyboard explicitly and persists touch mode without recon
 			timeout: 15_000,
 		});
 		await authenticateTestRdp(page);
+		await revealDesktopControls(page, true);
 	};
 
 	try {
@@ -364,6 +365,31 @@ test('mobile RDP opens keyboard explicitly and persists touch mode without recon
 
 		const keyboardInput = page.getByRole('textbox', { name: 'Remote desktop keyboard input', exact: true });
 		const remoteDisplay = page.locator('.remote-display-container [tabindex="0"]');
+		await step('narrow touch toolbars reveal without resizing or opening the keyboard', async () => {
+			const viewport = page.viewportSize();
+			expect(viewport).not.toBeNull();
+			const panel = page.locator('.remote-desktop-panel');
+			const chrome = panel.locator('[data-desktop-chrome]');
+			for (const width of [390, 320]) {
+				await page.setViewportSize({ width, height: viewport!.height });
+				await remoteDisplay.tap({ position: { x: 40, y: 240 } });
+				await expect(chrome).toBeHidden();
+				const before = await panel.locator('.remote-display-container').boundingBox();
+				await revealDesktopControls(page, true);
+				expect(await panel.locator('.remote-display-container').boundingBox()).toEqual(before);
+				const overflow = await chrome.evaluate((element) => element.scrollWidth - element.clientWidth);
+				expect(overflow).toBeLessThanOrEqual(1);
+				await expect(directMode).toBeVisible();
+				await expect(panel.getByRole('button', { name: 'Reconnect', exact: true })).toBeVisible();
+				await expect(keyboardInput).not.toBeFocused();
+				await panel.getByRole('button', { name: 'File clipboard', exact: true }).tap();
+				const files = page.getByRole('dialog', { name: 'File clipboard', exact: true });
+				await expect(files).toBeVisible();
+				await files.getByRole('button', { name: 'Close', exact: true }).tap();
+				await expect(files).toBeHidden();
+			}
+			await page.setViewportSize(viewport!);
+		});
 		await remoteDisplay.tap({ position: { x: 40, y: 40 } });
 		await expect(keyboardInput).not.toBeFocused();
 		// Also cover the compatibility click path used by touch browsers.
@@ -386,7 +412,8 @@ test('mobile RDP opens keyboard explicitly and persists touch mode without recon
 		await page.getByRole('button', { name: 'Hide keyboard', exact: true }).tap();
 		await expect(keyboardInput).not.toBeFocused();
 
-		await touchpadMode.click();
+		await revealDesktopControls(page, true);
+		await touchpadMode.tap();
 		await expect(touchpadMode).toHaveAttribute('aria-pressed', 'true');
 		await expect(directMode).toHaveAttribute('aria-pressed', 'false');
 		await expect(touchpadMode).toHaveAttribute('title', /One finger: move/);
@@ -394,6 +421,7 @@ test('mobile RDP opens keyboard explicitly and persists touch mode without recon
 		await expect(keyboardInput).not.toBeFocused();
 		expect(sessionCreateRequests).toBe(1);
 
+		await revealDesktopControls(page, true);
 		await page.getByRole('button', { name: 'Browser Fullscreen', exact: true }).tap();
 		await expect.poll(() => page.evaluate(() => Boolean(document.fullscreenElement))).toBe(true);
 		await remoteDisplay.tap({ position: { x: 40, y: 40 } });
@@ -406,10 +434,11 @@ test('mobile RDP opens keyboard explicitly and persists touch mode without recon
 		await expect.poll(() => page.evaluate(() => document.fullscreenElement)).toBeNull();
 		expect(sessionCreateRequests).toBe(1);
 
+		await revealDesktopControls(page, true);
 		await page
 			.getByRole('dialog', { name: connectionName, exact: true })
 			.getByRole('button', { name: 'Close', exact: true })
-			.click();
+			.tap();
 		await expect(page.getByRole('dialog', { name: connectionName, exact: true })).toBeHidden();
 		await openConnection();
 		await expect.poll(() => sessionCreateRequests).toBe(2);
@@ -418,13 +447,14 @@ test('mobile RDP opens keyboard explicitly and persists touch mode without recon
 			'aria-pressed',
 			'true',
 		);
-		await page.getByRole('button', { name: 'Direct', exact: true }).click();
+		await page.getByRole('button', { name: 'Direct', exact: true }).tap();
 		await expect(page.getByRole('button', { name: 'Direct', exact: true })).toHaveAttribute('aria-pressed', 'true');
 		expect(sessionCreateRequests).toBe(2);
+		await revealDesktopControls(page, true);
 		await page
 			.getByRole('dialog', { name: connectionName, exact: true })
 			.getByRole('button', { name: 'Close', exact: true })
-			.click();
+			.tap();
 		await openConnection();
 		await expect.poll(() => sessionCreateRequests).toBe(3);
 		await expect(page.getByRole('button', { name: 'Direct', exact: true })).toHaveAttribute('aria-pressed', 'true');

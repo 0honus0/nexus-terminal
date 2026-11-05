@@ -7,6 +7,7 @@ export function attachDesktopClipboard(
 	element: HTMLElement,
 	send: (text: string) => Promise<void>,
 	onFailure: (failure: RemoteDesktopFailure) => void,
+	canSync: (text: string) => boolean = () => true,
 ) {
 	let closed = false;
 	let reading: Promise<void> | null = null;
@@ -37,7 +38,7 @@ export function attachDesktopClipboard(
 		reading = Promise.resolve()
 			.then(async () => {
 				const text = await navigator.clipboard.readText();
-				if (closed) {
+				if (closed || !canSync(text)) {
 					return;
 				}
 				validate(text);
@@ -57,6 +58,12 @@ export function attachDesktopClipboard(
 	element.addEventListener('focusin', onFocus);
 	return {
 		sync,
+
+		async paste(text: string): Promise<void> {
+			if (closed) return;
+			validate(text);
+			await send(text);
+		},
 
 		receive(text: string): void {
 			if (closed) {

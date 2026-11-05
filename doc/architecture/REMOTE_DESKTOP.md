@@ -72,7 +72,29 @@ IronRDP SDK 没有取消 pending connect 的 API；前端保留其晚结果 owne
 
 手机指南由原Modal复用全局UiInfoHint按点击展示，桌面保留原行内说明。desktop-touch可选回调提供与派发鼠标事件一致的client坐标；RDP Adapter仅在有触控能力时安装本地指针覆盖层，按容器比例定位以兼容缩放，覆盖层不截输入也不修改解码Canvas，不作为远端操作确认。触控板首次定位派发mousemove，独立初始化标志避免左上角坐标被重置；实体鼠标事件隐藏覆盖层，关闭随原实例移除，VNC沿用原厂商光标而不新增该覆盖层。
 
-键鼠、原生触控、剪贴板监听与 timer 绑定原实例；切模式取消原手势，失焦/关闭释放 RDP 按键。剪贴板纯文本最多 1 MiB；浏览器权限拒绝不阻断桌面。批量文本输入最多 64 KiB UTF-8，超量整次拒绝，不发送部分文本。RDP 动态尺寸通过 display-control；DPI 换算为 SDK 的 100–500% 缩放提示，初始协商仍受 SDK/远端能力限制。音视频、文件通道等 SDK 能力未作为本版产品承诺。
+键鼠、原生触控、剪贴板监听与 timer 绑定原实例；切模式取消原手势，失焦/关闭释放 RDP 按键。剪贴板纯文本最多 1 MiB；浏览器权限拒绝不阻断桌面。批量文本输入最多 64 KiB UTF-8，超量整次拒绝，不发送部分文本。RDP 动态尺寸通过 display-control；DPI 换算为 SDK 的 100–500% 缩放提示，初始协商仍受 SDK/远端能力限制。音频与文件剪贴板见下节；视频加速/媒体重定向、磁盘映射等能力尚未接入。
+
+### 本地输入法与文件剪贴板
+
+1. **职责与范围**：rdp-keyboard-anchor将隐藏textarea定位到最近点击的Canvas位置，防止候选框使用flex布局中的静态位置；SDK没有远端文本光标坐标，不承诺Tab/方向键之后的精确追踪。RDP文件剪贴板接入现有SDK Provider，VNC仍仅文本；没有磁盘映射、视频加速、多显示器或RemoteApp扩展；音频单独接入如下。
+2. **子功能与目录**：rdp-desktop装配键盘锚点、原文本同步和rdp-file-clipboard；后者唯一持有RdpFileTransferProvider、厂商文件信息/流ID和原始Promise。RdpFileClipboard组件使用原UiOverlayPanel提供选择文件与逐项下载，嵌在桌面窗口内以保留全屏可达性。
+3. **依赖方向**：Modal/组件→原Peer窄文件能力；browser-desktop懒加载Adapter后转交能力，厂商扩展与存储后端选择留Adapter，不引入Backend路由或另一份传输协议。
+4. **类型与转换**：RemoteDesktopClipboardFile/Progress、FileClipboardState与FileClipboard唯一归本功能model-types；SDKFileInfo先核对后逐字段转换。列表修订与索引组成原实例内ID，下载流ID独立关联进度，旧列表不能指向新同索引文件。File/Blob仅为前端浏览器能力，无Shared、存储或秘密契约变动。
+5. **入口与安装**：SessionBuilder注册Provider全部文件/锁/应答扩展，connect成功后绑定原session；文件选择只发布剪贴板供用户在远端目录粘贴，浏览器提供文件的原生paste在接受列表后至多派发一次远端Ctrl+V。远端文件列表只显示，不自动下载，不承诺写入系统通用文件剪贴板。
+6. **数据与并发**：上传不替换尚未完成的主动选择/粘贴批次，按文件进度累计；已完成批次的远端重复粘贴可由新明确选择替换，避免旧重粘贴阻塞后续上传。批次完成仍核对error事件，避免SDK对含失败文件的完成Promise误报成功。下载复查列表身份及实际报告的总量与Blob大小；剪贴板自动读取在上传期间不派发文本，文件有效期间不重复发布已知旧文本。沿SDK既有2 GiB下载门槛及64KiB分块，无新增产品配额；使用Blob后端避免持久临时文件。
+7. **生命周期与失败**：键盘锚点保存Canvas内比例，按当前offsetParent/缩放/滚动重算，监听ResizeObserver、窗口/visualViewport和全屏，关闭完整退订并恢复共享mobile textarea样式。文件Provider随原peer关闭dispose，原上传/下载Promise收敛后释放WASM；已关闭session的晚到Provider调用释放Extension后停止派发，避免异步写回再次访问已释放session。组件订阅、晚结果、下载URL及回收timer随实例/销毁清理；关闭不撤销远端部分文件。
+8. **当前能力与验收**：支持文件选择、浏览器提供的文件paste、等待/进度与远端文件逐项下载，目录本身不打包。当前源码/静态状态与未验范围见PLAN/testing，不能以历史文本剪贴板回归证明新文件通道或原生输入法候选窗口已通过实机验收。
+
+### 音频输出
+
+1. **职责与范围**：复用RDPSND及公开上游Web音频PR #2020，不另写音频协议/解码器。仅输出PCM16立体声，22.05/44.1/48kHz；不启用麦克风，不扩展视频通道。
+2. **子功能与目录**：vendor/ironrdp保留固定上游补丁、编译包、许可证及来源；rdp-audio-output持有AudioContext、播放源、音量和手势监听，rdp-desktop装配builder并随原连接关闭。
+3. **依赖方向**：RDP Adapter→audioPlayback扩展→RDPSND；库的Send后端仅经mpsc交付数据，JS回调留session loop，无unsafe Send。Backend继续透明传输，无新路由或服务端声音解码。
+4. **类型与转换**：上游callback以unknown交付wave/volume/close；Adapter严格核对判别字段、PCM采样率/声道/帧对齐和音量范围，逐样本将交错小端PCM16转换为浏览器Float32声道。全部技术类型仅在当前Adapter，无Shared或存储变化。
+5. **入口与安装**：AudioContext可用时注册audioPlayback；上游补丁启用playback并装配RDPSND，Windows需要时附加不含设备的RDPDR，打印通道存在时复用它。浏览器不具备AudioContext时保持桌面可用，不显示无效设置。
+6. **数据与并发**：音频只存当前实例内存，采用AudioContext时钟连续排程；按用户授权实时优先，超过设备报告的延迟加相邻实际音频块时长时停止旧播放队列。没有固定毫秒数、额外文件、总量配额或上传录音；暂停期间丢弃块，不把远端声音无限积压。
+7. **生命周期与失败**：自动resume可能保持pending，后续真实pointer/touch/key仍再次调用resume，不被旧Promise阻挡；拒绝仅等待手势。AudioContext暂停清空播放，正常RDPSND close保留已排程尾音；连接失败、run结束与窗口close都停止声音、释放context并移除监听。回调晚到由closed拒绝；单次播放失败关闭音频，安全日志一次，不让桌面失败。
+8. **当前能力与验收**：源码及WASM/TypeScript/生产构建见testing；上游PR公开但未合并，不能称为官方发布能力。指定Windows非零PCM/播放排程、暂停丢弃/恢复和重连资源释放已验证；物理声音、自动播放受限、移动设备、网络抖动与尾音仍待专项验收。上游正式发布包含位图修复及音频后删除临时补丁与二进制替代物。
 
 RDP Adapter 的输入事务按完整字符计数，每批最多 32 字符（按下/释放成对），不加等待计时；普通键立即派发。仅连续 mousemove 合并为约 16ms 内最新坐标，所有按键、按钮与滚轮事务先携带尚未提交的坐标，避免点击/键盘越过之前的指针移动；blur、切文本输入与 close 在 releaseAllInputs 前刷新并清理指针 timer，动态 resize 前也先提交旧坐标。输入事务不重试，某批失败停止后续文本，不把未知结果当作未发送而重放；保留原 IME 去重、修饰键集合与 64 KiB 预检。类型与状态留当前 Adapter，不新增 Shared 字段或全局队列；WASM 解码/绘制仍在原 SDK，本轮不承诺消除 RTT 或主线程解码成本。
 
@@ -111,4 +133,17 @@ noVNC 1.7.0 自身持有 backbuffer、damage bounds 与有序 render queue，在
 
 当前已完成静态检查与构建；PLAN D17 的一般本地测试限制保持，D19 授权的指定 HTTPS 站点真实 RDP 基础链路、常用键盘、composition 去重、双向纯文本剪贴板及拒绝授权、窗口/全屏切换，以及 Chromium 移动仿真输入和触控已验证。后续已补证分钟级持续输入、票据重放/过期拒绝不影响原连接、受控 WS 关闭/新票据重连、两次建连中取消及刷新后实际 TCP 释放；页面销毁后的 WS 事件观察缺口由独立 TCP 证据补充，不记录原脚本整体 PASS。该证据不覆盖 VNC、其它系统组合键、原生输入法/手机真机、小时级或空闲稳定性、16 路并发、强制晚成功/复杂故障及多平台。旧 Guacamole 的 B10/Windows PASS 只属于旧实现，不能作为新桥的验收。具体命令/结果归 [testing](../testing/E2E.md)，操作见 [USAGE](../USAGE.md#远程桌面)，实施状态见 [PLAN](../PLAN.md)。
 
-IronRDP npm 0.7.0 尚未包含位图 source stride 与边界修复；Adapter 对齐桌面宽度不能处理单个位图矩形的源行填充，已移除该规避。正式依赖固定为上游成功构建 `62246b364a0282bab85087f658a81fe4207b6b31` 的原始 npm archive，仓库 vendor 目录保留完整来源、SHA-256 与双许可证，pnpm lockfile 验证完整性，Docker 与 E2E runner 安装前复制该文件。运行时不下载 Actions 产物，不更改 SDK 源码或窗口 UI；保持现有 initial/dynamic 尺寸、像素 presenter、输入与关闭 owner。更新上游构建或恢复 npm 正式版均须回归真实画面、键鼠、剪贴板、动态缩放及重连，不能仅凭版本号判为兼容。
+IronRDP npm 0.7.0 尚未包含位图 source stride 与边界修复；Adapter 对齐桌面宽度不能处理单个位图矩形的源行填充，已移除该规避。正式依赖以 `62246b364a0282bab85087f658a81fe4207b6b31` 为基线，应用上游公开Web音频PR #2020的固定提交 `3bf4a223f7765a05597849691eb76da34d7e5cc8` 后重编译WASM/npm archive，仓库 vendor 目录保留完整来源、SHA-256 与双许可证，pnpm lockfile 验证完整性，Docker 与 E2E runner 安装前复制该文件。运行时不下载 Actions 产物；音频源码补丁与构建步骤见vendor/ironrdp/README，窗口UI保持；保持现有 initial/dynamic 尺寸、像素 presenter、输入与关闭 owner。更新上游构建或恢复 npm 正式版均须回归真实画面、键鼠、剪贴板、动态缩放及重连，不能仅凭版本号判为兼容。
+
+上游能力截至2026-11-05：RemoteApp原生Viewer窗口支持[#2201](https://github.com/Devolutions/IronRDP/pull/2201)、完整RAIL消息[#2196](https://github.com/Devolutions/IronRDP/pull/2196)、原生压缩音频/DVC[#2203](https://github.com/Devolutions/IronRDP/pull/2203)和多显示器/DPI[#2182](https://github.com/Devolutions/IronRDP/pull/2182)均已合并，不能描述为只有协议草稿或秘密功能。Web音频[#2020](https://github.com/Devolutions/IronRDP/pull/2020)仍open，较早的Web Audio方案[#904](https://github.com/Devolutions/IronRDP/pull/904)仍draft；Web图形接入/修复[#1977](https://github.com/Devolutions/IronRDP/pull/1977)仍open。原生能力已合并不表示当前Web SDK有相应公开接口，也无据承诺Web交付时间。
+
+### 非全屏 RDP 顶部工具栏
+
+1. **职责与范围**：仅非全屏RDP使用顶部浮动工具栏；所有原标题、窗口操作、文件剪贴板和尺寸控件合并在同一顶部区域，窄屏自然换行。VNC保留原上下布局，全屏保留原交互。
+2. **子功能与目录**：RemoteDesktopModal持toolsOpen和floatingTools，以同一chrome容器复用原控件，不新增全局状态或通用弹窗规则。
+3. **依赖方向**：Modal消费原Controller/Peer和Foundation按钮/输入/覆盖层，无后端、Shared或SDK扩展。
+4. **类型与转换**：局部布尔状态与PointerEvent/MouseEvent留组件；无外部协议或持久化变化。
+5. **入口与安装**：顶部短横条支持鼠标悬停、触屏点击和键盘Enter；Esc关闭并返回触发点。已连接时收起，连接中/失败及文件面板打开时保持可见。
+6. **数据与并发**：从初次建连前就使用绝对定位，避免晚切布局使不支持动态resize的服务器留下黑边；展开收起不改变显示区域和协商尺寸。focus-within保留键盘操作，点桌面释放工具栏焦点。
+7. **生命周期与失败**：断开/关闭重置浮出状态；异步键盘聚焦核对active/visible/当前状态。文件面板仍挂在桌面节点内并提升原chrome层级，不使用会改变fixed定位的transform；隐藏/关闭不重建连接。
+8. **当前能力与验收**：真实Windows、桌面及触屏仿真范围以testing为准；不将仿真视为原生手机键盘或VNC全链通过。

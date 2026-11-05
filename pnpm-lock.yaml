@@ -404,8 +404,8 @@ importers:
         specifier: ^6.43.15
         version: 6.43.15
       '@devolutions/iron-remote-desktop-rdp':
-        specifier: file:vendor/ironrdp/iron-remote-desktop-rdp-62246b364a02.tgz
-        version: file:packages/frontend/vendor/ironrdp/iron-remote-desktop-rdp-62246b364a02.tgz
+        specifier: file:vendor/ironrdp/iron-remote-desktop-rdp-62246b364a02-audio-3bf4a223f776.tgz
+        version: file:packages/frontend/vendor/ironrdp/iron-remote-desktop-rdp-62246b364a02-audio-3bf4a223f776.tgz
       '@floating-ui/vue':
         specifier: 2.0.1
         version: 2.0.1(vue@3.5.44(@typescript/typescript6@6.0.2))
@@ -722,9 +722,9 @@ packages:
   '@codemirror/view@6.43.15':
     resolution: {integrity: sha512-HHsfpqFeHyXLs983pSRe38Xajs0vFWZQ2BuX0m7Ki8w3jZ5iD8cuR3lBz2/5/X53Dhf32SBHKh6rtSTB6tKeGw==}
 
-  '@devolutions/iron-remote-desktop-rdp@file:packages/frontend/vendor/ironrdp/iron-remote-desktop-rdp-62246b364a02.tgz':
-    resolution: {integrity: sha512-Omi3HGp8xkchB6HiAo/NxdooHbbFQU1N3NILsG6IJqH8HWdTBNdfI0yJGmkjeiaFA20bsPYNeLGIf3lZ2idhuA==, tarball: file:packages/frontend/vendor/ironrdp/iron-remote-desktop-rdp-62246b364a02.tgz}
-    version: 0.7.0
+  '@devolutions/iron-remote-desktop-rdp@file:packages/frontend/vendor/ironrdp/iron-remote-desktop-rdp-62246b364a02-audio-3bf4a223f776.tgz':
+    resolution: {integrity: sha512-9Xb7Vl1w9QkJKJSgGidsefmIPSgGF6MzUsFp7Xt+ZFgWqaZNgVwCje2xwA9giaPsvs5wHmjdkZM8W2af6+34gA==, tarball: file:packages/frontend/vendor/ironrdp/iron-remote-desktop-rdp-62246b364a02-audio-3bf4a223f776.tgz}
+    version: 0.7.0-nexus.audio.1
 
   '@esbuild/aix-ppc64@0.28.2':
     resolution: {integrity: sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ==}
@@ -3742,7 +3742,7 @@ snapshots:
       style-mod: 4.1.4
       w3c-keyname: 2.2.8
 
-  '@devolutions/iron-remote-desktop-rdp@file:packages/frontend/vendor/ironrdp/iron-remote-desktop-rdp-62246b364a02.tgz': {}
+  '@devolutions/iron-remote-desktop-rdp@file:packages/frontend/vendor/ironrdp/iron-remote-desktop-rdp-62246b364a02-audio-3bf4a223f776.tgz': {}
 
   '@esbuild/aix-ppc64@0.28.2':
     optional: true

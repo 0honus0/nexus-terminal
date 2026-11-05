@@ -12,6 +12,9 @@ import { attachDesktopClipboard, MAX_CLIPBOARD_BYTES } from './desktop-clipboard
 import { attachDesktopTouch } from './desktop-touch';
 import { DESKTOP_SCANCODES } from './desktop-keyboard';
 import { attachRdpFramePresenter } from './rdp-frame-presenter';
+import { attachRdpAudioOutput } from './rdp-audio-output';
+import { attachRdpKeyboardAnchor } from './rdp-keyboard-anchor';
+import { createRdpFileClipboard } from './rdp-file-clipboard';
 import {
 	RemoteDesktopFailure,
 	type RemoteDesktopPeerFactory,
@@ -86,6 +89,8 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 		keyboard.tabIndex = -1;
 		element.append(keyboard);
 	}
+	const keyboardAnchor = attachRdpKeyboardAnchor(element, canvas, keyboard);
+	const audio = attachRdpAudioOutput(element, keyboard);
 	let session: RdpSession | null = null;
 	let closed = false;
 	let started = false;
@@ -98,6 +103,7 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 	const pressedButtons = new Set<number>();
 	let composedText = '';
 	let compositionTime = 0;
+	let lastClipboardText: string | null = null;
 	let touch: ReturnType<typeof attachDesktopTouch> | null = null;
 	let timer: ReturnType<typeof setTimeout> | null = null;
 	let pointerTimer: ReturnType<typeof setTimeout> | null = null;
@@ -189,6 +195,21 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 		}
 	};
 
+	const pasteRemote = () => {
+		const holdingControl = pressedKeys.has(0x1d) || pressedKeys.has(0xe01d);
+		const metaKeys = [0xe05b, 0xe05c].filter((code) => pressedKeys.has(code));
+		apply(() => [
+			...metaKeys.map((code) => Backend.DeviceEvent.keyReleased(code)),
+			...(holdingControl ? [] : [Backend.DeviceEvent.keyPressed(0x1d)]),
+			Backend.DeviceEvent.keyPressed(0x2f),
+			Backend.DeviceEvent.keyReleased(0x2f),
+			...(holdingControl ? [] : [Backend.DeviceEvent.keyReleased(0x1d)]),
+			...metaKeys.map((code) => Backend.DeviceEvent.keyPressed(code)),
+		]);
+	};
+
+	const fileClipboard = createRdpFileClipboard({ onFailure: inputFailure, paste: pasteRemote });
+
 	const clipboard = attachDesktopClipboard(
 		element,
 		async (text) => {
@@ -203,6 +224,7 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 				clipboardTasks.add(task);
 				try {
 					await task;
+					if (!closed) lastClipboardText = text;
 				} finally {
 					clipboardTasks.delete(task);
 				}
@@ -211,10 +233,47 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 			}
 		},
 		inputFailure,
+		(text) => {
+			if (fileClipboard.isUploading()) return false;
+			if (fileClipboard.hasFiles() && text === lastClipboardText) return false;
+			fileClipboard.clearRemoteFiles();
+			return true;
+		},
 	);
+
+	const paste = (event: ClipboardEvent) => {
+		if (closed || !session || textInputActive || !event.clipboardData) return;
+		event.preventDefault();
+		event.stopPropagation();
+		const files = Array.from(event.clipboardData.files);
+		const text = event.clipboardData.getData('text/plain');
+		if (files.length) {
+			void fileClipboard.upload(files, true).catch(inputFailure);
+		} else if (fileClipboard.hasFiles() && (!text || text === lastClipboardText || fileClipboard.isUploading())) {
+			pasteRemote();
+		} else if (event.clipboardData.types.includes('text/plain')) {
+			fileClipboard.clearRemoteFiles();
+			const original = session;
+			void clipboard
+				.paste(text)
+				.then(() => {
+					if (!closed && session === original) pasteRemote();
+				})
+				.catch(inputFailure);
+		}
+	};
 
 	const key = (event: KeyboardEvent) => {
 		if (closed || !session || textInputActive || event.isComposing || event.key === 'Process') {
+			return;
+		}
+		if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'v') {
+			// Native paste grants access to browser-provided files. Dispatch one remote paste after clipboard setup.
+			if (fileClipboard.isUploading()) {
+				event.preventDefault();
+				if (event.type === 'keydown') pasteRemote();
+			}
+			event.stopPropagation();
 			return;
 		}
 		const scancode = DESKTOP_SCANCODES[event.code];
@@ -280,6 +339,7 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 
 	const focus = () => {
 		if (!closed && session && !options.hasTouch) {
+			keyboardAnchor.update();
 			keyboard.focus({ preventScroll: true });
 		}
 	};
@@ -320,6 +380,7 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 			return;
 		}
 		if (event.type === 'mousedown') {
+			keyboardAnchor.move(event.clientX, event.clientY);
 			focus();
 			pressedButtons.add(event.button);
 			apply(() => [Backend.DeviceEvent.mouseButtonPressed(event.button)]);
@@ -382,6 +443,7 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 	keyboard.addEventListener('keyup', key);
 	keyboard.addEventListener('beforeinput', beforeInput);
 	keyboard.addEventListener('compositionend', composition);
+	keyboard.addEventListener('paste', paste);
 	keyboard.addEventListener('blur', release);
 	canvas.addEventListener('mousedown', mouse);
 	canvas.addEventListener('mouseup', mouse);
@@ -421,8 +483,13 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 			builder.renderCanvas(canvas).free();
 			builder.desktopSize(new Backend.DesktopSize(display.width, display.height)).free();
 			builder.extension(displayControl(true)).free();
+			const audioExtension = audio.extension();
+			if (audioExtension) builder.extension(audioExtension).free();
 			builder.extension(enableCredssp(true)).free();
 			builder.extension(outboundMessageSizeLimit(REMOTE_DESKTOP_FRAME_MAX_BYTES)).free();
+			for (const extension of fileClipboard.getBuilderExtensions()) {
+				builder.extension(extension).free();
+			}
 			builder.setCursorStyleCallbackContext(null).free();
 			builder
 				.setCursorStyleCallback((kind: unknown, data: unknown, hotspotX: unknown, hotspotY: unknown) => {
@@ -453,6 +520,7 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 						return;
 					}
 					try {
+						if (!closed) fileClipboard.clearRemoteFiles();
 						for (const item of data.items()) {
 							try {
 								if (item.mimeType() !== 'text/plain') {
@@ -460,9 +528,11 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 								}
 								const value: unknown = item.value();
 								if (typeof value === 'string') {
+									lastClipboardText = value;
 									clipboard.receive(value);
 								} else if (value instanceof Uint8Array && value.byteLength <= MAX_CLIPBOARD_BYTES) {
-									clipboard.receive(new TextDecoder().decode(value));
+									lastClipboardText = new TextDecoder().decode(value);
+									clipboard.receive(lastClipboardText);
 								}
 							} finally {
 								item.free();
@@ -495,6 +565,7 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 			if (closed) {
 				connected.shutdown();
 			} else {
+				fileClipboard.setSession(connected);
 				const negotiated = connected.desktopSize();
 				try {
 					requestedDisplay = { width: negotiated.width, height: negotiated.height, dpi: 96 };
@@ -517,13 +588,16 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 			if (session === connected) {
 				session = null;
 			}
-			await Promise.allSettled([...clipboardTasks]);
+			audio.close();
+			fileClipboard.close();
+			await Promise.allSettled([fileClipboard.settled(), ...clipboardTasks]);
 			connected.free();
 		}
 	};
 
 	return {
 		element,
+		fileClipboard: fileClipboard.capability,
 
 		connect(connection, display) {
 			if (closed || started || connection.protocol !== 'RDP') {
@@ -536,6 +610,7 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 					clearTimeout(timer);
 				}
 				timer = null;
+				audio.close();
 				if (closed) {
 					logger.error({ code: 'remote_desktop_closed_task_failed' }, 'Remote desktop cleanup failed');
 				} else {
@@ -567,6 +642,9 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 			}
 			release();
 			closed = true;
+			keyboardAnchor.close();
+			audio.close();
+			fileClipboard.close();
 			stopPresenting();
 			if (timer) {
 				clearTimeout(timer);
@@ -582,6 +660,7 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 			keyboard.removeEventListener('keyup', key);
 			keyboard.removeEventListener('beforeinput', beforeInput);
 			keyboard.removeEventListener('compositionend', composition);
+			keyboard.removeEventListener('paste', paste);
 			keyboard.removeEventListener('blur', release);
 			canvas.removeEventListener('mousedown', mouse);
 			canvas.removeEventListener('mouseup', mouse);

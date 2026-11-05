@@ -50,6 +50,7 @@ export interface RemoteDesktopApi {
 
 export interface RemoteDesktopPeer {
 	readonly element: HTMLElement;
+	readonly fileClipboard?: RemoteDesktopFileClipboard;
 	connect(session: RemoteDesktopSession, display: RemoteDesktopDisplay): void;
 	resize(display: RemoteDesktopDisplay): void;
 	focus(): void;
@@ -58,6 +59,32 @@ export interface RemoteDesktopPeer {
 	syncClipboard(): Promise<void>;
 	sendText(text: string): void;
 	close(): void;
+}
+
+export interface RemoteDesktopClipboardFile {
+	id: string;
+	name: string;
+	path: string;
+	size: number;
+	isDirectory: boolean;
+}
+
+export interface RemoteDesktopClipboardProgress {
+	transferred: number;
+	total: number;
+}
+
+export interface RemoteDesktopFileClipboardState {
+	files: RemoteDesktopClipboardFile[];
+	canUpload: boolean;
+	upload: (RemoteDesktopClipboardProgress & { waiting: boolean }) | null;
+	downloads: (RemoteDesktopClipboardProgress & { id: string })[];
+}
+
+export interface RemoteDesktopFileClipboard {
+	subscribe(listener: (state: RemoteDesktopFileClipboardState) => void): () => void;
+	upload(files: File[]): Promise<void>;
+	download(id: string): Promise<Blob>;
 }
 
 export interface RemoteDesktopPeerOptions {

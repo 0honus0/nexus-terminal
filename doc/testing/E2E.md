@@ -8,6 +8,56 @@
 
 官方插件[v1.0.3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.3)仍为d5dd455，本批没有插件改动。本体[amd dev发布41872562719](https://github.com/0honus0/nexus-terminal/actions/runs/41872562719)success，dev与sha-2b0ab3db9208的digest一致，平台/revision均经实际GHCR核对，详见下节；此前指定实例的7262e8ac部署仍保持原范围，本轮不更新生产容器或数据库。真实运营商切网、手机软键盘、外部供应商及未列故障边界仍按[待验与外部依赖](../PLAN.md#待验与外部依赖)保留；受控回归不替代真实模型效果或吞吐实测。更早测试与镜像结果只保留为各自历史证据。
 
+## RDP 当前批次审核与正式 E2E（2026-11-05，远程待验）
+
+用户授权审核全部当前本地变更、补充用例、提交推送及修复远程E2E。按H-13保留已确认UI，未扩展产品配置或新增库协议；所有既有输入锚点/文件/音频/浮动工具栏源码、三语、依赖锁及vendor固定补丁已审核。调用链覆盖懒加载Peer→技术Adapter→Provider/AudioContext→Modal，检查建连前关闭、晚成功、剪贴板替换、批次失败、run结束、重连和关闭，保持资源唯一owner及逐字段投影。上游音频补丁/包hash与README一致；新tgz已纳入本批提交范围，旧tgz删除，不产生运行时下载。
+
+正式用例沿现有xrdp/TigerVNC夹具：桌面保留管理页/首页/Workspace入口、真实画面和文本剪贴板、DPI、resize/minimize/fullscreen与VNC原断言，统一经实际横条展开RDP操作；display:contents的footer断言改查实际Reconnect控件及节点存在，不删功能断言。新增真实Canvas点击IME锚点、工具栏显示前后画面几何不变、键盘Enter/Esc回焦、文件面板不因悬停消失的检查。手机原用例补320/390px触屏展开/收起、无横向溢出、不自动聚焦键盘、文件面板开关；按真实tap操作顶部控件。
+
+新增独立RDP生命周期用例：通过真实SDK/文件选择，选择中文/emoji与空文件后暂缓服务端WS交付，确定上传等待且不能重复选择；显式重连后旧批次/错误/远端列表清空并恢复选择，真实AudioContext状态由closed/新活跃到最终全closed。只观察和转发原生AudioContext，不替换实际播放器；xrdp/VNC夹具不支持完整Windows文件/音频通道，因此不把本用例称为非零PCM或文件落盘验收，实际Windows双向hash/PCM证据见下节。
+
+环境仍为Node26.13.0/pnpm12.16.1，日志集中`/home/honus/nexus-task-artifacts/rdp-e2e-review-20261105`，未重建本机浏览器/测试数据库/Docker镜像。根check通过、E2E build（Shared/Backend/Frontend及浏览器测试客户端）通过；三个变更测试入口strict/noUnusedLocals目标tsc通过，初次typeRoots路径错误已更正，不放宽检查。全仓格式及diff收口，正式远程结果随后登记；此前559项不作为本批通过。
+
+## Windows RDP 实测、顶部工具栏与清理（2026-11-05）
+
+基线main/75343fdd的当前未提交工作区，经用户授权在独立应用数据库、https://api.honus.top与本机CDP验证指定Windows目标。用户选择1授权临时启动Audiosrv及其依赖AudioEndpointBuilder，原状态均Stopped/Manual；仅经UAC启动和测试，结束后两项均恢复Stopped/Manual，启动类型不变。远端只创建本次TEMP下nexus-rdp-test-21b66a84，最终已删除并核对不存在，自建PowerShell/Explorer窗口已关闭。本批不提交、推送、发布或更新生产。
+
+精简证据集中`/home/honus/nexus-task-artifacts/rdp-windows-acceptance-20261105/evidence`：
+
+- `audio-acceptance.json/log`：真实Windows内存WAV产生非零PCM，32次实际AudioBufferSource.start、44.1kHz立体声、峰值0.36624；原AudioContext时钟运行。暂停期间再播放一段真实声音，start计数不增长，恢复后新声音继续播放；重连时原context为closed、新context为running。排程提前量最高35.41ms，实际块约185.76ms；前者不是网络延迟或端到端声音延迟。Headless浏览器静音，不能证明物理扬声器听感；设备报告延迟也不能代表用户真实硬件。
+- `file-acceptance.json`及`upload-acceptance.json/log`：远端2048字节二进制下载逐字节及SHA256一致；浏览器文件选择后在真实Explorer粘贴三文件，131073字节二进制、0字节空文件、33字节中文内容，以及中文/emoji文件名全部核对大小和SHA256。仅本次隔离文件，不宣称目录打包、大文件内存或吞吐已测。
+- `toolbar-desktop.json`：4组通过，工具栏移出隐藏、所有原控件同一顶部区域且画面几何不变、Enter/Esc焦点、文件面板超出悬停仍可见及Esc关闭。`window-acceptance.json/log`另4组通过：实际点击锚点偏差小于3px、最小化/恢复不断线、全屏/Esc不断线及恢复浮动工具栏、改宽后仍保持完整高度。原显示区域1062×754，现1062×856，释放102px的上下固定占用。
+- `mobile-acceptance.json/log`：390/320px Android UA与真实CDP touch事件仿真通过；顶部展开/桌面点击收起、全部控件无横向溢出，320px文件面板开关及关闭连接通过。三份UI结果pageerror均为空，截图toolbar-desktop-open/hidden、window-desktop及toolbar-mobile-390/320保留。这是浏览器仿真，非原生手机键盘或输入法候选窗口验收。
+- `services-restored.log`、`remote-cleanup.log`核对服务原状及远端临时目录删除；`cleanup.json`列出本次和可确认前序临时目录/缓存/工具包/旧trace删除，两个专用Docker镜像及按确切ID匹配的66条本轮构建缓存清理。自建9998/3001/29222及旧43669监听、目标13389测试TCP均已释放，临时数据库/凭据/profile/浏览器二进制已删除；保留产品源码/vendor包、项目node_modules、Node26/pnpm12工具与精简日志。最终磁盘已用16664788992字节（15.52GiB），可用约13.32GiB；与初次约29GiB相比已明显回落，未操作其它项目镜像或用户数据。
+
+静态证据：`check.log`根check、`backend-build.log`、`frontend-build.log`生产构建退出0；最终`format-all.log`全仓ESLint/Prettier通过，文档另定向格式及git diff --check通过。Shared构建曾触发开发Vite整页刷新并断开测试连接，构建结束后重新建连验收，不计为产品故障。早期脚本有剪贴板权限恢复、中文按钮名称、等待文案和模拟鼠标点击触屏工具栏定位错误，修正测试驱动后以最终结果计验收，未为测试改变产品行为。未运行全量本地/远程E2E；既有559项不覆盖本批。
+
+仍待：VNC整链、xrdp、原生IME/真机软键盘、物理声音/受限自动播放/音量尾音、弱网听感、长时和多连接/资源失败。当前35ms测量未支持继续压缩播放缓冲；库分包、服务器和真实输出设备需独立端到端测量，不能以更小排程值宣称声音总延迟下降。
+
+## RDP 音频输出（2026-11-05，源码与构建）
+
+承接下节同一main/75343fdd未提交批次，用户明确要求实现音频输出并允许丢弃声音、实时优先。本轮采用上游公开PR [#2020](https://github.com/Devolutions/IronRDP/pull/2020)的固定提交3bf4a223f7765a05597849691eb76da34d7e5cc8，应用到原62246b364a02基线；该PR仍open，不能称为已发布Web能力。上游补丁（仅规范化空白context行，不改源代码内容）与双许可证入vendor，包版本0.7.0-nexus.audio.1，SHA256为616f3720728f2ae014c0091b97788873b6434025bfceb1b96e10c3d90158d7c8。旧官方包退出当前依赖，仅留Git历史，不重复保留二进制。pnpm完整性及Docker/runner的vendor复制消费者同步核对。
+
+当时源码、Docker构建环境、工具与日志集中`/home/honus/nexus-task-artifacts/rdp-audio-output-20261105`；后续按用户授权清除临时源码/缓存/镜像，精简构建日志和来源记录保留；Node26.13.0/pnpm12.16.1，隔离构建器使用Rust1.94.1、wasm32-unknown-unknown、wasm-pack0.15.1及npm11.20.0。没有安装宿主全局Rust或启动应用测试服务。`wasm-build-upstream.log`为显式locked release WASM构建成功，`package-build-upstream.log`为上游TS检查、Vite及npm pack成功；使用上游xtask相同的生成JS URL替换，不依赖会吞掉构建失败的pre-build.js。最初自写回调桥被本PR整体替换，早期构建/失败日志只保留执行记录，不作为最终包证据。
+
+源码复审：Send后端不持JS回调；音频开关与真实RDPSND及无设备RDPDR一起装配，不增加磁盘/打印重定向。前端严格核对wave/volume/close，PCM16转Float32、双声道音量、AudioContext连续排程；允许按设备延迟和实际块时长丢弃积压。暂停不累积声音，pending自动resume不能阻挡后续手势；late callback、正常close尾音、格式改变、run结束/建连失败/窗口关闭、音频单独失败及全部监听/播放源释放已核对。
+
+最终`check-upstream.log`根check退出0，`frontend-build-upstream.log`前端生产build退出0（Vite3.39秒），`format-all.log`全仓ESLint/Prettier退出0，`diff-check.log`通过。`final-package-provenance.json`核对最终tgz版本/回调出口/补丁与二进制hash；`.gitignore`仅放行该vendor目录的tgz，防止换包后新二进制遗漏提交。按D17未新增或运行本地行为/浏览器/E2E，也未运行补丁自带测试；上游PR自己的测试/实机报告不作为本项目验证。待验Windows/xrdp真实声音及策略、自动播放受限、音量/尾音、弱网积压丢弃、前后台/重连、移动设备与多连接资源；不能用559项历史通过代替新包验收。未提交推送、发布、部署或维护数据库。
+
+能力进度另核对GitHub PR原始响应：RemoteApp Viewer #2201、RAIL #2196、原生压缩音频/DVC #2203、多屏/DPI #2182均已merged；Web音频 #2020 open、旧Web音频 #904 draft、Web图形接入/修复 #1977 open。`upstream-pr-*.json`和查询结果保留，不把closed自动当作merged；产品当前未接入RemoteApp/多屏/视频加速。
+
+## RDP 输入法定位与文件剪贴板（2026-11-05，源码与静态）
+
+基线main/75343fdd的本轮未提交工作区，Node26.13.0、pnpm12.16.1通过前轮runtime/env.sh显式注入。本节为音频追加前的独立源码阶段，仅改Frontend及文档；当时无依赖或WASM变化。当前音频依赖变更及新检查单独见上节，无Backend、Shared、DDL或远程运行变更。日志和只读源码集中`/home/honus/nexus-task-artifacts/rdp-input-clipboard-20261105`并保留；没有启动测试服务或浏览器。
+
+源码审核覆盖：textarea点击锚点、缩放/offsetParent/滚动重算、共享mobile输入样式恢复和监听清理；原Provider扩展/会话绑定、文件列表修订/流ID进度、下载大小、文本覆盖保护、原生paste及修饰键；批次失败/重粘贴/新选择和关闭收敛；面板全屏节点、旧Promise、订阅及下载URL。上游上传Promise可在单文件失败后resolve，Adapter保留error事件并拒绝误报成功；关闭后的Provider晚回调释放Extension，不再访问已释放WASM，不把关闭当作远端部分文件回滚。
+
+`check-complete.log`根check退出0（Shared构建、Backend类型、双端ESLint和Frontend vue-tsc），`format-complete.log`全仓ESLint/Prettier退出0，`build-frontend-complete.log`前端生产构建退出0；最终提示文字和文档另做作用域格式/diff检查。首轮check.log只因新增声明缺函数空行失败，修正后check-final.log/check-delivery.log及最终检查均通过。SDK archive的SHA256仍为vendor记录的`be9364441f5ef8059d55c33109ba4f688bb4532ea6d4f04ec6d69b0bd3cc7921`，本节阶段没有SDK patch或重编译，后续音频构建见上节。
+
+用户追加仅使用库已有接口。核对锁定62246b364a02的d.ts/Rust及官方master/f96f664abf0bdfe547f222bcd37e09899f00f310，npm latest仍0.7.0（npm-rdp-metadata.json）。当前Web配置的音频playback/capture为false、多屏布局为None、RemoteApp/RDPGFX为false，色深/性能标志/连接档位固定且没有公开设置接口；NoopRdpsndBackend只满足打印依赖。Rust的RAIL编解码、原生音频和多屏PDU不等于Web已有功能，当时按约束未扩展库接口；之后用户明确授权的音频按上节采用公开PR。普通远端视频可作为现有桌面像素显示，不声称有视频加速。源文件留upstream-master-session.rs/lib.rs及ironrdp-capability-paths.txt；先按main查询失败，已根据实际默认master固定SHA读取，不把404内容当源码。
+
+按PLAN D17未新增/运行本地行为、浏览器或E2E。原生候选窗口/手机真机、双向Windows/xrdp文件/空文件/多文件/目录子文件/重粘贴、拒绝/锁过期/断线/晚写入及大文件内存均未实测。SDK没有远端文本光标坐标，Tab/方向键后不承诺精确跟随；保留上游2GiB下载门槛、Blob内存后端，不报告任意大小或吞吐保证。此前559项只属于5548e788，不作为本轮新能力通过证据；未提交推送、发布或部署。
+
 ## 依赖升级提交与正式远程验收（2026-11-05，完成）
 
 用户授权提交推送并等待本次完整E2E。复核所有4份workflow引用的11种Actions，均与本轮官方release盘点一致；5份清单共121条依赖声明和catalog/overrides已核对。Vue3 draggable、TS6前端别名、SheetJS官方包及IronRDP锁定上游构建保持实际适用来源，不将npm旧latest标签作为降级目标。

@@ -1,4 +1,9 @@
-import { authenticateTestRdp, observeDesktopBinaryTraffic } from '../../support/desktop';
+import {
+	authenticateTestRdp,
+	observeDesktopAudioContexts,
+	observeDesktopBinaryTraffic,
+	revealDesktopControls,
+} from '../../support/desktop';
 import { readConnectionList } from '../../../../packages/shared/src/targets/connections/http-codec';
 import { readTestConnectionImportId } from '../../support/targets';
 import { expect, test, type APIRequestContext, type Locator, type Page } from '../../support/fixtures';
@@ -176,6 +181,7 @@ test('RDP browser client preserves settings, clipboard and browser fullscreen', 
 						}),
 					)
 					.toBe(true);
+				await revealDesktopControls(page);
 				await modal.getByRole('button', { name: 'Close', exact: true }).click();
 				await expect(modal).toBeHidden();
 				await expect(page).toHaveURL(/\/connections$/);
@@ -202,6 +208,7 @@ test('RDP browser client preserves settings, clipboard and browser fullscreen', 
 					timeout: 10_000,
 				})
 				.toBeGreaterThan(previousLastConnectedAt);
+			await revealDesktopControls(page);
 			await modal.getByRole('button', { name: 'Close', exact: true }).click();
 			await expect(modal).toBeHidden();
 			await expect(page).toHaveURL(/\/$/);
@@ -216,6 +223,8 @@ test('RDP browser client preserves settings, clipboard and browser fullscreen', 
 
 			const modal = remoteWindow(page);
 			await expect(modal).toBeVisible();
+			await expect(modal).toContainText('Connected', { timeout: 15_000 });
+			await revealDesktopControls(page);
 			await expect(modal.locator('i.fa-desktop')).toBeVisible();
 			await expect(modal.locator('i.fa-expand')).toBeVisible();
 			await expect(modal.locator('i.fa-window-minimize')).toBeVisible();
@@ -223,6 +232,46 @@ test('RDP browser client preserves settings, clipboard and browser fullscreen', 
 			await expect(page.getByRole('dialog', { name: 'Progress Display', exact: true })).toHaveCount(0);
 			await expect(modal).toContainText('Connected', { timeout: 15_000 });
 			await authenticateTestRdp(page);
+		});
+
+		await step('floating RDP controls preserve desktop geometry and keyboard access', async () => {
+			const panel = remoteWindow(page);
+			const chrome = panel.locator('[data-desktop-chrome]');
+			const canvas = panel.locator('canvas');
+			await canvas.click({ position: { x: 180, y: 160 } });
+			await page.mouse.move(0, 0);
+			await expect(chrome).toBeHidden();
+			const before = await panel.locator('.remote-display-container').boundingBox();
+			expect(before).not.toBeNull();
+			const anchor = await panel.locator('textarea').boundingBox();
+			const canvasBox = await canvas.boundingBox();
+			expect(anchor).not.toBeNull();
+			expect(canvasBox).not.toBeNull();
+			expect(anchor!.x).toBeCloseTo(canvasBox!.x + 180, 0);
+			expect(anchor!.y).toBeCloseTo(canvasBox!.y + 160, 0);
+			await revealDesktopControls(page);
+			expect(await panel.locator('.remote-display-container').boundingBox()).toEqual(before);
+			const chromeBox = await chrome.boundingBox();
+			expect(chromeBox).not.toBeNull();
+			expect(chromeBox!.y).toBeCloseTo(before!.y, 0);
+			await page.mouse.move(0, 0);
+			await expect(chrome).toBeHidden();
+			const edge = panel.getByRole('button', { name: 'Show window controls', exact: true });
+			await edge.focus();
+			await page.keyboard.press('Enter');
+			await expect(chrome).toBeVisible();
+			expect(await chrome.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+			await page.keyboard.press('Escape');
+			await expect(chrome).toBeHidden();
+			await expect(edge).toBeFocused();
+			await revealDesktopControls(page);
+			await panel.getByRole('button', { name: 'File clipboard', exact: true }).click();
+			const files = page.getByRole('dialog', { name: 'File clipboard', exact: true });
+			await expect(files).toBeVisible();
+			await page.mouse.move(0, 0);
+			await expect(files).toBeVisible();
+			await page.keyboard.press('Escape');
+			await expect(files).toBeHidden();
 		});
 
 		await step(
@@ -266,9 +315,11 @@ test('RDP browser client preserves settings, clipboard and browser fullscreen', 
 			const header = panel.locator('header');
 			const footer = panel.locator('footer');
 			await expect(panel).toBeVisible();
+			await revealDesktopControls(page);
 			await expect(fullscreen).toBeVisible();
 			await expect(header).toBeVisible();
-			await expect(footer).toBeVisible();
+			await expect(footer).toBeAttached();
+			await expect(panel.getByRole('button', { name: 'Reconnect', exact: true })).toBeVisible();
 
 			const normalBox = await panel.boundingBox();
 			expect(normalBox).toBeTruthy();
@@ -301,7 +352,8 @@ test('RDP browser client preserves settings, clipboard and browser fullscreen', 
 			await page.keyboard.press('Escape');
 			await expect.poll(() => panel.evaluate((element) => document.fullscreenElement === element)).toBe(false);
 			await expect(header).toBeVisible();
-			await expect(footer).toBeVisible();
+			await expect(footer).toBeAttached();
+			await expect(panel.getByRole('button', { name: 'Reconnect', exact: true })).toBeVisible();
 			const restoredBox = await panel.boundingBox();
 			expect(restoredBox).toBeTruthy();
 			expect(restoredBox!.width).toBeLessThan(viewport!.width);
@@ -512,6 +564,7 @@ async function exercisePointerWindow(page: Page): Promise<void> {
 		Math.round(resizedPanelBox!.height),
 	);
 
+	await revealDesktopControls(page);
 	await panel.getByRole('button', { name: 'Minimize', exact: true }).click();
 	await expect(panel).toBeHidden();
 	const restore = page.getByRole('button', { name: 'Restore remote desktop window', exact: true });
@@ -557,6 +610,7 @@ test('RDP pointer resize and restore-button dragging preserve minimized window b
 		await expect(remoteWindow(page)).toHaveCSS('height', '560px');
 		await exercisePointerWindow(page);
 		const modal = remoteWindow(page);
+		await revealDesktopControls(page);
 		await modal.getByRole('button', { name: 'Close', exact: true }).click();
 		await expect(modal).toBeHidden();
 	} finally {
@@ -597,6 +651,7 @@ test('VNC pointer resize and restore-button dragging share the same window seman
 			const modal = remoteWindow(page);
 			await expect(modal).toBeVisible();
 			await expect(modal).toContainText('Connected', { timeout: 15_000 });
+			await revealDesktopControls(page);
 			await modal.getByRole('button', { name: 'Close', exact: true }).click();
 			await expect(modal).toBeHidden();
 			await expect(page).toHaveURL(/\/connections$/);
@@ -649,10 +704,70 @@ test('VNC pointer resize and restore-button dragging share the same window seman
 		await expect(vncModal).toContainText('Connected');
 		await exercisePointerWindow(page);
 		const modal = remoteWindow(page);
+		await revealDesktopControls(page);
 		await modal.getByRole('button', { name: 'Close', exact: true }).click();
 		await expect(modal).toBeHidden();
 	} finally {
 		await context.request.delete(`/api/v1/targets/connections/${connectionId}`, {
+			headers: { Origin: E2E_URLS.frontendOrigin },
+		});
+	}
+});
+
+test('RDP reconnect cancels pending file batches and retires the previous audio context', async ({ page, context }) => {
+	const readAudioStates = await observeDesktopAudioContexts(page);
+	await loginAsInitialAdmin(context.request);
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.language = 'en-US';
+	});
+	let holdRemote = false;
+	await page.routeWebSocket('**/ws/remote-desktop?*', (socket) => {
+		const server = socket.connectToServer();
+		server.onMessage((message) => {
+			if (!holdRemote) socket.send(message);
+		});
+	});
+	const name = 'E2E RDP Clipboard Lifecycle';
+	const id = await createRemoteConnection(context.request, 'RDP', name, '127.0.0.1', E2E_PORTS.rdp);
+	try {
+		await openRemoteConnection(page, name);
+		const panel = remoteWindow(page);
+		await expect(panel).toContainText('Connected', { timeout: 15_000 });
+		await authenticateTestRdp(page);
+		await expect.poll(readAudioStates).toEqual([expect.stringMatching(/^(running|suspended)$/)]);
+		await revealDesktopControls(page);
+		await panel.getByRole('button', { name: 'File clipboard', exact: true }).click();
+		const files = page.getByRole('dialog', { name: 'File clipboard', exact: true });
+		const choose = files.getByRole('button', { name: 'Choose local files', exact: true });
+		await expect(choose).toBeEnabled();
+		// Hold real server responses after the chooser to exercise cancellation before a file target accepts it.
+		holdRemote = true;
+		await files.locator('input[type="file"]').setInputFiles([
+			{ name: '中文-😀.txt', mimeType: 'text/plain', buffer: Buffer.from('file clipboard') },
+			{ name: 'empty.txt', mimeType: 'text/plain', buffer: Buffer.alloc(0) },
+		]);
+		await expect(choose).toBeDisabled();
+		await expect(files.getByRole('status')).toContainText('Files are ready');
+		await files.getByRole('button', { name: 'Close', exact: true }).click();
+		await revealDesktopControls(page);
+		holdRemote = false;
+		await panel.getByRole('button', { name: 'Reconnect', exact: true }).click();
+		await expect(panel).toContainText('Connected', { timeout: 15_000 });
+		await authenticateTestRdp(page);
+		await expect.poll(readAudioStates).toEqual(['closed', expect.stringMatching(/^(running|suspended)$/)]);
+		await revealDesktopControls(page);
+		await panel.getByRole('button', { name: 'File clipboard', exact: true }).click();
+		await expect(choose).toBeEnabled();
+		await expect(files.getByRole('status')).toHaveCount(0);
+		await expect(files.getByRole('listitem')).toHaveCount(0);
+		await files.getByRole('button', { name: 'Close', exact: true }).click();
+		await revealDesktopControls(page);
+		await panel.getByRole('button', { name: 'Close', exact: true }).click();
+		await expect(panel).toBeHidden();
+		await expect.poll(readAudioStates).toEqual(['closed', 'closed']);
+	} finally {
+		holdRemote = false;
+		await context.request.delete(`/api/v1/targets/connections/${id}`, {
 			headers: { Origin: E2E_URLS.frontendOrigin },
 		});
 	}
