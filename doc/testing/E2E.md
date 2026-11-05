@@ -4,11 +4,11 @@
 
 ## 当前验收基线
 
-最新完整远程[E2E 41961045032](https://github.com/0honus0/nexus-terminal/actions/runs/41961045032)验证`main/5548e78892528d1844682c775b4ac9ae30e51093`：559项全部一次通过，质量检查、双端生产构建、Docker smoke与8个测试分片全部success；耗时任务成功、文档截图按条件跳过。按正式Reporter核对559条唯一passed记录，无失败、重试或场景跳过。Backend129项，Browser1–7分别41/65/44/58/62/84/76项（包含隔离场景）。后继bb06abd4只更新耗时估算，产品源码一致，不称其直接跑过本轮E2E。最终文档收口不改变被测源码。
+最新完整远程[E2E 41972562509](https://github.com/0honus0/nexus-terminal/actions/runs/41972562509)验证`main/2f5804344bf9e2cf6c3128dd05b6155577f0a684`：560项全部一次通过，质量检查、双端生产构建、Docker smoke与8个测试分片全部success；耗时任务成功、文档截图按条件跳过。按正式Reporter核对560条唯一passed记录，无失败、重试或场景跳过。Backend129项，Browser1–7分别40/44/67/60/68/72/80项（包含隔离场景）。后继5aeb3c38只更新耗时估算，产品源码一致，不称其直接跑过本轮E2E。最终文档收口不改变被测源码。
 
 官方插件[v1.0.3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.3)仍为d5dd455，本批没有插件改动。本体[amd dev发布41872562719](https://github.com/0honus0/nexus-terminal/actions/runs/41872562719)success，dev与sha-2b0ab3db9208的digest一致，平台/revision均经实际GHCR核对，详见下节；此前指定实例的7262e8ac部署仍保持原范围，本轮不更新生产容器或数据库。真实运营商切网、手机软键盘、外部供应商及未列故障边界仍按[待验与外部依赖](../PLAN.md#待验与外部依赖)保留；受控回归不替代真实模型效果或吞吐实测。更早测试与镜像结果只保留为各自历史证据。
 
-## RDP 当前批次审核与正式 E2E（2026-11-05，远程待验）
+## RDP 当前批次审核与正式 E2E（2026-11-05，已通过）
 
 用户授权审核全部当前本地变更、补充用例、提交推送及修复远程E2E。按H-13保留已确认UI，未扩展产品配置或新增库协议；所有既有输入锚点/文件/音频/浮动工具栏源码、三语、依赖锁及vendor固定补丁已审核。调用链覆盖懒加载Peer→技术Adapter→Provider/AudioContext→Modal，检查建连前关闭、晚成功、剪贴板替换、批次失败、run结束、重连和关闭，保持资源唯一owner及逐字段投影。上游音频补丁/包hash与README一致；新tgz已纳入本批提交范围，旧tgz删除，不产生运行时下载。
 
@@ -16,13 +16,19 @@
 
 新增独立RDP生命周期用例：通过真实SDK/文件选择，选择中文/emoji与空文件后暂缓服务端WS交付，确定上传等待且不能重复选择；显式重连后旧批次/错误/远端列表清空并恢复选择，真实AudioContext状态由closed/新活跃到最终全closed。只观察和转发原生AudioContext，不替换实际播放器；xrdp/VNC夹具不支持完整Windows文件/音频通道，因此不把本用例称为非零PCM或文件落盘验收，实际Windows双向hash/PCM证据见下节。
 
-环境仍为Node26.13.0/pnpm12.16.1，日志集中`/home/honus/nexus-task-artifacts/rdp-e2e-review-20261105`，未重建本机浏览器/测试数据库/Docker镜像。根check通过、E2E build（Shared/Backend/Frontend及浏览器测试客户端）通过；三个变更测试入口strict/noUnusedLocals目标tsc通过，初次typeRoots路径错误已更正，不放宽检查。全仓格式及diff收口，正式远程结果随后登记；此前559项不作为本批通过。
+环境仍为Node26.13.0/pnpm12.16.1，日志集中`/home/honus/nexus-task-artifacts/rdp-e2e-review-20261105`，未重建本机浏览器/测试数据库/Docker镜像。根check通过、E2E build（Shared/Backend/Frontend及浏览器测试客户端）通过；三个变更测试入口strict/noUnusedLocals目标tsc通过，初次typeRoots路径错误已更正，不放宽检查。首轮修复后重新执行根check、前端生产build、测试目标类型及全仓格式，均退出0，git diff --check通过；不沿用此前559项作为本批通过。
 
 ### 首轮远程失败与修正
 
 提交79fbba4d的正式远程41971291558：质量、Docker、runner以及Backend和5个Browser分片成功，Browser3/5各失败一项。新增文件批次取消/重连/AudioContext释放4.4秒通过，真实VNC、DPI及pointer resize/minimize通过。失败1为手机原tap坐标y40落在展开的顶部工具栏，测试改为y240的真实桌面区域，保留键盘/触控/不重连断言；失败2为桌面新增悬停后移出断言，toolsOpen仍true，确认横条展开被替换后不能只靠chrome的pointerleave。Modal补面板pointermove核对桌面目标与面板pointerleave，键盘focus-within和文件面板保持原可见语义，不改UI设计。已有失败场景保留并在完整新轮核对，不重跑旧SHA冒充修复。
 
 首轮新增vendor补丁的空白context行曾触发暂存diff检查；仅规范化空context行，针对固定base重新git apply --check成功，产品源变更与实际tgz不变；新patch SHA256见vendor，归档来源记录保留原上游hash。
+
+### 最终正式远程结果
+
+修复提交2f580434的完整远程[41972562509](https://github.com/0honus0/nexus-terminal/actions/runs/41972562509)最终success，560项一次通过，无失败、重试或测试跳过。首轮失败的桌面RDP综合场景9.6秒、手机RDP场景7.2秒通过，新增文件批次重连/音频context释放4.2秒通过；原VNC、DPI、窗口缩放/最小化、文本剪贴板及全部其它模块断言保留并通过。质量、runner、Docker与8分片全部success，耗时均衡任务成功；仅非手动截图任务按条件跳过。round2-result.json、8份分片日志及round2-test-summary.json保留实际SHA、每项唯一passed计数和零retry记录；首轮日志保留原失败，不覆盖。CI后继5aeb3c38只更新duration-estimates，已审核并快进本地。最终仅回填文档，不发布镜像或更新生产，无数据库维护。
+
+CI的xrdp/TigerVNC场景不替代指定Windows的双向文件hash和非零PCM证据；物理听感、原生手机软键盘与候选框、弱网抖动等仍未验，不由本轮全量通过推断。本机磁盘仍约16GiB占用、14GB可用，保留精简日志，没有重建大型测试残余。
 
 ## Windows RDP 实测、顶部工具栏与清理（2026-11-05）
 
