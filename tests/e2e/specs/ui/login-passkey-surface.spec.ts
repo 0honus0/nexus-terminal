@@ -21,7 +21,7 @@ type CdpAudit = {
 type AuthenticatorHandle = {
 	cdp: CDPSession;
 	authenticatorId: string;
-	command: <T = unknown>(method: string, params?: object) => Promise<T>;
+	command: CDPSession['send'];
 };
 
 type NetworkEvent = {
@@ -44,18 +44,16 @@ async function addVirtualAuthenticator(
 ): Promise<AuthenticatorHandle> {
 	const cdp = await context.newCDPSession(page);
 
-	const command = async <T = unknown>(method: string, params?: object): Promise<T> => {
+	const command: CDPSession['send'] = (method, params) => {
 		audit.methods.push(method);
-		try {
-			return (await cdp.send(method, params)) as T;
-		} catch (cause) {
+		return cdp.send(method, params).catch((cause: unknown) => {
 			audit.errors.push({ method, message: describeError(cause) });
 			throw cause;
-		}
+		});
 	};
 
 	await command('WebAuthn.enable', { enableUI: false });
-	const result = await command<{ authenticatorId: string }>('WebAuthn.addVirtualAuthenticator', {
+	const result = await command('WebAuthn.addVirtualAuthenticator', {
 		options: {
 			protocol: 'ctap2',
 			transport: 'internal',
@@ -298,7 +296,7 @@ test('Login passkey succeeds, reports credential failure, and falls back to pass
 			failurePage = await failureContext.newPage();
 			observeAuthResponses(failurePage, 'contextB', networkEvents);
 			authenticatorB = await addVirtualAuthenticator(failureContext, failurePage, cdpAudits.contextB);
-			const credentials = await authenticatorB.command<{ credentials: unknown[] }>('WebAuthn.getCredentials', {
+			const credentials = await authenticatorB.command('WebAuthn.getCredentials', {
 				authenticatorId: authenticatorB.authenticatorId,
 			});
 			expect(credentials.credentials).toHaveLength(0);

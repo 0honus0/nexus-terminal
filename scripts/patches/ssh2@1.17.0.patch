@@ -1,0 +1,250 @@
+diff --git a/lib/protocol/crypto/src/binding.cc b/lib/protocol/crypto/src/binding.cc
+--- a/lib/protocol/crypto/src/binding.cc
++++ b/lib/protocol/crypto/src/binding.cc
+@@ -74,7 +74,7 @@
+ 
+ #define POLY1305_KEYLEN   32
+ #define POLY1305_TAGLEN   16
+-class ChaChaPolyCipher : public ObjectWrap {
++class ChaChaPolyCipher : public Nan::ObjectWrap {
+  public:
+   static NAN_MODULE_INIT(Init) {
+     Local<FunctionTemplate> tpl = Nan::New<FunctionTemplate>(New);
+@@ -85,8 +85,7 @@
+     SetPrototypeMethod(tpl, "free", Free);
+ 
+     Local<Function> func = Nan::GetFunction(tpl).ToLocalChecked();
+-    Local<Context> context = Nan::GetCurrentContext();
+-    v8::Isolate* isolate = context->GetIsolate();
++    v8::Isolate* isolate = v8::Isolate::GetCurrent();
+ 
+     constructor().Set(isolate, func);
+ 
+@@ -359,7 +358,8 @@
+   static NAN_METHOD(Encrypt) {
+     MarkPopErrorOnReturn mark_pop_error_on_return;
+ 
+-    ChaChaPolyCipher* obj = ObjectWrap::Unwrap<ChaChaPolyCipher>(info.Holder());
++    ChaChaPolyCipher* obj =
++      Nan::ObjectWrap::Unwrap<ChaChaPolyCipher>(info.Holder());
+ 
+     if (!Buffer::HasInstance(info[0]))
+       return Nan::ThrowTypeError("Missing/Invalid packet");
+@@ -387,7 +387,8 @@
+   }
+ 
+   static NAN_METHOD(Free) {
+-    ChaChaPolyCipher* obj = ObjectWrap::Unwrap<ChaChaPolyCipher>(info.Holder());
++    ChaChaPolyCipher* obj =
++      Nan::ObjectWrap::Unwrap<ChaChaPolyCipher>(info.Holder());
+     obj->clear();
+   }
+ 
+@@ -408,7 +409,7 @@
+ #endif
+ };
+ 
+-class AESGCMCipher : public ObjectWrap {
++class AESGCMCipher : public Nan::ObjectWrap {
+  public:
+   static NAN_MODULE_INIT(Init) {
+     Local<FunctionTemplate> tpl = Nan::New<FunctionTemplate>(New);
+@@ -419,8 +420,7 @@
+     SetPrototypeMethod(tpl, "free", Free);
+ 
+     Local<Function> func = Nan::GetFunction(tpl).ToLocalChecked();
+-    Local<Context> context = Nan::GetCurrentContext();
+-    v8::Isolate* isolate = context->GetIsolate();
++    v8::Isolate* isolate = v8::Isolate::GetCurrent();
+ 
+     constructor().Set(isolate, func);
+ 
+@@ -607,7 +607,7 @@
+   static NAN_METHOD(Encrypt) {
+     MarkPopErrorOnReturn mark_pop_error_on_return;
+ 
+-    AESGCMCipher* obj = ObjectWrap::Unwrap<AESGCMCipher>(info.Holder());
++    AESGCMCipher* obj = Nan::ObjectWrap::Unwrap<AESGCMCipher>(info.Holder());
+ 
+     if (!Buffer::HasInstance(info[0]))
+       return Nan::ThrowTypeError("Missing/Invalid packet");
+@@ -637,7 +637,7 @@
+   }
+ 
+   static NAN_METHOD(Free) {
+-    AESGCMCipher* obj = ObjectWrap::Unwrap<AESGCMCipher>(info.Holder());
++    AESGCMCipher* obj = Nan::ObjectWrap::Unwrap<AESGCMCipher>(info.Holder());
+     obj->clear();
+   }
+ 
+@@ -649,7 +649,7 @@
+   EVP_CIPHER_CTX* ctx_;
+ };
+ 
+-class GenericCipher : public ObjectWrap {
++class GenericCipher : public Nan::ObjectWrap {
+  public:
+   static NAN_MODULE_INIT(Init) {
+     Local<FunctionTemplate> tpl = Nan::New<FunctionTemplate>(New);
+@@ -660,8 +660,7 @@
+     SetPrototypeMethod(tpl, "free", Free);
+ 
+     Local<Function> func = Nan::GetFunction(tpl).ToLocalChecked();
+-    Local<Context> context = Nan::GetCurrentContext();
+-    v8::Isolate* isolate = context->GetIsolate();
++    v8::Isolate* isolate = v8::Isolate::GetCurrent();
+ 
+     constructor().Set(isolate, func);
+ 
+@@ -990,7 +989,7 @@
+   static NAN_METHOD(Encrypt) {
+     MarkPopErrorOnReturn mark_pop_error_on_return;
+ 
+-    GenericCipher* obj = ObjectWrap::Unwrap<GenericCipher>(info.Holder());
++    GenericCipher* obj = Nan::ObjectWrap::Unwrap<GenericCipher>(info.Holder());
+ 
+     if (!Buffer::HasInstance(info[0]))
+       return Nan::ThrowTypeError("Missing/Invalid packet");
+@@ -1022,7 +1021,7 @@
+   }
+ 
+   static NAN_METHOD(Free) {
+-    GenericCipher* obj = ObjectWrap::Unwrap<GenericCipher>(info.Holder());
++    GenericCipher* obj = Nan::ObjectWrap::Unwrap<GenericCipher>(info.Holder());
+     obj->clear();
+   }
+ 
+@@ -1045,7 +1044,7 @@
+ 
+ // =============================================================================
+ 
+-class ChaChaPolyDecipher : public ObjectWrap {
++class ChaChaPolyDecipher : public Nan::ObjectWrap {
+  public:
+   static NAN_MODULE_INIT(Init) {
+     Local<FunctionTemplate> tpl = Nan::New<FunctionTemplate>(New);
+@@ -1057,8 +1056,7 @@
+     SetPrototypeMethod(tpl, "free", Free);
+ 
+     Local<Function> func = Nan::GetFunction(tpl).ToLocalChecked();
+-    Local<Context> context = Nan::GetCurrentContext();
+-    v8::Isolate* isolate = context->GetIsolate();
++    v8::Isolate* isolate = v8::Isolate::GetCurrent();
+ 
+     constructor().Set(isolate, func);
+ 
+@@ -1373,7 +1371,7 @@
+     MarkPopErrorOnReturn mark_pop_error_on_return;
+ 
+     ChaChaPolyDecipher* obj =
+-      ObjectWrap::Unwrap<ChaChaPolyDecipher>(info.Holder());
++      Nan::ObjectWrap::Unwrap<ChaChaPolyDecipher>(info.Holder());
+ 
+     if (!Buffer::HasInstance(info[0]) || Buffer::Length(info[0]) != 4)
+       return Nan::ThrowTypeError("Missing/Invalid length bytes");
+@@ -1412,7 +1410,7 @@
+     MarkPopErrorOnReturn mark_pop_error_on_return;
+ 
+     ChaChaPolyDecipher* obj =
+-      ObjectWrap::Unwrap<ChaChaPolyDecipher>(info.Holder());
++      Nan::ObjectWrap::Unwrap<ChaChaPolyDecipher>(info.Holder());
+ 
+     if (!Buffer::HasInstance(info[0]))
+       return Nan::ThrowTypeError("Missing/Invalid packet");
+@@ -1452,7 +1450,7 @@
+ 
+   static NAN_METHOD(Free) {
+     ChaChaPolyDecipher* obj =
+-      ObjectWrap::Unwrap<ChaChaPolyDecipher>(info.Holder());
++      Nan::ObjectWrap::Unwrap<ChaChaPolyDecipher>(info.Holder());
+     obj->clear();
+   }
+ 
+@@ -1474,7 +1472,7 @@
+ #endif
+ };
+ 
+-class AESGCMDecipher : public ObjectWrap {
++class AESGCMDecipher : public Nan::ObjectWrap {
+  public:
+   static NAN_MODULE_INIT(Init) {
+     Local<FunctionTemplate> tpl = Nan::New<FunctionTemplate>(New);
+@@ -1485,8 +1483,7 @@
+     SetPrototypeMethod(tpl, "free", Free);
+ 
+     Local<Function> func = Nan::GetFunction(tpl).ToLocalChecked();
+-    Local<Context> context = Nan::GetCurrentContext();
+-    v8::Isolate* isolate = context->GetIsolate();
++    v8::Isolate* isolate = v8::Isolate::GetCurrent();
+ 
+     constructor().Set(isolate, func);
+ 
+@@ -1668,7 +1665,8 @@
+   static NAN_METHOD(Decrypt) {
+     MarkPopErrorOnReturn mark_pop_error_on_return;
+ 
+-    AESGCMDecipher* obj = ObjectWrap::Unwrap<AESGCMDecipher>(info.Holder());
++    AESGCMDecipher* obj =
++      Nan::ObjectWrap::Unwrap<AESGCMDecipher>(info.Holder());
+ 
+     if (!Buffer::HasInstance(info[0]))
+       return Nan::ThrowTypeError("Missing/Invalid packet");
+@@ -1713,7 +1711,8 @@
+   }
+ 
+   static NAN_METHOD(Free) {
+-    AESGCMDecipher* obj = ObjectWrap::Unwrap<AESGCMDecipher>(info.Holder());
++    AESGCMDecipher* obj =
++      Nan::ObjectWrap::Unwrap<AESGCMDecipher>(info.Holder());
+     obj->clear();
+   }
+ 
+@@ -1725,7 +1724,7 @@
+   EVP_CIPHER_CTX* ctx_;
+ };
+ 
+-class GenericDecipher : public ObjectWrap {
++class GenericDecipher : public Nan::ObjectWrap {
+  public:
+   static NAN_MODULE_INIT(Init) {
+     Local<FunctionTemplate> tpl = Nan::New<FunctionTemplate>(New);
+@@ -1737,8 +1736,7 @@
+     SetPrototypeMethod(tpl, "free", Free);
+ 
+     Local<Function> func = Nan::GetFunction(tpl).ToLocalChecked();
+-    Local<Context> context = Nan::GetCurrentContext();
+-    v8::Isolate* isolate = context->GetIsolate();
++    v8::Isolate* isolate = v8::Isolate::GetCurrent();
+ 
+     constructor().Set(isolate, func);
+ 
+@@ -2127,7 +2125,8 @@
+   static NAN_METHOD(DecryptBlock) {
+     MarkPopErrorOnReturn mark_pop_error_on_return;
+ 
+-    GenericDecipher* obj = ObjectWrap::Unwrap<GenericDecipher>(info.Holder());
++    GenericDecipher* obj =
++      Nan::ObjectWrap::Unwrap<GenericDecipher>(info.Holder());
+ 
+     if (!Buffer::HasInstance(info[0]))
+       return Nan::ThrowTypeError("Missing/Invalid block");
+@@ -2157,7 +2156,8 @@
+   static NAN_METHOD(Decrypt) {
+     MarkPopErrorOnReturn mark_pop_error_on_return;
+ 
+-    GenericDecipher* obj = ObjectWrap::Unwrap<GenericDecipher>(info.Holder());
++    GenericDecipher* obj =
++      Nan::ObjectWrap::Unwrap<GenericDecipher>(info.Holder());
+ 
+     if (!Buffer::HasInstance(info[0]))
+       return Nan::ThrowTypeError("Missing/Invalid packet");
+@@ -2203,7 +2203,8 @@
+   }
+ 
+   static NAN_METHOD(Free) {
+-    GenericDecipher* obj = ObjectWrap::Unwrap<GenericDecipher>(info.Holder());
++    GenericDecipher* obj =
++      Nan::ObjectWrap::Unwrap<GenericDecipher>(info.Holder());
+     obj->clear();
+   }
+ 

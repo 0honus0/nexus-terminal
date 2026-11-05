@@ -8,7 +8,11 @@ const repoRoot = path.resolve(scriptDir, '../..');
 const rootPackage = readJson('package.json');
 const e2ePackage = readJson('tests/e2e/package.json');
 
-const nodeVersion = 'current';
+const nodeVersion = fs.readFileSync(path.join(repoRoot, '.node-version'), 'utf8').trim();
+
+if (!/^\d+\.\d+\.\d+$/.test(nodeVersion)) {
+	throw new Error(`Invalid .node-version: ${nodeVersion}`);
+}
 const pnpmVersion = /^pnpm@(.+)$/.exec(String(rootPackage.packageManager ?? ''))?.[1];
 const playwrightVersion = e2ePackage.devDependencies?.['@playwright/test'];
 
@@ -18,6 +22,7 @@ if (!/^\d+\.\d+\.\d+$/.test(String(playwrightVersion))) {
 }
 
 const definitionFiles = [
+	'.node-version',
 	'package.json',
 	'pnpm-lock.yaml',
 	'pnpm-workspace.yaml',
@@ -35,7 +40,7 @@ const definitionFiles = [
 ];
 const hash = crypto.createHash('sha256');
 hash.update(`node=${nodeVersion}\nplaywright=${playwrightVersion}\npnpm=${pnpmVersion}\n`);
-// Refresh the floating Node image and OS packages at least once per UTC week
+// Refresh the Node image and OS packages at least once per UTC week
 // when CI runs, even if the workspace dependency files have not changed.
 hash.update(`refreshWeek=${Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000))}\n`);
 for (const relativePath of definitionFiles) {

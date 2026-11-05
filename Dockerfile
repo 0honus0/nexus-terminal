@@ -1,8 +1,10 @@
 # syntax=docker/dockerfile:1.7
 
-FROM alpine:latest AS workspace-base
-RUN apk upgrade --no-cache \
-    && apk add --no-cache nodejs-current npm
+ARG NODE_VERSION=26.13.0
+FROM node:${NODE_VERSION}-alpine AS node-base
+
+FROM node-base AS workspace-base
+RUN apk upgrade --no-cache
 ENV PNPM_CONFIG_STORE_DIR=/pnpm/store
 WORKDIR /build
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
@@ -10,13 +12,13 @@ COPY scripts/patches ./scripts/patches
 COPY packages/frontend/vendor ./packages/frontend/vendor
 COPY packages/shared/package.json ./packages/shared/package.json
 RUN PNPM_VERSION="$(node -p "require('./package.json').packageManager.replace(/^pnpm@/, '')")" \
-    && npm install --global "pnpm@${PNPM_VERSION}"
+    && npm install --global --allow-scripts=pnpm "pnpm@${PNPM_VERSION}"
 
 FROM workspace-base AS backend-builder
 RUN apk add --no-cache python3 py3-setuptools make g++
 COPY packages/backend/package.json ./packages/backend/package.json
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm install --frozen-lockfile --filter @nexus-terminal/backend...
+    CI_CHECK_FAIL=ssh2 pnpm install --frozen-lockfile --filter @nexus-terminal/backend...
 COPY packages/shared/src ./packages/shared/src
 COPY packages/shared/tsconfig.json ./packages/shared/tsconfig.json
 COPY packages/backend/src ./packages/backend/src
@@ -40,12 +42,12 @@ COPY packages/frontend/index.html packages/frontend/tsconfig.json packages/front
 RUN pnpm --filter @nexus-terminal/shared build \
     && pnpm --filter @nexus-terminal/frontend build
 
-FROM alpine:latest AS runtime
+FROM node-base AS runtime
 LABEL org.opencontainers.image.title="Nexus Terminal" \
       org.opencontainers.image.description="Unified runtime image for the frontend and backend"
 
 RUN apk upgrade --no-cache \
-    && apk add --no-cache nodejs-current nginx tini \
+    && apk add --no-cache nginx tini \
     && rm -rf /usr/share/nginx/html/* /var/cache/apk/*
 WORKDIR /app
 ENV NEXUS_HTML_THEME_ASSET_DIR=/app/assets/html-themes/local

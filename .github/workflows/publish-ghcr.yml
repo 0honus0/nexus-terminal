@@ -51,7 +51,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.sha }}
 
@@ -61,9 +61,9 @@ jobs:
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Set up pnpm and Node.js for dependency audit
-        uses: pnpm/setup@v2
+        uses: pnpm/setup@v3.1.2
         with:
-          runtime: node@latest
+          node-version-file: .node-version
           install: false
 
       - name: Audit production dependencies
@@ -208,7 +208,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
         with:
           ref: ${{ needs.prepare.outputs.source_sha }}
 
@@ -221,23 +221,28 @@ jobs:
 
       - name: Set up QEMU
         if: needs.prepare.outputs.architecture != 'amd'
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@v4.4.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@v4.4.1
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v4
+        uses: docker/login-action@v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Read image Node.js version
+        id: node_version
+        run: echo "value=$(cat .node-version)" >> "$GITHUB_OUTPUT"
+
       - name: Build and push image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@v7.4.0
         with:
           context: .
           file: Dockerfile
+          build-args: NODE_VERSION=${{ steps.node_version.outputs.value }}
           pull: true
           platforms: ${{ needs.prepare.outputs.platforms }}
           push: true

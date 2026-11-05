@@ -215,6 +215,9 @@ export function useNativeThreads(
 			return;
 		}
 		if (selected.value?.id === value.id) {
+			// Selecting the current thread still dismisses the narrow-screen drawer.
+			// The runtime owns skipping a redundant conversation read.
+			select(selected.value);
 			return;
 		}
 		selected.value = value;

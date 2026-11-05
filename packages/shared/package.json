@@ -882,6 +882,6 @@
     "typescript": "catalog:node-build"
   },
   "dependencies": {
-    "semver": "7.8.5"
+    "semver": "7.8.6"
   }
 }

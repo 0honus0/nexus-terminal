@@ -15,10 +15,10 @@ catalogs:
 
 overrides:
   dompurify: 'catalog:'
-  'readdir-glob>minimatch': ^11.0.3
-  'eslint>minimatch': ^11.0.3
-  '@eslint/config-array>minimatch': ^11.0.3
-  '@typescript-eslint/typescript-estree>minimatch': ^11.0.3
+  'readdir-glob>minimatch': ^11.0.4
+  'eslint>minimatch': ^11.0.4
+  '@eslint/config-array>minimatch': ^11.0.4
+  '@typescript-eslint/typescript-estree>minimatch': ^11.0.4
 
 allowBuilds:
   bcrypt: true
@@ -32,6 +32,10 @@ failIfNoMatch: true
 catalogPrune: true
 verifyDepsBeforeRun: false
 patchedDependencies:
+  # Temporary Node 26 fix; remove on the next ssh2 upgrade containing the upstream fixes (doc/DEPLOYMENT.md).
+  ssh2@1.17.0: scripts/patches/ssh2@1.17.0.patch
   '@xterm/xterm@6.0.0': scripts/patches/@xterm__xterm@6.0.0.patch
   monaco-editor@0.57.0: scripts/patches/monaco-editor@0.57.0.patch
   splitpanes@4.1.2: scripts/patches/splitpanes@4.1.2.patch
+minimumReleaseAgeExclude:
+  - openai@7.51.0

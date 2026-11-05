@@ -8,6 +8,37 @@
 
 官方插件[v1.0.3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.3)仍为d5dd455，本批没有插件改动。本体[amd dev发布41872562719](https://github.com/0honus0/nexus-terminal/actions/runs/41872562719)success，dev与sha-2b0ab3db9208的digest一致，平台/revision均经实际GHCR核对，详见下节；此前指定实例的7262e8ac部署仍保持原范围，本轮不更新生产容器或数据库。真实运营商切网、手机软键盘、外部供应商及未列故障边界仍按[待验与外部依赖](../PLAN.md#待验与外部依赖)保留；受控回归不替代真实模型效果或吞吐实测。更早测试与镜像结果只保留为各自历史证据。
 
+## 依赖升级提交与正式远程验收（2026-11-05，进行中）
+
+用户授权提交推送并等待本次完整E2E。复核所有4份workflow引用的11种Actions，均与本轮官方release盘点一致；5份清单共121条依赖声明和catalog/overrides已核对。Vue3 draggable、TS6前端别名、SheetJS官方包及定制IronRDP保持实际适用来源，不将npm旧latest标签作为降级目标。
+
+只读核对上一轮 `e79cf838/41958423414` 为失败：质量、runner、Docker smoke及其它7个分片通过，browser shard5的390/320px两项提醒场景均在模型选择前被已打开的会话抽屉遮挡。原日志位于本轮产物目录 `remote/previous-e2e-failed.log`，堆栈是task-notices.spec→openNativeTask→selectAgentModel。源码确认use-native-threads.choose遇到同一已选项直接返回，Surface的selectNativeThread没有收到事件而未关闭抽屉。现同项选择仍发布已有selection，原runtime.selectThread继续按相同ID避免重复加载。保留原布局、样式、权限/在途写保护及场景断言；修复后根check、前端build通过，日志为check-submit.log与build-frontend-submit.log；全仓格式以format-submit.log为准，并用本次新SHA完整远程验收。
+
+后续实际SHA、远程run、日志、分片与结果在本节收口；进行中不记录为通过，不发布或部署。
+
+## 依赖、Node 与 Actions 升级（2026-11-05，静态与构建）
+
+工作区为 `main/e79cf838` 的本轮未提交变更。官方 Node release index 确认最新正式稳定版26.13.0 LTS（Lithium），27 alpha未采用；npm metadata确认pnpm12.16.1及升级版本，Actions按各官方最新正式release更新。Node官方linux-x64包的SHA256与SHASUMS一致，pnpm包完整性与npm metadata一致；盘点及下载信息集中 `/home/honus/nexus-task-artifacts/dependencies-upgrade-20261105`，保留至用户通知。工具链通过该目录 `runtime/env.sh` 显式注入，Node在 `tools/node-v26.13.0-linux-x64/bin`，pnpm在 `tools/pnpm-native/node_modules/.bin`；未改系统全局Node、shell配置或生产。
+
+升级13处直接依赖及minimatch覆盖，pnpm更新/dedupe生成环境/应用两文档锁文件。Vue3 draggable、SheetJS CDN、前端TS6别名及原三个补丁保留。pnpm12拒绝Monaco旧的无git头patch，只补头部后安装成功，原修复正文逐字保持；OpenAI7.51.0显式升级需要精确版本发布等待期例外，未关闭整体供应链校验。初次新store安装因原node_modules链接旧store被拒绝，按新store重新安装后成功；失败日志保留，不混作最终结果。未批准依赖附带的Agent skills。
+
+初次统一Docker构建退出0但ssh2可选原生模块失败：Node26的V8已删除Context::GetIsolate。采用上游45522bb8723d8ecf459a1d222086e56074c11682与a3a39d795a8d7ff43d5f33aafadccfc03466d044的Isolate/Nan ObjectWrap修复，合并成ssh2@1.17.0临时patch，未改变加密算法。主镜像与runner构建以CI_CHECK_FAIL=ssh2确认编译失败不会被可选安装隐藏。最终Docker日志明确Succeeded in building optional crypto binding，镜像为 `nexus-terminal:deps-20261105`；无网络一次性容器加载六个原生cipher/decipher导出及ssh2、p-limit、p-retry、openai、undici、node:sqlite均成功，Node版本v26.13.0，容器已自动移除。用户明确要求后续升级清除此patch，DEPLOYMENT、PLAN和workspace注释已登记退役条件：新ssh2正式版含修复时同次删除文件/注册/锁引用并重验编译与加载。
+
+执行结果：
+
+| 检查                  | 最终证据与结果                                                                                                                                                                                                                                                                                                         |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node/pnpm安装与锁文件 | install-patch-format.log、update-final.log、dedupe.log、install-ssh2-patch.log及frozen-final.log，最终均退出0；本机无make，ssh2可选编译在本机仍回退，Docker内严格原生构建验证单独列明。                                                                                                                                |
+| 根check与Shared check | check.log、shared-check.log退出0，覆盖Shared构建、Backend类型、双端ESLint及vue-tsc。                                                                                                                                                                                                                                   |
+| 双端生产build         | build.log退出0；原生补丁后的双端源码未改，最终Docker重新完成同版Shared/Backend/Frontend构建，docker-build-final.log退出0。                                                                                                                                                                                             |
+| E2E严格类型           | runtime/tsconfig-e2e.json保留实际配置，frontend vue-tsc --project该文件退出0，e2e-types-final.log；包含全部E2E、原前端paths及声明文件，strict/noEmit。既有Passkey CDP辅助器统一库自身send签名，不改功能断言。早期裸tsc调用缺Node类型、前端alias/声明且附加了无基线的noUnused检查，原失败日志保留，不修改项目配置规避。 |
+| Docker与依赖加载      | docker-metadata-final.json、docker-build-final.log及docker-imports.log；amd64构建和原生依赖加载退出0。runner-docker-check-final.log退出0；初次缺ARG默认值警告已补齐26.13.0后重验。                                                                                                                                     |
+| workflow与脚本        | 官方actionlint v1.7.12经release SHA256核对，全部workflow检查退出0（actionlint-final.log）；bash -n两份构建脚本通过。Node文件纳入E2E触发和runner指纹，四workflow已同步Actions及版本入口。                                                                                                                               |
+| 生产依赖审计          | audit-final.log退出0，info/low/moderate/high/critical全部0。                                                                                                                                                                                                                                                           |
+| 格式与diff            | format-final.log为最终全仓ESLint/Prettier，diff-check-final.log为最终git diff --check；均退出0。                                                                                                                                                                                                                       |
+
+p-limit/p-retry仍使用默认ESM接口和原具名重试条件，没有因SDK更新更改未知提交或取消结算语义；OpenAI及PDF消费者通过类型和生产build。没有DDL、数据维护或产品UI变更。未运行本地行为/浏览器/全量E2E，初次静态阶段未提交推送或触发远程workflow；用户随后授权提交推送及等待E2E，结果见上节，不发布或部署。完整E2E runner重建及离线缓存复用、ARM64和真实SSH/Agent/PDF行为留正式回归，本轮构建/加载不等于上述已通过。自建镜像与日志留规范目录及Docker本地构建存储，不删除其它镜像或用户产物。
+
 ## 聊天 GIF 与图片预览容量（2026-11-05，源码、静态与限定 CDP）
 
 环境为`/home/honus/nexus-terminal`的`main/92e7f996`未提交工作区，Node v22.23.1、pnpm 11.28.10；pnpm来自`/home/honus/nexus-task-artifacts/agent-chat-controls-20261104/tools/node_modules/.bin`。本轮日志集中保留`/home/honus/nexus-task-artifacts/gif-preview-settings-20261105`，不沿用前轮Agent历史或清理工作流的检查作为本轮证据。

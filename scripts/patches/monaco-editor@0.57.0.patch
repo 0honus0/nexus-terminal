@@ -1,3 +1,4 @@
+diff --git a/esm/vs/platform/hover/browser/hoverWidget.js b/esm/vs/platform/hover/browser/hoverWidget.js
 --- a/esm/vs/platform/hover/browser/hoverWidget.js
 +++ b/esm/vs/platform/hover/browser/hoverWidget.js
 @@ -498,40 +498,51 @@

@@ -54,5 +54,5 @@
     "prettier": "^3.9.10",
     "typescript-eslint": "^8.72.1"
   },
-  "packageManager": "pnpm@11.28.10"
+  "packageManager": "pnpm@12.16.1"
 }

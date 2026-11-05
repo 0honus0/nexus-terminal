@@ -18,13 +18,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .node-version
 
       - name: Verify cleanup retention and failure handling
         run: node --test scripts/maintenance/cleanup-history.test.mjs
 
       - name: Clean old versions, runs, artifacts and caches
-        uses: actions/github-script@v9
+        uses: actions/github-script@v9.0.0
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
