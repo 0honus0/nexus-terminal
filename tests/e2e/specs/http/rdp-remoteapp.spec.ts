@@ -109,10 +109,13 @@ const insertUserWithAdminPassword = (username: string): void => {
     const { DatabaseSync } = require('node:sqlite');
     const db = new DatabaseSync(process.argv[1]);
     try {
+      // Match the application's SQLite lock wait; keep fixture read/write in one admission.
+      db.exec('PRAGMA busy_timeout=5000; BEGIN IMMEDIATE');
       const source = db.prepare('SELECT password_hash FROM access_accounts WHERE username = ?').get(process.argv[2]);
       if (!source?.password_hash) throw new Error('Seed admin password hash is missing.');
-      const now = Math.floor(Date.now() / 1000);
+      const now = Date.now();
       db.prepare('INSERT INTO access_accounts(username,password_hash,created_at,updated_at) VALUES (?,?,?,?)').run(process.argv[3], source.password_hash, now, now);
+      db.exec('COMMIT');
     } finally {
       db.close();
     }
