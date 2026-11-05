@@ -11,14 +11,14 @@ type E2EFixtures = {
 	_e2eTestReset: void;
 };
 
-export const resetE2EBaseline = async (mode: E2EDatabaseMode) => {
+export const resetE2EBaseline = async (mode: E2EDatabaseMode, expectedShutdown?: 'execution_unknown') => {
 	const token = process.env.NEXUS_E2E_CONTROL_TOKEN;
 	if (!token) throw new Error('NEXUS_E2E_CONTROL_TOKEN is required');
 	// A reset with a lost response is unknown; never retry replacement of the baseline.
 	const response = await fetch(E2E_URLS.backendControlOrigin + '/reset', {
 		method: 'POST',
 		headers: { 'X-Nexus-E2E-Control': token, 'Content-Type': 'application/json' },
-		body: JSON.stringify({ mode }),
+		body: JSON.stringify({ mode, expectedShutdown }),
 		signal: AbortSignal.timeout(60_000),
 	});
 	baseExpect(response.ok, 'Backend-next isolated baseline reset failed: HTTP ' + response.status).toBeTruthy();

@@ -35,7 +35,7 @@ for (const width of [1280, 390, 320]) {
 				);
 				const tasks = hub.getByRole('complementary', { name: 'Tasks', exact: true });
 				await tasks.getByText('Execution details', { exact: true }).click();
-				await expect(tasks.getByText('printf notice-first', { exact: true })).toBeVisible();
+				await expect(tasks.getByText('1. printf notice-first', { exact: true })).toBeVisible();
 				await hub.getByRole('button', { name: 'Minimize Agent', exact: true }).click();
 				const notice = page.getByRole('dialog', { name: 'Task update', exact: true });
 				await expect(notice).toHaveCount(0);
@@ -47,7 +47,7 @@ for (const width of [1280, 390, 320]) {
 				expect(second.id).not.toBe(first.id);
 				await expect(notice).toBeVisible();
 				await expect(notice.getByText('Your approval is needed', { exact: true })).toBeVisible();
-				await expect(notice.getByText('printf notice-second', { exact: true })).toBeVisible();
+				await expect(notice.getByText('1. printf notice-second', { exact: true })).toBeVisible();
 				await expect(launcher).toBeFocused();
 				await expect(hub).toBeHidden();
 				const bounds = await notice.boundingBox();

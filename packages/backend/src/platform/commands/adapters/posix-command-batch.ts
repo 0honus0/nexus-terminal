@@ -51,6 +51,7 @@ export async function executePosixBatch(
 	let channel: MachineCommand | null = null;
 
 	let offStderr = () => {};
+	let offStdout = () => {};
 
 	let failure: unknown = null;
 
@@ -170,12 +171,36 @@ export async function executePosixBatch(
 				controller.abort();
 			}
 		});
-		for await (const chunk of command.readable) {
-			if (!Buffer.isBuffer(chunk)) {
-				throw new MachineDispatchFailure('unknown');
-			}
-			stdout.write(chunk);
-		}
+		// ssh2.destroy() only sends EOF/CLOSE. A remote process ignoring TERM may
+		// keep its readable open after the local outcome has become unknown. Stop
+		// consuming on that outcome so the machine owner can retire the transport;
+		// awaiting the stream first would prevent that owner from ever releasing it.
+		await new Promise<void>((resolve, reject) => {
+			const data = (chunk: unknown) => {
+				try {
+					if (!Buffer.isBuffer(chunk)) throw new MachineDispatchFailure('unknown');
+					stdout.write(chunk);
+				} catch (error) {
+					reject(error);
+				}
+			};
+			const end = () => resolve();
+			const error = (cause: unknown) => reject(cause);
+			offStdout = () => {
+				command.readable.off('data', data);
+				command.readable.off('end', end);
+				command.readable.off('error', error);
+				command.readable.pause();
+				resolve();
+			};
+			command.readable.on('data', data);
+			command.readable.once('end', end);
+			command.readable.once('error', error);
+			void command.outcome.then((outcome) => {
+				if (outcome.status === 'unknown') reject(new MachineDispatchFailure('unknown'));
+			}, reject);
+			if (command.readable.readableEnded) resolve();
+		});
 		const outcome = await command.outcome;
 		if (failure !== null) {
 			throw failure;
@@ -218,7 +243,11 @@ export async function executePosixBatch(
 	} finally {
 		clearTimeout(timer);
 		try {
-			offStderr();
+			try {
+				offStdout();
+			} finally {
+				offStderr();
+			}
 		} finally {
 			channel?.close();
 		}

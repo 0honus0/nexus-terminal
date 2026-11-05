@@ -4,8 +4,50 @@ import { test } from 'node:test';
 import { mkdtemp, mkdir, readFile, writeFile, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { PassThrough } from 'node:stream';
+import { PosixCommandAdapter } from '../../../packages/backend/dist/platform/commands/adapters/posix-command.js';
+import { MachineDispatchFailure } from '../../../packages/backend/dist/platform/ssh/ssh-port.js';
 import { openAgentExecution } from './agent-execution-fixture.mjs';
 import { openSshd, until, expectStatus } from '../remote/openssh-fixture.mjs';
+
+await test(
+	'Shell yield: an unknown channel outcome releases a readable that never ends',
+	{ timeout: 1000 },
+	async (t) => {
+		const readable = new PassThrough();
+		t.after(() => readable.destroy());
+		let settle;
+		const outcome = new Promise((resolve) => {
+			settle = resolve;
+		});
+		let offStderr = false;
+		let closed = 0;
+		const result = new PosixCommandAdapter().executeBatch(
+			async () => ({
+				readable,
+				outcome,
+				onStderr: () => () => {
+					offStderr = true;
+				},
+				close: () => {
+					closed++;
+				},
+			}),
+			[{ kind: 'shell', script: 'ignored-by-controlled-channel' }],
+			null,
+			'stop',
+			{ timeoutMs: 10000, maxOutputBytes: 1024 },
+		);
+		settle({ status: 'unknown', reason: 'cancelled' });
+		await assert.rejects(result, (error) => error instanceof MachineDispatchFailure && error.outcome === 'unknown');
+		assert.equal(readable.readableEnded, false);
+		assert.equal(readable.listenerCount('data'), 0);
+		assert.equal(readable.listenerCount('end'), 0);
+		assert.equal(readable.listenerCount('error'), 0);
+		assert.equal(offStderr, true);
+		assert.equal(closed, 1);
+	},
+);
 
 // Only model responses are scripted. HTTP, governance, SQLite, Job/Run owners and SSH are real.
 await test('Shell yield policy and mutation admission', { timeout: 60000 }, async (t) => {

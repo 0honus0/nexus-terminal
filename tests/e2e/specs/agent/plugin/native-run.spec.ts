@@ -117,13 +117,14 @@ test('remote signed Nexus Agent plugin installs, registers an Agent definition, 
 		const report = JSON.parse(result.text);
 		expect(report.marker).toBe('BATCH_OK');
 		expect(JSON.stringify(report.first)).toContain(String(connectionId));
-		expect(report.second.text).toContain('nexus-e2e-seed');
+		expect(report.second.items[0].value.text).toContain('nexus-e2e-seed');
 	});
 	await step('file_read uses the selected SSH capability and returns an actual content hash', async () => {
 		const report = JSON.parse((await execute(`E2E_NATIVE_PLUGIN_READ connection=${connectionId}`)).text);
 		const bytes = await readFile(path.resolve(__dirname, '../../../.tmp/ssh-root/seed.txt'));
-		expect(report.text).toBe(bytes.toString('utf8'));
-		expect(report.sha256).toBe(createHash('sha256').update(bytes).digest('hex'));
+		expect(report.items).toHaveLength(1);
+		expect(report.items[0].value.text).toBe(bytes.toString('utf8'));
+		expect(report.items[0].value.sha256).toBe(createHash('sha256').update(bytes).digest('hex'));
 	});
 	await step('identical commands in distinct tool calls execute as two deliberate operations', async () => {
 		const proof = path.resolve(__dirname, '../../../.tmp/ssh-root/duplicate-proof.txt');
@@ -131,9 +132,13 @@ test('remote signed Nexus Agent plugin installs, registers an Agent definition, 
 		try {
 			const result = await execute(`E2E_NATIVE_PLUGIN_DUPLICATE connection=${connectionId}`, ['shell_execute']);
 			const report = JSON.parse(result.text);
-			expect(report).toMatchObject({ marker: 'DUPLICATE_OK', first: { exitCode: 0 }, second: { exitCode: 0 } });
+			expect(report.marker).toBe('DUPLICATE_OK');
+			for (const result of [report.first, report.second]) {
+				expect(result.commands).toHaveLength(1);
+				expect(result.commands[0]).toMatchObject({ status: 'completed', exitCode: 0 });
+			}
 			expect(await readFile(proof, 'utf8')).toBe('duplicate-e2e\nduplicate-e2e\n');
-			expect(report.file.text).toBe('duplicate-e2e\nduplicate-e2e\n');
+			expect(report.file.items[0].value.text).toBe('duplicate-e2e\nduplicate-e2e\n');
 		} finally {
 			await rm(proof, { force: true });
 		}

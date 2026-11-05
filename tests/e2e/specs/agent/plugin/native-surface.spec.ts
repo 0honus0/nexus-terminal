@@ -187,7 +187,10 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 			});
 			const result = await finishNativeTask(task, run.id);
 			expect(result.run.status).toBe('completed');
-			expect(JSON.parse(result.text)).toMatchObject({ exitCode: 0, stdout: 'approval-e2e' });
+			const output = JSON.parse(result.text);
+			expect(output.status).toBe('completed');
+			expect(output.commands).toHaveLength(1);
+			expect(output.commands[0]).toMatchObject({ exitCode: 0, stdout: 'approval-e2e' });
 			await expect(article).toHaveCount(0);
 			await expect(
 				hub.locator('article[data-tool-name="shell_execute"][data-approval-status="approved"]'),

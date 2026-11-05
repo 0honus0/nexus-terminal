@@ -996,3 +996,9 @@ CI 后继提交 `62fb68f839f6facb5c25283a2edc0b459c9d8018` 仅修改 `scripts/e2
 官方插件 main `7f0498cf14fa50f7a664adf892ef041c62ad7fab` 已通过 [Validate 42074435148](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42074435148)，[打包 42074606017](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42074606017) 成功；下载后验证 catalog SHA/大小、全部文件 hash 与固定发布者 Ed25519 签名。Nexus Agent 升级 1.0.4，Full-stack 保持原 1.0.3，SDK 与权限声明不变。完整 E2E、发布结论待当前实际执行后补齐。
 
 本地完整 Backend 首轮 140 项通过，1 项因 Node 不接受空 --test-name-pattern 参数而启动失败；修正 wrapper 仅在非空时传入参数后，正式相同入口重跑该项通过（local-backend-corrected.log），实际 SQLite 脚本另有 phase2-final.log。完整 Browser 持续执行，首轮交付审批摘要及 A01 Provider 夹具仍读取旧单项字段，已按 paths[]/items[].value 更新并保留首次失败，后续用当前契约验收。远程 runner 同步增加官方 Docker 29.9.2 CLI，后端分片独占其临时 Actions 主机 socket，实际 Docker 用例不跳过或换成模拟成功。
+
+### 首轮完整回归修正
+
+本体实现提交 `8bff9305e3b9d3a31346c92906d787c565c7314e` 的 [远程 E2E 42076105731](https://github.com/0honus0/nexus-terminal/actions/runs/42076105731) 未通过，原日志与后端诊断产物保留。旧测试仍读取单项 Shell/Job/File 结果，任务提醒未计入命令批次预览序号，现逐项适配并保留退出码、内容 hash、审批/焦点和实际进程退出断言。本地相应六份浏览器文件修正后 32 项通过（local-browser-corrected.log）。ACP 取消实际保留 unknown 工具账本与关闭证据，进程已退出；正式夹具增加显式预期关闭校验并保留原数据库，不忽略清理或存储失败。
+
+远程另发现 ssh2 的 close/destroy 不一定结束忽略 TERM 的远端命令输出流。批次读取改为同时观察命令终态，未知终态解除本地读取监听后，由原机器 owner 退役并等待传输关闭；仍保留原 mutation blocked 和 Job unknown，不重放。新增“输出流永不结束”的确定性回归，原真实 SSH 的 held/blocked 用例不放宽等待期限；yield-final.log 共 9 项通过。CI 先前只安装 Chromium headless shell，Puppeteer 定向测试缺完整 Chromium，runner 改为安装同版本 Chromium 全套。完整当前 SHA 验收及镜像发布仍待后续结果。

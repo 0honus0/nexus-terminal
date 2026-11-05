@@ -7,6 +7,8 @@ import { join, resolve } from 'node:path';
 // Load the built entry; static API types come from its source, not generated JavaScript.
 const applicationEntry = '../../../packages/backend/dist/bootstrap/create-app.js';
 const { createApp } = await import(applicationEntry);
+const { ToolExecutionUnknown, ToolCleanupFailure } =
+	await import('../../../packages/backend/dist/modules/agent/agent-failure.js');
 
 /** @param {string} name */
 function required(name) {
@@ -79,23 +81,41 @@ function failureEvidence(cause, depth = 0) {
 	};
 }
 
-async function closeApplication() {
+/** @param {'execution_unknown' | undefined} expectedShutdown */
+async function closeApplication(expectedShutdown) {
+	let retainEvidence = false;
 	if (application) {
 		// Failed cleanup keeps the owner and its files; a new baseline must not hide it.
-		await application.close();
+		try {
+			await application.close();
+		} catch (error) {
+			if (expectedShutdown !== 'execution_unknown' || !onlyExecutionUnknown(error)) throw error;
+			retainEvidence = true;
+			process.stderr.write(
+				'E2E expected execution uncertainty: ' + JSON.stringify(failureEvidence(error)) + '\n',
+			);
+		}
+		if (expectedShutdown && !retainEvidence) throw new Error('Expected execution uncertainty was not reported');
 		application = null;
 	}
 	// Restore only after the original application has successfully released its resources.
 	restoreClock();
 	if (directory) {
-		await rm(directory, { recursive: true, force: true });
+		if (!retainEvidence) await rm(directory, { recursive: true, force: true });
 		directory = null;
 	}
 }
 
-/** @param {'seed' | 'empty'} mode */
-async function resetApplication(mode) {
-	await closeApplication();
+/** @param {unknown} error @returns {boolean} */
+function onlyExecutionUnknown(error) {
+	if (error instanceof ToolCleanupFailure) return false;
+	if (error instanceof ToolExecutionUnknown) return true;
+	return error instanceof AggregateError && error.errors.length > 0 && error.errors.every(onlyExecutionUnknown);
+}
+
+/** @param {'seed' | 'empty'} mode @param {'execution_unknown' | undefined} expectedShutdown */
+async function resetApplication(mode, expectedShutdown) {
+	await closeApplication(expectedShutdown);
 	if (shutdown) return;
 	await mkdir(dataRoot, { recursive: true });
 	directory = await mkdtemp(join(dataRoot, 'backend-'));
@@ -161,9 +181,9 @@ async function restartApplication() {
 	if (!shutdown) await openApplication();
 }
 
-/** @param {'seed' | 'empty' | 'restart'} mode */
-function startReset(mode) {
-	const task = mode === 'restart' ? restartApplication() : resetApplication(mode);
+/** @param {'seed' | 'empty' | 'restart'} mode @param {'execution_unknown' | undefined} expectedShutdown */
+function startReset(mode, expectedShutdown) {
+	const task = mode === 'restart' ? restartApplication() : resetApplication(mode, expectedShutdown);
 	resetting = task;
 	void task.then(
 		() => {
@@ -200,8 +220,9 @@ function resetMode(value) {
 		value === null ||
 		typeof value !== 'object' ||
 		Array.isArray(value) ||
-		Object.keys(value).length !== 1 ||
+		Object.keys(value).some((key) => key !== 'mode' && key !== 'expectedShutdown') ||
 		!('mode' in value) ||
+		('expectedShutdown' in value && (value.expectedShutdown !== 'execution_unknown' || value.mode === 'restart')) ||
 		(value.mode !== 'empty' && value.mode !== 'seed' && value.mode !== 'restart')
 	)
 		return null;
@@ -289,7 +310,14 @@ async function handleControl(request, response) {
 		response.writeHead(503).end();
 		return;
 	}
-	await startReset(mode);
+	const expectedShutdown =
+		value !== null &&
+		typeof value === 'object' &&
+		'expectedShutdown' in value &&
+		value.expectedShutdown === 'execution_unknown'
+			? 'execution_unknown'
+			: undefined;
+	await startReset(mode, expectedShutdown);
 	response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ reset: true, mode }));
 }
 

@@ -255,9 +255,13 @@ for (const signedSkill of [false, true]) {
 			const report = JSON.parse(result.text);
 			expect(report.launch.accepted).toBe(true);
 			readAgentId(report.launch.jobId);
-			expect(report.status.jobId).toBe(report.launch.jobId);
-			expect(report.settled).toMatchObject({ jobId: report.launch.jobId, state: 'completed' });
-			expect(report.settled.result).toMatchObject({ status: 'completed', exitCode: 0 });
+			expect(report.status.jobs).toHaveLength(1);
+			expect(report.status.jobs[0].jobId).toBe(report.launch.jobId);
+			expect(report.settled.jobs).toHaveLength(1);
+			expect(report.settled.jobs[0]).toMatchObject({ jobId: report.launch.jobId, state: 'completed' });
+			expect(report.settled.jobs[0].result.status).toBe('completed');
+			expect(report.settled.jobs[0].result.commands).toHaveLength(1);
+			expect(report.settled.jobs[0].result.commands[0]).toMatchObject({ status: 'completed', exitCode: 0 });
 			if (signedSkill) {
 				expect(report.skill.name).toBe('operations');
 				expect(report.skill.body).toContain('begin with bounded read-only inspection');
@@ -347,11 +351,17 @@ for (const scenario of [
 			const result = await finishNativeTask(task, run.id, ['shell_execute', 'file_patch']);
 			expect(result.run.status).toBe('completed');
 			const report = JSON.parse(result.text);
-			expect(report.before).toMatchObject({ status: 'nonzero', exitCode: 1 });
-			expect(report.before.stdout + report.before.stderr).toContain(scenario.before);
-			expect(report.after).toMatchObject({ status: 'completed', exitCode: 0 });
-			expect(report.after.stdout).toContain(scenario.after);
-			for (const output of [report.before.stdout, report.after.stdout]) {
+			expect(report.before.status).toBe('nonzero');
+			expect(report.before.commands).toHaveLength(1);
+			const before = report.before.commands[0];
+			expect(before).toMatchObject({ status: 'nonzero', exitCode: 1 });
+			expect(before.stdout + before.stderr).toContain(scenario.before);
+			expect(report.after.status).toBe('completed');
+			expect(report.after.commands).toHaveLength(1);
+			const after = report.after.commands[0];
+			expect(after).toMatchObject({ status: 'completed', exitCode: 0 });
+			expect(after.stdout).toContain(scenario.after);
+			for (const output of [before.stdout, after.stdout]) {
 				const identity = output.split('\n').find((line: string) => line.startsWith('{"serverPid":'));
 				if (!identity) {
 					expect(scenario.id).toBe('A03');
