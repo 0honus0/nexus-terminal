@@ -27,6 +27,15 @@ import {
 const headers = { Origin: E2E_URLS.frontendOrigin };
 const backendBaseUrl = E2E_URLS.frontendOrigin;
 
+test('RDP TLS certificate probing closes its sockets without terminating its process', async () => {
+	const result = await promisify(execFile)(
+		process.execPath,
+		[path.resolve(__dirname, '../../fixtures/remote/desktop-certificate-probe.mjs'), String(E2E_PORTS.rdp)],
+		{ timeout: 30_000, maxBuffer: 1024 * 1024 },
+	);
+	expect(result.stdout).toContain('PASS real RDP certificate probe and socket cleanup');
+});
+
 test('RDP certificate trust survives concurrent confirmation, revocation and canceled probes', async ({}, testInfo) => {
 	const result = await promisify(execFile)(
 		process.execPath,
