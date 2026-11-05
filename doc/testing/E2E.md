@@ -4,9 +4,9 @@
 
 ## 当前验收基线
 
-最新完整远程 [E2E 42035960955](https://github.com/0honus0/nexus-terminal/actions/runs/42035960955) 验证 `main/90bf154544ad086e06571f3f9e000d263934ddff`：594 项全部一次通过，质量检查、双端生产构建、Docker smoke 与8个测试分片全部 success；耗时更新任务成功，文档截图按条件跳过。按正式 Reporter 核对594条唯一 passed 记录，无失败、重试、flaky 或场景跳过。Backend132项，Browser1–7分别42/73/67/63/70/73/74项（包含隔离场景）；质量作业另含7项产物复用逻辑回归。单独重跑耗时汇总的 attempt2 也成功，确认复用 attempt1 的8份产物。后继 `0c0355a8` 仅更新耗时估算，不称其直接跑过本轮 E2E；最终文档收口不改变被测源码。首次网络失败、复制 job 的 attempt 重写及修正证据见 [本轮验收记录](HISTORY.md#e2e-耗时产物下载与重跑2026-11-05)。
+最新完整远程 [E2E 42082006188](https://github.com/0honus0/nexus-terminal/actions/runs/42082006188) 验证 `main/346def40812b4ef696a82467e403cdf7c326ba31`：610 项全部一次通过，质量检查、双端生产构建、Docker smoke 与8个测试分片全部 success；耗时更新任务成功，文档截图按条件跳过。按正式 Reporter 核对610条唯一 passed 记录，无失败、重试、flaky 或场景跳过。Backend141项，Browser1–7分别39/69/64/68/77/58/94项（包含隔离场景）；质量作业另含7项产物复用逻辑回归。后继 `01caa834` 仅更新耗时估算，不称其直接跑过本轮 E2E；文档收口不改变被测源码。首次失败、修正及本地复测见 [本轮验收记录](HISTORY.md#agent-工具批次与-run-连接资源2026-11-05)。
 
-官方插件 [v1.0.4](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.4) 的 main 为 `7f0498c`，验证与签名包检查通过，Nexus Agent 指引同步批次工具、分页和 Run 资源；Full-stack 保持 1.0.3，权限声明与 SDK 不变。本轮工作区回归和镜像交付见 [Agent 工具与资源记录](HISTORY.md#agent-工具批次与-run-连接资源2026-11-05)，未完成的当前回归不覆盖上方历史完整基线。真实运营商切网、手机软键盘、外部供应商及未列故障边界仍按 [待验与外部依赖](../PLAN.md#待验与外部依赖) 保留；受控回归不替代真实模型效果或吞吐实测。更早测试与镜像结果只保留为各自历史证据。
+官方插件 [v1.0.4](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.4) 的 main 为 `7f0498c`，验证与签名包检查通过，Nexus Agent 指引同步批次工具、分页和 Run 资源；Full-stack 保持 1.0.3，权限声明与 SDK 不变。本轮本地回归和镜像交付见 [Agent 工具与资源记录](HISTORY.md#agent-工具批次与-run-连接资源2026-11-05)。真实运营商切网、手机软键盘、外部供应商及未列故障边界仍按 [待验与外部依赖](../PLAN.md#待验与外部依赖) 保留；受控回归不替代真实模型效果或吞吐实测。更早测试与镜像结果只保留为各自历史证据。
 
 ## 阶段逻辑回归
 

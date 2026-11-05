@@ -993,12 +993,43 @@ CI 后继提交 `62fb68f839f6facb5c25283a2edc0b459c9d8018` 仅修改 `scripts/e2
 
 数据库保持 v1 签名不变，独立 v2 转换 Shell Job 结果为 commands[]，v3 转换历史交付/展示结果为 items[]；正常重启执行升级并验证第二次启动不重写，迁移失败回滚由 phase2 场景验证。快照身份改为完整有序迁移链签名，不接受不同链快照。
 
-官方插件 main `7f0498cf14fa50f7a664adf892ef041c62ad7fab` 已通过 [Validate 42074435148](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42074435148)，[打包 42074606017](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42074606017) 成功；下载后验证 catalog SHA/大小、全部文件 hash 与固定发布者 Ed25519 签名。Nexus Agent 升级 1.0.4，Full-stack 保持原 1.0.3，SDK 与权限声明不变。完整 E2E、发布结论待当前实际执行后补齐。
+官方插件 main `7f0498cf14fa50f7a664adf892ef041c62ad7fab` 已通过 [Validate 42074435148](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42074435148)，[打包 42074606017](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42074606017) 成功；下载后验证 catalog SHA/大小、全部文件 hash 与固定发布者 Ed25519 签名。[Nexus Agent 1.0.4](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.4) 已发布，Full-stack 保持原 1.0.3，SDK 与权限声明不变。
 
-本地完整 Backend 首轮 140 项通过，1 项因 Node 不接受空 --test-name-pattern 参数而启动失败；修正 wrapper 仅在非空时传入参数后，正式相同入口重跑该项通过（local-backend-corrected.log），实际 SQLite 脚本另有 phase2-final.log。完整 Browser 持续执行，首轮交付审批摘要及 A01 Provider 夹具仍读取旧单项字段，已按 paths[]/items[].value 更新并保留首次失败，后续用当前契约验收。远程 runner 同步增加官方 Docker 29.9.2 CLI，后端分片独占其临时 Actions 主机 socket，实际 Docker 用例不跳过或换成模拟成功。
+本地完整 Backend 首轮 140 项通过，1 项因 Node 不接受空 --test-name-pattern 参数而启动失败；修正 wrapper 仅在非空时传入参数后，正式相同入口重跑该项通过（local-backend-corrected.log），实际 SQLite 脚本另有 phase2-final.log。Browser 首轮交付审批摘要及 A01 Provider 夹具仍读取旧单项字段，已按 paths[]/items[].value 更新并保留首次失败，后续用当前契约验收。远程 runner 同步增加官方 Docker 29.9.2 CLI，后端分片独占其临时 Actions 主机 socket，实际 Docker 用例不跳过或换成模拟成功。
 
 ### 首轮完整回归修正
 
 本体实现提交 `8bff9305e3b9d3a31346c92906d787c565c7314e` 的 [远程 E2E 42076105731](https://github.com/0honus0/nexus-terminal/actions/runs/42076105731) 未通过，原日志与后端诊断产物保留。旧测试仍读取单项 Shell/Job/File 结果，任务提醒未计入命令批次预览序号，现逐项适配并保留退出码、内容 hash、审批/焦点和实际进程退出断言。本地相应六份浏览器文件修正后 32 项通过（local-browser-corrected.log）。ACP 取消实际保留 unknown 工具账本与关闭证据，进程已退出；正式夹具增加显式预期关闭校验并保留原数据库，不忽略清理或存储失败。
 
-远程另发现 ssh2 的 close/destroy 不一定结束忽略 TERM 的远端命令输出流。批次读取改为同时观察命令终态，未知终态解除本地读取监听后，由原机器 owner 退役并等待传输关闭；仍保留原 mutation blocked 和 Job unknown，不重放。新增“输出流永不结束”的确定性回归，原真实 SSH 的 held/blocked 用例不放宽等待期限；yield-final.log 共 9 项通过。CI 先前只安装 Chromium headless shell，Puppeteer 定向测试缺完整 Chromium，runner 改为安装同版本 Chromium 全套。完整当前 SHA 验收及镜像发布仍待后续结果。
+远程另发现 ssh2 的 close/destroy 不一定结束忽略 TERM 的远端命令输出流。批次读取改为同时观察命令终态，未知终态解除本地读取监听后，由原机器 owner 退役并等待传输关闭；仍保留原 mutation blocked 和 Job unknown，不重放。新增“输出流永不结束”的确定性回归，原真实 SSH 的 held/blocked 用例不放宽等待期限；yield-final.log 共 9 项通过。CI 先前只安装 Chromium headless shell，Puppeteer 定向测试缺完整 Chromium，runner 改为安装同版本 Chromium 全套。
+
+### 完整远程验收
+
+[E2E 42079275442](https://github.com/0honus0/nexus-terminal/actions/runs/42079275442) 在 `646f1e6db68dd91ef83132faec8b9de0fd49ae94` 完整成功：正式 Reporter 共610条唯一 passed，失败、重试、flaky、场景跳过均为0。Backend141项，Browser1–7分别35/92/76/65/76/61/64项；质量与格式、双端构建、Docker smoke、runner准备及耗时汇总全部成功，仅条件不满足的文档截图作业跳过。原日志、元数据和逐分片/项目统计为 remote-final-run.log、remote-final-run.json、remote-final-summary.json。
+
+本地较新 xrdp 仅在 DEBUG 输出实际 VNC 认证成功，旧夹具计数 INFO 镜像行导致真实认证成功后仍断言超时；`646f1e6d` 改计唯一 canonical DEBUG 行，既适用于本地新版本，也避免 CI 旧版本重复计数。此修正随上述完整远程回归通过。后继 `0fa770a8` 仅更新耗时估算，镜像运行代码与构建输入相对被测 SHA 完全一致。
+
+### 本地完整回归与连续场景
+
+local-browser-final.log 的完整469项运行保留463项通过和6项失败，不能称整轮全绿。该进程启动时仍加载旧桌面夹具，造成桌面3项及手机1项认证计数超时；另外2项 Pad 大输出恢复在读取日志前因保留的 unknown 数据库被误计为第二个活动实例而失败。原数据库、Trace、截图、录像和逐项日志已在服务全部停止后归档至 browser-final-first-181444。
+
+`346def40` 将显式预期 execution_unknown 的数据库移至 backend-data/evidence/，保留原名、数据库和围栏事实；正常活动实例仍只在 backend-* 命名空间，不放宽 suspend 日志唯一实例断言。源码仅改测试夹具，格式、ESLint、Node语法与diff检查通过；产品未知结果和清理失败的处理不变。
+
+随后按正式 `NEXUS_E2E_SUITE=all` 入口连续运行 ssh-acp-settings、rdp-remoteapp-fullscreen、suspend-log-compaction、pad-suspended-output、touch-workflows 五份文件，共22项全部通过（1.5分钟，local-final-corrected.log）。这轮先执行 ACP 取消并留下 evidence 数据库，再执行真实日志压缩、两个112MiB远端输出和原Shell恢复，以及桌面/手机RDP认证、文件批次取消和音频上下文退役；没有单独重置进程来绕过证据目录问题。服务停止后保留当前轮全部产物与原数据库，覆盖先前6项失败；本地全量加修正复测与远程完整一次通过分别记录，不合并成一次本地全绿。
+
+### 最终源码验收与审核结论
+
+包含证据目录修正的 `346def40812b4ef696a82467e403cdf7c326ba31` 已通过 [完整 E2E 42082006188](https://github.com/0honus0/nexus-terminal/actions/runs/42082006188)。正式 Reporter 核对610条唯一通过，失败、重试、flaky和场景跳过均为0；Backend141项，Browser1–7分别39/69/64/68/77/58/94项，质量/格式、构建、Docker smoke及耗时汇总均成功。最终原日志、元数据及统计为 remote-latest-run.log、remote-latest-run.json、remote-latest-summary.json；本地原失败与22项连续复测的对应关系见 local-final-summary.json。后继 `01caa834` 只更新耗时估算。
+
+| 审核表   | 结论与证据                                                                                                                                                                             |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 批次工具、分页、事件等待、Run资源、10分钟续期、结束排空和手动关闭确认均已接线；本地定向及最终完整610项回归通过。                                                                       |
+| 职责归属 | Remote Model持独占传输及技术转换，Tools持Run能力，Runs协调关闭与生命周期；前端复用全局确认组件，未改无关UI。                                                                           |
+| 类型归属 | 双端安全视图和关闭协议归Shared；内部应用、存储和技术对象独立定义并白名单转换，全部真实消费者同步。                                                                                     |
+| 完成证据 | 根check、完整格式和双端构建通过；SSH/ACP竞争与取消、Browser/Docker、真实SQLite迁移、1280/390/320px关闭流程及完整远程均有对应日志。插件和amd dev镜像已交付，不扩大真实设备/供应商保证。 |
+
+### 镜像交付
+
+[amd dev 发布 42081065621](https://github.com/0honus0/nexus-terminal/actions/runs/42081065621) 成功，源码 `0fa770a821324f16c7c9a62905025a41f592450d`；`ghcr.io/0honus0/nexus-terminal:dev` 与 `sha-0fa770a82132` 指向同一 index：`sha256:ffe28db0e71200d0ea08e0874db54b46d69211e1c281fe65ee7fe608c55d33d9`。从 GHCR 读取并校验 manifest/config 的 SHA-256，实际平台仅 linux/amd64，平台 digest 为 `sha256:ae6063f070cf119b00bb3e46a114bd4c00e2bf73ec33e0cf64653709d70375e8`，OCI revision 与发布源码一致。发布日志、元数据和注册表核验分别为 publish-run.log、publish-run.json、published-image.json；不把后续文档提交称为该镜像源码，未更新生产实例。
+
+发布后的 `346def40` 仅改测试证据目录，另有耗时估算和文档提交；已核对最终源码相对镜像源码的产品包、Dockerfile、锁文件、工具链和发布workflow无变化，镜像包含本次全部运行功能修改。测试目录、失败证据和专用任务目录保留至用户通知清理。
