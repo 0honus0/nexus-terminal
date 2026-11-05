@@ -28,6 +28,12 @@ Node 26.13.0 / pnpm 12.16.1：根 `pnpm run check`、`pnpm run format:all:check`
 
 Agent App 生命周期旧用例直接等待公网推荐目录，超过 10 秒而重试通过；现先通过真实 API 安装本地签名 Nexus Agent，验证推荐端点准确返回该安装。新增正式 E2E 执行已有真实 HTTP/SQLite 的官方目录契约测试，控制网络 Adapter 返回，保留固定公钥校验、语义版本排序、无兼容推荐和离线已安装读取，并新增未安装且目录离线时明确 503/provider_unavailable。不是公网下载成功证据；本地 round5 两项通过，产品 UI、生产超时和信任政策未改。远程整轮仍待重跑，失败日志及 round4/5 报告留在本轮任务目录。
 
+### 整轮远程验收与收口
+
+修正提交 `08fdd88dbcb18a1edf303826998705c9d5bb55d4` 的 [E2E 42001858049](https://github.com/0honus0/nexus-terminal/actions/runs/42001858049) 全部成功：根质量与格式、双端生产构建、Docker 部署 smoke、Backend 及七个 Browser 分片均通过。正式 Reporter 共 577 条唯一 passed，零失败、重试或场景跳过；Backend 131 项，Browser 1–7 分别 41/46/53/73/65/83/85。耗时估算更新成功，截图更新任务按条件跳过，非测试场景跳过。本轮相对上一完整基线新增 10 项正式 E2E；生产实现提交为 `c7709d80`，远程修正只涉及用例和验证文档，未削弱生产防护或修改已确认 UI。
+
+本地 round4/5 补跑三项通过后，根 check、全量格式、E2E vue-tsc 与 diff 再次通过。远程日志、准确 SHA/jobs JSON 和逐项统计保留为任务目录的 `remote-final-run.log/json`、`remote-final-summary.json`；首轮失败保留 `remote-first-run.log`。自动提交 `94603a33` 只调整 `scripts/e2e/duration-estimates.json`，已核对后快进同步，不将其作为直接被测 SHA。PLAN 清理本轮已验收施工区，自定义主题、真机和三语/身份交错未覆盖项承接待验区。无数据库变更，不需迁移；没有发布镜像、部署或操作生产数据。本地测试服务已退出，产物按要求保留至用户通知清理。
+
 ## 管理列表深浅主题信息层级（2026-11-05，源码与静态）
 
 `main/dc0b3c5f465a927e7a6c7ec44f0800fcbd757a1e` 当前工作区：基础 primary 采用中性色，原类型徽标和标签因此接近普通文字；部分次级字段又叠加透明度。现由 Foundation uiCatalog.css 提供名称、信息色类型、主题强调色标签和语义状态配色，六个源码文件覆盖连接、代理、通知、Docker 与工作区连接分组；不改全局按钮、布局、动作、Shared 或持久数据。已审宽窄屏标签、分组优先级、主题变量应用链及原状态投影。

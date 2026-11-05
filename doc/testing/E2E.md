@@ -4,9 +4,9 @@
 
 ## 当前验收基线
 
-最新完整远程[E2E 41986375724](https://github.com/0honus0/nexus-terminal/actions/runs/41986375724)验证`main/ae6919fd5bec8764913ffb662f15c3a32b39b8fb`：567项全部一次通过，质量检查、双端生产构建、Docker smoke与8个测试分片全部success；耗时任务成功、文档截图按条件跳过。按正式Reporter核对567条唯一passed记录，无失败、重试或场景跳过。Backend131项，Browser1–7分别38/71/43/67/74/64/79项（包含隔离场景）。后继a7f9aeb7只更新耗时估算，已审核产品源码一致，不称其直接跑过本轮E2E。最终文档收口不改变被测源码。
+最新完整远程 [E2E 42001858049](https://github.com/0honus0/nexus-terminal/actions/runs/42001858049) 验证 `main/08fdd88dbcb18a1edf303826998705c9d5bb55d4`：577 项全部一次通过，质量检查、双端生产构建、Docker smoke 与 8 个测试分片全部 success；耗时更新任务成功，文档截图按条件跳过。按正式 Reporter 核对 577 条唯一 passed 记录，无失败、重试或场景跳过。Backend 131 项，Browser 1–7 分别 41/46/53/73/65/83/85 项（包含隔离场景）。本轮新增 10 项正式 E2E，覆盖管理配色/工具栏、复制移动安全和官方推荐契约；首轮失败与修正见 [本轮验收记录](HISTORY.md#整轮远程验收与收口)。后继 `94603a33` 仅更新耗时估算，已核对产品源码和测试一致，不称其直接跑过本轮 E2E；最终文档收口不改变被测源码。本轮没有发布镜像或更新生产环境。
 
-官方插件[v1.0.3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.3)仍为d5dd455，该次交付没有插件改动。本体[amd dev发布41987211909](https://github.com/0honus0/nexus-terminal/actions/runs/41987211909)success，dev与sha-a7f9aeb79491的digest一致，平台/revision均经实际GHCR核对，见[发布交付记录](HISTORY.md#amd64-dev-发布与交付2026-11-05)；该次交付未更新生产容器或数据库。真实运营商切网、手机软键盘、外部供应商及未列故障边界仍按[待验与外部依赖](../PLAN.md#待验与外部依赖)保留；受控回归不替代真实模型效果或吞吐实测。更早测试与镜像结果只保留为各自历史证据。
+历史发布证据：官方插件[v1.0.3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.3)仍为d5dd455，该次交付没有插件改动。本体[amd dev发布41987211909](https://github.com/0honus0/nexus-terminal/actions/runs/41987211909)success，dev与sha-a7f9aeb79491的digest一致，平台/revision均经实际GHCR核对，见[发布交付记录](HISTORY.md#amd64-dev-发布与交付2026-11-05)；该次交付未更新生产容器或数据库。真实运营商切网、手机软键盘、外部供应商及未列故障边界仍按[待验与外部依赖](../PLAN.md#待验与外部依赖)保留；受控回归不替代真实模型效果或吞吐实测。更早测试与镜像结果只保留为各自历史证据。
 
 ## 阶段逻辑回归
 
