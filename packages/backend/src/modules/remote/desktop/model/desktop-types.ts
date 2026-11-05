@@ -1,4 +1,8 @@
-import type { RemoteDesktopProtocol, RemoteDesktopErrorCode } from '@nexus-terminal/shared/remote/desktop/values';
+import type {
+	RemoteDesktopProtocol,
+	RemoteDesktopErrorCode,
+	RdpCertificateReason,
+} from '@nexus-terminal/shared/remote/desktop/values';
 
 export interface DesktopDisplay {
 	width: number | null;
@@ -12,6 +16,7 @@ export interface DesktopTicketResult {
 }
 
 export interface DesktopConnection {
+	certificateFingerprint: string | null;
 	protocol: RemoteDesktopProtocol;
 	host: string;
 	port: number;
@@ -20,6 +25,7 @@ export interface DesktopConnection {
 }
 
 export interface DesktopTicket {
+	readonly certificateFingerprint: string | null;
 	readonly userId: number;
 	readonly tokenDigest: string;
 	readonly targetId: number;
@@ -27,6 +33,37 @@ export interface DesktopTicket {
 	readonly protocol: RemoteDesktopProtocol;
 	readonly expiresAt: number;
 	readonly display: DesktopDisplay;
+}
+
+export interface DesktopCertificate {
+	fingerprint: string;
+	subject: string;
+	issuer: string;
+	validFrom: number;
+	validTo: number;
+	systemTrusted: boolean;
+	hostMatches: boolean;
+}
+
+export interface DesktopCertificateChallenge {
+	targetId: number;
+	host: string;
+	port: number;
+	fingerprint: string;
+	previousFingerprint: string | null;
+	subject: string;
+	issuer: string;
+	validFrom: number;
+	validTo: number;
+	reason: RdpCertificateReason;
+}
+
+export interface DesktopCertificateApproval {
+	host: string;
+	port: number;
+	fingerprint: string;
+	previousFingerprint: string | null;
+	remember: boolean;
 }
 
 /** Instance-bound application capability; raw HTTP/WS handles stay in Model. */

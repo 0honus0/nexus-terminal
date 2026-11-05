@@ -1,5 +1,44 @@
-import { expect, type Page } from './fixtures';
+import { expect, type Page, type APIRequestContext } from './fixtures';
 import { E2E_URLS } from './test-env';
+import { readRemoteDesktopFailureResponse } from '../../../packages/shared/src/remote/desktop/http-codec';
+
+/** Explicitly approve the real fixture certificate; never suppress verification in product code. */
+export async function createTestRdpSession(request: APIRequestContext, id: number, query = '', remember = false) {
+	const url = `/api/v1/connections/${id}/rdp-session${query}`;
+	const headers = { Origin: E2E_URLS.frontendOrigin };
+	const initial = await request.post(url, { headers });
+	if (initial.status() === 200) return initial;
+	expect(initial.status(), await initial.text()).toBe(409);
+	const failure = readRemoteDesktopFailureResponse(await initial.json());
+	if (failure.code !== 'certificate_required') throw new Error('Expected fixture certificate confirmation');
+	const certificate = failure.certificate;
+	expect(initial.headers()['cache-control']).toBe('no-store');
+	const confirmed = await request.post(url, {
+		headers,
+		data: {
+			certificate: {
+				host: certificate.host,
+				port: certificate.port,
+				fingerprint: certificate.fingerprint,
+				previousFingerprint: certificate.previousFingerprint,
+				remember,
+			},
+		},
+	});
+	expect(confirmed.status(), await confirmed.text()).toBe(200);
+	return confirmed;
+}
+
+export async function confirmTestRdpCertificate(page: Page, remember = false): Promise<void> {
+	const dialog = page.getByRole('dialog', { name: 'Confirm RDP server certificate', exact: true });
+	await expect(dialog).toBeVisible();
+	await expect(dialog).toContainText('SHA-256');
+	const checkbox = dialog.getByRole('checkbox');
+	await expect(checkbox).not.toBeChecked();
+	if (remember) await checkbox.check();
+	await dialog.getByRole('button', { name: 'Continue connecting', exact: true }).click();
+	await expect(dialog).toBeHidden();
+}
 
 export async function observeDesktopBinaryTraffic(page: Page): Promise<() => Promise<void>> {
 	let receivedBinary = 0;

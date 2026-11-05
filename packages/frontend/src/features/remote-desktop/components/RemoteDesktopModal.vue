@@ -20,6 +20,7 @@
 	import { createRemoteDesktopController } from '../model/remote-desktop-controller';
 	import type {
 		RemoteDesktopConnection,
+		RemoteDesktopCertificate,
 		RemoteDesktopDisplay,
 		RemoteDesktopState,
 		RemoteTouchMode,
@@ -32,6 +33,7 @@
 	} from '@nexus-terminal/shared/remote/desktop/values';
 	import { registerAuthenticatedSessionOwner } from '@/shared/session/public';
 	import RdpFileClipboard from './RdpFileClipboard.vue';
+	import RdpCertificateDialog from './RdpCertificateDialog.vue';
 
 	const touchModeStorage = {
 		namespace: 'remote-desktop.touch-mode',
@@ -132,9 +134,34 @@
 	let mobileInputComposing = false;
 	let active = true;
 	let viewRevision = 0;
+	const certificateChallenge = ref<RemoteDesktopCertificate | null>(null);
+	let completeCertificate: ((choice: { remember: boolean } | null) => void) | null = null;
+
+	const chooseCertificate = (choice: { remember: boolean } | null) => completeCertificate?.(choice);
+
 	const controller = createRemoteDesktopController({
 		api: remoteDesktopApi,
 		createPeer: createBrowserDesktop,
+
+		confirmCertificate(certificate, signal) {
+			if (signal.aborted) return Promise.resolve(null);
+			completeCertificate?.(null);
+			return new Promise((resolve) => {
+				const finish = (choice: { remember: boolean } | null) => {
+					signal.removeEventListener('abort', cancel);
+					certificateChallenge.value = null;
+					completeCertificate = null;
+					resolve(choice);
+				};
+
+				const cancel = () => finish(null);
+
+				completeCertificate = finish;
+				certificateChallenge.value = certificate;
+				signal.addEventListener('abort', cancel, { once: true });
+				if (signal.aborted) cancel();
+			});
+		},
 
 		onState(next, failure) {
 			state.value = next;
@@ -368,7 +395,7 @@
 	};
 
 	const handleFullscreenKeydown = (event: KeyboardEvent) => {
-		if (fileClipboardOpen.value) return;
+		if (fileClipboardOpen.value || certificateChallenge.value) return;
 		if (
 			event.key === 'Escape' &&
 			floatingTools.value &&
@@ -866,6 +893,13 @@
 				:title="t('remoteDesktopModal.resize')"
 				:aria-label="t('remoteDesktopModal.resize')"
 				@pointerdown.stop="resize.startResize"
+			/>
+			<RdpCertificateDialog
+				v-if="certificateChallenge"
+				:certificate="certificateChallenge"
+				:teleport="!fullscreen"
+				@cancel="chooseCertificate(null)"
+				@approve="chooseCertificate"
 			/>
 		</div>
 	</UiOverlayPanel>

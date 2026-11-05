@@ -184,6 +184,8 @@ try {
 		const attempts = [];
 		const states = [];
 		const owner = createRemoteDesktopController({
+			confirmCertificate: async () => null,
+
 			api: {
 				create(_id, _protocol, _display, signal) {
 					return new Promise((resolve, reject) => requests.push({ resolve, reject, signal }));
@@ -407,6 +409,8 @@ try {
 				document.body.append(host);
 				const fixture = { host, state: '', connectionId: null, failure: null };
 				fixture.owner = createRemoteDesktopController({
+					confirmCertificate: async () => ({ remember: false }),
+
 					api: remoteDesktopApi,
 					createPeer: createBrowserDesktop,
 

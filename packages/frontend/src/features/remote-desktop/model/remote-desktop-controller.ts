@@ -1,5 +1,9 @@
 import {
 	RemoteDesktopFailure,
+	RemoteDesktopCertificateRequired,
+	type RemoteDesktopCertificate,
+	type RemoteDesktopCertificateApproval,
+	type RemoteDesktopSession,
 	type RemoteDesktopApi,
 	type RemoteDesktopConnection,
 	type RemoteDesktopDisplay,
@@ -14,6 +18,10 @@ interface ControllerOptions {
 	createPeer: RemoteDesktopPeerFactory;
 	onState(state: RemoteDesktopState, failure: RemoteDesktopFailure | null): void;
 	onConnected(connectionId: number): void;
+	confirmCertificate(
+		certificate: RemoteDesktopCertificate,
+		signal: AbortSignal,
+	): Promise<{ remember: boolean } | null>;
 }
 
 export function createRemoteDesktopController(options: ControllerOptions) {
@@ -47,6 +55,32 @@ export function createRemoteDesktopController(options: ControllerOptions) {
 		options.onState('error', result);
 	};
 
+	const createSession = async (
+		connection: RemoteDesktopConnection,
+		display: RemoteDesktopDisplay,
+		signal: AbortSignal,
+	): Promise<RemoteDesktopSession> => {
+		let approval: RemoteDesktopCertificateApproval | null = null;
+		while (!signal.aborted) {
+			try {
+				return await options.api.create(connection.id, connection.type, display, signal, approval);
+			} catch (cause) {
+				if (!(cause instanceof RemoteDesktopCertificateRequired) || signal.aborted) throw cause;
+				const choice = await options.confirmCertificate(cause.certificate, signal);
+				if (choice === null || signal.aborted) throw new RemoteDesktopFailure('cancelled', 'not_dispatched');
+				const certificate = cause.certificate;
+				approval = {
+					host: certificate.host,
+					port: certificate.port,
+					fingerprint: certificate.fingerprint,
+					previousFingerprint: certificate.previousFingerprint,
+					remember: choice.remember,
+				};
+			}
+		}
+		throw new RemoteDesktopFailure('cancelled', 'not_dispatched');
+	};
+
 	return {
 		close,
 
@@ -66,7 +100,7 @@ export function createRemoteDesktopController(options: ControllerOptions) {
 			pending = controller;
 			options.onState('connecting', null);
 			try {
-				const session = await options.api.create(connection.id, connection.type, display, controller.signal);
+				const session = await createSession(connection, display, controller.signal);
 				if (revision !== generation || controller.signal.aborted) return;
 				const current = options.createPeer({
 					hasTouch: input.hasTouch,
@@ -99,6 +133,14 @@ export function createRemoteDesktopController(options: ControllerOptions) {
 				current.connect(session, display);
 			} catch (cause) {
 				if (revision !== generation) return;
+				if (
+					cause instanceof RemoteDesktopFailure &&
+					cause.code === 'cancelled' &&
+					cause.outcome === 'not_dispatched'
+				) {
+					close();
+					return;
+				}
 				const failure =
 					cause instanceof RemoteDesktopFailure
 						? cause

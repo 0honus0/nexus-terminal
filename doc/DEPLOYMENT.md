@@ -1,6 +1,6 @@
 # 部署与更新
 
-默认使用 Docker Compose。唯一后端为 `packages/backend`（原 backend-next），启动产物 `dist/main.js`；前后端消费 Shared。旧实现从 Git 历史读取，不提供旧库、旧快照或旧环境变量的兼容层。功能见 [USAGE](USAGE.md)，待验范围见 [实施方案](PLAN.md)。
+默认使用 Docker Compose。唯一后端为 `packages/backend`（原 backend-next），启动产物 `dist/main.js`；前后端消费 Shared。旧实现从 Git 历史读取，业务运行路径不保留旧值或旧环境变量兼容层；下一版本起的数据库升级策略见下方迁移章节。功能见 [USAGE](USAGE.md)，待验范围见 [实施方案](PLAN.md)。
 
 ## 部署
 
@@ -15,7 +15,7 @@ cp .env.example .env
 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
 ```
 
-把生成结果保存为 `.env` 的 `NEXUS_ENCRYPTION_KEY`，并设置实际 `NEXUS_PUBLIC_ORIGIN`。部署文件与所选镜像必须来自同一版本；合并源码不代表镜像已发布。重构版本使用空数据目录，不直接挂载旧产品数据库。在受控网络完成首次管理员初始化后再开放公网。
+把生成结果保存为 `.env` 的 `NEXUS_ENCRYPTION_KEY`，并设置实际 `NEXUS_PUBLIC_ORIGIN`。部署文件与所选镜像必须来自同一版本；合并源码不代表镜像已发布。首次部署由程序初始化数据库。在受控网络完成首次管理员初始化后再开放公网。
 
 ```bash
 docker compose up -d
@@ -39,9 +39,9 @@ docker compose logs --tail=100 backend
 | `.env`                       | Compose 插值和 Backend env_file；首次初始化设置以后以持久配置为准                          |
 | `NEXUS_IPV6_SUBNET/GATEWAY`  | 默认 `fd01::/80` / `fd01::1`，与宿主冲突时修改                                             |
 
-数据库文件的父目录即实例数据目录；每个实例使用独立目录。资源目录不再拼接 `.db.appearance/.db.artifacts/.db.plugins`，本次布局为破坏性升级，不自动迁移旧目录或混用旧数据库；以新的空数据目录启动，旧目录需由操作者自行保管，程序不删除旧数据。Compose 的数据库固定为容器内 `/app/data/nexus-terminal.db`，通过 `.env` 的 `NEXUS_DATA_DIR` 配置宿主目录，默认仍为 `./data`。运行中可能出现 SQLite WAL/SHM、恢复日志和临时目录，勿手动清除正在使用的恢复文件。
+数据库文件的父目录即实例数据目录；每个实例使用独立目录。资源目录使用 `appearance/`、`artifacts/`、`plugins/`，实例数据与密钥一起保留。Compose 的数据库固定为容器内 `/app/data/nexus-terminal.db`，通过 `.env` 的 `NEXUS_DATA_DIR` 配置宿主目录，默认仍为 `./data`。运行中可能出现 SQLite WAL/SHM、恢复日志和临时目录，勿手动清除正在使用的恢复文件。
 
-当前首版数据库仅保留 v1 完整结构；当前结构包含远端依赖安装的 `tools` 机器突变来源、Agent Images 协议、上下文摘要/自动标题、模型响应收讫标记、Run 级批准策略和子任务模型请求数的正安全整数约束、每步完整宿主/插件指引快照，结构签名为 `backend-next-v1-initial-20261104-agent-instructions`。即使旧开发库也标为 v1，亦不能据此视为兼容；启用当前工作区构建前使用独立空数据目录并保管原目录与密钥，不把旧库/旧快照直接混入新实例。程序不会自动删除旧数据或执行开发期升级。
+当前代码的数据库基线为 v1，结构签名为 `backend-next-v1-initial-20261105-rdp-certificates`，精确定义以 `packages/backend/src/bootstrap/schema.ts` 为准。当前实现仍只有 v1，下一版本迁移交付与验收见 [PLAN](PLAN.md#待实现与条件维护)。
 
 首次 Passkey 站点从公开 Origin 推导；多站点可用 `NEXUS_PASSKEY_SITES` JSON 初始化。CAPTCHA 和 Passkey 站点配置在设置页维护，按界面提示重启激活；IP 白名单、登录封禁策略、监控周期和资源缓存 TTL 保存后热更新。白名单保存前确认当前来源仍被允许，保留部署恢复入口。插件仓库与信任 Publisher 由管理接口配置，不使用旧 catalog 环境变量。写操作依赖当前会话、同源 Origin/Fetch Metadata，不使用旧 CSRF token 端点。
 
@@ -84,9 +84,15 @@ location / {
 
 保留公开 Host/协议并启用 WebSocket。HTTPS 支持 Passkey、剪贴板等浏览器能力。代理必须传递实际观察到的来源，并用网络隔离阻止绕过；宿主 Backend 默认信任 loopback，外部代理使用精确 IP/最小 CIDR，不接受旧 hop 数配置。Compose 默认启用 IPv6，宿主不支持时同步关闭 `enable_ipv6` 和 IPv6 IPAM。
 
-## 备份与更新
+## 数据库迁移（从下一版本起）
 
-更新至包含图片预览容量设置的版本时，已有`preferences_presentation.value_json`的`preferences`必须显式增加`imagePreviewMaxMiB`（整数MiB，默认20，0取消该项限制），并维护对应记录版本，避免旧编辑草稿覆盖新记录；旧导入快照同样需要先维护新字段。严格解码不自动补齐旧数据，无表结构变更。本轮只记录升级前提，不操作现有数据库。
+按 [H-21](rules/HUMAN.md#人工规则列表)，每条数据库结构、CHECK 约束或持久数据变更新增一条独立迁移，使用连续版本号、固定签名和执行记录。`dev` 与 `latest` 使用同一条迁移链，不在正式发布前合并或压缩迁移；没有数据库变更时不增加空迁移。已执行或已发布的迁移及签名保持不变，后续修正追加新迁移。
+
+旧数值、单位、JSON 字段和约束通过 SQL 或迁移脚本转换，业务代码及持久解码只接受新格式。真实 SQL 仍由所属 SQLite Adapter 持有，模块 migrations 与 Bootstrap 负责顺序编排，复用现有 `SchemaMigration` 与 `schema_version`。脚本只在对应迁移应用时执行；迁移和版本记录同事务提交，失败不写入成功标记，未知提交先核对持久结果，不盲目重放。重复启动校验已应用版本和签名，只执行尚未应用的迁移。
+
+交付前验证上一发布基线升级、多条迁移顺序执行、连续 dev 升级、重复启动跳过、空库安装、数据保留、完整性/外键、失败回滚及快照恢复边界。后续功能文档记录对应迁移版本、转换内容与验证结果，升级流程由版本内迁移承担。
+
+## 备份与更新
 
 ```bash
 docker compose stop backend

@@ -46,7 +46,7 @@
       "unauthenticated": "Sign in again.",
       "forbidden": "Desktop access is not permitted.",
       "not_found": "Connection not found.",
-      "conflict": "The target changed or its route is unsupported. Only direct desktop connections are supported.",
+      "conflict": "The connection configuration, route or certificate trust has changed. Check it and reconnect.",
       "limit_exceeded": "Desktop capacity is full. Try again after another session closes.",
       "remote_unavailable": "The desktop service is unavailable.",
       "operation_unknown": "The remote operation could not be confirmed.",
@@ -54,7 +54,8 @@
       "request_failed": "The request could not be completed.",
       "cancelled": "The request was cancelled.",
       "input_failed": "Input or clipboard synchronization failed.",
-      "cleanup_failed": "Local cleanup could not be confirmed. Close this window before opening another desktop."
+      "cleanup_failed": "Local cleanup could not be confirmed. Close this window before opening another desktop.",
+      "certificate_required": "Confirm RDP server certificate"
     },
     "fileClipboard": {
       "title": "File clipboard",
@@ -68,6 +69,22 @@
       "directory": "Folder",
       "failed": "File transfer did not complete. Check the remote clipboard and destination folder, then select or copy the files again.",
       "download": "Download"
+    },
+    "certificate": {
+      "title": "Confirm RDP server certificate",
+      "target": "Target",
+      "subject": "Issued to",
+      "issuer": "Issued by",
+      "validity": "Valid period",
+      "previous": "Previous SHA-256",
+      "remember": "Remember this certificate; ask again if it changes",
+      "connect": "Continue connecting",
+      "reasons": {
+        "untrusted": "The certificate authority could not be verified. Check the fingerprint and confirm you trust this server before connecting.",
+        "expired": "The certificate is expired or not yet valid. Check its fingerprint and the server clock before connecting.",
+        "hostname_mismatch": "The certificate does not match the connection address. Check the fingerprint to confirm this is the expected server.",
+        "changed": "The server certificate differs from the remembered certificate. Verify why it changed; an unexpected change may indicate impersonation."
+      }
     }
   },
   "vncModal": {

@@ -1,4 +1,8 @@
-import type { RemoteDesktopErrorCode, RemoteDesktopProtocol } from '@nexus-terminal/shared/remote/desktop/values';
+import type {
+	RemoteDesktopErrorCode,
+	RemoteDesktopProtocol,
+	RdpCertificateReason,
+} from '@nexus-terminal/shared/remote/desktop/values';
 
 export interface RemoteDesktopConnection {
 	id: number;
@@ -39,12 +43,40 @@ export class RemoteDesktopFailure extends Error {
 	}
 }
 
+export interface RemoteDesktopCertificate {
+	connectionId: number;
+	host: string;
+	port: number;
+	fingerprint: string;
+	previousFingerprint: string | null;
+	subject: string;
+	issuer: string;
+	validFrom: number;
+	validTo: number;
+	reason: RdpCertificateReason;
+}
+
+export interface RemoteDesktopCertificateApproval {
+	host: string;
+	port: number;
+	fingerprint: string;
+	previousFingerprint: string | null;
+	remember: boolean;
+}
+
+export class RemoteDesktopCertificateRequired extends RemoteDesktopFailure {
+	constructor(readonly certificate: RemoteDesktopCertificate) {
+		super('certificate_required', 'confirmed');
+	}
+}
+
 export interface RemoteDesktopApi {
 	create(
 		connectionId: number,
 		protocol: RemoteDesktopProtocol,
 		display: RemoteDesktopDisplay,
 		signal: AbortSignal,
+		approval?: RemoteDesktopCertificateApproval | null,
 	): Promise<RemoteDesktopSession>;
 }
 

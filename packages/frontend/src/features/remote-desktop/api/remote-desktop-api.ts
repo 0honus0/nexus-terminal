@@ -3,13 +3,18 @@ import {
 	readRemoteDesktopSessionPath,
 	readRemoteDesktopSessionResponse,
 	readRemoteDesktopFailureResponse,
+	readRemoteDesktopSessionRequest,
 } from '@nexus-terminal/shared/remote/desktop/http-codec';
 import { REMOTE_DESKTOP_RESPONSE_MAX_BYTES } from '@nexus-terminal/shared/remote/desktop/values';
 import type { RemoteDesktopErrorCode } from '@nexus-terminal/shared/remote/desktop/values';
 import { requestJson } from '@/client/http/json-client';
 import { HttpRequestFailure } from '@/client/http/request-failure';
-import { toDisplayRequest, toSession } from '../model/remote-desktop-mapper';
-import { RemoteDesktopFailure, type RemoteDesktopApi } from '../model/remote-desktop-types';
+import { toDisplayRequest, toSession, toCertificate, toCertificateRequest } from '../model/remote-desktop-mapper';
+import {
+	RemoteDesktopFailure,
+	RemoteDesktopCertificateRequired,
+	type RemoteDesktopApi,
+} from '../model/remote-desktop-types';
 
 function matchesStatus(code: RemoteDesktopErrorCode, status: number): boolean {
 	switch (code) {
@@ -22,6 +27,7 @@ function matchesStatus(code: RemoteDesktopErrorCode, status: number): boolean {
 		case 'not_found':
 			return status === 404;
 		case 'conflict':
+		case 'certificate_required':
 			return status === 409;
 		case 'limit_exceeded':
 			return status === 413 || status === 429;
@@ -32,8 +38,9 @@ function matchesStatus(code: RemoteDesktopErrorCode, status: number): boolean {
 }
 
 export const remoteDesktopApi: RemoteDesktopApi = {
-	async create(connectionId, protocol, display, signal) {
+	async create(connectionId, protocol, display, signal, approval = null) {
 		let query: URLSearchParams;
+		const body = toCertificateRequest(approval);
 		try {
 			readRemoteDesktopSessionPath({ id: String(connectionId) });
 			if (!Number.isSafeInteger(connectionId) || (protocol !== 'RDP' && protocol !== 'VNC')) {
@@ -46,6 +53,9 @@ export const remoteDesktopApi: RemoteDesktopApi = {
 				dpi: String(request.dpi),
 			});
 			readRemoteDesktopDisplay(query);
+			readRemoteDesktopSessionRequest(body);
+			if (protocol !== 'RDP' && approval !== null)
+				throw new RemoteDesktopFailure('invalid_input', 'not_dispatched');
 		} catch (cause) {
 			throw new RemoteDesktopFailure('invalid_input', 'not_dispatched', { cause });
 		}
@@ -55,7 +65,8 @@ export const remoteDesktopApi: RemoteDesktopApi = {
 			response = await requestJson({
 				method: 'POST',
 				url: '/api/v1/connections/' + connectionId + '/' + path + '?' + query,
-				maxRequestBytes: 1,
+				body,
+				maxRequestBytes: REMOTE_DESKTOP_RESPONSE_MAX_BYTES,
 				maxResponseBytes: REMOTE_DESKTOP_RESPONSE_MAX_BYTES,
 				signal,
 			});
@@ -74,6 +85,11 @@ export const remoteDesktopApi: RemoteDesktopApi = {
 			const failure = readRemoteDesktopFailureResponse(response.body);
 			if (!matchesStatus(failure.code, response.status)) {
 				throw new RemoteDesktopFailure('protocol_failure', 'unknown');
+			}
+			if (failure.code === 'certificate_required') {
+				if (protocol !== 'RDP' || failure.certificate.connectionId !== connectionId)
+					throw new RemoteDesktopFailure('protocol_failure', 'unknown');
+				throw new RemoteDesktopCertificateRequired(toCertificate(failure.certificate));
 			}
 			throw new RemoteDesktopFailure(
 				failure.code,

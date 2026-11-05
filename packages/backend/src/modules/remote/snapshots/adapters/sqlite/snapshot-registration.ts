@@ -4,6 +4,7 @@ import {
 	restoreSnapshotRow,
 } from '../../../../../platform/storage/sqlite/adapters/snapshot-row.js';
 import { SnapshotFailure } from '../../../../../platform/storage/sqlite/snapshot-types.js';
+import { readCertificateTrustRow } from '../../../desktop/adapters/sqlite/certificate-sql.js';
 import { mutationRow, mutationEvidenceRow } from '../../../machines/adapters/sqlite/mutation-row.js';
 import type { SqlRow } from '../../../../../platform/storage/sqlite/worker-types.js';
 
@@ -23,6 +24,11 @@ function groupByClaim(rows: readonly SqlRow[], ids: ReadonlySet<string>): Map<st
 /** Fixed current table/column coverage owned by remote; no runtime schema discovery. */
 export function registerRemoteSnapshot(): SnapshotRegistration {
 	const tables: SnapshotTable[] = [
+		{
+			name: 'remote_desktop_certificates',
+			partitionColumn: 'user_id',
+			columns: ['user_id', 'host', 'port', 'fingerprint', 'confirmed_at'],
+		},
 		{
 			name: 'remote_machine_mutation_claims',
 			columns: [
@@ -58,6 +64,9 @@ export function registerRemoteSnapshot(): SnapshotRegistration {
 		tables,
 
 		validate(rows) {
+			for (const row of rows.get('remote_desktop_certificates') ?? []) {
+				readCertificateTrustRow(row);
+			}
 			const claims = rows.get('remote_machine_mutation_claims') ?? [];
 			const evidence = rows.get('remote_machine_mutation_evidence') ?? [];
 			const locks = rows.get('remote_machine_mutations') ?? [];

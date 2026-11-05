@@ -1,5 +1,7 @@
 import {
 	authenticateTestRdp,
+	createTestRdpSession,
+	confirmTestRdpCertificate,
 	observeDesktopAudioContexts,
 	observeDesktopBinaryTraffic,
 	revealDesktopControls,
@@ -124,10 +126,7 @@ test('RDP browser client preserves settings, clipboard and browser fullscreen', 
 		});
 
 		await step('RDP session configuration is delivered without caching', async () => {
-			const session = await context.request.post(
-				`/api/v1/connections/${connectionId}/rdp-session?width=1440&height=900&dpi=120`,
-				{ headers: { Origin: E2E_URLS.frontendOrigin } },
-			);
+			const session = await createTestRdpSession(context.request, connectionId, '?width=1440&height=900&dpi=120');
 			expect(session.ok()).toBeTruthy();
 			await expect(session.json()).resolves.toMatchObject({ ticket: expect.any(String) });
 		});
@@ -142,6 +141,15 @@ test('RDP browser client preserves settings, clipboard and browser fullscreen', 
 				await expect(page).toHaveURL(/\/connections$/);
 				const modal = remoteWindow(page);
 				await expect(modal).toBeVisible();
+				const certificate = page.getByRole('dialog', { name: 'Confirm RDP server certificate', exact: true });
+				await expect(certificate).toBeVisible();
+				await expect(modal.locator('canvas')).toHaveCount(0);
+				await certificate.getByRole('button', { name: 'Cancel', exact: true }).click();
+				await expect(certificate).toBeHidden();
+				await expect(modal).toContainText('Disconnected');
+				await expect(modal.locator('canvas')).toHaveCount(0);
+				await modal.getByRole('button', { name: 'Reconnect', exact: true }).click();
+				await confirmTestRdpCertificate(page);
 				await expect(modal).toContainText('Connected', { timeout: 15_000 });
 				await authenticateTestRdp(page);
 				const display = modal.locator('.remote-display-container');
@@ -201,6 +209,7 @@ test('RDP browser client preserves settings, clipboard and browser fullscreen', 
 			await expect(page).toHaveURL(/\/$/);
 			const modal = remoteWindow(page);
 			await expect(modal).toBeVisible();
+			await confirmTestRdpCertificate(page, true);
 			await expect(modal).toContainText('Connected', { timeout: 15_000 });
 			await authenticateTestRdp(page);
 			await expect
@@ -224,6 +233,9 @@ test('RDP browser client preserves settings, clipboard and browser fullscreen', 
 			const modal = remoteWindow(page);
 			await expect(modal).toBeVisible();
 			await expect(modal).toContainText('Connected', { timeout: 15_000 });
+			await expect(page.getByRole('dialog', { name: 'Confirm RDP server certificate', exact: true })).toHaveCount(
+				0,
+			);
 			await revealDesktopControls(page);
 			await expect(modal.locator('i.fa-desktop')).toBeVisible();
 			await expect(modal.locator('i.fa-expand')).toBeVisible();
@@ -399,7 +411,9 @@ async function createRemoteConnection(
 		},
 	});
 	expect(response.status(), await response.text()).toBe(200);
-	return readTestConnectionImportId(await response.json());
+	const id = readTestConnectionImportId(await response.json());
+	if (type === 'RDP') await createTestRdpSession(request, id, '', true);
+	return id;
 }
 
 async function openRemoteConnection(page: Page, name: string): Promise<void> {

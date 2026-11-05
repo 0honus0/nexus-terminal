@@ -46,7 +46,7 @@
       "unauthenticated": "请重新登录。",
       "forbidden": "没有桌面访问权限。",
       "not_found": "连接不存在。",
-      "conflict": "目标已变化或路由不支持；桌面仅支持直连。",
+      "conflict": "连接配置、路线或证书信任已变化，请检查后重新连接。",
       "limit_exceeded": "桌面容量已满，请等待其他会话关闭。",
       "remote_unavailable": "桌面服务不可用。",
       "operation_unknown": "无法确认远端操作结果。",
@@ -54,7 +54,8 @@
       "request_failed": "请求未能完成。",
       "cancelled": "请求已取消。",
       "input_failed": "输入或剪贴板同步失败。",
-      "cleanup_failed": "无法确认本地清理完成，请关闭窗口后再打开桌面。"
+      "cleanup_failed": "无法确认本地清理完成，请关闭窗口后再打开桌面。",
+      "certificate_required": "确认 RDP 服务器证书"
     },
     "fileClipboard": {
       "title": "文件剪贴板",
@@ -68,6 +69,22 @@
       "directory": "文件夹",
       "failed": "文件传输未完成。请检查远端剪贴板和目标目录，再重新选择或复制文件。",
       "download": "下载"
+    },
+    "certificate": {
+      "title": "确认 RDP 服务器证书",
+      "target": "连接目标",
+      "subject": "颁发给",
+      "issuer": "颁发者",
+      "validity": "有效期",
+      "previous": "原证书 SHA-256",
+      "remember": "记住此证书，证书变化时再次询问",
+      "connect": "继续连接",
+      "reasons": {
+        "untrusted": "无法验证证书的颁发机构。请核对证书指纹，确认目标可信后再连接。",
+        "expired": "证书尚未生效或已经过期。请核对证书指纹和服务器时间后再决定是否连接。",
+        "hostname_mismatch": "证书与连接地址不匹配。请核对证书指纹，确认这是预期服务器。",
+        "changed": "服务器证书与已记住的证书不同。请先确认更换原因；未知的变化可能意味着连接被冒充。"
+      }
     }
   },
   "vncModal": {

@@ -5,14 +5,18 @@ import {
 	REMOTE_DESKTOP_MAX_DPI,
 	REMOTE_DESKTOP_RESPONSE_MAX_BYTES,
 	REMOTE_DESKTOP_ERROR_CODES,
+	RDP_CERTIFICATE_REASONS,
+	isRdpCertificateFingerprint,
 } from './values.js';
 import type {
 	RemoteDesktopDisplayRequest,
 	RemoteDesktopSessionPath,
 	RemoteDesktopSessionResponse,
 	RemoteDesktopFailureResponse,
+	RemoteDesktopSessionRequest,
+	RdpCertificateView,
 } from './http.js';
-import { record } from '../../common/http-codec.js';
+import { record as readRecord, InvalidPayload } from '../../common/http-codec.js';
 import {
 	TARGET_CONNECTION_HOST_MAX_BYTES,
 	TARGET_CONNECTION_USERNAME_MAX_BYTES,
@@ -23,6 +27,17 @@ export class InvalidRemoteDesktopPayload extends Error {
 	constructor() {
 		super('Invalid remote desktop request');
 		this.name = 'InvalidRemoteDesktopPayload';
+	}
+}
+
+function record(value: unknown, keys: readonly string[], maxBytes: number): Record<string, unknown> {
+	try {
+		return readRecord(value, keys, maxBytes);
+	} catch (cause) {
+		if (cause instanceof InvalidPayload) {
+			throw new InvalidRemoteDesktopPayload();
+		}
+		throw cause;
 	}
 }
 
@@ -112,10 +127,116 @@ export function readRemoteDesktopSessionResponse(value: unknown): RemoteDesktopS
 }
 
 export function readRemoteDesktopFailureResponse(value: unknown): RemoteDesktopFailureResponse {
+	if (value && typeof value === 'object' && 'code' in value && value.code === 'certificate_required') {
+		const item = record(value, ['code', 'certificate'], REMOTE_DESKTOP_RESPONSE_MAX_BYTES);
+		return { code: 'certificate_required', certificate: readRdpCertificate(item.certificate) };
+	}
 	const item = record(value, ['code'], REMOTE_DESKTOP_RESPONSE_MAX_BYTES);
 	const code = REMOTE_DESKTOP_ERROR_CODES.find((candidate) => candidate === item.code);
-	if (code === undefined) {
+	if (code === undefined || code === 'certificate_required') {
 		throw new InvalidRemoteDesktopPayload();
 	}
 	return { code };
+}
+
+function readEndpoint(host: unknown, port: unknown): { host: string; port: number } {
+	if (
+		typeof host !== 'string' ||
+		!host.length ||
+		/[\s\u0000-\u001f\u007f]/u.test(host) ||
+		new TextEncoder().encode(host).byteLength > TARGET_CONNECTION_HOST_MAX_BYTES ||
+		typeof port !== 'number' ||
+		!Number.isInteger(port) ||
+		port < 1 ||
+		port > 65535
+	) {
+		throw new InvalidRemoteDesktopPayload();
+	}
+	return { host, port };
+}
+
+function readPreviousFingerprint(value: unknown): string | null {
+	if (value !== null && !isRdpCertificateFingerprint(value)) {
+		throw new InvalidRemoteDesktopPayload();
+	}
+	return value;
+}
+
+function readRdpCertificate(value: unknown): RdpCertificateView {
+	const item = record(
+		value,
+		[
+			'connectionId',
+			'host',
+			'port',
+			'fingerprint',
+			'previousFingerprint',
+			'subject',
+			'issuer',
+			'validFrom',
+			'validTo',
+			'reason',
+		],
+		REMOTE_DESKTOP_RESPONSE_MAX_BYTES,
+	);
+	const endpoint = readEndpoint(item.host, item.port);
+	const reason = RDP_CERTIFICATE_REASONS.find((candidate) => candidate === item.reason);
+	if (
+		typeof item.connectionId !== 'number' ||
+		!Number.isSafeInteger(item.connectionId) ||
+		item.connectionId < 1 ||
+		!isRdpCertificateFingerprint(item.fingerprint) ||
+		typeof item.subject !== 'string' ||
+		typeof item.issuer !== 'string' ||
+		typeof item.validFrom !== 'number' ||
+		!Number.isSafeInteger(item.validFrom) ||
+		typeof item.validTo !== 'number' ||
+		!Number.isSafeInteger(item.validTo) ||
+		item.validTo < item.validFrom ||
+		reason === undefined
+	) {
+		throw new InvalidRemoteDesktopPayload();
+	}
+	const previousFingerprint = readPreviousFingerprint(item.previousFingerprint);
+	const changed = previousFingerprint !== null && previousFingerprint !== item.fingerprint;
+	if ((reason === 'changed') !== changed) {
+		throw new InvalidRemoteDesktopPayload();
+	}
+	return {
+		connectionId: item.connectionId,
+		host: endpoint.host,
+		port: endpoint.port,
+		fingerprint: item.fingerprint,
+		previousFingerprint,
+		subject: item.subject,
+		issuer: item.issuer,
+		validFrom: item.validFrom,
+		validTo: item.validTo,
+		reason,
+	};
+}
+
+export function readRemoteDesktopSessionRequest(value: unknown): RemoteDesktopSessionRequest {
+	const body = record(value, ['certificate'], REMOTE_DESKTOP_RESPONSE_MAX_BYTES);
+	if (body.certificate === null) {
+		return { certificate: null };
+	}
+	const item = record(
+		body.certificate,
+		['host', 'port', 'fingerprint', 'previousFingerprint', 'remember'],
+		REMOTE_DESKTOP_RESPONSE_MAX_BYTES,
+	);
+	const endpoint = readEndpoint(item.host, item.port);
+	if (!isRdpCertificateFingerprint(item.fingerprint) || typeof item.remember !== 'boolean') {
+		throw new InvalidRemoteDesktopPayload();
+	}
+	return {
+		certificate: {
+			host: endpoint.host,
+			port: endpoint.port,
+			fingerprint: item.fingerprint,
+			previousFingerprint: readPreviousFingerprint(item.previousFingerprint),
+			remember: item.remember,
+		},
+	};
 }

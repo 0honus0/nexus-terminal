@@ -24,9 +24,19 @@ export const REMOTE_DESKTOP_ERROR_CODES = [
 	'forbidden',
 	'not_found',
 	'conflict',
+	'certificate_required',
 	'limit_exceeded',
 	'remote_unavailable',
 	'operation_unknown',
 ] as const;
 
 export type RemoteDesktopErrorCode = (typeof REMOTE_DESKTOP_ERROR_CODES)[number];
+
+export const RDP_CERTIFICATE_REASONS = ['untrusted', 'expired', 'hostname_mismatch', 'changed'] as const;
+
+export type RdpCertificateReason = (typeof RDP_CERTIFICATE_REASONS)[number];
+
+/** SHA-256 fingerprint as emitted by Node TLS, 32 uppercase octets. */
+export function isRdpCertificateFingerprint(value: unknown): value is string {
+	return typeof value === 'string' && /^[A-F0-9]{2}(?::[A-F0-9]{2}){31}$/u.test(value);
+}

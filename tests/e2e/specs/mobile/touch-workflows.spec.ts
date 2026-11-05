@@ -1,4 +1,9 @@
-import { authenticateTestRdp, observeDesktopBinaryTraffic, revealDesktopControls } from '../../support/desktop';
+import {
+	createTestRdpSession,
+	authenticateTestRdp,
+	observeDesktopBinaryTraffic,
+	revealDesktopControls,
+} from '../../support/desktop';
 import { readTestConnectionImportId } from '../../support/targets';
 import { readConnectionList } from '../../../../packages/shared/src/targets/connections/http-codec';
 import { E2E_URLS, E2E_PORTS } from '../../support/test-env';
@@ -336,6 +341,7 @@ test('mobile RDP opens keyboard explicitly and persists touch mode without recon
 	});
 	expect(createResponse.status(), await createResponse.text()).toBe(200);
 	const connectionId = readTestConnectionImportId(await createResponse.json());
+	await createTestRdpSession(context.request, connectionId, '', true);
 
 	const openConnection = async () => {
 		await page.goto('/workspace');

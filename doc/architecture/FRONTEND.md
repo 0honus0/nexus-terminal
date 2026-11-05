@@ -458,3 +458,14 @@ usePluginManagement 持已确认安装快照；相同 appId/revision 序列不�
 6. **数据、事务与并发**：保存继续走原expectedVersion/CAS、草稿与未知写入围栏；仅已确认偏好生效。未自动重载已打开图片，显式刷新取得最新预算。WS文件读取按请求预算累计实际字节，不再叠加固定64MiB总量上限；帧大小、背压与并发机制不变。
 7. **生命周期与失败**：关闭、替换、清空沿原AbortController/token检查，旧响应不发布；初次超限保留原tooLarge提示，刷新失败保留原图。0不代表浏览器内存无限，分块读取后仍需整体ArrayBuffer/Blob供预览。Socket在复制/合并分配抛错时reject原等待并清空分块，未完成文件读取同时发送取消；不会因先移除pending/timer而遗留等待。
 8. **当前能力与验收**：产品入口见USAGE文件管理器、Agent聊天/文件库及界面偏好章节；类型/格式/生产构建与源码审核归testing；本轮明确授权CDP已验证GIF动画、保存/持久化、两处新开/刷新/65MiB/0，取消/身份撤销/分配失败组合仍待正式回归。
+
+### RDP 证书确认
+
+1. **职责与范围**：连接前显示当前不受信证书，允许取消、仅本次或记住具体指纹；VNC 沿原流程。
+2. **子功能与目录**：remote-desktop API 严格读取 Shared，controller 持确认与建连代次，Modal 持当前挑战/Promise，RdpCertificateDialog 复用 Foundation 确认、详情、按钮和勾选框。
+3. **依赖方向**：组件→controller/API→Shared；技术 RDP SDK 仍仅在 Adapter，确认前不创建 SDK 或 WS。没有全局信任状态或浏览器信任缓存。
+4. **类型与转换**：Shared 请求/响应与本功能独立 Certificate/Approval 分别定义，mapper 白名单转换；API 核对当前 connectionId、RDP 协议和 409 状态。毫秒有效期只在 UI 本地化显示，SHA-256 原样展示。
+5. **入口与安装**：ControllerOptions 注入带 AbortSignal 的确认回调，Modal 装配；确认后才发送精确指纹及 remember。基础 UiConfirmationPanel 默认 teleport=true，全屏证书弹窗按 false 留在原全屏节点，既有弹窗不变。
+6. **数据、事务与并发**：记住选择只交后端原身份/CAS 事务，前端不把 checkbox 当持久回执；API 返回新挑战时重新显示并清除勾选，不自动接受。未知保存先在下一次连接读取当前信任，不自动重写。
+7. **生命周期与失败**：取消正常进入 disconnected；关闭/切目标/登出 abort 原等待并解除监听，generation 阻止晚选择和旧 finally 写回。证书弹窗打开时原 fullscreen Esc handler 让出处理，确认层 Esc 取消连接；actual TLS 指纹变化仍由原桥拒绝，用户主动重连。
+8. **当前能力与验收**：源码、三语及双端契约已同步，静态/构建及未验范围见 testing；既有 RDP 浏览器场景迁移取消/一次/记住步骤，未执行本批浏览器或 E2E，不以历史 560 项证明新流程通过。

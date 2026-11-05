@@ -5,18 +5,30 @@ import {
 	type DesktopTransportRequest,
 	type DesktopTransportPeer,
 } from '../../../../platform/desktop/desktop-port.js';
-import type { DesktopConnection, DesktopDisplay, DesktopPeer } from './desktop-types.js';
+import type {
+	DesktopConnection,
+	DesktopDisplay,
+	DesktopPeer,
+	DesktopCertificate,
+	DesktopCertificateApproval,
+} from './desktop-types.js';
 import type WebSocket from 'ws';
 import { DesktopFailure } from '../desktop-errors.js';
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 import type { SessionTokens } from '../../../../platform/security/session-tokens.js';
+import { SqliteFailure } from '../../../../platform/storage/sqlite/sqlite-errors.js';
+import { CertificateTrustStorageConflict, type CertificateTrustStorage } from '../storage/certificate-storage.js';
 
 /** Targets public → Remote application fact: do not spread a trusted secret DTO. */
-export function toDesktopConnection(source: TrustedDesktopTarget): DesktopConnection {
+export function toDesktopConnection(
+	source: TrustedDesktopTarget,
+	certificateFingerprint: string | null,
+): DesktopConnection {
 	if (!source.password) {
 		throw new DesktopFailure('invalid_input');
 	}
 	return {
+		certificateFingerprint,
 		protocol: source.protocol,
 		host: source.host,
 		port: source.port,
@@ -30,7 +42,72 @@ export class DesktopModel {
 	constructor(
 		private readonly transport: DesktopTransport,
 		private readonly tokens: SessionTokens,
+		private readonly certificates: CertificateTrustStorage,
 	) {}
+
+	async probeCertificate(host: string, port: number, signal: AbortSignal): Promise<DesktopCertificate> {
+		try {
+			const source = await this.transport.probeCertificate(host, port, signal);
+			return {
+				fingerprint: source.fingerprint,
+				subject: source.subject,
+				issuer: source.issuer,
+				validFrom: source.validFrom,
+				validTo: source.validTo,
+				systemTrusted: source.systemTrusted,
+				hostMatches: source.hostMatches,
+			};
+		} catch (cause) {
+			throw new DesktopFailure('remote_unavailable', { cause });
+		}
+	}
+
+	async trustedCertificate(userId: number, host: string, port: number): Promise<string | null> {
+		try {
+			const record = await this.certificates.get(userId, host, port);
+			return record?.fingerprint ?? null;
+		} catch (cause) {
+			throw new DesktopFailure('remote_unavailable', { cause });
+		}
+	}
+
+	async rememberCertificate(
+		userId: number,
+		token: string,
+		approval: DesktopCertificateApproval,
+		validate: () => void,
+	): Promise<void> {
+		try {
+			await this.certificates.confirm(
+				{
+					userId,
+					host: approval.host,
+					port: approval.port,
+					fingerprint: approval.fingerprint,
+					previousFingerprint: approval.previousFingerprint,
+				},
+				this.digestToken(token),
+				(identity) => {
+					if (identity !== userId) {
+						throw new DesktopFailure('unauthenticated');
+					}
+					validate();
+				},
+			);
+		} catch (cause) {
+			if (cause instanceof DesktopFailure) {
+				throw cause;
+			}
+			if (cause instanceof CertificateTrustStorageConflict) {
+				throw new DesktopFailure('conflict', { cause });
+			}
+			const code =
+				cause instanceof SqliteFailure && (cause.kind === 'commit_unknown' || cause.kind === 'rollback_failed')
+					? 'operation_unknown'
+					: 'remote_unavailable';
+			throw new DesktopFailure(code, { cause });
+		}
+	}
 
 	issueTicket(): string {
 		try {
@@ -131,6 +208,6 @@ function toDesktopTransport(connection: DesktopConnection): DesktopTransportRequ
 		protocol: connection.protocol === 'RDP' ? 'rdp' : 'vnc',
 		host: connection.host,
 		port: connection.port,
-		ignoreCertificate: true,
+		certificateFingerprint: connection.certificateFingerprint,
 	};
 }

@@ -62,7 +62,7 @@ system/status 同时拥有 SystemHealthResponse、固定健康取值及 readSyst
 
 B3.2 新增 `remote/monitoring/{values,model,http,http-codec,events,workspace,workspace-codec}`、`remote/docker/{values,workspace,workspace-codec}` 和 `system/status/{values,model,http,http-codec}`。基础取值与对象隔离；Docker action 为唯一有限值，技术 Port 仅精确引用 values，不引入 Shared DTO。远端、本机事实分别定义，不通过大量可选字段混成全局状态集合。
 
-B3.3 的 `remote/desktop/{values,http,http-codec}` 持有 RDP/VNC、显示范围、30 秒 ticket、1,024 pending/16 active、有限安全码和 2 MiB 二进制帧上限。HTTP 成功严格为 `{ticket,protocol,host,port,username,password}`，完整 JSON 最多 64 KiB；凭据仅供用户已接受的浏览器 SDK 内存消费，响应 no-store，不进入 URL、日志或持久存储。path/query 拒绝未知、重复或非十进制参数，成功/失败 codec 核对完整白名单、容量及 43 字符 ticket；前端另核对请求协议。秘密字段容量引用 Targets values，不 trim。后端仅取得不含密码的 TCP/TLS 技术请求，握手/关闭和队列策略归实际 owner。RemoteApp 契约已删除，完整调用链见远程桌面专题，本版行为仍待远程验收。
+B3.3 的 `remote/desktop/{values,http,http-codec}` 持有 RDP/VNC、显示范围、30 秒 ticket、1,024 pending/16 active、有限安全码和 2 MiB 二进制帧上限。HTTP 成功严格为 `{ticket,protocol,host,port,username,password}`，完整 JSON 最多 64 KiB；凭据仅供用户已接受的浏览器 SDK 内存消费，响应 no-store，不进入 URL、日志或持久存储。path/query 拒绝未知、重复或非十进制参数，成功/失败 codec 核对完整白名单、容量及 43 字符 ticket；前端另核对请求协议。秘密字段容量引用 Targets values，不 trim。RDP 初次请求可无 body 或传 certificate=null；明确确认以独立 RdpCertificateApproval 写入 host/port/fingerprint/previousFingerprint/remember，未确认响应为 409 certificate_required 和 RdpCertificateView（connectionId、目标、证书主体/颁发者、SHA-256、原指纹、有效期 Unix 毫秒及有限原因）。严格 codec 核对完整白名单、指纹格式及 changed 与原指纹的关联；前端另核对 connectionId/协议。挑战无票据或密码，JSON 沿原 64 KiB 完整预算；Shared 不持授权、证书验证、持久信任或自动重试政策。后端仅取得不含密码且带已确认指纹的 TCP/TLS 技术请求，握手/关闭和队列策略归实际 owner。RemoteApp 契约已删除，完整调用链见远程桌面专题，新证书流程的行为仍待远程验收。
 
 ```text
 packages/shared/src/<domain>/<feature>/
@@ -294,7 +294,7 @@ B8 签名 Skill 文档、解析结果与内部执行输入仅由后端 Tool/Plug
 
 ## B9 机器突变恢复契约
 
-remote/mutations 的 values/model/http/http-codec 分别持有状态/来源/人工确认结果与容量、安全观察、独立 evidence/release 命令及严格 codec，精确出口安装于 package.json。原 owner 实例、资源摘要与存储行不公开；生产者停止/资源停止必须显式 true，证据来源固定 administrator。服务端 HTTP/mapper 已消费，正式恢复管理前端已对接；应用/存储仍保留独立类型。协议校验 held/blocked/released 与时间、修订、证据序列的一致性，分页最多50项/8MiB，不能把 released 改写成原操作成功。operations/values 增加两个真实审计事件。唯一初始 v1 已变更，不兼容旧开发数据或旧签名备份；行为待 B10。
+remote/mutations 的 values/model/http/http-codec 分别持有状态/来源/人工确认结果与容量、安全观察、独立 evidence/release 命令及严格 codec，精确出口安装于 package.json。原 owner 实例、资源摘要与存储行不公开；生产者停止/资源停止必须显式 true，证据来源固定 administrator。服务端 HTTP/mapper 已消费，正式恢复管理前端已对接；应用/存储仍保留独立类型。协议校验 held/blocked/released 与时间、修订、证据序列的一致性，分页最多50项/8MiB，不能把 released 改写成原操作成功。operations/values 增加两个真实审计事件。存储结构及快照校验已同步；行为覆盖见 testing，后续数据库演进按 H-21。
 
 ### B9 Targets 导入与测试
 
@@ -500,4 +500,4 @@ App 来源仅为真实签名插件安装；删除 AgentCreateAppRequest/Response
 5. **入口与安装**：沿现有精确exports和preferences接口；remote/files/workspace-codec接收正安全整数maxBytes，不再有固定64MiB总量上限；同步实际后端和前端收发消费者及既有非法预算fixture。
 6. **数据、事务与并发**：不持存储数据、不包含SQL；完整偏好JSON/CAS仍归Preferences。文件格式预算在预览Registry，WS每次总量采用请求预算，帧大小/并发/背压保持独立，HTTP transfer inline的20MiB预算不影响本轮WS读取。
 7. **生命周期与失败**：严格解码拒绝缺失/负数/小数/非数和不安全单位转换；不为旧JSON补字段。0不承诺无限资源，取消/晚响应/网络失败由原运行时与读源拥有。
-8. **当前能力与验收**：前后端所有真实偏好映射和预览入口已接入；本轮静态及明确授权的限定CDP证据与未验组合见testing，未运行全量本地E2E；升级已有持久数据前应显式维护新字段。
+8. **当前能力与验收**：前后端所有真实偏好映射和预览入口已接入；本轮静态及明确授权的限定CDP证据与未验组合见testing，未运行全量本地E2E；后续新增持久字段由对应独立迁移转换，运行时保持严格解码。

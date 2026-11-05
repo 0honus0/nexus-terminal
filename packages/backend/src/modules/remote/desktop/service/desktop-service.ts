@@ -5,7 +5,15 @@ import type { TrustedDesktopTargets, ConnectionUsage } from '../../../targets/pu
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 import { toDesktopConnection } from '../model/desktop-model.js';
 import type { DesktopModel } from '../model/desktop-model.js';
-import type { DesktopDisplay, DesktopTicket, DesktopPeer, DesktopTicketResult } from '../model/desktop-types.js';
+import type {
+	DesktopDisplay,
+	DesktopTicket,
+	DesktopPeer,
+	DesktopTicketResult,
+	DesktopCertificateApproval,
+	DesktopCertificate,
+	DesktopCertificateChallenge,
+} from '../model/desktop-types.js';
 import type { RemoteDesktopProtocol } from '@nexus-terminal/shared/remote/desktop/values';
 import {
 	REMOTE_DESKTOP_TICKET_TTL_MS,
@@ -13,7 +21,7 @@ import {
 	REMOTE_DESKTOP_MAX_ACTIVE_SESSIONS,
 } from '@nexus-terminal/shared/remote/desktop/values';
 import { TargetOperationError } from '../../../targets/public-errors.js';
-import { DesktopFailure } from '../desktop-errors.js';
+import { DesktopCertificateRequired, DesktopFailure } from '../desktop-errors.js';
 import { FailureSummary } from '../../../../platform/lifecycle/failure-summary.js';
 
 const ISSUE_TIMEOUT_MS = 15_000;
@@ -31,6 +39,19 @@ interface DesktopSlot {
 
 interface TimedReservation {
 	expired: boolean;
+	controller: AbortController;
+	trustWriteStarted: boolean;
+}
+
+interface CertificateAuthorization {
+	token: string;
+	userId: number;
+	targetId: number;
+	host: string;
+	port: number;
+	approval: DesktopCertificateApproval | null;
+	reservation: TimedReservation;
+	signal: AbortSignal | undefined;
 }
 
 export class DesktopService {
@@ -38,6 +59,7 @@ export class DesktopService {
 	private readonly issuing = new Set<TimedReservation>();
 	private readonly tasks = new Set<Promise<unknown>>();
 	private readonly slots = new Set<DesktopSlot>();
+	private probing = 0;
 	private readonly failures = new FailureSummary();
 	private readonly recordedFailures = new WeakSet<Error>();
 	private accepting = true;
@@ -65,7 +87,9 @@ export class DesktopService {
 	private track<T>(task: Promise<T>): Promise<T> {
 		this.tasks.add(task);
 		void task.catch((error: unknown) => {
-			logDiagnostic(this.logger, 'warn', 'DESKTOP_OPERATION_FAILED', {}, error);
+			if (!(error instanceof DesktopCertificateRequired)) {
+				logDiagnostic(this.logger, 'warn', 'DESKTOP_OPERATION_FAILED', {}, error);
+			}
 			if (error instanceof RemoteResourceCleanupFailure) {
 				this.recordFailure(error);
 			}
@@ -126,6 +150,7 @@ export class DesktopService {
 		protocol: RemoteDesktopProtocol,
 		display: DesktopDisplay,
 		signal?: AbortSignal,
+		approval: DesktopCertificateApproval | null = null,
 	): Promise<DesktopTicketResult> {
 		if (!token) {
 			throw new DesktopFailure('unauthenticated');
@@ -143,7 +168,11 @@ export class DesktopService {
 		if (this.tickets.size + this.issuing.size >= REMOTE_DESKTOP_MAX_PENDING_TICKETS) {
 			throw new DesktopFailure('limit_exceeded');
 		}
-		const reservation: TimedReservation = { expired: false };
+		const reservation: TimedReservation = {
+			expired: false,
+			controller: new AbortController(),
+			trustWriteStarted: false,
+		};
 		this.issuing.add(reservation); // Synchronous capacity admission.
 		const original = this.track(
 			(async () => {
@@ -161,6 +190,34 @@ export class DesktopService {
 					if (!target.password) {
 						throw new DesktopFailure('invalid_input');
 					}
+					const certificateFingerprint =
+						protocol === 'RDP'
+							? await this.authorizeCertificate({
+									token,
+									userId,
+									targetId,
+									host: target.host.toLowerCase(),
+									port: target.port,
+									approval,
+									reservation,
+									signal,
+								})
+							: null;
+					if (protocol === 'VNC' && approval !== null) {
+						throw new DesktopFailure('invalid_input');
+					}
+					this.validateReservation(reservation, signal);
+					const latest = await this.targets.get(targetId);
+					if (
+						!latest ||
+						latest.version !== target.version ||
+						latest.createdAt !== target.createdAt ||
+						latest.host !== target.host ||
+						latest.port !== target.port ||
+						latest.protocol !== protocol
+					) {
+						throw new DesktopFailure('conflict');
+					}
 					if ((await this.identity(token)) !== userId) {
 						throw new DesktopFailure('unauthenticated');
 					}
@@ -171,6 +228,7 @@ export class DesktopService {
 					}
 					this.tickets.set(ticket, {
 						userId,
+						certificateFingerprint,
 						tokenDigest: this.model.digestToken(token),
 						targetId,
 						targetVersion: target.version,
@@ -178,7 +236,7 @@ export class DesktopService {
 						expiresAt: Date.now() + REMOTE_DESKTOP_TICKET_TTL_MS,
 						display: { width: display.width, height: display.height, dpi: display.dpi },
 					});
-					return { ticket, connection: toDesktopConnection(target) };
+					return { ticket, connection: toDesktopConnection(target, certificateFingerprint) };
 				} finally {
 					this.issuing.delete(reservation);
 				}
@@ -189,7 +247,8 @@ export class DesktopService {
 
 			const stop = () => {
 				reservation.expired = true;
-				reject(new DesktopFailure('remote_unavailable'));
+				reservation.controller.abort();
+				reject(new DesktopFailure(reservation.trustWriteStarted ? 'operation_unknown' : 'remote_unavailable'));
 			};
 
 			timer = setTimeout(stop, ISSUE_TIMEOUT_MS);
@@ -231,16 +290,85 @@ export class DesktopService {
 		}
 	}
 
+	private async authorizeCertificate(request: CertificateAuthorization): Promise<string> {
+		const { token, userId, targetId, host, port, approval, reservation, signal } = request;
+		if (this.slots.size + this.probing >= REMOTE_DESKTOP_MAX_ACTIVE_SESSIONS) {
+			throw new DesktopFailure('limit_exceeded');
+		}
+		this.probing += 1;
+		let certificate: DesktopCertificate;
+		try {
+			certificate = await this.model.probeCertificate(host, port, reservation.controller.signal);
+		} finally {
+			this.probing -= 1;
+		}
+		this.validateReservation(reservation, signal);
+		const previousFingerprint = await this.model.trustedCertificate(userId, host, port);
+		if ((await this.identity(token)) !== userId) {
+			throw new DesktopFailure('unauthenticated');
+		}
+		this.validateReservation(reservation, signal);
+		const now = Date.now();
+		const expired = now < certificate.validFrom || now > certificate.validTo;
+		const changed = previousFingerprint !== null && previousFingerprint !== certificate.fingerprint;
+		let reason: DesktopCertificateChallenge['reason'] = 'untrusted';
+		if (changed) {
+			reason = 'changed';
+		} else if (expired) {
+			reason = 'expired';
+		} else if (!certificate.hostMatches) {
+			reason = 'hostname_mismatch';
+		}
+		const challenge: DesktopCertificateChallenge = {
+			targetId,
+			host,
+			port,
+			fingerprint: certificate.fingerprint,
+			previousFingerprint,
+			subject: certificate.subject,
+			issuer: certificate.issuer,
+			validFrom: certificate.validFrom,
+			validTo: certificate.validTo,
+			reason,
+		};
+		if (approval === null) {
+			if (
+				previousFingerprint === certificate.fingerprint ||
+				(!changed && certificate.systemTrusted && certificate.hostMatches && !expired)
+			) {
+				return certificate.fingerprint;
+			}
+			throw new DesktopCertificateRequired(challenge);
+		}
+		if (
+			approval.host !== host ||
+			approval.port !== port ||
+			approval.fingerprint !== certificate.fingerprint ||
+			approval.previousFingerprint !== previousFingerprint
+		) {
+			throw new DesktopCertificateRequired(challenge);
+		}
+		if (approval.remember) {
+			// A lost/expired response cannot prove that this persistent write rolled back.
+			reservation.trustWriteStarted = true;
+			await this.model.rememberCertificate(userId, token, approval, () =>
+				this.validateReservation(reservation, signal),
+			);
+		}
+		this.validateReservation(reservation, signal);
+		return certificate.fingerprint;
+	}
+
 	private validateReservation(reservation: TimedReservation, signal?: AbortSignal): void {
 		if (!this.accepting || reservation.expired || signal?.aborted) {
-			throw new DesktopFailure('remote_unavailable');
+			throw new DesktopFailure(reservation.trustWriteStarted ? 'operation_unknown' : 'remote_unavailable');
 		}
 	}
 
 	/** Consume once before any await; a rejected handshake never restores a bearer ticket. */
 	async accept(token: string | null, ticket: string, peer: DesktopPeer): Promise<void> {
 		this.prune();
-		if (!this.accepting || !peer.isOpen || this.slots.size >= REMOTE_DESKTOP_MAX_ACTIVE_SESSIONS) {
+		if (!this.accepting || !peer.isOpen || this.slots.size + this.probing >= REMOTE_DESKTOP_MAX_ACTIVE_SESSIONS) {
 			await this.refuseSocket(peer, 'limit_exceeded');
 			return;
 		}
@@ -327,7 +455,7 @@ export class DesktopService {
 				}
 				// Rebuild from current Targets snapshot; never hand an old
 				// credential from a consumed ticket to the technical adapter.
-				const connection = toDesktopConnection(current);
+				const connection = toDesktopConnection(current, record.certificateFingerprint);
 				dispatched = true;
 				logDiagnostic(this.logger, 'info', 'DESKTOP_BRIDGE_OPEN_STARTED', {
 					connectionId: record.targetId,
@@ -498,6 +626,7 @@ export class DesktopService {
 		this.tickets.clear();
 		for (const reservation of this.issuing) {
 			reservation.expired = true;
+			reservation.controller.abort();
 		}
 	}
 

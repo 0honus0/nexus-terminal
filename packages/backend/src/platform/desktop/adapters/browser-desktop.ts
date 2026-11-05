@@ -6,9 +6,11 @@ import { REMOTE_DESKTOP_FRAME_MAX_BYTES } from '@nexus-terminal/shared/remote/de
 import {
 	DesktopTransportFailure,
 	type DesktopTransport,
+	type DesktopTransportCertificate,
 	type DesktopTransportPeer,
 	type DesktopTransportRequest,
 } from '../desktop-port.js';
+import { readRdpNegotiation, probeRdpCertificate } from './rdp-tls.js';
 import { encodeCleanPathResponse, readCleanPathRequest } from './rdcleanpath.js';
 
 const MAX_QUEUED_BYTES = 4 * 1024 * 1024;
@@ -313,62 +315,9 @@ class BrowserDesktopPeer implements DesktopTransportPeer {
 		}
 	}
 
-	private readNegotiation(socket: net.Socket): Promise<Buffer> {
-		return new Promise<Buffer>((resolve, reject) => {
-			let buffer = Buffer.alloc(0);
-
-			const clean = () => {
-				socket.off('data', receive);
-				socket.off('close', fail);
-				socket.off('error', fail);
-			};
-
-			const fail = () => {
-				clean();
-				reject(new DesktopTransportFailure('unavailable'));
-			};
-
-			const receive = (chunk: Buffer) => {
-				if (buffer.length + chunk.length > 65535) {
-					return fail();
-				}
-				buffer = Buffer.concat([buffer, chunk]);
-				if (buffer.length < 4) {
-					return;
-				}
-				const length = buffer.readUInt16BE(2);
-				if (buffer[0] !== 3 || buffer[1] !== 0 || length < 19 || buffer.length > length) {
-					return fail();
-				}
-				if (buffer.length < length) {
-					return;
-				}
-				const offset = buffer.length - 8;
-				const protocol = buffer.readUInt32LE(offset + 4);
-				if (
-					buffer[5] !== 0xd0 ||
-					buffer[offset] !== 2 ||
-					buffer.readUInt16LE(offset + 2) !== 8 ||
-					(protocol !== 1 && protocol !== 2 && protocol !== 8)
-				) {
-					return fail();
-				}
-				clean();
-				resolve(buffer);
-			};
-
-			socket.on('data', receive);
-			socket.once('close', fail);
-			socket.once('error', fail);
-			if (socket.destroyed || this.closing) {
-				fail();
-			}
-		});
-	}
-
 	private async negotiate(bytes: Buffer, socket: net.Socket, options: DesktopTransportRequest): Promise<void> {
 		const request = readCleanPathRequest(bytes);
-		const responseTask = this.readNegotiation(socket);
+		const responseTask = readRdpNegotiation(socket);
 		socket.write(request);
 		const response = await responseTask;
 		if (this.closing) {
@@ -380,7 +329,7 @@ class BrowserDesktopPeer implements DesktopTransportPeer {
 		const secure = this.own(
 			tls.connect({
 				socket,
-				rejectUnauthorized: !options.ignoreCertificate,
+				rejectUnauthorized: false,
 				servername: net.isIP(options.host) ? undefined : options.host,
 				minVersion: 'TLSv1.2',
 			}),
@@ -388,6 +337,13 @@ class BrowserDesktopPeer implements DesktopTransportPeer {
 		await this.waitFor(secure, 'secureConnect');
 		if (this.closing) {
 			return;
+		}
+		// The preflight decision pins this exact leaf before any CredSSP/password data.
+		if (
+			!options.certificateFingerprint ||
+			secure.getPeerCertificate().fingerprint256 !== options.certificateFingerprint
+		) {
+			throw new DesktopTransportFailure('unavailable');
 		}
 		this.destination = secure;
 		const certificates: Buffer[] = [];
@@ -486,8 +442,28 @@ class BrowserDesktopPeer implements DesktopTransportPeer {
 
 export class BrowserDesktopAdapter implements DesktopTransport {
 	private readonly peers = new Set<BrowserDesktopPeer>();
+	private readonly probes = new Map<AbortController, Promise<unknown>>();
 	private closing = false;
 	private closePromise: Promise<void> | null = null;
+
+	async probeCertificate(host: string, port: number, signal: AbortSignal): Promise<DesktopTransportCertificate> {
+		if (this.closing || signal.aborted) {
+			throw new DesktopTransportFailure('unavailable');
+		}
+		const controller = new AbortController();
+
+		const abort = () => controller.abort();
+
+		signal.addEventListener('abort', abort, { once: true });
+		const task = probeRdpCertificate(host, port, controller.signal);
+		this.probes.set(controller, task);
+		try {
+			return await task;
+		} finally {
+			signal.removeEventListener('abort', abort);
+			this.probes.delete(controller);
+		}
+	}
 
 	bind(socket: WebSocket): DesktopTransportPeer {
 		if (this.closing) {
@@ -508,13 +484,31 @@ export class BrowserDesktopAdapter implements DesktopTransport {
 		this.closing = true;
 		this.closePromise = Promise.resolve().then(async () => {
 			const peers = [...this.peers];
+			const probes = [...this.probes.values()];
+			for (const controller of this.probes.keys()) {
+				controller.abort();
+			}
 			for (const peer of peers) {
 				peer.stop();
 			}
+			const settledProbes = Promise.allSettled(probes).then((results) => {
+				const failures = results.flatMap((result) =>
+					result.status === 'rejected' &&
+					!(result.reason instanceof DesktopTransportFailure && result.reason.reason === 'unavailable')
+						? [result.reason]
+						: [],
+				);
+				if (failures.length) {
+					throw new DesktopTransportFailure('cleanup_failed', {
+						cause: new AggregateError(failures, 'Desktop probe shutdown failed'),
+					});
+				}
+				// Expected network/cancellation rejections settle only after both sockets close.
+			});
 			let timer: ReturnType<typeof setTimeout> | undefined;
 			try {
 				await Promise.race([
-					Promise.all(peers.map((peer) => peer.closed)),
+					Promise.all([Promise.all(peers.map((peer) => peer.closed)), settledProbes]),
 					new Promise<never>((_, reject) => {
 						timer = setTimeout(
 							() => reject(new DesktopTransportFailure('cleanup_failed')),

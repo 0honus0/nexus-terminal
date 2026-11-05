@@ -6,6 +6,7 @@
 	withDefaults(
 		defineProps<{
 			visible: boolean;
+			teleport?: boolean;
 			title: string;
 			description?: string;
 			icon?: string;
@@ -18,6 +19,7 @@
 			backdropTrigger?: 'click' | 'mousedown';
 		}>(),
 		{
+			teleport: true,
 			description: '',
 			icon: 'fas fa-question-circle',
 			tone: 'primary',
@@ -36,7 +38,7 @@
 <template>
 	<UiOverlayPanel
 		:visible="visible"
-		teleport
+		:teleport="teleport"
 		:z-index="zIndex"
 		:close-on-backdrop="closeOnBackdrop"
 		:close-on-escape="closeOnEscape"

@@ -1,11 +1,13 @@
 import { readdirSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
+import { promisify } from 'node:util';
 import path from 'node:path';
 import { request as playwrightRequest } from '@playwright/test';
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { E2E_ADMIN, loginAsInitialAdmin } from '../../support/auth';
 import { advanceTestBackendClock } from '../../support/settings';
+import { createTestRdpSession } from '../../support/desktop';
 import { E2E_URLS, E2E_PORTS } from '../../support/test-env';
 const {
 	openRemoteDesktopWebSocket,
@@ -17,10 +19,27 @@ import {
 	readConnectionView,
 	readConnectionImportResponse,
 } from '../../../../packages/shared/src/targets/connections/http-codec';
-import { readRemoteDesktopSessionResponse } from '../../../../packages/shared/src/remote/desktop/http-codec';
+import {
+	readRemoteDesktopSessionResponse,
+	readRemoteDesktopFailureResponse,
+} from '../../../../packages/shared/src/remote/desktop/http-codec';
 
 const headers = { Origin: E2E_URLS.frontendOrigin };
 const backendBaseUrl = E2E_URLS.frontendOrigin;
+
+test('RDP certificate trust survives concurrent confirmation, revocation and canceled probes', async ({}, testInfo) => {
+	const result = await promisify(execFile)(
+		process.execPath,
+		[
+			path.resolve(__dirname, '../../../backend/remote/backend-next-desktop-certificates.integration.mjs'),
+			testInfo.outputPath('certificates.db'),
+		],
+		{ timeout: 30_000, maxBuffer: 1024 * 1024 },
+	);
+	expect(result.stdout).toContain(
+		'PASS Desktop certificate decisions, trust transactions and canceled probe ownership',
+	);
+});
 
 const sessionCookie = async (request: APIRequestContext): Promise<string> => {
 	const storage = await request.storageState();
@@ -59,10 +78,7 @@ const createRdpConnection = async (request: APIRequestContext, name: string): Pr
 };
 
 const createSessionTicket = async (request: APIRequestContext, connectionId: number): Promise<string> => {
-	const session = await request.post(
-		`/api/v1/connections/${connectionId}/rdp-session?width=1600&height=1000&dpi=144`,
-		{ headers },
-	);
+	const session = await createTestRdpSession(request, connectionId, '?width=1600&height=1000&dpi=144');
 	expect(session.status(), await session.text()).toBe(200);
 	const payload = readRemoteDesktopSessionResponse(await session.json());
 	expect(payload).toMatchObject({ ticket: expect.any(String) });
@@ -117,7 +133,37 @@ test('RDP sessions use the binary bridge and reject removed RemoteApp fields', a
 		expect(rejected.status()).toBe(400);
 	}
 
+	const url = `/api/v1/connections/${connectionId}/rdp-session`;
+	const untrusted = await request.post(url, { headers });
+	expect(untrusted.status(), await untrusted.text()).toBe(409);
+	const failure = readRemoteDesktopFailureResponse(await untrusted.json());
+	if (failure.code !== 'certificate_required') throw new Error('Expected untrusted fixture certificate');
+	expect(failure.certificate).toMatchObject({ host: '127.0.0.1', port: E2E_PORTS.rdp, previousFingerprint: null });
+	expect(Object.keys(await untrusted.json())).toEqual(['code', 'certificate']);
+	const certificate = failure.certificate;
+	for (const approval of [
+		{
+			host: certificate.host,
+			port: certificate.port,
+			fingerprint: '00:'.repeat(31) + '00',
+			previousFingerprint: null,
+			remember: true,
+		},
+		{
+			host: 'different.invalid',
+			port: certificate.port,
+			fingerprint: certificate.fingerprint,
+			previousFingerprint: null,
+			remember: true,
+		},
+	]) {
+		const mismatch = await request.post(url, { headers, data: { certificate: approval } });
+		expect(mismatch.status()).toBe(409);
+		expect(readRemoteDesktopFailureResponse(await mismatch.json()).code).toBe('certificate_required');
+	}
 	const ticket = await createSessionTicket(request, connectionId);
+	// A one-time approval must not become persistent trust.
+	expect((await request.post(url, { headers })).status()).toBe(409);
 	const cookie = await sessionCookie(request);
 	expect(cookie).toBeTruthy();
 
@@ -131,6 +177,16 @@ test('RDP sessions use the binary bridge and reject removed RemoteApp fields', a
 	const reused = (await waitForRemoteDesktopTicketRejection(ticket, cookie)) as { code: number; reason: string };
 	expect(reused.code).toBe(1008);
 	expect(reused.reason).toBe('invalid_input');
+
+	const malformed = await request.post(url, {
+		headers,
+		data: { certificate: { fingerprint: certificate.fingerprint } },
+	});
+	expect(malformed.status()).toBe(400);
+	await createTestRdpSession(request, connectionId, '', true);
+	const remembered = await request.post(url, { headers });
+	expect(remembered.status(), await remembered.text()).toBe(200);
+	expect(readRemoteDesktopSessionResponse(await remembered.json()).protocol).toBe('RDP');
 });
 
 test('remote desktop ticket is bound to its authenticated user without consuming the owner ticket', async ({

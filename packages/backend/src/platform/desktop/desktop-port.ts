@@ -14,7 +14,17 @@ export interface DesktopTransportRequest {
 	protocol: 'rdp' | 'vnc';
 	host: string;
 	port: number;
-	ignoreCertificate: boolean;
+	certificateFingerprint: string | null;
+}
+
+export interface DesktopTransportCertificate {
+	fingerprint: string;
+	subject: string;
+	issuer: string;
+	validFrom: number;
+	validTo: number;
+	systemTrusted: boolean;
+	hostMatches: boolean;
 }
 
 export interface DesktopTransportPeer {
@@ -22,6 +32,7 @@ export interface DesktopTransportPeer {
 }
 
 export interface DesktopTransport {
+	probeCertificate(host: string, port: number, signal: AbortSignal): Promise<DesktopTransportCertificate>;
 	bind(socket: WebSocket): DesktopTransportPeer;
 	close(): Promise<void>;
 }

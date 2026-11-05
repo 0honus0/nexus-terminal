@@ -2,6 +2,7 @@ import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values
 import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
 import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
 import type { RemoteDesktopProtocol } from '@nexus-terminal/shared/remote/desktop/values';
+import { REMOTE_DESKTOP_RESPONSE_MAX_BYTES } from '@nexus-terminal/shared/remote/desktop/values';
 import type {
 	RemoteDesktopSessionResponse,
 	RemoteDesktopFailureResponse,
@@ -9,10 +10,12 @@ import type {
 import {
 	readRemoteDesktopDisplay,
 	readRemoteDesktopSessionPath,
+	readRemoteDesktopSessionRequest,
+	readRemoteDesktopFailureResponse,
 	InvalidRemoteDesktopPayload,
 } from '@nexus-terminal/shared/remote/desktop/http-codec';
 import type { DesktopService } from '../../desktop/service/desktop-service.js';
-import { DesktopFailure } from '../../desktop/desktop-errors.js';
+import { DesktopCertificateRequired, DesktopFailure } from '../../desktop/desktop-errors.js';
 
 function status(code: DesktopFailure['code']): number {
 	switch (code) {
@@ -25,6 +28,7 @@ function status(code: DesktopFailure['code']): number {
 		case 'not_found':
 			return 404;
 		case 'conflict':
+		case 'certificate_required':
 			return 409;
 		case 'limit_exceeded':
 			return 429;
@@ -37,6 +41,7 @@ function status(code: DesktopFailure['code']): number {
 function ticketRoute(protocol: RemoteDesktopProtocol, service: DesktopService): HttpRoute {
 	return {
 		method: 'POST',
+		maxBodyBytes: REMOTE_DESKTOP_RESPONSE_MAX_BYTES,
 		path: `/api/v1/connections/:id/${protocol === 'RDP' ? 'rdp-session' : 'vnc-session'}`,
 
 		async handle(ctx: HttpRouteContext): Promise<void> {
@@ -71,12 +76,12 @@ function ticketRoute(protocol: RemoteDesktopProtocol, service: DesktopService): 
 			ctx.response.once('close', onClose);
 			ctx.response.once('finish', onFinish);
 			try {
-				if (
+				const hasBody =
 					ctx.request.headers['transfer-encoding'] ||
-					(ctx.request.headers['content-length'] && ctx.request.headers['content-length'] !== '0')
-				) {
-					throw new InvalidRemoteDesktopPayload();
-				}
+					(ctx.request.headers['content-length'] && ctx.request.headers['content-length'] !== '0');
+				const request = hasBody
+					? readRemoteDesktopSessionRequest(await ctx.json(controller.signal))
+					: { certificate: null };
 				const display = readRemoteDesktopDisplay(ctx.query);
 				const { id: targetId } = readRemoteDesktopSessionPath(ctx.params);
 				const result = await service.issue(
@@ -89,6 +94,15 @@ function ticketRoute(protocol: RemoteDesktopProtocol, service: DesktopService): 
 						dpi: display.dpi ?? null,
 					},
 					controller.signal,
+					request.certificate === null
+						? null
+						: {
+								host: request.certificate.host,
+								port: request.certificate.port,
+								fingerprint: request.certificate.fingerprint,
+								previousFingerprint: request.certificate.previousFingerprint,
+								remember: request.certificate.remember,
+							},
 				);
 				if (!controller.signal.aborted && !ctx.response.destroyed && !ctx.response.writableEnded) {
 					const response: RemoteDesktopSessionResponse = {
@@ -117,10 +131,37 @@ function ticketRoute(protocol: RemoteDesktopProtocol, service: DesktopService): 
 				if (error instanceof HttpInputFailure) {
 					throw error;
 				}
+				if (error instanceof DesktopCertificateRequired) {
+					const certificate = error.certificate;
+					const body: RemoteDesktopFailureResponse = {
+						code: 'certificate_required',
+						certificate: {
+							connectionId: certificate.targetId,
+							host: certificate.host,
+							port: certificate.port,
+							fingerprint: certificate.fingerprint,
+							previousFingerprint: certificate.previousFingerprint,
+							subject: certificate.subject,
+							issuer: certificate.issuer,
+							validFrom: certificate.validFrom,
+							validTo: certificate.validTo,
+							reason: certificate.reason,
+						},
+					};
+					// Includes the full encoded certificate projection in the existing response budget.
+					try {
+						readRemoteDesktopFailureResponse(body);
+					} catch {
+						ctx.send(503, { code: 'remote_unavailable' } satisfies RemoteDesktopFailureResponse);
+						return;
+					}
+					ctx.send(409, body, { 'Cache-Control': 'no-store', Pragma: 'no-cache' });
+					return;
+				}
 				const code =
 					error instanceof InvalidRemoteDesktopPayload
 						? 'invalid_input'
-						: error instanceof DesktopFailure
+						: error instanceof DesktopFailure && error.code !== 'certificate_required'
 							? error.code
 							: 'remote_unavailable';
 				const body: RemoteDesktopFailureResponse = { code };

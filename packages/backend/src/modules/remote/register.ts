@@ -68,6 +68,7 @@ import { createSuspendHttpRoutes } from './interfaces/http/suspend-http.js';
 import { createSuspendedCatalogWebSocketRoute } from './interfaces/ws/suspended-catalog-ws.js';
 import { BrowserDesktopAdapter } from '../../platform/desktop/adapters/browser-desktop.js';
 import { DesktopService } from './desktop/service/desktop-service.js';
+import { SqliteCertificateTrustStorage } from './desktop/adapters/sqlite/certificate-sql.js';
 import { DesktopModel } from './desktop/model/desktop-model.js';
 import { createDesktopHttpRoutes } from './interfaces/http/desktop-http.js';
 import { createDesktopWebSocketRoute } from './interfaces/ws/desktop-ws.js';
@@ -226,7 +227,8 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 		observations,
 		options.resourceRefreshSeconds,
 	);
-	const desktopModel = new DesktopModel(new BrowserDesktopAdapter(), new SecureSessionTokens());
+	const certificateStorage = new SqliteCertificateTrustStorage(options.sqlite);
+	const desktopModel = new DesktopModel(new BrowserDesktopAdapter(), new SecureSessionTokens(), certificateStorage);
 	const desktops = new DesktopService(
 		options.access,
 		options.targets.desktopTargets,
@@ -300,7 +302,10 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 			};
 		},
 
-		installTransactionIdentityReader: (read) => mutationStorage.installTransactionIdentityReader(read),
+		installTransactionIdentityReader: (read) => {
+			mutationStorage.installTransactionIdentityReader(read);
+			certificateStorage.installTransactionIdentityReader(read);
+		},
 
 		initialize: async () => {
 			await mutations.initialize();
