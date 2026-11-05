@@ -26,9 +26,11 @@ await test(
 			async () => ({
 				readable,
 				outcome,
+
 				onStderr: () => () => {
 					offStderr = true;
 				},
+
 				close: () => {
 					closed++;
 				},

@@ -51,6 +51,7 @@ export async function executePosixBatch(
 	let channel: MachineCommand | null = null;
 
 	let offStderr = () => {};
+
 	let offStdout = () => {};
 
 	let failure: unknown = null;
@@ -178,14 +179,19 @@ export async function executePosixBatch(
 		await new Promise<void>((resolve, reject) => {
 			const data = (chunk: unknown) => {
 				try {
-					if (!Buffer.isBuffer(chunk)) throw new MachineDispatchFailure('unknown');
+					if (!Buffer.isBuffer(chunk)) {
+						throw new MachineDispatchFailure('unknown');
+					}
 					stdout.write(chunk);
 				} catch (error) {
 					reject(error);
 				}
 			};
+
 			const end = () => resolve();
+
 			const error = (cause: unknown) => reject(cause);
+
 			offStdout = () => {
 				command.readable.off('data', data);
 				command.readable.off('end', end);
@@ -197,9 +203,13 @@ export async function executePosixBatch(
 			command.readable.once('end', end);
 			command.readable.once('error', error);
 			void command.outcome.then((outcome) => {
-				if (outcome.status === 'unknown') reject(new MachineDispatchFailure('unknown'));
+				if (outcome.status === 'unknown') {
+					reject(new MachineDispatchFailure('unknown'));
+				}
 			}, reject);
-			if (command.readable.readableEnded) resolve();
+			if (command.readable.readableEnded) {
+				resolve();
+			}
 		});
 		const outcome = await command.outcome;
 		if (failure !== null) {
