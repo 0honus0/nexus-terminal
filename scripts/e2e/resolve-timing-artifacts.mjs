@@ -1,3 +1,5 @@
+import { findArtifactForJob } from './job-artifacts.mjs';
+
 export async function resolveTimingArtifacts({ github, owner, repo, runId }) {
 	const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
 		owner,
@@ -6,21 +8,18 @@ export async function resolveTimingArtifacts({ github, owner, repo, runId }) {
 		filter: 'latest',
 		per_page: 100,
 	});
-	const names = new Set();
+	const sources = new Map();
 	for (const job of jobs) {
 		const match = /^Playwright (backend|browser) shard ([1-9]\d*)$/.exec(job.name);
 		if (!match) continue;
 		if (job.status !== 'completed' || job.conclusion !== 'success') {
 			throw new Error(`Timing source job did not succeed: ${job.name}`);
 		}
-		if (!Number.isSafeInteger(job.run_attempt) || job.run_attempt < 1) {
-			throw new Error(`Timing source job has no valid attempt: ${job.name}`);
-		}
-		const name = `e2e-timings-${match[1]}-${match[2]}-${job.run_attempt}`;
-		if (names.has(name)) throw new Error(`Duplicate timing source job: ${job.name}`);
-		names.add(name);
+		const prefix = `e2e-timings-${match[1]}-${match[2]}-`;
+		if (sources.has(prefix)) throw new Error(`Duplicate timing source job: ${job.name}`);
+		sources.set(prefix, job);
 	}
-	if (names.size === 0) throw new Error('No successful Playwright timing source jobs found');
+	if (sources.size === 0) throw new Error('No successful Playwright timing source jobs found');
 	const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
 		owner,
 		repo,
@@ -28,11 +27,11 @@ export async function resolveTimingArtifacts({ github, owner, repo, runId }) {
 		per_page: 100,
 	});
 	const ids = [];
-	for (const name of names) {
-		const matches = artifacts.filter((artifact) => artifact.name === name && !artifact.expired);
-		if (matches.length !== 1) throw new Error(`Expected one available timing artifact: ${name}`);
-		ids.push(matches[0].id);
-		console.log(`[E2E timings] using ${name} (artifact ${matches[0].id})`);
+	for (const [namePrefix, job] of sources) {
+		const artifact = findArtifactForJob({ job, artifacts, namePrefix });
+		if (!artifact) throw new Error(`Missing timing artifact for source job: ${job.name}`);
+		ids.push(artifact.id);
+		console.log(`[E2E timings] using ${artifact.name} (artifact ${artifact.id})`);
 	}
 	return ids.join(',');
 }

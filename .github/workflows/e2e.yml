@@ -244,6 +244,7 @@ jobs:
       - name: Download tested application build
         uses: actions/download-artifact@v8.0.2
         with:
+          github-token: ${{ github.token }}
           artifact-ids: ${{ steps.application.outputs.result }}
           path: packages
           merge-multiple: true

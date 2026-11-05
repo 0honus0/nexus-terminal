@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { resolveTimingArtifacts } from './resolve-timing-artifacts.mjs';
+import { waitForApplicationBuild } from './wait-for-build.mjs';
+
+function timestamp(attempt, minute) {
+	return new Date(Date.UTC(2026, 10, 5, attempt, minute)).toISOString();
+}
 
 function source(jobs, artifacts) {
 	const listJobsForWorkflowRun = Symbol('jobs');
@@ -31,13 +36,20 @@ function job(suite, shard, attempt) {
 	return {
 		name: `Playwright ${suite} shard ${shard}`,
 		run_attempt: attempt,
+		started_at: timestamp(attempt, 0),
+		completed_at: timestamp(attempt, 10),
 		status: 'completed',
 		conclusion: 'success',
 	};
 }
 
 function artifact(id, suite, shard, attempt) {
-	return { id, name: `e2e-timings-${suite}-${shard}-${attempt}`, expired: false };
+	return {
+		id,
+		name: `e2e-timings-${suite}-${shard}-${attempt}`,
+		expired: false,
+		created_at: timestamp(attempt, 5),
+	};
 }
 
 test('a partial rerun selects each latest job attempt and ignores superseded artifacts', async () => {
@@ -56,7 +68,10 @@ test('a partial rerun selects each latest job attempt and ignores superseded art
 
 test('rerunning only the updater reuses successful earlier shard artifacts', async () => {
 	const input = source(
-		[job('backend', 1, 1), { name: 'Update Playwright duration balance', run_attempt: 2 }],
+		[
+			{ ...job('backend', 1, 1), run_attempt: 2 },
+			{ name: 'Update Playwright duration balance', run_attempt: 2 },
+		],
 		[artifact(11, 'backend', 1, 1)],
 	);
 	assert.equal(await resolveTimingArtifacts(input), '11');
@@ -66,7 +81,7 @@ test('a missing or expired artifact fails instead of falling back to stale obser
 	for (const artifacts of [[artifact(11, 'browser', 1, 1)], [{ ...artifact(12, 'browser', 1, 2), expired: true }]]) {
 		await assert.rejects(
 			resolveTimingArtifacts(source([job('browser', 1, 2)], artifacts)),
-			/Expected one available timing artifact/,
+			/Missing timing artifact/,
 		);
 	}
 });
@@ -75,7 +90,7 @@ test('failed, ambiguous or unidentified sources cannot update timing estimates',
 	for (const jobs of [
 		[],
 		[{ ...job('backend', 1, 1), conclusion: 'failure' }],
-		[{ ...job('backend', 1, 1), run_attempt: undefined }],
+		[{ ...job('backend', 1, 1), completed_at: undefined }],
 		[job('backend', 1, 1), job('backend', 1, 1)],
 	]) {
 		await assert.rejects(resolveTimingArtifacts(source(jobs, [artifact(11, 'backend', 1, 1)])));
@@ -84,8 +99,27 @@ test('failed, ambiguous or unidentified sources cannot update timing estimates',
 		resolveTimingArtifacts(
 			source([job('backend', 1, 1)], [artifact(11, 'backend', 1, 1), artifact(12, 'backend', 1, 1)]),
 		),
-		/Expected one available timing artifact/,
+		/Multiple artifacts for source job/,
 	);
+});
+
+test('a failed shard rerun reuses the copied successful build without trusting its attempt', async () => {
+	const input = source(
+		[{ ...job('backend', 1, 1), name: 'Checks and format', run_attempt: 2 }],
+		[
+			{ ...artifact(11, 'backend', 1, 1), name: 'e2e-application-test-sha-1' },
+			{ ...artifact(12, 'backend', 1, 2), name: 'e2e-application-test-sha-2' },
+		],
+	);
+	assert.equal(await waitForApplicationBuild({ ...input, sha: 'test-sha' }), '11');
+});
+
+test('a full build rerun cannot use an earlier build artifact', async () => {
+	const input = source(
+		[{ ...job('backend', 1, 2), name: 'Checks and format' }],
+		[{ ...artifact(11, 'backend', 1, 1), name: 'e2e-application-test-sha-1' }],
+	);
+	await assert.rejects(waitForApplicationBuild({ ...input, sha: 'test-sha' }), /Application artifact unavailable/);
 });
 
 test('API failures propagate without publishing partial IDs', async () => {
