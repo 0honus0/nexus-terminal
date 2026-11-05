@@ -20,8 +20,7 @@ export interface WorkspaceFocusConfig {
 	shortcuts: Record<string, string>;
 }
 
-export interface WorkspaceLayoutSnapshot {
-	version: number;
+export interface WorkspaceLayoutConfiguration {
 	layout: WorkspaceLayoutNodeState;
 	sidebar: WorkspaceSidebar;
 }

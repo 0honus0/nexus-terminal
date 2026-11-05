@@ -428,7 +428,7 @@ usePluginManagement 持已确认安装快照；相同 appId/revision 序列不�
 
 ## 工作区尺寸自动保存的冲突核对
 
-1. **职责与范围**：WorkspaceLayoutController持当前预览和上次确认的本地尺寸，PresentationStore持持久快照、串行队列和恢复围栏；仅尺寸自动保存允许确定冲突后的有限恢复，不扩大到表单写入。
+1. **职责与范围**：WorkspaceLayoutController持当前预览和上次确认的本地尺寸，PresentationStore持持久快照、串行队列和恢复围栏；尺寸自动保存按容器比例核对；结构配置弹窗按完整布局与侧栏基线核对，见下节；不扩大到其它表单写入。
 2. **子功能与目录**：沿workspaceLayout、workspace-settings-adapter、preferences/store/presentation.store及model/layout-size-merge，布局错误文案由WorkspacePage与原Toast持有。
 3. **依赖方向**：Renderer显式分隔条事件→Controller的1000ms LatestValueSaver→原Repository/Adapter→PresentationStore→原API/Shared；恢复读取在原队列任务内部完成，不递归入队等待自身。
 4. **类型与转换**：原WorkspaceLayoutNodeState和PersonalLayout各自归属不变，Repository尺寸保存显式接收预览与本地确认基线；Adapter逐字段转换，无新后端/Shared契约。
@@ -469,3 +469,14 @@ usePluginManagement 持已确认安装快照；相同 appId/revision 序列不�
 6. **数据、事务与并发**：记住选择只交后端原身份/CAS 事务，前端不把 checkbox 当持久回执；API 返回新挑战时重新显示并清除勾选，不自动接受。未知保存先在下一次连接读取当前信任，不自动重写。
 7. **生命周期与失败**：取消正常进入 disconnected；关闭/切目标/登出 abort 原等待并解除监听，generation 阻止晚选择和旧 finally 写回。证书弹窗打开时原 fullscreen Esc handler 让出处理，确认层 Esc 取消连接；actual TLS 指纹变化仍由原桥拒绝，用户主动重连。
 8. **当前能力与验收**：源码、三语及双端契约已同步，静态/构建及未验范围见 testing；既有 RDP 浏览器场景迁移取消/一次/记住步骤，未执行本批浏览器或 E2E，不以历史 560 项证明新流程通过。
+
+## 配置布局弹窗的内容基线核对
+
+1. **职责与范围**：Configurator持编辑草稿及打开时的布局/侧栏基线，Controller拥有预览与尺寸任务，PresentationStore拥有串行队列及完整权威快照。解决同页锁定开关、其它偏好保存推进共享版本而误拒布局保存的问题，UI及刷新入口不变。
+2. **子功能与目录**：复用WorkspaceLayoutConfigurator、workspaceLayout、workspace-settings-adapter与preferences的presentation.store/model，不新增持久状态。
+3. **依赖方向**：弹窗→Controller→Repository/Adapter→Preferences公开Store→原API/Shared；恢复读取位于同一队列任务，不递归入队。
+4. **类型与转换**：WorkspaceLayoutConfiguration与PersonalWorkspaceLayout分别归运行时和偏好model；Adapter逐字段转换基线/目标，并返回实际确认的完整WorkspaceLayoutConfiguration。共享版本仅由PresentationStore持有，移除Controller无消费者的重复版本状态。目标与基线入队前复制，不携带失效的表单版本作为写入许可；API仍严格提交expectedVersion并核对完整回执。
+5. **入口与安装**：saveWorkspaceLayout在队列真正执行时核对当前快照。布局与侧栏作为一个整体；当前仍等于原基线才提交目标，目标已是当前值或没有本地修改则不重复写入。Controller应用实际确认的布局/侧栏，不能以旧草稿覆盖无写入时返回的当前配置。
+6. **数据、事务与并发**：保留原workspace-layout原子CAS，无数据库迁移。无关偏好/焦点变化可以推进版本；当前布局/侧栏与基线、目标均不同则拒绝。与尺寸保存复用有限CAS恢复：仅confirmed/version_conflict只读核对后最多再提交一次，二次冲突不循环。尺寸flush后重新取Store当前版本，不引用弹窗打开时的版本。
+7. **生命周期与失败**：派发及恢复读取后复查原scope/permission；撤销不追加写入。unknown不重放，真实内容冲突、读取失败和二次拒绝维持原围栏并保留草稿；显式刷新放弃草稿并重新建立基线。
+8. **当前能力与验收**：USAGE同步自动核对与人工刷新边界；正式远程用例覆盖同页锁定后保存、外部无关版本推进、真实布局冲突、提交后丢失响应及二次409。静态、完整Actions与尚未覆盖的真机边界分别记入testing。

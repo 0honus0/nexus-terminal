@@ -3,7 +3,11 @@ import { WORKSPACE_PANES, type WorkspacePane } from '@nexus-terminal/shared/pref
 import { logger } from '@/client/logging/logger';
 import { createLatestValueSaver } from '@/foundation/async';
 import type { WorkspaceSettingsRepository } from '../ports/workspace-settings-repository';
-import type { WorkspaceLayoutNodeState, WorkspaceSidebar } from '../model/presentation-types';
+import type {
+	WorkspaceLayoutNodeState,
+	WorkspaceSidebar,
+	WorkspaceLayoutConfiguration,
+} from '../model/presentation-types';
 
 export const WORKSPACE_LAYOUT_MIN_SIZE = 5;
 
@@ -207,7 +211,6 @@ export const createWorkspaceLayoutController = (
 	const sidebars = ref<WorkspaceSidebar>(defaultSidebars());
 	const loaded = ref(false);
 	const loading = ref(false);
-	const version = ref(0);
 	const error = ref<unknown>(null);
 	const scope = new AbortController();
 	let resizeScope = new AbortController();
@@ -261,7 +264,7 @@ export const createWorkspaceLayoutController = (
 			if (permission.aborted || scope.signal.aborted || scheduledRevision !== revision || error.value) {
 				return;
 			}
-			const result = await settingsRepository.saveResizedLayout(
+			await settingsRepository.saveResizedLayout(
 				layout,
 				cloneWorkspaceLayout(confirmedLayout),
 				AbortSignal.any([permission, scope.signal]),
@@ -270,7 +273,6 @@ export const createWorkspaceLayoutController = (
 				// A confirmed write still advances our baseline if the cached page became inactive meanwhile.
 				confirmedLayout = cloneWorkspaceLayout(layout);
 				if (!permission.aborted) {
-					version.value = result;
 					error.value = null;
 				}
 			}
@@ -293,14 +295,12 @@ export const createWorkspaceLayoutController = (
 			revision++;
 			loaded.value = false;
 			loading.value = false;
-			version.value = 0;
 			tree.value = createDefaultWorkspaceLayout();
 			confirmedLayout = cloneWorkspaceLayout(tree.value);
 			sidebars.value = defaultSidebars();
 			error.value = null;
 		},
 
-		version: computed(() => version.value),
 		error: computed(() => error.value),
 		loaded: computed(() => loaded.value),
 		loading: computed(() => loading.value),
@@ -321,7 +321,6 @@ export const createWorkspaceLayoutController = (
 					left: value.sidebar.left.map((pane) => pane),
 					right: value.sidebar.right.map((pane) => pane),
 				};
-				version.value = value.version;
 				loaded.value = true;
 				error.value = null;
 			} catch (cause) {
@@ -335,7 +334,10 @@ export const createWorkspaceLayoutController = (
 		async save(
 			nextTree: WorkspaceLayoutNodeState,
 			nextSidebars = sidebars.value,
-			expectedVersion = version.value,
+			baseline: WorkspaceLayoutConfiguration = {
+				layout: cloneWorkspaceLayout(tree.value),
+				sidebar: { left: [...sidebars.value.left], right: [...sidebars.value.right] },
+			},
 			permission = capturePermission(),
 		): Promise<void> {
 			const layout = cloneWorkspaceLayout(normalizeWorkspaceLayout(nextTree));
@@ -343,18 +345,22 @@ export const createWorkspaceLayoutController = (
 				left: nextSidebars.left.map((pane) => pane),
 				right: nextSidebars.right.map((pane) => pane),
 			};
+			const original = {
+				layout: cloneWorkspaceLayout(baseline.layout),
+				sidebar: { left: [...baseline.sidebar.left], right: [...baseline.sidebar.right] },
+			};
 			await resizeSaver.flush();
 			const result = await settingsRepository.saveLayout(
-				{ version: expectedVersion, layout, sidebar },
+				{ layout, sidebar },
+				original,
 				AbortSignal.any([permission, scope.signal]),
 			);
 			if (scope.signal.aborted || permission.aborted) return;
 			revokeResizeTasks();
 			revision++;
-			tree.value = layout;
-			confirmedLayout = cloneWorkspaceLayout(layout);
-			sidebars.value = sidebar;
-			version.value = result;
+			tree.value = cloneWorkspaceLayout(result.layout);
+			confirmedLayout = cloneWorkspaceLayout(result.layout);
+			sidebars.value = { left: [...result.sidebar.left], right: [...result.sidebar.right] };
 			loaded.value = true;
 			error.value = null;
 		},

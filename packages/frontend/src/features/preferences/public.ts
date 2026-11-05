@@ -10,6 +10,7 @@ export type {
 	PersonalLayout,
 	PersonalFocus,
 	PersonalSidebar,
+	PersonalWorkspaceLayout,
 	PresentationChange,
 } from './model/preferences-types';
 

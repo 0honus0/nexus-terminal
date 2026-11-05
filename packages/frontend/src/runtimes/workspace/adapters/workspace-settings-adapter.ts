@@ -33,35 +33,37 @@ export const workspaceSettingsAdapter: WorkspaceSettingsRepository = {
 	async loadLayout(recover = false) {
 		const value = await usePresentationStore().load(recover);
 		return {
-			version: value.version,
 			layout: fromPersonalLayout(value.layout),
 			sidebar: { left: value.sidebar.left.map((pane) => pane), right: value.sidebar.right.map((pane) => pane) },
 		};
 	},
 
 	async saveResizedLayout(layout, baseline, permission) {
-		const value = await usePresentationStore().saveLayoutSizes(
-			toPersonalLayout(layout),
-			toPersonalLayout(baseline),
-			permission,
-		);
-		return value.version;
+		await usePresentationStore().saveLayoutSizes(toPersonalLayout(layout), toPersonalLayout(baseline), permission);
 	},
 
-	async saveLayout(snapshot, permission) {
-		const value = await usePresentationStore().update(
+	async saveLayout(configuration, baseline, permission) {
+		const value = await usePresentationStore().saveWorkspaceLayout(
 			{
-				action: 'workspace',
-				expectedVersion: snapshot.version,
-				layout: toPersonalLayout(snapshot.layout),
+				layout: toPersonalLayout(configuration.layout),
 				sidebar: {
-					left: snapshot.sidebar.left.map((pane) => pane),
-					right: snapshot.sidebar.right.map((pane) => pane),
+					left: configuration.sidebar.left.map((pane) => pane),
+					right: configuration.sidebar.right.map((pane) => pane),
+				},
+			},
+			{
+				layout: toPersonalLayout(baseline.layout),
+				sidebar: {
+					left: baseline.sidebar.left.map((pane) => pane),
+					right: baseline.sidebar.right.map((pane) => pane),
 				},
 			},
 			permission,
 		);
-		return value.version;
+		return {
+			layout: fromPersonalLayout(value.layout),
+			sidebar: { left: value.sidebar.left.map((pane) => pane), right: value.sidebar.right.map((pane) => pane) },
+		};
 	},
 
 	async loadFocus(recover = false) {

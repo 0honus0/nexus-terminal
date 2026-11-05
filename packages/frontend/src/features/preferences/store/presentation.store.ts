@@ -4,13 +4,19 @@ import { registerAuthenticatedSessionReset } from '@/shared/session/public';
 import { PreferenceRequestFailure } from '@/client/preferences/preference-request';
 import { structurallyEqual } from '@/foundation/data';
 import { presentationApi } from '../api/presentation-api';
-import { snapshotPresentationChange, projectPreferences, projectLayout } from '../model/presentation-mapper';
+import {
+	snapshotPresentationChange,
+	projectPreferences,
+	projectLayout,
+	projectWorkspaceLayout,
+} from '../model/presentation-mapper';
 import { mergeLayoutSizes } from '../model/layout-size-merge';
 import type {
 	UserPresentation,
 	PresentationChange,
 	PanelScaleKind,
 	PersonalLayout,
+	PersonalWorkspaceLayout,
 	WorkspacePreferenceKey,
 } from '../model/preferences-types';
 
@@ -133,13 +139,10 @@ export const usePresentationStore = defineStore('presentation', () => {
 		}, permission);
 	}
 
-	function saveLayoutSizes(
-		layout: PersonalLayout,
-		baseline: PersonalLayout,
+	function mutateLayout(
+		work: (value: UserPresentation, signal: AbortSignal) => Promise<UserPresentation>,
 		permission?: AbortSignal,
 	): Promise<UserPresentation> {
-		const frozen = projectLayout(layout);
-		const original = projectLayout(baseline);
 		return mutate(async (signal) => {
 			const current = snapshot.value;
 			if (!current) throw new PreferenceRequestFailure('refresh_required', 'not_dispatched');
@@ -148,17 +151,7 @@ export const usePresentationStore = defineStore('presentation', () => {
 				if (signal.aborted || permission?.aborted) {
 					throw new PreferenceRequestFailure('cancelled', 'not_dispatched');
 				}
-				const merged = mergeLayoutSizes(original, frozen, value.layout);
-				if (!merged) {
-					throw new PreferenceRequestFailure('version_conflict', 'not_dispatched');
-				}
-				if (structurallyEqual(merged, value.layout)) {
-					return Promise.resolve(value);
-				}
-				return presentationApi.update(
-					{ action: 'layout', expectedVersion: value.version, layout: merged },
-					signal,
-				);
+				return work(value, signal);
 			}
 
 			try {
@@ -189,6 +182,44 @@ export const usePresentationStore = defineStore('presentation', () => {
 		}, permission);
 	}
 
+	function saveLayoutSizes(
+		layout: PersonalLayout,
+		baseline: PersonalLayout,
+		permission?: AbortSignal,
+	): Promise<UserPresentation> {
+		const frozen = projectLayout(layout);
+		const original = projectLayout(baseline);
+		return mutateLayout((value, signal) => {
+			const merged = mergeLayoutSizes(original, frozen, value.layout);
+			if (!merged) throw new PreferenceRequestFailure('version_conflict', 'not_dispatched');
+			if (structurallyEqual(merged, value.layout)) return Promise.resolve(value);
+			return presentationApi.update({ action: 'layout', expectedVersion: value.version, layout: merged }, signal);
+		}, permission);
+	}
+
+	function saveWorkspaceLayout(
+		layout: PersonalWorkspaceLayout,
+		baseline: PersonalWorkspaceLayout,
+		permission?: AbortSignal,
+	): Promise<UserPresentation> {
+		const frozen = projectWorkspaceLayout(layout);
+		const original = projectWorkspaceLayout(baseline);
+		return mutateLayout((value, signal) => {
+			const current = projectWorkspaceLayout(value);
+			if (structurallyEqual(frozen, original) || structurallyEqual(frozen, current)) {
+				return Promise.resolve(value);
+			}
+			// Layout and sidebars are one configuration: merging them independently can duplicate panes.
+			if (!structurallyEqual(original, current)) {
+				throw new PreferenceRequestFailure('version_conflict', 'not_dispatched');
+			}
+			return presentationApi.update(
+				{ action: 'workspace', expectedVersion: value.version, layout: frozen.layout, sidebar: frozen.sidebar },
+				signal,
+			);
+		}, permission);
+	}
+
 	function saveWorkspacePreference(
 		key: WorkspacePreferenceKey,
 		value: boolean,
@@ -206,7 +237,18 @@ export const usePresentationStore = defineStore('presentation', () => {
 		}, permission);
 	}
 
-	return { snapshot, error, blocked, load, update, savePanelScale, saveLayoutSizes, saveWorkspacePreference, reset };
+	return {
+		snapshot,
+		error,
+		blocked,
+		load,
+		update,
+		savePanelScale,
+		saveLayoutSizes,
+		saveWorkspaceLayout,
+		saveWorkspacePreference,
+		reset,
+	};
 });
 
 registerAuthenticatedSessionReset('presentation', () => usePresentationStore().reset());

@@ -27,7 +27,6 @@
 	const originalSidebar = ref<WorkspaceSidebar>({ left: [], right: [] });
 	const saving = ref(false);
 	const needsRefresh = ref(false);
-	const originalVersion = ref(0);
 	const view = useAuthenticatedViewScope({
 		available: () => props.visible,
 
@@ -40,7 +39,6 @@
 		() => props.visible,
 		(visible) => {
 			if (!visible) return;
-			originalVersion.value = workspaceLayout.version.value;
 			draft.value = cloneWorkspaceLayout(workspaceLayout.tree.value);
 			sidebar.value = {
 				left: [...workspaceLayout.sidebars.value.left],
@@ -152,7 +150,6 @@
 		try {
 			await workspaceLayout.load(true);
 			if (!view.isCurrent(signal)) return;
-			originalVersion.value = workspaceLayout.version.value;
 			draft.value = cloneWorkspaceLayout(workspaceLayout.tree.value);
 			originalDraft.value = cloneWorkspaceLayout(draft.value);
 			sidebar.value = {
@@ -180,7 +177,10 @@
 			await workspaceLayout.save(
 				cloneWorkspaceLayout(draft.value),
 				{ left: [...sidebar.value.left], right: [...sidebar.value.right] },
-				originalVersion.value,
+				{
+					layout: cloneWorkspaceLayout(originalDraft.value),
+					sidebar: { left: [...originalSidebar.value.left], right: [...originalSidebar.value.right] },
+				},
 				signal,
 			);
 			if (!view.isCurrent(signal)) return;

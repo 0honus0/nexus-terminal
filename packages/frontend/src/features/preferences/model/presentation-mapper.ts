@@ -12,6 +12,7 @@ import type {
 	PersonalSidebar,
 	UserPresentation,
 	PresentationChange,
+	PersonalWorkspaceLayout,
 } from './preferences-types';
 
 export function projectPreferences(value: UserPreferences | PresentationPreferences): UserPreferences {
@@ -81,6 +82,10 @@ export function projectFocus(value: PersonalFocus | PresentationFocus): Personal
 
 export function projectSidebar(value: PersonalSidebar | PresentationSidebar): PersonalSidebar {
 	return { left: value.left.map((pane) => pane), right: value.right.map((pane) => pane) };
+}
+
+export function projectWorkspaceLayout(value: PersonalWorkspaceLayout): PersonalWorkspaceLayout {
+	return { layout: projectLayout(value.layout), sidebar: projectSidebar(value.sidebar) };
 }
 
 export function fromPresentation(value: PresentationView): UserPresentation {

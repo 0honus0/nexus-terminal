@@ -88,6 +88,11 @@ export interface PersonalSidebar {
 	right: WorkspacePane[];
 }
 
+export interface PersonalWorkspaceLayout {
+	layout: PersonalLayout;
+	sidebar: PersonalSidebar;
+}
+
 export interface UserPresentation {
 	version: number;
 	preferences: UserPreferences;
