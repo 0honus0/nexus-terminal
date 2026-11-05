@@ -366,6 +366,8 @@ test('RDP browser client preserves settings, clipboard and browser fullscreen', 
 
 			await page.keyboard.press('Escape');
 			await expect.poll(() => panel.evaluate((element) => document.fullscreenElement === element)).toBe(false);
+			// Restored RDP chrome follows its normal edge-hover interaction after leaving fullscreen.
+			await revealDesktopControls(page);
 			await expect(header).toBeVisible();
 			await expect(footer).toBeAttached();
 			await expect(panel.getByRole('button', { name: 'Reconnect', exact: true })).toBeVisible();
