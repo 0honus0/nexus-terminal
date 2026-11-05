@@ -4,17 +4,19 @@
 
 ## 当前验收基线
 
-最新完整远程[E2E 41871072826](https://github.com/0honus0/nexus-terminal/actions/runs/41871072826)验证`main/d059911e01ce1645ecead9eeb7aae9b8d08df92f`：559项全部一次通过，质量检查、双端生产构建、Docker smoke与8个测试分片全部success；耗时任务成功、文档截图按条件跳过。按正式Reporter核对559条唯一passed记录，无失败、重试或场景跳过。Backend129项，Browser1–7分别33/71/60/49/75/67/75项（包含隔离场景）。后继2b0ab3db只更新耗时估算，产品源码一致，不称其直接跑过本轮E2E。最终文档收口不改变被测源码。
+最新完整远程[E2E 41961045032](https://github.com/0honus0/nexus-terminal/actions/runs/41961045032)验证`main/5548e78892528d1844682c775b4ac9ae30e51093`：559项全部一次通过，质量检查、双端生产构建、Docker smoke与8个测试分片全部success；耗时任务成功、文档截图按条件跳过。按正式Reporter核对559条唯一passed记录，无失败、重试或场景跳过。Backend129项，Browser1–7分别41/65/44/58/62/84/76项（包含隔离场景）。后继bb06abd4只更新耗时估算，产品源码一致，不称其直接跑过本轮E2E。最终文档收口不改变被测源码。
 
 官方插件[v1.0.3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.3)仍为d5dd455，本批没有插件改动。本体[amd dev发布41872562719](https://github.com/0honus0/nexus-terminal/actions/runs/41872562719)success，dev与sha-2b0ab3db9208的digest一致，平台/revision均经实际GHCR核对，详见下节；此前指定实例的7262e8ac部署仍保持原范围，本轮不更新生产容器或数据库。真实运营商切网、手机软键盘、外部供应商及未列故障边界仍按[待验与外部依赖](../PLAN.md#待验与外部依赖)保留；受控回归不替代真实模型效果或吞吐实测。更早测试与镜像结果只保留为各自历史证据。
 
-## 依赖升级提交与正式远程验收（2026-11-05，进行中）
+## 依赖升级提交与正式远程验收（2026-11-05，完成）
 
-用户授权提交推送并等待本次完整E2E。复核所有4份workflow引用的11种Actions，均与本轮官方release盘点一致；5份清单共121条依赖声明和catalog/overrides已核对。Vue3 draggable、TS6前端别名、SheetJS官方包及定制IronRDP保持实际适用来源，不将npm旧latest标签作为降级目标。
+用户授权提交推送并等待本次完整E2E。复核所有4份workflow引用的11种Actions，均与本轮官方release盘点一致；5份清单共121条依赖声明和catalog/overrides已核对。Vue3 draggable、TS6前端别名、SheetJS官方包及IronRDP锁定上游构建保持实际适用来源，不将npm旧latest标签作为降级目标。
 
 只读核对上一轮 `e79cf838/41958423414` 为失败：质量、runner、Docker smoke及其它7个分片通过，browser shard5的390/320px两项提醒场景均在模型选择前被已打开的会话抽屉遮挡。原日志位于本轮产物目录 `remote/previous-e2e-failed.log`，堆栈是task-notices.spec→openNativeTask→selectAgentModel。源码确认use-native-threads.choose遇到同一已选项直接返回，Surface的selectNativeThread没有收到事件而未关闭抽屉。现同项选择仍发布已有selection，原runtime.selectThread继续按相同ID避免重复加载。保留原布局、样式、权限/在途写保护及场景断言；修复后根check、前端build通过，日志为check-submit.log与build-frontend-submit.log；全仓格式以format-submit.log为准，并用本次新SHA完整远程验收。
 
-后续实际SHA、远程run、日志、分片与结果在本节收口；进行中不记录为通过，不发布或部署。
+5548e788已提交推送main，正式远程41961045032结论success。完整日志为本轮产物目录remote/e2e-complete.log，按正式Reporter测试结束记录生成remote/e2e-summary.json：559条记录及559个唯一标题全部passed，无失败、重试或测试跳过，分片数见当前验收基线。质量检查、runner完整重建、Docker smoke及8分片均success，耗时任务成功，文档截图按条件跳过。runner与主镜像均明确Succeeded in building optional crypto binding；分片新工作区安装复用567个包、downloaded 0。自动后继bb06abd4仅更新耗时估算；本次文档提交不改变被测产品源码。未发布产品镜像、更新生产或维护数据库，ARM64运行仍未验。
+
+日志中的非阻断事项如实保留：SFTP有MaxListenersExceededWarning，下载产物Action有Buffer()弃用警告，多个job同时保存同一缓存时有占用提示；本轮没有将这些警告视为已修复，也不以全套通过证明无性能或资源问题。工具、测试证据和本地构建镜像保留至用户通知。
 
 ## 依赖、Node 与 Actions 升级（2026-11-05，静态与构建）
 

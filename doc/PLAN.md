@@ -57,7 +57,7 @@
 | 功能对应 | 已升级13处直接依赖、minimatch overrides、锁文件、Node/pnpm及全部4份workflow中的Actions；Shared清单加入更新workflow检测/提交；Node变动触发E2E和runner重建。保留原补丁功能，Monaco仅补标准Git头；ssh2应用上游Isolate/Nan ObjectWrap修复，避免Node26编译失败后退回JS。复核上一轮远程失败后，use-native-threads.choose同项点击继续通知Surface收起抽屉，原runtime仍跳过重复读取；手机提醒原有场景保持断言。 |
 | 职责归属 | `.node-version`、根packageManager、各清单/catalog持版本；Docker、build.sh及workflow消费，runner-image-info纳入版本文件指纹。发布和E2E的Node都读取相同文件。主镜像构建与运行共用官方Node Alpine，构建时严格确认ssh2原生编译，不新增应用层或UI。                                                                                                                                                         |
 | 类型归属 | 无Shared/HTTP/持久化类型变化；p-limit默认ESM及p-retry的现有具名拒绝/取消语义保持，OpenAI/PDF真实消费者类型构建通过。既有Passkey E2E辅助器改用CDPSession自身的send签名，移除任意string及结果断言，不改场景/断言。                                                                                                                                                                                       |
-| 完成证据 | 新Node/pnpm frozen、根check、Shared check、双端build、E2E严格类型、全仓格式、生产audit零漏洞、actionlint和shell语法通过；主镜像最终构建及隔离无网络依赖加载通过，ssh2六个原生导出可用。runner Docker build check通过；全runner重建/离线缓存复用、远程E2E与ARM64运行待验，不复用历史PASS。最终文档/格式/diff收口见testing。                                                                             |
+| 完成证据 | 新Node/pnpm frozen、根check、Shared check、双端build、E2E严格类型、全仓格式、生产audit零漏洞、actionlint和shell语法通过；主镜像及隔离原生依赖加载通过。5548e788正式远程41961045032 success：559项一次通过、无失败/重试/测试跳过，质量、runner完整重建/567包零下载复用、Docker smoke与8分片全部通过。后继bb06abd4只更新耗时估算；完整日志、非阻断警告及未验范围见testing。ARM64运行未验，不发布或部署。 |
 
 ## GIF 聊天预览与可调图片预览容量（2026-11-05）
 
@@ -274,4 +274,4 @@
 
 ## 下一轮入口
 
-本轮依赖/Node/Actions升级已完成源码、静态与amd64统一镜像构建检查，用户已授权提交推送并等待完整远程E2E；按实际新SHA记录质量、runner、全部分片及Docker smoke，失败在本轮修复，不自动发布、部署或操作现存数据库。后续依赖升级必须检查并退役已被新ssh2正式版包含的临时补丁，删除文件/workspace/锁文件引用并复核原生编译加载，见DEPLOYMENT。上一轮GIF/Agent限定CDP只覆盖其原源码，不当作本轮新依赖验收。其余待验按本文件与testing原证据承接，不据既有专项授权自动运行全量测试。专用目录及构建产物保留至用户通知清理。
+本轮依赖/Node/Actions升级已提交推送，5548e788正式远程41961045032完成559项一次通过，质量、runner重建与Docker smoke均success；后继bb06abd4仅更新耗时估算，文档收口不改变产品源码。本轮不发布、部署或操作现存数据库。后续依赖升级必须检查并退役已被新ssh2正式版包含的临时补丁，删除文件/workspace/锁文件引用并复核原生编译加载，见DEPLOYMENT。日志中的SFTP监听器及上游Action警告、ARM64运行和其余未验范围按testing原证据承接，不据本轮通过扩大实测结论。RDP参数与Termix对比仅完成只读源码核对，未增加设置或改造引擎。专用目录及构建产物保留至用户通知清理。
