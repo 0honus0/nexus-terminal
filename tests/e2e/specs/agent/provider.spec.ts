@@ -3,6 +3,7 @@ import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { requestAgentJson } from '../../support/agent-request';
 import { createAgentProvider } from '../../support/agent';
 import { E2E_URLS } from '../../support/test-env';
+import { expectReadableCatalogText } from '../../support/catalog-colors';
 import {
 	readAgentProviderView,
 	readAgentProviderListResponse,
@@ -81,6 +82,7 @@ test('Provider credentials, observations and original configuration versions use
 	const panel = page.getByRole('region', { name: 'Model providers', exact: true });
 	await expect(panel.getByRole('heading', { name: 'Renamed local provider', exact: true })).toBeVisible();
 	await expect(panel).not.toContainText('e2e-provider-secret');
+	await expectReadableCatalogText(panel.locator('.ui-catalog-status-badge'));
 	provider = await requestAgentJson(
 		request,
 		{

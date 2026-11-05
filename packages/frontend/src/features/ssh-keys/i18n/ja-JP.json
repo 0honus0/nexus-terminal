@@ -1,5 +1,6 @@
 {
   "sshKeys": {
+    "manageKeys": "鍵の管理",
     "selector": {
       "selectPlaceholder": "SSH キーを選択...",
       "useDirectInput": "またはキーの内容を直接入力",

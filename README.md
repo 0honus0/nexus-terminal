@@ -68,7 +68,8 @@ Agent 的 File/Shell/ACP 工具通过明确授权的 SSH 连接执行，Browser 
 
 ## 工程文档
 
-- [实际软件需求与使用](./doc/USAGE.md)
+- [文档职责与总导航](./doc/README.md)
+- [接口使用补充](./doc/API.md)
 - [开发入口与规则](./doc/AGENTS.md)
 - [Frontend 架构](./doc/architecture/FRONTEND.md)
 - [Backend 架构](./doc/architecture/BACKEND.md)

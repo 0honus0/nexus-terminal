@@ -823,6 +823,9 @@
 		padding: 0;
 		line-height: 1;
 	}
+	.quick-command-group-name:not(:hover) {
+		color: var(--ui-catalog-accent-ink);
+	}
 	.quick-command-group-name {
 		font-family: var(--font-family-sans-serif);
 		height: 20px;
@@ -832,6 +835,9 @@
 	}
 	.quick-command-group-badge {
 		line-height: 1;
+	}
+	.quick-command-group-header:not(:hover) {
+		background: var(--ui-catalog-group-fill);
 	}
 	.quick-command-group-header {
 		min-width: 0;
@@ -853,6 +859,7 @@
 	}
 	.quick-command-display-text {
 		min-width: 0;
+		color: var(--ui-catalog-name-ink);
 	}
 	.quick-command-list-area {
 		padding-top: 0.625rem;

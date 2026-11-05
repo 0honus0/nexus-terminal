@@ -899,8 +899,10 @@ function attachSftp(session, accept) {
 				return;
 			}
 			const fullPath = resolveRemotePath(remotePath);
-			await fsp.stat(fullPath);
-			sftp.name(reqid, [{ filename: virtualPath(remotePath), longname: virtualPath(remotePath), attrs: {} }]);
+			// SFTP REALPATH resolves parent symlinks; lexical normalization would
+			// hide aliases from the application's overlap preflight.
+			const canonical = virtualPath(await fsp.realpath(fullPath));
+			sftp.name(reqid, [{ filename: canonical, longname: canonical, attrs: {} }]);
 		} catch (error) {
 			respondError(reqid, error);
 		}

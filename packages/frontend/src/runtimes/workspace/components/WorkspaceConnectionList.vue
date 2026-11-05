@@ -758,7 +758,7 @@
 		flex-shrink: 0;
 		place-items: center;
 		margin-right: 0.625rem;
-		color: var(--text-color-secondary);
+		color: var(--ui-catalog-info-ink);
 		font-size: 0.8125rem;
 		transition: color 0.15s ease;
 	}
@@ -768,6 +768,7 @@
 	}
 	.workspace-connection-name {
 		display: block;
+		color: var(--ui-catalog-name-ink);
 		font-size: 0.875rem;
 		line-height: 1.35;
 	}
@@ -781,12 +782,16 @@
 	.workspace-connection-group-more {
 		display: none;
 	}
-	.workspace-connection-group:hover {
-		background: color-mix(in srgb, var(--text-color) 9%, var(--app-bg-color));
+	.workspace-connection-group:hover,
+	.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-group:hover {
+		background: var(--ui-catalog-tag-fill);
+	}
+	.workspace-connection-group-name {
+		color: var(--ui-catalog-accent-ink);
 	}
 	.workspace-connection-group {
 		border-radius: 0.4rem;
-		background: color-mix(in srgb, var(--text-color) 3%, transparent);
+		background: var(--ui-catalog-group-fill);
 		box-shadow: none;
 	}
 	.workspace-connection-item:hover {
@@ -839,7 +844,7 @@
 		min-height: 1.85rem;
 		padding: 0.18rem 0.4rem;
 		border-radius: 0.45rem;
-		background: color-mix(in srgb, var(--text-color) 3.5%, transparent);
+		background: var(--ui-catalog-group-fill);
 	}
 	.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-group-name {
 		font-size: 0.72rem;
@@ -977,7 +982,6 @@
 		.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-host,
 		.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-time {
 			font-size: 0.64rem;
-			opacity: 0.64;
 		}
 		.workspace-connection-list:not(.workspace-connection-list--launchpad)
 			.workspace-connection-item.bg-primary\/20 {
@@ -1003,7 +1007,7 @@
 		font-weight: 500;
 	}
 	.workspace-connection-list--page .workspace-connection-group:hover {
-		background: color-mix(in srgb, var(--text-color) 3%, var(--app-bg-color));
+		background: var(--ui-catalog-tag-fill);
 	}
 	.workspace-connection-list--page .workspace-connection-group-name {
 		font-size: 0.75rem;
@@ -1141,7 +1145,7 @@
 		padding: 0.625rem 0.75rem;
 		border-radius: 0.625rem;
 		white-space: normal;
-		background: color-mix(in srgb, var(--text-color) 2.5%, transparent);
+		background: var(--ui-catalog-row-fill);
 		transition:
 			background-color 0.15s ease,
 			box-shadow 0.15s ease;
@@ -1181,7 +1185,6 @@
 		font-family: var(--font-family-monospace);
 		font-size: 0.6875rem;
 		line-height: 1.35;
-		opacity: 0.78;
 	}
 
 	.workspace-connection-meta {
@@ -1194,8 +1197,10 @@
 
 	.workspace-connection-type {
 		padding: 0.125rem 0.375rem;
-		border: 1px solid color-mix(in srgb, var(--border-color) 65%, transparent);
+		border: 1px solid color-mix(in srgb, var(--status-info-color) 28%, var(--border-color));
 		border-radius: 9999px;
+		background: var(--ui-catalog-type-fill);
+		color: var(--ui-catalog-info-ink);
 		font-size: 0.625rem;
 		font-weight: 600;
 		line-height: 1.4;
@@ -1205,7 +1210,6 @@
 		flex-shrink: 0;
 		font-size: 0.6875rem;
 		white-space: nowrap;
-		opacity: 0.72;
 	}
 
 	.workspace-connection-list--launchpad .workspace-connection-meta {

@@ -321,10 +321,11 @@
 							<div class="ui-catalog-card__content">
 								<div class="ui-catalog-card__heading">
 									<strong class="ui-catalog-card__name">{{ item.name }}</strong>
-									<UiBadge appearance="ghost" density="compact">
+									<UiBadge class="ui-catalog-type-badge" appearance="ghost" density="compact">
 										{{ t('settings.notifications.types.' + item.config.kind) }}
 									</UiBadge>
 									<UiBadge
+										class="ui-catalog-status-badge"
 										appearance="ghost"
 										density="compact"
 										:tone="item.enabled ? 'success' : 'warning'"

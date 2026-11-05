@@ -26,7 +26,7 @@ docker compose up -d
 
 Open `http://localhost:18111` · [Deployment & updates](./DEPLOYMENT.md)
 
-Agent File/Shell/ACP operations use explicitly authorized SSH connections, and Browser integration uses Backend CDP. The retired Agent Workspace Runner and Toolchain deployment are no longer supported; ordinary terminal Workspaces and SSH/SFTP/RDP/VNC remain available.
+Agent File/Shell/ACP operations use explicitly authorized SSH connections; Browser integration uses Backend CDP.
 
 ## Features
 
@@ -62,7 +62,7 @@ This overview describes the current source, including local changes. See [usage]
 
 ## Documentation
 
-[Features, usage & product requirements](./USAGE.md) · [Deployment & updates](./DEPLOYMENT.md) · [Frontend architecture](./architecture/FRONTEND.md) · [Backend architecture](./architecture/BACKEND.md) · [Shared contracts](./architecture/SHARED.md) · [Current plan](./PLAN.md) · [Browser Remote Desktop architecture](./architecture/REMOTE_DESKTOP.md) · [E2E](./testing/E2E.md) · [Development rules](./AGENTS.md) · [中文](../README.md)
+[Documentation map](./README.md) · [Features, usage & product requirements](./USAGE.md) · [Deployment & updates](./DEPLOYMENT.md) · [Frontend architecture](./architecture/FRONTEND.md) · [Backend architecture](./architecture/BACKEND.md) · [Shared contracts](./architecture/SHARED.md) · [Current plan](./PLAN.md) · [Browser Remote Desktop architecture](./architecture/REMOTE_DESKTOP.md) · [E2E](./testing/E2E.md) · [Development rules](./AGENTS.md) · [中文](../README.md)
 
 ## License
 

@@ -10,6 +10,7 @@ const stats = new Map();
 const source = {
 	targetId: 1,
 	fingerprint: 'source',
+	serverKeyFingerprint: 'source-server',
 
 	stat: async () => directory,
 
@@ -23,6 +24,7 @@ const source = {
 const destination = {
 	targetId: 2,
 	fingerprint: 'destination',
+	serverKeyFingerprint: 'destination-server',
 
 	async stat({ path }) {
 		stats.set(path, (stats.get(path) ?? 0) + 1);
@@ -66,7 +68,8 @@ for (let task = 1; task <= 2; task++) {
 	const result = await copyRemoteEntries(
 		source,
 		destination,
-		['/source'],
+		// Independent servers can have identical paths without sharing storage.
+		['/dest/source'],
 		'/dest',
 		'copy',
 		() => 30_000,

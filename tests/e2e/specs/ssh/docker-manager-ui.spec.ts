@@ -7,6 +7,7 @@ import { readPreferencesResponse } from '../../../../packages/shared/src/prefere
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
+import { expectReadableCatalogText } from '../../support/catalog-colors';
 import {
 	configureSshE2eSettings,
 	connectTestSshFromConnectionsPage,
@@ -85,6 +86,12 @@ test('Docker manager UI renders remote containers, stats, and executes a contain
 		await expect(row).toContainText('nexus-e2e-container');
 		await expect(row).toContainText('alpine:latest');
 		await expect(row).toContainText('Up 10 minutes');
+		const colors = await Promise.all(
+			['.docker-name', '.docker-image', '.docker-status'].map((selector) =>
+				expectReadableCatalogText(row.locator(selector)),
+			),
+		);
+		expect(new Set(colors).size).toBe(3);
 		for (const name of ['Start', 'Stop', 'Restart', 'More actions']) {
 			await expect(row.getByRole('button', { name, exact: true })).toBeVisible();
 		}

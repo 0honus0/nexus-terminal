@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { ServerTransferModel } from '../../transfers/model/server-transfer-model.js';
 import type { ServerTransferCommand } from '../../transfers/model/server-transfer-types.js';
 import { ServerTransferFailure } from '../../transfers/model/server-transfer-types.js';
@@ -85,7 +85,15 @@ export class RemoteFileModel {
 			signal.throwIfAborted();
 			lease = await opened.machine.openSftp(signal);
 			signal.throwIfAborted();
-			return new SftpFileResource(opened.target.id, opened.target.fingerprint, opened.machine, lease);
+			const serverKeyFingerprint =
+				'SHA256:' + createHash('sha256').update(opened.hostPublicKey).digest('base64').replace(/=+$/u, '');
+			return new SftpFileResource(
+				opened.target.id,
+				opened.target.fingerprint,
+				opened.machine,
+				lease,
+				serverKeyFingerprint,
+			);
 		} catch (error) {
 			const failure = this.failure(error);
 			const failures: unknown[] = [failure];

@@ -16,6 +16,7 @@ import { agentRecord, readAgentErrorResponse } from '../../../../../packages/sha
 import { expect, test } from '../../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../../support/auth';
 import { enablePluginApp, repositoryUrl } from './fixtures';
+import { expectReadableCatalogText } from '../../../support/catalog-colors';
 
 test.use({ actionTimeout: 10_000 });
 
@@ -82,6 +83,9 @@ test('official plugin source cannot be overridden by a configured third-party re
 		readAgentPluginInstallationList(raw),
 	);
 	expect(installations.items).toEqual([]);
+	// Keep this third-party/source-isolation check independent of public GitHub latency.
+	// The genuine HTTP checks above still reject attempts to override the official source.
+	await page.route('**/api/v1/agent/plugins/official/catalog', (route) => route.abort('failed'));
 	const officialRead = page.waitForRequest(
 		(candidate) =>
 			candidate.method() === 'GET' &&
@@ -95,6 +99,11 @@ test('official plugin source cannot be overridden by a configured third-party re
 		section.getByRole('button', { name: 'Copy', exact: true }).filter({ hasText: repositoryUrl }),
 	).toBeVisible();
 	await expect(section.getByRole('button', { name: 'Read official catalog', exact: true })).toHaveCount(0);
+	const localGroup = section
+		.locator('[role="button"][aria-expanded]')
+		.filter({ has: page.getByRole('button', { name: 'Copy', exact: true }).filter({ hasText: repositoryUrl }) });
+	await expectReadableCatalogText(localGroup.locator('.ui-catalog-group-label'));
+	await expectReadableCatalogText(localGroup.locator('.ui-catalog-type-badge').first());
 	// D16: actual first-party catalog, pinned publisher and signed download require external acceptance.
 });
 

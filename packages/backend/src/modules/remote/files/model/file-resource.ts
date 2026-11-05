@@ -68,6 +68,7 @@ export class SftpFileResource implements FileResource {
 		readonly fingerprint: string,
 		machine: MachineConnection,
 		lease: MachineSftpLease,
+		readonly serverKeyFingerprint: string,
 	) {
 		this.#machine = machine;
 		this.#lease = lease;

@@ -232,7 +232,7 @@
 		data-mutation-recovery
 	>
 		<template #actions>
-			<UiBadge v-if="store.blocked" tone="warning" density="compact">
+			<UiBadge class="ui-catalog-status-badge" v-if="store.blocked" tone="warning" density="compact">
 				{{ t('mutationRecovery.blockedBadge') }}
 			</UiBadge>
 			<UiBadge v-else-if="store.items.length" tone="neutral" density="compact">
@@ -276,7 +276,11 @@
 							<span class="mutation-claim__body">
 								<span class="mutation-claim__top">
 									<span class="mutation-claim__id">{{ item.id }}</span>
-									<UiBadge :tone="stateTone(item.state)" density="compact">
+									<UiBadge
+										class="ui-catalog-status-badge"
+										:tone="stateTone(item.state)"
+										density="compact"
+									>
 										{{ t('mutationRecovery.states.' + item.state) }}
 									</UiBadge>
 								</span>
@@ -315,7 +319,7 @@
 						<p class="mutation-recovery__eyebrow">{{ t('mutationRecovery.detailLabel') }}</p>
 						<h4>{{ draft.id }}</h4>
 					</div>
-					<UiBadge :tone="stateTone(draft.state)" density="compact">
+					<UiBadge class="ui-catalog-status-badge" :tone="stateTone(draft.state)" density="compact">
 						{{ t('mutationRecovery.states.' + draft.state) }}
 					</UiBadge>
 				</header>
@@ -365,7 +369,11 @@
 						<ul v-else class="mutation-detail__evidence">
 							<li v-for="item in draft.evidence" :key="item.id">
 								<div class="mutation-detail__evidence-head">
-									<UiBadge :tone="outcomeTone(item.outcome)" density="compact">
+									<UiBadge
+										class="ui-catalog-status-badge"
+										:tone="outcomeTone(item.outcome)"
+										density="compact"
+									>
 										{{ t('mutationRecovery.outcomes.' + item.outcome) }}
 									</UiBadge>
 									<time>{{ date(item.observedAt) }}</time>

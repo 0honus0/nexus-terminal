@@ -1,5 +1,6 @@
 {
   "sshKeys": {
+    "manageKeys": "密钥管理",
     "selector": {
       "selectPlaceholder": "选择一个 SSH 密钥...",
       "useDirectInput": "或直接输入密钥内容",

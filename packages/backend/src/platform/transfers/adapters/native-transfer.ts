@@ -358,8 +358,10 @@ export class NativeServerTransfer implements NativeTransferPort {
 			const ssh = prefix + 'ssh ' + [...options, '-p', String(input.port)].map(quote).join(' ');
 			// Secluded arguments travel in the rsync protocol; shell quoting inside the remote path would become literal.
 			const remotePath = input.username + '@' + host + ':' + targetDirectory;
+			// Explicit copy/move must copy bytes even when size and mtime match;
+			// rsync's default quick check would leave unrelated destination content in place.
 			return (
-				'LC_ALL=C rsync -aWs --info=progress2 --outbuf=L --no-inc-recursive -e ' +
+				'LC_ALL=C rsync -aWs --ignore-times --info=progress2 --outbuf=L --no-inc-recursive -e ' +
 				quote(ssh) +
 				' -- ' +
 				quote(input.sourcePath) +

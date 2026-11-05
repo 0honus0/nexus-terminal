@@ -1,6 +1,6 @@
 # 部署与更新
 
-默认使用 Docker Compose。唯一后端为 `packages/backend`（原 backend-next），启动产物 `dist/main.js`；前后端消费 Shared。旧实现从 Git 历史读取，业务运行路径不保留旧值或旧环境变量兼容层；下一版本起的数据库升级策略见下方迁移章节。功能见 [USAGE](USAGE.md)，待验范围见 [实施方案](PLAN.md)。
+默认使用 Docker Compose。唯一后端为 `packages/backend`，启动产物 `dist/main.js`；前后端消费 Shared。旧实现从 Git 历史读取，业务运行路径不保留旧值或旧环境变量兼容层；下一版本起的数据库升级策略见下方迁移章节。功能见 [USAGE](USAGE.md)，待验范围见 [实施方案](PLAN.md)。
 
 ## 部署
 
@@ -118,7 +118,7 @@ pnpm run check
 pnpm run format:all:check
 ```
 
-传递依赖的安全 override 按真实消费者限定：readdir-glob、ESLint、@eslint/config-array 和 @typescript-eslint/typescript-estree 使用 minimatch 11，避免继续解析受影响的旧版本；升级这些上游包时需同步核对其导出、glob 匹配和审计结果。jschardet 4 沿文件编辑器原动态导入使用，支持现有编码识别接口。现有 xterm、Monaco 与 splitpanes 补丁保留；Monaco 补丁使用 pnpm 12 支持的标准 Git diff 头。ssh2 1.17.0 额外应用上游 [Isolate 修复](https://github.com/mscdex/ssh2/commit/45522bb8723d8ecf459a1d222086e56074c11682) 和 [Nan ObjectWrap 修复](https://github.com/mscdex/ssh2/commit/a3a39d795a8d7ff43d5f33aafadccfc03466d044)，确保 Node 26 下原生加密模块能够编译和加载；此项为临时补丁，后续每次依赖升级都须检查：ssh2 新正式版包含上述修复时，同次删除补丁文件、`patchedDependencies` 注册及锁文件引用，再确认 Node 26 下原生加密模块编译、加载成功；不能只更新版本而遗留补丁。OpenAI 7.51.0 本轮明确升级到新发布的稳定版本，仅该精确版本列入 pnpm 默认发布等待期的例外，不关闭整体供应链校验。
+传递依赖的安全 override 按真实消费者限定：readdir-glob、ESLint、@eslint/config-array 和 @typescript-eslint/typescript-estree 使用 minimatch 11，避免继续解析受影响的旧版本；升级这些上游包时需同步核对其导出、glob 匹配和审计结果。jschardet 4 沿文件编辑器原动态导入使用，支持现有编码识别接口。现有 xterm、Monaco 与 splitpanes 补丁保留；Monaco 补丁使用 pnpm 12 支持的标准 Git diff 头。ssh2 1.17.0 额外应用上游 [Isolate 修复](https://github.com/mscdex/ssh2/commit/45522bb8723d8ecf459a1d222086e56074c11682) 和 [Nan ObjectWrap 修复](https://github.com/mscdex/ssh2/commit/a3a39d795a8d7ff43d5f33aafadccfc03466d044)，确保 Node 26 下原生加密模块能够编译和加载；此项为临时补丁，后续每次依赖升级都须检查：ssh2 新正式版包含上述修复时，同次删除补丁文件、`patchedDependencies` 注册及锁文件引用，再确认 Node 26 下原生加密模块编译、加载成功；不能只更新版本而遗留补丁。OpenAI 7.51.0 使用稳定版本，仅该精确版本列入 pnpm 默认发布等待期的例外，不关闭整体供应链校验。
 
 单包用 `build:backend` / `build:frontend`。直接启动后端须提供 `NEXUS_DB_PATH`、`NEXUS_ENCRYPTION_KEY`、`NEXUS_PUBLIC_ORIGIN`；默认绑定 `127.0.0.1:3001`。
 
@@ -129,42 +129,18 @@ scripts/build/build.sh docker
 
 启动命令还需从受控环境注入实例密钥和公开 Origin。Docker 构建与运行共用官方 `node:26.13.0-alpine` 基础镜像，Nginx/tini 由 APK 安装；升级 Node 时同步 `.node-version` 和主镜像、E2E runner Dockerfile 的默认 `NODE_VERSION`，构建脚本与 CI 显式传入版本文件的值。npm 安装 pnpm 时仅授权 pnpm 自身的安装脚本；workspace 的构建授权继续由 `allowBuilds` 管理。命中缓存不会刷新系统包；刷新用 `docker build --pull --no-cache .`。后端构建 Shared 后通过 `deploy --prod` 交付，不再构建 Protocol。发布与远程 E2E 仍按当前实施方案执行。
 
-## 手动清理发布历史与缓存
+## 仓库手动清理
 
-维护入口为 `.github/workflows/cleanup-history.yml`，只有 workflow_dispatch。执行内容、保留范围、权限及失败恢复见 [USAGE](USAGE.md#仓库手动清理)。先完成其它 E2E/发布任务再手动运行；首次在 GitHub 注册新 workflow 需要该文件存在于默认分支。不会触发镜像构建、更新服务器或删除实例数据。
+GitHub Actions 的 `Clean old Actions and container versions`（`.github/workflows/cleanup-history.yml`） 仅支持手动 Run workflow，不随推送、发布或定时任务执行。镜像清理仅限当前仓库关联的 `nexus-terminal` 和 `nexus-terminal-e2e-runner` 两个 GHCR 包；逐包核对仓库归属，分别保留现有 `main`、`dev`、`latest` 标签对应版本及其递归引用的平台和证明 manifest。其余旧发布版本、sha 标签版本和无标签版本均为清理候选；与保留版本共用 digest 的其它标签随版本保留。允许部分保护标签尚未发布（runner 当前只发布 `latest`）；有版本却没有任何保护标签的包会使清理停止，不整包盲删。
 
-### 1. 职责与范围
+同时清理旧 Actions 运行及产物、全部 Actions 缓存；保留上述镜像源码对应的成功记录、最近成功 E2E 及本次清理记录。其它包、GitHub Releases、Git 标签、运行中的服务和实例数据不在镜像清理范围内。清理时保留排队、运行中及重新启动的 Actions 和所属产物；有其它活跃任务时，本次保留镜像版本及 Actions 缓存，待任务结束后手动重跑。
 
-`cleanup-history.mjs` 是仓库维护策略和删除执行的唯一 owner，仅面向当前仓库 Actions，以及归属核对通过的两个固定容器包 `nexus-terminal`、`nexus-terminal-e2e-runner`。不涉及产品数据、GitHub Release 或 Git 标签删除。
+超期空排队记录不会一直阻挡清理：只有仍为 queued、没有结论、创建/开始/更新时间均超过 GitHub 官方 workflow 总期限35天、所有尝试均没有 job，并在读取 job 前后确认尝试号与时间未变化，才忽略其阻挡。该记录及产物仍保留，不尝试强删；近期重跑、有 job 或无法完整核实的记录继续保护。
 
-### 2. 子功能与目录
+执行日志按阶段展开，显示检查与删除耗时、逐项序号/ID、镜像 digest/标签、保留和跳过原因，以及已确认删除数量。摘要分别列出计划候选、实际删除与复查后保留/延后；存在其它活跃任务时会明确警告镜像和缓存未清理，不能仅凭 workflow 成功判断所有候选都已删除。
 
-既有 `scripts/maintenance/cleanup-history.mjs` 持有逐包检查、manifest 闭包、Actions 保留和资源删除；同目录 `cleanup-history.test.mjs` 提供隔离 GitHub/GHCR 回归。工作流只装配手动入口、权限和前置检查。
+保留镜像无法完整解析、包未关联本仓库或任一保护标签在清理中移动、消失或从缺失变为存在时停止。每次镜像版本删除前复查两个包的保护标签，结束时再次确认；GitHub API 不提供条件删除，复查与删除之间仍存在并发窗口，操作前应先完成其它发布任务。
 
-### 3. 依赖方向
+清理需要仓库 Actions 写权限及两个 GHCR 包的管理权限，包设置须允许此仓库的 Actions 管理访问。GitHub API 单次请求遇到瞬时服务错误时由官方 Octokit 最多重试3次并指数退避；权限/参数错误仍会失败，不降为成功或绕过权限。删除同一资源时404视为已不存在，单独计数，不冒充本轮删除；读取所属运行为404时保留无法重新确认状态的 artifact。镜像版本删除不做隐式重试，保持每次派发前核对渠道，失败后手动重跑重新计算保留集合。重试耗尽或其它失败仍可能已经删除部分旧资源，按运行日志核对权限和状态后手动重跑；不会恢复已删除历史。
 
-工作流调用脚本；脚本使用 github-script 提供的 Octokit/context/core，以及 Node fetch 访问 GHCR。不依赖产品 Backend、Frontend 或 Shared，不新增运行时服务。
-
-### 4. 类型与转换
-
-GitHub REST 包元数据中的 repository.id 必须与当前仓库 ID 相同；版本 ID 用于精确删除，版本 name 作为 SHA256 manifest digest。GHCR 的索引、平台和证明引用在各包独立遍历，标签通过 HEAD 的 docker-content-digest 复查；配置中合法 OCI revision 汇入关联成功运行的保留集合。token 仅在内存持有并注册日志脱敏，不进入产物。
-
-### 5. 入口与安装
-
-仍只有 `workflow_dispatch`，需要 `contents: read`、`actions: write`、`packages: write` 和两个包的仓库 Actions 管理权限。运行先执行维护回归，再检查全部保留集合，最后删除；没有新安装点或产品协议。
-
-### 6. 数据、事务与并发
-
-各包现有 main/dev/latest 为保留根，递归保留其平台及证明 manifest；共用 digest 的其它标签随版本保留。允许部分标签不存在，包404或空包跳过；有版本却没有保护根时停止。每次版本删除前复查两个包全部保护标签，结束时再查；移动、消失或新出现都停止旧计划。包版本 DELETE 无条件比较接口，多个 API 删除也不是事务，无法撤销已完成的删除。原 workflow 与发布共用按 ref 的 concurrency；另有活跃 Actions 时跳过镜像和缓存删除，但这不提供跨 ref 或外部发布的原子互斥。
-
-首次保留集合及删除镜像/缓存前均重新分类未完成运行。唯一排除阻挡的例外为超期空 queued：结论必须为 null、attempt 为有效正整数、创建/开始/更新三个时间均超过[GitHub 官方35天 workflow 总期限](https://docs.github.com/en/actions/reference/limits)。重读运行后以 `filter: all` 查询全部 attempt 的 job，只有明确 total_count=0 且 jobs 空数组，再重读确认 attempt/三个时间未变化且仍满足超期条件，才忽略其阻挡；记录和产物仍加入保留集合，不删除或取消。其它未完成状态、近期重跑、存在 job 或证据不全均保留阻挡；运行/job 的404不作为空 job 证据，非404读取失败传播并停止。
-
-### 7. 生命周期与失败
-
-当前/活跃运行、保留 revision 的成功运行及最近成功 E2E 留存；旧运行和产物删除前重新确认其运行状态。只有精确 DELETE 的404计为已不存在，其他失败传播；无法确认所属运行的产物保留。包版本删除禁用隐式重试，重跑必须重新检查渠道和计划。失败后按日志核对已删资源，不能把请求失败当作删除未发生。
-
-检查与删除按阶段折叠分组，记录成功/失败耗时；每项输出序号、资源ID、镜像digest/标签与保留/跳过/删除原因，删除开始、确认成功、404及异常分别表达。阶段结束和删除失败时汇总已确认数量。其它活跃运行造成镜像/缓存延后时输出 warning，摘要分列计划候选、实际删除和复查保留/延后，不把未执行删除表述成已清理。
-
-### 8. 当前能力与验收
-
-两个固定包保留规则及保护分支由既有维护回归覆盖；实际执行证据与未验范围见 [testing](testing/E2E.md#清理工作流超期空排队与执行日志2026-11-05源码与静态)。超期空排队识别本轮仅完成源码与静态审核，待正式回归核对旧空记录、全attempt有job、近期重跑、复查变化、读取异常和活跃运行延后。历史夹具不证明新分支或线上删除通过，实际删除数量以手动工作流运行摘要为准。
+策略实现和并发保证见 [仓库维护架构](architecture/MAINTENANCE.md)。先完成其它发布任务，再从 Actions 手动运行 `Clean old Actions and container versions`。

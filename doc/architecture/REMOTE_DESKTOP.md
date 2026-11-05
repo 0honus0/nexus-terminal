@@ -128,15 +128,15 @@ noVNC 1.7.0 自身持有 backbuffer、damage bounds 与有序 render queue，在
 - [Devolutions Gateway 的 RDP 接入](https://github.com/Devolutions/devolutions-gateway/blob/0e65dc2637f29d8e84dbfd326ce887960f5ca2a0/webapp/apps/gateway-ui/src/client/app/modules/web-client/rdp/web-client-rdp.component.ts) 使用同一 IronRDP Backend 与官方 Web component，并对动态尺寸做 debounce；没有在该接入中发现可直接移植的视频绘制开关。其 VNC 使用另一 Iron VNC SDK，不作为本项目 noVNC 的直接接入依据。
 - [Cockpit Machines 的 noVNC 接入](https://github.com/cockpit-project/cockpit-machines/blob/c03f14ae4abb8175c3a9b53d75db53905b55d3c0/src/components/vm/consoles/VncConsole.tsx) 直接配置 RFB 的缩放/远端尺寸等公开能力，不包装私有显示队列；[noVNC Display](https://github.com/novnc/noVNC/blob/v1.7.0/core/display.js) 与 [RFB](https://github.com/novnc/noVNC/blob/v1.7.0/core/rfb.js) 是本项目已安装版本的真实绘制 owner。
 
-本地 presenter 保留 ImageData 底图与 rAF 提交，超过原32区域预算时按最小新增重绘面积两两合并，减少分散小块引发的大面积重绘；仍在同一浏览器帧提交全部区域，保留最新像素、透明替换和原分配/不支持输入回退。原生 Canvas backbuffer/drawImage 与零复制行视图均未采用；基准数据、环境和验收边界归 [testing](../testing/E2E.md#rdpvnc-绘制性能验证2026-11-04)。
+本地 presenter 保留 ImageData 底图与 rAF 提交，超过原32区域预算时按最小新增重绘面积两两合并，减少分散小块引发的大面积重绘；仍在同一浏览器帧提交全部区域，保留最新像素、透明替换和原分配/不支持输入回退。原生 Canvas backbuffer/drawImage 与零复制行视图均未采用；基准数据、环境和验收边界归 [testing](../testing/HISTORY.md#rdpvnc-绘制性能验证2026-11-04)。
 
 真实端到端定位仍需测量接收间隔、解码主线程耗时、分辨率与协商编码，覆盖静态文本、拖窗和大面积滚动。VNC优先核对协商及服务器能力，保留库自身提交边界；不额外延迟协议或绘制、不盲目改质量/压缩默认值。RDPGFX/视频及 Worker 属于 SDK/构建能力评估，不能通过应用层假开关实现。
 
 ## 8. 当前能力与验收
 
-证书确认/记住已接入源码，取消/一次/记住与同指纹复用的既有协议/浏览器消费者已迁移；新证书变化、CA/名称/有效期、实际建连指纹替换和并发/取消尚待本批正式行为验收，不复用下述历史通过结论。源码已替换双端传输并移除 guacd/RemoteApp，既有集成与 E2E 已迁移为真实 TigerVNC/xrdp、浏览器 SDK 和 X selection/xterm/鼠标证据，不用虚假 Guacamole 指令证明画面或输入。
+证书确认、仅本次及记住指纹已接入双端与信任存储。正式远程基线已覆盖 xrdp 证书确认、受控 CA/名称/有效期与证书替换拒绝、信任 CAS/撤权及取消/未知结果映射；完整结果见 [测试入口](../testing/E2E.md#当前验收基线)。真实 Windows 证书链、真实 CA/轮换、介质故障、在途 TCP/TLS 取消及手机弹窗等未覆盖组合仍见 [PLAN](../PLAN.md#rdp-证书确认与记住选择待验收)。
 
-当前已完成静态检查与构建；PLAN D17 的一般本地测试限制保持，D19 授权的指定 HTTPS 站点真实 RDP 基础链路、常用键盘、composition 去重、双向纯文本剪贴板及拒绝授权、窗口/全屏切换，以及 Chromium 移动仿真输入和触控已验证。后续已补证分钟级持续输入、票据重放/过期拒绝不影响原连接、受控 WS 关闭/新票据重连、两次建连中取消及刷新后实际 TCP 释放；页面销毁后的 WS 事件观察缺口由独立 TCP 证据补充，不记录原脚本整体 PASS。该证据不覆盖 VNC、其它系统组合键、原生输入法/手机真机、小时级或空闲稳定性、16 路并发、强制晚成功/复杂故障及多平台。旧 Guacamole 的 B10/Windows PASS 只属于旧实现，不能作为新桥的验收。具体命令/结果归 [testing](../testing/E2E.md)，操作见 [USAGE](../USAGE.md#远程桌面)，实施状态见 [PLAN](../PLAN.md)。
+当前实现使用浏览器 SDK 和后端 TCP/TLS 桥；E2E 使用真实 TigerVNC/xrdp、浏览器 SDK 与 X selection/xterm/鼠标验证。指定 Windows 的基础连接、输入、双向文本与文件剪贴板、音频排程、顶部工具栏及触屏仿真有独立证据，见 [Windows 实测记录](../testing/HISTORY.md#windows-rdp-实测顶部工具栏与清理2026-11-05)。这些证据不代替物理声音听感、原生手机键盘、小时级稳定性、多连接资源、真实弱网或端到端图形性能。退役 Guacamole 的通过记录不证明当前实现。
 
 IronRDP npm 0.7.0 尚未包含位图 source stride 与边界修复；Adapter 对齐桌面宽度不能处理单个位图矩形的源行填充，已移除该规避。正式依赖以 `62246b364a0282bab85087f658a81fe4207b6b31` 为基线，应用上游公开Web音频PR #2020的固定提交 `3bf4a223f7765a05597849691eb76da34d7e5cc8` 后重编译WASM/npm archive，仓库 vendor 目录保留完整来源、SHA-256 与双许可证，pnpm lockfile 验证完整性，Docker 与 E2E runner 安装前复制该文件。运行时不下载 Actions 产物；音频源码补丁与构建步骤见vendor/ironrdp/README，窗口UI保持；保持现有 initial/dynamic 尺寸、像素 presenter、输入与关闭 owner。更新上游构建或恢复 npm 正式版均须回归真实画面、键鼠、剪贴板、动态缩放及重连，不能仅凭版本号判为兼容。
 

@@ -38,6 +38,8 @@ export class FileCommandNotStarted extends RemoteFileFailure {
 export interface FileResource {
 	readonly targetId: number;
 	readonly fingerprint: string;
+	/** Actual trusted handshake key; shared keys require conservative path-overlap checks. */
+	readonly serverKeyFingerprint: string;
 	readonly isOpen: boolean;
 	list(request: FileListRequest): Promise<FileEntry[]>;
 	scan(request: FileOperationRequest): Promise<FileEntry[]>;

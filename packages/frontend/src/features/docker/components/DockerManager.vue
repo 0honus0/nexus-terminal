@@ -265,7 +265,11 @@
 							<span class="docker-image" :title="container.image">{{ container.image }}</span>
 						</div>
 
-						<UiBadge class="docker-status" :tone="stateTone(container.state)" density="compact">
+						<UiBadge
+							class="docker-status ui-catalog-status-badge"
+							:tone="stateTone(container.state)"
+							density="compact"
+						>
 							{{ container.status }}
 						</UiBadge>
 
@@ -492,7 +496,7 @@
 		overflow: hidden;
 		border: 1px solid color-mix(in srgb, var(--border-color) 36%, transparent);
 		border-radius: 0.65rem;
-		background: color-mix(in srgb, var(--card-bg-color) 24%, transparent);
+		background: var(--ui-catalog-row-fill);
 		box-shadow: inset 0 1px 0 color-mix(in srgb, white 5%, transparent);
 		transition:
 			border-color 0.16s ease,
@@ -502,7 +506,7 @@
 	.docker-container:hover,
 	.docker-container--expanded {
 		border-color: color-mix(in srgb, var(--link-active-color) 28%, var(--border-color));
-		background: color-mix(in srgb, var(--card-bg-color) 34%, transparent);
+		background: var(--ui-catalog-group-fill);
 	}
 
 	.docker-summary {
@@ -560,18 +564,17 @@
 	}
 
 	.docker-name {
-		color: var(--text-color);
+		color: var(--ui-catalog-name-ink);
 		font-size: 0.75rem;
 		font-weight: 600;
 		line-height: 1.35;
 	}
 
 	.docker-image {
-		color: var(--text-color-secondary);
+		color: var(--ui-catalog-info-ink);
 		font-family: var(--font-family-monospace);
 		font-size: 0.6rem;
 		line-height: 1.3;
-		opacity: 0.78;
 	}
 
 	.docker-status {
@@ -594,7 +597,6 @@
 	.docker-ports__label {
 		flex: none;
 		font-weight: 600;
-		opacity: 0.72;
 	}
 
 	.docker-ports code {
@@ -682,7 +684,6 @@
 		font-size: 0.56rem;
 		font-weight: 600;
 		line-height: 1.25;
-		opacity: 0.78;
 	}
 
 	.docker-stat dd {

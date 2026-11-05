@@ -33,7 +33,11 @@ function fixture({ openSftp, closeLease, closeMachine, openMachine } = {}) {
 			open: async () => {
 				calls.push('machine.open');
 				await openMachine?.();
-				return { machine, target: { id: 17, fingerprint: 'fixture-fingerprint' } };
+				return {
+					machine,
+					target: { id: 17, fingerprint: 'fixture-fingerprint' },
+					hostPublicKey: Buffer.from('fixture-server-key'),
+				};
 			},
 		},
 		{ fingerprintStored: unused },

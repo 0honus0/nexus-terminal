@@ -215,13 +215,17 @@
 							</div>
 							<div class="min-w-0 flex-1 space-y-1.5">
 								<div class="flex flex-wrap items-center gap-2">
-									<h4 class="break-words text-sm font-semibold text-foreground">
+									<h4 class="ui-catalog-name break-words text-sm font-semibold text-foreground">
 										{{ item.configuration.name }}
 									</h4>
-									<UiBadge appearance="ghost" density="compact">
+									<UiBadge class="ui-catalog-type-badge" appearance="ghost" density="compact">
 										{{ item.configuration.kind.toUpperCase() }}
 									</UiBadge>
-									<UiBadge :tone="item.enabled ? 'success' : 'neutral'" density="compact">
+									<UiBadge
+										class="ui-catalog-status-badge"
+										:tone="item.enabled ? 'success' : 'neutral'"
+										density="compact"
+									>
 										{{
 											t(
 												item.enabled

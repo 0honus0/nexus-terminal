@@ -143,8 +143,16 @@
 							<div class="ui-catalog-card__content">
 								<div class="ui-catalog-card__heading">
 									<strong class="ui-catalog-card__name">{{ proxy.name }}</strong>
-									<UiBadge appearance="ghost" density="compact">{{ proxy.type }}</UiBadge>
-									<UiBadge v-if="proxy.username" tone="primary" appearance="ghost" density="compact">
+									<UiBadge class="ui-catalog-type-badge" appearance="ghost" density="compact">{{
+										proxy.type
+									}}</UiBadge>
+									<UiBadge
+										v-if="proxy.username"
+										class="ui-catalog-tag-badge"
+										tone="primary"
+										appearance="ghost"
+										density="compact"
+									>
 										{{ t('proxies.authenticated') }}
 									</UiBadge>
 								</div>

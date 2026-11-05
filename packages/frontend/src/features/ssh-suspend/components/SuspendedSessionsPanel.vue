@@ -301,7 +301,7 @@
 						</div>
 						<div class="flex items-center gap-1.5 shrink-0">
 							<span
-								class="session-time text-[11px] font-mono text-text-secondary/60"
+								class="session-time text-[11px] font-mono text-text-secondary"
 								:title="new Date(session.markedAt).toLocaleString()"
 							>
 								{{ formatTime(session.markedAt) }}
@@ -393,7 +393,7 @@
 						<!-- 右侧：紧凑时间 + 状态徽章 -->
 						<div class="flex items-center gap-1.5 shrink-0">
 							<span
-								class="session-time text-[11px] font-mono text-text-secondary/60"
+								class="session-time text-[11px] font-mono text-text-secondary"
 								:title="new Date(session.suspendedAt).toLocaleString()"
 							>
 								{{ formatTime(session.suspendedAt) }}

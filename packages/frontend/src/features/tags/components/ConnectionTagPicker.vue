@@ -21,6 +21,7 @@
 			{{ t('tags.refresh') }}
 		</UiButton>
 		<UiTokenInput
+			class="ui-catalog-tag-input"
 			:model-value="model"
 			@update:model-value="updateSelection"
 			:disabled="pending || data.busy.value || data.needsRefresh.value"

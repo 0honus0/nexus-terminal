@@ -1,3 +1,4 @@
+import { expectReadableCatalogText } from '../../support/catalog-colors';
 import type { Request } from '@playwright/test';
 import {
 	listTestCommandTags,
@@ -149,6 +150,7 @@ test('quick command tags and saved variables survive persistence, grouping, rena
 				const header = group.locator('.quick-command-group-header');
 				const name = group.getByRole('button', { name: TAG_NAME, exact: true });
 				await expect(group).toBeVisible();
+				await expectReadableCatalogText(name);
 
 				const originalHeaderHeight = (await header.boundingBox())!.height;
 				const topPadding = await list.evaluate((element) =>

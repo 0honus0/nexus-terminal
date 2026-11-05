@@ -1,6 +1,7 @@
 <script setup lang="ts">
 	import { computed, onActivated, onMounted, onBeforeUnmount, onDeactivated, ref, watch } from 'vue';
 	import { useAuthSession } from '@/features/auth/public';
+	import { SshKeyManagementModal } from '@/features/ssh-keys/public';
 	import { useRouter } from 'vue-router';
 	import { useI18n } from 'vue-i18n';
 	import { isNetworkFailure } from '@/client/http/network-failure';
@@ -96,6 +97,7 @@
 	const editing = ref<ConnectionSummary | null>(null);
 	const batch = ref(false);
 	const hostKeysVisible = ref(false);
+	const sshKeysVisible = ref(false);
 	const auth = useAuthSession();
 	let loadGeneration = 0;
 
@@ -121,6 +123,7 @@
 		formVisible.value = false;
 		importVisible.value = false;
 		hostKeysVisible.value = false;
+		sshKeysVisible.value = false;
 		editing.value = null;
 	}
 
@@ -265,6 +268,19 @@
 									<UiButton
 										type="button"
 										appearance="ghost"
+										class="connection-key-menu-action w-full !justify-start gap-2"
+										:aria-label="t('sshKeys.modal.title')"
+										@click="
+											close();
+											sshKeysVisible = true;
+										"
+									>
+										<i class="fas fa-key w-4 text-center" aria-hidden="true" />
+										{{ t('sshKeys.manageKeys') }}
+									</UiButton>
+									<UiButton
+										type="button"
+										appearance="ghost"
 										class="w-full !justify-start gap-2"
 										:disabled="loading || data.needsRefresh.value"
 										@click="
@@ -357,6 +373,17 @@
 						</div>
 					</div>
 					<div class="connections-panel__actions">
+						<UiButton
+							type="button"
+							appearance="soft"
+							density="comfortable"
+							class="connection-key-action"
+							:aria-label="t('sshKeys.modal.title')"
+							@click="sshKeysVisible = true"
+						>
+							<i class="fas fa-key" aria-hidden="true" />
+							{{ t('sshKeys.manageKeys') }}
+						</UiButton>
 						<UiButton
 							type="button"
 							appearance="soft"
@@ -550,13 +577,16 @@
 									c.name || c.host
 								}}</strong>
 								<div class="connection-badges connection-badges--inline">
-									<UiBadge class="connection-protocol" appearance="ghost" density="compact">{{
-										c.type
-									}}</UiBadge>
+									<UiBadge
+										class="connection-protocol ui-catalog-type-badge"
+										appearance="ghost"
+										density="compact"
+										>{{ c.type }}</UiBadge
+									>
 									<UiBadge
 										v-for="name in tagNames(c).slice(0, 3)"
 										:key="name"
-										class="connection-tag"
+										class="connection-tag ui-catalog-tag-badge"
 										tone="primary"
 										appearance="soft"
 										density="compact"
@@ -565,7 +595,7 @@
 									>
 									<UiBadge
 										v-if="tagNames(c).length > 3"
-										class="connection-tag connection-tag--more"
+										class="connection-tag ui-catalog-tag-badge"
 										appearance="ghost"
 										density="compact"
 										>+{{ tagNames(c).length - 3 }}</UiBadge
@@ -618,13 +648,16 @@
 						</div>
 
 						<div class="connection-badges connection-badges--rail">
-							<UiBadge class="connection-protocol" appearance="ghost" density="compact">{{
-								c.type
-							}}</UiBadge>
+							<UiBadge
+								class="connection-protocol ui-catalog-type-badge"
+								appearance="ghost"
+								density="compact"
+								>{{ c.type }}</UiBadge
+							>
 							<UiBadge
 								v-for="name in tagNames(c).slice(0, 3)"
 								:key="name"
-								class="connection-tag"
+								class="connection-tag ui-catalog-tag-badge"
 								tone="primary"
 								appearance="soft"
 								density="compact"
@@ -633,7 +666,7 @@
 							>
 							<UiBadge
 								v-if="tagNames(c).length > 3"
-								class="connection-tag connection-tag--more"
+								class="connection-tag ui-catalog-tag-badge"
 								appearance="ghost"
 								density="compact"
 								>+{{ tagNames(c).length - 3 }}</UiBadge
@@ -730,6 +763,7 @@
 
 		<ConnectionImportModal :visible="importVisible" @close="importVisible = false" />
 		<HostKeyManagementModal :visible="hostKeysVisible" @close="hostKeysVisible = false" />
+		<SshKeyManagementModal v-if="sshKeysVisible" v-model="sshKeysVisible" />
 		<ConnectionEditorModal
 			:visible="formVisible"
 			:connection="editing"
@@ -873,8 +907,8 @@
 
 	.connections-panel__head {
 		display: flex;
-		min-height: 80px;
-		align-items: stretch;
+		min-height: 48px;
+		align-items: center;
 		justify-content: space-between;
 		gap: 16px;
 		padding: 4px 2px 13px;
@@ -906,6 +940,7 @@
 		align-items: center;
 		gap: 7px;
 		margin: 0;
+		color: var(--ui-catalog-accent-ink);
 		font-size: 13px;
 		font-weight: 650;
 		letter-spacing: -0.01em;
@@ -926,24 +961,24 @@
 	}
 
 	.connections-panel__actions {
-		display: grid;
-		width: clamp(112px, 11vw, 152px);
-		min-height: 64px;
+		display: flex;
 		flex: 0 0 auto;
-		align-self: stretch;
-		grid-template-rows: repeat(2, minmax(0, 1fr));
-		gap: 6px;
+		align-items: center;
+		gap: 8px;
 	}
 
 	.connections-panel__actions > [data-ui-gen='2'] {
-		width: 100%;
-		height: auto;
-		min-height: 30px;
+		height: 36px;
 		justify-content: center;
 		gap: 6px;
-		--ui-control-height: 100%;
+		white-space: nowrap;
+		--ui-control-height: 36px;
 		--ui-control-padding-inline: 9px;
 		--ui-control-font-size: 11px;
+	}
+
+	.connection-key-menu-action {
+		display: none;
 	}
 
 	.catalog-toolbar {
@@ -1067,7 +1102,7 @@
 		padding: 14px 18px;
 		border: 0;
 		border-radius: 13px;
-		background: color-mix(in srgb, var(--text-color) 3.5%, transparent);
+		background: var(--ui-catalog-row-fill);
 		box-shadow: inset 2px 0 0 transparent;
 		transition:
 			background-color 140ms ease,
@@ -1174,6 +1209,7 @@
 		min-width: 0;
 		max-width: 24rem;
 		overflow: hidden;
+		color: var(--ui-catalog-name-ink);
 		font-size: 13px;
 		font-weight: 660;
 		line-height: 1.3;
@@ -1196,10 +1232,6 @@
 	.connection-tag {
 		overflow: hidden;
 		text-overflow: ellipsis;
-	}
-
-	.connection-tag--more {
-		color: var(--text-color-secondary);
 	}
 
 	.connection-address {
@@ -1345,16 +1377,31 @@
 		}
 
 		.connections-panel__actions {
+			display: grid;
 			width: clamp(108px, 26vw, 148px);
 			min-height: 72px;
+			align-self: stretch;
+			align-items: stretch;
+			grid-template-rows: repeat(2, minmax(0, 1fr));
 			gap: 6px;
 		}
 
 		.connections-panel__actions > [data-ui-gen='2'] {
+			width: 100%;
+			height: auto;
+			min-height: 30px;
 			gap: 5px;
 			--ui-control-height: 100%;
 			--ui-control-padding-inline: 9px;
 			--ui-control-font-size: 10.5px;
+		}
+
+		.connection-key-action {
+			display: none;
+		}
+
+		.connection-key-menu-action {
+			display: inline-flex;
 		}
 
 		.catalog-toolbar {

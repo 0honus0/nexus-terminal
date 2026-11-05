@@ -717,8 +717,15 @@
 						</div>
 						<div class="min-w-0 flex-1">
 							<div class="flex flex-wrap items-center gap-2">
-								<h4 class="text-sm font-bold tracking-tight text-foreground">{{ provider.name }}</h4>
-								<UiBadge :tone="provider.enabled ? 'success' : 'neutral'" density="compact" dot>
+								<h4 class="ui-catalog-name text-sm font-bold tracking-tight text-foreground">
+									{{ provider.name }}
+								</h4>
+								<UiBadge
+									class="ui-catalog-status-badge"
+									:tone="provider.enabled ? 'success' : 'neutral'"
+									density="compact"
+									dot
+								>
 									{{
 										t(
 											provider.enabled
@@ -920,13 +927,18 @@
 							>
 						</div>
 						<div class="mt-2 flex flex-wrap gap-1.5">
-							<UiBadge appearance="ghost" density="compact" class="font-mono">
+							<UiBadge appearance="ghost" density="compact" class="ui-catalog-type-badge font-mono">
 								{{ t('agent.settings.providers.contextShort', { value: model.contextWindow ?? '—' }) }}
 							</UiBadge>
-							<UiBadge appearance="ghost" density="compact" class="font-mono">
+							<UiBadge appearance="ghost" density="compact" class="ui-catalog-type-badge font-mono">
 								{{ t('agent.settings.providers.outputShort', { value: model.maxOutputTokens ?? '—' }) }}
 							</UiBadge>
-							<UiBadge v-if="model.supportsTools" tone="primary" density="compact">
+							<UiBadge
+								v-if="model.supportsTools"
+								class="ui-catalog-tag-badge"
+								tone="primary"
+								density="compact"
+							>
 								{{ t('agent.settings.providers.toolCapable') }}
 							</UiBadge>
 						</div>

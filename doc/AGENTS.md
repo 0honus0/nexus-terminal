@@ -1,6 +1,6 @@
 # 项目开发入口
 
-本文维护阅读入口和八步执行流程。规则按编号引用，正文只在所属规则文档维护。
+完整文档职责见[文档导航](README.md)。本文维护阅读入口和八步执行流程。规则按编号引用，正文只在所属规则文档维护。
 
 ## 开发前必读
 
@@ -10,7 +10,7 @@
 2. [AI 工程规则 E-xx 全部条目及细则](rules/ENGINEERING.md#规则列表)。
 3. [编码规范](rules/CODE_STYLE.md)。
 4. [模块模板](architecture/MODULE_TEMPLATE.md) 和适用的 [Backend](architecture/BACKEND.md)、[Frontend](architecture/FRONTEND.md)、[Shared](architecture/SHARED.md) 架构。
-5. [USAGE](USAGE.md)、[当前实施方案](PLAN.md) 和 [验证入口](testing/E2E.md)。部署工作另读 [DEPLOYMENT](DEPLOYMENT.md)，远程桌面另读 [专题架构](architecture/REMOTE_DESKTOP.md)。
+5. [USAGE](USAGE.md)、[当前实施方案](PLAN.md) 和 [验证入口](testing/E2E.md)。接口接入另读 [API](API.md)，Agent 工作另读 [Agent 架构](architecture/AGENT.md)，部署工作另读 [DEPLOYMENT](DEPLOYMENT.md)，远程桌面另读 [专题架构](architecture/REMOTE_DESKTOP.md)，仓库清理另读 [维护架构](architecture/MAINTENANCE.md)。
 
 ## 文档分工与优先关系
 
@@ -20,6 +20,7 @@
 | 类型、边界与 SQL     | [HUMAN](rules/HUMAN.md)、对应架构   | H-04–H-08、H-12、H-21 |
 | AI 工程经验          | [ENGINEERING](rules/ENGINEERING.md) | 适用 E-xx 及细则      |
 | 编码规范             | [CODE_STYLE](rules/CODE_STYLE.md)   | C-01–C-04、适用专题   |
+| 接口接入             | [API](API.md)                       | H-05–H-07、E-03       |
 | 产品行为             | [USAGE](USAGE.md)                   | H-09、H-13、E-12      |
 | 实施规划与提示词     | [当前实施方案](PLAN.md)             | H-11、E-10            |
 | 规则维护             | HUMAN、ENGINEERING                  | H-01–H-03、H-10、E-14 |

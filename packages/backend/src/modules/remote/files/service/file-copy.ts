@@ -505,6 +505,10 @@ export async function copyRemoteEntries(
 ): Promise<{ items: FilePathEntry[]; transferredBytes: number; completedFiles: number }> {
 	let directTransfer: FileDirectCopy | undefined = direct;
 	const sameTarget = source.targetId === destination.targetId && source.fingerprint === destination.fingerprint;
+	// Distinct saved connections and routes may reach the same filesystem.
+	// A shared trusted server key is a reason to reject overlapping paths,
+	// never proof that a rename or a silent no-op across those connections is safe.
+	const checkSharedPaths = sameTarget || source.serverKeyFingerprint === destination.serverKeyFingerprint;
 	const ctx: CopyContext = {
 		source,
 		destination,
@@ -524,7 +528,7 @@ export async function copyRemoteEntries(
 	try {
 		// Resolve parents, preserving symlink leaf objects. Textually different
 		// source aliases must not conceal a target that overwrites a later source.
-		const sourceLocations = sameTarget
+		const sourceLocations = checkSharedPaths
 			? await Promise.all(
 					paths.map(async (sourcePath) => {
 						const parent = await source.realpath(options(ctx, path.posix.dirname(sourcePath)));
@@ -532,7 +536,7 @@ export async function copyRemoteEntries(
 					}),
 				)
 			: paths;
-		const destinationRoot = sameTarget
+		const destinationRoot = checkSharedPaths
 			? await destinationLocation(ctx, destinationDirectory)
 			: destinationDirectory;
 		const nestedSources = sourceLocations.some((input, index) =>
@@ -558,8 +562,8 @@ export async function copyRemoteEntries(
 					targetLocation.startsWith(input + '/') ||
 					input.startsWith(targetLocation + '/'),
 			);
-			const unchangedMove = mode === 'move' && destinationPath === sourcePath;
-			if (sameTarget && overlapsSource && !unchangedMove) {
+			const unchangedMove = sameTarget && mode === 'move' && destinationPath === sourcePath;
+			if (checkSharedPaths && overlapsSource && !unchangedMove) {
 				throw new RemoteFileFailure('conflict');
 			}
 		}

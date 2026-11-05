@@ -1,4 +1,69 @@
 /* Shared catalog surfaces for management pages such as connections, proxies and notifications. */
+:root {
+	/* Blend with the theme foreground to keep colored text readable in light, dark and custom themes. */
+	--ui-catalog-name-ink: color-mix(in srgb, var(--link-active-color) 8%, var(--text-color));
+	--ui-catalog-accent-ink: color-mix(in srgb, var(--link-active-color) 50%, var(--text-color));
+	--ui-catalog-info-ink: color-mix(in srgb, var(--status-info-color) 45%, var(--text-color));
+	--ui-catalog-row-fill: color-mix(in srgb, var(--text-color) 4%, var(--app-bg-color));
+	--ui-catalog-group-fill: color-mix(in srgb, var(--link-active-color) 8%, var(--app-bg-color));
+	--ui-catalog-tag-fill: color-mix(in srgb, var(--link-active-color) 12%, var(--app-bg-color));
+	--ui-catalog-type-fill: color-mix(in srgb, var(--status-info-color) 10%, var(--app-bg-color));
+}
+
+.ui-catalog-type-badge[data-ui='badge'],
+.ui-catalog-tag-badge[data-ui='badge'],
+.ui-catalog-status-badge[data-ui='badge'],
+.ui-catalog-tag-input .ui-token-input__token {
+	box-shadow: none;
+	-webkit-backdrop-filter: none;
+	backdrop-filter: none;
+}
+
+.ui-catalog-name {
+	color: var(--ui-catalog-name-ink);
+}
+
+.ui-catalog-group-label {
+	color: var(--ui-catalog-accent-ink);
+}
+
+.ui-catalog-type-badge[data-ui='badge'],
+.ui-catalog-type-chip {
+	border-color: color-mix(in srgb, var(--status-info-color) 28%, var(--border-color));
+	background: var(--ui-catalog-type-fill);
+	color: var(--ui-catalog-info-ink);
+}
+
+.ui-catalog-tag-badge[data-ui='badge'],
+.ui-catalog-tag-input .ui-token-input__token {
+	border-color: color-mix(in srgb, var(--link-active-color) 28%, var(--border-color));
+	background: var(--ui-catalog-tag-fill);
+	color: var(--ui-catalog-accent-ink);
+}
+
+.ui-catalog-status-badge[data-ui='badge'] {
+	--ui-catalog-status-color: var(--text-color-secondary);
+	border-color: color-mix(in srgb, var(--ui-catalog-status-color) 28%, var(--border-color));
+	background: color-mix(in srgb, var(--ui-catalog-status-color) 10%, var(--app-bg-color));
+	color: color-mix(in srgb, var(--ui-catalog-status-color) 40%, var(--text-color));
+}
+
+.ui-catalog-status-badge[data-tone='success'] {
+	--ui-catalog-status-color: var(--status-success-color);
+}
+
+.ui-catalog-status-badge[data-tone='warning'] {
+	--ui-catalog-status-color: var(--status-warning-color);
+}
+
+.ui-catalog-status-badge[data-tone='danger'] {
+	--ui-catalog-status-color: var(--status-error-color);
+}
+
+.ui-catalog-status-badge[data-tone='primary'] {
+	--ui-catalog-status-color: var(--link-active-color);
+}
+
 .ui-catalog-page {
 	min-height: 100%;
 	padding: 20px 16px;
@@ -170,6 +235,7 @@
 	align-items: center;
 	gap: 7px;
 	margin: 0;
+	color: var(--ui-catalog-accent-ink);
 	font-size: 13px;
 	font-weight: 650;
 	letter-spacing: -0.01em;
@@ -233,7 +299,7 @@
 	padding: 14px 18px;
 	border: 0;
 	border-radius: 13px;
-	background: color-mix(in srgb, var(--text-color) 3.5%, transparent);
+	background: var(--ui-catalog-row-fill);
 	box-shadow: inset 2px 0 0 transparent;
 	transition:
 		background-color 140ms ease,
@@ -293,6 +359,7 @@
 	min-width: 0;
 	max-width: 30rem;
 	overflow-wrap: anywhere;
+	color: var(--ui-catalog-name-ink);
 	font-size: 13px;
 	font-weight: 660;
 	line-height: 1.3;

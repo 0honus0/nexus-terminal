@@ -1,7 +1,7 @@
 import { createServer, connect, type Socket } from 'node:net';
 import { once } from 'node:events';
 import { createHash } from 'node:crypto';
-import { readFile, writeFile, mkdir, symlink, lstat, readlink } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, symlink, lstat, readlink, stat, utimes, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { expect, test } from '../../../support/fixtures';
 import { loginAsInitialAdmin } from '../../../support/auth';
@@ -58,6 +58,13 @@ for (const entrypoint of ['clipboard', 'send'] as const) {
 				const bytes = Buffer.alloc(8 * 1024 * 1024);
 				for (let i = 0; i < bytes.length; i++) bytes[i] = i % 251;
 				await writeFile(sourcePath, bytes);
+				// Equal size/mtime must not let rsync's quick check retain stale bytes.
+				await mkdir(destination);
+				const destinationPath = path.join(destination, path.basename(sourcePath));
+				await writeFile(destinationPath, Buffer.alloc(bytes.length, 0xff));
+				const timestamp = new Date('2026-01-01T00:00:00Z');
+				await Promise.all([sourcePath, destinationPath].map((file) => utimes(file, timestamp, timestamp)));
+				expect((await stat(destinationPath)).mtimeMs).toBe((await stat(sourcePath)).mtimeMs);
 				expect(
 					(
 						await fetch(`${E2E_SSH.controlUrl}/transfer-peer?blocked=${blocked ? 1 : 0}&bandwidth=3072`, {
@@ -171,6 +178,138 @@ for (const entrypoint of ['clipboard', 'send'] as const) {
 		});
 	}
 }
+
+for (const mode of ['copy', 'move'] as const) {
+	test(`duplicate connections reject ${mode} onto the source through canonical directory aliases`, async ({
+		request,
+	}) => {
+		await loginAsInitialAdmin(request);
+		const sourceId = await target(request, E2E_SSH.port);
+		const destinationId = await target(request, E2E_SSH.port);
+		const health = await (await fetch(`${E2E_SSH.controlUrl}/health`)).json();
+		const root = String(health.rootDir);
+		const directory = path.join(root, 'overlap-source');
+		const alias = path.join(root, 'overlap-alias');
+		await mkdir(directory);
+		const sourcePath = path.join(directory, 'data.txt');
+		const bytes = Buffer.from('must survive a rejected overlapping transfer');
+		await writeFile(sourcePath, bytes);
+		await symlink(directory, alias);
+		const source = await openWorkspaceSession(request, sourceId);
+		const destination = await openWorkspaceSession(request, destinationId);
+		try {
+			await Promise.all([waitForFilesystemReady(source.socket), waitForFilesystemReady(destination.socket)]);
+			for (const paths of [
+				{ sourcePath, targetDirectory: directory },
+				{ sourcePath: path.join(alias, 'data.txt'), targetDirectory: directory },
+				{ sourcePath: directory, targetDirectory: path.join(directory, 'new', 'nested') },
+			]) {
+				const id = crypto.randomUUID();
+				const ended = waitForJson(
+					destination.socket,
+					(event) =>
+						event.type === 'transfer.copyMove' &&
+						event.payload?.requestId === id &&
+						['completed', 'failed'].includes(String(event.payload?.type)),
+				);
+				void ended.catch(() => undefined);
+				await requestWorkspace(
+					destination.socket,
+					'transfer.copyMove',
+					{
+						mode,
+						sourceWorkspaceId: source.workspaceId,
+						sources: [paths.sourcePath],
+						destination: paths.targetDirectory,
+					},
+					id,
+				);
+				expect((await ended).payload).toMatchObject({ type: 'failed', message: 'conflict' });
+				expect(await readFile(sourcePath)).toEqual(bytes);
+				expect(await readdir(directory)).toEqual(['data.txt']);
+			}
+			const peer = await (await fetch(`${E2E_SSH.controlUrl}/transfer-peer`)).json();
+			expect(peer.nativeTransfersStarted).toBe(0);
+			// The original same-connection, same-path move remains a harmless no-op.
+			if (mode === 'move') {
+				const id = crypto.randomUUID();
+				const ended = waitForJson(
+					source.socket,
+					(event) =>
+						event.type === 'transfer.copyMove' &&
+						event.payload?.requestId === id &&
+						['completed', 'failed'].includes(String(event.payload?.type)),
+				);
+				void ended.catch(() => undefined);
+				await requestWorkspace(
+					source.socket,
+					'transfer.copyMove',
+					{
+						mode,
+						sourceWorkspaceId: source.workspaceId,
+						sources: [sourcePath],
+						destination: directory,
+					},
+					id,
+				);
+				expect((await ended).payload?.type).toBe('completed');
+				expect(await readFile(sourcePath)).toEqual(bytes);
+			}
+		} finally {
+			await Promise.allSettled([closeWebSocket(source.socket), closeWebSocket(destination.socket)]);
+		}
+	});
+}
+
+test('rsync move replaces stale equal-size equal-mtime bytes before removing the source', async ({ request }) => {
+	await loginAsInitialAdmin(request);
+	const sourceId = await target(request, E2E_SSH.port);
+	const destinationId = await target(request, E2E_SSH.port);
+	const health = await (await fetch(`${E2E_SSH.controlUrl}/health`)).json();
+	const root = String(health.rootDir);
+	const sourcePath = path.join(root, 'move-overwrite.bin');
+	const targetDirectory = path.join(root, 'move-overwrite-target');
+	const destinationPath = path.join(targetDirectory, path.basename(sourcePath));
+	const bytes = Buffer.alloc(64 * 1024, 0x35);
+	await mkdir(targetDirectory);
+	await writeFile(sourcePath, bytes);
+	await writeFile(destinationPath, Buffer.alloc(bytes.length, 0x79));
+	const timestamp = new Date('2026-01-01T00:00:00Z');
+	await Promise.all([sourcePath, destinationPath].map((file) => utimes(file, timestamp, timestamp)));
+	const source = await openWorkspaceSession(request, sourceId);
+	const destination = await openWorkspaceSession(request, destinationId);
+	try {
+		await Promise.all([waitForFilesystemReady(source.socket), waitForFilesystemReady(destination.socket)]);
+		const id = crypto.randomUUID();
+		const ended = waitForJson(
+			destination.socket,
+			(event) =>
+				event.type === 'transfer.copyMove' &&
+				event.payload?.requestId === id &&
+				['completed', 'failed'].includes(String(event.payload?.type)),
+		);
+		void ended.catch(() => undefined);
+		await requestWorkspace(
+			destination.socket,
+			'transfer.copyMove',
+			{
+				mode: 'move',
+				sourceWorkspaceId: source.workspaceId,
+				sources: [sourcePath],
+				destination: targetDirectory,
+			},
+			id,
+		);
+		expect((await ended).payload?.type).toBe('completed');
+		expect(await readFile(destinationPath)).toEqual(bytes);
+		await expect(stat(sourcePath)).rejects.toMatchObject({ code: 'ENOENT' });
+		const peer = await (await fetch(`${E2E_SSH.controlUrl}/transfer-peer`)).json();
+		expect(peer.nativeTransfersStarted).toBe(1);
+		expect(peer.nativeTransfersExited).toBe(1);
+	} finally {
+		await Promise.allSettled([closeWebSocket(source.socket), closeWebSocket(destination.socket)]);
+	}
+});
 
 for (const outcome of ['failed', 'cancelled'] as const) {
 	test(`a ${outcome} native transfer keeps the source and never starts a relay`, async ({ request }) => {

@@ -62,7 +62,7 @@ test('the native archive command preserves writable stdin while ordinary command
 				return raw;
 			},
 		};
-		const resource = new SftpFileResource(1, 'fixture-host-key', machine, {});
+		const resource = new SftpFileResource(1, 'fixture-host-key', machine, {}, 'fixture-server-key');
 		assert.deepEqual(
 			await resource.executeCommandLines(
 				'echo fixture',

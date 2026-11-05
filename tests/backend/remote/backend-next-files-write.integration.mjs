@@ -324,6 +324,7 @@ async function cleanupAndLateOpenLifecycle() {
 			close: async () => Promise.reject(cleanupErrors[1]),
 		},
 		{ close: async () => Promise.reject(cleanupErrors[0]) },
+		'fixture-server-key',
 	);
 	const firstClose = cleanupResource.close();
 	const secondClose = cleanupResource.close();
@@ -480,7 +481,7 @@ async function fullMutationChain() {
 			this.isOpen = false;
 		},
 	};
-	const resource = new SftpFileResource(7, 'f'.repeat(64), machine, lease);
+	const resource = new SftpFileResource(7, 'f'.repeat(64), machine, lease, 'fixture-server-key');
 	let stale = false;
 	const model = {
 		digestToken: (token) => tokens.digest(token),

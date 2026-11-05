@@ -495,15 +495,20 @@
 									>{{ t('agent.settings.plugins.repositorySource') }}:</span
 								>
 								<span
-									class="min-w-0 break-all text-xs sm:text-sm font-bold text-foreground font-mono"
+									class="ui-catalog-group-label min-w-0 break-all text-xs sm:text-sm font-bold text-foreground font-mono"
 									>{{ group.owner }}</span
 								>
 							</div>
-							<UiBadge v-if="group.official" class="shrink-0" tone="primary" density="compact">
+							<UiBadge
+								v-if="group.official"
+								class="ui-catalog-tag-badge shrink-0"
+								tone="primary"
+								density="compact"
+							>
 								<i class="fa-solid fa-certificate text-[8px]" aria-hidden="true"></i>
 								<span>{{ t('agent.settings.plugins.officialRepository') }}</span>
 							</UiBadge>
-							<UiBadge v-else appearance="ghost" density="compact" class="shrink-0">
+							<UiBadge v-else appearance="ghost" density="compact" class="ui-catalog-type-badge shrink-0">
 								<i class="fa-solid fa-network-wired text-[8px]" aria-hidden="true"></i>
 								<span>{{ t('agent.settings.plugins.thirdPartyRepository') }}</span>
 							</UiBadge>
@@ -575,22 +580,30 @@
 									<div class="min-w-0 flex-1">
 										<div class="flex flex-wrap items-center gap-2">
 											<span
-												class="plugin-market__name text-xs sm:text-sm font-bold text-foreground"
+												class="plugin-market__name ui-catalog-name text-xs sm:text-sm font-bold text-foreground"
 												>{{ entry.displayName }}</span
 											>
 											<span
-												class="max-w-full break-all rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 font-mono text-[11px] text-text-secondary"
+												class="ui-catalog-type-chip max-w-full break-all rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 font-mono text-[11px] text-text-secondary"
 											>
 												v{{ entry.version }}
 											</span>
-											<UiBadge :tone="catalogEntryState(entry).tone" density="compact">{{
-												catalogEntryState(entry).label
-											}}</UiBadge>
-											<UiBadge v-if="retainedFor(entry)" tone="warning" density="compact">
+											<UiBadge
+												class="ui-catalog-status-badge"
+												:tone="catalogEntryState(entry).tone"
+												density="compact"
+												>{{ catalogEntryState(entry).label }}</UiBadge
+											>
+											<UiBadge
+												v-if="retainedFor(entry)"
+												class="ui-catalog-status-badge"
+												tone="warning"
+												density="compact"
+											>
 												{{ t('agent.settings.plugins.hasRetainedData') }}
 											</UiBadge>
 											<span
-												class="plugin-market__definition font-mono text-[11px] text-text-secondary/60"
+												class="plugin-market__definition font-mono text-[11px] text-text-secondary"
 											>
 												{{ entry.definitionId }}
 											</span>
