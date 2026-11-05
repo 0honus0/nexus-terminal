@@ -1,8 +1,8 @@
 import { createServer } from 'node:http';
 import { mock } from 'node:test';
 import { randomBytes } from 'node:crypto';
-import { mkdtemp, rm, mkdir } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { mkdtemp, rm, mkdir, rename } from 'node:fs/promises';
+import { basename, join, resolve } from 'node:path';
 
 // Load the built entry; static API types come from its source, not generated JavaScript.
 const applicationEntry = '../../../packages/backend/dist/bootstrap/create-app.js';
@@ -101,7 +101,15 @@ async function closeApplication(expectedShutdown) {
 	// Restore only after the original application has successfully released its resources.
 	restoreClock();
 	if (directory) {
-		if (!retainEvidence) await rm(directory, { recursive: true, force: true });
+		if (retainEvidence) {
+			// Keep uncertain outcomes outside the active-instance namespace. Later
+			// tests must not mistake retained evidence for a second running backend.
+			const evidenceRoot = join(dataRoot, 'evidence');
+			await mkdir(evidenceRoot, { recursive: true });
+			await rename(directory, join(evidenceRoot, basename(directory)));
+		} else {
+			await rm(directory, { recursive: true, force: true });
+		}
 		directory = null;
 	}
 }
