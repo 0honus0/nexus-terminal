@@ -4,9 +4,9 @@
 
 ## 当前验收基线
 
-最新完整远程[E2E 41972562509](https://github.com/0honus0/nexus-terminal/actions/runs/41972562509)验证`main/2f5804344bf9e2cf6c3128dd05b6155577f0a684`：560项全部一次通过，质量检查、双端生产构建、Docker smoke与8个测试分片全部success；耗时任务成功、文档截图按条件跳过。按正式Reporter核对560条唯一passed记录，无失败、重试或场景跳过。Backend129项，Browser1–7分别40/44/67/60/68/72/80项（包含隔离场景）。后继5aeb3c38只更新耗时估算，产品源码一致，不称其直接跑过本轮E2E。最终文档收口不改变被测源码。
+最新完整远程[E2E 41986375724](https://github.com/0honus0/nexus-terminal/actions/runs/41986375724)验证`main/ae6919fd5bec8764913ffb662f15c3a32b39b8fb`：567项全部一次通过，质量检查、双端生产构建、Docker smoke与8个测试分片全部success；耗时任务成功、文档截图按条件跳过。按正式Reporter核对567条唯一passed记录，无失败、重试或场景跳过。Backend131项，Browser1–7分别38/71/43/67/74/64/79项（包含隔离场景）。后继a7f9aeb7只更新耗时估算，已审核产品源码一致，不称其直接跑过本轮E2E。最终文档收口不改变被测源码。
 
-官方插件[v1.0.3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.3)仍为d5dd455，本批没有插件改动。本体[amd dev发布41872562719](https://github.com/0honus0/nexus-terminal/actions/runs/41872562719)success，dev与sha-2b0ab3db9208的digest一致，平台/revision均经实际GHCR核对，详见下节；此前指定实例的7262e8ac部署仍保持原范围，本轮不更新生产容器或数据库。真实运营商切网、手机软键盘、外部供应商及未列故障边界仍按[待验与外部依赖](../PLAN.md#待验与外部依赖)保留；受控回归不替代真实模型效果或吞吐实测。更早测试与镜像结果只保留为各自历史证据。
+官方插件[v1.0.3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.3)仍为d5dd455，本批没有插件改动。本体[amd dev发布41987211909](https://github.com/0honus0/nexus-terminal/actions/runs/41987211909)success，dev与sha-a7f9aeb79491的digest一致，平台/revision均经实际GHCR核对，见本批交付记录；本轮不更新生产容器或数据库。真实运营商切网、手机软键盘、外部供应商及未列故障边界仍按[待验与外部依赖](../PLAN.md#待验与外部依赖)保留；受控回归不替代真实模型效果或吞吐实测。更早测试与镜像结果只保留为各自历史证据。
 
 ## 下一版本数据库迁移验收（待执行）
 
@@ -17,9 +17,9 @@
 - 验证 SQL/脚本完成旧数值、单位与 JSON 转换，业务读取及解码只接受当前格式；核对 CHECK、关联版本、内容 hash 与快照恢复边界。
 - 验证迁移与版本记录同事务提交、失败回滚、提交未知核对及恢复，失败不能写入成功标记，未知结果不能盲目重放。
 
-## RDP 证书交付前审核与发布（2026-11-05，进行中）
+## RDP 证书交付前审核与发布（2026-11-05，已通过并发布）
 
-按用户要求提交前重新审核本批完整调用链：无凭据 TLS 探测、系统验证与显式信任、实际桥的指纹复核、事务内身份及 CAS、HTTP/Shared 白名单、前端取消/旧代次与全屏弹窗、快照注册和资源关闭；目前未发现明确的功能缺陷。补充 `backend-next-desktop-certificates.integration.mjs`，经正式 HTTP RDP spec 调用，使用独立输出数据库，保留原有功能断言。真实 SQLite 验证并发旧指纹只有一项成功、用户/端口隔离及写后撤权/取消回滚；受控证书事实验证系统信任、名称/有效期、轮换必须重新确认，受控探测验证取消后仍占槽直至实际收敛且不签发晚票据。SQLite 未知结果映射使用故障注入，不称为真实提交故障。以上新增行为断言等待正式远程执行。
+按用户要求提交前重新审核本批完整调用链：无凭据 TLS 探测、系统验证与显式信任、实际桥的指纹复核、事务内身份及 CAS、HTTP/Shared 白名单、前端取消/旧代次与全屏弹窗、快照注册和资源关闭；目前未发现明确的功能缺陷。补充 `backend-next-desktop-certificates.integration.mjs`，经正式 HTTP RDP spec 调用，使用独立输出数据库，保留原有功能断言。真实 SQLite 验证并发旧指纹只有一项成功、用户/端口隔离及写后撤权/取消回滚；受控证书事实验证系统信任、名称/有效期、轮换必须重新确认，受控探测验证取消后仍占槽直至实际收敛且不签发晚票据。SQLite 未知结果映射使用故障注入，不称为真实提交故障。新增行为断言已经下述正式远程执行，保留受控事实与真实介质故障的证据区别。
 
 本轮静态与生产构建沿用现有 Node26.13.0/pnpm12.16.1，产物集中 `/home/honus/nexus-task-artifacts/rdp-certificate-release-20261105`。根 check、Shared check/build、E2E build（双端生产及浏览器测试客户端）和全部 E2E strict 类型检查通过；新测试语法检查通过。补测代码的首次格式检查发现声明间空行，已按项目 ESLint 修正；文档收尾后重新核对全量格式及 diff。没有运行本地行为、浏览器或 Docker，没有更新生产实例；真实设备、证书实际替换和故障边界继续保留在 PLAN，不用受控事实替代实际 TLS/设备验收。
 
@@ -35,15 +35,21 @@
 
 第六轮 `f5dc91e1` / [41984375225](https://github.com/0honus0/nexus-terminal/actions/runs/41984375225) 完整成功：562项一次通过，零失败、重试和测试跳过；质量、Docker、Backend及7个浏览器分片和耗时均衡均success。metadata、8份原始分片日志及e2e-verification-41984375225.json已核对并保留在本轮集中目录。此结果覆盖RDP交付修复，尚不覆盖随后追加的配置布局修复；镜像等待包含布局修复的新SHA通过后发布。
 
-## 配置布局保存冲突（2026-11-05，进行中）
+## 配置布局保存冲突（2026-11-05，已通过）
 
 同一页面也可触发：preferences/layout/sidebar/focus共享版本；弹窗打开后保存锁定开关或其它偏好、先flush尺寸任务，原布局保存仍携带打开时版本。无需第二会话或其它用户。修复将弹窗原布局/侧栏内容基线送入Store原队列，只有无关版本变化时使用当前版本，真实内容冲突保留草稿；确定409最多恢复一次，unknown不重放。Controller应用实际完整回执，全部边界消费者同步；不改变UI、后端及数据库。
 
-新增workspace-layout-conflict.spec.ts五项正式浏览器回归：同页锁定后直接保存且重载持久化、外部偏好推进版本后的真实409及一次恢复、真实布局变化不覆盖/保留草稿/显式刷新后保存、真实提交成功后中断响应且禁止重放、连续两次真实409后停止。仅响应中断由浏览器路由控制，写入与版本核对均走真实后端；不把受控网络失败说成实际生产网络故障。按D17不运行本地行为测试。Node26.13.0/pnpm12.16.1下根check、E2E build（双端生产与浏览器客户端）、全仓格式、全部E2E strict类型及git diff --check通过，日志为集中目录logs/layout-{check,build,format,e2e-types}.log；源码审查核对队列执行时取版本、内容基线复制、原子布局/侧栏、取消与unknown围栏及全量消费者，无已知待修源码缺口。等待新轮完整远程Actions。产物继续集中rdp-certificate-release-20261105，保留至用户通知删除。
+新增workspace-layout-conflict.spec.ts五项正式浏览器回归：同页锁定后直接保存且重载持久化、外部偏好推进版本后的真实409及一次恢复、真实布局变化不覆盖/保留草稿/显式刷新后保存、真实提交成功后中断响应且禁止重放、连续两次真实409后停止。仅响应中断由浏览器路由控制，写入与版本核对均走真实后端；不把受控网络失败说成实际生产网络故障。按D17不运行本地行为测试。Node26.13.0/pnpm12.16.1下根check、E2E build（双端生产与浏览器客户端）、全仓格式、全部E2E strict类型及git diff --check通过，日志为集中目录logs/layout-{check,build,format,e2e-types}.log；源码审查核对队列执行时取版本、内容基线复制、原子布局/侧栏、取消与unknown围栏及全量消费者，无已知待修源码缺口。正式远程[41986375724](https://github.com/0honus0/nexus-terminal/actions/runs/41986375724)对提交ae6919fd全量567项一次通过，新增5项分别3.3/1.8/2.4/1.9/2.0秒通过，均无重试；browser6原始日志确认真实UI保存及故障恢复断言执行，其余7分片、质量、Docker均success。结果与8份分片原始日志及e2e-verification-41986375724.json已留存；未验恢复读取失败/读取中撤销的浏览器故障交错及实际多设备并发，不把本轮受控故障扩大为这些组合。产物继续集中rdp-certificate-release-20261105，保留至用户通知删除。
+
+## amd64 dev 发布与交付（2026-11-05）
+
+正式全量通过后触发[41987211909](https://github.com/0honus0/nexus-terminal/actions/runs/41987211909)，生产依赖audit与统一镜像build/push均success。GitHub workflow_dispatch不接受提交SHA作为ref（422，未创建任务），改用main后核对事件固定source为a7f9aeb7949106967466460c4a93cf817e02d16d；它与被测ae6919fd仅scripts/e2e/duration-estimates.json不同，产品源码一致。未创建临时分支/标签，不发布latest，不部署生产或维护生产数据库。
+
+GHCR实际manifest/config核验：ghcr.io/0honus0/nexus-terminal的dev与sha-a7f9aeb79491均为`sha256:ceb2172ba6eb1bfb5bcd5ca0be7e28937dde2c4a68091c7787c0e61e23692a3e`，只有linux/amd64可运行平台（忽略构建证明的unknown平台）；OCI revision精确等于a7f9aeb7949106967466460c4a93cf817e02d16d，version为sha-a7f9aeb79491。publication-result-41987211909.json、prepare/image日志、两份manifest及publication-verification.json集中在rdp-certificate-release-20261105；未拉取大镜像、未创建本地测试数据库/服务或浏览器。最后只提交文档验收及清理已完成PLAN阶段，不改变已测/已发布产品代码；相关真机与故障待验项继续保留。
 
 ## RDP 证书确认与认证配置核对（2026-11-05，源码与静态）
 
-基线 main/3685742762 的本批未提交工作区。用户决定不处理会话 IP 绑定及此前第 3/5/6 项，仅只读核对远程配置、解释登录封禁，以及实现 RDP 证书取消/本次连接/记住选择。未提交推送、发布、重启测试或生产服务，也未修改远程配置、业务数据库或证书。按 PLAN D17 未执行本批浏览器、行为或 E2E；上方 560 项是此前源码的历史通过，不覆盖本批新协议、存储或弹窗。
+基线 main/3685742762 的本批未提交工作区。用户决定不处理会话 IP 绑定及此前第 3/5/6 项，仅只读核对远程配置、解释登录封禁，以及实现 RDP 证书取消/本次连接/记住选择。未提交推送、发布、重启测试或生产服务，也未修改远程配置、业务数据库或证书。按 PLAN D17 未执行本批浏览器、行为或 E2E；当时已有的 560 项是此前源码的历史通过，不覆盖该阶段的新协议、存储或弹窗；后续实际回归见本批交付记录。
 
 远程只读结果：Backend 公共 Origin 为 HTTPS，内部 3001 未发布；Frontend 18111 监听全部 IPv4/IPv6 网卡，NPM host 网络通过 127.0.0.1:18111 转发。Host/Proto 头已配置；NPM、Frontend nginx 与 Backend 仍信任大范围私网代理。当前私网链路可直接访问 18111 状态接口，但未确认公网客户端实际 peer 地址，不能称已复现公网伪造来源绕过。实际数据库白名单为空、黑名单启用，15 分钟窗口失败 5 次封禁 300 秒，无活跃失败计数；封禁后新密码登录在哈希前返回 429，已进入计算的并发及其它密码证明入口不因此得到同样保护。本轮仅记录，不修改。SSH 交互结束后已关闭，没有凭据文件。
 
