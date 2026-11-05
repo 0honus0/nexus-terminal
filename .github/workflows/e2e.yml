@@ -180,7 +180,9 @@ jobs:
           retention-days: 1
 
       - name: Run standard checks serially
-        run: pnpm run check
+        run: |
+          pnpm run check
+          node --test scripts/e2e/resolve-timing-artifacts.test.mjs
 
       - name: Check formatting
         run: pnpm run format:all:check
@@ -299,6 +301,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: write
+      actions: read
     steps:
       - name: Checkout tested revision
         uses: actions/checkout@v7.0.1
@@ -308,10 +311,27 @@ jobs:
         with:
           node-version-file: .node-version
 
+      - name: Resolve successful shard timing artifacts
+        id: timings
+        uses: actions/github-script@v9.0.0
+        with:
+          retries: 3
+          result-encoding: string
+          script: |
+            const { resolveTimingArtifacts } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/e2e/resolve-timing-artifacts.mjs`);
+            return await resolveTimingArtifacts({
+              github,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              runId: context.runId,
+            });
+
       - name: Download E2E spec timings
         uses: actions/download-artifact@v8.0.2
         with:
-          pattern: e2e-timings-*-${{ github.run_attempt }}
+          # Use the REST API instead of the internal ListArtifacts endpoint.
+          github-token: ${{ github.token }}
+          artifact-ids: ${{ steps.timings.outputs.result }}
           path: e2e-timings
 
       - name: Update duration estimates

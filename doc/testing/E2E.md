@@ -30,6 +30,8 @@ Actions 默认总共 8 个测试 runner，分为 1 个后端和 7 个浏览器 r
 
 验证验证码 SDK 过期使用 Playwright 官方虚拟时钟；后端票据和缓存 TTL 使用 Node 内置 MockTimers 仅推进 Date，不改变产品超时或网络定时器。专门弱网回归保留原带宽与延迟；成功传输的进度回归使用真实8MiB文件及至少两个不同UI百分比、完整字节和SHA验证，以较高夹具带宽减少人为等待。SSH 空闲两分钟仍用真实时间，独立场景与拆分后的 Agent 回归按实测耗时分片，保持原功能覆盖。
 
+耗时汇总从当前运行各 Playwright 分片的最新成功 job 取得实际 attempt，再按不可变产物 ID 下载；仅重跑失败分片或汇总作业时复用其余已成功分片的原产物，不按汇总作业的 run_attempt 过滤全部分片。发现使用 github-script 的只读请求重试，下载使用官方 Action 的 token/REST 路径并保留摘要校验；任一来源失败、产物缺失、过期或重复均阻止汇总。产物选择逻辑回归 `node --test scripts/e2e/resolve-timing-artifacts.test.mjs` 纳入质量作业。
+
 ## 下一版本数据库迁移验收（待执行）
 
 按 H-21，每条数据库变更独立迁移，dev 与 latest 使用同一版本链；下列为后续迁移的验收要求：
