@@ -40,11 +40,11 @@ for (const erase of ['full screen', 'individual rows'] as const) {
 				);
 
 		let frame = 0;
-		for (const viewport of [
-			{ width: 650, height: 700 },
-			{ width: 1180, height: 820 },
-			{ width: 820, height: 600 },
-		]) {
+		for (const [viewport, commandMode] of [
+			[{ width: 650, height: 700 }, 'mobile'],
+			[{ width: 1180, height: 820 }, 'desktop'],
+			[{ width: 820, height: 600 }, 'desktop'],
+		] as const) {
 			await command.fill('s');
 			await command.press('Enter');
 			await expect(terminal).toContainText('OLD_TUI_HEADER');
@@ -52,7 +52,11 @@ for (const erase of ['full screen', 'individual rows'] as const) {
 			await expect(terminal).toContainText('OLD_TUI_FOOTER');
 			await expect.poll(coloredCells).toBeGreaterThan(0);
 			await page.setViewportSize(viewport);
+			// The responsive layout replaces the command bar. Do not fill the old
+			// input between the viewport event and the new layout mounting.
+			await expect(page.locator('.command-bar-root--' + commandMode)).toBeVisible();
 			await command.fill('r');
+			await expect(command).toHaveValue('r');
 			await command.press('Enter');
 			await expect(terminal).toContainText(`NEW_TUI_SCREEN_${++frame}`);
 			await expect(terminal).not.toContainText('OLD_TUI_HEADER');

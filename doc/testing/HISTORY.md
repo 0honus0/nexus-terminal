@@ -944,3 +944,9 @@ WorkspaceTabBar仅将原挂起菜单项移到重置之前，原条件、事件�
 第三轮 19 项全部一次通过。随后错误优先级审核修正 ToolModel 在同一操作 owner 内保留权限复查、消费及持久化的真实故障，正常源流拒绝不能覆盖这些故障，真正清理失败仍独立保留；补充权限存储失败的正式后端回归源码，其专项尚未执行。最终代码重新构建后第四轮 19 项全部一次通过，无失败、重试、flaky 或跳过；JSON Reporter 逐项核对见任务目录 `browser-verification.json`，最终原日志为 `browser-round4.log`、`browser-round4.json`，四轮原日志与失败现场均保留。覆盖 320/390/1440px 文本文件卡/预览边界/原生下载/已有文件展示不重复入库/刷新恢复；SSH GIF、Markdown、256 KiB 二进制、空文件原字节及 hash；缺两项能力之一、未选目标、拒绝审批、目录和符号链接；取消 held SFTP read 后 pending/句柄归零，无成功卡且后继正常重建基线。PNG/GIF Images 均解码、下载和刷新，GIF 用浏览器逐帧截图变化确认动画；供应商三类拒绝保留原断言。最终根 check、后端及 Shared 构建和 E2E vue-tsc 通过，日志分别为 `browser-final-check.log`、`authority-fix-build-final.log`、`browser-e2e-typecheck-final.log`。
 
 只读核对官方插件 [v1.0.3 manifest](https://github.com/0honus0/nexus-agent-plugins/blob/d5dd455e209fffb86433cedb7044c507a0d848b3/plugins/nexus.agent/manifest.json) 与 [agent.json](https://github.com/0honus0/nexus-agent-plugins/blob/d5dd455e209fffb86433cedb7044c507a0d848b3/plugins/nexus.agent/agent.json)：已声明 file.read / artifacts.write / artifacts.read，toolNames 为 null，因此无需修改或重新发布该插件。显式工具白名单的第三方插件需补所需工具名；原授权撤销不自动恢复。本次浏览器消费签名受控插件，不冒充真实模型或官方发布包的运行验收。
+
+### 提交与首轮完整远程回归
+
+用户授权提交、推送和发布版本，沿当前 main / linux/amd64 dev 渠道交付，不更新生产实例。功能提交 `100291a781a7e6884d5616240ab619802c94d179` 已推送；首轮 [E2E 42009569193](https://github.com/0honus0/nexus-terminal/actions/runs/42009569193) 质量、构建与 Docker smoke 通过，但后端新增流故障入口失败，Browser 5 的旧触屏终端重绘测试重试通过而被正式 flaky 门禁拒绝；其余分片通过。本轮没有发布镜像。
+
+后端 16 个子场景中，权限存储故障的断言错误地只检查 error.cause 的 AggregateError；实际 owner 返回顶层 AggregateError，并完整保留原存储故障与读取拒绝。修正为明确检查顶层聚合、两项因果、原存储错误身份、具名读取拒绝和 drain 分类，不改产品实现。触屏 Trace 记录显示从 650px 切回 1180px 后，fill 命中待卸载的手机命令框，而 press 已命中新建的空桌面命令框；测试改为等待目标响应式命令栏挂载再输入，并断言待发送值，保留原 ANSI 清屏、中文残留、背景色和全部视口断言，不添加固定等待或修改 UI。原 SHA、后端日志、Browser 5 首次 Trace/日志及整轮状态均保留在任务目录 `remote-e2e-42009569193.*`、`remote-failure-42009569193-backend/`、`remote-failure-42009569193-browser5/`。修正文件的 ESLint、Prettier、Node 语法及 diff 检查通过，下一轮完整远程验收待执行。

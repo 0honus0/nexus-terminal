@@ -287,8 +287,12 @@ await test('File delivery stream lifecycle and compound authority', async (t) =>
 			),
 			(error) =>
 				isAgentDrainFailure(error) &&
-				(error === expected ||
-					(error.cause instanceof AggregateError && error.cause.errors.includes(expected))),
+				error instanceof AggregateError &&
+				error.errors.length === 2 &&
+				error.errors.includes(expected) &&
+				error.errors.some(
+					(cause) => cause instanceof ToolOperationRefusal && cause.code === 'remote_unavailable',
+				),
 		);
 		assert.equal(state.readersClosed, 1);
 		assert.equal(state.resourcesClosed, 1);
