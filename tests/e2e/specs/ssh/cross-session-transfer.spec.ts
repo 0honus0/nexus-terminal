@@ -109,18 +109,33 @@ test('cross-session relay copy and move transfer data and progress over real SFT
 			);
 		});
 
-		await slowStep('cross-session directory copy works when source and target absolute paths match', async () => {
-			const progress = await runTransfer(destination.socket, `cross-same-path-${crypto.randomUUID()}`, {
-				mode: 'copy',
-				sourceWorkspaceId: source.workspaceId,
-				sources: ['/folder-seed'],
-				destination: '/',
-			});
-			expect(progress).toMatchObject({ totalKnown: false });
-			expect(Number(progress?.totalFiles)).toBeGreaterThan(0);
-			expect(Number(progress?.totalBytes)).toBeGreaterThan(0);
-			await expect(readRemoteFile(destination.socket, '/folder-seed/nested.txt')).resolves.toContain('nested');
-		});
+		await slowStep(
+			'duplicate sessions reject copying a directory onto itself and preserve source content',
+			async () => {
+				const original = await readRemoteFile(source.socket, '/folder-seed/nested.txt');
+				const requestId = `cross-same-path-${crypto.randomUUID()}`;
+				const terminalPromise = waitForJson(
+					destination.socket,
+					(message) =>
+						message.type === 'transfer.copyMove' &&
+						message.payload?.requestId === requestId &&
+						['completed', 'failed'].includes(String(message.payload?.type)),
+				);
+				await requestWorkspace(
+					destination.socket,
+					'transfer.copyMove',
+					{
+						mode: 'copy',
+						sourceWorkspaceId: source.workspaceId,
+						sources: ['/folder-seed'],
+						destination: '/',
+					},
+					requestId,
+				);
+				expect((await terminalPromise).payload).toMatchObject({ type: 'failed', message: 'conflict' });
+				await expect(readRemoteFile(source.socket, '/folder-seed/nested.txt')).resolves.toBe(original);
+			},
+		);
 
 		await slowStep('cross-session directory copy reuses READDIR metadata for child entries', async () => {
 			await setTestSshLstatDenyPrefix('/folder-seed/');

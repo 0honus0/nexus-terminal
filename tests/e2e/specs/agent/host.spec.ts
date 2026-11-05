@@ -1261,14 +1261,10 @@ test('Agent App lifecycle uses safe contracts, explicit grants and original stat
 		const retired = await request.get('/api/v1/agent' + path);
 		expect(retired.status(), path).toBe(404);
 	}
-	// Recommended onboarding is a live first-version Plugin endpoint, not a
-	// retired Agent Host compatibility route. An offline external catalog has
-	// an explicit provider-unavailable failure, not an invented 404 contract.
+	// Exercise the real endpoint with a signed local installation. Catalog success
+	// and unavailability are separately controlled in the onboarding contract test.
+	const installed = await installTestPlugin(request, 'nexus.agent');
 	const recommended = await request.get('/api/v1/agent/onboarding/recommended-plugin');
-	if (recommended.status() === 200) {
-		readAgentPluginRecommended(await recommended.json());
-	} else {
-		expect(recommended.status()).toBe(503);
-		expect(readAgentErrorResponse(await recommended.json())).toEqual({ code: 'provider_unavailable' });
-	}
+	expect(recommended.status()).toBe(200);
+	expect(readAgentPluginRecommended(await recommended.json())).toEqual({ entry: null, installation: installed });
 });

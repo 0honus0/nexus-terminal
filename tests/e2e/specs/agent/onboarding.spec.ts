@@ -8,6 +8,21 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
 
+test('official recommendation validates the pinned catalog and explicit offline outcomes through real HTTP', async () => {
+	test.setTimeout(120_000);
+	const result = await promisify(execFile)(
+		process.execPath,
+		[
+			'--test',
+			'--test-name-pattern=B10 official pinned catalog',
+			path.resolve(__dirname, '../../../backend/http/backend-next-plugin-repositories.integration.mjs'),
+		],
+		{ timeout: 90_000, maxBuffer: 1024 * 1024 },
+	);
+	expect(result.stdout).toContain('uninstalled recommendation reports provider unavailable when catalog is offline');
+	expect(result.stdout).toContain('installed recommendation is returned offline without fetching or enabling it');
+});
+
 test('onboarding initializes the enabled App and full declared grants in the installation transaction', async () => {
 	test.setTimeout(120_000);
 	const result = await promisify(execFile)(

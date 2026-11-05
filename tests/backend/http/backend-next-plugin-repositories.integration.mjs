@@ -450,6 +450,19 @@ await test(
 				expectStatus(await f.api('POST', recommendedPath + '/install', { grantAll: true }), 400);
 			},
 		);
+		await t.test('uninstalled recommendation reports provider unavailable when catalog is offline', async () => {
+			const unavailable = new MockAgent();
+			unavailable.disableNetConnect();
+			setGlobalDispatcher(unavailable);
+			try {
+				assert.deepEqual(expectStatus(await f.api('GET', recommendedPath), 503), {
+					code: 'provider_unavailable',
+				});
+			} finally {
+				setGlobalDispatcher(mock);
+				await unavailable.close();
+			}
+		});
 		await t.test('installed recommendation is returned offline without fetching or enabling it', async () => {
 			const plugin = await f.install('offline-recommended', {
 				definitionId: OFFICIAL_PLUGIN_SOURCE.recommendedAppId,
