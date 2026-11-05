@@ -82,12 +82,15 @@ const control = http.createServer(async (req, res) => {
 		}
 		if (req.method === 'GET' && req.url === '/e2e/desktop/rdp-authentication') {
 			const log = await readFile(path.join(directory, 'xrdp.log'), 'utf8');
-			// xrdp logs the same success as both a DEBUG wm message and an INFO
-			// log-window entry. Count only the latter so one connection adds one.
+			// The VNC module emits this DEBUG message for each authenticated
+			// connection. Some xrdp versions additionally mirror it to INFO;
+			// count the module message once, independent of that log-window copy.
 			return send(res, 200, {
 				authenticatedSessions: log
 					.split('\n')
-					.filter((line) => /\[INFO\s*\]\s+VNC connection complete, connected ok\r?$/.test(line)).length,
+					.filter((line) =>
+						/\[DEBUG\]\s+xrdp_wm_log_msg: VNC connection complete, connected ok\r?$/.test(line),
+					).length,
 			});
 		}
 		if (req.method === 'GET' && req.url === '/e2e/desktop/pointer') {
