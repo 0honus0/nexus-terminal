@@ -41,6 +41,8 @@ import type {
 
 function belongsToApp(result: AgentPluginFrontendResult, appId: string): boolean {
 	switch (result.method) {
+		case 'agent.threads.history':
+			return result.value.body.appId === appId;
 		case 'agent.threads.list':
 		case 'agent.runs.list':
 			return result.value.items.every((item) => item.appId === appId);

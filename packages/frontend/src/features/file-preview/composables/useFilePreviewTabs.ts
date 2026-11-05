@@ -29,7 +29,10 @@ interface PreviewOperation {
 const isAbortError = (cause: unknown): boolean =>
 	cause instanceof DOMException ? cause.name === 'AbortError' : cause instanceof Error && cause.name === 'AbortError';
 
-export function createFilePreviewSession(defaultSource?: FilePreviewSource): FilePreviewSessionController {
+export function createFilePreviewSession(
+	defaultSource?: FilePreviewSource,
+	getImagePreviewMaxMiB?: () => number,
+): FilePreviewSessionController {
 	const tabs = ref<PreviewTab[]>([]);
 	const activeId = ref<string | null>(null);
 	const sources = new Map<string, FilePreviewSource>();
@@ -73,7 +76,7 @@ export function createFilePreviewSession(defaultSource?: FilePreviewSource): Fil
 		tab.error = undefined;
 		try {
 			const data = await source.read(tab.path, {
-				maxBytes: previewInlineLimit(tab.kind),
+				maxBytes: previewInlineLimit(tab.kind, getImagePreviewMaxMiB?.()),
 				signal: operation.controller.signal,
 			});
 			if (!operationIsCurrent(tab.id, operation)) return;
@@ -165,7 +168,7 @@ export function createFilePreviewSession(defaultSource?: FilePreviewSource): Fil
 		tab.refreshing = true;
 		try {
 			const data = await source.read(tab.path, {
-				maxBytes: previewInlineLimit(tab.kind),
+				maxBytes: previewInlineLimit(tab.kind, getImagePreviewMaxMiB?.()),
 				signal: operation.controller.signal,
 			});
 			if (!operationIsCurrent(tab.id, operation)) return;

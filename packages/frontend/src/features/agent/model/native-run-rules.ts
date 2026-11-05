@@ -1,3 +1,4 @@
+import { AgentManagementFailure } from './management-failure';
 import type {
 	NativeEntryCursor,
 	NativeApproval,
@@ -6,7 +7,33 @@ import type {
 	NativeEntry,
 	NativeConversationEntry,
 	NativeTool,
+	NativeConversationSnapshot,
 } from './native-run-types';
+
+export const NATIVE_CONVERSATION_MAX_ENTRIES = 128;
+
+export const NATIVE_CONVERSATION_MAX_CHARACTERS = 256 * 1024;
+
+/** Preserve the separately paged history anchor while accepting forward stream data. */
+export function appendNativeConversationWindow(
+	current: NativeConversationSnapshot,
+	page: { items: NativeEntry[]; nextCursor: NativeEntryCursor },
+): NativeConversationSnapshot {
+	let previous = current.cursor;
+	for (const item of page.items) {
+		if (compareNativeEntryCursor(previous, item.position) >= 0) {
+			throw new AgentManagementFailure('protocol_failure', 'unknown');
+		}
+		previous = item.position;
+	}
+	const combined = appendNativeConversationEntries(current.entries, page.items);
+	return {
+		entries: combined,
+		cursor: page.nextCursor,
+		startCursor: current.startCursor,
+		olderHidden: current.olderHidden,
+	};
+}
 
 export function isNativeRunActive(run: NativeRun | NativeChild): boolean {
 	return run.status === 'pending' || run.status === 'running';

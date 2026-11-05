@@ -15,10 +15,7 @@ import {
 	readWorkspaceFileRealpathResponse,
 	readWorkspaceFileMutationResponse,
 } from '@nexus-terminal/shared/remote/files/workspace-codec';
-import {
-	REMOTE_FILE_MAX_TEXT_BYTES,
-	WORKSPACE_FILES_MAX_BINARY_READ_BYTES,
-} from '@nexus-terminal/shared/remote/files/values';
+import { REMOTE_FILE_MAX_TEXT_BYTES } from '@nexus-terminal/shared/remote/files/values';
 import type { WorkspaceErrorCode } from '@nexus-terminal/shared/remote/workspace/values';
 import {
 	WORKSPACE_MAX_IN_FLIGHT_REQUESTS,
@@ -369,7 +366,7 @@ export function createFilePreviewSource(filesystem: FilesystemChannel): FilePrev
 	return {
 		async read(path, options) {
 			const signal = options?.signal;
-			const maxBytes = options?.maxBytes ?? WORKSPACE_FILES_MAX_BINARY_READ_BYTES;
+			const maxBytes = options?.maxBytes ?? Number.MAX_SAFE_INTEGER;
 			fileRequest(readWorkspaceFileReadBinaryRequest, { path, maxBytes });
 			signal?.throwIfAborted();
 			const entry = await filesystem.stat(path, signal);

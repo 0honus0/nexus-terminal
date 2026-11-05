@@ -66,10 +66,7 @@ import { logger } from '@/client/logging/logger';
 import { openWebSocket, WebSocketConnectionFailure } from '@/client/websocket';
 import { decodeWorkspaceBinaryFrame } from '@nexus-terminal/shared/remote/workspace/workspace-binary';
 import { readWorkspaceFileReadBinaryRequest } from '@nexus-terminal/shared/remote/files/workspace-codec';
-import {
-	WORKSPACE_FILES_MAX_BINARY_READ_BYTES,
-	WORKSPACE_FILES_TRANSFER_TIMEOUT_MS,
-} from '@nexus-terminal/shared/remote/files/values';
+import { WORKSPACE_FILES_TRANSFER_TIMEOUT_MS } from '@nexus-terminal/shared/remote/files/values';
 import {
 	WORKSPACE_SUSPEND_MAX_HISTORY_PAGE_BYTES,
 	WORKSPACE_SUSPEND_MAX_JSON_BYTES,
@@ -905,23 +902,27 @@ export class WorkspaceSocket {
 							pending.maxBytes ?? WORKSPACE_SUSPEND_MAX_HISTORY_PAGE_BYTES,
 							WORKSPACE_SUSPEND_MAX_HISTORY_PAGE_BYTES,
 						)
-					: Math.min(
-							pending.maxBytes ?? WORKSPACE_FILES_MAX_BINARY_READ_BYTES,
-							WORKSPACE_FILES_MAX_BINARY_READ_BYTES,
-						);
+					: (pending.maxBytes ?? Number.MAX_SAFE_INTEGER);
 			if (pending.binaryBytes + frame.data.byteLength > maxBytes) {
-				this.pending.delete(frame.requestId);
-				window.clearTimeout(pending.timer);
-				pending.binaryChunks.length = 0;
-				pending.reject(new Error('Workspace binary response limit exceeded.'));
-				if (pending.operation === 'filesystem.readBinary') {
-					this.sendConnected('filesystem.cancelRead', { requestId: frame.requestId });
-				}
+				this.rejectBinaryResponse(
+					frame.requestId,
+					pending,
+					new Error('Workspace binary response limit exceeded.'),
+				);
 				return;
 			}
-			const copy = frame.data.slice();
-			pending.binaryChunks.push(copy);
-			pending.binaryBytes += copy.byteLength;
+			try {
+				const copy = frame.data.slice();
+				pending.binaryChunks.push(copy);
+				pending.binaryBytes += copy.byteLength;
+			} catch (cause) {
+				this.rejectBinaryResponse(
+					frame.requestId,
+					pending,
+					new Error('Workspace binary response buffering failed.', { cause }),
+				);
+				return;
+			}
 		}
 		if (frame.final) {
 			pending.binaryDone = true;
@@ -935,13 +936,35 @@ export class WorkspaceSocket {
 		}
 		this.pending.delete(requestId);
 		window.clearTimeout(pending.timer);
-		const bytes = new Uint8Array(pending.binaryBytes);
-		let offset = 0;
-		for (const chunk of pending.binaryChunks) {
-			bytes.set(chunk, offset);
-			offset += chunk.byteLength;
+		try {
+			const bytes = new Uint8Array(pending.binaryBytes);
+			let offset = 0;
+			for (const chunk of pending.binaryChunks) {
+				bytes.set(chunk, offset);
+				offset += chunk.byteLength;
+			}
+			pending.resolve({ data: pending.responseValue, bytes });
+		} catch (cause) {
+			// Allocation can fail at the browser's actual capacity. Always settle the wait,
+			// including after its timer and pending entry have already been removed.
+			this.rejectBinaryResponse(
+				requestId,
+				pending,
+				new Error('Workspace binary response assembly failed.', { cause }),
+			);
+		} finally {
+			pending.binaryChunks.length = 0;
 		}
-		pending.resolve({ data: pending.responseValue, bytes });
+	}
+
+	private rejectBinaryResponse(requestId: string, pending: PendingRequest, error: Error): void {
+		this.pending.delete(requestId);
+		window.clearTimeout(pending.timer);
+		pending.binaryChunks.length = 0;
+		pending.reject(error);
+		if (pending.operation === 'filesystem.readBinary' && !pending.binaryDone) {
+			this.sendConnected('filesystem.cancelRead', { requestId });
+		}
 	}
 
 	private failProtocol(message: string): void {

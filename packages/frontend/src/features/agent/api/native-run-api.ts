@@ -13,6 +13,7 @@ import type {
 	NativeModel,
 	NativeEntry,
 	NativeEntryCursor,
+	NativeEntryHistory,
 	NativePage,
 	NativeEvent,
 	NativeChild,
@@ -80,6 +81,39 @@ export async function getNativeRun(
 		? result.value === null
 			? null
 			: fromNativeRun(result.value)
+		: unexpected();
+}
+
+export async function listNativeEntryHistory(
+	scope: NativeThreadScope,
+	threadId: string,
+	before: NativeEntryCursor | null,
+	signal?: AbortSignal,
+): Promise<NativeEntryHistory> {
+	const result = await requestNativeWorkspace(
+		scope,
+		{
+			appVersion: scope.appVersion,
+			request: {
+				method: 'agent.threads.history',
+				params: {
+					threadId,
+					before: before === null ? null : fromNativeCursor(before),
+					limit: AGENT_THREAD_ENTRY_MAX_PAGE,
+				},
+			},
+		},
+		signal,
+	);
+	return result.method === 'agent.threads.history'
+		? {
+				body: {
+					items: result.value.body.items.map(fromNativeEntry),
+					nextCursor: fromNativeCursor(result.value.body.nextCursor),
+				},
+				startCursor: fromNativeCursor(result.value.startCursor),
+				hasEarlier: result.value.hasEarlier,
+			}
 		: unexpected();
 }
 

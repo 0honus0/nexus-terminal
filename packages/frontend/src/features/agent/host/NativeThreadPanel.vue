@@ -15,13 +15,18 @@
 		autoLoad?: boolean;
 		apiBase?: '/api/v1/agent' | '/__next/api/v1/agent';
 	}>();
-	const emit = defineEmits<{ select: [value: NativeThread | null]; working: [value: boolean] }>();
+	const emit = defineEmits<{
+		select: [value: NativeThread | null];
+		removed: [threadId: string];
+		working: [value: boolean];
+	}>();
 	const { locale, t } = useI18n();
 	const editor = useNativeThreads(
 		props.appId,
 		createNativeThreadApi(props.apiBase),
 		() => props.active,
 		(value) => emit('select', value),
+		(threadId) => emit('removed', threadId),
 	);
 	const { items, nextCursor, title, selected, loaded, pending, pendingDelete, inspected, deleteInspected, busy } =
 		editor;
@@ -92,16 +97,10 @@
 		editor.newThread();
 		title.value = t('agent.operations.untitledThread');
 		await editor.submit(false, true);
-		if (pending.value === null && selected.value !== null) {
-			await editor.refresh();
-		}
 	}
 
 	async function retryPending(): Promise<void> {
 		await editor.submit(true);
-		if (pending.value === null && selected.value !== null) {
-			await editor.refresh();
-		}
 	}
 
 	function handleScroll(): void {
@@ -133,7 +132,11 @@
 		},
 		{ immediate: true },
 	);
-	watch(busy, (value) => emit('working', value), { flush: 'sync' });
+	watch(
+		() => busy.value || pending.value !== null || pendingDelete.value !== null,
+		(value) => emit('working', value),
+		{ flush: 'sync' },
+	);
 	watch([busy, pending, pendingDelete], clearDeleteConfirmation);
 	let pendingRefresh = false;
 	let lastResumeRevision: number | undefined;

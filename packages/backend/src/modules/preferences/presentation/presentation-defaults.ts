@@ -1,3 +1,4 @@
+import { DEFAULT_IMAGE_PREVIEW_MAX_MIB } from '@nexus-terminal/shared/preferences/presentation/values';
 import type { PresentationView } from './model/presentation-types.js';
 
 export function defaultPresentation(): PresentationView {
@@ -36,6 +37,7 @@ export function defaultPresentation(): PresentationView {
 				fileManagerColWidths: { name: 200, permissions: 76, modified: 92 },
 				spreadsheetPreviewRowsPerPage: 500,
 				spreadsheetPreviewMaxColumns: 100,
+				imagePreviewMaxMiB: DEFAULT_IMAGE_PREVIEW_MAX_MIB,
 				rdpModalWidth: 1064,
 				rdpModalHeight: 858,
 				vncModalWidth: 1024,

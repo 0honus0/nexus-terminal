@@ -354,13 +354,24 @@ Memory四HTTP的完整codec由后端管理入口、对话候选审核及既有 A
 
 ### 原生与插件共用工作区契约
 
-scope/workspace-http 及 workspace-http-codec 唯一定义18项工作区请求/安全结果、严格codec、原生appVersion外壳和App响应关联；基础完整预算8MiB+1KiB与可选模型上限1024归scope/values。插件frontend-events/frontend-rpc-codec组合并消费该契约，原核心九方法不变；SDK由Backend构建时通过esbuild打包全部实际codec及第三方运行依赖，以独立浏览器ESM交付。不再把通用工作区对象定义在plugins中。Backend原生会话HTTP和插件RPC、Frontend正式Host/Run/正文/审批/Child、DEV线程组件及插件桥均为真实消费者。前端mapper逐字段转换独立NativeThread/Scope/Run/Entry/Approval/Child/Step/Tool对象，不直接把wire当UI状态；前端包已移除旧Protocol依赖。
+scope/workspace-http 及 workspace-http-codec 唯一定义19项工作区请求/安全结果、严格codec、原生appVersion外壳和App响应关联；基础完整预算8MiB+1KiB与可选模型上限1024归scope/values。插件frontend-events/frontend-rpc-codec组合并消费该契约，原核心九方法不变；SDK由Backend构建时通过esbuild打包全部实际codec及第三方运行依赖，以独立浏览器ESM交付。不再把通用工作区对象定义在plugins中。Backend原生会话HTTP和插件RPC、Frontend正式Host/Run/正文/审批/Child、DEV线程组件及插件桥均为真实消费者。前端mapper逐字段转换独立NativeThread/Scope/Run/Entry/Approval/Child/Step/Tool对象，不直接把wire当UI状态；前端包已移除旧Protocol依赖。
 
 新增 agent.threads.delete 的完整参数为 {threadId,expectedVersion}，成功 value 为 AgentDeleteThreadResponse {appId,threadId}；不接受 operationId、额外字段、缺字段、非 UUID 或非正安全整数版本。删除不递增线程版本，因此当前最大安全整数版本仍合法。结果 decoder 严格验证方法和原 threadId，原生响应还验证外壳 App/version 以及内层 appId；插件响应复用工作区 codec 关联线程与 envelope 的 nonce/id/seq，交付 SDK 按已绑定 App 检查结果归属。Backend workspace-mapper 为唯一协议↔应用白名单转换；删除属于 mutation，即使没有 operationId，丢失确认、超时或本地取消也保持未知副作用语义。
 
 pending/running/unknown 的 Root 或 Child 阻止删除，安全失败复用 agent/values 的 active_run_conflict（HTTP 409）；线程/App版本冲突使用 version_conflict，缺失/异 App线程使用 not_found，不根据错误正文归类。事务删除线程、全部 Run 和所属持久子表及附件引用，Memory 保留并清除 sourceRunId、推进自身版本；Artifact 元数据和文件保留。SQL、事务、状态准入和记忆版本耗尽判断均由 Backend 各自 owner 持有，Shared 不定义存储事实或删除策略对象。没有删除回执重放或墓碑兼容层，重复删除为 not_found；未知结果应保留原 threadId/expectedVersion 并先只读核对，不自动重放旧创建意图。
 
 验收边界为严格 unknown 输入、方法/线程/App/version/envelope 响应关联、现有消费者编译，以及 Backend 当前 v1 隔离 SQLite 的 FK/级联、拒绝和回滚验证；正式删除 UI、真实插件/原生 HTTP 交付丢失与并发竞争仍须各自整链验收，静态和隔离证据不扩大为全量行为通过。
+
+### 对话历史反向分页契约
+
+1. **职责与范围**：scope/model持AgentThreadEntryHistory，供原生Host和插件共用workspace读取最近/更早正文；不承载存储行或执行授权。
+2. **子功能与目录**：scope/workspace-http增加history请求/结果，http-codec严格解码正文页及前后锚点，workspace-http-codec关联方法、Thread和App。
+3. **依赖方向**：Backend接口/SDK及Frontend API消费Shared，Shared只消费本域纯取值/codec，不引用应用或技术层。
+4. **类型与转换**：请求为{threadId,before,limit}，before必填且可为null；响应为{body,startCursor,hasEarlier}。body复用AgentThreadEntries，四段游标及textOffset码点单位与前向协议一致；startCursor是首片段之前的位置，nextCursor是最后片段之后的位置。
+5. **入口与安装**：agent.threads.history通过原workspace HTTP及插件RPC，沿同一strict unknown解码和App/version/envelope关联；SDK绑定App检查history.body.appId。
+6. **数据、事务与并发**：limit复用既有1–16片段，单片4096码点/16KiB与完整512KiB预算；空页不可hasEarlier，非空首片段必须紧接startCursor，末尾不可超过before，同记录前缀必须连续；返回前向游标无需另做猜测转换。
+7. **生命周期与失败**：只读方法不加入mutation；错误沿原有限Agent失败码，无新重试或未知写入语义。协议不定义缓存预算、虚拟行高度或数据库策略。
+8. **当前能力与验收**：已同步Backend mapper/Service/Storage、原生API及插件SDK归属分支；类型与双端构建可检查消费者覆盖，分页真实SQL、Unicode和并发交付仍待正式行为回归。
 
 ## 图片模型协议与可选预算
 
@@ -479,3 +490,14 @@ App 来源仅为真实签名插件安装；删除 AgentCreateAppRequest/Response
 6. **数据、事务与并发**：Shared只定义外部形状，不执行授权、事务或版本检查；插件可选贡献表示该App是否提供此能力，不是历史兼容分支。模型步骤失败码与底层HTTP状态分别表达，不将供应商错误正文公开。
 7. **生命周期与失败**：插件上下文、声明和结果不是授权；实时grant、安装revision、单次审批、派发意图及未知收尾由Backend原owner保证。取消signal不表示远端副作用回滚。
 8. **当前能力与验收**：源码、静态与包构建记录归testing；真实子进程调用、撤权/升级、并发故障与模型效果仍待D17专项，不复用历史553项回归结论。
+
+### 图片预览容量契约
+
+1. **职责与范围**：preferences/presentation拥有双端个人图片预览容量的字段、单位、默认值和可表示范围；remote/files拥有实际二进制请求预算语义。
+2. **子功能与目录**：原values增加DEFAULT_IMAGE_PREVIEW_MAX_MIB=20及imagePreviewMaxMiB范围；model增加必填字段，http-codec精确字段解码同步，不新增包出口或依赖。
+3. **依赖方向**：Backend默认/校验/存储边界、Frontend默认/表单/Registry共同消费；Shared不引入浏览器、Pinia、存储或应用类型。
+4. **类型与转换**：imagePreviewMaxMiB为非负安全整数，0取消图片预算；最大Math.floor(Number.MAX_SAFE_INTEGER/1024²)仅来自单位转换的技术表示范围。HTTP完整请求/响应复用原PresentationPreferences解码，未设置不等于0，缺字段拒绝。
+5. **入口与安装**：沿现有精确exports和preferences接口；remote/files/workspace-codec接收正安全整数maxBytes，不再有固定64MiB总量上限；同步实际后端和前端收发消费者及既有非法预算fixture。
+6. **数据、事务与并发**：不持存储数据、不包含SQL；完整偏好JSON/CAS仍归Preferences。文件格式预算在预览Registry，WS每次总量采用请求预算，帧大小/并发/背压保持独立，HTTP transfer inline的20MiB预算不影响本轮WS读取。
+7. **生命周期与失败**：严格解码拒绝缺失/负数/小数/非数和不安全单位转换；不为旧JSON补字段。0不承诺无限资源，取消/晚响应/网络失败由原运行时与读源拥有。
+8. **当前能力与验收**：前后端所有真实偏好映射和预览入口已接入；本轮静态及明确授权的限定CDP证据与未验组合见testing，未运行全量本地E2E；升级已有持久数据前应显式维护新字段。

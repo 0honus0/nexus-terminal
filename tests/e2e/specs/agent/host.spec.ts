@@ -500,10 +500,7 @@ test('Agent layout preferences use the authenticated user namespace and reject o
 	expect(result.otherUnchanged).toBe(true);
 });
 
-test('Agent thread selection retains its identity while authoritative history is pending', async ({
-	page,
-	context,
-}) => {
+test('Agent thread selection stays responsive while earlier history is pending', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
 	await setUiLanguage(context.request);
 	const app = await createTestAgentApp(context.request);
@@ -533,7 +530,7 @@ test('Agent thread selection retains its identity while authoritative history is
 		const body = readAgentWorkspaceRequest(route.request().postDataJSON());
 		if (
 			hold &&
-			(body.request.method === 'agent.threads.entries' || body.request.method === 'agent.runs.list') &&
+			(body.request.method === 'agent.threads.history' || body.request.method === 'agent.runs.list') &&
 			body.request.params.threadId === first.id
 		) {
 			held += 1;
@@ -558,16 +555,17 @@ test('Agent thread selection retains its identity while authoritative history is
 		hold = true;
 		await openAgentConversations(page);
 		await firstButton.click();
-		await expect.poll(() => held).toBe(2);
+		await expect.poll(() => held).toBeGreaterThan(0);
 		await expect(
 			hub.locator('.agent-conversation-pane > header').getByText(first.title, { exact: true }),
 		).toBeVisible();
 		await openAgentConversations(page);
-		await expect(secondButton).toBeDisabled();
-		release();
-		await openAgentConversations(page);
 		await expect(secondButton).toBeEnabled();
 		await secondButton.click();
+		await expect(
+			hub.locator('.agent-conversation-pane > header').getByText(second.title, { exact: true }),
+		).toBeVisible();
+		release();
 		await expect(
 			hub.locator('.agent-conversation-pane > header').getByText(second.title, { exact: true }),
 		).toBeVisible();

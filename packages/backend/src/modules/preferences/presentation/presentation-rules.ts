@@ -51,6 +51,11 @@ export function validatePresentation(value: PresentationData): void {
 			prefs.spreadsheetPreviewMaxColumns,
 			PRESENTATION_PREFERENCE_BOUNDS.spreadsheetPreviewMaxColumns.min,
 			PRESENTATION_PREFERENCE_BOUNDS.spreadsheetPreviewMaxColumns.max,
+		) ||
+		!integer(
+			prefs.imagePreviewMaxMiB,
+			PRESENTATION_PREFERENCE_BOUNDS.imagePreviewMaxMiB.min,
+			PRESENTATION_PREFERENCE_BOUNDS.imagePreviewMaxMiB.max,
 		)
 	) {
 		throw new PresentationFailure('invalid_input');

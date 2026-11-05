@@ -106,6 +106,14 @@
 		) {
 			return t('settings.workspace.spreadsheetPreviewLimits.invalidColumns');
 		}
+		if (
+			patch.imagePreviewMaxMiB !== undefined &&
+			(!Number.isSafeInteger(patch.imagePreviewMaxMiB) ||
+				patch.imagePreviewMaxMiB < PRESENTATION_PREFERENCE_BOUNDS.imagePreviewMaxMiB.min ||
+				patch.imagePreviewMaxMiB > PRESENTATION_PREFERENCE_BOUNDS.imagePreviewMaxMiB.max)
+		) {
+			return t('settings.workspace.imagePreviewLimits.invalid');
+		}
 		return null;
 	};
 
@@ -626,6 +634,41 @@
 							tone="primary"
 							:loading="savingSection === 'terminal-scrollback'"
 							>{{ t('settings.terminalScrollback.saveButton') }}</UiButton
+						>
+					</div>
+				</form>
+			</section>
+
+			<hr class="border-border" />
+
+			<section class="settings-section-content">
+				<h3 class="mb-3 text-base font-semibold text-foreground">
+					{{ t('settings.workspace.imagePreviewLimits.title') }}
+				</h3>
+				<form
+					class="space-y-4"
+					@submit.prevent="savePatch('image-preview', { imagePreviewMaxMiB: form.imagePreviewMaxMiB })"
+				>
+					<UiFormField :label="t('settings.workspace.imagePreviewLimits.label')" for-id="imagePreviewMaxMiB">
+						<UiNumberInput
+							id="imagePreviewMaxMiB"
+							v-model="form.imagePreviewMaxMiB"
+							:min="PRESENTATION_PREFERENCE_BOUNDS.imagePreviewMaxMiB.min"
+							:max="PRESENTATION_PREFERENCE_BOUNDS.imagePreviewMaxMiB.max"
+							step="1"
+							:disabled="savingSection !== null || needsRefresh || loading"
+						/>
+						<p class="mt-1 text-xs text-text-secondary">
+							{{ t('settings.workspace.imagePreviewLimits.hint') }}
+						</p>
+					</UiFormField>
+					<div class="flex flex-wrap items-center justify-between gap-3">
+						<UiButton
+							type="submit"
+							appearance="solid"
+							tone="primary"
+							:loading="savingSection === 'image-preview'"
+							>{{ t('common.save') }}</UiButton
 						>
 					</div>
 				</form>

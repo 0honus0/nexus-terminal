@@ -50,3 +50,10 @@ export interface AgentThreadEntries {
 	items: AgentThreadEntry[];
 	nextCursor: AgentThreadEntryCursor;
 }
+
+/** Backward page whose body is still ordered for the ordinary forward stream. */
+export interface AgentThreadEntryHistory {
+	body: AgentThreadEntries;
+	startCursor: AgentThreadEntryCursor;
+	hasEarlier: boolean;
+}

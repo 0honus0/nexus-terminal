@@ -39,6 +39,8 @@ export const PRESENTATION_LAYOUT_MAX_DEPTH = 12;
 
 export const PRESENTATION_LAYOUT_MAX_NODES = 100;
 
+export const DEFAULT_IMAGE_PREVIEW_MAX_MIB = 20;
+
 /** Numeric preference ranges consumed by editors, protocol and stored-record validation. */
 export const PRESENTATION_PREFERENCE_BOUNDS = {
 	terminalScrollbackLimit: { min: 0, max: 100_000 },
@@ -48,6 +50,8 @@ export const PRESENTATION_PREFERENCE_BOUNDS = {
 	fileManagerRowSizeMultiplier: { min: 0.5, max: 2 },
 	spreadsheetPreviewRowsPerPage: { min: 10, max: 2000 },
 	spreadsheetPreviewMaxColumns: { min: 5, max: 200 },
+	// MiB must convert to an exactly representable safe integer number of bytes.
+	imagePreviewMaxMiB: { min: 0, max: Math.floor(Number.MAX_SAFE_INTEGER / (1024 * 1024)) },
 } as const;
 
 export const PRESENTATION_ERROR_CODES = [

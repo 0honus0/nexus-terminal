@@ -55,6 +55,7 @@
 		'fileManagerShowDeleteConfirmation',
 		'spreadsheetPreviewRowsPerPage',
 		'spreadsheetPreviewMaxColumns',
+		'imagePreviewMaxMiB',
 	] as const satisfies readonly (keyof UserPreferences)[];
 	const commandKeys = [
 		'workspaceSidebarPersistent',
@@ -183,6 +184,14 @@
 			)
 		)
 			return t('settings.workspace.spreadsheetPreviewLimits.invalidColumns');
+		if (
+			patch.imagePreviewMaxMiB !== undefined &&
+			(!Number.isSafeInteger(patch.imagePreviewMaxMiB) ||
+				patch.imagePreviewMaxMiB < PRESENTATION_PREFERENCE_BOUNDS.imagePreviewMaxMiB.min ||
+				patch.imagePreviewMaxMiB > PRESENTATION_PREFERENCE_BOUNDS.imagePreviewMaxMiB.max)
+		) {
+			return t('settings.workspace.imagePreviewLimits.invalid');
+		}
 		return null;
 	};
 
@@ -347,6 +356,22 @@
 						<p class="workspace-preferences__hint">
 							{{ t('settings.workspace.spreadsheetPreviewLimits.hint') }}
 						</p>
+						<UiFormField
+							:label="t('settings.workspace.imagePreviewLimits.label')"
+							for-id="imagePreviewMaxMiB"
+						>
+							<UiNumberInput
+								id="imagePreviewMaxMiB"
+								v-model="form.imagePreviewMaxMiB"
+								:min="PRESENTATION_PREFERENCE_BOUNDS.imagePreviewMaxMiB.min"
+								:max="PRESENTATION_PREFERENCE_BOUNDS.imagePreviewMaxMiB.max"
+								step="1"
+								:disabled="savingGroup !== null || needsRefresh || loading"
+							/>
+							<p class="workspace-preferences__hint">
+								{{ t('settings.workspace.imagePreviewLimits.hint') }}
+							</p>
+						</UiFormField>
 					</div>
 				</form>
 			</UiSettingsGroup>

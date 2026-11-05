@@ -5,7 +5,7 @@ import {
 	AGENT_THREAD_ENTRY_MAX_TEXT_BYTES,
 	AGENT_THREAD_ENTRIES_MAX_RESPONSE_BYTES,
 } from './values.js';
-import type { AgentThreadEntryCursor, AgentThreadEntries, AgentThreadEntry } from './model.js';
+import type { AgentThreadEntryCursor, AgentThreadEntries, AgentThreadEntry, AgentThreadEntryHistory } from './model.js';
 import {
 	InvalidAgentPayload,
 	encodeAgentJson,
@@ -224,4 +224,43 @@ export function readAgentThreadEntries(
 		throw new InvalidAgentPayload();
 	}
 	return { appId: readAgentId(row.appId), threadId, items, nextCursor };
+}
+
+export function readAgentThreadEntryHistory(
+	input: unknown,
+	threadId: string,
+	before: AgentThreadEntryCursor | null,
+	limit: number,
+): AgentThreadEntryHistory {
+	const row = agentRecord(input, ['body', 'startCursor', 'hasEarlier'], AGENT_THREAD_ENTRIES_MAX_RESPONSE_BYTES);
+	const startCursor = readAgentThreadEntryCursor(row.startCursor);
+	const body = readAgentThreadEntries(row.body, threadId, startCursor, limit);
+	if (
+		typeof row.hasEarlier !== 'boolean' ||
+		(!body.items.length && row.hasEarlier) ||
+		(body.items.length > 0 && startCursor.textOffset > 0 && !row.hasEarlier)
+	) {
+		throw new InvalidAgentPayload();
+	}
+	const first = body.items[0];
+	if (
+		first &&
+		(compareEntry(first.position, startCursor) !== 0 ||
+			first.position.textOffset - Array.from(first.text).length !== startCursor.textOffset)
+	) {
+		throw new InvalidAgentPayload();
+	}
+	if (before) {
+		const order = compareEntry(body.nextCursor, before) || body.nextCursor.textOffset - before.textOffset;
+		if (order > 0 || (before.textOffset > 0 && order !== 0)) {
+			throw new InvalidAgentPayload();
+		}
+	}
+	if (!body.items.length) {
+		const expected = before ?? { runSequence: 0, stepIndex: 0, eventSequence: 0, textOffset: 0 };
+		if (compareEntry(startCursor, expected) !== 0 || startCursor.textOffset !== expected.textOffset) {
+			throw new InvalidAgentPayload();
+		}
+	}
+	return { body, startCursor, hasEarlier: row.hasEarlier };
 }

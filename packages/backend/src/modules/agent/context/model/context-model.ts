@@ -1,5 +1,5 @@
 import { agentStorage } from '../../agent-storage-failure.js';
-import type { ThreadEntryCursor, ThreadEntries } from './context-types.js';
+import type { ThreadEntryCursor, ThreadEntries, ThreadEntryHistory } from './context-types.js';
 import type { RunModelMessage } from '../../runs/model/run-types.js';
 import type { ContextStorage, StoredContextMessage, StoredContextSnapshot } from '../storage/context-storage.js';
 import type {
@@ -51,6 +51,63 @@ export function toStoredContext(
 
 export class ContextModel {
 	constructor(private readonly storage: ContextStorage) {}
+
+	async previousEntries(
+		userId: number,
+		appId: string,
+		threadId: string,
+		before: ThreadEntryCursor | null,
+		limit: number,
+	): Promise<ThreadEntryHistory | null> {
+		const value = await agentStorage(() =>
+			this.storage.readPreviousEntries(
+				userId,
+				appId,
+				threadId,
+				before === null
+					? null
+					: {
+							runSequence: before.runSequence,
+							stepIndex: before.stepIndex,
+							eventSequence: before.eventSequence,
+							textOffset: before.textOffset,
+						},
+				limit,
+			),
+		);
+		return value === null
+			? null
+			: {
+					startCursor: {
+						runSequence: value.startCursor.runSequence,
+						stepIndex: value.startCursor.stepIndex,
+						eventSequence: value.startCursor.eventSequence,
+						textOffset: value.startCursor.textOffset,
+					},
+					hasEarlier: value.hasEarlier,
+					body: {
+						appId: value.body.appId,
+						threadId: value.body.threadId,
+						items: value.body.items.map((item) => ({
+							runId: item.runId,
+							role: item.role,
+							text: item.text,
+							position: {
+								runSequence: item.position.runSequence,
+								stepIndex: item.position.stepIndex,
+								eventSequence: item.position.eventSequence,
+								textOffset: item.position.textOffset,
+							},
+						})),
+						nextCursor: {
+							runSequence: value.body.nextCursor.runSequence,
+							stepIndex: value.body.nextCursor.stepIndex,
+							eventSequence: value.body.nextCursor.eventSequence,
+							textOffset: value.body.nextCursor.textOffset,
+						},
+					},
+				};
+	}
 
 	async entries(
 		userId: number,

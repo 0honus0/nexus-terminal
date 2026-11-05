@@ -1,3 +1,4 @@
+import { DEFAULT_IMAGE_PREVIEW_MAX_MIB } from '@nexus-terminal/shared/preferences/presentation/values';
 import type { PreviewKind } from '../model/preview';
 
 const MEBIBYTE = 1024 * 1024;
@@ -17,10 +18,18 @@ export const previewKindFor = (path: string): PreviewKind => {
 	return 'unsupported';
 };
 
-export const previewInlineLimit = (kind: PreviewKind): number | undefined => {
+export const previewInlineLimit = (
+	kind: PreviewKind,
+	imagePreviewMaxMiB = DEFAULT_IMAGE_PREVIEW_MAX_MIB,
+): number | undefined => {
 	if (kind === 'markdown') return 2 * MEBIBYTE;
 	if (kind === 'spreadsheet') return 10 * MEBIBYTE;
 	if (kind === 'database') return 64 * MEBIBYTE;
-	if (kind === 'image' || kind === 'pdf' || kind === 'docx') return 20 * MEBIBYTE;
+	if (kind === 'image') {
+		return imagePreviewMaxMiB === 0 ? undefined : imagePreviewMaxMiB * MEBIBYTE;
+	}
+	if (kind === 'pdf' || kind === 'docx') {
+		return 20 * MEBIBYTE;
+	}
 	return undefined;
 };

@@ -126,6 +126,12 @@
       "quickCommandsCollapsibleSearchTitle": "Quick Command Search",
       "quickCommandsCollapsibleSearchLabel": "Collapse the search box into a search button by default",
       "quickCommandsCollapsibleSearchDescription": "Disabled by default. When enabled, the Quick Commands panel shows a search button until you click it to expand the search box.",
+      "imagePreviewLimits": {
+        "title": "Image preview",
+        "label": "Image preview size limit (MiB)",
+        "hint": "Shared by the file manager and Agent file library. Use 0 for no size limit. Applies when opening or refreshing an image. Larger images use more browser memory.",
+        "invalid": "Enter a non-negative integer in MiB whose byte value fits in the safe integer range."
+      },
       "spreadsheetPreviewLimits": {
         "title": "Spreadsheet Preview",
         "rowsLabel": "Rows per page",

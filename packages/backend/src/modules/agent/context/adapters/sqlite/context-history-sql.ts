@@ -1,6 +1,10 @@
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
-import { readThreadEntries } from './thread-entry-sql.js';
-import type { StoredThreadEntries, StoredThreadEntryCursor } from '../../storage/context-storage.js';
+import { readThreadEntries, readPreviousThreadEntries } from './thread-entry-sql.js';
+import type {
+	StoredThreadEntries,
+	StoredThreadEntryCursor,
+	StoredThreadEntryHistory,
+} from '../../storage/context-storage.js';
 import { checkpointRow } from './checkpoint-sql.js';
 import { readContextSnapshot } from './context-row.js';
 import type { SqlRow } from '../../../../../platform/storage/sqlite/worker-types.js';
@@ -186,6 +190,16 @@ async function historySummary(
 
 export class SqliteContextStorage implements ContextStorage {
 	constructor(private readonly db: SqliteRuntime) {}
+
+	readPreviousEntries(
+		userId: number,
+		appId: string,
+		threadId: string,
+		before: StoredThreadEntryCursor | null,
+		limit: number,
+	): Promise<StoredThreadEntryHistory | null> {
+		return this.db.transaction((tx) => readPreviousThreadEntries(tx, userId, appId, threadId, before, limit));
+	}
 
 	readEntries(
 		userId: number,

@@ -1,5 +1,5 @@
 import { isWellFormedFileText } from './text-codec.js';
-import { WORKSPACE_FILES_MAX_BINARY_READ_BYTES, WORKSPACE_FILES_MAX_SEARCH_ENTRIES } from './values.js';
+import { WORKSPACE_FILES_MAX_SEARCH_ENTRIES } from './values.js';
 import { WORKSPACE_BINARY_MAX_REQUEST_ID_BYTES, WORKSPACE_ERROR_CODES } from '../workspace/values.js';
 import type {
 	WorkspaceFileMetadata,
@@ -88,9 +88,6 @@ export function readWorkspaceFileSearchRequest(input: unknown): WorkspaceFileSea
 export function readWorkspaceFileReadBinaryRequest(input: unknown): WorkspaceFileReadBinaryRequest {
 	const row = record(input, ['path', 'maxBytes']);
 	const maxBytes = positiveSafeInteger(row.maxBytes);
-	if (maxBytes > WORKSPACE_FILES_MAX_BINARY_READ_BYTES) {
-		throw new InvalidWorkspaceFilesPayload();
-	}
 	return { path: text(row.path), maxBytes };
 }
 

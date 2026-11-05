@@ -54,6 +54,13 @@ export interface StoredContextHistoryTurn {
 }
 
 export interface ContextStorage {
+	readPreviousEntries(
+		userId: number,
+		appId: string,
+		threadId: string,
+		before: StoredThreadEntryCursor | null,
+		limit: number,
+	): Promise<StoredThreadEntryHistory | null>;
 	readEntries(
 		userId: number,
 		appId: string,
@@ -93,4 +100,10 @@ export interface StoredContextHistoryBundle {
 	sources: StoredContextSource[];
 	turns: StoredContextHistoryTurn[];
 	summary: { content: string; coveredRuns: number } | null;
+}
+
+export interface StoredThreadEntryHistory {
+	body: StoredThreadEntries;
+	startCursor: StoredThreadEntryCursor;
+	hasEarlier: boolean;
 }

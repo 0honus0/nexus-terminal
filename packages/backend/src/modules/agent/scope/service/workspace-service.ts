@@ -31,6 +31,19 @@ export class WorkspaceService {
 	async rpc(access: ThreadAccess, input: WorkspaceInput, withMutation: WorkspaceMutation): Promise<WorkspaceResult> {
 		access.assertCurrent();
 		switch (input.method) {
+			case 'agent.threads.history':
+				return {
+					method: input.method,
+					value: required(
+						await this.contexts.previousEntries(
+							access.userId,
+							access.appId,
+							input.threadId,
+							input.before,
+							input.limit,
+						),
+					),
+				};
 			case 'agent.threads.entries':
 				return {
 					method: input.method,

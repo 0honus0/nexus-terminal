@@ -125,3 +125,9 @@ export interface CompactionResult {
 	source: RunModelMessage[];
 	cut: number;
 }
+
+export interface ThreadEntryHistory {
+	body: ThreadEntries;
+	startCursor: ThreadEntryCursor;
+	hasEarlier: boolean;
+}

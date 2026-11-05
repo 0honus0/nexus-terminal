@@ -16,6 +16,7 @@ import type { TerminalViewport } from '@/features/terminal/public';
 import { createFileEditorSession } from '@/features/file-editor/public';
 import { createFileClipboardController } from '@/features/transfers/public';
 import { WorkspaceRuntimeSession } from './workspaceRuntimeSession';
+import { usePreferences } from '@/features/preferences/public';
 
 const sessions = shallowReactive(new Map<string, WorkspaceRuntimeSession>());
 const activeId = ref<string | null>(null);
@@ -39,6 +40,15 @@ const handleSuspendedAutoTerminated = (event: SuspendedAutoTermination): void =>
 	);
 	suspendAutoTerminationNotice.value = notice;
 	void refreshSuspendedSessionsCatalog();
+};
+
+const createRuntimeSession = (connection: ConnectionSummary): WorkspaceRuntimeSession => {
+	const preferences = usePreferences();
+	return new WorkspaceRuntimeSession(connection, {
+		onSuspendedAutoTerminated: handleSuspendedAutoTerminated,
+
+		getImagePreviewMaxMiB: () => preferences.values.value.imagePreviewMaxMiB,
+	});
 };
 
 const orderedSessions = computed(() =>
@@ -174,9 +184,7 @@ const runResume = (
 				'Workspace resume replacement target was missing from tab order',
 			);
 		}
-		const session = new WorkspaceRuntimeSession(connection, {
-			onSuspendedAutoTerminated: handleSuspendedAutoTerminated,
-		});
+		const session = createRuntimeSession(connection);
 		const replacingVisibleSlot = Boolean(oldSession && replaceIndex >= 0);
 
 		if (oldSession && replaceIndex >= 0) {
@@ -260,9 +268,7 @@ export const workspaceRuntimeRegistry = {
 		if (connection.type !== 'SSH') {
 			throw new Error('Only SSH connections can open a Workspace session.');
 		}
-		const session = new WorkspaceRuntimeSession(connection, {
-			onSuspendedAutoTerminated: handleSuspendedAutoTerminated,
-		});
+		const session = createRuntimeSession(connection);
 		add(session);
 		try {
 			await session.connect(viewport);
@@ -320,9 +326,7 @@ export const workspaceRuntimeRegistry = {
 			const selectedId = activeId.value;
 			await removeRuntime(id, 'Terminal reset');
 			if (signal.aborted || generation !== runtimeGeneration) return 'unavailable';
-			const session = new WorkspaceRuntimeSession(previous.connection, {
-				onSuspendedAutoTerminated: handleSuspendedAutoTerminated,
-			});
+			const session = createRuntimeSession(previous.connection);
 			add(session, index);
 			if (selectedId !== id) restoreActive(selectedId, null);
 			try {

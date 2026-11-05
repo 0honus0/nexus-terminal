@@ -6,7 +6,7 @@ import type { AgentChildrenResponse, AgentMessageMetadataResponse } from '../col
 import type { AgentApprovalView, AgentApprovalPage } from '../governance/model.js';
 import type { AgentCreateRunRequest, AgentCreateRunResponse, AgentCancelRunResponse } from '../runs/http.js';
 import type { AgentApprovalResolveRequest } from '../governance/http.js';
-import type { AgentThreadEntryCursor, AgentThreadEntries } from './model.js';
+import type { AgentThreadEntryCursor, AgentThreadEntries, AgentThreadEntryHistory } from './model.js';
 
 export interface AgentSelectableModel {
 	providerId: string;
@@ -36,6 +36,10 @@ export type AgentWorkspaceInput =
 			};
 	  }
 	| { method: 'agent.threads.entries'; params: { threadId: string; after: AgentThreadEntryCursor; limit: number } }
+	| {
+			method: 'agent.threads.history';
+			params: { threadId: string; before: AgentThreadEntryCursor | null; limit: number };
+	  }
 	| { method: 'agent.runs.create'; params: { threadId: string; operationId: string; input: AgentCreateRunRequest } }
 	| { method: 'agent.runs.cancel'; params: { runId: string; operationId: string; expectedVersion: number } }
 	| {
@@ -63,6 +67,7 @@ export type AgentWorkspaceInput =
 
 export type AgentWorkspaceResult =
 	| { method: 'agent.threads.entries'; value: AgentThreadEntries }
+	| { method: 'agent.threads.history'; value: AgentThreadEntryHistory }
 	| { method: 'agent.runs.create' | 'agent.runs.appendInput'; value: AgentCreateRunResponse }
 	| { method: 'agent.runs.cancel' | 'agent.subagents.cancel'; value: AgentCancelRunResponse }
 	| { method: 'agent.approvals.resolve'; value: AgentApprovalView }

@@ -1775,7 +1775,6 @@
       "inspect": "Inspect original intention",
       "acknowledge": "I understand the original operation may have committed; abandoning tracking does not undo it.",
       "conversation": "Thread conversation",
-      "windowed": "Earlier body chunks have left this bounded display window. Server records remain; select the thread again to read from the beginning.",
       "toolActivity": "Tool calls",
       "toolCallDetails": {
         "title": "Call details",

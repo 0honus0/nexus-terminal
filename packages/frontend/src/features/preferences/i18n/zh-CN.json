@@ -126,6 +126,12 @@
       "quickCommandsCollapsibleSearchTitle": "快捷指令搜索框",
       "quickCommandsCollapsibleSearchLabel": "默认将搜索框折叠为搜索按钮",
       "quickCommandsCollapsibleSearchDescription": "默认关闭。开启后快捷指令面板只显示搜索按钮，点击后再展开搜索框。",
+      "imagePreviewLimits": {
+        "title": "图片预览",
+        "label": "图片预览大小上限（MiB）",
+        "hint": "文件管理器与 Agent 文件库共用。0 表示不限大小，下次打开或刷新图片时生效。较大的图片会占用更多浏览器内存。",
+        "invalid": "请输入非负整数 MiB，且换算后的字节数不能超过安全整数范围。"
+      },
       "spreadsheetPreviewLimits": {
         "title": "电子表格预览",
         "rowsLabel": "每页行数",

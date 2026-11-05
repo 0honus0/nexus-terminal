@@ -161,6 +161,12 @@ function fixture(
 	const core = {
 		info: (text) => logs.push(text),
 
+		warning: (text) => logs.push(text),
+
+		startGroup: (text) => logs.push(text),
+
+		endGroup() {},
+
 		setSecret() {},
 
 		summary,

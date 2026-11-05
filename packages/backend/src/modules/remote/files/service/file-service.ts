@@ -19,7 +19,6 @@ import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 import {
 	REMOTE_FILE_MAX_TEXT_BYTES,
 	REMOTE_FILE_MAX_PATH_BYTES,
-	WORKSPACE_FILES_MAX_BINARY_READ_BYTES,
 	WORKSPACE_FILES_TRANSFER_TIMEOUT_MS,
 } from '@nexus-terminal/shared/remote/files/values';
 import {
@@ -2756,7 +2755,7 @@ export class RemoteFileService {
 		signal?: AbortSignal,
 	): Promise<void> {
 		const normalized = remotePath(filePath);
-		if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > WORKSPACE_FILES_MAX_BINARY_READ_BYTES) {
+		if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
 			throw new RemoteFileFailure('invalid_input');
 		}
 		return this.runTransferRead(

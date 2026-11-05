@@ -1,7 +1,14 @@
 <script setup lang="ts">
 	import { useElementSize, useResizeObserver } from '@vueuse/core';
 	import { useResizeHandle } from '@/foundation/interaction';
-	import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+	import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type ShallowUnwrapRef } from 'vue';
+	import {
+		DynamicScroller,
+		DynamicScrollerItem,
+		type CacheSnapshot,
+		type DynamicScrollerExposed,
+	} from 'vue-virtual-scroller';
+	import 'vue-virtual-scroller/dist/vue-virtual-scroller.css';
 	import { UiButton, UiCheckbox, UiEmptyState, UiLoadingState, UiInlineNotice } from '@/foundation/ui';
 	import { useI18n } from 'vue-i18n';
 	import { useNativeRuns } from '../composables/use-native-runs';
@@ -17,7 +24,7 @@
 	import AgentConversationWelcome from '../ai/AgentConversationWelcome.vue';
 	import type { NativeThread } from '../model/native-thread-types';
 	import { formatAgentNumber } from '../locale-format';
-	import type { NativeApproval, NativeModel, NativeTool } from '../model/native-run-types';
+	import type { NativeApproval, NativeModel, NativeTool, NativeConversationEntry } from '../model/native-run-types';
 	import type { AgentTaskActivity } from '../model/task-activity-types';
 	import { useAgentHostState } from './agent-host-state';
 	import { AGENT_REASONING_EFFORTS, type AgentReasoningEffort } from '@nexus-terminal/shared/agent/providers/values';
@@ -45,7 +52,14 @@
 	const taskRailWidth = ref(360);
 	const taskRailHeight = ref(0);
 	const pendingThreadSelection = ref<NativeThread | null>(null);
-	const scroller = ref<HTMLElement | null>(null);
+	interface TranscriptRow {
+		id: string;
+		entry: NativeConversationEntry | null;
+		entryIndex: number;
+		tools: NativeTool[];
+	}
+	const transcript = ref<(ShallowUnwrapRef<DynamicScrollerExposed<TranscriptRow>> & { $el: unknown }) | null>(null);
+	const scroller = computed(() => (transcript.value?.$el instanceof HTMLElement ? transcript.value.$el : null));
 	const attachmentControl = ref<{ removeById(id: string): void } | null>(null);
 	const showJumpToLatest = ref(false);
 	const keepPinnedToBottom = ref(true);
@@ -53,10 +67,16 @@
 	const canJumpNext = ref(false);
 	type AgentConfigControl = 'model' | 'reasoning' | 'target' | 'approval';
 	const selectedConfig = ref<AgentConfigControl | null>(null);
-	let applyingThreadSelection = false;
+	const threadScrollPositions = new Map<
+		string,
+		{ top: number; pinned: boolean; anchor: string | null; offset: number; cache?: CacheSnapshot; width?: number }
+	>();
+	let disposed = false;
 	let layoutObserver: ReturnType<typeof useResizeObserver> | null = null;
 	let transcriptObserver: ReturnType<typeof useResizeObserver> | null = null;
 	let transcriptFrame: number | null = null;
+	let historyAnchorFrame: number | null = null;
+	let partialHistoryAnchor: { threadId: string; rowId: string; size: number; top: number } | null = null;
 
 	onMounted(() => {
 		if (!layoutRoot.value) {
@@ -71,8 +91,11 @@
 		});
 	});
 	onBeforeUnmount(() => {
+		disposed = true;
+		partialHistoryAnchor = null;
 		layoutObserver?.stop();
 		transcriptObserver?.stop();
+		if (historyAnchorFrame !== null) cancelAnimationFrame(historyAnchorFrame);
 		if (transcriptFrame !== null) cancelAnimationFrame(transcriptFrame);
 	});
 
@@ -113,6 +136,8 @@
 		acknowledged,
 		olderHidden,
 		blocked,
+		loadingThread,
+		loadingOlder,
 		inputArtifacts,
 		attachmentsReady,
 	} = runtime;
@@ -216,6 +241,7 @@
 			appVersion: props.appVersion,
 			threadTitle: selected.title,
 			runId: current.id,
+			locallyStarted: runtime.startedRunId.value === current.id,
 			status: current.status,
 			preview: preview.slice(0, 360),
 			approvals: isNativeRunActive(current) ? pendingApprovals.value : [],
@@ -277,33 +303,60 @@
 	const toolsByEntry = computed(() => {
 		const assigned = new Map<number, NativeTool[]>();
 		const orphan: NativeTool[] = [];
+		const runEntries = new Map<string, { last: number; steps: Map<number, number> }>();
+		for (let index = 0; index < entries.value.length; index++) {
+			const entry = entries.value[index];
+			if (!entry) continue;
+			let indexes = runEntries.get(entry.runId);
+			if (!indexes) {
+				indexes = { last: index, steps: new Map() };
+				runEntries.set(entry.runId, indexes);
+			}
+			indexes.last = index;
+			if (entry.role === 'assistant') indexes.steps.set(entry.position.stepIndex, index);
+		}
 		for (const group of toolGroups.value) {
 			const first = group[0];
 			if (!first) continue;
-			let target = -1;
-			for (let index = 0; index < entries.value.length; index++) {
-				const entry = entries.value[index];
-				if (!entry || entry.role !== 'assistant' || entry.runId !== first.runId) continue;
-				if (entry.position.stepIndex === first.modelStepIndex) {
-					target = index;
-					break;
-				}
-				if (entry.position.stepIndex < first.modelStepIndex) target = index;
+			const indexes = runEntries.get(first.runId);
+			if (!indexes) {
+				orphan.push(...group);
+				continue;
 			}
-			if (target < 0) {
-				for (let index = entries.value.length - 1; index >= 0; index--) {
-					if (entries.value[index]?.runId === first.runId) {
-						target = index;
-						break;
-					}
+			let target = indexes.steps.get(first.modelStepIndex);
+			if (target === undefined) {
+				for (const [step, index] of indexes.steps) {
+					if (step < first.modelStepIndex) target = index;
 				}
 			}
-			if (target < 0) orphan.push(...group);
-			else {
-				assigned.set(target, [...(assigned.get(target) ?? []), ...group]);
-			}
+			target ??= indexes.last;
+			assigned.set(target, [...(assigned.get(target) ?? []), ...group]);
 		}
 		return { assigned, orphan };
+	});
+
+	const transcriptRows = computed<TranscriptRow[]>(() => {
+		const rows = entries.value.map((entry, entryIndex) => ({
+			id: [
+				entry.runId,
+				entry.role,
+				entry.position.stepIndex,
+				entry.role === 'user' ? entry.position.eventSequence : 0,
+			].join(':'),
+			entry,
+			entryIndex,
+			tools: toolsByEntry.value.assigned.get(entryIndex) ?? [],
+		}));
+		const orphanIds = new Set(toolsByEntry.value.orphan.map((tool) => tool.id));
+		const orphanRows: TranscriptRow[] = toolGroups.value
+			.filter((group) => group[0] && orphanIds.has(group[0].id))
+			.map((group) => ({
+				id: 'tools:' + group[0]?.runId + ':' + group[0]?.modelStepIndex,
+				entry: null,
+				entryIndex: -1,
+				tools: group,
+			}));
+		return [...rows, ...orphanRows];
 	});
 
 	const approvalsByTool = computed(() => {
@@ -506,19 +559,12 @@
 	);
 
 	async function applyThreadSelection(): Promise<void> {
-		if (applyingThreadSelection) return;
 		const value = pendingThreadSelection.value;
 		if (!value || !scope.value || operation.busy.value || pending.value !== null || !attachmentsReady.value) {
 			return;
 		}
-		applyingThreadSelection = true;
 		pendingThreadSelection.value = null;
-		try {
-			await runtime.selectThread(value);
-		} finally {
-			applyingThreadSelection = false;
-			void applyThreadSelection();
-		}
+		await runtime.selectThread(value);
 	}
 
 	function isNearBottom(): boolean {
@@ -527,9 +573,10 @@
 	}
 
 	async function scrollToBottom(): Promise<void> {
+		keepPinnedToBottom.value = true;
 		const selectedThreadId = thread.value?.id;
 		await nextTick();
-		if (!props.active || thread.value?.id !== selectedThreadId) return;
+		if (disposed || !props.active || thread.value?.id !== selectedThreadId || !keepPinnedToBottom.value) return;
 		const element = scroller.value;
 		if (element) element.scrollTop = element.scrollHeight;
 		keepPinnedToBottom.value = true;
@@ -539,7 +586,7 @@
 
 	function updateMessageNavigation(): void {
 		const element = scroller.value;
-		canJumpPrevious.value = !!element && element.scrollTop > 2;
+		canJumpPrevious.value = !!element && (element.scrollTop > 2 || olderHidden.value);
 		canJumpNext.value = !!element && element.scrollHeight - element.scrollTop - element.clientHeight > 2;
 	}
 
@@ -556,29 +603,107 @@
 		);
 	}
 
-	function jumpMessage(direction: 'previous' | 'next'): void {
+	function transcriptLeadingSize(): number {
+		// The library's item offsets exclude its before slot and the existing transcript padding.
+		return scroller.value?.querySelector<HTMLElement>('.vue-recycle-scroller__item-wrapper')?.offsetTop ?? 0;
+	}
+
+	async function jumpMessage(direction: 'previous' | 'next'): Promise<void> {
 		const element = scroller.value;
-		if (!props.active || !element) return;
-		const top = element.getBoundingClientRect().top + element.clientTop;
-		const padding = Number.parseFloat(getComputedStyle(element).paddingTop) || 0;
-		const positions = Array.from(
-			element.querySelectorAll<HTMLElement>('[data-agent-message]'),
-			(message) => message.getBoundingClientRect().top - top + element.scrollTop - padding,
+		const list = transcript.value;
+		if (!props.active || !element || !list) return;
+		const top = element.scrollTop - transcriptLeadingSize();
+		const targets = transcriptRows.value.flatMap((row, index) =>
+			row.entry && isMessageStart(row.entryIndex) ? [index] : [],
 		);
 		const target =
 			direction === 'previous'
-				? (positions.filter((position) => position < element.scrollTop - 2).at(-1) ?? 0)
-				: (positions.find((position) => position > element.scrollTop + 2) ?? element.scrollHeight);
+				? targets.findLast((index) => list.getItemOffset(index) < top - 2)
+				: targets.find((index) => list.getItemOffset(index) > top + 2);
 		keepPinnedToBottom.value = false;
-		element.scrollTop = target;
+		if (target !== undefined) {
+			list.scrollToPosition(transcriptLeadingSize() + list.getItemOffset(target));
+		} else if (direction === 'previous' && olderHidden.value) {
+			await loadOlderTranscript();
+		} else {
+			element.scrollTop = direction === 'previous' ? 0 : element.scrollHeight;
+		}
 		handleTranscriptScroll();
+	}
+
+	async function loadOlderTranscript(): Promise<void> {
+		if (disposed || !props.active || loadingOlder.value || loadingThread.value || !olderHidden.value) return;
+		const selectedThreadId = thread.value?.id;
+		keepPinnedToBottom.value = false;
+		await runtime.readOlderEntries(() => {
+			const first = transcriptRows.value[0];
+			if (first && thread.value && scroller.value && transcript.value) {
+				partialHistoryAnchor = {
+					threadId: thread.value.id,
+					rowId: first.id,
+					size: transcript.value.getItemSize(first, 0),
+					top: scroller.value.scrollTop,
+				};
+			}
+		});
+		await nextTick();
+		if (disposed || !props.active || thread.value?.id !== selectedThreadId) return;
+		if (partialHistoryAnchor) {
+			if (historyAnchorFrame !== null) cancelAnimationFrame(historyAnchorFrame);
+			historyAnchorFrame = requestAnimationFrame(() => {
+				historyAnchorFrame = requestAnimationFrame(() => {
+					historyAnchorFrame = null;
+					handleTranscriptItemResize();
+					partialHistoryAnchor = null;
+				});
+			});
+		}
+		updateMessageNavigation();
 	}
 
 	function handleTranscriptScroll(): void {
 		if (!props.active) return;
 		updateMessageNavigation();
-		keepPinnedToBottom.value = isNearBottom();
+		if (!loadingOlder.value && !partialHistoryAnchor) keepPinnedToBottom.value = isNearBottom();
 		showJumpToLatest.value = !keepPinnedToBottom.value;
+		if (thread.value && scroller.value && !loadingThread.value) {
+			const index =
+				transcript.value?.findItemIndex(Math.max(0, scroller.value.scrollTop - transcriptLeadingSize())) ?? -1;
+			threadScrollPositions.set(thread.value.id, {
+				anchor: transcriptRows.value[index]?.id ?? null,
+				offset:
+					scroller.value.scrollTop - transcriptLeadingSize() - (transcript.value?.getItemOffset(index) ?? 0),
+				top: scroller.value.scrollTop,
+				pinned: keepPinnedToBottom.value,
+			});
+			if (scroller.value.scrollTop <= 2 && olderHidden.value) void loadOlderTranscript();
+		}
+	}
+
+	function handleTranscriptItemResize(): void {
+		if (disposed || !props.active) {
+			partialHistoryAnchor = null;
+			return;
+		}
+		const anchor = partialHistoryAnchor;
+		const first = transcriptRows.value[0];
+		if (
+			anchor &&
+			first &&
+			thread.value?.id === anchor.threadId &&
+			first.id === anchor.rowId &&
+			scroller.value &&
+			transcript.value
+		) {
+			const size = transcript.value.getItemSize(first, 0);
+			if (size !== anchor.size) {
+				scroller.value.scrollTop = anchor.top + size - anchor.size;
+				partialHistoryAnchor = null;
+			}
+		} else {
+			partialHistoryAnchor = null;
+		}
+		handleTranscriptResize();
 	}
 
 	function handleTranscriptResize(): void {
@@ -633,6 +758,31 @@
 		else runtime.clearThread();
 	}
 
+	watch(
+		() => thread.value?.id,
+		(threadId, previousThreadId) => {
+			const previous = previousThreadId ? threadScrollPositions.get(previousThreadId) : undefined;
+			if (previous && transcript.value && scroller.value) {
+				previous.cache = transcript.value.cacheSnapshot;
+				previous.width = scroller.value.clientWidth;
+			}
+			for (const id of threadScrollPositions.keys()) {
+				if (id !== threadId && !runtime.hasConversationSnapshot(id)) threadScrollPositions.delete(id);
+			}
+			partialHistoryAnchor = null;
+			if (historyAnchorFrame !== null) {
+				cancelAnimationFrame(historyAnchorFrame);
+				historyAnchorFrame = null;
+			}
+		},
+		{ flush: 'sync' },
+	);
+
+	function forgetNativeThread(threadId: string): void {
+		threadScrollPositions.delete(threadId);
+		runtime.forgetThread(threadId);
+	}
+
 	function removeInputArtifact(id: string): void {
 		attachmentControl.value?.removeById(id);
 	}
@@ -655,8 +805,29 @@
 			const threadId = value[0];
 			const previousThreadId = previous?.[0];
 			if (threadId && threadId !== previousThreadId) {
-				keepPinnedToBottom.value = true;
-				void scrollToBottom();
+				const position = entries.value.length > 0 ? threadScrollPositions.get(threadId) : undefined;
+				keepPinnedToBottom.value = position?.pinned ?? true;
+				if (keepPinnedToBottom.value) {
+					void scrollToBottom();
+				} else {
+					void nextTick(async () => {
+						if (!disposed && props.active && thread.value?.id === threadId && scroller.value && position) {
+							if (position.cache && position.width === scroller.value.clientWidth) {
+								transcript.value?.restoreCache(position.cache);
+								await nextTick();
+								if (disposed || !props.active || thread.value?.id !== threadId || !scroller.value)
+									return;
+							}
+							const index = transcriptRows.value.findIndex((row) => row.id === position.anchor);
+							if (index >= 0 && transcript.value)
+								transcript.value.scrollToPosition(
+									transcriptLeadingSize() + transcript.value.getItemOffset(index) + position.offset,
+								);
+							else scroller.value.scrollTop = position.top;
+							handleTranscriptScroll();
+						}
+					});
+				}
 				return;
 			}
 			if (keepPinnedToBottom.value) void scrollToBottom();
@@ -715,6 +886,7 @@
 				:disabled="operation.busy.value || bindingBusy || !!pending || !attachmentsReady"
 				auto-load
 				@select="selectNativeThread"
+				@removed="forgetNativeThread"
 				@working="threadBusy = $event"
 			/>
 		</aside>
@@ -847,105 +1019,134 @@
 				/>
 				<!-- No gap above the composer: the entire floating status row must overlay the scroller. -->
 				<section v-if="thread" class="flex min-h-0 flex-1 flex-col">
-					<p v-if="olderHidden" role="status" class="mb-3 text-xs">{{ t('agent.nativeRun.windowed') }}</p>
-					<div
-						ref="scroller"
-						class="agent-conversation-scroller min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-5 py-5 touch-pan-y"
+					<DynamicScroller
+						:key="thread.id"
+						ref="transcript"
+						:items="transcriptRows"
+						key-field="id"
+						:min-item-size="80"
+						:enabled="active"
+						shift
+						class="agent-conversation-scroller min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 touch-pan-y"
 						aria-live="polite"
 						@scroll.passive="handleTranscriptScroll"
 						@load.capture="handleTranscriptResize"
 					>
-						<AgentConversationWelcome
-							v-if="!entries.length && !submittedMessage"
-							:active="active"
-							:draft="draft"
-							@select="draft = $event"
-						/>
-						<template
-							v-for="(entry, index) in entries"
-							:key="
-								[
-									entry.position.runSequence,
-									entry.position.stepIndex,
-									entry.position.eventSequence,
-									entry.position.textOffset,
-								].join(':')
-							"
-						>
-							<article
-								:data-agent-message="isMessageStart(index) ? '' : undefined"
-								class="mx-auto flex w-full max-w-3xl"
-								:class="entry.role === 'user' ? 'justify-end' : ''"
-							>
-								<div
-									class="min-w-0"
-									:class="
-										entry.role === 'user'
-											? 'max-w-[80%] rounded-2xl rounded-tr-[5px] bg-primary/[0.07] px-4 py-3.5 ring-1 ring-inset ring-primary/10 shadow-2xs'
-											: 'w-full'
+						<template #before>
+							<div v-if="olderHidden" class="mb-3 flex justify-center">
+								<UiButton
+									density="compact"
+									appearance="ghost"
+									:disabled="
+										loadingOlder ||
+										loadingThread ||
+										operation.busy.value ||
+										operation.refreshRequired.value
 									"
+									@click="loadOlderTranscript"
 								>
-									<div
-										v-if="entry.role === 'assistant'"
-										class="mb-2.5 flex items-center gap-2 px-1 text-[11px] text-text-secondary/70"
-									>
-										<span class="h-1.5 w-1.5 rounded-full bg-primary"></span
-										>{{ t('agent.nativeRun.roles.assistant') }}
-									</div>
-									<p
-										v-if="entry.role === 'user'"
-										class="whitespace-pre-wrap break-words text-[13px] leading-[1.7]"
-									>
-										{{ entry.text }}
-									</p>
-									<div
-										v-else
-										class="rounded-xl bg-card px-4 py-3.5 ring-1 ring-inset ring-border/30 shadow-2xs"
-									>
-										<AgentMessageBody :text="entry.text" />
-									</div>
-								</div>
-							</article>
-							<NativeToolActivityList
+									{{
+										loadingOlder ? t('agent.operations.loading') : t('agent.conversation.loadOlder')
+									}}
+								</UiButton>
+							</div>
+							<UiLoadingState
+								v-if="loadingThread && !entries.length"
+								compact
+								:bordered="false"
+								:title="t('agent.operations.loading')"
+							/>
+							<AgentConversationWelcome
+								v-else-if="!entries.length && !submittedMessage"
 								:active="active"
-								:tools="toolsByEntry.assigned.get(index) ?? []"
-								:approvals-by-tool="approvalsByTool"
-								:connections="connections"
+								:draft="draft"
+								@select="draft = $event"
 							/>
 						</template>
-						<article
-							v-if="submittedMessage"
-							data-agent-message
-							class="mx-auto flex w-full max-w-3xl justify-end"
-						>
-							<div
-								class="min-w-0 max-w-[80%] rounded-2xl rounded-tr-[5px] bg-primary/[0.07] px-4 py-3.5 ring-1 ring-inset ring-primary/10 shadow-2xs"
+						<template #default="{ item, index, active: rowActive }">
+							<DynamicScrollerItem
+								:item="item"
+								:index="index"
+								:active="rowActive"
+								:emit-resize="true"
+								class="space-y-3 pb-3"
+								@resize="handleTranscriptItemResize"
 							>
-								<p class="whitespace-pre-wrap break-words text-[13px] leading-[1.7]">
-									{{ submittedMessage.text }}
-								</p>
+								<article
+									v-if="item.entry"
+									:data-agent-message="isMessageStart(item.entryIndex) ? '' : undefined"
+									class="mx-auto flex w-full max-w-3xl"
+									:class="item.entry.role === 'user' ? 'justify-end' : ''"
+								>
+									<div
+										class="min-w-0"
+										:class="
+											item.entry.role === 'user'
+												? 'max-w-[80%] rounded-2xl rounded-tr-[5px] bg-primary/[0.07] px-4 py-3.5 ring-1 ring-inset ring-primary/10 shadow-2xs'
+												: 'w-full'
+										"
+									>
+										<div
+											v-if="item.entry.role === 'assistant'"
+											class="mb-2.5 flex items-center gap-2 px-1 text-[11px] text-text-secondary/70"
+										>
+											<span class="h-1.5 w-1.5 rounded-full bg-primary"></span
+											>{{ t('agent.nativeRun.roles.assistant') }}
+										</div>
+										<p
+											v-if="item.entry.role === 'user'"
+											class="whitespace-pre-wrap break-words text-[13px] leading-[1.7]"
+										>
+											{{ item.entry.text }}
+										</p>
+										<div
+											v-else
+											class="rounded-xl bg-card px-4 py-3.5 ring-1 ring-inset ring-border/30 shadow-2xs"
+										>
+											<AgentMessageBody :text="item.entry.text" />
+										</div>
+									</div>
+								</article>
+								<NativeToolActivityList
+									:active="active && rowActive"
+									:key="item.id"
+									:tools="item.tools"
+									:approvals-by-tool="approvalsByTool"
+									:connections="connections"
+								/>
+							</DynamicScrollerItem>
+						</template>
+						<template #after>
+							<div class="space-y-3">
+								<article
+									v-if="submittedMessage"
+									data-agent-message
+									class="mx-auto flex w-full max-w-3xl justify-end"
+								>
+									<div
+										class="min-w-0 max-w-[80%] rounded-2xl rounded-tr-[5px] bg-primary/[0.07] px-4 py-3.5 ring-1 ring-inset ring-primary/10 shadow-2xs"
+									>
+										<p class="whitespace-pre-wrap break-words text-[13px] leading-[1.7]">
+											{{ submittedMessage.text }}
+										</p>
+									</div>
+								</article>
+								<div v-if="toolCursor !== null" class="mx-auto flex w-full max-w-3xl justify-center">
+									<UiButton
+										density="compact"
+										appearance="ghost"
+										:disabled="operation.busy.value"
+										@click="readOlderTools"
+									>
+										{{ t('agent.nativeRun.toolOlder') }}
+									</UiButton>
+								</div>
+								<UiInlineNotice v-if="chatError" class="mx-auto w-full max-w-3xl" tone="danger">
+									{{ chatError }}
+								</UiInlineNotice>
 							</div>
-						</article>
-						<NativeToolActivityList
-							:active="active"
-							:tools="toolsByEntry.orphan"
-							:approvals-by-tool="approvalsByTool"
-							:connections="connections"
-						/>
-						<div v-if="toolCursor !== null" class="mx-auto flex w-full max-w-3xl justify-center">
-							<UiButton
-								density="compact"
-								appearance="ghost"
-								:disabled="operation.busy.value"
-								@click="readOlderTools"
-							>
-								{{ t('agent.nativeRun.toolOlder') }}
-							</UiButton>
-						</div>
-						<UiInlineNotice v-if="chatError" class="mx-auto w-full max-w-3xl" tone="danger">
-							{{ chatError }}
-						</UiInlineNotice>
-					</div>
+						</template>
+					</DynamicScroller>
 					<footer class="agent-composer-footer relative z-10 shrink-0 px-4 pb-4">
 						<div class="agent-composer-area mx-auto max-w-3xl">
 							<div v-if="inputArtifacts.length" class="mb-2 flex flex-wrap gap-1.5">
@@ -1535,7 +1736,7 @@
 				class="mb-3"
 				:approvals="pendingApprovals"
 				:connections="connections"
-				:disabled="operation.busy.value || threadBusy"
+				:disabled="operation.busy.value || threadBusy || loadingThread"
 				@mutate="runtime.mutate"
 			/>
 			<NativeRunDetails

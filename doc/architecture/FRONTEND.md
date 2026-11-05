@@ -66,11 +66,22 @@ Workspace RuntimeSession 持普通与挂起附件的连接/续租，Registry 持
 1. **职责与范围**：原生Surface继续拥有任务权威与写意图；Host仅呈现最小化时实际发生的任务状态、审批和失败变化，提醒短暂出现，不常驻或建立全局Run store。
 2. **子功能与目录**：AgentAppSurface发布当前任务投影和窄审批能力；useNativeRuns持原订阅，agent-host-state按Surface实例登记；use-agent-task-notices持变化基线、合并队列、收起/过期计时；AgentLauncher和AgentTaskNotice呈现。
 3. **依赖方向**：Surface/runtime → 本功能model/原API；Host投影 → Launcher/card → Foundation按钮；@floating-ui/vue 2.0.1已由Reka引入，Frontend显式声明直接依赖复用定位/flip/shift/size，不复用有全局FocusScope/DismissableLayer的弹出框承载自动提醒。
-4. **类型与转换**：AgentTaskActivity及注册能力唯一归agent/model，复用NativeRun/Approval的有限状态及安全摘要；投影只带当前会话标题、状态、最多360字符结果、已确认用量/待审批和实例绑定动作。API与Shared白名单转换保持，无新后端契约或本地持久化。
-5. **入口与安装**：仅minimized显示变化提醒，单纯最小化/普通文字/计数或语言变化不补弹；首个历史终态快照只作基线。同一实例任务更新合并，多实例顺序展示；新审批优先，正在悬停/键盘操作的卡片保持，8秒收起；悬停/键盘操作暂缓、触摸点击不永久暂停。卡片不自动聚焦或建立背景遮罩，Esc仅在卡片内处理，328px最大展示宽度再按真实可用宽高收缩。
+4. **类型与转换**：AgentTaskActivity及注册能力唯一归agent/model，复用NativeRun/Approval的有限状态及安全摘要；投影带本页确认创建的Run标记、当前会话标题、状态、最多360字符结果、已确认用量/待审批和实例绑定动作。API与Shared白名单转换保持，无新后端契约或本地持久化。
+5. **入口与安装**：仅minimized显示变化提醒，单纯最小化/普通文字/计数或语言变化不补弹；切换/加载历史任务的首个快照只作基线，本页确认创建或追加的Run首次回执即终态时仍可提醒；不按历史加载伪造新完成。同一实例任务更新合并，多实例顺序展示；新审批优先，正在悬停/键盘操作的卡片保持，8秒收起；悬停/键盘操作暂缓、触摸点击不永久暂停。卡片不自动聚焦或建立背景遮罩，Esc仅在卡片内处理，328px最大展示宽度再按真实可用宽高收缩。
 6. **数据、事务与并发**：最小化可继续同一任务订阅和窄审批，创建/追加/取消与未知写重试仍要求完整活动界面。快速批准复查当前Run/Thread、最新审批版本/hash，再沿原快照意图/CAS/operationId提交；并发点击受原busy/blocked围栏，禁止重放或扩大授权。语言改变只更新文案，变化键使用原语义取值。
-7. **生命周期与失败**：浏览器隐藏暂停原订阅和收起计时，恢复原游标续读；关闭/销毁/认证撤销停止观察，目录按App版本/启用状态过滤并删除对应提醒。每个Surface独立Symbol注册，旧卸载只能注销自己；晚更新不能恢复已注销项。提醒收起不影响任务，过期审批按最近真实expiresAt更新入口标记/按钮，不定时请求服务端；冲突/未知保留原完整任务核对路径。
+7. **生命周期与失败**：任务订阅由实际socket结果驱动退避，不用onLine硬闸；online/offline和NetworkInformation change重新连接，首份状态到达前心跳不续原45秒期限。浏览器隐藏暂停原订阅和收起计时，恢复原游标续读；关闭/销毁/认证撤销停止观察，目录按App版本/启用状态过滤并删除对应提醒。每个Surface独立Symbol注册，旧卸载只能注销自己；晚更新不能恢复已注销项。提醒收起不影响任务，过期审批按最近真实expiresAt更新入口标记/按钮，不定时请求服务端；冲突/未知保留原完整任务核对路径。
 8. **当前能力与验收**：仅已挂载原生Surface的当前任务，无全局任务发现或自定义插件虚构状态。源码/静态检查与真实UI/异步故障验收分别记录于testing；原553项正式通过不覆盖新增提醒，手机、键盘、最小化变化与审批故障待后续明确授权回归。
+
+### Agent 会话列表与正文恢复
+
+1. **职责与范围**：Thread owner持列表和创建/删除意图；Run owner缓存已确认正文及双向游标，任务/审批状态仍从原API核对；Surface持阅读位置和虚拟渲染，不建立全局任务Store。
+2. **子功能与目录**：use-native-threads后台核对已加载范围并直接消费写回执；use-native-runs持conversationSnapshots、追赶窗口、selectionGeneration及历史分页；native-run-rules合并连续正文；AgentAppSurface复用vue-virtual-scroller的DynamicScroller/Item测高与可见行回收，消息和工具分组共同虚拟化。
+3. **依赖方向**：Panel/Surface → 原composable → API/Native model → Shared workspace契约；history沿现有Backend Context/Workspace读取，不增加新路由、库或存储。Host提醒只消费Surface投影。
+4. **类型与转换**：NativeConversationSnapshot唯一归agent/model，保存entries、前向cursor、反向startCursor和olderHidden，无审批、权限或写意图。NativeEntryHistory逐字段映射Shared AgentThreadEntryHistory；Surface局部TranscriptRow持稳定Run/role/step/event键，工具子组件随行身份隔离，避免回收时串用展开状态。
+5. **入口与安装**：返回Hub保留列表并后台核对；增删直接消费权威回执，未知仍显式核对。重复选择不重置，新选择可取消旧后台读。无缓存首次仅取最近正文页，向上到顶或点击原“加载更早消息”入口再取前页；缓存立即显示并沿前向游标补齐，追赶期间批量发布，避免历史逐页重绘。
+6. **数据、事务与并发**：活动正文随分页增长，只挂载可见消息/工具行；闲置缓存沿原128条/256Ki UTF-16字符预算及访问顺序淘汰，活动正文超预算时不保留额外闲置窗口，不限制持久历史。前后游标分离，前页合并不得回退WS进度。scope/App版本、选择代次与operation generation隔离晚结果；历史首次加载禁止写入，用户翻页可取代工具后台读并补安排工具快照。未确认写入仍串行。
+7. **生命周期与失败**：Surface按逻辑消息索引导航、保存阅读锚点及库CacheSnapshot；同宽缓存切换先恢复测量再定位，测量缓存随正文缓存淘汰，宽度变化不套用旧测量；prepend复用库shift，单条消息补前缀另按实测行高差保持位置；动态测高期间仅在用户贴底时跟随。删除确认后清缓存/位置，最后会话清空主区；后台列表失败保留旧画面和恢复围栏，权限/认证撤销清私有状态；切换/销毁取消旧读取、订阅、工具timer和视图RAF，不自动重放未知写入。
+8. **当前能力与验收**：保留原气泡、审批和工具详情、输入区及悬浮控件，删除无消费者的旧裁剪提示；未缓存正文不再从头读取。Run元数据仍分页到最新并保留最近100项，不宣称其已改为服务端尾页。本轮限定CDP已验证尾页/连续上翻、长正文虚拟挂载与同宽缓存阅读位置、创建/删除及最小化完成提醒；真实弱网、代码/图片/宽度变化测高与导航交错仍按testing待验，不报告未经实测的加速比例。
 
 ### 认证撤销后的通知隔离
 
@@ -436,3 +447,14 @@ usePluginManagement 持已确认安装快照；相同 appId/revision 序列不�
 6. **数据、事务与并发**：template 的 layout.loaded 挂载门禁保留；Runtime 已有 pre-mount 输出缓冲及消费窗口继续持字节，挂载后按原顺序解析，不丢输出、不提前开放输入。首次前台恢复仍等待布局和查询动作完成。
 7. **生命周期与失败**：loadQueryActions 的原页面 signal/current 检查阻止失活或注销后的晚返回派发；布局失败走原设置重读入口，连接仍由 Registry/Runtime 持有关闭、未知结果和恢复，不因布局慢创建第二份 SSH。WorkspaceConnectionList只对具名TargetRequestFailure/cancelled过滤被单条配置刷新取代的旧列表读取通知，保留真实读取失败的原刷新提示，不修改Store快照与请求时序。
 8. **当前能力与验收**：消除布局读取与连接流程之间的代码串行依赖，真实收益取决于读取与握手耗时；USAGE 见终端章节，静态/构建及待验边界归 PLAN/testing。
+
+### 图片预览容量与聊天 GIF
+
+1. **职责与范围**：个人偏好拥有文件管理器与Agent文件库共用的imagePreviewMaxMiB；聊天Artifact图片使用原生img展示GIF，不转码。
+2. **子功能与目录**：preferences的两个正式设置面板复用UiNumberInput和原保存流程；file-preview/providers/previewRegistry按格式计算读取预算，Session负责新开与刷新，Workspace/ArtifactLibraryView/FilePreview负责装配。
+3. **依赖方向**：预览Session接收读取最新值的getter，不依赖Pinia；Workspace Registry在创建会话时经preferences/public获得controller，恢复和重置沿同一工厂。Agent文件库及独立组件同样注入，未注入的独立Session使用Shared默认20。
+4. **类型与转换**：UserPreferences保持本地类型与projectPreferences白名单；Shared字段以整数MiB表示，0映射为无图片大小预算，其余乘1024²。非图片预算不变，值仅在每次读取开始时取一次。
+5. **入口与安装**：工作区文件组及另一正式偏好面板均支持编辑/保存；两处图片预览复用已有超限提示、重试/刷新与取消入口。聊天Markdown仍只允许本站已授权Artifact preview相对URL。
+6. **数据、事务与并发**：保存继续走原expectedVersion/CAS、草稿与未知写入围栏；仅已确认偏好生效。未自动重载已打开图片，显式刷新取得最新预算。WS文件读取按请求预算累计实际字节，不再叠加固定64MiB总量上限；帧大小、背压与并发机制不变。
+7. **生命周期与失败**：关闭、替换、清空沿原AbortController/token检查，旧响应不发布；初次超限保留原tooLarge提示，刷新失败保留原图。0不代表浏览器内存无限，分块读取后仍需整体ArrayBuffer/Blob供预览。Socket在复制/合并分配抛错时reject原等待并清空分块，未完成文件读取同时发送取消；不会因先移除pending/timer而遗留等待。
+8. **当前能力与验收**：产品入口见USAGE文件管理器、Agent聊天/文件库及界面偏好章节；类型/格式/生产构建与源码审核归testing；本轮明确授权CDP已验证GIF动画、保存/持久化、两处新开/刷新/65MiB/0，取消/身份撤销/分配失败组合仍待正式回归。

@@ -54,6 +54,7 @@ import type {
 
 export interface WorkspaceRuntimeSessionOptions {
 	workspaceId?: string;
+	getImagePreviewMaxMiB?: () => number;
 	onSuspendedAutoTerminated?: (event: SuspendedAutoTermination) => void;
 }
 
@@ -147,7 +148,7 @@ export class WorkspaceRuntimeSession {
 		this.transferController = createTransferController(this.adapters.transfers);
 		this.terminalState = createTerminalSessionState();
 		this.editorController = createFileEditorSession(this.adapters.documents);
-		this.previewController = createFilePreviewSession(this.adapters.preview);
+		this.previewController = createFilePreviewSession(this.adapters.preview, options.getImagePreviewMaxMiB);
 		this.filesystemState = createFilesystemSessionState(this.adapters.filesystem);
 		this.statusController = createStatusMonitorSession(this.adapters.status);
 		this.dockerController = createDockerSession(this.adapters.docker);

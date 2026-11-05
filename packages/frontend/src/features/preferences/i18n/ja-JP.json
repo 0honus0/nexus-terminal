@@ -126,6 +126,12 @@
       "quickCommandsCollapsibleSearchTitle": "クイックコマンド検索",
       "quickCommandsCollapsibleSearchLabel": "検索ボックスを既定で検索ボタンに折りたたむ",
       "quickCommandsCollapsibleSearchDescription": "既定では無効です。有効にすると、クイックコマンドパネルには検索ボタンだけが表示され、クリックすると検索ボックスが展開されます。",
+      "imagePreviewLimits": {
+        "title": "画像プレビュー",
+        "label": "画像プレビューのサイズ上限（MiB）",
+        "hint": "ファイルマネージャーと Agent ファイルライブラリで共通です。0 はサイズ制限なし。次に画像を開くか更新すると適用されます。大きな画像はブラウザーのメモリを多く使用します。",
+        "invalid": "バイト換算後の値が安全な整数の範囲に収まる、0 以上の整数 MiB を入力してください。"
+      },
       "spreadsheetPreviewLimits": {
         "title": "スプレッドシートプレビュー",
         "rowsLabel": "1ページあたりの行数",

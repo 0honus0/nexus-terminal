@@ -4,6 +4,7 @@
 	import { useI18n } from 'vue-i18n';
 	import { UiButton, UiEmptyState, UiInlineLoading, UiInlineNotice, UiSpinner } from '@/foundation/ui';
 	import { useFeedback } from '@/shared/feedback/public';
+	import { usePreferences } from '@/features/preferences/public';
 	import ImagePreview from './ImagePreview.vue';
 	import FilePreviewDialog from './FilePreviewDialog.vue';
 
@@ -53,7 +54,9 @@
 	const emit = defineEmits<{ edit: [path: string]; hide: []; dismiss: [] }>();
 	const { t } = useI18n();
 	const feedback = useFeedback();
-	const preview = props.session ?? createFilePreviewSession(props.source);
+	const preferences = usePreferences();
+	const preview =
+		props.session ?? createFilePreviewSession(props.source, () => preferences.values.value.imagePreviewMaxMiB);
 	const root = ref<HTMLElement | null>(null);
 	const loadingTab = computed(() => (preview.active.value?.loading ? preview.active.value : null));
 

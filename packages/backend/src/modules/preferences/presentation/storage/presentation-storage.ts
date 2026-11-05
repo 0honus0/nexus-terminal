@@ -37,6 +37,7 @@ export interface StoredPresentationPreferences {
 	fileManagerColWidths: Record<string, number>;
 	spreadsheetPreviewRowsPerPage: number;
 	spreadsheetPreviewMaxColumns: number;
+	imagePreviewMaxMiB: number;
 	rdpModalWidth: number;
 	rdpModalHeight: number;
 	vncModalWidth: number;

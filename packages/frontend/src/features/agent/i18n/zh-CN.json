@@ -1775,7 +1775,6 @@
       "inspect": "只读核对原意图",
       "acknowledge": "我理解原操作可能已提交，放弃跟踪不会撤销原效果。",
       "conversation": "线程正文",
-      "windowed": "为控制页面内存，较早的正文分片已移出显示窗口；服务器记录仍保留。重新选择线程可从头读取。",
       "toolActivity": "工具调用",
       "toolCallDetails": {
         "title": "调用详情",

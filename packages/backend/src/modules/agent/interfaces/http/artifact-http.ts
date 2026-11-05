@@ -269,7 +269,10 @@ export function createArtifactHttpRoutes(
 			) {
 				throw new AgentOperationError('not_found');
 			}
-			if (mode === 'preview' && !['image/png', 'image/jpeg', 'image/webp'].includes(value.mediaType)) {
+			if (
+				mode === 'preview' &&
+				!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(value.mediaType)
+			) {
 				throw new AgentOperationError('not_found');
 			}
 			const { start, endInclusive, partial } = readAgentArtifactDownloadRange(

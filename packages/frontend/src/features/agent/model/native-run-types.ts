@@ -63,6 +63,20 @@ export interface NativeConversationEntry {
 	text: string;
 }
 
+/** A confirmed presentation window; permissions and run state are always read again. */
+export interface NativeConversationSnapshot {
+	entries: NativeConversationEntry[];
+	cursor: NativeEntryCursor;
+	startCursor: NativeEntryCursor;
+	olderHidden: boolean;
+}
+
+export interface NativeEntryHistory {
+	body: NativePage<NativeEntry, NativeEntryCursor>;
+	startCursor: NativeEntryCursor;
+	hasEarlier: boolean;
+}
+
 export interface NativeEvent {
 	runId: string;
 	sequence: number;

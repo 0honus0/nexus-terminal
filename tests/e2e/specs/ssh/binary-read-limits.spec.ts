@@ -27,7 +27,7 @@ test('binary reads require a valid byte budget and recover after an oversized re
 			{ maxBytes: 0 },
 			{ maxBytes: -1 },
 			{ maxBytes: 1.5 },
-			{ maxBytes: 64 * 1024 * 1024 + 1 },
+			{ maxBytes: Number.MAX_SAFE_INTEGER + 1 },
 			{ maxBytes: '1024' },
 			{ maxBytes: true },
 			{ maxBytes: [1024] },

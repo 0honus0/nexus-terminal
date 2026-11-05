@@ -7,6 +7,7 @@ export interface AgentTaskActivity {
 	appVersion: number;
 	threadTitle: string;
 	runId: string;
+	locallyStarted: boolean;
 	status: NativeRun['status'];
 	preview: string;
 	approvals: NativeApproval[];

@@ -231,7 +231,7 @@ try {
 		};
 
 		try {
-			for (const maxBytes of [NaN, 0, 64 * 1024 * 1024 + 1]) {
+			for (const maxBytes of [NaN, 0, Number.MAX_SAFE_INTEGER + 1]) {
 				const socket = make();
 				const invalid = await socket
 					.requestBinary('filesystem.readBinary', { path: '/invalid-budget', maxBytes })

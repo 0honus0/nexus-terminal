@@ -89,6 +89,16 @@ export function useAgentManagementOperation(
 		notice.value = !writing && isNetworkFailure(cause) ? '' : failureNotice(cause, writing);
 	}
 
+	function cancelBackgroundRead(): boolean {
+		if (!backgroundRequest) {
+			return false;
+		}
+		generation += 1;
+		backgroundRequest.abort();
+		backgroundRequest = null;
+		return true;
+	}
+
 	async function execute<T>(
 		action: (signal: AbortSignal) => Promise<T>,
 		accept: (result: T) => void,
@@ -138,5 +148,14 @@ export function useAgentManagementOperation(
 		}
 	}
 
-	return { busy, refreshRequired, notice, failureMessage, execute, reportFailure, clearFeedback };
+	return {
+		busy,
+		refreshRequired,
+		notice,
+		failureMessage,
+		execute,
+		reportFailure,
+		clearFeedback,
+		cancelBackgroundRead,
+	};
 }

@@ -102,28 +102,21 @@ export function useAgentTaskNotices(host: AgentHostState, directory: () => HostD
 	watch(
 		() =>
 			new Map(
-				[...host.taskActivities].map(([owner, activity]) => [owner, activity ? changeKey(activity) : null]),
+				[...host.taskActivities].map(([owner, activity]) => [
+					owner,
+					activity ? { runId: activity.runId, key: changeKey(activity) } : null,
+				]),
 			),
 		(next, previous) => {
 			if (host.windowManager.state.status !== 'minimized') {
 				return;
 			}
-			for (const [owner, key] of next) {
-				if (
-					!key ||
-					!previous?.has(owner) ||
-					previous.get(owner) === key ||
-					!availableActivities.value.has(owner)
-				) {
+			for (const [owner, state] of next) {
+				if (!state || previous?.get(owner)?.key === state.key || !availableActivities.value.has(owner)) {
 					continue;
 				}
 				const activity = availableActivities.value.get(owner);
-				if (
-					previous.get(owner) === null &&
-					activity &&
-					activity.status !== 'pending' &&
-					activity.status !== 'running'
-				) {
+				if (previous?.get(owner)?.runId !== state.runId && activity && !activity.locallyStarted) {
 					continue;
 				}
 				const promoteApproval =

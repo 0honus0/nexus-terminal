@@ -12,7 +12,7 @@ import {
 import { AGENT_WORKSPACE_MAX_RESPONSE_BYTES, AGENT_WORKSPACE_MAX_SELECTABLE_MODELS } from './values.js';
 import { AGENT_SCOPE_MAX_NAME_BYTES, AGENT_THREAD_MAX_PAGE } from './values.js';
 import { AGENT_THREAD_ENTRY_MAX_PAGE } from './values.js';
-import { readAgentThreadEntryCursor, readAgentThreadEntries } from './http-codec.js';
+import { readAgentThreadEntryCursor, readAgentThreadEntries, readAgentThreadEntryHistory } from './http-codec.js';
 import { readAgentCreateThreadResponse, readAgentAppDefinitionListResponse } from './http-codec.js';
 import {
 	readAgentRunResponse,
@@ -72,6 +72,17 @@ export function readAgentWorkspaceInput(input: unknown): AgentWorkspaceInput {
 					threadId: readAgentId(p.threadId),
 					operationId: readAgentId(p.operationId),
 					input: readAgentCreateRunRequest(p.input),
+				},
+			};
+		}
+		case 'agent.threads.history': {
+			const p = agentRecord(row.params, ['threadId', 'before', 'limit']);
+			return {
+				method: row.method,
+				params: {
+					threadId: readAgentId(p.threadId),
+					before: p.before === null ? null : readAgentThreadEntryCursor(p.before),
+					limit: agentInteger(p.limit, 1, AGENT_THREAD_ENTRY_MAX_PAGE),
 				},
 			};
 		}
@@ -251,6 +262,16 @@ export function readAgentWorkspaceResult(input: unknown, request: AgentWorkspace
 		throw new InvalidAgentPayload();
 	}
 	switch (request.method) {
+		case 'agent.threads.history':
+			return {
+				method: request.method,
+				value: readAgentThreadEntryHistory(
+					row.value,
+					request.params.threadId,
+					request.params.before,
+					request.params.limit,
+				),
+			};
 		case 'agent.threads.entries':
 			return {
 				method: request.method,
@@ -471,6 +492,8 @@ export function readAgentWorkspaceRequest(input: unknown): AgentWorkspaceRequest
 
 function belongsToApp(value: AgentWorkspaceResult, appId: string): boolean {
 	switch (value.method) {
+		case 'agent.threads.history':
+			return value.value.body.appId === appId;
 		case 'agent.threads.entries':
 		case 'agent.threads.create':
 		case 'agent.threads.rename':

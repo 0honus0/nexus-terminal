@@ -7,7 +7,7 @@ import type { Participant, MessageMetadataPage } from '../../runs/model/run-coll
 import type { Approval, ApprovalPage } from '../../governance/model/governance-types.js';
 import type { CreateRunResult, CancelRunResult } from '../../runs/model/run-types.js';
 import type { AgentApprovalDecision } from '@nexus-terminal/shared/agent/governance/values';
-import type { ThreadEntryCursor, ThreadEntries } from '../../context/model/context-types.js';
+import type { ThreadEntryCursor, ThreadEntries, ThreadEntryHistory } from '../../context/model/context-types.js';
 
 export type WorkspaceMutation = <T>(work: () => Promise<T>) => Promise<T>;
 
@@ -45,6 +45,7 @@ export type WorkspaceInput =
 			input: WorkspaceRunInput;
 	  }
 	| { method: 'agent.threads.entries'; threadId: string; after: ThreadEntryCursor; limit: number }
+	| { method: 'agent.threads.history'; threadId: string; before: ThreadEntryCursor | null; limit: number }
 	| { method: 'agent.runs.create'; threadId: string; operationId: string; input: WorkspaceRunInput }
 	| { method: 'agent.runs.cancel'; runId: string; operationId: string; expectedVersion: number }
 	| { method: 'agent.subagents.cancel'; runId: string; childId: string; operationId: string; expectedVersion: number }
@@ -63,6 +64,7 @@ export type WorkspaceInput =
 
 export type WorkspaceResult =
 	| { method: 'agent.threads.entries'; value: ThreadEntries }
+	| { method: 'agent.threads.history'; value: ThreadEntryHistory }
 	| { method: 'agent.runs.create' | 'agent.runs.appendInput'; value: CreateRunResult }
 	| { method: 'agent.runs.cancel' | 'agent.subagents.cancel'; value: CancelRunResult }
 	| { method: 'agent.approvals.resolve'; value: Approval }

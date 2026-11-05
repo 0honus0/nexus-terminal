@@ -51,6 +51,7 @@ export function projectPreferences(value: UserPreferences | PresentationPreferen
 		),
 		spreadsheetPreviewRowsPerPage: value.spreadsheetPreviewRowsPerPage,
 		spreadsheetPreviewMaxColumns: value.spreadsheetPreviewMaxColumns,
+		imagePreviewMaxMiB: value.imagePreviewMaxMiB,
 		rdpModalWidth: value.rdpModalWidth,
 		rdpModalHeight: value.rdpModalHeight,
 		vncModalWidth: value.vncModalWidth,

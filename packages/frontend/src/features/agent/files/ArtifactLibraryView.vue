@@ -14,6 +14,7 @@
 		type UiSelectOption,
 	} from '@/foundation/ui';
 	import { useFeedback } from '@/shared/feedback/public';
+	import { usePreferences } from '@/features/preferences/public';
 	import {
 		createFilePreviewSession,
 		loadFilePreview,
@@ -56,7 +57,8 @@
 	const appNames = computed(() => new Map(apps.value.map((app) => [app.id, app.name])));
 
 	const FilePreview = defineAsyncComponent(loadFilePreview);
-	const previewSession = createFilePreviewSession();
+	const preferences = usePreferences();
+	const previewSession = createFilePreviewSession(undefined, () => preferences.values.value.imagePreviewMaxMiB);
 	const previewMounted = ref(false);
 	const previewVisible = ref(false);
 	// 兜底源：预览内 Markdown 相对链接按文件名继续打开同批产物。

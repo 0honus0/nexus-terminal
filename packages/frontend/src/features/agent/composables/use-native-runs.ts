@@ -11,6 +11,7 @@ import {
 	getNativeRun,
 	getNativeRunUsage,
 	listNativeEntries,
+	listNativeEntryHistory,
 	listNativeEvents,
 	listNativeChildren,
 	listNativeApprovals,
@@ -29,6 +30,7 @@ import type {
 	NativeRunUsage,
 	NativeEntry,
 	NativeConversationEntry,
+	NativeConversationSnapshot,
 	NativeEntryCursor,
 	NativeEvent,
 	NativeChild,
@@ -44,8 +46,10 @@ import type {
 } from '../model/native-run-types';
 import { snapshotNativeRunAction } from '../model/native-run-mapper';
 import {
+	appendNativeConversationWindow,
 	appendNativeConversationEntries,
-	compareNativeEntryCursor,
+	NATIVE_CONVERSATION_MAX_ENTRIES,
+	NATIVE_CONVERSATION_MAX_CHARACTERS,
 	isNativeRunActive,
 	canCancelNativeRun,
 	mergeNativeTools,
@@ -106,6 +110,58 @@ export function useNativeRuns(
 	let awaitingConfirmedUpdate = false;
 	let disposed = false;
 	let toolRefreshTimer: number | null = null;
+	const loadingThread = ref(false);
+	const loadingOlder = ref(false);
+	const historyCursor = ref<NativeEntryCursor>({ runSequence: 0, stepIndex: 0, eventSequence: 0, textOffset: 0 });
+	const startedRunId = ref<string | null>(null);
+	const conversationSnapshots = new Map<string, NativeConversationSnapshot>();
+	let catchingUp: NativeConversationSnapshot | null = null;
+	let selectionGeneration = 0;
+	let removedThreadId: string | null = null;
+	let selectingSnapshot = false;
+
+	function trimSnapshots(): void {
+		const currentEntries = catchingUp?.entries ?? entries.value;
+		let count = currentEntries.length;
+		let characters = currentEntries.reduce((total, entry) => total + entry.text.length, 0);
+		const evicted: string[] = [];
+		for (const [id, snapshot] of [...conversationSnapshots].reverse()) {
+			count += snapshot.entries.length;
+			characters += snapshot.entries.reduce((total, entry) => total + entry.text.length, 0);
+			if (count > NATIVE_CONVERSATION_MAX_ENTRIES || characters > NATIVE_CONVERSATION_MAX_CHARACTERS) {
+				evicted.push(id);
+			}
+		}
+		for (const id of evicted) {
+			conversationSnapshots.delete(id);
+		}
+	}
+
+	function finishCatchUp(): void {
+		if (catchingUp) {
+			entries.value = catchingUp.entries;
+			olderHidden.value = catchingUp.olderHidden;
+			catchingUp = null;
+		}
+		loadingThread.value = false;
+		selectingSnapshot = false;
+		trimSnapshots();
+	}
+
+	function hasConversationSnapshot(threadId: string): boolean {
+		return conversationSnapshots.has(threadId);
+	}
+
+	function forgetThread(threadId: string): void {
+		conversationSnapshots.delete(threadId);
+		if (thread.value?.id === threadId) {
+			operation.cancelBackgroundRead();
+			removedThreadId = threadId;
+			selectionGeneration += 1;
+			clearToolRefreshTimer();
+			stopUpdates();
+		}
+	}
 
 	function stopUpdates(): void {
 		updateGeneration += 1;
@@ -127,6 +183,14 @@ export function useNativeRuns(
 	}
 
 	function clearPrivate(): void {
+		selectionGeneration += 1;
+		conversationSnapshots.clear();
+		catchingUp = null;
+		loadingThread.value = false;
+		loadingOlder.value = false;
+		selectingSnapshot = false;
+		startedRunId.value = null;
+		removedThreadId = null;
 		awaitingConfirmedUpdate = false;
 		clearToolRefreshTimer();
 		stopUpdates();
@@ -143,6 +207,7 @@ export function useNativeRuns(
 		runs.value = [];
 		entries.value = [];
 		entryCursor.value = { runSequence: 0, stepIndex: 0, eventSequence: 0, textOffset: 0 };
+		historyCursor.value = { runSequence: 0, stepIndex: 0, eventSequence: 0, textOffset: 0 };
 		tools.value = [];
 		toolCursor.value = null;
 		pending.value = null;
@@ -183,6 +248,7 @@ export function useNativeRuns(
 	const blocked = computed(
 		() =>
 			operation.busy.value ||
+			loadingThread.value ||
 			threadBusy() ||
 			operation.refreshRequired.value ||
 			pending.value !== null ||
@@ -200,6 +266,7 @@ export function useNativeRuns(
 	}
 
 	function fail(cause: unknown): void {
+		finishCatchUp();
 		awaitingConfirmedUpdate = false;
 		stopUpdates();
 		operation.refreshRequired.value = true;
@@ -246,43 +313,71 @@ export function useNativeRuns(
 	}
 
 	function acceptEntries(page: { items: NativeEntry[]; nextCursor: NativeEntryCursor }): void {
-		let previous = entryCursor.value;
-		for (const item of page.items) {
-			if (compareNativeEntryCursor(previous, item.position) >= 0) {
-				throw new AgentManagementFailure('protocol_failure', 'unknown');
-			}
-			previous = item.position;
+		const combined = appendNativeConversationWindow(
+			catchingUp ?? {
+				entries: entries.value,
+				cursor: entryCursor.value,
+				startCursor: historyCursor.value,
+				olderHidden: olderHidden.value,
+			},
+			page,
+		);
+		if (catchingUp) {
+			catchingUp = combined;
+		} else {
+			entries.value = combined.entries;
+			olderHidden.value = combined.olderHidden;
 		}
-		const combined = appendNativeConversationEntries(entries.value, page.items);
-		// This is a local display window, never a protocol or durable-content limit.
-		let characters = combined.reduce((total, item) => total + item.text.length, 0);
-		while (combined.length > 1 && (combined.length > 128 || characters > 256 * 1024)) {
-			const first = combined.shift();
-			if (first) characters -= first.text.length;
-			olderHidden.value = true;
-		}
-		const first = combined[0];
-		if (first && characters > 256 * 1024) {
-			let start = first.text.length - 256 * 1024;
-			// Do not cut between the UTF-16 halves of a Unicode code point.
-			const code = first.text.charCodeAt(start);
-			if (code >= 0xdc00 && code <= 0xdfff) start += 1;
-			first.text = first.text.slice(start);
-			olderHidden.value = true;
-		}
-		entries.value = combined;
-		entryCursor.value = page.nextCursor;
+		entryCursor.value = combined.cursor;
+		trimSnapshots();
 		const submitted = submittedMessage.value;
 		if (
 			submitted &&
 			submitted.threadId === thread.value?.id &&
 			page.items.some((item) => item.role === 'user' && item.runId === submitted.runId)
-		)
+		) {
 			submittedMessage.value = null;
+		}
 	}
 
 	async function selectThread(value: NativeThread): Promise<void> {
-		if (operation.busy.value || pending.value !== null || !attachmentsReady.value) return;
+		const current = scope.value;
+		if (!current || operation.busy.value || pending.value !== null || !attachmentsReady.value) return;
+		if (thread.value?.id === value.id && removedThreadId !== value.id && !operation.refreshRequired.value) {
+			if (value.version > thread.value.version) {
+				thread.value = value;
+			}
+			return;
+		}
+		const previousId = thread.value?.id;
+		if (
+			previousId &&
+			previousId !== removedThreadId &&
+			entries.value.length > 0 &&
+			!loadingThread.value &&
+			!operation.refreshRequired.value
+		) {
+			conversationSnapshots.delete(previousId);
+			conversationSnapshots.set(previousId, {
+				entries: entries.value,
+				cursor: entryCursor.value,
+				startCursor: historyCursor.value,
+				olderHidden: olderHidden.value,
+			});
+		}
+		const cached = conversationSnapshots.get(value.id);
+		conversationSnapshots.delete(value.id);
+		operation.cancelBackgroundRead();
+		const selectedGeneration = ++selectionGeneration;
+		awaitingConfirmedUpdate = false;
+		inspected.value = false;
+		acknowledged.value = false;
+		removedThreadId = null;
+		startedRunId.value = null;
+		loadingThread.value = true;
+		loadingOlder.value = false;
+		selectingSnapshot = true;
+		operation.refreshRequired.value = true;
 		clearToolRefreshTimer();
 		stopUpdates();
 		inputArtifacts.value = [];
@@ -297,20 +392,73 @@ export function useNativeRuns(
 			updatedAt: value.updatedAt,
 		};
 		runs.value = [];
-		entries.value = [];
-		entryCursor.value = { runSequence: 0, stepIndex: 0, eventSequence: 0, textOffset: 0 };
+		entries.value = cached?.entries ?? [];
+		entryCursor.value = cached?.cursor ?? { runSequence: 0, stepIndex: 0, eventSequence: 0, textOffset: 0 };
+		historyCursor.value = cached?.startCursor ?? { runSequence: 0, stepIndex: 0, eventSequence: 0, textOffset: 0 };
+		olderHidden.value = cached?.olderHidden ?? false;
+		catchingUp = {
+			entries: entries.value,
+			cursor: entryCursor.value,
+			startCursor: historyCursor.value,
+			olderHidden: olderHidden.value,
+		};
 		tools.value = [];
 		toolCursor.value = null;
-		olderHidden.value = false;
+		trimSnapshots();
 		clearRun();
 		approvalMode.value = 'ask';
-		await refreshThread();
+		// The latest Run snapshot owns the body/tool reads; selection only needs its identity here.
+		await operation.execute(
+			async (signal) => {
+				const [recentRuns, history] = await Promise.all([
+					readRecentRuns(current, value.id, signal),
+					cached ? null : listNativeEntryHistory(current, value.id, null, signal),
+				]);
+				return { recentRuns, history };
+			},
+			(value) => {
+				if (selectedGeneration !== selectionGeneration) return;
+				runs.value = value.recentRuns;
+				if (value.history) {
+					entries.value = appendNativeConversationEntries([], value.history.body.items);
+					entryCursor.value = value.history.body.nextCursor;
+					historyCursor.value = value.history.startCursor;
+					olderHidden.value = value.history.hasEarlier;
+					catchingUp = {
+						entries: entries.value,
+						cursor: entryCursor.value,
+						startCursor: historyCursor.value,
+						olderHidden: olderHidden.value,
+					};
+				}
+			},
+			{ write: false, background: true, onFailure: fail },
+		);
+		if (selectedGeneration !== selectionGeneration || operation.refreshRequired.value) {
+			return;
+		}
 		const latest = runs.value.at(-1);
-		if (!run.value && latest) await selectRun(latest);
+		if (latest) {
+			await selectRun(latest, true);
+			if (selectedGeneration === selectionGeneration) {
+				selectingSnapshot = false;
+				startUpdates();
+			}
+		} else {
+			finishCatchUp();
+		}
 	}
 
 	function clearThread(): void {
 		if (operation.busy.value || pending.value !== null) return;
+		operation.cancelBackgroundRead();
+		selectionGeneration += 1;
+		catchingUp = null;
+		awaitingConfirmedUpdate = false;
+		loadingThread.value = false;
+		loadingOlder.value = false;
+		selectingSnapshot = false;
+		startedRunId.value = null;
 		operation.clearFeedback();
 		clearToolRefreshTimer();
 		stopUpdates();
@@ -320,6 +468,7 @@ export function useNativeRuns(
 		runs.value = [];
 		entries.value = [];
 		entryCursor.value = { runSequence: 0, stepIndex: 0, eventSequence: 0, textOffset: 0 };
+		historyCursor.value = { runSequence: 0, stepIndex: 0, eventSequence: 0, textOffset: 0 };
 		tools.value = [];
 		toolCursor.value = null;
 		olderHidden.value = false;
@@ -347,6 +496,7 @@ export function useNativeRuns(
 		const current = scope.value;
 		const selected = thread.value;
 		if (!current || !selected) return;
+		const selectedGeneration = selectionGeneration;
 		stopUpdates();
 		await operation.execute(
 			async (signal) => {
@@ -358,6 +508,9 @@ export function useNativeRuns(
 				return { recentRuns, body, toolPage };
 			},
 			(result) => {
+				if (selectedGeneration !== selectionGeneration || thread.value?.id !== selected.id) {
+					return;
+				}
 				runs.value = result.recentRuns;
 				acceptEntries(result.body);
 				tools.value = mergeNativeTools(tools.value, result.toolPage.items);
@@ -366,7 +519,51 @@ export function useNativeRuns(
 			},
 			{ write: false, onFailure: fail },
 		);
-		startUpdates();
+		if (selectedGeneration === selectionGeneration && thread.value?.id === selected.id) {
+			startUpdates();
+		}
+	}
+
+	async function readOlderEntries(beforePrepend?: () => void): Promise<void> {
+		const current = scope.value;
+		const selected = thread.value;
+		if (
+			!current ||
+			!selected ||
+			!olderHidden.value ||
+			loadingThread.value ||
+			loadingOlder.value ||
+			operation.busy.value ||
+			operation.refreshRequired.value ||
+			pending.value
+		)
+			return;
+		const generation = selectionGeneration;
+		const before = historyCursor.value;
+		const interruptedRead = operation.cancelBackgroundRead();
+		loadingOlder.value = true;
+		try {
+			await operation.execute(
+				(signal) => listNativeEntryHistory(current, selected.id, before, signal),
+				(page) => {
+					if (generation !== selectionGeneration || thread.value?.id !== selected.id) return;
+					beforePrepend?.();
+					entries.value = appendNativeConversationEntries(
+						appendNativeConversationEntries([], page.body.items),
+						entries.value,
+					);
+					historyCursor.value = page.startCursor;
+					olderHidden.value = page.hasEarlier;
+					trimSnapshots();
+				},
+				{ write: false, background: true, onFailure: fail },
+			);
+		} finally {
+			if (generation === selectionGeneration) {
+				loadingOlder.value = false;
+				if (interruptedRead && !operation.refreshRequired.value) scheduleToolRefresh();
+			}
+		}
 	}
 
 	async function readEntries(): Promise<void> {
@@ -382,7 +579,7 @@ export function useNativeRuns(
 		startUpdates();
 	}
 
-	async function selectRun(value: NativeRun): Promise<void> {
+	async function selectRun(value: NativeRun, background = false): Promise<void> {
 		if (operation.busy.value || pending.value !== null) return;
 		stopUpdates();
 		clearRun();
@@ -398,16 +595,19 @@ export function useNativeRuns(
 			updatedAt: value.updatedAt,
 		};
 		approvalMode.value = value.approvalMode;
-		await refreshRun();
+		await refreshRun(background);
 	}
 
-	async function refreshRun(): Promise<void> {
+	async function refreshRun(background = false): Promise<void> {
 		stopUpdates();
-		await readRun();
-		startUpdates();
+		const generation = updateGeneration;
+		await readRun(background);
+		if (generation === updateGeneration) {
+			startUpdates();
+		}
 	}
 
-	async function readRun(): Promise<void> {
+	async function readRun(background = false): Promise<void> {
 		const current = scope.value;
 		const selected = run.value;
 		const selectedThread = thread.value;
@@ -458,7 +658,7 @@ export function useNativeRuns(
 				children.value = value.descendants;
 				inspected.value = pending.value !== null;
 			},
-			{ write: false, onFailure: fail },
+			{ write: false, background, onFailure: fail },
 		);
 	}
 
@@ -525,7 +725,8 @@ export function useNativeRuns(
 	}
 
 	function startUpdates(): void {
-		if (!canReadUpdates() || subscription || !scope.value || !run.value || !thread.value) return;
+		if (selectingSnapshot || !canReadUpdates() || subscription || !scope.value || !run.value || !thread.value)
+			return;
 		const generation = updateGeneration;
 		subscription = subscribeNativeRun(
 			scope.value,
@@ -581,7 +782,12 @@ export function useNativeRuns(
 				operation.refreshRequired.value = false;
 			}
 		}
-		if (!value.more && run.value && !isNativeRunActive(run.value)) stopUpdates();
+		if (!value.more) {
+			finishCatchUp();
+			if (run.value && !isNativeRunActive(run.value)) {
+				stopUpdates();
+			}
+		}
 	}
 
 	watch(operation.busy, (busy) => {
@@ -662,7 +868,14 @@ export function useNativeRuns(
 	async function mutate(action: NativeRunAction | null, retry = false): Promise<void> {
 		// Minimized controls can decide an existing approval, never create, append or retry work.
 		const available = active() || (observeMinimized() && action?.kind === 'approve' && !retry);
-		if (!available || operation.busy.value || threadBusy() || operation.refreshRequired.value || !scope.value) {
+		if (
+			!available ||
+			operation.busy.value ||
+			loadingThread.value ||
+			threadBusy() ||
+			operation.refreshRequired.value ||
+			!scope.value
+		) {
 			return;
 		}
 		if (pending.value !== null && (!retry || !inspected.value)) return;
@@ -699,6 +912,7 @@ export function useNativeRuns(
 				if (intent.action.kind === 'create' || intent.action.kind === 'append') {
 					if (result.kind !== 'run') throw new AgentManagementFailure('protocol_failure', 'unknown');
 					clearRun();
+					startedRunId.value = result.run.id;
 					run.value = result.run;
 					if (submittedMessage.value?.operationId === intent.operationId) {
 						if (entries.value.some((item) => item.role === 'user' && item.runId === result.run.id)) {
@@ -779,6 +993,12 @@ export function useNativeRuns(
 	return {
 		operation,
 		blocked,
+		loadingThread,
+		loadingOlder,
+		readOlderEntries,
+		startedRunId,
+		forgetThread,
+		hasConversationSnapshot,
 		scope,
 		thread,
 		models,

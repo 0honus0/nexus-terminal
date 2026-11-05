@@ -1525,7 +1525,7 @@ Remote register 安装 `/api/v1/transfers/send`、`status`、`status/:taskId`、
 2. **子功能与目录**：原 providers/service、platform/ai/adapters/model-image 与 openai-compatible；RunExecutionOwner 持直接派发，原 ToolService 持 image_models_list/image_generate，Artifact 原 owner 持输出。
 3. **依赖方向**：Run/Tool → ProviderImageService → ProviderService/ArtifactService；Model/技术 Adapter 各自投影；不从网络 Adapter 写数据库或绕过 Run 派发记录。
 4. **类型与转换**：Shared 的 images 协议、supportsImageGeneration 与可选文字预算同步应用/存储/SQLite/前端；新 ProviderImageRequest/ImageArtifact 留 providers/model。Artifact 的 model actor 与独立存储授权逐字段转换，不伪造工具授权。
-5. **入口与安装**：原模型选择器同时消费 Images；配置分对话/图片两组。图片工具由原 toolDefinitions 安装，需原 artifacts.write/批准。新增 GET /api/v1/agent/apps/:appId/artifacts/:artifactId/preview，复用认证下载读取与 Range，限定 PNG/JPEG/WebP、nosniff、private/no-store。
+5. **入口与安装**：原模型选择器同时消费 Images；配置分对话/图片两组。图片工具由原 toolDefinitions 安装，需原 artifacts.write/批准。新增 GET /api/v1/agent/apps/:appId/artifacts/:artifactId/preview，复用认证下载读取与 Range，限定 PNG/JPEG/WebP/GIF、nosniff、private/no-store。
 6. **数据、事务与并发**：直接图片沿模型 Step 的 reserve/dispatch/finish 与原请求/并发预算；工具沿 ToolCall 账本和原工具预算。Artifact 写事务核对 Images frozen protocol、原 dispatched Step/hash、当前 Run 与 Provider 代际。图片输出继承原文件预算/期限，不冒充网络与 SQLite 原子事务。
 7. **生命周期与失败**：Provider请求跟踪及停机/配置修改取消覆盖图片请求。正式直接Images与image_generate统一继承Run剩余绝对期限，ToolService不为image_generate另设普通工具短超时，ProviderService该入口不再添加固定五分钟计时；网络生成、文件发布和后续验证共同消耗同一任务时限。管理图片测试仍独立五分钟，发现等管理读取仍十秒。Platform仅为图片ModelSdkRequest建立独立Undici Agent，其它请求保留原连接池，headersTimeout/bodyTimeout为0，由原应用signal控制完整等待（连接建立仍受传输自己的连接时限）；close分别尝试reader与dispatcher.destroy，保留独立失败和原错误身份，不使用全局连接池修改。外部 JSON 与 base64 有界读取；不获取返回 URL，不接收 SVG/HTML。付费请求未知或落盘失败不自动重试；本地取消不证明供应商回滚。全局日志不记提示词/图片/凭据。
 8. **当前能力与验收**：一次一张、按Artifact剩余空间与Node字符串/Buffer技术容量约束、供应商默认尺寸/质量。直接图片只用本次描述，文字工具可传 Agent 整理的描述；不接入编辑、视频、音频。前端 Markdown 仅允许受保护的本站预览图。静态、目录、隔离HTTP及真实CDP验收的环境、入口与保证边界分别见 testing；编译不替代真实图片生成或完整治理回归。
@@ -1555,6 +1555,17 @@ Platform AI的ModelStreamProjection消费SDK已解码事件，持有Chat Complet
 6. **数据、事务与并发**：无新表。先订阅再首次读取，写入通知在原存储调用收敛后发出，unknown不重派。正文/状态变化约16ms合并，读取中dirty保持；状态及用量/审批/子任务独立于正文热路径，终态后再读正文并持续至空页。发送游标与客户端已接纳游标分离，连接内按发送游标连续推送，重连从客户端已接纳游标恢复。
 7. **生命周期与失败**：最多16页且累计不超过完整输出预算的未ACK窗口，满额暂停到ACK，容量不是Run失败条件；大状态页等待先前窗口排空，心跳另留1KiB传输缓冲。ACK按序、60秒期限，订阅首帧15秒，心跳15秒/权限复核3秒；心跳不查询Run/正文。关闭取消计时、退订并等在途短读取，RunChanges纳入AgentRequestOwner停机资源，Platform等真实WS排空。隐藏、断线或关闭不取消Run，不重发模型。
 8. **当前能力与验收**：状态/正文/用量/审批/子任务均有直接推送消费者；记忆审核和插件SDK独立订阅保持原行为。命令1KiB，完整输出按审批8MiB、正文512KiB、事件32KiB、独立的子任务元数据编码容量及8KiB封装，合计按runs/values公式计算；客户端单帧/待接纳窗口和后端发送预算同源。源码与静态证据见PLAN/testing；未以编译代替实机弱网、权限/版本撤销、停机及E2E验证。
+
+### Agent 对话正文反向分页
+
+1. **职责与范围**：Context提供最近正文页及指定位置之前的连续片段，支持原生会话按需上翻；不改模型上下文、日志持久化或WS前向续读。
+2. **子功能与目录**：scope WorkspaceService分派history；context HistoryService校验、Model白名单转换；ContextStorage/SqliteContextStorage归存储边界，thread-entry-sql持有查询与片段解码。
+3. **依赖方向**：原HTTP/插件RPC → Workspace → Context Service/Model → Storage/SQLite；Adapter不引用应用类型，入口/出口唯一mapper留interfaces/http/workspace-mapper，插件SDK同样检查App归属。
+4. **类型与转换**：Shared AgentThreadEntryHistory持body/startCursor/hasEarlier，应用ThreadEntryHistory和StoredThreadEntryHistory独立；每层按字段及嵌套cursor/items转换。textOffset为Unicode码点，startCursor指本页首片段之前，body.nextCursor可直接用于原前向entries/WS。
+5. **入口与安装**：在原workspace方法联合增加agent.threads.history，before=null读取最新页，否则读取原游标之前。沿原管理员/持久会话/启用App版本准入、用户与App/Thread归属；缺失仍not_found，无新增公开路由或历史兼容入口。
+6. **数据、事务与并发**：原只读事务确认Thread并取正文；先按位置倒序选limit+1条元数据，再读取本页正文，返回正序。复用16片段/每片4096码点与16KiB/完整512KiB容量；最早记录若只返回后缀则停止，不跨过其未读前缀形成缺口。下一页从startCursor读取，hasEarlier由额外记录或未读前缀判定；无表结构/迁移变化。
+7. **生命周期与失败**：原请求owner持短读取与交付权限复核；无任务执行或写入，不取消模型、不重派副作用。技术/损坏数据失败由原agentStorage安全映射；空页保留请求边界，前端按Shared严格关联校验，不用空页猜测写入结果。
+8. **当前能力与验收**：覆盖Root输入与assistant text.delta，不包含工具输出正文；工具沿原独立分页。查询只交付一页，但未测查询计划/耗时，不声称遍历元数据成本恒定；静态与生产构建、SQL/Unicode/边界待验范围见testing。
 
 ## 成熟技术库边界
 
@@ -1818,3 +1829,14 @@ Scope 的可管理 App 查询在 LIMIT 前按 user_id/app_id 排除 removed 安�
 6. **数据、事务与并发**：原 SQLite 安装事务准入读取当前身份、阶段、发布者与安装事实后作决策；声明/App/政策/grants/安装记录同事务提交。已安装幂等返回不恢复启停/权限；升级仍停用并保留授权。保留数据后由引导确认重装才显式初始化完整声明授权。
 7. **生命周期与失败**：沿原任务 lane、期限与 Runtime owner 跟踪；事务失败回滚初始化。安装提交后的 runtime 启动失败保留 operation_unknown，不能虚报安装回滚；后续只读核对，不自动重装或写总开关。后续撤权、Run 目标、禁用名单和审批策略继续生效。
 8. **当前能力与验收**：USAGE 区分推荐新装/普通市场/升级/复用；正式回归使用真实签名夹具和 SQLite 验证内部初始化、运行态及撤权不恢复。官方 pinned key 不替换，真实官方新签名包仍按 D16 保留实机待验。
+
+### 图片预览偏好与 GIF 交付
+
+1. **职责与范围**：Preferences保存个人imagePreviewMaxMiB，Agent Artifact HTTP拥有聊天图片媒体准入；Remote Files执行每次请求的二进制预算。
+2. **子功能与目录**：沿presentation/model、storage、adapters/sqlite及interfaces/http映射；GIF只在agent/interfaces/http/artifact-http的原preview白名单增加，不新增路由/转码器。
+3. **依赖方向**：Preferences应用校验与持久JSON解码消费Shared默认/表示范围；Remote Files只接收正安全整数maxBytes，不反向依赖个人偏好或UI设置。
+4. **类型与转换**：imagePreviewMaxMiB为必填非负整数，默认20、0由前端解释为取消该项预算；Model和HTTP仍双向逐字段投影，SQLite严格解码完整字段。最大值仅保证MiB转换后字节数为安全整数，不设产品二次上限。
+5. **入口与安装**：沿GET/PUT settings/preferences；GET apps/:appId/artifacts/:artifactId/preview允许PNG/JPEG/WebP/GIF，Content-Type按已存媒体类型，nosniff、private/no-store和Range沿原实现；生成模型仍只输出PNG/JPEG/WebP。
+6. **数据、事务与并发**：原preferences_presentation.value_json/CAS拥有持久事实，无DDL变更或隐式兼容。已有库/导入快照在升级前需显式补齐该字段并按现行版本约束维护，不自动补旧JSON。文件声明大小及实际流由本次maxBytes检查，不再固定64MiB；并发、帧/队列背压和独立SFTP资源沿原owner。
+7. **生命周期与失败**：GIF流式返回原字节，原认证、文件ready/有效期/版本及持续授权复查保持；失败终止响应，不自动重试。文件读取继续绑定原Workspace身份、期限和取消/清理，调整上限不预分配该容量。浏览器可报告的复制/合并分配失败立即结束原等待、释放已缓存分块并取消未完读取，不因移除pending/timer后抛错而永久等待。
+8. **当前能力与验收**：对应USAGE文件/聊天/偏好说明；Shared/双端check和生产build保持静态证据；本轮限定CDP已验证动画、设置持久化及65MiB读取完整性，取消/身份撤销/分配失败组合留正式回归，不扩大局部证据。

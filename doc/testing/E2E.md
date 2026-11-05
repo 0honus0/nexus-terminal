@@ -8,6 +8,38 @@
 
 官方插件[v1.0.3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.3)仍为d5dd455，本批没有插件改动。本体[amd dev发布41872562719](https://github.com/0honus0/nexus-terminal/actions/runs/41872562719)success，dev与sha-2b0ab3db9208的digest一致，平台/revision均经实际GHCR核对，详见下节；此前指定实例的7262e8ac部署仍保持原范围，本轮不更新生产容器或数据库。真实运营商切网、手机软键盘、外部供应商及未列故障边界仍按[待验与外部依赖](../PLAN.md#待验与外部依赖)保留；受控回归不替代真实模型效果或吞吐实测。更早测试与镜像结果只保留为各自历史证据。
 
+## 聊天 GIF 与图片预览容量（2026-11-05，源码、静态与限定 CDP）
+
+环境为`/home/honus/nexus-terminal`的`main/92e7f996`未提交工作区，Node v22.23.1、pnpm 11.28.10；pnpm来自`/home/honus/nexus-task-artifacts/agent-chat-controls-20261104/tools/node_modules/.bin`。本轮日志集中保留`/home/honus/nexus-task-artifacts/gif-preview-settings-20261105`，不沿用前轮Agent历史或清理工作流的检查作为本轮证据。
+
+源码审核范围：Shared默认/单位/安全整数范围及完整偏好codec，Backend应用/存储类型、HTTP/Model双向白名单、严格JSON解码与CAS，Frontend两处设置入口/三语/mapper，以及Workspace新建/恢复/重置、Agent文件库、FilePreview独立Session的新开与刷新。新字段imagePreviewMaxMiB默认20、0取消图片大小预算；其它格式不变。移除WS固定64MiB二次总量限制，保留声明量/实际量、请求预算、并发/帧/背压；既有非法预算fixture同步为不安全整数，未增加场景。大图可报告的分块复制/最终合并分配异常会reject原等待、清空分块，未结束文件读取发送取消；无timer悬空分支已补齐。聊天仅增加原Artifact preview的image/gif准入，原字节、Range、nosniff、权限及有效期检查保持。
+
+首轮`pnpm run check`、`pnpm --filter @nexus-terminal/shared check`和`pnpm run build`退出0，日志为check.log、shared-check.log、build.log。补齐缓冲分配失败路径后根check及前端build再次退出0，日志为check-final.log、build-frontend-final.log。最终全仓ESLint/Prettier及git diff --check均退出0，执行记录为format-final.log、diff-check.log；文档回填后另核对对应Markdown格式与diff。没有新增依赖、DDL或旧JSON兼容，已有偏好和旧快照升级前需显式补齐字段并维护版本，本轮未操作数据库。
+
+初次按PLAN D17仅做上述静态检查；用户随后明确“浏览器验证下，没问题提交推送”，本轮限定例外经`https://api.honus.top`和CDP 29222连接Chromium，使用9998/3001隔离前后端、全新独立SQLite、loopback OpenSSH、正式签名测试App及本地流式模型夹具。无外部付费模型或现存实例数据操作，不运行全量本地E2E。全部脚本、独立数据库/临时密钥、日志、截图和trace集中上述目录的browser子目录，不进入仓库；关闭自建进程后保留磁盘产物至用户通知。
+
+本轮7项主预览与4项Workspace验收通过（acceptance.json、workspace-acceptance.json及各自成功日志）：默认20，1/3/0/128保存200且重载保持，-1/1.5/空草稿不派发写入；390/320px设置可操作无页面横向溢出。聊天真实发送Run后GIF原字节/Content-Type一致，连续截图红蓝两帧确认动画，未使用不能证明动画的canvas首帧判据。Agent文件库与SSH文件管理器均验证1MiB超限、3MiB重开动画、降回1后刷新失败保留旧图；0时Agent文件库实际读取65MiB GIF，Workspace在128MiB和0预算均成功读取，完整Blob大小与SHA-256精确匹配原文件，0对应WS maxBytes=Number.MAX_SAFE_INTEGER，结果见large-image-proof.json。另在会话专项验证390px聊天GIF可见、匿名preview返回401。pageerror均为0。
+
+设置桌面/390/320、聊天桌面/390、文件库及Workspace超限/动画/大图截图与trace均在browser目录。早期验收脚本的定位、通知过渡/弹层关闭顺序及canvas判据已更正，原失败日志仍保留；不记作产品故障。正式待验：另一偏好面板、失效Artifact/SVG拒绝、设置与在途读取交错、关闭取消/身份撤销/晚响应、可报告分配失败及真实设备内存边界；不将65MiB成功解读为任意大小可用。
+
+## Agent 提醒、会话列表与虚拟历史（2026-11-05，源码、静态与限定 CDP）
+
+基线main/92e7f996叠加前轮未提交清理修正。用户已确认是在Hub最小化时没有提示；原NativeRunStream的onLine硬闸可阻止重连，首份update前心跳可无限续期限，空基线还可能抑制本页快速任务的首份终态。现以前台真实WS结果及原退避重连，观察网络change，心跳不替代首份快照；本页确认派发的Run与历史首次加载分开。尚无该现场浏览器/请求证据，不将源码缺口当作唯一已复现原因。
+
+会话列表返回时后台核对原已加载范围，增删直接使用服务器回执，不再每次清空或额外刷新；旧unknown/expectedVersion及先核对保护保留。选择代次与原background取消隔离晚回执，正文窗口在同一Surface内存复用，闲置缓存沿原128条/256Ki字符预算淘汰；活动历史随用户分页增长，超预算时不再保留额外闲置窗口。HTTP与WS追赶不并发接纳相同正文，more=false后一次发布补读。
+
+用户追加动态加载和虚拟列表后，Shared新增agent.threads.history；Backend原Workspace/Context/Storage/SQLite及原生API/插件SDK同步。反向页先选元数据再取正文，首片段若为后缀立即停止，保留未读前缀；使用原16片段、4096码点/16KiB、512KiB容量。before为null首次仅尾页，before为startCursor向前读取，前向nextCursor独立续WS；无表结构、迁移或新依赖。Surface复用DynamicScroller/Item，正文及工具分组仅挂载可见行，按逻辑消息导航；prepend与单消息前缀补齐分别保持阅读锚点，动态测高仅贴底跟随。保留原气泡/工具/审批/输入外观，移除无消费者的旧裁剪提示。
+
+完整调用链与生命周期源码审核覆盖：HTTP/插件RPC准入及出口App关联、Shared游标形状/页边界/空页/码点单位、SQL参数与排序/半片段、实时append与向前读取、A→B→A/旧finally、后台刷新与增删、删除当前/最后项/unknown全页核对、隐藏/权限撤销/销毁及socket/timer/listener/RAF收尾。既有host.spec会话选择场景已同步history方法及加载中允许切换的断言，未新增场景。根check（含Backend包级check、Shared构建、双端ESLint及vue-tsc）、Shared check和双端生产build退出0，追加视图销毁/晚回调保护后根check与前端build再次退出0；全仓ESLint/Prettier及git diff --check通过。主要日志为check-delivery.log、shared-complete.log、build-complete.log、build-frontend-delivery.log及format-delivery.log，证据集中`/home/honus/nexus-task-artifacts/agent-session-performance-20261105`并保留。
+
+初次按PLAN D17仅完成上述源码/静态；后续明确授权后在同一GIF隔离环境补充5项会话和4项提醒/权限CDP，session-acceptance.json与notice-acceptance.json均通过、pageerror为0。8个真实completed Run包含中文/emoji与长正文，反向SQL逐页恢复50152码点，无重复seed；首次浏览器只取尾页，连续上翻9页后到history-01，完整16条消息仅挂载5条，正文继续动态测高。缓存切换没有再次读取该线程history，创建/两次确认删除直接更新列表。
+
+浏览器实测发现实际缺陷：正文缓存后，重新挂载的DynamicScroller丢失已测行高，原阅读位置从history-04偏移至history-06。Surface在切换前保存库公开CacheSnapshot，同宽返回先恢复测量再按原消息锚点/偏移定位；测量缓存跟随正文缓存淘汰，删除/身份撤销/销毁仍清理，晚nextTick复查活动/选择。修复后连续回归同一段落及像素偏移完全一致，见session-scroll-proof.json与history-restored.png。新增技术状态仅属Surface，不进入Shared或应用正文模型。修复后根check与前端生产build及最终格式检查见browser目录相应日志。
+
+提醒专项经正常UI发送真实Run，仅延后创建回执交付，确认服务器已completed后最小化再放行，首份终态仍弹出任务已完成；桌面及390px卡片可见无溢出，离开悬停后自动收起，历史completed基线不误弹。截图notice-completed-{desktop,mobile-390}.png及trace保留。全部20项限定CDP通过后按授权提交推送main，不发布或部署。
+
+待正式验证：误报offline/网络change/首份状态缺失、审批快捷决定、真实手机后台与切网；长代码/图片/宽度变化的测高与未挂载导航、prepend和实时输出/切换交错、缓存淘汰与身份撤销、跨页增删及未知写入。Run元数据仍从原列表逐页取得最新100项，不声称该链路也采用尾页，不报告未经测量的耗时或内存收益。
+
 ## 手机后台恢复后的挂起目录同步（2026-11-04，源码与只读排查）
 
 用户要求排查指定实例运行中手机后台返回、重连失败后刷新列表持续加载，并确认原标签为蓝色。只读SSH核对实际Backend为2b0ab3db、17:03:29 UTC启动；没有重启、修改配置/数据库、发起应用登录或接管用户会话。日志确认最新蓝色会话17:20:46进入suspended，17:22:09完成suspend_resuming→attached，17:22:57再次断线后仍为suspended，无关闭/删除记录；这与此前普通会话17:12:23宽限期结束是不同会话，不能混为本次丢失证据。HTTP目录17:18:47及17:19:00均200，目录WS最后一次建立为17:12:50，之后手机仍有成功HTTP/终端请求。后端无本次error/fatal，Nginx错误日志为空。未导出终端正文。
@@ -232,6 +264,14 @@ Node v22.23.1、puppeteer-core 25.16.0、HeadlessChrome 156.0.8078.47，独立�
 修复：无会话视图保持撤销，attach才可恢复新scope；上述观察与重读绑定原view；通用保存器回传原T，Workspace及layout按原permission过滤晚回调，列宽/侧栏/显隐等在派发前检查；App尺寸保存要求已认证用户。保留全局feedback、AppHeader真实退出失败和状态核对，未将取消伪装为成功或自动重试未知写入。原样保留SSH/RDP变更；本批检查覆盖合并后的工作区，RDP单独提交按用户新增授权收口。
 
 已完成两轮源码复核：第一轮沿auth.beginAuthentication→App同步生命周期→stores/view撤销→错误观察/保存回调，第二轮核对首次匿名挂载、attach、logout失败恢复、重复激活、切用户、旧signal和刷新动作、layout与全部7个LatestValueSaver消费者、远程桌面null身份及真实错误出口。按PLAN D17未新增/运行本地行为、CDP或E2E；前序RDP108轮与13项像素证据只覆盖绘制，不能当作退出回归。根 `pnpm run check`、`pnpm run build:frontend` 和 `pnpm run format:all:check` 均退出0（check.log/build.log/format.log），最终文档格式与 `git diff --check` 通过；本批产物集中 `/tmp/nexus-logout-feedback-20261104`，环境和前序产物保留至用户通知。
+
+## 清理工作流超期空排队与执行日志（2026-11-05，源码与静态）
+
+基线 main/92e7f996，仅修改既有维护脚本、日志夹具消费者与对应文档。只读取得 [41943915755](https://github.com/0honus0/nexus-terminal/actions/runs/41943915755) 的完整日志，以及 [34749067364](https://github.com/0honus0/nexus-terminal/actions/runs/34749067364) 的运行/job元数据：该记录 queued、conclusion=null、attempt=1，创建/开始/更新时间均为2026-09-13T09:10:30Z，全部attempt查询返回 total_count=0、jobs=[]。原清理因此保留156个本体版本、73个runner版本及818个缓存，不能把该次workflow成功当作镜像清理完成。
+
+新源码仅在 queued 的三个时间均超过[GitHub 官方35天workflow期限](https://docs.github.com/en/actions/reference/limits)、重读仍符合、全部attempt明确无job、再次重读attempt/时间未变时排除其阻挡；首次保留记录/产物，镜像/缓存删除前重新分类。近期重跑、有job、元数据缺失/变化、404均不进入例外，其他读取错误继续失败。原两包仓库归属、保护标签manifest闭包、逐次渠道复查、精确404与非404失败传播保留；新日志核对阶段耗时、逐项ID/序号/digest/标签、保留原因、删除确认及已删/计划/延后摘要。夹具只补warning/group日志接口，不新增测试场景。
+
+环境Node v22.23.1、pnpm 11.28.10。两脚本 `node --check`、根 `pnpm run check`（含Shared构建、Backend包级类型、双端ESLint及Frontend类型）和 `pnpm run format:all:check` 均退出0，日志为syntax.log、check.log、format-final.log；首轮format.log记录夹具日志接口缺空行，已修正。最终文档格式及 `git diff --check` 另行核对。按PLAN D17不新增或执行本地行为、浏览器或E2E，不把下节历史22项PASS算作本轮通过。待正式回归：超期空记录、以前attempt有job、近期重跑、两次GET之间变化、读取404/403/500、真正活跃任务延后及新摘要计数。未触发线上清理、删除、发布或部署；现场证据和本轮静态日志集中 `/home/honus/nexus-task-artifacts/cleanup-workflow-20261105`，保留至用户通知。
 
 ## 两包镜像清理保留规则（2026-11-04）
 

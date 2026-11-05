@@ -15,6 +15,7 @@ export function useNativeThreads(
 	api: NativeThreadApi,
 	active: () => boolean,
 	select: (value: NativeThread | null) => void,
+	removed: (threadId: string) => void,
 ) {
 	const items = ref<NativeThread[]>([]);
 	const observedThread = ref<NativeThread | null>(null);
@@ -71,12 +72,21 @@ export function useNativeThreads(
 	);
 
 	async function refresh(): Promise<void> {
+		const background =
+			loaded.value && pending.value === null && pendingDelete.value === null && !operation.refreshRequired.value;
+		const lastLoadedId = items.value.reduce((last, item) => (item.id > last ? item.id : last), '');
 		await operation.execute(
 			async (signal) => {
 				const current = await api.scope(appId, signal);
-				const page = await api.list(current, null, AGENT_THREAD_MAX_PAGE, signal);
+				let page = await api.list(current, null, AGENT_THREAD_MAX_PAGE, signal);
+				const refreshed = [...page.items];
+				// Revalidate the loaded range without dropping later pages when the Hub reopens.
+				while (page.nextCursor !== null && page.nextCursor < lastLoadedId) {
+					page = await api.list(current, page.nextCursor, AGENT_THREAD_MAX_PAGE, signal);
+					refreshed.push(...page.items);
+				}
 				const deletedId = pendingDelete.value?.thread.id;
-				let found = deletedId === undefined || page.items.some((item) => item.id === deletedId);
+				let found = deletedId === undefined || refreshed.some((item) => item.id === deletedId);
 				let after = page.nextCursor;
 				// Absence from one page cannot confirm an unknown delete.
 				while (!found && after !== null) {
@@ -84,7 +94,11 @@ export function useNativeThreads(
 					found = next.items.some((item) => item.id === deletedId);
 					after = next.nextCursor;
 				}
-				return { scope: current, page, deletedThreadExists: found };
+				return {
+					scope: current,
+					page: { items: refreshed, nextCursor: page.nextCursor },
+					deletedThreadExists: found,
+				};
 			},
 			(result) => {
 				scope.value = result.scope;
@@ -97,6 +111,13 @@ export function useNativeThreads(
 				const updatedSelection = items.value.find((item) => item.id === selected.value?.id);
 				if (updatedSelection) {
 					acceptThread(updatedSelection);
+				} else if (selected.value && pending.value === null && pendingDelete.value === null) {
+					removed(selected.value.id);
+					selected.value = null;
+					title.value = '';
+					if (items.value.length === 0) {
+						select(null);
+					}
 				}
 				nextCursor.value = result.page.nextCursor;
 				loaded.value = true;
@@ -119,6 +140,7 @@ export function useNativeThreads(
 					if (!result.deletedThreadExists) {
 						const deletedId = pendingDelete.value.thread.id;
 						pendingDelete.value = null;
+						removed(deletedId);
 						if (selected.value?.id === deletedId) {
 							const replacement = items.value[0] ?? null;
 							selected.value = replacement;
@@ -131,13 +153,10 @@ export function useNativeThreads(
 			},
 			{
 				write: false,
+				background,
 
 				onFailure: (cause) => {
 					handleAuthorityFailure(cause);
-					scope.value = null;
-					items.value = [];
-					nextCursor.value = null;
-					loaded.value = false;
 					inspected.value = false;
 					deleteInspected.value = false;
 					operation.refreshRequired.value = true;
@@ -155,14 +174,20 @@ export function useNativeThreads(
 		await operation.execute(
 			(signal) => api.list(current, after, AGENT_THREAD_MAX_PAGE, signal),
 			(page) => {
-				if (page.items.some((item) => items.value.some((existing) => existing.id === item.id))) {
-					throw new AgentManagementFailure('protocol_failure', 'unknown');
+				// Confirmed local creations can already belong to a not-yet-loaded page.
+				const merged = new Map(items.value.map((item) => [item.id, item]));
+				for (const item of page.items) {
+					const previous = merged.get(item.id);
+					if (!previous || item.version > previous.version) {
+						merged.set(item.id, item);
+					}
 				}
-				items.value = [...items.value, ...page.items];
+				items.value = [...merged.values()];
 				nextCursor.value = page.nextCursor;
 			},
 			{
 				write: false,
+				background: true,
 
 				onFailure: (cause) => {
 					handleAuthorityFailure(cause);
@@ -187,6 +212,9 @@ export function useNativeThreads(
 
 	function choose(value: NativeThread): void {
 		if (pending.value !== null || pendingDelete.value !== null || operation.busy.value) {
+			return;
+		}
+		if (selected.value?.id === value.id) {
 			return;
 		}
 		selected.value = value;
@@ -229,6 +257,7 @@ export function useNativeThreads(
 				pendingDelete.value = null;
 				deleteInspected.value = true;
 				items.value = items.value.filter((item) => item.id !== result.threadId);
+				removed(result.threadId);
 				if (wasSelected) {
 					selected.value = replacement;
 					title.value = replacement?.title ?? '';
@@ -237,7 +266,6 @@ export function useNativeThreads(
 			},
 			{
 				write: true,
-				refreshAfterSuccess: true,
 
 				onFailure: (cause) => {
 					handleAuthorityFailure(cause);
@@ -250,9 +278,6 @@ export function useNativeThreads(
 				},
 			},
 		);
-		if (!pendingDelete.value && operation.notice.value === 'saved') {
-			await refresh();
-		}
 	}
 
 	async function remove(value: NativeThread): Promise<void> {
@@ -330,13 +355,21 @@ export function useNativeThreads(
 			(signal) => api.mutate(intent, signal),
 			(value) => {
 				pending.value = null;
-				selected.value = value;
-				title.value = value.title;
-				select(value);
+				const previous = items.value.find((item) => item.id === value.id);
+				const observed = observedThread.value?.id === value.id ? observedThread.value : null;
+				const confirmed = previous && previous.version > value.version ? previous : value;
+				const latest = observed && observed.version > confirmed.version ? observed : confirmed;
+				if (!previous) {
+					items.value = [latest, ...items.value];
+				} else {
+					items.value = items.value.map((item) => (item.id === value.id ? latest : item));
+				}
+				selected.value = latest;
+				title.value = latest.title;
+				select(latest);
 			},
 			{
 				write: true,
-				refreshAfterSuccess: true,
 
 				onFailure: (cause) => {
 					handleAuthorityFailure(cause);

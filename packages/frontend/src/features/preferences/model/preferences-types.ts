@@ -6,6 +6,7 @@ import type {
 	CommandInputSyncTarget,
 } from '@nexus-terminal/shared/preferences/presentation/values';
 import {
+	DEFAULT_IMAGE_PREVIEW_MAX_MIB,
 	FRONTEND_LOG_LEVELS,
 	PRESENTATION_PREFERENCE_BOUNDS,
 } from '@nexus-terminal/shared/preferences/presentation/values';
@@ -42,6 +43,7 @@ export interface UserPreferences {
 	fileManagerColWidths: Record<string, number>;
 	spreadsheetPreviewRowsPerPage: number;
 	spreadsheetPreviewMaxColumns: number;
+	imagePreviewMaxMiB: number;
 	rdpModalWidth: number;
 	rdpModalHeight: number;
 	vncModalWidth: number;
@@ -134,6 +136,7 @@ export const defaultPreferences: UserPreferences = {
 	fileManagerColWidths: { name: 200, permissions: 76, modified: 92 },
 	spreadsheetPreviewRowsPerPage: 500,
 	spreadsheetPreviewMaxColumns: 100,
+	imagePreviewMaxMiB: DEFAULT_IMAGE_PREVIEW_MAX_MIB,
 	rdpModalWidth: 1064,
 	rdpModalHeight: 858,
 	vncModalWidth: 1024,

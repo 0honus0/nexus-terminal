@@ -31,6 +31,8 @@ export function subscribeNativeRun(
 	let retry: ReturnType<typeof setTimeout> | undefined;
 	let deadline: ReturnType<typeof setTimeout> | undefined;
 	let delay = 1000;
+	const browserConnection =
+		'connection' in navigator && navigator.connection instanceof EventTarget ? navigator.connection : undefined;
 
 	let resume = () => {};
 
@@ -60,15 +62,14 @@ export function subscribeNativeRun(
 		stopSocket();
 		if (disposed || document.hidden) return;
 		reportNetworkFailure(networkSource);
-		if (navigator.onLine) {
-			retry = setTimeout(connect, delay + Math.floor(Math.random() * 250));
-			delay = Math.min(delay * 2, 30_000);
-		}
+		retry = setTimeout(connect, delay + Math.floor(Math.random() * 250));
+		delay = Math.min(delay * 2, 30_000);
 	}
 
 	function connect(): void {
 		stopSocket();
-		if (disposed || document.hidden || !navigator.onLine) return;
+		// Connectivity hints may remain offline even while this origin is reachable.
+		if (disposed || document.hidden) return;
 		let current: WebSocket;
 		try {
 			current = openWebSocket('/ws/agent-runs?' + query.toString());
@@ -183,9 +184,12 @@ export function subscribeNativeRun(
 					resume();
 				}
 				if (socket !== current || disposed) return;
-				armDeadline();
-				delay = 1000;
-				clearPendingNetworkFailure(networkSource);
+				// A heartbeat cannot substitute for the first accepted task snapshot.
+				if (revision > 0) {
+					armDeadline();
+					delay = 1000;
+					clearPendingNetworkFailure(networkSource);
+				}
 			} catch {
 				reject('protocol_failure');
 			}
@@ -200,12 +204,14 @@ export function subscribeNativeRun(
 		};
 	}
 
-	function onOnline(): void {
+	function onNetworkChange(): void {
 		delay = 1000;
 		connect();
 	}
 
-	window.addEventListener('online', onOnline);
+	window.addEventListener('online', onNetworkChange);
+	window.addEventListener('offline', onNetworkChange);
+	browserConnection?.addEventListener('change', onNetworkChange);
 	connect();
 	return {
 		resume: () => resume(),
@@ -214,7 +220,9 @@ export function subscribeNativeRun(
 			disposed = true;
 			stopSocket();
 			clearPendingNetworkFailure(networkSource);
-			window.removeEventListener('online', onOnline);
+			window.removeEventListener('online', onNetworkChange);
+			window.removeEventListener('offline', onNetworkChange);
+			browserConnection?.removeEventListener('change', onNetworkChange);
 		},
 	};
 }

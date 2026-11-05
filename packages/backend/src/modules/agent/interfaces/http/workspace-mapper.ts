@@ -37,6 +37,21 @@ export function fromWorkspace(value: AgentWorkspaceInput): WorkspaceInput {
 				},
 			};
 		}
+		case 'agent.threads.history':
+			return {
+				method: value.method,
+				threadId: value.params.threadId,
+				limit: value.params.limit,
+				before:
+					value.params.before === null
+						? null
+						: {
+								runSequence: value.params.before.runSequence,
+								stepIndex: value.params.before.stepIndex,
+								eventSequence: value.params.before.eventSequence,
+								textOffset: value.params.before.textOffset,
+							},
+			};
 		case 'agent.threads.entries':
 			return {
 				method: value.method,
@@ -155,6 +170,20 @@ export function fromWorkspace(value: AgentWorkspaceInput): WorkspaceInput {
 
 export function toWorkspace(value: WorkspaceResult): AgentWorkspaceResult {
 	switch (value.method) {
+		case 'agent.threads.history':
+			return {
+				method: value.method,
+				value: {
+					body: toThreadEntries(value.value.body),
+					hasEarlier: value.value.hasEarlier,
+					startCursor: {
+						runSequence: value.value.startCursor.runSequence,
+						stepIndex: value.value.startCursor.stepIndex,
+						eventSequence: value.value.startCursor.eventSequence,
+						textOffset: value.value.startCursor.textOffset,
+					},
+				},
+			};
 		case 'agent.threads.entries':
 			return { method: value.method, value: toThreadEntries(value.value) };
 		case 'agent.runs.create':
