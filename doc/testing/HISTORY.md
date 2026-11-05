@@ -956,3 +956,17 @@ WorkspaceTabBar仅将原挂起菜单项移到重置之前，原条件、事件�
 修正提交 `ed9003d0f8df48d8e6a03611945dace8504b4514` 的完整 [E2E 42010824912](https://github.com/0honus0/nexus-terminal/actions/runs/42010824912) success。逐项解析正式 Reporter：593 条唯一 passed 记录，首次全部通过，无失败、重试、flaky 或场景跳过；11 个 regular/isolated 执行组均 passed。Backend 132 项，Browser 1–7 分别 42/44/60/75/79/90/71 项；质量、双端生产构建、Docker smoke、8 个分片及耗时更新作业全部 success，文档截图按条件跳过。新增后端 16 个子场景包含原字节、短读/超读/修改时间变化、逐块撤权、消费失败/提前退出、原读取/资源清理失败、采样中断与权限存储故障；浏览器文件交付和 GIF 正式场景均通过。原始证据在任务目录 `remote-e2e-42010824912.json`、`remote-e2e-42010824912.log` 和 `remote-verification-42010824912.json`。
 
 CI 后继提交 `62fb68f839f6facb5c25283a2edc0b459c9d8018` 仅修改 `scripts/e2e/duration-estimates.json`，已核对产品与测试完全一致。以该 main 提交启动 [amd64 dev 发布 42011867002](https://github.com/0honus0/nexus-terminal/actions/runs/42011867002)，生产依赖审计、构建与推送全部 success。直接读取 GHCR 核对：`dev` 与 `sha-62fb68f839f6` 同为 `sha256:178381da7fa0230721296668eac5ef57f4152a3a244f7aa9728b93b66f409db7`；实际镜像为 linux/amd64，OCI revision 为 `62fb68f839f6facb5c25283a2edc0b459c9d8018`，version 为 `sha-62fb68f839f6`。发布状态/原日志为任务目录 `publish-42011867002.json`、`publish-42011867002.log`，镜像原始查询与核对摘要为 `image-dev-inspect.txt`、`image-sha-inspect.txt`、`image-config.json`、`publication-verification.json`。本次没有数据库格式变化，无需新增迁移；不部署远程实例，官方插件也无需重新发布。测试目录与首次失败证据保留至用户通知清理。
+
+## E2E 耗时产物下载与重跑（2026-11-05）
+
+原 `8e4765a6` 的 [42031844232](https://github.com/0honus0/nexus-terminal/actions/runs/42031844232) 中594项测试、质量和 Docker smoke 均成功，仅耗时下载失败：官方下载 Action 的内部 ListArtifacts 请求遇到 ECONNRESET。修正为 token/REST 下载、保留 SHA256 校验，并独立解析分片产物 ID，不忽略最终下载失败或缺失产物。
+
+首版 `e6786d85` 的 [42034179288](https://github.com/0honus0/nexus-terminal/actions/runs/42034179288/attempts/1) 完整594项、构建、质量、Docker smoke 和汇总均成功；随后仅重跑汇总的 attempt2 失败，暴露 GitHub 会复制已成功 job 并更改 ID/run_attempt，但沿用原 started_at/completed_at。直接拿复制 job 的 attempt 拼产物名仍会错误寻找并未生成的 attempt2 产物。本轮未将该失败重跑记为成功。
+
+最终 `90bf154544ad086e06571f3f9e000d263934ddff` 让构建等待和耗时汇总复用同一 job-artifacts owner，按当前运行、源 job 实际执行时间、产物创建时间及名称前缀选取不可变 ID；拒绝其它执行周期、重复、过期或缺失产物。构建下载也改用官方 REST 路径。7项逻辑回归覆盖混合真实执行周期、复制成功 job、仅重跑汇总、构建复用、全量重跑拒绝旧构建、缺失/过期/重复和 API 失败；已接入质量作业。使用失败 attempt2 的真实 API 元数据，另确认能选齐8份耗时及原构建。Node26.13.0/pnpm12.16.1 下根 check、全量格式、Node 逻辑回归与 diff 检查通过。
+
+最终 [42035960955 attempt1](https://github.com/0honus0/nexus-terminal/actions/runs/42035960955/attempts/1) 完整通过。逐项核对正式 Reporter：594条唯一 passed，零失败、重试、flaky或场景跳过；Backend132，Browser1–7为42/73/67/63/70/73/74项。质量及其7项逻辑回归、双端生产构建、Docker smoke、8个分片和耗时更新全部success，文档截图按条件跳过。包含此前 `90df431d` 的GIF稳定分组、嵌套 Markdown 图片与下载说明保留，以及 `8e4765a6` 取消按钮移动后的既有操作回归；未将这些场景称为专项视觉验收。
+
+再单独重跑汇总的 [attempt2](https://github.com/0honus0/nexus-terminal/actions/runs/42035960955/attempts/2) 成功；日志确认下载全部8份名称仍为 attempt1 的耗时产物，当前分支已前进时正确跳过旧估算推送。后继 `0c0355a8` 仅为CI耗时更新，已快进同步；没有发布镜像、部署实例、改数据库或更新插件。专项视觉与真实设备边界继续保留在 PLAN。
+
+原始失败、首版完整运行与失败重跑、最终两次成功的日志及元数据集中 `/home/honus/nexus-task-artifacts/e2e-timings-20261105`；逐项摘要为 `final-report-summary.json`，最终原日志为 `final-run-attempt1.log`、`final-updater-attempt2.log`，状态为 `final-run-attempt1.json`、`final-run-attempt2.json`。首次测试方法空行格式错误修正后全量格式通过，修正复制 job 后再次检查通过；证据与测试目录保留至用户通知。
