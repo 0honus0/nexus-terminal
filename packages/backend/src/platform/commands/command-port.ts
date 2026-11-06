@@ -22,7 +22,7 @@ export interface NativeCommandBatchResult {
 }
 
 export interface NativeCommandBatchOptions extends MachineExecuteOptions {
-	onOutput?(index: number, stream: 'stdout' | 'stderr', text: string): void;
+	onOutput?(index: number, stream: 'stdout' | 'stderr', text: string, signal: AbortSignal): Promise<void>;
 }
 
 export interface CommandPort {
@@ -45,4 +45,11 @@ export interface CommandPort {
 		cwd: string | null,
 		options: MachineExecuteOptions,
 	): Promise<MachineCommandResult>;
+}
+
+export class NativeCommandCleanupFailure extends Error {
+	constructor(options: ErrorOptions) {
+		super('Command channel cleanup failed', options);
+		this.name = 'NativeCommandCleanupFailure';
+	}
 }

@@ -4,6 +4,12 @@ import { promisify } from 'node:util';
 import { expect, test } from '../../support/fixtures';
 
 for (const [name, file, pattern] of [
+	['authority monitoring and unknown Job fences', 'storage/backend-next-authority-monitor.integration.mjs', ''],
+	[
+		'complete logs, disk-space recovery and cancellation',
+		'storage/backend-next-tool-output.integration.mjs',
+		'Tool output:',
+	],
 	[
 		'lazy tool discovery, both protocols and live authorization',
 		'http/backend-next-agent-tool-loading.integration.mjs',

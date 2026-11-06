@@ -93,6 +93,7 @@ export interface MachineShell extends MachineByteChannel {
 }
 
 export interface MachineCommand extends MachineByteChannel {
+	readonly stderrReadable: Readable;
 	readonly outcome: Promise<MachineCommandOutcome>;
 	cancel(): void;
 }

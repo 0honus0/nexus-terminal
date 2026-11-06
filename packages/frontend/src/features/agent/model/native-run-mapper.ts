@@ -304,6 +304,7 @@ export function fromNativeRunUpdate(value: AgentRunStreamUpdate): NativeRunUpdat
 							browserSessions: resource.browserSessions,
 							activeOperations: resource.activeOperations,
 							backgroundJobs: resource.backgroundJobs,
+							waitingOutputJobs: resource.waitingOutputJobs,
 							targetIds: resource.targetIds.map((id) => id),
 							expiresAt: resource.expiresAt,
 						})),

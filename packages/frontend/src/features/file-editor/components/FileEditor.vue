@@ -1,6 +1,6 @@
 <script setup lang="ts">
 	import { filesystemFailureMessage } from '@/features/filesystem/public';
-	import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue';
+	import { computed, defineAsyncComponent, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import {
 		UiBadge,
@@ -13,7 +13,7 @@
 		UiSpinner,
 	} from '@/foundation/ui';
 	import { useDeviceCapabilities } from '@/foundation/browser';
-	import { focusRegistry } from '@/shared/focus/public';
+	import { focusRegistry, ownsDocumentKeyboardEvent } from '@/shared/focus/public';
 	import { useFeedback } from '@/shared/feedback/public';
 
 	const loadMonacoEditor = () => import('./MonacoEditor.vue');
@@ -22,7 +22,9 @@
 
 	const MonacoEditor = defineAsyncComponent(loadMonacoEditor);
 	const CodeMirrorMobileEditor = defineAsyncComponent(loadCodeMirrorMobileEditor);
-	import { createFileEditorSession, type FileEditorSessionController } from '../composables/useFileEditorSession';
+	import { createFileEditorSession } from '../composables/useFileEditorSession';
+	import { useFileEditorActions } from '../composables/use-file-editor-actions';
+	import type { FileEditorSessionController } from '../model/file-editor-session-types';
 	import type { FileDocumentPort } from '../ports/file-document-port';
 	import type { EditorLineEnding } from '../model/editor';
 
@@ -63,6 +65,7 @@
 
 	const props = withDefaults(
 		defineProps<{
+			active?: boolean;
 			port: FileDocumentPort;
 			scopeId?: string;
 			scopeLabel?: string;
@@ -90,6 +93,7 @@
 		},
 	});
 	const root = ref<HTMLElement | null>(null);
+	const lifecycleActive = ref(true);
 	type SearchableEditor = { focus?: () => void; openSearch?: () => void };
 	const mobileEditor = ref<SearchableEditor | null>(null);
 	const desktopEditor = ref<SearchableEditor | null>(null);
@@ -160,42 +164,13 @@
 		else desktopEditor.value?.openSearch?.();
 	};
 
-	const confirmDiscardIfDirty = async (): Promise<boolean> => {
-		if (!editorSession.active.value?.dirty) return true;
-		return feedback.confirm({ message: t('fileEditor.confirmDiscardChanges') });
-	};
+	const { reload, changeEncoding, close, closeOthers, closeToRight, closeToLeft, closeAll } = useFileEditorActions({
+		session: resolveSession,
 
-	const reload = async (): Promise<void> => {
-		const active = editorSession.active.value;
-		if (!active || active.saveState === 'saving' || !(await confirmDiscardIfDirty())) return;
-		const current = editorSession.active.value;
-		if (!current || current.id !== active.id || current.saveState === 'saving') return;
-		try {
-			await editorSession.reload(active.id);
-		} catch {
-			return;
-		}
-	};
+		active: () => props.active !== false,
 
-	editorSession.setCloseConfirmation(() => feedback.confirm({ message: t('fileEditor.confirmDiscardChanges') }));
-
-	const changeEncoding = async (value: unknown): Promise<void> => {
-		const active = editorSession.active.value;
-		const encoding = typeof value === 'string' ? value : '';
-		if (!active || !encoding || encoding === active.encoding || active.saveState === 'saving') {
-			return;
-		}
-		if (!(await confirmDiscardIfDirty())) {
-			return;
-		}
-		const current = editorSession.active.value;
-		if (!current || current.id !== active.id || current.saveState === 'saving') {
-			return;
-		}
-		try {
-			await editorSession.changeEncoding(active.id, encoding);
-		} catch {}
-	};
+		confirmDiscard: (signal) => feedback.confirm({ message: t('fileEditor.confirmDiscardChanges'), signal }),
+	});
 
 	const changeLineEnding = (value: unknown): void => {
 		const active = editorSession.active.value;
@@ -223,14 +198,21 @@
 		const id = context.value?.id;
 		context.value = null;
 		if (!id) return;
-		if (action === 'close') editorSession.close(id);
-		else if (action === 'others') editorSession.closeOthers(id);
-		else if (action === 'right') editorSession.closeToRight(id);
-		else editorSession.closeToLeft(id);
+		if (action === 'close') close(id);
+		else if (action === 'others') closeOthers(id);
+		else if (action === 'right') closeToRight(id);
+		else closeToLeft(id);
 	};
 
 	const handleEditorKeydown = (event: KeyboardEvent) => {
-		if (!root.value?.getClientRects().length) return;
+		if (
+			event.defaultPrevented ||
+			props.active === false ||
+			!lifecycleActive.value ||
+			!root.value?.getClientRects().length ||
+			!ownsDocumentKeyboardEvent(root.value, event)
+		)
+			return;
 		if (!event.altKey) return;
 		if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
 		if (editorSession.tabs.value.length <= 1) return;
@@ -248,9 +230,21 @@
 				else desktopEditor.value?.focus?.();
 				return true;
 			},
-			() => Boolean(root.value?.getClientRects().length && editorSession.active.value),
+			() =>
+				Boolean(
+					props.active !== false &&
+					lifecycleActive.value &&
+					root.value?.getClientRects().length &&
+					editorSession.active.value,
+				),
 		);
 		window.addEventListener('keydown', handleEditorKeydown, true);
+	});
+	onActivated(() => {
+		lifecycleActive.value = true;
+	});
+	onDeactivated(() => {
+		lifecycleActive.value = false;
 	});
 	onBeforeUnmount(() => {
 		unregisterFocus?.();
@@ -259,14 +253,19 @@
 	defineExpose({
 		open,
 		save,
-
-		close: (id: string) => editorSession.close(id),
+		close,
+		closeAll,
 
 		focus: () => (device.isMobile.value ? mobileEditor.value?.focus?.() : desktopEditor.value?.focus?.()),
 	});
 </script>
 <template>
-	<section ref="root" class="file-editor-container" :class="{ 'has-close-button': showCloseButton }">
+	<section
+		ref="root"
+		data-document-keyboard-scope
+		class="file-editor-container"
+		:class="{ 'has-close-button': showCloseButton }"
+	>
 		<div class="file-editor-header ui-glass-chrome">
 			<div class="file-editor-tabs" role="tablist">
 				<div
@@ -292,7 +291,7 @@
 						:title="t('fileManager.actions.closeTab')"
 						:aria-label="t('fileManager.actions.closeTab')"
 						:disabled="tab.saveState === 'saving'"
-						@click.stop="editorSession.close(tab.id)"
+						@click.stop="close(tab.id)"
 					>
 						<i class="fas fa-xmark" aria-hidden="true"></i>
 					</button>
@@ -848,7 +847,6 @@
 	}
 
 	.editor-loading :deep(.ui-spinner) {
-		--ui-spinner-size: 13px;
 		--ui-tone-accent: color-mix(in srgb, var(--editor-accent) 80%, var(--editor-text));
 	}
 

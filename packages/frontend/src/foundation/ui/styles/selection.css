@@ -1,0 +1,370 @@
+.ui-popover {
+	display: inline-flex;
+	min-width: 0;
+}
+
+.ui-popover__panel {
+	z-index: 80;
+	min-width: min(220px, var(--reka-popover-content-available-width, calc(100vw - 24px)));
+	max-width: var(--reka-popover-content-available-width, calc(100vw - 24px));
+	max-height: var(--reka-popover-content-available-height, calc(100dvh - 24px));
+	overflow: auto;
+	padding: 10px;
+	color: var(--ui-text);
+	outline: none;
+	overscroll-behavior: contain;
+}
+
+.ui-popover__panel--solid {
+	border-color: var(--border-color);
+	background-color: var(--app-bg-color);
+	background-image: none;
+	box-shadow: 0 18px 44px -26px rgb(0 0 0 / 42%);
+	-webkit-backdrop-filter: none;
+	backdrop-filter: none;
+}
+
+.ui-popover__panel:focus-visible {
+	box-shadow: var(--ui-focus-ring), var(--ui-shadow-raised);
+}
+
+.ui-select {
+	position: relative;
+	display: block;
+	width: 100%;
+	min-width: 0;
+}
+
+.ui-select__trigger {
+	display: flex;
+	width: 100%;
+	min-width: 0;
+	height: var(--ui-control-height);
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--ui-control-gap);
+	padding-inline: var(--ui-control-padding-inline);
+	border: 1px solid var(--glass-border-color);
+	background-color: var(--glass-fill);
+	background-image: var(--glass-sheen-image);
+	color: var(--ui-text);
+	box-shadow: var(--glass-shadow);
+	font-size: var(--ui-control-font-size);
+	text-align: start;
+	cursor: pointer;
+	-webkit-backdrop-filter: var(--ui-glass-filter);
+	backdrop-filter: var(--ui-glass-filter);
+}
+
+.ui-select--fit-longest {
+	display: grid;
+	width: max-content;
+	max-width: 100%;
+}
+
+.ui-select--fit-longest .ui-select__trigger,
+.ui-select__width-guide {
+	grid-area: 1 / 1;
+}
+
+.ui-select__width-guide {
+	display: grid;
+	visibility: hidden;
+	pointer-events: none;
+	height: 0;
+	overflow: hidden;
+	padding-inline: var(--ui-control-padding-inline);
+	padding-right: calc(var(--ui-control-padding-inline) + var(--ui-control-gap) + 12px);
+	border-inline: 1px solid transparent;
+	font-size: var(--ui-control-font-size);
+	white-space: nowrap;
+}
+
+.ui-select__width-guide > span {
+	grid-area: 1 / 1;
+}
+
+.ui-select__trigger:not(:disabled):hover {
+	border-color: var(--ui-hairline-strong);
+	background-color: color-mix(in srgb, var(--card-bg-color) 54%, transparent);
+}
+
+/*
+ * The open trigger borrows the canonical Gen 2 glass tokens so the control and
+ * its panel read as one surface. Only geometry and the focus ring stay local.
+ */
+.ui-select[data-state='open'] .ui-select__trigger,
+.ui-select__trigger[data-state='open'] {
+	border-bottom-left-radius: 0;
+	border-bottom-right-radius: 0;
+	border-color: var(--glass-border-color);
+	border-bottom-color: var(--glass-border-color);
+	background-color: var(--glass-fill);
+	-webkit-backdrop-filter: var(--glass-backdrop-filter);
+	backdrop-filter: var(--glass-backdrop-filter);
+	box-shadow: var(--glass-inset-highlight);
+	position: relative;
+	z-index: 86;
+}
+
+/* When the list flips above the trigger, the touching trigger edge must be square too. */
+.ui-select[data-state='open'][data-panel-side='top'] .ui-select__trigger {
+	border-top-left-radius: 0;
+	border-top-right-radius: 0;
+	border-bottom-left-radius: var(--ui-control-radius);
+	border-bottom-right-radius: var(--ui-control-radius);
+}
+
+.ui-select__trigger:focus-visible {
+	outline: none;
+	border-color: var(--ui-hairline-strong);
+	box-shadow: none;
+}
+
+.ui-select__trigger--invalid {
+	border-color: color-mix(in srgb, var(--status-error-color) 70%, var(--border-color));
+	--ui-focus-color: var(--status-error-color);
+	--ui-focus-ring: 0 0 0 3px color-mix(in srgb, var(--status-error-color) 17%, transparent);
+}
+
+.ui-select__trigger--disabled {
+	cursor: not-allowed;
+	border-color: var(--ui-disabled-border);
+	background: var(--ui-disabled-fill);
+	color: var(--ui-disabled-text);
+	box-shadow: none;
+}
+
+.ui-select__value {
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.ui-select--fit-content {
+	width: auto;
+	max-width: 100%;
+}
+.ui-select--fit-content .ui-select__trigger {
+	width: auto;
+	max-width: 100%;
+	min-width: 0;
+}
+.ui-select--fit-content .ui-select__value {
+	flex: 0 1 auto;
+	max-width: min(340px, calc(100vw - 160px));
+}
+
+.ui-select__icon {
+	display: inline-flex;
+	width: 12px;
+	height: 12px;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	color: var(--ui-text-muted);
+	transition: transform var(--ui-motion-duration) var(--ui-motion-ease);
+}
+
+.ui-select__icon > svg {
+	width: 100%;
+	height: 100%;
+}
+
+.ui-select__trigger[data-state='open'] .ui-select__icon {
+	transform: rotate(180deg);
+}
+
+.ui-select__panel {
+	z-index: 85;
+	width: var(--reka-select-trigger-width, max-content);
+	min-width: var(--reka-select-trigger-width, 0px);
+	max-width: min(var(--reka-select-content-available-width, calc(100vw - 24px)), calc(100vw - 24px));
+	overflow: hidden;
+	padding: 4px;
+	border-top-width: 0;
+	border-top-left-radius: 0;
+	border-top-right-radius: 0;
+	border-bottom-left-radius: var(--ui-control-radius);
+	border-bottom-right-radius: var(--ui-control-radius);
+	color: var(--ui-text);
+	outline: none;
+	overscroll-behavior: contain;
+}
+
+.ui-select__panel[data-state='open'] {
+	animation: ui-gen2-panel-in var(--ui-motion-duration) var(--ui-motion-ease);
+}
+
+.ui-select__panel[data-side='top'] {
+	border-top-width: 1px;
+	border-bottom-width: 0;
+	border-top-left-radius: var(--ui-control-radius);
+	border-top-right-radius: var(--ui-control-radius);
+	border-bottom-left-radius: 0;
+	border-bottom-right-radius: 0;
+}
+
+.ui-select__panel[data-match-trigger-width] {
+	width: var(--reka-select-trigger-width, 100%);
+	min-width: 0;
+	max-width: var(--reka-select-trigger-width, 100%);
+}
+
+.ui-select[data-text-align='center'] .ui-select__value,
+.ui-select__trigger[data-text-align='center'] .ui-select__value {
+	text-align: center;
+}
+
+/* Balance the trailing chevron so the selected value is centred on the control, not the value slot. */
+.ui-select__trigger[data-text-align='center']::before {
+	content: '';
+	width: 12px;
+	height: 12px;
+	flex: 0 0 12px;
+}
+
+.ui-select__panel[data-text-align='center'] .ui-select__item {
+	text-align: center;
+	justify-items: center;
+}
+
+.ui-select__panel[data-text-align='center'] .ui-select__item-body {
+	width: 100%;
+	align-items: center;
+	text-align: center;
+}
+
+.ui-select__panel[data-text-align='center'] .ui-select__item-label {
+	width: 100%;
+	text-align: center;
+}
+
+.ui-select__viewport {
+	/* The panel adds 8px padding and one 1px border on either placement side. */
+	max-height: min(
+		320px,
+		calc(100dvh - 64px),
+		max(0px, calc(var(--reka-select-content-available-height, 100dvh) - 9px))
+	);
+	overflow-y: auto;
+}
+
+.ui-select__item {
+	display: grid;
+	grid-template-columns: 14px minmax(0, 1fr);
+	align-items: center;
+	gap: 8px;
+	min-height: 32px;
+	padding: 5px 8px;
+	border-radius: calc(var(--ui-control-radius) - 2px);
+	border: none;
+	color: var(--ui-text);
+	font-size: var(--ui-control-font-size);
+	line-height: 1.3;
+	outline: none;
+	box-shadow: none;
+	cursor: pointer;
+	user-select: none;
+	transition:
+		background-color var(--ui-motion-duration) var(--ui-motion-ease),
+		color var(--ui-motion-duration) var(--ui-motion-ease);
+}
+
+.ui-select__item:focus,
+.ui-select__item:focus-visible,
+.ui-select__item.ui-focusable:focus-visible {
+	outline: none;
+	box-shadow: none;
+	border: none;
+}
+
+.ui-select__panel[data-density='compact'] .ui-select__item {
+	min-height: 28px;
+	padding-block: 3px;
+}
+
+.ui-select__panel[data-density='comfortable'] .ui-select__item {
+	min-height: 36px;
+	padding-block: 5px;
+}
+
+.ui-select__panel[data-hide-indicator] .ui-select__item,
+.ui-select__panel--no-indicator .ui-select__item {
+	grid-template-columns: minmax(0, 1fr);
+	padding-inline: 10px 12px;
+}
+
+.ui-select__item[data-highlighted] {
+	background: color-mix(in srgb, var(--link-active-color) 30%, var(--card-bg-color));
+	color: var(--ui-text);
+}
+
+.ui-select__item[data-state='checked'] {
+	background: color-mix(in srgb, var(--link-active-color) 72%, black);
+	color: white;
+	font-weight: 600;
+	border: none;
+	box-shadow: none;
+	outline: none;
+}
+
+.ui-select__item[data-state='checked'][data-highlighted] {
+	background: color-mix(in srgb, var(--link-active-color) 80%, black);
+	color: white;
+}
+
+.ui-select__item[data-disabled] {
+	color: var(--ui-disabled-text);
+	cursor: not-allowed;
+}
+
+.ui-select__item-indicator {
+	display: inline-flex;
+	width: 14px;
+	height: 14px;
+	align-items: center;
+	justify-content: center;
+	color: var(--ui-tone-accent);
+}
+
+.ui-select__item-indicator > * {
+	display: inline-flex;
+	width: 12px;
+	height: 12px;
+}
+
+.ui-select__item-body {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 1px;
+}
+
+.ui-select__item-label {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.ui-select__panel[data-fit-longest-option] .ui-select__item-label {
+	white-space: normal;
+	overflow: visible;
+	text-overflow: clip;
+	overflow-wrap: anywhere;
+}
+
+.ui-select__panel[data-fit-longest-option] .ui-select__item {
+	height: auto;
+}
+
+.ui-select__item-description {
+	overflow: hidden;
+	color: var(--ui-text-muted);
+	font-size: 11px;
+	line-height: 1.35;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}

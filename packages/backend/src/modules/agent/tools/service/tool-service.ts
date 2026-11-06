@@ -1305,6 +1305,10 @@ export class ToolService {
 		};
 	}
 
+	waitingOutputCount(scope: ToolJobScope): number {
+		return this.jobs.waitingOutputCount(scope);
+	}
+
 	backgroundCount(scope: ToolJobScope): number {
 		return this.jobs.backgroundCount(scope);
 	}

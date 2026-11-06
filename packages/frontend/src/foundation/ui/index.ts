@@ -36,8 +36,6 @@ export { default as UiInfoHint } from './UiInfoHint.vue';
 
 export { default as UiInlineNotice } from './UiInlineNotice.vue';
 
-export { default as UiTooltip } from './UiTooltip.vue';
-
 export { default as UiInput } from './UiInput.vue';
 
 export { default as UiListToolbar } from './UiListToolbar.vue';
@@ -47,8 +45,6 @@ export { default as UiLoadingState } from './UiLoadingState.vue';
 export { default as UiInlineLoading } from './UiInlineLoading.vue';
 
 export { default as UiModal } from './UiModal.vue';
-
-export { default as UiManagementCard } from './UiManagementCard.vue';
 
 export { default as UiNumberInput } from './UiNumberInput.vue';
 

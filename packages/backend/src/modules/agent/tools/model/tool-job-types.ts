@@ -64,8 +64,26 @@ export interface ToolJobPreparation {
 	work(
 		signal: AbortSignal,
 		timeoutMs: number,
-		onOutput: (index: number, stream: 'stdout' | 'stderr', text: string) => void,
+		onOutput: (index: number, stream: 'stdout' | 'stderr', text: string, signal: AbortSignal) => Promise<void>,
 	): Promise<Exclude<ToolJobResult, { status: 'not_started' }>>;
 	validate(signal: AbortSignal): Promise<void>;
 	onFailure(error: unknown): void;
+}
+
+export interface ToolOutputEvent {
+	commandIndex: number;
+	stream: 'stdout' | 'stderr';
+	text: string;
+}
+
+export interface ToolOutputPage {
+	output: ToolOutputEvent[];
+	nextOffset: number;
+	capturedBytes: number;
+}
+
+export interface ToolOutputWriter {
+	append(event: ToolOutputEvent, signal: AbortSignal, blocked: (waiting: boolean) => void): Promise<void>;
+	flush(signal: AbortSignal, blocked: (waiting: boolean) => void): Promise<void>;
+	close(): Promise<void>;
 }

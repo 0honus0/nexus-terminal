@@ -1,0 +1,25 @@
+.ui-catalog-toolbar--notifications {
+	grid-template-columns: minmax(180px, 1fr) 150px 150px;
+}
+
+@media (max-width: 900px) {
+	.ui-catalog-toolbar--notifications {
+		grid-template-columns: minmax(0, 1fr) 150px 150px;
+	}
+}
+
+@media (max-width: 760px) {
+	.ui-catalog-toolbar--notifications {
+		grid-template-columns: minmax(0, 1fr) 136px 136px;
+	}
+}
+
+@media (max-width: 620px) {
+	.ui-catalog-toolbar--notifications {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.ui-catalog-toolbar--notifications > :first-child {
+		grid-column: 1 / -1;
+	}
+}

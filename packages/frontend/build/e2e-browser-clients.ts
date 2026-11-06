@@ -10,7 +10,21 @@ export default defineConfig({
 	resolve: {
 		alias: { '@': fileURLToPath(new URL('../src', import.meta.url)) },
 	},
-	plugins: [vue()],
+	plugins: [
+		vue(),
+		{
+			name: 'rdpsnd-test-delivery',
+			enforce: 'pre',
+
+			resolveId(id, importer) {
+				if (
+					id === '@devolutions/iron-remote-desktop-rdp' &&
+					importer?.endsWith('/adapters/rdp-audio-output.ts')
+				)
+					return fileURLToPath(new URL('../../../tests/e2e/support/rdp-audio-extension.ts', import.meta.url));
+			},
+		},
+	],
 	build: {
 		target: 'es2025',
 		outDir: fileURLToPath(new URL('../dist/__e2e__', import.meta.url)),
@@ -19,6 +33,7 @@ export default defineConfig({
 				'browser-clients': fileURLToPath(new URL('../../../tests/e2e/support/browser-clients.ts', import.meta.url)),
 				'browser-diagnostics': fileURLToPath(new URL('./e2e-browser-diagnostics.ts', import.meta.url)),
 				'browser-terminal': fileURLToPath(new URL('./e2e-browser-terminal.ts', import.meta.url)),
+				'browser-rdp': fileURLToPath(new URL('./e2e-browser-rdp.ts', import.meta.url)),
 			},
 			formats: ['es'],
 			cssFileName: 'browser-terminal',

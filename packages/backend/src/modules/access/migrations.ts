@@ -8,3 +8,5 @@ export async function initializeAccessSchema(tx: SqlExecutor): Promise<void> {
 	await initializeSessionSchema(tx);
 	await initializeAccessFactors(tx);
 }
+
+export { initializeOidcSchema as migrateAccessOidc } from './oidc/adapters/sqlite/oidc-schema.js';

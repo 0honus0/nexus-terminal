@@ -1,14 +1,15 @@
 <script setup lang="ts">
+	import { useResizeObserver } from '@vueuse/core';
 	import { computed, defineAsyncComponent, onActivated, reactive, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { useRoute, useRouter } from 'vue-router';
 	import { loadAppearanceSettingsPanel, useAppearance } from '@/features/appearance/public';
 	import { AgentSettingsPanel } from '@/features/agent/public';
-	import { BackupSettingsPanel } from '@/features/backup/public';
-	import { MutationRecoveryPanel } from '@/features/mutation-recovery/public';
-	import { HostDiagnosticsPanel } from '@/features/system-overview/public';
+	import { loadBackupSettingsPanel } from '@/features/backup/public';
+	import { loadMutationRecoveryPanel } from '@/features/mutation-recovery/public';
+	import { loadHostDiagnosticsPanel } from '@/features/system-overview/public';
 	import { loadPreferencesSettingsPanel, loadWorkspacePreferencesPanel } from '@/features/preferences/public';
-	import { SecuritySettingsPanel } from '@/features/security/public';
+	import { loadSecuritySettingsPanel, loadIpAccessPanel } from '@/features/security/public';
 	import { useAuthSession } from '@/features/auth/public';
 	import { supportedLocales } from '@/app/i18n';
 	import { useHorizontalDragScroll } from '@/foundation/interaction';
@@ -19,29 +20,62 @@
 	const PreferencesSettingsPanel = defineAsyncComponent(loadPreferencesSettingsPanel);
 	const WorkspacePreferencesPanel = defineAsyncComponent(loadWorkspacePreferencesPanel);
 	const AppearanceSettingsPanel = defineAsyncComponent(loadAppearanceSettingsPanel);
+	const BackupSettingsPanel = defineAsyncComponent(loadBackupSettingsPanel);
+	const MutationRecoveryPanel = defineAsyncComponent(loadMutationRecoveryPanel);
+	const HostDiagnosticsPanel = defineAsyncComponent(loadHostDiagnosticsPanel);
+	const SecuritySettingsPanel = defineAsyncComponent(loadSecuritySettingsPanel);
+	const IpAccessPanel = defineAsyncComponent(loadIpAccessPanel);
 	type SettingsTab = 'workspace' | 'system' | 'security' | 'ipControl' | 'data' | 'appearance' | 'agent' | 'about';
 
-	const { t } = useI18n();
+	const { t, locale } = useI18n();
 	const route = useRoute();
 	const router = useRouter();
 	const auth = useAuthSession();
 	const appearance = useAppearance();
 	const active = ref<SettingsTab>('workspace');
 
-	const visited = reactive(new Set<SettingsTab>(['workspace']));
+	const visited = reactive(new Set<SettingsTab>());
+	const maintenanceOpen = ref(false);
+	const maintenanceVisited = ref(false);
+
+	const toggleMaintenance = (event: Event): void => {
+		if (!(event.target instanceof HTMLDetailsElement)) return;
+		maintenanceOpen.value = event.target.open;
+		if (maintenanceOpen.value) maintenanceVisited.value = true;
+	};
+
 	const mobileView = ref<'menu' | 'detail'>('detail');
 	const currentVersion = packageJson.version;
 	const contentContainer = ref<HTMLElement | null>(null);
 	const settingsTabsDrag = useHorizontalDragScroll();
+	const mobileTabs = ref<HTMLElement | null>(null);
+	const mobileTabsContent = ref<HTMLElement | null>(null);
+	const hiddenTabsAtStart = ref(false);
+	const hiddenTabsAtEnd = ref(false);
 
-	watch(
-		active,
-		(value) => {
-			visited.add(value);
-			contentContainer.value?.scrollTo({ top: 0, behavior: 'instant' });
-		},
-		{ immediate: true },
-	);
+	const syncMobileTabEdges = (): void => {
+		const list = mobileTabs.value;
+		hiddenTabsAtStart.value = Boolean(list && list.clientWidth && list.scrollLeft > 1);
+		hiddenTabsAtEnd.value = Boolean(
+			list && list.clientWidth && list.scrollWidth - list.clientWidth - list.scrollLeft > 1,
+		);
+	};
+
+	const revealActiveMobileTab = (): void => {
+		const list = mobileTabs.value;
+		const selected = list?.querySelector<HTMLElement>('[aria-selected="true"]');
+		if (list?.clientWidth && selected) {
+			const bounds = list.getBoundingClientRect();
+			const tabBounds = selected.getBoundingClientRect();
+			if (tabBounds.left < bounds.left) list.scrollLeft += tabBounds.left - bounds.left;
+			else if (tabBounds.right > bounds.right) list.scrollLeft += tabBounds.right - bounds.right;
+		}
+		syncMobileTabEdges();
+	};
+
+	useResizeObserver([mobileTabs, mobileTabsContent], revealActiveMobileTab);
+	watch([active, mobileView, locale], revealActiveMobileTab, { flush: 'post' });
+	onActivated(revealActiveMobileTab);
 
 	interface TabItem {
 		value: SettingsTab;
@@ -155,6 +189,15 @@
 	};
 
 	watch(() => route.query.tab, syncRouteTab, { immediate: true });
+	watch(
+		active,
+		(value) => {
+			visited.add(value);
+			contentContainer.value?.scrollTo({ top: 0, behavior: 'instant' });
+		},
+		{ immediate: true },
+	);
+
 	onActivated(syncRouteTab);
 
 	const currentTab = computed<TabItem>(() => {
@@ -190,7 +233,13 @@
 	};
 
 	const focusTab = (surface: TabSurface, tab: SettingsTab): void => {
-		requestAnimationFrame(() => document.getElementById(tabElementId(surface, tab))?.focus());
+		requestAnimationFrame(() => {
+			const element = document.getElementById(tabElementId(surface, tab));
+			if (surface === 'mobile') {
+				element?.focus({ preventScroll: true });
+				revealActiveMobileTab();
+			} else element?.focus();
+		});
 	};
 
 	const handleTabKeydown = (
@@ -286,7 +335,7 @@
 			>
 				<!-- 移动端：顶部紧凑导航栏 (单行高度，居中选项，右侧不设冗余标签，放不下时右侧隐藏/可滑动) -->
 				<div
-					class="settings-mobile-toolbar ui-glass-panel mt-2 flex items-center gap-2 rounded-xl p-1.5 lg:hidden shrink-0 w-full overflow-hidden"
+					class="settings-mobile-toolbar ui-glass-panel mt-2 flex items-center rounded-xl p-1.5 lg:hidden shrink-0 w-full overflow-hidden"
 				>
 					<button
 						type="button"
@@ -297,41 +346,48 @@
 						<span>{{ t('settings.mobile.allSettings') }}</span>
 					</button>
 
-					<!-- 居中设置项（无遮挡时居中，放不下时右侧隐藏/可滑动） -->
+					<!-- Edge hints sit beside the scroller so labels and pointer targets stay unobstructed. -->
 					<div
-						class="flex-1 min-w-0 flex items-center overflow-x-auto no-scrollbar py-0.5 cursor-grab select-none"
-						@pointerdown="settingsTabsDrag.pointerdown"
-						@pointermove="settingsTabsDrag.pointermove"
-						@pointerup="settingsTabsDrag.pointerup"
-						@pointercancel="settingsTabsDrag.pointercancel"
-						@lostpointercapture="settingsTabsDrag.lostpointercapture"
-						@click.capture="settingsTabsDrag.click"
-						@dragstart.prevent
-						role="tablist"
-						:aria-label="t('settings.sectionsAriaLabel')"
+						class="settings-mobile-tabs flex-1 min-w-0"
+						:class="{ 'has-hidden-start': hiddenTabsAtStart, 'has-hidden-end': hiddenTabsAtEnd }"
 					>
-						<div class="flex items-center gap-1.5 mx-auto shrink-0">
-							<button
-								v-for="item in allTabs"
-								:key="item.value"
-								type="button"
-								role="tab"
-								:id="tabElementId('mobile', item.value)"
-								:tabindex="active === item.value ? 0 : -1"
-								:aria-selected="active === item.value"
-								:aria-controls="`settings-panel-${item.value}`"
-								class="settings-mobile-tab ui-solid-item inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors duration-150 cursor-pointer"
-								:class="
-									active === item.value
-										? 'settings-mobile-tab--active text-foreground font-semibold'
-										: 'border-transparent text-text-secondary hover:text-foreground'
-								"
-								@click="selectTab(item.value)"
-								@keydown="handleTabKeydown($event, item.value, 'horizontal', 'mobile')"
-							>
-								<i :class="item.icon" class="text-[11px]" aria-hidden="true"></i>
-								<span>{{ t(item.labelKey) }}</span>
-							</button>
+						<div
+							ref="mobileTabs"
+							class="min-w-0 flex items-center overflow-x-auto no-scrollbar py-0.5 cursor-grab select-none"
+							@scroll.passive="syncMobileTabEdges"
+							@pointerdown="settingsTabsDrag.pointerdown"
+							@pointermove="settingsTabsDrag.pointermove"
+							@pointerup="settingsTabsDrag.pointerup"
+							@pointercancel="settingsTabsDrag.pointercancel"
+							@lostpointercapture="settingsTabsDrag.lostpointercapture"
+							@click.capture="settingsTabsDrag.click"
+							@dragstart.prevent
+							role="tablist"
+							:aria-label="t('settings.sectionsAriaLabel')"
+						>
+							<div ref="mobileTabsContent" class="flex items-center gap-1.5 mx-auto shrink-0">
+								<button
+									v-for="item in allTabs"
+									:key="item.value"
+									type="button"
+									role="tab"
+									:id="tabElementId('mobile', item.value)"
+									:tabindex="active === item.value ? 0 : -1"
+									:aria-selected="active === item.value"
+									:aria-controls="`settings-panel-${item.value}`"
+									class="settings-mobile-tab ui-solid-item inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors duration-150 cursor-pointer"
+									:class="
+										active === item.value
+											? 'settings-mobile-tab--active text-foreground font-semibold'
+											: 'border-transparent text-text-secondary hover:text-foreground'
+									"
+									@click="selectTab(item.value)"
+									@keydown="handleTabKeydown($event, item.value, 'horizontal', 'mobile')"
+								>
+									<i :class="item.icon" class="text-[11px]" aria-hidden="true"></i>
+									<span>{{ t(item.labelKey) }}</span>
+								</button>
+							</div>
 						</div>
 					</div>
 				</div>
@@ -478,19 +534,15 @@
 							id="settings-panel-security"
 							role="tabpanel"
 							:aria-label="tabLabel('security')"
-							section="security"
 							:two-factor-enabled="auth.user.value?.twoFactorEnabled"
 							@auth-changed="auth.refreshSession"
 						/>
-						<SecuritySettingsPanel
+						<IpAccessPanel
 							v-if="visited.has('ipControl')"
 							v-show="active === 'ipControl'"
 							id="settings-panel-ipControl"
 							role="tabpanel"
 							:aria-label="tabLabel('ipControl')"
-							section="ipControl"
-							:two-factor-enabled="auth.user.value?.twoFactorEnabled"
-							@auth-changed="auth.refreshSession"
 						/>
 						<BackupSettingsPanel
 							:active="active === 'data'"
@@ -504,6 +556,7 @@
 							v-if="visited.has('data')"
 							v-show="active === 'data'"
 							class="ui-settings-group settings-maintenance"
+							@toggle="toggleMaintenance"
 						>
 							<summary class="ui-glass-chrome flex cursor-pointer list-none items-center gap-3">
 								<span class="ui-settings-group__icon" aria-hidden="true">
@@ -519,9 +572,9 @@
 									aria-hidden="true"
 								></i>
 							</summary>
-							<div class="settings-maintenance__body">
-								<HostDiagnosticsPanel :active="active === 'data'" />
-								<MutationRecoveryPanel :active="active === 'data'" />
+							<div v-if="maintenanceVisited" class="settings-maintenance__body">
+								<HostDiagnosticsPanel :active="active === 'data' && maintenanceOpen" />
+								<MutationRecoveryPanel :active="active === 'data' && maintenanceOpen" />
 							</div>
 						</details>
 						<AppearanceSettingsPanel
@@ -633,6 +686,35 @@
 		border-radius: 12px;
 	}
 
+	.settings-mobile-tabs {
+		position: relative;
+		padding-inline: 8px;
+	}
+
+	.settings-mobile-tabs::before,
+	.settings-mobile-tabs::after {
+		position: absolute;
+		top: 50%;
+		width: 5px;
+		height: 5px;
+		border: solid var(--text-color-secondary);
+		border-width: 0 1.5px 1.5px 0;
+		opacity: 0.65;
+		pointer-events: none;
+	}
+
+	.settings-mobile-tabs.has-hidden-start::before {
+		content: '';
+		left: 1px;
+		transform: translateY(-50%) rotate(135deg);
+	}
+
+	.settings-mobile-tabs.has-hidden-end::after {
+		content: '';
+		right: 1px;
+		transform: translateY(-50%) rotate(-45deg);
+	}
+
 	/* Settings actions are used repeatedly across long forms. Give the shared buttons a larger
    * visual and pointer target here without increasing buttons in dense Workspace toolbars. */
 	.settings-page :deep([data-ui='button']:not([data-density='compact']):not([data-density='comfortable'])) {
@@ -683,10 +765,6 @@
 		border-radius: 0;
 		background: transparent;
 		box-shadow: none;
-	}
-
-	.settings-page :deep(.settings-surface > h2) {
-		display: none;
 	}
 
 	@media (max-width: 1023px) {

@@ -120,6 +120,9 @@
 					<span>{{ t('agent.resources.operations', { count: resource.activeOperations }) }}</span>
 					<span>{{ t('agent.resources.backgroundJobs', { count: resource.backgroundJobs }) }}</span>
 				</div>
+				<p v-if="resource.waitingOutputJobs > 0" class="mt-2 text-[11px] text-warning">
+					{{ t('agent.resources.waitingOutput', { count: resource.waitingOutputJobs }) }}
+				</p>
 				<p v-if="resource.expiresAt !== null" class="mt-2 text-[10px] text-text-secondary">
 					{{ t('agent.resources.expires', { time: formatTime(resource.expiresAt) }) }}
 				</p>

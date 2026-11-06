@@ -11,6 +11,7 @@ export interface NativeResourceSession {
 	browserSessions: number;
 	activeOperations: number;
 	backgroundJobs: number;
+	waitingOutputJobs: number;
 	targetIds: number[];
 	expiresAt: number | null;
 }

@@ -662,3 +662,103 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
 		});
 	}
 });
+
+test('hidden cached previews leave document shortcuts available and retain the loaded search state', async ({
+	page,
+	context,
+}) => {
+	await loginAsInitialAdmin(context.request);
+	await configureSshE2eSettings(context.request);
+	await resetTestSshFilesystem();
+	await page.setViewportSize({ width: 1440, height: 900 });
+	let binaryReads = 0;
+	page.on('websocket', (socket) => {
+		socket.on('framesent', ({ payload }) => {
+			if (typeof payload === 'string' && payload.includes('"filesystem.readBinary"')) binaryReads++;
+		});
+	});
+	const connectionId = await ensureTestSshConnection(context.request);
+	await connectTestSshFromConnectionsPage(page, connectionId);
+	await openConnectedFileManager(page);
+	const filename = 'README-e2e.md';
+	await openPreview(page, filename);
+	const popup = documentPopup(page);
+	await expect(popup.getByRole('heading', { name: 'Nexus Markdown E2E' })).toBeVisible();
+	const loadedReads = binaryReads;
+	expect(loadedReads).toBeGreaterThan(0);
+
+	await hidePreview(page, filename);
+
+	const dispatchShortcut = (key: string, ctrlKey = false) =>
+		page.evaluate(
+			({ key, ctrlKey }) => {
+				const event = new KeyboardEvent('keydown', { key, ctrlKey, bubbles: true, cancelable: true });
+				document.body.dispatchEvent(event);
+				return event.defaultPrevented;
+			},
+			{ key, ctrlKey },
+		);
+
+	expect(await dispatchShortcut('f', true)).toBe(false);
+	await openPreview(page, filename);
+	await expect(previewSearchInput(popup)).toHaveCount(0);
+	await page.keyboard.press('Control+f');
+	await expect(previewSearchInput(popup)).toBeFocused();
+	await previewSearchInput(popup).fill('Nexus Markdown E2E');
+	await expect(popup.locator('mark[data-preview-search-active]')).toHaveText('Nexus Markdown E2E');
+
+	await hidePreview(page, filename);
+	expect(await dispatchShortcut('Escape')).toBe(false);
+	expect(await dispatchShortcut('f', true)).toBe(false);
+	await openPreview(page, filename);
+	await expect(previewSearchInput(popup)).toHaveValue('Nexus Markdown E2E');
+	await expect(popup.locator('mark[data-preview-search-active]')).toHaveText('Nexus Markdown E2E');
+	expect(binaryReads).toBe(loadedReads);
+});
+
+test('narrow document search keeps touch navigation, editing and refresh reachable', async ({ page, context }) => {
+	await loginAsInitialAdmin(context.request);
+	await configureSshE2eSettings(context.request);
+	await resetTestSshFilesystem();
+	const connectionId = await ensureTestSshConnection(context.request);
+	await connectTestSshFromConnectionsPage(page, connectionId);
+	await openConnectedFileManager(page);
+	await openPreview(page, 'README-e2e.md');
+	const popup = documentPopup(page);
+	await popup.getByRole('button', { name: 'Search in document', exact: true }).click();
+	const input = previewSearchInput(popup);
+	await input.fill('Nexus');
+	for (const width of [320, 390]) {
+		await page.setViewportSize({ width, height: 844 });
+		await expect(input).toBeVisible();
+		const geometry = await popup.locator('.file-preview-toolbar').evaluate((element) => {
+			const input = element.querySelector('input');
+			return { fits: element.scrollWidth <= element.clientWidth + 1, inputWidth: input?.clientWidth ?? 0 };
+		});
+		expect(geometry.fits).toBe(true);
+		expect(geometry.inputWidth).toBeGreaterThan(100);
+		for (const name of ['Previous match', 'Next match']) {
+			const button = popup.getByRole('button', { name, exact: true });
+			await expect(button).toBeEnabled();
+			const box = await button.boundingBox();
+			expect(box?.width).toBeGreaterThanOrEqual(44);
+			expect(box?.height).toBeGreaterThanOrEqual(44);
+			await button.click();
+			await expect(popup.locator('mark[data-preview-search-active]')).toHaveText('Nexus');
+		}
+		await popup.getByRole('button', { name: 'Refresh preview', exact: true }).click();
+		await expect(popup.getByRole('heading', { name: 'Nexus Markdown E2E' })).toBeVisible();
+		await expect(popup.getByRole('button', { name: 'Edit', exact: true })).toBeInViewport();
+	}
+	await popup.locator('.preview-search-controls').getByRole('button', { name: 'Clear', exact: true }).click();
+	await expect(input).toHaveValue('');
+	await expect(input).toBeVisible();
+	await expect(popup.locator('mark[data-preview-search-match]')).toHaveCount(0);
+	await input.fill('Nexus');
+	const close = popup.locator('.preview-search-controls > button').last();
+	await close.click();
+	await expect(input).toBeHidden();
+	await expect(popup.locator('mark[data-preview-search-match]')).toHaveCount(0);
+	await popup.getByRole('button', { name: 'Edit', exact: true }).click();
+	await expect(popup).toBeHidden();
+});

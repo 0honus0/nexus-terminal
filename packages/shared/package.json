@@ -875,6 +875,18 @@
     "./agent/plugins/agent-extension": {
       "types": "./dist/agent/plugins/agent-extension.d.ts",
       "default": "./dist/agent/plugins/agent-extension.js"
+    },
+    "./access/oidc/http": {
+      "types": "./dist/access/oidc/http.d.ts",
+      "default": "./dist/access/oidc/http.js"
+    },
+    "./access/oidc/values": {
+      "types": "./dist/access/oidc/values.d.ts",
+      "default": "./dist/access/oidc/values.js"
+    },
+    "./access/oidc/http-codec": {
+      "types": "./dist/access/oidc/http-codec.d.ts",
+      "default": "./dist/access/oidc/http-codec.js"
     }
   },
   "devDependencies": {

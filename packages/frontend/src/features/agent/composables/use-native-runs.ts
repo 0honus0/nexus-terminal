@@ -4,7 +4,8 @@ import { mergeNativeApprovals } from '../model/native-run-rules';
 import { subscribeNativeRun } from '../api/native-run-stream';
 import type { AgentReasoningEffort } from '@nexus-terminal/shared/agent/providers/values';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
+import { useAuthSession } from '@/features/auth/public';
+import { useConnections } from '@/features/connections/public';
 import { createNativeThreadApi } from '../api/native-thread-api';
 import { getAgentDenylist } from '../api/app-management-api';
 import {
@@ -67,7 +68,8 @@ export function useNativeRuns(
 	canStart: () => boolean,
 	observeMinimized: () => boolean,
 ) {
-	const capabilities = useRuntimeFeatureCapabilities();
+	const auth = useAuthSession();
+	const connectionCatalog = useConnections();
 	const threadApi = createNativeThreadApi();
 	const scope = ref<NativeThreadScope | null>(null);
 	const thread = ref<NativeThread | null>(null);
@@ -245,7 +247,7 @@ export function useNativeRuns(
 	const connections = computed(() =>
 		deniedIds.value === null
 			? []
-			: capabilities.connections.items.value.filter(
+			: connectionCatalog.connections.value.filter(
 					(item) => item.type === 'SSH' && !deniedIds.value?.includes(item.id),
 				),
 	);
@@ -263,8 +265,8 @@ export function useNativeRuns(
 		if (blocked.value || !active()) return;
 		const available = new Set(connections.value.map((connection) => connection.id));
 		connectionIds.value = [...new Set(ids)].filter((id) => available.has(id));
-		const userId = capabilities.auth.userId.value;
-		if (capabilities.auth.authenticated.value && userId !== null) {
+		const userId = auth.user.value?.id ?? null;
+		if (auth.isAuthenticated.value && userId !== null) {
 			writeNativeTargetPreference(userId, appId, connectionIds.value);
 		}
 	}
@@ -301,14 +303,14 @@ export function useNativeRuns(
 				const [availableModels, denylist] = await Promise.all([
 					listNativeModels(current, signal),
 					getAgentDenylist(signal),
-					capabilities.connections.revalidate(),
+					connectionCatalog.revalidate(),
 				]);
 				return { current, availableModels, denylist };
 			},
 			(value) => {
-				const userId = capabilities.auth.userId.value;
+				const userId = auth.user.value?.id ?? null;
 				const remembered =
-					scope.value === null && capabilities.auth.authenticated.value && userId !== null
+					scope.value === null && auth.isAuthenticated.value && userId !== null
 						? readNativeTargetPreference(userId, appId)
 						: connectionIds.value;
 				scope.value = value.current;
@@ -316,7 +318,7 @@ export function useNativeRuns(
 				deniedIds.value = value.denylist.entries.map((item) => item.connectionId);
 				const available = new Set(connections.value.map((connection) => connection.id));
 				connectionIds.value = remembered.filter((id) => available.has(id));
-				if (capabilities.auth.authenticated.value && userId !== null) {
+				if (auth.isAuthenticated.value && userId !== null) {
 					writeNativeTargetPreference(userId, appId, connectionIds.value);
 				}
 				// Never replace an original selected model/configuration after an edit or failure.

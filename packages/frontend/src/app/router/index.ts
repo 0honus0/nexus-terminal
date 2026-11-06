@@ -2,6 +2,7 @@ import { logger } from '@/client/logging/logger';
 import type { Pinia } from 'pinia';
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
 import { createAuthNavigationFacade, loadSetupView } from '@/features/auth/public';
+import { preloadWorkspaceTerminalSurface } from '@/runtimes/workspace/public';
 import { loadConnectionsView } from '@/features/connections/public';
 import { loadProxiesView } from '@/features/proxies/public';
 import { loadTargetsNextDevView } from '@/features/targets-next/public';
@@ -69,6 +70,13 @@ const routes: RouteRecordRaw[] = [
 		name: 'Login',
 		meta: { public: true },
 		component: loadLogin,
+	},
+	{
+		path: '/login/oidc/callback',
+		name: 'OidcCallback',
+		meta: { public: true },
+
+		component: () => import('../pages/login/OidcCallbackPage.vue'),
 	},
 	{
 		path: '/setup',
@@ -185,6 +193,7 @@ export const createAppRouter = (pinia: Pinia) => {
 
 		if (!isPublic && !auth.authenticated) return { name: 'Login' };
 		if (to.name === 'Login' && auth.authenticated) return { name: 'Dashboard' };
+		if (to.name === 'Workspace' && to.query.connectionId) preloadWorkspaceTerminalSurface();
 		return true;
 	});
 

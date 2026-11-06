@@ -52,6 +52,7 @@ export function toRunStreamEvent(
 							browserSessions: value.resource.browserSessions,
 							activeOperations: value.resource.operations,
 							backgroundJobs: value.backgroundJobs,
+							waitingOutputJobs: value.waitingOutputJobs,
 							targetIds: value.resource.targets.map((id) => id),
 							expiresAt: value.expiresAt,
 						})),

@@ -402,7 +402,7 @@ export function toolDefinitions(): ToolDefinition[] {
 			name: 'shell_execute',
 			version: '3.0.0',
 			description:
-				'Execute commands (array of shell scripts; one item for one command) sequentially in one exec on the selected SSH target after approval. Each command has isolated cwd/environment/stdin and separate output/exit status; onError defaults to stop, remaining items are not_started. SSH remains reusable throughout the Run. Optional cwd is absolute. foreground yields after yieldSeconds; background omits yieldSeconds. Use returned jobId with shell_job_control, never rerun to wait.',
+				'Execute commands (array of shell scripts; one item for one command) sequentially in one exec on the selected SSH target after approval. Each command has isolated cwd/environment/stdin and separate output/exit status; onError defaults to stop, remaining items are not_started. SSH remains reusable throughout the Run. Optional cwd is absolute. foreground yields after yieldSeconds; background omits yieldSeconds. Full stdout/stderr is saved to the job log without a total-size quota; inline output is only a preview. Use returned jobId with shell_job_control action=output and nextOffset to read more, never rerun to wait. A full disk pauses output until space is freed or the task is cancelled/expires.',
 			capability: 'shell.execute',
 			risk: 'destructive',
 			mutation: true,
@@ -448,7 +448,7 @@ export function toolDefinitions(): ToolDefinition[] {
 			name: 'shell_job_control',
 			version: '3.0.0',
 			description:
-				'Manage this Run/target Shell Jobs. list omits jobIds and pages via offset/nextOffset (64/page). status/wait/cancel/output require jobIds; output reads captured live stdout/stderr pages from byte offset (UTF-8 boundaries) and returns nextOffset per Job; reuse it to avoid repeating logs; wait for running Jobs instead of repeatedly reading an unchanged cursor. Retained terminal jobs remain readable until Run cleanup; after restart output is reconstructed from captured final results. one ID uses a one-item array. waitMode=all|any, waitSeconds defaults to 10 (max 30 and frozen timeout), shared by the whole group. Wait expiry leaves the same Job running. Cancel requires approval; unknown results are not replayed.',
+				'Manage this Run/target Shell Jobs. list omits jobIds and pages via offset/nextOffset (64/page). status/wait/cancel/output require jobIds; output reads captured live stdout/stderr pages from byte offset (UTF-8 boundaries) and returns nextOffset per Job; reuse it to avoid repeating logs; wait for running Jobs instead of repeatedly reading an unchanged cursor. Complete logs remain stored with the conversation, including after execution ends and process restart. available=false explicitly means no stored log exists. waitingForSpace means output is paused until disk space is freed; the original deadline and cancellation still apply. Reading saved output does not resolve unknown execution status. one ID uses a one-item array. waitMode=all|any, waitSeconds defaults to 10 (max 30 and frozen timeout), shared by the whole group. Wait expiry leaves the same Job running. Cancel requires approval; unknown results are not replayed.',
 			capability: 'shell.execute',
 			risk: 'read',
 			mutation: false,

@@ -121,7 +121,7 @@ export interface ExecuteCommandRequest {
 	commands: ExecutionCommand[];
 	cwd: string | null;
 	onError: 'stop' | 'continue';
-	onOutput?(index: number, stream: 'stdout' | 'stderr', text: string): void;
+	onOutput?(index: number, stream: 'stdout' | 'stderr', text: string, signal: AbortSignal): Promise<void>;
 }
 
 export interface ExecuteCommandResult {

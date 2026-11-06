@@ -25,7 +25,7 @@
 			iconOnly?: boolean;
 			wrapperClass?: string;
 			triggerClass?: string;
-			portalMarker?: boolean;
+			panelMarkerAttribute?: `data-${string}`;
 		}>(),
 		{
 			title: '',
@@ -42,12 +42,16 @@
 			iconOnly: false,
 			wrapperClass: '',
 			triggerClass: '',
-			portalMarker: false,
+			panelMarkerAttribute: undefined,
 		},
 	);
 
 	const model = defineModel<boolean>('open', { default: false });
 	const emit = defineEmits<{ 'open-change': [open: boolean] }>();
+
+	const panelMarkerAttributes = computed(() =>
+		props.panelMarkerAttribute ? { [props.panelMarkerAttribute]: '' } : {},
+	);
 
 	const wrapper = ref<HTMLElement | null>(null);
 	let restoreFocus = true;
@@ -113,7 +117,7 @@
 				<PopoverContent
 					data-ui="popover-panel"
 					data-ui-gen="2"
-					:data-agent-hub-portal="props.portalMarker ? '' : undefined"
+					v-bind="panelMarkerAttributes"
 					data-surface="glass"
 					:side="props.placement"
 					:side-offset="props.offset"

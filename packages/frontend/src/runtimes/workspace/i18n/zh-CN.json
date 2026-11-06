@@ -48,6 +48,25 @@
       "conflict": "工作区布局或面板尺寸已变化，本次调整未保存。请刷新布局后重新调整。",
       "unknown": "无法确认布局是否已保存。请先刷新核对，系统不会自动重复保存。",
       "failed": "读取或保存工作区布局失败，请刷新后重试。"
+    },
+    "connectionFailure": {
+      "network": "与 Nexus 的连接中断，请检查网络后重试。",
+      "timeout": "连接响应超时，请稍后重试。",
+      "unexpected": "暂时无法建立连接，请重试；仍失败时请查看服务日志。",
+      "remote_unavailable": "无法建立 SSH 连接，请检查服务器地址、端口、登录凭据及 SSH 服务。",
+      "host_key_untrusted": "尚未确认服务器身份。重新连接时请核对并确认主机指纹。",
+      "unauthenticated": "登录已失效，请重新登录后连接。",
+      "forbidden": "当前连接未获授权，请检查账号权限和访问策略。",
+      "not_found": "连接或原会话已不存在，请从连接管理重新打开。",
+      "conflict": "会话状态已变化，请稍后重试；挂起会话请从列表核对。",
+      "stale_target": "连接配置已变化，请从连接管理重新打开。",
+      "limit_exceeded": "当前资源繁忙，请稍后重试或关闭不再使用的会话。",
+      "operation_unknown": "暂时无法确认连接结果，请先核对会话状态，不要重复创建。",
+      "invalid_input": "连接配置无效，请在连接管理中检查后重试。",
+      "command_failed": "远端终端启动失败，请检查服务器的 Shell 配置。",
+      "not_text": "服务器返回了无法使用的连接响应，请检查服务配置。",
+      "suspendedRefresh": "暂时无法读取挂起会话，请检查网络后重试。",
+      "suspendedMissing": "列表中已找不到此挂起会话，请打开挂起会话列表核对。"
     }
   },
   "layoutConfigurator": {

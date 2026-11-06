@@ -27,8 +27,8 @@
 		UiSwitch,
 	} from '@/foundation/ui';
 	import { useFeedback } from '@/shared/feedback/public';
-	import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
-	import { preloadWorkspaceTerminalSurface } from '@/runtimes/workspace/public';
+	import { useConnectionTags } from '@/features/tags/public';
+	import { remoteDesktopLauncher } from '@/features/remote-desktop/public';
 	import { useConnectionManagement } from '../composables/use-connection-management';
 	import ConnectionImportModal from '../components/ConnectionImportModal.vue';
 	import ConnectionEditorModal from '../components/ConnectionEditorModal.vue';
@@ -57,8 +57,7 @@
 	} = useConnectionManagement();
 	const importVisible = ref(false);
 	const moreVisible = ref(false);
-	const capabilities = useRuntimeFeatureCapabilities();
-	const tags = capabilities.tags;
+	const tags = useConnectionTags();
 	const search = ref('');
 	type SortField = 'lastConnected' | 'name' | 'type' | 'updated' | 'created';
 	type SortOrder = 'asc' | 'desc';
@@ -205,11 +204,10 @@
 			.filter((connection) => connection.type === 'SSH')
 			.map((connection) => String(connection.id));
 		if (!ids.length) return;
-		preloadWorkspaceTerminalSurface();
 		void router.push({ name: 'Workspace', query: { connectionId: ids } });
 	};
 
-	const tagNameById = computed(() => new Map(tags.items.value.map((tag) => [tag.id, tag.name])));
+	const tagNameById = computed(() => new Map(tags.tags.value.map((tag) => [tag.id, tag.name])));
 
 	const tagNames = (connection: ConnectionSummary) =>
 		connection.tagIds.map((id) => tagNameById.value.get(id)).filter((name): name is string => Boolean(name));
@@ -236,10 +234,9 @@
 
 	const connect = (c: ConnectionSummary) => {
 		if (c.type === 'RDP' || c.type === 'VNC') {
-			capabilities.remoteDesktop.open({ id: c.id, name: c.name || c.host, type: c.type });
+			remoteDesktopLauncher.open({ id: c.id, name: c.name || c.host, type: c.type });
 			return;
 		}
-		preloadWorkspaceTerminalSurface();
 		return router.push({ name: 'Workspace', query: { connectionId: String(c.id) } });
 	};
 </script>
@@ -429,7 +426,7 @@
 							:aria-label="t('dashboard.filterByTag')"
 						>
 							<option value="">{{ t('dashboard.filterTags.all') }}</option>
-							<option v-for="tag in tags.items.value" :key="tag.id" :value="tag.id">
+							<option v-for="tag in tags.tags.value" :key="tag.id" :value="tag.id">
 								{{ tag.name }}
 							</option>
 						</UiSelect>

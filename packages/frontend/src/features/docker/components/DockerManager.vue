@@ -443,35 +443,22 @@
 	}
 
 	.docker-empty {
+		--ui-empty-state-icon-size: 32px;
+		--ui-empty-state-icon-border: 0;
+		--ui-empty-state-icon-background: color-mix(in srgb, var(--text-color) 6%, transparent);
+		--ui-empty-state-icon-color: var(--text-color-secondary);
+		--ui-empty-state-icon-font-size: 13px;
+		--ui-empty-state-title-font-size: 0.75rem;
+		--ui-empty-state-title-font-weight: 600;
+		--ui-empty-state-description-max-width: 20rem;
+		--ui-empty-state-description-color: var(--text-color-secondary);
+		--ui-empty-state-description-font-size: 0.65rem;
+		--ui-empty-state-action-margin-top: 0.15rem;
 		width: 100%;
 		margin: auto;
 		justify-content: center;
 		padding: 0.75rem;
 		background: transparent;
-	}
-
-	.docker-empty :deep(.ui-empty-state__icon) {
-		width: 32px;
-		height: 32px;
-		border: 0;
-		background: color-mix(in srgb, var(--text-color) 6%, transparent);
-		color: var(--text-color-secondary);
-		font-size: 13px;
-	}
-
-	.docker-empty :deep(.ui-empty-state__title) {
-		font-size: 0.75rem;
-		font-weight: 600;
-	}
-
-	.docker-empty :deep(.ui-empty-state__description) {
-		max-width: 20rem;
-		color: var(--text-color-secondary);
-		font-size: 0.65rem;
-	}
-
-	.docker-empty :deep(.ui-empty-state__action) {
-		margin-top: 0.15rem;
 	}
 
 	.docker-content-area {
@@ -760,17 +747,10 @@
 		}
 
 		.docker-empty {
+			--ui-empty-state-icon-size: 26px;
+			--ui-empty-state-icon-font-size: 11px;
+			--ui-empty-state-description-display: none;
 			padding: 0.4rem;
-		}
-
-		.docker-empty :deep(.ui-empty-state__icon) {
-			width: 26px;
-			height: 26px;
-			font-size: 11px;
-		}
-
-		.docker-empty :deep(.ui-empty-state__description) {
-			display: none;
 		}
 
 		.docker-ports__label {
@@ -784,11 +764,8 @@
 		}
 
 		.docker-empty {
+			--ui-empty-state-description-display: none;
 			padding-block: 0.35rem;
-		}
-
-		.docker-empty :deep(.ui-empty-state__description) {
-			display: none;
 		}
 	}
 

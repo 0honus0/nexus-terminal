@@ -292,6 +292,7 @@ export function readAgentResourceSession(input: unknown): import('./model.js').A
 		'browserSessions',
 		'activeOperations',
 		'backgroundJobs',
+		'waitingOutputJobs',
 		'targetIds',
 		'expiresAt',
 	]);
@@ -315,6 +316,7 @@ export function readAgentResourceSession(input: unknown): import('./model.js').A
 		browserSessions: agentInteger(row.browserSessions),
 		activeOperations: agentInteger(row.activeOperations),
 		backgroundJobs: agentInteger(row.backgroundJobs),
+		waitingOutputJobs: agentInteger(row.waitingOutputJobs),
 		targetIds,
 		expiresAt: row.expiresAt === null ? null : agentInteger(row.expiresAt, openedAt),
 	};

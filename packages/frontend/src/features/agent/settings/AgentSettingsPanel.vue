@@ -1,18 +1,19 @@
 <script setup lang="ts">
-	import { computed, reactive, ref, watch } from 'vue';
+	import { computed, defineAsyncComponent, reactive, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import AgentExtensionsSettings from './AgentExtensionsSettings.vue';
 	import { usePluginManagement } from '../composables/use-plugin-management';
-	import BrowserRuntimeSettings from './BrowserRuntimeSettings.vue';
 	import ModelProviderSettings from './ModelProviderSettings.vue';
 	import { UiInfoHint, UiSwitch } from '@/foundation/ui';
 	import { useSettingsReloadSource } from '@/shared/feedback/public';
 	import { useExecutionSettings } from '../composables/use-execution-settings';
 	import { useAppManagement } from '../composables/use-app-management';
 	import ExecutionSettings from './ExecutionSettings.vue';
-	import SafetyNetworkSettings from './SafetyNetworkSettings.vue';
 	import AgentOnboardingModal from './AgentOnboardingModal.vue';
 	import { useAgentOnboarding } from '../composables/use-agent-onboarding';
+
+	const AgentExtensionsSettings = defineAsyncComponent(() => import('./AgentExtensionsSettings.vue'));
+	const BrowserRuntimeSettings = defineAsyncComponent(() => import('./BrowserRuntimeSettings.vue'));
+	const SafetyNetworkSettings = defineAsyncComponent(() => import('./SafetyNetworkSettings.vue'));
 
 	const { t } = useI18n();
 	const props = withDefaults(defineProps<{ active?: boolean }>(), { active: true });

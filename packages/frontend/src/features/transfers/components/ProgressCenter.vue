@@ -1,5 +1,6 @@
 <script setup lang="ts">
-	import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+	import { useEventListener } from '@vueuse/core';
+	import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
 	import { useDraggablePosition, useResizeHandle } from '@/foundation/interaction';
@@ -38,9 +39,10 @@
 	const MIN_WIDTH = 280;
 	const MIN_HEIGHT = 130;
 
-	const props = withDefaults(defineProps<{ tasks: TransferTask[]; sourceLabel?: string; teleport?: boolean }>(), {
-		teleport: true,
-	});
+	const props = withDefaults(
+		defineProps<{ tasks: TransferTask[]; sourceLabel?: string; teleport?: boolean; active?: boolean }>(),
+		{ teleport: true, active: true },
+	);
 	const emit = defineEmits<{ cancel: [id: string]; cancelAll: []; remove: [id: string]; hide: [] }>();
 	const { t } = useI18n();
 	const panel = ref<HTMLElement | null>(null);
@@ -49,6 +51,10 @@
 	const position = ref({ x: 16, y: 16 });
 	const initialized = ref(false);
 	const aggregateSpeed = ref(0);
+	const viewActive = ref(true);
+	const pageVisible = ref(!document.hidden);
+	const windowActive = computed(() => props.active && viewActive.value);
+	const samplingActive = computed(() => windowActive.value && pageVisible.value && initialized.value);
 	let speedTimer: number | undefined;
 	let lastSpeedSampleAt = 0;
 	let lastBytesWritten = 0;
@@ -119,6 +125,7 @@
 	};
 
 	const clampRenderedWindow = (): void => {
+		if (!windowActive.value) return;
 		const element = panel.value;
 		if (!element) return;
 		const viewportWidth = document.documentElement.clientWidth;
@@ -137,6 +144,9 @@
 	};
 
 	const clampAfterRender = (): void => {
+		if (!windowActive.value) return;
+		drag.cancelDragging();
+		resize.cancelResize();
 		clampWindow();
 		void nextTick(clampRenderedWindow);
 	};
@@ -177,7 +187,7 @@
 
 		getElement: () => panel.value,
 
-		canStart: (event) => !(event.target as HTMLElement).closest('button'),
+		canStart: (event) => windowActive.value && !(event.target as HTMLElement).closest('button'),
 
 		constrain: (candidate, element) => ({
 			x: Math.max(8, Math.min(candidate.x, window.innerWidth - element.offsetWidth - 8)),
@@ -190,6 +200,9 @@
 	const resize = useResizeHandle({
 		width,
 		height,
+
+		canStart: () => windowActive.value,
+
 		minWidth: responsiveMinWidth,
 		minHeight: responsiveMinHeight,
 		maxWidth: availableWidth,
@@ -198,17 +211,46 @@
 		onEnd: saveWindow,
 	});
 
+	const stopSampling = (): void => {
+		if (speedTimer !== undefined) window.clearInterval(speedTimer);
+		speedTimer = undefined;
+		lastSpeedSampleAt = 0;
+		lastBytesWritten = 0;
+		aggregateSpeed.value = 0;
+	};
+
+	watch(samplingActive, (active) => {
+		stopSampling();
+		if (!active) return;
+		sampleAggregateSpeed();
+		speedTimer = window.setInterval(sampleAggregateSpeed, 500);
+	});
+	watch(
+		windowActive,
+		(active) => {
+			if (active) clampAfterRender();
+			else {
+				drag.cancelDragging();
+				resize.cancelResize();
+			}
+		},
+		{ flush: 'sync' },
+	);
+	useEventListener(window, 'resize', clampAfterRender);
+	useEventListener(document, 'visibilitychange', () => {
+		pageVisible.value = !document.hidden;
+	});
 	onMounted(() => {
 		restoreWindow();
 		void nextTick(clampRenderedWindow);
-		sampleAggregateSpeed();
-		speedTimer = window.setInterval(sampleAggregateSpeed, 500);
-		window.addEventListener('resize', clampAfterRender);
 	});
-	onBeforeUnmount(() => {
-		if (speedTimer !== undefined) window.clearInterval(speedTimer);
-		window.removeEventListener('resize', clampAfterRender);
+	onActivated(() => {
+		viewActive.value = true;
 	});
+	onDeactivated(() => {
+		viewActive.value = false;
+	});
+	onBeforeUnmount(stopSampling);
 	watch(
 		() => [props.tasks.length, activeTasks.value.length, presentationMode.value],
 		() => void nextTick(clampRenderedWindow),
@@ -218,7 +260,7 @@
 <template>
 	<Teleport to="body" :disabled="!props.teleport">
 		<div
-			v-show="initialized"
+			v-show="initialized && windowActive"
 			ref="panel"
 			data-ui-gen="2"
 			class="transfer-progress-window ui-surface ui-surface--raised ui-radius--panel fixed z-[60] flex min-h-0 flex-col overflow-hidden text-sm"

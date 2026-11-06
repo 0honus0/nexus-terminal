@@ -132,7 +132,7 @@ async function collectLoginMetrics(page: Page, testInfo: import('@playwright/tes
 				password: readRect('#password'),
 				alert: readRect('[role="alert"]'),
 				submit: readRect('form button[type="submit"]'),
-				passkey: readRect('form button[type="button"]'),
+				passkey: readRect('.login-passkey'),
 			},
 		};
 	});
@@ -230,8 +230,11 @@ test('Login passkey succeeds, reports credential failure, and falls back to pass
 
 			const passkeysResponse = await context.request.get('/api/v1/auth/user/passkeys');
 			expect(passkeysResponse.status()).toBe(200);
-			const passkeys = (await passkeysResponse.json()) as Array<{ credentialId: string }>;
+			const passkeys = (await passkeysResponse.json()) as Array<{ credentialId: string; name: string | null }>;
 			expect(passkeys).toHaveLength(1);
+			// Chromium intentionally supplies an anonymous AAGUID; do not invent a vendor.
+			expect(passkeys[0]?.name).toBeNull();
+			await expect(panel).toContainText('Unnamed Passkey');
 			credentialId = passkeys[0]?.credentialId ?? '';
 			expect(credentialId).toBeTruthy();
 			registrationObserved = true;

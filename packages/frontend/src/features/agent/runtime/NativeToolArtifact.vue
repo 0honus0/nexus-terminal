@@ -175,6 +175,7 @@
 			@close="closePreview"
 		>
 			<FilePreview
+				:active="active && previewVisible"
 				v-if="previewMounted && previewSource"
 				class="min-h-0 flex-1"
 				:source="previewSource"

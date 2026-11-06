@@ -3,7 +3,7 @@
 	import { useI18n } from 'vue-i18n';
 	import { useFeedback } from '@/shared/feedback/public';
 	import { isNetworkFailure } from '@/client/http/network-failure';
-	import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
+	import { useAuthSession } from '@/features/auth/public';
 	import { useAgentManagementOperation } from '../composables/use-agent-management-operation';
 	import { listManagedApps } from '../api/app-management-api';
 	import { listPluginInstallations, listPluginVersions } from '../api/plugin-management-api';
@@ -17,7 +17,7 @@
 	import { provideAgentHostState } from './agent-host-state';
 	import { useAgentTaskNotices } from './use-agent-task-notices';
 
-	const auth = useRuntimeFeatureCapabilities().auth;
+	const auth = useAuthSession();
 	const { t } = useI18n();
 	const feedback = useFeedback();
 	const host = provideAgentHostState();
@@ -32,7 +32,7 @@
 			directory.value = null;
 			windowManager.reset();
 		},
-		() => auth.authenticated.value && auth.userId.value === 1,
+		() => auth.isAuthenticated.value && (auth.user.value?.id ?? null) === 1,
 	);
 
 	function persistLayout(): void {
@@ -82,7 +82,7 @@
 	}
 
 	watch(
-		() => [auth.authenticated.value, auth.userId.value] as const,
+		() => [auth.isAuthenticated.value, auth.user.value?.id ?? null] as const,
 		([authenticated, next]) => {
 			persistLayout();
 			userId = authenticated && next === 1 ? next : null;
@@ -122,7 +122,9 @@
 
 <template>
 	<Teleport to="body">
-		<template v-if="auth.authenticated.value && auth.userId.value === 1 && directory?.executionEnabled">
+		<template
+			v-if="auth.isAuthenticated.value && (auth.user.value?.id ?? null) === 1 && directory?.executionEnabled"
+		>
 			<AgentHubWindow v-if="directory" :directory="directory" @layout-change="persistLayout" />
 			<AgentLauncher
 				v-if="windowManager.state.status !== 'visible' || !directory"

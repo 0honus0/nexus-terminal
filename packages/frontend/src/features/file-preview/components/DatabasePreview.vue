@@ -56,7 +56,9 @@
 	);
 
 	const focusPreview = (): void => {
-		void nextTick(() => previewRoot.value?.focus({ preventScroll: true }));
+		void nextTick(() => {
+			if (props.active) previewRoot.value?.focus({ preventScroll: true });
+		});
 	};
 
 	const loadPage = (nextPage = page.value): void => {
@@ -147,6 +149,7 @@
 		const nextPage = Math.floor(searchIndex.value / ROWS_PER_PAGE) + 1;
 		if (nextPage !== page.value) loadPage(nextPage);
 		void nextTick(() => {
+			if (!props.active) return;
 			const rowIndex = searchIndex.value % ROWS_PER_PAGE;
 			scroller.value
 				?.querySelector<HTMLElement>(`[data-database-row-index="${rowIndex}"]`)

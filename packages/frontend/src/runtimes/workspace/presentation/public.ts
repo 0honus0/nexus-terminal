@@ -6,10 +6,9 @@ export { provideWorkspaceUiState } from '../state/workspaceUiState';
 
 export { workspaceRuntimeRegistry, type WorkspaceRuntimeSession } from '../session';
 
-export {
-	loadWorkspaceSessionSurface,
-	preloadWorkspaceTerminalSurface,
-} from '../components/preloadWorkspaceTerminalSurface';
+export { workspaceConnectionFailureCode } from '../model/workspace-error-types';
+
+export { loadWorkspaceSessionSurface } from '../components/preloadWorkspaceTerminalSurface';
 
 export const loadWorkspaceLayoutConfigurator = () => import('../components/WorkspaceLayoutConfigurator.vue');
 

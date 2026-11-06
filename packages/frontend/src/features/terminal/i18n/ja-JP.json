@@ -1,9 +1,7 @@
 {
   "terminal": {
-    "connectionFailed": "接続に失敗しました：{reason}",
     "connectionClosed": "接続が切断されました",
-    "retryConnection": "任意のキーを押して再接続…",
-    "retryConnectionTouch": "ターミナルをタップするか、任意のキーを押して再接続…",
+    "retryConnection": "ターミナルにフォーカスして Enter でも再試行できます",
     "inputRejected": "接続が利用できない、入力が大きすぎる、または送信バッファが満杯のため、端末入力を送信できませんでした。拒否された入力は自動再送されません。",
     "search": {
       "open": "ターミナルを検索",
@@ -41,6 +39,9 @@
       "arrowDown": "下矢印キー",
       "arrowLeft": "左矢印キー",
       "arrowRight": "右矢印キー"
-    }
+    },
+    "connectionInterrupted": "ターミナルは未接続です",
+    "reconnect": "再接続",
+    "retryConnectionTouch": "ターミナルのタップでも再試行できます"
   }
 }

@@ -34,6 +34,8 @@ import {
 	WorkspaceDispatchFailure,
 	WorkspaceRequestFailure,
 	WorkspaceRequestTimeout,
+	workspaceConnectionFailureCode,
+	type WorkspaceConnectionFailureCode,
 } from '../model/workspace-error-types';
 import { toSuspendedAutoTermination, type SuspendedAutoTermination } from '@/features/ssh-suspend/public';
 import { WorkspaceSocket, type WorkspaceAttachmentRequest } from '../protocol/workspaceSocket';
@@ -66,6 +68,7 @@ export class WorkspaceRuntimeSession {
 	readonly id: string;
 	readonly state: Ref<WorkspaceLifecycleState> = ref('idle');
 	readonly statusMessage = ref('');
+	readonly connectionFailureCode = ref<WorkspaceConnectionFailureCode | null>(null);
 	readonly markedForSuspend = ref(false);
 	readonly markedForSuspendAt = ref<string | null>(null);
 	readonly hasConnected = ref(false);
@@ -304,6 +307,7 @@ export class WorkspaceRuntimeSession {
 		const startedAt = performance.now();
 		this.state.value = phase === 'reconnect' ? 'reconnecting' : 'connecting';
 		this.statusMessage.value = '';
+		this.connectionFailureCode.value = null;
 		logger.debug(
 			{
 				workspaceId: this.id,
@@ -403,6 +407,7 @@ export class WorkspaceRuntimeSession {
 			if (!this.disposed && !this.closing) {
 				this.state.value = 'error';
 				this.statusMessage.value = error.message;
+				this.connectionFailureCode.value = workspaceConnectionFailureCode(cause);
 			}
 			this.scheduleReconnect();
 			throw error;
@@ -623,6 +628,7 @@ export class WorkspaceRuntimeSession {
 		this.markCapabilitiesDisconnected();
 		this.state.value = 'connecting';
 		this.statusMessage.value = '';
+		this.connectionFailureCode.value = null;
 		this.suspendedSessionId = suspendedSessionId;
 		this.ownershipGeneration = undefined;
 		this.leaseExpiresAt = undefined;
@@ -714,6 +720,7 @@ export class WorkspaceRuntimeSession {
 			if (!this.disposed && !this.closing && generation === this.lifecycleGeneration) {
 				this.state.value = 'error';
 				this.statusMessage.value = this.recoveryRequired.value ? 'operation_unknown' : 'remote_unavailable';
+				this.connectionFailureCode.value = workspaceConnectionFailureCode(cause);
 			}
 			throw cause;
 		}

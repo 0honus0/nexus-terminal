@@ -215,7 +215,7 @@
 						>
 							<UiSelect v-model="form.proxyId">
 								<option :value="null">{{ t('connections.form.noProxy') }}</option>
-								<option v-for="proxy in proxies.items.value" :key="proxy.id" :value="proxy.id">
+								<option v-for="proxy in proxies.proxies.value" :key="proxy.id" :value="proxy.id">
 									{{ proxy.name }} ({{ proxy.type }} - {{ proxy.host }}:{{ proxy.port }})
 								</option>
 							</UiSelect>

@@ -77,6 +77,69 @@ async function dragTerminalDown(page: Page): Promise<void> {
 	);
 }
 
+test('mobile reconnect button restores a marked session through suspension without creating a new SSH shell', async ({
+	page,
+	context,
+}) => {
+	await loginAsInitialAdmin(context.request);
+	await configureSshE2eSettings(context.request);
+	const connectionId = await ensureTestSshConnection(context.request);
+	let disconnect: (() => void) | undefined;
+	let connects = 0;
+	let resumes = 0;
+	await page.routeWebSocket('**/ws/workspace', (socket) => {
+		const server = socket.connectToServer();
+		disconnect = () => {
+			server.close();
+			socket.close();
+		};
+		socket.onMessage((message) => {
+			if (typeof message === 'string') {
+				const frame = JSON.parse(message);
+				if (frame.type === 'workspace.connect') connects++;
+				if (frame.type === 'suspend.resume') resumes++;
+			}
+			server.send(message);
+		});
+	});
+	await connectTestSshFromConnectionsPage(page, connectionId);
+	const command = page.locator('input.command-bar-input');
+	await command.fill('export NEXUS_RETRY_PROOF=retained_shell');
+	await command.press('Enter');
+	const tab = page.getByRole('tablist').locator('[data-session-id]').filter({ hasText: 'E2E SSH' }).first();
+	await tab.click({ button: 'right' });
+	await page.getByText('Suspend Session', { exact: true }).click();
+	await expect.poll(async () => (await suspendedSessions(context.request)).length).toBe(1);
+	const initialConnects = connects;
+	// Suppress automatic foreground reconciliation while the real transport detaches.
+	await page.evaluate(() =>
+		Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' }),
+	);
+	try {
+		expect(disconnect).toBeTruthy();
+		disconnect?.();
+		await expect.poll(async () => (await suspendedSessions(context.request))[0]?.ownershipState).toBe('available');
+		const retry = page
+			.locator('.terminal-reconnect-notice')
+			.getByRole('button', { name: 'Reconnect', exact: true });
+		await expect(retry).toBeVisible();
+		expect(resumes).toBe(0);
+		// No visibility event: only the explicit button is allowed to start this recovery.
+		await page.evaluate(() => Reflect.deleteProperty(document, 'visibilityState'));
+		await retry.tap();
+		await expect.poll(() => resumes).toBe(1);
+		await expect(command).toBeEnabled();
+		await expect(page.locator('.terminal-reconnect-notice')).toHaveCount(0);
+		await expect(page.getByRole('tablist').locator('[data-session-id]')).toHaveCount(1);
+		expect(connects).toBe(initialConnects);
+		await command.fill('printf "RESTORED=%s\\n" "$NEXUS_RETRY_PROOF"');
+		await command.press('Enter');
+		await expect(page.locator('.terminal-inner-container')).toContainText('RESTORED=retained_shell');
+	} finally {
+		await page.evaluate(() => Reflect.deleteProperty(document, 'visibilityState'));
+	}
+});
+
 test('mobile terminal blocks input until foreground resume completes without replaying keystrokes', async ({
 	page,
 	context,

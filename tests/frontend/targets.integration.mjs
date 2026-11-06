@@ -278,10 +278,7 @@ try {
 	const result = await page.evaluate(
 		async (ssh) => {
 			const { createPinia, setActivePinia } = await import('/node_modules/.vite/deps/pinia.js');
-			const { createApp, h, ref, computed, nextTick, KeepAlive } =
-				await import('/node_modules/.vite/deps/vue.js');
-			const { provideRuntimeFeatureCapabilities } = await import('/src/shared/capabilities/public.ts');
-			let runtimeCapabilities = null;
+			const { createApp, h, ref, nextTick, KeepAlive } = await import('/node_modules/.vite/deps/vue.js');
 			const { createAccessApi } = await import('/src/features/auth/api/access-api.ts');
 			const { useAuthStore } = await import('/src/features/auth/store/auth.store.ts');
 			const { proxiesApi } = await import('/src/features/proxies/api/proxies-api.ts');
@@ -369,7 +366,6 @@ try {
 				document.body.append(node);
 				const app = createApp({
 					setup() {
-						if (runtimeCapabilities) provideRuntimeFeatureCapabilities(runtimeCapabilities);
 						return () => (wrapper ? wrapper(component, props) : h(component, props));
 					},
 				});
@@ -1578,34 +1574,9 @@ try {
 						await import('/src/features/connections/components/ConnectionEditorModal.vue');
 					const { default: ImportModal } =
 						await import('/src/features/connections/components/ConnectionImportModal.vue');
-					const { default: TagPicker } =
-						await import('/src/features/tags/components/ConnectionTagPicker.vue');
 					const { useConnectionManagement } =
 						await import('/src/features/connections/composables/use-connection-management.ts');
 					const connections = useConnectionsStore(pinia);
-					runtimeCapabilities = {
-						auth: {
-							userId: computed(() => auth.user?.id ?? null),
-							authenticated: computed(() => auth.isAuthenticated),
-						},
-						connections: {
-							items: computed(() => connections.connections),
-							loaded: computed(() => connections.loaded),
-							load: connections.load,
-							revalidate: connections.revalidate,
-						},
-						proxies: { items: computed(() => proxies.items), load: proxies.load },
-						sshKeys: { items: computed(() => keys.items), load: keys.load, selector: KeySelector },
-						tags: {
-							items: computed(() => tags.items),
-							load: tags.load,
-							revalidate: tags.revalidate,
-							ensure: tags.ensure,
-							picker: TagPicker,
-						},
-						remoteDesktop: { open() {} },
-						terminal: { loadView: async () => ({ default: {} }) },
-					};
 
 					const input = (name) => ({
 						name,
@@ -2073,7 +2044,6 @@ try {
 					document.body.append(viewNode);
 					const viewApp = createApp({
 						setup() {
-							provideRuntimeFeatureCapabilities(runtimeCapabilities);
 							return () => h(ConnectionsView);
 						},
 					});

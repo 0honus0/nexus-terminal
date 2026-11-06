@@ -30,6 +30,7 @@
 		type FilesystemSessionState,
 	} from '../composables/createFilesystemSessionState';
 	import { useFilesystemCatalog } from '../composables/useFilesystemCatalog';
+	import { useFileManagerColumns } from '../composables/use-file-manager-columns';
 	import { collectDroppedLocalFiles } from '../composables/collectDroppedLocalFiles';
 	import type { FilesystemChannel, FilesystemDownloadPort, TerminalDirectoryPort } from '../ports/filesystem-channel';
 	import { filesystemFailureMessage } from '../model/filesystem-feedback';
@@ -214,55 +215,37 @@
 	const listScrollTop = ref(0);
 	const listViewportHeight = ref(600);
 	const listViewportWidth = ref(800);
-	const isCustomResized = ref(false);
 	const FILE_VIRTUALIZATION_THRESHOLD = 250;
 	const FILE_LIST_OVERSCAN = 12;
 	let listResizeObserver: ReturnType<typeof useResizeObserver> | undefined;
 	let disposed = false;
-	type ColumnKey = 'name' | 'permissions' | 'modified';
-	const minimumColumnWidths: Record<ColumnKey, number> = {
-		name: 80,
-		permissions: 90,
-		modified: 108,
-	};
-	const defaultColumnWidths: Record<ColumnKey, number> = {
-		name: 200,
-		permissions: 98,
-		modified: 136,
-	};
+	const {
+		showPermissions,
+		showModified,
+		isLarge,
+		isMedium,
+		isSmall,
+		visibleColumnCount,
+		canResizeName,
+		canResizePermissions,
+		isCustomResized,
+		totalColumnWidth,
+		columnStyle,
+		startColumnResize,
+		cancelColumnResize,
+	} = useFileManagerColumns({
+		viewportWidth: listViewportWidth,
+		isMobile: device.isMobile,
 
-	const initialColumnWidth = (key: ColumnKey): number => {
-		const width = props.columnWidths?.[key];
-		if (typeof width === 'number' && Number.isFinite(width)) {
-			return Math.max(minimumColumnWidths[key], width);
-		}
-		return defaultColumnWidths[key];
-	};
+		widths: () => props.columnWidths,
 
-	const renderedColumnWidths = ref<Record<ColumnKey, number>>({
-		name: initialColumnWidth('name'),
-		permissions: initialColumnWidth('permissions'),
-		modified: initialColumnWidth('modified'),
-	});
-	const showPermissions = computed(() => listViewportWidth.value >= 560);
-	const showModified = computed(() => listViewportWidth.value >= 400);
-	const isLarge = computed(() => showPermissions.value);
-	const isMedium = computed(() => !showPermissions.value && showModified.value);
-	const isSmall = computed(() => !showModified.value);
-	const visibleColumnCount = computed(() => 1 + (showPermissions.value ? 1 : 0) + (showModified.value ? 1 : 0));
-	const canResizeName = computed(() => !device.isMobile.value && (showPermissions.value || showModified.value));
-	const canResizePermissions = computed(() => !device.isMobile.value && showModified.value);
+		available: () => !view.capture().aborted,
 
-	const totalColumnWidth = computed(() => {
-		let sum = renderedColumnWidths.value.name;
-		if (showPermissions.value) sum += renderedColumnWidths.value.permissions;
-		if (showModified.value) sum += renderedColumnWidths.value.modified;
-		return sum;
+		onCommit: (widths) => emit('columnWidths', widths),
 	});
 	const isCurrentPathFavorite = computed(() =>
 		catalog.favorites.value.some((item) => item.path === browser.path.value),
 	);
-	let activeColumnResize: { key: ColumnKey; pointerId: number; startX: number; startWidth: number } | undefined;
 	let unregisterSearchFocus: (() => void) | undefined;
 	let unregisterPathFocus: (() => void) | undefined;
 	let navigationQueue: Promise<void> = Promise.resolve();
@@ -277,6 +260,7 @@
 	});
 
 	function clearIntents(): void {
+		cancelColumnResize();
 		browser.cancelPrefetch();
 		endRemoteDrag();
 		pendingDelete = undefined;
@@ -291,7 +275,7 @@
 		context.value = null;
 	}
 
-	watch(() => props.channel, clearIntents);
+	watch(() => props.channel, clearIntents, { flush: 'sync' });
 
 	const enqueueNavigation = (operation: () => Promise<void>): Promise<void> => {
 		queuedRefresh = undefined;
@@ -632,72 +616,6 @@
 		{ flush: 'post' },
 	);
 
-	const stopColumnResize = (event?: PointerEvent) => {
-		if (!activeColumnResize) return;
-		if (event && event.pointerId !== activeColumnResize.pointerId) return;
-		activeColumnResize = undefined;
-		window.removeEventListener('pointermove', moveColumnResize);
-		window.removeEventListener('pointerup', stopColumnResize);
-		window.removeEventListener('pointercancel', stopColumnResize);
-		document.body.style.cursor = '';
-		document.body.style.userSelect = '';
-		emit('columnWidths', { ...renderedColumnWidths.value });
-	};
-
-	function moveColumnResize(event: PointerEvent) {
-		const current = activeColumnResize;
-		if (!current || event.pointerId !== current.pointerId) return;
-		isCustomResized.value = true;
-		const minimum = minimumColumnWidths[current.key];
-		const next = Math.max(minimum, Math.min(900, current.startWidth + event.clientX - current.startX));
-		renderedColumnWidths.value = { ...renderedColumnWidths.value, [current.key]: Math.round(next) };
-	}
-
-	const startColumnResize = (event: PointerEvent, key: ColumnKey) => {
-		if (!event.isPrimary || activeColumnResize) return;
-		event.preventDefault();
-		event.stopPropagation();
-		activeColumnResize = {
-			key,
-			pointerId: event.pointerId,
-			startX: event.clientX,
-			startWidth: renderedColumnWidths.value[key],
-		};
-		document.body.style.cursor = 'col-resize';
-		document.body.style.userSelect = 'none';
-		window.addEventListener('pointermove', moveColumnResize);
-		window.addEventListener('pointerup', stopColumnResize);
-		window.addEventListener('pointercancel', stopColumnResize);
-	};
-
-	const columnStyle = (key: ColumnKey) => {
-		if (key === 'name') {
-			if (!showModified.value || !isCustomResized.value) {
-				return {
-					minWidth: `${minimumColumnWidths.name}px`,
-				};
-			}
-			return {
-				width: `${renderedColumnWidths.value.name}px`,
-				minWidth: `${minimumColumnWidths.name}px`,
-			};
-		}
-		if (!isCustomResized.value) {
-			if (key === 'permissions') {
-				const w = listViewportWidth.value < 460 ? 90 : 98;
-				return { width: `${w}px`, minWidth: `${minimumColumnWidths.permissions}px` };
-			}
-			if (key === 'modified') {
-				const w = listViewportWidth.value < 360 ? 108 : 136;
-				return { width: `${w}px`, minWidth: `${minimumColumnWidths.modified}px` };
-			}
-		}
-		return {
-			width: `${renderedColumnWidths.value[key]}px`,
-			minWidth: `${minimumColumnWidths[key]}px`,
-		};
-	};
-
 	let downloadLifetime = new AbortController();
 	let downloadsActive = true;
 
@@ -738,14 +656,6 @@
 		if (ownsFilesystemState) filesystemState.dispose();
 		stopListScrollerWatch();
 		listResizeObserver?.stop();
-		if (activeColumnResize) {
-			activeColumnResize = undefined;
-			window.removeEventListener('pointermove', moveColumnResize);
-			window.removeEventListener('pointerup', stopColumnResize);
-			window.removeEventListener('pointercancel', stopColumnResize);
-			document.body.style.cursor = '';
-			document.body.style.userSelect = '';
-		}
 	});
 	watch(browser.path, (path) => {
 		clearRemoteDragTarget();
@@ -758,19 +668,6 @@
 		resetListScroll();
 	});
 	watch([browser.sortKey, browser.sortDirection], resetListScroll);
-	watch(
-		() => props.columnWidths,
-		(value) => {
-			if (!value || activeColumnResize) return;
-			for (const key of Object.keys(minimumColumnWidths) as ColumnKey[]) {
-				const width = value[key];
-				if (Number.isFinite(width)) {
-					renderedColumnWidths.value[key] = Math.max(minimumColumnWidths[key], Number(width));
-				}
-			}
-		},
-		{ deep: true },
-	);
 
 	const activate = async (entry: RemoteFileEntry): Promise<void> => {
 		try {

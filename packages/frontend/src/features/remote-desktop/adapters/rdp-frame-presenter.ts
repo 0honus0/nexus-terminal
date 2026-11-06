@@ -31,6 +31,7 @@ export function attachRdpFramePresenter(canvas: HTMLCanvasElement, onFailure: (c
 	let height = 0;
 	let direct = false;
 	let disposed = false;
+	let intersects = typeof IntersectionObserver === 'undefined';
 
 	function cancelFrame(): void {
 		if (frame !== null) cancelAnimationFrame(frame);
@@ -79,6 +80,40 @@ export function attachRdpFramePresenter(canvas: HTMLCanvasElement, onFailure: (c
 			present(source, 0, 0, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);
 		}
 	}
+
+	function schedule(): void {
+		if (disposed || document.hidden || !intersects || frame !== null || !damage.length) return;
+		frame = requestAnimationFrame(() => {
+			frame = null;
+			if (document.hidden || !intersects) return;
+			try {
+				flush();
+			} catch (cause) {
+				onFailure(cause);
+			}
+		});
+	}
+
+	function visibilityChanged(): void {
+		if (document.hidden || !intersects) cancelFrame();
+		else schedule();
+	}
+
+	// Invisible desktops still decode into the same bounded latest-pixel buffer. Only presentation pauses.
+	const visibility =
+		typeof IntersectionObserver === 'undefined'
+			? null
+			: new IntersectionObserver((entries) => {
+					for (const entry of entries) {
+						if (entry.target !== canvas) continue;
+						// With threshold 0, touching the viewport edge already counts as intersecting.
+						// Requiring positive area can strand it when moving inside without another notification.
+						intersects = entry.isIntersecting;
+					}
+					visibilityChanged();
+				});
+	visibility?.observe(canvas);
+	document.addEventListener('visibilitychange', visibilityChanged);
 
 	function addDamage(rect: Damage): void {
 		let current = rect;
@@ -190,15 +225,7 @@ export function attachRdpFramePresenter(canvas: HTMLCanvasElement, onFailure: (c
 			}
 		}
 		addDamage({ left: dx + left, top: dy + top, right: dx + right, bottom: dy + bottom });
-		if (frame === null) {
-			frame = requestAnimationFrame(() => {
-				try {
-					flush();
-				} catch (cause) {
-					onFailure(cause);
-				}
-			});
-		}
+		schedule();
 	}
 
 	// Only this adapter-owned context is wrapped. Other canvases and global browser prototypes are untouched.
@@ -207,6 +234,8 @@ export function attachRdpFramePresenter(canvas: HTMLCanvasElement, onFailure: (c
 		if (disposed) return;
 		disposed = true;
 		cancelFrame();
+		visibility?.disconnect();
+		document.removeEventListener('visibilitychange', visibilityChanged);
 		pixels = null;
 		damage = [];
 		restoreWidth();

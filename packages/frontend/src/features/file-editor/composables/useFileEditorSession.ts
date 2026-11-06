@@ -1,37 +1,8 @@
-import { computed, ref, type ComputedRef, type Ref } from 'vue';
+import { computed, ref } from 'vue';
 import type { FileDocumentPort } from '../ports/file-document-port';
 import type { EditorDocument, EditorLineEnding } from '../model/editor';
+import type { FileEditorOpenContext, FileEditorSessionController } from '../model/file-editor-session-types';
 import { canonicalEditorEncoding } from '../model/editorEncoding';
-
-export interface FileEditorOpenContext {
-	scopeId?: string;
-	scopeLabel?: string;
-	port: FileDocumentPort;
-}
-
-export interface FileEditorSessionController {
-	tabs: Ref<EditorDocument[]>;
-	activeId: Ref<string | null>;
-	active: ComputedRef<EditorDocument | null>;
-	loading: Ref<boolean>;
-	open(path: string, context?: FileEditorOpenContext): Promise<EditorDocument>;
-	update(content: string): void;
-	save(doc?: EditorDocument | null): Promise<void>;
-	reload(id: string): Promise<void>;
-	changeEncoding(id: string, encoding: string): Promise<void>;
-	changeLineEnding(id: string, lineEnding: EditorLineEnding): void;
-	updateScrollPosition(id: string, scrollTop: number, scrollLeft: number): void;
-	setCloseConfirmation(confirm: () => Promise<boolean>): void;
-	close(id: string): Promise<boolean>;
-	closeOthers(id: string): Promise<boolean>;
-	closeToRight(id: string): Promise<boolean>;
-	closeToLeft(id: string): Promise<boolean>;
-	closeAll(): Promise<boolean>;
-	closeScope(scopeId: string): void;
-	reset(): void;
-	invalidatePaths(scopeId: string, paths: readonly string[]): boolean;
-	activateRelative(delta: number): void;
-}
 
 export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEditorSessionController {
 	const tabs = ref<EditorDocument[]>([]);
@@ -46,7 +17,7 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
 	let openEpoch = 0;
 	const scopeGenerations = new Map<string | undefined, number>();
 
-	let confirmClose = async (): Promise<boolean> => false;
+	const closeConfirmations = new Map<symbol, () => Promise<boolean>>();
 
 	const unavailableDocuments = new Set<string>();
 	const active = computed(() => tabs.value.find((item) => item.id === activeId.value) ?? null);
@@ -239,15 +210,40 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
 		if (activeId.value === id) activeId.value = tabs.value[Math.min(index, tabs.value.length - 1)]?.id ?? null;
 	}
 
-	async function closeDocuments(documents: EditorDocument[]): Promise<boolean> {
+	async function closeDocuments(documents: EditorDocument[], confirmationToken?: symbol): Promise<boolean> {
+		if (confirmationToken && !closeConfirmations.has(confirmationToken)) return false;
 		if (documents.some((doc) => savingDocuments.has(doc.id))) return false;
-		const snapshots = documents.map((doc) => ({ id: doc.id, content: doc.content, dirty: doc.dirty }));
-		if (documents.some((doc) => doc.dirty) && !(await confirmClose())) return false;
+		const epoch = closeEpoch;
+		const snapshots = documents.map((doc) => ({
+			id: doc.id,
+			content: doc.content,
+			originalContent: doc.originalContent,
+			encoding: doc.encoding,
+			dirty: doc.dirty,
+		}));
+		if (documents.some((doc) => doc.dirty)) {
+			const token = confirmationToken ?? [...closeConfirmations.keys()].at(-1);
+			const confirm = token && closeConfirmations.get(token);
+			if (
+				!token ||
+				!confirm ||
+				!(await confirm()) ||
+				epoch !== closeEpoch ||
+				closeConfirmations.get(token) !== confirm
+			)
+				return false;
+		}
 		if (
 			documents.some((doc) => savingDocuments.has(doc.id)) ||
 			snapshots.some((saved) => {
 				const current = tabs.value.find((doc) => doc.id === saved.id);
-				return current && (current.content !== saved.content || current.dirty !== saved.dirty);
+				return (
+					!current ||
+					current.content !== saved.content ||
+					current.originalContent !== saved.originalContent ||
+					current.encoding !== saved.encoding ||
+					current.dirty !== saved.dirty
+				);
 			})
 		)
 			return false;
@@ -255,28 +251,35 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
 		return true;
 	}
 
-	function close(id: string): Promise<boolean> {
-		return closeDocuments(tabs.value.filter((doc) => doc.id === id));
+	function close(id: string, confirmationToken?: symbol): Promise<boolean> {
+		return closeDocuments(
+			tabs.value.filter((doc) => doc.id === id),
+			confirmationToken,
+		);
 	}
 
-	function closeOthers(id: string): Promise<boolean> {
+	function closeOthers(id: string, confirmationToken?: symbol): Promise<boolean> {
 		if (!tabs.value.some((item) => item.id === id)) return Promise.resolve(false);
-		return closeDocuments(tabs.value.filter((tab) => tab.id !== id));
+		return closeDocuments(
+			tabs.value.filter((tab) => tab.id !== id),
+			confirmationToken,
+		);
 	}
 
-	function closeToRight(id: string): Promise<boolean> {
+	function closeToRight(id: string, confirmationToken?: symbol): Promise<boolean> {
 		const index = tabs.value.findIndex((item) => item.id === id);
-		return index < 0 ? Promise.resolve(false) : closeDocuments(tabs.value.slice(index + 1));
+		return index < 0 ? Promise.resolve(false) : closeDocuments(tabs.value.slice(index + 1), confirmationToken);
 	}
 
-	function closeToLeft(id: string): Promise<boolean> {
+	function closeToLeft(id: string, confirmationToken?: symbol): Promise<boolean> {
 		const index = tabs.value.findIndex((item) => item.id === id);
-		return index < 0 ? Promise.resolve(false) : closeDocuments(tabs.value.slice(0, index));
+		return index < 0 ? Promise.resolve(false) : closeDocuments(tabs.value.slice(0, index), confirmationToken);
 	}
 
-	function closeAll(): Promise<boolean> {
+	function closeAll(confirmationToken?: symbol): Promise<boolean> {
+		if (confirmationToken && !closeConfirmations.has(confirmationToken)) return Promise.resolve(false);
 		openEpoch += 1;
-		return closeDocuments([...tabs.value]);
+		return closeDocuments([...tabs.value], confirmationToken);
 	}
 
 	function reset(): void {
@@ -291,7 +294,7 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
 		savingDocuments.clear();
 		loadingOperations = 0;
 		loading.value = false;
-		confirmClose = async () => false;
+		closeConfirmations.clear();
 	}
 
 	function closeScope(scopeId: string): void {
@@ -346,7 +349,23 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
 		close,
 
 		setCloseConfirmation: (confirm) => {
-			confirmClose = confirm;
+			const token = Symbol('document-close-confirmation');
+			closeConfirmations.set(token, confirm);
+			return {
+				close: (id) => close(id, token),
+
+				closeOthers: (id) => closeOthers(id, token),
+
+				closeToRight: (id) => closeToRight(id, token),
+
+				closeToLeft: (id) => closeToLeft(id, token),
+
+				closeAll: () => closeAll(token),
+
+				dispose: () => {
+					closeConfirmations.delete(token);
+				},
+			};
 		},
 
 		closeOthers,

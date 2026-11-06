@@ -1,0 +1,179 @@
+/* Shared UI materials and theme-derived component tokens. */
+:root {
+	/*
+   * Liquid Glass material (iOS 26/27 style): very translucent fills over a strong blur,
+   * a subtle top rim and a diagonal sheen. Rim and sheen derive from the theme
+   * background without adding a bright outline to dark panels.
+   */
+	--glass-rim: color-mix(in srgb, var(--app-bg-color) 85%, rgb(255 255 255));
+	--glass-fill: color-mix(in srgb, var(--card-bg-color) 42%, transparent);
+	--glass-nav-fill: color-mix(in srgb, var(--header-bg-color) 55%, transparent);
+	--glass-inset-fill: color-mix(in srgb, var(--input-bg-color) 34%, transparent);
+	--glass-backdrop-filter: blur(28px) saturate(185%);
+	--glass-control-filter: blur(16px) saturate(170%);
+	/* Mixing in the theme border keeps edges visible when a light panel sits on a light page. */
+	--glass-border-color: color-mix(in srgb, var(--border-color) 80%, transparent);
+	--glass-inset-highlight: inset 0 1px 0 color-mix(in srgb, var(--glass-rim) 8%, transparent);
+	--glass-rim-shadow:
+		var(--glass-inset-highlight), inset 1px 0 0 color-mix(in srgb, var(--glass-rim) 5%, transparent),
+		inset -1px 0 0 color-mix(in srgb, var(--glass-rim) 3%, transparent);
+	--glass-sheen-image: linear-gradient(
+		135deg,
+		color-mix(in srgb, var(--glass-rim) 14%, transparent) 0%,
+		transparent 38%,
+		transparent 100%
+	);
+	--glass-shadow: var(--glass-rim-shadow), 0 1px 2px rgb(0 0 0 / 6%), 0 24px 56px -26px rgb(0 0 0 / 24%);
+}
+
+@layer components {
+	.ui-glass-panel {
+		border: 1px solid var(--glass-border-color);
+		background-image: var(--glass-sheen-image);
+		box-shadow: var(--glass-shadow);
+		-webkit-backdrop-filter: var(--glass-backdrop-filter);
+		backdrop-filter: var(--glass-backdrop-filter);
+		background-color: var(--glass-fill);
+	}
+
+	.ui-solid-inset,
+	.ui-solid-item {
+		border: 1px solid var(--border-color);
+		background-image: none;
+		-webkit-backdrop-filter: none;
+		backdrop-filter: none;
+	}
+
+	.ui-solid-inset {
+		background-color: var(--input-bg-color);
+		box-shadow: inset 0 1px 2px rgb(0 0 0 / 6%);
+	}
+
+	.ui-solid-item {
+		background-color: var(--card-bg-color);
+		box-shadow: none;
+		transition:
+			background-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+			border-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+	}
+
+	.ui-solid-item:hover {
+		background-color: var(--header-bg-color);
+		border-color: var(--border-hover-color);
+	}
+
+	/*
+	 * Chrome material for docked headers, footers and sidebars. Ownership of
+	 * border width, radius and layout stays with the component.
+	 */
+	.ui-glass-chrome {
+		background-color: var(--glass-nav-fill);
+		background-image: var(--glass-sheen-image);
+		box-shadow: var(--glass-inset-highlight);
+		-webkit-backdrop-filter: var(--ui-glass-filter);
+		backdrop-filter: var(--ui-glass-filter);
+	}
+}
+
+[data-ui-gen='2'] {
+	--ui-control-height: 32px;
+	--ui-control-padding-inline: 11px;
+	--ui-control-gap: 7px;
+	--ui-control-font-size: 12px;
+	--ui-control-radius: 10px;
+	--ui-panel-radius: 22px;
+	--ui-pill-radius: 999px;
+
+	--ui-motion-duration: 140ms;
+	--ui-motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+	--ui-text: var(--text-color);
+	--ui-text-muted: var(--text-color-secondary);
+	--ui-hairline: var(--glass-border-color);
+	--ui-hairline-strong: color-mix(in srgb, var(--border-color) 92%, transparent);
+	--ui-fill-raised: color-mix(in srgb, var(--card-bg-color) 58%, transparent);
+	--ui-fill-inset: color-mix(in srgb, var(--input-bg-color) 48%, transparent);
+	--ui-fill-inset-hover: color-mix(in srgb, var(--input-bg-color) 62%, transparent);
+	--ui-fill-soft: color-mix(in srgb, var(--card-bg-color) 18%, transparent);
+	--ui-fill-soft-hover: color-mix(in srgb, var(--card-bg-color) 32%, transparent);
+	--ui-glass-filter: blur(14px) saturate(155%);
+	--ui-glass-control-filter: blur(8px) saturate(145%);
+	--ui-glass-highlight: var(--glass-inset-highlight);
+
+	--ui-shadow-raised:
+		0 1px 1px color-mix(in srgb, var(--text-color) 6%, transparent),
+		0 6px 20px -14px color-mix(in srgb, var(--text-color) 24%, transparent);
+	--ui-shadow-inset:
+		inset 0 1px 2px rgb(0 0 0 / 8%), inset 0 0 0 1px color-mix(in srgb, var(--app-bg-color) 24%, transparent);
+
+	--ui-focus-color: color-mix(in srgb, var(--link-active-color) 72%, var(--border-color));
+	--ui-focus-ring: 0 0 0 3px color-mix(in srgb, var(--link-active-color) 18%, transparent);
+
+	--ui-disabled-fill: color-mix(in srgb, var(--input-disabled-bg-color) 58%, transparent);
+	--ui-disabled-text: var(--input-disabled-text-color);
+	--ui-disabled-border: var(--input-disabled-border-color);
+
+	--ui-tone-accent: var(--text-color);
+	--ui-tone-solid: var(--text-color);
+	--ui-tone-on-solid: var(--app-bg-color);
+	--ui-tone-soft: color-mix(in srgb, var(--card-bg-color) 16%, transparent);
+	--ui-tone-ink: var(--text-color);
+	--ui-tone-border: color-mix(in srgb, var(--border-color) 32%, transparent);
+}
+
+[data-ui-gen='2'][data-density='compact'] {
+	--ui-control-height: 28px;
+	--ui-control-padding-inline: 9px;
+	--ui-control-gap: 6px;
+	--ui-control-font-size: 11px;
+}
+
+[data-ui-gen='2'][data-density='comfortable'] {
+	--ui-control-height: 36px;
+	--ui-control-padding-inline: 13px;
+	--ui-control-gap: 8px;
+	--ui-control-font-size: 13px;
+}
+
+[data-ui-gen='2'][data-density='touch'] {
+	--ui-control-height: 44px;
+	--ui-control-padding-inline: 13px;
+	--ui-control-gap: 8px;
+	--ui-control-font-size: 14px;
+}
+
+[data-ui-gen='2'][data-tone='primary'] {
+	--ui-tone-accent: var(--text-color);
+	--ui-tone-solid: var(--card-bg-color);
+	--ui-tone-on-solid: var(--text-color);
+	--ui-tone-soft: color-mix(in srgb, var(--card-bg-color) 20%, transparent);
+	--ui-tone-ink: var(--text-color);
+	--ui-tone-border: color-mix(in srgb, var(--border-color) 35%, transparent);
+}
+
+[data-ui-gen='2'][data-tone='success'] {
+	--ui-tone-accent: var(--status-success-color);
+	--ui-tone-solid: var(--status-success-color);
+	--ui-tone-on-solid: var(--status-success-text-color);
+	--ui-tone-soft: color-mix(in srgb, var(--status-success-color) 12%, transparent);
+	--ui-tone-ink: color-mix(in srgb, var(--status-success-color) 80%, var(--text-color));
+	--ui-tone-border: color-mix(in srgb, var(--status-success-color) 30%, var(--border-color));
+}
+
+[data-ui-gen='2'][data-tone='warning'] {
+	--ui-tone-accent: var(--status-warning-color);
+	--ui-tone-solid: var(--status-warning-color);
+	--ui-tone-on-solid: var(--status-warning-text-color);
+	--ui-tone-soft: color-mix(in srgb, var(--status-warning-color) 14%, transparent);
+	--ui-tone-ink: color-mix(in srgb, var(--status-warning-color) 70%, var(--text-color));
+	--ui-tone-border: color-mix(in srgb, var(--status-warning-color) 34%, var(--border-color));
+}
+
+[data-ui-gen='2'][data-tone='danger'] {
+	--ui-tone-accent: var(--status-error-color);
+	--ui-tone-solid: var(--status-error-color);
+	--ui-tone-on-solid: var(--status-error-text-color);
+	--ui-tone-soft: color-mix(in srgb, var(--status-error-color) 12%, transparent);
+	--ui-tone-ink: color-mix(in srgb, var(--status-error-color) 80%, var(--text-color));
+	--ui-tone-border: color-mix(in srgb, var(--status-error-color) 30%, var(--border-color));
+}

@@ -11,6 +11,7 @@ import type {
 	AuthenticatorTransport,
 } from '@simplewebauthn/server';
 import { WebauthnTechnicalFailure } from '../webauthn-port.js';
+import { passkeyAuthenticatorNames } from './passkey-authenticators.js';
 import type {
 	WebauthnPort,
 	WebauthnResponse,
@@ -233,13 +234,14 @@ export class NativeWebauthn implements WebauthnPort {
 		if (!result.verified || !result.registrationInfo) {
 			return null;
 		}
-		const { credential, credentialBackedUp } = result.registrationInfo;
+		const { credential, credentialBackedUp, aaguid } = result.registrationInfo;
 		return {
 			id: credential.id,
 			publicKeyBase64: Buffer.from(credential.publicKey).toString('base64'),
 			counter: credential.counter,
 			transports: credential.transports ?? [],
 			backedUp: credentialBackedUp,
+			authenticatorName: passkeyAuthenticatorNames.get(aaguid.toLowerCase()) ?? null,
 		};
 	}
 

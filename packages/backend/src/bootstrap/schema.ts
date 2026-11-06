@@ -3,7 +3,7 @@ import { initializePreferencesSchema } from '../modules/preferences/migrations.j
 import { initializeRemoteSchema } from '../modules/remote/migrations.js';
 import type { SchemaMigration } from '../platform/storage/sqlite/schema-types.js';
 import { initializeTargetsSchema } from '../modules/targets/migrations.js';
-import { initializeAccessSchema } from '../modules/access/migrations.js';
+import { initializeAccessSchema, migrateAccessOidc } from '../modules/access/migrations.js';
 import {
 	initializeAgentSchema,
 	migrateAgentToolBatches,
@@ -33,4 +33,5 @@ export const applicationMigrations: readonly SchemaMigration[] = [
 		apply: migrateAgentToolBatches,
 	},
 	{ version: 3, signature: 'agent-artifact-output-batches-20261105', apply: migrateAgentToolOutputs },
+	{ version: 4, signature: 'access-oidc-20261106', apply: migrateAccessOidc },
 ];

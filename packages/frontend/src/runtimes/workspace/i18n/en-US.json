@@ -48,6 +48,25 @@
       "conflict": "The workspace layout or pane sizes changed. This adjustment was not saved. Refresh the layout before adjusting it again.",
       "unknown": "The layout save could not be confirmed. Refresh and verify it first; the save will not be repeated automatically.",
       "failed": "The workspace layout could not be read or saved. Refresh it and try again."
+    },
+    "connectionFailure": {
+      "network": "Connection to Nexus was interrupted. Check your network and retry.",
+      "timeout": "The connection timed out. Please retry shortly.",
+      "unexpected": "Unable to connect right now. Retry, or check the service logs if this continues.",
+      "remote_unavailable": "Unable to establish SSH. Check the server address, port, credentials and SSH service.",
+      "host_key_untrusted": "The server identity has not been confirmed. Reconnect to review and confirm its fingerprint.",
+      "unauthenticated": "Your login has expired. Sign in again before connecting.",
+      "forbidden": "Access was denied. Check your account permissions and access policy.",
+      "not_found": "The connection or original session no longer exists. Open it again from Connections.",
+      "conflict": "The session state has changed. Retry shortly, or check the suspended sessions list.",
+      "stale_target": "The connection settings have changed. Open it again from Connections.",
+      "limit_exceeded": "Resources are busy. Retry shortly or close unused sessions.",
+      "operation_unknown": "The connection result is unconfirmed. Check the session before creating another.",
+      "invalid_input": "The connection settings are invalid. Check them in Connections and retry.",
+      "command_failed": "The remote terminal could not start. Check the server shell configuration.",
+      "not_text": "The server returned an unusable connection response. Check its configuration.",
+      "suspendedRefresh": "Unable to read suspended sessions. Check your network and retry.",
+      "suspendedMissing": "This suspended session is no longer listed. Open the suspended sessions list to check."
     }
   },
   "layoutConfigurator": {

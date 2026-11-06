@@ -814,16 +814,12 @@
 		padding: 0.5rem 0.5rem 0.35rem;
 	}
 	.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-search {
+		--ui-control-font-size: 0.7rem;
 		height: 1.9rem;
 		min-height: 1.9rem;
 		border-color: transparent;
 		background: color-mix(in srgb, var(--input-bg-color) 44%, transparent);
 		box-shadow: inset 0 1px 1px rgb(0 0 0 / 4%);
-	}
-	.workspace-connection-list:not(.workspace-connection-list--launchpad)
-		.workspace-connection-search
-		:deep(.ui-input__control) {
-		font-size: 0.7rem;
 	}
 	.workspace-connection-list:not(.workspace-connection-list--launchpad)
 		.workspace-connection-search
@@ -881,27 +877,19 @@
 		display: none;
 	}
 	.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-empty {
+		--ui-empty-state-icon-size: 25px;
+		--ui-empty-state-icon-border: 0;
+		--ui-empty-state-icon-background: color-mix(in srgb, var(--text-color) 6%, transparent);
+		--ui-empty-state-icon-color: var(--text-color-secondary);
+		--ui-empty-state-icon-font-size: 10px;
+		--ui-empty-state-title-font-size: 11px;
+		--ui-empty-state-title-font-weight: 500;
+		--ui-empty-state-title-color: var(--text-color-secondary);
 		margin: auto;
 		padding: 0.75rem;
 		background: transparent;
 	}
-	.workspace-connection-list:not(.workspace-connection-list--launchpad)
-		.workspace-connection-empty
-		:deep(.ui-empty-state__icon) {
-		width: 25px;
-		height: 25px;
-		border: 0;
-		background: color-mix(in srgb, var(--text-color) 6%, transparent);
-		color: var(--text-color-secondary);
-		font-size: 10px;
-	}
-	.workspace-connection-list:not(.workspace-connection-list--launchpad)
-		.workspace-connection-empty
-		:deep(.ui-empty-state__title) {
-		font-size: 11px;
-		font-weight: 500;
-		color: var(--text-color-secondary);
-	}
+
 	.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-loading {
 		font-size: 0.7rem;
 	}
@@ -1071,10 +1059,6 @@
 
 	.workspace-connection-list--launchpad .workspace-connection-empty {
 		padding: 4rem 1rem;
-	}
-
-	.workspace-connection-list--launchpad .workspace-connection-empty i {
-		color: color-mix(in srgb, var(--text-color-secondary) 65%, transparent);
 	}
 
 	.workspace-connection-list--launchpad .workspace-connection-section {

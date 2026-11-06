@@ -1,9 +1,10 @@
 <script setup lang="ts">
 	import { filesystemFailureMessage } from '@/features/filesystem/public';
-	import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue';
+	import { computed, defineAsyncComponent, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiButton, UiEmptyState, UiInlineLoading, UiInlineNotice, UiSpinner } from '@/foundation/ui';
 	import { useFeedback } from '@/shared/feedback/public';
+	import { ownsDocumentKeyboardEvent } from '@/shared/focus/public';
 	import { usePreferences } from '@/features/preferences/public';
 	import ImagePreview from './ImagePreview.vue';
 	import FilePreviewDialog from './FilePreviewDialog.vue';
@@ -42,15 +43,19 @@
 	import { createFilePreviewSession, type FilePreviewSessionController } from '../composables/useFilePreviewTabs';
 	import type { FilePreviewSource } from '../ports/file-preview-source';
 
-	const props = defineProps<{
-		source: FilePreviewSource;
-		scopeId?: string;
-		scopeLabel?: string;
-		showScopeLabel?: boolean;
-		session?: FilePreviewSessionController;
-		spreadsheetRowsPerPage?: number;
-		spreadsheetMaxColumns?: number;
-	}>();
+	const props = withDefaults(
+		defineProps<{
+			active?: boolean;
+			source: FilePreviewSource;
+			scopeId?: string;
+			scopeLabel?: string;
+			showScopeLabel?: boolean;
+			session?: FilePreviewSessionController;
+			spreadsheetRowsPerPage?: number;
+			spreadsheetMaxColumns?: number;
+		}>(),
+		{ active: true },
+	);
 	const emit = defineEmits<{ edit: [path: string]; hide: []; dismiss: [] }>();
 	const { t } = useI18n();
 	const feedback = useFeedback();
@@ -58,6 +63,14 @@
 	const preview =
 		props.session ?? createFilePreviewSession(props.source, () => preferences.values.value.imagePreviewMaxMiB);
 	const root = ref<HTMLElement | null>(null);
+	const lifecycleActive = ref(true);
+	const active = computed(() => props.active && lifecycleActive.value);
+	onActivated(() => {
+		lifecycleActive.value = true;
+	});
+	onDeactivated(() => {
+		lifecycleActive.value = false;
+	});
 	const loadingTab = computed(() => (preview.active.value?.loading ? preview.active.value : null));
 
 	const formatBytes = (bytes: number): string => {
@@ -99,8 +112,10 @@
 
 	const handleLoadingKeydown = (event: KeyboardEvent): void => {
 		if (
+			!active.value ||
 			!loadingTab.value ||
 			!root.value?.getClientRects().length ||
+			!ownsDocumentKeyboardEvent(root.value, event) ||
 			event.defaultPrevented ||
 			event.key !== 'Escape'
 		)
@@ -116,7 +131,7 @@
 </script>
 
 <template>
-	<section ref="root" class="relative flex h-full min-h-0 flex-col bg-background">
+	<section ref="root" data-document-keyboard-scope class="relative flex h-full min-h-0 flex-col bg-background">
 		<template v-for="tab in preview.tabs.value" :key="tab.id">
 			<div v-show="preview.activeId.value === tab.id" class="absolute inset-0 min-h-0">
 				<UiSpinner v-if="tab.loading" class="m-6" />
@@ -124,7 +139,7 @@
 					v-else-if="tab.error"
 					:file="{ name: tab.name, path: tab.path }"
 					:session="preview"
-					:active="preview.activeId.value === tab.id"
+					:active="active && preview.activeId.value === tab.id"
 					@close="emit('hide')"
 				>
 					<div class="flex h-full min-h-[18rem] items-center justify-center p-6">
@@ -150,14 +165,14 @@
 						v-if="tab.kind === 'image'"
 						:file="tab.file"
 						:session="preview"
-						:active="preview.activeId.value === tab.id"
+						:active="active && preview.activeId.value === tab.id"
 						@close="emit('hide')"
 					/>
 					<MarkdownPreview
 						v-else-if="tab.kind === 'markdown'"
 						:file="tab.file"
 						:session="preview"
-						:active="preview.activeId.value === tab.id"
+						:active="active && preview.activeId.value === tab.id"
 						@open="open"
 						@edit="emit('edit', tab.path)"
 						@close="emit('hide')"
@@ -166,14 +181,14 @@
 						v-else-if="tab.kind === 'pdf'"
 						:file="tab.file"
 						:session="preview"
-						:active="preview.activeId.value === tab.id"
+						:active="active && preview.activeId.value === tab.id"
 						@close="emit('hide')"
 					/>
 					<SpreadsheetPreview
 						v-else-if="tab.kind === 'spreadsheet'"
 						:file="tab.file"
 						:session="preview"
-						:active="preview.activeId.value === tab.id"
+						:active="active && preview.activeId.value === tab.id"
 						:rows-per-page="spreadsheetRowsPerPage"
 						:max-columns="spreadsheetMaxColumns"
 						@close="emit('hide')"
@@ -182,14 +197,14 @@
 						v-else-if="tab.kind === 'database'"
 						:file="tab.file"
 						:session="preview"
-						:active="preview.activeId.value === tab.id"
+						:active="active && preview.activeId.value === tab.id"
 						@close="emit('hide')"
 					/>
 					<DocxPreview
 						v-else-if="tab.kind === 'docx'"
 						:file="tab.file"
 						:session="preview"
-						:active="preview.activeId.value === tab.id"
+						:active="active && preview.activeId.value === tab.id"
 						@close="emit('hide')"
 					/>
 					<div v-else class="grid h-full place-items-center text-text-secondary">

@@ -52,11 +52,11 @@
 		WorkspaceTabBar,
 		provideWorkspaceUiState,
 		workspaceRuntimeRegistry,
+		workspaceConnectionFailureCode,
 		type WorkspaceRuntimeSession,
 		loadWorkspaceLayoutConfigurator,
 		loadWorkspaceFocusConfigurator,
 		loadWorkspaceSessionSurface,
-		preloadWorkspaceTerminalSurface,
 	} from '@/runtimes/workspace/presentation/public';
 
 	const ProgressDisplayModal = defineAsyncComponent(loadProgressDisplayModal);
@@ -548,6 +548,21 @@
 			});
 
 			const task = await target.transferController.waitForTask(taskId);
+			// The mutation belongs to the live sessions even after its initiating view is gone.
+			// Only UI feedback and further user actions require that original view permission.
+			const refreshes: Promise<void>[] = [];
+			if (task.status === 'completed' || task.status === 'partial') {
+				if (registry.sessions.get(target.id) === target && target.state.value === 'connected')
+					refreshes.push(target.filesystemState.browser.refresh());
+				if (
+					!sameSession &&
+					snapshot.operation === 'cut' &&
+					registry.sessions.get(source.id) === source &&
+					source.state.value === 'connected'
+				)
+					refreshes.push(source.filesystemState.browser.refresh());
+			}
+			const refreshed = await Promise.allSettled(refreshes);
 			if (!current()) return;
 			if (task.status === 'error' || task.status === 'unknown') {
 				feedback.notifyError(
@@ -566,10 +581,6 @@
 			if (warning) feedback.notifyWarning(t(warning.key, warning.params ?? {}));
 			if (snapshot.operation === 'cut' && task.status === 'completed')
 				registry.fileClipboard.clear(snapshot.generation);
-			// Refresh is a read after the confirmed mutation; its failure must not suggest replaying the move.
-			const refreshes = [target.filesystemState.browser.refresh()];
-			if (!sameSession && snapshot.operation === 'cut') refreshes.push(source.filesystemState.browser.refresh());
-			const refreshed = await Promise.allSettled(refreshes);
 			if (refreshed.some((result) => result.status === 'rejected'))
 				feedback.notifyWarning(t('fileManager.warnings.transferRefreshFailed'));
 		} catch (cause) {
@@ -626,7 +637,23 @@
 		else surfaces.delete(id);
 	};
 
-	const openConnection = async (connection: ConnectionSummary): Promise<void> => {
+	const preparingSessionId = ref<string | null>(null);
+	let activationGeneration = 0;
+
+	const beginSessionSelection = (): number => {
+		preparingSessionId.value = null;
+		return ++activationGeneration;
+	};
+
+	const openConnectionPicker = (): void => {
+		beginSessionSelection();
+		connectionPickerVisible.value = true;
+	};
+
+	const openConnection = async (
+		connection: ConnectionSummary,
+		selection = beginSessionSelection(),
+	): Promise<void> => {
 		const signal = pageScope.signal;
 		if (!isPageCurrent(signal)) return;
 		if (connection.type === 'RDP' || connection.type === 'VNC') {
@@ -637,9 +664,10 @@
 			});
 			return;
 		}
-		connectionPickerVisible.value = false;
+		const activate = selection === activationGeneration;
+		if (activate) connectionPickerVisible.value = false;
 		try {
-			await registry.open(connection);
+			await registry.open(connection, { activate });
 		} catch (cause) {
 			if (!isPageCurrent(signal) || (cause instanceof DOMException && cause.name === 'AbortError')) return;
 			feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
@@ -648,9 +676,10 @@
 
 	const openConnections = async (connections: ConnectionSummary[]) => {
 		const signal = pageScope.signal;
+		const selection = beginSessionSelection();
 		for (const connection of connections) {
 			if (!isPageCurrent(signal)) return;
-			await openConnection(connection);
+			await openConnection(connection, selection);
 		}
 	};
 
@@ -713,9 +742,6 @@
 		}
 	};
 
-	const preparingSessionId = ref<string | null>(null);
-	let activationGeneration = 0;
-
 	const activateSession = (id: string) => {
 		const signal = pageScope.signal;
 		const session = registry.sessions.get(id);
@@ -724,7 +750,7 @@
 		const isCurrent = () => isPageCurrent(signal) && registry.sessions.get(id) === session;
 
 		connectionPickerVisible.value = false;
-		const generation = ++activationGeneration;
+		const generation = beginSessionSelection();
 		if (id === registry.activeId.value) {
 			preparingSessionId.value = null;
 			void nextTick(() => {
@@ -927,7 +953,8 @@
 				},
 				'Workspace suspended-session resume failed in view',
 			);
-			if (!options.silent) feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
+			if (!options.silent)
+				feedback.notifyError(t(`workspace.connectionFailure.${workspaceConnectionFailureCode(cause)}`));
 			return false;
 		}
 	};
@@ -963,6 +990,7 @@
 				{ workspaceId, status: refreshed.status, failureKind: 'suspended_catalog_refresh_failed' },
 				'Marked Workspace resume stopped because suspended catalog refresh failed',
 			);
+			feedback.notifyError(t('workspace.connectionFailure.suspendedRefresh'));
 			return;
 		}
 		const suspended =
@@ -978,9 +1006,37 @@
 				},
 				'Marked Workspace could not find a matching suspended session',
 			);
+			feedback.notifyError(t('workspace.connectionFailure.suspendedMissing'));
 			return;
 		}
 		await resumeSuspended(suspended);
+	};
+
+	const retryingSuspendedSessions = new Set<string>();
+
+	const handleSessionInteraction = (session: WorkspaceRuntimeSession): void => {
+		if (
+			!isPageCurrent(pageScope.signal) ||
+			registry.sessions.get(session.id) !== session ||
+			session.recoveryRequired.value ||
+			session.resetRequested.value ||
+			!['error', 'disconnected', 'reconnecting'].includes(session.state.value)
+		)
+			return;
+		if (!session.markedForSuspend.value) {
+			session.reconnectNow();
+			return;
+		}
+		// Marked sessions must use the suspension owner and its takeover confirmation.
+		if (retryingSuspendedSessions.has(session.id)) return;
+		retryingSuspendedSessions.add(session.id);
+		const signal = pageScope.signal;
+		void resumeMarkedSession(session.id)
+			.catch((cause) => {
+				logger.warn({ err: cause, workspaceId: session.id }, 'Explicit suspended-session recovery failed');
+				if (isPageCurrent(signal)) feedback.notifyError(t('workspace.connectionFailure.suspendedRefresh'));
+			})
+			.finally(() => retryingSuspendedSessions.delete(session.id));
 	};
 
 	const reconcileDisconnectedWorkspaceSessions = (options: { kickOrdinary?: boolean } = {}): Promise<void> => {
@@ -1245,6 +1301,7 @@
 			: route.query.openSuspended;
 		const shouldOpenSuspended = rawOpenSuspended === '1' || rawOpenSuspended === 'true';
 		if (!values.length && !shouldOpenSuspended) return;
+		const selection = beginSessionSelection();
 
 		// Consume one-shot query actions before starting any potentially slow connection work.
 		// ConnectionSummary success must never perform a later navigation: if the user returns to the
@@ -1255,9 +1312,11 @@
 				if (!isPageCurrent(signal)) return;
 				const connection = await refreshConnection(id);
 				if (!isPageCurrent(signal)) return;
-				await openConnection(connection);
+				// Keep the original selection intent across config reads and earlier SSH handshakes.
+				await openConnection(connection, selection);
 			}
-			if (isPageCurrent(signal) && shouldOpenSuspended) suspendedVisible.value = true;
+			if (isPageCurrent(signal) && selection === activationGeneration && shouldOpenSuspended)
+				suspendedVisible.value = true;
 		} catch (cause) {
 			if (isPageCurrent(signal)) feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
 		}
@@ -1309,7 +1368,6 @@
 	onMounted(async () => {
 		activatePageActions();
 		const signal = pageScope.signal;
-		if (route.query.connectionId) preloadWorkspaceTerminalSurface();
 		window.addEventListener('keydown', handleGlobalKeydown, true);
 		window.addEventListener('keyup', handleGlobalKeyup, true);
 		document.addEventListener('visibilitychange', handleDocumentVisibilityChange);
@@ -1435,7 +1493,7 @@
 			@close-left="closeSessionsToLeft"
 			@toggle-suspend="toggleSuspendMark"
 			@reorder="registry.move"
-			@new-session="connectionPickerVisible = true"
+			@new-session="openConnectionPicker"
 			@toggle-header="toggleHeader"
 			@preload-progress="preloadProgressDisplay"
 			@preload-layout-configurator="preloadLayoutConfigurator"
@@ -1555,7 +1613,7 @@
 				@quick-command-row-scale="scheduleQuickCommandScale"
 				@quick-command-compact-mode="updateQuickCommandCompactMode"
 				@progress-visible="setProgressVisible(session.id, $event)"
-				@interaction="session.reconnectNow()"
+				@interaction="handleSessionInteraction(session)"
 				@open-suspended="suspendedVisible = true"
 				@open-focus-configurator="focusConfiguratorVisible = true"
 				@sidebar-width="saveSidebarWidth"

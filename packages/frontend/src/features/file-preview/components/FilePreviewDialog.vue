@@ -51,7 +51,7 @@
 
 	const scrollActiveTabIntoView = (): void => {
 		const activeId = props.session.activeId.value;
-		if (!activeId || !root.value) return;
+		if (!props.active || !activeId || !root.value) return;
 		const active = Array.from(root.value.querySelectorAll<HTMLElement>('[data-preview-tab-id]')).find(
 			(element) => element.dataset.previewTabId === activeId,
 		);
@@ -70,6 +70,7 @@
 	<section
 		ref="root"
 		data-file-preview-dialog
+		data-document-keyboard-scope
 		class="file-preview-dialog relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-background text-foreground"
 	>
 		<div v-if="active" class="file-preview-header ui-glass-chrome">
@@ -377,6 +378,18 @@
 			height: 2.75rem;
 			min-width: 2.75rem;
 			flex-basis: 2.75rem;
+		}
+	}
+
+	@container file-preview-dialog (max-width: 640px) {
+		.file-preview-toolbar:has(.preview-search-controls) {
+			flex-wrap: wrap;
+		}
+	}
+
+	@media (pointer: coarse) {
+		.file-preview-toolbar:has(.preview-search-controls) {
+			flex-wrap: wrap;
 		}
 	}
 

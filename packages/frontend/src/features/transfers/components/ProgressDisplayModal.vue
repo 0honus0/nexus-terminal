@@ -3,12 +3,12 @@
 		ServerTransferItemStatus,
 		ServerTransferTaskStatus,
 	} from '@nexus-terminal/shared/remote/transfers/server-values';
-	import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+	import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
 	import { useDraggablePosition } from '@/foundation/interaction';
 	import { UiButton, UiEmptyState, UiLoadingState, UiOverlayPanel, UiSpinner } from '@/foundation/ui';
-	import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
+	import { useConnections } from '@/features/connections/public';
 	import type { ProgressSource, TransferTask } from '../model/transfer-types';
 	import { formatTransferBytes, isIndeterminateArchiveProgress } from '../model/progress-presentation';
 	import type { ServerTransferTask } from '../model/server-transfer-types';
@@ -36,7 +36,7 @@
 		remove: [sourceId: string, taskId: string];
 	}>();
 	const { t, locale } = useI18n();
-	const connections = useRuntimeFeatureCapabilities().connections;
+	const connections = useConnections();
 	interface ProgressDisplayPosition {
 		x: number;
 		y: number;
@@ -60,6 +60,8 @@
 	const panelContent = ref<HTMLElement | null>(null);
 	const position = ref({ x: VIEWPORT_MARGIN, y: VIEWPORT_MARGIN });
 	const positionInitialized = ref(false);
+	const viewActive = ref(true);
+	const windowActive = computed(() => props.visible && viewActive.value);
 	let positionObserver: ResizeObserver | undefined;
 
 	const panelElement = (): HTMLElement | null => panelContent.value?.parentElement ?? null;
@@ -73,12 +75,12 @@
 	});
 
 	const savePosition = (): void => {
-		if (props.mobile || !positionInitialized.value) return;
+		if (!windowActive.value || props.mobile || !positionInitialized.value) return;
 		writeStoredValue(progressDisplayPositionStorage, position.value);
 	};
 
 	const syncPosition = (): void => {
-		if (props.mobile) return;
+		if (!windowActive.value || props.mobile) return;
 		const element = panelElement();
 		if (!element) return;
 		let next = position.value;
@@ -87,12 +89,11 @@
 			next = readStoredValue(progressDisplayPositionStorage) ?? { x: rect.left, y: rect.top };
 		}
 		position.value = clampPosition(next, element);
-		if (positionInitialized.value) savePosition();
 		positionInitialized.value = true;
 	};
 
 	const requestPositionSync = (): void => {
-		if (props.mobile) return;
+		if (!windowActive.value || props.mobile) return;
 		const element = panelElement();
 		if (!element) return;
 		positionObserver?.observe(element);
@@ -103,6 +104,7 @@
 		getElement: panelElement,
 
 		canStart: (event) =>
+			windowActive.value &&
 			!props.mobile &&
 			event.button === 0 &&
 			!(event.target as HTMLElement).closest('button, a, input, select, textarea'),
@@ -126,20 +128,43 @@
 		};
 	});
 
+	const cancelPositionSync = (): void => {
+		drag.cancelDragging();
+		positionObserver?.disconnect();
+	};
+
+	const handleResize = (): void => {
+		cancelPositionSync();
+		requestPositionSync();
+	};
+
+	watch(
+		() => [windowActive.value, props.mobile] as const,
+		() => {
+			cancelPositionSync();
+			void nextTick(requestPositionSync);
+		},
+		{ flush: 'sync' },
+	);
+	onActivated(() => {
+		viewActive.value = true;
+	});
+	onDeactivated(() => {
+		viewActive.value = false;
+	});
 	onMounted(() => {
-		if (props.mobile) return;
 		// Measure after layout, without forcing the terminal and all panes to lay out during opening.
 		positionObserver = new ResizeObserver(() => {
 			positionObserver?.disconnect();
 			syncPosition();
 		});
 		requestPositionSync();
-		window.addEventListener('resize', requestPositionSync);
+		window.addEventListener('resize', handleResize);
 	});
 	onBeforeUnmount(() => {
 		positionObserver?.disconnect();
 		positionObserver = undefined;
-		window.removeEventListener('resize', requestPositionSync);
+		window.removeEventListener('resize', handleResize);
 	});
 
 	const done = (status: TransferTask['status']) =>
@@ -171,7 +196,7 @@
 
 	const connectionName = (connectionId?: number): string => {
 		if (!connectionId) return t('transferProgressModal.unknownSourceServer');
-		const connection = connections.items.value.find((item) => item.id === connectionId);
+		const connection = connections.connections.value.find((item) => item.id === connectionId);
 		return (
 			connection?.name?.trim() ||
 			connection?.host ||
@@ -229,7 +254,7 @@
 
 <template>
 	<UiOverlayPanel
-		:visible="visible"
+		:visible="windowActive"
 		:overlay="true"
 		:teleport="true"
 		:z-index="1100"
@@ -243,7 +268,7 @@
 		@close="emit('close')"
 	>
 		<section
-			v-if="visible"
+			v-if="windowActive"
 			ref="panelContent"
 			data-progress-display-placement="overlay"
 			class="progress-display-overlay flex min-h-0 flex-col overflow-hidden text-foreground"

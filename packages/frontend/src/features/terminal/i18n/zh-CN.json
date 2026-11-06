@@ -1,9 +1,7 @@
 {
   "terminal": {
-    "connectionFailed": "连接失败：{reason}",
     "connectionClosed": "连接已断开",
-    "retryConnection": "按任意键重新连接…",
-    "retryConnectionTouch": "轻点终端或按任意键重新连接…",
+    "retryConnection": "聚焦终端后也可按 Enter 重试",
     "inputRejected": "终端输入未发送：连接不可用、输入过大或发送缓冲已满。被拒绝的输入不会自动重发。",
     "search": {
       "open": "搜索终端",
@@ -41,6 +39,9 @@
       "arrowDown": "下方向键",
       "arrowLeft": "左方向键",
       "arrowRight": "右方向键"
-    }
+    },
+    "connectionInterrupted": "终端尚未连接",
+    "reconnect": "重新连接",
+    "retryConnectionTouch": "也可轻点终端空白处重试"
   }
 }

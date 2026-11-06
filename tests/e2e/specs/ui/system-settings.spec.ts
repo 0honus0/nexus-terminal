@@ -83,6 +83,107 @@ test('system settings persist timezone and language changes through the UI', asy
 	}
 });
 
+test('timezone options remain reachable in short viewports without saving preferences', async ({ page, context }) => {
+	await loginAsInitialAdmin(context.request);
+	const original = await preferences(context.request);
+	await page.goto('/settings?tab=system');
+	const timezone = page.locator('#timezoneSelect');
+	await expect(timezone).toBeVisible();
+	for (const size of [
+		{ width: 390, height: 400 },
+		{ width: 320, height: 240 },
+	]) {
+		await page.setViewportSize(size);
+		await timezone.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+		await timezone.click();
+		const panel = page.locator('[data-ui="select-panel"]');
+		await expect(panel).toBeInViewport({ ratio: 1 });
+		const first = panel.getByRole('option', { name: 'UTC', exact: true });
+		await first.scrollIntoViewIfNeeded();
+		await expect(first).toBeInViewport({ ratio: 1 });
+		await first.click();
+		await expectUiSelectValue(timezone, 'UTC');
+		await timezone.click();
+		await expect(panel).toBeInViewport({ ratio: 1 });
+		const last = panel.getByRole('option', { name: 'Etc/GMT-14', exact: true });
+		await last.scrollIntoViewIfNeeded();
+		await expect(last).toBeInViewport({ ratio: 1 });
+		await last.click();
+		await expectUiSelectValue(timezone, 'Etc/GMT-14');
+	}
+	expect(await preferences(context.request)).toEqual(original);
+});
+
+test('mobile settings tabs reveal scrollable edges and keep the selected category visible', async ({
+	page,
+	context,
+}) => {
+	await loginAsInitialAdmin(context.request);
+	const original = await preferences(context.request);
+	try {
+		for (const language of ['en-US', 'zh-CN', 'ja-JP']) {
+			await updateUiPreferences(context.request, (value) => {
+				value.language = language;
+			});
+			for (const width of [320, 390]) {
+				await page.setViewportSize({ width, height: 700 });
+				await page.goto('/settings?tab=about');
+				const tabs = page.locator('.settings-mobile-toolbar [role="tablist"]');
+				const edges = page.locator('.settings-mobile-tabs');
+				const first = tabs.getByRole('tab').first();
+				const last = tabs.getByRole('tab').last();
+
+				const selectedIsVisible = () =>
+					tabs.evaluate((element) => {
+						const selected = element.querySelector('[aria-selected="true"]');
+						if (!selected) return false;
+						const bounds = element.getBoundingClientRect();
+						const selectedBounds = selected.getBoundingClientRect();
+						return selectedBounds.left >= bounds.left - 1 && selectedBounds.right <= bounds.right + 1;
+					});
+
+				await expect(last).toHaveAttribute('aria-selected', 'true');
+				await expect.poll(selectedIsVisible).toBe(true);
+				await expect(edges).toHaveClass(/has-hidden-start/);
+				await expect(edges).not.toHaveClass(/has-hidden-end/);
+				await last.focus();
+				await page.keyboard.press('Home');
+				await expect(first).toBeFocused();
+				await expect(first).toHaveAttribute('aria-selected', 'true');
+				await expect.poll(selectedIsVisible).toBe(true);
+				await expect(edges).not.toHaveClass(/has-hidden-start/);
+				await expect(edges).toHaveClass(/has-hidden-end/);
+				await page.keyboard.press('End');
+				await expect(last).toBeFocused();
+				await expect.poll(selectedIsVisible).toBe(true);
+				await page.keyboard.press('ArrowLeft');
+				await expect(tabs.locator('#settings-tab-mobile-data')).toBeFocused();
+				await expect.poll(selectedIsVisible).toBe(true);
+				await tabs.evaluate((element) => {
+					element.scrollLeft = (element.scrollWidth - element.clientWidth) / 2;
+				});
+				await expect(edges).toHaveClass(/has-hidden-start/);
+				await expect(edges).toHaveClass(/has-hidden-end/);
+				await page.locator('.settings-mobile-back').click();
+				await page.locator('.settings-mobile-group button').last().click();
+				await expect(last).toHaveAttribute('aria-selected', 'true');
+				await expect.poll(selectedIsVisible).toBe(true);
+			}
+			await page.setViewportSize({ width: 1023, height: 700 });
+			const tabs = page.locator('.settings-mobile-toolbar [role="tablist"]');
+			await expect.poll(() => tabs.evaluate((element) => element.scrollWidth - element.clientWidth)).toBe(0);
+			await expect(page.locator('.settings-mobile-tabs')).not.toHaveClass(/has-hidden-/);
+			await page.setViewportSize({ width: 1440, height: 900 });
+			await expect(page.locator('.settings-mobile-toolbar')).toBeHidden();
+			await expect(page.locator('.settings-sidebar')).toBeVisible();
+		}
+	} finally {
+		await updateUiPreferences(context.request, (value) => {
+			value.language = original.language;
+		});
+	}
+});
+
 test('preferences load workspace values from the Shared presentation contract', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
 	const original = await preferences(context.request);

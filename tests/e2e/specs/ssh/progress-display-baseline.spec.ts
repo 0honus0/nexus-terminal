@@ -23,9 +23,13 @@ import { slowStep, step } from '../../support/steps';
 import { selectUiOption } from '../../support/ui-select';
 import {
 	closeProgressDisplay,
+	dragLocalFile,
+	startZipCompression,
 	hideVisibleProgressCenter,
 	visibleProgressCenter,
 	visibleProgressTask,
+	assertProgressGestureCancelled,
+	cancelProgressPointer,
 } from './progress-display.helpers';
 
 const row = (page: Page, filename: string): Locator => fileManagerRow(page, filename);
@@ -134,6 +138,21 @@ test('desktop Progress Display floats above the workspace without resizing the t
 		expect(Math.abs(after.y - before.y)).toBeLessThan(1);
 		expect(Math.abs(after.width - before.width)).toBeLessThan(1);
 		expect(Math.abs(after.height - before.height)).toBeLessThan(1);
+
+		await step(
+			'interrupted Progress Display drags release selection without saving or accepting late input',
+			async () => {
+				for (const cancellation of ['pointercancel', 'blur', 'hidden'] as const) {
+					await assertProgressGestureCancelled(
+						page,
+						display,
+						display.locator('.transfer-progress-header'),
+						'nexus.transfers.progress-display-position.v1',
+						() => cancelProgressPointer(page, cancellation),
+					);
+				}
+			},
+		);
 
 		await step('desktop Progress Display drags freely and restores its last position', async () => {
 			const dialog = display;
@@ -246,6 +265,212 @@ test('existing copy progress popup hides and restores through Progress Display',
 		await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
 	}
 });
+
+test('progress gestures cancel when their session, popup or cached workspace becomes inactive', async ({
+	page,
+	context,
+}) => {
+	test.setTimeout(90_000);
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await openFileManager(page, context);
+	await closeConnectedFileManager(page);
+	const connectionId = await ensureTestSshConnection(context.request);
+	const tabs = page.locator('.terminal-tab-shell').getByRole('tab');
+	const firstTab = tabs.nth(0);
+	await page.getByRole('button', { name: 'New Connection Tab', exact: true }).click();
+	await page.locator(`.workspace-connection-list [data-connection-id="${connectionId}"]`).click();
+	await expect(tabs).toHaveCount(2);
+	const secondTab = tabs.nth(1);
+	await expect(secondTab).toHaveAttribute('data-session-state', 'connected', { timeout: 20_000 });
+	await firstTab.click();
+	await reopenConnectedFileManager(page);
+	const sourceName = 'gesture-lifecycle-progress.bin';
+	await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(sourceName)}&size=${256 * 1024}`, {
+		method: 'POST',
+	});
+	await refreshFileManager(page);
+	await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=3000`, { method: 'POST' });
+	try {
+		await rightClickRow(page, sourceName);
+		await clickMenuItem(page, 'Copy');
+		await goIntoFolder(page, 'folder-seed');
+		await openCurrentDirectoryContextMenu(page);
+		await clickMenuItem(page, 'Paste');
+		const center = page.locator('.transfer-progress-window');
+		await expect(center).toBeVisible();
+		for (const cancellation of ['pointercancel', 'blur', 'hidden'] as const) {
+			await assertProgressGestureCancelled(
+				page,
+				center,
+				center.locator('.transfer-progress-header'),
+				'nexus.transfers.progress-window.v1',
+				() => cancelProgressPointer(page, cancellation),
+			);
+		}
+		await closeConnectedFileManager(page);
+		await expect(center).toBeVisible();
+
+		const switchAway = async (): Promise<void> => {
+			await secondTab.dispatchEvent('click');
+			await expect(secondTab).toHaveAttribute('aria-selected', 'true');
+			await expect(center).toBeHidden();
+		};
+
+		await assertProgressGestureCancelled(
+			page,
+			center,
+			center.locator('.transfer-progress-header'),
+			'nexus.transfers.progress-window.v1',
+			switchAway,
+		);
+		await firstTab.click();
+		await expect(center).toBeVisible();
+		await assertProgressGestureCancelled(
+			page,
+			center,
+			center.locator('[data-ui="resize-handle"]'),
+			'nexus.transfers.progress-window.v1',
+			switchAway,
+		);
+		await firstTab.click();
+		await hideVisibleProgressCenter(page);
+		const restore = page.getByRole('button', { name: /^Progress Display \(/ });
+		const restorePanel = restore.locator('..');
+		for (const cancellation of ['pointercancel', 'blur'] as const) {
+			await assertProgressGestureCancelled(
+				page,
+				restorePanel,
+				restorePanel,
+				'nexus.workspace.progress-restore-position.v1',
+				() => cancelProgressPointer(page, cancellation),
+			);
+			await restore.dispatchEvent('click', { detail: 1 });
+			await expect(center).toBeHidden();
+			await expect(restore).toBeVisible();
+			// A later keyboard click is independent of the cancelled pointer gesture.
+			await assertProgressGestureCancelled(
+				page,
+				restorePanel,
+				restorePanel,
+				'nexus.workspace.progress-restore-position.v1',
+				() => cancelProgressPointer(page, cancellation),
+			);
+			await restore.focus();
+			await page.keyboard.press(cancellation === 'pointercancel' ? 'Enter' : 'Space');
+			await expect(center).toBeVisible();
+			await hideVisibleProgressCenter(page);
+		}
+		const restoreBounds = await restore.boundingBox();
+		if (!restoreBounds) throw new Error('Progress restore button is missing');
+		await restorePanel.dispatchEvent('pointerdown', {
+			pointerId: 93,
+			pointerType: 'pen',
+			isPrimary: true,
+			button: 0,
+			clientX: restoreBounds.x + 12,
+			clientY: restoreBounds.y + 12,
+		});
+		await page.evaluate(
+			({ x, y }) => {
+				window.dispatchEvent(
+					new PointerEvent('pointermove', { pointerId: 93, clientX: x - 40, clientY: y - 25 }),
+				);
+				window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 93 }));
+			},
+			{ x: restoreBounds.x + 12, y: restoreBounds.y + 12 },
+		);
+		await restore.focus();
+		await page.keyboard.press('Space');
+		await expect(center).toBeVisible();
+		await hideVisibleProgressCenter(page);
+		await assertProgressGestureCancelled(
+			page,
+			restorePanel,
+			restorePanel,
+			'nexus.workspace.progress-restore-position.v1',
+			async () => {
+				await secondTab.dispatchEvent('click');
+				await expect(restore).toBeHidden();
+			},
+		);
+		await firstTab.click();
+		await restore.click();
+		await expect(center).toBeVisible();
+		await assertProgressGestureCancelled(
+			page,
+			center,
+			center.locator('.transfer-progress-header'),
+			'nexus.transfers.progress-window.v1',
+			async () => {
+				await center.getByRole('button', { name: 'Hide progress', exact: true }).dispatchEvent('click');
+				await expect(center).toBeHidden();
+			},
+		);
+		const display = await openDesktopProgressDisplay(page);
+		await assertProgressGestureCancelled(
+			page,
+			display,
+			display.locator('.transfer-progress-header'),
+			'nexus.transfers.progress-display-position.v1',
+			async () => {
+				await display.getByRole('button', { name: 'Hide progress', exact: true }).dispatchEvent('click');
+				await expect(display).toBeHidden();
+			},
+		);
+		const reopenedDisplay = await openDesktopProgressDisplay(page);
+		await assertProgressGestureCancelled(
+			page,
+			reopenedDisplay,
+			reopenedDisplay.locator('.transfer-progress-header'),
+			'nexus.transfers.progress-display-position.v1',
+			async () => {
+				await page
+					.locator('.app-nav-links')
+					.getByRole('link', { name: 'Dashboard', exact: true })
+					.dispatchEvent('click');
+				await expect(page).toHaveURL(/\/$/);
+				await expect(reopenedDisplay).toBeHidden();
+			},
+		);
+		await page.goBack();
+		await reopenConnectedFileManager(page);
+		await expect(row(page, sourceName)).toBeVisible({ timeout: 30_000 });
+		await expect(visibleProgressTask(page, sourceName)).toHaveCount(0, { timeout: 30_000 });
+	} finally {
+		await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+	}
+});
+
+for (const operation of ['upload', 'archive'] as const) {
+	test(`${operation} completion refreshes the original directory after leaving its view`, async ({
+		page,
+		context,
+	}) => {
+		await openFileManager(page, context);
+		const filename = operation === 'upload' ? 'view-lifecycle-upload.bin' : 'archive-source.zip';
+		const delayPath = operation === 'upload' ? '/sftp/write-delay' : '/archive/exec-delay';
+		await fetch(`${E2E_SSH.controlUrl}${delayPath}?ms=3000`, { method: 'POST' });
+		try {
+			if (operation === 'upload') await dragLocalFile(page, filename, 16 * 1024, 0x5a);
+			else await startZipCompression(page, 'archive-source.txt');
+			await expect(visibleProgressTask(page, filename)).toBeVisible();
+			await expect(visibleProgressTask(page, filename)).not.toHaveAttribute('data-task-status', 'completed');
+			await page
+				.locator('.app-nav-links')
+				.getByRole('link', { name: 'Dashboard', exact: true })
+				.dispatchEvent('click');
+			await expect(page).toHaveURL(/\/$/);
+			await expect(page.locator('.transfer-progress-window:visible')).toHaveCount(0);
+			await page.goBack();
+			await reopenConnectedFileManager(page);
+			// No manual refresh: the session must publish completion after the old view permission was revoked.
+			await expect(row(page, filename)).toBeVisible({ timeout: 30_000 });
+			await expect(visibleProgressTask(page, filename)).toHaveCount(0, { timeout: 30_000 });
+		} finally {
+			await fetch(`${E2E_SSH.controlUrl}${delayPath}?ms=0`, { method: 'POST' });
+		}
+	});
+}
 
 test('application modals open above the standalone transfer progress popup', async ({ page, context }) => {
 	await page.setViewportSize({ width: 1024, height: 768 });

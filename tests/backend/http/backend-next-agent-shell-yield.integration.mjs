@@ -15,21 +15,20 @@ await test(
 	{ timeout: 1000 },
 	async (t) => {
 		const readable = new PassThrough();
+		const stderrReadable = new PassThrough();
+		t.after(() => stderrReadable.destroy());
 		t.after(() => readable.destroy());
 		let settle;
 		const outcome = new Promise((resolve) => {
 			settle = resolve;
 		});
-		let offStderr = false;
+
 		let closed = 0;
 		const result = new PosixCommandAdapter().executeBatch(
 			async () => ({
 				readable,
+				stderrReadable,
 				outcome,
-
-				onStderr: () => () => {
-					offStderr = true;
-				},
 
 				close: () => {
 					closed++;
@@ -46,7 +45,8 @@ await test(
 		assert.equal(readable.listenerCount('data'), 0);
 		assert.equal(readable.listenerCount('end'), 0);
 		assert.equal(readable.listenerCount('error'), 0);
-		assert.equal(offStderr, true);
+		assert.equal(stderrReadable.listenerCount('data'), 0);
+		assert.equal(stderrReadable.listenerCount('end'), 0);
 		assert.equal(closed, 1);
 	},
 );
@@ -135,7 +135,10 @@ await test('Shell yield policy and mutation admission', { timeout: 60000 }, asyn
 		);
 		await f.approve(await f.approval(quick, 'shell_execute'));
 		await f.wait(quick, 'completed');
-		assert.deepEqual(result(f, quick, 'shell_execute').value, {
+		const quickResult = result(f, quick, 'shell_execute').value;
+		assert.deepEqual(quickResult, {
+			jobId: f.rows('agent_tool_jobs', quick)[0].id,
+			outputRead: { connectionId: f.connectionId, action: 'output', jobIds: [quickResult.jobId], offset: 0 },
 			status: 'nonzero',
 			commands: [
 				{
@@ -194,6 +197,75 @@ await test('Shell yield policy and mutation admission', { timeout: 60000 }, asyn
 			assert.equal(f.rows('agent_tool_jobs', run).length, 1);
 		},
 	);
+
+	await scenario('8 MiB output finishes over real OpenSSH with its complete log intact', async (f, directory) => {
+		await settings(f, { maxToolOutputBytes: 4096 });
+		const run = await f.start('eight MiB output', (results) => {
+			if (results.length) {
+				assert.equal(results[0].kind, 'captured_result_preview');
+				assert.ok(results[0].projection.text.includes('"jobId":'));
+				assert.ok(results[0].projection.text.includes('"outputRead":{"connectionId":' + f.connectionId));
+				return {};
+			}
+			return shell(f, {
+				commands: ["head -c 8388608 /dev/zero | tr '\\000' o", "printf '末尾🙂'; printf '错误🙂' >&2"],
+			});
+		});
+		await f.approve(await f.approval(run, 'shell_execute'));
+		await f.wait(run, 'completed');
+		const job = f.rows('agent_tool_jobs', run)[0];
+		const value = JSON.parse(job.result_text);
+		assert.equal(value.status, 'completed');
+		assert.equal(value.commands[0].truncated, true);
+		assert.equal(value.commands[1].status, 'completed');
+		const bytes = await readFile(join(directory, 'tool-logs', job.id + '.log'));
+		assert.equal(bytes.length, 8388608 + Buffer.byteLength('末尾🙂错误🙂'));
+		assert.equal(bytes.filter((byte) => byte === 111).length, 8388608);
+		const text = bytes.toString('utf8');
+		assert.ok(text.includes('末尾🙂'));
+		assert.ok(text.includes('错误🙂'));
+	});
+
+	await scenario('complete large stdout/stderr and later commands are paged without replay', async (f, directory) => {
+		const expected = ['o'.repeat(40000), '错🙂'.repeat(2000), 'tail🙂'];
+		const received = ['', '', ''];
+		let offset = 0;
+		const effect = join(directory, 'once');
+		const run = await f.start('complete command output', (results) => {
+			if (!results.length)
+				return shell(f, {
+					commands: [
+						`printf x >> '${effect}'; awk 'BEGIN { for(i=0;i<40000;i++) printf "o"; for(i=0;i<2000;i++) printf "错🙂" > "/dev/stderr" }'`,
+						"printf 'tail🙂'",
+					],
+				});
+			if (results.length > 1) {
+				const page = results.at(-1).jobs[0];
+				assert.equal(page.available, true);
+				assert.equal(page.offset, offset);
+				for (const item of page.output)
+					received[item.commandIndex === 1 ? 2 : item.stream === 'stderr' ? 1 : 0] += item.text;
+				offset = page.nextOffset;
+				if (page.complete && offset === page.capturedBytes) return {};
+			}
+			return {
+				name: 'shell_job_control',
+				input: { connectionId: f.connectionId, action: 'output', jobIds: [results[0].jobId], offset },
+			};
+		});
+		await f.approve(await f.approval(run, 'shell_execute'));
+		await f.wait(run, 'completed');
+		assert.deepEqual(received, expected);
+		assert.equal(await readFile(effect, 'utf8'), 'x');
+		const job = f.rows('agent_tool_jobs', run)[0];
+		assert.equal(JSON.parse(job.result_text).commands[0].truncated, true);
+		assert.ok(offset > 32 * 1024);
+		await f.restart();
+		const { NativeTextLogStore } =
+			await import('../../../packages/backend/dist/platform/blobs/adapters/native-text-log-store.js');
+		const store = await NativeTextLogStore.open(join(directory, 'tool-logs'));
+		assert.equal((await store.read(job.id, 0, 4096)).totalBytes, offset);
+	});
 
 	await scenario(
 		'held and blocked admission never execute the new command or overwrite original evidence',

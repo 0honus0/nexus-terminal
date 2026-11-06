@@ -142,7 +142,7 @@ export function remoteOperations(
 					cwd: request.cwd,
 					onError: request.onError,
 
-					onOutput: (index, stream, text) => request.onOutput?.(index, stream, text),
+					onOutput: async (index, stream, text, signal) => request.onOutput?.(index, stream, text, signal),
 				});
 				return {
 					status: value.status,

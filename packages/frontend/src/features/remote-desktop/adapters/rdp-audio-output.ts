@@ -136,10 +136,9 @@ export function attachRdpAudioOutput(element: HTMLElement, keyboard: HTMLTextAre
 					}
 				}
 				// Live sound must not replay an ever growing catch-up queue after network/background stalls.
-				// Derive the horizon from the device latency and this actual PCM block, not a fixed product limit.
-				const deviceLatency = output.baseLatency + (output.outputLatency || 0);
-				if (nextTime > output.currentTime + deviceLatency + Math.max(buffer.duration, lastBlockDuration))
-					stop();
+				// Device latency is downstream of this clock; it must not grant extra application queue time.
+				// Keep one actual adjacent block of jitter tolerance, independent of output hardware buffering.
+				if (nextTime > output.currentTime + Math.max(buffer.duration, lastBlockDuration)) stop();
 				lastBlockDuration = buffer.duration;
 				format = nextFormat;
 				const source = output.createBufferSource();

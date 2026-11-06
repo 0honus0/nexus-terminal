@@ -17,6 +17,40 @@ const CONNECTION_NAME = 'E2E RDP Browser';
 
 const remoteWindow = (page: Page): Locator => page.locator('.remote-desktop-panel');
 
+const RDP_TOOLBAR_TAB_ORDER = [
+	'Width',
+	'Increase value',
+	'Decrease value',
+	'Height',
+	'Increase value',
+	'Decrease value',
+	'Reconnect',
+	'File clipboard',
+	'Browser Fullscreen',
+	'Minimize',
+	'Close',
+];
+
+async function expectRdpToolbarLayout(panel: Locator): Promise<void> {
+	const layout = await panel.evaluate((element) => {
+		const chrome = element.querySelector<HTMLElement>('[data-desktop-chrome]');
+		if (!chrome) throw new Error('RDP window controls are missing');
+		const panelBox = element.getBoundingClientRect();
+		const controls = Array.from(chrome.querySelectorAll<HTMLElement>('input, button'));
+		return {
+			order: controls.map((control) => control.getAttribute('aria-label') || control.textContent?.trim()),
+			overflow: chrome.scrollWidth - chrome.clientWidth,
+			insidePanel: controls.every((control) => {
+				const box = control.getBoundingClientRect();
+				return box.width > 0 && box.left >= panelBox.left && box.right <= panelBox.right;
+			}),
+		};
+	});
+	expect(layout.order.slice(0, RDP_TOOLBAR_TAB_ORDER.length)).toEqual(RDP_TOOLBAR_TAB_ORDER);
+	expect(layout.overflow).toBe(0);
+	expect(layout.insidePanel).toBe(true);
+}
+
 const connectionCard = (page: Page, name: string): Locator =>
 	page.locator('.connection-card').filter({ has: page.getByText(name, { exact: true }) });
 
@@ -275,7 +309,18 @@ test('RDP browser client preserves settings, clipboard and browser fullscreen', 
 			await edge.focus();
 			await page.keyboard.press('Enter');
 			await expect(chrome).toBeVisible();
-			expect(await chrome.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+			await expectRdpToolbarLayout(panel);
+			await expect(panel.getByRole('spinbutton', { name: 'Width', exact: true })).toBeFocused();
+			for (const [index, name] of RDP_TOOLBAR_TAB_ORDER.entries()) {
+				if (index > 0) await page.keyboard.press('Tab');
+				expect(
+					await page.evaluate(
+						() =>
+							document.activeElement?.getAttribute('aria-label') ||
+							document.activeElement?.textContent?.trim(),
+					),
+				).toBe(name);
+			}
 			await page.keyboard.press('Escape');
 			await expect(chrome).toBeHidden();
 			await expect(edge).toBeFocused();
@@ -328,12 +373,12 @@ test('RDP browser client preserves settings, clipboard and browser fullscreen', 
 			const panel = remoteWindow(page);
 			const fullscreen = panel.getByRole('button', { name: 'Browser Fullscreen', exact: true });
 			const header = panel.locator('header');
-			const footer = panel.locator('footer');
+			const actions = panel.locator('.remote-desktop-actions');
 			await expect(panel).toBeVisible();
 			await revealDesktopControls(page);
 			await expect(fullscreen).toBeVisible();
 			await expect(header).toBeVisible();
-			await expect(footer).toBeAttached();
+			await expect(actions).toBeVisible();
 			await expect(panel.getByRole('button', { name: 'Reconnect', exact: true })).toBeVisible();
 
 			const normalBox = await panel.boundingBox();
@@ -344,7 +389,7 @@ test('RDP browser client preserves settings, clipboard and browser fullscreen', 
 			await fullscreen.click();
 			await expect.poll(() => panel.evaluate((element) => document.fullscreenElement === element)).toBe(true);
 			await expect(header).toBeHidden();
-			await expect(footer).toBeHidden();
+			await expect(actions).toBeHidden();
 			const fullscreenBox = await panel.boundingBox();
 			expect(fullscreenBox).toBeTruthy();
 			expect(Math.abs(fullscreenBox!.x)).toBeLessThanOrEqual(1);
@@ -369,7 +414,7 @@ test('RDP browser client preserves settings, clipboard and browser fullscreen', 
 			// Restored RDP chrome follows its normal edge-hover interaction after leaving fullscreen.
 			await revealDesktopControls(page);
 			await expect(header).toBeVisible();
-			await expect(footer).toBeAttached();
+			await expect(actions).toBeVisible();
 			await expect(panel.getByRole('button', { name: 'Reconnect', exact: true })).toBeVisible();
 			const restoredBox = await panel.boundingBox();
 			expect(restoredBox).toBeTruthy();
@@ -484,7 +529,13 @@ test('wide RDP restores the legacy 120 DPI connection rule', async ({ page, cont
 	}
 });
 
-async function dragBy(page: Page, target: Locator, deltaX: number, deltaY: number): Promise<void> {
+async function dragBy(
+	page: Page,
+	target: Locator,
+	deltaX: number,
+	deltaY: number,
+	end: 'pointerup' | 'pointercancel' | 'blur' = 'pointerup',
+): Promise<void> {
 	const box = await target.boundingBox();
 	expect(box).toBeTruthy();
 	const startX = box!.x + box!.width / 2;
@@ -505,7 +556,7 @@ async function dragBy(page: Page, target: Locator, deltaX: number, deltaY: numbe
 		clientY: startY,
 	});
 	await page.evaluate(
-		({ x, y, id }) => {
+		({ x, y, id, end }) => {
 			window.dispatchEvent(
 				new PointerEvent('pointermove', {
 					bubbles: true,
@@ -519,20 +570,22 @@ async function dragBy(page: Page, target: Locator, deltaX: number, deltaY: numbe
 				}),
 			);
 			window.dispatchEvent(
-				new PointerEvent('pointerup', {
-					bubbles: true,
-					cancelable: true,
-					pointerId: id,
-					pointerType: 'pen',
-					isPrimary: true,
-					button: 0,
-					buttons: 0,
-					clientX: x,
-					clientY: y,
-				}),
+				end === 'blur'
+					? new Event('blur')
+					: new PointerEvent(end, {
+							bubbles: true,
+							cancelable: true,
+							pointerId: id,
+							pointerType: 'pen',
+							isPrimary: true,
+							button: 0,
+							buttons: 0,
+							clientX: x,
+							clientY: y,
+						}),
 			);
 		},
-		{ x: startX + deltaX, y: startY + deltaY, id: pointerId },
+		{ x: startX + deltaX, y: startY + deltaY, id: pointerId, end },
 	);
 }
 
@@ -592,21 +645,169 @@ async function exercisePointerWindow(page: Page): Promise<void> {
 	await expect(restore).toBeVisible();
 	const initialRestoreBox = await restore.boundingBox();
 	expect(initialRestoreBox).toBeTruthy();
+	if (protocol === 'RDP') {
+		await page.mouse.move(400, 100);
+		await expect(restore).toHaveAttribute('data-dock', 'left');
+		await expect(restore).toHaveCSS('transform', 'matrix(1, 0, 0, 1, -25, 0)');
+	}
 
 	await dragBy(page, restore, 140, 80);
 	await expect(panel).toBeHidden();
 	const movedRestoreBox = await restore.boundingBox();
 	expect(movedRestoreBox).toBeTruthy();
-	expect(movedRestoreBox!.x).toBeGreaterThan(initialRestoreBox!.x + 80);
+	if (protocol === 'RDP') {
+		await expect(restore).toHaveAttribute('data-dock', 'left');
+		await dragBy(page, restore, page.viewportSize()!.width, 0);
+		await expect(restore).toHaveAttribute('data-dock', 'right');
+		await restore.focus();
+		await page.keyboard.press('ArrowRight');
+		await expect(restore).toHaveCSS('transform', 'none');
+		await restore.blur();
+	} else {
+		expect(movedRestoreBox!.x).toBeGreaterThan(initialRestoreBox!.x + 80);
+	}
 	expect(movedRestoreBox!.y).toBeGreaterThan(initialRestoreBox!.y + 40);
 
 	// Browsers normally emit a click after a pointer drag on the same moving button.
 	// That click must be swallowed once, while the next intentional click restores it.
-	await restore.dispatchEvent('click');
+	await restore.dispatchEvent('click', { detail: 1 });
 	await expect(panel).toBeHidden();
 	await restore.click();
 	await expect(panel).toBeVisible();
 	await expect(restore).toBeHidden();
+
+	// Keyboard activation has detail 0 and must work on its first attempt even when no drag click arrived.
+	for (const [end, key] of [
+		['pointercancel', 'Enter'],
+		['pointerup', 'Space'],
+		['blur', 'Enter'],
+	] as const) {
+		await revealDesktopControls(page);
+		await panel.getByRole('button', { name: 'Minimize', exact: true }).click();
+		await expect(restore).toBeVisible();
+		await dragBy(page, restore, -80, -30, end);
+		await restore.focus();
+		await page.keyboard.press(key);
+		await expect(panel).toBeVisible();
+		await expect(restore).toBeHidden();
+	}
+
+	const originalViewport = page.viewportSize();
+	expect(originalViewport).toBeTruthy();
+	const originalSelection = await page.evaluate(() => document.body.style.userSelect);
+	const savedPreferences = await getUiPreferences(page.request);
+	const reconnectRequests: string[] = [];
+
+	const observeRequest = (request: import('@playwright/test').Request) => {
+		if (request.method() === 'POST' && /\/connections\/\d+\/(rdp|vnc)-session/.test(request.url())) {
+			reconnectRequests.push(request.url());
+		}
+	};
+
+	page.on('request', observeRequest);
+	for (const cancellation of ['pointercancel', 'blur', 'hidden'] as const) {
+		const bounds = await resizeHandle.boundingBox();
+		expect(bounds).toBeTruthy();
+		await resizeHandle.dispatchEvent('pointerdown', {
+			pointerId: 23,
+			pointerType: 'pen',
+			isPrimary: true,
+			button: 0,
+			clientX: bounds!.x,
+			clientY: bounds!.y,
+		});
+		await page.evaluate((cancellation) => {
+			window.dispatchEvent(new PointerEvent('pointermove', { pointerId: 23, clientX: 700, clientY: 500 }));
+			if (cancellation === 'hidden') {
+				Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+				document.dispatchEvent(new Event('visibilitychange'));
+				Reflect.deleteProperty(document, 'hidden');
+				document.dispatchEvent(new Event('visibilitychange'));
+			} else if (cancellation === 'blur') {
+				window.dispatchEvent(new Event('blur'));
+			} else {
+				window.dispatchEvent(new PointerEvent('pointercancel', { pointerId: 23 }));
+			}
+		}, cancellation);
+		await expect.poll(() => page.evaluate(() => document.body.style.userSelect)).toBe(originalSelection);
+		const cancelledBox = await panel.boundingBox();
+		await page.evaluate(() => {
+			window.dispatchEvent(new PointerEvent('pointermove', { pointerId: 23, clientX: 1000, clientY: 700 }));
+			window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 23 }));
+		});
+		expect(await panel.boundingBox()).toEqual(cancelledBox);
+		expect(await getUiPreferences(page.request)).toEqual(savedPreferences);
+	}
+
+	for (const viewport of [
+		{ width: 390, height: 400 },
+		{ width: 320, height: 240 },
+	]) {
+		await page.setViewportSize(viewport);
+		await expect
+			.poll(async () => {
+				const bounds = await panel.boundingBox();
+				return Boolean(
+					bounds &&
+					bounds.x >= 0 &&
+					bounds.y >= 0 &&
+					bounds.x + bounds.width <= viewport.width + 1 &&
+					bounds.y + bounds.height <= viewport.height + 1,
+				);
+			})
+			.toBe(true);
+		await revealDesktopControls(page);
+		if (protocol === 'RDP') await expectRdpToolbarLayout(panel);
+		await expect(panel.getByRole('button', { name: 'Close', exact: true })).toBeInViewport();
+		await expect(panel).toContainText('Connected');
+	}
+	// Leave the small viewport's chrome before moving the window back underneath the pointer.
+	await page.mouse.move(0, 0);
+	await page.setViewportSize(originalViewport!);
+	await revealDesktopControls(page);
+	await panel.getByRole('button', { name: 'Minimize', exact: true }).click();
+	await expect(restore).toBeVisible();
+	await dragBy(page, restore, 1200, 800);
+	await page.setViewportSize({ width: 390, height: 400 });
+	if (protocol === 'RDP') {
+		await expect(restore).toHaveAttribute('data-dock', 'right');
+		await expect(restore.locator('..')).toBeInViewport({ ratio: 1 });
+	} else {
+		await expect(restore).toBeInViewport({ ratio: 1 });
+	}
+	// Consume the original drag's synthetic click before intentionally restoring.
+	await restore.dispatchEvent('click', { detail: 1 });
+	await restore.click();
+	await expect(panel).toBeVisible();
+	expect(await getUiPreferences(page.request)).toEqual(savedPreferences);
+	await page.setViewportSize(originalViewport!);
+	page.off('request', observeRequest);
+	expect(reconnectRequests).toEqual([]);
+}
+
+async function closeDesktopDuringResize(page: Page): Promise<void> {
+	const panel = remoteWindow(page);
+	const preferences = await getUiPreferences(page.request);
+	const originalSelection = await page.evaluate(() => document.body.style.userSelect);
+	await revealDesktopControls(page);
+	const resize = panel.getByLabel('Resize window', { exact: true });
+	const bounds = await resize.boundingBox();
+	expect(bounds).toBeTruthy();
+	await resize.dispatchEvent('pointerdown', {
+		pointerId: 31,
+		isPrimary: true,
+		button: 0,
+		clientX: bounds!.x,
+		clientY: bounds!.y,
+	});
+	await page.evaluate(() => {
+		window.dispatchEvent(new PointerEvent('pointermove', { pointerId: 31, clientX: 800, clientY: 600 }));
+	});
+	// Closing the owner cancels its still-active pointer; it must not commit a size.
+	await panel.getByRole('button', { name: 'Close', exact: true }).dispatchEvent('click');
+	await expect(panel).toBeHidden();
+	await expect.poll(() => page.evaluate(() => document.body.style.userSelect)).toBe(originalSelection);
+	expect(await getUiPreferences(page.request)).toEqual(preferences);
 }
 
 test('RDP pointer resize and restore-button dragging preserve minimized window behavior', async ({ page, context }) => {
@@ -630,15 +831,49 @@ test('RDP pointer resize and restore-button dragging preserve minimized window b
 		await expect(remoteWindow(page)).toHaveCSS('width', '900px');
 		await expect(remoteWindow(page)).toHaveCSS('height', '560px');
 		await exercisePointerWindow(page);
-		const modal = remoteWindow(page);
-		await revealDesktopControls(page);
-		await modal.getByRole('button', { name: 'Close', exact: true }).click();
-		await expect(modal).toBeHidden();
+		await closeDesktopDuringResize(page);
 	} finally {
 		await context.request.delete(`/api/v1/targets/connections/${connectionId}`, {
 			headers: { Origin: E2E_URLS.frontendOrigin },
 		});
 	}
+});
+
+test.describe('RDP docked restore on touch screens', () => {
+	test.use({ hasTouch: true });
+
+	test('the visible half restores the current RDP window on a trusted touch tap', async ({ page, context }) => {
+		await loginAsInitialAdmin(context.request);
+		await page.setViewportSize({ width: 390, height: 700 });
+		await updateUiPreferences(context.request, (preferences) => {
+			preferences.language = 'en-US';
+		});
+		const name = 'E2E RDP Docked Touch';
+		const connectionId = await createRemoteConnection(context.request, 'RDP', name, '127.0.0.1', E2E_PORTS.rdp);
+		try {
+			await openRemoteConnection(page, name);
+			const panel = remoteWindow(page);
+			await expect(panel).toContainText('Connected', { timeout: 15_000 });
+			await revealDesktopControls(page, true);
+			await expectRdpToolbarLayout(panel);
+			await expect(panel.getByRole('group', { name: 'Touch', exact: true })).toBeVisible();
+			await panel.getByRole('button', { name: 'Minimize', exact: true }).tap();
+			const restore = page.getByRole('button', { name: 'Restore remote desktop window', exact: true });
+			await expect(restore).toHaveAttribute('data-dock', 'left');
+			const anchor = await restore.locator('..').boundingBox();
+			expect(anchor).toBeTruthy();
+			await page.touchscreen.tap(anchor!.x + 12, anchor!.y + 25);
+			await expect(panel).toBeVisible();
+			await expect(restore).toBeHidden();
+			await expect(panel).toContainText('Connected');
+			await revealDesktopControls(page, true);
+			await panel.getByRole('button', { name: 'Close', exact: true }).tap();
+		} finally {
+			await context.request.delete(`/api/v1/targets/connections/${connectionId}`, {
+				headers: { Origin: E2E_URLS.frontendOrigin },
+			});
+		}
+	});
 });
 
 test('VNC pointer resize and restore-button dragging share the same window semantics', async ({ page, context }) => {
@@ -724,10 +959,7 @@ test('VNC pointer resize and restore-button dragging share the same window seman
 			.toBe(remoteText);
 		await expect(vncModal).toContainText('Connected');
 		await exercisePointerWindow(page);
-		const modal = remoteWindow(page);
-		await revealDesktopControls(page);
-		await modal.getByRole('button', { name: 'Close', exact: true }).click();
-		await expect(modal).toBeHidden();
+		await closeDesktopDuringResize(page);
 	} finally {
 		await context.request.delete(`/api/v1/targets/connections/${connectionId}`, {
 			headers: { Origin: E2E_URLS.frontendOrigin },

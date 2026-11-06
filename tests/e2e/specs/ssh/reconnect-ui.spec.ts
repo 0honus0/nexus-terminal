@@ -19,6 +19,7 @@ import {
 	trustTestSshHostKey,
 } from '../../support/ssh';
 import { step } from '../../support/steps';
+import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 
 const MULTI_SESSION_NAMES = [
 	'M08 Workspace Session Alpha Long Label',
@@ -165,103 +166,146 @@ async function captureWorkspaceEvidence(page: Page, testInfo: TestInfo, name: 'b
 	expect(metrics.tabScroller?.right).toBeLessThanOrEqual(metrics.viewport.width + 1);
 }
 
-test('initial SSH failure retains its terminal error and waits for explicit retry', async ({ page, context }) => {
-	await loginAsInitialAdmin(context.request);
-	await configureSshE2eSettings(context.request);
+for (const mobile of [false, true]) {
+	test.describe(mobile ? 'mobile reconnect' : 'desktop reconnect', () => {
+		test.use(mobile ? { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } : {});
+		test('initial SSH failure retains its terminal error and waits for explicit retry', async ({
+			page,
+			context,
+		}) => {
+			await loginAsInitialAdmin(context.request);
+			await configureSshE2eSettings(context.request);
 
-	const name = `E2E Initial Failure ${Date.now()}`;
-	const create = await context.request.post('/api/v1/targets/connections/import', {
-		headers: { Origin: E2E_URLS.frontendOrigin },
-		data: {
-			items: [
-				{
-					connection: {
-						name: name,
-						type: 'SSH',
-						host: '127.0.0.1',
-						port: 1,
-						username: 'e2e',
-						notes: null,
-						route: 'direct',
-						proxyId: null,
-						tagIds: [],
-						jumpIds: [],
-					},
-					credential: { kind: 'password', password: 'invalid-for-unreachable-port' },
+			const name = `E2E Initial Failure ${Date.now()}`;
+			const create = await context.request.post('/api/v1/targets/connections/import', {
+				headers: { Origin: E2E_URLS.frontendOrigin },
+				data: {
+					items: [
+						{
+							connection: {
+								name: name,
+								type: 'SSH',
+								host: '127.0.0.1',
+								port: 1,
+								username: 'e2e',
+								notes: null,
+								route: 'direct',
+								proxyId: null,
+								tagIds: [],
+								jumpIds: [],
+							},
+							credential: { kind: 'password', password: 'invalid-for-unreachable-port' },
+						},
+					],
 				},
-			],
-		},
-	});
-	expect(create.status()).toBe(200);
-	const connectionId = readTestConnectionImportId(await create.json());
+			});
+			expect(create.status()).toBe(200);
+			const connectionId = readTestConnectionImportId(await create.json());
 
-	await page.addInitScript(() => {
-		const state = window as typeof window & { __e2eMaxWorkspaceTabs?: number };
+			await page.addInitScript(() => {
+				const state = window as typeof window & { __e2eMaxWorkspaceTabs?: number };
 
-		const sample = () => {
-			const count = document.querySelectorAll('.terminal-tab-shell [role="tab"]').length;
-			state.__e2eMaxWorkspaceTabs = Math.max(state.__e2eMaxWorkspaceTabs ?? 0, count);
-		};
+				const sample = () => {
+					const count = document.querySelectorAll('.terminal-tab-shell [role="tab"]').length;
+					state.__e2eMaxWorkspaceTabs = Math.max(state.__e2eMaxWorkspaceTabs ?? 0, count);
+				};
 
-		state.__e2eMaxWorkspaceTabs = 0;
-		const observer = new MutationObserver(sample);
+				state.__e2eMaxWorkspaceTabs = 0;
+				const observer = new MutationObserver(sample);
 
-		const start = () => {
-			sample();
-			observer.observe(document.documentElement, { childList: true, subtree: true });
-		};
+				const start = () => {
+					sample();
+					observer.observe(document.documentElement, { childList: true, subtree: true });
+				};
 
-		if (document.documentElement) start();
-		else document.addEventListener('DOMContentLoaded', start, { once: true });
-	});
+				if (document.documentElement) start();
+				else document.addEventListener('DOMContentLoaded', start, { once: true });
+			});
 
-	const workspaceConnectIds: string[] = [];
-	page.on('websocket', (socket) => {
-		if (new URL(socket.url()).pathname !== '/ws/workspace') return;
-		socket.on('framesent', (event) => {
-			if (typeof event.payload !== 'string') return;
+			const workspaceConnectIds: string[] = [];
+			page.on('websocket', (socket) => {
+				if (new URL(socket.url()).pathname !== '/ws/workspace') return;
+				socket.on('framesent', (event) => {
+					if (typeof event.payload !== 'string') return;
+					try {
+						const message = JSON.parse(event.payload) as {
+							type?: string;
+							payload?: { workspaceId?: string };
+						};
+						if (message.type === 'workspace.connect' && message.payload?.workspaceId) {
+							workspaceConnectIds.push(message.payload.workspaceId);
+						}
+					} catch {
+						// Ignore non-JSON frames.
+					}
+				});
+			});
+
 			try {
-				const message = JSON.parse(event.payload) as { type?: string; payload?: { workspaceId?: string } };
-				if (message.type === 'workspace.connect' && message.payload?.workspaceId) {
-					workspaceConnectIds.push(message.payload.workspaceId);
+				await page.goto(`/workspace?connectionId=${connectionId}`);
+				await expect.poll(() => workspaceConnectIds.length, { timeout: 15_000 }).toBe(1);
+
+				const tabs = page.locator('.terminal-tab-shell').getByRole('tab');
+				await expect(tabs).toHaveCount(1);
+				const terminal = page.locator('.terminal-container:visible');
+				const notice = terminal.locator('.terminal-reconnect-notice');
+				await expect(notice).toContainText('Unable to establish SSH', { timeout: 15_000 });
+				await expect(notice).not.toContainText('remote_unavailable');
+				await expect(terminal.locator('.xterm-rows')).not.toContainText('Connection failed');
+
+				expect(
+					await page.evaluate(
+						() => (window as typeof window & { __e2eMaxWorkspaceTabs?: number }).__e2eMaxWorkspaceTabs ?? 0,
+					),
+				).toBe(1);
+
+				const failedWorkspaceId = workspaceConnectIds[0]!;
+				await page.waitForTimeout(3_000);
+				expect(workspaceConnectIds).toEqual([failedWorkspaceId]);
+				// Retry must work without focusing xterm's hidden textarea first.
+				await page.locator('input.command-bar-input').focus();
+				const retry = notice.getByRole('button', { name: 'Reconnect', exact: true });
+				if (mobile) await retry.tap();
+				else await retry.click();
+				await expect.poll(() => workspaceConnectIds.length).toBe(2);
+				await expect(notice).toContainText('Unable to establish SSH');
+				await expect(tabs).toHaveCount(1);
+				await expect(terminal.locator('.xterm-rows')).not.toContainText('remote_unavailable');
+				await expect(notice).toHaveCount(1);
+				if (mobile) {
+					await expect(terminal.locator('.xterm-helper-textarea')).not.toBeFocused();
+				} else {
+					await terminal.focus();
+					await page.keyboard.press('ControlOrMeta+C');
+					await page.keyboard.press('Tab');
+					expect(workspaceConnectIds).toHaveLength(2);
+					await terminal.focus();
+					await page.keyboard.press('Enter');
+					await expect.poll(() => workspaceConnectIds.length).toBe(3);
+					await expect(notice).toContainText('Unable to establish SSH');
 				}
-			} catch {
-				// Ignore non-JSON frames.
+				await captureFunctionalScreenshot(page, `terminal-reconnect-${mobile ? 'mobile' : 'desktop'}.png`);
+				if (mobile) {
+					await page.setViewportSize({ width: 320, height: 400 });
+					await retry.scrollIntoViewIfNeeded();
+					await retry.tap({ trial: true });
+					await captureFunctionalScreenshot(page, 'terminal-reconnect-mobile-320x400.png');
+				}
+				expect(
+					await notice.evaluate((element) => {
+						const box = element.getBoundingClientRect();
+						return box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight;
+					}),
+				).toBe(true);
+			} finally {
+				const remove = await context.request.delete(`/api/v1/targets/connections/${connectionId}`, {
+					headers: { Origin: E2E_URLS.frontendOrigin },
+				});
+				expect([200, 204, 404]).toContain(remove.status());
 			}
 		});
 	});
-
-	try {
-		await page.goto(`/workspace?connectionId=${connectionId}`);
-		await expect.poll(() => workspaceConnectIds.length, { timeout: 15_000 }).toBe(1);
-
-		const tabs = page.locator('.terminal-tab-shell').getByRole('tab');
-		await expect(tabs).toHaveCount(1);
-		const terminal = page.locator('.terminal-inner-container:visible');
-		await expect(terminal.locator('.xterm-rows')).toContainText('Connection failed', { timeout: 15_000 });
-		await expect(terminal.locator('.xterm-rows')).toContainText('Press any key to reconnect');
-
-		expect(
-			await page.evaluate(
-				() => (window as typeof window & { __e2eMaxWorkspaceTabs?: number }).__e2eMaxWorkspaceTabs ?? 0,
-			),
-		).toBe(1);
-
-		const failedWorkspaceId = workspaceConnectIds[0]!;
-		await page.waitForTimeout(3_000);
-		expect(workspaceConnectIds).toEqual([failedWorkspaceId]);
-		await terminal.locator('.xterm-helper-textarea').focus();
-		await page.keyboard.press('x');
-		await expect.poll(() => workspaceConnectIds.length).toBe(2);
-		await expect(tabs).toHaveCount(1);
-		await expect(terminal.locator('.xterm-rows')).toContainText('Press any key to reconnect');
-	} finally {
-		const remove = await context.request.delete(`/api/v1/targets/connections/${connectionId}`, {
-			headers: { Origin: E2E_URLS.frontendOrigin },
-		});
-		expect([200, 204, 404]).toContain(remove.status());
-	}
-});
+}
 
 test('hidden terminals consume sustained output without animation frames or reconnecting the shell', async ({
 	page,
@@ -639,7 +683,7 @@ test('a failed SSH reconnect waits for a key and then reconnects immediately', a
 					),
 				)
 				.toBeTruthy();
-			await expect(terminal.locator('.xterm-rows')).toContainText('Press any key to reconnect');
+			await expect(page.locator('.terminal-reconnect-notice')).toContainText('Unable to establish SSH');
 			await page.waitForTimeout(4500);
 			expect(workspaceConnectRequests).toBe(initialConnectRequestCount + 1);
 		});

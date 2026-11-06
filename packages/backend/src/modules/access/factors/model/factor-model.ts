@@ -40,6 +40,7 @@ import type {
 	CompletePartialLogin,
 } from './factor-types.js';
 import { toAuthenticationFactorOptions, toRegistrationFactorOptions } from './options-projector.js';
+import { defaultPasskeyName } from '../passkey-naming-rules.js';
 
 interface NewFactorChallenge {
 	policy: FactorChallengePolicy;
@@ -434,7 +435,7 @@ export class FactorModel {
 					generation: this.issueToken(),
 					counter: credential.counter,
 					transports: credential.transports.map((transport) => transport),
-					name: null,
+					name: defaultPasskeyName(credential.authenticatorName),
 					backedUp: credential.backedUp,
 				},
 			}),

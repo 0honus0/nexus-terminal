@@ -159,6 +159,22 @@
       "keepSecret": "保留已存储密钥",
       "clearSecret": "清除已存储密钥",
       "replaceSecret": "替换已存储密钥"
+    },
+    "oidc": {
+      "title": "单点登录（OIDC）",
+      "description": "连接 Pocket ID 或其他 OpenID Connect 提供方，绑定当前账号。",
+      "enabled": "在登录页显示",
+      "label": "提供方名称",
+      "authentication": "客户端认证",
+      "publicClient": "公共客户端（PKCE）",
+      "secretKept": "留空保留已保存的密钥",
+      "callback": "回调地址 · 请填入提供方的客户端配置",
+      "bound": "已绑定账号",
+      "unbound": "尚未绑定账号",
+      "bind": "绑定账号",
+      "unbind": "解除绑定",
+      "hint": "先保存配置，再绑定账号。每次操作需验证当前密码。OIDC 使用提供方的认证策略，本地 TOTP 用于密码登录；强制 Passkey 的账号不能使用 OIDC。修改配置或解绑会退出 OIDC 登录会话。",
+      "saved": "OIDC 配置已保存。"
     }
   }
 }

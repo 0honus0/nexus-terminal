@@ -61,6 +61,7 @@ export interface StoredJobChange {
 }
 
 export interface ToolJobStorage {
+	exists(id: string): Promise<boolean>;
 	create(input: StoredJobCreate): Promise<StoredToolJob | 'version_conflict' | 'limit_exceeded'>;
 	get(scope: StoredJobScope, id: string): Promise<StoredToolJob | null>;
 	list(scope: StoredJobScope, connectionId: number, limit: number, offset: number): Promise<StoredToolJob[]>;

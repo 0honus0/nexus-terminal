@@ -1,10 +1,17 @@
+import { FailureSummary } from '../../../../platform/lifecycle/failure-summary.js';
 import { RESULT_PAGE_MAX_BYTES } from '../../context/result-rules.js';
 import type { Logger } from '../../../../platform/logging/logger.js';
 import { logDiagnostic, withDiagnosticContext } from '../../../../platform/logging/diagnostic-log.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { ToolJobModel } from '../model/tool-job-model.js';
 import { TOOL_RESULT_MAX_BYTES } from '../../runs/run-tool-limits.js';
-import type { ToolJob, ToolJobScope, ToolJobPreparation, ToolJobResult } from '../model/tool-job-types.js';
+import type {
+	ToolJob,
+	ToolJobScope,
+	ToolJobPreparation,
+	ToolJobResult,
+	ToolOutputWriter,
+} from '../model/tool-job-types.js';
 import type { ToolJobControlInput, ToolTarget } from '../model/tool-types.js';
 import {
 	AgentFailure,
@@ -20,11 +27,11 @@ interface OwnedJob {
 	active: boolean;
 	job: ToolJob;
 	controller: AbortController;
-	output: Array<{ commandIndex: number; stream: 'stdout' | 'stderr'; text: string }>;
+	waitingForSpace: boolean;
 	work: (
 		signal: AbortSignal,
 		timeoutMs: number,
-		onOutput: (index: number, stream: 'stdout' | 'stderr', text: string) => void,
+		onOutput: (index: number, stream: 'stdout' | 'stderr', text: string, signal: AbortSignal) => Promise<void>,
 	) => Promise<Exclude<ToolJobResult, { status: 'not_started' }>>;
 	deadline: number;
 	timer: ReturnType<typeof setTimeout> | null;
@@ -70,9 +77,10 @@ function resultView(result: ToolJobResult | null) {
 				};
 }
 
-function snapshot(job: ToolJob): string {
+function snapshot(job: ToolJob, waitingForSpace: boolean): string {
 	return JSON.stringify({
 		jobId: job.id,
+		waitingForSpace,
 		state: job.state,
 		revision: job.revision,
 		result: resultView(job.result),
@@ -84,6 +92,78 @@ function snapshot(job: ToolJob): string {
 /** Run-owned Shell execution. Every remote Promise remains owned through durable settlement and cleanup. */
 export class ToolJobService {
 	private readonly jobs = new Map<string, OwnedJob>();
+	private collecting: Promise<void> | null = null;
+	private collectionTimer: ReturnType<typeof setTimeout> | null = null;
+	private stopping = false;
+
+	waitingOutputCount(scope: ToolJobScope): number {
+		return [...this.jobs.values()].filter(
+			(item) => sameScope(item.job, scope) && item.active && item.waitingForSpace,
+		).length;
+	}
+
+	async initialize(): Promise<void> {
+		await this.collectOutput();
+		this.scheduleCollection();
+	}
+
+	private scheduleCollection(): void {
+		if (this.stopping || this.collectionTimer !== null) {
+			return;
+		}
+		this.collectionTimer = setTimeout(() => {
+			this.collectionTimer = null;
+			void this.collectOutput()
+				.catch((error: unknown) => {
+					logDiagnostic(this.logger, 'error', 'AGENT_JOB_OUTPUT_CLEANUP_FAILED', {}, error);
+				})
+				.finally(() => this.scheduleCollection());
+		}, 60_000);
+		this.collectionTimer.unref();
+	}
+
+	collectOutput(): Promise<void> {
+		this.collecting ??= Promise.resolve()
+			.then(async () => {
+				const failures = new FailureSummary();
+				try {
+					for await (const id of this.model.outputKeys()) {
+						try {
+							if (!(await this.model.outputOwnerExists(id))) {
+								await this.model.removeOutput(id);
+							}
+						} catch (error) {
+							failures.record(error);
+						}
+					}
+				} catch (error) {
+					failures.record(error);
+				}
+				const errors = failures.errors();
+				if (errors.length) {
+					throw new ToolCleanupFailure({ cause: new AggregateError(errors, 'Output cleanup failed') });
+				}
+			})
+			.finally(() => {
+				this.collecting = null;
+			});
+		return this.collecting;
+	}
+
+	quiesce(): void {
+		this.stopping = true;
+		if (this.collectionTimer !== null) {
+			clearTimeout(this.collectionTimer);
+			this.collectionTimer = null;
+		}
+	}
+
+	async close(): Promise<void> {
+		this.quiesce();
+		if (this.collecting) {
+			await this.collecting;
+		}
+	}
 
 	constructor(
 		private readonly model: ToolJobModel,
@@ -123,7 +203,7 @@ export class ToolJobService {
 		}
 		this.jobs.set(job.id, {
 			background: input.background,
-			output: [],
+			waitingForSpace: false,
 			active: true,
 			job,
 			controller,
@@ -186,12 +266,15 @@ export class ToolJobService {
 		let monitoring: Promise<void> | null = null;
 		let authorityFailure: unknown = null;
 		let confirmed = false;
+		let writer: ToolOutputWriter | null = null;
+		let executionFailure: unknown = null;
 		try {
 			if (Date.now() >= item.deadline) {
 				item.controller.abort();
 			}
 			item.controller.signal.throwIfAborted();
 			await item.validate(item.controller.signal);
+			writer = await this.model.openOutput(item.job.id);
 			item.job = await this.model.change(item.job, 'dispatched', null);
 			logDiagnostic(this.logger, 'info', 'AGENT_JOB_DISPATCHED');
 			await item.validate(item.controller.signal);
@@ -224,12 +307,33 @@ export class ToolJobService {
 				item.controller.abort();
 			}
 			item.controller.signal.throwIfAborted();
-			const result = await item.work(item.controller.signal, remainingMs, (commandIndex, stream, text) => {
-				if (text) {
-					item.output.push({ commandIndex, stream, text });
+			const output = writer;
+
+			const blocked = (waiting: boolean) => {
+				if (item.waitingForSpace === waiting) {
+					return;
 				}
-			});
+				item.waitingForSpace = waiting;
+				this.changed(item.job);
+				logDiagnostic(
+					this.logger,
+					waiting ? 'warn' : 'info',
+					waiting ? 'AGENT_JOB_OUTPUT_WAITING_FOR_SPACE' : 'AGENT_JOB_OUTPUT_RESUMED',
+					{ jobId: item.job.id },
+				);
+			};
+
+			const result = await item.work(
+				item.controller.signal,
+				remainingMs,
+				async (commandIndex, stream, text, signal) => {
+					await output.append({ commandIndex, stream, text }, signal, blocked);
+				},
+			);
 			confirmed = true;
+			await writer.flush(item.controller.signal, blocked);
+			await writer.close();
+			writer = null;
 			await item.validate(item.controller.signal);
 			monitor.abort();
 			await monitoring;
@@ -248,6 +352,7 @@ export class ToolJobService {
 				truncated: result.commands.some((item) => item.status !== 'not_started' && item.truncated),
 			});
 		} catch (error) {
+			executionFailure = error;
 			logDiagnostic(this.logger, 'warn', 'AGENT_JOB_EXECUTION_FAILED', {}, error);
 			monitor.abort();
 			if (monitoring) {
@@ -259,7 +364,11 @@ export class ToolJobService {
 				(authorityFailure !== null && isAgentDrainFailure(authorityFailure))
 			) {
 				if (authorityFailure !== null && authorityFailure !== error) {
-					throw new AggregateError([error, authorityFailure], 'Job execution and authority failed');
+					executionFailure = new AggregateError(
+						[error, authorityFailure],
+						'Job execution and authority failed',
+					);
+					throw executionFailure;
 				}
 				throw error;
 			}
@@ -275,7 +384,8 @@ export class ToolJobService {
 				logDiagnostic(this.logger, 'warn', 'AGENT_JOB_SETTLED', { state: item.job.state });
 			} catch (settlement) {
 				logDiagnostic(this.logger, 'error', 'AGENT_JOB_SETTLEMENT_FAILED', {}, settlement);
-				throw new AggregateError([error, settlement], 'Job execution and settlement failed');
+				executionFailure = new AggregateError([error, settlement], 'Job execution and settlement failed');
+				throw executionFailure;
 			}
 			if (error instanceof ToolCleanupFailure) {
 				throw error;
@@ -290,8 +400,22 @@ export class ToolJobService {
 				await monitoring;
 			}
 			item.unsubscribe();
-			item.active = false;
-			this.changed(item.job);
+			try {
+				if (writer !== null) {
+					try {
+						await writer.close();
+					} catch (cleanup) {
+						throw new ToolCleanupFailure({
+							cause:
+								executionFailure === null ? cleanup : new AggregateError([executionFailure, cleanup]),
+						});
+					}
+				}
+			} finally {
+				item.active = false;
+				item.waitingForSpace = false;
+				this.changed(item.job);
+			}
 		}
 	}
 
@@ -373,7 +497,16 @@ export class ToolJobService {
 	): Promise<string> {
 		const job = await this.waitFor(scope, target, id, waitMs, signal, validate);
 		if (job.result !== null && job.result.status !== 'not_started') {
-			return JSON.stringify(resultView(job.result));
+			const result = resultView(job.result);
+			if (result === null || result.status === 'not_started') {
+				throw new AgentFailure('internal_failure');
+			}
+			return JSON.stringify({
+				jobId: job.id,
+				outputRead: { connectionId: job.connectionId, action: 'output', jobIds: [job.id], offset: 0 },
+				status: result.status,
+				commands: result.commands,
+			});
 		}
 		const item = this.jobs.get(id);
 		if (item?.active) {
@@ -385,7 +518,7 @@ export class ToolJobService {
 			runId: job.runId,
 			state: job.state,
 		});
-		return snapshot(job);
+		return snapshot(job, this.jobs.get(job.id)?.waitingForSpace ?? false);
 	}
 
 	async control(
@@ -412,6 +545,7 @@ export class ToolJobService {
 					jobId: job.id,
 					state: job.state,
 					revision: job.revision,
+					waitingForSpace: this.jobs.get(job.id)?.waitingForSpace ?? false,
 					createdAt: job.createdAt,
 					updatedAt: job.updatedAt,
 				})),
@@ -425,44 +559,16 @@ export class ToolJobService {
 			const pages = [];
 			let size = 128;
 			for (const job of jobs) {
-				await this.settled(job);
-				const live = this.jobs.get(job.id)?.output;
-				const events =
-					live ??
-					(job.result && job.result.status !== 'not_started'
-						? job.result.commands.flatMap((item) =>
-								item.status === 'not_started'
-									? []
-									: [
-											{ commandIndex: item.index, stream: 'stdout', text: item.stdout },
-											{ commandIndex: item.index, stream: 'stderr', text: item.stderr },
-										],
-							)
-						: []);
-				const totalBytes = events.reduce((sum, event) => sum + Buffer.byteLength(event.text), 0);
-				if (input.offset > totalBytes) {
-					throw new AgentFailure('invalid_input');
-				}
+				// Reading evidence does not wait for execution settlement or clear an unknown fence.
+				const captured = await this.model.output(job.id, input.offset, RESULT_PAGE_MAX_BYTES);
+				const events = captured?.output ?? [];
+				const totalBytes = captured?.capturedBytes ?? 0;
+
 				const output: Array<{ commandIndex: number; stream: string; text: string }> = [];
-				let skipped = 0,
-					nextOffset = input.offset,
+				let nextOffset = input.offset,
 					full = false;
 				let outputBytes = 2;
 				for (const event of events) {
-					const eventBytes = Buffer.byteLength(event.text);
-					if (skipped + eventBytes <= input.offset) {
-						skipped += eventBytes;
-						continue;
-					}
-					const start = Math.max(0, input.offset - skipped);
-					let text: string;
-					try {
-						text = new TextDecoder('utf-8', { fatal: true }).decode(
-							Buffer.from(event.text).subarray(start),
-						);
-					} catch (cause) {
-						throw new AgentFailure('invalid_input', { cause });
-					}
 					const last = output[output.length - 1];
 					const item =
 						last?.commandIndex === event.commandIndex && last.stream === event.stream
@@ -477,7 +583,7 @@ export class ToolJobService {
 						outputBytes += overhead;
 						output.push(item);
 					}
-					for (const point of text) {
+					for (const point of event.text) {
 						const cost = Buffer.byteLength(JSON.stringify(point)) - 2;
 						if (outputBytes + cost > RESULT_PAGE_MAX_BYTES) {
 							full = true;
@@ -487,7 +593,6 @@ export class ToolJobService {
 						outputBytes += cost;
 						nextOffset += Buffer.byteLength(point);
 					}
-					skipped += eventBytes;
 					if (full) {
 						break;
 					}
@@ -498,6 +603,8 @@ export class ToolJobService {
 					offset: input.offset,
 					nextOffset,
 					capturedBytes: totalBytes,
+					available: captured !== null,
+					waitingForSpace: this.jobs.get(job.id)?.waitingForSpace ?? false,
 					output,
 					complete: job.state !== 'queued' && job.state !== 'dispatched',
 				};
@@ -571,6 +678,7 @@ export class ToolJobService {
 				jobId: job.id,
 				state: job.state,
 				revision: job.revision,
+				waitingForSpace: this.jobs.get(job.id)?.waitingForSpace ?? false,
 				result: resultView(job.result),
 				createdAt: job.createdAt,
 				updatedAt: job.updatedAt,

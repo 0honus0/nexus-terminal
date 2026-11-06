@@ -253,6 +253,13 @@ for (const shared of [true, false] as const) {
 				await row(page, 'plainfile').dblclick();
 				await expect(editorView(page)).toBeVisible();
 				await expect(editorTabs()).toHaveCount(shared ? 2 : 1);
+				if (shared) {
+					await editorTabs().first().click();
+					await page.keyboard.press('Alt+ArrowRight');
+					await expect(editorTabs().last()).toHaveAttribute('aria-selected', 'true');
+					await page.keyboard.press('Alt+ArrowLeft');
+					await expect(editorTabs().first()).toHaveAttribute('aria-selected', 'true');
+				}
 			});
 		} finally {
 			await page.goto('/connections').catch(() => undefined);

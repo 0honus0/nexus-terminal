@@ -16,6 +16,8 @@ export interface WebauthnPublicKey {
 
 export interface WebauthnRegisteredKey extends WebauthnPublicKey {
 	backedUp: boolean;
+	/** Display metadata only; an AAGUID name is not evidence of authenticator trust. */
+	authenticatorName: string | null;
 }
 
 export interface WebauthnRelyingParty {

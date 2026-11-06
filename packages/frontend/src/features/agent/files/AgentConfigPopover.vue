@@ -62,7 +62,7 @@
 		placement="top"
 		align="center"
 		boundary-selector=".agent-hub-window"
-		portal-marker
+		panel-marker-attribute="data-agent-hub-portal"
 		:panel-class="`rounded-2xl p-3 ${props.panelClass}`"
 		@open-change="onOpenChange"
 	>
@@ -92,6 +92,14 @@
 
 <style scoped>
 	.agent-config-summary {
+		min-width: var(--agent-config-trigger-min-width, var(--agent-config-hub-min-width, var(--ui-control-height)));
+		height: var(--agent-config-trigger-height, var(--agent-config-hub-height, var(--ui-control-height)));
+		gap: var(--agent-config-trigger-gap, var(--agent-config-hub-gap, var(--ui-control-gap)));
+		padding-inline: var(
+			--agent-config-trigger-padding-inline,
+			var(--agent-config-hub-padding-inline, var(--ui-control-padding-inline))
+		);
+		justify-content: var(--agent-config-trigger-justify-content, center);
 		font-size: 11px;
 		line-height: 1.25;
 	}
@@ -113,22 +121,29 @@
 
 	@container agent-hub-window (max-width: 1040px) {
 		.agent-config-summary {
-			height: 28px;
-			gap: 4px;
-			padding-inline: 6px;
-			font-size: 11px;
-			line-height: 1.25;
+			--agent-config-hub-height: 28px;
+			--agent-config-hub-gap: 4px;
+			--agent-config-hub-padding-inline: 6px;
 		}
 	}
 
 	@container agent-hub-window (max-width: 760px) {
 		.agent-config-summary {
-			min-width: 28px;
-			height: 28px;
-			gap: 3px;
-			padding-inline: 6px;
-			font-size: 11px;
-			line-height: 1.25;
+			--agent-config-hub-min-width: 28px;
+			--agent-config-hub-gap: 3px;
+		}
+	}
+	@container agent-hub-window (max-width: 760px) {
+		.agent-config-summary,
+		.agent-config-summary.agent-config-trigger-square {
+			height: 44px;
+		}
+	}
+
+	@media (pointer: coarse) {
+		.agent-config-summary,
+		.agent-config-summary.agent-config-trigger-square {
+			height: 44px;
 		}
 	}
 </style>

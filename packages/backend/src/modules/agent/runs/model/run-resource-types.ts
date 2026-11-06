@@ -9,6 +9,7 @@ export interface RunResourceScope {
 export interface RunResourceSnapshot {
 	resource: ToolResourceSnapshot;
 	backgroundJobs: number;
+	waitingOutputJobs: number;
 	expiresAt: number | null;
 }
 

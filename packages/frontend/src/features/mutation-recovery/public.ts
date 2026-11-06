@@ -1,1 +1,1 @@
-export { default as MutationRecoveryPanel } from './components/MutationRecoveryPanel.vue';
+export const loadMutationRecoveryPanel = () => import('./components/MutationRecoveryPanel.vue');

@@ -1998,6 +1998,7 @@
       "close": "接続を閉じる",
       "connecting": "接続を準備中",
       "operations": "実行中 {count}",
+      "waitingOutput": "{count} 件のタスクがログ保存領域を待っています。空き容量を確保すると再開します。タスクの停止も可能です。",
       "backgroundJobs": "バックグラウンド {count}",
       "expires": "アイドル接続の解放時刻：{time}",
       "closeTitle": "タスクを停止して接続を閉じますか？",

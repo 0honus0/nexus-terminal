@@ -56,12 +56,16 @@ const orderedSessions = computed(() =>
 );
 const activeSession = computed(() => (activeId.value ? (sessions.get(activeId.value) ?? null) : null));
 
-const add = (session: WorkspaceRuntimeSession, index = order.value.length): WorkspaceRuntimeSession => {
+const add = (
+	session: WorkspaceRuntimeSession,
+	index = order.value.length,
+	activate = true,
+): WorkspaceRuntimeSession => {
 	sessions.set(session.id, session);
 	const next = [...order.value];
 	next.splice(Math.max(0, Math.min(index, next.length)), 0, session.id);
 	order.value = next;
-	activeId.value = session.id;
+	if (activate) activeId.value = session.id;
 	logger.debug(
 		{ workspaceId: session.id, connectionId: session.connection.id, sessionCount: sessions.size },
 		'Workspace runtime registered',
@@ -264,12 +268,15 @@ export const workspaceRuntimeRegistry = {
 	sharedEditorSession,
 	suspendAutoTerminationNotice,
 
-	async open(connection: ConnectionSummary, viewport?: TerminalViewport): Promise<WorkspaceRuntimeSession> {
+	async open(
+		connection: ConnectionSummary,
+		{ viewport, activate = true }: { viewport?: TerminalViewport; activate?: boolean } = {},
+	): Promise<WorkspaceRuntimeSession> {
 		if (connection.type !== 'SSH') {
 			throw new Error('Only SSH connections can open a Workspace session.');
 		}
 		const session = createRuntimeSession(connection);
-		add(session);
+		add(session, order.value.length, activate);
 		try {
 			await session.connect(viewport);
 			if (sessions.get(session.id) !== session) {

@@ -522,7 +522,7 @@ agent_tool_jobs 由所属 Adapter 安装；id 绑定原工具记录，完整 sco
 
 ### 7. 生命周期与失败
 
-Shell commands[] 原始 UTF-8 合计≤8KiB，cwd≤256bytes，完整参数JSON≤16KiB；stdout/stderr合计32KiB有界捕获，明确truncated，完整结果可容纳最坏JSON转义。Remote按冻结预算和真实资源占用动态接纳，Shell的实际执行截止时间来自原Run的绝对deadlineAt，不随yield/续查重置。foreground的yieldSeconds可为0，默认冻结toolTimeoutSeconds并以其封顶；窗口到期仅返回Job快照，不abort。job wait默认10秒、最多30秒且受冻结工具等待预算约束，到期同样保留执行。不可续查的其它工具仍使用冻结工具执行期限（默认45秒），Remote不再额外把合法配置硬截为45秒。连接握手单独遵守Platform既有300秒技术上限，命令消耗Run剩余期限。每个任务、权限监测、timer/listener/Promise均有原owner；派发前再次核对剩余时间；每秒复查原批准/目标/当前权威，终态结算前先停止并等待权限监控收敛，失效取消后等真实收尾。根取消/结束/停机统一drain；清理失败保留配额和原因。Shell非零退出是已确认命令失败，SSH派发未知、取消、后验失败和清理失败不得报远端回滚。工具说明要求模型在需要结果时继续等待原Job，不能因yield重跑或提前结束Run。模型主动结束Run仍沿原收尾政策取消剩余Job。已有held/blocked由Mutation SQLite在获取全部资源的同一事务分类，具名准入拒绝经Remote public/ToolModel映射为tool_machine_busy/tool_machine_blocked，新操作failed且没有新副作用；原blocked证据保留，只能沿现有恢复流程核对。
+Shell commands[] 原始 UTF-8 合计≤8KiB，cwd≤256bytes，完整参数JSON≤16KiB；stdout/stderr内联预览合计32KiB，明确truncated；完整文本日志按下方输出存储专题落盘，不受预览大小限制。Remote按冻结预算和真实资源占用动态接纳，Shell的实际执行截止时间来自原Run的绝对deadlineAt，不随yield/续查重置。foreground的yieldSeconds可为0，默认冻结toolTimeoutSeconds并以其封顶；窗口到期仅返回Job快照，不abort。job wait默认10秒、最多30秒且受冻结工具等待预算约束，到期同样保留执行。不可续查的其它工具仍使用冻结工具执行期限（默认45秒），Remote不再额外把合法配置硬截为45秒。连接握手单独遵守Platform既有300秒技术上限，命令消耗Run剩余期限。每个任务、权限监测、timer/listener/Promise均有原owner；派发前再次核对剩余时间；每秒复查原批准/目标/当前权威，终态结算前先停止并等待权限监控收敛，失效取消后等真实收尾。根取消/结束/停机统一drain；清理失败保留配额和原因。Shell非零退出是已确认命令失败，SSH派发未知、取消、后验失败和清理失败不得报远端回滚。工具说明要求模型在需要结果时继续等待原Job，不能因yield重跑或提前结束Run。模型主动结束Run仍沿原收尾政策取消剩余Job。已有held/blocked由Mutation SQLite在获取全部资源的同一事务分类，具名准入拒绝经Remote public/ToolModel映射为tool_machine_busy/tool_machine_blocked，新操作failed且没有新副作用；原blocked证据保留，只能沿现有恢复流程核对。
 
 ### 8. 当前能力与验收
 
@@ -970,3 +970,16 @@ WorkspaceService使用原RunService与ContextHistoryService：Root列表按threa
 6. **数据、事务与并发**：加载名字不持久化，不需要迁移。搜索复用现有工具执行账本、政策修订和完成事务；最终验证之后才产生可信加载效果，整批工具成功后才用于下一轮。常驻及已加载定义维持稳定顺序。
 7. **生命周期与失败**：每轮和每次搜索重新过滤当前授权；撤权立即使已加载定义退出目录。取消、批次失败、未知提交不推进下一次模型请求。Run 结束自动释放局部集合，不新增定时器、全局缓存或重启恢复；Child 继承完整授权上界而非父任务当前已加载子集。
 8. **当前能力与验收**：实现及验证状态见 PLAN/testing。参考 [Vercel AI SDK 的 toolSearch 与逐次加载状态](https://github.com/vercel/ai/blob/6737c7721b10ce489e21efff43a4acf9c8ca7f04/packages/ai/src/tool-search/prepare-tool-search.ts)：搜索入口不得延迟加载、当前执行持有发现集合、按当前可用目录筛选、下一轮生效。该函数绑定 SDK 自身生成循环且不是独立检索接口，本项目保留现有治理/账本 owner；检索复用 [Fuse.js](https://github.com/krisk/Fuse)，使用关键词包含匹配和系统 Intl.Segmenter 中文分词，分类别名补足 Host 英文声明。不复制其私有实现、默认五条限制或另建评分算法，不限定结果条数；参数、结果和上下文继续遵循原预算。验收覆盖双协议、搜索后复用、同轮拒绝、撤权/无目标/Child/插件上界、取消及原 MCP/ACP/Browser/交付链；真实 token 与耗时收益另行测量，工具 JSON 字节减少不等于实际计费同比减少。
+
+## 完整 Shell 输出存储
+
+1. **职责与范围**：Job 持有完整 Shell 输出；内联结果只保存有界预览。日志不设单任务总量配额，不增加 Artifact 权限，仍绑定原 user/App/Run/目标版本。
+2. **子功能与目录**：ToolJobService 拥有写入、等待空间状态和回收政策；ToolJobModel 转换应用日志与 Platform TextLogStore；NativeTextLogStore 保存 UTF-8 数据与定长索引。POSIX Adapter 解析批次边界并异步交付全部输出。
+3. **依赖方向**：Service→JobModel→JobStorage/SQLite 与 TextLogStore/Native；Agent→Remote→CommandModel→CommandPort→SSH。文件名和句柄不进入应用或公开响应。
+4. **类型与转换**：应用日志事件/分页/写入能力归 tools/model/tool-job-types，Platform 只持通用整数标签和文本记录；Model 显式映射命令序号/流。模型工具返回原 Job 引用和 UTF-8 字节游标；空间等待计数经原资源 Shared/mapper 投影到侧栏。
+5. **入口与安装**：沿 shell_execute 与 shell_job_control.output/status/wait，无新执行入口。Bootstrap 在数据目录安装独立 tool-logs 子目录；它随数据卷持久化，不属于当前应用 JSON 备份的 Artifact 文件集合；原 Agent lifecycle 管理清理任务。
+6. **数据、事务与并发**：Job 身份/状态仍归 agent_tool_jobs，无新增数据库结构。日志追加先数据后索引；活动读取只观察已提交记录；索引二分定位，分页不扫描全部历史。数据库与文件并非原子提交，历史无日志明确不可用，不从截断预览伪造完整输出。
+7. **生命周期与失败**：两个 SSH 输出流各自暂停，串行等待日志写入，避免无界队列。ENOSPC/EDQUOT 保留已确认日志并等待空间恢复；原取消/期限仍有效。失败/取消不证明远端停止；读取已存日志不解除 unknown 围栏。日志不随 Run 结束删除；只有对应 Job 已不存在且没有活动读写才回收。重启不重放命令；未完成追加不作为完整记录发布。
+8. **当前能力与验收**：完整日志、预览引用、分页、空间等待及回收已接线；真实 OpenSSH 8 MiB、双流、UTF-8/BOM、低预览预算、权限/未知、重启及有界背压回归见 testing/HISTORY。空间耗尽与迟到刷盘错误采用真实文件操作上的故障注入，未做生产磁盘填满或掉电实验。只保留已确认写入前缀，存储故障或取消不保证仍在远端/传输/在途写入的尾部已经保存。
+
+参考 Pi 的 [OutputAccumulator](https://github.com/badlogic/pi-mono/blob/2a32a605a9f18a5f0191f65358a2e764b2f69fc7/packages/coding-agent/src/core/tools/output-accumulator.ts) 分离完整文件与有限展示；实际追加、范围读取使用 Node 文件能力，SSH 背压、Job 授权和生命周期由本项目既有 owner 适配。

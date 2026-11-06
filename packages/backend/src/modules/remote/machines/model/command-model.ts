@@ -1,4 +1,5 @@
 import type { RemoteMachineProvider } from './machine-types.js';
+import { NativeCommandCleanupFailure } from '../../../../platform/commands/command-port.js';
 import type { CommandPort, NativeCommand } from '../../../../platform/commands/command-port.js';
 import { MachineDispatchFailure, MACHINE_CONNECT_MAX_TIMEOUT_MS } from '../../../../platform/ssh/ssh-port.js';
 import { TargetOperationError } from '../../../targets/public-errors.js';
@@ -55,7 +56,7 @@ export class MachineCommandModel {
 					maxOutputBytes,
 					signal: scope.signal,
 
-					onOutput: (index, stream, text) => input.onOutput?.(index, stream, text),
+					onOutput: async (index, stream, text, signal) => input.onOutput?.(index, stream, text, signal),
 				},
 			);
 			await scope.validate();
@@ -76,7 +77,9 @@ export class MachineCommandModel {
 				),
 			};
 		} catch (cause) {
-			if (cause instanceof RemoteResourceCleanupFailure || cause instanceof RemoteFileFailure) {
+			if (cause instanceof NativeCommandCleanupFailure) {
+				failure = new RemoteResourceCleanupFailure([cause]);
+			} else if (cause instanceof RemoteResourceCleanupFailure || cause instanceof RemoteFileFailure) {
 				failure = cause;
 			} else if (cause instanceof MachineDispatchFailure) {
 				failure = new RemoteFileFailure(

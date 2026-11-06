@@ -1,5 +1,7 @@
 import type { NativeCommandBatchOptions } from '../command-port.js';
+import { NativeCommandCleanupFailure } from '../command-port.js';
 import { randomUUID } from 'node:crypto';
+import type { Readable } from 'node:stream';
 import { StringDecoder } from 'node:string_decoder';
 import { MachineDispatchFailure } from '../../ssh/ssh-port.js';
 import type { MachineCommand } from '../../ssh/ssh-port.js';
@@ -13,7 +15,7 @@ interface CapturedCommand {
 	ended: Map<'stdout' | 'stderr', number>;
 }
 
-/** Parse control records before applying the shared output budget, including after truncation. */
+/** Stream all output to the owner; the result budget limits only the inline preview. */
 export async function executePosixBatch(
 	open: (command: string, signal: AbortSignal) => Promise<MachineCommand>,
 	invocations: string[],
@@ -49,20 +51,19 @@ export async function executePosixBatch(
 	}));
 	let remaining = options.maxOutputBytes;
 	let channel: MachineCommand | null = null;
+	let executionFailure: unknown = null;
 
-	let offStderr = () => {};
+	const readers: Promise<void>[] = [];
+	const readingStopped = new AbortController();
+	const readingSignal = AbortSignal.any([signal, readingStopped.signal]);
 
-	let offStdout = () => {};
-
-	let failure: unknown = null;
-
-	const parser = (stream: 'stdout' | 'stderr') => {
+	const stdoutParser = (stream: 'stdout' | 'stderr') => {
 		const decoder = new StringDecoder('utf8');
 		let pending = '';
 		let current: number | null = null;
 		let next = 0;
 
-		const output = (text: string) => {
+		const output = async (text: string) => {
 			if (!text) {
 				return;
 			}
@@ -71,10 +72,10 @@ export async function executePosixBatch(
 			if (!item || index === null) {
 				throw new MachineDispatchFailure('unknown');
 			}
+			await options.onOutput?.(index, stream, text, readingSignal);
 			const bytes = Buffer.byteLength(text);
 			if (bytes <= remaining) {
 				item[stream] += text;
-				options.onOutput?.(index, stream, text);
 				remaining -= bytes;
 			} else {
 				// Never split a UTF-8 code point at the capture boundary.
@@ -88,15 +89,12 @@ export async function executePosixBatch(
 					remaining -= size;
 				}
 				item[stream] += accepted;
-				if (accepted) {
-					options.onOutput?.(index, stream, accepted);
-				}
 				item.truncated = true;
 				remaining = 0;
 			}
 		};
 
-		const consume = (text: string, final: boolean) => {
+		const consume = async (text: string, final: boolean) => {
 			pending += text;
 			while (pending) {
 				const start = pending.indexOf(prefix);
@@ -105,11 +103,11 @@ export async function executePosixBatch(
 					while (keep > 0 && !prefix.startsWith(pending.slice(-keep))) {
 						keep--;
 					}
-					output(pending.slice(0, pending.length - keep));
+					await output(pending.slice(0, pending.length - keep));
 					pending = pending.slice(pending.length - keep);
 					break;
 				}
-				output(pending.slice(0, start));
+				await output(pending.slice(0, start));
 				pending = pending.slice(start);
 				const end = pending.indexOf(suffix, prefix.length);
 				if (end < 0) {
@@ -158,68 +156,87 @@ export async function executePosixBatch(
 		};
 	};
 
-	const stdout = parser('stdout');
-	const stderr = parser('stderr');
+	const stdout = stdoutParser('stdout');
+	const stderr = stdoutParser('stderr');
 	try {
 		signal.throwIfAborted();
 		channel = await open(script, signal);
 		const command = channel;
-		offStderr = command.onStderr((bytes) => {
-			try {
-				stderr.write(bytes);
-			} catch (error) {
-				failure ??= error;
-				controller.abort();
-			}
-		});
-		// ssh2.destroy() only sends EOF/CLOSE. A remote process ignoring TERM may
-		// keep its readable open after the local outcome has become unknown. Stop
-		// consuming on that outcome so the machine owner can retire the transport;
-		// awaiting the stream first would prevent that owner from ever releasing it.
-		await new Promise<void>((resolve, reject) => {
-			const data = (chunk: unknown) => {
-				try {
-					if (!Buffer.isBuffer(chunk)) {
-						throw new MachineDispatchFailure('unknown');
+		// Each stream pauses after one chunk; both serialize through the append owner.
+		// At most one delivered chunk per stream waits outside the SSH buffers.
+		let writing = Promise.resolve();
+
+		const consume = (readable: Readable, parser: ReturnType<typeof stdoutParser>) =>
+			new Promise<void>((resolve, reject) => {
+				let done = false;
+				let pending = Promise.resolve();
+
+				const cleanup = () => {
+					readable.off('data', data);
+					readable.off('end', end);
+					readable.off('error', fail);
+					readingSignal.removeEventListener('abort', abort);
+					readable.pause();
+				};
+
+				const finish = (error?: unknown) => {
+					if (done) {
+						return;
 					}
-					stdout.write(chunk);
-				} catch (error) {
-					reject(error);
+					done = true;
+					cleanup();
+					void pending.then(() => (error === undefined ? resolve() : reject(error)), reject);
+				};
+
+				const fail = (error: unknown) => finish(error);
+
+				const abort = () => finish(new MachineDispatchFailure('unknown'));
+
+				const data = (chunk: unknown) => {
+					readable.pause();
+					if (!Buffer.isBuffer(chunk)) {
+						fail(new MachineDispatchFailure('unknown'));
+						return;
+					}
+					pending = writing.then(() => parser.write(chunk));
+					writing = pending;
+					void pending.then(() => {
+						if (!done && !readingSignal.aborted) {
+							readable.resume();
+						}
+					}, fail);
+				};
+
+				const end = () => {
+					pending = writing.then(() => parser.end());
+					writing = pending;
+					finish();
+				};
+
+				readable.on('data', data);
+				readable.once('end', end);
+				readable.once('error', fail);
+				readingSignal.addEventListener('abort', abort, { once: true });
+				if (readingSignal.aborted) {
+					abort();
+				} else if (readable.readableEnded) {
+					end();
+				} else {
+					readable.resume();
 				}
-			};
+			});
 
-			const end = () => resolve();
-
-			const error = (cause: unknown) => reject(cause);
-
-			offStdout = () => {
-				command.readable.off('data', data);
-				command.readable.off('end', end);
-				command.readable.off('error', error);
-				command.readable.pause();
-				resolve();
-			};
-			command.readable.on('data', data);
-			command.readable.once('end', end);
-			command.readable.once('error', error);
-			void command.outcome.then((outcome) => {
-				if (outcome.status === 'unknown') {
-					reject(new MachineDispatchFailure('unknown'));
-				}
-			}, reject);
-			if (command.readable.readableEnded) {
-				resolve();
+		// Direct stderr consumption survives SSH channel-close while buffered data drains.
+		readers.push(consume(command.readable, stdout), consume(command.stderrReadable, stderr));
+		const outcome = command.outcome.then((value) => {
+			if (value.status === 'unknown') {
+				readingStopped.abort();
+				throw new MachineDispatchFailure('unknown');
 			}
+			return value;
 		});
-		const outcome = await command.outcome;
-		if (failure !== null) {
-			throw failure;
-		}
-		if (outcome.status === 'unknown') {
-			throw new MachineDispatchFailure('unknown');
-		}
-		stdout.end();
-		stderr.end();
+		const [, result] = await Promise.all([Promise.all(readers), outcome]);
+
 		let stopped = false;
 		let anyFailed = false;
 		const results: NativeCommandBatchResult['results'] = captured.map((item, index) => {
@@ -246,20 +263,27 @@ export async function executePosixBatch(
 				truncated: item.truncated,
 			};
 		});
-		if ((outcome.status === 'nonzero') !== anyFailed) {
+		if ((result.status === 'nonzero') !== anyFailed) {
 			throw new MachineDispatchFailure('unknown');
 		}
 		return { results };
+	} catch (cause) {
+		controller.abort();
+		executionFailure =
+			cause instanceof MachineDispatchFailure
+				? cause
+				: new MachineDispatchFailure(channel === null ? 'not_started' : 'unknown', { cause });
+		throw executionFailure;
 	} finally {
 		clearTimeout(timer);
+		readingStopped.abort();
+		await Promise.allSettled(readers);
 		try {
-			try {
-				offStdout();
-			} finally {
-				offStderr();
-			}
-		} finally {
 			channel?.close();
+		} catch (cleanup) {
+			throw new NativeCommandCleanupFailure({
+				cause: executionFailure === null ? cleanup : new AggregateError([executionFailure, cleanup]),
+			});
 		}
 	}
 }

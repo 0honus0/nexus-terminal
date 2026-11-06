@@ -94,7 +94,7 @@ await test('Shell Job list paginates beyond the former history cap without losin
 		await service.control(
 			scope,
 			target,
-			{ action: 'list', jobId: null, waitSeconds: 0, offset: 0 },
+			{ action: 'list', jobIds: [], waitSeconds: 0, offset: 0 },
 			new AbortController().signal,
 			async () => {},
 			1000,
@@ -106,7 +106,7 @@ await test('Shell Job list paginates beyond the former history cap without losin
 		await service.control(
 			scope,
 			target,
-			{ action: 'list', jobId: null, waitSeconds: 0, offset: first.nextOffset },
+			{ action: 'list', jobIds: [], waitSeconds: 0, offset: first.nextOffset },
 			new AbortController().signal,
 			async () => {},
 			1000,
@@ -241,6 +241,16 @@ for (const mode of ['success', 'late-storage-failure', 'execution-and-storage-fa
 			updatedAt: Date.now(),
 		};
 		const service = new ToolJobService({
+			async openOutput() {
+				return {
+					append: async () => {},
+
+					flush: async () => {},
+
+					close: async () => {},
+				};
+			},
+
 			async create() {
 				return job;
 			},
@@ -283,7 +293,7 @@ for (const mode of ['success', 'late-storage-failure', 'execution-and-storage-fa
 					if (mode === 'execution-and-storage-failure') {
 						throw operationFailure;
 					}
-					return result;
+					return { status: result.status, commands: [{ index: 0, ...result }] };
 				},
 			}),
 		);
@@ -346,7 +356,7 @@ for (const action of ['list', 'status', 'wait', 'cancel']) {
 			service.control(
 				scope,
 				target,
-				{ action, jobId: job.id, waitSeconds: 30, offset: 0 },
+				{ action, jobIds: [job.id], waitSeconds: 30, offset: 0 },
 				new AbortController().signal,
 				async () => {},
 				1000,

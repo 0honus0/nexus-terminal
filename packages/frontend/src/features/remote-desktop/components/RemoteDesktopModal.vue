@@ -1,6 +1,6 @@
 <script setup lang="ts">
-	import { useResizeObserver } from '@vueuse/core';
-	import { computed, nextTick, onBeforeUnmount, onActivated, onDeactivated, ref, watch } from 'vue';
+	import { createReusableTemplate, useEventListener, useResizeObserver } from '@vueuse/core';
+	import { computed, nextTick, onBeforeUnmount, onActivated, onDeactivated, ref, shallowRef, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import {
 		UiBadge,
@@ -67,6 +67,9 @@
 	}>();
 	const { t } = useI18n();
 	const device = useDeviceCapabilities();
+	const [DefineWindowActions, WindowActions] = createReusableTemplate();
+	const [DefineSizeControls, SizeControls] = createReusableTemplate();
+	const [DefineTouchControls, TouchControls] = createReusableTemplate();
 	const panel = ref<HTMLElement | null>(null);
 	const display = ref<HTMLElement | null>(null);
 	const mobileKeyboardInput = ref<HTMLTextAreaElement | null>(null);
@@ -88,8 +91,35 @@
 	const minimized = ref(false);
 	const modalWidth = ref(props.width);
 	const modalHeight = ref(props.height);
-	const restoreButton = ref<HTMLButtonElement | null>(null);
-	const restorePosition = ref({ x: 16, y: Math.max(16, window.innerHeight / 2 - 25) });
+	const restoreAnchor = ref<HTMLElement | null>(null);
+	const restoreDock = ref<'left' | 'right' | null>(null);
+	const dockedRestore = computed(() => (props.connection?.type === 'RDP' ? restoreDock.value : null));
+
+	const readViewport = () => {
+		const root = document.documentElement;
+		const visual = window.visualViewport;
+		const left = Math.max(0, visual?.offsetLeft ?? 0);
+		const top = Math.max(0, visual?.offsetTop ?? 0);
+		// Chromium can include the stable scrollbar gutter in both clientWidth and visualViewport.width.
+		const layoutWidth = Math.min(root.clientWidth, root.getBoundingClientRect().width);
+		return {
+			left,
+			top,
+			width: Math.max(0, Math.min(layoutWidth, left + (visual?.width ?? window.innerWidth)) - left),
+			height: Math.max(0, Math.min(root.clientHeight, top + (visual?.height ?? window.innerHeight)) - top),
+		};
+	};
+
+	const viewport = shallowRef(readViewport());
+	const overlayViewportStyle = computed(() => ({
+		left: `${viewport.value.left}px`,
+		top: `${viewport.value.top}px`,
+		width: `${viewport.value.width}px`,
+		height: `${viewport.value.height}px`,
+		right: 'auto',
+		bottom: 'auto',
+	}));
+	const restorePosition = ref({ x: 16, y: Math.max(16, viewport.value.height / 2 - 25) });
 	const touchMode = ref<RemoteTouchMode>(readTouchMode());
 	const vncText = ref('');
 	const vncTextFocused = ref(false);
@@ -102,7 +132,11 @@
 		if (event.detail === 0) {
 			await nextTick();
 			if (!active || !props.visible || !floatingTools.value || !toolsOpen.value) return;
-			panel.value?.querySelector<HTMLElement>('[data-desktop-chrome] button:not(:disabled)')?.focus();
+			panel.value
+				?.querySelector<HTMLElement>(
+					'[data-desktop-chrome] input:not(:disabled), [data-desktop-chrome] button:not(:disabled)',
+				)
+				?.focus();
 		}
 	};
 
@@ -193,9 +227,9 @@
 
 	const protocolMinHeight = () => (props.connection?.type === 'VNC' ? 600 : 480);
 
-	const maxPanelWidth = () => Math.max(200, window.innerWidth - 32);
+	const maxPanelWidth = () => Math.max(0, viewport.value.width - 32);
 
-	const maxPanelHeight = () => Math.max(200, window.innerHeight - 32);
+	const maxPanelHeight = () => Math.max(0, viewport.value.height - 32);
 
 	const minPanelWidth = () => Math.min(protocolMinWidth(), maxPanelWidth());
 
@@ -275,6 +309,7 @@
 	};
 
 	const disconnect = () => {
+		cancelWindowGestures();
 		fileClipboardOpen.value = false;
 		toolsOpen.value = false;
 		viewRevision += 1;
@@ -334,16 +369,85 @@
 			sendSize();
 		},
 	});
+
+	const constrainRestorePosition = (position: { x: number; y: number }, element: HTMLElement) => ({
+		x: Math.max(
+			viewport.value.left,
+			Math.min(position.x, viewport.value.left + viewport.value.width - element.offsetWidth),
+		),
+		y: Math.max(
+			viewport.value.top,
+			Math.min(position.y, viewport.value.top + viewport.value.height - element.offsetHeight),
+		),
+	});
+
 	const restoreDrag = useDraggablePosition({
 		position: restorePosition,
 
-		getElement: () => restoreButton.value,
+		getElement: () => restoreAnchor.value,
 
-		constrain: (position, element) => ({
-			x: Math.max(0, Math.min(position.x, window.innerWidth - element.offsetWidth)),
-			y: Math.max(0, Math.min(position.y, window.innerHeight - element.offsetHeight)),
-		}),
+		constrain: constrainRestorePosition,
+
+		onMove: () => {
+			restoreDock.value = null;
+		},
+
+		onEnd: () => dockRestoreButton(),
 	});
+
+	function dockRestoreButton(): void {
+		const anchor = restoreAnchor.value;
+		if (!minimized.value || props.connection?.type !== 'RDP' || !anchor) return;
+		const left = restorePosition.value.x - viewport.value.left;
+		const right = viewport.value.width - anchor.offsetWidth - left;
+		restoreDock.value ??= left <= right ? 'left' : 'right';
+		restorePosition.value = {
+			x:
+				restoreDock.value === 'left'
+					? viewport.value.left
+					: Math.max(viewport.value.left, viewport.value.left + viewport.value.width - anchor.offsetWidth),
+			y: restorePosition.value.y,
+		};
+	}
+
+	function cancelWindowGestures(): void {
+		resize.cancelResize();
+		restoreDrag.cancelDragging();
+	}
+
+	const fitWindowToViewport = () => {
+		if (!active || !props.visible) return;
+		cancelWindowGestures();
+		viewport.value = readViewport();
+		if (!fullscreen.value) clampSize();
+		if (restoreAnchor.value) {
+			restorePosition.value = constrainRestorePosition(restorePosition.value, restoreAnchor.value);
+			dockRestoreButton();
+		}
+		sendSize();
+	};
+
+	useEventListener(window, 'resize', fitWindowToViewport);
+	useEventListener(window.visualViewport, 'resize', fitWindowToViewport);
+	useEventListener(window.visualViewport, 'scroll', fitWindowToViewport);
+	useResizeObserver(document.documentElement, () => {
+		const next = readViewport();
+		const current = viewport.value;
+		if (
+			next.left !== current.left ||
+			next.top !== current.top ||
+			next.width !== current.width ||
+			next.height !== current.height
+		) {
+			fitWindowToViewport();
+		}
+	});
+	useEventListener(window, 'blur', cancelWindowGestures);
+	useEventListener(document, 'visibilitychange', () => {
+		if (document.hidden) cancelWindowGestures();
+		else fitWindowToViewport();
+	});
+	watch(minimized, () => void nextTick(fitWindowToViewport));
 
 	const minimize = () => {
 		if (fullscreen.value) return;
@@ -356,11 +460,10 @@
 		void nextTick(sendSize);
 	};
 
-	const handleRestoreClick = () => {
-		if (restoreDrag.didDrag.value) {
-			restoreDrag.didDrag.value = false;
-			return;
-		}
+	const handleRestoreClick = (event: MouseEvent) => {
+		const dragged = restoreDrag.didDrag.value;
+		restoreDrag.didDrag.value = false;
+		if (dragged && event.detail > 0) return;
 		restore();
 	};
 
@@ -391,7 +494,7 @@
 
 	const onFullscreen = () => {
 		fullscreen.value = Boolean(panel.value && document.fullscreenElement === panel.value);
-		void nextTick(sendSize);
+		void nextTick(fitWindowToViewport);
 	};
 
 	const handleFullscreenKeydown = (event: KeyboardEvent) => {
@@ -462,6 +565,7 @@
 	watch(vncTextFocused, (value) => controller.peer?.setTextInputActive(value), { flush: 'sync' });
 	onActivated(() => {
 		active = true;
+		fitWindowToViewport();
 	});
 	onDeactivated(() => {
 		active = false;
@@ -494,7 +598,7 @@
 					vncTextFocused.value = false;
 					if (changedConnection) disconnect();
 				}
-				clampSize();
+				fitWindowToViewport();
 				void nextTick(connect);
 			} else {
 				minimized.value = false;
@@ -518,19 +622,197 @@
 </script>
 
 <template>
-	<Teleport to="body">
-		<button
-			v-if="visible && minimized"
-			ref="restoreButton"
+	<DefineWindowActions>
+		<UiButton
 			type="button"
-			class="fixed z-[100] flex h-[50px] w-[50px] cursor-grab items-center justify-center rounded-full bg-primary text-white shadow-lg hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50 active:cursor-grabbing"
-			:style="{ left: `${restorePosition.x}px`, top: `${restorePosition.y}px` }"
-			:title="t('remoteDesktopModal.restoreWindow')"
-			@pointerdown="restoreDrag.startDragging"
-			@click="handleRestoreClick"
+			appearance="ghost"
+			density="compact"
+			icon-only
+			:title="fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')"
+			:aria-label="fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')"
+			@click="toggleFullscreen"
 		>
-			<i class="fas fa-window-restore fa-lg" aria-hidden="true"></i>
-		</button>
+			<i :class="fullscreen ? 'fas fa-compress fa-sm' : 'fas fa-expand fa-sm'" aria-hidden="true"></i>
+		</UiButton>
+		<UiButton
+			type="button"
+			appearance="ghost"
+			density="compact"
+			icon-only
+			:title="t('common.minimize')"
+			:aria-label="t('common.minimize')"
+			@click="minimize"
+		>
+			<i class="fas fa-window-minimize fa-sm" aria-hidden="true"></i>
+		</UiButton>
+		<UiButton
+			type="button"
+			appearance="ghost"
+			density="compact"
+			icon-only
+			:title="t('common.close')"
+			:aria-label="t('common.close')"
+			@click="closeModal"
+		>
+			<i class="fas fa-times fa-lg" aria-hidden="true"></i>
+		</UiButton>
+	</DefineWindowActions>
+	<DefineSizeControls>
+		<div
+			class="remote-desktop-size-controls flex min-w-0 shrink-0 items-center gap-y-1"
+			:class="
+				device.isMobile.value
+					? 'ml-0 w-full flex-nowrap justify-end gap-x-1.5 border-t border-border/60 pt-2'
+					: 'ml-auto flex-wrap gap-x-2'
+			"
+		>
+			<div class="remote-desktop-dimension">
+				<label
+					:for="connection?.type === 'VNC' ? 'vnc-modal-width' : 'rdp-modal-width'"
+					class="shrink-0 whitespace-nowrap text-xs"
+				>
+					{{ t('common.width') }}:
+				</label>
+				<div class="min-w-0 w-20" :class="device.isMobile.value ? 'flex-1 max-w-20' : ''">
+					<UiNumberInput
+						:id="connection?.type === 'VNC' ? 'vnc-modal-width' : 'rdp-modal-width'"
+						v-model="modalWidth"
+						:disabled="sizeSaving"
+						density="compact"
+						:min="minPanelWidth()"
+						:max="maxPanelWidth()"
+						step="10"
+						:aria-label="t('common.width')"
+						@change="commitSize"
+					/>
+				</div>
+			</div>
+			<div class="remote-desktop-dimension">
+				<label
+					:for="connection?.type === 'VNC' ? 'vnc-modal-height' : 'rdp-modal-height'"
+					class="shrink-0 whitespace-nowrap text-xs"
+				>
+					{{ t('common.height') }}:
+				</label>
+				<div class="min-w-0 w-20" :class="device.isMobile.value ? 'flex-1 max-w-20' : ''">
+					<UiNumberInput
+						:id="connection?.type === 'VNC' ? 'vnc-modal-height' : 'rdp-modal-height'"
+						v-model="modalHeight"
+						:disabled="sizeSaving"
+						density="compact"
+						:min="minPanelHeight()"
+						:max="maxPanelHeight()"
+						step="10"
+						:aria-label="t('common.height')"
+						@change="commitSize"
+					/>
+				</div>
+			</div>
+			<UiButton
+				type="button"
+				appearance="solid"
+				tone="primary"
+				class="shrink-0 whitespace-nowrap"
+				:disabled="state === 'connecting'"
+				:title="t('remoteDesktopModal.reconnectTooltip')"
+				@click="connect"
+			>
+				{{ t('common.reconnect') }}
+			</UiButton>
+		</div>
+	</DefineSizeControls>
+	<DefineTouchControls>
+		<div
+			v-if="device.hasTouch.value"
+			class="flex min-w-0 flex-col gap-1"
+			:class="device.isMobile.value ? 'w-full' : ''"
+		>
+			<div class="flex items-center gap-1.5" :class="device.isMobile.value ? 'w-full justify-between' : ''">
+				<div class="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
+					<span class="text-[11px] text-text-muted">{{ t('remoteDesktopModal.touchModeLabel') }}</span>
+					<UiInfoHint
+						v-if="device.isMobile.value"
+						:label="t('remoteDesktopModal.touchGuide')"
+						:text="
+							t(
+								touchMode === 'direct'
+									? 'remoteDesktopModal.touchHintDirect'
+									: 'remoteDesktopModal.touchHintTouchpad',
+							)
+						"
+						trigger="click"
+						align="start"
+					/>
+				</div>
+				<div
+					class="inline-flex shrink-0 overflow-hidden rounded border border-border"
+					role="group"
+					:aria-label="t('remoteDesktopModal.touchModeLabel')"
+				>
+					<button
+						type="button"
+						class="relative z-10 min-h-8 px-2 py-1 text-[11px] transition-colors"
+						:class="
+							touchMode === 'direct'
+								? 'bg-primary text-white'
+								: 'bg-background text-foreground hover:bg-hover'
+						"
+						:aria-pressed="touchMode === 'direct'"
+						:title="t('remoteDesktopModal.touchHintDirect')"
+						@click="setTouchMode('direct')"
+					>
+						<i class="fas fa-hand-pointer mr-1" aria-hidden="true"></i
+						>{{ t('remoteDesktopModal.touchModeDirect') }}
+					</button>
+					<button
+						type="button"
+						class="relative z-10 min-h-8 border-l border-border px-2 py-1 text-[11px] transition-colors"
+						:class="
+							touchMode === 'touchpad'
+								? 'bg-primary text-white'
+								: 'bg-background text-foreground hover:bg-hover'
+						"
+						:aria-pressed="touchMode === 'touchpad'"
+						:title="t('remoteDesktopModal.touchHintTouchpad')"
+						@click="setTouchMode('touchpad')"
+					>
+						<i class="fas fa-arrows-up-down-left-right mr-1" aria-hidden="true"></i
+						>{{ t('remoteDesktopModal.touchModeTouchpad') }}
+					</button>
+				</div>
+			</div>
+			<span v-if="!device.isMobile.value" class="text-[11px] leading-tight text-text-muted">
+				{{
+					t(
+						touchMode === 'direct'
+							? 'remoteDesktopModal.touchHintDirect'
+							: 'remoteDesktopModal.touchHintTouchpad',
+					)
+				}}
+			</span>
+		</div>
+	</DefineTouchControls>
+
+	<Teleport to="body">
+		<div
+			v-if="visible && minimized"
+			ref="restoreAnchor"
+			class="fixed z-[100] h-[50px] w-[50px]"
+			:class="{ 'overflow-hidden': dockedRestore !== null }"
+			:style="{ left: `${restorePosition.x}px`, top: `${restorePosition.y}px` }"
+		>
+			<button
+				type="button"
+				class="remote-desktop-restore flex h-full w-full touch-none select-none cursor-grab items-center justify-center rounded-full bg-primary text-white shadow-lg hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50 active:cursor-grabbing"
+				:class="{ 'is-dragging': restoreDrag.dragging.value }"
+				:data-dock="dockedRestore"
+				:title="t('remoteDesktopModal.restoreWindow')"
+				@pointerdown="restoreDrag.startDragging"
+				@click="handleRestoreClick"
+			>
+				<i class="fas fa-window-restore fa-lg" aria-hidden="true"></i>
+			</button>
+		</div>
 	</Teleport>
 
 	<UiOverlayPanel
@@ -539,6 +821,7 @@
 		teleport
 		:surface="false"
 		:close-on-backdrop="false"
+		:style="overlayViewportStyle"
 	>
 		<div
 			ref="panel"
@@ -592,46 +875,27 @@
 					</h3>
 					<div class="ml-2 flex shrink-0 items-center space-x-1">
 						<UiBadge appearance="soft" density="compact" :tone="stateTone">{{ stateLabel }}</UiBadge>
-						<UiButton
-							type="button"
-							appearance="ghost"
-							density="compact"
-							icon-only
-							:title="fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')"
-							:aria-label="fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')"
-							@click="toggleFullscreen"
-						>
-							<i
-								:class="fullscreen ? 'fas fa-compress fa-sm' : 'fas fa-expand fa-sm'"
-								aria-hidden="true"
-							></i>
-						</UiButton>
-						<UiButton
-							type="button"
-							appearance="ghost"
-							density="compact"
-							icon-only
-							:title="t('common.minimize')"
-							:aria-label="t('common.minimize')"
-							@click="minimize"
-						>
-							<i class="fas fa-window-minimize fa-sm" aria-hidden="true"></i>
-						</UiButton>
-						<UiButton
-							type="button"
-							appearance="ghost"
-							density="compact"
-							icon-only
-							:title="t('common.close')"
-							:aria-label="t('common.close')"
-							@click="closeModal"
-						>
-							<i class="fas fa-times fa-lg" aria-hidden="true"></i>
-						</UiButton>
+						<WindowActions v-if="!floatingTools" />
 					</div>
 				</header>
+				<template v-if="floatingTools">
+					<div
+						class="remote-desktop-actions flex min-w-0 max-w-full flex-wrap items-center gap-2 text-xs text-text-secondary"
+					>
+						<SizeControls />
+						<RdpFileClipboard
+							v-model:open="fileClipboardOpen"
+							:clipboard="controller.peer?.fileClipboard ?? null"
+							:enabled="state === 'connected'"
+						/>
+						<div class="flex shrink-0 items-center space-x-1">
+							<WindowActions />
+						</div>
+					</div>
+					<TouchControls />
+				</template>
 				<footer
-					v-if="!fullscreen"
+					v-else-if="!fullscreen"
 					class="remote-desktop-footer flex shrink-0 gap-2 border-t border-border bg-header p-2 text-xs text-text-secondary"
 					:class="device.isMobile.value ? 'flex-col items-stretch' : 'flex-wrap items-center justify-between'"
 				>
@@ -639,80 +903,7 @@
 						class="flex min-w-0 items-center gap-2"
 						:class="device.isMobile.value ? 'w-full flex-none flex-col items-stretch' : 'flex-1 flex-wrap'"
 					>
-						<div
-							v-if="device.hasTouch.value"
-							class="flex min-w-0 flex-col gap-1"
-							:class="device.isMobile.value ? 'w-full' : ''"
-						>
-							<div
-								class="flex items-center gap-1.5"
-								:class="device.isMobile.value ? 'w-full justify-between' : ''"
-							>
-								<div class="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
-									<span class="text-[11px] text-text-muted">{{
-										t('remoteDesktopModal.touchModeLabel')
-									}}</span>
-									<UiInfoHint
-										v-if="device.isMobile.value"
-										:label="t('remoteDesktopModal.touchGuide')"
-										:text="
-											t(
-												touchMode === 'direct'
-													? 'remoteDesktopModal.touchHintDirect'
-													: 'remoteDesktopModal.touchHintTouchpad',
-											)
-										"
-										trigger="click"
-										align="start"
-									/>
-								</div>
-								<div
-									class="inline-flex shrink-0 overflow-hidden rounded border border-border"
-									role="group"
-									:aria-label="t('remoteDesktopModal.touchModeLabel')"
-								>
-									<button
-										type="button"
-										class="relative z-10 min-h-8 px-2 py-1 text-[11px] transition-colors"
-										:class="
-											touchMode === 'direct'
-												? 'bg-primary text-white'
-												: 'bg-background text-foreground hover:bg-hover'
-										"
-										:aria-pressed="touchMode === 'direct'"
-										:title="t('remoteDesktopModal.touchHintDirect')"
-										@click="setTouchMode('direct')"
-									>
-										<i class="fas fa-hand-pointer mr-1" aria-hidden="true"></i
-										>{{ t('remoteDesktopModal.touchModeDirect') }}
-									</button>
-									<button
-										type="button"
-										class="relative z-10 min-h-8 border-l border-border px-2 py-1 text-[11px] transition-colors"
-										:class="
-											touchMode === 'touchpad'
-												? 'bg-primary text-white'
-												: 'bg-background text-foreground hover:bg-hover'
-										"
-										:aria-pressed="touchMode === 'touchpad'"
-										:title="t('remoteDesktopModal.touchHintTouchpad')"
-										@click="setTouchMode('touchpad')"
-									>
-										<i class="fas fa-arrows-up-down-left-right mr-1" aria-hidden="true"></i
-										>{{ t('remoteDesktopModal.touchModeTouchpad') }}
-									</button>
-								</div>
-							</div>
-							<span v-if="!device.isMobile.value" class="text-[11px] leading-tight text-text-muted">
-								{{
-									t(
-										touchMode === 'direct'
-											? 'remoteDesktopModal.touchHintDirect'
-											: 'remoteDesktopModal.touchHintTouchpad',
-									)
-								}}
-							</span>
-						</div>
+						<TouchControls />
 
 						<div v-if="connection?.type === 'VNC'" class="flex min-w-[12rem] flex-1 items-center space-x-2">
 							<UiInput
@@ -738,72 +929,9 @@
 								{{ t('common.send') }}
 							</UiButton>
 						</div>
-						<RdpFileClipboard
-							v-if="connection?.type === 'RDP'"
-							v-model:open="fileClipboardOpen"
-							:clipboard="controller.peer?.fileClipboard ?? null"
-							:enabled="state === 'connected'"
-						/>
 					</div>
 
-					<div
-						class="flex min-w-0 shrink-0 items-center gap-y-1"
-						:class="
-							device.isMobile.value
-								? 'ml-0 w-full flex-nowrap justify-end gap-x-1.5 border-t border-border/60 pt-2'
-								: 'ml-auto flex-wrap gap-x-2'
-						"
-					>
-						<label
-							:for="connection?.type === 'VNC' ? 'vnc-modal-width' : 'rdp-modal-width'"
-							class="shrink-0 whitespace-nowrap text-xs"
-						>
-							{{ t('common.width') }}:
-						</label>
-						<div class="min-w-0 w-20" :class="device.isMobile.value ? 'flex-1 max-w-20' : ''">
-							<UiNumberInput
-								:id="connection?.type === 'VNC' ? 'vnc-modal-width' : 'rdp-modal-width'"
-								v-model="modalWidth"
-								:disabled="sizeSaving"
-								density="compact"
-								:min="minPanelWidth()"
-								:max="maxPanelWidth()"
-								step="10"
-								:aria-label="t('common.width')"
-								@change="commitSize"
-							/>
-						</div>
-						<label
-							:for="connection?.type === 'VNC' ? 'vnc-modal-height' : 'rdp-modal-height'"
-							class="shrink-0 whitespace-nowrap text-xs"
-						>
-							{{ t('common.height') }}:
-						</label>
-						<div class="min-w-0 w-20" :class="device.isMobile.value ? 'flex-1 max-w-20' : ''">
-							<UiNumberInput
-								:id="connection?.type === 'VNC' ? 'vnc-modal-height' : 'rdp-modal-height'"
-								v-model="modalHeight"
-								:disabled="sizeSaving"
-								density="compact"
-								:min="minPanelHeight()"
-								:max="maxPanelHeight()"
-								step="10"
-								:aria-label="t('common.height')"
-								@change="commitSize"
-							/>
-						</div>
-						<UiButton
-							type="button"
-							appearance="solid"
-							tone="primary"
-							class="shrink-0 whitespace-nowrap"
-							:disabled="state === 'connecting'"
-							:title="t('remoteDesktopModal.reconnectTooltip')"
-							@click="connect"
-						>
-							{{ t('common.reconnect') }}
-						</UiButton>
-					</div>
+					<SizeControls />
 				</footer>
 			</div>
 
@@ -906,6 +1034,25 @@
 </template>
 
 <style scoped>
+	.remote-desktop-restore[data-dock='left'] {
+		transform: translateX(-50%);
+	}
+
+	.remote-desktop-restore[data-dock='right'] {
+		transform: translateX(50%);
+	}
+
+	.remote-desktop-restore[data-dock]:focus-visible,
+	.remote-desktop-restore.is-dragging {
+		transform: none;
+	}
+
+	@media (hover: hover) {
+		.remote-desktop-restore[data-dock]:hover {
+			transform: none;
+		}
+	}
+
 	.remote-desktop-panel:fullscreen,
 	.remote-desktop-panel-fullscreen {
 		width: 100vw !important;
@@ -966,17 +1113,19 @@
 		padding: 0;
 		border: 0;
 	}
-	.remote-desktop-panel-floating-tools .remote-desktop-footer {
+	.remote-desktop-dimension {
 		display: contents;
 	}
-	.remote-desktop-panel-floating-tools .remote-desktop-footer > div:first-child {
-		flex: 0 1 auto;
-		width: auto;
+	.remote-desktop-panel-floating-tools .remote-desktop-size-controls {
+		display: contents;
 	}
-	.remote-desktop-panel-floating-tools .remote-desktop-footer > div:last-child {
-		margin: 0;
-		padding: 0;
-		border: 0;
+	.remote-desktop-panel-floating-tools .remote-desktop-dimension {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+	}
+	.remote-desktop-panel-floating-tools .remote-desktop-dimension > div {
+		flex: none;
 	}
 
 	.remote-desktop-edge {

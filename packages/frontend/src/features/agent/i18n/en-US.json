@@ -1998,6 +1998,7 @@
       "close": "Close connections",
       "connecting": "Preparing connections",
       "operations": "Active operations {count}",
+      "waitingOutput": "{count} job(s) waiting for log storage space. Free disk space to resume, or stop the task.",
       "backgroundJobs": "Background jobs {count}",
       "expires": "Idle connection expiry: {time}",
       "closeTitle": "Stop tasks and close connections?",

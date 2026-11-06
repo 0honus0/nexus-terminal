@@ -97,6 +97,9 @@
 		open?: (path: string) => Promise<unknown> | unknown;
 		focus?: () => void;
 	}
+	interface PopupEditorHandle extends EditorApi {
+		closeAll?: () => Promise<boolean>;
+	}
 	interface PreviewApi {
 		open?: (path: string) => Promise<unknown> | unknown;
 	}
@@ -198,6 +201,12 @@
 	const surfaceRoot = ref<HTMLElement | null>(null);
 	const documentPopupVisible = ref(false);
 	const documentPopupInitialized = ref(false);
+	const popupEditorActive = computed(
+		() => props.active !== false && documentPopupVisible.value && documentMode.value === 'editor',
+	);
+	const popupPreviewActive = computed(
+		() => props.active !== false && documentPopupVisible.value && documentMode.value === 'preview',
+	);
 	const fileManagerPopupVisible = ref(false);
 	watch(documentPopupVisible, (visible) => {
 		if (visible) documentPopupInitialized.value = true;
@@ -260,7 +269,7 @@
 		height: Math.min(Math.max(PREVIEW_POPUP_MIN_HEIGHT, window.innerHeight * 0.94), previewPopupAvailableHeight()),
 	});
 
-	const popupEditorRef = ref<EditorApi | null>(null);
+	const popupEditorRef = ref<PopupEditorHandle | null>(null);
 	const popupPreviewRef = ref<PreviewApi | null>(null);
 	const activeLeftSidebar = ref<WorkspacePane | null>(null);
 	const activeRightSidebar = ref<WorkspacePane | null>(null);
@@ -385,6 +394,7 @@
 	const initializeProgressRestorePosition = async (): Promise<void> => {
 		if (props.mobile) return;
 		await nextTick();
+		if (props.active === false || !showProgressRestoreButton.value) return;
 		const element = progressRestoreButton.value;
 		if (!element) return;
 		if (progressRestorePositionInitialized.value) {
@@ -401,39 +411,24 @@
 	};
 
 	const clampProgressRestoreToViewport = (): void => {
+		progressRestoreDrag.cancelDragging();
+		if (props.active === false || !showProgressRestoreButton.value) return;
 		const element = progressRestoreButton.value;
 		if (!element || !progressRestorePositionInitialized.value) return;
 		progressRestorePosition.value = clampProgressRestorePosition(progressRestorePosition.value, element);
-		saveProgressRestorePosition();
 	};
 
-	let progressRestoreMoved = false;
-	let suppressProgressRestoreClick = false;
 	const progressRestoreDrag = useDraggablePosition({
 		position: progressRestorePosition,
 
 		getElement: () => progressRestoreButton.value,
 
-		canStart: (event) => !props.mobile && event.button === 0,
+		canStart: (event) =>
+			props.active !== false && showProgressRestoreButton.value && !props.mobile && event.button === 0,
 
 		constrain: (candidate, element) => clampProgressRestorePosition(candidate, element),
 
-		onStart: () => {
-			progressRestoreMoved = false;
-		},
-
-		onMove: () => {
-			progressRestoreMoved = true;
-		},
-
-		onEnd: () => {
-			saveProgressRestorePosition();
-			if (!progressRestoreMoved) return;
-			suppressProgressRestoreClick = true;
-			window.setTimeout(() => {
-				suppressProgressRestoreClick = false;
-			}, 0);
-		},
+		onEnd: saveProgressRestorePosition,
 	});
 	const progressRestoreButtonStyle = computed(() =>
 		progressRestorePositionInitialized.value
@@ -452,19 +447,27 @@
 		() => progressTasks.value.length > 0 && !progressVisible.value && !fileManagerPopupVisible.value,
 	);
 
-	const restoreHiddenProgress = (): void => {
-		if (suppressProgressRestoreClick) {
-			suppressProgressRestoreClick = false;
-			return;
-		}
+	const restoreHiddenProgress = (event: MouseEvent): void => {
+		const dragged = progressRestoreDrag.didDrag.value;
+		progressRestoreDrag.didDrag.value = false;
+		if (dragged && event.detail > 0) return;
 		progressVisible.value = true;
 	};
 
-	watch(showProgressRestoreButton, (visible) => {
-		if (visible) void initializeProgressRestorePosition();
-	});
+	watch(
+		() => [props.active, props.mobile, showProgressRestoreButton.value] as const,
+		([active, mobile, visible]) => {
+			if (active === false || mobile || !visible) progressRestoreDrag.cancelDragging();
+			else void initializeProgressRestorePosition();
+		},
+		{ flush: 'sync' },
+	);
+	onDeactivated(() => progressRestoreDrag.cancelDragging());
 	onMounted(() => window.addEventListener('resize', clampProgressRestoreToViewport));
-	onBeforeUnmount(() => window.removeEventListener('resize', clampProgressRestoreToViewport));
+	onBeforeUnmount(() => {
+		progressRestoreDrag.cancelDragging();
+		window.removeEventListener('resize', clampProgressRestoreToViewport);
+	});
 
 	const removeTransferTask = (id: string): void => transfers.remove(id);
 
@@ -555,7 +558,7 @@
 		minHeight: fileManagerPopupResponsiveMinHeight,
 		maxWidth: fileManagerPopupAvailableWidth,
 		maxHeight: fileManagerPopupAvailableHeight,
-		active: computed(() => fileManagerPopupVisible.value),
+		active: computed(() => props.active !== false && fileManagerPopupVisible.value),
 
 		enabled: () => !props.mobile,
 
@@ -571,7 +574,7 @@
 		minHeight: editorPopupResponsiveMinHeight,
 		maxWidth: editorPopupAvailableWidth,
 		maxHeight: editorPopupAvailableHeight,
-		active: computed(() => documentPopupVisible.value && documentMode.value === 'editor'),
+		active: popupEditorActive,
 
 		enabled: () => !props.mobile,
 
@@ -585,13 +588,30 @@
 		minHeight: previewPopupResponsiveMinHeight,
 		maxWidth: previewPopupAvailableWidth,
 		maxHeight: previewPopupAvailableHeight,
-		active: computed(() => documentPopupVisible.value && documentMode.value === 'preview'),
+		active: popupPreviewActive,
 
 		enabled: () => !props.mobile,
 
 		widthMultiplier: 2,
 		heightMultiplier: 2,
 	});
+
+	const cancelSurfaceResizes = (): void => {
+		leftResize.cancelResize();
+		rightResize.cancelResize();
+		fileManagerPopupSizing.resize.cancelResize();
+		editorPopupSizing.resize.cancelResize();
+		previewPopupSizing.resize.cancelResize();
+	};
+
+	watch(
+		() => props.active,
+		(active) => {
+			if (active === false) cancelSurfaceResizes();
+		},
+		{ flush: 'sync' },
+	);
+
 	const fileManagerPopupStyle = computed(() =>
 		props.mobile
 			? undefined
@@ -816,7 +836,7 @@
 			return;
 		}
 		if (documentMode.value === 'editor') {
-			if (!(await editorSession.value.closeAll())) return;
+			if (!(await popupEditorRef.value?.closeAll?.())) return;
 		} else previewSession.clear();
 		documentPopupVisible.value = false;
 	};
@@ -897,6 +917,12 @@
 			const taskIds = await controller.startUploadBatch(files, { scopeId: session.id, path }, directories);
 			void Promise.all(taskIds.map((id) => controller.waitForTask(id)))
 				.then(async (tasks) => {
+					if (
+						session.state.value === 'connected' &&
+						tasks.some((task) => task.status === 'completed' || task.status === 'partial')
+					) {
+						await session.filesystemState.browser.refresh();
+					}
 					if (fileView.isCurrent(permission) && props.session === session) {
 						for (const task of tasks) {
 							if (!isProgressTaskVisible(task)) {
@@ -905,13 +931,6 @@
 								notifyTransferWarning(task);
 							}
 						}
-					}
-					if (
-						fileView.isCurrent(permission) &&
-						props.session === session &&
-						tasks.some((task) => task.status === 'completed' || task.status === 'partial')
-					) {
-						await session.filesystemState.browser.refresh();
 					}
 				})
 				.catch((cause) => {
@@ -975,12 +994,14 @@
 				destination: { scopeId: session.id, path: destination },
 			});
 			const task = await session.transferController.waitForTask(taskId);
+			if (session.state.value === 'connected' && (task.status === 'completed' || task.status === 'partial')) {
+				await session.filesystemState.browser.refresh();
+			}
 			if (!isCurrent()) {
 				return;
 			}
 			if (task.status === 'completed' || task.status === 'partial') {
 				notifyTransferWarning(task);
-				await session.filesystemState.browser.refresh();
 			} else if (task.status === 'error' || task.status === 'unknown') {
 				feedback.notifyError(transferErrorMessage(task));
 			}
@@ -1111,12 +1132,17 @@
 		void requestContext.session.transferController
 			.waitForTask(taskId)
 			.then(async (task) => {
+				if (
+					requestContext.session.state.value === 'connected' &&
+					(task.status === 'completed' || task.status === 'partial')
+				) {
+					await requestContext.session.filesystemState.browser.refresh();
+				}
 				if (!isArchiveViewCurrent(requestContext)) {
 					return;
 				}
 				if (task.status === 'completed' || task.status === 'partial') {
 					notifyTransferWarning(task);
-					await requestContext.session.filesystemState.browser.refresh();
 					return;
 				}
 				if (task.status === 'unknown') {
@@ -1716,6 +1742,7 @@
 
 		<ProgressCenter
 			v-if="progressTasks.length && progressVisible && !fileManagerPopupVisible"
+			:active="props.active !== false"
 			:tasks="progressTasks"
 			:source-label="session.connection.name || session.connection.host"
 			@cancel="transfers.cancel"
@@ -1828,6 +1855,7 @@
 			<template #overlay-content>
 				<ProgressCenter
 					v-if="progressTasks.length && progressVisible"
+					:active="props.active !== false"
 					:tasks="progressTasks"
 					:source-label="session.connection.name || session.connection.host"
 					:teleport="false"
@@ -1864,6 +1892,7 @@
 			<div v-if="documentPopupInitialized" class="relative flex h-full min-h-0 flex-col">
 				<FileEditor
 					ref="popupEditorRef"
+					:active="popupEditorActive"
 					v-show="documentMode === 'editor'"
 					class="min-h-0 flex-1"
 					:port="session.adapters.documents"
@@ -1893,6 +1922,7 @@
 				>
 					<FilePreview
 						ref="popupPreviewRef"
+						:active="popupPreviewActive"
 						class="min-h-0 flex-1"
 						:source="session.adapters.preview"
 						:scope-id="session.id"

@@ -1,0 +1,85 @@
+.ui-surface {
+	color: var(--ui-text);
+}
+
+/* Configuration forms share an opaque surface instead of stacking glass cards. */
+.ui-form-surface,
+.ui-overlay-panel.ui-form-surface {
+	background: var(--app-bg-color);
+	background-image: none;
+	color: var(--text-color);
+	border: 1px solid var(--glass-border-color);
+	box-shadow: 0 16px 48px -24px rgb(0 0 0 / 28%);
+	-webkit-backdrop-filter: none;
+	backdrop-filter: none;
+}
+
+.ui-form-section {
+	min-width: 0;
+	padding-block: 0.25rem;
+}
+
+.ui-form-section > h4 {
+	margin-bottom: 0.75rem;
+	border: 0;
+	padding: 0;
+	color: var(--text-color);
+	font-size: 0.875rem;
+}
+
+.ui-surface--plain {
+	background: transparent;
+}
+
+.ui-surface--raised {
+	border: 1px solid var(--glass-border-color);
+	background-color: var(--glass-fill);
+	background-image: var(--glass-sheen-image);
+	box-shadow: var(--glass-shadow);
+	-webkit-backdrop-filter: var(--ui-glass-filter);
+	backdrop-filter: var(--ui-glass-filter);
+}
+
+.ui-surface--inset {
+	border: 1px solid var(--ui-hairline);
+	background: var(--ui-fill-inset);
+	box-shadow: var(--ui-glass-highlight), var(--ui-shadow-inset);
+	-webkit-backdrop-filter: var(--ui-glass-control-filter);
+	backdrop-filter: var(--ui-glass-control-filter);
+}
+
+.ui-overlay-panel {
+	/* The panel receives programmatic focus, but is not an interactive control. */
+	outline: none;
+	border-radius: var(--ui-panel-radius);
+	border-color: var(--glass-border-color);
+	background-color: var(--glass-fill);
+	background-image: var(--glass-sheen-image);
+	box-shadow: var(--glass-shadow);
+	-webkit-backdrop-filter: var(--glass-backdrop-filter);
+	backdrop-filter: var(--glass-backdrop-filter);
+}
+
+.ui-table {
+	border-color: var(--glass-border-color);
+	background-color: var(--glass-fill);
+}
+
+.ui-table__head {
+	background: var(--ui-fill-soft);
+}
+
+.ui-table__body {
+	background: color-mix(in srgb, var(--card-bg-color) 18%, transparent);
+}
+
+.ui-context-menu {
+	border-radius: var(--ui-control-radius);
+	color: var(--ui-text);
+	-webkit-backdrop-filter: var(--ui-glass-filter);
+	backdrop-filter: var(--ui-glass-filter);
+}
+
+.ui-table__empty {
+	color: var(--ui-text-muted);
+}

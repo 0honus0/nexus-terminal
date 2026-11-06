@@ -361,7 +361,9 @@
 					!session.recoveryRequired.value &&
 					!session.resetRequested.value &&
 					['error', 'disconnected'].includes(session.state.value)
-						? session.statusMessage.value || t('terminal.connectionClosed')
+						? session.connectionFailureCode.value
+							? t(`workspace.connectionFailure.${session.connectionFailureCode.value}`)
+							: t('terminal.connectionClosed')
 						: undefined
 				"
 				:channel="terminalChannel ?? session.adapters.terminal"
@@ -437,6 +439,7 @@
 			<template v-else-if="node.component === 'editor'">
 				<FileEditor
 					ref="editorRef"
+					:active="active !== false && (popupDocuments || documentMode === 'editor')"
 					v-show="popupDocuments || documentMode === 'editor'"
 					class="min-h-0 flex-1"
 					:port="session.adapters.documents"
@@ -453,6 +456,7 @@
 				<FilePreview
 					v-if="!popupDocuments"
 					ref="previewRef"
+					:active="active !== false && documentMode === 'preview'"
 					v-show="documentMode === 'preview'"
 					class="min-h-0 flex-1"
 					:source="session.adapters.preview"

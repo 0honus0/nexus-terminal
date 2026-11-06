@@ -15,16 +15,21 @@
 			captchaToken?: string | null;
 			captchaStatus?: CaptchaStatus;
 			passkeyLoading?: boolean;
+			oidcLabel?: string | null;
+			oidcLoading?: boolean;
 		}>(),
 		{
 			captchaRequired: false,
 			captchaToken: null,
 			captchaStatus: 'ready',
 			passkeyLoading: false,
+			oidcLabel: null,
+			oidcLoading: false,
 		},
 	);
 	const emit = defineEmits<{
 		passkey: [input: PasskeyLoginInput];
+		oidc: [rememberMe: boolean];
 		loginAttempted: [];
 		securityChallengeFeedback: [message: string | null];
 		securityChallengeConsumed: [];
@@ -56,7 +61,7 @@
 	const showPassword = ref(false);
 	const theme = ref<'light' | 'dark'>(resolveInitialTheme());
 	const isDark = computed(() => theme.value === 'dark');
-	const isBusy = computed(() => isLoading.value || props.passkeyLoading);
+	const isBusy = computed(() => isLoading.value || props.passkeyLoading || props.oidcLoading);
 	const captchaBlocked = computed(() => !pendingSecondFactor.value && props.captchaStatus !== 'ready');
 	const heading = computed(() =>
 		pendingSecondFactor.value ? t('auth.login.twoFactorHeading') : t('auth.login.heading'),
@@ -336,11 +341,11 @@
 							tone="primary"
 							density="comfortable"
 							block
-							:loading="isBusy"
+							:loading="isLoading"
 							:disabled="isBusy || captchaBlocked"
 						>
 							<span>{{
-								isBusy
+								isLoading
 									? t('auth.login.loggingIn')
 									: pendingSecondFactor
 										? t('auth.login.verifyButton')
@@ -348,12 +353,13 @@
 							}}</span>
 						</UiButton>
 
-						<template v-if="!pendingSecondFactor">
+						<div v-if="!pendingSecondFactor" class="login-alternatives">
 							<div class="login-divider">
 								<span>{{ t('auth.login.or') }}</span>
 							</div>
 							<UiButton
 								class="login-passkey"
+								:loading="props.passkeyLoading"
 								type="button"
 								density="comfortable"
 								block
@@ -371,9 +377,23 @@
 										/>
 									</svg>
 								</template>
-								{{ isBusy ? t('auth.login.loggingIn') : t('auth.login.loginWithPasskey') }}
+								{{
+									props.passkeyLoading ? t('auth.login.loggingIn') : t('auth.login.loginWithPasskey')
+								}}
 							</UiButton>
-						</template>
+							<UiButton
+								v-if="props.oidcLabel"
+								class="login-passkey login-oidc"
+								type="button"
+								density="comfortable"
+								block
+								:loading="props.oidcLoading"
+								:disabled="isBusy"
+								@click="emit('oidc', rememberMe)"
+								><template #leading><i class="fa-solid fa-id-card" aria-hidden="true" /></template
+								>{{ t('auth.oidc.loginWith', { provider: props.oidcLabel }) }}</UiButton
+							>
+						</div>
 					</form>
 				</div>
 			</section>
@@ -383,6 +403,7 @@
 
 <style scoped>
 	.auth-page {
+		--auth-control-height: 52px;
 		--auth-page: #eaedf7;
 		--auth-frame: #f8f9fd;
 		--auth-surface: #ffffff;
@@ -464,9 +485,9 @@
 	.auth-stage {
 		position: relative;
 		display: grid;
-		grid-template-columns: minmax(0, 1.14fr) minmax(430px, 0.86fr);
-		width: min(1360px, 100%);
-		height: min(800px, calc(100svh - 56px));
+		grid-template-columns: minmax(0, 1fr) minmax(400px, 1fr);
+		width: min(1180px, 100%);
+		min-height: min(720px, calc(100svh - 40px));
 		margin: 0;
 		overflow: hidden;
 		background: var(--auth-frame);
@@ -599,7 +620,8 @@
 	.auth-panel {
 		position: relative;
 		display: grid;
-		padding: clamp(24px, 3.4vw, 50px);
+		min-width: 0;
+		padding: 72px clamp(28px, 4vw, 64px) 48px;
 		place-items: center;
 		background:
 			radial-gradient(32rem 24rem at 100% 0%, var(--auth-accent-soft), transparent 70%), var(--auth-surface-soft);
@@ -607,8 +629,9 @@
 	}
 
 	.auth-card {
-		width: min(100%, 430px);
-		padding: clamp(26px, 3vw, 38px);
+		width: min(100%, 390px);
+		min-width: 0;
+		padding: 0;
 		background: transparent;
 		border: 0;
 		box-shadow: none;
@@ -620,8 +643,8 @@
 
 	.auth-theme-toggle {
 		position: absolute;
-		top: clamp(24px, 3.4vw, 50px);
-		right: clamp(24px, 3.4vw, 50px);
+		top: 24px;
+		right: 24px;
 		z-index: 2;
 		display: grid;
 		width: 36px;
@@ -656,7 +679,7 @@
 	}
 
 	.auth-heading {
-		margin: clamp(26px, 3.4vh, 34px) 0 0;
+		margin: 0;
 	}
 
 	.auth-heading h2 {
@@ -695,7 +718,8 @@
 	}
 
 	.login-input.ui-input {
-		height: 52px;
+		--ui-control-font-size: 14px;
+		height: var(--auth-control-height);
 		padding-inline: 15px;
 		background: var(--auth-field);
 		border: 1px solid var(--auth-line-strong);
@@ -738,10 +762,6 @@
 
 	.login-input:focus-within :deep(.ui-input__adornment) {
 		color: var(--auth-accent);
-	}
-
-	.login-input :deep(.ui-input__control) {
-		font-size: 14px;
 	}
 
 	.login-password-control {
@@ -824,7 +844,7 @@
 
 	.login-submit.ui-button.ui-button--solid[data-tone='primary'] {
 		width: 100%;
-		height: 52px;
+		height: var(--auth-control-height);
 		margin-top: 2px;
 		padding: 0 20px;
 		color: #fff;
@@ -861,6 +881,12 @@
 		border-top-color: #fff;
 	}
 
+	.login-alternatives {
+		display: grid;
+		gap: 16px;
+		margin-top: 4px;
+	}
+
 	.login-divider {
 		display: flex;
 		align-items: center;
@@ -880,7 +906,7 @@
 
 	.login-passkey.ui-button {
 		width: 100%;
-		height: 52px;
+		height: var(--auth-control-height);
 		color: var(--auth-ink-soft);
 		font-size: 12px;
 		font-weight: 600;
@@ -910,264 +936,49 @@
 		outline-offset: 2px;
 	}
 
-	@media (max-width: 1100px) {
-		.auth-stage {
-			grid-template-columns: minmax(0, 0.95fr) minmax(410px, 1.05fr);
-		}
-
-		.auth-hero {
-			padding: 38px;
-		}
-	}
-
 	@media (max-width: 900px) {
 		.auth-page {
 			padding: 16px;
 		}
 
 		.auth-stage {
-			grid-template-columns: 1fr;
-			grid-template-rows: auto minmax(0, 1fr);
-			width: min(760px, 100%);
-			height: min(780px, calc(100svh - 32px));
+			grid-template-columns: minmax(0, 1fr);
+			width: min(640px, 100%);
+			min-height: calc(100svh - 32px);
 		}
 
 		.auth-hero {
-			padding: 24px 28px 20px;
+			padding: 24px 32px;
 		}
 
 		.auth-hero-main {
-			width: 100%;
-			margin: 0;
-			padding: 28px 0 0;
+			padding: 20px 0 0;
 		}
 
 		.auth-hero h1 {
-			font-size: clamp(2rem, 5.8vw, 2.75rem);
+			font-size: clamp(1.8rem, 4.5vw, 2.5rem);
 		}
 
 		.auth-panel {
-			display: flex;
-			align-items: center;
-			flex-direction: column;
-			justify-content: flex-start;
-			padding: clamp(20px, 8vh, 76px) 24px 24px;
+			padding: 56px 32px 36px;
 			border-top: 1px solid var(--auth-line);
 			border-left: 0;
 		}
 
-		.auth-card {
-			padding: 0 28px 24px;
-			border-radius: 22px;
-		}
-
 		.auth-theme-toggle {
-			top: clamp(20px, 8vh, 76px);
-		}
-
-		.auth-heading {
-			margin-top: 0;
-			padding-right: 48px;
-		}
-
-		.auth-heading h2 {
-			font-size: 29px;
-		}
-
-		.login-form {
-			gap: 11px;
-			margin-top: 20px;
-		}
-
-		.login-input.ui-input,
-		.login-submit.ui-button,
-		.login-passkey.ui-button {
-			height: 48px;
-		}
-	}
-
-	@media (min-width: 561px) and (max-width: 900px) and (max-height: 820px) {
-		.auth-hero {
-			padding: 18px 24px 16px;
-		}
-
-		.auth-hero-main {
-			padding-top: 18px;
-		}
-
-		.auth-hero h1 {
-			font-size: clamp(1.9rem, 4.5vw, 2.25rem);
-		}
-
-		.auth-panel {
-			padding: clamp(16px, 5vh, 40px) 20px 16px;
-		}
-
-		.auth-card {
-			padding: 0 24px 18px;
-		}
-
-		.auth-theme-toggle {
-			top: clamp(16px, 5vh, 40px);
-		}
-
-		.auth-heading {
-			margin-top: 0;
-		}
-
-		.login-form {
-			gap: 9px;
-			margin-top: 16px;
-		}
-
-		.login-input.ui-input,
-		.login-submit.ui-button,
-		.login-passkey.ui-button {
-			height: 44px;
-		}
-	}
-
-	@media (min-width: 561px) and (max-width: 900px) and (max-height: 720px) {
-		.auth-stage {
-			height: auto;
-			min-height: calc(100svh - 32px);
-		}
-	}
-
-	@media (min-width: 650px) and (max-width: 900px) and (max-height: 560px) {
-		.auth-page {
-			padding: 10px;
-		}
-
-		.auth-stage {
-			grid-template-columns: minmax(210px, 0.72fr) minmax(0, 1.28fr);
-			grid-template-rows: minmax(0, 1fr);
-			width: min(900px, 100%);
-			height: calc(100svh - 20px);
-			min-height: 0;
-		}
-
-		.auth-hero {
-			padding: 18px 20px;
-		}
-
-		.auth-brand {
-			gap: 11px;
-		}
-
-		.auth-brand-mark {
-			width: 38px;
-			height: 38px;
-			border-radius: 12px;
-		}
-
-		.auth-brand-mark img {
-			width: 27px;
-		}
-
-		.auth-brand-name strong {
-			font-size: 14px;
-		}
-
-		.auth-brand-name span {
-			font-size: 7px;
-		}
-
-		.auth-hero-main {
-			width: 100%;
-			margin: 0;
-			padding: 18px 0 0;
-		}
-
-		.auth-hero h1 {
-			font-size: clamp(1.55rem, 3.2vw, 1.9rem);
-			line-height: 1.1;
-		}
-
-		.auth-panel {
-			padding: 10px 14px;
-			justify-content: center;
-			border-top: 0;
-			border-left: 1px solid var(--auth-line);
-		}
-
-		.auth-card {
-			width: min(100%, 430px);
-			padding: 12px 18px;
-			border-radius: 18px;
-		}
-
-		.auth-theme-toggle {
-			top: 12px;
-			right: 12px;
-			width: 30px;
-			height: 30px;
-			border-radius: 9px;
-		}
-
-		.auth-theme-icon {
-			width: 14px;
-			height: 14px;
-		}
-
-		.auth-heading {
-			margin-top: 5px;
-			padding-right: 0;
-		}
-
-		.auth-heading h2 {
-			font-size: 25px;
-		}
-
-		.auth-heading p {
-			display: none;
-		}
-
-		.login-form {
-			gap: 7px;
-			margin-top: 10px;
-		}
-
-		.login-field {
-			gap: 4px;
-		}
-
-		.login-field :deep(.ui-form-field__label) {
-			font-size: 10px;
-		}
-
-		.login-input.ui-input,
-		.login-submit.ui-button,
-		.login-passkey.ui-button {
-			height: 40px;
-		}
-
-		.login-password-toggle {
-			width: 30px;
-			height: 30px;
-		}
-
-		.login-passkey.ui-button {
-			border-radius: 12px;
+			top: 16px;
+			right: 20px;
 		}
 	}
 
 	@media (max-width: 560px) {
 		.auth-page {
-			align-items: flex-start;
 			padding: 0;
 		}
 
-		.auth-page::before {
-			background-size: 36px 36px;
-		}
-
 		.auth-stage {
-			grid-template-rows: minmax(0, 1fr);
 			width: 100%;
-			height: auto;
 			min-height: 100svh;
-			margin: 0;
 			border: 0;
 			border-radius: 0;
 		}
@@ -1177,141 +988,88 @@
 		}
 
 		.auth-panel {
-			padding: 20px 14px calc(20px + env(safe-area-inset-bottom));
-			border-top: 0;
+			padding: calc(60px + env(safe-area-inset-top)) clamp(24px, 7vw, 36px)
+				calc(32px + env(safe-area-inset-bottom));
+			border: 0;
 		}
 
-		.auth-card {
-			margin-block: auto;
-			padding: 0 18px 20px;
-			border-radius: 20px;
+		.auth-theme-toggle {
+			top: calc(16px + env(safe-area-inset-top));
 		}
 
 		.auth-mobile-mark {
 			display: flex;
 			justify-content: center;
-			margin-bottom: 14px;
+			margin-bottom: 24px;
 		}
 
 		.auth-mobile-mark img {
-			width: auto;
-			height: 64px;
-			filter: drop-shadow(0 10px 18px rgb(51 31 85 / 18%));
-		}
-
-		.auth-theme-toggle {
-			top: 16px;
-			right: 14px;
+			width: 56px;
+			height: auto;
 		}
 
 		.auth-heading {
-			margin-top: 0;
+			text-align: center;
 		}
 
 		.auth-heading h2 {
 			font-size: 28px;
 		}
 
-		.login-form {
-			margin-top: 18px;
+		.login-input.ui-input {
+			--ui-control-font-size: 16px;
 		}
 	}
 
-	@media (min-width: 901px) and (max-height: 840px) {
-		.auth-hero {
-			padding-block: 28px;
-		}
-
-		.auth-hero-main {
-			padding-block: 20px;
-		}
-
+	@media (max-height: 760px) {
 		.auth-panel {
-			padding-block: 14px;
+			padding-block: calc(56px + env(safe-area-inset-top)) calc(24px + env(safe-area-inset-bottom));
 		}
 
-		.auth-card {
-			padding: 28px 30px;
+		.auth-mobile-mark {
+			margin-bottom: 16px;
 		}
 
-		.auth-heading {
-			margin-top: 22px;
+		.auth-mobile-mark img {
+			width: 44px;
 		}
 
 		.login-form {
-			gap: 11px;
+			gap: 12px;
 			margin-top: 20px;
 		}
 
-		.login-input.ui-input,
-		.login-submit.ui-button,
-		.login-passkey.ui-button {
-			height: 48px;
+		.login-alternatives {
+			gap: 12px;
+		}
+
+		.auth-page {
+			--auth-control-height: 46px;
 		}
 	}
 
-	@media (max-width: 360px) {
+	@media (min-width: 561px) and (max-width: 900px) and (max-height: 560px) {
+		.auth-stage {
+			grid-template-columns: minmax(0, 0.7fr) minmax(320px, 1fr);
+			width: 100%;
+		}
+
+		.auth-hero {
+			padding: 28px 24px;
+		}
+
+		.auth-hero-main {
+			padding-block: 24px;
+		}
+
+		.auth-hero h1 {
+			font-size: 1.8rem;
+		}
+
 		.auth-panel {
-			padding: 16px 10px calc(16px + env(safe-area-inset-bottom));
-		}
-
-		.auth-card {
-			padding: 0 15px 18px;
-		}
-
-		.auth-theme-toggle {
-			top: 16px;
-		}
-
-		.auth-heading {
-			margin-top: 0;
-		}
-
-		.login-form {
-			gap: 10px;
-			margin-top: 16px;
-		}
-	}
-
-	@media (max-width: 560px) and (max-height: 760px) {
-		.auth-panel {
-			padding: 12px 12px calc(14px + env(safe-area-inset-bottom));
-		}
-
-		.auth-card {
-			padding: 0 16px 14px;
-		}
-
-		.auth-theme-toggle {
-			top: 12px;
-		}
-
-		.auth-heading {
-			margin-top: 0;
-		}
-
-		.auth-heading h2 {
-			font-size: 26px;
-		}
-
-		.auth-heading p {
-			margin-top: 6px;
-			font-size: 12px;
-		}
-
-		.login-form {
-			gap: 9px;
-			margin-top: 14px;
-		}
-
-		.login-field :deep(.ui-form-field__label) {
-			font-size: 10px;
-		}
-
-		.login-input.ui-input,
-		.login-submit.ui-button,
-		.login-passkey.ui-button {
-			height: 44px;
+			padding-inline: 24px;
+			border-top: 0;
+			border-left: 1px solid var(--auth-line);
 		}
 	}
 

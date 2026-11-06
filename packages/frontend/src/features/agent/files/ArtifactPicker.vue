@@ -231,20 +231,7 @@
 </template>
 
 <style scoped>
-	.agent-config-summary {
-		font-size: 11px;
-		line-height: 1;
-	}
-
 	@container agent-hub-window (max-width: 1040px) {
-		.agent-config-summary {
-			min-width: 28px;
-			height: 28px;
-			gap: 3px;
-			padding-inline: 6px;
-			font-size: 11px;
-		}
-
 		.agent-config-verbose {
 			display: none;
 		}

@@ -3,7 +3,9 @@ import { useI18n } from 'vue-i18n';
 import { useAuthSession } from '@/features/auth/public';
 import { useFeedback } from '@/shared/feedback/public';
 import { isNetworkFailure } from '@/client/http/network-failure';
-import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
+import { ConnectionTagPicker } from '@/features/tags/public';
+import { useProxies } from '@/features/proxies/public';
+import { SshKeySelector, useSshKeys } from '@/features/ssh-keys/public';
 import { targetErrorKey } from '@/client/targets/target-types';
 import { InvalidTargetPayload } from '@nexus-terminal/shared/targets/http';
 import { TARGET_CONNECTION_MAX_JUMPS } from '@nexus-terminal/shared/targets/connections/values';
@@ -39,12 +41,11 @@ export function useConnectionForm(
 	},
 ) {
 	const { t } = useI18n();
-	const capabilities = useRuntimeFeatureCapabilities();
 	const connections = useConnections();
 	const auth = useAuthSession();
 	const feedback = useFeedback();
-	const proxies = capabilities.proxies;
-	const sshKeys = capabilities.sshKeys;
+	const proxies = useProxies();
+	const sshKeys = useSshKeys();
 	const form = ref(toConnectionDraft(props.connection ?? null));
 	const removeSavedCredential = ref(false);
 	const scriptMode = ref(false);
@@ -114,7 +115,7 @@ export function useConnectionForm(
 				if (current !== generation) {
 					return;
 				}
-				emit('submitMany', parseConnectionScript(script.value, proxies.items.value, sshKeys.items.value));
+				emit('submitMany', parseConnectionScript(script.value, proxies.proxies.value, sshKeys.keys.value));
 				return;
 			}
 			const hosts = expandConnectionHosts(form.value.host.trim());
@@ -288,8 +289,8 @@ export function useConnectionForm(
 		parsing,
 		testResult,
 		proxies,
-		ConnectionTagPicker: capabilities.tags.picker,
-		SshKeySelector: capabilities.sshKeys.selector,
+		ConnectionTagPicker,
+		SshKeySelector,
 		availableJumpHosts,
 		jumpHostsForIndex,
 		addJumpHost,

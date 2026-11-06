@@ -58,6 +58,7 @@
 		:placeholder="props.placeholder"
 		:trailing-interactive="props.clearable && model.length > 0"
 		class="ui-search-input"
+		:class="{ 'ui-search-input--clearable': props.clearable }"
 	>
 		<template #leading>
 			<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
@@ -78,6 +79,11 @@
 </template>
 
 <style scoped>
+	.ui-search-input--clearable :deep(input::-webkit-search-cancel-button) {
+		-webkit-appearance: none;
+		display: none;
+	}
+
 	.ui-search-input__clear {
 		display: grid;
 		width: 18px;

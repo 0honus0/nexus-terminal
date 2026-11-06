@@ -2,7 +2,13 @@
 	import { onBeforeUnmount, onMounted, ref } from 'vue';
 	import { useRouter } from 'vue-router';
 	import { useI18n } from 'vue-i18n';
-	import { authErrorKey, LoginView, type PasskeyLoginInput } from '@/features/auth/public';
+	import {
+		authErrorKey,
+		createOidcApi,
+		redirectToOidc,
+		LoginView,
+		type PasskeyLoginInput,
+	} from '@/features/auth/public';
 	import { LoginCaptchaChallenge, useLoginSecurity } from '@/features/security/public';
 	import { UiInlineNotice } from '@/foundation/ui';
 
@@ -13,11 +19,50 @@
 	const captchaFeedback = ref<string | null>(null);
 	const captchaChallenge = ref<{ reset: () => void } | null>(null);
 	const passkeyError = ref('');
+	const oidc = createOidcApi();
+	const oidcLabel = ref<string | null>(null);
+	const oidcLoading = ref(false);
+	const oidcController = new AbortController();
 	let disposed = false;
 	onBeforeUnmount(() => {
 		disposed = true;
+		oidcController.abort();
 	});
 	onMounted(() => security.refresh());
+	onMounted(async () => {
+		try {
+			const label = await oidc.provider(oidcController.signal);
+			if (!disposed) {
+				oidcLabel.value = label;
+			}
+		} catch (cause) {
+			if (!disposed) {
+				passkeyError.value = t(authErrorKey(cause));
+			}
+		}
+	});
+
+	async function loginWithOidc(rememberMe: boolean): Promise<void> {
+		if (oidcLoading.value || disposed) {
+			return;
+		}
+		oidcLoading.value = true;
+		passkeyError.value = '';
+		try {
+			const url = await oidc.login(rememberMe, oidcController.signal);
+			if (!disposed) {
+				redirectToOidc(url, 'login');
+			}
+		} catch (cause) {
+			if (!disposed) {
+				passkeyError.value = t(authErrorKey(cause));
+			}
+		} finally {
+			if (!disposed) {
+				oidcLoading.value = false;
+			}
+		}
+	}
 
 	const handleLoginAttempted = () => {
 		passkeyError.value = '';
@@ -51,6 +96,9 @@
 		:captcha-token="captchaToken"
 		:captcha-status="security.captchaStatus.value"
 		:passkey-loading="security.loading.value"
+		:oidc-label="oidcLabel"
+		:oidc-loading="oidcLoading"
+		@oidc="loginWithOidc"
 		@passkey="loginWithPasskey"
 		@login-attempted="handleLoginAttempted"
 		@security-challenge-feedback="captchaFeedback = $event"

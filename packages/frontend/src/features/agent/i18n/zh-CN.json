@@ -1998,6 +1998,7 @@
       "close": "关闭连接",
       "connecting": "正在准备连接",
       "operations": "执行中 {count}",
+      "waitingOutput": "{count} 个任务正在等待日志存储空间。释放磁盘空间后自动继续，也可停止任务。",
       "backgroundJobs": "后台任务 {count}",
       "expires": "空闲连接回收时间：{time}",
       "closeTitle": "停止任务并关闭连接？",

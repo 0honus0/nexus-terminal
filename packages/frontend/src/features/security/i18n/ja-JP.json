@@ -159,6 +159,22 @@
       "keepSecret": "保存済み秘密鍵を保持",
       "clearSecret": "保存済み秘密鍵を削除",
       "replaceSecret": "保存済み秘密鍵を置換"
+    },
+    "oidc": {
+      "title": "シングルサインオン（OIDC）",
+      "description": "Pocket ID または OpenID Connect プロバイダーを現在のアカウントにリンクします。",
+      "enabled": "ログインページに表示",
+      "label": "プロバイダー名",
+      "authentication": "クライアント認証",
+      "publicClient": "パブリッククライアント（PKCE）",
+      "secretKept": "空欄の場合は保存済みのシークレットを保持",
+      "callback": "コールバック URL · プロバイダーに登録してください",
+      "bound": "アカウント連携済み",
+      "unbound": "アカウント未連携",
+      "bind": "アカウントを連携",
+      "unbind": "連携を解除",
+      "hint": "設定を保存してから連携してください。各操作には現在のパスワードが必要です。OIDC はプロバイダーの認証方針を使用し、ローカル TOTP はパスワード認証に適用されます。Passkey 必須のアカウントは OIDC を利用できません。設定変更や解除は OIDC セッションを終了します。",
+      "saved": "OIDC 設定を保存しました。"
     }
   }
 }

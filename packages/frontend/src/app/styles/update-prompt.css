@@ -1,0 +1,44 @@
+.ui-update-prompt {
+	width: min(420px, calc(100vw - 32px));
+	max-width: none;
+	background-image: radial-gradient(
+		120% 90% at 8% 0%,
+		color-mix(in srgb, var(--link-active-color) 10%, transparent),
+		transparent 62%
+	);
+}
+
+.ui-update-prompt .ui-dialog__header {
+	padding: 20px 22px 15px;
+	border-bottom: 0;
+}
+
+.ui-update-prompt .ui-dialog__title {
+	font-size: 16px;
+}
+
+.ui-update-prompt .ui-dialog__description {
+	max-width: 34em;
+	margin-top: 5px;
+	font-size: 12.5px;
+	line-height: 1.55;
+	text-wrap: pretty;
+}
+
+.ui-update-prompt .ui-dialog__footer {
+	padding: 0 22px 20px;
+	border-top: 0;
+}
+
+@media (max-width: 639px) {
+	.ui-update-prompt .ui-dialog__header {
+		padding: 18px 18px 14px;
+	}
+	.ui-update-prompt .ui-dialog__footer {
+		padding: 0 18px 18px;
+	}
+	.ui-update-prompt .ui-dialog__footer .ui-button {
+		flex: 1;
+		min-height: 44px;
+	}
+}

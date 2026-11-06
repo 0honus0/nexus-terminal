@@ -4,6 +4,46 @@
 
 已退役 Runner/Guacamole 的证据仅用于追溯，不能证明当前 SSH/CDP/浏览器 SDK 的行为。静态、受控 fixture、真实服务与真机结论分别判断。
 
+## 连接发起期间保留最新选择（2026-11-06）
+
+基于 `main/378083190cba468ed69dad892c0810b33e9f2edd` 的未提交工作区，保留前序变更。确认根因是异步的连接配置读取、顺序批量连接和标签预布局没有共用选择次序：旧查询晚返回后调用普通打开，会把刚创建的会话设为当前标签；批量里的后续连接也能覆盖用户的新选择。普通已注册SSH握手完成本身不写activeId，避免把网络耗时误当成唯一根因。
+
+WorkspacePage复用原activationGeneration，查询在读取前捕获，整批连接共享同一代次；单连接、标签切换和打开启动页推进代次，同时清理旧预布局目标。Registry.open显式接收本地activate选项，旧请求继续建立后台连接但不改activeId或关闭较新的启动页。原pageScope撤销、SSH成功/失败恢复、租约与清理保持，不改UI、Shared、后端或数据库。
+
+| 审核表   | 结论                                                                                                             |
+| -------- | ---------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 最新选择优先；单连接/批量延迟读取不抢标签；后台握手不关闭新连接页；后台连接仍可切换并执行命令。                  |
+| 职责归属 | 页面持选择代次，Registry持注册和activeId，Runtime持SSH生命周期；复用原状态，不新增选择Store或定时器。            |
+| 类型归属 | 本地open选项含viewport/activate；真实页面消费者同版迁移，既有无选项直接打开保留默认激活；无跨端协议变更。        |
+| 完成证据 | 修复前浏览器实际复现最新标签aria-selected由true变false；修复后桌面/手机6个新增交错场景及既有相关场景验证见下文。 |
+
+Node 26.13.0 / pnpm 12.16.1。原构建的`baseline3.log`保留确定失败：从连接管理进入、暂存第一条配置读取、选择第二条并连通，再释放第一条响应，最新标签被错误取消选中。最初误选ui项目未收集SSH场景；随后首次夹具直接导航未预载连接列表而卡在选择入口，分别保留baseline/baseline2日志，不作为产品复现证据。修正夹具沿真实连接管理入口进入后复现成功。
+
+修复版正式本地runner构建双端，选取workspace-no-session、reconnect-ui、terminal-reset及terminal-session-isolation。第一轮23项通过、两项因批量打开同一连接形成两个同名标签而触发测试定位歧义；实际原标签仍为选中。回归改为在释放延迟请求前捕获真实Workspace ID，断言原实例仍选中且可见，不放宽业务断言；再次运行完整isolation文件8项通过。两轮合计覆盖25个唯一场景，包含桌面与390px手机仿真、真实SSH服务、失败重连、页面返回、后台尺寸、快捷键、批量关闭、重置及会话隔离。不是GitHub Actions或真机运营商切网验收。
+
+根check、双端生产构建、全量格式和diff检查通过；新增测试函数间距按现有ESLint修正，首次日志保留。产物集中`/home/honus/nexus-task-artifacts/terminal-selection-20261106`，含start.diff、baseline3.log、e2e.log、final.log、对应report/results、check.log和format-fixed.log。临时产物保留至用户通知；没有提交、推送、发布或部署。
+
+## 终端异常恢复、尺寸与跨设备审核（2026-11-06）
+
+基于 `main/378083190cba468ed69dad892c0810b33e9f2edd` 的未提交工作区，保留全部前序修改。本轮沿 TerminalView、OutputWriter、TypeAhead、Workspace Runtime/Socket、Shared 几何以及后端 PTY/租约恢复审核初连、失败重连、挂起回放、输入输出与消费、历史翻页、尺寸变更、手机/桌面和前后台生命周期。未更改连接协议、未知结果围栏、字号策略或界面样式，无数据库变更；未提交推送、运行 GitHub Actions 或部署生产服务。
+
+修复三类已复现问题：失活/后台视图的迟到 DOM 输入、粘贴和未完成 IME 仍可能发到 SSH，现由输入根节点 capture 守卫阻止，并清空失活 textarea、保留 xterm compositionend 清理和后台 DSR 协议应答；备用缓冲区全屏程序误触发挂起历史加载，现于请求前、返回后及解析队列排空后复查，竞态中暂存的实时输出仍按顺序交还原 writer，解析完成才归还消费信用；恢复完成回调原先直接插入 xterm，可能越过 TypeAhead 中的恢复输出而提前同步尺寸，现通过原 outputWriter.barrier 等待完整队列，并保留 PTY 代次与实例检查。
+
+| 审核表   | 结论                                                                                                                                                    |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 后台迟到用户输入拒绝、DSR继续；新IME可输入；全屏滚动不拉历史，返回普通屏后仍可读取；历史缩放与独立xterm直接缩放对照一致；挂起回放结束前不提前发送尺寸。 |
+| 职责归属 | 改动位于TerminalView交互/展示owner，复用OutputWriter、TypeAhead、Channel和原清理机制；Runtime/Socket及后端PTY/租约职责不变。                            |
+| 类型归属 | 历史暂存只接收decodeOutput后的string，收窄数组并删除冗余二进制解码；不新增Shared字段、重复状态、兼容支路或产品测试接口。                                |
+| 完成证据 | 修复前3项受控失败及CDP恢复竞态失败留存；本地正式runner两轮76项、43项通过（包含重叠），指定Windows Chrome CDP最新7项全部通过；静态检查及未验边界见下文。 |
+
+Node 26.13.0 / pnpm 12.16.1。首轮正式runner覆盖 terminal-lifecycle、terminal-ui/session-cache/session-isolation/startup/reset，以及手机 terminal-touch/output-scheduling/suspend-resume/ssh-workspace，共76项通过；恢复屏障修复后重建双端并重跑 lifecycle 与手机 suspend-resume，43项通过。两轮不能相加作为唯一数量。新增7个场景纳入正式spec；最后增强的“历史响应期间暂存输出仍显示且消费回调完整”断言由最新CDP再次执行通过。测试用SerializeAddon只经原E2E浏览器构建入口导出，独立参考xterm对照缩放，不改产品接口。
+
+指定 `http://172.30.30.11:9223` 的 Windows Chrome 156，通过 `https://api.honus.top` 下独立受控测试页加载实际构建的TerminalView/xterm并运行7项专项，均通过且无pageerror；会话传输是受控harness。恢复竞态旧构建在解析屏障释放前发送1次resize，修复后为0，释放后正常恢复正文与窗口尺寸。所有本轮创建的浏览器页已关闭，用户原tab保留。
+
+证据集中 `/home/honus/nexus-task-artifacts/terminal-audit-20261106`：`start.diff` 保存本轮基线；`baseline.log`、`cdp-before-resume.json` 保留失败；`e2e.log`、`e2e-final.log` 和对应report/results保存正式runner结果；`cdp-final.json` 保存最终7项；`check.log`、`format.log` 保存静态检查。双端生产构建、根check、全量格式及diff检查通过。临时产物按用户要求保留至通知清理。
+
+这些结果覆盖真实本地SSH测试服务、浏览器故障注入与移动设备仿真，不代表真实Android/iOS软键盘、运营商切网、休眠恢复或多跳弱网全部通过；相关边界继续保留PLAN，未宣称性能提升数字或消除所有缩放抖动。
+
 ## Agent 工具资源复用（2026-11-05，源码与静态）
 
 本轮为 `main/2abcf49b` 基线上的未提交工作区，Node 26.13.0、pnpm 12.16.1。Remote 为每个 Run 创建独占借用的 SSH 池，顺序命令归还后复用，并发按需建连；成功文件资源保留独占 SFTP 供连续文件、项目指引与文件交付复用。Shell/Job、Docker、诊断与 ACP 消费同一作用域；每条命令的 cwd/env 仍独立，ACP 程序与协议会话不跨调用复用。MCP、Browser 和插件沿原缓存/会话 owner，无 UI、Shared 工具参数或数据库变化。
@@ -1337,3 +1377,389 @@ Nexus Agent 没有前后端入口，toolNames=null 按宿主当前授权目录�
 [发布 42162441122](https://github.com/0honus0/nexus-terminal/actions/runs/42162441122) 成功，输入为 `channel=dev`、`architecture=amd`，源提交 `620c0828e444e7fc5b4876713cecd9d1618e2967`。直接读取 GHCR 核对 `ghcr.io/0honus0/nexus-terminal:dev` 与 `sha-620c0828e444` 指向同一摘要 `sha256:333bf9ede35afa56b1cc1c35769364844fb54ff5ef521d414256c7fb9313525f`；运行平台为 `linux/amd64`，OCI revision 与源提交一致。另一个 `unknown/unknown` manifest 是构建证明，不是额外运行平台。发布日志和 registry manifest/config 保存在同一证据目录。
 
 本轮无需数据库迁移，未更新生产主机、未发布 latest。应用插件契约兼容，官方插件仓库无变更，不重复发布插件。交付后的文档提交只刷新验收与计划，不改变被测或发布源码。
+
+## 登录布局与 Passkey 命名：首轮边界核对（2026-11-06）
+
+本轮首轮本地 19 项回归中 17 项通过，两个深浅主题布局场景在 390×400 失败。精确测量主按钮 top=348.125、height=52、bottom=400.125：短屏 46px 规则被主按钮高优先级选择器覆盖；Playwright 的最小滚动还留下 0.125px 的像素舍入。修复统一通过 `--auth-control-height` 控制输入框、密码登录、Passkey 按钮高度；测试明确滚动居中并执行真实点击可达性预检，保留完整可视边界及等高断言，不放宽断言容差。首次日志/trace 与随后诊断保留在 `/home/honus/nexus-task-artifacts/auth-oidc-passkey-20261106`，修复后 `layout-fixed.log` 3/3通过，包含深浅主题六视口和真实Passkey流程。
+
+## OIDC、登录布局与 Passkey（2026-11-06）
+
+基线 main `37808319`，Node 26.13.0 / pnpm 12.16.1；本轮未提交工作区。证据集中于 `/home/honus/nexus-task-artifacts/auth-oidc-passkey-20261106`，不代表远程生产配置验收。
+
+选型核实：[openid-client](https://github.com/panva/openid-client) 2440 stars、MIT、6.8.9（2026-11-02），issue903 当天修复并发布；[Fastify OAuth2](https://github.com/fastify/fastify-oauth2) 319 stars、8.3.2（2026-10-19安全修复），偏 OAuth 流程，完整 OIDC 验证选择前者。使用库的非否认检查显式验证 ID Token 数字签名，不只依赖 TLS。
+
+[Pocket ID](https://github.com/pocket-id/pocket-id) 10064 stars、v2.19.2，名称目录固定在主仓库 commit `23d7968ccdcbe2343d2e025187f226ded9aa10ea`，407项名称并保留 BSD-2-Clause 授权；未直接依赖2026-11-03已宣布弃用、计划置空 JSON 的 passkeydeveloper 远程目录，也未引入低于200 stars的小 fork。维护脚本 `scripts/maintenance/update-passkey-authenticators.mjs` 以明确commit更新静态快照。
+
+390×400 初测控件底边为400.125px，发现短屏按钮高度受到更高优先级样式覆盖，另有最小滚动舍入。控件统一使用高度变量，测试居中滚动后保留严格边界和真实命中断言；`layout-fixed.log` 3/3通过，含两主题×六尺寸及真实Passkey流程。
+
+OIDC 首轮真实协议测试暴露正常认证拒绝进入审计后台失败收口，按既有Access边界修复；测试IdP的Basic认证还需按OAuth规范解码表单转义，此项修正在夹具，不改变协议库。`oidc-protocol4.log` 十二项通过。组合浏览器首轮33项通过、2项失败：新接口使用自定义serializer时缺少JSON Content-Type，浏览器严格解码拒绝；已补明确Content-Type，`oidc-browser2.log` 双视口完整OIDC登录、解绑、重新绑定2/2通过。
+
+`oidc-storage.log` 四项通过：v3→v4保留账号与旧迁移记录、重复启动及外键/完整性；过期/密码变化/强制Passkey；取消与来源封禁；提交确认丢失后的已知会话撤销。测试使用真实SQLite，外部协议在此专项为受控Port；数字签名验证由协议E2E覆盖。
+
+最终组合 `final-e2e.log` 37/37通过，涵盖既有认证、Passkey自动命名、布局及OIDC。最后审核发现消费回调后、授权码交换期间退出无法阻止迟到登录：流程改为持久 `consumed` 认领，最终事务再次核对记录和期限，退出/新流程/配置变化均可撤销在途流程。修复后 `claim-e2e.log` 17/17通过（14项协议、3项浏览器），`claim-storage.log` 4/4通过；这些测试组有交集，不累计为唯一场景数量。全部新场景已进入正式E2E目录，HTTP场景加入backend分片清单。
+
+真实Pocket ID安装、真实手机键盘、真实磁盘故障不由本地签名夹具或注入故障代替。截图位于同目录 `claim-screenshots`，包括390×400登录和桌面OIDC配置；已人工查看。数据库新增独立v4迁移，启动自动执行，旧迁移不改动；本轮未提交、推送、发布或操作生产。
+
+### 功能对应表
+
+| 功能与真实消费者        | 实际入口及实现                                                                   | 差异与当前状态                                                                           |
+| ----------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Pocket ID / OIDC 新接入 | Access OIDC 八个 HTTP 入口、Auth API、Security OidcPanel、LoginPage/CallbackPage | 显式绑定已有管理员；三种客户端认证；14 项协议与 3 项浏览器流程通过，含表单保存和禁用退出 |
+| Passkey 默认名称        | NativeWebauthn 已验证 AAGUID → FactorModel → 现有 passkey 列表                   | Pocket ID 静态名称，无联网、信任变更或旧数据回填；四种验证器与手动改名回归通过           |
+| 登录布局                | LoginView + login-layout.spec.ts                                                 | 保留原主题；统一控件高度、短屏滚动；深浅六视口与 390×400 严格边界通过                    |
+| 退出与配置撤销          | access-http、OidcService/Model、SqliteOidcStorage                                | 退出撤销当前在途流程，最终事务复查持久认领；配置变更撤销 OIDC 会话                       |
+
+### 职责归属表
+
+| 关键流程            | owner 与调用链                                                           | 审核结论                                                                                              |
+| ------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| OIDC 协议与外部网络 | Platform security OpenidClient → openid-client                           | 不自行实现 JWT/OAuth；强制签名、PKCE/nonce/state；禁止远程 HTTP 与网络重定向，响应受既有认证预算约束  |
+| 身份绑定与配置      | Service 密码证明 → Model 应用判断 → SQLite 同事务事实与写入              | issuer+sub，不使用邮箱；CAS、原会话/密码版本、来源与强制 Passkey 复查；更换身份配置不沿用旧密钥       |
+| 颁发与交付          | Model.complete → deliverAccessResult                                     | 持久认领只允许一次交换；最终事务复查撤销；提交确认丢失撤销已知 bearer；绑定提交不能冒充可回滚         |
+| 前端读写与资源      | use-oidc-settings、browser-oidc、CallbackPage                            | generation/AbortController、未知写入刷新围栏；当前 OIDC 会话被撤销后导航登录；秘密不留 sessionStorage |
+| 迁移与备份          | Access OIDC SQLite schema → migrations → Bootstrap v4；backup-exclusions | 不改 v1–v3；认证三表排除业务快照；4 项真实存储回归通过                                                |
+
+### 类型归属表
+
+| 类型/边界                              | 唯一 owner 与转换                                   | 审核结论                                                                  |
+| -------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------- |
+| 客户端认证取值、Cookie/回调、完整 HTTP | Shared access/oidc values/http/http-codec           | 双端与测试消费；未知字段拒绝；changed 响应也归 Shared                     |
+| 应用配置、流程、回调与状态             | 双端 Auth/Access 各自 model/oidc-types              | 表示与用途不同；HTTP/API 明确白名单映射；不向 Shared 泄漏后端秘密         |
+| SQLite 记录、事务事实与命令            | Access oidc/storage                                 | Adapter 不引用应用类型，Model 显式转换与事务判断                          |
+| 库配置与技术错误                       | Platform security/oidc-port、adapters/openid-client | 库对象/Token 不越界；未知验证错误报不可用，不伪造通过；验证器名称只为显示 |
+
+### 完成证据表
+
+| 项目      | 当前证据                                                                                                                              | 限定范围                                                               |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| 源码/架构 | 四表完整链路复核，Backend/Frontend/Shared 八节设计及 API/USAGE/DEPLOYMENT 已同步                                                      | 按 H-04–H-08、H-21、E-02.5、E-05.3、E-07.5/E-07.6、E-10.3、E-14.4 核对 |
+| 静态/构建 | 双端生产构建 `verified-build.log`，最后认领修复后后端构建 `claim-build2.log`；根检查 `claim-check.log`、格式 `claim-format-check.log` | 本地工作区，不代表远程 CI                                              |
+| 逻辑回归  | 完整相关组合37/37；最后OIDC专项17/17、真实存储4/4；390×400专项3/3                                                                     | 分组存在交集，不累计；签名协议和浏览器是真实执行，介质失败为注入       |
+| 实机/发布 | Chromium、本地签名IdP、真实SQLite；证据统一保留                                                                                       | 真实Pocket ID、手机键盘与介质故障待验；本轮未提交/推送/发布            |
+
+## 终端重连入口与失败提示（2026-11-06）
+
+本轮基于已有 OIDC 未提交工作区继续修改，未提交/推送/发布。证据统一保留于 `/home/honus/nexus-task-artifacts/terminal-reconnect-20261106`，Node 26.13.0 / pnpm 12.16.1；使用正式前端生产构建、真实后端与测试 SSH，浏览器为 Chromium 桌面及移动模拟，不代替真实手机软键盘。
+
+源码发现两个直接原因：重连按键只挂在 xterm 隐藏输入框，原测试主动聚焦该框后才按键；蓝色挂起标签同样显示提示，却调用直接排除 markedForSuspend 的普通 reconnectNow。错误提示还将 statusMessage 原始安全码写进终端，重复失败会堆积并混入展示快照。
+
+### 功能对应表
+
+| 功能     | 真实消费者                                                       | 结论                                                                              |
+| -------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| 显式重试 | TerminalView 恢复卡片/UiButton/容器键盘                          | 无隐藏输入框焦点也能点击或聚焦容器按Enter；快捷键、Tab不误重试；重试按键不发给SSH |
+| 失败说明 | WorkspaceRuntimeSession → WorkspaceLayoutRenderer → TerminalView | 按具名错误分类本地化，给出检查事项，不显示原异常正文，不写终端日志                |
+| 挂起恢复 | WorkspacePage → 原目录/Registry恢复                              | 原标签去重、保留接管确认；按钮恢复后原Shell变量保留，没有新增SSH连接              |
+| 移动交互 | 按钮/轻点/现有输入与选择                                         | 重连不主动聚焦软键盘；320×400卡片与按钮可见可点击，正常触摸和粘贴回归通过         |
+
+### 职责归属表
+
+| 流程           | owner                  | 审核结论                                                                    |
+| -------------- | ---------------------- | --------------------------------------------------------------------------- |
+| 输入与呈现     | TerminalView           | 只发布意图；活动/可见/只读检查，不新增全局键盘监听，不替代连接状态          |
+| 连接失败与重连 | RuntimeSession         | 原连接Promise、退避、未知结果围栏不变，记录安全失败类别                     |
+| 挂起恢复       | WorkspacePage/Registry | 原目录、身份/实例复查及接管确认；重复点击不并发打开确认；退出后晚反馈不回填 |
+
+### 类型归属表
+
+| 边界         | 唯一owner                             | 审核结论                                                           |
+| ------------ | ------------------------------------- | ------------------------------------------------------------------ |
+| 服务端安全码 | Shared remote/workspace/values        | 沿用现有有限值，无新协议或迁移                                     |
+| 本地连接失败 | workspace/model/workspace-error-types | 具名异常转有限分类，presentation出口供Page消费，不靠错误字符串推断 |
+| 终端展示     | TerminalView props/interaction        | 文案由装配层转换，终端不深层依赖Workspace                          |
+
+### 完成证据表
+
+| 项目       | 证据                                                                 | 边界                                                                                 |
+| ---------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| 静态/构建  | final-check.log、final-build.log、format-check.log、git diff --check | 根类型/ESLint、前端生产构建、全仓格式检查                                            |
+| 浏览器/SSH | final-e2e.log：7/7，38.1秒                                           | 桌面/移动初次失败、重试成功、挂起恢复保留Shell、恢复中输入丢弃、触摸取消、剪贴板粘贴 |
+| 视觉       | final-screenshots：桌面、390×844、320×400；已人工查看                | 移动为模拟设备，真实输入法仍待验                                                     |
+| 交付       | USAGE与Frontend架构已同步                                            | 无新数据库迁移；未提交、推送或操作生产                                               |
+
+首轮 `e2e.log` 3/3与 `mobile-e2e.log` 4/4，最后组合重新验证7/7；分组重复，不累计成14项。审核覆盖H-04–H-07、H-09/H-13、E-05/E-07、E-10/E-14.4；此前OIDC变更及测试证据保留。
+
+## Agent 完整命令日志与空间等待（2026-11-06）
+
+基线 `main/37808319` 的未提交工作区；保留前轮 OIDC/Passkey 和终端重连变更。本轮取消 Shell 完整文本日志的总量限制，32 KiB 只作内联预览，按 Job 保存 UTF-8 数据与索引。Node 26.13.0 / pnpm 12.16.1；证据根目录 `/home/honus/nexus-task-artifacts/agent-output-20261106`，未提交、推送、发布或操作生产。参考 Pi 的完整文件/有限展示设计，源码固定版本及调研保存在 research。
+
+### 契约审核表
+
+| 边界     | Owner 与消费者                                                            | 结论                                                                                               |
+| -------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| 命令输出 | CommandPort → CommandModel → Remote public/mapper → ToolRemoteModel → Job | 全部输出异步交付并传递取消信号；两个流串行保存，保留命令序号/流；预览独立                          |
+| 日志读取 | ToolJobService → ToolJobModel → TextLogStore                              | 既有 Job/user/App/Run/目标版本授权；UTF-8 游标和 JSON 预算；unknown 只允许读取证据，不解除执行围栏 |
+| 等待状态 | Shared AgentResourceSessionView/codec → WS mapper → Native mapper/资源卡  | waitingOutputJobs 显式映射；沿既有关闭确认和任务取消，不创建第二个执行状态机                       |
+| 模型发现 | shell_execute / shell_job_control Host 声明                               | 完成结果首先给 jobId/outputRead，低预览预算仍可看到续读入口；权限与工具输入不变，无插件包变更      |
+
+### 容量审核表
+
+| 项目       | 规则与证据                                                                                                      |
+| ---------- | --------------------------------------------------------------------------------------------------------------- |
+| 完整日志   | 不设单任务总量配额；真实 OpenSSH 8 MiB 和后续 stdout/stderr 完整保存；小日志也归同一持久 owner                  |
+| 内存       | 每个 SSH 流最多一个已交付 chunk 等待，保存串行；另有 ssh2 自身窗口/Readable 缓冲，不承诺连接总内存仅为预览大小  |
+| 模型与续读 | 32 KiB 原内联预览；输出数组原 4 KiB JSON 预算、批量结果原 256 KiB 预算；中文/emoji/BOM/控制字符均按实际编码处理 |
+| 物理空间   | ENOSPC/EDQUOT 等待后重试原文件范围；部分写入不重复，最终 sync 迟到空间失败也等待；取消和原 Run 期限不延长       |
+
+### 生命周期审核表
+
+| 阶段          | 结论                                                                                                      |
+| ------------- | --------------------------------------------------------------------------------------------------------- |
+| 创建与派发    | 原 Job 持久准入后创建日志；dispatched 提交及原授权复查后执行一次 SSH；无新数据库结构或迁移                |
+| 正常/失败结束 | 成功先刷盘、关闭日志再结算；失败/取消保留已确认前缀；日志关闭真实完成前 Job 仍活动，晚清理失败保留因果    |
+| 读取与保留    | 活跃写入/读取保护；Run 结束不删除，文件随数据卷保留；恢复不重放命令，缺失日志明确 available=false         |
+| 回收          | Service 决定 owner 不存在才回收；Model 转换、SQL Adapter 查权威存在；周期及启动扫描，单项失败仍处理其余项 |
+| 备份边界      | 当前 JSON 应用备份保存任务和预览，不包含 tool-logs 完整文件；完整迁移需要保留数据卷中的该目录             |
+
+### 完成证据表
+
+| 检查             | 证据及范围                                                                                                                                                     |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 类型/ESLint      | close-check.log：根 check 通过，含 Backend、Shared 和 Frontend                                                                                                 |
+| 构建             | close-build.log：最终 Backend/Shared；review-build.log：双端生产构建，后续前端源码未改变                                                                       |
+| 命令与故障       | verified-e2e.log：5 个正式后端场景通过；后继 preview-e2e.log 通过低预览预算引用；close-e2e.log：收尾变更涉及的权限、完整日志、真实 SSH 三场景再次通过，40.8 秒 |
+| 完整日志内部场景 | 正式 runner 包含 Native 文件分页/重启/读写保护、部分写入和空间恢复、取消、unknown/错身份/错版本、Job 等待状态、迟到 sync 故障、实际关闭前保留活动状态          |
+| 并发             | 真实 SSH 协议下暂停日志接收时，ACP 审批经独立连接继续；保存回调未形成无界队列                                                                                  |
+| 浏览器           | browser-verified-e2e.log：3/3，19.8 秒；1280/390/320 像素资源卡、隐藏/恢复、关闭确认及取消保持；本地模拟手机不代替真机                                         |
+
+初次故障证据保留：旧权限监测夹具的单命令结果和新夹具的 Storage.change 签名已修正；并行启动浏览器与后端遇到测试专用 22225 端口冲突，改串行复测。最初用 ssh2 测试 peer 验证 8 MiB 时，其转发未处理背压及双流写队列收尾，无法证明完整交付；该场景改用实际 OpenSSH，保留相同容量/完整性断言并通过，未放宽产品结束校验。真实介质耗尽、掉电、长时间吞吐和手机实际等待提示按 PLAN 保留；本地专项不冒充远程全量 CI。
+
+最终格式证据：`format-check.log` 全仓 ESLint/Prettier 通过，`diff-check.log` 为空；HISTORY 收口另经 Prettier 与 diff 检查。三个宽度的关闭确认截图位于 browser-verified-report，另已查看前次 320×844 同一界面的截图。
+
+## 前端样式与组件职责重构（2026-11-06）
+
+基线为 `main/37808319` 加本轮开始时已有工作区；OIDC/Passkey、终端恢复、Agent 完整日志等前序未提交改动完整保留。本轮按用户要求由三个 `gpt-6.1-sol/high` 子代理分工实施，主代理复核；无提交、推送、发布或生产数据改动。适用 H-04–H-09/H-12/H-13、E-02/E-03.4/E-09/E-10.1/E-10.3/E-10.4、C-01–C-04。Node 26.13.0 / pnpm 12.16.1，环境入口为 `dependencies-upgrade-20261105/runtime/env.sh`。
+
+证据根目录 `/home/honus/nexus-task-artifacts/frontend-style-refactor-20261106` 保存开始时的 status/diff、完整 frontend src 压缩基线、隔离测试数据库、截图、计算样式、命令和检查日志；基础 CSS 的 AST 迁移证据另在 `/home/honus/nexus-task-artifacts/frontend-style-foundation-20261106/ast-proof.json`。专用测试前端 9998、后端 3001，通过 `https://api.honus.top` 与用户指定 CDP `http://172.30.30.11:9223` 访问；未使用远程生产数据库，测试凭据仅在任务目录权限 0600 文件中。
+
+### 功能对应
+
+| 原功能/消费者                                                            | 最终实现与差异                                                                 | 结论                                                      |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------ | --------------------------------------------------------- |
+| global.css → uiGen2/uiCatalog → 全部基础组件                             | Foundation 拆为十个职责 CSS；App 显式装配，删除旧入口                          | 492 条原规则保留，未改变 CSS layer、有效覆盖和正常 UI     |
+| AppUpdatePrompt、NotificationHost、代理/通知目录工具栏                   | 样式归 App、Feedback、对应 feature；Header 与 Toast 的位置关系归 App shell     | Foundation 不再认识上层业务 DOM                           |
+| Docker、命令历史、WorkspaceConnectionList 空态                           | 原深层选择器定制改为 UiEmptyState 公开 CSS 变量，含 dense/compact 与容器条件   | 默认 fallback 和调用方原值保持，实际组件 CDP 对照通过     |
+| Login、Workspace 搜索字号                                                | 复用 UiInput 原有 `--ui-control-font-size`，保留 14/16px 和 0.7rem             | 去除内部 input class 覆盖，不改断点                       |
+| FileEditor spinner、QuickCommands 图标、ArtifactPicker 与 Workspace 空态 | 删除重复 13px、重复 currentColor!important，以及三条因 scoped 隔离不匹配的规则 | 动态 class、第三方生成 DOM 和必要媒体规则保留             |
+| App、Agent、连接编辑/批量/列表、发送文件与进度弹窗                       | 删除 shared/capabilities；通过现有 feature public 获取原 Pinia/launcher owner  | 不新增状态、请求、缓存或资源；同步独立 targets 测试消费者 |
+| AgentConfigPopover → UiPopover                                           | `panelMarkerAttribute` 接一个 data 属性名称，由 Agent 提供原标记               | 原 Portal DOM、焦点和 Escape 语义保持                     |
+
+### 职责归属
+
+| 关键职责                                   | 最终 owner / 证据                                                             | 结论                                                        |
+| ------------------------------------------ | ----------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| 通用材料/控件/浮层/可访问性/确认/目录/设置 | `foundation/ui/styles/*` 与原组件                                             | 十类真实职责，不按文件行数机械拆分                          |
+| 应用及业务样式装配                         | `app/styles/global.css`、shell/update-prompt；Feedback 和两个 feature styles  | Foundation 无上层 CSS import；通知定位选择器权重保持        |
+| 控件可定制外观                             | UiEmptyState fallback、UiInput/Spinner 既有变量                               | 业务在实例根 class 赋值，无新万能组件                       |
+| 认证、查询和更新权威                       | 原 feature Store/composable/remoteDesktopLauncher                             | reset 注册、KeepAlive、scope、晚返回与未知写入围栏保持      |
+| 外部覆写与无效样式审核                     | 全前端 deep/UI 选择器盘点；ArtifactPicker 真实 SFC 编译 scope 与 CDP 属性核对 | 不将一次 Coverage 未命中或动态 class 静态无命中当作删除依据 |
+
+### 类型归属
+
+| 类型/契约                                           | 唯一 owner / 消费者                                             | 核对                                                                   |
+| --------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| ConnectionSummary、Tag/Proxy/SSH Key 与认证应用对象 | 原 feature model/public → 实际消费者                            | 不经 shared 重导出，不复制类型                                         |
+| RuntimeFeatureCapabilities                          | 删除定义、注入与全部消费者；删除无消费者 terminal.loadView      | packages/tests 无旧入口残留；前后静态运行时 import 图均无循环          |
+| UiPopover 面板标记                                  | UiPopover 的 `data-${string}` prop，AgentConfigPopover 唯一消费 | Foundation 不包含 Agent 专属属性名                                     |
+| CSS 实例定制                                        | Foundation UiEmptyState 及既有 UiInput/Spinner 变量             | 31 条声明加原值 fallback；新增 display:block/margin-top:0 为原计算默认 |
+| HTTP/WS、Shared、存储                               | 本轮未改变                                                      | 无数据库迁移、协议或权限变化                                           |
+
+### 完成证据
+
+| 项目                 | 源码/架构                                                                                 | 静态                                      | 浏览器/逻辑与限制                                                                                                                                                |
+| -------------------- | ----------------------------------------------------------------------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CSS owner 迁移       | AST 保留 492 条规则/490 个 selector+at-rule 上下文、1863 条声明原样；同 selector 顺序一致 | 定向 PostCSS、Prettier 与 diff 检查通过   | 独立复核 231 组跨 selector 顺序候选，实际元素/权重无新增覆盖冲突                                                                                                 |
+| 桌面/窄屏视觉        | 1440/390/320px × 深浅主题；六页面、真实空态组件、登录、连接表单、Toast、确认框            | 根 check 与前端生产 build 通过            | 原始基线 66 组计算样式一致；一个旋转 spinner 的瞬时 rect 有差异，样式未变。63 张截图逐像素一致，其余三张仅 5–36 像素差异，最大约 0.0019%，已结合相同计算样式复核 |
+| 更新提示             | 使用真实 AppUpdatePrompt，通过原反应式状态显示                                            | CSS 声明与布局保留                        | 六组实际弹窗对比旧基础 CSS 与新样式计算值一致；旧 CSS 覆盖对照属于受控样式验证，不冒充重构前整页快照                                                             |
+| 管理列表与连接表单   | 正式 runner，生产前端/真实后端/SSH 夹具                                                   | 正式构建通过                              | `e2e.log`：8 项通过，含深浅主题三宽管理配色、代理目录失败下表单可用、真实 SSH 测试并创建连接                                                                     |
+| 能力与 Portal 消费者 | 原 feature public 与 Agent 面板标记                                                       | 最终构建产物                              | `consumer-e2e.log`：7 项通过，覆盖 Desktop/Pixel UA 的 Agent 目标选择与权限保持、四项批量编辑（含部分失败、目录失败、窄屏）及代理密码保留/替换/清除              |
+| 全仓格式             | 全部新/修改 CSS、Vue、TS 与文档                                                           | `format-all.log` 与 `diff-check.log` 通过 | 无新增自定义源码文本门禁，无新测试依赖                                                                                                                           |
+
+首轮浮层复测与正式测试构建并行，Shared dist 重建触发 Vite 热重载，导致白屏/计数不足及一次超时；原日志保留，未修改产品或放宽断言。稳定后 `after-stable-overlays.log` 与 `stable-overlay-comparison.json` 逐项对照通过。首次标为 update 的脚本未真正触发只读状态渲染，不计作更新提示验收，已用 `update-proof` 单独补验。`pixel-comparison.json`、`before/after/after-stable` 与 `update-proof/comparison.json` 是最终视觉证据。
+
+USAGE 的目录、确认/Toast、登录、工作区及 Agent 操作说明已核对仍符合当前行为，本次纯内部重构不添加产品文案。未宣称全仓所有 CSS 都已证明无效或全部清理；保留确有用途的业务布局、动态 class、第三方 DOM 适配与无障碍规则。真实手机软键盘、自定义主题及完整远程 E2E 不由本轮桌面 CDP 视口模拟代替，后续范围仍由 PLAN 管理。
+
+## 前端模块边界与活动视图复核（2026-11-06）
+
+本轮基于 `main/378083190cba468ed69dad892c0810b33e9f2edd` 及原有未提交工作区，保留 OIDC、终端恢复、Agent 完整日志与前一轮样式重构。专用目录 `/home/honus/nexus-task-artifacts/frontend-modules-20261106` 保存开始时完整 diff、状态和 frontend/src archive。上一轮38个前端文件与66组证据复核未发现回归；本轮非 bug 不修改正常外观，不提交推送、部署或触碰生产数据。
+
+### 功能对应
+
+| 功能           | 变更与不变量                                                                                    | 验证                                                         |
+| -------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| 基础 UI        | 删除无消费者 Tooltip、ManagementCard、management 操作布局、Pagination density；现有分页外观保持 | 全消费者扫描、类型/构建                                      |
+| 文件列宽       | 独立交互 owner；隐藏/断线/取消/失焦停止，不派发晚保存；原400/560断点和宽度保持                  | CDP前后、正式取消及恢复保存                                  |
+| 文件预览       | 真实active贯通全部消费者与延迟focus；隐藏不拦Ctrl+F/Escape，保留缓存搜索                        | CDP、正式隐藏/重开/读取计数                                  |
+| 文件编辑       | actions绑定修订、授权和视图；共享session各视图持独立关闭能力，晚确认不丢新草稿                  | 7组真实组件before/after、25项确认生命周期检查                |
+| 窗口与手势     | resize取消不提交；远桌收敛到可见视口；外观失焦停止拖动；Workspace切会话取消5个resize            | CDP、真实双SSH会话正式回归；远桌正式组随新增贴边功能继续验收 |
+| Agent/Provider | 按钮尺寸归组件变量；Provider展示卡片分离，父持API/草稿/弹窗；清理经证明死CSS                    | 128组按钮矩阵、18组sidebar、11组Provider边界和事件           |
+| 导航           | App router认证后预加载Workspace，移除Connections反向Runtime依赖                                 | 全调用链及正式SSH连接导航                                    |
+
+### 职责与类型归属
+
+| 审核表     | 结论                                                                                                                                    |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| 职责       | App拥有导航；Workspace传真实active及取消本视图手势；columns/actions拥有交互；原session仍持读写/草稿；Provider子卡片仅展示/发事件        |
+| 类型       | 编辑session/关闭能力唯一归file-editor/model；组件props/events在本功能；Foundation取消API不含业务；Shared、数据库和迁移无变化            |
+| 资源与并发 | pointerup提交，取消仅释放；确认绑定原实例和修订，A失活不借B继续确认；无handler拒绝丢弃；隐藏预览不新读、不迟聚焦；已派发读写仍沿原owner |
+
+### 完成证据
+
+Node26.13.0/pnpm12.16.1 根 `pnpm run check`、`pnpm run format:all:check` 通过，正式runner已完成双端生产构建；`check.log`、`format.log`、`e2e.log`保留完整记录。正式Playwright本地隔离端口/独立数据根18项通过，覆盖Provider、外观自定义、文件各格式预览、隐藏缓存快捷键、列宽取消/恢复和真实双会话五个resize取消。它是仓库正式用例的本地执行，不冒称GitHub远程全量已通过。
+
+指定CDP `172.30.30.11:9223` / `api.honus.top` 真实组件前后：列宽隐藏后body恢复且无提交、隐藏Markdown不再阻止Ctrl+F、远桌1440×900初始几何不变，390×400从y=-229/h858修复为y16/h368。三张正常截图逐像素一致，见`normal-comparison.json`。Provider11场景DOM/计算样式一致、5组PNG字节一致，复制/测试弹窗/删除确认及禁用事件均通过（没有真实模型调用）。Agent128组深浅/交叉容器矩阵共512个按钮快照一致，sidebar18组一致。`foundation/comparison.json`及`sidebar-comparison.json`保存结果。
+
+`tests/frontend/workspace-session.integration.mjs` 原codec10、Workspace21+producer10、编辑/预览22、Registry17与新增25确认生命周期检查通过；这部分为真实Vue/受控端口专项，不代替真实远端写入故障。CDP编辑器7组保留4个旧确认缺陷及3组正常对照，见`editor/*final*`。根主代理及独立Sol复核发现的共享确认借用、Workspace五手势失活问题均已补齐再验。
+
+首轮Agent快照受到容器未结算、主题过渡及鼠标残留:hover影响；原始失败保留，之后在同一挂载组件原位替换归档旧/新scoped CSS、等待布局并关闭过渡、移开鼠标，128组完全一致，不通过改产品外观或放宽断言消除差异。宽窄全页初扫在并行开发及CDP页面切换期间存在加载中空白采样，未据此宣称通过。停止并行修改后串行置前、等待真实main可见再采样，Dashboard/连接/代理/通知/设置/Workspace各1440、390、320px共18组通过，无横向溢出或pageerror，见page-scan-stable/results.json；这是当前隔离数据与主题下的覆盖，不代表所有自定义主题和数据组合。真实手机软键盘、系统输入法和自定义主题组合仍不由桌面CDP代替。隔离服务及证据按用户要求保留至通知删除。
+
+## Windows 恢复入口与 Termix 绘制对照（2026-11-06）
+
+本轮追加任务：RDP 最小化恢复按钮左右贴边半隐藏；排查 Windows 应用最小化时分块更新。所有文件归 `/home/honus/nexus-task-artifacts/frontend-modules-20261106/{rdp-edge,rdp-render,viewport-scrollbar}`，不提交推送或部署生产。
+
+### 四表审核
+
+| 审核表   | 结论与边界                                                                                                                                           |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | RDP恢复按钮贴最近左右侧，hover/键盘/拖动显露、触摸可见半边恢复；VNC保留完整按钮。分块问题通过原方案和Termix真实引擎同Windows对照定位，未宣称完全消除 |
+| 职责归属 | Modal只持锚点、dock、可见viewport；Foundation持pointer机制。渲染仍归现有adapter/SDK，Backend保持透明桥；未增加凑帧timer、改解码器或降画质            |
+| 类型归属 | 仅Modal局部坐标/有限dock状态，无Shared、数据库、连接参数或迁移                                                                                       |
+| 完成证据 | CDP/真实headless及正式E2E逐轮记录见下；真实协议和Windows截图另见rdp-render/stable-analysis.md，不能以受控窗口代替实机性能                            |
+
+恢复按钮初次CDP覆盖左右25px、hover/keyboard50px、跨侧拖动后不误恢复、窄屏与可信touch；正式E2E进一步发现真实滚动条边界：root的clientWidth和visualViewport.width均390，但scrollbar-gutter:stable使根矩形只有382，旧按钮只有0.84交叉比例，RDP实际仅露17px。修复取根实际宽度/client范围与visualViewport交集，并观察根尺寸变化；有效范围不变不取消手势。复验RDP anchor x332、比例1、可见25px；VNC完整50px；不触发window resize而仅切gutter时仍自动更新，无sizeChange或pageerror。大视口原x184正常几何保持。
+
+首次正式组前2项通过后在测试控制栏揭示竞态停住；trace证明小视口恢复后旧鼠标触发pointerleave，header刚可见又隐藏。用例在恢复视口前移开鼠标，保留全部功能断言。第二轮4项通过、2项按上述0.84真实越界失败；原日志、截图及trace保留，未以放宽可见比例换绿。最终轮重建前后端并执行同文件全部6项通过（含可信触屏tap），见rdp-e2e-final.log；未放宽ratio=1断言。与前端18项共24项正式本地用例通过。最后根check、全仓format:all:check、git diff --check通过，GitHub远程全量未触发。
+
+### 实机绘制定位
+
+使用用户此前授权的同一Windows目标，浏览器实际建立RDP。首次指定CDP浏览器本身就在目标Windows内，出现递归桌面；该记录仅用于确认位图编码，不作性能结论。正式对照改用本机Linux headless浏览器，Nexus/Termix请求32/Termix请求16顺序连接（避免同账户互踢），均1062×856。打开一份空白Notepad，最大化后每方案3次最小化/恢复，同一Chrome/code-server背景；核验15张截图操作均成功。结束关闭本次空白窗口，没有在Windows创建文件。
+
+Termix对照为插件1.3.1、固定提交`1b7242358efb7b105b017e2f24ca2a451d8348c4`的真实EngineSession/EngineCore/RdpClient/Display和原预编译WASM，标准guacamole-common-js1.5.0及Termix同款同步flush补丁；不是完整Termix应用部署。隔离server仅绑定127.0.0.1动态端口，凭据从0600文件读入内存，不放URL或日志。主仓`6b060594`的此时默认方案为服务端Worker解码后PNG/JPEG+Guacamole sync，而不是默认guacd/FreeRDP或H.264。
+
+三组实际收到的均为主要64×64的压缩16bpp位图，均无SurfaceCommands、RFX或frame markers；Termix请求32并未在此目标激活32bpp/RFX，不能据此修改Nexus默认值。Nexus三次最小化首次→最后位图收到为71→181、33→225、25→77ms，真实paint最后为180.3、224.5、76.4ms；每次native putImageData总耗时1.2、1.7、0.7ms，未观测到≥50ms长任务。第二次末尾仅2块65字节，主体早于该尾部完成。Termix两组也有2–3批桌面图像和渐进sync，不证明整次动画原子呈现。
+
+详细三组表及恢复数据在`stable-analysis.json/md`；Termix最后sync是到达时刻，不等于最终paint，不能与Nexus原生paint作排名。Nexus经api.honus.top而Termix经loopback并在server Worker解码，两边捕获有开销、无随机交错、样本仅每组3次；这些证据支持分批在前端绘制前已存在，不区分Windows产帧与网络分批，也不证明所有分辨率/网络/GPU场景。
+
+固定与当前上游Web SessionBuilder均无公开正常模式色深、完整帧回调或RDPGFX开关；legacyGraphics虽然请求32却同时禁codec，不是通用加速。上游FrameEnd PR #1189已关闭未合并，作者最终说明未达到预期，不能作为现成修复。当前没有证据支持修改应用渲染链；保留立即协议转发和原rAF提交，未加入会延迟输入与画面的猜测等待。完全消除该目标渐进更新仍依赖后续协商/SDK能力验证，不写成已修复。
+
+本轮收口：原9998/3001隔离测试环境与全部证据保留；Termix对照服务和专用headless浏览器在连接关闭后按已记录PID核实归属并停止，未删除用户要求保留的文件，见rdp-render/process-cleanup.json。凭据文件保持0600；没有在生产数据库执行迁移、提交推送或发布。主代理与独立Sol最后复核实例关闭、五手势失活与可见viewport边界，未发现新问题。
+
+## 前端最终缺口与 UI 复审（2026-11-06）
+
+基于 `main/378083190cba468ed69dad892c0810b33e9f2edd` 及原未提交工作区，保留前序功能。本轮证据位于 `/home/honus/nexus-task-artifacts/frontend-final-audit-20261106`，`frontend-start.diff` 记录追加审核前的前端状态；测试环境为前端9998、`api.honus.top`、指定Windows Chrome156 CDP。非 bug 不改变正常UI，未提交推送、发布或部署。
+
+### 功能对应
+
+| 功能           | 实证问题与修复                                                                                                                      | 不变量                                                                  |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| 拖动与进度窗口 | 取消/失焦/隐藏/卸载原会调用onEnd；失活窗口仍显示并采样。基础拖动区分提交与取消，同步全部5个消费者，真实active控制Teleport及速度计时 | 正常pointerup和显式stop仍提交；取消保留内存位置但不保存；原传输继续     |
+| 多文档快捷键   | 两个共享编辑器一次Alt+右原跳两个标签；Ctrl+F及加载态Escape可作用于另一预览。按通用文档根标记和当前焦点选择唯一实例                  | 保留单视图及无文档焦点的首个可用处理；不改原搜索、session和加载取消流程 |
+| 基础下拉       | 矮屏时区panel原高329px、顶部y=-85px，首项在屏外不可选。消费Reka可用高度并扣除现有边框与padding                                      | 保留正常320px列表上限、密度及样式；首尾滚动可达                         |
+| 传输目录同步   | 正式回归复现切页后复制完成，但原视图回调失效使列表一直旧；将完成后只读刷新绑定原存活会话，同步上传、移动及归档                      | 旧视图不再发提示或新写入，不重放传输                                    |
+| 恢复按钮键盘   | 拖动取消或松手无click后首次Enter原被didDrag吞掉；仅抑制detail>0的指针click                                                          | Enter/空格首次恢复，迟到指针click仍不误触                               |
+| 无效样式       | 删除 `.ui-select__value[data-placeholder]`：唯一真实span不设置该属性，第三方状态在trigger上                                         | 不将未命中的动态CSS当作无效规则；无正常视觉变化                         |
+
+### 职责归属
+
+| owner                 | 当前边界                                                                                                             |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Foundation            | 只持指针手势、选择状态释放及基础下拉可用高度；取消不调用业务onEnd                                                    |
+| Transfers / Workspace | 窗口实际active、位置持久化及速度采样归各窗口；Workspace装配宿主状态，不改变传输资源生命周期                          |
+| shared/focus          | `ownsDocumentKeyboardEvent` 为纯DOM判断，只认识 `data-document-keyboard-scope`，无feature私有选择器、Store或全局监听 |
+| 文件功能              | FileEditor、PreviewSearchBar、FilePreview加载态在自身监听里核对active/可见性/KeepAlive/defaultPrevented及文档归属    |
+
+### 类型归属
+
+新增取消能力沿原Foundation交互返回值；进度active沿feature受控props；焦点helper仅接HTMLElement/KeyboardEvent并返回boolean。三个文档组件显式声明通用根标记，所有5个拖动消费者同步取消调用。目录完成回调复核原session生命周期；注销/关闭同步释放browser与adapter，dispose/generation阻止晚读取回填，断线由原重连刷新补齐；独立只读复核未发现重复派发或把旧结果写入新会话的路径。没有Shared协议、数据库或迁移变更，无兼容桥和第二份业务状态。
+
+### 完成证据
+
+Node26.13.0/pnpm12.16.1：根 `pnpm run check`、`pnpm run format:all:check` 和 `git diff --check` 已通过，日志为 `check.log`、`format-check.log`。首轮正式生产构建通过，43项端到端42通过、1失败，见 `e2e.log`：新增进度生命周期用例的手势断言全部通过，但最终目录未显示已完成的复制。后端原任务3535d2d6-f8d0-4e43-a8f6-03c52c9ffe5f已记录MUTATION_COMPLETED；原页面permission在切会话/页后失效使刷新被跳过。已修源码并保留失败trace、截图与原断言。最终 `e2e-final.log`：双端生产构建和50项正式本地隔离E2E全部通过（3.7分钟），含原失败场景、新增上传/归档离页后无需手动刷新、RDP/VNC键盘恢复、进度取消/隐藏、系统矮屏下拉及文件编辑/预览。最新根检查与全仓格式分别为 `check-final.log`、`format-check-final.log`，均通过；`source-sha256.json` 记录本轮关键源码和测试指纹。此结果为正式仓库用例的本地执行，不代表GitHub远程全量。
+
+- `gestures/before.json` → `after.json`：四种取消及卸载不再触发onEnd，晚move/up无效，正常松手/显式stop共2次提交。`consumers-after.json` 为真实Center/Display的20组位置、localStorage、active/KeepAlive/后台、采样计时和正常提交核对，pageerror为空；实组件测试不等同于真实手机后台。
+- `gestures/keyboard-restore-before.json` → `keyboard-restore-after.json`：两owner×三种拖动结束方式共6组键盘首次激活修复；6组可信mouse/pen/touch正常恢复，无pageerror。真实键盘click同样是PointerEvent，但detail=0，不能按事件类猜测鼠标；正式RDP/VNC与进度用例同步覆盖。
+- `keyboard/before.json` → `after.json`，`loading-before.log` → `integration-final.log`：13项实组件浏览器检查通过，覆盖共享/独立编辑器、active=false、已处理事件、事件target/activeElement、无焦点fallback、搜索与加载取消归属。对应仓库入口 `tests/frontend/document-keyboard.integration.mjs`；正式SSH用例同步补左右标签导航。
+- `select/before-cases.json` → `after-cases.json`：3种density、fitLongest两态、4种视口/位置共24组，16组越界降至0组。390×400和320×240真实时区首尾均可点击；1440正常列表仍320px，截图0像素差，见 `verification.json`。
+
+只读UI建议尚未实施：手机设置分类条隐藏滚动条，可增加边缘滚动提示；紧凑按钮可评估保持视觉尺寸的触控热区；被省略的长模型ID/连接名称可提供触屏可用的完整查看方式。源码依据分别为SettingsPage、AgentConfigPopover/PreviewSearchBar及ProviderCatalogCard/UiSelect，实测见 `select/optional-ui-measurements.json`。不据此改动当前已确认设计；完整GitHub回归及真实手机输入法仍不由本轮桌面视口测试代替。
+
+## RDP 音画评估、工具栏与移动 UI（2026-11-06）
+
+用户授权悬浮工具栏重排与前轮移动UI建议，并补充实测声音晚于画面及FreeRDP替换评估。本轮保留原未提交工作区，未提交推送、发布、部署或迁移数据库。全部证据归 `/home/honus/nexus-task-artifacts/rdp-audio-toolbar-ui-20261106`，工具链Node26.13.0/pnpm12.16.1。
+
+### 四表审核
+
+| 审核表   | 结论与边界                                                                                                                                                                                           |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 非全屏RDP尺寸→重连→文件剪贴板→全屏→最小化→关闭，真实DOM与Tab顺序一致；手机设置分类显示实际溢出方向，预览搜索两行且操作可达，长模型ID展开后可选择全文，配置按钮增高。正常桌面密度、VNC和全屏行为保留  |
+| 职责归属 | 远桌Modal局部复用已有VueUse模板；设置Page持导航和实际scroll状态；控件调整归原feature；基础UiSearchInput仅在自有清除按钮开启时隐藏重复原生取消图标。音频保持现有Adapter/SDK，不增加猜测缓冲或自造协议 |
+| 类型归属 | 原props及局部DOM/几何状态，无Shared或数据库契约修改；音频JS能力没有假增timestamp/播放反馈字段                                                                                                        |
+| 完成证据 | 最终双端生产构建、32项正式本地E2E、根check、全仓格式及diff检查通过；CDP三语/深浅/宽窄与触控交互如下。实际物理音画同步未修复，FreeRDP只有文档/源码评估                                                |
+
+### 浏览器与正式回归
+
+Windows Chrome156通过指定CDP、独立page访问api.honus.top/9998，页面完成后关闭。`toolbar/after.json`覆盖7组RDP/VNC宽窄mouse/touch，VNC三组几何与before一致，无pageerror；截图使用受控失败连接，仅证明布局，不代替连接成功。正式RDP用例实际连接隔离目标，验证11个Tab停靠点（含数字步进按钮）、320/390可达性、剪贴板、全屏、重连音频释放和VNC回归。
+
+`settings/final/results.json`含三语×深浅×320/390/1440共18组，无pageerror；`desktop-comparison-final.json`六张桌面图0像素变化。`controls/assertions.json`、`interactions.json`与`search-clear.json`覆盖真实深浅主题320/390/1440及三种coarse触控组合，搜索上一/下一、清除保留面板、关闭面板、编辑/刷新原owner、长模型ID完整选择和无横向溢出。预览搜索操作为44×44，Agent配置仅增高到44px、保持原横向紧凑宽度，不宣称全部按钮44×44；前期主题注入有误的图片不作为最终主题证据，使用baseline/final组。
+
+首轮`e2e.log`为30通过、2失败，首次trace/截图保留：新增Provider用例只登录了独立request，浏览器仍在登录页，已为page.request补登录；设置页新增箭头留白叠加原8px间距，Linux字体下320px英文Data Management分类略宽于滚动区。去掉重复间距，箭头使用原空隙；保留原完整可见断言，不以省略文字换绿。最终`e2e-final.log`重新构建双端，5个spec共32项全部通过（1.7分钟）；`check-final.log`根检查、`format-check-final.log`全仓格式及`git diff --check`通过。GitHub远程全量未触发，真实手机键盘与物理设备仍另验。
+
+### 音频与FreeRDP评估边界
+
+用户确认声音偏晚。当前Web扩展丢弃RDPSND timestamp且没有播放延迟回传；底层收到wave即确认，图形也没有共同呈现时间戳。历史2026-11-05 Windows授权测试每声道8192采样、44.1kHz，即185.760ms声音块，应用排程ahead最多35.410ms；当时base/output latency为42.667/128ms。这些不是本次用户物理音画差，也不能简单相加作为端到端延迟。新静音CDP探测仅核对浏览器API，不能证明强制采样率或numeric latency更快。报告及固定源码见`audio/assessment.md`、`provenance.json`；未修改音频产品代码、SDK或Windows策略。
+
+FreeRDP是原生库，不能直接替换当前浏览器WASM。可复用方案为guacd/FreeRDP服务端解码、Guacamole协议及guacamole-common-js前端，需适配已有鉴权/撤权、证书人工确认和指纹、目标与代理、尺寸/输入/音频/文件以及进程生命周期。Guacamole1.6.0官方文档公开GFX和RemoteApp等能力，但是否改善视频、分块和服务器负载仍需同目标实测；文件驱动器重定向不冒充当前文件剪贴板。
+
+关键源码区别：FreeRDP原生RDPSND有设备播放时延反馈，而固定Guacamole1.6.0的`rdpsnd.c`安装自己的通道，`rdpsnd-messages.c`写入/flush浏览器音频后用原timestamp确认，不直接继承原生反馈优势。不能声称换guacd就解决声音晚。对比源码、官方页面和仓库活动元数据存于`audio/freerdp-comparison/assessment.md`及同目录。此前Termix对照使用IronRDP插件，不是FreeRDP性能测试。没有新依赖、引擎切换或性能提升倍数结论。
+
+## 设置布局与加载优化（2026-11-06）
+
+本轮按用户授权审核八个设置分类与Agent子分类的布局和加载，保留已有未提交功能，不提交推送、部署或修改数据库。证据归 `/home/honus/nexus-task-artifacts/settings-optimization-20261106`；`start.diff`保存追加前的工作区状态，Node26.13.0/pnpm12.16.1。
+
+### 四表审核
+
+| 审核表   | 实现与边界                                                                                                                                                               |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 功能对应 | 路由入口只登记实际分类，不先挂载隐藏工作区；诊断/恢复首次展开才挂载，收起撤销active、再开读取。分组标题按内容宽度与操作组换行，短标题仍同排，不再挤成窄列                |
+| 职责归属 | SettingsPage持visited和维护展开；Security只装配安全功能，IP面板独立；各feature public提供原面板loader；Agent按分类拆异步入口；通用标题/动作排版归Foundation settings.css |
+| 类型归属 | 仅原组件props/events及局部布尔状态，安全面板移除混合section分支并同步唯一消费者；无Shared/协议/数据库迁移、额外缓存或依赖                                                |
+| 完成证据 | 根check、全仓格式、生产构建、diff检查通过；正式本地27个唯一场景覆盖通过，首次失败和精确补跑如下；CDP布局、请求和构建块大小分别记录，不冒称实机加载提速倍数               |
+
+### 性能与布局证据
+
+指定Windows Chrome156 CDP通过独立页面访问api.honus.top/9998，结束关闭自建页面；语言与主题只改页面内存，不保存用户设置。`before/results.json`→`final/results.json`覆盖8分类及3个Agent子分类×320/390/1440共33组；`locales/results.json`再覆盖8分类×中文/日文×深浅主题×3宽度共96组。最终无pageerror或控件横向越界；中文短标题仍保持同排，英文长标题与动作按内容换行。320px英文TOTP标题原只剩12px，标题栏颜色原55px，完整可读性由正式用例同时核对最多两行、文字不溢出和动作不重叠。未改变配色、实际设置或保存流程。
+
+`request-comparison.json`记录同环境冷页面API请求数量：关于19→14、外观19→14、系统24→19、安全22→17、IP控制21→16、Agent24→19、数据21→14；工作区自身仍19次。省掉隐藏工作区的一次配置和完整presentation四端点查询，数据额外省去折叠诊断与突变目录查询。全局认证、主题和Agent宿主请求继续正常执行。数字是已记录开发环境请求计数，不是物理弱网或总体延迟测量。
+
+`bundle-before.json`→`bundle-after.json`记录生产构建未压缩单块大小：SettingsPage40302→20718字节，AgentSettingsPanel221341→91426字节；安全、IP、备份、诊断/恢复及Agent扩展、浏览器运行时、安全网络、集成/市场/预算改为独立按需加载。整体代码仍存在，不能把入口单块变化写成整个页面传输或加载时间同比减少。现有已访问表单实例、完整presentation读取、CAS与未知写入围栏保留，没有通过使用过期快照减少请求。
+
+### 回归与收口
+
+新增`settings-loading.spec.ts`验证直接入口无隐藏工作区/配置查询、维护区首开/收起/重开、系统和工作区独立草稿在分类间保留且不写入、安全/外观标题及动作宽窄可达。首轮`e2e.log`双端构建通过，27项中26通过、1失败；新用例打开维护区后用宽泛summary定位关闭，误匹配内部两个折叠项。只将定位改为外层直接summary，保留请求、重开和布局断言；原trace/截图保留。`e2e-final.log`重新构建后该spec3项全部通过，覆盖共27个唯一场景；其余组包括备份实际导入导出、CAPTCHA、IP白黑名单、OIDC登录/配置/撤销、偏好保存和真实读取失败、Agent预算/硬限制/ACP与插件诊断。
+
+`check.log`、`format-check.log`及最终文档/测试定向检查通过。首次CDP全分类脚本在appearance可见性等待超时，原日志保留于before.log；独立probe无页面错误且显示正确，重跑完整before和两轮after均完成，未据此推测或修改产品失败逻辑。截图和API探针不替代真机输入法、真实弱网或GitHub全量；本轮未触发远程CI。规则、USAGE、架构与PLAN已同步，测试环境和产物保留至用户通知清理。
+
+## IronRDP 应用排队与隐藏绘制优化（2026-11-06）
+
+用户决定保留IronRDP、不采用guacd。本轮基于main `378083190cba468ed69dad892c0810b33e9f2edd` 的既有未提交工作区追加两项优化，未提交推送、发布、部署或改数据库。证据归 `/home/honus/nexus-task-artifacts/ironrdp-optimization-20261106`，含修改前`start.diff`、Adapter备份及首次失败产物；工具链Node26.13.0/pnpm12.16.1。
+
+### 四表审核
+
+| 审核表   | 结论与边界                                                                                                                                           |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 隐藏/最小化/未挂载Canvas保留最新像素但免提交，恢复时一次显示积累变化；音频不再按设备输出延迟额外保留应用积压，正常连续排程、RDPSND尾音与暂停丢弃保留 |
+| 职责归属 | 可见性观察、rAF及底图归rdp-frame-presenter；PCM实时排队归rdp-audio-output；仍复用原SDK、Web Audio和Canvas，没有协议实现、新依赖或服务端进程          |
+| 类型归属 | Adapter内部布尔状态及原PCM回调契约；无Shared/API/数据库变化。测试专用入口与RDPSND交付替身仅由E2E构建引入，不在产品提供测试钩子                       |
+| 完成证据 | 双端生产构建、14项本地正式E2E、指定Windows CDP三项受控检查、根check与最终格式/diff检查通过。没有物理音画差、CPU/GPU百分比或端到端性能倍数结论        |
+
+### 对照与回归
+
+`baseline.log`在产品修改前运行新增两项检查，两项均按预期失败：隐藏画布收到12批像素仍有12次native putImageData；受控AudioContext时钟下，以历史Windows实际8192采样/44.1kHz块及42.667/128ms设备延迟构造三块突发，第三块被排在350.519ms之后。此为可重复的应用排队问题，不是用户设备声音晚的端到端测量。
+
+修改后`e2e.log`重新构建双端与测试客户端，14项全部通过（32.1秒）。其中新增3项验证隐藏期间0次提交、恢复1次、最终像素与源内存复用、同值尺寸重置、页面可见性、关闭晚回调、初始未挂载与直接绘制/分配失败回退顺序；音频使用真实Web Audio Buffer/Source、受控时钟及RDPSND交付替身，正常35.410ms提前排程连续、close不截尾、暂停忽略PCM、积压时停止两块旧声音并立即安排最新块、关闭不接受晚到块。其余11项使用真实xrdp/TigerVNC及后端，覆盖证书信任/撤销/取消、票据归属/期限、连接/剪贴板、尺寸/DPI/全屏、手机恢复、VNC与重连音频释放。
+
+最后源码复核补充IntersectionObserver阈值边界：threshold=0在画布刚碰到视口时可以报告isIntersecting=true、面积0，继续移入时不一定再次通知。因此直接消费isIntersecting，不额外按正面积过滤。`e2e-final.log`补充边缘用例时2项通过、1项失败：测试以innerWidth定位边缘，实际IntersectionObserver视口因稳定滚动条留白比innerWidth窄8px，所谓移入后仍处于可视区域外。`edge-probe.log`保存真实rootBounds与坐标；用例改为读取浏览器报告的rootBounds.right，保持像素断言。`e2e-edge.log`重新构建并验证三项通过，最终CDP也使用该版本。
+
+`cdp-results.json`通过指定 `172.30.30.11:9223` 的Windows Chrome，在 `api.honus.top` 同源自建页面复用上述三个受控场景，全部通过、无pageerror。测试模块由page级路由提供，不改服务器文件、用户页或设置；完成后关闭自建页。这与真实xrdp连接证据分开，不冒充本轮真实Windows播放或物理声音测量。
+
+`check.log`根检查通过；首次`format.log`发现新增测试声明间距8处，自动格式修正后`format-final.log`通过。未更改正常UI、150ms动态尺寸防抖、鼠标输入调度、初始化/证书准入或上游SDK。冷启动预加载只有串行路径观察，没有可归因的性能对照，本轮不引入额外准备入口。超32MiB底图及不支持路径仍直接绘制，不宣称这些情况也停止隐藏提交；协议处理与解码继续，不能把减少Canvas提交视为消除全部后台开销。真实网络波动可能更早丢弃旧音频，符合用户授权的实时优先；上游分块、时间戳缺失、音频设备延迟及渐进绘制仍按PLAN能力边界推进。

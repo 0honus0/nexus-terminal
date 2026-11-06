@@ -485,24 +485,20 @@
 		--ui-control-radius: 0.45rem;
 	}
 	.command-history-empty {
+		--ui-empty-state-icon-size: 26px;
+		--ui-empty-state-icon-border: 0;
+		--ui-empty-state-icon-background: color-mix(in srgb, var(--text-color) 6%, transparent);
+		--ui-empty-state-icon-color: var(--text-color-secondary);
+		--ui-empty-state-icon-font-size: 11px;
+		--ui-empty-state-title-font-size: 11px;
+		--ui-empty-state-title-font-weight: 500;
+		--ui-empty-state-title-color: var(--text-color-secondary);
 		min-height: 100%;
 		margin: auto;
 		justify-content: center;
 		background: transparent;
 	}
-	.command-history-empty :deep(.ui-empty-state__icon) {
-		width: 26px;
-		height: 26px;
-		border: 0;
-		background: color-mix(in srgb, var(--text-color) 6%, transparent);
-		color: var(--text-color-secondary);
-		font-size: 11px;
-	}
-	.command-history-empty :deep(.ui-empty-state__title) {
-		font-size: 11px;
-		font-weight: 500;
-		color: var(--text-color-secondary);
-	}
+
 	@container command-history-pane (min-width: 420px) {
 		.command-history-list {
 			padding-inline: 0.3rem;

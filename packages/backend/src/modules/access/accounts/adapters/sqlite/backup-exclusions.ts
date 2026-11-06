@@ -8,5 +8,8 @@ export function accessBackupExclusions(): readonly string[] {
 		'access_pending_logins',
 		'access_factor_challenges',
 		'access_passkeys',
+		'access_oidc_configuration',
+		'access_oidc_flows',
+		'access_oidc_sessions',
 	];
 }

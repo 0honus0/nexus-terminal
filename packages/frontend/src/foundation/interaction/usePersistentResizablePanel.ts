@@ -104,6 +104,7 @@ export function usePersistentResizablePanel(options: PersistentResizablePanelOpt
 		() => [options.active?.value ?? true, enabled()] as const,
 		([active, isEnabled]) => {
 			if (active && isEnabled) restore();
+			else resize.cancelResize();
 		},
 		{ immediate: true },
 	);

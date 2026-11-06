@@ -8,3 +8,5 @@ export { createTerminalSessionState } from '../src/features/terminal/state/termi
 
 export { TerminalTypeAhead } from '../src/features/terminal/vendor/vscode-typeahead/prediction';
 export { Terminal } from '@xterm/xterm';
+
+export { SerializeAddon } from '@xterm/addon-serialize';

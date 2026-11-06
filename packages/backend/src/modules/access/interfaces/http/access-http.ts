@@ -1,3 +1,5 @@
+import type { OidcService } from '../../oidc/service/oidc-service.js';
+import { ACCESS_OIDC_FLOW_COOKIE } from '@nexus-terminal/shared/access/oidc/values';
 import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import {
 	ACCESS_AUTH_REQUEST_MAX_BYTES,
@@ -108,7 +110,12 @@ async function handle(
 }
 
 /** Access owns its own endpoints; HTTP runtime never receives Access storage or SQL ports. */
-export function createAccessRoutes(access: AccessService, factors: FactorService, secureCookies: boolean): HttpRoute[] {
+export function createAccessRoutes(
+	access: AccessService,
+	factors: FactorService,
+	secureCookies: boolean,
+	oidc: OidcService,
+): HttpRoute[] {
 	return [
 		{
 			method: 'GET',
@@ -245,7 +252,13 @@ export function createAccessRoutes(access: AccessService, factors: FactorService
 			handler: (request, reply) =>
 				handle(request, reply, async () => {
 					const token = readSession(request);
+					const oidcCookie = readRequestCookie(request.raw, ACCESS_OIDC_FLOW_COOKIE);
 					const results = await Promise.allSettled([
+						accessBoundary(async () => {
+							if (oidcCookie !== null) {
+								await oidc.discard(oidcCookie);
+							}
+						}),
 						accessBoundary(() => access.logout(token)),
 						accessBoundary(() =>
 							factors.logoutFlows(
@@ -263,6 +276,7 @@ export function createAccessRoutes(access: AccessService, factors: FactorService
 						.code(200)
 						.headers({
 							'Set-Cookie': [
+								ACCESS_OIDC_FLOW_COOKIE,
 								ACCESS_SESSION_COOKIE_NAME,
 								ACCESS_PARTIAL_COOKIE_NAME,
 								ACCESS_CHALLENGE_COOKIE_NAME,

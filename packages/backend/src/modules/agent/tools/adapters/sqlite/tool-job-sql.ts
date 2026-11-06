@@ -159,6 +159,12 @@ async function get(tx: SqlExecutor, scope: StoredJobScope, id: string): Promise<
 export class SqliteToolJobStorage implements ToolJobStorage {
 	constructor(private readonly db: SqliteRuntime) {}
 
+	exists(id: string): Promise<boolean> {
+		return this.db.transaction(
+			async (tx) => (await tx.one('SELECT id FROM agent_tool_jobs WHERE id=?', [id])) !== null,
+		);
+	}
+
 	create(input: StoredJobCreate): Promise<StoredToolJob | 'version_conflict' | 'limit_exceeded'> {
 		return this.db.transaction(async (tx) => {
 			const authority = await tx.one(

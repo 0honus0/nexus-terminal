@@ -1,6 +1,8 @@
 <script setup lang="ts">
-	import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+	import { useEventListener } from '@vueuse/core';
+	import { computed, nextTick, onMounted, ref, watch } from 'vue';
 	import { UiButton, UiPopover, UiSurface } from '@/foundation/ui';
+	import { useDraggablePosition } from '@/foundation/interaction';
 	import { useI18n } from 'vue-i18n';
 	import { useSettingsReloadSource } from '@/shared/feedback/public';
 	import { useAppearanceStore } from '../store/appearance.store';
@@ -41,7 +43,36 @@
 	const root = ref<HTMLElement | null>(null);
 	const dialog = ref<HTMLElement | null>(null);
 	const uiPanel = ref<InstanceType<typeof BasicAppearancePanel> | null>(null);
-	const drag = reactive({ active: false, startX: 0, startY: 0, left: 0, top: 0 });
+	const dragPosition = ref({ x: 0, y: 0 });
+	let backdropPointerStarted = false;
+	const drag = useDraggablePosition({
+		position: dragPosition,
+
+		getElement: () => dialog.value,
+
+		canStart: (event) => event.button === 0 && event.target instanceof Element && !event.target.closest('button'),
+
+		constrain: (position, element) => ({
+			x: Math.max(0, Math.min((root.value?.clientWidth ?? 0) - element.offsetWidth, position.x)),
+			y: Math.max(0, Math.min((root.value?.clientHeight ?? 0) - element.offsetHeight, position.y)),
+		}),
+
+		onMove: (position) => {
+			if (!dialog.value) return;
+			dialog.value.style.left = `${position.x}px`;
+			dialog.value.style.top = `${position.y}px`;
+		},
+	});
+
+	const handleBackdropPointerDown = (event: PointerEvent): void => {
+		backdropPointerStarted = event.target === event.currentTarget;
+	};
+
+	const handleBackdropClick = (): void => {
+		const startedOnBackdrop = backdropPointerStarted;
+		backdropPointerStarted = false;
+		if (startedOnBackdrop) emit('close');
+	};
 
 	const centerDialog = async (): Promise<void> => {
 		await nextTick();
@@ -51,51 +82,28 @@
 	};
 
 	const handleResize = (): void => {
-		if (!drag.active) {
-			void centerDialog();
-		}
+		drag.cancelDragging();
+		void centerDialog();
 	};
+
+	useEventListener(window, 'resize', handleResize);
 
 	onMounted(() => {
 		activeTab.value = 'ui';
 		void centerDialog();
-		window.addEventListener('resize', handleResize);
 	});
 
 	watch(
 		() => props.visible,
 		(visible) => {
-			if (!visible) return;
+			if (!visible) {
+				drag.cancelDragging();
+				return;
+			}
 			activeTab.value = 'ui';
 			void centerDialog();
 		},
 	);
-
-	const startDrag = (event: MouseEvent): void => {
-		if (!dialog.value || !root.value || (event.target as HTMLElement).closest('button')) return;
-		event.preventDefault();
-		drag.active = true;
-		drag.startX = event.clientX;
-		drag.startY = event.clientY;
-		drag.left = dialog.value.offsetLeft;
-		drag.top = dialog.value.offsetTop;
-		document.addEventListener('mousemove', moveDrag);
-		document.addEventListener('mouseup', stopDrag);
-	};
-
-	const moveDrag = (event: MouseEvent): void => {
-		if (!drag.active || !dialog.value || !root.value) return;
-		const maxLeft = Math.max(0, root.value.clientWidth - dialog.value.offsetWidth);
-		const maxTop = Math.max(0, root.value.clientHeight - dialog.value.offsetHeight);
-		dialog.value.style.left = `${Math.max(0, Math.min(maxLeft, drag.left + event.clientX - drag.startX))}px`;
-		dialog.value.style.top = `${Math.max(0, Math.min(maxTop, drag.top + event.clientY - drag.startY))}px`;
-	};
-
-	const stopDrag = (): void => {
-		drag.active = false;
-		document.removeEventListener('mousemove', moveDrag);
-		document.removeEventListener('mouseup', stopDrag);
-	};
 
 	const moveTab = (event: KeyboardEvent, index: number): void => {
 		const direction =
@@ -111,11 +119,6 @@
 		activeTab.value = next.id;
 		void nextTick(() => document.getElementById(`appearance-customizer-tab-${next.id}`)?.focus());
 	};
-
-	onBeforeUnmount(() => {
-		stopDrag();
-		window.removeEventListener('resize', handleResize);
-	});
 </script>
 
 <template>
@@ -125,7 +128,8 @@
 			ref="root"
 			data-ui="overlay"
 			class="fixed inset-0 z-[1000] flex items-center justify-center"
-			@click.self="emit('close')"
+			@pointerdown="handleBackdropPointerDown"
+			@click.self="handleBackdropClick"
 		>
 			<div
 				ref="dialog"
@@ -133,7 +137,7 @@
 			>
 				<header
 					class="ui-glass-chrome flex shrink-0 cursor-move items-center justify-between border-b border-border px-4 py-3"
-					@mousedown="startDrag"
+					@pointerdown="drag.startDragging"
 				>
 					<h2 class="m-0 text-lg text-foreground md:text-xl">{{ t('styleCustomizer.title') }}</h2>
 					<UiButton appearance="ghost" icon-only :aria-label="t('common.close')" @click="emit('close')">

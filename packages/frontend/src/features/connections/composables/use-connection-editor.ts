@@ -2,7 +2,9 @@ import { onBeforeUnmount, onDeactivated, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAuthSession } from '@/features/auth/public';
 import { useFeedback, useFeedbackMessage } from '@/shared/feedback/public';
-import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
+import { useConnectionTags } from '@/features/tags/public';
+import { useProxies } from '@/features/proxies/public';
+import { useSshKeys } from '@/features/ssh-keys/public';
 import { TargetRequestFailure, targetErrorKey } from '@/client/targets/target-types';
 import { readConnectionImportRequest } from '@nexus-terminal/shared/targets/connections/http-codec';
 import { TARGET_CONNECTION_IMPORT_MAX_ITEMS } from '@nexus-terminal/shared/targets/connections/values';
@@ -27,7 +29,9 @@ export function useConnectionEditor(
 	const { t } = useI18n();
 	const auth = useAuthSession();
 	const feedback = useFeedback();
-	const capabilities = useRuntimeFeatureCapabilities();
+	const tags = useConnectionTags();
+	const proxies = useProxies();
+	const sshKeys = useSshKeys();
 	const data = useConnections();
 	const snapshot = ref<ConnectionSummary | null>(null);
 	const credential = ref<CredentialSummary | null>(null);
@@ -149,11 +153,7 @@ export function useConnectionEditor(
 		} finally {
 			// An import may have created related resources even when its acknowledgement was lost.
 			// Refresh their existing owners without clearing the connection write-recovery fence.
-			const results = await Promise.allSettled([
-				capabilities.tags.load(true),
-				capabilities.proxies.load(true),
-				capabilities.sshKeys.load(true),
-			]);
+			const results = await Promise.allSettled([tags.load(true), proxies.load(true), sshKeys.load(true)]);
 			if (!signal.aborted && results.some((result) => result.status === 'rejected')) {
 				feedback.notifyWarning(t('connections.failures.options_failed'));
 			}

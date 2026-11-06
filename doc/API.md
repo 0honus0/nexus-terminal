@@ -506,3 +506,19 @@ GET/PUT /api/v1/settings/logging 使用 {expectedVersion,level}，level为debug/
 JSON 对象继续通过 `preSerialization`，模块 serializer 只编码一次并检查最终 UTF-8 字节预算；serializer 失败由原生 route errorHandler 投影安全错误，不能依赖 handler 的 try/catch 捕获。已提交写入的响应失败保留结果未知。普通 Buffer/Readable 使用原生 `reply.send()`；保留必要的 raw 响应时须设置自身内容/传输头；Helmet 已在 onRequest 将安全策略写入 raw 响应，不能另拼一份 CSP。绕过钩子的技术失败由 Platform 清除原实体及凭据头并生成最小安全错误。异步响应钩子完成前不得认为 send 已交付；需要资源确认的接口检查真实 finish、最终成功状态和原身份。审计发布不改写已经交付的业务结果。详细 owner、维护与错误规则见 [Backend HTTP 运行时](architecture/BACKEND.md#fastify-http-运行时)。
 
 Cookie 解析与序列化分别使用已注册的 `@fastify/cookie` 实例；HTTP 的原生 cookies 和 WS 的解析结果经过同一重复名称/容量拒绝，模块继续读取安全事实，不能再手写解析或单独解析出另一份身份。Access Cookie 使用原 HttpOnly、SameSite、Secure、Path 和有效期策略；直接通过实例 serializeCookie 写入响应头，保证失败后移除 Set-Cookie 不会被延迟队列重加。安全头通过 Helmet 的原生 route options 或 reply.helmet 配置，业务策略仍归对应模块；不得直接启用所有默认项改变既有 iframe、SDK 或 HTTP 部署行为。
+
+## OIDC 认证接口
+
+协议 owner 为 Shared `access/oidc/{values,http,http-codec}`，安装在 Access，复用现有 Origin/CSRF、Cookie 和会话交付。所有返回禁止缓存；完整请求/响应沿用基础认证 16 KiB JSON 预算，禁止未知字段。
+
+| 方法与路径（前缀 `/api/v1/auth/oidc`）  | 请求与结果                                                                                                 | 授权                              |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| GET `/provider`                         | `{provider:null \| {label}}`                                                                               | 公开，仅已启用且绑定时显示        |
+| GET `/settings`                         | revision、enabled、label、issuer、clientId、clientAuthentication、hasSecret、bound、callbackUrl            | 完整会话                          |
+| PUT `/settings`                         | 期望 revision（首次为 null）、完整配置、secret keep/replace/clear、password → `{changed:true}`             | 完整会话与密码证明、事务 CAS      |
+| DELETE `/binding`                       | revision、password → `{changed:true}`                                                                      | 完整会话与密码证明                |
+| POST `/binding/start`                   | revision、password → authorizationUrl                                                                      | 完整会话与密码证明                |
+| POST `/login/start`                     | rememberMe → authorizationUrl                                                                              | 来源准入、已绑定配置              |
+| POST `/binding/finish`、`/login/finish` | code、state、issuer、error（code/error 二选一，其余可空字段显式 null）→ `{completed:'binding' \| 'login'}` | 原流程 Cookie；绑定还须原完整会话 |
+
+提供方只回调固定 SPA `/login/oidc/callback`；浏览器立即移除敏感查询并同源 POST 完成，不开放任意 redirect URI 或跨站 POST 豁免。完整认证依赖 openid-client Discovery、PKCE、nonce/state、ID Token 声明与数字签名；接口不接收可直接兑换本地权限的邮箱。配置变更与解绑撤销关联 OIDC 会话，重复、过期、旧配置及身份变化拒绝。密码改变、Passkey 强制政策和来源准入在最终写事务重新核验。

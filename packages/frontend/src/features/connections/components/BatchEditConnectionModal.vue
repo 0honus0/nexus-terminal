@@ -12,7 +12,9 @@
 		UiSelect,
 		UiTextarea,
 	} from '@/foundation/ui';
-	import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
+	import { ConnectionTagPicker } from '@/features/tags/public';
+	import { useProxies } from '@/features/proxies/public';
+	import { useSshKeys } from '@/features/ssh-keys/public';
 	import { targetErrorKey } from '@/client/targets/target-types';
 	import { readConnectionChanges, readCredentialInput } from '@nexus-terminal/shared/targets/connections/http-codec';
 	import type { TargetConnectionChanges } from '@nexus-terminal/shared/targets/connections/http';
@@ -20,11 +22,9 @@
 	const props = defineProps<{ visible: boolean; count: number; loading?: boolean }>();
 	const emit = defineEmits<{ close: []; save: [command: ConnectionBatchCommand] }>();
 	const { t } = useI18n();
-	const capabilities = useRuntimeFeatureCapabilities();
 	const session = useAuthSession();
-	const proxies = capabilities.proxies;
-	const sshKeys = capabilities.sshKeys;
-	const ConnectionTagPicker = capabilities.tags.picker;
+	const proxies = useProxies();
+	const sshKeys = useSshKeys();
 	const port = ref('');
 	const username = ref('');
 	const password = ref('');
@@ -185,7 +185,7 @@
 							><UiSelect v-model="proxyId"
 								><option value="__nochange__">{{ t('connections.batchEdit.noChange') }}</option>
 								<option value="__none__">{{ t('connections.form.noProxy') }}</option>
-								<option v-for="item in proxies.items.value" :key="item.id" :value="String(item.id)">
+								<option v-for="item in proxies.proxies.value" :key="item.id" :value="String(item.id)">
 									{{ item.name }} ({{ item.type }})
 								</option></UiSelect
 							></UiFormField
@@ -229,7 +229,7 @@
 					<UiFormField v-if="auth === 'key'" :label="t('connections.form.sshKey')"
 						><UiSelect v-model="sshKeyId"
 							><option value="">{{ t('connections.form.noSshKey') }}</option>
-							<option v-for="key in sshKeys.items.value" :key="key.id" :value="String(key.id)">
+							<option v-for="key in sshKeys.keys.value" :key="key.id" :value="String(key.id)">
 								{{ key.name }}
 							</option></UiSelect
 						></UiFormField

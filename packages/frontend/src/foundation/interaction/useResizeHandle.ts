@@ -1,5 +1,5 @@
 import { useEventListener } from '@vueuse/core';
-import { computed, onBeforeUnmount, ref, type Ref } from 'vue';
+import { computed, onBeforeUnmount, onDeactivated, ref, type Ref } from 'vue';
 
 export interface ResizeSize {
 	width: number;
@@ -62,14 +62,21 @@ export function useResizeHandle(options: ResizeHandleOptions) {
 		options.onMove?.(currentSize());
 	};
 
-	function stopResize(event?: PointerEvent): void {
-		if (!isResizing.value) return;
-		if (event && event.pointerId !== activePointerId) return;
+	function releaseResize(event?: PointerEvent): boolean {
+		if (!isResizing.value || (event && event.pointerId !== activePointerId)) return false;
 
 		isResizing.value = false;
 		activePointerId = null;
 		document.body.style.userSelect = previousBodyUserSelect;
-		options.onEnd?.(currentSize());
+		return true;
+	}
+
+	function stopResize(event?: PointerEvent): void {
+		if (releaseResize(event)) options.onEnd?.(currentSize());
+	}
+
+	function cancelResize(event?: PointerEvent): void {
+		releaseResize(event);
 	}
 
 	const startResize = (event: PointerEvent): void => {
@@ -91,15 +98,14 @@ export function useResizeHandle(options: ResizeHandleOptions) {
 	const gestureTarget = computed(() => (isResizing.value ? window : undefined));
 	useEventListener(gestureTarget, 'pointermove', handlePointerMove);
 	useEventListener(gestureTarget, 'pointerup', stopResize);
-	useEventListener(gestureTarget, 'pointercancel', stopResize);
-
-	onBeforeUnmount(() => {
-		const shouldNotifyEnd = isResizing.value;
-		isResizing.value = false;
-		activePointerId = null;
-		if (shouldNotifyEnd) document.body.style.userSelect = previousBodyUserSelect;
-		if (shouldNotifyEnd) options.onEnd?.(currentSize());
+	useEventListener(gestureTarget, 'pointercancel', cancelResize);
+	useEventListener(gestureTarget, 'blur', () => cancelResize());
+	useEventListener(document, 'visibilitychange', () => {
+		if (document.hidden) cancelResize();
 	});
 
-	return { isResizing, startResize, stopResize };
+	onBeforeUnmount(() => cancelResize());
+	onDeactivated(() => cancelResize());
+
+	return { isResizing, startResize, stopResize, cancelResize };
 }

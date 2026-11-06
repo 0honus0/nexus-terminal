@@ -11,6 +11,7 @@
 	import { writeClipboardText } from '@/foundation/browser';
 	import { useWheelScale } from '@/foundation/interaction';
 	import { logger } from '@/client/logging/logger';
+	import { UiButton } from '@/foundation/ui';
 	import '@xterm/xterm/css/xterm.css';
 	import type { TerminalChannel } from '../ports/terminal-channel';
 	import type { TerminalOutput, TerminalVisualOptions } from '../model/terminal-types';
@@ -62,22 +63,34 @@
 	let terminal: Terminal | undefined;
 	let typeAhead: TerminalTypeAhead | undefined;
 	let predictionResizePending = false;
-	let renderedConnectionFailure: string | undefined;
 
-	const renderConnectionFailure = (): void => {
-		if (!props.connectionFailure) {
-			renderedConnectionFailure = undefined;
-			return;
-		}
-		if (!terminal || renderedConnectionFailure === props.connectionFailure) return;
-		renderedConnectionFailure = props.connectionFailure;
-		const reason = props.connectionFailure.replace(/[\x00-\x1f\x7f-\x9f]/gu, ' ').slice(0, 1000);
-		terminal.write(
-			`\r\n\x1b[31m${t('terminal.connectionFailed', { reason })}\x1b[0m\r\n\r\n${t(device.supportsTouchInteraction.value ? 'terminal.retryConnectionTouch' : 'terminal.retryConnection')}\r\n`,
-		);
+	const requestReconnect = (): void => {
+		if (!canInteract() || props.inputEnabled || !props.connectionFailure) return;
+		// Keep desktop typing in the terminal when the retry button disappears.
+		// Mobile recovery must not summon the software keyboard.
+		if (!device.supportsTouchInteraction.value) terminal?.focus();
+		emit('interaction');
 	};
 
-	watch(() => props.connectionFailure, renderConnectionFailure);
+	const handleRetryKey = (event: KeyboardEvent): void => {
+		if (!canInteract() || props.inputEnabled || !props.connectionFailure) return;
+		// Keep navigation, copying and browser shortcuts available while disconnected.
+		if (
+			event.isComposing ||
+			event.keyCode === 229 ||
+			event.repeat ||
+			event.ctrlKey ||
+			event.altKey ||
+			event.metaKey ||
+			!(event.key === 'Enter' || event.key.length === 1) ||
+			(event.target instanceof Element && event.target.closest('button, input, [role="search"]'))
+		)
+			return;
+		event.preventDefault();
+		event.stopImmediatePropagation();
+		requestReconnect();
+	};
+
 	let fit: FitAddon | undefined;
 	let searchAddon: SearchAddon | undefined;
 	let serializeAddon: SerializeAddon | undefined;
@@ -108,8 +121,8 @@
 	let historyCursorResetTask: Promise<boolean> | null = null;
 	let historyViewGeneration = 0;
 	let mobileSelectionSyncFrame: number | null = null;
-	const deferredTerminalOutput: Array<string | Uint8Array> = [];
-	let historyReplayingOutput: Array<string | Uint8Array> = [];
+	const deferredTerminalOutput: string[] = [];
+	let historyReplayingOutput: string[] = [];
 	const deferredOutputConsumers: Array<() => void> = [];
 	const hasVisualBackground = computed(() =>
 		Boolean(props.visual?.backgroundEnabled && (props.visual.backgroundImageUrl || props.visual.customHtml)),
@@ -372,25 +385,13 @@
 		return pagedHistorySession;
 	};
 
-	const appendDeferredTerminalOutput = (data: string | Uint8Array): boolean => {
-		const copy = typeof data === 'string' ? data : data.slice();
-		deferredTerminalOutput.push(copy);
-		deferredTerminalOutputBytes += outputByteLength(copy);
+	const appendDeferredTerminalOutput = (data: string): boolean => {
+		deferredTerminalOutput.push(data);
+		deferredTerminalOutputBytes += outputByteLength(data);
 		return deferredTerminalOutputBytes >= HISTORY_DEFERRED_OUTPUT_MAX_BYTES;
 	};
 
-	const deferredTerminalOutputReplay = (): string => {
-		const chunks = [...historyReplayingOutput, ...deferredTerminalOutput];
-		if (!chunks.length) return '';
-		const decoder = new TextDecoder();
-		let replay = '';
-		for (const chunk of chunks) {
-			if (typeof chunk === 'string') replay += chunk;
-			else replay += decoder.decode(chunk, { stream: true });
-		}
-		replay += decoder.decode();
-		return replay;
-	};
+	const deferredTerminalOutputReplay = (): string => [...historyReplayingOutput, ...deferredTerminalOutput].join('');
 
 	const liveReplaySnapshot = (): string => {
 		if (!historyBrowsing) {
@@ -450,6 +451,19 @@
 				})();
 				await historyEntryTask;
 				if (!terminal || generation !== historyViewGeneration) return;
+				// The application may have entered its alternate screen while the history request
+				// or parser barrier was pending. Keep that live screen and release diverted bytes in order.
+				if (terminal.buffer.active.type !== 'normal') {
+					const data = deferredTerminalOutput.splice(0).join('');
+					const bytes = deferredTerminalOutputBytes;
+					const consumers = deferredOutputConsumers.splice(0);
+					deferredTerminalOutputBytes = 0;
+					outputWriter.enqueue(data, bytes, !canInteract(), () => {
+						for (const consumed of consumers) consumed();
+					});
+					void resetHistoryCursor();
+					return;
+				}
 				historyLiveSnapshot = `${serializeTerminalSnapshot(
 					terminal,
 					serializeAddon,
@@ -586,7 +600,14 @@
 	};
 
 	const loadPreviousOutput = async (): Promise<void> => {
-		if (disposed || historyLoading || historyRebuilding || !props.channel.loadPreviousOutput) return;
+		if (
+			disposed ||
+			historyLoading ||
+			historyRebuilding ||
+			terminal?.buffer.active.type !== 'normal' ||
+			!props.channel.loadPreviousOutput
+		)
+			return;
 		activatePagedHistoryMode();
 		const generation = historyViewGeneration;
 		const remotePtyGeneration = terminalState.remotePtyGeneration.value;
@@ -600,6 +621,10 @@
 			);
 			const page = await props.channel.loadPreviousOutput(pageBytes);
 			if (generation !== historyViewGeneration) return;
+			if (terminal?.buffer.active.type !== 'normal') {
+				void resetHistoryCursor();
+				return;
+			}
 			if (page?.data.byteLength) await rebuildHistoryWindow(page.data);
 		} catch (cause) {
 			logger.warn({ err: cause }, 'Terminal history page failed');
@@ -1296,8 +1321,14 @@
 			mobileLongPressTriggered = false;
 		} else if (device.supportsTouchInteraction.value && event.touches.length === 0) {
 			const shouldFocus = event.type !== 'touchcancel' && !mobileTouchMoved && !mobileGestureHadMultipleTouches;
-			if (shouldFocus) emit('interaction');
-			restoreMobileSoftKeyboard(shouldFocus);
+			if (shouldFocus && props.connectionFailure) {
+				event.preventDefault();
+				requestReconnect();
+				restoreMobileSoftKeyboard(false);
+			} else {
+				if (shouldFocus) emit('interaction');
+				restoreMobileSoftKeyboard(shouldFocus);
+			}
 		}
 		mobileSelectionLastPoint = null;
 		if (event.touches.length < 2) pinchStartDistance = 0;
@@ -1310,6 +1341,8 @@
 
 	const resetInteractions = (): void => {
 		interactionGeneration += 1;
+		// A compositionend already queued by the browser must not commit text into a retired view.
+		if (terminal?.textarea) terminal.textarea.value = '';
 		clipboardGestureAt = -Infinity;
 		clearMobileLongPressTimer();
 		mobileLongPressStart = null;
@@ -1558,20 +1591,17 @@
 		root.value!.addEventListener('touchcancel', handleTouchEnd, { passive: false });
 		terminal.attachCustomKeyEventHandler((event) => {
 			if (!canInteract()) return false;
-			// Keep an explicit key press able to kick reconnect without forwarding
-			// that key to a transport whose current attachment is not ready.
 			if (!props.inputEnabled) {
 				if (
-					props.connectionFailure &&
 					event.type === 'keydown' &&
-					!event.isComposing &&
-					event.keyCode !== 229 &&
-					event.key !== 'Unidentified' &&
-					!event.repeat &&
-					!['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)
+					event.ctrlKey &&
+					event.shiftKey &&
+					!event.altKey &&
+					!event.metaKey &&
+					event.key.toLowerCase() === 'c'
 				) {
 					event.preventDefault();
-					emit('interaction');
+					void copySelection();
 				}
 				return false;
 			}
@@ -1626,7 +1656,7 @@
 			}
 			if (!canInteract() || props.inputEnabled || !props.connectionFailure) return;
 			consumeRetryInput(event);
-			emit('interaction');
+			requestReconnect();
 		};
 
 		const retryCompositionInput = (event: Event): void => {
@@ -1637,15 +1667,28 @@
 			if (event.type === 'compositionend') {
 				consumeRetryInput(event);
 				retryComposition = false;
-				if (canInteract() && !props.inputEnabled && props.connectionFailure) emit('interaction');
+				requestReconnect();
 			}
 		};
 
 		const inputRoot = root.value;
+
+		const guardInactiveInput = (event: Event): void => {
+			if (canInteract()) return;
+			if (terminal?.textarea) terminal.textarea.value = '';
+			// Let xterm finish an existing composition with an empty value, clearing its own IME state.
+			if (event.type === 'compositionend') return;
+			if (event.cancelable) event.preventDefault();
+			event.stopImmediatePropagation();
+		};
+
+		const inputEvents = ['input', 'paste', 'compositionstart', 'compositionupdate', 'compositionend'];
+		for (const type of inputEvents) inputRoot?.addEventListener(type, guardInactiveInput, true);
 		inputRoot?.addEventListener('input', retryInput, true);
 		for (const type of ['compositionstart', 'compositionupdate', 'compositionend'])
 			inputRoot?.addEventListener(type, retryCompositionInput, true);
 		cleanup.push(() => {
+			for (const type of inputEvents) inputRoot?.removeEventListener(type, guardInactiveInput, true);
 			inputRoot?.removeEventListener('input', retryInput, true);
 			for (const type of ['compositionstart', 'compositionupdate', 'compositionend'])
 				inputRoot?.removeEventListener(type, retryCompositionInput, true);
@@ -1710,9 +1753,10 @@
 			props.channel.onConnected?.(restorePresentation) ?? (() => undefined),
 			props.channel.onResumeComplete?.(() => {
 				const target = terminal;
+				if (!target) return;
 				const generation = terminalState.remotePtyGeneration.value;
-				outputWriter.flush();
-				target?.write('', () => {
+				// Restoration includes writes waiting in TypeAhead, not only xterm's current parser queue.
+				outputWriter.barrier(() => {
 					if (
 						!disposed &&
 						terminal === target &&
@@ -1776,7 +1820,6 @@
 		void document.fonts.ready.then(() => {
 			if (terminal && root.value?.isConnected) scheduleGeometrySync();
 		});
-		renderConnectionFailure();
 		emit('ready');
 	});
 
@@ -1897,6 +1940,8 @@
 		:class="{ 'has-text-stroke': visual?.textStroke?.enabled, 'has-text-shadow': visual?.textShadow?.enabled }"
 		:style="terminalStyle"
 		:data-font-size="renderedFontSize"
+		:tabindex="connectionFailure ? 0 : undefined"
+		@keydown.capture="handleRetryKey"
 	>
 		<div
 			v-if="visual?.backgroundEnabled && visual.backgroundImageUrl"
@@ -1929,6 +1974,34 @@
 			role="application"
 			:aria-label="t('terminal.ariaLabel')"
 		></div>
+		<div
+			v-if="connectionFailure"
+			class="terminal-reconnect-notice absolute inset-x-3 bottom-3 z-20 mx-auto max-w-lg rounded-xl border border-border bg-background/95 p-3 text-foreground shadow-lg"
+			role="status"
+			aria-live="polite"
+			@pointerdown.stop
+		>
+			<div class="flex items-start gap-3">
+				<i class="fa-solid fa-plug-circle-exclamation mt-0.5 text-status-warning" aria-hidden="true"></i>
+				<div class="min-w-0 flex-1">
+					<p class="text-sm font-medium">{{ t('terminal.connectionInterrupted') }}</p>
+					<p class="mt-1 break-words text-sm text-text-secondary">{{ connectionFailure }}</p>
+				</div>
+			</div>
+			<div class="mt-3 flex flex-wrap items-center justify-between gap-2">
+				<span class="text-xs text-text-secondary">{{
+					t(
+						device.supportsTouchInteraction.value
+							? 'terminal.retryConnectionTouch'
+							: 'terminal.retryConnection',
+					)
+				}}</span>
+				<UiButton tone="primary" class="shrink-0" @click="requestReconnect">
+					<template #leading><i class="fa-solid fa-rotate-right" aria-hidden="true"></i></template>
+					{{ t('terminal.reconnect') }}
+				</UiButton>
+			</div>
+		</div>
 		<template v-if="device.supportsTouchInteraction.value && mobileSelectionHandles.visible">
 			<button
 				v-show="mobileSelectionHandles.startVisible"

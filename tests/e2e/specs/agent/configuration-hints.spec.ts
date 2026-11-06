@@ -80,6 +80,20 @@ for (const profile of ['Desktop Chrome', 'Pixel 7']) {
 				await expect(trigger).toHaveText('');
 				await expect(trigger.locator('.fa-server')).toBeVisible();
 				await expect(trigger.locator('.fa-chevron-down')).toHaveCount(0);
+				await expect.poll(() => trigger.evaluate((element) => element.getBoundingClientRect().height)).toBe(44);
+				const controlsFit = await hub.locator('.agent-composer-toolbar').evaluate((toolbar) => {
+					const bounds = toolbar.getBoundingClientRect();
+					const buttons = Array.from(toolbar.querySelectorAll('button')).map((button) =>
+						button.getBoundingClientRect(),
+					);
+					return buttons.every(
+						(button, index) =>
+							button.left >= bounds.left &&
+							button.right <= bounds.right &&
+							buttons.slice(index + 1).every((next) => button.right <= next.left),
+					);
+				});
+				expect(controlsFit).toBe(true);
 				await trigger.click();
 				await expect(target).toBeChecked();
 				await expect(secondTarget).not.toBeChecked();

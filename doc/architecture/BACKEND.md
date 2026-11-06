@@ -948,3 +948,41 @@ Remote register 安装 `/api/v1/transfers/send`、`status`、`status/:taskId`、
 6. **数据、事务与并发**：terminal.input/resize经requireTerminal完整授权，flow按原pending-resume规则完整授权；这三个操作跳过dispatch外层的重复校验，其它操作继续原围栏；不缓存身份或授权。
 7. **生命周期与失败**：权限撤销、挂起租约到期及attachment变化仍由allowed检查；SSH选项设置失败沿原catch销毁客户端，连接阶段统一保留原资源owner与取消收敛；不改发送顺序、输出窗口和消费ACK。
 8. **当前能力与验收**：源码及静态证据见PLAN/testing；没有实测数据时不承诺具体毫秒改善，TCP策略对已有连接不追溯生效，须新建SSH连接；高RTT下真实回显仍需网络往返。
+
+## Access OIDC
+
+### 1. 职责与范围
+
+Access 持有单提供方配置、已有管理员的 issuer + subject 绑定及短期认证流程；不按邮箱自动认领身份。openid-client 负责 Discovery、Code + PKCE、state/nonce、ID Token 签名和声明校验。OIDC 是独立登录方式，本地 TOTP 属密码登录流程；启用强制 Passkey 的账号不允许 OIDC 登录，提供方负责其自身多因素策略。
+
+### 2. 子功能与目录
+
+`access/oidc/{model,service,storage,adapters/sqlite}` 持有配置和流程；HTTP 在 Access 既有 interfaces/http；Platform security 的 OIDC Port/Adapter 隔离 openid-client。沿用 Access 五分钟认证流程期限与三十天会话期限，不建立第二套 Session 插件。
+
+### 3. 依赖方向
+
+HTTP → Service → Model → storage/Platform；SQLite Adapter 仅消费 storage 契约和同模块存储能力。Service 复用 Access 密码证明；事务内再验证原会话。
+
+### 4. 类型与转换
+
+Shared access/oidc 归属设置、启动、完成与状态协议。Interface 逐字段映射应用类型；Model 转换存储事实、秘密及技术请求；库配置和令牌只留技术边界，不回传浏览器。
+
+### 5. 入口与安装
+
+Access register 安装 OIDC；认证入口含公开提供方状态、登录启动/完成，管理入口含设置读取/保存、绑定启动/完成和解绑。固定同源 `/login/oidc/callback` 返回 SPA，立即移除敏感查询后同源 POST，保持现有 CSRF/Origin 检查。
+
+### 6. 数据、事务与并发
+
+追加迁移 v4 建配置、流程和 OIDC 会话归属表；不改已执行迁移。配置 CAS、会话及密码版本、来源封禁、绑定、到期在实际提交事务复查。独立 HttpOnly Lax Cookie 绑定浏览器；PKCE、nonce、state、配置版本及固定回调绑定流程，回调先以 consumed 标记单次认领，事务最终提交前仍须存在且有效；退出/新流程能删除已经认领的流程，阻止迟到签发。变更配置/解绑清理流程并撤销关联 OIDC 会话，普通登录不受影响。秘密使用现有 SecretBox；认证表排除快照导入。
+
+### 7. 生命周期与失败
+
+流程沿用五分钟期限，过期惰性清理，无额外周期任务。网络调用跟随请求断开和原流程到期取消，库默认网络超时仍生效；不重放 code exchange。配置、授权、颁发在外部验证后复查；会话交付复用 deliverAccessResult，断线未交付则撤销。未知提交保留 operation_unknown，不自动重试写入。
+
+### 8. 当前能力与验收
+
+Passkey 名称、登录布局与 OIDC 已实现；协议、存储与浏览器专项通过，具体范围以 testing/HISTORY 为准。验证真实签名、PKCE、nonce/state、浏览器绑定、未绑定身份拒绝、过期/重放/配置变更、撤销及迁移，不用单独 mock 库验证替代协议链。
+
+### Agent 命令输出存储
+
+Job 日志与模型预览分离，沿 Agent Model 调用 Platform TextLogStore。Native 实现使用 Node 文件能力、UTF-8 数据文件和定长索引，支持有界追加、字节分页和真实空间不足等待；技术层不持 Agent 身份或业务保留期。装配在数据库同级 `tool-logs`，Job Service 决定何时回收，未知执行不重放。完整 owner、协议及生命周期见 [Agent 完整 Shell 输出存储](AGENT.md#完整-shell-输出存储)。本轮无新增数据库迁移；当前 JSON 备份不含完整日志，数据卷迁移需保留该目录。

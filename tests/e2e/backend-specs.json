@@ -11,6 +11,7 @@
   "http/fastify-transport.spec.ts",
   "http/mutation-capacity.spec.ts",
   "http/mutation-origin.spec.ts",
+  "http/passkey-naming.spec.ts",
   "http/quick-commands-audit.spec.ts",
   "http/rdp-remoteapp.spec.ts",
   "http/ssh-key-audit-failure.spec.ts",
@@ -32,5 +33,6 @@
   "ssh/suspend-log-compaction.spec.ts",
   "ssh/terminal-protocol.spec.ts",
   "ssh/upload-prepare-profile.spec.ts",
-  "websocket/authenticated-revocation.spec.ts"
+  "websocket/authenticated-revocation.spec.ts",
+  "http/oidc.spec.ts"
 ]

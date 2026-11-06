@@ -1,0 +1,7 @@
+:root {
+	--app-header-height: calc(60px + env(safe-area-inset-top, 0px));
+}
+
+body:has(.app-header) .ui-notification-host {
+	top: calc(var(--app-header-height) + 0.75rem);
+}

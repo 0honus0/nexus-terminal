@@ -191,3 +191,48 @@ for (const modelId of ['e2e-image-moderation', 'e2e-image-policy']) {
 		expect(await attempts.json()).toEqual({ [modelId]: 1 });
 	});
 }
+
+test('expanded Provider model IDs remain readable and selectable on narrow screens', async ({ page, request }) => {
+	await loginAsInitialAdmin(request);
+	await loginAsInitialAdmin(page.request);
+	await setUiLanguage(page.request);
+	const modelId = 'organization/' + 'long-model-identifier-'.repeat(12) + 'final';
+	const provider = await requestAgentJson(
+		request,
+		{
+			method: 'POST',
+			path: '/ai/providers',
+			status: 201,
+			data: {
+				kind: 'openai-compatible',
+				displayName: 'Long model ID review',
+				baseUrl: E2E_URLS.openAiProviderOrigin + '/v1',
+				protocol: 'chat-completions',
+				models: [{ id: modelId, contextWindow: 131072, maxOutputTokens: 128, supportsTools: true }],
+				enabled: true,
+			},
+		},
+		readAgentProviderView,
+	);
+	await page.goto('/settings?tab=agent');
+	const card = page.getByRole('article').filter({ hasText: provider.displayName });
+	await card.locator('summary').click();
+	const model = card.getByText(modelId, { exact: true });
+	for (const width of [320, 390, 1440]) {
+		await page.setViewportSize({ width, height: 900 });
+		await expect(model).toBeVisible();
+		const selection = await model.evaluate((element) => {
+			const range = document.createRange();
+			range.selectNodeContents(element);
+			const selection = window.getSelection();
+			selection?.removeAllRanges();
+			selection?.addRange(range);
+			return {
+				text: selection?.toString(),
+				selectable: getComputedStyle(element).userSelect,
+				fits: element.scrollWidth <= element.clientWidth + 1,
+			};
+		});
+		expect(selection).toEqual({ text: modelId, selectable: 'text', fits: true });
+	}
+});

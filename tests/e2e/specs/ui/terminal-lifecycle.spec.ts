@@ -3,7 +3,9 @@ import { expect, test, type Page } from '../../support/fixtures';
 interface TerminalLifecycleHarness {
 	mount(): Promise<void>;
 	unmount(): void;
-	output(data: string | number[]): void;
+	output(data: string | number[], viewport?: { columns: number; rows: number }): void;
+	completeResume(): void;
+	resizes: Array<{ columns: number; rows: number }>;
 	input(data: string): void;
 	active(value: boolean): Promise<void>;
 	paste(): Promise<boolean>;
@@ -22,6 +24,7 @@ interface TerminalLifecycleHarness {
 	historyRequests: number;
 	inputs: string[];
 	readonly columns: number;
+	readonly rows: number;
 	consumed: number;
 	listeners: number;
 }
@@ -54,7 +57,14 @@ async function mountTerminalHarness(page: Page): Promise<void> {
 		let terminalApi: { paste(): Promise<boolean>; serialize(): Promise<string>; scrollToBottom(): void } | null =
 			null;
 		const inputHandlers = new Set<(data: string) => void>();
-		const outputHandlers = new Set<(output: { data: string | Uint8Array; consumed(): void }) => void>();
+		const outputHandlers = new Set<
+			(output: {
+				data: string | Uint8Array;
+				viewport?: { columns: number; rows: number };
+				consumed(): void;
+			}) => void
+		>();
+		const resumeHandlers = new Set<() => void>();
 		let resolveClipboard: ((value: string) => void) | null = null;
 		let resolveHistory: ((value: { data: Uint8Array; hasMore: boolean }) => void) | null = null;
 		let historyAvailable = false;
@@ -62,6 +72,7 @@ async function mountTerminalHarness(page: Page): Promise<void> {
 		let resolveCursorReset: ((available: boolean) => void) | null = null;
 		const harness: TerminalLifecycleHarness = {
 			inputs: [],
+			resizes: [],
 			consumed: 0,
 			historyRequests: 0,
 			cursorResets: 0,
@@ -73,6 +84,10 @@ async function mountTerminalHarness(page: Page): Promise<void> {
 
 			get columns() {
 				return state.geometry.value?.columns ?? 0;
+			},
+
+			get rows() {
+				return state.geometry.value?.rows ?? 0;
 			},
 
 			get listeners() {
@@ -99,7 +114,14 @@ async function mountTerminalHarness(page: Page): Promise<void> {
 									return () => inputHandlers.delete(handler);
 								},
 
-								resize: () => undefined,
+								resize: (viewport: { columns: number; rows: number }) => {
+									harness.resizes.push(viewport);
+								},
+
+								onResumeComplete(handler: () => void) {
+									resumeHandlers.add(handler);
+									return () => resumeHandlers.delete(handler);
+								},
 
 								onOutput(handler: (output: { data: string | Uint8Array; consumed(): void }) => void) {
 									outputHandlers.add(handler);
@@ -146,13 +168,18 @@ async function mountTerminalHarness(page: Page): Promise<void> {
 				for (const handler of inputHandlers) handler(data);
 			},
 
-			output(data) {
+			output(data, viewport) {
 				for (const handler of outputHandlers)
 					handler({
 						data: Array.isArray(data) ? new Uint8Array(data) : data,
+						viewport,
 
 						consumed: () => harness.consumed++,
 					});
+			},
+
+			completeResume() {
+				for (const handler of resumeHandlers) handler();
 			},
 
 			async active(value) {
@@ -245,6 +272,202 @@ test('terminal cancels delayed clipboard input after switching away and back', a
 	});
 	expect(pasted).toBe(false);
 	expect(await page.evaluate(() => window.__terminalLifecycle.inputs)).toEqual([]);
+});
+
+for (const hidden of [false, true]) {
+	test(`terminal rejects late DOM input while ${hidden ? 'the page is hidden' : 'its pane is inactive'} but still answers protocol queries`, async ({
+		page,
+	}) => {
+		await mountTerminalHarness(page);
+		await page.evaluate(async (hidden) => {
+			const harness = window.__terminalLifecycle;
+			if (hidden) {
+				Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+				document.dispatchEvent(new Event('visibilitychange'));
+			} else await harness.active(false);
+			const textarea = document.querySelector<HTMLTextAreaElement>('#terminal-lifecycle-host textarea')!;
+			textarea.value = 'STALE_INPUT';
+			textarea.dispatchEvent(
+				new InputEvent('input', { bubbles: true, inputType: 'insertText', data: 'STALE_INPUT' }),
+			);
+			const clipboardData = new DataTransfer();
+			clipboardData.setData('text/plain', 'STALE_PASTE');
+			textarea.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData }));
+			harness.output('\x1b[5n');
+			await harness.serialize();
+		}, hidden);
+		expect(await page.evaluate(() => window.__terminalLifecycle.inputs)).toEqual(['\x1b[0n']);
+		await page.evaluate(async () => {
+			Reflect.deleteProperty(document, 'visibilityState');
+			document.dispatchEvent(new Event('visibilitychange'));
+			await window.__terminalLifecycle.active(true);
+		});
+		await page.locator('#terminal-lifecycle-host textarea').press('x');
+		await expect.poll(() => page.evaluate(() => window.__terminalLifecycle.inputs)).toEqual(['\x1b[0n', 'x']);
+	});
+}
+
+test('alternate-screen applications keep wheel input without fetching suspended history', async ({ page }) => {
+	await mountTerminalHarness(page);
+	await page.evaluate(async () => {
+		const harness = window.__terminalLifecycle;
+		harness.output('\x1b[?1049hCURRENT_APPLICATION');
+		await harness.serialize();
+		harness.delayHistory();
+	});
+	const terminal = page.locator('#terminal-lifecycle-host .terminal-inner-container');
+	await terminal.dispatchEvent('wheel', { deltaY: -100 });
+	expect(await page.evaluate(() => window.__terminalLifecycle.historyRequests)).toBe(0);
+	await expect(page.locator('#terminal-lifecycle-host .xterm-rows')).toContainText('CURRENT_APPLICATION');
+	await page.evaluate(async () => {
+		window.__terminalLifecycle.output('\x1b[?1049l');
+		await window.__terminalLifecycle.serialize();
+	});
+	await terminal.dispatchEvent('wheel', { deltaY: -100 });
+	await expect.poll(() => page.evaluate(() => window.__terminalLifecycle.historyRequests)).toBe(1);
+	await page.evaluate(() => window.__terminalLifecycle.releaseHistory('OLDER_SHELL_OUTPUT\r\n'));
+	await expect(page.locator('#terminal-lifecycle-host .xterm-rows')).toContainText('OLDER_SHELL_OUTPUT');
+});
+
+test('resizing during historical browsing restores the same live screen as resizing without history', async ({
+	page,
+}) => {
+	await mountTerminalHarness(page);
+	const baseline = await page.evaluate(async () => {
+		const harness = window.__terminalLifecycle;
+		harness.output('A'.repeat(harness.columns) + '\r\nSECOND_ROW\r\nTHIRD_ROW\x1b[2;5H');
+		const snapshot = await harness.serialize();
+		harness.delayHistory();
+		return { snapshot, columns: harness.columns, rows: harness.rows };
+	});
+	await page.locator('#terminal-lifecycle-host .terminal-inner-container').dispatchEvent('wheel', { deltaY: -100 });
+	await expect.poll(() => page.evaluate(() => window.__terminalLifecycle.historyRequests)).toBe(1);
+	await page.evaluate(() =>
+		window.__terminalLifecycle.releaseHistory(Array.from({ length: 100 }, (_, i) => `OLD_ROW_${i}\r\n`).join('')),
+	);
+	await expect(page.locator('#terminal-lifecycle-host .xterm-rows')).toContainText('OLD_ROW_');
+	await page.locator('#terminal-lifecycle-host').evaluate((host) => {
+		host.style.width = '390px';
+	});
+	await expect.poll(() => page.evaluate(() => window.__terminalLifecycle.columns)).toBeLessThan(baseline.columns);
+	await page.evaluate(() => window.__terminalLifecycle.scrollToBottom());
+	await expect(page.locator('#terminal-lifecycle-host .xterm-rows')).toContainText('THIRD_ROW');
+	const result = await page.evaluate(async (baseline) => {
+		const harness = window.__terminalLifecycle;
+		const actual = await harness.serialize();
+		const path = '/__e2e__/browser-terminal.js';
+		const { Terminal, SerializeAddon } = await import(path);
+		const reference = new Terminal({ cols: baseline.columns, rows: baseline.rows, convertEol: true });
+		const serializer = new SerializeAddon();
+		reference.loadAddon(serializer);
+		try {
+			await new Promise<void>((resolve) => reference.write(baseline.snapshot, resolve));
+			reference.resize(harness.columns, harness.rows);
+			return { actual, expected: serializer.serialize() };
+		} finally {
+			reference.dispose();
+		}
+	}, baseline);
+	expect(result.actual).toBe(result.expected);
+});
+
+test('a composition that ends after leaving the terminal cannot send stale text and the next composition works', async ({
+	page,
+}) => {
+	await mountTerminalHarness(page);
+	await page.locator('#terminal-lifecycle-host textarea').evaluate((element) => {
+		const input = element as HTMLTextAreaElement;
+		input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+		input.value = '旧输入';
+		input.dispatchEvent(new CompositionEvent('compositionupdate', { bubbles: true, data: input.value }));
+	});
+	await page.evaluate(() => window.__terminalLifecycle.active(false));
+	await page.locator('#terminal-lifecycle-host textarea').evaluate((element) => {
+		const input = element as HTMLTextAreaElement;
+		input.value = '旧输入';
+		input.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: input.value }));
+	});
+	await expect(page.locator('#terminal-lifecycle-host .composition-view')).not.toHaveClass(/active/);
+	await page.evaluate(async () => {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		await window.__terminalLifecycle.active(true);
+	});
+	expect(await page.evaluate(() => window.__terminalLifecycle.inputs)).toEqual([]);
+	await page.locator('#terminal-lifecycle-host textarea').evaluate((element) => {
+		const input = element as HTMLTextAreaElement;
+		input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+		input.value = '新输入';
+		input.dispatchEvent(new CompositionEvent('compositionupdate', { bubbles: true, data: input.value }));
+		input.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: input.value }));
+	});
+	await expect.poll(() => page.evaluate(() => window.__terminalLifecycle.inputs)).toEqual(['新输入']);
+});
+
+test('a pending history page cannot replace an alternate-screen application started during its request', async ({
+	page,
+}) => {
+	await mountTerminalHarness(page);
+	await page.evaluate(() => window.__terminalLifecycle.delayHistory());
+	await page.locator('#terminal-lifecycle-host .terminal-inner-container').dispatchEvent('wheel', { deltaY: -100 });
+	await expect.poll(() => page.evaluate(() => window.__terminalLifecycle.historyRequests)).toBe(1);
+	await page.evaluate(async () => {
+		const harness = window.__terminalLifecycle;
+		harness.output('\x1b[?1049hNEW_APPLICATION');
+		harness.releaseHistory('OBSOLETE_HISTORY');
+		await Promise.resolve();
+		harness.output('\r\nLIVE_AFTER_HISTORY_RESPONSE');
+	});
+	await expect.poll(() => page.evaluate(() => window.__terminalLifecycle.cursorResets)).toBe(1);
+	await expect(page.locator('#terminal-lifecycle-host .xterm-rows')).toContainText('NEW_APPLICATION');
+	await expect(page.locator('#terminal-lifecycle-host .xterm-rows')).not.toContainText('OBSOLETE_HISTORY');
+	await expect(page.locator('#terminal-lifecycle-host .xterm-rows')).toContainText('LIVE_AFTER_HISTORY_RESPONSE');
+	await expect.poll(() => page.evaluate(() => window.__terminalLifecycle.consumed)).toBe(2);
+});
+
+test('resume completion waits for queued viewport and output before synchronizing the PTY size', async ({ page }) => {
+	await mountTerminalHarness(page);
+	const result = await page.evaluate(async () => {
+		const path = '/__e2e__/browser-terminal.js';
+		const { Terminal } = await import(path);
+		const harness = window.__terminalLifecycle;
+		await harness.serialize();
+		const originalWrite = Terminal.prototype.write;
+		let hold = true;
+		let release: (() => void) | undefined;
+		const pending = new Promise<void>((resolve) => {
+			Terminal.prototype.write = function (data: string | Uint8Array, callback?: () => void) {
+				if (hold && data === '' && callback) {
+					hold = false;
+					originalWrite.call(this, data, () => {
+						release = callback;
+						resolve();
+					});
+				} else originalWrite.call(this, data, callback);
+			};
+		});
+		try {
+			harness.resizes.length = 0;
+			harness.output('', { columns: 40, rows: 10 });
+			harness.output('RESTORED_SCREEN');
+			harness.completeResume();
+			// The foreground size sync must remain fenced by pending restoration.
+			window.dispatchEvent(new Event('pageshow'));
+			await pending;
+			for (let i = 0; i < 3; i++) await new Promise(requestAnimationFrame);
+			const premature = harness.resizes.length;
+			release?.();
+			release = undefined;
+			Terminal.prototype.write = originalWrite;
+			await harness.serialize();
+			return { premature };
+		} finally {
+			Terminal.prototype.write = originalWrite;
+			release?.();
+		}
+	});
+	expect(result.premature).toBe(0);
+	await expect(page.locator('#terminal-lifecycle-host .xterm-rows')).toContainText('RESTORED_SCREEN');
+	await expect.poll(() => page.evaluate(() => window.__terminalLifecycle.columns)).toBeGreaterThan(40);
 });
 
 test('terminal cancels delayed clipboard input after its remote PTY is replaced', async ({ page }) => {

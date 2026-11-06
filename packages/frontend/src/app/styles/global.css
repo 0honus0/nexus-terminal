@@ -1,7 +1,20 @@
 @import 'tailwindcss';
 @import './tokens.css';
-@import '../../foundation/ui/uiGen2.css';
-@import '../../foundation/ui/uiCatalog.css';
+@import '../../foundation/ui/styles/materials.css';
+@import './shell.css';
+@import '../../foundation/ui/styles/surfaces.css';
+@import '../../foundation/ui/styles/feedback-states.css';
+@import '../../foundation/ui/styles/controls.css';
+@import '../../foundation/ui/styles/selection.css';
+@import '../../foundation/ui/styles/dialogs.css';
+@import './update-prompt.css';
+@import '../../shared/feedback/styles/notifications.css';
+@import '../../foundation/ui/styles/motion-accessibility.css';
+@import '../../foundation/ui/styles/confirmation-actions.css';
+@import '../../foundation/ui/styles/catalog.css';
+@import '../../foundation/ui/styles/settings.css';
+@import '../../features/proxies/styles/catalog-toolbar.css';
+@import '../../features/notifications/styles/catalog-toolbar.css';
 
 html {
 	scrollbar-gutter: stable;

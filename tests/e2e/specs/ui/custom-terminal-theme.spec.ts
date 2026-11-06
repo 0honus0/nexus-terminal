@@ -7,6 +7,42 @@ import { step } from '../../support/steps';
 const THEME_NAME = 'E2E Custom Terminal Theme UI';
 const EDITED_THEME_NAME = 'E2E Custom Terminal Theme UI Edited';
 
+test('appearance window cancels a drag on blur and ignores its backdrop release', async ({ page, context }) => {
+	await loginAsInitialAdmin(context.request);
+	await setUiLanguage(context.request);
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto('/');
+	await page.getByTitle('Customize Style').click();
+	const customizer = page.getByRole('heading', { name: 'Appearance Customizer', exact: true }).locator('../..');
+	const header = customizer.locator('header');
+	const originalSelection = await page.evaluate(() => document.body.style.userSelect);
+	const bounds = await header.boundingBox();
+	expect(bounds).toBeTruthy();
+	await page.mouse.move(bounds!.x + 50, bounds!.y + 20);
+	await page.mouse.down();
+	await page.mouse.move(bounds!.x + 75, bounds!.y + 35);
+	const dragged = await customizer.boundingBox();
+	await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+	await page.mouse.move(bounds!.x + 150, bounds!.y + 70);
+	expect(await customizer.boundingBox()).toEqual(dragged);
+	await expect.poll(() => page.evaluate(() => document.body.style.userSelect)).toBe(originalSelection);
+	await page.mouse.up();
+	await header.dispatchEvent('pointerdown', { pointerId: 41, isPrimary: true, button: 0 });
+	const overlay = customizer.locator('..');
+	await overlay.dispatchEvent('pointerup', { pointerId: 41 });
+	await overlay.dispatchEvent('click');
+	await expect(customizer).toBeVisible();
+	await page.setViewportSize({ width: 1000, height: 600 });
+	await expect
+		.poll(async () => {
+			const box = await customizer.boundingBox();
+			return Boolean(box && box.x >= 0 && box.y >= 0 && box.x + box.width <= 1000 && box.y + box.height <= 600);
+		})
+		.toBe(true);
+	await header.getByRole('button', { name: 'Close', exact: true }).click();
+	await expect(customizer).toBeHidden();
+});
+
 async function cleanupThemes(request: APIRequestContext): Promise<void> {
 	for (const theme of await listTestThemes(request)) {
 		if (!theme.preset && [THEME_NAME, EDITED_THEME_NAME].includes(theme.name)) {

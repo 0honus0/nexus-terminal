@@ -1,0 +1,15 @@
+.ui-catalog-toolbar--proxy {
+	grid-template-columns: minmax(180px, 1fr) 160px;
+}
+
+@media (max-width: 620px) {
+	.ui-catalog-toolbar--proxy {
+		grid-template-columns: minmax(0, 1fr) minmax(112px, 0.38fr);
+	}
+}
+
+@media (max-width: 360px) {
+	.ui-catalog-toolbar--proxy {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}

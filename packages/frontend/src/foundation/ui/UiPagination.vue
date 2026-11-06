@@ -1,6 +1,5 @@
 <script setup lang="ts">
 	import UiButton from './UiButton.vue';
-	import type { UiDensity } from './uiTypes';
 
 	const props = withDefaults(
 		defineProps<{
@@ -9,11 +8,9 @@
 			previousLabel: string;
 			nextLabel: string;
 			label?: string;
-			density?: UiDensity;
 		}>(),
 		{
 			label: 'Pagination',
-			density: 'compact',
 		},
 	);
 

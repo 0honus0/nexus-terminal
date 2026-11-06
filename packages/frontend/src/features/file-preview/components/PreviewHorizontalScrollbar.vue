@@ -1,6 +1,6 @@
 <script setup lang="ts">
 	import { useResizeObserver } from '@vueuse/core';
-	import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
+	import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, shallowRef, watch } from 'vue';
 
 	const props = withDefaults(
 		defineProps<{
@@ -18,6 +18,8 @@
 	const viewportWidth = ref(0);
 	const hasOverflow = computed(() => contentWidth.value > viewportWidth.value + 1);
 
+	let mounted = false;
+	let lifecycleActive = true;
 	let observedTarget: HTMLElement | null = null;
 	const observedElements = shallowRef<Array<HTMLElement | SVGElement>>([]);
 	let resizeObserver: ReturnType<typeof useResizeObserver> | null = null;
@@ -35,13 +37,14 @@
 	} | null = null;
 
 	const syncTrackFromTarget = () => {
-		if (!observedTarget || !trackRef.value) return;
+		if (!props.active || !lifecycleActive || !observedTarget || !trackRef.value) return;
 		if (Math.abs(trackRef.value.scrollLeft - observedTarget.scrollLeft) <= 1) return;
 		trackRef.value.scrollLeft = observedTarget.scrollLeft;
 	};
 
 	const refreshMetrics = () => {
 		refreshFrame = 0;
+		if (!props.active || !lifecycleActive) return;
 		if (!observedTarget) {
 			contentWidth.value = 0;
 			viewportWidth.value = 0;
@@ -54,6 +57,7 @@
 	};
 
 	const queueRefresh = () => {
+		if (!props.active || !lifecycleActive || !observedTarget) return;
 		if (refreshFrame) cancelAnimationFrame(refreshFrame);
 		refreshFrame = requestAnimationFrame(refreshMetrics);
 	};
@@ -61,7 +65,7 @@
 	const handleTargetScroll = () => syncTrackFromTarget();
 
 	const handleTrackScroll = () => {
-		if (!observedTarget || !trackRef.value) return;
+		if (!props.active || !lifecycleActive || !observedTarget || !trackRef.value) return;
 		if (Math.abs(observedTarget.scrollLeft - trackRef.value.scrollLeft) <= 1) return;
 		observedTarget.scrollLeft = trackRef.value.scrollLeft;
 	};
@@ -75,7 +79,7 @@
 	};
 
 	const handleTargetTouchStart = (event: TouchEvent) => {
-		if (!observedTarget || event.touches.length !== 1) {
+		if (!props.active || !lifecycleActive || !observedTarget || event.touches.length !== 1) {
 			touchGesture = null;
 			return;
 		}
@@ -93,7 +97,7 @@
 	};
 
 	const handleTargetTouchMove = (event: TouchEvent) => {
-		if (!observedTarget || !touchGesture) return;
+		if (!props.active || !lifecycleActive || !observedTarget || !touchGesture) return;
 		const touch = findGestureTouch(event);
 		if (!touch) return;
 
@@ -138,6 +142,8 @@
 	};
 
 	const detachTarget = () => {
+		if (refreshFrame) cancelAnimationFrame(refreshFrame);
+		refreshFrame = 0;
 		observedTarget?.removeEventListener('scroll', handleTargetScroll);
 		observedTarget?.removeEventListener('touchstart', handleTargetTouchStart);
 		observedTarget?.removeEventListener('touchmove', handleTargetTouchMove);
@@ -193,22 +199,26 @@
 		queueRefresh();
 	};
 
-	watch(
-		() => props.target,
-		(target) => attachTarget(target),
-	);
-	watch(
-		() => props.active,
-		(active) => {
-			if (active) queueRefresh();
-		},
-	);
+	const syncTarget = (): void => {
+		if (mounted && lifecycleActive && props.active) attachTarget(props.target);
+		else detachTarget();
+	};
 
-	onMounted(() => attachTarget(props.target));
-
+	watch(() => [props.target, props.active] as const, syncTarget, { flush: 'post' });
+	onMounted(() => {
+		mounted = true;
+		syncTarget();
+	});
+	onActivated(() => {
+		lifecycleActive = true;
+		syncTarget();
+	});
+	onDeactivated(() => {
+		lifecycleActive = false;
+		detachTarget();
+	});
 	onBeforeUnmount(() => {
-		if (refreshFrame) cancelAnimationFrame(refreshFrame);
-		refreshFrame = 0;
+		mounted = false;
 		detachTarget();
 	});
 </script>

@@ -1,3 +1,8 @@
+import { OidcService } from './oidc/service/oidc-service.js';
+import { OidcModel } from './oidc/model/oidc-model.js';
+import { SqliteOidcStorage } from './oidc/adapters/sqlite/oidc-sql.js';
+import { OpenidClient } from '../../platform/security/adapters/openid-client.js';
+import { createOidcRoutes } from './interfaces/http/oidc-http.js';
 import { accessBackupExclusions } from './accounts/adapters/sqlite/backup-exclusions.js';
 import type { SqlExecutor } from '../../platform/storage/sqlite/sql-types.js';
 import type { SqliteRuntime } from '../../platform/storage/sqlite/sqlite-runtime.js';
@@ -146,6 +151,13 @@ export function registerAccess({
 		factors,
 	);
 	const admission = new SourceAdmissionService(ipWhitelist ?? '', addresses, sessions, failurePolicy);
+	const oidc = new OidcService(
+		new OidcModel(new SqliteOidcStorage(sqlite), tokens, secrets ?? null, new OpenidClient()),
+		service,
+		addresses,
+		failurePolicy,
+		admission,
+	);
 	const publicApi: AccessPublicApi = {
 		provePassword: (token, password) =>
 			accessBoundary(async () => {
@@ -197,8 +209,9 @@ export function registerAccess({
 		},
 
 		routes: (secureCookies) => [
-			...createAccessRoutes(service, factors, secureCookies),
+			...createAccessRoutes(service, factors, secureCookies, oidc),
 			...createFactorRoutes(factors, secureCookies),
+			...createOidcRoutes(oidc, secureCookies),
 		],
 	};
 }

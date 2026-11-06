@@ -20,7 +20,9 @@
 	import { useAuthenticatedViewScope } from '@/shared/session/public';
 	import { loadRemoteDirectoryPicker } from '@/features/filesystem/public';
 	import { useRemoteTools, RemoteToolInstallDialog } from '@/features/remote-tools/public';
-	import { useRuntimeFeatureCapabilities, type ConnectionSummary } from '@/shared/capabilities/public';
+	import { useAuthSession } from '@/features/auth/public';
+	import { useConnections, type ConnectionSummary } from '@/features/connections/public';
+	import { useConnectionTags } from '@/features/tags/public';
 	import { useServerTransfersStore, serverTransferFailureKey } from '../store/serverTransfers.store';
 	import { useTransferCredentialConfirmation } from '../composables/useTransferCredentialConfirmation';
 	import type { SendFileSource, ServerTransferTask } from '../model/server-transfer-types';
@@ -38,9 +40,10 @@
 	const feedback = useFeedback();
 	const confirmTransferCredentials = useTransferCredentialConfirmation();
 	const toolInstaller = useRemoteTools();
-	const capabilities = useRuntimeFeatureCapabilities();
-	const connections = capabilities.connections;
-	const tags = capabilities.tags;
+	const auth = useAuthSession();
+	const authenticatedUserId = computed(() => auth.user.value?.id ?? null);
+	const connections = useConnections();
+	const tags = useConnectionTags();
 	const transfers = useServerTransfersStore();
 	const search = ref('');
 	const selected = ref(new Set<number>());
@@ -80,9 +83,9 @@
 		connections: ConnectionSummary[];
 	}
 
-	const tagNames = computed(() => new Map(tags.items.value.map((tag) => [tag.id, tag.name])));
+	const tagNames = computed(() => new Map(tags.tags.value.map((tag) => [tag.id, tag.name])));
 	const sshConnections = computed(() =>
-		connections.items.value.filter(
+		connections.connections.value.filter(
 			(connection) => connection.type === 'SSH' && connection.id !== props.sourceConnectionId,
 		),
 	);
@@ -90,7 +93,7 @@
 		sshConnections.value.filter((connection) => selected.value.has(connection.id)),
 	);
 	const toolTargetName = computed(() => {
-		const target = connections.items.value.find((item) => item.id === toolInstaller.offer.value?.targetId);
+		const target = connections.connections.value.find((item) => item.id === toolInstaller.offer.value?.targetId);
 		return target?.name || target?.host;
 	});
 	const browseTarget = computed(() =>
@@ -110,11 +113,11 @@
 		{ flush: 'sync' },
 	);
 	watch(
-		[browseTargetKey, capabilities.auth.userId],
+		[browseTargetKey, authenticatedUserId],
 		() => {
 			pickerOpen.value = false;
 			const target = browseTarget.value;
-			const userId = capabilities.auth.userId.value;
+			const userId = authenticatedUserId.value;
 			targetPath.value = target && userId !== null ? readServerTransferDirectory(userId, target) : '';
 		},
 		{ flush: 'sync' },
@@ -122,7 +125,7 @@
 
 	function selectDirectory(path: string): void {
 		const target = browseTarget.value;
-		const userId = capabilities.auth.userId.value;
+		const userId = authenticatedUserId.value;
 		if (!pickerOpen.value || !props.visible || submitting.value || !target || userId === null) return;
 		targetPath.value = path;
 		rememberServerTransferDirectory(userId, target, path);

@@ -1,9 +1,7 @@
 {
   "terminal": {
-    "connectionFailed": "Connection failed: {reason}",
     "connectionClosed": "Connection closed",
-    "retryConnection": "Press any key to reconnect…",
-    "retryConnectionTouch": "Tap the terminal or press any key to reconnect…",
+    "retryConnection": "Or focus the terminal and press Enter",
     "inputRejected": "Terminal input was not sent: the connection is unavailable, the input is too large, or the send buffer is full. Rejected input is not retried automatically.",
     "search": {
       "open": "Search terminal",
@@ -41,6 +39,9 @@
       "arrowDown": "Down arrow",
       "arrowLeft": "Left arrow",
       "arrowRight": "Right arrow"
-    }
+    },
+    "connectionInterrupted": "Terminal is not connected",
+    "reconnect": "Reconnect",
+    "retryConnectionTouch": "Or tap the terminal to retry"
   }
 }

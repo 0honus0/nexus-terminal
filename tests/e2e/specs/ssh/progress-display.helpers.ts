@@ -124,3 +124,62 @@ export async function closeProgressDisplay(modal: Locator): Promise<void> {
 	await modal.getByRole('button', { name: 'Hide progress', exact: true }).click();
 	await expect(modal).toBeHidden();
 }
+
+export async function assertProgressGestureCancelled(
+	page: Page,
+	panel: Locator,
+	handle: Locator,
+	storageKey: string,
+	cancel: () => Promise<void>,
+): Promise<void> {
+	const stored = await page.evaluate((key) => localStorage.getItem(key), storageKey);
+	const selection = await page.evaluate(() => document.body.style.userSelect);
+	const bounds = await handle.boundingBox();
+	if (!bounds) throw new Error('Progress gesture handle is missing');
+	await handle.dispatchEvent('pointerdown', {
+		pointerId: 91,
+		pointerType: 'pen',
+		isPrimary: true,
+		button: 0,
+		clientX: bounds.x + 12,
+		clientY: bounds.y + 12,
+	});
+	await page.evaluate(
+		({ x, y }) => {
+			window.dispatchEvent(new PointerEvent('pointermove', { pointerId: 91, clientX: x - 40, clientY: y - 25 }));
+			window.dispatchEvent(new PointerEvent('pointercancel', { pointerId: 999 }));
+		},
+		{ x: bounds.x + 12, y: bounds.y + 12 },
+	);
+	await expect.poll(() => page.evaluate(() => document.body.style.userSelect)).toBe('none');
+	await cancel();
+	await expect.poll(() => page.evaluate(() => document.body.style.userSelect)).toBe(selection);
+	const cancelledBounds = (await panel.isVisible()) ? await panel.boundingBox() : null;
+	await page.evaluate(() => {
+		window.dispatchEvent(new PointerEvent('pointermove', { pointerId: 91, clientX: 800, clientY: 600 }));
+		window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 91, clientX: 800, clientY: 600 }));
+	});
+	expect((await panel.isVisible()) ? await panel.boundingBox() : null).toEqual(cancelledBounds);
+	expect(await page.evaluate((key) => localStorage.getItem(key), storageKey)).toBe(stored);
+}
+
+export async function cancelProgressPointer(
+	page: Page,
+	cancellation: 'pointercancel' | 'blur' | 'hidden',
+): Promise<void> {
+	await page.evaluate((kind) => {
+		if (kind === 'pointercancel') window.dispatchEvent(new PointerEvent('pointercancel', { pointerId: 91 }));
+		else if (kind === 'blur') window.dispatchEvent(new Event('blur'));
+		else {
+			const previous = Object.getOwnPropertyDescriptor(document, 'hidden');
+			try {
+				Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+				document.dispatchEvent(new Event('visibilitychange'));
+			} finally {
+				if (previous) Object.defineProperty(document, 'hidden', previous);
+				else Reflect.deleteProperty(document, 'hidden');
+				document.dispatchEvent(new Event('visibilitychange'));
+			}
+		}
+	}, cancellation);
+}

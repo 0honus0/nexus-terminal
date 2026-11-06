@@ -1,15 +1,16 @@
 <script setup lang="ts">
-	import { computed, reactive, ref } from 'vue';
+	import { computed, defineAsyncComponent, reactive, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiInfoHint } from '@/foundation/ui';
 	import type { useAppManagement } from '../composables/use-app-management';
 	import type { usePluginManagement } from '../composables/use-plugin-management';
-	import AppExecutionPolicySettings from './AppExecutionPolicySettings.vue';
-	import AppIntegrationSettings from './AppIntegrationSettings.vue';
 	import AppManagementSettings from './AppManagementSettings.vue';
-	import PluginManagementSettings from './PluginManagementSettings.vue';
 
 	type ExtensionSection = 'apps' | 'integrations' | 'market' | 'budget';
+
+	const AppExecutionPolicySettings = defineAsyncComponent(() => import('./AppExecutionPolicySettings.vue'));
+	const AppIntegrationSettings = defineAsyncComponent(() => import('./AppIntegrationSettings.vue'));
+	const PluginManagementSettings = defineAsyncComponent(() => import('./PluginManagementSettings.vue'));
 
 	const props = defineProps<{
 		active: boolean;

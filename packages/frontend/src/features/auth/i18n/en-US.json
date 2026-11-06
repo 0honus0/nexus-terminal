@@ -64,6 +64,12 @@
       "captcha": "CAPTCHA verification failed. Complete a new challenge.",
       "initialized": "An account already exists. Refresh and sign in.",
       "cancelled": "This operation is no longer current. Check the session status."
+    },
+    "oidc": {
+      "loginWith": "Continue with {provider}",
+      "completing": "Completing sign-in",
+      "retryHint": "Return and start again. This callback will not be retried automatically.",
+      "return": "Return to sign-in"
     }
   }
 }

@@ -33,7 +33,7 @@
 
 	const focusSearchMatch = (behavior: ScrollBehavior = 'smooth') => {
 		const active = activatePreviewSearchMatch(searchMatches.value, activeSearchIndex.value);
-		active?.scrollIntoView({ block: 'center', inline: 'nearest', behavior });
+		if (props.active) active?.scrollIntoView({ block: 'center', inline: 'nearest', behavior });
 	};
 
 	const refreshSearch = (behavior: ScrollBehavior = 'auto') => {

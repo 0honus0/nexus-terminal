@@ -37,6 +37,10 @@ export class SourceAdmissionService {
 	}
 
 	async admitAuthenticationSource(source: string): Promise<boolean> {
+		return this.allowsSource(source);
+	}
+
+	allowsSource(source: string): boolean {
 		const address = this.addresses.resolve(source);
 		return address !== null && this.isAllowed(address);
 	}

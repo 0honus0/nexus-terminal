@@ -92,6 +92,7 @@ export class RunResourceService {
 						{
 							resource,
 							backgroundJobs,
+							waitingOutputJobs: this.tools.waitingOutputCount(childScope),
 							expiresAt:
 								resource.phase === 'idle' && backgroundJobs === 0
 									? resource.lastUsedAt + RESOURCE_IDLE_MS

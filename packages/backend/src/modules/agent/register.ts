@@ -1,3 +1,4 @@
+import type { TextLogStore } from '../../platform/blobs/text-log-store.js';
 import { RunResourceService } from './runs/service/run-resource-service.js';
 import { createRunResourceHttpRoute } from './interfaces/http/run-resource-http.js';
 import { NativeContentInspector } from '../../platform/blobs/adapters/native-content-inspector.js';
@@ -240,6 +241,7 @@ export function registerAgent(
 	resolver: TrustedSshTargetResolver,
 	remoteOperations: RemoteMachineOperationFactory,
 	blobs: BlobStore,
+	toolLogs: TextLogStore,
 	events: OperationsEvents,
 	diagnostics: HostDiagnostics,
 	pluginBlobs: BlobStore,
@@ -378,7 +380,7 @@ export function registerAgent(
 		events,
 		executionSettings,
 	);
-	const jobModel = new ToolJobModel(new SqliteToolJobStorage(sqlite));
+	const jobModel = new ToolJobModel(new SqliteToolJobStorage(sqlite), toolLogs);
 	const collaboration = new RunCollaborationService(
 		new RunCollaborationModel(new SqliteRunCollaborationStorage(sqlite), changes),
 		{
@@ -408,11 +410,12 @@ export function registerAgent(
 		execution.abortProvider(userId, providerId),
 	);
 	const images = new ProviderImageService(providerService, artifacts);
+	const jobs = new ToolJobService(jobModel, logger, (scope) => toolModel.touch(scope));
 	const toolService = new ToolService(
 		toolModel,
 		tools,
 		governance,
-		new ToolJobService(jobModel, logger, (scope) => toolModel.touch(scope)),
+		jobs,
 		new AcpPermissionService(tools, governance),
 		collaboration,
 		new ToolProjectService(new ToolProjectModel(new SqliteToolProjectStorage(sqlite)), toolModel),
@@ -475,6 +478,7 @@ export function registerAgent(
 		registryService,
 		governance,
 		artifacts,
+		jobs,
 		integrations,
 		browser,
 		plugins,
@@ -697,6 +701,7 @@ export function registerAgent(
 			await tools.reconcileUnsettled();
 			logDiagnostic(logger, 'info', 'AGENT_RECOVERY_STAGE_COMPLETED', { stage: 'tools', mode });
 			await jobModel.reconcile();
+			await jobs.initialize();
 			logDiagnostic(logger, 'info', 'AGENT_RECOVERY_STAGE_COMPLETED', { stage: 'jobs', mode });
 			await artifacts.initialize();
 			logDiagnostic(logger, 'info', 'AGENT_RECOVERY_STAGE_COMPLETED', { stage: 'artifacts', mode });

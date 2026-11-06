@@ -547,7 +547,7 @@ export class ToolRemoteModel {
 	async command(
 		input: Extract<ToolInput, { kind: 'shell' }>,
 		scope: ToolOperationScope,
-		onOutput?: (index: number, stream: 'stdout' | 'stderr', text: string) => void,
+		onOutput?: (index: number, stream: 'stdout' | 'stderr', text: string, signal: AbortSignal) => Promise<void>,
 	): Promise<Exclude<ToolJobResult, { status: 'not_started' }>> {
 		return this.withOperation(scope, async (request) => {
 			const value = await this.operations.executeCommand(request, {
@@ -555,7 +555,7 @@ export class ToolRemoteModel {
 				cwd: input.cwd,
 				onError: input.onError,
 
-				onOutput: (index, stream, text) => onOutput?.(index, stream, text),
+				onOutput: async (index, stream, text, signal) => onOutput?.(index, stream, text, signal),
 			});
 			return {
 				status: value.status,

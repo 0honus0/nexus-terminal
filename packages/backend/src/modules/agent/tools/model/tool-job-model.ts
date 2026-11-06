@@ -1,4 +1,8 @@
 import { agentStorage } from '../../agent-storage-failure.js';
+import { TextLogFailure } from '../../../../platform/blobs/text-log-store.js';
+import type { TextLogStore } from '../../../../platform/blobs/text-log-store.js';
+import type { ToolOutputPage, ToolOutputWriter } from './tool-job-types.js';
+import { ToolCleanupFailure } from '../../agent-failure.js';
 import { AgentFailure } from '../../agent-failure.js';
 import type {
 	ToolJobStorage,
@@ -81,7 +85,95 @@ function mutation(value: StoredToolJob | 'version_conflict' | 'limit_exceeded'):
 }
 
 export class ToolJobModel {
-	constructor(private readonly storage: ToolJobStorage) {}
+	constructor(
+		private readonly storage: ToolJobStorage,
+		private readonly logs: TextLogStore,
+	) {}
+
+	async openOutput(id: string): Promise<ToolOutputWriter> {
+		try {
+			const writer = await this.logs.create(id);
+			return {
+				append: async (event, signal, blocked) => {
+					try {
+						await writer.append(
+							{ tag: event.commandIndex * 2 + (event.stream === 'stderr' ? 1 : 0), text: event.text },
+							signal,
+							blocked,
+						);
+					} catch (cause) {
+						throw new AgentFailure('internal_failure', { cause });
+					}
+				},
+
+				flush: async (signal, blocked) => {
+					try {
+						await writer.flush(signal, blocked);
+					} catch (cause) {
+						throw new AgentFailure('internal_failure', { cause });
+					}
+				},
+
+				close: async () => {
+					try {
+						await writer.close();
+					} catch (cause) {
+						throw new ToolCleanupFailure({ cause });
+					}
+				},
+			};
+		} catch (cause) {
+			throw new AgentFailure('internal_failure', { cause });
+		}
+	}
+
+	async output(id: string, offset: number, maxBytes: number): Promise<ToolOutputPage | null> {
+		try {
+			const page = await this.logs.read(id, offset, maxBytes);
+			return {
+				output: page.records.map((record) => ({
+					commandIndex: Math.floor(record.tag / 2),
+					stream: record.tag % 2 === 0 ? 'stdout' : 'stderr',
+					text: record.text,
+				})),
+				nextOffset: page.nextOffset,
+				capturedBytes: page.totalBytes,
+			};
+		} catch (cause) {
+			if (cause instanceof TextLogFailure && cause.reason === 'not_found') {
+				return null;
+			}
+			if (cause instanceof TextLogFailure && cause.reason === 'cleanup_failed') {
+				throw new ToolCleanupFailure({ cause });
+			}
+			if (cause instanceof TextLogFailure && cause.reason === 'invalid_offset') {
+				throw new AgentFailure('invalid_input', { cause });
+			}
+			throw new AgentFailure('internal_failure', { cause });
+		}
+	}
+
+	async *outputKeys(): AsyncIterable<string> {
+		try {
+			for await (const id of this.logs.keys()) {
+				yield id;
+			}
+		} catch (cause) {
+			throw new ToolCleanupFailure({ cause });
+		}
+	}
+
+	outputOwnerExists(id: string): Promise<boolean> {
+		return agentStorage(() => this.storage.exists(id));
+	}
+
+	async removeOutput(id: string): Promise<void> {
+		try {
+			await this.logs.remove(id);
+		} catch (cause) {
+			throw new ToolCleanupFailure({ cause });
+		}
+	}
 
 	async create(value: ToolJobInput, maxHistory: number): Promise<ToolJob> {
 		return mutation(

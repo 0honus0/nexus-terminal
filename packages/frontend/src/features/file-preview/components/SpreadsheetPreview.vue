@@ -104,7 +104,9 @@
 	});
 
 	const focusPreview = (): void => {
-		void nextTick(() => previewRoot.value?.focus({ preventScroll: true }));
+		void nextTick(() => {
+			if (props.active) previewRoot.value?.focus({ preventScroll: true });
+		});
 	};
 
 	const resetScroll = (): void => {
@@ -135,6 +137,7 @@
 		sheetIndex.value = match.sheetIndex;
 		page.value = Math.floor(match.rowIndex / rowsPerPage.value) + 1;
 		void nextTick(() => {
+			if (!props.active) return;
 			scroller.value
 				?.querySelector<HTMLElement>(
 					`[data-spreadsheet-row-index="${match.rowIndex}"][data-spreadsheet-column-index="${match.colIndex}"]`,

@@ -138,6 +138,7 @@ export class SshShellChannel extends ByteChannel implements MachineShell {
 }
 
 export class SshCommandChannel extends ByteChannel implements MachineCommand {
+	readonly stderrReadable: ClientChannel['stderr'];
 	readonly outcome: Promise<MachineCommandOutcome>;
 	// The Promise constructor runs its executor synchronously before any channel event.
 	private settle!: (value: MachineCommandOutcome) => void;
@@ -145,6 +146,7 @@ export class SshCommandChannel extends ByteChannel implements MachineCommand {
 
 	constructor(channel: ClientChannel, onEnded: () => void, keepStdinOpenForTermination = false) {
 		super(channel, onEnded);
+		this.stderrReadable = channel.stderr;
 		this.outcome = new Promise((resolve) => {
 			this.settle = resolve;
 		});

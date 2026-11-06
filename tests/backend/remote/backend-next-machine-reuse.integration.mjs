@@ -377,11 +377,20 @@ await test('Agent reuse: ACP approvals complete while a large exec remains activ
 	const f = await fixture(t),
 		service = f.create(),
 		stop = new AbortController();
+	const blocked = Promise.withResolvers();
+	let outputCalls = 0;
+	const request = command('printf __nexus_hold__ __nexus_bulk__');
+	request.onOutput = async (_index, _stream, _text, signal) => {
+		outputCalls++;
+		blocked.resolve();
+		if (!signal.aborted) await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
+	};
 	const bulk = assert.rejects(
-		service.executeCommand(scope(stop.signal), command('printf __nexus_hold__ __nexus_bulk__')),
+		service.executeCommand(scope(stop.signal), request),
 		(error) => error instanceof RemoteFileFailure && error.code === 'operation_unknown',
 	);
 	await f.state.execEntered.promise;
+	await blocked.promise;
 	let approval = false;
 	await service.executeAcp(scope(), {
 		argv: ['__nexus_acp__', 'permission'],
@@ -399,6 +408,7 @@ await test('Agent reuse: ACP approvals complete while a large exec remains activ
 	});
 	assert.equal(approval, true);
 	assert.equal(f.state.connections, 2, 'background output and ACP cannot share TCP backpressure');
+	assert.equal(outputCalls, 1, 'a blocked output sink never accumulates append requests');
 	stop.abort();
 	await bulk;
 	assert.equal((await service.executeCommand(scope(), command('printf healthy'))).commands[0].stdout, 'healthy');

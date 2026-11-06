@@ -143,3 +143,7 @@
 .mobile-terminal-clipboard-menu button:disabled {
 	opacity: 0.4;
 }
+.terminal-reconnect-notice {
+	max-height: calc(100% - 1.5rem);
+	overflow-y: auto;
+}

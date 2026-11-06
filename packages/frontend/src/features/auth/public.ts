@@ -69,3 +69,9 @@ export const createAuthNavigationFacade = (pinia: Pinia): AuthNavigationFacade =
 		},
 	};
 };
+
+export { createOidcApi } from './api/oidc-api';
+
+export { redirectToOidc, consumeOidcCallback } from './adapters/browser-oidc';
+
+export type { OidcSettings, OidcSettingsChange } from './model/oidc-types';

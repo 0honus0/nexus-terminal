@@ -36,6 +36,9 @@ function event(route: HttpRoute, status: number, responseUserId: number | null):
 		}
 		return successful ? null : 'LOGIN_FAILURE';
 	}
+	if (route.url === '/api/v1/auth/oidc/login/finish') {
+		return successful ? 'LOGIN_SUCCESS' : 'LOGIN_FAILURE';
+	}
 	if (route.url === '/api/v1/auth/passkey/authenticate') {
 		return successful ? (responseUserId === null ? null : 'PASSKEY_AUTH_SUCCESS') : 'PASSKEY_AUTH_FAILURE';
 	}

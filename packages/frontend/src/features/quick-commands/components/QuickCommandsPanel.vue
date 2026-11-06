@@ -943,9 +943,6 @@
 	.quick-control--primary {
 		color: var(--text-color-secondary);
 	}
-	.quick-control--primary i {
-		color: currentColor !important;
-	}
 	.quick-control--primary:hover {
 		background: color-mix(in srgb, var(--primary-color) 12%, transparent);
 		color: var(--text-color);

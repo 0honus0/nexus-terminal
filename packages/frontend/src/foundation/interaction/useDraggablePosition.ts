@@ -1,5 +1,5 @@
 import { useEventListener } from '@vueuse/core';
-import { computed, onBeforeUnmount, ref, type Ref } from 'vue';
+import { computed, onBeforeUnmount, onDeactivated, ref, type Ref } from 'vue';
 
 export interface DragPosition {
 	x: number;
@@ -43,14 +43,21 @@ export function useDraggablePosition(options: DraggablePositionOptions) {
 		options.onMove?.(next);
 	};
 
-	function stopDragging(event?: PointerEvent): void {
-		if (!dragging.value) return;
-		if (event && event.pointerId !== activePointerId) return;
+	function releaseDragging(event?: PointerEvent): boolean {
+		if (!dragging.value || (event && event.pointerId !== activePointerId)) return false;
 
 		dragging.value = false;
 		activePointerId = null;
 		restoreBodySelection();
-		options.onEnd?.(options.position.value);
+		return true;
+	}
+
+	function stopDragging(event?: PointerEvent): void {
+		if (releaseDragging(event)) options.onEnd?.(options.position.value);
+	}
+
+	function cancelDragging(event?: PointerEvent): void {
+		releaseDragging(event);
 	}
 
 	const startDragging = (event: PointerEvent): void => {
@@ -76,15 +83,14 @@ export function useDraggablePosition(options: DraggablePositionOptions) {
 	const gestureTarget = computed(() => (dragging.value ? window : undefined));
 	useEventListener(gestureTarget, 'pointermove', handlePointerMove);
 	useEventListener(gestureTarget, 'pointerup', stopDragging);
-	useEventListener(gestureTarget, 'pointercancel', stopDragging);
-
-	onBeforeUnmount(() => {
-		const shouldNotifyEnd = dragging.value;
-		dragging.value = false;
-		activePointerId = null;
-		if (shouldNotifyEnd) restoreBodySelection();
-		if (shouldNotifyEnd) options.onEnd?.(options.position.value);
+	useEventListener(gestureTarget, 'pointercancel', cancelDragging);
+	useEventListener(gestureTarget, 'blur', () => cancelDragging());
+	useEventListener(document, 'visibilitychange', () => {
+		if (document.hidden) cancelDragging();
 	});
 
-	return { dragging, didDrag, startDragging, stopDragging };
+	onBeforeUnmount(() => cancelDragging());
+	onDeactivated(() => cancelDragging());
+
+	return { dragging, didDrag, startDragging, stopDragging, cancelDragging };
 }

@@ -501,3 +501,41 @@ App 来源仅为真实签名插件安装；删除 AgentCreateAppRequest/Response
 6. **数据、事务与并发**：不持存储数据、不包含SQL；完整偏好JSON/CAS仍归Preferences。文件格式预算在预览Registry，WS每次总量采用请求预算，帧大小/并发/背压保持独立，HTTP transfer inline的20MiB预算不影响WS读取。
 7. **生命周期与失败**：严格解码拒绝缺失/负数/小数/非数和不安全单位转换；不为旧JSON补字段。0不承诺无限资源，取消/晚响应/网络失败由原运行时与读源拥有。
 8. **当前能力与验收**：前后端所有真实偏好映射和预览入口已接入；静态、限定CDP证据与未验组合见testing，未运行全量本地E2E；后续新增持久字段由对应独立迁移转换，运行时保持严格解码。
+
+## OIDC 契约
+
+### 1. 职责与范围
+
+`access/oidc` 仅拥有前后端共同消费的认证协议，不持有 IdP Token、加密正文、SQLite 行或应用状态。
+
+### 2. 子功能与目录
+
+values 持有客户端认证取值、Cookie 名和固定回调路径；http 持有完整请求/响应；http-codec 严格解码。
+
+### 3. 依赖方向
+
+两端引用 Shared，Shared 只引用 common/http-codec 与 Access 基础预算，不引用业务包。
+
+### 4. 类型与转换
+
+配置响应与写请求分开定义；密钥操作为 keep/clear/replace 联合；回调显式 code/state/issuer/error，拒绝未知字段、缺字段和 code/error 同时有或同时无。应用边界各自逐字段映射。
+
+### 5. 入口与安装
+
+package exports 暴露 values/http/http-codec，实际消费者为后端 OIDC HTTP、前端 Auth API 和 E2E。
+
+### 6. 数据、事务与并发
+
+revision 为不透明随机版本，首次为空；Shared 只校验表示，CAS、一次性消费和授权在 Access 完成。
+
+### 7. 生命周期与失败
+
+复用 Access 错误码与基本认证完整 JSON 预算。协议不宣称超时或取消已回滚绑定；前端围栏保留未知结果。
+
+### 8. 当前能力与验收
+
+双端与测试同步消费新协议，不提供旧版本兼容。具体静态与行为验收见 testing/HISTORY。
+
+### Agent 日志等待状态
+
+AgentResourceSessionView 增加 waitingOutputJobs 非负整数，严格 codec、后端 WS mapper 和前端 native mapper 同步投影。它表示因日志存储空间不足而暂停接收输出的活动 Job 数量，不是新的执行终态或配额。日志正文、索引和内部 Job 读取能力仅由后端/模型消费，不增加无前端消费者的 Shared DTO。

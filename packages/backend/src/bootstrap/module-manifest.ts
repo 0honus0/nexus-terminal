@@ -1,3 +1,4 @@
+import { NativeTextLogStore } from '../platform/blobs/adapters/native-text-log-store.js';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
 import { readRequestCookie } from '../platform/http/http-request.js';
 import { sqliteSchemaSignature } from '../platform/storage/sqlite/schema-signature.js';
@@ -129,6 +130,7 @@ export async function registerModules({
 	const paths = resolveDataPaths(sqlite.path);
 	const backgrounds = await NativeBlobStore.open(paths.appearance);
 	const artifacts = await NativeBlobStore.open(paths.artifacts);
+	const toolLogs = await NativeTextLogStore.open(paths.toolLogs);
 	const plugins = await NativeBlobStore.open(paths.plugins);
 	const preferences = await registerPreferences({
 		sqlite,
@@ -247,6 +249,7 @@ export async function registerModules({
 			targets.trustedSshTargets,
 			remote.operations,
 			artifacts,
+			toolLogs,
 			operations.publicApi,
 			system.diagnostics,
 			plugins,

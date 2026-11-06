@@ -159,6 +159,22 @@
       "keepSecret": "Keep stored secret",
       "clearSecret": "Clear stored secret",
       "replaceSecret": "Replace stored secret"
+    },
+    "oidc": {
+      "title": "Single sign-on (OIDC)",
+      "description": "Connect Pocket ID or another OpenID Connect provider to your existing account.",
+      "enabled": "Show on the login page",
+      "label": "Provider name",
+      "authentication": "Client authentication",
+      "publicClient": "Public client (PKCE)",
+      "secretKept": "Leave blank to keep the saved secret",
+      "callback": "Callback URL · register this with your provider",
+      "bound": "Account linked",
+      "unbound": "Account not linked",
+      "bind": "Link account",
+      "unbind": "Unlink account",
+      "hint": "Save changes before linking. Confirm your current password for each action. OIDC uses your provider’s sign-in policy; local TOTP applies to password login. Accounts requiring Passkey cannot use OIDC. Changing configuration or unlinking signs out OIDC sessions.",
+      "saved": "OIDC configuration saved."
     }
   }
 }
