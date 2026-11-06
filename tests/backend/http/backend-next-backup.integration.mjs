@@ -234,8 +234,8 @@ await test(
 				'cross-instance import replaces product state and preserves destination session/listener',
 				async () => {
 					const restored = expectStatus(await restore(archive, sourcePassword), 200);
-					// Remote desktop certificate trust is included in the current snapshot registration.
-					assert.equal(restored.restoredTables, 89);
+					// Includes remote desktop trust and the durable notification pending queue.
+					assert.equal(restored.restoredTables, 90);
 					assert.ok(restored.restoredRows > 0);
 					// The signed source plugin package and the uploaded artifact are both restored.
 					assert.equal(restored.restoredFiles, 2);
