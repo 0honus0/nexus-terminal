@@ -1,7 +1,8 @@
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
 import { Readable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
-import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
+import { finished } from 'node:stream/promises';
+import type { HttpRoute, HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
 import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
 import type { WorkspaceService } from '../../sessions/service/workspace-service.js';
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
@@ -21,50 +22,54 @@ import { suspendSessionView } from '../suspend-view.js';
 
 const ROOT = '/api/v1/ssh-suspend';
 
-function requireId(ctx: HttpRouteContext): string {
-	const id = ctx.params.suspendSessionId;
+function requireId(request: HttpRequest): string {
+	const id = request.params.suspendSessionId;
 	if (!id || !SUSPENDED_SESSION_ID_PATTERN.test(id)) {
 		throw new WorkspaceFailure('invalid_input');
 	}
 	return id;
 }
 
-function route(method: HttpRoute['method'], path: string, action: (ctx: HttpRouteContext) => Promise<void>): HttpRoute {
+function route(
+	method: HttpRoute['method'],
+	path: string,
+	action: (request: HttpRequest, reply: HttpReply) => Promise<void>,
+): HttpRoute {
 	return {
 		method,
-		path: ROOT + path,
-		maxBodyBytes: SUSPENDED_MANAGEMENT_MAX_JSON_BYTES,
+		url: ROOT + path,
+		bodyLimit: SUSPENDED_MANAGEMENT_MAX_JSON_BYTES,
 
-		async handle(ctx) {
+		async handler(request: HttpRequest, reply: HttpReply) {
 			try {
-				if (ctx.query.size) {
+				if (request.query.size) {
 					throw new WorkspaceFailure('invalid_input');
 				}
-				await action(ctx);
+				await action(request, reply);
 			} catch (error) {
 				if (error instanceof HttpInputFailure) {
 					throw error;
 				}
-				if (ctx.response.destroyed || ctx.request.aborted) {
+				if (reply.raw.destroyed || request.raw.aborted) {
 					return;
 				}
-				if (ctx.response.headersSent) {
-					ctx.response.destroy(error instanceof Error ? error : new Error('Suspend stream failed'));
+				if (reply.raw.headersSent) {
+					reply.raw.destroy(error instanceof Error ? error : new Error('Suspend stream failed'));
 					return;
 				}
 				if (error instanceof RemoteResourceCleanupFailure) {
-					ctx.send(503, { code: 'operation_unknown' });
+					reply.code(503).send({ code: 'operation_unknown' });
 					return;
 				}
 				if (error instanceof WorkspaceFailure) {
-					ctx.send(suspendedHttpErrorStatus(error.code), { code: error.code });
+					reply.code(suspendedHttpErrorStatus(error.code)).send({ code: error.code });
 					return;
 				}
 				if (error instanceof InvalidSuspendedHttpPayload) {
-					ctx.send(400, { code: 'invalid_input' });
+					reply.code(400).send({ code: 'invalid_input' });
 					return;
 				}
-				ctx.send(503, { code: 'remote_unavailable' });
+				reply.code(503).send({ code: 'remote_unavailable' });
 			}
 		},
 	};
@@ -73,75 +78,122 @@ function route(method: HttpRoute['method'], path: string, action: (ctx: HttpRout
 /** The same WorkspaceService owns all WS/HTTP suspended management. */
 export function createSuspendHttpRoutes(workspaces: WorkspaceService): HttpRoute[] {
 	return [
-		route('GET', '/suspended-sessions', async (ctx) => {
-			const views = await workspaces.listSuspended(ctx.cookie(ACCESS_SESSION_COOKIE_NAME));
+		route('GET', '/suspended-sessions', async (request, reply) => {
+			const views = await workspaces.listSuspended(readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME));
 			let catalog: SuspendedSessionView[];
 			try {
 				catalog = readSuspendedSessionCatalog(views.map(suspendSessionView));
 			} catch (cause) {
 				throw new WorkspaceFailure('remote_unavailable', { cause });
 			}
-			ctx.send(200, catalog);
+			reply.code(200).send(catalog);
 		}),
-		route('DELETE', '/remove/:suspendSessionId', async (ctx) => {
-			const suspendedSessionId = requireId(ctx);
+		route('DELETE', '/remove/:suspendSessionId', async (request, reply) => {
+			const suspendedSessionId = requireId(request);
 			const disposition = await workspaces.removeSuspended(
-				ctx.cookie(ACCESS_SESSION_COOKIE_NAME),
+				readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
 				suspendedSessionId,
 			);
 			if (disposition === null) {
 				throw new WorkspaceFailure('not_found');
 			}
-			ctx.send(200, { suspendedSessionId, disposition });
+			reply.code(200).send({ suspendedSessionId, disposition });
 		}),
-		route('DELETE', '/terminate/:suspendSessionId', async (ctx) => {
-			const id = requireId(ctx);
-			const removed = await workspaces.terminateSuspended(ctx.cookie(ACCESS_SESSION_COOKIE_NAME), id);
+		route('DELETE', '/terminate/:suspendSessionId', async (request, reply) => {
+			const id = requireId(request);
+			const removed = await workspaces.terminateSuspended(
+				readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
+				id,
+			);
 			if (!removed) {
 				throw new WorkspaceFailure('not_found');
 			}
-			ctx.send(200, { message: 'Suspended session terminated and removed.' });
+			reply.code(200).send({ message: 'Suspended session terminated and removed.' });
 		}),
-		route('DELETE', '/entry/:suspendSessionId', async (ctx) => {
-			const id = requireId(ctx);
-			const removed = await workspaces.removeDisconnectedSuspended(ctx.cookie(ACCESS_SESSION_COOKIE_NAME), id);
+		route('DELETE', '/entry/:suspendSessionId', async (request, reply) => {
+			const id = requireId(request);
+			const removed = await workspaces.removeDisconnectedSuspended(
+				readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
+				id,
+			);
 			if (!removed) {
 				throw new WorkspaceFailure('not_found');
 			}
-			ctx.send(200, { message: 'Disconnected suspended entry removed.' });
+			reply.code(200).send({ message: 'Disconnected suspended entry removed.' });
 		}),
-		route('PUT', '/name/:suspendSessionId', async (ctx) => {
-			const id = requireId(ctx);
-			const input = readSuspendedSessionRename(await ctx.json());
-			await workspaces.renameSuspended(ctx.cookie(ACCESS_SESSION_COOKIE_NAME), id, input.customName);
-			ctx.send(200, {
+		route('PUT', '/name/:suspendSessionId', async (request, reply) => {
+			const id = requireId(request);
+			const input = readSuspendedSessionRename(request.body);
+			await workspaces.renameSuspended(
+				readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
+				id,
+				input.customName,
+			);
+			reply.code(200).send({
 				message: 'Suspended session name updated.',
 				customName: input.customName,
 			} satisfies SuspendedSessionRenameResponse);
 		}),
-		route('GET', '/log/:suspendSessionId', async (ctx) => {
+		route('GET', '/log/:suspendSessionId', async (request, reply) => {
 			const controller = new AbortController();
 
 			const abort = () => controller.abort(new Error('Log client disconnected'));
 
 			const disconnected = () => {
-				if (!ctx.response.writableEnded) {
+				if (!reply.raw.writableEnded) {
 					abort();
 				}
 			};
 
-			ctx.request.once('aborted', abort);
-			ctx.response.once('close', disconnected);
+			request.raw.once('aborted', abort);
+			reply.raw.once('close', disconnected);
 			try {
 				const delivered = await workspaces.deliverSuspendedLog(
-					ctx.cookie(ACCESS_SESSION_COOKIE_NAME),
-					requireId(ctx),
+					readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
+					requireId(request),
 					{
 						deliver: async (filename, bytes, signal) => {
 							signal.throwIfAborted();
-							ctx.response.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
-							ctx.response.setHeader('Content-Type', 'text/plain; charset=utf-8');
-							await pipeline(Readable.from(bytes), ctx.response, { signal });
+							const source = Readable.from(bytes, { objectMode: false, signal });
+							const sourceClosed = Promise.allSettled([finished(source, { cleanup: true })]);
+							let failure: unknown = null;
+							try {
+								reply
+									.headers({
+										'Content-Disposition': 'attachment; filename="' + filename + '"',
+										'Content-Type': 'text/plain; charset=utf-8',
+										'Cache-Control': 'private, no-store',
+									})
+									.send(source);
+								await finished(reply.raw, { signal, cleanup: true });
+								if (!source.readableEnded || reply.statusCode !== 200) {
+									throw new WorkspaceFailure('remote_unavailable');
+								}
+								const [result] = await sourceClosed;
+								if (result.status === 'rejected') {
+									throw result.reason;
+								}
+							} catch (error) {
+								failure = error;
+								if (!reply.raw.writableFinished) {
+									reply.raw.destroy();
+								}
+							} finally {
+								source.destroy();
+								const [result] = await sourceClosed;
+								if (result.status === 'rejected' && source.errored && result.reason !== failure) {
+									failure =
+										failure === null
+											? result.reason
+											: new AggregateError(
+													[failure, result.reason],
+													'Suspended log delivery failed',
+												);
+								}
+							}
+							if (failure !== null) {
+								throw failure;
+							}
 						},
 					},
 					controller.signal,
@@ -150,8 +202,8 @@ export function createSuspendHttpRoutes(workspaces: WorkspaceService): HttpRoute
 					throw new WorkspaceFailure('not_found');
 				}
 			} finally {
-				ctx.request.off('aborted', abort);
-				ctx.response.off('close', disconnected);
+				request.raw.off('aborted', abort);
+				reply.raw.off('close', disconnected);
 			}
 		}),
 	];

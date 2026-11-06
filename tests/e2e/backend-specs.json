@@ -8,6 +8,7 @@
   "http/connection-import.spec.ts",
   "http/connections-tags.spec.ts",
   "http/database-migrations.spec.ts",
+  "http/fastify-transport.spec.ts",
   "http/mutation-capacity.spec.ts",
   "http/mutation-origin.spec.ts",
   "http/quick-commands-audit.spec.ts",

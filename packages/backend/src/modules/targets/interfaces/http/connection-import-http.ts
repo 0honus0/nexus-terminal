@@ -1,12 +1,11 @@
-import type { HttpRouteContext } from '../../../../platform/http/http-types.js';
-import { decodeMultipart, readBodyBytes, type MultipartPart } from '../../../../platform/http/http-body.js';
+import type { HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
+import { readMultipart, type MultipartPart } from '../../../../platform/http/http-body.js';
 import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
 import type { TargetsPublicApi } from '../../public.js';
 import { InvalidTargetPayload, targetArray } from '@nexus-terminal/shared/targets/http';
 import {
 	TARGET_CONNECTION_IMPORT_FILE_FIELD,
 	TARGET_CONNECTION_IMPORT_FILE_MAX_BYTES,
-	TARGET_CONNECTION_IMPORT_MULTIPART_MAX_BYTES,
 	TARGET_CONNECTION_IMPORT_MAX_ITEMS,
 } from '@nexus-terminal/shared/targets/connections/values';
 import {
@@ -19,15 +18,23 @@ import type {
 } from '@nexus-terminal/shared/targets/connections/http';
 import { toImportItems } from './target-http-view.js';
 
-async function readItems(context: HttpRouteContext, signal: AbortSignal): Promise<unknown[]> {
-	const contentType = context.request.headers['content-type'];
+async function readItems(request: HttpRequest, reply: HttpReply, signal: AbortSignal): Promise<unknown[]> {
+	const contentType = request.headers['content-type'];
 	if (typeof contentType !== 'string' || !/^multipart\/form-data(?:\s*;|$)/iu.test(contentType)) {
-		return readConnectionImportRequest(await context.json(signal)).items;
+		return readConnectionImportRequest(request.body).items;
 	}
-	const bytes = await readBodyBytes(context.request, TARGET_CONNECTION_IMPORT_MULTIPART_MAX_BYTES, signal);
 	let parts: MultipartPart[] = [];
 	try {
-		parts = await decodeMultipart(bytes, contentType, 1, signal);
+		parts = await readMultipart(
+			request,
+			reply,
+			{
+				maxParts: 1,
+				maxFileBytes: TARGET_CONNECTION_IMPORT_FILE_MAX_BYTES,
+				maxFieldBytes: TARGET_CONNECTION_IMPORT_FILE_MAX_BYTES,
+			},
+			signal,
+		);
 		const file = parts[0];
 		if (
 			parts.length !== 1 ||
@@ -55,13 +62,13 @@ async function readItems(context: HttpRouteContext, signal: AbortSignal): Promis
 		for (const part of parts) {
 			part.bytes.fill(0);
 		}
-		bytes.fill(0);
 	}
 }
 
 /** The enclosing management scope revalidates the original session in every item transaction. */
 export async function importConnectionRequest(
-	context: HttpRouteContext,
+	request: HttpRequest,
+	reply: HttpReply,
 	targets: TargetsPublicApi,
 ): Promise<TargetConnectionImportResponse> {
 	const controller = new AbortController();
@@ -69,9 +76,9 @@ export async function importConnectionRequest(
 
 	const disconnected = () => controller.abort();
 
-	context.response.once('close', disconnected);
+	reply.raw.once('close', disconnected);
 	try {
-		const sources = await readItems(context, controller.signal);
+		const sources = await readItems(request, reply, controller.signal);
 		const items: TargetConnectionImportResponse['items'] = [];
 		for (const source of sources) {
 			controller.signal.throwIfAborted();
@@ -98,6 +105,6 @@ export async function importConnectionRequest(
 		throw error;
 	} finally {
 		clearTimeout(timer);
-		context.response.off('close', disconnected);
+		reply.raw.off('close', disconnected);
 	}
 }

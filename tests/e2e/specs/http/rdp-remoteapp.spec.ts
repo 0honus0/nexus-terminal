@@ -1,4 +1,3 @@
-import { readdirSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -9,6 +8,7 @@ import { E2E_ADMIN, loginAsInitialAdmin } from '../../support/auth';
 import { advanceTestBackendClock } from '../../support/settings';
 import { createTestRdpSession } from '../../support/desktop';
 import { E2E_URLS, E2E_PORTS } from '../../support/test-env';
+import { backendDataDirectory } from '../../support/backend-data';
 const {
 	openRemoteDesktopWebSocket,
 	waitForRemoteDesktopTicketRejection,
@@ -99,12 +99,7 @@ const createSessionTicket = async (request: APIRequestContext, connectionId: num
 };
 
 const insertUserWithAdminPassword = (username: string): void => {
-	const dataRoot = path.resolve(__dirname, '../../.tmp/backend-data');
-	const directories = readdirSync(dataRoot, { withFileTypes: true }).filter(
-		(item) => item.isDirectory() && item.name.startsWith('backend-'),
-	);
-	expect(directories).toHaveLength(1);
-	const databasePath = path.join(dataRoot, directories[0].name, 'nexus-terminal.db');
+	const databasePath = path.join(backendDataDirectory(), 'nexus-terminal.db');
 	const script = String.raw`
     const { DatabaseSync } = require('node:sqlite');
     const db = new DatabaseSync(process.argv[1]);

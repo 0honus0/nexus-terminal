@@ -1,4 +1,5 @@
-import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
+import type { HttpRoute, HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
 import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
 import type { AccessPublicApi } from '../../../access/public.js';
 import { AccessOperationError } from '../../../access/public-errors.js';
@@ -97,8 +98,8 @@ function toTag(value: CommandTagRecord): QuickCommandTag {
 	};
 }
 
-async function authenticate(context: HttpRouteContext, access: AccessPublicApi): Promise<CommandActor> {
-	const token = context.cookie(ACCESS_SESSION_COOKIE_NAME);
+async function authenticate(request: HttpRequest, reply: HttpReply, access: AccessPublicApi): Promise<CommandActor> {
+	const token = readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME);
 	const identity = await access.authenticate(token);
 	if (!token || !identity) {
 		throw new CommandFailure('unauthenticated');
@@ -106,25 +107,44 @@ async function authenticate(context: HttpRouteContext, access: AccessPublicApi):
 	return { userId: identity.userId, token };
 }
 
-async function revalidate(context: HttpRouteContext, access: AccessPublicApi, actor: CommandActor): Promise<void> {
-	const current = await authenticate(context, access);
+async function revalidate(
+	request: HttpRequest,
+	reply: HttpReply,
+	access: AccessPublicApi,
+	actor: CommandActor,
+): Promise<void> {
+	const current = await authenticate(request, reply, access);
 	if (current.userId !== actor.userId || current.token !== actor.token) {
 		throw new CommandFailure('forbidden');
 	}
 }
 
-function ready(context: HttpRouteContext): void {
-	if (context.response.destroyed || context.response.writableEnded) {
+function ready(request: HttpRequest, reply: HttpReply): void {
+	if (reply.raw.destroyed || reply.raw.writableEnded) {
 		throw new CommandFailure('unavailable');
 	}
 }
 
-function send(context: HttpRouteContext, status: number, body: unknown): void {
-	if (Buffer.byteLength(JSON.stringify(body), 'utf8') > COMMAND_RESPONSE_MAX_BYTES) {
-		throw new CommandFailure('limit_exceeded');
-	}
-	ready(context);
-	context.send(status, body);
+function send(request: HttpRequest, reply: HttpReply, status: number, body: unknown, mutation = false): void {
+	ready(request, reply);
+	reply.type('application/json; charset=utf-8').serializer((payload) => {
+		try {
+			const encoded = JSON.stringify(payload);
+			if (encoded === undefined) {
+				throw new CommandFailure('internal_failure');
+			}
+			if (Buffer.byteLength(encoded, 'utf8') > COMMAND_RESPONSE_MAX_BYTES) {
+				throw new CommandFailure('limit_exceeded');
+			}
+			return encoded;
+		} catch (cause) {
+			throw new CommandFailure(
+				mutation ? 'operation_unknown' : cause instanceof CommandFailure ? cause.code : 'internal_failure',
+				{ cause },
+			);
+		}
+	});
+	reply.code(status).send(body);
 }
 
 function failureCode(error: unknown): CommandErrorCode {
@@ -146,16 +166,32 @@ function failureCode(error: unknown): CommandErrorCode {
 	return 'internal_failure';
 }
 
-async function handle(context: HttpRouteContext, work: () => Promise<void>): Promise<void> {
+function sendFailure(error: unknown, request: HttpRequest, reply: HttpReply): void {
+	const code = failureCode(error);
+	if (reply.sent || reply.raw.headersSent) {
+		reply.raw.destroy();
+	} else if (!reply.raw.destroyed && !reply.raw.writableEnded) {
+		reply
+			.removeHeader('Content-Length')
+			.type('application/json; charset=utf-8')
+			.serializer(JSON.stringify)
+			.code(error instanceof HttpInputFailure ? error.status : ERROR_STATUS[code])
+			.send({ code });
+	}
+}
+
+function httpErrorHandler(error: unknown, request: HttpRequest, reply: HttpReply): void {
+	if (!(error instanceof CommandFailure)) {
+		throw error;
+	}
+	sendFailure(error, request, reply);
+}
+
+async function handle(request: HttpRequest, reply: HttpReply, work: () => Promise<void>): Promise<void> {
 	try {
 		await work();
 	} catch (error) {
-		const code = failureCode(error);
-		if (context.response.headersSent) {
-			context.response.destroy();
-		} else if (!context.response.destroyed && !context.response.writableEnded) {
-			context.send(error instanceof HttpInputFailure ? error.status : ERROR_STATUS[code], { code });
-		}
+		sendFailure(error, request, reply);
 	}
 }
 
@@ -195,24 +231,25 @@ function projectResult(
 }
 
 async function execute(
-	context: HttpRouteContext,
+	request: HttpRequest,
+	reply: HttpReply,
 	access: AccessPublicApi,
 	service: CommandService,
 	decode: (value: unknown) => CommandTask,
 	status: number,
 ): Promise<void> {
-	if (context.query.size) {
+	if (request.query.size) {
 		throw new InvalidCommandPayload();
 	}
-	const actor = await authenticate(context, access);
-	const input = await context.json();
+	const actor = await authenticate(request, reply, access);
+	const input = request.body;
 	const task = decode(input);
-	await revalidate(context, access, actor);
-	ready(context);
+	await revalidate(request, reply, access, actor);
+	ready(request, reply);
 	const result = await service.mutate(actor, task);
 	try {
-		await revalidate(context, access, actor);
-		send(context, status, projectResult(task, result));
+		await revalidate(request, reply, access, actor);
+		send(request, reply, status, projectResult(task, result), true);
 	} catch (cause) {
 		throw new CommandFailure('operation_unknown', { cause });
 	}
@@ -224,13 +261,16 @@ export function createCommandRoutes(service: CommandService, access: AccessPubli
 	return [
 		{
 			method: 'DELETE',
-			path: path + '/untagged-group',
-			maxBodyBytes: COMMAND_REQUEST_MAX_BYTES,
+			url: path + '/untagged-group',
+			bodyLimit: COMMAND_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handle(context, () =>
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, () =>
 					execute(
-						context,
+						request,
+						reply,
 						access,
 						service,
 						(value) => {
@@ -249,55 +289,62 @@ export function createCommandRoutes(service: CommandService, access: AccessPubli
 		},
 		{
 			method: 'GET',
-			path,
+			url: path,
 
-			handle: (context) =>
-				handle(context, async () => {
-					const actor = await authenticate(context, access);
-					const query = readCommandQuery(context.query);
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					const actor = await authenticate(request, reply, access);
+					const query = readCommandQuery(request.query);
 					const page = await service.list(actor, {
 						sortBy: query.sortBy,
 						offset: query.offset,
 						limit: query.limit,
 					});
-					await revalidate(context, access, actor);
+					await revalidate(request, reply, access, actor);
 					const body: CommandListResponse = {
 						entries: page.entries.map(toCommand),
 						nextOffset: page.nextOffset,
 					};
-					send(context, 200, body);
+					send(request, reply, 200, body);
 				}),
 		},
 		{
 			method: 'GET',
-			path: tags,
+			url: tags,
 
-			handle: (context) =>
-				handle(context, async () => {
-					const actor = await authenticate(context, access);
-					const query = readCommandQuery(context.query, true);
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					const actor = await authenticate(request, reply, access);
+					const query = readCommandQuery(request.query, true);
 					const page = await service.listTags(actor, {
 						sortBy: query.sortBy,
 						offset: query.offset,
 						limit: query.limit,
 					});
-					await revalidate(context, access, actor);
+					await revalidate(request, reply, access, actor);
 					const body: CommandTagListResponse = {
 						entries: page.entries.map(toTag),
 						nextOffset: page.nextOffset,
 					};
-					send(context, 200, body);
+					send(request, reply, 200, body);
 				}),
 		},
 		{
 			method: 'POST',
-			path,
-			maxBodyBytes: COMMAND_REQUEST_MAX_BYTES,
+			url: path,
+			bodyLimit: COMMAND_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handle(context, () =>
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, () =>
 					execute(
-						context,
+						request,
+						reply,
 						access,
 						service,
 						(value) => ({ action: 'create', input: toInput(readCommandCreate(value)) }),
@@ -307,20 +354,23 @@ export function createCommandRoutes(service: CommandService, access: AccessPubli
 		},
 		{
 			method: 'PUT',
-			path: path + '/:id',
-			maxBodyBytes: COMMAND_REQUEST_MAX_BYTES,
+			url: path + '/:id',
+			bodyLimit: COMMAND_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handle(context, () =>
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, () =>
 					execute(
-						context,
+						request,
+						reply,
 						access,
 						service,
 						(value) => {
 							const input = readCommandUpdate(value);
 							return {
 								action: 'update',
-								id: readCommandId(context.params.id),
+								id: readCommandId(request.params.id),
 								expectedVersion: input.expectedVersion,
 								input: toInput(input),
 							};
@@ -331,18 +381,21 @@ export function createCommandRoutes(service: CommandService, access: AccessPubli
 		},
 		{
 			method: 'DELETE',
-			path: path + '/:id',
-			maxBodyBytes: COMMAND_REQUEST_MAX_BYTES,
+			url: path + '/:id',
+			bodyLimit: COMMAND_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handle(context, () =>
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, () =>
 					execute(
-						context,
+						request,
+						reply,
 						access,
 						service,
 						(value) => ({
 							action: 'delete',
-							id: readCommandId(context.params.id),
+							id: readCommandId(request.params.id),
 							expectedVersion: readCommandVersion(value).expectedVersion,
 						}),
 						200,
@@ -351,18 +404,21 @@ export function createCommandRoutes(service: CommandService, access: AccessPubli
 		},
 		{
 			method: 'POST',
-			path: path + '/:id/increment-usage',
-			maxBodyBytes: COMMAND_REQUEST_MAX_BYTES,
+			url: path + '/:id/increment-usage',
+			bodyLimit: COMMAND_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handle(context, () =>
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, () =>
 					execute(
-						context,
+						request,
+						reply,
 						access,
 						service,
 						(value) => ({
 							action: 'increment',
-							id: readCommandId(context.params.id),
+							id: readCommandId(request.params.id),
 							expectedVersion: readCommandVersion(value).expectedVersion,
 						}),
 						200,
@@ -371,13 +427,16 @@ export function createCommandRoutes(service: CommandService, access: AccessPubli
 		},
 		{
 			method: 'POST',
-			path: path + '/bulk-assign-tag',
-			maxBodyBytes: COMMAND_REQUEST_MAX_BYTES,
+			url: path + '/bulk-assign-tag',
+			bodyLimit: COMMAND_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handle(context, () =>
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, () =>
 					execute(
-						context,
+						request,
+						reply,
 						access,
 						service,
 						(value) => {
@@ -397,13 +456,16 @@ export function createCommandRoutes(service: CommandService, access: AccessPubli
 		},
 		{
 			method: 'POST',
-			path: tags,
-			maxBodyBytes: COMMAND_REQUEST_MAX_BYTES,
+			url: tags,
+			bodyLimit: COMMAND_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handle(context, () =>
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, () =>
 					execute(
-						context,
+						request,
+						reply,
 						access,
 						service,
 						(value) => ({ action: 'create_tag', name: readCommandTagCreate(value).name }),
@@ -413,20 +475,23 @@ export function createCommandRoutes(service: CommandService, access: AccessPubli
 		},
 		{
 			method: 'PUT',
-			path: tags + '/:id',
-			maxBodyBytes: COMMAND_REQUEST_MAX_BYTES,
+			url: tags + '/:id',
+			bodyLimit: COMMAND_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handle(context, () =>
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, () =>
 					execute(
-						context,
+						request,
+						reply,
 						access,
 						service,
 						(value) => {
 							const input = readCommandTagUpdate(value);
 							return {
 								action: 'update_tag',
-								id: readCommandId(context.params.id),
+								id: readCommandId(request.params.id),
 								expectedVersion: input.expectedVersion,
 								name: input.name,
 							};
@@ -437,20 +502,23 @@ export function createCommandRoutes(service: CommandService, access: AccessPubli
 		},
 		{
 			method: 'DELETE',
-			path: tags + '/:id/group',
-			maxBodyBytes: COMMAND_REQUEST_MAX_BYTES,
+			url: tags + '/:id/group',
+			bodyLimit: COMMAND_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handle(context, () =>
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, () =>
 					execute(
-						context,
+						request,
+						reply,
 						access,
 						service,
 						(value) => {
 							const input = readCommandGroupDelete(value);
 							return {
 								action: 'delete_group',
-								id: readCommandId(context.params.id),
+								id: readCommandId(request.params.id),
 								expectedVersion: input.expectedVersion,
 								commands: input.commands.map((row) => ({
 									id: row.id,
@@ -464,18 +532,21 @@ export function createCommandRoutes(service: CommandService, access: AccessPubli
 		},
 		{
 			method: 'DELETE',
-			path: tags + '/:id',
-			maxBodyBytes: COMMAND_REQUEST_MAX_BYTES,
+			url: tags + '/:id',
+			bodyLimit: COMMAND_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handle(context, () =>
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, () =>
 					execute(
-						context,
+						request,
+						reply,
 						access,
 						service,
 						(value) => ({
 							action: 'delete_tag',
-							id: readCommandId(context.params.id),
+							id: readCommandId(request.params.id),
 							expectedVersion: readCommandVersion(value).expectedVersion,
 						}),
 						200,

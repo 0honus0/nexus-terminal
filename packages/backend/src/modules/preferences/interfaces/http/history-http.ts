@@ -1,4 +1,5 @@
-import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
+import type { HttpRoute, HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
 import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
 import type { AccessPublicApi } from '../../../access/public.js';
 import { AccessOperationError } from '../../../access/public-errors.js';
@@ -40,8 +41,8 @@ const ERROR_STATUS: Record<HistoryErrorCode, number> = {
 	unavailable: 503,
 };
 
-async function authenticate(context: HttpRouteContext, access: AccessPublicApi): Promise<HistoryActor> {
-	const token = context.cookie(ACCESS_SESSION_COOKIE_NAME);
+async function authenticate(request: HttpRequest, reply: HttpReply, access: AccessPublicApi): Promise<HistoryActor> {
+	const token = readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME);
 	const identity = await access.authenticate(token);
 	if (!token || !identity) {
 		throw new HistoryFailure('unauthenticated');
@@ -49,14 +50,28 @@ async function authenticate(context: HttpRouteContext, access: AccessPublicApi):
 	return { userId: identity.userId, token };
 }
 
-function send(context: HttpRouteContext, status: number, value: unknown): void {
-	if (Buffer.byteLength(JSON.stringify(value), 'utf8') > HISTORY_RESPONSE_MAX_BYTES) {
-		throw new HistoryFailure('limit_exceeded');
-	}
-	if (context.response.destroyed || context.response.writableEnded) {
+function send(request: HttpRequest, reply: HttpReply, status: number, value: unknown, mutation = false): void {
+	if (reply.raw.destroyed || reply.raw.writableEnded) {
 		throw new HistoryFailure('unavailable');
 	}
-	context.send(status, value);
+	reply.type('application/json; charset=utf-8').serializer((payload) => {
+		try {
+			const encoded = JSON.stringify(payload);
+			if (encoded === undefined) {
+				throw new HistoryFailure('internal_failure');
+			}
+			if (Buffer.byteLength(encoded, 'utf8') > HISTORY_RESPONSE_MAX_BYTES) {
+				throw new HistoryFailure('limit_exceeded');
+			}
+			return encoded;
+		} catch (cause) {
+			throw new HistoryFailure(
+				mutation ? 'operation_unknown' : cause instanceof HistoryFailure ? cause.code : 'internal_failure',
+				{ cause },
+			);
+		}
+	});
+	reply.code(status).send(value);
 }
 
 function toWire(kind: HistoryKind, value: HistoryPage): CommandHistoryListResponse | PathHistoryListResponse {
@@ -72,8 +87,13 @@ function toWire(kind: HistoryKind, value: HistoryPage): CommandHistoryListRespon
 	};
 }
 
-async function revalidate(context: HttpRouteContext, access: AccessPublicApi, actor: HistoryActor): Promise<void> {
-	const current = await authenticate(context, access);
+async function revalidate(
+	request: HttpRequest,
+	reply: HttpReply,
+	access: AccessPublicApi,
+	actor: HistoryActor,
+): Promise<void> {
+	const current = await authenticate(request, reply, access);
 	if (current.userId !== actor.userId || current.token !== actor.token) {
 		throw new HistoryFailure('forbidden');
 	}
@@ -98,37 +118,54 @@ function failureCode(error: unknown): HistoryErrorCode {
 	return 'internal_failure';
 }
 
-async function handle(context: HttpRouteContext, work: () => Promise<void>): Promise<void> {
+function sendFailure(error: unknown, request: HttpRequest, reply: HttpReply): void {
+	const code = failureCode(error);
+	const status = error instanceof HttpInputFailure ? error.status : ERROR_STATUS[code];
+	if (reply.sent || reply.raw.headersSent) {
+		reply.raw.destroy();
+	} else if (!reply.raw.destroyed && !reply.raw.writableEnded) {
+		reply
+			.removeHeader('Content-Length')
+			.type('application/json; charset=utf-8')
+			.serializer(JSON.stringify)
+			.code(status)
+			.send({ code });
+	}
+}
+
+function httpErrorHandler(error: unknown, request: HttpRequest, reply: HttpReply): void {
+	if (!(error instanceof HistoryFailure)) {
+		throw error;
+	}
+	sendFailure(error, request, reply);
+}
+
+async function handle(request: HttpRequest, reply: HttpReply, work: () => Promise<void>): Promise<void> {
 	try {
 		await work();
 	} catch (error) {
-		const code = failureCode(error);
-		const status = error instanceof HttpInputFailure ? error.status : ERROR_STATUS[code];
-		if (context.response.headersSent) {
-			context.response.destroy();
-		} else if (!context.response.destroyed && !context.response.writableEnded) {
-			context.send(status, { code });
-		}
+		sendFailure(error, request, reply);
 	}
 }
 
 async function deliver(
-	context: HttpRouteContext,
+	request: HttpRequest,
+	reply: HttpReply,
 	access: AccessPublicApi,
 	actor: HistoryActor,
 	status: number,
 	result: unknown,
 ): Promise<void> {
 	try {
-		await revalidate(context, access, actor);
-		send(context, status, result);
+		await revalidate(request, reply, access, actor);
+		send(request, reply, status, result, true);
 	} catch (cause) {
 		throw new HistoryFailure('operation_unknown', { cause });
 	}
 }
 
-function requireNoQuery(context: HttpRouteContext): void {
-	if (context.query.size) {
+function requireNoQuery(request: HttpRequest, reply: HttpReply): void {
+	if (request.query.size) {
 		throw new InvalidHistoryPayload();
 	}
 }
@@ -138,69 +175,77 @@ function routes(kind: HistoryKind, service: HistoryService, access: AccessPublic
 	return [
 		{
 			method: 'GET',
-			path,
+			url: path,
 
-			handle: (context) =>
-				handle(context, async () => {
-					const actor = await authenticate(context, access);
-					const query = readHistoryListQuery(context.query);
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					const actor = await authenticate(request, reply, access);
+					const query = readHistoryListQuery(request.query);
 					const page = await service.list(actor, { kind, offset: query.offset, limit: query.limit });
-					await revalidate(context, access, actor);
-					send(context, 200, toWire(kind, page));
+					await revalidate(request, reply, access, actor);
+					send(request, reply, 200, toWire(kind, page));
 				}),
 		},
 		{
 			method: 'POST',
-			path,
-			maxBodyBytes: HISTORY_REQUEST_MAX_BYTES,
+			url: path,
+			bodyLimit: HISTORY_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handle(context, async () => {
-					requireNoQuery(context);
-					const actor = await authenticate(context, access);
-					const input = await context.json();
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					requireNoQuery(request, reply);
+					const actor = await authenticate(request, reply, access);
+					const input = request.body;
 					const text =
 						kind === 'command' ? readCommandHistoryAdd(input).command : readPathHistoryAdd(input).path;
-					await revalidate(context, access, actor);
-					if (context.response.destroyed || context.response.writableEnded) {
+					await revalidate(request, reply, access, actor);
+					if (reply.raw.destroyed || reply.raw.writableEnded) {
 						throw new HistoryFailure('unavailable');
 					}
 					const saved = await service.add(actor, { kind, text });
 					const result: HistoryAddResponse = { id: saved.id };
-					await deliver(context, access, actor, 201, result);
+					await deliver(request, reply, access, actor, 201, result);
 				}),
 		},
 		{
 			method: 'DELETE',
-			path: path + '/:id',
+			url: path + '/:id',
 
-			handle: (context) =>
-				handle(context, async () => {
-					requireNoQuery(context);
-					const actor = await authenticate(context, access);
-					const id = readHistoryId(context.params.id);
-					if (context.response.destroyed || context.response.writableEnded) {
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					requireNoQuery(request, reply);
+					const actor = await authenticate(request, reply, access);
+					const id = readHistoryId(request.params.id);
+					if (reply.raw.destroyed || reply.raw.writableEnded) {
 						throw new HistoryFailure('unavailable');
 					}
 					await service.delete(actor, kind, id);
 					const result: HistoryDeleteResponse = { deleted: true };
-					await deliver(context, access, actor, 200, result);
+					await deliver(request, reply, access, actor, 200, result);
 				}),
 		},
 		{
 			method: 'DELETE',
-			path,
+			url: path,
 
-			handle: (context) =>
-				handle(context, async () => {
-					requireNoQuery(context);
-					const actor = await authenticate(context, access);
-					if (context.response.destroyed || context.response.writableEnded) {
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					requireNoQuery(request, reply);
+					const actor = await authenticate(request, reply, access);
+					if (reply.raw.destroyed || reply.raw.writableEnded) {
 						throw new HistoryFailure('unavailable');
 					}
 					const count = await service.clear(actor, kind);
 					const result: HistoryClearResponse = { count };
-					await deliver(context, access, actor, 200, result);
+					await deliver(request, reply, access, actor, 200, result);
 				}),
 		},
 	];

@@ -67,12 +67,10 @@ for (const phase of ['read-dispatch', 'approval-dispatch', 'completion']) {
 								name: phase === 'read-dispatch' ? 'file_inspect' : 'file_write',
 								input:
 									phase === 'read-dispatch'
-										? { connectionId: f.connectionId, path: directory }
+										? { connectionId: f.connectionId, paths: [directory] }
 										: {
 												connectionId: f.connectionId,
-												path,
-												content: 'committed once',
-												expectedSha256: 'absent',
+												items: [{ path, content: 'committed once', expectedSha256: 'absent' }],
 											},
 							},
 				);

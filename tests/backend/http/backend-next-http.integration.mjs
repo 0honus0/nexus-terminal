@@ -391,7 +391,7 @@ await test('B10 installed backend-next HTTP, durable state and model execution',
 					}),
 					200,
 				);
-				assert.equal(restored.restoredTables, 88);
+				assert.equal(restored.restoredTables, 89);
 				assert.ok(restored.restoredRows > 0);
 				assert.equal(typeof restored.cleanupPending, 'boolean');
 				assert.deepEqual(expectStatus(await api('GET', '/api/v1/quick-commands'), 200).entries, [command]);

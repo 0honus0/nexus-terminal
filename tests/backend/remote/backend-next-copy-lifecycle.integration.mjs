@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { until } from './openssh-fixture.mjs';
 import { fileHandles, remoteFilesFixture, transferEvent } from './file-transfer-fixture.mjs';
+import { RemoteFileModel } from '../../../packages/backend/dist/modules/remote/files/model/file-model.js';
+import { SftpFileResource } from '../../../packages/backend/dist/modules/remote/files/model/file-resource.js';
 
 async function prefix(path, length) {
 	const file = await open(path, 'r');
@@ -21,6 +23,8 @@ async function prefix(path, length) {
 await test('B10 real cross-Workspace copy cancellation and either owner closing', async (t) => {
 	for (const mode of ['cancel', 'source-close', 'destination-close']) {
 		await t.test(mode, async (t) => {
+			// These cases exercise the real SFTP stage writer; direct transfer has its own lifecycle coverage.
+			t.mock.method(RemoteFileModel.prototype, 'copyDirect', async () => false);
 			const f = await remoteFilesFixture(t);
 			const source = await f.endpoint('source');
 			const destination = await f.endpoint('destination');
@@ -38,6 +42,28 @@ await test('B10 real cross-Workspace copy cancellation and either owner closing'
 				await file.close();
 			}
 			await writeFile(destinationPath, original);
+			const openRead = SftpFileResource.prototype.openRead;
+			t.mock.method(SftpFileResource.prototype, 'openRead', async function (request) {
+				const source = await openRead.call(this, request);
+				if (request.path !== sourcePath) return source;
+				return {
+					async *[Symbol.asyncIterator]() {
+						let readBytes = 0;
+						for await (const chunk of source) {
+							yield chunk;
+							readBytes += chunk.byteLength;
+							if (readBytes >= bytes.length * 2) {
+								// Keep the actual writer open until cancellation, independent of local disk speed.
+								request.signal.throwIfAborted();
+								await new Promise((resolve) =>
+									request.signal.addEventListener('abort', resolve, { once: true }),
+								);
+								request.signal.throwIfAborted();
+							}
+						}
+					},
+				};
+			});
 			const requestId = randomUUID();
 			const started = await destination.workspace.call(
 				'transfer.copyMove',
@@ -50,11 +76,17 @@ await test('B10 real cross-Workspace copy cancellation and either owner closing'
 				requestId,
 			);
 			assert.equal(started.ok, true, JSON.stringify(started));
-			const progress = await transferEvent(destination.workspace, 'transfer.copyMove', requestId, [
-				'progress',
-				'failed',
-				'completed',
-			]);
+			const progress = await until(
+				() =>
+					destination.workspace.events.find(
+						(event) =>
+							event.type === 'transfer.copyMove' &&
+							event.payload.requestId === requestId &&
+							(event.payload.type !== 'progress' || event.payload.transferredBytes >= bytes.length),
+					),
+				Boolean,
+				'Copy has written the original prefix before cancellation',
+			);
 			assert.equal(progress.payload.type, 'progress', JSON.stringify(progress));
 			assert.ok(progress.payload.transferredBytes >= bytes.length);
 			const stages = (await readdir(destination.root)).filter((name) => name.startsWith('.nexus-upload-'));
@@ -62,6 +94,7 @@ await test('B10 real cross-Workspace copy cancellation and either owner closing'
 			const stage = join(destination.root, stages[0]);
 			assert.deepEqual(await prefix(stage, bytes.length), bytes);
 			assert.ok((await fileHandles(stage)).length > 0, 'the actual SFTP writer is still active');
+			assert.ok((await stat(stage)).size < 128 * 1024 * 1024, 'the copy is incomplete before cancellation');
 			f.state.allowUnknownShutdown = true;
 			if (mode === 'cancel') {
 				const response = await destination.workspace.call('transfer.cancel', { taskId: requestId });
@@ -69,8 +102,8 @@ await test('B10 real cross-Workspace copy cancellation and either owner closing'
 				assert.equal(response.data, true);
 			} else {
 				const response = await f.close(mode === 'source-close' ? source : destination);
-				assert.equal(response.ok, false, JSON.stringify(response));
-				assert.equal(response.error, 'operation_unknown');
+				assert.equal(response.ok, true, JSON.stringify(response));
+				assert.equal(response.data, null);
 			}
 			if (mode !== 'destination-close') {
 				const terminal = await transferEvent(destination.workspace, 'transfer.copyMove', requestId, [
@@ -89,7 +122,7 @@ await test('B10 real cross-Workspace copy cancellation and either owner closing'
 			assert.deepEqual(await readFile(destinationPath), original);
 			assert.deepEqual(await prefix(sourcePath, bytes.length), bytes);
 			assert.equal((await stat(sourcePath)).size, 128 * 1024 * 1024);
-			assert.ok((await stat(stage)).size < 128 * 1024 * 1024, 'cancellation interrupts the actual large copy');
+			await assert.rejects(stat(stage), { code: 'ENOENT' });
 			const healthy = mode === 'source-close' ? destination : source;
 			assert.deepEqual(await healthy.workspace.read(healthPath, 1024), original);
 			const peer = await f.connect(destination.target);

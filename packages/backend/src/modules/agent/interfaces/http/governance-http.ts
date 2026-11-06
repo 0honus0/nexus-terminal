@@ -1,3 +1,5 @@
+import { agentHttpSerializer, agentHttpErrorHandler } from './agent-http-response.js';
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import { AgentHttpInput } from './agent-input.js';
 import { toApproval, toApprovalPage } from './governance-mapper.js';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
@@ -20,7 +22,7 @@ import {
 	readAgentApprovalResolveRequest,
 	readAgentApprovalCommandHeaders,
 } from '@nexus-terminal/shared/agent/governance/http-codec';
-import { encodeAgentJson, InvalidAgentPayload } from '@nexus-terminal/shared/agent/http-codec';
+import { InvalidAgentPayload } from '@nexus-terminal/shared/agent/http-codec';
 import type {
 	AgentGrantView,
 	AgentExecutionPolicyView,
@@ -30,8 +32,7 @@ import type {
 } from '@nexus-terminal/shared/agent/governance/model';
 import type { AgentErrorResponse } from '@nexus-terminal/shared/agent/http';
 import type { AgentExecutionPolicyOverrides } from '@nexus-terminal/shared/agent/governance/model';
-import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
-import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
+import type { HttpRoute, HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
 import type { AccessPublicApi } from '../../../access/public.js';
 import { AccessOperationError } from '../../../access/public-errors.js';
 import { AgentOperationError } from '../../public-errors.js';
@@ -53,14 +54,12 @@ type Response =
 	| AgentTargetDenylistView
 	| AgentErrorResponse;
 
-function send(ctx: HttpRouteContext, status: number, value: Response): void {
-	try {
-		encodeAgentJson(value, AGENT_GOVERNANCE_MAX_RESPONSE_BYTES);
-	} catch {
-		// A finite collection over the complete JSON response budget is a capacity failure.
-		throw new AgentOperationError('limit_exceeded');
-	}
-	ctx.send(status, value);
+function send(reply: HttpReply, status: number, value: Response): void {
+	reply
+		.type('application/json; charset=utf-8')
+		.serializer(agentHttpSerializer(AGENT_GOVERNANCE_MAX_RESPONSE_BYTES))
+		.code(status)
+		.send(value);
 }
 
 function toScope(scope: GrantScope): AgentGrantScope {
@@ -198,26 +197,23 @@ const toPolicy = (v: ExecutionPolicy): AgentExecutionPolicyView => ({
 	},
 });
 
-function fail(ctx: HttpRouteContext, error: unknown): void {
-	if (error instanceof HttpInputFailure) {
-		throw error;
-	}
+function fail(reply: HttpReply, error: unknown): void {
 	if (error instanceof InvalidAgentPayload || (error instanceof AgentFailure && error.code === 'invalid_input')) {
-		send(ctx, 400, { code: 'invalid_input' });
+		send(reply, 400, { code: 'invalid_input' });
 		return;
 	}
 	if (error instanceof AgentOperationError) {
 		const code = error.code;
-		send(ctx, agentErrorStatus(code), { code });
+		send(reply, agentErrorStatus(code), { code });
 		return;
 	}
 	if (error instanceof AccessOperationError) {
-		send(ctx, error.code === 'storage_unavailable' ? 503 : 500, {
+		send(reply, error.code === 'storage_unavailable' ? 503 : 500, {
 			code: error.code === 'storage_unavailable' ? 'storage_unavailable' : 'internal_failure',
 		});
 		return;
 	}
-	send(ctx, 500, { code: 'internal_failure' });
+	send(reply, 500, { code: 'internal_failure' });
 }
 
 export function createGovernanceHttpRoutes(
@@ -228,20 +224,20 @@ export function createGovernanceHttpRoutes(
 	const routes: HttpRoute[] = [];
 	const base = '/api/v1';
 
-	async function identity(ctx: HttpRouteContext): Promise<number | null> {
-		const session = await access.authenticate(ctx.cookie(ACCESS_SESSION_COOKIE_NAME));
+	async function identity(httpRequest: HttpRequest, reply: HttpReply): Promise<number | null> {
+		const session = await access.authenticate(readRequestCookie(httpRequest.raw, ACCESS_SESSION_COOKIE_NAME));
 		if (session === null) {
-			send(ctx, 401, { code: 'unauthenticated' });
+			send(reply, 401, { code: 'unauthenticated' });
 			return null;
 		}
 		if (session.userId !== 1) {
-			send(ctx, 403, { code: 'forbidden' });
+			send(reply, 403, { code: 'forbidden' });
 			return null;
 		}
 		return session.userId;
 	}
 
-	type Handler = (ctx: HttpRouteContext, userId: number) => Promise<void>;
+	type Handler = (httpRequest: HttpRequest, reply: HttpReply, userId: number) => Promise<void>;
 
 	function add(
 		method: HttpRoute['method'],
@@ -252,65 +248,63 @@ export function createGovernanceHttpRoutes(
 	): void {
 		routes.push({
 			method,
-			path: base + path,
-			maxBodyBytes,
+			url: base + path,
+			bodyLimit: maxBodyBytes,
+			errorHandler: agentHttpErrorHandler,
 
-			async handle(ctx) {
-				const inputBoundary = new AgentHttpInput(ctx);
+			async handler(httpRequest, reply) {
+				const inputBoundary = new AgentHttpInput(httpRequest);
 				try {
-					const userId = await identity(ctx);
+					const userId = await identity(httpRequest, reply);
 					if (userId === null) {
 						return;
 					}
-					if ([...ctx.query.keys()].some((key) => !queryKeys.includes(key))) {
+					if ([...httpRequest.query.keys()].some((key) => !queryKeys.includes(key))) {
 						throw new InvalidAgentPayload();
 					}
-					await boundary(() => inputBoundary.normalize(() => action(ctx, userId)));
+					await boundary(() => inputBoundary.normalize(() => action(httpRequest, reply, userId)));
 				} catch (error) {
-					if (inputBoundary.transportFailure) {
-						throw inputBoundary.transportFailure;
-					}
-					fail(ctx, error);
+					fail(reply, error);
 				}
 			},
 		});
 	}
 
-	async function deliver(ctx: HttpRouteContext, status: number, value: Response): Promise<void> {
-		if ((await identity(ctx)) === null) {
+	async function deliver(httpRequest: HttpRequest, reply: HttpReply, status: number, value: Response): Promise<void> {
+		if ((await identity(httpRequest, reply)) === null) {
 			return;
 		}
-		send(ctx, status, value);
+		send(reply, status, value);
 	}
 
-	add('GET', '/agent/target-denylist', async (ctx, userId) => {
-		await deliver(ctx, 200, toDenylist(await governance.denylist(userId)));
+	add('GET', '/agent/target-denylist', async (httpRequest, reply, userId) => {
+		await deliver(httpRequest, reply, 200, toDenylist(await governance.denylist(userId)));
 	});
-	add('PUT', '/agent/target-denylist', async (ctx, userId) => {
-		const input = readAgentTargetDenylistReplaceRequest(await ctx.json());
+	add('PUT', '/agent/target-denylist', async (httpRequest, reply, userId) => {
+		const input = readAgentTargetDenylistReplaceRequest(httpRequest.body);
 		const result = await governance.replaceDenylist({
 			userId,
 			expectedRevision: input.expectedRevision,
 			connectionIds: input.connectionIds.map((id) => id),
 			reason: input.reason,
 		});
-		await deliver(ctx, 200, toDenylist(result));
+		await deliver(httpRequest, reply, 200, toDenylist(result));
 	});
-	add('GET', '/agent/apps/:appId/grants', async (ctx, userId) => {
-		const appId = readAgentGovernanceAppPath(ctx.params).appId;
+	add('GET', '/agent/apps/:appId/grants', async (httpRequest, reply, userId) => {
+		const appId = readAgentGovernanceAppPath(httpRequest.params).appId;
 		const grants = await governance.grants(userId, appId);
 		if (!grants) {
-			await deliver(ctx, 404, { code: 'not_found' });
+			await deliver(httpRequest, reply, 404, { code: 'not_found' });
 			return;
 		}
-		await deliver(ctx, 200, toGrants(grants));
+		await deliver(httpRequest, reply, 200, toGrants(grants));
 	});
 	add(
 		'PUT',
 		'/agent/apps/:appId/grants',
-		async (ctx, userId) => {
-			const appId = readAgentGovernanceAppPath(ctx.params).appId;
-			const request = readAgentGrantReplaceRequest(await ctx.json());
+		async (httpRequest, reply, userId) => {
+			const appId = readAgentGovernanceAppPath(httpRequest.params).appId;
+			const request = readAgentGrantReplaceRequest(httpRequest.body);
 			const grants = await governance.replaceGrants(
 				userId,
 				appId,
@@ -318,42 +312,63 @@ export function createGovernanceHttpRoutes(
 				request.grants.map((g) => ({ capability: g.capability, scope: fromPublicScope(g.scope) })),
 			);
 			if (!grants) {
-				await deliver(ctx, 404, { code: 'not_found' });
+				await deliver(httpRequest, reply, 404, { code: 'not_found' });
 				return;
 			}
-			await deliver(ctx, 200, toGrants(grants));
+			await deliver(httpRequest, reply, 200, toGrants(grants));
 		},
 		AGENT_GOVERNANCE_MAX_GRANT_BODY_BYTES,
 	);
-	add('GET', '/agent/apps/:appId/execution-policy', async (ctx, userId) => {
-		const appId = readAgentGovernanceAppPath(ctx.params).appId;
+	add('GET', '/agent/apps/:appId/execution-policy', async (httpRequest, reply, userId) => {
+		const appId = readAgentGovernanceAppPath(httpRequest.params).appId;
 		const policy = await governance.execution(userId, appId);
-		await deliver(ctx, policy === null ? 404 : 200, policy === null ? { code: 'not_found' } : toPolicy(policy));
+		await deliver(
+			httpRequest,
+			reply,
+			policy === null ? 404 : 200,
+			policy === null ? { code: 'not_found' } : toPolicy(policy),
+		);
 	});
-	add('PUT', '/agent/apps/:appId/execution-policy', async (ctx, userId) => {
-		const appId = readAgentGovernanceAppPath(ctx.params).appId;
-		const request = readAgentExecutionPolicyReplaceRequest(await ctx.json());
+	add('PUT', '/agent/apps/:appId/execution-policy', async (httpRequest, reply, userId) => {
+		const appId = readAgentGovernanceAppPath(httpRequest.params).appId;
+		const request = readAgentExecutionPolicyReplaceRequest(httpRequest.body);
 		const policy = await governance.replaceExecution(
 			userId,
 			appId,
 			request.expectedVersion,
 			fromPublicPolicy(request.overrides),
 		);
-		await deliver(ctx, policy === null ? 404 : 200, policy === null ? { code: 'not_found' } : toPolicy(policy));
+		await deliver(
+			httpRequest,
+			reply,
+			policy === null ? 404 : 200,
+			policy === null ? { code: 'not_found' } : toPolicy(policy),
+		);
 	});
-	add('GET', '/apps/:appId/approvals/:approvalId', async (ctx, userId) => {
-		const path = readAgentApprovalPath(ctx.params);
+	add('GET', '/apps/:appId/approvals/:approvalId', async (httpRequest, reply, userId) => {
+		const path = readAgentApprovalPath(httpRequest.params);
 		const value = await governance.approval(userId, path.appId, path.approvalId);
-		await deliver(ctx, value === null ? 404 : 200, value === null ? { code: 'not_found' } : toApproval(value));
+		await deliver(
+			httpRequest,
+			reply,
+			value === null ? 404 : 200,
+			value === null ? { code: 'not_found' } : toApproval(value),
+		);
 	});
 	add(
 		'GET',
 		'/apps/:appId/runs/:runId/approvals',
-		async (ctx, userId) => {
-			const path = readAgentRunApprovalsPath(ctx.params);
-			const items = await governance.approvals(userId, path.appId, path.runId, readAgentApprovalQuery(ctx.query));
+		async (httpRequest, reply, userId) => {
+			const path = readAgentRunApprovalsPath(httpRequest.params);
+			const items = await governance.approvals(
+				userId,
+				path.appId,
+				path.runId,
+				readAgentApprovalQuery(httpRequest.query),
+			);
 			await deliver(
-				ctx,
+				httpRequest,
+				reply,
 				items === null ? 404 : 200,
 				items === null ? { code: 'not_found' } : toApprovalPage(items),
 			);
@@ -361,10 +376,10 @@ export function createGovernanceHttpRoutes(
 		AGENT_GOVERNANCE_MAX_BODY_BYTES,
 		['after'],
 	);
-	add('POST', '/apps/:appId/approvals/:approvalId/resolve', async (ctx, userId) => {
-		const path = readAgentApprovalPath(ctx.params);
-		const request = readAgentApprovalResolveRequest(await ctx.json());
-		const key = readAgentApprovalCommandHeaders(ctx.request.headers['idempotency-key']).operationKey;
+	add('POST', '/apps/:appId/approvals/:approvalId/resolve', async (httpRequest, reply, userId) => {
+		const path = readAgentApprovalPath(httpRequest.params);
+		const request = readAgentApprovalResolveRequest(httpRequest.body);
+		const key = readAgentApprovalCommandHeaders(httpRequest.headers['idempotency-key']).operationKey;
 		const result = await governance.resolve({
 			userId,
 			appId: path.appId,
@@ -375,7 +390,7 @@ export function createGovernanceHttpRoutes(
 			operationKey: key,
 			feedback: request.feedback,
 		});
-		await deliver(ctx, 200, toApproval(result));
+		await deliver(httpRequest, reply, 200, toApproval(result));
 	});
 	return routes;
 }

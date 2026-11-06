@@ -38,19 +38,18 @@ function multipart(parts) {
 	return { bytes: Buffer.concat(chunks), headers: { 'Content-Type': 'multipart/form-data; boundary=' + boundary } };
 }
 
-function heldExport(address, cookie, password) {
-	const bytes = Buffer.from(JSON.stringify({ password }));
+function heldRequest(address, cookie, path, bytes, headers) {
 	let req;
 	const result = new Promise((resolve, reject) => {
 		req = request(
-			'http://' + address + '/api/v1/settings/backup/export',
+			'http://' + address + path,
 			{
 				method: 'POST',
 				headers: {
 					Host: new URL(origin).host,
 					Origin: origin,
 					Cookie: cookie,
-					'Content-Type': 'application/json',
+					...headers,
 					'Content-Length': bytes.length,
 				},
 			},
@@ -62,7 +61,7 @@ function heldExport(address, cookie, password) {
 			},
 		);
 		req.on('error', reject);
-		req.setTimeout(15000, () => req.destroy(new Error('Held export deadline')));
+		req.setTimeout(15000, () => req.destroy(new Error('Held request deadline')));
 		req.write(bytes.subarray(0, 1));
 	});
 	// Attach the observer before cancellation can reject the request.
@@ -74,6 +73,20 @@ function heldExport(address, cookie, password) {
 
 		abort: () => req.destroy(new Error('Fixture cancelled upload')),
 	};
+}
+
+function heldExport(address, cookie, password) {
+	return heldRequest(address, cookie, '/api/v1/settings/backup/export', Buffer.from(JSON.stringify({ password })), {
+		'Content-Type': 'application/json',
+	});
+}
+
+function heldImport(address, cookie, archive, password) {
+	const body = multipart([
+		{ name: 'backupFile', filename: 'held.nexus-backup', bytes: archive },
+		{ name: 'password', bytes: password },
+	]);
+	return heldRequest(address, cookie, '/api/v1/settings/backup/import', body.bytes, body.headers);
 }
 
 await test(
@@ -221,7 +234,8 @@ await test(
 				'cross-instance import replaces product state and preserves destination session/listener',
 				async () => {
 					const restored = expectStatus(await restore(archive, sourcePassword), 200);
-					assert.equal(restored.restoredTables, 88);
+					// Remote desktop certificate trust is included in the current snapshot registration.
+					assert.equal(restored.restoredTables, 89);
 					assert.ok(restored.restoredRows > 0);
 					// The signed source plugin package and the uploaded artifact are both restored.
 					assert.equal(restored.restoredFiles, 2);
@@ -317,14 +331,14 @@ await test(
 				assert.deepEqual((await api('GET', artifactPath() + '/content')).bytes, content);
 			});
 			await t.test(
-				'held request body occupies the shared slot; cancellation releases it for export',
+				'held raw import body occupies the shared slot; cancellation releases it for export',
 				async () => {
-					const held = heldExport(address, cookie, destinationPassword);
+					const held = heldImport(address, cookie, archive, sourcePassword);
 					try {
 						await until(
 							() => api('POST', '/api/v1/settings/backup/export', { password: destinationPassword }),
 							(response) => response.status === 409 && response.body.code === 'busy',
-							'Held producer admission',
+							'Held import admission',
 						);
 						assert.equal(expectStatus(await restore(archive, sourcePassword), 409).code, 'busy');
 					} finally {
@@ -334,7 +348,7 @@ await test(
 					const exported = await until(
 						() => api('POST', '/api/v1/settings/backup/export', { password: destinationPassword }),
 						(response) => response.status === 200,
-						'Admission released after aborted producer',
+						'Admission released after aborted import',
 					);
 					assert.equal(exported.bytes.subarray(0, 9).toString('ascii'), 'NXSEALED2');
 				},
@@ -344,11 +358,12 @@ await test(
 				async () => {
 					const held = heldExport(address, cookie, destinationPassword);
 					try {
-						await until(
-							() => api('POST', '/api/v1/settings/backup/export', { password: destinationPassword }),
-							(response) => response.status === 409 && response.body.code === 'busy',
-							'Held export admission',
-						);
+						// Native JSON parsing completes before the export enters the business scope.
+						const exported = await api('POST', '/api/v1/settings/backup/export', {
+							password: destinationPassword,
+						});
+						expectStatus(exported, 200);
+						assert.equal(exported.bytes.subarray(0, 9).toString('ascii'), 'NXSEALED2');
 						expectStatus(await api('POST', '/api/v1/auth/logout', {}), 200);
 						held.finish();
 						const response = await held.result;

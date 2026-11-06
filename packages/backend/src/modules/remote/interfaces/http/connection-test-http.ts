@@ -1,5 +1,6 @@
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
-import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
+import type { HttpRoute, HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
 import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
 import type { ConnectionTestService } from '../../machines/service/connection-test-service.js';
 import type { ConnectionTestCommand, UnsavedConnectionTest } from '../../machines/model/connection-test-types.js';
@@ -61,35 +62,44 @@ function status(code: ConnectionTestErrorCode): number {
 	}
 }
 
-async function handle(context: HttpRouteContext, owner: ConnectionTestService, stored: boolean): Promise<void> {
+async function handle(
+	request: HttpRequest,
+	reply: HttpReply,
+	owner: ConnectionTestService,
+	stored: boolean,
+): Promise<void> {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), 15_000);
 
 	const disconnected = () => controller.abort();
 
-	context.response.once('close', disconnected);
+	reply.raw.once('close', disconnected);
 	try {
-		if (context.query.size) {
+		if (request.query.size) {
 			throw new InvalidTargetPayload();
 		}
 		let command: ConnectionTestCommand;
 		if (stored) {
-			if (!/^[1-9]\d*$/u.test(context.params.id)) {
+			if (!/^[1-9]\d*$/u.test(request.params.id)) {
 				throw new InvalidTargetPayload();
 			}
-			command = { kind: 'stored', targetId: targetNumber(Number(context.params.id)) };
+			command = { kind: 'stored', targetId: targetNumber(Number(request.params.id)) };
 		} else {
-			command = { kind: 'unsaved', target: toUnsaved(readUnsavedSshTest(await context.json(controller.signal))) };
+			command = { kind: 'unsaved', target: toUnsaved(readUnsavedSshTest(request.body)) };
 		}
-		const value = await owner.test(context.cookie(ACCESS_SESSION_COOKIE_NAME), command, controller.signal);
+		const value = await owner.test(
+			readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
+			command,
+			controller.signal,
+		);
 		controller.signal.throwIfAborted();
-		context.send(200, { status: 'ok', latencyMs: value.latencyMs } satisfies ConnectionTestResponse);
+		reply.code(200).send({ status: 'ok', latencyMs: value.latencyMs } satisfies ConnectionTestResponse);
 	} catch (error) {
 		if (error instanceof HttpInputFailure) {
 			throw error;
 		}
 		if (error instanceof ConnectionTestHostKeyFailure && !controller.signal.aborted) {
-			context.send(422, {
+			reply.code(422).send({
 				code: 'host_key_untrusted',
 				hostKey: {
 					host: error.hostKey.host,
@@ -108,10 +118,10 @@ async function handle(context: HttpRouteContext, owner: ConnectionTestService, s
 					: controller.signal.aborted
 						? 'unavailable'
 						: 'internal_failure';
-		context.send(status(code), { code } satisfies ConnectionTestFailureResponse);
+		reply.code(status(code)).send({ code } satisfies ConnectionTestFailureResponse);
 	} finally {
 		clearTimeout(timer);
-		context.response.off('close', disconnected);
+		reply.raw.off('close', disconnected);
 	}
 }
 
@@ -119,17 +129,17 @@ export function createConnectionTestRoutes(owner: ConnectionTestService): HttpRo
 	return [
 		{
 			method: 'POST',
-			path: '/api/v1/targets/connections/:id/test',
-			maxBodyBytes: CONNECTION_TEST_BODY_MAX_BYTES,
+			url: '/api/v1/targets/connections/:id/test',
+			bodyLimit: CONNECTION_TEST_BODY_MAX_BYTES,
 
-			handle: (ctx) => handle(ctx, owner, true),
+			handler: (request, reply) => handle(request, reply, owner, true),
 		},
 		{
 			method: 'POST',
-			path: '/api/v1/targets/connections/test-unsaved',
-			maxBodyBytes: CONNECTION_TEST_BODY_MAX_BYTES,
+			url: '/api/v1/targets/connections/test-unsaved',
+			bodyLimit: CONNECTION_TEST_BODY_MAX_BYTES,
 
-			handle: (ctx) => handle(ctx, owner, false),
+			handler: (request, reply) => handle(request, reply, owner, false),
 		},
 	];
 }

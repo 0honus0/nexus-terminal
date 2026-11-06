@@ -123,9 +123,9 @@ await test('B10 Agent tool approval, actual SSH effects and revocation', { timeo
 								name: 'file_write',
 								arguments: JSON.stringify({
 									connectionId,
-									path: scenario.path,
-									content: scenario.content,
-									expectedSha256: 'absent',
+									items: [
+										{ path: scenario.path, content: scenario.content, expectedSha256: 'absent' },
+									],
 								}),
 							},
 						},
@@ -327,7 +327,7 @@ await test('B10 Agent tool approval, actual SSH effects and revocation', { timeo
 				const details = expectStatus(await api('GET', runPath(run) + '/tools/' + approval.toolCallId), 200);
 				assert.equal(details.tool.id, approval.toolCallId);
 				assert.equal(details.failureCode, null);
-				assert.equal(JSON.parse(details.argumentsJson).content, content);
+				assert.equal(JSON.parse(details.argumentsJson).items[0].content, content);
 				assert.equal(expectStatus(await resolve(approval, 'approved', key), 200).status, 'approved');
 				assert.equal(calls.length, 2);
 				assert.ok(calls[1].messages.some((message) => message.role === 'tool'));

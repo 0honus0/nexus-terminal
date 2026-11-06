@@ -1121,3 +1121,201 @@ Node 26.13.0 / pnpm 12.16.1：`pnpm check`、`pnpm build`、E2E 测试客户端�
 源码与消费者、边界/结构和容量四表已完成审核，无待修缺口；根 check、全仓格式、生产及测试客户端构建通过，本轮 E2E vue-tsc 和54条本地文档文件链接检查也通过。首轮修正仅同步真实日志级别和取样时机，保留原功能/对比度断言与当前 UI。完整运行记录为本轮目录的 `remote-final-run.json/log`、逐项核对为 `remote-final-run.summary.json`，8份实际耗时产物在 `final-timings/`，首次失败证据继续保留。
 
 远程自动提交 `225618e9` 仅修改耗时估算，已审核并快进同步；本次收口只更新文档，不将元数据或文档提交描述为直接被测 SHA。PLAN 清除已验施工区，真实模型效果、弱网/后台现场、手机软键盘与其它既有故障交错仍保留原待验范围。无数据库变更，无发布镜像或生产部署，专用产物按用户要求保留至通知清理。
+
+## Fastify 迁移完整性与框架能力复核（2026-11-06）
+
+本轮按用户要求审核后端完整 HTTP 流程与可复用框架能力，未修改产品代码、安装依赖或提交推送。旧 router/context/JSON 调度的运行时消费者已移除，七模块普通 HTTP 通过同一 Fastify 路由安装入口；Service/Model 未引入 Fastify。原生 Node listener 与 `ws` 仍承接稳定端口、在线恢复代次及 WS 业务生命周期，不能视为遗留路由器，也不能直接用 `app.close()` 取代维护排空。
+
+| 审核项               | 结论与后续                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 实际遗漏：raw 响应头 | `suspend-http.ts` 日志导出仅写 Content-Disposition/Content-Type；`plugin-intent-http.ts` 文件下载及 `file-download-http.ts` 的 416 分支缺少 nosniff。Fastify 全局 `reply.header()` 不会在 hijack 后自动写入 raw。实际挂起日志路由搭配 service stub 的真实 HTTP 请求得到 200，但无 no-store/nosniff；需要补齐并测真实响应头。Nginx 的 nosniff 不能证明后端自身已覆盖，也不补日志的 no-store。                                        |
+| 原生发送与编码       | 多处预先 JSON.stringify/encodeAgentJson 计算预算，再 reply.send 对象，发生重复序列化；可用原生 serializer/onSend 在单次编码后检查实际字节，保留 Shared 预算与业务错误投影。简单 Buffer/Readable 可改原生 send；带凭据撤销、最后字节授权和业务交付确认的流仍保留 owner。                                                                                                                                                             |
+| hooks 与模块边界     | http-bindings 包装十类 hooks 并适配 callback/Promise，Operations 另外用多个 WeakMap 记录请求阶段。可用 encapsulated plugins、decorateRequest 和 route config 收敛结构；Fastify response 完成不代表异步 handler/审计/补偿结束，真实任务排空不能删。                                                                                                                                                                                  |
+| schema 与文档        | 当前未给真实路由安装 schema/validatorCompiler/serializerCompiler。Shared codec 仍承担严格校验，不是完全无校验；统一 schema 后可利用框架验证、响应序列化及 OpenAPI。不得单独抄一份后端 schema，响应 schema 也不代替授权和业务 mapper。                                                                                                                                                                                               |
+| 上传解析             | http-body 先缓冲整个请求，再伪造 IncomingMessage 交给 Formidable，并收集各 part；连接导入还自行解析 JSON。`@fastify/multipart` 的流式 parts 可去掉中间整包和伪请求。保留授权先于读取、总字节预算、各 part 限制、秘密清零及取消；插件的 fileSize/parts 不等于整个 multipart 总预算，route.bodyLimit 不能代替该检查。不使用自动落临时文件的 saveRequestFiles 或默认整包附加 body 模式。                                               |
+| 原生取消存在版本问题 | Node 26.13.0 + Fastify 5.12.8，设置 handlerTimeout=100ms、handler 等待 150ms；GET 得 503，而正常 JSON POST 在请求体读完时 raw close（complete=true、aborted=false）误触发 signal，并清除 timer，最终仍得 200。源码 route.js/request.js 监听 IncomingMessage close，reply.hijack 还会移除监听。本项目未启用这两项能力，不构成已上线业务超时失效；不能直接用其替换现有取消逻辑。未来接入还须补 FST_ERR_HANDLER_TIMEOUT 安全错误映射。 |
+| 日志与安全策略       | request.id/genReqId、onResponse 等可统一技术关联与耗时；现有 Pino 安全白名单和业务审计保留，不能直接打开默认请求日志暴露 URL/凭据。CORS/JWT/session 插件不能替代同源校验、持久会话撤销、事务内授权和来源封禁。前端 Nginx 已开 gzip，暂无再加全局后端压缩的依据。                                                                                                                                                                    |
+
+本地诊断脚本与 JSON 结果保存在 `/home/honus/nexus-task-artifacts/http-fastify-20261106/http-capability-audit.{mjs,json}`；真实 listener + 实际 suspend 路由使用现有 dist，service stub 只提供固定日志字节，不访问数据库、远程主机或真实会话。取消探针直接使用安装的 Fastify，未使用 inject 模拟连接。该脚本报告现状，不是通过的产品回归测试。本轮未重新执行上一节的全量验收。
+
+官方插件选型通过 GitHub 仓库 API 和 README 核对（2026-11-06 查询，Star 会变化）：
+
+| 插件                                                                                                                                                                                                                                                                                      | Star                        | 结论                                                                                                                                             |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [@fastify/multipart](https://github.com/fastify/fastify-multipart)                                                                                                                                                                                                                        | 539                         | 满足 H-14，优先候选；明确选择支持 Fastify 5 的版本，采用 parts 流式消费和显式限制。                                                              |
+| [@fastify/swagger](https://github.com/fastify/fastify-swagger)                                                                                                                                                                                                                            | 1101                        | 满足 H-14；README 声明 >=9.x 支持 Fastify 5。先建立 Shared schema 来源，再注册插件汇总实际路由，不能直接生成准确的现有 codec 契约。              |
+| [@fastify/cookie](https://github.com/fastify/fastify-cookie)                                                                                                                                                                                                                              | 300                         | 功能能替代手拼 Cookie；当前不满足 H-14。若以后采用仍须保留同名重复 Cookie 拒绝和凭据撤销，不以普通字典解析覆盖这些语义。                         |
+| [swagger-ui](https://github.com/fastify/fastify-swagger-ui)、[helmet](https://github.com/fastify/fastify-helmet)、[compress](https://github.com/fastify/fastify-compress)、[websocket](https://github.com/fastify/fastify-websocket)、[static](https://github.com/fastify/fastify-static) | 192 / 464 / 230 / 467 / 499 | 当前均低于 H-14 门槛，不引入。即使将来满足，也须核对既有 Nginx 压缩/安全头、插件 sandbox、受权资源读取和 WS 维护生命周期，不能为插件数量而替换。 |
+
+## Fastify HTTP 整体迁移（2026-11-06）
+
+基于 `main/48d6f557f0995273f98a29be673a0ff44f546fbc` 的未提交工作区；Node 26.13.0、pnpm 12.16.1、Fastify 5.12.8。基础框架与 Remote/System 由主代理迁移，Access/Agent/Preferences/Targets/Operations 由 Sol 子代理分工，主代理统一审核与验收。保持 UI、Shared DTO、业务权限和数据结构，无数据库迁移；普通 JSON 的读取时机改由框架负责，使用说明与 API 已同步。专用证据目录为 `/home/honus/nexus-task-artifacts/http-fastify-20261106`，保留至用户通知清理。
+
+**功能对应审核**
+
+| 功能与真实消费者                    | 最终实现与结论                                                                                                                                                                       |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 七模块 HTTP 与 Bootstrap            | 各 `interfaces/http` 直接使用 Fastify `url/handler/request/reply/bodyLimit`；删除旧 router、HttpRouteContext 和 JSON 调度，无双轨。                                                  |
+| Access 会话、因素与 Remote 资源交付 | 响应真实 finish 且最终成功状态才确认交付；异步 onSend 失败后撤销凭据、释放 Shell/Files/桌面票据，原 owner 保留清理失败。                                                             |
+| 上传、下载、插件资源与背景图片      | rawBody 独立 parser scope 保留原始流；显式 HEAD、Range、multipart 和插件通配路径校验保留。背景首字节前读取失败可返回安全 JSON，部分交付失败结束原传输。                              |
+| 审计、身份与安全失败                | 来源准入先行，审计登记原身份，再在解析前拒绝未认证写入；onResponse 按最终状态记录，包括解析拒绝、401 和失败响应钩子。审计失败不改写业务响应；技术兜底不泄漏异常正文或未确认 Cookie。 |
+| 备份恢复与 WebSocket                | 稳定 listener 保留，维护排空真实 handler/hooks/传输后替换完整 Fastify 实例；旧恢复响应退出后关闭旧实例。WS 继续使用现有 ws 协议与授权。                                              |
+
+**职责归属审核**
+
+| owner           | 核对结果                                                                                                                                                |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Platform HTTP   | `http-bindings` 持 Fastify 和请求任务；`http-server/http-lifecycle` 持 listener、WS 与维护代次，断连不代替真实任务结束。                                |
+| 模块 interfaces | 严格解码、白名单投影、原始流与交付确认仍由各模块持有；Fastify 类型未进入 Service、Model、storage 或 Shared。                                            |
+| Operations      | `operation-observer` 保留原请求、身份与实际 handler 完成，`AuditEventOwner` 追踪发布及拒绝因果；System maintenance 路由不进入该请求观察，避免等待自身。 |
+| 测试夹具        | 迁移种子在应用完整关闭后写入；每轮唯一 NEXUS_E2E_DATA_ROOT 由父配置传给 workers/后端，保留恰好一个实例的断言，不扫描历史目录。                          |
+
+**类型归属审核**
+
+| 契约                            | 核对结果                                                                                                |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| HttpRoute/HttpRequest/HttpReply | Platform 仅约定 Fastify 泛型；Body 为 unknown，查询保留 URLSearchParams 重复值，不保留旧 context 适配。 |
+| Shared 与内部应用类型           | 请求/响应 codec 与模块 mapper 原 owner 保留；无新增跨层 DTO、数据库表示或兼容分支。                     |
+| 路由 hooks 与 raw 流            | 框架声明需要的断言限于 Platform 技术边界；模块直接消费原生 hooks，上传预算与取消仍归原业务 owner。      |
+
+**完成证据**
+
+| 范围                 | 命令、结果与边界                                                                                                                                                                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 核心 HTTP 失败与维护 | `node --test --test-concurrency=1 --test-timeout=60000` 执行 fastify/resource-delivery/access-delivery/backup 四个文件，52/52 通过，无跳过或取消；`reviewed-http.tap`。                                                                                 |
+| 正式后端组           | `NEXUS_E2E_SUITE=backend pnpm test:e2e:remote -- --timeout=120000 --retries=0`，146/146 通过，6.4 分钟；`e2e-backend-final.log`、独立 report/results/durations。                                                                                        |
+| 最终补充浏览器与接口 | 13 个指定 spec 共 53/53 通过（44 项浏览器、9 项接口），无重试，2.5 分钟；`e2e-browser.log` 与独立 report/results。覆盖登录、连接/密钥管理、备份 UI、审计、插件 SDK/仓库、GIF/文件交付和上传；最终未认证请求审计 hook 调整在此重新构建后验证。           |
+| 静态与构建           | 最终根 `pnpm run check` 通过（`check-delivery.log`），补充回归入口重新完成双端生产构建和 E2E clients 构建（`e2e-browser.log`）；`pnpm run format:all:check` 通过（`format-delivery.log`），`git diff --check` 通过；最后仅改文档并复查受影响 Markdown。 |
+| 未验范围             | 尚未提交推送，未触发本轮 GitHub Actions、全部浏览器分片或 Docker smoke；不替代真实手机、外网及生产升级验收。                                                                                                                                            |
+
+补充真实浏览器远程桌面专项 `specs/ui/rdp-remoteapp-fullscreen.spec.ts` 5/5 通过，无重试，26.2 秒；证据 `e2e-desktop.log` 和独立 report/results。覆盖 RDP 设置、剪贴板、全屏、120 DPI、窗口交互、重连时文件批次/音频资源清理，以及 VNC 连接、输入、剪贴板与窗口交互。该正式流程通过不替代独立旧 VNC 夹具失败的根因定位。
+
+首轮正式后端组为 143/146：Agent 文件迁移测试在活跃数据库上准备旧数据导致锁冲突；RDP 用户夹具和挂起日志夹具发现历史实例目录。均保留首次日志 `e2e-backend.log`，修复离线种子与运行目录隔离后完整重跑通过。旧工具图片发现、批量文件参数、Job 故障注入、Passkey 数据库路径及备份表数等消费者同步当前契约；既有有效断言保留。初始全目录 Node 探测包含未更新的独立夹具和缺少正式 runner 配置的测试，其失败日志 `backend-regression.log` 不属于通过证据；正式后端通过不能宣称所有独立 Node 测试均通过。
+
+独立 Node 探测的剩余失败已按证据分组：`machine-admission`、`authority-monitor` 使用旧 execute/单命令 Job 契约；`integration-races` 缺插件安装表和当前 drain mock；`public-boundary` 漏既有 lastConnectedAt；Files 名额场景仍断言已移除的 8/16/64 固定上限，部分资源夹具按旧单资源关闭计数或未注入清理失败便期待 unknown。桌面证书测试缺数据库参数、旧 RDP 夹具未走现有证书确认；ENOSPC worker 在用户命名空间执行本机 Node 路径被拒绝，未触发故障场景。独立 VNC 浏览器握手、server-transfers 未进入预期 mock 和旧前端测试页定位仍未归因，不概括为已通过或全部环境问题；相关业务 Service/Model 本轮未改，继续作为独立测试维护项保留。
+
+## Fastify 原生能力重设计（2026-11-06）
+
+沿用 `main/48d6f557f0995273f98a29be673a0ff44f546fbc` 的迁移工作区，Node 26.13.0、pnpm 12.16.1、Fastify 5.12.8。按用户要求替换可由框架承担的旧设计；Shared 对外协议没有变化，前端真实入口继续使用原契约，无需兼容分支、UI 或数据库变更。实现由原 Sol 分工继续，主代理统一补审和验收；最后两项独立复核因上游 503 未完成，不作为独立审核通过证据。
+
+**功能对应审核**
+
+| 功能与消费者                | 最终实现与结论                                                                                                                                                   |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 连接、主题、背景与备份导入  | `@fastify/multipart@10.1.7` 的 parts 流替换整包缓冲与 Formidable；仅在上传路由 scope 安装。文本字段也按字节读取，保留畸形 UTF-8 拒绝及秘密清零，无上传临时文件。 |
+| 七模块 JSON 响应            | 原生 serializer 单次编码并检查实际字节，保留 preSerialization 对象观察；路由 errorHandler 保留安全错误、写入未知、凭据撤销与 RPC envelope。                      |
+| 日志、主题与 Agent 文件下载 | 普通 Buffer/Readable 交给原生 send；Artifact 与 Plugin Intent 共用流交付 owner，最后权限及长度检查前保留末字节。复杂远程/备份传输的业务收尾继续由原 owner 负责。 |
+| 审计与请求结束              | 六个 WeakMap 合并成单一请求状态，删除重复完成 resolver；按真实 handler Promise 与传输完成共同收口，保留解析失败、断连后执行及维护排空。                          |
+
+**职责归属审核**
+
+| owner                 | 审核结论                                                                                                                                                         |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Platform HTTP         | 持原生路由 scope、multipart 技术解析和总字节预算；JSON 与 multipart 预算独立。hijack 安全错误清除尚未发送的 raw headers，避免旧 Content-Length/下载头污染 JSON。 |
+| 模块 interfaces       | 保留白名单投影、Shared 预算与业务错误分类；serializer 失败走原生错误通道，不能依赖 handler try/catch。                                                           |
+| 业务资源与 Operations | 继续负责授权、取消、未知写入和真实任务排空；响应结束不等于后台任务停止。框架 signal/timeout 的已证实 POST 问题不通过删除 owner 规避。                            |
+
+**类型归属审核**
+
+| 契约                      | 审核结论                                                                                             |
+| ------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Shared 请求与响应         | 仍为唯一对外契约；无复制 schema、旧协议分支或新增存储表示。                                          |
+| Fastify 及 multipart 类型 | 留在 Platform 和 HTTP interfaces，未进入 Service/Model；路由 config 显式携带 multipart 封装预算。    |
+| Agent 响应与流交付        | 具名内部 helper 统一 serializer/errorHandler 与授权交付；HTTP 状态和工具 RPC envelope 保持各自契约。 |
+
+**调用链审核**
+
+| 调用链                                          | 核对重点与结果                                                                                                                         |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 浏览器导入 → parser → 模块                      | 来源/身份准入先于读取；JSON bodyLimit 与 multipart 声明量/实际量分别核对；未结束 boundary 的 part 超限及时结束，错误交付后关闭原连接。 |
+| 应用结果 → preSerialization → serializer → send | 只编码一次，预算覆盖变换后的对象；写入后编码失败按 operation_unknown，Access 未交付凭据撤销。                                          |
+| Artifact/插件源 → Readable → HTTP               | 等待响应与源清理；最后字节不早于最终权限检查，失败保留因果与取消，不虚报完整下载。                                                     |
+| 请求 → Operations → handler/response → 维护     | 解析失败可审计，断连后的异步 handler 仍计入排空；保持恢复代次及稳定 listener，不等待自身维护请求。                                     |
+
+**最终验证**
+
+证据均在 `/home/honus/nexus-task-artifacts/http-fastify-20261106`，保留到用户通知清理。
+
+| 范围             | 结果与证据                                                                                                                                                                                                                                                                  |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 核心 HTTP 专项   | 8 文件 91/91 通过，`native-capabilities-accepted.log`；multipart/backup 补充组 31/31 通过，`native-multipart-backup-final.log`。两组有重叠。                                                                                                                                |
+| 正式本地组合回归 | 正式 runner 执行 backend-specs 全量与 11 个相关浏览器 spec，`--timeout=120000 --retries=0`；177/177 通过，8.1 分钟，包含后端 146 项及相关浏览器 31 项。`native-e2e-final.log`、`native-e2e-final-report/`、`native-e2e-final-results/`、`native-e2e-final-durations.json`。 |
+| 静态与构建       | 最终源码根 check 通过，`native-check-delivery.log`；全量 ESLint/格式通过，`native-format-check.log`；最终正式 runner 重新完成双端生产和 E2E clients 构建。文档收口另验格式与 diff。                                                                                         |
+| 未验范围         | 未提交推送或触发本轮 GitHub Actions；未运行全部浏览器分片或 Docker smoke，不替代真实手机、外网及生产升级。前轮记录中的独立旧夹具债务继续保留。                                                                                                                              |
+
+首轮正式后端 145/146：新增 Fastify wrapper 的测试夹具缺少真实平台 await-reply 桥，改真实 listener 后又发现 Node 26 fetch 不支持覆盖 Host、原生 DELETE 测试缺 Content-Length；现使用真实 listener 与明确请求头的 Node HTTP 客户端，保留全部功能断言。Multipart 首次失败暴露提前 destroy 原请求导致正常备份拒绝响应被截断，以及未发送最终 boundary 时 part 超限无法退出；已改为安全响应后关闭连接并消费 limit/truncated 状态，继续清零已读秘密。首次失败日志与后续专项日志均保留，不以最终通过覆盖失败证据。
+
+原生 `request.signal` / `handlerTimeout` 的版本问题沿用前节真实探针证据，未接入项目。仅安装符合 H-14 且支持 Fastify 5 的 multipart 插件；Shared schema/OpenAPI 留作独立后续任务。本轮测试服务已退出，日志归集至 `native-e2e-final-logs/`，未删除专用产物或操作生产环境。
+
+## Fastify 插件替换与维护复核（2026-11-06）
+
+基于 `main/48d6f557f0995273f98a29be673a0ff44f546fbc` 的未提交迁移工作区继续；用户明确将 H-14 门槛改为 Star 不低于 200，并要求仍在维护、问题修复及时，已更新唯一规则 owner。Node 26.13.0、pnpm 12.16.1。以下 Stars 和维护事实为本轮 GitHub API 核验快照，不将 Stars 或官方组织身份当作质量保证。
+
+| 候选                                                        | Stars | 维护与适配结论                                                                                                                                                                                                                                                |
+| ----------------------------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Cookie](https://github.com/fastify/fastify-cookie)         | 300   | 采用 11.1.5；10 月 27 日发布修正自定义编码。HTTP 用原生解析钩子，WS 用已注册实例的 parseCookie；不用存在初始化缺陷的独立导出。                                                                                                                                |
+| [Helmet](https://github.com/fastify/fastify-helmet)         | 464   | 采用 13.2.0；10 月 13 日发布全局 nonce 继承修复，相关 PR 两天合并。沿现有策略配置，不引入其他默认响应头。                                                                                                                                                     |
+| [Multipart](https://github.com/fastify/fastify-multipart)   | 539   | 保留前轮已采用的 10.1.7；仓库 11 月 5 日仍有维护活动，parts 的真实边界回归继续覆盖。                                                                                                                                                                          |
+| [WebSocket](https://github.com/fastify/fastify-websocket)   | 467   | 11.3.7 于 11 月 4 日发布自定义 preClose 的 upgrade listener 清理修复；核对源码后保留现有 ws。插件绑定 Fastify 实例的 upgrade/close 生命周期，而本项目稳定 listener 跨代存活，旧恢复响应可晚退出；替换仍需重写同一维护协调，不能删除现有代次、授权及业务排空。 |
+| [Static](https://github.com/fastify/fastify-static)         | 499   | 11 月 4 日连续修复目录/多 root 预压缩回退。前端静态资源由 Nginx 承担；插件资源经过授权内容 owner，不直接公开文件系统 root，不重复安装。                                                                                                                       |
+| [Compress](https://github.com/fastify/fastify-compress)     | 230   | 10 月 27 日发布 9.3.0；现有 Nginx 已有 gzip、预压缩、Vary 和代理压缩配置，不在 Node 重复压缩。                                                                                                                                                                |
+| [CORS](https://github.com/fastify/fastify-cors)             | 496   | 11 月 5 日发布 11.4.1，修复 Vary token；CORS 不能代替 Host/Origin/Fetch Metadata 的来源准入。公开 SDK 的固定星号响应无需预检路由和通用 CORS 状态机，保留原声明。                                                                                              |
+| [Rate Limit](https://github.com/fastify/fastify-rate-limit) | 604   | 11 月 2 日发布 11.2.2，修复管线请求计数快照；现有登录策略按认证失败在 SQLite 原子累计、持久封禁并通知，不是按 HTTP 请求数限流，不用通用插件改变规则。                                                                                                         |
+| [Swagger](https://github.com/fastify/fastify-swagger)       | 1101  | 11 月 1 日仍发布 schema 引用修复；插件不能从现有严格 codec 生成等价 schema。须先完成 Shared 单一 schema 来源，保留既有独立任务，不维护平行协议定义。                                                                                                          |
+| [Swagger UI](https://github.com/fastify/fastify-swagger-ui) | 192   | 虽仍维护，但低于本轮明确门槛，不采用。                                                                                                                                                                                                                        |
+
+维护证据保存在 `github-audit.json`、`maintenance-audit.json`、`adopted-fix-evidence.json` 和 `additional-candidates.json`。Cookie [PR 374](https://github.com/fastify/fastify-cookie/pull/374)/[377](https://github.com/fastify/fastify-cookie/pull/377) 的非安全编码修复分别经过约 57/33 天合并，不能宣称所有问题都能在数天修复；[issue 383](https://github.com/fastify/fastify-cookie/issues/383) 的独立导出初始化问题已有修复 PR、尚未进入采用版本。本轮依据已发布版本在实际使用路径的修复与回归选型，未修复路径明确不使用；没有本地补丁或私有 API 绕过。Helmet [PR 324](https://github.com/fastify/fastify-helmet/pull/324) 为 10 月 11 日提出、13 日合并。未来升级仍按 H-14 重审缺陷和发布，不承诺供应商修复时限。
+
+**功能对应审核**
+
+| 功能与消费者                       | 最终实现                                                                                                                                                                                            |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTP/WS 会话读取                   | 插件解析一次，Platform 绑定请求事实并统一拒绝重复名称和原有超量 Cookie；HTTP 原生 cookies 与原始请求认证消费者一致，不对不透明 token 做 URI 解码。WS 在授权前通过当前代已注册实例解析。             |
+| 登录、2FA、Passkey、退出与改密     | 删除手拼 Cookie 属性；Access 的唯一策略 helper 调用实例 serializeCookie，保持 Path、HttpOnly、SameSite、Secure 及原有效期。直接设置响应头使既有错误通道可移除凭据，不引入插件 pending cookie 队列。 |
+| Plugin、SDK、HTML 主题、背景与下载 | Helmet 持有安全头生成；模块保留 CSP/CORP/Referrer 策略，普通流与 hijack 都读取同一 raw 响应头。删除模块各处重复 nosniff；技术兜底绕过插件时仍清头并写最小安全错误。                                 |
+
+**职责归属审核**
+
+| owner               | 结论                                                                                                       |
+| ------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Platform HTTP       | 注册 Cookie/Helmet，维护源验证、解析事实、重复拒绝与代次；不把插件 request/reply 传入应用或 Shared。       |
+| Access interfaces   | Cookie 属性属于认证策略，序列化属于插件；真实 finish、失败撤销和未知结果仍由 deliverAccessResult 追踪。    |
+| 内容模块 interfaces | Helmet 的 route options/调用归资源出口；授权、字节预算、源确认和收尾留原 owner，没有通用静态文件路径绕过。 |
+
+**类型归属审核**
+
+| 契约             | 结论                                                                                                                       |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Fastify 插件类型 | 仅在 HTTP 技术边界使用。Cookie 类型暂漏 parseOptions.decode，用具名推断配置同时保留标准 encode，不加 any、断言或上游补丁。 |
+| Shared/前端      | 对外请求、响应、身份和 UI 均不变；既有前端直接消费，通过浏览器真实流程验证，无兼容层或数据库迁移。                         |
+
+**调用链审核**
+
+| 调用链                                  | 核对重点                                                                                                             |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| 来源 → Cookie → 审计/应用准入 → handler | Cookie 在应用身份读取前初始化；重复项不能被 first-wins 解析误认证，审计与 HTTP/WS 看到同一事实；旧请求继续绑定原值。 |
+| 颁发凭据 → 序列化 → finish/错误         | 不使用延迟 cookie 队列，错误移除 Set-Cookie 后不能重发；Passkey 超限、断连、onSend 失败仍撤销原凭据。                |
+| 原生/原始下载 → Helmet → 真实传输       | 保留原 CSP directives，禁用原本不存在的 HSTS/X-Frame/COEP/COOP 默认项；技术错误移除旧下载元数据后保留 nosniff。      |
+| 在线恢复 → 新实例插件 → HTTP/WS         | 新实例先注册插件再开放；旧实例等待原请求退出。新增跨恢复 HTTP/WS Cookie 场景，未改变稳定 listener 和业务排空。       |
+
+**验证记录**
+
+专用产物：`/home/honus/nexus-task-artifacts/http-plugins-20261106`，保留至用户通知清理。核心 8 文件 94/94 通过（`http-regression-final.log`）；其中新增实际 Cookie/WS/恢复、Cookie 安全交付及真实内容路由的 Helmet 政策检查，已由既有正式 fastify-transport wrapper 收集。首次 91 项专项有一个 Agent 独立夹具未注册 Cookie/绑定解析事实，未执行预期业务写入；同步该夹具后保留原未知写入断言并完整重跑，首次证据为 `http-regression-first.log`。两个独立 serializer 夹具均安装真实插件，不用生产兼容分支绕过。
+
+根 check 通过（`check.log`）；初次构建发现插件配置类型和 Helmet boolean 声明不一致，按实际公开 API 修正后生产后端构建通过（`build-backend-second.log`）。初次全量格式检查仅发现更新后的 HUMAN 表格格式，已修正。最终全量 ESLint/格式通过（`format-final.log`），文档收口另核对格式与 `git diff --check`。正式本地 runner 重新构建双端与 E2E clients，执行完整 backend-specs 与 11 个相关浏览器 spec，`--timeout=120000 --retries=0` 共 **177/177 通过**；日志为 `e2e-combined.log`，报告、结果、耗时及逐项日志分别为 `e2e-report/`、`e2e-results/`、`e2e-durations.json`、`e2e-logs/`。这些组与 94 项专项有覆盖交集，不相加为唯一场景数。覆盖认证、Cookie 交付、备份恢复、插件 iframe、主题/背景、文件交付、HTTP/WS 撤销及 SSH/弱网场景；USAGE 的认证、插件、外观与下载说明已核对，本轮不改正常产品行为。
+
+本轮测试服务已退出，专用产物继续保留。尚未提交推送、触发本轮 GitHub Actions、执行全部浏览器分片或 Docker smoke；不替代真实手机、外网及生产升级验证，前轮独立旧夹具债务继续保留。
+
+### 官方应用插件兼容性补审
+
+用户继续要求核对应用插件是否需要同步变更。检查现有插件工作区 `/home/honus/nexus-task-artifacts/agent-tool-reuse-20261105/nexus-agent-plugins`，本地与远程 main 均为 `7f0498cf14fa50f7a664adf892ef041c62ad7fab`，工作区干净；Nexus Agent 1.0.4、Full-stack 1.0.3 均使用 SDK "1"。本轮 HTTP 内部迁移没有修改 Shared 插件协议、宿主 SDK、能力基础值或 Agent contribution，故无需改插件清单、权限或版本。
+
+Nexus Agent 没有前后端入口，toolNames=null 按宿主当前授权目录发现工具；Full-stack 通过 `/sdk/frontend-v1.mjs` 与 MessagePort 调用 host.appInfo/storage，后端只使用原隔离 SDK/IPC，不依赖 HTTP 框架或直接读取 Cookie。其 plugin_tool_call 白名单、context.read/plugin.invoke 声明及上下文/工具请求形状仍匹配当前宿主。两个真实 manifest/agent.json 已经当前 Shared decoder 校验，Full-stack 实际使用的四类 SDK 请求形状也通过；插件仓库 lint、格式及 check 全部通过，未修改源码或重新发布。
+
+补跑正式 `agent/plugin/custom-surface.spec.ts`，1/1 通过，无重试：覆盖隔离 iframe/SDK 握手、前后端 AppStorage、文件/子进程权限拒绝和跨 App 数据隔离。该浏览器场景使用仓库签名受控夹具，不冒充官方发布包的完整安装验收；官方源码另按上述调用链及 Shared 契约核对。日志、报告及 contracts.log 保存在 `/home/honus/nexus-task-artifacts/http-plugins-20261106/app-review`；服务已退出，产物保留至用户通知。本轮未提交推送或发布。
+
+### 提交前复核与交付授权（2026-11-06）
+
+复核稳定 listener 的异步代次替换、来源/会话准入顺序、真实 handler 排空、multipart 超限及秘密清零、下载末字节授权、凭据失败撤销和原生 serializer 错误出口，未发现新的阻断问题；四份审核表结论保持有效。确认无旧 HttpRouteContext、http-router、Formidable 或整包 multipart 解码消费者。`git diff --check` 通过，生产依赖 `pnpm audit --prod --audit-level=high` 返回无已知漏洞。证据目录为 `/home/honus/nexus-task-artifacts/http-release-20261106`。
+
+用户已授权提交推送、修复远程完整 E2E 至通过、发布 linux/amd64 dev 镜像；不更新生产主机。此处记录交付开始状态，不将尚未执行的远程验证或发布写为完成。

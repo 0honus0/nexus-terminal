@@ -1,8 +1,9 @@
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
 import path from 'node:path';
 import { once } from 'node:events';
 import { finished } from 'node:stream/promises';
-import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
+import type { HttpRoute, HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
 import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
 import type { RemoteFileService } from '../../files/service/file-service.js';
 import {
@@ -100,11 +101,11 @@ function readRangeSelection(header: string | undefined): FileReadSelection {
 }
 
 function downloadSink<TPlan>(
-	ctx: HttpRouteContext,
+	reply: HttpReply,
 	signal: AbortSignal,
 	onPlan: (plan: TPlan) => Promise<void>,
 ): FileDownloadSink<TPlan> {
-	const response = ctx.response;
+	const response = reply.raw;
 	let finalByte = new Uint8Array(0);
 	return {
 		plan: onPlan,
@@ -140,24 +141,24 @@ function downloadSink<TPlan>(
 export function createFileDownloadHttpRoutes(files: RemoteFileService): HttpRoute[] {
 	const issueTicket: HttpRoute = {
 		method: 'POST',
-		path: '/api/v1/sftp/download-ticket',
-		maxBodyBytes: WORKSPACE_DOWNLOAD_MAX_JSON_BYTES,
+		url: '/api/v1/sftp/download-ticket',
+		bodyLimit: WORKSPACE_DOWNLOAD_MAX_JSON_BYTES,
 
-		async handle(ctx) {
+		async handler(request: HttpRequest, reply: HttpReply) {
 			try {
-				const payload = readDownloadTicketRequest(await ctx.json());
+				const payload = readDownloadTicketRequest(request.body);
 				const controller = new AbortController();
 
 				const closed = () => controller.abort();
 
-				ctx.response.once('close', closed);
-				ctx.request.once('aborted', closed);
-				if (ctx.request.aborted || ctx.response.destroyed) {
+				reply.raw.once('close', closed);
+				request.raw.once('aborted', closed);
+				if (request.raw.aborted || reply.raw.destroyed) {
 					closed();
 				}
 				try {
 					const issued = await files.issueDownloadTicket(
-						ctx.cookie(ACCESS_SESSION_COOKIE_NAME),
+						readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
 						payload.sessionId ?? null,
 						payload.connectionId,
 						payload.remotePath,
@@ -167,16 +168,16 @@ export function createFileDownloadHttpRoutes(files: RemoteFileService): HttpRout
 						url: issued.url,
 						expiresInSeconds: issued.expiresInSeconds,
 					};
-					ctx.send(201, response, { 'Cache-Control': 'private, no-store' });
+					reply.code(201).headers({ 'Cache-Control': 'private, no-store' }).send(response);
 				} finally {
-					ctx.response.off('close', closed);
-					ctx.request.off('aborted', closed);
+					reply.raw.off('close', closed);
+					request.raw.off('aborted', closed);
 				}
 			} catch (error) {
 				if (error instanceof HttpInputFailure) {
 					throw error;
 				}
-				ctx.send(error instanceof InvalidDownloadTicketRequest ? 400 : failureStatus(error), {
+				reply.code(error instanceof InvalidDownloadTicketRequest ? 400 : failureStatus(error)).send({
 					message:
 						error instanceof InvalidDownloadTicketRequest
 							? 'invalid_input'
@@ -190,10 +191,10 @@ export function createFileDownloadHttpRoutes(files: RemoteFileService): HttpRout
 
 	const download = (method: 'GET' | 'HEAD'): HttpRoute => ({
 		method,
-		path: '/api/v1/sftp/download',
+		url: '/api/v1/sftp/download',
 
-		async handle(ctx: HttpRouteContext): Promise<void> {
-			const response = ctx.response;
+		async handler(request: HttpRequest, reply: HttpReply): Promise<void> {
+			const response = reply.raw;
 			const controller = new AbortController();
 
 			const cancelled = () => controller.abort();
@@ -204,22 +205,22 @@ export function createFileDownloadHttpRoutes(files: RemoteFileService): HttpRout
 				}
 			};
 
-			ctx.request.once('aborted', cancelled);
+			request.raw.once('aborted', cancelled);
 			response.once('close', closed);
 			const deadline = setTimeout(cancelled, method === 'HEAD' ? HEAD_DEADLINE_MS : DOWNLOAD_DEADLINE_MS);
 			deadline.unref();
-			if (ctx.request.aborted || response.destroyed) {
+			if (request.raw.aborted || response.destroyed) {
 				cancelled();
 			}
 			try {
-				const ticket = ctx.query.get('ticket');
-				const id = ticket === null ? connectionId(ctx.query.get('connectionId')) : 0;
-				const workspaceId = ticket === null ? ctx.query.get('sessionId') : null;
-				const remotePath = ticket === null ? ctx.query.get('remotePath') : null;
+				const ticket = request.query.get('ticket');
+				const id = ticket === null ? connectionId(request.query.get('connectionId')) : 0;
+				const workspaceId = ticket === null ? request.query.get('sessionId') : null;
+				const remotePath = ticket === null ? request.query.get('remotePath') : null;
 				if (ticket === null && !remotePath) {
 					throw new RemoteFileFailure('invalid_input');
 				}
-				const kind = ticket === null && ctx.query.get('disposition') === 'inline' ? 'inline' : 'attachment';
+				const kind = ticket === null && request.query.get('disposition') === 'inline' ? 'inline' : 'attachment';
 
 				const plan = async (plan: FileDownloadPlan) => {
 					if (controller.signal.aborted) {
@@ -237,20 +238,20 @@ export function createFileDownloadHttpRoutes(files: RemoteFileService): HttpRout
 								: 'application/octet-stream',
 						'Content-Length': String(plan.length),
 						'Accept-Ranges': 'bytes',
-						'X-Content-Type-Options': 'nosniff',
 						'Cache-Control': 'private, no-store',
 					};
 					if (plan.partial) {
 						headers['Content-Range'] = `bytes ${plan.start}-${plan.end}/${plan.size}`;
 					}
+					reply.hijack();
 					response.writeHead(plan.partial ? 206 : 200, headers);
 				};
 
-				const sink = downloadSink(ctx, controller.signal, plan);
+				const sink = downloadSink(reply, controller.signal, plan);
 
 				if (ticket === null) {
 					const resourceKind = await files.inspectDownloadKind(
-						ctx.cookie(ACCESS_SESSION_COOKIE_NAME),
+						readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
 						workspaceId,
 						id,
 						remotePath ?? '',
@@ -260,24 +261,24 @@ export function createFileDownloadHttpRoutes(files: RemoteFileService): HttpRout
 						// Old GET/HEAD /download accepted directories as ZIP, not only
 						// the explicitly named /download-directory route.
 						if (method === 'HEAD') {
+							reply.hijack();
 							response.writeHead(200, {
 								'Content-Type': 'application/zip',
 								'Cache-Control': 'private, no-store',
-								'X-Content-Type-Options': 'nosniff',
 							});
 							response.end();
 						} else {
 							await files.downloadDirectory(
-								ctx.cookie(ACCESS_SESSION_COOKIE_NAME),
+								readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
 								workspaceId,
 								id,
 								remotePath ?? '',
-								downloadSink<string>(ctx, controller.signal, async (filename) => {
+								downloadSink<string>(reply, controller.signal, async (filename) => {
+									reply.hijack();
 									response.writeHead(200, {
 										'Content-Disposition': disposition('attachment', filename),
 										'Content-Type': 'application/zip',
 										'Cache-Control': 'private, no-store',
-										'X-Content-Type-Options': 'nosniff',
 									});
 								}),
 								controller.signal,
@@ -296,19 +297,19 @@ export function createFileDownloadHttpRoutes(files: RemoteFileService): HttpRout
 				if (ticket !== null) {
 					await files.downloadTicket(
 						ticket,
-						ctx.sourceIp,
-						readRangeSelection(ctx.request.headers.range),
+						request.ip,
+						readRangeSelection(request.raw.headers.range),
 						method === 'GET',
 						sink,
 						controller.signal,
 					);
 				} else {
 					await files.downloadWorkspace(
-						ctx.cookie(ACCESS_SESSION_COOKIE_NAME),
+						readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
 						workspaceId,
 						id,
 						remotePath ?? '',
-						readRangeSelection(ctx.request.headers.range),
+						readRangeSelection(request.raw.headers.range),
 						method === 'GET',
 						sink,
 						controller.signal,
@@ -317,20 +318,24 @@ export function createFileDownloadHttpRoutes(files: RemoteFileService): HttpRout
 			} catch (error) {
 				if (!response.headersSent && !response.destroyed) {
 					if (error instanceof InlinePreviewTooLarge) {
-						ctx.send(413, { message: 'inline_preview_too_large' } satisfies WorkspaceTransferHttpError);
+						reply
+							.code(413)
+							.send({ message: 'inline_preview_too_large' } satisfies WorkspaceTransferHttpError);
 					} else if (error instanceof FileDownloadTicketFailure) {
-						ctx.send(error.reason === 'gone' ? 410 : 423, {
+						reply.code(error.reason === 'gone' ? 410 : 423).send({
 							message: error.reason === 'gone' ? 'download_ticket_expired' : 'download_ticket_locked',
 						} satisfies WorkspaceTransferHttpError);
 					} else if (error instanceof FileRangeNotSatisfiable) {
-						response.writeHead(416, {
-							'Accept-Ranges': 'bytes',
-							'Content-Range': `bytes */${error.fileSize}`,
-							'Cache-Control': 'private, no-store',
-						});
-						response.end();
+						reply
+							.code(416)
+							.headers({
+								'Accept-Ranges': 'bytes',
+								'Content-Range': `bytes */${error.fileSize}`,
+								'Cache-Control': 'private, no-store',
+							})
+							.send();
 					} else {
-						ctx.send(failureStatus(error), {
+						reply.code(failureStatus(error)).send({
 							message: error instanceof RemoteFileFailure ? error.code : 'internal_failure',
 						} satisfies WorkspaceTransferHttpError);
 					}
@@ -341,7 +346,7 @@ export function createFileDownloadHttpRoutes(files: RemoteFileService): HttpRout
 				}
 			} finally {
 				clearTimeout(deadline);
-				ctx.request.off('aborted', cancelled);
+				request.raw.off('aborted', cancelled);
 				response.off('close', closed);
 			}
 		},
@@ -349,10 +354,10 @@ export function createFileDownloadHttpRoutes(files: RemoteFileService): HttpRout
 
 	const directoryZip: HttpRoute = {
 		method: 'GET',
-		path: '/api/v1/sftp/download-directory',
+		url: '/api/v1/sftp/download-directory',
 
-		async handle(ctx): Promise<void> {
-			const response = ctx.response;
+		async handler(request: HttpRequest, reply: HttpReply): Promise<void> {
+			const response = reply.raw;
 			const controller = new AbortController();
 
 			const aborted = () => controller.abort();
@@ -363,40 +368,40 @@ export function createFileDownloadHttpRoutes(files: RemoteFileService): HttpRout
 				}
 			};
 
-			ctx.request.once('aborted', aborted);
+			request.raw.once('aborted', aborted);
 			response.once('close', closed);
 			const deadline = setTimeout(aborted, DOWNLOAD_DEADLINE_MS);
 			deadline.unref();
-			if (ctx.request.aborted || response.destroyed) {
+			if (request.raw.aborted || response.destroyed) {
 				aborted();
 			}
 			try {
-				const targetId = connectionId(ctx.query.get('connectionId'));
-				const filePath = ctx.query.get('remotePath');
+				const targetId = connectionId(request.query.get('connectionId'));
+				const filePath = request.query.get('remotePath');
 				if (!filePath) {
 					throw new RemoteFileFailure('invalid_input');
 				}
 				await files.downloadDirectory(
-					ctx.cookie(ACCESS_SESSION_COOKIE_NAME),
-					ctx.query.get('sessionId'),
+					readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
+					request.query.get('sessionId'),
 					targetId,
 					filePath,
-					downloadSink<string>(ctx, controller.signal, async (filename) => {
+					downloadSink<string>(reply, controller.signal, async (filename) => {
 						if (controller.signal.aborted) {
 							throw new RemoteFileFailure('remote_unavailable');
 						}
+						reply.hijack();
 						response.writeHead(200, {
 							'Content-Disposition': disposition('attachment', filename),
 							'Content-Type': 'application/zip',
 							'Cache-Control': 'private, no-store',
-							'X-Content-Type-Options': 'nosniff',
 						});
 					}),
 					controller.signal,
 				);
 			} catch (error) {
 				if (!response.headersSent && !response.destroyed) {
-					ctx.send(failureStatus(error), {
+					reply.code(failureStatus(error)).send({
 						message: error instanceof RemoteFileFailure ? error.code : 'internal_failure',
 					} satisfies WorkspaceTransferHttpError);
 				} else if (!response.writableFinished) {
@@ -404,7 +409,7 @@ export function createFileDownloadHttpRoutes(files: RemoteFileService): HttpRout
 				}
 			} finally {
 				clearTimeout(deadline);
-				ctx.request.off('aborted', aborted);
+				request.raw.off('aborted', aborted);
 				response.off('close', closed);
 			}
 		},

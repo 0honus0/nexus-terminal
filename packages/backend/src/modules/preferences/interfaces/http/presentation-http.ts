@@ -1,4 +1,5 @@
-import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
+import type { HttpRoute, HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
 import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
 import type { AccessPublicApi } from '../../../access/public.js';
 import { AccessOperationError } from '../../../access/public-errors.js';
@@ -54,8 +55,12 @@ const ERROR_STATUS: Record<PresentationErrorCode, number> = {
 	unavailable: 503,
 };
 
-async function authenticate(context: HttpRouteContext, access: AccessPublicApi): Promise<PresentationActor> {
-	const token = context.cookie(ACCESS_SESSION_COOKIE_NAME);
+async function authenticate(
+	request: HttpRequest,
+	reply: HttpReply,
+	access: AccessPublicApi,
+): Promise<PresentationActor> {
+	const token = readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME);
 	const identity = await access.authenticate(token);
 	if (!token || !identity) {
 		throw new PresentationFailure('unauthenticated');
@@ -63,25 +68,44 @@ async function authenticate(context: HttpRouteContext, access: AccessPublicApi):
 	return { userId: identity.userId, token };
 }
 
-async function revalidate(context: HttpRouteContext, access: AccessPublicApi, actor: PresentationActor): Promise<void> {
-	const current = await authenticate(context, access);
+async function revalidate(
+	request: HttpRequest,
+	reply: HttpReply,
+	access: AccessPublicApi,
+	actor: PresentationActor,
+): Promise<void> {
+	const current = await authenticate(request, reply, access);
 	if (current.userId !== actor.userId || current.token !== actor.token) {
 		throw new PresentationFailure('forbidden');
 	}
 }
 
-function ready(context: HttpRouteContext): void {
-	if (context.response.destroyed || context.response.writableEnded) {
+function ready(request: HttpRequest, reply: HttpReply): void {
+	if (reply.raw.destroyed || reply.raw.writableEnded) {
 		throw new PresentationFailure('unavailable');
 	}
 }
 
-function send(context: HttpRouteContext, body: unknown): void {
-	if (Buffer.byteLength(JSON.stringify(body), 'utf8') > PRESENTATION_RESPONSE_MAX_BYTES) {
-		throw new PresentationFailure('limit_exceeded');
-	}
-	ready(context);
-	context.send(200, body);
+function send(request: HttpRequest, reply: HttpReply, body: unknown, mutation = false): void {
+	ready(request, reply);
+	reply.type('application/json; charset=utf-8').serializer((payload) => {
+		try {
+			const encoded = JSON.stringify(payload);
+			if (encoded === undefined) {
+				throw new PresentationFailure('internal_failure');
+			}
+			if (Buffer.byteLength(encoded, 'utf8') > PRESENTATION_RESPONSE_MAX_BYTES) {
+				throw new PresentationFailure('limit_exceeded');
+			}
+			return encoded;
+		} catch (cause) {
+			throw new PresentationFailure(
+				mutation ? 'operation_unknown' : cause instanceof PresentationFailure ? cause.code : 'internal_failure',
+				{ cause },
+			);
+		}
+	});
+	reply.code(200).send(body);
 }
 
 function failureCode(error: unknown): PresentationErrorCode {
@@ -103,19 +127,35 @@ function failureCode(error: unknown): PresentationErrorCode {
 	return 'internal_failure';
 }
 
-async function handle(context: HttpRouteContext, work: () => Promise<void>): Promise<void> {
+function sendFailure(error: unknown, request: HttpRequest, reply: HttpReply): void {
+	const code = failureCode(error);
+	if (reply.sent || reply.raw.headersSent) {
+		reply.raw.destroy();
+	} else if (!reply.raw.destroyed && !reply.raw.writableEnded) {
+		reply
+			.removeHeader('Content-Length')
+			.type('application/json; charset=utf-8')
+			.serializer(JSON.stringify)
+			.code(error instanceof HttpInputFailure ? error.status : ERROR_STATUS[code])
+			.send({ code });
+	}
+}
+
+function httpErrorHandler(error: unknown, request: HttpRequest, reply: HttpReply): void {
+	if (!(error instanceof PresentationFailure)) {
+		throw error;
+	}
+	sendFailure(error, request, reply);
+}
+
+async function handle(request: HttpRequest, reply: HttpReply, work: () => Promise<void>): Promise<void> {
 	try {
-		if (context.query.size) {
+		if (request.query.size) {
 			throw new InvalidPresentationPayload();
 		}
 		await work();
 	} catch (error) {
-		const code = failureCode(error);
-		if (context.response.headersSent) {
-			context.response.destroy();
-		} else if (!context.response.destroyed && !context.response.writableEnded) {
-			context.send(error instanceof HttpInputFailure ? error.status : ERROR_STATUS[code], { code });
-		}
+		sendFailure(error, request, reply);
 	}
 }
 
@@ -127,14 +167,16 @@ function getRoute(
 ): HttpRoute {
 	return {
 		method: 'GET',
-		path,
+		url: path,
 
-		handle: (context) =>
-			handle(context, async () => {
-				const actor = await authenticate(context, access);
+		errorHandler: httpErrorHandler,
+
+		handler: (request, reply) =>
+			handle(request, reply, async () => {
+				const actor = await authenticate(request, reply, access);
 				const value = await service.get(actor);
-				await revalidate(context, access, actor);
-				send(context, project(value));
+				await revalidate(request, reply, access, actor);
+				send(request, reply, project(value));
 			}),
 	};
 }
@@ -147,20 +189,22 @@ function updateRoute(
 ): HttpRoute {
 	return {
 		method: 'PUT',
-		path,
-		maxBodyBytes: PRESENTATION_REQUEST_MAX_BYTES,
+		url: path,
+		bodyLimit: PRESENTATION_REQUEST_MAX_BYTES,
 
-		handle: (context) =>
-			handle(context, async () => {
-				const actor = await authenticate(context, access);
-				const command = decode(await context.json());
-				await revalidate(context, access, actor);
-				ready(context);
+		errorHandler: httpErrorHandler,
+
+		handler: (request, reply) =>
+			handle(request, reply, async () => {
+				const actor = await authenticate(request, reply, access);
+				const command = decode(request.body);
+				await revalidate(request, reply, access, actor);
+				ready(request, reply);
 				const saved = await service.update(actor, command);
 				try {
-					await revalidate(context, access, actor);
+					await revalidate(request, reply, access, actor);
 					const body: PresentationUpdateResponse = { version: saved.version, value: toWireData(saved.value) };
-					send(context, body);
+					send(request, reply, body, true);
 				} catch (cause) {
 					throw new PresentationFailure('operation_unknown', { cause });
 				}

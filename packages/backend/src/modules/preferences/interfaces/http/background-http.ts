@@ -1,6 +1,6 @@
-import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
+import type { HttpRoute, HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
 import { withAppearanceDeadline } from './appearance-http-deadline.js';
-import { readBodyBytes, decodeMultipart } from '../../../../platform/http/http-body.js';
+import { readMultipart } from '../../../../platform/http/http-body.js';
 import {
 	BACKGROUND_MULTIPART_MAX_BYTES,
 	BACKGROUND_MAX_BYTES,
@@ -22,25 +22,38 @@ import type {
 	BackgroundContent,
 } from '../../appearance/model/background-types.js';
 import { toWireAppearance } from './appearance-mapper.js';
-import { authenticate, revalidate, ready, deliver, handle, readAppearanceInput } from './appearance-http-support.js';
+import {
+	authenticate,
+	revalidate,
+	ready,
+	deliver,
+	handle,
+	readAppearanceInput,
+	appearanceHttpErrorHandler,
+} from './appearance-http-support.js';
 
 function toWireBackground(value: BackgroundMutation): BackgroundMutationResponse {
 	return { appearance: toWireAppearance(value.appearance), cleanupPending: value.cleanupPending };
 }
 
 async function readUpload(
-	context: HttpRouteContext,
+	request: HttpRequest,
+	reply: HttpReply,
 	kind: BackgroundKind,
 	signal: AbortSignal,
 ): Promise<BackgroundUpload> {
-	const type = context.request.headers['content-type'];
+	const type = request.raw.headers['content-type'];
 	if (typeof type !== 'string') {
 		throw new AppearanceFailure('unsupported_media_type');
 	}
-	const parts = await decodeMultipart(
-		await readBodyBytes(context.request, BACKGROUND_MULTIPART_MAX_BYTES, signal),
-		type,
-		2,
+	const parts = await readMultipart(
+		request,
+		reply,
+		{
+			maxParts: 2,
+			maxFileBytes: BACKGROUND_MAX_BYTES,
+			maxFieldBytes: 16,
+		},
 		signal,
 	);
 	try {
@@ -83,9 +96,9 @@ async function readUpload(
 	}
 }
 
-function writeChunk(context: HttpRouteContext, chunk: Uint8Array, signal: AbortSignal): Promise<void> {
+function writeChunk(request: HttpRequest, reply: HttpReply, chunk: Uint8Array, signal: AbortSignal): Promise<void> {
 	return new Promise((resolve, reject) => {
-		if (signal.aborted || context.response.destroyed) {
+		if (signal.aborted || reply.raw.destroyed) {
 			reject(new AppearanceFailure('unavailable'));
 			return;
 		}
@@ -95,13 +108,13 @@ function writeChunk(context: HttpRouteContext, chunk: Uint8Array, signal: AbortS
 		};
 
 		const aborted = () => {
-			context.response.destroy();
+			reply.raw.destroy();
 			finish(new AppearanceFailure('unavailable'));
 		};
 
 		const finish = (error?: Error | null) => {
-			context.response.off('close', disconnected);
-			context.response.off('error', finish);
+			reply.raw.off('close', disconnected);
+			reply.raw.off('error', finish);
 			signal.removeEventListener('abort', aborted);
 			if (error) {
 				reject(error);
@@ -110,37 +123,58 @@ function writeChunk(context: HttpRouteContext, chunk: Uint8Array, signal: AbortS
 			}
 		};
 
-		context.response.on('close', disconnected);
-		context.response.once('error', finish);
+		reply.raw.on('close', disconnected);
+		reply.raw.once('error', finish);
 		signal.addEventListener('abort', aborted, { once: true });
 		try {
-			context.response.write(chunk, finish);
+			reply.raw.write(chunk, finish);
 		} catch (cause) {
 			finish(cause instanceof Error ? cause : new AppearanceFailure('internal_failure', { cause }));
 		}
 	});
 }
 
-async function transfer(context: HttpRouteContext, content: BackgroundContent, signal: AbortSignal): Promise<void> {
-	ready(context);
-	context.response.setHeader('Content-Type', content.mediaType);
-	context.response.setHeader('Content-Length', String(content.sizeBytes));
-	context.response.setHeader(
-		'Content-Security-Policy',
-		"sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:",
-	);
-	context.response.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
-	context.response.setHeader('X-Content-Type-Options', 'nosniff');
-	context.response.setHeader('Cache-Control', 'private, no-store');
-	await content.transfer((chunk) => writeChunk(context, chunk, signal));
+async function transfer(
+	request: HttpRequest,
+	reply: HttpReply,
+	content: BackgroundContent,
+	signal: AbortSignal,
+): Promise<void> {
+	ready(request, reply);
+	signal.throwIfAborted();
+	let started = false;
+
+	const start = () => {
+		if (started) {
+			return;
+		}
+		ready(request, reply);
+		signal.throwIfAborted();
+		reply.raw.setHeader('Content-Type', content.mediaType);
+		reply.raw.setHeader('Content-Length', String(content.sizeBytes));
+		reply.raw.setHeader('Cache-Control', 'private, no-store');
+		reply.hijack();
+		started = true;
+	};
+
+	// A source can fail before yielding any bytes. Keep native error replies available
+	// until the first actual write, then let the original transfer own termination.
+	await content.transfer((chunk) => {
+		if (!chunk.byteLength) {
+			return Promise.resolve();
+		}
+		start();
+		return writeChunk(request, reply, chunk, signal);
+	});
+	start();
 	await new Promise<void>((resolve, reject) => {
-		if (signal.aborted || context.response.destroyed) {
+		if (signal.aborted || reply.raw.destroyed) {
 			reject(new AppearanceFailure('unavailable'));
 			return;
 		}
 
 		const closed = () => {
-			if (context.response.writableFinished) {
+			if (reply.raw.writableFinished) {
 				finished();
 			} else {
 				failed(new AppearanceFailure('unavailable'));
@@ -158,23 +192,23 @@ async function transfer(context: HttpRouteContext, content: BackgroundContent, s
 		};
 
 		const aborted = () => {
-			context.response.destroy();
+			reply.raw.destroy();
 			failed(new AppearanceFailure('unavailable'));
 		};
 
 		const cleanup = () => {
-			context.response.off('finish', finished);
-			context.response.off('close', closed);
-			context.response.off('error', failed);
+			reply.raw.off('finish', finished);
+			reply.raw.off('close', closed);
+			reply.raw.off('error', failed);
 			signal.removeEventListener('abort', aborted);
 		};
 
-		context.response.once('finish', finished);
-		context.response.on('close', closed);
-		context.response.once('error', failed);
+		reply.raw.once('finish', finished);
+		reply.raw.on('close', closed);
+		reply.raw.once('error', failed);
 		signal.addEventListener('abort', aborted, { once: true });
 		try {
-			context.response.end();
+			reply.raw.end();
 		} catch (cause) {
 			failed(cause);
 		}
@@ -188,42 +222,47 @@ export function createBackgroundRoutes(service: BackgroundService, access: Acces
 		routes.push(
 			{
 				method: 'POST',
-				path: path + '/' + kind,
-				maxBodyBytes: BACKGROUND_MULTIPART_MAX_BYTES,
+				url: path + '/' + kind,
+				bodyLimit: BACKGROUND_MULTIPART_MAX_BYTES,
+				config: { multipartBodyLimit: BACKGROUND_MULTIPART_MAX_BYTES },
 
-				handle: (context) =>
-					handle(context, () =>
-						withAppearanceDeadline(context, async (signal) => {
-							const actor = await authenticate(context, access);
+				errorHandler: appearanceHttpErrorHandler,
+
+				handler: (request, reply) =>
+					handle(request, reply, () =>
+						withAppearanceDeadline(request, reply, async (signal) => {
+							const actor = await authenticate(request, reply, access);
 							const result = await service.upload(
 								actor,
 								(active) =>
 									readAppearanceInput(active, async () => {
-										const input = await readUpload(context, kind, active);
-										await revalidate(context, access, actor);
-										ready(context);
+										const input = await readUpload(request, reply, kind, active);
+										await revalidate(request, reply, access, actor);
+										ready(request, reply);
 										active.throwIfAborted();
 										return input;
 									}),
 								signal,
 							);
-							await deliver(context, access, actor, () => toWireBackground(result));
+							await deliver(request, reply, access, actor, () => toWireBackground(result));
 						}),
 					),
 			},
 			{
 				method: 'DELETE',
-				path: path + '/' + kind,
+				url: path + '/' + kind,
 
-				handle: (context) =>
-					handle(context, () =>
-						withAppearanceDeadline(context, async (signal) => {
-							const actor = await authenticate(context, access);
-							const input = readBackgroundDelete(await context.json(signal));
-							await revalidate(context, access, actor);
-							ready(context);
+				errorHandler: appearanceHttpErrorHandler,
+
+				handler: (request, reply) =>
+					handle(request, reply, () =>
+						withAppearanceDeadline(request, reply, async (signal) => {
+							const actor = await authenticate(request, reply, access);
+							const input = readBackgroundDelete(request.body);
+							await revalidate(request, reply, access, actor);
+							ready(request, reply);
 							const result = await service.remove(actor, kind, input.expectedVersion, signal);
-							await deliver(context, access, actor, () => toWireBackground(result));
+							await deliver(request, reply, access, actor, () => toWireBackground(result));
 						}),
 					),
 			},
@@ -231,16 +270,30 @@ export function createBackgroundRoutes(service: BackgroundService, access: Acces
 	}
 	routes.push({
 		method: 'GET',
-		path: path + '/file/:filename',
+		url: path + '/file/:filename',
+		helmet: {
+			contentSecurityPolicy: {
+				useDefaults: false,
+				directives: {
+					sandbox: [],
+					defaultSrc: ["'none'"],
+					styleSrc: ["'unsafe-inline'"],
+					imgSrc: ['data:', 'blob:'],
+				},
+			},
+			crossOriginResourcePolicy: { policy: 'same-origin' },
+		},
 
-		handle: (context) =>
-			handle(context, () =>
-				withAppearanceDeadline(context, async (signal) => {
-					const actor = await authenticate(context, access);
-					const parameters = readBackgroundFilePath(context.params.filename);
+		errorHandler: appearanceHttpErrorHandler,
+
+		handler: (request, reply) =>
+			handle(request, reply, () =>
+				withAppearanceDeadline(request, reply, async (signal) => {
+					const actor = await authenticate(request, reply, access);
+					const parameters = readBackgroundFilePath(request.params.filename);
 					await service.read(actor, parameters.filename, signal, async (content, active) => {
-						await revalidate(context, access, actor);
-						await transfer(context, content, active);
+						await revalidate(request, reply, access, actor);
+						await transfer(request, reply, content, active);
 					});
 				}),
 			),

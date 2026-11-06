@@ -1,9 +1,5 @@
 import type { HttpRoute } from '../../../../platform/http/http-types.js';
-import {
-	HTML_THEME_REQUEST_MAX_BYTES,
-	HTML_THEME_RESPONSE_MAX_BYTES,
-	HTML_THEME_NAME_MAX_BYTES,
-} from '@nexus-terminal/shared/preferences/html-themes/values';
+import { HTML_THEME_REQUEST_MAX_BYTES } from '@nexus-terminal/shared/preferences/html-themes/values';
 import {
 	readHtmlThemeName,
 	readHtmlThemeCreate,
@@ -12,7 +8,6 @@ import {
 } from '@nexus-terminal/shared/preferences/html-themes/http-codec';
 import type { AccessPublicApi } from '../../../access/public.js';
 import type { HtmlThemeService } from '../../appearance/service/html-theme-service.js';
-import { HtmlThemeFailure } from '../../html-theme-failure.js';
 import { withAppearanceDeadline } from './appearance-http-deadline.js';
 import { authenticate, ready } from './appearance-http-support.js';
 import {
@@ -23,6 +18,8 @@ import {
 } from './html-theme-mapper.js';
 import {
 	handleHtmlTheme,
+	htmlThemeHttpErrorHandler,
+	sendHtmlThemeJson,
 	deliverHtmlTheme,
 	readHtmlThemeInput,
 	sendHtmlThemeText,
@@ -34,40 +31,39 @@ export function createHtmlThemeRoutes(service: HtmlThemeService, access: AccessP
 	return [
 		{
 			method: 'GET',
-			path,
+			url: path,
 
-			handle: (context) =>
-				handleHtmlTheme(context, async () => {
-					const actor = await authenticate(context, access);
-					ready(context);
+			errorHandler: htmlThemeHttpErrorHandler,
+
+			handler: (request, reply) =>
+				handleHtmlTheme(request, reply, async () => {
+					const actor = await authenticate(request, reply, access);
+					ready(request, reply);
 					const rows = await service.list(actor);
-					await revalidateHtmlTheme(context, access, actor);
-					ready(context);
+					await revalidateHtmlTheme(request, reply, access, actor);
+					ready(request, reply);
 					const body = rows.map(toWireHtmlTheme);
-					if (Buffer.byteLength(JSON.stringify(body)) > HTML_THEME_RESPONSE_MAX_BYTES) {
-						throw new HtmlThemeFailure('limit_exceeded');
-					}
-					context.send(200, body);
+					sendHtmlThemeJson(reply, 200, body);
 				}),
 		},
 		{
 			method: 'GET',
-			path: path + '/:themeName',
-			maxPathParameterBytes: HTML_THEME_NAME_MAX_BYTES,
-			pathParameterAlphabet: 'segment',
+			url: path + '/:themeName',
 
-			handle: (context) =>
-				handleHtmlTheme(context, async () => {
-					const actor = await authenticate(context, access);
-					ready(context);
-					await withAppearanceDeadline(context, (deadlineSignal) =>
+			errorHandler: htmlThemeHttpErrorHandler,
+
+			handler: (request, reply) =>
+				handleHtmlTheme(request, reply, async () => {
+					const actor = await authenticate(request, reply, access);
+					ready(request, reply);
+					await withAppearanceDeadline(request, reply, (deadlineSignal) =>
 						service.readLocal(
 							actor,
-							readHtmlThemeName(context.params.themeName),
+							readHtmlThemeName(request.params.themeName),
 							async (content, ownerSignal) => {
 								const signal = AbortSignal.any([deadlineSignal, ownerSignal]);
-								await revalidateHtmlTheme(context, access, actor);
-								await sendHtmlThemeText(context, content, signal);
+								await revalidateHtmlTheme(request, reply, access, actor);
+								await sendHtmlThemeText(request, reply, content, signal);
 							},
 						),
 					);
@@ -75,55 +71,58 @@ export function createHtmlThemeRoutes(service: HtmlThemeService, access: AccessP
 		},
 		{
 			method: 'POST',
-			path,
-			maxBodyBytes: HTML_THEME_REQUEST_MAX_BYTES,
+			url: path,
+			bodyLimit: HTML_THEME_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handleHtmlTheme(context, async () => {
-					const actor = await authenticate(context, access);
+			errorHandler: htmlThemeHttpErrorHandler,
+
+			handler: (request, reply) =>
+				handleHtmlTheme(request, reply, async () => {
+					const actor = await authenticate(request, reply, access);
 					const row = await service.create(actor, (signal) =>
-						readHtmlThemeInput(context, access, actor, signal, (input) =>
+						readHtmlThemeInput(request, reply, access, actor, signal, (input) =>
 							toApplicationHtmlTheme(readHtmlThemeCreate(input)),
 						),
 					);
-					await deliverHtmlTheme(context, access, actor, 201, toWireHtmlTheme(row));
+					await deliverHtmlTheme(request, reply, access, actor, 201, toWireHtmlTheme(row));
 				}),
 		},
 		{
 			method: 'PUT',
-			path: path + '/:themeName',
-			maxPathParameterBytes: HTML_THEME_NAME_MAX_BYTES,
-			pathParameterAlphabet: 'segment',
-			maxBodyBytes: HTML_THEME_REQUEST_MAX_BYTES,
+			url: path + '/:themeName',
 
-			handle: (context) =>
-				handleHtmlTheme(context, async () => {
-					const actor = await authenticate(context, access);
-					const name = readHtmlThemeName(context.params.themeName);
+			bodyLimit: HTML_THEME_REQUEST_MAX_BYTES,
+
+			errorHandler: htmlThemeHttpErrorHandler,
+
+			handler: (request, reply) =>
+				handleHtmlTheme(request, reply, async () => {
+					const actor = await authenticate(request, reply, access);
+					const name = readHtmlThemeName(request.params.themeName);
 					const row = await service.update(actor, (signal) =>
-						readHtmlThemeInput(context, access, actor, signal, (input) =>
+						readHtmlThemeInput(request, reply, access, actor, signal, (input) =>
 							toApplicationHtmlThemeChange(name, readHtmlThemeUpdate(input)),
 						),
 					);
-					await deliverHtmlTheme(context, access, actor, 200, toWireHtmlTheme(row));
+					await deliverHtmlTheme(request, reply, access, actor, 200, toWireHtmlTheme(row));
 				}),
 		},
 		{
 			method: 'DELETE',
-			path: path + '/:themeName',
-			maxPathParameterBytes: HTML_THEME_NAME_MAX_BYTES,
-			pathParameterAlphabet: 'segment',
+			url: path + '/:themeName',
 
-			handle: (context) =>
-				handleHtmlTheme(context, async () => {
-					const actor = await authenticate(context, access);
-					const name = readHtmlThemeName(context.params.themeName);
+			errorHandler: htmlThemeHttpErrorHandler,
+
+			handler: (request, reply) =>
+				handleHtmlTheme(request, reply, async () => {
+					const actor = await authenticate(request, reply, access);
+					const name = readHtmlThemeName(request.params.themeName);
 					await service.delete(actor, (signal) =>
-						readHtmlThemeInput(context, access, actor, signal, (input) =>
+						readHtmlThemeInput(request, reply, access, actor, signal, (input) =>
 							toApplicationHtmlThemeVersion(name, readHtmlThemeDelete(input)),
 						),
 					);
-					await deliverHtmlTheme(context, access, actor, 200, { deleted: true });
+					await deliverHtmlTheme(request, reply, access, actor, 200, { deleted: true });
 				}),
 		},
 	];

@@ -1,6 +1,8 @@
+import { agentHttpSerializer, agentHttpErrorHandler } from './agent-http-response.js';
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import { AgentHttpInput } from './agent-input.js';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
-import { readAgentId, encodeAgentJson, InvalidAgentPayload } from '@nexus-terminal/shared/agent/http-codec';
+import { readAgentId, InvalidAgentPayload } from '@nexus-terminal/shared/agent/http-codec';
 import {
 	readAgentIntegrationCreate,
 	readAgentIntegrationCreateHeaders,
@@ -11,8 +13,7 @@ import {
 	AGENT_INTEGRATION_MAX_BODY_BYTES,
 	AGENT_INTEGRATION_MAX_RESPONSE_BYTES,
 } from '@nexus-terminal/shared/agent/integrations/values';
-import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
-import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
+import type { HttpRoute, HttpRequest } from '../../../../platform/http/http-types.js';
 import type { AccessPublicApi } from '../../../access/public.js';
 import { AccessOperationError } from '../../../access/public-errors.js';
 import { AgentOperationError } from '../../public-errors.js';
@@ -31,66 +32,66 @@ export function createIntegrationHttpRoutes(
 	function add(
 		method: HttpRoute['method'],
 		suffix: string,
-		action: (ctx: HttpRouteContext, actor: IntegrationActor) => Promise<unknown>,
+		action: (request: HttpRequest, actor: IntegrationActor) => Promise<unknown>,
 	): void {
 		routes.push({
 			method,
-			path: '/api/v1/apps/:appId/integrations' + suffix,
-			maxBodyBytes: AGENT_INTEGRATION_MAX_BODY_BYTES,
+			url: '/api/v1/apps/:appId/integrations' + suffix,
+			bodyLimit: AGENT_INTEGRATION_MAX_BODY_BYTES,
+			errorHandler: agentHttpErrorHandler,
 
-			async handle(ctx) {
-				const inputBoundary = new AgentHttpInput(ctx);
+			async handler(request, reply) {
+				const inputBoundary = new AgentHttpInput(request);
 				let completed = false;
 				try {
-					if ([...ctx.query.keys()].length) {
+					if ([...request.query.keys()].length) {
 						throw new InvalidAgentPayload();
 					}
-					const token = ctx.cookie(ACCESS_SESSION_COOKIE_NAME),
+					const token = readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
 						identity = await access.authenticate(token);
 					if (!token || !identity) {
-						ctx.send(401, { code: 'unauthenticated' });
+						reply.code(401).send({ code: 'unauthenticated' });
 						return;
 					}
 					if (identity.userId !== 1) {
-						ctx.send(403, { code: 'forbidden' });
+						reply.code(403).send({ code: 'forbidden' });
 						return;
 					}
-					const actor = { userId: identity.userId, appId: readAgentId(ctx.params.appId), token };
-					const result = await boundary(() => inputBoundary.normalize(() => action(ctx, actor)));
+					const actor = { userId: identity.userId, appId: readAgentId(request.params.appId), token };
+					const result = await boundary(() => inputBoundary.normalize(() => action(request, actor)));
 					completed = method !== 'GET';
 					const current = await access.authenticate(token);
 					if (current?.userId !== actor.userId) {
-						ctx.send(completed ? 503 : 401, { code: completed ? 'operation_unknown' : 'unauthenticated' });
+						reply
+							.code(completed ? 503 : 401)
+							.send({ code: completed ? 'operation_unknown' : 'unauthenticated' });
 						return;
 					}
-					try {
-						encodeAgentJson(result, AGENT_INTEGRATION_MAX_RESPONSE_BYTES);
-					} catch {
-						throw new AgentOperationError('limit_exceeded');
-					}
-					ctx.send(method === 'POST' && suffix === '' ? 201 : 200, result);
+					reply
+						.type('application/json; charset=utf-8')
+						.serializer(
+							agentHttpSerializer(
+								AGENT_INTEGRATION_MAX_RESPONSE_BYTES,
+								completed ? 'operation_unknown' : 'limit_exceeded',
+							),
+						);
+					reply.code(method === 'POST' && suffix === '' ? 201 : 200).send(result);
 				} catch (error) {
-					if (inputBoundary.transportFailure) {
-						throw inputBoundary.transportFailure;
-					}
 					if (completed) {
-						ctx.send(503, { code: 'operation_unknown' });
+						reply.code(503).send({ code: 'operation_unknown' });
 						return;
-					}
-					if (error instanceof HttpInputFailure) {
-						throw error;
 					}
 					if (error instanceof InvalidAgentPayload) {
-						ctx.send(400, { code: 'invalid_input' });
+						reply.code(400).send({ code: 'invalid_input' });
 					} else if (error instanceof AgentOperationError) {
-						ctx.send(agentErrorStatus(error.code), { code: error.code });
+						reply.code(agentErrorStatus(error.code)).send({ code: error.code });
 					} else if (error instanceof AccessOperationError) {
 						const unavailable = error.code === 'storage_unavailable';
-						ctx.send(unavailable ? 503 : 500, {
+						reply.code(unavailable ? 503 : 500).send({
 							code: unavailable ? 'storage_unavailable' : 'internal_failure',
 						});
 					} else {
-						ctx.send(500, { code: 'internal_failure' });
+						reply.code(500).send({ code: 'internal_failure' });
 					}
 				}
 			},
@@ -98,44 +99,44 @@ export function createIntegrationHttpRoutes(
 	}
 
 	add('GET', '', async (_ctx, actor) => ({ items: (await service.list(actor)).map(toIntegrationView) }));
-	add('POST', '', async (ctx, actor) =>
+	add('POST', '', async (request, actor) =>
 		toIntegrationView(
 			await service.create(
 				actor,
-				readAgentIntegrationCreateHeaders({ idempotencyKey: ctx.request.headers['idempotency-key'] })
+				readAgentIntegrationCreateHeaders({ idempotencyKey: request.headers['idempotency-key'] })
 					.idempotencyKey,
-				toIntegrationInput(readAgentIntegrationCreate(await ctx.json())),
+				toIntegrationInput(readAgentIntegrationCreate(request.body)),
 			),
 		),
 	);
-	add('GET', '/:integrationId', async (ctx, actor) =>
-		toIntegrationView(await service.get(actor, readAgentId(ctx.params.integrationId))),
+	add('GET', '/:integrationId', async (request, actor) =>
+		toIntegrationView(await service.get(actor, readAgentId(request.params.integrationId))),
 	);
-	add('PATCH', '/:integrationId', async (ctx, actor) => {
-		const input = readAgentIntegrationUpdate(await ctx.json());
+	add('PATCH', '/:integrationId', async (request, actor) => {
+		const input = readAgentIntegrationUpdate(request.body);
 		return toIntegrationView(
 			await service.update(
 				actor,
-				readAgentId(ctx.params.integrationId),
+				readAgentId(request.params.integrationId),
 				input.expectedVersion,
 				toIntegrationInput(input),
 			),
 		);
 	});
-	add('DELETE', '/:integrationId', async (ctx, actor) => {
+	add('DELETE', '/:integrationId', async (request, actor) => {
 		await service.remove(
 			actor,
-			readAgentId(ctx.params.integrationId),
-			readAgentIntegrationVersion(await ctx.json()),
+			readAgentId(request.params.integrationId),
+			readAgentIntegrationVersion(request.body),
 		);
 		return { status: 'deleted' };
 	});
-	add('POST', '/:integrationId/refresh', async (ctx, actor) =>
+	add('POST', '/:integrationId/refresh', async (request, actor) =>
 		toIntegrationDiscovery(
 			await service.refresh(
 				actor,
-				readAgentId(ctx.params.integrationId),
-				readAgentIntegrationVersion(await ctx.json()),
+				readAgentId(request.params.integrationId),
+				readAgentIntegrationVersion(request.body),
 			),
 		),
 	);

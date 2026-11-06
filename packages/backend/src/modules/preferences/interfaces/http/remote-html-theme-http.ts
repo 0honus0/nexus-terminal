@@ -1,4 +1,4 @@
-import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
+import type { HttpRoute, HttpReply } from '../../../../platform/http/http-types.js';
 import type { AccessPublicApi } from '../../../access/public.js';
 import type { HtmlThemeService } from '../../appearance/service/html-theme-service.js';
 import {
@@ -6,15 +6,13 @@ import {
 	readRemoteHtmlThemeListQuery,
 	readRemoteHtmlThemeContentQuery,
 } from '@nexus-terminal/shared/preferences/html-themes/http-codec';
-import {
-	HTML_THEME_REQUEST_MAX_BYTES,
-	HTML_THEME_RESPONSE_MAX_BYTES,
-} from '@nexus-terminal/shared/preferences/html-themes/values';
-import { HtmlThemeFailure } from '../../html-theme-failure.js';
+import { HTML_THEME_REQUEST_MAX_BYTES } from '@nexus-terminal/shared/preferences/html-themes/values';
 import { authenticate, ready } from './appearance-http-support.js';
 import { withAppearanceDeadline } from './appearance-http-deadline.js';
 import {
 	handleHtmlTheme,
+	htmlThemeHttpErrorHandler,
+	sendHtmlThemeJson,
 	deliverHtmlTheme,
 	readHtmlThemeInput,
 	sendHtmlThemeText,
@@ -27,77 +25,84 @@ export function createRemoteHtmlThemeRoutes(service: HtmlThemeService, access: A
 	return [
 		{
 			method: 'GET',
-			path: path + '/repository-url',
+			url: path + '/repository-url',
 
-			handle: (context) =>
-				handleHtmlTheme(context, async () => {
-					const actor = await authenticate(context, access);
-					ready(context);
+			errorHandler: htmlThemeHttpErrorHandler,
+
+			handler: (request, reply) =>
+				handleHtmlTheme(request, reply, async () => {
+					const actor = await authenticate(request, reply, access);
+					ready(request, reply);
 					const source = await service.getSource(actor);
 					if (source.changed) {
-						await deliverHtmlTheme(context, access, actor, 200, toWireHtmlThemeSource(source));
+						await deliverHtmlTheme(request, reply, access, actor, 200, toWireHtmlThemeSource(source));
 					} else {
-						await revalidateHtmlTheme(context, access, actor);
-						ready(context);
-						context.send(200, toWireHtmlThemeSource(source));
+						await revalidateHtmlTheme(request, reply, access, actor);
+						ready(request, reply);
+						sendHtmlThemeJson(reply, 200, toWireHtmlThemeSource(source));
 					}
 				}),
 		},
 		{
 			method: 'PUT',
-			path: path + '/repository-url',
-			maxBodyBytes: HTML_THEME_REQUEST_MAX_BYTES,
+			url: path + '/repository-url',
+			bodyLimit: HTML_THEME_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handleHtmlTheme(context, async () => {
-					const actor = await authenticate(context, access);
+			errorHandler: htmlThemeHttpErrorHandler,
+
+			handler: (request, reply) =>
+				handleHtmlTheme(request, reply, async () => {
+					const actor = await authenticate(request, reply, access);
 					const source = await service.setSource(actor, (signal) =>
-						readHtmlThemeInput(context, access, actor, signal, (input) =>
+						readHtmlThemeInput(request, reply, access, actor, signal, (input) =>
 							toApplicationHtmlThemeSource(readHtmlThemeRepositoryUpdate(input)),
 						),
 					);
-					await deliverHtmlTheme(context, access, actor, 200, toWireHtmlThemeSource(source));
+					await deliverHtmlTheme(request, reply, access, actor, 200, toWireHtmlThemeSource(source));
 				}),
 		},
 		{
 			method: 'GET',
-			path: path + '/list',
+			url: path + '/list',
 
-			handle: (context) =>
+			errorHandler: htmlThemeHttpErrorHandler,
+
+			handler: (request, reply) =>
 				handleHtmlTheme(
-					context,
+					request,
+					reply,
 					() =>
-						withAppearanceDeadline(context, async (signal) => {
-							const actor = await authenticate(context, access);
-							ready(context);
-							const query = readRemoteHtmlThemeListQuery(context.query);
+						withAppearanceDeadline(request, reply, async (signal) => {
+							const actor = await authenticate(request, reply, access);
+							ready(request, reply);
+							const query = readRemoteHtmlThemeListQuery(request.query);
 							const rows = await service.listRemote(actor, query.repoUrl, signal);
-							await revalidateHtmlTheme(context, access, actor);
-							ready(context);
+							await revalidateHtmlTheme(request, reply, access, actor);
+							ready(request, reply);
 							const body = rows.map(toWireRemoteHtmlTheme);
-							if (Buffer.byteLength(JSON.stringify(body)) > HTML_THEME_RESPONSE_MAX_BYTES) {
-								throw new HtmlThemeFailure('limit_exceeded');
-							}
-							context.send(200, body);
+							sendHtmlThemeJson(reply, 200, body);
 						}),
 					true,
 				),
 		},
 		{
 			method: 'GET',
-			path: path + '/content',
+			url: path + '/content',
 
-			handle: (context) =>
+			errorHandler: htmlThemeHttpErrorHandler,
+
+			handler: (request, reply) =>
 				handleHtmlTheme(
-					context,
+					request,
+					reply,
 					() =>
-						withAppearanceDeadline(context, async (signal) => {
-							const actor = await authenticate(context, access);
-							ready(context);
-							const query = readRemoteHtmlThemeContentQuery(context.query);
+						withAppearanceDeadline(request, reply, async (signal) => {
+							const actor = await authenticate(request, reply, access);
+							ready(request, reply);
+							const query = readRemoteHtmlThemeContentQuery(request.query);
 							await service.readRemote(actor, query.fileUrl, signal, async (content, active) => {
-								await revalidateHtmlTheme(context, access, actor);
-								await sendHtmlThemeText(context, content, active);
+								await revalidateHtmlTheme(request, reply, access, actor);
+								await sendHtmlThemeText(request, reply, content, active);
 							});
 						}),
 					true,

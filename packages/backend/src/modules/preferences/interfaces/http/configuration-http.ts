@@ -1,5 +1,6 @@
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
-import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
+import type { HttpRoute, HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
 import type { AccessPublicApi } from '../../../access/public.js';
 import { AccessOperationError } from '../../../access/public-errors.js';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
@@ -84,8 +85,8 @@ function toWire(value: ConfigurationView): SettingsView {
 	};
 }
 
-async function authorize(context: HttpRouteContext, access: AccessPublicApi): Promise<string> {
-	const token = context.cookie(ACCESS_SESSION_COOKIE_NAME);
+async function authorize(request: HttpRequest, reply: HttpReply, access: AccessPublicApi): Promise<string> {
+	const token = readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME);
 	const identity = await access.authenticate(token);
 	if (!identity || !token) {
 		throw new PreferencesFailure('unauthenticated');
@@ -96,14 +97,28 @@ async function authorize(context: HttpRouteContext, access: AccessPublicApi): Pr
 	return token;
 }
 
-function send(context: HttpRouteContext, body: unknown): void {
-	if (Buffer.byteLength(JSON.stringify(body), 'utf8') > SETTINGS_RESPONSE_MAX_BYTES) {
-		throw new PreferencesFailure('limit_exceeded');
-	}
-	if (context.response.destroyed || context.response.writableEnded) {
+function send(request: HttpRequest, reply: HttpReply, body: unknown, mutation = false): void {
+	if (reply.raw.destroyed || reply.raw.writableEnded) {
 		throw new PreferencesFailure('unavailable');
 	}
-	context.send(200, body);
+	reply.type('application/json; charset=utf-8').serializer((payload) => {
+		try {
+			const encoded = JSON.stringify(payload);
+			if (encoded === undefined) {
+				throw new PreferencesFailure('internal_failure');
+			}
+			if (Buffer.byteLength(encoded, 'utf8') > SETTINGS_RESPONSE_MAX_BYTES) {
+				throw new PreferencesFailure('limit_exceeded');
+			}
+			return encoded;
+		} catch (cause) {
+			throw new PreferencesFailure(
+				mutation ? 'operation_unknown' : cause instanceof PreferencesFailure ? cause.code : 'internal_failure',
+				{ cause },
+			);
+		}
+	});
+	reply.code(200).send(body);
 }
 
 const ERROR_STATUS: Record<SettingsErrorCode, number> = {
@@ -137,32 +152,49 @@ function failureCode(error: unknown): SettingsErrorCode {
 	return 'internal_failure';
 }
 
-async function handle(context: HttpRouteContext, work: () => Promise<void>): Promise<void> {
+function sendFailure(error: unknown, request: HttpRequest, reply: HttpReply): void {
+	const code = failureCode(error);
+	const status = error instanceof HttpInputFailure ? error.status : ERROR_STATUS[code];
+	if (reply.sent || reply.raw.headersSent) {
+		reply.raw.destroy();
+	} else if (!reply.raw.destroyed && !reply.raw.writableEnded) {
+		reply
+			.removeHeader('Content-Length')
+			.type('application/json; charset=utf-8')
+			.serializer(JSON.stringify)
+			.code(status)
+			.send({ code });
+	}
+}
+
+function httpErrorHandler(error: unknown, request: HttpRequest, reply: HttpReply): void {
+	if (!(error instanceof PreferencesFailure)) {
+		throw error;
+	}
+	sendFailure(error, request, reply);
+}
+
+async function handle(request: HttpRequest, reply: HttpReply, work: () => Promise<void>): Promise<void> {
 	try {
-		if (context.query.size) {
+		if (request.query.size) {
 			throw new InvalidSettingsPayload();
 		}
 		await work();
 	} catch (error) {
-		const code = failureCode(error);
-		const status = error instanceof HttpInputFailure ? error.status : ERROR_STATUS[code];
-		if (context.response.headersSent) {
-			context.response.destroy();
-		} else if (!context.response.destroyed && !context.response.writableEnded) {
-			context.send(status, { code });
-		}
+		sendFailure(error, request, reply);
 	}
 }
 
 async function deliverMutation(
-	context: HttpRouteContext,
+	request: HttpRequest,
+	reply: HttpReply,
 	access: AccessPublicApi,
 	view: ConfigurationView,
 	captchaOnly: boolean,
 ): Promise<void> {
 	try {
-		await authorize(context, access);
-		if (context.response.destroyed || context.response.writableEnded) {
+		await authorize(request, reply, access);
+		if (reply.raw.destroyed || reply.raw.writableEnded) {
 			throw new PreferencesFailure('operation_unknown');
 		}
 		const wire = toWire(view);
@@ -179,9 +211,9 @@ async function deliverMutation(
 					expectedHostname: wire.captcha.expectedHostname,
 				},
 			};
-			send(context, body);
+			send(request, reply, body, true);
 		} else {
-			send(context, wire);
+			send(request, reply, wire, true);
 		}
 	} catch (cause) {
 		throw new PreferencesFailure('operation_unknown', { cause });
@@ -192,27 +224,31 @@ export function createConfigurationRoutes(service: ConfigurationService, access:
 	return [
 		{
 			method: 'GET',
-			path: '/api/v1/settings',
+			url: '/api/v1/settings',
 
-			handle: (context) =>
-				handle(context, async () => {
-					await authorize(context, access);
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					await authorize(request, reply, access);
 					const view = await service.get();
-					await authorize(context, access);
-					send(context, toWire(view));
+					await authorize(request, reply, access);
+					send(request, reply, toWire(view));
 				}),
 		},
 		{
 			method: 'PUT',
-			path: '/api/v1/settings',
-			maxBodyBytes: SETTINGS_REQUEST_MAX_BYTES,
+			url: '/api/v1/settings',
+			bodyLimit: SETTINGS_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handle(context, async () => {
-					await authorize(context, access);
-					const command = readSettingsUpdate(await context.json());
-					const token = await authorize(context, access);
-					if (context.response.destroyed || context.response.writableEnded) {
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					await authorize(request, reply, access);
+					const command = readSettingsUpdate(request.body);
+					const token = await authorize(request, reply, access);
+					if (reply.raw.destroyed || reply.raw.writableEnded) {
 						throw new PreferencesFailure('unavailable');
 					}
 					const view = await service.update(
@@ -223,15 +259,17 @@ export function createConfigurationRoutes(service: ConfigurationService, access:
 						},
 						token,
 					);
-					await deliverMutation(context, access, view, false);
+					await deliverMutation(request, reply, access, view, false);
 				}),
 		},
 		{
 			method: 'GET',
-			path: '/api/v1/settings/captcha',
+			url: '/api/v1/settings/captcha',
 
-			handle: (context) =>
-				handle(context, async () => {
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
 					const value = service.installation().captcha;
 					const body: AccessCaptchaConfigResponse = {
 						enabled: value.enabled,
@@ -239,20 +277,22 @@ export function createConfigurationRoutes(service: ConfigurationService, access:
 						hcaptchaSiteKey: value.provider === 'hcaptcha' ? value.siteKey : '',
 						recaptchaSiteKey: value.provider === 'recaptcha' ? value.siteKey : '',
 					};
-					send(context, body);
+					send(request, reply, body);
 				}),
 		},
 		{
 			method: 'PUT',
-			path: '/api/v1/settings/captcha',
-			maxBodyBytes: SETTINGS_REQUEST_MAX_BYTES,
+			url: '/api/v1/settings/captcha',
+			bodyLimit: SETTINGS_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handle(context, async () => {
-					await authorize(context, access);
-					const command = readSettingsCaptchaUpdate(await context.json());
-					const token = await authorize(context, access);
-					if (context.response.destroyed || context.response.writableEnded) {
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					await authorize(request, reply, access);
+					const command = readSettingsCaptchaUpdate(request.body);
+					const token = await authorize(request, reply, access);
+					if (reply.raw.destroyed || reply.raw.writableEnded) {
 						throw new PreferencesFailure('unavailable');
 					}
 					const view = await service.updateCaptcha(
@@ -262,7 +302,7 @@ export function createConfigurationRoutes(service: ConfigurationService, access:
 						},
 						token,
 					);
-					await deliverMutation(context, access, view, true);
+					await deliverMutation(request, reply, access, view, true);
 				}),
 		},
 	];

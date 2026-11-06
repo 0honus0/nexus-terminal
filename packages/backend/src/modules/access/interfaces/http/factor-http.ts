@@ -1,6 +1,8 @@
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import { ACCESS_AUTH_REQUEST_MAX_BYTES } from '@nexus-terminal/shared/access/values';
 import { deliverAccessResult } from './access-delivery.js';
-import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
+import { serializeAccessCookie } from './access-cookie.js';
+import type { HttpRoute, HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
 import type { FactorService } from '../../factors/service/factor-service.js';
 import type {
 	FactorWebauthnOptions,
@@ -38,35 +40,37 @@ import {
 	ACCESS_SESSION_COOKIE_NAME,
 	ACCESS_REMEMBER_SECONDS,
 	ACCESS_PARTIAL_SECONDS,
-	ACCESS_PASSKEY_CREDENTIAL_ID_MAX_BYTES,
 	ACCESS_FACTOR_REQUEST_MAX_BYTES,
 	ACCESS_FACTOR_RESPONSE_MAX_BYTES,
 } from '@nexus-terminal/shared/access/values';
 
-function sendPasskeyResponse(context: HttpRouteContext, value: unknown, headers?: Record<string, string>): void {
-	if (Buffer.byteLength(JSON.stringify(value), 'utf8') > ACCESS_FACTOR_RESPONSE_MAX_BYTES) {
-		throw new AccessOperationError('limit_exceeded');
-	}
-	context.send(200, value, headers);
+function sendPasskeyResponse(reply: HttpReply, value: unknown, headers?: Record<string, string>): void {
+	reply.type('application/json; charset=utf-8').serializer((payload) => {
+		let encoded: string;
+		try {
+			encoded = JSON.stringify(payload);
+		} catch {
+			throw new AccessOperationError('internal_failure');
+		}
+		if (Buffer.byteLength(encoded, 'utf8') > ACCESS_FACTOR_RESPONSE_MAX_BYTES) {
+			throw new AccessOperationError('limit_exceeded');
+		}
+		return encoded;
+	});
+	reply
+		.code(200)
+		.headers(headers ?? {})
+		.send(value);
 }
 
-function cookie(name: string, token: string, secure: boolean, maxAge: number): string {
-	const attributes = [name + '=' + token, 'Path=/', 'HttpOnly', 'SameSite=Lax', 'Max-Age=' + maxAge];
-	if (secure) {
-		attributes.push('Secure');
+function factorErrorHandler(error: unknown, _request: HttpRequest, reply: HttpReply): void {
+	if (!(error instanceof AccessOperationError)) {
+		throw error;
 	}
-	return attributes.join('; ');
-}
-
-function sessionCookie(token: string, remember: boolean, secure: boolean): string {
-	const attributes = [ACCESS_SESSION_COOKIE_NAME + '=' + token, 'Path=/', 'HttpOnly', 'SameSite=Lax'];
-	if (remember) {
-		attributes.push('Max-Age=' + ACCESS_REMEMBER_SECONDS);
-	}
-	if (secure) {
-		attributes.push('Secure');
-	}
-	return attributes.join('; ');
+	reply.removeHeader('Set-Cookie');
+	reply.type('application/json; charset=utf-8').serializer(JSON.stringify);
+	const code = error.code;
+	reply.code(factorErrorStatus(code)).send({ code });
 }
 
 function factorErrorStatus(code: string): number {
@@ -96,16 +100,21 @@ function factorErrorStatus(code: string): number {
 	}
 }
 
-async function handle(context: HttpRouteContext, work: () => Promise<void>, acceptsQuery = false): Promise<void> {
+async function handle(
+	request: HttpRequest,
+	reply: HttpReply,
+	work: () => Promise<void>,
+	acceptsQuery = false,
+): Promise<void> {
 	try {
-		if (!acceptsQuery && context.query.size > 0) {
+		if (!acceptsQuery && request.query.size > 0) {
 			throw new InvalidFactorPayload();
 		}
 		await work();
 	} catch (error) {
 		if (error instanceof InvalidFactorPayload || error instanceof AccessOperationError) {
 			const code = error instanceof InvalidFactorPayload ? 'invalid_input' : error.code;
-			context.send(factorErrorStatus(code), { code });
+			reply.code(factorErrorStatus(code)).send({ code });
 			return;
 		}
 		// The common HTTP runtime owns unknown failures, body parsing and media-type rejections.
@@ -141,18 +150,20 @@ function toFactorPasskeySubmission(input: AccessPasskeyClientCredential): Factor
 }
 
 async function deliverFactorLogin(
-	context: HttpRouteContext,
+	request: HttpRequest,
+	reply: HttpReply,
 	factors: FactorService,
 	run: () => Promise<FactorLoginResult>,
 	secure: boolean,
 	passkey: boolean,
 ): Promise<void> {
 	await deliverAccessResult(
-		context,
+		request,
+		reply,
 		run,
 		(result) => {
 			if (result.status !== 'authenticated') {
-				context.send(result.status === 'rate_limited' ? 429 : 401, { code: result.status });
+				reply.code(result.status === 'rate_limited' ? 429 : 401).send({ code: result.status });
 				return;
 			}
 			const user = {
@@ -163,12 +174,23 @@ async function deliverFactorLogin(
 			const body = passkey
 				? ({ verified: true, user } satisfies AccessPasskeyLoginResponse)
 				: ({ user } satisfies AccessTotpLoginResponse);
-			context.send(200, body, {
-				'Set-Cookie': [
-					sessionCookie(result.token, result.rememberMe, secure),
-					cookie(passkey ? ACCESS_CHALLENGE_COOKIE_NAME : ACCESS_PARTIAL_COOKIE_NAME, '', secure, 0),
-				],
-			});
+			reply
+				.code(200)
+				.headers({
+					'Set-Cookie': [
+						serializeAccessCookie(reply, ACCESS_SESSION_COOKIE_NAME, result.token, {
+							secure,
+							maxAge: result.rememberMe ? ACCESS_REMEMBER_SECONDS : undefined,
+						}),
+						serializeAccessCookie(
+							reply,
+							passkey ? ACCESS_CHALLENGE_COOKIE_NAME : ACCESS_PARTIAL_COOKIE_NAME,
+							'',
+							{ secure, maxAge: 0 },
+						),
+					],
+				})
+				.send(body);
 		},
 		async (result) => {
 			if (result.status === 'authenticated') {
@@ -244,16 +266,23 @@ export function createFactorRoutes(factors: FactorService, secure: boolean): Htt
 	return [
 		{
 			method: 'POST',
-			path: '/api/v1/auth/login/2fa',
-			maxBodyBytes: ACCESS_AUTH_REQUEST_MAX_BYTES,
+			errorHandler: factorErrorHandler,
+			url: '/api/v1/auth/login/2fa',
+			bodyLimit: ACCESS_AUTH_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handle(context, async () => {
-					const code = readTotpToken(await context.json());
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					const code = readTotpToken(request.body);
 					await deliverFactorLogin(
-						context,
+						request,
+						reply,
 						factors,
-						() => factors.loginTotp(context.cookie(ACCESS_PARTIAL_COOKIE_NAME), code, context.sourceIp),
+						() =>
+							factors.loginTotp(
+								readRequestCookie(request.raw, ACCESS_PARTIAL_COOKIE_NAME),
+								code,
+								request.ip,
+							),
 						secure,
 						false,
 					);
@@ -261,90 +290,101 @@ export function createFactorRoutes(factors: FactorService, secure: boolean): Htt
 		},
 		{
 			method: 'POST',
-			path: '/api/v1/auth/2fa/setup',
+			errorHandler: factorErrorHandler,
+			url: '/api/v1/auth/2fa/setup',
 
-			handle: (context) =>
-				handle(context, async () => {
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
 					await deliverAccessResult(
-						context,
+						request,
+						reply,
 						() =>
 							factors.totpSetup(
-								context.cookie(ACCESS_SESSION_COOKIE_NAME),
-								context.cookie(ACCESS_TOTP_SETUP_COOKIE_NAME),
+								readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
+								readRequestCookie(request.raw, ACCESS_TOTP_SETUP_COOKIE_NAME),
 							),
 						(result) =>
-							context.send(
-								200,
-								{
-									secret: result.secret,
-									qrCodeUrl: result.qrCodeUrl,
-								} satisfies AccessTotpSetupResponse,
-								{
-									'Set-Cookie': cookie(
+							reply
+								.code(200)
+								.headers({
+									'Set-Cookie': serializeAccessCookie(
+										reply,
 										ACCESS_TOTP_SETUP_COOKIE_NAME,
 										result.cookie,
-										secure,
-										ACCESS_PARTIAL_SECONDS,
+										{ secure, maxAge: ACCESS_PARTIAL_SECONDS },
 									),
-								},
-							),
+								})
+								.send({
+									secret: result.secret,
+									qrCodeUrl: result.qrCodeUrl,
+								} satisfies AccessTotpSetupResponse),
 						(result) => factors.logoutFlows(null, null, result.cookie),
 					);
 				}),
 		},
 		{
 			method: 'POST',
-			path: '/api/v1/auth/2fa/verify',
+			errorHandler: factorErrorHandler,
+			url: '/api/v1/auth/2fa/verify',
 
-			handle: (context) =>
-				handle(context, async () => {
-					const code = readTotpToken(await context.json());
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					const code = readTotpToken(request.body);
 					await accessBoundary(() =>
 						factors.totpActivate(
-							context.cookie(ACCESS_SESSION_COOKIE_NAME),
-							context.cookie(ACCESS_TOTP_SETUP_COOKIE_NAME),
+							readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
+							readRequestCookie(request.raw, ACCESS_TOTP_SETUP_COOKIE_NAME),
 							code,
 						),
 					);
-					context.send(200, { changed: true } satisfies AccessTotpChangedResponse, {
-						'Set-Cookie': cookie(ACCESS_TOTP_SETUP_COOKIE_NAME, '', secure, 0),
-					});
+					reply
+						.code(200)
+						.headers({
+							'Set-Cookie': serializeAccessCookie(reply, ACCESS_TOTP_SETUP_COOKIE_NAME, '', {
+								secure,
+								maxAge: 0,
+							}),
+						})
+						.send({ changed: true } satisfies AccessTotpChangedResponse);
 				}),
 		},
 		{
 			method: 'DELETE',
-			path: '/api/v1/auth/2fa',
+			errorHandler: factorErrorHandler,
+			url: '/api/v1/auth/2fa',
 
-			handle: (context) =>
-				handle(context, async () => {
-					const password = readTotpDisable(await context.json());
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					const password = readTotpDisable(request.body);
 					await accessBoundary(() =>
-						factors.totpDisable(context.cookie(ACCESS_SESSION_COOKIE_NAME), password),
+						factors.totpDisable(readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME), password),
 					);
-					context.send(200, { changed: true } satisfies AccessTotpChangedResponse);
+					reply.code(200).send({ changed: true } satisfies AccessTotpChangedResponse);
 				}),
 		},
 		{
 			method: 'POST',
-			path: '/api/v1/auth/passkey/registration-options',
+			errorHandler: factorErrorHandler,
+			url: '/api/v1/auth/passkey/registration-options',
 
-			handle: (context) =>
-				handle(context, async () => {
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
 					await deliverAccessResult(
-						context,
+						request,
+						reply,
 						() =>
 							factors.registrationOptions(
-								context.cookie(ACCESS_SESSION_COOKIE_NAME),
-								context.cookie(ACCESS_CHALLENGE_COOKIE_NAME),
-								context.origin,
+								readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
+								readRequestCookie(request.raw, ACCESS_CHALLENGE_COOKIE_NAME),
+								request.origin,
 							),
 						(result) =>
-							sendPasskeyResponse(context, toRegistrationOptions(result.options), {
-								'Set-Cookie': cookie(
+							sendPasskeyResponse(reply, toRegistrationOptions(result.options), {
+								'Set-Cookie': serializeAccessCookie(
+									reply,
 									ACCESS_CHALLENGE_COOKIE_NAME,
 									result.cookie,
-									secure,
-									ACCESS_PARTIAL_SECONDS,
+									{ secure, maxAge: ACCESS_PARTIAL_SECONDS },
 								),
 							}),
 						(result) => factors.logoutFlows(null, result.cookie, null),
@@ -353,47 +393,56 @@ export function createFactorRoutes(factors: FactorService, secure: boolean): Htt
 		},
 		{
 			method: 'POST',
-			path: '/api/v1/auth/passkey/register',
-			maxBodyBytes: ACCESS_FACTOR_REQUEST_MAX_BYTES,
+			errorHandler: factorErrorHandler,
+			url: '/api/v1/auth/passkey/register',
+			bodyLimit: ACCESS_FACTOR_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handle(context, async () => {
-					const response = toFactorPasskeySubmission(readPasskeyRegister(await context.json()));
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					const response = toFactorPasskeySubmission(readPasskeyRegister(request.body));
 					const verified = await accessBoundary(() =>
 						factors.registerPasskey(
-							context.cookie(ACCESS_SESSION_COOKIE_NAME),
-							context.cookie(ACCESS_CHALLENGE_COOKIE_NAME),
+							readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
+							readRequestCookie(request.raw, ACCESS_CHALLENGE_COOKIE_NAME),
 							response,
 						),
 					);
-					context.send(verified ? 201 : 400, { verified } satisfies AccessPasskeyVerifiedResponse, {
-						'Set-Cookie': cookie(ACCESS_CHALLENGE_COOKIE_NAME, '', secure, 0),
-					});
+					reply
+						.code(verified ? 201 : 400)
+						.headers({
+							'Set-Cookie': serializeAccessCookie(reply, ACCESS_CHALLENGE_COOKIE_NAME, '', {
+								secure,
+								maxAge: 0,
+							}),
+						})
+						.send({ verified } satisfies AccessPasskeyVerifiedResponse);
 				}),
 		},
 		{
 			method: 'POST',
-			path: '/api/v1/auth/passkey/authentication-options',
+			errorHandler: factorErrorHandler,
+			url: '/api/v1/auth/passkey/authentication-options',
 
-			handle: (context) =>
-				handle(context, async () => {
-					const username = readPasskeyAuthenticationOptions(await context.json());
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					const username = readPasskeyAuthenticationOptions(request.body);
 					await deliverAccessResult(
-						context,
+						request,
+						reply,
 						() =>
 							factors.authenticationOptions(
 								username,
-								context.cookie(ACCESS_CHALLENGE_COOKIE_NAME),
-								context.sourceIp,
-								context.origin,
+								readRequestCookie(request.raw, ACCESS_CHALLENGE_COOKIE_NAME),
+								request.ip,
+								request.origin,
 							),
 						(result) =>
-							sendPasskeyResponse(context, toAuthenticationOptions(result.options), {
-								'Set-Cookie': cookie(
+							sendPasskeyResponse(reply, toAuthenticationOptions(result.options), {
+								'Set-Cookie': serializeAccessCookie(
+									reply,
 									ACCESS_CHALLENGE_COOKIE_NAME,
 									result.cookie,
-									secure,
-									ACCESS_PARTIAL_SECONDS,
+									{ secure, maxAge: ACCESS_PARTIAL_SECONDS },
 								),
 							}),
 						(result) => factors.logoutFlows(null, result.cookie, null),
@@ -402,22 +451,24 @@ export function createFactorRoutes(factors: FactorService, secure: boolean): Htt
 		},
 		{
 			method: 'POST',
-			path: '/api/v1/auth/passkey/authenticate',
-			maxBodyBytes: ACCESS_FACTOR_REQUEST_MAX_BYTES,
+			errorHandler: factorErrorHandler,
+			url: '/api/v1/auth/passkey/authenticate',
+			bodyLimit: ACCESS_FACTOR_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handle(context, async () => {
-					const input = readPasskeyAuthenticate(await context.json());
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					const input = readPasskeyAuthenticate(request.body);
 					const evidence = toFactorPasskeySubmission(input.response);
 					await deliverFactorLogin(
-						context,
+						request,
+						reply,
 						factors,
 						() =>
 							factors.authenticatePasskey(
-								context.cookie(ACCESS_CHALLENGE_COOKIE_NAME),
+								readRequestCookie(request.raw, ACCESS_CHALLENGE_COOKIE_NAME),
 								evidence,
 								input.rememberMe,
-								context.sourceIp,
+								request.ip,
 							),
 						secure,
 						true,
@@ -426,30 +477,33 @@ export function createFactorRoutes(factors: FactorService, secure: boolean): Htt
 		},
 		{
 			method: 'GET',
-			path: '/api/v1/auth/passkey/has-configured',
+			errorHandler: factorErrorHandler,
+			url: '/api/v1/auth/passkey/has-configured',
 
-			handle: (context) =>
+			handler: (request, reply) =>
 				handle(
-					context,
+					request,
+					reply,
 					async () => {
-						const username = readPasskeyHasConfigured(context.query);
+						const username = readPasskeyHasConfigured(request.query);
 						const hasPasskeys = await accessBoundary(() => factors.hasPasskeys(username));
-						context.send(200, { hasPasskeys } satisfies AccessPasskeyHasConfiguredResponse);
+						reply.code(200).send({ hasPasskeys } satisfies AccessPasskeyHasConfiguredResponse);
 					},
 					true,
 				),
 		},
 		{
 			method: 'GET',
-			path: '/api/v1/auth/user/passkeys',
+			errorHandler: factorErrorHandler,
+			url: '/api/v1/auth/user/passkeys',
 
-			handle: (context) =>
-				handle(context, async () => {
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
 					const credentials = await accessBoundary(() =>
-						factors.listPasskeys(context.cookie(ACCESS_SESSION_COOKIE_NAME)),
+						factors.listPasskeys(readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME)),
 					);
 					sendPasskeyResponse(
-						context,
+						reply,
 						credentials.map((credential): AccessPasskeySummary => ({
 							credentialId: credential.credentialId,
 							name: credential.name,
@@ -463,36 +517,36 @@ export function createFactorRoutes(factors: FactorService, secure: boolean): Htt
 		},
 		{
 			method: 'DELETE',
-			path: '/api/v1/auth/user/passkeys/:credentialID',
-			maxPathParameterBytes: ACCESS_PASSKEY_CREDENTIAL_ID_MAX_BYTES,
+			errorHandler: factorErrorHandler,
+			url: '/api/v1/auth/user/passkeys/:credentialID',
 
-			handle: (context) =>
-				handle(context, async () => {
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
 					await accessBoundary(() =>
 						factors.removePasskey(
-							context.cookie(ACCESS_SESSION_COOKIE_NAME),
-							context.params.credentialID ?? '',
+							readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
+							request.params.credentialID ?? '',
 						),
 					);
-					context.send(200, { removed: true } satisfies AccessPasskeyRemoveResponse);
+					reply.code(200).send({ removed: true } satisfies AccessPasskeyRemoveResponse);
 				}),
 		},
 		{
 			method: 'PUT',
-			path: '/api/v1/auth/user/passkeys/:credentialID/name',
-			maxPathParameterBytes: ACCESS_PASSKEY_CREDENTIAL_ID_MAX_BYTES,
+			errorHandler: factorErrorHandler,
+			url: '/api/v1/auth/user/passkeys/:credentialID/name',
 
-			handle: (context) =>
-				handle(context, async () => {
-					const name = readPasskeyName(await context.json());
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					const name = readPasskeyName(request.body);
 					await accessBoundary(() =>
 						factors.renamePasskey(
-							context.cookie(ACCESS_SESSION_COOKIE_NAME),
-							context.params.credentialID ?? '',
+							readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
+							request.params.credentialID ?? '',
 							name,
 						),
 					);
-					context.send(200, { renamed: true } satisfies AccessPasskeyRenameResponse);
+					reply.code(200).send({ renamed: true } satisfies AccessPasskeyRenameResponse);
 				}),
 		},
 	];

@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { EventEmitter } from 'node:events';
+import { createRequire } from 'node:module';
 import { deliverAccessResult } from '../../../packages/backend/dist/modules/access/interfaces/http/access-delivery.js';
 import { openManagement } from './management-fixture.mjs';
 import { interruptAccessResponse, responseTokenDigest } from './access-delivery-fixture.mjs';
@@ -39,7 +40,8 @@ for (const stage of ['send', 'close', 'late_issue']) {
 			let revocations = 0;
 			let issuedSignal;
 			const result = deliverAccessResult(
-				{ request, response },
+				{ raw: request },
+				{ raw: response },
 				async (signal) => {
 					issuedSignal = signal;
 					if (stage === 'late_issue') {
@@ -75,6 +77,52 @@ for (const stage of ['send', 'close', 'late_issue']) {
 		},
 	);
 }
+
+await test('Fastify response hook failure revokes credentials although the error response finishes', async () => {
+	const require = createRequire(new URL('../../../packages/backend/package.json', import.meta.url));
+	const app = require('fastify')();
+	const revoked = [];
+	let finishStatus;
+	let complete;
+	const completed = new Promise((resolve) => {
+		complete = resolve;
+	});
+	app.addHook('onSend', async (_request, reply, payload) => {
+		if (reply.statusCode === 200) throw new Error('Controlled response hook failure');
+		return payload;
+	});
+	app.post('/issue', async (request, reply) => {
+		reply.raw.once('finish', () => {
+			finishStatus = reply.raw.statusCode;
+		});
+		try {
+			await deliverAccessResult(
+				request,
+				reply,
+				async () => 'committed-session',
+				(token) => {
+					reply.code(200).send({ token });
+				},
+				async (token) => {
+					revoked.push(token);
+				},
+			);
+		} finally {
+			complete();
+		}
+	});
+	try {
+		const address = await app.listen({ host: '127.0.0.1', port: 0 });
+		const response = await fetch(address + '/issue', { method: 'POST' });
+		assert.equal(response.status, 500);
+		await response.text();
+		await completed;
+		assert.equal(finishStatus, 500, 'a real error response completed on the transport');
+		assert.deepEqual(revoked, ['committed-session'], 'failed credential delivery cannot retain a session');
+	} finally {
+		await app.close();
+	}
+});
 
 function cookie(response) {
 	return (response.headers['set-cookie'] ?? []).map((value) => value.split(';')[0]).join('; ');

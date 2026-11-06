@@ -52,11 +52,23 @@ export async function openImageFixture(directory, { publicOrigin = origin, png =
 				.filter((message) => message.role === 'tool')
 				.map((message) => JSON.parse(message.content));
 			let action;
-			if (results.length === 0) action = { name: 'image_models_list', input: {} };
-			else if (results.length === 1) {
-				const selected = results[0].models.find((item) => item.modelId === 'gpt-image-2.5');
+			if (results.length === 0) {
+				assert.ok(body.tools.some((tool) => tool.function.name === 'tool_search'));
+				action = { name: 'tool_search', input: { query: 'image_models_list image_generate' } };
+			} else if (results.length === 1) {
+				assert.equal(results[0].availableNextTurn, true);
+				assert.deepEqual(results[0].matches.map((tool) => tool.name).sort(), [
+					'image_generate',
+					'image_models_list',
+				]);
+				action = { name: 'image_models_list', input: {} };
+			} else if (results.length === 2) {
+				const selected = results[1].models.find((item) => item.modelId === 'gpt-image-2.5');
 				assert.ok(selected);
 				action = { name: 'image_generate', input: { ...selected, prompt: 'A blue circle.' } };
+			}
+			if (action) {
+				assert.ok(body.tools.some((tool) => tool.function.name === action.name));
 			}
 			const delta = action
 				? {

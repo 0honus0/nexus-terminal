@@ -1,6 +1,7 @@
+import { agentHttpSerializer, agentHttpErrorHandler } from './agent-http-response.js';
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import { AgentHttpInput } from './agent-input.js';
-import { Readable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
+import { deliverArtifactContent } from './artifact-http-delivery.js';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
 import {
 	AGENT_ARTIFACT_MAX_BODY_BYTES,
@@ -17,10 +18,9 @@ import {
 	readAgentArtifactCleanup,
 	readAgentArtifactQuery,
 } from '@nexus-terminal/shared/agent/artifacts/http-codec';
-import { readAgentId, encodeAgentJson, InvalidAgentPayload } from '@nexus-terminal/shared/agent/http-codec';
+import { readAgentId, InvalidAgentPayload } from '@nexus-terminal/shared/agent/http-codec';
 import { toArtifactView } from './artifact-mapper.js';
-import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
-import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
+import type { HttpRoute, HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
 import type { AccessPublicApi } from '../../../access/public.js';
 import { AccessOperationError } from '../../../access/public-errors.js';
 import type { ArtifactService } from '../../artifacts/service/artifact-service.js';
@@ -28,22 +28,23 @@ import type { ArtifactActor } from '../../artifacts/model/artifact-types.js';
 import { AgentOperationError } from '../../public-errors.js';
 import { agentErrorStatus } from './agent-http-status.js';
 
-function send(ctx: HttpRouteContext, status: number, value: unknown): void {
-	try {
-		encodeAgentJson(value, AGENT_ARTIFACT_MAX_RESPONSE_BYTES);
-	} catch {
-		throw new AgentOperationError('limit_exceeded');
-	}
-	ctx.send(status, value);
+function send(reply: HttpReply, status: number, value: unknown, mutation = false): void {
+	reply
+		.type('application/json; charset=utf-8')
+		.serializer(
+			agentHttpSerializer(AGENT_ARTIFACT_MAX_RESPONSE_BYTES, mutation ? 'operation_unknown' : 'limit_exceeded'),
+		)
+		.code(status)
+		.send(value);
 }
 
-function noQuery(ctx: HttpRouteContext): void {
-	if ([...ctx.query.keys()].length) {
+function noQuery(request: HttpRequest): void {
+	if ([...request.query.keys()].length) {
 		throw new InvalidAgentPayload();
 	}
 }
 
-async function responseIdentity(ctx: HttpRouteContext, access: AccessPublicApi, actor: ArtifactActor): Promise<void> {
+async function responseIdentity(reply: HttpReply, access: AccessPublicApi, actor: ArtifactActor): Promise<void> {
 	if (actor.kind !== 'session') {
 		throw new AgentOperationError('forbidden');
 	}
@@ -51,7 +52,7 @@ async function responseIdentity(ctx: HttpRouteContext, access: AccessPublicApi, 
 	if (!current || current.userId !== actor.userId) {
 		throw new AgentOperationError('version_conflict');
 	}
-	if (ctx.response.destroyed) {
+	if (reply.raw.destroyed) {
 		throw new AgentOperationError('operation_unknown');
 	}
 }
@@ -66,64 +67,66 @@ export function createArtifactHttpRoutes(
 	function add(
 		method: HttpRoute['method'],
 		path: string,
-		action: (ctx: HttpRouteContext, userId: number, token: string, signal: AbortSignal) => Promise<void>,
+		action: (
+			request: HttpRequest,
+			reply: HttpReply,
+			userId: number,
+			token: string,
+			signal: AbortSignal,
+		) => Promise<void>,
 		maxBodyBytes = AGENT_ARTIFACT_MAX_BODY_BYTES,
 	): void {
 		routes.push({
 			method,
-			path: '/api/v1/agent' + path,
-			maxBodyBytes,
+			url: '/api/v1/agent' + path,
+			bodyLimit: maxBodyBytes,
+			errorHandler: agentHttpErrorHandler,
+			config: { rawBody: method === 'PUT' && path.endsWith('/content') },
 
-			async handle(ctx) {
-				const inputBoundary = new AgentHttpInput(ctx);
+			async handler(request, reply) {
+				const inputBoundary = new AgentHttpInput(request);
 				const abort = new AbortController();
 
 				const closed = () => {
-					if (!ctx.response.writableEnded) {
+					if (!reply.raw.writableEnded) {
 						abort.abort();
 					}
 				};
 
-				ctx.response.once('close', closed);
+				reply.raw.once('close', closed);
 				try {
-					const token = ctx.cookie(ACCESS_SESSION_COOKIE_NAME);
+					const token = readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME);
 					const current = await access.authenticate(token);
 					if (!current || !token) {
-						send(ctx, 401, { code: 'unauthenticated' });
+						send(reply, 401, { code: 'unauthenticated' });
 						return;
 					}
 					if (current.userId !== 1) {
-						send(ctx, 403, { code: 'forbidden' });
+						send(reply, 403, { code: 'forbidden' });
 						return;
 					}
 					const signal = AbortSignal.any([abort.signal, AbortSignal.timeout(60000)]);
 					await boundary(() =>
-						inputBoundary.normalize(() => action(ctx, current.userId, token, signal), signal),
+						inputBoundary.normalize(() => action(request, reply, current.userId, token, signal), signal),
 					);
 				} catch (error) {
-					if (inputBoundary.transportFailure) {
-						throw inputBoundary.transportFailure;
-					}
-					if (ctx.response.headersSent) {
-						ctx.response.destroy(error instanceof Error ? error : undefined);
+					if (reply.sent || reply.raw.headersSent) {
+						reply.raw.destroy(error instanceof Error ? error : undefined);
 						return;
 					}
-					if (error instanceof HttpInputFailure) {
-						throw error;
-					}
 					if (error instanceof InvalidAgentPayload) {
-						send(ctx, 400, { code: 'invalid_input' });
+						send(reply, 400, { code: 'invalid_input' });
 					} else if (error instanceof AgentOperationError) {
-						send(ctx, agentErrorStatus(error.code), { code: error.code });
+						send(reply, agentErrorStatus(error.code), { code: error.code });
 					} else if (error instanceof AccessOperationError) {
-						send(ctx, error.code === 'storage_unavailable' ? 503 : 500, {
+						send(reply, error.code === 'storage_unavailable' ? 503 : 500, {
 							code: error.code === 'storage_unavailable' ? 'storage_unavailable' : 'internal_failure',
 						});
 					} else {
-						send(ctx, 500, { code: 'internal_failure' });
+						send(reply, 500, { code: 'internal_failure' });
 					}
 				} finally {
-					ctx.response.off('close', closed);
+					reply.raw.off('close', closed);
 				}
 			},
 		});
@@ -132,24 +135,35 @@ export function createArtifactHttpRoutes(
 	function addApp(
 		method: HttpRoute['method'],
 		path: string,
-		action: (ctx: HttpRouteContext, actor: ArtifactActor, signal: AbortSignal) => Promise<void>,
+		action: (request: HttpRequest, reply: HttpReply, actor: ArtifactActor, signal: AbortSignal) => Promise<void>,
 		maxBodyBytes = AGENT_ARTIFACT_MAX_BODY_BYTES,
 	): void {
 		add(
 			method,
 			path,
-			(ctx, userId, token, signal) =>
-				action(ctx, { kind: 'session', userId, token, appId: readAgentId(ctx.params.appId) }, signal),
+			(request, reply, userId, token, signal) =>
+				action(
+					request,
+					reply,
+					{ kind: 'session', userId, token, appId: readAgentId(request.params.appId) },
+					signal,
+				),
 			maxBodyBytes,
 		);
 	}
 
-	async function deliver(ctx: HttpRouteContext, actor: ArtifactActor, status: number, value: unknown): Promise<void> {
+	async function deliver(
+		request: HttpRequest,
+		reply: HttpReply,
+		actor: ArtifactActor,
+		status: number,
+		value: unknown,
+	): Promise<void> {
 		try {
-			await responseIdentity(ctx, access, actor);
-			send(ctx, status, value);
+			await responseIdentity(reply, access, actor);
+			send(reply, status, value, request.method !== 'GET');
 		} catch (error) {
-			if (ctx.method !== 'GET') {
+			if (request.method !== 'GET') {
 				throw new AgentOperationError('operation_unknown');
 			}
 			throw error;
@@ -157,14 +171,15 @@ export function createArtifactHttpRoutes(
 	}
 
 	async function library(
-		ctx: HttpRouteContext,
+		request: HttpRequest,
+		reply: HttpReply,
 		userId: number,
 		token: string,
 		action: 'list' | 'storage',
 	): Promise<void> {
 		let result: unknown;
 		if (action === 'storage') {
-			noQuery(ctx);
+			noQuery(request);
 			const value = await service.summary(userId);
 			result = {
 				storage: {
@@ -179,7 +194,7 @@ export function createArtifactHttpRoutes(
 				},
 			};
 		} else {
-			const input = readAgentArtifactQuery(ctx.query);
+			const input = readAgentArtifactQuery(request.query);
 			const page = await service.list(userId, {
 				appId: input.appId,
 				retained: input.retained,
@@ -192,18 +207,18 @@ export function createArtifactHttpRoutes(
 		}
 		const current = await access.authenticate(token);
 		if (!current || current.userId !== userId) {
-			send(ctx, 401, { code: 'unauthenticated' });
+			send(reply, 401, { code: 'unauthenticated' });
 			return;
 		}
-		send(ctx, 200, result);
+		send(reply, 200, result);
 	}
 
-	add('GET', '/files', (ctx, userId, token) => library(ctx, userId, token, 'list'));
-	add('GET', '/files/storage', (ctx, userId, token) => library(ctx, userId, token, 'storage'));
-	addApp('POST', '/apps/:appId/artifacts', async (ctx, actor) => {
-		noQuery(ctx);
-		const input = readAgentArtifactBegin(await ctx.json());
-		await deliver(ctx, actor, 201, {
+	add('GET', '/files', (request, reply, userId, token) => library(request, reply, userId, token, 'list'));
+	add('GET', '/files/storage', (request, reply, userId, token) => library(request, reply, userId, token, 'storage'));
+	addApp('POST', '/apps/:appId/artifacts', async (request, reply, actor) => {
+		noQuery(request);
+		const input = readAgentArtifactBegin(request.body);
+		await deliver(request, reply, actor, 201, {
 			artifact: toArtifactView(
 				await service.begin(actor, {
 					name: input.name,
@@ -213,8 +228,8 @@ export function createArtifactHttpRoutes(
 			),
 		});
 	});
-	addApp('GET', '/apps/:appId/artifacts', async (ctx, actor) => {
-		const query = readAgentArtifactQuery(ctx.query);
+	addApp('GET', '/apps/:appId/artifacts', async (request, reply, actor) => {
+		const query = readAgentArtifactQuery(request.query);
 		if (query.appId !== null && query.appId !== actor.appId) {
 			throw new InvalidAgentPayload();
 		}
@@ -226,26 +241,29 @@ export function createArtifactHttpRoutes(
 			offset: query.offset,
 			limit: query.limit,
 		});
-		await deliver(ctx, actor, 200, { items: page.items.map(toArtifactView), nextOffset: page.nextOffset });
+		await deliver(request, reply, actor, 200, {
+			items: page.items.map(toArtifactView),
+			nextOffset: page.nextOffset,
+		});
 	});
-	addApp('GET', '/apps/:appId/artifacts/:artifactId', async (ctx, actor) => {
-		noQuery(ctx);
-		const value = await service.get(actor, readAgentId(ctx.params.artifactId));
+	addApp('GET', '/apps/:appId/artifacts/:artifactId', async (request, reply, actor) => {
+		noQuery(request);
+		const value = await service.get(actor, readAgentId(request.params.artifactId));
 		if (!value) {
 			throw new AgentOperationError('not_found');
 		}
-		await deliver(ctx, actor, 200, { artifact: toArtifactView(value) });
+		await deliver(request, reply, actor, 200, { artifact: toArtifactView(value) });
 	});
-	addApp('PUT', '/apps/:appId/artifacts/:artifactId/content', async (ctx, actor, signal) => {
-		noQuery(ctx);
-		const artifactId = readAgentId(ctx.params.artifactId);
+	addApp('PUT', '/apps/:appId/artifacts/:artifactId/content', async (request, reply, actor, signal) => {
+		noQuery(request);
+		const artifactId = readAgentId(request.params.artifactId);
 		const { expectedVersion } = readAgentArtifactUploadHeaders(
-			ctx.request.headers['if-match'],
-			ctx.request.headers['content-type'],
+			request.headers['if-match'],
+			request.headers['content-type'],
 		);
 
 		async function* source(): AsyncIterable<Uint8Array> {
-			for await (const chunk of ctx.request) {
+			for await (const chunk of request.raw) {
 				signal.throwIfAborted();
 				if (!Buffer.isBuffer(chunk)) {
 					throw new InvalidAgentPayload();
@@ -255,12 +273,12 @@ export function createArtifactHttpRoutes(
 		}
 
 		const value = await service.upload(actor, artifactId, expectedVersion, source(), signal);
-		await deliver(ctx, actor, 200, { artifact: toArtifactView(value) });
+		await deliver(request, reply, actor, 200, { artifact: toArtifactView(value) });
 	});
 	for (const mode of ['content', 'preview'] as const) {
-		addApp('GET', '/apps/:appId/artifacts/:artifactId/' + mode, async (ctx, actor, signal) => {
-			noQuery(ctx);
-			const artifactId = readAgentId(ctx.params.artifactId);
+		addApp('GET', '/apps/:appId/artifacts/:artifactId/' + mode, async (request, reply, actor, signal) => {
+			noQuery(request);
+			const artifactId = readAgentId(request.params.artifactId);
 			const value = await service.get(actor, artifactId);
 			if (
 				!value ||
@@ -276,58 +294,60 @@ export function createArtifactHttpRoutes(
 				throw new AgentOperationError('not_found');
 			}
 			const { start, endInclusive, partial } = readAgentArtifactDownloadRange(
-				ctx.request.headers.range,
+				request.headers.range,
 				value.sizeBytes,
 			);
-			await responseIdentity(ctx, access, actor);
-			ctx.response.statusCode = partial ? 206 : 200;
-			ctx.response.setHeader('Content-Type', mode === 'preview' ? value.mediaType : 'application/octet-stream');
-			ctx.response.setHeader('X-Content-Type-Options', 'nosniff');
-			ctx.response.setHeader('Cache-Control', 'private, no-store');
-			ctx.response.setHeader(
+			await responseIdentity(reply, access, actor);
+			reply.code(partial ? 206 : 200);
+			reply.header('Content-Type', mode === 'preview' ? value.mediaType : 'application/octet-stream');
+			reply.header('Cache-Control', 'private, no-store');
+			reply.header(
 				'Content-Disposition',
 				(mode === 'preview' ? 'inline' : 'attachment') + "; filename*=UTF-8''" + encodeURIComponent(value.name),
 			);
-			ctx.response.setHeader('ETag', '"' + value.version + '"');
-			ctx.response.setHeader('Accept-Ranges', 'bytes');
-			ctx.response.setHeader('Content-Length', Math.max(0, endInclusive - start + 1));
+			reply.header('ETag', '"' + value.version + '"');
+			reply.header('Accept-Ranges', 'bytes');
+			reply.header('Content-Length', Math.max(0, endInclusive - start + 1));
 			if (partial) {
-				ctx.response.setHeader('Content-Range', `bytes ${start}-${endInclusive}/${value.sizeBytes}`);
+				reply.header('Content-Range', `bytes ${start}-${endInclusive}/${value.sizeBytes}`);
 			}
-			await pipeline(
-				Readable.from(service.read(actor, artifactId, value.version, { start, endInclusive }, signal)),
-				ctx.response,
-				{
-					signal,
-				},
+			await deliverArtifactContent(
+				reply,
+				service.read(actor, artifactId, value.version, { start, endInclusive }, signal),
+				signal,
 			);
 		});
 	}
-	addApp('PATCH', '/apps/:appId/artifacts/:artifactId/retain', async (ctx, actor) => {
-		noQuery(ctx);
-		const input = readAgentArtifactRetain(await ctx.json());
-		await deliver(ctx, actor, 200, {
+	addApp('PATCH', '/apps/:appId/artifacts/:artifactId/retain', async (request, reply, actor) => {
+		noQuery(request);
+		const input = readAgentArtifactRetain(request.body);
+		await deliver(request, reply, actor, 200, {
 			artifact: toArtifactView(
-				await service.retain(actor, readAgentId(ctx.params.artifactId), input.expectedVersion, input.retained),
+				await service.retain(
+					actor,
+					readAgentId(request.params.artifactId),
+					input.expectedVersion,
+					input.retained,
+				),
 			),
 		});
 	});
-	addApp('DELETE', '/apps/:appId/artifacts/:artifactId', async (ctx, actor) => {
-		noQuery(ctx);
-		const input = readAgentArtifactVersion(await ctx.json());
-		await service.delete(actor, readAgentId(ctx.params.artifactId), input.expectedVersion);
-		await deliver(ctx, actor, 200, { deleted: true });
+	addApp('DELETE', '/apps/:appId/artifacts/:artifactId', async (request, reply, actor) => {
+		noQuery(request);
+		const input = readAgentArtifactVersion(request.body);
+		await service.delete(actor, readAgentId(request.params.artifactId), input.expectedVersion);
+		await deliver(request, reply, actor, 200, { deleted: true });
 	});
-	addApp('POST', '/apps/:appId/artifacts/:artifactId/attachments', async (ctx, actor) => {
-		noQuery(ctx);
-		const input = readAgentArtifactAttach(await ctx.json());
-		const value = await service.attach(actor, readAgentId(ctx.params.artifactId), {
+	addApp('POST', '/apps/:appId/artifacts/:artifactId/attachments', async (request, reply, actor) => {
+		noQuery(request);
+		const input = readAgentArtifactAttach(request.body);
+		const value = await service.attach(actor, readAgentId(request.params.artifactId), {
 			expectedVersion: input.expectedVersion,
 			targetAppId: input.targetAppId,
 			threadId: input.threadId,
 			runId: input.runId,
 		});
-		await deliver(ctx, actor, 200, {
+		await deliver(request, reply, actor, 200, {
 			attachment: {
 				artifact: toArtifactView(value),
 				sourceAppId: value.appId,
@@ -339,23 +359,23 @@ export function createArtifactHttpRoutes(
 			},
 		});
 	});
-	addApp('DELETE', '/apps/:appId/artifacts/:artifactId/attachments/:threadId', async (ctx, actor) => {
-		noQuery(ctx);
-		const input = readAgentArtifactVersion(await ctx.json());
-		await deliver(ctx, actor, 200, {
+	addApp('DELETE', '/apps/:appId/artifacts/:artifactId/attachments/:threadId', async (request, reply, actor) => {
+		noQuery(request);
+		const input = readAgentArtifactVersion(request.body);
+		await deliver(request, reply, actor, 200, {
 			artifact: toArtifactView(
 				await service.detach(
 					actor,
-					readAgentId(ctx.params.artifactId),
+					readAgentId(request.params.artifactId),
 					input.expectedVersion,
-					readAgentId(ctx.params.threadId),
+					readAgentId(request.params.threadId),
 				),
 			),
 		});
 	});
-	addApp('POST', '/apps/:appId/artifacts/cleanup/preview', async (ctx, actor) => {
-		noQuery(ctx);
-		readAgentArtifactEmptyRequest(await ctx.json());
+	addApp('POST', '/apps/:appId/artifacts/cleanup/preview', async (request, reply, actor) => {
+		noQuery(request);
+		readAgentArtifactEmptyRequest(request.body);
 		const plan = await service.previewCleanup(actor);
 		const byApp = new Map<string, { appId: string; count: number; bytes: number }>();
 		for (const item of plan.items) {
@@ -364,7 +384,7 @@ export function createArtifactHttpRoutes(
 			group.bytes += item.sizeBytes;
 			byApp.set(item.appId, group);
 		}
-		await deliver(ctx, actor, 200, {
+		await deliver(request, reply, actor, 200, {
 			confirmation: {
 				confirmationId: plan.id,
 				expiresAt: plan.expiresAt,
@@ -375,11 +395,11 @@ export function createArtifactHttpRoutes(
 			},
 		});
 	});
-	addApp('POST', '/apps/:appId/artifacts/cleanup/confirm', async (ctx, actor) => {
-		noQuery(ctx);
-		const input = readAgentArtifactCleanup(await ctx.json());
+	addApp('POST', '/apps/:appId/artifacts/cleanup/confirm', async (request, reply, actor) => {
+		noQuery(request);
+		const input = readAgentArtifactCleanup(request.body);
 		const value = await service.confirmCleanup(actor, input.confirmationId);
-		await deliver(ctx, actor, 200, {
+		await deliver(request, reply, actor, 200, {
 			result: {
 				deletedCount: value.deletedCount,
 				deletedBytes: value.deletedBytes,

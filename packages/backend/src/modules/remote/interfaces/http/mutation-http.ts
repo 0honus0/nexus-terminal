@@ -1,5 +1,6 @@
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
-import type { HttpRoute } from '../../../../platform/http/http-types.js';
+import type { HttpRoute, HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
 import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
 import { InvalidPayload } from '@nexus-terminal/shared/common/http-codec';
 import {
@@ -8,7 +9,7 @@ import {
 	readMutationEvidence,
 	readMutationRelease,
 } from '@nexus-terminal/shared/remote/mutations/http-codec';
-import { MUTATION_BODY_MAX_BYTES, MUTATION_ID_MAX_BYTES } from '@nexus-terminal/shared/remote/mutations/values';
+import { MUTATION_BODY_MAX_BYTES } from '@nexus-terminal/shared/remote/mutations/values';
 import type { MutationErrorCode } from '@nexus-terminal/shared/remote/mutations/values';
 import type { MutationFailureResponse, MutationListResponse } from '@nexus-terminal/shared/remote/mutations/http';
 import type { MutationRecoveryService } from '../../machines/service/mutation-recovery-service.js';
@@ -40,15 +41,19 @@ function status(code: MutationErrorCode): number {
 
 export function createMutationHttpRoutes(owner: MutationRecoveryService): HttpRoute[] {
 	const root = '/api/v1/remote/mutations';
-	const routes: HttpRoute[] = [
+	const routes = [
 		{
 			method: 'GET',
-			path: root,
+			url: root,
 
-			async handle(ctx) {
-				const query = readMutationQuery(ctx.query);
-				const value = await owner.list(ctx.cookie(ACCESS_SESSION_COOKIE_NAME), query.after, query.limit);
-				ctx.send(200, {
+			async handler(request: HttpRequest, reply: HttpReply) {
+				const query = readMutationQuery(request.query);
+				const value = await owner.list(
+					readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
+					query.after,
+					query.limit,
+				);
+				reply.code(200).send({
 					items: value.items.map(toMutationView),
 					nextCursor: value.nextCursor,
 				} satisfies MutationListResponse);
@@ -56,73 +61,77 @@ export function createMutationHttpRoutes(owner: MutationRecoveryService): HttpRo
 		},
 		{
 			method: 'GET',
-			path: root + '/:id',
+			url: root + '/:id',
 
-			async handle(ctx) {
-				if (ctx.query.size) {
+			async handler(request: HttpRequest, reply: HttpReply) {
+				if (request.query.size) {
 					throw new InvalidPayload();
 				}
-				ctx.send(
-					200,
-					toMutationView(
-						await owner.get(ctx.cookie(ACCESS_SESSION_COOKIE_NAME), readMutationId(ctx.params.id)),
-					),
-				);
+				reply
+					.code(200)
+					.send(
+						toMutationView(
+							await owner.get(
+								readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
+								readMutationId(request.params.id),
+							),
+						),
+					);
 			},
 		},
 		{
 			method: 'POST',
-			path: root + '/:id/evidence',
+			url: root + '/:id/evidence',
 
-			async handle(ctx) {
-				if (ctx.query.size) {
+			async handler(request: HttpRequest, reply: HttpReply) {
+				if (request.query.size) {
 					throw new InvalidPayload();
 				}
-				const input = toMutationEvidence(readMutationEvidence(await ctx.json()));
-				ctx.send(
-					200,
-					toMutationView(
-						await owner.recordEvidence(
-							ctx.cookie(ACCESS_SESSION_COOKIE_NAME),
-							readMutationId(ctx.params.id),
-							input,
+				const input = toMutationEvidence(readMutationEvidence(request.body));
+				reply
+					.code(200)
+					.send(
+						toMutationView(
+							await owner.recordEvidence(
+								readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
+								readMutationId(request.params.id),
+								input,
+							),
 						),
-					),
-				);
+					);
 			},
 		},
 		{
 			method: 'POST',
-			path: root + '/:id/release',
+			url: root + '/:id/release',
 
-			async handle(ctx) {
-				if (ctx.query.size) {
+			async handler(request: HttpRequest, reply: HttpReply) {
+				if (request.query.size) {
 					throw new InvalidPayload();
 				}
-				const input = toMutationRelease(readMutationRelease(await ctx.json()));
-				ctx.send(
-					200,
-					toMutationView(
-						await owner.release(
-							ctx.cookie(ACCESS_SESSION_COOKIE_NAME),
-							readMutationId(ctx.params.id),
-							input,
+				const input = toMutationRelease(readMutationRelease(request.body));
+				reply
+					.code(200)
+					.send(
+						toMutationView(
+							await owner.release(
+								readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
+								readMutationId(request.params.id),
+								input,
+							),
 						),
-					),
-				);
+					);
 			},
 		},
-	];
+	] satisfies HttpRoute[];
 	return routes.map((route) => ({
 		method: route.method,
-		path: route.path,
-		maxBodyBytes: MUTATION_BODY_MAX_BYTES,
-		maxPathParameterBytes: MUTATION_ID_MAX_BYTES,
-		pathParameterAlphabet: 'opaque',
+		url: route.url,
+		bodyLimit: MUTATION_BODY_MAX_BYTES,
 
-		async handle(ctx) {
+		async handler(request: HttpRequest, reply: HttpReply) {
 			try {
-				await route.handle(ctx);
+				await route.handler(request, reply);
 			} catch (error) {
 				if (error instanceof HttpInputFailure) {
 					throw error;
@@ -133,7 +142,7 @@ export function createMutationHttpRoutes(owner: MutationRecoveryService): HttpRo
 						: error instanceof InvalidPayload
 							? 'invalid_input'
 							: 'storage_unavailable';
-				ctx.send(status(code), { code } satisfies MutationFailureResponse);
+				reply.code(status(code)).send({ code } satisfies MutationFailureResponse);
 			}
 		},
 	}));

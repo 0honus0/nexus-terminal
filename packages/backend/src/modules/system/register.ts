@@ -128,14 +128,14 @@ export function registerSystem(
 			...createSystemStatusRoutes(service),
 			...createDiagnosticRoutes(diagnostic),
 			...createBackupRoutes(backups, (request, apply) => maintenance.run(request, apply)).filter((route) =>
-				route.path.endsWith('/export'),
+				route.url.endsWith('/export'),
 			),
 		],
 
 		// The import task must not sit inside the Operations occupancy it needs to drain.
 		maintenanceRoutes: () =>
 			createBackupRoutes(backups, (request, apply) => maintenance.run(request, apply)).filter((route) =>
-				route.path.endsWith('/import'),
+				route.url.endsWith('/import'),
 			),
 
 		closeForRestore: async () => {

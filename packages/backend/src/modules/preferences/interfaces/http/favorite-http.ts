@@ -1,4 +1,5 @@
-import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
+import type { HttpRoute, HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
 import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
 import type { AccessPublicApi } from '../../../access/public.js';
 import { AccessOperationError } from '../../../access/public-errors.js';
@@ -51,8 +52,8 @@ function toWire(value: FavoriteRecord): FavoritePath {
 	};
 }
 
-async function authenticate(context: HttpRouteContext, access: AccessPublicApi): Promise<FavoriteActor> {
-	const token = context.cookie(ACCESS_SESSION_COOKIE_NAME);
+async function authenticate(request: HttpRequest, reply: HttpReply, access: AccessPublicApi): Promise<FavoriteActor> {
+	const token = readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME);
 	const identity = await access.authenticate(token);
 	if (!token || !identity) {
 		throw new FavoriteFailure('unauthenticated');
@@ -60,37 +61,57 @@ async function authenticate(context: HttpRouteContext, access: AccessPublicApi):
 	return { userId: identity.userId, token };
 }
 
-async function revalidate(context: HttpRouteContext, access: AccessPublicApi, actor: FavoriteActor): Promise<void> {
-	const current = await authenticate(context, access);
+async function revalidate(
+	request: HttpRequest,
+	reply: HttpReply,
+	access: AccessPublicApi,
+	actor: FavoriteActor,
+): Promise<void> {
+	const current = await authenticate(request, reply, access);
 	if (current.userId !== actor.userId || current.token !== actor.token) {
 		throw new FavoriteFailure('forbidden');
 	}
 }
 
-function ready(context: HttpRouteContext): void {
-	if (context.response.destroyed || context.response.writableEnded) {
+function ready(request: HttpRequest, reply: HttpReply): void {
+	if (reply.raw.destroyed || reply.raw.writableEnded) {
 		throw new FavoriteFailure('unavailable');
 	}
 }
 
-function send(context: HttpRouteContext, status: number, body: unknown): void {
-	if (Buffer.byteLength(JSON.stringify(body), 'utf8') > FAVORITE_RESPONSE_MAX_BYTES) {
-		throw new FavoriteFailure('limit_exceeded');
-	}
-	ready(context);
-	context.send(status, body);
+function send(request: HttpRequest, reply: HttpReply, status: number, body: unknown, mutation = false): void {
+	ready(request, reply);
+	reply.type('application/json; charset=utf-8').serializer((payload) => {
+		try {
+			const encoded = JSON.stringify(payload);
+			if (encoded === undefined) {
+				throw new FavoriteFailure('internal_failure');
+			}
+			if (Buffer.byteLength(encoded, 'utf8') > FAVORITE_RESPONSE_MAX_BYTES) {
+				throw new FavoriteFailure('limit_exceeded');
+			}
+			return encoded;
+		} catch (cause) {
+			throw new FavoriteFailure(
+				mutation ? 'operation_unknown' : cause instanceof FavoriteFailure ? cause.code : 'internal_failure',
+				{ cause },
+			);
+		}
+	});
+	reply.code(status).send(body);
 }
 
 async function deliver(
-	context: HttpRouteContext,
+	request: HttpRequest,
+	reply: HttpReply,
 	access: AccessPublicApi,
 	actor: FavoriteActor,
 	status: number,
 	project: () => FavoritePathMutationResponse | FavoritePathDeleteResponse,
 ): Promise<void> {
 	try {
-		await revalidate(context, access, actor);
-		send(context, status, project());
+		await revalidate(request, reply, access, actor);
+		send(request, reply, status, project(), true);
 	} catch (cause) {
 		throw new FavoriteFailure('operation_unknown', { cause });
 	}
@@ -115,21 +136,37 @@ function failureCode(error: unknown): FavoriteErrorCode {
 	return 'internal_failure';
 }
 
-async function handle(context: HttpRouteContext, work: () => Promise<void>): Promise<void> {
-	try {
-		await work();
-	} catch (error) {
-		const code = failureCode(error);
-		if (context.response.headersSent) {
-			context.response.destroy();
-		} else if (!context.response.destroyed && !context.response.writableEnded) {
-			context.send(error instanceof HttpInputFailure ? error.status : ERROR_STATUS[code], { code });
-		}
+function sendFailure(error: unknown, request: HttpRequest, reply: HttpReply): void {
+	const code = failureCode(error);
+	if (reply.sent || reply.raw.headersSent) {
+		reply.raw.destroy();
+	} else if (!reply.raw.destroyed && !reply.raw.writableEnded) {
+		reply
+			.removeHeader('Content-Length')
+			.type('application/json; charset=utf-8')
+			.serializer(JSON.stringify)
+			.code(error instanceof HttpInputFailure ? error.status : ERROR_STATUS[code])
+			.send({ code });
 	}
 }
 
-function noQuery(context: HttpRouteContext): void {
-	if (context.query.size) {
+function httpErrorHandler(error: unknown, request: HttpRequest, reply: HttpReply): void {
+	if (!(error instanceof FavoriteFailure)) {
+		throw error;
+	}
+	sendFailure(error, request, reply);
+}
+
+async function handle(request: HttpRequest, reply: HttpReply, work: () => Promise<void>): Promise<void> {
+	try {
+		await work();
+	} catch (error) {
+		sendFailure(error, request, reply);
+	}
+}
+
+function noQuery(request: HttpRequest, reply: HttpReply): void {
+	if (request.query.size) {
 		throw new InvalidFavoritePayload();
 	}
 }
@@ -139,107 +176,119 @@ export function createFavoriteRoutes(service: FavoriteService, access: AccessPub
 	return [
 		{
 			method: 'GET',
-			path,
+			url: path,
 
-			handle: (context) =>
-				handle(context, async () => {
-					const actor = await authenticate(context, access);
-					const query = readFavoriteQuery(context.query);
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					const actor = await authenticate(request, reply, access);
+					const query = readFavoriteQuery(request.query);
 					const page = await service.list(actor, {
 						sortBy: query.sortBy,
 						offset: query.offset,
 						limit: query.limit,
 					});
-					await revalidate(context, access, actor);
+					await revalidate(request, reply, access, actor);
 					const body: FavoritePathListResponse = {
 						entries: page.entries.map(toWire),
 						nextOffset: page.nextOffset,
 					};
-					send(context, 200, body);
+					send(request, reply, 200, body);
 				}),
 		},
 		{
 			method: 'GET',
-			path: path + '/:id',
+			url: path + '/:id',
 
-			handle: (context) =>
-				handle(context, async () => {
-					noQuery(context);
-					const actor = await authenticate(context, access);
-					const item = await service.get(actor, readFavoriteId(context.params.id));
-					await revalidate(context, access, actor);
-					send(context, 200, toWire(item));
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					noQuery(request, reply);
+					const actor = await authenticate(request, reply, access);
+					const item = await service.get(actor, readFavoriteId(request.params.id));
+					await revalidate(request, reply, access, actor);
+					send(request, reply, 200, toWire(item));
 				}),
 		},
 		{
 			method: 'POST',
-			path,
-			maxBodyBytes: FAVORITE_REQUEST_MAX_BYTES,
+			url: path,
+			bodyLimit: FAVORITE_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handle(context, async () => {
-					noQuery(context);
-					const actor = await authenticate(context, access);
-					const input = readFavoriteCreate(await context.json());
-					await revalidate(context, access, actor);
-					ready(context);
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					noQuery(request, reply);
+					const actor = await authenticate(request, reply, access);
+					const input = readFavoriteCreate(request.body);
+					await revalidate(request, reply, access, actor);
+					ready(request, reply);
 					const item = await service.create(actor, { name: input.name, path: input.path });
-					await deliver(context, access, actor, 201, () => ({ favoritePath: toWire(item) }));
+					await deliver(request, reply, access, actor, 201, () => ({ favoritePath: toWire(item) }));
 				}),
 		},
 		{
 			method: 'PUT',
-			path: path + '/:id',
-			maxBodyBytes: FAVORITE_REQUEST_MAX_BYTES,
+			url: path + '/:id',
+			bodyLimit: FAVORITE_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handle(context, async () => {
-					noQuery(context);
-					const actor = await authenticate(context, access);
-					const id = readFavoriteId(context.params.id);
-					const input = readFavoriteUpdate(await context.json());
-					await revalidate(context, access, actor);
-					ready(context);
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					noQuery(request, reply);
+					const actor = await authenticate(request, reply, access);
+					const id = readFavoriteId(request.params.id);
+					const input = readFavoriteUpdate(request.body);
+					await revalidate(request, reply, access, actor);
+					ready(request, reply);
 					const item = await service.update(actor, {
 						id,
 						expectedVersion: input.expectedVersion,
 						input: { name: input.name, path: input.path },
 					});
-					await deliver(context, access, actor, 200, () => ({ favoritePath: toWire(item) }));
+					await deliver(request, reply, access, actor, 200, () => ({ favoritePath: toWire(item) }));
 				}),
 		},
 		{
 			method: 'PUT',
-			path: path + '/:id/update-last-used',
-			maxBodyBytes: FAVORITE_REQUEST_MAX_BYTES,
+			url: path + '/:id/update-last-used',
+			bodyLimit: FAVORITE_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handle(context, async () => {
-					noQuery(context);
-					const actor = await authenticate(context, access);
-					const id = readFavoriteId(context.params.id);
-					const input = readFavoriteVersion(await context.json());
-					await revalidate(context, access, actor);
-					ready(context);
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					noQuery(request, reply);
+					const actor = await authenticate(request, reply, access);
+					const id = readFavoriteId(request.params.id);
+					const input = readFavoriteVersion(request.body);
+					await revalidate(request, reply, access, actor);
+					ready(request, reply);
 					const item = await service.touch(actor, id, input.expectedVersion);
-					await deliver(context, access, actor, 200, () => ({ favoritePath: toWire(item) }));
+					await deliver(request, reply, access, actor, 200, () => ({ favoritePath: toWire(item) }));
 				}),
 		},
 		{
 			method: 'DELETE',
-			path: path + '/:id',
-			maxBodyBytes: FAVORITE_REQUEST_MAX_BYTES,
+			url: path + '/:id',
+			bodyLimit: FAVORITE_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handle(context, async () => {
-					noQuery(context);
-					const actor = await authenticate(context, access);
-					const id = readFavoriteId(context.params.id);
-					const input = readFavoriteVersion(await context.json());
-					await revalidate(context, access, actor);
-					ready(context);
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					noQuery(request, reply);
+					const actor = await authenticate(request, reply, access);
+					const id = readFavoriteId(request.params.id);
+					const input = readFavoriteVersion(request.body);
+					await revalidate(request, reply, access, actor);
+					ready(request, reply);
 					await service.delete(actor, id, input.expectedVersion);
-					await deliver(context, access, actor, 200, () => ({ deleted: true }));
+					await deliver(request, reply, access, actor, 200, () => ({ deleted: true }));
 				}),
 		},
 	];

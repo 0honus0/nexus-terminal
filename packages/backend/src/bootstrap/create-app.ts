@@ -177,7 +177,7 @@ function createLifecycle(
 					const replacement = await install();
 					setModules(replacement);
 					await replacement.initialize('restore');
-					lease.replace({
+					await lease.replace({
 						allowedOrigins: replacement.allowedOrigins,
 						admitUnmatched: replacement.admitUnmatchedHttp,
 						routes: replacement.httpRoutes(secureCookies),

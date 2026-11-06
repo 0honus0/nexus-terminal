@@ -1,3 +1,5 @@
+import { agentHttpSerializer, agentHttpErrorHandler } from './agent-http-response.js';
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import type { AgentRunUsageView } from '@nexus-terminal/shared/agent/runs/model';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
 import { AGENT_APP_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/scope/values';
@@ -12,7 +14,7 @@ import { AGENT_TOOL_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/tool
 import type { AgentToolView, AgentToolCallDetails } from '@nexus-terminal/shared/agent/tools/model';
 import type { AgentThreadToolsResponse } from '@nexus-terminal/shared/agent/tools/http';
 import { agentErrorStatus } from './agent-http-status.js';
-import { InvalidAgentPayload, encodeAgentJson } from '@nexus-terminal/shared/agent/http-codec';
+import { InvalidAgentPayload } from '@nexus-terminal/shared/agent/http-codec';
 import { AGENT_MAX_JSON_BODY_BYTES, AGENT_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/values';
 import { AGENT_RUN_MAX_JSON_BODY_BYTES, AGENT_RUN_IDEMPOTENCY_HEADER } from '@nexus-terminal/shared/agent/runs/values';
 import { readAgentAppPath, readAgentCreateThreadRequest } from '@nexus-terminal/shared/agent/scope/http-codec';
@@ -33,8 +35,7 @@ import type {
 	AgentRunPath,
 } from '@nexus-terminal/shared/agent/runs/http';
 import type { AgentErrorResponse } from '@nexus-terminal/shared/agent/http';
-import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
-import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
+import type { HttpRoute, HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
 import type { AccessPublicApi } from '../../../access/public.js';
 import { AccessOperationError } from '../../../access/public-errors.js';
 import { AgentOperationError } from '../../public-errors.js';
@@ -50,7 +51,7 @@ import type {
 } from '@nexus-terminal/shared/agent/collaboration/http';
 
 const ROOT = '/api/v1/agent';
-type Handler = (context: HttpRouteContext, userId: number) => Promise<void>;
+type Handler = (request: HttpRequest, reply: HttpReply, userId: number) => Promise<void>;
 
 type AgentHttpResponse =
 	| AgentAppView
@@ -70,26 +71,20 @@ type AgentHttpResponse =
 	| AgentErrorResponse;
 
 function sendAgent(
-	context: HttpRouteContext,
+	reply: HttpReply,
 	status: number,
 	value: AgentHttpResponse,
 	maxBytes = AGENT_MAX_RESPONSE_BYTES,
 ): void {
-	try {
-		encodeAgentJson(value, maxBytes);
-	} catch {
-		// A producer exceeding its contract is a server failure, not invalid user input.
-		throw new AgentOperationError('limit_exceeded');
-	}
-	context.send(status, value);
+	reply.type('application/json; charset=utf-8').serializer(agentHttpSerializer(maxBytes)).code(status).send(value);
 }
 
-function operationKey(context: HttpRouteContext): string {
-	return readAgentRunCommandHeaders(context.request.headers[AGENT_RUN_IDEMPOTENCY_HEADER.toLowerCase()]).operationKey;
+function operationKey(request: HttpRequest): string {
+	return readAgentRunCommandHeaders(request.headers[AGENT_RUN_IDEMPOTENCY_HEADER.toLowerCase()]).operationKey;
 }
 
-function runPath(context: HttpRouteContext): AgentRunPath {
-	return readAgentRunPath({ appId: context.params.appId, runId: context.params.id });
+function runPath(request: HttpRequest): AgentRunPath {
+	return readAgentRunPath({ appId: request.params.appId, runId: request.params.id });
 }
 
 function toRun(value: AgentRunView): AgentRunView {
@@ -116,26 +111,23 @@ function toEvent(value: AgentRunEventView): AgentRunEventView {
 	};
 }
 
-function failure(context: HttpRouteContext, error: unknown): void {
-	if (error instanceof HttpInputFailure) {
-		throw error;
-	}
+function failure(reply: HttpReply, error: unknown): void {
 	if (error instanceof InvalidAgentPayload) {
-		sendAgent(context, 400, { code: 'invalid_input' });
+		sendAgent(reply, 400, { code: 'invalid_input' });
 		return;
 	}
 	if (error instanceof AgentOperationError) {
 		const status = agentErrorStatus(error.code);
-		sendAgent(context, status, { code: error.code });
+		sendAgent(reply, status, { code: error.code });
 		return;
 	}
 	if (error instanceof AccessOperationError) {
-		sendAgent(context, error.code === 'storage_unavailable' ? 503 : 500, {
+		sendAgent(reply, error.code === 'storage_unavailable' ? 503 : 500, {
 			code: error.code === 'storage_unavailable' ? 'storage_unavailable' : 'internal_failure',
 		});
 		return;
 	}
-	sendAgent(context, 500, { code: 'internal_failure' });
+	sendAgent(reply, 500, { code: 'internal_failure' });
 }
 
 function add(
@@ -149,27 +141,28 @@ function add(
 ): void {
 	routes.push({
 		method,
-		path: ROOT + path,
-		maxBodyBytes,
+		url: ROOT + path,
+		bodyLimit: maxBodyBytes,
+		errorHandler: agentHttpErrorHandler,
 
-		async handle(context) {
+		async handler(request, reply) {
 			try {
-				if ([...context.query.keys()].some((key) => !queryKeys.includes(key))) {
+				if ([...request.query.keys()].some((key) => !queryKeys.includes(key))) {
 					throw new AgentOperationError('invalid_input');
 				}
-				const token = context.cookie(ACCESS_SESSION_COOKIE_NAME);
+				const token = readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME);
 				const identity = await access.authenticate(token);
 				if (identity === null) {
-					sendAgent(context, 401, { code: 'unauthenticated' });
+					sendAgent(reply, 401, { code: 'unauthenticated' });
 					return;
 				}
 				if (identity.userId !== 1) {
-					sendAgent(context, 403, { code: 'forbidden' });
+					sendAgent(reply, 403, { code: 'forbidden' });
 					return;
 				}
-				await action(context, identity.userId);
+				await action(request, reply, identity.userId);
 			} catch (error) {
-				failure(context, error);
+				failure(reply, error);
 			}
 		},
 	});
@@ -216,28 +209,30 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 	const routes: HttpRoute[] = [];
 
 	async function deliver(
-		ctx: HttpRouteContext,
+		request: HttpRequest,
+		reply: HttpReply,
 		status: number,
 		value: AgentHttpResponse,
 		maxBytes = AGENT_MAX_RESPONSE_BYTES,
 	): Promise<void> {
-		const identity = await access.authenticate(ctx.cookie(ACCESS_SESSION_COOKIE_NAME));
+		const identity = await access.authenticate(readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME));
 		if (identity === null) {
-			sendAgent(ctx, 401, { code: 'unauthenticated' });
+			sendAgent(reply, 401, { code: 'unauthenticated' });
 			return;
 		}
 		if (identity.userId !== 1) {
-			sendAgent(ctx, 403, { code: 'forbidden' });
+			sendAgent(reply, 403, { code: 'forbidden' });
 			return;
 		}
-		sendAgent(ctx, status, value, maxBytes);
+		sendAgent(reply, status, value, maxBytes);
 	}
 
-	add(routes, 'GET', '/apps/:appId/runs/:id/subagents', access, async (ctx, userId) => {
-		const path = runPath(ctx);
+	add(routes, 'GET', '/apps/:appId/runs/:id/subagents', access, async (request, reply, userId) => {
+		const path = runPath(request);
 		const result = await agent.listChildren(userId, path.appId, path.runId);
 		await deliver(
-			ctx,
+			request,
+			reply,
 			result === null ? 404 : 200,
 			result === null
 				? { code: 'not_found' }
@@ -254,29 +249,33 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 			AGENT_COLLABORATION_MAX_RESPONSE_BYTES,
 		);
 	});
-	add(routes, 'POST', '/apps/:appId/runs/:id/subagents/:childId/cancel', access, async (ctx, userId) => {
-		const path = readAgentChildPath({ appId: ctx.params.appId, runId: ctx.params.id, childId: ctx.params.childId });
-		const key = operationKey(ctx);
-		const body = readAgentCancelRunRequest(await ctx.json());
+	add(routes, 'POST', '/apps/:appId/runs/:id/subagents/:childId/cancel', access, async (request, reply, userId) => {
+		const path = readAgentChildPath({
+			appId: request.params.appId,
+			runId: request.params.id,
+			childId: request.params.childId,
+		});
+		const key = operationKey(request);
+		const body = readAgentCancelRunRequest(request.body);
 		const result = await agent.cancelChild(
 			{ userId, appId: path.appId, runId: path.runId, expectedVersion: body.expectedVersion, operationKey: key },
 			path.childId,
 		);
 		const response = toMutationResponse(result);
-		await deliver(ctx, response.status, response.value);
+		await deliver(request, reply, response.status, response.value);
 	});
 	add(
 		routes,
 		'GET',
 		'/apps/:appId/runs/:id/subagents/:childId/messages',
 		access,
-		async (ctx, userId) => {
+		async (request, reply, userId) => {
 			const path = readAgentChildPath({
-				appId: ctx.params.appId,
-				runId: ctx.params.id,
-				childId: ctx.params.childId,
+				appId: request.params.appId,
+				runId: request.params.id,
+				childId: request.params.childId,
 			});
-			const query = readAgentMessageMetadataQuery(ctx.query);
+			const query = readAgentMessageMetadataQuery(request.query);
 			const result = await agent.listChildMessages(
 				userId,
 				path.appId,
@@ -286,7 +285,8 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 				query.limit,
 			);
 			await deliver(
-				ctx,
+				request,
+				reply,
 				result === null ? 404 : 200,
 				result === null
 					? { code: 'not_found' }
@@ -305,10 +305,11 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 		['after', 'limit'],
 	);
 
-	add(routes, 'GET', '/app-definitions', access, async (ctx, userId) => {
+	add(routes, 'GET', '/app-definitions', access, async (request, reply, userId) => {
 		const values = await agent.listAppDefinitions(userId);
 		await deliver(
-			ctx,
+			request,
+			reply,
 			200,
 			values.map((value) => ({
 				id: value.id,
@@ -319,26 +320,37 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 			AGENT_APP_MAX_RESPONSE_BYTES,
 		);
 	});
-	add(routes, 'GET', '/apps', access, async (ctx, userId) => {
-		await deliver(ctx, 200, (await agent.listApps(userId)).map(toApp), AGENT_APP_MAX_RESPONSE_BYTES);
+	add(routes, 'GET', '/apps', access, async (request, reply, userId) => {
+		await deliver(request, reply, 200, (await agent.listApps(userId)).map(toApp), AGENT_APP_MAX_RESPONSE_BYTES);
 	});
-	add(routes, 'GET', '/apps/:appId', access, async (ctx, userId) => {
-		const appId = readAgentAppPath(ctx.params).appId;
+	add(routes, 'GET', '/apps/:appId', access, async (request, reply, userId) => {
+		const appId = readAgentAppPath(request.params).appId;
 		const value = await agent.getApp(userId, appId);
-		await deliver(ctx, value === null ? 404 : 200, value === null ? { code: 'not_found' } : toApp(value));
+		await deliver(
+			request,
+			reply,
+			value === null ? 404 : 200,
+			value === null ? { code: 'not_found' } : toApp(value),
+		);
 	});
-	add(routes, 'PATCH', '/apps/:appId', access, async (ctx, userId) => {
-		const appId = readAgentAppPath(ctx.params).appId;
-		const input = readAgentAppStateUpdateRequest(await ctx.json());
+	add(routes, 'PATCH', '/apps/:appId', access, async (request, reply, userId) => {
+		const appId = readAgentAppPath(request.params).appId;
+		const input = readAgentAppStateUpdateRequest(request.body);
 		const value = await agent.setAppEnabled(userId, appId, input.enabled, input.expectedVersion);
-		await deliver(ctx, value === null ? 404 : 200, value === null ? { code: 'not_found' } : toApp(value));
+		await deliver(
+			request,
+			reply,
+			value === null ? 404 : 200,
+			value === null ? { code: 'not_found' } : toApp(value),
+		);
 	});
-	add(routes, 'POST', '/apps/:appId/threads', access, async (ctx, userId) => {
-		const body = readAgentCreateThreadRequest(await ctx.json());
-		const path = readAgentAppPath(ctx.params);
+	add(routes, 'POST', '/apps/:appId/threads', access, async (request, reply, userId) => {
+		const body = readAgentCreateThreadRequest(request.body);
+		const path = readAgentAppPath(request.params);
 		const result = await agent.createThread(userId, path.appId, body.title);
 		await deliver(
-			ctx,
+			request,
+			reply,
 			result === null ? 404 : 201,
 			result === null
 				? { code: 'not_found' }
@@ -357,10 +369,10 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 		'POST',
 		'/apps/:appId/threads/:threadId/runs',
 		access,
-		async (ctx, userId) => {
-			const key = operationKey(ctx);
-			const body = readAgentCreateRunRequest(await ctx.json());
-			const path = readAgentCreateRunPath(ctx.params);
+		async (request, reply, userId) => {
+			const key = operationKey(request);
+			const body = readAgentCreateRunRequest(request.body);
+			const path = readAgentCreateRunPath(request.params);
 			const value = await agent.createRun({
 				userId,
 				appId: path.appId,
@@ -379,15 +391,15 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 				operationKey: key,
 			});
 			const response = toMutationResponse(value);
-			await deliver(ctx, response.status, response.value);
+			await deliver(request, reply, response.status, response.value);
 		},
 		[],
 		AGENT_RUN_MAX_JSON_BODY_BYTES,
 	);
-	add(routes, 'POST', '/apps/:appId/runs/:id/cancel', access, async (ctx, userId) => {
-		const key = operationKey(ctx);
-		const body = readAgentCancelRunRequest(await ctx.json());
-		const path = runPath(ctx);
+	add(routes, 'POST', '/apps/:appId/runs/:id/cancel', access, async (request, reply, userId) => {
+		const key = operationKey(request);
+		const body = readAgentCancelRunRequest(request.body);
+		const path = runPath(request);
 		const value = await agent.cancelRun({
 			userId,
 			appId: path.appId,
@@ -396,22 +408,28 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 			operationKey: key,
 		});
 		const response = toMutationResponse(value);
-		await deliver(ctx, response.status, response.value);
+		await deliver(request, reply, response.status, response.value);
 	});
-	add(routes, 'GET', '/apps/:appId/runs/:id', access, async (ctx, userId) => {
-		const path = runPath(ctx);
+	add(routes, 'GET', '/apps/:appId/runs/:id', access, async (request, reply, userId) => {
+		const path = runPath(request);
 		const result = await agent.getRun(userId, path.appId, path.runId);
-		await deliver(ctx, result === null ? 404 : 200, result === null ? { code: 'not_found' } : toRun(result));
+		await deliver(
+			request,
+			reply,
+			result === null ? 404 : 200,
+			result === null ? { code: 'not_found' } : toRun(result),
+		);
 	});
-	add(routes, 'GET', '/apps/:appId/runs/:runId/tools/:toolId', access, async (ctx, userId) => {
+	add(routes, 'GET', '/apps/:appId/runs/:runId/tools/:toolId', access, async (request, reply, userId) => {
 		const path = readAgentToolCallPath({
-			appId: ctx.params.appId,
-			runId: ctx.params.runId,
-			toolId: ctx.params.toolId,
+			appId: request.params.appId,
+			runId: request.params.runId,
+			toolId: request.params.toolId,
 		});
 		const result = await agent.getToolCall(userId, path.appId, path.runId, path.toolId);
 		await deliver(
-			ctx,
+			request,
+			reply,
 			result === null ? 404 : 200,
 			result === null
 				? { code: 'not_found' }
@@ -428,12 +446,12 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 		'GET',
 		'/apps/:appId/threads/:threadId/tools',
 		access,
-		async (ctx, userId) => {
+		async (request, reply, userId) => {
 			const path = readAgentThreadToolsPath({
-				appId: ctx.params.appId,
-				threadId: ctx.params.threadId,
+				appId: request.params.appId,
+				threadId: request.params.threadId,
 			});
-			const query = readAgentThreadToolsQuery(ctx.query);
+			const query = readAgentThreadToolsQuery(request.query);
 			const result = await agent.listThreadTools(
 				userId,
 				path.appId,
@@ -442,7 +460,8 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 				query.limit,
 			);
 			await deliver(
-				ctx,
+				request,
+				reply,
 				result === null ? 404 : 200,
 				result === null
 					? { code: 'not_found' }
@@ -460,12 +479,13 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 		'GET',
 		'/apps/:appId/runs/:id/events',
 		access,
-		async (ctx, userId) => {
-			const query = readAgentRunEventsQuery(ctx.query);
-			const path = runPath(ctx);
+		async (request, reply, userId) => {
+			const query = readAgentRunEventsQuery(request.query);
+			const path = runPath(request);
 			const result = await agent.listEvents(userId, path.appId, path.runId, query.after, query.limit);
 			await deliver(
-				ctx,
+				request,
+				reply,
 				result === null ? 404 : 200,
 				result === null
 					? { code: 'not_found' }
@@ -477,11 +497,12 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 		},
 		['after', 'limit'],
 	);
-	add(routes, 'GET', '/apps/:appId/runs/:id/usage', access, async (ctx, userId) => {
-		const path = runPath(ctx);
+	add(routes, 'GET', '/apps/:appId/runs/:id/usage', access, async (request, reply, userId) => {
+		const path = runPath(request);
 		const value = await agent.getUsage(userId, path.appId, path.runId);
 		await deliver(
-			ctx,
+			request,
+			reply,
 			value === null ? 404 : 200,
 			value === null
 				? { code: 'not_found' }

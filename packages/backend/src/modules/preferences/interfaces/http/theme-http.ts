@@ -1,6 +1,7 @@
-import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
+import type { HttpRoute, HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
 import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
-import { readBodyBytes, decodeMultipart, type MultipartPart } from '../../../../platform/http/http-body.js';
+import { readMultipart, type MultipartPart } from '../../../../platform/http/http-body.js';
 import { InvalidPayload } from '@nexus-terminal/shared/common/http-codec';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
 import {
@@ -64,9 +65,9 @@ function codeFor(error: unknown): TerminalThemeErrorCode {
 	return 'internal_failure';
 }
 
-async function authenticate(context: HttpRouteContext, access: AccessPublicApi): Promise<ThemeActor> {
+async function authenticate(request: HttpRequest, reply: HttpReply, access: AccessPublicApi): Promise<ThemeActor> {
 	try {
-		const token = context.cookie(ACCESS_SESSION_COOKIE_NAME);
+		const token = readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME);
 		const identity = await access.authenticate(token);
 		if (!identity || !token) {
 			throw new ThemeFailure('unauthenticated');
@@ -80,78 +81,126 @@ async function authenticate(context: HttpRouteContext, access: AccessPublicApi):
 	}
 }
 
-async function revalidate(context: HttpRouteContext, access: AccessPublicApi, actor: ThemeActor): Promise<void> {
-	const current = await authenticate(context, access);
+async function revalidate(
+	request: HttpRequest,
+	reply: HttpReply,
+	access: AccessPublicApi,
+	actor: ThemeActor,
+): Promise<void> {
+	const current = await authenticate(request, reply, access);
 	if (current.userId !== actor.userId || current.token !== actor.token) {
 		throw new ThemeFailure('forbidden');
 	}
 }
 
-function ready(context: HttpRouteContext): void {
-	if (context.response.destroyed || context.response.writableEnded) {
+function ready(request: HttpRequest, reply: HttpReply): void {
+	if (reply.raw.destroyed || reply.raw.writableEnded) {
 		throw new ThemeFailure('unavailable');
 	}
 }
 
-function send(context: HttpRouteContext, status: number, body: unknown): void {
-	if (Buffer.byteLength(JSON.stringify(body)) > TERMINAL_THEME_RESPONSE_MAX_BYTES) {
-		throw new ThemeFailure('limit_exceeded');
-	}
-	ready(context);
-	context.send(status, body);
+function send(request: HttpRequest, reply: HttpReply, status: number, body: unknown, mutation = false): void {
+	ready(request, reply);
+	reply.type('application/json; charset=utf-8').serializer((payload) => {
+		try {
+			const encoded = JSON.stringify(payload);
+			if (encoded === undefined) {
+				throw new ThemeFailure('internal_failure');
+			}
+			if (Buffer.byteLength(encoded, 'utf8') > TERMINAL_THEME_RESPONSE_MAX_BYTES) {
+				throw new ThemeFailure('limit_exceeded');
+			}
+			return encoded;
+		} catch (cause) {
+			throw new ThemeFailure(
+				mutation ? 'operation_unknown' : cause instanceof ThemeFailure ? cause.code : 'internal_failure',
+				{ cause },
+			);
+		}
+	});
+	reply.code(status).send(body);
 }
 
 async function deliver(
-	context: HttpRouteContext,
+	request: HttpRequest,
+	reply: HttpReply,
 	access: AccessPublicApi,
 	actor: ThemeActor,
 	status: number,
 	project: () => unknown,
 ): Promise<void> {
 	try {
-		await revalidate(context, access, actor);
-		send(context, status, project());
+		await revalidate(request, reply, access, actor);
+		send(request, reply, status, project(), true);
 	} catch (cause) {
 		throw new ThemeFailure('operation_unknown', { cause });
 	}
 }
 
-async function handle(context: HttpRouteContext, work: () => Promise<void>): Promise<void> {
+function sendFailure(error: unknown, request: HttpRequest, reply: HttpReply): void {
+	const code = codeFor(error);
+	if (reply.sent || reply.raw.headersSent) {
+		reply.raw.destroy();
+	} else if (!reply.raw.destroyed && !reply.raw.writableEnded) {
+		reply
+			.removeHeader('Content-Length')
+			.type('application/json; charset=utf-8')
+			.serializer(JSON.stringify)
+			.code(ERROR_STATUS[code])
+			.send({ code });
+	}
+}
+
+function httpErrorHandler(error: unknown, request: HttpRequest, reply: HttpReply): void {
+	if (!(error instanceof ThemeFailure)) {
+		throw error;
+	}
+	sendFailure(error, request, reply);
+}
+
+async function handle(request: HttpRequest, reply: HttpReply, work: () => Promise<void>): Promise<void> {
 	try {
-		if (context.query.size) {
+		if (request.query.size) {
 			throw new ThemeFailure('invalid_input');
 		}
 		await work();
 	} catch (error) {
-		const code = codeFor(error);
-		if (context.response.headersSent) {
-			context.response.destroy();
-		} else if (!context.response.destroyed && !context.response.writableEnded) {
-			context.send(ERROR_STATUS[code], { code });
-		}
+		sendFailure(error, request, reply);
 	}
 }
 
-async function readImport(context: HttpRouteContext, upstream: AbortSignal): Promise<TerminalThemeImportRequest> {
+async function readImport(
+	request: HttpRequest,
+	reply: HttpReply,
+	upstream: AbortSignal,
+): Promise<TerminalThemeImportRequest> {
 	const controller = new AbortController();
 	const active = AbortSignal.any([upstream, controller.signal]);
 	const timer = setTimeout(() => controller.abort(), 30000);
 
 	const disconnected = () => {
-		if (!context.response.writableFinished) {
+		if (!reply.raw.writableFinished) {
 			controller.abort();
 		}
 	};
 
-	context.response.on('close', disconnected);
+	reply.raw.on('close', disconnected);
 	let parts: MultipartPart[] = [];
 	try {
-		const type = context.request.headers['content-type'];
+		const type = request.raw.headers['content-type'];
 		if (typeof type !== 'string') {
 			throw new ThemeFailure('unsupported_media_type');
 		}
-		const bytes = await readBodyBytes(context.request, TERMINAL_THEME_MULTIPART_MAX_BYTES, active);
-		parts = await decodeMultipart(bytes, type, 2, active);
+		parts = await readMultipart(
+			request,
+			reply,
+			{
+				maxParts: 2,
+				maxFileBytes: TERMINAL_THEME_IMPORT_MAX_BYTES,
+				maxFieldBytes: TERMINAL_THEME_NAME_MAX_BYTES,
+			},
+			active,
+		);
 		const file = parts.find((part) => part.name === 'themeFile');
 		const name = parts.find((part) => part.name === 'name');
 		if (file && file.bytes.byteLength > TERMINAL_THEME_IMPORT_MAX_BYTES) {
@@ -196,7 +245,7 @@ async function readImport(context: HttpRouteContext, upstream: AbortSignal): Pro
 			part.bytes.fill(0);
 		}
 		clearTimeout(timer);
-		context.response.off('close', disconnected);
+		reply.raw.off('close', disconnected);
 	}
 }
 
@@ -205,117 +254,133 @@ export function createThemeRoutes(service: ThemeService, access: AccessPublicApi
 	return [
 		{
 			method: 'GET',
-			path,
+			url: path,
 
-			handle: (context) =>
-				handle(context, async () => {
-					const actor = await authenticate(context, access);
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					const actor = await authenticate(request, reply, access);
 					const rows = await service.list(actor);
-					await revalidate(context, access, actor);
-					send(context, 200, rows.map(toWireTheme));
+					await revalidate(request, reply, access, actor);
+					send(request, reply, 200, rows.map(toWireTheme));
 				}),
 		},
 		{
 			method: 'POST',
-			path,
-			maxBodyBytes: TERMINAL_THEME_REQUEST_MAX_BYTES,
+			url: path,
+			bodyLimit: TERMINAL_THEME_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handle(context, async () => {
-					const actor = await authenticate(context, access);
-					const input = readTerminalThemeCreate(await context.json());
-					await revalidate(context, access, actor);
-					ready(context);
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					const actor = await authenticate(request, reply, access);
+					const input = readTerminalThemeCreate(request.body);
+					await revalidate(request, reply, access, actor);
+					ready(request, reply);
 					const saved = await service.create(actor, toApplicationTheme(input));
-					await deliver(context, access, actor, 201, () => toWireTheme(saved));
+					await deliver(request, reply, access, actor, 201, () => toWireTheme(saved));
 				}),
 		},
 		{
 			method: 'POST',
-			path: path + '/import',
-			maxBodyBytes: TERMINAL_THEME_MULTIPART_MAX_BYTES,
+			url: path + '/import',
+			bodyLimit: TERMINAL_THEME_MULTIPART_MAX_BYTES,
+			config: { multipartBodyLimit: TERMINAL_THEME_MULTIPART_MAX_BYTES },
 
-			handle: (context) =>
-				handle(context, async () => {
-					const actor = await authenticate(context, access);
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					const actor = await authenticate(request, reply, access);
 					const saved = await service.import(actor, async (signal) => {
-						const input = await readImport(context, signal);
-						await revalidate(context, access, actor);
-						ready(context);
+						const input = await readImport(request, reply, signal);
+						await revalidate(request, reply, access, actor);
+						ready(request, reply);
 						if (signal.aborted) {
 							throw new ThemeFailure('unavailable');
 						}
 						return toApplicationTheme(input);
 					});
-					await deliver(context, access, actor, 201, () => toWireTheme(saved));
+					await deliver(request, reply, access, actor, 201, () => toWireTheme(saved));
 				}),
 		},
 		{
 			method: 'GET',
-			path: path + '/:id/export',
+			url: path + '/:id/export',
 
-			handle: (context) =>
-				handle(context, async () => {
-					const actor = await authenticate(context, access);
-					const item = await service.get(actor, readTerminalThemeId(context.params.id));
-					await revalidate(context, access, actor);
-					ready(context);
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					const actor = await authenticate(request, reply, access);
+					const item = await service.get(actor, readTerminalThemeId(request.params.id));
+					await revalidate(request, reply, access, actor);
+					ready(request, reply);
 					const filename =
 						item.name
 							.replace(/[^a-z0-9]/giu, '_')
 							.toLowerCase()
 							.slice(0, 128) + '.json';
-					context.send(200, toWireThemeColors(item.colors), {
+					reply.headers({
 						'Content-Disposition': 'attachment; filename="' + filename + '"',
 					});
+					send(request, reply, 200, toWireThemeColors(item.colors));
 				}),
 		},
 		{
 			method: 'GET',
-			path: path + '/:id',
+			url: path + '/:id',
 
-			handle: (context) =>
-				handle(context, async () => {
-					const actor = await authenticate(context, access);
-					const item = await service.get(actor, readTerminalThemeId(context.params.id));
-					await revalidate(context, access, actor);
-					send(context, 200, toWireTheme(item));
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					const actor = await authenticate(request, reply, access);
+					const item = await service.get(actor, readTerminalThemeId(request.params.id));
+					await revalidate(request, reply, access, actor);
+					send(request, reply, 200, toWireTheme(item));
 				}),
 		},
 		{
 			method: 'PUT',
-			path: path + '/:id',
-			maxBodyBytes: TERMINAL_THEME_REQUEST_MAX_BYTES,
+			url: path + '/:id',
+			bodyLimit: TERMINAL_THEME_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handle(context, async () => {
-					const actor = await authenticate(context, access);
-					const id = readTerminalThemeId(context.params.id);
-					const input = readTerminalThemeUpdate(await context.json());
-					await revalidate(context, access, actor);
-					ready(context);
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					const actor = await authenticate(request, reply, access);
+					const id = readTerminalThemeId(request.params.id);
+					const input = readTerminalThemeUpdate(request.body);
+					await revalidate(request, reply, access, actor);
+					ready(request, reply);
 					const saved = await service.update(actor, {
 						id,
 						expectedVersion: input.expectedVersion,
 						input: toApplicationTheme({ name: input.name, themeData: input.themeData }),
 					});
-					await deliver(context, access, actor, 200, () => toWireTheme(saved));
+					await deliver(request, reply, access, actor, 200, () => toWireTheme(saved));
 				}),
 		},
 		{
 			method: 'DELETE',
-			path: path + '/:id',
-			maxBodyBytes: TERMINAL_THEME_REQUEST_MAX_BYTES,
+			url: path + '/:id',
+			bodyLimit: TERMINAL_THEME_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handle(context, async () => {
-					const actor = await authenticate(context, access);
-					const id = readTerminalThemeId(context.params.id);
-					const input = readTerminalThemeDelete(await context.json());
-					await revalidate(context, access, actor);
-					ready(context);
+			errorHandler: httpErrorHandler,
+
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					const actor = await authenticate(request, reply, access);
+					const id = readTerminalThemeId(request.params.id);
+					const input = readTerminalThemeDelete(request.body);
+					await revalidate(request, reply, access, actor);
+					ready(request, reply);
 					await service.delete(actor, { id, expectedVersion: input.expectedVersion });
-					await deliver(context, access, actor, 200, () => ({ deleted: true }));
+					await deliver(request, reply, access, actor, 200, () => ({ deleted: true }));
 				}),
 		},
 	];

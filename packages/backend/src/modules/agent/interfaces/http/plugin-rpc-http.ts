@@ -1,3 +1,5 @@
+import { agentHttpErrorHandler, AgentRpcHttpSerializationFailure } from './agent-http-response.js';
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import { AgentHttpInput } from './agent-input.js';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
 import { AGENT_PLUGIN_MAX_FRONTEND_MESSAGE_BYTES } from '@nexus-terminal/shared/agent/plugins/values';
@@ -8,7 +10,6 @@ import type {
 import { readAgentPluginFrontendRpc } from '@nexus-terminal/shared/agent/plugins/frontend-rpc-codec';
 import { encodeAgentJson, readAgentId, InvalidAgentPayload } from '@nexus-terminal/shared/agent/http-codec';
 import type { HttpRoute } from '../../../../platform/http/http-types.js';
-import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
 import type { AccessPublicApi } from '../../../access/public.js';
 import { AccessOperationError } from '../../../access/public-errors.js';
 import type { PluginService } from '../../plugins/service/plugin-service.js';
@@ -40,18 +41,19 @@ export function createPluginRpcHttpRoute(
 ): HttpRoute {
 	return {
 		method: 'POST',
-		path: '/api/v1/agent/plugins/installations/:appId/frontend/rpc',
-		maxBodyBytes: AGENT_PLUGIN_MAX_FRONTEND_MESSAGE_BYTES,
+		url: '/api/v1/agent/plugins/installations/:appId/frontend/rpc',
+		bodyLimit: AGENT_PLUGIN_MAX_FRONTEND_MESSAGE_BYTES,
+		errorHandler: agentHttpErrorHandler,
 
-		async handle(ctx) {
+		async handler(request, reply) {
 			const exchange: { request: AgentPluginFrontendRpcRequest | null } = { request: null };
-			const input = new AgentHttpInput(ctx);
+			const input = new AgentHttpInput(request);
 			let committed = false;
 			try {
-				if ([...ctx.query.keys()].length) {
+				if ([...request.query.keys()].length) {
 					throw new InvalidAgentPayload();
 				}
-				const token = ctx.cookie(ACCESS_SESSION_COOKIE_NAME),
+				const token = readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
 					identity = await access.authenticate(token);
 				if (!token || !identity) {
 					throw new AgentOperationError('unauthenticated');
@@ -63,7 +65,7 @@ export function createPluginRpcHttpRoute(
 					input.normalize(() =>
 						service.rpc(
 							{ userId: identity.userId, token },
-							readAgentId(ctx.params.appId),
+							readAgentId(request.params.appId),
 							async (signal) => {
 								const decoded = await input.read(readAgentPluginFrontendRpc, signal);
 								exchange.request = decoded;
@@ -100,26 +102,29 @@ export function createPluginRpcHttpRoute(
 					ok: true,
 					result: toPluginRpc(result),
 				};
-				try {
-					encodeAgentJson(response, AGENT_PLUGIN_MAX_FRONTEND_MESSAGE_BYTES);
-				} catch {
-					throw new AgentOperationError(committed ? 'operation_unknown' : 'limit_exceeded');
-				}
-				ctx.send(200, response);
+				const envelope = exchange.request.envelope;
+				reply.type('application/json; charset=utf-8').serializer((payload) => {
+					try {
+						return encodeAgentJson(payload, AGENT_PLUGIN_MAX_FRONTEND_MESSAGE_BYTES);
+					} catch (cause) {
+						throw new AgentRpcHttpSerializationFailure(
+							committed ? 'operation_unknown' : 'limit_exceeded',
+							cause,
+							envelope.nonce,
+							envelope.id,
+							envelope.seq,
+						);
+					}
+				});
+				reply.code(200).send(response);
 			} catch (error) {
-				if (ctx.response.headersSent || ctx.response.destroyed || ctx.response.writableEnded) {
-					ctx.response.destroy();
+				if (reply.sent || reply.raw.headersSent || reply.raw.destroyed || reply.raw.writableEnded) {
+					reply.raw.destroy();
 					return;
-				}
-				if (input.transportFailure) {
-					throw input.transportFailure;
-				}
-				if (error instanceof HttpInputFailure) {
-					throw error;
 				}
 				const code = failureCode(error, committed);
 				if (exchange.request === null) {
-					ctx.send(agentErrorStatus(code), { code });
+					reply.code(agentErrorStatus(code)).send({ code });
 					return;
 				}
 				const response: AgentPluginRpcResponse = {
@@ -131,7 +136,7 @@ export function createPluginRpcHttpRoute(
 					ok: false,
 					error: { code },
 				};
-				ctx.send(agentErrorStatus(code), response);
+				reply.code(agentErrorStatus(code)).send(response);
 			}
 		},
 	};

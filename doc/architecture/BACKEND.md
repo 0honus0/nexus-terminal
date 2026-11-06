@@ -250,6 +250,17 @@ Workspace复制失败message收窄为Shared RemoteFileErrorCode；归档失败�
 
 ## 5. 入口与安装
 
+### Fastify HTTP 运行时
+
+1. **职责与范围**：Fastify 负责路由匹配、参数解码、有界 JSON 读取、序列化、错误处理和请求钩子；`platform/http` 保留受信来源、安全失败投影、HTTP/WS 资源跟踪与在线维护代次。删除自建 router、HttpRouteContext 与 JSON send/read 调度，不保留双轨。
+2. **子功能与目录**：`http-bindings.ts` 构建完整 Fastify 实例并安装模块路由；`http-server.ts` 持有稳定 TCP listener 与 WS；`http-lifecycle.ts` 排空原任务；`http-request.ts` 保留 Host/Origin 安全规则及已解析 Cookie 的重复/容量拒绝策略，`http-body.ts` 消费原生 multipart parts，持有总字节/单 part 预算、取消与秘密清零，不整包缓冲或伪造请求。模块 interfaces 的 serializer/errorHandler 持有本域响应预算与安全错误投影。
+3. **依赖方向**：模块 interfaces 直接使用 Fastify request/reply；register 与 Bootstrap 装配原生路由。Service/Model/Shared 不依赖 Fastify。业务认证、事务准入、取消和交付确认留实际模块 owner。
+4. **类型与转换**：Platform 的 HttpRoute/HttpRequest/HttpReply 仅约定原生 Fastify 泛型；正文为 unknown，查询用 URLSearchParams 保留重复值，参数由框架解码后交 Shared/业务校验。原始流使用 request.raw/reply.raw，输入输出仍经模块白名单 mapper。AJV 不做类型强转、默认注入或额外字段删除；本轮不新增平行 schema。
+5. **入口与安装**：路由使用 url/handler/bodyLimit；来源准入在 onRequest；随后 `@fastify/cookie` 解析一次，Platform 对 HTTP 和 WS 的解析结果统一拒绝重复 Cookie，原始值不做 URI 解码；WS 使用该代已注册实例的 parseCookie，不调用插件未初始化的独立导出。`@fastify/helmet` 统一生成 nosniff，插件资源、背景与 HTML 主题按原政策配置 CSP/CORP/Referrer；关闭不属于原策略的默认项，避免引入 HSTS、frame 拒绝或跨域隔离变化。非认证域的应用写入同时在正文缓冲前验证完整会话，handler/事务继续复查原权限。未知路径和框架路径解析失败同样校验来源。JSON 保留严格 UTF-8、媒体类型和安全错误码；仅声明 `config.multipartBodyLimit` 的路由在独立 scope 安装 `@fastify/multipart`，该值约束含封装的总字节，`bodyLimit` 单独约束 JSON。二进制 rawBody 路由仍在独立 parser scope 将原始流交给业务入口读取。GET 不自动生成 HEAD，保留显式下载 HEAD。插件通配路由使用原生 /*，资源路径安全校验归插件接口。
+6. **数据、事务与并发**：无数据库迁移。普通 JSON 在 handler 前解析，业务名额从应用准入时开始；未完整上传的导出 JSON 不占备份执行槽。multipart parts 在原应用作用域内读取，不自动写临时文件，备份密码等字段保留原始字节再严格解码。平台预检声明长度，parts 消费时计数实际 encoded 字节；超限/取消或提前拒绝未结束的请求会终止原流。应用 owner 保证权限、CAS 和事务。
+7. **生命周期与失败**：路由 handler、callback/Promise hook 和响应传输分别跟踪；断连不表示任务完成。显式 send 等待原生 reply 完成，避免异步审计/序列化期间空响应。原生 serializer 在 preSerialization 后单次编码并检查 UTF-8 字节预算；失败交本域 errorHandler，写入后的序列化失败保留 operation_unknown，错误投影重置 serializer。普通文本/日志与 Agent Artifact 下载使用原生 Buffer/Readable 发送，流 source 和真实响应分别等待；Artifact 在源最终授权/长度检查完成前保留末字节。仍需直接控制传输的业务流才 hijack。认证和远程资源同时核对真实 finish 与最终成功状态，错误响应完成不视为资源交付。Access 经已注册实例的 serializeCookie 生成会话与因素 Cookie，直接写 Set-Cookie 头，不加入插件延迟发送队列，确保失败可以彻底移除未交付凭据。全局安全兜底清除尚未交付的 Cookie 及实体头，避免失败流的 Content-Length/ETag 污染 JSON 错误。Operations 用单一请求状态记录原身份、响应身份与真实 handler Promise，在 onResponse 按最终状态发布审计，覆盖解析拒绝和响应钩子失败；审计故障由原 owner 保留，不改写已提交响应。恢复先停止准入、排空并安装新的 Fastify 实例，再原子替换；旧实例等待原恢复请求退出后关闭，不等待自身。WebSocket 保留独立授权、代次复查及完整会话任务跟踪。
+8. **当前能力与验收**：七个模块已按上述入口迁移；OpenAPI/AsyncAPI 自动生成仍未实施。专项覆盖严格解析、异步回复、原始流、来源拒绝、回调提前回复、资源交付失败释放和恢复代次；实际执行证据归 testing，未验状态归 PLAN。
+
 ### Factors 安装与真实接口
 
 `registerAccess({sqlite,secrets,passkeys})` 装配 Factors，`createApp.configuration` 首次初始化持久 Preferences 的 passkeys 站点列表，每项为 `{origin,rpId}`，后续启动从持久安装快照装配，独立入口从 `NEXUS_PUBLIC_ORIGIN` 推断并允许 `NEXUS_PASSKEY_RP_ID` 收窄。RP 必须与公开来源 hostname 一致或是其合法父域；非 localhost 的 HTTP Origin 禁止启用。
@@ -603,7 +614,7 @@ Artifact普通下载和插件包暂存复用ArtifactService的readGranted lease�
 
 插件包同身份/版本内容不可变；stage→verify→install、升级排空→版本切换和卸载→数据删除分别有持久判据。受信 manifest 由 Scope 安装成声明，不自动赋予 grants；撤销 publisher、App 禁用或升级围栏旧 Run/工具。intents 固定原用户、发送/接收 App 和意图内容，Artifact 引用/授予与消息创建同事务，不把收到消息解释为通用文件权限。
 
-当前导出登记88张产品表，逐次核对实际表集、声明列顺序及目标结构签名；认证七表、模型缓存及技术schema记录明确排除，新增表或列但未登记会拒绝导出。固定表列按技术白名单投影，秘密在所属Adapter解密为受载荷保护的传递表示，System只取得字节。背景ready、Artifact ready和插件staged/verified/installed原包按真实引用采集；实际大小在读取前后核对，内容hash及插件manifest/files/entry/signature复用原解码owner验证；文件预算先包含base64膨胀及完整JSON。SQL前后快照内容hash必须相同，内容发布中或变化拒绝；这不是全应用物理一致快照。
+当前导出登记89张产品表，逐次核对实际表集、声明列顺序及目标结构签名；认证七表、模型缓存及技术schema记录明确排除，新增表或列但未登记会拒绝导出。固定表列按技术白名单投影，秘密在所属Adapter解密为受载荷保护的传递表示，System只取得字节。背景ready、Artifact ready和插件staged/verified/installed原包按真实引用采集；实际大小在读取前后核对，内容hash及插件manifest/files/entry/signature复用原解码owner验证；文件预算先包含base64膨胀及完整JSON。SQL前后快照内容hash必须相同，内容发布中或变化拒绝；这不是全应用物理一致快照。
 
 备份覆盖集在全部本阶段 owner 确定后冻结，登记允许的表/列/文件根/敏感字段和恢复顺序，拒绝未知或缺失的必需组成，不使用过滤字段/跳过未知表兼容。数据库快照与文件不是同一物理事务；采集前后核对源版本、实际引用、大小/hash 与包内容，有限重采集仍不能宣称全系统物理快照。
 
@@ -631,7 +642,7 @@ System 的导入 Service 已消费维护能力。Bootstrap 同时暂停外部 pu
 
 ### 8. 当前能力与验收
 
-已接入 Preferences themes/appearance 的主题、设置和图片链路，以及System加密导出。导出单名额包括输入producer、密码证明、采集/封装与HTTP finish；120秒总期限和关闭/断连取消由原owner持有，文件清理未确认拒绝新准入并在close汇总。NXSEALED2采用随机数据密钥、PBKDF2-SHA256密码包、可选实例密钥包及AES-256-GCM完整头部认证。实际 multipart 导入已接线到预检、全应用维护、持久 staging/journal、同事务 marker、启动对账和新实例重建/重绑。该链与 整批源码复审已收口，静态证据归 testing；行为仍待验收。themes 包含 403 个实际 preset、22 个颜色字段、严格导入/导出和用户 CAS；活动引用清空与外观版本同事务。appearance 首次认证 GET 在事务内创建 version=1 默认，已存在记录不会重新填默认；PUT 为明确 patch/CAS，图片字段只读。协议图片 URL 在 interfaces 从内部 opaque ID 构造；UI 线格式保留 JSON 字符串，HTTP mapper 转换到应用 UI 变量对象，Model 逐项复制独立存储对象，SQLite Adapter 解码嵌套持久 JSON；Service 不解析线格式或持久 JSON。外观写入 producer 同样在应用名额取得后读取完整输入。HTTP 输入与交付边界将协议拒绝、认证失败和取消转换为所属应用失败，再进入 Service 的任务观察；存储、清理及提交未知仍保留具名原因，期限取消不覆盖已分类失败。HTML 来源写入调用 AppearanceService 时，输入回调使用 Appearance 失败契约，返回后再转换为 HTML 失败契约。
+已接入 Preferences themes/appearance 的主题、设置和图片链路，以及System加密导出。导出单名额包括已解析输入的应用验证、密码证明、采集/封装与 HTTP finish；普通 JSON 的有界读取由 Fastify 在 handler 前完成；120秒总期限和关闭/断连取消由原owner持有，文件清理未确认拒绝新准入并在close汇总。NXSEALED2采用随机数据密钥、PBKDF2-SHA256密码包、可选实例密钥包及AES-256-GCM完整头部认证。实际 multipart 导入已接线到预检、全应用维护、持久 staging/journal、同事务 marker、启动对账和新实例重建/重绑。该链与 整批源码复审已收口，静态证据归 testing；行为仍待验收。themes 包含 403 个实际 preset、22 个颜色字段、严格导入/导出和用户 CAS；活动引用清空与外观版本同事务。appearance 首次认证 GET 在事务内创建 version=1 默认，已存在记录不会重新填默认；PUT 为明确 patch/CAS，图片字段只读。协议图片 URL 在 interfaces 从内部 opaque ID 构造；UI 线格式保留 JSON 字符串，HTTP mapper 转换到应用 UI 变量对象，Model 逐项复制独立存储对象，SQLite Adapter 解码嵌套持久 JSON；Service 不解析线格式或持久 JSON。外观普通 JSON 在 Fastify 完成解析后进入应用写入作用域；原始图片上传仍由应用作用域内的 producer 有界读取。HTTP 输入与交付边界将协议拒绝、认证失败和取消转换为所属应用失败，再进入 Service 的任务观察；存储、清理及提交未知仍保留具名原因，期限取消不覆盖已分类失败。HTML 来源写入调用 AppearanceService 时，输入回调使用 Appearance 失败契约，返回后再转换为 HTML 失败契约。
 
 BackgroundService 共用 16 个串行在途任务，输入 producer 返回应用命令，不带 HTTP 对象；名额覆盖 multipart 消费、等待、SQL/文件发布、交付与清理，shutdown 取消 producer/读取并等待实际任务。BackgroundModel 转换独立存储事实、内容格式证据和 Blob 应用能力/失败。Adapter 负责 pending→ready/retired 和引用/版本同事务；清理只有在同事务确认无引用后开始，文件删除确认后删除元数据。启动/后续上传/停机复查无引用记录；清理失败保留有界原因、持久记录及 cleanupPending，不删除活跃内容。文件根由 Bootstrap 安装 NativeBlobStore(resolveDataPaths(db.path).appearance)，即数据库父目录下的 appearance/；不在 Service/register 拼技术路径。精确结构签名按迁移版本校验。
 
@@ -645,7 +656,7 @@ HTML 库保持在 appearance 子功能：service/html-theme-service 管理来源
 
 ### 在线恢复持久边界
 
-NativeSnapshotRestoreFiles 只处理已安装的 opaque 根、暂存文件、目录切换日志及清理；SqliteSnapshotRestore 只处理技术表恢复和提交证据。所有真实 SQL/DDL 仍在 Adapter；snapshot_restore_state 是本机技术事实，排除于可携备份。88张产品表不包含认证、模型目录缓存或恢复标记。Preferences 预检除引用存在外，核对活动主题的用户或内置归属、背景的用户/用途/ready 状态；批量索引避免逐条扫描全集。
+NativeSnapshotRestoreFiles 只处理已安装的 opaque 根、暂存文件、目录切换日志及清理；SqliteSnapshotRestore 只处理技术表恢复和提交证据。所有真实 SQL/DDL 仍在 Adapter；snapshot_restore_state 是本机技术事实，排除于可携备份。89张产品表不包含认证、模型目录缓存或恢复标记。Preferences 预检除引用存在外，核对活动主题的用户或内置归属、背景的用户/用途/ready 状态；批量索引避免逐条扫描全集。
 
 文件及日志写入同步后才发布；日志在每次 rename 前保存意图，rename 后同步相关目录。删除按目标 schema 的 FK 依赖先子后父，插入使用延迟 FK；恢复数据和 restore_id/initialized 标记在同一事务提交，SQLite 明确使用 FULL 同步。提交失败后读取标记，不能用异常或断连推断回滚；标记不可读时保留现场并停止准入。仅旧内容清理失败、而当前数据与文件已确认一致时，可返回 cleanupPending 并由日志在后续启动/导入前继续清理。
 
@@ -885,7 +896,7 @@ Remote register 安装 `/api/v1/transfers/send`、`status`、`status/:taskId`、
 
 ## 成熟技术库边界
 
-1. **职责与范围**：安全算法、MIME/图片格式识别及版本比较委托成熟库；应用权限、事务和任务政策保留原owner。HTTP路由/WS/维护架构不变，不使用Fastify或Zod替换。
+1. **职责与范围**：安全算法、MIME/图片格式识别及版本比较委托成熟库；应用权限、事务和任务政策保留原owner。HTTP 路由采用上文 Fastify 运行时；WS 与应用维护规则由原 owner 持有，未引入 Zod。
 2. **子功能与目录**：security/adapters/rfc-totp、http/http-body、images/adapters/native-image-inspector与ai/adapters/model-image、Agent plugins版本规则沿原目录实现。
 3. **依赖方向**：otplib/Formidable/file-type/fast-xml-parser仅Adapter消费；semver通过共享版本校验及插件比较消费，不向应用暴露第三方对象。
 4. **类型与转换**：TotpPort维持同步verify；ImageInspector.inspect与MultipartPart解析返回Promise，Model和四个HTTP producer同步await；原MIME/格式投影、失败与白名单不变。

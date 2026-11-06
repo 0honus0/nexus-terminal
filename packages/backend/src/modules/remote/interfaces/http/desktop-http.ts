@@ -1,5 +1,6 @@
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
-import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
+import type { HttpRoute, HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
 import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
 import type { RemoteDesktopProtocol } from '@nexus-terminal/shared/remote/desktop/values';
 import { REMOTE_DESKTOP_RESPONSE_MAX_BYTES } from '@nexus-terminal/shared/remote/desktop/values';
@@ -41,29 +42,39 @@ function status(code: DesktopFailure['code']): number {
 function ticketRoute(protocol: RemoteDesktopProtocol, service: DesktopService): HttpRoute {
 	return {
 		method: 'POST',
-		maxBodyBytes: REMOTE_DESKTOP_RESPONSE_MAX_BYTES,
-		path: `/api/v1/connections/:id/${protocol === 'RDP' ? 'rdp-session' : 'vnc-session'}`,
+		bodyLimit: REMOTE_DESKTOP_RESPONSE_MAX_BYTES,
+		url: `/api/v1/connections/:id/${protocol === 'RDP' ? 'rdp-session' : 'vnc-session'}`,
 
-		async handle(ctx: HttpRouteContext): Promise<void> {
+		async handler(request: HttpRequest, reply: HttpReply): Promise<void> {
 			const controller = new AbortController();
+			const socket = reply.raw.socket;
 			let pendingTicket: string | null = null;
 
 			const detachResponse = () => {
-				ctx.response.off('close', onClose);
-				ctx.response.off('finish', onFinish);
+				reply.raw.off('close', onClose);
+				reply.raw.off('finish', onFinish);
 			};
 
 			const onFinish = () => {
+				if (
+					pendingTicket !== null &&
+					(reply.raw.statusCode !== 200 ||
+						reply.raw.destroyed ||
+						socket?.destroyed === true ||
+						request.raw.aborted)
+				) {
+					service.discard(pendingTicket);
+				}
 				pendingTicket = null;
 				detachResponse();
 			};
 
 			const abort = () => controller.abort();
 
-			ctx.request.once('aborted', abort);
+			request.raw.once('aborted', abort);
 
 			const onClose = () => {
-				if (!ctx.response.writableFinished) {
+				if (!reply.raw.writableFinished) {
 					abort();
 					if (pendingTicket !== null) {
 						service.discard(pendingTicket);
@@ -73,19 +84,17 @@ function ticketRoute(protocol: RemoteDesktopProtocol, service: DesktopService): 
 				detachResponse();
 			};
 
-			ctx.response.once('close', onClose);
-			ctx.response.once('finish', onFinish);
+			reply.raw.once('close', onClose);
+			reply.raw.once('finish', onFinish);
 			try {
 				const hasBody =
-					ctx.request.headers['transfer-encoding'] ||
-					(ctx.request.headers['content-length'] && ctx.request.headers['content-length'] !== '0');
-				const request = hasBody
-					? readRemoteDesktopSessionRequest(await ctx.json(controller.signal))
-					: { certificate: null };
-				const display = readRemoteDesktopDisplay(ctx.query);
-				const { id: targetId } = readRemoteDesktopSessionPath(ctx.params);
+					request.raw.headers['transfer-encoding'] ||
+					(request.raw.headers['content-length'] && request.raw.headers['content-length'] !== '0');
+				const input = hasBody ? readRemoteDesktopSessionRequest(request.body) : { certificate: null };
+				const display = readRemoteDesktopDisplay(request.query);
+				const { id: targetId } = readRemoteDesktopSessionPath(request.params);
 				const result = await service.issue(
-					ctx.cookie(ACCESS_SESSION_COOKIE_NAME),
+					readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
 					targetId,
 					protocol,
 					{
@@ -94,17 +103,17 @@ function ticketRoute(protocol: RemoteDesktopProtocol, service: DesktopService): 
 						dpi: display.dpi ?? null,
 					},
 					controller.signal,
-					request.certificate === null
+					input.certificate === null
 						? null
 						: {
-								host: request.certificate.host,
-								port: request.certificate.port,
-								fingerprint: request.certificate.fingerprint,
-								previousFingerprint: request.certificate.previousFingerprint,
-								remember: request.certificate.remember,
+								host: input.certificate.host,
+								port: input.certificate.port,
+								fingerprint: input.certificate.fingerprint,
+								previousFingerprint: input.certificate.previousFingerprint,
+								remember: input.certificate.remember,
 							},
 				);
-				if (!controller.signal.aborted && !ctx.response.destroyed && !ctx.response.writableEnded) {
+				if (!controller.signal.aborted && !reply.raw.destroyed && !reply.raw.writableEnded) {
 					const response: RemoteDesktopSessionResponse = {
 						ticket: result.ticket,
 						protocol: result.connection.protocol,
@@ -115,7 +124,7 @@ function ticketRoute(protocol: RemoteDesktopProtocol, service: DesktopService): 
 					};
 					pendingTicket = result.ticket;
 					try {
-						ctx.send(200, response, { 'Cache-Control': 'no-store', Pragma: 'no-cache' });
+						reply.code(200).headers({ 'Cache-Control': 'no-store', Pragma: 'no-cache' }).send(response);
 					} catch (error) {
 						service.discard(result.ticket);
 						pendingTicket = null;
@@ -125,7 +134,7 @@ function ticketRoute(protocol: RemoteDesktopProtocol, service: DesktopService): 
 					service.discard(result.ticket);
 				}
 			} catch (error) {
-				if (controller.signal.aborted || ctx.response.destroyed) {
+				if (controller.signal.aborted || reply.raw.destroyed) {
 					return;
 				}
 				if (error instanceof HttpInputFailure) {
@@ -152,10 +161,10 @@ function ticketRoute(protocol: RemoteDesktopProtocol, service: DesktopService): 
 					try {
 						readRemoteDesktopFailureResponse(body);
 					} catch {
-						ctx.send(503, { code: 'remote_unavailable' } satisfies RemoteDesktopFailureResponse);
+						reply.code(503).send({ code: 'remote_unavailable' } satisfies RemoteDesktopFailureResponse);
 						return;
 					}
-					ctx.send(409, body, { 'Cache-Control': 'no-store', Pragma: 'no-cache' });
+					reply.code(409).headers({ 'Cache-Control': 'no-store', Pragma: 'no-cache' }).send(body);
 					return;
 				}
 				const code =
@@ -165,13 +174,13 @@ function ticketRoute(protocol: RemoteDesktopProtocol, service: DesktopService): 
 							? error.code
 							: 'remote_unavailable';
 				const body: RemoteDesktopFailureResponse = { code };
-				ctx.send(status(code), body);
+				reply.code(status(code)).send(body);
 			} finally {
-				ctx.request.off('aborted', abort);
+				request.raw.off('aborted', abort);
 				// send() queues bytes; retain revocation until actual finish or close.
-				if (ctx.response.writableFinished) {
+				if (reply.raw.writableFinished) {
 					onFinish();
-				} else if (ctx.response.destroyed) {
+				} else if (reply.raw.destroyed) {
 					onClose();
 				} else if (pendingTicket === null) {
 					detachResponse();

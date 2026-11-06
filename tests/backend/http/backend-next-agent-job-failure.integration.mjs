@@ -53,12 +53,13 @@ await test('Job failures stop the owning Run and its waits', { timeout: 60000 },
 			`import fs from 'node:fs';process.on('SIGHUP',()=>{});fs.writeFileSync(${JSON.stringify(pidPath)},String(process.pid));fs.appendFileSync(${JSON.stringify(effect)},'x');setInterval(()=>{if(fs.existsSync(${JSON.stringify(release)}))process.exit(0);},20);`,
 		);
 		let original;
+		let supervisor;
 
 		async function identity(pid) {
 			try {
 				const value = await readFile('/proc/' + pid + '/stat', 'utf8');
 				const fields = value.slice(value.lastIndexOf(')') + 2).split(' ');
-				return { born: fields[19], zombie: fields[0] === 'Z' };
+				return { born: fields[19], zombie: fields[0] === 'Z', parentPid: Number(fields[1]) };
 			} catch (error) {
 				if (['ENOENT', 'ESRCH'].includes(error.code)) return null;
 				throw error;
@@ -80,19 +81,29 @@ await test('Job failures stop the owning Run and its waits', { timeout: 60000 },
 			const current = await identity(pid);
 			assert.ok(current);
 			original = { pid, born: current.born };
+			const parent = await identity(current.parentPid);
+			assert.ok(parent);
+			assert.ok((await readFile('/proc/' + current.parentPid + '/cmdline', 'utf8')).includes(script));
+			supervisor = { pid: current.parentPid, born: parent.born };
 		}
 
 		async function stop() {
-			if (!original) return;
-			const current = await identity(original.pid);
-			if (current?.born === original.born && !current.zombie) {
-				process.kill(original.pid, 'SIGKILL');
+			// The batch shell can confirm a killed child with exit 137. Interrupt
+			// that bound shell too so this scenario actually loses completion evidence.
+			for (const instance of [supervisor, original]) {
+				if (!instance) {
+					continue;
+				}
+				const current = await identity(instance.pid);
+				if (current?.born === instance.born && !current.zombie) {
+					process.kill(instance.pid, 'SIGKILL');
+				}
 			}
 		}
 
 		subtest.after(stop);
 		return {
-			argv: [process.execPath, script],
+			command: 'exec ' + posixCommand([process.execPath, script]),
 			effect,
 			started,
 			stop,
@@ -144,7 +155,7 @@ await test('Job failures stop the owning Run and its waits', { timeout: 60000 },
 							input: {
 								connectionId: f.connectionId,
 								mode: 'background',
-								commands: [posixCommand(process.argv)],
+								commands: [process.command],
 							},
 						},
 			);
@@ -186,7 +197,7 @@ await test('Job failures stop the owning Run and its waits', { timeout: 60000 },
 							input: {
 								connectionId: f.connectionId,
 								...(mode === 'foreground' ? {} : { mode: 'background' }),
-								commands: [posixCommand(process.argv)],
+								commands: [process.command],
 							},
 						};
 					if (mode === 'approval')
@@ -194,9 +205,7 @@ await test('Job failures stop the owning Run and its waits', { timeout: 60000 },
 							name: 'file_write',
 							input: {
 								connectionId: f.connectionId,
-								path: forbidden,
-								content: 'never',
-								expectedSha256: 'absent',
+								items: [{ path: forbidden, content: 'never', expectedSha256: 'absent' }],
 							},
 						};
 					if (mode === 'model') return { hold: true };
@@ -309,7 +318,7 @@ await test('Job failures stop the owning Run and its waits', { timeout: 60000 },
 							input: {
 								connectionId: f.connectionId,
 								mode: 'background',
-								commands: [posixCommand(process.argv)],
+								commands: [process.command],
 							},
 						},
 			);
@@ -359,7 +368,7 @@ await test('Job failures stop the owning Run and its waits', { timeout: 60000 },
 							input: {
 								connectionId: f.connectionId,
 								mode: 'background',
-								commands: [posixCommand(process.argv)],
+								commands: [process.command],
 							},
 						},
 			);
@@ -420,7 +429,7 @@ await test('Job failures stop the owning Run and its waits', { timeout: 60000 },
 						input: {
 							connectionId: f.connectionId,
 							mode: 'background',
-							commands: [posixCommand(process.argv)],
+							commands: [process.command],
 						},
 					},
 		);

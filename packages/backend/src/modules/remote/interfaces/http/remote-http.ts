@@ -1,8 +1,9 @@
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import type { RemoteHttpErrorCode } from '@nexus-terminal/shared/remote/sessions/values';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
 import { finished } from 'node:stream/promises';
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
-import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
+import type { HttpRoute, HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
 import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
 import type { SessionView } from '../../public.js';
 import { isRemoteSessionId } from '@nexus-terminal/shared/remote/sessions/model';
@@ -34,37 +35,37 @@ function toShellView(value: SessionView): RemoteShellView {
 	};
 }
 
-function handleError(ctx: HttpRouteContext, error: unknown): void {
+function handleError(request: HttpRequest, reply: HttpReply, error: unknown): void {
 	if (error instanceof HttpInputFailure) {
 		throw error;
 	}
-	if (ctx.response.destroyed || ctx.request.aborted) {
+	if (reply.raw.destroyed || request.raw.aborted) {
 		return;
 	}
-	if (ctx.response.headersSent) {
-		ctx.response.destroy();
+	if (reply.raw.headersSent) {
+		reply.raw.destroy();
 		return;
 	}
 	if (error instanceof RemoteInputError || error instanceof InvalidRemotePayload) {
-		ctx.send(400, { code: 'invalid_input' } satisfies RemoteFailureResponse);
+		reply.code(400).send({ code: 'invalid_input' } satisfies RemoteFailureResponse);
 		return;
 	}
 	if (error instanceof RemotePermissionError) {
 		const status = remoteErrorStatus(error.code);
-		ctx.send(status, { code: error.code } satisfies RemoteFailureResponse);
+		reply.code(status).send({ code: error.code } satisfies RemoteFailureResponse);
 		return;
 	}
 	if (error instanceof RemoteOperationError) {
 		const status = remoteErrorStatus(error.code);
-		ctx.send(status, { code: error.code } satisfies RemoteFailureResponse);
+		reply.code(status).send({ code: error.code } satisfies RemoteFailureResponse);
 		return;
 	}
 	if (error instanceof RemoteHostKeyUntrustedError) {
-		ctx.send(422, { code: 'host_key_untrusted' } satisfies RemoteFailureResponse);
+		reply.code(422).send({ code: 'host_key_untrusted' } satisfies RemoteFailureResponse);
 		return;
 	}
 	// No machine/SSH error, private credential or destination leaks to HTTP.
-	ctx.send(503, { code: 'remote_unavailable' } satisfies RemoteFailureResponse);
+	reply.code(503).send({ code: 'remote_unavailable' } satisfies RemoteFailureResponse);
 }
 
 function remoteErrorStatus(code: RemoteHttpErrorCode): number {
@@ -87,20 +88,20 @@ function remoteErrorStatus(code: RemoteHttpErrorCode): number {
 function route(
 	method: HttpRoute['method'],
 	path: string,
-	handler: (ctx: HttpRouteContext) => Promise<void>,
+	handler: (request: HttpRequest, reply: HttpReply) => Promise<void>,
 ): HttpRoute {
 	return {
 		method,
-		path: ROOT + path,
+		url: ROOT + path,
 
-		async handle(ctx) {
+		async handler(request: HttpRequest, reply: HttpReply) {
 			try {
-				if (ctx.query.size) {
+				if (request.query.size) {
 					throw new RemoteInputError();
 				}
-				await handler(ctx);
+				await handler(request, reply);
 			} catch (error) {
-				handleError(ctx, error);
+				handleError(request, reply, error);
 			}
 		},
 	};
@@ -108,23 +109,23 @@ function route(
 
 export function createRemoteHttpRoutes(owner: RemoteSessionOwner): HttpRoute[] {
 	return [
-		route('POST', '/sessions', async (ctx) => {
-			const token = ctx.cookie(ACCESS_SESSION_COOKIE_NAME);
-			const v = readRemoteOpenShell(await ctx.json());
+		route('POST', '/sessions', async (request, reply) => {
+			const token = readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME);
+			const v = readRemoteOpenShell(request.body);
 			const controller = new AbortController();
 
 			const aborted = () => controller.abort(new Error('HTTP client disconnected'));
 
-			ctx.request.once('aborted', aborted);
+			request.raw.once('aborted', aborted);
 
 			const disconnected = () => {
-				if (!ctx.response.writableFinished) {
+				if (!reply.raw.writableFinished) {
 					aborted();
 				}
 			};
 
-			ctx.response.once('close', disconnected);
-			if (ctx.request.aborted || ctx.response.destroyed) {
+			reply.raw.once('close', disconnected);
+			if (request.raw.aborted || reply.raw.destroyed) {
 				aborted();
 			}
 			try {
@@ -139,13 +140,28 @@ export function createRemoteHttpRoutes(owner: RemoteSessionOwner): HttpRoute[] {
 				const delivery = new AbortController();
 				const timer = setTimeout(() => delivery.abort(), OPEN_DELIVERY_MS);
 				timer.unref();
+				const socket = reply.raw.socket;
+				let delivered = false;
+
+				const finishedDelivery = () => {
+					delivered =
+						reply.raw.statusCode === 201 &&
+						!reply.raw.destroyed &&
+						socket?.destroyed !== true &&
+						!request.raw.aborted;
+				};
+
+				reply.raw.once('finish', finishedDelivery);
 				try {
 					controller.signal.throwIfAborted();
-					ctx.send(201, toShellView(opened));
-					await finished(ctx.response, {
+					reply.code(201).send(toShellView(opened));
+					await finished(reply.raw, {
 						signal: AbortSignal.any([controller.signal, delivery.signal]),
 						cleanup: true,
 					});
+					if (!delivered) {
+						throw new RemoteOperationError('remote_unavailable');
+					}
 				} catch (error) {
 					try {
 						await owner.release(opened.id);
@@ -155,35 +171,36 @@ export function createRemoteHttpRoutes(owner: RemoteSessionOwner): HttpRoute[] {
 					throw error;
 				} finally {
 					clearTimeout(timer);
+					reply.raw.off('finish', finishedDelivery);
 				}
 			} finally {
-				ctx.request.off('aborted', aborted);
-				ctx.response.off('close', disconnected);
+				request.raw.off('aborted', aborted);
+				reply.raw.off('close', disconnected);
 			}
 		}),
-		route('GET', '/sessions/:id', async (ctx) => {
-			const id = ctx.params.id;
+		route('GET', '/sessions/:id', async (request, reply) => {
+			const id = request.params.id;
 			if (!id || !isRemoteSessionId(id)) {
 				throw new RemoteInputError();
 			}
-			const session = await owner.get(ctx.cookie(ACCESS_SESSION_COOKIE_NAME), id);
-			ctx.send(
-				session ? 200 : 404,
-				session ? toShellView(session) : ({ code: 'not_found' } satisfies RemoteFailureResponse),
-			);
+			const session = await owner.get(readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME), id);
+			reply
+				.code(session ? 200 : 404)
+				.send(session ? toShellView(session) : ({ code: 'not_found' } satisfies RemoteFailureResponse));
 		}),
-		route('DELETE', '/sessions/:id', async (ctx) => {
-			const id = ctx.params.id;
+		route('DELETE', '/sessions/:id', async (request, reply) => {
+			const id = request.params.id;
 			if (!id || !isRemoteSessionId(id)) {
 				throw new RemoteInputError();
 			}
-			const deleted = await owner.closeSession(ctx.cookie(ACCESS_SESSION_COOKIE_NAME), id);
-			ctx.send(
-				deleted ? 200 : 404,
-				deleted
-					? ({ closed: true } satisfies RemoteCloseSessionResponse)
-					: ({ code: 'not_found' } satisfies RemoteFailureResponse),
-			);
+			const deleted = await owner.closeSession(readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME), id);
+			reply
+				.code(deleted ? 200 : 404)
+				.send(
+					deleted
+						? ({ closed: true } satisfies RemoteCloseSessionResponse)
+						: ({ code: 'not_found' } satisfies RemoteFailureResponse),
+				);
 		}),
 	];
 }

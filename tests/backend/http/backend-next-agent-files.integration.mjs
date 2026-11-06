@@ -267,25 +267,31 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 6
 					.rows('agent_run_tools', run)
 					.filter((row) => ['file_deliver', 'artifact_present'].includes(row.tool_name));
 				const oldOutputs = outputRows.map((row) => JSON.parse(row.result_text).items[0].value);
-				const db = new DatabaseSync(f.database);
-				try {
-					db.exec('BEGIN');
-					for (const [index, row] of outputRows.entries())
-						db.prepare('UPDATE agent_run_tools SET result_text=? WHERE id=?').run(
-							JSON.stringify(oldOutputs[index]),
-							row.id,
-						);
-					const oldJob = { status: original.status, ...original.commands[0] };
-					delete oldJob.index;
-					db.prepare('UPDATE agent_tool_jobs SET result_text=? WHERE id=?').run(
-						JSON.stringify(oldJob),
-						job.id,
-					);
-					db.exec('DELETE FROM schema_version WHERE version>=2; COMMIT');
-				} finally {
-					db.close();
-				}
-				await f.restart();
+				await f.restart({
+					beforeBoot() {
+						// Seed the previous representation only after all application and
+						// HTTP audit writers have drained and closed their database handles.
+						const db = new DatabaseSync(f.database);
+						try {
+							db.exec('BEGIN');
+							for (const [index, row] of outputRows.entries()) {
+								db.prepare('UPDATE agent_run_tools SET result_text=? WHERE id=?').run(
+									JSON.stringify(oldOutputs[index]),
+									row.id,
+								);
+							}
+							const oldJob = { status: original.status, ...original.commands[0] };
+							delete oldJob.index;
+							db.prepare('UPDATE agent_tool_jobs SET result_text=? WHERE id=?').run(
+								JSON.stringify(oldJob),
+								job.id,
+							);
+							db.exec('DELETE FROM schema_version WHERE version>=2; COMMIT');
+						} finally {
+							db.close();
+						}
+					},
+				});
 				await f.wait(run, 'completed');
 				assert.deepEqual(JSON.parse(f.rows('agent_tool_jobs', shellRun)[0].result_text), original);
 				for (const [index, row] of f

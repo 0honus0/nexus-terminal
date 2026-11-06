@@ -1,7 +1,10 @@
+import type { AgentOperationErrorCode } from '@nexus-terminal/shared/agent/values';
+import { agentHttpSerializer, agentHttpErrorHandler } from './agent-http-response.js';
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
 import { AGENT_MAX_JSON_BODY_BYTES } from '@nexus-terminal/shared/agent/values';
 import type { AgentProviderApi } from '../../providers/model/provider-api-types.js';
-import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
+import type { HttpRoute, HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
 import type { AccessPublicApi } from '../../../access/public.js';
 import {
 	readAgentProviderCreateRequest,
@@ -13,14 +16,13 @@ import {
 	readAgentProviderTestRequest,
 	readAgentProviderEmptyRequest,
 } from '@nexus-terminal/shared/agent/providers/http-codec';
-import { InvalidAgentPayload, encodeAgentJson } from '@nexus-terminal/shared/agent/http-codec';
+import { InvalidAgentPayload } from '@nexus-terminal/shared/agent/http-codec';
 import {
 	AGENT_PROVIDER_MAX_BODY_BYTES,
 	AGENT_PROVIDER_MAX_RESPONSE_BYTES,
 } from '@nexus-terminal/shared/agent/providers/values';
 import { AgentOperationError } from '../../public-errors.js';
 import { AccessOperationError } from '../../../access/public-errors.js';
-import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
 import {
 	appProvider,
 	appProviderPatch,
@@ -33,15 +35,19 @@ import {
 } from './provider-mapper.js';
 
 const ROOT = '/api/v1/agent';
-type Handler = (ctx: HttpRouteContext, userId: number) => Promise<void>;
+type Handler = (request: HttpRequest, reply: HttpReply, userId: number) => Promise<void>;
 
-function send(ctx: HttpRouteContext, status: number, value: unknown): void {
-	try {
-		encodeAgentJson(value, AGENT_PROVIDER_MAX_RESPONSE_BYTES);
-	} catch {
-		throw new AgentOperationError('limit_exceeded');
-	}
-	ctx.send(status, value);
+function send(
+	reply: HttpReply,
+	status: number,
+	value: unknown,
+	failureCode: AgentOperationErrorCode = 'limit_exceeded',
+): void {
+	reply
+		.type('application/json; charset=utf-8')
+		.serializer(agentHttpSerializer(AGENT_PROVIDER_MAX_RESPONSE_BYTES, failureCode))
+		.code(status)
+		.send(value);
 }
 
 function errorStatus(code: AgentOperationError['code']): number {
@@ -67,29 +73,26 @@ function errorStatus(code: AgentOperationError['code']): number {
 	}
 }
 
-function failed(ctx: HttpRouteContext, e: unknown): void {
-	if (ctx.response.destroyed) {
+function failed(reply: HttpReply, e: unknown): void {
+	if (reply.raw.destroyed) {
 		return;
 	}
-	if (e instanceof HttpInputFailure) {
-		throw e;
-	}
 	if (e instanceof InvalidAgentPayload) {
-		send(ctx, 400, { code: 'invalid_input' });
+		send(reply, 400, { code: 'invalid_input' });
 		return;
 	}
 	if (e instanceof AgentOperationError) {
 		const c = e.code;
-		send(ctx, errorStatus(c), { code: c });
+		send(reply, errorStatus(c), { code: c });
 		return;
 	}
 	if (e instanceof AccessOperationError) {
-		send(ctx, e.code === 'storage_unavailable' ? 503 : 500, {
+		send(reply, e.code === 'storage_unavailable' ? 503 : 500, {
 			code: e.code === 'storage_unavailable' ? 'storage_unavailable' : 'internal_failure',
 		});
 		return;
 	}
-	send(ctx, 500, { code: 'internal_failure' });
+	send(reply, 500, { code: 'internal_failure' });
 }
 
 function add(
@@ -103,56 +106,62 @@ function add(
 ): void {
 	routes.push({
 		method,
-		path: ROOT + path,
-		maxBodyBytes,
+		url: ROOT + path,
+		bodyLimit: maxBodyBytes,
+		errorHandler: agentHttpErrorHandler,
 
-		async handle(ctx) {
+		async handler(request, reply) {
 			try {
-				if ([...ctx.query.keys()].some((key) => !queryKeys.includes(key))) {
+				if ([...request.query.keys()].some((key) => !queryKeys.includes(key))) {
 					throw new AgentOperationError('invalid_input');
 				}
-				const token = ctx.cookie(ACCESS_SESSION_COOKIE_NAME);
+				const token = readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME);
 				const identity = await access.authenticate(token);
 				if (!identity) {
-					send(ctx, 401, { code: 'unauthenticated' });
+					send(reply, 401, { code: 'unauthenticated' });
 					return;
 				}
 				if (identity.userId !== 1) {
-					send(ctx, 403, { code: 'forbidden' });
+					send(reply, 403, { code: 'forbidden' });
 					return;
 				}
-				await action(ctx, identity.userId);
+				await action(request, reply, identity.userId);
 			} catch (e) {
-				failed(ctx, e);
+				failed(reply, e);
 			}
 		},
 	});
 }
 
-function providerId(ctx: HttpRouteContext): string {
-	return readAgentProviderId(ctx.params.providerId);
+function providerId(request: HttpRequest): string {
+	return readAgentProviderId(request.params.providerId);
 }
 
-function externalSignal(ctx: HttpRouteContext): { signal: AbortSignal; dispose: () => void } {
+function externalSignal(reply: HttpReply): { signal: AbortSignal; dispose: () => void } {
 	const controller = new AbortController();
 
 	const abort = () => controller.abort();
 
-	ctx.response.once('close', abort);
-	if (ctx.response.destroyed) {
+	reply.raw.once('close', abort);
+	if (reply.raw.destroyed) {
 		abort();
 	}
 	return {
 		signal: controller.signal,
 
-		dispose: () => ctx.response.off('close', abort),
+		dispose: () => reply.raw.off('close', abort),
 	};
 }
 
-async function verifyAuthorized(ctx: HttpRouteContext, access: AccessPublicApi, userId: number): Promise<void> {
+async function verifyAuthorized(
+	request: HttpRequest,
+	reply: HttpReply,
+	access: AccessPublicApi,
+	userId: number,
+): Promise<void> {
 	let identity;
 	try {
-		identity = await access.authenticate(ctx.cookie(ACCESS_SESSION_COOKIE_NAME));
+		identity = await access.authenticate(readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME));
 	} catch (e) {
 		if (e instanceof AccessOperationError) {
 			throw new AgentOperationError(
@@ -164,37 +173,40 @@ async function verifyAuthorized(ctx: HttpRouteContext, access: AccessPublicApi, 
 	if (!identity || identity.userId !== userId) {
 		throw new AgentOperationError('provider_configuration_stale');
 	}
-	if (ctx.response.destroyed) {
+	if (reply.raw.destroyed) {
 		throw new AgentOperationError('provider_configuration_stale');
 	}
 }
 
 async function authorizedSend(
-	ctx: HttpRouteContext,
+	request: HttpRequest,
+	reply: HttpReply,
 	access: AccessPublicApi,
 	userId: number,
 	status: number,
 	value: unknown,
+	failureCode: AgentOperationErrorCode = 'limit_exceeded',
 ): Promise<void> {
-	if (ctx.response.destroyed) {
+	if (reply.raw.destroyed) {
 		return;
 	}
-	await verifyAuthorized(ctx, access, userId);
-	if (ctx.response.destroyed) {
+	await verifyAuthorized(request, reply, access, userId);
+	if (reply.raw.destroyed) {
 		return;
 	}
-	send(ctx, status, value);
+	send(reply, status, value, failureCode);
 }
 
 async function mutationSend(
-	ctx: HttpRouteContext,
+	request: HttpRequest,
+	reply: HttpReply,
 	access: AccessPublicApi,
 	userId: number,
 	status: number,
 	project: () => unknown,
 ): Promise<void> {
 	try {
-		await authorizedSend(ctx, access, userId, status, project());
+		await authorizedSend(request, reply, access, userId, status, project(), 'operation_unknown');
 	} catch {
 		throw new AgentOperationError('operation_unknown');
 	}
@@ -202,18 +214,19 @@ async function mutationSend(
 
 export function createAgentProviderHttpRoutes(access: AccessPublicApi, providers: AgentProviderApi): HttpRoute[] {
 	const routes: HttpRoute[] = [];
-	add(routes, 'GET', '/ai/model-registry', access, async (ctx, userId) =>
-		authorizedSend(ctx, access, userId, 200, wireRegistryStatus(await providers.registryStatus(userId))),
+	add(routes, 'GET', '/ai/model-registry', access, async (request, reply, userId) =>
+		authorizedSend(request, reply, access, userId, 200, wireRegistryStatus(await providers.registryStatus(userId))),
 	);
 	add(
 		routes,
 		'GET',
 		'/ai/model-registry/resolve',
 		access,
-		async (ctx, userId) => {
-			const query = readAgentRegistryResolveQuery(ctx.query);
+		async (request, reply, userId) => {
+			const query = readAgentRegistryResolveQuery(request.query);
 			await authorizedSend(
-				ctx,
+				request,
+				reply,
 				access,
 				userId,
 				200,
@@ -222,36 +235,43 @@ export function createAgentProviderHttpRoutes(access: AccessPublicApi, providers
 		},
 		['modelId'],
 	);
-	add(routes, 'POST', '/ai/model-registry/refresh', access, async (ctx, userId) => {
-		readAgentProviderEmptyRequest(await ctx.json());
-		await verifyAuthorized(ctx, access, userId);
-		const cancellable = externalSignal(ctx);
+	add(routes, 'POST', '/ai/model-registry/refresh', access, async (request, reply, userId) => {
+		readAgentProviderEmptyRequest(request.body);
+		await verifyAuthorized(request, reply, access, userId);
+		const cancellable = externalSignal(reply);
 		try {
 			const result = await providers.registryRefresh(userId, cancellable.signal);
-			await mutationSend(ctx, access, userId, 200, () => wireRegistryStatus(result));
+			await mutationSend(request, reply, access, userId, 200, () => wireRegistryStatus(result));
 		} finally {
 			cancellable.dispose();
 		}
 	});
-	add(routes, 'GET', '/ai/providers', access, async (ctx, userId) =>
-		authorizedSend(ctx, access, userId, 200, (await providers.list(userId)).map(wireProvider)),
+	add(routes, 'GET', '/ai/providers', access, async (request, reply, userId) =>
+		authorizedSend(request, reply, access, userId, 200, (await providers.list(userId)).map(wireProvider)),
 	);
-	add(routes, 'GET', '/ai/providers/:providerId', access, async (ctx, userId) =>
-		authorizedSend(ctx, access, userId, 200, wireProvider(await providers.get(userId, providerId(ctx)))),
+	add(routes, 'GET', '/ai/providers/:providerId', access, async (request, reply, userId) =>
+		authorizedSend(
+			request,
+			reply,
+			access,
+			userId,
+			200,
+			wireProvider(await providers.get(userId, providerId(request))),
+		),
 	);
-	add(routes, 'GET', '/ai/models', access, async (ctx, userId) =>
-		authorizedSend(ctx, access, userId, 200, (await providers.available(userId)).map(wireAvailable)),
+	add(routes, 'GET', '/ai/models', access, async (request, reply, userId) =>
+		authorizedSend(request, reply, access, userId, 200, (await providers.available(userId)).map(wireAvailable)),
 	);
 	add(
 		routes,
 		'POST',
 		'/ai/providers',
 		access,
-		async (ctx, userId) => {
-			const input = appProvider(readAgentProviderCreateRequest(await ctx.json()));
-			await verifyAuthorized(ctx, access, userId);
+		async (request, reply, userId) => {
+			const input = appProvider(readAgentProviderCreateRequest(request.body));
+			await verifyAuthorized(request, reply, access, userId);
 			const result = await providers.create(userId, input);
-			await mutationSend(ctx, access, userId, 201, () => wireProvider(result));
+			await mutationSend(request, reply, access, userId, 201, () => wireProvider(result));
 		},
 		[],
 		AGENT_PROVIDER_MAX_BODY_BYTES,
@@ -261,16 +281,16 @@ export function createAgentProviderHttpRoutes(access: AccessPublicApi, providers
 		'PATCH',
 		'/ai/providers/:providerId',
 		access,
-		async (ctx, userId) => {
-			const body = readAgentProviderUpdateRequest(await ctx.json());
-			await verifyAuthorized(ctx, access, userId);
+		async (request, reply, userId) => {
+			const body = readAgentProviderUpdateRequest(request.body);
+			await verifyAuthorized(request, reply, access, userId);
 			const result = await providers.update(
 				userId,
-				providerId(ctx),
+				providerId(request),
 				body.expectedVersion,
 				appProviderPatch(body),
 			);
-			await mutationSend(ctx, access, userId, 200, () => wireProvider(result));
+			await mutationSend(request, reply, access, userId, 200, () => wireProvider(result));
 		},
 		[],
 		AGENT_PROVIDER_MAX_BODY_BYTES,
@@ -280,11 +300,11 @@ export function createAgentProviderHttpRoutes(access: AccessPublicApi, providers
 		'DELETE',
 		'/ai/providers/:providerId',
 		access,
-		async (ctx, userId) => {
-			const { expectedVersion } = readAgentProviderDeleteQuery(ctx.query);
-			await verifyAuthorized(ctx, access, userId);
-			await providers.remove(userId, providerId(ctx), expectedVersion);
-			await mutationSend(ctx, access, userId, 200, () => ({ deleted: true }));
+		async (request, reply, userId) => {
+			const { expectedVersion } = readAgentProviderDeleteQuery(request.query);
+			await verifyAuthorized(request, reply, access, userId);
+			await providers.remove(userId, providerId(request), expectedVersion);
+			await mutationSend(request, reply, access, userId, 200, () => ({ deleted: true }));
 		},
 		['expectedVersion'],
 	);
@@ -293,9 +313,9 @@ export function createAgentProviderHttpRoutes(access: AccessPublicApi, providers
 		'POST',
 		'/ai/providers/discover-endpoint-models',
 		access,
-		async (ctx, userId) => {
-			const input = readAgentProviderEndpointRequest(await ctx.json());
-			const cancellable = externalSignal(ctx);
+		async (request, reply, userId) => {
+			const input = readAgentProviderEndpointRequest(request.body);
+			const cancellable = externalSignal(reply);
 			try {
 				const found = await providers.discoverEndpoint(
 					userId,
@@ -303,7 +323,7 @@ export function createAgentProviderHttpRoutes(access: AccessPublicApi, providers
 					input.credential,
 					cancellable.signal,
 				);
-				await authorizedSend(ctx, access, userId, 200, found.map(wireDiscovered));
+				await authorizedSend(request, reply, access, userId, 200, found.map(wireDiscovered));
 			} finally {
 				cancellable.dispose();
 			}
@@ -311,29 +331,29 @@ export function createAgentProviderHttpRoutes(access: AccessPublicApi, providers
 		[],
 		AGENT_PROVIDER_MAX_BODY_BYTES,
 	);
-	add(routes, 'POST', '/ai/providers/:providerId/discover-models', access, async (ctx, userId) => {
-		readAgentProviderEmptyRequest(await ctx.json());
-		const id = providerId(ctx);
-		const cancellable = externalSignal(ctx);
+	add(routes, 'POST', '/ai/providers/:providerId/discover-models', access, async (request, reply, userId) => {
+		readAgentProviderEmptyRequest(request.body);
+		const id = providerId(request);
+		const cancellable = externalSignal(reply);
 		try {
 			const found = await providers.discover(
 				userId,
 				id,
-				() => verifyAuthorized(ctx, access, userId),
+				() => verifyAuthorized(request, reply, access, userId),
 				cancellable.signal,
 			);
-			await mutationSend(ctx, access, userId, 200, () => found.map(wireDiscovered));
+			await mutationSend(request, reply, access, userId, 200, () => found.map(wireDiscovered));
 		} finally {
 			cancellable.dispose();
 		}
 	});
-	add(routes, 'POST', '/ai/providers/:providerId/test', access, async (ctx, userId) => {
-		const body = readAgentProviderTestRequest(await ctx.json());
-		const id = providerId(ctx);
-		const cancellable = externalSignal(ctx);
+	add(routes, 'POST', '/ai/providers/:providerId/test', access, async (request, reply, userId) => {
+		const body = readAgentProviderTestRequest(request.body);
+		const id = providerId(request);
+		const cancellable = externalSignal(reply);
 		try {
 			const result = await providers.test(userId, id, body.modelId, cancellable.signal);
-			await authorizedSend(ctx, access, userId, 200, wireTest(result));
+			await authorizedSend(request, reply, access, userId, 200, wireTest(result));
 		} finally {
 			cancellable.dispose();
 		}

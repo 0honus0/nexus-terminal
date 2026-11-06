@@ -1,4 +1,5 @@
-import type { HttpRouteContext } from '../../../../platform/http/http-types.js';
+import type { HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
+import { finished } from 'node:stream/promises';
 import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
 import { InvalidPayload } from '@nexus-terminal/shared/common/http-codec';
 import {
@@ -57,58 +58,95 @@ function errorCode(error: unknown): HtmlThemeErrorCode {
 	return 'internal_failure';
 }
 
+function sendFailure(error: unknown, request: HttpRequest, reply: HttpReply): void {
+	const code = errorCode(error);
+	if (reply.sent || reply.raw.headersSent) {
+		reply.raw.destroy();
+	} else if (!reply.raw.destroyed && !reply.raw.writableEnded) {
+		reply
+			.removeHeader('Content-Length')
+			.type('application/json; charset=utf-8')
+			.serializer(JSON.stringify)
+			.code(STATUS[code])
+			.send({ code });
+	}
+}
+
+export function htmlThemeHttpErrorHandler(error: unknown, request: HttpRequest, reply: HttpReply): void {
+	if (!(error instanceof HtmlThemeFailure)) {
+		throw error;
+	}
+	sendFailure(error, request, reply);
+}
+
 export async function handleHtmlTheme(
-	context: HttpRouteContext,
+	request: HttpRequest,
+	reply: HttpReply,
 	work: () => Promise<void>,
 	allowQuery = false,
 ): Promise<void> {
 	try {
-		if (!allowQuery && context.query.size) {
+		if (!allowQuery && request.query.size) {
 			throw new HtmlThemeFailure('invalid_input');
 		}
 		await work();
 	} catch (error) {
-		const code = errorCode(error);
-		if (context.response.headersSent) {
-			context.response.destroy();
-		} else if (!context.response.destroyed && !context.response.writableEnded) {
-			context.send(STATUS[code], { code });
-		}
+		sendFailure(error, request, reply);
 	}
 }
 
+export function sendHtmlThemeJson(reply: HttpReply, status: number, body: unknown, mutation = false): void {
+	reply.type('application/json; charset=utf-8').serializer((payload) => {
+		try {
+			const encoded = JSON.stringify(payload);
+			if (encoded === undefined) {
+				throw new HtmlThemeFailure('internal_failure');
+			}
+			if (Buffer.byteLength(encoded, 'utf8') > HTML_THEME_RESPONSE_MAX_BYTES) {
+				throw new HtmlThemeFailure('limit_exceeded');
+			}
+			return encoded;
+		} catch (cause) {
+			throw new HtmlThemeFailure(
+				mutation ? 'operation_unknown' : cause instanceof HtmlThemeFailure ? cause.code : 'internal_failure',
+				{ cause },
+			);
+		}
+	});
+	reply.code(status).send(body);
+}
+
 export async function deliverHtmlTheme(
-	context: HttpRouteContext,
+	request: HttpRequest,
+	reply: HttpReply,
 	access: AccessPublicApi,
 	actor: HtmlThemeActor,
 	status: number,
 	body: unknown,
 ): Promise<void> {
 	try {
-		await revalidateHtmlTheme(context, access, actor);
-		ready(context);
-		if (Buffer.byteLength(JSON.stringify(body)) > HTML_THEME_RESPONSE_MAX_BYTES) {
-			throw new HtmlThemeFailure('limit_exceeded');
-		}
-		context.send(status, body);
+		await revalidateHtmlTheme(request, reply, access, actor);
+		ready(request, reply);
+		sendHtmlThemeJson(reply, status, body, true);
 	} catch (cause) {
 		throw new HtmlThemeFailure('operation_unknown', { cause });
 	}
 }
 
 export async function readHtmlThemeInput<T>(
-	context: HttpRouteContext,
+	request: HttpRequest,
+	reply: HttpReply,
 	access: AccessPublicApi,
 	actor: HtmlThemeActor,
 	ownerSignal: AbortSignal,
 	decode: (input: unknown) => T,
 ): Promise<T> {
 	try {
-		return await withAppearanceDeadline(context, async (deadlineSignal) => {
+		return await withAppearanceDeadline(request, reply, async (deadlineSignal) => {
 			const signal = AbortSignal.any([ownerSignal, deadlineSignal]);
-			const input = decode(await context.json(signal));
-			await revalidateHtmlTheme(context, access, actor);
-			ready(context);
+			const input = decode(request.body);
+			await revalidateHtmlTheme(request, reply, access, actor);
+			ready(request, reply);
 			signal.throwIfAborted();
 			return input;
 		});
@@ -125,69 +163,54 @@ export async function readHtmlThemeInput<T>(
 	}
 }
 
-export function sendHtmlThemeText(context: HttpRouteContext, content: string, signal: AbortSignal): Promise<void> {
-	return new Promise((resolve, reject) => {
-		const cleanup = () => {
-			context.response.off('finish', finished);
-			context.response.off('close', closed);
-			context.response.off('error', failed);
-			signal.removeEventListener('abort', aborted);
-		};
-
-		const finished = () => {
-			cleanup();
-			resolve();
-		};
-
-		const failed = (cause: unknown) => {
-			cleanup();
-			reject(new HtmlThemeFailure('unavailable', { cause }));
-		};
-
-		const closed = () => {
-			if (context.response.writableFinished) {
-				finished();
-			} else {
-				failed(new HtmlThemeFailure('unavailable'));
-			}
-		};
-
-		const aborted = () => {
-			context.response.destroy();
-			failed(new HtmlThemeFailure('unavailable'));
-		};
-
-		if (signal.aborted || context.response.destroyed || context.response.writableEnded) {
-			failed(new HtmlThemeFailure('unavailable'));
-			return;
+export async function sendHtmlThemeText(
+	request: HttpRequest,
+	reply: HttpReply,
+	content: string,
+	signal: AbortSignal,
+): Promise<void> {
+	try {
+		if (signal.aborted || reply.raw.destroyed || reply.raw.writableEnded) {
+			throw new HtmlThemeFailure('unavailable');
 		}
-		context.response.once('finish', finished);
-		context.response.once('close', closed);
-		context.response.once('error', failed);
-		signal.addEventListener('abort', aborted, { once: true });
-		try {
-			context.response.setHeader('Content-Type', 'text/plain; charset=utf-8');
-			context.response.setHeader('Content-Length', String(Buffer.byteLength(content)));
-			context.response.setHeader(
-				'Content-Security-Policy',
-				"sandbox; default-src 'none'; base-uri 'none'; form-action 'none'",
-			);
-			context.response.setHeader('X-Content-Type-Options', 'nosniff');
-			context.response.setHeader('Cache-Control', 'private, no-store');
-			context.response.end(content);
-		} catch (cause) {
-			failed(cause);
+		reply.helmet({
+			contentSecurityPolicy: {
+				useDefaults: false,
+				directives: {
+					sandbox: [],
+					defaultSrc: ["'none'"],
+					baseUri: ["'none'"],
+					formAction: ["'none'"],
+				},
+			},
+		});
+		reply
+			.code(200)
+			.headers({
+				'Content-Type': 'text/plain; charset=utf-8',
+				'Cache-Control': 'private, no-store',
+			})
+			.send(Buffer.from(content));
+		await finished(reply.raw, { signal, cleanup: true });
+		if (reply.statusCode !== 200 || request.raw.aborted) {
+			throw new HtmlThemeFailure('unavailable');
 		}
-	});
+	} catch (cause) {
+		if (!reply.raw.writableFinished) {
+			reply.raw.destroy();
+		}
+		throw new HtmlThemeFailure('unavailable', { cause });
+	}
 }
 
 export async function revalidateHtmlTheme(
-	context: HttpRouteContext,
+	request: HttpRequest,
+	reply: HttpReply,
 	access: AccessPublicApi,
 	actor: HtmlThemeActor,
 ): Promise<void> {
 	try {
-		await revalidate(context, access, actor);
+		await revalidate(request, reply, access, actor);
 	} catch (cause) {
 		throw new HtmlThemeFailure(errorCode(cause), { cause });
 	}

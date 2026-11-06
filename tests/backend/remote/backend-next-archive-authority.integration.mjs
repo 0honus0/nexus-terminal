@@ -124,7 +124,13 @@ await test(
 					'completed',
 				]);
 				assert.equal(event.payload.type, 'failed');
-				assert.equal(event.payload.message, 'operation_unknown');
+				// Preparation has not mutated; publication has a confirmed native exit and discarded stage.
+				const failure = {
+					prepare: 'not_found',
+					dispatch: 'operation_unknown',
+					publish: 'remote_unavailable',
+				};
+				assert.equal(event.payload.message, failure[value.phase]);
 				assert.deepEqual(await readFile(value.destination), Buffer.from('original archive destination'));
 				assert.equal(await readFile(value.source, 'utf8'), 'real native archive input');
 				assert.equal(value.commands > 0, value.phase === 'publish');

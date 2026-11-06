@@ -63,7 +63,9 @@ export class AuditEventOwner {
 
 	publish(notice: AuditNotice): Promise<void> {
 		if (this.stopping || this.tasks.size >= 256) {
-			return Promise.reject(new OperationsFailure(this.stopping ? 'shutting_down' : 'limit_exceeded'));
+			const error = new OperationsFailure(this.stopping ? 'shutting_down' : 'limit_exceeded');
+			this.recordFailure(error);
+			return Promise.reject(error);
 		}
 		return this.track(async () => {
 			const saved = await this.audit.append({

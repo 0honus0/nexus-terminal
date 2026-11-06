@@ -422,13 +422,13 @@ POST /api/v1/appearance/background/{page,terminal} 使用 pageBackgroundFile/ter
 | 外观请求/响应           | 各 8 MiB；UI JSON 16 KiB、HTML 副本 1 MiB、字体 1,024 bytes、来源 URL 4,096 bytes |
 | 背景文件/完整 multipart | 5 MiB / 5 MiB + 16 KiB；五种媒体类型                                              |
 
-UI JSON 为 CSS 变量对象：最多 128 个 ASCII --变量名，单值 2 KiB；HTTP 使用 JSON 字符串，内部使用对象。完整外观输入在应用名额取得后读取，读取期限 60 秒，停机或断连取消读取。字体范围 0.1–512、蒙版 0–1、描边宽度 0–32、阴影偏移 ±512/模糊 0–512。400 invalid_input、401 unauthenticated、403 forbidden、404 not_found/theme_not_found、409 version_conflict/name_conflict/preset_readonly、413 limit_exceeded、415 unsupported_media_type；不可用/内部失败/清理失败/提交未知为安全 503。冲突先只读刷新；operation_unknown 或响应中断先核对当前主题/外观，不自动重传、重删或换版本重试。缺内容/损坏记录报失败，不静默修改用户设置。畸形 JSON、错误媒体类型和超限输入在写入前拒绝，不记为后台停机故障；输入取消不自动重试，已分类的存储或提交未知不因超时降为普通取消。
+UI JSON 为 CSS 变量对象：最多 128 个 ASCII --变量名，单值 2 KiB；HTTP 使用 JSON 字符串，内部使用对象。普通 JSON 在来源和完整会话准入后由 Fastify 有界解析，随后进入外观应用名额与 60 秒操作期限；原始图片上传仍在应用作用域内读取，停机或断连取消原任务。字体范围 0.1–512、蒙版 0–1、描边宽度 0–32、阴影偏移 ±512/模糊 0–512。400 invalid_input、401 unauthenticated、403 forbidden、404 not_found/theme_not_found、409 version_conflict/name_conflict/preset_readonly、413 limit_exceeded、415 unsupported_media_type；不可用/内部失败/清理失败/提交未知为安全 503。冲突先只读刷新；operation_unknown 或响应中断先核对当前主题/外观，不自动重传、重删或换版本重试。缺内容/损坏记录报失败，不静默修改用户设置。畸形 JSON、错误媒体类型和超限输入在写入前拒绝，不记为后台停机故障；输入取消不自动重试，已分类的存储或提交未知不因超时降为普通取消。
 
 ## HTML 主题库
 
 完整认证用户使用 GET/POST /api/v1/appearance/html-presets/local 和 GET/PUT/DELETE /local/:themeName。17 个预置只读，自定义按用户隔离，可覆盖同名预置；删除自定义后再次读取同名预置。列表同时包含两种来源，返回 {name,type,version,updatedAt}；内容 GET 返回 text/plain，后端不执行 HTML。活动 HTML 保存在外观设置的内容副本，修改或删除库条目不会自动修改副本。编辑时改变名称表示另存副本，保留原条目；删除原条目需独立确认。内容允许为空。
 
-POST 使用 {name,content}；PUT 使用 {expectedVersion,content}，DELETE 使用 {expectedVersion}。名称是单个 .html 文件名，最多 255 UTF-8 bytes，允许中文和空格，禁止路径、..、控制字符；放入路径时使用 encodeURIComponent，字节预算按解码后的名称计算。内容最多 1 MiB，允许空文本。更新/删除以自定义列表项的 version 为准；用户级持久修订不因删除重建而复用，也不保证每项版本连续。JSON 请求 8 MiB、完整响应 32 MiB（容纳远端目录最坏转义），列表最多 4,096 项，每用户最多 2,048 个自定义主题。输入先准入再读取，60 秒期限；unknown 或响应断开后只读核对，不自动重写。预期输入拒绝、输入取消及文本交付前断连不记为整个主题服务故障；认证存储失败保留安全失败类别，不冒充未登录。
+POST 使用 {name,content}；PUT 使用 {expectedVersion,content}，DELETE 使用 {expectedVersion}。名称是单个 .html 文件名，最多 255 UTF-8 bytes，允许中文和空格，禁止路径、..、控制字符；放入路径时使用 encodeURIComponent，字节预算按解码后的名称计算。内容最多 1 MiB，允许空文本。更新/删除以自定义列表项的 version 为准；用户级持久修订不因删除重建而复用，也不保证每项版本连续。JSON 请求 8 MiB、完整响应 32 MiB（容纳远端目录最坏转义），列表最多 4,096 项，每用户最多 2,048 个自定义主题。普通 JSON 经来源和完整会话准入后由 Fastify 有界解析，应用处理期限为 60 秒；unknown 或响应断开后只读核对，不自动重写。预期输入拒绝、输入取消及文本交付前断连不记为整个主题服务故障；认证存储失败保留安全失败类别，不冒充未登录。
 
 远端使用 GET/PUT /html-presets/remote/repository-url，读取 {url,version}，写入 {url,expectedVersion}（url 可为 null，版本与外观设置共用）。GET /remote/list 可提供单个 repoUrl，否则使用已保存来源；GET /remote/content 必须提供单个 fileUrl。仓库仅接受 HTTPS github.com 的 owner/repo 或 /tree/ref/path，内容仅接受 HTTPS raw.githubusercontent.com 的 .html；不跟随重定向，不自动改写旧官方 URL。保存来源不证明仓库可用或授予执行权。
 
@@ -496,3 +496,13 @@ GET/PUT /api/v1/settings/logging 使用 {expectedVersion,level}，level为debug/
 ## Agent 连接资源关闭
 
 `POST /api/v1/agent/apps/:appId/resources/close` 接收 `{appVersion,target,confirmed}`。target 为 `{kind:"app"}` 或 `{kind:"session",runId,sessionId}`。需当前 App 版本及管理员会话；未确认且存在活动 Run/操作/后台 Job 返回 confirmation_required 和计数，confirmed 后停止原任务并等待资源排空。sessionId 绑定精确资源实例，旧请求不关闭后续新实例。资源状态经原 Run WS 推送，包括连接计数、活动数、状态和 expiresAt；隐藏/最小化不调用关闭。
+
+## HTTP 框架接入
+
+后端模块接口直接注册 Fastify 路由，使用 `url`、`handler(request, reply)`、`bodyLimit`；正文从 `request.body` 以 unknown 交 Shared 严格解码，参数和重复查询在协议边界验证。禁止把 Fastify request/reply 传入 Service、Model 或 Shared。
+
+普通 JSON 由框架先有界解析，再执行应用 handler；来源校验及应用写入的完整会话准入在解析前完成，业务 owner 在解析后和实际事务继续复查权限。multipart 路由声明 `config.multipartBodyLimit`，由独立插件 scope 提供流式 parts；`bodyLimit` 仍约束 JSON，multipart 完整封装和每个 part 分别计量，业务入口授权后读取，无自动临时文件。声明长度超限可在读取前返回 413；分块上传实际超限或未结束的 part 被拒绝时终止原连接，不保证能交付 JSON 错误，客户端不得自动重试写入。仅二进制原始上传使用 `config.rawBody` 并由接口承担读取预算和取消。
+
+JSON 对象继续通过 `preSerialization`，模块 serializer 只编码一次并检查最终 UTF-8 字节预算；serializer 失败由原生 route errorHandler 投影安全错误，不能依赖 handler 的 try/catch 捕获。已提交写入的响应失败保留结果未知。普通 Buffer/Readable 使用原生 `reply.send()`；保留必要的 raw 响应时须设置自身内容/传输头；Helmet 已在 onRequest 将安全策略写入 raw 响应，不能另拼一份 CSP。绕过钩子的技术失败由 Platform 清除原实体及凭据头并生成最小安全错误。异步响应钩子完成前不得认为 send 已交付；需要资源确认的接口检查真实 finish、最终成功状态和原身份。审计发布不改写已经交付的业务结果。详细 owner、维护与错误规则见 [Backend HTTP 运行时](architecture/BACKEND.md#fastify-http-运行时)。
+
+Cookie 解析与序列化分别使用已注册的 `@fastify/cookie` 实例；HTTP 的原生 cookies 和 WS 的解析结果经过同一重复名称/容量拒绝，模块继续读取安全事实，不能再手写解析或单独解析出另一份身份。Access Cookie 使用原 HttpOnly、SameSite、Secure、Path 和有效期策略；直接通过实例 serializeCookie 写入响应头，保证失败后移除 Set-Cookie 不会被延迟队列重加。安全头通过 Helmet 的原生 route options 或 reply.helmet 配置，业务策略仍归对应模块；不得直接启用所有默认项改变既有 iframe、SDK 或 HTTP 部署行为。

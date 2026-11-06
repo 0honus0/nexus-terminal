@@ -1,9 +1,11 @@
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import {
 	ACCESS_AUTH_REQUEST_MAX_BYTES,
 	ACCESS_IP_BLACKLIST_RESPONSE_MAX_BYTES,
 } from '@nexus-terminal/shared/access/values';
 import { deliverAccessResult } from './access-delivery.js';
-import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
+import { serializeAccessCookie } from './access-cookie.js';
+import type { HttpRoute, HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
 import type { AccessService } from '../../authentication/service/access-service.js';
 import { AccessOperationError, accessBoundary } from '../../access-errors.js';
 import type { AuthenticatedIdentity } from '../../authentication/model/access-types.js';
@@ -36,39 +38,17 @@ import {
 import { ACCESS_CHALLENGE_COOKIE_NAME, ACCESS_TOTP_SETUP_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
 import type { FactorService } from '../../factors/service/factor-service.js';
 
-function readSession(context: HttpRouteContext): string | null {
-	return context.cookie(ACCESS_SESSION_COOKIE_NAME);
-}
-
-function cookieHeader(token: string, rememberMe: boolean, secure: boolean): string {
-	const attributes = [ACCESS_SESSION_COOKIE_NAME + '=' + token, 'Path=/', 'HttpOnly', 'SameSite=Lax'];
-	if (secure) {
-		attributes.push('Secure');
-	}
-	if (rememberMe) {
-		attributes.push('Max-Age=' + ACCESS_REMEMBER_SECONDS);
-	}
-	return attributes.join('; ');
-}
-
-function clearedCookie(secure: boolean): string {
-	return [
-		ACCESS_SESSION_COOKIE_NAME + '=',
-		'Path=/',
-		'HttpOnly',
-		'SameSite=Lax',
-		'Max-Age=0',
-		...(secure ? ['Secure'] : []),
-	].join('; ');
+function readSession(request: HttpRequest): string | null {
+	return readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME);
 }
 
 function toUser(identity: AuthenticatedIdentity): AccessUserView {
 	return { id: identity.userId, username: identity.username, twoFactorEnabled: identity.twoFactorEnabled };
 }
 
-function errorResponse(context: HttpRouteContext, error: unknown): void {
+function errorResponse(reply: HttpReply, error: unknown): void {
 	if (!(error instanceof AccessOperationError)) {
-		context.send(500, { code: 'internal_failure' } satisfies AccessHttpErrorResponse);
+		reply.code(500).send({ code: 'internal_failure' } satisfies AccessHttpErrorResponse);
 		return;
 	}
 	const code = error.code;
@@ -99,20 +79,25 @@ function errorResponse(context: HttpRouteContext, error: unknown): void {
 		default:
 			status = 500;
 	}
-	context.send(status, { code } satisfies AccessHttpErrorResponse);
+	reply.code(status).send({ code } satisfies AccessHttpErrorResponse);
 }
 
-async function handle(context: HttpRouteContext, action: () => Promise<void>, acceptsQuery = false): Promise<void> {
+async function handle(
+	request: HttpRequest,
+	reply: HttpReply,
+	action: () => Promise<void>,
+	acceptsQuery = false,
+): Promise<void> {
 	try {
 		// Only the blacklist list endpoint accepts query parameters.
-		if (!acceptsQuery && context.query.size > 0) {
+		if (!acceptsQuery && request.query.size > 0) {
 			throw new AccessOperationError('invalid_input');
 		}
 		await action();
 	} catch (error) {
 		if (error instanceof InvalidAccessPayload || error instanceof AccessOperationError) {
 			errorResponse(
-				context,
+				reply,
 				error instanceof InvalidAccessPayload ? new AccessOperationError('invalid_input') : error,
 			);
 			return;
@@ -127,12 +112,12 @@ export function createAccessRoutes(access: AccessService, factors: FactorService
 	return [
 		{
 			method: 'GET',
-			path: '/api/v1/auth/captcha/config',
+			url: '/api/v1/auth/captcha/config',
 
-			handle: (context) =>
-				handle(context, async () => {
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
 					const config = access.captchaConfig();
-					context.send(200, {
+					reply.code(200).send({
 						enabled: config.enabled,
 						provider: config.provider,
 						hcaptchaSiteKey: config.hcaptchaSiteKey,
@@ -142,83 +127,89 @@ export function createAccessRoutes(access: AccessService, factors: FactorService
 		},
 		{
 			method: 'GET',
-			path: '/api/v1/auth/needs-setup',
+			url: '/api/v1/auth/needs-setup',
 
-			handle: (context) =>
-				handle(context, async () => {
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
 					const needsSetup = await accessBoundary(() => access.needsSetup());
-					context.send(200, { needsSetup: Boolean(needsSetup) } satisfies AccessNeedsSetupResponse);
+					reply.code(200).send({ needsSetup: Boolean(needsSetup) } satisfies AccessNeedsSetupResponse);
 				}),
 		},
 		{
 			method: 'POST',
-			path: '/api/v1/auth/setup',
-			maxBodyBytes: ACCESS_AUTH_REQUEST_MAX_BYTES,
+			url: '/api/v1/auth/setup',
+			bodyLimit: ACCESS_AUTH_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handle(context, async () => {
-					const data = readAccessSetupRequest(await context.json());
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					const data = readAccessSetupRequest(request.body);
 					const identity = await accessBoundary(() => access.setupAdmin(data.username, data.password));
-					context.send(201, { user: toUser(identity) } satisfies AccessSetupResponse);
+					reply.code(201).send({ user: toUser(identity) } satisfies AccessSetupResponse);
 				}),
 		},
 		{
 			method: 'POST',
-			path: '/api/v1/auth/login',
-			maxBodyBytes: ACCESS_AUTH_REQUEST_MAX_BYTES,
+			url: '/api/v1/auth/login',
+			bodyLimit: ACCESS_AUTH_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handle(context, async () => {
-					const data = readAccessLoginRequest(await context.json());
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					const data = readAccessLoginRequest(request.body);
 					await deliverAccessResult(
-						context,
+						request,
+						reply,
 						(signal) =>
 							access.login({
 								username: data.username,
 								password: data.password,
 								rememberMe: data.rememberMe === true,
-								source: context.sourceIp,
+								source: request.ip,
 								captchaToken: data.captchaToken,
-								previousPartialToken: context.cookie(ACCESS_PARTIAL_COOKIE_NAME),
+								previousPartialToken: readRequestCookie(request.raw, ACCESS_PARTIAL_COOKIE_NAME),
 								signal,
 							}),
 						(result) => {
 							if (result.status === 'requires_two_factor') {
-								const cookie = [
-									ACCESS_PARTIAL_COOKIE_NAME + '=' + result.token,
-									'Path=/',
-									'HttpOnly',
-									'SameSite=Lax',
-									'Max-Age=' + ACCESS_PARTIAL_SECONDS,
-									...(secureCookies ? ['Secure'] : []),
-								].join('; ');
-								context.send(
-									200,
-									{ requiresTwoFactor: true } satisfies AccessPendingTwoFactorResponse,
-									{ 'Set-Cookie': cookie },
-								);
+								const cookie = serializeAccessCookie(reply, ACCESS_PARTIAL_COOKIE_NAME, result.token, {
+									secure: secureCookies,
+									maxAge: ACCESS_PARTIAL_SECONDS,
+								});
+								reply
+									.code(200)
+									.headers({ 'Set-Cookie': cookie })
+									.send({ requiresTwoFactor: true } satisfies AccessPendingTwoFactorResponse);
 								return;
 							}
 							if (result.status !== 'authenticated') {
 								const code = result.status;
-								context.send(
-									code === 'rate_limited' || code === 'limit_exceeded'
-										? 429
-										: code === 'factor_unavailable'
-											? 403
-											: 401,
-									{ code } satisfies AccessHttpErrorResponse,
-								);
+								reply
+									.code(
+										code === 'rate_limited' || code === 'limit_exceeded'
+											? 429
+											: code === 'factor_unavailable'
+												? 403
+												: 401,
+									)
+									.send({ code } satisfies AccessHttpErrorResponse);
 								return;
 							}
-							context.send(
-								200,
-								{
+							reply
+								.code(200)
+								.headers({
+									'Set-Cookie': serializeAccessCookie(
+										reply,
+										ACCESS_SESSION_COOKIE_NAME,
+										result.token,
+										{
+											secure: secureCookies,
+											maxAge: result.rememberMe ? ACCESS_REMEMBER_SECONDS : undefined,
+										},
+									),
+								})
+								.send({
 									user: toUser(result.identity),
 									requiresTwoFactor: false,
-								} satisfies AccessLoginResponse,
-								{ 'Set-Cookie': cookieHeader(result.token, result.rememberMe, secureCookies) },
-							);
+								} satisfies AccessLoginResponse);
 						},
 						async (result) => {
 							if (result.status === 'authenticated') {
@@ -232,15 +223,15 @@ export function createAccessRoutes(access: AccessService, factors: FactorService
 		},
 		{
 			method: 'GET',
-			path: '/api/v1/auth/status',
+			url: '/api/v1/auth/status',
 
-			handle: (context) =>
-				handle(context, async () => {
-					const identity = await accessBoundary(() => access.authenticate(readSession(context)));
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					const identity = await accessBoundary(() => access.authenticate(readSession(request)));
 					if (identity === null) {
-						context.send(401, { code: 'unauthenticated' } satisfies AccessHttpErrorResponse);
+						reply.code(401).send({ code: 'unauthenticated' } satisfies AccessHttpErrorResponse);
 					} else {
-						context.send(200, {
+						reply.code(200).send({
 							isAuthenticated: true,
 							user: toUser(identity),
 						} satisfies AccessStatusResponse);
@@ -249,18 +240,18 @@ export function createAccessRoutes(access: AccessService, factors: FactorService
 		},
 		{
 			method: 'POST',
-			path: '/api/v1/auth/logout',
+			url: '/api/v1/auth/logout',
 
-			handle: (context) =>
-				handle(context, async () => {
-					const token = readSession(context);
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					const token = readSession(request);
 					const results = await Promise.allSettled([
 						accessBoundary(() => access.logout(token)),
 						accessBoundary(() =>
 							factors.logoutFlows(
-								context.cookie(ACCESS_PARTIAL_COOKIE_NAME),
-								context.cookie(ACCESS_CHALLENGE_COOKIE_NAME),
-								context.cookie(ACCESS_TOTP_SETUP_COOKIE_NAME),
+								readRequestCookie(request.raw, ACCESS_PARTIAL_COOKIE_NAME),
+								readRequestCookie(request.raw, ACCESS_CHALLENGE_COOKIE_NAME),
+								readRequestCookie(request.raw, ACCESS_TOTP_SETUP_COOKIE_NAME),
 							),
 						),
 					]);
@@ -268,54 +259,64 @@ export function createAccessRoutes(access: AccessService, factors: FactorService
 					if (failures.length > 0) {
 						throw new AggregateError(failures, 'Access logout cleanup incomplete');
 					}
-					context.send(200, { loggedOut: true } satisfies AccessLogoutResponse, {
-						'Set-Cookie': [
-							clearedCookie(secureCookies),
-							...[
+					reply
+						.code(200)
+						.headers({
+							'Set-Cookie': [
+								ACCESS_SESSION_COOKIE_NAME,
 								ACCESS_PARTIAL_COOKIE_NAME,
 								ACCESS_CHALLENGE_COOKIE_NAME,
 								ACCESS_TOTP_SETUP_COOKIE_NAME,
 							].map((name) =>
-								[
-									name + '=',
-									'Path=/',
-									'HttpOnly',
-									'SameSite=Lax',
-									'Max-Age=0',
-									...(secureCookies ? ['Secure'] : []),
-								].join('; '),
+								serializeAccessCookie(reply, name, '', { secure: secureCookies, maxAge: 0 }),
 							),
-						],
-					});
+						})
+						.send({ loggedOut: true } satisfies AccessLogoutResponse);
 				}),
 		},
 		{
 			method: 'PUT',
-			path: '/api/v1/auth/password',
-			maxBodyBytes: ACCESS_AUTH_REQUEST_MAX_BYTES,
+			url: '/api/v1/auth/password',
+			bodyLimit: ACCESS_AUTH_REQUEST_MAX_BYTES,
 
-			handle: (context) =>
-				handle(context, async () => {
-					const data = readAccessPasswordRequest(await context.json());
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					const data = readAccessPasswordRequest(request.body);
 					await accessBoundary(() =>
-						access.changePassword(readSession(context), data.currentPassword, data.newPassword),
+						access.changePassword(readSession(request), data.currentPassword, data.newPassword),
 					);
-					context.send(200, { passwordChanged: true } satisfies AccessPasswordResponse, {
-						'Set-Cookie': clearedCookie(secureCookies),
-					});
+					reply
+						.code(200)
+						.headers({
+							'Set-Cookie': serializeAccessCookie(reply, ACCESS_SESSION_COOKIE_NAME, '', {
+								secure: secureCookies,
+								maxAge: 0,
+							}),
+						})
+						.send({ passwordChanged: true } satisfies AccessPasswordResponse);
 				}),
 		},
 		{
 			method: 'GET',
-			path: '/api/v1/settings/ip-blacklist',
+			url: '/api/v1/settings/ip-blacklist',
 
-			handle: (context) =>
+			errorHandler(error, _request, reply) {
+				if (!(error instanceof AccessOperationError)) {
+					throw error;
+				}
+				reply.removeHeader('Set-Cookie');
+				reply.type('application/json; charset=utf-8').serializer(JSON.stringify);
+				errorResponse(reply, error);
+			},
+
+			handler: (request, reply) =>
 				handle(
-					context,
+					request,
+					reply,
 					async () => {
-						const { limit, offset } = readAccessIpBlacklistQuery(context.query);
+						const { limit, offset } = readAccessIpBlacklistQuery(request.query);
 						const page = await accessBoundary(() =>
-							access.listLoginFailures(readSession(context), limit, offset),
+							access.listLoginFailures(readSession(request), limit, offset),
 						);
 						const body = {
 							entries: page.entries.map((entry) => ({
@@ -327,25 +328,34 @@ export function createAccessRoutes(access: AccessService, factors: FactorService
 							})),
 							total: page.total,
 						} satisfies AccessIpBlacklistResponse;
-						if (Buffer.byteLength(JSON.stringify(body), 'utf8') > ACCESS_IP_BLACKLIST_RESPONSE_MAX_BYTES) {
-							throw new AccessOperationError('limit_exceeded');
-						}
-						context.send(200, body);
+						reply.type('application/json; charset=utf-8').serializer((payload) => {
+							let encoded: string;
+							try {
+								encoded = JSON.stringify(payload);
+							} catch {
+								throw new AccessOperationError('internal_failure');
+							}
+							if (Buffer.byteLength(encoded, 'utf8') > ACCESS_IP_BLACKLIST_RESPONSE_MAX_BYTES) {
+								throw new AccessOperationError('limit_exceeded');
+							}
+							return encoded;
+						});
+						reply.code(200).send(body);
 					},
 					true,
 				),
 		},
 		{
 			method: 'DELETE',
-			path: '/api/v1/settings/ip-blacklist',
+			url: '/api/v1/settings/ip-blacklist',
 
-			handle: (context) =>
-				handle(context, async () => {
-					const input = readAccessIpBlacklistRemoveRequest(await context.json());
+			handler: (request, reply) =>
+				handle(request, reply, async () => {
+					const input = readAccessIpBlacklistRemoveRequest(request.body);
 					const removed = await accessBoundary(() =>
-						access.clearLoginFailure(readSession(context), input.ip),
+						access.clearLoginFailure(readSession(request), input.ip),
 					);
-					context.send(200, { removed } satisfies AccessIpBlacklistRemoveResponse);
+					reply.code(200).send({ removed } satisfies AccessIpBlacklistRemoveResponse);
 				}),
 		},
 	];

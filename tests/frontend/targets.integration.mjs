@@ -10,6 +10,9 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { createApp } from '../../packages/backend/dist/bootstrap/create-app.js';
 
+const requireBackend = createRequire(new URL('../../packages/backend/package.json', import.meta.url));
+const fastify = requireBackend('fastify');
+
 const requirePlaywright = createRequire(new URL('../e2e/package.json', import.meta.url));
 const { chromium } = requirePlaywright('@playwright/test');
 
@@ -32,149 +35,147 @@ const producerRoutes = createTargetsRoutes(
 	{ run: async (_actor, action) => action() },
 );
 let producerResult;
-const producerContext = {
-	cookie: () => 'isolated-token',
+const producerServer = fastify({ routerOptions: { querystringParser: (query) => new URLSearchParams(query) } });
+for (const route of producerRoutes) {
+	producerServer.route(route);
+}
 
-	query: new URLSearchParams(),
+async function readProducerList(url) {
+	const response = await producerServer.inject({
+		method: 'GET',
+		url,
+		headers: { cookie: 'nexus_session=isolated-token' },
+	});
+	producerResult = { status: response.statusCode, body: response.json() };
+}
 
-	send: (status, body) => {
-		producerResult = { status, body };
-	},
-};
-const producerProxy = {
-	id: 1,
-	name: 'proxy',
-	type: 'HTTP',
-	host: '127.0.0.1',
-	port: 8080,
-	username: null,
-	version: 1,
-	createdAt: 1,
-	updatedAt: 1,
-};
-producerItems = Array.from({ length: TARGET_MANAGEMENT_MAX_ITEMS + 1 }, (_, index) => ({
-	...producerProxy,
-	id: index + 1,
-}));
-await producerRoutes
-	.find((route) => route.method === 'GET' && route.path === '/api/v1/targets/proxies')
-	.handle(producerContext);
-assert.deepEqual(producerResult, { status: 413, body: { code: 'limit_exceeded' } });
-producerItems = [
-	{
+try {
+	const producerProxy = {
 		id: 1,
-		name: 'x'.repeat(TARGET_MANAGEMENT_RESPONSE_MAX_BYTES['ssh-keys']),
+		name: 'proxy',
+		type: 'HTTP',
+		host: '127.0.0.1',
+		port: 8080,
+		username: null,
 		version: 1,
 		createdAt: 1,
 		updatedAt: 1,
-	},
-];
-await producerRoutes
-	.find((route) => route.method === 'GET' && route.path === '/api/v1/targets/ssh-keys')
-	.handle(producerContext);
-assert.deepEqual(producerResult, { status: 413, body: { code: 'limit_exceeded' } });
-producerItems = [];
-console.log('Targets controlled producer checks: 2 PASS (item count and complete response bytes)');
+	};
+	producerItems = Array.from({ length: TARGET_MANAGEMENT_MAX_ITEMS + 1 }, (_, index) => ({
+		...producerProxy,
+		id: index + 1,
+	}));
+	await readProducerList('/api/v1/targets/proxies');
+	assert.deepEqual(producerResult, { status: 413, body: { code: 'limit_exceeded' } });
+	producerItems = [
+		{
+			id: 1,
+			name: 'x'.repeat(TARGET_MANAGEMENT_RESPONSE_MAX_BYTES['ssh-keys']),
+			version: 1,
+			createdAt: 1,
+			updatedAt: 1,
+		},
+	];
+	await readProducerList('/api/v1/targets/ssh-keys');
+	assert.deepEqual(producerResult, { status: 413, body: { code: 'limit_exceeded' } });
+	producerItems = [];
+	console.log('Targets controlled producer checks: 2 PASS (item count and complete response bytes)');
 
-producerItems = Array.from({ length: TARGET_MANAGEMENT_MAX_ITEMS + 1 }, (_, index) => ({
-	id: index + 1,
-	name: 'tag',
-	version: 1,
-	createdAt: 1,
-	updatedAt: 1,
-}));
-const tagListRoute = producerRoutes.find((route) => route.method === 'GET' && route.path === '/api/v1/targets/tags');
-await tagListRoute.handle(producerContext);
-assert.deepEqual(producerResult, { status: 413, body: { code: 'limit_exceeded' } });
-producerItems = [
-	{ id: 1, name: 'x'.repeat(TARGET_MANAGEMENT_RESPONSE_MAX_BYTES.tags), version: 1, createdAt: 1, updatedAt: 1 },
-];
-await tagListRoute.handle(producerContext);
-assert.deepEqual(producerResult, { status: 413, body: { code: 'limit_exceeded' } });
-producerItems = Array.from({ length: TARGET_MANAGEMENT_MAX_ITEMS }, (_, index) => ({
-	id: index + 1,
-	name: '\u0001'.repeat(128),
-	version: Number.MAX_SAFE_INTEGER,
-	createdAt: Number.MAX_SAFE_INTEGER,
-	updatedAt: Number.MAX_SAFE_INTEGER,
-}));
-await tagListRoute.handle(producerContext);
-assert.equal(producerResult.status, 200);
-const { readTagList } = await import('../../packages/shared/dist/targets/tags/http-codec.js');
-assert.equal(readTagList(producerResult.body).length, TARGET_MANAGEMENT_MAX_ITEMS);
-producerItems = [];
-console.log('Tags controlled producer checks: 3 PASS (count, bytes, maximum valid escaped collection)');
+	producerItems = Array.from({ length: TARGET_MANAGEMENT_MAX_ITEMS + 1 }, (_, index) => ({
+		id: index + 1,
+		name: 'tag',
+		version: 1,
+		createdAt: 1,
+		updatedAt: 1,
+	}));
+	await readProducerList('/api/v1/targets/tags');
+	assert.deepEqual(producerResult, { status: 413, body: { code: 'limit_exceeded' } });
+	producerItems = [
+		{ id: 1, name: 'x'.repeat(TARGET_MANAGEMENT_RESPONSE_MAX_BYTES.tags), version: 1, createdAt: 1, updatedAt: 1 },
+	];
+	await readProducerList('/api/v1/targets/tags');
+	assert.deepEqual(producerResult, { status: 413, body: { code: 'limit_exceeded' } });
+	producerItems = Array.from({ length: TARGET_MANAGEMENT_MAX_ITEMS }, (_, index) => ({
+		id: index + 1,
+		name: '\u0001'.repeat(128),
+		version: Number.MAX_SAFE_INTEGER,
+		createdAt: Number.MAX_SAFE_INTEGER,
+		updatedAt: Number.MAX_SAFE_INTEGER,
+	}));
+	await readProducerList('/api/v1/targets/tags');
+	assert.equal(producerResult.status, 200);
+	const { readTagList } = await import('../../packages/shared/dist/targets/tags/http-codec.js');
+	assert.equal(readTagList(producerResult.body).length, TARGET_MANAGEMENT_MAX_ITEMS);
+	producerItems = [];
+	console.log('Tags controlled producer checks: 3 PASS (count, bytes, maximum valid escaped collection)');
 
-const hostListRoute = producerRoutes.find(
-	(route) => route.method === 'GET' && route.path === '/api/v1/targets/host-keys',
-);
-producerItems = Array.from({ length: TARGET_MANAGEMENT_MAX_ITEMS + 1 }, (_, index) => ({
-	host: index + '.example',
-	port: 22,
-	fingerprint: 'SHA256:' + 'A'.repeat(43),
-	confirmedAt: 0,
-}));
-await hostListRoute.handle(producerContext);
-assert.deepEqual(producerResult, { status: 413, body: { code: 'limit_exceeded' } });
-producerItems = [
-	{
-		host: 'x'.repeat(TARGET_MANAGEMENT_RESPONSE_MAX_BYTES['host-keys']),
+	producerItems = Array.from({ length: TARGET_MANAGEMENT_MAX_ITEMS + 1 }, (_, index) => ({
+		host: index + '.example',
 		port: 22,
 		fingerprint: 'SHA256:' + 'A'.repeat(43),
 		confirmedAt: 0,
-	},
-];
-await hostListRoute.handle(producerContext);
-assert.deepEqual(producerResult, { status: 413, body: { code: 'limit_exceeded' } });
-producerItems = Array.from({ length: TARGET_MANAGEMENT_MAX_ITEMS }, (_, index) => ({
-	host: String(index).padStart(5, '0') + '\\'.repeat(248),
-	port: 65535,
-	fingerprint: 'SHA256:' + 'A'.repeat(43),
-	confirmedAt: Number.MAX_SAFE_INTEGER,
-}));
-await hostListRoute.handle(producerContext);
-assert.equal(producerResult.status, 200);
-const { readHostKeyList } = await import('../../packages/shared/dist/targets/host-keys/http-codec.js');
-assert.equal(readHostKeyList(producerResult.body).length, TARGET_MANAGEMENT_MAX_ITEMS);
-producerItems = [];
-console.log('Host Key controlled producer checks: 3 PASS (count, bytes, maximum valid escaped collection)');
+	}));
+	await readProducerList('/api/v1/targets/host-keys');
+	assert.deepEqual(producerResult, { status: 413, body: { code: 'limit_exceeded' } });
+	producerItems = [
+		{
+			host: 'x'.repeat(TARGET_MANAGEMENT_RESPONSE_MAX_BYTES['host-keys']),
+			port: 22,
+			fingerprint: 'SHA256:' + 'A'.repeat(43),
+			confirmedAt: 0,
+		},
+	];
+	await readProducerList('/api/v1/targets/host-keys');
+	assert.deepEqual(producerResult, { status: 413, body: { code: 'limit_exceeded' } });
+	producerItems = Array.from({ length: TARGET_MANAGEMENT_MAX_ITEMS }, (_, index) => ({
+		host: String(index).padStart(5, '0') + '\\'.repeat(248),
+		port: 65535,
+		fingerprint: 'SHA256:' + 'A'.repeat(43),
+		confirmedAt: Number.MAX_SAFE_INTEGER,
+	}));
+	await readProducerList('/api/v1/targets/host-keys');
+	assert.equal(producerResult.status, 200);
+	const { readHostKeyList } = await import('../../packages/shared/dist/targets/host-keys/http-codec.js');
+	assert.equal(readHostKeyList(producerResult.body).length, TARGET_MANAGEMENT_MAX_ITEMS);
+	producerItems = [];
+	console.log('Host Key controlled producer checks: 3 PASS (count, bytes, maximum valid escaped collection)');
 
-const connectionListRoute = producerRoutes.find(
-	(route) => route.method === 'GET' && route.path === '/api/v1/targets/connections',
-);
-const producerConnection = {
-	id: 1,
-	version: 1,
-	createdAt: 0,
-	updatedAt: 0,
-	lastConnectedAt: null,
-	name: 'connection',
-	type: 'SSH',
-	host: 'localhost',
-	port: 22,
-	username: 'user',
-	route: 'direct',
-	proxyId: null,
-	notes: null,
-	tagIds: [],
-	jumpIds: [],
-};
-producerItems = Array.from({ length: TARGET_MANAGEMENT_MAX_ITEMS + 1 }, (_, index) => ({
-	...producerConnection,
-	id: index + 1,
-}));
-await connectionListRoute.handle(producerContext);
-assert.deepEqual(producerResult, { status: 413, body: { code: 'limit_exceeded' } });
-producerItems = Array.from({ length: TARGET_MANAGEMENT_MAX_ITEMS }, (_, index) => ({
-	...producerConnection,
-	id: index + 1,
-}));
-await connectionListRoute.handle(producerContext);
-const { readConnectionList } = await import('../../packages/shared/dist/targets/connections/http-codec.js');
-assert.equal(producerResult.status, 200);
-assert.equal(readConnectionList(producerResult.body).length, TARGET_MANAGEMENT_MAX_ITEMS);
-producerItems = [];
-console.log('Connections controlled producer checks: 2 PASS (count refusal and complete maximum-size collection)');
+	const producerConnection = {
+		id: 1,
+		version: 1,
+		createdAt: 0,
+		updatedAt: 0,
+		lastConnectedAt: null,
+		name: 'connection',
+		type: 'SSH',
+		host: 'localhost',
+		port: 22,
+		username: 'user',
+		route: 'direct',
+		proxyId: null,
+		notes: null,
+		tagIds: [],
+		jumpIds: [],
+	};
+	producerItems = Array.from({ length: TARGET_MANAGEMENT_MAX_ITEMS + 1 }, (_, index) => ({
+		...producerConnection,
+		id: index + 1,
+	}));
+	await readProducerList('/api/v1/targets/connections');
+	assert.deepEqual(producerResult, { status: 413, body: { code: 'limit_exceeded' } });
+	producerItems = Array.from({ length: TARGET_MANAGEMENT_MAX_ITEMS }, (_, index) => ({
+		...producerConnection,
+		id: index + 1,
+	}));
+	await readProducerList('/api/v1/targets/connections');
+	const { readConnectionList } = await import('../../packages/shared/dist/targets/connections/http-codec.js');
+	assert.equal(producerResult.status, 200);
+	assert.equal(readConnectionList(producerResult.body).length, TARGET_MANAGEMENT_MAX_ITEMS);
+	producerItems = [];
+	console.log('Connections controlled producer checks: 2 PASS (count refusal and complete maximum-size collection)');
+} finally {
+	await producerServer.close();
+}
 
 const root = await mkdtemp(join(tmpdir(), 'nexus-f1-targets-'));
 const encryptionKey = randomBytes(32);

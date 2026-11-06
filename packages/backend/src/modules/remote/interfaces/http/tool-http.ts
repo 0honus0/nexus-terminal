@@ -1,3 +1,4 @@
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
 import {
 	InvalidRemoteToolPayload,
@@ -7,7 +8,7 @@ import {
 import { TOOL_BODY_MAX_BYTES, type ToolErrorCode } from '@nexus-terminal/shared/remote/tools/values';
 import type { RemoteToolCheck } from '@nexus-terminal/shared/remote/tools/model';
 import type { RemoteToolInstallResponse, RemoteToolErrorResponse } from '@nexus-terminal/shared/remote/tools/http';
-import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
+import type { HttpRoute, HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
 import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
 import type { RemoteToolService } from '../../tools/service/tool-service.js';
 import { RemoteToolFailure, type ToolCheckIntent } from '../../tools/model/tool-types.js';
@@ -34,22 +35,27 @@ function status(code: ToolErrorCode): number {
 	return code === 'unavailable' || code === 'connection_unavailable' || code === 'shutting_down' ? 503 : 422;
 }
 
-async function handle(ctx: HttpRouteContext, owner: RemoteToolService, installing: boolean): Promise<void> {
+async function handle(
+	request: HttpRequest,
+	reply: HttpReply,
+	owner: RemoteToolService,
+	installing: boolean,
+): Promise<void> {
 	const controller = new AbortController();
 
 	const disconnected = () => controller.abort();
 
-	ctx.response.once('close', disconnected);
+	reply.raw.once('close', disconnected);
 	try {
-		if (ctx.query.size) {
+		if (request.query.size) {
 			throw new InvalidRemoteToolPayload();
 		}
-		const token = ctx.cookie(ACCESS_SESSION_COOKIE_NAME);
-		const body = await ctx.json(controller.signal);
+		const token = readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME);
+		const body = request.body;
 		if (installing) {
 			const command = readRemoteToolInstallRequest(body);
 			const value = await owner.install(token, command.planId, command.password, controller.signal);
-			ctx.send(200, { targetId: value.targetId, ready: true } satisfies RemoteToolInstallResponse);
+			reply.code(200).send({ targetId: value.targetId, ready: true } satisfies RemoteToolInstallResponse);
 		} else {
 			const input = readRemoteToolCheckRequest(body);
 			const intent: ToolCheckIntent =
@@ -64,7 +70,7 @@ async function handle(ctx: HttpRouteContext, owner: RemoteToolService, installin
 						};
 			const result = await owner.check(token, intent, controller.signal);
 			const value = result.inspection;
-			ctx.send(200, {
+			reply.code(200).send({
 				targetId: value.targetId,
 				tools: value.tools.map((tool) => tool),
 				missing: value.missing.map((tool) => tool),
@@ -84,9 +90,9 @@ async function handle(ctx: HttpRouteContext, owner: RemoteToolService, installin
 				: cause instanceof RemoteToolFailure
 					? cause.code
 					: 'unavailable';
-		ctx.send(status(code), { code } satisfies RemoteToolErrorResponse);
+		reply.code(status(code)).send({ code } satisfies RemoteToolErrorResponse);
 	} finally {
-		ctx.response.off('close', disconnected);
+		reply.raw.off('close', disconnected);
 	}
 }
 
@@ -94,17 +100,17 @@ export function createRemoteToolRoutes(owner: RemoteToolService): HttpRoute[] {
 	return [
 		{
 			method: 'POST',
-			path: '/api/v1/remote/tools/check',
-			maxBodyBytes: TOOL_BODY_MAX_BYTES,
+			url: '/api/v1/remote/tools/check',
+			bodyLimit: TOOL_BODY_MAX_BYTES,
 
-			handle: (ctx) => handle(ctx, owner, false),
+			handler: (request, reply) => handle(request, reply, owner, false),
 		},
 		{
 			method: 'POST',
-			path: '/api/v1/remote/tools/install',
-			maxBodyBytes: TOOL_BODY_MAX_BYTES,
+			url: '/api/v1/remote/tools/install',
+			bodyLimit: TOOL_BODY_MAX_BYTES,
 
-			handle: (ctx) => handle(ctx, owner, true),
+			handler: (request, reply) => handle(request, reply, owner, true),
 		},
 	];
 }

@@ -1,23 +1,43 @@
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
-import type { HttpRoute } from '../../../../platform/http/http-types.js';
+import type { HttpRoute, HttpReply } from '../../../../platform/http/http-types.js';
 import type { DiagnosticService } from '../../diagnostics/service/diagnostic-service.js';
 import { SystemStatusFailure } from '../../system-failure.js';
 import type { HostDiagnosticResponse } from '@nexus-terminal/shared/system/diagnostics/http';
 import { HOST_DIAGNOSTIC_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/system/diagnostics/values';
 
+function sendDiagnosticError(reply: HttpReply, error: unknown): void {
+	const code =
+		error instanceof SystemStatusFailure && (error.code === 'unauthenticated' || error.code === 'forbidden')
+			? error.code
+			: 'unavailable';
+	reply.code(code === 'unauthenticated' ? 401 : code === 'forbidden' ? 403 : 503).send({ code });
+}
+
 export function createDiagnosticRoutes(service: DiagnosticService): HttpRoute[] {
 	return [
 		{
 			method: 'GET',
-			path: '/api/v1/system/diagnostics',
+			url: '/api/v1/system/diagnostics',
 
-			handle: async (ctx) => {
+			errorHandler(error, _request, reply) {
+				if (!(error instanceof SystemStatusFailure)) {
+					throw error;
+				}
+				reply.removeHeader('Set-Cookie');
+				reply.type('application/json; charset=utf-8').serializer(JSON.stringify);
+				sendDiagnosticError(reply, error);
+			},
+
+			handler: async (request, reply) => {
 				try {
-					if (ctx.query.size) {
-						ctx.send(400, { code: 'invalid_input' });
+					if (request.query.size) {
+						reply.code(400).send({ code: 'invalid_input' });
 						return;
 					}
-					const value = await service.collectAuthenticated(ctx.cookie(ACCESS_SESSION_COOKIE_NAME));
+					const value = await service.collectAuthenticated(
+						readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
+					);
 					const response: HostDiagnosticResponse = {
 						diagnostics: {
 							collectedAt: value.collectedAt,
@@ -49,17 +69,21 @@ export function createDiagnosticRoutes(service: DiagnosticService): HttpRoute[] 
 							},
 						},
 					};
-					if (Buffer.byteLength(JSON.stringify(response), 'utf8') > HOST_DIAGNOSTIC_MAX_RESPONSE_BYTES) {
-						throw new Error('Diagnostic response budget exceeded');
-					}
-					ctx.send(200, response);
+					reply.type('application/json; charset=utf-8').serializer((payload) => {
+						let encoded: string;
+						try {
+							encoded = JSON.stringify(payload);
+						} catch {
+							throw new SystemStatusFailure('remote_unavailable');
+						}
+						if (Buffer.byteLength(encoded, 'utf8') > HOST_DIAGNOSTIC_MAX_RESPONSE_BYTES) {
+							throw new SystemStatusFailure('remote_unavailable');
+						}
+						return encoded;
+					});
+					reply.code(200).send(response);
 				} catch (error) {
-					const code =
-						error instanceof SystemStatusFailure &&
-						(error.code === 'unauthenticated' || error.code === 'forbidden')
-							? error.code
-							: 'unavailable';
-					ctx.send(code === 'unauthenticated' ? 401 : code === 'forbidden' ? 403 : 503, { code });
+					sendDiagnosticError(reply, error);
 				}
 			},
 		},

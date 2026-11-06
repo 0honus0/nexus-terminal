@@ -74,26 +74,19 @@ export class NodeProcessDiagnostic implements ProcessDiagnosticSource {
 			this.observedModules.add(id);
 			this.httpRequests.set({ module: id }, 0);
 		}
+		const collector = this;
 		return routes.map((route) => ({
-			method: route.method,
-			path: route.path,
-			...(route.maxBodyBytes === undefined ? {} : { maxBodyBytes: route.maxBodyBytes }),
-			...(route.maxPathParameterBytes === undefined
-				? {}
-				: { maxPathParameterBytes: route.maxPathParameterBytes }),
-			...(route.pathParameterAlphabet === undefined
-				? {}
-				: { pathParameterAlphabet: route.pathParameterAlphabet }),
+			...route,
 
-			handle: async (context) => {
-				if (!this.closed) {
-					this.httpRequests.inc({ module: id });
+			async handler(request, reply) {
+				if (!collector.closed) {
+					collector.httpRequests.inc({ module: id });
 				}
 				try {
-					await route.handle(context);
+					return await route.handler.call(this, request, reply);
 				} finally {
-					if (!this.closed) {
-						this.httpRequests.dec({ module: id });
+					if (!collector.closed) {
+						collector.httpRequests.dec({ module: id });
 					}
 				}
 			},

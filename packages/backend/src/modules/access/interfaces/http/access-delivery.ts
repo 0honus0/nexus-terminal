@@ -1,16 +1,17 @@
-import type { HttpRouteContext } from '../../../../platform/http/http-types.js';
+import type { HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
 import { accessBoundary } from '../../access-errors.js';
 
 /** Retain committed credentials until HTTP finishes handing off the response. */
 export async function deliverAccessResult<T>(
-	context: HttpRouteContext,
+	request: HttpRequest,
+	reply: HttpReply,
 	issue: (signal: AbortSignal) => Promise<T>,
 	send: (issued: T) => void,
 	revoke: (issued: T) => Promise<void>,
 ): Promise<void> {
 	const cancellation = new AbortController();
 	let responseFinished = false;
-	const socket = context.response.socket;
+	const socket = reply.raw.socket;
 
 	let completed: (delivered: boolean) => void = () => undefined;
 
@@ -19,7 +20,12 @@ export async function deliverAccessResult<T>(
 	});
 
 	const onFinish = () => {
-		responseFinished = !context.response.destroyed && socket?.destroyed !== true && !context.request.aborted;
+		responseFinished =
+			reply.raw.statusCode >= 200 &&
+			reply.raw.statusCode < 300 &&
+			!reply.raw.destroyed &&
+			socket?.destroyed !== true &&
+			!request.raw.aborted;
 		if (!responseFinished) {
 			cancellation.abort();
 		}
@@ -34,11 +40,11 @@ export async function deliverAccessResult<T>(
 		completed(responseFinished);
 	};
 
-	context.response.once('finish', onFinish);
-	context.response.once('close', onClose);
+	reply.raw.once('finish', onFinish);
+	reply.raw.once('close', onClose);
 	socket?.once('close', onClose);
-	context.request.once('aborted', onClose);
-	if (context.response.destroyed || socket?.destroyed || context.request.aborted) {
+	request.raw.once('aborted', onClose);
+	if (reply.raw.destroyed || socket?.destroyed || request.raw.aborted) {
 		cancellation.abort();
 	}
 
@@ -56,7 +62,7 @@ export async function deliverAccessResult<T>(
 
 	try {
 		issued = { value: await accessBoundary(() => issue(cancellation.signal)) };
-		if (cancellation.signal.aborted || context.response.destroyed) {
+		if (cancellation.signal.aborted || reply.raw.destroyed) {
 			await cleanup();
 			return;
 		}
@@ -72,9 +78,9 @@ export async function deliverAccessResult<T>(
 		}
 		throw error;
 	} finally {
-		context.response.off('finish', onFinish);
-		context.response.off('close', onClose);
+		reply.raw.off('finish', onFinish);
+		reply.raw.off('close', onClose);
 		socket?.off('close', onClose);
-		context.request.off('aborted', onClose);
+		request.raw.off('aborted', onClose);
 	}
 }

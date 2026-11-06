@@ -9,7 +9,7 @@ import { isIP } from 'node:net';
 import proxyaddr from 'proxy-addr';
 import { WebSocket, WebSocketServer } from 'ws';
 import type { HttpServerOptions, HttpListener, HttpSuspension } from './http-types.js';
-import { firstHeader, validateOrigin, sendJson } from './http-request.js';
+import { firstHeader, validateOrigin } from './http-request.js';
 import { compileHttpBindings } from './http-bindings.js';
 import { HttpLifecycleFailure } from './http-errors.js';
 import { createWebSocketChannel } from './websocket-channel.js';
@@ -18,7 +18,7 @@ import { FailureSummary } from '../lifecycle/failure-summary.js';
 export async function openHttpListener(options: HttpServerOptions): Promise<HttpListener> {
 	validateHttpOptions(options);
 	const trust = proxyaddr.compile([...options.trustedProxies]);
-	let bindings = compileHttpBindings(options.publicOrigin, options, trust, options.logger);
+	let bindings = await compileHttpBindings(options.publicOrigin, options, trust, options.logger);
 	const websocketServer = new WebSocketServer({
 		noServer: true,
 		// Raw third-party protocols may remove their socket 'close' listeners.
@@ -36,11 +36,18 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 	let generation = 0;
 	let suspension: HttpSuspension | null = null;
 	const activeRequests = new Set<Promise<void>>();
+	const retiredBindings = new Set<Promise<void>>();
+	const bindingFailures = new FailureSummary();
 	const requests = new Map<IncomingMessage, { response: ServerResponse; task: Promise<void> }>();
 
 	const server: Server = createServer((request, response) => {
 		if (!accepting) {
-			sendJson(response, 503, { code: 'shutting_down' }, { Connection: 'close' });
+			response.writeHead(503, {
+				'Content-Type': 'application/json; charset=utf-8',
+				'Cache-Control': 'no-store',
+				Connection: 'close',
+			});
+			response.end('{"code":"shutting_down"}');
 			return;
 		}
 		const completed = waitForResponse(response, request);
@@ -108,6 +115,7 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 				return;
 			}
 			routePath = route.path;
+			admittedBindings.prepareUpgradeCookies(request);
 			let authorized: boolean;
 			try {
 				authorized = await route.authorize(request, url, proxyaddr(request, trust));
@@ -224,7 +232,18 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 			true,
 		);
 	});
-	await listen(server, options);
+	try {
+		await listen(server, options);
+	} catch (error) {
+		const cleanup = await Promise.allSettled([
+			bindings.close(),
+			new Promise<void>((resolve) => websocketServer.close(() => resolve())),
+		]);
+		throw new AggregateError(
+			[error, ...cleanup.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []))],
+			'HTTP listener startup failed',
+		);
+	}
 	// Transport control frames cover ordinary and raw routes alike. Browsers
 	// answer Ping without a page timer, including when the page is in background.
 	const keepaliveTimer = setInterval(() => {
@@ -291,6 +310,7 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 		let drainPromise: Promise<void> | null = null;
 		let drained = false;
 		let replaced = false;
+		let replacing = false;
 
 		function assertCurrent(): void {
 			if (closePromise || suspension !== lease) {
@@ -328,12 +348,28 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 				return drainPromise;
 			},
 
-			replace(replacement): void {
+			async replace(replacement): Promise<void> {
 				assertCurrent();
-				if (!drained || replaced) {
+				if (!drained || replaced || replacing) {
 					throw new HttpLifecycleFailure('invalid_state');
 				}
-				bindings = compileHttpBindings(options.publicOrigin, replacement, trust, options.logger);
+				replacing = true;
+				const prepared = await compileHttpBindings(options.publicOrigin, replacement, trust, options.logger);
+				try {
+					assertCurrent();
+				} catch (error) {
+					await prepared.close();
+					throw error;
+				}
+				const previous = bindings;
+				bindings = prepared;
+				// The restore response still belongs to the retired generation. Closing
+				// it here would wait for the very request executing replace().
+				const retirement = Promise.allSettled([...activeRequests]).then(() => previous.close());
+				retiredBindings.add(retirement);
+				void retirement
+					.catch((error: unknown) => bindingFailures.record(error))
+					.finally(() => retiredBindings.delete(retirement));
 				replaced = true;
 			},
 
@@ -363,17 +399,28 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 			accepting = false;
 			clearInterval(keepaliveTimer);
 			generation += 1;
-			closePromise = Promise.resolve().then(() =>
-				closeHttpResources({
-					server,
-					websocketServer,
-					activeSockets,
-					pendingUpgrades,
-					activeRequests,
-					websocketTasks,
-					websocketFailures,
-				}),
-			);
+			closePromise = Promise.resolve().then(async () => {
+				const outcomes = await Promise.allSettled([
+					closeHttpResources({
+						server,
+						websocketServer,
+						activeSockets,
+						pendingUpgrades,
+						activeRequests,
+						websocketTasks,
+						websocketFailures,
+					}),
+				]);
+				await Promise.allSettled([...retiredBindings]);
+				const runtime = await Promise.allSettled([bindings.close()]);
+				const failures = [...outcomes, ...runtime].flatMap((result) =>
+					result.status === 'rejected' ? [result.reason] : [],
+				);
+				failures.push(...bindingFailures.errors());
+				if (failures.length) {
+					throw new AggregateError(failures, 'HTTP framework shutdown failed');
+				}
+			});
 			return closePromise;
 		},
 	};

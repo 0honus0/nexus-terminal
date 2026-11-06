@@ -1,3 +1,5 @@
+import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
+import { readRequestCookie } from '../platform/http/http-request.js';
 import { sqliteSchemaSignature } from '../platform/storage/sqlite/schema-signature.js';
 import type { Logger } from '../platform/logging/logger.js';
 import { logDiagnostic } from '../platform/logging/diagnostic-log.js';
@@ -258,55 +260,71 @@ export async function registerModules({
 
 		const admitHttp = (routes: HttpRoute[]): HttpRoute[] =>
 			routes.map((route) => ({
-				method: route.method,
-				path: route.path,
-				...(route.maxBodyBytes === undefined ? {} : { maxBodyBytes: route.maxBodyBytes }),
-				...(route.maxPathParameterBytes === undefined
-					? {}
-					: { maxPathParameterBytes: route.maxPathParameterBytes }),
-				...(route.pathParameterAlphabet === undefined
-					? {}
-					: { pathParameterAlphabet: route.pathParameterAlphabet }),
-
-				handle: async (context) => {
-					let allowed: boolean;
-					try {
-						const authenticationRoute =
-							route.path === '/api/v1/auth/login' ||
-							route.path === '/api/v1/auth/login/2fa' ||
-							route.path === '/api/v1/auth/passkey/authentication-options' ||
-							route.path === '/api/v1/auth/passkey/authenticate' ||
-							route.path === '/api/v1/auth/passkey/has-configured' ||
-							route.path === '/api/v1/auth/status' ||
-							route.path === '/api/v1/auth/logout' ||
-							route.path === '/api/v1/settings/ip-blacklist';
-						allowed = await (authenticationRoute
-							? access.publicApi.admitAuthenticationSource(context.sourceIp)
-							: access.publicApi.admitSource(context.sourceIp));
-					} catch (error) {
-						const code =
-							error instanceof AccessOperationError &&
-							(error.code === 'storage_unavailable' || error.code === 'operation_unknown')
-								? error.code
-								: 'internal_failure';
-						context.send(503, { code });
-						return;
-					}
-					if (!allowed) {
-						await operations.publicApi.publish({
-							key: randomUUID(),
-							event: 'IP_BLOCKED',
-							userId: null,
-							subjectId: null,
-							sourceIp: context.sourceIp,
-							route: route.path,
-							statusCode: 403,
-						});
-						context.send(403, { code: 'forbidden' });
-						return;
-					}
-					await route.handle(context);
-				},
+				...route,
+				onRequest: [
+					async (request, reply) => {
+						let allowed: boolean;
+						try {
+							const authenticationRoute =
+								route.url === '/api/v1/auth/login' ||
+								route.url === '/api/v1/auth/login/2fa' ||
+								route.url === '/api/v1/auth/passkey/authentication-options' ||
+								route.url === '/api/v1/auth/passkey/authenticate' ||
+								route.url === '/api/v1/auth/passkey/has-configured' ||
+								route.url === '/api/v1/auth/status' ||
+								route.url === '/api/v1/auth/logout' ||
+								route.url === '/api/v1/settings/ip-blacklist';
+							allowed = await (authenticationRoute
+								? access.publicApi.admitAuthenticationSource(request.ip)
+								: access.publicApi.admitSource(request.ip));
+						} catch (error) {
+							const code =
+								error instanceof AccessOperationError &&
+								(error.code === 'storage_unavailable' || error.code === 'operation_unknown')
+									? error.code
+									: 'internal_failure';
+							return reply.code(503).send({ code });
+						}
+						if (!allowed) {
+							await operations.publicApi.publish({
+								key: randomUUID(),
+								event: 'IP_BLOCKED',
+								userId: null,
+								subjectId: null,
+								sourceIp: request.ip,
+								route: route.url,
+								statusCode: 403,
+							});
+							return reply.code(403).send({ code: 'forbidden' });
+						}
+					},
+					...(Array.isArray(route.onRequest) ? route.onRequest : route.onRequest ? [route.onRequest] : []),
+					async (request, reply) => {
+						// Fastify parses JSON before the handler. Reject unauthenticated application
+						// writes before buffering; owners revalidate after parsing/at their transaction.
+						const applicationWrite =
+							!route.url.startsWith('/api/v1/auth/') &&
+							['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method);
+						if (applicationWrite) {
+							try {
+								if (
+									!(await access.publicApi.authenticate(
+										readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
+									))
+								) {
+									return reply.code(401).send({ code: 'unauthenticated' });
+								}
+							} catch (error) {
+								const code =
+									error instanceof AccessOperationError &&
+									(error.code === 'storage_unavailable' || error.code === 'operation_unknown')
+										? error.code
+										: 'internal_failure';
+								return reply.code(503).send({ code });
+							}
+						}
+					},
+				],
 			}));
 
 		const admitWebSocket = (routes: HttpWebSocketRoute[]): HttpWebSocketRoute[] =>

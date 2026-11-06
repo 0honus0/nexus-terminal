@@ -1,4 +1,5 @@
-import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
+import type { HttpRoute, HttpRequest } from '../../../../platform/http/http-types.js';
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
 import type { AccessPublicApi } from '../../../access/public.js';
 import { AccessOperationError } from '../../../access/public-errors.js';
@@ -45,8 +46,8 @@ const STATUS: Record<OperationsErrorCode, number> = {
 	shutting_down: 503,
 };
 
-async function authenticate(ctx: HttpRouteContext, access: AccessPublicApi): Promise<NotificationActor> {
-	const token = ctx.cookie(ACCESS_SESSION_COOKIE_NAME);
+async function authenticate(ctx: HttpRequest, access: AccessPublicApi): Promise<NotificationActor> {
+	const token = readRequestCookie(ctx.raw, ACCESS_SESSION_COOKIE_NAME);
 	const identity = await access.authenticate(token);
 	if (!token || !identity) {
 		throw new OperationsFailure('unauthenticated');
@@ -84,14 +85,24 @@ export function createOperationsRoutes(
 	function route(
 		method: HttpRoute['method'],
 		path: string,
-		work: (ctx: HttpRouteContext, actor: NotificationActor) => Promise<unknown>,
+		work: (ctx: HttpRequest, actor: NotificationActor) => Promise<unknown>,
 	): HttpRoute {
 		return {
 			method,
-			path,
-			maxBodyBytes: OPERATIONS_BODY_MAX_BYTES,
+			url: path,
+			bodyLimit: OPERATIONS_BODY_MAX_BYTES,
 
-			handle: async (ctx) => {
+			errorHandler(error, _request, reply) {
+				if (!(error instanceof OperationsFailure)) {
+					throw error;
+				}
+				reply.removeHeader('Set-Cookie');
+				reply.type('application/json; charset=utf-8').serializer(JSON.stringify);
+				const value = code(error);
+				reply.code(STATUS[value]).send({ code: value });
+			},
+
+			handler: async (ctx, reply) => {
 				let completed = false;
 				try {
 					const actor = await authenticate(ctx, access);
@@ -108,24 +119,33 @@ export function createOperationsRoutes(
 					if (current.userId !== actor.userId || current.token !== actor.token) {
 						throw new OperationsFailure('forbidden');
 					}
-					if (Buffer.byteLength(JSON.stringify(body), 'utf8') > OPERATIONS_RESPONSE_MAX_BYTES) {
-						throw new OperationsFailure('limit_exceeded');
-					}
-					if (ctx.response.destroyed || ctx.response.writableEnded) {
+					reply.type('application/json; charset=utf-8').serializer((payload) => {
+						let encoded: string;
+						try {
+							encoded = JSON.stringify(payload);
+						} catch {
+							throw new OperationsFailure(completed ? 'operation_unknown' : 'internal_failure');
+						}
+						if (Buffer.byteLength(encoded, 'utf8') > OPERATIONS_RESPONSE_MAX_BYTES) {
+							throw new OperationsFailure(completed ? 'operation_unknown' : 'limit_exceeded');
+						}
+						return encoded;
+					});
+					if (reply.raw.destroyed || reply.raw.writableEnded) {
 						return;
 					}
-					ctx.send(200, body);
+					reply.code(200).send(body);
 				} catch (error) {
 					if (!completed && error instanceof HttpInputFailure) {
 						throw error;
 					}
-					if (ctx.response.headersSent) {
-						ctx.response.destroy();
+					if (reply.raw.headersSent) {
+						reply.raw.destroy();
 						return;
 					}
-					if (!ctx.response.destroyed && !ctx.response.writableEnded) {
+					if (!reply.raw.destroyed && !reply.raw.writableEnded) {
 						const value = completed ? 'operation_unknown' : code(error);
-						ctx.send(STATUS[value], { code: value });
+						reply.code(STATUS[value]).send({ code: value });
 					}
 				}
 			},
@@ -155,7 +175,7 @@ export function createOperationsRoutes(
 			};
 		}),
 		route('PUT', prefix + '/logging', async (ctx, actor) => {
-			const input = readBackendLoggingUpdate(await ctx.json());
+			const input = readBackendLoggingUpdate(ctx.body);
 			const value = await logging.update(
 				{ userId: actor.userId, token: actor.token },
 				input.expectedVersion,
@@ -169,7 +189,7 @@ export function createOperationsRoutes(
 			};
 		}),
 		route('POST', prefix + '/notifications/test-unsaved', async (ctx, actor) => {
-			const input = readNotificationUnsavedTest(await ctx.json());
+			const input = readNotificationUnsavedTest(ctx.body);
 			return {
 				delivery: toDeliveryView(
 					await notifications.testUnsaved(actor, toNotificationConfigChange(input.config)),
@@ -181,16 +201,11 @@ export function createOperationsRoutes(
 		})),
 		route('POST', prefix + '/notifications', async (ctx, actor) => ({
 			setting: toNotificationView(
-				await notifications.change(
-					actor,
-					null,
-					0,
-					toNotificationChange(readNotificationCreate(await ctx.json())),
-				),
+				await notifications.change(actor, null, 0, toNotificationChange(readNotificationCreate(ctx.body))),
 			),
 		})),
 		route('PUT', prefix + '/notifications/:id', async (ctx, actor) => {
-			const input = readNotificationUpdate(await ctx.json());
+			const input = readNotificationUpdate(ctx.body);
 			return {
 				setting: toNotificationView(
 					await notifications.change(
@@ -203,12 +218,12 @@ export function createOperationsRoutes(
 			};
 		}),
 		route('DELETE', prefix + '/notifications/:id', async (ctx, actor) => {
-			const input = readNotificationVersion(await ctx.json());
+			const input = readNotificationVersion(ctx.body);
 			await notifications.delete(actor, uuid(ctx.params.id), input.expectedVersion);
 			return { deleted: true };
 		}),
 		route('POST', prefix + '/notifications/:id/test', async (ctx, actor) => {
-			record(await ctx.json(), []);
+			record(ctx.body, []);
 			return { delivery: toDeliveryView(await notifications.test(actor, uuid(ctx.params.id))) };
 		}),
 		route('GET', prefix + '/notification-deliveries', async (ctx) => {

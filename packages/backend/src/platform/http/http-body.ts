@@ -1,7 +1,6 @@
-import formidable, { multipart } from 'formidable';
-import { Readable } from 'node:stream';
-import type { IncomingMessage } from 'node:http';
+import type {} from '@fastify/multipart';
 import { HttpInputFailure } from './http-errors.js';
+import type { HttpRequest, HttpReply } from './http-types.js';
 
 export interface MultipartPart {
 	name: string;
@@ -11,120 +10,167 @@ export interface MultipartPart {
 	bytes: Uint8Array;
 }
 
-/** Bounded in-memory ingress. The caller owns the request deadline and disconnect signal. */
-export async function readBodyBytes(request: IncomingMessage, maxBytes: number, signal: AbortSignal): Promise<Buffer> {
-	const length = request.headers['content-length'];
-	if (length !== undefined && (!/^(0|[1-9]\d*)$/.test(length) || Number(length) > maxBytes)) {
-		throw new HttpInputFailure(413, 'body_too_large');
-	}
-
-	const abort = () => request.destroy();
-
-	signal.throwIfAborted();
-	signal.addEventListener('abort', abort, { once: true });
-	const chunks: Buffer[] = [];
-	try {
-		let received = 0;
-		for await (const raw of request) {
-			if (!Buffer.isBuffer(raw)) {
-				throw new HttpInputFailure(400, 'invalid_body');
-			}
-			chunks.push(raw);
-			signal.throwIfAborted();
-			received += raw.length;
-			if (received > maxBytes) {
-				throw new HttpInputFailure(413, 'body_too_large');
-			}
-		}
-		signal.throwIfAborted();
-		if (length !== undefined && received !== Number(length)) {
-			throw new HttpInputFailure(400, 'invalid_body');
-		}
-		return Buffer.concat(chunks, received);
-	} finally {
-		signal.removeEventListener('abort', abort);
-		for (const chunk of chunks) {
-			chunk.fill(0);
-		}
-	}
+export interface MultipartLimits {
+	maxParts: number;
+	maxFileBytes: number;
+	maxFieldBytes: number;
 }
 
-/** Formidable consumes bounded in-memory input; overriding every part prevents temporary files. */
-export async function decodeMultipart(
-	bytes: Buffer,
-	contentType: string,
-	maxParts: number,
+/**
+ * Consume native multipart parts after authorization, enforcing the encoded request budget
+ * and each part's limit while clearing partial secrets on failure.
+ * Every part is streamed as a file so fields retain exact bytes for strict business decoding.
+ */
+export async function readMultipart(
+	request: HttpRequest,
+	reply: HttpReply,
+	limits: MultipartLimits,
 	signal: AbortSignal,
 ): Promise<MultipartPart[]> {
-	const source = Object.assign(Readable.from([bytes]), {
-		headers: { 'content-type': contentType, 'content-length': String(bytes.length) },
-	});
-	const form = formidable({ enabledPlugins: [multipart] });
+	signal.throwIfAborted();
+	if (!request.isMultipart()) {
+		throw new HttpInputFailure(415, 'unsupported_media_type');
+	}
+	const maxBytes = request.routeOptions.config.multipartBodyLimit ?? request.routeOptions.bodyLimit;
+	const length = request.headers['content-length'];
+	if (length !== undefined && (!/^(0|[1-9]\d*)$/u.test(length) || Number(length) > maxBytes)) {
+		throw new HttpInputFailure(413, 'body_too_large');
+	}
 	const parts: MultipartPart[] = [];
-	const owned: Buffer[] = [];
-	let failure: HttpInputFailure | null = null;
-	form.onPart = (part) => {
-		const name = part.name;
-		const filename = part.originalFilename;
-		if (
-			!name ||
-			name.length > 128 ||
-			/[\r\n\0]/u.test(name) ||
-			(filename !== null && (filename.length > 1024 || /[\r\n\0]/u.test(filename)))
-		) {
-			failure ??= new HttpInputFailure(400, 'invalid_multipart');
+	let invalidMetadata = false;
+	let receivedBytes = 0;
+	let ingressFailure: HttpInputFailure | null = null;
+
+	const count = (chunk: Buffer) => {
+		receivedBytes += chunk.byteLength;
+		if (receivedBytes > maxBytes && ingressFailure === null) {
+			ingressFailure = new HttpInputFailure(413, 'body_too_large');
+			request.raw.destroy(ingressFailure);
 		}
-		if (parts.length >= maxParts) {
-			failure ??= new HttpInputFailure(400, 'invalid_multipart');
-			return;
-		}
-		const result: MultipartPart = {
-			name: name ?? '',
-			filename,
-			contentType: part.mimetype?.split(';', 1)[0]?.trim().toLowerCase() ?? null,
-			bytes: new Uint8Array(),
-		};
-		const chunks: Buffer[] = [];
-		parts.push(result);
-		part.on('data', (chunk: unknown) => {
-			if (!Buffer.isBuffer(chunk)) {
-				failure ??= new HttpInputFailure(400, 'invalid_multipart');
-				return;
-			}
-			const copy = Buffer.from(chunk);
-			chunks.push(copy);
-			owned.push(copy);
-		});
-		part.on('end', () => {
-			result.bytes = Buffer.concat(chunks);
-		});
 	};
+
+	const abort = () => request.raw.destroy();
+
+	signal.addEventListener('abort', abort, { once: true });
 	try {
-		signal.throwIfAborted();
-		if (!/^multipart\/form-data(?:\s*;|$)/iu.test(contentType)) {
-			throw new HttpInputFailure(415, 'unsupported_media_type');
+		const source = request.parts({
+			isPartAFile: () => true,
+
+			limits: {
+				parts: limits.maxParts,
+				files: limits.maxParts,
+				fields: limits.maxParts,
+				fileSize: Math.max(limits.maxFileBytes, limits.maxFieldBytes),
+				fieldSize: limits.maxFieldBytes,
+			},
+		});
+		// Async iteration installs the plugin parser synchronously before the stream's next tick.
+		// Do not pipe a second payload: the native multipart plugin consumes request.raw itself.
+		request.raw.prependListener('data', count);
+		for await (const part of source) {
+			signal.throwIfAborted();
+			if (part.type !== 'file') {
+				throw new HttpInputFailure(400, 'invalid_multipart');
+			}
+			const filename = part.filename ?? null;
+			const maxBytes = filename === null ? limits.maxFieldBytes : limits.maxFileBytes;
+			const chunks: Buffer[] = [];
+			let received = 0;
+
+			const partExceeded = () => {
+				ingressFailure ??= new HttpInputFailure(413, 'body_too_large');
+				if (!request.raw.readableEnded) {
+					part.file.destroy(ingressFailure);
+				}
+			};
+
+			part.file.once('limit', partExceeded);
+			try {
+				// The parser may reach its limit before yielding the part, or while
+				// its consumer waits for a boundary that the client never sends.
+				if (part.file.truncated) {
+					partExceeded();
+				}
+				for await (const chunk of part.file) {
+					if (!Buffer.isBuffer(chunk)) {
+						throw new HttpInputFailure(400, 'invalid_multipart');
+					}
+					chunks.push(chunk);
+					signal.throwIfAborted();
+					received += chunk.byteLength;
+					if (received > maxBytes) {
+						throw new HttpInputFailure(413, 'body_too_large');
+					}
+				}
+				signal.throwIfAborted();
+				if (part.file.truncated) {
+					throw new HttpInputFailure(413, 'body_too_large');
+				}
+				parts.push({
+					name: part.fieldname,
+					filename,
+					contentType: part.mimetype?.split(';', 1)[0]?.trim().toLowerCase() ?? null,
+					bytes: Buffer.concat(chunks, received),
+				});
+			} finally {
+				part.file.off('limit', partExceeded);
+				for (const chunk of chunks) {
+					chunk.fill(0);
+				}
+			}
+			if (
+				!part.fieldname ||
+				part.fieldname.length > 128 ||
+				/[\r\n\0]/u.test(part.fieldname) ||
+				(filename !== null && (filename.length > 1024 || /[\r\n\0]/u.test(filename)))
+			) {
+				invalidMetadata = true;
+			}
 		}
-		// Formidable's documented request integration uses only headers and Readable events.
-		// The finite source intentionally has no socket: parsing must not own or destroy the real response.
-		await form.parse(source as IncomingMessage);
 		signal.throwIfAborted();
-		if (failure) {
-			throw failure;
+		if (invalidMetadata) {
+			throw new HttpInputFailure(400, 'invalid_multipart');
 		}
 		return parts;
 	} catch (cause) {
+		// Stop an unfinished parser immediately, but allow the module to deliver its
+		// safe refusal before closing the connection. It must not read an unbounded tail.
+		if (!request.raw.readableEnded) {
+			request.raw.unpipe();
+			request.raw.pause();
+			if (reply.raw.destroyed || reply.raw.writableFinished) {
+				request.raw.destroy();
+			} else {
+				reply.header('Connection', 'close');
+
+				const closed = () => {
+					reply.raw.off('finish', closed);
+					reply.raw.off('close', closed);
+					request.raw.destroy();
+				};
+
+				reply.raw.once('finish', closed);
+				reply.raw.once('close', closed);
+			}
+		}
 		for (const part of parts) {
 			part.bytes.fill(0);
+		}
+		if (ingressFailure) {
+			throw ingressFailure;
+		}
+		if (signal.aborted) {
+			throw signal.reason;
 		}
 		if (cause instanceof HttpInputFailure) {
 			throw cause;
 		}
+		if (cause instanceof request.server.multipartErrors.RequestFileTooLargeError) {
+			throw new HttpInputFailure(413, 'body_too_large', { cause });
+		}
 		throw new HttpInputFailure(400, 'invalid_multipart', { cause });
 	} finally {
-		source.destroy();
-		for (const chunk of owned) {
-			chunk.fill(0);
-		}
-		bytes.fill(0);
+		request.raw.off('data', count);
+		signal.removeEventListener('abort', abort);
 	}
 }

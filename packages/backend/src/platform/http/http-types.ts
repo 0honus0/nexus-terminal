@@ -2,31 +2,32 @@ import type { Logger } from '../logging/logger.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type WebSocket from 'ws';
 
-export interface HttpRouteContext {
-	/** Canonical external origin selected from trusted installation configuration. */
-	readonly origin: string;
-	readonly method: string;
-	readonly path: string;
-	readonly query: URLSearchParams;
-	readonly params: Readonly<Record<string, string>>;
-	readonly request: IncomingMessage;
-	readonly response: ServerResponse;
-	readonly sourceIp: string;
-	json(signal?: AbortSignal): Promise<unknown>;
-	cookie(name: string): string | null;
-	send(status: number, body: unknown, headers?: Readonly<Record<string, string | string[]>>): void;
+import type { FastifyReply, FastifyRequest, RouteOptions, RawServerDefault } from 'fastify';
+
+export interface HttpRouteParameters {
+	Params: Record<string, string>;
+	Querystring: URLSearchParams;
+	Body: unknown;
 }
 
-export interface HttpRoute {
-	readonly method: 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-	readonly path: string;
-	/** Transport-only JSON body budget. Default 16 KiB; large routes must opt in explicitly. */
-	readonly maxBodyBytes?: number;
-	/** Route-owned decoded UTF-8 path parameter budget; default 64 bytes. */
-	readonly maxPathParameterBytes?: number;
-	/** Opaque allows ASCII dots/colons; segment allows text without separators/controls. Routes validate meaning. */
-	readonly pathParameterAlphabet?: 'identifier' | 'opaque' | 'segment';
-	handle(context: HttpRouteContext): Promise<void>;
+/** Native Fastify contracts with the application's strictly decoded query representation. */
+export type HttpRequest = FastifyRequest<HttpRouteParameters>;
+
+export type HttpReply = FastifyReply;
+
+export type HttpRoute = RouteOptions<RawServerDefault, IncomingMessage, ServerResponse, HttpRouteParameters>;
+
+declare module 'fastify' {
+	interface FastifyRequest {
+		/** Validated installation origin, never an unchecked Host or forwarded header. */
+		origin: string;
+	}
+	interface FastifyContextConfig {
+		/** The route owns streaming ingress and its explicit byte/deadline budget. */
+		rawBody?: boolean;
+		/** Enables native multipart parsing with a total encoded budget distinct from JSON bodyLimit. */
+		multipartBodyLimit?: number;
+	}
 }
 
 export interface HttpBindings {
@@ -86,7 +87,7 @@ export interface HttpSuspension {
 	/** Waits for other requests and all old WS tasks; business owners must also be closed by the caller. */
 	drain(): Promise<void>;
 	/** Replace all captured HTTP/WS/origin/admission consumers only after a confirmed drain. */
-	replace(bindings: HttpBindings): void;
+	replace(bindings: HttpBindings): Promise<void>;
 	/** Requires fresh bindings; old closed module consumers cannot be resumed. */
 	resume(): void;
 }

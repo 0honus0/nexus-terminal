@@ -1,4 +1,5 @@
-import type { HttpRouteContext } from '../../../../platform/http/http-types.js';
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
+import type { HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
 import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
 import { InvalidPayload } from '@nexus-terminal/shared/common/http-codec';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
@@ -62,9 +63,13 @@ export async function readAppearanceInput<T>(signal: AbortSignal, load: () => Pr
 	}
 }
 
-export async function authenticate(context: HttpRouteContext, access: AccessPublicApi): Promise<AppearanceActor> {
+export async function authenticate(
+	request: HttpRequest,
+	reply: HttpReply,
+	access: AccessPublicApi,
+): Promise<AppearanceActor> {
 	try {
-		const token = context.cookie(ACCESS_SESSION_COOKIE_NAME);
+		const token = readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME);
 		const identity = await access.authenticate(token);
 		if (!identity || !token) {
 			throw new AppearanceFailure('unauthenticated');
@@ -79,53 +84,89 @@ export async function authenticate(context: HttpRouteContext, access: AccessPubl
 }
 
 export async function revalidate(
-	context: HttpRouteContext,
+	request: HttpRequest,
+	reply: HttpReply,
 	access: AccessPublicApi,
 	actor: AppearanceActor,
 ): Promise<void> {
-	const current = await authenticate(context, access);
+	const current = await authenticate(request, reply, access);
 	if (current.userId !== actor.userId || current.token !== actor.token) {
 		throw new AppearanceFailure('forbidden');
 	}
 }
 
-export function ready(context: HttpRouteContext): void {
-	if (context.response.destroyed || context.response.writableEnded) {
+export function ready(request: HttpRequest, reply: HttpReply): void {
+	if (reply.raw.destroyed || reply.raw.writableEnded) {
 		throw new AppearanceFailure('unavailable');
 	}
 }
 
+export function sendAppearanceJson(reply: HttpReply, body: unknown, mutation = false): void {
+	reply.type('application/json; charset=utf-8').serializer((payload) => {
+		try {
+			const encoded = JSON.stringify(payload);
+			if (encoded === undefined) {
+				throw new AppearanceFailure('internal_failure');
+			}
+			if (Buffer.byteLength(encoded, 'utf8') > APPEARANCE_RESPONSE_MAX_BYTES) {
+				throw new AppearanceFailure('limit_exceeded');
+			}
+			return encoded;
+		} catch (cause) {
+			throw new AppearanceFailure(
+				mutation ? 'operation_unknown' : cause instanceof AppearanceFailure ? cause.code : 'internal_failure',
+				{ cause },
+			);
+		}
+	});
+	reply.code(200).send(body);
+}
+
 export async function deliver(
-	context: HttpRouteContext,
+	request: HttpRequest,
+	reply: HttpReply,
 	access: AccessPublicApi,
 	actor: AppearanceActor,
 	project: () => unknown,
 ): Promise<void> {
 	try {
-		await revalidate(context, access, actor);
+		await revalidate(request, reply, access, actor);
 		const body = project();
-		if (Buffer.byteLength(JSON.stringify(body)) > APPEARANCE_RESPONSE_MAX_BYTES) {
-			throw new AppearanceFailure('limit_exceeded');
-		}
-		ready(context);
-		context.send(200, body);
+		ready(request, reply);
+		sendAppearanceJson(reply, body, true);
 	} catch (cause) {
 		throw new AppearanceFailure('operation_unknown', { cause });
 	}
 }
 
-export async function handle(context: HttpRouteContext, work: () => Promise<void>): Promise<void> {
+function sendFailure(error: unknown, request: HttpRequest, reply: HttpReply): void {
+	const code = codeFor(error);
+	if (reply.sent || reply.raw.headersSent) {
+		reply.raw.destroy();
+	} else if (!reply.raw.destroyed && !reply.raw.writableEnded) {
+		reply
+			.removeHeader('Content-Length')
+			.type('application/json; charset=utf-8')
+			.serializer(JSON.stringify)
+			.code(ERROR_STATUS[code])
+			.send({ code });
+	}
+}
+
+export function appearanceHttpErrorHandler(error: unknown, request: HttpRequest, reply: HttpReply): void {
+	if (!(error instanceof AppearanceFailure)) {
+		throw error;
+	}
+	sendFailure(error, request, reply);
+}
+
+export async function handle(request: HttpRequest, reply: HttpReply, work: () => Promise<void>): Promise<void> {
 	try {
-		if (context.query.size) {
+		if (request.query.size) {
 			throw new AppearanceFailure('invalid_input');
 		}
 		await work();
 	} catch (error) {
-		const code = codeFor(error);
-		if (context.response.headersSent) {
-			context.response.destroy();
-		} else if (!context.response.destroyed && !context.response.writableEnded) {
-			context.send(ERROR_STATUS[code], { code });
-		}
+		sendFailure(error, request, reply);
 	}
 }

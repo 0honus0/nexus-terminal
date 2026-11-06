@@ -1,3 +1,4 @@
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
 import {
 	InvalidServerTransferPayload,
@@ -14,7 +15,7 @@ import type {
 	ServerTransferCancellation,
 	ServerTransferHttpError,
 } from '@nexus-terminal/shared/remote/transfers/server-http';
-import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
+import type { HttpRoute, HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
 import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
 import { ServerTransferFailure } from '../../transfers/model/server-transfer-types.js';
 import type { ServerTransferTask } from '../../transfers/model/server-transfer-types.js';
@@ -52,25 +53,30 @@ function toSnapshot(task: ServerTransferTask): ServerTransferSnapshot {
 
 type Action = 'send' | 'list' | 'details' | 'cancel' | 'remove';
 
-async function handle(ctx: HttpRouteContext, owner: ServerTransferService, action: Action): Promise<void> {
+async function handle(
+	request: HttpRequest,
+	reply: HttpReply,
+	owner: ServerTransferService,
+	action: Action,
+): Promise<void> {
 	const controller = new AbortController();
 
 	const disconnected = () => controller.abort();
 
-	ctx.response.once('close', disconnected);
+	reply.raw.once('close', disconnected);
 	try {
 		if (
-			[...ctx.query.keys()].some((key) => action !== 'list' || key !== 'after') ||
-			ctx.query.getAll('after').length > 1
+			[...request.query.keys()].some((key) => action !== 'list' || key !== 'after') ||
+			request.query.getAll('after').length > 1
 		) {
 			throw new InvalidServerTransferPayload();
 		}
-		const token = ctx.cookie(ACCESS_SESSION_COOKIE_NAME);
+		const token = readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME);
 		if (action === 'send') {
 			const task = await owner.send(
 				token,
 				async () => {
-					const input = readServerTransferInput(await ctx.json(controller.signal));
+					const input = readServerTransferInput(request.body);
 					return {
 						sourceConnectionId: input.sourceConnectionId,
 						connectionIds: input.connectionIds.map((id) => id),
@@ -85,25 +91,24 @@ async function handle(ctx: HttpRouteContext, owner: ServerTransferService, actio
 				},
 				controller.signal,
 			);
-			ctx.send(202, toSnapshot(task));
+			reply.code(202).send(toSnapshot(task));
 		} else if (action === 'list') {
-			const after = ctx.query.get('after');
+			const after = request.query.get('after');
 			const page = await owner.list(token, after === null ? null : readServerTransferId(after));
-			ctx.send(200, {
+			reply.code(200).send({
 				items: page.items.map(toSnapshot),
 				nextCursor: page.nextCursor,
 			} satisfies ServerTransferPage);
 		} else {
-			const id = readServerTransferId(ctx.params.taskId);
+			const id = readServerTransferId(request.params.taskId);
 			if (action === 'details') {
-				ctx.send(200, toSnapshot(await owner.details(token, id)));
+				reply.code(200).send(toSnapshot(await owner.details(token, id)));
 			} else if (action === 'cancel') {
 				await owner.cancel(token, id);
-				ctx.send(200, { taskId: id, accepted: true } satisfies ServerTransferCancellation);
+				reply.code(200).send({ taskId: id, accepted: true } satisfies ServerTransferCancellation);
 			} else {
 				await owner.remove(token, id);
-				ctx.response.writeHead(204);
-				ctx.response.end();
+				reply.code(204).send();
 			}
 		}
 	} catch (error) {
@@ -116,9 +121,9 @@ async function handle(ctx: HttpRouteContext, owner: ServerTransferService, actio
 				: error instanceof ServerTransferFailure
 					? error.code
 					: 'internal_failure';
-		ctx.send(serverTransferErrorStatus(code), { code } satisfies ServerTransferHttpError);
+		reply.code(serverTransferErrorStatus(code)).send({ code } satisfies ServerTransferHttpError);
 	} finally {
-		ctx.response.off('close', disconnected);
+		reply.raw.off('close', disconnected);
 	}
 }
 
@@ -126,34 +131,34 @@ export function createServerTransferRoutes(owner: ServerTransferService): HttpRo
 	return [
 		{
 			method: 'POST',
-			path: '/api/v1/transfers/send',
-			maxBodyBytes: SERVER_TRANSFER_REQUEST_MAX_BYTES,
+			url: '/api/v1/transfers/send',
+			bodyLimit: SERVER_TRANSFER_REQUEST_MAX_BYTES,
 
-			handle: (ctx) => handle(ctx, owner, 'send'),
+			handler: (request, reply) => handle(request, reply, owner, 'send'),
 		},
 		{
 			method: 'GET',
-			path: '/api/v1/transfers/status',
+			url: '/api/v1/transfers/status',
 
-			handle: (ctx) => handle(ctx, owner, 'list'),
+			handler: (request, reply) => handle(request, reply, owner, 'list'),
 		},
 		{
 			method: 'GET',
-			path: '/api/v1/transfers/status/:taskId',
+			url: '/api/v1/transfers/status/:taskId',
 
-			handle: (ctx) => handle(ctx, owner, 'details'),
+			handler: (request, reply) => handle(request, reply, owner, 'details'),
 		},
 		{
 			method: 'POST',
-			path: '/api/v1/transfers/cancel/:taskId',
+			url: '/api/v1/transfers/cancel/:taskId',
 
-			handle: (ctx) => handle(ctx, owner, 'cancel'),
+			handler: (request, reply) => handle(request, reply, owner, 'cancel'),
 		},
 		{
 			method: 'DELETE',
-			path: '/api/v1/transfers/:taskId',
+			url: '/api/v1/transfers/:taskId',
 
-			handle: (ctx) => handle(ctx, owner, 'remove'),
+			handler: (request, reply) => handle(request, reply, owner, 'remove'),
 		},
 	];
 }

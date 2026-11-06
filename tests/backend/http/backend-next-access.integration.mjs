@@ -861,7 +861,7 @@ await test(
 										verifyPasskeyConfirmation(fault, {
 											guest,
 											signedAssertion,
-											database: join(directory, 'passkeys.db'),
+											database: join(directory, 'passkeys', 'nexus-terminal.db'),
 											credentialId: registration.id,
 											origin,
 											confirmation,
@@ -885,7 +885,9 @@ await test(
 								const digest = responseTokenDigest(interrupted, ACCESS_SESSION_COOKIE_NAME);
 								await until(
 									() => {
-										const db = new DatabaseSync(join(directory, 'passkeys.db'), { readOnly: true });
+										const db = new DatabaseSync(join(directory, 'passkeys', 'nexus-terminal.db'), {
+											readOnly: true,
+										});
 										try {
 											return db
 												.prepare(

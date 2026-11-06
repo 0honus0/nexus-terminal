@@ -460,7 +460,7 @@ export async function openAgentExecution(directory, sshd, options = {}) {
 			}
 		},
 
-		async restart({ unknown = false, verifyCloseFailure } = {}) {
+		async restart({ unknown = false, verifyCloseFailure, beforeBoot } = {}) {
 			if (verifyCloseFailure) {
 				await assert.rejects(app.close(), verifyCloseFailure);
 			} else if (unknown) {
@@ -469,6 +469,7 @@ export async function openAgentExecution(directory, sshd, options = {}) {
 				await app.close();
 			}
 			app = null;
+			await beforeBoot?.();
 			await boot();
 		},
 	};

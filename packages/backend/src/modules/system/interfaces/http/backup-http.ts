@@ -1,3 +1,4 @@
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import { readBackupExport, readBackupImport } from '@nexus-terminal/shared/system/backups/http-codec';
 import {
 	BACKUP_REQUEST_MAX_BYTES,
@@ -8,7 +9,7 @@ import { ACCESS_PASSWORD_MAX_BYTES } from '@nexus-terminal/shared/access/values'
 import type { BackupImportResponse } from '@nexus-terminal/shared/system/backups/http';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
 import { InvalidPayload } from '@nexus-terminal/shared/common/http-codec';
-import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
+import type { HttpRoute, HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
 import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
 import type { BackupService } from '../../backups/service/backup-service.js';
 import {
@@ -17,7 +18,7 @@ import {
 	type BackupExportInput,
 	type BackupImportInput,
 } from '../../backups/model/backup-types.js';
-import { readBodyBytes, decodeMultipart } from '../../../../platform/http/http-body.js';
+import { readMultipart } from '../../../../platform/http/http-body.js';
 import type { IncomingMessage } from 'node:http';
 
 /** Transport status remains owned by HTTP; cause is retained only for diagnosis. */
@@ -30,17 +31,23 @@ class BackupInputFailure extends BackupFailure {
 	}
 }
 
-async function readImport(ctx: HttpRouteContext, signal: AbortSignal): Promise<BackupImportInput> {
-	let body: Uint8Array | null = null;
+async function readImport(request: HttpRequest, reply: HttpReply, signal: AbortSignal): Promise<BackupImportInput> {
 	const owned: Uint8Array[] = [];
 	let file: Uint8Array | null = null;
 	try {
-		if (ctx.query.size) {
+		if (request.query.size) {
 			throw new InvalidPayload();
 		}
-		const bytes = await readBodyBytes(ctx.request, BACKUP_MULTIPART_MAX_BYTES, signal);
-		body = bytes;
-		const parts = await decodeMultipart(bytes, ctx.request.headers['content-type'] ?? '', 2, signal);
+		const parts = await readMultipart(
+			request,
+			reply,
+			{
+				maxParts: 2,
+				maxFileBytes: BACKUP_MAX_FILE_BYTES,
+				maxFieldBytes: ACCESS_PASSWORD_MAX_BYTES,
+			},
+			signal,
+		);
 		for (const part of parts) {
 			owned.push(part.bytes);
 		}
@@ -74,15 +81,15 @@ async function readImport(ctx: HttpRouteContext, signal: AbortSignal): Promise<B
 		if (!file) {
 			throw new InvalidPayload();
 		}
-		const request = readBackupImport({ backupFile: file, password });
-		const content = request.backupFile;
+		const decoded = readBackupImport({ backupFile: file, password });
+		const content = decoded.backupFile;
 		file = null;
 		for (let index = owned.length - 1; index >= 0; index--) {
 			if (owned[index] === content) {
 				owned.splice(index, 1);
 			}
 		}
-		return { content, password: request.password };
+		return { content, password: decoded.password };
 	} catch (cause) {
 		if (cause instanceof HttpInputFailure) {
 			throw new BackupInputFailure(cause);
@@ -92,20 +99,20 @@ async function readImport(ctx: HttpRouteContext, signal: AbortSignal): Promise<B
 		}
 		throw cause;
 	} finally {
-		body?.fill(0);
 		for (const bytes of owned) {
 			bytes.fill(0);
 		}
 	}
 }
 
-async function readExport(ctx: HttpRouteContext, signal: AbortSignal): Promise<BackupExportInput> {
+async function readExport(request: HttpRequest, signal: AbortSignal): Promise<BackupExportInput> {
 	try {
-		if (ctx.query.size) {
+		if (request.query.size) {
 			throw new InvalidPayload();
 		}
-		const request = readBackupExport(await ctx.json(signal));
-		return { password: request.password };
+		signal.throwIfAborted();
+		const decoded = readBackupExport(request.body);
+		return { password: decoded.password };
 	} catch (cause) {
 		if (cause instanceof HttpInputFailure) {
 			throw new BackupInputFailure(cause);
@@ -117,18 +124,22 @@ async function readExport(ctx: HttpRouteContext, signal: AbortSignal): Promise<B
 	}
 }
 
-function deliverExport(ctx: HttpRouteContext, file: BackupExportFile, signal: AbortSignal): Promise<void> {
+function deliverExport(reply: HttpReply, file: BackupExportFile, signal: AbortSignal): Promise<void> {
 	signal.throwIfAborted();
 	return new Promise((resolve, reject) => {
 		const cleanup = () => {
-			ctx.response.off('finish', finish);
-			ctx.response.off('close', fail);
-			ctx.response.off('error', fail);
+			reply.raw.off('finish', finish);
+			reply.raw.off('close', fail);
+			reply.raw.off('error', fail);
 			signal.removeEventListener('abort', abort);
 		};
 
 		const finish = () => {
 			cleanup();
+			if (reply.raw.destroyed || !reply.raw.writableFinished) {
+				reject(new BackupFailure('unavailable'));
+				return;
+			}
 			resolve();
 		};
 
@@ -138,23 +149,23 @@ function deliverExport(ctx: HttpRouteContext, file: BackupExportFile, signal: Ab
 		};
 
 		const abort = () => {
-			ctx.response.destroy();
+			reply.raw.destroy();
 			fail();
 		};
 
-		ctx.response.once('finish', finish);
-		ctx.response.once('close', fail);
-		ctx.response.once('error', fail);
+		reply.raw.once('finish', finish);
+		reply.raw.once('close', fail);
+		reply.raw.once('error', fail);
 		signal.addEventListener('abort', abort, { once: true });
 		try {
-			ctx.response.writeHead(200, {
+			reply.hijack();
+			reply.raw.writeHead(200, {
 				'Content-Type': 'application/octet-stream',
 				'Content-Length': String(file.content.byteLength),
 				'Content-Disposition': 'attachment; filename="nexus-terminal.nexus-backup"',
 				'Cache-Control': 'no-store',
-				'X-Content-Type-Options': 'nosniff',
 			});
-			ctx.response.end(file.content);
+			reply.raw.end(file.content);
 		} catch (cause) {
 			cleanup();
 			reject(cause);
@@ -178,13 +189,13 @@ function errorStatus(code: BackupFailure['code']): number {
 	return code === 'limit_exceeded' ? 413 : 503;
 }
 
-function sendFailure(ctx: HttpRouteContext, failure: unknown): void {
-	if (!ctx.response.headersSent && !ctx.response.destroyed) {
+function sendFailure(reply: HttpReply, failure: unknown): void {
+	if (!reply.sent && !reply.raw.headersSent && !reply.raw.destroyed) {
 		const code = failure instanceof BackupFailure ? failure.code : 'unavailable';
 		const status = failure instanceof BackupInputFailure ? failure.status : errorStatus(code);
-		ctx.send(status, { code });
-	} else if (!ctx.response.writableFinished) {
-		ctx.response.destroy();
+		reply.code(status).send({ code });
+	} else if (!reply.raw.writableFinished) {
+		reply.raw.destroy();
 	}
 }
 
@@ -195,53 +206,54 @@ export function createBackupRoutes(
 	return [
 		{
 			method: 'POST',
-			path: '/api/v1/settings/backup/export',
-			maxBodyBytes: BACKUP_REQUEST_MAX_BYTES,
+			url: '/api/v1/settings/backup/export',
+			bodyLimit: BACKUP_REQUEST_MAX_BYTES,
 
-			async handle(ctx) {
+			async handler(request, reply) {
 				const disconnected = new AbortController();
 
 				const abort = () => {
-					if (!ctx.response.writableFinished) {
+					if (!reply.raw.writableFinished) {
 						disconnected.abort();
 					}
 				};
 
-				ctx.response.once('close', abort);
+				reply.raw.once('close', abort);
 				try {
 					await service.export(
-						ctx.cookie(ACCESS_SESSION_COOKIE_NAME),
-						(signal) => readExport(ctx, signal),
-						(file, signal) => deliverExport(ctx, file, signal),
+						readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
+						(signal) => readExport(request, signal),
+						(file, signal) => deliverExport(reply, file, signal),
 						disconnected.signal,
 					);
 				} catch (error) {
-					sendFailure(ctx, error);
+					sendFailure(reply, error);
 				} finally {
-					ctx.response.off('close', abort);
+					reply.raw.off('close', abort);
 				}
 			},
 		},
 		{
 			method: 'POST',
-			path: '/api/v1/settings/backup/import',
-			maxBodyBytes: BACKUP_MULTIPART_MAX_BYTES,
+			url: '/api/v1/settings/backup/import',
+			bodyLimit: BACKUP_MULTIPART_MAX_BYTES,
+			config: { multipartBodyLimit: BACKUP_MULTIPART_MAX_BYTES },
 
-			async handle(ctx) {
+			async handler(request, reply) {
 				const disconnected = new AbortController();
 
 				const abort = () => {
-					if (!ctx.response.writableFinished) {
+					if (!reply.raw.writableFinished) {
 						disconnected.abort();
 					}
 				};
 
-				ctx.response.once('close', abort);
+				reply.raw.once('close', abort);
 				try {
 					const receipt = await service.import(
-						ctx.cookie(ACCESS_SESSION_COOKIE_NAME),
-						(signal) => readImport(ctx, signal),
-						(apply) => maintain(ctx.request, apply),
+						readRequestCookie(request.raw, ACCESS_SESSION_COOKIE_NAME),
+						(signal) => readImport(request, reply, signal),
+						(apply) => maintain(request.raw, apply),
 						disconnected.signal,
 					);
 					const response: BackupImportResponse = {
@@ -250,13 +262,13 @@ export function createBackupRoutes(
 						restoredFiles: receipt.restoredFiles,
 						cleanupPending: receipt.cleanupPending,
 					};
-					if (!ctx.response.destroyed) {
-						ctx.send(200, response);
+					if (!reply.raw.destroyed) {
+						reply.code(200).send(response);
 					}
 				} catch (cause) {
-					sendFailure(ctx, cause);
+					sendFailure(reply, cause);
 				} finally {
-					ctx.response.off('close', abort);
+					reply.raw.off('close', abort);
 				}
 			},
 		},

@@ -8,7 +8,9 @@ import backendSpecs from './backend-specs.json';
 
 const e2eRoot = __dirname;
 const repoRoot = path.resolve(e2eRoot, '../..');
-const testDataDir = path.join(e2eRoot, '.tmp', 'backend-data');
+process.env.NEXUS_E2E_DATA_ROOT ??= path.join(e2eRoot, '.tmp', 'backend-data', randomBytes(16).toString('hex'));
+const testDataDir = path.resolve(process.env.NEXUS_E2E_DATA_ROOT);
+process.env.NEXUS_E2E_DATA_ROOT = testDataDir;
 process.env.NEXUS_E2E_CONTROL_TOKEN ??= randomBytes(32).toString('hex');
 const isCI = Boolean(process.env.CI);
 const suite = process.env.NEXUS_E2E_SUITE ?? 'all';

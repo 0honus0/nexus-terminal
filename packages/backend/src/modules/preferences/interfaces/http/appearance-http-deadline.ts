@@ -1,4 +1,4 @@
-import type { HttpRouteContext } from '../../../../platform/http/http-types.js';
+import type { HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
 import { AppearanceFailure } from '../../appearance-failure.js';
 import { HtmlThemeFailure } from '../../html-theme-failure.js';
 import { AccessOperationError } from '../../../access/public-errors.js';
@@ -6,23 +6,24 @@ import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
 import { InvalidPayload } from '@nexus-terminal/shared/common/http-codec';
 
 export async function withAppearanceDeadline<T>(
-	context: HttpRouteContext,
+	request: HttpRequest,
+	reply: HttpReply,
 	work: (signal: AbortSignal) => Promise<T>,
 ): Promise<T> {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), 60000);
 
 	const disconnected = () => {
-		if (!context.response.writableFinished) {
+		if (!reply.raw.writableFinished) {
 			controller.abort();
 		}
 	};
 
-	context.response.on('close', disconnected);
+	reply.raw.on('close', disconnected);
 
 	const transportFailed = () => controller.abort();
 
-	context.response.on('error', transportFailed);
+	reply.raw.on('error', transportFailed);
 	try {
 		return await work(controller.signal);
 	} catch (cause) {
@@ -39,7 +40,7 @@ export async function withAppearanceDeadline<T>(
 		throw cause;
 	} finally {
 		clearTimeout(timer);
-		context.response.off('close', disconnected);
-		context.response.off('error', transportFailed);
+		reply.raw.off('close', disconnected);
+		reply.raw.off('error', transportFailed);
 	}
 }
