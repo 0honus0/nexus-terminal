@@ -215,7 +215,7 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 6
 			},
 		);
 		await scenario(
-			'batch delivery, Artifact paging and v1-to-v3 migration preserve content across repeated startup',
+			'batch delivery, Artifact paging and v1-to-current migration preserve content across repeated startup',
 			async (f, directory) => {
 				await f.grants(['file.read', 'artifacts.read', 'artifacts.write', 'shell.execute']);
 				const paths = [join(directory, 'one.txt'), join(directory, 'two.txt')],
@@ -286,7 +286,14 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 6
 								JSON.stringify(oldJob),
 								job.id,
 							);
-							db.exec('DELETE FROM schema_version WHERE version>=2; COMMIT');
+							// Restore the actual v1 schema so later DDL migrations run once.
+							db.exec(`
+								DROP TABLE access_oidc_sessions;
+								DROP TABLE access_oidc_flows;
+								DROP TABLE access_oidc_configuration;
+								DELETE FROM schema_version WHERE version>=2;
+								COMMIT;
+							`);
 						} finally {
 							db.close();
 						}

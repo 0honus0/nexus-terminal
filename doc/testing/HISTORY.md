@@ -1763,3 +1763,22 @@ FreeRDP是原生库，不能直接替换当前浏览器WASM。可复用方案为
 `cdp-results.json`通过指定 `172.30.30.11:9223` 的Windows Chrome，在 `api.honus.top` 同源自建页面复用上述三个受控场景，全部通过、无pageerror。测试模块由page级路由提供，不改服务器文件、用户页或设置；完成后关闭自建页。这与真实xrdp连接证据分开，不冒充本轮真实Windows播放或物理声音测量。
 
 `check.log`根检查通过；首次`format.log`发现新增测试声明间距8处，自动格式修正后`format-final.log`通过。未更改正常UI、150ms动态尺寸防抖、鼠标输入调度、初始化/证书准入或上游SDK。冷启动预加载只有串行路径观察，没有可归因的性能对照，本轮不引入额外准备入口。超32MiB底图及不支持路径仍直接绘制，不宣称这些情况也停止隐藏提交；协议处理与解码继续，不能把减少Canvas提交视为消除全部后台开销。真实网络波动可能更早丢弃旧音频，符合用户授权的实时优先；上游分块、时间戳缺失、音频设备延迟及渐进绘制仍按PLAN能力边界推进。
+
+## 本轮功能提交与远程 E2E 修复（2026-11-06）
+
+本轮提交并推送 `9853e87d96e5f75467527490b18950cae1441cb0`，包括 OIDC/Passkey、Agent 完整日志、前端 CSS/模块重构、设置加载、IronRDP 和终端恢复/连接选择修复。该提交前根 check、全仓格式及 diff 检查通过；此前本地专项分别见本页对应记录。统一交付证据归 `/home/honus/nexus-task-artifacts/remote-e2e-delivery-20261106`，保留至用户通知清理。本轮仅提交、推送与 E2E，不发布镜像或更新生产主机。
+
+### 首轮失败与修复
+
+[首轮 42218925378](https://github.com/0honus0/nexus-terminal/actions/runs/42218925378) 在上述 SHA 完整运行，质量、双端构建、Docker smoke 和七个浏览器分片全部成功；后端有三项失败且重试仍失败，整轮为 failure。原作业日志和完整诊断包分别留在 `first-backend.log` 与 `first-backend-artifact/`，不以局部重跑掩盖首次失败。
+
+| 审核表   | 结论与边界                                                                                                               |
+| -------- | ------------------------------------------------------------------------------------------------------------------------ |
+| 功能对应 | 只同步测试夹具，保留实际文件交付、UTF-8 分页、迁移回滚/重启和资源关闭断言；USAGE 原说明仍符合产品，无 UI 或产品行为改变  |
+| 职责归属 | 迁移链与 SQL 仍归原 Bootstrap/Adapter；测试恢复真实旧表结构，产品不增加重复 CREATE 兼容；资源 mock 实现真实 Job 读取能力 |
+| 类型归属 | SQLite 正式版本断言补充 v4；资源替身新增 waitingOutputCount 并验证 0→1→0 的等待状态投影；无 Shared/业务类型变化          |
+| 完成证据 | 本地正式 Playwright 动态端口入口的三个原失败场景全部通过，日志 `local-three.log`；最终远程整轮待验                       |
+
+具体根因：存储用例仍预期 `[1,2,3]`，未同步新增 v4；文件用例删除 v2 之后的迁移记录但保留 v4 的 OIDC 三表，导致启动重执行 DDL；资源用例的 Job mock 缺少 waitingOutputCount，读取会话状态时抛 TypeError。修复后用实际 v1 表结构重新执行连续迁移，保留旧内容转换及第二次启动不变的断言；存储测试仍覆盖有序安装、失败事务回滚和恢复。
+
+本地命令为 `NEXUS_E2E_SUITE=backend node scripts/e2e/run-remote.mjs -- --project=agent specs/agent/execution-flow.spec.ts --grep 'file batches|ordered SQLite migrations|resource expiration'`，隔离数据及 TMPDIR 位于本轮任务目录，重新构建 Shared/Backend 后 3 项全部一次通过（19.3 秒）。实际 Node 子场景覆盖文件 11 项、资源 5 项与完整存储脚本，不将子项重复累计为正式唯一 E2E 数量。

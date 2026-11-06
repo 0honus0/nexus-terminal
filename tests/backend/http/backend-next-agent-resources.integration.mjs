@@ -19,6 +19,7 @@ function resourceFixture(t, { cleanupFails = false } = {}) {
 	let closes = 0;
 	let cancellations = 0;
 	let jobs = 0;
+	let waitingOutputJobs = 0;
 	const model = new ToolModel(
 		null,
 		null,
@@ -50,6 +51,8 @@ function resourceFixture(t, { cleanupFails = false } = {}) {
 			drain: async () => {},
 
 			backgroundCount: () => jobs,
+
+			waitingOutputCount: () => waitingOutputJobs,
 		},
 		null,
 		null,
@@ -104,6 +107,10 @@ function resourceFixture(t, { cleanupFails = false } = {}) {
 
 		counts: () => ({ closes, cancellations }),
 
+		waitingOutput: (count) => {
+			waitingOutputJobs = count;
+		},
+
 		jobs: (count) => {
 			jobs = count;
 			model.touch(scope);
@@ -121,6 +128,11 @@ await test('Resource lifecycle: tool activity renews ten-minute idle expiration 
 	const first = f.resources.read(f.scope, [])[0];
 	assert.equal(first.expiresAt, Date.now() + 600000);
 	assert.equal(first.resource.mcpSessions, 1);
+	assert.equal(first.waitingOutputJobs, 0);
+	f.waitingOutput(1);
+	assert.equal(f.resources.read(f.scope, [])[0].waitingOutputJobs, 1);
+	f.waitingOutput(0);
+	assert.equal(f.resources.read(f.scope, [])[0].waitingOutputJobs, 0);
 	t.mock.timers.tick(599999);
 	assert.equal(f.counts().closes, 0);
 	f.model.touch(f.scope);
