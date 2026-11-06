@@ -1850,3 +1850,9 @@ Node 26.13.0/pnpm 12.16.1；`build.log` 与 `browser.log` 包含 Shared、Backen
 根因与修复：手机RDP仍定位旧常驻模式按钮，改从Touch弹层进入并保留持久化/不重连断言；Markdown预览沿旧28px断言，更新为本轮已确认44px等宽高；异步语言启动可能错过window.load，PWA同时处理已加载文档，原场景延迟语言包到load之后覆盖竞态；v1数据迁移夹具只删除版本记录未删除后增结构，补齐5–10还原；Docker生产类型检查的音频测试入口跨目录引用未复制的测试源码，测试adapter移到frontend/build，仍仅E2E配置打包。
 
 本地 `e2e-fix-browser.log` 的正式动态隔离入口3项一次通过，包含异步load竞态、手机Markdown真实编辑/SFTP保存和RDP模式/重连；`e2e-fix-backend.log` 的文件专项12项通过，无skip；`e2e-fix-check.log` 根check通过。构建包含双端与E2E客户端；未在本地重新构建Docker镜像，待远程smoke核对。后续完整远程仍待验，不修改产品布局或跳过失败功能。
+
+最终远程 [42306606716](https://github.com/0honus0/nexus-terminal/actions/runs/42306606716) 对应 `379af20af947196f8f92d1c4cd346187c10d18d5`，完整680项一次通过：Backend167，Browser1–7分别47/52/90/81/66/92/85。质量与Docker smoke成功，耗时更新成功，截图任务按条件跳过；Reporter无场景skip、retry、flaky或失败。`final-*.log`及`e2e-reporter-audit.json`保存原日志和逐项去重统计。后继`9fd223a3`仅为自动耗时更新。原工作区已三方同步11个修复路径、保留661个其它修改/未跟踪路径；Agent文件专项已使用独立legacy adapter夹具，保留其新实现，没有恢复本轮已修旧式schema回退。
+
+## 非 Agent main amd64 dev 发布（2026-11-06）
+
+[发布42307601610](https://github.com/0honus0/nexus-terminal/actions/runs/42307601610)成功，来源`9fd223a38c675c5fb4097e649b7edda00895158d`，与完整680项E2E的379af20a仅差耗时估算。`ghcr.io/0honus0/nexus-terminal:dev`与`sha-9fd223a38c67`均为`sha256:8eca2327e9d597875ef3525c780b85a9a738e086e782d1a048bc5c7514dd271f`；linux/amd64平台manifest为`sha256:d6596123615d4a531026395bf76e260420050200e7bc2a62e0ae5752819cdaa8`。OCI revision与来源匹配，生产依赖审计无已知漏洞。证据在non-agent-fixes-20261106/publication；只读manifest/config，未拉取完整镜像、未更新远程生产服务。Agent重构继续本地推进，本镜像不含中间源码。
