@@ -1790,3 +1790,18 @@ FreeRDP是原生库，不能直接替换当前浏览器WASM。可复用方案为
 [最终 E2E 42220871118](https://github.com/0honus0/nexus-terminal/actions/runs/42220871118) 在该修复 SHA 全部成功：质量、runner、Docker smoke、后端和七个浏览器分片及耗时更新均 success，文档截图按条件跳过。`final-run.log` 经正式 Reporter 逐条统计为 678 条记录、678 个唯一场景、全部 passed，无失败、重试、flaky 或场景跳过；其中 Backend 166，Browser 1–7 为 58/58/59/82/72/92/91。三个原失败场景均首次通过；首轮 failure 保留，不用最终成功改写原始结果。
 
 工作流自动推送 `c6bee350`，仅更新 `scripts/e2e/duration-estimates.json`，已审核并快进同步。本轮最终只同步验收基线与实施计划，不改变已验证源码；当前 OIDC 迁移 v4 已被正式迁移及重启场景覆盖。真实 Pocket ID、手机输入法、运营商弱网、介质故障和物理音画性能仍按 PLAN 单列，不由受控 E2E 代替。未发布镜像、未更新生产主机，测试证据与环境继续保留至用户通知。
+
+## Main amd64 dev 发布（2026-11-06）
+
+用户在完整远程 E2E 通过后授权发布 main dev。核对 main 为 `024d608ac2de29d3991a0005e9215156ce52f646`，与被测 `cd0c10f3` 之间仅有验收文档和测试耗时更新；工作区干净，沿用 amd64 架构。通过现有 `publish-ghcr.yml`，以 main、channel=dev、architecture=amd 触发 [42222715508](https://github.com/0honus0/nexus-terminal/actions/runs/42222715508)，准备、生产依赖审计和镜像构建推送全部 success。
+
+| 审核表   | 结果                                                                                                         |
+| -------- | ------------------------------------------------------------------------------------------------------------ |
+| 功能对应 | 发布已通过 678 项完整 E2E 的应用代码；不改变产品或 UI，不更新生产主机                                        |
+| 职责归属 | 现有发布 workflow 构建并推送 GHCR；本地仅读取 manifest/config 核对结果，不拉取完整镜像                       |
+| 类型归属 | 无代码或协议变化；镜像含原有 OIDC v4 连续迁移，由实例升级启动时自动执行                                      |
+| 完成证据 | 工作流 success，dev 与源码标签摘要相同，OCI revision 和 linux/amd64 平台均匹配；日志和元数据位于下述任务目录 |
+
+`ghcr.io/0honus0/nexus-terminal:dev` 与 `ghcr.io/0honus0/nexus-terminal:sha-024d608ac2de` 的 OCI index digest 均为 `sha256:aa9166d34b872f62477d5ee9c85c8e28727940da75eeeed5fc2dd1116b4d98c6`；amd64 平台 manifest 为 `sha256:2a09c505e9823305ff495554f07bb268c9becf12c6f6b521d55a9457c97a645d`。实际 config 的 revision 为完整源码 SHA，version 为 `sha-024d608ac2de`，OS/architecture 为 linux/amd64；证明 manifest 的 unknown/unknown 不代表另一个执行平台。
+
+证据归 `/home/honus/nexus-task-artifacts/main-dev-publish-20261106`，包括源码差异清单、完整工作流日志、最终状态、两个标签 manifest 与实际 config；保留至用户通知。发布后只更新本节、当前验收入口和迁移链摘要，格式与 diff 检查后提交，不将后续文档 SHA 误写为镜像来源；未创建 Release、未变更 latest、未更新远程容器或数据库。

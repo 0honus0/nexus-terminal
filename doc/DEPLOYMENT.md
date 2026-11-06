@@ -41,7 +41,7 @@ docker compose logs --tail=100 backend
 
 数据库文件的父目录即实例数据目录；每个实例使用独立目录。资源目录使用 `appearance/`、`artifacts/`、`plugins/`，实例数据与密钥一起保留。Compose 的数据库固定为容器内 `/app/data/nexus-terminal.db`，通过 `.env` 的 `NEXUS_DATA_DIR` 配置宿主目录，默认仍为 `./data`。运行中可能出现 SQLite WAL/SHM、恢复日志和临时目录，勿手动清除正在使用的恢复文件。
 
-当前迁移链为 v1 初始结构、v2 Shell Job 命令批次结果转换、v3 文件交付/展示批次结果转换；精确签名见 `packages/backend/src/bootstrap/schema.ts`。更新启动时自动顺序迁移，重复启动跳过已执行记录；业务代码只读取迁移后的格式。
+当前迁移链为 v1 初始结构、v2 Shell Job 命令批次结果转换、v3 文件交付/展示批次结果转换、v4 Access OIDC 表；精确签名见 `packages/backend/src/bootstrap/schema.ts`。更新启动时自动顺序迁移，重复启动跳过已执行记录；业务代码只读取迁移后的格式。
 
 首次 Passkey 站点从公开 Origin 推导；多站点可用 `NEXUS_PASSKEY_SITES` JSON 初始化。CAPTCHA 和 Passkey 站点配置在设置页维护，按界面提示重启激活；IP 白名单、登录封禁策略、监控周期和资源缓存 TTL 保存后热更新。白名单保存前确认当前来源仍被允许，保留部署恢复入口。插件仓库与信任 Publisher 由管理接口配置，不使用旧 catalog 环境变量。写操作依赖当前会话、同源 Origin/Fetch Metadata，不使用旧 CSRF token 端点。
 

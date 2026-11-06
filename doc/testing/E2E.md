@@ -4,13 +4,13 @@
 
 ## 当前验收基线
 
-最新完整远程 [E2E 42220871118](https://github.com/0honus0/nexus-terminal/actions/runs/42220871118) 验证 `main/cd0c10f39acb8269226c40bacfd6c7948948df15`：678 项全部一次通过，质量检查、双端生产构建、Docker smoke 与 8 个测试分片全部 success；耗时更新成功，文档截图按条件跳过。正式 Reporter 核对 678 条唯一 passed 记录，无失败、重试、flaky 或场景跳过。Backend 166 项，Browser 1–7 分别 58/58/59/82/72/92/91 项（包含隔离场景）；质量作业另含 7 项产物复用逻辑回归。本轮覆盖 OIDC/Passkey、Agent 完整日志、前端模块与设置加载、IronRDP、终端恢复及连接选择；首次失败、夹具修复和最终证据见 [交付验收记录](HISTORY.md#本轮功能提交与远程-e2e-修复2026-11-06)。后继 `c6bee350` 仅更新耗时估算，不称其直接跑过本轮 E2E；文档收口不改变被测源码。本轮没有镜像发布或生产部署。
+最新完整远程 [E2E 42220871118](https://github.com/0honus0/nexus-terminal/actions/runs/42220871118) 验证 `main/cd0c10f39acb8269226c40bacfd6c7948948df15`：678 项全部一次通过，质量检查、双端生产构建、Docker smoke 与 8 个测试分片全部 success；耗时更新成功，文档截图按条件跳过。正式 Reporter 核对 678 条唯一 passed 记录，无失败、重试、flaky 或场景跳过。Backend 166 项，Browser 1–7 分别 58/58/59/82/72/92/91 项（包含隔离场景）；质量作业另含 7 项产物复用逻辑回归。本轮覆盖 OIDC/Passkey、Agent 完整日志、前端模块与设置加载、IronRDP、终端恢复及连接选择；首次失败、夹具修复和最终证据见 [交付验收记录](HISTORY.md#本轮功能提交与远程-e2e-修复2026-11-06)。后继 `c6bee350` 仅更新耗时估算，不称其直接跑过本轮 E2E；文档收口不改变被测源码。验收后已按用户指令发布下述 amd64 dev 镜像；未更新生产主机。
 
 官方插件 [v1.0.4](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.4) 的 main 为 `7f0498c`，验证与签名包检查通过，Nexus Agent 指引同步批次工具、分页和 Run 资源；Full-stack 保持 1.0.3，权限声明与 SDK 不变。本轮本地回归和镜像交付见 [Agent 工具与资源记录](HISTORY.md#agent-工具批次与-run-连接资源2026-11-05)。真实运营商切网、手机软键盘、外部供应商及未列故障边界仍按 [待验与外部依赖](../PLAN.md#待验与外部依赖) 保留；受控回归不替代真实模型效果或吞吐实测。更早测试与镜像结果只保留为各自历史证据。
 
 本地 Fastify 迁移见 [迁移记录](HISTORY.md#fastify-http-整体迁移2026-11-06)，后续重设计的最终 177 项组合回归、91 项专项及未验边界见 [原生能力重设计](HISTORY.md#fastify-原生能力重设计2026-11-06)；后续 Cookie/Helmet 插件替换见 [插件复核](HISTORY.md#fastify-插件替换与维护复核2026-11-06)。最终 Cookie/Helmet 版本的 HTTP 专项为 94 项，组合回归为 177 项；这些组存在覆盖交集，不累计作为唯一场景总数。迁移已纳入上述远程提交基线。
 
-此前 [amd64 dev 发布 42162441122](https://github.com/0honus0/nexus-terminal/actions/runs/42162441122) 已成功，镜像源为 `620c0828`，`dev` 与 `sha-620c0828e444` 的摘要和 OCI revision 已核对；完整摘要见上述交付验收记录。无数据库迁移，未更新生产主机。
+最新 [amd64 dev 发布 42222715508](https://github.com/0honus0/nexus-terminal/actions/runs/42222715508) 已成功，源码为 `024d608ac2de29d3991a0005e9215156ce52f646`，与上述 E2E SHA 之间仅有文档及测试耗时记录变化。`ghcr.io/0honus0/nexus-terminal:dev` 和 `sha-024d608ac2de` 的摘要、linux/amd64 平台与 OCI revision 已核对；完整摘要见 [发布记录](HISTORY.md#main-amd64-dev-发布2026-11-06)。本次镜像包含 OIDC v4 自动迁移；未更新生产主机。更早镜像发布记录保留在历史索引。
 
 ## 阶段逻辑回归
 
