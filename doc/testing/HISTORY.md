@@ -1772,13 +1772,21 @@ FreeRDP是原生库，不能直接替换当前浏览器WASM。可复用方案为
 
 [首轮 42218925378](https://github.com/0honus0/nexus-terminal/actions/runs/42218925378) 在上述 SHA 完整运行，质量、双端构建、Docker smoke 和七个浏览器分片全部成功；后端有三项失败且重试仍失败，整轮为 failure。原作业日志和完整诊断包分别留在 `first-backend.log` 与 `first-backend-artifact/`，不以局部重跑掩盖首次失败。
 
-| 审核表   | 结论与边界                                                                                                               |
-| -------- | ------------------------------------------------------------------------------------------------------------------------ |
-| 功能对应 | 只同步测试夹具，保留实际文件交付、UTF-8 分页、迁移回滚/重启和资源关闭断言；USAGE 原说明仍符合产品，无 UI 或产品行为改变  |
-| 职责归属 | 迁移链与 SQL 仍归原 Bootstrap/Adapter；测试恢复真实旧表结构，产品不增加重复 CREATE 兼容；资源 mock 实现真实 Job 读取能力 |
-| 类型归属 | SQLite 正式版本断言补充 v4；资源替身新增 waitingOutputCount 并验证 0→1→0 的等待状态投影；无 Shared/业务类型变化          |
-| 完成证据 | 本地正式 Playwright 动态端口入口的三个原失败场景全部通过，日志 `local-three.log`；最终远程整轮待验                       |
+| 审核表   | 结论与边界                                                                                                                                    |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 只同步测试夹具，保留实际文件交付、UTF-8 分页、迁移回滚/重启和资源关闭断言；USAGE 原说明仍符合产品，无 UI 或产品行为改变                       |
+| 职责归属 | 迁移链与 SQL 仍归原 Bootstrap/Adapter；测试恢复真实旧表结构，产品不增加重复 CREATE 兼容；资源 mock 实现真实 Job 读取能力                      |
+| 类型归属 | SQLite 正式版本断言补充 v4；资源替身新增 waitingOutputCount 并验证 0→1→0 的等待状态投影；无 Shared/业务类型变化                               |
+| 完成证据 | 本地正式 Playwright 动态端口入口的三个原失败场景全部通过，日志 `local-three.log`；修复提交 cd0c10f3 的最终远程 678 项一次通过，见下方整轮核对 |
 
 具体根因：存储用例仍预期 `[1,2,3]`，未同步新增 v4；文件用例删除 v2 之后的迁移记录但保留 v4 的 OIDC 三表，导致启动重执行 DDL；资源用例的 Job mock 缺少 waitingOutputCount，读取会话状态时抛 TypeError。修复后用实际 v1 表结构重新执行连续迁移，保留旧内容转换及第二次启动不变的断言；存储测试仍覆盖有序安装、失败事务回滚和恢复。
 
 本地命令为 `NEXUS_E2E_SUITE=backend node scripts/e2e/run-remote.mjs -- --project=agent specs/agent/execution-flow.spec.ts --grep 'file batches|ordered SQLite migrations|resource expiration'`，隔离数据及 TMPDIR 位于本轮任务目录，重新构建 Shared/Backend 后 3 项全部一次通过（19.3 秒）。实际 Node 子场景覆盖文件 11 项、资源 5 项与完整存储脚本，不将子项重复累计为正式唯一 E2E 数量。
+
+### 最终整轮核对与交付
+
+修复提交 `cd0c10f39acb8269226c40bacfd6c7948948df15` 已推送 main；其提交前根 `pnpm run check`、`pnpm run format:all:check` 和 diff 检查通过，日志为 `fix-check.log`、`fix-format.log`。本地正式入口同时重新构建 Shared/Backend；原首轮远程质量作业已完成双端生产构建，本次完整远程也重新构建双端，不复用首轮失败的测试结果。
+
+[最终 E2E 42220871118](https://github.com/0honus0/nexus-terminal/actions/runs/42220871118) 在该修复 SHA 全部成功：质量、runner、Docker smoke、后端和七个浏览器分片及耗时更新均 success，文档截图按条件跳过。`final-run.log` 经正式 Reporter 逐条统计为 678 条记录、678 个唯一场景、全部 passed，无失败、重试、flaky 或场景跳过；其中 Backend 166，Browser 1–7 为 58/58/59/82/72/92/91。三个原失败场景均首次通过；首轮 failure 保留，不用最终成功改写原始结果。
+
+工作流自动推送 `c6bee350`，仅更新 `scripts/e2e/duration-estimates.json`，已审核并快进同步。本轮最终只同步验收基线与实施计划，不改变已验证源码；当前 OIDC 迁移 v4 已被正式迁移及重启场景覆盖。真实 Pocket ID、手机输入法、运营商弱网、介质故障和物理音画性能仍按 PLAN 单列，不由受控 E2E 代替。未发布镜像、未更新生产主机，测试证据与环境继续保留至用户通知。
