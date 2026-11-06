@@ -1105,3 +1105,11 @@ local-browser-final.log 的完整469项运行保留463项通过和6项失败，�
 目标按钮以 Desktop Chrome / Pixel 7 的 UA 分别验证 1440→390→320→1440px，窄屏仅图标、宽屏文字和计数恢复，选中目标持续且授权不改变。诊断四项浏览器用例进入正式 UI 分组，覆盖级别动态过滤、脱敏、HTTP 分类关联、运行时错误和 WebSocket 关闭。未增加产品 UI 或数据库变更。
 
 Node 26.13.0 / pnpm 12.16.1：`pnpm check`、`pnpm build`、E2E 测试客户端构建、`pnpm format:all:check` 和 `git diff --check` 通过；Playwright 收集 618 项 / 145 文件。按照 D17，本阶段尚未本地执行新增行为用例，远程整轮结果后续追加。完整源码审核确认目录授权唯一投影、加载只在整批完成及取消/到期检查后生效、Root/Child 各自 Run 生命周期、插件无搜索时的完整已授权目录，以及诊断无载荷/异常正文记录。产物集中 `/home/honus/nexus-task-artifacts/e2e-tool-loading-20261106`，保留至用户通知清理。
+
+### 首轮远程：目录颜色取样时机
+
+`5b96f9692c86b8929c2f31782f88423d817bdcb3` 的 [E2E 42142314918](https://github.com/0honus0/nexus-terminal/actions/runs/42142314918) 首个失败为 Browser 3 的 dark/390px 管理目录用例：通知名称前景已为深色主题的 `(227,226,237)`，卡片背景仍在原 `140ms background-color` 过渡中，截图呈中间灰色，单次即时取样为 3.7175，重试通过。flaky 门禁正确拒绝，未把重试通过计作验收。首次日志、Trace、截图和视频保留在本轮产物目录的 `remote-first-browser3.log` 与 `first-browser3/`。
+
+取色辅助函数现在沿元素及背景祖先等待浏览器实际运行/待启动的 CSS 过渡完成，再使用原 canvas 合成算法和 4.5 下限；未禁用动画、改主题或降低对比度要求。此修正属于测试取样同步，产品源码保持本次提交状态；其它分片完成后核对完整首轮结果，修正 SHA 的整轮另行记录。
+
+首轮最终质量、Docker smoke、Backend 及 Browser 1/2/5/6/7 成功；Browser 4 的既有 SSH 重连场景在真实重连、视口和命令输出均成功后，等待日志超时。诊断实现将连接成功从 debug 提到 info，旧测试仅收集 debug/log，漏收了成功记录；现收集 info 并明确断言失败为 level 20、成功为 level 30，仍验证原目标、重连阶段和密码不外泄。其它 debug 日志消费者已核对，无同类等级变化。首轮完整失败输出保留 `remote-first-failed.log`，job/SHA 保留 `remote-first-run.json`。目录场景另在每次打开页面后断言目标主题已生效，再等待实际过渡完成，避免取到初始主题。

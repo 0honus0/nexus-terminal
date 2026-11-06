@@ -92,7 +92,15 @@ for (const theme of ['light', 'dark'] as const) {
 				).toBeLessThanOrEqual(1);
 			};
 
-			await page.goto('/connections');
+			const openCatalog = async (path: string) => {
+				await page.goto(path);
+				await expect(page.locator('html')).toHaveCSS(
+					'--app-bg-color',
+					(theme === 'dark' ? darkUiTheme : defaultUiTheme)['--app-bg-color'],
+				);
+			};
+
+			await openCatalog('/connections');
 			const row = page.locator('.connection-card').filter({ hasText: 'Production server' });
 			const nameColor = await expectReadableCatalogText(row.locator('.connection-name'));
 			const typeColor = await expectReadableCatalogText(
@@ -141,7 +149,7 @@ for (const theme of ['light', 'dark'] as const) {
 				page.locator('.ui-token-input__token').filter({ hasText: 'Production group' }),
 			);
 			await page.locator('form.connection-form').getByRole('button', { name: 'Cancel', exact: true }).click();
-			await page.goto('/proxies');
+			await openCatalog('/proxies');
 			const proxy = page.getByRole('article').filter({ hasText: 'Authenticated proxy' });
 			expect(await expectReadableCatalogText(proxy.locator('.ui-catalog-type-badge'))).not.toBe(
 				await expectReadableCatalogText(proxy.locator('.ui-catalog-tag-badge')),
@@ -149,7 +157,7 @@ for (const theme of ['light', 'dark'] as const) {
 			await expectReadableCatalogText(proxy.locator('.ui-catalog-card__name'));
 			await noOverflow();
 			await screenshot('proxies');
-			await page.goto('/notifications');
+			await openCatalog('/notifications');
 			const channel = page.getByRole('article').filter({ hasText: 'Disabled notification' });
 			expect(await expectReadableCatalogText(channel.locator('.ui-catalog-type-badge'))).not.toBe(
 				await expectReadableCatalogText(channel.locator('.ui-catalog-status-badge')),

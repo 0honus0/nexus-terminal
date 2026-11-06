@@ -3,6 +3,27 @@ import { expect, type Locator } from '@playwright/test';
 /** Read rendered sRGB colors, including alpha over the catalog's ancestor fills. */
 export async function expectReadableCatalogText(locator: Locator): Promise<string> {
 	await expect(locator).toBeVisible();
+	// Appearance loads asynchronously; a visible card can still be transitioning
+	// from its initial theme. Sample the final rendered colors, not an intermediate fill.
+	await expect
+		.poll(() =>
+			locator.evaluate((element) => {
+				for (let node: Element | null = element; node; node = node.parentElement) {
+					if (
+						node
+							.getAnimations()
+							.some(
+								(animation) =>
+									animation instanceof CSSTransition &&
+									(animation.pending || animation.playState === 'running'),
+							)
+					)
+						return false;
+				}
+				return true;
+			}),
+		)
+		.toBe(true);
 	const sample = await locator.evaluate((element) => {
 		const canvas = document.createElement('canvas');
 		canvas.width = canvas.height = 1;

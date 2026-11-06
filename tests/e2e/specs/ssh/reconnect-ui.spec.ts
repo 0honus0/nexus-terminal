@@ -484,15 +484,15 @@ test('a failed SSH reconnect waits for a key and then reconnects immediately', a
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(context.request);
 
-	const frontendDebugLogs: Array<Record<string, unknown>> = [];
+	const frontendLogs: Array<Record<string, unknown>> = [];
 	page.on('console', (message) => {
-		if (message.type() !== 'debug' && message.type() !== 'log') return;
+		if (!['debug', 'info', 'log'].includes(message.type())) return;
 		for (const argument of message.args()) {
 			void argument
 				.jsonValue()
 				.then((value) => {
 					if (value && typeof value === 'object' && typeof (value as { msg?: unknown }).msg === 'string') {
-						frontendDebugLogs.push(value as Record<string, unknown>);
+						frontendLogs.push(value as Record<string, unknown>);
 					}
 				})
 				.catch(() => undefined);
@@ -633,7 +633,11 @@ test('a failed SSH reconnect waits for a key and then reconnects immediately', a
 			await setTestSshOnline(false);
 			await expect.poll(() => workspaceConnectRequests, { timeout: 40_000 }).toBe(initialConnectRequestCount + 1);
 			await expect
-				.poll(() => frontendDebugLogs.some((entry) => entry.msg === 'Workspace reconnect attempt failed'))
+				.poll(() =>
+					frontendLogs.some(
+						(entry) => entry.msg === 'Workspace reconnect attempt failed' && entry.level === 20,
+					),
+				)
 				.toBeTruthy();
 			await expect(terminal.locator('.xterm-rows')).toContainText('Press any key to reconnect');
 			await page.waitForTimeout(4500);
@@ -674,15 +678,16 @@ test('a failed SSH reconnect waits for a key and then reconnects immediately', a
 				.not.toContain('nexus-e2e$ nexus-e2e$');
 			await expect
 				.poll(() =>
-					frontendDebugLogs.some(
+					frontendLogs.some(
 						(entry) =>
 							entry.msg === 'Workspace connection attempt succeeded' &&
+							entry.level === 30 &&
 							entry.connectionId === connectionId &&
 							entry.phase === 'reconnect',
 					),
 				)
 				.toBeTruthy();
-			expect(JSON.stringify(frontendDebugLogs)).not.toContain(E2E_SSH.password);
+			expect(JSON.stringify(frontendLogs)).not.toContain(E2E_SSH.password);
 		});
 	} finally {
 		await setTestSshOnline(true);
