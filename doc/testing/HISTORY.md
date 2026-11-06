@@ -1319,3 +1319,21 @@ Nexus Agent 没有前后端入口，toolNames=null 按宿主当前授权目录�
 复核稳定 listener 的异步代次替换、来源/会话准入顺序、真实 handler 排空、multipart 超限及秘密清零、下载末字节授权、凭据失败撤销和原生 serializer 错误出口，未发现新的阻断问题；四份审核表结论保持有效。确认无旧 HttpRouteContext、http-router、Formidable 或整包 multipart 解码消费者。`git diff --check` 通过，生产依赖 `pnpm audit --prod --audit-level=high` 返回无已知漏洞。证据目录为 `/home/honus/nexus-task-artifacts/http-release-20261106`。
 
 用户已授权提交推送、修复远程完整 E2E 至通过、发布 linux/amd64 dev 镜像；不更新生产主机。此处记录交付开始状态，不将尚未执行的远程验证或发布写为完成。
+
+## Fastify 迁移远程验收与 amd dev 发布（2026-11-06）
+
+提交前审核后推送 `c15862cec37f5e25a5f63dc1908174c6d6ec525d`。[E2E 42161301186](https://github.com/0honus0/nexus-terminal/actions/runs/42161301186) 首轮完整通过：双端生产构建、质量与格式检查、runner 更新、8 个测试分片及 Docker smoke 均 success，无需失败修复或重跑。质量作业另含 7 项产物复用逻辑测试。文档截图更新按触发条件跳过，不属于场景跳过。
+
+| 分组        |                         首次通过 |
+| ----------- | -------------------------------: |
+| Backend     |                              146 |
+| Browser 1–7 | 39 / 75 / 72 / 69 / 78 / 82 / 59 |
+| 合计        |                              620 |
+
+核对正式 Reporter 的 620 条唯一结果，全部 passed，失败、重试、flaky 和场景跳过均为 0。新增 HTTP 契约专项由正式 backend 分片执行。原独立旧夹具、真机与外部供应商待验仍保留在 PLAN，不以本轮结果宣称未执行专项均通过。
+
+本地已快进同步 CI 提交 `620c0828e444e7fc5b4876713cecd9d1618e2967`，仅修改 `scripts/e2e/duration-estimates.json`；运行源码与被测提交一致。远程日志、作业状态、Reporter 统计与各分片 timings 保存于 `/home/honus/nexus-task-artifacts/http-release-20261106`。
+
+[发布 42162441122](https://github.com/0honus0/nexus-terminal/actions/runs/42162441122) 成功，输入为 `channel=dev`、`architecture=amd`，源提交 `620c0828e444e7fc5b4876713cecd9d1618e2967`。直接读取 GHCR 核对 `ghcr.io/0honus0/nexus-terminal:dev` 与 `sha-620c0828e444` 指向同一摘要 `sha256:333bf9ede35afa56b1cc1c35769364844fb54ff5ef521d414256c7fb9313525f`；运行平台为 `linux/amd64`，OCI revision 与源提交一致。另一个 `unknown/unknown` manifest 是构建证明，不是额外运行平台。发布日志和 registry manifest/config 保存在同一证据目录。
+
+本轮无需数据库迁移，未更新生产主机、未发布 latest。应用插件契约兼容，官方插件仓库无变更，不重复发布插件。交付后的文档提交只刷新验收与计划，不改变被测或发布源码。
