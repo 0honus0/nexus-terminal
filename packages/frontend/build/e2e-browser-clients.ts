@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
+import { localeMessages } from './locale-messages';
 
 // Invoked only by the E2E build; production builds never include these entries.
 export default defineConfig({
@@ -12,6 +13,7 @@ export default defineConfig({
 	},
 	plugins: [
 		vue(),
+		localeMessages(),
 		{
 			name: 'rdpsnd-test-delivery',
 			enforce: 'pre',
@@ -30,7 +32,10 @@ export default defineConfig({
 		outDir: fileURLToPath(new URL('../dist/__e2e__', import.meta.url)),
 		lib: {
 			entry: {
-				'browser-clients': fileURLToPath(new URL('../../../tests/e2e/support/browser-clients.ts', import.meta.url)),
+				'browser-clients': fileURLToPath(
+					new URL('../../../tests/e2e/support/browser-clients.ts', import.meta.url),
+				),
+				'browser-locale': fileURLToPath(new URL('./e2e-browser-locale.ts', import.meta.url)),
 				'browser-diagnostics': fileURLToPath(new URL('./e2e-browser-diagnostics.ts', import.meta.url)),
 				'browser-terminal': fileURLToPath(new URL('./e2e-browser-terminal.ts', import.meta.url)),
 				'browser-rdp': fileURLToPath(new URL('./e2e-browser-rdp.ts', import.meta.url)),

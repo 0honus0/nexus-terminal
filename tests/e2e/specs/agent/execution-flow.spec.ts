@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 import { expect, test } from '../../support/fixtures';
 
 for (const [name, file, pattern] of [
+	['SQLite composition, notification queue and diagnostics', 'storage/backend-next-performance.integration.mjs', ''],
 	['authority monitoring and unknown Job fences', 'storage/backend-next-authority-monitor.integration.mjs', ''],
 	[
 		'complete logs, disk-space recovery and cancellation',

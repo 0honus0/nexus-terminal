@@ -725,6 +725,32 @@ test('narrow document search keeps touch navigation, editing and refresh reachab
 	await openConnectedFileManager(page);
 	await openPreview(page, 'README-e2e.md');
 	const popup = documentPopup(page);
+	for (const width of [320, 390, 820]) {
+		await page.setViewportSize({ width, height: 844 });
+		await expect
+			.poll(() =>
+				popup.locator('.file-preview-footer').evaluate((footer) => {
+					const path = footer.querySelector('.file-preview-path');
+					const buttons = [...footer.querySelectorAll('.preview-toolbar-button')];
+					const pathBox = path?.getBoundingClientRect();
+					const boxes = buttons.map((button) => button.getBoundingClientRect());
+					return Boolean(
+						pathBox &&
+						pathBox.width > 0 &&
+						path?.getAttribute('title')?.endsWith('README-e2e.md') &&
+						footer.scrollWidth <= footer.clientWidth + 1 &&
+						boxes.length === 3 &&
+						boxes.every(
+							(box) =>
+								Math.abs(box.width - box.height) < 1 &&
+								Math.abs(box.width - boxes[0].width) < 1 &&
+								Math.abs(box.y + box.height / 2 - pathBox.y - pathBox.height / 2) < 2,
+						),
+					);
+				}),
+			)
+			.toBe(true);
+	}
 	await popup.getByRole('button', { name: 'Search in document', exact: true }).click();
 	const input = previewSearchInput(popup);
 	await input.fill('Nexus');

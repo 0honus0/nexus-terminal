@@ -133,7 +133,7 @@ test('OIDC v3 -> v4 preserves data, records migration once and reopens', async (
 		await initializeSchema(db, applicationMigrations);
 		assert.deepEqual(
 			(await db.all('SELECT version FROM schema_version ORDER BY version')).map((row) => row.version),
-			[1, 2, 3, 4],
+			[1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
 		);
 		assert.equal((await db.one('PRAGMA integrity_check')).integrity_check, 'ok');
 		assert.deepEqual(await db.all('PRAGMA foreign_key_check'), []);

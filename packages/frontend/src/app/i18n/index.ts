@@ -1,88 +1,17 @@
 import { installUiTranslator } from '@/shared/i18n/public';
-import { createI18n, type Composer } from 'vue-i18n';
+import { createI18n } from 'vue-i18n';
+import { supportedLocales, defaultLocale, type SupportedLocale } from './locale-values';
+
+export { supportedLocales, type SupportedLocale } from './locale-values';
+
 import { readStoredValue, stringStorageCodec, writeStoredValue } from '@/foundation/browser';
 
-interface MessageTree {
-	[key: string]: string | MessageTree;
-}
-
-export const supportedLocales = ['en-US', 'zh-CN', 'ja-JP'] as const;
-
-export type SupportedLocale = (typeof supportedLocales)[number];
-
-const defaultLocale: SupportedLocale = 'en-US';
 const localeStorage = {
 	namespace: 'locale',
 	version: 1,
 	codec: stringStorageCodec((value) => supportedLocales.includes(value as SupportedLocale)),
 	legacyKeys: ['user-locale'],
 } as const;
-
-const messageModules = {
-	...import.meta.glob<MessageTree>('./messages/*.json', { eager: true, import: 'default' }),
-	...import.meta.glob<MessageTree>('../pages/*/i18n/*.json', { eager: true, import: 'default' }),
-	...import.meta.glob<MessageTree>('../../shared/*/i18n/*.json', { eager: true, import: 'default' }),
-	...import.meta.glob<MessageTree>('../../features/*/i18n/*.json', { eager: true, import: 'default' }),
-	...import.meta.glob<MessageTree>('../../features/*/next/i18n/*.json', { eager: true, import: 'default' }),
-	...import.meta.glob<MessageTree>('../../runtimes/*/i18n/*.json', { eager: true, import: 'default' }),
-};
-
-const isMessageTree = (value: string | MessageTree | undefined): value is MessageTree =>
-	typeof value === 'object' && value !== null;
-
-const mergeTree = (target: MessageTree, source: MessageTree, sourcePath: string, prefix = ''): void => {
-	for (const [key, value] of Object.entries(source)) {
-		const path = prefix ? `${prefix}.${key}` : key;
-		const existing = target[key];
-
-		if (typeof value === 'string') {
-			if (existing !== undefined) {
-				throw new Error(`[i18n] Duplicate translation key "${path}" from ${sourcePath}.`);
-			}
-			target[key] = value;
-			continue;
-		}
-
-		if (typeof existing === 'string') {
-			throw new Error(`[i18n] Translation namespace collision at "${path}" from ${sourcePath}.`);
-		}
-
-		const branch = isMessageTree(existing) ? existing : {};
-		target[key] = branch;
-		mergeTree(branch, value, sourcePath, path);
-	}
-};
-
-const messages = Object.fromEntries(supportedLocales.map((locale) => [locale, {} as MessageTree])) as Record<
-	SupportedLocale,
-	MessageTree
->;
-
-for (const [path, module] of Object.entries(messageModules)) {
-	const locale = supportedLocales.find((candidate) => path.endsWith(`/${candidate}.json`));
-	if (!locale) {
-		throw new Error(`[i18n] Unsupported locale file: ${path}`);
-	}
-	mergeTree(messages[locale], module, path);
-}
-
-const flattenKeys = (tree: MessageTree, prefix = ''): string[] =>
-	Object.entries(tree).flatMap(([key, value]) => {
-		const path = prefix ? `${prefix}.${key}` : key;
-		return typeof value === 'string' ? [path] : flattenKeys(value, path);
-	});
-
-const referenceKeys = new Set(flattenKeys(messages[defaultLocale]));
-for (const locale of supportedLocales) {
-	const localeKeys = new Set(flattenKeys(messages[locale]));
-	const missing = [...referenceKeys].filter((key) => !localeKeys.has(key));
-	const extra = [...localeKeys].filter((key) => !referenceKeys.has(key));
-	if (missing.length || extra.length) {
-		throw new Error(
-			`[i18n] Locale ${locale} does not match ${defaultLocale}. Missing: ${missing.join(', ') || '-'}; extra: ${extra.join(', ') || '-'}.`,
-		);
-	}
-}
 
 const resolveSupportedLocale = (candidate?: string | null): SupportedLocale | null => {
 	if (!candidate) return null;
@@ -107,25 +36,55 @@ const i18n = createI18n({
 	legacy: false,
 	locale: getInitialLocale(),
 	fallbackLocale: defaultLocale,
-	messages,
+	messages: {},
 });
 
 installUiTranslator((key, parameters) => (parameters ? i18n.global.t(key, parameters) : i18n.global.t(key)));
 
-export const setLocale = (candidate: string): boolean => {
+const loaders = {
+	'en-US': () => import('virtual:nexus-locale/en-US'),
+
+	'zh-CN': () => import('virtual:nexus-locale/zh-CN'),
+
+	'ja-JP': () => import('virtual:nexus-locale/ja-JP'),
+};
+const loading = new Map<SupportedLocale, Promise<void>>();
+let selection = 0;
+
+function loadLocale(locale: SupportedLocale): Promise<void> {
+	const previous = loading.get(locale);
+	if (previous) return previous;
+	const task = loaders[locale]()
+		.then((module) => {
+			i18n.global.setLocaleMessage(locale, module.default);
+		})
+		.catch((error: unknown) => {
+			loading.delete(locale);
+			throw error;
+		});
+	loading.set(locale, task);
+	return task;
+}
+
+export async function initializeLocale(): Promise<void> {
+	const locale = getInitialLocale();
+	await loadLocale(locale);
+	i18n.global.locale.value = locale;
+	document.documentElement.lang = locale;
+}
+
+export async function setLocale(candidate: string): Promise<boolean> {
 	const locale = resolveSupportedLocale(candidate);
 	if (!locale) return false;
-
-	const composer = i18n.global as unknown as Composer;
-	composer.locale.value = locale;
+	const current = ++selection;
+	await loadLocale(locale);
+	if (current !== selection) return false;
+	i18n.global.locale.value = locale;
 	document.documentElement.lang = locale;
 	writeStoredValue(localeStorage, locale);
 	return true;
-};
+}
 
-export const getLocale = (): SupportedLocale => {
-	const composer = i18n.global as unknown as Composer;
-	return resolveSupportedLocale(composer.locale.value) ?? defaultLocale;
-};
+export const getLocale = (): SupportedLocale => resolveSupportedLocale(i18n.global.locale.value) ?? defaultLocale;
 
 export default i18n;

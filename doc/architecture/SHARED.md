@@ -539,3 +539,14 @@ revision 为不透明随机版本，首次为空；Shared 只校验表示，CAS�
 ### Agent 日志等待状态
 
 AgentResourceSessionView 增加 waitingOutputJobs 非负整数，严格 codec、后端 WS mapper 和前端 native mapper 同步投影。它表示因日志存储空间不足而暂停接收输出的活动 Job 数量，不是新的执行终态或配额。日志正文、索引和内部 Job 读取能力仅由后端/模型消费，不增加无前端消费者的 Shared DTO。
+
+## 诊断 schema 的唯一来源
+
+1. **职责与范围**：System diagnostics 作为已接入的 schema 契约，统一类型、严格解码和 Fastify 响应结构；其它协议保持原严格 codec，未宣称完成全库迁移。
+2. **子功能与目录**：`system/diagnostics/model.ts` 定义 Zod Mini 业务结构与推导类型；`http.ts` 定义完整响应/错误、路径和 JSON Schema 生成；`http-codec.ts` 负责容量与安全失败映射。
+3. **依赖方向**：Shared 只依赖 Zod Mini 和所属基础 values；前端 API 与后端 HTTP 共用。Zod 的星数、维护和缺陷修复证据见本轮 testing；不依赖后端框架或数据库。
+4. **类型与转换**：计数为安全非负整数，耗时/CPU 为有限非负值；指标名字与单位必须对应，模块与指标不能重复，数据库可用状态与版本关联。类型从 schema 推导，应用与协议仍保留独立白名单 mapper。
+5. **入口与安装**：`HOST_DIAGNOSTIC_PATH` 被双端消费，真实 Fastify 路由挂载生成的 response schema 并使用框架序列化，返回前用同一 decoder 执行跨字段校验和既有完整编码预算。
+6. **数据、事务与并发**：不持有数据库或请求状态；新增 SQLite 指标由原 System 模块读取，不改变原采样节奏。
+7. **生命周期与失败**：未知字段、缺失字段、类型错误及跨字段不一致统一拒绝；不做强制类型转换，不扩大公开错误正文。JSON Schema 只表达结构条件，细化规则仍由 shared decoder 执行。
+8. **当前能力与验收**：诊断双端和真实路由已接线，类型、构建及新增契约场景按 testing 记录。全库 OpenAPI/AsyncAPI 生成仍是 PLAN 中的独立待办。

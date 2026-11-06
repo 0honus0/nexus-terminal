@@ -894,6 +894,7 @@
     "typescript": "catalog:node-build"
   },
   "dependencies": {
-    "semver": "7.8.6"
+    "semver": "7.8.6",
+    "zod": "4.6.7"
   }
 }

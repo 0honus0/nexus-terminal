@@ -2,6 +2,7 @@ import type { Logger } from '../../logging/logger.js';
 import { logDiagnostic } from '../../logging/diagnostic-log.js';
 import type { SqlExecutor } from './sql-types.js';
 import { SqliteTransactionAdapter } from './adapters/transaction-sql.js';
+import { SqliteStatistics } from './sqlite-statistics.js';
 import { Worker } from 'node:worker_threads';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { realpathSync, mkdirSync } from 'node:fs';
@@ -30,9 +31,17 @@ interface TransactionAdmissionScope {
 	admissions: readonly ((tx: SqlExecutor) => Promise<void>)[];
 }
 
+interface ComposedTransaction {
+	executor: SqlExecutor;
+	active: boolean;
+	tasks: Set<Promise<unknown>>;
+	failures: Set<unknown>;
+}
+
 const openDatabasePaths = new Set<string>();
 
 export class SqliteRuntime implements SqlExecutor {
+	readonly statistics = new SqliteStatistics();
 	private readonly worker: Worker;
 	private readonly pending = new Map<number, PendingCall>();
 	private nextId = 0;
@@ -45,6 +54,7 @@ export class SqliteRuntime implements SqlExecutor {
 	private closed = false;
 	private readonly transactionScope = new AsyncLocalStorage<boolean>();
 	private readonly admissionScope = new AsyncLocalStorage<TransactionAdmissionScope>();
+	private readonly composedScope = new AsyncLocalStorage<ComposedTransaction>();
 	private readonly directExecutor: SqlExecutor = {
 		exec: (sql) => this.call('exec', sql),
 
@@ -230,9 +240,20 @@ export class SqliteRuntime implements SqlExecutor {
 			return Promise.reject(this.unavailable);
 		}
 		this.pendingOperations++;
-		const result = this.tail.then(work).finally(() => {
-			this.pendingOperations--;
-		});
+		const queuedAt = performance.now();
+		const result = this.tail
+			.then(async () => {
+				const startedAt = performance.now();
+				this.statistics.record('waiting', startedAt - queuedAt);
+				try {
+					return await work();
+				} finally {
+					this.statistics.record('execution', performance.now() - startedAt);
+				}
+			})
+			.finally(() => {
+				this.pendingOperations--;
+			});
 		this.tail = result.catch(() => undefined);
 		return result;
 	}
@@ -298,13 +319,78 @@ export class SqliteRuntime implements SqlExecutor {
 	}
 
 	private readOrWrite<T>(work: (tx: SqlExecutor) => Promise<T>, direct: () => Promise<T>): Promise<T> {
+		const composed = this.composedScope.getStore();
+		if (composed) {
+			return this.participate(composed, work);
+		}
 		const admissions = this.admissions();
 		return this.enqueue(admissions.length ? () => this.runTransaction(work, admissions) : direct);
 	}
 
 	transaction<T>(work: (tx: SqlExecutor) => Promise<T>): Promise<T> {
+		const composed = this.composedScope.getStore();
+		if (composed) {
+			return this.participate(composed, work);
+		}
 		const admissions = this.admissions();
 		return this.enqueue(() => this.runTransaction(work, admissions));
+	}
+
+	/** Explicit adapter-owned composition for state assembly, including lazy expiry writes.
+	 * Participants share one commit; any participant failure poisons the whole transaction.
+	 * Ordinary nested transactions and external work inside a transaction remain forbidden.
+	 */
+	composeTransaction<T>(work: () => Promise<T>): Promise<T> {
+		const admissions = this.admissions();
+		return this.enqueue(() =>
+			this.runTransaction(async (executor) => {
+				const scope: ComposedTransaction = { executor, active: true, tasks: new Set(), failures: new Set() };
+				let outcome: TransactionOutcome<T>;
+				try {
+					outcome = { status: 'ok', value: await this.composedScope.run(scope, work) };
+				} catch (error) {
+					scope.failures.add(error);
+					outcome = { status: 'error', error };
+				}
+				scope.active = false;
+				if (scope.tasks.size) {
+					scope.failures.add(
+						new SqliteFailure('transaction', null, {
+							cause: new Error('Unawaited composed transaction work'),
+						}),
+					);
+					await Promise.allSettled([...scope.tasks]);
+				}
+				if (scope.failures.size) {
+					const failures = [...scope.failures];
+					throw failures.length === 1
+						? failures[0]
+						: new AggregateError(failures, 'Composed transaction failed');
+				}
+				if (outcome.status === 'error') {
+					throw outcome.error;
+				}
+				return outcome.value;
+			}, admissions),
+		);
+	}
+
+	private participate<T>(scope: ComposedTransaction, work: (tx: SqlExecutor) => Promise<T>): Promise<T> {
+		if (!scope.active) {
+			return Promise.reject(new SqliteFailure('transaction'));
+		}
+		const task = Promise.resolve()
+			.then(() => work(scope.executor))
+			.catch((error: unknown) => {
+				scope.failures.add(error);
+				throw error;
+			})
+			.finally(() => scope.tasks.delete(task));
+		scope.tasks.add(task);
+		// Observe even a detached participant immediately; the composition still reports
+		// every failure and rejects instead of committing partially observed work.
+		void task.catch(() => undefined);
+		return task;
 	}
 
 	private async runTransaction<T>(
@@ -386,12 +472,15 @@ export class SqliteRuntime implements SqlExecutor {
 	}
 
 	private async commit(): Promise<void> {
+		const startedAt = performance.now();
 		try {
 			await this.transactions.commit();
 		} catch (error) {
 			const failure = new SqliteFailure('commit_unknown', null, { cause: error });
 			this.markUnavailable(failure);
 			throw failure;
+		} finally {
+			this.statistics.record('commit', performance.now() - startedAt);
 		}
 	}
 

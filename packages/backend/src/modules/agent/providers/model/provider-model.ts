@@ -216,7 +216,7 @@ export class ProviderModel {
 	}
 
 	async guardCurrent(row: ProviderRecord): Promise<void> {
-		const current = await this.get(row.userId, row.id);
+		const current = await agentStorage(() => this.storage.generation(row.userId, row.id));
 		if (
 			!current ||
 			!current.enabled ||

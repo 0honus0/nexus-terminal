@@ -32,7 +32,7 @@ export interface StoredAuditQuery {
 }
 
 export interface AuditStorage {
-	append(input: StoredAuditInput, retain: number): Promise<{ record: StoredAuditRecord; created: boolean }>;
+	append(input: StoredAuditInput): Promise<{ record: StoredAuditRecord; created: boolean }>;
 	prune(retain: number): Promise<void>;
 	list(query: StoredAuditQuery): Promise<StoredAuditRecord[]>;
 }

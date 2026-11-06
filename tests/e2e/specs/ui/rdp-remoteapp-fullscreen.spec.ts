@@ -31,13 +31,17 @@ const RDP_TOOLBAR_TAB_ORDER = [
 	'Close',
 ];
 
-async function expectRdpToolbarLayout(panel: Locator): Promise<void> {
+async function expectRdpToolbarLayout(panel: Locator, touch = false): Promise<void> {
 	const layout = await panel.evaluate((element) => {
 		const chrome = element.querySelector<HTMLElement>('[data-desktop-chrome]');
 		if (!chrome) throw new Error('RDP window controls are missing');
 		const panelBox = element.getBoundingClientRect();
-		const controls = Array.from(chrome.querySelectorAll<HTMLElement>('input, button'));
+		const controls = Array.from(chrome.querySelectorAll<HTMLElement>('input, button')).filter((control) =>
+			control.checkVisibility(),
+		);
 		return {
+			compact: panelBox.width < 900,
+			height: chrome.getBoundingClientRect().height,
 			order: controls.map((control) => control.getAttribute('aria-label') || control.textContent?.trim()),
 			overflow: chrome.scrollWidth - chrome.clientWidth,
 			insidePanel: controls.every((control) => {
@@ -46,7 +50,19 @@ async function expectRdpToolbarLayout(panel: Locator): Promise<void> {
 			}),
 		};
 	});
-	expect(layout.order.slice(0, RDP_TOOLBAR_TAB_ORDER.length)).toEqual(RDP_TOOLBAR_TAB_ORDER);
+	const order = layout.compact
+		? [
+				'Window size',
+				'Reconnect',
+				'File clipboard',
+				...(touch ? ['Touch'] : []),
+				'Browser Fullscreen',
+				'Minimize',
+				'Close',
+			]
+		: RDP_TOOLBAR_TAB_ORDER;
+	expect(layout.order).toEqual(order);
+	expect(layout.height).toBeLessThanOrEqual(48);
 	expect(layout.overflow).toBe(0);
 	expect(layout.insidePanel).toBe(true);
 }
@@ -842,33 +858,128 @@ test('RDP pointer resize and restore-button dragging preserve minimized window b
 test.describe('RDP docked restore on touch screens', () => {
 	test.use({ hasTouch: true });
 
-	test('the visible half restores the current RDP window on a trusted touch tap', async ({ page, context }) => {
+	test('compact controls stay on one row and docked taps tolerate touch movement', async ({ page, context }) => {
 		await loginAsInitialAdmin(context.request);
-		await page.setViewportSize({ width: 390, height: 700 });
+		await page.setViewportSize({ width: 820, height: 1180 });
 		await updateUiPreferences(context.request, (preferences) => {
 			preferences.language = 'en-US';
 		});
 		const name = 'E2E RDP Docked Touch';
 		const connectionId = await createRemoteConnection(context.request, 'RDP', name, '127.0.0.1', E2E_PORTS.rdp);
+		const cdp = await context.newCDPSession(page);
+
+		const touch = async (x: number, y: number, deltaX: number, deltaY: number) => {
+			await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y, id: 1 }] });
+			await cdp.send('Input.dispatchTouchEvent', {
+				type: 'touchMove',
+				touchPoints: [{ x: x + deltaX, y: y + deltaY, id: 1 }],
+			});
+			await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+		};
+
 		try {
 			await openRemoteConnection(page, name);
 			const panel = remoteWindow(page);
 			await expect(panel).toContainText('Connected', { timeout: 15_000 });
-			await revealDesktopControls(page, true);
-			await expectRdpToolbarLayout(panel);
-			await expect(panel.getByRole('group', { name: 'Touch', exact: true })).toBeVisible();
-			await panel.getByRole('button', { name: 'Minimize', exact: true }).tap();
-			const restore = page.getByRole('button', { name: 'Restore remote desktop window', exact: true });
-			await expect(restore).toHaveAttribute('data-dock', 'left');
-			const anchor = await restore.locator('..').boundingBox();
-			expect(anchor).toBeTruthy();
-			await page.touchscreen.tap(anchor!.x + 12, anchor!.y + 25);
-			await expect(panel).toBeVisible();
-			await expect(restore).toBeHidden();
-			await expect(panel).toContainText('Connected');
+			// Desktop UA with touch covers tablets which request desktop websites.
+			for (const width of [820, 390, 320]) {
+				await step(`single-row touch toolbar and restore at ${width}px`, async () => {
+					await page.setViewportSize({ width, height: 780 });
+					await revealDesktopControls(page, true);
+					await expectRdpToolbarLayout(panel, true);
+					await panel.getByRole('button', { name: 'Touch', exact: true }).tap();
+					const touchPanel = page.getByRole('dialog', { name: 'Touch', exact: true });
+					await expect(touchPanel.getByRole('group', { name: 'Touch', exact: true })).toBeVisible();
+					for (const mode of ['Touchpad', 'Direct']) {
+						const button = touchPanel.getByRole('button', { name: mode, exact: true });
+						await button.tap();
+						await expect(button).toHaveAttribute('aria-pressed', 'true');
+					}
+					await page.keyboard.press('Escape');
+					await expect(touchPanel).toBeHidden();
+					await expect(panel.getByRole('button', { name: 'Touch', exact: true })).toBeFocused();
+					await panel.getByRole('button', { name: 'Window size', exact: true }).tap();
+					const sizePanel = page.getByRole('dialog', { name: 'Window size', exact: true });
+					await expect(sizePanel.getByRole('spinbutton', { name: 'Width', exact: true })).toBeVisible();
+					await expect(sizePanel.getByRole('spinbutton', { name: 'Height', exact: true })).toBeVisible();
+					const sizeBox = await sizePanel.boundingBox();
+					expect(sizeBox).toBeTruthy();
+					expect(sizeBox!.x).toBeGreaterThanOrEqual(0);
+					expect(sizeBox!.x + sizeBox!.width).toBeLessThanOrEqual(width);
+					await page.keyboard.press('Escape');
+					await expect(sizePanel).toBeHidden();
+					await panel.getByRole('button', { name: 'File clipboard', exact: true }).tap();
+					const files = page.getByRole('dialog', { name: 'File clipboard', exact: true });
+					await expect(files).toBeVisible();
+					await files.getByRole('button', { name: 'Close', exact: true }).tap();
+
+					const restore = page.getByRole('button', { name: 'Restore remote desktop window', exact: true });
+					for (const jitter of [1, 4]) {
+						await revealDesktopControls(page, true);
+						await panel.getByRole('button', { name: 'Minimize', exact: true }).tap();
+						await expect(restore).toBeVisible();
+						const anchor = await restore.locator('..').boundingBox();
+						expect(anchor).toBeTruthy();
+						const right = (await restore.getAttribute('data-dock')) === 'right';
+						await touch(
+							right ? anchor!.x + anchor!.width - 12 : anchor!.x + 12,
+							anchor!.y + 25,
+							jitter,
+							jitter,
+						);
+						await expect(panel).toBeVisible();
+						await expect(restore).toBeHidden();
+					}
+
+					await revealDesktopControls(page, true);
+					await panel.getByRole('button', { name: 'Minimize', exact: true }).tap();
+					const anchor = await restore.locator('..').boundingBox();
+					expect(anchor).toBeTruthy();
+					const right = (await restore.getAttribute('data-dock')) === 'right';
+					const startX = right ? anchor!.x + anchor!.width - 12 : anchor!.x + 12;
+					const endX = right ? 12 : width - 12;
+					await touch(startX, anchor!.y + 25, endX - startX, 40);
+					await expect(panel).toBeHidden();
+					await expect(restore).toHaveAttribute('data-dock', right ? 'left' : 'right');
+					const docked = await restore.locator('..').boundingBox();
+					expect(docked).toBeTruthy();
+					await touch(right ? docked!.x + 12 : docked!.x + docked!.width - 12, docked!.y + 25, 1, 1);
+					await expect(panel).toBeVisible();
+					await expect(panel).toContainText('Connected');
+				});
+			}
+			await step('typing a new size preserves focus across the compact layout boundary', async () => {
+				await page.setViewportSize({ width: 1440, height: 1000 });
+				await revealDesktopControls(page, true);
+				await panel.getByRole('button', { name: 'Window size', exact: true }).tap();
+				const sizePanel = page.getByRole('dialog', { name: 'Window size', exact: true });
+				const compactWidth = sizePanel.getByRole('spinbutton', { name: 'Width', exact: true });
+				const before = await panel.boundingBox();
+				await compactWidth.focus();
+				await compactWidth.press('Control+A');
+				await compactWidth.pressSequentially('1064');
+				await expect(compactWidth).toBeFocused();
+				expect(await panel.boundingBox()).toEqual(before);
+				await compactWidth.press('Tab');
+				await expect(sizePanel).toBeHidden();
+				await revealDesktopControls(page, true);
+				const inlineWidth = panel.getByRole('spinbutton', { name: 'Width', exact: true });
+				await expect(inlineWidth).toBeEnabled();
+				await inlineWidth.focus();
+				await inlineWidth.press('Control+A');
+				await inlineWidth.pressSequentially('1200');
+				await expect(inlineWidth).toBeFocused();
+				await expect(inlineWidth).toHaveValue('1200');
+				expect((await panel.boundingBox())!.width).toBe(1064);
+				await inlineWidth.press('Tab');
+				await expect
+					.poll(async () => (await getUiPreferences(context.request)).preferences.rdpModalWidth)
+					.toBe(1200);
+			});
 			await revealDesktopControls(page, true);
 			await panel.getByRole('button', { name: 'Close', exact: true }).tap();
 		} finally {
+			await cdp.detach();
 			await context.request.delete(`/api/v1/targets/connections/${connectionId}`, {
 				headers: { Origin: E2E_URLS.frontendOrigin },
 			});

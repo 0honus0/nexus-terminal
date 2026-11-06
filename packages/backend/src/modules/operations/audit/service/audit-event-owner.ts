@@ -16,6 +16,8 @@ export class AuditEventOwner {
 	private readonly failures = new FailureSummary();
 	private readonly recordedFailures = new WeakSet<Error>();
 	private closePromise: Promise<void> | null = null;
+	private pruneRequested = false;
+	private pruning: Promise<void> | null = null;
 
 	constructor(
 		private readonly audit: AuditService,
@@ -84,7 +86,7 @@ export class AuditEventOwner {
 			]);
 			const errors = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
 			try {
-				await this.audit.prune();
+				await this.pruneAudit();
 			} catch (error) {
 				errors.push(error);
 			}
@@ -92,6 +94,25 @@ export class AuditEventOwner {
 				throw new AggregateError(errors, 'Operation observers failed');
 			}
 		}, this.tasks);
+	}
+
+	/** Concurrent publishers share cleanup; a publication during cleanup requests one final pass. */
+	private pruneAudit(): Promise<void> {
+		this.pruneRequested = true;
+		if (this.pruning !== null) {
+			return this.pruning;
+		}
+		this.pruning = Promise.resolve().then(async () => {
+			try {
+				while (this.pruneRequested) {
+					this.pruneRequested = false;
+					await this.audit.prune();
+				}
+			} finally {
+				this.pruning = null;
+			}
+		});
+		return this.pruning;
 	}
 
 	quiesce(): void {

@@ -38,6 +38,7 @@ export function registerOperationsSnapshot(secrets: SecretBox | null): SnapshotR
 			columns: ['id', 'version', 'name', 'enabled', 'events_json', 'config_json', 'created_at', 'updated_at'],
 		},
 		{ name: 'operations_notification_fanout', columns: ['audit_id'] },
+		{ name: 'operations_notification_pending', columns: ['audit_id'] },
 		{
 			name: 'operations_notification_deliveries',
 			columns: ['id', 'setting_id', 'event', 'status', 'config_json', 'subject_id', 'created_at', 'updated_at'],
@@ -47,6 +48,21 @@ export function registerOperationsSnapshot(secrets: SecretBox | null): SnapshotR
 		tables,
 
 		validate(rows) {
+			const pendingRows = rows.get('operations_notification_pending') ?? [];
+			const processedRows = rows.get('operations_notification_fanout') ?? [];
+			const pending = new Set(pendingRows.map((row) => row.audit_id));
+			const processed = new Set(processedRows.map((row) => row.audit_id));
+			const audits = rows.get('operations_audit') ?? [];
+			// Every retained audit is either pending or settled, never both. Foreign keys alone
+			// cannot enforce this partition when accepting a restored snapshot.
+			if (
+				pending.size !== pendingRows.length ||
+				processed.size !== processedRows.length ||
+				pending.size + processed.size !== audits.length ||
+				audits.some((row) => pending.has(row.id) === processed.has(row.id))
+			) {
+				throw new SnapshotFailure('unavailable');
+			}
 			const logging = rows.get('operations_logging') ?? [];
 			// An untouched installation uses LoggingService's version-0 default;
 			// only an explicit settings change creates the singleton record.

@@ -66,9 +66,26 @@ export function registerSystem(
 			const pendingRequests = sqlite.getPendingRequestCount();
 			const pendingOperations = sqlite.getPendingOperationCount();
 			const memory = await sqlite.getWorkerMemory();
+			const statistics = sqlite.statistics.read();
 			return [
 				{ name: 'pending_requests', unit: 'count', value: pendingRequests },
 				{ name: 'pending_operations', unit: 'count', value: pendingOperations },
+				{ name: 'database_operations', unit: 'count', value: statistics.waiting.count },
+				{ name: 'database_queue_wait_ms', unit: 'milliseconds', value: statistics.waiting.milliseconds },
+				{
+					name: 'database_queue_wait_max_ms',
+					unit: 'milliseconds',
+					value: statistics.waiting.maximumMilliseconds,
+				},
+				{ name: 'database_execution_ms', unit: 'milliseconds', value: statistics.execution.milliseconds },
+				{
+					name: 'database_execution_max_ms',
+					unit: 'milliseconds',
+					value: statistics.execution.maximumMilliseconds,
+				},
+				{ name: 'database_commits', unit: 'count', value: statistics.commit.count },
+				{ name: 'database_commit_ms', unit: 'milliseconds', value: statistics.commit.milliseconds },
+				{ name: 'database_commit_max_ms', unit: 'milliseconds', value: statistics.commit.maximumMilliseconds },
 				{ name: 'worker_heap_used_bytes', unit: 'bytes', value: memory.heapUsedBytes },
 				{ name: 'worker_heap_total_bytes', unit: 'bytes', value: memory.heapTotalBytes },
 				{ name: 'worker_external_bytes', unit: 'bytes', value: memory.externalBytes },

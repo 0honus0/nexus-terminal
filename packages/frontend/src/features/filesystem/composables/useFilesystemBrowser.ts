@@ -1,3 +1,4 @@
+import { parentOf } from '../model/filesystem-path-rules';
 import { computed, ref, shallowRef, watch, type ComputedRef, type Ref } from 'vue';
 import type { FilesystemChannel } from '../ports/filesystem-channel';
 import type { RemoteFileSearchEntry, RemoteFileEntry } from '../model/filesystem-types';
@@ -42,13 +43,6 @@ export interface FilesystemBrowserController {
 }
 
 const PREFETCH_DELAY_MS = 20;
-
-const parentPath = (path: string) => {
-	const normalized = path.replace(/\/+$/, '') || '/';
-	if (normalized === '/') return '/';
-	const index = normalized.lastIndexOf('/');
-	return index <= 0 ? '/' : normalized.slice(0, index);
-};
 
 const entryName = (entry: RemoteFileEntry): string =>
 	'relativePath' in entry && typeof entry.relativePath === 'string' ? entry.relativePath : entry.name;
@@ -251,7 +245,7 @@ export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '
 		while (true) {
 			const result = await loadDirectory(candidate, true);
 			if (result !== false || candidate === '/') return;
-			candidate = parentPath(candidate);
+			candidate = parentOf(candidate);
 		}
 	};
 
@@ -259,7 +253,7 @@ export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '
 		if (entry.metadata.isDirectory) await load(entry.path);
 	};
 
-	const goParent = () => load(parentPath(path.value));
+	const goParent = () => load(parentOf(path.value));
 
 	const search = async () => {
 		const query = searchQuery.value.trim();

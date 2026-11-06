@@ -11,6 +11,7 @@ export async function frozenExecution(tx: SqlReader, runId: string): Promise<Sto
 }
 
 export async function executionUsage(tx: SqlExecutor, runId: string, userId: number): Promise<StoredExecutionUsage> {
+	// SQLite's partial-index implication rules require the exact active-state predicate as well as equality.
 	const row = await tx.one(
 		`SELECT COALESCE(c.parent_id,r.id) AS root_id,
  (SELECT COUNT(*) FROM agent_run_model_steps s WHERE s.run_id=COALESCE(c.parent_id,r.id) OR s.run_id IN (SELECT run_id FROM agent_run_children WHERE parent_id=COALESCE(c.parent_id,r.id))) +
@@ -25,7 +26,7 @@ export async function executionUsage(tx: SqlExecutor, runId: string, userId: num
   WHERE b.root_id=COALESCE(c.parent_id,r.id)) +
  (SELECT COALESCE(SUM(CASE WHEN a.state='failed' THEN 0 WHEN a.input_tokens IS NOT NULL AND a.output_tokens IS NOT NULL
  THEN a.input_tokens+a.output_tokens ELSE a.estimated_tokens END),0) FROM agent_context_compactions a WHERE a.root_id=COALESCE(c.parent_id,r.id)) + (SELECT COALESCE(SUM(CASE WHEN a.state='failed' THEN 0 WHEN a.input_tokens IS NOT NULL AND a.output_tokens IS NOT NULL THEN a.input_tokens+a.output_tokens ELSE a.estimated_tokens END),0) FROM agent_thread_titles a WHERE a.run_id=COALESCE(c.parent_id,r.id)) AS tokens,
- (SELECT COUNT(*) FROM agent_run_model_steps s JOIN agent_runs owner ON owner.id=s.run_id WHERE owner.user_id=? AND s.state='dispatched' AND s.response_received=0) +
+ (SELECT COUNT(*) FROM agent_run_model_steps s JOIN agent_runs owner ON owner.id=s.run_id WHERE owner.user_id=? AND s.state='dispatched' AND s.state IN ('reserved','dispatched') AND s.response_received=0) +
  (SELECT COUNT(*) FROM agent_context_compactions a JOIN agent_runs owner ON owner.id=a.run_id WHERE owner.user_id=? AND a.state='dispatched') + (SELECT COUNT(*) FROM agent_thread_titles a JOIN agent_runs owner ON owner.id=a.run_id WHERE owner.user_id=? AND a.state='dispatched') AS calls
  FROM agent_runs r LEFT JOIN agent_run_children c ON c.run_id=r.id WHERE r.id=? AND r.user_id=?`,
 		[userId, userId, userId, runId, userId],

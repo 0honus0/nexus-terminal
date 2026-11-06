@@ -9,6 +9,7 @@
 		UiInfoHint,
 		UiNumberInput,
 		UiOverlayPanel,
+		UiPopover,
 		UiResizeHandle,
 		UiSpinner,
 		type UiTone,
@@ -69,6 +70,7 @@
 	const device = useDeviceCapabilities();
 	const [DefineWindowActions, WindowActions] = createReusableTemplate();
 	const [DefineSizeControls, SizeControls] = createReusableTemplate();
+	const [DefineReconnectControl, ReconnectControl] = createReusableTemplate();
 	const [DefineTouchControls, TouchControls] = createReusableTemplate();
 	const panel = ref<HTMLElement | null>(null);
 	const display = ref<HTMLElement | null>(null);
@@ -124,8 +126,16 @@
 	const vncText = ref('');
 	const vncTextFocused = ref(false);
 	const fileClipboardOpen = ref(false);
+	const sizeControlsOpen = ref(false);
+	const touchControlsOpen = ref(false);
 	const toolsOpen = ref(false);
 	const floatingTools = computed(() => props.connection?.type === 'RDP' && !fullscreen.value);
+	const compactTools = computed(() => floatingTools.value && modalWidth.value < 900);
+	const toolbarDensity = computed(() => (floatingTools.value && device.hasTouch.value ? 'default' : 'compact'));
+	const toolsPanelOpen = computed(() => fileClipboardOpen.value || sizeControlsOpen.value || touchControlsOpen.value);
+	const touchHint = computed(() =>
+		t(touchMode.value === 'direct' ? 'remoteDesktopModal.touchHintDirect' : 'remoteDesktopModal.touchHintTouchpad'),
+	);
 
 	const revealTools = async (event: MouseEvent) => {
 		toolsOpen.value = true;
@@ -158,6 +168,8 @@
 		if (!(event.target instanceof Element) || event.target.closest('[data-desktop-chrome], [data-desktop-edge]'))
 			return;
 		toolsOpen.value = false;
+		sizeControlsOpen.value = false;
+		touchControlsOpen.value = false;
 		if (document.activeElement instanceof HTMLElement && document.activeElement.closest('[data-desktop-chrome]')) {
 			document.activeElement.blur();
 		}
@@ -311,6 +323,8 @@
 	const disconnect = () => {
 		cancelWindowGestures();
 		fileClipboardOpen.value = false;
+		sizeControlsOpen.value = false;
+		touchControlsOpen.value = false;
 		toolsOpen.value = false;
 		viewRevision += 1;
 		vncText.value = '';
@@ -393,6 +407,12 @@
 		},
 
 		onEnd: () => dockRestoreButton(),
+
+		onTap: (event) => {
+			// Touch browsers can omit the synthesized click after a docked drag.
+			// Only a completed tap restores; cancel and actual dragging never do.
+			if (event.pointerType !== 'mouse') restore();
+		},
 	});
 
 	function dockRestoreButton(): void {
@@ -451,6 +471,8 @@
 
 	const minimize = () => {
 		if (fullscreen.value) return;
+		sizeControlsOpen.value = false;
+		touchControlsOpen.value = false;
 		hideMobileKeyboard();
 		minimized.value = true;
 	};
@@ -467,8 +489,18 @@
 		restore();
 	};
 
-	const commitSize = () => {
+	const commitSize = (dimension: 'width' | 'height', event: Event) => {
+		// Keep partial edits inside the input: resizing on every digit can switch
+		// the toolbar layout and unmount the focused control before editing ends.
+		const input = event.target;
+		if (!(input instanceof HTMLInputElement)) return;
+		const value = input.valueAsNumber;
+		if (Number.isFinite(value)) {
+			if (dimension === 'width') modalWidth.value = value;
+			else modalHeight.value = value;
+		}
 		clampSize();
+		input.value = String(dimension === 'width' ? modalWidth.value : modalHeight.value);
 		emit('sizeChange', { width: modalWidth.value, height: modalHeight.value });
 		void nextTick(sendSize);
 	};
@@ -498,7 +530,7 @@
 	};
 
 	const handleFullscreenKeydown = (event: KeyboardEvent) => {
-		if (fileClipboardOpen.value || certificateChallenge.value) return;
+		if (toolsPanelOpen.value || certificateChallenge.value) return;
 		if (
 			event.key === 'Escape' &&
 			floatingTools.value &&
@@ -619,6 +651,13 @@
 		void exitFullscreen();
 		disconnect();
 	});
+	watch(
+		() => [props.visible, props.connection?.id, floatingTools.value, compactTools.value] as const,
+		() => {
+			sizeControlsOpen.value = false;
+			touchControlsOpen.value = false;
+		},
+	);
 </script>
 
 <template>
@@ -626,7 +665,7 @@
 		<UiButton
 			type="button"
 			appearance="ghost"
-			density="compact"
+			:density="toolbarDensity"
 			icon-only
 			:title="fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')"
 			:aria-label="fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')"
@@ -637,7 +676,7 @@
 		<UiButton
 			type="button"
 			appearance="ghost"
-			density="compact"
+			:density="toolbarDensity"
 			icon-only
 			:title="t('common.minimize')"
 			:aria-label="t('common.minimize')"
@@ -648,7 +687,7 @@
 		<UiButton
 			type="button"
 			appearance="ghost"
-			density="compact"
+			:density="toolbarDensity"
 			icon-only
 			:title="t('common.close')"
 			:aria-label="t('common.close')"
@@ -657,68 +696,77 @@
 			<i class="fas fa-times fa-lg" aria-hidden="true"></i>
 		</UiButton>
 	</DefineWindowActions>
+	<DefineReconnectControl>
+		<UiButton
+			type="button"
+			appearance="solid"
+			tone="primary"
+			:density="floatingTools ? toolbarDensity : 'default'"
+			:icon-only="compactTools"
+			class="shrink-0 whitespace-nowrap"
+			:disabled="state === 'connecting'"
+			:aria-label="t('common.reconnect')"
+			:title="t('remoteDesktopModal.reconnectTooltip')"
+			@click="connect"
+		>
+			<i v-if="floatingTools" class="fas fa-rotate-right" aria-hidden="true"></i>
+			<span v-if="!compactTools">{{ t('common.reconnect') }}</span>
+		</UiButton>
+	</DefineReconnectControl>
 	<DefineSizeControls>
 		<div
 			class="remote-desktop-size-controls flex min-w-0 shrink-0 items-center gap-y-1"
 			:class="
-				device.isMobile.value
-					? 'ml-0 w-full flex-nowrap justify-end gap-x-1.5 border-t border-border/60 pt-2'
-					: 'ml-auto flex-wrap gap-x-2'
+				floatingTools
+					? 'gap-x-2'
+					: device.isMobile.value
+						? 'ml-0 w-full flex-nowrap justify-end gap-x-1.5 border-t border-border/60 pt-2'
+						: 'ml-auto flex-wrap gap-x-2'
 			"
 		>
-			<div class="remote-desktop-dimension">
+			<div class="remote-desktop-dimension" :class="{ 'remote-desktop-dimension-group': floatingTools }">
 				<label
 					:for="connection?.type === 'VNC' ? 'vnc-modal-width' : 'rdp-modal-width'"
 					class="shrink-0 whitespace-nowrap text-xs"
 				>
 					{{ t('common.width') }}:
 				</label>
-				<div class="min-w-0 w-20" :class="device.isMobile.value ? 'flex-1 max-w-20' : ''">
+				<div class="min-w-0 w-20" :class="device.isMobile.value && !floatingTools ? 'flex-1 max-w-20' : ''">
 					<UiNumberInput
 						:id="connection?.type === 'VNC' ? 'vnc-modal-width' : 'rdp-modal-width'"
-						v-model="modalWidth"
+						:model-value="modalWidth"
 						:disabled="sizeSaving"
 						density="compact"
 						:min="minPanelWidth()"
 						:max="maxPanelWidth()"
 						step="10"
 						:aria-label="t('common.width')"
-						@change="commitSize"
+						@change="commitSize('width', $event)"
 					/>
 				</div>
 			</div>
-			<div class="remote-desktop-dimension">
+			<div class="remote-desktop-dimension" :class="{ 'remote-desktop-dimension-group': floatingTools }">
 				<label
 					:for="connection?.type === 'VNC' ? 'vnc-modal-height' : 'rdp-modal-height'"
 					class="shrink-0 whitespace-nowrap text-xs"
 				>
 					{{ t('common.height') }}:
 				</label>
-				<div class="min-w-0 w-20" :class="device.isMobile.value ? 'flex-1 max-w-20' : ''">
+				<div class="min-w-0 w-20" :class="device.isMobile.value && !floatingTools ? 'flex-1 max-w-20' : ''">
 					<UiNumberInput
 						:id="connection?.type === 'VNC' ? 'vnc-modal-height' : 'rdp-modal-height'"
-						v-model="modalHeight"
+						:model-value="modalHeight"
 						:disabled="sizeSaving"
 						density="compact"
 						:min="minPanelHeight()"
 						:max="maxPanelHeight()"
 						step="10"
 						:aria-label="t('common.height')"
-						@change="commitSize"
+						@change="commitSize('height', $event)"
 					/>
 				</div>
 			</div>
-			<UiButton
-				type="button"
-				appearance="solid"
-				tone="primary"
-				class="shrink-0 whitespace-nowrap"
-				:disabled="state === 'connecting'"
-				:title="t('remoteDesktopModal.reconnectTooltip')"
-				@click="connect"
-			>
-				{{ t('common.reconnect') }}
-			</UiButton>
+			<ReconnectControl v-if="!floatingTools" />
 		</div>
 	</DefineSizeControls>
 	<DefineTouchControls>
@@ -727,19 +775,20 @@
 			class="flex min-w-0 flex-col gap-1"
 			:class="device.isMobile.value ? 'w-full' : ''"
 		>
-			<div class="flex items-center gap-1.5" :class="device.isMobile.value ? 'w-full justify-between' : ''">
+			<div
+				class="flex gap-1.5"
+				:class="
+					floatingTools
+						? 'flex-col items-stretch'
+						: ['items-center', { 'w-full justify-between': device.isMobile.value }]
+				"
+			>
 				<div class="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
 					<span class="text-[11px] text-text-muted">{{ t('remoteDesktopModal.touchModeLabel') }}</span>
 					<UiInfoHint
-						v-if="device.isMobile.value"
+						v-if="device.isMobile.value && !floatingTools"
 						:label="t('remoteDesktopModal.touchGuide')"
-						:text="
-							t(
-								touchMode === 'direct'
-									? 'remoteDesktopModal.touchHintDirect'
-									: 'remoteDesktopModal.touchHintTouchpad',
-							)
-						"
+						:text="touchHint"
 						trigger="click"
 						align="start"
 					/>
@@ -752,11 +801,12 @@
 					<button
 						type="button"
 						class="relative z-10 min-h-8 px-2 py-1 text-[11px] transition-colors"
-						:class="
+						:class="[
+							floatingTools && 'flex-1 whitespace-nowrap',
 							touchMode === 'direct'
 								? 'bg-primary text-white'
-								: 'bg-background text-foreground hover:bg-hover'
-						"
+								: 'bg-background text-foreground hover:bg-hover',
+						]"
 						:aria-pressed="touchMode === 'direct'"
 						:title="t('remoteDesktopModal.touchHintDirect')"
 						@click="setTouchMode('direct')"
@@ -767,11 +817,12 @@
 					<button
 						type="button"
 						class="relative z-10 min-h-8 border-l border-border px-2 py-1 text-[11px] transition-colors"
-						:class="
+						:class="[
+							floatingTools && 'flex-1 whitespace-nowrap',
 							touchMode === 'touchpad'
 								? 'bg-primary text-white'
-								: 'bg-background text-foreground hover:bg-hover'
-						"
+								: 'bg-background text-foreground hover:bg-hover',
+						]"
 						:aria-pressed="touchMode === 'touchpad'"
 						:title="t('remoteDesktopModal.touchHintTouchpad')"
 						@click="setTouchMode('touchpad')"
@@ -781,14 +832,12 @@
 					</button>
 				</div>
 			</div>
-			<span v-if="!device.isMobile.value" class="text-[11px] leading-tight text-text-muted">
-				{{
-					t(
-						touchMode === 'direct'
-							? 'remoteDesktopModal.touchHintDirect'
-							: 'remoteDesktopModal.touchHintTouchpad',
-					)
-				}}
+			<span
+				v-if="floatingTools || !device.isMobile.value"
+				class="text-[11px] text-text-muted"
+				:class="floatingTools ? 'leading-relaxed' : 'leading-tight'"
+			>
+				{{ touchHint }}
 			</span>
 		</div>
 	</DefineTouchControls>
@@ -840,7 +889,7 @@
 			@pointerleave="leaveTools"
 		>
 			<button
-				v-if="floatingTools && state === 'connected' && !toolsOpen && !fileClipboardOpen"
+				v-if="floatingTools && state === 'connected' && !toolsOpen && !toolsPanelOpen"
 				type="button"
 				data-desktop-edge="top"
 				class="remote-desktop-edge remote-desktop-edge-top"
@@ -855,7 +904,7 @@
 				class="remote-desktop-chrome"
 				data-desktop-chrome
 				:class="{
-					'remote-desktop-tools-revealed': toolsOpen || fileClipboardOpen || state !== 'connected',
+					'remote-desktop-tools-revealed': toolsOpen || toolsPanelOpen || state !== 'connected',
 					'remote-desktop-tools-dialog': fileClipboardOpen,
 				}"
 				@pointerenter="toolsOpen = true"
@@ -865,34 +914,92 @@
 					v-if="!fullscreen"
 					class="remote-desktop-header flex shrink-0 items-center justify-between border-b border-border p-3"
 				>
-					<h3 class="min-w-0 truncate text-base font-semibold">
+					<h3 class="min-w-0 truncate text-base font-semibold" :title="`${windowTitle} - ${connectionLabel}`">
 						<i
 							:class="connection?.type === 'VNC' ? 'fas fa-plug' : 'fas fa-desktop'"
 							class="mr-2 text-text-secondary"
 							aria-hidden="true"
 						></i>
-						{{ windowTitle }} - {{ connectionLabel }}
+						{{ floatingTools ? connectionLabel : `${windowTitle} - ${connectionLabel}` }}
 					</h3>
 					<div class="ml-2 flex shrink-0 items-center space-x-1">
-						<UiBadge appearance="soft" density="compact" :tone="stateTone">{{ stateLabel }}</UiBadge>
+						<UiBadge
+							appearance="soft"
+							density="compact"
+							:tone="stateTone"
+							:class="{ 'sr-only': compactTools }"
+							>{{ stateLabel }}</UiBadge
+						>
+						<span
+							v-if="compactTools"
+							class="remote-desktop-state-dot"
+							:data-state="state"
+							:title="stateLabel"
+							aria-hidden="true"
+						></span>
 						<WindowActions v-if="!floatingTools" />
 					</div>
 				</header>
 				<template v-if="floatingTools">
-					<div
-						class="remote-desktop-actions flex min-w-0 max-w-full flex-wrap items-center gap-2 text-xs text-text-secondary"
-					>
-						<SizeControls />
+					<div class="remote-desktop-actions flex shrink-0 items-center gap-1 text-xs text-text-secondary">
+						<UiPopover
+							v-if="compactTools"
+							v-model:open="sizeControlsOpen"
+							:ariaLabel="t('remoteDesktopModal.windowSize')"
+							:density="toolbarDensity"
+							icon-only
+							boundary-selector=".remote-desktop-panel"
+							panel-class="p-3"
+						>
+							<template #trigger><i class="fas fa-ruler-combined" aria-hidden="true"></i></template>
+							<template #panel>
+								<div class="remote-desktop-size-popover">
+									<p class="mb-3 text-xs font-medium">{{ t('remoteDesktopModal.windowSize') }}</p>
+									<SizeControls />
+								</div>
+							</template>
+						</UiPopover>
+						<SizeControls v-else />
+						<ReconnectControl />
 						<RdpFileClipboard
 							v-model:open="fileClipboardOpen"
+							:icon-only="compactTools"
+							:density="toolbarDensity"
 							:clipboard="controller.peer?.fileClipboard ?? null"
 							:enabled="state === 'connected'"
 						/>
+						<UiPopover
+							v-if="device.hasTouch.value"
+							v-model:open="touchControlsOpen"
+							:ariaLabel="t('remoteDesktopModal.touchModeLabel')"
+							:title="
+								t(
+									touchMode === 'direct'
+										? 'remoteDesktopModal.touchModeDirect'
+										: 'remoteDesktopModal.touchModeTouchpad',
+								)
+							"
+							:density="toolbarDensity"
+							icon-only
+							boundary-selector=".remote-desktop-panel"
+							panel-class="w-64 max-w-[calc(100vw-2rem)] p-3"
+						>
+							<template #trigger>
+								<i
+									:class="
+										touchMode === 'direct'
+											? 'fas fa-hand-pointer'
+											: 'fas fa-arrows-up-down-left-right'
+									"
+									aria-hidden="true"
+								></i>
+							</template>
+							<template #panel><TouchControls /></template>
+						</UiPopover>
 						<div class="flex shrink-0 items-center space-x-1">
 							<WindowActions />
 						</div>
 					</div>
-					<TouchControls />
 				</template>
 				<footer
 					v-else-if="!fullscreen"
@@ -1086,7 +1193,7 @@
 		left: 0;
 		z-index: 30;
 		display: flex;
-		flex-wrap: wrap;
+		flex-wrap: nowrap;
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0.5rem;
@@ -1108,10 +1215,29 @@
 		z-index: 1200;
 	}
 	.remote-desktop-panel-floating-tools .remote-desktop-header {
-		flex: 1 1 16rem;
+		flex: 1 1 0;
 		min-width: 0;
 		padding: 0;
 		border: 0;
+	}
+	.remote-desktop-panel-floating-tools .remote-desktop-header h3 {
+		font-size: 0.8125rem;
+	}
+	.remote-desktop-state-dot {
+		width: 0.5rem;
+		height: 0.5rem;
+		flex: none;
+		border-radius: 50%;
+		background: var(--color-text-muted);
+	}
+	.remote-desktop-state-dot[data-state='connected'] {
+		background: var(--status-success-color);
+	}
+	.remote-desktop-state-dot[data-state='connecting'] {
+		background: var(--status-warning-color);
+	}
+	.remote-desktop-state-dot[data-state='error'] {
+		background: var(--status-error-color);
 	}
 	.remote-desktop-dimension {
 		display: contents;
@@ -1119,13 +1245,25 @@
 	.remote-desktop-panel-floating-tools .remote-desktop-size-controls {
 		display: contents;
 	}
-	.remote-desktop-panel-floating-tools .remote-desktop-dimension {
+	.remote-desktop-dimension-group {
 		display: flex;
 		align-items: center;
 		gap: 0.375rem;
 	}
 	.remote-desktop-panel-floating-tools .remote-desktop-dimension > div {
 		flex: none;
+	}
+	.remote-desktop-size-popover {
+		width: 13rem;
+		max-width: calc(100vw - 3rem);
+	}
+	.remote-desktop-size-popover .remote-desktop-size-controls {
+		flex-direction: column;
+		align-items: stretch;
+		gap: 0.75rem;
+	}
+	.remote-desktop-size-popover .remote-desktop-dimension {
+		justify-content: space-between;
 	}
 
 	.remote-desktop-edge {

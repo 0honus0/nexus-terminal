@@ -162,7 +162,8 @@
 					value:
 						metric.unit === 'bytes'
 							? formatBytes(metric.value)
-							: new Intl.NumberFormat(locale.value).format(metric.value),
+							: new Intl.NumberFormat(locale.value).format(metric.value) +
+								(metric.unit === 'milliseconds' ? ' ms' : ''),
 				})),
 			})) ?? [],
 	);

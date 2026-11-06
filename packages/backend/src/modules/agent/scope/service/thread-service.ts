@@ -56,6 +56,11 @@ export class ThreadService {
 		return this.model.withAdmission(access, (facts) => admission(access, facts), work);
 	}
 
+	withState<T>(access: ThreadAccess, work: () => Promise<T>): Promise<T> {
+		this.validateAccess(access);
+		return this.model.withState(access, (facts) => admission(access, facts), work);
+	}
+
 	async list(access: ThreadAccess, after: string | null, limit: number): Promise<ThreadPage> {
 		this.validateAccess(access);
 		if (after !== null) {

@@ -37,25 +37,20 @@ export class RunStreamService {
 			}
 			return { body, state: null, more: body.items.length > 0 };
 		}
-		const [page, initialApprovals, children, initialBody] = await Promise.all([
+		const [page, approvals, children, body] = await Promise.all([
 			this.runs.listEvents(userId, appId, runId, cursor.events, AGENT_RUN_EVENT_MAX_LIMIT),
 			this.governance.approvals(userId, appId, runId, cursor.approvals),
 			this.collaboration.listChildren({ userId, appId, runId }),
 			readBody(),
 		]);
 		const run = await this.runs.get(userId, appId, runId);
-		if (!run || run.threadId !== cursor.threadId || !page || !initialApprovals || !children || !initialBody) {
+		if (!run || run.threadId !== cursor.threadId || !page || !approvals || !children || !body) {
 			throw new AgentFailure('not_found');
 		}
 		if (page.items.some((event) => event.runVersion > run.version)) {
 			throw new AgentFailure('internal_failure');
 		}
-		// The final state can be observed after an earlier body read; drain from the same cursor again.
-		const terminal = run.status !== 'pending' && run.status !== 'running';
-		const body = terminal ? await readBody() : initialBody;
-		const approvals = terminal
-			? await this.governance.approvals(userId, appId, runId, cursor.approvals)
-			: initialApprovals;
+		// The admitted state transaction prevents a terminal commit overtaking its output page.
 		const thread = await this.threads.forRun(userId, appId, runId);
 		const usage = await this.runs.getUsage(userId, appId, runId);
 		if (

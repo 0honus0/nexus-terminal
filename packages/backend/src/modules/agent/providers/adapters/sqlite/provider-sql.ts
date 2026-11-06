@@ -7,6 +7,7 @@ import type {
 	ProviderWrite,
 	ProviderWriteResult,
 	ProviderDeleteResult,
+	StoredProviderGeneration,
 } from '../../storage/provider-storage.js';
 import type { StoredProviderObservation } from '../../storage/provider-storage.js';
 import type { StoredProviderUsage } from '../../storage/provider-storage.js';
@@ -38,6 +39,24 @@ async function find(tx: SqlExecutor, userId: number, id: string): Promise<Provid
 
 export class SqliteProviderStorage implements ProviderStorage {
 	constructor(private readonly db: SqliteRuntime) {}
+
+	async generation(userId: number, id: string): Promise<StoredProviderGeneration | null> {
+		const row = await this.db.one(
+			'SELECT enabled,version,credential_revision FROM agent_providers WHERE id=? AND user_id=? AND deleted_at IS NULL',
+			[id, userId],
+		);
+		if (row === null) {
+			return null;
+		}
+		if (row.enabled !== 0 && row.enabled !== 1) {
+			throw new Error('Corrupt provider enabled state');
+		}
+		return {
+			enabled: row.enabled === 1,
+			version: storedInteger(row.version, 1),
+			credentialRevision: storedInteger(row.credential_revision, 1),
+		};
+	}
 
 	async recordObservations(
 		userId: number,

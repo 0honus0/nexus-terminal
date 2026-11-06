@@ -77,7 +77,15 @@
         "worker_array_buffer_bytes": "DB Worker ArrayBuffer",
         "active_runs": "実行・終了処理中の Agent タスク",
         "pending_run_writes": "処理中の Agent 書き込み",
-        "status_subscriptions": "サーバー状態の購読"
+        "status_subscriptions": "サーバー状態の購読",
+        "database_operations": "DB 開始済み操作数",
+        "database_queue_wait_ms": "DB 累積待機時間",
+        "database_queue_wait_max_ms": "DB 最大待機時間",
+        "database_execution_ms": "DB 累積実行時間",
+        "database_execution_max_ms": "DB 最大操作時間",
+        "database_commits": "DB コミット試行数",
+        "database_commit_ms": "DB 累積コミット時間",
+        "database_commit_max_ms": "DB 最大コミット時間"
       }
     }
   }

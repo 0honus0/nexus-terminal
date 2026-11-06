@@ -2,6 +2,7 @@
 	import { computed, nextTick, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiButton } from '@/foundation/ui';
+	import PreviewToolbarButton from './PreviewToolbarButton.vue';
 	import { useFeedback } from '@/shared/feedback/public';
 	import type { FilePreviewSessionController } from '../composables/useFilePreviewTabs';
 
@@ -136,11 +137,7 @@
 			</div>
 			<div class="file-preview-toolbar">
 				<slot name="toolbar" />
-				<UiButton
-					appearance="soft"
-					density="compact"
-					icon-only
-					class="preview-footer-action"
+				<PreviewToolbarButton
 					:loading="isRefreshing"
 					:disabled="isRefreshing"
 					:aria-label="t('fileManager.preview.refresh')"
@@ -148,7 +145,7 @@
 					@click="refreshCurrentTab"
 				>
 					<i class="fas fa-rotate" aria-hidden="true"></i>
-				</UiButton>
+				</PreviewToolbarButton>
 			</div>
 		</footer>
 	</section>
@@ -257,7 +254,7 @@
 		min-width: 0;
 		min-height: 2.75rem;
 		flex: 0 0 auto;
-		flex-wrap: wrap;
+		flex-wrap: nowrap;
 		align-items: center;
 		gap: 0.35rem 0.6rem;
 		padding: 0.3rem 0.55rem;
@@ -267,7 +264,7 @@
 	.file-preview-toolbar {
 		display: flex;
 		min-width: 0;
-		max-width: 100%;
+		max-width: calc(100% - 5rem);
 		flex: 0 1 auto;
 		align-items: center;
 		justify-content: flex-start;
@@ -297,7 +294,7 @@
 		display: flex;
 		min-width: 0;
 		min-height: 2rem;
-		flex: 1 1 12rem;
+		flex: 1 1 0;
 		align-items: center;
 		gap: 0.45rem;
 		overflow: hidden;
@@ -322,7 +319,7 @@
 	}
 
 	.file-preview-scope {
-		max-width: 8rem;
+		max-width: min(8rem, 35%);
 		flex: 0 0 auto;
 		overflow: hidden;
 		border: 1px solid color-mix(in srgb, var(--link-active-color) 24%, var(--border-color));
@@ -351,26 +348,11 @@
 		opacity: 1;
 	}
 
-	.preview-footer-action {
-		width: 2rem;
-		height: 2rem;
-		min-width: 2rem;
-		flex: 0 0 2rem;
-	}
-
 	@container file-preview-dialog (max-width: 640px) {
 		.file-preview-footer {
+			--preview-toolbar-action-size: 44px;
 			gap: 0.25rem;
 			padding: 0.3rem 0.5rem;
-		}
-
-		.file-preview-statusbar {
-			flex-basis: 100%;
-		}
-
-		.file-preview-toolbar {
-			width: 100%;
-			flex-basis: 100%;
 		}
 
 		.preview-header-close {
@@ -382,13 +364,33 @@
 	}
 
 	@container file-preview-dialog (max-width: 640px) {
+		.file-preview-footer:has(.preview-search-controls) {
+			flex-wrap: wrap;
+		}
+
+		.file-preview-footer:has(.preview-search-controls) .file-preview-statusbar {
+			flex-basis: 100%;
+		}
+
 		.file-preview-toolbar:has(.preview-search-controls) {
+			width: 100%;
+			max-width: 100%;
 			flex-wrap: wrap;
 		}
 	}
 
 	@media (pointer: coarse) {
+		.file-preview-footer:has(.preview-search-controls) {
+			flex-wrap: wrap;
+		}
+
+		.file-preview-footer:has(.preview-search-controls) .file-preview-statusbar {
+			flex-basis: 100%;
+		}
+
 		.file-preview-toolbar:has(.preview-search-controls) {
+			width: 100%;
+			max-width: 100%;
 			flex-wrap: wrap;
 		}
 	}
@@ -401,13 +403,6 @@
 		.preview-tab {
 			max-width: 11rem;
 			padding-inline: 0.45rem 0.3rem;
-		}
-
-		.preview-footer-action {
-			width: 2.75rem;
-			height: 2.75rem;
-			min-width: 2.75rem;
-			flex-basis: 2.75rem;
 		}
 	}
 </style>

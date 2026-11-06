@@ -7,7 +7,7 @@ import { setNetworkFailureHandler } from '@/client/http/network-failure';
 import { useFeedback } from '@/shared/feedback/public';
 import { createAuthNavigationFacade } from '@/features/auth/public';
 import { createAppRouter } from './router';
-import i18n from './i18n';
+import i18n, { initializeLocale } from './i18n';
 import { registerAppServiceWorker, registerGlobalDynamicImportRecovery } from './bootstrap/pwa';
 import { registerGlobalRuntimeDiagnostics, registerVueRuntimeDiagnostics } from './bootstrap/runtimeDiagnostics';
 import './styles/global.css';
@@ -15,6 +15,8 @@ import '@fortawesome/fontawesome-free/css/all.min.css';
 
 registerGlobalRuntimeDiagnostics();
 registerGlobalDynamicImportRecovery();
+
+await initializeLocale();
 
 const app = createApp(App);
 registerVueRuntimeDiagnostics(app);

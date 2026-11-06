@@ -1,14 +1,22 @@
 <script setup lang="ts">
 	import { onBeforeUnmount, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiOverlayPanel, UiSpinner } from '@/foundation/ui';
+	import { UiButton, UiOverlayPanel, UiSpinner, type UiDensity } from '@/foundation/ui';
 	import type {
 		RemoteDesktopClipboardFile,
 		RemoteDesktopFileClipboard,
 		RemoteDesktopFileClipboardState,
 	} from '../model/remote-desktop-types';
 
-	const props = defineProps<{ clipboard: RemoteDesktopFileClipboard | null; enabled: boolean }>();
+	const props = withDefaults(
+		defineProps<{
+			clipboard: RemoteDesktopFileClipboard | null;
+			enabled: boolean;
+			iconOnly?: boolean;
+			density?: UiDensity;
+		}>(),
+		{ iconOnly: false, density: 'compact' },
+	);
 	const open = defineModel<boolean>('open', { default: false });
 	const { t, locale } = useI18n();
 	const picker = ref<HTMLInputElement | null>(null);
@@ -102,14 +110,16 @@
 
 <template>
 	<UiButton
-		density="compact"
+		:density="density"
+		:icon-only="iconOnly"
 		:disabled="!enabled || !clipboard"
 		:aria-label="t('remoteDesktopModal.fileClipboard.title')"
+		:title="t('remoteDesktopModal.fileClipboard.title')"
 		@click="open = true"
 	>
 		<template #leading><i class="fas fa-file-arrow-up" aria-hidden="true"></i></template>
-		{{ t('remoteDesktopModal.fileClipboard.title') }}
-		<span v-if="state.files.length" class="text-text-muted">{{ state.files.length }}</span>
+		<span v-if="!iconOnly">{{ t('remoteDesktopModal.fileClipboard.title') }}</span>
+		<span v-if="!iconOnly && state.files.length" class="text-text-muted">{{ state.files.length }}</span>
 	</UiButton>
 	<UiOverlayPanel
 		:visible="open"

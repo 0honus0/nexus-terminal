@@ -85,6 +85,17 @@ export class SqliteThreadStorage implements ThreadStorage {
 		);
 	}
 
+	withState<T>(
+		access: StoredThreadAccess,
+		admit: (facts: StoredThreadAccessFacts) => void,
+		work: () => Promise<T>,
+	): Promise<T> {
+		return this.db.withTransactionAdmission(
+			(tx) => this.check(tx, access, admit),
+			() => this.db.composeTransaction(work),
+		);
+	}
+
 	async forRun(userId: number, appId: string, runId: string): Promise<ThreadRecord | null> {
 		const row = await this.db.one(
 			`SELECT t.* FROM agent_threads t JOIN agent_runs r ON r.thread_id=t.id AND r.user_id=t.user_id AND r.app_id=t.app_id WHERE r.id=? AND r.user_id=? AND r.app_id=?`,

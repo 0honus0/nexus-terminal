@@ -105,8 +105,11 @@ export class SqliteNotificationStorage implements NotificationStorage {
 	fanout(select: (facts: StoredNotificationFanout) => string[] | null): Promise<number> {
 		return this.db.transaction(async (tx) => {
 			const rows = await tx.all(
-				'SELECT a.* FROM operations_audit a LEFT JOIN operations_notification_fanout f ON f.audit_id=a.id WHERE f.audit_id IS NULL ORDER BY a.id LIMIT 100',
+				'SELECT a.* FROM operations_notification_pending p JOIN operations_audit a ON a.id=p.audit_id ORDER BY p.audit_id LIMIT 100',
 			);
+			if (rows.length === 0) {
+				return 0;
+			}
 			const configs = (await tx.all('SELECT * FROM operations_notifications WHERE enabled=1')).map(setting);
 			const pending = await tx.one(
 				"SELECT COUNT(*) AS total FROM operations_notification_deliveries WHERE status IN ('queued','dispatched')",
@@ -156,6 +159,7 @@ export class SqliteNotificationStorage implements NotificationStorage {
 					}
 				}
 				await tx.run('INSERT INTO operations_notification_fanout(audit_id) VALUES(?)', [source.id]);
+				await tx.run('DELETE FROM operations_notification_pending WHERE audit_id=?', [source.id]);
 				processed++;
 			}
 			return processed;
@@ -224,6 +228,7 @@ export class SqliteNotificationStorage implements NotificationStorage {
 				await tx.run(
 					'INSERT OR IGNORE INTO operations_notification_fanout(audit_id) SELECT id FROM operations_audit',
 				);
+				await tx.run('DELETE FROM operations_notification_pending');
 			}
 		});
 	}

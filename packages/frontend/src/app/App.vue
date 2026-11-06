@@ -48,7 +48,9 @@
 		[preferences.loaded, () => preferences.values.value.language],
 		([loaded, language]) => {
 			if (loaded) {
-				setLocale(language);
+				void setLocale(language).catch((error: unknown) =>
+					logger.error({ err: error }, 'Application language loading failed'),
+				);
 			}
 		},
 		{ immediate: true },

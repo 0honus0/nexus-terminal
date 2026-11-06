@@ -75,3 +75,16 @@ GIF/Markdown 图片、文件卡分组及聊天既有操作的正式回归已通�
 
 - [ ] **OpenAPI/AsyncAPI 自动生成**：为 Shared 协议建立统一 schema 来源，绑定真实安装的 HTTP 路由并汇总生成 OpenAPI；WebSocket 契约按 AsyncAPI 汇总。设计入口见 [Backend](architecture/BACKEND.md) 和 [Shared](architecture/SHARED.md)。
 - [ ] **ssh2 临时补丁退役**：后续依赖升级时检查正式版；上游包含当前 Node 26 原生编译修复后，同次删除补丁文件、workspace 注册及锁文件引用，重新验证原生编译与加载，按 [DEPLOYMENT](DEPLOYMENT.md) 执行。
+
+## 非 Agent 重构修复独立交付（2026-11-06）
+
+本批仅提交 RDP 触屏恢复/工具栏、预览底栏、语言按需加载、文件拖动/进度位置 owner 和 SQLite/通知/诊断优化；Agent 插件架构、SDK、市场及执行流程迁移继续留本地。迁移仅增加独立性能索引 5–9 与通知待处理队列 10，不包含后续 Agent 重构迁移。使用隔离 worktree，禁止覆盖原工作区中间改动。
+
+| 审核表   | 范围与判据                                                                                      |
+| -------- | ----------------------------------------------------------------------------------------------- |
+| 功能对应 | RDP 手机/平板单行及恢复、预览按钮、语言切换、通知与历史保留；USAGE 对应章节同步                 |
+| 职责归属 | 原 UI/交互 owner；SQL 在 Adapter，统计在 Platform，诊断在 System；不引入新 Agent 注册机制       |
+| 类型归属 | 诊断 Zod Mini schema 与双端 codec 同源；内部与存储转换保留；旧 Run WS 协议不变                  |
+| 完成证据 | 隔离构建、静态和格式通过，浏览器8项与数据库专项12项通过；远程完整 E2E 待本次推送，不引用旧 PASS |
+
+提交前核对全部差异，构建双端和测试客户端，运行 check/format 与专项；推送后逐项检查远程质量、Docker smoke、后端与七个浏览器分片，修复实际失败。最终回填 testing 并同步原 main 的提交基线，同时保留所有 Agent 未提交内容。产物位于 /home/honus/nexus-task-artifacts/non-agent-fixes-20261106，保留至用户通知。

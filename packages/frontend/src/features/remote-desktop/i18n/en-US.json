@@ -85,7 +85,8 @@
         "hostname_mismatch": "The certificate does not match the connection address. Check the fingerprint to confirm this is the expected server.",
         "changed": "The server certificate differs from the remembered certificate. Verify why it changed; an unexpected change may indicate impersonation."
       }
-    }
+    },
+    "windowSize": "Window size"
   },
   "vncModal": {
     "title": "VNC Session",

@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath } from 'node:url';
 import { rdpWasmAssets } from './build/rdp-wasm-assets.ts';
 import { precompressedAssets } from './build/precompressed-assets.ts';
+import { localeMessages } from './build/locale-messages.ts';
 
 const resolveLocalModule = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 
@@ -32,7 +33,7 @@ export default defineConfig({
 			),
 		},
 	},
-	plugins: [rdpWasmAssets(), vue(), tailwindcss(), precompressedAssets()],
+	plugins: [localeMessages(), rdpWasmAssets(), vue(), tailwindcss(), precompressedAssets()],
 	oxc: {
 		target: 'es2025',
 	},

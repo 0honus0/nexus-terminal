@@ -28,6 +28,12 @@ import {
 } from '../../../packages/backend/dist/modules/access/sessions/login-failure-rules.js';
 const root = await mkdtemp(join(tmpdir(), 'nexus-phase2-'));
 const key = randomBytes(32);
+const migrationVersions = applicationMigrations.map((migration) => migration.version);
+assert.deepEqual(
+	migrationVersions,
+	Array.from({ length: applicationMigrations.at(-1).version }, (_, index) => index + 1),
+	'The complete production migration chain must start at one without gaps or duplicates',
+);
 
 function metadata(name, route = 'direct', proxyId = null, jumpIds = []) {
 	return {
@@ -59,14 +65,10 @@ try {
 	await once(modelServer, 'listening');
 	const dbPath = join(root, 'initial-v1.db');
 	let db = SqliteRuntime.open(dbPath);
-	assert.deepEqual(
-		applicationMigrations.map((migration) => migration.version),
-		[1, 2, 3, 4],
-	);
 	await initializeSchema(db, applicationMigrations);
 	assert.deepEqual(
 		(await db.all('SELECT version FROM schema_version')).map((r) => r.version),
-		[1, 2, 3, 4],
+		migrationVersions,
 	);
 	await initializeSchema(db, applicationMigrations);
 	await new SqliteAccountStorage(db).createInitialAdmin({ username: 'regression', passwordHash: 'fixture-hash' });
@@ -267,7 +269,7 @@ try {
 		lastAttemptAt: 20000,
 	});
 	const versions = (await db.all('SELECT version FROM schema_version ORDER BY version')).map((r) => r.version);
-	assert.deepEqual(versions, [1, 2, 3, 4]);
+	assert.deepEqual(versions, migrationVersions);
 	const creds = await db.all('SELECT encrypted_password FROM proxy_credentials');
 	assert.ok(creds[0].encrypted_password.startsWith('v1.'));
 	assert.equal(creds[0].encrypted_password.includes('SECRET_PROXY'), false);
@@ -304,7 +306,7 @@ try {
 	db = SqliteRuntime.open(failPath);
 	assert.deepEqual(
 		(await db.all('SELECT version FROM schema_version ORDER BY version')).map((r) => r.version),
-		[1, 2, 3, 4],
+		migrationVersions,
 	);
 	await db.close();
 	// Reject the first batch's incompatible pre-release v1 instead of silently

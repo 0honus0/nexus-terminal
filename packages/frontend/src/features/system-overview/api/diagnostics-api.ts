@@ -1,3 +1,4 @@
+import { HOST_DIAGNOSTIC_PATH } from '@nexus-terminal/shared/system/diagnostics/http';
 import {
 	readHostDiagnosticResponse,
 	readHostDiagnosticError,
@@ -11,7 +12,7 @@ import { fromDiagnostics } from '../model/diagnostic-mapper';
 export async function getHostDiagnostics(signal?: AbortSignal): Promise<HostDiagnostics> {
 	try {
 		const response = await requestJson({
-			url: '/api/v1/system/diagnostics',
+			url: HOST_DIAGNOSTIC_PATH,
 			method: 'GET',
 			maxRequestBytes: HOST_DIAGNOSTIC_MAX_RESPONSE_BYTES,
 			maxResponseBytes: HOST_DIAGNOSTIC_MAX_RESPONSE_BYTES,

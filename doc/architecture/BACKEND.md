@@ -986,3 +986,14 @@ Passkey 名称、登录布局与 OIDC 已实现；协议、存储与浏览器专
 ### Agent 命令输出存储
 
 Job 日志与模型预览分离，沿 Agent Model 调用 Platform TextLogStore。Native 实现使用 Node 文件能力、UTF-8 数据文件和定长索引，支持有界追加、字节分页和真实空间不足等待；技术层不持 Agent 身份或业务保留期。装配在数据库同级 `tool-logs`，Job Service 决定何时回收，未知执行不重放。完整 owner、协议及生命周期见 [Agent 完整 Shell 输出存储](AGENT.md#完整-shell-输出存储)。本轮无新增数据库迁移；当前 JSON 备份不含完整日志，数据卷迁移需保留该目录。
+
+## SQLite 状态组合与写入观测
+
+1. **职责与范围**：Platform SQLite 只管理真实事务、排队和 Worker；Agent 的状态组合由 Scope Adapter 显式开启，授权政策仍在 Thread Model/Service。Operations 的审计与通知持有自己的待处理记录。
+2. **子功能与目录**：`sqlite-runtime.ts` 提供 `composeTransaction`，`sqlite-statistics.ts` 保存常量空间计数；`scope/adapters/sqlite/thread-sql.ts` 以 `withState` 使用组合。各领域 SQL 和迁移留原 Adapter。
+3. **依赖方向**：WS → Thread Service/Model → Scope Storage/Adapter → Platform；状态内的子领域 Adapter 参与同一执行器。Platform 不读取 Agent 身份或业务字段，不允许把外部网络调用放进组合事务。
+4. **类型与转换**：组合执行器和耗时归 Platform；身份与状态仍沿各自 Model 转换。System 将累计排队/执行/提交次数、总耗时和最大耗时投影到 Shared 诊断指标，毫秒取整，不记录 SQL、参数或身份。
+5. **入口与安装**：现有 `/ws/agent-runs` 在授权、订阅核对、状态页和心跳权限核对时调用 `withState`，保留原单 Run 订阅协议。普通写入仍用 `transaction`，普通嵌套事务仍拒绝。迁移继续由 `bootstrap/schema.ts` 顺序安装。
+6. **数据、事务与并发**：显式组合只占一次排队和一次提交；身份在事务前后复查，所有参与者共享快照。审批读取的惰性过期写入参与原事务。迁移 5–9 分别增加预算 Root、审批 Run/Tool、决议 approval、上下文压缩 Run 索引；迁移 10 新增通知 pending 表并转换尚无 fanout 回执的审计记录，已发布迁移不改写。审计新增与 pending 同事务，fanout 回执与 pending 删除同事务；快照验证 pending/processed 恰好分割保留审计，恢复时抑制历史通知。并发发布共用裁剪任务，裁剪只删除已分发记录。
+7. **生命周期与失败**：参与者失败即使被上层捕获也阻止提交；未等待的参与工作先收敛再回滚，失效 scope 的迟到访问拒绝。提交未知保持原数据库不可用围栏，不自动重试；组合不授予独立后台工作临时权限。发布与清理仍由 AuditEventOwner 跟踪至关闭完成。
+8. **当前能力与验收**：`backend-next-performance.integration.mjs` 纳入正式 Agent E2E，覆盖升级、回滚、撤权、迟到参与者、通知恢复及同秒历史保留。排队耗时包含前序任务等待，执行耗时包含整个操作与提交，commit 统计提交尝试（含失败）；它们不等于逐条 SQL 耗时或线上性能提升比例。实际执行证据见 testing。

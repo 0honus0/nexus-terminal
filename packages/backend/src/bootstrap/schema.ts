@@ -1,4 +1,4 @@
-import { initializeOperationsSchema } from '../modules/operations/migrations.js';
+import { initializeOperationsSchema, migrateOperationsPendingNotifications } from '../modules/operations/migrations.js';
 import { initializePreferencesSchema } from '../modules/preferences/migrations.js';
 import { initializeRemoteSchema } from '../modules/remote/migrations.js';
 import type { SchemaMigration } from '../platform/storage/sqlite/schema-types.js';
@@ -8,6 +8,7 @@ import {
 	initializeAgentSchema,
 	migrateAgentToolBatches,
 	migrateAgentToolOutputs,
+	agentPerformanceMigrations,
 } from '../modules/agent/migrations.js';
 import { initializeSnapshotRestoreSchema } from '../platform/storage/sqlite/adapters/snapshot-restore-sql.js';
 
@@ -34,4 +35,10 @@ export const applicationMigrations: readonly SchemaMigration[] = [
 	},
 	{ version: 3, signature: 'agent-artifact-output-batches-20261105', apply: migrateAgentToolOutputs },
 	{ version: 4, signature: 'access-oidc-20261106', apply: migrateAccessOidc },
+	...agentPerformanceMigrations,
+	{
+		version: 10,
+		signature: 'operations-notification-pending-20261106',
+		apply: migrateOperationsPendingNotifications,
+	},
 ];

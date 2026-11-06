@@ -67,11 +67,13 @@ export class SqliteHistoryStorage implements HistoryStorage {
 					[userId, kind, text],
 				),
 			);
+			// recordedAt is at least the latest stored timestamp, so the just-saved row
+			// owns the first retention slot even when its stable id is older than its peers.
 			await tx.run(
 				`DELETE FROM preferences_history WHERE user_id=? AND kind=? AND id IN (
-    SELECT id FROM preferences_history WHERE user_id=? AND kind=?
-    ORDER BY recorded_at DESC,(id=?) DESC,id DESC LIMIT -1 OFFSET ?)`,
-				[userId, kind, userId, kind, saved.id, retain],
+    SELECT id FROM preferences_history WHERE user_id=? AND kind=? AND id<>?
+    ORDER BY recorded_at DESC,id DESC LIMIT -1 OFFSET ?)`,
+				[userId, kind, userId, kind, saved.id, retain - 1],
 			);
 			return saved;
 		});

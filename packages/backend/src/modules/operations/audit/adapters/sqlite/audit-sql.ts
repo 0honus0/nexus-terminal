@@ -57,7 +57,7 @@ export function readAuditRecord(row: Record<string, unknown>): StoredAuditRecord
 export class SqliteAuditStorage implements AuditStorage {
 	constructor(private readonly db: SqliteRuntime) {}
 
-	append(input: StoredAuditInput, retain: number): Promise<{ record: StoredAuditRecord; created: boolean }> {
+	append(input: StoredAuditInput): Promise<{ record: StoredAuditRecord; created: boolean }> {
 		return this.db.transaction(async (tx) => {
 			const previous = await tx.one('SELECT * FROM operations_audit WHERE event_key=?', [input.key]);
 			if (previous) {
@@ -74,8 +74,8 @@ export class SqliteAuditStorage implements AuditStorage {
 				}
 				return { record, created: false };
 			}
-			const result = await tx.run(
-				'INSERT INTO operations_audit(event_key,event,created_at,user_id,source_ip,subject_id,route,status_code) VALUES(?,?,?,?,?,?,?,?)',
+			const row = await tx.one(
+				'INSERT INTO operations_audit(event_key,event,created_at,user_id,source_ip,subject_id,route,status_code) VALUES(?,?,?,?,?,?,?,?) RETURNING *',
 				[
 					input.key,
 					input.event,
@@ -87,12 +87,12 @@ export class SqliteAuditStorage implements AuditStorage {
 					input.statusCode,
 				],
 			);
-			const row = await tx.one('SELECT * FROM operations_audit WHERE id=?', [result.lastId]);
 			if (!row) {
 				throw new Error('Audit event missing after insert');
 			}
-			await prune(tx, retain);
-			return { record: readAuditRecord(row), created: true };
+			const record = readAuditRecord(row);
+			await tx.run('INSERT INTO operations_notification_pending(audit_id) VALUES(?)', [record.id]);
+			return { record, created: true };
 		});
 	}
 
@@ -126,7 +126,7 @@ export class SqliteAuditStorage implements AuditStorage {
 
 async function prune(tx: SqlExecutor, retain: number): Promise<void> {
 	await tx.run(
-		'DELETE FROM operations_audit WHERE id IN (SELECT id FROM operations_audit ORDER BY id DESC LIMIT -1 OFFSET ?) AND id IN (SELECT audit_id FROM operations_notification_fanout)',
+		'DELETE FROM operations_audit WHERE id <= (SELECT id FROM operations_audit ORDER BY id DESC LIMIT 1 OFFSET ?) AND EXISTS (SELECT 1 FROM operations_notification_fanout f WHERE f.audit_id=operations_audit.id)',
 		[retain],
 	);
 }

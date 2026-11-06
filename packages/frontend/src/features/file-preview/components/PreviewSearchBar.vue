@@ -2,6 +2,7 @@
 	import { nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiButton, UiSearchInput } from '@/foundation/ui';
+	import PreviewToolbarButton from './PreviewToolbarButton.vue';
 	import { ownsDocumentKeyboardEvent } from '@/shared/focus/public';
 
 	const props = withDefaults(
@@ -30,7 +31,7 @@
 	const { t } = useI18n();
 	const inputRef = ref<{ focus?: (options?: FocusOptions) => void; select?: () => void } | null>(null);
 
-	const buttonRef = ref<InstanceType<typeof UiButton> | null>(null);
+	const buttonRef = ref<InstanceType<typeof PreviewToolbarButton> | null>(null);
 	const controlsRef = ref<HTMLElement | null>(null);
 	let mounted = false;
 	let lifecycleActive = true;
@@ -134,20 +135,16 @@
 </script>
 
 <template>
-	<UiButton
+	<PreviewToolbarButton
 		v-if="!props.open"
 		ref="buttonRef"
 		type="button"
-		appearance="soft"
-		density="compact"
-		icon-only
-		class="h-11 w-11 shrink-0 sm:h-8 sm:w-8"
 		:aria-label="t('fileManager.preview.search', 'Search in document')"
 		:title="t('fileManager.preview.search', 'Search in document')"
 		@click="emit('open')"
 	>
 		<i class="fas fa-search" aria-hidden="true"></i>
-	</UiButton>
+	</PreviewToolbarButton>
 
 	<div
 		v-else

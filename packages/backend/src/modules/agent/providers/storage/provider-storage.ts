@@ -75,6 +75,7 @@ export interface StoredProviderUsage {
 }
 
 export interface ProviderStorage {
+	generation(userId: number, id: string): Promise<StoredProviderGeneration | null>;
 	/** A completed discovery may write only when both revisions still match the original request. */
 	recordObservations(
 		userId: number,
@@ -102,6 +103,12 @@ export interface ProviderStorage {
 	credential(userId: number, id: string, providerVersion: number, credentialRevision: number): Promise<string | null>;
 	/** Reads the provider using the Run creation transaction. */
 	snapshot(tx: SqlExecutor, userId: number, id: string): Promise<ProviderStoredRow | null>;
+}
+
+export interface StoredProviderGeneration {
+	enabled: boolean;
+	version: number;
+	credentialRevision: number;
 }
 
 export type ProviderDeleteResult = { status: 'ok' } | { status: 'not_found' | 'version_conflict' | 'provider_in_use' };

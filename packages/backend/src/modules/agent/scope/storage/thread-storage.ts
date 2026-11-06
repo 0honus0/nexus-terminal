@@ -58,6 +58,11 @@ export class ThreadStorageRefusal extends Error {
 }
 
 export interface ThreadStorage {
+	withState<T>(
+		access: StoredThreadAccess,
+		admit: (facts: StoredThreadAccessFacts) => void,
+		work: () => Promise<T>,
+	): Promise<T>;
 	forRun(userId: number, appId: string, runId: string): Promise<ThreadRecord | null>;
 	withAdmission<T>(
 		access: StoredThreadAccess,

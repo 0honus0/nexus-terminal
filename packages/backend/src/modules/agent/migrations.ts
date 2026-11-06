@@ -1,3 +1,10 @@
+import { indexExecutionBudgetRoot } from './execution/adapters/sqlite/execution-index-migration.js';
+import {
+	indexApprovalRun,
+	indexApprovalTool,
+	indexApprovalResolution,
+} from './governance/adapters/sqlite/governance-index-migrations.js';
+import { indexCompactionRun } from './context/adapters/sqlite/compaction-index-migration.js';
 import { migrateToolOutputBatches } from './runs/adapters/sqlite/run-tool-output-migration.js';
 import { initializeThreadTitles } from './scope/adapters/sqlite/title-schema.js';
 import { initializeAutomaticCompactions } from './context/adapters/sqlite/compaction-schema.js';
@@ -58,3 +65,11 @@ export async function initializeAgentSchema(tx: SqlExecutor): Promise<void> {
 export async function migrateAgentToolOutputs(tx: SqlExecutor): Promise<void> {
 	await migrateToolOutputBatches(tx);
 }
+
+export const agentPerformanceMigrations = [
+	{ version: 5, signature: 'agent-budget-root-index-20261106', apply: indexExecutionBudgetRoot },
+	{ version: 6, signature: 'agent-approval-run-index-20261106', apply: indexApprovalRun },
+	{ version: 7, signature: 'agent-approval-tool-index-20261106', apply: indexApprovalTool },
+	{ version: 8, signature: 'agent-resolution-approval-index-20261106', apply: indexApprovalResolution },
+	{ version: 9, signature: 'agent-compaction-run-index-20261106', apply: indexCompactionRun },
+];

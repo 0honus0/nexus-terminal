@@ -65,6 +65,21 @@ export class ThreadModel {
 		);
 	}
 
+	withState<T>(access: ThreadAccess, admit: (facts: ThreadAccessFacts) => void, work: () => Promise<T>): Promise<T> {
+		return agentStorage(() =>
+			this.storage.withState(
+				{
+					kind: access.kind,
+					userId: access.userId,
+					appId: access.appId,
+					digest: this.tokens.digest(access.token),
+				},
+				(facts) => admit(fromAccessFacts(facts)),
+				work,
+			),
+		);
+	}
+
 	async forRun(userId: number, appId: string, runId: string): Promise<AgentThread | null> {
 		const value = await agentStorage(() => this.storage.forRun(userId, appId, runId));
 		return value === null ? null : fromThreadRecord(value);

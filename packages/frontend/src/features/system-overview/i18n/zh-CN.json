@@ -77,7 +77,15 @@
         "worker_array_buffer_bytes": "数据库 Worker ArrayBuffer",
         "active_runs": "运行及收尾中的 Agent 任务",
         "pending_run_writes": "在途 Agent 写入",
-        "status_subscriptions": "服务器状态订阅"
+        "status_subscriptions": "服务器状态订阅",
+        "database_operations": "数据库已开始操作数",
+        "database_queue_wait_ms": "数据库累计排队时间",
+        "database_queue_wait_max_ms": "数据库最长排队时间",
+        "database_execution_ms": "数据库累计执行时间",
+        "database_execution_max_ms": "数据库最长单次执行",
+        "database_commits": "数据库提交尝试数",
+        "database_commit_ms": "数据库累计提交时间",
+        "database_commit_max_ms": "数据库最长提交时间"
       }
     }
   }

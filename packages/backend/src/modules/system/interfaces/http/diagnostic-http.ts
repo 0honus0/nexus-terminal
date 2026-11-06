@@ -3,8 +3,12 @@ import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values
 import type { HttpRoute, HttpReply } from '../../../../platform/http/http-types.js';
 import type { DiagnosticService } from '../../diagnostics/service/diagnostic-service.js';
 import { SystemStatusFailure } from '../../system-failure.js';
-import type { HostDiagnosticResponse } from '@nexus-terminal/shared/system/diagnostics/http';
-import { HOST_DIAGNOSTIC_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/system/diagnostics/values';
+import {
+	HOST_DIAGNOSTIC_PATH,
+	hostDiagnosticRouteSchema,
+	type HostDiagnosticResponse,
+} from '@nexus-terminal/shared/system/diagnostics/http';
+import { readHostDiagnosticResponse } from '@nexus-terminal/shared/system/diagnostics/http-codec';
 
 function sendDiagnosticError(reply: HttpReply, error: unknown): void {
 	const code =
@@ -18,7 +22,8 @@ export function createDiagnosticRoutes(service: DiagnosticService): HttpRoute[] 
 	return [
 		{
 			method: 'GET',
-			url: '/api/v1/system/diagnostics',
+			url: HOST_DIAGNOSTIC_PATH,
+			schema: hostDiagnosticRouteSchema(),
 
 			errorHandler(error, _request, reply) {
 				if (!(error instanceof SystemStatusFailure)) {
@@ -69,19 +74,7 @@ export function createDiagnosticRoutes(service: DiagnosticService): HttpRoute[] 
 							},
 						},
 					};
-					reply.type('application/json; charset=utf-8').serializer((payload) => {
-						let encoded: string;
-						try {
-							encoded = JSON.stringify(payload);
-						} catch {
-							throw new SystemStatusFailure('remote_unavailable');
-						}
-						if (Buffer.byteLength(encoded, 'utf8') > HOST_DIAGNOSTIC_MAX_RESPONSE_BYTES) {
-							throw new SystemStatusFailure('remote_unavailable');
-						}
-						return encoded;
-					});
-					reply.code(200).send(response);
+					reply.code(200).send(readHostDiagnosticResponse(response));
 				} catch (error) {
 					sendDiagnosticError(reply, error);
 				}

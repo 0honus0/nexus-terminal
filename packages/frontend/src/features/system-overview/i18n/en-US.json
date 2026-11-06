@@ -77,7 +77,15 @@
         "worker_array_buffer_bytes": "Database Worker ArrayBuffers",
         "active_runs": "Running and draining Agent tasks",
         "pending_run_writes": "In-flight Agent writes",
-        "status_subscriptions": "Server status subscriptions"
+        "status_subscriptions": "Server status subscriptions",
+        "database_operations": "Database operations started",
+        "database_queue_wait_ms": "Cumulative database queue wait",
+        "database_queue_wait_max_ms": "Longest database queue wait",
+        "database_execution_ms": "Cumulative database execution time",
+        "database_execution_max_ms": "Longest database operation",
+        "database_commits": "Database commit attempts",
+        "database_commit_ms": "Cumulative database commit time",
+        "database_commit_max_ms": "Longest database commit"
       }
     }
   }

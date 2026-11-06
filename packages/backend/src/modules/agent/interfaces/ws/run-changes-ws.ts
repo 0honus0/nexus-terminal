@@ -42,7 +42,7 @@ export function createRunChangesWebSocketRoute(
 					return false;
 				}
 				return await boundary(() =>
-					threads.withAdmission(
+					threads.withState(
 						{
 							kind: 'session',
 							userId: identity.userId,
@@ -151,7 +151,7 @@ export function createRunChangesWebSocketRoute(
 					stateDirty = false;
 				}
 				task = boundary(() =>
-					threads.withAdmission(actor, async () => {
+					threads.withState(actor, async () => {
 						return current
 							? stream.read(actor.userId, actor.appId, selected.runId, current, includeState)
 							: null;
@@ -263,7 +263,7 @@ export function createRunChangesWebSocketRoute(
 						}
 						cursor = fromRunStreamCursor(command.cursor);
 						await boundary(() =>
-							threads.withAdmission(actor, async () => {
+							threads.withState(actor, async () => {
 								const run = await runs.get(actor.userId, actor.appId, selected.runId);
 								actor.assertCurrent();
 								if (!run || run.threadId !== command.cursor.threadId) {

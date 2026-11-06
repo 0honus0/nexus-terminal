@@ -18,21 +18,18 @@ function fromStorage(value: StoredAuditRecord): AuditRecord {
 export class AuditModel {
 	constructor(private readonly storage: AuditStorage) {}
 
-	async append(input: AuditInput, retain: number): Promise<{ record: AuditRecord; created: boolean }> {
+	async append(input: AuditInput): Promise<{ record: AuditRecord; created: boolean }> {
 		const value = await operationsStorage(() =>
-			this.storage.append(
-				{
-					key: input.key,
-					event: input.event,
-					createdAt: input.createdAt,
-					userId: input.userId,
-					sourceIp: input.sourceIp,
-					subjectId: input.subjectId,
-					route: input.route,
-					statusCode: input.statusCode,
-				},
-				retain,
-			),
+			this.storage.append({
+				key: input.key,
+				event: input.event,
+				createdAt: input.createdAt,
+				userId: input.userId,
+				sourceIp: input.sourceIp,
+				subjectId: input.subjectId,
+				route: input.route,
+				statusCode: input.statusCode,
+			}),
 		);
 		return { record: fromStorage(value.record), created: value.created };
 	}

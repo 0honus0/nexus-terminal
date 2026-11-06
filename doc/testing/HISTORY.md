@@ -1805,3 +1805,40 @@ FreeRDP是原生库，不能直接替换当前浏览器WASM。可复用方案为
 `ghcr.io/0honus0/nexus-terminal:dev` 与 `ghcr.io/0honus0/nexus-terminal:sha-024d608ac2de` 的 OCI index digest 均为 `sha256:aa9166d34b872f62477d5ee9c85c8e28727940da75eeeed5fc2dd1116b4d98c6`；amd64 平台 manifest 为 `sha256:2a09c505e9823305ff495554f07bb268c9becf12c6f6b521d55a9457c97a645d`。实际 config 的 revision 为完整源码 SHA，version 为 `sha-024d608ac2de`，OS/architecture 为 linux/amd64；证明 manifest 的 unknown/unknown 不代表另一个执行平台。
 
 证据归 `/home/honus/nexus-task-artifacts/main-dev-publish-20261106`，包括源码差异清单、完整工作流日志、最终状态、两个标签 manifest 与实际 config；保留至用户通知。发布后只更新本节、当前验收入口和迁移链摘要，格式与 diff 检查后提交，不将后续文档 SHA 误写为镜像来源；未创建 Release、未变更 latest、未更新远程容器或数据库。
+
+## RDP 平板与手机工具栏（2026-11-06）
+
+本地 `390cfdb5` 上的未提交工作区专项，Agent 中间迁移仍暂停。使用 Node 26.13.0、pnpm 12.16.1、指定 Windows Chrome CDP `172.30.30.11:9223`，访问 `api.honus.top`，前端9998直接加载当前源码，复用隔离3002 Backend及已授权的真实 Windows RDP 目标。产物集中 `/home/honus/nexus-task-artifacts/rdp-toolbar-touch-20261106`，凭据不写入证据。
+
+- 原因：820px桌面UA触屏下工具栏高约139.75px，长触控说明和flex-wrap共同挤成多行；恢复按钮的任意pointermove被标记为拖动，实际1px偏移吞掉恢复click。拖动后还观察到浏览器只派发pointerup而缺少合成click。
+- 修复：实际窗口宽度决定单行/紧凑呈现，尺寸和触控复用UiPopover，状态和文件入口紧凑显示；完成的touch/pen轻点直接恢复，12px容差与现有长按一致，真正拖动与取消不恢复。尺寸change时才应用完整值，避免逐字编辑触发布局切换后丢失焦点。
+- `review-final2.log` / `review-results.json`：真实RDP、820/390/320px各自48px单行、零溢出；尺寸/触控/文件面板可用，直触与触控板切换，1/4px触摸偏移、真实拖动到另一侧不误恢复、下一次轻点恢复通过。后续尺寸提交调整另由桌面专项验收。
+- `desktop-review.log` / `desktop-results.json`：1440px真实桌面连接，紧凑尺寸输入1064与宽窗口逐字输入1200均保留焦点，提交后应用；原11项Tab顺序、鼠标拖动/恢复和原生浏览器全屏进出通过。
+- 用户要求加快交付后，停止重复截图及额外多语言/主题矩阵复跑；`review-acceptance.log`只记录该轮已完成的820px，不作为全矩阵通过。已有完整三宽度专项与最终尺寸提交专项分别保留，不清除失败及中止证据。
+- `eslint-final.log`、`e2e-list.log`：受影响源码与正式用例ESLint通过；Playwright发现6项RDP/VNC用例，新覆盖保持真实输入及原连接/全屏功能断言。`git diff --check`通过。
+- `frontend-build-final.log`：前端构建在vue-tsc阶段被Agent的PluginRepositorySettings与plugin-market-rules共4处manifest字段缺口阻断；本轮RDP/基础手势无类型错误。未修补暂停的Agent代码，未运行正式全量构建/E2E，不沿用历史PASS。
+
+限定浏览器证据不代替真机iPad/Android、VNC真实传输与Workspace真实文件任务回归；后续入口保留在PLAN。源码仅涉及前端，无数据库迁移；测试资源保留至用户通知，本轮未提交推送发布。
+
+## 文件预览底栏（2026-11-06）
+
+在现有未提交工作区修复FilePreviewDialog强制窄屏换行及搜索/编辑/刷新分别覆盖宽高的问题，PreviewToolbarButton统一基础按钮尺寸；保留原搜索、刷新和编辑事件，不涉及数据库。
+
+指定CDP访问api.honus.top的本地9998源码环境，挂载真实MarkdownPreview与真实预览session，输入来自内存Markdown夹具，未读取或修改远端文件。320/390/820px容器回归全部通过：三个按钮分别统一44/44/32px、路径与按钮垂直居中同排、底栏零横向溢出；搜索命中2条、关闭恢复底栏，3次编辑事件与3次刷新读取均收到。样例长路径的可见宽度分别约94/164/559px，完整路径保留title。结果位于`/home/honus/nexus-task-artifacts/file-preview-footer-20261106/{review-final.log,results.json}`，首次脚本定位错误保留原日志。
+
+定向ESLint、Prettier和diff检查通过；前端vue-tsc仍被此前Agent中间迁移字段缺口阻断，不称全仓通过或正式E2E通过。未运行远端文件传输/持久化回归；产物保留至用户要求清理，未提交推送发布。
+
+## 非 Agent 重构修复独立提交（2026-11-06）
+
+从 main/390cfdb5 的混合工作区拆分；独立 worktree 位于 `/home/honus/nexus-task-artifacts/non-agent-fixes-20261106/worktree`。原工作区 Agent 插件架构和 SDK 中间变更继续保留，不进入本批。`scope-audit.json` 逐文件记录取舍，包含已跟踪与新增文件；不单按 Agent 路径过滤，索引、Provider 轻量准入及状态一致性查询属于原性能任务。
+
+| 审核表   | 结果                                                                                                            |
+| -------- | --------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | RDP 单行工具栏/触屏恢复、预览路径与等大按钮、语言按需加载、文件拖动和进度位置职责整理、历史保留、审计通知与诊断 |
+| 职责归属 | UI 延续原 owner；构建聚合语言；数据库事务/索引留 Adapter，统计留 Platform；插件新执行架构和 SDK 不带入          |
+| 类型归属 | 诊断唯一 Shared Zod Mini schema 与前后端消费者同步，字段与单位严格校验；原 Run WS 协议不变                      |
+| 完成证据 | 本地构建/静态/格式检查通过；正式浏览器入口 8 项、数据库专项 12 项通过；当前提交远程整轮仍待验                   |
+
+Node 26.13.0/pnpm 12.16.1；`build.log` 与 `browser.log` 包含 Shared、Backend、Frontend 和测试客户端生产构建，`check.log` 为根 check，`format.log` 为 format:all:check。正式动态隔离端口入口覆盖语言按需/并发切换、RDP 设置/剪贴板/全屏/缩放/触屏轻点和拖动恢复、VNC 恢复、窄屏真实文件预览底栏/搜索/编辑/刷新，8 项一次通过。`targeted-storage.log` 为 performance、phase2、oidc 三份脚本共12项：迁移4→10、重复启动、索引计划、通知回滚/恢复、组合事务拒绝与迟到参与、历史保留、诊断路由/严格解码及 Provider 版本校验全部通过。
+
+额外运行全部 storage 脚本的 `storage-tests.log` 为124项、78通过/46失败，未视为本批验收通过：integration-races 的旧表与清理替身、public-boundary 缺少已有 lastConnectedAt 字段、snapshot-crash 的根目录注册夹具不匹配，以及本机命名空间内执行 Node 被拒绝。保留原始失败，不跳过或改成成功；适用逻辑使用上述专项及后续正式完整远程 E2E 核对。实机 iPad/Android、物理音画与介质性能仍不由受控回归代替。无镜像发布或生产部署。

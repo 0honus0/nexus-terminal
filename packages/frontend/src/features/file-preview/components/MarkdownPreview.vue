@@ -3,7 +3,7 @@
 	import { useI18n } from 'vue-i18n';
 	import { marked } from 'marked';
 	import DOMPurify from 'dompurify';
-	import { UiButton } from '@/foundation/ui';
+	import PreviewToolbarButton from './PreviewToolbarButton.vue';
 	import FilePreviewDialog from './FilePreviewDialog.vue';
 	import PreviewSearchBar from './PreviewSearchBar.vue';
 	import {
@@ -120,16 +120,14 @@
 				@previous="moveSearch(-1)"
 				@next="moveSearch(1)"
 			/>
-			<UiButton
+			<PreviewToolbarButton
 				type="button"
-				appearance="soft"
-				density="compact"
-				class="h-11 shrink-0 sm:h-8"
+				:aria-label="t('fileManager.actions.edit')"
+				:title="t('fileManager.actions.edit')"
 				@click="emit('edit')"
 			>
 				<i class="fas fa-pen" aria-hidden="true"></i>
-				<span>{{ t('fileManager.actions.edit') }}</span>
-			</UiButton>
+			</PreviewToolbarButton>
 		</template>
 		<article
 			ref="host"

@@ -30,7 +30,7 @@ export class AuditService {
 		text(input.subjectId, 256);
 		text(input.sourceIp, 128);
 		text(input.route, 512);
-		return this.model.append(input, 50000);
+		return this.model.append(input);
 	}
 
 	prune(): Promise<void> {
