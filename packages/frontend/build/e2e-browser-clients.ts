@@ -23,7 +23,7 @@ export default defineConfig({
 					id === '@devolutions/iron-remote-desktop-rdp' &&
 					importer?.endsWith('/adapters/rdp-audio-output.ts')
 				)
-					return fileURLToPath(new URL('../../../tests/e2e/support/rdp-audio-extension.ts', import.meta.url));
+					return fileURLToPath(new URL('./e2e-rdp-audio-extension.ts', import.meta.url));
 			},
 		},
 	],

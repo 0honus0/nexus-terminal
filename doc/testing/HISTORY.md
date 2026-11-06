@@ -1842,3 +1842,11 @@ FreeRDP是原生库，不能直接替换当前浏览器WASM。可复用方案为
 Node 26.13.0/pnpm 12.16.1；`build.log` 与 `browser.log` 包含 Shared、Backend、Frontend 和测试客户端生产构建，`check.log` 为根 check，`format.log` 为 format:all:check。正式动态隔离端口入口覆盖语言按需/并发切换、RDP 设置/剪贴板/全屏/缩放/触屏轻点和拖动恢复、VNC 恢复、窄屏真实文件预览底栏/搜索/编辑/刷新，8 项一次通过。`targeted-storage.log` 为 performance、phase2、oidc 三份脚本共12项：迁移4→10、重复启动、索引计划、通知回滚/恢复、组合事务拒绝与迟到参与、历史保留、诊断路由/严格解码及 Provider 版本校验全部通过。
 
 额外运行全部 storage 脚本的 `storage-tests.log` 为124项、78通过/46失败，未视为本批验收通过：integration-races 的旧表与清理替身、public-boundary 缺少已有 lastConnectedAt 字段、snapshot-crash 的根目录注册夹具不匹配，以及本机命名空间内执行 Node 被拒绝。保留原始失败，不跳过或改成成功；适用逻辑使用上述专项及后续正式完整远程 E2E 核对。实机 iPad/Android、物理音画与介质性能仍不由受控回归代替。无镜像发布或生产部署。
+
+## 非 Agent 修复远程失败收敛（2026-11-06）
+
+首次完整远程 [42303771316](https://github.com/0honus0/nexus-terminal/actions/runs/42303771316) 对应 f3ef8671：质量、runner及Browser1/5/6/7通过，Browser2/3/4、Backend与Docker smoke失败，未作为通过证据。原日志保留在non-agent-fixes-20261106。
+
+根因与修复：手机RDP仍定位旧常驻模式按钮，改从Touch弹层进入并保留持久化/不重连断言；Markdown预览沿旧28px断言，更新为本轮已确认44px等宽高；异步语言启动可能错过window.load，PWA同时处理已加载文档，原场景延迟语言包到load之后覆盖竞态；v1数据迁移夹具只删除版本记录未删除后增结构，补齐5–10还原；Docker生产类型检查的音频测试入口跨目录引用未复制的测试源码，测试adapter移到frontend/build，仍仅E2E配置打包。
+
+本地 `e2e-fix-browser.log` 的正式动态隔离入口3项一次通过，包含异步load竞态、手机Markdown真实编辑/SFTP保存和RDP模式/重连；`e2e-fix-backend.log` 的文件专项12项通过，无skip；`e2e-fix-check.log` 根check通过。构建包含双端与E2E客户端；未在本地重新构建Docker镜像，待远程smoke核对。后续完整远程仍待验，不修改产品布局或跳过失败功能。

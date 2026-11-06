@@ -288,6 +288,12 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 6
 							);
 							// Restore the actual v1 schema so later DDL migrations run once.
 							db.exec(`
+								DROP TABLE operations_notification_pending;
+								DROP INDEX agent_budget_reservation_root;
+								DROP INDEX agent_approval_run_lookup;
+								DROP INDEX agent_approval_tool_lookup;
+								DROP INDEX agent_resolution_approval_lookup;
+								DROP INDEX agent_compaction_run_lookup;
 								DROP TABLE access_oidc_sessions;
 								DROP TABLE access_oidc_flows;
 								DROP TABLE access_oidc_configuration;

@@ -1006,7 +1006,21 @@ test('PWA resources, favicon, manifest, and service worker bootstrap resolve fro
 	context,
 }) => {
 	await loginAsInitialAdmin(context.request);
-	await page.goto('/');
+	const { promise: localeReady, resolve: releaseLocale } = Promise.withResolvers<void>();
+	let delayedLocale = false;
+	await page.route(/\/en-US[^/]*\.js(?:\?|$)/, async (route) => {
+		delayedLocale = true;
+		await localeReady;
+		await route.continue();
+	});
+	try {
+		await page.goto('/', { waitUntil: 'load' });
+		expect(delayedLocale).toBe(true);
+		expect(await page.evaluate(() => document.readyState)).toBe('complete');
+		await expect(page.locator('#app')).toBeEmpty();
+	} finally {
+		releaseLocale();
+	}
 
 	await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', '/manifest.json');
 	await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', /^#[0-9A-Fa-f]{6}$/);

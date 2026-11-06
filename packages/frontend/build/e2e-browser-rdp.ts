@@ -3,4 +3,4 @@ export { attachRdpFramePresenter } from '../src/features/remote-desktop/adapters
 
 export { attachRdpAudioOutput } from '../src/features/remote-desktop/adapters/rdp-audio-output';
 
-export { deliverRdpAudio } from '../../../tests/e2e/support/rdp-audio-extension';
+export { deliverRdpAudio } from './e2e-rdp-audio-extension';

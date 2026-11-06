@@ -356,18 +356,36 @@ test('mobile RDP opens keyboard explicitly and persists touch mode without recon
 		await revealDesktopControls(page, true);
 	};
 
+	const touchPanel = page.getByRole('dialog', { name: 'Touch', exact: true });
+
+	const openTouchControls = async () => {
+		await revealDesktopControls(page, true);
+		await page
+			.getByRole('dialog', { name: connectionName, exact: true })
+			.getByRole('button', { name: 'Touch', exact: true })
+			.tap();
+		await expect(touchPanel).toBeVisible();
+	};
+
+	const closeTouchControls = async () => {
+		await page.keyboard.press('Escape');
+		await expect(touchPanel).toBeHidden();
+	};
+
 	try {
 		await page.goto('/login');
 		await openConnection();
 		await expect.poll(() => sessionCreateRequests).toBe(1);
 
-		const directMode = page.getByRole('button', { name: 'Direct', exact: true });
-		const touchpadMode = page.getByRole('button', { name: 'Touchpad', exact: true });
+		await openTouchControls();
+		const directMode = touchPanel.getByRole('button', { name: 'Direct', exact: true });
+		const touchpadMode = touchPanel.getByRole('button', { name: 'Touchpad', exact: true });
 
 		await expect(directMode).toBeVisible();
 		await expect(directMode).toHaveAttribute('aria-pressed', 'true');
 		await expect(touchpadMode).toHaveAttribute('aria-pressed', 'false');
 		await expect(directMode).toHaveAttribute('title', /Tap: click/);
+		await closeTouchControls();
 
 		const keyboardInput = page.getByRole('textbox', { name: 'Remote desktop keyboard input', exact: true });
 		const remoteDisplay = page.locator('.remote-display-container [tabindex="0"]');
@@ -385,7 +403,9 @@ test('mobile RDP opens keyboard explicitly and persists touch mode without recon
 				expect(await panel.locator('.remote-display-container').boundingBox()).toEqual(before);
 				const overflow = await chrome.evaluate((element) => element.scrollWidth - element.clientWidth);
 				expect(overflow).toBeLessThanOrEqual(1);
+				await openTouchControls();
 				await expect(directMode).toBeVisible();
+				await closeTouchControls();
 				await expect(panel.getByRole('button', { name: 'Reconnect', exact: true })).toBeVisible();
 				await expect(keyboardInput).not.toBeFocused();
 				await panel.getByRole('button', { name: 'File clipboard', exact: true }).tap();
@@ -418,7 +438,7 @@ test('mobile RDP opens keyboard explicitly and persists touch mode without recon
 		await page.getByRole('button', { name: 'Hide keyboard', exact: true }).tap();
 		await expect(keyboardInput).not.toBeFocused();
 
-		await revealDesktopControls(page, true);
+		await openTouchControls();
 		await touchpadMode.tap();
 		await expect(touchpadMode).toHaveAttribute('aria-pressed', 'true');
 		await expect(directMode).toHaveAttribute('aria-pressed', 'false');
@@ -448,6 +468,7 @@ test('mobile RDP opens keyboard explicitly and persists touch mode without recon
 		await expect(page.getByRole('dialog', { name: connectionName, exact: true })).toBeHidden();
 		await openConnection();
 		await expect.poll(() => sessionCreateRequests).toBe(2);
+		await openTouchControls();
 
 		await expect(page.getByRole('button', { name: 'Touchpad', exact: true })).toHaveAttribute(
 			'aria-pressed',
@@ -456,6 +477,7 @@ test('mobile RDP opens keyboard explicitly and persists touch mode without recon
 		await page.getByRole('button', { name: 'Direct', exact: true }).tap();
 		await expect(page.getByRole('button', { name: 'Direct', exact: true })).toHaveAttribute('aria-pressed', 'true');
 		expect(sessionCreateRequests).toBe(2);
+		await closeTouchControls();
 		await revealDesktopControls(page, true);
 		await page
 			.getByRole('dialog', { name: connectionName, exact: true })
@@ -463,6 +485,7 @@ test('mobile RDP opens keyboard explicitly and persists touch mode without recon
 			.tap();
 		await openConnection();
 		await expect.poll(() => sessionCreateRequests).toBe(3);
+		await openTouchControls();
 		await expect(page.getByRole('button', { name: 'Direct', exact: true })).toHaveAttribute('aria-pressed', 'true');
 		expect(desktopErrors, 'desktop rendering and reconnects must not panic the WASM runtime').toEqual([]);
 	} finally {

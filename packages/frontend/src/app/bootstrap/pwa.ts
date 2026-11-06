@@ -170,19 +170,19 @@ export const registerAppServiceWorker = (): void => {
 	});
 	window.addEventListener('online', () => checkForAppUpdate(true));
 
-	window.addEventListener(
-		'load',
-		() => {
-			void navigator.serviceWorker
-				.register('/sw.js?v=4', { updateViaCache: 'none' })
-				.then((registration) => {
-					monitorServiceWorkerRegistration(registration);
-					checkForAppUpdate(true);
-				})
-				.catch(() => undefined);
-		},
-		{ once: true },
-	);
+	const register = (): void => {
+		void navigator.serviceWorker
+			.register('/sw.js?v=4', { updateViaCache: 'none' })
+			.then((registration) => {
+				monitorServiceWorkerRegistration(registration);
+				checkForAppUpdate(true);
+			})
+			.catch(() => undefined);
+	};
+
+	// Async bootstrap can finish after the document has already loaded.
+	if (document.readyState === 'complete') register();
+	else window.addEventListener('load', register, { once: true });
 };
 
 export const recoverStaleDynamicImport = async (error: unknown, reloadTarget: string): Promise<boolean> => {
