@@ -332,7 +332,7 @@ export class WorkspaceRuntimeSession {
 			this.freshConnectionRequired = false;
 			this.reconnectAttempt = 0;
 			this.state.value = 'connected';
-			logger.debug(
+			logger.info(
 				{
 					workspaceId: this.id,
 					connectionId: this.connection.id,

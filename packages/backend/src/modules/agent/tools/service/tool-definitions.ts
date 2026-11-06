@@ -5,7 +5,7 @@ import { browserTools } from './browser-tools.js';
 import { mcpTools } from './mcp-tools.js';
 import { collaborationTools } from './collaboration-tools.js';
 import { RESULT_PAGE_MAX_BYTES } from '../../context/result-rules.js';
-import { TOOL_RESULT_MAX_BYTES } from '../../runs/run-tool-limits.js';
+import { TOOL_ARGUMENT_MAX_BYTES, TOOL_RESULT_MAX_BYTES } from '../../runs/run-tool-limits.js';
 import type { ToolDefinition, ToolInputField } from '../model/tool-types.js';
 
 const connection = (): ToolInputField => ({
@@ -41,6 +41,27 @@ export function toolDefinitions(): ToolDefinition[] {
 		clear: 'Clear this Run SSH project binding after approval. Does not change remote files or shell cwd.',
 	};
 	return [
+		{
+			name: 'tool_search',
+			version: '1.0.0',
+			capability: 'context.read',
+			risk: 'read',
+			mutation: false,
+			scheduling: 'parallel',
+			description:
+				'Discover and load authorized tools for the next model turn. Search exact tool names (space/comma separated) or task keywords in English/Chinese: browser/浏览器, MCP, ACP, Docker, images/图片, deliver/交付, memory/记忆, project/项目, collaboration/协作, files/文件. Returns names and summaries; full input schemas are supplied in the next turn. Do not call newly discovered tools in the same batch. Query * explicitly loads all available tools. Discovery never grants permission.',
+			input: {
+				fields: [
+					{
+						name: 'query',
+						kind: 'text',
+						required: true,
+						allowEmpty: false,
+						maxBytes: TOOL_ARGUMENT_MAX_BYTES,
+					},
+				],
+			},
+		},
 		{
 			name: 'plugin_tool_call',
 			version: '1.0.0',

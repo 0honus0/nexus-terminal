@@ -1,8 +1,7 @@
 <script setup lang="ts">
 	import { useAgentResourceControl } from '../composables/use-agent-resource-control';
-	import { useElementSize, useResizeObserver } from '@vueuse/core';
+	import { useElementSize, useMediaQuery, useResizeObserver } from '@vueuse/core';
 	import { useResizeHandle } from '@/foundation/interaction';
-	import { useDeviceCapabilities } from '@/foundation/browser';
 	import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type ShallowUnwrapRef } from 'vue';
 	import {
 		DynamicScroller,
@@ -44,8 +43,8 @@
 	const layoutRoot = ref<HTMLElement | null>(null);
 	const composer = ref<HTMLElement | null>(null);
 	const { width: composerWidth } = useElementSize(composer);
-	const { isMobile } = useDeviceCapabilities();
-	const showTargetLabel = computed(() => !isMobile.value && composerWidth.value > 620);
+	const isWideViewport = useMediaQuery('(min-width: 768px)');
+	const showTargetLabel = computed(() => isWideViewport.value && composerWidth.value > 620);
 	const threadsOverlay = ref(false);
 	const threadSidebarVisible = ref(true);
 	const threadDrawerOpen = ref(false);

@@ -2,6 +2,7 @@ import {
 	AGENT_RUN_STREAM_MAX_IN_FLIGHT_PAGES,
 	AGENT_RUN_STREAM_MAX_JSON_BYTES,
 } from '@nexus-terminal/shared/agent/runs/values';
+import { logger } from '@/client/logging/logger';
 import { openWebSocket } from '@/client/websocket';
 import { clearPendingNetworkFailure, reportNetworkFailure } from '@/client/http/network-failure';
 import {
@@ -26,6 +27,8 @@ export function subscribeNativeRun(
 	const query = new URLSearchParams({ appId: scope.appId, appVersion: String(scope.appVersion), runId });
 	const selected = readAgentRunSubscription(query);
 	const networkSource = Symbol();
+	const context = { appId: scope.appId, runId };
+	let recovering = false;
 	let disposed = false;
 	let socket: WebSocket | null = null;
 	let retry: ReturnType<typeof setTimeout> | undefined;
@@ -52,15 +55,19 @@ export function subscribeNativeRun(
 	}
 
 	function reject(code: 'forbidden' | 'protocol_failure'): void {
+		if (code === 'protocol_failure') logger.error({ ...context, code }, 'Agent stream rejected');
+		else logger.debug({ ...context, code }, 'Agent stream access revoked');
 		stopSocket();
 		disposed = true;
 		clearPendingNetworkFailure(networkSource);
 		onRejected(new AgentManagementFailure(code, 'not_dispatched'));
 	}
 
-	function reconnect(): void {
+	function reconnect(reason: 'open_failed' | 'send_failed' | 'deadline' | 'closed' | 'transport_error'): void {
 		stopSocket();
 		if (disposed || document.hidden) return;
+		recovering = true;
+		logger.warn({ ...context, reason, retryDelayMs: delay }, 'Agent stream reconnect scheduled');
 		reportNetworkFailure(networkSource);
 		retry = setTimeout(connect, delay + Math.floor(Math.random() * 250));
 		delay = Math.min(delay * 2, 30_000);
@@ -72,9 +79,10 @@ export function subscribeNativeRun(
 		if (disposed || document.hidden) return;
 		let current: WebSocket;
 		try {
+			logger.debug(context, 'Agent stream connecting');
 			current = openWebSocket('/ws/agent-runs?' + query.toString());
 		} catch {
-			reconnect();
+			reconnect('open_failed');
 			return;
 		}
 		socket = current;
@@ -106,7 +114,7 @@ export function subscribeNativeRun(
 			try {
 				current.send(encoded);
 			} catch {
-				reconnect();
+				reconnect('send_failed');
 			}
 		};
 		resume = () => {
@@ -129,7 +137,7 @@ export function subscribeNativeRun(
 						JSON.stringify(readAgentRunStreamCommand({ type: 'ack', revision: item.update.revision })),
 					);
 				} catch {
-					reconnect();
+					reconnect('send_failed');
 					return;
 				}
 			}
@@ -138,7 +146,7 @@ export function subscribeNativeRun(
 		function armDeadline(): void {
 			clearTimeout(deadline);
 			deadline = setTimeout(() => {
-				if (socket === current) reconnect();
+				if (socket === current) reconnect('deadline');
 			}, 45_000);
 		}
 
@@ -186,6 +194,10 @@ export function subscribeNativeRun(
 				if (socket !== current || disposed) return;
 				// A heartbeat cannot substitute for the first accepted task snapshot.
 				if (revision > 0) {
+					if (recovering) {
+						logger.info(context, 'Agent stream recovered');
+						recovering = false;
+					}
 					armDeadline();
 					delay = 1000;
 					clearPendingNetworkFailure(networkSource);
@@ -197,14 +209,15 @@ export function subscribeNativeRun(
 		current.onclose = (event) => {
 			if (socket !== current || disposed) return;
 			if (event.code === 1008) reject('forbidden');
-			else reconnect();
+			else reconnect('closed');
 		};
 		current.onerror = () => {
-			if (socket === current && !disposed) reconnect();
+			if (socket === current && !disposed) reconnect('transport_error');
 		};
 	}
 
 	function onNetworkChange(): void {
+		logger.debug({ ...context, online: navigator.onLine }, 'Agent stream network changed');
 		delay = 1000;
 		connect();
 	}
@@ -217,6 +230,7 @@ export function subscribeNativeRun(
 		resume: () => resume(),
 
 		close() {
+			logger.debug(context, 'Agent stream subscription closed');
 			disposed = true;
 			stopSocket();
 			clearPendingNetworkFailure(networkSource);

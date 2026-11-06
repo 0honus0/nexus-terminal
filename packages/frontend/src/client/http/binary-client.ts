@@ -96,7 +96,12 @@ export async function requestBinary(
 		diagnose(response.status);
 		return { status: response.status, headers: response.headers, bytes };
 	} catch (cause) {
-		diagnose(response.status, input.signal?.aborted ? 'cancelled' : 'response_failed');
+		const diagnosticCode = input.signal?.aborted
+			? 'cancelled'
+			: cause instanceof HttpRequestFailure
+				? cause.code
+				: 'response_failed';
+		diagnose(response.status, diagnosticCode);
 		if (input.signal?.aborted) {
 			throw new HttpRequestFailure('cancelled', 'unknown', { cause });
 		}

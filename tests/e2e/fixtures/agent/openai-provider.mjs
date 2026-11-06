@@ -26,7 +26,7 @@ const sendSse = (response, value) => {
 	response.write(`data: ${JSON.stringify(payload)}\n\n`);
 };
 
-const regressionResponse = (response, delta, finishReason = 'stop') => {
+const sendRegressionResponse = (response, delta, finishReason = 'stop') => {
 	response.writeHead(200, {
 		'Content-Type': 'text/event-stream',
 		'Cache-Control': 'no-store',
@@ -261,6 +261,39 @@ const server = http.createServer(async (request, response) => {
 	const messages = Array.isArray(body?.messages) ? body.messages : [];
 	const latestUserMessage = [...messages].reverse().find((message) => message?.role === 'user');
 	const latestUserText = JSON.stringify(latestUserMessage?.content ?? '');
+	// Simulate a model following the real discovery contract; never inject schemas or bypass Host guards.
+	const offeredNames = new Set((body.tools ?? []).map((tool) => tool.function?.name));
+
+	const regressionResponse = (response, delta, finishReason = 'stop') => {
+		const missing = (delta.tool_calls ?? []).filter((call) => !offeredNames.has(call.function.name));
+		if (missing.length && offeredNames.has('tool_search')) {
+			const id = 'discover_' + missing.map((call) => call.id).join('_');
+			// A denied/unknown discovery must still exercise the original rejection scenario.
+			if (!messages.some((message) => message.role === 'tool' && message.tool_call_id === id)) {
+				return sendRegressionResponse(
+					response,
+					{
+						tool_calls: [
+							{
+								index: 0,
+								id,
+								type: 'function',
+								function: {
+									name: 'tool_search',
+									arguments: JSON.stringify({
+										query: [...new Set(missing.map((call) => call.function.name))].join(' '),
+									}),
+								},
+							},
+						],
+					},
+					'tool_calls',
+				);
+			}
+		}
+		return sendRegressionResponse(response, delta, finishReason);
+	};
+
 	const isCheckpointRequest = messages.some(
 		(message) =>
 			message?.role === 'system' &&
@@ -450,6 +483,30 @@ const server = http.createServer(async (request, response) => {
 						function: {
 							name: 'collaboration_delegate',
 							arguments: JSON.stringify(args),
+						},
+					},
+				],
+			},
+			'tool_calls',
+		);
+		return;
+	}
+	if (
+		latestUserText.includes('E2E_BROWSER_LIFECYCLE') &&
+		offeredNames.has('tool_search') &&
+		!offeredNames.has('browser_open')
+	) {
+		regressionResponse(
+			response,
+			{
+				tool_calls: [
+					{
+						index: 0,
+						id: 'browser_lifecycle_load',
+						type: 'function',
+						function: {
+							name: 'browser_open',
+							arguments: '{}',
 						},
 					},
 				],

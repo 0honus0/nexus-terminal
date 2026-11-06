@@ -1,4 +1,5 @@
-import axios, { type AxiosInstance } from 'axios';
+import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
+import { beginHttpDiagnostic } from '../logging/transport-diagnostics';
 import { logger } from '../logging/logger';
 import { dispatchUnauthorized } from './unauthorized';
 import { clearPendingNetworkFailure, isNetworkFailure, reportNetworkFailure } from './network-failure';
@@ -16,6 +17,8 @@ export const httpClient: AxiosInstance = axios.create({
 	withCredentials: true,
 });
 
+const diagnostics = new WeakMap<InternalAxiosRequestConfig, ReturnType<typeof beginHttpDiagnostic>>();
+
 const requestPath = (url: string | undefined): string => url?.split(/[?#]/, 1)[0] || 'unknown';
 
 const requestMethod = (method: string | undefined): string => method?.toUpperCase() || 'UNKNOWN';
@@ -23,12 +26,14 @@ const requestMethod = (method: string | undefined): string => method?.toUpperCas
 const isExplicitLogoutRequest = (url: string | undefined): boolean => requestPath(url).endsWith('/auth/logout');
 
 httpClient.interceptors.request.use((config) => {
-	logger.trace({ method: requestMethod(config.method), path: requestPath(config.url) }, 'HTTP request dispatch');
+	diagnostics.set(config, beginHttpDiagnostic(requestMethod(config.method), httpClient.getUri(config)));
 	return config;
 });
 
 httpClient.interceptors.response.use(
 	(response) => {
+		diagnostics.get(response.config)?.(response.status);
+		diagnostics.delete(response.config);
 		if (response.config.method?.toUpperCase() === 'GET') {
 			clearPendingNetworkFailure(httpClient.getUri(response.config));
 		}
@@ -44,16 +49,12 @@ httpClient.interceptors.response.use(
 			} else if (error.response && error.config?.method?.toUpperCase() === 'GET') {
 				clearPendingNetworkFailure(httpClient.getUri(error.config));
 			}
-			const context = {
-				method: requestMethod(error.config?.method),
-				path: requestPath(error.config?.url),
-				statusCode: error.response?.status,
-				errorCode: error.code,
-			};
-			if (!error.response || (error.response.status ?? 0) >= 500) {
-				logger.warn(context, 'HTTP request failed');
-			} else {
-				logger.debug(context, 'HTTP request rejected');
+			if (error.config) {
+				diagnostics.get(error.config)?.(
+					error.response?.status ?? null,
+					axios.isCancel(error) ? 'cancelled' : error.response ? undefined : 'request_failed',
+				);
+				diagnostics.delete(error.config);
 			}
 		} else {
 			logger.warn({ err: error }, 'Unexpected HTTP client failure');

@@ -1,3 +1,4 @@
+import { logger } from '@/client/logging/logger';
 import { defineStore } from 'pinia';
 import { createAccessApi } from '../api/access-api';
 import { createPasskeyCeremony } from '../adapters/browser-passkey';
@@ -72,6 +73,7 @@ export const useAuthStore = defineStore('auth', {
 				}
 				this.user = user;
 				this.sessionState = user ? 'authenticated' : 'anonymous';
+				logger.debug({ status: this.sessionState }, 'Frontend session resolved');
 				if (user) {
 					this.pendingSecondFactor = false;
 				}
@@ -121,6 +123,7 @@ export const useAuthStore = defineStore('auth', {
 				this.sessionState = 'authenticated';
 				this.user = result.user;
 			}
+			logger.info({ status: result.status }, 'Frontend login confirmed');
 			return result;
 		},
 
@@ -141,6 +144,7 @@ export const useAuthStore = defineStore('auth', {
 				this.user = user;
 				this.sessionState = 'authenticated';
 				this.setupState = 'complete';
+				logger.info({ method: 'passkey' }, 'Frontend login confirmed');
 				return user;
 			} finally {
 				if (passkeyCeremonies.get(this) === controller) {
@@ -160,6 +164,7 @@ export const useAuthStore = defineStore('auth', {
 				this.sessionState = 'authenticated';
 				this.user = user;
 				this.pendingSecondFactor = false;
+				logger.info({ method: 'two_factor' }, 'Frontend login confirmed');
 				return user;
 			} catch (cause) {
 				if (generation === this.sessionGeneration && cause instanceof AuthRequestFailure) {
@@ -172,6 +177,7 @@ export const useAuthStore = defineStore('auth', {
 		},
 
 		invalidateSession(): void {
+			logger.debug({ previousStatus: this.sessionState }, 'Frontend session invalidated');
 			passkeyCeremonies.get(this)?.abort();
 			this.sessionGeneration += 1;
 			this.sessionState = 'anonymous';
@@ -215,6 +221,7 @@ export const useAuthStore = defineStore('auth', {
 				await authApi.logout();
 				this.assertCurrent(generation);
 				this.invalidateSession();
+				logger.info('Frontend logout confirmed');
 			} catch (cause) {
 				this.assertCurrent(generation);
 				// The owner teardown above is deliberate even when logout failed.

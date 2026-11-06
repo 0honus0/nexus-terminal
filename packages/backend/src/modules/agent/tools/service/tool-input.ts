@@ -103,6 +103,13 @@ function validateFields(fields: ToolDefinition['input']['fields'], value: Record
 export function toolInput(definition: ToolDefinition, argumentsJson: string): ToolInput {
 	const value = object(argumentsJson);
 	validateFields(definition.input.fields, value);
+	if (definition.name === 'tool_search') {
+		const query = text(value.query, TOOL_ARGUMENT_MAX_BYTES).trim();
+		if (!query) {
+			throw new AgentFailure('invalid_input');
+		}
+		return { kind: 'tool_search', query };
+	}
 	if (definition.name === 'plugin_tool_call') {
 		const name = text(value.name, 64),
 			version = text(value.version, 64),

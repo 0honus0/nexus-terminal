@@ -1,3 +1,4 @@
+import { logger } from '@/client/logging/logger';
 import type { Pinia } from 'pinia';
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
 import { createAuthNavigationFacade, loadSetupView } from '@/features/auth/public';
@@ -138,13 +139,29 @@ export const createAppRouter = (pinia: Pinia) => {
 		routes,
 	});
 	const auth = createAuthNavigationFacade(pinia);
+	const navigationStarts = new WeakMap<object, number>();
+	router.beforeEach((to) => {
+		navigationStarts.set(to, performance.now());
+		logger.debug({ route: String(to.name ?? 'unnamed') }, 'Frontend navigation started');
+	});
 
 	router.onError(async (error, to) => {
+		logger.error({ err: error, route: String(to.name ?? 'unnamed') }, 'Frontend navigation failed');
 		const reloadTarget = to.fullPath || window.location.pathname;
 		await recoverStaleDynamicImport(error, reloadTarget);
 	});
 
-	router.afterEach((to) => {
+	router.afterEach((to, _from, failure) => {
+		const startedAt = navigationStarts.get(to);
+		navigationStarts.delete(to);
+		logger.debug(
+			{
+				route: String(to.name ?? 'unnamed'),
+				failureType: failure?.type,
+				durationMs: startedAt === undefined ? undefined : Math.round(performance.now() - startedAt),
+			},
+			failure ? 'Frontend navigation interrupted' : 'Frontend navigation completed',
+		);
 		clearDynamicImportRecoveryMarker(to.fullPath);
 	});
 

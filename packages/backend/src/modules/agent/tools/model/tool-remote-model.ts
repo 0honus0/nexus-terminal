@@ -49,6 +49,7 @@ export class ToolRemoteModel {
 	async perform(
 		input: Exclude<
 			ToolInput,
+			| { kind: 'tool_search' }
 			| { kind: 'plugin' }
 			| { kind: 'connections' }
 			| { kind: 'job' }

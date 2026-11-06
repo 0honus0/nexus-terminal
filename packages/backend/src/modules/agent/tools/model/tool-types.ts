@@ -4,6 +4,7 @@ import type { PluginAgentCatalog } from '../../plugins/model/plugin-contribution
 
 export interface ToolStepContext {
 	definitions: ToolDefinition[];
+	availableDefinitions: ToolDefinition[];
 	systemPrompt: string;
 	pluginCatalog: PluginAgentCatalog;
 }
@@ -28,6 +29,7 @@ export type ToolInputField = { name: string; required: boolean } & (
 );
 
 export type ToolInput =
+	| { kind: 'tool_search'; query: string }
 	| { kind: 'plugin'; name: string; version: string; sha256: string; argumentsJson: string }
 	| { kind: 'browser_targets' }
 	| { kind: 'acp_integrations' }
@@ -116,6 +118,8 @@ export interface ToolOperationScope {
 
 export interface ToolExecutionScope {
 	pluginCatalog: PluginAgentCatalog;
+	availableDefinitions: ToolDefinition[];
+	onToolsLoaded(names: string[]): void;
 	userId: number;
 	appId: string;
 	runId: string;

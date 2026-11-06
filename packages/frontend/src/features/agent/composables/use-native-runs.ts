@@ -1,3 +1,4 @@
+import { logger } from '@/client/logging/logger';
 import type { NativeResourceSession } from '../model/native-resource-types';
 import { mergeNativeApprovals } from '../model/native-run-rules';
 import { subscribeNativeRun } from '../api/native-run-stream';
@@ -269,6 +270,22 @@ export function useNativeRuns(
 	}
 
 	function fail(cause: unknown): void {
+		const context = {
+			appId,
+			runId: run.value?.id,
+			code: cause instanceof AgentManagementFailure ? cause.code : 'unexpected',
+		};
+		if (
+			cause instanceof AgentManagementFailure &&
+			['cancelled', 'unauthenticated', 'forbidden'].includes(cause.code)
+		)
+			logger.debug(context, 'Agent update stopped');
+		else if (
+			!(cause instanceof AgentManagementFailure) ||
+			['protocol_failure', 'internal_failure'].includes(cause.code)
+		)
+			logger.error(context, 'Agent update failed');
+		else logger.warn(context, 'Agent update failed');
 		finishCatchUp();
 		awaitingConfirmedUpdate = false;
 		stopUpdates();
@@ -771,6 +788,12 @@ export function useNativeRuns(
 				thread.value = value.state.thread;
 			}
 			run.value = value.state.run;
+			if (previousStatus !== value.state.run.status) {
+				logger.info(
+					{ appId, runId: value.state.run.id, previousStatus, status: value.state.run.status },
+					'Agent run status changed',
+				);
+			}
 			usage.value = value.state.usage;
 			events.value = [...events.value, ...value.state.events.items].slice(-200);
 			eventCursor.value = value.state.events.nextCursor;

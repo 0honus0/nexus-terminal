@@ -1,3 +1,4 @@
+import { authorizedToolDefinitions, exposedToolDefinitions, searchToolDefinitions } from '../tool-catalog-rules.js';
 import { ToolBatchExecutionUnknown } from '../model/tool-batch-failure.js';
 import { AGENT_HOST_INSTRUCTIONS } from '../../context/agent-instructions.js';
 import type { ToolStepContext } from '../model/tool-types.js';
@@ -231,6 +232,7 @@ export class ToolService {
 		stepIndex: number,
 		signal: AbortSignal,
 		previousCatalog: PluginAgentCatalog | null,
+		loadedTools: ReadonlySet<string>,
 	): Promise<ToolStepContext> {
 		const catalog = await this.governance.toolCatalog(scope.userId, scope.appId, scope.runId);
 		if (catalog === null) {
@@ -241,17 +243,7 @@ export class ToolService {
 		}
 		const pluginCatalog = previousCatalog ?? (await this.plugins.agentCatalog(scope, signal));
 		const contribution = pluginCatalog.contribution;
-		const available = definitions.filter(
-			(tool) =>
-				catalog.capabilities.includes(tool.capability) &&
-				(tool.name !== 'file_deliver' || catalog.capabilities.includes('artifacts.write')) &&
-				(contribution?.toolNames == null || contribution.toolNames.includes(tool.name)) &&
-				(tool.name !== 'plugin_tool_call' || (contribution !== null && contribution.tools.length > 0)) &&
-				(!tool.input.fields.some((field) => field.name === 'connectionId') ||
-					catalog.connectionIds.length > 0) &&
-				(!['acp_integration_list', 'acp_integration_execute'].includes(tool.name) ||
-					catalog.connectionIds.length > 0),
-		);
+		const available = authorizedToolDefinitions(definitions, catalog, pluginCatalog);
 		const skills = available.some((tool) => tool.name === 'skill_read')
 			? pluginCatalog.skills.map((skill) => ({
 					name: skill.name,
@@ -287,7 +279,12 @@ export class ToolService {
 				tools: available.some((tool) => tool.name === 'plugin_tool_call') ? (contribution?.tools ?? []) : [],
 			});
 		await this.plugins.assertAgentCatalog(scope, pluginCatalog.revision, signal);
-		return { definitions: available, systemPrompt, pluginCatalog };
+		return {
+			definitions: exposedToolDefinitions(available, loadedTools),
+			availableDefinitions: available,
+			systemPrompt,
+			pluginCatalog,
+		};
 	}
 
 	validateStep(
@@ -340,6 +337,8 @@ export class ToolService {
 										modelStepIndex: scope.modelStepIndex,
 										deadlineAt: scope.deadlineAt,
 										pluginCatalog: scope.pluginCatalog,
+										availableDefinitions: scope.availableDefinitions,
+										onToolsLoaded: scope.onToolsLoaded,
 
 										onBackgroundFailure: (error) =>
 											scope.onBackgroundFailure(error, proposal.toolName),
@@ -495,6 +494,7 @@ export class ToolService {
 					signal,
 					deadlineAt: scope.deadlineAt,
 					pluginCatalog: scope.pluginCatalog,
+					availableDefinitions: scope.availableDefinitions,
 					onBackgroundFailure: scope.onBackgroundFailure,
 				},
 			);
@@ -521,6 +521,9 @@ export class ToolService {
 			}
 			await this.verify(current, admitted.policy.revision, signal);
 			interrupted(signal);
+			if (result.loadedTools) {
+				scope.onToolsLoaded(result.loadedTools);
+			}
 			return projectCapturedResult(
 				completed.operation.id,
 				completed.operation.resultText,
@@ -619,6 +622,7 @@ export class ToolService {
 		await validateIntegration();
 		interrupted(signal);
 		const target =
+			input.kind === 'tool_search' ||
 			input.kind === 'plugin' ||
 			input.kind === 'browser_targets' ||
 			input.kind === 'acp_integrations' ||
@@ -713,9 +717,10 @@ export class ToolService {
 			signal: AbortSignal;
 			deadlineAt: number;
 			pluginCatalog: PluginAgentCatalog;
+			availableDefinitions: ToolDefinition[];
 			onBackgroundFailure(error: unknown): void;
 		},
-	): Promise<{ text: string; targets: { id: number; version: number }[] }> {
+	): Promise<{ text: string; targets: { id: number; version: number }[]; loadedTools?: string[] }> {
 		const timeoutMs = limits.toolTimeoutSeconds * 1000;
 
 		const validate = async () => {
@@ -728,6 +733,26 @@ export class ToolService {
 		};
 
 		await validate();
+		if (input.kind === 'tool_search') {
+			const catalog = await this.governance.toolCatalog(operation.userId, operation.appId, operation.runId);
+			if (catalog === null) {
+				throw new AgentFailure('version_conflict');
+			}
+			const available = authorizedToolDefinitions(run.availableDefinitions, catalog, run.pluginCatalog);
+			const matches = searchToolDefinitions(available, input.query);
+			await validate();
+			return {
+				text: JSON.stringify({
+					matches: matches.map((tool) => ({
+						name: tool.name,
+						summary: tool.description.split(/(?<=[.!?])\s/u)[0],
+					})),
+					availableNextTurn: true,
+				}),
+				targets: [],
+				loadedTools: matches.map((tool) => tool.name),
+			};
+		}
 		if (input.kind === 'plugin') {
 			await validate();
 			const text = await this.plugins.invokeAgent(

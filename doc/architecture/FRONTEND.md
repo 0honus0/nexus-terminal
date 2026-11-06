@@ -242,7 +242,7 @@ FileManager 沿原 TerminalDirectoryPort.changeDirectory 的 onQueued 消费 wai
 4. **类型与转换**：复用agent/model/native-run-types.ts；索引按工具ID关联，并复查appId/runId，当前状态还须匹配operationHash和inputRevision/operationRevision。审批时间为秒，展示时乘1000；工具时间保持毫秒。审批与执行状态分别呈现，不将批准转换为completed。
 5. **入口与安装**：消息后和未关联消息的工具列表共同消费审批索引；不再独立渲染审批历史。工具未加载时随原工具分页加载，审批读取范围仍为当前选中Run，不伪造其它Run的审批状态。
 6. **数据、事务与并发**：只读投影不持久化、不提交批准；审批按输入版本、政策版本及申请时间排序，被取代的许可不覆盖其替代许可；同一工具旧操作的审批留在展开详情，不能作为当前操作已获批准的依据。
-7. **生命周期与失败**：保留原订阅、版本合并、Run/Thread切换和失效围栏；设备能力观察由Foundation随组件作用域释放，不新增业务timer。状态行绝对定位在输入区上方，空白pointer-events:none，只有按钮恢复命中；按钮自身实色，正文保留底部留白。聊天滚动区与footer之间不留gap或顶部padding，使整排状态行都覆盖正文滚动范围；无用量时的发送提示不绘制底色。权限入口与compact附件入口复用soft外观，非compact附件仍沿原ghost；SSH目标沿useDeviceCapabilities识别手机，手机（含横屏/宽视口）始终使用square图标触发器；电脑输入区超过620px时显示文字、已选数量和下拉箭头，窄输入区收为图标，保留原aria-label/title和选择面板。思考/目标/权限及附件外层不收缩，模型沿原flex收缩；文件/发送持右组，停止移入左组，避免附件flex-1/min-w-0导致根宽小于按钮的重叠。附件、输入框及popover仍沿原布局/Portal，不改变自动跟随与导航动作。思考强度按手选或当前模型默认得出同一有效显示值，标签、说明、滑块定位和强度配色统一消费；未配置默认时显示“自动”，不补造具体请求等级，原模型切换清覆盖和Run冻结保持。
+7. **生命周期与失败**：保留原订阅、版本合并、Run/Thread切换和失效围栏；页面媒体查询由VueUse随组件作用域释放，不新增业务timer。状态行绝对定位在输入区上方，空白pointer-events:none，只有按钮恢复命中；按钮自身实色，正文保留底部留白。聊天滚动区与footer之间不留gap或顶部padding，使整排状态行都覆盖正文滚动范围；无用量时的发送提示不绘制底色。权限入口与compact附件入口复用soft外观，非compact附件仍沿原ghost；SSH目标仅按页面和输入区宽度响应，VueUse媒体查询页面至少768px且输入区超过620px时显示文字、已选数量和下拉箭头，其余使用square图标触发器；不消费设备类型、UA或触控能力，保留原aria-label/title和选择面板。思考/目标/权限及附件外层不收缩，模型沿原flex收缩；文件/发送持右组，停止移入左组，避免附件flex-1/min-w-0导致根宽小于按钮的重叠。附件、输入框及popover仍沿原布局/Portal，不改变自动跟随与导航动作。思考强度按手选或当前模型默认得出同一有效显示值，标签、说明、滑块定位和强度配色统一消费；未配置默认时显示“自动”，不补造具体请求等级，原模型切换清覆盖和Run冻结保持。
 8. **当前能力与验收**：已完成源码与消费者迁移；此前限定CDP覆盖桌面及390/320px的浮层点击/滚轮穿透、Token/消息导航和真实批准/拒绝状态，证据见testing。随后SSH图标及工具栏左右分组调整仅完成源码复审和静态检查，视觉与行为回归未执行；真实触摸滚动/软键盘、扩大审批和历史分页组合仍待专项。
 
 ### 自动图片预览
@@ -502,3 +502,14 @@ usePluginManagement 持已确认安装快照；相同 appId/revision 序列不�
 6. **数据、事务与并发**：保留原workspace-layout原子CAS，无数据库迁移。无关偏好/焦点变化可以推进版本；当前布局/侧栏与基线、目标均不同则拒绝。与尺寸保存复用有限CAS恢复：仅confirmed/version_conflict只读核对后最多再提交一次，二次冲突不循环。尺寸flush后重新取Store当前版本，不引用弹窗打开时的版本。
 7. **生命周期与失败**：派发及恢复读取后复查原scope/permission；撤销不追加写入。unknown不重放，真实内容冲突、读取失败和二次拒绝维持原围栏并保留草稿；显式刷新放弃草稿并重新建立基线。
 8. **当前能力与验收**：USAGE同步自动核对与人工刷新边界；正式远程用例覆盖同页锁定后保存、外部无关版本推进、真实布局冲突、提交后丢失响应及二次409。静态、完整Actions与尚未覆盖的真机边界分别记入testing。
+
+## 前端分级诊断
+
+1. **职责与范围**：`client/logging/logger.ts` 是浏览器 Pino 唯一实例；偏好 Store 是生效等级的唯一 owner，覆盖启动、认证、导航、传输、工作区和 Agent。日志不上传、不持久化、不改变 UI。
+2. **子功能与目录**：沿既有 logger、transport-diagnostics 与 app/bootstrap/runtimeDiagnostics；真实状态 owner 记录状态变化，传输 owner 记录安全技术元数据，不新增并行日志系统。
+3. **依赖方向**：logger 消费 Shared `FRONTEND_LOG_LEVELS/FrontendLogLevel`；Client、Runtime 和 Feature 依赖 logger；Client 不反向依赖 Feature。
+4. **类型与转换**：错误通过 Pino 的浏览器 `err` serializer 白名单投影类型及源码位置；忽略错误正文和自定义字段。HTTP/WS 只投影 pathname、本地关联编号、状态、耗时与缓冲字节，不记录查询参数、凭据、正文及聊天/终端内容。
+5. **入口与安装**：main 安装全局和 Vue 错误诊断；偏好同步沿原 Store watcher；Axios 与 fetch 共用 HTTP 诊断，正式构建不包含 `build/e2e-browser-diagnostics.ts` 测试入口。
+6. **数据、事务与并发**：不涉及数据库或迁移；HTTP 回调仅结算一次，Axios 通过 WeakMap 关联配置与诊断，不修改请求头、重试、错误或未知结果契约；页面内编号不等于服务端请求 ID。
+7. **生命周期与失败**：全局监听与 PerformanceObserver 属于页面生命周期；WS 与 Agent 沿原关闭/重连 owner，不新增 timer。取消/主动关闭记 debug，恢复失败记 warn，协议/未捕获异常记 error；trace 走 console.debug 避免逐帧捕获堆栈，长任务先检查等级再聚合。
+8. **当前能力与验收**：新增正式浏览器场景覆盖等级动态过滤、silent、脱敏、HTTP 关联与取消以及 window/Promise/Vue 异常；实际执行、静态结果与远程待验分开记录在 testing/HISTORY。

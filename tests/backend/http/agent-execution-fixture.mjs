@@ -63,10 +63,65 @@ export async function openAgentExecution(directory, sshd, options = {}) {
 				response.destroy();
 				return;
 			}
+			const batch = action.calls ?? (action.name ? [{ name: action.name, input: action.input }] : []);
 			response.writeHead(200, { 'Content-Type': 'text/event-stream' });
 			response.flushHeaders();
 			if (body.input) {
-				assert.ok(!action.name && !action.calls && !action.hold);
+				assert.ok(!action.hold);
+				if (batch.length) {
+					const output = batch.map((call, index) => ({
+						type: 'function_call',
+						id: 'fc_' + (results.length + index),
+						call_id: 'call_' + (results.length + index),
+						name: call.name,
+						arguments: JSON.stringify(call.input),
+						status: 'completed',
+					}));
+					response.write(
+						'data: ' +
+							JSON.stringify({
+								type: 'response.created',
+								response: { id: 'resp_flow', created_at: 1700000000, model: body.model },
+							}) +
+							'\n\n',
+					);
+					for (const [index, item] of output.entries()) {
+						for (const event of [
+							{
+								type: 'response.output_item.added',
+								output_index: index,
+								item: { ...item, arguments: '', status: 'in_progress' },
+							},
+							{
+								type: 'response.function_call_arguments.delta',
+								item_id: item.id,
+								output_index: index,
+								delta: item.arguments,
+							},
+							{
+								type: 'response.function_call_arguments.done',
+								item_id: item.id,
+								output_index: index,
+								arguments: item.arguments,
+							},
+							{ type: 'response.output_item.done', output_index: index, item },
+						])
+							response.write('data: ' + JSON.stringify(event) + '\n\n');
+					}
+					response.end(
+						'data: ' +
+							JSON.stringify({
+								type: 'response.completed',
+								response: {
+									status: 'completed',
+									output,
+									usage: { input_tokens: 100, output_tokens: 32 },
+								},
+							}) +
+							'\n\n',
+					);
+					return;
+				}
 				const text = action.text ?? 'Fixture finished';
 				const item = {
 					type: 'message',
@@ -118,7 +173,6 @@ export async function openAgentExecution(directory, sshd, options = {}) {
 				response.once('close', () => held.delete(response));
 				return;
 			}
-			const batch = action.calls ?? (action.name ? [{ name: action.name, input: action.input }] : []);
 			const delta = batch.length
 				? {
 						tool_calls: batch.map((call, index) => ({
@@ -304,7 +358,7 @@ export async function openAgentExecution(directory, sshd, options = {}) {
 			}
 		},
 
-		async start(name, program) {
+		async start(name, program, { connectionIds = [connectionId] } = {}) {
 			const key = name + ':' + randomUUID();
 			programs.set(key, program);
 			const thread = expectStatus(await api('POST', base() + '/threads', { title: name }), 201);
@@ -315,7 +369,7 @@ export async function openAgentExecution(directory, sshd, options = {}) {
 					{
 						prompt: key,
 						approvalMode: 'ask',
-						connectionIds: [connectionId],
+						connectionIds,
 						model: { providerId: provider.id, modelId: 'fixture', configurationVersion: provider.version },
 					},
 					{ 'Idempotency-Key': randomUUID() },

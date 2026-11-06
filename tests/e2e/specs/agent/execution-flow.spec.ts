@@ -4,6 +4,17 @@ import { promisify } from 'node:util';
 import { expect, test } from '../../support/fixtures';
 
 for (const [name, file, pattern] of [
+	[
+		'lazy tool discovery, both protocols and live authorization',
+		'http/backend-next-agent-tool-loading.integration.mjs',
+		'Agent tool loading:',
+	],
+	['MCP negotiation, tool catalogs and governed execution', 'http/backend-next-agent-mcp.integration.mjs', 'B10'],
+	[
+		'ACP execution, inherited entry points and inner permissions',
+		'http/backend-next-agent-acp.integration.mjs',
+		'B10',
+	],
 	['Docker targeted batch reads and lifecycle', 'http/backend-next-docker.integration.mjs', 'B10'],
 	[
 		'Browser per-session isolation and combined observations',
@@ -80,6 +91,9 @@ for (const [name, file, pattern] of [
 			}
 			throw error;
 		});
+		if (file.includes('agent-tool-loading')) {
+			await testInfo.attach('tool-loading-execution', { body: result.stdout, contentType: 'text/plain' });
+		}
 		expect(result.stdout).toMatch(/# fail 0(?:\r?\n|$)/);
 		expect(result.stdout).toMatch(/# pass [1-9]\d*(?:\r?\n|$)/);
 		expect(result.stdout).not.toMatch(/# cancelled [1-9]/);

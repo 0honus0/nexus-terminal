@@ -1037,3 +1037,71 @@ local-browser-final.log 的完整469项运行保留463项通过和6项失败，�
 ## Agent 手机服务器选择图标（2026-11-05）
 
 按用户授权修正AgentAppSurface目标触发器：原来只按composer宽度超过620px显示文字，现在复用Foundation的useDeviceCapabilities，手机含横屏/宽视口始终只显示服务器图标；电脑宽输入区保留文字与已选数量，窄输入区沿原收缩规则。组件持展示判断，Foundation持设备能力，原popover选择、无障碍名称、授权及Shared/后端契约均不变，无数据库迁移。核对既有目标选择消费者并同步USAGE及前端架构；根check、完整格式和前端生产构建通过，日志为agent-tool-reuse-20261105任务目录下的target-mobile-{check,format,build}.log。此条仅记录源码与静态/构建结果，宽窄输入区专项视觉及真实手机边界仍沿PLAN保留，正式回归由推送后远程E2E执行。
+
+## 前端分级日志完善（2026-11-05）
+
+本轮基于 `main/5580aaec348a1a200fa5f52b360264154df1a238` 的未提交工作区；记录本轮源码与命令，不复用前次远程 E2E 作为验证。继续使用 Pino 与 Shared 日志等级，没有 UI、后端协议、数据库或部署变更。
+
+| 审核项         | 结论                                                                                                                                                       |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 契约与消费者   | Shared 等级唯一；偏好 Store 同步原 Pino 实例。Client、app、Workspace 和 Agent 消费同一 owner，无新日志系统或公开接口。                                     |
+| 类型与转换     | HTTP/WS 只投影安全元数据，异常只投影类型/源码位置；查询参数、凭据、正文、自定义异常字段不进入新增日志。                                                    |
+| 生命周期与并发 | 请求回调仅结算一次，Axios 通过 WeakMap 关联；WS 单次监听、Agent 原退订/重连及页面级诊断 owner 保持原生命周期。高频输出仅既有 trace，关闭等级不序列化异常。 |
+| 失败与恢复     | 正常取消/主动关闭为 debug；网络/重连为 warn，5xx/协议/未捕获异常为 error；等级切换不冒充错误，silent 不输出切换通知。                                      |
+
+- 工具链：Node 26.13.0、pnpm 12.16.1、Playwright 1.64.1，测试服务使用动态隔离的本地环回端口与独立 E2E 基线。
+- 静态与构建：根 `pnpm run check`、`pnpm run format:all:check`、`pnpm run build:frontend`、测试专用客户端构建与 `git diff --check` 通过。专项入口同时重新构建 Shared、Backend、Frontend 和测试客户端。
+- 初轮 `pnpm test:e2e:remote -- --project=ui frontend-diagnostics.spec.ts`：3 项一次通过（6.0s），包含等级过滤、异常脱敏和关闭时不序列化、Axios/fetch 的状态/取消/网络/格式失败及运行时错误。
+- 补齐 WS 后执行 `pnpm test:e2e:remote -- --project=ui frontend-diagnostics.spec.ts system-settings.spec.ts --grep frontend`：5 项全部一次通过（8.7s），无失败、重试或跳过；新增 WS 正常/异常关闭与 silent、关联编号和内容隔离，并回归前后端日志等级独立保存、重载保持和非法等级拒绝。
+- 产物保留在 `/home/honus/nexus-task-artifacts/agent-tool-reuse-20261105/frontend-logging-*.log`；正式测试入口的 `remote` 名称只表示动态端口本地执行，不代表 GitHub Actions。
+- 未验：本轮未提交/推送、未运行正式远程完整 E2E，未在生产服务或真实手机弱网/后台现场复现；Agent 与工作区状态日志已静态审核，不能据此声称真实卡死场景全部覆盖。无生产更新。
+
+## Agent SSH 目标入口按宽度响应（2026-11-06）
+
+本轮在上一轮前端日志的未提交工作区上只调整 `AgentAppSurface.vue` 的目标入口显示条件，并同步 USAGE 和 Frontend 架构；不覆盖既有本地修改，没有提交、推送或部署。
+
+- 契约/消费者审核：目标入口的文字、已选数量、下拉箭头和 square 外观共用 `showTargetLabel`，目标选择与权限协议不变。
+- 转换审核：去掉 `useDeviceCapabilities/isMobile`，改为 VueUse 的页面 `min-width:768px` 与既有输入区 `>620px` 条件；复用既有响应分界，不引入设备/UA/触控类型判断。
+- 生命周期审核：媒体查询由 VueUse 随组件作用域释放；继续复用输入区测量，无新监听 owner、定时器或持久状态。
+- 风险审核：窄屏保留图标、标题、可访问名称和完整选择弹层；桌面页面收窄与手机 UA 的宽页面均按实际空间响应。
+- 静态：根 `pnpm run check`、`pnpm run format:all:check`、`git diff --check` 通过；限定回归入口重新完成 Shared、Backend、Frontend 生产构建与测试客户端构建。
+- 浏览器：沿用正式夹具和已有 `configuration-hints.spec.ts` 的真实目标选择/批选/权限场景，任务目录中的临时配置增加验收 hook；1 项一次通过（9.9s），无重试或跳过。验收桌面 UA 1440px 有文字、390px 仅图标、恢复宽度重新展开，以及手机 UA 在 1440/390px 下分别展开/收起。截图已目视核对。
+- 产物：`/home/honus/nexus-task-artifacts/agent-target-width-20261106/` 保留临时配置、hook、日志及四张截图；代码检查日志在上一任务目录 `agent-target-width-check.log`。未向产品加入测试入口或永久新增低影响样式测试。
+- 边界：本轮为本地 Chromium 受控验收；未运行正式远程完整 E2E，真实手机软键盘、横竖屏与其它语言仍沿 PLAN 的真机专项记录。
+
+## Agent Host 工具按需发现（2026-11-06）
+
+基于 main `5580aaec348a1a200fa5f52b360264154df1a238` 的未提交工作区实施，保留既有前端日志与目标入口宽度修改；没有提交、推送、发布或更新生产环境。无 Shared/HTTP/数据库结构变化，不需要迁移。
+
+采用 [Vercel AI SDK toolSearch](https://github.com/vercel/ai/blob/6737c7721b10ce489e21efff43a4acf9c8ca7f04/packages/ai/src/tool-search/prepare-tool-search.ts) 的常驻搜索、当前执行持有发现集合、下一轮提供 schema 模式。其公开工厂必须绑定 SDK 的生成循环，非独立检索接口；本项目沿用原 Run/治理/账本，不复制 SDK 私有执行器。检索使用 Fuse.js 7.5.0 的关键词包含匹配，中文分词复用 Intl.Segmenter；不自行评分、不增加五条之类的结果限制。另核对 DeepAgents 原生搜索的模型/端点资格和 Goose 的目录/详情分离。GitHub 元数据已确认 AI SDK、DeepAgents、Goose、Fuse 均超过 H-14 的 500 Star 要求；确切 SHA、源码和元数据在任务产物 reference 目录。
+
+| 审核表         | 已审源码/消费者及结论                                                                                                                                                                                                                                                                                                           |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 类型与消费者   | tools/model/tool-types、tool-input/definitions、ToolRemoteModel 排除新 targetless 分支、ToolService、RunExecutionOwner、受控 Provider 与 execution-flow 正式入口。availableDefinitions 与当轮 definitions 分离；原 RunModelStream 投影、requestHash、预算和当轮提案白名单仍消费同一份实际声明；无业务类型泄入 Shared/Platform。 |
+| 依赖与转换     | tool-catalog-rules 是 live 权限/目标/插件过滤与检索的唯一 owner。Root/Child 原始工具上界在过滤前保留；结果只投影 name/summary，不复制 schema；无 search 权限或被 App 工具白名单排除时直接提供完整授权目录。Fuse/Intl 只执行纯检索，无网络、模型选择请求或新增技术资源。                                                         |
+| 生命周期与失败 | Run 内局部 Set，无跨 Run/Child 共享、定时器或重启恢复。搜索复用原读工具账本，complete 和最终 verify 后才发布效果；整批成功及取消/期限检查后按目录顺序合并，下轮再次按当前授权过滤。同轮未加载提案保持原拒绝/unknown 围栏；提交后确认失败、批次失败及取消均不推进下一次模型派发。                                                |
+| 验证与风险     | root check、完整 format:all:check、git diff --check、Shared/Backend/Frontend 与 E2E 客户端构建通过。下列本地正式 runner 回归通过；真实模型选词/发现成功率、prompt cache 和计费收益未测，GitHub Actions 全量未运行。                                                                                                             |
+
+执行环境为 Node 26.13.0、pnpm 12.16.1、Playwright 1.64.1。`test:e2e:remote` 本轮仍是动态端口的本地正式 runner，不代表 GitHub Actions：
+
+- 双协议专项在 `backend-next-agent-tool-loading.integration.mjs`：两种协议各 10 个场景，加父用例共 22 项。覆盖精确名/中文关键词、无匹配、schema 下一轮加载与复用、fresh Run 隔离、同轮拒绝、无 SSH 目标、撤权后的目录/执行拦截、插件白名单、显式完整目录、Child 独立与继承上界、取消后的禁止续轮。通过 `agent/execution-flow.spec.ts` 执行。
+- `pnpm test:e2e:remote -- --project=agent execution-flow.spec.ts plugin/native-run.spec.ts file-delivery.spec.ts functional-images.spec.ts functional-memory.spec.ts functional-regressions.spec.ts plugin/browser-lifecycle.spec.ts plugin/subagent-lifecycle.spec.ts --output=/home/honus/nexus-task-artifacts/tool-loading-implementation-20261106/e2e-results`：**51 项一次通过，4.7m**。覆盖真实 SSH/Browser/SQLite 执行、资源关闭、图片/GIF 与文件交付、原生插件、Child、取消、审批及宽窄聊天界面。
+- 补充 `NEXUS_E2E_SUITE=backend pnpm test:e2e:remote -- --project=agent execution-flow.spec.ts --grep 'lazy tool discovery|MCP negotiation|ACP execution' --output=/home/honus/nexus-task-artifacts/tool-loading-implementation-20261106/protocol-results`：**3 项一次通过，21.3s**，包含 22 项发现专项重跑及原 MCP 协商/调用、ACP 真实 SSH/入口继承/内层审批链。
+- 新增专项初轮暴露 Responses 夹具 added 状态错误，以及同轮未加载提案的终态预期不符；修正为真实协议的 in_progress 和原有 model_response_invalid/unknown 断言，未放宽产品提案校验。后续专项与上述扩展回归全部通过。
+
+实际受控 Provider 收到的 tools 数组测量（同 App 全授权、有选中 SSH、无自定义插件工具）：
+
+| 协议             | 首轮工具数/JSON bytes | 显式完整目录工具数/JSON bytes | 工具定义 JSON 降幅 |
+| ---------------- | --------------------- | ----------------------------- | ------------------ |
+| Chat Completions | 11 / 8695             | 64 / 42786                    | 79.68%             |
+| Responses        | 11 / 8717             | 64 / 42914                    | 79.69%             |
+
+上述是实际编码后的工具定义 JSON，**不等于整体请求 token、账单或延迟同比下降**；实际集合取决于授权和目标，搜索本身也占模型轮次与工具额度。无额外 selector 模型请求。源码、自审、检查/构建日志、三轮专项日志、51 项日志、wire-measurements.json 及参考源码保留在 `/home/honus/nexus-task-artifacts/tool-loading-implementation-20261106/`。真实模型、自然到期及所有未知提交/介质故障交错仍按 PLAN 待验边界推进。
+
+## 诊断、宽度按钮与工具加载补充 E2E（2026-11-06）
+
+基于 `main/5aa6e40a4b4ee7be6a5134c3646e6bf76bb1b07b` 的三组本地功能变更补齐永久覆盖。工具加载新增双协议下的重叠并发搜索/重复加载去重与稳定排序、非法参数失败账本后的有效重试，以及显式插件白名单包含搜索时的目录隔离；每协议 13 个子场景，加父场景共 28 项 Node 测试，由正式 execution-flow 承载。签名 Nexus Agent 浏览器场景进一步核对只读搜索先完成，两个已审批写工具在下一模型步骤完成。
+
+目标按钮以 Desktop Chrome / Pixel 7 的 UA 分别验证 1440→390→320→1440px，窄屏仅图标、宽屏文字和计数恢复，选中目标持续且授权不改变。诊断四项浏览器用例进入正式 UI 分组，覆盖级别动态过滤、脱敏、HTTP 分类关联、运行时错误和 WebSocket 关闭。未增加产品 UI 或数据库变更。
+
+Node 26.13.0 / pnpm 12.16.1：`pnpm check`、`pnpm build`、E2E 测试客户端构建、`pnpm format:all:check` 和 `git diff --check` 通过；Playwright 收集 618 项 / 145 文件。按照 D17，本阶段尚未本地执行新增行为用例，远程整轮结果后续追加。完整源码审核确认目录授权唯一投影、加载只在整批完成及取消/到期检查后生效、Root/Child 各自 Run 生命周期、插件无搜索时的完整已授权目录，以及诊断无载荷/异常正文记录。产物集中 `/home/honus/nexus-task-artifacts/e2e-tool-loading-20261106`，保留至用户通知清理。

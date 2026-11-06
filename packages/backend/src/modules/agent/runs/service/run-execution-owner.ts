@@ -45,6 +45,7 @@ const MAX_PENDING_RUN_WRITES = 64;
 interface ModelStepOutcome {
 	pluginCatalog: PluginAgentCatalog | null;
 	definitions: ToolDefinition[];
+	availableDefinitions: ToolDefinition[];
 	step: RunModelStep;
 	text: string;
 	terminal: Extract<RunModelDelta, { kind: 'finished' }>;
@@ -625,6 +626,7 @@ export class RunExecutionOwner {
 		let version = command.version;
 		let previous: RunModelStep | null = null;
 		let pluginCatalog: PluginAgentCatalog | null = null;
+		const loadedTools = new Set<string>();
 		for (let stepIndex = 1; stepIndex <= maxRequests; stepIndex++) {
 			let outcome: ModelStepOutcome | null;
 			try {
@@ -638,6 +640,7 @@ export class RunExecutionOwner {
 					compaction,
 					title,
 					pluginCatalog,
+					loadedTools,
 				);
 			} catch (error) {
 				// A definite local rejection between rounds must settle the Root.
@@ -663,9 +666,14 @@ export class RunExecutionOwner {
 				if (!outcome.pluginCatalog) {
 					throw new AgentFailure('internal_failure');
 				}
+				const pendingTools = new Set<string>();
 				const results = await this.tools.executeBatch(
 					{
 						pluginCatalog: outcome.pluginCatalog,
+						availableDefinitions: outcome.availableDefinitions,
+
+						onToolsLoaded: (names) => names.forEach((name) => pendingTools.add(name)),
+
 						userId: command.userId,
 						appId: command.appId,
 						runId: command.runId,
@@ -700,6 +708,11 @@ export class RunExecutionOwner {
 
 				if (signal.aborted || Date.now() >= command.deadlineAt || stepIndex === maxRequests) {
 					throw new AgentFailure('limit_exceeded');
+				}
+				for (const tool of outcome.availableDefinitions) {
+					if (pendingTools.has(tool.name)) {
+						loadedTools.add(tool.name);
+					}
 				}
 				context.appendExchange({
 					content: outcome.text,
@@ -823,6 +836,7 @@ export class RunExecutionOwner {
 		compaction: CompactionSession,
 		title: TitleSession,
 		pluginCatalog: PluginAgentCatalog | null,
+		loadedTools: ReadonlySet<string>,
 	): Promise<ModelStepOutcome | null> {
 		if (signal.aborted) {
 			return null;
@@ -844,6 +858,7 @@ export class RunExecutionOwner {
 					stepIndex,
 					signal,
 					pluginCatalog,
+					loadedTools,
 				)
 			: null;
 		const definitions = toolStep?.definitions ?? [];
@@ -1092,6 +1107,7 @@ export class RunExecutionOwner {
 						text,
 						terminal: event,
 						definitions,
+						availableDefinitions: toolStep?.availableDefinitions ?? [],
 						pluginCatalog: toolStep?.pluginCatalog ?? null,
 					};
 				}

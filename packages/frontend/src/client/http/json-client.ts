@@ -98,7 +98,12 @@ export async function requestJson(input: JsonRequest): Promise<{ status: number;
 		diagnose(response.status);
 		return { status: response.status, body };
 	} catch (cause) {
-		diagnose(response.status, input.signal?.aborted ? 'cancelled' : 'response_failed');
+		const diagnosticCode = input.signal?.aborted
+			? 'cancelled'
+			: cause instanceof HttpRequestFailure
+				? cause.code
+				: 'response_failed';
+		diagnose(response.status, diagnosticCode);
 		if (input.signal?.aborted) {
 			throw new HttpRequestFailure('cancelled', 'unknown', { cause });
 		}

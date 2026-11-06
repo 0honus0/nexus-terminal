@@ -13,6 +13,7 @@ import {
 import { configureTestPluginRepository, installTestPlugin } from '../../../support/plugins';
 import { requestAgentJson } from '../../../support/agent-request';
 import { requestAgentWorkspace } from '../../../support/agent';
+import { readAgentThreadToolsResponse } from '../../../../../packages/shared/src/agent/tools/http-codec';
 import { readAgentErrorResponse } from '../../../../../packages/shared/src/agent/http-codec';
 import { expect, test } from '../../../support/fixtures';
 import { loginAsInitialAdmin } from '../../../support/auth';
@@ -99,6 +100,21 @@ test('remote signed Nexus Agent plugin installs, registers an Agent definition, 
 			first: { fact: { key: 'native_batch_first', value: '0', version: 1 } },
 			second: { fact: { key: 'native_batch_second', value: '1', version: 1 } },
 		});
+		const tools = await requestAgentJson(
+			request,
+			{ method: 'GET', path: `/apps/${app.id}/threads/${task.thread.id}/tools?limit=100` },
+			(raw) => readAgentThreadToolsResponse(raw, app.id, null, 100),
+		);
+		const records = tools.items.filter((tool) => tool.runId === result.run.id);
+		const discoveries = records.filter((tool) => tool.toolName === 'tool_search');
+		expect(discoveries).toHaveLength(1);
+		expect(discoveries[0]).toMatchObject({ state: 'completed', mutation: false });
+		const writes = records.filter((tool) => tool.toolName === 'collaboration_fact_write');
+		expect(writes).toHaveLength(2);
+		for (const write of writes) {
+			expect(write.state).toBe('completed');
+			expect(write.modelStepIndex).toBe(discoveries[0].modelStepIndex + 1);
+		}
 		const approvals = await requestAgentWorkspace(request, app, {
 			method: 'agent.approvals.list',
 			params: { runId: result.run.id, after: null },

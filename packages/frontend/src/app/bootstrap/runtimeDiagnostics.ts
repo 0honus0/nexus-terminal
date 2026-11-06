@@ -1,14 +1,13 @@
+import type { App } from 'vue';
 import { logger } from '@/client/logging/logger';
 
 let registered = false;
 
-const normalizeError = (value: unknown): Error => {
-	if (value instanceof Error) return value;
-	if (typeof value === 'string') return new Error(value);
+const sourcePath = (value: string): string | undefined => {
 	try {
-		return new Error(JSON.stringify(value));
+		return value ? new URL(value, window.location.href).pathname : undefined;
 	} catch {
-		return new Error(String(value));
+		return undefined;
 	}
 };
 
@@ -20,6 +19,10 @@ const pageContext = (): Record<string, unknown> => ({
 export const registerGlobalRuntimeDiagnostics = (): void => {
 	if (registered) return;
 	registered = true;
+	logger.info(pageContext(), 'Frontend runtime started');
+	window.addEventListener('online', () => logger.info(pageContext(), 'Browser network online'));
+	window.addEventListener('offline', () => logger.warn(pageContext(), 'Browser network offline'));
+	document.addEventListener('visibilitychange', () => logger.debug(pageContext(), 'Frontend visibility changed'));
 	if (typeof PerformanceObserver !== 'undefined' && PerformanceObserver.supportedEntryTypes.includes('longtask')) {
 		const observer = new PerformanceObserver((list) => {
 			if (!logger.isLevelEnabled('trace') || document.hidden) return;
@@ -40,9 +43,9 @@ export const registerGlobalRuntimeDiagnostics = (): void => {
 	window.addEventListener('error', (event) => {
 		logger.error(
 			{
-				err: normalizeError(event.error ?? event.message),
+				err: event.error,
 				source: 'window.error',
-				filename: event.filename || undefined,
+				filename: sourcePath(event.filename),
 				line: event.lineno || undefined,
 				column: event.colno || undefined,
 				...pageContext(),
@@ -54,11 +57,17 @@ export const registerGlobalRuntimeDiagnostics = (): void => {
 	window.addEventListener('unhandledrejection', (event) => {
 		logger.error(
 			{
-				err: normalizeError(event.reason),
+				err: event.reason,
 				source: 'window.unhandledrejection',
 				...pageContext(),
 			},
 			'Unhandled frontend promise rejection',
 		);
 	});
+};
+
+export const registerVueRuntimeDiagnostics = (app: App): void => {
+	app.config.errorHandler = (err, _instance, phase) => {
+		logger.error({ err, source: 'vue', phase }, 'Unhandled Vue error');
+	};
 };

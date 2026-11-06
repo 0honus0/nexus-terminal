@@ -17,6 +17,7 @@ export default defineConfig({
 		lib: {
 			entry: {
 				'browser-clients': fileURLToPath(new URL('../../../tests/e2e/support/browser-clients.ts', import.meta.url)),
+				'browser-diagnostics': fileURLToPath(new URL('./e2e-browser-diagnostics.ts', import.meta.url)),
 				'browser-terminal': fileURLToPath(new URL('./e2e-browser-terminal.ts', import.meta.url)),
 			},
 			formats: ['es'],

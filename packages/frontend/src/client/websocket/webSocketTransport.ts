@@ -1,5 +1,7 @@
 import { logger } from '../logging/logger';
 
+let nextTransportId = 0;
+
 export interface WebSocketOpenOptions {
 	protocols?: string | string[];
 }
@@ -14,22 +16,31 @@ export const openWebSocket = (path: string, options: WebSocketOpenOptions = {}):
 	const url = createWebSocketUrl(path);
 	const pathname = new URL(url).pathname;
 	const startedAt = performance.now();
-	logger.trace({ path: pathname }, 'WebSocket transport opening');
+	const transportId = ++nextTransportId;
+	logger.debug({ transportId, path: pathname }, 'WebSocket transport opening');
 	const socket = options.protocols ? new WebSocket(url, options.protocols) : new WebSocket(url);
+	let opened = false;
 	socket.addEventListener(
 		'open',
-		() =>
-			logger.trace(
-				{ path: pathname, durationMs: Math.round(performance.now() - startedAt) },
+		() => {
+			opened = true;
+			logger.info(
+				{ transportId, path: pathname, durationMs: Math.round(performance.now() - startedAt) },
 				'WebSocket transport opened',
-			),
+			);
+		},
 		{ once: true },
 	);
 	socket.addEventListener(
 		'close',
-		(event) =>
-			logger.debug(
+		(event) => {
+			const log =
+				opened && ![1000, 1001, 1005].includes(event.code)
+					? logger.warn.bind(logger)
+					: logger.debug.bind(logger);
+			log(
 				{
+					transportId,
 					path: pathname,
 					code: event.code,
 					clean: event.wasClean,
@@ -37,14 +48,15 @@ export const openWebSocket = (path: string, options: WebSocketOpenOptions = {}):
 					bufferedBytes: socket.bufferedAmount,
 				},
 				'WebSocket transport closed',
-			),
+			);
+		},
 		{ once: true },
 	);
 	socket.addEventListener(
 		'error',
 		() =>
 			logger.debug(
-				{ path: pathname, state: socket.readyState, bufferedBytes: socket.bufferedAmount },
+				{ transportId, path: pathname, state: socket.readyState, bufferedBytes: socket.bufferedAmount },
 				'WebSocket transport failed',
 			),
 		{ once: true },

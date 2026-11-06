@@ -856,7 +856,7 @@ Scope 的可管理 App 查询在 LIMIT 前按 user_id/app_id 排除 removed 安�
 2. **子功能与目录**：沿tools/model/tool-types、service/tool-definitions/browser-tools/collaboration-tools/mcp-tools及tool-input；模型投影沿runs/model/run-model-stream；技术schema沿platform/ai/model-port与adapters/model-request。
 3. **依赖方向**：Tools应用声明→Run Model逐字段投影→技术Port→供应商Adapter；无Adapter引应用类型、Shared DTO穿透或跨一级私有调用。
 4. **类型与转换**：文本field可声明已有有限choices；Model复制为独立string enum，Adapter核验并复制到Chat Completions/Responses schema。ToolCatalogFacts/State归Governance Model，StoredToolCatalogFacts只归storage并在Model投影policy/connectionIds，Service复用authorizationFact返回可用能力；新增目录ToolInput只属Tools内部模型，不新增Shared管理协议。仅同现有语义校验一致的值进入枚举，不改变合法调用形状；字节预算仍由输入边界实际计量，不将JSON Schema字符长度当作UTF-8精确容量。
-5. **入口与安装**：Run每步经Tools.availableDefinitions将Child白名单目录与Governance.toolCatalog交集；首次目录读取允许pending（模型步骤reserve才进入running），后续读取允许running，终态/unknown均拒绝；Governance同事务读取App政策、Run选择与现存SSH类型，沿原authorizationFact筛选能力和未被denylist禁止的目标，目录不代替实际派发授权。Browser与ACP安全目录分别归原Integration子功能owner，工具账本和授权链不旁路；浏览器/项目上下文/MCP按动作给出不同用途、输入来源和下一步，减少泛化重复说明。file_write新建使用明确字符串absent，替换使用原hash。
+5. **入口与安装**：Run每步经ToolService.prepareStep将Child白名单目录与Governance.toolCatalog交集；首次目录读取允许pending（模型步骤reserve才进入running），后续读取允许running，终态/unknown均拒绝；Governance同事务读取App政策、Run选择与现存SSH类型，沿原authorizationFact筛选能力和未被denylist禁止的目标，目录不代替实际派发授权。Browser与ACP安全目录分别归原Integration子功能owner，工具账本和授权链不旁路；浏览器/项目上下文/MCP按动作给出不同用途、输入来源和下一步，减少泛化重复说明。file_write新建使用明确字符串absent，替换使用原hash。
 6. **数据、事务与并发**：无schema变更；Governance存储新增目录事实读取并经Model白名单转换，SQL仅Adapter持有；请求hash包含实际投影后的声明，原付费请求不可变身份及独立工具账本/审批保持。
 7. **生命周期与失败**：声明精简不放宽授权、目标绑定、审批、超时、取消、未知及清理。后台Job、Root/Child、Browser/MCP/ACP仍由原owner管理，独立能力不因名字相似而合并。浏览器发现只返回目标标识/版本/URL模式，ACP只返回当前所选SSH的启用配置安全元数据；均在交付前复查原工具授权。技术历史校验允许已完成调用不在当前目录，RunModelStream仍拒绝本轮未提供的新工具提案。
 8. **当前能力与验收**：源码范围及真实消费者审核、静态证据见PLAN/testing；行为留D17远程回归，不以说明更短声称模型准确率或延迟实测改善。
@@ -959,3 +959,14 @@ WorkspaceService使用原RunService与ContextHistoryService：Root列表按threa
 6. **数据、事务与并发**：复用 agent_run_tools.result_text 与 Artifact begin/upload，v3 独立迁移将历史 file_deliver/artifact_present 结果转换为批次数组。现有总空间预留、hash、版本、期限与授权事务保持；文件引用不自动 retain/share/attach。
 7. **生命周期与失败**：Remote 持读取资源直至消费者完成，逐块复查权限/取消和长度，EOF 前复查类型、大小、修改时间，再允许 Artifact 发布；拒绝目录/链接。检测仅缓冲库要求的前缀，后续流式复制；Remote 公开流在读取与 iterator 清理时同样转换安全错误，ToolRemoteModel 转为 Agent 失败；ArtifactModel 保留源读取拒绝与消费者的持久化失败，取消不冒充内部故障，真正的关闭失败仍保留并阻止虚报释放。任何失败/取消/unknown 不显示成功交付。前端按需读取元数据，元数据/预览支持取消与卸载清理，原生下载由浏览器及原认证 HTTP 流拥有，刷新从工具账本恢复。
 8. **当前能力与验收**：参考 [LibreChat](https://github.com/LibreChat-AI/LibreChat/blob/f4154b649efa37e1345ccc517a4d8d1ed2178c82/api/app/clients/tools/structured/OpenAIImageTools.js) 的工具文件引用和 [Open WebUI](https://github.com/open-webui/open-webui/blob/c38885a1a737da4968f157092f304f3b5481d0bf/src/lib/components/chat/Messages/ToolOutputFile.svelte) 的工具输出文件展示；依赖复用本项目现有 file-type、Artifact 和 FilePreview。实现与验证状态见 PLAN/testing，静态不代表真实模型和远程故障验收。
+
+## Host 工具按需加载
+
+1. **职责与范围**：ToolService 持有当前授权目录与搜索用例；RunExecutionOwner 持有每个 Run 的加载名字集合。常用工具与 tool_search 常驻，其余完整定义在搜索成功后的下一轮提供，发现本身不授予执行权限。
+2. **子功能与目录**：tools/tool-catalog-rules 持目录过滤、常驻选择和 Fuse.js 搜索投影；tools/service 复用原严格解码、治理与工具账本；runs/service 只维护运行期加载集合，Root/Child 相互独立。
+3. **依赖方向**：Run owner → ToolService → 原 Governance/Plugins；搜索只读取经过当前权限、目标、插件和 Child 上界过滤的目录，不绕过 RunModelStream 的当轮工具白名单。
+4. **类型与转换**：ToolStepContext 明确区分当轮 definitions 与完整 availableDefinitions；ToolExecutionScope 传入搜索上界与可信加载回调。模型 query 经原 toolInput 严格解码；结果只投影名字与简短说明，不重复完整输入 schema。均属后端内部类型，无新增 Shared/HTTP 契约。
+5. **入口与安装**：tool_search 是普通原生 function tool，Chat Completions 与 Responses 共用；工具说明及 Host 指引介绍名称/中英文关键词搜索。未获搜索权限或被插件白名单排除时完整提供已授权目录，避免切断发现路径。
+6. **数据、事务与并发**：加载名字不持久化，不需要迁移。搜索复用现有工具执行账本、政策修订和完成事务；最终验证之后才产生可信加载效果，整批工具成功后才用于下一轮。常驻及已加载定义维持稳定顺序。
+7. **生命周期与失败**：每轮和每次搜索重新过滤当前授权；撤权立即使已加载定义退出目录。取消、批次失败、未知提交不推进下一次模型请求。Run 结束自动释放局部集合，不新增定时器、全局缓存或重启恢复；Child 继承完整授权上界而非父任务当前已加载子集。
+8. **当前能力与验收**：实现及验证状态见 PLAN/testing。参考 [Vercel AI SDK 的 toolSearch 与逐次加载状态](https://github.com/vercel/ai/blob/6737c7721b10ce489e21efff43a4acf9c8ca7f04/packages/ai/src/tool-search/prepare-tool-search.ts)：搜索入口不得延迟加载、当前执行持有发现集合、按当前可用目录筛选、下一轮生效。该函数绑定 SDK 自身生成循环且不是独立检索接口，本项目保留现有治理/账本 owner；检索复用 [Fuse.js](https://github.com/krisk/Fuse)，使用关键词包含匹配和系统 Intl.Segmenter 中文分词，分类别名补足 Host 英文声明。不复制其私有实现、默认五条限制或另建评分算法，不限定结果条数；参数、结果和上下文继续遵循原预算。验收覆盖双协议、搜索后复用、同轮拒绝、撤权/无目标/Child/插件上界、取消及原 MCP/ACP/Browser/交付链；真实 token 与耗时收益另行测量，工具 JSON 字节减少不等于实际计费同比减少。
