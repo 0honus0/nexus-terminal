@@ -12,6 +12,18 @@ for (const [title, file] of [
 		'settings Surface preserves named refusals and uncertain mutation fences',
 		'frontend/plugin-host-bridge.integration.mjs',
 	],
+	[
+		'host execution editor preserves unknown-write and identity-revocation fences',
+		'frontend/agent-execution.integration.mjs',
+	],
+	[
+		'host Provider editor preserves credentials, original CAS and uncertain writes',
+		'frontend/agent-provider.integration.mjs',
+	],
+	[
+		'host registry refresh recovers by read without replaying uncertain writes',
+		'frontend/agent-registry.integration.mjs',
+	],
 ]) {
 	test('SDK4 ' + title, async ({}, testInfo) => {
 		test.setTimeout(120_000);

@@ -2,7 +2,7 @@ import type { AgentRunStepState, AgentRunStepEventType } from '@nexus-terminal/s
 import type { AgentRunStepFailureCode } from '@nexus-terminal/shared/agent/runs/values';
 import type { StoredStepProposal } from './run-proposal-types.js';
 
-/** Durable model request journal owned by the existing Run aggregate. Not a second Run registry. */
+/** Historical model request evidence retained for strict snapshot decoding. */
 export type StoredStepState = AgentRunStepState;
 
 export interface StoredRunStep {
@@ -33,14 +33,4 @@ export interface StoredRunStepEvent {
 	inputTokens?: number;
 	outputTokens?: number;
 	createdAt: number;
-}
-
-export interface StoredRunUsage {
-	runId: string;
-	runVersion: number;
-	inputTokens: number | null;
-	outputTokens: number | null;
-	reportedModelRequests: number;
-	modelRequests: number;
-	toolExecutions: number;
 }

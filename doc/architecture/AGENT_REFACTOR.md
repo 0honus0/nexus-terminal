@@ -93,22 +93,20 @@ dsh 不是只能运行单 Agent；其 registry、子 Agent 和 ACP provider 支�
 
 ### 2.1 本体目录
 
-前后端继续使用一致的 `agent/plugins` 归属；不恢复独立 `packages/plugin-frontend-sdk`，也不为尚无其它消费者的“通用插件平台”提前抽顶层产品模块。下表为目标职责，具体移动在实施时按实际消费者完成，不建立空层。
+前后端继续使用一致的 `agent/plugins` 归属；不恢复独立 `packages/plugin-frontend-sdk`，也不为尚无其它消费者的“通用插件平台”提前抽顶层产品模块。以下路径对应当前源码，不按概念方框机械增加目录层级。
 
-| 目录                                                                          | 职责与真实消费者                                                                   |
-| ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Backend `modules/agent/plugins/packages`                                      | 包、仓库、签名、安装与独立版本；市场、已安装列表消费                               |
-| Backend `modules/agent/plugins/composition`                                   | 用户选择的插件实例、必需依赖闭包、就绪状态与变更影响；App 配置与激活消费           |
-| Backend `modules/agent/plugins/registry`                                      | 描述、注册代、可见性、发现及准确绑定；App、工具、服务和 Surface 消费               |
-| Backend `modules/agent/plugins/runtime`                                       | 隔离进程/实例、注册与调用代理、释放；技术进程由 Adapter 持有                       |
-| Backend `modules/agent/plugins/settings`                                      | 非秘密配置、schema 修订、字段写权限、CAS；人工页面与 Agent 共用                    |
-| Backend `modules/agent/plugins/sdk`                                           | 受管能力的插件侧边界适配；不导出整个 Service 容器                                  |
-| Backend `modules/agent/scope`、`runs`、`operations`                           | App/会话身份；通用 Run；操作账本与资源归属。Operation 不再依赖模型 step 或工具名称 |
-| Backend `modules/agent/governance`、`providers`、`artifacts` 及现有资源 owner | 真实准入、模型调用/计量、内容与已确认产物；由窄能力装配给执行侧                    |
-| Backend `modules/agent/interfaces`、`register.ts`                             | HTTP/WS/RPC 边界及唯一装配；不在子功能再建同义接口树                               |
-| Frontend `features/agent/plugins/{market,installed,settings,surfaces,sdk}`    | 市场、已安装管理、设置壳、通用 iframe 生命周期、浏览器 SDK                         |
-| Frontend `features/agent` 的应用壳与执行观察                                  | 窗口、App 选择、可信操作、提醒及通用任务观察；不内置聊天和 MCP 表单                |
-| Shared `agent/plugins`、`agent/runs`、`agent/operations`                      | 双端协议、公开 SDK 类型、严格解码及安全错误；不承载执行实现或存储行                |
+| 当前路径                                                                              | 职责与真实消费者                                                                                                          |
+| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Backend `modules/agent/plugins/{service,model,storage,adapters}`                      | 包、仓库、安装、组合、实例、配置与连接；分别由具名 Plugin/Repository/Instance/Connection Service、Model 及存储 owner 承担 |
+| Backend `modules/agent/plugins/registry/model`                                        | 作用域描述、注册代、发现、准确 binding 与事件；App、工具、服务及 Surface 消费                                             |
+| Backend `modules/agent/plugins/service/plugin-runtime-service.ts`、`adapters/runtime` | 隔离进程、实例注册、调用与释放；技术进程由 Platform owner 持有                                                            |
+| Backend `modules/agent/plugins/sdk`                                                   | 公开后端 SDK4；只暴露受管能力，不导出 Service 容器                                                                        |
+| Backend `modules/agent/{scope,runs,operations}`                                       | App/会话身份、通用 Run、操作账本与资源归属；Operation 不依赖模型 step 或工具名称                                          |
+| Backend `modules/agent/{governance,providers,artifacts,tools,integrations}`           | 准入、模型、内容及受管 I/O；经窄能力装配到执行侧，插件持业务算法和协议客户端                                              |
+| Backend `modules/agent/interfaces`、`register.ts`                                     | HTTP/WS/RPC 边界及唯一装配                                                                                                |
+| Frontend `features/agent/plugins/{api,model,components,composables}`                  | 市场、已安装列表、配置与连接编辑的边界、状态和组件                                                                        |
+| Frontend `features/agent/plugins/{host,sdk}`                                          | App/Settings iframe、可信交互与浏览器 SDK；应用壳保留窗口、App 选择及通用执行观察                                         |
+| Shared `agent/{plugins,runs,operations}`                                              | 双端协议、公开 SDK 类型、严格解码及安全错误；不承载执行实现或存储行                                                       |
 
 每个有实际数据/用例的子功能按既有 Service → Model → storage/Adapter 分层。Service 持流程与政策，Model 做应用/存储/技术转换，Adapter 持 SQL 与技术资源；不能因为动态注册而绕过 H-04–H-08。内部协作使用窄契约，不绕到 HTTP 或模块 public 做一次空转。
 
@@ -480,7 +478,7 @@ MCP/ACP 的官方 SDK、帧解释与会话算法在服务插件；Host 负责固
 
 ### 8.1 当前状态
 
-SDK4宿主、前后端SDK及八个官方包已完成本轮实现、静态检查、正式矩阵738项及插件/仓库98项测试，最终签包指定CDP验收与双仓发布已完成。D24–D26旧SDK切片仍仅作历史证据，不替代本版结果；源码、发布版本、摘要及首次失败统一见[当前验收基线](../testing/E2E.md#当前验收基线)。
+SDK4宿主、前后端SDK及八个官方包已完成实现、正式验收与发布；后续复审、测试矩阵及发布状态随当前验收基线维护。D24–D26旧SDK切片仍仅作历史证据，不替代本版结果；源码、发布版本、摘要及首次失败统一见[当前验收基线](../testing/E2E.md#当前验收基线)。
 
 下列场景保留为设计与持续回归判据，不表示已穷尽全部故障组合。矩阵外独立旧夹具、真实模型、移动真机、介质故障和性能实测继续见[PLAN](../PLAN.md#agent-动态插件架构重新设计)，不将编译或受控fixture等同于这些实测。
 

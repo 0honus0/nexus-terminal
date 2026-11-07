@@ -2081,4 +2081,12 @@ Node 26.13.0/pnpm 12.16.1；`build.log` 与 `browser.log` 包含 Shared、Backen
 
 初次全目录探测与 Shared 重建重叠，部分模块读取失败，且启动清单含随后删除的旧文件；保留原 TAP，不计为通过。Shell 和备份分别保留首次失败及后续回归，不能将夹具预期变化误报为产品修复。已停止的测试目录归档并逐文件校验字节后压缩保留，未删除未知证据或原 CDP 验收现场。
 
-本轮本地检查：根 `pnpm run check`、完整 `format:all:check`、双端构建及 `git diff --check` 通过；最终专项共110项通过，无失败、取消或跳过，覆盖当前包安全、进程生命周期、真实流竞态、仓库取消、Shell、容量、迁移/快照及前端 MessagePort/codec/名称。完整备份组另有20项通过，与前述专项交集不相加。正式远程矩阵和新镜像仍待本轮运行结束后记录。
+本轮本地检查：根 `pnpm run check`、完整 `format:all:check`、双端构建及 `git diff --check` 通过；最终专项共110项通过，无失败、取消或跳过，覆盖当前包安全、进程生命周期、真实流竞态、仓库取消、Shell、容量、迁移/快照及前端 MessagePort/codec/名称。完整备份组另有19项通过，与前述专项交集不相加。正式远程矩阵和新镜像仍待本轮运行结束后记录。
+
+补充盘点保留并迁移三份实际宿主设置回归（execution/provider/registry）：当前预算字段、能力来源、独立标签、凭据输入、FormField 的 label/for 关联和条件恢复按钮按真实 owner 更新；未知写入不重放、原 CAS、三语消息及撤销后迟到返回断言保留。异步动作按实际写入次数与空闲状态同步，不借已有 Toast 判断新动作结束。三份接入正式浏览器 sandbox/Host 回归入口，独立 SDK MessagePort 六项仍保留在正式执行链。
+
+扩展 storage 目录探测共287项：279项首次通过，2项因深临时路径超过 Chromium Unix socket 上限、5项因 user namespace 无法穿过私有主目录失败，均用正确环境单独重跑通过；公开 targets 边界的旧字段预期补入当前只读 `lastConnectedAt`，保留秘密隔离与白名单精确断言。ENOSPC使用可访问的隔离路径及同版本 Node，五项真实有限文件系统回归通过，不跳过、不改变产品代码。原失败日志保留，不能将首次整组写成全部通过。
+
+宿主设置与公开边界最终组合 `inventory-repairs-final.tap` 四项全部通过；六轮旧 Provider 夹具定位保留，最后补齐当前 UI 所需凭据并等待真实目录匹配完成，未放宽模型来源/秘密/CAS/未知写入等断言。`frontend-repairs-3.tap` execution已通过、`frontend-repairs-2.tap` registry已通过；以最终组合为本批结论。设计文档的目录表同步实际Service/Model/Adapter与前端host布局，移除尚待搬迁的旧目标路径表述。
+
+最终 `check-closeout.log` 根检查、`format-closeout.log` 全仓格式及 `host-browser-wrapper.log` 双端生产构建通过；正式浏览器入口五项全部通过（29.6秒），覆盖真实签名 sandbox、Host bridge和三份设置回归。正式清单已生成749项，待最终提交的完整远程矩阵通过后发布。

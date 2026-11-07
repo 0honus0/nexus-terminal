@@ -226,12 +226,19 @@ try {
 
 			const buttons = () => [...node.querySelectorAll('button')];
 
-			const read = () => buttons().find((button) => button.textContent.includes('Read current status'));
+			const read = () =>
+				buttons().find(
+					(button) =>
+						button.textContent.trim() === i18n.global.t('agent.settings.providers.registryReadStatus'),
+				);
 
-			const refresh = () => buttons().find((button) => button.textContent.includes('Update now'));
+			const refresh = () =>
+				buttons().find(
+					(button) => button.textContent.trim() === i18n.global.t('agent.settings.providers.registryRefresh'),
+				);
 
 			refresh().click();
-			await until(() => unknownNotice());
+			await until(() => unknownNotice() && read() && !read().disabled && refresh().disabled);
 			check(
 				refresh().disabled && writes === 1 && !node.textContent.includes('operation_unknown'),
 				'unknown refresh blocks replay and uses safe localized message',
@@ -245,17 +252,19 @@ try {
 			for (const locale of ['zh-CN', 'ja-JP']) {
 				setLocale(locale);
 				await nextTick();
-				buttons()[1].click();
-				await until(() => unknownNotice());
+				refresh().click();
+				await until(() => unknownNotice() && read() && !read().disabled && refresh().disabled);
 				check(
 					unknownNotice()?.message === i18n.global.t('agent.settings.providers.registryUnknown'),
 					locale + ' safe unknown message',
 				);
-				buttons()[0].click();
-				await until(() => !buttons()[1].disabled);
+				read().click();
+				await until(() => !refresh().disabled);
 			}
 			setLocale('en-US');
 			await nextTick();
+			refresh().click();
+			await until(() => read() && refresh().disabled);
 			let release;
 			let held = false;
 			window.fetch = () => {

@@ -43,6 +43,7 @@ const connection = {
 	version: 4,
 	createdAt: 10,
 	updatedAt: 11,
+	lastConnectedAt: 12,
 	name: 'host',
 	type: 'SSH',
 	host: 'host.local',
@@ -68,6 +69,7 @@ assert.deepEqual(
 		'version',
 		'createdAt',
 		'updatedAt',
+		'lastConnectedAt',
 		'name',
 		'type',
 		'host',
@@ -82,6 +84,8 @@ assert.deepEqual(
 );
 const input = toConnectionInput(connection);
 withoutInternal(input);
+assert.equal(view.lastConnectedAt, 12);
+assert.equal('lastConnectedAt' in input, false, 'connection activity is read-only');
 assert.notStrictEqual(input.tagIds, connection.tagIds);
 const patch = toConnectionPatch({
 	notes: 'changed',

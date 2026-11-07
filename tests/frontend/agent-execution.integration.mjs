@@ -180,7 +180,7 @@ try {
 				return nativeFetch(...args);
 			};
 			const invalid = structuredClone(current);
-			invalid.limits.maxModelRequests = 161;
+			invalid.limits.maxModelRequests = 0;
 			await failure(() => saveExecutionSettings(invalid), 'invalid_input', 'not_dispatched');
 			check(dispatched === 0, 'invalid execution limits rejected before dispatch');
 			const wire = { settings: current };
@@ -229,7 +229,7 @@ try {
 				.use(pinia)
 				.use(i18n);
 			mounted.mount(node);
-			await until(() => node.querySelectorAll('input').length === 32);
+			await until(() => node.querySelectorAll('input').length === 30);
 			check(
 				node.querySelectorAll('textarea').length === 0 && node.querySelectorAll('select').length === 0,
 				'actual components render shared budgets and hard limits without child overrides',
@@ -294,12 +294,19 @@ try {
 				'successful read recovers actual saved state without replay',
 			);
 			for (const locale of ['zh-CN', 'ja-JP']) {
+				const expectedWrites = writes + 1;
 				setLocale(locale);
 				await nextTick();
 				editBudget(77);
 				await nextTick();
 				save().click();
-				await until(() => hasFeedback(i18n.global.t('agent.settings.execution.unknown')));
+				await until(
+					() =>
+						writes === expectedWrites &&
+						node.querySelector('fieldset').disabled &&
+						!read().disabled &&
+						hasFeedback(i18n.global.t('agent.settings.execution.unknown')),
+				);
 				check(hasFeedback(i18n.global.t('agent.settings.execution.unknown')), locale + ' safe unknown message');
 				read().click();
 				await nextTick();
@@ -337,7 +344,7 @@ try {
 				.use(pinia)
 				.use(i18n);
 			mounted.mount(node);
-			await until(() => node.querySelectorAll('input').length === 32);
+			await until(() => node.querySelectorAll('input').length === 30);
 			check(modelReads === 0, 'inherited Subagent settings do not load a separate model directory');
 			window.fetch = nativeFetch;
 			hardInput = node.querySelector('details input');
@@ -391,7 +398,7 @@ try {
 			mounted.mount(node);
 			await until(() => hasFeedback(i18n.global.t('agent.settings.providerManagement.failed')));
 			Array.from(node.querySelectorAll('nav button'))
-				.find((button) => button.textContent.trim() === 'Execution & Integrations')
+				.find((button) => button.textContent.trim() === i18n.global.t('agent.settings.groups.runtime'))
 				.click();
 			await nextTick();
 			await until(() => node.querySelector('section[aria-label="Execution and performance"] input'));

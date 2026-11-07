@@ -170,7 +170,12 @@ try {
 					if (predicate()) return;
 					await new Promise((resolve) => setTimeout(resolve, 10));
 				}
-				throw Error('Provider UI did not converge: ' + node?.textContent?.slice(0, 400));
+				throw Error(
+					'Provider UI did not converge: ' +
+						document.body.textContent.slice(-1400) +
+						' Feedback: ' +
+						JSON.stringify(notifications.notifications.map((item) => item.message)),
+				);
 			}
 
 			const { useNotificationStore } = await import('/src/shared/feedback/store/notification.store.ts');
@@ -192,7 +197,13 @@ try {
 			}
 
 			function model() {
-				return { id: 'fixture-model', contextWindow: 8192, maxOutputTokens: 512, supportsTools: true };
+				return {
+					id: 'fixture-model',
+					sources: { contextWindow: 'manual', maxOutputTokens: 'manual', supportsTools: 'manual' },
+					contextWindow: 8192,
+					maxOutputTokens: 512,
+					supportsTools: true,
+				};
 			}
 
 			function draft() {
@@ -401,32 +412,43 @@ try {
 				authenticatedSessionLifecycle.attach(1);
 				await setLocale('en-US');
 				mount({ render: () => h(ProviderSettings) });
-				await until(
-					() =>
-						!Array.from(node.querySelectorAll('button')).find((b) => b.textContent === 'Add provider')
-							?.disabled,
+				await until(() =>
+					Array.from(node.querySelectorAll('button')).some(
+						(b) =>
+							b.querySelector('.provider-add-label--full')?.textContent.trim() ===
+								i18n.global.t('agent.settings.providers.add') && !b.disabled,
+					),
 				);
-				const add = Array.from(node.querySelectorAll('button')).find((b) => b.textContent === 'Add provider');
+				const add = Array.from(node.querySelectorAll('button')).find(
+					(b) =>
+						b.querySelector('.provider-add-label--full')?.textContent.trim() ===
+						i18n.global.t('agent.settings.providers.add'),
+				);
 				add.click();
 				await nextTick();
 				const form = document.querySelector('#provider-editor');
 				check(form?.closest('[role=dialog]'), 'provider creation uses the modal interaction');
 
 				function input(label, value) {
-					const el = Array.from(form.querySelectorAll('label'))
-						.find((el) => el.textContent.trim().startsWith(label))
-						?.querySelector('input');
-					if (!el) throw Error('Missing ' + label);
-					el.value = value;
-					el.dispatchEvent(new Event('input', { bubbles: true }));
+					const el = Array.from(form.querySelectorAll('label')).find((el) =>
+						el.textContent.trim().startsWith(label),
+					)?.htmlFor;
+					const field = el ? document.getElementById(el) : null;
+					if (!field) throw Error('Missing ' + label);
+					field.value = value;
+					field.dispatchEvent(new Event('input', { bubbles: true }));
 				}
 
 				input('Name', 'Created from actual card');
 				input('API endpoint', vendorUrl);
+				input('API credential', 'fixture-ui-secret');
 				Array.from(form.querySelectorAll('button'))
-					.find((b) => b.textContent === 'Add model manually')
+					.find((b) => b.textContent.trim() === i18n.global.t('agent.settings.providerManagement.addModel'))
 					.click();
 				await nextTick();
+				await until(
+					() => !form.querySelector('fieldset').disabled && form.querySelector('input[id$="-model-id"]'),
+				);
 				input('Model ID', 'ui-model');
 				input('Context window', 8192);
 				input('Maximum output tokens', 128);
@@ -462,7 +484,10 @@ try {
 				window.fetch = nativeFetch;
 				await setLocale('en-US');
 				mount({ render: () => h(AgentSettingsPanel) });
-				await until(() => node.textContent.includes('Model providers') && hasFeedback('Concurrent update'));
+				await until(
+					() =>
+						node.textContent.includes('Model providers') && node.textContent.includes('Concurrent update'),
+				);
 				check(
 					node.querySelector('section[aria-label="Model providers"]') &&
 						node.querySelectorAll('nav button').length === 4,
