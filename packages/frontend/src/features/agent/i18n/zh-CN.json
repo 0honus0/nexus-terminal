@@ -1918,7 +1918,9 @@
         "collaboration_consumeMessages": "协作操作",
         "collaboration_readFact": "协作操作",
         "collaboration_writeFact": "协作操作",
-        "acp_permission": "审批 ACP 权限"
+        "acp_permission": "审批 ACP 权限",
+        "skills_catalog": "列出技能",
+        "memory_retrieve": "读取记忆候选"
       },
       "toolSummary": {
         "failedCount": "{count} 个失败",

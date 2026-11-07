@@ -25,9 +25,6 @@ import type {
 } from '../../storage/governance-storage.js';
 import { integer, readPolicy, scopeJson, readRunStatus, assertRevisionAvailable } from './governance-row.js';
 
-const approvalColumns =
-	'id,user_id,app_id,run_id,tool_call_id,operation_hash,capability,target_version,kind,status,policy_revision,input_revision,version,requested_at,expires_at,decided_at,decided_by_user_id,consumed_at,feedback,inspection_json';
-
 export async function currentPolicy(tx: SqlReader, userId: number, appId: string): Promise<StoredPolicy | null> {
 	const app = await appAuthority(tx, userId, appId);
 	if (app === null) {

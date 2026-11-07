@@ -57,12 +57,6 @@ export interface ArtifactFacts {
 	totalBytes: number;
 }
 
-export interface ArtifactMutationFacts {
-	record: ArtifactRecord;
-	references: number;
-	now: number;
-}
-
 export interface ArtifactWriteFacts {
 	bytes: number;
 	sha256: string;

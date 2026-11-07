@@ -1,10 +1,7 @@
 import type { StoredRunAppExecution } from '../storage/run-storage.js';
 import type { RunAppExecution } from './run-app-execution-types.js';
-import type { StoredRun, StoredRunEvent, StoredFrozenInput, StoredFrozenModelInput } from '../storage/run-storage.js';
-import type { FrozenModelInput } from '../../providers/model/provider-types.js';
+import type { StoredRun, StoredRunEvent, StoredFrozenInput } from '../storage/run-storage.js';
 import type { AgentRun, AgentRunEvent, RunFrozenInput } from './run-types.js';
-
-import { toStoredModel } from '../../providers/model/provider-projection.js';
 
 export function fromStoredRun(value: StoredRun): AgentRun {
 	return {
@@ -53,17 +50,4 @@ export function fromStoredAppExecution(value: StoredRunAppExecution): RunAppExec
 
 export function fromStoredFrozen(value: StoredFrozenInput): RunFrozenInput {
 	return { appExecution: fromStoredAppExecution(value.appExecution), inputJson: value.inputJson };
-}
-
-export function toStoredFrozen(value: FrozenModelInput): StoredFrozenModelInput {
-	return {
-		providerId: value.providerId,
-		providerVersion: value.providerVersion,
-		credentialRevision: value.credentialRevision,
-		modelId: value.modelId,
-		baseUrl: value.baseUrl,
-		protocol: value.protocol,
-		capabilities: toStoredModel(value.capabilities),
-		executionPolicy: value.executionPolicy,
-	};
 }

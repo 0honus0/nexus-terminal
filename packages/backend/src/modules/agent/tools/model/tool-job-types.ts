@@ -89,8 +89,6 @@ export type ToolJobControlValue =
 	| { jobs: ToolJobOutputValue[]; nextIndex: number | null }
 	| { jobs: ToolJobSnapshot[] };
 
-export type ToolJobValue = ToolJobAccepted | ToolJobSnapshot | ToolJobControlValue;
-
 export interface ToolJobPreparation {
 	background: boolean;
 	deadlineAt: number;

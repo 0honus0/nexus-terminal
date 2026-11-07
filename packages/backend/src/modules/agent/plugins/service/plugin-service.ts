@@ -522,8 +522,6 @@ export class PluginService {
 					) {
 						throw new AgentFailure('version_conflict');
 					}
-					for (const candidate of selected) {
-					}
 					return {
 						app: app.installation.package,
 						dependencies: pluginExecutionDependencies(

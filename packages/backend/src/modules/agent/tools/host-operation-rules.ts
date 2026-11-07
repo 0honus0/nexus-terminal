@@ -95,40 +95,8 @@ export function hostOperationDefinition(name: string): GovernedHostOperationDefi
 	return hostOperationDefinitions().find((entry) => entry.name === name) ?? null;
 }
 
-/** Static read lanes must cover every argument branch, including dynamically strengthened operations. */
-export function isStrictlyReadOnlyHostOperation(name: string): boolean {
-	if (name.startsWith('transport.') || name === 'shell.jobs') {
-		return false;
-	}
-	const policy = hostOperationDefinition(name);
-	return policy !== null && policy.risk === 'read' && !policy.mutation;
-}
-
 export function isAcpExecutionOperation(name: string): boolean {
 	return name === 'acp.execute' || name === 'acp.executeSaved';
-}
-
-export function hostOperationRequirements(
-	names: readonly string[],
-): { capabilities: AgentCapability[]; targets: boolean; childAccess: 'inherit' | 'root-only' } | null {
-	const capabilities = new Set<AgentCapability>();
-	let targets = false;
-	let childAccess: 'inherit' | 'root-only' = 'inherit';
-	for (const name of names) {
-		const policy = hostOperationDefinition(name);
-		if (!policy) {
-			return null;
-		}
-		capabilities.add(policy.capability);
-		for (const capability of policy.requirements.capabilities) {
-			capabilities.add(capability);
-		}
-		targets ||= policy.requirements.targets;
-		if (policy.childAccess === 'root-only') {
-			childAccess = 'root-only';
-		}
-	}
-	return { capabilities: [...capabilities].sort(), targets, childAccess };
 }
 
 /** The same strictly decoded request fixes risk at preparation and at persistent relationship checks. */

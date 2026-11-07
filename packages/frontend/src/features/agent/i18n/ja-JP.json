@@ -1918,7 +1918,9 @@
         "collaboration_consumeMessages": "コラボレーション操作",
         "collaboration_readFact": "コラボレーション操作",
         "collaboration_writeFact": "コラボレーション操作",
-        "acp_permission": "ACP 権限を承認"
+        "acp_permission": "ACP 権限を承認",
+        "skills_catalog": "スキルを一覧表示",
+        "memory_retrieve": "メモリ候補を読み取り"
       },
       "toolSummary": {
         "failedCount": "{count} 件失敗",

@@ -90,7 +90,6 @@ import { BrowserModel } from './integrations/model/browser-model.js';
 import { BrowserService } from './integrations/service/browser-service.js';
 import { createBrowserHttpRoutes } from './interfaces/http/browser-http.js';
 import {
-	SqliteIntegrationStorage,
 	appsWithIntegrationSettings,
 	clearAppIntegrationSettings,
 } from './integrations/adapters/sqlite/integration-sql.js';
@@ -244,7 +243,6 @@ export function registerAgent(
 	logger?: Logger,
 ): AgentRegistration {
 	const browserStorage = new SqliteBrowserStorage(sqlite);
-	const integrationStorage = new SqliteIntegrationStorage(sqlite);
 	const executionStorage = new SqliteExecutionStorage(sqlite);
 	const executionSettings = new ExecutionService(
 		new ExecutionModel(executionStorage, new SecureSessionTokens()),
@@ -817,7 +815,6 @@ export function registerAgent(
 			pluginRepositoryStorage.installIdentityReader(read);
 			pluginIntentStorage.installIdentityReader(read);
 			browserStorage.installTransactionIdentityReader(read);
-			integrationStorage.installTransactionIdentityReader(read);
 			memoryStorage.installTransactionIdentityReader(read);
 			artifactStorage.installTransactionIdentityReader(read);
 			executionStorage.installTransactionIdentityReader(read);

@@ -16,7 +16,15 @@ const otherAppId = '10000000-0000-4000-8000-000000000002';
 const artifactId = '20000000-0000-4000-8000-000000000001';
 const key = '30000000-0000-4000-8000-000000000001';
 const otherKey = '30000000-0000-4000-8000-000000000002';
-const selection = { key, id: artifactId, name: 'animation.gif' };
+const selection = {
+	key,
+	id: artifactId,
+	name: 'animation.gif',
+	version: 7,
+	sha256: 'a'.repeat(64),
+	mediaType: 'image/gif',
+	sizeBytes: 42,
+};
 
 function rangeRequest() {
 	return readAgentPluginUiInput({
@@ -94,6 +102,16 @@ test('Host attachment results reject foreign metadata, duplicate selections and 
 			appId,
 		),
 	);
+	for (const mutation of [
+		{ version: 0 },
+		{ sha256: 'invalid' },
+		{ mediaType: 'image/gif\\r\\nX: injected' },
+		{ sizeBytes: -1 },
+	]) {
+		assert.throws(() =>
+			readAgentPluginUiHostResult({ kind: read.kind, selections: [{ ...selection, ...mutation }] }, read, appId),
+		);
+	}
 	const open = { kind: 'artifact.selection.open', anchor: { left: 0, top: 0, width: 28, height: 28 }, keys: [] };
 	assert.throws(() =>
 		readAgentPluginUiHostResult({ kind: open.kind, selections: [selection, selection] }, open, appId),

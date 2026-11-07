@@ -31,13 +31,6 @@ export interface StoredProviderObservation {
 	capabilities: Partial<Omit<StoredProviderModel, 'id' | 'protocol' | 'capabilitySources'>>;
 }
 
-export interface StoredModelReference {
-	providerId: string;
-	modelId: string;
-	configurationVersion: number;
-	reasoningEffort?: AgentReasoningEffort;
-}
-
 export interface ProviderStoredRow {
 	id: string;
 	userId: number;

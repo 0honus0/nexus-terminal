@@ -53,11 +53,6 @@ export interface MemoryAdmissionFacts {
 	now: number;
 }
 
-export interface MemoryReviewFacts {
-	memory: MemoryRecord;
-	now: number;
-}
-
 export interface MemoryReviewTask {
 	content: string;
 	status: AgentMemoryStatus;

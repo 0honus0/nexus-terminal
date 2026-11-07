@@ -1,5 +1,6 @@
 import { pendingPluginConfiguration, savePluginConfiguration } from '../api/plugin-configuration-writes';
 import { fromPluginConfiguration } from '../model/plugin-instance-mapper';
+import { AGENT_HTTP_ERROR_CODES, type AgentHttpErrorCode } from '@nexus-terminal/shared/agent/values';
 import { logger } from '@/client/logging/logger';
 import { agentRecord, encodeAgentJson } from '@nexus-terminal/shared/agent/http-codec';
 import { readAgentRunEventsResponse } from '@nexus-terminal/shared/agent/runs/http-codec';
@@ -370,10 +371,7 @@ export class PluginFrontendHostBridge {
 		owner.transport.close();
 	}
 
-	private failure(
-		request: AgentPluginRpcEnvelope,
-		code: 'limit_exceeded' | 'invalid_input' | 'operation_unknown' | 'forbidden',
-	): AgentPluginRpcResponse {
+	private failure(request: AgentPluginRpcEnvelope, code: AgentHttpErrorCode): AgentPluginRpcResponse {
 		return {
 			type: 'nexus.plugin.response',
 			protocol: 4,
@@ -492,10 +490,17 @@ export class PluginFrontendHostBridge {
 			if (!(cause instanceof AgentManagementFailure)) this.recordFailure(cause);
 			if (!this.closed && !abort.signal.aborted && this.pending.get(request.id) === abort) {
 				const failure = cause instanceof AgentManagementFailure ? cause : null;
+				const confirmedCode =
+					failure && failure.outcome !== 'unknown'
+						? AGENT_HTTP_ERROR_CODES.find((code) => code === failure.code)
+						: undefined;
 				this.post(
 					this.failure(
 						request,
-						!dispatched || failure?.outcome === 'not_dispatched' ? 'invalid_input' : 'operation_unknown',
+						confirmedCode ??
+							(!dispatched || failure?.outcome === 'not_dispatched'
+								? 'invalid_input'
+								: 'operation_unknown'),
 					),
 				);
 			}

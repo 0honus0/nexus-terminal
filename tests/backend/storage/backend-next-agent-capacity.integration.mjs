@@ -478,29 +478,23 @@ await test('Browser configuration accepts larger target, endpoint and pattern se
 	);
 });
 
-await test('Integration configuration keeps complete transport and path budgets without separate argv or host-count policies', async () => {
-	const { readAgentIntegrationConfiguration } =
-		await import('../../../packages/shared/dist/agent/integrations/http-codec.js');
-	const { AGENT_MCP_PROTOCOL_VERSION } = await import('../../../packages/shared/dist/agent/integrations/values.js');
-	const acp = readAgentIntegrationConfiguration({
-		kind: 'acp',
-		displayName: 'Large invocation',
+await test('Plugin connections keeps complete transport and path budgets without separate argv or host-count policies', async () => {
+	const { readAgentPluginConnector } = await import('../../../packages/shared/dist/agent/plugins/connection.js');
+	const acp = readAgentPluginConnector({
+		kind: 'remoteProcess',
 		connectionId: 1,
 		argv: ['node', '-e', 'x'.repeat(10000), ...Array.from({ length: 160 }, (_, index) => String(index))],
 		cwd: '/' + 'a/'.repeat(200) + 'work',
-		protocolVersion: '1',
 	});
 	assert.equal(acp.argv.length, 163);
 	assert.ok(acp.cwd.length > 256);
-	const mcp = readAgentIntegrationConfiguration({
-		kind: 'mcp',
-		displayName: 'Many explicit authorities',
+	const mcp = readAgentPluginConnector({
+		kind: 'http',
 		endpoint: 'https://mcp.example.test/',
-		privateHostExceptions: Array.from({ length: 40 }, (_, index) => 'host-' + index + '.example.test:443'),
-		protocolVersion: AGENT_MCP_PROTOCOL_VERSION,
+		privateAuthorities: Array.from({ length: 40 }, (_, index) => 'host-' + index + '.example.test:443'),
 	});
-	assert.equal(mcp.privateHostExceptions.length, 40);
-	assert.throws(() => readAgentIntegrationConfiguration({ ...acp, argv: ['node', '\0'] }));
+	assert.equal(mcp.privateAuthorities.length, 40);
+	assert.throws(() => readAgentPluginConnector({ ...acp, argv: ['node', '\0'] }));
 });
 
 await test('Denylist and context snapshots do not add target/source count policies inside their existing encoded capacities', async () => {

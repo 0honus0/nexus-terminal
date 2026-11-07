@@ -10,11 +10,3 @@ export function matchesAppExecutionDependency(
 		semver.satisfies(selected.version, '>=' + dependency.minVersion + ' <=' + dependency.maxVersion)
 	);
 }
-
-/** Referencing an execution App does not adopt that App's own UI. */
-export function isPluginAppUiContribution(
-	rootPackageId: string,
-	selected: { id: string; contributions: { app: object | null; ui: boolean } },
-): boolean {
-	return selected.contributions.ui && (selected.id === rootPackageId || selected.contributions.app === null);
-}

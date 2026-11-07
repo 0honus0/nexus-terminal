@@ -34,18 +34,3 @@ export async function executionUsage(tx: SqlExecutor, runId: string, userId: num
 		concurrentModelCalls: executionInteger(row.calls),
 	};
 }
-
-export async function reserveExecutionTokens(
-	tx: SqlExecutor,
-	runId: string,
-	stepIndex: number,
-	rootId: string,
-	tokens: number,
-): Promise<void> {
-	await tx.run('INSERT INTO agent_run_budget_reservations(run_id,step_index,root_id,tokens) VALUES(?,?,?,?)', [
-		runId,
-		stepIndex,
-		rootId,
-		tokens,
-	]);
-}

@@ -7,13 +7,12 @@ import type {
 	StoredIntegrationRejection,
 } from '../../storage/integration-storage.js';
 import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
-import {
-	AGENT_MCP_PROTOCOL_VERSION,
-	AGENT_INTEGRATION_MAX_BODY_BYTES,
-	AGENT_INTEGRATION_NAME_MAX_BYTES,
-	AGENT_MCP_ENDPOINT_MAX_BYTES,
-	AGENT_MCP_HOST_MAX_BYTES,
-} from '@nexus-terminal/shared/agent/integrations/values';
+// Historical snapshot format. These constants do not constrain SDK4 plugin connections.
+const AGENT_MCP_PROTOCOL_VERSION = '2026-07-28';
+const AGENT_INTEGRATION_MAX_BODY_BYTES = 32 * 1024;
+const AGENT_INTEGRATION_NAME_MAX_BYTES = 128;
+const AGENT_MCP_ENDPOINT_MAX_BYTES = 4096;
+const AGENT_MCP_HOST_MAX_BYTES = 253;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return value !== null && typeof value === 'object' && !Array.isArray(value);

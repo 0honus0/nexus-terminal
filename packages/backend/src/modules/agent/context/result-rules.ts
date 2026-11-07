@@ -66,25 +66,3 @@ export function resultPage(text: string, input: ResultReadInput, previewBytes: n
 		text: characters.join(''),
 	};
 }
-
-/** The raw journal is unchanged. The model receives an explicit, recoverable preview. */
-export function projectCapturedResult(id: string, text: string, previewBytes = RESULT_MODEL_MAX_BYTES): string {
-	const limit = previewLimit(previewBytes);
-	if (Buffer.byteLength(text, 'utf8') <= limit) {
-		return text;
-	}
-	return JSON.stringify({
-		kind: 'captured_result_preview',
-		truncated: true,
-		projection: resultPage(
-			text,
-			{
-				toolCallId: id,
-				sha256: capturedResultHash(text),
-				offset: 0,
-				maxBytes: Math.min(AGENT_TOOL_RESULT_PAGE_MAX_BYTES, limit - 512),
-			},
-			previewBytes,
-		),
-	});
-}

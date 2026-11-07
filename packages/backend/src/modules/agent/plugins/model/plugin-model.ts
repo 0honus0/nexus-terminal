@@ -1528,24 +1528,6 @@ function installation(value: StoredPluginInstallation): PluginInstallation {
 	};
 }
 
-function toData(value: PluginData): StoredPluginData {
-	return { key: value.key, version: value.version, valueJson: value.valueJson, updatedAt: value.updatedAt };
-}
-
-function toInstallation(value: PluginInstallation): StoredPluginInstallation {
-	return {
-		appId: value.appId,
-		definitionId: value.definitionId,
-		version: value.version,
-		packageHash: value.packageHash,
-		publisherKeyId: value.publisherKeyId,
-		status: value.status,
-		revision: value.revision,
-		createdAt: value.createdAt,
-		updatedAt: value.updatedAt,
-	};
-}
-
 function runtimeFailure(error: unknown): never {
 	if (error instanceof PluginCallableRefusal) {
 		// A plugin can report its own uncertain outcome; Host callback and cleanup failures

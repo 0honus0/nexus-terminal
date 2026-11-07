@@ -4,6 +4,28 @@ import { promisify } from 'node:util';
 import { expect, test } from '../../support/fixtures';
 
 for (const [name, file, pattern] of [
+	[
+		'signed package admission, immutable bytes and SDK4 sandbox headers',
+		'http/backend-next-plugin-package-security.integration.mjs',
+		'',
+	],
+	[
+		'SDK4 original-process lifecycle and explicit recovery',
+		'http/backend-next-plugin-runtime-lifecycle.integration.mjs',
+		'',
+	],
+	['RPC authority after kernel-confirmed Blob open', 'http/backend-next-plugin-rpc-races.integration.mjs', ''],
+	[
+		'repository download cancellation, revocation and shutdown',
+		'http/backend-next-plugin-repository-faults.integration.mjs',
+		'',
+	],
+	['UI protocol identity and byte-range decoders', '../frontend/agent-chat-ui-codecs.integration.mjs', ''],
+	[
+		'trusted tool summaries and multilingual target projections',
+		'../frontend/agent-tool-summary.integration.mjs',
+		'',
+	],
 	['subscriber asynchronous authority isolation', 'storage/backend-next-run-changes.integration.mjs', ''],
 	[
 		'streamed Artifact cancellation, revoked intents and package upgrade fences',

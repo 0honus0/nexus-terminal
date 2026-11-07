@@ -1,60 +1,11 @@
 import type { AgentToolIdentity } from '@nexus-terminal/shared/agent/tools/identity';
 import type { StoredExecutionSettings } from '../../execution/storage/execution-storage.js';
-import type { StoredToolOperation } from '../../runs/storage/run-tool-storage.js';
-import type { AgentRunStatus } from '@nexus-terminal/shared/agent/runs/values';
-import type { StoredFrozenInput } from '../../runs/storage/run-storage.js';
-import type { ProviderStoredRow } from '../../providers/storage/provider-storage.js';
-
-export interface StoredToolAuthorityIdentity {
-	userId: number;
-	appId: string;
-	runId: string;
-	id: string;
-	expectedRevision: number;
-	operationHash: string;
-}
-
-export type StoredToolAuthorityTask =
-	| { kind: 'dispatch' }
-	| { kind: 'inspect'; policyRevision: number }
-	| { kind: 'verify'; policyRevision: number }
-	| { kind: 'result_source'; policyRevision: number; reader: StoredToolAuthorityIdentity }
-	| {
-			kind: 'complete';
-			policyRevision: number;
-			resultText: string;
-			outputArtifactIds: string[];
-			targets: { id: number; version: number }[];
-	  };
-
-export interface StoredToolAuthority {
-	operation: StoredToolOperation;
-	policy: StoredPolicy;
-	connectionIds: number[];
-}
-
-export type StoredToolPermitDecision = (
-	approval: StoredApproval,
-	operation: StoredToolOperation,
-	policy: StoredPolicy,
-	now: number,
-) => boolean;
-
-export type StoredToolAuthorityDecision = (
-	operation: StoredToolOperation,
-	policy: StoredPolicy,
-	status: AgentRunStatus,
-	frozen: StoredFrozenInput,
-	provider: ProviderStoredRow | null,
-	connectionIds: number[],
-) => boolean;
 
 import type {
 	AgentCapability,
 	AgentApprovalStatus,
 	AgentApprovalKind,
 	AgentApprovalRisk,
-	AgentApprovalDecision,
 } from '@nexus-terminal/shared/agent/governance/values';
 
 export type StoredScope =
@@ -128,21 +79,6 @@ export type ExecutionReplaceResult =
 	| { status: 'ok'; policy: StoredPolicy; settings: StoredExecutionSettings | null }
 	| { status: 'not_found' | 'version_conflict' };
 
-export type ApprovalCommitResult =
-	| { status: 'ok' | 'replayed'; approval: StoredApproval }
-	| { status: 'not_found' | 'version_conflict' | 'approval_stale' | 'idempotency_conflict' };
-
-export interface StoredApprovalResolution {
-	userId: number;
-	appId: string;
-	approvalId: string;
-	decision: AgentApprovalDecision;
-	expectedVersion: number;
-	operationKey: string;
-	requestHash: string;
-	feedback: string | null;
-}
-
 export interface StoredToolCatalogFacts {
 	policy: StoredPolicy;
 	connectionIds: number[];
@@ -203,11 +139,4 @@ export interface StoredDenylistCommand {
 export interface StoredDenylistMutation {
 	value: StoredTargetDenylist;
 	revokedRuns: boolean;
-}
-
-export interface StoredApprovalPage {
-	items: StoredApproval[];
-	after: string | null;
-	nextCursor: string | null;
-	hasMore: boolean;
 }

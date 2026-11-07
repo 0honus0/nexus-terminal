@@ -3,108 +3,91 @@ import { test } from 'node:test';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { openPlugins } from './plugin-management-fixture.mjs';
+import { DatabaseSync } from 'node:sqlite';
+import { openPlugins, stopPackageSource } from './plugin-management-fixture.mjs';
 import { expectStatus, until } from '../remote/openssh-fixture.mjs';
 import { ModuleRuntimeFailure } from '../../../packages/backend/dist/platform/isolation/module-runtime.js';
-import { AgentFailure } from '../../../packages/backend/dist/modules/agent/agent-failure.js';
-import { PluginRuntimeService } from '../../../packages/backend/dist/modules/agent/plugins/service/plugin-runtime-service.js';
-import { pinnedExecutionFixture } from '../../support/pinned-plugin-package.mjs';
 
 const base = '/api/v1/agent/plugins/installations/';
-const executionFixture = await pinnedExecutionFixture();
-const contributions = {
-	app: { execution: { kind: 'self', protocol: 1 }, toolNames: ['lifecycle_probe'], dependencies: [] },
-	tools: [
-		{
-			name: 'lifecycle_probe',
-			description: 'Record the first invocation of this isolated runtime instance.',
-			inputSchema: { type: 'object', properties: {}, required: [], additionalProperties: false },
-			executionProfile: 'general',
-			hostOperations: [],
-			childAccess: 'root-only',
-			discovery: { mode: 'initial', loader: false, keywords: [] },
-		},
-	],
-	ui: true,
-	skills: [],
-};
-const backend = `import policy from './nexus-policy.mjs';
-let sdk;
-let recorded = false;
-export default {
- ...policy,
- async activate(value) {
- await policy.activate(value);
- sdk = value;
- },
- async agent() {
- if (recorded) return { text: 'runtime-ready' };
- const previous = await sdk.request({ method: 'storage.get', params: { key: 'activations' } });
- if (!previous.ok) throw new Error('activation read failed');
- const saved = await sdk.request({ method: 'storage.put', params: {
-  key: 'activations', expectedVersion: previous.result.value?.version ?? 0,
-  operationId: crypto.randomUUID(), valueJson: JSON.stringify((JSON.parse(previous.result.value?.valueJson ?? '0')) + 1)
- } });
- if (!saved.ok) throw new Error('activation write failed');
- recorded = true;
- return { text: 'runtime-ready' };
- },
- async quiesce() {
- policy.quiesce();
- try {
-  await sdk.request({ method: 'storage.put', params: { key: 'late', expectedVersion: 0, operationId: crypto.randomUUID(), valueJson: 'true' } });
- } catch { return; }
- throw new Error('late request was accepted after quiesce');
- }
-};
-`;
+const backend = `import {definePlugin} from './sdk.mjs';
+let recorded = false, activeContext;
+export default definePlugin(plugin => {
+ const namespace = plugin.identity.package.packageId;
+ plugin.register({kind:'app',key:namespace+'.run',contract:namespace,apiVersion:1,
+ summary:'Lifecycle probe',instructions:'',inputSchemaJson:'{"type":"object"}',resultSchemaJson:'{"type":"object"}',
+ capabilities:[],tags:[],execution:'managed'}, async (_,context) => {
+  activeContext = context;
+  if (!recorded) {
+   const previous = await context.storage.read(namespace,'activations');
+   const saved = await context.storage.write({namespace,key:'activations',expectedRevision:previous?.revision ?? 0,
+    operationKey:crypto.randomUUID(),documentJson:JSON.stringify(JSON.parse(previous?.documentJson ?? '0')+1)});
+   if(saved.kind !== 'completed') throw new Error('activation write failed');
+   recorded = true;
+  }
+  return {kind:'complete',outputs:[]};
+ });
+ plugin.onDispose(async () => {
+  if (!activeContext) return;
+  try {
+   await activeContext.storage.write({namespace,key:'late',expectedRevision:0,operationKey:crypto.randomUUID(),documentJson:'true'});
+  } catch { return; }
+  throw new Error('late request was accepted after disposal');
+ });
+});`;
 
-function runtimeOptions(module = backend) {
-	return { ...executionFixture, contributions, capabilities: ['plugin.invoke'], backend: module };
+function runtimeOptions() {
+	return { capabilities: ['plugin.invoke'], backend };
 }
 
 async function openRuntimeLifecycle(t) {
-	let runtime;
-	const reconcile = PluginRuntimeService.prototype.reconcile;
-	t.mock.method(PluginRuntimeService.prototype, 'reconcile', function (...args) {
-		runtime = this;
-		return reconcile.apply(this, args);
-	});
 	const fixture = await openPlugins(t);
+	const settings = expectStatus(await fixture.api('GET', '/api/v1/agent/execution-settings'), 200).settings;
+	expectStatus(
+		await fixture.api('PUT', '/api/v1/agent/execution-settings', {
+			expectedVersion: settings.version,
+			enabled: true,
+			limits: settings.limits,
+		}),
+		200,
+	);
+	const db = new DatabaseSync(fixture.database, { readOnly: true });
+	t.after(() => db.close());
 	return {
 		...fixture,
 
-		async invoke(plugin) {
-			assert.ok(runtime, 'Observe the actual runtime owner without replacing its implementation');
-			const binding = expectStatus(
-				await fixture.api('GET', '/api/v1/agent/plugins/apps/bindings'),
-				200,
-			).bindings.find((item) => item.appId === plugin.appId);
-			assert.ok(binding);
-			const result = await runtime.invokeAgent(
-				1,
-				plugin.appId,
-				binding.executionRevision,
-				{
-					kind: 'tool',
-					runId: randomUUID(),
-					stepIndex: 1,
-					operationId: randomUUID(),
-					name: 'lifecycle_probe',
-					argumentsJson: '{}',
-				},
-				new AbortController().signal,
-				15000,
-				plugin.installation.definitionId,
-				{
-					profile: 'general',
-					hostOperations: [],
-					target: null,
+		data(plugin, key) {
+			const row = db
+				.prepare('SELECT document_json FROM agent_plugin_private_data WHERE app_id=? AND key=?')
+				.get(plugin.appId, key);
+			return row ? row.document_json : null;
+		},
 
-					invokeOperation: async () => assert.fail('Lifecycle probe must not invoke a domain operation'),
-				},
+		async invoke(plugin) {
+			await plugin.grants(['plugin.invoke']);
+			const thread = expectStatus(
+				await fixture.api('POST', plugin.appPath + '/threads', { title: 'Lifecycle probe' }),
+				201,
 			);
-			assert.equal(result, 'runtime-ready');
+			const { run } = expectStatus(
+				await fixture.api(
+					'POST',
+					plugin.appPath + '/threads/' + thread.id + '/runs',
+					{
+						prompt: 'Probe',
+						approvalMode: 'ask',
+						connectionIds: [],
+						inputJson: '{}',
+					},
+					{ 'Idempotency-Key': randomUUID() },
+				),
+				201,
+			);
+			const final = await until(
+				async () => expectStatus(await fixture.api('GET', plugin.appPath + '/runs/' + run.id), 200),
+				(value) => !['pending', 'running'].includes(value.status),
+				'SDK4 lifecycle Run settles',
+			);
+			assert.equal(final.status, 'completed', JSON.stringify(final));
 		},
 	};
 }
@@ -134,7 +117,10 @@ function api(f, plugin) {
 	return {
 		runtime: async () => expectStatus(await f.api('GET', path + '/runtime'), 200),
 
-		data: async (key) => expectStatus(await f.api('GET', path + '/data/' + key), 200).value,
+		data: async (key) => {
+			const valueJson = f.data(plugin, key);
+			return valueJson === null ? null : { valueJson };
+		},
 
 		ack: (input) => f.api('POST', path + '/runtime/acknowledge', input),
 
@@ -143,11 +129,12 @@ function api(f, plugin) {
 }
 
 await test(
-	'B10 real runtime quiesce fences SDK writes and failed health releases original child',
+	'SDK4 disposal fences retained call-context writes and releases the original child',
 	{ timeout: 60000 },
 	async (t) => {
 		const f = await openRuntimeLifecycle(t);
 		const plugin = await f.install('lifecycle', runtimeOptions());
+		await stopPackageSource(f);
 		await f.invoke(plugin);
 		const owner = api(f, plugin);
 		let previous;
@@ -170,7 +157,7 @@ await test(
 				);
 			},
 		);
-		await t.test('disable rejects SDK call inside real quiesce and waits original process exit', async () => {
+		await t.test('disable rejects SDK call inside real disposal and waits original process exit', async () => {
 			await plugin.enabled(false);
 			assert.equal((await owner.runtime()).state, 'closed');
 			await assertExited(child);
@@ -188,29 +175,16 @@ await test(
 			);
 			await plugin.enabled(false);
 		});
-		await t.test('real health rejection closes constructor and leaves no materialized process', async () => {
-			const unhealthy = await f.install('unhealthy', {
-				...runtimeOptions(`import policy from './nexus-policy.mjs';
-export default { ...policy, health() { return false; } };`),
-				enabled: false,
-			});
-			const app = expectStatus(await f.api('GET', unhealthy.appPath), 200);
-			expectStatus(await f.api('PATCH', unhealthy.appPath, { expectedVersion: app.version, enabled: true }), 200);
-			await assert.rejects(
-				f.invoke(unhealthy),
-				(error) => error instanceof AgentFailure && error.code === 'provider_unavailable',
-			);
-			assert.equal((await api(f, unhealthy).runtime()).state, 'closed');
-			assert.deepEqual(await readdir(f.database + '.modules'), []);
-			await unhealthy.enabled(false);
-		});
-		await t.test('unhealthy plugin does not prevent another actual runtime from starting and closing', async () => {
-			await plugin.enabled(true);
-			await f.invoke(plugin);
-			assert.equal((await owner.data('activations')).valueJson, '3');
-			await plugin.enabled(false);
-			assert.equal(await owner.runtime().then((value) => value.state), 'closed');
-		});
+		await t.test(
+			'a disposed SDK4 context does not prevent another incarnation from starting and closing',
+			async () => {
+				await plugin.enabled(true);
+				await f.invoke(plugin);
+				assert.equal((await owner.data('activations')).valueJson, '3');
+				await plugin.enabled(false);
+				assert.equal(await owner.runtime().then((value) => value.state), 'closed');
+			},
+		);
 	},
 );
 
@@ -220,6 +194,7 @@ await test(
 	async (t) => {
 		const f = await openRuntimeLifecycle(t);
 		const plugin = await f.install('killed-runtime', runtimeOptions());
+		await stopPackageSource(f);
 		await f.invoke(plugin);
 		const owner = api(f, plugin);
 		const original = await owner.runtime();

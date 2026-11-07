@@ -12,12 +12,7 @@ import {
 	AGENT_APPROVAL_MAX_SUMMARY_BYTES,
 	AGENT_APPROVAL_OPERATION_HASH_PATTERN,
 } from '@nexus-terminal/shared/agent/governance/values';
-import type {
-	StoredToolOperation,
-	StoredToolEvent,
-	StoredToolResultSourceAuthority,
-} from '../../storage/run-tool-storage.js';
-import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
+import type { StoredToolOperation, StoredToolEvent } from '../../storage/run-tool-storage.js';
 
 function invalid(): never {
 	throw new Error('Corrupt Agent tool operation');
@@ -63,44 +58,6 @@ function readRequiredCapabilities(value: unknown) {
 	return requiredValues.map(
 		(value: unknown) => AGENT_CAPABILITIES.find((capability) => capability === value) ?? invalid(),
 	);
-}
-
-/** Read only authority columns; captured result bodies never enter a provenance graph query. */
-export function readToolResultSourceAuthority(row: Record<string, unknown>): StoredToolResultSourceAuthority {
-	const capability = AGENT_CAPABILITIES.find((value) => value === row.capability);
-	const risk = AGENT_APPROVAL_RISKS.find((value) => value === row.risk);
-	const operationHash = text(row.operation_hash, 64);
-	if (
-		!capability ||
-		!risk ||
-		(row.mutation !== 0 && row.mutation !== 1) ||
-		!AGENT_APPROVAL_OPERATION_HASH_PATTERN.test(operationHash) ||
-		typeof row.identity_json !== 'string'
-	) {
-		return invalid();
-	}
-	const targetId = row.target_id === null ? null : integer(row.target_id, 1),
-		targetVersion = row.target_version === null ? null : integer(row.target_version, 1);
-	if ((targetId === null) !== (targetVersion === null)) {
-		return invalid();
-	}
-	return {
-		id: id(row.id),
-		userId: integer(row.user_id, 1),
-		appId: id(row.app_id),
-		runId: id(row.run_id),
-		identity: readAgentToolIdentity(JSON.parse(row.identity_json)),
-		operationHash,
-		revision: integer(row.revision, 1),
-		toolName: text(row.tool_name, AGENT_APPROVAL_MAX_TOOL_NAME_BYTES),
-		toolVersion: text(row.tool_version, AGENT_APPROVAL_MAX_TOOL_VERSION_BYTES),
-		capability,
-		requiredCapabilities: readRequiredCapabilities(row.required_capabilities_json),
-		targetId,
-		targetVersion,
-		risk,
-		mutation: row.mutation === 1,
-	};
 }
 
 export function readToolOperation(row: Record<string, unknown>): StoredToolOperation {
@@ -185,22 +142,6 @@ export function readToolOperation(row: Record<string, unknown>): StoredToolOpera
 		createdAt,
 		updatedAt,
 	};
-}
-
-export async function toolOperation(
-	tx: SqlExecutor,
-	userId: number,
-	appId: string,
-	runId: string,
-	id: string,
-): Promise<StoredToolOperation | null> {
-	const row = await tx.one('SELECT * FROM agent_run_tools WHERE user_id=? AND app_id=? AND run_id=? AND id=?', [
-		userId,
-		appId,
-		runId,
-		id,
-	]);
-	return row === null ? null : readToolOperation(row);
 }
 
 export function readToolEvent(row: Record<string, unknown>): StoredToolEvent {

@@ -6,7 +6,7 @@
 
 ## 2. 子功能与目录
 
-- `sdk/`：对不可信 UI 公开的纯浏览器协议3 runtime，仅依赖 Shared 与本地ui-client。
+- `sdk/`：对不可信 UI 公开的纯浏览器协议4 runtime，仅依赖 Shared 与本地ui-client。
 - `host/`：可信Host桥、descriptor/RPC适配、iframe容器、Artifact选择及其本地类型。
 - `api/`、`model/`：插件市场/安装/数据清除HTTP适配、展示类型、mapper与规则。
 - `composables/`、`components/`：插件管理状态、市场/安装计划及设置面板。
@@ -30,8 +30,8 @@ sdk/index.ts是公开ESM资产构建入口；前端构建出部署资产，backe
 
 ## 7. 生命周期与失败
 
-协议3原grant expiry、ready/environment、取消、close/drain和流生命周期保留。独立UI从同一个公开ESM模块取得factory和错误构造器，避免内嵌另一份runtime造成instanceof失配。
+协议4的grant expiry、ready/environment、取消、close/drain和流生命周期保留。独立UI从同一个公开ESM模块取得factory和错误构造器，避免内嵌另一份runtime造成instanceof失配。
 
 ## 8. 验证入口
 
-总owner统一执行frontend/Shared检查、公开runtime构建、端口协议测试、独立UIcheck/build及原行为验收。当前目录迁移阶段只源码审阅和格式化，不声称任何新build或运行时PASS。
+总owner统一执行frontend/Shared检查、公开runtime构建、端口协议测试、独立UIcheck/build及原行为验收。正式SDK4验收与本轮复审范围见 [验证入口](../../../../../../doc/testing/E2E.md)，不以目录迁移或源码扫描替代运行证据。

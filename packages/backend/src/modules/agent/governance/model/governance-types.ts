@@ -1,31 +1,5 @@
 import type { AgentToolIdentity } from '@nexus-terminal/shared/agent/tools/identity';
 import type { ExecutionSettings } from '../../execution/model/execution-types.js';
-import type { AgentRunStatus } from '@nexus-terminal/shared/agent/runs/values';
-import type { ToolOperation } from '../../runs/model/run-tool-types.js';
-import type { RunFrozenInput } from '../../runs/model/run-types.js';
-import type { ProviderRecord } from '../../providers/model/provider-types.js';
-
-export interface ToolAuthorityIdentity {
-	userId: number;
-	appId: string;
-	runId: string;
-	id: string;
-	expectedRevision: number;
-	operationHash: string;
-}
-
-export type ToolAuthorityTask =
-	| { kind: 'dispatch' }
-	| { kind: 'inspect'; policyRevision: number }
-	| { kind: 'verify'; policyRevision: number }
-	| { kind: 'result_source'; policyRevision: number; reader: ToolAuthorityIdentity }
-	| {
-			kind: 'complete';
-			policyRevision: number;
-			resultText: string;
-			outputArtifactIds: string[];
-			targets: { id: number; version: number }[];
-	  };
 
 /** Advisory model catalog; actual dispatch always rechecks tool authority. */
 export interface ToolCatalogState {
@@ -40,34 +14,11 @@ export interface ToolCatalogFacts {
 	denylistRevision: number;
 }
 
-export interface ToolAuthority {
-	operation: ToolOperation;
-	policy: GrantState;
-	connectionIds: number[];
-}
-
-export type ToolPermitDecision = (
-	approval: Approval,
-	operation: ToolOperation,
-	policy: GrantState,
-	now: number,
-) => boolean;
-
-export type ToolAuthorityDecision = (
-	operation: ToolOperation,
-	policy: GrantState,
-	status: AgentRunStatus,
-	frozen: RunFrozenInput,
-	provider: ProviderRecord | null,
-	connectionIds: number[],
-) => boolean;
-
 import type {
 	AgentCapability,
 	AgentApprovalStatus,
 	AgentApprovalKind,
 	AgentApprovalRisk,
-	AgentApprovalDecision,
 } from '@nexus-terminal/shared/agent/governance/values';
 
 export type GrantScope =
@@ -152,42 +103,6 @@ export interface Approval {
 	inspection: ApprovalInspection;
 }
 
-export interface ApprovalRequest {
-	id: string;
-	userId: number;
-	appId: string;
-	runId: string;
-	toolCallId: string;
-	kind: AgentApprovalKind;
-}
-
-export interface ApprovalOperation {
-	id: string;
-	operationHash: string;
-	operationRevision: number;
-	capability: AgentCapability;
-	targetVersion: number | null;
-	inspection: ApprovalInspection;
-}
-
-export interface ResolveApproval {
-	userId: number;
-	appId: string;
-	approvalId: string;
-	decision: AgentApprovalDecision;
-	operationHash: string;
-	expectedVersion: number;
-	operationKey: string;
-	feedback?: string;
-}
-
-export interface ConsumeApproval {
-	userId: number;
-	appId: string;
-	approvalId: string;
-	expectedVersion: number;
-}
-
 export interface ExecutionPolicyFacts {
 	settings: ExecutionSettings | null;
 	app: AppPolicyFacts;
@@ -195,33 +110,12 @@ export interface ExecutionPolicyFacts {
 	overrides: PolicyOverrides;
 }
 
-export type ApprovalTransition = (
-	approval: Approval,
-	status: AgentRunStatus,
-	now: number,
-) => 'expired' | 'superseded' | null;
-
 export type GrantChangeDecision = (current: GrantState) => { allow: boolean; pendingStatus: 'superseded' | null };
 
 export type ExecutionChangeDecision = (current: ExecutionPolicyFacts) => {
 	allow: boolean;
 	pendingStatus: 'superseded' | null;
 };
-
-export type ApprovalRequestDecision = (
-	policy: GrantState,
-	status: AgentRunStatus,
-	operation: ApprovalOperation,
-	approvalMode: import('@nexus-terminal/shared/agent/runs/values').AgentApprovalMode,
-) => Approval | null;
-
-export type ApprovalResolveDecision = (
-	approval: Approval,
-	policy: GrantState,
-	status: AgentRunStatus,
-	version: number,
-	now: number,
-) => boolean;
 
 export interface CapabilityDefinition {
 	id: AgentCapability;
@@ -267,11 +161,4 @@ export type DenylistChangeDecision = (current: TargetDenylist) => { revoke: bool
 export interface DenylistMutation {
 	value: TargetDenylist;
 	revokedRuns: boolean;
-}
-
-export interface ApprovalPage {
-	items: Approval[];
-	after: string | null;
-	nextCursor: string | null;
-	hasMore: boolean;
 }

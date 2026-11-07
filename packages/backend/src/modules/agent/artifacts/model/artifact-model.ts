@@ -46,25 +46,6 @@ export function artifactFromStorage(row: StoredArtifact): ArtifactRecord {
 	};
 }
 
-export function artifactToStorage(value: ArtifactRecord): StoredArtifact {
-	return {
-		id: value.id,
-		appId: value.appId,
-		name: value.name,
-		mediaType: value.mediaType,
-		kind: value.kind,
-		sizeBytes: value.sizeBytes,
-		sha256: value.sha256,
-		status: value.status,
-		retained: value.retained,
-		version: value.version,
-		createdAt: value.createdAt,
-		readyAt: value.readyAt,
-		expiresAt: value.expiresAt,
-		deletedAt: value.deletedAt,
-	};
-}
-
 function facts(value: StoredArtifactFacts): ArtifactFacts {
 	return {
 		settingsVersion: value.settingsVersion,

@@ -1,5 +1,4 @@
-import type { AgentRunStatus, AgentRunStepState } from '@nexus-terminal/shared/agent/runs/values';
-import type { AgentToolState } from '@nexus-terminal/shared/agent/tools/values';
+import type { AgentRunStatus } from '@nexus-terminal/shared/agent/runs/values';
 import type { StoredStepProposal } from '../../runs/storage/run-proposal-types.js';
 
 export type StoredContextMessage =
@@ -32,34 +31,6 @@ export interface StoredContextCheckpointProjection {
 	sourceMessages: number;
 	rawSummary: string;
 	renderedSummary: string;
-}
-
-export interface StoredContextHistoryCommand {
-	userId: number;
-	appId: string;
-	runId: string;
-	expectedVersion: number;
-	includeThread: boolean;
-}
-
-export interface StoredContextHistoryFacts {
-	sources: number;
-	runs: number;
-	steps: number;
-	tools: number;
-	bytes: number;
-}
-
-export interface StoredContextHistoryTurn {
-	source: StoredContextSource;
-	input: string;
-	steps: {
-		index: number;
-		state: AgentRunStepState;
-		text: string;
-		proposals: StoredStepProposal[];
-		results: { providerCallId: string; state: AgentToolState; content: string | null }[];
-	}[];
 }
 
 export interface ContextStorage {
@@ -97,19 +68,6 @@ export interface StoredThreadEntries {
 		text: string;
 	}[];
 	nextCursor: StoredThreadEntryCursor;
-}
-
-/** Same-transaction completed tool facts for application projection verification. */
-export interface StoredContextToolResult {
-	id: string;
-	providerCallId: string;
-	content: string;
-}
-
-export interface StoredContextHistoryBundle {
-	sources: StoredContextSource[];
-	turns: StoredContextHistoryTurn[];
-	summary: { content: string; coveredRuns: number } | null;
 }
 
 export interface StoredThreadEntryHistory {

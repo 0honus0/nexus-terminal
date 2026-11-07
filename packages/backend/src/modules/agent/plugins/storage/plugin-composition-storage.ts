@@ -124,11 +124,6 @@ export interface StoredPluginPackageUpdateDependency {
 	installationRevision: number;
 }
 
-export interface StoredPluginPackageUpdatePreparation {
-	installation: StoredPluginPackageInstallation;
-	dependencies: StoredPluginPackageUpdateDependency[];
-}
-
 export interface StoredPluginPackageUpdateDecision {
 	uiOnly: boolean;
 	impacts: StoredPluginPackageUpdateImpact[];

@@ -429,8 +429,10 @@ await test('B10 actual Agent Shell and background Job lifecycles', { timeout: 12
 			'target version change rejects a pending Shell approval before any process starts',
 			async (f, directory) => {
 				const effect = join(directory, 'must-not-exist');
-				const run = await f.start('target revision', () =>
-					shell(f, { commands: [posixCommand(['touch', effect])] }),
+				const run = await f.start('target revision', (results) =>
+					results.length
+						? { text: 'Obsolete target rejected' }
+						: shell(f, { commands: [posixCommand(['touch', effect])] }),
 				);
 				const approval = await f.approval(run, 'shell_execute');
 				await f.changeTarget();
@@ -447,7 +449,12 @@ await test('B10 actual Agent Shell and background Job lifecycles', { timeout: 12
 					),
 					409,
 				);
-				await f.wait(run, 'failed');
+				await f.wait(run, 'completed');
+				const operations = f.operations(run).filter((operation) => operation.label === 'shell.execute');
+				assert.equal(operations.length, 1, 'The refused proposal must not be dispatched again');
+				assert.equal(operations[0].state, 'failed');
+				assert.equal(operations[0].failure_code, 'version_conflict');
+				assert.equal(f.rows('agent_tool_jobs', run).length, 0);
 				await assert.rejects(stat(effect), { code: 'ENOENT' });
 			},
 		);

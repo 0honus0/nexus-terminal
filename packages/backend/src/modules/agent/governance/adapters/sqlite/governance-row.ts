@@ -265,34 +265,6 @@ export function readApproval(row: Record<string, unknown>): StoredApproval {
 	return result;
 }
 
-/** An idempotency reply is its original committed projection, not a later mutable approval row. */
-export function readApprovalSnapshot(raw: unknown): StoredApproval {
-	const row = record(parse(raw));
-	exact(row, [
-		'id',
-		'user_id',
-		'app_id',
-		'run_id',
-		'tool_call_id',
-		'operation_hash',
-		'capability',
-		'target_version',
-		'kind',
-		'status',
-		'policy_revision',
-		'input_revision',
-		'version',
-		'requested_at',
-		'expires_at',
-		'decided_at',
-		'decided_by_user_id',
-		'consumed_at',
-		'feedback',
-		'inspection_json',
-	]);
-	return readApproval(row);
-}
-
 export function readRunStatus(value: unknown): AgentRunStatus {
 	const status = AGENT_RUN_STATUSES.find((item) => item === value);
 	return status === undefined ? invalid() : status;

@@ -664,22 +664,6 @@
       "types": "./dist/preferences/html-themes/http-codec.d.ts",
       "default": "./dist/preferences/html-themes/http-codec.js"
     },
-    "./agent/integrations/values": {
-      "types": "./dist/agent/integrations/values.d.ts",
-      "default": "./dist/agent/integrations/values.js"
-    },
-    "./agent/integrations/model": {
-      "types": "./dist/agent/integrations/model.d.ts",
-      "default": "./dist/agent/integrations/model.js"
-    },
-    "./agent/integrations/http": {
-      "types": "./dist/agent/integrations/http.d.ts",
-      "default": "./dist/agent/integrations/http.js"
-    },
-    "./agent/integrations/http-codec": {
-      "types": "./dist/agent/integrations/http-codec.d.ts",
-      "default": "./dist/agent/integrations/http-codec.js"
-    },
     "./agent/integrations/browser-values": {
       "types": "./dist/agent/integrations/browser-values.d.ts",
       "default": "./dist/agent/integrations/browser-values.js"

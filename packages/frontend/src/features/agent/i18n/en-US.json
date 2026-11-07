@@ -1918,7 +1918,9 @@
         "collaboration_consumeMessages": "Collaboration operation",
         "collaboration_readFact": "Collaboration operation",
         "collaboration_writeFact": "Collaboration operation",
-        "acp_permission": "Approve ACP permission"
+        "acp_permission": "Approve ACP permission",
+        "skills_catalog": "List skills",
+        "memory_retrieve": "Read memory candidates"
       },
       "toolSummary": {
         "failedCount": "{count} failed",

@@ -56,8 +56,6 @@ export interface ExecutionUsage {
 	concurrentModelCalls: number;
 }
 
-export type ExecutionBudgetAdmission = (settings: ExecutionSettings, usage: ExecutionUsage) => void;
-
 export function copyExecutionLimits(value: ExecutionLimits): ExecutionLimits {
 	return {
 		maxModelRequests: value.maxModelRequests,
