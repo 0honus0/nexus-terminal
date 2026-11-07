@@ -35,8 +35,18 @@ COPY packages/backend/package.json packages/backend/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
 COPY tests/e2e/package.json tests/e2e/package.json
+# GNU tar 1.34 writes zero device fields differently from the 1.35 release packager.
+# Use the same maintained upstream format instead of weakening immutable archive checks.
+ADD --checksum=sha256:9ae57e981c1e73c0eebc2b26c9b0c4497fe310ef1d516ea430efb5470b71f7a8 \
+  https://deb.debian.org/debian/pool/main/t/tar/tar_1.35+dfsg.orig.tar.xz /tmp/nexus-tar-source.tar.xz
 RUN apt-get update \
   && apt-get install -y --no-install-recommends g++ make python3 \
+  && tar -xf /tmp/nexus-tar-source.tar.xz -C /tmp \
+  && cd /tmp/tar-1.35+dfsg \
+  && FORCE_UNSAFE_CONFIGURE=1 ./configure --disable-nls --without-selinux \
+  && make -j2 \
+  && install -m 0755 src/tar /usr/local/bin/tar \
+  && cd /workspace \
   && CI_CHECK_FAIL=ssh2 pnpm install --frozen-lockfile \
   && rm -rf node_modules packages/*/node_modules tests/e2e/node_modules \
   && apt-get purge -y --auto-remove g++ make python3 \

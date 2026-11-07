@@ -1991,3 +1991,7 @@ Node 26.13.0/pnpm 12.16.1；`build.log` 与 `browser.log` 包含 Shared、Backen
 `f1d52d4b` 的 [E2E 42390286200](https://github.com/0honus0/nexus-terminal/actions/runs/42390286200) 质量、双端构建与 Docker smoke 通过；全部测试分片因重建签包摘要不匹配在启动时失败，未运行的场景不能记为通过。固定 tar 的文件/目录权限，避免 CI 检出 umask 改变原包字节；本地八包重建 SHA-256 均与原官方签包一致。隔离 runner 同步正式 iframe 测试的新名称，保持未知副作用场景的独立后端生命周期。
 
 指定 CDP 的正式签包聊天发现自动标题写入被工具列表投影误解码，造成内部失败并关闭插件准入。Operation Adapter 将 App 标题及私有存储回执排除在工具投影之外，原持久账本、原授权和真实工具/效果仍保留；真实 SQLite 34项通过，新增自动标题后读取工具列表、重新打开聊天及插件列表的正式浏览器场景。该修复没有变更 UI 或数据库结构；USAGE 的自动标题、聊天恢复和工具调用说明仍适用。后续完整远程矩阵和最终 CDP 结果继续补齐。
+
+第二轮 [E2E 42391065220](https://github.com/0honus0/nexus-terminal/actions/runs/42391065220) 的质量与 Docker smoke 通过，但签包摘要仍在测试启动时失败。下载 Bookworm 的 GNU tar1.34 在本机复现精确相同的错误摘要，逐头核对为 ustar 的零设备号字段编码与官方打包环境 GNU tar1.35 不同；runner 使用已核对 Debian 源码 SHA-256 的1.35构建，不改签包或放宽摘要断言。
+
+指定CDP在`api.honus.top:443`、本地9998生产前端预览和正式签名包上通过聊天、High默认推理、1440/390/320px无横向溢出、宽屏SSH文字/窄屏图标及刷新后重开聊天恢复。`cdp-final/acceptance.json`、截图与原失败日志保留；无pageerror。此前根check重建Shared期间影响运行中Vite的失败不算产品验收，最终改用冻结生产前端产物完成同一场景。

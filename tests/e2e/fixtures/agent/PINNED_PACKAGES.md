@@ -32,7 +32,9 @@ services remain available without automatically exposing their tools to a model.
 
 `buildPinnedPluginPackage` verifies every recorded payload, rejects missing,
 extra or nonregular files, validates the V4 signature and signed file list, then
-reconstructs the deterministic GNU tar. Its bytes, SHA-256 and size must match the
+reconstructs the deterministic GNU tar 1.35 archive with normalized file permissions.
+The runner pins the same tar version as the release packager: GNU tar 1.34 encodes
+zero device fields differently even in ustar mode. Its bytes, SHA-256 and size must match the
 independent archive exactly. It preserves the manifest, runtime, `files.json`,
 `signature.ed25519`, staged versions and dependency publisher bindings. It never
 changes a package to satisfy Host checks.
