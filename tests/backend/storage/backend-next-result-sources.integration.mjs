@@ -10,6 +10,33 @@ const refused = (code) => (error) => error instanceof AgentFailure && error.code
 
 const signal = new AbortController().signal;
 
+await test('Tool activity: App title and private storage receipts stay durable without breaking tool reads', async (t) => {
+	const f = await operationStorageFixture(t);
+	await f.db.exec('CREATE TABLE agent_threads(id TEXT,user_id INTEGER,app_id TEXT)');
+	const run = await f.db.one('SELECT thread_id FROM agent_runs WHERE id=?', [f.scope.runId]);
+	await f.db.run('INSERT INTO agent_threads VALUES(?,1,?)', [run.thread_id, f.scope.appId]);
+	const activity = new SqliteOperationActivityStorage(f.db);
+	const tool = await f.insert({ kind: 'tool' });
+	const native = await f.insert({ parentId: tool.id });
+	for (const parentId of [null, tool.id]) {
+		for (const kind of ['thread.title', 'plugin.storage']) {
+			const receipt = await f.insert({ parentId, label: kind, binding: { kind } });
+			assert.equal(await activity.get(1, f.scope.appId, f.scope.runId, receipt.id), null);
+			assert.equal((await f.model.get(f.scope, receipt.callerId, receipt.operationKey)).id, receipt.id);
+		}
+	}
+	const page = await activity.list(1, f.scope.appId, run.thread_id, null, 20);
+	assert.deepEqual(
+		page.items.map((item) => item.operation.id),
+		[tool.id],
+	);
+	assert.deepEqual(
+		page.items[0].effects.map((item) => item.id),
+		[native.id],
+	);
+	assert.deepEqual((await activity.get(1, f.scope.appId, f.scope.runId, tool.id)).effects, page.items[0].effects);
+});
+
 async function fixture(t) {
 	const f = await operationStorageFixture(t);
 	const artifactId = randomUUID(),

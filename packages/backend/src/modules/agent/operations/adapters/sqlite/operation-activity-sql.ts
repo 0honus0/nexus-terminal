@@ -5,8 +5,11 @@ import type { StoredOperation } from '../../storage/operation-storage.js';
 import { operationRow } from './operation-row.js';
 import { operationPresentation } from './operation-activity-row.js';
 
+// App metadata and private storage receipts remain in the ledger, outside tool activity.
+const presented = `json_extract(o.binding_json,'$.kind') NOT IN ('thread.title','plugin.storage')`;
+
 // Native effects with a tool ancestor belong to that card. Direct effects remain observable for non-model Apps.
-const visible = `o.kind='tool' OR (o.kind='effect' AND NOT EXISTS(
+const visible = `o.kind='tool' OR (o.kind='effect' AND ${presented} AND NOT EXISTS(
  WITH RECURSIVE ancestors(id,parent_id,kind) AS (
  SELECT p.id,p.parent_id,p.kind FROM agent_operations p WHERE p.id=o.parent_id
  UNION SELECT p.id,p.parent_id,p.kind FROM agent_operations p JOIN ancestors a ON p.id=a.parent_id)
@@ -18,7 +21,7 @@ async function activity(tx: SqlExecutor, operation: StoredOperation): Promise<St
 		`WITH RECURSIVE effects(id) AS (
 	 SELECT id FROM agent_operations WHERE id=?
 	 UNION SELECT o.id FROM agent_operations o JOIN effects e ON o.parent_id=e.id)
-	 SELECT o.* FROM agent_operations o JOIN effects e ON e.id=o.id ORDER BY o.sequence`,
+	 SELECT o.* FROM agent_operations o JOIN effects e ON e.id=o.id WHERE ${presented} ORDER BY o.sequence`,
 		[operation.id],
 	);
 	const artifacts = await tx.all(

@@ -4,6 +4,7 @@ import { toolDisplayName } from '../../../../../packages/frontend/src/features/a
 import { readAgentRunUsageResponse } from '../../../../../packages/shared/src/agent/runs/http-codec';
 import { readAgentArtifactResponse } from '../../../../../packages/shared/src/agent/artifacts/http-codec';
 import { readAgentProviderView } from '../../../../../packages/shared/src/agent/providers/http-codec';
+import { readAgentThreadToolsResponse } from '../../../../../packages/shared/src/agent/tools/http-codec';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import {
@@ -35,6 +36,32 @@ import { E2E_URLS } from '../../../support/test-env';
 import { enablePluginApp } from './fixtures';
 
 test.use({ actionTimeout: 10_000 });
+
+test('automatic conversation titles preserve tool activity reads and chat reload', async ({ page, context }) => {
+	const prepared = await prepareNativeTask(context.request, page);
+	const created = await requestAgentWorkspace(context.request, prepared.app, {
+		method: 'agent.threads.create',
+		params: { operationId: randomUUID(), title: 'Untitled thread', autoTitle: true },
+	});
+	if (created.method !== 'agent.threads.create') throw new Error('Unexpected thread creation receipt');
+	const task = { ...prepared, thread: created.value };
+	await openNativeTask(task);
+	const run = await startNativeTask(task, 'Reply OK without using tools.');
+	const result = await finishNativeTask(task, run.id);
+	expect(result.run.status).toBe('completed');
+	expect(result.text).toBe('OK');
+	const activity = await requestAgentJson(
+		context.request,
+		{ method: 'GET', path: `/apps/${task.app.id}/threads/${task.thread.id}/tools?limit=20` },
+		(value) => readAgentThreadToolsResponse(value, task.app.id, null, 20),
+	);
+	expect(activity.items).toEqual([]);
+	const hub = await openNativeTask(task);
+	await expect(hub.getByRole('textbox', { name: 'Task input', exact: true })).toBeVisible();
+	await expect(hub.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
+	const plugins = await context.request.get('/api/v1/agent/plugins/installations');
+	expect(plugins.status()).toBe(200);
+});
 
 test('restored model checkpoints require a current model before sending', async ({ page, context }) => {
 	const task = await prepareNativeTask(context.request, page);

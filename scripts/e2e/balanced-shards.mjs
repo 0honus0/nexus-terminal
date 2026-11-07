@@ -23,7 +23,7 @@ const isolatedInvalidToolSpec = 'specs/agent/plugin/native-surface.spec.ts';
 const isolatedUnknownTitle =
 	'Nexus Agent subagent lifecycle preserves tool batches and reclaims child Browser contexts';
 const isolatedInvalidToolTitle =
-	'installed Nexus Agent plugin uses the host-owned Agent surface and captures functional evidence';
+	'installed Nexus Agent plugin uses the installed chat UI iframe and captures functional evidence';
 const isolatedAcpSpec = 'specs/agent/ssh-acp-settings.spec.ts';
 const isolatedAcpCancelledTitle =
 	'SSH ACP settings product chain: cancelled inner permission without a Workspace profile';

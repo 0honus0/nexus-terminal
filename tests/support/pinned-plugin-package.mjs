@@ -108,6 +108,7 @@ export async function buildPinnedPluginPackage(directory, packageId) {
 	const output = join(directory, packageId + '.tar');
 	execFileSync('tar', [
 		'--sort=name',
+		'--mode=u=rwX,go=rX',
 		'--mtime=@0',
 		'--owner=0',
 		'--group=0',
