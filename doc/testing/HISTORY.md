@@ -1077,7 +1077,7 @@ WorkspaceTabBar仅将原挂起菜单项移到重置之前，原条件、事件�
 
 ## Agent GIF 与模型文件交付（2026-11-05，源码、静态与限定浏览器）
 
-本轮工作区基于 `745beddb308778d6a6ffe5915c9b7eb682d6f15c`，新增真实 GIF Images 响应、file_deliver、artifact_present 及文本自动文件卡；outputArtifactId 是现有工具结果的派生投影，无数据库列或持久数据格式变更，不需要迁移。参考模式固定源码链接见 [Agent 文件交付设计](../architecture/AGENT.md#模型文件交付)，未引入第二套文件库或预览引擎。
+本轮工作区基于 `745beddb308778d6a6ffe5915c9b7eb682d6f15c`，新增真实 GIF Images 响应、file_deliver、artifact_present 及文本自动文件卡；outputArtifactId 是现有工具结果的派生投影，无数据库列或持久数据格式变更，不需要迁移。参考模式固定源码链接见 [当时的Agent文件交付设计](https://github.com/0honus0/nexus-terminal/blob/100291a781a7e6884d5616240ab619802c94d179/doc/architecture/AGENT.md#模型文件交付)，未引入第二套文件库或预览引擎。
 
 环境为 Node 26.13.0 / pnpm 12.16.1；根 `pnpm run check`、`pnpm run format:all:check`、`pnpm run build`、`git diff --check` 通过。E2E TypeScript 使用 vue-tsc 和任务独立 tsconfig 检查通过；裸 tsc 不支持已有 Vue 模块入口，已改用项目相同 Vue 检查器，未放宽类型。产物集中于 `/home/honus/nexus-task-artifacts/agent-file-delivery-20261105`，保留参考源码、检查输出及真实两帧 GIF；ffmpeg 帧摘要确认两帧内容不同，此事实不代替浏览器播放验收。
 
@@ -2022,3 +2022,36 @@ Node 26.13.0/pnpm 12.16.1；`build.log` 与 `browser.log` 包含 Shared、Backen
 第七轮最终Reporter覆盖全部738项，无遗漏：737项最终通过，权限监控1项失败，手机重连另有1项flaky，因此整轮失败。Backend213项中212通过；其余六个浏览器分片均一次通过。权限故障夹具只阻塞第一次治理查询，之后并发最终校验成功，可在监控失败前正常确认命令并释放机器锁；这与“持续存储故障”预期不一致。改为故障释放点前所有相关查询持续失败，保留真实进程退出、原owner等待、unknown账本及机器锁证据断言。`monitor-final-outage.log` ACP/Job两项通过，无skip/cancel。
 
 最终CDP环境另经真实包更新入口升级至Agent2.0.2/UI2.0.1，MCP/ACP4.0.0及四工具包2.0.0保持；`cdp-release-candidate/installed-packages.json`记录版本与原包摘要，`acceptance.json`记录1440/390/320px聊天、High默认思考、SSH文字/图标、刷新恢复与零pageerror，全部通过。此前CDP验收为Agent2.0.1/UI2.0.0，不将旧结果当作最终签包验收。
+
+## SDK4 完整验收与发布（2026-11-07）
+
+最终完整远程[E2E42399935928](https://github.com/0honus0/nexus-terminal/actions/runs/42399935928)验证`13017e0d1e7b76bed184208048e6224c83fc15d3`，正式矩阵738项全部一次通过：Backend213；Browser1–7分别49/56/103/69/74/88/86。质量检查、双端生产构建、Docker smoke、八个测试分片及耗时汇总均成功。8份timing产物已下载；正式Reporter的738个唯一开始/结束记录与`playwright --list --reporter=json`清单逐项匹配，无失败、重试、flaky、场景跳过、遗漏或多余用例。文档截图任务按条件跳过，不是测试跳过。
+
+证据归`/home/honus/nexus-task-artifacts/agent-modular-20261106/final-implementation/delivery-20261107`（下称delivery）：`publication/e2e-42399935928/{run.json,reporter-summary.json,*.log}`、`e2e-eighth-final-summary.txt`、`expected-tests.json`与8个timing归档。`publication/verify-e2e.py 42399935928 --require-green`可重复只读核对。此前前七轮、手机重连flaky、权限持续故障夹具及本地首次失败保留，不覆盖为通过。全目录独立Node探测889项中173失败/8取消仍不算通过；本节738仅指完整正式矩阵。
+
+### 官方插件发布
+
+插件仓`550e4e0b4d873dcaedac54fd37f4e34208d5f91f`的[Validate42394503906](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42394503906)成功：82项插件测试与16项仓库测试全部通过。8个产品包各有独立可执行测试入口，统一CI与包发布均接入。
+
+已发布[v2.0.0](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v2.0.0)、[v2.0.1](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v2.0.1)和最新[v2.0.2](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v2.0.2)。最新组合为Agent2.0.2、ChatUI2.0.1、MCP/ACP服务4.0.0、四个工具包2.0.0；初始版本保留不可变产物，未重写签包。公开latest/catalog原始字节与候选完全一致，全部11个包版本逐文件hash、Ed25519签名和原tar摘要验证；11个公开tar实际下载字节数与摘要均匹配。本地真实Host官方目录可读取Agent2.0.2并标记compatible。
+
+对应`publication/{plugin-validation.log,final-package-verification.json,public-plugin-verification.json,live-host-official-catalog.json}`及原始catalog/发布说明保留。最终CDP通过真实prepare-update/update安装Agent2.0.2/UI2.0.1后验收，准确8包版本/hash在`cdp-release-candidate/installed-packages.json`；1440/390/320px聊天、High默认思考、SSH宽屏文字/窄屏图标和刷新恢复通过，无横向溢出或pageerror。截图和`acceptance.json`保留；早先Agent2.0.1/UI2.0.0验收不冒充最终包证据。
+
+集中收口同时完成MCP/ACP快捷入口到插件实例设置的对接；凭据保留/清除、独立实例、App压缩配置及SSH审批取消纳入回归。迁移59删除无消费者的Host压缩偏好，迁移60保存有限操作故障诊断；SQL仍归Adapter，业务仅消费当前数据。公开Shared SDK归档使用4.0.2，不覆盖已生成的4.0.1；包与实际消费者同步固定。
+
+### main amd64 dev 镜像
+
+[发布42401471984](https://github.com/0honus0/nexus-terminal/actions/runs/42401471984)成功，来源`f984034c6b672e0ff51ce5acd41d03667b5b9748`。相对被测13017e0d只增加CI自动更新的`scripts/e2e/duration-estimates.json`；后续文档收口不改变被测或发布源码。生产依赖审计及构建推送成功。
+
+`ghcr.io/0honus0/nexus-terminal:dev`与`sha-f984034c6b67`同为`sha256:5f1ca18c460041c4888d677d83d53021d26b37e40091629c967affdb6978f27d`。唯一产品平台linux/amd64的manifest为`sha256:ccae91b2c5ac3d611e7f71b987d5bfcde39188358168bd25233ff7e90c824880`，config为`sha256:fd6eb0e95d0ef01b4426f5d6db10f6d40ac97a46afc4f35cd5311a7f9940c3c7`。只读GHCR核对真实manifest/config字节摘要、平台和OCI revision/source，未拉取完整镜像。`publication/image-publish-run.json`、`image-verification.json`及日志保留。本轮不更新生产主机。
+
+### 审核与保留边界
+
+| 审核表   | 本轮结果                                                                                                                                            |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 完整正式738矩阵、八包独立测试与指定CDP已完成；保留全部主要功能、当前UI和安全断言，不以跳过或重试换绿。                                              |
+| 职责归属 | App持完整调度，UI/工具/MCP/ACP归独立插件；Host持真实权限、受管I/O、Operation/Run、持久事实与关闭，发布来自各自正式仓库。                            |
+| 类型归属 | Shared/SDK4唯一协议；正式生产者、消费者、SDK归档、签名包、fixture与发布脚本同步，无旧运行兼容。                                                     |
+| 完成证据 | 两仓实现已提交推送，插件正式公开；正式E2E与amd64 dev发布均成功，准确摘要/版本已核对。真实模型、手机真机、介质故障、负载与物理音画等范围保留在PLAN。 |
+
+按用户授权已清理本轮可重建测试Docker资源、351个可重建测试实例、旧staging、重复浏览器与缓存；原`space-cleanup-20261107.json`记录当时29G降至22G，后续构建仍会重新占用，不能当作当前占用。发布期间另清理旧pnpm与Node编译缓存共约0.88GB，见`publication/cache-cleanup.json`。无关immortalwrt/imagebuilder镜像、业务数据、源码、数据库、最终staging及所有首次失败/未知效果证据保留，最终CDP环境按原授权保留至用户通知。不把已确认可重建缓存与未知副作用现场一起删除。
