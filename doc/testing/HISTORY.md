@@ -2009,4 +2009,12 @@ Node 26.13.0/pnpm 12.16.1；`build.log` 与 `browser.log` 包含 Shared、Backen
 - `browser-continuation.log`：42项中38通过，另外4项首次失败已修复；`browser-continuation-final.log` 最终5/5通过，包括两种委派期限、两项布局持久化和真实原生Surface审批。已有通过组覆盖A07、首次启用、会话切换及双标签草稿。
 - 根check、后端build和全仓格式通过，证据分别为 `check-continuation.log`、`backend-build-final-fences.log`、`format-all-final-fences.log`。提交前另执行 `check-final-push.log`。
 
-本地专项不代替完整远程矩阵；新提交的完整E2E、逐项Reporter核对及正式发布继续推进。独立插件仓当前 `550e4e0b4d873dcaedac54fd37f4e34208d5f91f`，最终固定Agent2.0.2/UI2.0.1；其余包2.0.0，发布仍为draft。
+本地专项不代替完整远程矩阵；新提交的完整E2E、逐项Reporter核对及正式发布继续推进。独立插件仓当前 `550e4e0b4d873dcaedac54fd37f4e34208d5f91f`，最终固定Agent2.0.2/UI2.0.1、MCP/ACP服务4.0.0、四个工具包2.0.0，发布仍为draft。
+
+### SDK4 第七轮手机重连夹具时序
+
+[E2E 42398286023](https://github.com/0honus0/nexus-terminal/actions/runs/42398286023) 验证 `dc8907000cdd5f4afa1f09876fe7521a601d8ddb`。Browser4的手机显式重连场景首次失败、重试通过，本轮不能作为发布通过证据；质量、构建、Docker smoke及其它已结束浏览器分片通过，后端结果另行补齐。首次trace、截图、录像及完整日志归 `delivery-20261107/publication/e2e-seventh-browser4-diagnostics`。
+
+首次失败现场显示“Failed to mark session for suspend: operation_unknown”：测试在数据库刚保存挂起记录后立即切断WebSocket，浏览器尚未应用原成功回执，正确保留未知操作围栏。该场景要测的是已成功标记会话的显式重连，因此补充等待标签蓝色状态，即浏览器已应用挂起回执，然后才注入断线；不修改产品UI、不改变未知效果处理、不增加睡眠或放宽断言。原有无新SSH登录、仅一次resume和环境变量保留断言全部保持。
+
+`mobile-reconnect-final.log` 连续5次全部通过（18.9秒），受影响文件ESLint、Prettier及diff检查通过；该专项不代替下一轮完整远程矩阵。

@@ -110,6 +110,8 @@ test('mobile reconnect button restores a marked session through suspension witho
 	await tab.click({ button: 'right' });
 	await page.getByText('Suspend Session', { exact: true }).click();
 	await expect.poll(async () => (await suspendedSessions(context.request)).length).toBe(1);
+	// Persistence precedes the mark receipt; detach only after the UI has applied that receipt.
+	await expect(tab.locator(':scope > span.rounded-full')).toHaveClass(/\bbg-blue-500\b/);
 	const initialConnects = connects;
 	// Suppress automatic foreground reconciliation while the real transport detaches.
 	await page.evaluate(() =>
