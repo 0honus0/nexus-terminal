@@ -1,5 +1,9 @@
+import { agentHost } from '../../../fixtures/agent/workbench';
+import { hasApprovalIdentity } from '../../../../support/package-tool-catalog.mjs';
+import { toolDisplayName } from '../../../../../packages/frontend/src/features/agent/runtime/native-tool-summary';
 import { readAgentRunUsageResponse } from '../../../../../packages/shared/src/agent/runs/http-codec';
 import { readAgentArtifactResponse } from '../../../../../packages/shared/src/agent/artifacts/http-codec';
+import { readAgentProviderView } from '../../../../../packages/shared/src/agent/providers/http-codec';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import {
@@ -16,7 +20,12 @@ import {
 import { installTestPlugin } from '../../../support/plugins';
 import { selectUiOption } from '../../../support/ui-select';
 import { requestAgentJson } from '../../../support/agent-request';
-import { openAgentConversations, requestAgentWorkspace } from '../../../support/agent';
+import {
+	createTestAgentApp,
+	openAgentConversations,
+	requestAgentWorkspace,
+	selectAgentModel,
+} from '../../../support/agent';
 import { expect, test } from '../../../support/fixtures';
 import { loginAsInitialAdmin } from '../../../support/auth';
 import { captureFunctionalScreenshot } from '../../../support/functional-screenshots';
@@ -27,7 +36,52 @@ import { enablePluginApp } from './fixtures';
 
 test.use({ actionTimeout: 10_000 });
 
-test('installed Nexus Agent plugin uses the host-owned Agent surface and captures functional evidence', async ({
+test('restored model checkpoints require a current model before sending', async ({ page, context }) => {
+	const task = await prepareNativeTask(context.request, page);
+	await createTestAgentApp(context.request, 'Checkpoint companion');
+	const hub = await openNativeTask(task);
+	const draft = hub.getByRole('textbox', { name: 'Task input', exact: true });
+	const model = hub.getByRole('button', { name: 'Model for this execution', exact: true });
+	const send = hub.getByRole('button', { name: 'Send', exact: true });
+	const text = 'Keep the saved model choice until I explicitly select its current configuration.';
+	await draft.fill(text);
+	await expect(send).toBeEnabled();
+
+	const reopen = async () => {
+		const host = agentHost(page);
+		await host.getByRole('button', { name: 'Close ' + task.app.name, exact: true }).click();
+		await expect(host.locator('iframe[data-agent-app-id="' + task.app.id + '"]')).toHaveCount(0);
+		await host.getByRole('button', { name: 'Choose an Agent app', exact: true }).click();
+		await page
+			.locator('[data-agent-hub-portal]')
+			.getByRole('button')
+			.filter({ has: page.getByText(task.app.name, { exact: true }) })
+			.click();
+		await expect(draft).toHaveValue(text);
+	};
+
+	await reopen();
+	await expect(model).toContainText('e2e-model');
+	await expect(send).toBeEnabled();
+	const updated = await requestAgentJson(
+		context.request,
+		{
+			method: 'PATCH',
+			path: '/ai/providers/' + task.provider.id,
+			data: { expectedVersion: task.provider.version, displayName: task.provider.displayName + ' revised' },
+		},
+		readAgentProviderView,
+	);
+	expect(updated.version).toBe(task.provider.version + 1);
+	await reopen();
+	await expect(model).toContainText('Choose a model');
+	await expect(send).toBeDisabled();
+	await selectAgentModel(page, updated);
+	await expect(send).toBeEnabled();
+	await expect(draft).toHaveValue(text);
+});
+
+test('installed Nexus Agent plugin uses the installed chat UI iframe and captures functional evidence', async ({
 	page,
 	context,
 }) => {
@@ -44,7 +98,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 		app,
 	);
 	let hub = await openNativeTask(task);
-	await step('the installed definition uses native host UI and durable Run history', async () => {
+	await step('the installed definition uses the installed chat UI and durable Run history', async () => {
 		const run = await startNativeTask(task, 'E2E_NATIVE_PLUGIN_OK');
 		expect((await finishNativeTask(task, run.id)).run.status).toBe('completed');
 		await expect(hub.getByText('OK', { exact: true })).toBeVisible();
@@ -74,17 +128,24 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 			.click();
 	});
 	await step('resizing persists host-owned geometry across reload', async () => {
-		const handle = hub.getByRole('button', { name: 'Resize Agent', exact: true });
-		const before = await hub.boundingBox();
+		const handle = agentHost(page).getByRole('button', { name: 'Resize Agent', exact: true });
+		const before = await agentHost(page).boundingBox();
 		expect(before).not.toBeNull();
 		await handle.focus();
 		await handle.press('ArrowLeft');
-		await expect.poll(async () => (await hub.boundingBox())!.width).toBeLessThan(before!.width);
-		const changed = await hub.boundingBox();
+		await expect.poll(async () => (await agentHost(page).boundingBox())!.width).toBeLessThan(before!.width);
+		const changed = await agentHost(page).boundingBox();
 		hub = await openNativeTask(task);
-		await expect.poll(async () => Math.abs((await hub.boundingBox())!.width - changed!.width)).toBeLessThan(2);
+		await expect
+			.poll(async () => Math.abs((await agentHost(page).boundingBox())!.width - changed!.width))
+			.toBeLessThan(2);
 	});
 	await step('create and switch threads in the UI and rename through the versioned workspace API', async () => {
+		const draft = hub.getByRole('textbox', { name: 'Task input', exact: true });
+		const approvalMode = hub.getByRole('button', { name: 'Approval mode', exact: true });
+		await approvalMode.click();
+		await hub.getByRole('button', { name: 'Full access', exact: true }).click();
+		await draft.fill('Keep this unsent draft and its approval preference while switching conversations.');
 		await openAgentConversations(page);
 		const panel = hub.locator('#agent-thread-sidebar');
 		const { result } = await captureNativeCommand(task, 'agent.threads.create', () =>
@@ -94,6 +155,10 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 			throw new Error('Unexpected thread creation');
 		}
 		expect(result.value.title).toBe('Untitled thread');
+		await expect(draft).toHaveValue(
+			'Keep this unsent draft and its approval preference while switching conversations.',
+		);
+		await expect(approvalMode).toHaveAttribute('title', /: Full access$/u);
 		await openAgentConversations(page);
 		await expect(
 			panel.getByRole('button').filter({ has: page.getByText('Untitled thread', { exact: true }) }),
@@ -115,7 +180,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 			title: 'Renamed plugin conversation',
 			version: result.value.version + 1,
 		});
-		await hub.getByRole('button', { name: 'Minimize Agent', exact: true }).click();
+		await agentHost(page).getByRole('button', { name: 'Minimize Agent', exact: true }).click();
 		await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
 		await openAgentConversations(page);
 		await expect(
@@ -126,6 +191,13 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 			.filter({ has: page.getByText(task.thread.title, { exact: true }) })
 			.click();
 		await expect(hub.getByText('OK', { exact: true })).toBeVisible();
+		await expect(draft).toHaveValue(
+			'Keep this unsent draft and its approval preference while switching conversations.',
+		);
+		await expect(approvalMode).toHaveAttribute('title', /: Full access$/u);
+		await approvalMode.click();
+		await hub.getByRole('button', { name: 'Ask when needed', exact: true }).click();
+		await draft.clear();
 	});
 	await step(
 		'old slash/checkpoint/delete APIs stay retired; plain prompts and follow-ups create real Runs',
@@ -149,56 +221,77 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 			expect(deleted.status()).toBe(404);
 		},
 	);
-	await step('pending mutation approval is rendered and submits the original hash and version', async () => {
-		const run = await startNativeTask(task, `E2E_NATIVE_PLUGIN_APPROVAL connection=${connectionId}`, [
-			connectionId,
-		]);
-		try {
-			const approval = await waitNativeApproval(task, run.id, 'shell_execute');
-			// Approval delivery opens Tasks automatically. Toggling here races the
-			// WebSocket update and can close the panel just as the card arrives.
-			await expect(hub.getByRole('button', { name: 'Show or hide task panel', exact: true })).toHaveAttribute(
-				'aria-expanded',
-				'true',
-			);
-			await expect(hub.getByRole('complementary', { name: 'Tasks', exact: true })).toBeVisible();
-			const article = hub
-				.getByRole('complementary', { name: 'Tasks', exact: true })
-				.locator('article')
-				.filter({ has: page.getByRole('button', { name: 'Approve and run', exact: true }) })
-				.filter({ hasText: approval.inspection.toolName });
-			await expect(article).toContainText('shell_execute');
-			await expect(article).toContainText('Destructive');
-			await article.getByRole('button', { name: 'Normalized operation', exact: true }).click();
-			await expect(article).toContainText(approval.id);
-			await expect(article).toContainText(approval.operationHash);
-			await expect(article.getByRole('button', { name: 'Inspect tool audit', exact: true })).toHaveCount(0);
-			await expect(article).toContainText('printf approval-e2e');
-			const { command: input } = await captureNativeCommand(task, 'agent.approvals.resolve', () =>
-				article.getByRole('button', { name: 'Approve and run', exact: true }).click(),
-			);
-			if (input.request.method !== 'agent.approvals.resolve') {
-				throw new Error('Unexpected approval command');
+	await step(
+		'trusted Host pre-reads approval, confirms in the parent, and resolves the original hash and version',
+		async () => {
+			const run = await startNativeTask(task, `E2E_NATIVE_PLUGIN_APPROVAL connection=${connectionId}`, [
+				connectionId,
+			]);
+			try {
+				const approval = await waitNativeApproval(task, run.id, 'shell_execute');
+				expect(hasApprovalIdentity(approval, 'shell_execute')).toBe(true);
+				expect(approval.capability).toBe('shell.execute');
+				expect(approval.operationName).toBe('shell.execute');
+				// Approval delivery opens Tasks automatically. Toggling here races the
+				// WebSocket update and can close the panel just as the card arrives.
+				await expect(hub.getByRole('button', { name: 'Show or hide task panel', exact: true })).toHaveAttribute(
+					'aria-expanded',
+					'true',
+				);
+				await expect(hub.getByRole('complementary', { name: 'Tasks', exact: true })).toBeVisible();
+				const article = hub
+					.getByRole('complementary', { name: 'Tasks', exact: true })
+					.locator('article')
+					.filter({ has: page.getByRole('button', { name: 'Approve and run', exact: true }) })
+					.filter({ hasText: toolDisplayName({ kind: 'host', operation: approval.operationName }) });
+				await expect(article).toContainText('shell.execute');
+				await expect(article).toContainText('Destructive');
+				await article.getByRole('button', { name: 'Normalized operation', exact: true }).click();
+				await expect(article).toContainText(approval.id);
+				await expect(article).toContainText(approval.operationHash);
+				await expect(article.getByRole('button', { name: 'Inspect tool audit', exact: true })).toHaveCount(0);
+				await expect(article).toContainText('printf approval-e2e');
+				const { command: input, authorization } = await captureNativeCommand(
+					task,
+					'agent.approvals.resolve',
+					() => article.getByRole('button', { name: 'Approve and run', exact: true }).click(),
+				);
+				expect(authorization).toMatchObject({
+					id: approval.id,
+					appId: task.app.id,
+					runId: run.id,
+					status: 'requested',
+					version: approval.version,
+					operationHash: approval.operationHash,
+					operationName: approval.operationName,
+					summary: approval.summary,
+					targetId: approval.targetId,
+				});
+				if (input.request.method !== 'agent.approvals.resolve') {
+					throw new Error('Unexpected approval command');
+				}
+				expect(input.request.params.input).toMatchObject({
+					expectedVersion: approval.version,
+					operationHash: approval.operationHash,
+					decision: 'approved',
+				});
+				const result = await finishNativeTask(task, run.id);
+				expect(result.run.status).toBe('completed');
+				const output = JSON.parse(result.text);
+				expect(output.status).toBe('completed');
+				expect(output.commands).toHaveLength(1);
+				expect(output.commands[0]).toMatchObject({ exitCode: 0, stdout: 'approval-e2e' });
+				await expect(article).toHaveCount(0);
+				await expect(
+					hub.locator(
+						'article[data-tool-name="' + approval.operationName + '"][data-approval-status="approved"]',
+					),
+				).toHaveCount(1);
+			} finally {
+				await cancelNativeTask(task, run.id);
 			}
-			expect(input.request.params.input).toMatchObject({
-				expectedVersion: approval.version,
-				operationHash: approval.operationHash,
-				decision: 'approved',
-			});
-			const result = await finishNativeTask(task, run.id);
-			expect(result.run.status).toBe('completed');
-			const output = JSON.parse(result.text);
-			expect(output.status).toBe('completed');
-			expect(output.commands).toHaveLength(1);
-			expect(output.commands[0]).toMatchObject({ exitCode: 0, stdout: 'approval-e2e' });
-			await expect(article).toHaveCount(0);
-			await expect(
-				hub.locator('article[data-tool-name="shell_execute"][data-approval-status="approved"]'),
-			).toHaveCount(1);
-		} finally {
-			await cancelNativeTask(task, run.id);
-		}
-	});
+		},
+	);
 	await step('protocol-invalid dispatched model tools remain unknown without a fabricated success', async () => {
 		const run = await startNativeTask(task, 'E2E_NATIVE_PLUGIN_FAIL');
 		const result = await finishNativeTask(task, run.id);
@@ -273,8 +366,8 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 			await expect(picker.getByRole('checkbox').filter({ hasText: 'plugin-evidence.txt' })).toBeChecked();
 			await page.keyboard.press('Escape');
 			await expect(picker).toBeHidden();
-			await hub.getByRole('button', { name: 'Files', exact: true }).click();
-			const library = hub.getByRole('region', { name: 'Files and Artifact library', exact: true });
+			await agentHost(page).getByRole('button', { name: 'Files', exact: true }).click();
+			const library = agentHost(page).getByRole('region', { name: 'Files and Artifact library', exact: true });
 			await selectUiOption(library.getByRole('combobox', { name: 'App', exact: true }), app.id);
 			const search = library.getByRole('searchbox', { name: 'Search files', exact: true });
 			await expect(search).toBeEnabled();

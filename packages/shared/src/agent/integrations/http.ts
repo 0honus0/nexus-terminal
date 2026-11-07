@@ -28,6 +28,15 @@ export interface AgentIntegrationCreateHeaders {
 	idempotencyKey: string;
 }
 
+/** A durable rejection prevents every later replay of this exact creation key. */
+export interface AgentIntegrationNotCreatedResponse {
+	status: 'not_created';
+	appId: string;
+	idempotencyKey: string;
+}
+
+export type AgentIntegrationCreateResponse = AgentIntegrationView | AgentIntegrationNotCreatedResponse;
+
 export interface AgentIntegrationDeleteResponse {
 	status: 'deleted';
 }

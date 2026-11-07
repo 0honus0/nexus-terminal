@@ -90,7 +90,7 @@ async function setup(t, native = false) {
 			const descriptor = expectStatus(await f.api('GET', installPath + '/descriptor'), 200);
 			const envelope = {
 				type: 'nexus.plugin.request',
-				protocol: 1,
+				protocol: 3,
 				nonce: randomUUID(),
 				id: randomUUID(),
 				seq: 1,
@@ -109,7 +109,7 @@ async function setup(t, native = false) {
 function assertReply(response, envelope, status, code) {
 	const body = expectStatus(response, status);
 	assert.equal(body.type, 'nexus.plugin.response');
-	assert.equal(body.protocol, 1);
+	assert.equal(body.protocol, 3);
 	assert.equal(body.id, envelope.id);
 	assert.equal(body.nonce, envelope.nonce);
 	assert.equal(body.seq, envelope.seq);
@@ -390,20 +390,27 @@ await test('B10 actual backend SDK revocation and original-child upgrade drain',
 			const id = await command(receipt);
 			await lease.blocked();
 			const input = {
-				expectedRevision: receiver.installation.revision,
+				expectedRevision: (await f.packageInstallation(receiver.installation.definitionId)).revision,
 				stageId: verified.id,
 				expectedStageVersion: verified.version,
 			};
 			let settled = false;
-			const pending = f.api('POST', installPath + '/prepare-upgrade', input).then((result) => {
-				settled = true;
-				return result;
-			});
+			const pending = f
+				.api(
+					'POST',
+					'/api/v1/agent/plugins/packages/' + receiver.installation.definitionId + '/prepare-update',
+					input,
+				)
+				.then((result) => {
+					settled = true;
+					return result;
+				});
 			const observed = observe(t, pending);
 			await until(
 				() =>
-					db.prepare('SELECT status FROM agent_plugin_installations WHERE app_id=?').get(receiver.appId)
-						.status,
+					db
+						.prepare('SELECT status FROM agent_plugin_packages WHERE package_id=?')
+						.get(receiver.installation.definitionId).status,
 				(value) => value === 'draining',
 				'upgrade committed draining before actual host finishes',
 			);
@@ -412,16 +419,22 @@ await test('B10 actual backend SDK revocation and original-child upgrade drain',
 			await lease.release();
 			const [outcome] = await observed;
 			assert.equal(outcome.status, 'fulfilled');
-			const prepared = expectStatus(outcome.value, 200);
+			const preparation = expectStatus(outcome.value, 200);
+			const prepared = preparation.installation;
 			assert.equal(prepared.status, 'draining');
 			assert.equal(current().state, 'closed');
 			assert.equal(await processIdentity(originalChild.pid), null);
 			const saved = stored('reply');
 			assert.notEqual(saved ? JSON.parse(saved).id : null, id, 'closing runtime cannot publish a late reply');
-			receiver.installation = expectStatus(
-				await f.api('POST', installPath + '/upgrade', { ...input, expectedRevision: prepared.revision }),
+			expectStatus(
+				await f.api(
+					'POST',
+					'/api/v1/agent/plugins/packages/' + receiver.installation.definitionId + '/update',
+					{ ...input, expectedRevision: prepared.revision, dependencies: preparation.dependencies },
+				),
 				200,
 			);
+			receiver.installation = expectStatus(await f.api('GET', installPath), 200);
 			assert.equal(receiver.installation.version, '1.1.0');
 			await receiver.grants(capabilities);
 			await receiver.enabled(true);

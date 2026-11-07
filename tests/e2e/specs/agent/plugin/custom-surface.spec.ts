@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import { readAgentGrantView } from '../../../../../packages/shared/src/agent/governance/http-codec';
+import { requestAgentWorkspace } from '../../../support/agent';
 import { installTestPlugin } from '../../../support/plugins';
 import { requestAgentJson } from '../../../support/agent-request';
 import {
@@ -23,6 +26,19 @@ test('frontend target owns a full Custom App Surface and connects through the is
 	context,
 }) => {
 	const request = context.request;
+	const legacySdkRequests: string[] = [];
+	const sdkImportStatuses: number[] = [];
+	page.on('request', (request) => {
+		if (/^\/sdk\/frontend-v[123]\.mjs$/u.test(new URL(request.url()).pathname))
+			legacySdkRequests.push(request.url());
+	});
+	page.on('response', (response) => {
+		if (
+			new URL(response.url()).pathname === '/sdk/frontend-v4.mjs' &&
+			response.request().resourceType() === 'script'
+		)
+			sdkImportStatuses.push(response.status());
+	});
 	await loginAsInitialAdmin(request);
 	await setUiLanguage(request);
 	await enableTestAgentExecution(request);
@@ -38,6 +54,79 @@ test('frontend target owns a full Custom App Surface and connects through the is
 	for (const installed of [custom, agent, fullstack]) {
 		expect(installations.items).toContainEqual(installed);
 	}
+	const fullstackApp = await requestAgentJson(
+		request,
+		{ method: 'GET', path: '/apps/' + fullstack.appId },
+		readAgentAppResponse,
+	);
+	const grantsPath = '/apps/' + fullstack.appId + '/grants';
+	const grants = await requestAgentJson(request, { method: 'GET', path: grantsPath }, readAgentGrantView);
+	await requestAgentJson(
+		request,
+		{
+			method: 'PUT',
+			path: grantsPath,
+			data: {
+				expectedPolicyRevision: grants.policyRevision,
+				grants: [{ capability: 'plugin.invoke', scope: { kind: 'global' } }],
+			},
+		},
+		readAgentGrantView,
+	);
+	const thread = await requestAgentWorkspace(request, fullstackApp, {
+		method: 'agent.threads.create',
+		params: { operationId: randomUUID(), title: 'Backend probe', autoTitle: false },
+	});
+	if (thread.method !== 'agent.threads.create') throw new Error('Probe thread missing');
+
+	const readBackendProbe = async () => {
+		const started = await requestAgentWorkspace(request, fullstackApp, {
+			method: 'agent.runs.create',
+			params: {
+				threadId: thread.value.id,
+				operationId: randomUUID(),
+				input: {
+					approvalMode: 'full_access',
+					prompt: 'Probe private backend state',
+					connectionIds: [],
+					inputJson: '{}',
+				},
+			},
+		});
+		if (started.method !== 'agent.runs.create') throw new Error('Probe Run missing');
+		await expect
+			.poll(async () => {
+				const state = await requestAgentWorkspace(request, fullstackApp, {
+					method: 'agent.runs.get',
+					params: { runId: started.value.run.id },
+				});
+				return state.method === 'agent.runs.get' ? state.value?.status : null;
+			})
+			.toBe('completed');
+		const outputs = await requestAgentWorkspace(request, fullstackApp, {
+			method: 'agent.runs.outputs',
+			params: { runId: started.value.run.id },
+		});
+		if (outputs.method !== 'agent.runs.outputs' || outputs.value?.length !== 1)
+			throw new Error('Probe output missing');
+		const content = await requestAgentWorkspace(request, fullstackApp, {
+			method: 'agent.content.read',
+			params: { runId: started.value.run.id, reference: outputs.value[0], index: 0 },
+		});
+		if (content.method !== 'agent.content.read') throw new Error('Probe content missing');
+		expect(content.value.nextIndex).toBeNull();
+		return JSON.parse(content.value.text);
+	};
+
+	const backendProbe = await readBackendProbe();
+	expect(backendProbe).toMatchObject({
+		appId: fullstack.appId,
+		state: 'active',
+		protocolVersion: 4,
+		fileReadDenied: true,
+		childProcessDenied: true,
+	});
+	expect(await readBackendProbe()).toEqual(backendProbe);
 	await page.goto('/settings?tab=agent');
 	await selectAgentSettingsGroup(page, 'tools');
 	const section = page.getByRole('region', { name: 'Plugin management', exact: true });
@@ -90,10 +179,72 @@ test('frontend target owns a full Custom App Surface and connects through the is
 		`ready:${custom.appId}:nexus.custom-surface`,
 		{ timeout: 15_000 },
 	);
-	await expect(hub.locator('iframe')).toHaveAttribute('sandbox', 'allow-scripts');
+	await expect.poll(() => sdkImportStatuses.length).toBeGreaterThan(0);
+	expect(sdkImportStatuses.every((status) => status === 200)).toBe(true);
+	expect(legacySdkRequests).toEqual([]);
+	await expect(hub.locator('iframe').filter({ visible: true })).toHaveAttribute(
+		'sandbox',
+		'allow-scripts allow-forms',
+	);
+	const formAction = 'https://form-submission.invalid/nexus-plugin-form-probe';
+	let nativeRequests = 0;
+	await page.route(formAction, async (route) => {
+		nativeRequests += 1;
+		await route.abort();
+	});
+	const formEvents = await customFrame.locator('body').evaluate(async (body, action) => {
+		const form = document.createElement('form');
+		const input = document.createElement('input');
+		input.required = true;
+		input.value = 'sandbox-submit-probe';
+		const button = document.createElement('button');
+		button.type = 'submit';
+		form.append(input, button);
+		body.append(form);
+		let submitEvents = 0;
+		form.addEventListener(
+			'submit',
+			(event) => {
+				event.preventDefault();
+				submitEvents += 1;
+			},
+			{ once: true },
+		);
+		button.click();
+		if (submitEvents !== 1) {
+			form.remove();
+			return { submitEvents, directive: '' };
+		}
+		form.action = action;
+		try {
+			const directive = await new Promise<string>((resolve, reject) => {
+				const onViolation = (event: SecurityPolicyViolationEvent) => {
+					if (event.effectiveDirective !== 'form-action') return;
+					if (new URL(event.blockedURI).origin !== new URL(action).origin) return;
+					clearTimeout(timeout);
+					document.removeEventListener('securitypolicyviolation', onViolation);
+					resolve(event.effectiveDirective);
+				};
+
+				const timeout = setTimeout(() => {
+					document.removeEventListener('securitypolicyviolation', onViolation);
+					reject(new Error('Native plugin form submission was not blocked by form-action CSP'));
+				}, 5000);
+				document.addEventListener('securitypolicyviolation', onViolation);
+				form.requestSubmit();
+			});
+			return { submitEvents, directive };
+		} finally {
+			form.remove();
+		}
+	}, formAction);
+	expect(formEvents).toEqual({ submitEvents: 1, directive: 'form-action' });
+	expect(nativeRequests).toBe(0);
+	await page.unroute(formAction);
+	await expect(customFrame.getByTestId('custom-sdk-status')).toHaveText(`ready:${custom.appId}:nexus.custom-surface`);
 	await choose(fullstack.appId);
 	const frame = hub.locator('iframe').filter({ visible: true });
-	await expect(frame).toHaveAttribute('sandbox', 'allow-scripts');
+	await expect(frame).toHaveAttribute('sandbox', 'allow-scripts allow-forms');
 	const surface = frame.contentFrame();
 	await expect(surface.getByTestId('fullstack-frontend-status')).toHaveText(
 		`frontend:ready:${fullstack.appId}@1.0.0`,
@@ -110,20 +261,6 @@ test('frontend target owns a full Custom App Surface and connects through the is
 		},
 	);
 	expect(JSON.parse(stored.valueJson!)).toEqual({ source: 'frontend', counter: 1 });
-	const backend = await requestAgentJson(
-		request,
-		{ method: 'GET', path: `/plugins/installations/${fullstack.appId}/data/backend.status` },
-		(raw) => {
-			const row = agentRecord(raw, ['value']);
-			return readAgentPluginDataView(row.value);
-		},
-	);
-	expect(JSON.parse(backend.valueJson!)).toMatchObject({
-		appId: fullstack.appId,
-		state: 'active',
-		fileReadDenied: true,
-		childProcessDenied: true,
-	});
 	const crossed = await requestAgentJson(
 		request,
 		{ method: 'GET', path: `/plugins/installations/${custom.appId}/data/frontend.demo` },
@@ -134,4 +271,6 @@ test('frontend target owns a full Custom App Surface and connects through the is
 	await expect(
 		hub.locator('iframe').filter({ visible: true }).contentFrame().getByTestId('custom-sdk-status'),
 	).toHaveText(`ready:${custom.appId}:nexus.custom-surface`);
+	expect(sdkImportStatuses.every((status) => status === 200)).toBe(true);
+	expect(legacySdkRequests).toEqual([]);
 });

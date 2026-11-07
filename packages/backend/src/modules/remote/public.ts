@@ -202,7 +202,11 @@ export interface RemoteMachineOperations {
 		maxBytes: number,
 		consume: (file: RemoteFileContent, source: AsyncIterable<Uint8Array>) => Promise<T>,
 	): Promise<T>;
-	executeAcp(scope: RemoteMachineOperationScope, request: RemoteExecuteAcpRequest): Promise<RemoteExecuteAcpResult>;
+	withProcess(
+		scope: RemoteMachineOperationScope,
+		request: RemoteProcessRequest,
+		consume: (channel: RemoteProcessChannel) => Promise<void>,
+	): Promise<void>;
 	executeCommand(
 		scope: RemoteMachineOperationScope,
 		request: RemoteExecuteCommandRequest,
@@ -217,6 +221,8 @@ export interface RemoteMachineOperations {
 		request: RemoteDockerControlRequest,
 	): Promise<RemoteDockerControlResult>;
 	inspectPath(scope: RemoteMachineOperationScope, path: string): Promise<RemotePathSnapshot>;
+	/** Pure preflight also validates the existing parent's canonical path before accepting absence. */
+	assertMissingPath(scope: RemoteMachineOperationScope, path: string): Promise<void>;
 	patchText(scope: RemoteMachineOperationScope, request: RemotePatchTextRequest): Promise<RemoteWriteTextResult>;
 	movePath(scope: RemoteMachineOperationScope, request: RemoteMovePathRequest): Promise<RemoteMovePathResult>;
 	deletePath(scope: RemoteMachineOperationScope, request: RemoteDeletePathRequest): Promise<RemoteDeletePathResult>;
@@ -238,32 +244,6 @@ export interface RemoteMachineOperations {
 		maxResults: number,
 	): Promise<RemoteReadSearch>;
 	diagnose(scope: RemoteMachineOperationScope): Promise<RemoteReadDiagnostics>;
-}
-
-export interface RemoteAcpPermissionRequest {
-	sessionId: string;
-	toolCallId: string;
-	requestId: string;
-	title: string | null;
-	kind: string | null;
-	inputJson: string;
-}
-
-export interface RemoteAcpPermissionResponse {
-	decision: 'allow_once' | 'reject_once';
-	delivered(): Promise<void>;
-}
-
-export interface RemoteExecuteAcpRequest {
-	argv: string[];
-	cwd: string;
-	prompt: string;
-	permission(input: RemoteAcpPermissionRequest, signal: AbortSignal): Promise<RemoteAcpPermissionResponse>;
-}
-
-export interface RemoteExecuteAcpResult {
-	text: string;
-	stopReason: 'end_turn' | 'max_tokens' | 'max_turn_requests' | 'refusal' | 'cancelled';
 }
 
 export interface RemoteReadTextPageRequest {
@@ -293,4 +273,28 @@ export interface RemoteReadDirectoryPageResult {
 	entries: RemoteReadEntry[];
 	nextAfter: string | null;
 	fingerprint: string;
+}
+
+/** Caller-authorized process, owned until consume settles and the actual channel drains. */
+export interface RemoteProcessRequest {
+	argv: string[];
+	cwd: string;
+	maxReadBytes: number;
+}
+
+export type RemoteProcessOutcome =
+	| { kind: 'completed' | 'nonzero'; exitCode: number }
+	| {
+			kind: 'unknown';
+			reason: 'disconnect' | 'timeout' | 'cancelled' | 'channel_error' | 'remote_signal';
+			signal: string | null;
+	  };
+
+export interface RemoteProcessChannel {
+	read(stream: 'stdout' | 'stderr', maxBytes: number): Promise<{ bytes: Uint8Array; eof: boolean }>;
+	write(bytes: Uint8Array): Promise<void>;
+	end(): Promise<void>;
+	outcome(): Promise<RemoteProcessOutcome>;
+	cancel(): void;
+	close(): Promise<void>;
 }

@@ -1,5 +1,4 @@
 import {
-	AGENT_PROVIDER_MODEL_LIMIT,
 	AGENT_MODEL_CAPABILITY_FIELDS,
 	AGENT_PROVIDER_MAX_MODEL_ID_BYTES,
 	AGENT_PROVIDER_MAX_NAME_BYTES,
@@ -35,8 +34,7 @@ export function validateProviderInput(input: ProviderInput): void {
 		!['responses', 'chat-completions', 'images'].includes(input.protocol) ||
 		typeof input.enabled !== 'boolean' ||
 		!Array.isArray(input.models) ||
-		input.models.length < 1 ||
-		input.models.length > AGENT_PROVIDER_MODEL_LIMIT
+		input.models.length < 1
 	) {
 		throw new AgentFailure('invalid_input');
 	}

@@ -1,19 +1,16 @@
-import { AGENT_RUN_STEP_MAX_TEXT_BYTES } from '@nexus-terminal/shared/agent/runs/values';
+import { readChildOutputPreview } from './run-child-output.js';
+
 import { AGENT_EXECUTION_LIMIT_MAXIMA } from '@nexus-terminal/shared/agent/execution/values';
 import { AGENT_CHILD_PROFILES } from '@nexus-terminal/shared/agent/collaboration/values';
-import { CollaborationStorageRefusal } from '../../storage/run-collaboration-storage.js';
-import type { StoredCollaborationAuthority } from '../../storage/run-collaboration-storage.js';
-import { toolOperation } from './run-tool-row.js';
 import { AGENT_RUN_STATUSES, AGENT_RUN_STEP_MAX_INDEX } from '@nexus-terminal/shared/agent/runs/values';
 import type { SqlExecutor, SqlReader } from '../../../../../platform/storage/sqlite/sql-types.js';
 import type { StoredParticipant, StoredParticipantScope } from '../../storage/run-collaboration-storage.js';
+import { currentRunAppExecution } from './run-app-execution-sql.js';
+import { readRunAppExecution } from './run-app-execution-row.js';
 
 export function storedStrings(value: unknown): string[] {
 	if (typeof value !== 'string') {
 		throw new Error('Corrupt participant list');
-	}
-	if (Buffer.byteLength(value, 'utf8') > 16 * 1024) {
-		throw new Error('Participant list exceeded its stored bound');
 	}
 	const parsed: unknown = JSON.parse(value);
 	if (
@@ -53,7 +50,7 @@ export function storedText(value: unknown): string {
 
 export async function participant(tx: SqlReader, scope: StoredParticipantScope): Promise<StoredParticipant | null> {
 	const row = await tx.one(
-		`SELECT r.id,r.version,r.run_kind,r.status,r.created_at,r.deadline_at,c.parent_id,c.profile,substr(c.output_text,1,1024) AS output_text,COALESCE(length(CAST(c.output_text AS BLOB)),0) AS output_bytes,c.tools_json,c.max_requests,c.dependencies_json,c.dependency_mode
+		`SELECT r.id,r.version,r.run_kind,r.status,r.created_at,r.deadline_at,c.parent_id,c.profile,c.output_text,c.tools_json,c.max_requests,c.dependencies_json,c.dependency_mode
 		 FROM agent_runs r LEFT JOIN agent_run_children c ON c.run_id=r.id WHERE r.id=? AND r.user_id=? AND r.app_id=?`,
 		[scope.runId, scope.userId, scope.appId],
 	);
@@ -82,6 +79,9 @@ export async function participant(tx: SqlReader, scope: StoredParticipantScope):
 			dependencyMode: 'success',
 		};
 	}
+	if (row.run_kind === 'child' && row.parent_id === null) {
+		return archivedChild(tx, scope, row, status);
+	}
 	if (
 		row.run_kind !== 'child' ||
 		typeof row.parent_id !== 'string' ||
@@ -93,13 +93,12 @@ export async function participant(tx: SqlReader, scope: StoredParticipantScope):
 	if (
 		!profile ||
 		storedInteger(row.max_requests, 1) > AGENT_EXECUTION_LIMIT_MAXIMA.maxModelRequests ||
-		(status === 'completed') !== (row.output_text !== null) ||
-		(row.output_text !== null &&
-			(storedInteger(row.output_bytes, 1) > AGENT_RUN_STEP_MAX_TEXT_BYTES ||
-				storedInteger(row.output_bytes, 1) < Buffer.byteLength(storedText(row.output_text), 'utf8')))
+		(status === 'completed') !== (row.output_text !== null)
 	) {
 		throw new Error('Corrupt participant limits or terminal output');
 	}
+	const output =
+		row.output_text === null ? null : await readChildOutputPreview(tx, scope, storedText(row.output_text));
 	return {
 		id: scope.runId,
 		version: storedInteger(row.version, 1),
@@ -107,11 +106,49 @@ export async function participant(tx: SqlReader, scope: StoredParticipantScope):
 		parentId: row.parent_id,
 		status,
 		profile,
-		output: row.output_text === null ? null : storedText(row.output_text),
-		outputBytes: storedInteger(row.output_bytes),
+		output: output?.text ?? null,
+		outputBytes: output?.originalBytes ?? 0,
 		tools: storedStrings(row.tools_json),
 		maxRequests: storedInteger(row.max_requests, 1),
 		deadline: storedInteger(row.deadline_at, 1),
+		dependencies: storedStrings(row.dependencies_json),
+		dependencyMode: row.dependency_mode,
+	};
+}
+
+/** Read-only audit projection. Archived relations never become current executable participants. */
+async function archivedChild(
+	tx: SqlReader,
+	scope: StoredParticipantScope,
+	run: Record<string, unknown>,
+	status: StoredParticipant['status'],
+): Promise<StoredParticipant | null> {
+	const row = await tx.one(
+		`SELECT c.parent_id,c.profile,c.output_text,c.tools_json,c.max_requests,c.dependencies_json,c.dependency_mode
+		 FROM agent_legacy_run_children c JOIN agent_run_inputs i ON i.run_id=c.run_id
+		 WHERE c.run_id=? AND json_extract(i.app_execution_json,'$.kind')='retired'`,
+		[scope.runId],
+	);
+	if (!row) {
+		return null;
+	}
+	const profile = AGENT_CHILD_PROFILES.find((value) => value === row.profile);
+	if (!profile || (row.dependency_mode !== 'success' && row.dependency_mode !== 'settled')) {
+		throw new Error('Corrupt archived participant relation');
+	}
+	const output = row.output_text === null ? null : storedText(row.output_text);
+	return {
+		id: scope.runId,
+		version: storedInteger(run.version, 1),
+		rootId: storedText(row.parent_id),
+		parentId: storedText(row.parent_id),
+		status,
+		profile,
+		output: output === null ? null : Array.from(output).slice(0, 1024).join(''),
+		outputBytes: output === null ? 0 : Buffer.byteLength(output),
+		tools: storedStrings(row.tools_json),
+		maxRequests: storedInteger(row.max_requests, 1),
+		deadline: storedInteger(run.deadline_at, 1),
 		dependencies: storedStrings(row.dependencies_json),
 		dependencyMode: row.dependency_mode,
 	};
@@ -126,18 +163,21 @@ export async function currentParticipant(
 	stepIndex?: number,
 	allowExpired = false,
 ): Promise<boolean> {
+	const input = await tx.one('SELECT app_execution_json FROM agent_run_inputs WHERE run_id=?', [scope.runId]);
+	if (!input || readRunAppExecution(input.app_execution_json).kind === 'retired') {
+		return false;
+	}
 	const current = await participant(tx, scope);
 	if (!current || (current.status !== 'pending' && current.status !== 'running')) {
+		return false;
+	}
+	if (!allowExpired && !(await currentRunAppExecution(tx, scope))) {
 		return false;
 	}
 	if (current.parentId === null) {
 		return allowExpired || clock() < current.deadline;
 	}
-	const allowedTool =
-		toolName === undefined ||
-		(toolName === 'acp_inner_permission'
-			? current.tools.includes('acp_execute') || current.tools.includes('acp_integration_execute')
-			: current.tools.includes(toolName));
+	const allowedTool = toolName === undefined || current.tools.includes(toolName);
 	if (!allowedTool || (stepIndex !== undefined && stepIndex > current.maxRequests)) {
 		return false;
 	}
@@ -152,30 +192,4 @@ export async function currentParticipant(
 		parent.status === 'running' &&
 		(allowExpired || clock() < current.deadline)
 	);
-}
-
-export async function collaborationAuthority(
-	tx: SqlExecutor,
-	input: StoredCollaborationAuthority,
-): Promise<StoredParticipant> {
-	const operation = await toolOperation(
-		tx,
-		input.scope.userId,
-		input.scope.appId,
-		input.scope.runId,
-		input.operationId,
-	);
-	if (
-		!operation ||
-		operation.state !== 'dispatched' ||
-		operation.operationHash !== input.operationHash ||
-		!(await currentParticipant(tx, input.scope, Date.now, operation.toolName))
-	) {
-		throw new CollaborationStorageRefusal('version_conflict');
-	}
-	const owner = await participant(tx, input.scope);
-	if (!owner) {
-		throw new Error('Collaboration participant missing');
-	}
-	return owner;
 }

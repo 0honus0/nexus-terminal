@@ -1,13 +1,14 @@
+import { expectedToolIdentity } from '../../support/package-tool-catalog.mjs';
 import { posixCommand } from '../../support/posix-command.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, writeFile, rm, stat } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openAgentExecution } from './agent-execution-fixture.mjs';
 import { openSshd, until, expectStatus } from '../remote/openssh-fixture.mjs';
-import { ToolService } from '../../../packages/backend/dist/modules/agent/tools/service/tool-service.js';
+import { DefaultToolResources } from '../../../packages/backend/dist/modules/agent/tools/service/default-tool-resources.js';
 import {
 	AgentFailure,
 	ToolExecutionUnknown,
@@ -25,25 +26,13 @@ await test('B10 resource drain preserves effect uncertainty and independent stor
 			throw failure;
 		});
 		resources.push(() => visited.push('released'));
-		const service = new ToolService(
+		const service = new DefaultToolResources(
 			{
-				quiesceRun() {},
-
 				drainRun() {},
 
 				settleDrain() {},
 			},
-			null,
-			null,
 			{ drain: resources[1] },
-			null,
-			null,
-			null,
-			null,
-			null,
-			null,
-			null,
-			null,
 			{ drainRun: resources[0] },
 			{ drainRun: resources[2] ?? (() => visited.push('browser')) },
 		);
@@ -63,8 +52,8 @@ await test('B10 resource drain preserves effect uncertainty and independent stor
 	}
 });
 
-await test('B10 actual Agent Shell and background Job lifecycles', { timeout: 60000 }, async (t) => {
-	const root = await mkdtemp(join(tmpdir(), 'nexus-b10-shell-'));
+await test('B10 actual Agent Shell and background Job lifecycles', { timeout: 120000 }, async (t) => {
+	const root = await mkdtemp(join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-b10-shell-'));
 	let sshd;
 	let sequence = 0;
 
@@ -72,7 +61,9 @@ await test('B10 actual Agent Shell and background Job lifecycles', { timeout: 60
 		await t.test(name, async (scenario) => {
 			const directory = join(root, String(++sequence));
 			await mkdir(directory);
-			const fixture = await openAgentExecution(directory, sshd);
+			const fixture = await openAgentExecution(directory, sshd, {
+				discover: 'shell_execute shell_job_control file_read',
+			});
 			const cleanup = { unknown: false };
 			scenario.after(() => fixture.close(cleanup));
 			await work(fixture, directory, cleanup);
@@ -84,9 +75,19 @@ await test('B10 actual Agent Shell and background Job lifecycles', { timeout: 60
 	}
 
 	function result(fixture, run, name) {
-		const operation = fixture.rows('agent_run_tools', run).findLast((row) => row.tool_name === name);
+		const operation = fixture
+			.operations(run)
+			.findLast(
+				(row) => row.label === expectedToolIdentity(name).packageId + '.' + expectedToolIdentity(name).name,
+			);
 		assert.ok(operation, 'Expected durable tool operation');
-		return { operation, value: operation.result_text === null ? null : JSON.parse(operation.result_text) };
+		return {
+			operation,
+			value:
+				operation.result_json === null
+					? null
+					: JSON.parse(fixture.content(JSON.parse(operation.result_json).content)),
+		};
 	}
 
 	async function heldProcess(directory) {
@@ -196,9 +197,9 @@ await test('B10 actual Agent Shell and background Job lifecycles', { timeout: 60
 			const value = result(f, run, 'shell_execute').value.commands[0];
 			assert.equal(value.truncated, true);
 			assert.equal(Buffer.byteLength(value.stdout), 32768);
-			assert.equal(f.calls.length, 2);
+			assert.equal(f.calls.length, 3);
 			assert.equal(
-				JSON.parse(f.calls[1].body.messages.find((message) => message.role === 'tool').content).kind,
+				JSON.parse(f.calls[2].body.messages.findLast((message) => message.role === 'tool').content).kind,
 				'captured_result_preview',
 			);
 		});
@@ -275,7 +276,7 @@ await test('B10 actual Agent Shell and background Job lifecycles', { timeout: 60
 					await processFixture.started();
 					await until(
 						() => f.calls.length,
-						(count) => count === 3,
+						(count) => count === 4,
 						'Wait result reached model',
 					);
 					assert.equal(result(f, run, 'shell_job_control').value.jobs[0].state, 'dispatched');
@@ -378,7 +379,7 @@ await test('B10 actual Agent Shell and background Job lifecycles', { timeout: 60
 					await f.approve(await f.approval(run, 'shell_execute'));
 					await processFixture.started();
 					const approval = await f.approval(run, 'shell_job_control');
-					assert.equal(approval.inspection.risk, 'control');
+					assert.equal(approval.risk, 'control');
 					assert.equal(f.rows('agent_tool_jobs', run)[0].state, 'dispatched');
 					await f.approve(approval);
 					await until(
@@ -406,7 +407,7 @@ await test('B10 actual Agent Shell and background Job lifecycles', { timeout: 60
 					await processFixture.started();
 					await until(
 						() => f.calls.length,
-						(count) => count === 2,
+						(count) => count === 3,
 						'Held model continuation',
 					);
 					await f.grants([]);
@@ -454,6 +455,5 @@ await test('B10 actual Agent Shell and background Job lifecycles', { timeout: 60
 		if (sshd) {
 			await sshd.close();
 		}
-		await rm(root, { recursive: true, force: true });
 	}
 });

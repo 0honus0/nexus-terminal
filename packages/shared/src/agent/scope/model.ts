@@ -32,13 +32,14 @@ export interface AgentThreadView {
 
 export interface AgentThreadEntryCursor {
 	runSequence: number;
-	stepIndex: number;
-	eventSequence: number;
+	messageOrdinal: number;
+	chunkIndex: number;
 	textOffset: number;
 }
 
 export interface AgentThreadEntry {
 	runId: string;
+	operationSequence: number;
 	role: 'user' | 'assistant';
 	position: AgentThreadEntryCursor;
 	text: string;

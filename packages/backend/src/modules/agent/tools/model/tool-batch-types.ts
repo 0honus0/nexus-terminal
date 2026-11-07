@@ -24,8 +24,35 @@ export interface ToolDockerControlItem {
 	expectedFingerprint: string;
 }
 
-export type ToolBatchResult =
-	| { index: number; status: 'completed'; value: unknown }
+export interface ToolWriteValue {
+	path: string;
+	status: 'created' | 'replaced';
+	bytes: number;
+	sha256: string;
+}
+
+export interface ToolMoveValue {
+	path: string;
+	destinationPath: string;
+	kind: 'file' | 'directory';
+	fingerprint: string;
+}
+
+export interface ToolDeleteValue {
+	path: string;
+	kind: 'file' | 'directory';
+	fileCount: number;
+	directoryCount: number;
+}
+
+export interface ToolDockerValue {
+	containerId: string;
+	action: DockerAction;
+	state: string | null;
+}
+
+export type ToolBatchResult<T = ToolWriteValue | ToolMoveValue | ToolDeleteValue | ToolDockerValue> =
+	| { index: number; status: 'completed'; value: T }
 	| {
 			index: number;
 			status: 'failed';

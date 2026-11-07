@@ -8,6 +8,8 @@
 
 	const props = defineProps<{
 		appId: string;
+		appVersion?: number;
+		restoreThreadId?: string | null;
 		liveThread?: NativeThread | null;
 		active: boolean;
 		resumeRevision?: number;
@@ -21,12 +23,17 @@
 		working: [value: boolean];
 	}>();
 	const { locale, t } = useI18n();
+	const appVersion = props.appVersion;
 	const editor = useNativeThreads(
 		props.appId,
-		createNativeThreadApi(props.apiBase),
+		createNativeThreadApi(
+			props.apiBase,
+			appVersion === undefined ? undefined : async (appId) => ({ appId, appVersion }),
+		),
 		() => props.active,
 		(value) => emit('select', value),
 		(threadId) => emit('removed', threadId),
+		() => props.restoreThreadId ?? null,
 	);
 	const { items, nextCursor, title, selected, loaded, pending, pendingDelete, inspected, deleteInspected, busy } =
 		editor;

@@ -1,3 +1,4 @@
+import { AGENT_PLUGIN_FRONTEND_SANDBOX } from '../../../packages/shared/dist/agent/plugins/values.js';
 import { createTestAgentApp } from './native-agent-fixture.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -25,7 +26,7 @@ export async function activate({ context, request }) {
  if (!previous.ok) throw new Error('read failed');
  const value = previous.result.value;
  const count = value?.valueJson ? JSON.parse(value.valueJson).count + 1 : 1;
- const result = await request({ method: 'storage.put', params: { key: 'runtime', expectedVersion: value?.version ?? 0, operationId: crypto.randomUUID(), valueJson: JSON.stringify({ count, marker, version: context.version }) } });
+ const result = await request({ method: 'storage.put', params: { key: 'runtime', expectedVersion: value?.version ?? 0, operationId: crypto.randomUUID(), valueJson: JSON.stringify({ count, marker, version: context.package.version }) } });
  if (!result.ok) throw new Error('write failed');
 }
 export function health() { return true; }
@@ -41,11 +42,14 @@ await test(
 		await writeFile(keyPath, privateKey.export({ type: 'pkcs8', format: 'pem' }), { mode: 0o600 });
 		let f;
 		let artifactApp;
+		let execution;
 		let staged;
 		let installation;
 		let descriptor;
 		let publisher;
 		let upgraded;
+		let preparedPackage;
+		let preparedDependencies;
 		let initialData;
 		let rpcRequest;
 		const base = '/api/v1/agent/plugins';
@@ -112,11 +116,32 @@ await test(
 			await writeFile(
 				join(source, 'manifest.json'),
 				JSON.stringify({
-					schemaVersion: 1,
+					schemaVersion: 3,
 					id: definitionId,
 					version,
 					displayName: 'isolated plugin',
-					sdkVersion: '1',
+					compatibility: {
+						host: { minVersion: '1.0.0', maxVersion: '1.99.99' },
+						backendSdk: 3,
+						frontendSdk: 3,
+					},
+					contributions: {
+						app: {
+							execution: { kind: 'reference', protocol: 1, packageId: 'nexus.agent' },
+							toolNames: null,
+							dependencies: [
+								{
+									packageId: execution.packageId,
+									publisherKeyId: execution.publisherKeyId,
+									minVersion: execution.version,
+									maxVersion: execution.version,
+								},
+							],
+						},
+						tools: [],
+						ui: true,
+						skills: [],
+					},
 					capabilities: [],
 					intents: [],
 					frontendEntry: 'frontend/index.html',
@@ -186,6 +211,10 @@ await test(
 		try {
 			f = await openManagement(directory);
 			artifactApp = await createTestAgentApp(f.api, directory, 'plugin package source');
+			execution = expectStatus(await f.api('GET', '/api/v1/agent/plugins/packages'), 200).installations.find(
+				(item) => item.packageId === 'nexus.agent' && item.status === 'installed',
+			);
+			assert.ok(execution);
 			const sourceInstallations = expectStatus(await f.api('GET', base + '/installations'), 200).items;
 			await t.test('anonymous publisher and install administration are denied', async () => {
 				expectStatus(await f.anonymous('GET', base + '/publishers'), 401);
@@ -197,7 +226,10 @@ await test(
 					staged = await stage(await build('1.0.0'));
 					assert.equal(staged.status, 'staged');
 					expectStatus(
-						await f.api('POST', base + '/install', { stageId: staged.id, expectedVersion: staged.version }),
+						await f.api('POST', base + '/packages/install', {
+							stageId: staged.id,
+							expectedVersion: staged.version,
+						}),
 						409,
 					);
 				},
@@ -239,13 +271,21 @@ await test(
 				async () => {
 					staged = readAgentPluginStageView(expectStatus(await verify(staged), 200));
 					assert.equal(staged.status, 'verified');
+					const { installation: installedPackage } = expectStatus(
+						await f.api('POST', base + '/packages/install', {
+							stageId: staged.id,
+							expectedVersion: staged.version,
+						}),
+						200,
+					);
+					assert.equal(installedPackage.packageId, definitionId);
+					const { binding } = expectStatus(
+						await f.api('POST', base + '/apps/compose', { packageId: definitionId }),
+						200,
+					);
 					installation = readAgentPluginInstallation(
-						expectStatus(
-							await f.api('POST', base + '/install', {
-								stageId: staged.id,
-								expectedVersion: staged.version,
-							}),
-							200,
+						expectStatus(await f.api('GET', base + '/installations'), 200).items.find(
+							(item) => item.appId === binding.appId,
 						),
 					);
 					assert.equal(installation.definitionId, definitionId);
@@ -255,19 +295,29 @@ await test(
 					expectStatus(await f.api('GET', dataPath('runtime')), 403);
 				},
 			);
-			await t.test('repeated install returns original identity and creates no duplicate App', async () => {
-				assert.deepEqual(
-					expectStatus(
-						await f.api('POST', base + '/install', { stageId: staged.id, expectedVersion: staged.version }),
-						200,
-					),
-					installation,
-				);
-				assert.equal(
-					expectStatus(await f.api('GET', base + '/installations'), 200).items.length,
-					sourceInstallations.length + 1,
-				);
-			});
+			await t.test(
+				'repeated package install returns original package identity and creates no duplicate App',
+				async () => {
+					assert.deepEqual(
+						expectStatus(
+							await f.api('POST', base + '/packages/install', {
+								stageId: staged.id,
+								expectedVersion: staged.version,
+							}),
+							200,
+						),
+						{
+							installation: expectStatus(await f.api('GET', base + '/packages'), 200).installations.find(
+								(item) => item.packageId === definitionId,
+							),
+						},
+					);
+					assert.equal(
+						expectStatus(await f.api('GET', base + '/installations'), 200).items.length,
+						sourceInstallations.length + 1,
+					);
+				},
+			);
 			await t.test(
 				'enabling starts actual child module and signed sibling import with authenticated host storage',
 				async () => {
@@ -287,13 +337,55 @@ await test(
 					asset.bytes.toString('utf8'),
 					'<!doctype html><title>isolated plugin</title><p>signed asset</p>',
 				);
-				assert.match(asset.headers['content-security-policy'], /sandbox allow-scripts/u);
+				const directives = new Map(
+					asset.headers['content-security-policy'].split(';').map((item) => {
+						const [name, ...values] = item.trim().split(/\s+/u);
+						return [name, values];
+					}),
+				);
+				assert.deepEqual(new Set(directives.get('sandbox')), new Set(AGENT_PLUGIN_FRONTEND_SANDBOX.split(' ')));
+				assert.deepEqual(directives.get('form-action'), ["'none'"]);
+				assert.deepEqual(directives.get('connect-src'), ["'none'"]);
+				assert.deepEqual(directives.get('default-src'), ["'none'"]);
+				assert.deepEqual(directives.get('script-src'), ["'self'", "'wasm-unsafe-eval'"]);
+				assert.deepEqual(directives.get('worker-src'), ['blob:']);
+				assert.deepEqual(directives.get('style-src'), ["'self'", "'unsafe-inline'"]);
+				assert.deepEqual(directives.get('img-src'), ["'self'", 'data:', 'blob:']);
+				assert.deepEqual(directives.get('font-src'), ["'self'", 'data:', 'blob:']);
+				assert.deepEqual(directives.get('object-src'), ["'none'"]);
+				assert.deepEqual(directives.get('base-uri'), ["'none'"]);
+				assert.deepEqual(directives.get('frame-ancestors'), ["'self'"]);
+				assert.equal(asset.headers['referrer-policy'], 'no-referrer');
+				assert.equal(asset.headers['content-type'], 'text/html; charset=utf-8');
+				assert.equal(asset.headers['content-length'], String(asset.bytes.byteLength));
 				expectStatus(
 					await f.anonymous('GET', descriptor.url.replace('/frontend/index.html', '/backend/main.mjs')),
 					400,
 				);
-				const sdk = await f.anonymous('GET', '/sdk/frontend-v1.mjs');
+				expectStatus(await f.anonymous('GET', '/sdk/frontend-v1.mjs'), 404);
+				expectStatus(await f.anonymous('GET', '/sdk/frontend-v2.mjs'), 404);
+				const sdk = await f.anonymous('GET', '/sdk/frontend-v3.mjs');
 				expectStatus(sdk, 200);
+				assert.deepEqual(
+					sdk.bytes,
+					await readFile(
+						new URL(
+							'../../../packages/backend/dist/modules/agent/plugins/adapters/frontend/frontend-v3.mjs',
+							import.meta.url,
+						),
+					),
+				);
+				assert.equal(sdk.headers['cross-origin-resource-policy'], 'cross-origin');
+				assert.equal(sdk.headers['access-control-allow-origin'], '*');
+				assert.equal(sdk.headers['content-security-policy'], undefined);
+				assert.equal(sdk.headers['content-type'], 'text/javascript; charset=utf-8');
+				assert.equal(sdk.headers['content-length'], String(sdk.bytes.byteLength));
+				for (const response of [asset, sdk]) {
+					assert.equal(response.headers['x-content-type-options'], 'nosniff');
+					assert.equal(response.headers['cross-origin-resource-policy'], 'cross-origin');
+					assert.equal(response.headers['access-control-allow-origin'], '*');
+					assert.equal(response.headers['cache-control'], 'no-store');
+				}
 				assert.match(sdk.bytes.toString('utf8'), /export\s*\{\s*connectNexusPlugin/u);
 				assert.doesNotMatch(sdk.bytes.toString('utf8'), /from ['"](?:@nexus-terminal|semver|\.\/agent)/u);
 				expectStatus(
@@ -335,7 +427,7 @@ await test(
 					grant: descriptor.url.split('/')[4],
 					envelope: {
 						type: 'nexus.plugin.request',
-						protocol: 1,
+						protocol: 3,
 						nonce: randomUUID(),
 						id: randomUUID(),
 						seq: 1,
@@ -419,7 +511,7 @@ await test(
 					const other = await stage(await build('1.0.0', 'different content'));
 					const checked = expectStatus(await verify(other), 200);
 					expectStatus(
-						await f.api('POST', base + '/install', {
+						await f.api('POST', base + '/packages/install', {
 							stageId: checked.id,
 							expectedVersion: checked.version,
 						}),
@@ -437,18 +529,24 @@ await test(
 				const next = await stage(await build('1.1.0'));
 				upgraded = expectStatus(await verify(next), 200);
 				const child = await childIdentity();
-				installation = expectStatus(
-					await f.api('POST', installPath() + '/prepare-upgrade', {
-						expectedRevision: installation.revision,
+				const packageFact = expectStatus(await f.api('GET', base + '/packages'), 200).installations.find(
+					(item) => item.packageId === definitionId,
+				);
+				const preparation = expectStatus(
+					await f.api('POST', base + '/packages/' + definitionId + '/prepare-update', {
+						expectedRevision: packageFact.revision,
 						stageId: upgraded.id,
 						expectedStageVersion: upgraded.version,
 					}),
 					200,
 				);
-				assert.equal(installation.status, 'draining');
+				preparedPackage = preparation.installation;
+				preparedDependencies = preparation.dependencies;
+				assert.equal(preparedPackage.status, 'draining');
 				assert.equal((await runtime()).state, 'closed');
 				await assertExited(child);
 				assert.deepEqual(await readdir(f.database + '.modules'), []);
+				await setEnabled(false);
 			});
 			await t.test(
 				'migration requires full original key/version snapshot and preserves failed input atomically',
@@ -462,6 +560,7 @@ await test(
 						expectedRevision: snapshot.revision,
 						operationId: randomUUID(),
 						items: snapshot.items.map((item) => ({
+							packageId: item.packageId,
 							key: item.key,
 							expectedVersion: item.version,
 							valueJson: item.valueJson,
@@ -486,13 +585,17 @@ await test(
 			await t.test(
 				'upgrade switches version while disabled, then actual activation consumes new version',
 				async () => {
-					installation = expectStatus(
-						await f.api('POST', installPath() + '/upgrade', {
-							expectedRevision: installation.revision,
+					expectStatus(
+						await f.api('POST', base + '/packages/' + definitionId + '/update', {
+							expectedRevision: preparedPackage.revision,
+							dependencies: preparedDependencies,
 							stageId: upgraded.id,
 							expectedStageVersion: upgraded.version,
 						}),
 						200,
+					);
+					installation = expectStatus(await f.api('GET', base + '/installations'), 200).items.find(
+						(item) => item.appId === installation.appId,
 					);
 					assert.equal(installation.version, '1.1.0');
 					assert.equal(expectStatus(await f.api('GET', appPath()), 200).enabled, false);
@@ -546,6 +649,7 @@ await test(
 				);
 				assert.equal((await runtime()).state, 'closed');
 				assert.deepEqual(await readdir(f.database + '.modules'), []);
+				await setEnabled(false);
 			});
 		} finally {
 			await f?.close();

@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "publisherKeyId": "ed25519:617ec64b03cd6ed1a1ddf373e3a47f38666cdcd27753d674e136a4d0a359a1a0",
+  "files": [
+    {
+      "path": "backend/build-inputs.json",
+      "sha256": "fa9da2c44aabf33839f83251103500f153ac4b8b70a0e992ad9d9814b8665f89",
+      "sizeBytes": 35715
+    },
+    {
+      "path": "backend/index.mjs",
+      "sha256": "1a4621f9a850dfc7729fd56f360d616a0b13733cad7bdecf73322e97a42a1f20",
+      "sizeBytes": 1204981
+    },
+    {
+      "path": "backend/THIRD-PARTY-NOTICES.txt",
+      "sha256": "37d2c83ddafbf26a8866e1aa94f9ff79d762d4b0087ebd7d8d57ffe19e67d00a",
+      "sizeBytes": 30310
+    },
+    {
+      "path": "docs/settings.md",
+      "sha256": "250125c3f2696997c3e7b5a57bbaaf030e8dd8c75e31e6fe0040b4974f292da8",
+      "sizeBytes": 143
+    },
+    {
+      "path": "frontend/assets/index-CDYVth99.css",
+      "sha256": "3e702e9697cb3beaf27229f03c7d0862874c5b0b6fd2301c11f7a1728aaadb67",
+      "sizeBytes": 112124
+    },
+    {
+      "path": "frontend/assets/index-DrOYWYxk.js",
+      "sha256": "138bd2311a924993d2f93a184acc3ebd3176a3eebe005feb048c31570603d7b9",
+      "sizeBytes": 163529
+    },
+    {
+      "path": "frontend/index.html",
+      "sha256": "7fa7d35ec7e19608c96603b6e878c473100c4b04f928b5872cb462432172590b",
+      "sizeBytes": 385
+    }
+  ]
+}

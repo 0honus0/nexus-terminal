@@ -1,4 +1,4 @@
-import { MODEL_STREAM_MAX_DELTA_FRAME_BYTES, ModelNetworkFailure } from './model-port.js';
+import { MODEL_TEXT_BATCH_BYTES, ModelNetworkFailure } from './model-port.js';
 import type { ModelStreamEvent } from './model-port.js';
 
 type ReadResult =
@@ -58,8 +58,7 @@ export async function* modelTextBatches(
 			try {
 				for (;;) {
 					const nextRead = read();
-					const next =
-						bytes >= MODEL_STREAM_MAX_DELTA_FRAME_BYTES ? null : await Promise.race([nextRead, due]);
+					const next = bytes >= MODEL_TEXT_BATCH_BYTES ? null : await Promise.race([nextRead, due]);
 					if (next === null) {
 						yield { type: 'text_delta', text };
 						current = await nextRead;
@@ -71,7 +70,7 @@ export async function* modelTextBatches(
 						next.kind === 'error' ||
 						next.value.done ||
 						next.value.value.type !== 'text_delta' ||
-						bytes + Buffer.byteLength(next.value.value.text) > MODEL_STREAM_MAX_DELTA_FRAME_BYTES
+						bytes + Buffer.byteLength(next.value.value.text) > MODEL_TEXT_BATCH_BYTES
 					) {
 						if (next.kind === 'error') {
 							reader.deferred = next.error;

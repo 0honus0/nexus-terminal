@@ -1,7 +1,5 @@
 import type { Participant, ChildAdmissionFacts, DelegateCommand } from './model/run-collaboration-types.js';
 
-export const COLLABORATION_MAX_FACTS = 128;
-
 export function mayDelegate(command: DelegateCommand, facts: ChildAdmissionFacts): boolean {
 	return (
 		facts.parent.parentId === null &&
@@ -19,5 +17,5 @@ export function mayDelegate(command: DelegateCommand, facts: ChildAdmissionFacts
 }
 
 export function isSettled(status: Participant['status']): boolean {
-	return status !== 'pending' && status !== 'running';
+	return status !== 'pending' && status !== 'running' && status !== 'suspended';
 }

@@ -197,10 +197,7 @@ export class ArtifactModel {
 	}
 
 	private auth(actor: ArtifactActor): StoredArtifactAuthorization {
-		if (actor.kind === 'model') {
-			return { kind: 'model', runId: actor.runId, stepIndex: actor.stepIndex, requestHash: actor.requestHash };
-		}
-		return actor.kind === 'session'
+		return actor.kind === 'session' || actor.kind === 'plugin-ui'
 			? { kind: 'session', digest: this.tokens.digest(actor.token) }
 			: { kind: 'tool', runId: actor.runId, operationId: actor.operationId, operationHash: actor.operationHash };
 	}

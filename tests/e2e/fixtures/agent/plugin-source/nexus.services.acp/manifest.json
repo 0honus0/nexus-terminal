@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 4,
+  "id": "nexus.services.acp",
+  "version": "4.0.0",
+  "displayName": "ACP Service",
+  "compatibility": {
+    "host": {
+      "minVersion": "1.1.0",
+      "maxVersion": "1.1.0"
+    },
+    "backendSdk": 4,
+    "frontendSdk": null
+  },
+  "capabilities": ["plugin.invoke", "service.transport.process"],
+  "dependencies": [],
+  "intents": [],
+  "frontendEntry": null,
+  "backendEntry": "backend/index.mjs",
+  "contributions": {
+    "app": null,
+    "tools": false,
+    "services": true,
+    "ui": null,
+    "skills": [],
+    "settings": {
+      "frontendEntry": null,
+      "instructions": "docs/settings.md",
+      "schemaRevision": 1,
+      "schemaJson": "{\"type\": \"object\", \"properties\": {}, \"additionalProperties\": false}",
+      "defaultsJson": "{}",
+      "agentEditablePaths": []
+    }
+  },
+  "namespaces": ["nexus.services.acp", "nexus.protocol.acp"]
+}

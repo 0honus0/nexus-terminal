@@ -48,7 +48,12 @@ await test('Machine execution accepts a long caller budget and independently cap
 	let connectBudget;
 	let commandBudget;
 	let closed = 0;
-	const result = { status: 'completed', exitCode: 0, signal: null, stdout: 'done', stderr: '', truncated: false };
+	const result = {
+		status: 'completed',
+		commands: [
+			{ index: 0, status: 'completed', exitCode: 0, signal: null, stdout: 'done', stderr: '', truncated: false },
+		],
+	};
 	const commands = new MachineCommandModel(
 		{
 			release: (machine) => machine.close(),
@@ -69,13 +74,12 @@ await test('Machine execution accepts a long caller budget and independently cap
 			},
 		},
 		{
-			async execute(_executor, _command, _cwd, options) {
+			async executeBatch(_executor, _commands, _cwd, _onError, options) {
 				commandBudget = options.timeoutMs;
 				return {
-					outcome: { status: 'completed', exitCode: 0, signal: null },
-					stdout: 'done',
-					stderr: '',
-					truncated: false,
+					results: [
+						{ index: 0, status: 'completed', exitCode: 0, stdout: 'done', stderr: '', truncated: false },
+					],
 				};
 			},
 		},
@@ -84,7 +88,6 @@ await test('Machine execution accepts a long caller budget and independently cap
 		null,
 		null,
 		commands,
-		null,
 		{
 			async run(_id, _origin, _targets, work) {
 				return work();

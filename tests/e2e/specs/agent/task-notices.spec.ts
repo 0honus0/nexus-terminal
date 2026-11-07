@@ -1,3 +1,4 @@
+import { agentChatSurface } from '../../fixtures/agent/workbench';
 import {
 	cancelNativeTask,
 	captureNativeCommand,
@@ -29,11 +30,10 @@ for (const width of [1280, 390, 320]) {
 			try {
 				const first = await waitNativeApproval(prepared, run.id, 'shell_execute');
 				const hub = page.getByRole('dialog', { name: 'Agent', exact: true });
-				await expect(hub.getByRole('button', { name: 'Show or hide task panel', exact: true })).toHaveAttribute(
-					'aria-expanded',
-					'true',
-				);
-				const tasks = hub.getByRole('complementary', { name: 'Tasks', exact: true });
+				await expect(
+					agentChatSurface(page).getByRole('button', { name: 'Show or hide task panel', exact: true }),
+				).toHaveAttribute('aria-expanded', 'true');
+				const tasks = agentChatSurface(page).getByRole('complementary', { name: 'Tasks', exact: true });
 				await tasks.getByText('Execution details', { exact: true }).click();
 				await expect(tasks.getByText('1. printf notice-first', { exact: true })).toBeVisible();
 				await hub.getByRole('button', { name: 'Minimize Agent', exact: true }).click();
@@ -71,7 +71,7 @@ for (const width of [1280, 390, 320]) {
 				await expect(launcher).toBeFocused();
 				await launcher.press('Enter');
 				await expect(hub).toBeVisible();
-				await expect(hub.getByText('NOTICE_COMPLETED', { exact: true })).toBeVisible();
+				await expect(agentChatSurface(page).getByText('NOTICE_COMPLETED', { exact: true })).toBeVisible();
 				await hub.getByRole('button', { name: 'Minimize Agent', exact: true }).click();
 				await expect(notice).toHaveCount(0);
 			} finally {

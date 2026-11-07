@@ -1,4 +1,4 @@
-import { connectNexusPlugin } from '/sdk/frontend-v1.mjs';
+import { connectNexusPlugin } from '/sdk/frontend-v4.mjs';
 
 const status = document.querySelector('[data-testid="custom-sdk-status"]');
 let nexus;

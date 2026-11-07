@@ -1,11 +1,20 @@
-import { ToolBatchExecutionUnknown } from './tool-batch-failure.js';
+import type {
+	ToolRemoteTextPageInput,
+	ToolRemoteListPageInput,
+	ToolRemoteTextPageResult,
+	ToolRemoteListPageResult,
+} from './tool-remote-file-types.js';
+import type { HostToolCommand } from './host-tool-command.js';
+import { ToolBatchExecutionUnknown, ToolBatchCleanupFailure } from './tool-batch-failure.js';
 import type { ToolBatchResult } from './tool-batch-types.js';
+import type { HostOperationResult } from './host-operation-result.js';
+import { posix } from 'node:path';
 import { TOOL_RESULT_MAX_BYTES } from '../../runs/run-tool-limits.js';
 import type { ToolJobResult } from './tool-job-types.js';
-import type { ProjectDirectoryEntry, ProjectInstruction } from './tool-project-types.js';
 import type { RemoteMachineOperations, RemoteMachineOperationScope } from '../../../remote/public.js';
+import type { RemoteProcessRequest, RemoteProcessChannel } from '../../../remote/public.js';
 import { RemoteMachineOperationError } from '../../../remote/public-errors.js';
-import type { ToolOperationScope, ToolInput, ToolFileContent } from './tool-types.js';
+import type { ToolOperationScope, ToolFileContent } from './tool-types.js';
 import {
 	AgentFailure,
 	ToolOperationRefusal,
@@ -16,8 +25,59 @@ import {
 	isAgentDrainFailure,
 } from '../../agent-failure.js';
 
+type ToolRemoteModelResult = Extract<
+	HostOperationResult,
+	{
+		operation:
+			| 'docker.inspect'
+			| 'docker.control'
+			| 'remote.write'
+			| 'remote.move'
+			| 'remote.delete'
+			| 'remote.patch'
+			| 'remote.inspect'
+			| 'remote.search'
+			| 'diagnostics.readTarget';
+	}
+>;
+
+function batchFailureCode(error: unknown) {
+	return error instanceof RemoteMachineOperationError &&
+		(error.code === 'not_found' ||
+			error.code === 'not_text' ||
+			error.code === 'conflict' ||
+			error.code === 'command_failed' ||
+			error.code === 'invalid_input' ||
+			error.code === 'limit_exceeded')
+		? error.code
+		: null;
+}
+
 export class ToolRemoteModel {
 	constructor(private readonly operations: RemoteMachineOperations) {}
+
+	async withProcess(
+		scope: ToolOperationScope,
+		request: RemoteProcessRequest,
+		consume: (channel: RemoteProcessChannel) => Promise<void>,
+	): Promise<void> {
+		try {
+			return await this.operations.withProcess(
+				{
+					operationId: scope.operationId,
+					targetId: scope.target.id,
+					fingerprint: scope.target.fingerprint,
+					timeoutMs: scope.timeoutMs,
+					signal: scope.signal,
+					validate: scope.validate,
+				},
+				{ argv: request.argv.map((arg) => arg), cwd: request.cwd, maxReadBytes: request.maxReadBytes },
+				consume,
+			);
+		} catch (error) {
+			return this.failure(error);
+		}
+	}
 
 	snapshot(): {
 		connections: number;
@@ -47,35 +107,24 @@ export class ToolRemoteModel {
 	}
 
 	async perform(
-		input: Exclude<
-			ToolInput,
-			| { kind: 'tool_search' }
-			| { kind: 'plugin' }
-			| { kind: 'connections' }
-			| { kind: 'job' }
-			| { kind: 'shell' }
-			| { kind: 'collaboration' }
-			| { kind: 'project' }
-			| { kind: 'result' }
-			| { kind: 'memory' }
-			| { kind: 'browser_targets' }
-			| { kind: 'acp_integrations' }
-			| { kind: 'image_models' }
-			| { kind: 'image_generate' }
-			| { kind: 'artifact' }
-			| { kind: 'deliver' }
-			| { kind: 'checkpoint' }
-			| { kind: 'host_diagnostics' }
-			| { kind: 'mcp' }
-			| { kind: 'mcp_discovery' }
-			| { kind: 'browser' }
-			| { kind: 'skill' }
-			| { kind: 'acp_integration' }
+		input: Extract<
+			HostToolCommand,
+			{
+				kind:
+					| 'docker_inspect'
+					| 'write'
+					| 'move'
+					| 'delete'
+					| 'docker_control'
+					| 'patch'
+					| 'diagnostics'
+					| 'inspect'
+					| 'search';
+			}
 		>,
 		scope: ToolOperationScope,
-	): Promise<string> {
+	): Promise<ToolRemoteModelResult> {
 		let validationFailure: unknown = null;
-		let permissionFailure: unknown = null;
 
 		const validate = async () => {
 			try {
@@ -95,67 +144,32 @@ export class ToolRemoteModel {
 			validate,
 		};
 		try {
-			if (input.kind === 'acp') {
-				if (!scope.permission) {
-					throw new AgentFailure('internal_failure');
-				}
-				const permission = scope.permission;
-				const value = await this.operations.executeAcp(request, {
-					argv: input.argv.map((arg) => arg),
-					cwd: input.cwd,
-					prompt: input.prompt,
-
-					permission: async (value, signal) => {
-						try {
-							const response = await permission(
-								{
-									sessionId: value.sessionId,
-									toolCallId: value.toolCallId,
-									requestId: value.requestId,
-									title: value.title,
-									kind: value.kind,
-									inputJson: value.inputJson,
-								},
-								signal,
-							);
-							return {
-								decision: response.decision,
-
-								delivered: async () => {
-									try {
-										await response.delivered();
-									} catch (error) {
-										permissionFailure = error;
-										throw error;
-									}
-								},
-							};
-						} catch (error) {
-							permissionFailure = error;
-							throw error;
-						}
-					},
-				});
-				return JSON.stringify({ text: value.text, stopReason: value.stopReason });
-			}
 			if (input.kind === 'docker_inspect') {
-				const values = await this.operations.inspectDockers(
-					request,
-					input.containerIds.map((id) => id),
-				);
-				return JSON.stringify({
-					items: values.map((value, index) =>
-						value
-							? {
-									index,
-									containerId: value.containerId,
-									state: value.state,
-									image: value.image,
-									fingerprint: value.fingerprint,
-								}
-							: { index, containerId: input.containerIds[index], failureCode: 'not_found' },
-					),
-				});
+				try {
+					const value = await this.operations.inspectDocker(request, input.containerId);
+					await validate();
+					return {
+						operation: 'docker.inspect',
+						value: {
+							status: 'ok',
+							value: {
+								containerId: value.containerId,
+								state: value.state,
+								image: value.image,
+								fingerprint: value.fingerprint,
+							},
+						},
+					};
+				} catch (error) {
+					if (
+						validationFailure === null &&
+						error instanceof RemoteMachineOperationError &&
+						error.code === 'not_found'
+					) {
+						return { operation: 'docker.inspect', value: { status: 'not_found' } };
+					}
+					throw error;
+				}
 			}
 			if (
 				input.kind === 'write' ||
@@ -171,108 +185,59 @@ export class ToolRemoteModel {
 					expectedSha256: input.expectedSha256,
 					edits: input.edits.map((edit) => ({ oldText: edit.oldText, newText: edit.newText })),
 				});
-				return JSON.stringify({
-					path: value.path,
-					status: value.status,
-					bytes: value.bytes,
-					sha256: value.sha256,
-				});
+				return {
+					operation: 'remote.patch',
+					value: {
+						path: value.path,
+						status: value.status,
+						bytes: value.bytes,
+						sha256: value.sha256,
+					},
+				};
 			}
 			if (input.kind === 'diagnostics') {
 				const value = await this.operations.diagnose(request);
-				return JSON.stringify({
-					generatedAt: value.generatedAt,
-					cpuPercent: value.cpuPercent,
-					memUsedBytes: value.memUsedBytes,
-					memTotalBytes: value.memTotalBytes,
-					diskUsedBytes: value.diskUsedBytes,
-					diskTotalBytes: value.diskTotalBytes,
-					loadAverage: value.loadAverage.map((number) => number),
-				});
+				return {
+					operation: 'diagnostics.readTarget',
+					value: {
+						generatedAt: value.generatedAt,
+						cpuPercent: value.cpuPercent,
+						memUsedBytes: value.memUsedBytes,
+						memTotalBytes: value.memTotalBytes,
+						diskUsedBytes: value.diskUsedBytes,
+						diskTotalBytes: value.diskTotalBytes,
+						loadAverage: value.loadAverage.map((number) => number),
+					},
+				};
 			}
-			if (input.kind === 'read' || input.kind === 'list' || input.kind === 'inspect') {
-				const items: Array<
-					| { index: number; path: string; value: unknown }
-					| { index: number; path: string; failureCode: 'not_found' | 'not_text' }
-				> = [];
-				let size = 128;
-				for (let index = 0; index < input.paths.length; index++) {
-					const path = input.paths[index];
+			if (input.kind === 'inspect') {
+				try {
+					const value = await this.operations.inspectPath(request, input.path);
 					await validate();
-					let item: (typeof items)[number];
-					try {
-						if (input.kind === 'read') {
-							const value = await this.operations.readTextPage(request, {
-								path,
-								offset: input.offset,
-								maxBytes: input.maxBytes,
-							});
-							item = {
-								index,
-								path,
-								value: {
-									path: value.path,
-									text: value.text,
-									bytes: value.bytes,
-									sha256: value.sha256,
-									pageSha256: value.pageSha256,
-									sizeBytes: value.sizeBytes,
-									offset: value.offset,
-									nextOffset: value.nextOffset,
-									fingerprint: value.fingerprint,
-								},
-							};
-						} else if (input.kind === 'list') {
-							const value = await this.operations.listPage(request, { path, after: input.after });
-							item = {
-								index,
-								path,
-								value: {
-									nextAfter: value.nextAfter,
-									fingerprint: value.fingerprint,
-									entries: value.entries.map((entry) => ({
-										name: entry.name,
-										kind: entry.kind,
-										size: entry.size,
-										modifiedAt: entry.modifiedAt,
-									})),
-								},
-							};
-						} else {
-							const value = await this.operations.inspectPath(request, path);
-							item = {
-								index,
-								path,
-								value: {
-									path: value.path,
-									kind: value.kind,
-									fingerprint: value.fingerprint,
-									fileCount: value.fileCount,
-									directoryCount: value.directoryCount,
-									bytes: value.bytes,
-								},
-							};
-						}
-					} catch (error) {
-						if (
-							!(error instanceof RemoteMachineOperationError) ||
-							(error.code !== 'not_found' && error.code !== 'not_text')
-						) {
-							throw error;
-						}
-						item = { index, path, failureCode: error.code };
+					return {
+						operation: 'remote.inspect',
+						value: {
+							status: 'ok',
+							value: {
+								path: value.path,
+								kind: value.kind,
+								fingerprint: value.fingerprint,
+								fileCount: value.fileCount,
+								directoryCount: value.directoryCount,
+								bytes: value.bytes,
+							},
+						},
+					};
+				} catch (error) {
+					if (
+						validationFailure === null &&
+						error instanceof RemoteMachineOperationError &&
+						(error.code === 'not_found' || error.code === 'not_text')
+					) {
+						return { operation: 'remote.inspect', value: { status: error.code } };
 					}
-					const bytes = Buffer.byteLength(JSON.stringify(item)) + 1;
-					if (size + bytes > TOOL_RESULT_MAX_BYTES) {
-						if (!items.length) {
-							throw new AgentFailure('limit_exceeded');
-						}
-						return JSON.stringify({ items, nextIndex: index });
-					}
-					items.push(item);
-					size += bytes;
+					throw error;
 				}
-				return JSON.stringify({ items, nextIndex: null });
 			}
 			const value = await this.operations.search(
 				request,
@@ -280,40 +245,160 @@ export class ToolRemoteModel {
 				input.queries.map((query) => query),
 				input.maxResults,
 			);
-			return JSON.stringify({
-				matches: value.matches.map((match) => ({
-					queryIndex: match.queryIndex,
-					path: match.path,
-					line: match.line,
-					column: match.column,
-					text: match.text,
-				})),
-				truncated: value.truncated,
-			});
+			return {
+				operation: 'remote.search',
+				value: {
+					matches: value.matches.map((match) => ({
+						queryIndex: match.queryIndex,
+						path: match.path,
+						line: match.line,
+						column: match.column,
+						text: match.text,
+					})),
+					truncated: value.truncated,
+				},
+			};
 		} catch (error) {
 			if (error instanceof ToolBatchExecutionUnknown) {
 				throw error;
 			}
-			this.failure(error, validationFailure, permissionFailure);
+			this.failure(error, validationFailure);
+		}
+	}
+
+	async readTextPage(input: ToolRemoteTextPageInput, scope: ToolOperationScope): Promise<ToolRemoteTextPageResult> {
+		let validationFailure: unknown = null;
+		const request: RemoteMachineOperationScope = {
+			operationId: scope.operationId,
+			targetId: scope.target.id,
+			fingerprint: scope.target.fingerprint,
+			timeoutMs: scope.timeoutMs,
+			signal: scope.signal,
+
+			validate: async () => {
+				try {
+					await scope.validate();
+				} catch (error) {
+					validationFailure = error;
+					throw error;
+				}
+			},
+		};
+		try {
+			const value = await this.operations.readTextPage(request, {
+				path: input.path,
+				offset: input.offset,
+				maxBytes: input.maxBytes,
+			});
+			await request.validate();
+			return {
+				status: 'ok',
+				value: {
+					path: value.path,
+					text: value.text,
+					bytes: value.bytes,
+					sizeBytes: value.sizeBytes,
+					offset: value.offset,
+					nextOffset: value.nextOffset,
+					sha256: value.sha256,
+					pageSha256: value.pageSha256,
+					fingerprint: value.fingerprint,
+				},
+			};
+		} catch (error) {
+			if (
+				validationFailure === null &&
+				error instanceof RemoteMachineOperationError &&
+				(error.code === 'not_found' || error.code === 'not_text')
+			) {
+				return { status: error.code };
+			}
+			this.failure(error, validationFailure);
+		}
+	}
+
+	async listPage(input: ToolRemoteListPageInput, scope: ToolOperationScope): Promise<ToolRemoteListPageResult> {
+		let validationFailure: unknown = null;
+		const request: RemoteMachineOperationScope = {
+			operationId: scope.operationId,
+			targetId: scope.target.id,
+			fingerprint: scope.target.fingerprint,
+			timeoutMs: scope.timeoutMs,
+			signal: scope.signal,
+
+			validate: async () => {
+				try {
+					await scope.validate();
+				} catch (error) {
+					validationFailure = error;
+					throw error;
+				}
+			},
+		};
+		try {
+			const value = await this.operations.listPage(request, { path: input.path, after: input.after });
+			await request.validate();
+			return {
+				status: 'ok',
+				value: {
+					entries: value.entries.map((entry) => ({
+						name: entry.name,
+						kind: entry.kind,
+						size: entry.size,
+						modifiedAt: entry.modifiedAt,
+					})),
+					nextAfter: value.nextAfter,
+					fingerprint: value.fingerprint,
+				},
+			};
+		} catch (error) {
+			if (
+				validationFailure === null &&
+				error instanceof RemoteMachineOperationError &&
+				error.code === 'not_found'
+			) {
+				return { status: 'not_found' };
+			}
+			this.failure(error, validationFailure);
 		}
 	}
 
 	private async batchMutations(
-		input: Extract<ToolInput, { kind: 'write' | 'move' | 'delete' | 'docker_control' }>,
+		input: Extract<HostToolCommand, { kind: 'write' | 'move' | 'delete' | 'docker_control' }>,
 		request: RemoteMachineOperationScope,
-	): Promise<string> {
-		const results: ToolBatchResult[] = [];
-
-		const knownFailure = (error: unknown) =>
-			error instanceof RemoteMachineOperationError &&
-			(error.code === 'not_found' ||
-				error.code === 'not_text' ||
-				error.code === 'conflict' ||
-				error.code === 'command_failed' ||
-				error.code === 'invalid_input' ||
-				error.code === 'limit_exceeded')
-				? error.code
-				: null;
+	): Promise<
+		Extract<
+			ToolRemoteModelResult,
+			{ operation: 'remote.write' | 'remote.move' | 'remote.delete' | 'docker.control' }
+		>
+	> {
+		if (!input.items.length) {
+			throw new AgentFailure('invalid_input');
+		}
+		if (input.kind === 'docker_control') {
+			if (new Set(input.items.map((item) => item.containerId)).size !== input.items.length) {
+				throw new AgentFailure('invalid_input');
+			}
+		} else {
+			const paths: string[] = [];
+			for (const item of input.items) {
+				const itemPaths = 'destinationPath' in item ? [item.path, item.destinationPath] : [item.path];
+				for (const path of itemPaths) {
+					if (
+						path === '/' ||
+						!posix.isAbsolute(path) ||
+						posix.normalize(path) !== path ||
+						/[\u0000-\u001f\u007f]/u.test(path) ||
+						paths.some(
+							(other) => path === other || path.startsWith(other + '/') || other.startsWith(path + '/'),
+						)
+					) {
+						throw new AgentFailure('invalid_input');
+					}
+					paths.push(path);
+				}
+			}
+		}
 
 		// Reserve all fixed per-item results before the first side effect.
 		if (
@@ -345,18 +430,6 @@ export class ToolRemoteModel {
 			throw new AgentFailure('limit_exceeded');
 		}
 
-		const absent = async (path: string) => {
-			try {
-				await this.operations.inspectPath(request, path);
-			} catch (error) {
-				if (error instanceof RemoteMachineOperationError && error.code === 'not_found') {
-					return;
-				}
-				throw error;
-			}
-			throw new RemoteMachineOperationError('conflict');
-		};
-
 		// Preflight the complete plan; individual execution still performs its own fingerprint checks.
 		for (let index = 0; index < input.items.length; index++) {
 			await request.validate();
@@ -364,7 +437,7 @@ export class ToolRemoteModel {
 				if (input.kind === 'write') {
 					const item = input.items[index];
 					if (item.expectedSha256 === 'absent') {
-						await absent(item.path);
+						await this.operations.assertMissingPath(request, item.path);
 					} else if ((await this.operations.readText(request, item.path)).sha256 !== item.expectedSha256) {
 						throw new RemoteMachineOperationError('conflict');
 					}
@@ -384,23 +457,100 @@ export class ToolRemoteModel {
 						throw new RemoteMachineOperationError('conflict');
 					}
 					if (input.kind === 'move') {
-						await absent(input.items[index].destinationPath);
+						await this.operations.assertMissingPath(request, input.items[index].destinationPath);
 					}
 				}
 			} catch (error) {
-				const code = knownFailure(error);
+				const code = batchFailureCode(error);
 				if (code === null) {
 					throw error;
 				}
-				return JSON.stringify({
-					items: input.items.map((_, itemIndex) =>
-						itemIndex === index
-							? { index: itemIndex, status: 'failed', failureCode: code }
-							: { index: itemIndex, status: 'not_started' },
-					),
-				});
+				const items: ToolBatchResult<never>[] = input.items.map((_, itemIndex) =>
+					itemIndex === index
+						? { index: itemIndex, status: 'failed', failureCode: code }
+						: { index: itemIndex, status: 'not_started' },
+				);
+				if (input.kind === 'write') {
+					return { operation: 'remote.write', value: { items } };
+				}
+				if (input.kind === 'move') {
+					return { operation: 'remote.move', value: { items } };
+				}
+				if (input.kind === 'delete') {
+					return { operation: 'remote.delete', value: { items } };
+				}
+				return { operation: 'docker.control', value: { items } };
 			}
 		}
+		if (input.kind === 'write') {
+			return {
+				operation: 'remote.write',
+				value: await this.executeMutations(input, request, async (scope, item) => {
+					const value = await this.operations.writeText(scope, {
+						path: item.path,
+						content: item.content,
+						expectedSha256: item.expectedSha256,
+					});
+					return { path: value.path, status: value.status, bytes: value.bytes, sha256: value.sha256 };
+				}),
+			};
+		}
+		if (input.kind === 'move') {
+			return {
+				operation: 'remote.move',
+				value: await this.executeMutations(input, request, async (scope, item) => {
+					const value = await this.operations.movePath(scope, {
+						path: item.path,
+						destinationPath: item.destinationPath,
+						expectedFingerprint: item.expectedFingerprint,
+					});
+					return {
+						path: value.path,
+						destinationPath: value.destinationPath,
+						kind: value.kind,
+						fingerprint: value.fingerprint,
+					};
+				}),
+			};
+		}
+		if (input.kind === 'delete') {
+			return {
+				operation: 'remote.delete',
+				value: await this.executeMutations(input, request, async (scope, item) => {
+					const value = await this.operations.deletePath(scope, {
+						path: item.path,
+						expectedFingerprint: item.expectedFingerprint,
+						scope: item.scope,
+					});
+					return {
+						path: value.path,
+						kind: value.kind,
+						fileCount: value.fileCount,
+						directoryCount: value.directoryCount,
+					};
+				}),
+			};
+		}
+		return {
+			operation: 'docker.control',
+			value: await this.executeMutations(input, request, async (scope, item) => {
+				const value = await this.operations.controlDocker(scope, {
+					containerId: item.containerId,
+					action: item.action,
+					expectedFingerprint: item.expectedFingerprint,
+				});
+				return { containerId: value.containerId, action: value.action, state: value.state };
+			}),
+		};
+	}
+
+	private async executeMutations<Item, Value>(
+		input: { items: Item[]; onError: 'stop' | 'continue' },
+		request: RemoteMachineOperationScope,
+		execute: (scope: RemoteMachineOperationScope, item: Item) => Promise<Value>,
+	): Promise<{ items: ToolBatchResult<Value>[] }> {
+		const results: ToolBatchResult<Value>[] = [];
+
 		let stopped = false;
 		for (let index = 0; index < input.items.length; index++) {
 			if (stopped) {
@@ -418,67 +568,10 @@ export class ToolRemoteModel {
 			};
 			try {
 				await request.validate();
-				if (input.kind === 'write') {
-					const item = input.items[index];
-					const value = await this.operations.writeText(scope, {
-						path: item.path,
-						content: item.content,
-						expectedSha256: item.expectedSha256,
-					});
-					results.push({
-						index,
-						status: 'completed',
-						value: { path: value.path, status: value.status, bytes: value.bytes, sha256: value.sha256 },
-					});
-				} else if (input.kind === 'move') {
-					const item = input.items[index];
-					const value = await this.operations.movePath(scope, {
-						path: item.path,
-						destinationPath: item.destinationPath,
-						expectedFingerprint: item.expectedFingerprint,
-					});
-					results.push({
-						index,
-						status: 'completed',
-						value: {
-							path: value.path,
-							destinationPath: value.destinationPath,
-							kind: value.kind,
-							fingerprint: value.fingerprint,
-						},
-					});
-				} else if (input.kind === 'delete') {
-					const item = input.items[index];
-					const value = await this.operations.deletePath(scope, {
-						path: item.path,
-						expectedFingerprint: item.expectedFingerprint,
-						scope: item.scope,
-					});
-					results.push({
-						index,
-						status: 'completed',
-						value: {
-							path: value.path,
-							kind: value.kind,
-							fileCount: value.fileCount,
-							directoryCount: value.directoryCount,
-						},
-					});
-				} else {
-					const item = input.items[index];
-					const value = await this.operations.controlDocker(scope, {
-						containerId: item.containerId,
-						action: item.action,
-						expectedFingerprint: item.expectedFingerprint,
-					});
-					results.push({
-						index,
-						status: 'completed',
-						value: { containerId: value.containerId, action: value.action, state: value.state },
-					});
-				}
+				const value = await execute(scope, input.items[index]);
+				results.push({ index, status: 'completed', value });
 			} catch (error) {
-				const code = knownFailure(error);
+				const code = batchFailureCode(error);
 				if (code !== null) {
 					results.push({ index, status: 'failed', failureCode: code });
 					stopped = input.onError === 'stop';
@@ -492,8 +585,10 @@ export class ToolRemoteModel {
 				try {
 					this.failure(error);
 				} catch (failure) {
-					if (failure instanceof ToolExecutionUnknown && !(failure instanceof ToolCleanupFailure)) {
-						throw new ToolBatchExecutionUnknown(
+					if (failure instanceof ToolExecutionUnknown) {
+						const Failure =
+							failure instanceof ToolCleanupFailure ? ToolBatchCleanupFailure : ToolBatchExecutionUnknown;
+						throw new Failure(
 							JSON.stringify({ failureCode: 'tool_result_unconfirmed', items: results }),
 							failure,
 						);
@@ -502,7 +597,7 @@ export class ToolRemoteModel {
 				}
 			}
 		}
-		return JSON.stringify({ items: results });
+		return { items: results };
 	}
 
 	async fileInfo(path: string, scope: ToolOperationScope): Promise<ToolFileContent> {
@@ -545,7 +640,7 @@ export class ToolRemoteModel {
 	}
 
 	async command(
-		input: Extract<ToolInput, { kind: 'shell' }>,
+		input: Extract<HostToolCommand, { kind: 'shell' }>,
 		scope: ToolOperationScope,
 		onOutput?: (index: number, stream: 'stdout' | 'stderr', text: string, signal: AbortSignal) => Promise<void>,
 	): Promise<Exclude<ToolJobResult, { status: 'not_started' }>> {
@@ -573,23 +668,6 @@ export class ToolRemoteModel {
 							},
 				),
 			};
-		});
-	}
-
-	async projectDirectory(path: string, scope: ToolOperationScope): Promise<ProjectDirectoryEntry[]> {
-		return this.withOperation(scope, async (request) =>
-			(await this.operations.list(request, path)).map((entry) => ({
-				name: entry.name,
-				kind: entry.kind,
-				size: entry.size,
-			})),
-		);
-	}
-
-	async projectInstruction(path: string, scope: ToolOperationScope): Promise<ProjectInstruction> {
-		return this.withOperation(scope, async (request) => {
-			const value = await this.operations.readText(request, path);
-			return { path: value.path, text: value.text, bytes: value.bytes, sha256: value.sha256 };
 		});
 	}
 
@@ -638,7 +716,7 @@ export class ToolRemoteModel {
 		}
 	}
 
-	private failure(error: unknown, validationFailure: unknown = null, permissionFailure: unknown = null): never {
+	private failure(error: unknown, validationFailure: unknown = null): never {
 		if (
 			error instanceof AgentFailure ||
 			error instanceof ToolOperationRefusal ||
@@ -646,17 +724,6 @@ export class ToolRemoteModel {
 			error instanceof ToolMutationAdmissionRefusal
 		) {
 			throw error;
-		}
-		if (
-			permissionFailure !== null &&
-			isAgentDrainFailure(permissionFailure) &&
-			!(permissionFailure instanceof ToolExecutionUnknown)
-		) {
-			const cause = new AggregateError([permissionFailure, error], 'ACP permission and execution failed');
-			if (error instanceof RemoteMachineOperationError && error.code === 'cleanup_failed') {
-				throw new ToolCleanupFailure({ cause });
-			}
-			throw cause;
 		}
 		if (
 			validationFailure !== null &&

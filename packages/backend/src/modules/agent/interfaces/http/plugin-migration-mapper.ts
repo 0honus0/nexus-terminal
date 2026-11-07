@@ -1,5 +1,4 @@
 import type { AgentPluginDataMigration } from '@nexus-terminal/shared/agent/plugins/migration-http';
-import { toPluginData } from './plugin-mapper.js';
 import type {
 	AgentPluginDataSnapshot,
 	AgentPluginDataMigrationResult,
@@ -15,6 +14,7 @@ export function fromPluginDataMigration(value: AgentPluginDataMigration): Plugin
 		expectedRevision: value.expectedRevision,
 		operationId: value.operationId,
 		items: value.items.map((item) => ({
+			packageId: item.packageId,
 			key: item.key,
 			expectedVersion: item.expectedVersion,
 			valueJson: item.valueJson,
@@ -23,7 +23,17 @@ export function fromPluginDataMigration(value: AgentPluginDataMigration): Plugin
 }
 
 export function toPluginDataSnapshot(value: PluginDataSnapshot): AgentPluginDataSnapshot {
-	return { appId: value.appId, revision: value.revision, items: value.items.map(toPluginData) };
+	return {
+		appId: value.appId,
+		revision: value.revision,
+		items: value.items.map((item) => ({
+			packageId: item.packageId,
+			key: item.key,
+			version: item.version,
+			valueJson: item.valueJson,
+			updatedAt: item.updatedAt,
+		})),
+	};
 }
 
 export function toPluginDataMigrationResult(value: PluginDataMigrationResult): AgentPluginDataMigrationResult {

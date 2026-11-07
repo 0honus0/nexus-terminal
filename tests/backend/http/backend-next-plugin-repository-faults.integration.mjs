@@ -44,14 +44,18 @@ await test('B10 real repository admission, download revocation and shutdown', { 
 	const url = 'http://127.0.0.1:' + server.address().port + '/catalog.json';
 	bytes = await f.build('repository-faults');
 	catalog = {
-		schemaVersion: 1,
+		schemaVersion: 2,
 		publishers: [{ keyId: f.publisher.keyId, label: f.publisher.label, publicKeyPem: f.publisher.publicKeyPem }],
 		packages: [
 			{
-				appId: 'isolated.b10-repository-faults',
+				packageId: 'isolated.b10-repository-faults',
 				version: '1.0.0',
-				sdkVersion: '1',
-				nexus: { minVersion: '0.0.0', maxVersion: '999.0.0' },
+				compatibility: {
+					host: { minVersion: '0.0.0', maxVersion: '999.0.0' },
+					backendSdk: null,
+					frontendSdk: 3,
+				},
+				contributionKinds: ['app', 'ui'],
 				displayName: 'faults',
 				description: 'isolated streaming source',
 				packageUrl: './package.tar',
@@ -74,7 +78,8 @@ await test('B10 real repository admission, download revocation and shutdown', { 
 	const download = () =>
 		f.api('POST', base + '/remote/stage', {
 			repositoryUrl: url,
-			appId: catalog.packages[0].appId,
+			packageId: catalog.packages[0].packageId,
+			publisherKeyId: catalog.packages[0].publisherKeyId,
 			version: '1.0.0',
 		});
 
@@ -155,7 +160,7 @@ await test('B10 real repository admission, download revocation and shutdown', { 
 			assert.notEqual(expectStatus(await revoking, 200).revokedAt, null);
 			assert.equal(
 				expectStatus(
-					await f.api('POST', base + '/install', {
+					await f.api('POST', base + '/packages/install', {
 						stageId: stage.id,
 						expectedVersion: stage.version,
 					}),

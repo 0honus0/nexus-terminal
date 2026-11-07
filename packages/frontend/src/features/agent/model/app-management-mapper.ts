@@ -105,12 +105,6 @@ export function toAppPolicy(value: AppPolicyOverrides): AgentExecutionPolicyOver
 			overrides[key] = value[key];
 		}
 	}
-	if (value.contextCompactionMode !== undefined) {
-		overrides.contextCompactionMode = value.contextCompactionMode;
-	}
-	if (value.contextProfile !== undefined) {
-		overrides.contextProfile = value.contextProfile;
-	}
 	return overrides;
 }
 
@@ -126,8 +120,6 @@ export function fromAppPolicy(value: AgentExecutionPolicyView): AppExecutionPoli
 			maxRecallBytes: value.overrides.maxRecallBytes,
 			maxSubagentMessages: value.overrides.maxSubagentMessages,
 			maxSubagentMessageBytes: value.overrides.maxSubagentMessageBytes,
-			contextCompactionMode: value.overrides.contextCompactionMode,
-			contextProfile: value.overrides.contextProfile,
 		},
 		effective: {
 			maxModelRequests: value.effective.maxModelRequests,
@@ -138,8 +130,6 @@ export function fromAppPolicy(value: AgentExecutionPolicyView): AppExecutionPoli
 			maxRecallBytes: value.effective.maxRecallBytes,
 			maxSubagentMessages: value.effective.maxSubagentMessages,
 			maxSubagentMessageBytes: value.effective.maxSubagentMessageBytes,
-			contextCompactionMode: value.effective.contextCompactionMode,
-			contextProfile: value.effective.contextProfile,
 		},
 	};
 }

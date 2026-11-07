@@ -1,10 +1,15 @@
-import type { StoredContextSnapshot, StoredContextToolResult } from './context-storage.js';
+import type {
+	StoredContextSnapshot,
+	StoredContextToolResult,
+	StoredContextCheckpointProjection,
+} from './context-storage.js';
 import type { RunStepPolicyCheck, StepScope } from '../../runs/storage/run-step-storage.js';
 import type { StoredExecutionSettings, StoredExecutionUsage } from '../../execution/storage/execution-storage.js';
 
 export interface StoredCompactionCommand extends StepScope {
 	id: string;
 	snapshot: StoredContextSnapshot;
+	checkpointProjection: StoredContextCheckpointProjection | null;
 	cut: number;
 	estimatedTokens: number;
 }

@@ -1,9 +1,10 @@
+import { readAgentPluginPackageUpdatePreparation } from '../../../../packages/shared/src/agent/plugins/package-update-http-codec';
 import { randomUUID } from 'node:crypto';
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { requestAgentJson } from '../../support/agent-request';
 import { requestAgentWorkspace, createTestAgentApp, enableTestAgentExecution } from '../../support/agent';
-import { installTestPlugin, stageTestPlugin } from '../../support/plugins';
+import { installTestPlugin, stageTestPlugin, getPluginInstallation } from '../../support/plugins';
 import { readAgentAppListResponse, readAgentAppResponse } from '../../../../packages/shared/src/agent/scope/http-codec';
 import {
 	readAgentExecutionSettingsResponse,
@@ -22,8 +23,9 @@ import {
 	readAgentPluginIntentListResponse,
 } from '../../../../packages/shared/src/agent/plugins/intent-http-codec';
 import {
-	readAgentPluginInstallation,
 	readAgentPluginInstallationList,
+	readAgentPluginPackageInstallationList,
+	readAgentPluginPackageInstallationResponse,
 } from '../../../../packages/shared/src/agent/plugins/http-codec';
 import { readAgentErrorResponse } from '../../../../packages/shared/src/agent/http-codec';
 
@@ -251,8 +253,6 @@ test('per-App execution policy persists overrides and rejects stale or over-limi
 	expect(before.overrides).toEqual({});
 	const overrides = {
 		maxModelRequests: Math.min(3, settings.hardLimits.maxModelRequests),
-		contextCompactionMode: 'aggressive',
-		contextProfile: 'extended',
 	};
 	const saved = await requestAgentJson(
 		request,
@@ -493,29 +493,43 @@ test('Plugin public API upgrades an installed package to a newer signed version'
 	await prepare(request);
 	const before = await installTestPlugin(request, 'nexus.upgrade', '1.0.0');
 	const verified = await stageTestPlugin(request, 'nexus.upgrade', '2.0.0');
-	const input = { expectedRevision: before.revision, stageId: verified.id, expectedStageVersion: verified.version };
-	const prepared = await requestAgentJson(
+	const packages = await requestAgentJson(
 		request,
-		{ method: 'POST', path: `/plugins/installations/${before.appId}/prepare-upgrade`, data: input },
-		readAgentPluginInstallation,
+		{ method: 'GET', path: '/plugins/packages' },
+		readAgentPluginPackageInstallationList,
+	);
+	const installedPackage = packages.installations.find((item) => item.packageId === before.definitionId);
+	if (!installedPackage) throw new Error('Missing installed package');
+	const input = {
+		expectedRevision: installedPackage.revision,
+		stageId: verified.id,
+		expectedStageVersion: verified.version,
+	};
+	const { installation: prepared, dependencies } = await requestAgentJson(
+		request,
+		{ method: 'POST', path: `/plugins/packages/${before.definitionId}/prepare-update`, data: input },
+		readAgentPluginPackageUpdatePreparation,
 	);
 	expect(prepared.status).toBe('draining');
-	const upgraded = await requestAgentJson(
+	const { installation: updatedPackage } = await requestAgentJson(
 		request,
 		{
 			method: 'POST',
-			path: `/plugins/installations/${before.appId}/upgrade`,
-			data: { ...input, expectedRevision: prepared.revision },
+			path: `/plugins/packages/${before.definitionId}/update`,
+			data: { ...input, expectedRevision: prepared.revision, dependencies },
 		},
-		readAgentPluginInstallation,
+		readAgentPluginPackageInstallationResponse,
 	);
+	expect(updatedPackage.version).toBe('2.0.0');
+	expect(updatedPackage.revision).toBeGreaterThan(prepared.revision);
+	const upgraded = await getPluginInstallation(request, before.appId);
 	expect(upgraded).toMatchObject({
 		appId: before.appId,
 		definitionId: 'nexus.upgrade',
 		version: '2.0.0',
 		status: 'installed',
 	});
-	expect(upgraded.revision).toBeGreaterThan(prepared.revision);
+	expect(upgraded.revision).toBeGreaterThan(before.revision);
 	const installations = await requestAgentJson(request, { method: 'GET', path: '/plugins/installations' }, (raw) =>
 		readAgentPluginInstallationList(raw),
 	);

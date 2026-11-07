@@ -1,3 +1,9 @@
+import { agentChatSurface, agentHost } from './workbench';
+import { hasApprovalIdentity } from '../../../support/package-tool-catalog.mjs';
+import {
+	readAgentPluginFrontendRpc,
+	readAgentPluginRpcResponse,
+} from '../../../../packages/shared/src/agent/plugins/frontend-rpc-codec';
 import { randomUUID } from 'node:crypto';
 import { expect, type APIRequestContext, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
@@ -10,7 +16,13 @@ import {
 	selectAgentModel,
 } from '../../support/agent';
 import { readAgentAppResponse } from '../../../../packages/shared/src/agent/scope/http-codec';
-import { readAgentGrantView } from '../../../../packages/shared/src/agent/governance/http-codec';
+import { readAgentGrantView, readAgentApprovalView } from '../../../../packages/shared/src/agent/governance/http-codec';
+import type { AgentApprovalView } from '../../../../packages/shared/src/agent/governance/model';
+import {
+	toolCommandPreview,
+	toolSummaryTargetIds,
+	toolDisplayName,
+} from '../../../../packages/frontend/src/features/agent/runtime/native-tool-summary';
 import {
 	readAgentWorkspaceRequest,
 	readAgentWorkspaceResponse,
@@ -61,7 +73,7 @@ export async function prepareNativeTask(
 				path,
 				data: {
 					expectedPolicyRevision: before.policyRevision,
-					grants: capabilities.map((capability) => {
+					grants: [...new Set<AgentCapability>(['plugin.invoke', ...capabilities])].map((capability) => {
 						const definition = before.definitions.find((item) => item.id === capability);
 						if (!definition) {
 							throw new Error(`Capability unavailable: ${capability}`);
@@ -90,14 +102,19 @@ export type NativeTask = Awaited<ReturnType<typeof prepareNativeTask>>;
 export async function openNativeTask(task: NativeTask) {
 	const { page, thread, provider } = task;
 	await page.goto('/connections');
-	const hub = page.getByRole('dialog', { name: 'Agent', exact: true });
+	const host = agentHost(page);
+	const hub = agentChatSurface(page, task.app.id);
 	await openAgentHub(page);
-	await hub.getByRole('button', { name: 'Choose an Agent app', exact: true }).click();
+	await host.getByRole('button', { name: 'Choose an Agent app', exact: true }).click();
 	await page
 		.locator('[data-agent-hub-portal]')
 		.getByRole('button')
 		.filter({ has: page.getByText(task.app.name, { exact: true }) })
 		.click();
+	await expect(host.locator('iframe[data-agent-app-id="' + task.app.id + '"]')).toHaveAttribute(
+		'sandbox',
+		'allow-scripts allow-forms',
+	);
 	await openAgentConversations(page);
 	const threads = hub.locator('#agent-thread-sidebar');
 	let after: string | null = null;
@@ -122,13 +139,19 @@ export async function openNativeTask(task: NativeTask) {
 	return hub;
 }
 
-type NativeCommandReceipt = { command: AgentWorkspaceRequest; result: AgentWorkspaceResult };
+type NativeCommandReceipt = {
+	command: AgentWorkspaceRequest;
+	result: AgentWorkspaceResult;
+	authorization?: AgentApprovalView;
+};
 
 type NativeCommandCapture = {
 	appId: string;
+	appVersion: number;
 	method: AgentWorkspaceInput['method'];
 	receipt?: NativeCommandReceipt;
 	claimed: boolean;
+	dispatches: number;
 };
 
 type NativeCommandRouter = { active?: NativeCommandCapture; ready: Promise<void> };
@@ -146,28 +169,39 @@ async function getNativeCommandRouter(page: Page): Promise<NativeCommandRouter> 
 	const router: NativeCommandRouter = { ready: Promise.resolve() };
 	nativeCommandRouters.set(page, router);
 	router.ready = page
-		.route('**/agent/apps/*/workspace', async (route) => {
+		.route('**/agent/plugins/installations/*/frontend/rpc', async (route) => {
 			const request = route.request();
 			const active = router.active;
 			if (
 				!active ||
-				active.claimed ||
 				request.method() !== 'POST' ||
-				!request.url().endsWith(`/agent/apps/${active.appId}/workspace`)
+				!request.url().endsWith(`/agent/plugins/installations/${active.appId}/frontend/rpc`)
 			) {
 				await route.fallback();
 				return;
 			}
-			const command = readAgentWorkspaceRequest(request.postDataJSON());
-			if (command.request.method !== active.method) {
+			const rpc = readAgentPluginFrontendRpc(request.postDataJSON());
+			if (rpc.envelope.request.method !== active.method) {
 				await route.fallback();
 				return;
 			}
+			active.dispatches += 1;
+			if (active.claimed) {
+				await route.fallback();
+				return;
+			}
+			const command = readAgentWorkspaceRequest({ appVersion: active.appVersion, request: rpc.envelope.request });
 			active.claimed = true;
 			const upstream = await route.fetch({ maxRetries: 0 });
 			expect(upstream.status()).toBe(200);
-			const response = readAgentWorkspaceResponse(await upstream.json(), active.appId, command);
-			active.receipt = { command, result: response.result };
+			const response = readAgentPluginRpcResponse(await upstream.json(), rpc.envelope);
+			if (!response.ok) throw new Error('Expected successful original Agent RPC receipt');
+			const workspace = readAgentWorkspaceResponse(
+				{ appId: active.appId, appVersion: active.appVersion, result: response.result },
+				active.appId,
+				command,
+			);
+			active.receipt = { command, result: workspace.result };
 			await route.fulfill({ response: upstream });
 		})
 		.then(() => undefined);
@@ -183,29 +217,90 @@ export async function captureNativeCommand(
 ): Promise<NativeCommandReceipt> {
 	const router = await getNativeCommandRouter(task.page);
 	if (router.active) throw new Error('An Agent command capture is already active on this Page');
-	const active: NativeCommandCapture = { appId: task.app.id, method, claimed: false };
+	const active: NativeCommandCapture = {
+		appId: task.app.id,
+		appVersion: task.app.version,
+		method,
+		claimed: false,
+		dispatches: 0,
+	};
 	router.active = active;
+	const approvalResponse =
+		method === 'agent.approvals.resolve'
+			? task.page.waitForResponse((response) => {
+					const path = new URL(response.url()).pathname;
+					return (
+						response.request().method() === 'GET' &&
+						response.frame() === task.page.mainFrame() &&
+						path.startsWith('/api/v1/apps/' + task.app.id + '/approvals/') &&
+						path.split('/').length === 7
+					);
+				})
+			: undefined;
+	let authorization: AgentApprovalView | undefined;
 	const waiting = task.page.waitForResponse((response) => {
 		if (
-			!response.url().endsWith(`/agent/apps/${task.app.id}/workspace`) ||
+			!response.url().endsWith(`/agent/plugins/installations/${task.app.id}/frontend/rpc`) ||
 			response.request().method() !== 'POST'
 		) {
 			return false;
 		}
-		return readAgentWorkspaceRequest(response.request().postDataJSON()).request.method === method;
+		return readAgentPluginFrontendRpc(response.request().postDataJSON()).envelope.request.method === method;
 	});
 	try {
-		const [, response] = await Promise.all([action(), waiting]);
+		const [, response] = await Promise.all([
+			Promise.all([action(), approvalResponse]).then(async ([, response]) => {
+				if (method !== 'agent.approvals.resolve') return;
+				if (!response) throw new Error('Missing original Host approval pre-read');
+				expect(response.status()).toBe(200);
+				authorization = readAgentApprovalView(await response.json());
+				expect(new URL(response.url()).pathname).toBe(
+					'/api/v1/apps/' + task.app.id + '/approvals/' + authorization.id,
+				);
+				expect(authorization.appId).toBe(task.app.id);
+				expect(authorization.status).toBe('requested');
+				const confirmation = task.page.getByRole('dialog', {
+					name: 'Operation requires approval',
+					exact: true,
+				});
+				await expect(confirmation).toBeVisible();
+				const preview = toolCommandPreview(authorization.summary);
+				if (preview) await expect(confirmation).toContainText(preview.text);
+				await expect(confirmation.locator('[data-dialog-details]')).toContainText(
+					toolDisplayName({ kind: 'host', operation: authorization.operationName }),
+				);
+
+				await expect(confirmation.locator('[data-dialog-details]')).toContainText(authorization.operationHash);
+				const targets = toolSummaryTargetIds(authorization.summary);
+				if (!targets.length && authorization.targetId !== null) targets.push(authorization.targetId);
+				for (const target of targets)
+					await expect(confirmation.locator('[data-dialog-details]')).toContainText(String(target));
+				if (!targets.length) await expect(confirmation.locator('[data-dialog-details]')).toContainText('—');
+				// The original resolve must remain undispatched until the trusted parent confirmation.
+				expect(active.dispatches).toBe(0);
+				await confirmation.getByRole('button', { name: /^(Approve and run|Reject once)$/ }).click();
+			}),
+			waiting,
+		]);
 		expect(response.status()).toBe(200);
 		if (!active.receipt) throw new Error('Original Agent response was not captured');
-		return active.receipt;
+		expect(active.dispatches).toBe(1);
+		if (method === 'agent.approvals.resolve') {
+			const command = active.receipt.command.request;
+			if (!authorization || command.method !== 'agent.approvals.resolve')
+				throw new Error('Missing original trusted approval authorization');
+			expect(command.params.approvalId).toBe(authorization.id);
+			expect(command.params.input.expectedVersion).toBe(authorization.version);
+			expect(command.params.input.operationHash).toBe(authorization.operationHash);
+		}
+		return { ...active.receipt, ...(authorization ? { authorization } : {}) };
 	} finally {
 		router.active = undefined;
 	}
 }
 
 export async function openNativeTaskPanel(page: Page): Promise<void> {
-	const toggle = page.getByRole('button', { name: 'Show or hide task panel', exact: true });
+	const toggle = agentChatSurface(page).getByRole('button', { name: 'Show or hide task panel', exact: true });
 	await expect(toggle).toBeVisible();
 	if ((await toggle.getAttribute('aria-expanded')) !== 'true') {
 		await toggle.click();
@@ -218,13 +313,13 @@ export async function startNativeTask(
 	connectionIds: number[] = [],
 	followUp = false,
 ) {
-	const hub = task.page.getByRole('dialog', { name: 'Agent', exact: true });
+	const hub = agentChatSurface(task.page, task.app.id);
 	const panel = hub.getByRole('complementary', { name: 'Tasks', exact: true });
 	if (await panel.isVisible()) {
 		await panel.getByRole('button', { name: 'Close', exact: true }).click();
 	}
 	await hub.getByRole('button', { name: 'Select SSH targets', exact: true }).click();
-	const targets = task.page
+	const targets = hub
 		.locator('fieldset')
 		.filter({ has: task.page.locator('legend', { hasText: 'Select SSH targets' }) });
 	await expect(targets).toBeVisible();
@@ -273,9 +368,10 @@ export async function finishNativeTask(task: NativeTask, runId: string, approved
 			async () => {
 				const approvals = await listNativeApprovalHistory(task, runId);
 				for (const approval of approvals.filter((item) => item.status === 'requested')) {
-					expect(approvedTools, `Unexpected approval: ${approval.inspection.toolName}`).toContain(
-						approval.inspection.toolName,
-					);
+					expect(
+						approvedTools.some((name) => hasApprovalIdentity(approval, name)),
+						`Unexpected approval: ${approval.operationName}`,
+					).toBe(true);
 					await requestAgentWorkspace(task.request, task.app, {
 						method: 'agent.approvals.resolve',
 						params: {
@@ -296,7 +392,7 @@ export async function finishNativeTask(task: NativeTask, runId: string, approved
 		.toMatch(/^(completed|failed|unknown|cancelled)$/);
 	const run = await readNativeRun(task, runId);
 	const entries: AgentThreadEntry[] = [];
-	let after: AgentThreadEntryCursor = { runSequence: 0, stepIndex: 0, eventSequence: 0, textOffset: 0 };
+	let after: AgentThreadEntryCursor = { runSequence: 0, messageOrdinal: 0, chunkIndex: 0, textOffset: 0 };
 	for (let page = 0; page < 128; page++) {
 		const history = await requestAgentWorkspace(task.request, task.app, {
 			method: 'agent.threads.entries',
@@ -328,7 +424,7 @@ export async function waitNativeApproval(task: NativeTask, runId: string, toolNa
 	await expect
 		.poll(async () => {
 			const result = await listNativeApprovalHistory(task, runId);
-			found = result.find((item) => item.status === 'requested' && item.inspection.toolName === toolName);
+			found = result.find((item) => item.status === 'requested' && hasApprovalIdentity(item, toolName));
 			return !!found;
 		})
 		.toBe(true);

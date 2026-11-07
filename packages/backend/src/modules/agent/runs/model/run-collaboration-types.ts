@@ -29,6 +29,7 @@ export type CollaborationInput =
 			action: 'delegate';
 			profile: AgentChildProfile;
 			objective: string;
+			inputJson: string;
 			targets: number[];
 
 			dependencies: string[];
@@ -71,6 +72,7 @@ export interface DelegateCommand {
 	id: string;
 	requestHash: string;
 	objective: string;
+	inputJson: string;
 	targets: number[];
 	profile: AgentChildProfile;
 	tools: string[];
@@ -90,7 +92,7 @@ export interface CollaborationAuthority {
 
 export interface ChildCreation {
 	participant: Participant;
-	providerId: string;
+	inputJson: string;
 	prompt: string;
 	requestHash: string;
 	version: number;
@@ -122,4 +124,45 @@ export interface MessageMetadataPage {
 export interface CollaborationWatch {
 	changed: Promise<void>;
 	close(): void;
+}
+
+export interface CollaborationChildView {
+	id: string;
+	parentId: string | null;
+	status: AgentRunStatus;
+	profile: AgentChildProfile;
+	output: string | null;
+	outputBytes: number;
+	outputTruncated: boolean;
+	maxRequests: number;
+	deadline: number;
+}
+
+export type CollaborationResult =
+	| { operation: 'collaboration.delegate'; value: CollaborationChildView }
+	| { operation: 'collaboration.list'; value: { children: CollaborationChildView[]; nextCursor: string | null } }
+	| { operation: 'collaboration.join'; value: { children: CollaborationChildView[]; ready: boolean } }
+	| { operation: 'collaboration.cancel'; value: { children: CollaborationChildView[] } }
+	| {
+			operation: 'collaboration.readOutput';
+			value: {
+				childId: string;
+				sha256: string;
+				originalBytes: number;
+				offset: number;
+				nextOffset: number | null;
+				text: string;
+			};
+	  }
+	| { operation: 'collaboration.sendMessage'; value: { sequence: number } }
+	| { operation: 'collaboration.readMessages'; value: CollaborationPage }
+	| { operation: 'collaboration.consumeMessages'; value: { consumedThrough: number } }
+	| { operation: 'collaboration.readFact' | 'collaboration.writeFact'; value: { fact: CollaborationFact | null } };
+
+export interface ChildOutputPage {
+	sha256: string;
+	originalBytes: number;
+	offset: number;
+	nextOffset: number | null;
+	text: string;
 }

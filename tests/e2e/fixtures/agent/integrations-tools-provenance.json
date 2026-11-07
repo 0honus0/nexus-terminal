@@ -1,0 +1,52 @@
+{
+  "packageId": "nexus.tools.integrations",
+  "sourceRoot": "nexus-agent-plugins",
+  "baselineCommit": "e19e7049d81b3aa0d7ec533dce24ce4a726668dc",
+  "sourceWorktree": {
+    "dirty": false,
+    "releaseTag": "v2.0.0",
+    "note": "Official GitHub Actions signed SDK4 release archive; copied verbatim."
+  },
+  "sourceFiles": [
+    {
+      "path": "plugins/nexus.tools.integrations/backend/index.mjs",
+      "sha256": "a919b7ff504cd239211dda639c60b757c8226d371415e8c8f8569c112aceef52",
+      "sizeBytes": 349650
+    },
+    {
+      "path": "plugins/nexus.tools.integrations/files.json",
+      "sha256": "d91d00fda15ed4ef0c24316e507182822b8a81dbcb3b87be925b05d989895979",
+      "sizeBytes": 296
+    },
+    {
+      "path": "plugins/nexus.tools.integrations/manifest.json",
+      "sha256": "ad7298a138bbc3a20b1059f317912d2b3057a7a891bca3d547d401ee27585fb8",
+      "sizeBytes": 775
+    },
+    {
+      "path": "plugins/nexus.tools.integrations/signature.ed25519",
+      "sha256": "309364a8fa4ca470618dbbf8863accf524fe7194bb21d62bac710be9c5084045",
+      "sizeBytes": 64
+    }
+  ],
+  "sourceFilesSha256": "abc0e63079bda96152bac4b68d056ef355846575453692162f18129996a50242",
+  "upstreamSignedPackage": {
+    "version": "2.0.0",
+    "compatibility": {
+      "host": {
+        "minVersion": "1.1.0",
+        "maxVersion": "1.1.0"
+      },
+      "backendSdk": 4,
+      "frontendSdk": null
+    },
+    "publisher": {
+      "keyId": "ed25519:617ec64b03cd6ed1a1ddf373e3a47f38666cdcd27753d674e136a4d0a359a1a0",
+      "label": "Nexus first-party plugins",
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAPw+WXiJPcxqiKjxGCRcm3fWwy+JByAKTKX+iE5pKD/E=\n-----END PUBLIC KEY-----\n"
+    },
+    "publisherKeyId": "ed25519:617ec64b03cd6ed1a1ddf373e3a47f38666cdcd27753d674e136a4d0a359a1a0",
+    "sha256": "05f88bdaf7601daed309e215cde680a018fca9d9572535f8aca8060c3d8803f1",
+    "sizeBytes": 358400
+  }
+}

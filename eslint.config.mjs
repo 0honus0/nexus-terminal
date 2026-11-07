@@ -172,7 +172,13 @@ const functionSpacingPlugin = {
 export default [
 	{
 		name: 'nexus/ignores',
-		ignores: ['**/dist/**', '**/node_modules/**', '**/data/**'],
+		ignores: [
+			'**/dist/**',
+			'**/node_modules/**',
+			'**/data/**',
+			// Preserve independently built plugin bytes; the fixture verifies their pinned hashes.
+			'tests/e2e/fixtures/agent/plugin-source/**',
+		],
 	},
 	...vue.configs['flat/essential'],
 	{

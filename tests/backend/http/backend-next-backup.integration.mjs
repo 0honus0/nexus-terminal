@@ -190,6 +190,14 @@ await test(
 				const downloaded = await source.api('GET', artifactPath() + '/content');
 				expectStatus(downloaded, 200);
 				assert.deepEqual(downloaded.bytes, content);
+				const app = expectStatus(await source.api('GET', '/api/v1/agent/apps/' + source.appId), 200);
+				expectStatus(
+					await source.api('PATCH', '/api/v1/agent/apps/' + source.appId, {
+						expectedVersion: app.version,
+						enabled: false,
+					}),
+					200,
+				);
 				const exported = await source.api('POST', '/api/v1/settings/backup/export', {
 					password: sourcePassword,
 				});
@@ -235,10 +243,10 @@ await test(
 				async () => {
 					const restored = expectStatus(await restore(archive, sourcePassword), 200);
 					// Includes remote desktop trust and the durable notification pending queue.
-					assert.equal(restored.restoredTables, 90);
+					assert.equal(restored.restoredTables, 123);
 					assert.ok(restored.restoredRows > 0);
 					// The signed source plugin package and the uploaded artifact are both restored.
-					assert.equal(restored.restoredFiles, 2);
+					assert.equal(restored.restoredFiles, 7);
 					assert.equal(typeof restored.cleanupPending, 'boolean');
 					assert.deepEqual(expectStatus(await api('GET', '/api/v1/quick-commands'), 200).entries, []);
 					assert.equal(expectStatus(await api('GET', '/api/v1/auth/status'), 200).isAuthenticated, true);
@@ -280,6 +288,14 @@ await test(
 					const provider = providers[0];
 					assert.equal(provider.hasCredential, true);
 					assert.equal(JSON.stringify(provider).includes('isolated-secret'), false);
+					const app = expectStatus(await api('GET', '/api/v1/agent/apps/' + source.appId), 200);
+					expectStatus(
+						await api('PATCH', '/api/v1/agent/apps/' + source.appId, {
+							expectedVersion: app.version,
+							enabled: true,
+						}),
+						200,
+					);
 					const prompt = source.program('backup restored model', () => ({}));
 					const base = '/api/v1/agent/apps/' + source.appId;
 					const thread = expectStatus(await api('POST', base + '/threads', { title: 'restored model' }), 201);
@@ -291,11 +307,15 @@ await test(
 								prompt,
 								approvalMode: 'ask',
 								connectionIds: [source.connectionId],
-								model: {
-									providerId: provider.id,
-									modelId: 'fixture',
-									configurationVersion: provider.version,
-								},
+								inputJson: JSON.stringify({
+									model: {
+										providerId: provider.id,
+										modelId: 'fixture',
+										configurationVersion: provider.version,
+										reasoningEffort: null,
+									},
+									artifacts: [],
+								}),
 							},
 							{ 'Idempotency-Key': randomUUID() },
 						),

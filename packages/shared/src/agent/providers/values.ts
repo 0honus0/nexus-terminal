@@ -1,5 +1,3 @@
-export const AGENT_PROVIDER_MODEL_LIMIT = 128;
-
 export const AGENT_PROVIDER_MAX_BODY_BYTES = 128 * 1024;
 
 export const AGENT_PROVIDER_MAX_NAME_BYTES = 128;
@@ -9,8 +7,6 @@ export const AGENT_PROVIDER_MAX_MODEL_ID_BYTES = 512;
 export const AGENT_PROVIDER_MAX_SECRET_BYTES = 8192;
 
 export const AGENT_PROVIDER_MAX_URL_BYTES = 2048;
-
-export const AGENT_PROVIDER_DISCOVERY_LIMIT = 1000;
 
 export const AGENT_REASONING_EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
 

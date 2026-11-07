@@ -1,6 +1,9 @@
 import type { AgentCapability } from '@nexus-terminal/shared/agent/governance/values';
 
 export interface StoredDefinition {
+	userId: number;
+	sourcePackageId: string;
+	/** Immutable internal execution composition identity. */
 	id: string;
 	version: string;
 	contentHash: string;
@@ -8,11 +11,21 @@ export interface StoredDefinition {
 	capabilities: AgentCapability[];
 }
 
+/** Signed source App package metadata for the public package catalog. */
+export interface StoredAppPackageDeclaration {
+	sourcePackageId: string;
+	version: string;
+	displayName: string;
+	capabilities: AgentCapability[];
+}
+
 export interface AppRecord {
+	sourcePackageId: string;
 	definitionInstalled: boolean;
 	id: string;
 	userId: number;
 	name: string;
+	/** Internal declaration identity; sourcePackageId is projected to clients separately. */
 	definitionId: string;
 	definitionVersion: string;
 	capabilities: AgentCapability[];
@@ -47,9 +60,9 @@ export interface ThreadRecord {
 }
 
 export interface AgentScopeStorage {
-	listDeclarations(userId: number, limit: number): Promise<StoredDefinition[]>;
+	listDeclarations(userId: number): Promise<StoredAppPackageDeclaration[]>;
 	getApp(userId: number, id: string): Promise<AppRecord | null>;
-	listApps(userId: number, limit: number): Promise<AppRecord[]>;
+	listApps(userId: number): Promise<AppRecord[]>;
 	setEnabled(
 		userId: number,
 		id: string,

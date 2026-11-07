@@ -19,7 +19,6 @@ import type {
 
 const LIMIT_MODELS = 1024 * 1024;
 const LIMIT_PROBE = 512 * 1024;
-const MAX_MODELS = 1000;
 
 const isNonemptyText = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0;
 
@@ -281,7 +280,7 @@ export class OpenAiCompatibleAdapter implements ModelNetworkPort {
 			// Read exactly one bounded response; SDK auto-pagination is deliberately not consumed.
 			const page: unknown = await request.client.models.list({ signal: request.requestSignal });
 			const raw = record(page);
-			if (!raw || !Array.isArray(raw.data) || raw.data.length > MAX_MODELS) {
+			if (!raw || !Array.isArray(raw.data)) {
 				throw new ModelNetworkFailure('response_invalid');
 			}
 			const models = new Map<string, EndpointModel>();

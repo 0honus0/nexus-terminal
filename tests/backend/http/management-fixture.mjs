@@ -29,7 +29,8 @@ export async function openManagement(directory, options = {}, transport = { orig
 
 	const wireHeaders = (headers) => ({ Host: new URL(origin).host, Origin: origin, ...headers });
 
-	const api = (method, path, input, headers) => send(address, cookie, method, path, input, wireHeaders(headers));
+	const api = (method, path, input, headers, options) =>
+		send(address, cookie, method, path, input, wireHeaders(headers), options);
 
 	async function login() {
 		const result = await api('POST', '/api/v1/auth/login', { username: 'admin', password, rememberMe: false });

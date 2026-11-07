@@ -1,14 +1,6 @@
 import type { StoredPluginManifest } from './plugin-storage.js';
 
-export interface StoredPluginAgentContribution {
-	role: string;
-	toolNames: string[] | null;
-	beforeStep: boolean;
-	tools: { name: string; description: string }[];
-}
-
 export interface DecodedPluginPackage {
-	agentContribution: StoredPluginAgentContribution | null;
 	manifest: StoredPluginManifest;
 	publisherKeyId: string;
 	signatureValid: boolean;

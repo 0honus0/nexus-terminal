@@ -1,3 +1,4 @@
+import { agentChatSurface } from '../fixtures/agent/workbench';
 import { randomUUID } from 'node:crypto';
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
@@ -82,7 +83,15 @@ export async function prepareAgentRun(
 			prompt: 'Reply OK without using tools.',
 			approvalMode: 'ask',
 			connectionIds: [],
-			model: { providerId: provider.id, modelId: 'e2e-model', configurationVersion: provider.version },
+			inputJson: JSON.stringify({
+				model: {
+					providerId: provider.id,
+					modelId: 'e2e-model',
+					configurationVersion: provider.version,
+					reasoningEffort: null,
+				},
+				artifacts: [],
+			}),
 		},
 	};
 }
@@ -98,10 +107,15 @@ export async function createTestAgentApp(
 	});
 	expect(response.ok).toBe(true);
 	const created: unknown = await response.json();
-	if (typeof created !== 'object' || created === null || !('appId' in created) || typeof created.appId !== 'string') {
+	if (
+		typeof created !== 'object' ||
+		created === null ||
+		!('packageId' in created) ||
+		typeof created.packageId !== 'string'
+	) {
 		throw new Error('Invalid native plugin fixture identity');
 	}
-	const installed = await installTestPlugin(request, created.appId);
+	const installed = await installTestPlugin(request, created.packageId);
 	const app = await requestAgentJson(
 		request,
 		{ method: 'GET', path: '/apps/' + installed.appId },
@@ -155,9 +169,9 @@ export async function openAgentHub(page: Page): Promise<void> {
 }
 
 export async function selectAgentModel(page: Page, provider: AgentProviderView, modelId = 'e2e-model'): Promise<void> {
-	const hub = page.getByRole('dialog', { name: 'Agent', exact: true });
+	const hub = agentChatSurface(page);
 	const trigger = hub.getByRole('button', { name: 'Model for this execution', exact: true });
-	const models = page.getByRole('listbox', { name: 'Model for this execution', exact: true });
+	const models = hub.getByRole('listbox', { name: 'Model for this execution', exact: true });
 	await trigger.click();
 	const option = models
 		.getByRole('option')
@@ -214,7 +228,7 @@ export async function openAgentConversations(page: Page): Promise<void> {
 	await page.evaluate(
 		() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
 	);
-	const toggle = page.locator('.agent-hub-window').getByRole('button', { name: 'Open conversations', exact: true });
+	const toggle = agentChatSurface(page).getByRole('button', { name: 'Open conversations', exact: true });
 	await expect(toggle).toHaveAttribute('aria-expanded', /^(true|false)$/);
 	if ((await toggle.getAttribute('aria-expanded')) === 'false') {
 		await toggle.click();

@@ -1,11 +1,12 @@
 import type { SqlRow } from '../../../../../platform/storage/sqlite/worker-types.js';
 import { SnapshotFailure } from '../../../../../platform/storage/sqlite/snapshot-types.js';
-import { decodeRun } from '../../../runs/adapters/sqlite/run-sql.js';
+import { decodeRun } from '../../../runs/adapters/sqlite/run-row.js';
 import type { AgentRunStatus, AgentRunEventType } from '@nexus-terminal/shared/agent/runs/values';
 
 const currentEvents: Readonly<Record<AgentRunStatus, AgentRunEventType>> = {
 	pending: 'run.created',
 	running: 'run.started',
+	suspended: 'run.suspended',
 	completed: 'run.completed',
 	failed: 'run.failed',
 	unknown: 'run.unknown',
@@ -48,7 +49,8 @@ export function validateSnapshotHistory(rows: ReadonlyMap<string, readonly SqlRo
 			events.length !== run.version ||
 			events[0]?.event_type !== 'run.created' ||
 			events[0]?.created_at !== run.created_at ||
-			events.at(-1)?.event_type !== terminal ||
+			(events.at(-1)?.event_type !== terminal &&
+				!(run.status === 'pending' && events.at(-1)?.event_type === 'run.resumed')) ||
 			events.at(-1)?.created_at !== run.updated_at ||
 			events.some((event, index) => event.sequence !== index + 1 || event.run_version !== event.sequence)
 		) {

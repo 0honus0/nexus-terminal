@@ -158,10 +158,22 @@ export class SftpFileResource implements FileResource {
 					entries.pop();
 				}
 			}
-			if (Buffer.byteLength(JSON.stringify(entries)) > request.maxMetadataBytes) {
-				throw new RemoteFileFailure('limit_exceeded');
+			// Byte capacity bounds a page, never the complete directory. The caller
+			// continues after the last returned name even when a page has fewer rows.
+			let bytes = 2;
+			let count = 0;
+			for (const entry of entries) {
+				const cost = Buffer.byteLength(JSON.stringify(entry)) + (count === 0 ? 0 : 1);
+				if (bytes + cost > request.maxMetadataBytes) {
+					if (count === 0) {
+						throw new RemoteFileFailure('limit_exceeded');
+					}
+					break;
+				}
+				bytes += cost;
+				count++;
 			}
-			return entries;
+			return entries.slice(0, count);
 		}, request.signal);
 	}
 

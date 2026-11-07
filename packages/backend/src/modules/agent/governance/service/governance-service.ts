@@ -1,37 +1,20 @@
-import type { ApprovalPage, ToolCatalogState } from '../model/governance-types.js';
+import type { ToolCatalogState } from '../model/governance-types.js';
 import type { ExecutionService } from '../../execution/service/execution-service.js';
-import type { OperationsEvents } from '../../../operations/public.js';
+
 import type { RevokeRuns } from '../../runs/model/run-types.js';
-import type { ToolOperation } from '../../runs/model/run-tool-types.js';
-import type { ConsumeApproval } from '../model/governance-types.js';
-import type { ToolAuthorityIdentity, ToolAuthorityTask, ToolAuthority } from '../model/governance-types.js';
-import { mayReadTool, mayUseTool, mayUseConsumedApproval } from '../governance-rules.js';
-import { TOOL_RESULT_MAX_BYTES } from '../../runs/run-tool-limits.js';
+
 import {
-	AGENT_DENYLIST_MAX_TARGETS,
 	AGENT_DENYLIST_MAX_REASON_BYTES,
 	AGENT_DENYLIST_MAX_REASON_CODE_POINTS,
 } from '@nexus-terminal/shared/agent/governance/values';
 import type { DenylistCommand, TargetDenylist, DenylistTarget, DenylistMutation } from '../model/governance-types.js';
-import {
-	AGENT_TARGET_CAPABILITIES,
-	AGENT_CAPABILITIES,
-	AGENT_APPROVAL_TTL_SECONDS,
-	AGENT_APPROVAL_MAX_FEEDBACK_BYTES,
-	AGENT_APPROVAL_KINDS,
-	AGENT_APPROVAL_OPERATION_HASH_PATTERN,
-	AGENT_APPROVAL_DECISIONS,
-} from '@nexus-terminal/shared/agent/governance/values';
-import { createHash } from 'node:crypto';
-import { validateAgentId, validateUserId, validateOperationKey } from '../../agent-validation.js';
+import { AGENT_TARGET_CAPABILITIES, AGENT_CAPABILITIES } from '@nexus-terminal/shared/agent/governance/values';
+
+import { validateAgentId, validateUserId } from '../../agent-validation.js';
 import {
 	capabilityDefinitions,
 	authorizationFact,
 	validOverrides,
-	mayResolve,
-	mayConsumeApproval,
-	approvalTransition,
-	mayRequestApproval,
 	grantChangeDecision,
 	executionChangeDecision,
 	mayReplaceGrants,
@@ -39,14 +22,10 @@ import {
 import type { AgentCapability } from '@nexus-terminal/shared/agent/governance/values';
 import type {
 	GrantInput,
-	ApprovalRequest,
-	ApprovalOperation,
-	ResolveApproval,
 	GrantState,
 	PolicyOverrides,
 	ExecutionPolicy,
 	ExecutionPolicyFacts,
-	Approval,
 	GrantCatalogState,
 } from '../model/governance-types.js';
 import type { GovernanceModel } from '../model/governance-model.js';
@@ -56,46 +35,6 @@ import { AgentFailure, isAgentDrainFailure } from '../../agent-failure.js';
  * No unowned timer: expiry is committed at each access or decision in the original transaction.
  */
 export class GovernanceService {
-	/** Subscribe before reading authority so a concurrent decision cannot be lost. */
-	watch(userId: number, appId: string): { wait(signal: AbortSignal): Promise<void>; close(): void } {
-		let changed = false;
-		let notify: (() => void) | null = null;
-		const stop = this.model.subscribe(userId, appId, () => {
-			changed = true;
-			notify?.();
-		});
-		return {
-			wait: async (signal) => {
-				if (changed || signal.aborted) {
-					changed = false;
-					return;
-				}
-				await new Promise<void>((resolve) => {
-					const done = () => {
-						clearTimeout(timer);
-						signal.removeEventListener('abort', done);
-						notify = null;
-						changed = false;
-						resolve();
-					};
-
-					// Preserve the existing cross-process/expiry check interval.
-					const timer = setTimeout(done, 1000);
-					notify = done;
-					signal.addEventListener('abort', done, { once: true });
-					if (changed || signal.aborted) {
-						done();
-					}
-				});
-			},
-
-			close: () => {
-				stop();
-				notify?.();
-			},
-		};
-	}
-
 	private readonly pending = new Set<Promise<unknown>>();
 	private closing = false;
 	private closePromise: Promise<void> | null = null;
@@ -105,33 +44,8 @@ export class GovernanceService {
 	constructor(
 		private readonly model: GovernanceModel,
 		private readonly revoke: RevokeRuns,
-		private readonly events: OperationsEvents,
 		private readonly settings: ExecutionService,
 	) {}
-
-	/** Current tool authority. Only a read-only operation can dispatch without approval. */
-	toolAuthority(input: ToolAuthorityIdentity, task: ToolAuthorityTask): Promise<ToolAuthority | null> {
-		validateScope(input.userId, input.appId);
-		validateAgentId(input.runId);
-		validateAgentId(input.id);
-		if (
-			!Number.isSafeInteger(input.expectedRevision) ||
-			input.expectedRevision < 1 ||
-			!AGENT_APPROVAL_OPERATION_HASH_PATTERN.test(input.operationHash) ||
-			(task.kind !== 'dispatch' && (!Number.isSafeInteger(task.policyRevision) || task.policyRevision < 0)) ||
-			(task.kind === 'complete' && Buffer.byteLength(task.resultText, 'utf8') > TOOL_RESULT_MAX_BYTES)
-		) {
-			throw new AgentFailure('invalid_input');
-		}
-		return this.admitted(() =>
-			this.model.toolAuthority(
-				input,
-				task,
-				task.kind === 'dispatch' ? mayReadTool : mayUseTool,
-				mayUseConsumedApproval,
-			),
-		);
-	}
 
 	private async admitted<T>(action: () => Promise<T>, inheritedCleanup = false): Promise<T> {
 		// Cancellation accepted before quiesce must still finish its post-commit revoke.
@@ -175,6 +89,27 @@ export class GovernanceService {
 				),
 			};
 		});
+	}
+
+	/** A snapshot for actual capability admission, never supplied by a plugin. */
+	assertInstanceCapabilities(userId: number, appId: string, capabilities: readonly AgentCapability[]): Promise<void> {
+		validateScope(userId, appId);
+		return this.admitted(async () => {
+			const policy = await this.model.grants(userId, appId);
+			if (!policy || capabilities.some((capability) => !authorizationFact(policy, capability, null).allowed)) {
+				throw new AgentFailure('forbidden');
+			}
+		});
+	}
+
+	operationAuthority(
+		userId: number,
+		appId: string,
+		runId: string,
+	): Promise<import('../model/governance-types.js').ToolCatalogFacts | null> {
+		validateScope(userId, appId);
+		validateAgentId(runId);
+		return this.admitted(() => this.model.toolCatalog(userId, appId, runId));
 	}
 
 	grants(userId: number, appId: string): Promise<GrantCatalogState | null> {
@@ -253,144 +188,6 @@ export class GovernanceService {
 		);
 	}
 
-	approval(userId: number, appId: string, id: string): Promise<Approval | null> {
-		validateScope(userId, appId);
-		validateAgentId(id);
-		return this.admitted(() => this.model.approval(userId, appId, id, now, approvalTransition));
-	}
-
-	approvals(userId: number, appId: string, runId: string, after: string | null): Promise<ApprovalPage | null> {
-		validateScope(userId, appId);
-		validateAgentId(runId);
-		if (after !== null) {
-			validateAgentId(after);
-		}
-		return this.admitted(() => this.model.approvals(userId, appId, runId, after, now, approvalTransition));
-	}
-
-	async request(input: ApprovalRequest): Promise<Approval | null> {
-		validateUserId(input.userId);
-		for (const id of [input.appId, input.runId, input.toolCallId, input.id]) {
-			validateAgentId(id);
-		}
-		if (!AGENT_APPROVAL_KINDS.includes(input.kind)) {
-			throw new AgentFailure('invalid_input');
-		}
-		return this.admitted(async () => {
-			const saved = await this.model.request(
-				input,
-				(policy, status, operation, approvalMode) => {
-					if (
-						input.kind !==
-						(operation.inspection.toolName === 'acp_inner_permission' ? 'acp_permission' : 'tool')
-					) {
-						return null;
-					}
-					const connectionId = operation.inspection.targetConnectionId;
-					if (
-						!authorizationFact(policy, operation.capability, connectionId).allowed ||
-						!mayRequestApproval(status, operation.inspection.risk)
-					) {
-						return null;
-					}
-					return createRequestedApproval(input, operation, policy.revision, now(), approvalMode);
-				},
-				mayUseTool,
-			);
-			if (saved !== null && saved.status === 'requested') {
-				try {
-					await this.events.publish({
-						key: 'approval:' + saved.id,
-						event: 'AGENT_APPROVAL_REQUIRED',
-						userId: input.userId,
-						subjectId: saved.id,
-						sourceIp: null,
-						route: null,
-						statusCode: null,
-					});
-				} catch (cause) {
-					throw new AgentFailure('operation_unknown', { cause });
-				}
-			}
-			return saved;
-		});
-	}
-
-	resolve(input: ResolveApproval): Promise<Approval> {
-		validateUserId(input.userId);
-		for (const id of [input.appId, input.approvalId]) {
-			validateAgentId(id);
-		}
-		validateOperationKey(input.operationKey);
-		if (
-			!AGENT_APPROVAL_DECISIONS.includes(input.decision) ||
-			!Number.isSafeInteger(input.expectedVersion) ||
-			input.expectedVersion < 1 ||
-			!AGENT_APPROVAL_OPERATION_HASH_PATTERN.test(input.operationHash) ||
-			(input.feedback !== undefined &&
-				(!input.feedback.trim() ||
-					new TextEncoder().encode(input.feedback).length > AGENT_APPROVAL_MAX_FEEDBACK_BYTES))
-		) {
-			throw new AgentFailure('invalid_input');
-		}
-		const hash = createHash('sha256')
-			.update(
-				JSON.stringify({
-					appId: input.appId,
-					approvalId: input.approvalId,
-					decision: input.decision,
-					operationHash: input.operationHash,
-					expectedVersion: input.expectedVersion,
-					feedback: input.feedback ?? null,
-				}),
-			)
-			.digest('hex');
-		return this.admitted(() =>
-			this.model.resolve(
-				{
-					userId: input.userId,
-					appId: input.appId,
-					approvalId: input.approvalId,
-					decision: input.decision,
-					operationHash: input.operationHash,
-					expectedVersion: input.expectedVersion,
-					operationKey: input.operationKey,
-					feedback: input.feedback,
-				},
-				hash,
-				now,
-				approvalTransition,
-				(approval, policy, status, version, time) =>
-					authorizationFact(policy, approval.capability, approval.inspection.targetConnectionId).allowed &&
-					mayResolve(
-						approval,
-						policy.revision,
-						status,
-						version,
-						input.operationHash,
-						input.expectedVersion,
-						time,
-					),
-			),
-		);
-	}
-
-	/** Internal executor only: a successful commit grants precisely one dispatch intent. */
-	consume(input: ConsumeApproval): Promise<ToolOperation> {
-		validateScope(input.userId, input.appId);
-		validateAgentId(input.approvalId);
-		if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1) {
-			throw new AgentFailure('invalid_input');
-		}
-		return this.admitted(() => this.model.consume(input, Date.now, mayConsumeApproval, mayUseTool));
-	}
-
-	invalidate(userId: number, appId: string, runId: string): Promise<number> {
-		validateScope(userId, appId);
-		validateAgentId(runId);
-		return this.admitted(() => this.model.invalidate(userId, appId, runId, now, approvalTransition), true);
-	}
-
 	denylist(userId: number): Promise<TargetDenylist> {
 		validateUserId(userId);
 		return this.admitted(() => this.model.denylist());
@@ -401,7 +198,6 @@ export class GovernanceService {
 		if (
 			!Number.isSafeInteger(input.expectedRevision) ||
 			input.expectedRevision < 1 ||
-			input.connectionIds.length > AGENT_DENYLIST_MAX_TARGETS ||
 			input.connectionIds.some((id) => !Number.isSafeInteger(id) || id < 1) ||
 			typeof input.reason !== 'string' ||
 			!input.reason.trim() ||
@@ -506,8 +302,6 @@ export class GovernanceService {
 				maxRecallBytes: value.limits.maxRecallBytes,
 				maxSubagentMessages: value.limits.maxMessages,
 				maxSubagentMessageBytes: value.limits.maxMessageBytes,
-				contextCompactionMode: value.contextCompactionMode,
-				contextProfile: value.contextProfile,
 			},
 		};
 	}
@@ -534,42 +328,4 @@ function toGrantCatalog(state: GrantState | null): GrantCatalogState | null {
 					(definition) => state.app.declared && state.app.capabilities.includes(definition.id),
 				),
 			};
-}
-
-function createRequestedApproval(
-	input: ApprovalRequest,
-	operation: ApprovalOperation,
-	policyRevision: number,
-	requestedAt: number,
-	approvalMode: import('@nexus-terminal/shared/agent/runs/values').AgentApprovalMode,
-): Approval {
-	return {
-		capability: operation.capability,
-		targetVersion: operation.targetVersion,
-		id: input.id,
-		userId: input.userId,
-		appId: input.appId,
-		runId: input.runId,
-		toolCallId: input.toolCallId,
-		operationHash: operation.operationHash,
-		kind: input.kind,
-		status: approvalMode === 'full_access' ? 'approved' : 'requested',
-		policyRevision,
-		inputRevision: operation.operationRevision,
-		version: 1,
-		requestedAt: requestedAt,
-		expiresAt: requestedAt + AGENT_APPROVAL_TTL_SECONDS,
-		decidedAt: approvalMode === 'full_access' ? requestedAt : null,
-		decidedByUserId: approvalMode === 'full_access' ? input.userId : null,
-		consumedAt: null,
-		feedback: null,
-		inspection: {
-			toolName: operation.inspection.toolName,
-			toolVersion: operation.inspection.toolVersion,
-			risk: operation.inspection.risk,
-			mutation: operation.inspection.mutation,
-			targetConnectionId: operation.inspection.targetConnectionId,
-			summary: operation.inspection.summary,
-		},
-	};
 }

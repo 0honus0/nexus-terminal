@@ -6,6 +6,7 @@
 	import { onBeforeUnmount, ref } from 'vue';
 	import { UiButton, UiPopover } from '@/foundation/ui';
 	import type { UiAppearance } from '@/foundation/ui';
+	import type { ReferenceElement } from 'reka-ui';
 
 	const props = withDefaults(
 		defineProps<{
@@ -18,6 +19,7 @@
 			triggerSelected?: boolean;
 			triggerVariant?: 'default' | 'square';
 			disabled?: boolean;
+			anchor?: ReferenceElement;
 		}>(),
 		{
 			title: '',
@@ -48,6 +50,14 @@
 		emit('open-change', value);
 	};
 
+	function show(): void {
+		if (props.disabled || open.value) return;
+		open.value = true;
+		onOpenChange(true);
+	}
+
+	defineExpose({ open: show, close });
+
 	onBeforeUnmount(() => {
 		if (activePopoverCloser === close) activePopoverCloser = null;
 	});
@@ -59,6 +69,7 @@
 		:ariaLabel="props.ariaLabel"
 		:title="props.title"
 		:disabled="props.disabled"
+		:anchor="props.anchor"
 		placement="top"
 		align="center"
 		boundary-selector=".agent-hub-window"

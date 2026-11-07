@@ -6,11 +6,39 @@ import { randomUUID } from 'node:crypto';
 import { openPlugins } from './plugin-management-fixture.mjs';
 import { expectStatus, until } from '../remote/openssh-fixture.mjs';
 import { ModuleRuntimeFailure } from '../../../packages/backend/dist/platform/isolation/module-runtime.js';
+import { AgentFailure } from '../../../packages/backend/dist/modules/agent/agent-failure.js';
+import { PluginRuntimeService } from '../../../packages/backend/dist/modules/agent/plugins/service/plugin-runtime-service.js';
+import { pinnedExecutionFixture } from '../../support/pinned-plugin-package.mjs';
 
 const base = '/api/v1/agent/plugins/installations/';
-const backend = `let sdk;
-export async function activate(value) {
+const executionFixture = await pinnedExecutionFixture();
+const contributions = {
+	app: { execution: { kind: 'self', protocol: 1 }, toolNames: ['lifecycle_probe'], dependencies: [] },
+	tools: [
+		{
+			name: 'lifecycle_probe',
+			description: 'Record the first invocation of this isolated runtime instance.',
+			inputSchema: { type: 'object', properties: {}, required: [], additionalProperties: false },
+			executionProfile: 'general',
+			hostOperations: [],
+			childAccess: 'root-only',
+			discovery: { mode: 'initial', loader: false, keywords: [] },
+		},
+	],
+	ui: true,
+	skills: [],
+};
+const backend = `import policy from './nexus-policy.mjs';
+let sdk;
+let recorded = false;
+export default {
+ ...policy,
+ async activate(value) {
+ await policy.activate(value);
  sdk = value;
+ },
+ async agent() {
+ if (recorded) return { text: 'runtime-ready' };
  const previous = await sdk.request({ method: 'storage.get', params: { key: 'activations' } });
  if (!previous.ok) throw new Error('activation read failed');
  const saved = await sdk.request({ method: 'storage.put', params: {
@@ -18,16 +46,68 @@ export async function activate(value) {
   operationId: crypto.randomUUID(), valueJson: JSON.stringify((JSON.parse(previous.result.value?.valueJson ?? '0')) + 1)
  } });
  if (!saved.ok) throw new Error('activation write failed');
-}
-export function health() { return true; }
-export async function quiesce() {
+ recorded = true;
+ return { text: 'runtime-ready' };
+ },
+ async quiesce() {
+ policy.quiesce();
  try {
   await sdk.request({ method: 'storage.put', params: { key: 'late', expectedVersion: 0, operationId: crypto.randomUUID(), valueJson: 'true' } });
  } catch { return; }
  throw new Error('late request was accepted after quiesce');
-}
-export function dispose() {}
+ }
+};
 `;
+
+function runtimeOptions(module = backend) {
+	return { ...executionFixture, contributions, capabilities: ['plugin.invoke'], backend: module };
+}
+
+async function openRuntimeLifecycle(t) {
+	let runtime;
+	const reconcile = PluginRuntimeService.prototype.reconcile;
+	t.mock.method(PluginRuntimeService.prototype, 'reconcile', function (...args) {
+		runtime = this;
+		return reconcile.apply(this, args);
+	});
+	const fixture = await openPlugins(t);
+	return {
+		...fixture,
+
+		async invoke(plugin) {
+			assert.ok(runtime, 'Observe the actual runtime owner without replacing its implementation');
+			const binding = expectStatus(
+				await fixture.api('GET', '/api/v1/agent/plugins/apps/bindings'),
+				200,
+			).bindings.find((item) => item.appId === plugin.appId);
+			assert.ok(binding);
+			const result = await runtime.invokeAgent(
+				1,
+				plugin.appId,
+				binding.executionRevision,
+				{
+					kind: 'tool',
+					runId: randomUUID(),
+					stepIndex: 1,
+					operationId: randomUUID(),
+					name: 'lifecycle_probe',
+					argumentsJson: '{}',
+				},
+				new AbortController().signal,
+				15000,
+				plugin.installation.definitionId,
+				{
+					profile: 'general',
+					hostOperations: [],
+					target: null,
+
+					invokeOperation: async () => assert.fail('Lifecycle probe must not invoke a domain operation'),
+				},
+			);
+			assert.equal(result, 'runtime-ready');
+		},
+	};
+}
 
 async function childIdentity(f) {
 	const root = f.database + '.modules';
@@ -66,26 +146,30 @@ await test(
 	'B10 real runtime quiesce fences SDK writes and failed health releases original child',
 	{ timeout: 60000 },
 	async (t) => {
-		const f = await openPlugins(t);
-		const plugin = await f.install('lifecycle', { backend });
+		const f = await openRuntimeLifecycle(t);
+		const plugin = await f.install('lifecycle', runtimeOptions());
+		await f.invoke(plugin);
 		const owner = api(f, plugin);
 		let previous;
 		let child;
-		await t.test('active child has durable activation and acknowledgement is forbidden while bound', async () => {
-			previous = await owner.runtime();
-			child = await childIdentity(f);
-			assert.equal(previous.state, 'active');
-			assert.equal((await owner.data('activations')).valueJson, '1');
-			expectStatus(
-				await owner.ack({
-					expectedRevision: plugin.installation.revision,
-					instanceRevision: previous.revision,
-					instanceId: previous.instanceId,
-					confirmed: true,
-				}),
-				409,
-			);
-		});
+		await t.test(
+			'active child records its first invocation and acknowledgement is forbidden while bound',
+			async () => {
+				previous = await owner.runtime();
+				child = await childIdentity(f);
+				assert.equal(previous.state, 'active');
+				assert.equal((await owner.data('activations')).valueJson, '1');
+				expectStatus(
+					await owner.ack({
+						expectedRevision: plugin.installation.revision,
+						instanceRevision: previous.revision,
+						instanceId: previous.instanceId,
+						confirmed: true,
+					}),
+					409,
+				);
+			},
+		);
 		await t.test('disable rejects SDK call inside real quiesce and waits original process exit', async () => {
 			await plugin.enabled(false);
 			assert.equal((await owner.runtime()).state, 'closed');
@@ -94,6 +178,7 @@ await test(
 		});
 		await t.test('reenable creates new owner without late write and preserves original history', async () => {
 			await plugin.enabled(true);
+			await f.invoke(plugin);
 			assert.notEqual((await owner.runtime()).instanceId, previous.instanceId);
 			assert.equal((await owner.data('activations')).valueJson, '2');
 			assert.equal(await owner.data('late'), null);
@@ -105,16 +190,15 @@ await test(
 		});
 		await t.test('real health rejection closes constructor and leaves no materialized process', async () => {
 			const unhealthy = await f.install('unhealthy', {
-				backend: 'export function health() { return false; }',
+				...runtimeOptions(`import policy from './nexus-policy.mjs';
+export default { ...policy, health() { return false; } };`),
 				enabled: false,
 			});
 			const app = expectStatus(await f.api('GET', unhealthy.appPath), 200);
-			assert.equal(
-				expectStatus(
-					await f.api('PATCH', unhealthy.appPath, { expectedVersion: app.version, enabled: true }),
-					503,
-				).code,
-				'operation_unknown',
+			expectStatus(await f.api('PATCH', unhealthy.appPath, { expectedVersion: app.version, enabled: true }), 200);
+			await assert.rejects(
+				f.invoke(unhealthy),
+				(error) => error instanceof AgentFailure && error.code === 'provider_unavailable',
 			);
 			assert.equal((await api(f, unhealthy).runtime()).state, 'closed');
 			assert.deepEqual(await readdir(f.database + '.modules'), []);
@@ -122,6 +206,7 @@ await test(
 		});
 		await t.test('unhealthy plugin does not prevent another actual runtime from starting and closing', async () => {
 			await plugin.enabled(true);
+			await f.invoke(plugin);
 			assert.equal((await owner.data('activations')).valueJson, '3');
 			await plugin.enabled(false);
 			assert.equal(await owner.runtime().then((value) => value.state), 'closed');
@@ -133,8 +218,9 @@ await test(
 	'B10 killed runtime retains unknown until restart and explicit original-instance acknowledgement',
 	{ timeout: 60000 },
 	async (t) => {
-		const f = await openPlugins(t);
-		const plugin = await f.install('killed-runtime', { backend });
+		const f = await openRuntimeLifecycle(t);
+		const plugin = await f.install('killed-runtime', runtimeOptions());
+		await f.invoke(plugin);
 		const owner = api(f, plugin);
 		const original = await owner.runtime();
 		const identity = await childIdentity(f);
@@ -184,8 +270,11 @@ await test(
 			},
 		);
 		await t.test('wrong instance, revision or confirmation cannot clear unknown', async () => {
+			assert.equal(
+				expectStatus(await owner.ack({ ...acknowledgement, instanceId: randomUUID() }), 404).code,
+				'not_found',
+			);
 			for (const change of [
-				{ instanceId: randomUUID() },
 				{ instanceRevision: original.revision + 1 },
 				{ expectedRevision: plugin.installation.revision + 1 },
 			]) {
@@ -210,6 +299,7 @@ await test(
 			async () => {
 				await plugin.enabled(false);
 				await plugin.enabled(true);
+				await f.invoke(plugin);
 				const live = await owner.runtime();
 				assert.equal(live.state, 'active');
 				assert.notEqual(live.instanceId, original.instanceId);

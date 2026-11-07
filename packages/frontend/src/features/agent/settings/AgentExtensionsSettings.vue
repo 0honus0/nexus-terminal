@@ -3,14 +3,16 @@
 	import { useI18n } from 'vue-i18n';
 	import { UiInfoHint } from '@/foundation/ui';
 	import type { useAppManagement } from '../composables/use-app-management';
-	import type { usePluginManagement } from '../composables/use-plugin-management';
+	import type { usePluginManagement } from '../plugins/composables/use-plugin-management';
 	import AppManagementSettings from './AppManagementSettings.vue';
 
 	type ExtensionSection = 'apps' | 'integrations' | 'market' | 'budget';
 
 	const AppExecutionPolicySettings = defineAsyncComponent(() => import('./AppExecutionPolicySettings.vue'));
 	const AppIntegrationSettings = defineAsyncComponent(() => import('./AppIntegrationSettings.vue'));
-	const PluginManagementSettings = defineAsyncComponent(() => import('./PluginManagementSettings.vue'));
+	const PluginManagementSettings = defineAsyncComponent(
+		() => import('../plugins/components/PluginManagementSettings.vue'),
+	);
 
 	const props = defineProps<{
 		active: boolean;

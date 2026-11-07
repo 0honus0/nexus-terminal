@@ -46,7 +46,7 @@ build_local() {
     echo "==> Building $component locally"
     (
         cd "$ROOT_DIR"
-        pnpm --filter "@nexus-terminal/$component" build
+        pnpm run "build:$component"
     )
 }
 

@@ -34,7 +34,7 @@ export function useAgentTaskNotices(host: AgentHostState, directory: () => HostD
 		return new Map(
 			[...host.taskActivities].filter(([, activity]) => {
 				const app = activity ? apps.get(activity.appId) : undefined;
-				return activity !== null && app?.version === activity.appVersion && app.surface === 'agent';
+				return activity !== null && app?.version === activity.appVersion && app.surface === 'plugin';
 			}),
 		);
 	});

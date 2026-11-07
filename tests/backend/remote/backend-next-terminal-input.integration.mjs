@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { bindRequestCookies } from '../../../packages/backend/dist/platform/http/http-request.js';
 import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { randomUUID } from 'node:crypto';
@@ -101,7 +102,9 @@ async function fixture(t, bypassAfterFirst = false) {
 			throw new Error('Unexpected protocol close');
 		},
 	};
-	createWorkspaceFilesRoute(null, null, workspaces, null).connected(channel, { headers: {} });
+	const request = { headers: {} };
+	bindRequestCookies(request, {});
+	createWorkspaceFilesRoute(null, null, workspaces, null).connected(channel, request);
 	t.after(async () => {
 		release();
 		await onClose();

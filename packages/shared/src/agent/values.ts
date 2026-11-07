@@ -22,6 +22,12 @@ export const AGENT_OPERATION_ERROR_CODES = [
 	'provider_request_failed',
 	'limit_exceeded',
 	'operation_unknown',
+	'command_failed',
+	'remote_unavailable',
+	'host_key_untrusted',
+	'not_text',
+	'mutation_busy',
+	'mutation_blocked',
 ] as const;
 
 export type AgentOperationErrorCode = (typeof AGENT_OPERATION_ERROR_CODES)[number];

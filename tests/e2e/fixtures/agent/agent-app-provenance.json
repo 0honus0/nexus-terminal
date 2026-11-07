@@ -1,0 +1,82 @@
+{
+  "packageId": "nexus.agent",
+  "sourceRoot": "nexus-agent-plugins",
+  "baselineCommit": "0bf6cbb019a98cfecff9d194c5d4fa2dc1325c80",
+  "sourceWorktree": {
+    "dirty": false,
+    "releaseTag": "v2.0.1",
+    "note": "Official GitHub Actions signed SDK4 release archive; copied verbatim."
+  },
+  "sourceFiles": [
+    {
+      "path": "plugins/nexus.agent/backend/index.mjs",
+      "sha256": "681cb7aee829702d6226e24f3513606eb9762dc404a1edeaab4ac89a0cedf550",
+      "sizeBytes": 420496
+    },
+    {
+      "path": "plugins/nexus.agent/docs/settings.md",
+      "sha256": "53b0f6c99002612c808dd8e694835025916b4756e24f64c1246ed64b1dcbcd8f",
+      "sizeBytes": 360
+    },
+    {
+      "path": "plugins/nexus.agent/files.json",
+      "sha256": "277cb7c640a45987a3773fbd408ebc8884bf016e91edca43c5603b0a41b26b4c",
+      "sizeBytes": 1285
+    },
+    {
+      "path": "plugins/nexus.agent/frontend/assets/index-DrJzQXyr.css",
+      "sha256": "3e4a8401a819f1f96074533f0eafa32bdb442032f70641bf86b9b2329a0936c2",
+      "sizeBytes": 110526
+    },
+    {
+      "path": "plugins/nexus.agent/frontend/assets/index-hB8iVf_X.js",
+      "sha256": "e1022375a2f7d8b2cdec3d0bcc51b1b6aec47410c3ba70ba891a08d63837d42f",
+      "sizeBytes": 167726
+    },
+    {
+      "path": "plugins/nexus.agent/frontend/index.html",
+      "sha256": "1b920babfb96ffcb671252fd98d9ba0273422d6ae2a9a7d47f4c94904bc42375",
+      "sizeBytes": 385
+    },
+    {
+      "path": "plugins/nexus.agent/manifest.json",
+      "sha256": "acf09c7c4a2accbdd5cdb4824dbde2c4ffccd1e7d51d5d1f37ca8b69788431ee",
+      "sizeBytes": 2025
+    },
+    {
+      "path": "plugins/nexus.agent/signature.ed25519",
+      "sha256": "a03cfc2152d103e8d0e690468a9781f41769bec97535fdea2c3568fda72094be",
+      "sizeBytes": 64
+    },
+    {
+      "path": "plugins/nexus.agent/skills/developer/SKILL.md",
+      "sha256": "4739485e24de44d299944c19bcaeb10b21dec78d8bd45dfa7ef651a2dd98df6c",
+      "sizeBytes": 2548
+    },
+    {
+      "path": "plugins/nexus.agent/skills/operations/SKILL.md",
+      "sha256": "8229a5c0fa47b6e7f7baad76e8bba1178bb63817e0fa261d8af0a17c43259185",
+      "sizeBytes": 2252
+    }
+  ],
+  "sourceFilesSha256": "f5dc000720800fa003702a1ef6d5b7d8238095e59541698cec3a1d138f8c7cb5",
+  "upstreamSignedPackage": {
+    "version": "2.0.1",
+    "compatibility": {
+      "host": {
+        "minVersion": "1.1.0",
+        "maxVersion": "1.1.0"
+      },
+      "backendSdk": 4,
+      "frontendSdk": 4
+    },
+    "publisher": {
+      "keyId": "ed25519:617ec64b03cd6ed1a1ddf373e3a47f38666cdcd27753d674e136a4d0a359a1a0",
+      "label": "Nexus first-party plugins",
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAPw+WXiJPcxqiKjxGCRcm3fWwy+JByAKTKX+iE5pKD/E=\n-----END PUBLIC KEY-----\n"
+    },
+    "publisherKeyId": "ed25519:617ec64b03cd6ed1a1ddf373e3a47f38666cdcd27753d674e136a4d0a359a1a0",
+    "sha256": "4f0cc4aadafdc88937bae7d1870b282f825efa51b3e0ef4dafd1ffafd4b89957",
+    "sizeBytes": 727040
+  }
+}

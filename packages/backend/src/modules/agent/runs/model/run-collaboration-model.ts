@@ -1,6 +1,7 @@
 import type { CollaborationWatch } from './run-collaboration-types.js';
 import { RunChanges } from './run-changes.js';
 import { AgentFailure } from '../../agent-failure.js';
+import { CollaborationRefusal } from '../run-collaboration-failure.js';
 import { agentStorage } from '../../agent-storage-failure.js';
 import { CollaborationStorageRefusal } from '../storage/run-collaboration-storage.js';
 import type {
@@ -57,7 +58,7 @@ async function storage<T>(work: () => Promise<T>): Promise<T> {
 	} catch (error) {
 		// Domain refusals are not an unknown commit or a technical failure.
 		if (error instanceof AgentFailure && error.cause instanceof CollaborationStorageRefusal) {
-			throw new AgentFailure(error.cause.code);
+			throw new CollaborationRefusal(error.cause.code, { cause: error });
 		}
 		throw error;
 	}
@@ -100,7 +101,7 @@ export class RunCollaborationModel {
 			close();
 		};
 
-		off = this.changes.subscribe(scope.userId, scope.appId, close, () => {
+		off = this.changes.subscribe(scope, close, () => {
 			reject(new AgentFailure('provider_unavailable'));
 			close();
 		});
@@ -140,15 +141,33 @@ export class RunCollaborationModel {
 		return (await storage(() => this.owner.children(toScope(scope)))).map(fromParticipant);
 	}
 
-	output(scope: ParticipantScope, childId: string): Promise<string | null> {
-		return storage(() => this.owner.output(toScope(scope), childId));
+	async output(
+		scope: ParticipantScope,
+		childId: string,
+		offset: number,
+		maxBytes: number,
+	): Promise<import('./run-collaboration-types.js').ChildOutputPage | null> {
+		const value = await storage(() => this.owner.output(toScope(scope), childId, offset, maxBytes));
+		if (value === null) {
+			return null;
+		}
+		if (value.status === 'invalid_offset') {
+			throw new AgentFailure('invalid_input');
+		}
+		return {
+			sha256: value.sha256,
+			originalBytes: value.originalBytes,
+			offset: value.offset,
+			nextOffset: value.nextOffset,
+			text: value.text,
+		};
 	}
 
 	async delegate(
 		command: DelegateCommand,
 		admit: (facts: ChildAdmissionFacts) => boolean,
 	): Promise<ChildCreation | null> {
-		const value = await this.changes.after(command.scope.userId, command.scope.appId, () =>
+		const value = await this.changes.after(command.scope, () =>
 			storage(() =>
 				this.owner.delegate(
 					{
@@ -159,6 +178,7 @@ export class RunCollaborationModel {
 						id: command.id,
 						requestHash: command.requestHash,
 						objective: command.objective,
+						inputJson: command.inputJson,
 						targets: command.targets.map((id) => id),
 						profile: command.profile,
 						tools: command.tools.map((name) => name),
@@ -181,7 +201,7 @@ export class RunCollaborationModel {
 		return value
 			? {
 					participant: fromParticipant(value.participant),
-					providerId: value.providerId,
+					inputJson: value.inputJson,
 					prompt: value.prompt,
 					requestHash: value.requestHash,
 					version: value.version,
@@ -196,7 +216,7 @@ export class RunCollaborationModel {
 		authority: CollaborationAuthority | null = null,
 	): Promise<string[]> {
 		return (
-			await this.changes.after(scope.userId, scope.appId, () =>
+			await this.changes.after(scope, () =>
 				storage(() =>
 					this.owner.cancelChildren(
 						toScope(scope),
@@ -219,13 +239,10 @@ export class RunCollaborationModel {
 		key: string,
 		text: string,
 		expectedVersion: number,
-		maxFacts: number,
 	): Promise<CollaborationFact> {
-		const value = await storage(() =>
-			this.owner.writeFact(toAuthority(authority), key, text, expectedVersion, maxFacts),
-		);
+		const value = await storage(() => this.owner.writeFact(toAuthority(authority), key, text, expectedVersion));
 		if (typeof value === 'string') {
-			throw new AgentFailure(value);
+			throw new CollaborationRefusal(value);
 		}
 		return { key: value.key, value: value.value, version: value.version, authorId: value.authorId };
 	}
@@ -238,7 +255,7 @@ export class RunCollaborationModel {
 		maxMessages: number,
 		maxBytes: number,
 	): Promise<number> {
-		return this.changes.after(authority.scope.userId, authority.scope.appId, () =>
+		return this.changes.after(authority.scope, () =>
 			storage(() =>
 				this.owner.send(
 					toAuthority(authority),
@@ -253,8 +270,13 @@ export class RunCollaborationModel {
 		);
 	}
 
-	async read(authority: CollaborationAuthority, after: number, limit: number): Promise<CollaborationPage> {
-		const page = await storage(() => this.owner.read(toAuthority(authority), after, limit));
+	async read(
+		authority: CollaborationAuthority,
+		after: number,
+		limit: number,
+		maxBytes: number,
+	): Promise<CollaborationPage> {
+		const page = await storage(() => this.owner.read(toAuthority(authority), after, limit, maxBytes));
 		return {
 			messages: page.messages.map((value) => ({
 				sequence: value.sequence,
@@ -270,7 +292,7 @@ export class RunCollaborationModel {
 	async consume(authority: CollaborationAuthority, through: number, expectedConsumed: number): Promise<number> {
 		const result = await storage(() => this.owner.consume(toAuthority(authority), through, expectedConsumed));
 		if (result === 'version_conflict') {
-			throw new AgentFailure(result);
+			throw new CollaborationRefusal(result);
 		}
 		return result;
 	}

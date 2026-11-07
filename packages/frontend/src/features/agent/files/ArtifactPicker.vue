@@ -6,6 +6,7 @@
 	import { RecycleScroller } from 'vue-virtual-scroller';
 	import 'vue-virtual-scroller/dist/vue-virtual-scroller.css';
 	import type { ManagedArtifact } from '../model/artifact-types';
+	import type { ReferenceElement } from 'reka-ui';
 	import { useArtifactPicker } from '../composables/use-artifact-picker';
 
 	const props = defineProps<{
@@ -15,10 +16,15 @@
 		modelValue: ManagedArtifact[];
 		disabled?: boolean;
 		compact?: boolean;
+		anchor?: ReferenceElement;
 	}>();
-	const emit = defineEmits<{ 'update:modelValue': [value: ManagedArtifact[]] }>();
+	const emit = defineEmits<{
+		'update:modelValue': [value: ManagedArtifact[]];
+		'open-change': [value: boolean];
+	}>();
 	const { t } = useI18n();
 	const opened = ref(false);
+	const popover = ref<InstanceType<typeof AgentConfigPopover> | null>(null);
 	const input = ref<HTMLInputElement | null>(null);
 	const selectedIds = computed(() => new Set(props.modelValue.map((item) => item.id)));
 
@@ -79,30 +85,48 @@
 		}
 	}
 
+	function open(): void {
+		if (props.disabled || props.active === false) return;
+		popover.value?.open();
+	}
+
+	function close(): void {
+		popover.value?.close();
+	}
+
+	function onOpenChange(value: boolean): void {
+		opened.value = value;
+		emit('open-change', value);
+	}
+
+	defineExpose({ open, close });
+
 	watch(
 		() => props.active,
 		(value) => {
-			if (value === false) opened.value = false;
+			if (value === false) close();
 		},
 	);
 
 	watch(
 		() => props.appId,
 		() => {
-			opened.value = false;
+			close();
 		},
 	);
 </script>
 
 <template>
 	<AgentConfigPopover
+		ref="popover"
 		:ariaLabel="$t('agent.attachments.button', { count: modelValue.length })"
 		:title="$t('agent.attachments.button', { count: modelValue.length })"
 		:disabled="disabled"
+		:anchor="anchor"
 		panel-class="w-[min(520px,calc(100vw-24px))]"
 		:trigger-appearance="compact ? 'soft' : 'ghost'"
 		:trigger-variant="compact ? 'square' : 'default'"
-		@open-change="(value) => (opened = value)"
+		@open-change="onOpenChange"
 	>
 		<template #trigger>
 			<template v-if="compact">

@@ -1,22 +1,19 @@
 import type { ExecutionService } from '../../execution/service/execution-service.js';
-import type { GovernanceService } from '../../governance/service/governance-service.js';
+
 import type { RunCollaborationService } from './run-collaboration-service.js';
-import {
-	AGENT_RUN_MAX_PROMPT_BYTES,
-	AGENT_RUN_EVENT_MAX_LIMIT,
-	AGENT_RUN_MAX_SELECTED_CONNECTIONS,
-} from '@nexus-terminal/shared/agent/runs/values';
-import {
-	AGENT_PROVIDER_MAX_MODEL_ID_BYTES,
-	AGENT_REASONING_EFFORTS,
-} from '@nexus-terminal/shared/agent/providers/values';
+import { AGENT_RUN_MAX_PROMPT_BYTES, AGENT_RUN_EVENT_MAX_LIMIT } from '@nexus-terminal/shared/agent/runs/values';
+
 import { AGENT_TOOL_LIST_MAX_LIMIT } from '@nexus-terminal/shared/agent/tools/values';
-import type { ToolListCursor, ToolListPage, ToolOperation } from '../model/run-tool-types.js';
-import type { RunToolModel } from '../model/run-tool-model.js';
+import type {
+	OperationActivityCursor,
+	OperationActivityPage,
+	OperationActivity,
+} from '../../operations/model/operation-activity-types.js';
+import type { OperationActivityModel } from '../../operations/model/operation-activity-model.js';
 import { createHash, randomUUID } from 'node:crypto';
 import type { RunModel } from '../model/run-model.js';
-import type { RunStepModel } from '../model/run-step-model.js';
 import type { RunExecutionOwner } from './run-execution-owner.js';
+import type { RunAppDrivers } from '../drivers/run-app-drivers.js';
 import type {
 	RunUsage,
 	AgentRun,
@@ -29,6 +26,7 @@ import type {
 } from '../model/run-types.js';
 import { AgentFailure } from '../../agent-failure.js';
 import { validateAgentId, validateOperationKey, validateUserId } from '../../agent-validation.js';
+import type { ResumeRunRequest, ResumeRunResult, RunSuspension } from '../model/run-resume-types.js';
 
 function validateScope(userId: number, appId: string): void {
 	validateUserId(userId);
@@ -36,11 +34,7 @@ function validateScope(userId: number, appId: string): void {
 }
 
 function validatePrompt(prompt: string): void {
-	if (
-		typeof prompt !== 'string' ||
-		!prompt.trim() ||
-		Buffer.byteLength(prompt, 'utf8') > AGENT_RUN_MAX_PROMPT_BYTES
-	) {
+	if (typeof prompt !== 'string' || Buffer.byteLength(prompt, 'utf8') > AGENT_RUN_MAX_PROMPT_BYTES) {
 		throw new AgentFailure('invalid_input');
 	}
 }
@@ -51,7 +45,7 @@ function validateCursor(value: number): void {
 	}
 }
 
-function hashCommand(name: 'create_run' | 'cancel_run', value: readonly (string | number)[]): string {
+function hashCommand(name: 'create_run' | 'cancel_run' | 'resume_run', value: readonly (string | number)[]): string {
 	// Every field has a fixed position and schema version, including expectedVersion.
 	// JSON.stringify is unambiguous for these validated scalar inputs.
 	return createHash('sha256')
@@ -62,11 +56,10 @@ function hashCommand(name: 'create_run' | 'cancel_run', value: readonly (string 
 export class RunService {
 	constructor(
 		private readonly model: RunModel,
-		private readonly steps: RunStepModel,
 		private readonly execution: RunExecutionOwner,
-		private readonly tools: RunToolModel,
+		private readonly appDrivers: RunAppDrivers,
+		private readonly activities: OperationActivityModel,
 		private readonly collaboration: RunCollaborationService,
-		private readonly governance: GovernanceService,
 		private readonly settings: ExecutionService,
 	) {}
 
@@ -111,6 +104,68 @@ export class RunService {
 		return this.createRoot(request, null);
 	}
 
+	suspension(userId: number, appId: string, runId: string): Promise<RunSuspension | null> {
+		validateScope(userId, appId);
+		validateAgentId(runId);
+		return this.model.suspension(userId, appId, runId);
+	}
+
+	async resume(request: ResumeRunRequest): Promise<ResumeRunResult> {
+		validateScope(request.userId, request.appId);
+		validateAgentId(request.runId);
+		validateOperationKey(request.operationKey);
+		if (
+			!Number.isSafeInteger(request.expectedVersion) ||
+			request.expectedVersion < 1 ||
+			request.expectedVersion >= Number.MAX_SAFE_INTEGER
+		) {
+			throw new AgentFailure('invalid_input');
+		}
+		let inputJson: string;
+		try {
+			inputJson = JSON.stringify(JSON.parse(request.inputJson));
+		} catch (cause) {
+			throw new AgentFailure('invalid_input', { cause });
+		}
+		const requestHash = hashCommand('resume_run', [
+			request.appId,
+			request.runId,
+			request.expectedVersion,
+			inputJson,
+		]);
+		await this.execution.waitForSuspension(request.userId, request.appId, request.runId);
+		const settings = await this.settings.get(request.userId);
+		return this.execution.admitCreate(async (admit) => {
+			const result = await this.model.resume(
+				{
+					userId: request.userId,
+					appId: request.appId,
+					runId: request.runId,
+					expectedVersion: request.expectedVersion,
+					operationKey: request.operationKey.toLowerCase(),
+					inputJson,
+				},
+				requestHash,
+				(current, activeRuns) => {
+					admit();
+					if (!current?.enabled) {
+						throw new AgentFailure('execution_disabled');
+					}
+					if (Math.max(activeRuns, this.execution.occupiedSlots() - 1) >= current.limits.maxConcurrentRuns) {
+						throw new AgentFailure('limit_exceeded');
+					}
+				},
+			);
+			if (result.status === 'resumed') {
+				if (!this.appDrivers.start(this.execution, result.command, result.parentId)) {
+					await this.execution.failUnstarted(result.command);
+				}
+				return { status: 'resumed', run: result.run };
+			}
+			return result;
+		}, settings.limits.maxConcurrentRuns);
+	}
+
 	appendInput(request: CreateRunRequest, sourceRunId: string, expectedVersion: number): Promise<CreateRunResult> {
 		validateAgentId(sourceRunId);
 		if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
@@ -130,34 +185,15 @@ export class RunService {
 		if (request.approvalMode !== 'ask' && request.approvalMode !== 'full_access') {
 			throw new AgentFailure('invalid_input');
 		}
-		if (!request.model) {
-			throw new AgentFailure('invalid_input');
+		let inputJson: string;
+		try {
+			inputJson = JSON.stringify(JSON.parse(request.inputJson));
+		} catch (cause) {
+			throw new AgentFailure('invalid_input', { cause });
 		}
-		validateAgentId(request.model.providerId);
-		if (
-			typeof request.model.modelId !== 'string' ||
-			!request.model.modelId.trim() ||
-			Buffer.byteLength(request.model.modelId, 'utf8') > AGENT_PROVIDER_MAX_MODEL_ID_BYTES ||
-			!Number.isSafeInteger(request.model.configurationVersion) ||
-			request.model.configurationVersion < 1
-		) {
-			throw new AgentFailure('invalid_input');
-		}
-		if (
-			request.model.reasoningEffort !== undefined &&
-			!AGENT_REASONING_EFFORTS.includes(request.model.reasoningEffort)
-		) {
-			throw new AgentFailure('invalid_input');
-		}
-		const model = {
-			providerId: request.model.providerId,
-			modelId: request.model.modelId,
-			configurationVersion: request.model.configurationVersion,
-			...(request.model.reasoningEffort === undefined ? {} : { reasoningEffort: request.model.reasoningEffort }),
-		};
+
 		if (
 			!Array.isArray(request.connectionIds) ||
-			request.connectionIds.length > AGENT_RUN_MAX_SELECTED_CONNECTIONS ||
 			new Set(request.connectionIds).size !== request.connectionIds.length ||
 			request.connectionIds.some((id) => !Number.isSafeInteger(id) || id < 1)
 		) {
@@ -168,10 +204,7 @@ export class RunService {
 			request.appId,
 			request.threadId,
 			request.prompt,
-			model.providerId,
-			model.modelId,
-			model.configurationVersion,
-			model.reasoningEffort ?? 'default',
+			inputJson,
 			request.approvalMode,
 			JSON.stringify(connectionIds),
 			JSON.stringify(origin),
@@ -182,7 +215,7 @@ export class RunService {
 			const created = await this.model.create(
 				{
 					origin,
-					model,
+					inputJson,
 					approvalMode: request.approvalMode,
 					connectionIds,
 					userId: request.userId,
@@ -226,17 +259,17 @@ export class RunService {
 			if (created.status === 'created') {
 				// A replay, stale Provider or unknown DB commit must never start a
 				// second paid request. The execution owner checks frozen authorization.
-				const command = {
+				const command: import('../model/run-types.js').RunExecutionCommand = {
 					deadlineAt: created.run.createdAt + activeSeconds * 1000,
 					userId: request.userId,
 					appId: request.appId,
 					runId: created.run.id,
-					providerId: model.providerId,
+					inputJson,
 					version: created.run.version,
 					prompt: request.prompt,
 					requestHash,
 				};
-				if (!this.execution.start(command)) {
+				if (!this.appDrivers.start(this.execution, command)) {
 					try {
 						await this.execution.failUnstarted(command);
 					} catch (error) {
@@ -296,11 +329,6 @@ export class RunService {
 			// authoritative cancellation has committed or replayed as cancelled.
 			if ('run' in result && result.run.status === 'cancelled') {
 				this.execution.abort(request.userId, request.appId, request.runId);
-				try {
-					await this.governance.invalidate(request.userId, request.appId, request.runId);
-				} catch (error) {
-					throw new AgentFailure('operation_unknown', { cause: error });
-				}
 			}
 			return result;
 		});
@@ -313,20 +341,20 @@ export class RunService {
 		return this.model.get(userId, appId, runId);
 	}
 
-	getToolCall(userId: number, appId: string, runId: string, toolId: string): Promise<ToolOperation | null> {
+	getToolCall(userId: number, appId: string, runId: string, toolId: string): Promise<OperationActivity | null> {
 		validateScope(userId, appId);
 		validateAgentId(runId);
 		validateAgentId(toolId);
-		return this.tools.get({ userId, appId, runId, id: toolId });
+		return this.activities.get(userId, appId, runId, toolId);
 	}
 
 	listThreadTools(
 		userId: number,
 		appId: string,
 		threadId: string,
-		before: ToolListCursor | null,
+		before: OperationActivityCursor | null,
 		limit: number,
-	): Promise<ToolListPage | null> {
+	): Promise<OperationActivityPage | null> {
 		validateScope(userId, appId);
 		validateAgentId(threadId);
 		if (
@@ -340,7 +368,7 @@ export class RunService {
 		if (before !== null) {
 			validateAgentId(before.id);
 		}
-		return this.tools.listThread({ userId, appId, threadId }, before, limit);
+		return this.activities.list(userId, appId, threadId, before, limit);
 	}
 
 	frozen(userId: number, appId: string, runId: string): Promise<RunFrozenInput | null> {
@@ -368,6 +396,6 @@ export class RunService {
 	getUsage(userId: number, appId: string, runId: string): Promise<RunUsage | null> {
 		validateScope(userId, appId);
 		validateAgentId(runId);
-		return this.steps.usage(userId, appId, runId);
+		return this.model.usage(userId, appId, runId);
 	}
 }

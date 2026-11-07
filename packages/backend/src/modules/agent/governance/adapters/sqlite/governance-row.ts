@@ -1,3 +1,4 @@
+import { readAgentToolIdentity } from '@nexus-terminal/shared/agent/tools/identity-codec';
 import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
 import { AGENT_RUN_STATUSES } from '@nexus-terminal/shared/agent/runs/values';
 import type { AgentRunStatus } from '@nexus-terminal/shared/agent/runs/values';
@@ -12,10 +13,7 @@ import {
 	AGENT_APPROVAL_MAX_SUMMARY_BYTES,
 	AGENT_APPROVAL_MAX_FEEDBACK_BYTES,
 	AGENT_EXECUTION_INTEGER_KEYS,
-	AGENT_EXECUTION_COMPACTION_MODES,
-	AGENT_EXECUTION_CONTEXT_PROFILES,
 	AGENT_TARGET_CAPABILITIES,
-	AGENT_GRANT_MAX_TARGET_IDS,
 	AGENT_GRANT_MAX_ID_BYTES,
 } from '@nexus-terminal/shared/agent/governance/values';
 import type {
@@ -88,7 +86,6 @@ function readScope(value: unknown): StoredScope {
 	if (
 		ssh.mode !== 'ids' ||
 		!Array.isArray(ssh.ids) ||
-		ssh.ids.length > AGENT_GRANT_MAX_TARGET_IDS ||
 		ssh.ids.some(
 			(id) =>
 				typeof id !== 'string' ||
@@ -118,26 +115,12 @@ export function scopeJson(value: StoredScope): string {
 
 export function readOverrides(value: unknown): StoredPolicyOverrides {
 	const row = record(parse(value));
-	exact(row, [...AGENT_EXECUTION_INTEGER_KEYS, 'contextCompactionMode', 'contextProfile']);
+	exact(row, AGENT_EXECUTION_INTEGER_KEYS);
 	const result: StoredPolicyOverrides = {};
 	for (const key of AGENT_EXECUTION_INTEGER_KEYS) {
 		if (row[key] !== undefined) {
 			result[key] = integer(row[key], 1);
 		}
-	}
-	if (row.contextCompactionMode !== undefined) {
-		const mode = AGENT_EXECUTION_COMPACTION_MODES.find((m) => m === row.contextCompactionMode);
-		if (mode === undefined) {
-			return invalid();
-		}
-		result.contextCompactionMode = mode;
-	}
-	if (row.contextProfile !== undefined) {
-		const profile = AGENT_EXECUTION_CONTEXT_PROFILES.find((p) => p === row.contextProfile);
-		if (profile === undefined) {
-			return invalid();
-		}
-		result.contextProfile = profile;
 	}
 	return result;
 }
@@ -175,7 +158,7 @@ export function readPolicy(
 
 function readInspection(value: unknown): StoredApproval['inspection'] {
 	const row = record(parse(value));
-	exact(row, ['toolName', 'toolVersion', 'risk', 'mutation', 'targetConnectionId', 'summary']);
+	exact(row, ['toolName', 'toolVersion', 'identity', 'risk', 'mutation', 'targetConnectionId', 'summary']);
 	const risk = AGENT_APPROVAL_RISKS.find((r) => r === row.risk);
 	const toolName = string(row.toolName);
 	const toolVersion = string(row.toolVersion);
@@ -202,6 +185,7 @@ function readInspection(value: unknown): StoredApproval['inspection'] {
 	return {
 		toolName,
 		toolVersion,
+		identity: readAgentToolIdentity(row.identity),
 		risk,
 		mutation,
 		targetConnectionId: row.targetConnectionId === null ? null : integer(row.targetConnectionId, 1),

@@ -1,3 +1,5 @@
+import type { AgentCapability } from '@nexus-terminal/shared/agent/governance/values';
+
 export type StoredIntegrationConfiguration =
 	| {
 			kind: 'mcp';
@@ -31,6 +33,7 @@ export interface StoredIntegrationFacts {
 	enabled: boolean;
 	identityUserId: number | null;
 	count: number;
+	capabilities: AgentCapability[];
 }
 
 export interface StoredIntegrationReceipt {
@@ -53,6 +56,18 @@ export interface StoredIntegrationTask {
 	credentialRevision: number;
 }
 
+export type StoredIntegrationCreationDecision = { kind: 'create'; task: StoredIntegrationTask } | { kind: 'reject' };
+
+export type StoredIntegrationCreationResult =
+	{ kind: 'created'; receipt: StoredIntegrationReceipt } | { kind: 'not_created' };
+
+export interface StoredIntegrationRejection {
+	userId: number;
+	appId: string;
+	key: string;
+	intentHash: string;
+}
+
 export interface IntegrationStorage {
 	list(scope: StoredIntegrationScope): Promise<StoredIntegration[]>;
 	get(scope: StoredIntegrationScope, id: string): Promise<StoredIntegration | null>;
@@ -64,8 +79,15 @@ export interface IntegrationStorage {
 		intentHash: string,
 		now: number,
 		admit: (facts: StoredIntegrationFacts) => void,
-		decide: (facts: StoredIntegrationFacts) => StoredIntegrationTask,
-	): Promise<StoredIntegrationReceipt>;
+		decide: (facts: StoredIntegrationFacts) => StoredIntegrationCreationDecision,
+	): Promise<StoredIntegrationCreationResult>;
+	prepareDiscovery(
+		scope: StoredIntegrationScope,
+		digest: string,
+		id: string,
+		version: number,
+		admit: (facts: StoredIntegrationFacts) => void,
+	): Promise<StoredIntegration>;
 	update(
 		scope: StoredIntegrationScope,
 		digest: string,

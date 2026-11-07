@@ -1,3 +1,5 @@
+import type { AgentToolIdentity } from '@nexus-terminal/shared/agent/tools/identity';
+
 interface ToolSummaryTranslator {
 	translate(key: string, named?: Record<string, string>): string;
 	has(key: string): boolean;
@@ -38,12 +40,16 @@ function actionLabel(value: string | null, translator: ToolSummaryTranslator): s
 	return translator.has(key) ? translator.translate(key) : value;
 }
 
-function toolLabel(toolName: string, translator: ToolSummaryTranslator): string | null {
-	const key = `agent.nativeRun.toolLabel.${toolName}`;
-	if (translator.has(key)) return translator.translate(key);
-	const prefix = toolName.split('_')[0];
-	const groupKey = `agent.nativeRun.toolLabel.${prefix}`;
-	return prefix && translator.has(groupKey) ? translator.translate(groupKey) : null;
+function toolLabel(identity: AgentToolIdentity, translator: ToolSummaryTranslator): string | null {
+	if (identity.kind !== 'host') return null;
+	const key = `agent.nativeRun.hostOperation.${identity.operation.replaceAll('.', '_')}`;
+	return translator.has(key) ? translator.translate(key) : null;
+}
+
+/** Display persisted Host identity; a plugin's local name never assigns Host behavior. */
+export function toolDisplayName(identity: AgentToolIdentity, translator?: ToolSummaryTranslator): string {
+	if (identity.kind === 'plugin') return `${identity.packageId} / ${identity.name}`;
+	return (translator ? toolLabel(identity, translator) : null) ?? identity.operation;
 }
 
 export interface ToolCommandPreview {
@@ -51,23 +57,59 @@ export interface ToolCommandPreview {
 	truncated: boolean;
 }
 
-/** Reads the bounded command preview included with Shell and ACP audit summaries. */
+/** Reads the bounded task or command preview included with the authoritative audit summary. */
 export function toolCommandPreview(summary: string): ToolCommandPreview | null {
 	const fields = parsedSummary(summary);
 	const command = fields ? readText(fields.command) : null;
 	return command ? { text: command, truncated: fields?.commandTruncated === true } : null;
 }
 
+function summaryTargetIds(fields: Record<string, unknown> | null): number[] {
+	const targets = fields?.targets;
+	if (
+		!Array.isArray(targets) ||
+		!targets.every((id): id is number => typeof id === 'number' && Number.isSafeInteger(id) && id > 0) ||
+		new Set(targets).size !== targets.length
+	)
+		return [];
+	return targets;
+}
+
+export function toolSummaryTargetIds(summary: string): number[] {
+	return summaryTargetIds(parsedSummary(summary));
+}
+
+/** Multi-target delegations retain their real target list instead of inventing a single target. */
+export function formatToolTargets(
+	summary: string,
+	targetConnectionId: number | null,
+	labels: ReadonlyMap<number, string>,
+): string {
+	const targets = toolSummaryTargetIds(summary);
+	const ids = targets.length ? targets : targetConnectionId === null ? [] : [targetConnectionId];
+	return ids.length ? ids.map((id) => labels.get(id) ?? String(id)).join(', ') : '—';
+}
+
 /** Converts the server's sanitized audit summary into readable UI copy without exposing raw JSON. */
-export function formatToolSummary(summary: string, toolName: string, translator: ToolSummaryTranslator): string {
+export function formatToolSummary(
+	summary: string,
+	identity: AgentToolIdentity,
+	translator: ToolSummaryTranslator,
+): string {
 	const fields = parsedSummary(summary);
 	if (!fields) {
-		return toolLabel(toolName, translator) ?? translator.translate('agent.nativeRun.toolSummary.recorded');
+		return toolLabel(identity, translator) ?? translator.translate('agent.nativeRun.toolSummary.recorded');
 	}
 	const action = readText(fields.action);
 	const path = readText(fields.path);
 	const bytes = readBytes(fields.bytes ?? fields.newBytes);
 	switch (action) {
+		case 'delegate':
+			return translator.translate('agent.nativeRun.toolSummary.delegate', {
+				profile: readText(fields.profile) ?? '—',
+				targets: summaryTargetIds(fields).join(', ') || '—',
+				bytes: readBytes(fields.objectiveBytes) ?? '—',
+			});
 		case 'execute': {
 			const mode =
 				readText(fields.mode) === 'background'
@@ -124,5 +166,5 @@ export function formatToolSummary(summary: string, toolName: string, translator:
 	const label = actionLabel(action, translator);
 	return label
 		? translator.translate('agent.nativeRun.toolSummary.action', { action: label })
-		: (toolLabel(toolName, translator) ?? translator.translate('agent.nativeRun.toolSummary.recorded'));
+		: (toolLabel(identity, translator) ?? translator.translate('agent.nativeRun.toolSummary.recorded'));
 }

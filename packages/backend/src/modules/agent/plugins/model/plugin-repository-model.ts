@@ -80,7 +80,9 @@ export class PluginRepositoryModel {
 	async catalog(
 		url: string,
 		signal: AbortSignal,
-		compatible: (sdkVersion: string, minVersion: string, maxVersion: string) => boolean,
+		compatibilityReason: (
+			compatibility: PluginCatalogEntry['compatibility'],
+		) => PluginCatalogEntry['compatibilityReason'],
 	): Promise<PluginCatalog> {
 		try {
 			const value = await this.network.catalog(url, signal);
@@ -92,17 +94,25 @@ export class PluginRepositoryModel {
 					publicKeyPem: item.publicKeyPem,
 				})),
 				packages: value.packages.map((item) => ({
-					appId: item.appId,
+					packageId: item.packageId,
 					version: item.version,
-					sdkVersion: item.sdkVersion,
-					nexus: { minVersion: item.nexus.minVersion, maxVersion: item.nexus.maxVersion },
+					compatibility: {
+						host: {
+							minVersion: item.compatibility.host.minVersion,
+							maxVersion: item.compatibility.host.maxVersion,
+						},
+						backendSdk: item.compatibility.backendSdk,
+						frontendSdk: item.compatibility.frontendSdk,
+					},
+					contributionKinds: item.contributionKinds.map((kind) => kind),
 					displayName: item.displayName,
 					description: item.description,
 					packageUrl: item.packageUrl,
 					sha256: item.sha256,
 					sizeBytes: item.sizeBytes,
 					publisherKeyId: item.publisherKeyId,
-					compatible: compatible(item.sdkVersion, item.nexus.minVersion, item.nexus.maxVersion),
+					compatible: compatibilityReason(item.compatibility) === null,
+					compatibilityReason: compatibilityReason(item.compatibility),
 				})),
 			};
 		} catch (error) {

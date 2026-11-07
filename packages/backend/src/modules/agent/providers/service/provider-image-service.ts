@@ -15,6 +15,7 @@ export class ProviderImageService {
 		input: ProviderImageRequest,
 		signal: AbortSignal,
 		validate: () => Promise<void>,
+		recordOutputArtifacts?: (ids: readonly string[]) => void,
 	): Promise<ImageArtifact> {
 		await validate();
 		const maxBytes = await this.artifacts.availableBytes(actor);
@@ -38,12 +39,20 @@ export class ProviderImageService {
 			yield result.bytes;
 		}
 
-		const saved = await this.artifacts.upload(actor, value.id, value.version, source(), signal);
+		const saved = await this.artifacts.upload(
+			actor,
+			value.id,
+			value.version,
+			source(),
+			signal,
+			recordOutputArtifacts,
+		);
 		await validate();
 		const root =
 			'/api/v1/agent/apps/' + encodeURIComponent(actor.appId) + '/artifacts/' + encodeURIComponent(saved.id);
 		return {
 			id: saved.id,
+			mediaType: result.mediaType,
 			name: saved.name,
 			previewUrl: root + '/preview',
 			downloadUrl: root + '/content',

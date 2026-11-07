@@ -1,12 +1,13 @@
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
+import { REMOTE_FILE_MAX_PATH_BYTES } from '@nexus-terminal/shared/remote/files/values';
 import type {
 	ToolProjectStorage,
 	StoredProjectScope,
 	StoredProjectBinding,
 	StoredProjectMutation,
 } from '../../storage/tool-project-storage.js';
-import { toolOperation } from '../../../runs/adapters/sqlite/run-tool-row.js';
-import { currentParticipant, storedInteger, storedText } from '../../../runs/adapters/sqlite/run-participant-sql.js';
+import { currentOperation } from '../../../operations/adapters/sqlite/current-operation-sql.js';
+import { storedInteger, storedText } from '../../../runs/adapters/sqlite/run-participant-sql.js';
 
 export class SqliteToolProjectStorage implements ToolProjectStorage {
 	constructor(private readonly db: SqliteRuntime) {}
@@ -23,7 +24,7 @@ export class SqliteToolProjectStorage implements ToolProjectStorage {
 			const directory = storedText(row.directory);
 			const fingerprint = storedText(row.fingerprint);
 			if (
-				Buffer.byteLength(directory, 'utf8') > 256 ||
+				Buffer.byteLength(directory, 'utf8') > REMOTE_FILE_MAX_PATH_BYTES ||
 				!directory.startsWith('/') ||
 				directory.split('/').includes('..') ||
 				!fingerprint ||
@@ -38,21 +39,21 @@ export class SqliteToolProjectStorage implements ToolProjectStorage {
 	change(command: StoredProjectMutation): Promise<boolean> {
 		return this.db.transaction(async (tx) => {
 			const { scope } = command;
-			const operation = await toolOperation(tx, scope.userId, scope.appId, scope.runId, command.operationId);
-			const policy = await tx.one(
-				'SELECT policy_revision FROM agent_governance_policies WHERE user_id=? AND app_id=?',
-				[scope.userId, scope.appId],
+			const current = await currentOperation(
+				tx,
+				{
+					userId: scope.userId,
+					appId: scope.appId,
+					runId: scope.runId,
+					operationId: command.operationId,
+					operationHash: command.operationHash,
+				},
+				{ labels: ['project.bindingWrite'] },
 			);
 			if (
-				!operation ||
-				operation.state !== 'dispatched' ||
-				operation.operationHash !== command.operationHash ||
-				operation.targetId !== scope.connectionId ||
-				operation.toolName !==
-					(command.binding === null ? 'project_directory_clear' : 'project_directory_bind') ||
-				!policy ||
-				policy.policy_revision !== command.policyRevision ||
-				!(await currentParticipant(tx, scope, Date.now, operation.toolName, operation.modelStepIndex))
+				!current ||
+				current.authority.target?.id !== scope.connectionId ||
+				current.authority.policyRevision !== command.policyRevision
 			) {
 				return false;
 			}
@@ -69,7 +70,7 @@ export class SqliteToolProjectStorage implements ToolProjectStorage {
 					!target ||
 					target.type !== 'SSH' ||
 					target.version !== command.binding.targetVersion ||
-					operation.targetVersion !== command.binding.targetVersion
+					current.authority.target.version !== command.binding.targetVersion
 				) {
 					return false;
 				}

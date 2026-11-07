@@ -146,7 +146,11 @@ export async function readMultipart(
 				const closed = () => {
 					reply.raw.off('finish', closed);
 					reply.raw.off('close', closed);
-					request.raw.destroy();
+					if (reply.raw.writableFinished) {
+						request.raw.socket.end();
+					} else {
+						request.raw.destroy();
+					}
 				};
 
 				reply.raw.once('finish', closed);

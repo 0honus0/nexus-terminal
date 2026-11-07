@@ -1,3 +1,5 @@
+import { hasToolIdentity, expectedToolIdentity } from '../../../support/package-tool-catalog.mjs';
+import { agentHost } from '../../fixtures/agent/workbench';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -75,14 +77,14 @@ for (const width of [320, 390, 1440]) {
 		await expect(hub.locator('[data-tool-artifact]')).toHaveCount(0);
 		await resolveNativeApproval(task, approval, 'approved');
 		expect((await finishNativeTask(task, created.id)).run.status).toBe('completed');
-		const record = (await tools(task)).find((tool) => tool.toolName === 'artifact_create');
+		const record = (await tools(task)).find((tool) => hasToolIdentity(tool, 'artifact_create'));
 		if (!record?.outputArtifactIds[0]) throw new Error('Expected saved text file reference');
 		const card = hub.locator('[data-tool-artifact]');
 		await expect(card).toContainText('report.md');
 		await closeTaskPanel(hub);
 		await testInfo.attach('delivered-file-card', { body: await page.screenshot(), contentType: 'image/png' });
 		await card.getByRole('button', { name: 'Preview', exact: true }).click();
-		const preview = page.getByRole('dialog', { name: 'Preview', exact: true });
+		const preview = hub.getByRole('dialog', { name: 'Preview', exact: true });
 		await expect(preview).toBeVisible();
 		await expect(preview).toContainText('Saved by the model.');
 		const bounds = await preview.boundingBox();
@@ -102,7 +104,7 @@ for (const width of [320, 390, 1440]) {
 		const presented = await startNativeTask(task, `E2E_PRESENT_FILE artifact=${record.outputArtifactIds[0]}`);
 		expect((await finishNativeTask(task, presented.id)).run.status).toBe('completed');
 		expect((await tools(task)).find((tool) => tool.runId === presented.id)).toMatchObject({
-			toolName: 'artifact_present',
+			identity: expect.objectContaining({ kind: 'plugin', ...expectedToolIdentity('artifact_present') }),
 			outputArtifactIds: record.outputArtifactIds,
 			mutation: false,
 		});
@@ -134,7 +136,7 @@ for (const file of files) {
 			);
 			runId = created.id;
 			const approval = await waitNativeApproval(task, created.id, 'file_deliver');
-			expect(JSON.parse(approval.inspection.summary)).toEqual({
+			expect(JSON.parse(approval.summary)).toEqual({
 				action: 'deliver',
 				paths: ['/file-delivery/' + file.name],
 			});
@@ -150,7 +152,7 @@ for (const file of files) {
 				sizeBytes: file.bytes.byteLength,
 				sha256: hash(file.bytes),
 			});
-			const record = (await tools(task)).find((tool) => tool.toolName === 'file_deliver');
+			const record = (await tools(task)).find((tool) => hasToolIdentity(tool, 'file_deliver'));
 			expect(record).toMatchObject({
 				state: 'completed',
 				outputArtifactIds: [delivered.id],
@@ -287,7 +289,7 @@ for (const invalid of ['directory', 'symlink']) {
 			runId = run.id;
 			expect((await finishNativeTask(task, run.id, ['file_deliver'])).run.status).toBe('unknown');
 			expect(await artifacts(task)).toHaveLength(0);
-			const rejected = (await tools(task)).find((tool) => tool.toolName === 'file_deliver');
+			const rejected = (await tools(task)).find((tool) => hasToolIdentity(tool, 'file_deliver'));
 			expect(rejected?.outputArtifactIds).toEqual([]);
 			if (!rejected) throw new Error('Expected rejected delivery record');
 			const toolPath = { appId: task.app.id, runId: run.id, toolId: rejected.id };

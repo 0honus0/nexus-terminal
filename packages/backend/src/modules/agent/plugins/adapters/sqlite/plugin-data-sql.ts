@@ -4,7 +4,7 @@ import type { StoredPluginData, StoredPluginDataMutation } from '../../storage/p
 import { PluginStorageRefusal } from '../../storage/plugin-storage.js';
 import {
 	AGENT_PLUGIN_MAX_DATA_KEY_BYTES,
-	AGENT_PLUGIN_MAX_DATA_VALUE_BYTES,
+	hasAgentPluginDataValueCapacity,
 } from '@nexus-terminal/shared/agent/plugins/values';
 
 export function pluginDataRow(row: SqlRow): StoredPluginData {
@@ -23,7 +23,7 @@ export function pluginDataRow(row: SqlRow): StoredPluginData {
 		throw new Error('Corrupt plugin data');
 	}
 	if (row.value_json !== null) {
-		if (Buffer.byteLength(row.value_json, 'utf8') > AGENT_PLUGIN_MAX_DATA_VALUE_BYTES) {
+		if (!hasAgentPluginDataValueCapacity(row.value_json)) {
 			throw new Error('Corrupt plugin data size');
 		}
 		JSON.parse(row.value_json);
@@ -49,7 +49,7 @@ export async function mutatePluginData(
 	userId: number,
 	appId: string,
 	input: StoredPluginDataMutation,
-	decide: (current: StoredPluginData | null, keyCount: number, dataBytes: number) => void,
+	decide: (current: StoredPluginData | null) => void,
 ): Promise<StoredPluginData> {
 	const replay = await tx.one(
 		'SELECT content_hash,key,version,value_json,updated_at,retired FROM agent_plugin_data_operations WHERE user_id=? AND app_id=? AND operation_id=?',
@@ -62,14 +62,7 @@ export async function mutatePluginData(
 		return pluginDataRow(replay);
 	}
 	const current = await readPluginData(tx, userId, appId, input.key);
-	const counts = await tx.one(
-		'SELECT COUNT(*) AS keys,COALESCE(SUM(LENGTH(CAST(value_json AS BLOB))),0) AS data_bytes FROM agent_plugin_data WHERE user_id=? AND app_id=? AND value_json IS NOT NULL',
-		[userId, appId],
-	);
-	if (typeof counts?.keys !== 'number' || typeof counts.data_bytes !== 'number') {
-		throw new Error('Plugin data count missing');
-	}
-	decide(current, counts.keys, counts.data_bytes);
+	decide(current);
 	if (current?.version === Number.MAX_SAFE_INTEGER) {
 		throw new PluginStorageRefusal('version_conflict');
 	}

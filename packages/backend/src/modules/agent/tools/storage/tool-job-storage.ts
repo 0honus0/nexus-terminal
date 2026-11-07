@@ -1,4 +1,4 @@
-import type { ToolJobState } from '../tool-job-values.js';
+import type { AgentToolJobState } from '@nexus-terminal/shared/agent/tools/values';
 
 export interface StoredJobScope {
 	userId: number;
@@ -33,7 +33,7 @@ export interface StoredToolJob {
 	targetVersion: number;
 	fingerprint: string;
 	policyRevision: number;
-	state: ToolJobState;
+	state: AgentToolJobState;
 	revision: number;
 	result: StoredToolJobResult | null;
 	createdAt: number;
@@ -42,6 +42,7 @@ export interface StoredToolJob {
 
 export interface StoredJobCreate {
 	id: string;
+	operationHash: string;
 	userId: number;
 	appId: string;
 	runId: string;

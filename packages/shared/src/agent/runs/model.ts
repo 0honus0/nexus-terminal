@@ -44,7 +44,7 @@ export interface AgentResourceSessionView {
 	openedAt: number;
 	sshConnections: number;
 	sftpChannels: number;
-	mcpSessions: number;
+	protocolSessions: number;
 	browserSessions: number;
 	activeOperations: number;
 	backgroundJobs: number;

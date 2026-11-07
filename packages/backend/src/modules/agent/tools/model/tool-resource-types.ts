@@ -6,7 +6,7 @@ export interface ToolResourceSnapshot {
 	phase: AgentResourceSessionState;
 	createdAt: number;
 	lastUsedAt: number;
-	mcpSessions: number;
+	protocolSessions: number;
 	browserSessions: number;
 	connections: number;
 	files: number;

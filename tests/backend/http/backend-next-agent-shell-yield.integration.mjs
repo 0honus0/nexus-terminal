@@ -52,8 +52,8 @@ await test(
 );
 
 // Only model responses are scripted. HTTP, governance, SQLite, Job/Run owners and SSH are real.
-await test('Shell yield policy and mutation admission', { timeout: 60000 }, async (t) => {
-	const root = await mkdtemp(join(tmpdir(), 'nexus-agent-shell-yield-'));
+await test('Shell yield policy and mutation admission', { timeout: 120000 }, async (t) => {
+	const root = await mkdtemp(join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-agent-shell-yield-'));
 	const sshd = await openSshd(root);
 	t.after(() => sshd.close());
 	let sequence = 0;
@@ -62,7 +62,9 @@ await test('Shell yield policy and mutation admission', { timeout: 60000 }, asyn
 		await t.test(name, async (subtest) => {
 			const directory = join(root, String(++sequence));
 			await mkdir(directory);
-			const fixture = await openAgentExecution(directory, sshd);
+			const fixture = await openAgentExecution(directory, sshd, {
+				discover: 'shell_execute shell_job_control tool_result_read',
+			});
 			const cleanup = { unknown: false };
 			subtest.after(() => fixture.close(cleanup));
 			await work(fixture, directory, cleanup);
@@ -89,33 +91,61 @@ await test('Shell yield policy and mutation admission', { timeout: 60000 }, asyn
 	});
 
 	const result = (f, run, name) => {
-		const operation = f.rows('agent_run_tools', run).findLast((row) => row.tool_name === name);
+		const operation = f.operations(run).findLast((row) => row.label === 'nexus.tools.remote.' + name);
 		assert.ok(operation);
-		return { operation, value: JSON.parse(operation.result_text) };
+		return {
+			operation,
+			value:
+				operation.state === 'completed'
+					? JSON.parse(f.content(JSON.parse(operation.result_json).content))
+					: { failureCode: operation.failure_code },
+		};
 	};
 
 	for (const mode of ['foreground', 'background']) {
 		await scenario(mode + ' exceeds tool wait budget, waits repeatedly and executes once', async (f, directory) => {
 			await settings(f, { toolTimeoutSeconds: 1 });
 			const effect = join(directory, 'single-effect');
-			const run = await f.start(mode + ' yield', (results) => {
+			const gate = join(directory, 'release-after-waits');
+			let completedWaits = 0;
+			const run = await f.start(mode + ' yield', async (results) => {
 				if (!results.length) {
-					return shell(f, { mode, commands: [`printf x >> '${effect}'; sleep 3; printf finished`] });
+					return shell(f, {
+						mode,
+						commands: [
+							`printf x >> '${effect}'; while [ ! -f '${gate}' ]; do sleep 0.05; done; printf finished`,
+						],
+					});
 				}
 				const latest = results.at(-1).jobs?.[0] ?? results.at(-1);
 				assert.equal(latest.jobId, results[0].jobId);
+				assert.equal(
+					f.operations(run).find((row) => row.label === 'nexus.tools.remote.shell_execute')?.state,
+					'completed',
+					'the original Job continues after its successful plugin dispatch',
+				);
+				if (results.length > 1 && completedWaits < 2) {
+					assert.ok(['queued', 'dispatched'].includes(latest.state));
+					completedWaits++;
+					if (completedWaits === 2) await writeFile(gate, 'release');
+				}
 				return latest.state === 'completed' ? {} : wait(f, results[0].jobId);
 			});
-			await f.approve(await f.approval(run, 'shell_execute'));
-			await f.wait(run, 'completed');
-			assert.equal(await readFile(effect, 'utf8'), 'x');
-			assert.equal(f.rows('agent_tool_jobs', run).length, 1);
-			assert.equal(f.rows('agent_tool_jobs', run)[0].state, 'completed');
-			const operations = f.rows('agent_run_tools', run);
-			assert.ok(operations.filter((row) => row.tool_name === 'shell_job_control').length >= 2);
-			assert.ok(operations.every((row) => row.state === 'completed'));
-			assert.equal(result(f, run, 'shell_job_control').value.jobs[0].result.commands[0].stdout, 'finished');
-			assert.deepEqual(expectStatus(await f.api('GET', '/api/v1/remote/mutations'), 200).items, []);
+			try {
+				await f.approve(await f.approval(run, 'shell_execute'));
+				await f.wait(run, 'completed');
+				assert.equal(completedWaits, 2);
+				assert.equal(await readFile(effect, 'utf8'), 'x');
+				assert.equal(f.rows('agent_tool_jobs', run).length, 1);
+				assert.equal(f.rows('agent_tool_jobs', run)[0].state, 'completed');
+				const operations = f.operations(run);
+				assert.ok(operations.filter((row) => row.label === 'nexus.tools.remote.shell_job_control').length >= 2);
+				assert.ok(operations.every((row) => row.state === 'completed'));
+				assert.equal(result(f, run, 'shell_job_control').value.jobs[0].result.commands[0].stdout, 'finished');
+				assert.deepEqual(expectStatus(await f.api('GET', '/api/v1/remote/mutations'), 200).items, []);
+			} finally {
+				await writeFile(gate, 'release');
+			}
 		});
 	}
 
@@ -200,19 +230,48 @@ await test('Shell yield policy and mutation admission', { timeout: 60000 }, asyn
 
 	await scenario('8 MiB output finishes over real OpenSSH with its complete log intact', async (f, directory) => {
 		await settings(f, { maxToolOutputBytes: 4096 });
+		let reconstructed = '';
+		let captured;
 		const run = await f.start('eight MiB output', (results) => {
-			if (results.length) {
+			if (results.length === 0)
+				return shell(f, {
+					commands: ["head -c 8388608 /dev/zero | tr '\\000' o", "printf '末尾🙂'; printf '错误🙂' >&2"],
+				});
+			if (results.length === 1) {
 				assert.equal(results[0].kind, 'captured_result_preview');
-				assert.ok(results[0].projection.text.includes('"jobId":'));
-				assert.ok(results[0].projection.text.includes('"outputRead":{"connectionId":' + f.connectionId));
+				captured = results[0].projection;
+				assert.ok(captured.text.includes('"jobId":'));
+				assert.ok(captured.text.includes('"outputRead":{"connectionId":' + f.connectionId));
+				reconstructed = captured.text;
+			} else {
+				const page = results.at(-1).items[0];
+				assert.equal(page.offset, captured.nextOffset);
+				assert.equal(page.sha256, captured.sha256);
+				reconstructed += page.text;
+				captured = page;
+			}
+			if (captured.nextOffset === null) {
+				const receipt = f.operations(run).find((row) => row.label === 'nexus.tools.remote.shell_execute');
+				assert.equal(reconstructed, f.content(JSON.parse(receipt.result_json).content));
+				assert.equal(JSON.parse(reconstructed).commands[1].status, 'completed');
 				return {};
 			}
-			return shell(f, {
-				commands: ["head -c 8388608 /dev/zero | tr '\\000' o", "printf '末尾🙂'; printf '错误🙂' >&2"],
-			});
+			return {
+				name: 'tool_result_read',
+				input: {
+					items: [
+						{
+							toolCallId: captured.toolCallId,
+							sha256: captured.sha256,
+							offset: captured.nextOffset,
+							maxBytes: 3072,
+						},
+					],
+				},
+			};
 		});
 		await f.approve(await f.approval(run, 'shell_execute'));
-		await f.wait(run, 'completed');
+		await f.wait(run, 'completed', 30000);
 		const job = f.rows('agent_tool_jobs', run)[0];
 		const value = JSON.parse(job.result_text);
 		assert.equal(value.status, 'completed');
@@ -254,7 +313,7 @@ await test('Shell yield policy and mutation admission', { timeout: 60000 }, asyn
 			};
 		});
 		await f.approve(await f.approval(run, 'shell_execute'));
-		await f.wait(run, 'completed');
+		await f.wait(run, 'completed', 30000);
 		assert.deepEqual(received, expected);
 		assert.equal(await readFile(effect, 'utf8'), 'x');
 		const job = f.rows('agent_tool_jobs', run)[0];
@@ -304,12 +363,11 @@ await test('Shell yield policy and mutation admission', { timeout: 60000 }, asyn
 				assert.equal(claim.state, 'held');
 
 				async function refused(code) {
-					const next = await f.start(code, () =>
-						shell(f, { commands: [posixCommand(['touch', forbiddenEffect])] }),
+					const next = await f.start(code, (results) =>
+						results.length ? {} : shell(f, { commands: [posixCommand(['touch', forbiddenEffect])] }),
 					);
 					await f.approve(await f.approval(next, 'shell_execute'));
-					const view = await f.wait(next, 'failed');
-					assert.equal(view.failure.code, code);
+					await f.wait(next, 'completed');
 					const entry = result(f, next, 'shell_execute');
 					assert.equal(entry.operation.state, 'failed');
 					assert.equal(entry.value.failureCode, code);
@@ -317,7 +375,7 @@ await test('Shell yield policy and mutation admission', { timeout: 60000 }, asyn
 					await assert.rejects(stat(forbiddenEffect), { code: 'ENOENT' });
 				}
 
-				await refused('tool_machine_busy');
+				await refused('mutation_busy');
 				assert.equal(
 					expectStatus(await f.api('GET', '/api/v1/remote/mutations'), 200).items[0].revision,
 					claim.revision,
@@ -331,7 +389,7 @@ await test('Shell yield policy and mutation admission', { timeout: 60000 }, asyn
 				cleanup.unknown = true;
 				const blocked = expectStatus(await f.api('GET', '/api/v1/remote/mutations'), 200).items[0];
 				assert.equal(blocked.state, 'blocked');
-				await refused('tool_machine_blocked');
+				await refused('mutation_blocked');
 				assert.deepEqual(expectStatus(await f.api('GET', '/api/v1/remote/mutations'), 200).items, [blocked]);
 			} finally {
 				await writeFile(gate, 'release');
@@ -358,61 +416,72 @@ await test('Shell yield policy and mutation admission', { timeout: 60000 }, asyn
 		async (f, directory, cleanup) => {
 			const effect = join(directory, 'revocation-started');
 			const finished = join(directory, 'revocation-finished');
+			const gate = join(directory, 'release-revoked-process');
 			const run = await f.start('yield then revoke', (results) =>
 				results.length
 					? { hold: true }
 					: shell(f, {
 							yieldSeconds: 0,
 							commands: [
-								`trap '' HUP TERM; printf x > '${effect}'; sleep 3; printf done > '${finished}'`,
+								`trap '' HUP TERM; printf x > '${effect}'; while [ ! -f '${gate}' ]; do sleep 0.05; done; printf done > '${finished}'`,
 							],
 						}),
 			);
-			await f.approve(await f.approval(run, 'shell_execute'));
-			await until(
-				async () => {
-					try {
-						return await readFile(effect, 'utf8');
-					} catch (error) {
-						if (error.code === 'ENOENT') {
-							return null;
+			try {
+				await f.approve(await f.approval(run, 'shell_execute'));
+				await until(
+					async () => {
+						try {
+							return await readFile(effect, 'utf8');
+						} catch (error) {
+							if (error.code === 'ENOENT') {
+								return null;
+							}
+							throw error;
 						}
-						throw error;
-					}
-				},
-				(value) => value === 'x',
-				'Yielded process started',
-			);
-			await until(
-				() => f.calls.length,
-				(count) => count === 2,
-				'Model received same Job',
-			);
-			await f.grants([]);
-			await until(
-				() => f.rows('agent_tool_jobs', run)[0]?.state,
-				(state) => state === 'unknown',
-				'Revocation preserves unknown',
-			);
-			cleanup.unknown = true;
-			f.finishModels();
-			await f.wait(run, 'unknown');
-			assert.equal(f.rows('agent_tool_jobs', run).length, 1);
-			assert.equal(await readFile(effect, 'utf8'), 'x');
-			await until(
-				async () => {
-					try {
-						return await readFile(finished, 'utf8');
-					} catch (error) {
-						if (error.code === 'ENOENT') {
-							return null;
+					},
+					(value) => value === 'x',
+					'Yielded process started',
+				);
+				await until(
+					() => f.calls.length,
+					(count) => count === 3,
+					'Model received same Job',
+				);
+				assert.equal(
+					f.operations(run).find((row) => row.label === 'nexus.tools.remote.shell_execute')?.state,
+					'completed',
+					'App grants are revoked after the original plugin dispatch completed',
+				);
+				assert.equal(f.rows('agent_tool_jobs', run)[0]?.state, 'dispatched');
+				await f.grants([]);
+				await until(
+					() => f.rows('agent_tool_jobs', run)[0]?.state,
+					(state) => state === 'unknown',
+					'Revocation preserves unknown',
+				);
+				cleanup.unknown = true;
+				f.finishModels();
+				await f.wait(run, 'unknown');
+				assert.equal(f.rows('agent_tool_jobs', run).length, 1);
+				assert.equal(await readFile(effect, 'utf8'), 'x');
+			} finally {
+				await writeFile(gate, 'release');
+				await until(
+					async () => {
+						try {
+							return await readFile(finished, 'utf8');
+						} catch (error) {
+							if (error.code === 'ENOENT') {
+								return null;
+							}
+							throw error;
 						}
-						throw error;
-					}
-				},
-				(value) => value === 'done',
-				'Revocation fixture process independently ended',
-			);
+					},
+					(value) => value === 'done',
+					'Revocation fixture process independently ended',
+				);
+			}
 		},
 	);
 

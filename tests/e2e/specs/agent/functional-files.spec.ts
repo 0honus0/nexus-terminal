@@ -1,3 +1,4 @@
+import { agentChatSurface } from '../../fixtures/agent/workbench';
 import { mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { expect, test } from '../../support/fixtures';
@@ -75,7 +76,7 @@ for (const repeat of [false, true]) {
 			runId = run.id;
 			await expect.poll(async () => (await (await request.get(hold)).json()).pending).toBeGreaterThan(0);
 			await openNativeTaskPanel(page);
-			await page.getByRole('button', { name: 'Request cancellation', exact: true }).click();
+			await agentChatSurface(page).getByRole('button', { name: 'Request cancellation', exact: true }).click();
 			await expect.poll(async () => (await readNativeRun(task, run.id)).status).toBe('cancelled');
 			await expect.poll(async () => (await (await request.get(hold)).json()).pending).toBe(0);
 			expect((await (await request.get(hold)).json()).blocked).toBe(true);
@@ -147,9 +148,7 @@ test('SSH search enforces file and byte bounds and never follows a symlink to th
 		const restored = await readNativeRun(task, id);
 		expect(restored.id).toBe(id);
 		expect(restored.status).toBe('cancelled');
-		await expect(
-			page.getByRole('dialog', { name: 'Agent', exact: true }).getByRole('button', { name: 'Send', exact: true }),
-		).toBeVisible();
+		await expect(agentChatSurface(page).getByRole('button', { name: 'Send', exact: true })).toBeVisible();
 	};
 
 	try {

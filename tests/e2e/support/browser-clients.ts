@@ -1,5 +1,5 @@
 // Test-only entry: bundle the real clients without exposing test hooks in the product build.
-export { listNativeEvents } from '../../../packages/frontend/src/features/agent/api/native-run-api';
+export { requestNativeWorkspace } from '../../../packages/frontend/src/features/agent/api/native-workspace-request';
 
 export { AgentManagementFailure } from '../../../packages/frontend/src/features/agent/model/management-failure';
 

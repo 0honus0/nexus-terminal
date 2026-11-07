@@ -18,6 +18,8 @@ const privateKeyPath = path.resolve(keyArg);
 const manifestSource = path.join(source, 'manifest.json');
 if (!fs.statSync(source).isDirectory() || !fs.statSync(manifestSource).isFile())
 	throw new Error('PLUGIN_SOURCE_INVALID');
+const sourceManifest = JSON.parse(fs.readFileSync(manifestSource, 'utf8'));
+if (sourceManifest.schemaVersion !== 4) throw new Error('CURRENT_PLUGIN_FIXTURE_REQUIRES_SCHEMA_4');
 const privateKey = createPrivateKey(fs.readFileSync(privateKeyPath));
 if (privateKey.asymmetricKeyType !== 'ed25519') throw new Error('PLUGIN_SIGNING_KEY_INVALID');
 const publicKey = createPublicKey(privateKey);
@@ -57,7 +59,7 @@ try {
 	);
 	fs.writeFileSync(path.join(root, 'files.json'), fileListBytes, { mode: 0o644 });
 	const signed = Buffer.concat([
-		Buffer.from('NEXUS_AGENT_PLUGIN_V1\0', 'utf8'),
+		Buffer.from('NEXUS_AGENT_PLUGIN_V4\0', 'utf8'),
 		manifestBytes,
 		Buffer.from([0]),
 		fileListBytes,
@@ -86,10 +88,17 @@ try {
 	process.stdout.write(
 		`${JSON.stringify(
 			{
-				appId: manifest.id,
+				packageId: manifest.id,
 				version: manifest.version,
-				sdkVersion: manifest.sdkVersion,
-				nexus: { minVersion: '1.0.0', maxVersion: '1.99.99' },
+				compatibility: manifest.compatibility,
+				contributionKinds: [
+					...(manifest.contributions.app ? ['app'] : []),
+					...(manifest.contributions.tools ? ['tools'] : []),
+					...(manifest.contributions.ui ? ['ui'] : []),
+					...(manifest.contributions.skills.length ? ['skills'] : []),
+					...(manifest.contributions.services ? ['services'] : []),
+					...(manifest.contributions.settings ? ['settings'] : []),
+				],
 				displayName: manifest.displayName,
 				publisherKeyId,
 				publicKeyPem: publicKey.export({ type: 'spki', format: 'pem' }).toString(),

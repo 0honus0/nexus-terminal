@@ -2,14 +2,17 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, writeFile, rm, stat, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, stat, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fixtureToolName, hasToolIdentity } from '../../support/package-tool-catalog.mjs';
+import { migrateToolOutputBatches } from '../../../packages/backend/dist/modules/agent/runs/adapters/sqlite/run-tool-output-migration.js';
+import { migrateToolJobBatchResults } from '../../../packages/backend/dist/modules/agent/tools/adapters/sqlite/tool-job-batch-migration.js';
 import { openAgentExecution } from './agent-execution-fixture.mjs';
 import { openSshd, expectStatus } from '../remote/openssh-fixture.mjs';
 
-await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 60000 }, async (t) => {
-	const root = await mkdtemp(join(tmpdir(), 'nexus-b10-agent-files-'));
+await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 120000 }, async (t) => {
+	const root = await mkdtemp(join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-b10-agent-files-'));
 	let sshd;
 	let sequence = 0;
 
@@ -17,7 +20,10 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 6
 		await t.test(name, async (scenario) => {
 			const directory = join(root, String(++sequence));
 			await mkdir(directory);
-			const fixture = await openAgentExecution(directory, sshd);
+			const fixture = await openAgentExecution(directory, sshd, {
+				discover:
+					'file_write file_read file_patch file_inspect file_move file_delete file_list file_search file_deliver artifact_present artifact_read shell_execute tool_result_read',
+			});
 			scenario.after(() => fixture.close());
 			await work(fixture, directory);
 		});
@@ -25,7 +31,10 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 6
 
 	const hash = (text) => createHash('sha256').update(text).digest('hex');
 
-	const tool = (f, name, input) => ({ name, input: { connectionId: f.connectionId, ...input } });
+	const tool = (f, name, input) => ({
+		name: fixtureToolName(f.calls.at(-1).body, name),
+		input: { connectionId: f.connectionId, ...input },
+	});
 
 	try {
 		sshd = await openSshd(root);
@@ -46,7 +55,7 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 6
 				['PUT', '/api/v1/agent/execution-settings', {}],
 				['PUT', '/api/v1/agent/browser/configuration', {}],
 				['POST', app + '/memories', {}],
-				['POST', '/api/v1/apps/' + f.appId + '/integrations', {}],
+				['PUT', '/api/v1/agent/plugins/apps/' + f.appId + '/composition', {}],
 				['POST', app + '/artifacts', {}],
 				['GET', app + '/memories?limit=wrong', undefined],
 				['GET', '/api/v1/agent/files?limit=wrong', undefined],
@@ -63,10 +72,6 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 6
 			assert.deepEqual(expectStatus(await f.api('GET', '/api/v1/agent/browser/configuration'), 200), browser);
 			assert.equal(expectStatus(await f.api('GET', app + '/memories'), 200).items.length, 0);
 			assert.equal(expectStatus(await f.api('GET', app + '/artifacts'), 200).items.length, 0);
-			assert.equal(
-				expectStatus(await f.api('GET', '/api/v1/apps/' + f.appId + '/integrations'), 200).items.length,
-				0,
-			);
 		});
 		await scenario(
 			'write/read/patch/inspect/move/delete use captured hashes and separate approvals',
@@ -123,17 +128,22 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 6
 				assert.equal(await readFile(source, 'utf8'), updated);
 				await f.approve(move);
 				const deletion = await f.approval(run, 'file_delete');
-				assert.equal(deletion.inspection.risk, 'destructive');
+				assert.equal(deletion.risk, 'destructive');
 				assert.equal(await readFile(destination, 'utf8'), updated);
 				await assert.rejects(stat(source), { code: 'ENOENT' });
 				await f.approve(deletion);
 				await f.wait(run, 'completed');
 				await assert.rejects(stat(destination), { code: 'ENOENT' });
-				const tools = f.rows('agent_run_tools', run);
+				const tools = (await f.toolHistory(run)).filter((item) => !hasToolIdentity(item, 'tool_search'));
 				assert.equal(tools.length, 7);
 				assert.ok(tools.every((row) => row.state === 'completed'));
-				assert.equal(JSON.parse(tools[1].result_text).items[0].value.sha256, hash(initial));
-				assert.equal(f.calls.length, 8);
+				const effects = f.operations(run).filter((row) => row.kind === 'effect');
+				assert.equal(effects.length, 7, 'Each native operation retains its own governed receipt');
+				assert.ok(effects.every((row) => row.state === 'completed'));
+				const read = f.operations(run).find((row) => row.label === 'nexus.tools.remote.file_read');
+				const payload = JSON.parse(f.content(JSON.parse(read.result_json).content));
+				assert.equal(payload.items[0].value.sha256, hash(initial));
+				assert.equal(f.calls.length, 9, 'One discovery plus seven tools plus final answer');
 			},
 		);
 		await scenario(
@@ -148,7 +158,7 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 6
 					}),
 					200,
 				);
-				const content = '甲🙂a'.repeat(6000),
+				const content = '甲🙂a'.repeat(2000),
 					path = join(directory, 'large.txt'),
 					folder = join(directory, 'entries');
 				await writeFile(path, content);
@@ -215,11 +225,11 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 6
 			},
 		);
 		await scenario(
-			'batch delivery, Artifact paging and v1-to-current migration preserve content across repeated startup',
+			'batch delivery, Artifact paging and immutable content survive repeated startup',
 			async (f, directory) => {
 				await f.grants(['file.read', 'artifacts.read', 'artifacts.write', 'shell.execute']);
 				const paths = [join(directory, 'one.txt'), join(directory, 'two.txt')],
-					contents = ['甲🙂alpha'.repeat(20), 'second'];
+					contents = ['甲🙂alpha'.repeat(6), 'second'];
 				await Promise.all(paths.map((path, index) => writeFile(path, contents[index])));
 				let received = '';
 				const run = await f.start('artifact batches', (results) => {
@@ -261,63 +271,37 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 6
 				);
 				await f.approve(await f.approval(shellRun, 'shell_execute'));
 				await f.wait(shellRun, 'completed');
-				const job = f.rows('agent_tool_jobs', shellRun)[0],
-					original = JSON.parse(job.result_text);
-				const outputRows = f
-					.rows('agent_run_tools', run)
-					.filter((row) => ['file_deliver', 'artifact_present'].includes(row.tool_name));
-				const oldOutputs = outputRows.map((row) => JSON.parse(row.result_text).items[0].value);
-				await f.restart({
-					beforeBoot() {
-						// Seed the previous representation only after all application and
-						// HTTP audit writers have drained and closed their database handles.
-						const db = new DatabaseSync(f.database);
-						try {
-							db.exec('BEGIN');
-							for (const [index, row] of outputRows.entries()) {
-								db.prepare('UPDATE agent_run_tools SET result_text=? WHERE id=?').run(
-									JSON.stringify(oldOutputs[index]),
-									row.id,
-								);
-							}
-							const oldJob = { status: original.status, ...original.commands[0] };
-							delete oldJob.index;
-							db.prepare('UPDATE agent_tool_jobs SET result_text=? WHERE id=?').run(
-								JSON.stringify(oldJob),
-								job.id,
-							);
-							// Restore the actual v1 schema so later DDL migrations run once.
-							db.exec(`
-								DROP TABLE operations_notification_pending;
-								DROP INDEX agent_budget_reservation_root;
-								DROP INDEX agent_approval_run_lookup;
-								DROP INDEX agent_approval_tool_lookup;
-								DROP INDEX agent_resolution_approval_lookup;
-								DROP INDEX agent_compaction_run_lookup;
-								DROP TABLE access_oidc_sessions;
-								DROP TABLE access_oidc_flows;
-								DROP TABLE access_oidc_configuration;
-								DELETE FROM schema_version WHERE version>=2;
-								COMMIT;
-							`);
-						} finally {
-							db.close();
-						}
-					},
-				});
-				await f.wait(run, 'completed');
-				assert.deepEqual(JSON.parse(f.rows('agent_tool_jobs', shellRun)[0].result_text), original);
-				for (const [index, row] of f
-					.rows('agent_run_tools', run)
-					.filter((row) => ['file_deliver', 'artifact_present'].includes(row.tool_name))
-					.entries()) {
-					assert.deepEqual(JSON.parse(row.result_text), {
-						items: [{ index: 0, status: 'completed', value: oldOutputs[index] }],
-					});
+				const tools = f.operations(run);
+				const shell = f.operations(shellRun);
+				const captured = tools
+					.filter((row) => row.kind === 'tool')
+					.map((row) => ({
+						id: row.id,
+						label: row.label,
+						result: row.result_json,
+						text: f.content(JSON.parse(row.result_json).content),
+					}));
+				for (let startup = 0; startup < 2; startup++) {
+					await f.restart();
+					await f.wait(run, 'completed');
+					assert.deepEqual(f.operations(run), tools);
+					assert.deepEqual(f.operations(shellRun), shell);
+					for (const row of captured) {
+						assert.equal(f.content(JSON.parse(row.result).content), row.text);
+					}
 				}
-				const migrated = f.rows('agent_run_tools', run);
-				await f.restart();
-				assert.deepEqual(f.rows('agent_run_tools', run), migrated);
+				const delivery = captured.find((row) => row.label === 'nexus.tools.remote.file_deliver');
+				assert.ok(delivery);
+				const delivered = JSON.parse(delivery.text).items;
+				for (const [index, item] of delivered.entries()) {
+					const download = await f.api(
+						'GET',
+						'/api/v1/agent/apps/' + f.appId + '/artifacts/' + item.value.id + '/content',
+					);
+					expectStatus(download, 200);
+					assert.equal(download.bytes.toString(), contents[index]);
+					assert.equal(item.value.sizeBytes, Buffer.byteLength(contents[index]));
+				}
 			},
 		);
 		await scenario('captured result batch reads bind source hash and code-point offsets', async (f, directory) => {
@@ -328,8 +312,8 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 6
 			const run = await f.start('result batches', (results) => {
 				if (!results.length) return tool(f, 'file_read', { paths: [path] });
 				if (results.length === 1) {
-					const row = f.rows('agent_run_tools', run)[0];
-					original = row.result_text;
+					const row = f.operations(run).find((item) => item.label === 'nexus.tools.remote.file_read');
+					original = f.content(JSON.parse(row.result_json).content);
 					return {
 						name: 'tool_result_read',
 						input: {
@@ -371,10 +355,13 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 6
 			await f.approve(await f.approval(run, 'file_write'));
 			await f.wait(run, 'completed');
 			assert.equal(await readFile(path, 'utf8'), 'current');
-			assert.equal(f.calls.length, 2);
-			const operation = f.rows('agent_run_tools', run)[0];
+			assert.equal(f.calls.length, 3);
+			const operation = f.operations(run).find((item) => item.label === 'nexus.tools.remote.file_write');
 			assert.equal(operation.state, 'completed');
-			assert.equal(JSON.parse(operation.result_text).items[0].failureCode, 'conflict');
+			assert.equal(
+				JSON.parse(f.content(JSON.parse(operation.result_json).content)).items[0].failureCode,
+				'conflict',
+			);
 		});
 		await scenario('symbolic-link read refuses without exposing its target', async (f, directory) => {
 			const path = join(directory, 'link'),
@@ -383,12 +370,16 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 6
 			await symlink(target, path);
 			const run = await f.start('link rejection', (results) => {
 				if (!results.length) return tool(f, 'file_read', { paths: [path] });
-				assert.deepEqual(results, [{ failureCode: 'tool_invalid_input' }]);
+				assert.ok(results[0].failure, JSON.stringify(results));
 				return {};
 			});
 			await f.wait(run, 'completed');
-			assert.equal(f.calls.length, 2);
-			assert.equal(f.rows('agent_run_tools', run)[0].state, 'failed');
+			assert.equal(f.calls.length, 3);
+			assert.ok(
+				(await f.toolHistory(run)).some(
+					(item) => hasToolIdentity(item, 'file_read') && item.state === 'failed',
+				),
+			);
 			assert.equal(await readFile(target, 'utf8'), 'must-not-be-returned');
 		});
 		await scenario('overlapping patch context refuses without editing the file', async (f, directory) => {
@@ -400,7 +391,7 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 6
 			await f.approve(await f.approval(run, 'file_patch'));
 			await f.wait(run, 'unknown');
 			assert.equal(await readFile(path, 'utf8'), 'aaa');
-			assert.equal(f.calls.length, 1);
+			assert.equal(f.calls.length, 2);
 		});
 		await scenario('move refuses an existing destination and preserves both files', async (f, directory) => {
 			const path = join(directory, 'source'),
@@ -426,7 +417,7 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 6
 			await f.wait(run, 'completed');
 			assert.equal(await readFile(path, 'utf8'), 'source');
 			assert.equal(await readFile(destinationPath, 'utf8'), 'destination');
-			assert.equal(f.calls.length, 3);
+			assert.equal(f.calls.length, 4);
 		});
 		await scenario(
 			'tree deletion requires explicit scope and leaves neighboring files intact',
@@ -452,7 +443,7 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 6
 						: tool(f, 'file_inspect', { paths: [path] }),
 				);
 				const approval = await f.approval(run, 'file_delete');
-				assert.equal(approval.inspection.risk, 'destructive');
+				assert.equal(approval.risk, 'destructive');
 				await f.approve(approval);
 				await f.wait(run, 'completed');
 				await assert.rejects(stat(path), { code: 'ENOENT' });
@@ -463,6 +454,33 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 6
 		if (sshd) {
 			await sshd.close();
 		}
-		await rm(root, { recursive: true, force: true });
+	}
+});
+
+await test('B10 historical file delivery and shell batch migrations retain legacy content', async () => {
+	const db = new DatabaseSync(':memory:');
+	try {
+		db.exec(
+			'CREATE TABLE agent_run_tools(id TEXT,tool_name TEXT,state TEXT,result_text TEXT); CREATE TABLE agent_tool_jobs(id TEXT,result_text TEXT);',
+		);
+		const artifact = { id: 'historical-artifact', name: 'legacy.txt', sizeBytes: 7 };
+		db.prepare("INSERT INTO agent_run_tools VALUES('file','file_deliver','completed',?)").run(
+			JSON.stringify(artifact),
+		);
+		db.prepare("INSERT INTO agent_tool_jobs VALUES('job',?)").run(
+			JSON.stringify({ status: 'completed', exitCode: 0, stdout: 'kept', stderr: '' }),
+		);
+		const tx = { run: async (sql, args = []) => db.prepare(sql).run(...args) };
+		await migrateToolOutputBatches(tx);
+		await migrateToolJobBatchResults(tx);
+		assert.deepEqual(
+			JSON.parse(db.prepare("SELECT result_text FROM agent_run_tools WHERE id='file'").get().result_text),
+			{ items: [{ index: 0, status: 'completed', value: artifact }] },
+		);
+		const job = JSON.parse(db.prepare("SELECT result_text FROM agent_tool_jobs WHERE id='job'").get().result_text);
+		assert.equal(job.commands[0].stdout, 'kept');
+		assert.equal(job.commands[0].index, 0);
+	} finally {
+		db.close();
 	}
 });

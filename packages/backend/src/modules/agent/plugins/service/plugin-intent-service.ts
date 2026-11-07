@@ -2,7 +2,6 @@ import type { PluginRpcInput } from '../model/plugin-types.js';
 import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
 import {
 	AGENT_PLUGIN_INTENT_MAX_RANGE_BYTES,
-	AGENT_PLUGIN_INTENT_MAX_ARTIFACTS,
 	AGENT_PLUGIN_INTENT_MAX_INPUT_BYTES,
 	AGENT_PLUGIN_INTENT_MAX_PAGE,
 } from '@nexus-terminal/shared/agent/plugins/intent-values';
@@ -158,7 +157,6 @@ export class PluginIntentService {
 			Buffer.byteLength(input.intentId, 'utf8') > 128 ||
 			!input.inputJson.length ||
 			Buffer.byteLength(input.inputJson, 'utf8') > AGENT_PLUGIN_INTENT_MAX_INPUT_BYTES ||
-			input.artifactIds.length > AGENT_PLUGIN_INTENT_MAX_ARTIFACTS ||
 			new Set(input.artifactIds).size !== input.artifactIds.length
 		) {
 			throw new AgentFailure('invalid_input');

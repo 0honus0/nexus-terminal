@@ -1,3 +1,4 @@
+import { AGENT_TOOL_RESULT_PAGE_MAX_BYTES } from '@nexus-terminal/shared/agent/tools/values';
 import { FailureSummary } from '../../../../platform/lifecycle/failure-summary.js';
 import type { OperationsEvents } from '../../../operations/public.js';
 import type { ExecutionService } from '../../execution/service/execution-service.js';
@@ -29,6 +30,9 @@ import type {
 
 function identity(actor: ArtifactActor): (value: number | null) => void {
 	return (value) => {
+		if (actor.kind === 'plugin-ui') {
+			actor.assertCurrent();
+		}
 		if (value !== actor.userId) {
 			throw new AgentFailure(
 				actor.kind === 'session' ? (value === null ? 'unauthenticated' : 'forbidden') : 'version_conflict',
@@ -231,13 +235,14 @@ export class ArtifactService {
 		sizeBytes: number,
 		source: AsyncIterable<Uint8Array>,
 		signal: AbortSignal,
+		recordOutputArtifacts?: (ids: readonly string[]) => void,
 	): Promise<ArtifactRecord> {
 		if (actor.kind !== 'tool') {
 			throw new AgentFailure('invalid_input');
 		}
 		return this.model.useDetectedContent(source, signal, async (mediaType, bytes) => {
 			const pending = await this.begin(actor, { name, mediaType, declaredBytes: sizeBytes });
-			return this.upload(actor, pending.id, pending.version, bytes, signal);
+			return this.upload(actor, pending.id, pending.version, bytes, signal, recordOutputArtifacts);
 		});
 	}
 
@@ -265,7 +270,7 @@ export class ArtifactService {
 			offset < 0 ||
 			!Number.isSafeInteger(maxBytes) ||
 			maxBytes < (encoding === 'utf8' ? 4 : 1) ||
-			maxBytes > 4096
+			maxBytes > AGENT_TOOL_RESULT_PAGE_MAX_BYTES
 		) {
 			throw new AgentFailure('invalid_input');
 		}
@@ -426,7 +431,7 @@ export class ArtifactService {
 	async availableBytes(actor: ArtifactActor, minimumBytes: 0 | 1 = 1): Promise<number> {
 		scope(actor);
 		const configuration =
-			actor.kind === 'session'
+			actor.kind === 'session' || actor.kind === 'plugin-ui'
 				? await this.settings.get(actor.userId)
 				: await this.settings.frozen(actor.userId, actor.appId, actor.runId);
 		const usage = await this.model.summary(actor.userId, Date.now(), configuration.limits.maxArtifactBytes);
@@ -462,7 +467,7 @@ export class ArtifactService {
 			throw new AgentFailure('limit_exceeded');
 		}
 		const configuration =
-			actor.kind === 'session'
+			actor.kind === 'session' || actor.kind === 'plugin-ui'
 				? await this.settings.get(actor.userId)
 				: await this.settings.frozen(actor.userId, actor.appId, actor.runId);
 		const now = Date.now();
@@ -498,11 +503,12 @@ export class ArtifactService {
 		expectedVersion: number,
 		source: AsyncIterable<Uint8Array>,
 		signal: AbortSignal,
+		recordOutputArtifacts?: (ids: readonly string[]) => void,
 	): Promise<ArtifactRecord> {
 		const release = this.acquireRead(artifactId);
 		let cleanupFailed = false;
 		try {
-			return await this.uploadOwned(actor, artifactId, expectedVersion, source, signal);
+			return await this.uploadOwned(actor, artifactId, expectedVersion, source, signal, recordOutputArtifacts);
 		} catch (error) {
 			if (error instanceof ToolCleanupFailure) {
 				cleanupFailed = true;
@@ -520,6 +526,7 @@ export class ArtifactService {
 		expectedVersion: number,
 		source: AsyncIterable<Uint8Array>,
 		signal: AbortSignal,
+		recordOutputArtifacts?: (ids: readonly string[]) => void,
 	): Promise<ArtifactRecord> {
 		scope(actor);
 		id(artifactId);
@@ -567,6 +574,8 @@ export class ArtifactService {
 				written.sha256,
 				Date.now(),
 			);
+			// Retain the confirmed ready identity even if publication or outer cleanup later fails.
+			recordOutputArtifacts?.([value.id]);
 			await this.events.publish({
 				key: 'artifact:' + value.id + ':' + value.version,
 				event: 'AGENT_ARTIFACT_CREATED',
@@ -757,12 +766,7 @@ export class ArtifactService {
 			randomUUID(),
 			600000,
 			Date.now,
-			(value, confirmations) => {
-				identity(actor)(value);
-				if (confirmations >= 128) {
-					throw new AgentFailure('limit_exceeded');
-				}
-			},
+			identity(actor),
 			AGENT_ARTIFACT_MAX_CLEANUP_ITEMS,
 		);
 	}

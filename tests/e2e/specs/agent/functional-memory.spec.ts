@@ -1,3 +1,6 @@
+import { expectedToolIdentity } from '../../../support/package-tool-catalog.mjs';
+import { readAgentPluginFrontendRpc } from '../../../../packages/shared/src/agent/plugins/frontend-rpc-codec';
+import { agentChatSurface } from '../../fixtures/agent/workbench';
 import regressionInputs from '../../fixtures/agent/regression-inputs.json';
 import { expect, test } from '../../support/fixtures';
 import { prepareNativeTask, openNativeTask, startNativeTask, finishNativeTask } from '../../fixtures/agent/native-task';
@@ -64,20 +67,27 @@ for (const fixture of regressionInputs.memoryProposals) {
 			(await requestAgentJson(request, { method: 'GET', path: `${path}/${reviewId}` }, readAgentMemoryResponse))
 				.memory;
 
-		const section = page.getByRole('complementary', { name: 'Memory review', exact: true });
+		const section = agentChatSurface(page).getByRole('complementary', { name: 'Memory review', exact: true });
 		if (!modelCandidate) throw new Error('Model memory candidate missing');
 		const row = section.locator('article').filter({ has: page.getByText(modelCandidate.content, { exact: true }) });
 		await expect(section).toBeVisible();
 		await expect(row).toBeVisible();
 		await expect(section.getByText(managed.content, { exact: true })).toHaveCount(0);
-		const endpoint = `/api/v1/agent${path}/${modelCandidate.id}/review`;
+		const endpoint = `/api/v1/agent/plugins/installations/${task.app.id}/frontend/rpc`;
 		const publishedWaiting = page.waitForResponse(
-			(response) => response.url().endsWith(endpoint) && response.request().method() === 'POST',
+			(response) =>
+				response.url().endsWith(endpoint) &&
+				response.request().method() === 'POST' &&
+				readAgentPluginFrontendRpc(response.request().postDataJSON()).envelope.request.method ===
+					'agent.memories.review',
 		);
 		await row.getByRole('button', { name: 'Save memory', exact: true }).click();
 		const publishedResponse = await publishedWaiting;
 		expect(publishedResponse.status()).toBe(200);
-		expect(publishedResponse.request().postDataJSON()).toEqual({
+		const reviewed = readAgentPluginFrontendRpc(publishedResponse.request().postDataJSON()).envelope.request;
+		if (reviewed.method !== 'agent.memories.review') throw new Error('Expected memory review command');
+		expect(reviewed.params.memoryId).toBe(modelCandidate.id);
+		expect(reviewed.params.input).toEqual({
 			expectedVersion: modelCandidate.version,
 			decision: 'publish',
 			content: modelCandidate.content,
@@ -172,7 +182,7 @@ for (const boundary of ['absolute', 'duration'] as const) {
 		expect(tools.items).toHaveLength(1);
 		expect(tools.items[0]).toMatchObject({
 			runId: created.id,
-			toolName: 'collaboration_delegate',
+			identity: expect.objectContaining({ kind: 'plugin', ...expectedToolIdentity('collaboration_delegate') }),
 			state: 'failed',
 		});
 		const children = await requestAgentWorkspace(request, task.app, {

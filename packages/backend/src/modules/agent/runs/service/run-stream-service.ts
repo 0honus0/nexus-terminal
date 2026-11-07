@@ -5,7 +5,7 @@ import { AgentFailure } from '../../agent-failure.js';
 import type { RunStreamCursor, RunStreamPage } from '../model/run-stream-types.js';
 import type { RunService } from './run-service.js';
 import type { ContextHistoryService } from '../../context/service/context-history-service.js';
-import type { GovernanceService } from '../../governance/service/governance-service.js';
+import type { OperationApprovalService } from '../../governance/service/operation-approval-service.js';
 import type { ThreadModel } from '../../scope/model/thread-model.js';
 import type { RunCollaborationService } from './run-collaboration-service.js';
 
@@ -14,7 +14,7 @@ export class RunStreamService {
 	constructor(
 		private readonly runs: RunService,
 		private readonly contexts: ContextHistoryService,
-		private readonly governance: GovernanceService,
+		private readonly approvals: OperationApprovalService,
 		private readonly collaboration: RunCollaborationService,
 		private readonly threads: ThreadModel,
 		private readonly resources: RunResourceService,
@@ -39,7 +39,7 @@ export class RunStreamService {
 		}
 		const [page, approvals, children, body] = await Promise.all([
 			this.runs.listEvents(userId, appId, runId, cursor.events, AGENT_RUN_EVENT_MAX_LIMIT),
-			this.governance.approvals(userId, appId, runId, cursor.approvals),
+			this.approvals.page(userId, appId, runId, cursor.approvals),
 			this.collaboration.listChildren({ userId, appId, runId }),
 			readBody(),
 		]);

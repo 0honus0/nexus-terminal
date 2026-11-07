@@ -1,3 +1,8 @@
+import { agentChatSurface, agentHost } from '../../fixtures/agent/workbench';
+import {
+	readAgentPluginFrontendRpc,
+	readAgentPluginRpcResponse,
+} from '../../../../packages/shared/src/agent/plugins/frontend-rpc-codec';
 import { installTestPlugin } from '../../support/plugins';
 import { dismissToasts } from '../../support/feedback';
 import {
@@ -47,7 +52,7 @@ test('Agent launcher stays passive until the user explicitly opens the Hub', asy
 	await page.goto('/connections');
 
 	const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
-	const hub = page.locator('section[aria-label="Agent"]');
+	const hub = agentHost(page);
 	await expect(launcher).toBeVisible();
 	await expect(hub).toHaveCount(0);
 
@@ -72,7 +77,7 @@ test('Agent launcher moves immediately on drag and opens only on click', async (
 			return { right: Number.parseFloat(style.right), bottom: Number.parseFloat(style.bottom) };
 		});
 
-	const hub = page.locator('section[aria-label="Agent"]');
+	const hub = agentHost(page);
 	await expect(launcher).toBeVisible();
 	const initial = await launcher.boundingBox();
 	const initialPosition = await launcherPosition();
@@ -111,7 +116,7 @@ test('Agent launcher docks on either edge, restores its side and expands on focu
 	await enableTestAgentExecution(context.request);
 	await page.goto('/connections');
 	const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
-	const hub = page.locator('section[aria-label="Agent"]');
+	const hub = agentHost(page);
 	await expect(launcher).toBeVisible();
 
 	for (const side of ['left', 'right'] as const) {
@@ -151,7 +156,7 @@ test.describe('touch Agent launcher', () => {
 		await enableTestAgentExecution(context.request);
 		await page.goto('/connections');
 		const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
-		const hub = page.locator('section[aria-label="Agent"]');
+		const hub = agentHost(page);
 		await expect(launcher).toBeVisible();
 		const initial = (await launcher.boundingBox())!;
 		const y = initial.y + 22 - 60;
@@ -198,7 +203,7 @@ test.describe('touch Agent launcher', () => {
 		await page.goto('/connections');
 
 		const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
-		const hub = page.locator('section[aria-label="Agent"]');
+		const hub = agentHost(page);
 		await expect(launcher).toBeVisible();
 		const initial = await launcher.boundingBox();
 		expect(initial).toBeTruthy();
@@ -259,29 +264,39 @@ test('Agent Hub native buttons keep a 24px physical pointer-target floor', async
 	await page.goto('/connections');
 	await openAgentHub(page);
 
-	const hub = page.locator('section[aria-label="Agent"]');
+	const hub = agentHost(page);
 	await expect(hub).toBeVisible();
-	const undersized = await hub.locator('button').evaluateAll((buttons) =>
-		buttons
-			.filter((button) => {
-				const style = getComputedStyle(button);
-				return style.display !== 'none' && style.visibility !== 'hidden' && button.getClientRects().length > 0;
-			})
-			.map((button) => {
-				const rect = button.getBoundingClientRect();
-				return {
-					width: rect.width,
-					height: rect.height,
-					label:
-						button.getAttribute('aria-label') ??
-						button.getAttribute('title') ??
-						button.textContent?.trim() ??
-						'',
-				};
-			})
-			.filter(({ width, height }) => width < 24 || height < 24),
+	const chat = agentChatSurface(page);
+	await expect(chat.getByRole('button', { name: 'Open conversations', exact: true })).toBeVisible();
+	const undersized = await Promise.all(
+		[hub, chat].map((surface) =>
+			surface.locator('button').evaluateAll((buttons) =>
+				buttons
+					.filter((button) => {
+						const style = getComputedStyle(button);
+						return (
+							style.display !== 'none' &&
+							style.visibility !== 'hidden' &&
+							button.getClientRects().length > 0
+						);
+					})
+					.map((button) => {
+						const rect = button.getBoundingClientRect();
+						return {
+							width: rect.width,
+							height: rect.height,
+							label:
+								button.getAttribute('aria-label') ??
+								button.getAttribute('title') ??
+								button.textContent?.trim() ??
+								'',
+						};
+					})
+					.filter(({ width, height }) => width < 24 || height < 24),
+			),
+		),
 	);
-	expect(undersized).toEqual([]);
+	expect(undersized.flat()).toEqual([]);
 
 	const resizeHandle = hub.locator('button[data-ui="resize-handle"]');
 	const resizeBox = await resizeHandle.boundingBox();
@@ -301,7 +316,7 @@ test('Agent Hub resizing keeps its current center and its bottom-right handle fo
 	await enableTestAgentExecution(context.request);
 	await page.goto('/connections');
 	await openAgentHub(page);
-	const hub = page.locator('section[aria-label="Agent"]');
+	const hub = agentHost(page);
 	await expect(hub).toBeVisible();
 	const handle = hub.locator('button[data-ui="resize-handle"]');
 
@@ -525,13 +540,14 @@ test('Agent thread selection stays responsive while earlier history is pending',
 		release = resolve;
 	});
 	let hold = false;
-	const workspacePath = `**/api/v1/agent/apps/${app.id}/workspace`;
-	await page.route(workspacePath, async (route) => {
-		const body = readAgentWorkspaceRequest(route.request().postDataJSON());
+	const rpcPath = `**/api/v1/agent/plugins/installations/${app.id}/frontend/rpc`;
+	await page.route(rpcPath, async (route) => {
+		const rpc = readAgentPluginFrontendRpc(route.request().postDataJSON());
+		const command = rpc.envelope.request;
 		if (
 			hold &&
-			(body.request.method === 'agent.threads.history' || body.request.method === 'agent.runs.list') &&
-			body.request.params.threadId === first.id
+			(command.method === 'agent.threads.history' || command.method === 'agent.runs.list') &&
+			command.params.threadId === first.id
 		) {
 			held += 1;
 			await gate;
@@ -541,7 +557,7 @@ test('Agent thread selection stays responsive while earlier history is pending',
 	try {
 		await page.goto('/connections');
 		await openAgentHub(page);
-		const hub = page.locator('section[aria-label="Agent"]');
+		const hub = agentChatSurface(page, app.id);
 		await openAgentConversations(page);
 		const threads = hub.locator('#agent-thread-sidebar');
 		const firstButton = threads.getByRole('button').filter({ has: page.getByText(first.title, { exact: true }) });
@@ -571,7 +587,7 @@ test('Agent thread selection stays responsive while earlier history is pending',
 		).toBeVisible();
 	} finally {
 		release();
-		await page.unroute(workspacePath);
+		await page.unroute(rpcPath);
 	}
 });
 
@@ -595,18 +611,25 @@ test('Agent create-thread Retry retains the exact operation after an unknown out
 
 	const before = await list();
 	const attempts: AgentWorkspaceRequest[] = [];
-	const workspacePath = `**/api/v1/agent/apps/${app.id}/workspace`;
-	await page.route(workspacePath, async (route) => {
-		const body = readAgentWorkspaceRequest(route.request().postDataJSON());
-		if (body.request.method !== 'agent.threads.create') {
+	const rpcPath = `**/api/v1/agent/plugins/installations/${app.id}/frontend/rpc`;
+	await page.route(rpcPath, async (route) => {
+		const rpc = readAgentPluginFrontendRpc(route.request().postDataJSON());
+		if (rpc.envelope.request.method !== 'agent.threads.create') {
 			await route.continue();
 			return;
 		}
+		const body = readAgentWorkspaceRequest({ appVersion: app.version, request: rpc.envelope.request });
 		attempts.push(body);
 		if (attempts.length === 1) {
 			const committed = await route.fetch();
 			expect(committed.status()).toBe(200);
-			readAgentWorkspaceResponse(await committed.json(), app.id, body);
+			const receipt = readAgentPluginRpcResponse(await committed.json(), rpc.envelope);
+			if (!receipt.ok) throw new Error('Expected the original create-thread operation to commit');
+			readAgentWorkspaceResponse(
+				{ appId: app.id, appVersion: app.version, result: receipt.result },
+				app.id,
+				body,
+			);
 			await route.abort('connectionreset');
 		} else {
 			await route.continue();
@@ -614,7 +637,7 @@ test('Agent create-thread Retry retains the exact operation after an unknown out
 	});
 	await page.goto('/connections');
 	await openAgentHub(page);
-	const hub = page.locator('section[aria-label="Agent"]');
+	const hub = agentChatSurface(page, app.id);
 	await openAgentConversations(page);
 	const threads = hub.locator('#agent-thread-sidebar');
 	await threads.getByRole('button', { name: 'New', exact: true }).click();
@@ -633,7 +656,7 @@ test('Agent create-thread Retry retains the exact operation after an unknown out
 	expect(attempts[0].request.params.operationId).toMatch(/^[0-9a-f-]{36}$/u);
 	await expect(retry).toHaveCount(0);
 	expect(await list()).toHaveLength(before.length + 1);
-	await page.unroute(workspacePath);
+	await page.unroute(rpcPath);
 });
 
 test('Agent execution setting gates the launcher and its global window', async ({ page, context }) => {
@@ -667,7 +690,7 @@ test('Agent execution setting gates the launcher and its global window', async (
 	await expect(enable).toBeEnabled();
 	await expect(enable).not.toBeChecked();
 	const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
-	const hub = page.locator('section[aria-label="Agent"]');
+	const hub = agentHost(page);
 	await expect(launcher).toHaveCount(0);
 	await expect(hub).toHaveCount(0);
 	const save = page.waitForResponse(
@@ -962,10 +985,11 @@ test('Agent Host preserves an open surface when a directory refresh fails and re
 	await enableTestAgentExecution(context.request);
 	await page.goto('/connections');
 	await openAgentHub(page);
-	const hub = page.locator('section[aria-label="Agent"]');
+	const hub = agentHost(page);
+	const chat = agentChatSurface(page, app.id);
 	await openAgentConversations(page);
-	await hub.locator('#agent-thread-sidebar').getByRole('button', { name: 'New', exact: true }).click();
-	const prompt = hub.getByRole('textbox', { name: 'Task input', exact: true });
+	await chat.locator('#agent-thread-sidebar').getByRole('button', { name: 'New', exact: true }).click();
+	const prompt = chat.getByRole('textbox', { name: 'Task input', exact: true });
 	await prompt.fill('Unsaved local prompt');
 	const appsPath = '**/api/v1/agent/apps';
 	await page.route(appsPath, (route) => route.fulfill({ status: 503, json: { code: 'storage_unavailable' } }));
@@ -1059,8 +1083,8 @@ test('Agent tabs own independent local drafts and observe external threads throu
 		await openAgentHub(follower);
 		await openAgentConversations(page);
 		await openAgentConversations(follower);
-		const firstHub = page.locator('section[aria-label="Agent"]');
-		const secondHub = follower.locator('section[aria-label="Agent"]');
+		const firstHub = agentChatSurface(page, app.id);
+		const secondHub = agentChatSurface(follower, app.id);
 		const secondThreads = secondHub.locator('#agent-thread-sidebar');
 		await firstHub
 			.locator('#agent-thread-sidebar')
@@ -1069,7 +1093,7 @@ test('Agent tabs own independent local drafts and observe external threads throu
 			.click();
 		await secondThreads
 			.getByRole('button')
-			.filter({ has: follower.getByText(initialThread.value.title, { exact: true }) })
+			.filter({ has: page.getByText(initialThread.value.title, { exact: true }) })
 			.click();
 		const firstDraft = firstHub.getByRole('textbox', { name: 'Task input', exact: true });
 		const secondDraft = secondHub.getByRole('textbox', { name: 'Task input', exact: true });
@@ -1080,11 +1104,11 @@ test('Agent tabs own independent local drafts and observe external threads throu
 			params: { autoTitle: false, operationId: randomUUID(), title: 'External thread' },
 		});
 		if (result.method !== 'agent.threads.create') throw new Error('Unexpected thread');
-		await secondHub.getByRole('button', { name: 'Minimize Agent', exact: true }).click();
+		await agentHost(follower).getByRole('button', { name: 'Minimize Agent', exact: true }).click();
 		await openAgentHub(follower);
 		await openAgentConversations(follower);
 		await expect(
-			secondThreads.getByRole('button').filter({ has: follower.getByText('External thread', { exact: true }) }),
+			secondThreads.getByRole('button').filter({ has: page.getByText('External thread', { exact: true }) }),
 		).toBeVisible();
 		await expect(secondDraft).toHaveValue('Follower draft');
 		await expect(firstDraft).toHaveValue('Leader draft');

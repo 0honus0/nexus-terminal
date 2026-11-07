@@ -1,3 +1,4 @@
+import type { AgentToolIdentity } from '@nexus-terminal/shared/agent/tools/identity';
 import type { ExecutionSettings } from '../../execution/model/execution-types.js';
 import type { AgentRunStatus } from '@nexus-terminal/shared/agent/runs/values';
 import type { ToolOperation } from '../../runs/model/run-tool-types.js';
@@ -17,7 +18,14 @@ export type ToolAuthorityTask =
 	| { kind: 'dispatch' }
 	| { kind: 'inspect'; policyRevision: number }
 	| { kind: 'verify'; policyRevision: number }
-	| { kind: 'complete'; policyRevision: number; resultText: string; targets: { id: number; version: number }[] };
+	| { kind: 'result_source'; policyRevision: number; reader: ToolAuthorityIdentity }
+	| {
+			kind: 'complete';
+			policyRevision: number;
+			resultText: string;
+			outputArtifactIds: string[];
+			targets: { id: number; version: number }[];
+	  };
 
 /** Advisory model catalog; actual dispatch always rechecks tool authority. */
 export interface ToolCatalogState {
@@ -27,7 +35,9 @@ export interface ToolCatalogState {
 
 export interface ToolCatalogFacts {
 	policy: GrantState;
+	policyExecutionVersion: number;
 	connectionIds: number[];
+	denylistRevision: number;
 }
 
 export interface ToolAuthority {
@@ -57,8 +67,6 @@ import type {
 	AgentApprovalStatus,
 	AgentApprovalKind,
 	AgentApprovalRisk,
-	AgentCompactionMode,
-	AgentContextProfile,
 	AgentApprovalDecision,
 } from '@nexus-terminal/shared/agent/governance/values';
 
@@ -94,8 +102,6 @@ export type PolicyOverrides = {
 	maxRecallBytes?: number;
 	maxSubagentMessages?: number;
 	maxSubagentMessageBytes?: number;
-	contextCompactionMode?: AgentCompactionMode;
-	contextProfile?: AgentContextProfile;
 };
 
 export interface ExecutionPolicy {
@@ -116,6 +122,7 @@ export interface AuthorizationFact {
 export interface ApprovalInspection {
 	toolName: string;
 	toolVersion: string;
+	identity: AgentToolIdentity;
 	risk: AgentApprovalRisk;
 	mutation: boolean;
 	targetConnectionId: number | null;

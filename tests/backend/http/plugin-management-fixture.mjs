@@ -1,19 +1,21 @@
 import { createTestAgentApp } from './native-agent-fixture.mjs';
+import { buildNativePluginPackage } from '../../support/native-plugin-package.mjs';
+import { pinnedExecutionFixture } from '../../support/pinned-plugin-package.mjs';
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { openManagement } from './management-fixture.mjs';
 import { expectStatus } from '../remote/openssh-fixture.mjs';
 
 export async function openPlugins(t) {
-	const directory = await mkdtemp(join(tmpdir(), 'nexus-b10-plugin-contract-'));
+	const directory = await mkdtemp(
+		join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-b10-plugin-contract-'),
+	);
 	let f;
 	t.after(async () => {
 		const failures = [];
-		for (const close of [() => f?.close(), () => rm(directory, { recursive: true, force: true })]) {
+		for (const close of [() => f?.close()]) {
 			try {
 				await close();
 			} catch (error) {
@@ -35,7 +37,11 @@ export async function openPlugins(t) {
 		}),
 		200,
 	);
-	const source = await createTestAgentApp(f.api, directory, 'package source', { signingKeyPath: keyPath });
+	const source = await createTestAgentApp(f.api, directory, 'package source', {
+		signingKeyPath: keyPath,
+		deterministic: true,
+		selectedRootIds: [],
+	});
 
 	async function upload(appId, bytes, name = 'plugin.tar') {
 		const base = '/api/v1/agent/apps/' + appId + '/artifacts';
@@ -58,48 +64,47 @@ export async function openPlugins(t) {
 	}
 
 	async function build(label, options = {}) {
-		const sourcePath = join(directory, randomUUID());
-		await mkdir(join(sourcePath, 'frontend'), { recursive: true });
-		await writeFile(
-			join(sourcePath, 'manifest.json'),
-			JSON.stringify({
-				schemaVersion: 1,
-				id: options.definitionId ?? 'isolated.b10-' + label,
-				version: options.version ?? '1.0.0',
-				displayName: label,
-				sdkVersion: '1',
-				capabilities: options.capabilities ?? [],
-				intents: options.intents ?? [],
-				frontendEntry: 'frontend/index.html',
-				backendEntry: options.backend ? 'backend/main.mjs' : null,
-			}),
-		);
-		await writeFile(
-			join(sourcePath, 'frontend/index.html'),
-			'<!doctype html><title>plugin</title><script type="module" src="./client.mjs"></script>',
-		);
-		await writeFile(
-			join(sourcePath, 'frontend/client.mjs'),
-			`import { connectNexusPlugin } from '/sdk/frontend-v1.mjs';
+		const id = options.definitionId ?? 'isolated.b10-' + label;
+		const frontend = options.frontend !== false;
+		const execution = options.modelApp ? await pinnedExecutionFixture() : {};
+		const contributions = options.contributions ?? {
+			app: execution.contribution?.app ?? {
+				entry: id + '.run',
+				uiContract: frontend ? id + '.ui' : null,
+				uiApiVersion: frontend ? 1 : null,
+			},
+			tools: false,
+			services: false,
+			ui: frontend ? { contract: execution.contribution?.app?.uiContract ?? id + '.ui', apiVersion: 1 } : null,
+			settings: execution.contribution?.settings ?? null,
+			skills: execution.contribution?.skills ?? [],
+		};
+		const assets = { ...execution.assets };
+		if (frontend) {
+			assets['frontend/index.html'] =
+				options.frontendMarkup ??
+				'<!doctype html><title>plugin</title><script type="module" src="./client.mjs"></script>';
+			assets['frontend/client.mjs'] = `import { connectNexusPlugin } from '/sdk/frontend-v4.mjs';
 window.connectTask = connectNexusPlugin().then((sdk) => { window.sdk = sdk; return true; });
-window.connectTask.catch((error) => { window.connectionError = error.message; });`,
-		);
-		if (options.backend) {
-			await mkdir(join(sourcePath, 'backend'));
-			await writeFile(join(sourcePath, 'backend/main.mjs'), options.backend);
+window.connectTask.catch((error) => { window.connectionError = error.message; });`;
 		}
-		const archivePath = join(directory, randomUUID() + '.tar');
-		execFileSync(
-			process.execPath,
-			[
-				fileURLToPath(new URL('../../e2e/fixtures/agent/build-plugin-package.mjs', import.meta.url)),
-				sourcePath,
-				archivePath,
-				keyPath,
-			],
-			{ stdio: 'pipe' },
-		);
-		return readFile(archivePath);
+		for (const [name, bytes] of Object.entries(options.assets ?? {})) {
+			assets['frontend/assets/' + name] = bytes;
+		}
+		const built = await buildNativePluginPackage(join(directory, randomUUID()), label, keyPath, {
+			...execution,
+			packageId: id,
+			version: options.version ?? '1.0.0',
+			contribution: contributions,
+			capabilities: options.capabilities ?? ['plugin.invoke'],
+			dependencies: options.dependencies ?? [],
+			namespaces: options.namespaces ?? execution.namespaces ?? [id],
+			frontendEntry: frontend ? 'frontend/index.html' : null,
+			backend: options.backend ?? execution.backend,
+			backendAssets: options.backendAssets,
+			assets,
+		});
+		return built.bytes;
 	}
 
 	async function install(label, options = {}) {
@@ -116,10 +121,25 @@ window.connectTask.catch((error) => { window.connectionError = error.message; })
 			await f.api('POST', '/api/v1/agent/plugins/verify', { stageId: stage.id, expectedVersion: stage.version }),
 			200,
 		);
-		const installation = expectStatus(
-			await f.api('POST', '/api/v1/agent/plugins/install', { stageId: stage.id, expectedVersion: stage.version }),
+		expectStatus(
+			await f.api('POST', '/api/v1/agent/plugins/packages/install', {
+				stageId: stage.id,
+				expectedVersion: stage.version,
+			}),
 			200,
 		);
+		const { binding } = expectStatus(
+			await f.api('POST', '/api/v1/agent/plugins/apps/compose', {
+				packageId: stage.manifest.id,
+				selectedRootIds: options.selectedRootIds ?? [],
+				uiPackageId: options.uiPackageId ?? (options.frontend === false ? null : stage.manifest.id),
+			}),
+			200,
+		);
+		const installation = expectStatus(await f.api('GET', '/api/v1/agent/plugins/installations'), 200).items.find(
+			(item) => item.appId === binding.appId,
+		);
+		if (!installation) throw new Error('Expected App installation is missing');
 		const appPath = '/api/v1/agent/apps/' + installation.appId;
 
 		async function enabled(value) {
@@ -141,8 +161,25 @@ window.connectTask.catch((error) => { window.connectionError = error.message; })
 		if (options.enabled !== false) {
 			await enabled(true);
 		}
-		return { installation, appId: installation.appId, appPath, enabled, grants };
+		return { installation, stage, appId: installation.appId, appPath, enabled, grants };
 	}
 
-	return { ...f, directory, source, build, publisher, install, upload };
+	return {
+		...f,
+		directory,
+		source,
+		build,
+		publisher,
+		install,
+		upload,
+
+		async packageInstallation(packageId) {
+			const installation = expectStatus(
+				await f.api('GET', '/api/v1/agent/plugins/packages'),
+				200,
+			).installations.find((item) => item.packageId === packageId);
+			if (!installation) throw new Error('Expected package installation is missing');
+			return installation;
+		},
+	};
 }

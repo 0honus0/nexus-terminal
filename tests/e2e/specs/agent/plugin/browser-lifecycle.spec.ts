@@ -1,3 +1,4 @@
+import { hasToolIdentity, hasApprovalIdentity } from '../../../../support/package-tool-catalog.mjs';
 import { randomUUID } from 'node:crypto';
 import {
 	resolveNativeApproval,
@@ -125,10 +126,10 @@ test('Nexus Agent Browser lifecycle cases reclaim contexts across cancellation a
 					}
 					expect(approvals.value.hasMore).toBe(false);
 					expect(
-						approvals.value.items.filter((item) => item.inspection.toolName === 'shell_execute'),
+						approvals.value.items.filter((item) => hasApprovalIdentity(item, 'shell_execute')),
 					).toHaveLength(1);
 					expect(
-						approvals.value.items.find((item) => item.inspection.toolName === 'shell_execute')!.consumedAt,
+						approvals.value.items.find((item) => hasApprovalIdentity(item, 'shell_execute'))!.consumedAt,
 					).toBeNull();
 				}
 			} finally {

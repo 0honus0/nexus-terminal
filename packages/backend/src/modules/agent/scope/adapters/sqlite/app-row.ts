@@ -1,3 +1,4 @@
+import { definitionComposition, readDefinitionPackage } from './definition-composition-row.js';
 import { pluginTrust } from '../../../plugins/adapters/sqlite/plugin-trust-sql.js';
 import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
 import {
@@ -34,7 +35,22 @@ export async function readDefinition(tx: SqlReader, row: Record<string, unknown>
 	) {
 		throw new Error('Corrupt App declaration');
 	}
+	const packageRows = await tx.all(
+		'SELECT * FROM agent_app_definition_packages WHERE definition_id=? AND definition_version=? ORDER BY kind,package_id',
+		[id, version],
+	);
+	const owner = packageRows[0]?.user_id;
+	if (typeof owner !== 'number' || packageRows.some((row) => row.user_id !== owner)) {
+		throw new Error('Corrupt declaration owner');
+	}
+	const composition = definitionComposition(owner, packageRows.map(readDefinitionPackage));
+	const appPackage = composition.packages.find((reference) => reference.kind === 'app');
+	if (composition.id !== id || composition.digest !== contentHash || !appPackage || appPackage.version !== version) {
+		throw new Error('Corrupt execution declaration identity');
+	}
 	return {
+		userId: owner,
+		sourcePackageId: appPackage.packageId,
 		id,
 		version,
 		contentHash,
@@ -83,12 +99,16 @@ async function capabilities(tx: SqlReader, definitionId: string, version: string
 export async function readApp(tx: SqlReader, row: Record<string, unknown>): Promise<AppRecord> {
 	const definitionId = text(row.definition_id);
 	const definitionVersion = text(row.definition_version);
-	const definition = await tx.one('SELECT 1 FROM agent_app_definitions WHERE id=? AND version=?', [
+	const definitionRow = await tx.one('SELECT * FROM agent_app_definitions WHERE id=? AND version=?', [
 		definitionId,
 		definitionVersion,
 	]);
-	if (definition === null) {
+	if (definitionRow === null) {
 		throw new Error('Missing App declaration');
+	}
+	const definition = await readDefinition(tx, definitionRow);
+	if (definition.userId !== integer(row.user_id, 1)) {
+		throw new Error('Cross-user App declaration');
 	}
 	const declared = await pluginTrust(tx, integer(row.user_id, 1), text(row.id), definitionVersion);
 	const enabled = boolean(row.enabled);
@@ -115,12 +135,13 @@ export async function readApp(tx: SqlReader, row: Record<string, unknown>): Prom
 	}
 	return {
 		definitionInstalled: declared,
+		sourcePackageId: definition.sourcePackageId,
 		id,
 		userId: integer(row.user_id, 1),
 		name,
 		definitionId,
 		definitionVersion,
-		capabilities: declared ? await capabilities(tx, definitionId, definitionVersion) : [],
+		capabilities: declared ? definition.capabilities.map((value) => value) : [],
 		enabled,
 		version: integer(row.version, 1),
 		createdAt,

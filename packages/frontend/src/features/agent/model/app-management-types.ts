@@ -1,10 +1,5 @@
 import type { AgentAppExecutionState } from '@nexus-terminal/shared/agent/scope/values';
-import type {
-	AgentCapability,
-	AgentGrantScopeKind,
-	AgentCompactionMode,
-	AgentContextProfile,
-} from '@nexus-terminal/shared/agent/governance/values';
+import type { AgentCapability, AgentGrantScopeKind } from '@nexus-terminal/shared/agent/governance/values';
 
 export interface ManagedApp {
 	id: string;
@@ -50,8 +45,6 @@ export interface AppPolicyOverrides {
 	maxRecallBytes?: number;
 	maxSubagentMessages?: number;
 	maxSubagentMessageBytes?: number;
-	contextCompactionMode?: AgentCompactionMode;
-	contextProfile?: AgentContextProfile;
 }
 
 export interface AppExecutionPolicy {

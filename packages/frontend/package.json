@@ -1,12 +1,13 @@
 {
   "name": "@nexus-terminal/frontend",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host",
     "build": "vue-tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:plugin-sdk": "pnpm --filter @nexus-terminal/shared build && node build/build-plugin-frontend-sdk.mjs"
   },
   "dependencies": {
     "@babel/runtime": "^8.1.0",
@@ -82,6 +83,7 @@
     "@types/sql.js": "^1.4.11",
     "@vitejs/plugin-vue": "^6.0.10",
     "@vue/compiler-sfc": "^3.5.44",
+    "esbuild": "0.28.2",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "vite": "^8.3.5",
     "vue-tsc": "^3.3.14"

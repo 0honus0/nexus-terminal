@@ -36,7 +36,6 @@ export interface StoredMemoryFacts {
 	enabled: boolean;
 	identityUserId: number | null;
 	sourceExists: boolean;
-	count: number;
 	now: number;
 }
 
@@ -80,7 +79,6 @@ export interface MemoryStorage {
 		scope: StoredMemoryScope,
 		auth: StoredMemoryAuthorization,
 		clock: () => number,
-		limit: number,
 		admit: (facts: StoredMemoryFacts) => void,
 	): Promise<StoredMemory[]>;
 }

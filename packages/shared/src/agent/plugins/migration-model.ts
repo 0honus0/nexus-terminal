@@ -1,9 +1,7 @@
-import type { AgentPluginData } from './model.js';
-
 export interface AgentPluginDataSnapshot {
 	appId: string;
 	revision: number;
-	items: AgentPluginData[];
+	items: { packageId: string; key: string; version: number; valueJson: string | null; updatedAt: number }[];
 }
 
 export interface AgentPluginDataMigrationResult {

@@ -4,7 +4,7 @@ import { MODEL_REASONING_MAX_BYTES } from '../../../../../platform/ai/model-port
 import { readStepProposals } from '../../../runs/adapters/sqlite/run-step-proposals.js';
 import { TOOL_PROVIDER_CALL_ID_MAX_BYTES } from '../../../runs/run-tool-limits.js';
 import { storedInteger, storedText } from '../../../runs/adapters/sqlite/run-participant-sql.js';
-import { CONTEXT_MAX_BYTES, CONTEXT_MAX_SOURCES, CONTEXT_SNAPSHOT_MAX_BYTES } from '../../context-limits.js';
+import { CONTEXT_MAX_BYTES, CONTEXT_SNAPSHOT_MAX_BYTES } from '../../context-limits.js';
 import type { StoredContextMessage, StoredContextSnapshot } from '../../storage/context-storage.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -70,12 +70,7 @@ export function decodeContextSnapshot(json: unknown): StoredContextSnapshot {
 	}
 	const parsed: unknown = JSON.parse(json);
 	const value = object(parsed, ['messages', 'sources', 'systemPrompt']);
-	if (
-		!Array.isArray(value.messages) ||
-		value.messages.length === 0 ||
-		!Array.isArray(value.sources) ||
-		value.sources.length > CONTEXT_MAX_SOURCES
-	) {
+	if (!Array.isArray(value.messages) || value.messages.length === 0 || !Array.isArray(value.sources)) {
 		throw new Error('Corrupt context snapshot shape');
 	}
 	const systemPrompt = storedText(value.systemPrompt);

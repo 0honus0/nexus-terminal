@@ -1,13 +1,45 @@
 {
   "name": "@nexus-terminal/shared",
-  "version": "0.1.0",
+  "version": "4.0.2",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc",
+    "build": "node --input-type=module -e \"import { rm } from 'node:fs/promises'; await rm('dist', { recursive: true, force: true });\" && tsc",
     "check": "tsc --noEmit"
   },
   "exports": {
+    "./agent/plugins/host-operations": {
+      "types": "./dist/agent/plugins/host-operations.d.ts",
+      "default": "./dist/agent/plugins/host-operations.js"
+    },
+    "./agent/plugins/host-operations-codec": {
+      "types": "./dist/agent/plugins/host-operations-codec.d.ts",
+      "default": "./dist/agent/plugins/host-operations-codec.js"
+    },
+    "./agent/tools/identity": {
+      "types": "./dist/agent/tools/identity.d.ts",
+      "default": "./dist/agent/tools/identity.js"
+    },
+    "./agent/tools/identity-codec": {
+      "types": "./dist/agent/tools/identity-codec.d.ts",
+      "default": "./dist/agent/tools/identity-codec.js"
+    },
+    "./agent/plugins/package-update-http-codec": {
+      "types": "./dist/agent/plugins/package-update-http-codec.d.ts",
+      "default": "./dist/agent/plugins/package-update-http-codec.js"
+    },
+    "./agent/plugins/remote-files": {
+      "types": "./dist/agent/plugins/remote-files.d.ts",
+      "default": "./dist/agent/plugins/remote-files.js"
+    },
+    "./agent/plugins/remote-files-codec": {
+      "types": "./dist/agent/plugins/remote-files-codec.d.ts",
+      "default": "./dist/agent/plugins/remote-files-codec.js"
+    },
+    "./agent/plugins/recommended-install-codec": {
+      "types": "./dist/agent/plugins/recommended-install-codec.d.ts",
+      "default": "./dist/agent/plugins/recommended-install-codec.js"
+    },
     "./remote/tools/values": {
       "types": "./dist/remote/tools/values.d.ts",
       "default": "./dist/remote/tools/values.js"
@@ -887,6 +919,114 @@
     "./access/oidc/http-codec": {
       "types": "./dist/access/oidc/http-codec.d.ts",
       "default": "./dist/access/oidc/http-codec.js"
+    },
+    "./agent/plugins/tool-schema": {
+      "types": "./dist/agent/plugins/tool-schema.d.ts",
+      "default": "./dist/agent/plugins/tool-schema.js"
+    },
+    "./agent/plugins/ui-http": {
+      "types": "./dist/agent/plugins/ui-http.d.ts",
+      "default": "./dist/agent/plugins/ui-http.js"
+    },
+    "./agent/plugins/ui-http-codec": {
+      "types": "./dist/agent/plugins/ui-http-codec.d.ts",
+      "default": "./dist/agent/plugins/ui-http-codec.js"
+    },
+    "./agent/plugins/ui-events": {
+      "types": "./dist/agent/plugins/ui-events.d.ts",
+      "default": "./dist/agent/plugins/ui-events.js"
+    },
+    "./agent/plugins/ui-events-codec": {
+      "types": "./dist/agent/plugins/ui-events-codec.d.ts",
+      "default": "./dist/agent/plugins/ui-events-codec.js"
+    },
+    "./agent/plugins/install-plan": {
+      "types": "./dist/agent/plugins/install-plan.d.ts",
+      "default": "./dist/agent/plugins/install-plan.js"
+    },
+    "./agent/plugins/install-plan-codec": {
+      "types": "./dist/agent/plugins/install-plan-codec.d.ts",
+      "default": "./dist/agent/plugins/install-plan-codec.js"
+    },
+    "./agent/plugins/package-values": {
+      "types": "./dist/agent/plugins/package-values.d.ts",
+      "default": "./dist/agent/plugins/package-values.js"
+    },
+    "./agent/memory/events": {
+      "types": "./dist/agent/memory/events.d.ts",
+      "default": "./dist/agent/memory/events.js"
+    },
+    "./agent/plugins/ui-streams": {
+      "types": "./dist/agent/plugins/ui-streams.d.ts",
+      "default": "./dist/agent/plugins/ui-streams.js"
+    },
+    "./agent/plugins/ui-streams-codec": {
+      "types": "./dist/agent/plugins/ui-streams-codec.d.ts",
+      "default": "./dist/agent/plugins/ui-streams-codec.js"
+    },
+    "./agent/plugins/registry": {
+      "types": "./dist/agent/plugins/registry.d.ts",
+      "default": "./dist/agent/plugins/registry.js"
+    },
+    "./agent/plugins/registry-codec": {
+      "types": "./dist/agent/plugins/registry-codec.d.ts",
+      "default": "./dist/agent/plugins/registry-codec.js"
+    },
+    "./agent/plugins/runtime": {
+      "types": "./dist/agent/plugins/runtime.d.ts",
+      "default": "./dist/agent/plugins/runtime.js"
+    },
+    "./agent/plugins/runtime-codec": {
+      "types": "./dist/agent/plugins/runtime-codec.d.ts",
+      "default": "./dist/agent/plugins/runtime-codec.js"
+    },
+    "./agent/operations/values": {
+      "types": "./dist/agent/operations/values.d.ts",
+      "default": "./dist/agent/operations/values.js"
+    },
+    "./agent/plugins/content": {
+      "types": "./dist/agent/plugins/content.d.ts",
+      "default": "./dist/agent/plugins/content.js"
+    },
+    "./agent/plugins/app-runtime": {
+      "types": "./dist/agent/plugins/app-runtime.d.ts",
+      "default": "./dist/agent/plugins/app-runtime.js"
+    },
+    "./agent/plugins/run-context": {
+      "types": "./dist/agent/plugins/run-context.d.ts",
+      "default": "./dist/agent/plugins/run-context.js"
+    },
+    "./agent/plugins/connection": {
+      "types": "./dist/agent/plugins/connection.d.ts",
+      "default": "./dist/agent/plugins/connection.js"
+    },
+    "./agent/plugins/connection-codec": {
+      "types": "./dist/agent/plugins/connection-codec.d.ts",
+      "default": "./dist/agent/plugins/connection-codec.js"
+    },
+    "./agent/plugins/data": {
+      "types": "./dist/agent/plugins/data.d.ts",
+      "default": "./dist/agent/plugins/data.js"
+    },
+    "./agent/plugins/settings": {
+      "types": "./dist/agent/plugins/settings.d.ts",
+      "default": "./dist/agent/plugins/settings.js"
+    },
+    "./agent/plugins/settings-codec": {
+      "types": "./dist/agent/plugins/settings-codec.d.ts",
+      "default": "./dist/agent/plugins/settings-codec.js"
+    },
+    "./agent/plugins/service-transport": {
+      "types": "./dist/agent/plugins/service-transport.d.ts",
+      "default": "./dist/agent/plugins/service-transport.js"
+    },
+    "./agent/plugins/service-transport-codec": {
+      "types": "./dist/agent/plugins/service-transport-codec.d.ts",
+      "default": "./dist/agent/plugins/service-transport-codec.js"
+    },
+    "./agent/plugins/app-outcome": {
+      "types": "./dist/agent/plugins/app-outcome.d.ts",
+      "default": "./dist/agent/plugins/app-outcome.js"
     }
   },
   "devDependencies": {
@@ -896,5 +1036,8 @@
   "dependencies": {
     "semver": "7.8.6",
     "zod": "4.6.7"
-  }
+  },
+  "files": [
+    "dist"
+  ]
 }

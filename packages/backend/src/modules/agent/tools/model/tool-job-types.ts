@@ -1,6 +1,6 @@
 import type { ToolTarget } from './tool-types.js';
-import type { ToolOperation } from '../../runs/model/run-tool-types.js';
-import type { ToolJobState } from '../tool-job-values.js';
+import type { HostEffect } from './host-execution-types.js';
+import type { AgentToolJobState } from '@nexus-terminal/shared/agent/tools/values';
 
 export interface ToolJobScope {
 	userId: number;
@@ -17,7 +17,7 @@ export interface ToolJob {
 	targetVersion: number;
 	fingerprint: string;
 	policyRevision: number;
-	state: ToolJobState;
+	state: AgentToolJobState;
 	revision: number;
 	result: ToolJobResult | null;
 	createdAt: number;
@@ -26,6 +26,7 @@ export interface ToolJob {
 
 export interface ToolJobInput {
 	id: string;
+	operationHash: string;
 	userId: number;
 	appId: string;
 	runId: string;
@@ -53,11 +54,48 @@ export type ToolJobResult =
 			>;
 	  };
 
+export interface ToolJobAccepted {
+	jobId: string;
+	accepted: true;
+}
+
+export interface ToolJobSummary {
+	jobId: string;
+	state: AgentToolJobState;
+	revision: number;
+	waitingForSpace: boolean;
+	createdAt: number;
+	updatedAt: number;
+}
+
+export interface ToolJobSnapshot extends ToolJobSummary {
+	result: ToolJobResult | null;
+}
+
+export interface ToolJobOutputValue {
+	jobId: string;
+	state: AgentToolJobState;
+	offset: number;
+	nextOffset: number;
+	capturedBytes: number;
+	available: boolean;
+	waitingForSpace: boolean;
+	output: ToolOutputEvent[];
+	complete: boolean;
+}
+
+export type ToolJobControlValue =
+	| { jobs: ToolJobSummary[]; nextOffset: number | null }
+	| { jobs: ToolJobOutputValue[]; nextIndex: number | null }
+	| { jobs: ToolJobSnapshot[] };
+
+export type ToolJobValue = ToolJobAccepted | ToolJobSnapshot | ToolJobControlValue;
+
 export interface ToolJobPreparation {
 	background: boolean;
 	deadlineAt: number;
 	maxHistory: number;
-	operation: ToolOperation;
+	operation: HostEffect;
 	target: ToolTarget;
 	policyRevision: number;
 	signal: AbortSignal;

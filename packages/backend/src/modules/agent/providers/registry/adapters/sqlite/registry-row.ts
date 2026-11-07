@@ -115,8 +115,7 @@ export function decodeRegistrySnapshot(raw: unknown): StoredRegistrySnapshot {
 		row.source !== 'models.dev' ||
 		(row.sourceRevision !== null && typeof row.sourceRevision !== 'string') ||
 		!positive(row.generatedAt) ||
-		Object.keys(entries).length < 1 ||
-		Object.keys(entries).length > 5000
+		Object.keys(entries).length < 1
 	) {
 		throw new Error('Corrupt model registry snapshot');
 	}

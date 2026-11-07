@@ -56,8 +56,6 @@ export function defaultExecutionSettings(): ExecutionSettings {
 		artifactTtlSeconds: 2592000,
 	};
 	return {
-		contextCompactionMode: 'balanced',
-		contextProfile: 'normal',
 		version: 0,
 		enabled: false,
 		limits,
@@ -191,8 +189,6 @@ export class ExecutionService {
 			limits: copyExecutionLimits(original.limits),
 			hardLimits: copyExecutionLimits(original.hardLimits),
 			updatedAt: original.updatedAt,
-			contextCompactionMode: overrides.contextCompactionMode ?? original.contextCompactionMode,
-			contextProfile: overrides.contextProfile ?? original.contextProfile,
 		};
 		settings.limits.maxModelRequests = Math.min(
 			settings.limits.maxModelRequests,
@@ -249,8 +245,6 @@ export class ExecutionService {
 				validateLimits(limits, current.hardLimits);
 
 				return {
-					contextCompactionMode: current.contextCompactionMode,
-					contextProfile: current.contextProfile,
 					version: current.version + 1,
 					enabled,
 					limits,
@@ -266,14 +260,11 @@ export class ExecutionService {
 		actor(value);
 		validateLimits(proposed, AGENT_EXECUTION_LIMIT_MAXIMA);
 		const id = randomUUID();
-		return this.model.preview(value, id, Date.now, (facts, count, now) => {
+		return this.model.preview(value, id, Date.now, (facts, _count, now) => {
 			admit(value, facts);
 			const current = facts.settings ?? defaultExecutionSettings();
 			if (current.version !== version) {
 				throw new AgentFailure('version_conflict');
-			}
-			if (count >= 128) {
-				throw new AgentFailure('limit_exceeded');
 			}
 			this.validateHardLimits(current, proposed, facts);
 			return {
@@ -305,8 +296,6 @@ export class ExecutionService {
 				const current = facts.settings ?? defaultExecutionSettings();
 				this.validateHardLimits(current, plan.proposed, facts);
 				return {
-					contextCompactionMode: current.contextCompactionMode,
-					contextProfile: current.contextProfile,
 					version: current.version + 1,
 					enabled: current.enabled,
 					limits: current.limits,

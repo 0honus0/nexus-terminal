@@ -1,3 +1,4 @@
+import { agentHost } from '../../fixtures/agent/workbench';
 import {
 	cancelNativeTask,
 	openNativeTask,
@@ -40,15 +41,15 @@ for (const width of [1280, 390, 320]) {
 						await expect(resource.getByText('SSH 1', { exact: true })).toBeVisible();
 						const resourceId = await resource.getAttribute('data-resource-id');
 						expect(resourceId).toBeTruthy();
-						await hub.getByRole('button', { name: 'Minimize Agent', exact: true }).click();
-						await expect(hub).toBeHidden();
+						await agentHost(page).getByRole('button', { name: 'Minimize Agent', exact: true }).click();
+						await expect(agentHost(page)).toBeHidden();
 						expect((await readNativeRun(task, run.id)).status).toBe('running');
 						await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
 						await expect(resource).toHaveAttribute('data-resource-id', resourceId ?? '');
 						const close =
 							action === 'connection'
 								? resource.getByRole('button', { name: 'Close connections', exact: true })
-								: hub.getByRole('button', { name: 'Close Agent', exact: true });
+								: agentHost(page).getByRole('button', { name: 'Close Agent', exact: true });
 						await close.click();
 						const confirmation = page.getByRole('dialog', {
 							name: 'Stop tasks and close connections?',
@@ -67,7 +68,7 @@ for (const width of [1280, 390, 320]) {
 						await confirmation.getByRole('button', { name: 'Stop and close', exact: true }).click();
 						await expect.poll(async () => (await readNativeRun(task, run.id)).status).toBe('cancelled');
 						if (action === 'interface') {
-							await expect(hub).toBeHidden();
+							await expect(agentHost(page)).toBeHidden();
 							await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
 						}
 						await expect(tasks.locator('[data-agent-resources]')).toHaveCount(0);

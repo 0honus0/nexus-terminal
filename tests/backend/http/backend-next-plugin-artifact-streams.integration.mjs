@@ -239,55 +239,63 @@ await test(
 			);
 		}
 
-		await t.test('prepare-upgrade fences active content; new version cannot reuse the old receipt', async (t) => {
-			const packageArtifact = await f.upload(
-				sender.appId,
-				await f.build('stream-receiver', {
-					version: '1.1.0',
-					capabilities,
-					intents: [{ id: 'inspect', schemaVersion: 1 }],
-				}),
-			);
-			const stage = expectStatus(
-				await f.api('POST', '/api/v1/agent/plugins/stage', {
-					artifactAppId: sender.appId,
-					artifactId: packageArtifact.id,
-					expectedVersion: packageArtifact.version,
-				}),
-				200,
-			);
-			const verified = expectStatus(
-				await f.api('POST', '/api/v1/agent/plugins/verify', {
-					stageId: stage.id,
-					expectedVersion: stage.version,
-				}),
-				200,
-			);
-			await create();
-			const oldPath = path;
-			const stream = await heldRead(t, f, oldPath, artifact);
-			const installPath = '/api/v1/agent/plugins/installations/' + receiver.appId;
-			const command = {
-				expectedRevision: receiver.installation.revision,
-				stageId: verified.id,
-				expectedStageVersion: verified.version,
-			};
-			const prepared = expectStatus(await f.api('POST', installPath + '/prepare-upgrade', command), 200);
-			assert.equal(prepared.status, 'draining');
-			await interrupted(f, artifact, stream, content);
-			const upgraded = expectStatus(
-				await f.api('POST', installPath + '/upgrade', { ...command, expectedRevision: prepared.revision }),
-				200,
-			);
-			assert.equal(upgraded.version, '1.1.0');
-			await receiver.grants(capabilities);
-			await receiver.enabled(true);
-			expectStatus(await f.api('GET', oldPath), 404);
-			await create();
-			const full = await f.api('GET', path);
-			expectStatus(full, 200);
-			assert.deepEqual(full.bytes, content);
-		});
+		await t.test(
+			'package prepare-update fences active content; new version cannot reuse the old receipt',
+			async (t) => {
+				const packageArtifact = await f.upload(
+					sender.appId,
+					await f.build('stream-receiver', {
+						version: '1.1.0',
+						capabilities,
+						intents: [{ id: 'inspect', schemaVersion: 1 }],
+					}),
+				);
+				const stage = expectStatus(
+					await f.api('POST', '/api/v1/agent/plugins/stage', {
+						artifactAppId: sender.appId,
+						artifactId: packageArtifact.id,
+						expectedVersion: packageArtifact.version,
+					}),
+					200,
+				);
+				const verified = expectStatus(
+					await f.api('POST', '/api/v1/agent/plugins/verify', {
+						stageId: stage.id,
+						expectedVersion: stage.version,
+					}),
+					200,
+				);
+				await create();
+				const oldPath = path;
+				const stream = await heldRead(t, f, oldPath, artifact);
+				const command = {
+					expectedRevision: (await f.packageInstallation(receiver.installation.definitionId)).revision,
+					stageId: verified.id,
+					expectedStageVersion: verified.version,
+				};
+				const packagePath = '/api/v1/agent/plugins/packages/' + receiver.installation.definitionId;
+				const preparation = expectStatus(await f.api('POST', packagePath + '/prepare-update', command), 200);
+				const prepared = preparation.installation;
+				assert.equal(prepared.status, 'draining');
+				await interrupted(f, artifact, stream, content);
+				const upgraded = expectStatus(
+					await f.api('POST', packagePath + '/update', {
+						...command,
+						expectedRevision: prepared.revision,
+						dependencies: preparation.dependencies,
+					}),
+					200,
+				);
+				assert.equal(upgraded.installation.version, '1.1.0');
+				await receiver.grants(capabilities);
+				await receiver.enabled(true);
+				expectStatus(await f.api('GET', oldPath), 404);
+				await create();
+				const full = await f.api('GET', path);
+				expectStatus(full, 200);
+				assert.deepEqual(full.bytes, content);
+			},
+		);
 		await t.test('after receipt revocation all read leases permit actual source deletion', async () => {
 			// Invisible receipts still retain their explicit grant until revoke/expiry.
 			expectStatus(

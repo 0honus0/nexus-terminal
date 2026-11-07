@@ -6,8 +6,8 @@ export interface ArtifactScope {
 }
 
 export type ArtifactActor =
-	| { kind: 'model'; userId: number; appId: string; runId: string; stepIndex: number; requestHash: string }
 	| { kind: 'session'; userId: number; appId: string; token: string }
+	| { kind: 'plugin-ui'; userId: number; appId: string; token: string; assertCurrent(): void }
 	| { kind: 'tool'; userId: number; appId: string; runId: string; operationId: string; operationHash: string };
 
 export interface ArtifactRecord {

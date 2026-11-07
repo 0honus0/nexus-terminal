@@ -26,7 +26,7 @@ import {
 	nextLoginFailure,
 	mayAttemptLogin,
 } from '../../../packages/backend/dist/modules/access/sessions/login-failure-rules.js';
-const root = await mkdtemp(join(tmpdir(), 'nexus-phase2-'));
+const root = await mkdtemp(join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-phase2-'));
 const key = randomBytes(32);
 const migrationVersions = applicationMigrations.map((migration) => migration.version);
 assert.deepEqual(
@@ -195,6 +195,17 @@ try {
 	if (!agentApp.enabled) {
 		await app.agent.setAppEnabled(1, agentApp.id, true, agentApp.version);
 	}
+	const grantPath = '/api/v1/agent/apps/' + agentApp.id + '/grants';
+	const grants = (await fixtureApi('GET', grantPath)).body;
+	assert.equal(
+		(
+			await fixtureApi('PUT', grantPath, {
+				expectedPolicyRevision: grants.policyRevision,
+				grants: [{ capability: 'plugin.invoke', scope: { kind: 'global' } }],
+			})
+		).status,
+		200,
+	);
 	const thread = await app.agent.createThread(1, agentApp.id, 'state');
 	const intent = {
 		userId: 1,
@@ -203,7 +214,15 @@ try {
 		prompt: 'hello',
 		approvalMode: 'ask',
 		connectionIds: [host.id],
-		model: { providerId: provider.id, modelId: 'fixture', configurationVersion: provider.version },
+		inputJson: JSON.stringify({
+			model: {
+				providerId: provider.id,
+				modelId: 'fixture',
+				configurationVersion: provider.version,
+				reasoningEffort: null,
+			},
+			artifacts: [],
+		}),
 		operationKey: randomUUID(),
 	};
 	const createdRun = await app.agent.createRun(intent);
@@ -325,5 +344,5 @@ try {
 	modelServer.closeAllConnections();
 	await new Promise((resolve) => modelServer.close(resolve));
 	if (app) await app.close();
-	await rm(root, { recursive: true, force: true });
+	if (!process.env.NEXUS_AGENT_ACCEPTANCE_ROOT) await rm(root, { recursive: true, force: true });
 }

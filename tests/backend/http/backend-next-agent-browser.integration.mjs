@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
-import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openAgentExecution } from './agent-execution-fixture.mjs';
@@ -16,7 +16,7 @@ const puppeteer = requireBackend('puppeteer-core');
 const { chromium } = requireE2e('@playwright/test');
 
 await test('B10 actual CDP Browser ownership and governed operations', { timeout: 90000 }, async (t) => {
-	const root = await mkdtemp(join(tmpdir(), 'nexus-b10-browser-'));
+	const root = await mkdtemp(join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-b10-browser-'));
 	let sshd;
 	let browser;
 	let observer;
@@ -46,7 +46,10 @@ await test('B10 actual CDP Browser ownership and governed operations', { timeout
 		await t.test(name, async (scenario) => {
 			const directory = join(root, String(++sequence));
 			await mkdir(directory);
-			const f = await openAgentExecution(directory, sshd);
+			const f = await openAgentExecution(directory, sshd, {
+				discover:
+					'browser_open browser_navigate browser_snapshot browser_console browser_screenshot browser_click',
+			});
 			scenario.after(async () => {
 				await f.close();
 				await contexts(2);
@@ -136,7 +139,7 @@ await test('B10 actual CDP Browser ownership and governed operations', { timeout
 				await f.wait(run, 'completed');
 				await contexts(2);
 				assert.ok(requests.includes('/allowed/page'));
-				assert.ok(f.rows('agent_run_tools', run).every((row) => row.state === 'completed'));
+				assert.ok(f.operations(run).every((row) => row.state === 'completed'));
 				const downloaded = await f.api(
 					'GET',
 					'/api/v1/agent/apps/' + f.appId + '/artifacts/' + screenshot.artifactId + '/content',
@@ -161,17 +164,19 @@ await test('B10 actual CDP Browser ownership and governed operations', { timeout
 			},
 		);
 		await scenario('disallowed navigation is blocked before page request', async (f, configuration) => {
-			const run = await f.start('Browser URL refusal', (results) =>
-				!results.length
-					? open(configuration)
-					: {
-							name: 'browser_navigate',
-							input: { sessionId: results[0].sessionId, url: pageOrigin + '/blocked/secret' },
-						},
-			);
+			const run = await f.start('Browser URL refusal', (results) => {
+				if (results.length === 0) return open(configuration);
+				if (results.length === 1)
+					return {
+						name: 'browser_navigate',
+						input: { sessionId: results[0].sessionId, url: pageOrigin + '/blocked/secret' },
+					};
+				assert.ok(results[1].failure, JSON.stringify(results));
+				return { text: 'Navigation refused' };
+			});
 			await f.approve(await f.approval(run, 'browser_open'));
 			await f.approve(await f.approval(run, 'browser_navigate'));
-			await f.wait(run, 'unknown');
+			await f.wait(run, 'completed');
 			assert.ok(!requests.includes('/blocked/secret'));
 			await contexts(2);
 		});
@@ -180,6 +185,10 @@ await test('B10 actual CDP Browser ownership and governed operations', { timeout
 			async (f, configuration) => {
 				const before = requests.filter((url) => url === '/allowed/effect').length;
 				const run = await f.start('Browser stale snapshot', (results) => {
+					if (results.length === 5) {
+						assert.ok(results[4].failure, JSON.stringify(results));
+						return { text: 'Stale action refused' };
+					}
 					if (!results.length) {
 						return open(configuration);
 					}
@@ -207,9 +216,9 @@ await test('B10 actual CDP Browser ownership and governed operations', { timeout
 				const stale = await f.approval(run, 'browser_click');
 				assert.equal(requests.filter((url) => url === '/allowed/effect').length, before + 1);
 				await f.approve(stale);
-				await f.wait(run, 'unknown');
+				await f.wait(run, 'completed');
 				assert.equal(requests.filter((url) => url === '/allowed/effect').length, before + 1);
-				assert.equal(f.rows('agent_run_tools', run).at(-1).state, 'unknown');
+				assert.ok(f.operations(run).some((row) => row.label === 'browser.click' && row.state === 'failed'));
 				await contexts(2);
 			},
 		);
@@ -228,14 +237,17 @@ await test('B10 actual CDP Browser ownership and governed operations', { timeout
 				(value) => typeof value === 'string',
 				'Browser session published',
 			);
-			const other = await f.start('Browser wrong owner', () => ({
-				name: 'browser_snapshot',
-				input: { sessionId },
-			}));
-			await f.wait(other, 'failed');
-			assert.deepEqual(JSON.parse(f.rows('agent_run_tools', other)[0].result_text), {
-				failureCode: 'tool_target_unavailable',
+			const other = await f.start('Browser wrong owner', (results) => {
+				if (results.length === 0)
+					return {
+						name: 'browser_snapshot',
+						input: { sessionId },
+					};
+				assert.ok(results[0].failure, JSON.stringify(results));
+				return { text: 'Foreign session refused' };
 			});
+			await f.wait(other, 'completed');
+			assert.ok(f.operations(other).some((row) => row.label === 'browser.snapshot' && row.state === 'failed'));
 			await contexts(3);
 			await f.cancel(owner);
 			await f.wait(owner, 'cancelled');
@@ -264,7 +276,6 @@ await test('B10 actual CDP Browser ownership and governed operations', { timeout
 				return new Promise((resolve) => site.close(resolve));
 			}),
 		]);
-		await rm(root, { recursive: true, force: true });
 		const failures = outcomes.flatMap((outcome) => (outcome.status === 'rejected' ? [outcome.reason] : []));
 		if (failures.length) {
 			throw new AggregateError(failures, 'Browser fixtures cleanup failed');

@@ -7,7 +7,8 @@ import { expectStatus, until } from '../remote/openssh-fixture.mjs';
 
 await test('B10 real signed sandbox, complete SDK imports and MessagePort RPC', { timeout: 60000 }, async (t) => {
 	const f = await openPlugins(t);
-	const plugin = await f.install('browser');
+	const plugin = await f.install('browser', { modelApp: true, capabilities: ['plugin.invoke', 'context.read'] });
+	await plugin.grants(['plugin.invoke', 'context.read']);
 	const b = await openPluginBrowser(t, f, plugin);
 	let frame;
 
@@ -19,7 +20,7 @@ await test('B10 real signed sandbox, complete SDK imports and MessagePort RPC', 
 		);
 		assert.deepEqual(
 			b.requests.filter((item) => item.path.startsWith('/sdk/')),
-			[{ path: '/sdk/frontend-v1.mjs', status: 200 }],
+			[{ path: '/sdk/frontend-v4.mjs', status: 200 }],
 		);
 		assert.deepEqual(b.errors, []);
 		assert.equal(
@@ -91,7 +92,11 @@ await test('B10 real signed sandbox, complete SDK imports and MessagePort RPC', 
 		await frame.evaluate(
 			({ nonce, appId }) => {
 				const channel = new MessageChannel();
-				window.postMessage({ type: 'nexus.plugin.init', protocol: 1, nonce, appId }, '*', [channel.port2]);
+				window.postMessage(
+					{ type: 'nexus.plugin.init', protocol: 4, nonce, appId, expiresAt: Date.now() + 60000 },
+					'*',
+					[channel.port2],
+				);
 				channel.port1.close();
 			},
 			{ nonce: randomUUID(), appId: plugin.appId },
@@ -157,39 +162,31 @@ await test('B10 real signed sandbox, complete SDK imports and MessagePort RPC', 
 		},
 	);
 	await t.test(
-		'32 held replies fill local pending budget; closing settles all and rejects new requests',
+		'concurrent held replies exceed the old pending threshold and close with their original owner',
 		async () => {
 			await b.page.evaluate(() => {
 				window.bridge.hold = true;
 			});
 			await frame.evaluate(() => {
-				window.pending = Array.from({ length: 32 }, () =>
+				window.pending = Array.from({ length: 33 }, () =>
 					window.sdk.request({ method: 'storage.get', params: { key: 'browser' } }).then(
 						() => 'ok',
 						(error) => error.code,
 					),
 				);
 			});
-			const extra = await frame.evaluate(async () => {
-				try {
-					await window.sdk.request({ method: 'storage.get', params: { key: 'browser' } });
-				} catch (error) {
-					return error.code;
-				}
-			});
-			assert.equal(extra, 'provider_unavailable');
-			await b.page.waitForFunction(() => window.bridge.queued.length === 32);
+			await b.page.waitForFunction(() => window.bridge.queued.length === 33);
 			assert.deepEqual(
 				await frame.evaluate(async () => {
 					await window.sdk.close();
 					return Promise.all(window.pending);
 				}),
-				Array(32).fill('provider_unavailable'),
+				Array(33).fill('provider_unavailable'),
 			);
 			frame = await b.frame();
 		},
 	);
-	await t.test('real HTTP denial reaches subscription failure and unsubscribe closes it', async () => {
+	await t.test('real WS denial reaches subscription failure and unsubscribe closes it', async () => {
 		const runId = randomUUID();
 		const result = await frame.evaluate(async (runId) => {
 			const failures = [];
@@ -211,7 +208,7 @@ await test('B10 real signed sandbox, complete SDK imports and MessagePort RPC', 
 		assert.deepEqual(result, ['not_found']);
 	});
 	let run;
-	await t.test('SDK creates a real model Run and polls its actual events with the server cursor', async () => {
+	await t.test('SDK creates a real model Run and streams its actual events with the server cursor', async () => {
 		frame = await b.frame();
 		const provider = expectStatus(
 			await f.api('POST', '/api/v1/agent/ai/providers', {
@@ -252,7 +249,15 @@ await test('B10 real signed sandbox, complete SDK imports and MessagePort RPC', 
 						params: {
 							threadId,
 							operationId,
-							input: { prompt: 'subscription', approvalMode: 'ask', connectionIds: [], model },
+							input: {
+								prompt: 'subscription',
+								approvalMode: 'ask',
+								connectionIds: [],
+								inputJson: JSON.stringify({
+									model: { ...model, reasoningEffort: null },
+									artifacts: [],
+								}),
+							},
 						},
 					}),
 				{
@@ -286,14 +291,47 @@ await test('B10 real signed sandbox, complete SDK imports and MessagePort RPC', 
 		const first = await frame.evaluate(() => window.pages[0]);
 		assert.ok(first.items.every((item) => item.runId === run.id));
 		assert.ok(first.items.length > 0);
-		await b.page.waitForFunction(
-			(cursor) =>
-				window.bridge.requests.some(
-					(item) => item.request.method === 'agent.runs.events' && item.request.params.after === cursor,
-				),
-			first.nextCursor,
+		await b.page.waitForFunction(() =>
+			window.bridge.requests.some(
+				(item) => item.type === 'nexus.plugin.stream' && item.command === 'ack' && item.revision === 1,
+			),
 		);
 		await frame.evaluate(() => window.sdk.agent.runs.unsubscribe(window.sub.id));
+		await frame.evaluate(
+			({ runId, after }) => {
+				window.resumed = [];
+				window.sub = window.sdk.agent.runs.subscribe(
+					runId,
+					after,
+					(page) => window.resumed.push(page),
+					() => {},
+				);
+			},
+			{ runId: run.id, after: first.nextCursor },
+		);
+		const resumedId = await frame.evaluate(() => window.sub.id);
+		await b.page.waitForFunction(
+			(id) =>
+				window.bridge.requests.some(
+					(item) =>
+						item.type === 'nexus.plugin.stream' && item.subscriptionId === id && item.command === 'ack',
+				),
+			resumedId,
+		);
+		assert.deepEqual(
+			await b.page.evaluate(
+				(id) => window.bridge.streamReplies.find((item) => item.subscriptionId === id).value,
+				resumedId,
+			),
+			{ items: [], nextCursor: first.nextCursor },
+		);
+		assert.deepEqual(
+			await frame.evaluate(() => window.resumed),
+			[],
+			'empty catch-up pages do not repeat consumer callbacks',
+		);
+		await frame.evaluate(() => window.sdk.agent.runs.unsubscribe(window.sub.id));
+		assert.equal(b.modelCalls.length, 1, 'stream recovery never resubmits the accepted model Run');
 		assert.deepEqual(await frame.evaluate(() => window.failures), []);
 	});
 	await t.test('unsubscribe waits an already running asynchronous consumer callback', async () => {
@@ -345,12 +383,12 @@ await test('B10 real signed sandbox, complete SDK imports and MessagePort RPC', 
 			assert.deepEqual(result, ['isolated callback failure']);
 		},
 	);
-	await t.test('eight subscriptions retain independent ownership and a ninth is refused', async () => {
+	await t.test('nine subscriptions retain independent ownership beyond the old threshold', async () => {
 		await b.page.evaluate(() => {
 			window.bridge.hold = true;
 		});
-		const refused = await frame.evaluate((runId) => {
-			window.subs = Array.from({ length: 8 }, () =>
+		await frame.evaluate((runId) => {
+			window.subs = Array.from({ length: 9 }, () =>
 				window.sdk.agent.runs.subscribe(
 					runId,
 					0,
@@ -358,24 +396,16 @@ await test('B10 real signed sandbox, complete SDK imports and MessagePort RPC', 
 					() => {},
 				),
 			);
-			try {
-				window.sdk.agent.runs.subscribe(
-					runId,
-					0,
-					() => {},
-					() => {},
-				);
-			} catch (error) {
-				return error.code;
-			}
 		}, run.id);
-		assert.equal(refused, 'limit_exceeded');
-		await b.page.waitForFunction(() => window.bridge.queued.length === 8);
+		const ids = await frame.evaluate(() => window.subs.map((sub) => sub.id));
+		await b.page.waitForFunction(
+			(ids) => ids.every((id) => window.bridge.queued.some((event) => event.subscriptionId === id)),
+			ids,
+		);
+		assert.equal(ids.length, 9);
 		await frame.evaluate(() => Promise.all(window.subs.map((sub) => window.sdk.agent.runs.unsubscribe(sub.id))));
 		await b.page.evaluate(() => {
-			for (const response of window.bridge.queued) {
-				window.bridge.port.postMessage(response);
-			}
+			for (const response of window.bridge.queued) window.bridge.port.postMessage(response);
 			window.bridge.queued = [];
 			window.bridge.hold = false;
 		});
@@ -395,7 +425,7 @@ await test('B10 real signed sandbox, complete SDK imports and MessagePort RPC', 
 				() => {},
 			);
 		}, run.id);
-		await b.page.waitForFunction(() => window.bridge.queued.length === 1);
+		await b.page.waitForFunction(() => window.bridge.queued.length >= 1);
 		await frame.evaluate(() => window.sdk.agent.runs.unsubscribe(window.sub.id));
 		await b.page.evaluate(() => {
 			window.bridge.port.postMessage(window.bridge.queued[0]);

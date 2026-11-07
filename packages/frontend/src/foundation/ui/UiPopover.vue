@@ -1,5 +1,6 @@
 <script setup lang="ts">
-	import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui';
+	import { PopoverAnchor, PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui';
+	import type { ReferenceElement } from 'reka-ui';
 	import { computed, ref, watch } from 'vue';
 	import UiButton from './UiButton.vue';
 	import type { UiAppearance, UiDensity, UiTone } from './uiTypes';
@@ -26,6 +27,7 @@
 			wrapperClass?: string;
 			triggerClass?: string;
 			panelMarkerAttribute?: `data-${string}`;
+			anchor?: ReferenceElement;
 		}>(),
 		{
 			title: '',
@@ -55,6 +57,7 @@
 
 	const wrapper = ref<HTMLElement | null>(null);
 	let restoreFocus = true;
+	let escaped = false;
 
 	const collisionBoundary = computed<HTMLElement | undefined>(() => {
 		if (!props.boundarySelector) return undefined;
@@ -80,8 +83,25 @@
 
 	const onCloseAutoFocus = (event: Event): void => {
 		if (!restoreFocus) event.preventDefault();
+		else if (props.anchor && escaped) {
+			const element =
+				props.anchor instanceof HTMLElement
+					? props.anchor
+					: 'contextElement' in props.anchor
+						? props.anchor.contextElement
+						: undefined;
+			if (element instanceof HTMLElement) {
+				event.preventDefault();
+				element.focus({ preventScroll: true });
+			}
+		}
 		restoreFocus = true;
+		escaped = false;
 	};
+
+	function onEscapeKeydown(): void {
+		escaped = true;
+	}
 
 	// `disabled` must also resolve an already-open popover. Funnelling the
 	// transition through `applyOpen(false)` keeps the model and `open-change`
@@ -97,7 +117,10 @@
 <template>
 	<span ref="wrapper" data-ui="popover" data-ui-gen="2" class="ui-popover" :class="props.wrapperClass">
 		<PopoverRoot :open="model" :modal="false" @update:open="applyOpen">
-			<PopoverTrigger as-child>
+			<PopoverAnchor v-if="props.anchor" :reference="props.anchor">
+				<span aria-hidden="true"></span>
+			</PopoverAnchor>
+			<PopoverTrigger v-else as-child>
 				<slot name="trigger-control" :open="model">
 					<UiButton
 						:appearance="props.triggerAppearance"
@@ -132,6 +155,7 @@
 					class="ui-surface ui-radius--panel ui-popover__panel ui-glass-panel"
 					:class="[props.surface === 'solid' && 'ui-popover__panel--solid', props.panelClass]"
 					@close-auto-focus="onCloseAutoFocus"
+					@escape-key-down="onEscapeKeydown"
 				>
 					<slot name="panel" :close="close" />
 				</PopoverContent>

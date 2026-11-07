@@ -262,7 +262,7 @@ test('Agent RPC serialization refusal keeps the original exchange envelope and u
 		assert.equal(response.statusCode, 503);
 		assert.deepEqual(response.json(), {
 			type: 'nexus.plugin.response',
-			protocol: 1,
+			protocol: 4,
 			nonce: 'original-nonce',
 			id: 'original-id',
 			seq: 7,

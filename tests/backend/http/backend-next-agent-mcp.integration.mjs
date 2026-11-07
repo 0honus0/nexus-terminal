@@ -1,123 +1,78 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { randomUUID } from 'node:crypto';
-import { once } from 'node:events';
-import { createServer } from 'node:http';
-import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { listAgentApprovalHistory } from './agent-approval-fixture.mjs';
+import { configureProtocol } from './agent-protocol-fixture.mjs';
+import { openMcp } from './mcp-server-fixture.mjs';
 import { openAgentExecution } from './agent-execution-fixture.mjs';
 import { openSshd, until, expectStatus } from '../remote/openssh-fixture.mjs';
 
-/** The external MCP server is scripted; SDK negotiation, HTTP, authority and SQL stay real. */
-async function openMcp() {
-	const requests = [];
-	const pending = new Set();
-	const failures = [];
+async function pending(f, run) {
+	return (await listAgentApprovalHistory(f.api, f.appId, run.id)).filter((item) => item.status === 'requested');
+}
 
-	let tool = () => ({ content: [{ type: 'text', text: 'external-result' }] });
+function methodFor(f, run, approval) {
+	const operation = f.operations(run).find((item) => item.id === approval.operationId);
+	assert.ok(operation, 'Approval must refer to the immutable operation');
+	if (operation.label !== 'transport.http.request') return null;
+	const params = JSON.parse(operation.arguments_json).request.params;
+	return params.bodyUtf8 === null ? null : JSON.parse(params.bodyUtf8).method;
+}
 
-	let toolName = 'echo';
-	const server = createServer((request, response) => {
-		const task = Promise.resolve().then(async () => {
-			if (request.method !== 'POST') {
-				response.writeHead(request.method === 'DELETE' ? 204 : 405).end();
-				return;
+async function gate(f, run, { stopAtRefresh = false } = {}) {
+	return until(
+		async () => {
+			for (const approval of await pending(f, run)) {
+				assert.ok(['transport.session', 'transport.http.request'].includes(approval.operationName));
+				const method = methodFor(f, run, approval);
+				if (
+					method === 'tools/call' ||
+					(stopAtRefresh &&
+						method === 'tools/list' &&
+						f
+							.operations(run)
+							.some(
+								(item) =>
+									item.kind === 'tool' &&
+									item.label === 'nexus.tools.integrations.mcp_discover' &&
+									item.state === 'completed',
+							))
+				)
+					return approval;
+				await f.approve(approval);
 			}
-			const chunks = [];
-			for await (const chunk of request) {
-				chunks.push(chunk);
-			}
-			const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-			requests.push({ body, authorization: request.headers.authorization });
-			if (body.id === undefined) {
-				response.writeHead(202).end();
-				return;
-			}
-			const cached = { ttlMs: 0, cacheScope: 'private' };
-			let result;
-			switch (body.method) {
-				case 'server/discover':
-					result = {
-						supportedVersions: ['2026-07-28'],
-						capabilities: { tools: {}, resources: {}, prompts: {} },
-						_meta: { 'io.modelcontextprotocol/serverInfo': { name: 'B10 MCP', version: '1.0.0' } },
-					};
-					break;
-				case 'tools/list':
-					result = {
-						...cached,
-						tools: [{ name: toolName, description: 'Fixture tool', inputSchema: { type: 'object' } }],
-					};
-					break;
-				case 'resources/list':
-					result = { ...cached, resources: [{ uri: 'fixture://document', name: 'Document' }] };
-					break;
-				case 'prompts/list':
-					result = { ...cached, prompts: [{ name: 'greeting', description: 'Fixture prompt' }] };
-					break;
-				case 'resources/read':
-					result = { ...cached, contents: [{ uri: 'fixture://document', text: 'resource-value' }] };
-					break;
-				case 'prompts/get':
-					result = { messages: [{ role: 'user', content: { type: 'text', text: 'prompt-value' } }] };
-					break;
-				case 'tools/call':
-					result = await tool(body.params, response);
-					if (result === null) {
-						return;
-					}
-					break;
-				default:
-					assert.fail('Unexpected MCP method: ' + body.method);
-			}
-			response.writeHead(200, { 'Content-Type': 'application/json' });
-			response.end(
-				JSON.stringify({ jsonrpc: '2.0', id: body.id, result: { resultType: 'complete', ...result } }),
+			const current = expectStatus(await f.api('GET', '/api/v1/agent/apps/' + f.appId + '/runs/' + run.id), 200);
+			assert.ok(
+				!['completed', 'failed', 'unknown', 'cancelled'].includes(current.status),
+				JSON.stringify(current),
 			);
-		});
-		pending.add(task);
-		void task.then(
-			() => pending.delete(task),
-			(error) => {
-				pending.delete(task);
-				failures.push(error);
-				response.destroy(error);
-			},
-		);
-	});
-	server.listen(0, '127.0.0.1');
-	await once(server, 'listening');
-	const authority = '127.0.0.1:' + server.address().port;
-	return {
-		requests,
-		configuration: {
-			kind: 'mcp',
-			displayName: 'B10 external MCP',
-			endpoint: 'http://' + authority + '/mcp',
-			privateHostExceptions: [authority],
-			protocolVersion: '2026-07-28',
+			return null;
 		},
+		Boolean,
+		'Independent MCP outbound invocation approval',
+	);
+}
 
-		setTool(work) {
-			tool = work;
+async function settle(f, run, status = 'completed') {
+	const final = await until(
+		async () => {
+			for (const approval of await pending(f, run)) {
+				assert.ok(['transport.session', 'transport.http.request'].includes(approval.operationName));
+				await f.approve(approval);
+			}
+			return expectStatus(await f.api('GET', '/api/v1/agent/apps/' + f.appId + '/runs/' + run.id), 200);
 		},
-
-		changeCatalog() {
-			toolName = 'changed';
-		},
-
-		async close() {
-			server.closeAllConnections();
-			await new Promise((resolve) => server.close(resolve));
-			await Promise.allSettled([...pending]);
-			assert.deepEqual(failures, []);
-		},
-	};
+		(value) => ['completed', 'failed', 'unknown', 'cancelled'].includes(value.status),
+		'MCP Run settles',
+	);
+	assert.equal(final.status, status, JSON.stringify(final));
+	return final;
 }
 
 await test('B10 actual MCP integration negotiation and governed execution', { timeout: 90000 }, async (t) => {
-	const root = await mkdtemp(join(tmpdir(), 'nexus-b10-mcp-'));
+	const root = await mkdtemp(join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-b10-mcp-'));
 	let sshd;
 	let sequence = 0;
 
@@ -138,46 +93,39 @@ await test('B10 actual MCP integration negotiation and governed execution', { ti
 					throw new AggregateError(failures, 'MCP fixture cleanup failed');
 				}
 			});
-			f = await openAgentExecution(directory, sshd);
-			await f.grants(['integration.mcp.read', 'integration.mcp.invoke']);
-			const path = '/api/v1/apps/' + f.appId + '/integrations';
-			const input = {
-				configuration: external.configuration,
-				enabled: true,
-				credential: { action: 'replace', value: 'mcp-fixture-secret' },
-			};
-			const key = randomUUID();
-			const integration = expectStatus(await f.api('POST', path, input, { 'Idempotency-Key': key }), 201);
-			assert.deepEqual(
-				expectStatus(await f.api('POST', path, input, { 'Idempotency-Key': key }), 201),
-				integration,
+			f = await openAgentExecution(directory, sshd, {
+				discover: 'mcp_discover mcp_tool mcp_resource mcp_prompt',
+				plugin: { selectedRootIds: ['nexus.tools.integrations', 'nexus.tools.agent', 'nexus.services.mcp'] },
+			});
+			await f.grants(['integration.mcp.read', 'integration.mcp.invoke', 'service.transport.http']);
+			const { instance } = await configureProtocol(
+				f,
+				'nexus.services.mcp',
+				{
+					kind: 'http',
+					endpoint: external.configuration.endpoint,
+					privateAuthorities: external.configuration.privateHostExceptions,
+				},
+				{ action: 'replace', value: 'mcp-fixture-secret' },
 			);
-			assert.equal(integration.hasCredential, true);
-			assert.ok(!JSON.stringify(integration).includes('mcp-fixture-secret'));
-			const discovery = expectStatus(
-				await f.api('POST', path + '/' + integration.id + '/refresh', { expectedVersion: integration.version }),
-				200,
-			);
-			assert.equal(discovery.serverName, 'B10 MCP');
-			assert.equal(discovery.protocolVersion, '2026-07-28');
-			assert.equal(discovery.tools[0].name, 'echo');
-			await work(f, external, discovery.integration, cleanup);
+			await work(f, external, instance, cleanup);
 		});
 	}
 
 	function discover(integration) {
-		return { name: 'mcp_discover', input: { integrationId: integration.id, version: integration.version } };
+		return { name: 'mcp_discover', input: { instanceId: integration.id } };
 	}
 
 	function invoke(integration, catalog, kind = 'tool', extra = {}) {
 		return {
 			name: 'mcp_' + kind,
 			input: {
-				integrationId: integration.id,
-				version: integration.version,
+				instanceId: integration.id,
 				schemaHash: catalog.schemaHash,
 				name: kind === 'resource' ? 'fixture://document' : kind === 'prompt' ? 'greeting' : 'echo',
 				argumentsJson: '{}',
+				resume: null,
+				continuation: null,
 				...extra,
 			},
 		};
@@ -186,17 +134,16 @@ await test('B10 actual MCP integration negotiation and governed execution', { ti
 	try {
 		sshd = await openSshd(root);
 		await scenario(
-			'management replay, pinned discovery, independent approval and read operations',
+			'pinned discovery, independent transport approval, secret boundary and read operations',
 			async (f, external, integration) => {
 				const run = await f.start('MCP success', (results) => {
 					if (results.length === 0) {
 						return discover(integration);
 					}
 					if (results.length === 1) {
-						assert.equal(results[0].untrusted, true);
+						assert.equal(results[0].catalog.tools[0].name, 'echo');
 						return invoke(integration, results[0]);
 					}
-					assert.equal(results.at(-1).untrusted, true);
 					assert.equal(results.at(-1).kind, 'complete');
 					if (results.length === 2) {
 						assert.equal(JSON.parse(results[1].resultJson).content[0].text, 'external-result');
@@ -209,16 +156,16 @@ await test('B10 actual MCP integration negotiation and governed execution', { ti
 					assert.equal(JSON.parse(results[3].resultJson).messages[0].content.text, 'prompt-value');
 					return {};
 				});
-				const approval = await f.approval(run, 'mcp_tool');
+				const approval = await gate(f, run);
 				assert.equal(external.requests.filter((request) => request.body.method === 'tools/call').length, 0);
 				await f.approve(approval);
-				await f.wait(run, 'completed');
+				await settle(f, run);
 				assert.equal(external.requests.filter((request) => request.body.method === 'tools/call').length, 1);
 				assert.ok(external.requests.every((request) => request.authorization === 'Bearer mcp-fixture-secret'));
 				assert.ok(external.requests.some((request) => request.body.method === 'server/discover'));
 				assert.ok(!external.requests.some((request) => request.body.method === 'initialize'));
 				await f.restart();
-				assert.equal((await f.wait(run, 'completed')).status, 'completed');
+				assert.equal((await settle(f, run)).status, 'completed');
 				assert.equal(external.requests.filter((request) => request.body.method === 'tools/call').length, 1);
 			},
 		);
@@ -226,14 +173,14 @@ await test('B10 actual MCP integration negotiation and governed execution', { ti
 			'catalog drift after approval request is refused before remote dispatch',
 			async (f, external, integration) => {
 				const run = await f.start('MCP changed catalog', (results) =>
-					results.length ? invoke(integration, results[0]) : discover(integration),
+					results.length > 1 ? {} : results.length ? invoke(integration, results[0]) : discover(integration),
 				);
-				const approval = await f.approval(run, 'mcp_tool');
+				const approval = await gate(f, run, { stopAtRefresh: true });
 				external.changeCatalog();
 				await f.approve(approval);
-				await f.wait(run, 'unknown');
+				await settle(f, run);
 				assert.equal(external.requests.filter((request) => request.body.method === 'tools/call').length, 0);
-				assert.equal(f.rows('agent_run_tools', run).at(-1).state, 'unknown');
+				assert.ok(!(await f.toolHistory(run)).some((item) => item.state === 'unknown'));
 			},
 		);
 		await scenario(
@@ -270,27 +217,29 @@ await test('B10 actual MCP integration negotiation and governed execution', { ti
 					}
 					if (results.length === 2) {
 						assert.equal(results[1].kind, 'input_required');
-						assert.equal(results[1].untrusted, true);
-						assert.notEqual(results[1].requestState, 'external-private-state');
-						assert.match(results[1].requestState, /^[0-9a-f-]{36}$/);
+						assert.equal(results[1].requestState, 'external-private-state');
+						assert.match(results[1].continuation, /^[0-9a-f-]{36}$/);
 						assert.equal(JSON.parse(results[1].inputRequestsJson).confirm.method, 'elicitation/create');
 						return invoke(integration, results[0], 'tool', {
-							requestState: results[1].requestState,
-							inputResponsesJson: JSON.stringify({
-								confirm: { action: 'accept', content: { answer: 'yes' } },
-							}),
+							continuation: results[1].continuation,
+							resume: {
+								requestState: results[1].requestState,
+								inputResponsesJson: JSON.stringify({
+									confirm: { action: 'accept', content: { answer: 'yes' } },
+								}),
+							},
 						});
 					}
 					assert.equal(JSON.parse(results[2].resultJson).content[0].text, 'resumed');
 					return {};
 				});
-				const first = await f.approval(run, 'mcp_tool');
+				const first = await gate(f, run);
 				await f.approve(first);
-				const second = await f.approval(run, 'mcp_tool');
+				const second = await gate(f, run);
 				assert.notEqual(second.id, first.id);
 				assert.equal(external.requests.filter((request) => request.body.method === 'tools/call').length, 1);
 				await f.approve(second);
-				await f.wait(run, 'completed');
+				await settle(f, run);
 				assert.equal(external.requests.filter((request) => request.body.method === 'tools/call').length, 2);
 			},
 		);
@@ -313,16 +262,16 @@ await test('B10 actual MCP integration negotiation and governed execution', { ti
 						assert.equal(results[1].kind, 'input_required');
 						assert.deepEqual(JSON.parse(results[1].inputRequestsJson), {});
 						return invoke(integration, results[0], 'tool', {
-							requestState: results[1].requestState,
-							inputResponsesJson: '{}',
+							continuation: results[1].continuation,
+							resume: { requestState: results[1].requestState, inputResponsesJson: '{}' },
 						});
 					}
 					assert.equal(JSON.parse(results[2].resultJson).content[0].text, 'continued');
 					return {};
 				});
-				await f.approve(await f.approval(run, 'mcp_tool'));
-				await f.approve(await f.approval(run, 'mcp_tool'));
-				await f.wait(run, 'completed');
+				await f.approve(await gate(f, run));
+				await f.approve(await gate(f, run));
+				await settle(f, run);
 				assert.equal(external.requests.filter((request) => request.body.method === 'tools/call').length, 2);
 			},
 		);
@@ -347,38 +296,41 @@ await test('B10 actual MCP integration negotiation and governed execution', { ti
 					pending = results[1];
 					return {};
 				});
-				await f.approve(await f.approval(first, 'mcp_tool'));
-				await f.wait(first, 'completed');
+				await f.approve(await gate(f, first));
+				await settle(f, first);
 				assert.equal(pending.kind, 'input_required');
-				const second = await f.start('MCP wrong state owner', () =>
-					invoke(integration, observed, 'tool', {
-						requestState: pending.requestState,
-						inputResponsesJson: '{}',
-					}),
+				const second = await f.start('MCP wrong state owner', (results) =>
+					results.length
+						? {}
+						: invoke(integration, observed, 'tool', {
+								continuation: pending.continuation,
+								resume: { requestState: pending.requestState, inputResponsesJson: '{}' },
+							}),
 				);
-				await f.approve(await f.approval(second, 'mcp_tool'));
-				await f.wait(second, 'unknown');
+				await settle(f, second, 'completed');
 				assert.equal(external.requests.filter((request) => request.body.method === 'tools/call').length, 1);
 			},
 		);
 		await scenario(
 			'private host access requires the exact explicit authority exception',
 			async (f, external, integration) => {
-				const path = '/api/v1/apps/' + f.appId + '/integrations/' + integration.id;
 				const before = external.requests.length;
-				const updated = expectStatus(
-					await f.api('PATCH', path, {
-						expectedVersion: integration.version,
-						configuration: { ...external.configuration, privateHostExceptions: [] },
-						enabled: true,
+				const base = '/api/v1/agent/plugins/apps/' + f.appId + '/instances/' + integration.id + '/connection';
+				const connection = expectStatus(await f.api('GET', base), 200);
+				expectStatus(
+					await f.api('PUT', base, {
+						expectedRevision: connection.revision,
+						connector: { kind: 'http', endpoint: external.configuration.endpoint, privateAuthorities: [] },
 						credential: { action: 'keep' },
 					}),
 					200,
 				);
-				const response = await f.api('POST', path + '/refresh', { expectedVersion: updated.version });
-				assert.equal(response.status, 503);
-				assert.deepEqual(response.body, { code: 'provider_unavailable' });
+				const run = await f.start('MCP private authority refused', (results) =>
+					results.length ? {} : discover(integration),
+				);
+				await settle(f, run);
 				assert.equal(external.requests.length, before);
+				assert.ok((await f.toolHistory(run)).some((item) => item.state === 'failed'));
 			},
 		);
 		await scenario(
@@ -391,14 +343,14 @@ await test('B10 actual MCP integration negotiation and governed execution', { ti
 					return null;
 				});
 				const run = await f.start('MCP broken response', (results) =>
-					results.length ? invoke(integration, results[0]) : discover(integration),
+					results.length > 1 ? {} : results.length ? invoke(integration, results[0]) : discover(integration),
 				);
-				await f.approve(await f.approval(run, 'mcp_tool'));
-				await f.wait(run, 'unknown');
+				await f.approve(await gate(f, run));
+				await settle(f, run, 'unknown');
 				assert.equal(effects, 1);
-				assert.equal(f.rows('agent_run_tools', run).at(-1).state, 'unknown');
-				await f.restart({ unknown: true });
-				assert.equal((await f.wait(run, 'unknown')).status, 'unknown');
+				assert.equal(f.operations(run).at(-1).state, 'unknown');
+				await f.restart();
+				assert.equal((await settle(f, run, 'unknown')).status, 'unknown');
 				assert.equal(effects, 1);
 				cleanup.unknown = false;
 			},
@@ -418,9 +370,13 @@ await test('B10 actual MCP integration negotiation and governed execution', { ti
 				});
 				try {
 					const run = await f.start('MCP cancel after dispatch', (results) =>
-						results.length ? invoke(integration, results[0]) : discover(integration),
+						results.length > 1
+							? {}
+							: results.length
+								? invoke(integration, results[0])
+								: discover(integration),
 					);
-					await f.approve(await f.approval(run, 'mcp_tool'));
+					await f.approve(await gate(f, run));
 					await until(
 						async () => effects,
 						(value) => value === 1,
@@ -430,12 +386,12 @@ await test('B10 actual MCP integration negotiation and governed execution', { ti
 					release();
 					await f.wait(run, 'cancelled');
 					await until(
-						async () => f.rows('agent_run_tools', run).at(-1).state,
+						async () => f.operations(run).at(-1).state,
 						(status) => status === 'unknown',
 						'MCP unknown after cancellation',
 					);
 					assert.equal(effects, 1);
-					cleanup.unknown = true;
+					cleanup.unknown = false;
 				} finally {
 					release();
 				}
@@ -443,6 +399,5 @@ await test('B10 actual MCP integration negotiation and governed execution', { ti
 		);
 	} finally {
 		await sshd?.close();
-		await rm(root, { recursive: true, force: true });
 	}
 });

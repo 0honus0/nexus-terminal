@@ -7,11 +7,14 @@ import type {
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { constants as bufferConstants } from 'node:buffer';
 import { isWellFormedFileText } from '@nexus-terminal/shared/remote/files/text-codec';
 import {
 	REMOTE_FILE_MAX_PATH_BYTES,
 	REMOTE_FILE_MAX_LIST_ENTRIES,
 	REMOTE_FILE_MAX_METADATA_BYTES,
+	REMOTE_FILE_TEXT_PAGE_MIN_BYTES,
+	REMOTE_FILE_TEXT_PAGE_MAX_BYTES,
 } from '@nexus-terminal/shared/remote/files/values';
 import { RemoteFileFailure } from '../model/file-types.js';
 import type { FileInfo } from '../model/file-types.js';
@@ -21,11 +24,6 @@ import type {
 	FileInspectionContext,
 	FileContent,
 } from '../../machines/model/operation-types.js';
-
-const MAX_TEXT_BYTES = 32 * 1024;
-const MAX_SEARCH_FILES = 100;
-const MAX_SEARCH_DIRECTORIES = 100;
-const MAX_SEARCH_BYTES = 2 * 1024 * 1024;
 
 export function inspectionPath(input: string): string {
 	if (
@@ -64,12 +62,13 @@ export async function inspectText(context: FileInspectionContext, input: string)
 	if (before.kind !== 'file') {
 		throw new RemoteFileFailure('not_text');
 	}
-	if (before.size > MAX_TEXT_BYTES) {
+	// Full-text edits are buffered strings; pagination capacity is not a file-size policy.
+	if (before.size > bufferConstants.MAX_STRING_LENGTH) {
 		throw new RemoteFileFailure('limit_exceeded');
 	}
 	const bytes = await context.resource.read({
 		path: requested,
-		maxBytes: MAX_TEXT_BYTES,
+		maxBytes: Math.max(1, before.size),
 		timeoutMs: context.remaining(),
 		signal: context.signal,
 	});
@@ -122,6 +121,48 @@ export async function inspectDirectory(context: FileInspectionContext, input: st
 	return entries;
 }
 
+/** Directory pages keep I/O bounded without limiting the complete tree to one page. */
+export async function* inspectDirectoryEntries(context: FileInspectionContext, input: string) {
+	const requested = inspectionPath(input);
+	const before = await inspectInfo(context, requested);
+	if (before.kind !== 'directory') {
+		throw new RemoteFileFailure('invalid_input');
+	}
+	let after = '';
+	for (;;) {
+		const entries = await context.resource.listAfter({
+			path: requested,
+			after,
+			maxEntries: REMOTE_FILE_MAX_LIST_ENTRIES,
+			maxMetadataBytes: REMOTE_FILE_MAX_METADATA_BYTES,
+			timeoutMs: context.remaining(),
+			signal: context.signal,
+		});
+		await context.validate();
+		for (const entry of entries) {
+			if (
+				entry.name <= after ||
+				entry.name.includes('/') ||
+				entry.name.includes('\0') ||
+				!isWellFormedFileText(entry.name) ||
+				entry.name === '.' ||
+				entry.name === '..'
+			) {
+				throw new RemoteFileFailure('invalid_input');
+			}
+			after = entry.name;
+			yield entry;
+		}
+		if (entries.length === 0) {
+			break;
+		}
+	}
+	const current = await inspectInfo(context, requested);
+	if (metadataFingerprint(current) !== metadataFingerprint(before)) {
+		throw new RemoteFileFailure('conflict');
+	}
+}
+
 function metadataFingerprint(info: FileInfo): string {
 	return createHash('sha256')
 		.update(JSON.stringify([info.kind, info.size, info.modifiedAt, info.mode]))
@@ -137,8 +178,8 @@ export async function inspectTextPage(
 		!Number.isSafeInteger(input.offset) ||
 		input.offset < 0 ||
 		!Number.isSafeInteger(input.maxBytes) ||
-		input.maxBytes < 4 ||
-		input.maxBytes > MAX_TEXT_BYTES
+		input.maxBytes < REMOTE_FILE_TEXT_PAGE_MIN_BYTES ||
+		input.maxBytes > REMOTE_FILE_TEXT_PAGE_MAX_BYTES
 	) {
 		throw new RemoteFileFailure('invalid_input');
 	}
@@ -155,7 +196,7 @@ export async function inspectTextPage(
 				path: requested,
 				start: input.offset,
 				length,
-				maxBytes: MAX_TEXT_BYTES,
+				maxBytes: REMOTE_FILE_TEXT_PAGE_MAX_BYTES,
 				timeoutMs: context.remaining(),
 				signal: context.signal,
 			})
@@ -229,7 +270,7 @@ export async function inspectDirectoryPage(
 			size: entry.info.size,
 			modifiedAt: entry.info.modifiedAt,
 		})),
-		nextAfter: entries.length > page.length ? page[page.length - 1].name : null,
+		nextAfter: page.length ? page[page.length - 1].name : null,
 		fingerprint: metadataFingerprint(before),
 	};
 }
@@ -245,16 +286,10 @@ export async function inspectSearch(
 		!queries.length ||
 		new Set(queries).size !== queries.length ||
 		queries.some(
-			(query) =>
-				!isWellFormedFileText(query) ||
-				!query ||
-				query.includes('\n') ||
-				query.includes('\r') ||
-				Buffer.byteLength(query, 'utf8') > 1024,
+			(query) => !isWellFormedFileText(query) || !query || query.includes('\n') || query.includes('\r'),
 		) ||
 		!Number.isSafeInteger(maxResults) ||
-		maxResults < 1 ||
-		maxResults > 100
+		maxResults < 1
 	) {
 		throw new RemoteFileFailure('invalid_input');
 	}
@@ -264,39 +299,23 @@ export async function inspectSearch(
 	if (initial.kind !== 'file' && initial.kind !== 'directory') {
 		throw new RemoteFileFailure('invalid_input');
 	}
-	const queue = [{ path: normalized, kind: initial.kind, depth: 0 }];
+	const queue = [{ path: normalized, kind: initial.kind }];
 	const matches: ReadSearchResult['matches'] = [];
-	let fileCount = 0;
-	let directoryCount = 0;
-	let bytes = 0;
 	while (queue.length) {
-		const next = queue.shift();
+		const next = queue.pop();
 		if (!next) {
 			break;
 		}
-		if (next.depth > 8) {
-			throw new RemoteFileFailure('limit_exceeded');
-		}
 		if (next.kind === 'directory') {
-			if (++directoryCount > MAX_SEARCH_DIRECTORIES) {
-				throw new RemoteFileFailure('limit_exceeded');
-			}
-			for (const entry of await inspectDirectory(context, next.path)) {
+			for await (const entry of inspectDirectoryEntries(context, next.path)) {
 				if (entry.info.kind === 'file' || entry.info.kind === 'directory') {
-					if (queue.length + fileCount + directoryCount >= MAX_SEARCH_FILES + MAX_SEARCH_DIRECTORIES) {
-						throw new RemoteFileFailure('limit_exceeded');
-					}
 					queue.push({
 						path: path.posix.join(next.path, entry.name),
 						kind: entry.info.kind,
-						depth: next.depth + 1,
 					});
 				}
 			}
 			continue;
-		}
-		if (++fileCount > MAX_SEARCH_FILES) {
-			throw new RemoteFileFailure('limit_exceeded');
 		}
 		let file: ReadTextResult;
 		try {
@@ -306,10 +325,6 @@ export async function inspectSearch(
 				continue;
 			}
 			throw error;
-		}
-		bytes += file.bytes;
-		if (bytes > MAX_SEARCH_BYTES) {
-			throw new RemoteFileFailure('limit_exceeded');
 		}
 		const lines = file.text.split(/\r\n|\n|\r/u);
 		for (let index = 0; index < lines.length; index++) {

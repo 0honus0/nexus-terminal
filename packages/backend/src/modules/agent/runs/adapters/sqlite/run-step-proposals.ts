@@ -1,21 +1,14 @@
 import type { StoredStepProposal } from '../../storage/run-proposal-types.js';
-import {
-	TOOL_ARGUMENT_MAX_BYTES,
-	TOOL_PROVIDER_CALL_ID_MAX_BYTES,
-	TOOL_PROPOSAL_MAX_COUNT,
-} from '../../run-tool-limits.js';
+import { TOOL_ARGUMENT_MAX_BYTES, TOOL_PROVIDER_CALL_ID_MAX_BYTES } from '../../run-tool-limits.js';
 import { AGENT_APPROVAL_MAX_TOOL_NAME_BYTES } from '@nexus-terminal/shared/agent/governance/values';
 
 /** The journal's private JSON is decoded only at its SQLite boundary. */
 export function readStepProposals(input: unknown): StoredStepProposal[] {
-	if (
-		typeof input !== 'string' ||
-		Buffer.byteLength(input, 'utf8') > TOOL_PROPOSAL_MAX_COUNT * (TOOL_ARGUMENT_MAX_BYTES * 6 + 1024)
-	) {
+	if (typeof input !== 'string') {
 		throw new Error('Corrupt model proposals capacity');
 	}
 	const value: unknown = JSON.parse(input);
-	if (!Array.isArray(value) || value.length > TOOL_PROPOSAL_MAX_COUNT) {
+	if (!Array.isArray(value)) {
 		throw new Error('Corrupt model proposals');
 	}
 	const ids = new Set<string>();

@@ -1,8 +1,10 @@
+import { REMOTE_FILE_MAX_PATH_BYTES } from '@nexus-terminal/shared/remote/files/values';
 import type { SqlRow } from '../../../../../platform/storage/sqlite/worker-types.js';
 import type {
 	StoredIntegration,
 	StoredIntegrationConfiguration,
 	StoredIntegrationReceipt,
+	StoredIntegrationRejection,
 } from '../../storage/integration-storage.js';
 import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
 import {
@@ -10,11 +12,7 @@ import {
 	AGENT_INTEGRATION_MAX_BODY_BYTES,
 	AGENT_INTEGRATION_NAME_MAX_BYTES,
 	AGENT_MCP_ENDPOINT_MAX_BYTES,
-	AGENT_MCP_HOST_MAX_ITEMS,
 	AGENT_MCP_HOST_MAX_BYTES,
-	AGENT_ACP_ARGV_MAX_ITEMS,
-	AGENT_ACP_ARGV_MAX_BYTES,
-	AGENT_ACP_CWD_MAX_BYTES,
 } from '@nexus-terminal/shared/agent/integrations/values';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -42,8 +40,8 @@ function integer(value: unknown, min = 0): number {
 	return value;
 }
 
-function texts(value: unknown, maxItems: number, maxBytes: number): string[] {
-	if (!Array.isArray(value) || value.length > maxItems) {
+function texts(value: unknown, maxBytes: number): string[] {
+	if (!Array.isArray(value)) {
 		throw new Error('Invalid integration list');
 	}
 	return value.map((item) => text(item, maxBytes));
@@ -88,7 +86,7 @@ function configuration(raw: unknown): StoredIntegrationConfiguration {
 		}
 		const endpoint = text(row.endpoint, AGENT_MCP_ENDPOINT_MAX_BYTES);
 		const url = new URL(endpoint);
-		const hosts = texts(row.privateHostExceptions, AGENT_MCP_HOST_MAX_ITEMS, AGENT_MCP_HOST_MAX_BYTES);
+		const hosts = texts(row.privateHostExceptions, AGENT_MCP_HOST_MAX_BYTES);
 		if (
 			!['https:', 'http:'].includes(url.protocol) ||
 			url.username ||
@@ -112,12 +110,11 @@ function configuration(raw: unknown): StoredIntegrationConfiguration {
 		if (Object.keys(row).length !== 6) {
 			throw new Error('Invalid ACP configuration');
 		}
-		const argv = texts(row.argv, AGENT_ACP_ARGV_MAX_ITEMS, AGENT_ACP_ARGV_MAX_BYTES);
-		const cwd = text(row.cwd, AGENT_ACP_CWD_MAX_BYTES);
+		const argv = texts(row.argv, AGENT_INTEGRATION_MAX_BODY_BYTES);
+		const cwd = text(row.cwd, REMOTE_FILE_MAX_PATH_BYTES);
 		if (
 			!argv[0] ||
 			argv[0].startsWith('-') ||
-			Buffer.byteLength(argv.join('')) > AGENT_ACP_ARGV_MAX_BYTES ||
 			argv.some((arg) => arg.includes('\0')) ||
 			!cwd.startsWith('/') ||
 			cwd.split('/').includes('..') ||
@@ -186,5 +183,18 @@ export function integrationReceipt(row: SqlRow): StoredIntegrationReceipt {
 		version: 1,
 		createdAt: integer(value.createdAt),
 		updatedAt: integer(value.updatedAt),
+	};
+}
+
+export function integrationRejection(row: SqlRow): StoredIntegrationRejection {
+	const intentHash = text(row.intent_hash, 64);
+	if (!/^[a-f0-9]{64}$/u.test(intentHash)) {
+		throw new Error('Invalid integration creation hash');
+	}
+	return {
+		userId: integer(row.user_id, 1),
+		appId: id(row.app_id),
+		key: id(row.operation_key),
+		intentHash,
 	};
 }

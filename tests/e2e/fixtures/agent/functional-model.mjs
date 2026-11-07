@@ -11,7 +11,19 @@ export function respondFunctionalModel(messages, userText, response, send) {
 	const call = (id, name, input) =>
 		send(
 			response,
-			{ tool_calls: [{ index: 0, id, type: 'function', function: { name, arguments: JSON.stringify(input) } }] },
+			{
+				tool_calls: [
+					{
+						index: 0,
+						id,
+						type: 'function',
+						function: {
+							name: name,
+							arguments: JSON.stringify(input),
+						},
+					},
+				],
+			},
 			'tool_calls',
 		);
 

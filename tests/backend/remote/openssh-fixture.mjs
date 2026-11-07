@@ -13,8 +13,8 @@ import { decodeWorkspaceBinaryFrame } from '../../../packages/shared/dist/remote
 
 const origin = 'http://127.0.0.1:0';
 
-async function until(read, accept, description) {
-	const deadline = performance.now() + 10000;
+async function until(read, accept, description, timeoutMs = 10000) {
+	const deadline = performance.now() + timeoutMs;
 	let value;
 	do {
 		value = await read();
@@ -26,13 +26,15 @@ async function until(read, accept, description) {
 	assert.fail(description + ': ' + JSON.stringify(value));
 }
 
-function send(address, cookie, method, path, input, headers = {}) {
+function send(address, cookie, method, path, input, headers = {}, options = {}) {
 	const bytes = Buffer.isBuffer(input) ? input : input === undefined ? undefined : Buffer.from(JSON.stringify(input));
 	return new Promise((resolve, reject) => {
+		let responseStarted = false;
 		const req = request(
 			'http://' + address + path,
 			{
 				method,
+				signal: options.signal,
 				headers: {
 					Host: new URL(origin).host,
 					Origin: origin,
@@ -42,6 +44,7 @@ function send(address, cookie, method, path, input, headers = {}) {
 				},
 			},
 			(response) => {
+				responseStarted = true;
 				const chunks = [];
 				response.on('data', (chunk) => chunks.push(chunk));
 				response.on('error', reject);
@@ -62,7 +65,11 @@ function send(address, cookie, method, path, input, headers = {}) {
 				});
 			},
 		);
-		req.on('error', reject);
+		req.on('error', (error) => {
+			// A server may refuse a large upload before its outgoing write ends.
+			// Once headers arrive the response owns completeness and decoding.
+			if (!responseStarted) reject(error);
+		});
 		req.setTimeout(15000, () => req.destroy(new Error('OpenSSH HTTP request deadline')));
 		req.end(bytes);
 	});

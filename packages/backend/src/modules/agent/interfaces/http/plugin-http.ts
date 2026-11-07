@@ -1,3 +1,24 @@
+import { AGENT_PLUGIN_FRONTEND_SANDBOX } from '@nexus-terminal/shared/agent/plugins/values';
+import { readAgentPluginPackageId } from '@nexus-terminal/shared/agent/plugins/http-codec';
+import {
+	readAgentPluginPackageUpdate,
+	readAgentPluginPackageUpdateCancellation,
+} from '@nexus-terminal/shared/agent/plugins/package-update-http-codec';
+import { fromPluginPackageUpdateDependencies, toPluginPackageUpdatePreparation } from './plugin-mapper.js';
+import { readAgentPluginRecommendedInstallRequest } from '@nexus-terminal/shared/agent/plugins/recommended-install-codec';
+import { readAgentPluginInstallPlanRequest } from '@nexus-terminal/shared/agent/plugins/install-plan-codec';
+import {
+	fromPluginInstallPlanRequest,
+	toPluginInstallPlan,
+	toPluginInstallPlanResult,
+} from './plugin-install-plan-mapper.js';
+import { createPluginUploadHttpRoute } from './plugin-upload-http.js';
+import {
+	readAgentPluginAppCompose,
+	readAgentPluginAppCompositionUpdate,
+	readAgentPluginPackageRetirement,
+} from '@nexus-terminal/shared/agent/plugins/http-codec';
+import { toPluginPackageInstallation, toPluginAppBinding } from './plugin-mapper.js';
 import { agentHttpSerializer, agentHttpErrorHandler } from './agent-http-response.js';
 import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import { readAgentPluginRuntimeAcknowledgement } from '@nexus-terminal/shared/agent/plugins/runtime-http-codec';
@@ -18,9 +39,12 @@ import {
 	readAgentPluginOfficialStage,
 } from '@nexus-terminal/shared/agent/plugins/repository-http-codec';
 import { AGENT_PLUGIN_MAX_CATALOG_BYTES } from '@nexus-terminal/shared/agent/plugins/values';
-import { agentRecord } from '@nexus-terminal/shared/agent/http-codec';
+
 import { toPluginCatalog, toPluginRepositorySettings, toPluginRecommended } from './plugin-mapper.js';
 import { AgentFailure } from '../../agent-failure.js';
+import type { PluginConnectionService } from '../../plugins/service/plugin-connection-service.js';
+import { readAgentPluginConnectionWrite } from '@nexus-terminal/shared/agent/plugins/connection-codec';
+import { fromPluginConnectionWrite, toPluginConnection } from './plugin-connection-mapper.js';
 import { AgentHttpInput } from './agent-input.js';
 import { createPluginRpcHttpRoute } from './plugin-rpc-http.js';
 import { Readable } from 'node:stream';
@@ -49,6 +73,17 @@ import type { AccessPublicApi } from '../../../access/public.js';
 import { AccessOperationError } from '../../../access/public-errors.js';
 import { AgentOperationError } from '../../public-errors.js';
 import type { PluginService } from '../../plugins/service/plugin-service.js';
+import type { PluginInstanceService } from '../../plugins/service/plugin-instance-service.js';
+import {
+	readAgentPluginConfigurationWrite,
+	readAgentPluginInstanceCreate,
+	readAgentPluginInstanceUpdate,
+} from '@nexus-terminal/shared/agent/plugins/settings-codec';
+import {
+	toPluginInstance,
+	toPluginConfiguration,
+	toPluginInstanceSettings,
+} from '../plugin/plugin-configuration-mapper.js';
 import type { PluginActor } from '../../plugins/model/plugin-types.js';
 import { agentErrorStatus } from './agent-http-status.js';
 import {
@@ -66,6 +101,8 @@ export function createPluginHttpRoutes(
 	access: AccessPublicApi,
 	service: PluginService,
 	repositories: PluginRepositoryService,
+	instances: PluginInstanceService,
+	connections: PluginConnectionService,
 	boundary: <T>(work: () => Promise<T>) => Promise<T>,
 ): HttpRoute[] {
 	const routes: HttpRoute[] = [];
@@ -145,11 +182,212 @@ export function createPluginHttpRoutes(
 		});
 	}
 
+	add('GET', '/packages', async (_request, actor) => {
+		const directory = await service.packageDirectory(actor);
+		return {
+			installations: directory.installations.map(toPluginPackageInstallation),
+			retainedPackageIds: directory.retainedPackageIds.map((id) => id),
+		};
+	});
+	add('POST', '/packages/install', async (_request, actor, reader) => {
+		const input = await reader.read(readAgentPluginInstall);
+		return {
+			installation: toPluginPackageInstallation(
+				await service.installPackage(actor, input.stageId, input.expectedVersion),
+			),
+		};
+	});
+	add('POST', '/packages/:packageId/prepare-update', async (request, actor, reader) => {
+		const input = await reader.read(readAgentPluginUpgrade);
+		return toPluginPackageUpdatePreparation(
+			await service.preparePackageUpdate(
+				actor,
+				request.params.packageId ?? '',
+				input.expectedRevision,
+				input.stageId,
+				input.expectedStageVersion,
+			),
+		);
+	});
+	add('POST', '/packages/:packageId/update', async (request, actor, reader) => {
+		const input = await reader.read(readAgentPluginPackageUpdate);
+		return {
+			installation: toPluginPackageInstallation(
+				await service.updatePackage(
+					actor,
+					request.params.packageId ?? '',
+					input.expectedRevision,
+					input.stageId,
+					input.expectedStageVersion,
+					fromPluginPackageUpdateDependencies(input.dependencies),
+				),
+			),
+		};
+	});
+	add('POST', '/packages/:packageId/cancel-update', async (request, actor, reader) => {
+		const input = await reader.read(readAgentPluginPackageUpdateCancellation);
+		return {
+			installation: toPluginPackageInstallation(
+				await service.cancelPackageUpdate(actor, request.params.packageId ?? '', input.expectedRevision),
+			),
+		};
+	});
+	add('DELETE', '/packages/:packageId', async (request, actor, reader) => {
+		const input = await reader.read(readAgentPluginPackageRetirement);
+		return {
+			installation: toPluginPackageInstallation(
+				await service.removePackage(
+					actor,
+					request.params.packageId ?? '',
+					input.expectedRevision,
+					input.clearData,
+				),
+			),
+		};
+	});
+	add('GET', '/apps/bindings', async (_request, actor) => ({
+		bindings: (await service.appBindings(actor)).map(toPluginAppBinding),
+	}));
+	add('GET', '/apps/:appId/instances', async (request, actor) => ({
+		instances: (await instances.listAuthorized({ kind: 'manual', actor }, readAgentId(request.params.appId))).map(
+			toPluginInstance,
+		),
+	}));
+	add('POST', '/apps/:appId/instances', async (request, actor, reader) => {
+		const command = await reader.read(readAgentPluginInstanceCreate);
+		return {
+			instance: toPluginInstance(
+				await instances.create(actor, readAgentId(request.params.appId), command.packageId, command.name),
+			),
+		};
+	});
+	add('PUT', '/apps/:appId/instances/:instanceId', async (request, actor, reader) => {
+		const command = await reader.read(readAgentPluginInstanceUpdate);
+		return {
+			instance: toPluginInstance(
+				await instances.update(
+					actor,
+					readAgentId(request.params.appId),
+					readAgentId(request.params.instanceId),
+					command.expectedRevision,
+					{ name: command.name, selected: command.selected, enabled: command.enabled },
+				),
+			),
+		};
+	});
+	add('GET', '/apps/:appId/instances/:instanceId/connection', async (request, actor) =>
+		toPluginConnection(
+			await connections.read(actor, readAgentId(request.params.appId), readAgentId(request.params.instanceId)),
+		),
+	);
+	add('PUT', '/apps/:appId/instances/:instanceId/connection', async (request, actor, reader) => {
+		const command = fromPluginConnectionWrite(await reader.read(readAgentPluginConnectionWrite));
+		return toPluginConnection(
+			await connections.write(
+				actor,
+				readAgentId(request.params.appId),
+				readAgentId(request.params.instanceId),
+				command,
+			),
+		);
+	});
+	add('GET', '/apps/:appId/instances/:instanceId/configuration', async (request, actor) =>
+		toPluginInstanceSettings(
+			await instances.read(
+				{ kind: 'manual', actor },
+				readAgentId(request.params.appId),
+				readAgentId(request.params.instanceId),
+			),
+		),
+	);
+	add('GET', '/apps/:appId/instances/:instanceId/settings/descriptor', async (request, actor) =>
+		toPluginDescriptor(
+			await service.settingsDescriptor(
+				actor,
+				readAgentId(request.params.appId),
+				readAgentId(request.params.instanceId),
+			),
+		),
+	);
+	add('PUT', '/apps/:appId/instances/:instanceId/configuration', async (request, actor, reader) => {
+		const command = await reader.read(readAgentPluginConfigurationWrite);
+		const result = await instances.write(
+			{ kind: 'manual', actor },
+			readAgentId(request.params.appId),
+			readAgentId(request.params.instanceId),
+			{
+				operationKey: command.operationKey,
+				expectedPackageRevision: command.expectedPackageRevision,
+				expectedRevision: command.expectedRevision,
+				schemaRevision: command.schemaRevision,
+				documentJson: command.documentJson,
+			},
+		);
+		return { configuration: toPluginConfiguration(result.configuration), changed: result.changed };
+	});
+	add('POST', '/apps/compose', async (_request, actor, reader) => {
+		const input = await reader.read(readAgentPluginAppCompose);
+		return {
+			binding: toPluginAppBinding(
+				await service.composeApp(actor, input.packageId, {
+					enableWithDeclaredGrants: false,
+					selectedRootIds: input.selectedRootIds.map((id) => id),
+					uiPackageId: input.uiPackageId,
+				}),
+			),
+		};
+	});
+	add('PUT', '/apps/:appId/composition', async (request, actor, reader) => {
+		const command = await reader.read(readAgentPluginAppCompositionUpdate);
+		return {
+			binding: toPluginAppBinding(
+				await service.composeApp(actor, command.packageId, {
+					enableWithDeclaredGrants: false,
+					appId: readAgentId(request.params.appId),
+					selectedRootIds: command.selectedRootIds.map((id) => id),
+					uiPackageId: command.uiPackageId,
+					expectedBinding: {
+						executionRevision: command.expectedExecutionRevision,
+						uiRevision: command.expectedUiRevision,
+					},
+				}),
+			),
+		};
+	});
+
+	add('POST', '/apps/:appId/restore', async (request, actor, reader) => {
+		const input = await reader.read(readAgentPluginAppCompose);
+		return {
+			binding: toPluginAppBinding(
+				await service.composeApp(actor, input.packageId, {
+					enableWithDeclaredGrants: false,
+					selectedRootIds: input.selectedRootIds.map((id) => id),
+					uiPackageId: input.uiPackageId,
+					appId: readAgentId(request.params.appId),
+				}),
+			),
+		};
+	});
+
 	add(
 		'GET',
 		'/installations/:appId/data-snapshot',
 		async (request, actor) =>
 			toPluginDataSnapshot(await service.dataSnapshot(actor, readAgentId(request.params.appId))),
+		AGENT_PLUGIN_MAX_BODY_BYTES,
+		AGENT_PLUGIN_MAX_MIGRATION_BYTES,
+	);
+	add(
+		'GET',
+		'/installations/:appId/packages/:packageId/data-snapshot',
+		async (request, actor) =>
+			toPluginDataSnapshot(
+				await service.dataSnapshot(
+					actor,
+					readAgentId(request.params.appId),
+					readAgentPluginPackageId(request.params.packageId),
+				),
+			),
 		AGENT_PLUGIN_MAX_BODY_BYTES,
 		AGENT_PLUGIN_MAX_MIGRATION_BYTES,
 	);
@@ -164,18 +402,6 @@ export function createPluginHttpRoutes(
 			),
 		AGENT_PLUGIN_MAX_MIGRATION_BYTES,
 	);
-	add('POST', '/installations/:appId/prepare-upgrade', async (request, actor, reader) => {
-		const input = await reader.read(readAgentPluginUpgrade);
-		return toPluginInstallation(
-			await service.prepareUpgrade(
-				actor,
-				readAgentId(request.params.appId),
-				input.expectedRevision,
-				input.stageId,
-				input.expectedStageVersion,
-			),
-		);
-	});
 	add('POST', '/installations/:appId/delete-data', async (request, actor, reader) => {
 		const input = await reader.read(readAgentPluginDataPurge);
 		return toPluginDataPurge(
@@ -187,7 +413,10 @@ export function createPluginHttpRoutes(
 			),
 		);
 	});
-	routes.push(createPluginRpcHttpRoute(access, service, boundary));
+	routes.push(
+		createPluginRpcHttpRoute(access, service, boundary),
+		createPluginUploadHttpRoute(access, service, boundary),
+	);
 	add('GET', '/installations/:appId/data/:key', async (request, actor) => {
 		const value = await service.readData(
 			actor,
@@ -265,7 +494,12 @@ export function createPluginHttpRoutes(
 		toPluginStage(
 			await repositories.stage(actor, async (signal) => {
 				const input = await reader.read(readAgentPluginOfficialStage, signal);
-				return { repositoryUrl: OFFICIAL_PLUGIN_SOURCE.catalogUrl, appId: input.appId, version: input.version };
+				return {
+					repositoryUrl: OFFICIAL_PLUGIN_SOURCE.catalogUrl,
+					packageId: input.packageId,
+					version: input.version,
+					publisherKeyId: input.publisherKeyId,
+				};
 			}),
 		),
 	);
@@ -273,22 +507,68 @@ export function createPluginHttpRoutes(
 		toPluginStage(
 			await repositories.stage(actor, async (signal) => {
 				const input = await reader.read(readAgentPluginRepositoryStage, signal);
-				return { repositoryUrl: input.repositoryUrl, appId: input.appId, version: input.version };
+				return {
+					repositoryUrl: input.repositoryUrl,
+					packageId: input.packageId,
+					version: input.version,
+					publisherKeyId: input.publisherKeyId,
+				};
 			}),
+		),
+	);
+	add('POST', '/official/prepare', async (_request, actor, reader) =>
+		toPluginInstallPlan(
+			await repositories.prepare(actor, async (signal) => {
+				const input = await reader.read(readAgentPluginOfficialStage, signal);
+				return {
+					repositoryUrl: OFFICIAL_PLUGIN_SOURCE.catalogUrl,
+					packageId: input.packageId,
+					version: input.version,
+					publisherKeyId: input.publisherKeyId,
+				};
+			}),
+		),
+	);
+	add('POST', '/remote/prepare', async (_request, actor, reader) =>
+		toPluginInstallPlan(
+			await repositories.prepare(actor, async (signal) => {
+				const input = await reader.read(readAgentPluginRepositoryStage, signal);
+				return {
+					repositoryUrl: input.repositoryUrl,
+					packageId: input.packageId,
+					version: input.version,
+					publisherKeyId: input.publisherKeyId,
+				};
+			}),
+		),
+	);
+	add('POST', '/install-plan', async (_request, actor, reader) =>
+		toPluginInstallPlanResult(
+			await repositories.installPlan(actor, async (signal) =>
+				fromPluginInstallPlanRequest(await reader.read(readAgentPluginInstallPlanRequest, signal)),
+			),
 		),
 	);
 	add('GET', '/onboarding/recommended-plugin', async (_ctx, actor) =>
 		toPluginRecommended(await repositories.recommended(actor)),
 	);
-	add('POST', '/onboarding/recommended-plugin/install', async (_ctx, actor, reader) =>
-		toPluginInstallation(
-			await repositories.installRecommended(actor, async (signal) => {
-				await reader.read((raw) => {
-					agentRecord(raw, []);
-				}, signal);
-			}),
-		),
-	);
+	add('POST', '/onboarding/recommended-plugin/install', async (_request, actor, reader) => {
+		const input = await reader.read(readAgentPluginRecommendedInstallRequest);
+		if (input.kind === 'existing') {
+			return {
+				kind: 'existing',
+				installation: toPluginInstallation(
+					await repositories.existingRecommended(actor, input.appId, input.expectedRevision),
+				),
+			};
+		}
+		return {
+			kind: 'installed',
+			result: toPluginInstallPlanResult(
+				await repositories.installPlan(actor, async () => fromPluginInstallPlanRequest(input.plan), true),
+			),
+		};
+	});
 
 	add('GET', '/versions', async (_ctx, actor) => ({
 		items: (await service.versions(actor)).map(toPluginVersion),
@@ -296,18 +576,6 @@ export function createPluginHttpRoutes(
 	add('GET', '/installations/:appId/descriptor', async (request, actor) =>
 		toPluginDescriptor(await service.descriptor(actor, readAgentId(request.params.appId))),
 	);
-	add('POST', '/installations/:appId/upgrade', async (request, actor, reader) => {
-		const input = await reader.read(readAgentPluginUpgrade);
-		return toPluginInstallation(
-			await service.upgrade(
-				actor,
-				readAgentId(request.params.appId),
-				input.expectedRevision,
-				input.stageId,
-				input.expectedStageVersion,
-			),
-		);
-	});
 	add('DELETE', '/installations/:appId', async (request, actor, reader) => {
 		const input = await reader.read(readAgentPluginRetirement);
 		return toPluginInstallation(
@@ -323,10 +591,6 @@ export function createPluginHttpRoutes(
 	add('GET', '/installations', async (_ctx, actor) =>
 		toPluginInstallationList(await service.installationDirectory(actor)),
 	);
-	add('POST', '/install', async (_request, actor, reader) => {
-		const input = await reader.read(readAgentPluginInstall);
-		return toPluginInstallation(await service.install(actor, input.stageId, input.expectedVersion));
-	});
 	add('GET', '/stages', async (_ctx, actor) => ({ items: (await service.stages(actor)).map(toPluginStage) }));
 	add('GET', '/installations/:appId/runtime', async (request, actor) => {
 		const value = await service.runtimeObservation(actor, readAgentId(request.params.appId));
@@ -403,8 +667,7 @@ export function createPluginContentRoutes(
 				}
 				await boundary(() =>
 					service.sdkAsset(resolve(request, reply), async (content, signal) => {
-						reply.hijack();
-						reply.raw.writeHead(200, {
+						reply.headers({
 							'Content-Type': 'text/javascript; charset=utf-8',
 							'Content-Length': String(content.bytes.byteLength),
 							'Cache-Control': 'no-store',
@@ -430,7 +693,7 @@ export function createPluginContentRoutes(
 	});
 
 	return [
-		sdk('/sdk/frontend-v1.mjs', () => 'frontend-v1.mjs'),
+		sdk('/sdk/frontend-v4.mjs', () => 'frontend-v4.mjs'),
 		{
 			method: 'GET',
 			url: '/plugins/:appId/:version/:grant/*',
@@ -440,12 +703,15 @@ export function createPluginContentRoutes(
 				contentSecurityPolicy: {
 					useDefaults: false,
 					directives: {
-						sandbox: ['allow-scripts'],
+						sandbox: AGENT_PLUGIN_FRONTEND_SANDBOX.split(' '),
 						defaultSrc: ["'none'"],
-						scriptSrc: ["'self'"],
-						styleSrc: ["'self'"],
-						imgSrc: ["'self'", 'data:'],
-						fontSrc: ["'self'"],
+						// Packaged SQLite compiles inlined WASM; PDF owns an inlined worker.
+						scriptSrc: ["'self'", "'wasm-unsafe-eval'"],
+						workerSrc: ['blob:'],
+						// Document previews create styles and local font/image object URLs.
+						styleSrc: ["'self'", "'unsafe-inline'"],
+						imgSrc: ["'self'", 'data:', 'blob:'],
+						fontSrc: ["'self'", 'data:', 'blob:'],
 						connectSrc: ["'none'"],
 						objectSrc: ["'none'"],
 						baseUri: ["'none'"],
@@ -456,6 +722,16 @@ export function createPluginContentRoutes(
 			},
 
 			async handler(request, reply) {
+				const stop = new AbortController();
+
+				const disconnected = () => {
+					if (!reply.raw.writableEnded) {
+						stop.abort();
+					}
+				};
+
+				request.raw.once('aborted', disconnected);
+				reply.raw.once('close', disconnected);
 				try {
 					if ([...request.query.keys()].length) {
 						throw new InvalidAgentPayload();
@@ -475,38 +751,44 @@ export function createPluginContentRoutes(
 						throw new InvalidAgentPayload();
 					}
 					await boundary(() =>
-						service.asset(appId, version, grant, path, async (content, signal) => {
-							const types: Readonly<Record<string, string>> = {
-								html: 'text/html; charset=utf-8',
-								css: 'text/css; charset=utf-8',
-								js: 'text/javascript; charset=utf-8',
-								mjs: 'text/javascript; charset=utf-8',
-								json: 'application/json',
-								png: 'image/png',
-								jpg: 'image/jpeg',
-								jpeg: 'image/jpeg',
-								gif: 'image/gif',
-								svg: 'image/svg+xml',
-								webp: 'image/webp',
-								woff: 'font/woff',
-								woff2: 'font/woff2',
-								ttf: 'font/ttf',
-								wasm: 'application/wasm',
-								txt: 'text/plain; charset=utf-8',
-							};
-							reply.hijack();
-							reply.raw.writeHead(200, {
-								'Content-Type': types[path.split('.').at(-1) ?? ''] ?? 'application/octet-stream',
-								'Content-Length': String(content.bytes.byteLength),
-								'Cache-Control': 'no-store',
-								'Access-Control-Allow-Origin': '*',
-								ETag: '"' + content.sha256 + '"',
-							});
-							await deliverContent(reply, content.bytes, signal);
-						}),
+						service.asset(
+							appId,
+							version,
+							grant,
+							path,
+							async (content, signal) => {
+								const types: Readonly<Record<string, string>> = {
+									html: 'text/html; charset=utf-8',
+									css: 'text/css; charset=utf-8',
+									js: 'text/javascript; charset=utf-8',
+									mjs: 'text/javascript; charset=utf-8',
+									json: 'application/json',
+									png: 'image/png',
+									jpg: 'image/jpeg',
+									jpeg: 'image/jpeg',
+									gif: 'image/gif',
+									svg: 'image/svg+xml',
+									webp: 'image/webp',
+									woff: 'font/woff',
+									woff2: 'font/woff2',
+									ttf: 'font/ttf',
+									wasm: 'application/wasm',
+									txt: 'text/plain; charset=utf-8',
+								};
+								reply.headers({
+									'Content-Type': types[path.split('.').at(-1) ?? ''] ?? 'application/octet-stream',
+									'Content-Length': String(content.bytes.byteLength),
+									'Cache-Control': 'no-store',
+									'Access-Control-Allow-Origin': '*',
+									ETag: '"' + content.sha256 + '"',
+								});
+								await deliverContent(reply, content.bytes, signal);
+							},
+							stop.signal,
+						),
 					);
 				} catch (error) {
-					if (reply.sent || reply.raw.headersSent) {
+					if (reply.sent || reply.raw.headersSent || reply.raw.destroyed) {
 						reply.raw.destroy();
 						return;
 					}
@@ -517,6 +799,9 @@ export function createPluginContentRoutes(
 					} else {
 						reply.code(500).send({ code: 'internal_failure' });
 					}
+				} finally {
+					request.raw.removeListener('aborted', disconnected);
+					reply.raw.removeListener('close', disconnected);
 				}
 			},
 		},
@@ -525,6 +810,14 @@ export function createPluginContentRoutes(
 
 async function deliverContent(reply: HttpReply, bytes: Uint8Array, signal: AbortSignal): Promise<void> {
 	try {
+		// Hijacking bypasses Fastify's header flush, including the route's Helmet policy.
+		reply.hijack();
+		for (const [name, value] of Object.entries(reply.getHeaders())) {
+			if (value !== undefined) {
+				reply.raw.setHeader(name, value);
+			}
+		}
+		reply.raw.writeHead(200);
 		await pipeline(Readable.from([bytes]), reply.raw, { signal });
 	} catch (error) {
 		if (signal.aborted || reply.raw.destroyed) {

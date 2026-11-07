@@ -1,3 +1,6 @@
+import type { AgentPluginInstallation } from './model.js';
+import type { AgentPluginInstallPlanRequest, AgentPluginInstallPlanResponse } from './install-plan.js';
+
 export interface AgentPluginRepositoryUpdate {
 	expectedVersion: number;
 	repositories: { url: string }[];
@@ -5,12 +8,14 @@ export interface AgentPluginRepositoryUpdate {
 
 export interface AgentPluginRepositoryStage {
 	repositoryUrl: string;
-	appId: string;
+	packageId: string;
+	publisherKeyId: string;
 	version: string;
 }
 
 export interface AgentPluginOfficialStage {
-	appId: string;
+	packageId: string;
+	publisherKeyId: string;
 	version: string;
 }
 
@@ -18,4 +23,10 @@ export interface AgentPluginRemoteCatalogQuery {
 	repositoryUrl: string;
 }
 
-export type AgentPluginRecommendedInstallRequest = Record<string, never>;
+export type AgentPluginRecommendedInstallRequest =
+	| { kind: 'existing'; appId: string; expectedRevision: number }
+	| { kind: 'plan'; plan: AgentPluginInstallPlanRequest };
+
+export type AgentPluginRecommendedInstallResponse =
+	| { kind: 'existing'; installation: AgentPluginInstallation }
+	| { kind: 'installed'; result: AgentPluginInstallPlanResponse };

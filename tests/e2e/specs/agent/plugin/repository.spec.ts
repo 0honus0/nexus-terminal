@@ -22,7 +22,7 @@ test.use({ actionTimeout: 10_000 });
 
 test('unsafe remote plugin archive fails validation without terminating the Backend', async ({ request }) => {
 	await loginAsInitialAdmin(request);
-	await configureTestPluginRepository(request);
+	const catalog = await configureTestPluginRepository(request);
 	// Trust the controlled publisher first, so rejection actually reaches archive inspection.
 	await stageTestPlugin(request, 'nexus.custom-surface');
 	const before = await requestAgentJson(request, { method: 'GET', path: '/plugins/stages' }, (raw) =>
@@ -34,7 +34,12 @@ test('unsafe remote plugin archive fails validation without terminating the Back
 			method: 'POST',
 			path: '/plugins/remote/stage',
 			status: 400,
-			data: { repositoryUrl, appId: 'nexus.unsafe', version: '1.0.0' },
+			data: {
+				repositoryUrl,
+				packageId: 'nexus.unsafe',
+				publisherKeyId: catalog.packages.find((entry) => entry.packageId === 'nexus.unsafe')?.publisherKeyId,
+				version: '1.0.0',
+			},
 		},
 		(raw) => expect(readAgentErrorResponse(raw)).toEqual({ code: 'invalid_input' }),
 	);
@@ -75,7 +80,12 @@ test('official plugin source cannot be overridden by a configured third-party re
 			method: 'POST',
 			path: '/plugins/official/stage',
 			status: 400,
-			data: { appId: 'nexus.fullstack', version: '1.0.0', repositoryUrl },
+			data: {
+				packageId: 'nexus.fullstack',
+				publisherKeyId: catalog.packages.find((entry) => entry.packageId === 'nexus.fullstack')?.publisherKeyId,
+				version: '1.0.0',
+				repositoryUrl,
+			},
 		},
 		(raw) => expect(readAgentErrorResponse(raw)).toEqual({ code: 'invalid_input' }),
 	);

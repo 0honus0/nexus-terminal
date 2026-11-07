@@ -1,3 +1,4 @@
+import { agentChatSurface } from '../../fixtures/agent/workbench';
 import { cp, readFile, readdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import regressionInputs from '../../fixtures/agent/regression-inputs.json';
@@ -102,7 +103,7 @@ test('a clarification completes one Run and explicit follow-up creates another i
 	const question = await finishNativeTask(task, first.id);
 	expect(question.run.status).toBe('completed');
 	expect(question.text).toBe('Choose a report format. Reply with report_format: concise.');
-	await expect(page.getByText(question.text, { exact: true })).toBeVisible();
+	await expect(agentChatSurface(page).getByText(question.text, { exact: true })).toBeVisible();
 	const next = await startNativeTask(task, 'report_format: concise', [], true);
 	expect(next.id).not.toBe(first.id);
 	const result = await finishNativeTask(task, next.id);
@@ -130,7 +131,7 @@ test('recorded JSON and marker cases preserve exact output through a later Run i
 		// not refresh the already-mounted Host view. Re-select the same thread
 		// through its real Read action before checking rendered model output.
 		await openNativeTask(task);
-		await expect(page.getByText(fixture.expected, { exact: true })).toBeVisible();
+		await expect(agentChatSurface(page).getByText(fixture.expected, { exact: true })).toBeVisible();
 	}
 });
 
@@ -145,7 +146,7 @@ test('reopening a completed clarification restores history and explicit follow-u
 	expect(question.run.status).toBe('completed');
 	expect(question.text).toBe('Choose deployment color: blue or green.');
 	await openNativeTask(task);
-	await expect(page.getByText(question.text, { exact: true })).toBeVisible();
+	await expect(agentChatSurface(page).getByText(question.text, { exact: true })).toBeVisible();
 	await openNativeTaskPanel(page);
 	const followUp = await startNativeTask(task, 'deployment_color: green', [], true);
 	const answer = await finishNativeTask(task, followUp.id);
@@ -153,5 +154,5 @@ test('reopening a completed clarification restores history and explicit follow-u
 	expect(answer.text).toBe('CHOSEN:green');
 	expect(followUp.id).not.toBe(created.id);
 	expect(await readNativeRun(task, created.id)).toEqual(question.run);
-	await expect(page.getByText('CHOSEN:green', { exact: true })).toBeVisible();
+	await expect(agentChatSurface(page).getByText('CHOSEN:green', { exact: true })).toBeVisible();
 });

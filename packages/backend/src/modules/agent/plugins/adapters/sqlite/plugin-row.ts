@@ -53,12 +53,15 @@ export function stageRow(row: SqlRow): StoredPluginStage {
 	const id = text(row.id),
 		sizeBytes = integer(row.size_bytes, 1),
 		createdAt = integer(row.created_at);
-	const publisherKeyId = row.publisher_key_id === null ? null : text(row.publisher_key_id);
+	const sourcePublisherKeyId = row.publisher_key_id === null ? null : text(row.publisher_key_id);
+	// Failed stages may retain a signed retired candidate solely for snapshot
+	// evidence. They never publish or decode an executable manifest.
+	const publisherKeyId = status === 'failed' ? null : sourcePublisherKeyId;
 	if (
 		!/^[a-f0-9]{64}$/u.test(packageHash) ||
 		!AGENT_ID_PATTERN.test(id) ||
 		sizeBytes > AGENT_PLUGIN_MAX_ARCHIVE_BYTES ||
-		(publisherKeyId !== null && !/^ed25519:[a-f0-9]{64}$/u.test(publisherKeyId))
+		(sourcePublisherKeyId !== null && !/^ed25519:[a-f0-9]{64}$/u.test(sourcePublisherKeyId))
 	) {
 		throw new Error('Corrupt package hash');
 	}
@@ -68,13 +71,16 @@ export function stageRow(row: SqlRow): StoredPluginStage {
 		if (Buffer.byteLength(encoded) > 65536) {
 			throw new Error('Corrupt plugin manifest size');
 		}
-		const value: unknown = JSON.parse(encoded);
-		manifest = pluginManifest(value);
+		if (status !== 'failed') {
+			const value: unknown = JSON.parse(encoded);
+			manifest = pluginManifest(value);
+		}
 	}
 	const verified = status === 'verified' || status === 'installed';
 	if (
 		verified !== (manifest !== null && publisherKeyId !== null) ||
-		(manifest === null) !== (publisherKeyId === null)
+		(manifest === null) !== (publisherKeyId === null) ||
+		(status === 'failed' && (row.manifest_json === null) !== (sourcePublisherKeyId === null))
 	) {
 		throw new Error('Corrupt plugin stage verification');
 	}

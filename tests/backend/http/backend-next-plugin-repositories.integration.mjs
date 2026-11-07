@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { openPlugins } from './plugin-management-fixture.mjs';
 import { expectStatus, until } from '../remote/openssh-fixture.mjs';
@@ -20,12 +20,12 @@ const product = createRequire(new URL('../../../package.json', import.meta.url))
 
 await test('B10 onboarding initialization commits enabled App and full declared grants without restoring revoked grants', async (t) => {
 	const f = await openPlugins(t);
-	const install = PluginService.prototype.install;
+	const install = PluginService.prototype.composeApp;
 	let initialize = true;
 	// Exercise the internal onboarding decision with a real signed package and SQLite transaction.
 	// This is not an official-publisher installation and does not replace or relax its pinned key.
-	t.mock.method(PluginService.prototype, 'install', function (actor, stageId, version, options) {
-		return install.call(this, actor, stageId, version, initialize ? { enableWithDeclaredGrants: true } : options);
+	t.mock.method(PluginService.prototype, 'composeApp', function (actor, packageId, options) {
+		return install.call(this, actor, packageId, initialize ? { enableWithDeclaredGrants: true } : options);
 	});
 	const capabilities = ['file.read', 'shell.execute', 'machine.inspect', 'context.read'];
 	const plugin = await f.install('onboarding-initialization', {
@@ -54,7 +54,10 @@ await test('B10 onboarding initialization commits enabled App and full declared 
 		(item) => item.manifest?.id === plugin.installation.definitionId,
 	);
 	assert.ok(stage);
-	expectStatus(await f.api('POST', base + '/install', { stageId: stage.id, expectedVersion: stage.version }), 200);
+	expectStatus(
+		await f.api('POST', base + '/packages/install', { stageId: stage.id, expectedVersion: stage.version }),
+		200,
+	);
 	assert.equal(expectStatus(await f.api('GET', plugin.appPath), 200).enabled, false);
 	assert.deepEqual(expectStatus(await f.api('GET', plugin.appPath + '/grants'), 200).grants, []);
 	initialize = false;
@@ -117,10 +120,14 @@ await test('B10 actual repository HTTP, signed downloads and configuration order
 	const packageBytes = await f.build('repository');
 	bytes = packageBytes;
 	const entry = {
-		appId: 'isolated.b10-repository',
+		packageId: 'isolated.b10-repository',
 		version: '1.0.0',
-		sdkVersion: '1',
-		nexus: { minVersion: product.version, maxVersion: product.version },
+		compatibility: {
+			host: { minVersion: product.version, maxVersion: product.version },
+			backendSdk: null,
+			frontendSdk: 3,
+		},
+		contributionKinds: ['app', 'ui'],
 		displayName: 'repository',
 		description: 'isolated download',
 		packageUrl: './package.tar',
@@ -129,7 +136,7 @@ await test('B10 actual repository HTTP, signed downloads and configuration order
 		publisherKeyId: f.publisher.keyId,
 	};
 	const original = {
-		schemaVersion: 1,
+		schemaVersion: 2,
 		publishers: [{ keyId: f.publisher.keyId, label: f.publisher.label, publicKeyPem: f.publisher.publicKeyPem }],
 		packages: [entry],
 	};
@@ -143,7 +150,12 @@ await test('B10 actual repository HTTP, signed downloads and configuration order
 		f.api('PUT', base + '/repositories', { expectedVersion, repositories });
 
 	const download = (version = entry.version) =>
-		f.api('POST', base + '/remote/stage', { repositoryUrl: url, appId: entry.appId, version });
+		f.api('POST', base + '/remote/stage', {
+			repositoryUrl: url,
+			packageId: entry.packageId,
+			publisherKeyId: entry.publisherKeyId,
+			version,
+		});
 
 	await t.test('anonymous endpoints refuse before external access', async () => {
 		expectStatus(await f.anonymous('GET', base + '/repositories'), 401);
@@ -185,8 +197,8 @@ await test('B10 actual repository HTTP, signed downloads and configuration order
 		assert.equal(requests.at(-1).headers.authorization, undefined);
 		assert.equal(requests.at(-1).headers.cookie, undefined);
 	});
-	await t.test('exactly sixteen configured sources fit and restoring one advances CAS', async () => {
-		const sources = Array.from({ length: 16 }, (_, index) => ({ url: url + '?source=' + index }));
+	await t.test('more than sixteen configured sources fit and restoring one advances CAS', async () => {
+		const sources = Array.from({ length: 24 }, (_, index) => ({ url: url + '?source=' + index }));
 		settings = expectStatus(await save(sources), 200);
 		assert.deepEqual(settings.repositories, sources);
 		settings = expectStatus(await save([{ url }]), 200);
@@ -259,7 +271,10 @@ await test('B10 actual repository HTTP, signed downloads and configuration order
 		});
 	}
 	await t.test('incompatible SDK and product versions are visible but cannot stage', async () => {
-		for (const changed of [{ sdkVersion: '2' }, { nexus: { minVersion: '999.0.0', maxVersion: '999.0.0' } }]) {
+		for (const changed of [
+			{ compatibility: { ...entry.compatibility, frontendSdk: 3 } },
+			{ compatibility: { ...entry.compatibility, host: { minVersion: '999.0.0', maxVersion: '999.0.0' } } },
+		]) {
 			catalog = structuredClone(original);
 			Object.assign(catalog.packages[0], changed);
 			assert.equal(readAgentPluginCatalog(expectStatus(await read(), 200)).packages[0].compatible, false);
@@ -295,11 +310,19 @@ await test('B10 actual repository HTTP, signed downloads and configuration order
 		catalog.packages[0].packageUrl = '/redirect';
 		stage = expectStatus(await download(), 200);
 		assert.equal(stage.status, 'verified');
-		const installed = expectStatus(
-			await f.api('POST', base + '/install', { stageId: stage.id, expectedVersion: stage.version }),
+		const { installation: installedPackage } = expectStatus(
+			await f.api('POST', base + '/packages/install', { stageId: stage.id, expectedVersion: stage.version }),
 			200,
 		);
-		assert.equal(installed.definitionId, entry.appId);
+		assert.equal(installedPackage.packageId, entry.packageId);
+		const { binding } = expectStatus(
+			await f.api('POST', base + '/apps/compose', { packageId: entry.packageId }),
+			200,
+		);
+		const installed = expectStatus(await f.api('GET', base + '/installations'), 200).items.find(
+			(item) => item.appId === binding.appId,
+		);
+		assert.equal(installed.definitionId, entry.packageId);
 		assert.equal(expectStatus(await f.api('GET', '/api/v1/agent/apps/' + installed.appId), 200).enabled, false);
 		assert.deepEqual(
 			expectStatus(await f.api('GET', '/api/v1/agent/apps/' + installed.appId + '/grants'), 200).grants,
@@ -383,7 +406,7 @@ await test(
 		});
 		const source = new URL(OFFICIAL_PLUGIN_SOURCE.catalogUrl);
 		let catalog = {
-			schemaVersion: 1,
+			schemaVersion: 2,
 			publishers: [
 				{
 					keyId: OFFICIAL_PLUGIN_SOURCE.publisherKeyId,
@@ -399,10 +422,10 @@ await test(
 			.persist();
 
 		const entry = (version, changes = {}) => ({
-			appId: OFFICIAL_PLUGIN_SOURCE.recommendedAppId,
+			packageId: OFFICIAL_PLUGIN_SOURCE.recommendedAppId,
 			version,
-			sdkVersion: '1',
-			nexus: { minVersion: '0.0.0', maxVersion: '999.0.0' },
+			compatibility: { host: { minVersion: '0.0.0', maxVersion: '999.0.0' }, backendSdk: null, frontendSdk: 3 },
+			contributionKinds: ['app', 'ui'],
 			displayName: 'official metadata',
 			description: 'catalog only',
 			packageUrl: 'https://example.invalid/package.tar',
@@ -432,7 +455,7 @@ await test(
 				entry('1.10.0-beta.2'),
 				entry('1.10.0-beta.11'),
 				entry('1.10.0'),
-				entry('2.0.0', { sdkVersion: '2' }),
+				entry('2.0.0', { compatibility: { ...entry('2.0.0').compatibility, frontendSdk: 2 } }),
 			];
 			const result = readAgentPluginRecommended(expectStatus(await f.api('GET', recommendedPath), 200));
 			assert.equal(result.entry.version, '1.10.0');
@@ -446,8 +469,19 @@ await test(
 					entry: null,
 					installation: null,
 				});
-				expectStatus(await f.api('POST', recommendedPath + '/install', {}), 404);
-				expectStatus(await f.api('POST', recommendedPath + '/install', { grantAll: true }), 400);
+				expectStatus(
+					await f.api('POST', base + '/official/prepare', {
+						packageId: OFFICIAL_PLUGIN_SOURCE.recommendedAppId,
+						publisherKeyId: OFFICIAL_PLUGIN_SOURCE.publisherKeyId,
+						version: '9.9.9',
+					}),
+					404,
+				);
+				expectStatus(await f.api('POST', recommendedPath + '/install', {}), 400);
+				expectStatus(
+					await f.api('POST', recommendedPath + '/install', { operationId: randomUUID(), grantAll: true }),
+					400,
+				);
 			},
 		);
 		await t.test('uninstalled recommendation reports provider unavailable when catalog is offline', async () => {
@@ -463,28 +497,62 @@ await test(
 				await unavailable.close();
 			}
 		});
-		await t.test('installed recommendation is returned offline without fetching or enabling it', async () => {
-			const plugin = await f.install('offline-recommended', {
-				definitionId: OFFICIAL_PLUGIN_SOURCE.recommendedAppId,
-				enabled: false,
-			});
-			const unavailable = new MockAgent();
-			unavailable.disableNetConnect();
-			setGlobalDispatcher(unavailable);
-			try {
-				const result = readAgentPluginRecommended(expectStatus(await f.api('GET', recommendedPath), 200));
-				assert.equal(result.entry, null);
-				assert.deepEqual(result.installation, plugin.installation);
-				assert.deepEqual(
-					expectStatus(await f.api('POST', recommendedPath + '/install', {}), 200),
-					plugin.installation,
-				);
-				assert.equal(expectStatus(await f.api('GET', plugin.appPath), 200).enabled, false);
-				assert.deepEqual(expectStatus(await f.api('GET', plugin.appPath + '/grants'), 200).grants, []);
-			} finally {
-				setGlobalDispatcher(mock);
-				await unavailable.close();
-			}
-		});
+		await t.test(
+			'installed recommendation is returned offline without fetching or enabling it (read-only installation fact fixture)',
+			async (t) => {
+				const plugin = await f.install('offline-recommended', { enabled: false });
+				// Only the read boundary supplies the already-verified official identity here.
+				// The real custom-signed install above is not an official signed-package installation.
+				const installation = {
+					appId: plugin.installation.appId,
+					definitionId: OFFICIAL_PLUGIN_SOURCE.recommendedAppId,
+					version: plugin.installation.version,
+					packageHash: plugin.installation.packageHash,
+					publisherKeyId: OFFICIAL_PLUGIN_SOURCE.publisherKeyId,
+					status: plugin.installation.status,
+					revision: plugin.installation.revision,
+					createdAt: plugin.installation.createdAt,
+					updatedAt: plugin.installation.updatedAt,
+				};
+				const listInstallations = PluginService.prototype.installations;
+				t.mock.method(PluginService.prototype, 'installations', async function (actor) {
+					return (await listInstallations.call(this, actor)).map((item) =>
+						item.appId === installation.appId ? installation : item,
+					);
+				});
+				const unavailable = new MockAgent();
+				unavailable.disableNetConnect();
+				setGlobalDispatcher(unavailable);
+				try {
+					const result = readAgentPluginRecommended(expectStatus(await f.api('GET', recommendedPath), 200));
+					assert.equal(result.entry, null);
+					assert.deepEqual(result.installation, installation);
+					assert.deepEqual(
+						expectStatus(
+							await f.api('POST', recommendedPath + '/install', {
+								kind: 'existing',
+								appId: plugin.appId,
+								expectedRevision: plugin.installation.revision,
+							}),
+							200,
+						),
+						{ kind: 'existing', installation },
+					);
+					expectStatus(
+						await f.api('POST', recommendedPath + '/install', {
+							kind: 'existing',
+							appId: plugin.appId,
+							expectedRevision: installation.revision + 1,
+						}),
+						409,
+					);
+					assert.equal(expectStatus(await f.api('GET', plugin.appPath), 200).enabled, false);
+					assert.deepEqual(expectStatus(await f.api('GET', plugin.appPath + '/grants'), 200).grants, []);
+				} finally {
+					setGlobalDispatcher(mock);
+					await unavailable.close();
+				}
+			},
+		);
 	},
 );

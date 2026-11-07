@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { AgentFailure, isAgentDrainFailure, ToolCleanupFailure, ToolExecutionUnknown } from '../../agent-failure.js';
+import {
+	AgentFailure,
+	isAgentDrainFailure,
+	ToolCleanupFailure,
+	ToolExecutionUnknown,
+	ToolOperationRefusal,
+} from '../../agent-failure.js';
 import type { BrowserModel } from '../model/browser-model.js';
 import type { ArtifactService } from '../../artifacts/service/artifact-service.js';
 import type { ArtifactActor, ArtifactRecord } from '../../artifacts/model/artifact-types.js';
@@ -12,6 +18,9 @@ import type {
 	BrowserToolOwner,
 	BrowserInput,
 	BrowserSessionRecord,
+	BrowserCatalog,
+	BrowserCapture,
+	BrowserOperationResult,
 } from '../model/browser-types.js';
 
 function allowUrl(target: BrowserTarget, url: string): boolean {
@@ -76,7 +85,9 @@ export class BrowserService {
 		mediaType: string,
 		bytes: Uint8Array,
 		signal: AbortSignal,
-	): Promise<{ artifactId: string; version: number; sha256: string; sizeBytes: number; mediaType: string }> {
+		recordOutputArtifacts: (ids: readonly string[]) => void,
+	): Promise<BrowserCapture> {
+		signal.throwIfAborted();
 		const actor = this.actor(owner),
 			record = await this.artifacts.begin(actor, { name, mediaType, declaredBytes: bytes.byteLength });
 
@@ -84,7 +95,14 @@ export class BrowserService {
 			yield bytes;
 		}
 
-		const saved: ArtifactRecord = await this.artifacts.upload(actor, record.id, record.version, source(), signal);
+		const saved: ArtifactRecord = await this.artifacts.upload(
+			actor,
+			record.id,
+			record.version,
+			source(),
+			signal,
+			recordOutputArtifacts,
+		);
 		if (saved.status !== 'ready' || saved.sha256 === null) {
 			throw new AgentFailure('operation_unknown');
 		}
@@ -126,11 +144,19 @@ export class BrowserService {
 		// Tool calls inherit the configured Run/tool signal, including time spent queued.
 		const deadline = AbortSignal.any([this.stop.signal, signal ?? AbortSignal.timeout(60000)]);
 		const previous = lane ? [this.barrier, this.lanes.get(lane)] : [this.barrier, ...this.lanes.values()];
-		const task = Promise.all(previous).then(() => {
+		const task = Promise.all(previous).then(async () => {
 			if (this.closing || deadline.aborted) {
 				throw new AgentFailure('provider_unavailable');
 			}
-			return work(deadline);
+			try {
+				return await work(deadline);
+			} catch (error) {
+				// Only the exact cancellation rejection is a stopped wait; independent failures still fence this owner.
+				if (deadline.aborted && error === deadline.reason && !(error instanceof AgentFailure)) {
+					throw new AgentFailure('provider_unavailable', { cause: error });
+				}
+				throw error;
+			}
 		});
 		const settled = task.then(
 			() => undefined,
@@ -193,7 +219,7 @@ export class BrowserService {
 		});
 	}
 
-	catalog(userId: number, signal: AbortSignal, validate: () => Promise<void>): Promise<string> {
+	catalog(userId: number, signal: AbortSignal, validate: () => Promise<void>): Promise<BrowserCatalog> {
 		return this.task(async (deadline) => {
 			const combined = AbortSignal.any([deadline, signal]);
 			await validate();
@@ -201,14 +227,13 @@ export class BrowserService {
 			const configuration = await this.model.configuration(userId);
 			await validate();
 			combined.throwIfAborted();
-			return JSON.stringify({
+			return {
 				targets: configuration.targets.map((target) => ({
 					targetId: target.id,
 					expectedVersion: configuration.version,
 					allowedUrlPatterns: target.allowedUrlPatterns.map((pattern) => pattern),
 				})),
-				untrusted: true,
-			});
+			};
 		}, signal);
 	}
 
@@ -217,9 +242,10 @@ export class BrowserService {
 		input: BrowserInput,
 		signal: AbortSignal,
 		validate: () => Promise<void>,
-	): Promise<string> {
+		recordOutputArtifacts: (ids: readonly string[]) => void,
+	): Promise<BrowserOperationResult> {
 		return this.task(
-			async (deadline) => {
+			async (deadline): Promise<BrowserOperationResult> => {
 				const combined = AbortSignal.any([deadline, signal]);
 				await validate();
 				combined.throwIfAborted();
@@ -227,10 +253,10 @@ export class BrowserService {
 					const config = await this.model.configuration(owner.userId);
 					const target = config.targets.find((item) => item.id === input.targetId);
 					if (!target) {
-						throw new AgentFailure('not_found');
+						throw new ToolOperationRefusal('not_found');
 					}
 					if (config.version !== input.expectedVersion) {
-						throw new AgentFailure('version_conflict');
+						throw new ToolOperationRefusal('version_conflict');
 					}
 					const capability = await this.connectTarget(target, combined);
 					try {
@@ -238,7 +264,7 @@ export class BrowserService {
 						await validate();
 						combined.throwIfAborted();
 						if (current.version !== config.version) {
-							throw new AgentFailure('version_conflict');
+							throw new ToolOperationRefusal('version_conflict');
 						}
 						const record = {
 							sessionId: randomUUID(),
@@ -252,13 +278,16 @@ export class BrowserService {
 							record,
 							capability,
 						});
-						return JSON.stringify({
-							sessionId: record.sessionId,
-							targetId: record.targetId,
-							targetVersion: record.targetVersion,
-							runId: record.runId,
-							createdAt: record.createdAt,
-						});
+						return {
+							action: 'open',
+							value: {
+								sessionId: record.sessionId,
+								targetId: record.targetId,
+								targetVersion: record.targetVersion,
+								runId: record.runId,
+								createdAt: record.createdAt,
+							},
+						};
 					} catch (error) {
 						try {
 							await capability.close();
@@ -277,60 +306,34 @@ export class BrowserService {
 					session.owner.appId !== owner.appId ||
 					session.owner.runId !== owner.runId
 				) {
-					throw new AgentFailure('not_found');
+					throw new ToolOperationRefusal('not_found');
 				}
 				if (input.action === 'close') {
 					await session.capability.close();
 					this.sessions.delete(input.sessionId);
-					return JSON.stringify({ status: 'closed' });
+					return { action: 'close', value: { status: 'closed' } };
 				}
 				if ((await this.model.configuration(owner.userId)).version !== session.record.targetVersion) {
-					throw new AgentFailure('version_conflict');
+					throw new ToolOperationRefusal('version_conflict');
 				}
-				let result: unknown;
+				let result: BrowserOperationResult;
 				if (input.action === 'snapshot') {
-					const startedAt = Date.now();
 					const snapshot = await session.capability.snapshot(input.maxNodes, combined);
-					const snapshotAt = Date.now();
-					await validate();
-					let screenshot = null;
-					if (input.include.includes('screenshot')) {
-						const bytes = await session.capability.screenshot(
-							await this.artifacts.availableBytes(this.actor(owner)),
-							combined,
-						);
-						await validate();
-						screenshot = {
-							capturedAt: Date.now(),
-							artifact: await this.saveCapture(
-								owner,
-								'screenshot-' + session.record.sessionId + '.png',
-								'image/png',
-								bytes,
-								combined,
-							),
-						};
-					}
-					await validate();
-					const console = input.include.includes('console')
-						? { capturedAt: Date.now(), entries: session.capability.console(input.after, input.limit) }
-						: null;
 					result = {
-						snapshotId: snapshot.snapshotId,
-						url: snapshot.url,
-						title: snapshot.title,
-						nodes: snapshot.nodes.map((node) => ({
-							ref: node.ref,
-							parentRef: node.parentRef,
-							tag: node.tag,
-							text: node.text,
-							attributes: node.attributes.map((attr) => ({ name: attr.name, value: attr.value })),
-						})),
-						truncated: snapshot.truncated,
-						startedAt,
-						snapshotAt,
-						screenshot,
-						console,
+						action: 'snapshot',
+						value: {
+							snapshotId: snapshot.snapshotId,
+							url: snapshot.url,
+							title: snapshot.title,
+							nodes: snapshot.nodes.map((node) => ({
+								ref: node.ref,
+								parentRef: node.parentRef,
+								tag: node.tag,
+								text: node.text,
+								attributes: node.attributes.map((attr) => ({ name: attr.name, value: attr.value })),
+							})),
+							truncated: snapshot.truncated,
+						},
 					};
 				} else if (input.action === 'screenshot') {
 					const bytes = await session.capability.screenshot(
@@ -338,17 +341,31 @@ export class BrowserService {
 						combined,
 					);
 					await validate();
-					result = await this.saveCapture(
+					const capture = await this.saveCapture(
 						owner,
 						'screenshot-' + session.record.sessionId + '.png',
 						'image/png',
 						bytes,
 						combined,
+						recordOutputArtifacts,
 					);
+					result = { action: 'screenshot', value: capture };
 				} else if (input.action === 'console') {
-					result = session.capability.console(input.after, input.limit);
+					const page = session.capability.console(input.after, input.limit);
+					result = {
+						action: 'console',
+						value: {
+							entries: page.entries.map((entry) => ({
+								sequence: entry.sequence,
+								type: entry.type,
+								text: entry.text,
+							})),
+							nextCursor: page.nextCursor,
+							truncated: page.truncated,
+						},
+					};
 				} else if (input.action === 'upload') {
-					result = await this.artifacts.useToolContent(
+					const reply = await this.artifacts.useToolContent(
 						this.actor(owner),
 						input.artifactId,
 						input.expectedVersion,
@@ -372,6 +389,10 @@ export class BrowserService {
 							);
 						},
 					);
+					if (reply.kind !== 'page') {
+						throw new ToolExecutionUnknown();
+					}
+					result = { action: 'upload', value: { kind: 'page', url: reply.url, title: reply.title } };
 				} else {
 					const reply = await session.capability.perform(
 						input.action === 'download'
@@ -390,14 +411,28 @@ export class BrowserService {
 					);
 					if (reply.kind === 'file') {
 						await validate();
-						result = await this.saveCapture(owner, reply.name, reply.mediaType, reply.bytes, combined);
+						if (input.action !== 'download') {
+							throw new ToolExecutionUnknown();
+						}
+						const capture = await this.saveCapture(
+							owner,
+							reply.name,
+							reply.mediaType,
+							reply.bytes,
+							combined,
+							recordOutputArtifacts,
+						);
+						result = { action: 'download', value: capture };
 					} else {
-						result = { kind: 'page', url: reply.url, title: reply.title };
+						if (input.action === 'download') {
+							throw new ToolExecutionUnknown();
+						}
+						result = { action: input.action, value: { kind: 'page', url: reply.url, title: reply.title } };
 					}
 				}
 				await validate();
 				combined.throwIfAborted();
-				return JSON.stringify(result);
+				return result;
 			},
 			signal,
 			input.action === 'open' ? 'open:' + owner.operationId : 'session:' + input.sessionId,

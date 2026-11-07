@@ -1,9 +1,11 @@
 import { posixCommand } from '../../support/posix-command.mjs';
 import { listAgentApprovalHistory } from './agent-approval-fixture.mjs';
 import assert from 'node:assert/strict';
+import { packageTool, findFixtureTool, fixtureToolName, rawToolName } from '../../support/package-tool-catalog.mjs';
 import { test } from 'node:test';
-import { randomUUID } from 'node:crypto';
-import { mkdtemp, mkdir, rm, stat, readFile } from 'node:fs/promises';
+import { DatabaseSync } from 'node:sqlite';
+import { randomUUID, createHash } from 'node:crypto';
+import { mkdtemp, mkdir, stat, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openAgentExecution } from './agent-execution-fixture.mjs';
@@ -42,16 +44,20 @@ await test('B10 Child waits preserve nested effect failures and independent stor
 	}
 });
 
-await test('B10 actual Root/Child collaboration ownership', { timeout: 60000 }, async (t) => {
-	const root = await mkdtemp(join(tmpdir(), 'nexus-b10-collaboration-'));
+await test('B10 actual Root/Child collaboration ownership', { timeout: 180000 }, async (t) => {
+	const root = await mkdtemp(join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-b10-collaboration-'));
 	let sshd;
 	let sequence = 0;
 
-	async function scenario(name, work) {
+	async function scenario(name, work, options = {}) {
 		await t.test(name, async (scenario) => {
 			const directory = join(root, String(++sequence));
 			await mkdir(directory);
-			const f = await openAgentExecution(directory, sshd);
+			const f = await openAgentExecution(directory, sshd, {
+				discover:
+					'collaboration_delegate collaboration_join collaboration_cancel collaboration_list collaboration_message_send collaboration_message_read collaboration_message_consume collaboration_fact_write collaboration_fact_read file_read file_write shell_execute',
+				...options,
+			});
 			const releases = [];
 			const cleanup = { unknown: false };
 			scenario.after(async () => {
@@ -61,7 +67,28 @@ await test('B10 actual Root/Child collaboration ownership', { timeout: 60000 }, 
 				await f.close(cleanup);
 			});
 			await f.grants(['app.intents.exchange', 'file.read', 'file.write']);
-			await work(f, directory, releases, cleanup);
+			try {
+				await work(f, directory, releases, cleanup);
+			} catch (error) {
+				const db = new DatabaseSync(join(directory, 'state.db'), { readOnly: true });
+				try {
+					scenario.diagnostic(
+						JSON.stringify({
+							runs: db.prepare('SELECT id,status,version FROM agent_runs').all(),
+							tools: db
+								.prepare(
+									'SELECT id,run_id,parent_id,label,state,revision,failure_code FROM agent_operations',
+								)
+								.all(),
+							children: db.prepare('SELECT run_id,parent_id FROM agent_run_children').all(),
+							jobs: db.prepare('SELECT id,run_id,state FROM agent_tool_jobs').all(),
+						}),
+					);
+				} finally {
+					db.close();
+				}
+				throw error;
+			}
 		});
 	}
 
@@ -87,6 +114,44 @@ await test('B10 actual Root/Child collaboration ownership', { timeout: 60000 }, 
 		};
 	}
 
+	function completedPackageCalls(f, directory, run, expected) {
+		const rows = f.operations(run);
+		const packages = rows.filter((row) => row.kind === 'tool' && row.label !== 'nexus.tools.agent.tool_search');
+		assert.equal(packages.length, expected.length);
+		const effects = rows.filter((row) => row.kind === 'effect');
+		assert.equal(effects.length, expected.length);
+		assert.ok(rows.every((row) => row.state === 'completed'));
+		const db = new DatabaseSync(join(directory, 'state.db'), { readOnly: true });
+		try {
+			for (const [name, operation] of expected) {
+				const parent = packages.find((row) => row.label === 'nexus.tools.agent.' + name);
+				assert.ok(parent, 'Expected completed package call: ' + name);
+				const binding = JSON.parse(parent.binding_json);
+				assert.equal(binding.kind, 'registry');
+				assert.equal(binding.package.packageId, 'nexus.tools.agent');
+				assert.equal(
+					createHash('sha256')
+						.update(JSON.stringify([binding.binding.id, parent.arguments_json]))
+						.digest('hex'),
+					parent.request_hash,
+				);
+				const descendants = effects.filter((row) => row.parent_id === parent.id);
+				assert.equal(descendants.length, 1);
+				const [child] = descendants;
+				assert.equal(child.label, operation);
+				assert.equal(JSON.parse(child.binding_json).kind, 'native');
+				const proof = JSON.parse(
+					db.prepare('SELECT proof_json FROM agent_operation_authorities WHERE operation_id=?').get(child.id)
+						.proof_json,
+				);
+				assert.equal(proof.instance.packageId, 'nexus.tools.agent');
+				assert.equal(proof.instance.id, binding.binding.instanceId);
+			}
+		} finally {
+			db.close();
+		}
+	}
+
 	try {
 		sshd = await openSshd(root);
 		await scenario(
@@ -96,9 +161,9 @@ await test('B10 actual Root/Child collaboration ownership', { timeout: 60000 }, 
 					assert.equal(results.length, 0);
 					assert.equal(body.messages.filter((message) => message.role === 'user').length, 1);
 					const names = body.tools.map((tool) => tool.function.name);
-					assert.ok(names.includes('file_read'));
-					assert.ok(names.includes('file_write'));
-					assert.ok(!names.includes('collaboration_delegate'));
+					assert.ok(names.includes(packageTool(body, 'nexus.tools.remote', 'file_read').name));
+					assert.ok(names.includes(packageTool(body, 'nexus.tools.remote', 'file_write').name));
+					assert.equal(findFixtureTool(body, 'collaboration_delegate'), undefined);
 					return {};
 				});
 				const run = await f.start('private parent context', (results) => {
@@ -139,11 +204,142 @@ await test('B10 actual Root/Child collaboration ownership', { timeout: 60000 }, 
 				const call = f.calls.find((value) => value.key === objective);
 				assert.ok(call);
 				assert.ok(!JSON.stringify(call.body).includes('private parent context'));
-				assert.equal(f.calls.length, 4);
+				assert.equal(f.calls.length, 6);
 				await f.restart();
 				assert.equal((await children(f, run, 1))[0].status, 'completed');
-				assert.equal(f.calls.length, 4);
+				assert.equal(f.calls.length, 6);
 			},
+		);
+		await scenario(
+			'Child inherits the authorized dynamic package catalog, discovers an unloaded package tool and persists real bounded readonly descendants',
+			async (f, directory) => {
+				await f.grants(['context.read', 'file.read', 'app.intents.exchange']);
+				const project = join(directory, 'dynamic-project');
+				await mkdir(project);
+				await writeFile(
+					join(project, 'package.json'),
+					JSON.stringify({ name: 'dynamic-child-project', scripts: { test: 'node --check index.mjs' } }),
+				);
+				await writeFile(join(project, 'index.mjs'), 'export const actual = true;\n');
+				let inspectedName;
+				const restrictedNames = new Set();
+				const hidden = ['remote.readTextPage', 'remote.listPage'];
+				const objective = f.program('dynamic signed package Child', (results, body) => {
+					const offered = body.tools.map((tool) => tool.function.name);
+					assert.ok(hidden.every((name) => !offered.includes(name)));
+					assert.equal(findFixtureTool(body, 'collaboration_delegate'), undefined);
+					assert.equal(findFixtureTool(body, 'file_write'), undefined, 'ungranted writes remain unavailable');
+					if (!results.length) {
+						assert.ok(
+							!body.tools.some((tool) =>
+								tool.function.description?.startsWith('nexus.tools.remote / remote_project_inspect: '),
+							),
+						);
+						return {
+							name: 'tool_search',
+							input: {
+								query: 'remote_project_inspect collaboration_delegate remote_file_read_text_page remote_directory_list_page',
+							},
+						};
+					}
+					inspectedName = packageTool(body, 'nexus.tools.remote', 'remote_project_inspect').name;
+					assert.deepEqual(
+						results[0].matches.map((tool) => tool.key),
+						['nexus.tools.remote.remote_project_inspect'],
+					);
+					if (results.length === 1)
+						return { name: inspectedName, input: { connectionId: f.connectionId, directory: project } };
+					assert.equal(results.length, 2);
+					assert.equal(results[1].directory, project);
+					assert.ok(results[1].entries.some((entry) => entry.name === 'package.json'));
+					assert.ok(results[1].recommendedChecks.some((check) => check.script === 'test'));
+					return { text: 'ACTUAL_DYNAMIC_CHILD_READ_COMPLETED' };
+				});
+				const run = await f.start('Root leaves package inspect unloaded before delegation', (results, body) => {
+					for (const name of ['collaboration_delegate', 'collaboration_join', 'collaboration_cancel']) {
+						const definition = findFixtureTool(body, name);
+						if (definition) restrictedNames.add('nexus.tools.agent.' + name);
+					}
+					assert.ok(
+						!body.tools.some((tool) =>
+							tool.function.description?.startsWith('nexus.tools.remote / remote_project_inspect: '),
+						),
+					);
+					if (!results.length)
+						return {
+							name: 'tool_search',
+							input: { query: 'collaboration_delegate collaboration_join collaboration_cancel' },
+						};
+					if (results.length === 1) return delegate(objective, { targets: [String(f.connectionId)] });
+					if (results.length === 2)
+						return {
+							name: 'collaboration_join',
+							input: { childIds: [results[1].id], mode: 'all', waitSeconds: 30 },
+						};
+					assert.equal(results[2].ready, true);
+					assert.equal(results[2].children[0].status, 'completed');
+					assert.equal(results[2].children[0].output, 'ACTUAL_DYNAMIC_CHILD_READ_COMPLETED');
+					return {};
+				});
+				await f.approve(await f.approval(run, 'collaboration_delegate'));
+				await f.wait(run, 'completed');
+				const [child] = await children(f, run, 1);
+				const persisted = f.rows('agent_run_children', child)[0];
+				const inherited = JSON.parse(persisted.tools_json);
+				assert.ok(
+					!inherited.includes('nexus.tools.remote.file_write'),
+					'Child cannot grow beyond the parent capability catalog',
+				);
+				assert.ok(
+					inherited.includes('nexus.tools.remote.remote_project_inspect'),
+					'unloaded signed package declaration is frozen into Child.tools',
+				);
+				assert.ok(
+					hidden.every((name) => !inherited.includes(name)),
+					'hidden primitives never enter Child.tools',
+				);
+				assert.equal(restrictedNames.size, 3);
+				for (const name of restrictedNames) assert.ok(!inherited.includes(name));
+				const operations = f.operations(child);
+				const parent = operations.find(
+					(operation) => operation.label === 'nexus.tools.remote.remote_project_inspect',
+				);
+				assert.equal(parent.state, 'completed');
+				const descendants = operations.filter((operation) => hidden.includes(operation.label));
+				assert.ok(descendants.some((operation) => operation.label === hidden[0]));
+				assert.ok(descendants.some((operation) => operation.label === hidden[1]));
+				const db = new DatabaseSync(join(directory, 'state.db'), { readOnly: true });
+				try {
+					for (const operation of descendants) {
+						assert.equal(operation.state, 'completed');
+						const binding = JSON.parse(operation.binding_json);
+						assert.equal(binding.kind, 'native');
+						assert.equal(binding.capability, 'file.read');
+						assert.equal(binding.target.id, f.connectionId);
+						assert.equal(binding.mutation, false);
+						assert.equal(operation.parent_id, parent.id);
+						const proof = JSON.parse(
+							db
+								.prepare('SELECT proof_json FROM agent_operation_authorities WHERE operation_id=?')
+								.get(operation.id).proof_json,
+						);
+						assert.equal(proof.instance.packageId, 'nexus.tools.remote');
+						assert.equal(proof.instance.id, JSON.parse(parent.binding_json).binding.instanceId);
+						assert.equal(
+							createHash('sha256').update(operation.arguments_json).digest('hex'),
+							operation.request_hash,
+						);
+					}
+				} finally {
+					db.close();
+				}
+				assert.equal(f.calls.filter((call) => call.key === objective).length, 3);
+				const calls = f.calls.length;
+				await f.restart();
+				assert.equal((await children(f, run, 1))[0].status, 'completed');
+				assert.equal(f.calls.length, calls, 'completed dynamic package Child never replays after restart');
+			},
+			{ discover: null },
 		);
 		await scenario('Root cancel fences a running Child and a pending dependency without replay', async (f) => {
 			const first = f.program('running child', () => ({ hold: true }));
@@ -233,7 +429,35 @@ await test('B10 actual Root/Child collaboration ownership', { timeout: 60000 }, 
 				f.finishModels();
 				await f.wait(run, 'completed');
 				assert.equal((await children(f, run, 1))[0].status, 'cancelled');
-				assert.ok(f.rows('agent_run_tools', child).every((tool) => tool.state !== 'completed'));
+				const operations = f
+					.operations(child)
+					.filter((row) => row.label === 'nexus.tools.remote.file_write' || row.label === 'remote.write');
+				assert.equal(operations.length, 2);
+				assert.ok(operations.every((tool) => tool.state === 'cancelled'));
+				const packageCall = operations.find((row) => row.kind === 'tool');
+				assert.equal(packageCall.label, 'nexus.tools.remote.file_write');
+				const hostCall = operations.find((row) => row.label === 'remote.write');
+				assert.equal(hostCall.parent_id, packageCall.id);
+				assert.ok(hostCall.revision >= 2, 'The accepted operation has an immutable terminal receipt');
+				const db = new DatabaseSync(join(directory, 'state.db'), { readOnly: true });
+				try {
+					assert.equal(
+						db
+							.prepare('SELECT COUNT(*) AS count FROM agent_operation_authorities WHERE operation_id=?')
+							.get(hostCall.id).count,
+						0,
+						'An unapproved write never commits dispatch authority',
+					);
+					assert.equal(
+						db
+							.prepare('SELECT COUNT(*) AS count FROM agent_operation_authorities WHERE operation_id=?')
+							.get(packageCall.id).count,
+						1,
+						'The plugin invocation is independently authorized',
+					);
+				} finally {
+					db.close();
+				}
 			},
 		);
 		await scenario(
@@ -301,8 +525,12 @@ await test('B10 actual Root/Child collaboration ownership', { timeout: 60000 }, 
 				await f.wait(child, 'completed');
 				f.finishModels();
 				await f.wait(run, 'completed');
-				assert.equal(f.rows('agent_run_tools', child).length, 4);
-				assert.ok(f.rows('agent_run_tools', child).every((tool) => tool.state === 'completed'));
+				completedPackageCalls(f, directory, child, [
+					['collaboration_message_read', 'collaboration.readMessages'],
+					['collaboration_message_consume', 'collaboration.consumeMessages'],
+					['collaboration_fact_write', 'collaboration.writeFact'],
+					['collaboration_fact_read', 'collaboration.readFact'],
+				]);
 			},
 		);
 		await scenario(
@@ -352,7 +580,7 @@ await test('B10 actual Root/Child collaboration ownership', { timeout: 60000 }, 
 				const approval = await f.approval(child, 'shell_execute');
 				await until(
 					async () => f.calls,
-					(calls) => calls.filter((call) => call.key !== objective).length === 2,
+					(calls) => calls.filter((call) => call.key !== objective).length === 3,
 					'Parent final response',
 				);
 				cleanup.unknown = true;
@@ -382,16 +610,24 @@ await test('B10 actual Root/Child collaboration ownership', { timeout: 60000 }, 
 		await scenario(
 			'missing collaboration grant refuses delegation before approval or Child creation',
 			async (f) => {
+				await f.grants(['file.read', 'app.intents.exchange']);
+				let forbiddenName;
+				const probe = await f.start('capture actual package delegate before revocation', (_results, body) => {
+					forbiddenName = fixtureToolName(body, 'collaboration_delegate');
+					return {};
+				});
+				await f.wait(probe, 'completed');
+				const baseline = f.calls.length;
 				await f.grants(['file.read']);
 				const objective = f.program('unauthorized child', () => assert.fail('Unauthorized Child dispatched'));
-				const run = await f.start('no collaboration grant', () => delegate(objective));
+				const run = await f.start('no collaboration grant', () => ({
+					...delegate(objective),
+					name: rawToolName(forbiddenName),
+				}));
 				await f.wait(run, 'unknown');
-				assert.equal(
-					f.calls[0].body.tools.some((tool) => tool.function.name === 'collaboration_delegate'),
-					false,
-				);
+				assert.equal(findFixtureTool(f.calls.at(-1).body, 'collaboration_delegate'), undefined);
 				assert.deepEqual(await children(f, run, 0), []);
-				assert.equal(f.calls.length, 1);
+				assert.equal(f.calls.length, baseline + 2);
 				assert.deepEqual(await listAgentApprovalHistory(f.api, f.appId, run.id), []);
 			},
 		);
@@ -414,7 +650,7 @@ await test('B10 actual Root/Child collaboration ownership', { timeout: 60000 }, 
 			await f.approve(await f.approval(run, 'collaboration_delegate'));
 			await until(
 				async () => f.calls,
-				(calls) => calls.filter((call) => call.key !== objective).length === 3,
+				(calls) => calls.filter((call) => call.key !== objective).length === 4,
 				'Join timeout delivered',
 			);
 			assert.equal((await children(f, run, 1))[0].status, 'running');
@@ -423,22 +659,29 @@ await test('B10 actual Root/Child collaboration ownership', { timeout: 60000 }, 
 			assert.equal((await children(f, run, 1))[0].status, 'cancelled');
 		});
 		await scenario('stale fact CAS keeps the first value and never retries', async (f) => {
-			const run = await f.start('fact conflict', (results) => ({
-				name: 'collaboration_fact_write',
-				input: {
-					key: 'same-key',
-					value: results.length ? 'must-not-overwrite' : 'first value',
-					expectedVersion: 0,
-				},
-			}));
+			const run = await f.start('fact conflict', (results) => {
+				if (results.length === 2) {
+					assert.equal(results[1].failure.code, 'version_conflict');
+					return {};
+				}
+				return {
+					name: 'collaboration_fact_write',
+					input: {
+						key: 'same-key',
+						value: results.length ? 'must-not-overwrite' : 'first value',
+						expectedVersion: 0,
+					},
+				};
+			});
 			await f.approve(await f.approval(run, 'collaboration_fact_write'));
 			await f.approve(await f.approval(run, 'collaboration_fact_write'));
-			await f.wait(run, 'unknown');
-			const tools = f.rows('agent_run_tools', run);
+			await f.wait(run, 'completed');
+			const tools = f.operations(run).filter((row) => row.label === 'nexus.tools.agent.collaboration_fact_write');
 			assert.equal(tools.length, 2);
 			assert.equal(tools[0].state, 'completed');
-			assert.equal(tools[1].state, 'unknown');
-			assert.equal(JSON.parse(tools[0].result_text).fact.value, 'first value');
+			assert.equal(tools[1].state, 'failed');
+			assert.equal(tools[1].failure_code, 'version_conflict');
+			assert.equal(JSON.parse(f.content(JSON.parse(tools[0].result_json).content)).fact.value, 'first value');
 			assert.deepEqual(
 				f.facts(run).map((fact) => ({
 					key: fact.fact_key,
@@ -448,7 +691,7 @@ await test('B10 actual Root/Child collaboration ownership', { timeout: 60000 }, 
 				})),
 				[{ key: 'same-key', value: 'first value', version: 1, authorId: run.id }],
 			);
-			assert.equal(f.calls.length, 2);
+			assert.equal(f.calls.length, 4);
 		});
 		await scenario(
 			'model list/cancel keeps independent control approval and family ownership',
@@ -470,21 +713,21 @@ await test('B10 actual Root/Child collaboration ownership', { timeout: 60000 }, 
 				});
 				await f.approve(await f.approval(run, 'collaboration_delegate'));
 				const approval = await f.approval(run, 'collaboration_cancel');
-				assert.equal(approval.inspection.risk, 'control');
+				assert.equal(approval.risk, 'control');
 				assert.equal((await children(f, run, 1))[0].status, 'running');
 				await f.approve(approval);
 				await f.wait(run, 'completed');
 				assert.equal((await children(f, run, 1))[0].status, 'cancelled');
-				assert.deepEqual(
-					f.rows('agent_run_tools', run).map((tool) => tool.state),
-					['completed', 'completed', 'completed'],
-				);
+				completedPackageCalls(f, directory, run, [
+					['collaboration_delegate', 'collaboration.delegate'],
+					['collaboration_list', 'collaboration.list'],
+					['collaboration_cancel', 'collaboration.cancel'],
+				]);
 			},
 		);
 	} finally {
 		if (sshd) {
 			await sshd.close();
 		}
-		await rm(root, { recursive: true, force: true });
 	}
 });

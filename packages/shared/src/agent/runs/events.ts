@@ -1,4 +1,4 @@
-import { agentInteger, agentRecord, InvalidAgentPayload, readAgentId } from '../http-codec.js';
+import { agentInteger, agentRecord, isAgentRecord, InvalidAgentPayload, readAgentId } from '../http-codec.js';
 
 import {
 	AGENT_RUN_STREAM_MAX_COMMAND_BYTES,
@@ -31,22 +31,6 @@ export interface AgentRunSubscription {
 	runId: string;
 }
 
-export function readAgentRunSubscription(query: URLSearchParams): AgentRunSubscription {
-	const keys = ['appId', 'appVersion', 'runId'];
-	if ([...query.keys()].length !== keys.length || keys.some((key) => query.getAll(key).length !== 1)) {
-		throw new InvalidAgentPayload();
-	}
-	const version = query.get('appVersion');
-	if (version === null || !/^[1-9][0-9]{0,15}$/.test(version)) {
-		throw new InvalidAgentPayload();
-	}
-	return {
-		appId: readAgentId(query.get('appId')),
-		appVersion: agentInteger(Number(version), 1),
-		runId: readAgentId(query.get('runId')),
-	};
-}
-
 export interface AgentRunStreamCursor {
 	threadId: string;
 	entries: AgentThreadEntryCursor;
@@ -54,8 +38,69 @@ export interface AgentRunStreamCursor {
 	approvals: string | null;
 }
 
+export type AgentStreamAuthorization = { kind: 'session'; appVersion: number } | { kind: 'plugin'; grant: string };
+
+export type AgentStreamSource =
+	| { kind: 'run'; appId: string; access: AgentStreamAuthorization; runId: string; cursor: AgentRunStreamCursor }
+	| { kind: 'run-events'; appId: string; grant: string; runId: string; after: number }
+	| { kind: 'memory'; appId: string; access: AgentStreamAuthorization; threadId: string | null };
+
 export type AgentRunStreamCommand =
-	{ type: 'subscribe'; cursor: AgentRunStreamCursor } | { type: 'ack'; revision: number };
+	| { type: 'subscribe'; subscriptionId: string; generation: number; source: AgentStreamSource }
+	| { type: 'ack'; subscriptionId: string; generation: number; revision: number }
+	| { type: 'unsubscribe'; subscriptionId: string; generation: number };
+
+export type AgentStreamFrame =
+	| { type: 'heartbeat' }
+	| { type: 'data'; subscriptionId: string; generation: number; revision: number; value: unknown }
+	| {
+			type: 'rejected';
+			subscriptionId: string;
+			generation: number;
+			code: 'forbidden' | 'resync_required' | 'unavailable';
+	  };
+
+export function readAgentStreamFrame(input: unknown): AgentStreamFrame {
+	if (!isAgentRecord(input)) {
+		throw new InvalidAgentPayload();
+	}
+	const value = input;
+	if (value.type === 'heartbeat') {
+		agentRecord(input, ['type'], AGENT_RUN_STREAM_MAX_JSON_BYTES);
+		return { type: 'heartbeat' };
+	}
+	const identity = {
+		subscriptionId: readAgentId(value.subscriptionId),
+		generation: agentInteger(value.generation, 1),
+	};
+	if (value.type === 'data') {
+		agentRecord(
+			input,
+			['type', 'subscriptionId', 'generation', 'revision', 'value'],
+			AGENT_RUN_STREAM_MAX_JSON_BYTES,
+		);
+		return {
+			type: 'data',
+			subscriptionId: identity.subscriptionId,
+			generation: identity.generation,
+			revision: agentInteger(value.revision, 1),
+			value: value.value,
+		};
+	}
+	if (
+		value.type === 'rejected' &&
+		(value.code === 'forbidden' || value.code === 'resync_required' || value.code === 'unavailable')
+	) {
+		agentRecord(input, ['type', 'subscriptionId', 'generation', 'code'], AGENT_RUN_STREAM_MAX_JSON_BYTES);
+		return {
+			type: 'rejected',
+			subscriptionId: identity.subscriptionId,
+			generation: identity.generation,
+			code: value.code,
+		};
+	}
+	throw new InvalidAgentPayload();
+}
 
 export interface AgentRunStreamState {
 	thread: AgentThreadView;
@@ -79,29 +124,88 @@ export interface AgentRunStreamUpdate {
 
 export type AgentRunStreamEvent = AgentRunStreamUpdate | { type: 'heartbeat' };
 
-export function readAgentRunStreamCommand(input: unknown): AgentRunStreamCommand {
-	if (input !== null && typeof input === 'object' && 'type' in input && input.type === 'ack') {
-		const row = agentRecord(input, ['type', 'revision'], AGENT_RUN_STREAM_MAX_COMMAND_BYTES);
-		return { type: 'ack', revision: agentInteger(row.revision, 1) };
-	}
-	const row = agentRecord(input, ['type', 'cursor'], AGENT_RUN_STREAM_MAX_COMMAND_BYTES);
-	if (row.type !== 'subscribe') {
-		throw new InvalidAgentPayload();
-	}
+export function readAgentRunStreamCursor(input: unknown): AgentRunStreamCursor {
 	const cursor = agentRecord(
-		row.cursor,
+		input,
 		['threadId', 'entries', 'events', 'approvals'],
 		AGENT_RUN_STREAM_MAX_COMMAND_BYTES,
 	);
 	return {
-		type: 'subscribe',
-		cursor: {
-			threadId: readAgentId(cursor.threadId),
-			entries: readAgentThreadEntryCursor(cursor.entries),
-			events: agentInteger(cursor.events),
-			approvals: readAgentApprovalAfter(cursor.approvals),
-		},
+		threadId: readAgentId(cursor.threadId),
+		entries: readAgentThreadEntryCursor(cursor.entries),
+		events: agentInteger(cursor.events),
+		approvals: readAgentApprovalAfter(cursor.approvals),
 	};
+}
+
+export function readAgentRunStreamCommand(input: unknown): AgentRunStreamCommand {
+	if (!isAgentRecord(input)) {
+		throw new InvalidAgentPayload();
+	}
+	const row = input;
+	const subscriptionId = readAgentId(row.subscriptionId);
+	const generation = agentInteger(row.generation, 1);
+	if (row.type === 'ack') {
+		agentRecord(input, ['type', 'subscriptionId', 'generation', 'revision'], AGENT_RUN_STREAM_MAX_COMMAND_BYTES);
+		return { type: 'ack', subscriptionId, generation, revision: agentInteger(row.revision, 1) };
+	}
+	if (row.type === 'unsubscribe') {
+		agentRecord(input, ['type', 'subscriptionId', 'generation'], AGENT_RUN_STREAM_MAX_COMMAND_BYTES);
+		return { type: 'unsubscribe', subscriptionId, generation };
+	}
+	if (row.type !== 'subscribe') {
+		throw new InvalidAgentPayload();
+	}
+	agentRecord(input, ['type', 'subscriptionId', 'generation', 'source'], AGENT_RUN_STREAM_MAX_COMMAND_BYTES);
+	if (!isAgentRecord(row.source)) {
+		throw new InvalidAgentPayload();
+	}
+	const source = row.source;
+	if (source.kind === 'run') {
+		agentRecord(row.source, ['kind', 'appId', 'access', 'runId', 'cursor'], AGENT_RUN_STREAM_MAX_COMMAND_BYTES);
+		return {
+			type: 'subscribe',
+			subscriptionId,
+			generation,
+			source: {
+				kind: 'run',
+				appId: readAgentId(source.appId),
+				access: readAgentStreamAuthorization(source.access),
+				runId: readAgentId(source.runId),
+				cursor: readAgentRunStreamCursor(source.cursor),
+			},
+		};
+	}
+	if (source.kind === 'run-events') {
+		agentRecord(row.source, ['kind', 'appId', 'grant', 'runId', 'after'], AGENT_RUN_STREAM_MAX_COMMAND_BYTES);
+		return {
+			type: 'subscribe',
+			subscriptionId,
+			generation,
+			source: {
+				kind: 'run-events',
+				appId: readAgentId(source.appId),
+				grant: readAgentId(source.grant),
+				runId: readAgentId(source.runId),
+				after: agentInteger(source.after),
+			},
+		};
+	}
+	if (source.kind === 'memory') {
+		agentRecord(row.source, ['kind', 'appId', 'access', 'threadId'], AGENT_RUN_STREAM_MAX_COMMAND_BYTES);
+		return {
+			type: 'subscribe',
+			subscriptionId,
+			generation,
+			source: {
+				kind: 'memory',
+				appId: readAgentId(source.appId),
+				access: readAgentStreamAuthorization(source.access),
+				threadId: source.threadId === null ? null : readAgentId(source.threadId),
+			},
+		};
+	}
+	throw new InvalidAgentPayload();
 }
 
 export function readAgentRunStreamEvent(
@@ -193,4 +297,19 @@ export function readAgentRunStreamEvent(
 		state,
 		more: row.more,
 	};
+}
+
+function readAgentStreamAuthorization(input: unknown): AgentStreamAuthorization {
+	if (!isAgentRecord(input)) {
+		throw new InvalidAgentPayload();
+	}
+	if (input.kind === 'session') {
+		const row = agentRecord(input, ['kind', 'appVersion'], AGENT_RUN_STREAM_MAX_COMMAND_BYTES);
+		return { kind: 'session', appVersion: agentInteger(row.appVersion, 1) };
+	}
+	const row = agentRecord(input, ['kind', 'grant'], AGENT_RUN_STREAM_MAX_COMMAND_BYTES);
+	if (row.kind !== 'plugin') {
+		throw new InvalidAgentPayload();
+	}
+	return { kind: 'plugin', grant: readAgentId(row.grant) };
 }

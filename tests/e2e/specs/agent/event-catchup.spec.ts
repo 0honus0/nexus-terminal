@@ -117,9 +117,17 @@ test('production native event client rejects duplicate pages and retains its sup
 		page.evaluate(
 			async ({ appId, runId }) => {
 				const path = '/__e2e__/browser-clients.js';
-				const { listNativeEvents, AgentManagementFailure } = await import(/* @vite-ignore */ path);
+				const { requestNativeWorkspace, AgentManagementFailure } = await import(/* @vite-ignore */ path);
 				try {
-					const result = await listNativeEvents({ appId, appVersion: 1 }, runId, 7);
+					const reply = await requestNativeWorkspace(
+						{ appId, appVersion: 1 },
+						{
+							appVersion: 1,
+							request: { method: 'agent.runs.events', params: { runId, after: 7, limit: 100 } },
+						},
+					);
+					if (reply.method !== 'agent.runs.events') throw new Error('Unexpected event response');
+					const result = reply.value;
 					return { status: 'ok', cursor: result.nextCursor, runId: result.items[0]?.runId };
 				} catch (cause) {
 					if (

@@ -3,8 +3,7 @@ import { mkdtemp, readFile, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { SqliteGovernanceStorage } from '../../../packages/backend/dist/modules/agent/governance/adapters/sqlite/governance-sql.js';
-import { SqliteRunToolStorage } from '../../../packages/backend/dist/modules/agent/runs/adapters/sqlite/run-tool-sql.js';
+import { SqliteOperationStorage } from '../../../packages/backend/dist/modules/agent/operations/adapters/sqlite/operation-sql.js';
 import { SqliteFailure } from '../../../packages/backend/dist/platform/storage/sqlite/sqlite-errors.js';
 import { openAgentExecution } from './agent-execution-fixture.mjs';
 import { openSshd, until } from '../remote/openssh-fixture.mjs';
@@ -31,31 +30,37 @@ for (const phase of ['read-dispatch', 'approval-dispatch', 'completion']) {
 	await test(
 		'Actual Tool ledger ' + phase + ' commit with lost acknowledgement never repeats the original operation',
 		async (t) => {
-			const directory = await mkdtemp(join(tmpdir(), 'nexus-b10-tool-ledger-'));
+			const directory = await mkdtemp(
+				join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-b10-tool-ledger-'),
+			);
 			let sshd;
 			let f;
 			const lost = new SqliteFailure('commit_unknown');
+			let primaryFailure;
 			try {
 				sshd = await openSshd(directory);
-				f = await openAgentExecution(directory, sshd);
+				f = await openAgentExecution(directory, sshd, { discover: 'file_inspect file_write' });
 				const path = join(directory, 'effect.txt');
 				let commits = 0;
 				let compensations = 0;
-				const finish = SqliteRunToolStorage.prototype.finish;
-				t.mock.method(SqliteRunToolStorage.prototype, 'finish', function (...args) {
-					compensations += 1;
+				const finish = SqliteOperationStorage.prototype.finish;
+				t.mock.method(SqliteOperationStorage.prototype, 'finish', function (...args) {
+					if (
+						f.operations({ id: args[0].runId }).find((row) => row.id === args[1])?.label ===
+						(phase === 'read-dispatch' ? 'remote.inspect' : 'remote.write')
+					)
+						compensations++;
 					return finish.apply(this, args);
 				});
-				const method = phase === 'approval-dispatch' ? 'consumeApproval' : 'toolAuthority';
-				const original = SqliteGovernanceStorage.prototype[method];
-				t.mock.method(SqliteGovernanceStorage.prototype, method, async function (...args) {
+				const method = phase === 'completion' ? 'finish' : 'dispatch';
+				const original = SqliteOperationStorage.prototype[method];
+				t.mock.method(SqliteOperationStorage.prototype, method, async function (...args) {
 					const result = await original.apply(this, args);
 					if (
-						result &&
-						(phase === 'approval-dispatch' ||
-							args[1].kind === (phase === 'completion' ? 'complete' : 'dispatch'))
+						result.status === 'ok' &&
+						result.operation.label === (phase === 'read-dispatch' ? 'remote.inspect' : 'remote.write')
 					) {
-						commits += 1;
+						commits++;
 						throw lost;
 					}
 					return result;
@@ -84,19 +89,28 @@ for (const phase of ['read-dispatch', 'approval-dispatch', 'completion']) {
 				);
 				await f.wait(run, 'unknown');
 				await f.restart({ verifyCloseFailure: (error) => causes(error).has(lost) });
-				assert.equal(compensations, 0, 'Unknown durable commit cannot trigger speculative Tool settlement');
-				assert.equal(f.calls.length, 1, 'No next model step or automatic operation replay');
-				const stored = f.rows('agent_run_tools', run);
+				assert.equal(
+					compensations,
+					phase === 'completion' ? 1 : 0,
+					'Unknown durable commit cannot trigger another native settlement',
+				);
+				assert.equal(f.calls.length, 2, 'Discovery followed by the original domain call; no automatic replay');
+				const stored = f
+					.operations(run)
+					.filter((row) => row.label === (phase === 'read-dispatch' ? 'remote.inspect' : 'remote.write'));
 				assert.equal(stored.length, 1);
 				assert.equal(stored[0].state, phase === 'completion' ? 'completed' : 'unknown');
 				await f.wait(run, 'unknown');
 				if (phase === 'completion') {
 					assert.equal(await readFile(path, 'utf8'), 'committed once');
-					assert.ok(stored[0].result_text);
+					assert.ok(stored[0].result_json);
 				} else {
 					await assert.rejects(stat(path), { code: 'ENOENT' });
 				}
 				t.mock.restoreAll();
+			} catch (error) {
+				primaryFailure = error;
+				throw error;
 			} finally {
 				t.mock.restoreAll();
 				const failures = [];
@@ -108,7 +122,10 @@ for (const phase of ['read-dispatch', 'approval-dispatch', 'completion']) {
 					}
 				}
 				if (failures.length) {
-					throw new AggregateError(failures, 'Tool ledger fixture cleanup failed');
+					throw new AggregateError(
+						primaryFailure ? [primaryFailure, ...failures] : failures,
+						'Tool ledger fixture cleanup failed',
+					);
 				}
 			}
 		},

@@ -7,8 +7,6 @@ import {
 	AGENT_PROVIDER_MAX_NAME_BYTES,
 	AGENT_PROVIDER_MAX_SECRET_BYTES,
 	AGENT_PROVIDER_MAX_URL_BYTES,
-	AGENT_PROVIDER_MODEL_LIMIT,
-	AGENT_PROVIDER_DISCOVERY_LIMIT,
 	AGENT_REASONING_EFFORTS,
 	AGENT_PROVIDER_FAILURE_CODES,
 	AGENT_REGISTRY_MAX_MODEL_ID_BYTES,
@@ -204,12 +202,7 @@ function input(value: unknown, isUpdate: boolean): AgentProviderInput {
 		],
 		AGENT_PROVIDER_MAX_BODY_BYTES,
 	);
-	if (
-		r.kind !== 'openai-compatible' ||
-		!Array.isArray(r.models) ||
-		r.models.length < 1 ||
-		r.models.length > AGENT_PROVIDER_MODEL_LIMIT
-	) {
+	if (r.kind !== 'openai-compatible' || !Array.isArray(r.models) || r.models.length < 1) {
 		throw new InvalidAgentPayload();
 	}
 	const models = r.models.map(model);
@@ -259,7 +252,7 @@ export function readAgentProviderUpdateRequest(v: unknown): AgentProviderUpdateR
 	}
 	let models: AgentProviderModelInput[] | undefined;
 	if (r.models !== undefined) {
-		if (!Array.isArray(r.models) || r.models.length < 1 || r.models.length > AGENT_PROVIDER_MODEL_LIMIT) {
+		if (!Array.isArray(r.models) || r.models.length < 1) {
 			throw new InvalidAgentPayload();
 		}
 		models = r.models.map(model);
@@ -317,21 +310,25 @@ export function readAgentProviderEmptyRequest(v: unknown): void {
 }
 
 export function readAgentProviderView(v: unknown): AgentProviderView {
-	const r = agentRecord(v, [
-		'id',
-		'kind',
-		'displayName',
-		'baseUrl',
-		'protocol',
-		'models',
-		'enabled',
-		'hasCredential',
-		'credentialRevision',
-		'version',
-		'createdAt',
-		'updatedAt',
-	]);
-	if (!Array.isArray(r.models) || r.models.length < 1 || r.models.length > AGENT_PROVIDER_MODEL_LIMIT) {
+	const r = agentRecord(
+		v,
+		[
+			'id',
+			'kind',
+			'displayName',
+			'baseUrl',
+			'protocol',
+			'models',
+			'enabled',
+			'hasCredential',
+			'credentialRevision',
+			'version',
+			'createdAt',
+			'updatedAt',
+		],
+		AGENT_PROVIDER_MAX_RESPONSE_BYTES,
+	);
+	if (!Array.isArray(r.models) || r.models.length < 1) {
 		throw new InvalidAgentPayload();
 	}
 	const models: AgentProviderModelView[] = r.models.map((raw) => {
@@ -482,7 +479,7 @@ export function readAgentProviderDeleteResponse(value: unknown): AgentProviderDe
 
 export function readAgentDiscoveredModels(v: unknown): AgentDiscoveredModel[] {
 	encodeAgentJson(v, AGENT_PROVIDER_MAX_RESPONSE_BYTES);
-	if (!Array.isArray(v) || v.length > AGENT_PROVIDER_DISCOVERY_LIMIT) {
+	if (!Array.isArray(v)) {
 		throw new InvalidAgentPayload();
 	}
 	const discovered = v.map((raw) => {

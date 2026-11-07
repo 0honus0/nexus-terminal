@@ -1,3 +1,4 @@
+import { agentChatSurface, agentHost } from '../../fixtures/agent/workbench';
 import { devices } from '@playwright/test';
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
@@ -29,8 +30,9 @@ for (const profile of ['Desktop Chrome', 'Pixel 7']) {
 			await enableTestAgentExecution(context.request);
 			await page.goto('/connections');
 			await openAgentHub(page);
-			const hub = page.locator('.agent-hub-window');
-			await hub.getByRole('button', { name: 'Choose an Agent app', exact: true }).click();
+			const host = agentHost(page);
+			const hub = agentChatSurface(page, app.id);
+			await host.getByRole('button', { name: 'Choose an Agent app', exact: true }).click();
 			await page
 				.locator('[data-agent-hub-portal]')
 				.getByRole('button')
@@ -47,11 +49,11 @@ for (const profile of ['Desktop Chrome', 'Pixel 7']) {
 				.toBe(0);
 			await expect(hub.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
 			await hub.getByRole('button', { name: 'Select SSH targets', exact: true }).click();
-			const targets = page
+			const targets = hub
 				.locator('fieldset')
 				.filter({ has: page.locator('legend', { hasText: 'Select SSH targets' }) });
-			const target = targets.getByRole('checkbox').and(page.locator('#agent-target-' + connectionId));
-			const secondTarget = targets.getByRole('checkbox').and(page.locator('#agent-target-' + secondConnectionId));
+			const target = targets.getByRole('checkbox').and(hub.locator('#agent-target-' + connectionId));
+			const secondTarget = targets.getByRole('checkbox').and(hub.locator('#agent-target-' + secondConnectionId));
 			const enableAll = targets.getByRole('button', { name: 'Enable all', exact: true });
 			const disableAll = targets.getByRole('button', { name: 'Disable all', exact: true });
 			await expect(disableAll).toBeDisabled();

@@ -57,6 +57,41 @@ export interface BrowserSnapshot {
 	truncated: boolean;
 }
 
+export interface BrowserCatalog {
+	targets: { targetId: string; expectedVersion: number; allowedUrlPatterns: string[] }[];
+}
+
+export interface BrowserCapture {
+	artifactId: string;
+	version: number;
+	sha256: string;
+	sizeBytes: number;
+	mediaType: string;
+}
+
+export interface BrowserConsoleRead {
+	entries: { sequence: number; type: string; text: string }[];
+	nextCursor: number;
+	truncated: boolean;
+}
+
+export interface BrowserPageResult {
+	kind: 'page';
+	url: string;
+	title: string;
+}
+
+export type BrowserOperationResult =
+	| { action: 'open'; value: BrowserSessionRecord }
+	| { action: 'close'; value: { status: 'closed' } }
+	| { action: 'snapshot'; value: BrowserSnapshot }
+	| { action: 'screenshot' | 'download'; value: BrowserCapture }
+	| { action: 'console'; value: BrowserConsoleRead }
+	| {
+			action: 'navigate' | 'back' | 'scroll' | 'press' | 'select' | 'wait' | 'click' | 'type' | 'upload';
+			value: BrowserPageResult;
+	  };
+
 export type BrowserInput =
 	| { action: 'open'; targetId: string; expectedVersion: number }
 	| { action: 'close'; sessionId: string }
@@ -64,9 +99,6 @@ export type BrowserInput =
 			action: 'snapshot';
 			sessionId: string;
 			maxNodes: number;
-			include: ('screenshot' | 'console')[];
-			after: number;
-			limit: number;
 	  }
 	| { action: 'screenshot'; sessionId: string }
 	| { action: 'console'; sessionId: string; after: number; limit: number }
@@ -119,10 +151,7 @@ export interface BrowserApplicationSession {
 	readonly maxUploadBytes: number;
 	snapshot(maxNodes: number, signal: AbortSignal): Promise<BrowserSnapshot>;
 	screenshot(maxBytes: number, signal: AbortSignal): Promise<Uint8Array>;
-	console(
-		after: number,
-		limit: number,
-	): { entries: { sequence: number; type: string; text: string }[]; nextCursor: number; truncated: boolean };
+	console(after: number, limit: number): BrowserConsoleRead;
 	perform(input: BrowserSessionAction, signal: AbortSignal): Promise<BrowserReply>;
 	close(): Promise<void>;
 }

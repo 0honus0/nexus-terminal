@@ -1,3 +1,7 @@
+import { toToolView } from './tool-mapper.js';
+import { toMemoryView } from './memory-mapper.js';
+import { parseAgentToolListCursor, encodeAgentToolListCursor } from '@nexus-terminal/shared/agent/tools/http-codec';
+import { toArtifactView } from './artifact-mapper.js';
 import type { ThreadEntries } from '../../context/model/context-types.js';
 import type { RunEventPage } from '../../runs/model/run-types.js';
 import type { Participant } from '../../runs/model/run-collaboration-types.js';
@@ -7,13 +11,41 @@ import type { AgentChildrenResponse } from '@nexus-terminal/shared/agent/collabo
 import type { AgentWorkspaceInput, AgentWorkspaceResult } from '@nexus-terminal/shared/agent/scope/workspace-http';
 import { AGENT_CHILD_PROFILES } from '@nexus-terminal/shared/agent/collaboration/values';
 import { AgentFailure } from '../../agent-failure.js';
-import type { WorkspaceInput, WorkspaceResult } from '../../scope/model/workspace-types.js';
+import type {
+	CoreWorkspaceInput,
+	CoreWorkspaceResult,
+	UiWorkspaceInput,
+	UiWorkspaceResult,
+} from '../../scope/model/workspace-types.js';
 import { toThreadView, toDefinitionView } from './scope-mapper.js';
-import { toRunView } from './run-mapper.js';
-import { toApproval, toApprovalPage } from './governance-mapper.js';
+import { toRunView, toRunSuspension } from './run-mapper.js';
+import { toOperationApproval, toOperationApprovalPage } from './operation-approval-mapper.js';
 
-export function fromWorkspace(value: AgentWorkspaceInput): WorkspaceInput {
+export function fromWorkspace(value: AgentWorkspaceInput): CoreWorkspaceInput {
 	switch (value.method) {
+		case 'agent.content.read':
+			return {
+				method: value.method,
+				runId: value.params.runId,
+				index: value.params.index,
+				reference: {
+					id: value.params.reference.id,
+					sha256: value.params.reference.sha256,
+					sizeBytes: value.params.reference.sizeBytes,
+					mediaType: value.params.reference.mediaType,
+				},
+			};
+		case 'agent.runs.resume':
+			return {
+				method: value.method,
+				runId: value.params.runId,
+				operationId: value.params.operationId,
+				expectedVersion: value.params.input.expectedVersion,
+				inputJson: value.params.input.inputJson,
+			};
+		case 'agent.runs.outputs':
+		case 'agent.runs.suspension':
+			return { method: value.method, runId: value.params.runId };
 		case 'agent.runs.appendInput': {
 			const p = value.params;
 			return {
@@ -26,14 +58,7 @@ export function fromWorkspace(value: AgentWorkspaceInput): WorkspaceInput {
 					prompt: p.input.prompt,
 					approvalMode: p.input.approvalMode,
 					connectionIds: p.input.connectionIds.map((id) => id),
-					model: {
-						providerId: p.input.model.providerId,
-						modelId: p.input.model.modelId,
-						configurationVersion: p.input.model.configurationVersion,
-						...(p.input.model.reasoningEffort === undefined
-							? {}
-							: { reasoningEffort: p.input.model.reasoningEffort }),
-					},
+					inputJson: p.input.inputJson,
 				},
 			};
 		}
@@ -47,8 +72,8 @@ export function fromWorkspace(value: AgentWorkspaceInput): WorkspaceInput {
 						? null
 						: {
 								runSequence: value.params.before.runSequence,
-								stepIndex: value.params.before.stepIndex,
-								eventSequence: value.params.before.eventSequence,
+								messageOrdinal: value.params.before.messageOrdinal,
+								chunkIndex: value.params.before.chunkIndex,
 								textOffset: value.params.before.textOffset,
 							},
 			};
@@ -59,8 +84,8 @@ export function fromWorkspace(value: AgentWorkspaceInput): WorkspaceInput {
 				limit: value.params.limit,
 				after: {
 					runSequence: value.params.after.runSequence,
-					stepIndex: value.params.after.stepIndex,
-					eventSequence: value.params.after.eventSequence,
+					messageOrdinal: value.params.after.messageOrdinal,
+					chunkIndex: value.params.after.chunkIndex,
 					textOffset: value.params.after.textOffset,
 				},
 			};
@@ -74,14 +99,7 @@ export function fromWorkspace(value: AgentWorkspaceInput): WorkspaceInput {
 					prompt: p.input.prompt,
 					approvalMode: p.input.approvalMode,
 					connectionIds: p.input.connectionIds.map((id) => id),
-					model: {
-						providerId: p.input.model.providerId,
-						modelId: p.input.model.modelId,
-						configurationVersion: p.input.model.configurationVersion,
-						...(p.input.model.reasoningEffort === undefined
-							? {}
-							: { reasoningEffort: p.input.model.reasoningEffort }),
-					},
+					inputJson: p.input.inputJson,
 				},
 			};
 		}
@@ -168,8 +186,53 @@ export function fromWorkspace(value: AgentWorkspaceInput): WorkspaceInput {
 	}
 }
 
-export function toWorkspace(value: WorkspaceResult): AgentWorkspaceResult {
+export function toWorkspace(value: CoreWorkspaceResult): AgentWorkspaceResult {
 	switch (value.method) {
+		case 'agent.runs.suspension': {
+			const item = value.value;
+			return { method: value.method, value: item === null ? null : toRunSuspension(item) };
+		}
+		case 'agent.runs.outputs':
+			return {
+				method: value.method,
+				value:
+					value.value === null
+						? null
+						: value.value.map((ref) => ({
+								id: ref.id,
+								sha256: ref.sha256,
+								sizeBytes: ref.sizeBytes,
+								mediaType: ref.mediaType,
+							})),
+			};
+		case 'agent.content.read':
+			return {
+				method: value.method,
+				value: {
+					reference: {
+						id: value.value.reference.id,
+						sha256: value.value.reference.sha256,
+						sizeBytes: value.value.reference.sizeBytes,
+						mediaType: value.value.reference.mediaType,
+					},
+					index: value.value.index,
+					text: value.value.text,
+					nextIndex: value.value.nextIndex,
+				},
+			};
+		case 'agent.runs.resume': {
+			const result = value.value;
+			if (result.status === 'resumed') {
+				return { method: value.method, value: { status: 'resumed', run: toRunView(result.run) } };
+			}
+			if (result.status === 'replayed') {
+				return {
+					method: value.method,
+					value: { status: 'replayed', originalStatus: 'resumed', run: toRunView(result.run) },
+				};
+			}
+			throw new AgentFailure('internal_failure');
+		}
 		case 'agent.threads.history':
 			return {
 				method: value.method,
@@ -178,8 +241,8 @@ export function toWorkspace(value: WorkspaceResult): AgentWorkspaceResult {
 					hasEarlier: value.value.hasEarlier,
 					startCursor: {
 						runSequence: value.value.startCursor.runSequence,
-						stepIndex: value.value.startCursor.stepIndex,
-						eventSequence: value.value.startCursor.eventSequence,
+						messageOrdinal: value.value.startCursor.messageOrdinal,
+						chunkIndex: value.value.startCursor.chunkIndex,
 						textOffset: value.value.startCursor.textOffset,
 					},
 				},
@@ -215,7 +278,7 @@ export function toWorkspace(value: WorkspaceResult): AgentWorkspaceResult {
 			return { method: value.method, value: { status: result.status, run: toRunView(result.run) } };
 		}
 		case 'agent.approvals.resolve':
-			return { method: value.method, value: toApproval(value.value) };
+			return { method: value.method, value: toOperationApproval(value.value) };
 		case 'agent.definitions.list':
 			return { method: value.method, value: value.value.map(toDefinitionView) };
 		case 'agent.providers.list':
@@ -274,7 +337,7 @@ export function toWorkspace(value: WorkspaceResult): AgentWorkspaceResult {
 				},
 			};
 		case 'agent.approvals.list':
-			return { method: value.method, value: toApprovalPage(value.value) };
+			return { method: value.method, value: toOperationApprovalPage(value.value) };
 	}
 }
 
@@ -284,19 +347,20 @@ export function toThreadEntries(value: ThreadEntries): AgentThreadEntries {
 		threadId: value.threadId,
 		items: value.items.map((item) => ({
 			runId: item.runId,
+			operationSequence: item.operationSequence,
 			role: item.role,
 			text: item.text,
 			position: {
 				runSequence: item.position.runSequence,
-				stepIndex: item.position.stepIndex,
-				eventSequence: item.position.eventSequence,
+				messageOrdinal: item.position.messageOrdinal,
+				chunkIndex: item.position.chunkIndex,
 				textOffset: item.position.textOffset,
 			},
 		})),
 		nextCursor: {
 			runSequence: value.nextCursor.runSequence,
-			stepIndex: value.nextCursor.stepIndex,
-			eventSequence: value.nextCursor.eventSequence,
+			messageOrdinal: value.nextCursor.messageOrdinal,
+			chunkIndex: value.nextCursor.chunkIndex,
 			textOffset: value.nextCursor.textOffset,
 		},
 	};
@@ -332,4 +396,196 @@ export function toChildren(value: Participant[]): AgentChildrenResponse {
 			};
 		}),
 	};
+}
+
+export function fromUiWorkspace(
+	value: import('@nexus-terminal/shared/agent/plugins/ui-http').AgentPluginUiInput,
+): UiWorkspaceInput {
+	switch (value.method) {
+		case 'agent.runs.usage':
+			return { method: value.method, runId: value.params.runId };
+		case 'agent.tools.list':
+			return {
+				method: value.method,
+				threadId: value.params.threadId,
+				before: value.params.before === null ? null : fromToolCursor(value.params.before),
+				limit: value.params.limit,
+			};
+		case 'agent.tools.details':
+			return { method: value.method, runId: value.params.runId, toolId: value.params.toolId };
+		case 'agent.memories.list':
+			return {
+				method: value.method,
+				query: {
+					status: value.params.status,
+					offset: value.params.offset,
+					limit: value.params.limit,
+					...(value.params.threadId === undefined ? {} : { threadId: value.params.threadId }),
+				},
+			};
+		case 'agent.memories.get':
+			return { method: value.method, memoryId: value.params.memoryId };
+		case 'agent.memories.review':
+			return {
+				method: value.method,
+				memoryId: value.params.memoryId,
+				input: {
+					expectedVersion: value.params.input.expectedVersion,
+					decision: value.params.input.decision,
+					content: value.params.input.content,
+				},
+			};
+		case 'agent.artifacts.list':
+			return {
+				method: value.method,
+				query: {
+					retained: value.params.retained,
+					kind: value.params.kind,
+					q: value.params.q,
+					offset: value.params.offset,
+					limit: value.params.limit,
+				},
+			};
+		case 'agent.artifacts.get':
+			return { method: value.method, artifactId: value.params.artifactId };
+		case 'agent.artifacts.begin':
+			return {
+				method: value.method,
+				input: {
+					name: value.params.name,
+					mediaType: value.params.mediaType,
+					declaredBytes: value.params.declaredBytes,
+				},
+			};
+		case 'agent.artifacts.retain':
+			return {
+				method: value.method,
+				artifactId: value.params.artifactId,
+				expectedVersion: value.params.input.expectedVersion,
+				retained: value.params.input.retained,
+			};
+		case 'agent.artifacts.delete':
+			return {
+				method: value.method,
+				artifactId: value.params.artifactId,
+				expectedVersion: value.params.input.expectedVersion,
+			};
+		case 'agent.artifacts.attach':
+			return {
+				method: value.method,
+				artifactId: value.params.artifactId,
+				expectedVersion: value.params.expectedVersion,
+				threadId: value.params.threadId,
+				runId: value.params.runId,
+			};
+		case 'agent.artifacts.readRange':
+			return {
+				method: value.method,
+				artifactId: value.params.artifactId,
+				expectedVersion: value.params.expectedVersion,
+				start: value.params.start,
+				endInclusive: value.params.endInclusive,
+			};
+	}
+}
+
+export function toUiWorkspace(
+	value: UiWorkspaceResult,
+): import('@nexus-terminal/shared/agent/plugins/ui-http').AgentPluginUiResult {
+	const appId = value.appId;
+	switch (value.method) {
+		case 'agent.runs.usage':
+			return {
+				appId,
+				method: value.method,
+				value: {
+					runId: value.value.runId,
+					runVersion: value.value.runVersion,
+					inputTokens: value.value.inputTokens,
+					outputTokens: value.value.outputTokens,
+					reportedModelRequests: value.value.reportedModelRequests,
+					modelRequests: value.value.modelRequests,
+					toolExecutions: value.value.toolExecutions,
+				},
+			};
+		case 'agent.tools.list':
+			return {
+				appId,
+				method: value.method,
+				value: {
+					items: value.value.items.map(toToolView),
+					nextCursor:
+						value.value.nextCursor === null
+							? null
+							: encodeAgentToolListCursor(value.value.nextCursor.createdAt, value.value.nextCursor.id),
+				},
+			};
+		case 'agent.tools.details':
+			return {
+				appId,
+				method: value.method,
+				value: {
+					tool: toToolView(value.value),
+					argumentsJson: value.value.argumentsJson,
+					failureCode: value.value.failureCode,
+				},
+			};
+		case 'agent.memories.list':
+			return {
+				appId,
+				method: value.method,
+				value: { items: value.value.items.map(toMemoryView), nextOffset: value.value.nextOffset },
+			};
+		case 'agent.memories.get':
+		case 'agent.memories.review':
+			return { appId, method: value.method, value: { memory: toMemoryView(value.value) } };
+		case 'agent.artifacts.list':
+			return {
+				appId,
+				method: value.method,
+				value: { items: value.value.items.map(toArtifactView), nextOffset: value.value.nextOffset },
+			};
+		case 'agent.artifacts.get':
+		case 'agent.artifacts.begin':
+		case 'agent.artifacts.retain':
+			return { appId, method: value.method, value: { artifact: toArtifactView(value.value) } };
+		case 'agent.artifacts.delete':
+			return { appId, method: value.method, value: { deleted: true } };
+		case 'agent.artifacts.attach':
+			return {
+				appId,
+				method: value.method,
+				value: {
+					attachment: {
+						artifact: toArtifactView(value.value.artifact),
+						sourceAppId: value.value.artifact.appId,
+						targetAppId: value.value.targetAppId,
+						threadId: value.value.threadId,
+						runId: value.value.runId,
+						role: 'input',
+						crossApp: value.value.artifact.appId !== value.value.targetAppId,
+					},
+				},
+			};
+		case 'agent.artifacts.readRange':
+			return {
+				appId,
+				method: value.method,
+				value: {
+					artifactId: value.value.artifactId,
+					start: value.value.start,
+					endInclusive: value.value.endInclusive,
+					dataBase64: Buffer.from(value.value.bytes).toString('base64'),
+					version: value.value.version,
+					totalBytes: value.value.totalBytes,
+				},
+			};
+	}
+}
+
+function fromToolCursor(
+	value: string,
+): import('../../operations/model/operation-activity-types.js').OperationActivityCursor {
+	const cursor = parseAgentToolListCursor(value);
+	return { createdAt: cursor.createdAt, id: cursor.id };
 }

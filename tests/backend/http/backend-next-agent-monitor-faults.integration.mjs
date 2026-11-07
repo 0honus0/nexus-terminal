@@ -5,6 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { SqliteGovernanceStorage } from '../../../packages/backend/dist/modules/agent/governance/adapters/sqlite/governance-sql.js';
+import { RunChanges } from '../../../packages/backend/dist/modules/agent/runs/model/run-changes.js';
+import { listAgentApprovalHistory } from './agent-approval-fixture.mjs';
+import { configureProtocol } from './agent-protocol-fixture.mjs';
 import { SqliteFailure } from '../../../packages/backend/dist/platform/storage/sqlite/sqlite-errors.js';
 import { openAgentExecution } from './agent-execution-fixture.mjs';
 import { openSshd, until, expectStatus } from '../remote/openssh-fixture.mjs';
@@ -33,9 +36,24 @@ for (const mode of ['acp', 'job']) {
 			const failure = new SqliteFailure('unavailable');
 			try {
 				sshd = await openSshd(directory);
-				f = await openAgentExecution(directory, sshd);
+				f = await openAgentExecution(
+					directory,
+					sshd,
+					mode === 'acp'
+						? {
+								discover: 'acp_execute',
+								plugin: {
+									selectedRootIds: [
+										'nexus.tools.agent',
+										'nexus.tools.integrations',
+										'nexus.services.acp',
+									],
+								},
+							}
+						: { discover: 'shell_execute' },
+				);
 				if (mode === 'acp') {
-					await f.grants(['integration.acp.invoke']);
+					await f.grants(['integration.acp.invoke', 'service.transport.process', 'context.read']);
 				}
 				const pidPath = join(directory, 'original.pid');
 				const script = join(directory, 'external.mjs');
@@ -53,11 +71,26 @@ for await (const line of createInterface({input:process.stdin})) {
 }
 `,
 				);
-				const authority = SqliteGovernanceStorage.prototype.toolAuthority;
+				const authority = SqliteGovernanceStorage.prototype.toolCatalog;
+				let events;
+				const subscribe = RunChanges.prototype.subscribe;
+				t.mock.method(RunChanges.prototype, 'subscribe', function (...args) {
+					if (args[0].appId === f.appId) events = this;
+					return subscribe.apply(this, args);
+				});
+				let instance;
+				if (mode === 'acp') {
+					({ instance } = await configureProtocol(f, 'nexus.services.acp', {
+						kind: 'remoteProcess',
+						connectionId: f.connectionId,
+						argv: [process.execPath, script],
+						cwd: directory,
+					}));
+				}
 				let entered = false;
-				t.mock.method(SqliteGovernanceStorage.prototype, 'toolAuthority', async function (...args) {
+				t.mock.method(SqliteGovernanceStorage.prototype, 'toolCatalog', async function (...args) {
 					const result = await authority.apply(this, args);
-					if (pid && args[1].kind === 'verify' && !entered) {
+					if (pid && !entered) {
 						assert.ok(result, 'The original durable authority query actually succeeded');
 						entered = true;
 						await gate;
@@ -73,9 +106,7 @@ for await (const line of createInterface({input:process.stdin})) {
 								input:
 									mode === 'acp'
 										? {
-												connectionId: f.connectionId,
-												argv: [process.execPath, script],
-												cwd: directory,
+												instanceId: instance.id,
 												prompt: 'Wait for actual failure',
 											}
 										: {
@@ -85,23 +116,38 @@ for await (const line of createInterface({input:process.stdin})) {
 											},
 							},
 				);
-				await f.approve(await f.approval(run, mode === 'acp' ? 'acp_execute' : 'shell_execute'));
+				if (mode === 'job') {
+					await f.approve(await f.approval(run, 'shell_execute'));
+				}
 				pid = await until(
-					() =>
-						readFile(pidPath, 'utf8')
+					async () => {
+						if (mode === 'acp') {
+							for (const approval of await listAgentApprovalHistory(f.api, f.appId, run.id)) {
+								if (approval.status === 'requested') {
+									assert.ok(
+										['transport.session', 'transport.stdio.write'].includes(approval.operationName),
+									);
+									await f.approve(approval);
+								}
+							}
+						}
+						return readFile(pidPath, 'utf8')
 							.then(Number)
 							.catch((error) => {
 								if (error.code === 'ENOENT') {
 									return null;
 								}
 								throw error;
-							}),
+							});
+					},
 					(value) => Number.isSafeInteger(value) && value > 1,
 					'Real remote process wrote its original PID',
 				);
 				const identity = await readFile('/proc/' + pid + '/stat', 'utf8');
 				processStart = identity.slice(identity.lastIndexOf(')') + 2).split(' ')[19];
-				await until(() => entered, Boolean, 'The original one-second monitor reached real durable governance');
+				assert.ok(events, 'Actual resource owner subscribed to Run invalidations');
+				events.notify({ userId: 1, appId: f.appId, runId: run.id });
+				await until(() => entered, Boolean, 'Event-triggered monitor reached real durable governance');
 				process.kill(pid, 'SIGTERM');
 				await until(
 					async () => {
@@ -118,7 +164,10 @@ for await (const line of createInterface({input:process.stdin})) {
 					Boolean,
 					'Original SSH executable actually terminated before authority returned',
 				);
-				const before = f.rows(mode === 'job' ? 'agent_tool_jobs' : 'agent_run_tools', run)[0];
+				const before =
+					mode === 'job'
+						? f.rows('agent_tool_jobs', run)[0]
+						: f.operations(run).find((row) => row.label === 'transport.session');
 				assert.equal(before.state, 'dispatched', 'Actual process exit does not bypass the in-flight monitor');
 				const restarting = f.restart({ verifyCloseFailure: (error) => contains(error, failure) });
 				void restarting.catch(() => undefined);
@@ -136,14 +185,23 @@ for await (const line of createInterface({input:process.stdin})) {
 				release();
 				await restarting;
 				t.mock.restoreAll();
-				assert.equal(f.rows(mode === 'job' ? 'agent_tool_jobs' : 'agent_run_tools', run)[0].state, 'unknown');
 				assert.equal(
-					f.calls.length,
-					mode === 'job' ? 2 : 1,
-					'Recovery never repeats the original external operation',
+					(mode === 'job'
+						? f.rows('agent_tool_jobs', run)[0]
+						: f.operations(run).find((row) => row.label === 'transport.session')
+					).state,
+					'unknown',
 				);
+				assert.equal(f.calls.length, 2, 'Recovery never repeats the original external operation');
 				const claims = expectStatus(await f.api('GET', '/api/v1/remote/mutations'), 200).items;
-				assert.equal(claims.length, 1, 'The actual SSH mutation retains its original durable claim');
+				if (mode === 'job') {
+					assert.equal(claims.length, 1, 'The actual SSH mutation retains its original durable claim');
+				} else {
+					assert.equal(claims.length, 0, 'Raw protocol resources use the original generic Operation fence');
+					assert.equal((await f.wait(run, 'unknown')).status, 'unknown');
+					const original = f.operations(run).find((row) => row.id === before.id);
+					assert.equal(original.state, 'unknown', 'Restart preserves the exact original session fence');
+				}
 				assert.ok(
 					claims.every((claim) => claim.state === 'blocked'),
 					'Original mutation evidence is never automatically released',

@@ -1,8 +1,4 @@
-import {
-	AGENT_DENYLIST_MAX_TARGETS,
-	AGENT_DENYLIST_MAX_REASON_BYTES,
-	AGENT_DENYLIST_MAX_REASON_CODE_POINTS,
-} from './values.js';
+import { AGENT_DENYLIST_MAX_REASON_BYTES, AGENT_DENYLIST_MAX_REASON_CODE_POINTS } from './values.js';
 import type { AgentTargetDenylistView } from './model.js';
 import type { AgentTargetDenylistReplaceRequest } from './http.js';
 import {
@@ -18,20 +14,15 @@ import {
 	AGENT_CAPABILITIES,
 	AGENT_TARGET_CAPABILITIES,
 	AGENT_GRANT_MAX_ID_BYTES,
-	AGENT_GRANT_MAX_TARGET_IDS,
 	AGENT_GOVERNANCE_MAX_BODY_BYTES,
 	AGENT_GOVERNANCE_MAX_GRANT_BODY_BYTES,
 	AGENT_EXECUTION_INTEGER_KEYS,
-	AGENT_EXECUTION_COMPACTION_MODES,
-	AGENT_EXECUTION_CONTEXT_PROFILES,
 	AGENT_GOVERNANCE_MAX_RESPONSE_BYTES,
 	AGENT_APPROVAL_STATUSES,
-	AGENT_APPROVAL_KINDS,
 	AGENT_APPROVAL_DECISIONS,
 	AGENT_APPROVAL_RISKS,
 	AGENT_APPROVAL_OPERATION_HASH_PATTERN,
 	AGENT_APPROVAL_MAX_TOOL_NAME_BYTES,
-	AGENT_APPROVAL_MAX_TOOL_VERSION_BYTES,
 	AGENT_APPROVAL_MAX_SUMMARY_BYTES,
 	AGENT_APPROVAL_MAX_FEEDBACK_BYTES,
 	AGENT_APPROVAL_OPERATION_HASH_LENGTH,
@@ -100,11 +91,7 @@ function grantScope(value: unknown, capability: AgentCapability): AgentGrantScop
 		record(targets.ssh, ['mode']);
 		return { kind: 'targets', targets: { ssh: { mode: 'all' } } };
 	}
-	if (
-		selection.mode !== 'ids' ||
-		!Array.isArray(selection.ids) ||
-		selection.ids.length > AGENT_GRANT_MAX_TARGET_IDS
-	) {
+	if (selection.mode !== 'ids' || !Array.isArray(selection.ids)) {
 		throw new InvalidAgentPayload();
 	}
 	record(targets.ssh, ['mode', 'ids']);
@@ -145,26 +132,12 @@ export function readAgentExecutionPolicyReplaceRequest(value: unknown): AgentExe
 }
 
 function readPolicyOverrides(value: unknown): AgentExecutionPolicyOverrides {
-	const raw = record(value, [...AGENT_EXECUTION_INTEGER_KEYS, 'contextCompactionMode', 'contextProfile'], []);
+	const raw = record(value, AGENT_EXECUTION_INTEGER_KEYS, []);
 	const overrides: AgentExecutionPolicyOverrides = {};
 	for (const key of AGENT_EXECUTION_INTEGER_KEYS) {
 		if (Object.hasOwn(raw, key)) {
 			overrides[key] = agentInteger(raw[key], 1);
 		}
-	}
-	if (Object.hasOwn(raw, 'contextCompactionMode')) {
-		const match = AGENT_EXECUTION_COMPACTION_MODES.find((v) => v === raw.contextCompactionMode);
-		if (!match) {
-			throw new InvalidAgentPayload();
-		}
-		overrides.contextCompactionMode = match;
-	}
-	if (Object.hasOwn(raw, 'contextProfile')) {
-		const match = AGENT_EXECUTION_CONTEXT_PROFILES.find((v) => v === raw.contextProfile);
-		if (!match) {
-			throw new InvalidAgentPayload();
-		}
-		overrides.contextProfile = match;
 	}
 	return overrides;
 }
@@ -270,13 +243,8 @@ export function readAgentExecutionPolicyView(value: unknown): AgentExecutionPoli
 	const row = agentRecord(value, ['overrides', 'effective', 'version'], AGENT_GOVERNANCE_MAX_RESPONSE_BYTES);
 	const overrides = readPolicyOverrides(row.overrides);
 	const effective = readPolicyOverrides(row.effective);
-	const keys = [...AGENT_EXECUTION_INTEGER_KEYS, 'contextCompactionMode', 'contextProfile'];
+	const keys = AGENT_EXECUTION_INTEGER_KEYS;
 	if (Object.keys(effective).length !== keys.length || keys.some((key) => !(key in effective))) {
-		throw new InvalidAgentPayload();
-	}
-	const mode = AGENT_EXECUTION_COMPACTION_MODES.find((v) => v === effective.contextCompactionMode);
-	const profile = AGENT_EXECUTION_CONTEXT_PROFILES.find((v) => v === effective.contextProfile);
-	if (!mode || !profile) {
 		throw new InvalidAgentPayload();
 	}
 	const complete = {
@@ -288,37 +256,8 @@ export function readAgentExecutionPolicyView(value: unknown): AgentExecutionPoli
 		maxRecallBytes: agentInteger(effective.maxRecallBytes, 1),
 		maxSubagentMessages: agentInteger(effective.maxSubagentMessages, 1),
 		maxSubagentMessageBytes: agentInteger(effective.maxSubagentMessageBytes, 1),
-		contextCompactionMode: mode,
-		contextProfile: profile,
 	};
 	return { overrides, effective: complete, version: agentInteger(row.version) };
-}
-
-function inspection(raw: unknown): AgentApprovalView['inspection'] {
-	const row = record(raw, ['toolName', 'toolVersion', 'risk', 'mutation', 'targetConnectionId', 'summary']);
-	const risk = AGENT_APPROVAL_RISKS.find((item) => item === row.risk);
-	if (!risk) {
-		throw new InvalidAgentPayload();
-	}
-	if (
-		typeof row.mutation !== 'boolean' ||
-		(row.targetConnectionId !== null &&
-			!(
-				typeof row.targetConnectionId === 'number' &&
-				Number.isSafeInteger(row.targetConnectionId) &&
-				row.targetConnectionId > 0
-			))
-	) {
-		throw new InvalidAgentPayload();
-	}
-	return {
-		toolName: agentText(row.toolName, AGENT_APPROVAL_MAX_TOOL_NAME_BYTES),
-		toolVersion: agentText(row.toolVersion, AGENT_APPROVAL_MAX_TOOL_VERSION_BYTES),
-		risk,
-		mutation: row.mutation,
-		targetConnectionId: row.targetConnectionId === null ? null : agentInteger(row.targetConnectionId, 1),
-		summary: agentText(row.summary, AGENT_APPROVAL_MAX_SUMMARY_BYTES),
-	};
 }
 
 export function readAgentApprovalView(value: unknown): AgentApprovalView {
@@ -326,29 +265,33 @@ export function readAgentApprovalView(value: unknown): AgentApprovalView {
 		value,
 		[
 			'id',
+			'sequence',
 			'appId',
 			'runId',
-			'toolCallId',
+			'operationId',
+			'parentOperationId',
 			'operationHash',
-			'kind',
 			'status',
 			'policyRevision',
-			'inputRevision',
 			'version',
+			'capability',
+			'operationName',
+			'risk',
+			'summary',
+			'targetId',
 			'requestedAt',
 			'expiresAt',
 			'decidedAt',
 			'decidedByUserId',
 			'consumedAt',
-			'inspection',
 		],
 		AGENT_GOVERNANCE_MAX_RESPONSE_BYTES,
 	);
-	const status = AGENT_APPROVAL_STATUSES.find((v) => v === row.status);
-	const kind = AGENT_APPROVAL_KINDS.find((v) => v === row.kind);
+	const status = AGENT_APPROVAL_STATUSES.find((item) => item === row.status);
+	const risk = AGENT_APPROVAL_RISKS.find((item) => item === row.risk);
 	if (
 		!status ||
-		!kind ||
+		!risk ||
 		typeof row.operationHash !== 'string' ||
 		!AGENT_APPROVAL_OPERATION_HASH_PATTERN.test(row.operationHash)
 	) {
@@ -356,30 +299,33 @@ export function readAgentApprovalView(value: unknown): AgentApprovalView {
 	}
 	const result: AgentApprovalView = {
 		id: readAgentId(row.id),
+		sequence: agentInteger(row.sequence, 1),
 		appId: readAgentId(row.appId),
 		runId: readAgentId(row.runId),
-		toolCallId: readAgentId(row.toolCallId),
+		operationId: readAgentId(row.operationId),
+		parentOperationId: row.parentOperationId === null ? null : readAgentId(row.parentOperationId),
 		operationHash: row.operationHash,
-		kind,
 		status,
-		policyRevision: agentInteger(row.policyRevision),
-		inputRevision: agentInteger(row.inputRevision),
+		policyRevision: agentInteger(row.policyRevision, 1),
 		version: agentInteger(row.version, 1),
+		capability: capability(row.capability),
+		operationName: agentText(row.operationName, AGENT_APPROVAL_MAX_TOOL_NAME_BYTES),
+		risk,
+		summary: agentText(row.summary, AGENT_APPROVAL_MAX_SUMMARY_BYTES),
+		targetId: row.targetId === null ? null : agentInteger(row.targetId, 1),
 		requestedAt: agentInteger(row.requestedAt),
 		expiresAt: agentInteger(row.expiresAt),
 		decidedAt: row.decidedAt === null ? null : agentInteger(row.decidedAt),
 		decidedByUserId: row.decidedByUserId === null ? null : agentInteger(row.decidedByUserId, 1),
 		consumedAt: row.consumedAt === null ? null : agentInteger(row.consumedAt),
-		inspection: inspection(row.inspection),
 	};
-
 	const decided = result.status === 'approved' || result.status === 'denied';
+	// Automatic full-access approval has no human decider. Expiration and supersession retain prior decisions.
 	if (
 		result.expiresAt <= result.requestedAt ||
-		result.inputRevision < 1 ||
-		(decided
-			? result.decidedAt === null || result.decidedByUserId === null
-			: result.decidedAt !== null || result.decidedByUserId !== null) ||
+		(decided && result.decidedAt === null) ||
+		(result.status === 'requested' && (result.decidedAt !== null || result.decidedByUserId !== null)) ||
+		(result.decidedByUserId !== null && result.decidedAt === null) ||
 		(result.decidedAt !== null &&
 			(result.decidedAt < result.requestedAt || result.decidedAt >= result.expiresAt)) ||
 		(result.consumedAt !== null &&
@@ -394,7 +340,13 @@ export function readAgentApprovalView(value: unknown): AgentApprovalView {
 }
 
 export function readAgentApprovalAfter(value: unknown): string | null {
-	return value === null ? null : readAgentId(value);
+	if (value === null) {
+		return null;
+	}
+	if (typeof value !== 'string' || !/^[1-9][0-9]*$/u.test(value) || !Number.isSafeInteger(Number(value))) {
+		throw new InvalidAgentPayload();
+	}
+	return value;
 }
 
 export function readAgentApprovalPage(value: unknown, after: string | null): AgentApprovalPage {
@@ -408,15 +360,18 @@ export function readAgentApprovalPage(value: unknown, after: string | null): Age
 		throw new InvalidAgentPayload();
 	}
 	const items = row.items.map(readAgentApprovalView);
-	let previous = after;
+	let previous = after === null ? 0 : Number(after);
 	for (const item of items) {
-		if (previous !== null && item.id <= previous) {
+		if (item.sequence <= previous) {
 			throw new InvalidAgentPayload();
 		}
-		previous = item.id;
+		previous = item.sequence;
 	}
 	const nextCursor = readAgentApprovalAfter(row.nextCursor);
-	if (nextCursor !== previous || (row.hasMore && items.length !== AGENT_APPROVAL_MAX_PAGE_ITEMS)) {
+	if (
+		nextCursor !== (items.length ? String(previous) : after) ||
+		(row.hasMore && items.length !== AGENT_APPROVAL_MAX_PAGE_ITEMS)
+	) {
 		throw new InvalidAgentPayload();
 	}
 	return { items, after, nextCursor, hasMore: row.hasMore };
@@ -443,7 +398,7 @@ function denylistReason(input: unknown): string {
 
 export function readAgentTargetDenylistReplaceRequest(input: unknown): AgentTargetDenylistReplaceRequest {
 	const row = agentRecord(input, ['connectionIds', 'reason', 'expectedRevision'], AGENT_GOVERNANCE_MAX_BODY_BYTES);
-	if (!Array.isArray(row.connectionIds) || row.connectionIds.length > AGENT_DENYLIST_MAX_TARGETS) {
+	if (!Array.isArray(row.connectionIds)) {
 		throw new InvalidAgentPayload();
 	}
 	return {
@@ -455,7 +410,7 @@ export function readAgentTargetDenylistReplaceRequest(input: unknown): AgentTarg
 
 export function readAgentTargetDenylistResponse(input: unknown): AgentTargetDenylistView {
 	const row = agentRecord(input, ['revision', 'entries'], AGENT_GOVERNANCE_MAX_RESPONSE_BYTES);
-	if (!Array.isArray(row.entries) || row.entries.length > AGENT_DENYLIST_MAX_TARGETS) {
+	if (!Array.isArray(row.entries)) {
 		throw new InvalidAgentPayload();
 	}
 	const entries = row.entries.map((value) => {

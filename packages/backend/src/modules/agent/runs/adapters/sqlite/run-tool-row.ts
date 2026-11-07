@@ -1,11 +1,9 @@
+import { readAgentToolIdentity } from '@nexus-terminal/shared/agent/tools/identity-codec';
+import { readToolOutputArtifactIds } from './run-tool-output-sql.js';
 import { AGENT_RUN_FAILURE_CODES, type AgentRunFailureCode } from '@nexus-terminal/shared/agent/runs/values';
 import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
-import { AGENT_ARTIFACT_OUTPUT_TOOLS, AGENT_TOOL_STATES } from '@nexus-terminal/shared/agent/tools/values';
-import {
-	TOOL_ARGUMENT_MAX_BYTES,
-	TOOL_RESULT_MAX_BYTES,
-	TOOL_PROVIDER_CALL_ID_MAX_BYTES,
-} from '../../run-tool-limits.js';
+import { AGENT_TOOL_STATES } from '@nexus-terminal/shared/agent/tools/values';
+import { toolArgumentMaxBytes, TOOL_RESULT_MAX_BYTES, TOOL_PROVIDER_CALL_ID_MAX_BYTES } from '../../run-tool-limits.js';
 import {
 	AGENT_CAPABILITIES,
 	AGENT_APPROVAL_RISKS,
@@ -14,7 +12,11 @@ import {
 	AGENT_APPROVAL_MAX_SUMMARY_BYTES,
 	AGENT_APPROVAL_OPERATION_HASH_PATTERN,
 } from '@nexus-terminal/shared/agent/governance/values';
-import type { StoredToolOperation, StoredToolEvent } from '../../storage/run-tool-storage.js';
+import type {
+	StoredToolOperation,
+	StoredToolEvent,
+	StoredToolResultSourceAuthority,
+} from '../../storage/run-tool-storage.js';
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 
 function invalid(): never {
@@ -31,39 +33,6 @@ function text(value: unknown, max: number): string {
 
 function id(value: unknown): string {
 	return typeof value === 'string' && AGENT_ID_PATTERN.test(value) ? value : invalid();
-}
-
-/** Only successful server-owned delivery tools can publish an Artifact reference. */
-function outputArtifactIds(toolName: unknown, state: unknown, resultText: string | null): string[] {
-	if (
-		!AGENT_ARTIFACT_OUTPUT_TOOLS.some((name) => name === toolName) ||
-		(state !== 'completed' && state !== 'unknown') ||
-		resultText === null
-	) {
-		return [];
-	}
-	const result: unknown = JSON.parse(resultText);
-	if (typeof result !== 'object' || result === null || Array.isArray(result)) {
-		return invalid();
-	}
-	if (toolName !== 'file_deliver' && toolName !== 'artifact_present') {
-		return state === 'completed' && 'id' in result ? [id(result.id)] : [];
-	}
-	if (!('items' in result) || !Array.isArray(result.items)) {
-		return state === 'unknown' ? [] : invalid();
-	}
-	return result.items.flatMap((item: unknown) => {
-		if (typeof item !== 'object' || item === null || !('status' in item)) {
-			return invalid();
-		}
-		if (item.status !== 'completed') {
-			return [];
-		}
-		if (!('value' in item) || typeof item.value !== 'object' || item.value === null || !('id' in item.value)) {
-			return invalid();
-		}
-		return [id(item.value.id)];
-	});
 }
 
 /** Only a server-recorded, finite failure code can leave the private result body. */
@@ -83,6 +52,57 @@ function failureCode(state: unknown, resultText: string | null): AgentRunFailure
 	return AGENT_RUN_FAILURE_CODES.find((code) => code === result.failureCode) ?? null;
 }
 
+function readRequiredCapabilities(value: unknown) {
+	if (typeof value !== 'string') {
+		return invalid();
+	}
+	const requiredValues: unknown = JSON.parse(value);
+	if (!Array.isArray(requiredValues) || new Set(requiredValues).size !== requiredValues.length) {
+		return invalid();
+	}
+	return requiredValues.map(
+		(value: unknown) => AGENT_CAPABILITIES.find((capability) => capability === value) ?? invalid(),
+	);
+}
+
+/** Read only authority columns; captured result bodies never enter a provenance graph query. */
+export function readToolResultSourceAuthority(row: Record<string, unknown>): StoredToolResultSourceAuthority {
+	const capability = AGENT_CAPABILITIES.find((value) => value === row.capability);
+	const risk = AGENT_APPROVAL_RISKS.find((value) => value === row.risk);
+	const operationHash = text(row.operation_hash, 64);
+	if (
+		!capability ||
+		!risk ||
+		(row.mutation !== 0 && row.mutation !== 1) ||
+		!AGENT_APPROVAL_OPERATION_HASH_PATTERN.test(operationHash) ||
+		typeof row.identity_json !== 'string'
+	) {
+		return invalid();
+	}
+	const targetId = row.target_id === null ? null : integer(row.target_id, 1),
+		targetVersion = row.target_version === null ? null : integer(row.target_version, 1);
+	if ((targetId === null) !== (targetVersion === null)) {
+		return invalid();
+	}
+	return {
+		id: id(row.id),
+		userId: integer(row.user_id, 1),
+		appId: id(row.app_id),
+		runId: id(row.run_id),
+		identity: readAgentToolIdentity(JSON.parse(row.identity_json)),
+		operationHash,
+		revision: integer(row.revision, 1),
+		toolName: text(row.tool_name, AGENT_APPROVAL_MAX_TOOL_NAME_BYTES),
+		toolVersion: text(row.tool_version, AGENT_APPROVAL_MAX_TOOL_VERSION_BYTES),
+		capability,
+		requiredCapabilities: readRequiredCapabilities(row.required_capabilities_json),
+		targetId,
+		targetVersion,
+		risk,
+		mutation: row.mutation === 1,
+	};
+}
+
 export function readToolOperation(row: Record<string, unknown>): StoredToolOperation {
 	const state = AGENT_TOOL_STATES.find((item) => item === row.state);
 	const capability = AGENT_CAPABILITIES.find((item) => item === row.capability);
@@ -96,7 +116,12 @@ export function readToolOperation(row: Record<string, unknown>): StoredToolOpera
 	) {
 		return invalid();
 	}
-	const argumentsJson = text(row.arguments_json, TOOL_ARGUMENT_MAX_BYTES);
+	const requiredCapabilities = readRequiredCapabilities(row.required_capabilities_json);
+	if (typeof row.identity_json !== 'string') {
+		return invalid();
+	}
+	const identity = readAgentToolIdentity(JSON.parse(row.identity_json));
+	const argumentsJson = text(row.arguments_json, toolArgumentMaxBytes(identity));
 	let argumentsValue: unknown;
 	try {
 		argumentsValue = JSON.parse(argumentsJson);
@@ -128,6 +153,10 @@ export function readToolOperation(row: Record<string, unknown>): StoredToolOpera
 	if (state === 'completed' && resultText === null) {
 		return invalid();
 	}
+	const outputArtifactIds = readToolOutputArtifactIds(row.output_artifact_ids_json);
+	if ((state === 'inspected' || state === 'dispatched') && outputArtifactIds.length > 0) {
+		return invalid();
+	}
 	return {
 		id: id(row.id),
 		userId: integer(row.user_id, 1),
@@ -137,7 +166,9 @@ export function readToolOperation(row: Record<string, unknown>): StoredToolOpera
 		providerCallId: text(row.provider_call_id, TOOL_PROVIDER_CALL_ID_MAX_BYTES),
 		toolName: text(row.tool_name, AGENT_APPROVAL_MAX_TOOL_NAME_BYTES),
 		toolVersion: text(row.tool_version, AGENT_APPROVAL_MAX_TOOL_VERSION_BYTES),
+		identity,
 		capability,
+		requiredCapabilities,
 		targetId,
 		targetVersion,
 		risk,
@@ -150,7 +181,7 @@ export function readToolOperation(row: Record<string, unknown>): StoredToolOpera
 		state,
 		resultText,
 		failureCode: failureCode(state, resultText),
-		outputArtifactIds: outputArtifactIds(row.tool_name, state, resultText),
+		outputArtifactIds,
 		createdAt,
 		updatedAt,
 	};

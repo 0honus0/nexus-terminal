@@ -1,6 +1,12 @@
 /** User-visible budgets shared by the Remote Files HTTP producer and consumer. */
 export const REMOTE_FILE_MAX_PATH_BYTES = 4096;
 
+/** Existing text inspection page size; offsets and lengths count UTF-8 bytes. */
+export const REMOTE_FILE_TEXT_PAGE_MAX_BYTES = 32 * 1024;
+
+/** A page must accommodate one complete UTF-8 code point. */
+export const REMOTE_FILE_TEXT_PAGE_MIN_BYTES = 4;
+
 export const REMOTE_FILE_MAX_REQUEST_BYTES = 16 * 1024;
 
 /** Formal editor text capacity. JSON budgets below also cover escaping overhead. */

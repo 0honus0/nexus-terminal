@@ -1,3 +1,4 @@
+import { fixtureToolName, findFixtureTool } from '../../support/package-tool-catalog.mjs';
 import { createTestAgentApp } from './native-agent-fixture.mjs';
 import { listAgentApprovalHistory } from './agent-approval-fixture.mjs';
 import assert from 'node:assert/strict';
@@ -53,14 +54,14 @@ export async function openImageFixture(directory, { publicOrigin = origin, png =
 				.map((message) => JSON.parse(message.content));
 			let action;
 			if (results.length === 0) {
-				assert.ok(body.tools.some((tool) => tool.function.name === 'tool_search'));
+				assert.ok(findFixtureTool(body, 'tool_search'));
 				action = { name: 'tool_search', input: { query: 'image_models_list image_generate' } };
 			} else if (results.length === 1) {
 				assert.equal(results[0].availableNextTurn, true);
-				assert.deepEqual(results[0].matches.map((tool) => tool.name).sort(), [
-					'image_generate',
-					'image_models_list',
-				]);
+				assert.deepEqual(
+					results[0].matches.map((tool) => tool.key).sort(),
+					['image_generate', 'image_models_list'].map((name) => 'nexus.tools.agent.' + name).sort(),
+				);
 				action = { name: 'image_models_list', input: {} };
 			} else if (results.length === 2) {
 				const selected = results[1].models.find((item) => item.modelId === 'gpt-image-2.5');
@@ -68,7 +69,7 @@ export async function openImageFixture(directory, { publicOrigin = origin, png =
 				action = { name: 'image_generate', input: { ...selected, prompt: 'A blue circle.' } };
 			}
 			if (action) {
-				assert.ok(body.tools.some((tool) => tool.function.name === action.name));
+				assert.ok(findFixtureTool(body, action.name));
 			}
 			const delta = action
 				? {
@@ -77,7 +78,10 @@ export async function openImageFixture(directory, { publicOrigin = origin, png =
 								index: 0,
 								id: 'call_' + results.length,
 								type: 'function',
-								function: { name: action.name, arguments: JSON.stringify(action.input) },
+								function: {
+									name: fixtureToolName(body, action.name),
+									arguments: JSON.stringify(action.input),
+								},
 							},
 						],
 					}
@@ -165,7 +169,9 @@ export async function openImageFixture(directory, { publicOrigin = origin, png =
 			return expectStatus(
 				await api('PUT', base + '/grants', {
 					expectedPolicyRevision: current.policyRevision,
-					grants: capabilities.map((capability) => ({ capability, scope: { kind: 'global' } })),
+					grants: (capabilities.length ? [...new Set(['plugin.invoke', ...capabilities])] : []).map(
+						(capability) => ({ capability, scope: { kind: 'global' } }),
+					),
 				}),
 				200,
 			);
@@ -216,9 +222,17 @@ export async function openImageFixture(directory, { publicOrigin = origin, png =
 						base + '/threads/' + thread.id + '/runs',
 						{
 							prompt,
-							approvalMode: 'ask',
+							approvalMode: modelId === 'text-model' ? 'ask' : 'full_access',
 							connectionIds: [],
-							model: { providerId: provider.id, modelId, configurationVersion: provider.version },
+							inputJson: JSON.stringify({
+								model: {
+									providerId: provider.id,
+									modelId,
+									configurationVersion: provider.version,
+									reasoningEffort: null,
+								},
+								artifacts: [],
+							}),
 						},
 						{ 'Idempotency-Key': randomUUID() },
 					),
@@ -243,7 +257,7 @@ export async function openImageFixture(directory, { publicOrigin = origin, png =
 							method: 'agent.threads.entries',
 							params: {
 								threadId: thread.id,
-								after: { runSequence: 0, stepIndex: 0, eventSequence: 0, textOffset: 0 },
+								after: { runSequence: 0, messageOrdinal: 0, chunkIndex: 0, textOffset: 0 },
 								limit: AGENT_THREAD_ENTRY_MAX_PAGE,
 							},
 						},

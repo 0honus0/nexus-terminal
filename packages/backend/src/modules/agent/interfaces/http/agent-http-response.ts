@@ -1,4 +1,6 @@
 import { encodeAgentJson } from '@nexus-terminal/shared/agent/http-codec';
+import { AGENT_PLUGIN_PROTOCOL_VERSION } from '@nexus-terminal/shared/agent/plugins/values';
+import type { AgentPluginRpcResponse } from '@nexus-terminal/shared/agent/plugins/frontend-events';
 import type { AgentOperationErrorCode } from '@nexus-terminal/shared/agent/values';
 import type { HttpRoute } from '../../../../platform/http/http-types.js';
 import { agentErrorStatus } from './agent-http-status.js';
@@ -54,11 +56,11 @@ export const agentHttpErrorHandler: NonNullable<HttpRoute['errorHandler']> = fun
 	reply.removeHeader('Content-Length');
 	// The failed bounded serializer must not run again while projecting its safe refusal.
 	reply.type('application/json; charset=utf-8').serializer(JSON.stringify);
-	const payload =
+	const payload: AgentPluginRpcResponse | { code: AgentOperationErrorCode } =
 		error instanceof AgentRpcHttpSerializationFailure
 			? {
 					type: 'nexus.plugin.response',
-					protocol: 1,
+					protocol: AGENT_PLUGIN_PROTOCOL_VERSION,
 					nonce: error.nonce,
 					id: error.id,
 					seq: error.seq,

@@ -4,6 +4,7 @@ export function agentErrorStatus(code: AgentOperationError['code']): number {
 	switch (code) {
 		case 'unauthenticated':
 			return 401;
+		case 'host_key_untrusted':
 		case 'forbidden':
 			return 403;
 		case 'execution_disabled':
@@ -17,6 +18,8 @@ export function agentErrorStatus(code: AgentOperationError['code']): number {
 			return 400;
 		case 'not_found':
 			return 404;
+		case 'mutation_busy':
+		case 'mutation_blocked':
 		case 'active_run_conflict':
 		case 'idempotency_conflict':
 		case 'approval_stale':
@@ -26,11 +29,16 @@ export function agentErrorStatus(code: AgentOperationError['code']): number {
 			return 409;
 		case 'model_not_found':
 			return 404;
+		case 'remote_unavailable':
 		case 'provider_unavailable':
 		case 'provider_request_failed':
 		case 'storage_unavailable':
 		case 'operation_unknown':
 			return 503;
+		case 'not_text':
+			return 415;
+		case 'command_failed':
+			return 422;
 		case 'internal_failure':
 			return 500;
 	}

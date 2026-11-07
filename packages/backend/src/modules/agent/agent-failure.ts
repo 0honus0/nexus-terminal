@@ -101,6 +101,8 @@ export class ToolOperationRefusal extends Error {
 					'remote_unavailable' | 'host_key_untrusted' | 'not_text' | 'not_found' | 'forbidden'
 			  >
 			| 'command_failed'
+			| 'target_denied'
+			| 'version_conflict'
 			| import('../remote/public-errors.js').MachineMutationAdmissionCode,
 		options?: ErrorOptions,
 	) {
@@ -114,6 +116,14 @@ export class ToolMutationAdmissionRefusal extends ToolOperationRefusal {
 	constructor(code: import('../remote/public-errors.js').MachineMutationAdmissionCode, options?: ErrorOptions) {
 		super(code, options);
 		this.name = 'ToolMutationAdmissionRefusal';
+	}
+}
+
+/** Execution definitely failed after admitted work; it must stop the Run without suggesting safe replay. */
+export class ToolExecutionFailure extends Error {
+	constructor(options?: ErrorOptions) {
+		super('Agent tool execution failed', options);
+		this.name = 'ToolExecutionFailure';
 	}
 }
 
@@ -147,6 +157,9 @@ function cleanupFailed(error: unknown): boolean {
 /** Preserve effect uncertainty across owners without guessing after an uncertain storage commit. */
 export function aggregateToolFailures(failures: unknown[], message: string): Error {
 	const cause = new AggregateError(failures, message);
+	if (failures.length && failures.every(resourceFenced)) {
+		return new AgentResourceFenced({ cause });
+	}
 	if (failures.length && failures.every(unconfirmedEffects)) {
 		return failures.some(cleanupFailed) ? new ToolCleanupFailure({ cause }) : new ToolExecutionUnknown({ cause });
 	}
@@ -155,7 +168,11 @@ export function aggregateToolFailures(failures: unknown[], message: string): Err
 
 /** Business refusals are expected; persistence and unknown failures remain shutdown evidence. */
 export function isAgentDrainFailure(error: unknown): boolean {
-	if (error instanceof ToolOperationRefusal || error instanceof AgentResourceFenced) {
+	if (
+		error instanceof ToolOperationRefusal ||
+		error instanceof AgentResourceFenced ||
+		error instanceof ToolExecutionFailure
+	) {
 		return false;
 	}
 	return (

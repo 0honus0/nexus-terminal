@@ -3,7 +3,7 @@
 	import { useI18n } from 'vue-i18n';
 	import { UiBadge, UiButton } from '@/foundation/ui';
 	import type { AgentTaskActivity } from '../model/task-activity-types';
-	import { formatToolSummary, toolCommandPreview } from '../runtime/native-tool-summary';
+	import { formatToolSummary, formatToolTargets, toolCommandPreview } from '../runtime/native-tool-summary';
 
 	const props = defineProps<{ activity: AgentTaskActivity; queuedCount: number; now: number }>();
 	const emit = defineEmits<{ dismiss: [] }>();
@@ -13,19 +13,25 @@
 		() => approval.value !== null && approval.value.expiresAt * 1000 > props.now && !props.activity.blocked,
 	);
 	const summary = computed(() => {
-		const inspection = approval.value?.inspection;
+		const inspection = approval.value;
 		return inspection
-			? formatToolSummary(inspection.summary, inspection.toolName, {
-					translate: (key, named) => t(key, named ?? {}),
+			? formatToolSummary(
+					inspection.summary,
+					{ kind: 'host', operation: inspection.operationName },
+					{
+						translate: (key, named) => t(key, named ?? {}),
 
-					has: (key) => te(key),
-				})
+						has: (key) => te(key),
+					},
+				)
 			: '';
 	});
-	const command = computed(() => (approval.value ? toolCommandPreview(approval.value.inspection.summary) : null));
+	const command = computed(() => (approval.value ? toolCommandPreview(approval.value.summary) : null));
 	const target = computed(() => {
-		const id = approval.value?.inspection.targetConnectionId;
-		return id === null || id === undefined ? '' : (props.activity.targetLabels.get(id) ?? String(id));
+		const inspection = approval.value;
+		if (!inspection) return '';
+		const label = formatToolTargets(inspection.summary, inspection.targetId, props.activity.targetLabels);
+		return label === '—' ? '' : label;
 	});
 	const tone = computed(() => {
 		if (props.activity.failureMessage || props.activity.status === 'failed') {
@@ -94,16 +100,16 @@
 			<div class="mb-2 flex min-w-0 items-center gap-2">
 				<UiBadge
 					:tone="
-						approval.inspection.risk === 'read'
+						approval.risk === 'read'
 							? 'success'
-							: approval.inspection.risk === 'control' || approval.inspection.risk === 'mutate'
+							: approval.risk === 'control' || approval.risk === 'mutate'
 								? 'warning'
 								: 'danger'
 					"
 					appearance="soft"
 					density="compact"
 				>
-					{{ t(`agent.approvals.risk.${approval.inspection.risk}`) }}
+					{{ t(`agent.approvals.risk.${approval.risk}`) }}
 				</UiBadge>
 				<span v-if="target" class="min-w-0 truncate text-[11px] text-text-secondary" :title="target">
 					<i class="fa-solid fa-server mr-1 text-[9px]" aria-hidden="true"></i>{{ target }}
@@ -153,7 +159,13 @@
 					:disabled="!canDecide"
 					@click="activity.decide(approval, 'denied')"
 				>
-					{{ t(approval.kind === 'acp_permission' ? 'agent.approvals.rejectOnce' : 'agent.approvals.deny') }}
+					{{
+						t(
+							approval.operationName === 'transport.permission'
+								? 'agent.approvals.rejectOnce'
+								: 'agent.approvals.deny',
+						)
+					}}
 				</UiButton>
 				<UiButton
 					appearance="solid"
@@ -163,7 +175,11 @@
 					@click="activity.decide(approval, 'approved')"
 				>
 					{{
-						t(approval.kind === 'acp_permission' ? 'agent.approvals.allowOnce' : 'agent.approvals.approve')
+						t(
+							approval.operationName === 'transport.permission'
+								? 'agent.approvals.allowOnce'
+								: 'agent.approvals.approve',
+						)
 					}}
 				</UiButton>
 			</div>

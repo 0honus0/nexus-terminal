@@ -1,4 +1,4 @@
-import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
+import { jsonStorageCodec, readStoredValue, removeStoredValue, writeStoredValue } from '@/foundation/browser';
 import type { BrowserStorageDefinition } from '@/foundation/browser';
 
 const targetIdsCodec = jsonStorageCodec<number[]>((value) => {
@@ -26,4 +26,8 @@ export function readNativeTargetPreference(userId: number, appId: string): numbe
 
 export function writeNativeTargetPreference(userId: number, appId: string, ids: number[]): void {
 	writeStoredValue(preferences(userId, appId), ids);
+}
+
+export function clearNativeTargetPreference(userId: number, appId: string): void {
+	removeStoredValue(preferences(userId, appId));
 }

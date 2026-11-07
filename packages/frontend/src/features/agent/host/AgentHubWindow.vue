@@ -11,19 +11,18 @@
 		type OverlayStackRegistration,
 	} from '@/foundation/ui';
 	import type { HostApp, HostDirectory } from '../model/host-types';
-	import PluginAppFrame from './PluginAppFrame.vue';
+	import PluginAppFrame from '../plugins/host/PluginAppFrame.vue';
 	import AgentAppSwitcher from './AgentAppSwitcher.vue';
 	import { useAgentHostState } from './agent-host-state';
+	import { agentHostEvents } from '../events/agent-host-events';
 
-	const loadAgentAppSurface = () => import('./AgentAppSurface.vue');
-
-	const AgentAppSurface = defineAsyncComponent(loadAgentAppSurface);
 	const ArtifactLibraryView = defineAsyncComponent(() => import('../files/ArtifactLibraryView.vue'));
 
 	const props = defineProps<{ directory: HostDirectory }>();
 	const { windowManager: agentWindowManager } = useAgentHostState();
 	const emit = defineEmits<{ layoutChange: [] }>();
 	const state = agentWindowManager.state;
+	const appNames = computed(() => Object.fromEntries(props.directory.apps.map((app) => [app.id, app.displayName])));
 	const activeApp = computed(() => props.directory.apps.find((app) => app.id === state.activeAppId) ?? null);
 	const visible = computed(() => state.status === 'visible');
 	const resourceControl = useAgentResourceControl(() => visible.value);
@@ -31,6 +30,13 @@
 	watch(visible, (shown) => {
 		if (shown) resumeRevision.value += 1;
 	});
+
+	const wakeConfiguration = () => {
+		resumeRevision.value += 1;
+	};
+
+	const stopConfiguration = agentHostEvents.on('configuration-changed', wakeConfiguration);
+	const stopAuthorization = agentHostEvents.on('authorization-changed', wakeConfiguration);
 	const hasOpened = ref(visible.value);
 	const hubWindowRef = ref<HTMLElement | null>(null);
 	let backgroundScrollRestore: (() => void) | null = null;
@@ -46,6 +52,7 @@
 		'select:not([disabled])',
 		'textarea:not([disabled])',
 		'[contenteditable="true"]',
+		'iframe[data-agent-app-id]',
 		'[tabindex]:not([tabindex="-1"])',
 	].join(',');
 
@@ -95,12 +102,18 @@
 	const isActuallyFocusable = (element: HTMLElement): boolean => {
 		if (
 			!element.isConnected ||
+			element.hasAttribute('data-agent-focus-boundary') ||
 			element.hasAttribute('disabled') ||
 			element.getAttribute('aria-hidden') === 'true'
 		) {
 			return false;
 		}
 		if (!element.matches(FOCUSABLE_SELECTOR)) return false;
+		if (
+			element instanceof HTMLIFrameElement &&
+			(element.tabIndex < 0 || !element.sandbox.contains('allow-scripts'))
+		)
+			return false;
 		if (element.closest('[inert]')) return false;
 		const style = window.getComputedStyle(element);
 		if (style.display === 'none' || style.visibility === 'hidden') return false;
@@ -141,6 +154,11 @@
 		if (!hub) return;
 		hub.focus({ preventScroll: true });
 		lastHubFocus = hub;
+	};
+
+	const focusHubStart = () => {
+		const hub = hubWindowRef.value;
+		if (hub) (getFocusableElements(hub)[0] ?? hub).focus({ preventScroll: true });
 	};
 
 	const restoreFocusAfterHide = async (target: HTMLElement | null) => {
@@ -264,9 +282,6 @@
 		{ immediate: true },
 	);
 	const enabledApps = computed(() => props.directory.apps.filter((app) => app.enabled));
-
-	let surfacePreloadHandle: number | ReturnType<typeof setTimeout> | null = null;
-	let surfacePreloadUsesIdleCallback = false;
 
 	// The Hub is modal by design: while it is open the background app is inert,
 	// so the backdrop must keep absorbing pointer/wheel/touch. Clicking outside
@@ -481,16 +496,28 @@
 	};
 
 	const openAppIds = ref<string[]>([]);
-	type ResidentAppSurface = { appId: string; version: number; packageVersion: string; surface: 'agent' | 'custom' };
+	type ResidentAppSurface = {
+		appId: string;
+		version: number;
+		packageVersion: string;
+		uiRevision: number;
+		surface: 'plugin';
+	};
 	const residentAppSurfaces = ref<ResidentAppSurface[]>([]);
 	const filesMounted = ref(state.hubView === 'files');
 
 	const residentKey = (surface: ResidentAppSurface): string =>
-		surface.appId + '@' + surface.version + ':' + surface.packageVersion;
+		surface.appId + '@' + surface.version + ':' + surface.uiRevision + ':' + surface.packageVersion;
 
 	const toResidentSurface = (app: HostApp): ResidentAppSurface | null => {
 		if (!app.enabled || app.surface === 'unavailable') return null;
-		return { appId: app.id, version: app.version, packageVersion: app.packageVersion, surface: app.surface };
+		return {
+			appId: app.id,
+			version: app.version,
+			packageVersion: app.packageVersion,
+			uiRevision: app.uiRevision,
+			surface: app.surface,
+		};
 	};
 
 	watch(
@@ -524,6 +551,7 @@
 				!current.enabled ||
 				current.version !== resident.version ||
 				current.packageVersion !== resident.packageVersion ||
+				current.uiRevision !== resident.uiRevision ||
 				current.surface !== resident.surface
 			) {
 				return [];
@@ -547,7 +575,10 @@
 	watch(
 		() => [
 			props.directory.apps
-				.map((app) => `${app.id}:${app.version}:${app.enabled ? 1 : 0}:${app.surface}:${app.packageVersion}`)
+				.map(
+					(app) =>
+						`${app.id}:${app.version}:${app.enabled ? 1 : 0}:${app.surface}:${app.packageVersion}:${app.uiRevision}`,
+				)
 				.join('|'),
 			openAppIds.value.join('|'),
 			state.activeAppId,
@@ -565,10 +596,6 @@
 		return list.length > 0 ? list : enabledApps.value;
 	});
 
-	const appNames = computed<Record<string, string>>(() =>
-		Object.fromEntries(props.directory.apps.map((app) => [app.id, app.displayName])),
-	);
-
 	const switchApp = (appId: string) => {
 		if (!appId) return;
 		if (!openAppIds.value.includes(appId)) {
@@ -580,7 +607,7 @@
 
 	async function closeHub(): Promise<void> {
 		const scopes = props.directory.apps
-			.filter((app) => app.enabled && app.surface === 'agent')
+			.filter((app) => app.enabled && app.surface === 'plugin')
 			.map((app) => ({ appId: app.id, appVersion: app.version }));
 		if (scopes.length && !(await resourceControl.closeApps(scopes))) return;
 		agentWindowManager.closeHub();
@@ -592,7 +619,7 @@
 		const index = openAppIds.value.indexOf(appId);
 		if (index === -1) return;
 		const app = props.directory.apps.find((app) => app.id === appId);
-		if (app?.surface === 'agent' && !(await resourceControl.closeApps([{ appId, appVersion: app.version }])))
+		if (app?.surface === 'plugin' && !(await resourceControl.closeApps([{ appId, appVersion: app.version }])))
 			return;
 		const remaining = openAppIds.value.filter((id) => id !== appId);
 		openAppIds.value = remaining;
@@ -648,24 +675,14 @@
 		window.addEventListener('resize', handleResize);
 		document.addEventListener('focusin', handleDocumentFocusIn, true);
 		document.addEventListener('keydown', handleDocumentKeydown, true);
-		if ('requestIdleCallback' in window) {
-			surfacePreloadUsesIdleCallback = true;
-			surfacePreloadHandle = window.requestIdleCallback(() => void loadAgentAppSurface(), { timeout: 1200 });
-		} else {
-			surfacePreloadHandle = setTimeout(() => void loadAgentAppSurface(), 350);
-		}
 	});
 	onBeforeUnmount(() => {
+		stopConfiguration();
+		stopAuthorization();
 		window.removeEventListener('resize', handleResize);
 		document.removeEventListener('focusin', handleDocumentFocusIn, true);
 		document.removeEventListener('keydown', handleDocumentKeydown, true);
-		if (surfacePreloadHandle !== null) {
-			if (surfacePreloadUsesIdleCallback && 'cancelIdleCallback' in window) {
-				window.cancelIdleCallback(surfacePreloadHandle as number);
-			} else {
-				clearTimeout(surfacePreloadHandle as ReturnType<typeof setTimeout>);
-			}
-		}
+
 		cancelActiveInteraction();
 		hubOverlayRegistration?.unregister();
 		hubOverlayRegistration = null;
@@ -903,19 +920,16 @@
 				"
 				class="h-full min-h-0"
 			>
-				<AgentAppSurface
-					v-if="resident.surface === 'agent'"
-					:app-id="resident.appId"
-					:active="visible && state.hubView !== 'files' && state.activeAppId === resident.appId"
-					:app-version="resident.version"
-					:resume-revision="resumeRevision"
-					:app-names="appNames"
-					:execution-enabled="directory.executionEnabled"
-				/>
 				<PluginAppFrame
-					v-else
+					:app-names="appNames"
 					:app-id="resident.appId"
 					:version="resident.packageVersion"
+					:app-version="resident.version"
+					:ui-revision="resident.uiRevision"
+					:resume-revision="resumeRevision"
+					:execution-enabled="directory.executionEnabled"
+					:minimized="state.status === 'minimized'"
+					:compact="hubCompact"
 					:visible="
 						visible &&
 						state.hubView !== 'files' &&
@@ -925,7 +939,7 @@
 				/>
 			</div>
 			<UiEmptyState
-				v-if="state.hubView !== 'files' && activeApp && !['agent', 'custom'].includes(activeApp.surface)"
+				v-if="state.hubView !== 'files' && activeApp && activeApp.surface === 'unavailable'"
 				class="h-full"
 				compact
 				:bordered="false"
@@ -951,6 +965,8 @@
 			@pointerdown="handleResizePointerDown"
 			@keydown="handleResizeKeydown"
 		/>
+		<!-- Tab events inside an opaque frame do not bubble to the Host focus trap. -->
+		<span class="sr-only" tabindex="0" data-agent-focus-boundary @focus="focusHubStart"></span>
 	</section>
 </template>
 

@@ -1,4 +1,4 @@
-import type { AgentCompactionMode, AgentContextProfile } from '@nexus-terminal/shared/agent/governance/values';
+import type {} from '@nexus-terminal/shared/agent/governance/values';
 
 export interface StoredExecutionLimits {
 	maxModelRequests: number;
@@ -19,8 +19,6 @@ export interface StoredExecutionLimits {
 }
 
 export interface StoredExecutionSettings {
-	contextCompactionMode: AgentCompactionMode;
-	contextProfile: AgentContextProfile;
 	version: number;
 	enabled: boolean;
 	limits: StoredExecutionLimits;

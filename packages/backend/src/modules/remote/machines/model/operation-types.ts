@@ -159,37 +159,6 @@ export interface DockerControlResult {
 	state: string | null;
 }
 
-export interface AcpPermissionRequest {
-	sessionId: string;
-	toolCallId: string;
-	requestId: string;
-	title: string | null;
-	kind: string | null;
-	inputJson: string;
-}
-
-export interface AcpPermissionResponse {
-	decision: 'allow_once' | 'reject_once';
-	delivered(): Promise<void>;
-}
-
-export interface ExecuteAcpRequest {
-	argv: string[];
-	cwd: string;
-	prompt: string;
-	permission(input: AcpPermissionRequest, signal: AbortSignal): Promise<AcpPermissionResponse>;
-}
-
-export interface ExecuteAcpResult {
-	text: string;
-	stopReason: 'end_turn' | 'max_tokens' | 'max_turn_requests' | 'refusal' | 'cancelled';
-}
-
-export interface MachineClientIdentity {
-	name: string;
-	version: string;
-}
-
 export interface MachineResourceSnapshot {
 	connections: number;
 	files: number;
@@ -226,4 +195,28 @@ export interface ReadDirectoryPageResult {
 	entries: ReadEntry[];
 	nextAfter: string | null;
 	fingerprint: string;
+}
+
+/** Application byte channel; native streams and SSH credentials remain private. */
+export interface MachineProcessRequest {
+	argv: string[];
+	cwd: string;
+	maxReadBytes: number;
+}
+
+export type MachineProcessOutcome =
+	| { kind: 'completed' | 'nonzero'; exitCode: number }
+	| {
+			kind: 'unknown';
+			reason: 'disconnect' | 'timeout' | 'cancelled' | 'channel_error' | 'remote_signal';
+			signal: string | null;
+	  };
+
+export interface MachineProcessChannel {
+	read(stream: 'stdout' | 'stderr', maxBytes: number): Promise<{ bytes: Uint8Array; eof: boolean }>;
+	write(bytes: Uint8Array): Promise<void>;
+	end(): Promise<void>;
+	outcome(): Promise<MachineProcessOutcome>;
+	cancel(): void;
+	close(): Promise<void>;
 }

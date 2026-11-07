@@ -1,21 +1,11 @@
-import type { ApprovalPage, ToolCatalogFacts } from './governance-types.js';
-import { ToolCapabilityDenied } from '../../agent-failure.js';
-import { toolAuthorizationFailure } from '../governance-rules.js';
-import type { AgentOperationErrorCode } from '@nexus-terminal/shared/agent/values';
+import type { ToolCatalogFacts } from './governance-types.js';
+
 import { RunChanges } from '../../runs/model/run-changes.js';
 import type { StoredExecutionSettings } from '../../execution/storage/execution-storage.js';
 import { fromSettings } from '../../execution/model/execution-projection.js';
-import type { StoredToolAuthorityDecision } from '../storage/governance-storage.js';
+
 import type { DenylistChangeDecision, DenylistMutation } from './governance-types.js';
-import type {
-	ToolAuthorityIdentity,
-	ToolAuthorityTask,
-	ToolAuthorityDecision,
-	ToolPermitDecision,
-	ToolAuthority,
-} from './governance-types.js';
-import { fromStoredFrozen } from '../../runs/model/run-projection.js';
-import { fromStoredProvider } from '../../providers/model/provider-projection.js';
+
 import type { AppPolicyFacts } from './governance-types.js';
 import type { StoredAppPolicyFacts } from '../storage/governance-storage.js';
 import type { ConnectionCatalog } from '../../../targets/public.js';
@@ -26,7 +16,6 @@ import type {
 	GovernanceStorage,
 	StoredPolicy,
 	StoredGrant,
-	StoredApproval,
 	StoredScope,
 	StoredPolicyOverrides,
 } from '../storage/governance-storage.js';
@@ -36,21 +25,12 @@ import type {
 	GrantState,
 	PolicyOverrides,
 	ExecutionPolicyFacts,
-	ApprovalTransition,
 	GrantChangeDecision,
 	ExecutionChangeDecision,
-	ApprovalRequestDecision,
-	ApprovalResolveDecision,
-	Approval,
-	ResolveApproval,
 	GrantInput,
-	ApprovalRequest,
 } from './governance-types.js';
 import { AgentFailure } from '../../agent-failure.js';
 import { agentStorage } from '../../agent-storage-failure.js';
-import { fromStoredTool } from '../../runs/model/run-tool-model.js';
-import type { ToolOperation } from '../../runs/model/run-tool-types.js';
-import type { ConsumeApproval } from './governance-types.js';
 
 function toScope(scope: StoredScope): GrantScope {
 	if (scope.kind === 'global') {
@@ -112,12 +92,6 @@ export function toPolicyOverrides(row: StoredPolicyOverrides): PolicyOverrides {
 	if (row.maxSubagentMessageBytes !== undefined) {
 		result.maxSubagentMessageBytes = row.maxSubagentMessageBytes;
 	}
-	if (row.contextCompactionMode !== undefined) {
-		result.contextCompactionMode = row.contextCompactionMode;
-	}
-	if (row.contextProfile !== undefined) {
-		result.contextProfile = row.contextProfile;
-	}
 	return result;
 }
 
@@ -147,74 +121,8 @@ function fromOverrides(row: PolicyOverrides): StoredPolicyOverrides {
 	if (row.maxSubagentMessageBytes !== undefined) {
 		result.maxSubagentMessageBytes = row.maxSubagentMessageBytes;
 	}
-	if (row.contextCompactionMode !== undefined) {
-		result.contextCompactionMode = row.contextCompactionMode;
-	}
-	if (row.contextProfile !== undefined) {
-		result.contextProfile = row.contextProfile;
-	}
 	return result;
 }
-
-const fromApproval = (approval: StoredApproval): Approval => ({
-	capability: approval.capability,
-	targetVersion: approval.targetVersion,
-	id: approval.id,
-	userId: approval.userId,
-	appId: approval.appId,
-	runId: approval.runId,
-	toolCallId: approval.toolCallId,
-	operationHash: approval.operationHash,
-	kind: approval.kind,
-	status: approval.status,
-	policyRevision: approval.policyRevision,
-	inputRevision: approval.inputRevision,
-	version: approval.version,
-	requestedAt: approval.requestedAt,
-	expiresAt: approval.expiresAt,
-	decidedAt: approval.decidedAt,
-	decidedByUserId: approval.decidedByUserId,
-	consumedAt: approval.consumedAt,
-	feedback: approval.feedback,
-	inspection: {
-		toolName: approval.inspection.toolName,
-		toolVersion: approval.inspection.toolVersion,
-		risk: approval.inspection.risk,
-		mutation: approval.inspection.mutation,
-		targetConnectionId: approval.inspection.targetConnectionId,
-		summary: approval.inspection.summary,
-	},
-});
-
-const toStoredApproval = (a: Approval): StoredApproval => ({
-	capability: a.capability,
-	targetVersion: a.targetVersion,
-	id: a.id,
-	userId: a.userId,
-	appId: a.appId,
-	runId: a.runId,
-	toolCallId: a.toolCallId,
-	operationHash: a.operationHash,
-	kind: a.kind,
-	status: a.status,
-	policyRevision: a.policyRevision,
-	inputRevision: a.inputRevision,
-	version: a.version,
-	requestedAt: a.requestedAt,
-	expiresAt: a.expiresAt,
-	decidedAt: a.decidedAt,
-	decidedByUserId: a.decidedByUserId,
-	consumedAt: a.consumedAt,
-	feedback: a.feedback,
-	inspection: {
-		toolName: a.inspection.toolName,
-		toolVersion: a.inspection.toolVersion,
-		risk: a.inspection.risk,
-		mutation: a.inspection.mutation,
-		targetConnectionId: a.inspection.targetConnectionId,
-		summary: a.inspection.summary,
-	},
-});
 
 const appState = (stored: StoredPolicy): GrantState => ({
 	app: fromAppPolicy(stored.app),
@@ -233,7 +141,7 @@ const policyFacts = (stored: StoredPolicy, settings: StoredExecutionSettings | n
 
 export class GovernanceModel {
 	subscribe(userId: number, appId: string, wake: () => void): () => void {
-		return this.changes.subscribe(userId, appId, wake, wake);
+		return this.changes.subscribe({ userId, appId }, wake, wake);
 	}
 
 	constructor(
@@ -241,93 +149,6 @@ export class GovernanceModel {
 		private readonly targets: ConnectionCatalog,
 		private readonly changes = new RunChanges(),
 	) {}
-
-	async toolAuthority(
-		input: ToolAuthorityIdentity,
-		task: ToolAuthorityTask,
-		decide: ToolAuthorityDecision,
-		permit: ToolPermitDecision,
-	): Promise<ToolAuthority | null> {
-		let refusal: AgentOperationErrorCode | null = null;
-		const result = await agentStorage(() =>
-			this.storage.toolAuthority(
-				{
-					userId: input.userId,
-					appId: input.appId,
-					runId: input.runId,
-					id: input.id,
-					expectedRevision: input.expectedRevision,
-					operationHash: input.operationHash,
-				},
-				task.kind === 'complete'
-					? {
-							kind: 'complete',
-							policyRevision: task.policyRevision,
-							resultText: task.resultText,
-							targets: task.targets.map((target) => ({ id: target.id, version: target.version })),
-						}
-					: task.kind === 'verify'
-						? { kind: 'verify', policyRevision: task.policyRevision }
-						: task.kind === 'inspect'
-							? { kind: 'inspect', policyRevision: task.policyRevision }
-							: { kind: 'dispatch' },
-				Date.now,
-				toStoredAuthorityDecision((operation, policy, status, frozen, provider, ids) => {
-					const allowed = decide(operation, policy, status, frozen, provider, ids);
-					if (!allowed) {
-						refusal = toolAuthorizationFailure(operation, policy);
-					}
-					return allowed;
-				}),
-				(approval, operation, policy, time) =>
-					permit(fromApproval(approval), fromStoredTool(operation), appState(policy), time),
-			),
-		);
-		if (result === null && refusal !== null) {
-			if (refusal === 'forbidden') {
-				throw new ToolCapabilityDenied();
-			}
-			throw new AgentFailure(refusal);
-		}
-		return result === null
-			? null
-			: {
-					operation: fromStoredTool(result.operation),
-					policy: appState(result.policy),
-					connectionIds: result.connectionIds.map((id) => id),
-				};
-	}
-
-	async consume(
-		input: ConsumeApproval,
-		now: () => number,
-		decide: ApprovalResolveDecision,
-		authorize: ToolAuthorityDecision,
-	): Promise<ToolOperation> {
-		const result = await this.changes.after(input.userId, input.appId, () =>
-			agentStorage(() =>
-				this.storage.consumeApproval(
-					{
-						userId: input.userId,
-						appId: input.appId,
-						approvalId: input.approvalId,
-						expectedVersion: input.expectedVersion,
-					},
-					() => {
-						const milliseconds = now();
-						return { approvalTime: Math.floor(milliseconds / 1000), operationTime: milliseconds };
-					},
-					(approval, policy, status, revision, time) =>
-						decide(fromApproval(approval), appState(policy), status, revision, time),
-					toStoredAuthorityDecision(authorize),
-				),
-			),
-		);
-		if (result === 'approval_stale') {
-			throw new AgentFailure('approval_stale');
-		}
-		return fromStoredTool(result);
-	}
 
 	async denylist(): Promise<TargetDenylist> {
 		return fromDenylist(await agentStorage(() => this.storage.denylist()));
@@ -383,7 +204,9 @@ export class GovernanceModel {
 			? null
 			: {
 					policy: appState(facts.policy),
+					policyExecutionVersion: facts.policy.executionVersion,
 					connectionIds: facts.connectionIds.map((id) => id),
+					denylistRevision: facts.denylistRevision,
 				};
 	}
 
@@ -401,11 +224,13 @@ export class GovernanceModel {
 		decide: GrantChangeDecision,
 	): Promise<GrantState | null> {
 		const records = input.map((grant) => toStoredGrant(grant, now));
-		const result = await agentStorage(() =>
-			this.storage.replaceGrants(userId, appId, expected, records, (current) => {
-				const task = decide(appState(current));
-				return { allow: task.allow, pendingStatus: task.pendingStatus };
-			}),
+		const result = await this.changes.after({ userId, appId }, () =>
+			agentStorage(() =>
+				this.storage.replaceGrants(userId, appId, expected, records, (current) => {
+					const task = decide(appState(current));
+					return { allow: task.allow, pendingStatus: task.pendingStatus };
+				}),
+			),
 		);
 		if (result.status === 'not_found') {
 			return null;
@@ -428,11 +253,13 @@ export class GovernanceModel {
 		overrides: PolicyOverrides,
 		decide: ExecutionChangeDecision,
 	): Promise<ExecutionPolicyFacts | null> {
-		const result = await agentStorage(() =>
-			this.storage.replaceExecution(userId, appId, version, fromOverrides(overrides), (current, settings) => {
-				const task = decide(policyFacts(current, settings));
-				return { allow: task.allow, pendingStatus: task.pendingStatus };
-			}),
+		const result = await this.changes.after({ userId, appId }, () =>
+			agentStorage(() =>
+				this.storage.replaceExecution(userId, appId, version, fromOverrides(overrides), (current, settings) => {
+					const task = decide(policyFacts(current, settings));
+					return { allow: task.allow, pendingStatus: task.pendingStatus };
+				}),
+			),
 		);
 		if (result.status === 'not_found') {
 			return null;
@@ -441,149 +268,6 @@ export class GovernanceModel {
 			throw new AgentFailure('version_conflict');
 		}
 		return policyFacts(result.policy, result.settings);
-	}
-
-	async approval(
-		userId: number,
-		appId: string,
-		id: string,
-		now: () => number,
-		transition: ApprovalTransition,
-	): Promise<Approval | null> {
-		const row = await agentStorage(() =>
-			this.storage.getApproval(userId, appId, id, now, (stored, status, time) =>
-				transition(fromApproval(stored), status, time),
-			),
-		);
-		return row === null ? null : fromApproval(row);
-	}
-
-	async approvals(
-		userId: number,
-		appId: string,
-		runId: string,
-		after: string | null,
-		now: () => number,
-		transition: ApprovalTransition,
-	): Promise<ApprovalPage | null> {
-		const list = await agentStorage(() =>
-			this.storage.listApprovals(userId, appId, runId, after, now, (stored, status, time) =>
-				transition(fromApproval(stored), status, time),
-			),
-		);
-		return list === null
-			? null
-			: {
-					items: list.items.map(fromApproval),
-					after: list.after,
-					nextCursor: list.nextCursor,
-					hasMore: list.hasMore,
-				};
-	}
-
-	async request(
-		input: ApprovalRequest,
-		create: ApprovalRequestDecision,
-		authorize: ToolAuthorityDecision,
-	): Promise<Approval | null> {
-		const row = await this.changes.after(input.userId, input.appId, () =>
-			agentStorage(() =>
-				this.storage.requestApproval(
-					{
-						userId: input.userId,
-						appId: input.appId,
-						runId: input.runId,
-						toolCallId: input.toolCallId,
-					},
-					(stored, status, operation, approvalMode) => {
-						const fact = create(
-							appState(stored),
-							status,
-							{
-								id: operation.id,
-								operationHash: operation.operationHash,
-								operationRevision: operation.operationRevision,
-								capability: operation.capability,
-								targetVersion: operation.targetVersion,
-								inspection: {
-									toolName: operation.toolName,
-									toolVersion: operation.toolVersion,
-									risk: operation.risk,
-									mutation: operation.mutation,
-									targetConnectionId: operation.targetId,
-									summary: operation.summary,
-								},
-							},
-							approvalMode,
-						);
-						return fact === null ? null : toStoredApproval(fact);
-					},
-					toStoredAuthorityDecision(authorize),
-				),
-			),
-		);
-		return row === null ? null : fromApproval(row);
-	}
-
-	async resolve(
-		input: ResolveApproval,
-		hash: string,
-		now: () => number,
-		transition: ApprovalTransition,
-		decide: ApprovalResolveDecision,
-	): Promise<Approval> {
-		const result = await this.changes.after(input.userId, input.appId, () =>
-			agentStorage(() =>
-				this.storage.resolveApproval(
-					{
-						userId: input.userId,
-						appId: input.appId,
-						approvalId: input.approvalId,
-						decision: input.decision,
-						expectedVersion: input.expectedVersion,
-						operationKey: input.operationKey,
-						requestHash: hash,
-						feedback: input.feedback ?? null,
-					},
-					now,
-					(stored, status, time) => transition(fromApproval(stored), status, time),
-					(stored, policy, status, version, time) =>
-						decide(fromApproval(stored), appState(policy), status, version, time),
-				),
-			),
-		);
-		if (result.status === 'not_found') {
-			throw new AgentFailure('not_found');
-		}
-		if (result.status === 'version_conflict') {
-			throw new AgentFailure('version_conflict');
-		}
-		if (result.status === 'idempotency_conflict') {
-			throw new AgentFailure('idempotency_conflict');
-		}
-		if (result.status === 'approval_stale') {
-			throw new AgentFailure('approval_stale');
-		}
-		if (result.status === 'ok' || result.status === 'replayed') {
-			return fromApproval(result.approval);
-		}
-		throw new AgentFailure('internal_failure');
-	}
-
-	async invalidate(
-		userId: number,
-		appId: string,
-		runId: string,
-		now: () => number,
-		transition: ApprovalTransition,
-	): Promise<number> {
-		return this.changes.after(userId, appId, () =>
-			agentStorage(() =>
-				this.storage.invalidateRunApprovals(userId, appId, runId, now, (stored, status, time) =>
-					transition(fromApproval(stored), status, time),
-				),
-			),
-		);
 	}
 }
 
@@ -610,16 +294,4 @@ function fromAppPolicy(stored: StoredAppPolicyFacts): AppPolicyFacts {
 		capabilities: stored.capabilities.map((capability) => capability),
 		deniedTargetIds: stored.deniedTargetIds.map((id) => id),
 	};
-}
-
-function toStoredAuthorityDecision(decide: ToolAuthorityDecision): StoredToolAuthorityDecision {
-	return (operation, policy, status, frozen, provider, ids) =>
-		decide(
-			fromStoredTool(operation),
-			appState(policy),
-			status,
-			fromStoredFrozen(frozen),
-			provider === null ? null : fromStoredProvider(provider),
-			ids.map((id) => id),
-		);
 }

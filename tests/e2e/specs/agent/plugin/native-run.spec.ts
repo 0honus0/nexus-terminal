@@ -1,3 +1,4 @@
+import { hasToolIdentity, hasApprovalIdentity } from '../../../../support/package-tool-catalog.mjs';
 import { createHash } from 'node:crypto';
 import { readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
@@ -30,11 +31,9 @@ test('remote signed Nexus Agent plugin installs, registers an Agent definition, 
 	await loginAsInitialAdmin(request);
 	const connectionId = await ensureTestSshConnection(request);
 	const catalog = await configureTestPluginRepository(request);
+	expect(catalog.packages).toContainEqual(expect.objectContaining({ packageId: 'nexus.agent', compatible: true }));
 	expect(catalog.packages).toContainEqual(
-		expect.objectContaining({ appId: 'nexus.agent', version: '1.0.0', sdkVersion: '1', compatible: true }),
-	);
-	expect(catalog.packages).toContainEqual(
-		expect.objectContaining({ appId: 'nexus.agent', version: '1.0.4', compatible: false }),
+		expect.objectContaining({ packageId: 'nexus.agent', version: '1.0.4', compatible: false }),
 	);
 	await requestAgentJson(
 		request,
@@ -42,11 +41,19 @@ test('remote signed Nexus Agent plugin installs, registers an Agent definition, 
 			method: 'POST',
 			path: '/plugins/remote/stage',
 			status: 403,
-			data: { repositoryUrl, appId: 'nexus.agent', version: '1.0.4' },
+			data: {
+				repositoryUrl,
+				packageId: 'nexus.agent',
+				publisherKeyId: catalog.packages.find((entry) => entry.packageId === 'nexus.agent')?.publisherKeyId,
+				version: '1.0.4',
+			},
 		},
 		(raw) => expect(readAgentErrorResponse(raw)).toEqual({ code: 'forbidden' }),
 	);
+	const executable = catalog.packages.find((entry) => entry.packageId === 'nexus.agent' && entry.compatible);
+	expect(executable).toBeDefined();
 	const installed = await installTestPlugin(request, 'nexus.agent');
+	expect(installed.version).toBe(executable?.version);
 	const app = await enablePluginApp(request, installed.appId);
 	const task = await prepareNativeTask(
 		request,
@@ -80,16 +87,20 @@ test('remote signed Nexus Agent plugin installs, registers an Agent definition, 
 			const result = await execute('E2E_NATIVE_PLUGIN_SKILL ' + name);
 			const report = JSON.parse(result.text);
 			expect(report.marker).toBe('SKILL_OK');
-			expect(JSON.stringify(report.metadata)).not.toContain(
-				name === 'developer'
-					? 'Use an explicitly selected and authorized SSH connection'
-					: 'Prefer structured diagnostics',
+			const source = await readFile(
+				path.resolve(__dirname, '../../../fixtures/agent/plugin-source/nexus.agent/skills', name, 'SKILL.md'),
+				'utf8',
 			);
-			expect(JSON.stringify(report.document)).toContain(
-				name === 'developer'
-					? 'Use an explicitly selected and authorized SSH connection'
-					: 'Prefer structured diagnostics',
+			const body = source.slice(source.indexOf('\n---\n') + '\n---\n'.length);
+			expect(report.document).toMatchObject({
+				name,
+				sha256: createHash('sha256').update(source).digest('hex'),
+				body,
+			});
+			expect(report.metadata.matches).toContainEqual(
+				expect.objectContaining({ name, sha256: report.document.sha256 }),
 			);
+			for (const match of report.metadata.matches) expect(match).not.toHaveProperty('body');
 		}
 	});
 	await step('one assistant turn completes both control tool calls before the next inference', async () => {
@@ -106,14 +117,14 @@ test('remote signed Nexus Agent plugin installs, registers an Agent definition, 
 			(raw) => readAgentThreadToolsResponse(raw, app.id, null, 100),
 		);
 		const records = tools.items.filter((tool) => tool.runId === result.run.id);
-		const discoveries = records.filter((tool) => tool.toolName === 'tool_search');
+		const discoveries = records.filter((tool) => hasToolIdentity(tool, 'tool_search'));
 		expect(discoveries).toHaveLength(1);
 		expect(discoveries[0]).toMatchObject({ state: 'completed', mutation: false });
-		const writes = records.filter((tool) => tool.toolName === 'collaboration_fact_write');
+		const writes = records.filter((tool) => hasToolIdentity(tool, 'collaboration_fact_write'));
 		expect(writes).toHaveLength(2);
 		for (const write of writes) {
 			expect(write.state).toBe('completed');
-			expect(write.modelStepIndex).toBe(discoveries[0].modelStepIndex + 1);
+			expect(write.sequence).toBeGreaterThan(discoveries[0].sequence);
 		}
 		const approvals = await requestAgentWorkspace(request, app, {
 			method: 'agent.approvals.list',
@@ -125,7 +136,9 @@ test('remote signed Nexus Agent plugin installs, registers an Agent definition, 
 		expect(approvals.value.hasMore).toBe(false);
 		expect(approvals.value.items).toHaveLength(2);
 		for (const approval of approvals.value.items) {
-			expect(approval.inspection).toMatchObject({ toolName: 'collaboration_fact_write', risk: 'control' });
+			expect(hasApprovalIdentity(approval, 'collaboration_fact_write')).toBe(true);
+			expect(approval.operationName).toBe('collaboration.writeFact');
+			expect(approval.risk).toBe('control');
 		}
 	});
 	await step('parallel-safe reads preserve a complete assistant/tool batch', async () => {
@@ -135,13 +148,16 @@ test('remote signed Nexus Agent plugin installs, registers an Agent definition, 
 		expect(JSON.stringify(report.first)).toContain(String(connectionId));
 		expect(report.second.items[0].value.text).toContain('nexus-e2e-seed');
 	});
-	await step('file_read uses the selected SSH capability and returns an actual content hash', async () => {
-		const report = JSON.parse((await execute(`E2E_NATIVE_PLUGIN_READ connection=${connectionId}`)).text);
-		const bytes = await readFile(path.resolve(__dirname, '../../../.tmp/ssh-root/seed.txt'));
-		expect(report.items).toHaveLength(1);
-		expect(report.items[0].value.text).toBe(bytes.toString('utf8'));
-		expect(report.items[0].value.sha256).toBe(createHash('sha256').update(bytes).digest('hex'));
-	});
+	await step(
+		'the installed remote file reader uses the selected SSH capability and returns an actual content hash',
+		async () => {
+			const report = JSON.parse((await execute(`E2E_NATIVE_PLUGIN_READ connection=${connectionId}`)).text);
+			const bytes = await readFile(path.resolve(__dirname, '../../../.tmp/ssh-root/seed.txt'));
+			expect(report.items).toHaveLength(1);
+			expect(report.items[0].value.text).toBe(bytes.toString('utf8'));
+			expect(report.items[0].value.sha256).toBe(createHash('sha256').update(bytes).digest('hex'));
+		},
+	);
 	await step('identical commands in distinct tool calls execute as two deliberate operations', async () => {
 		const proof = path.resolve(__dirname, '../../../.tmp/ssh-root/duplicate-proof.txt');
 		await rm(proof, { force: true });

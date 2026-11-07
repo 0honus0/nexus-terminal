@@ -2,6 +2,7 @@ import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
 import type { StoredCompaction } from '../../storage/compaction-storage.js';
 import { readContextSnapshot } from './context-row.js';
 import { storedInteger, storedText } from '../../../runs/adapters/sqlite/run-participant-sql.js';
+import { CONTEXT_MAX_BYTES } from '../../context-limits.js';
 
 export function readCompaction(row: Record<string, unknown>): StoredCompaction {
 	const state = row.state;
@@ -28,7 +29,7 @@ export function readCompaction(row: Record<string, unknown>): StoredCompaction {
 		cut >= source.messages.length ||
 		source.messages[cut].role === 'tool' ||
 		(state === 'completed') !== (summary !== null) ||
-		(summary !== null && (!summary.trim() || Buffer.byteLength(summary, 'utf8') > 16384)) ||
+		(summary !== null && (!summary.trim() || Buffer.byteLength(summary, 'utf8') > CONTEXT_MAX_BYTES)) ||
 		(input === null) !== (output === null) ||
 		(input !== null && output !== null && !Number.isSafeInteger(input + output)) ||
 		![row.request_hash, row.creation_hash].every(

@@ -13,11 +13,7 @@
 		UiNumberInput,
 		UiTextarea,
 	} from '@/foundation/ui';
-	import {
-		AGENT_BROWSER_MAX_TARGETS,
-		AGENT_BROWSER_MAX_ENDPOINTS,
-		AGENT_BROWSER_MAX_PRIORITY,
-	} from '@nexus-terminal/shared/agent/integrations/browser-values';
+	import { AGENT_BROWSER_MAX_PRIORITY } from '@nexus-terminal/shared/agent/integrations/browser-values';
 	import { getBrowserConfiguration, saveBrowserConfiguration } from '../api/browser-api';
 	import { useAgentManagementOperation } from '../composables/use-agent-management-operation';
 	import type { BrowserConfiguration, BrowserTargetDraft, BrowserEndpointDraft } from '../model/browser-types';
@@ -97,9 +93,6 @@
 			}
 			targetDraft.value = copyTarget(target);
 		} else {
-			if (targets.value.length >= AGENT_BROWSER_MAX_TARGETS) {
-				return;
-			}
 			let suffix = 1;
 			while (targets.value.some((target) => target.id === `browser-${suffix}`)) {
 				suffix += 1;
@@ -155,7 +148,6 @@
 		if (blocked.value) return;
 		const target = targets.value[targetIndex];
 		if (!target) return;
-		if (endpointIndex === null && target.endpoints.length >= AGENT_BROWSER_MAX_ENDPOINTS) return;
 		const endpoint = endpointIndex === null ? newEndpoint() : target.endpoints[endpointIndex];
 		if (!endpoint) return;
 		endpointEditor.value = {
@@ -235,11 +227,7 @@
 				>
 				<UiInfoHint :text="t('agent.settings.browserRuntime.description')" />
 			</div>
-			<UiButton
-				type="button"
-				:disabled="blocked || targets.length >= AGENT_BROWSER_MAX_TARGETS"
-				@click="openTarget(null)"
-			>
+			<UiButton type="button" :disabled="blocked" @click="openTarget(null)">
 				<i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i
 				>{{ t('agent.settings.browserRuntime.addTarget') }}
 			</UiButton>
@@ -305,11 +293,7 @@
 					<div
 						class="flex shrink-0 items-center justify-end gap-1.5 border-t border-border/30 pt-2 sm:border-0 sm:pt-0"
 					>
-						<UiButton
-							type="button"
-							density="compact"
-							:disabled="blocked || target.endpoints.length >= AGENT_BROWSER_MAX_ENDPOINTS"
-							@click="openEndpointEditor(index)"
+						<UiButton type="button" density="compact" :disabled="blocked" @click="openEndpointEditor(index)"
 							><i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i>
 							{{ t('agent.settings.browserRuntime.addEndpoint') }}</UiButton
 						>
@@ -390,13 +374,7 @@
 					</div>
 				</div>
 			</article>
-			<UiButton
-				type="button"
-				block
-				:disabled="blocked || targets.length >= AGENT_BROWSER_MAX_TARGETS"
-				class="min-h-10"
-				@click="openTarget(null)"
-			>
+			<UiButton type="button" block :disabled="blocked" class="min-h-10" @click="openTarget(null)">
 				<i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i>
 				{{ t('agent.settings.browserRuntime.addTarget') }}
 			</UiButton>

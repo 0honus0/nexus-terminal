@@ -1,5 +1,6 @@
-import { capturedResultHash, resultPage } from '../../context/result-rules.js';
-import { TOOL_RESULT_MAX_BYTES } from '../run-tool-limits.js';
+import { agentPluginCapabilityReplyBytes } from '@nexus-terminal/shared/agent/plugins/runtime-codec';
+import { AGENT_PLUGIN_APP_PAYLOAD_MAX_BYTES } from '@nexus-terminal/shared/agent/plugins/values';
+import { AGENT_TOOL_RESULT_PAGE_MAX_BYTES } from '@nexus-terminal/shared/agent/tools/values';
 import type { ExecutionService } from '../../execution/service/execution-service.js';
 import { validateAgentId, validateUserId } from '../../agent-validation.js';
 import { createHash, randomUUID } from 'node:crypto';
@@ -9,19 +10,21 @@ import type {
 	Participant,
 	ParticipantScope,
 	CollaborationInput,
+	CollaborationResult,
 	CollaborationAuthority,
 	CollaborationRuntime,
 	DelegateCommand,
 } from '../model/run-collaboration-types.js';
-import type { ToolDefinition } from '../../tools/model/tool-types.js';
 import { AGENT_COLLABORATION_MESSAGE_MAX_PAGE } from '@nexus-terminal/shared/agent/collaboration/values';
 import type { MessageMetadataPage } from '../model/run-collaboration-types.js';
 import type { CollaborationFact } from '../model/run-collaboration-types.js';
-import type { ToolOperation } from '../model/run-tool-types.js';
-import { toolDefinitions } from '../../tools/service/tool-definitions.js';
-import { mayDelegate, isSettled, COLLABORATION_MAX_FACTS } from '../run-collaboration-rules.js';
+import type { HostEffect } from '../../tools/model/host-execution-types.js';
+import { mayDelegate, isSettled } from '../run-collaboration-rules.js';
 
 function view(value: Participant) {
+	if (value.profile === 'root') {
+		throw new AgentFailure('internal_failure');
+	}
 	return {
 		id: value.id,
 		parentId: value.parentId,
@@ -33,20 +36,6 @@ function view(value: Participant) {
 		maxRequests: value.maxRequests,
 		deadline: value.deadline,
 	};
-}
-
-/** Keep large Child batches within the existing tool envelope; full output stays readable separately. */
-function childViews(children: Participant[]): ReturnType<typeof view>[] {
-	const items = children.map(view);
-	if (Buffer.byteLength(JSON.stringify({ ready: false, children: items }), 'utf8') > TOOL_RESULT_MAX_BYTES) {
-		for (const item of items) {
-			if (item.output !== null && item.output.length > 0) {
-				item.output = '';
-				item.outputTruncated = true;
-			}
-		}
-	}
-	return items;
 }
 
 function factView(value: CollaborationFact | null) {
@@ -98,23 +87,20 @@ export class RunCollaborationService {
 		return this.model.messageMetadata({ userId: scope.userId, appId: scope.appId, runId: childId }, after, limit);
 	}
 
-	definitions(owner: Participant | null): ToolDefinition[] {
-		if (!owner) {
-			throw new AgentFailure('not_found');
-		}
-		return toolDefinitions().filter((tool) => owner.parentId === null || owner.tools.includes(tool.name));
-	}
-
 	participant(scope: ParticipantScope): Promise<Participant | null> {
 		return this.model.participant(scope);
 	}
 
 	async perform(
 		input: CollaborationInput,
-		operation: ToolOperation,
+		operation: HostEffect,
 		signal: AbortSignal,
 		validate: () => Promise<void>,
-	): Promise<string> {
+		availableTools: readonly string[],
+	): Promise<CollaborationResult> {
+		// Capture the parent's authorized discovery catalog, including not-yet-loaded
+		// package tools. A Child may narrow this snapshot, never grow beyond it.
+		const inheritedTools = availableTools.map((name) => name);
 		const scope = { userId: operation.userId, appId: operation.appId, runId: operation.runId };
 		const authority: CollaborationAuthority = {
 			scope,
@@ -127,43 +113,71 @@ export class RunCollaborationService {
 			throw new AgentFailure('provider_unavailable');
 		}
 		const execution = await this.settings.frozen(scope.userId, scope.appId, scope.runId);
-		let result: unknown;
+		let result: CollaborationResult;
 		if (input.action === 'delegate') {
-			result = await this.delegate(scope, input, operation, signal);
+			result = {
+				operation: 'collaboration.delegate',
+				value: await this.delegate(scope, input, operation, signal, inheritedTools),
+			};
 		} else if (input.action === 'list') {
 			const children = await this.model.children(scope);
 			const after = input.after === null ? -1 : children.findIndex((child) => child.id === input.after);
 			if (input.after !== null && after < 0) {
 				throw new AgentFailure('invalid_input');
 			}
-			const items = children.slice(after + 1, after + 1 + input.limit);
+			const items: ReturnType<typeof view>[] = [];
+			let bytes = agentPluginCapabilityReplyBytes({
+				operation: 'collaboration.list',
+				value: { children: [], nextCursor: '00000000-0000-4000-8000-000000000000' },
+			});
+			for (const child of children.slice(after + 1, after + 1 + input.limit)) {
+				const item = view(child);
+				const cost = Buffer.byteLength(JSON.stringify(JSON.stringify(item))) - 2 + (items.length ? 1 : 0);
+				if (bytes + cost > AGENT_PLUGIN_APP_PAYLOAD_MAX_BYTES) {
+					if (!items.length) {
+						throw new AgentFailure('limit_exceeded');
+					}
+					break;
+				}
+				bytes += cost;
+				items.push(item);
+			}
 			result = {
-				children: childViews(items),
-				nextCursor: after + 1 + items.length < children.length ? (items.at(-1)?.id ?? null) : null,
+				operation: 'collaboration.list',
+				value: {
+					children: items,
+					nextCursor: after + 1 + items.length < children.length ? (items.at(-1)?.id ?? null) : null,
+				},
 			};
 		} else if (input.action === 'output_read') {
-			const text = await this.model.output(scope, input.childId);
-			if (text === null) {
+			if (
+				!Number.isSafeInteger(input.offset) ||
+				input.offset < 0 ||
+				!Number.isSafeInteger(input.maxBytes) ||
+				input.maxBytes < 8 ||
+				input.maxBytes > AGENT_TOOL_RESULT_PAGE_MAX_BYTES
+			) {
+				throw new AgentFailure('invalid_input');
+			}
+			const page = await this.model.output(
+				scope,
+				input.childId,
+				input.offset,
+				Math.min(input.maxBytes, Math.max(1024, execution.limits.maxToolOutputBytes) - 512),
+			);
+			if (page === null) {
 				throw new AgentFailure('not_found');
 			}
-			const page = resultPage(
-				text,
-				{
-					toolCallId: input.childId,
-					sha256: capturedResultHash(text),
-					offset: input.offset,
-					maxBytes: input.maxBytes,
-				},
-				execution.limits.maxToolOutputBytes,
-			);
 			result = {
-				childId: input.childId,
-				sha256: page.sha256,
-				originalBytes: page.originalBytes,
-				offset: page.offset,
-				nextOffset: page.nextOffset,
-				text: page.text,
-				untrusted: true,
+				operation: 'collaboration.readOutput',
+				value: {
+					childId: input.childId,
+					sha256: page.sha256,
+					originalBytes: page.originalBytes,
+					offset: page.offset,
+					nextOffset: page.nextOffset,
+					text: page.text,
+				},
 			};
 		} else if (input.action === 'join' || input.action === 'cancel') {
 			const parent = await this.model.participant(scope);
@@ -178,9 +192,12 @@ export class RunCollaborationService {
 			if (input.action === 'cancel') {
 				await this.cancelChildren(scope, input.childIds, authority);
 				result = {
-					children: childViews(
-						(await this.model.children(scope)).filter((child) => input.childIds.includes(child.id)),
-					),
+					operation: 'collaboration.cancel',
+					value: {
+						children: (await this.model.children(scope))
+							.filter((child) => input.childIds.includes(child.id))
+							.map(view),
+					},
 				};
 			} else {
 				const deadline = Math.min(Date.now() + input.waitSeconds * 1000, parent.deadline);
@@ -196,7 +213,10 @@ export class RunCollaborationService {
 								? items.every((child) => isSettled(child.status))
 								: items.some((child) => isSettled(child.status));
 						if (ready || Date.now() >= deadline) {
-							result = { ready, children: childViews(items) };
+							result = {
+								operation: 'collaboration.join',
+								value: { ready, children: items.map(view) },
+							};
 							break;
 						}
 						await wake.changed;
@@ -206,47 +226,60 @@ export class RunCollaborationService {
 				}
 			}
 		} else if (input.action === 'send') {
+			const expiresAt = Date.now() + input.ttlSeconds * 1000;
+			if (!Number.isSafeInteger(expiresAt)) {
+				throw new AgentFailure('invalid_input');
+			}
 			result = {
-				sequence: await this.model.send(
-					authority,
-					input.recipientId,
-					input.body,
-					Date.now() + input.ttlSeconds * 1000,
-					execution.limits.maxMessages,
-					execution.limits.maxMessageBytes,
-				),
+				operation: 'collaboration.sendMessage',
+				value: {
+					sequence: await this.model.send(
+						authority,
+						input.recipientId,
+						input.body,
+						expiresAt,
+						execution.limits.maxMessages,
+						execution.limits.maxMessageBytes,
+					),
+				},
 			};
 		} else if (input.action === 'read') {
-			const page = await this.model.read(authority, input.after, input.limit);
+			const page = await this.model.read(authority, input.after, input.limit, AGENT_PLUGIN_APP_PAYLOAD_MAX_BYTES);
 			result = {
-				messages: page.messages.map((message) => ({
-					sequence: message.sequence,
-					senderId: message.senderId,
-					body: message.body,
-					expiresAt: message.expiresAt,
-				})),
-				nextCursor: page.nextCursor,
-				consumedThrough: page.consumedThrough,
+				operation: 'collaboration.readMessages',
+				value: {
+					messages: page.messages.map((message) => ({
+						sequence: message.sequence,
+						senderId: message.senderId,
+						body: message.body,
+						expiresAt: message.expiresAt,
+					})),
+					nextCursor: page.nextCursor,
+					consumedThrough: page.consumedThrough,
+				},
 			};
 		} else if (input.action === 'consume') {
-			result = { consumedThrough: await this.model.consume(authority, input.through, input.expectedConsumed) };
+			result = {
+				operation: 'collaboration.consumeMessages',
+				value: { consumedThrough: await this.model.consume(authority, input.through, input.expectedConsumed) },
+			};
 		} else if (input.action === 'fact_read') {
-			result = { fact: factView(await this.model.fact(authority, input.key)) };
+			result = {
+				operation: 'collaboration.readFact',
+				value: { fact: factView(await this.model.fact(authority, input.key)) },
+			};
 		} else {
 			result = {
-				fact: factView(
-					await this.model.writeFact(
-						authority,
-						input.key,
-						input.value,
-						input.expectedVersion,
-						COLLABORATION_MAX_FACTS,
+				operation: 'collaboration.writeFact',
+				value: {
+					fact: factView(
+						await this.model.writeFact(authority, input.key, input.value, input.expectedVersion),
 					),
-				),
+				},
 			};
 		}
 		await validate();
-		return JSON.stringify(result);
+		return result;
 	}
 
 	private async cancelChildren(
@@ -283,8 +316,9 @@ export class RunCollaborationService {
 	private async delegate(
 		scope: ParticipantScope,
 		input: Extract<CollaborationInput, { action: 'delegate' }>,
-		operation: ToolOperation,
+		operation: HostEffect,
 		signal: AbortSignal,
+		inheritedTools: readonly string[],
 	): Promise<ReturnType<typeof view>> {
 		const frozen = await this.settings.frozen(scope.userId, scope.appId, scope.runId);
 		return this.runtime.admit(async (admit) => {
@@ -305,25 +339,21 @@ export class RunCollaborationService {
 							operation.operationHash,
 							input.profile,
 							input.objective,
+							input.inputJson,
 							input.targets,
 							frozen.limits.maxModelRequests,
 							deadline,
 							input.dependencies,
 							input.dependencyMode,
+							inheritedTools,
 						]),
 					)
 					.digest('hex'),
 				objective: input.objective,
+				inputJson: input.inputJson,
 				targets: input.targets.map((id) => id),
 				profile: input.profile,
-				tools: this.definitions(parent)
-					.filter(
-						(tool) =>
-							!['collaboration_delegate', 'collaboration_join', 'collaboration_cancel'].includes(
-								tool.name,
-							),
-					)
-					.map((tool) => tool.name),
+				tools: inheritedTools.map((name) => name),
 				maxRequests: frozen.limits.maxModelRequests,
 				deadline,
 				dependencies: input.dependencies.map((id) => id),
@@ -349,7 +379,7 @@ export class RunCollaborationService {
 							userId: scope.userId,
 							appId: scope.appId,
 							runId: child.participant.id,
-							providerId: child.providerId,
+							inputJson: child.inputJson,
 							version: child.version,
 							prompt: child.prompt,
 							requestHash: child.requestHash,

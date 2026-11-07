@@ -30,7 +30,11 @@ export interface StoredTitleCommand extends StoredTitleScope {
 export type TitleBudgetAdmission = (settings: StoredExecutionSettings, usage: StoredExecutionUsage) => void;
 
 export interface TitleStorage {
-	claim(scope: StoredTitleScope, fallback: string, authorize: RunStepPolicyCheck): Promise<StoredTitleClaim | null>;
+	claim(
+		scope: StoredTitleScope,
+		fallback: string | null,
+		authorize: RunStepPolicyCheck,
+	): Promise<StoredTitleClaim | null>;
 	reserve(command: StoredTitleCommand, authorize: RunStepPolicyCheck, admit: TitleBudgetAdmission): Promise<boolean>;
 	dispatch(command: StoredTitleCommand, authorize: RunStepPolicyCheck, admit: TitleBudgetAdmission): Promise<boolean>;
 	recordUsage(command: StoredTitleCommand, input: number, output: number): Promise<boolean>;

@@ -1,10 +1,13 @@
+import { agentPluginCapabilityReplyBytes } from '@nexus-terminal/shared/agent/plugins/runtime-codec';
+import { MemoryChanges } from './memory-changes.js';
 import type { OperationsEvents } from '../../../operations/public.js';
 import type { OperationEvent } from '@nexus-terminal/shared/operations/values';
 import type { ExecutionService } from '../../execution/service/execution-service.js';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
+import { AGENT_PLUGIN_APP_PAYLOAD_MAX_BYTES } from '@nexus-terminal/shared/agent/plugins/values';
 import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
 import {
-	AGENT_MEMORY_MAX_CONTENT_BYTES,
+	hasAgentMemoryContentCapacity,
 	AGENT_MEMORY_MAX_PAGE,
 	AGENT_MEMORY_MAX_OFFSET,
 } from '@nexus-terminal/shared/agent/memory/values';
@@ -18,8 +21,11 @@ import type {
 	MemoryReview,
 	MemoryQuery,
 	MemoryAdmissionFacts,
-	MemoryRecallInput,
-	MemoryRecallItem,
+	MemoryCandidatesInput,
+	MemoryCandidate,
+	MemoryCandidatePage,
+	MemorySelectionInput,
+	MemorySelectedItem,
 } from '../model/memory-types.js';
 
 function validateScope(scope: MemoryScope): void {
@@ -39,14 +45,17 @@ function content(text: string): void {
 		!text.trim() ||
 		text.includes('\0') ||
 		Buffer.from(text, 'utf8').toString('utf8') !== text ||
-		Buffer.byteLength(text, 'utf8') > AGENT_MEMORY_MAX_CONTENT_BYTES
+		!hasAgentMemoryContentCapacity(text)
 	) {
 		throw new AgentFailure('invalid_input');
 	}
 }
 
-function admit(actor: MemoryActor, creation = false): (facts: MemoryAdmissionFacts) => void {
+function admit(actor: MemoryActor): (facts: MemoryAdmissionFacts) => void {
 	return (facts) => {
+		if (actor.kind === 'plugin-ui') {
+			actor.assertCurrent();
+		}
 		if (facts.identityUserId !== actor.userId) {
 			throw new AgentFailure(
 				actor.kind === 'session'
@@ -65,13 +74,12 @@ function admit(actor: MemoryActor, creation = false): (facts: MemoryAdmissionFac
 		if (!facts.sourceExists) {
 			throw new AgentFailure('not_found');
 		}
-		if (creation && facts.count >= 10000) {
-			throw new AgentFailure('limit_exceeded');
-		}
 	};
 }
 
 export class MemoryService {
+	readonly changes = new MemoryChanges();
+
 	constructor(
 		private readonly model: MemoryModel,
 		private readonly settings: ExecutionService,
@@ -83,21 +91,31 @@ export class MemoryService {
 		actor: MemoryActor,
 		event: OperationEvent,
 	): Promise<MemoryRecord> {
-		const value = await work;
+		let notified = false;
 		try {
-			await this.events.publish({
-				key: 'memory:' + value.id + ':' + value.version,
-				event,
-				userId: actor.userId,
-				subjectId: value.id,
-				sourceIp: null,
-				route: null,
-				statusCode: null,
-			});
-		} catch (error) {
-			throw new AgentFailure('operation_unknown', { cause: error });
+			const value = await work;
+			this.changes.notify({ userId: actor.userId, appId: actor.appId });
+			notified = true;
+			try {
+				await this.events.publish({
+					key: 'memory:' + value.id + ':' + value.version,
+					event,
+					userId: actor.userId,
+					subjectId: value.id,
+					sourceIp: null,
+					route: null,
+					statusCode: null,
+				});
+			} catch (error) {
+				throw new AgentFailure('operation_unknown', { cause: error });
+			}
+			return value;
+		} finally {
+			// Both confirmed commits and unknown commits require consumers to re-read facts.
+			if (!notified) {
+				this.changes.notify({ userId: actor.userId, appId: actor.appId });
+			}
 		}
-		return value;
 	}
 
 	async list(scope: MemoryScope, query: MemoryQuery): Promise<{ items: MemoryRecord[]; nextOffset: number | null }> {
@@ -153,7 +171,7 @@ export class MemoryService {
 		}
 		return this.notice(
 			this.model.create(actor, randomUUID(), input, (facts) => {
-				admit(actor, true)(facts);
+				admit(actor)(facts);
 				if (input.expiresAt !== null && input.expiresAt <= facts.now) {
 					throw new AgentFailure('invalid_input');
 				}
@@ -166,7 +184,11 @@ export class MemoryService {
 	review(actor: MemoryActor, id: string, input: MemoryReview): Promise<MemoryRecord> {
 		validateScope(actor);
 		validateId(id);
-		if (actor.kind !== 'session' || !Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1) {
+		if (
+			(actor.kind !== 'session' && actor.kind !== 'plugin-ui') ||
+			!Number.isSafeInteger(input.expectedVersion) ||
+			input.expectedVersion < 1
+		) {
 			throw new AgentFailure('invalid_input');
 		}
 		if (input.content !== null) {
@@ -201,55 +223,108 @@ export class MemoryService {
 		);
 	}
 
-	async recall(actor: MemoryActor, input: MemoryRecallInput): Promise<MemoryRecallItem[]> {
+	private async candidateSet(actor: MemoryActor, limit: number) {
 		validateScope(actor);
-		if (
-			!input.query.trim() ||
-			Buffer.byteLength(input.query, 'utf8') > 4096 ||
-			!Number.isSafeInteger(input.limit) ||
-			input.limit < 1
-		) {
+		if (!Number.isSafeInteger(limit) || limit < 1) {
 			throw new AgentFailure('invalid_input');
 		}
 		const configuration =
 			actor.kind === 'tool'
 				? await this.settings.frozen(actor.userId, actor.appId, actor.runId)
 				: await this.settings.get(actor.userId);
-		const limit = Math.min(input.limit, configuration.limits.maxRecallItems);
-		const terms = [...new Set(input.query.toLowerCase().split(/\s+/u).filter(Boolean))];
-		if (terms.length > 32) {
+		const maxItems = Math.min(limit, configuration.limits.maxRecallItems);
+		const maxBytes = configuration.limits.maxRecallBytes;
+		const records = await this.model.recall(actor, Date.now, admit(actor));
+		const candidates = records.map((memory): MemoryCandidate => ({
+			id: memory.id,
+			version: memory.version,
+			content: memory.content,
+			confidence: memory.confidence,
+		}));
+		const candidatesSha256 = createHash('sha256').update(JSON.stringify(candidates)).digest('hex');
+		return { candidates, candidatesSha256, maxItems, maxBytes };
+	}
+
+	async candidates(actor: MemoryActor, input: MemoryCandidatesInput): Promise<MemoryCandidatePage> {
+		if (!Number.isSafeInteger(input.offset) || input.offset < 0) {
 			throw new AgentFailure('invalid_input');
 		}
-		const candidates = await this.model.recall(actor, Date.now, Math.max(64, limit), admit(actor));
-		const ranked = candidates
-			.map((memory) => ({
-				memory,
-				score: terms.reduce((score, term) => score + (memory.content.toLowerCase().includes(term) ? 1 : 0), 0),
-			}))
-			.filter((value) => value.score > 0)
-			.sort(
-				(a, b) =>
-					b.score - a.score ||
-					b.memory.confidence - a.memory.confidence ||
-					a.memory.id.localeCompare(b.memory.id),
-			);
-		const items: MemoryRecallItem[] = [];
-		let bytes = 2;
-		for (const item of ranked.slice(0, limit)) {
-			const size = Buffer.byteLength(
-				JSON.stringify({
-					id: item.memory.id,
-					version: item.memory.version,
-					content: item.memory.content,
-					confidence: item.memory.confidence,
-					score: item.score,
-				}),
-				'utf8',
-			);
-			if (bytes + size + 1 > configuration.limits.maxRecallBytes) {
+		const { candidates, candidatesSha256, maxItems, maxBytes } = await this.candidateSet(actor, input.limit);
+		if (input.offset > candidates.length) {
+			throw new AgentFailure('invalid_input');
+		}
+		const items: MemoryCandidate[] = [];
+		for (const candidate of candidates.slice(input.offset)) {
+			const nextOffset =
+				input.offset + items.length + 1 < candidates.length ? input.offset + items.length + 1 : null;
+			const value = {
+				action: 'candidates',
+				items: [...items, candidate],
+				nextOffset,
+				candidatesSha256,
+				maxItems,
+				maxBytes,
+			};
+			const response = { operation: 'memory.retrieve', value };
+			if (agentPluginCapabilityReplyBytes(response) > AGENT_PLUGIN_APP_PAYLOAD_MAX_BYTES) {
+				if (items.length === 0) {
+					throw new AgentFailure('limit_exceeded');
+				}
 				break;
 			}
-			items.push({ memory: item.memory, score: item.score });
+			items.push(candidate);
+		}
+		return {
+			items,
+			nextOffset: input.offset + items.length < candidates.length ? input.offset + items.length : null,
+			candidatesSha256,
+			maxItems,
+			maxBytes,
+		};
+	}
+
+	/** Re-read the original published candidate set and enforce the frozen model-result budget. */
+	async select(actor: MemoryActor, input: MemorySelectionInput): Promise<MemorySelectedItem[]> {
+		if (
+			!/^[a-f0-9]{64}$/u.test(input.candidatesSha256) ||
+			new Set(input.items.map((item) => item.id)).size !== input.items.length ||
+			input.items.some(
+				(item) =>
+					!AGENT_ID_PATTERN.test(item.id) ||
+					!Number.isSafeInteger(item.version) ||
+					item.version < 1 ||
+					!Number.isSafeInteger(item.score) ||
+					item.score < 1,
+			)
+		) {
+			throw new AgentFailure('invalid_input');
+		}
+		const { candidates, candidatesSha256, maxItems, maxBytes } = await this.candidateSet(actor, input.limit);
+		if (input.candidatesSha256 !== candidatesSha256) {
+			throw new AgentFailure('version_conflict');
+		}
+		const byId = new Map(candidates.map((item) => [item.id, item]));
+		const selected = input.items.map((item): MemorySelectedItem => {
+			const candidate = byId.get(item.id);
+			if (!candidate || candidate.version !== item.version) {
+				throw new AgentFailure('version_conflict');
+			}
+			return {
+				id: candidate.id,
+				version: candidate.version,
+				content: candidate.content,
+				confidence: candidate.confidence,
+				score: item.score,
+			};
+		});
+		const items: MemorySelectedItem[] = [];
+		let bytes = 2;
+		for (const item of selected.slice(0, maxItems)) {
+			const size = Buffer.byteLength(JSON.stringify(item), 'utf8');
+			if (bytes + size + 1 > maxBytes) {
+				break;
+			}
+			items.push(item);
 			bytes += size + 1;
 		}
 		return items;

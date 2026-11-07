@@ -1,8 +1,4 @@
 import {
-	AGENT_EXECUTION_COMPACTION_MODES,
-	AGENT_EXECUTION_CONTEXT_PROFILES,
-} from '@nexus-terminal/shared/agent/governance/values';
-import {
 	AGENT_EXECUTION_LIMIT_KEYS,
 	AGENT_EXECUTION_LIMIT_MAXIMA,
 	AGENT_EXECUTION_SETTINGS_MAX_BYTES,
@@ -68,29 +64,13 @@ export function executionDocument(json: unknown): StoredExecutionSettings {
 	if (typeof json !== 'string' || Buffer.byteLength(json, 'utf8') > AGENT_EXECUTION_SETTINGS_MAX_BYTES) {
 		throw new Error('Corrupt execution JSON');
 	}
-	const r = object(JSON.parse(json), [
-		'version',
-		'enabled',
-		'limits',
-		'hardLimits',
-
-		'updatedAt',
-		'contextCompactionMode',
-		'contextProfile',
-	]);
-	const contextCompactionMode = AGENT_EXECUTION_COMPACTION_MODES.find((value) => value === r.contextCompactionMode);
-	const contextProfile = AGENT_EXECUTION_CONTEXT_PROFILES.find((value) => value === r.contextProfile);
-	if (!contextCompactionMode || !contextProfile) {
-		throw new Error('Corrupt frozen context policy');
-	}
+	const r = object(JSON.parse(json), ['version', 'enabled', 'limits', 'hardLimits', 'updatedAt']);
 	const limits = executionLimits(r.limits);
 	const hardLimits = executionLimits(r.hardLimits);
 	if (AGENT_EXECUTION_LIMIT_KEYS.some((k) => limits[k] > hardLimits[k])) {
 		throw new Error('Corrupt execution limit relationship');
 	}
 	return {
-		contextCompactionMode,
-		contextProfile,
 		version: executionInteger(r.version),
 		enabled: boolean(r.enabled),
 		limits,

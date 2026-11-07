@@ -1,3 +1,4 @@
+import { hasApprovalIdentity } from '../../../../support/package-tool-catalog.mjs';
 import { readAgentBrowserConfiguration } from '../../../../../packages/shared/src/agent/integrations/browser-http-codec';
 import { resolveNativeApproval, type NativeTask } from '../../../fixtures/agent/native-task';
 import { requestAgentJson } from '../../../support/agent-request';
@@ -123,7 +124,7 @@ export async function approveNativeFamily(task: NativeTask, runId: string, allow
 		}
 		expect(result.value.hasMore).toBe(false);
 		for (const approval of result.value.items.filter((item) => item.status === 'requested')) {
-			expect(allowed).toContain(approval.inspection.toolName);
+			expect(allowed.some((name) => hasApprovalIdentity(approval, name))).toBe(true);
 			await resolveNativeApproval(task, approval, 'approved');
 		}
 	}

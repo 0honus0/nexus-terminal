@@ -6,113 +6,218 @@ import type { ResponseCreateParamsStreaming, ResponseInputItem } from 'openai/re
 import {
 	ModelNetworkFailure,
 	MODEL_STREAM_MAX_BYTES,
-	MODEL_TOOL_MAX_CALLS,
-	MODEL_TOOL_MAX_DEFINITIONS,
 	MODEL_TOOL_MAX_ARGUMENT_BYTES,
 	MODEL_REASONING_MAX_BYTES,
 } from '../model-port.js';
 import type { ModelStreamInput, ModelMessage, ModelToolDefinition, ModelToolProperty } from '../model-port.js';
+import { JsonSchemaValidator } from '../../validation/json-schema-validator.js';
 
-function parameters(input: ModelToolDefinition['parameters']): ModelToolDefinition['parameters'] {
-	const fields = Object.entries(input.properties);
-	if (
-		input.type !== 'object' ||
-		input.additionalProperties !== false ||
-		fields.length > 32 ||
-		new Set(input.required).size !== input.required.length ||
-		input.required.some((name) => !(name in input.properties))
-	) {
+function isSchemaObject(input: unknown): input is Record<string, unknown> {
+	return typeof input === 'object' && input !== null && !Array.isArray(input);
+}
+
+function schemaRecord(input: unknown, required: string[], optional: string[]): Record<string, unknown> {
+	if (!isSchemaObject(input)) {
 		throw new ModelNetworkFailure('response_invalid');
 	}
-	const properties: Record<string, ModelToolProperty> = {};
-	for (const [name, field] of fields) {
-		if (!/^[a-zA-Z0-9_]{1,64}$/u.test(name)) {
+	for (const key of Object.keys(input)) {
+		if (!required.includes(key) && !optional.includes(key)) {
 			throw new ModelNetworkFailure('response_invalid');
 		}
-		if (field.type === 'array') {
-			// The tool owner sets cardinality; schema metadata only needs valid numeric bounds.
-			if (
-				!Number.isSafeInteger(field.minItems) ||
-				!Number.isSafeInteger(field.maxItems) ||
-				field.minItems < 1 ||
-				field.maxItems < field.minItems
-			) {
+	}
+	if (required.some((key) => !Object.hasOwn(input, key))) {
+		throw new ModelNetworkFailure('response_invalid');
+	}
+	return input;
+}
+
+function schemaText(input: unknown): string {
+	if (typeof input !== 'string' || input.includes('\0')) {
+		throw new ModelNetworkFailure('response_invalid');
+	}
+	return input;
+}
+
+function schemaCount(input: unknown): number | undefined {
+	if (input === undefined) {
+		return undefined;
+	}
+	if (typeof input !== 'number' || !Number.isSafeInteger(input) || input < 0) {
+		throw new ModelNetworkFailure('response_invalid');
+	}
+	return input;
+}
+
+function schemaNumber(input: unknown): number | undefined {
+	if (input === undefined) {
+		return undefined;
+	}
+	if (typeof input !== 'number' || !Number.isFinite(input)) {
+		throw new ModelNetworkFailure('response_invalid');
+	}
+	return input;
+}
+
+function validateBounds(minimum: number | undefined, maximum: number | undefined): void {
+	if (minimum !== undefined && maximum !== undefined && minimum > maximum) {
+		throw new ModelNetworkFailure('response_invalid');
+	}
+}
+
+function copySchemaDescription(input: Record<string, unknown>, result: { description?: string }): void {
+	if (Object.hasOwn(input, 'description')) {
+		result.description = schemaText(input.description);
+	}
+}
+
+/** Decode and project the entire supported schema before either SDK receives it. */
+function schemaProperty(input: unknown): ModelToolProperty {
+	if (!isSchemaObject(input)) {
+		throw new ModelNetworkFailure('response_invalid');
+	}
+	const type = input.type;
+	if (type === 'object') {
+		const row = schemaRecord(input, ['type', 'properties', 'required', 'additionalProperties'], ['description']);
+		if (
+			typeof row.properties !== 'object' ||
+			row.properties === null ||
+			Array.isArray(row.properties) ||
+			!Array.isArray(row.required) ||
+			row.additionalProperties !== false
+		) {
+			throw new ModelNetworkFailure('response_invalid');
+		}
+		const properties: Record<string, ModelToolProperty> = {};
+		for (const [name, property] of Object.entries(row.properties)) {
+			schemaText(name);
+			Object.defineProperty(properties, name, {
+				value: schemaProperty(property),
+				enumerable: true,
+				writable: true,
+				configurable: true,
+			});
+		}
+		const required = row.required.map(schemaText);
+		if (new Set(required).size !== required.length || required.some((name) => !Object.hasOwn(properties, name))) {
+			throw new ModelNetworkFailure('response_invalid');
+		}
+		const result: Extract<ModelToolProperty, { type: 'object' }> = {
+			type: 'object',
+			properties,
+			required,
+			additionalProperties: false,
+		};
+		copySchemaDescription(row, result);
+		return result;
+	}
+	if (type === 'array') {
+		const row = schemaRecord(input, ['type', 'items'], ['description', 'minItems', 'maxItems']);
+		const minItems = schemaCount(row.minItems);
+		const maxItems = schemaCount(row.maxItems);
+		validateBounds(minItems, maxItems);
+		const result: ModelToolProperty = { type: 'array', items: schemaProperty(row.items) };
+		copySchemaDescription(row, result);
+		if (minItems !== undefined) {
+			result.minItems = minItems;
+		}
+		if (maxItems !== undefined) {
+			result.maxItems = maxItems;
+		}
+		return result;
+	}
+	if (type === 'string') {
+		const row = schemaRecord(input, ['type'], ['description', 'minLength', 'maxLength', 'enum']);
+		const minLength = schemaCount(row.minLength);
+		const maxLength = schemaCount(row.maxLength);
+		validateBounds(minLength, maxLength);
+		const result: ModelToolProperty = { type: 'string' };
+		copySchemaDescription(row, result);
+		if (minLength !== undefined) {
+			result.minLength = minLength;
+		}
+		if (maxLength !== undefined) {
+			result.maxLength = maxLength;
+		}
+		if (Object.hasOwn(row, 'enum')) {
+			if (!Array.isArray(row.enum) || row.enum.length === 0) {
 				throw new ModelNetworkFailure('response_invalid');
 			}
-			if (field.items.type === 'object') {
-				properties[name] = {
-					type: 'array',
-					minItems: field.minItems,
-					maxItems: field.maxItems,
-					items: parameters(field.items),
-				};
-				continue;
-			}
-			if (
-				field.items.type !== 'string' ||
-				!Number.isSafeInteger(field.items.minLength) ||
-				!Number.isSafeInteger(field.items.maxLength) ||
-				field.items.minLength < 0 ||
-				field.items.minLength > field.items.maxLength ||
-				field.items.maxLength > MODEL_TOOL_MAX_ARGUMENT_BYTES
-			) {
+			const values = row.enum.map(schemaText);
+			if (new Set(values).size !== values.length) {
 				throw new ModelNetworkFailure('response_invalid');
 			}
-			properties[name] = {
-				type: 'array',
-				minItems: field.minItems,
-				maxItems: field.maxItems,
-				items: { type: 'string', minLength: field.items.minLength, maxLength: field.items.maxLength },
-			};
-		} else if (field.type === 'integer') {
-			if (
-				!Number.isSafeInteger(field.minimum) ||
-				!Number.isSafeInteger(field.maximum) ||
-				field.minimum > field.maximum
-			) {
+			result.enum = values;
+		}
+		return result;
+	}
+	if (type === 'boolean') {
+		const row = schemaRecord(input, ['type'], ['description']);
+		const result: ModelToolProperty = { type: 'boolean' };
+		copySchemaDescription(row, result);
+		return result;
+	}
+	if (type === 'number' || type === 'integer') {
+		const row = schemaRecord(input, ['type'], ['description', 'minimum', 'maximum']);
+		const minimum = schemaNumber(row.minimum);
+		const maximum = schemaNumber(row.maximum);
+		validateBounds(minimum, maximum);
+		const result: ModelToolProperty = { type };
+		copySchemaDescription(row, result);
+		if (minimum !== undefined) {
+			result.minimum = minimum;
+		}
+		if (maximum !== undefined) {
+			result.maximum = maximum;
+		}
+		return result;
+	}
+	throw new ModelNetworkFailure('response_invalid');
+}
+
+function parameters(input: ModelToolDefinition['parameters']): Record<string, unknown> {
+	if ('schemaJson' in input) {
+		try {
+			// Preserve publisher-owned JSON Schema, including unions and references.
+			// Compilation checks it without narrowing it to the old tool subset.
+			new JsonSchemaValidator(input.schemaJson);
+			const schema: unknown = JSON.parse(input.schemaJson);
+			if (!isSchemaObject(schema)) {
 				throw new ModelNetworkFailure('response_invalid');
 			}
-			properties[name] = { type: 'integer', minimum: field.minimum, maximum: field.maximum };
-		} else {
-			if (
-				field.type !== 'string' ||
-				!Number.isSafeInteger(field.minLength) ||
-				!Number.isSafeInteger(field.maxLength) ||
-				field.minLength < 0 ||
-				field.minLength > field.maxLength
-			) {
-				throw new ModelNetworkFailure('response_invalid');
-			}
-			const property: ModelToolProperty = {
-				type: 'string',
-				minLength: field.minLength,
-				maxLength: field.maxLength,
-			};
-			if (field.enum !== undefined) {
-				if (
-					!Array.isArray(field.enum) ||
-					field.enum.length === 0 ||
-					new Set(field.enum).size !== field.enum.length ||
-					field.enum.some(
-						(value) =>
-							typeof value !== 'string' ||
-							Array.from(value).length < field.minLength ||
-							Array.from(value).length > field.maxLength,
-					)
-				) {
-					throw new ModelNetworkFailure('response_invalid');
-				}
-				property.enum = field.enum.map((value) => value);
-			}
-			properties[name] = property;
+			return schema;
+		} catch (error) {
+			throw new ModelNetworkFailure('response_invalid', undefined, { cause: error, outcome: 'rejected' });
 		}
 	}
-	return { type: 'object', properties, required: input.required.map((name) => name), additionalProperties: false };
+	const result = schemaProperty(input);
+	if (result.type !== 'object') {
+		throw new ModelNetworkFailure('response_invalid');
+	}
+	return result;
 }
 
 function chatMessage(value: ModelMessage): ChatCompletionMessageParam {
 	if (value.role === 'user') {
-		return { role: 'user', content: value.content };
+		return {
+			role: 'user',
+			content:
+				typeof value.content === 'string'
+					? value.content
+					: value.content.map((part) =>
+							part.type === 'text'
+								? { type: 'text', text: part.text }
+								: {
+										type: 'image_url',
+										image_url: {
+											url:
+												'data:' +
+												part.mediaType +
+												';base64,' +
+												Buffer.from(part.bytes).toString('base64'),
+										},
+									},
+						),
+		};
 	}
 	if (value.role === 'tool') {
 		return { role: 'tool', tool_call_id: value.callId, content: value.content };
@@ -134,7 +239,27 @@ function chatMessage(value: ModelMessage): ChatCompletionMessageParam {
 
 function responseMessages(value: ModelMessage): ResponseInputItem[] {
 	if (value.role === 'user') {
-		return [{ role: 'user', content: value.content }];
+		return [
+			{
+				role: 'user',
+				content:
+					typeof value.content === 'string'
+						? value.content
+						: value.content.map((part) =>
+								part.type === 'text'
+									? { type: 'input_text', text: part.text }
+									: {
+											type: 'input_image',
+											detail: 'auto',
+											image_url:
+												'data:' +
+												part.mediaType +
+												';base64,' +
+												Buffer.from(part.bytes).toString('base64'),
+										},
+							),
+			},
+		];
 	}
 	if (value.role === 'tool') {
 		return [{ type: 'function_call_output', call_id: value.callId, output: value.content }];
@@ -161,7 +286,11 @@ function validateHistory(input: ModelStreamInput): void {
 	const pending = new Set<string>();
 	let bytes = 0;
 	for (const message of input.messages) {
-		bytes += Buffer.byteLength(JSON.stringify(message), 'utf8');
+		// Count the actual base64 wire representation, rather than Uint8Array's numeric JSON object.
+		bytes += Buffer.byteLength(
+			JSON.stringify(input.protocol === 'responses' ? responseMessages(message) : chatMessage(message)),
+			'utf8',
+		);
 		if (bytes > MODEL_STREAM_MAX_BYTES) {
 			throw new ModelNetworkFailure('too_large');
 		}
@@ -179,7 +308,6 @@ function validateHistory(input: ModelStreamInput): void {
 		}
 		if (
 			(!message.content.trim() && message.toolCalls.length === 0) ||
-			message.toolCalls.length > MODEL_TOOL_MAX_CALLS ||
 			(input.protocol !== 'responses' && message.reasoning.length > 0) ||
 			Buffer.byteLength(JSON.stringify(message.reasoning), 'utf8') > MODEL_REASONING_MAX_BYTES
 		) {
@@ -207,7 +335,6 @@ function toolDefinitions(input: ModelStreamInput) {
 	if (
 		input.messages.length === 0 ||
 		input.messages[0].role !== 'user' ||
-		input.tools.length > MODEL_TOOL_MAX_DEFINITIONS ||
 		new Set(input.tools.map((tool) => tool.name)).size !== input.tools.length ||
 		!Number.isSafeInteger(input.maxOutputTokens) ||
 		input.maxOutputTokens < 1

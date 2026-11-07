@@ -1,3 +1,4 @@
+import { hasToolIdentity } from '../../../support/package-tool-catalog.mjs';
 import imageData from '../../fixtures/agent/image-data.json';
 import { createHash, randomUUID } from 'node:crypto';
 import { expect, test, type Locator } from '../../support/fixtures';
@@ -92,7 +93,7 @@ for (const { format, nested } of [
 			{ method: 'GET', path: `/apps/${task.app.id}/threads/${task.thread.id}/tools?limit=100` },
 			(value) => readAgentThreadToolsResponse(value, task.app.id, null, 100),
 		);
-		const imageTool = tools.items.find((tool) => tool.toolName === 'image_generate');
+		const imageTool = tools.items.find((tool) => hasToolIdentity(tool, 'image_generate'));
 		expect(imageTool?.state).toBe('completed');
 		expect(imageTool?.outputArtifactIds[0]).toMatch(/^[a-f0-9-]{36}$/);
 		if (!imageTool) throw new Error('Expected persisted image tool');
@@ -119,7 +120,7 @@ for (const { format, nested } of [
 
 		const root = `/api/v1/agent/apps/${task.app.id}/artifacts/${imageTool?.outputArtifactIds[0]}`;
 		const preview = hub.locator('[data-tool-artifact] .agent-generated-image img');
-		await expect(preview).toHaveAttribute('src', root + '/preview');
+		await expect(preview).toHaveAttribute('src', /^blob:/);
 		await expect
 			.poll(() => preview.evaluate((node: HTMLImageElement) => node.complete && node.naturalWidth > 0))
 			.toBe(true);
@@ -152,7 +153,7 @@ for (const { format, nested } of [
 		await testInfo.attach('generated-' + format, { body: await page.screenshot(), contentType: 'image/png' });
 		await page.reload();
 		await openNativeTask(task);
-		await expect(preview).toHaveAttribute('src', root + '/preview');
+		await expect(preview).toHaveAttribute('src', /^blob:/);
 		await expect
 			.poll(() => preview.evaluate((node: HTMLImageElement) => node.complete && node.naturalWidth > 0))
 			.toBe(true);
@@ -194,7 +195,6 @@ for (const scenario of [
 		await resolveNativeApproval(task, approval, 'approved');
 		const finished = await finishNativeTask(task, run.id);
 		expect(finished.run.status).toBe('unknown');
-		expect(finished.run.failure).toEqual({ code: scenario.failureCode, toolName: 'image_generate' });
 		expect(finished.text).not.toContain('Image generated and saved.');
 		expect(JSON.stringify(finished)).not.toContain('E2E_PRIVATE_VENDOR_BODY');
 		const tools = await requestAgentJson(
@@ -202,12 +202,13 @@ for (const scenario of [
 			{ method: 'GET', path: `/apps/${task.app.id}/threads/${task.thread.id}/tools?limit=100` },
 			(value) => readAgentThreadToolsResponse(value, task.app.id, null, 100),
 		);
-		expect(tools.items.find((tool) => tool.toolName === 'image_generate')).toMatchObject({
+		expect(tools.items.find((tool) => hasToolIdentity(tool, 'image_generate'))).toMatchObject({
 			state: 'unknown',
 			outputArtifactIds: [],
 		});
-		const rejectedTool = tools.items.find((tool) => tool.toolName === 'image_generate');
+		const rejectedTool = tools.items.find((tool) => hasToolIdentity(tool, 'image_generate'));
 		if (!rejectedTool) throw new Error('Expected persisted rejected image tool');
+		expect(finished.run.failure).toEqual({ code: scenario.failureCode, toolName: rejectedTool.toolName });
 		const details = await requestAgentJson(
 			request,
 			{ method: 'GET', path: `/apps/${task.app.id}/runs/${run.id}/tools/${rejectedTool.id}` },

@@ -1,36 +1,47 @@
+import { fromRegistryDefinition } from '../registry/model/registry-protocol.js';
+
+import { PluginCallableRefusal } from '../storage/plugin-runtime.js';
+import { PluginSourceInvocationFailure } from './plugin-invocation-failure.js';
+
+import type {
+	PluginAppBinding,
+	PluginPackageInstallation,
+	PluginCompositionCandidate,
+	PluginCompositionDecision,
+	PluginPackageUpdateFacts,
+	PluginPackageUpdateResult,
+	PluginPackageUpdateDecision,
+} from './plugin-composition-types.js';
+import {
+	fromPluginPackageInstallation,
+	fromPluginAppBinding,
+	toPluginPackageReference,
+} from './plugin-composition-model.js';
+import { fromStoredPluginManifest, toStoredPluginManifest } from './plugin-manifest-model.js';
 import type { PluginRuntimeObservation, PluginRuntimeAcknowledgement } from './plugin-types.js';
-import type { PluginAppInitialization, PluginInstallationDirectory } from './plugin-types.js';
+import type { PluginInstallationDirectory } from './plugin-types.js';
 import type { PluginDataSnapshot, PluginDataMigration, PluginDataMigrationResult } from './plugin-migration-types.js';
 import type { PluginRuntimeLease } from './plugin-types.js';
-import { intentToStorage } from './plugin-intent-model.js';
-import { artifactToStorage } from '../../artifacts/model/artifact-model.js';
-import type { PluginBackendRuntime, PluginRuntimeReply } from '../storage/plugin-runtime.js';
+
+import type { PluginBackendRuntime } from '../storage/plugin-runtime.js';
 import { ModuleRuntimeFailure } from '../../../../platform/isolation/module-runtime.js';
 import type { DecodedPluginPackage } from '../storage/plugin-package.js';
 import type { StoredPluginContentSource } from '../storage/plugin-storage.js';
-import type { PluginPackageSource, PluginRuntimeInstance, PluginRpcInput, PluginRpcResult } from './plugin-types.js';
+import type { PluginPackageSource, PluginRuntimeInstance } from './plugin-types.js';
 import type { PluginSdkAssets } from '../storage/plugin-sdk-assets.js';
 import { createHash } from 'node:crypto';
-import { MAX_PLUGIN_SKILL_DOCUMENTS, MAX_PLUGIN_SKILL_BYTES } from '../plugin-skill-rules.js';
 import type { PluginSkillDocument } from './plugin-skill-types.js';
 import type { SessionTokens } from '../../../../platform/security/session-tokens.js';
 import type { BlobStore } from '../../../../platform/blobs/blob-store.js';
 import { BlobFailure } from '../../../../platform/blobs/blob-store.js';
 import type { PackageSignature } from '../../../../platform/packages/package-reader.js';
 import type { PluginPackageDecoder } from '../storage/plugin-package.js';
-import {
-	AgentFailure,
-	AgentResourceFenced,
-	ToolCleanupFailure,
-	ToolExecutionUnknown,
-	aggregateAgentFailures,
-} from '../../agent-failure.js';
+import { AgentFailure, AgentResourceFenced, ToolCleanupFailure, aggregateAgentFailures } from '../../agent-failure.js';
 import { agentStorage } from '../../agent-storage-failure.js';
 import type {
 	StoredPluginData,
 	PluginStorage,
 	StoredPluginStage,
-	StoredPluginManifest,
 	StoredPluginPublisher,
 	StoredPluginInstallation,
 } from '../storage/plugin-storage.js';
@@ -48,34 +59,6 @@ import type {
 	PluginVersion,
 	PluginContent,
 } from './plugin-types.js';
-
-function manifest(value: StoredPluginManifest): PluginManifest {
-	return {
-		schemaVersion: 1,
-		id: value.id,
-		version: value.version,
-		displayName: value.displayName,
-		sdkVersion: value.sdkVersion,
-		capabilities: value.capabilities.map((item) => item),
-		intents: value.intents.map((item) => ({ id: item.id, schemaVersion: item.schemaVersion })),
-		frontendEntry: value.frontendEntry,
-		backendEntry: value.backendEntry,
-	};
-}
-
-function toManifest(value: PluginManifest): StoredPluginManifest {
-	return {
-		schemaVersion: 1,
-		id: value.id,
-		version: value.version,
-		displayName: value.displayName,
-		sdkVersion: value.sdkVersion,
-		capabilities: value.capabilities.map((item) => item),
-		intents: value.intents.map((item) => ({ id: item.id, schemaVersion: item.schemaVersion })),
-		frontendEntry: value.frontendEntry,
-		backendEntry: value.backendEntry,
-	};
-}
 
 function publisher(value: StoredPluginPublisher): PluginPublisher {
 	return {
@@ -96,7 +79,7 @@ function stage(value: StoredPluginStage): PluginStage {
 		status: value.status,
 		version: value.version,
 		publisherKeyId: value.publisherKeyId,
-		manifest: value.manifest === null ? null : manifest(value.manifest),
+		manifest: value.manifest === null ? null : fromStoredPluginManifest(value.manifest),
 		createdAt: value.createdAt,
 		updatedAt: value.updatedAt,
 	};
@@ -143,6 +126,274 @@ function data(value: StoredPluginData): PluginData {
 }
 
 export class PluginModel {
+	async cancelPackageUpdate(
+		actor: PluginActor,
+		packageId: string,
+		revision: number,
+		admit: (identity: number | null, current: PluginPackageInstallation) => void,
+	): Promise<PluginPackageInstallation> {
+		return fromPluginPackageInstallation(
+			await storage(() =>
+				this.storage.cancelPackageUpdate(
+					actor.userId,
+					this.tokens.digest(actor.token),
+					packageId,
+					revision,
+					Date.now(),
+					(userId, current) => admit(userId, fromPluginPackageInstallation(current)),
+				),
+			),
+		);
+	}
+
+	async packageDirectory(
+		actor: PluginActor,
+	): Promise<{ installations: PluginPackageInstallation[]; retainedPackageIds: string[] }> {
+		const value = await storage(() => this.storage.packageDirectory(actor.userId));
+		return {
+			installations: value.installations.map(fromPluginPackageInstallation),
+			retainedPackageIds: value.retainedPackageIds.map((id) => id),
+		};
+	}
+
+	async appBindings(actor: PluginActor): Promise<PluginAppBinding[]> {
+		return (await storage(() => this.storage.appBindings(actor.userId))).map(fromPluginAppBinding);
+	}
+
+	packageRetainedData(actor: PluginActor): Promise<string[]> {
+		return storage(() => this.storage.packageRetainedData(actor.userId));
+	}
+
+	async removePackage(
+		actor: PluginActor,
+		packageId: string,
+		revision: number,
+		clearData: boolean,
+		admit: (
+			identity: number | null,
+			current: PluginPackageInstallation,
+			referenced: boolean,
+			runtimeClosed: boolean,
+			updatePending: boolean,
+		) => void,
+	): Promise<PluginPackageInstallation> {
+		return fromPluginPackageInstallation(
+			await storage(() =>
+				this.storage.removePackage(
+					actor.userId,
+					this.tokens.digest(actor.token),
+					packageId,
+					revision,
+					clearData,
+					Date.now(),
+					(userId, current, referenced, runtimeClosed, updatePending) =>
+						admit(userId, fromPluginPackageInstallation(current), referenced, runtimeClosed, updatePending),
+				),
+			),
+		);
+	}
+
+	async updatePackage(
+		actor: PluginActor,
+		packageId: string,
+		revision: number,
+		stageId: string,
+		stageVersion: number,
+		phase: 'prepare' | 'commit',
+		admit: (identity: number | null, facts: PluginPackageUpdateFacts) => PluginPackageUpdateDecision,
+	): Promise<PluginPackageUpdateResult> {
+		const value = await storage(() =>
+			this.storage.updatePackage(
+				actor.userId,
+				this.tokens.digest(actor.token),
+				packageId,
+				revision,
+				stageId,
+				stageVersion,
+				Date.now(),
+				phase,
+				(userId, facts) => {
+					const decision = admit(userId, {
+						candidates: facts.candidates.map((candidate) => ({
+							installation: fromPluginPackageInstallation(candidate.installation),
+							manifest: fromStoredPluginManifest(candidate.manifest),
+							publisher: candidate.publisher ? publisher(candidate.publisher) : null,
+						})),
+						current: fromPluginPackageInstallation(facts.current),
+						previousManifest: fromStoredPluginManifest(facts.previousManifest),
+						stage: stage(facts.stage),
+						publisher: facts.publisher ? publisher(facts.publisher) : null,
+						references: facts.references.map((reference) => ({
+							binding: fromPluginAppBinding(reference.binding),
+							manifest: fromStoredPluginManifest(reference.manifest),
+						})),
+					});
+					return {
+						uiOnly: decision.uiOnly,
+						impacts: decision.impacts.map((impact) => ({
+							appId: impact.appId,
+							restartApp: impact.restartApp,
+							packageIds: impact.packageIds.map((id) => id),
+						})),
+						dependencies: decision.dependencies.map((item) => ({
+							package: toPluginPackageReference(item.package),
+							installationRevision: item.installationRevision,
+						})),
+						bindings: decision.bindings.map((binding) => ({
+							appId: binding.appId,
+							executionRevision: binding.executionRevision,
+							uiRevision: binding.uiRevision,
+							app: toPluginPackageReference(binding.app),
+							dependencies: binding.dependencies.map(toPluginPackageReference),
+							selectedRootIds: binding.selectedRootIds.map((id) => id),
+							ui: binding.ui ? toPluginPackageReference(binding.ui) : null,
+						})),
+					};
+				},
+			),
+		);
+		return {
+			dependencies: value.dependencies.map((item) => ({
+				package: {
+					packageId: item.package.packageId,
+					version: item.package.version,
+					packageHash: item.package.packageHash,
+					publisherKeyId: item.package.publisherKeyId,
+				},
+				installationRevision: item.installationRevision,
+			})),
+			installation: fromPluginPackageInstallation(value.installation),
+			uiOnly: value.uiOnly,
+			appIds: value.appIds.map((appId) => appId),
+			impacts: value.impacts.map((impact) => ({
+				appId: impact.appId,
+				restartApp: impact.restartApp,
+				packageIds: impact.packageIds.map((id) => id),
+			})),
+		};
+	}
+
+	async packageInstallations(actor: PluginActor): Promise<PluginPackageInstallation[]> {
+		return (await storage(() => this.storage.packageInstallations(actor.userId))).map(
+			fromPluginPackageInstallation,
+		);
+	}
+
+	async installPackage(
+		actor: PluginActor,
+		stageId: string,
+		stageVersion: number,
+		admit: (
+			userId: number | null,
+			staged: PluginStage,
+			key: PluginPublisher | null,
+			current: PluginPackageInstallation | null,
+			updatePending: boolean,
+		) => void,
+	): Promise<PluginPackageInstallation> {
+		return fromPluginPackageInstallation(
+			await storage(() =>
+				this.storage.installPackage(
+					actor.userId,
+					this.tokens.digest(actor.token),
+					stageId,
+					stageVersion,
+					Date.now(),
+					(userId, staged, key, current, updatePending) =>
+						admit(
+							userId,
+							stage(staged),
+							key ? publisher(key) : null,
+							current ? fromPluginPackageInstallation(current) : null,
+							updatePending,
+						),
+				),
+			),
+		);
+	}
+
+	async composeApp(
+		actor: PluginActor,
+		appId: string,
+		packageId: string,
+		expectedBinding: { executionRevision: number; uiRevision: number } | null,
+		admit: (userId: number | null, candidates: PluginCompositionCandidate[]) => PluginCompositionDecision,
+	): Promise<PluginAppBinding> {
+		return fromPluginAppBinding(
+			await storage(() =>
+				this.storage.composeApp(
+					actor.userId,
+					this.tokens.digest(actor.token),
+					appId,
+					packageId,
+					expectedBinding === null
+						? null
+						: {
+								executionRevision: expectedBinding.executionRevision,
+								uiRevision: expectedBinding.uiRevision,
+							},
+					Date.now(),
+					(userId, candidates) => {
+						const decision = admit(
+							userId,
+							candidates.map((candidate) => ({
+								installation: fromPluginPackageInstallation(candidate.installation),
+								manifest: fromStoredPluginManifest(candidate.manifest),
+								publisher: candidate.publisher ? publisher(candidate.publisher) : null,
+							})),
+						);
+						return {
+							app: toPluginPackageReference(decision.app),
+							dependencies: decision.dependencies.map(toPluginPackageReference),
+							selectedRootIds: decision.selectedRootIds.map((id) => id),
+							ui: decision.ui ? toPluginPackageReference(decision.ui) : null,
+							initialization: {
+								enabled: decision.initialization.enabled,
+								grantedCapabilities:
+									decision.initialization.grantedCapabilities?.map((value) => value) ?? null,
+							},
+						};
+					},
+				),
+			),
+		);
+	}
+
+	async runtimeBinding(userId: number, appId: string): Promise<PluginAppBinding> {
+		return fromPluginAppBinding(await storage(() => this.storage.appBinding(userId, appId)));
+	}
+
+	async appExecutionBinding(
+		userId: number,
+		appId: string,
+		allowDraining: boolean,
+	): Promise<Extract<import('../../runs/model/run-app-execution-types.js').RunAppExecution, { kind: 'plugin' }>> {
+		const value = await storage(() => this.storage.appExecutionBinding(userId, appId, allowDraining));
+		if (!value) {
+			throw new AgentFailure('version_conflict');
+		}
+		return {
+			kind: 'plugin',
+			package: {
+				packageId: value.package.packageId,
+				version: value.package.version,
+				packageHash: value.package.packageHash,
+				publisherKeyId: value.package.publisherKeyId,
+			},
+			codeDependencies: value.codeDependencies.map((dependency) => ({
+				packageId: dependency.packageId,
+				version: dependency.version,
+				packageHash: dependency.packageHash,
+				publisherKeyId: dependency.publisherKeyId,
+			})),
+			handler: value.handler,
+		};
+	}
+
+	async appBinding(actor: PluginActor, appId: string): Promise<PluginAppBinding> {
+		return fromPluginAppBinding(await storage(() => this.storage.appBinding(actor.userId, appId)));
+	}
+
 	async dataSnapshot(
 		actor: PluginActor,
 		appId: string,
@@ -152,6 +403,7 @@ export class PluginModel {
 			runtimeClosed: boolean,
 			upgradePending: boolean,
 		) => void,
+		namespace?: string,
 	): Promise<PluginDataSnapshot> {
 		const value = await storage(() =>
 			this.storage.dataSnapshot(
@@ -160,9 +412,20 @@ export class PluginModel {
 				appId,
 				(userId, current, runtimeClosed, upgradePending) =>
 					admit(userId, installation(current), runtimeClosed, upgradePending),
+				namespace,
 			),
 		);
-		return { appId: value.appId, revision: value.revision, items: value.items.map(data) };
+		return {
+			appId: value.appId,
+			revision: value.revision,
+			items: value.items.map((item) => ({
+				packageId: item.packageId,
+				key: item.key,
+				version: item.version,
+				valueJson: item.valueJson,
+				updatedAt: item.updatedAt,
+			})),
+		};
 	}
 
 	async migrateData(
@@ -175,11 +438,17 @@ export class PluginModel {
 			runtimeClosed: boolean,
 			upgradePending: boolean,
 		) => void,
-		admitCapacity: (keys: number, bytes: number) => void,
 	): Promise<PluginDataMigrationResult> {
 		const items = input.items
-			.map((item) => ({ key: item.key, expectedVersion: item.expectedVersion, valueJson: item.valueJson }))
-			.sort((left, right) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0));
+			.map((item) => ({
+				packageId: item.packageId,
+				key: item.key,
+				expectedVersion: item.expectedVersion,
+				valueJson: item.valueJson,
+			}))
+			.sort((left, right) =>
+				(left.packageId + '\0' + left.key).localeCompare(right.packageId + '\0' + right.key),
+			);
 		const requestHash = createHash('sha256')
 			.update(JSON.stringify({ appId, expectedRevision: input.expectedRevision, items }))
 			.digest('hex');
@@ -197,7 +466,6 @@ export class PluginModel {
 				},
 				(userId, current, runtimeClosed, upgradePending) =>
 					admit(userId, installation(current), runtimeClosed, upgradePending),
-				admitCapacity,
 			),
 		);
 		return {
@@ -304,6 +572,7 @@ export class PluginModel {
 			publisher: PluginPublisher | null,
 			enabled: boolean,
 		) => void,
+		packageId?: string,
 	): Promise<PluginData | null> {
 		const value = await storage(() =>
 			this.storage.readData(
@@ -313,6 +582,7 @@ export class PluginModel {
 				key,
 				(userId, current, key, enabled) =>
 					admit(userId, installation(current), key === null ? null : publisher(key), enabled),
+				packageId,
 			),
 		);
 		return value === null ? null : data(value);
@@ -328,7 +598,8 @@ export class PluginModel {
 			publisher: PluginPublisher | null,
 			enabled: boolean,
 		) => void,
-		decide: (current: PluginData | null, keyCount: number, dataBytes: number) => void,
+		decide: (current: PluginData | null) => void,
+		packageId?: string,
 	): Promise<PluginData> {
 		const contentHash = createHash('sha256')
 			.update(JSON.stringify([input.expectedRevision, input.key, input.expectedVersion, input.valueJson]))
@@ -348,8 +619,8 @@ export class PluginModel {
 					},
 					(userId, current, key, enabled) =>
 						admit(userId, installation(current), key === null ? null : publisher(key), enabled),
-					(current, keyCount, dataBytes) =>
-						decide(current === null ? null : data(current), keyCount, dataBytes),
+					(current) => decide(current === null ? null : data(current)),
+					packageId,
 				),
 			),
 		);
@@ -357,7 +628,7 @@ export class PluginModel {
 
 	async versions(actor: PluginActor): Promise<PluginVersion[]> {
 		return (await storage(() => this.storage.versions(actor.userId))).map((value) => ({
-			manifest: manifest(value.manifest),
+			manifest: fromStoredPluginManifest(value.manifest),
 			packageHash: value.packageHash,
 			publisherKeyId: value.publisherKeyId,
 		}));
@@ -388,7 +659,7 @@ export class PluginModel {
 		if (!source.stage.manifest) {
 			throw new AgentFailure('storage_unavailable');
 		}
-		return manifest(source.stage.manifest);
+		return fromStoredPluginManifest(source.stage.manifest);
 	}
 
 	async asset(
@@ -404,6 +675,7 @@ export class PluginModel {
 			enabled: boolean,
 		) => void,
 		select: (value: PluginManifest) => void,
+		settingsInstanceId?: string,
 	): Promise<PluginContent> {
 		const read = () =>
 			storage(() =>
@@ -415,12 +687,13 @@ export class PluginModel {
 					(userId, current, key, enabled) => {
 						admit(userId, installation(current), key === null ? null : publisher(key), enabled);
 					},
+					settingsInstanceId,
 				),
 			);
 
 		const source = await read();
 		const decoded = await this.decodeSource(source, signal);
-		select(manifest(decoded.manifest));
+		select(fromStoredPluginManifest(decoded.manifest));
 		const file = decoded.files.find((item) => item.path === path);
 		if (!file) {
 			throw new AgentFailure('not_found');
@@ -554,7 +827,11 @@ export class PluginModel {
 				{
 					userId: lease.userId,
 					appId: lease.appId,
+					packageId: lease.packageId,
 					instanceId: lease.instanceId,
+					logicalInstanceId: lease.logicalInstanceId,
+					generation: lease.generation,
+					configurationRevision: lease.configurationRevision,
 					revision: lease.revision,
 					now: Date.now(),
 				},
@@ -570,7 +847,11 @@ export class PluginModel {
 				{
 					userId: lease.userId,
 					appId: lease.appId,
+					packageId: lease.packageId,
 					instanceId: lease.instanceId,
+					logicalInstanceId: lease.logicalInstanceId,
+					generation: lease.generation,
+					configurationRevision: lease.configurationRevision,
 					revision: lease.revision,
 					now: Date.now(),
 				},
@@ -590,10 +871,14 @@ export class PluginModel {
 		userId: number,
 		appId: string,
 		admit: (current: PluginInstallation, key: PluginPublisher | null, enabled: boolean) => void,
+		packageId?: string,
 	): Promise<PluginInstallation> {
 		const source = await storage(() =>
-			this.storage.runtimeContent(userId, appId, (current, key, enabled) =>
-				admit(installation(current), key === null ? null : publisher(key), enabled),
+			this.storage.runtimeContent(
+				userId,
+				appId,
+				(current, key, enabled) => admit(installation(current), key === null ? null : publisher(key), enabled),
+				packageId,
 			),
 		);
 		return installation(source.installation);
@@ -604,14 +889,18 @@ export class PluginModel {
 		appId: string,
 		signal: AbortSignal,
 		admit: (current: PluginInstallation, key: PluginPublisher | null, enabled: boolean) => void,
+		packageId?: string,
 	): Promise<PluginPackageSource> {
 		const source = await storage(() =>
-			this.storage.runtimeContent(userId, appId, (current, key, enabled) =>
-				admit(installation(current), key === null ? null : publisher(key), enabled),
+			this.storage.runtimeContent(
+				userId,
+				appId,
+				(current, key, enabled) => admit(installation(current), key === null ? null : publisher(key), enabled),
+				packageId,
 			),
 		);
 		const decoded = await this.decodeSource(source, signal);
-		const latest = await this.runtimeInstallation(userId, appId, admit);
+		const latest = await this.runtimeInstallation(userId, appId, admit, packageId);
 		if (latest.revision !== source.installation.revision) {
 			throw new AgentFailure('version_conflict');
 		}
@@ -620,22 +909,7 @@ export class PluginModel {
 		}
 		return {
 			installation: installation(source.installation),
-			agentContribution:
-				decoded.agentContribution === null
-					? null
-					: {
-							role: decoded.agentContribution.role,
-							toolNames:
-								decoded.agentContribution.toolNames === null
-									? null
-									: decoded.agentContribution.toolNames.map((name) => name),
-							beforeStep: decoded.agentContribution.beforeStep,
-							tools: decoded.agentContribution.tools.map((tool) => ({
-								name: tool.name,
-								description: tool.description,
-							})),
-						},
-			manifest: manifest(decoded.manifest),
+			manifest: fromStoredPluginManifest(decoded.manifest),
 			files: decoded.files.map((file) => ({ path: file.path, bytes: file.bytes.slice(), sha256: file.sha256 })),
 		};
 	}
@@ -650,7 +924,7 @@ export class PluginModel {
 		return {
 			version: source.manifest.version,
 			revision: source.installation.revision,
-			documents: fromPluginSkillFiles(source.files),
+			documents: fromPluginSkillFiles(source.files, source.manifest.contributions.skills),
 		};
 	}
 
@@ -659,10 +933,15 @@ export class PluginModel {
 		appId: string,
 		key: string,
 		admit: (current: PluginInstallation, publisher: PluginPublisher | null, enabled: boolean) => void,
+		packageId?: string,
 	): Promise<PluginData | null> {
 		const result = await storage(() =>
-			this.storage.runtimeReadData(userId, appId, key, (current, key, enabled) =>
-				admit(installation(current), key === null ? null : publisher(key), enabled),
+			this.storage.runtimeReadData(
+				userId,
+				appId,
+				key,
+				(current, key, enabled) => admit(installation(current), key === null ? null : publisher(key), enabled),
+				packageId,
 			),
 		);
 		return result === null ? null : data(result);
@@ -673,7 +952,8 @@ export class PluginModel {
 		appId: string,
 		input: PluginDataMutation,
 		admit: (current: PluginInstallation, publisher: PluginPublisher | null, enabled: boolean) => void,
-		decide: (current: PluginData | null, keyCount: number, dataBytes: number) => void,
+		decide: (current: PluginData | null) => void,
+		packageId?: string,
 	): Promise<PluginData> {
 		const contentHash = createHash('sha256')
 			.update(JSON.stringify([input.expectedRevision, input.key, input.expectedVersion, input.valueJson]))
@@ -690,7 +970,8 @@ export class PluginModel {
 					now: Date.now(),
 				},
 				(current, key, enabled) => admit(installation(current), key === null ? null : publisher(key), enabled),
-				(current, keys, dataBytes) => decide(current === null ? null : data(current), keys, dataBytes),
+				(current) => decide(current === null ? null : data(current)),
+				packageId,
 			),
 		);
 		return data(result);
@@ -698,7 +979,7 @@ export class PluginModel {
 
 	async openRuntime(
 		source: PluginPackageSource,
-		host: (input: PluginRpcInput) => Promise<PluginRpcResult>,
+		lifecycle: { instanceId: string; generation: string; configurationRevision: number },
 	): Promise<PluginRuntimeInstance> {
 		const entry = source.manifest.backendEntry;
 		if (entry === null) {
@@ -708,112 +989,15 @@ export class PluginModel {
 		try {
 			instance = await this.runtime.open({
 				appId: source.installation.appId,
+				instanceId: lifecycle.instanceId,
+				generation: lifecycle.generation,
+				configurationRevision: lifecycle.configurationRevision,
 				definitionId: source.installation.definitionId,
+				packageHash: source.installation.packageHash,
+				publisherKeyId: source.installation.publisherKeyId,
 				version: source.installation.version,
-				revision: source.installation.revision,
 				entry,
 				files: source.files.map((file) => ({ path: file.path, bytes: file.bytes, sha256: file.sha256 })),
-
-				host: async (request) => {
-					let input: PluginRpcInput;
-					if (request.method === 'host.appInfo') {
-						input = { method: request.method };
-					} else if (request.method === 'intents.create') {
-						const value = request.input;
-						input = {
-							method: request.method,
-							input: {
-								operationId: value.operationId,
-								receiverAppId: value.receiverAppId,
-								intentId: value.intentId,
-								inputJson: value.inputJson,
-								artifactIds: value.artifactIds.map((id) => id),
-								confirmed: value.confirmed,
-							},
-						};
-					} else if (request.method === 'intents.listReceived') {
-						input = { method: request.method, limit: request.limit };
-					} else if (request.method === 'intents.revoke') {
-						input = { method: request.method, receiptId: request.receiptId };
-					} else if (request.method === 'intents.artifacts.get') {
-						input = {
-							method: request.method,
-							receiptId: request.receiptId,
-							artifactId: request.artifactId,
-						};
-					} else if (request.method === 'intents.artifacts.readRange') {
-						input = {
-							method: request.method,
-							receiptId: request.receiptId,
-							artifactId: request.artifactId,
-							start: request.start,
-							endInclusive: request.endInclusive,
-						};
-					} else if (request.method === 'storage.get') {
-						input = { method: request.method, key: request.key };
-					} else if (request.method === 'storage.delete') {
-						input = {
-							method: request.method,
-							key: request.key,
-							expectedVersion: request.expectedVersion,
-							operationId: request.operationId,
-						};
-					} else {
-						input = {
-							method: request.method,
-							key: request.key,
-							expectedVersion: request.expectedVersion,
-							operationId: request.operationId,
-							valueJson: request.valueJson,
-						};
-					}
-					try {
-						const result = await host(input);
-						if (result.method === 'intents.create') {
-							return { ok: true, method: result.method, value: intentToStorage(result.value) };
-						}
-						if (result.method === 'intents.listReceived') {
-							return { ok: true, method: result.method, value: result.value.map(intentToStorage) };
-						}
-						if (result.method === 'intents.revoke') {
-							return { ok: true, method: result.method, value: { revoked: true } };
-						}
-						if (result.method === 'intents.artifacts.get') {
-							return { ok: true, method: result.method, value: artifactToStorage(result.value) };
-						}
-						if (result.method === 'intents.artifacts.readRange') {
-							const value = result.value;
-							return {
-								ok: true,
-								method: result.method,
-								value: {
-									receiptId: value.receiptId,
-									artifactId: value.artifactId,
-									start: value.start,
-									endInclusive: value.endInclusive,
-									bytes: value.bytes.slice(),
-								},
-							};
-						}
-						if (result.method === 'host.appInfo') {
-							return { ok: true, method: result.method, value: toInstallation(result.value) };
-						}
-						if (result.method === 'storage.get') {
-							return {
-								ok: true,
-								method: result.method,
-								value: result.value === null ? null : toData(result.value),
-							};
-						}
-						return { ok: true, method: result.method, value: toData(result.value) };
-					} catch (error) {
-						if (error instanceof AgentFailure) {
-							const reply: PluginRuntimeReply = { ok: false, code: error.code };
-							return reply;
-						}
-						throw error;
-					}
-				},
 			});
 		} catch (error) {
 			runtimeFailure(error);
@@ -833,33 +1017,36 @@ export class PluginModel {
 		return {
 			exited,
 
-			activate: () => call(() => owned.activate()),
+			activate: async () => (await call(() => owned.activate())).map(fromRegistryDefinition),
 
-			agent: async (input, signal, timeoutMs) => {
-				try {
-					const command =
-						input.kind === 'context'
-							? { kind: input.kind, runId: input.runId, stepIndex: input.stepIndex, prompt: input.prompt }
-							: {
-									kind: input.kind,
-									runId: input.runId,
-									stepIndex: input.stepIndex,
-									operationId: input.operationId,
-									name: input.name,
-									argumentsJson: input.argumentsJson,
-								};
-					const result = await owned.agent(command, signal, timeoutMs);
-					return result.text;
-				} catch (error) {
-					if (
-						error instanceof ModuleRuntimeFailure &&
-						(error.kind === 'execution_unknown' || error.kind === 'protocol_invalid')
-					) {
-						throw new ToolExecutionUnknown({ cause: error });
-					}
-					runtimeFailure(error);
-				}
-			},
+			releaseResources: (runId, deadlineUnixMs) => call(() => owned.releaseResources(runId, deadlineUnixMs)),
+
+			invokeCallable: (input, signal, timeoutMs, dispatch) =>
+				call(() =>
+					owned.invokeCallable(
+						{
+							key: input.key,
+							argumentsJson: input.argumentsJson,
+							scope:
+								input.scope.kind === 'run'
+									? {
+											kind: 'run',
+											runId: input.scope.runId,
+											operationId: input.scope.operationId,
+											deadlineUnixMs: input.scope.deadlineUnixMs,
+										}
+									: { kind: input.scope.kind, deadlineUnixMs: input.scope.deadlineUnixMs },
+						},
+						signal,
+						timeoutMs,
+						async (request) => {
+							const response = await dispatch({ method: request.method, inputJson: request.inputJson });
+							return response.ok
+								? { ok: true, valueJson: response.valueJson }
+								: { ok: false, code: response.code };
+						},
+					),
+				),
 
 			health: () => call(() => owned.health()),
 
@@ -953,45 +1140,6 @@ export class PluginModel {
 			installations: directory.installations.map(installation),
 			retainedAppIds: directory.retainedAppIds.map((id) => id),
 		};
-	}
-
-	async install(
-		actor: PluginActor,
-		stageId: string,
-		version: number,
-		appId: string,
-		admit: (
-			identity: number | null,
-			stage: PluginStage,
-			publisher: PluginPublisher | null,
-			current: PluginInstallation | null,
-		) => PluginAppInitialization,
-	): Promise<PluginInstallation> {
-		return installation(
-			await storage(() =>
-				this.storage.install(
-					actor.userId,
-					this.tokens.digest(actor.token),
-					stageId,
-					version,
-					appId,
-					Date.now(),
-					(userId, row, key, current) => {
-						const initialization = admit(
-							userId,
-							stage(row),
-							key === null ? null : publisher(key),
-							current === null ? null : installation(current),
-						);
-						return {
-							enabled: initialization.enabled,
-							grantedCapabilities:
-								initialization.grantedCapabilities?.map((capability) => capability) ?? null,
-						};
-					},
-				),
-			),
-		);
 	}
 
 	async stages(actor: PluginActor): Promise<PluginStage[]> {
@@ -1283,7 +1431,7 @@ export class PluginModel {
 				(id) => keys.find((key) => key.keyId === id && key.revokedAt === null)?.publicKeyPem ?? null,
 			);
 			return {
-				manifest: manifest(decoded.manifest),
+				manifest: fromStoredPluginManifest(decoded.manifest),
 				publisherKeyId: decoded.publisherKeyId,
 				signatureValid: decoded.signatureValid,
 			};
@@ -1339,7 +1487,10 @@ export class PluginModel {
 		} catch (error) {
 			throw new AgentFailure('invalid_input', { cause: error });
 		}
-		validateSkills(fromPluginSkillFiles(decoded.files), decoded.manifest.version);
+		validateSkills(
+			fromPluginSkillFiles(decoded.files, decoded.manifest.contributions.skills),
+			decoded.manifest.version,
+		);
 		return stage(
 			await storage(() =>
 				this.storage.updateStage(
@@ -1353,7 +1504,7 @@ export class PluginModel {
 						admit(identity, stage(row), key === null ? null : publisher(key), decoded.signatureValid);
 						return {
 							status: 'verified',
-							manifest: toManifest(manifest(decoded.manifest)),
+							manifest: toStoredPluginManifest(fromStoredPluginManifest(decoded.manifest)),
 							publisherKeyId: decoded.publisherKeyId,
 						};
 					},
@@ -1396,7 +1547,18 @@ function toInstallation(value: PluginInstallation): StoredPluginInstallation {
 }
 
 function runtimeFailure(error: unknown): never {
+	if (error instanceof PluginCallableRefusal) {
+		// A plugin can report its own uncertain outcome; Host callback and cleanup failures
+		// retain their original evidence independently of this untrusted declaration.
+		if (error.code === 'operation_unknown') {
+			throw new AgentResourceFenced({ cause: error });
+		}
+		throw new AgentFailure(error.code, { cause: error });
+	}
 	if (error instanceof ModuleRuntimeFailure) {
+		if (error.kind === 'source_failed') {
+			throw new PluginSourceInvocationFailure({ cause: error });
+		}
 		if (error.kind === 'cleanup_failed') {
 			throw new ToolCleanupFailure({ cause: error });
 		}
@@ -1409,15 +1571,16 @@ function runtimeFailure(error: unknown): never {
 
 export function fromPluginSkillFiles(
 	files: { path: string; bytes: Uint8Array; sha256: string }[],
+	declarations: readonly { path: string }[],
 ): PluginSkillDocument[] {
-	const selected = files.filter((file) => file.path.startsWith('skills/'));
-	if (selected.length > MAX_PLUGIN_SKILL_DOCUMENTS) {
-		throw new AgentFailure('limit_exceeded');
-	}
-	return selected.map((file) => {
-		if (file.bytes.byteLength > MAX_PLUGIN_SKILL_BYTES) {
-			throw new AgentFailure('limit_exceeded');
+	const selected = declarations.map((declaration) => {
+		const file = files.find((file) => file.path === declaration.path);
+		if (!file) {
+			throw new AgentFailure('invalid_input');
 		}
+		return file;
+	});
+	return selected.map((file) => {
 		try {
 			return {
 				path: file.path,

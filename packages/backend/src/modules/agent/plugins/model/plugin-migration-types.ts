@@ -1,15 +1,13 @@
-import type { PluginData } from './plugin-types.js';
-
 export interface PluginDataSnapshot {
 	appId: string;
 	revision: number;
-	items: PluginData[];
+	items: { packageId: string; key: string; version: number; valueJson: string | null; updatedAt: number }[];
 }
 
 export interface PluginDataMigration {
 	expectedRevision: number;
 	operationId: string;
-	items: { key: string; expectedVersion: number; valueJson: string | null }[];
+	items: { packageId: string; key: string; expectedVersion: number; valueJson: string | null }[];
 }
 
 export interface PluginDataMigrationResult {

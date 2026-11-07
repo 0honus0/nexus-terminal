@@ -15,31 +15,14 @@ import {
 } from '@nexus-terminal/shared/agent/memory/http-codec';
 import { readAgentGovernanceAppPath } from '@nexus-terminal/shared/agent/governance/http-codec';
 import { InvalidAgentPayload } from '@nexus-terminal/shared/agent/http-codec';
-import type { AgentMemoryView } from '@nexus-terminal/shared/agent/memory/model';
+import { toMemoryView } from './memory-mapper.js';
 import type { HttpRoute, HttpRequest, HttpReply } from '../../../../platform/http/http-types.js';
 import type { AccessPublicApi } from '../../../access/public.js';
 import { AccessOperationError } from '../../../access/public-errors.js';
 import type { MemoryService } from '../../memory/service/memory-service.js';
-import type { MemoryRecord, MemoryActor } from '../../memory/model/memory-types.js';
+import type { MemoryActor } from '../../memory/model/memory-types.js';
 import { AgentOperationError } from '../../public-errors.js';
 import { agentErrorStatus } from './agent-http-status.js';
-
-function toWire(value: MemoryRecord): AgentMemoryView {
-	return {
-		id: value.id,
-		appId: value.appId,
-		content: value.content,
-		confidence: value.confidence,
-		status: value.status,
-		sourceRunId: value.sourceRunId,
-		expiresAt: value.expiresAt,
-		reviewAction: value.reviewAction,
-		reviewedAt: value.reviewedAt,
-		version: value.version,
-		createdAt: value.createdAt,
-		updatedAt: value.updatedAt,
-	};
-}
 
 function send(
 	reply: HttpReply,
@@ -135,7 +118,7 @@ export function createMemoryHttpRoutes(
 			offset: query.offset,
 			threadId: query.threadId,
 		});
-		return { items: page.items.map(toWire), nextOffset: page.nextOffset };
+		return { items: page.items.map(toMemoryView), nextOffset: page.nextOffset };
 	});
 	add(
 		'POST',
@@ -143,7 +126,7 @@ export function createMemoryHttpRoutes(
 		async (request, actor) => {
 			const input = readAgentMemoryProposal(request.body);
 			return {
-				memory: toWire(
+				memory: toMemoryView(
 					await service.propose(actor, {
 						content: input.content,
 						confidence: input.confidence,
@@ -164,13 +147,13 @@ export function createMemoryHttpRoutes(
 		if (!result) {
 			throw new AgentOperationError('not_found');
 		}
-		return { memory: toWire(result) };
+		return { memory: toMemoryView(result) };
 	});
 	add('POST', '/memories/:memoryId/review', async (request, actor) => {
 		const path = readAgentMemoryPath(request.params);
 		const input = readAgentMemoryReview(request.body);
 		return {
-			memory: toWire(
+			memory: toMemoryView(
 				await service.review(actor, path.memoryId, {
 					expectedVersion: input.expectedVersion,
 					decision: input.decision,

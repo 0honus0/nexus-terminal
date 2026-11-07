@@ -1,9 +1,7 @@
-import type { StoredPluginData } from './plugin-storage.js';
-
 export interface StoredPluginDataSnapshot {
 	appId: string;
 	revision: number;
-	items: StoredPluginData[];
+	items: { packageId: string; key: string; version: number; valueJson: string | null; updatedAt: number }[];
 }
 
 export interface StoredPluginDataMigration {
@@ -11,7 +9,7 @@ export interface StoredPluginDataMigration {
 	operationId: string;
 	requestHash: string;
 	now: number;
-	items: { key: string; expectedVersion: number; valueJson: string | null }[];
+	items: { packageId: string; key: string; expectedVersion: number; valueJson: string | null }[];
 }
 
 export interface StoredPluginDataMigrationResult {

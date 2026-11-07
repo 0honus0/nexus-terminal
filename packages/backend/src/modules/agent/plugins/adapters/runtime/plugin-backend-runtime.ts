@@ -1,161 +1,20 @@
+import { readAgentPluginRegistrations } from '@nexus-terminal/shared/agent/plugins/registry-codec';
 import {
-	readAgentPluginAgentRequest,
-	readAgentPluginAgentResult,
-} from '@nexus-terminal/shared/agent/plugins/agent-extension';
-import type {
-	AgentPluginBackendContext,
-	AgentPluginBackendReply,
-} from '@nexus-terminal/shared/agent/plugins/backend-sdk';
-import { readAgentPluginRpcInput } from '@nexus-terminal/shared/agent/plugins/rpc-codec';
-import type { AgentPluginIntentReceipt } from '@nexus-terminal/shared/agent/plugins/intent-model';
-import type { StoredPluginIntent } from '../../storage/plugin-intent-storage.js';
-import { encodeAgentJson } from '@nexus-terminal/shared/agent/http-codec';
+	readAgentPluginDispatchInput,
+	readAgentPluginDispatchReply,
+	readAgentPluginCapabilityRequest,
+	readAgentPluginCapabilityReply,
+} from '@nexus-terminal/shared/agent/plugins/runtime-codec';
+import type { AgentPluginRuntimeContext } from '@nexus-terminal/shared/agent/plugins/runtime';
+import { AGENT_PLUGIN_RESOURCE_RELEASE_KEY } from '@nexus-terminal/shared/agent/plugins/runtime';
+import { agentRecord, InvalidAgentPayload } from '@nexus-terminal/shared/agent/http-codec';
 import { AGENT_PLUGIN_MAX_MESSAGE_BYTES } from '@nexus-terminal/shared/agent/plugins/values';
-import { InvalidAgentPayload } from '@nexus-terminal/shared/agent/http-codec';
-import type { PluginBackendRuntime, PluginBackendInstance, PluginRuntimeReply } from '../../storage/plugin-runtime.js';
-import { ModuleRuntimeFailure, type ModuleRuntime } from '../../../../../platform/isolation/module-runtime.js';
+import { PluginCallableRefusal } from '../../storage/plugin-runtime.js';
+import type { PluginBackendRuntime, PluginBackendInstance } from '../../storage/plugin-runtime.js';
+import type { ModuleRuntime } from '../../../../../platform/isolation/module-runtime.js';
+import { ModuleRuntimeFailure } from '../../../../../platform/isolation/module-runtime.js';
 
-function intent(value: StoredPluginIntent): AgentPluginIntentReceipt {
-	return {
-		id: value.id,
-		senderAppId: value.senderAppId,
-		receiverAppId: value.receiverAppId,
-		senderVersion: value.senderVersion,
-		receiverVersion: value.receiverVersion,
-		senderRevision: value.senderRevision,
-		receiverRevision: value.receiverRevision,
-		intentId: value.intentId,
-		schemaVersion: value.schemaVersion,
-		inputJson: value.inputJson,
-		artifactIds: value.artifactIds.map((id) => id),
-		createdAt: value.createdAt,
-		expiresAt: value.expiresAt,
-		revokedAt: value.revokedAt,
-	};
-}
-
-function reply(value: PluginRuntimeReply): AgentPluginBackendReply {
-	const response = projectReply(value);
-	try {
-		// Reserve framing space for the generic runtime's finite IPC envelope.
-		encodeAgentJson(response, AGENT_PLUGIN_MAX_MESSAGE_BYTES - 1024);
-		return response;
-	} catch (error) {
-		if (!(error instanceof InvalidAgentPayload)) {
-			throw error;
-		}
-		const committed =
-			value.ok &&
-			(value.method === 'storage.put' ||
-				value.method === 'storage.delete' ||
-				value.method === 'intents.create' ||
-				value.method === 'intents.revoke');
-		return { ok: false, error: { code: committed ? 'operation_unknown' : 'limit_exceeded' } };
-	}
-}
-
-function projectReply(value: PluginRuntimeReply): AgentPluginBackendReply {
-	if (!value.ok) {
-		return { ok: false, error: { code: value.code } };
-	}
-	if (value.method === 'intents.create') {
-		return { ok: true, result: { method: value.method, value: intent(value.value) } };
-	}
-	if (value.method === 'intents.listReceived') {
-		return { ok: true, result: { method: value.method, value: value.value.map(intent) } };
-	}
-	if (value.method === 'intents.revoke') {
-		return { ok: true, result: { method: value.method, value: { revoked: true } } };
-	}
-	if (value.method === 'intents.artifacts.get') {
-		const item = value.value;
-		return {
-			ok: true,
-			result: {
-				method: value.method,
-				value: {
-					id: item.id,
-					appId: item.appId,
-					name: item.name,
-					mediaType: item.mediaType,
-					kind: item.kind,
-					sizeBytes: item.sizeBytes,
-					sha256: item.sha256,
-					status: item.status,
-					retained: item.retained,
-					version: item.version,
-					createdAt: item.createdAt,
-					readyAt: item.readyAt,
-					expiresAt: item.expiresAt,
-					deletedAt: item.deletedAt,
-				},
-			},
-		};
-	}
-	if (value.method === 'intents.artifacts.readRange') {
-		const item = value.value;
-		return {
-			ok: true,
-			result: {
-				method: value.method,
-				value: {
-					receiptId: item.receiptId,
-					artifactId: item.artifactId,
-					start: item.start,
-					endInclusive: item.endInclusive,
-					dataBase64: Buffer.from(item.bytes).toString('base64'),
-				},
-			},
-		};
-	}
-	if (value.method === 'host.appInfo') {
-		const item = value.value;
-		return {
-			ok: true,
-			result: {
-				method: value.method,
-				value: {
-					appId: item.appId,
-					definitionId: item.definitionId,
-					version: item.version,
-					packageHash: item.packageHash,
-					publisherKeyId: item.publisherKeyId,
-					status: item.status,
-					revision: item.revision,
-					createdAt: item.createdAt,
-					updatedAt: item.updatedAt,
-				},
-			},
-		};
-	}
-	if (value.method === 'storage.get') {
-		const item = value.value;
-		return {
-			ok: true,
-			result: {
-				method: value.method,
-				value:
-					item === null
-						? null
-						: {
-								key: item.key,
-								version: item.version,
-								valueJson: item.valueJson,
-								updatedAt: item.updatedAt,
-							},
-			},
-		};
-	}
-	const item = value.value;
-	return {
-		ok: true,
-		result: {
-			method: value.method,
-			value: { key: item.key, version: item.version, valueJson: item.valueJson, updatedAt: item.updatedAt },
-		},
-	};
-}
-
+/** Only the invocation-local bridge carries authority. Activation cannot borrow a global Host callback. */
 export class NativePluginBackendRuntime implements PluginBackendRuntime {
 	constructor(private readonly modules: ModuleRuntime) {}
 
@@ -164,125 +23,127 @@ export class NativePluginBackendRuntime implements PluginBackendRuntime {
 	}
 
 	async open(input: Parameters<PluginBackendRuntime['open']>[0]): Promise<PluginBackendInstance> {
-		const context: AgentPluginBackendContext = {
-			protocol: 1,
-			sdkVersion: '1',
+		const context: AgentPluginRuntimeContext = {
+			protocol: 4,
+			sdkVersion: '4',
+			instanceId: input.instanceId,
+			generation: input.generation,
 			appId: input.appId,
-			definitionId: input.definitionId,
-			version: input.version,
-			revision: input.revision,
+			package: {
+				packageId: input.definitionId,
+				version: input.version,
+				packageHash: input.packageHash,
+				publisherKeyId: input.publisherKeyId,
+			},
+			configurationRevision: input.configurationRevision,
 		};
 		const instance = await this.modules.open({
 			entry: input.entry,
 			files: input.files.map((file) => ({ path: file.path, bytes: file.bytes, sha256: file.sha256 })),
 			contextJson: JSON.stringify(context),
 
-			host: async (raw) => {
-				try {
-					const value = readAgentPluginRpcInput(raw);
-					if (value.method === 'host.appInfo') {
-						return reply(await input.host({ method: value.method }));
-					}
-					if (value.method === 'intents.create') {
-						const p = value.params;
-						return reply(
-							await input.host({
-								method: value.method,
-								input: {
-									operationId: p.operationId,
-									receiverAppId: p.receiverAppId,
-									intentId: p.intentId,
-									inputJson: p.inputJson,
-									artifactIds: p.artifactIds.map((id) => id),
-									confirmed: p.confirmed,
-								},
-							}),
-						);
-					}
-					if (value.method === 'intents.listReceived') {
-						return reply(await input.host({ method: value.method, limit: value.params.limit }));
-					}
-					if (value.method === 'intents.revoke') {
-						return reply(await input.host({ method: value.method, receiptId: value.params.receiptId }));
-					}
-					if (value.method === 'intents.artifacts.get') {
-						return reply(
-							await input.host({
-								method: value.method,
-								receiptId: value.params.receiptId,
-								artifactId: value.params.artifactId,
-							}),
-						);
-					}
-					if (value.method === 'intents.artifacts.readRange') {
-						return reply(
-							await input.host({
-								method: value.method,
-								receiptId: value.params.receiptId,
-								artifactId: value.params.artifactId,
-								start: value.params.start,
-								endInclusive: value.params.endInclusive,
-							}),
-						);
-					}
-					if (value.method === 'storage.get') {
-						return reply(await input.host({ method: value.method, key: value.params.key }));
-					}
-					if (value.method === 'storage.delete') {
-						return reply(
-							await input.host({
-								method: value.method,
-								key: value.params.key,
-								expectedVersion: value.params.expectedVersion,
-								operationId: value.params.operationId,
-							}),
-						);
-					}
-					if (value.method !== 'storage.put') {
-						return { ok: false, error: { code: 'forbidden' } };
-					}
-					return reply(
-						await input.host({
-							method: value.method,
-							key: value.params.key,
-							expectedVersion: value.params.expectedVersion,
-							operationId: value.params.operationId,
-							valueJson: value.params.valueJson,
-						}),
-					);
-				} catch (error) {
-					if (error instanceof InvalidAgentPayload) {
-						return { ok: false, error: { code: 'invalid_input' } };
-					}
-					throw error;
-				}
-			},
+			host: async () => ({ ok: false, code: 'forbidden' }),
 		});
 		return {
 			exited: instance.exited,
 
-			activate: () => instance.activate(),
+			activate: async () => readAgentPluginRegistrations(await instance.activate()),
 
-			agent: async (input, signal, timeoutMs) => {
-				const command =
-					input.kind === 'context'
-						? { kind: input.kind, runId: input.runId, stepIndex: input.stepIndex, prompt: input.prompt }
-						: {
-								kind: input.kind,
-								runId: input.runId,
-								stepIndex: input.stepIndex,
-								operationId: input.operationId,
-								name: input.name,
-								argumentsJson: input.argumentsJson,
-							};
-				const request = readAgentPluginAgentRequest(command);
-				const result = await instance.invoke(JSON.stringify(request), signal, timeoutMs);
-				try {
-					const value = readAgentPluginAgentResult(result);
-					return { text: value.text };
-				} catch (cause) {
-					throw new ModuleRuntimeFailure('execution_unknown', { cause });
+			releaseResources: async (runId, deadlineUnixMs) => {
+				const result = await instance.invoke(
+					JSON.stringify({
+						key: AGENT_PLUGIN_RESOURCE_RELEASE_KEY,
+						argumentsJson: JSON.stringify({ runId }),
+						scope: { kind: 'lifecycle', deadlineUnixMs },
+					}),
+					new AbortController().signal,
+					Math.max(1, deadlineUnixMs - Date.now()),
+					{
+						exportName: 'dispatch',
+						methods: [],
+
+						read: async () => {
+							throw new InvalidAgentPayload();
+						},
+					},
+				);
+				const reply = readAgentPluginDispatchReply(result);
+				if ('errorCode' in reply) {
+					throw new PluginCallableRefusal(reply.errorCode);
 				}
+				if (reply.resultJson !== 'null') {
+					throw new InvalidAgentPayload();
+				}
+			},
+
+			invokeCallable: async (input, signal, timeoutMs, call) => {
+				const request = readAgentPluginDispatchInput(input);
+				const pending = new Set<Promise<unknown>>();
+				const failures = new Set<unknown>();
+				let accepting = true;
+				let result: unknown;
+				let invocationFailed = false;
+				let invocationFailure: unknown;
+				try {
+					result = await instance.invoke(JSON.stringify(request), signal, timeoutMs, {
+						exportName: 'dispatch',
+						methods: ['call'],
+
+						read: (raw) => {
+							if (!accepting) {
+								return Promise.reject(new InvalidAgentPayload());
+							}
+							const task = Promise.resolve().then(async () => {
+								const envelope = agentRecord(
+									raw,
+									['method', 'input'],
+									AGENT_PLUGIN_MAX_MESSAGE_BYTES - 1024,
+								);
+								if (envelope.method !== 'call') {
+									throw new InvalidAgentPayload();
+								}
+								const value = readAgentPluginCapabilityRequest(envelope.input);
+								return readAgentPluginCapabilityReply(
+									await call({ method: value.method, inputJson: value.inputJson }),
+								);
+							});
+							pending.add(task);
+							void task.then(
+								() => pending.delete(task),
+								(error: unknown) => {
+									accepting = false;
+									pending.delete(task);
+									failures.add(error);
+								},
+							);
+							return task;
+						},
+					});
+				} catch (error) {
+					invocationFailed = true;
+					invocationFailure = error;
+				} finally {
+					// A handler may return or catch a refusal while accepted Host work is
+					// still pending. Its original invocation owns all of that work.
+					accepting = false;
+					await Promise.allSettled([...pending]);
+				}
+				if (failures.size > 0) {
+					if (invocationFailed) {
+						failures.add(invocationFailure);
+					}
+					throw new ModuleRuntimeFailure('protocol_invalid', {
+						cause: new AggregateError([...failures], 'Callable and accepted capabilities failed'),
+					});
+				}
+				if (invocationFailed) {
+					throw invocationFailure;
+				}
+				const reply = readAgentPluginDispatchReply(result);
+				if ('errorCode' in reply) {
+					throw new PluginCallableRefusal(reply.errorCode);
+				}
+				return reply.resultJson;
 			},
 
 			health: () => instance.health(),

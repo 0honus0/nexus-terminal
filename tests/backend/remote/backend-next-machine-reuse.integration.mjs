@@ -7,7 +7,6 @@ import { spawn } from 'node:child_process';
 import { RemoteMachineModel } from '../../../packages/backend/dist/modules/remote/machines/model/machine-model.js';
 import { RemoteMachineScopeModel } from '../../../packages/backend/dist/modules/remote/machines/model/machine-scope-model.js';
 import { MachineCommandModel } from '../../../packages/backend/dist/modules/remote/machines/model/command-model.js';
-import { MachineAcpModel } from '../../../packages/backend/dist/modules/remote/machines/model/acp-model.js';
 import { RemoteMachineOperationService } from '../../../packages/backend/dist/modules/remote/machines/service/operation-service.js';
 import { RemoteMachineOperationFactoryService } from '../../../packages/backend/dist/modules/remote/machines/service/operation-factory-service.js';
 import { RemoteFileModel } from '../../../packages/backend/dist/modules/remote/files/model/file-model.js';
@@ -16,7 +15,6 @@ import { RemoteFileFailure } from '../../../packages/backend/dist/modules/remote
 import { RemoteResourceCleanupFailure } from '../../../packages/backend/dist/modules/remote/resource-errors.js';
 import { Ssh2MachineFactory } from '../../../packages/backend/dist/platform/ssh/adapters/ssh2/ssh-machine.js';
 import { PosixCommandAdapter } from '../../../packages/backend/dist/platform/commands/adapters/posix-command.js';
-import { NdjsonAcpAdapter } from '../../../packages/backend/dist/platform/acp/adapters/ndjson-acp.js';
 import { TargetOperationError } from '../../../packages/backend/dist/modules/targets/public-errors.js';
 import { ToolModel } from '../../../packages/backend/dist/modules/agent/tools/model/tool-model.js';
 import { remoteOperationFactory } from '../../../packages/backend/dist/modules/remote/operation-mapper.js';
@@ -54,7 +52,7 @@ async function fixture(t) {
 		sftp: 0,
 		exec: 0,
 		activeSftp: 0,
-		acp: 0,
+		processes: 0,
 		held: [],
 		holdPaths: false,
 		pathEntered: Promise.withResolvers(),
@@ -99,55 +97,21 @@ async function fixture(t) {
 						state.execEntered.resolve();
 						return;
 					}
-					if (info.command.includes('__nexus_acp__')) {
-						state.acp++;
-						let input = '',
-							promptId;
+					if (info.command.includes('__nexus_interactive__')) {
+						state.processes++;
+						let input = '';
 						channel.on('data', (bytes) => {
 							input += bytes.toString();
 							while (input.includes('\n')) {
-								const index = input.indexOf('\n');
-								const value = JSON.parse(input.slice(0, index));
-								input = input.slice(index + 1);
-								if (value.id === undefined) continue;
-								if (value.id === 'permission') {
-									assert.equal(value.result.outcome.optionId, 'once');
-									channel.write(
-										JSON.stringify({
-											jsonrpc: '2.0',
-											id: promptId,
-											result: { stopReason: 'end_turn' },
-										}) + '\n',
-									);
-									continue;
+								const end = input.indexOf('\n');
+								const message = input.slice(0, end);
+								input = input.slice(end + 1);
+								if (message === 'prompt')
+									channel.write(info.command.includes('permission') ? 'approve\n' : 'done\n');
+								else {
+									assert.equal(message, 'allow_once');
+									channel.write('done\n');
 								}
-								if (value.method === 'session/prompt' && info.command.includes('permission')) {
-									promptId = value.id;
-									channel.write(
-										JSON.stringify({
-											jsonrpc: '2.0',
-											id: 'permission',
-											method: 'session/request_permission',
-											params: {
-												sessionId: 'fixture-session',
-												toolCall: {
-													toolCallId: 'bulk-independent',
-													title: 'Independent approval',
-													kind: 'read',
-												},
-												options: [{ optionId: 'once', kind: 'allow_once', name: 'Allow once' }],
-											},
-										}) + '\n',
-									);
-									continue;
-								}
-								const result =
-									value.method === 'initialize'
-										? { protocolVersion: 1 }
-										: value.method === 'session/new'
-											? { sessionId: 'fixture-session' }
-											: { stopReason: 'end_turn' };
-								channel.write(JSON.stringify({ jsonrpc: '2.0', id: value.id, result }) + '\n');
 							}
 						});
 						return;
@@ -283,7 +247,6 @@ async function fixture(t) {
 			files,
 			observations,
 			new MachineCommandModel(pool, commands),
-			new MachineAcpModel(pool, commands, new NdjsonAcpAdapter()),
 			{ run: async (_id, _origin, _targets, work) => work() },
 			pool,
 		);
@@ -309,7 +272,37 @@ async function fixture(t) {
 	};
 }
 
-await test('Agent reuse: commands, files, diagnostics and ACP retain only their Run resources', async (t) => {
+/** Remote owns only byte channels; official MCP/ACP SDK behavior is covered by signed-plugin HTTP scenarios. */
+async function interactiveProcess(service, owner, input) {
+	await service.withProcess(owner, { argv: input.argv, cwd: input.cwd, maxReadBytes: 4096 }, async (channel) => {
+		let buffered = '';
+
+		async function line() {
+			while (!buffered.includes('\n')) {
+				const chunk = await channel.read('stdout', 128);
+				assert.equal(chunk.eof, false, 'Interactive peer remains open until the owner closes it');
+				buffered += Buffer.from(chunk.bytes).toString();
+			}
+			const end = buffered.indexOf('\n');
+			const value = buffered.slice(0, end);
+			buffered = buffered.slice(end + 1);
+			return value;
+		}
+
+		await channel.write(Buffer.from('prompt\n'));
+		let reply = await line();
+		if (reply === 'approve') {
+			const approval = await input.permission();
+			assert.equal(approval.decision, 'allow_once');
+			await channel.write(Buffer.from(approval.decision + '\n'));
+			await approval.delivered();
+			reply = await line();
+		}
+		assert.equal(reply, 'done');
+	});
+}
+
+await test('Agent reuse: commands, files, diagnostics and interactive processes retain only their Run resources', async (t) => {
 	const f = await fixture(t);
 	const service = f.create();
 	assert.equal(
@@ -329,21 +322,21 @@ await test('Agent reuse: commands, files, diagnostics and ACP retain only their 
 	assert.equal(f.state.sftp, 1, 'sequential file operations reuse their SFTP channel');
 	await service.executeCommand(scope(), command('printf independent'));
 	await service.diagnose(scope());
-	await service.executeAcp(scope(), {
-		argv: ['__nexus_acp__'],
+	await interactiveProcess(service, scope(), {
+		argv: ['__nexus_interactive__'],
 		cwd: '/',
 		prompt: 'run',
 
 		permission: () => assert.fail('No permission callback expected'),
 	});
-	await service.executeAcp(scope(), {
-		argv: ['__nexus_acp__'],
+	await interactiveProcess(service, scope(), {
+		argv: ['__nexus_interactive__'],
 		cwd: '/',
 		prompt: 'run again',
 
 		permission: () => assert.fail('No permission callback expected'),
 	});
-	assert.equal(f.state.acp, 2, 'ACP starts a fresh protocol session each time');
+	assert.equal(f.state.processes, 2, 'each interactive call starts its own process');
 	assert.equal(f.state.connections, 2, 'idle command transport is reused independently of retained SFTP');
 	const second = f.create();
 	await second.executeCommand(scope(), command('printf another-run'));
@@ -373,7 +366,7 @@ await test('Agent reuse: concurrent commands isolate their transports and cancel
 	assert.equal(f.state.connections, 2, 'a retired connection can be replaced after its last lease');
 });
 
-await test('Agent reuse: ACP approvals complete while a large exec remains active on its own transport', async (t) => {
+await test('Agent reuse: interactive process callbacks complete while a large exec remains active on its own transport', async (t) => {
 	const f = await fixture(t),
 		service = f.create(),
 		stop = new AbortController();
@@ -392,8 +385,8 @@ await test('Agent reuse: ACP approvals complete while a large exec remains activ
 	await f.state.execEntered.promise;
 	await blocked.promise;
 	let approval = false;
-	await service.executeAcp(scope(), {
-		argv: ['__nexus_acp__', 'permission'],
+	await interactiveProcess(service, scope(), {
+		argv: ['__nexus_interactive__', 'permission'],
 		cwd: '/',
 		prompt: 'interactive approval',
 
@@ -407,7 +400,7 @@ await test('Agent reuse: ACP approvals complete while a large exec remains activ
 		},
 	});
 	assert.equal(approval, true);
-	assert.equal(f.state.connections, 2, 'background output and ACP cannot share TCP backpressure');
+	assert.equal(f.state.connections, 2, 'background output and an interactive process cannot share TCP backpressure');
 	assert.equal(outputCalls, 1, 'a blocked output sink never accumulates append requests');
 	stop.abort();
 	await bulk;
@@ -565,8 +558,15 @@ await test('Agent reuse: Agent Run drain releases the Remote factory and late ca
 		validate: async () => {},
 	};
 	await remote.command(input, request);
-	assert.equal((await remote.projectDirectory('/', request))[0].name, 'file.txt');
-	assert.equal((await remote.projectInstruction('/file.txt', request)).text, fileBytes.toString());
+	const listing = await remote.listPage({ path: '/', after: '' }, request);
+	assert.equal(listing.status, 'ok');
+	assert.equal(listing.value.entries[0].name, 'file.txt');
+	const instruction = await remote.readTextPage(
+		{ path: '/file.txt', offset: 0, maxBytes: fileBytes.length },
+		request,
+	);
+	assert.equal(instruction.status, 'ok');
+	assert.equal(instruction.value.text, fileBytes.toString());
 	const delivered = await remote.consumeFile('/file.txt', fileBytes.length, request, async (_file, source) => {
 		const chunks = [];
 		for await (const chunk of source) chunks.push(chunk);

@@ -1,5 +1,6 @@
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
+import { appAuthority } from '../../../scope/adapters/sqlite/app-row.js';
 import type {
 	IntegrationStorage,
 	StoredIntegrationScope,
@@ -7,9 +8,11 @@ import type {
 	StoredIntegrationFacts,
 	StoredIntegrationTask,
 	StoredIntegrationReceipt,
+	StoredIntegrationCreationDecision,
+	StoredIntegrationCreationResult,
 } from '../../storage/integration-storage.js';
 import { IntegrationStorageRefusal } from '../../storage/integration-storage.js';
-import { integrationRow, integrationReceipt } from './integration-row.js';
+import { integrationRow, integrationReceipt, integrationRejection } from './integration-row.js';
 
 async function get(tx: SqlExecutor, scope: StoredIntegrationScope, id: string): Promise<StoredIntegration | null> {
 	const row = await tx.one('SELECT * FROM agent_integrations WHERE user_id=? AND app_id=? AND id=?', [
@@ -31,7 +34,7 @@ export async function appsWithIntegrationSettings(tx: SqlExecutor, userId: numbe
 }
 
 export async function clearAppIntegrationSettings(tx: SqlExecutor, userId: number, appId: string): Promise<void> {
-	// Creation receipts remain historical facts; live configuration and credentials are removed.
+	// Success receipts and rejected creation keys remain terminal historical facts, without live credentials.
 	await tx.run('DELETE FROM agent_integrations WHERE user_id=? AND app_id=?', [userId, appId]);
 }
 
@@ -66,11 +69,13 @@ export class SqliteIntegrationStorage implements IntegrationStorage {
 		if (typeof count?.count !== 'number') {
 			throw new Error('Integration count missing');
 		}
+		const authority = app === null ? null : await appAuthority(tx, scope.userId, scope.appId);
 		return {
 			exists: app !== null,
 			enabled: app?.enabled === 1,
 			identityUserId: await this.readIdentity(tx, digest),
 			count: count.count,
+			capabilities: authority?.capabilities.map((capability) => capability) ?? [],
 		};
 	}
 
@@ -95,8 +100,8 @@ export class SqliteIntegrationStorage implements IntegrationStorage {
 		intentHash: string,
 		now: number,
 		admit: (facts: StoredIntegrationFacts) => void,
-		decide: (facts: StoredIntegrationFacts) => StoredIntegrationTask,
-	): Promise<StoredIntegrationReceipt> {
+		decide: (facts: StoredIntegrationFacts) => StoredIntegrationCreationDecision,
+	): Promise<StoredIntegrationCreationResult> {
 		return this.db.transaction(async (tx) => {
 			const facts = await this.facts(tx, scope, digest);
 			admit(facts);
@@ -104,13 +109,36 @@ export class SqliteIntegrationStorage implements IntegrationStorage {
 				'SELECT * FROM agent_integration_intents WHERE user_id=? AND app_id=? AND operation_key=?',
 				[scope.userId, scope.appId, key],
 			);
+			const rejected = await tx.one(
+				'SELECT * FROM agent_integration_rejections WHERE user_id=? AND app_id=? AND operation_key=?',
+				[scope.userId, scope.appId, key],
+			);
+			if (prior && rejected) {
+				throw new Error('Conflicting integration creation outcomes');
+			}
 			if (prior) {
 				if (prior.intent_hash !== intentHash || typeof prior.integration_id !== 'string') {
 					throw new IntegrationStorageRefusal('idempotency_conflict');
 				}
-				return integrationReceipt(prior);
+				return { kind: 'created', receipt: integrationReceipt(prior) };
 			}
-			const task = decide(facts);
+			if (rejected) {
+				if (integrationRejection(rejected).intentHash !== intentHash) {
+					throw new IntegrationStorageRefusal('idempotency_conflict');
+				}
+				return { kind: 'not_created' };
+			}
+			const decision = decide(facts);
+			if (decision.kind === 'reject') {
+				await tx.run('INSERT INTO agent_integration_rejections VALUES(?,?,?,?)', [
+					scope.userId,
+					scope.appId,
+					key,
+					intentHash,
+				]);
+				return { kind: 'not_created' };
+			}
+			const task = decision.task;
 			await tx.run('INSERT INTO agent_integrations VALUES(?,?,?,?,?,?,?,NULL,1,?,?)', [
 				id,
 				scope.userId,
@@ -146,7 +174,27 @@ export class SqliteIntegrationStorage implements IntegrationStorage {
 				id,
 				JSON.stringify(receipt),
 			]);
-			return receipt;
+			return { kind: 'created', receipt };
+		});
+	}
+
+	prepareDiscovery(
+		scope: StoredIntegrationScope,
+		digest: string,
+		id: string,
+		version: number,
+		admit: (facts: StoredIntegrationFacts) => void,
+	): Promise<StoredIntegration> {
+		return this.db.transaction(async (tx) => {
+			admit(await this.facts(tx, scope, digest));
+			const current = await get(tx, scope, id);
+			if (!current) {
+				throw new IntegrationStorageRefusal('not_found');
+			}
+			if (current.version !== version || !current.enabled) {
+				throw new IntegrationStorageRefusal('version_conflict');
+			}
+			return current;
 		});
 	}
 

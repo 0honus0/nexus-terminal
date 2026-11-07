@@ -41,7 +41,10 @@ function admission(access: ThreadAccess, facts: ThreadAccessFacts): void {
 }
 
 export class ThreadService {
-	constructor(private readonly model: ThreadModel) {}
+	constructor(
+		private readonly model: ThreadModel,
+		private readonly memoriesChanged: (scope: { userId: number; appId: string }) => void,
+	) {}
 
 	private validateAccess(access: ThreadAccess): void {
 		validateUserId(access.userId);
@@ -131,23 +134,33 @@ export class ThreadService {
 		if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1) {
 			throw new AgentFailure('invalid_input');
 		}
-		return this.model.remove(
-			access,
-			{ threadId: input.threadId, expectedVersion: input.expectedVersion },
-			(facts) => {
-				if (
-					facts.runStatuses.some(
-						(status) => status === 'pending' || status === 'running' || status === 'unknown',
-					)
-				) {
-					throw new AgentFailure('active_run_conflict');
-				}
-				if (facts.maxMemoryVersion !== null && facts.maxMemoryVersion >= Number.MAX_SAFE_INTEGER) {
-					throw new AgentFailure('version_conflict');
-				}
-				return { updatedAt: Date.now() };
-			},
-			(facts) => admission(access, facts),
-		);
+		return this.model
+			.remove(
+				access,
+				{ threadId: input.threadId, expectedVersion: input.expectedVersion },
+				(facts) => {
+					if (
+						facts.runStatuses.some(
+							(status) =>
+								status === 'pending' ||
+								status === 'running' ||
+								status === 'suspended' ||
+								status === 'unknown',
+						)
+					) {
+						throw new AgentFailure('active_run_conflict');
+					}
+					if (facts.maxMemoryVersion !== null && facts.maxMemoryVersion >= Number.MAX_SAFE_INTEGER) {
+						throw new AgentFailure('version_conflict');
+					}
+					return { updatedAt: Date.now() };
+				},
+				(facts) => admission(access, facts),
+			)
+			.finally(() => {
+				// Removing the source Thread changes Memory versions and thread-filtered membership.
+				// The notification capability marks subscribers dirty and isolates their failures.
+				this.memoriesChanged({ userId: access.userId, appId: access.appId });
+			});
 	}
 }

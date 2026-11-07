@@ -1,38 +1,48 @@
-import { ref } from 'vue';
-import { getPluginRecommendation, installRecommendedPlugin } from '../api/plugin-management-api';
-import type { PluginCatalogEntry } from '../model/plugin-types';
+import { ref, toRaw } from 'vue';
+import {
+	getPluginRecommendation,
+	preparePluginInstallPlan,
+	executePluginInstallPlan,
+} from '../plugins/api/plugin-management-api';
+import type { PluginCatalogEntry } from '../plugins/model/plugin-types';
+import type { PluginInstallPlan } from '../plugins/model/plugin-install-plan-types';
 import { useAgentManagementOperation } from './use-agent-management-operation';
 
-/** Installation and enabling are separate writes; an uncertain installation is never replayed. */
+/** Signed dependencies are prepared before confirmation; retries reconcile actual packages and App bindings. */
 export function useAgentOnboarding(options: {
 	available: () => boolean;
 	canEnable: () => boolean;
 	onReady: () => void;
 }) {
 	const entry = ref<PluginCatalogEntry | null>(null);
+	const plan = ref<PluginInstallPlan | null>(null);
 	const visible = ref(false);
-	const uncertain = ref(false);
-	let installIntent: symbol | null = null;
-	const operation = useAgentManagementOperation((reason) => {
+	const operation = useAgentManagementOperation(() => {
 		entry.value = null;
+		plan.value = null;
 		visible.value = false;
-		if (reason === 'session' || reason === 'disposed') uncertain.value = false;
-		else if (installIntent !== null) uncertain.value = true;
 	}, options.available);
 
 	async function request(): Promise<void> {
 		if (!options.canEnable()) return;
 		await operation.execute(
-			getPluginRecommendation,
-			(recommendation) => {
+			async (signal) => {
+				const recommendation = await getPluginRecommendation(signal);
+				const prepared =
+					recommendation.installation || !recommendation.entry
+						? null
+						: await preparePluginInstallPlan(recommendation.entry, null, signal);
+				return { recommendation, prepared };
+			},
+			({ recommendation, prepared }) => {
 				if (!options.canEnable()) return;
 				if (recommendation.installation?.status === 'installed') {
-					uncertain.value = false;
 					options.onReady();
 					return;
 				}
 				entry.value = recommendation.entry;
-				visible.value = recommendation.entry !== null;
+				plan.value = prepared;
+				visible.value = recommendation.entry !== null && prepared !== null;
 				if (!recommendation.entry) operation.notice.value = 'failed';
 			},
 			{ write: false },
@@ -40,13 +50,13 @@ export function useAgentOnboarding(options: {
 	}
 
 	async function confirm(): Promise<void> {
-		if (!visible.value || !entry.value?.compatible || uncertain.value || !options.canEnable()) return;
-		const intent = Symbol();
-		installIntent = intent;
+		if (!visible.value || !entry.value?.compatible || !plan.value || !options.canEnable()) return;
+		const original = structuredClone(toRaw(plan.value));
 		await operation.execute(
-			installRecommendedPlugin,
+			(signal) => executePluginInstallPlan(original, signal, 'declared_grants'),
 			() => {
 				visible.value = false;
+				plan.value = null;
 				options.onReady();
 			},
 			{
@@ -54,16 +64,16 @@ export function useAgentOnboarding(options: {
 				refreshAfterSuccess: true,
 
 				onFailure() {
-					uncertain.value = operation.notice.value === 'unknown';
+					plan.value = null;
+					operation.notice.value = 'failed';
 				},
 			},
 		);
-		if (installIntent === intent) installIntent = null;
 	}
 
 	function close(): void {
 		if (!operation.busy.value) visible.value = false;
 	}
 
-	return { entry, visible, uncertain, operation, request, confirm, close };
+	return { entry, plan, visible, operation, request, confirm, close };
 }

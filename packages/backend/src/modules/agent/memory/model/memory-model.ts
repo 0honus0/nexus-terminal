@@ -42,7 +42,6 @@ function fromFacts(value: StoredMemoryFacts): MemoryAdmissionFacts {
 		enabled: value.enabled,
 		identityUserId: value.identityUserId,
 		sourceExists: value.sourceExists,
-		count: value.count,
 		now: value.now,
 	};
 }
@@ -71,7 +70,7 @@ export class MemoryModel {
 	) {}
 
 	private authorization(actor: MemoryActor): StoredMemoryAuthorization {
-		return actor.kind === 'session'
+		return actor.kind === 'session' || actor.kind === 'plugin-ui'
 			? { kind: 'session', digest: this.tokens.digest(actor.token) }
 			: { kind: 'tool', runId: actor.runId, operationId: actor.operationId, operationHash: actor.operationHash };
 	}
@@ -140,14 +139,11 @@ export class MemoryModel {
 	async recall(
 		actor: MemoryActor,
 		clock: () => number,
-		limit: number,
 		admit: (facts: MemoryAdmissionFacts) => void,
 	): Promise<MemoryRecord[]> {
 		return (
 			await storage(() =>
-				this.storage.recall(scope(actor), this.authorization(actor), clock, limit, (facts) =>
-					admit(fromFacts(facts)),
-				),
+				this.storage.recall(scope(actor), this.authorization(actor), clock, (facts) => admit(fromFacts(facts))),
 			)
 		).map(fromStorage);
 	}

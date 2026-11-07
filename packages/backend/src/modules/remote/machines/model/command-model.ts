@@ -1,3 +1,5 @@
+import { withMachineProcess } from './process-model.js';
+import type { MachineProcessChannel, MachineProcessRequest } from './operation-types.js';
 import type { RemoteMachineProvider } from './machine-types.js';
 import { NativeCommandCleanupFailure } from '../../../../platform/commands/command-port.js';
 import type { CommandPort, NativeCommand } from '../../../../platform/commands/command-port.js';
@@ -13,6 +15,14 @@ export class MachineCommandModel {
 		private readonly machines: RemoteMachineProvider,
 		private readonly commands: CommandPort,
 	) {}
+
+	withProcess(
+		scope: MachineOperationScope,
+		input: MachineProcessRequest,
+		consume: (channel: MachineProcessChannel) => Promise<void>,
+	): Promise<void> {
+		return withMachineProcess(this.machines, this.commands, scope, input, consume);
+	}
 
 	async execute(
 		scope: MachineOperationScope,

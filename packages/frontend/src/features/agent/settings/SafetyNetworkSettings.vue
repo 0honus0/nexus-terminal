@@ -14,7 +14,6 @@
 		UiSearchInput,
 	} from '@/foundation/ui';
 	import { useConnections } from '@/features/connections/public';
-	import { AGENT_DENYLIST_MAX_TARGETS } from '@nexus-terminal/shared/agent/governance/values';
 	import { getAgentDenylist, saveAgentDenylist } from '../api/app-management-api';
 	import type { AgentDenylist, AgentDenylistDraft } from '../model/app-management-types';
 	import { useAgentManagementOperation } from '../composables/use-agent-management-operation';
@@ -85,14 +84,13 @@
 		if (blocked.value) return;
 		const next = new Set(draft.value.connectionIds);
 		if (next.has(id)) next.delete(id);
-		else if (next.size < AGENT_DENYLIST_MAX_TARGETS) next.add(id);
+		else next.add(id);
 		draft.value.connectionIds = [...next];
 	}
 
 	function blockFiltered(): void {
 		const next = new Set(draft.value.connectionIds);
 		for (const connection of filteredConnections.value) {
-			if (next.size >= AGENT_DENYLIST_MAX_TARGETS) break;
 			next.add(connection.id);
 		}
 		draft.value.connectionIds = [...next];

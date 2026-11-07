@@ -43,6 +43,26 @@ export class SqliteSchemaAdapter {
 		return version;
 	}
 
+	async validateMigration(): Promise<void> {
+		const enforcement = await this.executor.one('PRAGMA foreign_keys');
+		if (enforcement?.foreign_keys !== 1) {
+			throw new Error('Schema migration requires foreign key enforcement');
+		}
+		if (await this.executor.one('PRAGMA foreign_key_check')) {
+			throw new Error('Schema migration violates foreign key constraints');
+		}
+		const deferred = await this.executor.one('PRAGMA defer_foreign_keys');
+		if (deferred?.defer_foreign_keys !== 0 && deferred?.defer_foreign_keys !== 1) {
+			throw new Error('Invalid schema migration foreign key deferral');
+		}
+		if (deferred.defer_foreign_keys === 1) {
+			// DROP followed by recreation can retain SQLite's deferred violation
+			// count after every actual reference is valid. Reset only that count
+			// after checking the complete final schema, with enforcement still on.
+			await this.executor.exec('PRAGMA defer_foreign_keys=OFF');
+		}
+	}
+
 	async record(version: number, signature: string, appliedAt: number): Promise<void> {
 		await this.executor.run('INSERT INTO schema_version(version,signature,applied_at) VALUES(?,?,?)', [
 			version,

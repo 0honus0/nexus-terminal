@@ -8,15 +8,28 @@ import {
 } from '../../../packages/shared/src/agent/plugins/repository-http-codec';
 import {
 	readAgentPluginItems,
+	readAgentPluginInstallationList,
 	readAgentPluginPublisherView,
 	readAgentPluginStageView,
-	readAgentPluginInstallation,
+	readAgentPluginPackageInstallationResponse,
+	readAgentPluginPackageInstallationList,
+	readAgentPluginAppBindingResponse,
 } from '../../../packages/shared/src/agent/plugins/http-codec';
 import type { AgentPluginStage, AgentPluginInstallation } from '../../../packages/shared/src/agent/plugins/model';
 
 export const testPluginRepositoryUrl = E2E_URLS.pluginRepositoryOrigin + '/catalog.json';
 
 const repositoryUrl = testPluginRepositoryUrl;
+const pinnedPackageIds = [
+	'nexus.services.mcp',
+	'nexus.services.acp',
+	'nexus.tools.remote',
+	'nexus.tools.browser',
+	'nexus.tools.integrations',
+	'nexus.tools.agent',
+	'nexus.ui.chat',
+	'nexus.agent',
+];
 
 export async function configureTestPluginRepository(request: APIRequestContext) {
 	const settings = await requestAgentJson(
@@ -24,7 +37,7 @@ export async function configureTestPluginRepository(request: APIRequestContext) 
 		{ method: 'GET', path: '/plugins/repositories' },
 		readAgentPluginRepositorySettings,
 	);
-	if (!settings.repositories.some((entry) => entry.url === repositoryUrl)) {
+	if (settings.repositories.length !== 1 || settings.repositories[0].url !== repositoryUrl) {
 		await requestAgentJson(
 			request,
 			{
@@ -32,9 +45,7 @@ export async function configureTestPluginRepository(request: APIRequestContext) 
 				path: '/plugins/repositories',
 				data: {
 					expectedVersion: settings.version,
-					repositories: settings.repositories
-						.map((entry) => ({ url: entry.url }))
-						.concat({ url: repositoryUrl }),
+					repositories: [{ url: repositoryUrl }],
 				},
 			},
 			readAgentPluginRepositorySettings,
@@ -51,10 +62,15 @@ export async function configureTestPluginRepository(request: APIRequestContext) 
 export async function stageTestPlugin(
 	request: APIRequestContext,
 	definitionId: string,
-	version = '1.0.0',
+	version?: string,
 ): Promise<AgentPluginStage> {
 	const catalog = await configureTestPluginRepository(request);
-	const entry = catalog.packages.find((item) => item.appId === definitionId && item.version === version);
+	const requestedVersion = version ?? (pinnedPackageIds.includes(definitionId) ? null : '1.0.0');
+	const entry = catalog.packages.find(
+		(item) =>
+			item.packageId === definitionId &&
+			(requestedVersion === null ? item.compatible : item.version === requestedVersion),
+	);
 	if (!entry) {
 		throw new Error('Controlled plugin package is missing');
 	}
@@ -80,24 +96,97 @@ export async function stageTestPlugin(
 	}
 	const verified = await requestAgentJson(
 		request,
-		{ method: 'POST', path: '/plugins/remote/stage', data: { repositoryUrl, appId: definitionId, version } },
+		{
+			method: 'POST',
+			path: '/plugins/remote/stage',
+			data: {
+				repositoryUrl,
+				packageId: definitionId,
+				publisherKeyId: entry.publisherKeyId,
+				version: entry.version,
+			},
+		},
 		readAgentPluginStageView,
 	);
-	expect(verified.status).toBe('verified');
-	expect(verified.manifest).toMatchObject({ id: definitionId, version });
+	expect(['verified', 'installed']).toContain(verified.status);
+	expect(verified.manifest).toMatchObject({ id: definitionId, version: entry.version });
 	expect(verified.publisherKeyId).toBe(publisher.keyId);
 	return verified;
+}
+
+export async function getPluginInstallation(
+	request: APIRequestContext,
+	appId: string,
+): Promise<AgentPluginInstallation> {
+	const values = await requestAgentJson(
+		request,
+		{ method: 'GET', path: '/plugins/installations' },
+		readAgentPluginInstallationList,
+	);
+	const installation = values.items.find((item) => item.appId === appId);
+	if (!installation) throw new Error('Expected actual App installation: ' + appId);
+	return installation;
 }
 
 export async function installTestPlugin(
 	request: APIRequestContext,
 	definitionId: string,
-	version = '1.0.0',
+	version?: string,
 ): Promise<AgentPluginInstallation> {
+	for (const packageId of pinnedPackageIds) {
+		if (packageId === definitionId) continue;
+		const installed = await requestAgentJson(
+			request,
+			{ method: 'GET', path: '/plugins/packages' },
+			readAgentPluginPackageInstallationList,
+		);
+		if (installed.installations.some((entry) => entry.packageId === packageId && entry.status === 'installed'))
+			continue;
+		const catalog = await configureTestPluginRepository(request);
+		const candidate = catalog.packages.find((entry) => entry.packageId === packageId && entry.compatible);
+		if (!candidate) throw new Error('Controlled dependency package is missing: ' + packageId);
+		const dependency = await stageTestPlugin(request, packageId, candidate.version);
+		await requestAgentJson(
+			request,
+			{
+				method: 'POST',
+				path: '/plugins/packages/install',
+				data: { stageId: dependency.id, expectedVersion: dependency.version },
+			},
+			readAgentPluginPackageInstallationResponse,
+		);
+	}
 	const verified = await stageTestPlugin(request, definitionId, version);
-	return requestAgentJson(
+	await requestAgentJson(
 		request,
-		{ method: 'POST', path: '/plugins/install', data: { stageId: verified.id, expectedVersion: verified.version } },
-		readAgentPluginInstallation,
+		{
+			method: 'POST',
+			path: '/plugins/packages/install',
+			data: { stageId: verified.id, expectedVersion: verified.version },
+		},
+		readAgentPluginPackageInstallationResponse,
 	);
+	const { binding } = await requestAgentJson(
+		request,
+		{
+			method: 'POST',
+			path: '/plugins/apps/compose',
+			data: {
+				packageId: definitionId,
+				selectedRootIds:
+					verified.manifest.contributions.app?.uiContract === 'nexus.ui.chat'
+						? pinnedPackageIds.filter(
+								(id) => id !== 'nexus.agent' && id !== 'nexus.ui.chat' && id !== definitionId,
+							)
+						: [],
+				uiPackageId: verified.manifest.contributions.ui
+					? definitionId
+					: verified.manifest.contributions.app?.uiContract === 'nexus.ui.chat'
+						? 'nexus.ui.chat'
+						: null,
+			},
+		},
+		readAgentPluginAppBindingResponse,
+	);
+	return getPluginInstallation(request, binding.appId);
 }

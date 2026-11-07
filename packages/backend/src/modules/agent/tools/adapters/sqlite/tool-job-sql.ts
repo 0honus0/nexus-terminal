@@ -1,8 +1,9 @@
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
+import { currentOperation } from '../../../operations/adapters/sqlite/current-operation-sql.js';
 import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
 import { TOOL_RESULT_MAX_BYTES } from '../../../runs/run-tool-limits.js';
-import { TOOL_JOB_STATES } from '../../tool-job-values.js';
+import { AGENT_TOOL_JOB_STATES } from '@nexus-terminal/shared/agent/tools/values';
 import type {
 	ToolJobStorage,
 	StoredToolJobResult,
@@ -116,7 +117,7 @@ export function readToolJob(value: Record<string, unknown>): StoredToolJob {
 	if (!/^[a-f0-9]{64}$/.test(fingerprint)) {
 		throw new Error('Invalid stored job fingerprint');
 	}
-	const state = TOOL_JOB_STATES.find((item) => item === value.state);
+	const state = AGENT_TOOL_JOB_STATES.find((item) => item === value.state);
 	if (!AGENT_ID_PATTERN.test(id) || !AGENT_ID_PATTERN.test(appId) || !AGENT_ID_PATTERN.test(runId) || !state) {
 		throw new Error('Invalid stored job identity');
 	}
@@ -167,11 +168,23 @@ export class SqliteToolJobStorage implements ToolJobStorage {
 
 	create(input: StoredJobCreate): Promise<StoredToolJob | 'version_conflict' | 'limit_exceeded'> {
 		return this.db.transaction(async (tx) => {
-			const authority = await tx.one(
-				`SELECT t.id FROM agent_run_tools t JOIN agent_runs r ON r.id=t.run_id WHERE t.id=? AND t.user_id=? AND t.app_id=? AND t.run_id=? AND t.state='dispatched' AND t.tool_name='shell_execute' AND t.capability='shell.execute' AND t.mutation=1 AND t.target_id=? AND t.target_version=? AND r.status='running'`,
-				[input.id, input.userId, input.appId, input.runId, input.connectionId, input.targetVersion],
+			const current = await currentOperation(
+				tx,
+				{
+					userId: input.userId,
+					appId: input.appId,
+					runId: input.runId,
+					operationId: input.id,
+					operationHash: input.operationHash,
+				},
+				{ labels: ['shell.execute'] },
 			);
-			if (!authority) {
+			if (
+				!current ||
+				current.authority.target?.id !== input.connectionId ||
+				current.authority.target.version !== input.targetVersion ||
+				current.authority.policyRevision !== input.policyRevision
+			) {
 				return 'version_conflict';
 			}
 			const count = await tx.one(
@@ -239,11 +252,29 @@ export class SqliteToolJobStorage implements ToolJobStorage {
 				return 'version_conflict';
 			}
 			if (input.state === 'dispatched') {
-				const owner = await tx.one(
-					`SELECT t.id FROM agent_run_tools t JOIN agent_runs r ON r.id=t.run_id WHERE t.id=? AND t.state IN ('dispatched','completed') AND r.status='running'`,
-					[current.id],
-				);
-				if (!owner || current.state !== 'queued' || resultText !== null) {
+				const operation = await tx.one('SELECT request_hash FROM agent_operations WHERE id=?', [current.id]);
+				const owner =
+					operation && typeof operation.request_hash === 'string'
+						? await currentOperation(
+								tx,
+								{
+									userId: input.scope.userId,
+									appId: input.scope.appId,
+									runId: input.scope.runId,
+									operationId: current.id,
+									operationHash: operation.request_hash,
+								},
+								{ labels: ['shell.execute'], allowCompleted: true },
+							)
+						: null;
+				if (
+					!owner ||
+					owner.authority.target?.id !== current.connectionId ||
+					owner.authority.target.version !== current.targetVersion ||
+					owner.authority.policyRevision !== current.policyRevision ||
+					current.state !== 'queued' ||
+					resultText !== null
+				) {
 					return 'version_conflict';
 				}
 			} else if (current.state === 'queued' && input.state !== 'failed') {

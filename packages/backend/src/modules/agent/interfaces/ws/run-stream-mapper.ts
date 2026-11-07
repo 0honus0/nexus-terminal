@@ -3,15 +3,15 @@ import type { RunStreamCursor, RunStreamPage } from '../../runs/model/run-stream
 import { toThreadEntries, toRunEvents, toChildren } from '../http/workspace-mapper.js';
 import { toRunView, toRunUsageView } from '../http/run-mapper.js';
 import { toThreadView } from '../http/scope-mapper.js';
-import { toApprovalPage } from '../http/governance-mapper.js';
+import { toOperationApprovalPage } from '../http/operation-approval-mapper.js';
 
 export function fromRunStreamCursor(value: AgentRunStreamCursor): RunStreamCursor {
 	return {
 		threadId: value.threadId,
 		entries: {
 			runSequence: value.entries.runSequence,
-			stepIndex: value.entries.stepIndex,
-			eventSequence: value.entries.eventSequence,
+			messageOrdinal: value.entries.messageOrdinal,
+			chunkIndex: value.entries.chunkIndex,
 			textOffset: value.entries.textOffset,
 		},
 		events: value.events,
@@ -39,7 +39,7 @@ export function toRunStreamEvent(
 						run: toRunView(value.state.run),
 						usage: toRunUsageView(value.state.usage),
 						events: toRunEvents(value.state.events),
-						approvals: toApprovalPage(value.state.approvals),
+						approvals: toOperationApprovalPage(value.state.approvals),
 						children: toChildren(value.state.children),
 						resources: value.state.resources.map((value) => ({
 							id: value.resource.id,
@@ -48,7 +48,7 @@ export function toRunStreamEvent(
 							openedAt: value.resource.createdAt,
 							sshConnections: value.resource.connections,
 							sftpChannels: value.resource.files,
-							mcpSessions: value.resource.mcpSessions,
+							protocolSessions: value.resource.protocolSessions,
 							browserSessions: value.resource.browserSessions,
 							activeOperations: value.resource.operations,
 							backgroundJobs: value.backgroundJobs,

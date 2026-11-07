@@ -6,10 +6,7 @@ import { readApp } from '../../../scope/adapters/sqlite/app-row.js';
 import { currentPolicy } from '../../../governance/adapters/sqlite/governance-sql.js';
 import { pluginManifest } from '../package/plugin-manifest.js';
 import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
-import {
-	AGENT_PLUGIN_INTENT_MAX_INPUT_BYTES,
-	AGENT_PLUGIN_INTENT_MAX_ARTIFACTS,
-} from '@nexus-terminal/shared/agent/plugins/intent-values';
+import { AGENT_PLUGIN_INTENT_MAX_INPUT_BYTES } from '@nexus-terminal/shared/agent/plugins/intent-values';
 import type {
 	PluginIntentIdentity,
 	PluginIntentStorage,
@@ -61,7 +58,7 @@ export function readPluginIntentReceipt(row: Record<string, unknown>): StoredPlu
 	const inputJson = text(row.input_json, AGENT_PLUGIN_INTENT_MAX_INPUT_BYTES);
 	JSON.parse(inputJson);
 	const ids: unknown = JSON.parse(text(row.artifact_ids_json, 2048));
-	if (!Array.isArray(ids) || ids.length > AGENT_PLUGIN_INTENT_MAX_ARTIFACTS) {
+	if (!Array.isArray(ids)) {
 		throw new Error('Corrupt intent artifacts');
 	}
 	const artifactIds = ids.map(id);
@@ -97,10 +94,13 @@ async function app(tx: SqlExecutor, userId: number, appId: string): Promise<Stor
 	if (!policy) {
 		throw new Error('Missing intent policy');
 	}
-	const plugin = await tx.one('SELECT manifest_json FROM agent_plugin_versions WHERE definition_id=? AND version=?', [
-		value.definitionId,
-		value.definitionVersion,
-	]);
+	const plugin = await tx.one(
+		`SELECT v.manifest_json FROM agent_app_definition_packages ref
+		 JOIN agent_plugin_versions v ON v.user_id=ref.user_id AND v.definition_id=ref.package_id
+		 AND v.version=ref.version AND v.package_hash=ref.package_hash AND v.publisher_key_id=ref.publisher_key_id
+		 WHERE ref.user_id=? AND ref.definition_id=? AND ref.definition_version=? AND ref.kind='app'`,
+		[userId, value.definitionId, value.definitionVersion],
+	);
 	const installation = await tx.one('SELECT revision FROM agent_plugin_installations WHERE user_id=? AND app_id=?', [
 		userId,
 		appId,

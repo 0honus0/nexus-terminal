@@ -340,36 +340,49 @@ await test('Browser session lanes isolate pending snapshots and configuration wa
 
 	const validate = async () => {};
 
+	const outputArtifactIds = [];
+
+	const recordOutputArtifacts = (ids) => outputArtifactIds.push(...ids);
+
 	try {
-		const first = JSON.parse(
-			await service.perform(owner, { action: 'open', targetId: 'target', expectedVersion: 1 }, signal, validate),
+		const first = await service.perform(
+			owner,
+			{ action: 'open', targetId: 'target', expectedVersion: 1 },
+			signal,
+			validate,
+			recordOutputArtifacts,
 		);
-		const second = JSON.parse(
-			await service.perform(
-				{ ...owner, operationId: 'second' },
-				{ action: 'open', targetId: 'target', expectedVersion: 1 },
-				signal,
-				validate,
-			),
+		const second = await service.perform(
+			{ ...owner, operationId: 'second' },
+			{ action: 'open', targetId: 'target', expectedVersion: 1 },
+			signal,
+			validate,
+			recordOutputArtifacts,
 		);
+
+		assert.equal(first.action, 'open');
+		assert.equal(second.action, 'open');
 
 		const snapshot = (sessionId) => ({
 			action: 'snapshot',
 			sessionId,
 			maxNodes: 100,
-			include: [],
-			after: 0,
-			limit: 50,
 		});
 
-		const held = service.perform(owner, snapshot(first.sessionId), signal, validate);
+		const held = service.perform(owner, snapshot(first.value.sessionId), signal, validate, recordOutputArtifacts);
 		await firstEntered.promise;
-		const independent = service.perform(owner, snapshot(second.sessionId), signal, validate);
+		const independent = service.perform(
+			owner,
+			snapshot(second.value.sessionId),
+			signal,
+			validate,
+			recordOutputArtifacts,
+		);
 		await independent;
 		await secondDone.promise;
 		const update = service.update({ userId: 1 }, 1, []);
 		const stale = assert.rejects(
-			service.perform(owner, snapshot(second.sessionId), signal, validate),
+			service.perform(owner, snapshot(second.value.sessionId), signal, validate, recordOutputArtifacts),
 			(error) => error.code === 'not_found',
 		);
 		await new Promise((resolve) => setImmediate(resolve));
@@ -380,6 +393,7 @@ await test('Browser session lanes isolate pending snapshots and configuration wa
 		await stale;
 		assert.equal(updated, true);
 		assert.ok(sessions.every((session) => session.closed));
+		assert.deepEqual(outputArtifactIds, [], 'open and snapshot do not publish artifacts');
 	} finally {
 		releaseFirst.resolve();
 		await service.close();

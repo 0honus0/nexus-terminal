@@ -25,6 +25,7 @@ export async function initializeSchema(db: SqliteRuntime, migrations: readonly S
 				throw new Error('Schema changed during initialization');
 			}
 			await migration.apply(tx);
+			await metadata.validateMigration();
 			await metadata.record(migration.version, migration.signature, Date.now());
 		};
 

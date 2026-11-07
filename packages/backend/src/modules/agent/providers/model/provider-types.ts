@@ -177,6 +177,7 @@ export interface ProviderImageResult {
 }
 
 export interface ImageArtifact {
+	mediaType: string;
 	id: string;
 	name: string;
 	previewUrl: string;

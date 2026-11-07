@@ -44,9 +44,7 @@ export async function patchInspectedText(
 			!isWellFormedFileText(edit.oldText) ||
 			!isWellFormedFileText(edit.newText) ||
 			edit.oldText.includes('\0') ||
-			edit.newText.includes('\0') ||
-			Buffer.byteLength(edit.oldText, 'utf8') > 4096 ||
-			Buffer.byteLength(edit.newText, 'utf8') > 4096
+			edit.newText.includes('\0')
 		) {
 			throw new RemoteFileFailure('invalid_input');
 		}
@@ -77,9 +75,6 @@ export async function patchInspectedText(
 	}
 	fragments.push(before.text.slice(offset));
 	const content = fragments.join('');
-	if (Buffer.byteLength(content, 'utf8') > 32 * 1024) {
-		throw new RemoteFileFailure('limit_exceeded');
-	}
 	return writeInspectedText(context, { path: filePath, content, expectedSha256: input.expectedSha256 });
 }
 

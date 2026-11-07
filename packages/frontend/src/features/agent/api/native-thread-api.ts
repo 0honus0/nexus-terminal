@@ -15,7 +15,10 @@ import { AgentManagementFailure } from '../model/management-failure';
 import { requestAgentManagement } from './management-request';
 import { requestNativeWorkspace } from './native-workspace-request';
 
-export function createNativeThreadApi(apiBase: '/api/v1/agent' | '/__next/api/v1/agent' = '/api/v1/agent') {
+export function createNativeThreadApi(
+	apiBase: '/api/v1/agent' | '/__next/api/v1/agent' = '/api/v1/agent',
+	resolveScope?: (appId: string, signal?: AbortSignal) => Promise<NativeThreadScope>,
+) {
 	function normalizedAppId(appId: string): string {
 		try {
 			return readAgentAppPath({ appId }).appId;
@@ -31,6 +34,7 @@ export function createNativeThreadApi(apiBase: '/api/v1/agent' | '/__next/api/v1
 	return {
 		async scope(appId: string, signal?: AbortSignal): Promise<NativeThreadScope> {
 			const id = normalizedAppId(appId);
+			if (resolveScope) return resolveScope(id, signal);
 			const app = await requestAgentManagement({
 				method: 'GET',
 				apiBase,

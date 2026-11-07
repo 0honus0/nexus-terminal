@@ -6,11 +6,16 @@
 	import { useAuthSession } from '@/features/auth/public';
 	import { useAgentManagementOperation } from '../composables/use-agent-management-operation';
 	import { listManagedApps } from '../api/app-management-api';
-	import { listPluginInstallations, listPluginVersions } from '../api/plugin-management-api';
+	import {
+		listPluginInstallations,
+		listPluginVersions,
+		listPluginAppBindings,
+	} from '../plugins/api/plugin-management-api';
 	import { getExecutionSettings } from '../api/execution-api';
 	import { toHostDirectory } from '../model/host-mapper';
 	import type { HostDirectory } from '../model/host-types';
 	import { AgentManagementFailure } from '../model/management-failure';
+	import { clearNativeTargetPreference } from '../model/native-target-preferences';
 	import AgentHubWindow from './AgentHubWindow.vue';
 	import AgentLauncher from './AgentLauncher.vue';
 	import { agentHostEvents } from '../events/agent-host-events';
@@ -31,6 +36,7 @@
 			if (reason === 'view') return;
 			directory.value = null;
 			windowManager.reset();
+			host.clearUiState();
 		},
 		() => auth.isAuthenticated.value && (auth.user.value?.id ?? null) === 1,
 	);
@@ -42,13 +48,14 @@
 	async function refresh(): Promise<void> {
 		await operation.execute(
 			async (signal) => {
-				const [apps, installations, versions, execution] = await Promise.all([
+				const [apps, installations, versions, execution, bindings] = await Promise.all([
 					listManagedApps(signal),
 					listPluginInstallations(signal),
 					listPluginVersions(signal),
 					getExecutionSettings(signal),
+					listPluginAppBindings(signal),
 				]);
-				return toHostDirectory(apps, installations.installations, versions, execution.enabled);
+				return toHostDirectory(apps, installations.installations, versions, execution.enabled, bindings);
 			},
 			(next) => {
 				directory.value = next;
@@ -58,7 +65,7 @@
 				}
 				const enabled = next.apps.filter((app) => app.enabled);
 				if (!enabled.some((app) => app.id === windowManager.state.activeAppId)) {
-					const first = enabled.find((app) => app.surface === 'agent') ?? enabled[0];
+					const first = enabled[0];
 					if (first) windowManager.switchApp({ appId: first.id });
 					else windowManager.closeHub();
 				}
@@ -73,6 +80,7 @@
 					) {
 						directory.value = null;
 						windowManager.reset();
+						host.clearUiState();
 						return;
 					}
 					if (!isNetworkFailure(cause)) feedback.notifyError(t('agent.hub.directoryErrorHint'), 0);
@@ -105,6 +113,10 @@
 	const stopConfiguration = agentHostEvents.on('configuration-changed', () => {
 		void refresh();
 	});
+	const stopDataCleared = agentHostEvents.on('app-data-cleared', ({ appId }) => {
+		host.clearAppUiState(appId);
+		if (userId !== null) clearNativeTargetPreference(userId, appId);
+	});
 
 	function onVisibility(): void {
 		if (document.visibilityState === 'hidden') persistLayout();
@@ -116,6 +128,7 @@
 		persistLayout();
 		stopHost();
 		stopConfiguration();
+		stopDataCleared();
 		document.removeEventListener('visibilitychange', onVisibility);
 	});
 </script>

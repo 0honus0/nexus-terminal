@@ -51,7 +51,6 @@ export async function writeInspectedText(
 		filePath === '/' ||
 		!isWellFormedFileText(input.content) ||
 		input.content.includes('\0') ||
-		Buffer.byteLength(input.content, 'utf8') > 32 * 1024 ||
 		(input.expectedSha256 !== 'absent' && !/^[a-f0-9]{64}$/.test(input.expectedSha256))
 	) {
 		throw new RemoteFileFailure('invalid_input');

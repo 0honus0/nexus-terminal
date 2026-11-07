@@ -1,0 +1,82 @@
+{
+  "packageId": "nexus.services.mcp",
+  "sourceRoot": "nexus-agent-plugins",
+  "baselineCommit": "e19e7049d81b3aa0d7ec533dce24ce4a726668dc",
+  "sourceWorktree": {
+    "dirty": false,
+    "releaseTag": "v2.0.0",
+    "note": "Official GitHub Actions signed SDK4 release archive; copied verbatim."
+  },
+  "sourceFiles": [
+    {
+      "path": "plugins/nexus.services.mcp/backend/THIRD-PARTY-NOTICES.txt",
+      "sha256": "37d2c83ddafbf26a8866e1aa94f9ff79d762d4b0087ebd7d8d57ffe19e67d00a",
+      "sizeBytes": 30310
+    },
+    {
+      "path": "plugins/nexus.services.mcp/backend/build-inputs.json",
+      "sha256": "fa9da2c44aabf33839f83251103500f153ac4b8b70a0e992ad9d9814b8665f89",
+      "sizeBytes": 35715
+    },
+    {
+      "path": "plugins/nexus.services.mcp/backend/index.mjs",
+      "sha256": "1a4621f9a850dfc7729fd56f360d616a0b13733cad7bdecf73322e97a42a1f20",
+      "sizeBytes": 1204981
+    },
+    {
+      "path": "plugins/nexus.services.mcp/docs/settings.md",
+      "sha256": "250125c3f2696997c3e7b5a57bbaaf030e8dd8c75e31e6fe0040b4974f292da8",
+      "sizeBytes": 143
+    },
+    {
+      "path": "plugins/nexus.services.mcp/files.json",
+      "sha256": "c8ceb1e065fcc189946284b1a6c385203e79506521447fceae4ae27e3fcc1438",
+      "sizeBytes": 1293
+    },
+    {
+      "path": "plugins/nexus.services.mcp/frontend/assets/index-CDYVth99.css",
+      "sha256": "3e702e9697cb3beaf27229f03c7d0862874c5b0b6fd2301c11f7a1728aaadb67",
+      "sizeBytes": 112124
+    },
+    {
+      "path": "plugins/nexus.services.mcp/frontend/assets/index-DrOYWYxk.js",
+      "sha256": "138bd2311a924993d2f93a184acc3ebd3176a3eebe005feb048c31570603d7b9",
+      "sizeBytes": 163529
+    },
+    {
+      "path": "plugins/nexus.services.mcp/frontend/index.html",
+      "sha256": "7fa7d35ec7e19608c96603b6e878c473100c4b04f928b5872cb462432172590b",
+      "sizeBytes": 385
+    },
+    {
+      "path": "plugins/nexus.services.mcp/manifest.json",
+      "sha256": "65c28ae2e01747e037bfe0a3ac4482f308c147de1750ef42c503ec9885d3468c",
+      "sizeBytes": 1046
+    },
+    {
+      "path": "plugins/nexus.services.mcp/signature.ed25519",
+      "sha256": "2072208d56b12a1d3aa359d3497a4411832fd32e7a8690e4c849ea2d4c88a7c8",
+      "sizeBytes": 64
+    }
+  ],
+  "sourceFilesSha256": "e75aa75d8da7164c25b432db9b40a05eb5227c2d56c410b27ff7f85342120f59",
+  "upstreamSignedPackage": {
+    "version": "4.0.0",
+    "compatibility": {
+      "host": {
+        "minVersion": "1.1.0",
+        "maxVersion": "1.1.0"
+      },
+      "backendSdk": 4,
+      "frontendSdk": 4
+    },
+    "publisher": {
+      "keyId": "ed25519:617ec64b03cd6ed1a1ddf373e3a47f38666cdcd27753d674e136a4d0a359a1a0",
+      "label": "Nexus first-party plugins",
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAPw+WXiJPcxqiKjxGCRcm3fWwy+JByAKTKX+iE5pKD/E=\n-----END PUBLIC KEY-----\n"
+    },
+    "publisherKeyId": "ed25519:617ec64b03cd6ed1a1ddf373e3a47f38666cdcd27753d674e136a4d0a359a1a0",
+    "sha256": "cdf17709eadca125956d67cb6558d3d5ac6a84822cf6cb14f2736bc2fee208e6",
+    "sizeBytes": 1566720
+  }
+}

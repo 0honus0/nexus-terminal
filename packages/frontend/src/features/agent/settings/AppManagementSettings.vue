@@ -11,7 +11,7 @@
 		UiInlineNotice,
 	} from '@/foundation/ui';
 	import type { useAppManagement } from '../composables/use-app-management';
-	import type { usePluginManagement } from '../composables/use-plugin-management';
+	import type { usePluginManagement } from '../plugins/composables/use-plugin-management';
 	import type { ManagedApp } from '../model/app-management-types';
 	import AppGovernanceEditor from './AppGovernanceEditor.vue';
 	const { t } = useI18n();

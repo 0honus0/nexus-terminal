@@ -1,4 +1,3 @@
-import { posixCommand } from '../../../support/posix-command.mjs';
 import { createHash, generateKeyPairSync } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -6,6 +5,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildPinnedPluginPackage } from '../../../support/pinned-plugin-package.mjs';
 import { buildNativePluginPackage } from '../../../support/native-plugin-package.mjs';
 
 const current = path.dirname(fileURLToPath(import.meta.url));
@@ -28,29 +28,48 @@ else {
 	fs.writeFileSync(keyPath, privateKey.export({ type: 'pkcs8', format: 'pem' }));
 }
 
+const pinnedPackages = await Promise.all(
+	[
+		'nexus.services.mcp',
+		'nexus.services.acp',
+		'nexus.tools.remote',
+		'nexus.tools.browser',
+		'nexus.tools.integrations',
+		'nexus.tools.agent',
+		'nexus.ui.chat',
+		'nexus.agent',
+	].map(async (id) => ({
+		...(await buildPinnedPluginPackage(temp, id)),
+		packageName: id + '.tar',
+		description: 'Verbatim upstream package build pinned for offline E2E.',
+	})),
+);
+
 const buildPackage = (appId, version, sourceAppId = appId) => {
 	const packageName = `${appId}-${version}.tar`;
 	const packagePath = path.join(temp, packageName);
+	const source = path.join(temp, sourceAppId);
+	fs.cpSync(path.join(current, `plugin-source/${sourceAppId}`), source, { recursive: true });
+	const manifestPath = path.join(source, 'manifest.json');
+	const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+	if (manifest.backendEntry) {
+		fs.copyFileSync(
+			path.resolve(current, '../../../../packages/backend/dist-plugin-sdk/backend-v4.mjs'),
+			path.join(source, 'backend/sdk.mjs'),
+		);
+	}
+
 	const metadata = JSON.parse(
-		execFileSync(
-			process.execPath,
-			[
-				path.join(current, 'build-plugin-package.mjs'),
-				path.join(current, `plugin-source/${sourceAppId}`),
-				packagePath,
-				keyPath,
-			],
-			{ cwd: current, encoding: 'utf8' },
-		),
+		execFileSync(process.execPath, [path.join(current, 'build-plugin-package.mjs'), source, packagePath, keyPath], {
+			cwd: current,
+			encoding: 'utf8',
+		}),
 	);
 	return { metadata, packageName, bytes: fs.readFileSync(packagePath) };
 };
 
 const packages = [
-	{
-		...buildPackage('nexus.agent', '1.0.0'),
-		description: 'Signed E2E Nexus Agent fixture with Operations and Developer Skills.',
-	},
+	...pinnedPackages,
 	{
 		...buildPackage('nexus.fullstack', '1.0.0'),
 		description: 'Signed E2E first-party frontend/backend/runner target fixture.',
@@ -69,7 +88,22 @@ const packages = [
 		description: 'E2E-only Plugin upgrade v2 fixture.',
 	},
 ];
-const publisher = packages[0].metadata;
+const customPublisher = packages.find(({ metadata }) => metadata.packageId === 'nexus.fullstack').metadata;
+const packagePublishers = [
+	...new Map(
+		packages.map(({ metadata }) => [
+			metadata.publisherKeyId,
+			{
+				keyId: metadata.publisherKeyId,
+				label:
+					metadata.publisherKeyId === customPublisher.publisherKeyId
+						? 'Nexus E2E Fixture Publisher'
+						: 'Pinned upstream publisher',
+				publicKeyPem: metadata.publicKeyPem,
+			},
+		]),
+	).values(),
+];
 
 const unsafePackageName = 'nexus.unsafe-1.0.0.tar';
 const unsafePackagePath = path.join(temp, unsafePackageName);
@@ -81,20 +115,14 @@ const unsafePackageBytes = fs.readFileSync(unsafePackagePath);
 const unsafePackageHash = createHash('sha256').update(unsafePackageBytes).digest('hex');
 
 const catalog = {
-	schemaVersion: 1,
-	publishers: [
-		{
-			keyId: publisher.publisherKeyId,
-			label: 'Nexus E2E Preset Publisher',
-			publicKeyPem: publisher.publicKeyPem,
-		},
-	],
+	schemaVersion: 2,
+	publishers: packagePublishers,
 	packages: [
 		...packages.map(({ metadata, packageName, description }) => ({
-			appId: metadata.appId,
+			packageId: metadata.packageId,
 			version: metadata.version,
-			sdkVersion: metadata.sdkVersion,
-			nexus: metadata.nexus,
+			compatibility: metadata.compatibility,
+			contributionKinds: metadata.contributionKinds,
 			displayName: metadata.displayName,
 			description,
 			packageUrl: `${publicBaseUrl}/packages/${packageName}`,
@@ -103,35 +131,52 @@ const catalog = {
 			publisherKeyId: metadata.publisherKeyId,
 		})),
 		{
-			appId: 'nexus.unsafe',
+			packageId: 'nexus.unsafe',
 			version: '1.0.0',
-			sdkVersion: '1',
-			nexus: { minVersion: '1.0.0', maxVersion: '1.99.99' },
+			compatibility: {
+				host: { minVersion: '1.0.0', maxVersion: '1.99.99' },
+				backendSdk: null,
+				frontendSdk: null,
+			},
+			contributionKinds: ['app'],
 			displayName: 'Unsafe Archive Fixture',
 			description: 'E2E-only package containing a symbolic link and no trusted payload.',
 			packageUrl: `${publicBaseUrl}/packages/${unsafePackageName}`,
 			sha256: unsafePackageHash,
 			sizeBytes: unsafePackageBytes.byteLength,
-			publisherKeyId: publisher.publisherKeyId,
+			publisherKeyId: customPublisher.publisherKeyId,
 		},
 		{
-			appId: 'nexus.agent',
+			packageId: 'nexus.agent',
 			version: '1.0.4',
-			sdkVersion: '1',
-			nexus: { minVersion: '1.0.4', maxVersion: '1.0.99' },
+			compatibility: { host: { minVersion: '1.0.4', maxVersion: '1.0.99' }, backendSdk: null, frontendSdk: null },
+			contributionKinds: ['app'],
 			displayName: 'Nexus Agent',
 			description: 'E2E-only compatibility fixture that requires a newer Nexus 1.0.x host.',
 			packageUrl: `${publicBaseUrl}/packages/nexus.agent-1.0.4-incompatible.tar`,
 			sha256: '0'.repeat(64),
 			sizeBytes: 1,
-			publisherKeyId: publisher.publisherKeyId,
+			publisherKeyId: pinnedPackages.find(({ metadata }) => metadata.packageId === 'nexus.agent').metadata
+				.publisherKeyId,
 		},
 	],
 };
 const officialCatalog = {
-	schemaVersion: 1,
+	schemaVersion: 2,
 	publishers: catalog.publishers,
-	packages: catalog.packages.filter((candidate) => ['nexus.agent', 'nexus.fullstack'].includes(candidate.appId)),
+	packages: catalog.packages.filter((candidate) =>
+		[
+			'nexus.agent',
+			'nexus.fullstack',
+			'nexus.services.mcp',
+			'nexus.services.acp',
+			'nexus.tools.remote',
+			'nexus.tools.browser',
+			'nexus.tools.integrations',
+			'nexus.tools.agent',
+			'nexus.ui.chat',
+		].includes(candidate.packageId),
+	),
 };
 const officialCatalogBytes = Buffer.from(`${JSON.stringify(officialCatalog, null, 2)}\n`, 'utf8');
 let officialCatalogEnabled = true;
@@ -147,19 +192,49 @@ const server = http.createServer(async (request, response) => {
 		try {
 			const chunks = [];
 			for await (const chunk of request) chunks.push(chunk);
-			const { name } = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+			const { name, settingsKind, upgradePackageId } = JSON.parse(Buffer.concat(chunks).toString('utf8'));
 			if (typeof name !== 'string' || !name.trim()) {
 				response.writeHead(400).end();
 				return;
 			}
-			const { metadata, bytes } = await buildNativePluginPackage(temp, name, keyPath);
-			const packageUrl = '/packages/' + metadata.appId + '.tar';
+			if (settingsKind !== undefined && !['mcp-read', 'acp', 'none'].includes(settingsKind)) {
+				response.writeHead(400).end();
+				return;
+			}
+			if (
+				upgradePackageId !== undefined &&
+				(settingsKind !== 'none' ||
+					!dynamicPackages.some((entry) => entry.packageId === upgradePackageId && entry.version === '1.0.0'))
+			) {
+				response.writeHead(400).end();
+				return;
+			}
+			const extension =
+				settingsKind === undefined
+					? {
+							sourcePackage: path.join(current, 'plugin-source/nexus.agent'),
+							dependencies: [],
+						}
+					: {
+							...(upgradePackageId === undefined
+								? {}
+								: { packageId: upgradePackageId, version: '2.0.0' }),
+							capabilities:
+								settingsKind === 'mcp-read'
+									? ['integration.mcp.read']
+									: settingsKind === 'acp'
+										? ['integration.acp.invoke']
+										: [],
+						};
+
+			const { metadata, bytes } = await buildNativePluginPackage(temp, name, keyPath, extension);
+			const packageUrl = '/packages/' + metadata.packageId + '-' + metadata.version + '.tar';
 			packageByUrl.set(packageUrl, bytes);
 			dynamicPackages.push({
-				appId: metadata.appId,
+				packageId: metadata.packageId,
 				version: metadata.version,
-				sdkVersion: metadata.sdkVersion,
-				nexus: metadata.nexus,
+				compatibility: metadata.compatibility,
+				contributionKinds: metadata.contributionKinds,
 				displayName: metadata.displayName,
 				description: 'Signed isolated native Agent fixture',
 				packageUrl: publicBaseUrl + packageUrl,
@@ -168,7 +243,7 @@ const server = http.createServer(async (request, response) => {
 				publisherKeyId: metadata.publisherKeyId,
 			});
 			response.writeHead(201, { 'Content-Type': 'application/json' });
-			response.end(JSON.stringify({ appId: metadata.appId }));
+			response.end(JSON.stringify({ packageId: metadata.packageId }));
 		} catch (error) {
 			console.error('Native package fixture failed', error);
 			response.writeHead(500).end();
@@ -187,67 +262,8 @@ const server = http.createServer(async (request, response) => {
 		return;
 	}
 	if (hangOpenAiRequests && request.method === 'POST' && request.url === '/v1/chat/completions') {
-		let body = '';
-		request.on('data', (chunk) => {
-			body += chunk;
-		});
+		request.resume();
 		request.on('end', () => {
-			const messages = JSON.parse(body).messages ?? [];
-			const latestInput = messages.filter((message) => message.role === 'user').at(-1)?.content;
-			if (latestInput === 'Docker pending-input hold') {
-				const resultFor = (id) => {
-					const message = messages.find(
-						(candidate) => candidate.role === 'tool' && candidate.tool_call_id === id,
-					);
-					return message ? JSON.parse(message.content) : null;
-				};
-
-				const workspaceId = resultFor('queue_create')?.data?.workspaceId;
-				const started = resultFor('queue_start')?.ok;
-				const name = !workspaceId ? 'workspace_create' : !started ? 'workspace_control' : 'shell_execute';
-				const args = !workspaceId
-					? {}
-					: !started
-						? { workspaceId, action: 'start' }
-						: {
-								target: 'workspace',
-								id: workspaceId,
-								command: {
-									commands: [
-										posixCommand(['/bin/sh', '-c', 'printf ready > .queue-ready; sleep 60']),
-									],
-								},
-								timeoutSeconds: 90,
-								mode: 'foreground',
-							};
-				response.writeHead(200, { 'Content-Type': 'text/event-stream' });
-				response.end(
-					`data: ${JSON.stringify({
-						id: 'docker-pending-input-hold',
-						object: 'chat.completion.chunk',
-						choices: [
-							{
-								index: 0,
-								delta: {
-									tool_calls: [
-										{
-											index: 0,
-											id: !workspaceId ? 'queue_create' : !started ? 'queue_start' : 'queue_hold',
-											type: 'function',
-											function: {
-												name,
-												arguments: JSON.stringify(args),
-											},
-										},
-									],
-								},
-								finish_reason: 'tool_calls',
-							},
-						],
-					})}\n\ndata: [DONE]\n\n`,
-				);
-				return;
-			}
 			hangingProviderResponses.add(response);
 			response.on('close', () => hangingProviderResponses.delete(response));
 		});

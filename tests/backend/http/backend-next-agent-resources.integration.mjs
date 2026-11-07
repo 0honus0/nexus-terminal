@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ToolModel } from '../../../packages/backend/dist/modules/agent/tools/model/tool-model.js';
-import { ToolService } from '../../../packages/backend/dist/modules/agent/tools/service/tool-service.js';
+import { RunToolResources } from '../../../packages/backend/dist/modules/agent/tools/service/run-tool-resources.js';
+import { DefaultToolResources } from '../../../packages/backend/dist/modules/agent/tools/service/default-tool-resources.js';
 import { RunResourceService } from '../../../packages/backend/dist/modules/agent/runs/service/run-resource-service.js';
 import { RunChanges } from '../../../packages/backend/dist/modules/agent/runs/model/run-changes.js';
 import { RemoteMachineOperationError } from '../../../packages/backend/dist/modules/remote/public-errors.js';
@@ -43,10 +44,8 @@ function resourceFixture(t, { cleanupFails = false } = {}) {
 		null,
 		(owner) => resources?.changed(owner),
 	);
-	const tools = new ToolService(
+	const runtimeResources = new DefaultToolResources(
 		model,
-		null,
-		null,
 		{
 			drain: async () => {},
 
@@ -54,18 +53,10 @@ function resourceFixture(t, { cleanupFails = false } = {}) {
 
 			waitingOutputCount: () => waitingOutputJobs,
 		},
-		null,
-		null,
-		null,
-		null,
-		null,
-		null,
-		null,
-		null,
 		{
 			drainRun: async () => {},
 
-			sessionCount: () => 1,
+			count: () => 1,
 		},
 		{
 			drainRun: async () => {},
@@ -73,6 +64,7 @@ function resourceFixture(t, { cleanupFails = false } = {}) {
 			sessionCount: () => 1,
 		},
 	);
+	const tools = new RunToolResources(runtimeResources);
 	const run = { id: scope.runId, status: 'running', version: 9 };
 	const runs = {
 		get: async () => run,
@@ -127,7 +119,7 @@ await test('Resource lifecycle: tool activity renews ten-minute idle expiration 
 	release();
 	const first = f.resources.read(f.scope, [])[0];
 	assert.equal(first.expiresAt, Date.now() + 600000);
-	assert.equal(first.resource.mcpSessions, 1);
+	assert.equal(first.resource.protocolSessions, 1);
 	assert.equal(first.waitingOutputJobs, 0);
 	f.waitingOutput(1);
 	assert.equal(f.resources.read(f.scope, [])[0].waitingOutputJobs, 1);
@@ -205,7 +197,7 @@ await test('Resource lifecycle: cleanup failure retains the owner and concurrent
 });
 
 await test('Resource lifecycle: authenticated HTTP close confirms, durably cancels and drains a real running Agent', async (t) => {
-	const root = await mkdtemp(join(tmpdir(), 'nexus-agent-resources-'));
+	const root = await mkdtemp(join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-agent-resources-'));
 	const sshd = await openSshd(root);
 	let f;
 	t.after(async () => {
@@ -213,7 +205,6 @@ await test('Resource lifecycle: authenticated HTTP close confirms, durably cance
 			await f?.close();
 		} finally {
 			await sshd.close();
-			await rm(root, { recursive: true, force: true });
 		}
 	});
 	f = await openAgentExecution(root, sshd);

@@ -1516,7 +1516,10 @@ function runRemoteCommand(command, stream, session, pty = false) {
 	session.on('signal', onSignal);
 	child.stdout.on('data', (chunk) => stream.write(chunk));
 	child.stderr.on('data', (chunk) => stream.stderr.write(chunk));
-	stream.on('data', (chunk) => child.stdin.write(chunk));
+	stream.on('data', (chunk) => {
+		if (command.includes('acp-process.mjs')) console.error('ACP_FIXTURE_BYTES', chunk.toString());
+		child.stdin.write(chunk);
+	});
 	// sshd forwards channel EOF to the executed program's stdin. In particular,
 	// legacy SCP's sink waits for EOF after acknowledging the final file; leaving
 	// its stdin open transfers all bytes but deadlocks both peers at completion.

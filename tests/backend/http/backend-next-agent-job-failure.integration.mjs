@@ -31,16 +31,30 @@ await test('Job failures stop the owning Run and its waits', { timeout: 60000 },
 		await t.test(name, async (subtest) => {
 			const directory = join(root, String(++sequence));
 			await mkdir(directory);
-			const f = await openAgentExecution(directory, {
-				port: endpoint.port,
-				user: sshd.user,
-				fingerprint: sshd.fingerprint,
-				privateKey: sshd.privateKey,
-			});
+			const f = await openAgentExecution(
+				directory,
+				{
+					port: endpoint.port,
+					user: sshd.user,
+					fingerprint: sshd.fingerprint,
+					privateKey: sshd.privateKey,
+				},
+				{ discover: 'shell_execute shell_job_control file_write collaboration_delegate' },
+			);
 			const cleanup = { unknown: true };
 			subtest.after(() => f.close(cleanup));
 			await work(f, directory, subtest, cleanup);
 		});
+	}
+
+	function jobFailureToolName(f, run) {
+		const jobs = f.rows('agent_tool_jobs', run);
+		assert.equal(jobs.length, 1);
+		const source = f.operations(run).find((row) => row.id === jobs[0].id);
+		assert.ok(source, 'Job failure belongs to its original persisted Host operation');
+		assert.equal(source.label, 'shell.execute');
+		assert.equal(source.kind, 'effect');
+		return source.label;
 	}
 
 	async function executable(directory, subtest) {
@@ -175,7 +189,7 @@ await test('Job failures stop the owning Run and its waits', { timeout: 60000 },
 				(count) => count === 0,
 				'Transport loss closes model waiting',
 			);
-			assert.equal(f.calls.length, 2);
+			assert.equal(f.calls.length, 3);
 			assert.equal(await readFile(process.effect, 'utf8'), 'x');
 			assert.equal(f.rows('agent_tool_jobs', run)[0].state, 'unknown');
 			assert.equal(expectStatus(await f.api('GET', '/api/v1/remote/mutations'), 200).items[0].state, 'blocked');
@@ -229,10 +243,7 @@ await test('Job failures stop the owning Run and its waits', { timeout: 60000 },
 					);
 				if (mode === 'poll')
 					await until(
-						() =>
-							f
-								.rows('agent_run_tools', run)
-								.some((row) => row.tool_name === 'shell_job_control' && row.state === 'dispatched'),
+						() => f.operations(run).some((row) => row.label === 'shell.jobs' && row.state === 'dispatched'),
 						Boolean,
 						'Job wait is in progress',
 					);
@@ -240,13 +251,13 @@ await test('Job failures stop the owning Run and its waits', { timeout: 60000 },
 				await process.stop();
 				const view = await f.wait(run, 'unknown');
 				assert.equal(view.failure.code, 'tool_result_unconfirmed');
-				assert.equal(view.failure.toolName, 'shell_execute');
+				assert.equal(view.failure.toolName, jobFailureToolName(f, run));
 				await until(
 					() => f.heldModelCount,
 					(count) => count === 0,
 					'Failed Job closes the model transport',
 				);
-				assert.equal(f.calls.length, mode === 'foreground' ? 1 : 2, 'No extra model request or polling loop');
+				assert.equal(f.calls.length, mode === 'foreground' ? 2 : 3, 'No extra model request or polling loop');
 				assert.equal(await readFile(process.effect, 'utf8'), 'x');
 				assert.equal(f.rows('agent_tool_jobs', run).length, 1);
 				assert.equal(f.rows('agent_tool_jobs', run)[0].state, 'unknown');
@@ -264,7 +275,7 @@ await test('Job failures stop the owning Run and its waits', { timeout: 60000 },
 				}
 				await f.restart({ unknown: true });
 				assert.equal((await f.wait(run, 'unknown')).status, 'unknown');
-				assert.equal(f.calls.length, mode === 'foreground' ? 1 : 2, 'Restart never replays the Job');
+				assert.equal(f.calls.length, mode === 'foreground' ? 2 : 3, 'Restart never replays the Job');
 				// The restarted owner has no in-memory failed task; persisted evidence remains.
 				cleanup.unknown = false;
 			},
@@ -287,10 +298,12 @@ await test('Job failures stop the owning Run and its waits', { timeout: 60000 },
 			await f.approve(await f.approval(run, 'shell_execute'));
 			const view = await f.wait(run, 'failed');
 			assert.equal(view.failure.code, 'tool_host_untrusted');
-			assert.equal(f.rows('agent_run_tools', run)[0].state, 'failed');
+			const operation = f.operations(run).find((operation) => operation.label === 'shell.execute');
+			assert.equal(operation.state, 'failed');
+			assert.equal(operation.failure_code, 'host_key_untrusted');
 			assert.equal(f.rows('agent_tool_jobs', run)[0].state, 'failed');
 			assert.deepEqual(JSON.parse(f.rows('agent_tool_jobs', run)[0].result_text), { status: 'not_started' });
-			assert.equal(f.calls.length, 1);
+			assert.equal(f.calls.length, 2);
 			await assert.rejects(stat(effect), { code: 'ENOENT' });
 			assert.deepEqual(expectStatus(await f.api('GET', '/api/v1/remote/mutations'), 200).items, []);
 		},
@@ -339,7 +352,7 @@ await test('Job failures stop the owning Run and its waits', { timeout: 60000 },
 			assert.equal(attempts, 1);
 			assert.equal(f.rows('agent_tool_jobs', run)[0].state, 'dispatched', 'No speculative second Job write');
 			assert.equal(await readFile(process.effect, 'utf8'), 'x');
-			assert.equal(f.calls.length, 2);
+			assert.equal(f.calls.length, 3);
 			await f.restart({ verifyCloseFailure: (error) => contains(error, failure) });
 			cleanup.unknown = false;
 			assert.equal(f.rows('agent_tool_jobs', run)[0].state, 'unknown');
@@ -406,7 +419,7 @@ await test('Job failures stop the owning Run and its waits', { timeout: 60000 },
 			await process.stop();
 			const view = await f.wait(root, 'unknown');
 			assert.equal(view.failure.code, 'tool_result_unconfirmed');
-			assert.equal(view.failure.toolName, 'shell_execute');
+			assert.equal(view.failure.toolName, jobFailureToolName(f, child));
 			await until(
 				() => f.heldModelCount,
 				(count) => count === 1,
@@ -448,6 +461,6 @@ await test('Job failures stop the owning Run and its waits', { timeout: 60000 },
 		);
 		assert.equal((await f.wait(run, 'cancelled')).status, 'cancelled');
 		await process.stop();
-		assert.equal(f.calls.length, 2);
+		assert.equal(f.calls.length, 3);
 	});
 });

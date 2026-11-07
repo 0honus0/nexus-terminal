@@ -68,10 +68,7 @@ export class ProviderService {
 
 	private readonly active = new Map<string, Set<AbortController>>();
 
-	constructor(
-		private readonly model: ProviderModel,
-		private readonly revokeDependentRequests: (userId: number, providerId: string) => void,
-	) {}
+	constructor(private readonly model: ProviderModel) {}
 
 	quiesce(): void {
 		this.closing = true;
@@ -109,7 +106,6 @@ export class ProviderService {
 		for (const request of this.active.get(this.key(userId, id)) ?? []) {
 			request.abort();
 		}
-		this.revokeDependentRequests(userId, id);
 	}
 
 	private recordRequestFailure(error: unknown): void {
@@ -186,6 +182,16 @@ export class ProviderService {
 	async list(userId: number): Promise<ProviderView[]> {
 		validateUserId(userId);
 		return (await this.model.list(userId)).map((provider) => this.model.toView(provider));
+	}
+
+	/** Each real request owns revocation independently of the App's other models. */
+	managedRequest<T>(
+		userId: number,
+		providerId: string,
+		signal: AbortSignal,
+		action: (signal: AbortSignal) => Promise<T>,
+	): Promise<T> {
+		return this.withProviderRequest(userId, providerId, signal, action, null);
 	}
 
 	async get(userId: number, id: string): Promise<ProviderView> {
@@ -376,7 +382,6 @@ export class ProviderService {
 			!Number.isSafeInteger(maxBytes) ||
 			maxBytes < 1 ||
 			!input.prompt.trim() ||
-			Buffer.byteLength(input.prompt, 'utf8') > 16000 ||
 			!Number.isSafeInteger(input.configurationVersion) ||
 			input.configurationVersion < 1 ||
 			!input.modelId.trim() ||

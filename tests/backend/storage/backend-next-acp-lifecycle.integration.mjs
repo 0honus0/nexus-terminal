@@ -1,18 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { PassThrough, Writable } from 'node:stream';
-import { NdjsonAcpAdapter } from '../../../packages/backend/dist/platform/acp/adapters/ndjson-acp.js';
-import { AcpFailure } from '../../../packages/backend/dist/platform/acp/acp-port.js';
-import { MachineAcpModel } from '../../../packages/backend/dist/modules/remote/machines/model/acp-model.js';
+import { randomUUID } from 'node:crypto';
+import { PluginServiceTransportOwner } from '../../../packages/backend/dist/modules/agent/plugins/service/plugin-service-transport.js';
+import { MachineCommandDuplex } from '../../../packages/backend/dist/platform/ssh/command-duplex.js';
+import { MachineCommandModel } from '../../../packages/backend/dist/modules/remote/machines/model/command-model.js';
 import { RemoteResourceCleanupFailure } from '../../../packages/backend/dist/modules/remote/resource-errors.js';
-
-function gate() {
-	let resolve;
-	const promise = new Promise((done) => {
-		resolve = done;
-	});
-	return { promise, resolve };
-}
+import { AgentFailure, ToolCleanupFailure } from '../../../packages/backend/dist/modules/agent/agent-failure.js';
 
 function contains(error, expected) {
 	return (
@@ -22,274 +16,270 @@ function contains(error, expected) {
 	);
 }
 
-function fixture(t, mode) {
-	const readable = new PassThrough();
-	const entered = gate();
-	const permission = gate();
-	const controller = new AbortController();
-	const unsubscribeError = new Error('controlled ACP unsubscribe failure');
-	const cancelError = new Error('controlled ACP cancel failure');
-	const state = { writes: [], cancelled: 0, unsubscribed: 0, delivered: 0, permissionFinished: false };
-	const writable = new Writable({
-		write(bytes, _encoding, done) {
-			const message = JSON.parse(bytes.toString());
-			state.writes.push(message);
-			if (message.method === 'initialize') {
-				readable.write(
-					JSON.stringify({ jsonrpc: '2.0', id: message.id, result: { protocolVersion: 1 } }) + '\n',
-				);
-			} else if (message.method === 'session/new') {
-				readable.write(
-					JSON.stringify({ jsonrpc: '2.0', id: message.id, result: { sessionId: 'controlled-session' } }) +
-						'\n',
-				);
-			} else if (message.method === 'session/prompt') {
-				readable.write(
-					JSON.stringify({
-						jsonrpc: '2.0',
-						id: 'permission:1',
-						method: 'session/request_permission',
-						params: {
-							sessionId: 'controlled-session',
-							toolCall: { toolCallId: 'tool-call', rawInput: { path: '/example' } },
-							options: [
-								{ optionId: 'allow', kind: 'allow_once' },
-								{ optionId: 'reject', kind: 'reject_once' },
-							],
-						},
-					}) + '\n',
-				);
-			}
-			done();
-		},
-	});
-	const channel = {
-		readable,
-		writable,
+const tick = () => new Promise((resolve) => setImmediate(resolve));
 
-		onStderr: () => () => {
-			state.unsubscribed += 1;
-			if (mode === 'unsubscribe' || mode === 'both') {
-				throw unsubscribeError;
-			}
-		},
+for (const mode of ['normal', 'channel', 'permission', 'both']) {
+	await test(
+		'ACP Host lifecycle: cancellation owns pending reads and late permissions with ' + mode + ' cleanup',
+		async (t) => {
+			const read = Promise.withResolvers();
+			const permission = Promise.withResolvers();
+			const entered = Promise.withResolvers();
+			const channelClosed = Promise.withResolvers();
+			const stop = new AbortController();
+			const closeError = new Error('Controlled channel cleanup failure');
+			const permissionError = new Error('Controlled permission abandonment failure');
+			const state = { closed: 0, released: 0, delivered: 0, abandoned: 0, writes: 0 };
+			const channel = {
+				read: () => read.promise,
 
-		cancel() {
-			state.cancelled += 1;
-			if (mode === 'cancel' || mode === 'both') {
-				throw cancelError;
-			}
-		},
-	};
-	const input = {
-		cwd: '/',
-		prompt: 'controlled ACP request',
-		maxOutputBytes: 2048,
-		clientName: 'B10',
-		clientVersion: '1',
-	};
-	const callbacks = {
-		signal: controller.signal,
+				write: async () => {
+					state.writes++;
+				},
 
-		async permission() {
-			entered.resolve();
-			await permission.promise;
-			state.permissionFinished = true;
-			return {
-				decision: 'allow_once',
+				end: async () => {},
 
-				delivered: async () => {
-					state.delivered += 1;
+				outcome: async () => ({ kind: 'exit', exitCode: 0 }),
+
+				cancel() {},
+
+				async close() {
+					state.closed++;
+					await channelClosed.promise;
+					if (mode === 'channel' || mode === 'both') throw closeError;
 				},
 			};
-		},
-	};
-	t.after(() => {
-		permission.resolve();
-		readable.destroy();
-		writable.destroy();
-	});
-	return {
-		readable,
-		entered,
-		permission,
-		controller,
-		channel,
-		input,
-		callbacks,
-		state,
-		unsubscribeError,
-		cancelError,
-	};
-}
+			const owner = new PluginServiceTransportOwner({
+				signal: stop.signal,
 
-await test('ACP cancellation waits for readers and permission work despite independent cleanup failures', async (t) => {
-	for (const mode of ['normal', 'unsubscribe', 'cancel', 'both']) {
-		await t.test(mode, async (t) => {
-			const f = fixture(t, mode);
-			let settled = false;
-			const result = new NdjsonAcpAdapter().execute(f.channel, f.input, f.callbacks).then(
-				(value) => {
-					settled = true;
-					return { value };
-				},
-				(error) => {
-					settled = true;
-					return { error };
-				},
-			);
-			await f.entered.promise;
-			f.controller.abort();
-			await new Promise((resolve) => setImmediate(resolve));
-			assert.equal(settled, false, 'cancellation is not evidence of reader or permission cleanup');
-			assert.equal(f.state.cancelled, 1);
-			f.permission.resolve();
-			await new Promise((resolve) => setImmediate(resolve));
-			assert.equal(f.state.permissionFinished, true);
-			assert.equal(settled, false, 'the still-open reader remains owned');
-			f.readable.end();
-			const outcome = await result;
-			assert.ok(outcome.error instanceof AcpFailure);
-			assert.equal(outcome.error.code, mode === 'normal' ? 'transport_closed' : 'cleanup_failed');
-			assert.equal(f.state.unsubscribed, 1);
-			assert.equal(f.state.cancelled, 1);
-			assert.equal(f.state.delivered, 0);
-			assert.equal(f.state.writes.filter((message) => message.id === 'permission:1').length, 0);
-			if (mode === 'unsubscribe' || mode === 'both') {
-				assert.ok(contains(outcome.error, f.unsubscribeError));
-			}
-			if (mode === 'cancel' || mode === 'both') {
-				assert.ok(contains(outcome.error, f.cancelError));
-			}
-			if (mode !== 'normal') {
-				assert.ok(
-					outcome.error.cause.errors.some(
-						(error) => error instanceof AcpFailure && error.code === 'transport_closed',
-					),
-				);
-			}
-		});
-	}
+				validate: async () => {},
 
-	await t.test(
-		'the original Machine Model retains ACP and machine-close failures across its application conversion',
-		async (t) => {
-			const f = fixture(t, 'both');
-			const machineError = new Error('controlled machine close failure');
-			let closed = 0;
-			const model = new MachineAcpModel(
-				{
-					release: (machine) => machine.close(),
+				transport: {
+					kind: 'remoteProcess',
+					cwd: '/',
 
-					open: async () => ({
-						machine: {
-							close: async () => {
-								closed += 1;
-								throw machineError;
-							},
-						},
-					}),
-				},
-				{ open: async () => f.channel },
-				new NdjsonAcpAdapter(),
-			);
-			const result = model
-				.execute(
-					{
-						targetId: 1,
-						fingerprint: 'f'.repeat(64),
-						timeoutMs: 30000,
-						signal: f.controller.signal,
-
-						validate: async () => undefined,
+					async run(_signal, consume) {
+						await consume(channel);
+						state.released++;
 					},
-					{ cwd: '/', argv: ['fixture-acp'], prompt: 'controlled ACP', permission: f.callbacks.permission },
-					2048,
-					{ name: 'B10', version: '1' },
-				)
+
+					async permission() {
+						entered.resolve();
+						await permission.promise;
+						return {
+							decision: 'allow_once',
+
+							delivered: async () => {
+								state.delivered++;
+							},
+
+							async abandon(_cause, dispatched) {
+								assert.equal(dispatched, false);
+								state.abandoned++;
+								if (mode === 'permission' || mode === 'both') throw permissionError;
+							},
+						};
+					},
+				},
+			});
+			t.after(async () => {
+				permission.resolve();
+				channelClosed.resolve();
+				read.resolve({ bytes: new Uint8Array(), eof: true });
+				await owner.close().catch(() => undefined);
+			});
+			const { channelId } = (
+				await owner.dispatch({ method: 'transport.stdio.open', params: { grant: owner.facts.grant } })
+			).value;
+			const reading = owner.dispatch({ method: 'transport.stdio.read', params: { channelId, stream: 'stdout' } });
+			const approving = owner
+				.dispatch({
+					method: 'transport.permission.request',
+					params: {
+						channelId,
+						sessionId: 'original-session',
+						toolCallId: 'original-tool',
+						requestId: 'original-request',
+						title: 'Read',
+						kind: 'read',
+						inputJson: '{}',
+					},
+				})
 				.then(
 					(value) => ({ value }),
 					(error) => ({ error }),
 				);
-			await f.entered.promise;
-			f.controller.abort();
-			f.permission.resolve();
-			f.readable.end();
-			const outcome = await result;
-			assert.ok(outcome.error instanceof RemoteResourceCleanupFailure);
-			for (const error of [f.unsubscribeError, f.cancelError, machineError]) {
-				assert.ok(contains(outcome.error, error));
+			await entered.promise;
+			stop.abort();
+			let settled = false;
+			const closing = owner
+				.close()
+				.then(
+					() => ({ ok: true }),
+					(error) => ({ error }),
+				)
+				.finally(() => {
+					settled = true;
+				});
+			await tick();
+			permission.resolve();
+			assert.ok((await approving).error instanceof AgentFailure);
+			await tick();
+			assert.equal(settled, false, 'A late permission response does not release an open channel');
+			channelClosed.resolve();
+			await tick();
+			assert.equal(settled, false, 'Closing the channel still waits for the original read');
+			read.resolve({ bytes: Buffer.from('late bytes'), eof: false });
+			assert.equal((await reading).value.bytesBase64, '', 'Cancelled read never publishes late bytes');
+			const result = await closing;
+			if (mode === 'normal') assert.equal(result.ok, true);
+			else {
+				assert.ok(result.error instanceof ToolCleanupFailure);
+				if (mode === 'channel' || mode === 'both') assert.ok(contains(result.error, closeError));
+				if (mode === 'permission' || mode === 'both') assert.ok(contains(result.error, permissionError));
 			}
-			assert.equal(closed, 1);
-			assert.equal(f.state.delivered, 0);
+			assert.deepEqual(state, { closed: 1, released: 1, delivered: 0, abandoned: 1, writes: 0 });
+			await assert.rejects(
+				owner.dispatch({ method: 'transport.stdio.open', params: { grant: owner.facts.grant } }),
+				AgentFailure,
+			);
 		},
 	);
+}
 
-	await t.test('cancellation does not finish while an actual writer callback is still pending', async (t) => {
-		const entered = gate();
-		const readable = new PassThrough();
-		const controller = new AbortController();
-		let completeWrite;
-		let cancelled = 0;
-		let unsubscribed = 0;
-		let settled = false;
-		const writable = new Writable({
-			write(_bytes, _encoding, done) {
-				completeWrite = done;
-				entered.resolve();
-			},
-		});
-		t.after(() => {
-			completeWrite?.();
-			readable.destroy();
-			writable.destroy();
-		});
-		const result = new NdjsonAcpAdapter()
-			.execute(
-				{
-					readable,
-					writable,
-
-					onStderr: () => () => {
-						unsubscribed += 1;
-					},
-
-					cancel: () => {
-						cancelled += 1;
-					},
-				},
-				{ cwd: '/', prompt: 'writer waiting', maxOutputBytes: 1024, clientName: 'B10', clientVersion: '1' },
-				{
-					signal: controller.signal,
-
-					permission: async () => {
-						assert.fail('initialize is not a permission request');
-					},
-				},
-			)
-			.then(
-				(value) => ({ value }),
-				(error) => ({ error }),
-			)
-			.then((outcome) => {
-				settled = true;
-				return outcome;
-			});
-		await entered.promise;
-		controller.abort();
-		readable.end();
-		await new Promise((resolve) => setImmediate(resolve));
-		assert.equal(cancelled, 1);
-		assert.equal(settled, false, 'reader end cannot release the still-active writer');
-		const writeFailure = new Error('controlled write completion failure after cancellation');
-		// The stream owns its late write error even though the canceled request cannot publish success.
-		writable.on('error', () => undefined);
-		completeWrite(writeFailure);
-		completeWrite = undefined;
-		const outcome = await result;
-		assert.ok(outcome.error instanceof AcpFailure);
-		assert.equal(cancelled, 1);
-		assert.equal(unsubscribed, 1);
-		assert.ok(contains(outcome.error, writeFailure));
+await test('ACP byte channel lifecycle: close waits for the actual pending writer despite synchronous close failure', async (t) => {
+	const readable = new PassThrough();
+	const stderrReadable = new PassThrough();
+	const entered = Promise.withResolvers();
+	const stop = new AbortController();
+	const closed = new Set();
+	const closeError = new Error('Controlled synchronous channel close failure');
+	const writeError = new Error('Controlled late writer callback failure');
+	let completeWrite;
+	let cancelled = 0;
+	const writable = new Writable({
+		write(_bytes, _encoding, done) {
+			completeWrite = done;
+			entered.resolve();
+		},
 	});
+	writable.on('error', () => {});
+	const io = new MachineCommandDuplex(
+		{
+			readable,
+			stderrReadable,
+			writable,
+			outcome: Promise.resolve({ status: 'unknown', reason: 'cancelled' }),
+
+			onClose(listener) {
+				closed.add(listener);
+				return () => closed.delete(listener);
+			},
+
+			cancel() {
+				cancelled++;
+			},
+
+			close() {
+				throw closeError;
+			},
+		},
+		stop.signal,
+		2048,
+	);
+	t.after(async () => {
+		completeWrite?.();
+		readable.end();
+		stderrReadable.end();
+		for (const listener of closed) listener();
+		await io.close().catch(() => undefined);
+		writable.destroy();
+	});
+	const writing = assert.rejects(io.write(Buffer.from('pending')), (error) => contains(error, writeError));
+	await entered.promise;
+	stop.abort();
+	let settled = false;
+	const closing = io
+		.close()
+		.then(
+			() => ({ ok: true }),
+			(error) => ({ error }),
+		)
+		.finally(() => {
+			settled = true;
+		});
+	await tick();
+	assert.equal(settled, false, 'A synchronous close failure cannot release the still-active writer');
+	readable.end();
+	stderrReadable.end();
+	for (const listener of closed) listener();
+	await tick();
+	assert.equal(settled, false, 'Channel close confirmation cannot release the pending write callback');
+	completeWrite(writeError);
+	completeWrite = undefined;
+	await writing;
+	assert.ok(contains((await closing).error, closeError));
+	assert.equal(cancelled, 1);
+});
+
+await test('ACP byte channel lifecycle: Machine Model retains invocation and machine release failures', async () => {
+	const primary = new Error('Controlled process consumer failure');
+	const releaseError = new Error('Controlled machine release failure');
+	const readable = new PassThrough(),
+		stderrReadable = new PassThrough(),
+		writable = new PassThrough();
+	const closed = new Set();
+	let released = 0;
+	const model = new MachineCommandModel(
+		{
+			open: async () => ({ machine: { openRawCommand() {} } }),
+
+			async release() {
+				released++;
+				throw releaseError;
+			},
+		},
+		{
+			open: async () => ({
+				readable,
+				stderrReadable,
+				writable,
+				outcome: Promise.resolve({ status: 'exit', exitCode: 0 }),
+
+				onClose(listener) {
+					closed.add(listener);
+					return () => closed.delete(listener);
+				},
+
+				cancel() {},
+
+				close() {
+					readable.end();
+					stderrReadable.end();
+					for (const listener of closed) listener();
+				},
+			}),
+		},
+	);
+	await assert.rejects(
+		model.withProcess(
+			{
+				operationId: randomUUID(),
+				targetId: 1,
+				fingerprint: 'f'.repeat(64),
+				timeoutMs: 30000,
+				signal: new AbortController().signal,
+
+				validate: async () => {},
+			},
+			{ argv: ['fixture-acp'], cwd: '/', maxReadBytes: 2048 },
+			async () => {
+				throw primary;
+			},
+		),
+		(error) =>
+			error instanceof RemoteResourceCleanupFailure && contains(error, primary) && contains(error, releaseError),
+	);
+	assert.equal(released, 1);
+	writable.destroy();
 });

@@ -15,7 +15,9 @@ import {
 	isAgentDrainFailure,
 } from '../../../packages/backend/dist/modules/agent/agent-failure.js';
 import { ArtifactModel } from '../../../packages/backend/dist/modules/agent/artifacts/model/artifact-model.js';
-import { toolAuthorizationFailure } from '../../../packages/backend/dist/modules/agent/governance/governance-rules.js';
+import { authorizationFact } from '../../../packages/backend/dist/modules/agent/governance/governance-rules.js';
+
+import { effectiveHostOperationPolicy } from '../../../packages/backend/dist/modules/agent/tools/host-operation-rules.js';
 
 function fixture(
 	bytes,
@@ -151,7 +153,6 @@ await test('File delivery stream lifecycle and compound authority', async (t) =>
 				null,
 				null,
 				null,
-				null,
 				{
 					key: async () => 'fixture',
 
@@ -185,20 +186,13 @@ await test('File delivery stream lifecycle and compound authority', async (t) =>
 
 	await t.test('a wrapped EOF cleanup failure remains a cleanup failure across the importer', async () => {
 		const { context, state } = fixture(Buffer.alloc(8192), { readCleanup: true });
-		const service = new RemoteMachineOperationService(
-			{ open: async () => context.resource },
-			null,
-			null,
-			null,
-			null,
-			{
-				key: async () => 'fixture',
+		const service = new RemoteMachineOperationService({ open: async () => context.resource }, null, null, null, {
+			key: async () => 'fixture',
 
-				quiesce() {},
+			quiesce() {},
 
-				async close() {},
-			},
-		);
+			async close() {},
+		});
 		const model = new ToolRemoteModel(remoteOperations(service, () => service.close()));
 		const scope = {
 			operationId: 'delivery',
@@ -245,7 +239,6 @@ await test('File delivery stream lifecycle and compound authority', async (t) =>
 				null,
 				null,
 				null,
-				null,
 				{
 					key: async () => 'fixture',
 
@@ -284,20 +277,13 @@ await test('File delivery stream lifecycle and compound authority', async (t) =>
 
 	await t.test('authority storage failure during sampling is not hidden by its source refusal', async () => {
 		const { context, state } = fixture(Buffer.alloc(8192));
-		const service = new RemoteMachineOperationService(
-			{ open: async () => context.resource },
-			null,
-			null,
-			null,
-			null,
-			{
-				key: async () => 'fixture',
+		const service = new RemoteMachineOperationService({ open: async () => context.resource }, null, null, null, {
+			key: async () => 'fixture',
 
-				quiesce() {},
+			quiesce() {},
 
-				async close() {},
-			},
-		);
+			async close() {},
+		});
 		const model = new ToolRemoteModel(remoteOperations(service, () => service.close()));
 		const artifacts = new ArtifactModel(null, null, null, new NativeContentInspector());
 		const expected = new AgentFailure('storage_unavailable');
@@ -329,32 +315,51 @@ await test('File delivery stream lifecycle and compound authority', async (t) =>
 		await service.close();
 	});
 
-	await t.test('both declared capabilities and both grants are required', () => {
-		const operation = { toolName: 'file_deliver', capability: 'file.read', targetId: 7 };
+	await t.test('native delivery policy requires both declared capabilities and both current grants', () => {
+		const request = { operation: 'remote.deliver', connectionId: 7, paths: ['/output/file'] };
+		const operation = effectiveHostOperationPolicy(request.operation, JSON.stringify(request));
+		assert.ok(operation);
+		assert.equal(operation.capability, 'file.read');
+		assert.deepEqual(operation.requirements.capabilities, ['artifacts.write']);
 		const policy = {
+			userId: 1,
+			appId: 'app',
+			revision: 1,
 			app: { declared: true, enabled: true, capabilities: ['file.read', 'artifacts.write'], deniedTargetIds: [] },
 			grants: [
 				{ capability: 'file.read', scope: { kind: 'targets', targets: { ssh: { mode: 'ids', ids: ['7'] } } } },
 				{ capability: 'artifacts.write', scope: { kind: 'global' } },
 			],
 		};
-		assert.equal(toolAuthorizationFailure(operation, policy), null);
-		assert.equal(toolAuthorizationFailure({ ...operation, targetId: 8 }, policy), 'forbidden');
-		for (const capability of ['file.read', 'artifacts.write']) {
+		for (const capability of [operation.capability, ...operation.requirements.capabilities]) {
+			assert.equal(authorizationFact(policy, capability, 7).allowed, true);
 			assert.equal(
-				toolAuthorizationFailure(operation, {
-					...policy,
-					grants: policy.grants.filter((grant) => grant.capability !== capability),
-				}),
-				'forbidden',
+				authorizationFact(
+					{ ...policy, grants: policy.grants.filter((grant) => grant.capability !== capability) },
+					capability,
+					7,
+				).allowed,
+				false,
 			);
 			assert.equal(
-				toolAuthorizationFailure(operation, {
-					...policy,
-					app: { ...policy.app, capabilities: policy.app.capabilities.filter((item) => item !== capability) },
-				}),
-				'capability_undeclared',
+				authorizationFact(
+					{
+						...policy,
+						app: {
+							...policy.app,
+							capabilities: policy.app.capabilities.filter((item) => item !== capability),
+						},
+					},
+					capability,
+					7,
+				).allowed,
+				false,
+			);
+			assert.equal(
+				authorizationFact({ ...policy, app: { ...policy.app, deniedTargetIds: [7] } }, capability, 7).allowed,
+				false,
 			);
 		}
+		assert.equal(authorizationFact(policy, operation.capability, 8).allowed, false);
 	});
 });

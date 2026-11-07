@@ -9,6 +9,7 @@ import {
 	migrateAgentToolBatches,
 	migrateAgentToolOutputs,
 	agentPerformanceMigrations,
+	agentModularMigrations,
 } from '../modules/agent/migrations.js';
 import { initializeSnapshotRestoreSchema } from '../platform/storage/sqlite/adapters/snapshot-restore-sql.js';
 
@@ -41,4 +42,5 @@ export const applicationMigrations: readonly SchemaMigration[] = [
 		signature: 'operations-notification-pending-20261106',
 		apply: migrateOperationsPendingNotifications,
 	},
+	...agentModularMigrations,
 ];

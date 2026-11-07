@@ -1,3 +1,4 @@
+import { currentOperation } from '../../../operations/adapters/sqlite/current-operation-sql.js';
 import { frozenExecution } from '../../../execution/adapters/sqlite/execution-budget-sql.js';
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
@@ -16,8 +17,6 @@ import type {
 } from '../../storage/artifact-storage.js';
 import { ArtifactStorageRefusal } from '../../storage/artifact-storage.js';
 import { artifactRow, artifactInteger } from './artifact-row.js';
-import { currentParticipant } from '../../../runs/adapters/sqlite/run-participant-sql.js';
-import { toolOperation } from '../../../runs/adapters/sqlite/run-tool-row.js';
 
 async function record(tx: SqlExecutor, scope: StoredArtifactScope, id: string): Promise<StoredArtifact | null> {
 	const row = await tx.one('SELECT * FROM agent_artifacts WHERE user_id=? AND app_id=? AND id=?', [
@@ -118,6 +117,7 @@ export class SqliteArtifactStorage implements ArtifactStorage {
 		userId: number,
 		appId: string | null,
 		auth: StoredArtifactAuthorization,
+		allowModel = false,
 	): Promise<number | null> {
 		if (auth.kind === 'session') {
 			if (!this.readIdentity) {
@@ -128,40 +128,24 @@ export class SqliteArtifactStorage implements ArtifactStorage {
 		if (appId === null) {
 			return null;
 		}
-		if (auth.kind === 'model') {
-			const row = await tx.one(
-				`SELECT s.state FROM agent_run_model_steps s
-			JOIN agent_runs r ON r.id=s.run_id
-			JOIN agent_run_frozen_inputs f ON f.run_id=r.id
-			JOIN agent_providers p ON p.id=f.provider_id AND p.user_id=r.user_id
-			WHERE r.id=? AND r.user_id=? AND r.app_id=? AND s.step_index=? AND s.request_hash=?
-			AND s.state='dispatched' AND f.protocol='images' AND p.enabled=1 AND p.deleted_at IS NULL
-			AND p.version=f.provider_version AND p.credential_revision=f.credential_revision`,
-				[auth.runId, userId, appId, auth.stepIndex, auth.requestHash],
-			);
-			return row &&
-				(await currentParticipant(
-					tx,
-					{ userId, appId, runId: auth.runId },
-					Date.now,
-					undefined,
-					auth.stepIndex,
-				))
-				? userId
-				: null;
-		}
-		const operation = await toolOperation(tx, userId, appId, auth.runId, auth.operationId);
-		const current =
-			operation !== null &&
-			operation.state === 'dispatched' &&
-			operation.operationHash === auth.operationHash &&
-			(await currentParticipant(
-				tx,
-				{ userId, appId, runId: auth.runId },
-				Date.now,
-				operation.toolName,
-				operation.modelStepIndex,
-			));
+		const current = await currentOperation(
+			tx,
+			{ userId, appId, runId: auth.runId, operationId: auth.operationId, operationHash: auth.operationHash },
+			{
+				labels: [
+					'images.generate',
+					'artifacts.checkCapacity',
+					'artifacts.create',
+					'artifacts.read',
+					'artifacts.present',
+					'remote.deliver',
+					'browser.screenshot',
+					'browser.download',
+					'browser.upload',
+				],
+				allowModel,
+			},
+		);
 		return current ? userId : null;
 	}
 
@@ -169,6 +153,7 @@ export class SqliteArtifactStorage implements ArtifactStorage {
 		tx: SqlExecutor,
 		scope: StoredArtifactScope,
 		auth: StoredArtifactAuthorization,
+		allowModel = false,
 	): Promise<StoredArtifactFacts> {
 		const app = await tx.one('SELECT enabled FROM agent_apps WHERE id=? AND user_id=?', [
 			scope.appId,
@@ -193,7 +178,7 @@ export class SqliteArtifactStorage implements ArtifactStorage {
 				: (await frozenExecution(tx, auth.runId)).version;
 		return {
 			settingsVersion,
-			identityUserId: await this.identity(tx, scope.userId, scope.appId, auth),
+			identityUserId: await this.identity(tx, scope.userId, scope.appId, auth, allowModel),
 			appExists: app !== null,
 			appEnabled: app?.enabled === 1,
 			totalBytes: artifactInteger(totals.bytes),
@@ -234,7 +219,7 @@ export class SqliteArtifactStorage implements ArtifactStorage {
 		decide: (record: StoredArtifact, sourceEnabled: boolean) => void,
 	): Promise<StoredArtifact> {
 		return this.db.transaction(async (tx) => {
-			const facts = await this.facts(tx, scope, auth);
+			const facts = await this.facts(tx, scope, auth, true);
 			admit(facts);
 			if (auth.kind === 'session') {
 				const row = await record(tx, scope, id);

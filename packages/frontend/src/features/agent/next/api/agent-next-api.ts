@@ -28,7 +28,6 @@ import type {
 	AgentCancelRunResponse,
 	AgentCreateRunResponse,
 	AgentRunEventsResponse,
-	AgentCreateRunRequest,
 } from '@nexus-terminal/shared/agent/runs/http';
 import type { AgentRunView } from '@nexus-terminal/shared/agent/runs/model';
 import { AGENT_RUN_IDEMPOTENCY_HEADER, AGENT_RUN_MAX_JSON_BODY_BYTES } from '@nexus-terminal/shared/agent/runs/values';
@@ -209,7 +208,7 @@ export function createAgentNextApi(baseUrl: string) {
 			appId: string,
 			threadId: string,
 			prompt: string,
-			model: AgentCreateRunRequest['model'],
+			model: { providerId: string; modelId: string; configurationVersion: number },
 			operationKey: string,
 			signal?: AbortSignal,
 		): Promise<AgentCreateRunResponse> => {
@@ -217,7 +216,20 @@ export function createAgentNextApi(baseUrl: string) {
 			const thread = inputDecoded(() => readAgentId(threadId));
 			const key = inputDecoded(() => readAgentRunCommandHeaders(operationKey).operationKey);
 			const body = encoded(
-				{ prompt, model, connectionIds: [], approvalMode: 'ask' },
+				{
+					prompt,
+					inputJson: JSON.stringify({
+						model: {
+							providerId: model.providerId,
+							modelId: model.modelId,
+							configurationVersion: model.configurationVersion,
+							reasoningEffort: null,
+						},
+						artifacts: [],
+					}),
+					connectionIds: [],
+					approvalMode: 'ask',
+				},
 				readAgentCreateRunRequest,
 				AGENT_RUN_MAX_JSON_BODY_BYTES,
 			);

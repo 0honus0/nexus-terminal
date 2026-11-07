@@ -1,9 +1,8 @@
 import {
 	AGENT_REASONING_EFFORTS,
 	AGENT_MODEL_CAPABILITY_FIELDS,
-	AGENT_PROVIDER_MODEL_LIMIT,
-	AGENT_PROVIDER_DISCOVERY_LIMIT,
 	AGENT_PROVIDER_MAX_MODEL_ID_BYTES,
+	AGENT_PROVIDER_MAX_RESPONSE_BYTES,
 	AGENT_PROVIDER_MAX_NAME_BYTES,
 	AGENT_PROVIDER_MAX_URL_BYTES,
 } from '@nexus-terminal/shared/agent/providers/values';
@@ -176,8 +175,8 @@ export function decodeStoredModel(value: unknown): StoredProviderModel {
 }
 
 export function readStoredObservations(raw: unknown): StoredProviderObservation[] {
-	const parsed: unknown = JSON.parse(text(raw, 4 * 1024 * 1024));
-	if (!Array.isArray(parsed) || parsed.length > AGENT_PROVIDER_DISCOVERY_LIMIT) {
+	const parsed: unknown = JSON.parse(text(raw, AGENT_PROVIDER_MAX_RESPONSE_BYTES));
+	if (!Array.isArray(parsed)) {
 		throw new Error('Corrupt provider observations');
 	}
 	const seen = new Set<string>();
@@ -216,8 +215,8 @@ export function decodeProviderRow(row: Record<string, unknown>): ProviderStoredR
 	) {
 		throw new Error('Corrupt provider credential');
 	}
-	const parsed: unknown = JSON.parse(text(row.models_json, 128 * 1024));
-	if (!Array.isArray(parsed) || parsed.length < 1 || parsed.length > AGENT_PROVIDER_MODEL_LIMIT) {
+	const parsed: unknown = JSON.parse(text(row.models_json, AGENT_PROVIDER_MAX_RESPONSE_BYTES));
+	if (!Array.isArray(parsed) || parsed.length < 1) {
 		throw new Error('Corrupt provider models');
 	}
 	const models = parsed.map(decodeStoredModel);

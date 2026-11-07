@@ -53,7 +53,7 @@ async function killedAt(directory, phase) {
 async function fixture(t, originals = true) {
 	const directory = await mkdtemp(join(tmpdir(), 'nexus-b10-snapshot-crash-'));
 	const path = join(directory, 'state.db');
-	const roots = new Map(Object.entries(resolveDataPaths(path)));
+	const roots = new Map(Object.entries(resolveDataPaths(path)).filter(([name]) => name !== 'toolLogs'));
 	let db;
 	t.after(async () => {
 		try {
@@ -239,7 +239,7 @@ for (const phase of ['staged', 'published']) {
 	await test(`Actual application startup reconciles ${phase} SIGKILL before opening HTTP`, async (t) => {
 		const directory = await mkdtemp(join(tmpdir(), 'nexus-b10-snapshot-startup-'));
 		const path = join(directory, 'state.db');
-		const roots = new Map(Object.entries(resolveDataPaths(path)));
+		const roots = new Map(Object.entries(resolveDataPaths(path)).filter(([name]) => name !== 'toolLogs'));
 		let app;
 		t.after(async () => {
 			try {

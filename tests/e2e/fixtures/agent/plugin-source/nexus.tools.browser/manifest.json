@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 4,
+  "id": "nexus.tools.browser",
+  "version": "2.0.0",
+  "displayName": "Browser Tools",
+  "compatibility": {
+    "host": {
+      "minVersion": "1.1.0",
+      "maxVersion": "1.1.0"
+    },
+    "backendSdk": 4,
+    "frontendSdk": null
+  },
+  "capabilities": ["plugin.invoke", "browser.read", "browser.interact", "artifacts.read", "artifacts.write"],
+  "intents": [],
+  "frontendEntry": null,
+  "backendEntry": "backend/index.mjs",
+  "contributions": {
+    "app": null,
+    "tools": true,
+    "services": false,
+    "ui": null,
+    "settings": null,
+    "skills": []
+  },
+  "dependencies": [],
+  "namespaces": ["nexus.tools.browser", "nexus.model-tool"]
+}

@@ -9,7 +9,8 @@ export interface HostApp {
 	packageVersion: string;
 	enabled: boolean;
 	executionState: AgentAppExecutionState;
-	surface: 'agent' | 'custom' | 'unavailable';
+	uiRevision: number;
+	surface: 'plugin' | 'unavailable';
 }
 
 export interface HostDirectory {

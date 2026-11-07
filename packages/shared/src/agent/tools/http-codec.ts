@@ -1,4 +1,7 @@
-import { AGENT_RUN_STEP_MAX_INDEX, AGENT_RUN_FAILURE_CODES } from '../runs/values.js';
+import { AGENT_OPERATION_ERROR_CODES } from '../values.js';
+import { AGENT_OPERATION_STATES } from '../operations/values.js';
+import type { AgentOperationState } from '../operations/values.js';
+import { readAgentToolIdentity } from './identity-codec.js';
 import { agentRecord, agentInteger, agentText, readAgentId, InvalidAgentPayload } from '../http-codec.js';
 import {
 	AGENT_CAPABILITIES,
@@ -9,14 +12,11 @@ import {
 	AGENT_APPROVAL_MAX_TOOL_VERSION_BYTES,
 } from '../governance/values.js';
 import {
-	AGENT_TOOL_STATES,
-	AGENT_ARTIFACT_OUTPUT_TOOLS,
 	AGENT_TOOL_LIST_DEFAULT_LIMIT,
 	AGENT_TOOL_LIST_MAX_LIMIT,
 	AGENT_TOOL_MAX_RESPONSE_BYTES,
 	AGENT_TOOL_ARGUMENT_MAX_BYTES,
 } from './values.js';
-import type { AgentToolState } from './values.js';
 import type {
 	AgentThreadToolsPath,
 	AgentThreadToolsQuery,
@@ -47,15 +47,15 @@ export function readAgentToolCallDetails(input: unknown, path: AgentToolCallPath
 		throw new InvalidAgentPayload();
 	}
 	const failureCode =
-		row.failureCode === null ? null : AGENT_RUN_FAILURE_CODES.find((code) => code === row.failureCode);
+		row.failureCode === null ? null : AGENT_OPERATION_ERROR_CODES.find((code) => code === row.failureCode);
 	if (failureCode === undefined || (failureCode !== null && tool.state !== 'failed' && tool.state !== 'unknown')) {
 		throw new InvalidAgentPayload();
 	}
 	return { tool, argumentsJson, failureCode };
 }
 
-function state(input: unknown): AgentToolState {
-	const result = AGENT_TOOL_STATES.find((value) => value === input);
+function state(input: unknown): AgentOperationState {
+	const result = AGENT_OPERATION_STATES.find((value) => value === input);
 	if (result === undefined) {
 		throw new InvalidAgentPayload();
 	}
@@ -125,9 +125,11 @@ function readTool(input: unknown): AgentToolView {
 			'id',
 			'appId',
 			'runId',
-			'modelStepIndex',
+			'sequence',
+			'parentOperationId',
 			'toolName',
 			'toolVersion',
+			'identity',
 			'capability',
 			'targetId',
 			'targetVersion',
@@ -135,7 +137,7 @@ function readTool(input: unknown): AgentToolView {
 			'mutation',
 			'summary',
 			'operationHash',
-			'operationRevision',
+			'effects',
 			'revision',
 			'state',
 			'outputArtifactIds',
@@ -154,7 +156,16 @@ function readTool(input: unknown): AgentToolView {
 	if ((targetId === null) !== (targetVersion === null)) {
 		throw new InvalidAgentPayload();
 	}
-	const operationRevision = agentInteger(row.operationRevision, 1);
+	if (!Array.isArray(row.effects)) {
+		throw new InvalidAgentPayload();
+	}
+	const effects = row.effects.map((value) => {
+		const effect = agentRecord(value, ['id', 'operationHash']);
+		return { id: readAgentId(effect.id), operationHash: hash(effect.operationHash) };
+	});
+	if (new Set(effects.map((effect) => effect.id)).size !== effects.length) {
+		throw new InvalidAgentPayload();
+	}
 	const createdAt = agentInteger(row.createdAt);
 	if (!Array.isArray(row.outputArtifactIds)) {
 		throw new InvalidAgentPayload();
@@ -163,20 +174,16 @@ function readTool(input: unknown): AgentToolView {
 	if (new Set(outputArtifactIds).size !== outputArtifactIds.length) {
 		throw new InvalidAgentPayload();
 	}
-	if (
-		outputArtifactIds.length > 0 &&
-		(!AGENT_ARTIFACT_OUTPUT_TOOLS.some((name) => name === row.toolName) ||
-			(row.state !== 'completed' && row.state !== 'unknown'))
-	) {
-		throw new InvalidAgentPayload();
-	}
+
 	return {
 		id: readAgentId(row.id),
 		appId: readAgentId(row.appId),
 		runId: readAgentId(row.runId),
-		modelStepIndex: agentInteger(row.modelStepIndex, 1, AGENT_RUN_STEP_MAX_INDEX),
+		sequence: agentInteger(row.sequence, 1),
+		parentOperationId: row.parentOperationId === null ? null : readAgentId(row.parentOperationId),
 		toolName: agentText(row.toolName, AGENT_APPROVAL_MAX_TOOL_NAME_BYTES),
 		toolVersion: agentText(row.toolVersion, AGENT_APPROVAL_MAX_TOOL_VERSION_BYTES),
+		identity: readAgentToolIdentity(row.identity),
 		capability,
 		targetId,
 		targetVersion,
@@ -184,8 +191,8 @@ function readTool(input: unknown): AgentToolView {
 		mutation: row.mutation,
 		summary: agentText(row.summary, AGENT_APPROVAL_MAX_SUMMARY_BYTES),
 		operationHash: hash(row.operationHash),
-		operationRevision,
-		revision: agentInteger(row.revision, operationRevision),
+		effects,
+		revision: agentInteger(row.revision, 1),
 		state: state(row.state),
 		outputArtifactIds,
 		createdAt,

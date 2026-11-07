@@ -1,5 +1,4 @@
 import {
-	AGENT_DENYLIST_MAX_TARGETS,
 	AGENT_DENYLIST_MAX_REASON_BYTES,
 	AGENT_DENYLIST_MAX_REASON_CODE_POINTS,
 } from '@nexus-terminal/shared/agent/governance/values';
@@ -19,12 +18,9 @@ export async function currentDenylist(tx: SqlReader): Promise<StoredTargetDenyli
 		throw new Error('Missing Agent target policy');
 	}
 	const rows = await tx.all(
-		'SELECT connection_id,reason,changed_by,changed_at FROM agent_target_denylist ORDER BY connection_id LIMIT ?',
-		[AGENT_DENYLIST_MAX_TARGETS + 1],
+		'SELECT connection_id,reason,changed_by,changed_at FROM agent_target_denylist ORDER BY connection_id',
+		[],
 	);
-	if (rows.length > AGENT_DENYLIST_MAX_TARGETS) {
-		throw new Error('Corrupt Agent target policy capacity');
-	}
 	return {
 		revision: integer(meta.revision, 1),
 		entries: rows.map((row) => {

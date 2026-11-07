@@ -8,22 +8,23 @@ import type {
 import { storedInteger, storedText } from '../../../runs/adapters/sqlite/run-participant-sql.js';
 
 const ENTRY_SOURCE = `WITH entries AS (
- SELECT r.id AS run_id,r.thread_sequence AS run_sequence,0 AS step_index,0 AS event_sequence,
- 'user' AS role,r.input_text AS body FROM agent_runs r WHERE r.user_id=? AND r.app_id=? AND r.thread_id=? AND r.run_kind='root'
+ SELECT r.id AS run_id,r.thread_sequence AS run_sequence,0 AS message_ordinal,0 AS chunk_index,
+ 'user' AS role,0 AS operation_sequence,r.input_text AS body FROM agent_runs r WHERE r.user_id=? AND r.app_id=? AND r.thread_id=? AND r.run_kind='root' AND r.input_text<>''
  UNION ALL
- SELECT r.id,r.thread_sequence,e.step_index,e.sequence,'assistant',e.text_delta
- FROM agent_runs r JOIN agent_run_model_step_events e ON e.run_id=r.id
- WHERE r.user_id=? AND r.app_id=? AND r.thread_id=? AND r.run_kind='root' AND e.kind='text.delta'
+ SELECT r.id,r.thread_sequence,m.ordinal,c.chunk_index+1,'assistant',m.operation_sequence,c.text
+ FROM agent_runs r JOIN agent_app_messages m ON m.run_id=r.id
+ JOIN agent_app_message_chunks c ON c.message_id=m.id
+ WHERE r.user_id=? AND r.app_id=? AND r.thread_id=? AND r.run_kind='root' AND c.text<>''
 )`;
 
 const ENTRIES = `${ENTRY_SOURCE}
-SELECT run_id,run_sequence,step_index,event_sequence,role,nexus_text_length(body) AS text_length,
- CASE WHEN (run_sequence,step_index,event_sequence)=(?,?,?) THEN ? ELSE 0 END AS text_offset,
- nexus_text_slice(body,CASE WHEN (run_sequence,step_index,event_sequence)=(?,?,?) THEN ? ELSE 0 END,?) AS fragment
+SELECT run_id,run_sequence,message_ordinal,chunk_index,role,operation_sequence,nexus_text_length(body) AS text_length,
+ CASE WHEN (run_sequence,message_ordinal,chunk_index)=(?,?,?) THEN ? ELSE 0 END AS text_offset,
+ nexus_text_slice(body,CASE WHEN (run_sequence,message_ordinal,chunk_index)=(?,?,?) THEN ? ELSE 0 END,?) AS fragment
 FROM entries
-WHERE (run_sequence,step_index,event_sequence)>(?,?,?) OR
- ((run_sequence,step_index,event_sequence)=(?,?,?) AND nexus_text_length(body)>?)
-ORDER BY run_sequence,step_index,event_sequence LIMIT ?`;
+WHERE (run_sequence,message_ordinal,chunk_index)>(?,?,?) OR
+ ((run_sequence,message_ordinal,chunk_index)=(?,?,?) AND nexus_text_length(body)>?)
+ORDER BY run_sequence,message_ordinal,chunk_index LIMIT ?`;
 
 export async function readThreadEntries(
 	tx: SqlExecutor,
@@ -49,20 +50,20 @@ export async function readThreadEntries(
 		appId,
 		threadId,
 		after.runSequence,
-		after.stepIndex,
-		after.eventSequence,
+		after.messageOrdinal,
+		after.chunkIndex,
 		after.textOffset,
 		after.runSequence,
-		after.stepIndex,
-		after.eventSequence,
+		after.messageOrdinal,
+		after.chunkIndex,
 		after.textOffset,
 		AGENT_THREAD_ENTRY_MAX_TEXT_CODE_POINTS,
 		after.runSequence,
-		after.stepIndex,
-		after.eventSequence,
+		after.messageOrdinal,
+		after.chunkIndex,
 		after.runSequence,
-		after.stepIndex,
-		after.eventSequence,
+		after.messageOrdinal,
+		after.chunkIndex,
 		after.textOffset,
 		limit,
 	]);
@@ -77,14 +78,20 @@ export async function readThreadEntries(
 		}
 		const position = {
 			runSequence: storedInteger(row.run_sequence, 1),
-			stepIndex: storedInteger(row.step_index),
-			eventSequence: storedInteger(row.event_sequence),
+			messageOrdinal: storedInteger(row.message_ordinal),
+			chunkIndex: storedInteger(row.chunk_index),
 			textOffset: storedInteger(row.text_offset) + Array.from(text).length,
 		};
-		if ((row.role === 'user') !== (position.stepIndex === 0 && position.eventSequence === 0)) {
+		if ((row.role === 'user') !== (position.messageOrdinal === 0 && position.chunkIndex === 0)) {
 			throw new Error('Corrupt thread entry position');
 		}
-		items.push({ runId: storedText(row.run_id), role: row.role, position, text });
+		items.push({
+			runId: storedText(row.run_id),
+			operationSequence: storedInteger(row.operation_sequence),
+			role: row.role,
+			position,
+			text,
+		});
 		if (position.textOffset < storedInteger(row.text_length, 1)) {
 			break;
 		}
@@ -97,8 +104,8 @@ export async function readThreadEntries(
 			? items[items.length - 1].position
 			: {
 					runSequence: after.runSequence,
-					stepIndex: after.stepIndex,
-					eventSequence: after.eventSequence,
+					messageOrdinal: after.messageOrdinal,
+					chunkIndex: after.chunkIndex,
 					textOffset: after.textOffset,
 				},
 	};
@@ -106,28 +113,28 @@ export async function readThreadEntries(
 
 // Select the page's positions before reading its potentially large persisted text bodies.
 const PREVIOUS_ENTRIES = `WITH positions AS (
- SELECT r.id AS run_id,r.thread_sequence AS run_sequence,0 AS step_index,0 AS event_sequence,'user' AS role
- FROM agent_runs r WHERE r.user_id=? AND r.app_id=? AND r.thread_id=? AND r.run_kind='root'
+ SELECT r.id AS run_id,r.thread_sequence AS run_sequence,0 AS message_ordinal,0 AS chunk_index,'user' AS role,0 AS operation_sequence,NULL AS message_id
+ FROM agent_runs r WHERE r.user_id=? AND r.app_id=? AND r.thread_id=? AND r.run_kind='root' AND r.input_text<>''
  UNION ALL
- SELECT r.id,r.thread_sequence,e.step_index,e.sequence,'assistant'
- FROM agent_runs r JOIN agent_run_model_step_events e ON e.run_id=r.id
- WHERE r.user_id=? AND r.app_id=? AND r.thread_id=? AND r.run_kind='root' AND e.kind='text.delta'
+ SELECT r.id,r.thread_sequence,m.ordinal,c.chunk_index+1,'assistant',m.operation_sequence,m.id
+ FROM agent_runs r JOIN agent_app_messages m ON m.run_id=r.id
+ JOIN agent_app_message_chunks c ON c.message_id=m.id
+ WHERE r.user_id=? AND r.app_id=? AND r.thread_id=? AND r.run_kind='root' AND c.text<>''
 ), recent AS MATERIALIZED (
- SELECT * FROM positions WHERE ?=1 OR (run_sequence,step_index,event_sequence)<(?,?,?) OR
- ((run_sequence,step_index,event_sequence)=(?,?,?) AND ?>0)
- ORDER BY run_sequence DESC,step_index DESC,event_sequence DESC LIMIT ?
+ SELECT * FROM positions WHERE ?=1 OR (run_sequence,message_ordinal,chunk_index)<(?,?,?) OR
+ ((run_sequence,message_ordinal,chunk_index)=(?,?,?) AND ?>0)
+ ORDER BY run_sequence DESC,message_ordinal DESC,chunk_index DESC LIMIT ?
 ), bodies AS (
- SELECT recent.*,CASE WHEN recent.role='user' THEN r.input_text ELSE e.text_delta END AS body
+ SELECT recent.*,CASE WHEN recent.role='user' THEN r.input_text ELSE c.text END AS body
  FROM recent JOIN agent_runs r ON r.id=recent.run_id
- LEFT JOIN agent_run_model_step_events e ON recent.role='assistant' AND e.run_id=recent.run_id
- AND e.step_index=recent.step_index AND e.sequence=recent.event_sequence
+ LEFT JOIN agent_app_message_chunks c ON c.message_id=recent.message_id AND c.chunk_index+1=recent.chunk_index
 ), bounded AS (
- SELECT *,CASE WHEN (run_sequence,step_index,event_sequence)=(?,?,?)
+ SELECT *,CASE WHEN (run_sequence,message_ordinal,chunk_index)=(?,?,?)
  THEN MIN(?,nexus_text_length(body)) ELSE nexus_text_length(body) END AS end_offset FROM bodies
 )
-SELECT run_id,run_sequence,step_index,event_sequence,role,end_offset,
+SELECT run_id,run_sequence,message_ordinal,chunk_index,role,operation_sequence,end_offset,
  MAX(0,end_offset-?) AS text_offset,nexus_text_slice(body,MAX(0,end_offset-?),MIN(end_offset,?)) AS fragment
-FROM bounded ORDER BY run_sequence DESC,step_index DESC,event_sequence DESC`;
+FROM bounded ORDER BY run_sequence DESC,message_ordinal DESC,chunk_index DESC`;
 
 export async function readPreviousThreadEntries(
 	tx: SqlExecutor,
@@ -145,7 +152,7 @@ export async function readPreviousThreadEntries(
 	if (!thread) {
 		return null;
 	}
-	const bound = before ?? { runSequence: 0, stepIndex: 0, eventSequence: 0, textOffset: 0 };
+	const bound = before ?? { runSequence: 0, messageOrdinal: 0, chunkIndex: 0, textOffset: 0 };
 	const rows = await tx.all(PREVIOUS_ENTRIES, [
 		userId,
 		appId,
@@ -155,16 +162,16 @@ export async function readPreviousThreadEntries(
 		threadId,
 		before === null ? 1 : 0,
 		bound.runSequence,
-		bound.stepIndex,
-		bound.eventSequence,
+		bound.messageOrdinal,
+		bound.chunkIndex,
 		bound.runSequence,
-		bound.stepIndex,
-		bound.eventSequence,
+		bound.messageOrdinal,
+		bound.chunkIndex,
 		bound.textOffset,
 		limit + 1,
 		bound.runSequence,
-		bound.stepIndex,
-		bound.eventSequence,
+		bound.messageOrdinal,
+		bound.chunkIndex,
 		bound.textOffset,
 		AGENT_THREAD_ENTRY_MAX_TEXT_CODE_POINTS,
 		AGENT_THREAD_ENTRY_MAX_TEXT_CODE_POINTS,
@@ -186,18 +193,24 @@ export async function readPreviousThreadEntries(
 		}
 		const position = {
 			runSequence: storedInteger(row.run_sequence, 1),
-			stepIndex: storedInteger(row.step_index),
-			eventSequence: storedInteger(row.event_sequence),
+			messageOrdinal: storedInteger(row.message_ordinal),
+			chunkIndex: storedInteger(row.chunk_index),
 			textOffset: end,
 		};
-		if ((row.role === 'user') !== (position.stepIndex === 0 && position.eventSequence === 0)) {
+		if ((row.role === 'user') !== (position.messageOrdinal === 0 && position.chunkIndex === 0)) {
 			throw new Error('Corrupt thread history position');
 		}
-		items.push({ runId: storedText(row.run_id), role: row.role, position, text });
+		items.push({
+			runId: storedText(row.run_id),
+			operationSequence: storedInteger(row.operation_sequence),
+			role: row.role,
+			position,
+			text,
+		});
 		startCursor = {
 			runSequence: position.runSequence,
-			stepIndex: position.stepIndex,
-			eventSequence: position.eventSequence,
+			messageOrdinal: position.messageOrdinal,
+			chunkIndex: position.chunkIndex,
 			textOffset: start,
 		};
 		if (start > 0) {

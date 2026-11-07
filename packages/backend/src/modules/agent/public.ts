@@ -1,8 +1,8 @@
 import type { AgentToolCallDetails } from '@nexus-terminal/shared/agent/tools/model';
-import type { AgentReasoningEffort } from '@nexus-terminal/shared/agent/providers/values';
 import type { AgentAppView, AgentAppDefinitionView, AgentThreadView } from '@nexus-terminal/shared/agent/scope/model';
 import type { AgentRunUsageView, AgentRunView } from '@nexus-terminal/shared/agent/runs/model';
 import type { AgentRunEventsResponse } from '@nexus-terminal/shared/agent/runs/http';
+import type { AgentResumeRunResponse, AgentRunSuspensionView } from '@nexus-terminal/shared/agent/runs/http';
 import type { AgentCreateRunOutcome, AgentCancelRunOutcome } from '@nexus-terminal/shared/agent/runs/values';
 import type { AgentThreadToolsResponse } from '@nexus-terminal/shared/agent/tools/http';
 import type {
@@ -14,12 +14,7 @@ import type {
 export interface AgentCreateRunInput {
 	approvalMode: import('@nexus-terminal/shared/agent/runs/values').AgentApprovalMode;
 	connectionIds: number[];
-	model: {
-		providerId: string;
-		modelId: string;
-		configurationVersion: number;
-		reasoningEffort?: AgentReasoningEffort;
-	};
+	inputJson: string;
 	userId: number;
 	appId: string;
 	threadId: string;
@@ -34,6 +29,19 @@ export interface AgentCancelRunInput {
 	expectedVersion: number;
 	operationKey: string;
 }
+
+export interface AgentResumeRunInput {
+	userId: number;
+	appId: string;
+	runId: string;
+	expectedVersion: number;
+	operationKey: string;
+	inputJson: string;
+}
+
+export type AgentResumeRunResult =
+	| AgentResumeRunResponse
+	| { status: 'not_found' | 'version_conflict' | 'idempotency_conflict' | 'active_run_conflict' };
 
 export type AgentCreateRunResult =
 	| { status: AgentCreateRunOutcome; run: AgentRunView }
@@ -68,6 +76,8 @@ export interface AgentStateApi {
 	createThread(userId: number, appId: string, title: string): Promise<AgentThreadView | null>;
 	createRun(input: AgentCreateRunInput): Promise<AgentCreateRunResult>;
 	cancelRun(input: AgentCancelRunInput): Promise<AgentCancelRunResult>;
+	resumeRun(input: AgentResumeRunInput): Promise<AgentResumeRunResult>;
+	getRunSuspension(userId: number, appId: string, runId: string): Promise<AgentRunSuspensionView | null>;
 	getRun(userId: number, appId: string, runId: string): Promise<AgentRunView | null>;
 	getToolCall(userId: number, appId: string, runId: string, toolId: string): Promise<AgentToolCallDetails | null>;
 	listThreadTools(

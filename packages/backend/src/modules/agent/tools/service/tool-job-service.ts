@@ -1,5 +1,6 @@
+import type { RunChanges } from '../../runs/model/run-changes.js';
 import { FailureSummary } from '../../../../platform/lifecycle/failure-summary.js';
-import { RESULT_PAGE_MAX_BYTES } from '../../context/result-rules.js';
+import { RESULT_PAGE_DEFAULT_BYTES } from '../../context/result-rules.js';
 import type { Logger } from '../../../../platform/logging/logger.js';
 import { logDiagnostic, withDiagnosticContext } from '../../../../platform/logging/diagnostic-log.js';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -7,6 +8,10 @@ import type { ToolJobModel } from '../model/tool-job-model.js';
 import { TOOL_RESULT_MAX_BYTES } from '../../runs/run-tool-limits.js';
 import type {
 	ToolJob,
+	ToolJobAccepted,
+	ToolJobSnapshot,
+	ToolJobControlValue,
+	ToolJobOutputValue,
 	ToolJobScope,
 	ToolJobPreparation,
 	ToolJobResult,
@@ -54,7 +59,7 @@ function sameScope(job: ToolJob, scope: ToolJobScope): boolean {
 	return job.userId === scope.userId && job.appId === scope.appId && job.runId === scope.runId;
 }
 
-function resultView(result: ToolJobResult | null) {
+function resultView(result: ToolJobResult | null): ToolJobResult | null {
 	return result === null
 		? null
 		: result.status === 'not_started'
@@ -77,8 +82,8 @@ function resultView(result: ToolJobResult | null) {
 				};
 }
 
-function snapshot(job: ToolJob, waitingForSpace: boolean): string {
-	return JSON.stringify({
+function snapshot(job: ToolJob, waitingForSpace: boolean): ToolJobSnapshot {
+	return {
 		jobId: job.id,
 		waitingForSpace,
 		state: job.state,
@@ -86,7 +91,7 @@ function snapshot(job: ToolJob, waitingForSpace: boolean): string {
 		result: resultView(job.result),
 		createdAt: job.createdAt,
 		updatedAt: job.updatedAt,
-	});
+	};
 }
 
 /** Run-owned Shell execution. Every remote Promise remains owned through durable settlement and cleanup. */
@@ -167,6 +172,7 @@ export class ToolJobService {
 
 	constructor(
 		private readonly model: ToolJobModel,
+		private readonly changes: RunChanges,
 		private readonly logger?: Logger,
 		private readonly changed: (scope: ToolJobScope) => void = () => {},
 	) {}
@@ -176,13 +182,14 @@ export class ToolJobService {
 			.length;
 	}
 
-	async prepare(input: ToolJobPreparation): Promise<string> {
+	async prepare(input: ToolJobPreparation): Promise<ToolJobAccepted> {
 		const { operation, target, policyRevision, signal, work, validate } = input;
 		const deadline = input.deadlineAt;
 		signal.throwIfAborted();
 		const job = await this.model.create(
 			{
 				id: operation.id,
+				operationHash: operation.operationHash,
 				userId: operation.userId,
 				appId: operation.appId,
 				runId: operation.runId,
@@ -225,7 +232,7 @@ export class ToolJobService {
 			runId: job.runId,
 			connectionId: job.connectionId,
 		});
-		return JSON.stringify({ jobId: job.id, accepted: true });
+		return { jobId: job.id, accepted: true };
 	}
 
 	launch(id: string): void {
@@ -265,6 +272,25 @@ export class ToolJobService {
 		const monitor = new AbortController();
 		let monitoring: Promise<void> | null = null;
 		let authorityFailure: unknown = null;
+		let revision = 0;
+		let wake: (() => void) | null = null;
+
+		const notify = () => {
+			revision++;
+			wake?.();
+		};
+
+		const unsubscribe = this.changes.subscribe(
+			item.job,
+			notify,
+			() => {
+				authorityFailure = new AgentFailure('provider_unavailable');
+				item.controller.abort();
+				notify();
+			},
+			(scope) => scope.runId === undefined || scope.runId === item.job.runId,
+		);
+		monitor.signal.addEventListener('abort', notify);
 		let confirmed = false;
 		let writer: ToolOutputWriter | null = null;
 		let executionFailure: unknown = null;
@@ -279,20 +305,21 @@ export class ToolJobService {
 			logDiagnostic(this.logger, 'info', 'AGENT_JOB_DISPATCHED');
 			await item.validate(item.controller.signal);
 			monitoring = Promise.resolve().then(async () => {
+				let seen = -1;
 				while (!monitor.signal.aborted) {
-					try {
-						await delay(1000, undefined, { signal: monitor.signal });
-					} catch (error) {
-						if (monitor.signal.aborted) {
-							return;
-						}
-						authorityFailure = error;
-						item.controller.abort();
-						return;
+					if (seen === revision) {
+						await new Promise<void>((resolve) => {
+							wake = resolve;
+							if (monitor.signal.aborted || seen !== revision) {
+								resolve();
+							}
+						});
+						wake = null;
 					}
 					if (monitor.signal.aborted) {
 						return;
 					}
+					seen = revision;
 					try {
 						await item.validate(item.controller.signal);
 					} catch (error) {
@@ -361,7 +388,9 @@ export class ToolJobService {
 			// Uncertain DB commits are never followed by another guessed state write.
 			if (
 				(isAgentDrainFailure(error) && !(error instanceof ToolExecutionUnknown)) ||
-				(authorityFailure !== null && isAgentDrainFailure(authorityFailure))
+				(authorityFailure !== null &&
+					!(item.controller.signal.aborted && authorityFailure === item.controller.signal.reason) &&
+					isAgentDrainFailure(authorityFailure))
 			) {
 				if (authorityFailure !== null && authorityFailure !== error) {
 					executionFailure = new AggregateError(
@@ -399,6 +428,8 @@ export class ToolJobService {
 			if (monitoring) {
 				await monitoring;
 			}
+			unsubscribe();
+			monitor.signal.removeEventListener('abort', notify);
 			item.unsubscribe();
 			try {
 				if (writer !== null) {
@@ -437,6 +468,35 @@ export class ToolJobService {
 		}
 		if (item?.refusal) {
 			throw item.refusal;
+		}
+	}
+
+	/** A managed parent joins the real Job owner before publishing its own completion. */
+	async join(
+		scope: ToolJobScope,
+		target: ToolTarget,
+		id: string,
+		signal: AbortSignal,
+		validate: () => Promise<void>,
+	): Promise<void> {
+		const job = await this.owned(scope, target, id);
+		const item = this.jobs.get(id);
+		if ((job.state === 'queued' || job.state === 'dispatched') && !item?.pending) {
+			throw new ToolExecutionUnknown();
+		}
+
+		const cancel = () => item?.controller.abort();
+
+		signal.addEventListener('abort', cancel, { once: true });
+		if (signal.aborted) {
+			cancel();
+		}
+		try {
+			await item?.pending;
+			await this.settled(await this.owned(scope, target, id));
+			await validate();
+		} finally {
+			signal.removeEventListener('abort', cancel);
 		}
 	}
 
@@ -494,19 +554,10 @@ export class ToolJobService {
 		waitMs: number,
 		signal: AbortSignal,
 		validate: () => Promise<void>,
-	): Promise<string> {
+	): Promise<ToolJobSnapshot> {
 		const job = await this.waitFor(scope, target, id, waitMs, signal, validate);
 		if (job.result !== null && job.result.status !== 'not_started') {
-			const result = resultView(job.result);
-			if (result === null || result.status === 'not_started') {
-				throw new AgentFailure('internal_failure');
-			}
-			return JSON.stringify({
-				jobId: job.id,
-				outputRead: { connectionId: job.connectionId, action: 'output', jobIds: [job.id], offset: 0 },
-				status: result.status,
-				commands: result.commands,
-			});
+			return snapshot(job, this.jobs.get(job.id)?.waitingForSpace ?? false);
 		}
 		const item = this.jobs.get(id);
 		if (item?.active) {
@@ -528,7 +579,7 @@ export class ToolJobService {
 		signal: AbortSignal,
 		validate: () => Promise<void>,
 		waitBudgetMs: number,
-	): Promise<string> {
+	): Promise<ToolJobControlValue> {
 		await validate();
 		if (input.action === 'list') {
 			const records = await this.model.list(scope, target.id, 64, input.offset);
@@ -539,7 +590,7 @@ export class ToolJobService {
 				await this.settled(job);
 			}
 			await validate();
-			return JSON.stringify({
+			return {
 				nextOffset: records.length > 64 ? input.offset + 64 : null,
 				jobs: jobs.map((job) => ({
 					jobId: job.id,
@@ -549,22 +600,22 @@ export class ToolJobService {
 					createdAt: job.createdAt,
 					updatedAt: job.updatedAt,
 				})),
-			});
+			};
 		}
 		if (!input.jobIds.length) {
 			throw new AgentFailure('invalid_input');
 		}
 		const jobs = await Promise.all(input.jobIds.map((id) => this.owned(scope, target, id)));
 		if (input.action === 'output') {
-			const pages = [];
+			const pages: ToolJobOutputValue[] = [];
 			let size = 128;
 			for (const job of jobs) {
 				// Reading evidence does not wait for execution settlement or clear an unknown fence.
-				const captured = await this.model.output(job.id, input.offset, RESULT_PAGE_MAX_BYTES);
+				const captured = await this.model.output(job.id, input.offset, RESULT_PAGE_DEFAULT_BYTES);
 				const events = captured?.output ?? [];
 				const totalBytes = captured?.capturedBytes ?? 0;
 
-				const output: Array<{ commandIndex: number; stream: string; text: string }> = [];
+				const output: ToolJobOutputValue['output'] = [];
 				let nextOffset = input.offset,
 					full = false;
 				let outputBytes = 2;
@@ -576,7 +627,7 @@ export class ToolJobService {
 							: { commandIndex: event.commandIndex, stream: event.stream, text: '' };
 					if (item !== last) {
 						const overhead = Buffer.byteLength(JSON.stringify(item)) + (output.length ? 1 : 0);
-						if (outputBytes + overhead + 6 > RESULT_PAGE_MAX_BYTES) {
+						if (outputBytes + overhead + 6 > RESULT_PAGE_DEFAULT_BYTES) {
 							full = true;
 							break;
 						}
@@ -585,7 +636,7 @@ export class ToolJobService {
 					}
 					for (const point of event.text) {
 						const cost = Buffer.byteLength(JSON.stringify(point)) - 2;
-						if (outputBytes + cost > RESULT_PAGE_MAX_BYTES) {
+						if (outputBytes + cost > RESULT_PAGE_DEFAULT_BYTES) {
 							full = true;
 							break;
 						}
@@ -616,7 +667,7 @@ export class ToolJobService {
 				size += bytes;
 			}
 			await validate();
-			return JSON.stringify({ jobs: pages, nextIndex: pages.length < jobs.length ? pages.length : null });
+			return { jobs: pages, nextIndex: pages.length < jobs.length ? pages.length : null };
 		}
 
 		if (input.action === 'cancel') {
@@ -673,7 +724,7 @@ export class ToolJobService {
 			await this.settled(job);
 		}
 		await validate();
-		return JSON.stringify({
+		return {
 			jobs: current.map((job) => ({
 				jobId: job.id,
 				state: job.state,
@@ -683,7 +734,7 @@ export class ToolJobService {
 				createdAt: job.createdAt,
 				updatedAt: job.updatedAt,
 			})),
-		});
+		};
 	}
 
 	async drain(scope: ToolJobScope): Promise<void> {

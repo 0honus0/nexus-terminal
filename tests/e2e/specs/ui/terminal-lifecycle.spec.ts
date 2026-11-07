@@ -403,6 +403,164 @@ test('a composition that ends after leaving the terminal cannot send stale text 
 	await expect.poll(() => page.evaluate(() => window.__terminalLifecycle.inputs)).toEqual(['新输入']);
 });
 
+for (const delivery of ['input-before-timer', 'timer-before-input', 'keyup-before-input', 'timer-only']) {
+	test(`terminal delivers iOS IME spaces once with ${delivery}`, async ({ page }) => {
+		await mountTerminalHarness(page);
+		const inputs = await page.evaluate(async (delivery) => {
+			const input = document.querySelector<HTMLTextAreaElement>('#terminal-lifecycle-host textarea');
+			if (!input) throw new Error('Terminal textarea is missing.');
+			input.focus();
+			input.value = 'existing';
+			for (let count = 1; count <= 3; count++) {
+				input.dispatchEvent(
+					new KeyboardEvent('keydown', { key: ' ', code: 'Space', keyCode: 229, bubbles: true }),
+				);
+				if (delivery === 'timer-before-input') await new Promise((resolve) => setTimeout(resolve, 0));
+				if (delivery === 'keyup-before-input')
+					input.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', keyCode: 32, bubbles: true }));
+				input.dispatchEvent(
+					new InputEvent('beforeinput', {
+						inputType: 'insertText',
+						data: ' ',
+						bubbles: true,
+						composed: true,
+					}),
+				);
+				input.value = 'existing' + ' '.repeat(count);
+				if (delivery !== 'timer-only')
+					input.dispatchEvent(
+						new InputEvent('input', {
+							inputType: 'insertText',
+							data: ' ',
+							bubbles: true,
+							composed: true,
+						}),
+					);
+				await new Promise((resolve) => setTimeout(resolve, 0));
+				if (delivery !== 'keyup-before-input')
+					input.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', keyCode: 32, bubbles: true }));
+			}
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			return window.__terminalLifecycle.inputs;
+		}, delivery);
+		expect(inputs).toEqual([' ', ' ', ' ']);
+	});
+}
+
+test('terminal IME replacements send only the changed suffix and preserve complete emoji', async ({ page }) => {
+	await mountTerminalHarness(page);
+	const inputs = await page.evaluate(async () => {
+		const input = document.querySelector<HTMLTextAreaElement>('#terminal-lifecycle-host textarea');
+		if (!input) throw new Error('Terminal textarea is missing.');
+		for (const [before, after, data] of [
+			['prefix🙂 ', 'prefix🙂。', '。'],
+			['prefix🙂', 'prefix🙃', '🙃'],
+			['prefix🙂🦀', 'prefix', null],
+		]) {
+			input.value = before ?? '';
+			input.dispatchEvent(new KeyboardEvent('keydown', { keyCode: 229, bubbles: true }));
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			input.value = after ?? '';
+			input.dispatchEvent(
+				new InputEvent('input', {
+					inputType: data ? 'insertText' : 'deleteContentBackward',
+					data,
+					bubbles: true,
+					composed: true,
+				}),
+			);
+			input.dispatchEvent(new KeyboardEvent('keyup', { keyCode: 229, bubbles: true }));
+		}
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		return window.__terminalLifecycle.inputs;
+	});
+	expect(inputs).toEqual(['\x7f。', '\x7f🙃', '\x7f\x7f']);
+});
+
+test('terminal IME fallback preserves composition, direct emoji and desktop spaces without duplication', async ({
+	page,
+}) => {
+	await mountTerminalHarness(page);
+	await page.evaluate(async () => {
+		const input = document.querySelector<HTMLTextAreaElement>('#terminal-lifecycle-host textarea');
+		if (!input) throw new Error('Terminal textarea is missing.');
+		input.focus();
+		input.dispatchEvent(new KeyboardEvent('keydown', { keyCode: 229, bubbles: true }));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+		input.value = '中文🙂';
+		input.dispatchEvent(new CompositionEvent('compositionupdate', { data: input.value, bubbles: true }));
+		input.dispatchEvent(new CompositionEvent('compositionend', { data: input.value, bubbles: true }));
+		input.dispatchEvent(new KeyboardEvent('keyup', { keyCode: 229, bubbles: true }));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		input.value += '😄';
+		input.dispatchEvent(
+			new InputEvent('input', { inputType: 'insertText', data: '😄', bubbles: true, composed: true }),
+		);
+		input.dispatchEvent(new KeyboardEvent('keydown', { key: '!', keyCode: 229, bubbles: true }));
+		input.value += '!';
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		input.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: '!', bubbles: true }));
+		input.dispatchEvent(new KeyboardEvent('keyup', { key: '!', keyCode: 229, bubbles: true }));
+	});
+	await page.keyboard.type('a b');
+	expect(await page.evaluate(() => window.__terminalLifecycle.inputs)).toEqual(['中文🙂', '😄', '!', 'a', ' ', 'b']);
+});
+
+test('terminal cannot deliver a delayed iOS space after leaving its pane', async ({ page }) => {
+	await mountTerminalHarness(page);
+	await page.evaluate(async () => {
+		const input = document.querySelector<HTMLTextAreaElement>('#terminal-lifecycle-host textarea');
+		if (!input) throw new Error('Terminal textarea is missing.');
+		input.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', keyCode: 229, bubbles: true }));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		await window.__terminalLifecycle.active(false);
+		input.value = ' ';
+		input.dispatchEvent(
+			new InputEvent('input', { inputType: 'insertText', data: ' ', bubbles: true, composed: true }),
+		);
+		input.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', keyCode: 32, bubbles: true }));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		await window.__terminalLifecycle.active(true);
+		input.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', keyCode: 32, bubbles: true }));
+	});
+	expect(await page.evaluate(() => window.__terminalLifecycle.inputs)).toEqual([]);
+});
+
+test('terminal clears pending IME baselines on blur and input disable before returning', async ({ page }) => {
+	await mountTerminalHarness(page);
+	const results = await page.evaluate(async () => {
+		const input = document.querySelector<HTMLTextAreaElement>('#terminal-lifecycle-host textarea');
+		if (!input) throw new Error('Terminal textarea is missing.');
+		const results: string[][] = [];
+		for (const blur of [true, false]) {
+			window.__terminalLifecycle.inputs.length = 0;
+			input.focus();
+			input.value = 'previously sent text';
+			input.dispatchEvent(new KeyboardEvent('keydown', { keyCode: 229, bubbles: true }));
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			if (blur) input.blur();
+			else await window.__terminalLifecycle.active(false);
+			input.value = '';
+			await window.__terminalLifecycle.active(true);
+			input.focus();
+			input.dispatchEvent(new KeyboardEvent('keyup', { keyCode: 229, bubbles: true }));
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			results.push([...window.__terminalLifecycle.inputs]);
+			input.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', keyCode: 229, bubbles: true }));
+			input.value = ' ';
+			input.dispatchEvent(
+				new InputEvent('input', { inputType: 'insertText', data: ' ', bubbles: true, composed: true }),
+			);
+			input.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', keyCode: 32, bubbles: true }));
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			results.push([...window.__terminalLifecycle.inputs]);
+		}
+		return results;
+	});
+	expect(results).toEqual([[], [' '], [], [' ']]);
+});
+
 test('a pending history page cannot replace an alternate-screen application started during its request', async ({
 	page,
 }) => {

@@ -47,7 +47,7 @@ test('first enable requires installation confirmation and cancellation or confir
 		[],
 	);
 	const catalog = await configureTestPluginRepository(context.request);
-	const entry = catalog.packages.find((item) => item.appId === 'nexus.agent' && item.compatible);
+	const entry = catalog.packages.find((item) => item.packageId === 'nexus.agent' && item.compatible);
 	expect(entry).toBeDefined();
 	// Control only the recommendation response; the separate install remains a rejected write.
 	await page.route('**/api/v1/agent/onboarding/recommended-plugin', (route) =>

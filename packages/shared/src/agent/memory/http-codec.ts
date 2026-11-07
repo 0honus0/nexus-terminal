@@ -3,6 +3,7 @@ import {
 	AGENT_MEMORY_STATUSES,
 	AGENT_MEMORY_DECISIONS,
 	AGENT_MEMORY_MAX_CONTENT_BYTES,
+	hasAgentMemoryContentCapacity,
 	AGENT_MEMORY_MAX_BODY_BYTES,
 	AGENT_MEMORY_MAX_PAGE,
 	AGENT_MEMORY_MAX_OFFSET,
@@ -17,6 +18,14 @@ import type {
 	AgentMemoryResponse,
 	AgentMemoryListResponse,
 } from './http.js';
+
+function content(value: unknown): string {
+	const text = agentText(value, AGENT_MEMORY_MAX_CONTENT_BYTES);
+	if (!hasAgentMemoryContentCapacity(text)) {
+		throw new InvalidAgentPayload();
+	}
+	return text;
+}
 
 function confidence(value: unknown): number {
 	if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1) {
@@ -33,7 +42,7 @@ export function readAgentMemoryPath(value: unknown): AgentMemoryPath {
 export function readAgentMemoryProposal(value: unknown): AgentMemoryProposalRequest {
 	const r = agentRecord(value, ['content', 'confidence', 'expiresAt', 'sourceRunId'], AGENT_MEMORY_MAX_BODY_BYTES);
 	return {
-		content: agentText(r.content, AGENT_MEMORY_MAX_CONTENT_BYTES),
+		content: content(r.content),
 		confidence: confidence(r.confidence),
 		expiresAt: r.expiresAt === null ? null : agentInteger(r.expiresAt, 1),
 		sourceRunId: r.sourceRunId === null ? null : readAgentId(r.sourceRunId),
@@ -49,7 +58,7 @@ export function readAgentMemoryReview(value: unknown): AgentMemoryReviewRequest 
 	return {
 		expectedVersion: agentInteger(r.expectedVersion, 1),
 		decision,
-		content: r.content === null ? null : agentText(r.content, AGENT_MEMORY_MAX_CONTENT_BYTES),
+		content: r.content === null ? null : content(r.content),
 	};
 }
 
@@ -132,7 +141,7 @@ export function readAgentMemoryView(value: unknown): AgentMemoryView {
 	return {
 		id: readAgentId(r.id),
 		appId: readAgentId(r.appId),
-		content: agentText(r.content, AGENT_MEMORY_MAX_CONTENT_BYTES),
+		content: content(r.content),
 		confidence: confidence(r.confidence),
 		status,
 		sourceRunId: r.sourceRunId === null ? null : readAgentId(r.sourceRunId),

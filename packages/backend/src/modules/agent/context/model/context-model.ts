@@ -1,53 +1,6 @@
 import { agentStorage } from '../../agent-storage-failure.js';
 import type { ThreadEntryCursor, ThreadEntries, ThreadEntryHistory } from './context-types.js';
-import type { RunModelMessage } from '../../runs/model/run-types.js';
-import type { ContextStorage, StoredContextMessage, StoredContextSnapshot } from '../storage/context-storage.js';
-import type {
-	ContextSource,
-	ContextHistoryCommand,
-	ContextHistoryFacts,
-	ContextHistoryTurn,
-	ContextHistoryBundle,
-} from './context-types.js';
-
-/** The single application→context journal projection, consumed by RunStepModel. */
-export function toStoredContext(
-	messages: RunModelMessage[],
-	sources: ContextSource[],
-	systemPrompt: string,
-): StoredContextSnapshot {
-	return {
-		systemPrompt,
-		messages: messages.map((message): StoredContextMessage => {
-			if (message.role === 'user') {
-				return { role: 'user', content: message.content };
-			}
-			if (message.role === 'tool') {
-				return { role: 'tool', providerCallId: message.providerCallId, content: message.content };
-			}
-			return {
-				role: 'assistant',
-				content: message.content,
-				proposals: message.proposals.map((proposal) => ({
-					providerCallId: proposal.providerCallId,
-					toolName: proposal.toolName,
-					argumentsJson: proposal.argumentsJson,
-				})),
-				reasoning: message.reasoning.map((item) => ({
-					id: item.id,
-					encryptedContent: item.encryptedContent,
-					summary: item.summary.map((text) => text),
-				})),
-			};
-		}),
-		sources: sources.map((source) => ({
-			runId: source.runId,
-			version: source.version,
-			sequence: source.sequence,
-			status: source.status,
-		})),
-	};
-}
+import type { ContextStorage } from '../storage/context-storage.js';
 
 export class ContextModel {
 	constructor(private readonly storage: ContextStorage) {}
@@ -68,8 +21,8 @@ export class ContextModel {
 					? null
 					: {
 							runSequence: before.runSequence,
-							stepIndex: before.stepIndex,
-							eventSequence: before.eventSequence,
+							messageOrdinal: before.messageOrdinal,
+							chunkIndex: before.chunkIndex,
 							textOffset: before.textOffset,
 						},
 				limit,
@@ -80,8 +33,8 @@ export class ContextModel {
 			: {
 					startCursor: {
 						runSequence: value.startCursor.runSequence,
-						stepIndex: value.startCursor.stepIndex,
-						eventSequence: value.startCursor.eventSequence,
+						messageOrdinal: value.startCursor.messageOrdinal,
+						chunkIndex: value.startCursor.chunkIndex,
 						textOffset: value.startCursor.textOffset,
 					},
 					hasEarlier: value.hasEarlier,
@@ -90,19 +43,20 @@ export class ContextModel {
 						threadId: value.body.threadId,
 						items: value.body.items.map((item) => ({
 							runId: item.runId,
+							operationSequence: item.operationSequence,
 							role: item.role,
 							text: item.text,
 							position: {
 								runSequence: item.position.runSequence,
-								stepIndex: item.position.stepIndex,
-								eventSequence: item.position.eventSequence,
+								messageOrdinal: item.position.messageOrdinal,
+								chunkIndex: item.position.chunkIndex,
 								textOffset: item.position.textOffset,
 							},
 						})),
 						nextCursor: {
 							runSequence: value.body.nextCursor.runSequence,
-							stepIndex: value.body.nextCursor.stepIndex,
-							eventSequence: value.body.nextCursor.eventSequence,
+							messageOrdinal: value.body.nextCursor.messageOrdinal,
+							chunkIndex: value.body.nextCursor.chunkIndex,
 							textOffset: value.body.nextCursor.textOffset,
 						},
 					},
@@ -123,8 +77,8 @@ export class ContextModel {
 				threadId,
 				{
 					runSequence: after.runSequence,
-					stepIndex: after.stepIndex,
-					eventSequence: after.eventSequence,
+					messageOrdinal: after.messageOrdinal,
+					chunkIndex: after.chunkIndex,
 					textOffset: after.textOffset,
 				},
 				limit,
@@ -137,86 +91,22 @@ export class ContextModel {
 					threadId: value.threadId,
 					items: value.items.map((item) => ({
 						runId: item.runId,
+						operationSequence: item.operationSequence,
 						role: item.role,
 						text: item.text,
 						position: {
 							runSequence: item.position.runSequence,
-							stepIndex: item.position.stepIndex,
-							eventSequence: item.position.eventSequence,
+							messageOrdinal: item.position.messageOrdinal,
+							chunkIndex: item.position.chunkIndex,
 							textOffset: item.position.textOffset,
 						},
 					})),
 					nextCursor: {
 						runSequence: value.nextCursor.runSequence,
-						stepIndex: value.nextCursor.stepIndex,
-						eventSequence: value.nextCursor.eventSequence,
+						messageOrdinal: value.nextCursor.messageOrdinal,
+						chunkIndex: value.nextCursor.chunkIndex,
 						textOffset: value.nextCursor.textOffset,
 					},
-				};
-	}
-
-	async readHistory(
-		command: ContextHistoryCommand,
-		sourceLimit: number,
-		fits: (facts: ContextHistoryFacts) => boolean,
-	): Promise<ContextHistoryBundle | null> {
-		const turns = await agentStorage(() =>
-			this.storage.readHistory(
-				{
-					userId: command.userId,
-					appId: command.appId,
-					runId: command.runId,
-					expectedVersion: command.expectedVersion,
-					includeThread: command.includeThread,
-				},
-				sourceLimit,
-				(facts) =>
-					fits({
-						sources: facts.sources,
-						runs: facts.runs,
-						steps: facts.steps,
-						tools: facts.tools,
-						bytes: facts.bytes,
-					}),
-			),
-		);
-		return turns === null
-			? null
-			: {
-					sources: turns.sources.map((source) => ({
-						runId: source.runId,
-						version: source.version,
-						sequence: source.sequence,
-						status: source.status,
-					})),
-					summary:
-						turns.summary === null
-							? null
-							: { content: turns.summary.content, coveredRuns: turns.summary.coveredRuns },
-					turns: turns.turns.map((turn) => ({
-						source: {
-							runId: turn.source.runId,
-							version: turn.source.version,
-							sequence: turn.source.sequence,
-							status: turn.source.status,
-						},
-						input: turn.input,
-						steps: turn.steps.map((step) => ({
-							index: step.index,
-							state: step.state,
-							text: step.text,
-							proposals: step.proposals.map((proposal) => ({
-								providerCallId: proposal.providerCallId,
-								toolName: proposal.toolName,
-								argumentsJson: proposal.argumentsJson,
-							})),
-							results: step.results.map((result) => ({
-								providerCallId: result.providerCallId,
-								state: result.state,
-								content: result.content,
-							})),
-						})),
-					})),
 				};
 	}
 }

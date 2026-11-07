@@ -1,15 +1,18 @@
-import type { AgentToolState } from './values.js';
+import type { AgentOperationState } from '../operations/values.js';
 import type { AgentApprovalRisk, AgentCapability } from '../governance/values.js';
-import type { AgentRunFailureCode } from '../runs/values.js';
+import type { AgentOperationErrorCode } from '../values.js';
+import type { AgentToolIdentity } from './identity.js';
 
 /** Tool list projection; arguments are read separately through authenticated single-call details. */
 export interface AgentToolView {
 	id: string;
 	appId: string;
 	runId: string;
-	modelStepIndex: number;
+	sequence: number;
+	parentOperationId: string | null;
 	toolName: string;
 	toolVersion: string;
+	identity: AgentToolIdentity;
 	capability: AgentCapability;
 	targetId: number | null;
 	targetVersion: number | null;
@@ -17,9 +20,9 @@ export interface AgentToolView {
 	mutation: boolean;
 	summary: string;
 	operationHash: string;
-	operationRevision: number;
+	effects: { id: string; operationHash: string }[];
 	revision: number;
-	state: AgentToolState;
+	state: AgentOperationState;
 	/** App-owned file delivered by a completed, server-owned output tool. */
 	outputArtifactIds: string[];
 	createdAt: number;
@@ -30,5 +33,5 @@ export interface AgentToolView {
 export interface AgentToolCallDetails {
 	tool: AgentToolView;
 	argumentsJson: string;
-	failureCode: AgentRunFailureCode | null;
+	failureCode: AgentOperationErrorCode | null;
 }

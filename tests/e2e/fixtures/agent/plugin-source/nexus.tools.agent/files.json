@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "publisherKeyId": "ed25519:617ec64b03cd6ed1a1ddf373e3a47f38666cdcd27753d674e136a4d0a359a1a0",
+  "files": [
+    {
+      "path": "backend/index.mjs",
+      "sha256": "af1d898ec9fc87186edff9e24725fd6733a4c1d4e76481ce2a4e41246b427dac",
+      "sizeBytes": 464058
+    }
+  ]
+}

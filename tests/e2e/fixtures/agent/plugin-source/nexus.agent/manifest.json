@@ -1,14 +1,14 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 4,
   "id": "nexus.agent",
-  "version": "1.0.0",
+  "version": "2.0.1",
   "displayName": "Nexus Agent",
-  "sdkVersion": "1",
   "capabilities": [
     "file.read",
     "file.write",
     "file.delete",
     "machine.inspect",
+    "host.inspect",
     "shell.execute",
     "machine.docker.manage",
     "browser.read",
@@ -17,15 +17,56 @@
     "integration.mcp.invoke",
     "integration.acp.invoke",
     "artifacts.read",
+    "artifacts.write",
+    "context.read",
+    "context.compact",
+    "memory.read",
+    "memory.propose",
     "app.intents.exchange",
-    "context.read"
+    "plugin.invoke",
+    "plugin.configure",
+    "service.transport.http",
+    "service.transport.process"
   ],
-  "intents": [
-    {
-      "id": "memory.import",
-      "schemaVersion": 1
-    }
-  ],
+  "intents": [],
   "frontendEntry": null,
-  "backendEntry": null
+  "backendEntry": "backend/index.mjs",
+  "compatibility": {
+    "host": {
+      "minVersion": "1.1.0",
+      "maxVersion": "1.1.0"
+    },
+    "backendSdk": 4,
+    "frontendSdk": 4
+  },
+  "contributions": {
+    "app": {
+      "entry": "nexus.agent.run",
+      "uiContract": "nexus.ui.chat",
+      "uiApiVersion": 1
+    },
+    "tools": false,
+    "services": false,
+    "ui": null,
+    "settings": {
+      "frontendEntry": "frontend/index.html",
+      "instructions": "docs/settings.md",
+      "schemaRevision": 1,
+      "schemaJson": "{\"type\":\"object\",\"properties\":{\"instructions\":{\"type\":\"string\",\"title\":\"Additional instructions\"},\"compactionMode\":{\"type\":\"string\",\"enum\":[\"aggressive\",\"balanced\",\"conservative\"],\"title\":\"Context compaction\"}},\"required\":[\"instructions\",\"compactionMode\"],\"additionalProperties\":false}",
+      "defaultsJson": "{\"instructions\":\"\",\"compactionMode\":\"balanced\"}",
+      "agentEditablePaths": ["/instructions", "/compactionMode"]
+    },
+    "skills": [
+      {
+        "id": "nexus.agent.operations",
+        "path": "skills/operations/SKILL.md"
+      },
+      {
+        "id": "nexus.agent.developer",
+        "path": "skills/developer/SKILL.md"
+      }
+    ]
+  },
+  "dependencies": [],
+  "namespaces": ["nexus.agent", "nexus.app"]
 }

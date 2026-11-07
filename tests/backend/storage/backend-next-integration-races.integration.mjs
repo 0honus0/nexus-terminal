@@ -1,22 +1,21 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { IntegrationService } from '../../../packages/backend/dist/modules/agent/integrations/service/integration-service.js';
-import { IntegrationModel } from '../../../packages/backend/dist/modules/agent/integrations/model/integration-model.js';
-import { SqliteIntegrationStorage } from '../../../packages/backend/dist/modules/agent/integrations/adapters/sqlite/integration-sql.js';
-import { initializeAgentIntegrations } from '../../../packages/backend/dist/modules/agent/integrations/adapters/sqlite/integration-schema.js';
-import { ToolService } from '../../../packages/backend/dist/modules/agent/tools/service/tool-service.js';
+import { openAgentExecution } from '../http/agent-execution-fixture.mjs';
+import { openSshd, expectStatus } from '../remote/openssh-fixture.mjs';
+import { DefaultToolResources } from '../../../packages/backend/dist/modules/agent/tools/service/default-tool-resources.js';
+import { PluginInstanceModel } from '../../../packages/backend/dist/modules/agent/plugins/model/plugin-instance-model.js';
+import { SqlitePluginInstanceStorage } from '../../../packages/backend/dist/modules/agent/plugins/adapters/sqlite/plugin-instance-sql.js';
+import { PluginService } from '../../../packages/backend/dist/modules/agent/plugins/service/plugin-service.js';
 import {
 	AgentFailure,
-	ToolExecutionUnknown,
 	ToolCleanupFailure,
+	ToolExecutionUnknown,
 } from '../../../packages/backend/dist/modules/agent/agent-failure.js';
-import { SqliteRuntime } from '../../../packages/backend/dist/platform/storage/sqlite/sqlite-runtime.js';
 import { SqliteFailure } from '../../../packages/backend/dist/platform/storage/sqlite/sqlite-errors.js';
-import { McpFailure } from '../../../packages/backend/dist/platform/mcp/mcp-client.js';
 
 function gate() {
 	let resolve;
@@ -26,424 +25,272 @@ function gate() {
 	return { promise, resolve };
 }
 
-const actor = { userId: 1, appId: randomUUID(), runId: randomUUID() };
+const tick = () => new Promise((resolve) => setImmediate(resolve));
 
-function input(id = randomUUID(), resume = null) {
-	return { id, version: 1, schemaHash: 'a'.repeat(64), kind: 'tool', name: 'echo', argumentsJson: '{}', resume };
-}
+const actor = { userId: 1, appId: randomUUID(), runId: randomUUID(), token: 'controlled-token' };
 
-const waiting = { kind: 'input_required', requestState: 'private-remote-state', inputRequestsJson: '{}' };
-const completed = { kind: 'complete', resultJson: '{}' };
+const refused = (code) => (error) => error instanceof AgentFailure && error.code === code;
 
-async function capacityFixture(t) {
-	const calls = [];
-
-	let work = async () => waiting;
-
-	const service = new IntegrationService({
-		async invoke(owner, command, signal) {
-			calls.push({ owner, command });
-			return work(command, signal);
-		},
-
-		async close() {},
-	});
-	t.after(() => service.close());
-	return {
-		service,
-		calls,
-
-		setWork(value) {
-			work = value;
-		},
-	};
-}
-
-function invoke(f, command, signal = new AbortController().signal) {
-	return f.service.invoke(actor, command, signal, async () => undefined).then(JSON.parse);
-}
-
-await test('Continuation admission reserves the final slot across distinct integrations before dispatch', async (t) => {
-	const release = gate();
-	t.after(() => release.resolve());
-	const f = await capacityFixture(t);
-	for (let index = 0; index < 127; index += 1) {
-		const command = input();
-		await invoke(f, command);
-	}
-	const entered = gate();
-	f.setWork(async () => {
-		entered.resolve();
-		await release.promise;
-		return waiting;
-	});
-	const last = input();
-	const final = invoke(f, last);
-	await entered.promise;
-	assert.equal(f.calls.length, 128);
-	await assert.rejects(invoke(f, input()), { code: 'limit_exceeded' });
-	assert.equal(f.calls.length, 128, 'overflow must not reach the model');
-	release.resolve();
-	const state = await final;
-	assert.notEqual(state.requestState, waiting.requestState);
-	await assert.rejects(invoke(f, input()), { code: 'limit_exceeded' });
-	f.setWork(async () => completed);
-	assert.equal(
-		(await invoke(f, input(last.id, { requestState: state.requestState, inputResponsesJson: '{}' }))).kind,
-		'complete',
-	);
-	assert.equal(f.calls.at(-1).command.resume.requestState, waiting.requestState);
-	await assert.rejects(invoke(f, input(last.id, { requestState: state.requestState, inputResponsesJson: '{}' })), {
-		code: 'version_conflict',
-	});
-	f.setWork(async () => waiting);
-	await invoke(f, input());
-	await assert.rejects(invoke(f, input()), { code: 'limit_exceeded' });
-	f.service.drainRun(actor);
-	for (let index = 0; index < 128; index += 1) {
-		await invoke(f, input());
-	}
-	await assert.rejects(invoke(f, input()), { code: 'limit_exceeded' });
-});
-
-await test('Continuation reservation is released after complete, rejection and post-dispatch cancellation', async (t) => {
-	const release = gate();
-	t.after(() => release.resolve());
-	const f = await capacityFixture(t);
-	for (let index = 0; index < 127; index += 1) {
-		await invoke(f, input());
-	}
-	f.setWork(async () => completed);
-	await invoke(f, input());
-	const refusal = new AgentFailure('version_conflict');
-	f.setWork(async () => {
-		throw refusal;
-	});
-	await assert.rejects(invoke(f, input()), (error) => error === refusal);
-	const entered = gate();
-	f.setWork(async () => {
-		entered.resolve();
-		await release.promise;
-		return waiting;
-	});
-	const controller = new AbortController();
-	const canceled = invoke(f, input(), controller.signal);
-	const rejected = assert.rejects(
-		canceled,
-		(error) => error instanceof ToolExecutionUnknown && !(error instanceof ToolCleanupFailure),
-	);
-	await entered.promise;
-	controller.abort();
-	await assert.rejects(invoke(f, input()), { code: 'limit_exceeded' });
-	release.resolve();
-	await rejected;
-	f.setWork(async () => waiting);
-	await invoke(f, input());
-	await assert.rejects(invoke(f, input()), { code: 'limit_exceeded' });
-});
-
-async function modelFixture(t) {
-	const directory = await mkdtemp(join(tmpdir(), 'nexus-b10-integration-races-'));
-	const db = SqliteRuntime.open(join(directory, 'state.db'));
-	t.after(async () => {
-		try {
-			await db.close();
-		} finally {
-			await rm(directory, { recursive: true, force: true });
-		}
-	});
-	// Focused adapter fixture: identity is controlled; real transaction ordering and integration SQL are unchanged.
-	await db.exec('CREATE TABLE agent_apps(id TEXT,user_id INTEGER,enabled INTEGER,UNIQUE(id,user_id))');
-	await db.run('INSERT INTO agent_apps VALUES(?,?,1)', [actor.appId, actor.userId]);
-	await initializeAgentIntegrations(db);
-	const storage = new SqliteIntegrationStorage(db);
-	storage.installTransactionIdentityReader(async () => actor.userId);
-	const catalog = {
-		serverName: 'B10',
-		serverVersion: '1',
-		protocolVersion: '2026-07-28',
-		tools: [{ name: 'echo', description: '', inputSchemaJson: '{}' }],
-		resources: [],
-		prompts: [],
-	};
-	const mcp = {
-		async discover() {
-			return catalog;
-		},
-
-		async invoke() {
-			return completed;
-		},
-
-		async close() {},
-
-		async closeAll() {},
-	};
-	const model = new IntegrationModel(storage, null, { digest: () => 'controlled-session-digest' }, mcp, {
-		name: 'B10',
-		version: '1',
-	});
-	const record = await model.create(
-		{ ...actor, token: 'controlled-session' },
-		randomUUID(),
-		randomUUID(),
-		{
-			configuration: {
-				kind: 'mcp',
-				displayName: 'B10',
-				endpoint: 'https://example.com/mcp',
-				privateHostExceptions: [],
-				protocolVersion: '2026-07-28',
-			},
-			enabled: true,
-			credential: { action: 'clear' },
-		},
-		() => undefined,
-		() => undefined,
-	);
-	return { db, storage, mcp, model, record };
-}
-
-await test('A canceled discovery cannot publish its catalog after waiting for a real SQLite transaction', async (t) => {
-	const network = gate();
-	const discovered = gate();
-	const locked = gate();
-	const release = gate();
-	t.after(() => {
-		network.resolve();
-		release.resolve();
-	});
-	const f = await modelFixture(t);
-	t.mock.method(f.mcp, 'discover', async () => {
-		discovered.resolve();
-		await network.promise;
-		return {
-			serverName: 'new catalog',
-			serverVersion: '2',
-			protocolVersion: '2026-07-28',
-			tools: [],
-			resources: [],
-			prompts: [],
-		};
-	});
-	const queued = gate();
-	const original = f.storage.discover.bind(f.storage);
-	t.mock.method(f.storage, 'discover', (...args) => {
-		const task = original(...args);
-		queued.resolve();
-		return task;
-	});
-	const controller = new AbortController();
-	const refresh = f.model.discover(
-		{ ...actor, token: 'controlled-session' },
-		f.record.id,
-		1,
-		controller.signal,
-		() => undefined,
-	);
-	const rejected = assert.rejects(refresh, { code: 'provider_unavailable' });
-	await discovered.promise;
-	const blocker = f.db.transaction(async () => {
-		locked.resolve();
-		await release.promise;
-	});
-	await locked.promise;
-	network.resolve();
-	await queued.promise;
-	controller.abort();
-	release.resolve();
-	await blocker;
-	await rejected;
-	const current = await f.storage.get(actor, f.record.id);
-	assert.equal(current.version, 1);
-	assert.equal(current.schemaHash, null);
-	assert.equal(
-		(
-			await f.model.discover(
-				{ ...actor, token: 'controlled-session' },
-				f.record.id,
-				1,
-				new AbortController().signal,
-				() => undefined,
-			)
-		).integration.version,
-		2,
-	);
-});
-
-await test('MCP post-dispatch failures keep storage, cleanup and execution uncertainty distinct', async (t) => {
-	for (const [failure, code] of [
-		[new SqliteFailure('commit_unknown'), 'operation_unknown'],
-		[new SqliteFailure('worker_exit'), 'storage_unavailable'],
-		[new Error('controlled storage decode failure'), 'internal_failure'],
-	]) {
-		await t.test(code, async (t) => {
-			const f = await modelFixture(t);
-			let dispatched = 0;
-			t.mock.method(f.mcp, 'invoke', async () => {
-				dispatched += 1;
-				return completed;
-			});
-			const get = f.storage.get.bind(f.storage);
-			t.mock.method(f.storage, 'get', (...args) => {
-				if (dispatched) {
-					throw failure;
-				}
-				return get(...args);
-			});
-			await assert.rejects(
-				f.model.invoke(
-					actor,
-					input(f.record.id),
-					new AbortController().signal,
-					async () => undefined,
-					() => undefined,
-				),
-				(error) =>
-					error instanceof AgentFailure &&
-					!(error instanceof ToolExecutionUnknown) &&
-					error.code === code &&
-					error.cause === failure,
-			);
-			assert.equal(dispatched, 1);
-		});
-	}
-	for (const [kind, Type] of [
-		['cleanup_failed', ToolCleanupFailure],
-		['unavailable', ToolExecutionUnknown],
-	]) {
-		await t.test(kind, async (t) => {
-			const f = await modelFixture(t);
-			const failure = new McpFailure(kind);
-			let dispatched = 0;
-			t.mock.method(f.mcp, 'invoke', async () => {
-				dispatched += 1;
-				throw failure;
-			});
-			await assert.rejects(
-				f.model.invoke(
-					actor,
-					input(f.record.id),
-					new AbortController().signal,
-					async () => undefined,
-					() => undefined,
-				),
-				(error) => error instanceof Type && error.cause === failure,
-			);
-			assert.equal(dispatched, 1);
-		});
-	}
-});
-
-await test('An integration synchronous drain failure does not skip independent Job and Browser drainage', async () => {
+await test('Integration races: synchronous protocol failure still drains Jobs, Browser and SSH before settlement', async () => {
 	const job = gate();
 	const browser = gate();
-	const integrationFailure = new Error('controlled integration synchronous drain failure');
-	const jobFailure = new AgentFailure('storage_unavailable');
-	const browserFailure = new ToolCleanupFailure();
+	const model = gate();
+	const failures = [
+		new Error('protocol sync'),
+		new AgentFailure('storage_unavailable'),
+		new ToolCleanupFailure(),
+		new Error('SSH drain'),
+	];
 	const calls = [];
-	const service = new ToolService(
-		null,
-		null,
-		null,
+	const resources = new DefaultToolResources(
 		{
-			drain() {
+			async drainRun(runId) {
+				assert.equal(runId, actor.runId);
+				calls.push('ssh');
+				await model.promise;
+				throw failures[3];
+			},
+
+			settleDrain(scope, unknown) {
+				assert.equal(scope, actor);
+				assert.equal(unknown, true);
+				calls.push('settled');
+			},
+		},
+		{
+			async drain(scope) {
+				assert.equal(scope, actor);
 				calls.push('job');
-				return job.promise;
-			},
-		},
-		null,
-		null,
-		null,
-		null,
-		null,
-		null,
-		null,
-		null,
-		{
-			drainRun() {
-				calls.push('integration');
-				throw integrationFailure;
+				await job.promise;
+				throw failures[1];
 			},
 		},
 		{
-			drainRun() {
+			drainRun(scope) {
+				assert.equal(scope, actor);
+				calls.push('protocol');
+				throw failures[0];
+			},
+		},
+		{
+			async drainRun(scope) {
+				assert.equal(scope, actor);
 				calls.push('browser');
-				return browser.promise;
+				await browser.promise;
+				throw failures[2];
 			},
 		},
-		null,
 	);
 	let settled = false;
-	const task = service.drainRun(actor).catch((error) => {
-		settled = true;
-		return error;
-	});
-	await new Promise((resolve) => setImmediate(resolve));
-	assert.deepEqual(calls, ['integration', 'job', 'browser']);
-	assert.equal(settled, false);
-	job.resolve(Promise.reject(jobFailure));
-	await new Promise((resolve) => setImmediate(resolve));
-	assert.equal(settled, false);
-	browser.resolve(Promise.reject(browserFailure));
-	const error = await task;
-	assert.ok(error instanceof AggregateError);
-	assert.ok(
-		!(error instanceof ToolExecutionUnknown),
-		'mixed internal/storage failures cannot become execution-only unknown',
+	const task = resources.drainRun(actor).then(
+		() => {
+			throw new Error('Unexpected successful drain');
+		},
+		(error) => {
+			settled = true;
+			return error;
+		},
 	);
-	assert.deepEqual(error.errors, [integrationFailure, jobFailure, browserFailure]);
+	await tick();
+	assert.deepEqual(calls, ['protocol', 'job', 'browser']);
+	assert.equal(settled, false);
+	job.resolve();
+	await tick();
+	assert.equal(settled, false);
+	browser.resolve();
+	await tick();
+	assert.deepEqual(calls, ['protocol', 'job', 'browser', 'ssh']);
+	assert.equal(settled, false);
+	model.resolve();
+	const error = await task;
+	assert.ok(error instanceof AggregateError && !(error instanceof ToolExecutionUnknown));
+	assert.deepEqual(error.errors, failures);
+	assert.equal(calls.at(-1), 'settled');
 });
 
-await test('Integration queues preserve per-key ordering and close drains actual late work', async (t) => {
+await test('Integration races: queued plugin management stops on close and admitted original work drains first', async (t) => {
 	const release = gate();
-	t.after(() => release.resolve());
 	const entered = gate();
+	t.after(() => release.resolve());
 	let reads = 0;
-	let closes = 0;
-	let stopped = false;
-	const service = new IntegrationService({
-		async get() {
-			reads += 1;
+	let unsubscribed = 0;
+	const model = {
+		async observeRuntime() {
+			reads++;
 			entered.resolve();
 			await release.promise;
-			return { id: 'controlled-return' };
+			return null;
 		},
-
-		async close() {
-			closes += 1;
+	};
+	const instances = {
+		subscribe() {
+			let listening = true;
+			return () => {
+				if (listening) {
+					listening = false;
+					unsubscribed++;
+				}
+			};
 		},
-	});
-	t.after(() => service.close());
-	const tasks = Array.from({ length: 16 }, () =>
-		service.get(actor, 'same-integration').then(
+	};
+	const service = new PluginService(model, null, null, null, null, instances, null, null, '1.1.0', null);
+	const tasks = Array.from({ length: 4 }, () =>
+		service.runtimeObservation(actor, actor.appId).then(
 			(value) => ({ value }),
 			(error) => ({ error }),
 		),
 	);
 	await entered.promise;
-	tasks.push(
-		service.get(actor, 'other-integration').then(
-			(value) => ({ value }),
-			(error) => ({ error }),
-		),
-	);
-	await new Promise((resolve) => setImmediate(resolve));
-	assert.equal(reads, 2, 'independent work starts while fifteen same-key tasks remain queued');
-	const firstClose = service.close();
-	assert.strictEqual(firstClose, service.close());
-	void firstClose.then(() => {
-		stopped = true;
+	assert.equal(reads, 1);
+	const closing = service.close();
+	assert.strictEqual(service.close(), closing);
+	let closed = false;
+	void closing.then(() => {
+		closed = true;
 	});
-	await assert.rejects(service.get(actor, 'same-integration'), { code: 'provider_unavailable' });
-	await new Promise((resolve) => setImmediate(resolve));
-	assert.equal(stopped, false);
-	assert.equal(closes, 0, 'model must not close ahead of an already-dispatched read');
+	await assert.rejects(service.runtimeObservation(actor, actor.appId), refused('provider_unavailable'));
+	await tick();
+	assert.equal(closed, false);
+	assert.equal(unsubscribed, 1, 'Quiesce withdraws listeners immediately while original tasks remain owned');
 	release.resolve();
-	const outcomes = await Promise.all(tasks);
-	assert.equal(outcomes.filter((outcome) => outcome.value).length, 2);
-	assert.ok(outcomes.slice(1, 16).every((outcome) => outcome.error?.code === 'provider_unavailable'));
-	await firstClose;
-	assert.equal(reads, 2, 'queued work is not dispatched after quiesce');
-	assert.equal(closes, 1);
+	const results = await Promise.all(tasks);
+	assert.equal(results[0].value, null);
+	assert.ok(results.slice(1).every((result) => result.error?.code === 'provider_unavailable'));
+	await closing;
+	assert.equal(reads, 1);
+	assert.equal(unsubscribed, 1);
 });
+
+async function configurationFixture(t) {
+	const directory = await mkdtemp(
+		join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-plugin-config-races-'),
+	);
+	const sshd = await openSshd(directory);
+	t.after(() => sshd.close());
+	const f = await openAgentExecution(directory, sshd);
+	t.after(() => f.close());
+	let storage;
+	let principal;
+	const read = SqlitePluginInstanceStorage.prototype.read;
+	const capture = t.mock.method(SqlitePluginInstanceStorage.prototype, 'read', function (...args) {
+		storage = this;
+		principal = args[0];
+		return read.apply(this, args);
+	});
+	const path = '/api/v1/agent/plugins/apps/' + f.appId + '/instances/' + f.appId + '/configuration';
+	const source = expectStatus(await f.api('GET', path), 200);
+	capture.mock.restore();
+	assert.ok(storage && principal.kind === 'manual');
+	const model = new PluginInstanceModel(storage, { digest: () => principal.digest });
+	const caller = { kind: 'manual', actor: { userId: principal.userId, token: 'fixture-owned-session' } };
+
+	const command = (instructions = 'Original exact intent') => ({
+		operationKey: randomUUID(),
+		expectedPackageRevision: source.packageRevision,
+		expectedRevision: source.configuration.revision,
+		schemaRevision: source.settings.schemaRevision,
+		documentJson: JSON.stringify({ instructions, compactionMode: 'balanced' }),
+	});
+
+	return { f, model, storage, caller, source, command, appId: f.appId };
+}
+
+await test(
+	'Integration races: configuration rechecks the original session after a real SQLite queue',
+	{ timeout: 60000 },
+	async (t) => {
+		const f = await configurationFixture(t);
+		const locked = gate();
+		const release = gate();
+		t.after(() => release.resolve());
+		const before = await f.storage.db.one('SELECT COUNT(*) AS count FROM agent_plugin_configuration_mutations');
+		const blocker = f.storage.db.transaction(async (tx) => {
+			locked.resolve();
+			await release.promise;
+			await tx.run('UPDATE access_sessions SET expires_at=0 WHERE user_id=?', [f.caller.actor.userId]);
+		});
+		await locked.promise;
+		const task = f.model.write(f.caller, f.appId, f.appId, f.command());
+		const rejected = assert.rejects(task, refused('unauthenticated'));
+		await tick();
+		release.resolve();
+		await blocker;
+		await rejected;
+		const current = await f.storage.db.one('SELECT configuration_revision FROM agent_plugin_instances WHERE id=?', [
+			f.appId,
+		]);
+		assert.equal(current.configuration_revision, f.source.configuration.revision);
+		const after = await f.storage.db.one('SELECT COUNT(*) AS count FROM agent_plugin_configuration_mutations');
+		assert.equal(after.count, before.count, 'A queued unauthorized write publishes no intent receipt or settings');
+	},
+);
+
+await test(
+	'Integration races: unknown configuration commit recovers the original durable intent without repeating the mutation',
+	{ timeout: 60000 },
+	async (t) => {
+		const f = await configurationFixture(t);
+		const command = f.command();
+		const original = f.storage.write.bind(f.storage);
+		const failure = new SqliteFailure('commit_unknown');
+		let committed;
+		const injected = t.mock.method(f.storage, 'write', async (...args) => {
+			committed = await original(...args);
+			throw failure;
+		});
+		await assert.rejects(
+			f.model.write(f.caller, f.appId, f.appId, command),
+			(error) => refused('operation_unknown')(error) && error.cause === failure,
+		);
+		injected.mock.restore();
+		const recovered = await f.model.write(f.caller, f.appId, f.appId, command);
+		assert.equal(recovered.configuration.revision, committed.configuration.revision);
+		assert.equal(recovered.configuration.documentJson, command.documentJson);
+		await assert.rejects(
+			f.model.write(f.caller, f.appId, f.appId, {
+				...command,
+				documentJson: JSON.stringify({ instructions: 'Different intent', compactionMode: 'balanced' }),
+			}),
+			refused('idempotency_conflict'),
+		);
+		const current = await f.model.read(f.caller, f.appId, f.appId);
+		assert.equal(current.configuration.revision, f.source.configuration.revision + 1);
+		const count = await f.storage.db.one(
+			'SELECT COUNT(*) AS count FROM agent_plugin_configuration_mutations WHERE operation_key=?',
+			[command.operationKey],
+		);
+		assert.equal(count.count, 1);
+	},
+);
+
+await test(
+	'Integration races: independent configuration CAS commits once, exact receipts survive disabling and restart',
+	{ timeout: 60000 },
+	async (t) => {
+		const f = await configurationFixture(t);
+		const commands = [f.command('First competing intent'), f.command('Second competing intent')];
+		const results = await Promise.allSettled(
+			commands.map((command) => f.model.write(f.caller, f.appId, f.appId, command)),
+		);
+		assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
+		assert.equal(
+			results.filter((result) => result.status === 'rejected' && refused('version_conflict')(result.reason))
+				.length,
+			1,
+		);
+		const index = results.findIndex((result) => result.status === 'fulfilled');
+		const original = results[index].value;
+		const base = '/api/v1/agent/apps/' + f.appId;
+		const app = expectStatus(await f.f.api('GET', base), 200);
+		expectStatus(await f.f.api('PATCH', base, { expectedVersion: app.version, enabled: false }), 200);
+		await f.f.restart();
+		const path = '/api/v1/agent/plugins/apps/' + f.appId + '/instances/' + f.appId + '/configuration';
+		const replay = expectStatus(await f.f.api('PUT', path, commands[index]), 200);
+		assert.equal(replay.configuration.revision, original.configuration.revision);
+		assert.equal(replay.configuration.documentJson, original.configuration.documentJson);
+		assert.equal(
+			expectStatus(await f.f.api('GET', path), 200).configuration.documentJson,
+			original.configuration.documentJson,
+		);
+	},
+);

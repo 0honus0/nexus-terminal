@@ -1,5 +1,5 @@
 import type { RevokeRuns } from '../../runs/model/run-types.js';
-import { AGENT_SCOPE_MAX_NAME_BYTES, AGENT_APP_MAX_LIST_ITEMS } from '@nexus-terminal/shared/agent/scope/values';
+import { AGENT_SCOPE_MAX_NAME_BYTES } from '@nexus-terminal/shared/agent/scope/values';
 import { randomUUID } from 'node:crypto';
 import type { ScopeModel } from '../model/scope-model.js';
 import type { AgentApp, AgentThread, AppDeclaration } from '../model/scope-types.js';
@@ -22,20 +22,12 @@ export class ScopeService {
 
 	async declarations(userId: number): Promise<AppDeclaration[]> {
 		validateUserId(userId);
-		const values = await this.model.declarations(userId, AGENT_APP_MAX_LIST_ITEMS + 1);
-		if (values.length > AGENT_APP_MAX_LIST_ITEMS) {
-			throw new AgentFailure('limit_exceeded');
-		}
-		return values;
+		return this.model.declarations(userId);
 	}
 
 	async list(userId: number): Promise<AgentApp[]> {
 		validateUserId(userId);
-		const values = await this.model.listApps(userId, AGENT_APP_MAX_LIST_ITEMS + 1);
-		if (values.length > AGENT_APP_MAX_LIST_ITEMS) {
-			throw new AgentFailure('limit_exceeded');
-		}
-		return values;
+		return this.model.listApps(userId);
 	}
 
 	get(userId: number, appId: string): Promise<AgentApp | null> {

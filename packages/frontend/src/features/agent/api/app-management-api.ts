@@ -207,9 +207,7 @@ export async function saveAppExecutionPolicy(
 			if (
 				!expected ||
 				result.version !== version + 1 ||
-				AGENT_EXECUTION_INTEGER_KEYS.some((key) => result.overrides[key] !== expected?.overrides[key]) ||
-				result.overrides.contextProfile !== expected.overrides.contextProfile ||
-				result.overrides.contextCompactionMode !== expected.overrides.contextCompactionMode
+				AGENT_EXECUTION_INTEGER_KEYS.some((key) => result.overrides[key] !== expected?.overrides[key])
 			) {
 				throw new Error('Execution policy confirmation mismatch');
 			}

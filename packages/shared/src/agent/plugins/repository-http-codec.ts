@@ -1,5 +1,6 @@
+import { AGENT_PLUGIN_MAX_VERSION_BYTES, AGENT_PLUGIN_PACKAGE_HASH_LENGTH } from './package-values.js';
 import { isAgentPluginVersion } from './values.js';
-import { readAgentPluginInstallation } from './http-codec.js';
+import { readAgentPluginInstallation, readAgentPluginCompatibility, readAgentPluginPackageId } from './http-codec.js';
 import type { AgentPluginRecommended } from './repository-model.js';
 import { agentRecord, agentText, agentInteger, InvalidAgentPayload } from '../http-codec.js';
 import type {
@@ -7,12 +8,20 @@ import type {
 	AgentPluginRepositoryStage,
 	AgentPluginOfficialStage,
 } from './repository-http.js';
-import type { AgentPluginRepositorySettings, AgentPluginCatalog, AgentPluginCatalogEntry } from './repository-model.js';
+import type {
+	AgentPluginRepositorySettings,
+	AgentPluginCatalog,
+	AgentPluginCatalogEntry,
+	AgentPluginCatalogPackage,
+	AgentPluginCatalogIndex,
+} from './repository-model.js';
 import {
 	AGENT_PLUGIN_MAX_BODY_BYTES,
+	AGENT_PLUGIN_MAX_RESPONSE_BYTES,
 	AGENT_PLUGIN_MAX_ARCHIVE_BYTES,
 	AGENT_PLUGIN_MAX_CATALOG_BYTES,
-	AGENT_PLUGIN_MAX_REPOSITORIES,
+	AGENT_PLUGIN_CONTRIBUTION_KINDS,
+	AGENT_PLUGIN_COMPATIBILITY_REASONS,
 } from './values.js';
 
 export function readAgentPluginRepositoryUrl(input: unknown): string {
@@ -37,7 +46,7 @@ export function readAgentPluginRepositoryUrl(input: unknown): string {
 }
 
 function repositories(input: unknown): { url: string }[] {
-	if (!Array.isArray(input) || input.length > AGENT_PLUGIN_MAX_REPOSITORIES) {
+	if (!Array.isArray(input)) {
 		throw new InvalidAgentPayload();
 	}
 	const items = input.map((value) => {
@@ -59,7 +68,7 @@ export function readAgentPluginRepositoryUpdate(input: unknown): AgentPluginRepo
 }
 
 export function readAgentPluginRepositorySettings(input: unknown): AgentPluginRepositorySettings {
-	const row = agentRecord(input, ['version', 'repositories', 'updatedAt'], AGENT_PLUGIN_MAX_BODY_BYTES);
+	const row = agentRecord(input, ['version', 'repositories', 'updatedAt'], AGENT_PLUGIN_MAX_RESPONSE_BYTES);
 	return {
 		version: agentInteger(row.version, 0),
 		repositories: repositories(row.repositories),
@@ -68,91 +77,160 @@ export function readAgentPluginRepositorySettings(input: unknown): AgentPluginRe
 }
 
 function version(input: unknown): string {
-	const value = agentText(input, 64);
+	const value = agentText(input, AGENT_PLUGIN_MAX_VERSION_BYTES);
 	if (!isAgentPluginVersion(value)) {
 		throw new InvalidAgentPayload();
 	}
 	return value;
 }
 
-function appId(input: unknown): string {
+function catalogPublisherKeyId(input: unknown): string {
 	const value = agentText(input, 128);
-	if (!/^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9-]*)+$/u.test(value)) {
+	if (!/^ed25519:[a-f0-9]{64}$/u.test(value)) {
 		throw new InvalidAgentPayload();
 	}
 	return value;
 }
 
 export function readAgentPluginOfficialStage(input: unknown): AgentPluginOfficialStage {
-	const row = agentRecord(input, ['appId', 'version']);
-	return { appId: appId(row.appId), version: version(row.version) };
+	const row = agentRecord(input, ['packageId', 'publisherKeyId', 'version']);
+	return {
+		packageId: readAgentPluginPackageId(row.packageId),
+		publisherKeyId: catalogPublisherKeyId(row.publisherKeyId),
+		version: version(row.version),
+	};
 }
 
 export function readAgentPluginRepositoryStage(input: unknown): AgentPluginRepositoryStage {
-	const row = agentRecord(input, ['repositoryUrl', 'appId', 'version']);
+	const row = agentRecord(input, ['repositoryUrl', 'packageId', 'publisherKeyId', 'version']);
 	return {
 		repositoryUrl: readAgentPluginRepositoryUrl(row.repositoryUrl),
-		appId: appId(row.appId),
+		packageId: readAgentPluginPackageId(row.packageId),
+		publisherKeyId: catalogPublisherKeyId(row.publisherKeyId),
 		version: version(row.version),
 	};
+}
+
+function catalogText(input: unknown, maxBytes: number): string {
+	const value = agentText(input, maxBytes);
+	if (/[\u0000-\u001f\u007f]/u.test(value)) {
+		throw new InvalidAgentPayload();
+	}
+	return value;
+}
+
+function catalogPublicKey(input: unknown): string {
+	const value = agentText(input, 8192);
+	if (/[\u0000-\u0009\u000b\u000c\u000e-\u001f\u007f]/u.test(value)) {
+		throw new InvalidAgentPayload();
+	}
+	return value.replaceAll('\r\n', '\n');
+}
+
+function catalogPackageUrl(input: unknown, source: string | undefined): string {
+	const value = catalogText(input, 4096);
+	let resolved: string;
+	try {
+		resolved = new URL(value, source ?? 'https://catalog.invalid/').href;
+	} catch {
+		throw new InvalidAgentPayload();
+	}
+	readAgentPluginRepositoryUrl(resolved);
+	return source === undefined ? value : resolved;
+}
+
+const catalogPackageKeys = [
+	'packageId',
+	'version',
+	'compatibility',
+	'contributionKinds',
+	'displayName',
+	'description',
+	'packageUrl',
+	'sha256',
+	'sizeBytes',
+	'publisherKeyId',
+];
+
+function catalogPackage(row: Record<string, unknown>, source?: string): AgentPluginCatalogPackage {
+	const compatibility = readAgentPluginCompatibility(row.compatibility);
+	if (!Array.isArray(row.contributionKinds) || row.contributionKinds.length === 0) {
+		throw new InvalidAgentPayload();
+	}
+	const contributionKinds = row.contributionKinds.map((value) => {
+		const kind = AGENT_PLUGIN_CONTRIBUTION_KINDS.find((item) => item === value);
+		if (!kind) {
+			throw new InvalidAgentPayload();
+		}
+		return kind;
+	});
+	const sha256 = agentText(row.sha256, AGENT_PLUGIN_PACKAGE_HASH_LENGTH),
+		publisherKeyId = agentText(row.publisherKeyId, 128);
+	if (
+		!/^[a-f0-9]{64}$/u.test(sha256) ||
+		!/^ed25519:[a-f0-9]{64}$/u.test(publisherKeyId) ||
+		new Set(contributionKinds).size !== contributionKinds.length
+	) {
+		throw new InvalidAgentPayload();
+	}
+	return {
+		packageId: readAgentPluginPackageId(row.packageId),
+		version: version(row.version),
+		compatibility,
+		contributionKinds,
+		displayName: catalogText(row.displayName, 256),
+		description: catalogText(row.description, 2048),
+		packageUrl: catalogPackageUrl(row.packageUrl, source),
+		sha256,
+		sizeBytes: agentInteger(row.sizeBytes, 1, AGENT_PLUGIN_MAX_ARCHIVE_BYTES),
+		publisherKeyId,
+	};
+}
+
+export function readAgentPluginCatalogPackage(input: unknown): AgentPluginCatalogPackage {
+	return catalogPackage(agentRecord(input, catalogPackageKeys, AGENT_PLUGIN_MAX_CATALOG_BYTES));
 }
 
 export function readAgentPluginCatalogEntry(input: unknown): AgentPluginCatalogEntry {
 	const row = agentRecord(
 		input,
-		[
-			'appId',
-			'version',
-			'sdkVersion',
-			'nexus',
-			'displayName',
-			'description',
-			'packageUrl',
-			'sha256',
-			'sizeBytes',
-			'publisherKeyId',
-			'compatible',
-		],
+		[...catalogPackageKeys, 'compatible', 'compatibilityReason'],
 		AGENT_PLUGIN_MAX_CATALOG_BYTES,
 	);
-	const nexus = agentRecord(row.nexus, ['minVersion', 'maxVersion']);
-	const sha256 = agentText(row.sha256, 64),
-		publisherKeyId = agentText(row.publisherKeyId, 128);
-	if (
-		!/^[a-f0-9]{64}$/u.test(sha256) ||
-		!/^ed25519:[a-f0-9]{64}$/u.test(publisherKeyId) ||
-		typeof row.compatible !== 'boolean'
-	) {
+	const value = catalogPackage(row);
+	readAgentPluginRepositoryUrl(value.packageUrl);
+	const compatibilityReason =
+		row.compatibilityReason === null
+			? null
+			: AGENT_PLUGIN_COMPATIBILITY_REASONS.find((item) => item === row.compatibilityReason);
+	if (compatibilityReason === undefined || row.compatible !== (compatibilityReason === null)) {
 		throw new InvalidAgentPayload();
 	}
 	return {
-		appId: appId(row.appId),
-		version: version(row.version),
-		sdkVersion: agentText(row.sdkVersion, 64),
-		nexus: { minVersion: version(nexus.minVersion), maxVersion: version(nexus.maxVersion) },
-		displayName: agentText(row.displayName, 256),
-		description: agentText(row.description, 2048),
-		packageUrl: readAgentPluginRepositoryUrl(row.packageUrl),
-		sha256,
-		sizeBytes: agentInteger(row.sizeBytes, 1, AGENT_PLUGIN_MAX_ARCHIVE_BYTES),
-		publisherKeyId,
+		packageId: value.packageId,
+		version: value.version,
+		compatibility: {
+			host: { minVersion: value.compatibility.host.minVersion, maxVersion: value.compatibility.host.maxVersion },
+			backendSdk: value.compatibility.backendSdk,
+			frontendSdk: value.compatibility.frontendSdk,
+		},
+		contributionKinds: value.contributionKinds.map((kind) => kind),
+		displayName: value.displayName,
+		description: value.description,
+		packageUrl: value.packageUrl,
+		sha256: value.sha256,
+		sizeBytes: value.sizeBytes,
+		publisherKeyId: value.publisherKeyId,
 		compatible: row.compatible,
+		compatibilityReason,
 	};
 }
 
-export function readAgentPluginCatalog(input: unknown): AgentPluginCatalog {
-	const row = agentRecord(
-		input,
-		['schemaVersion', 'repositoryUrl', 'publishers', 'packages'],
-		AGENT_PLUGIN_MAX_CATALOG_BYTES,
-	);
-	if (
-		row.schemaVersion !== 1 ||
-		!Array.isArray(row.publishers) ||
-		row.publishers.length > 64 ||
-		!Array.isArray(row.packages) ||
-		row.packages.length > 512
-	) {
+function catalogContents<T extends AgentPluginCatalogPackage>(
+	row: Record<string, unknown>,
+	read: (input: unknown) => T,
+): { publishers: AgentPluginCatalogIndex['publishers']; packages: T[] } {
+	if (row.schemaVersion !== 2 || !Array.isArray(row.publishers) || !Array.isArray(row.packages)) {
 		throw new InvalidAgentPayload();
 	}
 	const publishers = row.publishers.map((value) => {
@@ -161,18 +239,37 @@ export function readAgentPluginCatalog(input: unknown): AgentPluginCatalog {
 		if (!/^ed25519:[a-f0-9]{64}$/u.test(keyId)) {
 			throw new InvalidAgentPayload();
 		}
-		return { keyId, label: agentText(item.label, 256), publicKeyPem: agentText(item.publicKeyPem, 8192) };
+		return { keyId, label: catalogText(item.label, 256), publicKeyPem: catalogPublicKey(item.publicKeyPem) };
 	});
-	const packages = row.packages.map(readAgentPluginCatalogEntry);
+	const packages = row.packages.map(read);
 	const keys = new Set(publishers.map((item) => item.keyId));
 	if (
 		keys.size !== publishers.length ||
-		new Set(packages.map((item) => item.appId + '@' + item.version)).size !== packages.length ||
+		new Set(packages.map((item) => item.publisherKeyId + '/' + item.packageId + '@' + item.version)).size !==
+			packages.length ||
 		packages.some((item) => !keys.has(item.publisherKeyId))
 	) {
 		throw new InvalidAgentPayload();
 	}
-	return { schemaVersion: 1, repositoryUrl: readAgentPluginRepositoryUrl(row.repositoryUrl), publishers, packages };
+	return { publishers, packages };
+}
+
+export function readAgentPluginCatalogIndex(input: unknown, source?: string): AgentPluginCatalogIndex {
+	const row = agentRecord(input, ['schemaVersion', 'publishers', 'packages'], AGENT_PLUGIN_MAX_CATALOG_BYTES);
+	const { publishers, packages } = catalogContents(row, (value) =>
+		catalogPackage(agentRecord(value, catalogPackageKeys, AGENT_PLUGIN_MAX_CATALOG_BYTES), source),
+	);
+	return { schemaVersion: 2, publishers, packages };
+}
+
+export function readAgentPluginCatalog(input: unknown): AgentPluginCatalog {
+	const row = agentRecord(
+		input,
+		['schemaVersion', 'repositoryUrl', 'publishers', 'packages'],
+		AGENT_PLUGIN_MAX_CATALOG_BYTES,
+	);
+	const { publishers, packages } = catalogContents(row, readAgentPluginCatalogEntry);
+	return { schemaVersion: 2, repositoryUrl: readAgentPluginRepositoryUrl(row.repositoryUrl), publishers, packages };
 }
 
 export function readAgentPluginRecommended(input: unknown): AgentPluginRecommended {

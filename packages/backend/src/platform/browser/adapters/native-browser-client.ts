@@ -145,24 +145,34 @@ class NativeBrowserSession implements BrowserSession {
 		return outcome.value;
 	}
 
-	snapshot(maxNodes: number, signal: AbortSignal): Promise<BrowserSnapshot> {
+	snapshot(maxNodes: number, maxBytes: number, signal: AbortSignal): Promise<BrowserSnapshot> {
 		return this.scope(signal, async () => {
-			if (!Number.isSafeInteger(maxNodes) || maxNodes < 1 || maxNodes > 1024) {
+			if (!Number.isSafeInteger(maxNodes) || maxNodes < 1 || !Number.isSafeInteger(maxBytes) || maxBytes < 1) {
 				throw new BrowserFailure('limit_exceeded');
 			}
 			const version = this.documentVersion;
-			const document = await this.cdp.send('DOM.getDocument', { depth: 8, pierce: false });
+			const document = await this.cdp.send('DOM.getDocument', { depth: -1, pierce: false });
 			if (this.documentVersion !== version) {
 				throw new BrowserFailure('stale_snapshot');
 			}
-			this.invalidate();
+			const url = this.page.url();
+			const title = await this.page.title();
+			if (this.documentVersion !== version) {
+				throw new BrowserFailure('stale_snapshot');
+			}
+			// Replacing local references does not mutate the remote document version.
+			this.snapshotId = null;
+			this.nodes.clear();
 			const snapshotId = randomUUID(),
 				nodes: BrowserNode[] = [];
 			const queue = [{ node: document.root, parentRef: null as string | null }];
-			let truncated = false,
-				total = 0;
-			while (queue.length) {
-				const current = queue.shift();
+			let truncated = false;
+			let total = Buffer.byteLength(JSON.stringify({ snapshotId, url, title, nodes: [], truncated: false }));
+			if (total > maxBytes) {
+				throw new BrowserFailure('limit_exceeded');
+			}
+			for (let index = 0; index < queue.length; index++) {
+				const current = queue[index];
 				if (!current) {
 					break;
 				}
@@ -176,18 +186,18 @@ class NativeBrowserSession implements BrowserSession {
 					const name = attrs[index],
 						value = attrs[index + 1];
 					if (name !== undefined && value !== undefined) {
-						attributes.push({ name, value: Buffer.from(value, 'utf8').subarray(0, 2048).toString('utf8') });
+						attributes.push({ name, value });
 					}
 				}
 				const entry = {
 					ref,
 					parentRef: current.parentRef,
 					tag: current.node.nodeName,
-					text: Buffer.from(current.node.nodeValue, 'utf8').subarray(0, 2048).toString('utf8'),
+					text: current.node.nodeValue,
 					attributes,
 				};
-				const bytes = Buffer.byteLength(JSON.stringify(entry), 'utf8');
-				if (nodes.length >= maxNodes || total + bytes > 65536) {
+				const bytes = Buffer.byteLength(JSON.stringify(entry), 'utf8') + (nodes.length ? 1 : 0);
+				if (nodes.length >= maxNodes || total + bytes > maxBytes) {
 					truncated = true;
 					break;
 				}
@@ -195,17 +205,11 @@ class NativeBrowserSession implements BrowserSession {
 				nodes.push(entry);
 				this.nodes.set(ref, current.node.backendNodeId);
 				for (const node of current.node.children ?? []) {
-					if (queue.length >= 4096) {
-						truncated = true;
-						break;
-					}
 					queue.push({ node, parentRef: ref });
 				}
 			}
 			this.snapshotId = snapshotId;
-			const url = this.page.url();
-			const title = await this.page.title();
-			if (this.snapshotId !== snapshotId) {
+			if (this.documentVersion !== version) {
 				throw new BrowserFailure('stale_snapshot');
 			}
 			return { snapshotId, url, title, nodes, truncated };

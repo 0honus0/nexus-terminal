@@ -1,32 +1,33 @@
-import { AGENT_THREAD_ENTRIES_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/scope/values';
 import {
 	AGENT_RUN_STREAM_MAX_IN_FLIGHT_PAGES,
 	AGENT_RUN_STREAM_MAX_COMMAND_BYTES,
 	AGENT_RUN_STREAM_MAX_JSON_BYTES,
 } from '@nexus-terminal/shared/agent/runs/values';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
-import { readAgentRunSubscription, readAgentRunStreamCommand } from '@nexus-terminal/shared/agent/runs/events';
+import { readAgentRunStreamCommand } from '@nexus-terminal/shared/agent/runs/events';
+import type { AgentStreamSource } from '@nexus-terminal/shared/agent/runs/events';
+import { encodeAgentJson } from '@nexus-terminal/shared/agent/http-codec';
 import type { HttpWebSocketRoute } from '../../../../platform/http/http-types.js';
 import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import type { AccessPublicApi } from '../../../access/public.js';
-import type { ThreadService } from '../../scope/service/thread-service.js';
-import type { SessionThreadAccess } from '../../scope/model/thread-types.js';
-import type { RunService } from '../../runs/service/run-service.js';
-import type { RunChanges } from '../../runs/model/run-changes.js';
+import type { Logger } from '../../../../platform/logging/logger.js';
+import { randomUUID } from 'node:crypto';
 import { AgentFailure } from '../../agent-failure.js';
 import { AgentOperationError } from '../../public-errors.js';
-import { encodeAgentJson } from '@nexus-terminal/shared/agent/http-codec';
-import type { RunStreamService } from '../../runs/service/run-stream-service.js';
-import type { RunStreamCursor, RunChangeKind } from '../../runs/model/run-stream-types.js';
-import { fromRunStreamCursor, toRunStreamEvent } from './run-stream-mapper.js';
+import type { AgentStreamSources, AgentStreamSourceReader } from './agent-stream-sources.js';
 
-export function createRunChangesWebSocketRoute(
+interface Subscription {
+	generation: number;
+	stop(): void;
+	ack(revision: number): void;
+	inspect(): void;
+}
+
+/** One authenticated page connection. Installed source owners retain admission, snapshots and durable cursors. */
+export function createAgentStreamWebSocketRoute(
 	access: AccessPublicApi,
-	threads: ThreadService,
-	runs: RunService,
-	changes: RunChanges,
-	stream: RunStreamService,
-	boundary: <T>(work: () => Promise<T>) => Promise<T>,
+	sources: AgentStreamSources,
+	logger?: Logger,
 ): HttpWebSocketRoute {
 	return {
 		path: '/ws/agent-runs',
@@ -34,267 +35,338 @@ export function createRunChangesWebSocketRoute(
 		maxTextMessageBytes: AGENT_RUN_STREAM_MAX_COMMAND_BYTES,
 
 		async authorize(request, url) {
+			if (url.search.length !== 0) {
+				return false;
+			}
+			const token = readRequestCookie(request, ACCESS_SESSION_COOKIE_NAME);
 			try {
-				const selected = readAgentRunSubscription(url.searchParams);
-				const token = readRequestCookie(request, ACCESS_SESSION_COOKIE_NAME);
-				const identity = await access.authenticate(token);
-				if (!token || identity?.userId !== 1) {
-					return false;
-				}
-				return await boundary(() =>
-					threads.withState(
-						{
-							kind: 'session',
-							userId: identity.userId,
-							appId: selected.appId,
-							appVersion: selected.appVersion,
-							token,
-
-							assertCurrent: () => {
-								if (request.destroyed) {
-									throw new AgentFailure('unauthenticated');
-								}
-							},
-						},
-						async () => (await runs.get(identity.userId, selected.appId, selected.runId)) !== null,
-					),
-				);
+				return Boolean(token) && (await access.authenticate(token))?.userId === 1;
 			} catch {
 				return false;
 			}
 		},
 
-		connected(channel, request, url) {
-			const selected = readAgentRunSubscription(url.searchParams);
+		connected(channel, request) {
 			const token = readRequestCookie(request, ACCESS_SESSION_COOKIE_NAME);
 			if (!token) {
 				channel.close(1008);
 				return;
 			}
+			const connectionId = randomUUID();
+			logger?.write('debug', 'AGENT_STREAM_OPENED', [{ name: 'connectionId', value: connectionId }]);
 			let closed = false;
-			let dirty = true;
-			let stateDirty = true;
-			let approvalRescan = false;
-			let revision = 0;
-			let cursor: RunStreamCursor | null = null;
-			const pending: Array<{ revision: number; bytes: number; expiresAt: number }> = [];
-			let pendingBytes = 0;
-			let flushing = false;
-			let timer: ReturnType<typeof setTimeout> | undefined;
-			let heartbeat: ReturnType<typeof setInterval> | undefined;
+			const subscriptions = new Map<string, Subscription>();
+			const tasks = new Set<Promise<void>>();
+			const cleanupFailures: unknown[] = [];
 
-			let unsubscribe = () => {};
-
-			let task = Promise.resolve();
-			const startedAt = Date.now();
-			let lastHeartbeat = startedAt;
-			const actor: SessionThreadAccess = {
-				kind: 'session',
-				userId: 1,
-				appId: selected.appId,
-				appVersion: selected.appVersion,
-				token,
-
-				assertCurrent: () => {
-					if (closed) {
-						throw new AgentFailure('unauthenticated');
-					}
-				},
+			const track = (task: Promise<void>) => {
+				tasks.add(task);
+				void task.then(
+					() => tasks.delete(task),
+					() => tasks.delete(task),
+				);
 			};
 
-			const stop = () => {
-				closed = true;
-				dirty = false;
-				pending.length = 0;
-				pendingBytes = 0;
-				clearTimeout(timer);
-				clearInterval(heartbeat);
-				unsubscribe();
-			};
-
-			const reject = (code = 1011) => {
-				stop();
-				channel.close(code, 'Agent stream unavailable');
-			};
-
-			const canSendPage = () => {
-				if (!cursor || pending.length >= AGENT_RUN_STREAM_MAX_IN_FLIGHT_PAGES) {
+			const send = (value: unknown): boolean => {
+				if (closed) {
 					return false;
 				}
-				// State includes multiple bounded projections: wait for prior pages to drain.
-				return stateDirty
-					? pending.length === 0
-					: pendingBytes + AGENT_THREAD_ENTRIES_MAX_RESPONSE_BYTES + 1024 <= AGENT_RUN_STREAM_MAX_JSON_BYTES;
+				try {
+					if (channel.send(encodeAgentJson(value, AGENT_RUN_STREAM_MAX_JSON_BYTES))) {
+						return true;
+					}
+				} catch {
+					/* Encoding and transport failure both require durable-source recovery. */
+				}
+				channel.close(1011, 'Agent stream unavailable');
+				return false;
 			};
 
-			const flush = () => {
-				if (closed || flushing) {
+			const remove = (id: string, owner: Subscription) => {
+				if (subscriptions.get(id) !== owner) {
 					return;
 				}
-				if (
-					(cursor === null && Date.now() - startedAt > 15_000) ||
-					(pending[0] && Date.now() > pending[0].expiresAt)
-				) {
-					reject();
-					return;
-				}
-				clearTimeout(timer);
-				timer = undefined;
-				flushing = true;
-				const current = dirty && canSendPage() ? cursor : null;
-				const includeState = stateDirty;
-				if (current && includeState && current.approvals === null) {
-					approvalRescan = false;
-				}
-				if (current) {
+				subscriptions.delete(id);
+				owner.stop();
+			};
+
+			const open = (id: string, generation: number, source: AgentStreamSource): Subscription => {
+				logger?.write('debug', 'AGENT_STREAM_SUBSCRIPTION_OPENED', [
+					{ name: 'connectionId', value: connectionId },
+					{ name: 'subscriptionId', value: id },
+					{ name: 'generation', value: generation },
+					{ name: 'source', value: source.kind },
+					{ name: 'appId', value: source.appId },
+				]);
+				let stopped = false;
+				let dirty = true;
+				let reading = false;
+				let revision = 0;
+				let pendingBytes = 0;
+				let reader: AgentStreamSourceReader | null = null;
+				let timer: ReturnType<typeof setTimeout> | undefined;
+				let expiry: ReturnType<typeof setTimeout> | undefined;
+				const pending: Array<{ revision: number; bytes: number; expiresAt: number }> = [];
+
+				const current = () => {
+					if (closed || stopped || subscriptions.get(id) !== owner) {
+						throw new AgentFailure('unauthenticated');
+					}
+				};
+
+				const fail = (code: 'forbidden' | 'resync_required' | 'unavailable') => {
+					if (stopped || closed) {
+						return;
+					}
+					logger?.write('warn', 'AGENT_STREAM_SUBSCRIPTION_REJECTED', [
+						{ name: 'connectionId', value: connectionId },
+						{ name: 'subscriptionId', value: id },
+						{ name: 'generation', value: generation },
+						{ name: 'code', value: code },
+						{ name: 'revision', value: revision },
+						{ name: 'pendingBytes', value: pendingBytes },
+					]);
+					send({ type: 'rejected', subscriptionId: id, generation, code });
+					remove(id, owner);
+				};
+
+				const handleFailure = (cause: unknown) => {
+					const code =
+						cause instanceof AgentOperationError || cause instanceof AgentFailure ? cause.code : null;
+					fail(
+						code !== null &&
+							['unauthenticated', 'forbidden', 'app_disabled', 'version_conflict'].includes(code)
+							? 'forbidden'
+							: code === 'not_found' || code === 'invalid_input'
+								? 'resync_required'
+								: 'unavailable',
+					);
+				};
+
+				const canRead = () =>
+					reader !== null &&
+					dirty &&
+					pending.length < AGENT_RUN_STREAM_MAX_IN_FLIGHT_PAGES &&
+					(reader.requiresDrain()
+						? pending.length === 0
+						: pendingBytes + reader.nextPageBytes <= AGENT_RUN_STREAM_MAX_JSON_BYTES);
+
+				const schedule = () => {
+					if (stopped || closed || reading || timer !== undefined || !canRead()) {
+						return;
+					}
+					timer = setTimeout(() => {
+						timer = undefined;
+						read();
+					}, 16);
+					timer.unref();
+				};
+
+				const read = () => {
+					if (stopped || closed || reading || !canRead() || !reader) {
+						return;
+					}
+					reading = true;
 					dirty = false;
-					stateDirty = false;
-				}
-				task = boundary(() =>
-					threads.withState(actor, async () => {
-						return current
-							? stream.read(actor.userId, actor.appId, selected.runId, current, includeState)
-							: null;
-					}),
-				)
-					.then((page) => {
-						if (closed) {
-							return;
-						}
-						if (page && current) {
-							if (revision >= Number.MAX_SAFE_INTEGER) {
-								reject();
+					if (revision >= Number.MAX_SAFE_INTEGER) {
+						fail('unavailable');
+						return;
+					}
+					const selectedReader = reader;
+					const task = Promise.resolve()
+						.then(() => selectedReader.read(revision + 1))
+						.then((page) => {
+							if (stopped || closed) {
 								return;
 							}
-							revision += 1;
-							const repeatApprovals =
-								page.state !== null && !page.state.approvals.hasMore && approvalRescan;
-							page.more = page.more || stateDirty || repeatApprovals;
-							const encoded = encodeAgentJson(
-								toRunStreamEvent(actor.appId, selected.runId, revision, page),
-								AGENT_RUN_STREAM_MAX_JSON_BYTES,
-							);
-							const bytes = Buffer.byteLength(encoded);
+							current();
+							selectedReader.assertCurrent();
+							revision++;
+							const frame = { type: 'data', subscriptionId: id, generation, revision, value: page.value };
+							const bytes = Buffer.byteLength(encodeAgentJson(frame, AGENT_RUN_STREAM_MAX_JSON_BYTES));
+							if (pendingBytes + bytes > AGENT_RUN_STREAM_MAX_JSON_BYTES) {
+								fail('unavailable');
+								return;
+							}
 							pending.push({ revision, bytes, expiresAt: Date.now() + 60_000 });
 							pendingBytes += bytes;
-							cursor = {
-								threadId: current.threadId,
-								entries: {
-									runSequence: page.body.nextCursor.runSequence,
-									stepIndex: page.body.nextCursor.stepIndex,
-									eventSequence: page.body.nextCursor.eventSequence,
-									textOffset: page.body.nextCursor.textOffset,
-								},
-								events: page.state?.events.nextCursor ?? current.events,
-								approvals: page.state
-									? page.state.approvals.hasMore
-										? page.state.approvals.nextCursor
-										: null
-									: current.approvals,
-							};
-							// Changes to a page already scanned require a complete follow-up scan.
-							dirty = dirty || page.more || repeatApprovals;
-							stateDirty =
-								stateDirty ||
-								(page.state?.events.items.length ?? 0) > 0 ||
-								(page.state?.approvals.hasMore ?? false) ||
-								repeatApprovals;
-							if (!channel.send(encoded)) {
-								reject();
-							}
-						} else if (Date.now() - lastHeartbeat >= 15_000) {
-							lastHeartbeat = Date.now();
-							if (!channel.send(JSON.stringify({ type: 'heartbeat' }))) {
-								reject();
-							}
-						}
-					})
-					.catch((cause: unknown) => {
-						const denied =
-							cause instanceof AgentOperationError &&
-							['unauthenticated', 'forbidden', 'app_disabled', 'version_conflict', 'not_found'].includes(
-								cause.code,
-							);
-						reject(denied ? 1008 : 1011);
-					})
-					.finally(() => {
-						flushing = false;
-						if (dirty && !closed && canSendPage()) {
+							dirty = dirty || page.more;
+							send(frame);
+						})
+						.catch(handleFailure)
+						.finally(() => {
+							reading = false;
 							schedule();
+						});
+					track(task);
+				};
+
+				const owner: Subscription = {
+					generation,
+
+					stop() {
+						if (stopped) {
+							return;
 						}
-					});
+						logger?.write('debug', 'AGENT_STREAM_SUBSCRIPTION_CLOSED', [
+							{ name: 'connectionId', value: connectionId },
+							{ name: 'subscriptionId', value: id },
+							{ name: 'generation', value: generation },
+							{ name: 'revision', value: revision },
+							{ name: 'pendingBytes', value: pendingBytes },
+						]);
+						stopped = true;
+						clearTimeout(timer);
+						clearTimeout(expiry);
+						const selectedReader = reader;
+						reader = null;
+						try {
+							selectedReader?.close();
+						} catch (cause) {
+							cleanupFailures.push(cause);
+						}
+						pending.length = 0;
+						pendingBytes = 0;
+					},
+
+					ack(value) {
+						const item = pending[0];
+						if (!item || item.revision !== value) {
+							fail('unavailable');
+							return;
+						}
+						pending.shift();
+						pendingBytes -= item.bytes;
+						schedule();
+					},
+
+					inspect() {
+						if (stopped || !reader) {
+							return;
+						}
+						if (pending[0] && Date.now() > pending[0].expiresAt) {
+							fail('unavailable');
+							return;
+						}
+						if (reading) {
+							return;
+						}
+						// Retain the safety audit until every legal authorization writer has notifications.
+						reading = true;
+						const selectedReader = reader;
+						track(
+							Promise.resolve()
+								.then(() => selectedReader.check())
+								.catch(handleFailure)
+								.finally(() => {
+									reading = false;
+									schedule();
+								}),
+						);
+					},
+				};
+				// Registration by the caller precedes initialization, including listener setup and the first snapshot.
+				track(
+					Promise.resolve()
+						.then(async () => {
+							const opened = await sources.open(source, {
+								identity: { userId: 1, token },
+								assertCurrent: current,
+
+								changed() {
+									dirty = true;
+									schedule();
+								},
+
+								stopped() {
+									fail('unavailable');
+								},
+
+								revoked() {
+									fail('forbidden');
+								},
+							});
+							if (stopped || closed) {
+								opened.close();
+								return;
+							}
+							current();
+							reader = opened;
+							if (reader.expiresAt !== null) {
+								const checkExpiry = () => {
+									if (!reader || stopped || closed || reader.expiresAt === null) {
+										return;
+									}
+									const remaining = reader.expiresAt - Date.now();
+									if (remaining <= 0) {
+										fail('forbidden');
+									} else {
+										expiry = setTimeout(checkExpiry, Math.min(2147483647, remaining));
+										expiry.unref();
+									}
+								};
+
+								checkExpiry();
+							}
+							schedule();
+						})
+						.catch(handleFailure),
+				);
+				return owner;
 			};
 
-			const schedule = () => {
-				if (closed || !dirty || timer !== undefined || flushing || !canSendPage()) {
-					return;
-				}
-				timer = setTimeout(() => {
-					timer = undefined;
-					flush();
-				}, 16);
-				timer.unref();
-			};
-
-			const changed = (kind: RunChangeKind) => {
-				dirty = true;
-				if (kind === 'state') {
-					approvalRescan = true;
-					stateDirty = true;
-				}
-				schedule();
-			};
-
-			channel.onMessage(async (text) => {
+			channel.onMessage((text) => {
 				if (closed) {
 					return;
 				}
 				try {
-					if (Buffer.byteLength(text) > AGENT_RUN_STREAM_MAX_COMMAND_BYTES) {
-						reject(1008);
-						return;
-					}
 					const input: unknown = JSON.parse(text);
 					const command = readAgentRunStreamCommand(input);
+					const previous = subscriptions.get(command.subscriptionId);
 					if (command.type === 'subscribe') {
-						if (cursor !== null) {
-							reject(1008);
+						if (previous && command.generation <= previous.generation) {
+							channel.close(1008);
 							return;
 						}
-						cursor = fromRunStreamCursor(command.cursor);
-						await boundary(() =>
-							threads.withState(actor, async () => {
-								const run = await runs.get(actor.userId, actor.appId, selected.runId);
-								actor.assertCurrent();
-								if (!run || run.threadId !== command.cursor.threadId) {
-									throw new AgentFailure('not_found');
-								}
-							}),
+						previous?.stop();
+						subscriptions.set(
+							command.subscriptionId,
+							open(command.subscriptionId, command.generation, command.source),
 						);
-					} else {
-						const oldest = pending[0];
-						if (!oldest || command.revision !== oldest.revision) {
-							reject(1008);
-							return;
+					} else if (previous?.generation === command.generation) {
+						if (command.type === 'ack') {
+							previous.ack(command.revision);
+						} else {
+							remove(command.subscriptionId, previous);
 						}
-						pending.shift();
-						pendingBytes -= oldest.bytes;
 					}
-					schedule();
+					// Late ACK/unsubscribe cannot release another generation's credit.
 				} catch {
-					reject(1008);
+					channel.close(1008, 'Invalid Agent stream command');
 				}
 			});
-			channel.onClose(async () => {
-				stop();
-				await task;
-			});
-			unsubscribe = changes.subscribe(actor.userId, actor.appId, changed, () => reject(1001));
-			if (closed) {
-				return;
-			}
-			heartbeat = setInterval(flush, 3000);
+			const heartbeat = setInterval(() => send({ type: 'heartbeat' }), 15_000);
 			heartbeat.unref();
+			const inspection = setInterval(() => {
+				for (const owner of subscriptions.values()) {
+					owner.inspect();
+				}
+			}, 3000);
+			inspection.unref();
+			channel.onClose(async () => {
+				closed = true;
+				logger?.write('debug', 'AGENT_STREAM_CLOSED', [{ name: 'connectionId', value: connectionId }]);
+				clearInterval(heartbeat);
+				clearInterval(inspection);
+				for (const owner of subscriptions.values()) {
+					owner.stop();
+				}
+				subscriptions.clear();
+				await Promise.allSettled([...tasks]);
+				if (cleanupFailures.length > 0) {
+					throw new AggregateError(cleanupFailures, 'Agent stream source cleanup failed');
+				}
+			});
 		},
 	};
 }

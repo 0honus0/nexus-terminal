@@ -131,7 +131,7 @@ await test(
 			);
 			const envelope = {
 				type: 'nexus.plugin.request',
-				protocol: 1,
+				protocol: 3,
 				nonce: randomUUID(),
 				id: randomUUID(),
 				seq: 1,

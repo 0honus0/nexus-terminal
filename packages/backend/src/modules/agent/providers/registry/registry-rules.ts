@@ -6,7 +6,6 @@ import type {
 	RegistryCatalogEntry,
 	RegistryDefaults,
 } from './model/registry-types.js';
-import { RegistryRefreshFailure } from './model/registry-types.js';
 
 // Retain the explicit corrections supplied by the pre-refactor resolver.
 const LOCAL_CAPABILITIES: Readonly<Record<string, Partial<RegistryDefaults>>> = {
@@ -80,9 +79,6 @@ export function buildRegistrySnapshot(
 				: { reasoningEfforts: [...item.capabilities.reasoningEfforts] }),
 		};
 		entries[item.providerId + '/' + item.modelId] = value;
-	}
-	if (Object.keys(entries).length > 5000) {
-		throw new RegistryRefreshFailure('MODEL_REGISTRY_RESPONSE_INVALID');
 	}
 	return { schemaVersion: 2, source: 'models.dev', sourceRevision: revision, generatedAt: now, entries };
 }

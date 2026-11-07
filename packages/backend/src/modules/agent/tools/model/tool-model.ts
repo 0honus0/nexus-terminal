@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { ToolJobScope } from './tool-job-types.js';
+import type { ToolHostDiagnosticsValue } from './tool-domain-types.js';
 import type { ToolResourceSnapshot } from './tool-resource-types.js';
 import type { TrustedSshTargetResolver, ConnectionCatalog } from '../../../targets/public.js';
 import type { HostDiagnostics } from '../../../system/public.js';
@@ -34,10 +35,10 @@ export class ToolModel {
 		private readonly changed: (scope: ToolJobScope) => void = () => {},
 	) {}
 
-	async hostDiagnostics(): Promise<string> {
+	async hostDiagnostics(): Promise<ToolHostDiagnosticsValue> {
 		try {
 			const value = await this.diagnostics.collect();
-			return JSON.stringify({
+			return {
 				collectedAt: value.collectedAt,
 				process: {
 					uptimeSeconds: value.process.uptimeSeconds,
@@ -62,7 +63,7 @@ export class ToolModel {
 					})),
 				})),
 				database: { available: value.database.available, schemaVersion: value.database.schemaVersion },
-			});
+			};
 		} catch (error) {
 			if (error instanceof SystemOperationError) {
 				throw new ToolOperationRefusal('remote_unavailable', { cause: error });
@@ -220,7 +221,7 @@ export class ToolModel {
 			runId: scope.runId,
 			createdAt: entry.openedAt,
 			lastUsedAt: entry.lastUsedAt,
-			mcpSessions: 0,
+			protocolSessions: 0,
 			browserSessions: 0,
 			phase:
 				value.cleanupFailed || entry.cleanupFailed

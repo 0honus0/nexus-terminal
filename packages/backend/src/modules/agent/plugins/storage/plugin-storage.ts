@@ -1,3 +1,5 @@
+import type { StoredPluginSignedContribution, StoredPluginPackageDependency } from './plugin-manifest-storage.js';
+import type { PluginCompositionStorage as importCompositionStorage } from './plugin-composition-storage.js';
 import type { AgentPluginRuntimeState } from '@nexus-terminal/shared/agent/plugins/runtime-values';
 import type { AgentCapability } from '@nexus-terminal/shared/agent/governance/values';
 import type {
@@ -25,15 +27,22 @@ export interface StoredPluginAppInitialization {
 }
 
 export interface StoredPluginManifest {
-	schemaVersion: 1;
+	schemaVersion: 4;
 	id: string;
 	version: string;
 	displayName: string;
-	sdkVersion: '1';
+	compatibility: {
+		host: { minVersion: string; maxVersion: string };
+		backendSdk: number | null;
+		frontendSdk: number | null;
+	};
+	contributions: StoredPluginSignedContribution;
 	capabilities: AgentCapability[];
 	intents: { id: string; schemaVersion: number }[];
 	frontendEntry: string | null;
 	backendEntry: string | null;
+	dependencies: StoredPluginPackageDependency[];
+	namespaces: string[];
 }
 
 export interface StoredPluginStage {
@@ -54,6 +63,10 @@ export interface StoredPluginRecovery {
 }
 
 export interface StoredPluginRuntimeLease {
+	logicalInstanceId: string;
+	generation: string;
+	configurationRevision: number;
+	packageId: string;
 	userId: number;
 	appId: string;
 	instanceId: string;
@@ -71,7 +84,7 @@ export interface StoredPluginRuntimeObservation {
 	acknowledgedAt: number | null;
 }
 
-export interface PluginStorage {
+export interface PluginStorage extends importCompositionStorage {
 	dataSnapshot(
 		userId: number,
 		digest: string,
@@ -82,6 +95,7 @@ export interface PluginStorage {
 			runtimeClosed: boolean,
 			upgradePending: boolean,
 		) => void,
+		namespace?: string,
 	): Promise<StoredPluginDataSnapshot>;
 	migrateData(
 		userId: number,
@@ -94,7 +108,6 @@ export interface PluginStorage {
 			runtimeClosed: boolean,
 			upgradePending: boolean,
 		) => void,
-		admitCapacity: (keys: number, bytes: number) => void,
 	): Promise<StoredPluginDataMigrationResult>;
 	withFrontendAdmission<T>(
 		userId: number,
@@ -139,19 +152,22 @@ export interface PluginStorage {
 		userId: number,
 		appId: string,
 		admit: (current: StoredPluginInstallation, publisher: StoredPluginPublisher | null, enabled: boolean) => void,
+		packageId?: string,
 	): Promise<StoredPluginContentSource>;
 	runtimeReadData(
 		userId: number,
 		appId: string,
 		key: string,
 		admit: (current: StoredPluginInstallation, publisher: StoredPluginPublisher | null, enabled: boolean) => void,
+		packageId?: string,
 	): Promise<StoredPluginData | null>;
 	runtimeMutateData(
 		userId: number,
 		appId: string,
 		input: StoredPluginDataMutation,
 		admit: (current: StoredPluginInstallation, publisher: StoredPluginPublisher | null, enabled: boolean) => void,
-		decide: (current: StoredPluginData | null, keyCount: number, dataBytes: number) => void,
+		decide: (current: StoredPluginData | null) => void,
+		packageId?: string,
 	): Promise<StoredPluginData>;
 
 	purgeData(
@@ -176,6 +192,7 @@ export interface PluginStorage {
 			publisher: StoredPluginPublisher | null,
 			enabled: boolean,
 		) => void,
+		packageId?: string,
 	): Promise<StoredPluginData | null>;
 	mutateData(
 		userId: number,
@@ -188,7 +205,8 @@ export interface PluginStorage {
 			publisher: StoredPluginPublisher | null,
 			enabled: boolean,
 		) => void,
-		decide: (current: StoredPluginData | null, keyCount: number, dataBytes: number) => void,
+		decide: (current: StoredPluginData | null) => void,
+		packageId?: string,
 	): Promise<StoredPluginData>;
 
 	versions(userId: number): Promise<StoredPluginVersion[]>;
@@ -203,6 +221,7 @@ export interface PluginStorage {
 			publisher: StoredPluginPublisher | null,
 			enabled: boolean,
 		) => void,
+		settingsInstanceId?: string,
 	): Promise<StoredPluginContentSource>;
 	beginRetirement(
 		userId: number,
@@ -237,20 +256,6 @@ export interface PluginStorage {
 	): Promise<StoredPluginInstallation>;
 	installations(userId: number): Promise<StoredPluginInstallation[]>;
 	installationDirectory(userId: number): Promise<StoredPluginInstallationDirectory>;
-	install(
-		userId: number,
-		digest: string,
-		stageId: string,
-		version: number,
-		appId: string,
-		now: number,
-		admit: (
-			identity: number | null,
-			stage: StoredPluginStage,
-			publisher: StoredPluginPublisher | null,
-			current: StoredPluginInstallation | null,
-		) => StoredPluginAppInitialization,
-	): Promise<StoredPluginInstallation>;
 	stages(userId: number): Promise<StoredPluginStage[]>;
 	recovery(): Promise<StoredPluginRecovery[]>;
 	recoverStage(userId: number, id: string, version: number, status: 'staged' | 'failed', now: number): Promise<void>;
@@ -337,7 +342,17 @@ export interface StoredPluginInstallationDirectory {
 	retainedAppIds: string[];
 }
 
+export interface StoredPluginExecutionPackage {
+	packageId: string;
+	kind: 'app' | 'tool';
+	version: string;
+	packageHash: string;
+	publisherKeyId: string;
+}
+
 export interface StoredPluginActivation {
+	mode: 'install' | 'selection' | 'provider';
+	executionPackages: StoredPluginExecutionPackage[];
 	userId: number;
 	appId: string;
 	definitionId: string;

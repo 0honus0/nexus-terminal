@@ -1,3 +1,4 @@
+import { readAgentPluginContentReference, readAgentPluginContentPage } from '../plugins/content.js';
 import { readAgentOptionalReasoningEffort } from '../providers/http-codec.js';
 import { AGENT_REASONING_EFFORTS } from '../providers/values.js';
 import {
@@ -9,7 +10,7 @@ import {
 	InvalidAgentPayload,
 } from '../http-codec.js';
 
-import { AGENT_WORKSPACE_MAX_RESPONSE_BYTES, AGENT_WORKSPACE_MAX_SELECTABLE_MODELS } from './values.js';
+import { AGENT_WORKSPACE_MAX_RESPONSE_BYTES } from './values.js';
 import { AGENT_SCOPE_MAX_NAME_BYTES, AGENT_THREAD_MAX_PAGE } from './values.js';
 import { AGENT_THREAD_ENTRY_MAX_PAGE } from './values.js';
 import { readAgentThreadEntryCursor, readAgentThreadEntries, readAgentThreadEntryHistory } from './http-codec.js';
@@ -22,6 +23,7 @@ import {
 	readAgentCancelRunResponse,
 } from '../runs/http-codec.js';
 import { AGENT_RUN_EVENT_MAX_LIMIT } from '../runs/values.js';
+import { readAgentResumeRunRequest, readAgentResumeRunResponse, readAgentRunSuspension } from '../runs/http-codec.js';
 import { AGENT_PROVIDER_MAX_NAME_BYTES, AGENT_PROVIDER_MAX_MODEL_ID_BYTES } from '../providers/values.js';
 import { readAgentChildrenResponse, readAgentMessageMetadataResponse } from '../collaboration/http-codec.js';
 import { AGENT_COLLABORATION_MESSAGE_MAX_PAGE } from '../collaboration/values.js';
@@ -45,6 +47,7 @@ export function isAgentWorkspaceMutation(input: AgentWorkspaceInput): boolean {
 		case 'agent.threads.rename':
 		case 'agent.threads.delete':
 		case 'agent.runs.create':
+		case 'agent.runs.resume':
 		case 'agent.runs.appendInput':
 		case 'agent.runs.cancel':
 		case 'agent.subagents.cancel':
@@ -58,6 +61,33 @@ export function isAgentWorkspaceMutation(input: AgentWorkspaceInput): boolean {
 export function readAgentWorkspaceInput(input: unknown): AgentWorkspaceInput {
 	const row = agentRecord(input, ['method', 'params'], AGENT_WORKSPACE_MAX_RESPONSE_BYTES);
 	switch (row.method) {
+		case 'agent.content.read': {
+			const p = agentRecord(row.params, ['runId', 'reference', 'index']);
+			return {
+				method: row.method,
+				params: {
+					runId: readAgentId(p.runId),
+					reference: readAgentPluginContentReference(p.reference),
+					index: agentInteger(p.index),
+				},
+			};
+		}
+		case 'agent.runs.resume': {
+			const p = agentRecord(row.params, ['runId', 'operationId', 'input'], AGENT_WORKSPACE_MAX_RESPONSE_BYTES);
+			return {
+				method: row.method,
+				params: {
+					runId: readAgentId(p.runId),
+					operationId: readAgentId(p.operationId),
+					input: readAgentResumeRunRequest(p.input),
+				},
+			};
+		}
+		case 'agent.runs.outputs':
+		case 'agent.runs.suspension': {
+			const p = agentRecord(row.params, ['runId']);
+			return { method: row.method, params: { runId: readAgentId(p.runId) } };
+		}
 		case 'agent.runs.appendInput': {
 			const p = agentRecord(
 				row.params,
@@ -243,7 +273,7 @@ export function readAgentWorkspaceInput(input: unknown): AgentWorkspaceInput {
 	}
 }
 
-function requireArray(input: unknown, limit: number): unknown[] {
+function requireArray(input: unknown, limit = Number.MAX_SAFE_INTEGER): unknown[] {
 	if (!Array.isArray(input) || input.length > limit) {
 		throw new InvalidAgentPayload();
 	}
@@ -262,6 +292,48 @@ export function readAgentWorkspaceResult(input: unknown, request: AgentWorkspace
 		throw new InvalidAgentPayload();
 	}
 	switch (request.method) {
+		case 'agent.runs.outputs': {
+			if (row.value === null) {
+				return { method: request.method, value: null };
+			}
+			if (!Array.isArray(row.value)) {
+				throw new InvalidAgentPayload();
+			}
+			const value = row.value.map(readAgentPluginContentReference);
+			uniqueIds(value);
+			return { method: request.method, value };
+		}
+		case 'agent.content.read': {
+			const value = readAgentPluginContentPage(row.value);
+			const expected = request.params.reference;
+			if (
+				value.index !== request.params.index ||
+				value.reference.id !== expected.id ||
+				value.reference.sha256 !== expected.sha256 ||
+				value.reference.sizeBytes !== expected.sizeBytes ||
+				value.reference.mediaType !== expected.mediaType
+			) {
+				throw new InvalidAgentPayload();
+			}
+			return { method: request.method, value };
+		}
+		case 'agent.runs.resume': {
+			const value = readAgentResumeRunResponse(row.value);
+			if (
+				value.run.id !== request.params.runId ||
+				value.run.version !== request.params.input.expectedVersion + 1
+			) {
+				throw new InvalidAgentPayload();
+			}
+			return { method: request.method, value };
+		}
+		case 'agent.runs.suspension': {
+			const value = row.value === null ? null : readAgentRunSuspension(row.value);
+			if (value !== null && value.runId !== request.params.runId) {
+				throw new InvalidAgentPayload();
+			}
+			return { method: request.method, value };
+		}
 		case 'agent.threads.history':
 			return {
 				method: request.method,
@@ -323,60 +395,56 @@ export function readAgentWorkspaceResult(input: unknown, request: AgentWorkspace
 		case 'agent.definitions.list':
 			return { method: request.method, value: readAgentAppDefinitionListResponse(row.value) };
 		case 'agent.providers.list': {
-			const value = requireArray(row.value, AGENT_WORKSPACE_MAX_SELECTABLE_MODELS).map(
-				(raw): AgentSelectableModel => {
-					if (!isAgentRecord(raw)) {
+			const value = requireArray(row.value).map((raw): AgentSelectableModel => {
+				if (!isAgentRecord(raw)) {
+					throw new InvalidAgentPayload();
+				}
+				const optional = Object.hasOwn(raw, 'defaultReasoningEffort') ? ['defaultReasoningEffort'] : [];
+				const p = agentRecord(raw, [
+					'providerId',
+					'providerDisplayName',
+					'configurationVersion',
+					'modelId',
+					'protocol',
+					'reasoningEfforts',
+					'reasoningMandatory',
+					...optional,
+				]);
+				const protocol =
+					p.protocol === 'chat-completions' || p.protocol === 'responses' || p.protocol === 'images'
+						? p.protocol
+						: null;
+				const reasoningEfforts = requireArray(p.reasoningEfforts, AGENT_REASONING_EFFORTS.length).map((raw) => {
+					const effort = readAgentOptionalReasoningEffort(raw);
+					if (effort === undefined) {
 						throw new InvalidAgentPayload();
 					}
-					const optional = Object.hasOwn(raw, 'defaultReasoningEffort') ? ['defaultReasoningEffort'] : [];
-					const p = agentRecord(raw, [
-						'providerId',
-						'providerDisplayName',
-						'configurationVersion',
-						'modelId',
-						'protocol',
-						'reasoningEfforts',
-						'reasoningMandatory',
-						...optional,
-					]);
-					const protocol =
-						p.protocol === 'chat-completions' || p.protocol === 'responses' || p.protocol === 'images'
-							? p.protocol
-							: null;
-					const reasoningEfforts = requireArray(p.reasoningEfforts, AGENT_REASONING_EFFORTS.length).map(
-						(raw) => {
-							const effort = readAgentOptionalReasoningEffort(raw);
-							if (effort === undefined) {
-								throw new InvalidAgentPayload();
-							}
-							return effort;
-						},
-					);
-					const defaultReasoningEffort = readAgentOptionalReasoningEffort(p.defaultReasoningEffort);
-					if (
-						new Set(reasoningEfforts).size !== reasoningEfforts.length ||
-						(defaultReasoningEffort !== undefined && !reasoningEfforts.includes(defaultReasoningEffort)) ||
-						typeof p.reasoningMandatory !== 'boolean' ||
-						(p.reasoningMandatory && !reasoningEfforts.length) ||
-						(protocol === 'images' && (reasoningEfforts.length > 0 || p.reasoningMandatory))
-					) {
-						throw new InvalidAgentPayload();
-					}
-					if (!protocol) {
-						throw new InvalidAgentPayload();
-					}
-					return {
-						providerId: readAgentId(p.providerId),
-						providerDisplayName: agentText(p.providerDisplayName, AGENT_PROVIDER_MAX_NAME_BYTES),
-						configurationVersion: agentInteger(p.configurationVersion, 1),
-						modelId: agentText(p.modelId, AGENT_PROVIDER_MAX_MODEL_ID_BYTES),
-						protocol,
-						reasoningEfforts,
-						reasoningMandatory: p.reasoningMandatory,
-						...(defaultReasoningEffort === undefined ? {} : { defaultReasoningEffort }),
-					};
-				},
-			);
+					return effort;
+				});
+				const defaultReasoningEffort = readAgentOptionalReasoningEffort(p.defaultReasoningEffort);
+				if (
+					new Set(reasoningEfforts).size !== reasoningEfforts.length ||
+					(defaultReasoningEffort !== undefined && !reasoningEfforts.includes(defaultReasoningEffort)) ||
+					typeof p.reasoningMandatory !== 'boolean' ||
+					(p.reasoningMandatory && !reasoningEfforts.length) ||
+					(protocol === 'images' && (reasoningEfforts.length > 0 || p.reasoningMandatory))
+				) {
+					throw new InvalidAgentPayload();
+				}
+				if (!protocol) {
+					throw new InvalidAgentPayload();
+				}
+				return {
+					providerId: readAgentId(p.providerId),
+					providerDisplayName: agentText(p.providerDisplayName, AGENT_PROVIDER_MAX_NAME_BYTES),
+					configurationVersion: agentInteger(p.configurationVersion, 1),
+					modelId: agentText(p.modelId, AGENT_PROVIDER_MAX_MODEL_ID_BYTES),
+					protocol,
+					reasoningEfforts,
+					reasoningMandatory: p.reasoningMandatory,
+					...(defaultReasoningEffort === undefined ? {} : { defaultReasoningEffort }),
+				};
+			});
 			if (new Set(value.map((item) => item.providerId + ':' + item.modelId)).size !== value.length) {
 				throw new InvalidAgentPayload();
 			}
@@ -506,6 +574,7 @@ function belongsToApp(value: AgentWorkspaceResult, appId: string): boolean {
 		case 'agent.runs.create':
 		case 'agent.runs.appendInput':
 		case 'agent.runs.cancel':
+		case 'agent.runs.resume':
 		case 'agent.subagents.cancel':
 			return value.value.run.appId === appId;
 		case 'agent.runs.get':

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { RunChanges } from '../../../packages/backend/dist/modules/agent/runs/model/run-changes.js';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, open, stat, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -148,9 +149,9 @@ await test('Tool output: unknown execution keeps readable evidence without relax
 	const writer = await model.openOutput(job.id);
 	await writer.append({ commandIndex: 1, stream: 'stderr', text: '\ufeffsaved evidence🙂' }, signal(), () => {});
 	await writer.close();
-	const service = new ToolJobService(model);
+	const service = new ToolJobService(model, new RunChanges());
 	const input = { action: 'output', jobIds: [job.id], offset: 0 };
-	const page = JSON.parse(await service.control(scope, target, input, signal(), async () => {}, 1000)).jobs[0];
+	const page = (await service.control(scope, target, input, signal(), async () => {}, 1000)).jobs[0];
 	assert.equal(page.state, 'unknown');
 	assert.equal(page.available, true);
 	assert.deepEqual(page.output, [{ commandIndex: 1, stream: 'stderr', text: '\ufeffsaved evidence🙂' }]);
@@ -222,7 +223,7 @@ await test('Tool output: Job exposes space waiting, resumes the original work an
 	);
 	const waiting = Promise.withResolvers();
 	const failures = [];
-	const service = new ToolJobService(model, undefined, () => {
+	const service = new ToolJobService(model, new RunChanges(), undefined, () => {
 		if (service.waitingOutputCount(scope)) waiting.resolve();
 	});
 	const probe = await open(join(directory, 'probe'), 'w');
@@ -270,13 +271,18 @@ await test('Tool output: Job exposes space waiting, resumes the original work an
 	service.launch(job.id);
 	await waiting.promise;
 	assert.equal(service.waitingOutputCount(scope), 1);
-	const status = JSON.parse(
-		await service.control(scope, target, { action: 'status', jobIds: [job.id] }, signal(), async () => {}, 1000),
+	const status = await service.control(
+		scope,
+		target,
+		{ action: 'status', jobIds: [job.id] },
+		signal(),
+		async () => {},
+		1000,
 	);
 	assert.equal(status.jobs[0].waitingForSpace, true);
 	full = false;
-	const result = JSON.parse(await service.foreground(scope, target, job.id, 5000, signal(), async () => {}));
-	assert.equal(result.status, 'completed');
+	const result = await service.foreground(scope, target, job.id, 5000, signal(), async () => {});
+	assert.equal(result.result.status, 'completed');
 	assert.equal(result.jobId, job.id);
 	assert.equal(service.waitingOutputCount(scope), 0);
 	assert.equal(calls, 1);
@@ -341,22 +347,30 @@ await test('Tool output: cancelled Job stays active until its log writer actuall
 		release = Promise.withResolvers();
 	t.after(() => release.resolve());
 	const failures = [];
-	const service = new ToolJobService({
-		create: async () => job,
+	const service = new ToolJobService(
+		{
+			create: async () => job,
 
-		change: async (previous, state, result) => ({ ...previous, state, result, revision: previous.revision + 1 }),
+			change: async (previous, state, result) => ({
+				...previous,
+				state,
+				result,
+				revision: previous.revision + 1,
+			}),
 
-		openOutput: async () => ({
-			append: async () => {},
+			openOutput: async () => ({
+				append: async () => {},
 
-			flush: async () => {},
+				flush: async () => {},
 
-			close: async () => {
-				closing.resolve();
-				await release.promise;
-			},
-		}),
-	});
+				close: async () => {
+					closing.resolve();
+					await release.promise;
+				},
+			}),
+		},
+		new RunChanges(),
+	);
 	await service.prepare({
 		operation: { ...scope, id: job.id },
 		target,

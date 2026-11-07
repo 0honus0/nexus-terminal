@@ -2,8 +2,12 @@ import type { AgentPluginData, AgentPluginInstallation } from './model.js';
 import type { AgentPluginIntentCreateRequest } from './intent-http.js';
 import type { AgentPluginIntentReceipt } from './intent-model.js';
 import type { AgentArtifactView } from '../artifacts/model.js';
+import type { AgentPluginHostOperationRequest, AgentPluginHostOperationResult } from './host-operations.js';
 
 export type AgentPluginRpcInput =
+	| { method: 'settings.read'; params: Record<string, never> }
+	| { method: 'settings.write'; params: import('./settings.js').AgentPluginConfigurationWrite }
+	| { method: 'host.perform'; params: AgentPluginHostOperationRequest }
 	| { method: 'host.appInfo'; params: Record<string, never> }
 	| { method: 'storage.get'; params: { key: string } }
 	| {
@@ -21,6 +25,9 @@ export type AgentPluginRpcInput =
 	  };
 
 export type AgentPluginRpcResult =
+	| { method: 'settings.read'; value: import('./settings.js').AgentPluginInstanceSettings }
+	| { method: 'settings.write'; value: import('./settings.js').AgentPluginConfigurationView }
+	| ({ method: 'host.perform' } & AgentPluginHostOperationResult)
 	| { method: 'host.appInfo'; value: AgentPluginInstallation }
 	| { method: 'storage.get'; value: AgentPluginData | null }
 	| { method: 'storage.put' | 'storage.delete'; value: AgentPluginData }

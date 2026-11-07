@@ -1,5 +1,9 @@
+import { rawToolName } from '../../../support/package-tool-catalog.mjs';
+
 /** Signed-plugin scenarios exercise native tools and validate complete model/tool turns. */
-export function respondPresetModel(messages, userText, response, send) {
+export function respondPresetModel(history, userText, response, send) {
+	// A persisted thread includes earlier Runs, whose deliberate call IDs may repeat.
+	const messages = history.slice(history.findLastIndex((item) => item.role === 'user'));
 	if (!userText.includes('E2E_NATIVE_PLUGIN_')) {
 		return false;
 	}
@@ -10,7 +14,11 @@ export function respondPresetModel(messages, userText, response, send) {
 		return message ? JSON.parse(message.content) : null;
 	};
 
-	const call = (id, name, input) => ({ id, type: 'function', function: { name, arguments: JSON.stringify(input) } });
+	const call = (id, name, input) => ({
+		id,
+		type: 'function',
+		function: { name: name, arguments: JSON.stringify(input) },
+	});
 
 	const calls = (items) =>
 		send(response, { tool_calls: items.map((item, index) => ({ index, ...item })) }, 'tool_calls');
@@ -55,13 +63,7 @@ export function respondPresetModel(messages, userText, response, send) {
 					'skill_read',
 					() => {
 						const entry = result('skill_find').matches.find((item) => item.name === name);
-						if (
-							!entry ||
-							JSON.stringify(result('skill_find')).includes('Prefer structured diagnostics') ||
-							JSON.stringify(result('skill_find')).includes(
-								'Use an explicitly selected and authorized SSH connection',
-							)
-						) {
+						if (!entry || result('skill_find').matches.some((item) => Object.hasOwn(item, 'body'))) {
 							throw new Error('Skill metadata must not contain the document body');
 						}
 						return { name: entry.name, version: entry.version, sha256: entry.sha256 };
@@ -152,7 +154,7 @@ export function respondPresetModel(messages, userText, response, send) {
 			() => ({ child: result('native_delegate'), joined: result('native_join') }),
 		);
 	} else if (userText.includes('E2E_NATIVE_PLUGIN_FAIL')) {
-		calls([call('missing_tool', 'e2e_missing_tool', {})]);
+		calls([call('missing_tool', rawToolName('e2e_missing_tool'), {})]);
 	} else {
 		complete('OK');
 	}

@@ -1,3 +1,8 @@
+import { validateSnapshotPluginVersions } from './snapshot-plugin-versions.js';
+import { validateSnapshotPluginComposition } from './snapshot-plugin-composition.js';
+import { validateSnapshotPluginData } from './snapshot-plugin-data.js';
+import { validateSnapshotToolChildren } from './snapshot-tool-children.js';
+import { validateSnapshotLegacyPackage } from './snapshot-legacy-package.js';
 import type { SnapshotRegistration, SnapshotTable } from '../../../../../platform/storage/sqlite/snapshot-types.js';
 import type { SecretBox } from '../../../../../platform/security/secret-box.js';
 import {
@@ -9,8 +14,6 @@ import type { SqlRow } from '../../../../../platform/storage/sqlite/worker-types
 import { SnapshotFailure } from '../../../../../platform/storage/sqlite/snapshot-types.js';
 import { artifactRow } from '../../../artifacts/adapters/sqlite/artifact-row.js';
 import { stageRow, publisherRow } from '../../../plugins/adapters/sqlite/plugin-row.js';
-import { pluginInstallationRow } from '../../../plugins/adapters/sqlite/plugin-installation-row.js';
-import { pluginManifest } from '../../../plugins/adapters/package/plugin-manifest.js';
 import type { DecodedPluginPackage } from '../../../plugins/storage/plugin-package.js';
 import { NativePluginPackageDecoder } from '../../../plugins/adapters/package/plugin-package-decoder.js';
 import { NativePackageReader } from '../../../../../platform/packages/adapters/native-package-reader.js';
@@ -21,14 +24,30 @@ import { currentPolicy } from '../../../governance/adapters/sqlite/governance-sq
 import { currentDenylist } from '../../../governance/adapters/sqlite/denylist-sql.js';
 import { executionSettings } from '../../../execution/adapters/sqlite/execution-sql.js';
 import { frozenExecution } from '../../../execution/adapters/sqlite/execution-budget-sql.js';
-import { participant } from '../../../runs/adapters/sqlite/run-participant-sql.js';
+
 import { frozenFromRun } from '../../../runs/adapters/sqlite/run-sql.js';
 import { validateRunStepRecovery } from '../../../runs/adapters/sqlite/run-step-sql.js';
 import { readBrowserConfiguration } from '../../../integrations/adapters/sqlite/browser-sql.js';
 import { validateSnapshotDeclarations } from './snapshot-declarations.js';
 import { validateSnapshotHistory } from './snapshot-history.js';
+import { validateSnapshotRunExecution } from './snapshot-run-execution.js';
+import { validateSnapshotOperations } from './snapshot-operations.js';
 
 function secretColumns(table: string, row: SqlRow): ReadonlyMap<string, string> {
+	if (table === 'agent_plugin_connections') {
+		if (
+			typeof row.user_id !== 'number' ||
+			!Number.isSafeInteger(row.user_id) ||
+			row.user_id < 1 ||
+			typeof row.app_id !== 'string' ||
+			typeof row.instance_id !== 'string'
+		) {
+			throw new SnapshotFailure('invalid_archive');
+		}
+		return new Map([
+			['encrypted_credential', 'plugin-connection:' + row.user_id + ':' + row.app_id + ':' + row.instance_id],
+		]);
+	}
 	if (table !== 'agent_providers' && table !== 'agent_integrations') {
 		return new Map();
 	}
@@ -54,7 +73,9 @@ export function registerAgentSnapshot(
 	secrets: SecretBox | null,
 	admitPackage: (value: DecodedPluginPackage) => void,
 ): SnapshotRegistration {
-	const packages = new NativePluginPackageDecoder(new NativePackageReader(), new NativePackageSignature());
+	const packageReader = new NativePackageReader();
+	const packageSignature = new NativePackageSignature();
+	const packages = new NativePluginPackageDecoder(packageReader, packageSignature);
 	const tables: SnapshotTable[] = [
 		{
 			name: 'agent_artifacts',
@@ -226,6 +247,10 @@ export function registerAgentSnapshot(
 			columns: ['user_id', 'app_id', 'operation_key', 'intent_hash', 'integration_id', 'result_json'],
 		},
 		{
+			name: 'agent_integration_rejections',
+			columns: ['user_id', 'app_id', 'operation_key', 'intent_hash'],
+		},
+		{
 			name: 'agent_memories',
 			columns: [
 				'id',
@@ -284,8 +309,62 @@ export function registerAgentSnapshot(
 			],
 		},
 		{
+			name: 'agent_plugin_legacy_versions',
+			columns: [
+				'user_id',
+				'definition_id',
+				'version',
+				'package_hash',
+				'publisher_key_id',
+				'stage_id',
+				'source_user_id',
+				'size_bytes',
+				'manifest_json',
+			],
+		},
+		{
 			name: 'agent_plugin_versions',
-			columns: ['definition_id', 'version', 'package_hash', 'publisher_key_id', 'stage_id', 'manifest_json'],
+			columns: [
+				'user_id',
+				'definition_id',
+				'version',
+				'package_hash',
+				'publisher_key_id',
+				'stage_id',
+				'manifest_json',
+			],
+		},
+		{
+			name: 'agent_plugin_packages',
+			columns: [
+				'user_id',
+				'package_id',
+				'version',
+				'package_hash',
+				'publisher_key_id',
+				'status',
+				'revision',
+				'created_at',
+				'updated_at',
+			],
+		},
+		{
+			name: 'agent_plugin_package_updates',
+			columns: ['user_id', 'package_id', 'stage_id', 'stage_version', 'created_at', 'data_migrated'],
+		},
+		{ name: 'agent_plugin_app_bindings', columns: ['user_id', 'app_id', 'execution_revision', 'ui_revision'] },
+		{
+			name: 'agent_plugin_app_packages',
+			columns: [
+				'user_id',
+				'app_id',
+				'package_id',
+				'kind',
+				'version',
+				'package_hash',
+				'publisher_key_id',
+				'selected_root',
+			],
 		},
 		{
 			name: 'agent_plugin_installations',
@@ -311,8 +390,12 @@ export function registerAgentSnapshot(
 			columns: [
 				'user_id',
 				'app_id',
+				'package_id',
+				'logical_instance_id',
 				'instance_id',
+				'generation',
 				'revision',
+				'configuration_revision',
 				'state',
 				'updated_at',
 				'unknown_at',
@@ -330,6 +413,29 @@ export function registerAgentSnapshot(
 				'updated_at',
 				'unknown_at',
 				'acknowledged_at',
+				'package_id',
+				'logical_instance_id',
+				'generation',
+				'configuration_revision',
+			],
+		},
+		{
+			name: 'agent_plugin_extension_data',
+			columns: ['user_id', 'app_id', 'package_id', 'key', 'version', 'value_json', 'updated_at'],
+		},
+		{
+			name: 'agent_plugin_extension_operations',
+			columns: [
+				'user_id',
+				'app_id',
+				'package_id',
+				'operation_id',
+				'content_hash',
+				'key',
+				'version',
+				'value_json',
+				'updated_at',
+				'retired',
 			],
 		},
 		{ name: 'agent_plugin_data', columns: ['user_id', 'app_id', 'key', 'version', 'value_json', 'updated_at'] },
@@ -402,6 +508,7 @@ export function registerAgentSnapshot(
 				'protocol',
 				'capabilities_json',
 				'execution_policy',
+				'app_execution_json',
 			],
 		},
 		{
@@ -436,16 +543,16 @@ export function registerAgentSnapshot(
 				'thread_sequence',
 				'run_kind',
 				'approval_mode',
-				'status',
 				'version',
 				'input_text',
 				'deadline_at',
 				'selected_connections_json',
 				'created_at',
 				'updated_at',
+				'status',
 			],
 		},
-		{ name: 'agent_run_events', columns: ['run_id', 'sequence', 'event_type', 'run_version', 'created_at'] },
+		{ name: 'agent_run_events', columns: ['run_id', 'sequence', 'run_version', 'created_at', 'event_type'] },
 		{
 			name: 'agent_command_idempotency',
 			columns: [
@@ -521,9 +628,25 @@ export function registerAgentSnapshot(
 				'result_text',
 				'created_at',
 				'updated_at',
+				'required_capabilities_json',
+				'output_artifact_ids_json',
+				'identity_json',
 			],
 		},
-		{ name: 'agent_acp_permissions', columns: ['tool_id', 'parent_id', 'parent_hash', 'request_key'] },
+		{
+			name: 'agent_tool_children',
+			columns: [
+				'tool_id',
+				'parent_id',
+				'parent_hash',
+				'request_key',
+				'kind',
+				'package_id',
+				'installation_revision',
+				'instance_id',
+				'instance_revision',
+			],
+		},
 		{
 			name: 'agent_run_tool_events',
 			columns: ['tool_call_id', 'revision', 'operation_revision', 'state', 'operation_hash', 'created_at'],
@@ -531,6 +654,19 @@ export function registerAgentSnapshot(
 		{
 			name: 'agent_app_definitions',
 			columns: ['id', 'version', 'display_name', 'content_hash'],
+		},
+		{
+			name: 'agent_app_definition_packages',
+			columns: [
+				'user_id',
+				'definition_id',
+				'definition_version',
+				'package_id',
+				'kind',
+				'version',
+				'package_hash',
+				'publisher_key_id',
+			],
 		},
 		{ name: 'agent_app_declared_capabilities', columns: ['definition_id', 'definition_version', 'capability'] },
 		{
@@ -588,6 +724,230 @@ export function registerAgentSnapshot(
 			columns: ['run_id', 'connection_id', 'directory', 'target_version', 'fingerprint'],
 		},
 		{ name: 'agent_project_effects', columns: ['operation_id'] },
+		{ name: 'agent_run_inputs', columns: ['run_id', 'app_execution_json', 'input_json', 'output_json'] },
+		{ name: 'agent_run_executions', columns: ['run_id', 'generation', 'state', 'created_at', 'updated_at'] },
+		{
+			name: 'agent_operations',
+			columns: [
+				'id',
+				'user_id',
+				'app_id',
+				'run_id',
+				'execution_generation',
+				'parent_id',
+				'caller_id',
+				'operation_key',
+				'request_hash',
+				'kind',
+				'label',
+				'binding_json',
+				'arguments_json',
+				'state',
+				'revision',
+				'result_json',
+				'failure_code',
+				'created_at',
+				'updated_at',
+				'sequence',
+			],
+		},
+		{
+			name: 'agent_operation_model_reservations',
+			columns: ['operation_id', 'root_id', 'provider_id', 'reserved_tokens', 'input_tokens', 'output_tokens'],
+		},
+		{
+			name: 'agent_operation_approvals',
+			columns: [
+				'id',
+				'operation_id',
+				'operation_hash',
+				'policy_revision',
+				'status',
+				'version',
+				'expires_at',
+				'consumed_at',
+				'capability',
+				'risk',
+				'summary',
+				'target_id',
+				'requested_at',
+				'decided_at',
+				'decided_by',
+				'sequence',
+			],
+		},
+		{
+			name: 'agent_operation_approval_commands',
+			columns: [
+				'user_id',
+				'app_id',
+				'operation_key',
+				'request_hash',
+				'approval_id',
+				'result_json',
+				'feedback',
+				'created_at',
+			],
+		},
+		{ name: 'agent_operation_authorities', columns: ['operation_id', 'proof_json'] },
+		{
+			name: 'agent_operation_artifacts',
+			columns: ['operation_id', 'artifact_id', 'artifact_version', 'sha256', 'size_bytes'],
+		},
+		{
+			name: 'agent_operation_contents',
+			columns: [
+				'id',
+				'user_id',
+				'app_id',
+				'run_id',
+				'owner_id',
+				'content_key',
+				'media_type',
+				'chunks',
+				'sealed',
+				'sha256',
+				'size_bytes',
+			],
+		},
+		{
+			name: 'agent_operation_content_chunks',
+			columns: ['content_id', 'chunk_index', 'text', 'sha256', 'size_bytes'],
+		},
+		{
+			name: 'agent_app_checkpoints',
+			columns: ['run_id', 'execution_generation', 'version', 'document_json', 'updated_at'],
+		},
+		{
+			name: 'agent_app_messages',
+			columns: [
+				'id',
+				'run_id',
+				'owner_id',
+				'message_key',
+				'ordinal',
+				'operation_id',
+				'chunks',
+				'created_at',
+				'operation_sequence',
+			],
+		},
+		{ name: 'agent_app_message_chunks', columns: ['message_id', 'chunk_index', 'text', 'sha256', 'created_at'] },
+		{
+			name: 'agent_plugin_instances',
+			columns: [
+				'id',
+				'user_id',
+				'app_id',
+				'package_id',
+				'name',
+				'selected',
+				'enabled',
+				'revision',
+				'configuration_revision',
+				'schema_revision',
+				'configuration_json',
+				'created_at',
+				'updated_at',
+			],
+		},
+		{
+			name: 'agent_plugin_configuration_mutations',
+			columns: [
+				'user_id',
+				'app_id',
+				'instance_id',
+				'caller_id',
+				'operation_key',
+				'request_hash',
+				'result_json',
+				'created_at',
+				'retired',
+			],
+		},
+		{
+			name: 'agent_plugin_connections',
+			columns: [
+				'instance_id',
+				'user_id',
+				'app_id',
+				'revision',
+				'connector_json',
+				'encrypted_credential',
+				'updated_at',
+			],
+		},
+		{
+			name: 'agent_plugin_private_data',
+			columns: [
+				'user_id',
+				'app_id',
+				'publisher_key_id',
+				'package_id',
+				'instance_id',
+				'namespace',
+				'key',
+				'revision',
+				'document_json',
+				'updated_at',
+			],
+		},
+		{
+			name: 'agent_run_suspensions',
+			columns: [
+				'run_id',
+				'run_version',
+				'execution_generation',
+				'checkpoint_version',
+				'input_request_json',
+				'suspended_at',
+				'resumed_at',
+				'resume_input_json',
+			],
+		},
+		{
+			name: 'agent_run_resume_commands',
+			columns: ['user_id', 'app_id', 'operation_key', 'run_id', 'request_hash', 'result_json'],
+		},
+		{
+			name: 'agent_legacy_tool_jobs',
+			columns: [
+				'id',
+				'user_id',
+				'app_id',
+				'run_id',
+				'connection_id',
+				'target_version',
+				'fingerprint',
+				'policy_revision',
+				'state',
+				'revision',
+				'result_text',
+				'created_at',
+				'updated_at',
+			],
+		},
+		{ name: 'agent_legacy_project_effects', columns: ['operation_id'] },
+		{
+			name: 'agent_legacy_run_children',
+			columns: [
+				'run_id',
+				'parent_id',
+				'operation_id',
+				'request_hash',
+				'profile',
+				'output_text',
+				'tools_json',
+				'max_requests',
+				'dependencies_json',
+				'dependency_mode',
+			],
+		},
+		{
+			name: 'agent_legacy_run_mailbox',
+			columns: ['root_id', 'recipient_id', 'sequence', 'message_id', 'sender_id', 'body_text', 'expires_at'],
+		},
+		{ name: 'agent_legacy_collaboration_effects', columns: ['operation_id', 'result_json'] },
 	];
 	for (const table of tables) {
 		if (table.columns.includes('user_id')) {
@@ -626,10 +986,7 @@ export function registerAgentSnapshot(
 				if (typeof row.id !== 'string' || typeof row.app_id !== 'string' || typeof row.user_id !== 'number') {
 					throw new SnapshotFailure('unavailable');
 				}
-				if (
-					!(await participant(reader, { runId: row.id, appId: row.app_id, userId: row.user_id })) ||
-					!(await frozenFromRun(reader, row.user_id, row.app_id, row.id))
-				) {
+				if (!(await frozenFromRun(reader, row.user_id, row.app_id, row.id))) {
 					throw new SnapshotFailure('unavailable');
 				}
 				await frozenExecution(reader, row.id);
@@ -639,57 +996,17 @@ export function registerAgentSnapshot(
 		validate(rows) {
 			validateAgentSnapshotDocuments(rows);
 			validateSnapshotHistory(rows);
+			validateSnapshotRunExecution(rows);
+			validateSnapshotOperations(rows);
+			validateSnapshotPluginVersions(rows);
+			validateSnapshotPluginComposition(rows);
+			validateSnapshotPluginData(rows);
 			validateSnapshotDeclarations(rows);
+			validateSnapshotToolChildren(rows);
 			for (const row of rows.get('agent_artifacts') ?? []) {
 				artifactRow(row);
 				if (row.status === 'staging' || row.status === 'deleting') {
 					throw new SnapshotFailure('source_changed');
-				}
-			}
-			const stages = rows.get('agent_plugin_stages') ?? [];
-			const stageIndex = new Map(stages.map((stage) => [stage.id, stage]));
-			for (const row of stages) {
-				stageRow(row);
-				if (row.status === 'staging') {
-					throw new SnapshotFailure('source_changed');
-				}
-			}
-			for (const row of rows.get('agent_plugin_publishers') ?? []) {
-				publisherRow(row);
-			}
-			for (const row of rows.get('agent_plugin_versions') ?? []) {
-				const stage = stageIndex.get(row.stage_id);
-				if (
-					!stage ||
-					stage.status !== 'installed' ||
-					stage.package_hash !== row.package_hash ||
-					stage.publisher_key_id !== row.publisher_key_id ||
-					typeof row.manifest_json !== 'string'
-				) {
-					throw new SnapshotFailure('unavailable');
-				}
-				const manifest = pluginManifest(JSON.parse(row.manifest_json));
-				if (
-					manifest.id !== row.definition_id ||
-					manifest.version !== row.version ||
-					JSON.stringify(manifest) !== JSON.stringify(stageRow(stage).manifest)
-				) {
-					throw new SnapshotFailure('unavailable');
-				}
-			}
-			const versions = rows.get('agent_plugin_versions') ?? [];
-			const versionIndex = new Map(
-				versions.map((version) => [JSON.stringify([version.definition_id, version.version]), version]),
-			);
-			for (const row of rows.get('agent_plugin_installations') ?? []) {
-				pluginInstallationRow(row);
-				const version = versionIndex.get(JSON.stringify([row.definition_id, row.version]));
-				if (
-					!version ||
-					version.package_hash !== row.package_hash ||
-					version.publisher_key_id !== row.publisher_key_id
-				) {
-					throw new SnapshotFailure('unavailable');
 				}
 			}
 		},
@@ -698,9 +1015,59 @@ export function registerAgentSnapshot(
 			if (ref.root !== 'plugins') {
 				return;
 			}
+			const archived = (rows.get('agent_plugin_legacy_versions') ?? []).filter(
+				(version) => version.stage_id === ref.key,
+			);
+			if (archived.length > 0) {
+				const source = archived[0];
+				if (
+					!source ||
+					typeof source.manifest_json !== 'string' ||
+					typeof source.publisher_key_id !== 'string'
+				) {
+					throw new SnapshotFailure('unavailable');
+				}
+				const publisher = (rows.get('agent_plugin_publishers') ?? []).find(
+					(publisher) =>
+						publisher.user_id === source.source_user_id && publisher.key_id === source.publisher_key_id,
+				);
+				if (!publisher) {
+					throw new SnapshotFailure('unavailable');
+				}
+				await validateSnapshotLegacyPackage(
+					bytes,
+					source.manifest_json,
+					source.publisher_key_id,
+					publisherRow(publisher).publicKeyPem,
+					packageReader,
+					packageSignature,
+				);
+				return;
+			}
 			const raw = (rows.get('agent_plugin_stages') ?? []).find((stage) => stage.id === ref.key);
 			if (!raw) {
 				throw new SnapshotFailure('unavailable');
+			}
+			if (
+				raw.status === 'failed' &&
+				typeof raw.manifest_json === 'string' &&
+				typeof raw.publisher_key_id === 'string'
+			) {
+				const publisher = (rows.get('agent_plugin_publishers') ?? []).find(
+					(publisher) => publisher.user_id === raw.user_id && publisher.key_id === raw.publisher_key_id,
+				);
+				if (!publisher) {
+					throw new SnapshotFailure('unavailable');
+				}
+				await validateSnapshotLegacyPackage(
+					bytes,
+					raw.manifest_json,
+					raw.publisher_key_id,
+					publisherRow(publisher).publicKeyPem,
+					packageReader,
+					packageSignature,
+				);
+				return;
 			}
 			const stage = stageRow(raw);
 			const publishers = rows.get('agent_plugin_publishers') ?? [];
@@ -735,9 +1102,21 @@ export function registerAgentSnapshot(
 			if (table === 'agent_artifacts' && row.status === 'ready') {
 				return [snapshotFile('artifacts', row, 'sha256')];
 			}
+			if (table === 'agent_plugin_legacy_versions') {
+				return [
+					snapshotFile(
+						'plugins',
+						{ id: row.stage_id, size_bytes: row.size_bytes, package_hash: row.package_hash },
+						'package_hash',
+					),
+				];
+			}
 			if (
 				table === 'agent_plugin_stages' &&
-				(row.status === 'staged' || row.status === 'verified' || row.status === 'installed')
+				(row.status === 'staged' ||
+					row.status === 'verified' ||
+					row.status === 'installed' ||
+					(row.status === 'failed' && row.manifest_json !== null))
 			) {
 				return [snapshotFile('plugins', row, 'package_hash')];
 			}

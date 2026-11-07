@@ -1,16 +1,12 @@
+import { REMOTE_FILE_MAX_PATH_BYTES } from '../../remote/files/values.js';
 import { agentRecord, agentText, agentInteger, readAgentId, InvalidAgentPayload } from '../http-codec.js';
 import {
 	AGENT_INTEGRATION_MAX_BODY_BYTES,
-	AGENT_INTEGRATION_MAX_ITEMS,
 	AGENT_INTEGRATION_MAX_RESPONSE_BYTES,
 	AGENT_MCP_PROTOCOL_VERSION,
 	AGENT_INTEGRATION_NAME_MAX_BYTES,
 	AGENT_MCP_ENDPOINT_MAX_BYTES,
-	AGENT_MCP_HOST_MAX_ITEMS,
 	AGENT_MCP_HOST_MAX_BYTES,
-	AGENT_ACP_ARGV_MAX_ITEMS,
-	AGENT_ACP_ARGV_MAX_BYTES,
-	AGENT_ACP_CWD_MAX_BYTES,
 } from './values.js';
 import type { AgentIntegrationConfiguration, AgentIntegrationView, AgentIntegrationDiscovery } from './model.js';
 import type {
@@ -19,10 +15,11 @@ import type {
 	AgentIntegrationCredential,
 	AgentIntegrationCreateHeaders,
 	AgentIntegrationDeleteResponse,
+	AgentIntegrationCreateResponse,
 } from './http.js';
 
-function list(input: unknown, max: number, bytes: number): string[] {
-	if (!Array.isArray(input) || input.length > max) {
+function list(input: unknown, bytes: number): string[] {
+	if (!Array.isArray(input)) {
 		throw new InvalidAgentPayload();
 	}
 	return input.map((item) => agentText(item, bytes));
@@ -72,7 +69,7 @@ export function readAgentIntegrationConfiguration(input: unknown): AgentIntegrat
 		) {
 			throw new InvalidAgentPayload();
 		}
-		const hosts = list(row.privateHostExceptions, AGENT_MCP_HOST_MAX_ITEMS, AGENT_MCP_HOST_MAX_BYTES);
+		const hosts = list(row.privateHostExceptions, AGENT_MCP_HOST_MAX_BYTES);
 		if (new Set(hosts).size !== hosts.length || hosts.some((host) => !authority(host))) {
 			throw new InvalidAgentPayload();
 		}
@@ -89,14 +86,13 @@ export function readAgentIntegrationConfiguration(input: unknown): AgentIntegrat
 		['kind', 'displayName', 'connectionId', 'argv', 'cwd', 'protocolVersion'],
 		AGENT_INTEGRATION_MAX_BODY_BYTES,
 	);
-	const argv = list(row.argv, AGENT_ACP_ARGV_MAX_ITEMS, AGENT_ACP_ARGV_MAX_BYTES),
-		cwd = agentText(row.cwd, AGENT_ACP_CWD_MAX_BYTES);
+	const argv = list(row.argv, AGENT_INTEGRATION_MAX_BODY_BYTES),
+		cwd = agentText(row.cwd, REMOTE_FILE_MAX_PATH_BYTES);
 	if (
 		row.kind !== 'acp' ||
 		row.protocolVersion !== '1' ||
 		!argv[0] ||
 		argv[0].startsWith('-') ||
-		new TextEncoder().encode(argv.join('')).byteLength > AGENT_ACP_ARGV_MAX_BYTES ||
 		argv.some((arg) => arg.includes('\0')) ||
 		!cwd.startsWith('/') ||
 		cwd.split('/').includes('..') ||
@@ -169,6 +165,18 @@ export function readAgentIntegrationCreateHeaders(input: unknown): AgentIntegrat
 	return { idempotencyKey: readAgentId(row.idempotencyKey) };
 }
 
+export function readAgentIntegrationCreateResponse(input: unknown): AgentIntegrationCreateResponse {
+	if (input !== null && typeof input === 'object' && 'status' in input && input.status === 'not_created') {
+		const row = agentRecord(input, ['status', 'appId', 'idempotencyKey']);
+		return {
+			status: 'not_created',
+			appId: readAgentId(row.appId),
+			idempotencyKey: readAgentId(row.idempotencyKey),
+		};
+	}
+	return readAgentIntegrationView(input);
+}
+
 export function readAgentIntegrationDeleteResponse(input: unknown): AgentIntegrationDeleteResponse {
 	const row = agentRecord(input, ['status']);
 	if (row.status !== 'deleted') {
@@ -224,7 +232,7 @@ export function readAgentIntegrationView(input: unknown): AgentIntegrationView {
 
 export function readAgentIntegrationList(input: unknown): { items: AgentIntegrationView[] } {
 	const row = agentRecord(input, ['items'], AGENT_INTEGRATION_MAX_RESPONSE_BYTES);
-	if (!Array.isArray(row.items) || row.items.length > AGENT_INTEGRATION_MAX_ITEMS) {
+	if (!Array.isArray(row.items)) {
 		throw new InvalidAgentPayload();
 	}
 	const items = row.items.map(readAgentIntegrationView);
@@ -240,14 +248,7 @@ export function readAgentIntegrationDiscovery(input: unknown): AgentIntegrationD
 		['integration', 'serverName', 'serverVersion', 'protocolVersion', 'tools', 'resources', 'prompts'],
 		AGENT_INTEGRATION_MAX_RESPONSE_BYTES,
 	);
-	if (
-		!Array.isArray(row.tools) ||
-		row.tools.length > 256 ||
-		!Array.isArray(row.resources) ||
-		row.resources.length > 2048 ||
-		!Array.isArray(row.prompts) ||
-		row.prompts.length > 512
-	) {
+	if (!Array.isArray(row.tools) || !Array.isArray(row.resources) || !Array.isArray(row.prompts)) {
 		throw new InvalidAgentPayload();
 	}
 	const tools = row.tools.map((item) => {

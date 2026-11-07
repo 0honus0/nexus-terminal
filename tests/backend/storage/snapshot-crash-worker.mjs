@@ -10,7 +10,7 @@ import { SqliteTransactionAdapter } from '../../../packages/backend/dist/platfor
 
 const [directory, phase] = process.argv.slice(2);
 const path = join(directory, 'state.db');
-const roots = new Map(Object.entries(resolveDataPaths(path)));
+const roots = new Map(Object.entries(resolveDataPaths(path)).filter(([name]) => name !== 'toolLogs'));
 const db = SqliteRuntime.open(path);
 const files = new NativeSnapshotRestoreFiles(path, roots);
 const sql = new SqliteSnapshotRestore(db);

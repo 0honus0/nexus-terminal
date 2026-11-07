@@ -59,7 +59,7 @@
 	});
 
 	function surfaceLabel(app: HostApp): string {
-		return t(app.surface === 'custom' ? 'agent.hub.customSurface' : 'agent.hub.agentSurface');
+		return t(app.surface === 'plugin' ? 'agent.hub.agentSurface' : 'agent.pluginFrontend.unavailable');
 	}
 
 	const positionPanel = (): boolean => {

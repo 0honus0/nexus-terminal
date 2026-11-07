@@ -25,6 +25,15 @@ export interface StoredContextSnapshot {
 	sources: StoredContextSource[];
 }
 
+/** Transient source-bound projection evidence; never part of persisted context JSON. */
+export interface StoredContextCheckpointProjection {
+	checkpointId: string;
+	sourceHash: string;
+	sourceMessages: number;
+	rawSummary: string;
+	renderedSummary: string;
+}
+
 export interface StoredContextHistoryCommand {
 	userId: number;
 	appId: string;
@@ -68,24 +77,25 @@ export interface ContextStorage {
 		after: StoredThreadEntryCursor,
 		limit: number,
 	): Promise<StoredThreadEntries | null>;
-	readHistory(
-		command: StoredContextHistoryCommand,
-		sourceLimit: number,
-		fits: (facts: StoredContextHistoryFacts) => boolean,
-	): Promise<StoredContextHistoryBundle | null>;
 }
 
 export interface StoredThreadEntryCursor {
 	runSequence: number;
-	stepIndex: number;
-	eventSequence: number;
+	messageOrdinal: number;
+	chunkIndex: number;
 	textOffset: number;
 }
 
 export interface StoredThreadEntries {
 	appId: string;
 	threadId: string;
-	items: { runId: string; role: 'user' | 'assistant'; position: StoredThreadEntryCursor; text: string }[];
+	items: {
+		runId: string;
+		operationSequence: number;
+		role: 'user' | 'assistant';
+		position: StoredThreadEntryCursor;
+		text: string;
+	}[];
 	nextCursor: StoredThreadEntryCursor;
 }
 

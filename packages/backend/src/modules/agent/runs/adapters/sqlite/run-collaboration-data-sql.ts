@@ -1,3 +1,6 @@
+import { agentPluginCapabilityReplyBytes } from '@nexus-terminal/shared/agent/plugins/runtime-codec';
+import { AGENT_PLUGIN_APP_PAYLOAD_MAX_BYTES } from '@nexus-terminal/shared/agent/plugins/values';
+import { collaborationAuthority } from './run-collaboration-authority-sql.js';
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import type {
 	StoredCollaborationAuthority,
@@ -5,18 +8,12 @@ import type {
 	StoredCollaborationPage,
 } from '../../storage/run-collaboration-storage.js';
 import { CollaborationStorageRefusal } from '../../storage/run-collaboration-storage.js';
-import {
-	participant,
-	collaborationAuthority,
-	currentParticipant,
-	storedInteger,
-	storedText,
-} from './run-participant-sql.js';
+import { participant, currentParticipant, storedInteger, storedText } from './run-participant-sql.js';
 
 function fact(row: Record<string, unknown>): StoredCollaborationFact {
 	if (
 		Buffer.byteLength(storedText(row.fact_key), 'utf8') > 128 ||
-		Buffer.byteLength(storedText(row.value_text), 'utf8') > 8192
+		Buffer.byteLength(storedText(row.value_text), 'utf8') > AGENT_PLUGIN_APP_PAYLOAD_MAX_BYTES
 	) {
 		throw new Error('Corrupt collaboration fact bounds');
 	}
@@ -47,8 +44,7 @@ export class CollaborationDataSql {
 		key: string,
 		value: string,
 		expectedVersion: number,
-		maxFacts: number,
-	): Promise<StoredCollaborationFact | 'version_conflict' | 'limit_exceeded'> {
+	): Promise<StoredCollaborationFact | 'version_conflict'> {
 		return this.db.transaction(async (tx) => {
 			const owner = await collaborationAuthority(tx, input);
 			const previous = await tx.one('SELECT result_json FROM agent_collaboration_effects WHERE operation_id=?', [
@@ -67,14 +63,7 @@ export class CollaborationDataSql {
 			) {
 				return 'version_conflict';
 			}
-			if (!row) {
-				const count = await tx.one('SELECT COUNT(*) AS total FROM agent_run_facts WHERE root_id=?', [
-					owner.rootId,
-				]);
-				if (!count || storedInteger(count.total) >= maxFacts) {
-					return 'limit_exceeded';
-				}
-			}
+
 			await tx.run(
 				'INSERT INTO agent_run_facts(root_id,fact_key,value_text,version,author_id) VALUES(?,?,?,?,?) ON CONFLICT(root_id,fact_key) DO UPDATE SET value_text=excluded.value_text,version=excluded.version,author_id=excluded.author_id',
 				[owner.rootId, key, value, expectedVersion + 1, owner.id],
@@ -152,7 +141,12 @@ export class CollaborationDataSql {
 		});
 	}
 
-	read(input: StoredCollaborationAuthority, after: number, limit: number): Promise<StoredCollaborationPage> {
+	read(
+		input: StoredCollaborationAuthority,
+		after: number,
+		limit: number,
+		maxBytes: number,
+	): Promise<StoredCollaborationPage> {
 		return this.db.transaction(async (tx) => {
 			const owner = await collaborationAuthority(tx, input);
 			const rows = await tx.all(
@@ -175,12 +169,49 @@ export class CollaborationDataSql {
 				rows.some(
 					(row, index) =>
 						storedInteger(row.sequence, 1) !== after + index + 1 ||
-						Buffer.byteLength(storedText(row.body_text), 'utf8') > 8192,
+						Buffer.byteLength(storedText(row.body_text), 'utf8') > AGENT_PLUGIN_APP_PAYLOAD_MAX_BYTES,
 				)
 			) {
 				throw new Error('Incomplete or corrupt mailbox page');
 			}
-			const nextCursor = rows.length ? storedInteger(rows[rows.length - 1].sequence, 1) : after;
+			// Advance only through rows represented in this byte-bound page. Expired
+			// rows can advance the cursor; a live row that did not fit remains unread.
+			const messages: StoredCollaborationPage['messages'] = [];
+			let nextCursor = after;
+			let bytes = agentPluginCapabilityReplyBytes({
+				operation: 'collaboration.readMessages',
+				value: {
+					messages: [],
+					nextCursor: Number.MAX_SAFE_INTEGER,
+					consumedThrough: Number.MAX_SAFE_INTEGER,
+				},
+			});
+			const now = Date.now();
+			for (const row of rows) {
+				const sequence = storedInteger(row.sequence, 1);
+				if (storedInteger(row.expires_at) <= now) {
+					nextCursor = sequence;
+					continue;
+				}
+				const message = {
+					sequence,
+					senderId: storedText(row.sender_id),
+					body: storedText(row.body_text),
+					expiresAt: storedInteger(row.expires_at),
+				};
+				// A message is first encoded in the result and then escaped in valueJson.
+				// Remove the two quotes around that encoded JSON fragment.
+				const cost = Buffer.byteLength(JSON.stringify(JSON.stringify(message))) - 2 + (messages.length ? 1 : 0);
+				if (bytes + cost > maxBytes) {
+					if (!messages.length) {
+						throw new CollaborationStorageRefusal('limit_exceeded');
+					}
+					break;
+				}
+				bytes += cost;
+				messages.push(message);
+				nextCursor = sequence;
+			}
 			const consumedThrough = cursor ? storedInteger(cursor.consumed_through) : 0;
 			const readThrough = cursor ? storedInteger(cursor.read_through) : 0;
 			if (consumedThrough > readThrough || readThrough > storedInteger(last.last)) {
@@ -194,14 +225,7 @@ export class CollaborationDataSql {
 				);
 			}
 			return {
-				messages: rows
-					.filter((row) => storedInteger(row.expires_at) > Date.now())
-					.map((row) => ({
-						sequence: storedInteger(row.sequence, 1),
-						senderId: storedText(row.sender_id),
-						body: storedText(row.body_text),
-						expiresAt: storedInteger(row.expires_at),
-					})),
+				messages,
 				nextCursor,
 				consumedThrough,
 			};

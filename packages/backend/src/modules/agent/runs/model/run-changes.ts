@@ -1,49 +1,101 @@
-import type { RunChangeKind } from './run-stream-types.js';
-import { EventEmitter } from 'node:events';
+import { AsyncResource } from 'node:async_hooks';
+import type { RunChangeKind, RunChangeScope } from './run-stream-types.js';
 
-/** Wake committed text/state delivery; durable journals and existing admission remain authoritative. */
+interface RunChangeListener {
+	scope: RunChangeScope;
+	changed(kind: RunChangeKind): void;
+	stopped(): void;
+	accepts?: (change: RunChangeScope) => boolean;
+}
+
+/** Invalidation only: the persistent source and its admission remain authoritative, including unknown commits. */
 export class RunChanges {
-	private readonly events = new EventEmitter();
+	private readonly listeners = new Set<RunChangeListener>();
 	private accepting = true;
 
-	constructor() {
-		// Connections are owned and removed by their WS lifecycle, not a fixed listener quota.
-		this.events.setMaxListeners(0);
-	}
-
-	subscribe(userId: number, appId: string, changed: (kind: RunChangeKind) => void, stopped: () => void): () => void {
+	subscribe(
+		scope: RunChangeScope,
+		changed: (kind: RunChangeKind) => void,
+		stopped: () => void,
+		accepts?: (change: RunChangeScope) => boolean,
+	): () => void {
 		if (!this.accepting) {
 			stopped();
 			return () => {};
 		}
-		const key = `${userId}:${appId}`;
-		this.events.on(key, changed);
-		this.events.on('stop', stopped);
+		const listener: RunChangeListener = {
+			scope: { userId: scope.userId, appId: scope.appId },
+			// Event producers can hold temporary HTTP transaction admission. Run work
+			// continues under the subscriber owner, never the publisher request.
+			changed: AsyncResource.bind(changed),
+			stopped: AsyncResource.bind(stopped),
+			accepts,
+		};
+		this.listeners.add(listener);
 		return () => {
-			this.events.off(key, changed);
-			this.events.off('stop', stopped);
+			this.listeners.delete(listener);
 		};
 	}
 
-	notify(userId: number, appId: string, kind: RunChangeKind = 'state'): void {
-		if (this.accepting) {
-			this.events.emit(`${userId}:${appId}`, kind);
+	notify(scope: RunChangeScope, kind: RunChangeKind = 'state'): void {
+		if (!this.accepting) {
+			return;
+		}
+		const change: RunChangeScope = Object.freeze({
+			userId: scope.userId,
+			appId: scope.appId,
+			runId: scope.runId,
+			threadId: scope.threadId,
+		});
+		for (const listener of [...this.listeners]) {
+			if (!this.listeners.has(listener)) {
+				continue;
+			}
+			if (listener.scope.userId !== scope.userId || listener.scope.appId !== scope.appId) {
+				continue;
+			}
+			try {
+				if (
+					(scope.runId === undefined && scope.threadId === undefined) ||
+					!listener.accepts ||
+					listener.accepts(change)
+				) {
+					listener.changed(kind);
+				}
+			} catch {
+				// A failed consumer is disconnected and cannot prevent other owners becoming dirty.
+				this.listeners.delete(listener);
+				try {
+					listener.stopped();
+				} catch {
+					/* Already detached from this producer. */
+				}
+			}
 		}
 	}
 
-	async after<T>(userId: number, appId: string, write: () => Promise<T>, kind: RunChangeKind = 'state'): Promise<T> {
+	async after<T>(scope: RunChangeScope, write: () => Promise<T>, kind: RunChangeKind = 'state'): Promise<T> {
 		try {
 			return await write();
 		} finally {
-			// Even an unknown commit requires a read; this never retries the mutation.
-			this.notify(userId, appId, kind);
+			this.notify(scope, kind);
 		}
 	}
 
 	quiesce(): void {
+		if (!this.accepting) {
+			return;
+		}
 		this.accepting = false;
-		this.events.emit('stop');
-		this.events.removeAllListeners();
+		const current = [...this.listeners];
+		this.listeners.clear();
+		for (const listener of current) {
+			try {
+				listener.stopped();
+			} catch {
+				/* Other subscriptions still need their shutdown signal. */
+			}
+		}
 	}
 
 	close(): Promise<void> {

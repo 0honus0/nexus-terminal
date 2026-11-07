@@ -2,7 +2,11 @@ import type { StoredExecutionSettings, StoredExecutionUsage } from '../../execut
 import type { AgentRunStepState, AgentRunStepEventType } from '@nexus-terminal/shared/agent/runs/values';
 import type { AgentRunStepFailureCode } from '@nexus-terminal/shared/agent/runs/values';
 import type { StoredFrozenInput } from './run-storage.js';
-import type { StoredContextSnapshot, StoredContextToolResult } from '../../context/storage/context-storage.js';
+import type {
+	StoredContextSnapshot,
+	StoredContextToolResult,
+	StoredContextCheckpointProjection,
+} from '../../context/storage/context-storage.js';
 import type { StoredStepProposal } from './run-proposal-types.js';
 import type { ProviderStoredRow } from '../../providers/storage/provider-storage.js';
 
@@ -20,6 +24,7 @@ export interface StoredRunStep {
 	expectedRunVersion: number;
 	requestHash: string;
 	creationHash: string;
+	responseReceived: boolean;
 	textBytes: number;
 	finishReason?: import('@nexus-terminal/shared/agent/runs/values').AgentRunStepFinishReason;
 	proposals: StoredStepProposal[];
@@ -47,6 +52,7 @@ export interface StepVersionedScope extends StepScope {
 
 export interface StepReservationScope extends StepScope {
 	context: StoredContextSnapshot;
+	checkpointProjection: StoredContextCheckpointProjection | null;
 	estimatedTokens: number;
 }
 
@@ -88,6 +94,8 @@ export interface RunStepStorage {
 		command: StepVersionedScope,
 		decide: (hasUnconfirmedEffects: boolean) => 'failed' | 'unknown',
 	): Promise<StepWriteResult>;
+	/** Complete the aggregate only after an App decision over this exact completed stop response. */
+	finishRoot(command: StepVersionedScope, outputText: string): Promise<StepWriteResult>;
 	/** Runs under the same transaction as Run + frozen snapshot authority checks. */
 	reserve(
 		command: StepReservationScope,

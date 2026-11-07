@@ -45,10 +45,7 @@ export async function invalidateAppPolicy(tx: SqlExecutor, userId: number, appId
 	if (result.changes !== 1) {
 		throw new Error('Missing App governance policy during revocation');
 	}
-	await tx.run(
-		"UPDATE agent_governance_approvals SET status='superseded',version=version+1 WHERE user_id=? AND app_id=? AND status='requested'",
-		[userId, appId],
-	);
+	await supersedePendingApprovals(tx, userId, appId);
 }
 
 export async function appsWithPolicySettings(tx: SqlExecutor, userId: number): Promise<string[]> {
@@ -83,10 +80,26 @@ export async function clearAppPolicySettings(tx: SqlExecutor, userId: number, ap
 
 export async function assertPendingApprovalRevisions(tx: SqlExecutor, userId: number, appId: string): Promise<void> {
 	const exhausted = await tx.one(
-		"SELECT id FROM agent_governance_approvals WHERE user_id=? AND app_id=? AND status='requested' AND version>=? LIMIT 1",
-		[userId, appId, Number.MAX_SAFE_INTEGER],
+		`SELECT id FROM agent_governance_approvals WHERE user_id=? AND app_id=? AND status='requested' AND version>=?
+		 UNION ALL SELECT a.id FROM agent_operation_approvals a JOIN agent_operations o ON o.id=a.operation_id
+		 WHERE o.user_id=? AND o.app_id=? AND a.status IN ('requested','approved') AND a.consumed_at IS NULL AND a.version>=? LIMIT 1`,
+		[userId, appId, Number.MAX_SAFE_INTEGER, userId, appId, Number.MAX_SAFE_INTEGER],
 	);
 	if (exhausted !== null) {
 		throw new Error('Agent approval revision exhausted');
 	}
+}
+
+/** Revocation preserves consumed evidence but invalidates every unused permit in the same policy transaction. */
+export async function supersedePendingApprovals(tx: SqlExecutor, userId: number, appId: string): Promise<void> {
+	await tx.run(
+		"UPDATE agent_governance_approvals SET status='superseded',version=version+1 WHERE user_id=? AND app_id=? AND status='requested'",
+		[userId, appId],
+	);
+	await tx.run(
+		`UPDATE agent_operation_approvals SET status='superseded',version=version+1
+	 WHERE status IN ('requested','approved') AND consumed_at IS NULL AND operation_id IN
+	 (SELECT id FROM agent_operations WHERE user_id=? AND app_id=?)`,
+		[userId, appId],
+	);
 }

@@ -4,6 +4,106 @@
 
 已退役 Runner/Guacamole 的证据仅用于追溯，不能证明当前 SSH/CDP/浏览器 SDK 的行为。静态、受控 fixture、真实服务与真机结论分别判断。
 
+## Agent 限制复审与容量回归（2026-11-07）
+
+继续未提交的 SDK4 重构，主代理独立执行。环境为 Node26.13.0、pnpm12.16.1；本轮文件清单、候选扫描、日志及浏览器现场归 `/home/honus/nexus-task-artifacts/agent-modular-20261106/limit-review`。最终清单覆盖主仓866项、独立插件仓411项（含删除项及生成物），这是完整文件清单与限制候选扫描，不表示全部文件均已逐行人工审阅。产品修复按 Shared → HTTP/WS/隔离宿主 → Service/Model/SQL → SDK/独立插件/前端消费者核对，保持权限、CAS、幂等、取消、完整续读及实际关闭语义。
+
+- 去掉重复的工具参数/命令/路径/正文截断、文件树数量及深度、目录和指引私有扫描预算；文件树hash流式读取，目录按实际字节缩页，短页不能当作EOF。
+- 去掉模型调用/定义、Provider模型/发现结果/Registry、App/可选模型/授权目标、Intent附件及JSON深度、Browser目标/规则/端点、Integration/MCP例外、denylist和上下文源的额外数量门槛。深层Intent采用显式栈遍历，重复身份、敏感字段和不安全URL仍拒绝。
+- Plugin KV去固定1024键/8MiB总量；外壳沿所属传输预算，真实JSON编码容量、CAS/tombstone/事务/receipt不放宽。协作消息、Memory和Skill按最终RPC二次编码预算分页，只消费实际交付的消息；工具结果页允许读取至64KiB，默认4KiB，未删完整结果。
+- 去掉隔离宿主/前端桥的私有并发和固定heap门槛；模型工具流增量计量UTF-8字节并正确合并跨delta代理对。MCP协商不再另加10/15秒期限，Host取消传到SDK实际fetch；ACP沿SDK帧预算并保持批准、排空与关闭。工具说明同步移除旧消息页4条和TTL300秒描述。
+- 本轮限制修改未改变持久数据格式；上下文快照SQL容量仍为原实际5MiB。既有Agent重构迁移保留，不能把本轮结论外推为整个重构无需迁移。单帧、分页、传输/存储容量和用户配置的执行预算继续生效。
+
+最终验证分别记录如下，避免将不同阶段重复项相加：
+
+- `capacity-final-6.log`：22项通过。包括真实Chromium深/宽DOM与完整字段、真实OpenSSH大文件及长路径、SQLite KV/Memory、Provider HTTP创建800/发现1500/重启/更新600模型及5001项Registry，以及集合/深度正向与重复/权限等负向回归。
+- `runtime-capacity-final-3.log`：7项通过。34个真实签名SDK4实例、3个同时开启的真实setup、同实例重复启用、关闭后新incarnation、publisher撤权后的进程/目录/账本清理。后续增强并发断言的 `runtime-capacity-final-6.log` 定向1项通过，启动日记写入期间重试读取，完整日记/进程身份断言不放宽；已接入正式 `execution-flow.spec.ts`。
+- `test-plugin-final-7.log`：独立插件仓74项通过；其中真实MCP延迟15.5秒握手和Host取消到实际fetch及close/drain均通过。`check-plugin-final-8.log`通过，插件完整生产构建见 `build-plugin-final-7.log`；本轮最后只修改两条工具说明，单独重建agent tools并进入新签包。
+- 公共Shared SDK使用不可变 `candidate.15`；八包开发签名staging22完成并固定到主仓fixture，`pins-final.json`记录全部原始hash、签名和归档字节重建验证。`staging22-final-1.log`最新包的消息二次编码分页、limit100、TTL3600及未交付消息消费围栏通过。此前 `host-plugin-final-2.log` 的33项通过保留；其10个失败均来自旧SDK3 runtime-capacity测试，已由上面的SDK4真实进程覆盖替换。未将该历史失败组合标为整组通过。
+- `check-main-final-5.log`、`build-main-final-4.log`：根check与双端生产构建通过。最终全仓格式、两仓差异检查见本目录的 `format-main-final-3.log` 和 `diff-final.log`。
+- 浏览器通过指定CDP `http://172.30.30.11:9223`访问 `https://api.honus.top`；前端9998，最新本地后端使用独立数据库。实际UI从130个模型新增至131并保存，刷新后仍131；1440/390/320px弹窗无水平溢出，添加按钮可用，无旧128上限提示，无pageerror。截图与结构化证据为 `browser/provider-{1440,390,320}.png`、`browser/result.json`。这是Provider设置回归，不等于完整Agent功能或移动真机验收。
+
+首次失败、旧SDK归档、旧签包和浏览器数据均保留，未提交/推送或正式发布。全量Agent重构R6及远程E2E仍按PLAN承接。
+
+## SDK4 续读与调用生命周期收尾（2026-11-07）
+
+继续 main/cfa5bb5b 的未提交重构工作区，主代理独立执行。Node26.13.0、pnpm12.16.1；日志仍归 `/home/honus/nexus-task-artifacts/agent-modular-20261106/final-implementation`。本轮产品变化涉及隔离执行、历史快照和受管 HTTP/SSH 字节通道，没有新增数据库迁移或修改已确认 UI。
+
+| 审核表   | 本轮结果                                                                                                                                                                                        |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | ACP 大结果通过预览游标读回完整内容，不重新执行 prompt；Child 只读操作复核当前权限；插件提前返回仍等待原 Host 调用；长连接释放已关闭响应，取消和同步关闭失败不提前释放写入。                     |
+| 职责归属 | 协议 SDK 归独立插件，通用字节 I/O 归 Platform，真实授权和 transport/Operation 生命周期归 Host；旧工具父子表仅作迁移和备份审计。                                                                 |
+| 类型归属 | 前端 SDK 握手与消息游标迁到 protocol4；服务注册用动态 Registry/准确 binding；删除无人消费的 frozen-app-execution SDK3 运行夹具，不恢复旧导出。                                                  |
+| 完成证据 | 下列专项通过；新增正式 runner 入口覆盖服务目录、HTTP及ACP收尾。staging19 最终组合已通过92项，配置/文件审批回归另通过12项；全量正式 E2E、最终 CDP 和正式插件发布仍未完成，不以局部结果宣称交付。 |
+
+- `protocols-staging18-2.log`：5项通过。大 ACP 返回按每页4096 JSON编码字节真实调用 `tool_result_read`，核对码点游标、完整128KiB文本和hash，`session/prompt`只执行一次。原10秒测试等待不足记录在 `acp-result-continuation-staging18-1.log`，只将该大结果用例等待改为45秒，产品期限不变；独立复验为 `acp-result-continuation-staging18-2.log`。
+- `module-runtime-sdk4-2.log`：25项通过，覆盖32个IPC请求、派发前拒绝第33个并恢复容量、八个控制请求、原调用取消/退出、超过旧30秒计时、同步abort重入及多错误保留。首次日志 `module-runtime-sdk4-1.log` 保留7通过/18失败；复现并修复void生命周期成功帧缺value、worker准入缺失、handler提前返回遗漏Host任务。后续新增“首次技术错误后拒绝同次新请求”的断言，已纳入下述staging19最终组合通过。
+- `authority-sdk4-1.log`：13项通过，含实际HTTP/OpenSSH/SQLite已完成effect的原dispatch proof、撤权/目标/父状态/批准变化、在途验证和Job事件监控。
+- `frontend-sdk4-port-2.log`：5项通过，保留应用后ACK、终态应用中退订、实际MessagePort取消等断言；首次旧游标失败保留 `frontend-sdk4-port-1.log`。
+- `readonly-sdk4-3.log`：2项通过。实际Root委派Child经OpenSSH读文件和目录，隐藏effect绑定准确包/实例/目标；撤权、配置/包身份/目标变化、跨Run/跨App等拒绝。旧schema3签名声明只作为显式archive审计，不能作为可执行SDK4包。首次两轮发现旧夹具的外键错误和快照遗漏的名称/版本及必要目标一致性校验，保留 `readonly-sdk4-{1,2}.log`。
+- `services-sdk4-1.log`：6项通过，覆盖内部依赖服务与模型工具曝光分离、准确caller/contract/schema、来源和投影对象不可改写权威事实、能力上界及1200项目录分页。旧静态serviceImports/图深度不恢复为产品限制。
+- `machine-sdk4-1.log`：10项通过，通用交互字节通道与大输出背压隔离，SFTP/命令/诊断/Docker复用、目标撤权、迟到握手、取消与完整关闭。该组只验证通用Remote通道，官方ACP协议由签名插件HTTP组验证。
+- `mcp-http-lifecycle-2.log`：7项通过，真实HTTP头部拒绝/响应溢出/六个请求取消、连续130个响应释放以及response/dispatcher独立清理错误。首次 `mcp-http-lifecycle-1.log` 实际复现已关闭response仍留在连接活跃集合；该日志还保留测试mock导致的递归错误，后者不作为产品缺陷。
+- `acp-host-lifecycle-2.log`：6项通过，Host等待迟到批准/原read、取消后不交付字节或批准、独立清理错误、真实Writable回调及MachineModel错误保留。首次 `acp-host-lifecycle-1.log` 复现command.close同步报错后提前释放writer，修复后保持原断言通过。
+- 独立仓 `mcp-plugin-lifecycle-1.log` 4项通过，新增SDK协商失败与detach失败均保留、dispose同步异常不丢独立原因；`plugin-check-lifecycle-1.log` 与 `plugin-test-lifecycle-1.log` 全检查及64项测试通过。这些源修改已构建为下述新staging19不可变签名包，旧staging18不用于证明新插件产物。
+
+- `finish-check-lifecycle-1.log`、`finish-build-lifecycle-1.log`：根check与双端生产构建通过，覆盖Native调用首次技术失败后停止新准入、HTTP响应释放及SSH同步关闭仍等待原写入。`plugin-build-lifecycle-1.log`、`plugin-staging19-1.log`完成八个包的新构建与签名；八包fixture及各自provenance固定为`2.0.0-dev.19`，原始文件/hash/签名/归档重建校验不变。fixture说明同步SDK4动态注册职责，不再把SDK3的六包、静态manifest工具数作为当前事实。
+- `lifecycle-final-staging19-1.log`：新签包下11组共92项通过，零失败/取消/跳过；包括增强后的module-runtime、authority/readonly/service、MCP HTTP/ACP Host收尾、连接复用、真实MCP/ACP、SDK4独立更新及前端MessagePort。仅这些组完成组合验证，不能代表50组正式Agent入口或全产品E2E通过。
+- `tool-regression-staging19-4.log`：7项通过。删除旧静态贡献与RunModelStream消费者，真实签名包目录经App发现后交给两个模型请求编码器；分别核对超过32个定义、合法33000字符历史、128个定义/32个调用的各自边界及溢出拒绝。真实OpenSSH文件写入核对准确父/子Operation、并发同键批准仅消费一次、0600权限、私有正文不出批准摘要、当前工具详情投影、拒绝后不写入、取消/撤权/目标禁用不能复活旧批准。App在收到确定拒绝后可自行选择继续结束，不恢复旧Host强制终止循环。前三轮日志保留测试迁移时错误的标题容量、旧状态名、错误字段路径及旧拒绝结果假设，不作为新产品缺陷。
+- `integration-races-staging19-3.log`：5项通过。旧IntegrationService退役后，原准入/收尾安全意图迁往真实DefaultToolResources/PluginService和实例配置owner：同步协议异常仍等Job/Browser/SSH原任务且保留四个错误；关闭只拒绝排队工作、等待已准入任务；真实SQLite队列后会话过期不写配置或回执；commit_unknown后原键恢复已提交内容且不二次修改；并发CAS只提交一个，准确回执跨停用和重启保留。前两轮保留测试disposer应幂等的夹具错误。旧128续接名额、集中Integration CRUD和静态声明不恢复；MCP原续接/Run归属由实际签包协议与MCP组承接，动态发布/失效由Registry组、保留数据/清理围栏由包迁移组承接，全部组仍须完成正式矩阵验收。
+- 新增上述两个正式runner组；`missing-dist-imports-staging19.json`扫描为零，说明测试中不再引用缺失的Backend/Shared dist文件，但不证明其余断言或运行行为已全部迁移。其余正式组的实跑结果另行记录。
+
+## SDK4 续读、协作与检查点恢复（2026-11-07）
+
+基于main/cfa5bb5b的未提交重构工作区，由主代理独立继续R6。Node26.13.0、pnpm12.16.1；本轮产物归`/home/honus/nexus-task-artifacts/agent-modular-20261106/final-implementation`。主仓与独立插件仓仍未提交或正式发布，没有更新生产主机，也没有删除用户要求保留的产物。
+
+| 审核表   | 实现与证据                                                                                                                                                                                                              |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 模型预览保留原调用/hash/码点游标；分页不限制原结果总大小，移除插件offset的旧256KiB上限。实际Shell8MiB结果由预览与续读重建并核对hash，不重跑命令。取消模型等待不再把父任务错误结算为unknown，真实执行/清理未知继续围栏。 |
+| 职责归属 | 完整内容归OperationContent；预览和压缩归App插件。RunAppState只校验内容引用、终态回执、代次和CAS；历史读者与来源均限定Root。CollaborationRefusal表达确认回滚的事务拒绝，Job owner独立记录实际执行未知。                  |
+| 类型归属 | Shared Run信息、内容页和检查点/历史解码使用原IPC预算，私有App状态不套普通HTTP32KiB上限；Host入口、SDK、独立仓、正式fixture同步。插件工作区override改为实际candidate.10归档，避免仅更新依赖却仍打入旧SDK。               |
+| 完成证据 | 下列专项、根check/双端build/format、插件check与62项测试通过。当前只完成这些范围；正式完整E2E、全部旧回归迁移、正式签名发布和最终指定浏览器仍待完成。                                                                    |
+
+- `collaboration-sdk4-5.log`：12项通过，包含父子隔离、准确绑定/派发证明、事实CAS拒绝、依赖取消、审批前取消、模型取消、消息与真实后台Job未知。此前失败的旧账本断言、目录查询和模型失败字段断言已迁移；没有恢复旧工具表或固定阶段。
+- `collaboration-shell-sdk4-4.log`：该轮Shell11项全部通过，协作仍有旧失败字段断言，因此整份组合日志不算全绿；协作最终结果使用上一条独立复验。Shell核对8MiB原始stdout、完整捕获结果重建、Unicode分页、后续命令和Job资源；仅大输出场景延长测试等待，不修改产品期限。
+- `result-children-registry-sdk4-3.log`：50项通过，涵盖实际SQLite内容、准确来源、当前权限/目标版本、超过2MiB结果的前页与尾页、撤权/跨目标、分块及全量损坏、递归Operation收敛和历史关系迁移。
+- `artifact-evidence-sdk4-2.log`：16项通过，保留已就绪产物来源、确认后拒绝、提交未知无假证据、清理归类和批次预检；只同步真实构造器位置。
+- `app-ledger-sdk4-3.log`：39项通过。正式旧phase-ledger测试迁移到真实Run/Operation/content/checkpoint DDL、Model与事务，保留确切状态/回执/摘要来源、CAS、封存/归属、过期/关闭/代次围栏、失败Child/Job、迟到完成与加密reasoning断言。新增Root历史分页与Child私有状态隔离、完整Unicode/转义chunk及超过HTTP默认大小的回执页。原Host五阶段/摘要包装设计由App私有状态回归承接，未重新引入旧实现。
+- `app-plugin-runtime-candidate10.log`：App运行与预览11项通过，覆盖同一模型请求恢复仅派发一次、准确压缩前缀/完整工具结果组/保留尾部、空及过大摘要不替换原历史、连续两次有用摘要各自绑定来源、未完成历史引用、意图hash不匹配拒绝、标题可选失败与真实未知/存储失败。该组是实际App加内存Host port，不能代替实际HTTP/存储证据。
+- `app-sdk4-staging17-1.log`：新签名8包固定到staging17，实际Backend/SDK/隔离插件与OpenSSH9项通过；其中新增长中文/Emoji结果在下一次Root恢复原历史，完整输出、两个Run各一次模型请求均核对。还覆盖无模型App、两个模型协议、真实文件、批准单次消费、审批前取消、同轮写入围栏和停用设置CAS。
+- `finish-check-ledger-2.log`、`finish-build-ledger-1.log`、`finish-format-ledger-3.log`：根check、双端生产构建和全仓格式通过。首轮发现括号/声明间距与格式偏移已修正；生成SDK bundle按源构建校验，Prettier仅排除其生成目录，签名fixture继续保持原字节校验。
+- `plugin-check-candidate10-4.log`、`plugin-test-candidate10-2.log`：独立仓check通过，插件测试分别27/33/2项，共62项通过；包含实际编译包、发行/组合、工具算法和MCP协议。两个旧测试将新的具名拒绝仍当作成功返回中的failure，改为核对拒绝类别，保留零Host调用和分页容量断言。
+
+首次失败均保留：`app-ledger-sdk4-1.log`复现Root错误取得Child检查点；`app-plugin-runtime-1.log`复现私有状态32KiB拒绝；`app-plugin-runtime-3.log`复现连续摘要复用相同operationKey导致准确请求冲突；`backend-build-ledger-2.log`为Shared目标库不支持String.isWellFormed，改用既有共享Unicode校验。candidate.9是在该失败编译后的导出，未被消费者或签包采用；candidate.10来自随后成功构建。所有旧归档保持不可变。staging17只是开发签名验收包，相关PASS不证明已正式发布或全部新架构验收完成。
+
+## Agent 模块化集成与易用性复核（2026-11-06）
+
+基于 `main/390cfdb5c545617cde2f2be71a63c4f28eed79de` 的未提交工作区，保留前序性能与架构修改。按用户授权采用 sol high/medium 分工，主代理审核边界并通过指定 Windows Chrome 156 CDP（`172.30.30.11:9223`）访问 `https://api.honus.top`；本轮前端为 9998 生产构建 preview，后端为独立 3002，包及模型决策 fixture 为 3003，数据和产物集中 `/home/honus/nexus-task-artifacts/agent-modular-20261106`。没有连接或更新生产数据库；未提交、推送、发布或部署。
+
+| 审核表   | 本轮结论                                                                                                                                                                                                                 |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 功能对应 | Run driver、统一工具目录与 schema、App/包组合、独立 UI、完整 SDK、多订阅事件及文件工具包已集成；第二个表单式巡检 App 实际复用同一工具包。第一版其余工具仍为本体默认贡献，不称全部外置。                                  |
+| 职责归属 | 执行内核持生命周期、准确派发与结算；Host 持认证、批准、目标校验和资源，插件持应用与工具算法。Root/Child、隐藏单项原语沿持久父子账本收敛，保留原权限与未知结果围栏。                                                      |
+| 类型归属 | Shared v2 包/SDK/事件契约同步后端、前端、独立仓与测试；sandbox 唯一取值含 allow-scripts/allow-forms，继续禁止 same-origin、原生表单网络和任意连接。安装流程不保存计划/进度，正式连续迁移保存实际包、绑定及数据迁移围栏。 |
+| 完成证据 | 本轮最终根 check、完整构建、独立包构建/签名核对通过；下列有限 CDP 链路已执行。新增正式 E2E 源码已注册并静态通过，但未运行本地或远程完整正式 E2E；不能用历史 Actions PASS 代替。                                          |
+
+实际验收与修正：
+
+- 插件页面多 chunk/CSS 并发复用了管理队列，曾返回 503；资源交付改走独立串行 lane 并追踪取消和关闭，入队及执行后核对原 grant。独立聊天构建补全外部组件的 Tailwind source 扫描及关键 utilities 构建检查。仍为串行资源交付，未测量跨 App 慢读者吞吐，不额外建立调度器。
+- iframe 原 sandbox 阻止 JS 表单提交；Shared sandbox 增加 allow-forms，HTTP CSP 继续 form-action none。`browser/forms-csp.json` 证明 JS submit 到达一次，原生表单网络请求为零、触发 form-action 违规，同源父页访问仍拒绝。SDK 仅公开 frontend-v2.mjs，不保留旧 v1 alias。
+- 聊天终态同步退订后的晚 ACK 原先关闭整个 UI；客户端应用后复查订阅，Host 严格解码后忽略已退订 id，活动 ACK 仍核对原 pending。`streams/terminal-ack/REVIEW.md` 的真实 port 定向逻辑 5/5 通过，浏览器修后普通聊天与终态后再次发送通过。
+- Child 原目录遗漏尚未加载的授权包工具；现继承父 availableDefinitions 授权快照，仍排除 Root 专用及隐藏原语。真实 Root 请求批准后创建 Child，Child 经签名包 read/list、隐藏原语和 loopback OpenSSH 读到 README marker/hash 及目录，父子均完成。`browser/real-tools-sql.json`、`child-relationships.json` 保留实际工具与父子持久关系；模型 fixture 只决定调用，文件结果来自真实 Host/SSH。explore 是角色标签，不等于权限自动降级；只读能力由文件工具 profile 约束。
+- 审批预读改用实际 Apps API；摘要补具体任务、命令和目标，可信 Host 确认显示目标名称及 id。最终 UI dev.7/工具 patch3 再次运行真实父子链，`browser/approval-final.json` 记录 Run `cf1b1fd7-b814-403c-8398-5e41f19dfd4d` completed，可信确认前零次 resolve、后一次，且无 pageerror；`approval-dialog-final.png` 保留实际弹窗。初次辅助脚本误用 Approve 按钮文案，按真实 Approve and run 继续同一待审批任务，没有重发该任务。
+- 市场执行包 prepare 递增修订后 commit 使用旧修订，已改用实际准备返回值；draining 普通安装不能越过 pending/data_migrated 围栏，保留配置但无 KV 的已卸载包仍可管理清除。`browser/tool-independent-upgrade.json` 证明 tools 2.0.0-dev.3→2.0.1-dev.3 经市场 install-plan 第一次完成，App/UI 包未变，执行修订 3→4。第二个巡检 App 随后通过真实共享工具完成 Run `8431e194-ca89-4dee-bb12-abc892142c35`，见 `inspection-after-tool-upgrade-sql.json` 及对应日志。
+- UI 2.0.0-dev.6→dev.7 更新期间 Run `36ea6bff-b7f7-4720-86c7-c5d5af3fe3c0` 保持 running，最终 completed；executionRevision 保持 4，uiRevision 8→9，未发送草稿保留，见 `browser/ui-independent-upgrade-final.json`。本次明确核对新 Thread 已创建，避免此前辅助脚本点击未就绪的 New 按钮而把任务写入旧 Thread。
+- 附件通过真实宿主上传并返回 opaque selection key，聊天显示 Files (1) 与文件胶囊，见 `browser/attachment-result.json`。文件输入由浏览器 File/DataTransfer 夹具提供；不是操作系统文件选择器验收。首次辅助脚本错误等待旧列表自动显示刚上传文件，实际上传已成功，关闭选择器后选中结果正常返回。
+- 审批模式草稿与历史 Run 冻结模式分开；无效 modelKey 不再让 Send 可点却静默失败，使用当前 selectedModel 判断，保留原选择与草稿并要求显式重选。`browser/checkpoint-final.json` 实际通过关闭/重开 App 保留有效选择，再将 Provider 配置版本 1→2，确认旧选择显示 Choose a model 且 Send 禁用，显式重选后恢复可发送、草稿保留且无 pageerror；对应正式用例已补充。
+- `browser/responsive-result.json` 与 chat-1440/390/320.png 核对最终 UI 的正文、会话列表、输入及控件边界；宽屏目标显示文字、窄屏显示图标，无横向溢出。早期截图正文空白来自未等布局/绘制稳定，调整采样先后及两帧等待后正常，没有为此修改产品 CSS 或虚拟列表。只证明指定桌面浏览器的宽度仿真，不代替真实手机软键盘。
+
+最终独立包证据：`packages/provenance/independent-build-ui-dev6-final-result.json`。UI 源快照 `90faad363974c315201ae1d02299c0489ddfc711302fc78c2960a7fe5b27ac30`，167 个源码、176 个构建输入、39 个运行输入与独立 fresh 构建及正式 fixture 一致；独立仓 build/check/8 项逻辑测试和 5 包验签通过。UI dev.6 包 hash `d41f6ab16b1e98e8b240037c839864789ecc95d3a12af833533450a01d8f88a9`，dev.7 为 `b5ceeab9ae38e383d33ddb9535e04b9d944ba1890801bddbd2f355e58d8d5a31`；旧 App/tools3 的 tar 与 release 描述原字节保留，没有覆盖或重签旧版本。
+
+静态命令为根 `pnpm run check`、`pnpm run build`、`pnpm run format:all:check`、`git diff --check`，最终日志使用任务目录下 integration-*-final.log。新增正式用例覆盖 schema/版本、runtime 隔离、共享包、子操作快照、并发 asset、安装迁移与恢复、ACK、审批摘要、实际 iframe 表单/批准及模型 checkpoint，按 D17 留待正式远程运行。历史数据库完整升级/备份恢复、并发撤权/未知效果、长日志控制延迟和资源峰值、第三方真实 Provider 效果及移动真机仍不由本轮有限链路证明。专用目录、数据库、包和运行环境保留至用户通知清理。
+
 ## 连接发起期间保留最新选择（2026-11-06）
 
 基于 `main/378083190cba468ed69dad892c0810b33e9f2edd` 的未提交工作区，保留前序变更。确认根因是异步的连接配置读取、顺序批量连接和标签预布局没有共用选择次序：旧查询晚返回后调用普通打开，会把刚创建的会话设为当前标签；批量里的后续连接也能覆盖用户的新选择。普通已注册SSH握手完成本身不写activeId，避免把网络耗时误当成唯一根因。
@@ -1856,3 +1956,32 @@ Node 26.13.0/pnpm 12.16.1；`build.log` 与 `browser.log` 包含 Shared、Backen
 ## 非 Agent main amd64 dev 发布（2026-11-06）
 
 [发布42307601610](https://github.com/0honus0/nexus-terminal/actions/runs/42307601610)成功，来源`9fd223a38c675c5fb4097e649b7edda00895158d`，与完整680项E2E的379af20a仅差耗时估算。`ghcr.io/0honus0/nexus-terminal:dev`与`sha-9fd223a38c67`均为`sha256:8eca2327e9d597875ef3525c780b85a9a738e086e782d1a048bc5c7514dd271f`；linux/amd64平台manifest为`sha256:d6596123615d4a531026395bf76e260420050200e7bc2a62e0ae5752819cdaa8`。OCI revision与来源匹配，生产依赖审计无已知漏洞。证据在non-agent-fixes-20261106/publication；只读manifest/config，未拉取完整镜像、未更新远程生产服务。Agent重构继续本地推进，本镜像不含中间源码。
+
+## iPhone Chrome 终端空格输入（2026-11-07）
+
+用户报告苹果手机Chrome普通空格无法输入，未补充其它输入框位置。实际排查TerminalView→xterm→onData→原TerminalChannel，应用没有trim或空格快捷键拦截；xterm6.0.0的229按键计时器可能早于textarea变更，而原input处理又跳过同一按键周期的composed事件。参考上游[问题5835](https://github.com/xtermjs/xterm.js/issues/5835)、[PR5836](https://github.com/xtermjs/xterm.js/pull/5836)和[问题6078](https://github.com/xtermjs/xterm.js/issues/6078)；5836检索时仍未合并，不宣称正式上游已修复。
+
+既有依赖补丁保留原渲染修复，新增229周期共用基线：input/keyup/原计时器互相去重，按完整码点交付变化后缀及对应退格，compositionstart/普通按键清理旧周期；失焦、禁用输入和销毁终端同时清除基线及计时器。内部接口、源码与ESM/UMD产物同步，pnpm锁文件固定新补丁哈希。TerminalView和UI未改，无数据库变更。
+
+证据归`/home/honus/nexus-task-artifacts/ios-terminal-space-20261107`，Node26.13.0/pnpm12.16.1，main/9fd223a3混合工作区；Agent重构内容保留，未提交推送发布。
+
+- 指定CDP`172.30.30.11:9223`、`https://api.honus.top`测试环境，Windows Chrome156。`baseline.json`记录timer先于input的空格漏发，`fixed.json`与`umd.json`记录修复后两种产物均只发送一个空格。
+- `component-regression-final.log`和JSON：直接执行正式terminal-lifecycle源码中8项新增场景，以Vite模块加载真实TerminalView，包含四种事件顺序下各三个连续空格、中文标点/emoji后缀替换与删除、中文composition/无keydown emoji/非composed事件/真实桌面键盘去重、离开终端后的迟到输入、失焦/禁用输入后再返回的旧基线清理。全部通过，无pageerror；该定向CDP运行未启动正式E2E后端夹具，不称正式整轮E2E或iPhone真机验收。
+- `check.log`根check、`build-frontend.log`前端生产构建、`test-lint.log`专项ESLint通过。`install-frozen.log`离线冻结安装通过，`patch-verification.json`核对全部9份修改后的依赖文件与候选逐字节一致；格式和diff检查通过。
+
+手机真机输入法、其它普通输入框、正式远程E2E与发布仍未验证；桌面CDP事件回放不能代替iPhone物理键盘/输入法组合。测试现场保留至用户通知清理。
+
+## Agent SDK4 最终收尾回归（2026-11-07）
+
+本轮基于独立插件仓 `0bf6cbb019a98cfecff9d194c5d4fa2dc1325c80`，Agent 2.0.1 与其余七包的正式 Actions 签名产物验证。插件 [Validate 42388106829](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42388106829) 与 [Agent 签包 42388935062](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42388935062) 成功；发布仍待完整本体验收，不把 draft 当作市场已更新。App 的16项单测及八包行为测试已通过，签名包逐文件hash、Ed25519与原始tar摘要均已核对。
+
+本地 Node26.13.0 / pnpm12.16.1、短TMPDIR隔离回归，证据集中于 `final-implementation/delivery-20261107`：
+
+- `backend-owner-settlement-final.log`：44项通过，包含三种真实SQLite提交确认丢失和原receipt/执行围栏保留。
+- `owners-backup-final-fourth.log`：54项全部通过，无skip/cancel，覆盖真实SSH传输故障、后台Job、未受信主机、旧目标批准、权限监控排空、跨实例备份/真实秘密与插件原包恢复、multipart大文件拒绝。
+- `owners-backup-browser-final-third.log`中的真实签名sandbox/MessagePort/WS组：14个子场景全部通过，含33个请求、9个独立订阅、晚事件与consumer关闭；该组合其它失败已在上述第四轮修复，不能将第三轮整组称通过。
+- `browser-acp-denied-final.log`：真实浏览器拒绝ACP内层权限后，精确响应交付、远端进程退出及无越权写入通过。
+
+本轮修复订阅回调误继承HTTP临时SQLite准入、提交确认丢失后Run永远running、协议关闭覆盖在途权限核对故障、旧目标批准仍可同意，以及快照表列顺序遗漏。普通HTTP拒绝在大上传尚未完成时采用正常写端关闭，避免提前reset吞掉安全拒绝响应。通用Operation和真实Job/资源围栏替代旧工具表断言，不恢复旧运行协议。
+
+首次全目录Node探测889项包含173失败与8取消，并非通过；其中构建并发污染、专用环境依赖和旧夹具问题分别保留日志，后续仅在冻结dist后执行定向回归。正式远程矩阵、指定CDP最终验收和镜像发布在本节后续补齐，不继承旧680项基线。

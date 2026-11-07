@@ -1,8 +1,15 @@
+import type { RegistryDefinition } from '../registry/model/registry-types.js';
+import type { PluginCallableInput, PluginCapabilityReply, PluginCapabilityRequest } from './plugin-invocation-types.js';
+import type { HostOperationResult } from '../../tools/model/host-operation-result.js';
+import type { AgentPluginHostOperationName } from '@nexus-terminal/shared/agent/plugins/values';
+import type { PluginSignedContribution, PluginPackageDependency } from './plugin-manifest-types.js';
 import type { AgentPluginRuntimeState } from '@nexus-terminal/shared/agent/plugins/runtime-values';
 import type { PluginIntentRpcInput, PluginIntentRpcResult } from './plugin-intent-types.js';
 import type { AgentCapability } from '@nexus-terminal/shared/agent/governance/values';
 import type {
 	AgentPluginStageStatus,
+	AgentPluginContributionKind,
+	AgentPluginCompatibilityReason,
 	AgentPluginInstallationStatus,
 } from '@nexus-terminal/shared/agent/plugins/values';
 
@@ -12,6 +19,13 @@ export interface PluginActor {
 }
 
 export type DrainPluginRuns = (userId: number, appId: string) => Promise<void>;
+
+export interface PluginRuntimeRetirementScope {
+	userId: number;
+	appId: string;
+	instanceId: string;
+	generation: string;
+}
 
 export interface PluginAppInitialization {
 	enabled: boolean;
@@ -30,12 +44,25 @@ export interface PluginContent {
 }
 
 export interface PluginFrontendDescriptor {
+	purpose: 'app' | 'settings';
+	instanceId: string;
+	package: import('./plugin-composition-types.js').PluginPackageReference;
+	uiRevision: number;
 	appId: string;
 	version: string;
 	grant: string;
 	entry: string;
 	expiresAt: number;
 }
+
+export type PluginFrontendGrant = {
+	actor: PluginActor;
+	appId: string;
+	packageId: string;
+	version: string;
+	revision: number;
+	expiresAt: number;
+} & ({ purpose: 'app' } | { purpose: 'settings'; instanceId: string; schemaRevision: number });
 
 export interface PluginPublisher {
 	keyId: string;
@@ -47,15 +74,22 @@ export interface PluginPublisher {
 }
 
 export interface PluginManifest {
-	schemaVersion: 1;
+	schemaVersion: 4;
 	id: string;
 	version: string;
 	displayName: string;
-	sdkVersion: '1';
+	compatibility: {
+		host: { minVersion: string; maxVersion: string };
+		backendSdk: number | null;
+		frontendSdk: number | null;
+	};
+	contributions: PluginSignedContribution;
 	capabilities: AgentCapability[];
 	intents: { id: string; schemaVersion: number }[];
 	frontendEntry: string | null;
 	backendEntry: string | null;
+	dependencies: PluginPackageDependency[];
+	namespaces: string[];
 }
 
 export interface PluginStage {
@@ -108,6 +142,9 @@ export interface PluginDataMutation {
 }
 
 export type PluginRpcInput =
+	| { method: 'settings.read' }
+	| { method: 'settings.write'; command: import('./plugin-instance-types.js').PluginConfigurationWrite }
+	| { method: 'host.perform'; operation: AgentPluginHostOperationName; argumentsJson: string }
 	| { method: 'host.appInfo' }
 	| { method: 'storage.get'; key: string }
 	| { method: 'storage.put'; key: string; expectedVersion: number; operationId: string; valueJson: string }
@@ -115,6 +152,9 @@ export type PluginRpcInput =
 	| PluginIntentRpcInput;
 
 export type PluginRpcResult =
+	| { method: 'settings.read'; value: import('./plugin-instance-types.js').PluginInstanceSource }
+	| { method: 'settings.write'; value: import('./plugin-instance-types.js').PluginConfiguration }
+	| { method: 'host.perform'; value: HostOperationResult }
 	| { method: 'host.appInfo'; value: PluginInstallation }
 	| { method: 'storage.get'; value: PluginData | null }
 	| { method: 'storage.put' | 'storage.delete'; value: PluginData }
@@ -127,7 +167,6 @@ export interface PluginDataPurge {
 }
 
 export interface PluginPackageSource {
-	agentContribution: import('./plugin-contribution-types.js').PluginAgentContribution | null;
 	installation: PluginInstallation;
 	manifest: PluginManifest;
 	files: { path: string; bytes: Uint8Array; sha256: string }[];
@@ -135,19 +174,24 @@ export interface PluginPackageSource {
 
 export interface PluginRuntimeInstance {
 	readonly exited: Promise<void>;
-
-	activate(): Promise<void>;
-	health(): Promise<boolean>;
-	agent(
-		input: import('./plugin-contribution-types.js').PluginAgentInvocation,
+	activate(): Promise<RegistryDefinition[]>;
+	releaseResources(runId: string, deadlineUnixMs: number): Promise<void>;
+	invokeCallable(
+		input: PluginCallableInput,
 		signal: AbortSignal,
 		timeoutMs: number,
+		call: (input: PluginCapabilityRequest) => Promise<PluginCapabilityReply>,
 	): Promise<string>;
+	health(): Promise<boolean>;
 	quiesce(deadline: number): Promise<void>;
 	close(): Promise<void>;
 }
 
 export interface PluginRuntimeLease {
+	generation: string;
+	logicalInstanceId: string;
+	configurationRevision: number;
+	packageId: string;
 	userId: number;
 	appId: string;
 	instanceId: string;
@@ -155,7 +199,12 @@ export interface PluginRuntimeLease {
 }
 
 export interface PluginRuntimeOwner {
-	agentLane: Promise<void>;
+	logicalInstanceId: string;
+	configurationRevision: number;
+	generation: string;
+	withdrawRegistrations: (() => void) | null;
+	runtimeKey: string;
+	packageId: string;
 	instanceId: string;
 	userId: number;
 	appId: string;
@@ -177,10 +226,14 @@ export interface PluginRepositorySettings {
 }
 
 export interface PluginCatalogEntry {
-	appId: string;
+	packageId: string;
 	version: string;
-	sdkVersion: string;
-	nexus: { minVersion: string; maxVersion: string };
+	compatibility: {
+		host: { minVersion: string; maxVersion: string };
+		backendSdk: number | null;
+		frontendSdk: number | null;
+	};
+	contributionKinds: AgentPluginContributionKind[];
 	displayName: string;
 	description: string;
 	packageUrl: string;
@@ -188,6 +241,7 @@ export interface PluginCatalogEntry {
 	sizeBytes: number;
 	publisherKeyId: string;
 	compatible: boolean;
+	compatibilityReason: AgentPluginCompatibilityReason | null;
 }
 
 export interface PluginCatalog {
@@ -198,7 +252,8 @@ export interface PluginCatalog {
 
 export interface PluginCatalogStage {
 	repositoryUrl: string;
-	appId: string;
+	publisherKeyId: string;
+	packageId: string;
 	version: string;
 }
 

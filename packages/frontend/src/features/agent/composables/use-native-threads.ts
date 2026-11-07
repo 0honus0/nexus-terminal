@@ -16,6 +16,7 @@ export function useNativeThreads(
 	active: () => boolean,
 	select: (value: NativeThread | null) => void,
 	removed: (threadId: string) => void,
+	restoreThreadId?: () => string | null,
 ) {
 	const items = ref<NativeThread[]>([]);
 	const observedThread = ref<NativeThread | null>(null);
@@ -74,6 +75,7 @@ export function useNativeThreads(
 	async function refresh(): Promise<void> {
 		const background =
 			loaded.value && pending.value === null && pendingDelete.value === null && !operation.refreshRequired.value;
+		const restoreId = !loaded.value ? (restoreThreadId?.() ?? null) : null;
 		const lastLoadedId = items.value.reduce((last, item) => (item.id > last ? item.id : last), '');
 		await operation.execute(
 			async (signal) => {
@@ -81,7 +83,11 @@ export function useNativeThreads(
 				let page = await api.list(current, null, AGENT_THREAD_MAX_PAGE, signal);
 				const refreshed = [...page.items];
 				// Revalidate the loaded range without dropping later pages when the Hub reopens.
-				while (page.nextCursor !== null && page.nextCursor < lastLoadedId) {
+				while (
+					page.nextCursor !== null &&
+					(page.nextCursor < lastLoadedId ||
+						(restoreId !== null && !refreshed.some((item) => item.id === restoreId)))
+				) {
 					page = await api.list(current, page.nextCursor, AGENT_THREAD_MAX_PAGE, signal);
 					refreshed.push(...page.items);
 				}
@@ -128,9 +134,9 @@ export function useNativeThreads(
 					selected.value === null &&
 					items.value.length > 0
 				) {
-					const newest = items.value.reduce((latest, item) =>
-						item.updatedAt > latest.updatedAt ? item : latest,
-					);
+					const newest =
+						items.value.find((item) => item.id === restoreId) ??
+						items.value.reduce((latest, item) => (item.updatedAt > latest.updatedAt ? item : latest));
 					selected.value = newest;
 					title.value = newest.title;
 					select(newest);

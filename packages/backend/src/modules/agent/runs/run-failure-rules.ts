@@ -75,6 +75,10 @@ export function runFailureCode(error: unknown, tool = false, timedOut = false): 
 			return 'execution_failed';
 		}
 		switch (error.code) {
+			case 'target_denied':
+				return 'tool_target_denied';
+			case 'version_conflict':
+				return 'tool_invalid_input';
 			case 'mutation_busy':
 				return 'tool_machine_busy';
 			case 'mutation_blocked':
@@ -101,6 +105,8 @@ export function runFailureCode(error: unknown, tool = false, timedOut = false): 
 	}
 	if (error instanceof AgentFailure) {
 		switch (error.code) {
+			case 'host_key_untrusted':
+				return 'tool_host_untrusted';
 			case 'forbidden':
 				return tool ? 'tool_not_authorized' : 'execution_not_authorized';
 			case 'capability_undeclared':

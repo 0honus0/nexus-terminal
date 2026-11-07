@@ -1,3 +1,4 @@
+import type { MachineProcessChannel, MachineProcessRequest } from '../model/operation-types.js';
 import type {
 	ReadTextPageRequest,
 	ReadTextPageResult,
@@ -7,9 +8,8 @@ import type {
 import { inspectTextPage, inspectDirectoryPage } from '../../files/service/file-inspection.js';
 import type { MachineMutationService } from './mutation-service.js';
 import { isWellFormedFileText } from '@nexus-terminal/shared/remote/files/text-codec';
+import { REMOTE_FILE_MAX_PATH_BYTES } from '@nexus-terminal/shared/remote/files/values';
 import { createHash, randomUUID } from 'node:crypto';
-import type { MachineAcpModel } from '../model/acp-model.js';
-import type { ExecuteAcpRequest, ExecuteAcpResult } from '../model/operation-types.js';
 import type { MachineCommandModel } from '../model/command-model.js';
 import type { RemoteMachineScopeModel } from '../model/machine-scope-model.js';
 import type {
@@ -21,7 +21,7 @@ import type {
 	DockerControlResult,
 } from '../model/operation-types.js';
 import { ObservationFailure } from '../../monitoring/model/observation-types.js';
-import { capturePath } from '../../files/service/file-snapshot.js';
+import { capturePath, requireMissingPath } from '../../files/service/file-snapshot.js';
 import { patchInspectedText, moveInspectedPath, deleteInspectedPath } from '../../files/service/file-mutation.js';
 import type {
 	InspectPathResult,
@@ -62,12 +62,10 @@ function validateCommand(input: {
 }): void {
 	const args = input.command.kind === 'argv' ? input.command.argv : [input.command.script];
 	const invalidProgram =
-		input.command.kind === 'argv' &&
-		(!input.command.argv[0] || input.command.argv[0].startsWith('-') || args.length > 128);
+		input.command.kind === 'argv' && (!input.command.argv[0] || input.command.argv[0].startsWith('-'));
 	const invalidContent =
 		!args.length ||
 		args.some((text) => !isWellFormedFileText(text) || text.includes('\0')) ||
-		args.reduce((bytes, text) => bytes + Buffer.byteLength(text, 'utf8'), 0) > 8192 ||
 		(input.command.kind === 'shell' && !input.command.script);
 	const cwd = input.cwd;
 	const invalidDirectory =
@@ -76,7 +74,7 @@ function validateCommand(input: {
 			cwd.split('/').includes('..') ||
 			/[\u0000-\u001f\u007f]/u.test(cwd) ||
 			!isWellFormedFileText(cwd) ||
-			Buffer.byteLength(cwd, 'utf8') > 256);
+			Buffer.byteLength(cwd, 'utf8') > REMOTE_FILE_MAX_PATH_BYTES);
 	if (invalidProgram || invalidContent || invalidDirectory) {
 		throw new RemoteFileFailure('invalid_input');
 	}
@@ -96,7 +94,6 @@ export class RemoteMachineOperationService {
 		private readonly files: RemoteFileModel,
 		private readonly observations: ObservationModel,
 		private readonly commands: MachineCommandModel,
-		private readonly acp: MachineAcpModel,
 		private readonly mutations: MachineMutationService,
 		private readonly machines: RemoteMachineScopeModel,
 		private readonly changed: () => void = () => {},
@@ -118,6 +115,7 @@ export class RemoteMachineOperationService {
 		scope: MachineOperationScope,
 		work: (signal: AbortSignal, remaining: () => number, validate: () => Promise<void>) => Promise<T>,
 		mutation = false,
+		validateResult = true,
 	): Promise<T> {
 		if (this.closing || this.cleanupFailures.length >= 8) {
 			throw new RemoteFileFailure('remote_unavailable');
@@ -168,7 +166,9 @@ export class RemoteMachineOperationService {
 				const execute = async () => {
 					const result = await work(controller.signal, remaining, validate);
 					try {
-						await validate();
+						if (validateResult) {
+							await validate();
+						}
 					} catch (cause) {
 						if (mutation) {
 							throw new RemoteFileFailure('operation_unknown', { cause });
@@ -208,6 +208,7 @@ export class RemoteMachineOperationService {
 		scope: MachineOperationScope,
 		work: (context: FileInspectionContext) => Promise<T>,
 		mutation = false,
+		validateResult = true,
 	): Promise<T> {
 		return this.admitted(
 			scope,
@@ -309,6 +310,10 @@ export class RemoteMachineOperationService {
 		});
 	}
 
+	assertMissingPath(scope: MachineOperationScope, path: string): Promise<void> {
+		return this.withFiles(scope, (context) => requireMissingPath(context, path));
+	}
+
 	patchText(scope: MachineOperationScope, request: PatchTextRequest): Promise<WriteTextResult> {
 		return this.withFiles(scope, (context) => patchInspectedText(context, request), true);
 	}
@@ -387,20 +392,19 @@ export class RemoteMachineOperationService {
 		});
 	}
 
-	executeAcp(scope: MachineOperationScope, input: ExecuteAcpRequest): Promise<ExecuteAcpResult> {
+	withProcess(
+		scope: MachineOperationScope,
+		input: MachineProcessRequest,
+		consume: (channel: MachineProcessChannel) => Promise<void>,
+	): Promise<void> {
 		validateCommand({ command: { kind: 'argv', argv: input.argv }, cwd: input.cwd });
-		if (
-			!input.prompt.trim() ||
-			!isWellFormedFileText(input.prompt) ||
-			input.prompt.includes('\0') ||
-			Buffer.byteLength(input.prompt, 'utf8') > 8192
-		) {
+		if (!Number.isSafeInteger(input.maxReadBytes) || input.maxReadBytes < 1) {
 			throw new RemoteFileFailure('invalid_input');
 		}
 		return this.admitted(
 			scope,
 			(signal, remaining, validate) =>
-				this.acp.execute(
+				this.commands.withProcess(
 					{
 						operationId: scope.operationId,
 						targetId: scope.targetId,
@@ -410,10 +414,10 @@ export class RemoteMachineOperationService {
 						validate,
 					},
 					input,
-					32 * 1024,
-					{ name: 'nexus-terminal', version: '1' },
+					consume,
 				),
 			true,
+			false,
 		);
 	}
 

@@ -13,8 +13,6 @@ import { MutationRecoveryService } from './machines/service/mutation-recovery-se
 import { createMutationHttpRoutes } from './interfaces/http/mutation-http.js';
 import { SecureSessionTokens } from '../../platform/security/adapters/secure-session-tokens.js';
 import type { SqlExecutor } from '../../platform/storage/sqlite/sql-types.js';
-import { MachineAcpModel } from './machines/model/acp-model.js';
-import { NdjsonAcpAdapter } from '../../platform/acp/adapters/ndjson-acp.js';
 import { MachineCommandModel } from './machines/model/command-model.js';
 import { PosixCommandAdapter } from '../../platform/commands/adapters/posix-command.js';
 import { RemoteMachineOperationService } from './machines/service/operation-service.js';
@@ -222,7 +220,6 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 			createFileModel(scoped),
 			createObservationModel(scoped),
 			new MachineCommandModel(scoped, new PosixCommandAdapter()),
-			new MachineAcpModel(scoped, new PosixCommandAdapter(), new NdjsonAcpAdapter()),
 			mutations,
 			scoped,
 			changed,

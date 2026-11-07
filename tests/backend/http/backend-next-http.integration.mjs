@@ -212,6 +212,17 @@ await test('B10 installed backend-next HTTP, durable state and model execution',
 					'version_conflict',
 				);
 				agentApp = await createTestAgentApp(api, directory, 'B10 app');
+				const policy = expectStatus(await api('GET', `/api/v1/agent/apps/${agentApp.id}/grants`), 200);
+				expectStatus(
+					await api('PUT', `/api/v1/agent/apps/${agentApp.id}/grants`, {
+						expectedPolicyRevision: policy.policyRevision,
+						grants: ['plugin.invoke', 'context.read'].map((capability) => ({
+							capability,
+							scope: { kind: 'global' },
+						})),
+					}),
+					200,
+				);
 				thread = expectStatus(
 					await api('POST', `/api/v1/agent/apps/${agentApp.id}/threads`, { title: 'B10 thread' }),
 					201,
@@ -221,7 +232,15 @@ await test('B10 installed backend-next HTTP, durable state and model execution',
 					prompt: 'hello',
 					approvalMode: 'ask',
 					connectionIds: [],
-					model: { providerId: provider.id, modelId: 'fixture', configurationVersion: provider.version },
+					inputJson: JSON.stringify({
+						model: {
+							providerId: provider.id,
+							modelId: 'fixture',
+							configurationVersion: provider.version,
+							reasoningEffort: null,
+						},
+						artifacts: [],
+					}),
 				};
 				assert.equal(
 					expectStatus(await api('POST', runPath, input, { 'Idempotency-Key': randomUUID() }), 403).code,
@@ -248,7 +267,15 @@ await test('B10 installed backend-next HTTP, durable state and model execution',
 					prompt: 'complete once',
 					approvalMode: 'ask',
 					connectionIds: [],
-					model: { providerId: provider.id, modelId: 'fixture', configurationVersion: provider.version },
+					inputJson: JSON.stringify({
+						model: {
+							providerId: provider.id,
+							modelId: 'fixture',
+							configurationVersion: provider.version,
+							reasoningEffort: null,
+						},
+						artifacts: [],
+					}),
 				};
 				const headers = { 'Idempotency-Key': randomUUID() };
 				const created = readAgentCreateRunResponse(expectStatus(await api('POST', path, input, headers), 201));
@@ -289,7 +316,15 @@ await test('B10 installed backend-next HTTP, durable state and model execution',
 					prompt: 'hold until cancellation',
 					approvalMode: 'ask',
 					connectionIds: [],
-					model: { providerId: provider.id, modelId: 'fixture', configurationVersion: provider.version },
+					inputJson: JSON.stringify({
+						model: {
+							providerId: provider.id,
+							modelId: 'fixture',
+							configurationVersion: provider.version,
+							reasoningEffort: null,
+						},
+						artifacts: [],
+					}),
 				};
 				const created = readAgentCreateRunResponse(
 					expectStatus(await api('POST', path, input, { 'Idempotency-Key': randomUUID() }), 201),
@@ -391,7 +426,7 @@ await test('B10 installed backend-next HTTP, durable state and model execution',
 					}),
 					200,
 				);
-				assert.equal(restored.restoredTables, 90);
+				assert.equal(restored.restoredTables, 123);
 				assert.ok(restored.restoredRows > 0);
 				assert.equal(typeof restored.cleanupPending, 'boolean');
 				assert.deepEqual(expectStatus(await api('GET', '/api/v1/quick-commands'), 200).entries, [command]);

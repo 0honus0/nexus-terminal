@@ -7,7 +7,6 @@ import type {
 import type { AgentPluginIntentReceipt } from './intent-model.js';
 import {
 	AGENT_PLUGIN_INTENT_MAX_INPUT_BYTES,
-	AGENT_PLUGIN_INTENT_MAX_ARTIFACTS,
 	AGENT_PLUGIN_INTENT_MAX_PAGE,
 	AGENT_PLUGIN_INTENT_MAX_BODY_BYTES,
 	AGENT_PLUGIN_INTENT_MAX_RESPONSE_BYTES,
@@ -31,18 +30,24 @@ const RESERVED_PAYLOAD_FIELDS = new Set([
 ]);
 
 /** Intents carry explicit public JSON, never an implicit credential/context transfer. */
-function validatePayload(value: unknown, depth = 0): void {
-	if (depth > 32 || (typeof value === 'number' && !Number.isFinite(value))) {
-		throw new InvalidAgentPayload();
-	}
-	if (Array.isArray(value)) {
-		value.forEach((item) => validatePayload(item, depth + 1));
-	} else if (value !== null && typeof value === 'object') {
-		for (const [key, child] of Object.entries(value)) {
-			if (RESERVED_PAYLOAD_FIELDS.has(key.toLowerCase().replace(/[^a-z0-9]/gu, ''))) {
-				throw new InvalidAgentPayload();
+function validatePayload(value: unknown): void {
+	const pending: unknown[] = [value];
+	while (pending.length) {
+		const current = pending.pop();
+		if (typeof current === 'number' && !Number.isFinite(current)) {
+			throw new InvalidAgentPayload();
+		}
+		if (Array.isArray(current)) {
+			for (const child of current) {
+				pending.push(child);
 			}
-			validatePayload(child, depth + 1);
+		} else if (current !== null && typeof current === 'object') {
+			for (const [key, child] of Object.entries(current)) {
+				if (RESERVED_PAYLOAD_FIELDS.has(key.toLowerCase().replace(/[^a-z0-9]/gu, ''))) {
+					throw new InvalidAgentPayload();
+				}
+				pending.push(child);
+			}
 		}
 	}
 }
@@ -61,7 +66,7 @@ export function readAgentPluginIntentJson(input: unknown): string {
 }
 
 function artifactIds(input: unknown): string[] {
-	if (!Array.isArray(input) || input.length > AGENT_PLUGIN_INTENT_MAX_ARTIFACTS) {
+	if (!Array.isArray(input)) {
 		throw new InvalidAgentPayload();
 	}
 	const ids = input.map(readAgentId);

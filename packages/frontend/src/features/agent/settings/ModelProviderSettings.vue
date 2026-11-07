@@ -27,7 +27,6 @@
 		AGENT_PROVIDER_MAX_SECRET_BYTES,
 		AGENT_PROVIDER_MAX_URL_BYTES,
 		AGENT_MODEL_CAPABILITY_FIELDS,
-		AGENT_PROVIDER_MODEL_LIMIT,
 	} from '@nexus-terminal/shared/agent/providers/values';
 	import type {
 		AgentModelCapabilityField,
@@ -56,7 +55,6 @@
 		busy,
 		blocked,
 		refreshRequired,
-		notice,
 		edit,
 		cancel,
 		load,
@@ -243,12 +241,6 @@
 
 		if (value.models.length === 0) {
 			messages.add(t('agent.settings.providerManagement.validation.modelsRequired'));
-		} else if (value.models.length > AGENT_PROVIDER_MODEL_LIMIT) {
-			messages.add(
-				t('agent.settings.providerManagement.validation.modelLimit', {
-					max: AGENT_PROVIDER_MODEL_LIMIT,
-				}),
-			);
 		}
 
 		const idCounts = new Map<string, number>();
@@ -338,7 +330,7 @@
 	}
 
 	function appendModel(found?: DiscoveredProviderModel): ProviderModelDraft | undefined {
-		if (!draft.value || blocked.value || draft.value.models.length >= AGENT_PROVIDER_MODEL_LIMIT) {
+		if (!draft.value || blocked.value) {
 			return;
 		}
 		if (found && draft.value.models.some((model) => model.id === found.id)) {
@@ -395,10 +387,6 @@
 				discoveredSelection[kind].includes(found.id) &&
 				!draft.value?.models.some((model) => model.id === found.id),
 		);
-		if (draft.value.models.length + additions.length > AGENT_PROVIDER_MODEL_LIMIT) {
-			notice.value = 'capacity';
-			return;
-		}
 		const added: ProviderModelDraft[] = [];
 		for (const found of additions) {
 			const model = appendModel(found);
@@ -992,9 +980,9 @@
 							<h4 class="flex min-w-0 flex-1 items-center gap-2 text-xs font-semibold text-foreground">
 								<i class="fa-solid fa-brain text-[11px] text-primary" aria-hidden="true"></i>
 								<span class="truncate">{{ t('agent.settings.providers.configuredModels') }}</span>
-								<UiBadge appearance="ghost" density="compact" class="shrink-0 font-mono"
-									>{{ draft.models.length }} / {{ AGENT_PROVIDER_MODEL_LIMIT }}</UiBadge
-								>
+								<UiBadge appearance="ghost" density="compact" class="shrink-0 font-mono">{{
+									draft.models.length
+								}}</UiBadge>
 							</h4>
 							<UiButton
 								type="button"
@@ -1058,7 +1046,6 @@
 										appearance="soft"
 										density="compact"
 										class="provider-model-group__action"
-										:disabled="draft.models.length >= AGENT_PROVIDER_MODEL_LIMIT"
 										@click="
 											addModel(
 												undefined,
@@ -1219,10 +1206,7 @@
 											appearance="solid"
 											tone="primary"
 											:disabled="
-												blocked ||
-												!draft ||
-												discoveredSelection[group.kind].length === 0 ||
-												draft.models.length >= AGENT_PROVIDER_MODEL_LIMIT
+												blocked || !draft || discoveredSelection[group.kind].length === 0
 											"
 											@click="addSelected(group.kind)"
 										>

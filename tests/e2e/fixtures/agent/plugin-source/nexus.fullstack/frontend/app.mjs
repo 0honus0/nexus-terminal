@@ -1,4 +1,4 @@
-import { connectNexusPlugin } from '/sdk/frontend-v1.mjs';
+import { connectNexusPlugin } from '/sdk/frontend-v4.mjs';
 
 const frontendStatus = document.querySelector('[data-testid="fullstack-frontend-status"]');
 const backendStatus = document.querySelector('[data-testid="fullstack-backend-status"]');
@@ -10,10 +10,18 @@ try {
 	const app = await nexus.request({ method: 'host.appInfo', params: {} });
 	if (app.method !== 'host.appInfo') throw new Error('Unexpected App response');
 	frontendStatus.textContent = `frontend:ready:${app.value.appId}@${app.value.version}`;
-	const backend = await nexus.request({ method: 'storage.get', params: { key: 'backend.status' } });
-	if (backend.method !== 'storage.get') throw new Error('Unexpected storage response');
-	const value = backend.value?.valueJson ? JSON.parse(backend.value.valueJson) : null;
-	backendStatus.textContent = value?.state === 'active' ? 'backend:active' : 'backend:missing';
+ const threads = await nexus.request({method:'agent.threads.list',params:{after:null,limit:50}});
+ if (threads.method !== 'agent.threads.list' || !threads.value.items.length) throw new Error('Backend probe thread missing');
+ const runs = await nexus.request({method:'agent.runs.list',params:{threadId:threads.value.items[0].id,after:0,limit:100}});
+ if (runs.method !== 'agent.runs.list') throw new Error('Backend probe runs missing');
+ const run = runs.value.items.find((item) => item.status === 'completed');
+ if (!run) throw new Error('Backend probe has not completed');
+ const outputs = await nexus.request({method:'agent.runs.outputs',params:{runId:run.id}});
+ if (outputs.method !== 'agent.runs.outputs' || outputs.value?.length !== 1) throw new Error('Backend output missing');
+ const page = await nexus.request({method:'agent.content.read',params:{runId:run.id,reference:outputs.value[0],index:0}});
+ if (page.method !== 'agent.content.read' || page.value.nextIndex !== null) throw new Error('Unexpected probe output');
+ const value = JSON.parse(page.value.text);
+ backendStatus.textContent = value.state === 'active' ? 'backend:active' : 'backend:missing';
 	writeButton.addEventListener('click', async () => {
 		writeButton.disabled = true;
 		try {

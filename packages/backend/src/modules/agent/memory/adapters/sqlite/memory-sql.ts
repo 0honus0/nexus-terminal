@@ -1,3 +1,4 @@
+import { currentOperation } from '../../../operations/adapters/sqlite/current-operation-sql.js';
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 import type { AgentMemoryStatus } from '@nexus-terminal/shared/agent/memory/values';
@@ -11,9 +12,7 @@ import type {
 	StoredMemory,
 } from '../../storage/memory-storage.js';
 import { MemoryStorageRefusal } from '../../storage/memory-storage.js';
-import { memoryRow, memoryInteger } from './memory-row.js';
-import { currentParticipant } from '../../../runs/adapters/sqlite/run-participant-sql.js';
-import { toolOperation } from '../../../runs/adapters/sqlite/run-tool-row.js';
+import { memoryRow } from './memory-row.js';
 
 async function getMemory(tx: SqlExecutor, scope: StoredMemoryScope, id: string): Promise<StoredMemory | null> {
 	const row = await tx.one('SELECT * FROM agent_memories WHERE user_id=? AND app_id=? AND id=?', [
@@ -80,30 +79,20 @@ export class SqliteMemoryStorage implements MemoryStorage {
 			}
 			identityUserId = await this.readIdentity(tx, auth.digest);
 		} else {
-			const operation = await toolOperation(tx, scope.userId, scope.appId, auth.runId, auth.operationId);
-			// All authority revocations fence the Run in the same transaction. A dispatched
-			// operation cannot outlive that fence or substitute another operation identity.
-			const current =
-				operation !== null &&
-				operation.state === 'dispatched' &&
-				operation.operationHash === auth.operationHash &&
-				(await currentParticipant(
-					tx,
-					{ userId: scope.userId, appId: scope.appId, runId: auth.runId },
-					Date.now,
-					operation.toolName,
-					operation.modelStepIndex,
-				));
+			const current = await currentOperation(
+				tx,
+				{
+					userId: scope.userId,
+					appId: scope.appId,
+					runId: auth.runId,
+					operationId: auth.operationId,
+					operationHash: auth.operationHash,
+				},
+				{ labels: ['memory.propose', 'memory.retrieve'] },
+			);
 			identityUserId = current ? scope.userId : null;
 		}
 		const now = Date.now();
-		const count = await tx.one(
-			"SELECT COUNT(*) AS count FROM agent_memories WHERE user_id=? AND app_id=? AND status!='revoked' AND (expires_at IS NULL OR expires_at>?)",
-			[scope.userId, scope.appId, now],
-		);
-		if (!count) {
-			throw new Error('Memory count missing');
-		}
 		const sourceExists =
 			sourceId === null ||
 			(await tx.one('SELECT id FROM agent_runs WHERE id=? AND user_id=? AND app_id=?', [
@@ -116,7 +105,6 @@ export class SqliteMemoryStorage implements MemoryStorage {
 			enabled: app?.enabled === 1,
 			identityUserId,
 			sourceExists,
-			count: memoryInteger(count.count),
 			now,
 		};
 	}
@@ -213,15 +201,14 @@ export class SqliteMemoryStorage implements MemoryStorage {
 		scope: StoredMemoryScope,
 		auth: StoredMemoryAuthorization,
 		clock: () => number,
-		limit: number,
 		admit: (facts: StoredMemoryFacts) => void,
 	): Promise<StoredMemory[]> {
 		return this.db.transaction(async (tx) => {
 			admit(await this.facts(tx, scope, auth, null));
 			return (
 				await tx.all(
-					"SELECT * FROM agent_memories WHERE user_id=? AND app_id=? AND status='published' AND (expires_at IS NULL OR expires_at>?) ORDER BY reviewed_at DESC,id LIMIT ?",
-					[scope.userId, scope.appId, clock(), limit],
+					"SELECT * FROM agent_memories WHERE user_id=? AND app_id=? AND status='published' AND (expires_at IS NULL OR expires_at>?) ORDER BY reviewed_at DESC,id",
+					[scope.userId, scope.appId, clock()],
 				)
 			).map(memoryRow);
 		});

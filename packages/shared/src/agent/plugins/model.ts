@@ -1,5 +1,10 @@
 import type { AgentCapability } from '../governance/values.js';
-import type { AgentPluginStageStatus, AgentPluginInstallationStatus } from './values.js';
+import type {
+	AgentPluginStageStatus,
+	AgentPluginInstallationStatus,
+	AgentPluginPackageInstallationStatus,
+	AGENT_PLUGIN_FRONTEND_SANDBOX,
+} from './values.js';
 
 export interface AgentPluginPublisher {
 	keyId: string;
@@ -10,16 +15,58 @@ export interface AgentPluginPublisher {
 	revokedAt: number | null;
 }
 
+export interface AgentPluginCompatibility {
+	host: { minVersion: string; maxVersion: string };
+	backendSdk: number | null;
+	frontendSdk: number | null;
+}
+
 export interface AgentPluginManifest {
-	schemaVersion: 1;
+	schemaVersion: 4;
 	id: string;
 	version: string;
 	displayName: string;
-	sdkVersion: string;
+	compatibility: AgentPluginCompatibility;
 	capabilities: AgentCapability[];
 	intents: { id: string; schemaVersion: number }[];
 	frontendEntry: string | null;
 	backendEntry: string | null;
+	contributions: import('./agent-extension.js').AgentPluginContribution;
+	dependencies: import('./agent-extension.js').AgentPluginPackageDependency[];
+	namespaces: string[];
+}
+
+export interface AgentPluginPackageReference {
+	packageId: string;
+	version: string;
+	packageHash: string;
+	publisherKeyId: string;
+}
+
+export interface AgentPluginPackageUpdateDependency {
+	package: AgentPluginPackageReference;
+	installationRevision: number;
+}
+
+export interface AgentPluginPackageInstallation {
+	packageId: string;
+	version: string;
+	packageHash: string;
+	publisherKeyId: string;
+	status: AgentPluginPackageInstallationStatus;
+	revision: number;
+	createdAt: number;
+	updatedAt: number;
+}
+
+export interface AgentPluginAppBinding {
+	appId: string;
+	executionRevision: number;
+	uiRevision: number;
+	app: AgentPluginPackageReference;
+	dependencies: AgentPluginPackageReference[];
+	selectedRootIds: string[];
+	ui: AgentPluginPackageReference | null;
 }
 
 export interface AgentPluginStage {
@@ -53,12 +100,16 @@ export interface AgentPluginVersion {
 }
 
 export interface AgentPluginDescriptor {
+	purpose: 'app' | 'settings';
+	instanceId: string;
 	appId: string;
 	version: string;
 	url: string;
-	sdkVersion: string;
-	protocolVersion: 1;
-	sandbox: 'allow-scripts';
+	sdkVersion: '4';
+	protocolVersion: 4;
+	package: AgentPluginPackageReference;
+	uiRevision: number;
+	sandbox: typeof AGENT_PLUGIN_FRONTEND_SANDBOX;
 	maxMessageBytes: number;
 	requestTimeoutMs: number;
 	expiresAt: number;

@@ -1,13 +1,7 @@
+import { agentPluginCapabilityReplyBytes } from '@nexus-terminal/shared/agent/plugins/runtime-codec';
+import { AGENT_PLUGIN_APP_PAYLOAD_MAX_BYTES } from '@nexus-terminal/shared/agent/plugins/values';
 import { AgentFailure } from '../agent-failure.js';
 import type { PluginSkillDocument, PluginSkill } from './model/plugin-skill-types.js';
-
-export const MAX_PLUGIN_SKILL_DOCUMENTS = 64;
-
-export const MAX_PLUGIN_SKILL_BYTES = 12 * 1024;
-
-const MAX_FRONTMATTER_VALUE_BYTES = 4096;
-const MAX_FRONTMATTER_FIELDS = 32;
-const MAX_FRONTMATTER_METADATA_FIELDS = 64;
 
 interface ParsedFrontmatter {
 	fields: Map<string, string>;
@@ -16,9 +10,6 @@ interface ParsedFrontmatter {
 
 const parseScalar = (raw: string): string => {
 	const value = raw.trim();
-	if (Buffer.byteLength(value, 'utf8') > MAX_FRONTMATTER_VALUE_BYTES) {
-		throw new AgentFailure('invalid_input');
-	}
 	if (value.startsWith('"') || value.endsWith('"')) {
 		if (!(value.startsWith('"') && value.endsWith('"'))) {
 			throw new AgentFailure('invalid_input');
@@ -69,9 +60,6 @@ const blockScalar = (lines: readonly string[], start: number, marker: string): {
 				.replace(/\n{3,}/g, '\n\n')
 		: normalized.join('\n');
 	const value = marker.endsWith('-') ? folded.replace(/\n+$/g, '') : folded;
-	if (Buffer.byteLength(value, 'utf8') > MAX_FRONTMATTER_VALUE_BYTES) {
-		throw new AgentFailure('invalid_input');
-	}
 	return { value, next };
 };
 
@@ -98,9 +86,6 @@ const parseFrontmatter = (header: string): ParsedFrontmatter => {
 		if (fields.has(key) || (key === 'metadata' && metadata.size > 0)) {
 			throw new AgentFailure('invalid_input');
 		}
-		if (fields.size >= MAX_FRONTMATTER_FIELDS) {
-			throw new AgentFailure('invalid_input');
-		}
 
 		if (key === 'metadata' && rawValue.trim() === '') {
 			index += 1;
@@ -114,7 +99,7 @@ const parseFrontmatter = (header: string): ParsedFrontmatter => {
 					break;
 				}
 				const item = /^\s+([A-Za-z0-9_.-]+):(?:\s*(.*))?$/.exec(metadataLine);
-				if (!item || metadata.size >= MAX_FRONTMATTER_METADATA_FIELDS) {
+				if (!item) {
 					throw new AgentFailure('invalid_input');
 				}
 				const metadataKey = item[1];
@@ -142,19 +127,10 @@ const parseFrontmatter = (header: string): ParsedFrontmatter => {
 };
 
 export function parsePluginSkills(documents: PluginSkillDocument[], version: string): PluginSkill[] {
-	if (documents.length > MAX_PLUGIN_SKILL_DOCUMENTS) {
-		throw new AgentFailure('limit_exceeded');
-	}
 	return documents.map((document) => {
 		const match = /^skills\/([a-z0-9]+(?:-[a-z0-9]+)*)\/SKILL\.md$/u.exec(document.path);
 		const end = document.content.indexOf('\n---\n', 4);
-		if (
-			!match ||
-			match[1].length > 64 ||
-			!document.content.startsWith('---\n') ||
-			end < 0 ||
-			Buffer.byteLength(document.content) > MAX_PLUGIN_SKILL_BYTES
-		) {
+		if (!match || match[1].length > 64 || !document.content.startsWith('---\n') || end < 0) {
 			throw new AgentFailure('invalid_input');
 		}
 		const { fields } = parseFrontmatter(document.content.slice(4, end));
@@ -163,7 +139,6 @@ export function parsePluginSkills(documents: PluginSkillDocument[], version: str
 		if (
 			name !== match[1] ||
 			!description?.trim() ||
-			Buffer.byteLength(description) > 1024 ||
 			/[\u0000-\u001f\u007f]/u.test(name) ||
 			description.includes('\0') ||
 			[...fields.keys()].some(
@@ -173,6 +148,20 @@ export function parsePluginSkills(documents: PluginSkillDocument[], version: str
 		) {
 			throw new AgentFailure('invalid_input');
 		}
-		return { name, description, version, sha256: document.sha256, body: document.content.slice(end + 5) };
+		const skill = { name, description, version, sha256: document.sha256, body: document.content.slice(end + 5) };
+		// Skills are currently delivered as one RPC result. Validate actual encoded
+		// envelopes rather than inventing separate document or metadata quotas.
+		const metadata = { name, description, version, sha256: document.sha256 };
+		if (
+			agentPluginCapabilityReplyBytes({ operation: 'skills.read', value: skill }) >
+				AGENT_PLUGIN_APP_PAYLOAD_MAX_BYTES ||
+			agentPluginCapabilityReplyBytes({
+				operation: 'skills.catalog',
+				value: { items: [metadata], nextOffset: Number.MAX_SAFE_INTEGER, catalogSha256: document.sha256 },
+			}) > AGENT_PLUGIN_APP_PAYLOAD_MAX_BYTES
+		) {
+			throw new AgentFailure('limit_exceeded');
+		}
+		return skill;
 	});
 }

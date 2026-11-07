@@ -1,7 +1,8 @@
 import { agentHttpSerializer, agentHttpErrorHandler } from './agent-http-response.js';
 import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import { AgentHttpInput } from './agent-input.js';
-import { toApproval, toApprovalPage } from './governance-mapper.js';
+import { toOperationApproval, toOperationApprovalPage } from './operation-approval-mapper.js';
+import type { OperationApprovalService } from '../../governance/service/operation-approval-service.js';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
 import { readAgentTargetDenylistReplaceRequest } from '@nexus-terminal/shared/agent/governance/http-codec';
 import type { AgentTargetDenylistView } from '@nexus-terminal/shared/agent/governance/model';
@@ -39,7 +40,6 @@ import { AgentOperationError } from '../../public-errors.js';
 import { AgentFailure } from '../../agent-failure.js';
 import type { GovernanceService } from '../../governance/service/governance-service.js';
 import type {
-	Approval,
 	GrantScope,
 	GrantCatalogState,
 	ExecutionPolicy,
@@ -122,12 +122,6 @@ function fromPublicPolicy(value: AgentExecutionPolicyOverrides): PolicyOverrides
 	if (value.maxSubagentMessageBytes !== undefined) {
 		result.maxSubagentMessageBytes = value.maxSubagentMessageBytes;
 	}
-	if (value.contextCompactionMode !== undefined) {
-		result.contextCompactionMode = value.contextCompactionMode;
-	}
-	if (value.contextProfile !== undefined) {
-		result.contextProfile = value.contextProfile;
-	}
 	return result;
 }
 
@@ -156,12 +150,6 @@ function toPublicPolicy(value: PolicyOverrides): AgentExecutionPolicyOverrides {
 	}
 	if (value.maxSubagentMessageBytes !== undefined) {
 		result.maxSubagentMessageBytes = value.maxSubagentMessageBytes;
-	}
-	if (value.contextCompactionMode !== undefined) {
-		result.contextCompactionMode = value.contextCompactionMode;
-	}
-	if (value.contextProfile !== undefined) {
-		result.contextProfile = value.contextProfile;
 	}
 	return result;
 }
@@ -192,8 +180,6 @@ const toPolicy = (v: ExecutionPolicy): AgentExecutionPolicyView => ({
 		maxRecallBytes: v.effective.maxRecallBytes,
 		maxSubagentMessages: v.effective.maxSubagentMessages,
 		maxSubagentMessageBytes: v.effective.maxSubagentMessageBytes,
-		contextCompactionMode: v.effective.contextCompactionMode,
-		contextProfile: v.effective.contextProfile,
 	},
 });
 
@@ -219,6 +205,7 @@ function fail(reply: HttpReply, error: unknown): void {
 export function createGovernanceHttpRoutes(
 	access: AccessPublicApi,
 	governance: GovernanceService,
+	approvals: OperationApprovalService,
 	boundary: <T>(work: () => Promise<T>) => Promise<T>,
 ): HttpRoute[] {
 	const routes: HttpRoute[] = [];
@@ -347,12 +334,12 @@ export function createGovernanceHttpRoutes(
 	});
 	add('GET', '/apps/:appId/approvals/:approvalId', async (httpRequest, reply, userId) => {
 		const path = readAgentApprovalPath(httpRequest.params);
-		const value = await governance.approval(userId, path.appId, path.approvalId);
+		const value = await approvals.get(userId, path.appId, path.approvalId);
 		await deliver(
 			httpRequest,
 			reply,
 			value === null ? 404 : 200,
-			value === null ? { code: 'not_found' } : toApproval(value),
+			value === null ? { code: 'not_found' } : toOperationApproval(value),
 		);
 	});
 	add(
@@ -360,7 +347,7 @@ export function createGovernanceHttpRoutes(
 		'/apps/:appId/runs/:runId/approvals',
 		async (httpRequest, reply, userId) => {
 			const path = readAgentRunApprovalsPath(httpRequest.params);
-			const items = await governance.approvals(
+			const items = await approvals.page(
 				userId,
 				path.appId,
 				path.runId,
@@ -370,7 +357,7 @@ export function createGovernanceHttpRoutes(
 				httpRequest,
 				reply,
 				items === null ? 404 : 200,
-				items === null ? { code: 'not_found' } : toApprovalPage(items),
+				items === null ? { code: 'not_found' } : toOperationApprovalPage(items),
 			);
 		},
 		AGENT_GOVERNANCE_MAX_BODY_BYTES,
@@ -380,17 +367,23 @@ export function createGovernanceHttpRoutes(
 		const path = readAgentApprovalPath(httpRequest.params);
 		const request = readAgentApprovalResolveRequest(httpRequest.body);
 		const key = readAgentApprovalCommandHeaders(httpRequest.headers['idempotency-key']).operationKey;
-		const result = await governance.resolve({
-			userId,
-			appId: path.appId,
-			approvalId: path.approvalId,
-			decision: request.decision,
-			operationHash: request.operationHash,
-			expectedVersion: request.expectedVersion,
-			operationKey: key,
-			feedback: request.feedback,
-		});
-		await deliver(httpRequest, reply, 200, toApproval(result));
+		const token = readRequestCookie(httpRequest.raw, ACCESS_SESSION_COOKIE_NAME);
+		if (!token) {
+			throw new AgentFailure('unauthenticated');
+		}
+		const result = await approvals.resolve(
+			{ userId, token },
+			{
+				appId: path.appId,
+				approvalId: path.approvalId,
+				decision: request.decision,
+				operationHash: request.operationHash,
+				expectedVersion: request.expectedVersion,
+				operationKey: key,
+				feedback: request.feedback,
+			},
+		);
+		await deliver(httpRequest, reply, 200, toOperationApproval(result));
 	});
 	return routes;
 }

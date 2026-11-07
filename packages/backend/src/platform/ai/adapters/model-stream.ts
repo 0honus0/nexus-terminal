@@ -2,12 +2,7 @@ import { ModelToolStream } from './model-tool-stream.js';
 import { responseReasoning } from './model-reasoning.js';
 import type { ModelStreamEvent, ModelStreamInput, ModelReasoningState } from '../model-port.js';
 import { ModelNetworkFailure } from '../model-port.js';
-import {
-	MODEL_STREAM_MAX_BYTES,
-	MODEL_STREAM_MAX_DELTA_FRAME_BYTES,
-	MODEL_STREAM_MAX_TEXT_BYTES,
-	MODEL_REASONING_MAX_BYTES,
-} from '../model-port.js';
+import { MODEL_STREAM_MAX_BYTES, MODEL_STREAM_MAX_TEXT_BYTES, MODEL_REASONING_MAX_BYTES } from '../model-port.js';
 
 /** Projects SDK-decoded provider events into bounded internal facts; never parses SSE. */
 const MAX_TEXT_BYTES = MODEL_STREAM_MAX_TEXT_BYTES;
@@ -130,15 +125,8 @@ export class ModelStreamProjection {
 		) {
 			throw new ModelNetworkFailure('response_invalid');
 		}
-		const isOutputSnapshot =
-			this.protocol === 'responses' &&
-			(event.type === 'response.completed' ||
-				event.type === 'response.output_text.done' ||
-				event.type === 'response.content_part.done' ||
-				event.type === 'response.output_item.done' ||
-				event.type === 'response.function_call_arguments.done');
 		const eventBytes = Buffer.byteLength(JSON.stringify(event), 'utf8');
-		if (eventBytes > (isOutputSnapshot ? MODEL_STREAM_MAX_BYTES : MODEL_STREAM_MAX_DELTA_FRAME_BYTES)) {
+		if (eventBytes > MODEL_STREAM_MAX_BYTES) {
 			throw new ModelNetworkFailure('too_large');
 		}
 		if (this.protocol === 'responses') {
@@ -189,9 +177,7 @@ export class ModelStreamProjection {
 				) {
 					throw new ModelNetworkFailure('response_invalid');
 				}
-				if (calls.length > 0) {
-					this.reasoning = responseReasoning(response.output);
-				}
+				this.reasoning = responseReasoning(response.output);
 				const outputs = full && this.textBytes === 0 ? this.delta(full) : [];
 				if (this.responseChunks.join('') !== full) {
 					throw new ModelNetworkFailure('response_invalid');
@@ -380,6 +366,10 @@ export class ModelStreamProjection {
 		if (this.finishReason === null) {
 			throw new ModelNetworkFailure('stream_truncated');
 		}
-		return [...(this.chatUsage ? [this.chatUsage] : []), { type: 'completed', finishReason: this.finishReason }];
+		const reported = this.chatUsage ? [this.chatUsage] : [];
+		if (this.finishReason === 'stop') {
+			return [...reported, { type: 'completed', finishReason: 'stop', reasoning: this.reasoning }];
+		}
+		return [...reported, { type: 'completed', finishReason: this.finishReason }];
 	}
 }

@@ -1,5 +1,7 @@
+import type { AgentOperationErrorCode } from '@nexus-terminal/shared/agent/values';
+import type { StoredRunAppMutation, StoredRunAppResult, StoredRunAppTerminal } from './run-app-storage.js';
 import type { AgentApprovalMode } from '@nexus-terminal/shared/agent/runs/values';
-import type { AgentRunFailureCode } from '@nexus-terminal/shared/agent/runs/values';
+
 import type { StoredPolicyOverrides } from '../../governance/storage/governance-storage.js';
 import type { StoredExecutionSettings } from '../../execution/storage/execution-storage.js';
 import type { StoredAppAuthority } from '../../scope/storage/scope-storage.js';
@@ -9,15 +11,12 @@ import type {
 	AgentCreateRunOutcome,
 	AgentCancelRunOutcome,
 } from '@nexus-terminal/shared/agent/runs/values';
-import type {
-	StoredModelReference,
-	StoredProviderModel,
-	ProviderStoredRow,
-} from '../../providers/storage/provider-storage.js';
+import type { StoredProviderModel } from '../../providers/storage/provider-storage.js';
 import type { AgentProviderProtocol } from '@nexus-terminal/shared/agent/providers/values';
+import type { RunResumeStorage } from './run-resume-storage.js';
 
 /** Storage projection; RunModel converts persisted capability text to an application value. */
-export interface StoredFrozenInput {
+export interface StoredFrozenModelInput {
 	providerId: string;
 	providerVersion: number;
 	credentialRevision: number;
@@ -26,6 +25,20 @@ export interface StoredFrozenInput {
 	protocol: AgentProviderProtocol;
 	capabilities: StoredProviderModel;
 	executionPolicy: 'governed';
+}
+
+export type StoredRunAppExecution =
+	| {
+			kind: 'plugin';
+			package: { packageId: string; version: string; packageHash: string; publisherKeyId: string };
+			codeDependencies: { packageId: string; version: string; packageHash: string; publisherKeyId: string }[];
+			handler: string;
+	  }
+	| { kind: 'retired' };
+
+export interface StoredFrozenInput {
+	appExecution: StoredRunAppExecution;
+	inputJson: string;
 }
 
 /** Storage contracts: no HTTP DTO or SQLite row escapes. */
@@ -44,7 +57,7 @@ export interface StoredRun {
 export interface CreateRunStorageCommand {
 	approvalMode: AgentApprovalMode;
 	origin: { runId: string; expectedVersion: number } | null;
-	model: StoredModelReference;
+	inputJson: string;
 	connectionIds: number[];
 	id: string;
 	userId: number;
@@ -89,9 +102,33 @@ export interface RunEventPageRecord {
 export type StoredCancelRunDecision = 'cancel' | 'already_cancelled' | 'version_conflict' | 'active_run_conflict';
 
 export type StoredRunFailure =
-	{ kind: 'job_unknown'; toolName: string } | { kind: 'tool'; code: AgentRunFailureCode; toolName: string };
+	{ kind: 'job_unknown'; toolName: string } | { kind: 'operation'; code: AgentOperationErrorCode; toolName: string };
 
-export interface RunStorage {
+export interface StoredRunUnstartedFailure {
+	userId: number;
+	appId: string;
+	runId: string;
+	expectedVersion: number;
+	creationHash: string;
+	now: number;
+}
+
+export interface StoredRunUsage {
+	runId: string;
+	runVersion: number;
+	inputTokens: number | null;
+	outputTokens: number | null;
+	reportedModelRequests: number;
+	modelRequests: number;
+	toolExecutions: number;
+}
+
+export interface RunStorage extends RunResumeStorage {
+	failUnstarted(command: StoredRunUnstartedFailure): Promise<boolean>;
+	usage(userId: number, appId: string, runId: string): Promise<StoredRunUsage | null>;
+	recover(now: number): Promise<number>;
+	startApp(command: StoredRunAppMutation): Promise<StoredRunAppResult>;
+	finishApp(command: StoredRunAppMutation, terminal: StoredRunAppTerminal): Promise<StoredRunAppResult>;
 	failure(userId: number, appId: string, runId: string): Promise<StoredRunFailure | null>;
 	ownExecution(work: () => Promise<void>): Promise<void>;
 	list(
@@ -105,7 +142,6 @@ export interface RunStorage {
 	create(
 		command: CreateRunStorageCommand,
 		mayCreate: (active: StoredRun | null) => boolean,
-		resolve: (provider: ProviderStoredRow, reference: StoredModelReference) => StoredFrozenInput | null,
 		authorizeApp: (current: StoredAppAuthority) => void,
 		authorizeOrigin: (current: StoredRun | null) => void,
 		freezeExecution: (

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 4,
+  "id": "nexus.ui.chat",
+  "version": "2.0.0",
+  "displayName": "Nexus Chat",
+  "compatibility": {
+    "host": {
+      "minVersion": "1.1.0",
+      "maxVersion": "1.1.0"
+    },
+    "backendSdk": null,
+    "frontendSdk": 4
+  },
+  "capabilities": [],
+  "intents": [],
+  "frontendEntry": "frontend/index.html",
+  "backendEntry": null,
+  "contributions": {
+    "app": null,
+    "tools": false,
+    "services": false,
+    "ui": {
+      "contract": "nexus.ui.chat",
+      "apiVersion": 1
+    },
+    "settings": null,
+    "skills": []
+  },
+  "dependencies": [],
+  "namespaces": []
+}

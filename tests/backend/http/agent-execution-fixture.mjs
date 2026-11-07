@@ -1,11 +1,18 @@
+import {
+	fixtureToolName,
+	hasToolIdentity,
+	hasApprovalIdentity,
+	toolIdentityOf,
+} from '../../support/package-tool-catalog.mjs';
 import { createTestAgentApp } from './native-agent-fixture.mjs';
 import { listAgentApprovalHistory } from './agent-approval-fixture.mjs';
 import assert from 'node:assert/strict';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import WebSocket from '../../../packages/backend/node_modules/ws/index.js';
 import { createApp } from '../../../packages/backend/dist/bootstrap/create-app.js';
 import { ToolExecutionUnknown } from '../../../packages/backend/dist/modules/agent/agent-failure.js';
 import { origin, until, send, expectStatus, openWorkspace } from '../remote/openssh-fixture.mjs';
@@ -17,6 +24,18 @@ export function hasUnknown(error) {
 		(error instanceof AggregateError && error.errors.some(hasUnknown)) ||
 		(error instanceof Error && error.cause !== undefined && hasUnknown(error.cause))
 	);
+}
+
+/** Explicitly exercise the real App's lazy discovery before the scenario's domain calls. */
+export function discoverTools(query, program) {
+	return (results, body) => {
+		if (results.length === 0) {
+			return { name: 'tool_search', input: { query } };
+		}
+		assert.ok(Array.isArray(results[0].loadKeys), 'Discovery must return exact callable keys');
+		assert.ok(results[0].loadKeys.length > 0, 'The selected and authorized tools must be discoverable');
+		return program(results.slice(1), body);
+	};
 }
 
 /** Only Provider output is scripted; execution, authorization and persistence stay real. */
@@ -73,7 +92,7 @@ export async function openAgentExecution(directory, sshd, options = {}) {
 						type: 'function_call',
 						id: 'fc_' + (results.length + index),
 						call_id: 'call_' + (results.length + index),
-						name: call.name,
+						name: fixtureToolName(body, call.name),
 						arguments: JSON.stringify(call.input),
 						status: 'completed',
 					}));
@@ -179,7 +198,7 @@ export async function openAgentExecution(directory, sshd, options = {}) {
 							index,
 							id: 'call_' + (results.length + index),
 							type: 'function',
-							function: { name: call.name, arguments: JSON.stringify(call.input) },
+							function: { name: fixtureToolName(body, call.name), arguments: JSON.stringify(call.input) },
 						})),
 					}
 				: { content: action.text ?? 'Fixture finished' };
@@ -223,12 +242,14 @@ export async function openAgentExecution(directory, sshd, options = {}) {
 		return expectStatus(
 			await api('PUT', base() + '/grants', {
 				expectedPolicyRevision: current.policyRevision,
-				grants: capabilities.map((capability) => ({
-					capability,
-					scope: AGENT_TARGET_CAPABILITIES.includes(capability)
-						? { kind: 'targets', targets: { ssh: { mode: 'ids', ids: [String(connectionId)] } } }
-						: { kind: 'global' },
-				})),
+				grants: (capabilities.length ? [...new Set(['plugin.invoke', ...capabilities])] : []).map(
+					(capability) => ({
+						capability,
+						scope: AGENT_TARGET_CAPABILITIES.includes(capability)
+							? { kind: 'targets', targets: { ssh: { mode: 'ids', ids: [String(connectionId)] } } }
+							: { kind: 'global' },
+					}),
+				),
 			}),
 			200,
 		);
@@ -244,6 +265,20 @@ export async function openAgentExecution(directory, sshd, options = {}) {
 				}
 				app = null;
 			}
+		} catch (error) {
+			const describe = (value) =>
+				value instanceof Error
+					? {
+							name: value.name,
+							code: value.code,
+							frames: value.stack?.split('\n').slice(1, 4),
+							cause: value.cause ? describe(value.cause) : null,
+							errors: value instanceof AggregateError ? value.errors.map(describe) : [],
+						}
+					: { type: typeof value };
+
+			console.error('Agent fixture close evidence', JSON.stringify(describe(error)));
+			throw error;
 		} finally {
 			model.closeAllConnections();
 			await new Promise((resolve) => model.close(resolve));
@@ -290,14 +325,31 @@ export async function openAgentExecution(directory, sshd, options = {}) {
 				displayName: 'B10 execution',
 				baseUrl: 'http://127.0.0.1:' + model.address().port + '/v1',
 				protocol: options.protocol ?? 'chat-completions',
-				models: [{ id: 'fixture', contextWindow: 131072, maxOutputTokens: 256, supportsTools: true }],
+				models: [
+					{
+						id: 'fixture',
+						contextWindow: options.contextWindow ?? 131072,
+						maxOutputTokens: 256,
+						supportsTools: true,
+					},
+				],
 				enabled: true,
 				credential: 'isolated-secret',
 			}),
 			201,
 		);
 		agentApp = await createTestAgentApp(api, directory, 'Execution fixture', options.plugin);
-		await grants(['file.read', 'file.write', 'file.delete', 'shell.execute', 'machine.inspect']);
+		await grants([
+			'file.read',
+			'file.write',
+			'file.delete',
+			'shell.execute',
+			'machine.inspect',
+			'context.read',
+			'context.compact',
+			'artifacts.read',
+			'artifacts.write',
+		]);
 		const settings = expectStatus(await api('GET', '/api/v1/agent/execution-settings'), 200).settings;
 		expectStatus(
 			await api('PUT', '/api/v1/agent/execution-settings', {
@@ -332,9 +384,16 @@ export async function openAgentExecution(directory, sshd, options = {}) {
 			return openWorkspace(address, cookie);
 		},
 
+		openRunStream() {
+			return new WebSocket('ws://' + address + '/ws/agent-runs', {
+				origin,
+				headers: { Host: new URL(origin).host, Cookie: cookie },
+			});
+		},
+
 		program(name, program) {
 			const key = name + ':' + randomUUID();
-			programs.set(key, program);
+			programs.set(key, options.discover ? discoverTools(options.discover, program) : program);
 			return key;
 		},
 
@@ -360,7 +419,7 @@ export async function openAgentExecution(directory, sshd, options = {}) {
 
 		async start(name, program, { connectionIds = [connectionId] } = {}) {
 			const key = name + ':' + randomUUID();
-			programs.set(key, program);
+			programs.set(key, options.discover ? discoverTools(options.discover, program) : program);
 			const thread = expectStatus(await api('POST', base() + '/threads', { title: name }), 201);
 			return expectStatus(
 				await api(
@@ -370,7 +429,15 @@ export async function openAgentExecution(directory, sshd, options = {}) {
 						prompt: key,
 						approvalMode: 'ask',
 						connectionIds,
-						model: { providerId: provider.id, modelId: 'fixture', configurationVersion: provider.version },
+						inputJson: JSON.stringify({
+							model: {
+								providerId: provider.id,
+								modelId: 'fixture',
+								configurationVersion: provider.version,
+								reasoningEffort: null,
+							},
+							artifacts: [],
+						}),
 					},
 					{ 'Idempotency-Key': randomUUID() },
 				),
@@ -378,21 +445,43 @@ export async function openAgentExecution(directory, sshd, options = {}) {
 			).run;
 		},
 
-		async wait(run, status) {
-			return until(
+		async wait(run, status, timeoutMs = 10000) {
+			const settled = await until(
 				async () => expectStatus(await api('GET', runPath(run)), 200),
-				(value) => value.status === status,
+				(value) =>
+					value.status === status || ['completed', 'failed', 'cancelled', 'unknown'].includes(value.status),
 				'Run ' + status,
+				timeoutMs,
 			);
+			if (settled.status !== status && fixtureFailures.length) {
+				throw new AggregateError(
+					[...fixtureFailures],
+					'Provider fixture failed: ' +
+						JSON.stringify(settled) +
+						'\n' +
+						fixtureFailures.map((failure) => failure.stack ?? String(failure)).join('\n'),
+				);
+			}
+			assert.equal(settled.status, status, JSON.stringify(settled));
+			return settled;
 		},
 
 		async approval(run, name) {
+			const matches = (value) => {
+				if (typeof name === 'string' && /^p_[a-f0-9]{62}$/u.test(name)) {
+					const row = this.rows('agent_run_tools', run).find((row) => row.tool_name === name);
+					assert.ok(row, 'General approval expectation requires an actual persisted package call');
+					return hasApprovalIdentity(value, toolIdentityOf(row));
+				}
+				return hasApprovalIdentity(value, name);
+			};
+
 			const items = await until(
 				async () => await listAgentApprovalHistory(api, agentApp.id, run.id),
-				(values) => values.some((value) => value.status === 'requested' && value.inspection.toolName === name),
+				(values) => values.some((value) => value.status === 'requested' && matches(value)),
 				'Approval ' + name,
 			);
-			return items.find((value) => value.status === 'requested' && value.inspection.toolName === name);
+			return items.find((value) => value.status === 'requested' && matches(value));
 		},
 
 		approve(approval) {
@@ -418,6 +507,78 @@ export async function openAgentExecution(directory, sshd, options = {}) {
 		},
 
 		grants,
+
+		operations(run) {
+			const db = new DatabaseSync(database, { readOnly: true });
+			try {
+				return db.prepare('SELECT * FROM agent_operations WHERE run_id=? ORDER BY sequence').all(run.id);
+			} finally {
+				db.close();
+			}
+		},
+
+		modelInvocations(run) {
+			return this.operations(run)
+				.filter((row) => row.kind === 'model')
+				.map((row) => {
+					const input = JSON.parse(row.arguments_json);
+					assert.equal(createHash('sha256').update(row.arguments_json).digest('hex'), row.request_hash);
+					return { operation: row, input, messages: JSON.parse(this.content(input.messages)) };
+				});
+		},
+
+		messageChunks(run) {
+			const db = new DatabaseSync(database, { readOnly: true });
+			try {
+				const messages = db
+					.prepare('SELECT * FROM agent_app_messages WHERE run_id=? ORDER BY ordinal')
+					.all(run.id);
+				return messages.flatMap((message) => {
+					const chunks = db
+						.prepare('SELECT * FROM agent_app_message_chunks WHERE message_id=? ORDER BY chunk_index')
+						.all(message.id);
+					assert.equal(chunks.length, message.chunks);
+					return chunks.map((chunk, index) => {
+						assert.equal(chunk.chunk_index, index);
+						assert.equal(createHash('sha256').update(chunk.text).digest('hex'), chunk.sha256);
+						return { message, chunk };
+					});
+				});
+			} finally {
+				db.close();
+			}
+		},
+
+		content(reference) {
+			const db = new DatabaseSync(database, { readOnly: true });
+			try {
+				const record = db.prepare('SELECT * FROM agent_operation_contents WHERE id=?').get(reference.id);
+				assert.equal(record.sealed, 1);
+				assert.equal(record.sha256, reference.sha256);
+				assert.equal(record.size_bytes, reference.sizeBytes);
+				const chunks = db
+					.prepare('SELECT * FROM agent_operation_content_chunks WHERE content_id=? ORDER BY chunk_index')
+					.all(reference.id);
+				assert.equal(chunks.length, record.chunks);
+				const text = chunks
+					.map((chunk, index) => {
+						assert.equal(chunk.chunk_index, index);
+						assert.equal(createHash('sha256').update(chunk.text).digest('hex'), chunk.sha256);
+						return chunk.text;
+					})
+					.join('');
+				assert.equal(Buffer.byteLength(text), reference.sizeBytes);
+				assert.equal(createHash('sha256').update(text).digest('hex'), reference.sha256);
+				return text;
+			} finally {
+				db.close();
+			}
+		},
+
+		async toolHistory(run) {
+			const current = expectStatus(await api('GET', runPath(run)), 200);
+			return expectStatus(await api('GET', base() + '/threads/' + current.threadId + '/tools'), 200).items;
+		},
 
 		async changeTarget() {
 			const target = await app.targets.get(connectionId);

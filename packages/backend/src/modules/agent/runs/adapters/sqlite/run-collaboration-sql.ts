@@ -1,5 +1,9 @@
-import { readRunApprovalMode } from './run-sql.js';
-import { AGENT_RUN_STEP_MAX_TEXT_BYTES } from '@nexus-terminal/shared/agent/runs/values';
+import { readChildOutputPage } from './run-child-output.js';
+import type { StoredChildOutputPage } from '../../storage/run-collaboration-storage.js';
+import { collaborationAuthority } from './run-collaboration-authority-sql.js';
+import { mayAdmitPluginRun } from '../../../plugins/adapters/sqlite/plugin-operation-authority.js';
+import { readRunApprovalMode } from './run-row.js';
+
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 import type {
 	RunCollaborationStorage,
@@ -13,8 +17,8 @@ import type {
 } from '../../storage/run-collaboration-storage.js';
 import { readRunSelection } from './run-selection.js';
 import { nextThreadSequence } from './run-order.js';
-import { participant, collaborationAuthority, storedText, storedInteger } from './run-participant-sql.js';
-import { fenceRunChildren } from './run-child-fence.js';
+import { participant, storedText, storedInteger } from './run-participant-sql.js';
+import { fenceRunChildren } from './run-fence.js';
 import { CollaborationDataSql } from './run-collaboration-data-sql.js';
 
 export async function children(tx: SqlExecutor, scope: StoredParticipantScope): Promise<StoredParticipant[]> {
@@ -22,9 +26,12 @@ export async function children(tx: SqlExecutor, scope: StoredParticipantScope): 
 	if (!owner) {
 		return [];
 	}
-	const rows = await tx.all('SELECT run_id FROM agent_run_children WHERE parent_id=? ORDER BY run_id', [
-		owner.rootId,
-	]);
+	const rows = await tx.all(
+		`SELECT run_id FROM agent_run_children WHERE parent_id=? UNION
+		 SELECT c.run_id FROM agent_legacy_run_children c JOIN agent_run_inputs i ON i.run_id=c.run_id
+		 WHERE c.parent_id=? AND json_extract(i.app_execution_json,'$.kind')='retired' ORDER BY run_id`,
+		[owner.rootId, owner.rootId],
+	);
 	const result: StoredParticipant[] = [];
 	for (const row of rows) {
 		const child = await participant(tx, {
@@ -48,8 +55,13 @@ export class SqliteRunCollaborationStorage extends CollaborationDataSql implemen
 				throw new Error('Missing mailbox participant');
 			}
 			const rows = await tx.all(
-				'SELECT sequence,sender_id,length(CAST(body_text AS BLOB)) AS body_bytes,expires_at FROM agent_run_mailbox WHERE root_id=? AND recipient_id=? AND sequence>? ORDER BY sequence LIMIT ?',
-				[owner.rootId, owner.id, after, limit],
+				`SELECT sequence,sender_id,length(CAST(body_text AS BLOB)) AS body_bytes,expires_at FROM agent_run_mailbox
+				 WHERE root_id=? AND recipient_id=? AND sequence>?
+				 UNION ALL SELECT m.sequence,m.sender_id,length(CAST(m.body_text AS BLOB)),m.expires_at
+				 FROM agent_legacy_run_mailbox m JOIN agent_run_inputs i ON i.run_id=m.recipient_id
+				 WHERE m.root_id=? AND m.recipient_id=? AND m.sequence>? AND json_extract(i.app_execution_json,'$.kind')='retired'
+				 ORDER BY sequence LIMIT ?`,
+				[owner.rootId, owner.id, after, owner.rootId, owner.id, after, limit],
 			);
 			const items = rows.map((row) => ({
 				sequence: storedInteger(row.sequence, 1),
@@ -69,7 +81,12 @@ export class SqliteRunCollaborationStorage extends CollaborationDataSql implemen
 		return this.db.transaction((tx) => children(tx, scope));
 	}
 
-	output(scope: StoredParticipantScope, childId: string): Promise<string | null> {
+	output(
+		scope: StoredParticipantScope,
+		childId: string,
+		offset: number,
+		maxBytes: number,
+	): Promise<StoredChildOutputPage | null> {
 		return this.db.transaction(async (tx) => {
 			const owner = await participant(tx, scope);
 			if (!owner) {
@@ -83,11 +100,13 @@ export class SqliteRunCollaborationStorage extends CollaborationDataSql implemen
 			if (!row || row.output_text === null) {
 				return null;
 			}
-			const text = storedText(row.output_text);
-			if (Buffer.byteLength(text, 'utf8') > AGENT_RUN_STEP_MAX_TEXT_BYTES) {
-				throw new Error('Corrupt Child output');
-			}
-			return text;
+			return readChildOutputPage(
+				tx,
+				{ userId: scope.userId, appId: scope.appId, runId: childId },
+				storedText(row.output_text),
+				offset,
+				maxBytes,
+			);
 		});
 	}
 
@@ -98,7 +117,7 @@ export class SqliteRunCollaborationStorage extends CollaborationDataSql implemen
 		return this.db.transaction(async (tx) => {
 			const parent = await collaborationAuthority(tx, command);
 			const existing = await tx.one(
-				'SELECT r.id,r.version,r.input_text,c.request_hash,f.provider_id FROM agent_run_children c JOIN agent_runs r ON r.id=c.run_id JOIN agent_run_frozen_inputs f ON f.run_id=r.id WHERE c.operation_id=?',
+				'SELECT r.id,r.version,r.input_text,c.request_hash,f.input_json FROM agent_run_children c JOIN agent_runs r ON r.id=c.run_id JOIN agent_run_inputs f ON f.run_id=r.id WHERE c.operation_id=?',
 				[command.operationId],
 			);
 			if (existing) {
@@ -112,7 +131,7 @@ export class SqliteRunCollaborationStorage extends CollaborationDataSql implemen
 				}
 				return {
 					participant: child,
-					providerId: storedText(existing.provider_id),
+					inputJson: storedText(existing.input_json),
 					prompt: storedText(existing.input_text),
 					requestHash: storedText(existing.request_hash),
 					version: storedInteger(existing.version, 1),
@@ -126,11 +145,14 @@ export class SqliteRunCollaborationStorage extends CollaborationDataSql implemen
 			if (!row) {
 				return null;
 			}
+			if (!(await mayAdmitPluginRun(tx, command.scope.userId, command.scope.appId))) {
+				return null;
+			}
 			const peers = await children(tx, command.scope);
 			const active = await tx.all(
 				`SELECT c.run_id FROM agent_run_children c JOIN agent_runs r ON r.id=c.run_id
-				 WHERE c.parent_id=? AND (r.status IN ('pending','running','unknown') OR EXISTS(
-				 SELECT 1 FROM agent_run_tools t WHERE t.run_id=r.id AND t.state IN ('inspected','dispatched','unknown')))`,
+				 WHERE c.parent_id=? AND (r.status IN ('pending','running','suspended','unknown') OR EXISTS(
+				 SELECT 1 FROM agent_operations t WHERE t.run_id=r.id AND t.state IN ('accepted','dispatched','unknown')))`,
 				[command.scope.runId],
 			);
 			if (
@@ -175,8 +197,8 @@ export class SqliteRunCollaborationStorage extends CollaborationDataSql implemen
 				],
 			);
 			await tx.run(
-				'INSERT INTO agent_run_frozen_inputs(run_id,provider_id,provider_version,credential_revision,model_id,base_url,protocol,capabilities_json,execution_policy) SELECT ?,provider_id,provider_version,credential_revision,model_id,base_url,protocol,capabilities_json,execution_policy FROM agent_run_frozen_inputs WHERE run_id=?',
-				[command.id, parent.id],
+				'INSERT INTO agent_run_inputs(run_id,app_execution_json,input_json,output_json) SELECT ?,app_execution_json,?,NULL FROM agent_run_inputs WHERE run_id=?',
+				[command.id, command.inputJson, parent.id],
 			);
 			await tx.run(
 				'INSERT INTO agent_run_execution_settings(run_id,settings_json) SELECT ?,settings_json FROM agent_run_execution_settings WHERE run_id=?',
@@ -186,9 +208,7 @@ export class SqliteRunCollaborationStorage extends CollaborationDataSql implemen
 				"INSERT INTO agent_run_events(run_id,sequence,event_type,run_version,created_at) VALUES(?,1,'run.created',1,?)",
 				[command.id, command.now],
 			);
-			const frozenRow = await tx.one('SELECT provider_id FROM agent_run_frozen_inputs WHERE run_id=?', [
-				command.id,
-			]);
+			const frozenRow = await tx.one('SELECT input_json FROM agent_run_inputs WHERE run_id=?', [command.id]);
 			const child = await participant(tx, {
 				userId: command.scope.userId,
 				appId: command.scope.appId,
@@ -199,7 +219,7 @@ export class SqliteRunCollaborationStorage extends CollaborationDataSql implemen
 			}
 			return {
 				participant: child,
-				providerId: storedText(frozenRow.provider_id),
+				inputJson: storedText(frozenRow.input_json),
 				prompt: command.objective,
 				requestHash: command.requestHash,
 				version: 1,

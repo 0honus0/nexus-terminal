@@ -325,9 +325,11 @@ Dashboard的ResourceStatusService与SystemStatusService不设全局4请求准入
 
 活跃 SSH/PTY、attachment/generation、lease、ACK 等由进程内唯一 Workspace Service 状态机权威持有，重启不持久化技术句柄。64 个普通 Workspace 名额在首次异步身份/目标解析前原子预留，覆盖排队、opening、attached/detached、closing 和未确认清理；重复 ID 不能抢占或重复计数。挂起目录另按用户 32/进程 64 限额与 24h 生存期，重附着同一 Workspace 不再占第二槽。每次 await/WS delivery/ACK 都复查记录实例与 generation；过期/旧 attachment 不能归还新实例或恢复旧 input。技术日志在私有本机临时目录，可重启清理，无持久活跃 shell。文件记录若无需 SQL 则不创建数据库层；任何未来持久变更仍经 Model/Storage/Adapter 执行。
 
-真实 SQL 仅在 Adapter：Agent scope/runs 和 Targets Host Key DDL 归各子功能 `adapters/sqlite`，模块迁移通过初始化接口调用。Bootstrap 持有 applicationMigrations 的顺序和版本，版本 marker 与 DDL 同事务提交。当前迁移链为 v1 初始结构、v2 Shell Job 批次结果转换、v3 文件交付/展示批次结果转换，按 H-21 逐条记录。
+真实 SQL 仅在 Adapter：Agent scope/runs 和 Targets Host Key DDL 归各子功能 `adapters/sqlite`，模块迁移通过初始化接口调用。Bootstrap 持有 applicationMigrations 的顺序和版本，版本 marker 与 DDL 同事务提交。当前完整迁移链以该安装入口为准，Agent 插件化包含逐条追加的包、组合、工具及执行策略绑定变更，按 H-21 独立记录。
 
 后续迁移交付见 [数据库迁移](../DEPLOYMENT.md#数据库迁移)。复用现有 `SchemaMigration`、`initializeSchema` 与 `schema_version`，从当前 v1 基线为每条数据库变更追加连续版本、固定签名及独立执行记录；dev 与 latest 使用同一迁移链，不归并或重写已执行版本。SQL 仍在所属 Adapter，JSON/数值/单位等复杂转换由迁移脚本编排并通过 Adapter 写入，业务运行路径不承担旧值兼容。重复启动按版本记录跳过已应用迁移，执行与版本标记同事务提交；v1 升级至 v3、重复启动与失败回滚的证据见 testing。
+
+每次迁移应用后、记录版本前，SQLite schema Adapter 在同一事务核对外键 enforcement 仍开启，并执行真实 `foreign_key_check`。发现违规即回滚，不写成功版本。重建父表可能使 SQLite 保留已失效的延迟检查计数；只有最终外键全部有效且本事务启用了 deferral 时，才关闭 deferral 清除该计数。该步骤不关闭外键约束、不更改历史迁移 SQL 或签名，也不改变普通事务的提交和未知结果语义。
 
 Platform 的 SQL Executor 契约在 `storage/sqlite/sql-types.ts`；版本表 Adapter、事务控制 Adapter 和 Worker 在 adapters。Runtime 持有队列、隔离和失败语义：回调失败回滚，rollback_failed/commit_unknown 保留因果并使实例不可用；未知提交不自动重试。Worker 严格验证完整消息，损坏/不可关联结果使待完成调用全部拒绝。只读 diagnostics 消息只采样自身 isolate 的内存并白名单回传，不执行 SQL、不插入 Runtime 事务队列；Runtime 合并相同采样，关闭停止新采样，已派发消息先于 close 按 Worker 消息顺序收敛。队列计数在准入时增加，实际任务 finally 时归还。
 
@@ -552,7 +554,7 @@ Platform logging/pino-logger唯一实现原Logger契约，registerOperations安�
 
 ### 1. 职责与范围
 
-Preferences 拥有终端主题、外观偏好、HTML 主题与背景引用。Agent integrations 拥有 MCP/ACP 配置和 Browser targets/session；Agent plugins 拥有可信包、安装版本、插件数据、签名 Skills、前后端 SDK/RPC 与跨 App intents。System backups 拥有全产品加密导出、候选预检、在线导入、持久恢复对账和实例重建。上述源码及两轮复核已收口，静态证据归 testing，只通过已登记的有限行为子集；原功能以实际路由、Service/Adapter 和消费者为依据，正式前端已接线。
+Preferences 拥有终端主题、外观偏好、HTML 主题与背景引用。Agent integrations 拥有 MCP/ACP 配置和 Browser targets/session；Agent plugins 拥有可信包及其安装版本、独立 App 组合、按包归属的插件数据、签名 Skills、前后端 SDK/RPC 与跨 App intents。System backups 拥有全产品加密导出、候选预检、在线导入、持久恢复对账和实例重建。上述源码及两轮复核已收口，静态证据归 testing，只通过已登记的有限行为子集；原功能以实际路由、Service/Adapter 和消费者为依据，正式前端已接线。
 
 备份是实际产品能力：旧快照包含产品/Agent 数据和 background、custom_html_theme、Artifact objects、plugins 文件，不含认证表与可重建模型目录缓存。新设计覆盖最新 owner，不导入旧 Backend/Protocol；快照严格核对当前表结构与签名，数据库迁移不代表任意旧快照可直接导入。现有 Artifact、Memory、Execution、Run/审批和 Remote machines 不另建一份。
 
@@ -575,9 +577,15 @@ Preferences 拥有终端主题、外观偏好、HTML 主题与背景引用。Age
 
 业务 Service → Model → 独立 storage/Platform → Adapter。Preferences 子功能直接消费同模块应用能力，themes/appearance 的当前引用判断通过同事务事实回调协调。Agent plugins 通过 Scope/Governance/Run/Artifact 的内部应用能力安装声明、排空与管理引用，不能让插件 SQLite Adapter import 这些 Service/Model 或跨 owner 直接改表。
 
-MCP、Browser 和已实现 ACP 继续经原 ToolService/RunExecutionOwner/governance/context/execution；共用技术连接不共用普通 SSH 会话、批准、budget 或资源名额。Browser 目标由服务器配置，模型输入不能自报一个新的 CDP endpoint 取得权限。
+MCP/ACP 由独立服务插件通过 Registry 提供，App/工具插件绑定服务能力，Host 只持当前授权、秘密、HTTP 字节与 SSH 进程传输。Browser 可信连接仍由宿主实现，目标由服务器配置，模型不能自报 CDP endpoint 取得权限。通用 Run owner 不持模型历史、工具策略或集成协议，完整边界见 [Agent 架构](AGENT.md)。
 
 System backups 通过 Access public 消费窄密码证明，通过安装契约取得应用维护/重建能力；不深层读取账户 hash 或直接访问私有 Model。模块 SQL Adapter 可向通用快照机制登记固定表列、顺序、存储校验和秘密转换任务，签名只使用存储/技术类型；register/Bootstrap 仅安装注册，不在通用层定义业务对象。备份 Service 不取得原始 SqlRow、文件句柄或万能执行器。实现前核对这些注册能力的真实消费者，不为测试或预留扩大 public。
+
+### Agent 执行与订阅依赖
+
+`runs/service/run-execution-owner` 只持通用执行代、准入、checkpoint、任务族取消/等待、终态通知和关闭汇总；实际 App driver 固定准确插件实现并调用完整 run handler。插件消费模型、目录、内容和受管 I/O；Host 的 Operation、模型请求和资源 owner 分别持授权、派发、预算、批准、账本和最终完成门。默认工具、图片、标题、压缩与调度算法在独立插件仓，不保留旧五阶段策略或 ToolService 循环回退。详见 [Agent 架构](AGENT.md)。
+
+`interfaces/ws/run-changes-ws` 是一个认证页面连接上的多源调度器；`AgentStreamSources` 在安装时注册 Run 状态、SDK Run 事件和 Memory 失效源，各源保留授权、读取或失效通知及关闭 owner。订阅按 subscriptionId/generation 隔离 revision、ACK 窗口和输出信用，心跳不是持久游标，旧 ACK 不释放新代次资源。通知只唤醒原读取，发送前复核原身份、App/包安装状态和权限，保留必要的安全审计；不将连接存活或事件提示视作授权。关闭先退订和取消，再等待已准入读取及真实资源收敛；未知提交和未确认清理仍留原 owner。
 
 ### 4. 类型与转换
 
@@ -596,7 +604,7 @@ Browser 配置原来在 Agent settings；不能因名字相似把它塞进 MCP/A
 
 Preferences 安装 /api/v1/appearance、/terminal-themes 的实际对应入口；主题 JSON 导入/导出、background 二进制与 HTML 文本各有明确读取预算、媒体类型和资源收尾。HTML 内容仍只当文本交付，前端 sandbox 消费；不在后端执行，也不把可信 GitHub 来源当执行授权。
 
-Agent integrations 对应旧实际 /api/v1/apps/:appId/integrations；plugins 对应 /api/v1/agent/plugins；跨 App intents 保留独立 /agent/apps/:appId/plugin-intents 覆盖依据。Agent settings 的 Browser targets、插件 repositories 和 onboarding 推荐/安装也要有实际新消费者。允许按 D15 修改 Agent 契约，但须逐项记录差异并同步消费者，不保留旧字段桥。
+Agent 插件入口为 /api/v1/agent/plugins，实例配置和连接位于 /apps/:appId/instances/:instanceId 的子路由；旧集中 integrations 路由已删除；跨 App intents 使用独立 /agent/apps/:appId/plugin-intents。Browser targets、repositories、依赖预览/安装和 onboarding 均由真实管理消费者调用；签名 UI 通过绑定 App/安装 grant 的 frontend/rpc 及具名订阅访问应用能力，不取得任意 HTTP 代理或 Cookie。
 
 System backups 的导出已安装POST /api/v1/settings/backup/export（JSON password→二进制下载），Shared system/backups拥有请求、安全错误和容量；导入已安装 /api/v1/settings/backup/import，multipart backupFile/password，安全回执与严格 codec 同属 Shared。HTTP 输入失败以接口层具名错误保留状态码，cause 仅供诊断，不据其内容决定响应。导出验证原会话的当前密码；导入当前完整认证与输入解密分别校验。实际 method/path/header/query/multipart/binary/响应/认证预算以实施对应表收口，schema 自动汇总仍留 P1，不借施工改变该启动条件。
 
@@ -604,7 +612,7 @@ Bootstrap 安装维护 owner、快照注册、恢复状态核对和模块重建�
 
 ### 6. 数据、事务与并发
 
-Run创建/取消时间由SQLite Adapter在实际读取后生成，Model不再传入排队前时间。Service通过Model的事务回调核对新建容量；RunExecutionOwner跟踪排队写入，执行名额仅在重放查询后对新Run准入。Run/Step/Tool及审批的单项、批量、级联和启动恢复均检查递增上限，派发和流式累计预留必要结算空间；SQL与行解码仍只在Adapter。Run/Step事件分页在同事务核对应有数量、连续序列、版本与末项状态/时间。
+Run 创建/取消时间由 SQLite Adapter 在实际读取后生成，Model 不传入排队前时间。Service 通过 Model 的事务回调核对新建容量；RunExecutionOwner 跟踪排队写入，执行名额仅在重放查询后对新 Run 准入。App driver 在 core 外绑定准确插件；Provider 撤权取消原 exact handle，模型派发和 Operation 各由自身持久 owner 管理。Run/Step/Tool及审批的单项、批量、级联和启动恢复均检查递增上限，派发和流式累计预留必要结算空间；SQL与行解码仍只在Adapter。Run/Step事件分页在同事务核对应有数量、连续序列、版本与末项状态/时间。
 
 Artifact普通下载和插件包暂存复用ArtifactService的readGranted lease；存储读取显式区分session原App归属与tool附件授权，会话读取保留原管理范围，不借用tool-only前提。会话/工具身份经Model读取当前事实，Service核对ready/有效期及HTTP响应绑定版本，分块及结束前复查。空文件仍授权，插件intent下载也经同一lease和最终复查，精确范围短读/超量均失败；HTTP只持有Range、响应头和交付。Run撤销确认失败也等待原任务收敛；Child围栏提交不明仍取消并排空已验证归属的本地任务，保留存储与清理双因果。ProviderHTTP仅将成功写入后的投影/复查/交付失败归为operation_unknown，写前确定拒绝保持原码；发现写入完成后不再将取消误报为确定未写。
 
@@ -612,9 +620,9 @@ Artifact普通下载和插件包暂存复用ArtifactService的readGranted lease�
 
 集成配置 CAS、凭据代际、发现的 schema/hash 与 App/声明版本分别表达。保存配置不等于连接已建立；刷新回写核对原版本和具体 generation。模型发现引用与真实工具调用绑定同一 schema/配置/授权事实；旧批准不自动授权新远端工具。Browser action 绑定原 session/target/version，页面快照/nodeRef 不能被新导航复用。
 
-插件包同身份/版本内容不可变；stage→verify→install、升级排空→版本切换和卸载→数据删除分别有持久判据。受信 manifest 由 Scope 安装成声明，不自动赋予 grants；撤销 publisher、App 禁用或升级围栏旧 Run/工具。intents 固定原用户、发送/接收 App 和意图内容，Artifact 引用/授予与消息创建同事务，不把收到消息解释为通用文件权限。
+插件包同身份/版本内容不可变；包安装、App 组合、升级排空→版本切换和卸载→数据删除各有独立持久事实。prepare 返回完整依赖闭包及精确包/stage/仓库/安装 revision，install-plan 提交时逐项复验；预览不建立持久工作流、流程 ID 或服务端继续令牌。依赖按序安装可部分提交，失败后读取原包/App 事实并重新准备，不假定整段回滚。Scope 只为显式 app 贡献建立 App，UI/工具/Skills 包本身不创建 App；组合必须绑定所选包和唯一 UI。普通安装不自动赋予 grants，推荐引导仅在新 App 初始化时按声明授权；撤销 publisher、App 禁用或升级围栏旧 Run/工具。intents 固定原用户、发送/接收 App 和意图内容，Artifact 引用/授予与消息创建同事务，不把收到消息解释为通用文件权限。
 
-当前导出登记89张产品表，逐次核对实际表集、声明列顺序及目标结构签名；认证七表、模型缓存及技术schema记录明确排除，新增表或列但未登记会拒绝导出。固定表列按技术白名单投影，秘密在所属Adapter解密为受载荷保护的传递表示，System只取得字节。背景ready、Artifact ready和插件staged/verified/installed原包按真实引用采集；实际大小在读取前后核对，内容hash及插件manifest/files/entry/signature复用原解码owner验证；文件预算先包含base64膨胀及完整JSON。SQL前后快照内容hash必须相同，内容发布中或变化拒绝；这不是全应用物理一致快照。
+当前导出登记90张产品表，逐次核对实际表集、声明列顺序及目标结构签名；认证七表、模型缓存及技术schema记录明确排除，新增表或列但未登记会拒绝导出。固定表列按技术白名单投影，秘密在所属Adapter解密为受载荷保护的传递表示，System只取得字节。背景ready、Artifact ready和插件staged/verified/installed原包按真实引用采集；实际大小在读取前后核对，内容hash及插件manifest/files/entry/signature复用原解码owner验证；文件预算先包含base64膨胀及完整JSON。SQL前后快照内容hash必须相同，内容发布中或变化拒绝；这不是全应用物理一致快照。
 
 备份覆盖集在全部本阶段 owner 确定后冻结，登记允许的表/列/文件根/敏感字段和恢复顺序，拒绝未知或缺失的必需组成，不使用过滤字段/跳过未知表兼容。数据库快照与文件不是同一物理事务；采集前后核对源版本、实际引用、大小/hash 与包内容，有限重采集仍不能宣称全系统物理快照。
 
@@ -656,7 +664,7 @@ HTML 库保持在 appearance 子功能：service/html-theme-service 管理来源
 
 ### 在线恢复持久边界
 
-NativeSnapshotRestoreFiles 只处理已安装的 opaque 根、暂存文件、目录切换日志及清理；SqliteSnapshotRestore 只处理技术表恢复和提交证据。所有真实 SQL/DDL 仍在 Adapter；snapshot_restore_state 是本机技术事实，排除于可携备份。89张产品表不包含认证、模型目录缓存或恢复标记。Preferences 预检除引用存在外，核对活动主题的用户或内置归属、背景的用户/用途/ready 状态；批量索引避免逐条扫描全集。
+NativeSnapshotRestoreFiles 只处理已安装的 opaque 根、暂存文件、目录切换日志及清理；SqliteSnapshotRestore 只处理技术表恢复和提交证据。所有真实 SQL/DDL 仍在 Adapter；snapshot_restore_state 是本机技术事实，排除于可携备份。90张产品表不包含认证、模型目录缓存或恢复标记。Preferences 预检除引用存在外，核对活动主题的用户或内置归属、背景的用户/用途/ready 状态；批量索引避免逐条扫描全集。
 
 文件及日志写入同步后才发布；日志在每次 rename 前保存意图，rename 后同步相关目录。删除按目标 schema 的 FK 依赖先子后父，插入使用延迟 FK；恢复数据和 restore_id/initialized 标记在同一事务提交，SQLite 明确使用 FULL 同步。提交失败后读取标记，不能用异常或断连推断回滚；标记不可读时保留现场并停止准入。仅旧内容清理失败、而当前数据与文件已确认一致时，可返回 cleanupPending 并由日志在后续启动/导入前继续清理。
 
@@ -993,7 +1001,7 @@ Job 日志与模型预览分离，沿 Agent Model 调用 Platform TextLogStore�
 2. **子功能与目录**：`sqlite-runtime.ts` 提供 `composeTransaction`，`sqlite-statistics.ts` 保存常量空间计数；`scope/adapters/sqlite/thread-sql.ts` 以 `withState` 使用组合。各领域 SQL 和迁移留原 Adapter。
 3. **依赖方向**：WS → Thread Service/Model → Scope Storage/Adapter → Platform；状态内的子领域 Adapter 参与同一执行器。Platform 不读取 Agent 身份或业务字段，不允许把外部网络调用放进组合事务。
 4. **类型与转换**：组合执行器和耗时归 Platform；身份与状态仍沿各自 Model 转换。System 将累计排队/执行/提交次数、总耗时和最大耗时投影到 Shared 诊断指标，毫秒取整，不记录 SQL、参数或身份。
-5. **入口与安装**：现有 `/ws/agent-runs` 在授权、订阅核对、状态页和心跳权限核对时调用 `withState`，保留原单 Run 订阅协议。普通写入仍用 `transaction`，普通嵌套事务仍拒绝。迁移继续由 `bootstrap/schema.ts` 顺序安装。
+5. **入口与安装**：页面共享 `/ws/agent-runs` 的 Run 状态源在状态页与心跳权限核对时调用 `withState`；SDK Run 事件和 Memory 失效各使用安装注册的具名源，不把通用 WS 层变成跨领域业务查询器。普通写入仍用 `transaction`，普通嵌套事务仍拒绝。迁移继续由 `bootstrap/schema.ts` 顺序安装。
 6. **数据、事务与并发**：显式组合只占一次排队和一次提交；身份在事务前后复查，所有参与者共享快照。审批读取的惰性过期写入参与原事务。迁移 5–9 分别增加预算 Root、审批 Run/Tool、决议 approval、上下文压缩 Run 索引；迁移 10 新增通知 pending 表并转换尚无 fanout 回执的审计记录，已发布迁移不改写。审计新增与 pending 同事务，fanout 回执与 pending 删除同事务；快照验证 pending/processed 恰好分割保留审计，恢复时抑制历史通知。并发发布共用裁剪任务，裁剪只删除已分发记录。
 7. **生命周期与失败**：参与者失败即使被上层捕获也阻止提交；未等待的参与工作先收敛再回滚，失效 scope 的迟到访问拒绝。提交未知保持原数据库不可用围栏，不自动重试；组合不授予独立后台工作临时权限。发布与清理仍由 AuditEventOwner 跟踪至关闭完成。
 8. **当前能力与验收**：`backend-next-performance.integration.mjs` 纳入正式 Agent E2E，覆盖升级、回滚、撤权、迟到参与者、通知恢复及同秒历史保留。排队耗时包含前序任务等待，执行耗时包含整个操作与提交，commit 统计提交尝试（含失败）；它们不等于逐条 SQL 耗时或线上性能提升比例。实际执行证据见 testing。

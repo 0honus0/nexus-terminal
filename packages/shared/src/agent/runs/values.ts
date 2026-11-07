@@ -8,13 +8,23 @@ export const AGENT_APPROVAL_MODES = ['ask', 'full_access'] as const;
 
 export type AgentApprovalMode = (typeof AGENT_APPROVAL_MODES)[number];
 
-export const AGENT_RUN_STATUSES = ['pending', 'running', 'completed', 'failed', 'unknown', 'cancelled'] as const;
+export const AGENT_RUN_STATUSES = [
+	'pending',
+	'running',
+	'suspended',
+	'completed',
+	'failed',
+	'unknown',
+	'cancelled',
+] as const;
 
 export type AgentRunStatus = (typeof AGENT_RUN_STATUSES)[number];
 
 export const AGENT_RUN_EVENT_TYPES = [
 	'run.created',
 	'run.started',
+	'run.suspended',
+	'run.resumed',
 	'run.completed',
 	'run.failed',
 	'run.unknown',
@@ -29,11 +39,10 @@ export type AgentCancelRunOutcome = 'cancelled' | 'already_cancelled';
 
 export type AgentRunCommandOutcome = AgentCreateRunOutcome | AgentCancelRunOutcome;
 
-export const AGENT_RUN_MAX_PROMPT_BYTES = 16 * 1024;
-
-export const AGENT_RUN_MAX_SELECTED_CONNECTIONS = 50;
-
 export const AGENT_RUN_MAX_JSON_BODY_BYTES = 128 * 1024;
+
+/** Prompt and selected targets share the complete request budget. */
+export const AGENT_RUN_MAX_PROMPT_BYTES = AGENT_RUN_MAX_JSON_BODY_BYTES;
 
 export const AGENT_RUN_EVENT_DEFAULT_AFTER = 0;
 

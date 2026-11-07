@@ -1,4 +1,3 @@
-import { readAgentOptionalReasoningEffort } from '../providers/http-codec.js';
 import {
 	agentRecord,
 	agentInteger,
@@ -15,11 +14,11 @@ import {
 	AGENT_RUN_EVENT_DEFAULT_LIMIT,
 	AGENT_RUN_EVENT_MAX_LIMIT,
 	AGENT_RUN_MAX_PROMPT_BYTES,
-	AGENT_RUN_MAX_SELECTED_CONNECTIONS,
 	AGENT_RUN_MAX_JSON_BODY_BYTES,
 } from './values.js';
 import { AGENT_MAX_JSON_BODY_BYTES } from '../values.js';
-import { AGENT_PROVIDER_MAX_MODEL_ID_BYTES } from '../providers/values.js';
+import { readAgentPluginContentReference } from '../plugins/content.js';
+import type { AgentResumeRunRequest, AgentResumeRunResponse, AgentRunSuspensionView } from './http.js';
 import type { AgentRunFailureView, AgentRunUsageView, AgentRunView, AgentRunEventView } from './model.js';
 import type {
 	AgentCreateRunRequest,
@@ -33,13 +32,65 @@ import type {
 	AgentRunEventsResponse,
 } from './http.js';
 
+function invalidRunInput(): never {
+	throw new InvalidAgentPayload();
+}
+
+export function readAgentResumeRunRequest(input: unknown): AgentResumeRunRequest {
+	const row = agentRecord(input, ['expectedVersion', 'inputJson'], AGENT_RUN_MAX_JSON_BODY_BYTES);
+	if (typeof row.inputJson !== 'string') {
+		throw new InvalidAgentPayload();
+	}
+	try {
+		JSON.parse(row.inputJson);
+	} catch {
+		throw new InvalidAgentPayload();
+	}
+	return {
+		expectedVersion: agentInteger(row.expectedVersion, 1, Number.MAX_SAFE_INTEGER - 2),
+		inputJson: row.inputJson,
+	};
+}
+
+export function readAgentResumeRunResponse(input: unknown): AgentResumeRunResponse {
+	if (!isAgentRecord(input)) {
+		throw new InvalidAgentPayload();
+	}
+	const row = agentRecord(
+		input,
+		input.status === 'replayed' ? ['status', 'originalStatus', 'run'] : ['status', 'run'],
+	);
+	const run = readAgentRunResponse(row.run);
+	if (run.status !== 'pending' || run.version < 2) {
+		throw new InvalidAgentPayload();
+	}
+	if (row.status === 'resumed') {
+		return { status: 'resumed', run };
+	}
+	if (row.status !== 'replayed' || row.originalStatus !== 'resumed') {
+		throw new InvalidAgentPayload();
+	}
+	return { status: 'replayed', originalStatus: 'resumed', run };
+}
+
+export function readAgentRunSuspension(input: unknown): AgentRunSuspensionView {
+	const row = agentRecord(input, ['runId', 'runVersion', 'checkpointVersion', 'inputRequest', 'suspendedAt']);
+	return {
+		runId: readAgentId(row.runId),
+		runVersion: agentInteger(row.runVersion, 1),
+		checkpointVersion: agentInteger(row.checkpointVersion, 1),
+		inputRequest: readAgentPluginContentReference(row.inputRequest),
+		suspendedAt: agentInteger(row.suspendedAt),
+	};
+}
+
 export function readAgentCreateRunRequest(input: unknown): AgentCreateRunRequest {
 	const fields = agentRecord(
 		input,
-		['prompt', 'model', 'connectionIds', 'approvalMode'],
+		['prompt', 'inputJson', 'connectionIds', 'approvalMode'],
 		AGENT_RUN_MAX_JSON_BODY_BYTES,
 	);
-	if (!Array.isArray(fields.connectionIds) || fields.connectionIds.length > AGENT_RUN_MAX_SELECTED_CONNECTIONS) {
+	if (!Array.isArray(fields.connectionIds)) {
 		throw new InvalidAgentPayload();
 	}
 	const approvalMode = AGENT_APPROVAL_MODES.find((mode) => mode === fields.approvalMode);
@@ -50,22 +101,23 @@ export function readAgentCreateRunRequest(input: unknown): AgentCreateRunRequest
 	if (new Set(connectionIds).size !== connectionIds.length) {
 		throw new InvalidAgentPayload();
 	}
-	if (!isAgentRecord(fields.model)) {
+	if (typeof fields.inputJson !== 'string') {
 		throw new InvalidAgentPayload();
 	}
-	const optional = Object.hasOwn(fields.model, 'reasoningEffort') ? ['reasoningEffort'] : [];
-	const model = agentRecord(fields.model, ['providerId', 'modelId', 'configurationVersion', ...optional]);
-	const reasoningEffort = readAgentOptionalReasoningEffort(model.reasoningEffort);
+	try {
+		JSON.parse(fields.inputJson);
+	} catch {
+		throw new InvalidAgentPayload();
+	}
 	return {
 		approvalMode,
-		prompt: agentText(fields.prompt, AGENT_RUN_MAX_PROMPT_BYTES),
+		prompt:
+			typeof fields.prompt === 'string' &&
+			new TextEncoder().encode(fields.prompt).byteLength <= AGENT_RUN_MAX_PROMPT_BYTES
+				? fields.prompt
+				: invalidRunInput(),
 		connectionIds,
-		model: {
-			providerId: readAgentId(model.providerId),
-			modelId: agentText(model.modelId, AGENT_PROVIDER_MAX_MODEL_ID_BYTES),
-			configurationVersion: agentInteger(model.configurationVersion, 1),
-			...(reasoningEffort === undefined ? {} : { reasoningEffort }),
-		},
+		inputJson: fields.inputJson,
 	};
 }
 
@@ -144,6 +196,7 @@ export function readAgentRunResponse(input: unknown): AgentRunView {
 	if (
 		row.status !== 'pending' &&
 		row.status !== 'running' &&
+		row.status !== 'suspended' &&
 		row.status !== 'completed' &&
 		row.status !== 'failed' &&
 		row.status !== 'unknown' &&
@@ -177,6 +230,8 @@ export function readAgentRunEvent(input: unknown): AgentRunEventView {
 	if (
 		row.type !== 'run.created' &&
 		row.type !== 'run.started' &&
+		row.type !== 'run.suspended' &&
+		row.type !== 'run.resumed' &&
 		row.type !== 'run.completed' &&
 		row.type !== 'run.failed' &&
 		row.type !== 'run.unknown' &&
@@ -288,7 +343,7 @@ export function readAgentResourceSession(input: unknown): import('./model.js').A
 		'openedAt',
 		'sshConnections',
 		'sftpChannels',
-		'mcpSessions',
+		'protocolSessions',
 		'browserSessions',
 		'activeOperations',
 		'backgroundJobs',
@@ -312,7 +367,7 @@ export function readAgentResourceSession(input: unknown): import('./model.js').A
 		openedAt,
 		sshConnections: agentInteger(row.sshConnections),
 		sftpChannels: agentInteger(row.sftpChannels),
-		mcpSessions: agentInteger(row.mcpSessions),
+		protocolSessions: agentInteger(row.protocolSessions),
 		browserSessions: agentInteger(row.browserSessions),
 		activeOperations: agentInteger(row.activeOperations),
 		backgroundJobs: agentInteger(row.backgroundJobs),

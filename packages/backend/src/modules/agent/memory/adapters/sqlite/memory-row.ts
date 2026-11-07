@@ -1,7 +1,7 @@
 import {
 	AGENT_MEMORY_STATUSES,
 	AGENT_MEMORY_DECISIONS,
-	AGENT_MEMORY_MAX_CONTENT_BYTES,
+	hasAgentMemoryContentCapacity,
 } from '@nexus-terminal/shared/agent/memory/values';
 import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
 import type { StoredMemory } from '../../storage/memory-storage.js';
@@ -35,7 +35,7 @@ export function memoryRow(row: Record<string, unknown>): StoredMemory {
 		!row.content.trim() ||
 		row.content.includes('\0') ||
 		Buffer.from(row.content, 'utf8').toString('utf8') !== row.content ||
-		Buffer.byteLength(row.content, 'utf8') > AGENT_MEMORY_MAX_CONTENT_BYTES ||
+		!hasAgentMemoryContentCapacity(row.content) ||
 		typeof row.confidence !== 'number' ||
 		!Number.isFinite(row.confidence) ||
 		row.confidence < 0 ||

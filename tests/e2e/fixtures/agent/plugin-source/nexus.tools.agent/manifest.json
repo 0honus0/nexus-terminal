@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 4,
+  "id": "nexus.tools.agent",
+  "version": "2.0.0",
+  "displayName": "Agent Collaboration and Content Tools",
+  "compatibility": {
+    "host": {
+      "minVersion": "1.1.0",
+      "maxVersion": "1.1.0"
+    },
+    "backendSdk": 4,
+    "frontendSdk": null
+  },
+  "capabilities": [
+    "app.intents.exchange",
+    "artifacts.read",
+    "artifacts.write",
+    "context.compact",
+    "context.read",
+    "memory.propose",
+    "memory.read",
+    "plugin.invoke",
+    "plugin.configure"
+  ],
+  "intents": [],
+  "frontendEntry": null,
+  "backendEntry": "backend/index.mjs",
+  "contributions": {
+    "app": null,
+    "tools": true,
+    "services": false,
+    "ui": null,
+    "settings": null,
+    "skills": []
+  },
+  "dependencies": [],
+  "namespaces": ["nexus.tools.agent", "nexus.model-tool", "nexus.app"]
+}

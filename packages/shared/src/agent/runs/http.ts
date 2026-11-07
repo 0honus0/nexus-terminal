@@ -1,5 +1,4 @@
 import type { AgentApprovalMode } from './values.js';
-import type { AgentReasoningEffort } from '../providers/values.js';
 import type { AgentRunView, AgentRunEventView } from './model.js';
 import type { AgentCreateRunOutcome, AgentCancelRunOutcome } from './values.js';
 
@@ -8,17 +7,29 @@ export interface AgentCreateRunRequest {
 	prompt: string;
 	/** Restricts this Run; selection never grants Agent permission. Empty means no selected targets. */
 	connectionIds: number[];
-	/** Selected configuration must match when the Run is created. */
-	model: {
-		providerId: string;
-		modelId: string;
-		configurationVersion: number;
-		reasoningEffort?: AgentReasoningEffort;
-	};
+	/** App-owned versioned input. The Host does not select a scheduling/model mode. */
+	inputJson: string;
 }
 
 export interface AgentCancelRunRequest {
 	expectedVersion: number;
+}
+
+export interface AgentResumeRunRequest {
+	expectedVersion: number;
+	/** App-owned response to its recorded input request. */
+	inputJson: string;
+}
+
+export type AgentResumeRunResponse =
+	{ status: 'resumed'; run: AgentRunView } | { status: 'replayed'; originalStatus: 'resumed'; run: AgentRunView };
+
+export interface AgentRunSuspensionView {
+	runId: string;
+	runVersion: number;
+	checkpointVersion: number;
+	inputRequest: import('../plugins/content.js').AgentPluginContentReference;
+	suspendedAt: number;
 }
 
 /** Decoded Idempotency-Key header, never a JSON body or authenticated identity. */

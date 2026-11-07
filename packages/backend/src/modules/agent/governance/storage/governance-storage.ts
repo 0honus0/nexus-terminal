@@ -1,3 +1,4 @@
+import type { AgentToolIdentity } from '@nexus-terminal/shared/agent/tools/identity';
 import type { StoredExecutionSettings } from '../../execution/storage/execution-storage.js';
 import type { StoredToolOperation } from '../../runs/storage/run-tool-storage.js';
 import type { AgentRunStatus } from '@nexus-terminal/shared/agent/runs/values';
@@ -17,7 +18,14 @@ export type StoredToolAuthorityTask =
 	| { kind: 'dispatch' }
 	| { kind: 'inspect'; policyRevision: number }
 	| { kind: 'verify'; policyRevision: number }
-	| { kind: 'complete'; policyRevision: number; resultText: string; targets: { id: number; version: number }[] };
+	| { kind: 'result_source'; policyRevision: number; reader: StoredToolAuthorityIdentity }
+	| {
+			kind: 'complete';
+			policyRevision: number;
+			resultText: string;
+			outputArtifactIds: string[];
+			targets: { id: number; version: number }[];
+	  };
 
 export interface StoredToolAuthority {
 	operation: StoredToolOperation;
@@ -46,8 +54,6 @@ import type {
 	AgentApprovalStatus,
 	AgentApprovalKind,
 	AgentApprovalRisk,
-	AgentCompactionMode,
-	AgentContextProfile,
 	AgentApprovalDecision,
 } from '@nexus-terminal/shared/agent/governance/values';
 
@@ -66,8 +72,6 @@ export interface StoredPolicyOverrides {
 	maxRecallBytes?: number;
 	maxSubagentMessages?: number;
 	maxSubagentMessageBytes?: number;
-	contextCompactionMode?: AgentCompactionMode;
-	contextProfile?: AgentContextProfile;
 }
 
 export interface StoredGrant {
@@ -110,6 +114,7 @@ export interface StoredApproval {
 	inspection: {
 		toolName: string;
 		toolVersion: string;
+		identity: AgentToolIdentity;
 		risk: AgentApprovalRisk;
 		mutation: boolean;
 		targetConnectionId: number | null;
@@ -141,29 +146,11 @@ export interface StoredApprovalResolution {
 export interface StoredToolCatalogFacts {
 	policy: StoredPolicy;
 	connectionIds: number[];
+	denylistRevision: number;
 }
 
 export interface GovernanceStorage {
 	toolCatalog(userId: number, appId: string, runId: string): Promise<StoredToolCatalogFacts | null>;
-	toolAuthority(
-		input: StoredToolAuthorityIdentity,
-		task: StoredToolAuthorityTask,
-		clock: () => number,
-		decide: StoredToolAuthorityDecision,
-		permit: StoredToolPermitDecision,
-	): Promise<StoredToolAuthority | null>;
-	consumeApproval(
-		input: { userId: number; appId: string; approvalId: string; expectedVersion: number },
-		clock: () => { approvalTime: number; operationTime: number },
-		decide: (
-			approval: StoredApproval,
-			policy: StoredPolicy,
-			status: AgentRunStatus,
-			operationRevision: number,
-			now: number,
-		) => boolean,
-		authorize: StoredToolAuthorityDecision,
-	): Promise<StoredToolOperation | 'approval_stale'>;
 	denylist(): Promise<StoredTargetDenylist>;
 	replaceDenylist(
 		input: StoredDenylistCommand,
@@ -192,66 +179,6 @@ export interface GovernanceStorage {
 			settings: StoredExecutionSettings | null,
 		) => { allow: boolean; pendingStatus: 'superseded' | null },
 	): Promise<ExecutionReplaceResult>;
-	getApproval(
-		userId: number,
-		appId: string,
-		id: string,
-		now: () => number,
-		transition: (
-			approval: StoredApproval,
-			runStatus: AgentRunStatus,
-			now: number,
-		) => 'expired' | 'superseded' | null,
-	): Promise<StoredApproval | null>;
-	listApprovals(
-		userId: number,
-		appId: string,
-		runId: string,
-		after: string | null,
-		now: () => number,
-		transition: (
-			approval: StoredApproval,
-			runStatus: AgentRunStatus,
-			now: number,
-		) => 'expired' | 'superseded' | null,
-	): Promise<StoredApprovalPage | null>;
-	requestApproval(
-		input: { userId: number; appId: string; runId: string; toolCallId: string },
-		create: (
-			policy: StoredPolicy,
-			runStatus: AgentRunStatus,
-			operation: StoredToolOperation,
-			approvalMode: import('@nexus-terminal/shared/agent/runs/values').AgentApprovalMode,
-		) => StoredApproval | null,
-		authorize: StoredToolAuthorityDecision,
-	): Promise<StoredApproval | null>;
-	resolveApproval(
-		input: StoredApprovalResolution,
-		now: () => number,
-		transition: (
-			approval: StoredApproval,
-			runStatus: AgentRunStatus,
-			now: number,
-		) => 'expired' | 'superseded' | null,
-		decide: (
-			approval: StoredApproval,
-			policy: StoredPolicy,
-			runStatus: AgentRunStatus,
-			operationRevision: number,
-			now: number,
-		) => boolean,
-	): Promise<ApprovalCommitResult>;
-	invalidateRunApprovals(
-		userId: number,
-		appId: string,
-		runId: string,
-		now: () => number,
-		transition: (
-			approval: StoredApproval,
-			runStatus: AgentRunStatus,
-			now: number,
-		) => 'expired' | 'superseded' | null,
-	): Promise<number>;
 }
 
 export interface StoredAppPolicyFacts {

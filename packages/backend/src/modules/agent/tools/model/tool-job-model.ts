@@ -180,6 +180,7 @@ export class ToolJobModel {
 			await agentStorage(() =>
 				this.storage.create({
 					id: value.id,
+					operationHash: value.operationHash,
 					userId: value.userId,
 					appId: value.appId,
 					runId: value.runId,

@@ -1,10 +1,12 @@
-import { ModelNetworkFailure, MODEL_TOOL_MAX_CALLS, MODEL_TOOL_MAX_ARGUMENT_BYTES } from '../model-port.js';
+import { ModelNetworkFailure, MODEL_TOOL_MAX_ARGUMENT_BYTES } from '../model-port.js';
 import type { ModelToolCall } from '../model-port.js';
 
 interface PendingCall {
 	id: string;
 	name: string;
 	argumentsJson: string;
+	argumentBytes: number;
+	trailingHighSurrogate: boolean;
 	itemId: string | null;
 	complete: boolean;
 }
@@ -30,6 +32,8 @@ function text(value: unknown, max: number): string {
 /** Only assembles provider protocol facts; it does not recognize or authorize business tools. */
 export class ModelToolStream {
 	private readonly calls = new Map<number, PendingCall>();
+	private readonly callIds = new Set<string>();
+	private readonly itemIds = new Set<string>();
 
 	constructor(private readonly enabled: boolean) {}
 
@@ -39,18 +43,25 @@ export class ModelToolStream {
 			typeof index !== 'number' ||
 			!Number.isSafeInteger(index) ||
 			index < 0 ||
-			this.calls.size >= MODEL_TOOL_MAX_CALLS ||
 			this.calls.has(index)
 		) {
 			throw new ModelNetworkFailure('response_invalid');
 		}
-		const call = { id: text(id, 256), name: text(name, 256), argumentsJson: '', itemId, complete: false };
-		if (
-			[...this.calls.values()].some(
-				(other) => other.id === call.id || (itemId !== null && other.itemId === itemId),
-			)
-		) {
+		const call = {
+			id: text(id, 256),
+			name: text(name, 256),
+			argumentsJson: '',
+			argumentBytes: 0,
+			trailingHighSurrogate: false,
+			itemId,
+			complete: false,
+		};
+		if (this.callIds.has(call.id) || (itemId !== null && this.itemIds.has(itemId))) {
 			throw new ModelNetworkFailure('response_invalid');
+		}
+		this.callIds.add(call.id);
+		if (itemId !== null) {
+			this.itemIds.add(itemId);
 		}
 		this.calls.set(index, call);
 		return call;
@@ -60,17 +71,24 @@ export class ModelToolStream {
 		if (call.complete || typeof value !== 'string') {
 			throw new ModelNetworkFailure('response_invalid');
 		}
-		if (
-			Buffer.byteLength(call.argumentsJson, 'utf8') + Buffer.byteLength(value, 'utf8') >
-			MODEL_TOOL_MAX_ARGUMENT_BYTES
-		) {
+		// A provider may split a UTF-16 pair across deltas. Count the concatenated
+		// UTF-8 bytes rather than counting both temporary replacement characters.
+		const first = value.charCodeAt(0);
+		const paired = call.trailingHighSurrogate && first >= 0xdc00 && first <= 0xdfff;
+		const bytes = Buffer.byteLength(value, 'utf8') - (paired ? 2 : 0);
+		if (call.argumentBytes + bytes > MODEL_TOOL_MAX_ARGUMENT_BYTES) {
 			throw new ModelNetworkFailure('too_large');
 		}
 		call.argumentsJson += value;
+		call.argumentBytes += bytes;
+		if (value.length) {
+			const last = value.charCodeAt(value.length - 1);
+			call.trailingHighSurrogate = last >= 0xd800 && last <= 0xdbff;
+		}
 	}
 
 	chat(input: unknown): void {
-		if (!Array.isArray(input) || input.length > MODEL_TOOL_MAX_CALLS) {
+		if (!Array.isArray(input)) {
 			throw new ModelNetworkFailure('response_invalid');
 		}
 		for (const raw of input) {

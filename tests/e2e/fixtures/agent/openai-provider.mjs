@@ -1,3 +1,4 @@
+import { fixtureToolName, findFixtureTool } from '../../../support/package-tool-catalog.mjs';
 import imageData from './image-data.json' with { type: 'json' };
 import { respondPresetModel } from './preset-model.mjs';
 import { respondFunctionalModel } from './functional-model.mjs';
@@ -18,6 +19,11 @@ const readJson = async (request) => {
 	for await (const chunk of request) chunks.push(chunk);
 	return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 };
+
+function assertDiscoveryNotReplayed(messages, id) {
+	if (messages.some((message) => message.role === 'tool' && message.tool_call_id === id))
+		throw new Error('Actual discovery refused or omitted the requested package tool; no call replay');
+}
 
 const sendSse = (response, value) => {
 	const payload = Array.isArray(value?.choices)
@@ -261,37 +267,61 @@ const server = http.createServer(async (request, response) => {
 	const messages = Array.isArray(body?.messages) ? body.messages : [];
 	const latestUserMessage = [...messages].reverse().find((message) => message?.role === 'user');
 	const latestUserText = JSON.stringify(latestUserMessage?.content ?? '');
-	// Simulate a model following the real discovery contract; never inject schemas or bypass Host guards.
-	const offeredNames = new Set((body.tools ?? []).map((tool) => tool.function?.name));
 
+	// Simulate a model following the real discovery contract; never inject schemas or bypass Host guards.
 	const regressionResponse = (response, delta, finishReason = 'stop') => {
-		const missing = (delta.tool_calls ?? []).filter((call) => !offeredNames.has(call.function.name));
-		if (missing.length && offeredNames.has('tool_search')) {
+		const calls = delta.tool_calls ?? [];
+		const missing = calls.filter(
+			(call) =>
+				!(typeof call.function.name === 'object' && 'rawToolName' in call.function.name) &&
+				!findFixtureTool(body, call.function.name),
+		);
+		if (missing.length) {
 			const id = 'discover_' + missing.map((call) => call.id).join('_');
-			// A denied/unknown discovery must still exercise the original rejection scenario.
-			if (!messages.some((message) => message.role === 'tool' && message.tool_call_id === id)) {
-				return sendRegressionResponse(
-					response,
-					{
-						tool_calls: [
-							{
-								index: 0,
-								id,
-								type: 'function',
-								function: {
-									name: 'tool_search',
-									arguments: JSON.stringify({
-										query: [...new Set(missing.map((call) => call.function.name))].join(' '),
-									}),
-								},
+			assertDiscoveryNotReplayed(messages, id);
+			return sendRegressionResponse(
+				response,
+				{
+					tool_calls: [
+						{
+							index: 0,
+							id,
+							type: 'function',
+							function: {
+								name: fixtureToolName(body, 'tool_search'),
+								arguments: JSON.stringify({
+									query: [
+										...new Set(
+											missing.map((call) =>
+												typeof call.function.name === 'string'
+													? call.function.name
+													: call.function.name.name,
+											),
+										),
+									].join(' '),
+								}),
 							},
-						],
-					},
-					'tool_calls',
-				);
-			}
+						},
+					],
+				},
+				'tool_calls',
+			);
 		}
-		return sendRegressionResponse(response, delta, finishReason);
+		return sendRegressionResponse(
+			response,
+			{
+				...delta,
+				...(delta.tool_calls
+					? {
+							tool_calls: calls.map((call) => ({
+								...call,
+								function: { ...call.function, name: fixtureToolName(body, call.function.name) },
+							})),
+						}
+					: {}),
+			},
+			finishReason,
+		);
 	};
 
 	const isCheckpointRequest = messages.some(
@@ -343,8 +373,8 @@ const server = http.createServer(async (request, response) => {
 		}
 	}
 	try {
-		if (respondFunctionalModel(messages, latestUserText, response, regressionResponse)) return;
-		if (respondPresetModel(messages, latestUserText, response, regressionResponse)) return;
+		if (respondFunctionalModel(messages, latestUserText, response, regressionResponse, body)) return;
+		if (respondPresetModel(messages, latestUserText, response, regressionResponse, body)) return;
 	} catch (error) {
 		// A deliberately strict model fixture should fail its one Run, never
 		// terminate the shared provider and poison later isolated E2E scenarios.
@@ -357,7 +387,7 @@ const server = http.createServer(async (request, response) => {
 		}
 		return;
 	}
-	const acpExecution = latestUserText.match(/E2E_ACP_EXECUTE integration=([a-f0-9-]+) version=(\d+)/);
+	const acpExecution = latestUserText.match(/E2E_ACP_EXECUTE instance=([a-f0-9-]+)/);
 	if (acpExecution) {
 		const result = messages.find(
 			(message) => message.role === 'tool' && message.tool_call_id === 'call_acp_execute',
@@ -372,10 +402,9 @@ const server = http.createServer(async (request, response) => {
 							id: 'call_acp_execute',
 							type: 'function',
 							function: {
-								name: 'acp_integration_execute',
+								name: 'acp_execute',
 								arguments: JSON.stringify({
-									integrationId: acpExecution[1],
-									version: Number(acpExecution[2]),
+									instanceId: acpExecution[1],
 									prompt: 'Request permission; do not write if rejected.',
 								}),
 							},
@@ -493,8 +522,8 @@ const server = http.createServer(async (request, response) => {
 	}
 	if (
 		latestUserText.includes('E2E_BROWSER_LIFECYCLE') &&
-		offeredNames.has('tool_search') &&
-		!offeredNames.has('browser_open')
+		findFixtureTool(body, 'tool_search') &&
+		!findFixtureTool(body, 'browser_open')
 	) {
 		regressionResponse(
 			response,
@@ -540,7 +569,7 @@ const server = http.createServer(async (request, response) => {
 									id: approvalCallId,
 									type: 'function',
 									function: {
-										name: 'shell_execute',
+										name: fixtureToolName(body, 'shell_execute'),
 										arguments: JSON.stringify({
 											connectionId: Number(connection[1]),
 											mode: 'foreground',
@@ -597,7 +626,7 @@ const server = http.createServer(async (request, response) => {
 							id: browserCallId,
 							type: 'function',
 							function: {
-								name: 'browser_open',
+								name: fixtureToolName(body, 'browser_open'),
 								arguments: JSON.stringify({
 									targetId: 'e2e-lifecycle',
 									expectedVersion: Number(/version=(\d+)/.exec(latestUserText)?.[1]),

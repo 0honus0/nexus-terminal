@@ -7,6 +7,17 @@ export interface StoredParticipantScope {
 	runId: string;
 }
 
+export type StoredChildOutputPage =
+	| { status: 'invalid_offset' }
+	| {
+			status: 'ok';
+			sha256: string;
+			originalBytes: number;
+			offset: number;
+			nextOffset: number | null;
+			text: string;
+	  };
+
 export interface StoredParticipant {
 	version: number;
 	id: string;
@@ -35,6 +46,7 @@ export interface StoredDelegateCommand extends StoredCollaborationAuthority {
 	id: string;
 	requestHash: string;
 	objective: string;
+	inputJson: string;
 	targets: number[];
 	profile: AgentChildProfile;
 	tools: string[];
@@ -46,7 +58,7 @@ export interface StoredDelegateCommand extends StoredCollaborationAuthority {
 
 export interface StoredChildCreation {
 	participant: StoredParticipant;
-	providerId: string;
+	inputJson: string;
 	prompt: string;
 	requestHash: string;
 	version: number;
@@ -85,7 +97,12 @@ export interface RunCollaborationStorage {
 	messageMetadata(scope: StoredParticipantScope, after: number, limit: number): Promise<StoredMessageMetadataPage>;
 	participant(scope: StoredParticipantScope): Promise<StoredParticipant | null>;
 	children(scope: StoredParticipantScope): Promise<StoredParticipant[]>;
-	output(scope: StoredParticipantScope, childId: string): Promise<string | null>;
+	output(
+		scope: StoredParticipantScope,
+		childId: string,
+		offset: number,
+		maxBytes: number,
+	): Promise<StoredChildOutputPage | null>;
 	delegate(
 		command: StoredDelegateCommand,
 		admit: (facts: StoredChildAdmissionFacts) => boolean,
@@ -102,8 +119,7 @@ export interface RunCollaborationStorage {
 		key: string,
 		value: string,
 		expectedVersion: number,
-		maxFacts: number,
-	): Promise<StoredCollaborationFact | 'version_conflict' | 'limit_exceeded'>;
+	): Promise<StoredCollaborationFact | 'version_conflict'>;
 	send(
 		authority: StoredCollaborationAuthority,
 		id: string,
@@ -113,7 +129,12 @@ export interface RunCollaborationStorage {
 		maxMessages: number,
 		maxBytes: number,
 	): Promise<number>;
-	read(authority: StoredCollaborationAuthority, after: number, limit: number): Promise<StoredCollaborationPage>;
+	read(
+		authority: StoredCollaborationAuthority,
+		after: number,
+		limit: number,
+		maxBytes: number,
+	): Promise<StoredCollaborationPage>;
 	consume(
 		authority: StoredCollaborationAuthority,
 		through: number,

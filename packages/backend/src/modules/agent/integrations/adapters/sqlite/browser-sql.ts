@@ -4,10 +4,7 @@ import type { StoredBrowserTarget, StoredBrowserConfiguration, BrowserStorage } 
 import { BrowserStorageRefusal } from '../../storage/browser-storage.js';
 import {
 	AGENT_BROWSER_MAX_BODY_BYTES,
-	AGENT_BROWSER_MAX_TARGETS,
-	AGENT_BROWSER_MAX_ENDPOINTS,
 	AGENT_BROWSER_ENDPOINT_MAX_BYTES,
-	AGENT_BROWSER_MAX_PATTERNS,
 	AGENT_BROWSER_PATTERN_MAX_BYTES,
 	AGENT_BROWSER_MAX_PRIORITY,
 	AGENT_BROWSER_TARGET_ID_MAX_BYTES,
@@ -22,7 +19,7 @@ function targets(encoded: unknown): StoredBrowserTarget[] {
 		throw new Error('Corrupt browser settings');
 	}
 	const value: unknown = JSON.parse(encoded);
-	if (!Array.isArray(value) || value.length > AGENT_BROWSER_MAX_TARGETS) {
+	if (!Array.isArray(value)) {
 		throw new Error('Corrupt browser targets');
 	}
 	const result = value.map((row) => {
@@ -34,10 +31,8 @@ function targets(encoded: unknown): StoredBrowserTarget[] {
 			Buffer.byteLength(row.id, 'utf8') > AGENT_BROWSER_TARGET_ID_MAX_BYTES ||
 			!Array.isArray(row.endpoints) ||
 			row.endpoints.length < 1 ||
-			row.endpoints.length > AGENT_BROWSER_MAX_ENDPOINTS ||
 			!Array.isArray(row.allowedUrlPatterns) ||
-			row.allowedUrlPatterns.length < 1 ||
-			row.allowedUrlPatterns.length > AGENT_BROWSER_MAX_PATTERNS
+			row.allowedUrlPatterns.length < 1
 		) {
 			throw new Error('Corrupt browser target');
 		}

@@ -16,7 +16,6 @@ import {
 } from '../http-codec.js';
 import {
 	AGENT_APP_MAX_RESPONSE_BYTES,
-	AGENT_APP_MAX_LIST_ITEMS,
 	AGENT_APP_DEFINITION_ID_PATTERN,
 	AGENT_APP_MAX_DEFINITION_ID_BYTES,
 	AGENT_APP_MAX_DEFINITION_VERSION_BYTES,
@@ -100,7 +99,7 @@ export function readAgentAppResponse(input: unknown): AgentAppView {
 
 export function readAgentAppListResponse(input: unknown): AgentAppView[] {
 	encodeAgentJson(input, AGENT_APP_MAX_RESPONSE_BYTES);
-	if (!Array.isArray(input) || input.length > AGENT_APP_MAX_LIST_ITEMS) {
+	if (!Array.isArray(input)) {
 		throw new InvalidAgentPayload();
 	}
 	const result = input.map(readApp);
@@ -112,7 +111,7 @@ export function readAgentAppListResponse(input: unknown): AgentAppView[] {
 
 export function readAgentAppDefinitionListResponse(input: unknown): AgentAppDefinitionView[] {
 	encodeAgentJson(input, AGENT_APP_MAX_RESPONSE_BYTES);
-	if (!Array.isArray(input) || input.length > AGENT_APP_MAX_LIST_ITEMS) {
+	if (!Array.isArray(input)) {
 		throw new InvalidAgentPayload();
 	}
 	const result = input.map((value) => {
@@ -152,16 +151,16 @@ export function readAgentCreateThreadResponse(input: unknown): AgentCreateThread
 }
 
 export function readAgentThreadEntryCursor(input: unknown): AgentThreadEntryCursor {
-	const row = agentRecord(input, ['runSequence', 'stepIndex', 'eventSequence', 'textOffset']);
+	const row = agentRecord(input, ['runSequence', 'messageOrdinal', 'chunkIndex', 'textOffset']);
 	const value = {
 		runSequence: agentInteger(row.runSequence, 0, Number.MAX_SAFE_INTEGER - 1),
-		stepIndex: agentInteger(row.stepIndex, 0, Number.MAX_SAFE_INTEGER - 1),
-		eventSequence: agentInteger(row.eventSequence, 0, Number.MAX_SAFE_INTEGER - 1),
+		messageOrdinal: agentInteger(row.messageOrdinal, 0, Number.MAX_SAFE_INTEGER - 1),
+		chunkIndex: agentInteger(row.chunkIndex, 0, Number.MAX_SAFE_INTEGER - 1),
 		textOffset: agentInteger(row.textOffset, 0, Number.MAX_SAFE_INTEGER - 1),
 	};
 	if (
-		(value.runSequence === 0 && (value.stepIndex !== 0 || value.eventSequence !== 0 || value.textOffset !== 0)) ||
-		(value.stepIndex === 0) !== (value.eventSequence === 0)
+		(value.runSequence === 0 && (value.messageOrdinal !== 0 || value.chunkIndex !== 0 || value.textOffset !== 0)) ||
+		(value.messageOrdinal === 0) !== (value.chunkIndex === 0)
 	) {
 		throw new InvalidAgentPayload();
 	}
@@ -169,7 +168,7 @@ export function readAgentThreadEntryCursor(input: unknown): AgentThreadEntryCurs
 }
 
 function compareEntry(a: AgentThreadEntryCursor, b: AgentThreadEntryCursor): number {
-	return a.runSequence - b.runSequence || a.stepIndex - b.stepIndex || a.eventSequence - b.eventSequence;
+	return a.runSequence - b.runSequence || a.messageOrdinal - b.messageOrdinal || a.chunkIndex - b.chunkIndex;
 }
 
 export function readAgentThreadEntries(
@@ -193,7 +192,11 @@ export function readAgentThreadEntries(
 	}
 	let previous = after;
 	const items = row.items.map((raw: unknown): AgentThreadEntry => {
-		const p = agentRecord(raw, ['runId', 'role', 'position', 'text'], AGENT_THREAD_ENTRIES_MAX_RESPONSE_BYTES);
+		const p = agentRecord(
+			raw,
+			['runId', 'operationSequence', 'role', 'position', 'text'],
+			AGENT_THREAD_ENTRIES_MAX_RESPONSE_BYTES,
+		);
 		const position = readAgentThreadEntryCursor(p.position);
 		if (
 			typeof p.text !== 'string' ||
@@ -209,7 +212,7 @@ export function readAgentThreadEntries(
 			(p.role !== 'user' && p.role !== 'assistant') ||
 			!points ||
 			points > AGENT_THREAD_ENTRY_MAX_TEXT_CODE_POINTS ||
-			(p.role === 'user') !== (position.stepIndex === 0) ||
+			(p.role === 'user') !== (position.messageOrdinal === 0) ||
 			!position.runSequence ||
 			order < 0 ||
 			position.textOffset !== (order === 0 ? previous.textOffset : 0) + points
@@ -217,7 +220,13 @@ export function readAgentThreadEntries(
 			throw new InvalidAgentPayload();
 		}
 		previous = position;
-		return { runId: readAgentId(p.runId), role: p.role, position, text };
+		return {
+			runId: readAgentId(p.runId),
+			operationSequence: agentInteger(p.operationSequence),
+			role: p.role,
+			position,
+			text,
+		};
 	});
 	const nextCursor = readAgentThreadEntryCursor(row.nextCursor);
 	if (compareEntry(nextCursor, previous) !== 0 || nextCursor.textOffset !== previous.textOffset) {
@@ -257,7 +266,7 @@ export function readAgentThreadEntryHistory(
 		}
 	}
 	if (!body.items.length) {
-		const expected = before ?? { runSequence: 0, stepIndex: 0, eventSequence: 0, textOffset: 0 };
+		const expected = before ?? { runSequence: 0, messageOrdinal: 0, chunkIndex: 0, textOffset: 0 };
 		if (compareEntry(startCursor, expected) !== 0 || startCursor.textOffset !== expected.textOffset) {
 			throw new InvalidAgentPayload();
 		}

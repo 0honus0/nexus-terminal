@@ -1,12 +1,15 @@
 <script setup lang="ts">
 	import { computed, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiBadge, UiButton, UiModal, UiSpinner } from '@/foundation/ui';
-	import type { PluginCatalogEntry } from '../model/plugin-types';
+	import { UiBadge, UiButton, UiModal, UiSpinner, UiInlineNotice } from '@/foundation/ui';
+	import type { PluginCatalogEntry } from '../plugins/model/plugin-types';
+	import type { PluginInstallPlan } from '../plugins/model/plugin-install-plan-types';
+	import PluginInstallPlanPreview from '../plugins/components/PluginInstallPlanPreview.vue';
 
 	const props = defineProps<{
 		visible: boolean;
 		entry: PluginCatalogEntry;
+		plan: PluginInstallPlan | null;
 		busy: boolean;
 		confirmDisabled: boolean;
 		notice: string;
@@ -76,7 +79,7 @@
 		<template v-if="entry">
 			<div class="space-y-4">
 				<UiButton v-if="needsRead" type="button" :disabled="busy" @click="emit('read')">{{
-					t('agent.settings.appManagement.readApps')
+					t('agent.settings.plugins.reverifyPackage')
 				}}</UiButton>
 				<!-- 插件基础信息主卡片 -->
 				<div class="relative overflow-hidden rounded-lg bg-header/25 p-4 transition-colors">
@@ -102,6 +105,11 @@
 						</div>
 					</div>
 				</div>
+
+				<PluginInstallPlanPreview v-if="plan" :plan="plan" />
+				<UiInlineNotice v-if="notice" tone="warning">{{
+					t('agent.settings.appManagement.' + notice)
+				}}</UiInlineNotice>
 
 				<!-- 3 栏核心特性网格 -->
 				<div class="grid grid-cols-1 gap-2.5 sm:grid-cols-3">

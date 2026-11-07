@@ -1,3 +1,4 @@
+import type { AgentPluginContentReference, AgentPluginContentPage } from '../plugins/content.js';
 import type { AgentAppDefinitionView, AgentThreadView } from './model.js';
 import type { AgentRunView } from '../runs/model.js';
 import type { AgentProviderProtocol, AgentReasoningEffort } from '../providers/values.js';
@@ -7,6 +8,7 @@ import type { AgentApprovalView, AgentApprovalPage } from '../governance/model.j
 import type { AgentCreateRunRequest, AgentCreateRunResponse, AgentCancelRunResponse } from '../runs/http.js';
 import type { AgentApprovalResolveRequest } from '../governance/http.js';
 import type { AgentThreadEntryCursor, AgentThreadEntries, AgentThreadEntryHistory } from './model.js';
+import type { AgentResumeRunRequest, AgentResumeRunResponse, AgentRunSuspensionView } from '../runs/http.js';
 
 export interface AgentSelectableModel {
 	providerId: string;
@@ -25,6 +27,10 @@ export interface AgentDeleteThreadResponse {
 }
 
 export type AgentWorkspaceInput =
+	| { method: 'agent.runs.outputs'; params: { runId: string } }
+	| { method: 'agent.content.read'; params: { runId: string; reference: AgentPluginContentReference; index: number } }
+	| { method: 'agent.runs.resume'; params: { runId: string; operationId: string; input: AgentResumeRunRequest } }
+	| { method: 'agent.runs.suspension'; params: { runId: string } }
 	| {
 			method: 'agent.runs.appendInput';
 			params: {
@@ -66,6 +72,10 @@ export type AgentWorkspaceInput =
 	| { method: 'agent.subagents.messages'; params: { runId: string; childId: string; after: number; limit: number } };
 
 export type AgentWorkspaceResult =
+	| { method: 'agent.runs.outputs'; value: AgentPluginContentReference[] | null }
+	| { method: 'agent.content.read'; value: AgentPluginContentPage }
+	| { method: 'agent.runs.resume'; value: AgentResumeRunResponse }
+	| { method: 'agent.runs.suspension'; value: AgentRunSuspensionView | null }
 	| { method: 'agent.threads.entries'; value: AgentThreadEntries }
 	| { method: 'agent.threads.history'; value: AgentThreadEntryHistory }
 	| { method: 'agent.runs.create' | 'agent.runs.appendInput'; value: AgentCreateRunResponse }

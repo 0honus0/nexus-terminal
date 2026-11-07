@@ -1,5 +1,5 @@
 import type { ManagedApp } from './app-management-types';
-import type { PluginInstallation, PluginVersion } from './plugin-types';
+import type { PluginInstallation, PluginVersion, PluginAppBinding } from '../plugins/model/plugin-types';
 import type { HostApp, HostDirectory } from './host-types';
 
 export function toHostDirectory(
@@ -7,6 +7,7 @@ export function toHostDirectory(
 	installations: PluginInstallation[],
 	versions: PluginVersion[],
 	executionEnabled: boolean,
+	bindings: PluginAppBinding[],
 ): HostDirectory {
 	const installationsByApp = new Map(installations.map((installation) => [installation.appId, installation]));
 	const versionsByIdentity = new Map<string, PluginVersion>();
@@ -37,17 +38,30 @@ export function toHostDirectory(
 						]),
 					)
 				: undefined;
-			const surface: HostApp['surface'] = version
-				? version.manifest.frontendEntry
-					? 'custom'
-					: 'agent'
-				: 'unavailable';
+			const binding = bindings.find((item) => item.appId === app.id);
+			const bindingMatchesApp =
+				binding?.app.packageId === app.definitionId &&
+				binding.app.version === app.definitionVersion &&
+				binding.app.packageHash === installation?.packageHash &&
+				binding.app.publisherKeyId === installation?.publisherKeyId;
+			const ui = binding?.ui;
+			const uiVersion = ui
+				? versionsByIdentity.get(JSON.stringify([ui.packageId, ui.version, ui.packageHash, ui.publisherKeyId]))
+				: undefined;
+			const surface: HostApp['surface'] =
+				version &&
+				bindingMatchesApp &&
+				uiVersion?.manifest.frontendEntry &&
+				uiVersion.manifest.contributionKinds.includes('ui')
+					? 'plugin'
+					: 'unavailable';
 			return {
 				id: app.id,
 				displayName: app.name,
 				definitionId: app.definitionId,
 				version: app.version,
-				packageVersion: app.definitionVersion,
+				packageVersion: binding?.ui?.version ?? app.definitionVersion,
+				uiRevision: binding?.uiRevision ?? 0,
 				enabled: app.enabled,
 				executionState: app.executionState,
 				surface,

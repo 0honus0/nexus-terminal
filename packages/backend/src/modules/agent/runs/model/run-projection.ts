@@ -1,7 +1,10 @@
-import type { StoredRun, StoredRunEvent, StoredFrozenInput } from '../storage/run-storage.js';
+import type { StoredRunAppExecution } from '../storage/run-storage.js';
+import type { RunAppExecution } from './run-app-execution-types.js';
+import type { StoredRun, StoredRunEvent, StoredFrozenInput, StoredFrozenModelInput } from '../storage/run-storage.js';
+import type { FrozenModelInput } from '../../providers/model/provider-types.js';
 import type { AgentRun, AgentRunEvent, RunFrozenInput } from './run-types.js';
-import { AgentFailure } from '../../agent-failure.js';
-import { fromStoredModel, toStoredModel } from '../../providers/model/provider-projection.js';
+
+import { toStoredModel } from '../../providers/model/provider-projection.js';
 
 export function fromStoredRun(value: StoredRun): AgentRun {
 	return {
@@ -27,24 +30,32 @@ export function fromStoredEvent(value: StoredRunEvent): AgentRunEvent {
 	};
 }
 
-export function fromStoredFrozen(value: StoredFrozenInput): RunFrozenInput {
-	const capabilities = fromStoredModel(value.capabilities);
-	if (value.protocol !== 'images' && capabilities.maxOutputTokens === undefined) {
-		throw new AgentFailure('provider_unavailable');
-	}
-	return {
-		providerId: value.providerId,
-		providerVersion: value.providerVersion,
-		credentialRevision: value.credentialRevision,
-		modelId: value.modelId,
-		baseUrl: value.baseUrl,
-		protocol: value.protocol,
-		capabilities,
-		executionPolicy: value.executionPolicy,
-	};
+export function fromStoredAppExecution(value: StoredRunAppExecution): RunAppExecution {
+	return value.kind === 'retired'
+		? { kind: 'retired' }
+		: {
+				kind: 'plugin',
+				package: {
+					packageId: value.package.packageId,
+					version: value.package.version,
+					packageHash: value.package.packageHash,
+					publisherKeyId: value.package.publisherKeyId,
+				},
+				codeDependencies: value.codeDependencies.map((dependency) => ({
+					packageId: dependency.packageId,
+					version: dependency.version,
+					packageHash: dependency.packageHash,
+					publisherKeyId: dependency.publisherKeyId,
+				})),
+				handler: value.handler,
+			};
 }
 
-export function toStoredFrozen(value: RunFrozenInput): StoredFrozenInput {
+export function fromStoredFrozen(value: StoredFrozenInput): RunFrozenInput {
+	return { appExecution: fromStoredAppExecution(value.appExecution), inputJson: value.inputJson };
+}
+
+export function toStoredFrozen(value: FrozenModelInput): StoredFrozenModelInput {
 	return {
 		providerId: value.providerId,
 		providerVersion: value.providerVersion,

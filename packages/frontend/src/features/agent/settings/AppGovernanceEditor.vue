@@ -2,7 +2,7 @@
 	import { computed, toRaw } from 'vue';
 	import { structurallyEqual } from '@/foundation/data';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiCheckbox, UiEmptyState, UiInfoHint, UiInlineNotice } from '@/foundation/ui';
+	import { UiBadge, UiButton, UiCheckbox, UiEmptyState, UiInfoHint, UiInlineNotice } from '@/foundation/ui';
 	import type { AgentCapability } from '@nexus-terminal/shared/agent/governance/values';
 	import type { ManagedApp } from '../model/app-management-types';
 	import { useAppGovernance } from '../composables/use-app-governance';
@@ -82,7 +82,9 @@
 				grants.value?.grants.map((grant) => ({ capability: grant.capability, scope: grant.scope })) ?? [],
 			),
 	);
-	const definitions = computed(() => grants.value?.definitions ?? []);
+	const definitions = computed(() =>
+		(grants.value?.definitions ?? []).filter((definition) => props.app.capabilities.includes(definition.id)),
+	);
 	const grantedCount = computed(
 		() => definitions.value.filter((definition) => grantFor(definition.id) !== undefined).length,
 	);

@@ -1,12 +1,4 @@
-import type {
-	AgentApprovalStatus,
-	AgentApprovalKind,
-	AgentApprovalRisk,
-	AgentGrantScopeKind,
-	AgentCompactionMode,
-	AgentContextProfile,
-	AgentCapability,
-} from './values.js';
+import type { AgentApprovalStatus, AgentApprovalRisk, AgentGrantScopeKind, AgentCapability } from './values.js';
 
 export type AgentGrantScope =
 	{ kind: 'global' } | { kind: 'targets'; targets: { ssh?: { mode: 'all' } | { mode: 'ids'; ids: string[] } } };
@@ -41,8 +33,6 @@ export interface AgentExecutionPolicyOverrides {
 	maxRecallBytes?: number;
 	maxSubagentMessages?: number;
 	maxSubagentMessageBytes?: number;
-	contextCompactionMode?: AgentCompactionMode;
-	contextProfile?: AgentContextProfile;
 }
 
 export interface AgentExecutionPolicyView {
@@ -53,28 +43,25 @@ export interface AgentExecutionPolicyView {
 
 export interface AgentApprovalView {
 	id: string;
+	sequence: number;
 	appId: string;
 	runId: string;
-	toolCallId: string;
+	operationId: string;
+	parentOperationId: string | null;
 	operationHash: string;
-	kind: AgentApprovalKind;
 	status: AgentApprovalStatus;
 	policyRevision: number;
-	inputRevision: number;
 	version: number;
+	capability: AgentCapability;
+	operationName: string;
+	risk: AgentApprovalRisk;
+	summary: string;
+	targetId: number | null;
 	requestedAt: number;
 	expiresAt: number;
 	decidedAt: number | null;
 	decidedByUserId: number | null;
 	consumedAt: number | null;
-	inspection: {
-		toolName: string;
-		toolVersion: string;
-		risk: AgentApprovalRisk;
-		mutation: boolean;
-		targetConnectionId: number | null;
-		summary: string;
-	};
 }
 
 export interface AgentTargetDenylistView {

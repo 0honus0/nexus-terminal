@@ -2,7 +2,10 @@ import { agentHttpErrorHandler, AgentRpcHttpSerializationFailure } from './agent
 import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import { AgentHttpInput } from './agent-input.js';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
-import { AGENT_PLUGIN_MAX_FRONTEND_MESSAGE_BYTES } from '@nexus-terminal/shared/agent/plugins/values';
+import {
+	AGENT_PLUGIN_MAX_FRONTEND_MESSAGE_BYTES,
+	AGENT_PLUGIN_PROTOCOL_VERSION,
+} from '@nexus-terminal/shared/agent/plugins/values';
 import type {
 	AgentPluginFrontendRpcRequest,
 	AgentPluginRpcResponse,
@@ -75,6 +78,7 @@ export function createPluginRpcHttpRoute(
 					),
 				);
 				committed =
+					result.method === 'settings.write' ||
 					result.method === 'storage.put' ||
 					result.method === 'storage.delete' ||
 					result.method === 'intents.create' ||
@@ -84,9 +88,15 @@ export function createPluginRpcHttpRoute(
 					result.method === 'agent.threads.delete' ||
 					result.method === 'agent.runs.create' ||
 					result.method === 'agent.runs.appendInput' ||
+					result.method === 'agent.runs.resume' ||
 					result.method === 'agent.runs.cancel' ||
 					result.method === 'agent.subagents.cancel' ||
-					result.method === 'agent.approvals.resolve';
+					result.method === 'agent.approvals.resolve' ||
+					result.method === 'agent.memories.review' ||
+					result.method === 'agent.artifacts.begin' ||
+					result.method === 'agent.artifacts.retain' ||
+					result.method === 'agent.artifacts.delete' ||
+					result.method === 'agent.artifacts.attach';
 				if (exchange.request === null) {
 					throw new AgentOperationError('internal_failure');
 				}
@@ -95,7 +105,7 @@ export function createPluginRpcHttpRoute(
 				}
 				const response: AgentPluginRpcResponse = {
 					type: 'nexus.plugin.response',
-					protocol: 1,
+					protocol: AGENT_PLUGIN_PROTOCOL_VERSION,
 					nonce: exchange.request.envelope.nonce,
 					id: exchange.request.envelope.id,
 					seq: exchange.request.envelope.seq,
@@ -129,7 +139,7 @@ export function createPluginRpcHttpRoute(
 				}
 				const response: AgentPluginRpcResponse = {
 					type: 'nexus.plugin.response',
-					protocol: 1,
+					protocol: AGENT_PLUGIN_PROTOCOL_VERSION,
 					nonce: exchange.request.envelope.nonce,
 					id: exchange.request.envelope.id,
 					seq: exchange.request.envelope.seq,

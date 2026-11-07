@@ -1,3 +1,4 @@
+import { AGENT_PLUGIN_FRONTEND_SANDBOX } from '../../../packages/shared/dist/agent/plugins/values.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { request } from 'node:http';
@@ -917,12 +918,13 @@ test('Helmet preserves plugin sandbox and raw SDK headers without adding incompa
 		assert.deepEqual(
 			new Set(asset.headers['content-security-policy'].split(';').map((item) => item.trim())),
 			new Set([
-				'sandbox allow-scripts',
+				'sandbox ' + AGENT_PLUGIN_FRONTEND_SANDBOX,
 				"default-src 'none'",
-				"script-src 'self'",
-				"style-src 'self'",
-				"img-src 'self' data:",
-				"font-src 'self'",
+				"script-src 'self' 'wasm-unsafe-eval'",
+				'worker-src blob:',
+				"style-src 'self' 'unsafe-inline'",
+				"img-src 'self' data: blob:",
+				"font-src 'self' data: blob:",
 				"connect-src 'none'",
 				"object-src 'none'",
 				"base-uri 'none'",
@@ -930,11 +932,20 @@ test('Helmet preserves plugin sandbox and raw SDK headers without adding incompa
 				"frame-ancestors 'self'",
 			]),
 		);
-		const sdk = await send(server, 'GET', '/sdk/frontend-v1.mjs');
+		assert.equal((await send(server, 'GET', '/sdk/frontend-v1.mjs')).status, 404);
+		assert.equal((await send(server, 'GET', '/sdk/frontend-v2.mjs')).status, 404);
+		const sdk = await send(server, 'GET', '/sdk/frontend-v4.mjs');
 		assert.equal(sdk.status, 200);
 		assert.equal(sdk.headers['cross-origin-resource-policy'], 'cross-origin');
 		assert.equal(sdk.headers['access-control-allow-origin'], '*');
 		assert.equal(sdk.headers['content-security-policy'], undefined);
+		assert.equal(sdk.headers['content-type'], 'text/javascript; charset=utf-8');
+		assert.equal(asset.headers['content-type'], 'text/html; charset=utf-8');
+		assert.equal(asset.headers.etag, '"' + content.sha256 + '"');
+		for (const response of [asset, sdk]) {
+			assert.equal(response.headers['content-length'], String(content.bytes.byteLength));
+			assert.equal(response.headers['cache-control'], 'no-store');
+		}
 		const theme = await send(server, 'GET', '/theme');
 		assert.equal(theme.status, 200);
 		assert.equal(theme.bytes.toString(), '<p>theme</p>');

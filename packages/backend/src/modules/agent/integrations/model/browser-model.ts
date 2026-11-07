@@ -1,7 +1,8 @@
+import { AGENT_PLUGIN_APP_PAYLOAD_MAX_BYTES } from '@nexus-terminal/shared/agent/plugins/values';
 import type { BrowserClient, BrowserSession } from '../../../../platform/browser/browser-client.js';
 import { BrowserFailure } from '../../../../platform/browser/browser-client.js';
 import type { SessionTokens } from '../../../../platform/security/session-tokens.js';
-import { AgentFailure, ToolCleanupFailure, ToolExecutionUnknown } from '../../agent-failure.js';
+import { AgentFailure, ToolCleanupFailure, ToolExecutionUnknown, ToolOperationRefusal } from '../../agent-failure.js';
 import { agentStorage } from '../../agent-storage-failure.js';
 import type { BrowserStorage, StoredBrowserTarget, StoredBrowserConfiguration } from '../storage/browser-storage.js';
 import { BrowserStorageRefusal } from '../storage/browser-storage.js';
@@ -50,13 +51,13 @@ function failure(error: unknown, mutation = false): never {
 			throw new ToolCleanupFailure({ cause: error });
 		}
 		if (error.kind === 'stale_snapshot') {
-			throw new AgentFailure('version_conflict', { cause: error });
+			throw new ToolOperationRefusal('version_conflict', { cause: error });
 		}
 		if (error.kind === 'limit_exceeded') {
 			throw new AgentFailure('limit_exceeded', { cause: error });
 		}
 		if (error.kind === 'url_denied') {
-			throw new AgentFailure('target_denied', { cause: error });
+			throw new ToolOperationRefusal('target_denied', { cause: error });
 		}
 		if (error.kind === 'execution_unknown' || mutation) {
 			throw new ToolExecutionUnknown({ cause: error });
@@ -77,7 +78,7 @@ class ApplicationBrowserSession implements BrowserApplicationSession {
 
 	async snapshot(maxNodes: number, signal: AbortSignal): Promise<BrowserSnapshot> {
 		try {
-			const value = await this.session.snapshot(maxNodes, signal);
+			const value = await this.session.snapshot(maxNodes, AGENT_PLUGIN_APP_PAYLOAD_MAX_BYTES, signal);
 			return {
 				snapshotId: value.snapshotId,
 				url: value.url,

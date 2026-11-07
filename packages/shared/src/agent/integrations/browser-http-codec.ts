@@ -1,10 +1,7 @@
 import { agentRecord, agentText, agentInteger, InvalidAgentPayload } from '../http-codec.js';
 import {
 	AGENT_BROWSER_MAX_BODY_BYTES,
-	AGENT_BROWSER_MAX_TARGETS,
-	AGENT_BROWSER_MAX_ENDPOINTS,
 	AGENT_BROWSER_ENDPOINT_MAX_BYTES,
-	AGENT_BROWSER_MAX_PATTERNS,
 	AGENT_BROWSER_PATTERN_MAX_BYTES,
 	AGENT_BROWSER_MAX_PRIORITY,
 	AGENT_BROWSER_TARGET_ID_MAX_BYTES,
@@ -20,7 +17,7 @@ function boolean(input: unknown): boolean {
 }
 
 export function readAgentBrowserTargets(input: unknown): AgentBrowserTarget[] {
-	if (!Array.isArray(input) || input.length > AGENT_BROWSER_MAX_TARGETS) {
+	if (!Array.isArray(input)) {
 		throw new InvalidAgentPayload();
 	}
 	const targets = input.map((value) => {
@@ -32,10 +29,8 @@ export function readAgentBrowserTargets(input: unknown): AgentBrowserTarget[] {
 		if (
 			!Array.isArray(row.endpoints) ||
 			!row.endpoints.length ||
-			row.endpoints.length > AGENT_BROWSER_MAX_ENDPOINTS ||
 			!Array.isArray(row.allowedUrlPatterns) ||
-			!row.allowedUrlPatterns.length ||
-			row.allowedUrlPatterns.length > AGENT_BROWSER_MAX_PATTERNS
+			!row.allowedUrlPatterns.length
 		) {
 			throw new InvalidAgentPayload();
 		}

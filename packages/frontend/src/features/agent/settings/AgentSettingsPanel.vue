@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { computed, defineAsyncComponent, reactive, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { usePluginManagement } from '../composables/use-plugin-management';
+	import { usePluginManagement } from '../plugins/composables/use-plugin-management';
 	import ModelProviderSettings from './ModelProviderSettings.vue';
 	import { UiInfoHint, UiSwitch } from '@/foundation/ui';
 	import { useSettingsReloadSource } from '@/shared/feedback/public';
@@ -127,16 +127,11 @@
 			:entry="onboarding.entry.value"
 			:visible="onboarding.visible.value"
 			:busy="onboarding.operation.busy.value"
-			:notice="
-				onboarding.uncertain.value
-					? 'unknown'
-					: onboarding.operation.notice.value === 'saved'
-						? ''
-						: onboarding.operation.notice.value
-			"
-			:needs-read="onboarding.operation.refreshRequired.value"
+			:plan="onboarding.plan.value"
+			:notice="onboarding.operation.notice.value === 'saved' ? '' : onboarding.operation.notice.value"
+			:needs-read="!onboarding.plan.value || onboarding.operation.refreshRequired.value"
 			:confirm-disabled="
-				onboarding.uncertain.value ||
+				!onboarding.plan.value ||
 				onboarding.operation.refreshRequired.value ||
 				!onboarding.entry.value.compatible ||
 				execution.blocked.value ||

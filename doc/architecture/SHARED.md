@@ -233,7 +233,7 @@ Agent file_inspect/patch/move/delete 的模型私有命令、树节点及内容�
 
 ### 协作契约边界
 
-`agent/collaboration/{values,model,http,http-codec}.ts` 定义已安装的 Child 列表、路径及消息元数据页、有限 profile 和容量，包出口精确列出。Child历史不再按默认工具4000次设集合上界；完整响应保持原2064384bytes的单次编码预算，独立于用户可调整总额度，不随安全整数上界乘法膨胀；消息元数据每页仍最多32项；取消复用 runs 的 expectedVersion/Idempotency-Key/成功联合与安全错误。严格 codec 检查字段、UUID、取值、唯一 Child/父归属和有序游标。后端 register/HTTP 各自白名单投影，Service 保持独立应用对象，Model 转独立 storage。十个模型协作工具的目标缩窄、正文/事实和上下文仍属私有 owner；观察 HTTP 不暴露正文、不推进模型扫描/消费水位。正式界面已消费安全投影，行为验收仍按 testing 的实际覆盖。
+`agent/collaboration/{values,model,http,http-codec}.ts` 定义已安装的 Child 列表、路径及消息元数据页、有限 profile 和容量，包出口精确列出。Child历史不再按默认工具4000次设集合上界；完整响应保持原2064384bytes的单次编码预算，独立于用户可调整总额度，不随安全整数上界乘法膨胀；消息元数据每页仍最多32项；取消复用 runs 的 expectedVersion/Idempotency-Key/成功联合与安全错误。严格 codec 检查字段、UUID、取值、唯一 Child/父归属和有序游标。后端 register/HTTP 各自白名单投影，Service 保持独立应用对象，Model 转独立 storage。十个模型协作工具由包提供；host-operations 持其隔离 SDK 的严格正文/事实请求与结果，当前身份、目标缩窄和原账本仍由 Backend owner 决定。观察 HTTP 不暴露正文、不推进扫描/消费水位。正式界面已消费安全投影，行为验收仍按 testing 的实际覆盖。
 
 ## Preferences 个人数据契约
 
@@ -241,7 +241,7 @@ Agent file_inspect/patch/move/delete 的模型私有命令、树节点及内容�
 
 ### Context 续读权限
 
-治理values新增context.read，与现有严格grants/完整治理响应codec及后端共用，正式治理界面展示该权限。结果续读仅有后端模型消费者，私有ResultPage/原始账本不加入Shared；context.read仍须叠加源工具当前能力，不是通用跨Run读取权限。
+治理values新增context.read，与现有严格grants/完整治理响应codec及后端共用，正式治理界面展示该权限。结果续读由隔离工具包消费 host.perform 的 context.readResults typed 单页 DTO，原始账本仍留 Backend；context.read仍须叠加源工具当前能力，不是通用跨Run读取权限。
 
 ## 数据、执行与运维协议
 
@@ -274,23 +274,23 @@ html-themes 的四个精确出口包含来源取值、名称/正文/完整编码
 
 ### 集成与插件源码边界
 
-Shared agent/integrations的model/http/http-codec/values及browser-*契约由新管理HTTP和模型工具消费者消费；内部配置、存储对象和技术资源保持独立类型并显式投影。秘密只定义写意图与存在标志。Shared agent/plugins已有publisher/stage/verify/install、升级/卸载/取消退役请求、安装/不可变版本/descriptor及严格响应codec。基础预算、entry命名空间和取值归values；管理集合仍检查32 MiB完整编码预算，不再另按累计4096条解码拒绝；缓存保留数属于Backend政策，实际前后端继续消费相同stage状态和对象。新增独立数据/清除请求和安全对象，JSON文本128 KiB、key128 bytes；完整数据写入与RPC消息512 KiB，管理列表仍32 MiB。events/rpc-codec持有两端核心九方法；frontend-events/frontend-rpc-codec精确导出iframe握手、前端27方法及纯解码，实际消费者是Backend HTTP与交付的有限SDK。SDK窗口/MessagePort/计时器归Backend插件frontend Adapter，不进入Shared；host.appInfo和storage.get/put/delete与intents五方法均已有两端实际消费者，前端Agent管理/Run/订阅已有SDK消费者，正式父页的Shared RPC桥已消费，原生 Host 也已消费当前契约。不能从导出文件存在推断消费者完备。当前 manifest、SDK 与正式 Host 使用同一 Shared 契约，不保留旧 Protocol 桥。
+Shared `agent/integrations/browser-*` 仅持 Browser 可信配置与安全观察。MCP/ACP 协议及私有业务契约归独立服务包；`agent/plugins/settings`、`connection` 和 `service-transport` 持宿主实际管理和传输边界，配置连接不授予执行权。
 
-插件backend-sdk提供纯后端扩展context/请求/安全回复和生命周期类型；NativePluginBackendRuntime是实际consumer，NodeWorker不依赖App类型。repository-model/http/http-codec提供完整仓库设置CAS、目录、stage及推荐响应；版本格式、完整目录容量和源数量在values唯一维护，Shared与包/目录Adapter消费同一版本取值。所有新出口精确列入package.json；后端与正式插件管理已接HTTP/Source管理，正式 Agent Host 已接当前 Shared；既有专项验证交付SDK在真实Chromium中的有限依赖/握手/订阅链，未代替正式父页或完整仓库验收；既有专项另有实际仓库HTTP/目录/下载和子进程backend-sdk九方法的有限行为证据，未新增类型或扩大权限。
+`agent/plugins/model` 定义 manifest4、准确包引用、安装和 App 组合；manifest contributions 为 app/tools/services/ui/settings/skills，App 声明版本化 entry/UI contract，dependencies 与 namespaces 独立。Registry 的 contract/apiVersion、schema、描述、binding 和事件允许插件扩展；目录描述不是授权，准确包/实例/generation/configuration 在派发前重新核对。安装准备不持久化，失败重新 prepare；包事实、配置写入、运行和真实效果各有独立状态。
 
-intents 的 intent-values/model/http/http-codec 四个精确出口承载消息创建、接收、撤销、安全视图、分页/容量及严格纯解码；Backend HTTP、前端 SDK/RPC 与后端运行实例都是实际消费者。线协议采用显式inputJson、artifactIds和UUID operationId，冻结双方声明/授权修订；HTTP列表16MiB与RPC512KiB分别检查，不能静默截断。Shared不持有存储grant、密码、进程或Artifact流；文件视图复用agent/artifacts。后端SDK消费当前九方法联合；Artifact分段读取单次128 KiB，带完整receipt/Artifact/范围与规范base64，codec校验请求关联、长度及编码；base64和IPC封装量分别计入预算。正式父页已消费新Shared RPC桥，原生 Host 也已接入。
+`backend-sdk` 的公开运行类型由 `runtime`、`registry`、`run-context`、`app-runtime`、`content`、`settings`、`data` 与 `service-transport` 组成。SDK4 的 definePlugin 注册 App、工具或服务，handler 取得 Host 派生的调用 scope 与 signal。App 持完整 run 循环，模型、目录调用、checkpoint、输出、私有数据和受管 I/O 通过明确能力交付；Host 不再接收五阶段 execution 决议。`host-operations` 保留固定可信领域请求及 typed 结果，不接受调用者自报用户或授权。
 
-Browser基础动作取值包含全部15项，ToolDefinition的实际生产者消费该类型；settleMs的协议上限在browser-values唯一维护，模型工具描述与应用入参校验共用，Platform不引入该业务容量。
+`frontend-events/frontend-rpc-codec` 定义 protocol4 ready/init/ack、nonce/id/seq envelope、cancel/close 及订阅。`ui-http` 保留具名 Run、工具、Memory、Artifact 操作；`ui-events` 只交付安全 environment、主题、opaque checkpoint/附件、可信确认及资源操作。token、userId、Cookie 和任意 HTTP 代理不进入插件对象。Shared 只交付类型与严格 codec，真实 MessagePort、timer 和关闭归 Frontend `features/agent/plugins/sdk`，公开资产为 `/sdk/frontend-v4.mjs`；Backend SDK 运行资产为 `dist-plugin-sdk/backend-v4.mjs`。两者目录与宿主保持一致，没有独立 SDK workspace 或旧协议回退。
 
-plugins运行时契约按runtime-values（有限状态）、runtime-model（安全实例观察）、runtime-http（完整确认请求）、runtime-http-codec（严格输入、联合状态及确认响应关联）分开，并精确导出。state/revision/instanceId/unknownAt/acknowledgedAt归双端对象，PID、物化路径、journal、账本行与处理政策不进入Shared。确认响应关联原instanceId/instanceRevision及closed，不能把当前安装修订当成原实例修订。正式插件管理页已接Shared运行态观察及确认；行为统一留远程Actions E2E。
+`repository-*`、`install-plan-*`、`package-update-*` 保留签名目录、依赖准备和准确提交契约。更新先验证、关闭新准入、排空及显式迁移，再切换准确包；UI-only 更新只推进对应 Surface 修订。intents 仍有独立消息与附件授权，普通注册服务不自动成为跨 App 消息。完整归属及生命周期见 [Agent 架构](AGENT.md)，各实际预算取所属 values，单页容量不得冒充总数据上限。
 
 ### 前端SDK扩展与数据迁移
 
-frontend-sdk为实际交付SDK的纯类型；前端消息预算8 MiB+1 KiB包含定义/审批集合与RPC封装，原核心方法子预算和后端IPC仍512 KiB。实际生产者/消费者为后端HTTP及交付SDK；不因扩大前端联合使后台获得Agent管理权限。ThreadView新增必填version/updatedAt；scope/model/codec定义entries与四段码点游标，16片/4096码点/16KiB片段/512KiB完整页，模型文字中emoji/NUL/空白均保留。appendInput带原Run/version、Thread、稳定operationId与新Run输入；响应核对同Thread和不同Run身份。
+ThreadView 有 version/updatedAt，workspace entries/history 使用原四段码点游标、每页16片/每片4096码点与16KiB/完整512KiB，保留 emoji/NUL/空白。appendInput 携原 Run/version、Thread、稳定 operationId 与新输入，成功关联同 Thread 的不同 Root；Shared 不定义运行任务、模型授权或旧数据兼容。
 
-migration-model持有安全快照与回执，migration-http持有独立写命令，migration-http-codec严格解码全集/唯一键/版本/JSON及请求关联；values持有1024键和52MiB完整预算，精确包出口。真实HTTP有prepare-upgrade/data-snapshot/migrate-data，Model/Adapter类型仍独立。后端 HTTP 和 SDK 继续提供迁移能力；正式设置页不提供手工 JSON 迁移入口，清除数据沿独立确认流程，不提供旧对象兼容。
+migration-model 的快照 items 为 packageId/key/version/valueJson/updatedAt；migration-http 的写 items 为 packageId/key/expectedVersion/valueJson。migration-http-codec 以 packageId+key 验证唯一性、严格 JSON/版本/请求关联；单次52MiB完整迁移预算沿原 owner；不叠加固定键数或 namespace 总量门槛，逐值仍核对正常 RPC 可读取的完整编码容量。全 App 与单 package 的 data-snapshot 消费同一响应，超限明确拒绝；迁移覆盖输入所涉及 namespace 的全部有效键并逐键 CAS，其余 namespace 保留。Shared 不把不同包同名键合并。普通管理数据与 UI SDK 指向当前 UI namespace，后端 SDK 指向执行包 namespace，同包多 App 隔离。
 
-签名 Skill 文档、解析结果与内部执行输入仅由后端 Tool/Plugin 消费，归 Agent Model，不在 Shared 创建无人消费的 DTO。搜索/读取使用后端工具账本；Shared 只承载安全工具投影、失败与治理基础值，正式前端消费工具记录。两轮源码收口，静态证据见 testing，行为覆盖与未验范围见 testing。
+后端准备更新、data-snapshot/migrate-data 与独立清除为实际消费者；不持有旧 migrate 代码回调或安装操作账本。写数据/迁移/清除各自的原有 operationId 和幂等回执继续存在，不能因安装不持久化而删除。签名 Skill 的正文/解析与内部执行输入归后端；Shared 只声明签名 namespace 元数据、安全工具投影与治理基础值。正式前端无手工 JSON 迁移编辑器，行为验收见 testing。
 
 ## 机器突变恢复契约
 
@@ -354,7 +354,7 @@ Memory四HTTP的完整codec由后端管理入口、对话候选审核及既有 A
 
 ### 原生与插件共用工作区契约
 
-scope/workspace-http 及 workspace-http-codec 唯一定义19项工作区请求/安全结果、严格codec、原生appVersion外壳和App响应关联；基础完整预算8MiB+1KiB与可选模型上限1024归scope/values。插件frontend-events/frontend-rpc-codec组合并消费该契约，原核心九方法不变；SDK由Backend构建时通过esbuild打包全部实际codec及第三方运行依赖，以独立浏览器ESM交付。不再把通用工作区对象定义在plugins中。Backend原生会话HTTP和插件RPC、Frontend正式Host/Run/正文/审批/Child、DEV线程组件及插件桥均为真实消费者。前端mapper逐字段转换独立NativeThread/Scope/Run/Entry/Approval/Child/Step/Tool对象，不直接把wire当UI状态；前端包已移除旧Protocol依赖。
+scope/workspace-http 及 workspace-http-codec 唯一定义通用工作区请求/安全结果、会话 appVersion 外壳与 App 响应关联；完整预算8MiB+1KiB、可选模型上限1024归scope/values。plugins/ui-http 只补 UI 专用领域用例，frontend-events组合消费。Backend 会话 HTTP、插件 RPC、独立签名聊天 UI 和 DEV 会话消费者各用真实身份分支；Workspace mapper 在接口逐字段转换，插件 UI 结果另核对可信 appId，不伪造管理员 session 或借用后端内部记录。
 
 新增 agent.threads.delete 的完整参数为 {threadId,expectedVersion}，成功 value 为 AgentDeleteThreadResponse {appId,threadId}；不接受 operationId、额外字段、缺字段、非 UUID 或非正安全整数版本。删除不递增线程版本，因此当前最大安全整数版本仍合法。结果 decoder 严格验证方法和原 threadId，原生响应还验证外壳 App/version 以及内层 appId；插件响应复用工作区 codec 关联线程与 envelope 的 nonce/id/seq，交付 SDK 按已绑定 App 检查结果归属。Backend workspace-mapper 为唯一协议↔应用白名单转换；删除属于 mutation，即使没有 operationId，丢失确认、超时或本地取消也保持未知副作用语义。
 
@@ -389,9 +389,11 @@ Provider 协议统一为 chat-completions/responses/images；配置与目录中�
 
 ### Agent Run 直接增量协议
 
-agent/runs/events持AgentRunSubscription、subscribe初始游标、按序ACK、update/heartbeat判别联合与严格unknown解码。query拒绝未知/重复字段和非十进制版本。update含当前Thread正文增量页及可为null的Thread/Run/用量/事件/审批/子任务状态；首帧必须含状态。codec复用原子域解码，核对App/Run/Thread、事件游标/版本、子任务父关联、正文连续码点位置与more含义；revision为连接内连续序号，重连重置，不能代替持久正文/事件游标。
+agent/runs/events 定义页面共享 WS 的 subscribe/ack/unsubscribe，包含 subscriptionId/generation；source 严格区分 run（appId/access/runId/cursor）、run-events（appId/grant/runId/after）与 memory（appId/access/threadId）。access 是 session/appVersion 或 plugin/grant，Shared 只表达来源信息，Backend 逐次校验真实授权。外层 data 帧关联订阅、代际与连接内 revision，rejected 仅 forbidden/resync_required/unavailable；value 仍须由已注册 source decoder 验证，不开放任意 topic/JSON 发布。
 
-容量归runs/values：命令1KiB；完整输出按原审批8MiB、正文512KiB、事件32KiB、独立的子任务元数据响应容量加8KiB封装，合计按runs/values公式计算；最多16页且总编码字节不超过输出预算的未ACK窗口。达到窗口只暂停发送至确认，不拒绝业务Run。各端严格引用同一命令/帧/待接纳容量，底层WS另留心跳余量。没有新的模型执行或变更命令，消息不含凭据、原始供应商帧或数据库行；推送不能作为授权。
+run update 复用原 Thread 正文页及可空状态组，状态含 Thread/Run/用量/事件/审批/子任务/资源；首帧须含状态。decoder 核对 App/Run/Thread、事件游标/版本、子任务父关联、正文连续码点与 more。run-events 复用 AgentRunEventsResponse；agent/memory/events 的 memory-invalidated 只有 epoch/revision，接收后通过原具名 Memory 读取补齐。持久游标与连接内 revision 分开，重连不能把写入当补读。
+
+命令1KiB、完整输出及16页未 ACK 窗口仍由 runs/values 定义；原审批8MiB、正文512KiB、事件32KiB、子任务/资源与外壳容量计入完整预算，窗口满仅暂停。插件 MessagePort 的 stream 消息独立 nonce/seq、subscriptionId/generation/ACK，SDK 不再500ms轮询；Host 接纳解码后确认后端，UI 回调/渲染确认后推进本地持久游标。认证、计时、背压队列、订阅重连及资源关闭仍归具体 owner，不进入 Shared。
 
 ### 公共版本校验
 
@@ -468,28 +470,28 @@ providers/model的AgentProviderModelInput允许可选capabilitySources，取值�
 
 ### 生成图片工具投影
 
-AgentToolView.outputArtifactIds 为必填且无重复的文件 UUID 数组；仅 image_generate/artifact_create/artifact_present/file_deliver 的 completed 或 unknown 状态允许非空，unknown 只展示批次中已确认完成的文件；Shared codec 严格验证状态与工具类型。应用 Model、StoredToolOperation 与前端 NativeTool 各自声明，通过 SQLite→Model→register→HTTP→frontend 白名单转换。工具列表不暴露原始结果、模型参数、URL 或 Base64。
+AgentToolView.outputArtifactIds 为必填且无重复的文件 UUID 数组；inspected/dispatched 不允许非空引用；其余已结算状态只发布 Host 已确认的 Artifact 引用，failed/cancelled 包父操作也汇总持久子操作事实。引用不再从模型工具名或结果 JSON 推断，插件文本不能伪造。工具/审批 identity 是 plugin 精确包身份或 Host 固定 operation，审计保留的历史 operation 不进入 callable 列表。应用 Model、StoredToolOperation 与前端 NativeTool 各自声明，经 SQLite→Model→register→HTTP→frontend 白名单转换；工具列表不暴露原始结果、模型参数、URL 或 Base64。
 
 Workspace 传输进度：copyMove.progress 的 transferMethodUsed 为选定工具的实际事实，取值复用 ServerTransferMethodUsed（rsync/scp/sftp），准备期尚未选定时省略；archive.progress 的 processedBytes 为 TAR 原生未压缩记录处理字节，非压缩包大小。task-codec 分别严格校验枚举和非负安全整数，双端 WS 投影与客户端 adapter 逐字段映射；未知总量不伪造 totalFiles 或百分比。
 
 ## 插件安装目录响应
 
-plugins/http 的 AgentPluginInstallationListResponse 为 GET /plugins/installations 的完整响应：items 是原安装单项，retainedAppIds 是仍有配置或 KV 正文的 removed App ID。专用 codec 严格核对集合形状、App/definition 唯一、retained ID 唯一且必须属于本次 removed 安装；沿原完整响应字节预算，不为此新增限制。Backend Model/HTTP 与 Frontend API 分别转换独立内部目录对象；Host、管理面板和既有 E2E 全部消费专用 codec。安装单项、原卸载 CAS 与数据清除幂等请求不变。
+plugins/http 的 AgentPluginInstallationListResponse 为 GET /plugins/installations 的完整响应：items 是原安装单项，retainedAppIds 是仍有配置或 KV 正文的 removed App ID。专用 codec 严格核对集合形状、App UUID 唯一、retained ID 唯一且必须属于本次 removed 安装；同一来源包可有多个 App，不能再以 definitionId 唯一拒绝。沿原完整响应字节预算，不为此新增限制。Backend Model/HTTP 与 Frontend API 分别转换独立内部目录对象；Host、管理面板和既有 E2E 全部消费专用 codec。安装单项、原卸载 CAS 与数据清除幂等请求不变。
 
 ### 插件 App 目录契约
 
-App 来源仅为真实签名插件安装；删除 AgentCreateAppRequest/Response 及其 codec，App 单项仍消费 readAgentAppResponse。AgentAppDefinitionView 只保留 id/version/displayName/capabilities，删除无意义的默认启用字段；HTTP 与 Workspace 复用同一严格 decoder，双端 mapper 及测试消费者同步，不接受旧字段或旧创建接口。Shared 不含内置 ID、迁移事实或签名秘密。
+App 来源仅为真实签名插件安装；删除 AgentCreateAppRequest/Response 及其 codec，App 单项仍消费 readAgentAppResponse。AgentAppDefinitionView 只保留 id/version/displayName/capabilities，删除无意义的默认启用字段；HTTP 与 Workspace 复用同一严格 decoder，双端 mapper 及测试消费者同步，不接受旧字段或旧创建接口。公共定义目录每个当前来源包一项；App.capabilities 为实际执行组合并集。内部 composition digest 与 retained refs 只在 Backend storage，公开 definitionId/version 保持真实签名 App 包 ID/SemVer；Shared 不含内置 ID、迁移事实或签名秘密。
 
-## Agent 插件贡献与模型拒绝
+## Agent 插件贡献与模型调用
 
-1. **职责与范围**：agent/plugins/agent-extension为签名包与隔离后端的真实SDK契约；governance/values增加plugin.invoke，runs/values增加PROVIDER_REQUEST_REJECTED，分别供双端授权展示及后端步骤消费者使用。
-2. **子功能与目录**：沿现有agent/plugins、governance和runs，不将宿主系统提示、调度池、存储快照或运行实例放入Shared。
-3. **依赖方向**：Backend包Adapter、隔离RPC Adapter和插件Backend SDK消费同一解码/类型；Frontend复用能力基础值和原授权编辑器。SDK type-only依赖不把宿主实现交付插件。
-4. **类型与转换**：贡献精确字段schemaVersion=1/role/toolNames(null或唯一名称数组)/beforeStep/tools(name/description唯一数组)；context请求为kind/runId/stepIndex/prompt，tool请求为kind/runId/stepIndex/operationId/name/argumentsJson，结果只含text。UUID、正安全整数、名称及JSON对象严格解码，完整编码沿原512KiB IPC预算预留1KiB封装。
-5. **入口与安装**：Shared包导出agent-extension及BackendModule可选agent(input,signal)方法；前后端设置和官方Full-stack示例同步。SDK版本仍1，官方新包下载要求Host 1.0.3，不转换旧贡献格式。
-6. **数据、事务与并发**：Shared只定义外部形状，不执行授权、事务或版本检查；插件可选贡献表示该App是否提供此能力，不是历史兼容分支。模型步骤失败码与底层HTTP状态分别表达，不将供应商错误正文公开。
-7. **生命周期与失败**：插件上下文、声明和结果不是授权；实时grant、安装revision、单次审批、派发意图及未知收尾由Backend原owner保证。取消signal不表示远端副作用回滚。
-8. **当前能力与验收**：源码、静态与包构建记录归testing；真实子进程调用、撤权/升级、并发故障与模型效果仍待D17专项，不复用历史553项回归结论。
+1. **职责与范围**：Shared 持 SDK4 外部协议；默认 App 的工具调度、模型历史、压缩与展示策略归独立插件仓，不把这些算法放进宿主契约。
+2. **子功能与目录**：插件 manifest/registry/runtime、模型 app-runtime、run-context、内容和 Operation 契约各有唯一 owner；真实请求、资源与账本归 Backend。
+3. **依赖方向**：签名包、隔离 IPC、前后端 SDK 和管理页消费同一 codec；Shared 不引用 Service、Model、存储行或框架句柄。
+4. **类型与转换**：manifest4 与 protocol4 严格解码，描述/schema、准确 binding 和实际调用分开。模型返回确定拒绝、流失败和未知派发保留各自有限结果，不从错误正文猜测。
+5. **入口与安装**：插件 definePlugin 注册完整 App entry、工具和服务 handler；Host 逐批原子发布。前端公开 connectNexusPlugin/PluginUiRequestFailure；不提供旧五阶段或 SDK3 回退。
+6. **数据、事务与并发**：目录公开贡献不产生权限，Operation 在派发事务复核当前 scope、包/实例/配置与审批。checkpoint 保留已消费回执和稳定意图，不能换键猜测重放。
+7. **生命周期与失败**：取消不证明真实效果结束；Run 成功须全部关联效果及资源收口。确定拒绝、取消、执行未知和清理失败分别传播，插件私有失败不能覆盖 Host 事实。
+8. **当前能力与验收**：默认 App、Chat UI、四个工具包和 MCP/ACP 服务包独立交付；管理、SDK、浏览器与正式发布的实际证据见 testing，历史版本 PASS 不代替本版验收。
 
 ### 图片预览容量契约
 

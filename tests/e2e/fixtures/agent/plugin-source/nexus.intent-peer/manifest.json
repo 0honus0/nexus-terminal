@@ -1,10 +1,11 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 4,
   "id": "nexus.intent-peer",
   "version": "1.0.0",
   "displayName": "Intent Peer Fixture",
-  "sdkVersion": "1",
-  "capabilities": ["app.intents.exchange"],
+  "capabilities": [
+    "app.intents.exchange"
+  ],
   "intents": [
     {
       "id": "e2e.receive",
@@ -12,5 +13,29 @@
     }
   ],
   "frontendEntry": null,
-  "backendEntry": null
+  "backendEntry": "backend/index.mjs",
+  "compatibility": {
+    "host": {
+      "minVersion": "1.0.0",
+      "maxVersion": "1.99.99"
+    },
+    "backendSdk": 4,
+    "frontendSdk": null
+  },
+  "contributions": {
+    "app": {
+      "entry": "nexus.intent-peer.run",
+      "uiContract": null,
+      "uiApiVersion": null
+    },
+    "tools": false,
+    "services": false,
+    "ui": null,
+    "settings": null,
+    "skills": []
+  },
+  "dependencies": [],
+  "namespaces": [
+    "nexus.intent-peer"
+  ]
 }

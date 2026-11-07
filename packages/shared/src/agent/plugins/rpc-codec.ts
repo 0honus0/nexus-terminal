@@ -10,9 +10,26 @@ import {
 	readAgentPluginInstallation,
 } from './http-codec.js';
 import type { AgentPluginRpcInput, AgentPluginRpcResult } from './events.js';
+import { readAgentPluginHostOperationRequest, readAgentPluginHostOperationResult } from './host-operations-codec.js';
+import { toAgentPluginHostOperationRpcResult } from './host-operation-rpc-result.js';
+import {
+	readAgentPluginConfigurationWrite,
+	readAgentPluginConfigurationView,
+	readAgentPluginInstanceSettings,
+} from './settings-codec.js';
 
 export function readAgentPluginRpcInput(input: unknown): AgentPluginRpcInput {
 	const row = agentRecord(input, ['method', 'params'], AGENT_PLUGIN_MAX_MESSAGE_BYTES);
+	if (row.method === 'settings.read') {
+		agentRecord(row.params, []);
+		return { method: row.method, params: {} };
+	}
+	if (row.method === 'settings.write') {
+		return { method: row.method, params: readAgentPluginConfigurationWrite(row.params) };
+	}
+	if (row.method === 'host.perform') {
+		return { method: row.method, params: readAgentPluginHostOperationRequest(row.params) };
+	}
 	if (row.method === 'host.appInfo') {
 		agentRecord(row.params, []);
 		return { method: row.method, params: {} };
@@ -87,9 +104,32 @@ export function readAgentPluginRpcInput(input: unknown): AgentPluginRpcInput {
 }
 
 export function readAgentPluginRpcResult(input: unknown, request: AgentPluginRpcInput): AgentPluginRpcResult {
-	const row = agentRecord(input, ['method', 'value'], AGENT_PLUGIN_MAX_MESSAGE_BYTES);
+	const row = agentRecord(
+		input,
+		request.method === 'host.perform' ? ['method', 'operation', 'value'] : ['method', 'value'],
+		AGENT_PLUGIN_MAX_MESSAGE_BYTES,
+	);
 	if (row.method !== request.method) {
 		throw new InvalidAgentPayload();
+	}
+	if (request.method === 'settings.read') {
+		return { method: request.method, value: readAgentPluginInstanceSettings(row.value) };
+	}
+	if (request.method === 'settings.write') {
+		const value = readAgentPluginConfigurationView(row.value);
+		if (
+			value.schemaRevision !== request.params.schemaRevision ||
+			value.documentJson !== request.params.documentJson ||
+			value.revision < request.params.expectedRevision
+		) {
+			throw new InvalidAgentPayload();
+		}
+		return { method: request.method, value };
+	}
+	if (request.method === 'host.perform') {
+		return toAgentPluginHostOperationRpcResult(
+			readAgentPluginHostOperationResult({ operation: row.operation, value: row.value }, request.params),
+		);
 	}
 	if (request.method === 'host.appInfo') {
 		return { method: request.method, value: readAgentPluginInstallation(row.value) };

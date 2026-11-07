@@ -45,8 +45,6 @@ export function toLimits(value: ExecutionLimits): StoredExecutionLimits {
 
 export function fromSettings(value: StoredExecutionSettings): ExecutionSettings {
 	return {
-		contextCompactionMode: value.contextCompactionMode,
-		contextProfile: value.contextProfile,
 		version: value.version,
 		enabled: value.enabled,
 		limits: fromLimits(value.limits),
@@ -58,8 +56,6 @@ export function fromSettings(value: StoredExecutionSettings): ExecutionSettings 
 
 export function toSettings(value: ExecutionSettings): StoredExecutionSettings {
 	return {
-		contextCompactionMode: value.contextCompactionMode,
-		contextProfile: value.contextProfile,
 		version: value.version,
 		enabled: value.enabled,
 		limits: toLimits(value.limits),

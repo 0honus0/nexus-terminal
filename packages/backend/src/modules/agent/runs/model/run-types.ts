@@ -8,7 +8,8 @@ import type {
 	AgentCreateRunOutcome,
 	AgentCancelRunOutcome,
 } from '@nexus-terminal/shared/agent/runs/values';
-import type { ModelReference, FrozenModelInput } from '../../providers/model/provider-types.js';
+import type { FrozenModelInput } from '../../providers/model/provider-types.js';
+import type { RunAppExecution } from './run-app-execution-types.js';
 
 export interface RunToolProposal {
 	providerCallId: string;
@@ -31,7 +32,7 @@ export type RunModelMessage =
 export interface CreateRootRunCommand {
 	approvalMode: AgentApprovalMode;
 	origin: { runId: string; expectedVersion: number } | null;
-	model: ModelReference;
+	inputJson: string;
 	connectionIds: number[];
 	id: string;
 	userId: number;
@@ -93,7 +94,7 @@ export interface RunEventPage {
 
 export interface CreateRunRequest {
 	approvalMode: AgentApprovalMode;
-	model: ModelReference;
+	inputJson: string;
 	connectionIds: number[];
 	userId: number;
 	appId: string;
@@ -117,7 +118,15 @@ export interface RootRunState {
 
 export type CancelRootRunDecision = 'cancel' | 'already_cancelled' | 'version_conflict' | 'active_run_conflict';
 
-export type RunFrozenInput = FrozenModelInput;
+export interface RunFrozenModelInput extends FrozenModelInput {
+	kind: 'model';
+	appExecution: RunAppExecution;
+}
+
+export interface RunFrozenInput {
+	appExecution: RunAppExecution;
+	inputJson: string;
+}
 
 /** Run-owned internal model-step application contracts; not persisted rows or Shared wire. */
 export interface RunModelStep {
@@ -168,7 +177,7 @@ export interface RunExecutionCommand {
 	userId: number;
 	appId: string;
 	runId: string;
-	providerId: string;
+	inputJson: string;
 	version: number;
 	prompt: string;
 	requestHash: string;
@@ -187,7 +196,7 @@ export interface RunUnstartedFailure {
 export type RunModelDelta =
 	| { kind: 'text'; content: string }
 	| { kind: 'usage'; inputTokens: number; outputTokens: number }
-	| { kind: 'finished'; finishReason: 'stop' }
+	| { kind: 'finished'; finishReason: 'stop'; reasoning: RunReasoningState[] }
 	| { kind: 'finished'; finishReason: 'tool_calls'; proposals: RunToolProposal[]; reasoning: RunReasoningState[] };
 
 export interface RunAppAuthority {

@@ -10,6 +10,7 @@ const send = (value) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ..
 record({ event: 'started', pid: process.pid, cwd: process.cwd() });
 process.on('exit', () => record({ event: 'exited' }));
 process.on('SIGTERM', () => process.exit(0));
+process.stdin.on('data', (bytes) => record({ event: 'bytes', text: bytes.toString() }));
 const input = readline.createInterface({ input: process.stdin });
 input.on('close', () => process.exit(0));
 let promptId;

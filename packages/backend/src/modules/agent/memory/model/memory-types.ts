@@ -7,6 +7,7 @@ export interface MemoryScope {
 
 export type MemoryActor =
 	| { kind: 'session'; userId: number; appId: string; token: string }
+	| { kind: 'plugin-ui'; userId: number; appId: string; token: string; assertCurrent(): void }
 	| { kind: 'tool'; userId: number; appId: string; runId: string; operationId: string; operationHash: string };
 
 export interface MemoryRecord {
@@ -49,7 +50,6 @@ export interface MemoryAdmissionFacts {
 	enabled: boolean;
 	identityUserId: number | null;
 	sourceExists: boolean;
-	count: number;
 	now: number;
 }
 
@@ -64,12 +64,33 @@ export interface MemoryReviewTask {
 	decision: AgentMemoryDecision;
 }
 
-export interface MemoryRecallInput {
-	query: string;
+/** A bounded read of real, currently published candidates; relevance is package-owned. */
+export interface MemoryCandidatesInput {
 	limit: number;
+	offset: number;
 }
 
-export interface MemoryRecallItem {
-	memory: MemoryRecord;
+export interface MemoryCandidate {
+	id: string;
+	version: number;
+	content: string;
+	confidence: number;
+}
+
+export interface MemoryCandidatePage {
+	items: MemoryCandidate[];
+	nextOffset: number | null;
+	candidatesSha256: string;
+	maxItems: number;
+	maxBytes: number;
+}
+
+export interface MemorySelectionInput {
+	limit: number;
+	candidatesSha256: string;
+	items: { id: string; version: number; score: number }[];
+}
+
+export interface MemorySelectedItem extends MemoryCandidate {
 	score: number;
 }

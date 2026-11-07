@@ -101,34 +101,37 @@ export function remoteOperations(
 
 		close: () => boundary(close),
 
-		executeAcp: (input, request) =>
-			boundary(async () => {
-				const value = await service.executeAcp(scope(input), {
-					argv: request.argv.map((arg) => arg),
-					cwd: request.cwd,
-					prompt: request.prompt,
-
-					permission: async (value, signal) => {
-						const response = await request.permission(
-							{
-								sessionId: value.sessionId,
-								toolCallId: value.toolCallId,
-								requestId: value.requestId,
-								title: value.title,
-								kind: value.kind,
-								inputJson: value.inputJson,
-							},
-							signal,
-						);
-						return {
-							decision: response.decision,
-
-							delivered: () => response.delivered(),
-						};
+		withProcess: (input, request, consume) =>
+			boundary(() =>
+				service.withProcess(
+					scope(input),
+					{
+						argv: request.argv.map((arg) => arg),
+						cwd: request.cwd,
+						maxReadBytes: request.maxReadBytes,
 					},
-				});
-				return { text: value.text, stopReason: value.stopReason };
-			}),
+					(channel) =>
+						consume({
+							read: (stream, maxBytes) => boundary(() => channel.read(stream, maxBytes)),
+
+							write: (bytes) => boundary(() => channel.write(bytes)),
+
+							end: () => boundary(() => channel.end()),
+
+							outcome: () => boundary(() => channel.outcome()),
+
+							cancel: () => {
+								try {
+									channel.cancel();
+								} catch (error) {
+									operationFailure(error);
+								}
+							},
+
+							close: () => boundary(() => channel.close()),
+						}),
+				),
+			),
 
 		executeCommand: (input, request) =>
 			boundary(async () => {
@@ -214,6 +217,8 @@ export function remoteOperations(
 					bytes: value.bytes,
 				};
 			}),
+
+		assertMissingPath: (input, path) => boundary(() => service.assertMissingPath(scope(input), path)),
 
 		patchText: (input, request) =>
 			boundary(async () => {

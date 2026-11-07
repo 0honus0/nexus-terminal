@@ -1,3 +1,5 @@
+import type { AgentPluginContributionKind } from '@nexus-terminal/shared/agent/plugins/values';
+
 export interface StoredPluginRepositorySettings {
 	version: number;
 	repositories: { url: string }[];
@@ -5,10 +7,14 @@ export interface StoredPluginRepositorySettings {
 }
 
 export interface StoredPluginCatalogEntry {
-	appId: string;
+	packageId: string;
 	version: string;
-	sdkVersion: string;
-	nexus: { minVersion: string; maxVersion: string };
+	compatibility: {
+		host: { minVersion: string; maxVersion: string };
+		backendSdk: number | null;
+		frontendSdk: number | null;
+	};
+	contributionKinds: AgentPluginContributionKind[];
 	displayName: string;
 	description: string;
 	packageUrl: string;

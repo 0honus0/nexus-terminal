@@ -1,3 +1,4 @@
+import { hasToolIdentity, hasApprovalIdentity } from '../../support/package-tool-catalog.mjs';
 import { createTestAgentApp } from './native-agent-fixture.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -23,7 +24,7 @@ await test(
 					const { thread, run } = await f.start(model);
 					if (model === 'text-model') {
 						const approval = await f.approval(run);
-						assert.equal(approval.inspection.toolName, 'image_generate');
+						assert.ok(hasApprovalIdentity(approval, 'image_generate'));
 						assert.equal(f.calls.filter((call) => call.path.endsWith('/generations')).length, count);
 						await f.approve(approval);
 					}
@@ -40,7 +41,7 @@ await test(
 							await f.api('GET', f.base + '/threads/' + thread.id + '/tools'),
 							200,
 						).items;
-						const generated = tools.find((tool) => tool.toolName === 'image_generate');
+						const generated = tools.find((tool) => hasToolIdentity(tool, 'image_generate'));
 						assert.equal(generated.state, 'completed');
 						assert.match(generated.outputArtifactIds[0], /^[a-f0-9-]{36}$/);
 						preview = f.base + '/artifacts/' + generated.outputArtifactIds[0] + '/preview';

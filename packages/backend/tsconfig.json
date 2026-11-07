@@ -9,7 +9,7 @@
     "outDir": "dist",
     "rootDir": "src",
     "types": ["node"],
-    "lib": ["ES2022"]
+    "lib": ["ES2024"]
   },
   "include": ["src/**/*.ts"]
 }

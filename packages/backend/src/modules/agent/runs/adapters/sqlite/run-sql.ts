@@ -1,6 +1,16 @@
-import { AGENT_RUN_FAILURE_CODES } from '@nexus-terminal/shared/agent/runs/values';
+import { AGENT_OPERATION_ERROR_CODES } from '@nexus-terminal/shared/agent/values';
+import { resumeRun, readRunSuspension } from './run-resume-sql.js';
+import type { RunResumeStorage } from '../../storage/run-resume-storage.js';
+import { failUnstartedRun, runOperationUsage, recoverRunExecutions } from './run-lifecycle-sql.js';
+import type { StoredRunUnstartedFailure, StoredRunUsage } from '../../storage/run-storage.js';
+import { startRunApp, finishRunApp } from './run-app-terminal-sql.js';
+import type { StoredRunAppMutation, StoredRunAppResult, StoredRunAppTerminal } from '../../storage/run-app-storage.js';
+import { mayAdmitPluginRun } from '../../../plugins/adapters/sqlite/plugin-operation-authority.js';
+import { appExecutionBinding } from '../../../plugins/adapters/sqlite/plugin-app-execution-sql.js';
+import { readRunAppExecution } from './run-app-execution-row.js';
+
 import type { StoredRunFailure } from '../../storage/run-storage.js';
-import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
+import { decodeRun, decodeEvent } from './run-row.js';
 import { readOverrides } from '../../../governance/adapters/sqlite/governance-row.js';
 import type { StoredPolicyOverrides } from '../../../governance/storage/governance-storage.js';
 import { executionSettings } from '../../../execution/adapters/sqlite/execution-sql.js';
@@ -8,19 +18,14 @@ import type { StoredExecutionSettings } from '../../../execution/storage/executi
 import { appAuthority } from '../../../scope/adapters/sqlite/app-row.js';
 import { nextThreadSequence } from './run-order.js';
 import type { StoredAppAuthority } from '../../../scope/storage/scope-storage.js';
-import { fenceRunSteps } from './run-fence.js';
-import type { AgentRunStatus, AgentRunCommandOutcome } from '@nexus-terminal/shared/agent/runs/values';
+import { fenceRunExecution } from './run-fence.js';
+import type { AgentRunCommandOutcome } from '@nexus-terminal/shared/agent/runs/values';
 import type { SqlExecutor, SqlReader } from '../../../../../platform/storage/sqlite/sql-types.js';
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
-import type { ProviderStorage } from '../../../providers/storage/provider-storage.js';
-import type { ProviderStoredRow } from '../../../providers/storage/provider-storage.js';
-import type { StoredModelReference } from '../../../providers/storage/provider-storage.js';
-import { decodeStoredModel } from '../../../providers/adapters/sqlite/provider-row.js';
-import type { StoredFrozenInput } from '../../storage/run-storage.js';
+import type { StoredFrozenInput, StoredRunAppExecution } from '../../storage/run-storage.js';
 import type {
 	RunStorage,
 	StoredRun,
-	StoredRunEvent,
 	CreateRunStorageCommand,
 	CancelRunStorageCommand,
 	StoredCreateResult,
@@ -43,70 +48,6 @@ function integer(value: unknown, min = 0): number {
 		throw new Error('Corrupt Agent integer');
 	}
 	return value;
-}
-
-function runStatus(value: unknown): AgentRunStatus {
-	if (
-		value === 'pending' ||
-		value === 'running' ||
-		value === 'completed' ||
-		value === 'failed' ||
-		value === 'unknown' ||
-		value === 'cancelled'
-	) {
-		return value;
-	}
-	throw new Error('Corrupt Agent Run status');
-}
-
-export function readRunApprovalMode(
-	value: unknown,
-): import('@nexus-terminal/shared/agent/runs/values').AgentApprovalMode {
-	if (value !== 'ask' && value !== 'full_access') {
-		throw new Error('Corrupt Run approval mode');
-	}
-	return value;
-}
-
-export function decodeRun(row: Row): StoredRun {
-	const createdAt = integer(row.created_at);
-	if (
-		![row.id, row.app_id, row.thread_id].every((value) => typeof value === 'string' && AGENT_ID_PATTERN.test(value))
-	) {
-		throw new Error('Corrupt Run identity');
-	}
-	return {
-		id: stringValue(row.id),
-		userId: integer(row.user_id, 1),
-		appId: stringValue(row.app_id),
-		threadId: stringValue(row.thread_id),
-		approvalMode: readRunApprovalMode(row.approval_mode),
-		status: runStatus(row.status),
-		version: integer(row.version, 1),
-		createdAt,
-		updatedAt: integer(row.updated_at, createdAt),
-	};
-}
-
-export function decodeEvent(row: Row): StoredRunEvent {
-	const type = row.event_type;
-	if (
-		type !== 'run.created' &&
-		type !== 'run.started' &&
-		type !== 'run.completed' &&
-		type !== 'run.failed' &&
-		type !== 'run.unknown' &&
-		type !== 'run.cancelled'
-	) {
-		throw new Error('Corrupt Agent event');
-	}
-	return {
-		runId: stringValue(row.run_id),
-		sequence: integer(row.sequence, 1),
-		type,
-		runVersion: integer(row.run_version, 1),
-		createdAt: integer(row.created_at),
-	};
 }
 
 function decodeReplay(row: Row): {
@@ -145,40 +86,23 @@ const SELECT_RUN = `
 
 /** The Run-owned SQLite adapter decodes frozen JSON inside an existing transaction. */
 export async function frozenFromRun(
-	db: SqlReader,
+	tx: SqlReader,
 	userId: number,
 	appId: string,
 	runId: string,
 ): Promise<StoredFrozenInput | null> {
-	const row = await db.one(
-		'SELECT f.provider_id,f.provider_version,f.credential_revision,f.model_id,f.base_url,f.protocol,f.capabilities_json,f.execution_policy FROM agent_run_frozen_inputs f JOIN agent_runs r ON r.id=f.run_id WHERE r.id=? AND r.user_id=? AND r.app_id=?',
+	const row = await tx.one(
+		'SELECT i.app_execution_json,i.input_json FROM agent_runs r JOIN agent_run_inputs i ON i.run_id=r.id WHERE r.id=? AND r.user_id=? AND r.app_id=?',
 		[runId, userId, appId],
 	);
 	if (!row) {
 		return null;
 	}
-	const protocol = row.protocol;
-	if (protocol !== 'responses' && protocol !== 'chat-completions' && protocol !== 'images') {
-		throw new Error('Corrupt frozen protocol');
+	if (typeof row.input_json !== 'string') {
+		throw new Error('Corrupt App input');
 	}
-	if (row.execution_policy !== 'governed') {
-		throw new Error('Corrupt execution policy');
-	}
-	const modelId = stringValue(row.model_id);
-	const capabilities = decodeStoredModel(JSON.parse(stringValue(row.capabilities_json)));
-	if (capabilities.id !== modelId) {
-		throw new Error('Corrupt frozen capability identity');
-	}
-	return {
-		providerId: stringValue(row.provider_id),
-		providerVersion: integer(row.provider_version, 1),
-		credentialRevision: integer(row.credential_revision, 1),
-		modelId,
-		baseUrl: stringValue(row.base_url),
-		protocol,
-		capabilities,
-		executionPolicy: 'governed',
-	};
+	JSON.parse(row.input_json);
+	return { appExecution: readRunAppExecution(row.app_execution_json), inputJson: row.input_json };
 }
 
 const SELECT_REPLAY = `
@@ -231,19 +155,23 @@ async function saveReplay(
 }
 
 export class SqliteRunStorage implements RunStorage {
+	resume(...args: Parameters<RunResumeStorage['resume']>): ReturnType<RunResumeStorage['resume']> {
+		return this.db.transaction((tx) => resumeRun(tx, args[0], args[1]));
+	}
+
+	suspension(userId: number, appId: string, runId: string): ReturnType<RunResumeStorage['suspension']> {
+		return this.db.transaction((tx) => readRunSuspension(tx, userId, appId, runId));
+	}
+
 	ownExecution(work: () => Promise<void>): Promise<void> {
 		return this.db.withoutTransactionAdmission(work);
 	}
 
-	constructor(
-		private readonly db: SqliteRuntime,
-		private readonly providers: ProviderStorage,
-	) {}
+	constructor(private readonly db: SqliteRuntime) {}
 
 	create(
 		command: CreateRunStorageCommand,
 		mayCreate: (active: StoredRun | null) => boolean,
-		resolve: (provider: ProviderStoredRow, reference: StoredModelReference) => StoredFrozenInput | null,
 		authorizeApp: (current: StoredAppAuthority) => void,
 		authorizeOrigin: (current: StoredRun | null) => void,
 		freezeExecution: (
@@ -283,8 +211,32 @@ export class SqliteRunStorage implements RunStorage {
 				return { status: 'scope_not_found' };
 			}
 			authorizeApp(authority);
+			if (!(await mayAdmitPluginRun(tx, command.userId, command.appId))) {
+				return { status: 'active_run_conflict' };
+			}
+			const policyBinding = await appExecutionBinding(tx, command.userId, command.appId);
+			if (!policyBinding) {
+				return { status: 'active_run_conflict' };
+			}
+			const appExecution: StoredRunAppExecution = {
+				kind: 'plugin',
+				package: {
+					packageId: policyBinding.package.packageId,
+					version: policyBinding.package.version,
+					packageHash: policyBinding.package.packageHash,
+					publisherKeyId: policyBinding.package.publisherKeyId,
+				},
+				codeDependencies: policyBinding.codeDependencies.map((dependency) => ({
+					packageId: dependency.packageId,
+					version: dependency.version,
+					packageHash: dependency.packageHash,
+					publisherKeyId: dependency.publisherKeyId,
+				})),
+				handler: policyBinding.handler,
+			};
 			const row = await tx.one(
-				SELECT_RUN + " WHERE thread_id=? AND run_kind='root' AND status IN ('pending','running','unknown')",
+				SELECT_RUN +
+					" WHERE thread_id=? AND run_kind='root' AND status IN ('pending','running','suspended','unknown')",
 				[command.threadId],
 			);
 			const active = row === null ? null : decodeRun(row);
@@ -307,11 +259,7 @@ export class SqliteRunStorage implements RunStorage {
 				integer(occupied.count),
 				policy === null ? {} : readOverrides(policy.execution_overrides_json),
 			);
-			const provider = await this.providers.snapshot(tx, command.userId, command.model.providerId);
-			const frozen = provider === null ? null : resolve(provider, command.model);
-			if (!frozen) {
-				return { status: 'provider_unavailable' };
-			}
+
 			const threadSequence = await nextThreadSequence(tx, command.threadId);
 			const createdAt = Date.now();
 			const deadlineAt = createdAt + execution.limits.maxActiveSeconds * 1000;
@@ -349,19 +297,10 @@ export class SqliteRunStorage implements RunStorage {
 				updatedAt: createdAt,
 			};
 			await tx.run(
-				'INSERT INTO agent_run_frozen_inputs(run_id,provider_id,provider_version,credential_revision,model_id,base_url,protocol,capabilities_json,execution_policy) VALUES(?,?,?,?,?,?,?,?,?)',
-				[
-					run.id,
-					frozen.providerId,
-					frozen.providerVersion,
-					frozen.credentialRevision,
-					frozen.modelId,
-					frozen.baseUrl,
-					frozen.protocol,
-					JSON.stringify(frozen.capabilities),
-					frozen.executionPolicy,
-				],
+				'INSERT INTO agent_run_inputs(run_id,app_execution_json,input_json,output_json) VALUES(?,?,?,NULL)',
+				[run.id, JSON.stringify(appExecution), command.inputJson],
 			);
+
 			await tx.run(
 				`
 				INSERT INTO agent_run_events(run_id,sequence,event_type,run_version,created_at)
@@ -376,6 +315,26 @@ export class SqliteRunStorage implements RunStorage {
 			await saveReplay(tx, command, 'create_run', run, 'created');
 			return { status: 'created', run };
 		});
+	}
+
+	failUnstarted(command: StoredRunUnstartedFailure): Promise<boolean> {
+		return this.db.transaction((tx) => failUnstartedRun(tx, command));
+	}
+
+	usage(userId: number, appId: string, runId: string): Promise<StoredRunUsage | null> {
+		return this.db.transaction((tx) => runOperationUsage(tx, userId, appId, runId));
+	}
+
+	recover(now: number): Promise<number> {
+		return this.db.transaction((tx) => recoverRunExecutions(tx, now));
+	}
+
+	startApp(command: StoredRunAppMutation): Promise<StoredRunAppResult> {
+		return this.db.transaction((tx) => startRunApp(tx, command));
+	}
+
+	finishApp(command: StoredRunAppMutation, terminal: StoredRunAppTerminal): Promise<StoredRunAppResult> {
+		return this.db.transaction((tx) => finishRunApp(tx, command, terminal));
 	}
 
 	async frozen(userId: number, appId: string, runId: string): Promise<StoredFrozenInput | null> {
@@ -435,7 +394,7 @@ export class SqliteRunStorage implements RunStorage {
 			const changed = await tx.run(
 				`
 				UPDATE agent_runs SET status='cancelled',version=?,updated_at=?
-				WHERE id=? AND app_id=? AND user_id=? AND status IN ('pending','running','unknown') AND version=?
+				WHERE id=? AND app_id=? AND user_id=? AND status IN ('pending','running','suspended','unknown') AND version=?
 			`,
 				[updated.version, updated.updatedAt, updated.id, updated.appId, updated.userId, current.version],
 			);
@@ -457,14 +416,14 @@ export class SqliteRunStorage implements RunStorage {
 				[updated.id, sequence, 'run.cancelled', updated.version, updated.updatedAt],
 			);
 			await saveReplay(tx, command, 'cancel_run', updated, 'cancelled');
-			await fenceRunSteps(tx, updated.id, updated.version, updated.updatedAt);
+			await fenceRunExecution(tx, updated.id, updated.updatedAt);
 			return { status: 'cancelled', run: updated };
 		});
 	}
 
 	async failure(userId: number, appId: string, runId: string): Promise<StoredRunFailure | null> {
 		const job = await this.db.one(
-			`SELECT t.tool_name FROM agent_tool_jobs j JOIN agent_run_tools t ON t.id=j.id
+			`SELECT o.label FROM agent_tool_jobs j JOIN agent_operations o ON o.id=j.id
 			 JOIN agent_runs r ON r.id=? AND r.user_id=j.user_id AND r.app_id=j.app_id
 			 WHERE j.user_id=? AND j.app_id=? AND j.state='unknown' AND r.status IN ('failed','unknown')
 			 AND (j.run_id=r.id OR EXISTS(SELECT 1 FROM agent_run_children c WHERE c.run_id=j.run_id AND c.parent_id=r.id))
@@ -472,32 +431,25 @@ export class SqliteRunStorage implements RunStorage {
 			[runId, userId, appId],
 		);
 		if (job) {
-			return { kind: 'job_unknown', toolName: stringValue(job.tool_name) };
+			return { kind: 'job_unknown', toolName: stringValue(job.label) };
 		}
 		const row = await this.db.one(
-			`SELECT t.tool_name,t.result_text FROM agent_run_tools t JOIN agent_runs r ON r.id=t.run_id
-			 WHERE t.user_id=? AND t.app_id=? AND t.run_id=? AND r.status IN ('failed','unknown')
-			 AND t.state IN ('failed','unknown') ORDER BY t.model_step_index DESC,t.created_at DESC,t.id DESC LIMIT 1`,
+			`SELECT o.label,o.state,o.failure_code FROM agent_operations o JOIN agent_runs r ON r.id=o.run_id
+			 WHERE o.user_id=? AND o.app_id=? AND o.run_id=? AND r.status IN ('failed','unknown')
+			 AND o.state IN ('failed','unknown') ORDER BY o.sequence DESC LIMIT 1`,
 			[userId, appId, runId],
 		);
 		if (!row) {
 			return null;
 		}
-		const toolName = stringValue(row.tool_name);
-		// Fencing and recovery can leave a terminal tool without a known
-		// failure cause. Do not invent one from its current permissions.
-		if (row.result_text === null) {
-			return { kind: 'tool', code: 'tool_failed', toolName };
-		}
-		const value: unknown = JSON.parse(stringValue(row.result_text));
-		if (!value || typeof value !== 'object' || Array.isArray(value) || !('failureCode' in value)) {
-			throw new Error('Corrupt tool failure diagnostic');
-		}
-		const code = AGENT_RUN_FAILURE_CODES.find((code) => code === value.failureCode);
+		const code =
+			row.state === 'unknown'
+				? 'operation_unknown'
+				: AGENT_OPERATION_ERROR_CODES.find((value) => value === row.failure_code);
 		if (!code) {
-			throw new Error('Corrupt tool failure code');
+			throw new Error('Corrupt operation failure code');
 		}
-		return { kind: 'tool', code, toolName };
+		return { kind: 'operation', code, toolName: stringValue(row.label) };
 	}
 
 	async get(userId: number, appId: string, runId: string): Promise<StoredRun | null> {
@@ -567,7 +519,9 @@ export class SqliteRunStorage implements RunStorage {
 				}
 				const currentType =
 					current.status === 'pending'
-						? 'run.created'
+						? current.version === 1
+							? 'run.created'
+							: 'run.resumed'
 						: current.status === 'running'
 							? 'run.started'
 							: 'run.' + current.status;

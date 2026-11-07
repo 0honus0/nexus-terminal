@@ -1,32 +1,30 @@
+import { hasToolIdentity } from '../../../support/package-tool-catalog.mjs';
+import { readAgentPluginFrontendRpc } from '../../../../packages/shared/src/agent/plugins/frontend-rpc-codec';
+import { agentChatSurface, readAgentChatReceipt } from '../../fixtures/agent/workbench';
 import { readAgentThreadToolsResponse } from '../../../../packages/shared/src/agent/tools/http-codec';
 import { openNativeTaskPanel } from '../../fixtures/agent/native-task';
 import {
 	openAgentConversations,
 	openAgentHub,
 	selectAgentModel,
+	createTestAgentApp,
 	selectAgentExtensionsSection,
 } from '../../support/agent';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { expect, test, resetE2EBaseline } from '../../support/fixtures';
+import { expect, test, resetE2EBaseline, type APIRequestContext } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { ensureTestSshConnection } from '../../support/ssh';
 import { selectUiOption } from '../../support/ui-select';
 import { E2E_URLS } from '../../support/test-env';
 import { requestAgentJson } from '../../support/agent-request';
 import { prepareAgentRun, requestAgentWorkspace } from '../../support/agent';
-import { readAgentGrantView } from '../../../../packages/shared/src/agent/governance/http-codec';
-import { readAgentAppListResponse } from '../../../../packages/shared/src/agent/scope/http-codec';
 import {
-	readAgentIntegrationList,
-	readAgentIntegrationView,
-} from '../../../../packages/shared/src/agent/integrations/http-codec';
+	readAgentGrantView,
+	readAgentExecutionPolicyView,
+} from '../../../../packages/shared/src/agent/governance/http-codec';
 import { readAgentErrorResponse } from '../../../../packages/shared/src/agent/http-codec';
-import {
-	readAgentWorkspaceRequest,
-	readAgentWorkspaceResponse,
-} from '../../../../packages/shared/src/agent/scope/workspace-http-codec';
 import type { AgentApprovalView } from '../../../../packages/shared/src/agent/governance/model';
 
 test.use({ actionTimeout: 10_000 });
@@ -54,11 +52,193 @@ test('retired Workspace control-plane endpoints stay unavailable without a produ
 	}
 });
 
+import {
+	pluginInstance,
+	pluginInstances,
+	pluginInstancePath,
+	pluginSettings,
+	pluginConnection,
+	openProtocolSettings,
+} from '../../support/plugin-settings';
+import { readAgentPluginConnectionView } from '../../../../packages/shared/src/agent/plugins/connection-codec';
+
+test('plugin settings follow signed service declarations without granting execution privileges', async ({
+	page,
+	context,
+}) => {
+	const request = context.request;
+	await loginAsInitialAdmin(request);
+	await setUiLanguage(request);
+	const app = await createTestAgentApp(request, 'Service settings App');
+	const mcp = await pluginInstance(request, app.id, 'nexus.services.mcp');
+	const acp = await pluginInstance(request, app.id, 'nexus.services.acp');
+	expect((await pluginSettings(request, app.id, mcp.id)).connectionKinds).toEqual(['http']);
+	expect((await pluginSettings(request, app.id, acp.id)).connectionKinds).toEqual(['remoteProcess']);
+	const before = await requestAgentJson(
+		request,
+		{ method: 'GET', path: '/apps/' + app.id + '/grants' },
+		readAgentGrantView,
+	);
+	expect(before.grants).toEqual([]);
+	const retiredRequests: string[] = [];
+	page.on('request', (value) => {
+		if (new URL(value.url()).pathname.includes('/integrations')) retiredRequests.push(value.url());
+	});
+	let dialog = await openProtocolSettings(page, app.id, mcp.name);
+	const form = dialog
+		.locator('form')
+		.filter({ has: page.getByRole('heading', { name: 'Connection settings', exact: true }) });
+	await selectUiOption(form.getByRole('combobox', { name: 'Kind', exact: true }), 'http');
+	await form.getByRole('textbox', { name: 'MCP HTTP/HTTPS URL', exact: true }).fill('https://example.com/mcp');
+	const saving = page.waitForResponse(
+		(response) =>
+			new URL(response.url()).pathname === '/api/v1/agent' + pluginInstancePath(app.id, mcp.id) + '/connection' &&
+			response.request().method() === 'PUT',
+	);
+	await form.getByRole('button', { name: 'Save', exact: true }).click();
+	expect((await saving).status()).toBe(200);
+	expect(await pluginConnection(request, app.id, mcp.id)).toMatchObject({
+		hasCredential: false,
+		connector: { kind: 'http', endpoint: 'https://example.com/mcp', privateAuthorities: [] },
+	});
+	await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+	dialog = await openProtocolSettings(page, app.id, acp.name);
+	const kind = dialog.getByRole('combobox', { name: 'Kind', exact: true });
+	await kind.click();
+	await expect(page.getByRole('option', { name: 'SSH', exact: true })).toBeVisible();
+	await expect(page.getByRole('option', { name: 'HTTP', exact: true })).toHaveCount(0);
+	await page.keyboard.press('Escape');
+	expect(
+		await requestAgentJson(request, { method: 'GET', path: '/apps/' + app.id + '/grants' }, readAgentGrantView),
+	).toEqual(before);
+	expect(retiredRequests).toEqual([]);
+});
+
+test('instance settings preserve credentials, isolate Apps and persist compaction in the App plugin', async ({
+	page,
+	context,
+}) => {
+	const request = context.request;
+	await loginAsInitialAdmin(request);
+	await setUiLanguage(request);
+	const app = await createTestAgentApp(request, 'Configured App');
+	const other = await createTestAgentApp(request, 'Independent App');
+	const mcp = await pluginInstance(request, app.id, 'nexus.services.mcp');
+	const otherMcp = await pluginInstance(request, other.id, 'nexus.services.mcp');
+	const otherConnection = await pluginConnection(request, other.id, otherMcp.id);
+	const connectionPath = pluginInstancePath(app.id, mcp.id) + '/connection';
+	const original = await pluginConnection(request, app.id, mcp.id);
+	const credential = 'retained-fixture-secret';
+	const prepared = await requestAgentJson(
+		request,
+		{
+			method: 'PUT',
+			path: connectionPath,
+			data: {
+				expectedRevision: original.revision,
+				connector: { kind: 'http', endpoint: 'https://example.com/mcp', privateAuthorities: [] },
+				credential: { action: 'replace', value: credential },
+			},
+		},
+		readAgentPluginConnectionView,
+	);
+	expect(prepared.hasCredential).toBe(true);
+	expect(JSON.stringify(prepared)).not.toContain(credential);
+	await page.setViewportSize({ width: 390, height: 844 });
+	let dialog = await openProtocolSettings(page, app.id, mcp.name);
+	const form = dialog
+		.locator('form')
+		.filter({ has: page.getByRole('heading', { name: 'Connection settings', exact: true }) });
+	await form.getByRole('textbox', { name: 'MCP HTTP/HTTPS URL', exact: true }).fill('https://example.com/current');
+	let saving = page.waitForResponse(
+		(response) =>
+			new URL(response.url()).pathname === '/api/v1/agent' + connectionPath &&
+			response.request().method() === 'PUT',
+	);
+	await form.getByRole('button', { name: 'Save', exact: true }).click();
+	expect((await saving).status()).toBe(200);
+	const kept = await pluginConnection(request, app.id, mcp.id);
+	expect(kept).toMatchObject({
+		hasCredential: true,
+		revision: prepared.revision + 1,
+		connector: { endpoint: 'https://example.com/current' },
+	});
+	const disabling = page.waitForResponse(
+		(response) =>
+			new URL(response.url()).pathname === '/api/v1/agent' + pluginInstancePath(app.id, mcp.id) &&
+			response.request().method() === 'PUT',
+	);
+	await dialog.getByRole('checkbox', { name: 'Enable this instance', exact: true }).click();
+	expect((await disabling).status()).toBe(200);
+	await expect(dialog.getByRole('checkbox', { name: 'Enable this instance', exact: true })).not.toBeChecked();
+	expect(await pluginConnection(request, app.id, mcp.id)).toEqual(kept);
+	expect((await pluginInstances(request, app.id)).find((value) => value.id === mcp.id)?.enabled).toBe(false);
+	await selectUiOption(form.getByRole('combobox', { name: 'MCP credential', exact: true }), 'clear');
+	saving = page.waitForResponse(
+		(response) =>
+			new URL(response.url()).pathname === '/api/v1/agent' + connectionPath &&
+			response.request().method() === 'PUT',
+	);
+	await form.getByRole('button', { name: 'Save', exact: true }).click();
+	expect((await saving).status()).toBe(200);
+	expect((await pluginConnection(request, app.id, mcp.id)).hasCredential).toBe(false);
+	expect(await pluginConnection(request, other.id, otherMcp.id)).toEqual(otherConnection);
+	await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+	// Public source availability is covered independently; keep this settings
+	// scenario deterministic while displaying a genuine unavailable-source result.
+	await page.route('**/api/v1/agent/plugins/official/catalog', (route) =>
+		route.fulfill({ status: 503, json: { code: 'provider_unavailable' } }),
+	);
+	await selectAgentExtensionsSection(page, 'market');
+	const row = page
+		.locator('div.border-b')
+		.filter({ has: page.getByText(app.name, { exact: true }) })
+		.filter({ has: page.getByRole('button', { name: 'Settings', exact: true }) });
+	const catalogError = page
+		.getByRole('alert')
+		.filter({ has: page.getByText('Request failed. Check your session or read again.', { exact: true }) });
+	await catalogError.getByRole('button', { name: 'Close', exact: true }).click();
+	await row.getByRole('button', { name: 'Settings', exact: true }).click();
+	dialog = page.getByRole('dialog', { name: 'Plugin settings', exact: true });
+	await selectUiOption(dialog.getByRole('combobox', { name: 'App using this plugin', exact: true }), app.id);
+	const frame = dialog.frameLocator('iframe[title="Plugin settings"]');
+	await selectUiOption(frame.getByRole('combobox', { name: 'Context compaction', exact: true }), 'aggressive');
+	await frame
+		.getByRole('textbox', { name: 'Additional instructions', exact: true })
+		.fill('Keep this App-specific policy.');
+	const root = await pluginInstance(request, app.id, app.definitionId);
+	const configPath = pluginInstancePath(app.id, root.id) + '/configuration';
+	await frame.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect
+		.poll(async () => JSON.parse((await pluginSettings(request, app.id, root.id)).configuration.documentJson))
+		.toEqual({ instructions: 'Keep this App-specific policy.', compactionMode: 'aggressive' });
+	await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+	await page.reload();
+	await selectAgentExtensionsSection(page, 'market');
+	await catalogError.getByRole('button', { name: 'Close', exact: true }).click();
+	await row.getByRole('button', { name: 'Settings', exact: true }).click();
+	await selectUiOption(dialog.getByRole('combobox', { name: 'App using this plugin', exact: true }), app.id);
+	await expect(frame.getByRole('combobox', { name: 'Context compaction', exact: true })).toHaveAttribute(
+		'data-value',
+		'aggressive',
+	);
+	await expect(frame.getByRole('textbox', { name: 'Additional instructions', exact: true })).toHaveValue(
+		'Keep this App-specific policy.',
+	);
+	const policy = await requestAgentJson(
+		request,
+		{ method: 'GET', path: '/apps/' + app.id + '/execution-policy' },
+		readAgentExecutionPolicyView,
+	);
+	expect(policy.overrides).not.toHaveProperty('contextCompactionMode');
+	expect(policy.effective).not.toHaveProperty('contextCompactionMode');
+});
+
 for (const decision of ['denied', 'cancelled'] as const) {
 	test(`SSH ACP settings product chain: ${decision} inner permission without a Workspace profile`, async ({
 		page,
 		context,
-	}) => {
+	}, testInfo) => {
 		const request = context.request;
 		await loginAsInitialAdmin(request);
 		await setUiLanguage(request);
@@ -75,9 +255,11 @@ for (const decision of ['denied', 'cancelled'] as const) {
 				data: {
 					expectedPolicyRevision: grants.policyRevision,
 					grants: [
+						{ capability: 'plugin.invoke', scope: { kind: 'global' } },
+						{ capability: 'integration.acp.invoke', scope: { kind: 'global' } },
 						{
-							capability: 'integration.acp.invoke',
-							scope: { kind: 'global' },
+							capability: 'service.transport.process',
+							scope: { kind: 'targets', targets: { ssh: { mode: 'ids', ids: [String(connectionId)] } } },
 						},
 					],
 				},
@@ -89,106 +271,55 @@ for (const decision of ['denied', 'cancelled'] as const) {
 		const evidencePath = path.join(directory, 'protocol.jsonl');
 		const argv = [process.execPath, path.resolve(__dirname, '../../fixtures/agent/acp-process.mjs'), evidencePath];
 
-		await page.goto('/settings?tab=agent');
-		await selectAgentExtensionsSection(page, 'integrations');
-		const section = page.getByRole('region', { name: 'MCP / ACP integrations', exact: true });
-		const apps = await requestAgentJson(request, { method: 'GET', path: '/apps' }, readAgentAppListResponse);
-		if (apps.length > 1) {
-			await selectUiOption(
-				section.getByRole('combobox', { name: 'Choose an App instance', exact: true }),
-				app.id,
-			);
-		} else {
-			expect(apps.map((item) => item.id)).toEqual([app.id]);
-		}
-		await section.getByRole('button', { name: 'Create integration', exact: true }).click();
-		const editor = page.getByRole('dialog', { name: 'Create integration', exact: true });
-		await editor
-			.getByRole('radiogroup', { name: 'Kind', exact: true })
-			.getByRole('radio', { name: 'ACP', exact: true })
-			.click();
-		await editor.getByRole('textbox', { name: 'Name', exact: true }).fill('SSH ACP settings fixture');
+		const instance = await pluginInstance(request, app.id, 'nexus.services.acp');
+		const connectionPath = pluginInstancePath(app.id, instance.id) + '/connection';
+		const editor = await openProtocolSettings(page, app.id, instance.name);
+		const connectionForm = editor
+			.locator('form')
+			.filter({ has: page.getByRole('heading', { name: 'Connection settings', exact: true }) });
+		await selectUiOption(connectionForm.getByRole('combobox', { name: 'Kind', exact: true }), 'remoteProcess');
 		await selectUiOption(
-			editor.getByRole('combobox', { name: 'SSH connection', exact: true }),
+			connectionForm.getByRole('combobox', { name: 'SSH connection', exact: true }),
 			String(connectionId),
 		);
-		await editor
+		await connectionForm
 			.getByRole('textbox', { name: 'argv (JSON string array, executable first)', exact: true })
 			.fill(JSON.stringify(argv));
-		await editor.getByRole('textbox', { name: 'Absolute working directory', exact: true }).fill(directory);
-		const enabled = editor.getByRole('switch', { name: 'Enable integration', exact: true });
-		if ((await enabled.getAttribute('aria-checked')) !== 'true') await enabled.click();
-		await expect(enabled).toHaveAttribute('aria-checked', 'true');
-		const integrationPath = `/api/v1/apps/${app.id}/integrations`;
-		const creation = page.waitForResponse(
+		await connectionForm.getByRole('textbox', { name: 'Absolute working directory', exact: true }).fill(directory);
+		const saving = page.waitForResponse(
 			(response) =>
-				new URL(response.url()).pathname === integrationPath && response.request().method() === 'POST',
+				new URL(response.url()).pathname === '/api/v1/agent' + connectionPath &&
+				response.request().method() === 'PUT',
 		);
-		await editor.getByRole('button', { name: 'Save', exact: true }).click();
-		const response = await creation;
-		expect(response.status()).toBe(201);
-		// Saving the integration re-renders the app-scoped editor; the same
-		// authenticated list is authoritative after the browser's response
-		// body becomes unavailable. Do not submit the creation a second time.
-		const savedIntegrations = await request.get(integrationPath);
-		expect(savedIntegrations.ok()).toBeTruthy();
-		const matches = readAgentIntegrationList(await savedIntegrations.json()).items.filter(
-			(item) => item.configuration.displayName === 'SSH ACP settings fixture',
-		);
-		expect(matches).toHaveLength(1);
-		const integration = readAgentIntegrationView(matches[0]);
-		expect(integration).toMatchObject({
-			appId: app.id,
-			enabled: true,
+		await connectionForm.getByRole('button', { name: 'Save', exact: true }).click();
+		expect((await saving).status()).toBe(200);
+		const configured = await pluginConnection(request, app.id, instance.id);
+		expect(configured).toMatchObject({
 			hasCredential: false,
-			configuration: {
-				kind: 'acp',
-				displayName: 'SSH ACP settings fixture',
-				connectionId,
-				argv,
-				cwd: directory,
-				protocolVersion: '1',
-			},
+			connector: { kind: 'remoteProcess', connectionId, argv, cwd: directory },
 		});
-		const invalid = await request.patch(`${integrationPath}/${integration.id}`, {
+		const invalid = await request.put('/api/v1/agent' + connectionPath, {
 			headers: { Origin: E2E_URLS.frontendOrigin },
 			data: {
-				expectedVersion: integration.version,
-				enabled: true,
+				expectedRevision: configured.revision,
+				connector: { kind: 'remoteProcess', connectionId, argv, cwd: 'relative/path' },
 				credential: { action: 'keep' },
-				configuration: {
-					kind: 'acp',
-					displayName: 'SSH ACP settings fixture',
-					connectionId,
-					argv,
-					cwd: 'relative/path',
-					protocolVersion: '1',
-				},
 			},
 		});
 		expect(invalid.status()).toBe(400);
 		expect(readAgentErrorResponse(await invalid.json())).toEqual({ code: 'invalid_input' });
-		const listResponse = await request.get(integrationPath);
-		expect(listResponse.status()).toBe(200);
-		expect(readAgentIntegrationList(await listResponse.json()).items).toContainEqual(integration);
+		expect(await pluginConnection(request, app.id, instance.id)).toEqual(configured);
+		await editor.getByRole('button', { name: 'Close', exact: true }).click();
 		await page.reload();
-		await selectAgentExtensionsSection(page, 'integrations');
-		const appSelector = section.getByRole('combobox', { name: 'Choose an App instance', exact: true });
-		if (apps.length > 1) {
-			await selectUiOption(appSelector, app.id);
-		} else {
-			await expect(appSelector).toHaveCount(0);
-		}
-		const integrationCard = section.getByRole('article').filter({
-			has: page.getByRole('heading', { name: 'SSH ACP settings fixture', exact: true }),
-		});
-		await expect(integrationCard).toBeVisible();
-		await expect(integrationCard).toContainText('ACP');
-		await expect(integrationCard).toContainText(directory);
+		const reloaded = await openProtocolSettings(page, app.id, instance.name);
+		await expect(reloaded.getByRole('textbox', { name: 'Absolute working directory', exact: true })).toHaveValue(
+			directory,
+		);
+		await reloaded.getByRole('button', { name: 'Close', exact: true }).click();
 
 		await page.goto('/connections');
 		await openAgentHub(page);
-		const hub = page.locator('section[aria-label="Agent"]');
+		const hub = agentChatSurface(page);
 		await openAgentConversations(page);
 		await hub
 			.locator('#agent-thread-sidebar')
@@ -197,27 +328,27 @@ for (const decision of ['denied', 'cancelled'] as const) {
 			.click();
 		await selectAgentModel(page, provider);
 		await hub.getByRole('button', { name: 'Select SSH targets', exact: true }).click();
-		const target = page
+		const target = hub
 			.locator('fieldset')
 			.filter({ has: page.locator('legend', { hasText: 'Select SSH targets' }) });
 		await target
 			.getByRole('checkbox')
-			.and(page.locator(`#agent-target-${connectionId}`))
+			.and(hub.locator(`#agent-target-${connectionId}`))
 			.check();
 		await page.keyboard.press('Escape');
 		await hub
 			.getByRole('textbox', { name: 'Task input', exact: true })
-			.fill(`E2E_ACP_EXECUTE integration=${integration.id} version=${integration.version}`);
+			.fill(`E2E_ACP_EXECUTE instance=${instance.id}`);
 		// Hub navigation can retire the browser's CDP copy of a successful
 		// Run mutation. Capture the original response through this exact route,
 		// then fulfill that same request; never replay a write to read its receipt.
 		// Keep the page-owned route until fixture teardown: Run creation starts
 		// concurrent reads and continuous polling, so removing it can strand a read.
-		const workspacePath = `/api/v1/agent/apps/${app.id}/workspace`;
+		const workspacePath = `/api/v1/agent/plugins/installations/${app.id}/frontend/rpc`;
 		const acceptedBodies = new Map<string, unknown>();
 		const routePattern = `**${workspacePath}`;
 		await page.route(routePattern, async (route) => {
-			const method = route.request().postDataJSON()?.request?.method;
+			const method = readAgentPluginFrontendRpc(route.request().postDataJSON()).envelope.request.method;
 			if (
 				route.request().method() !== 'POST' ||
 				(method !== 'agent.runs.create' && method !== 'agent.runs.cancel')
@@ -231,18 +362,19 @@ for (const decision of ['denied', 'cancelled'] as const) {
 		});
 		const runCreation = page.waitForResponse(
 			(item) =>
-				new URL(item.url()).pathname === `/api/v1/agent/apps/${app.id}/workspace` &&
-				item.request().postDataJSON()?.request?.method === 'agent.runs.create',
+				new URL(item.url()).pathname === workspacePath &&
+				readAgentPluginFrontendRpc(item.request().postDataJSON()).envelope.request.method ===
+					'agent.runs.create',
 		);
 		await hub.getByRole('button', { name: 'Send', exact: true }).click();
 		const runResponse = await runCreation;
 		expect(runResponse.status()).toBe(200);
 		expect(acceptedBodies.has('agent.runs.create')).toBe(true);
 		// Correlate the actual receipt through the same Shared decoder.
-		const runResult = readAgentWorkspaceResponse(
+		const runResult = readAgentChatReceipt(
+			app,
+			runResponse.request().postDataJSON(),
 			acceptedBodies.get('agent.runs.create'),
-			app.id,
-			readAgentWorkspaceRequest(runResponse.request().postDataJSON()),
 		).result;
 		if (runResult.method !== 'agent.runs.create') throw new Error('Unexpected Run receipt');
 		const runId = runResult.value.run.id;
@@ -270,9 +402,24 @@ for (const decision of ['denied', 'cancelled'] as const) {
 			let approval: AgentApprovalView | undefined;
 			await expect
 				.poll(async () => {
-					approval = (await approvals()).find(
-						(item) => item.status === 'requested' && item.inspection.toolName === toolName,
-					);
+					const pending = (await approvals()).filter((item) => item.status === 'requested');
+					approval = pending.find((item) => item.operationName === toolName);
+					for (const item of pending) {
+						if (approval || !['transport.session', 'transport.stdio.write'].includes(item.operationName))
+							continue;
+						await requestAgentWorkspace(request, app, {
+							method: 'agent.approvals.resolve',
+							params: {
+								approvalId: item.id,
+								operationId: randomUUID(),
+								input: {
+									decision: 'approved',
+									expectedVersion: item.version,
+									operationHash: item.operationHash,
+								},
+							},
+						});
+					}
 					return approval !== undefined;
 				})
 				.toBe(true);
@@ -287,7 +434,7 @@ for (const decision of ['denied', 'cancelled'] as const) {
 				.map((line) => JSON.parse(line));
 
 		try {
-			const launch = await waitApproval('acp_integration_execute');
+			const launch = await waitApproval('transport.session');
 			await requestAgentWorkspace(request, app, {
 				method: 'agent.approvals.resolve',
 				params: {
@@ -300,7 +447,7 @@ for (const decision of ['denied', 'cancelled'] as const) {
 					},
 				},
 			});
-			const inner = await waitApproval('acp_inner_permission');
+			const inner = await waitApproval('transport.permission');
 			const before = await evidence();
 			expect(before.filter((item) => item.event === 'request').map((item) => item.method)).toEqual([
 				'initialize',
@@ -314,17 +461,18 @@ for (const decision of ['denied', 'cancelled'] as const) {
 			if (decision === 'cancelled') {
 				const cancellation = page.waitForResponse(
 					(item) =>
-						new URL(item.url()).pathname === `/api/v1/agent/apps/${app.id}/workspace` &&
-						item.request().postDataJSON()?.request?.method === 'agent.runs.cancel',
+						new URL(item.url()).pathname === workspacePath &&
+						readAgentPluginFrontendRpc(item.request().postDataJSON()).envelope.request.method ===
+							'agent.runs.cancel',
 				);
 				await hub.getByRole('button', { name: 'Cancel run', exact: true }).click();
 				const cancellationResponse = await cancellation;
 				expect(cancellationResponse.status()).toBe(200);
 				expect(acceptedBodies.has('agent.runs.cancel')).toBe(true);
-				const cancellationResult = readAgentWorkspaceResponse(
+				const cancellationResult = readAgentChatReceipt(
+					app,
+					cancellationResponse.request().postDataJSON(),
 					acceptedBodies.get('agent.runs.cancel'),
-					app.id,
-					readAgentWorkspaceRequest(cancellationResponse.request().postDataJSON()),
 				).result;
 				expect(cancellationResult.method).toBe('agent.runs.cancel');
 				await expect.poll(async () => (await readRun()).status).toBe('cancelled');
@@ -361,7 +509,26 @@ for (const decision of ['denied', 'cancelled'] as const) {
 						},
 					},
 				});
-				await expect.poll(async () => (await readRun()).status).toBe('completed');
+				await expect
+					.poll(async () => {
+						for (const item of await approvals()) {
+							if (item.status !== 'requested' || item.operationName !== 'transport.stdio.write') continue;
+							await requestAgentWorkspace(request, app, {
+								method: 'agent.approvals.resolve',
+								params: {
+									approvalId: item.id,
+									operationId: randomUUID(),
+									input: {
+										decision: 'approved',
+										expectedVersion: item.version,
+										operationHash: item.operationHash,
+									},
+								},
+							});
+						}
+						return (await readRun()).status;
+					})
+					.toBe('completed');
 				await expect
 					.poll(async () => (await evidence()).some((item) => item.event === 'permission'))
 					.toBe(true);
@@ -383,7 +550,7 @@ for (const decision of ['denied', 'cancelled'] as const) {
 				{ method: 'GET', path: `/apps/${app.id}/threads/${runResult.value.run.threadId}/tools?limit=100` },
 				(raw) => readAgentThreadToolsResponse(raw, app.id, null, 100),
 			);
-			const tool = tools.items.find((item) => item.id === launch.toolCallId);
+			const tool = tools.items.find((item) => item.runId === runId && hasToolIdentity(item, 'acp_execute'));
 			expect(tool).toBeDefined();
 			expect(tool!.state).toBe(decision === 'cancelled' ? 'unknown' : 'completed');
 			expect(tool).not.toHaveProperty('argumentsJson');
@@ -401,6 +568,11 @@ for (const decision of ['denied', 'cancelled'] as const) {
 			} catch (error) {
 				if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
 			}
+			if (recorded)
+				await testInfo.attach('acp-protocol', {
+					body: JSON.stringify(recorded, null, 2),
+					contentType: 'application/json',
+				});
 			const started = recorded?.find((item) => item.event === 'started');
 			if (started) await expect.poll(() => processGone(started.pid)).toBe(true);
 			await rm(directory, { recursive: true, force: true });

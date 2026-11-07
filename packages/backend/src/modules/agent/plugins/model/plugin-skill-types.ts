@@ -13,5 +13,25 @@ export interface PluginSkill {
 }
 
 export type PluginSkillInput =
-	| { action: 'search'; query: string; limit: number }
-	| { action: 'read'; name: string; version: string; sha256: string };
+	{ action: 'catalog'; offset: number } | { action: 'read'; name: string; version: string; sha256: string };
+
+export type PluginSkillResult =
+	| {
+			operation: 'skills.catalog';
+			value: {
+				items: { name: string; description: string; version: string; sha256: string }[];
+				nextOffset: number | null;
+				catalogSha256: string;
+			};
+	  }
+	| {
+			operation: 'skills.read';
+			value: { name: string; description: string; version: string; sha256: string; body: string };
+	  };
+
+/** Signed documents exposed by an App or an explicitly selected capability root. */
+export interface PluginSkillCatalog {
+	packageId: string;
+	revision: number;
+	skills: PluginSkill[];
+}

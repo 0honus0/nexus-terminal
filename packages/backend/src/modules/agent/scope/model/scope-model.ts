@@ -9,7 +9,7 @@ function fromApp(value: AppRecord): AgentApp {
 		definitionInstalled: value.definitionInstalled,
 		id: value.id,
 		name: value.name,
-		definitionId: value.definitionId,
+		definitionId: value.sourcePackageId,
 		definitionVersion: value.definitionVersion,
 		capabilities: value.capabilities.map((capability) => capability),
 		enabled: value.enabled,
@@ -22,9 +22,9 @@ function fromApp(value: AppRecord): AgentApp {
 export class ScopeModel {
 	constructor(private readonly storage: AgentScopeStorage) {}
 
-	async declarations(userId: number, limit: number): Promise<AppDeclaration[]> {
-		return (await agentStorage(() => this.storage.listDeclarations(userId, limit))).map((value) => ({
-			id: value.id,
+	async declarations(userId: number): Promise<AppDeclaration[]> {
+		return (await agentStorage(() => this.storage.listDeclarations(userId))).map((value) => ({
+			id: value.sourcePackageId,
 			version: value.version,
 			displayName: value.displayName,
 			capabilities: value.capabilities.map((item) => item),
@@ -36,8 +36,8 @@ export class ScopeModel {
 		return value === null ? null : fromApp(value);
 	}
 
-	async listApps(userId: number, limit: number): Promise<AgentApp[]> {
-		return (await agentStorage(() => this.storage.listApps(userId, limit))).map(fromApp);
+	async listApps(userId: number): Promise<AgentApp[]> {
+		return (await agentStorage(() => this.storage.listApps(userId))).map(fromApp);
 	}
 
 	async setEnabled(

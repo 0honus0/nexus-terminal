@@ -189,6 +189,7 @@ async function artifactBinary(input: {
 			signal: input.signal,
 		});
 	} catch (cause) {
+		if (cause instanceof AgentManagementFailure) throw cause;
 		if (cause instanceof HttpRequestFailure) {
 			throw new AgentManagementFailure(cause.code, cause.outcome, { cause });
 		}

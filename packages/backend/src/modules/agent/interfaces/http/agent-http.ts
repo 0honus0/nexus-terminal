@@ -1,3 +1,4 @@
+import { copyToolIdentity } from '../../agent-tool-identity.js';
 import { agentHttpSerializer, agentHttpErrorHandler } from './agent-http-response.js';
 import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import type { AgentRunUsageView } from '@nexus-terminal/shared/agent/runs/model';
@@ -21,6 +22,7 @@ import { readAgentAppPath, readAgentCreateThreadRequest } from '@nexus-terminal/
 import {
 	readAgentCreateRunRequest,
 	readAgentCancelRunRequest,
+	readAgentResumeRunRequest,
 	readAgentRunCommandHeaders,
 	readAgentRunEventsQuery,
 	readAgentCreateRunPath,
@@ -31,6 +33,8 @@ import type { AgentRunView, AgentRunEventView } from '@nexus-terminal/shared/age
 import type {
 	AgentCreateRunResponse,
 	AgentCancelRunResponse,
+	AgentResumeRunResponse,
+	AgentRunSuspensionView,
 	AgentRunEventsResponse,
 	AgentRunPath,
 } from '@nexus-terminal/shared/agent/runs/http';
@@ -39,7 +43,7 @@ import type { HttpRoute, HttpRequest, HttpReply } from '../../../../platform/htt
 import type { AccessPublicApi } from '../../../access/public.js';
 import { AccessOperationError } from '../../../access/public-errors.js';
 import { AgentOperationError } from '../../public-errors.js';
-import type { AgentStateApi, AgentCreateRunResult, AgentCancelRunResult } from '../../public.js';
+import type { AgentStateApi, AgentCreateRunResult, AgentCancelRunResult, AgentResumeRunResult } from '../../public.js';
 import {
 	readAgentChildPath,
 	readAgentMessageMetadataQuery,
@@ -64,6 +68,8 @@ type AgentHttpResponse =
 	| AgentRunView
 	| AgentCreateRunResponse
 	| AgentCancelRunResponse
+	| AgentResumeRunResponse
+	| AgentRunSuspensionView
 	| AgentRunEventsResponse
 	| AgentToolView
 	| AgentToolCallDetails
@@ -168,9 +174,9 @@ function add(
 	});
 }
 
-function toMutationResponse(value: AgentCreateRunResult | AgentCancelRunResult): {
+function toMutationResponse(value: AgentCreateRunResult | AgentCancelRunResult | AgentResumeRunResult): {
 	status: number;
-	value: AgentCreateRunResponse | AgentCancelRunResponse | AgentErrorResponse;
+	value: AgentCreateRunResponse | AgentCancelRunResponse | AgentResumeRunResponse | AgentErrorResponse;
 } {
 	if (value.status === 'scope_not_found' || value.status === 'not_found') {
 		return { status: 404, value: { code: 'not_found' } };
@@ -181,6 +187,12 @@ function toMutationResponse(value: AgentCreateRunResult | AgentCancelRunResult):
 		value.status === 'version_conflict'
 	) {
 		return { status: 409, value: { code: value.status } };
+	}
+	if (value.status === 'replayed' && value.originalStatus === 'resumed') {
+		return { status: 200, value: { status: 'replayed', originalStatus: 'resumed', run: toRun(value.run) } };
+	}
+	if (value.status === 'resumed') {
+		return { status: 200, value: { status: 'resumed', run: toRun(value.run) } };
 	}
 	if (value.status === 'replayed') {
 		return {
@@ -380,14 +392,7 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 				prompt: body.prompt,
 				approvalMode: body.approvalMode,
 				connectionIds: body.connectionIds.map((id) => id),
-				model: {
-					providerId: body.model.providerId,
-					modelId: body.model.modelId,
-					configurationVersion: body.model.configurationVersion,
-					...(body.model.reasoningEffort === undefined
-						? {}
-						: { reasoningEffort: body.model.reasoningEffort }),
-				},
+				inputJson: body.inputJson,
 				operationKey: key,
 			});
 			const response = toMutationResponse(value);
@@ -409,6 +414,52 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 		});
 		const response = toMutationResponse(value);
 		await deliver(request, reply, response.status, response.value);
+	});
+	add(
+		routes,
+		'POST',
+		'/apps/:appId/runs/:id/resume',
+		access,
+		async (request, reply, userId) => {
+			const key = operationKey(request);
+			const body = readAgentResumeRunRequest(request.body);
+			const path = runPath(request);
+			const value = await agent.resumeRun({
+				userId,
+				appId: path.appId,
+				runId: path.runId,
+				expectedVersion: body.expectedVersion,
+				operationKey: key,
+				inputJson: body.inputJson,
+			});
+			const response = toMutationResponse(value);
+			await deliver(request, reply, response.status, response.value);
+		},
+		[],
+		AGENT_RUN_MAX_JSON_BODY_BYTES,
+	);
+	add(routes, 'GET', '/apps/:appId/runs/:id/suspension', access, async (request, reply, userId) => {
+		const path = runPath(request);
+		const value = await agent.getRunSuspension(userId, path.appId, path.runId);
+		await deliver(
+			request,
+			reply,
+			value === null ? 404 : 200,
+			value === null
+				? { code: 'not_found' }
+				: {
+						runId: value.runId,
+						runVersion: value.runVersion,
+						checkpointVersion: value.checkpointVersion,
+						inputRequest: {
+							id: value.inputRequest.id,
+							sha256: value.inputRequest.sha256,
+							sizeBytes: value.inputRequest.sizeBytes,
+							mediaType: value.inputRequest.mediaType,
+						},
+						suspendedAt: value.suspendedAt,
+					},
+		);
 	});
 	add(routes, 'GET', '/apps/:appId/runs/:id', access, async (request, reply, userId) => {
 		const path = runPath(request);
@@ -541,9 +592,11 @@ function toTool(value: AgentToolView): AgentToolView {
 		id: value.id,
 		appId: value.appId,
 		runId: value.runId,
-		modelStepIndex: value.modelStepIndex,
+		sequence: value.sequence,
+		parentOperationId: value.parentOperationId,
 		toolName: value.toolName,
 		toolVersion: value.toolVersion,
+		identity: copyToolIdentity(value.identity),
 		capability: value.capability,
 		targetId: value.targetId,
 		targetVersion: value.targetVersion,
@@ -551,7 +604,7 @@ function toTool(value: AgentToolView): AgentToolView {
 		mutation: value.mutation,
 		summary: value.summary,
 		operationHash: value.operationHash,
-		operationRevision: value.operationRevision,
+		effects: value.effects.map((effect) => ({ id: effect.id, operationHash: effect.operationHash })),
 		revision: value.revision,
 		state: value.state,
 		outputArtifactIds: value.outputArtifactIds.map((id) => id),

@@ -7,6 +7,7 @@ export interface AgentHostEventMap {
 	'authorization-changed': Record<string, unknown>;
 	'memory-changed': Record<string, unknown>;
 	'host-changed': undefined;
+	'app-data-cleared': { appId: string };
 	// Provider / settings writes: open Agent surfaces reload run configuration; Settings reloads only external changes.
 	'configuration-changed': AgentConfigurationChangedEvent;
 }

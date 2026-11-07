@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Logger } from '../../../../platform/logging/logger.js';
 import { logDiagnostic } from '../../../../platform/logging/diagnostic-log.js';
-import type { ToolService } from '../../tools/service/tool-service.js';
+import type { RunToolResources } from '../../tools/service/run-tool-resources.js';
 import { AgentFailure, aggregateToolFailures } from '../../agent-failure.js';
 import type { RunService } from './run-service.js';
 import type { RunExecutionOwner } from './run-execution-owner.js';
@@ -25,7 +25,7 @@ export class RunResourceService {
 	constructor(
 		private readonly runs: RunService,
 		private readonly execution: RunExecutionOwner,
-		private readonly tools: ToolService,
+		private readonly tools: RunToolResources,
 		private readonly collaboration: RunCollaborationService,
 		private readonly changes: RunChanges,
 		private readonly logger?: Logger,
@@ -190,7 +190,7 @@ export class RunResourceService {
 			}),
 		);
 		failures.push(...drained.flatMap((result) => (result.status === 'rejected' ? [result.reason] : [])));
-		this.changes.notify(userId, appId);
+		this.changes.notify({ userId, appId });
 		if (failures.length) {
 			throw aggregateToolFailures(failures, 'Requested resource shutdown failed');
 		}

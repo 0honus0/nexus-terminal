@@ -1,13 +1,12 @@
-import { AGENT_RUN_STEP_MAX_TEXT_BYTES } from '@nexus-terminal/shared/agent/runs/values';
 import { createHash } from 'node:crypto';
+import { AGENT_TOOL_RESULT_PAGE_MAX_BYTES } from '@nexus-terminal/shared/agent/tools/values';
 import { AgentFailure } from '../agent-failure.js';
-import { TOOL_RESULT_MAX_BYTES } from '../runs/run-tool-limits.js';
 import type { ResultReadInput, ResultPage } from './model/context-types.js';
 
 /** Default preview size; an explicitly configured model preview budget takes precedence. */
 export const RESULT_MODEL_MAX_BYTES = 8 * 1024;
 
-export const RESULT_PAGE_MAX_BYTES = 4 * 1024;
+export const RESULT_PAGE_DEFAULT_BYTES = 4 * 1024;
 
 export function capturedResultHash(text: string): string {
 	return createHash('sha256').update(text, 'utf8').digest('hex');
@@ -27,8 +26,7 @@ export function resultPage(text: string, input: ResultReadInput, previewBytes: n
 		input.offset < 0 ||
 		!Number.isSafeInteger(input.maxBytes) ||
 		input.maxBytes < 8 ||
-		input.maxBytes > RESULT_PAGE_MAX_BYTES ||
-		Buffer.byteLength(text, 'utf8') > Math.max(TOOL_RESULT_MAX_BYTES, AGENT_RUN_STEP_MAX_TEXT_BYTES)
+		input.maxBytes > AGENT_TOOL_RESULT_PAGE_MAX_BYTES
 	) {
 		throw new AgentFailure('invalid_input');
 	}
@@ -84,7 +82,7 @@ export function projectCapturedResult(id: string, text: string, previewBytes = R
 				toolCallId: id,
 				sha256: capturedResultHash(text),
 				offset: 0,
-				maxBytes: RESULT_PAGE_MAX_BYTES,
+				maxBytes: Math.min(AGENT_TOOL_RESULT_PAGE_MAX_BYTES, limit - 512),
 			},
 			previewBytes,
 		),

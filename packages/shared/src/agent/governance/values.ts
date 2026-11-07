@@ -1,3 +1,9 @@
+import {
+	AGENT_PLUGIN_MAX_PACKAGE_ID_BYTES,
+	AGENT_PLUGIN_MAX_VERSION_BYTES,
+	AGENT_PLUGIN_PACKAGE_HASH_LENGTH,
+} from '../plugins/package-values.js';
+
 /** Capability IDs used by the installed Agent governance HTTP endpoints. */
 export const AGENT_CAPABILITIES = [
 	'file.read',
@@ -20,6 +26,9 @@ export const AGENT_CAPABILITIES = [
 	'memory.propose',
 	'app.intents.exchange',
 	'plugin.invoke',
+	'plugin.configure',
+	'service.transport.http',
+	'service.transport.process',
 ] as const;
 
 export type AgentCapability = (typeof AGENT_CAPABILITIES)[number];
@@ -33,6 +42,7 @@ export const AGENT_TARGET_CAPABILITIES: readonly AgentCapability[] = [
 	'file.write',
 	'file.delete',
 	'shell.execute',
+	'service.transport.process',
 ];
 
 export const AGENT_APPROVAL_STATUSES = ['requested', 'approved', 'denied', 'expired', 'superseded'] as const;
@@ -56,8 +66,6 @@ export const AGENT_APPROVAL_TTL_SECONDS = 600;
 /** Per-message history budget; total durable approval history is not truncated. */
 export const AGENT_APPROVAL_MAX_PAGE_ITEMS = 64;
 
-export const AGENT_GRANT_MAX_TARGET_IDS = 256;
-
 export const AGENT_GRANT_MAX_ID_BYTES = 128;
 
 export const AGENT_GOVERNANCE_MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
@@ -69,10 +77,6 @@ export const AGENT_GOVERNANCE_MAX_GRANT_BODY_BYTES = 512 * 1024;
 export const AGENT_EXECUTION_COMPACTION_MODES = ['aggressive', 'balanced', 'conservative'] as const;
 
 export type AgentCompactionMode = (typeof AGENT_EXECUTION_COMPACTION_MODES)[number];
-
-export const AGENT_EXECUTION_CONTEXT_PROFILES = ['normal', 'extended'] as const;
-
-export type AgentContextProfile = (typeof AGENT_EXECUTION_CONTEXT_PROFILES)[number];
 
 export const AGENT_EXECUTION_INTEGER_KEYS = [
 	'maxModelRequests',
@@ -87,7 +91,9 @@ export const AGENT_EXECUTION_INTEGER_KEYS = [
 
 export const AGENT_APPROVAL_MAX_TOOL_NAME_BYTES = 256;
 
-export const AGENT_APPROVAL_MAX_TOOL_VERSION_BYTES = 256;
+// A plugin version binds packageId + '@' + version + '#' + the signed package SHA-256.
+export const AGENT_APPROVAL_MAX_TOOL_VERSION_BYTES =
+	AGENT_PLUGIN_MAX_PACKAGE_ID_BYTES + 1 + AGENT_PLUGIN_MAX_VERSION_BYTES + 1 + AGENT_PLUGIN_PACKAGE_HASH_LENGTH;
 
 export const AGENT_APPROVAL_MAX_SUMMARY_BYTES = 2048;
 
@@ -96,8 +102,6 @@ export const AGENT_APPROVAL_MAX_FEEDBACK_BYTES = 2000;
 export const AGENT_APPROVAL_OPERATION_HASH_LENGTH = 64;
 
 export const AGENT_APPROVAL_OPERATION_HASH_PATTERN = /^[a-f0-9]{64}$/iu;
-
-export const AGENT_DENYLIST_MAX_TARGETS = 50;
 
 export const AGENT_DENYLIST_MAX_REASON_CODE_POINTS = 512;
 

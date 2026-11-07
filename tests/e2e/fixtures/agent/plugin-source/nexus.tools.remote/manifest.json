@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 4,
+  "id": "nexus.tools.remote",
+  "version": "2.0.0",
+  "displayName": "Remote and System Tools",
+  "compatibility": {
+    "host": {
+      "minVersion": "1.1.0",
+      "maxVersion": "1.1.0"
+    },
+    "backendSdk": 4,
+    "frontendSdk": null
+  },
+  "capabilities": [
+    "plugin.invoke",
+    "host.inspect",
+    "file.read",
+    "shell.execute",
+    "machine.docker.manage",
+    "file.write",
+    "file.delete",
+    "machine.inspect",
+    "artifacts.write"
+  ],
+  "intents": [],
+  "frontendEntry": null,
+  "backendEntry": "backend/index.mjs",
+  "contributions": {
+    "app": null,
+    "tools": true,
+    "services": false,
+    "ui": null,
+    "settings": null,
+    "skills": []
+  },
+  "dependencies": [],
+  "namespaces": ["nexus.tools.remote", "nexus.model-tool"]
+}

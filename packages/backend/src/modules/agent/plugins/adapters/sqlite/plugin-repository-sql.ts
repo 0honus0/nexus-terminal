@@ -1,9 +1,9 @@
+import { AGENT_PLUGIN_MAX_BODY_BYTES } from '@nexus-terminal/shared/agent/plugins/values';
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import type { SqlRow } from '../../../../../platform/storage/sqlite/worker-types.js';
 import type { PluginRepositoryStorage, StoredPluginRepositorySettings } from '../../storage/plugin-repository.js';
 import { PluginStorageRefusal } from '../../storage/plugin-storage.js';
-import { AGENT_PLUGIN_MAX_REPOSITORIES } from '@nexus-terminal/shared/agent/plugins/values';
 
 function isRecord(input: unknown): input is Record<string, unknown> {
 	return input !== null && typeof input === 'object' && !Array.isArray(input);
@@ -21,12 +21,12 @@ export function readRepositorySettings(row: SqlRow | null): StoredPluginReposito
 		!Number.isSafeInteger(row.updated_at) ||
 		row.updated_at < 0 ||
 		typeof row.repositories_json !== 'string' ||
-		Buffer.byteLength(row.repositories_json) > 128 * 1024
+		Buffer.byteLength(row.repositories_json) > AGENT_PLUGIN_MAX_BODY_BYTES
 	) {
 		throw new Error('Corrupt plugin repository settings');
 	}
 	const raw: unknown = JSON.parse(row.repositories_json);
-	if (!Array.isArray(raw) || raw.length > AGENT_PLUGIN_MAX_REPOSITORIES) {
+	if (!Array.isArray(raw)) {
 		throw new Error('Corrupt plugin repository list');
 	}
 	const repositories = raw.map((item) => {

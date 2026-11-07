@@ -1,20 +1,55 @@
+import { appsWithPluginInstanceSettings } from './plugins/adapters/sqlite/plugin-instance-clear.js';
+import { OperationActivityModel } from './operations/model/operation-activity-model.js';
+import { SqliteOperationActivityStorage } from './operations/adapters/sqlite/operation-activity-sql.js';
+import { RunAppDrivers } from './runs/drivers/run-app-drivers.js';
+import { OperationModel } from './operations/model/operation-model.js';
+import { OperationService } from './operations/service/operation-service.js';
+import { SqliteOperationStorage } from './operations/adapters/sqlite/operation-sql.js';
+import { OperationContentModel } from './operations/model/operation-content-model.js';
+import { OperationContentService } from './operations/service/operation-content-service.js';
+import { SqliteOperationContentStorage } from './operations/adapters/sqlite/operation-content-sql.js';
+import { RunAppStateModel } from './runs/model/run-app-state-model.js';
+import { RunAppStateService } from './runs/service/run-app-state-service.js';
+import { SqliteRunAppStateStorage } from './runs/adapters/sqlite/run-app-state-sql.js';
+import { ModelInvocationModel } from './providers/model/model-invocation-model.js';
+import { ModelInvocationService } from './providers/service/model-invocation-service.js';
+import { OperationApprovalModel } from './governance/model/operation-approval-model.js';
+import { OperationApprovalService } from './governance/service/operation-approval-service.js';
+import { SqliteOperationApprovalStorage } from './governance/adapters/sqlite/operation-approval-sql.js';
+import { RunPluginCapabilities } from './interfaces/plugin/run-capabilities.js';
+import { RunConfigurationCapabilities } from './interfaces/plugin/run-configuration-capabilities.js';
+import { RunNativeCapabilities } from './interfaces/plugin/run-native-capabilities.js';
+import { RunTransportCapabilities } from './interfaces/plugin/run-transport-capabilities.js';
+import { PluginLifecycleCapabilities } from './interfaces/plugin/plugin-lifecycle-capabilities.js';
+import { PluginConnectionService } from './plugins/service/plugin-connection-service.js';
+import { PluginConnectionModel } from './plugins/model/plugin-connection-model.js';
+import { SqlitePluginConnectionStorage } from './plugins/adapters/sqlite/plugin-connection-sql.js';
+import { RunToolResources } from './tools/service/run-tool-resources.js';
+import { PluginInstanceService } from './plugins/service/plugin-instance-service.js';
+import { PluginInstanceModel } from './plugins/model/plugin-instance-model.js';
+import { SqlitePluginInstanceStorage } from './plugins/adapters/sqlite/plugin-instance-sql.js';
+import { ToolContentService } from './tools/service/tool-content-service.js';
+import { ToolRemoteService } from './tools/service/tool-remote-service.js';
+import { HostToolContributions } from './tools/service/host-tool-contributions.js';
+import { DefaultToolResources } from './tools/service/default-tool-resources.js';
+import { RunAppDriver } from './runs/drivers/run-app-driver.js';
 import type { TextLogStore } from '../../platform/blobs/text-log-store.js';
 import { RunResourceService } from './runs/service/run-resource-service.js';
 import { createRunResourceHttpRoute } from './interfaces/http/run-resource-http.js';
 import { NativeContentInspector } from '../../platform/blobs/adapters/native-content-inspector.js';
-import { TitleModel } from './scope/model/title-model.js';
-import { SqliteTitleStorage } from './scope/adapters/sqlite/title-sql.js';
-import { CompactionModel } from './context/model/compaction-model.js';
-import { SqliteCompactionStorage } from './context/adapters/sqlite/compaction-sql.js';
 import { RunStreamService } from './runs/service/run-stream-service.js';
 import { RunChanges } from './runs/model/run-changes.js';
-import { createRunChangesWebSocketRoute } from './interfaces/ws/run-changes-ws.js';
+import { createAgentStreamWebSocketRoute } from './interfaces/ws/run-changes-ws.js';
+import { AgentStreamSources } from './interfaces/ws/agent-stream-sources.js';
+import { createRunStreamSources } from './interfaces/ws/run-stream-sources.js';
+import { createMemoryStreamSource } from './interfaces/ws/memory-stream-source.js';
 import { ProviderImageService } from './providers/service/provider-image-service.js';
 import type { Logger } from '../../platform/logging/logger.js';
 import { logDiagnostic } from '../../platform/logging/diagnostic-log.js';
 import { registerAgentSnapshot } from './snapshots/adapters/sqlite/snapshot-registration.js';
 import type { SnapshotRegistration } from '../../platform/storage/sqlite/snapshot-types.js';
-import { toRunUsageView, toRunView } from './interfaces/http/run-mapper.js';
+import { toRunSuspension, toRunUsageView, toRunView } from './interfaces/http/run-mapper.js';
+import { toToolView } from './interfaces/http/tool-mapper.js';
 import { encodeAgentToolListCursor } from '@nexus-terminal/shared/agent/tools/http-codec';
 import { toThreadView, toDefinitionView } from './interfaces/http/scope-mapper.js';
 import { ThreadModel } from './scope/model/thread-model.js';
@@ -54,25 +89,18 @@ import { SqliteBrowserStorage } from './integrations/adapters/sqlite/browser-sql
 import { BrowserModel } from './integrations/model/browser-model.js';
 import { BrowserService } from './integrations/service/browser-service.js';
 import { createBrowserHttpRoutes } from './interfaces/http/browser-http.js';
-import { NativeMcpClient } from '../../platform/mcp/adapters/native-mcp-client.js';
 import {
 	SqliteIntegrationStorage,
 	appsWithIntegrationSettings,
 	clearAppIntegrationSettings,
 } from './integrations/adapters/sqlite/integration-sql.js';
 import { appsWithPolicySettings, clearAppPolicySettings } from './governance/adapters/sqlite/policy-write.js';
-import { IntegrationModel } from './integrations/model/integration-model.js';
-import { IntegrationService } from './integrations/service/integration-service.js';
-import { createIntegrationHttpRoutes } from './interfaces/http/integration-http.js';
 import type { HostDiagnostics } from '../system/public.js';
 import type { OperationsEvents } from '../operations/public.js';
 import { SqliteExecutionStorage } from './execution/adapters/sqlite/execution-sql.js';
 import { ExecutionModel } from './execution/model/execution-model.js';
 import { ExecutionService } from './execution/service/execution-service.js';
 import { createExecutionHttpRoutes } from './interfaces/http/execution-http.js';
-import { SqliteCheckpointStorage } from './context/adapters/sqlite/checkpoint-sql.js';
-import { CheckpointModel } from './context/model/checkpoint-model.js';
-import { CheckpointService } from './context/service/checkpoint-service.js';
 import { SqliteArtifactStorage } from './artifacts/adapters/sqlite/artifact-sql.js';
 import { ArtifactModel } from './artifacts/model/artifact-model.js';
 import { ArtifactService } from './artifacts/service/artifact-service.js';
@@ -91,13 +119,11 @@ import { SqliteToolProjectStorage } from './tools/adapters/sqlite/tool-project-s
 import { SqliteRunCollaborationStorage } from './runs/adapters/sqlite/run-collaboration-sql.js';
 import { RunCollaborationModel } from './runs/model/run-collaboration-model.js';
 import { RunCollaborationService } from './runs/service/run-collaboration-service.js';
-import { AcpPermissionService } from './tools/service/acp-permission-service.js';
 import { ToolJobService } from './tools/service/tool-job-service.js';
 import { ToolJobModel } from './tools/model/tool-job-model.js';
 import { SqliteToolJobStorage } from './tools/adapters/sqlite/tool-job-sql.js';
 import type { TrustedSshTargetResolver } from '../targets/public.js';
 import type { RemoteMachineOperationFactory } from '../remote/public.js';
-import { ToolService } from './tools/service/tool-service.js';
 import { ToolModel } from './tools/model/tool-model.js';
 import { AGENT_APP_EXECUTION_STATE } from '@nexus-terminal/shared/agent/scope/values';
 import type { RunRevocationRequest } from './runs/model/run-types.js';
@@ -122,18 +148,11 @@ import { SqliteScopeStorage } from './scope/adapters/sqlite/scope-sql.js';
 import { ScopeModel } from './scope/model/scope-model.js';
 import { ScopeService } from './scope/service/scope-service.js';
 import { SqliteRunStorage } from './runs/adapters/sqlite/run-sql.js';
-import { SqliteRunStepStorage } from './runs/adapters/sqlite/run-step-sql.js';
-import { SqliteRunToolStorage } from './runs/adapters/sqlite/run-tool-sql.js';
-import { RunToolModel } from './runs/model/run-tool-model.js';
-import type { ToolOperation } from './runs/model/run-tool-types.js';
-import type { AgentToolView } from '@nexus-terminal/shared/agent/tools/model';
 import { RunModel } from './runs/model/run-model.js';
-import { RunStepModel } from './runs/model/run-step-model.js';
 import { ContextModel } from './context/model/context-model.js';
 import { ContextHistoryService } from './context/service/context-history-service.js';
 import { ResultService } from './context/service/result-service.js';
 import { SqliteContextStorage } from './context/adapters/sqlite/context-history-sql.js';
-import { RunModelStream } from './runs/model/run-model-stream.js';
 import { RunExecutionOwner } from './runs/service/run-execution-owner.js';
 import { RunService } from './runs/service/run-service.js';
 import type { AgentApp } from './scope/model/scope-types.js';
@@ -160,30 +179,6 @@ function toAppView(value: AgentApp): AgentAppView {
 		enabled: value.enabled,
 		version: value.version,
 		executionState: AGENT_APP_EXECUTION_STATE,
-		createdAt: value.createdAt,
-		updatedAt: value.updatedAt,
-	};
-}
-
-function toToolView(value: ToolOperation): AgentToolView {
-	return {
-		id: value.id,
-		appId: value.appId,
-		runId: value.runId,
-		modelStepIndex: value.modelStepIndex,
-		toolName: value.toolName,
-		toolVersion: value.toolVersion,
-		capability: value.capability,
-		targetId: value.targetId,
-		targetVersion: value.targetVersion,
-		risk: value.risk,
-		mutation: value.mutation,
-		summary: value.summary,
-		operationHash: value.operationHash,
-		operationRevision: value.operationRevision,
-		revision: value.revision,
-		state: value.state,
-		outputArtifactIds: value.outputArtifactIds.map((id) => id),
 		createdAt: value.createdAt,
 		updatedAt: value.updatedAt,
 	};
@@ -250,20 +245,10 @@ export function registerAgent(
 ): AgentRegistration {
 	const browserStorage = new SqliteBrowserStorage(sqlite);
 	const integrationStorage = new SqliteIntegrationStorage(sqlite);
-	const integrations = new IntegrationService(
-		new IntegrationModel(integrationStorage, secrets, new SecureSessionTokens(), new NativeMcpClient(), {
-			name: 'nexus-terminal',
-			version: productVersion,
-		}),
-	);
 	const executionStorage = new SqliteExecutionStorage(sqlite);
 	const executionSettings = new ExecutionService(
 		new ExecutionModel(executionStorage, new SecureSessionTokens()),
 		(request) => execution.abortRevoked(request),
-	);
-	const checkpoints = new CheckpointService(
-		new CheckpointModel(new SqliteCheckpointStorage(sqlite)),
-		executionSettings,
 	);
 	const artifactStorage = new SqliteArtifactStorage(sqlite);
 	const artifacts = new ArtifactService(
@@ -286,11 +271,21 @@ export function registerAgent(
 		artifacts,
 	);
 	const pluginStorage = new SqlitePluginStorage(sqlite);
+	const pluginInstanceStorage = new SqlitePluginInstanceStorage(sqlite);
+	const pluginConnectionStorage = new SqlitePluginConnectionStorage(sqlite);
+	const pluginConnections = new PluginConnectionService(
+		new PluginConnectionModel(pluginConnectionStorage, new SecureSessionTokens(), secrets),
+		(error) => logDiagnostic(logger, 'error', 'PLUGIN_CONNECTION_OBSERVER_FAILED', {}, error),
+	);
+	const pluginInstances = new PluginInstanceService(
+		new PluginInstanceModel(pluginInstanceStorage, new SecureSessionTokens()),
+		(error) => logDiagnostic(logger, 'error', 'PLUGIN_INSTANCE_OBSERVER_FAILED', {}, error),
+	);
 	pluginStorage.installConfigurationLifecycle({
 		async retainedApps(tx, userId) {
 			const policies = await appsWithPolicySettings(tx, userId);
 			const integrations = await appsWithIntegrationSettings(tx, userId);
-			return [...policies, ...integrations];
+			return [...policies, ...integrations, ...(await appsWithPluginInstanceSettings(tx, userId))];
 		},
 
 		async clear(tx, userId, appId) {
@@ -301,6 +296,7 @@ export function registerAgent(
 	pluginStorage.installScopeLifecycle(
 		(tx, input) =>
 			activatePluginScope(tx, {
+				mode: input.mode,
 				userId: input.userId,
 				appId: input.appId,
 				definitionId: input.definitionId,
@@ -308,13 +304,20 @@ export function registerAgent(
 				displayName: input.displayName,
 				contentHash: input.contentHash,
 				capabilities: input.capabilities.map((item) => item),
+				executionPackages: input.executionPackages.map((item) => ({
+					packageId: item.packageId,
+					kind: item.kind,
+					version: item.version,
+					packageHash: item.packageHash,
+					publisherKeyId: item.publisherKeyId,
+				})),
 				enabled: input.enabled,
 				grantedCapabilities: input.grantedCapabilities?.map((capability) => capability) ?? null,
 				now: input.now,
 			}),
 		retirePluginScope,
 	);
-	const plugins = new PluginService(
+	const plugins: PluginService = new PluginService(
 		new PluginModel(
 			pluginStorage,
 			new SecureSessionTokens(),
@@ -328,7 +331,17 @@ export function registerAgent(
 		(request) => execution.abortRevoked(request),
 		(userId, appId) => execution.drainRevokedApp(userId, appId),
 		pluginIntents,
+		pluginInstances,
 		(access, input, withMutation) => workspace.rpc(access, input, withMutation),
+		(access, artifactId, expectedVersion, source, signal, withMutation) =>
+			workspace.uploadUiArtifact(access, artifactId, expectedVersion, source, signal, withMutation),
+		productVersion,
+		{
+			open: (input) =>
+				new PluginLifecycleCapabilities(pluginInstances, pluginConnections, governance, executionSettings).open(
+					input,
+				),
+		},
 		logger,
 	);
 	const pluginRepositoryStorage = new SqlitePluginRepositoryStorage(sqlite);
@@ -355,13 +368,11 @@ export function registerAgent(
 		new CapabilityRegistryModel(new SqliteCapabilityRegistryStorage(sqlite), new ModelsDevCatalogAdapter()),
 	);
 	const changes = new RunChanges();
-	const steps = new RunStepModel(new SqliteRunStepStorage(sqlite, providerStorage), changes);
-	const tools = new RunToolModel(
-		new SqliteRunToolStorage(sqlite),
-		(settings, usage) => executionSettings.admitTool(settings, usage),
-		changes,
+	const stopPluginChanges = pluginInstances.subscribe((scope) => changes.notify(scope));
+	const stopConnectionChanges = pluginConnections.subscribe((scope) =>
+		pluginInstances.changed(scope.userId, scope.appId, scope.instanceId),
 	);
-	const runModel = new RunModel(new SqliteRunStorage(sqlite, providerStorage), changes);
+	const runModel = new RunModel(new SqliteRunStorage(sqlite), changes);
 
 	const revoke = async (request: RunRevocationRequest): Promise<void> => {
 		const results = await Promise.allSettled([
@@ -375,9 +386,8 @@ export function registerAgent(
 	};
 
 	const governance = new GovernanceService(
-		new GovernanceModel(new SqliteGovernanceStorage(sqlite, providerStorage), targets, changes),
+		new GovernanceModel(new SqliteGovernanceStorage(sqlite), targets, changes),
 		revoke,
-		events,
 		executionSettings,
 	);
 	const jobModel = new ToolJobModel(new SqliteToolJobStorage(sqlite), toolLogs);
@@ -388,7 +398,7 @@ export function registerAgent(
 
 			admit: (work, maxRuns) => execution.admitCreate(work, maxRuns),
 
-			start: (command, parentId) => execution.start(command, parentId),
+			start: (command, parentId) => appDrivers.start(execution, command, parentId),
 
 			abort: (scope, id) => execution.abort(scope.userId, scope.appId, id),
 
@@ -401,53 +411,125 @@ export function registerAgent(
 	let resources: RunResourceService | null = null;
 
 	const toolChanged = (scope: { userId: number; appId: string; runId: string }) => {
-		changes.notify(scope.userId, scope.appId);
+		changes.notify(scope);
 		resources?.changed(scope);
 	};
 
 	const toolModel = new ToolModel(targets, resolver, remoteOperations, diagnostics, toolChanged);
-	const providerService = new ProviderService(providerModel, (userId, providerId) =>
-		execution.abortProvider(userId, providerId),
+	const providerService = new ProviderService(providerModel);
+	const operationModel = new OperationModel(
+		new SqliteOperationStorage(sqlite),
+		(settings, usage, kind, tokens) => {
+			if (kind === 'model') {
+				if (tokens === null) {
+					throw new AgentFailure('internal_failure');
+				}
+				executionSettings.admitReservation(settings, usage, tokens);
+			} else if (kind === 'tool') {
+				executionSettings.admitTool(settings, usage);
+			}
+		},
+		changes,
 	);
+	const operationService = new OperationService(operationModel);
+	const operationContents = new OperationContentService(
+		new OperationContentModel(new SqliteOperationContentStorage(sqlite)),
+	);
+	const appState = new RunAppStateService(new RunAppStateModel(new SqliteRunAppStateStorage(sqlite), changes));
+	const operationApprovalStorage = new SqliteOperationApprovalStorage(sqlite);
+	const operationApprovals = new OperationApprovalService(
+		new OperationApprovalModel(operationApprovalStorage, new SecureSessionTokens()),
+		changes,
+	);
+
 	const images = new ProviderImageService(providerService, artifacts);
-	const jobs = new ToolJobService(jobModel, logger, (scope) => toolModel.touch(scope));
-	const toolService = new ToolService(
+	const jobs = new ToolJobService(jobModel, changes, logger, (scope) => toolModel.touch(scope));
+	const hostTools = new HostToolContributions(
 		toolModel,
-		tools,
-		governance,
 		jobs,
-		new AcpPermissionService(tools, governance),
+		new ToolContentService(
+			new ResultService(operationModel, operationContents, governance, toolModel),
+			memory,
+			artifacts,
+			providerService,
+			images,
+		),
+		new ToolRemoteService(
+			toolModel,
+			jobs,
+			new ToolProjectService(new ToolProjectModel(new SqliteToolProjectStorage(sqlite)), toolModel),
+			artifacts,
+		),
 		collaboration,
-		new ToolProjectService(new ToolProjectModel(new SqliteToolProjectStorage(sqlite)), toolModel),
-		new ResultService(tools, governance),
-		memory,
-		artifacts,
-		checkpoints,
-		executionSettings,
-		integrations,
 		browser,
 		plugins,
-		providerService,
-		images,
+	);
+	const transportCapabilities = new RunTransportCapabilities(
+		pluginConnections,
+		governance,
+		operationApprovals,
+		plugins,
+		toolModel,
+		changes,
+	);
+	const toolResources = new RunToolResources(
+		new DefaultToolResources(toolModel, jobs, transportCapabilities, browser),
 	);
 	const contexts = new ContextHistoryService(new ContextModel(new SqliteContextStorage(sqlite)));
-	const execution = new RunExecutionOwner(
-		runModel,
-		steps,
-		new RunModelStream(network),
-		providerModel,
-		toolService,
-		collaboration,
-		contexts,
-		checkpoints,
+	const nativeCapabilities = new RunNativeCapabilities(
+		hostTools,
+		operationService,
+		governance,
+		operationApprovals,
+		toolResources,
+		plugins,
 		executionSettings,
-		events,
-		images,
-		new CompactionModel(new SqliteCompactionStorage(sqlite, providerStorage)),
-		new TitleModel(new SqliteTitleStorage(sqlite, providerStorage), changes),
+		collaboration,
+		changes,
+		transportCapabilities,
+	);
+	const capabilities = new RunPluginCapabilities(
+		governance,
+		executionSettings,
+		operationContents,
+		new ModelInvocationService(
+			new ModelInvocationModel(providerModel, network),
+			operationContents,
+			providerService,
+			artifacts,
+		),
+		appState,
+		plugins,
+		new RunConfigurationCapabilities(pluginInstances, governance, operationApprovals),
+		nativeCapabilities,
+		collaboration,
+	);
+	const appDriver = new RunAppDriver(
+		runModel,
+		operationService,
+		capabilities,
+		(input) => plugins.runRegisteredApp(input),
 		logger,
 	);
-	const runs = new RunService(runModel, steps, execution, tools, collaboration, governance, executionSettings);
+	const appDrivers = new RunAppDrivers(runModel, [
+		{
+			id: 'app',
+
+			supports: (input) => input.appExecution.kind === 'plugin',
+
+			driver: appDriver,
+		},
+	]);
+
+	const execution: RunExecutionOwner = new RunExecutionOwner(runModel, runModel, events, logger);
+	const runs = new RunService(
+		runModel,
+		execution,
+		appDrivers,
+		new OperationActivityModel(new SqliteOperationActivityStorage(sqlite)),
+		collaboration,
+		executionSettings,
+	);
 
 	const scope = new ScopeService(new ScopeModel(new SqliteScopeStorage(sqlite)), revoke, (userId, appId) =>
 		plugins.reconcileApp(userId, appId),
@@ -465,12 +547,41 @@ export function registerAgent(
 		};
 	});
 	const threadModel = new ThreadModel(threadStorage, new SecureSessionTokens());
-	const threads = new ThreadService(threadModel);
-	resources = new RunResourceService(runs, execution, toolService, collaboration, changes, logger);
-	const stream = new RunStreamService(runs, contexts, governance, collaboration, threadModel, resources);
-	const workspace = new WorkspaceService(scope, threads, providerService, runs, collaboration, governance, contexts);
+	const threads = new ThreadService(threadModel, (scope) => memory.changes.notify(scope));
+	resources = new RunResourceService(runs, execution, toolResources, collaboration, changes, logger);
+	const stream = new RunStreamService(runs, contexts, operationApprovals, collaboration, threadModel, resources);
+	const workspace: WorkspaceService = new WorkspaceService(
+		scope,
+		threads,
+		providerService,
+		runs,
+		collaboration,
+		operationApprovals,
+		contexts,
+		memory,
+		artifacts,
+		operationContents,
+	);
+	const streamSources = new AgentStreamSources([
+		...createRunStreamSources(threads, runs, changes, stream, plugins, boundary),
+		createMemoryStreamSource(memory.changes, threads, plugins, boundary),
+	]);
 
 	const requests = new AgentRequestOwner([
+		{
+			quiesce: stopPluginChanges,
+
+			close: async () => {
+				stopPluginChanges();
+			},
+		},
+		{
+			quiesce: stopConnectionChanges,
+
+			close: async () => {
+				stopConnectionChanges();
+			},
+		},
 		changes,
 		resources,
 		execution,
@@ -479,7 +590,6 @@ export function registerAgent(
 		governance,
 		artifacts,
 		jobs,
-		integrations,
 		browser,
 		plugins,
 		pluginRepositories,
@@ -602,19 +712,37 @@ export function registerAgent(
 					prompt: input.prompt,
 					approvalMode: input.approvalMode,
 					connectionIds: input.connectionIds.map((id) => id),
-					model: {
-						providerId: input.model.providerId,
-						modelId: input.model.modelId,
-						configurationVersion: input.model.configurationVersion,
-						...(input.model.reasoningEffort === undefined
-							? {}
-							: { reasoningEffort: input.model.reasoningEffort }),
-					},
+					inputJson: input.inputJson,
 					operationKey: input.operationKey,
 				});
 				// Only a newly committed Run enters the execution owner; its frozen
 				// policy is checked again at dispatch. Replays never restart it.
 				return toCreateResult(result);
+			}),
+
+		resumeRun: (input) =>
+			boundary(async () => {
+				const result = await runs.resume({
+					userId: input.userId,
+					appId: input.appId,
+					runId: input.runId,
+					expectedVersion: input.expectedVersion,
+					operationKey: input.operationKey,
+					inputJson: input.inputJson,
+				});
+				if (result.status === 'resumed') {
+					return { status: 'resumed', run: toRunView(result.run) };
+				}
+				if (result.status === 'replayed') {
+					return { status: 'replayed', originalStatus: 'resumed', run: toRunView(result.run) };
+				}
+				return { status: result.status };
+			}),
+
+		getRunSuspension: (userId, appId, runId) =>
+			boundary(async () => {
+				const value = await runs.suspension(userId, appId, runId);
+				return value === null ? null : toRunSuspension(value);
 			}),
 
 		cancelRun: (input) => boundary(() => cancelRun(input)),
@@ -684,6 +812,8 @@ export function registerAgent(
 		installTransactionIdentityReader: (read) => {
 			threadStorage.installTransactionIdentityReader(read);
 			pluginStorage.installTransactionIdentityReader(read);
+			pluginInstanceStorage.installIdentityReader(read);
+			pluginConnectionStorage.installIdentityReader(read);
 			pluginRepositoryStorage.installIdentityReader(read);
 			pluginIntentStorage.installIdentityReader(read);
 			browserStorage.installTransactionIdentityReader(read);
@@ -691,16 +821,16 @@ export function registerAgent(
 			memoryStorage.installTransactionIdentityReader(read);
 			artifactStorage.installTransactionIdentityReader(read);
 			executionStorage.installTransactionIdentityReader(read);
+			operationApprovalStorage.installIdentityReader(read);
 		},
 
 		// Reconcile persisted incomplete dispatches BEFORE accepting requests;
 		// never redispatch a request whose upstream effects are unknown.
 		initialize: async (mode) => {
-			await steps.reconcileUnsettled(Date.now());
-			logDiagnostic(logger, 'info', 'AGENT_RECOVERY_STAGE_COMPLETED', { stage: 'steps', mode });
-			await tools.reconcileUnsettled();
-			logDiagnostic(logger, 'info', 'AGENT_RECOVERY_STAGE_COMPLETED', { stage: 'tools', mode });
+			await operationModel.interrupt();
 			await jobModel.reconcile();
+			await runModel.recover(Date.now());
+			logDiagnostic(logger, 'info', 'AGENT_RECOVERY_STAGE_COMPLETED', { stage: 'executions', mode });
 			await jobs.initialize();
 			logDiagnostic(logger, 'info', 'AGENT_RECOVERY_STAGE_COMPLETED', { stage: 'jobs', mode });
 			await artifacts.initialize();
@@ -713,20 +843,26 @@ export function registerAgent(
 
 		close: () => requests.close(),
 
-		webSocketRoutes: (access) => [createRunChangesWebSocketRoute(access, threads, runs, changes, stream, boundary)],
+		webSocketRoutes: (access) => [createAgentStreamWebSocketRoute(access, streamSources, logger)],
 
 		routes: (access) => [
 			createWorkspaceHttpRoute(access, threads, workspace, boundary),
 			createRunResourceHttpRoute(access, threads, resources, boundary),
 			...createAgentHttpRoutes(access, publicApi),
 			...createAgentProviderHttpRoutes(access, providerApi),
-			...createGovernanceHttpRoutes(access, governance, boundary),
+			...createGovernanceHttpRoutes(access, governance, operationApprovals, boundary),
 			...createMemoryHttpRoutes(access, memory, boundary),
 			...createArtifactHttpRoutes(access, artifacts, boundary),
 			...createExecutionHttpRoutes(access, executionSettings, boundary),
-			...createIntegrationHttpRoutes(access, integrations, boundary),
 			...createBrowserHttpRoutes(access, browser, boundary),
-			...createPluginHttpRoutes(access, plugins, pluginRepositories, boundary),
+			...createPluginHttpRoutes(
+				access,
+				plugins,
+				pluginRepositories,
+				pluginInstances,
+				pluginConnections,
+				boundary,
+			),
 			...createPluginIntentHttpRoutes(access, pluginIntents, boundary),
 			...createPluginContentRoutes(plugins, boundary),
 		],
@@ -736,6 +872,9 @@ export function registerAgent(
 /** Installation-only fixed storage coverage; no business records leave the adapter. */
 export function registerAgentBackup(secrets: SecretBox | null): SnapshotRegistration {
 	return registerAgentSnapshot(secrets, (value) => {
-		parsePluginSkills(fromPluginSkillFiles(value.files), value.manifest.version);
+		parsePluginSkills(
+			fromPluginSkillFiles(value.files, value.manifest.contributions.skills),
+			value.manifest.version,
+		);
 	});
 }

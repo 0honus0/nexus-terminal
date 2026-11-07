@@ -1,16 +1,16 @@
 import type { AgentApprovalMode } from '@nexus-terminal/shared/agent/runs/values';
+import type { AgentToolIdentity } from '@nexus-terminal/shared/agent/tools/identity';
 import type { AgentRunFailureCode } from '@nexus-terminal/shared/agent/runs/values';
 import type { AgentProviderProtocol, AgentReasoningEffort } from '@nexus-terminal/shared/agent/providers/values';
 import type { AgentRunStatus, AgentRunEventType } from '@nexus-terminal/shared/agent/runs/values';
 import type {
 	AgentApprovalStatus,
-	AgentApprovalKind,
 	AgentApprovalRisk,
 	AgentApprovalDecision,
 	AgentCapability,
 } from '@nexus-terminal/shared/agent/governance/values';
 import type { AgentChildProfile } from '@nexus-terminal/shared/agent/collaboration/values';
-import type { AgentToolState } from '@nexus-terminal/shared/agent/tools/values';
+
 import type { NativeThreadScope } from './native-thread-types';
 
 export interface NativeModel {
@@ -43,13 +43,14 @@ export interface NativeRun {
 
 export interface NativeEntryCursor {
 	runSequence: number;
-	stepIndex: number;
-	eventSequence: number;
+	messageOrdinal: number;
+	chunkIndex: number;
 	textOffset: number;
 }
 
 export interface NativeEntry {
 	runId: string;
+	operationSequence: number;
 	role: 'user' | 'assistant';
 	position: NativeEntryCursor;
 	text: string;
@@ -58,9 +59,17 @@ export interface NativeEntry {
 /** Display message anchored to its first fragment; transport progress stays in the separate entry cursor. */
 export interface NativeConversationEntry {
 	runId: string;
+	operationSequence: number;
 	role: 'user' | 'assistant';
 	position: NativeEntryCursor;
 	text: string;
+}
+
+export interface NativeTranscriptRow {
+	id: string;
+	entry: NativeConversationEntry | null;
+	entryIndex: number;
+	tools: NativeTool[];
 }
 
 /** A confirmed presentation window; permissions and run state are always read again. */
@@ -87,28 +96,25 @@ export interface NativeEvent {
 
 export interface NativeApproval {
 	id: string;
+	sequence: number;
 	appId: string;
 	runId: string;
-	toolCallId: string;
+	operationId: string;
+	parentOperationId: string | null;
 	operationHash: string;
-	kind: AgentApprovalKind;
 	status: AgentApprovalStatus;
 	policyRevision: number;
-	inputRevision: number;
 	version: number;
+	capability: AgentCapability;
+	operationName: string;
+	risk: AgentApprovalRisk;
+	summary: string;
+	targetId: number | null;
 	requestedAt: number;
 	expiresAt: number;
 	decidedAt: number | null;
 	decidedByUserId: number | null;
 	consumedAt: number | null;
-	inspection: {
-		toolName: string;
-		toolVersion: string;
-		risk: AgentApprovalRisk;
-		mutation: boolean;
-		targetConnectionId: number | null;
-		summary: string;
-	};
 }
 
 export interface NativeChild {
@@ -162,7 +168,9 @@ export interface NativeTool {
 	id: string;
 	appId: string;
 	runId: string;
-	modelStepIndex: number;
+	sequence: number;
+	parentOperationId: string | null;
+	identity: AgentToolIdentity;
 	toolName: string;
 	toolVersion: string;
 	capability: AgentCapability;
@@ -172,10 +180,10 @@ export interface NativeTool {
 	mutation: boolean;
 	summary: string;
 	operationHash: string;
-	operationRevision: number;
+	effects: { id: string; operationHash: string }[];
 	revision: number;
-	state: AgentToolState;
-	/** App-owned file delivered by a completed, server-owned output tool. */
+	state: import('@nexus-terminal/shared/agent/operations/values').AgentOperationState;
+	/** App-owned output file references confirmed by the Host. */
 	outputArtifactIds: string[];
 	createdAt: number;
 	updatedAt: number;
@@ -184,7 +192,7 @@ export interface NativeTool {
 export interface NativeToolCallDetails {
 	tool: NativeTool;
 	argumentsJson: string;
-	failureCode: AgentRunFailureCode | null;
+	failureCode: import('@nexus-terminal/shared/agent/values').AgentOperationErrorCode | null;
 }
 
 export interface NativePage<T, Cursor> {

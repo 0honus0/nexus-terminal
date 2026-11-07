@@ -12,6 +12,7 @@
 | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `app`                                | main/bootstrap、路由、页面装配、shell、全局样式和语言安装。                                                                              |
 | `features`                           | 按连接、终端、文件、传输、状态、认证、偏好与 Agent 等业务拥有组件、model、API、mapper、store/composable 和公开入口；以实际功能需要分层。 |
+| `features/agent/plugins`             | 插件浏览器 SDK、可信 Host bridge/iframe、市场及安装管理；与 Backend/Shared 的 `agent/plugins` 对齐。                                     |
 | `runtimes/workspace`                 | 工作区标签、RuntimeSession/Registry、布局与能力装配；通过 adapter 连接功能 Port 与同一 Workspace 生命周期。                              |
 | `runtimes/remote-next`               | 独立远端开发入口；不代替正式 Workspace 消费者。                                                                                          |
 | `client`                             | HTTP/二进制/Workspace 等传输与严格通信边界，持请求关联、取消及连接资源，不持业务草稿或服务端政策。                                       |
@@ -37,7 +38,7 @@ Foundation 保持业务无关；具体编辑器、xterm、图表、插件 iframe
 
 ## 5. 入口与安装
 
-`app/main.ts`、bootstrap 与 router 安装全局依赖和页面；正式 Workspace 按当前身份和视图构建 runtime/功能能力。Agent Host 只匹配当前真实签名插件安装的 App/版本/hash/publisher；开启 Agent 的安装引导与总开关分别提交；确认引导新装时后端同时启用 App 和授予全部声明能力，普通市场安装和已有安装复用保留各自权限语义。DEV 页面仅作开发入口，不提供默认 App 或手工创建旁路。
+`app/main.ts`、bootstrap 与 router 安装全局依赖和页面；正式 Workspace 按当前身份和视图构建 runtime/功能能力。Agent Host 只匹配真实 App 组合及其签名包版本/hash/publisher，聊天统一加载组合选定的 UI 插件 iframe；Host 不根据 frontendEntry 在内置聊天与自定义页面之间分流。frontendEntry 仅是签名 UI 包资源入口。开启 Agent 的安装引导与总开关分别提交；确认引导新装时后端同时启用 App 和授予全部声明能力，普通市场安装和已有安装复用保留各自权限语义。DEV 页面仅作开发入口，不提供默认 App 或手工创建旁路。
 
 重型编辑器、预览及图表沿实际异步入口加载；加载占位不伪造业务数据。现成全局确认、Toast 和 UiSelect 由基础组件统一呈现，具体动作与恢复仍归用例 owner。
 
@@ -116,26 +117,37 @@ Workspace RuntimeSession 持普通与挂起附件的连接/续租，Registry 持
 7. **生命周期与失败**：弹窗按需挂载，关闭、页面隐藏或认证身份变化时销毁；读取、取消、错误及未知写入保护复用原管理 owner。
 8. **当前能力与验收**：操作说明见 USAGE 连接管理章节；按 PLAN 执行静态检查，宽窄屏与弹窗行为保留正式远程回归待验，不以编译替代。
 
+### Agent Host、签名 UI 与页面通信
+
+1. **职责与范围**：Host 持窗口、App 切换、真实认证网络、可信确认和资源选择；聊天展示、正文缓存及输入意图在签名 UI iframe。包安装与 App 组合是独立事实，只有提供 app 贡献并完成组合的 App 才进入 Host 目录。
+2. **子功能与目录**：`features/agent/plugins/sdk` 持公开浏览器 runtime，`plugins/host` 持 `PluginAppFrame`、可信 bridge、descriptor 投影及 Artifact 选择；`plugins/{api,model,composables,components}` 持插件市场、安装及数据管理。通用 Hub/窗口/提醒/checkpoint 状态留 `features/agent/host`，页面传输留 `api/page-stream`。独立插件仓库的 `plugins/nexus.ui.chat/src` 完整持有聊天、预览、基础 UI、样式及翻译源码。
+3. **依赖方向**：签名 UI → 公开 SDK/MessagePort → 绑定原 App 和安装身份的 Host bridge → 真实 API。SDK runtime 只依赖 Shared 与本地 UI client；独立 UI 只消费 Shared 契约和公开 ESM URL，不导入 Host 源码、认证 Store、直接 HTTP/WS client 或全功能服务定位器。包中的 displayName、权限声明和状态提示均不构成执行授权。
+4. **类型与转换**：Shared `agent/plugins/frontend-sdk` 唯一持有 `AgentPluginFrontendModule`、factory、错误构造器及 SDK 类型，相关文件持 RPC、UI 环境、流和 checkpoint 契约；Host 和 UI 分别逐字段投影。独立 UI 的 `nexus:frontend-sdk` 声明通过索引访问这些类型，factory 与 `PluginUiRequestFailure` 来自同一公开模块实例，保留 `instanceof` 语义。SDK 请求采用具名方法联合，不开放任意路径代理或自报 App 身份。主题、语言、窗口状态和目标摘要经白名单环境同步，环境消息不含 Cookie 或 grant；跨 App 选择结果不含源 App、包或资源版本。
+5. **入口与安装**：`pnpm run build:plugin-sdk` 从前端 `plugins/sdk/index.ts` 构建 `dist-plugin-sdk/frontend-v4.mjs`；Backend 仅复制该产物并交付 `/sdk/frontend-v4.mjs`，运行时不编译或导入前端源码。没有独立 frontend SDK workspace/npm/tgz 包。独立 UI 在自身仓库执行 check/build，Vite 将 `nexus:frontend-sdk` 保留为该公开 URL，产物进入真实签名 UI 包；生成的源码/hash 清单记录本地源码、Shared 归档与外部 runtime URL，不以 Host source snapshot 为构建输入。Host 不把 AgentAppSurface 作为聊天入口。
+6. **数据、事务与并发**：一个页面的 Run 状态、SDK Run 事件和 Memory 失效订阅复用一条 `/ws/agent-runs`；每个具名 source 有独立 subscriptionId、generation、revision 和 ACK 信用。Run/事件源沿持久游标恢复，Memory 的 epoch/revision 仅触发重读。父页只在 UI 实际消费后释放对应信用，页面重连不改变业务游标。任务投影由 Host 重新读取 Run、审批和用量，不能用 frame 自报状态替代权威事实。
+7. **生命周期与失败**：App/包版本、UI revision、grant、认证或页面生命周期失效时关闭原 bridge、端口和订阅，晚结果不得发布到新 frame。Host 在当前认证会话内按 App/UI package/publisher 保存 opaque checkpoint，UI 版本更新保留草稿，成功显式清除 App 数据后仅删除该 App 的 checkpoint 与目标偏好；payload schema 和严格解码由 UI 持有。审批及 full_access 先经父页可信确认；审批摘要由父页读取原审批版本/hash，最终权限和 CAS 仍由后端核对。跨 App ArtifactPicker 常驻父页并复用原多选/分页/上传恢复；frame 仅得到显式选择的 opaque key/id/name，附加使用父页保留的原版本与固定目标 App，未知写入不自动重试。
+8. **当前能力与验收**：架构以真实签名 iframe、独立构建和当前通信消费者为准；静态检查、受控逻辑、实际浏览器和完整远程验收分别记录于 testing/PLAN，不从组件复用或构建通过推断行为全部通过。
+
 ### Agent 最小化任务提醒
 
-1. **职责与范围**：原生Surface继续拥有任务权威与写意图；Host仅呈现最小化时实际发生的任务状态、审批和失败变化，提醒短暂出现，不常驻或建立全局Run store。
-2. **子功能与目录**：AgentAppSurface发布当前任务投影和窄审批能力；useNativeRuns持原订阅，agent-host-state按Surface实例登记；use-agent-task-notices持变化基线、合并队列、收起/过期计时；AgentLauncher和AgentTaskNotice呈现。
-3. **依赖方向**：Surface/runtime → 本功能model/原API；Host投影 → Launcher/card → Foundation按钮；@floating-ui/vue 2.0.1已由Reka引入，Frontend显式声明直接依赖复用定位/flip/shift/size，不复用有全局FocusScope/DismissableLayer的弹出框承载自动提醒。
-4. **类型与转换**：AgentTaskActivity及注册能力唯一归agent/model，复用NativeRun/Approval的有限状态及安全摘要；投影带本页确认创建的Run标记、当前会话标题、状态、最多360字符结果、已确认用量/待审批和实例绑定动作。API与Shared白名单转换保持，无新后端契约或本地持久化。
+1. **职责与范围**：签名 UI Surface 持任务展示与写意图；Host 核对权威 Run/审批/用量后呈现最小化时实际发生的任务状态、审批和失败变化，提醒短暂出现，不常驻或建立全局Run store。
+2. **子功能与目录**：签名 UI 内 AgentAppSurface 发布当前任务展示投影，useNativeRuns 持逻辑订阅；`plugins/host/ui-host-bridge` 的 PluginUiHostBridge 复核服务端事实并在 agent-host-state 按 frame 实例登记窄审批能力；use-agent-task-notices持变化基线、合并队列、收起/过期计时；AgentLauncher和AgentTaskNotice呈现。
+3. **依赖方向**：签名 UI Surface → 本功能 model/SDK；父页 bridge → 原认证 API → Host 投影 → Launcher/card → Foundation 按钮；@floating-ui/vue 2.0.1已由Reka引入，Frontend显式声明直接依赖复用定位/flip/shift/size，不复用有全局FocusScope/DismissableLayer的弹出框承载自动提醒。
+4. **类型与转换**：AgentTaskActivity及注册能力唯一归agent/model，复用NativeRun/Approval的有限状态及安全摘要；投影带本页确认创建的Run标记、当前会话标题、状态、最多360字符结果、已确认用量/待审批和实例绑定动作。UI 消息和 API/Shared 保持白名单转换；审批及用量来自 Host 重读，无新的提醒持久化。
 5. **入口与安装**：仅minimized显示变化提醒，单纯最小化/普通文字/计数或语言变化不补弹；切换/加载历史任务的首个快照只作基线，本页确认创建或追加的Run首次回执即终态时仍可提醒；不按历史加载伪造新完成。同一实例任务更新合并，多实例顺序展示；新审批优先，正在悬停/键盘操作的卡片保持，8秒收起；悬停/键盘操作暂缓、触摸点击不永久暂停。卡片不自动聚焦或建立背景遮罩，Esc仅在卡片内处理，328px最大展示宽度再按真实可用宽高收缩。
-6. **数据、事务与并发**：最小化可继续同一任务订阅和窄审批，创建/追加/取消与未知写重试仍要求完整活动界面。快速批准复查当前Run/Thread、最新审批版本/hash，再沿原快照意图/CAS/operationId提交；并发点击受原busy/blocked围栏，禁止重放或扩大授权。语言改变只更新文案，变化键使用原语义取值。
-7. **生命周期与失败**：任务订阅由实际socket结果驱动退避，不用onLine硬闸；online/offline和NetworkInformation change重新连接，首份状态到达前心跳不续原45秒期限。浏览器隐藏暂停原订阅和收起计时，恢复原游标续读；关闭/销毁/认证撤销停止观察，目录按App版本/启用状态过滤并删除对应提醒。每个Surface独立Symbol注册，旧卸载只能注销自己；晚更新不能恢复已注销项。提醒收起不影响任务，过期审批按最近真实expiresAt更新入口标记/按钮，不定时请求服务端；冲突/未知保留原完整任务核对路径。
-8. **当前能力与验收**：仅已挂载原生Surface的当前任务，无全局任务发现或自定义插件虚构状态。源码/静态检查与真实UI/异步故障验收分别记录于testing；已覆盖场景见测试入口，真实手机、键盘和扩大故障组合见 PLAN。
+6. **数据、事务与并发**：最小化可继续同一任务订阅和窄审批，创建/追加/取消与未知写重试仍要求完整活动界面。快速批准由父页复查当前 Run/Thread、最新审批版本/hash，显示可信确认，再沿原快照意图/CAS/operationId 提交；并发点击受原busy/blocked围栏，禁止重放或扩大授权。语言改变只更新文案，变化键使用原语义取值。
+7. **生命周期与失败**：逻辑任务订阅复用父页 page-stream，由实际 socket 结果驱动退避，不用 onLine 硬闸；online/offline 和 NetworkInformation change 触发重连，源首份状态到达前心跳不续原45秒期限。浏览器隐藏暂停原订阅和收起计时，恢复原游标续读；关闭/销毁/认证撤销停止观察，目录按App版本/启用状态过滤并删除对应提醒。每个Surface独立Symbol注册，旧卸载只能注销自己；晚更新不能恢复已注销项。提醒收起不影响任务，过期审批按最近真实expiresAt更新入口标记/按钮，不定时请求服务端；冲突/未知保留原完整任务核对路径。
+8. **当前能力与验收**：仅已挂载签名 UI 的当前任务投影；Host 重新核对真实状态，无全局任务发现或内置原生聊天分支。源码/静态检查与真实UI/异步故障验收分别记录于testing；已覆盖场景见测试入口，真实手机、键盘和扩大故障组合见 PLAN。
 
 ### Agent 会话列表与正文恢复
 
 1. **职责与范围**：Thread owner持列表和创建/删除意图；Run owner缓存已确认正文及双向游标，任务/审批状态仍从原API核对；Surface持阅读位置和虚拟渲染，不建立全局任务Store。
 2. **子功能与目录**：use-native-threads后台核对已加载范围并直接消费写回执；use-native-runs持conversationSnapshots、追赶窗口、selectionGeneration及历史分页；native-run-rules合并连续正文；AgentAppSurface复用vue-virtual-scroller的DynamicScroller/Item测高与可见行回收，消息和工具分组共同虚拟化。
-3. **依赖方向**：Panel/Surface → 原composable → API/Native model → Shared workspace契约；history沿现有Backend Context/Workspace读取，不增加新路由、库或存储。Host提醒只消费Surface投影。
-4. **类型与转换**：NativeConversationSnapshot唯一归agent/model，保存entries、前向cursor、反向startCursor和olderHidden，无审批、权限或写意图。NativeEntryHistory逐字段映射Shared AgentThreadEntryHistory；Surface局部TranscriptRow持稳定Run/role/step/event键，工具子组件随行身份隔离，避免回收时串用展开状态。工具组优先归属本步骤或更早的助手正文；无前置正文时锚定本Run首条已加载消息，后续步骤的总结不改变该锚点，避免文件/GIF跨行重新挂载。
+3. **依赖方向**：签名 UI Panel/Surface → 原 composable/Native model → SDK 具名请求 → Host 认证 RPC → 现有 Backend Context/Workspace；正文存储和游标归原 owner。Host 提醒在展示投影之外重新核对 Run/审批/用量。
+4. **类型与转换**：NativeConversationSnapshot唯一归agent/model，保存entries、前向cursor、反向startCursor和olderHidden，无审批、权限或写意图。NativeEntryHistory逐字段映射Shared AgentThreadEntryHistory；Agent Model 的 NativeTranscriptRow 持稳定Run/role/step/event键，工具子组件随行身份隔离，避免回收时串用展开状态。工具组优先归属本步骤或更早的助手正文；无前置正文时锚定本Run首条已加载消息，后续步骤的总结不改变该锚点，避免文件/GIF跨行重新挂载。
 5. **入口与安装**：返回Hub保留列表并后台核对；增删直接消费权威回执，未知仍显式核对。重复选择不重置，新选择可取消旧后台读。无缓存首次仅取最近正文页，向上到顶或点击原“加载更早消息”入口再取前页；缓存立即显示并沿前向游标补齐，追赶期间批量发布，避免历史逐页重绘。
-6. **数据、事务与并发**：活动正文随分页增长，只挂载可见消息/工具行；闲置缓存沿原128条/256Ki UTF-16字符预算及访问顺序淘汰，活动正文超预算时不保留额外闲置窗口，不限制持久历史。前后游标分离，前页合并不得回退WS进度。scope/App版本、选择代次与operation generation隔离晚结果；历史首次加载禁止写入，用户翻页可取代工具后台读并补安排工具快照。未确认写入仍串行。
-7. **生命周期与失败**：Surface按逻辑消息索引导航、保存阅读锚点及库CacheSnapshot；同宽缓存切换先恢复测量再定位，测量缓存随正文缓存淘汰，宽度变化不套用旧测量；prepend复用库shift，单条消息补前缀另按实测行高差保持位置；动态测高期间仅在用户贴底时跟随。删除确认后清缓存/位置，最后会话清空主区；后台列表失败保留旧画面和恢复围栏，权限/认证撤销清私有状态；切换/销毁取消旧读取、订阅、工具timer和视图RAF，不自动重放未知写入。
+6. **数据、事务与并发**：活动正文随向前分页增长，只挂载可见消息/工具行；跟随最新时按原128条/256Ki UTF-16字符缓存预算回收视口之前的完整消息，仍可重新分页读回，单条长消息不截断。闲置缓存按同一预算及访问顺序淘汰，活动正文超预算时不保留额外闲置窗口，不限制持久历史。前后游标分离，前页合并不得回退WS进度。scope/App版本、选择代次与operation generation隔离晚结果；历史首次加载禁止写入，用户翻页可取代工具后台读并补安排工具快照。未确认写入仍串行。
+7. **生命周期与失败**：Surface按逻辑消息索引导航、保存阅读锚点及库CacheSnapshot；同宽缓存切换先恢复测量再定位，测量缓存随正文缓存淘汰，宽度变化不套用旧测量；prepend复用库shift，单条消息补前缀另按实测行高差保持位置；动态测高期间仅在用户贴底时跟随。删除确认后清缓存/位置，最后会话清空主区；后台列表失败保留旧画面和恢复围栏，权限/认证撤销清私有状态；切换/销毁取消旧读取、逻辑订阅和视图 RAF，实际 socket 由页面 owner 共享，不自动重放未知写入。
 8. **当前能力与验收**：保留原气泡、审批和工具详情、输入区及悬浮控件，删除无消费者的旧裁剪提示；未缓存正文不再从头读取。Run元数据仍分页到最新并保留最近100项，不宣称其已改为服务端尾页。既有限定CDP验证尾页/连续上翻、长正文虚拟挂载与同宽缓存阅读位置、创建/删除及最小化完成提醒；真实弱网、代码/图片/宽度变化测高与导航交错仍按testing待验，不报告未经实测的加速比例。
 
 ### 认证撤销后的通知隔离
@@ -254,18 +266,18 @@ FileManager 沿原 TerminalDirectoryPort.changeDirectory 的 onQueued 消费 wai
 
 ### Agent 审计入口移除
 
-任务详情不再展示步骤与工具审计；审批卡片移除查看工具审计按钮及定位状态。NativeRunDetails 保留运行概况、子任务和 Run 事件；开发页同步移除步骤审计。线程工具列表 API 由 `native-tools-api.ts` 持有，供聊天工具状态及其中的审批结果展示使用；不保留旧审计 API 包装。其他界面布局和样式不变。
+任务详情不再展示步骤与工具审计；审批卡片移除查看工具审计按钮及定位状态。NativeRunDetails 保留运行概况、子任务和 Run 事件；开发页同步移除步骤审计。线程工具列表 API 由 `native-tools-api.ts` 持有，独立签名 UI 构建将其请求适配为 SDK 的 agent.tools.list/details，供聊天工具状态及其中的审批结果展示使用；不保留旧审计 API 包装。其他界面布局和样式不变。
 
 ### 插件市场安装与更新确认弹窗
 
-1. **职责与范围**：PluginManagementSettings将市场共用的候选包确认区放入UiModal，不再插入仓库列表上方；安装及两步升级保留原明确提交动作。
-2. **子功能与目录**：继续由agent/settings组件呈现校验信息与确认按钮，use-plugin-management持候选包/安装状态和写入；不新增并行流程、请求owner或弹窗专用类型。
-3. **依赖方向**：仅消费foundation/ui的UiModal；仓库校验仍经原prepareCatalogEntry，提交仍经applyCandidate和plugin-management-api，不改Backend/Shared。
-4. **类型与转换**：复用agent/model/plugin-types的PluginStage/PluginInstallation；manifest、签名信息及版本映射不变，无新通信字段。
+1. **职责与范围**：PluginManagementSettings将市场共用的候选包确认区放入UiModal，不再插入仓库列表上方；包安装、App 组合及两步升级保留明确提交动作。
+2. **子功能与目录**：继续由 agent/settings 呈现校验和确认；use-plugin-management 持候选包、依赖预览及已确认的包/App 安装状态，PluginInstallPlanPreview 展示完整依赖闭包。预览是本次操作的短期数据，不建立持久安装流程。
+3. **依赖方向**：弹窗消费 foundation/ui 的 UiModal；prepareCatalogEntry 经 Plugin API 严格解码依赖预览，applyCandidate 提交原包/仓库版本及依赖身份，实际校验和提交归后端 PluginRepositoryService。
+4. **类型与转换**：包/stage/App 事实归 agent/model/plugin-types，短期计划归 model/plugin-install-plan-types；API mapper 白名单转换 Shared install-plan，请求绑定仓库版本、stage 版本、已安装依赖 revision 和精确包身份。
 5. **入口与安装**：候选包非空且市场页active时显示；原签名、名称/版本、能力与技术详情移入正文，取消与确认留在独立footer。无候选包时恢复提示在市场，有候选包时在弹窗中显示，始终只显示一处。
-6. **数据、事务与并发**：candidate/candidateInstallation是唯一展示依据；沿原canWrite、busy、refreshRequired和mutationUnknown围栏，读写与版本校验不变。关闭只清空候选包，不提交撤销排空或重放未知操作。
+6. **数据、事务与并发**：candidate/candidatePlan 是预览展示依据，包和 App 的已确认快照分别维护；保留 canWrite、busy、refreshRequired 和 mutationUnknown 围栏。依赖可能已逐项提交，失败后重读实际包/App 事实并重新准备预览；关闭只清空候选意图，不撤销已提交包、排空或自动重放未知操作。
 7. **生命周期与失败**：忙碌时取消/遮罩/Escape均禁止关闭；空闲关闭、确认成功或失效清空后隐藏。UiModal负责Portal、焦点进入及短屏滚动；调用方在校验请求禁用按钮前保存触发元素，候选包关闭且原视图可写时在DOM更新后恢复焦点，失活时丢弃该引用；active控制离开页签的可见性，原视图owner继续隔离认证/页面撤销后的晚结果。失败重读与未知核对在弹窗内可达，未决状态仍由原owner持有。
-8. **当前能力与验收**：源码/静态和限定CDP证据见testing；三语手机/短屏、两步升级和未知结果恢复通过。离开页签/登出晚回执等扩大组合仍待专项，不将取消弹窗声称为撤销升级。
+8. **当前能力与验收**：原弹窗与新增依赖预览的源码、静态和实际浏览器证据分别见 testing；包/App 组合、部分成功、两步升级及未知结果恢复按当前 PLAN 验收，不将关闭弹窗声称为撤销安装或升级。
 
 ### Agent 聊天工具状态与悬浮控件
 
@@ -413,18 +425,29 @@ Run/Tool 安全原因增加 tool_result_unconfirmed，继续由 AgentAppSurface 
 
 ### 插件目录与卸载意图
 
-usePluginManagement 持已确认安装快照；相同 appId/revision 序列不重复发布，避免父组件重新读取 App/定义。retainedAppIds 来自后端同事务目录，不用本地已卸载列表猜测；Host、App 行及市场为当前投影建立 Map/Set，包 hash/publisher/定义版本匹配条件保留。AppManagementSettings的操作组在640px起继承父行items-center垂直居中，不设置self-end覆盖；更窄视口沿原全宽三列grid排列。App 卸载弹窗使用全局确认组件和默认关闭的清除选项；确认后顺序等待卸载、可选清除，只有整段成功才发布成功。清除的 operationId 留原意图，部分完成失败只重读；撤销后不回填旧状态，不自动重放。市场对应插件行显示保留数据标记及清除/重装；原目录不可用时以真实安装/版本信息显示清除行，不伪造可安装包。清除确认沿原 composable/API，移除独立保留数据面板及无消费者的原 JSON 编辑组件。清除不删除聊天、历史、记忆或文件，必要墓碑不作为可用 App 展示。
+usePluginManagement 分别持已确认包安装和 App 组合快照；包不因提供 UI/工具/Skills 自动成为 App，相同 App appId/revision 序列不重复发布，避免父组件重新读取 App/定义。retainedAppIds 来自后端同事务目录，不用本地已卸载列表猜测；Host、App 行及市场为当前投影建立 Map/Set，包 hash/publisher/定义版本匹配条件保留。AppManagementSettings的操作组在640px起继承父行items-center垂直居中，不设置self-end覆盖；更窄视口沿原全宽三列grid排列。App 卸载弹窗使用全局确认组件和默认关闭的清除选项；确认后顺序等待卸载、可选清除，只有整段成功才发布成功。清除的 operationId 留原意图，部分完成失败只重读；撤销后不回填旧状态，不自动重放。市场对应插件行显示保留数据标记及清除/重装；原目录不可用时以真实安装/版本信息显示清除行，不伪造可安装包。清除确认沿原 composable/API，移除独立保留数据面板及无消费者的原 JSON 编辑组件。清除不删除聊天、历史、记忆或文件，必要墓碑不作为可用 App 展示。
 
 ### Agent 启用与插件安装引导
 
 1. **职责与范围**：AgentSettingsPanel 开关接 useAgentOnboarding，安装确认与执行总开关仍是两个明确写入。
 2. **子功能与目录**：复用原 onboarding composable/modal 和 Plugin API；Host 删除 builtin 分支和无用 definitions 请求；DEV 删除手工创建 App，仅使用已安装 App UUID。
-3. **依赖方向**：设置 → 原 composable/API → Shared；Host 按 App/installation/version 完整身份映射 surface。
+3. **依赖方向**：设置 → 原 composable/API → Shared；Host 按 App 组合及所选签名 UI 包的完整身份映射 iframe。
 4. **类型与转换**：声明移除 defaultEnabled；删除无消费者的 DEV App 创建类型/API/翻译，原插件版本哈希与 publisher 白名单转换保持。
-5. **入口与安装**：关闭直接写总开关；开启先读推荐，未装显示 Nexus Agent 确认，已装复用，安装成功才写总开关。引导新装由后端原子初始化启用状态与完整声明授权，已有安装不重置；普通市场安装仍需单独启用与授权。引导底部安全提示独立一行；桌面安装/取消并排，手机两个按钮各占一行、文字保持单行，局部样式不修改全局 UiFormActions；手机面板使用16px内边距，标题与发布者标记可自然换行。
-6. **数据、事务与并发**：无本地默认 App/旧 ID 兼容；Host 仅匹配真实安装包 manifest、版本、hash 和 publisher；目录 Map 索引保持。
+5. **入口与安装**：关闭直接写总开关；开启先读推荐，未装时准备 App 包及依赖预览后显示 Nexus Agent 确认，已装复用，安装和 App 组合成功才写总开关。引导新装由后端原子初始化启用状态与完整声明授权，已有安装不重置；普通市场安装仍需单独启用与授权。引导底部安全提示独立一行；桌面安装/取消并排，手机两个按钮各占一行、文字保持单行，局部样式不修改全局 UiFormActions；手机面板使用16px内边距，标题与发布者标记可自然换行。
+6. **数据、事务与并发**：无本地默认 App/旧 ID 兼容；Host 仅匹配真实 App 组合及已安装的签名包 manifest、版本、hash 和 publisher；依赖预览没有持久流程 ID，目录 Map 索引保持。
 7. **生命周期与失败**：取消/读取失败/安装失败不开启；复用 view/session generation、未知写围栏与只读核对；视图失效后的晚结果不写总开关。
 8. **当前能力与验收**：USAGE 同步首启说明；各轮定向浏览器验收与静态结果见 testing；推荐新装初始化全部声明授权，已有安装不自动恢复权限。安装按钮的新排版按 D17 留 Windows/手机实机验收。
+
+### 插件化后的 Agent 设置
+
+1. **职责与范围**：宿主管理 Provider/模型、执行额度、权限和 Browser 可信连接；插件业务设置由签名 schema 与可选设置页面提供，MCP/ACP 使用独立服务实例。
+2. **子功能与目录**：`settings/AppIntegrationSettings` 仅列出当前 App 中声明 HTTP/远端进程连接能力的实例，读取和编辑复用 `plugins` 的实例配置、连接 API 与 `PluginInstanceSettings`。
+3. **依赖方向**：管理组件经本功能 API 使用 Shared；独立设置页面经公开前端 SDK 调用同一 Host 设置 owner，不引用本体私有组件。
+4. **类型与转换**：Shared `plugins/settings`、`plugins/connection` 持实际契约；前端 Model 显式投影。连接种类来自签名服务贡献，当前 grant 不改变配置适用性，执行仍逐次授权。
+5. **入口与安装**：已安装包行的“设置”管理 App/逻辑实例；MCP/ACP 页是所选服务实例的快捷入口，复用同一弹窗，不使用已移除的 `/apps/:id/integrations`。压缩偏好只在 App 插件设置，宿主预算页不再保留无消费者副本。
+6. **数据、事务与并发**：配置使用包修订、配置修订、schema 修订和操作键；连接使用独立 CAS 与 keep/clear/replace 凭据意图。停用实例不清空连接或凭据；迁移59删除旧宿主压缩字段，业务路径只消费新结构。
+7. **生命周期与失败**：目录读取绑定当前页面、App 和 generation；切换、离页、身份撤销取消旧读取，晚结果不覆盖新选择。写入未知保留原意图，人工与 Agent 走同一配置 owner。
+8. **当前能力与验收**：源码与静态已接通；真实服务配置、凭据保留/清除、App 隔离、压缩持久化及 SSH ACP 审批/取消的正式回归见 PLAN/testing。
 
 ### 插件仓库呈现
 
@@ -629,16 +652,16 @@ OIDC 设置/写入/回调类型在 Auth model；api 逐字段构造 Shared 请�
 7. **生命周期与失败**：原pageScope继续撤销离页/身份变化后的未派发动作；后台连接仍由原Runtime管理，不取消已派发SSH或重放输入。成功与失败均不补发激活动作。
 8. **当前能力与验收**：USAGE明确最新选择优先；桌面/手机延迟配置读取、批量、后台握手和手动选择覆盖归testing，真实手机/网络边界保持独立。
 
-### 语言加载与独立交互 owner
+### 增量正文、语言加载与独立交互 owner
 
-1. **职责与范围**：文件拖动与进度恢复位置分别持有自己的交互状态、监听和清理，原模板与样式不变；语言按当前选择加载。
-2. **子功能与目录**：Filesystem use-file-manager-drag 持悬停导航、边缘滚动和右键取消；Workspace use-progress-restore-position 持位置保存与视口约束；app/i18n 持语言选择，build/locale-messages 持构建完整性校验。
-3. **依赖方向**：容器编排 composable，经原认证视图与导航队列操作 Browser；构建插件枚举三语 JSON，浏览器动态导入所选语言。
-4. **类型与转换**：语言取值归 locale-values，三语键仍是唯一正文来源；拖动复用原文件和 Browser 类型，无协议变化。
-5. **入口与安装**：Vite 正式入口和 E2E 客户端安装 localeMessages，main 等待首种语言加载，切换使用异步 setLocale。
-6. **数据与并发**：只允许最后的语言选择发布，失败保留原语言；不新增持久化或容量限制。
-7. **生命周期与失败**：拖动在视图撤销、卸载和失活时取消；迟到悬停核对原目录、通道、元素和权限。首次语言资源加载失败需恢复网络后重载。
-8. **当前能力与验收**：构建校验重复/缺失/多余语言键，E2E 覆盖并发语言切换及原拖动交互，实际证据见 testing。
+1. **职责与范围**：Agent Runtime 持有正文和游标；`use-native-transcript` 只投影工具归属和稳定行。文件拖动与进度恢复位置分别持有自己的交互状态、监听和清理；原组件模板与样式不变。
+2. **子功能与目录**：Agent 的原地续写、历史 prepend/回收规则归 `model/native-run-rules`；Filesystem `use-file-manager-drag` 持悬停导航、边缘滚动和右键取消；Workspace `use-progress-restore-position` 持位置保存与视口约束。`app/i18n` 持语言选择，`build/locale-messages` 持构建目录和完整性校验。
+3. **依赖方向**：容器编排 composable，拖动通过原认证视图与导航队列操作 Browser；不越过功能 public 边界。语言构建插件只在构建端枚举 app/i18n/messages 与各功能三语 JSON、白名单合并并校验键，浏览器动态导入所选语言。
+4. **类型与转换**：NativeConversationEntry 保留首片段位置，独立游标记录传输进度；NativeTranscriptRow 归 Agent Model。续写保留消息对象，prepend 只重建跨页边界消息；可见行索引变化不改消息标识。语言取值归 locale-values，原三语键仍是唯一正文来源。
+5. **入口与安装**：AgentAppSurface 消费稳定行并在跟随最新时报告第一条可见消息；Vite 正式入口和 E2E 客户端都安装 localeMessages，main 等待首种语言加载后挂载，切换通过异步 setLocale。
+6. **数据、事务与并发**：正文回收复用原 128 条/256 Ki UTF-16 字符缓存预算，只释放视口之前的完整消息；正在阅读历史或向前加载时不回收。新首条使用事件起点作为反向分页边界，不把首片段结束位置误作起点；服务器数据不变，单条长消息不截断。工具锚点被回收时不移到列表末尾，重新读回原消息后恢复；工具元数据仍按独立分页持有，并非所有会话内存都已固定有界。
+7. **生命周期与失败**：历史读取保留身份/selection generation 与滚动锚点，空增量不复制数组。语言选择只允许最后请求发布，失败保留原语言；首次加载失败仍属于启动资源失败，恢复网络后重载。拖动在视图撤销、卸载和失活时取消，迟到悬停核对原目录、通道、元素和权限。
+8. **当前能力与验收**：构建校验重复/缺失/多余语言键；正式 E2E 新增正文/行 identity、跨页恢复和并发语言切换，原拖动、弹层及 Agent 视觉场景保持。性能比例和真实手机滚动不由静态检查证明，执行范围见 testing。
 
 ### 文件预览底栏
 
@@ -650,3 +673,14 @@ OIDC 设置/写入/回调类型在 Auth model；api 逐字段构造 Shared 请�
 6. **数据与并发**：复用原session和搜索状态，无新增业务状态、请求或持久化。
 7. **生命周期与失败**：展开搜索沿原窄屏完整控件布局，关闭恢复单行；刷新忙态和错误出口保持。
 8. **当前能力与验收**：指定CDP验证真实Markdown组件在320/390/820px容器中的路径、按钮几何及搜索/编辑/刷新事件，结果归testing；不代替真实远端文件读写回归。
+
+## 终端 iOS IME 输入交付
+
+1. **职责与范围**：终端输入库负责合成输入与按键去重，TerminalView继续持有可交互状态；不在业务层重发空格，不改UI。
+2. **子功能与目录**：沿用scripts/patches的xterm 6.0.0补丁，同步CompositionHelper、CoreBrowserTerminal、内部接口和ESM/UMD产物，保留原渲染补丁。
+3. **依赖方向**：TerminalView继续使用xterm公开接口；修复参考上游5836，补充input与计时器共用增量基线，不在组件访问私有core。
+4. **类型与转换**：DOM事件和textarea差异仅归xterm内部，按完整Unicode码点计算变化后交付原onData；无Shared、HTTP或数据库契约变化。
+5. **入口与安装**：pnpm patchedDependencies与锁文件固定补丁；keydown229建立基线，input、keyup和原零延时计时器共用同一交付状态。
+6. **数据、事务与并发**：每次交付先更新基线，重复事件不重复发送；仅发送变化的后缀与对应退格，不重发整段累积文本。compositionstart和普通按键清除旧229周期。
+7. **生命周期与失败**：229周期的计时器在两种fallback结束或清除时释放，失焦、禁用输入和终端销毁同步清理旧基线与计时器；实际输入资格仍由TerminalView和原disableStdin控制，离开终端的迟到输入继续被拦截。
+8. **当前能力与验收**：正式terminal-lifecycle用例覆盖空格事件顺序、替换、组合输入、桌面与失活；CDP受控事件证据归testing/HISTORY，桌面Chrome不能代替iPhone真机输入法验收。升级xterm时检查上游正式修复后退役本项补丁，保留尚未被上游覆盖的原渲染修复。
