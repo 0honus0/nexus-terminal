@@ -1,4 +1,4 @@
-import { expectedToolIdentity } from '../../../support/package-tool-catalog.mjs';
+import { hasToolIdentity } from '../../../support/package-tool-catalog.mjs';
 import { readAgentPluginFrontendRpc } from '../../../../packages/shared/src/agent/plugins/frontend-rpc-codec';
 import { agentChatSurface } from '../../fixtures/agent/workbench';
 import regressionInputs from '../../fixtures/agent/regression-inputs.json';
@@ -180,10 +180,11 @@ for (const boundary of ['absolute', 'duration'] as const) {
 			(raw) => readAgentThreadToolsResponse(raw, task.app.id, null, 20),
 		);
 		expect(tools.items).toHaveLength(1);
+		// Schema rejection precedes delegation dispatch; only discovery has a durable operation.
+		expect(hasToolIdentity(tools.items[0], 'tool_search')).toBe(true);
 		expect(tools.items[0]).toMatchObject({
 			runId: created.id,
-			identity: expect.objectContaining({ kind: 'plugin', ...expectedToolIdentity('collaboration_delegate') }),
-			state: 'failed',
+			state: 'completed',
 		});
 		const children = await requestAgentWorkspace(request, task.app, {
 			method: 'agent.subagents.list',

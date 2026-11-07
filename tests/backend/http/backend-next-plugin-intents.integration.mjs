@@ -203,6 +203,34 @@ await test(
 				expectStatus(await create(next), 404);
 			},
 		);
+		await t.test(
+			'attachment collections larger than the former storage decoder ceiling remain readable and replayable',
+			async () => {
+				const artifactIds = [];
+				for (let index = 0; index < 60; index++) {
+					artifactIds.push((await f.upload(sender.appId, Buffer.from([index]), 'attachment-' + index)).id);
+				}
+				assert.ok(Buffer.byteLength(JSON.stringify(artifactIds)) > 2048);
+				const command = { ...input, operationId: randomUUID(), artifactIds };
+				const accepted = readAgentPluginIntentResponse(expectStatus(await create(command), 201)).receipt;
+				assert.deepEqual(accepted.artifactIds, artifactIds);
+				assert.deepEqual(
+					readAgentPluginIntentResponse(expectStatus(await create(command), 201)).receipt,
+					accepted,
+				);
+				assert.deepEqual(
+					(await list()).find((item) => item.id === accepted.id),
+					accepted,
+				);
+				const downloaded = await f.api(
+					'GET',
+					receiverPath + '/' + accepted.id + '/artifacts/' + artifactIds[59] + '/content',
+				);
+				expectStatus(downloaded, 200);
+				assert.deepEqual(downloaded.bytes, Buffer.from([59]));
+				expectStatus(await f.api('DELETE', senderPath + '/' + accepted.id, {}), 200);
+			},
+		);
 		const saturated = [];
 		await t.test(
 			'exactly 100 live messages fit sender quota and valid replay still works at capacity',

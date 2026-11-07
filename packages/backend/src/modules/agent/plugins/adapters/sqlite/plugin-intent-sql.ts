@@ -6,7 +6,10 @@ import { readApp } from '../../../scope/adapters/sqlite/app-row.js';
 import { currentPolicy } from '../../../governance/adapters/sqlite/governance-sql.js';
 import { pluginManifest } from '../package/plugin-manifest.js';
 import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
-import { AGENT_PLUGIN_INTENT_MAX_INPUT_BYTES } from '@nexus-terminal/shared/agent/plugins/intent-values';
+import {
+	AGENT_PLUGIN_INTENT_MAX_BODY_BYTES,
+	AGENT_PLUGIN_INTENT_MAX_INPUT_BYTES,
+} from '@nexus-terminal/shared/agent/plugins/intent-values';
 import type {
 	PluginIntentIdentity,
 	PluginIntentStorage,
@@ -57,7 +60,7 @@ function id(value: unknown): string {
 export function readPluginIntentReceipt(row: Record<string, unknown>): StoredPluginIntent {
 	const inputJson = text(row.input_json, AGENT_PLUGIN_INTENT_MAX_INPUT_BYTES);
 	JSON.parse(inputJson);
-	const ids: unknown = JSON.parse(text(row.artifact_ids_json, 2048));
+	const ids: unknown = JSON.parse(text(row.artifact_ids_json, AGENT_PLUGIN_INTENT_MAX_BODY_BYTES));
 	if (!Array.isArray(ids)) {
 		throw new Error('Corrupt intent artifacts');
 	}
@@ -101,10 +104,12 @@ async function app(tx: SqlExecutor, userId: number, appId: string): Promise<Stor
 		 WHERE ref.user_id=? AND ref.definition_id=? AND ref.definition_version=? AND ref.kind='app'`,
 		[userId, value.definitionId, value.definitionVersion],
 	);
-	const installation = await tx.one('SELECT revision FROM agent_plugin_installations WHERE user_id=? AND app_id=?', [
-		userId,
-		appId,
-	]);
+	const installation = await tx.one(
+		`SELECT i.revision,i.status,p.status AS package_status FROM agent_plugin_installations i
+		 JOIN agent_plugin_packages p ON p.user_id=i.user_id AND p.package_id=i.definition_id
+		 WHERE i.user_id=? AND i.app_id=?`,
+		[userId, appId],
+	);
 	const intents = plugin === null ? [] : pluginManifest(JSON.parse(text(plugin.manifest_json, 256 * 1024))).intents;
 	return {
 		id: value.id,
@@ -112,7 +117,10 @@ async function app(tx: SqlExecutor, userId: number, appId: string): Promise<Stor
 		revision: value.version + ':' + policy.revision,
 		pluginRevision: installation === null ? null : integer(installation.revision, 1),
 		enabled: value.enabled,
-		declared: value.definitionInstalled,
+		declared:
+			value.definitionInstalled &&
+			installation?.status === 'installed' &&
+			installation.package_status === 'installed',
 		capabilities: value.capabilities.map((item) => item),
 		grants: policy.grants.map((item) => item.capability),
 		intents: intents.map((item) => ({ id: item.id, schemaVersion: item.schemaVersion })),

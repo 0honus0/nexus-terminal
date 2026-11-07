@@ -1,5 +1,7 @@
 /** Controlled model scenarios use current tool arguments, never retired public result envelopes. */
 export function respondFunctionalModel(messages, userText, response, send) {
+	// Prior Runs remain real model history, but this scripted plan starts at the current user turn.
+	messages = messages.slice(messages.findLastIndex((message) => message.role === 'user'));
 	const connection = /connection=(\d+)/.exec(userText);
 	const connectionId = connection ? Number(connection[1]) : null;
 

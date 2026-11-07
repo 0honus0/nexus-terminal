@@ -3,6 +3,23 @@ import { finished } from 'node:stream/promises';
 import type { HttpReply } from '../../../../platform/http/http-types.js';
 import { AgentFailure } from '../../agent-failure.js';
 
+function cancelledDelivery(error: unknown, signal: AbortSignal): boolean {
+	if (!signal.aborted) {
+		return false;
+	}
+	if (error === signal.reason) {
+		return true;
+	}
+	if (error instanceof AggregateError) {
+		return error.errors.length > 0 && error.errors.every((cause) => cancelledDelivery(cause, signal));
+	}
+	return (
+		error instanceof Error &&
+		'code' in error &&
+		((error.code === 'ABORT_ERR' && error.cause === signal.reason) || error.code === 'ERR_STREAM_PREMATURE_CLOSE')
+	);
+}
+
 /** Native transport still waits for the artifact source's final authorization and cleanup. */
 export async function deliverArtifactContent(
 	reply: HttpReply,
@@ -60,6 +77,9 @@ export async function deliverArtifactContent(
 		}
 	}
 	if (failure !== null) {
+		if (cancelledDelivery(failure, signal)) {
+			throw new AgentFailure('provider_unavailable', { cause: failure });
+		}
 		throw failure;
 	}
 }

@@ -2,7 +2,7 @@ import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { requestAgentJson } from '../../support/agent-request';
 import { E2E_URLS } from '../../support/test-env';
-import { configureTestPluginRepository, testPluginRepositoryUrl } from '../../support/plugins';
+import { configureTestPluginRepository, stageTestPlugin, testPluginRepositoryUrl } from '../../support/plugins';
 import { readAgentAppListResponse } from '../../../../packages/shared/src/agent/scope/http-codec';
 import { readAgentExecutionSettingsResponse } from '../../../../packages/shared/src/agent/execution/http-codec';
 import { execFile } from 'node:child_process';
@@ -53,11 +53,15 @@ test('first enable requires installation confirmation and cancellation or confir
 	const catalog = await configureTestPluginRepository(context.request);
 	const entry = catalog.packages.find((item) => item.packageId === 'nexus.agent' && item.compatible);
 	expect(entry).toBeDefined();
+	// The controlled remote source requires explicit publisher trust, unlike the pinned official source.
+	await stageTestPlugin(context.request, 'nexus.agent');
 	// Route the official lookup to the controlled signed repository; package preparation remains real.
 	await page.route('**/api/v1/agent/plugins/official/prepare', async (route) => {
 		const response = await context.request.post('/api/v1/agent/plugins/remote/prepare', {
+			headers: { Origin: E2E_URLS.frontendOrigin },
 			data: { ...route.request().postDataJSON(), repositoryUrl: testPluginRepositoryUrl },
 		});
+		expect(response.status()).toBe(200);
 		await route.fulfill({ response });
 	});
 	// Control only the recommendation response; the separate install remains a rejected write.

@@ -6,6 +6,7 @@ import {
 } from '../../../../packages/shared/src/agent/plugins/frontend-rpc-codec';
 import { randomUUID } from 'node:crypto';
 import { expect, type APIRequestContext, type Page } from '../../support/fixtures';
+import type { Route } from '@playwright/test';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { requestAgentJson } from '../../support/agent-request';
 import {
@@ -225,6 +226,22 @@ export async function captureNativeCommand(
 		dispatches: 0,
 	};
 	router.active = active;
+	let authorization: AgentApprovalView | undefined;
+	const approvalPath = '**/api/v1/apps/' + task.app.id + '/approvals/*';
+
+	const captureApproval = async (route: Route) => {
+		if (route.request().method() !== 'GET') {
+			await route.fallback();
+			return;
+		}
+		const response = await route.fetch({ maxRetries: 0 });
+		expect(response.status()).toBe(200);
+		authorization = readAgentApprovalView(await response.json());
+		expect(new URL(response.url()).pathname).toBe('/api/v1/apps/' + task.app.id + '/approvals/' + authorization.id);
+		await route.fulfill({ response });
+	};
+
+	if (method === 'agent.approvals.resolve') await task.page.route(approvalPath, captureApproval);
 	const approvalResponse =
 		method === 'agent.approvals.resolve'
 			? task.page.waitForResponse((response) => {
@@ -237,7 +254,6 @@ export async function captureNativeCommand(
 					);
 				})
 			: undefined;
-	let authorization: AgentApprovalView | undefined;
 	const waiting = task.page.waitForResponse((response) => {
 		if (
 			!response.url().endsWith(`/agent/plugins/installations/${task.app.id}/frontend/rpc`) ||
@@ -253,7 +269,7 @@ export async function captureNativeCommand(
 				if (method !== 'agent.approvals.resolve') return;
 				if (!response) throw new Error('Missing original Host approval pre-read');
 				expect(response.status()).toBe(200);
-				authorization = readAgentApprovalView(await response.json());
+				if (!authorization) throw new Error('Missing original Host approval body');
 				expect(new URL(response.url()).pathname).toBe(
 					'/api/v1/apps/' + task.app.id + '/approvals/' + authorization.id,
 				);
@@ -296,6 +312,7 @@ export async function captureNativeCommand(
 		return { ...active.receipt, ...(authorization ? { authorization } : {}) };
 	} finally {
 		router.active = undefined;
+		if (method === 'agent.approvals.resolve') await task.page.unroute(approvalPath, captureApproval);
 	}
 }
 

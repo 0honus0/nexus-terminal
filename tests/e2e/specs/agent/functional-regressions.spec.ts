@@ -49,7 +49,12 @@ test('A07 browser rejects a stale click, then a separate approved Run deploys on
 	request,
 	page,
 }) => {
-	const task = await prepareNativeTask(request, page, ['browser.read', 'browser.interact', 'artifacts.read']);
+	const task = await prepareNativeTask(request, page, [
+		'browser.read',
+		'browser.interact',
+		'artifacts.read',
+		'artifacts.write',
+	]);
 	const configuration = await requestAgentJson(
 		request,
 		{ method: 'GET', path: '/browser/configuration' },

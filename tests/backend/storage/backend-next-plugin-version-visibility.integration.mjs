@@ -80,7 +80,7 @@ await test('Plugin version visibility: independent contributions and exact share
 
 	await version(1, remote);
 	await installed(1, remote);
-	const uiCurrent = { ...ui, version: '2.0.1' };
+	const uiCurrent = { ...ui, version: `${Number(ui.version.split('.')[0]) + 1}.0.0` };
 	await version(1, uiCurrent);
 	await installed(1, uiCurrent, 'draining');
 	await version(1, ui);

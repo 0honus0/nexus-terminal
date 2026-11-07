@@ -1997,3 +1997,16 @@ Node 26.13.0/pnpm 12.16.1；`build.log` 与 `browser.log` 包含 Shared、Backen
 指定CDP在`api.honus.top:443`、本地9998生产前端预览和正式签名包上通过聊天、High默认推理、1440/390/320px无横向溢出、宽屏SSH文字/窄屏图标及刷新后重开聊天恢复。`cdp-final/acceptance.json`、截图与原失败日志保留；无pageerror。此前根check重建Shared期间影响运行中Vite的失败不算产品验收，最终改用冻结生产前端产物完成同一场景。
 
 第三轮runner缺少XZ解压工具，补齐构建依赖后，[E2E 42391577489](https://github.com/0honus0/nexus-terminal/actions/runs/42391577489) 的runner、质量与Docker smoke均通过，原签包摘要问题已消除。测试分片随后发现共享构建产物遗漏`backend/dist-plugin-sdk/backend-v4.mjs`，自定义签名夹具无法启动；上传清单和预构建检查同步补齐。该轮未执行的场景仍不算通过，完整验收继续使用新提交。
+
+### SDK4 第六轮远程失败收敛与最终本地回归
+
+[E2E 42396361014](https://github.com/0honus0/nexus-terminal/actions/runs/42396361014) 验证 `f134948bd02c07eb5f6cce6ad06e404eb90f4581`：质量、构建、Docker smoke 和 Browser3/4/5/6 通过；Browser1/2/7 及 Backend1 失败，整轮未通过。原始日志保留在上述 delivery 目录的 `remote-sixth-*`。后端协议/生命周期组实测12分39秒，原15分钟全局期限在后续SSH回归前中断；仅后端整轮期限调整至30分钟，单项期限不变。
+
+产品修复正常下载取消误报 owner 故障、包升级/卸载围栏内旧跨App附件授权仍可读取，以及持久附件列表写死2KiB的错误限制。正式后端矩阵新增对应流、意图、生命周期、退休故障和未知私有数据写入回归；SDK4原始效果保留，不恢复旧activate接口。测试夹具同步派发前schema拒绝的真实发现记录、仓库显式信任与Origin、当前Run模型历史范围、iframe内会话定位、原审批响应读取和独立UI新版本。
+
+- `lifecycle-intent-final.log`：54/54通过，无skip/cancel，含60附件超过旧2KiB后的回执、重读及真实字节下载。
+- `owner-sdk4-final.log`：4/4通过；`version-visibility-second.log`：独立版本可见性通过。
+- `browser-continuation.log`：42项中38通过，另外4项首次失败已修复；`browser-continuation-final.log` 最终5/5通过，包括两种委派期限、两项布局持久化和真实原生Surface审批。已有通过组覆盖A07、首次启用、会话切换及双标签草稿。
+- 根check、后端build和全仓格式通过，证据分别为 `check-continuation.log`、`backend-build-final-fences.log`、`format-all-final-fences.log`。提交前另执行 `check-final-push.log`。
+
+本地专项不代替完整远程矩阵；新提交的完整E2E、逐项Reporter核对及正式发布继续推进。独立插件仓当前 `550e4e0b4d873dcaedac54fd37f4e34208d5f91f`，最终固定Agent2.0.2/UI2.0.1；其余包2.0.0，发布仍为draft。

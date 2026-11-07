@@ -3,12 +3,24 @@ import { test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { openPlugins } from './plugin-management-fixture.mjs';
+import { openPlugins, stopPackageSource } from './plugin-management-fixture.mjs';
 import { expectStatus } from '../remote/openssh-fixture.mjs';
 import { processIdentity } from '../../../packages/backend/dist/platform/isolation/adapters/module-recovery.js';
 import { ModuleRuntimeFailure } from '../../../packages/backend/dist/platform/isolation/module-runtime.js';
 
 const base = '/api/v1/agent/plugins/installations/';
+
+// SDK4 has one disposal lifecycle; independent instances must retain every failure.
+function backend(dispose = '') {
+	return `import { definePlugin } from './sdk.mjs';
+ export default definePlugin((plugin) => {
+  plugin.register({kind:'app',key:plugin.identity.package.packageId+'.run',
+  contract:plugin.identity.package.packageId,apiVersion:1,summary:'Retirement probe',instructions:'',
+  inputSchemaJson:'{"type":"object"}',resultSchemaJson:'{"type":"object"}',
+  capabilities:[],tags:[],execution:'managed'},async()=>({kind:'complete',outputs:[]}));
+  plugin.onDispose(()=>{ ${dispose} });
+ });`;
+}
 
 async function children(f) {
 	const root = f.database + '.modules';
@@ -64,12 +76,13 @@ await test(
 		const db = new DatabaseSync(f.database, { readOnly: true });
 		t.after(() => db.close());
 		const plugins = [];
-		for (const [name, backend] of [
-			['quiesce-failure', 'export function quiesce() { throw new Error("private-quiesce-sentinel"); }'],
-			['dispose-failure', 'export function dispose() { throw new Error("private-dispose-sentinel"); }'],
-			['healthy-sibling', 'export function health() { return true; }'],
+		for (const [name, cleanup] of [
+			['first-disposal-failure', 'throw new Error("private-first-disposal-sentinel");'],
+			['second-disposal-failure', 'throw new Error("private-second-disposal-sentinel");'],
+			['healthy-sibling', ''],
 		])
-			plugins.push(await f.install(name, { backend }));
+			plugins.push(await f.install(name, { backend: backend(cleanup) }));
+		await stopPackageSource(f);
 		const original = await children(f);
 		assert.equal(original.length, 3);
 
@@ -111,8 +124,15 @@ await test(
 		await t.test(
 			'revoked publisher stays revoked and neither content nor a new runtime is silently restored',
 			async () => {
-				for (const plugin of plugins)
-					expectStatus(await f.api('GET', base + plugin.appId + '/data/never-written'), 403);
+				for (const plugin of plugins) {
+					// SDK4 rejects the revoked frontend binding before private-data admission.
+					assert.deepEqual(
+						expectStatus(await f.api('GET', base + plugin.appId + '/data/never-written'), 409),
+						{
+							code: 'version_conflict',
+						},
+					);
+				}
 				const publisher = expectStatus(await f.api('GET', '/api/v1/agent/plugins/publishers'), 200).items.find(
 					(value) => value.keyId === f.publisher.keyId,
 				);
@@ -161,8 +181,9 @@ await test(
 		const db = new DatabaseSync(f.database, { readOnly: true });
 		t.after(() => db.close());
 		const plugin = await f.install('failed-uninstall', {
-			backend: 'export function dispose() { throw new Error("private-remove-sentinel"); }',
+			backend: backend('throw new Error("private-remove-sentinel");'),
 		});
+		await stopPackageSource(f);
 		const path = base + plugin.appId;
 		const original = expectStatus(await f.api('GET', path + '/runtime'), 200);
 		const identities = await children(f);

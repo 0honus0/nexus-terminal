@@ -51,7 +51,8 @@ export default defineConfig({
 	workers: 1,
 	retries: isCI ? 1 : 0,
 	failOnFlakyTests: isCI,
-	globalTimeout: isCI ? 15 * 60_000 : 0,
+	// The SDK4 protocol/lifecycle suite alone measured 12m39s in CI; retain time for the remaining real SSH regressions.
+	globalTimeout: isCI ? (backendOnly ? 30 : 15) * 60_000 : 0,
 	timeout: isCI ? 120_000 : 0,
 	expect: { timeout: 10_000 },
 	reporter: isCI

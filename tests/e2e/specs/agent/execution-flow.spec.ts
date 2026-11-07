@@ -6,6 +6,26 @@ import { expect, test } from '../../support/fixtures';
 for (const [name, file, pattern] of [
 	['subscriber asynchronous authority isolation', 'storage/backend-next-run-changes.integration.mjs', ''],
 	[
+		'streamed Artifact cancellation, revoked intents and package upgrade fences',
+		'http/backend-next-plugin-artifact-streams.integration.mjs',
+		'',
+	],
+	[
+		'signed App intent receipts and cross-App Artifact authority',
+		'http/backend-next-plugin-intents.integration.mjs',
+		'',
+	],
+	[
+		'runtime concurrency, retained history and unknown private-data commits',
+		'http/backend-next-plugin-owner-faults.integration.mjs',
+		'',
+	],
+	[
+		'independent publisher retirement failures and explicit original-instance recovery',
+		'http/backend-next-plugin-retirement-failures.integration.mjs',
+		'',
+	],
+	[
 		'lost commit acknowledgements stop the original task family without rewriting evidence',
 		'http/backend-next-agent-ledger-faults.integration.mjs',
 		'',

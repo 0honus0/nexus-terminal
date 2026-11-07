@@ -184,3 +184,10 @@ window.connectTask.catch((error) => { window.connectionError = error.message; })
 		},
 	};
 }
+
+/** Stop the package-upload App after the last upload when a test observes only plugin children. */
+export async function stopPackageSource(f) {
+	const path = '/api/v1/agent/apps/' + f.source.id;
+	const app = expectStatus(await f.api('GET', path), 200);
+	expectStatus(await f.api('PATCH', path, { expectedVersion: app.version, enabled: false }), 200);
+}
