@@ -175,6 +175,7 @@ function run(plan, rawShard) {
 	}
 	for (const file of [
 		'backend/dist/bootstrap/create-app.js',
+		'backend/dist-plugin-sdk/backend-v4.mjs',
 		'shared/dist/access/http.js',
 		...(suite === 'backend'
 			? []

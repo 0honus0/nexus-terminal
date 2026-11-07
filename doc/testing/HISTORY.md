@@ -1995,3 +1995,5 @@ Node 26.13.0/pnpm 12.16.1；`build.log` 与 `browser.log` 包含 Shared、Backen
 第二轮 [E2E 42391065220](https://github.com/0honus0/nexus-terminal/actions/runs/42391065220) 的质量与 Docker smoke 通过，但签包摘要仍在测试启动时失败。下载 Bookworm 的 GNU tar1.34 在本机复现精确相同的错误摘要，逐头核对为 ustar 的零设备号字段编码与官方打包环境 GNU tar1.35 不同；runner 使用已核对 Debian 源码 SHA-256 的1.35构建，不改签包或放宽摘要断言。
 
 指定CDP在`api.honus.top:443`、本地9998生产前端预览和正式签名包上通过聊天、High默认推理、1440/390/320px无横向溢出、宽屏SSH文字/窄屏图标及刷新后重开聊天恢复。`cdp-final/acceptance.json`、截图与原失败日志保留；无pageerror。此前根check重建Shared期间影响运行中Vite的失败不算产品验收，最终改用冻结生产前端产物完成同一场景。
+
+第三轮runner缺少XZ解压工具，补齐构建依赖后，[E2E 42391577489](https://github.com/0honus0/nexus-terminal/actions/runs/42391577489) 的runner、质量与Docker smoke均通过，原签包摘要问题已消除。测试分片随后发现共享构建产物遗漏`backend/dist-plugin-sdk/backend-v4.mjs`，自定义签名夹具无法启动；上传清单和预构建检查同步补齐。该轮未执行的场景仍不算通过，完整验收继续使用新提交。

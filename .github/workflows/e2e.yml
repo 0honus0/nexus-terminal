@@ -175,6 +175,7 @@ jobs:
           path: |
             packages/shared/dist/
             packages/backend/dist/
+            packages/backend/dist-plugin-sdk/
             packages/frontend/dist/
           if-no-files-found: error
           retention-days: 1
