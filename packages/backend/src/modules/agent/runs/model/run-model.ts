@@ -264,12 +264,14 @@ export class RunModel {
 			const failure: RunFailure | null =
 				diagnostic === null
 					? null
-					: diagnostic.kind === 'job_unknown'
-						? { code: 'tool_result_unconfirmed', toolName: diagnostic.toolName }
-						: {
-								code: runFailureCode(new AgentFailure(diagnostic.code), true),
-								toolName: diagnostic.toolName,
-							};
+					: diagnostic.kind === 'diagnostic'
+						? { code: diagnostic.code, toolName: diagnostic.toolName }
+						: diagnostic.kind === 'job_unknown'
+							? { code: 'tool_result_unconfirmed', toolName: diagnostic.toolName }
+							: {
+									code: runFailureCode(new AgentFailure(diagnostic.code), true),
+									toolName: diagnostic.toolName,
+								};
 			const remembered = this.failures.get(runId);
 			if (failure !== null && failure.code !== 'tool_failed') {
 				run.failure = { code: failure.code, toolName: failure.toolName };

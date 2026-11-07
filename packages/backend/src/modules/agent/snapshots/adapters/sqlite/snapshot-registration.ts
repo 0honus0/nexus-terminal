@@ -752,6 +752,10 @@ export function registerAgentSnapshot(
 			],
 		},
 		{
+			name: 'agent_operation_diagnostics',
+			columns: ['operation_id', 'code'],
+		},
+		{
 			name: 'agent_operation_model_reservations',
 			columns: ['operation_id', 'root_id', 'provider_id', 'reserved_tokens', 'input_tokens', 'output_tokens'],
 		},

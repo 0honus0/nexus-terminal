@@ -20,11 +20,6 @@ const readJson = async (request) => {
 	return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 };
 
-function assertDiscoveryNotReplayed(messages, id) {
-	if (messages.some((message) => message.role === 'tool' && message.tool_call_id === id))
-		throw new Error('Actual discovery refused or omitted the requested package tool; no call replay');
-}
-
 const sendSse = (response, value) => {
 	const payload = Array.isArray(value?.choices)
 		? { ...value, choices: value.choices.map((choice, index) => ({ index, ...choice })) }
@@ -278,7 +273,16 @@ const server = http.createServer(async (request, response) => {
 		);
 		if (missing.length) {
 			const id = 'discover_' + missing.map((call) => call.id).join('_');
-			assertDiscoveryNotReplayed(messages, id);
+			const discovery = messages.find((message) => message.role === 'tool' && message.tool_call_id === id);
+			if (discovery) {
+				return sendRegressionResponse(response, {
+					content: JSON.stringify({
+						status: 'unavailable',
+						tools: missing.map((call) => call.function.name),
+						discovery: JSON.parse(discovery.content),
+					}),
+				});
+			}
 			return sendRegressionResponse(
 				response,
 				{
@@ -489,7 +493,8 @@ const server = http.createServer(async (request, response) => {
 		);
 		if (refusal) {
 			const result = JSON.parse(refusal.content);
-			regressionResponse(response, { content: 'DELEGATION_REJECTED:' + result.failureCode });
+			if (typeof result.failure?.code !== 'string') throw new Error('Expected a definite delegation refusal');
+			regressionResponse(response, { content: 'DELEGATION_REJECTED:' + result.failure.code });
 			return;
 		}
 		const args = {

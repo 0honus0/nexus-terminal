@@ -6,6 +6,8 @@ dist-plugin-sdk
 build
 coverage
 test-results
+playwright-report
+tests/e2e/.tmp/
 uploads
 temp-uploads
 *.min.js

@@ -1,16 +1,16 @@
 {
   "packageId": "nexus.ui.chat",
   "sourceRoot": "nexus-agent-plugins",
-  "baselineCommit": "e19e7049d81b3aa0d7ec533dce24ce4a726668dc",
+  "baselineCommit": "550e4e0b4d873dcaedac54fd37f4e34208d5f91f",
   "sourceWorktree": {
     "dirty": false,
-    "releaseTag": "v2.0.0",
+    "releaseTag": "v2.0.2",
     "note": "Official GitHub Actions signed SDK4 release archive; copied verbatim."
   },
   "sourceFiles": [
     {
       "path": "plugins/nexus.ui.chat/files.json",
-      "sha256": "1bfa1db1c61ce931186f56d971694e63cd38be1ead7be5467f00261fa553d7c1",
+      "sha256": "bf4dae186517367a801707f83e12a8bbbe46e8905a5027fdd34acf0bab73db6c",
       "sizeBytes": 6624
     },
     {
@@ -149,14 +149,14 @@
       "sizeBytes": 67
     },
     {
-      "path": "plugins/nexus.ui.chat/frontend/assets/index-B54znTZ8.css",
-      "sha256": "0e9933ecb1020fefacf7bb82d91d50f883bd0fdd9d1d97a7b89a99028a5a1809",
-      "sizeBytes": 270674
+      "path": "plugins/nexus.ui.chat/frontend/assets/index-BA479X54.js",
+      "sha256": "0e8aa1b4757893426f6f260b562972392d04dad49675f708cae7b8abf220408f",
+      "sizeBytes": 769365
     },
     {
-      "path": "plugins/nexus.ui.chat/frontend/assets/index-BdWxYoVL.js",
-      "sha256": "c84ae4d9cd49d0728bb1ced0f3e7832cbfc7b8bba65fc6e4db0c67a65ddf9f2b",
-      "sizeBytes": 769246
+      "path": "plugins/nexus.ui.chat/frontend/assets/index-C7O4wP-U.css",
+      "sha256": "6c67d8a4591b0c09b2d6d376c854fbd9c97973a0dd5c9540f6069692b895c133",
+      "sizeBytes": 270674
     },
     {
       "path": "plugins/nexus.ui.chat/frontend/assets/previewDomSearch-DbbsAJxb.js",
@@ -190,23 +190,23 @@
     },
     {
       "path": "plugins/nexus.ui.chat/frontend/index.html",
-      "sha256": "04e69a7042c94510ff58b9ee486a1c86dad9c36df31ecd05f8d62b0788d2950c",
+      "sha256": "9a1610049517d34a1acdf04c106ab3b6dd578372ae3ff0e27bc82db0ebc4cf63",
       "sizeBytes": 1088
     },
     {
       "path": "plugins/nexus.ui.chat/manifest.json",
-      "sha256": "94dadd679ebdd1734cc53ef5f2ffe98d0a791dd08a33549bc12d0d34975c2976",
+      "sha256": "e2c6a21c6f493cda91a5c0edb1d99a963791762bb672bacf4084fc0d140e14da",
       "sizeBytes": 600
     },
     {
       "path": "plugins/nexus.ui.chat/signature.ed25519",
-      "sha256": "b244b66c7ec3971c87b68762a73461741afef36a77f64baf1448923db2968cd0",
+      "sha256": "284b936b816cb278523949c55642326a1e6c9e38d4ba3d162176fd674c9debe8",
       "sizeBytes": 64
     }
   ],
-  "sourceFilesSha256": "e201ce30acc0fa241937a047f6b49651f201ab929b9a58e1436af5d33a9e4aca",
+  "sourceFilesSha256": "eeb6df1e1f60704984fddbf55180496049e6c352fd732a714ea37962d1433344",
   "upstreamSignedPackage": {
-    "version": "2.0.0",
+    "version": "2.0.1",
     "compatibility": {
       "host": {
         "minVersion": "1.1.0",
@@ -221,7 +221,7 @@
       "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAPw+WXiJPcxqiKjxGCRcm3fWwy+JByAKTKX+iE5pKD/E=\n-----END PUBLIC KEY-----\n"
     },
     "publisherKeyId": "ed25519:617ec64b03cd6ed1a1ddf373e3a47f38666cdcd27753d674e136a4d0a359a1a0",
-    "sha256": "0e884633e13880b3d912fc967f524dcae75fa8231fe74e24c8c7f3d9f4200495",
+    "sha256": "f204d232faf8bed24d8252538463f3d6f87c2cede14ed24eaea6bb2c9c7f1762",
     "sizeBytes": 4894720
   }
 }

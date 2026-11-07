@@ -110,7 +110,7 @@ ACP 官方 SDK 持帧解析、回调和 prompt，Host 受管 SSH 进程及权限
 
 Host 使用具名有限错误，cause/凭据/供应商正文不越过安全出口。拒绝、确定失败、取消、执行未知和清理未知分别表达。签名不证明代码安全，Node permission/独立进程/iframe 的保证按实际测试边界说明；原始协议传输是强能力，不能声称恶意 provider 的每帧语义均由 Host 解析或约束。
 
-日志使用项目诊断组件，关联 App/instance/Run/Operation/generation，不打印 Cookie、秘密或完整私密输入。业务状态靠真实事件与来源补读；没有输出不自动判卡死，心跳不证明任务推进。
+日志使用项目诊断组件，关联 App/instance/Run/Operation/generation，不打印 Cookie、秘密或完整私密输入。Operation 的确定故障原因经有限 RunFailureCode 映射，与终态同事务写入 agent_operation_diagnostics（迁移60），重启后从实际失败操作及所属工具投影；诊断不改变效果是否确认。快照包含该表并核对关联终态与有限码。工具活动从真实子效果汇总唯一 SSH 目标，多目标不伪造单一目标。业务状态靠真实事件与来源补读；没有输出不自动判卡死，心跳不证明任务推进。
 
 ## 8. 当前能力与验收
 

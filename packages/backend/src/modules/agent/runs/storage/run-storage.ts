@@ -1,3 +1,4 @@
+import type { AgentRunFailureCode } from '@nexus-terminal/shared/agent/runs/values';
 import type { AgentOperationErrorCode } from '@nexus-terminal/shared/agent/values';
 import type { StoredRunAppMutation, StoredRunAppResult, StoredRunAppTerminal } from './run-app-storage.js';
 import type { AgentApprovalMode } from '@nexus-terminal/shared/agent/runs/values';
@@ -102,7 +103,9 @@ export interface RunEventPageRecord {
 export type StoredCancelRunDecision = 'cancel' | 'already_cancelled' | 'version_conflict' | 'active_run_conflict';
 
 export type StoredRunFailure =
-	{ kind: 'job_unknown'; toolName: string } | { kind: 'operation'; code: AgentOperationErrorCode; toolName: string };
+	| { kind: 'job_unknown'; toolName: string }
+	| { kind: 'operation'; code: AgentOperationErrorCode; toolName: string }
+	| { kind: 'diagnostic'; code: AgentRunFailureCode; toolName: string | null };
 
 export interface StoredRunUnstartedFailure {
 	userId: number;

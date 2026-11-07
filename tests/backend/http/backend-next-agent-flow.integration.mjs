@@ -164,6 +164,12 @@ await test('Agent flow model outcomes and immutable instructions', { timeout: 18
 				assert.equal(contexts(f, run)[0].operation.state, 'failed');
 				assert.equal(f.operations(run).filter((row) => row.kind === 'tool').length, 0);
 				assert.ok(settled.failure);
+				if (status === 401) {
+					assert.deepEqual(settled.failure, { code: 'model_auth_failed', toolName: null });
+					await f.restart();
+					assert.deepEqual((await f.wait(run, 'failed')).failure, settled.failure);
+					assert.equal(f.calls.length, 1, 'Restart reads the durable safe cause without retrying');
+				}
 			});
 		}
 		for (const status of [408, 409, 500, 502, 503, 504]) {
@@ -172,7 +178,12 @@ await test('Agent flow model outcomes and immutable instructions', { timeout: 18
 				{},
 				async (f) => {
 					const run = await f.start('uncertain ' + status, () => ({ status }));
-					await f.wait(run, 'unknown');
+					const settled = await f.wait(run, 'unknown');
+					if (status === 503) {
+						assert.deepEqual(settled.failure, { code: 'model_service_unavailable', toolName: null });
+						await f.restart();
+						assert.deepEqual((await f.wait(run, 'unknown')).failure, settled.failure);
+					}
 					assert.equal(f.calls.length, 1);
 					assert.equal(contexts(f, run)[0].operation.state, 'unknown');
 				},

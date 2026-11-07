@@ -7,6 +7,7 @@ import { requestAgentJson } from './agent-request';
 import { installTestPlugin } from './plugins';
 import { readAgentAppResponse } from '../../../packages/shared/src/agent/scope/http-codec';
 import { readAgentProviderView } from '../../../packages/shared/src/agent/providers/http-codec';
+import { readAgentGrantView } from '../../../packages/shared/src/agent/governance/http-codec';
 import {
 	readAgentExecutionSettingsResponse,
 	readAgentExecutionSettingsUpdate,
@@ -68,6 +69,28 @@ export async function prepareAgentRun(
 	input: AgentCreateRunRequest;
 }> {
 	const app = existingApp ?? (await createTestAgentApp(request));
+	const grants = await requestAgentJson(
+		request,
+		{ method: 'GET', path: `/apps/${app.id}/grants` },
+		readAgentGrantView,
+	);
+	if (!grants.grants.some((grant) => grant.capability === 'plugin.invoke')) {
+		await requestAgentJson(
+			request,
+			{
+				method: 'PUT',
+				path: `/apps/${app.id}/grants`,
+				data: {
+					expectedPolicyRevision: grants.policyRevision,
+					grants: [
+						...grants.grants.map((grant) => ({ capability: grant.capability, scope: grant.scope })),
+						{ capability: 'plugin.invoke', scope: { kind: 'global' } },
+					],
+				},
+			},
+			readAgentGrantView,
+		);
+	}
 	const created = await requestAgentWorkspace(request, app, {
 		method: 'agent.threads.create',
 		params: { autoTitle: false, operationId: randomUUID(), title: 'Event pagination' },

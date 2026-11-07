@@ -98,6 +98,7 @@ window.connectTask.catch((error) => { window.connectionError = error.message; })
 			contribution: contributions,
 			capabilities: options.capabilities ?? ['plugin.invoke'],
 			dependencies: options.dependencies ?? [],
+			intents: options.intents ?? [],
 			namespaces: options.namespaces ?? execution.namespaces ?? [id],
 			frontendEntry: frontend ? 'frontend/index.html' : null,
 			backend: options.backend ?? execution.backend,

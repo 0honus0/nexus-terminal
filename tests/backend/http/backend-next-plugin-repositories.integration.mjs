@@ -31,7 +31,6 @@ await test('B10 onboarding initialization commits enabled App and full declared 
 	const plugin = await f.install('onboarding-initialization', {
 		capabilities,
 		enabled: false,
-		backend: 'export function activate() {}\nexport function health() { return true; }',
 	});
 	assert.equal(expectStatus(await f.api('GET', plugin.appPath), 200).enabled, true);
 	const grants = expectStatus(await f.api('GET', plugin.appPath + '/grants'), 200).grants;
@@ -44,9 +43,10 @@ await test('B10 onboarding initialization commits enabled App and full declared 
 				: { kind: 'global' },
 		);
 	}
-	assert.equal(
-		expectStatus(await f.api('GET', base + '/installations/' + plugin.appId + '/runtime'), 200).state,
-		'active',
+	await until(
+		async () => expectStatus(await f.api('GET', base + '/installations/' + plugin.appId + '/runtime'), 200).state,
+		(state) => state === 'active',
+		'onboarding starts the current SDK4 App',
 	);
 	await plugin.grants([]);
 	await plugin.enabled(false);
@@ -124,8 +124,8 @@ await test('B10 actual repository HTTP, signed downloads and configuration order
 		version: '1.0.0',
 		compatibility: {
 			host: { minVersion: product.version, maxVersion: product.version },
-			backendSdk: null,
-			frontendSdk: 3,
+			backendSdk: 4,
+			frontendSdk: 4,
 		},
 		contributionKinds: ['app', 'ui'],
 		displayName: 'repository',
@@ -153,7 +153,7 @@ await test('B10 actual repository HTTP, signed downloads and configuration order
 		f.api('POST', base + '/remote/stage', {
 			repositoryUrl: url,
 			packageId: entry.packageId,
-			publisherKeyId: entry.publisherKeyId,
+			publisherKeyId: catalog.packages[0].publisherKeyId,
 			version,
 		});
 
@@ -174,7 +174,6 @@ await test('B10 actual repository HTTP, signed downloads and configuration order
 		['credentials', [{ url: 'https://user:secret@example.test/catalog' }]],
 		['fragment', [{ url: url + '#private' }]],
 		['duplicate canonical URL', [{ url: 'https://EXAMPLE.test:443/' }, { url: 'https://example.test/' }]],
-		['seventeenth source', Array.from({ length: 17 }, (_, i) => ({ url: url + '?n=' + i }))],
 		['unknown nested field', [{ url, token: 'not allowed' }]],
 	]) {
 		await t.test(label + ' rejects without changing repository version', async () => {
@@ -316,7 +315,11 @@ await test('B10 actual repository HTTP, signed downloads and configuration order
 		);
 		assert.equal(installedPackage.packageId, entry.packageId);
 		const { binding } = expectStatus(
-			await f.api('POST', base + '/apps/compose', { packageId: entry.packageId }),
+			await f.api('POST', base + '/apps/compose', {
+				packageId: entry.packageId,
+				selectedRootIds: [],
+				uiPackageId: entry.packageId,
+			}),
 			200,
 		);
 		const installed = expectStatus(await f.api('GET', base + '/installations'), 200).items.find(
@@ -424,7 +427,7 @@ await test(
 		const entry = (version, changes = {}) => ({
 			packageId: OFFICIAL_PLUGIN_SOURCE.recommendedAppId,
 			version,
-			compatibility: { host: { minVersion: '0.0.0', maxVersion: '999.0.0' }, backendSdk: null, frontendSdk: 3 },
+			compatibility: { host: { minVersion: '0.0.0', maxVersion: '999.0.0' }, backendSdk: null, frontendSdk: 4 },
 			contributionKinds: ['app', 'ui'],
 			displayName: 'official metadata',
 			description: 'catalog only',

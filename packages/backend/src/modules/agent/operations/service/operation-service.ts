@@ -1,3 +1,5 @@
+import { runFailureCode } from '../../runs/run-failure-rules.js';
+import type { AgentRunFailureCode } from '@nexus-terminal/shared/agent/runs/values';
 import { AgentFailure, AgentResourceFenced, aggregateAgentFailures, isAgentDrainFailure } from '../../agent-failure.js';
 import { OperationDispatchRefusal, OperationEffectFailure } from '../model/operation-failure.js';
 import type { OperationModel } from '../model/operation-model.js';
@@ -151,9 +153,10 @@ export class OperationService {
 		owner: ExecutionOwner,
 		operation: OperationReceipt,
 		terminal: Parameters<OperationModel['finish']>[1],
+		diagnosticCode: AgentRunFailureCode | null = null,
 	): Promise<OperationExecutionResult> {
 		await this.waitChildren(owner, operation);
-		const ended = await this.model.finish(operation, terminal);
+		const ended = await this.model.finish(operation, terminal, diagnosticCode);
 		if (ended.status !== 'ok') {
 			throw new AgentFailure('operation_unknown');
 		}
@@ -211,6 +214,7 @@ export class OperationService {
 				input.signal.aborted
 					? { state: 'cancelled' }
 					: { state: 'failed', failureCode: error instanceof AgentFailure ? error.code : 'internal_failure' },
+				runFailureCode(error, true),
 			);
 		}
 		// An unknown dispatch commit must never be caught as an execution failure or retried.
@@ -257,6 +261,7 @@ export class OperationService {
 								state: 'failed',
 								failureCode: error instanceof AgentFailure ? error.code : 'internal_failure',
 							},
+				runFailureCode(error, true),
 			);
 			if (error instanceof OperationEffectFailure && error.cleanup === 'unknown') {
 				throw error;

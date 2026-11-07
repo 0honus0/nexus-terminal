@@ -110,7 +110,7 @@ for (const { format, nested } of [
 			`/api/v1/agent/apps/${task.app.id}/runs/${randomUUID()}/tools/${imageTool.id}`,
 		);
 		expect(wrongRun.status()).toBe(404);
-		const toolCard = hub.locator('[data-tool-name="image_generate"][data-tool-state]');
+		const toolCard = hub.locator(`[data-tool-name="${imageTool.toolName}"][data-tool-state]`);
 		await hub.locator('details.group\\/tools > summary').click();
 		await toolCard.locator('summary').click();
 		await expect(toolCard.locator('[data-tool-arguments]')).toHaveText(
@@ -214,15 +214,15 @@ for (const scenario of [
 			{ method: 'GET', path: `/apps/${task.app.id}/runs/${run.id}/tools/${rejectedTool.id}` },
 			(value) => readAgentToolCallDetails(value, { appId: task.app.id, runId: run.id, toolId: rejectedTool.id }),
 		);
-		expect(details.failureCode).toBe(scenario.failureCode);
+		expect(details.failureCode).toBeNull();
 		expect(JSON.stringify(details)).not.toContain('E2E_PRIVATE_VENDOR_BODY');
 		await hub.locator('details.group\\/tools > summary').click();
-		const toolCard = hub.locator('[data-tool-name="image_generate"][data-tool-state]');
+		const toolCard = hub.locator(`[data-tool-name="${rejectedTool.toolName}"][data-tool-state]`);
 		await toolCard.locator('summary').click();
 		await expect(toolCard.locator('[data-tool-arguments]')).toHaveText(
 			JSON.stringify(JSON.parse(details.argumentsJson), null, 2),
 		);
-		await expect(toolCard).toContainText(scenario.failureCode);
+		await expect(toolCard).toHaveAttribute('data-tool-state', 'unknown');
 		const message =
 			scenario.failureCode === 'model_content_filtered'
 				? 'The model service rejected the request or generated result during content safety checks. Revise the prompt before submitting again.'

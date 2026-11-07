@@ -8,7 +8,8 @@ import {
 	openAgentConversations,
 	requestAgentWorkspace,
 } from '../../support/agent';
-import { readAgentWorkspaceRequest } from '../../../../packages/shared/src/agent/scope/workspace-http-codec';
+import { readAgentPluginFrontendRpc } from '../../../../packages/shared/src/agent/plugins/frontend-rpc-codec';
+import { agentChatSurface } from '../../fixtures/agent/workbench';
 import { readServerTransferPage } from '../../../../packages/shared/src/remote/transfers/server-codec';
 import type { ServerTransferSnapshot } from '../../../../packages/shared/src/remote/transfers/server-model';
 
@@ -106,13 +107,25 @@ test('Agent search finds a conversation after the first page and recovers from a
 	if (!initial || !target) throw new Error('Missing conversation fixtures');
 	let failNext = true;
 	let nextPages = 0;
-	await page.route(`**/api/v1/agent/apps/${app.id}/workspace`, async (route) => {
-		const { request } = readAgentWorkspaceRequest(route.request().postDataJSON());
+	await page.route(`**/api/v1/agent/plugins/installations/${app.id}/frontend/rpc`, async (route) => {
+		const rpc = readAgentPluginFrontendRpc(route.request().postDataJSON());
+		const request = rpc.envelope.request;
 		if (request.method === 'agent.threads.list' && request.params.after !== null) {
 			nextPages++;
 			if (failNext) {
 				failNext = false;
-				await route.fulfill({ status: 503, json: { code: 'unavailable' } });
+				await route.fulfill({
+					status: 200,
+					json: {
+						type: 'nexus.plugin.response',
+						protocol: 4,
+						nonce: rpc.envelope.nonce,
+						id: rpc.envelope.id,
+						seq: rpc.envelope.seq,
+						ok: false,
+						error: { code: 'provider_unavailable' },
+					},
+				});
 				return;
 			}
 		}
@@ -121,7 +134,7 @@ test('Agent search finds a conversation after the first page and recovers from a
 	await page.goto('/connections');
 	await openAgentHub(page);
 	await openAgentConversations(page);
-	const sidebar = page.locator('.agent-hub-window #agent-thread-sidebar');
+	const sidebar = agentChatSurface(page, app.id).locator('#agent-thread-sidebar');
 	await expect(sidebar.getByText(initial.title, { exact: true })).toHaveCount(1);
 	await expect(sidebar.getByText(target.title, { exact: true })).toHaveCount(0);
 	await sidebar.getByRole('searchbox').fill(target.title);

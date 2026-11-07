@@ -171,7 +171,7 @@ for (const boundary of ['absolute', 'duration'] as const) {
 		const created = await startNativeTask(task, `E2E_REGRESSION_DEADLINE_SENTINEL boundary=${boundary}`);
 		const result = await finishNativeTask(task, created.id);
 		expect(result.run.status).toBe('completed');
-		expect(result.text).toBe('DELEGATION_REJECTED:tool_invalid_input');
+		expect(result.text).toBe('DELEGATION_REJECTED:invalid_input');
 		// The model response itself is complete. The rejected tool proposal
 		// must not fabricate a Child or an unknown remote effect.
 		const tools = await requestAgentJson(

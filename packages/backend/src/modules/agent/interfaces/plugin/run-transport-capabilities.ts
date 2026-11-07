@@ -584,13 +584,14 @@ export class RunTransportCapabilities implements PluginRunCapabilityExtensions, 
 									}
 								} catch (error) {
 									if (
-										!(error instanceof AgentFailure) ||
-										![
-											'forbidden',
-											'version_conflict',
-											'provider_unavailable',
-											'not_found',
-										].includes(error.code)
+										!(lifetime.aborted && error === lifetime.reason) &&
+										(!(error instanceof AgentFailure) ||
+											![
+												'forbidden',
+												'version_conflict',
+												'provider_unavailable',
+												'not_found',
+											].includes(error.code))
 									) {
 										authorityFailure = error;
 										input.execution.onBackgroundFailure(error, 'transport.session');

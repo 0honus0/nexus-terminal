@@ -84,7 +84,7 @@ async (input, context) => {
 			dependencies: extension.dependencies ?? [],
 			contributions: contribution,
 			capabilities: [...(extension.capabilities ?? AGENT_CAPABILITIES)],
-			intents: [],
+			intents: extension.intents ?? [],
 			frontendEntry: extension.frontendEntry ?? null,
 			backendEntry: backend ? 'backend/index.mjs' : null,
 			namespaces: extension.namespaces ?? [id],
@@ -104,7 +104,7 @@ async (input, context) => {
 	if (backend) {
 		await mkdir(join(content, 'backend'));
 		await writeFile(join(content, 'backend', 'index.mjs'), backend);
-		if (backend === defaultBackend) {
+		if (!extension.backendAssets?.['sdk.mjs'] && !extension.assets?.['backend/sdk.mjs']) {
 			await writeFile(
 				join(content, 'backend', 'sdk.mjs'),
 				await readFile(new URL('../../packages/backend/dist-plugin-sdk/backend-v4.mjs', import.meta.url)),

@@ -1,3 +1,4 @@
+import type { AgentRunFailureCode } from '@nexus-terminal/shared/agent/runs/values';
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import type { SqlReader } from '../../../../../platform/storage/sqlite/sql-types.js';
 import type {
@@ -328,6 +329,7 @@ export class SqliteOperationStorage implements OperationStorage {
 		revision: number,
 		terminal: StoredOperationTerminal,
 		now: number,
+		diagnosticCode: AgentRunFailureCode | null,
 	): Promise<StoredOperationMutation> {
 		return this.db.transaction(async (tx) => {
 			const original = await getById(tx, scope, id);
@@ -389,6 +391,12 @@ export class SqliteOperationStorage implements OperationStorage {
 				'UPDATE agent_operations SET state=?,revision=revision+1,result_json=?,failure_code=?,updated_at=? WHERE id=? AND revision=?',
 				[state, resultJson, failureCode, now, id, revision],
 			);
+			if (diagnosticCode !== null && (state === 'failed' || state === 'unknown')) {
+				await tx.run('INSERT INTO agent_operation_diagnostics(operation_id,code) VALUES (?,?)', [
+					id,
+					diagnosticCode,
+				]);
+			}
 			const operation = await getById(tx, scope, id);
 			if (!operation) {
 				throw new Error('Finished operation missing');

@@ -1,7 +1,8 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { requestAgentJson } from '../../support/agent-request';
-import { configureTestPluginRepository } from '../../support/plugins';
+import { E2E_URLS } from '../../support/test-env';
+import { configureTestPluginRepository, testPluginRepositoryUrl } from '../../support/plugins';
 import { readAgentAppListResponse } from '../../../../packages/shared/src/agent/scope/http-codec';
 import { readAgentExecutionSettingsResponse } from '../../../../packages/shared/src/agent/execution/http-codec';
 import { execFile } from 'node:child_process';
@@ -46,9 +47,19 @@ test('first enable requires installation confirmation and cancellation or confir
 	expect(await requestAgentJson(context.request, { method: 'GET', path: '/apps' }, readAgentAppListResponse)).toEqual(
 		[],
 	);
+	expect(
+		(await context.request.post(E2E_URLS.pluginRepositoryOrigin + '/control/official-catalog/enable')).status(),
+	).toBe(204);
 	const catalog = await configureTestPluginRepository(context.request);
 	const entry = catalog.packages.find((item) => item.packageId === 'nexus.agent' && item.compatible);
 	expect(entry).toBeDefined();
+	// Route the official lookup to the controlled signed repository; package preparation remains real.
+	await page.route('**/api/v1/agent/plugins/official/prepare', async (route) => {
+		const response = await context.request.post('/api/v1/agent/plugins/remote/prepare', {
+			data: { ...route.request().postDataJSON(), repositoryUrl: testPluginRepositoryUrl },
+		});
+		await route.fulfill({ response });
+	});
 	// Control only the recommendation response; the separate install remains a rejected write.
 	await page.route('**/api/v1/agent/onboarding/recommended-plugin', (route) =>
 		route.fulfill({ json: { entry, installation: null } }),

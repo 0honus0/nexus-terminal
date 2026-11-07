@@ -1,3 +1,4 @@
+import type { AgentRunFailureCode } from '@nexus-terminal/shared/agent/runs/values';
 import { randomUUID } from 'node:crypto';
 import { agentStorage } from '../../agent-storage-failure.js';
 import type {
@@ -179,7 +180,11 @@ export class OperationModel {
 			: { status: result.status };
 	}
 
-	async finish(value: OperationReceipt, terminal: OperationTerminal): Promise<OperationMutation> {
+	async finish(
+		value: OperationReceipt,
+		terminal: OperationTerminal,
+		diagnosticCode: AgentRunFailureCode | null = null,
+	): Promise<OperationMutation> {
 		const finish: StoredOperationTerminal =
 			terminal.state === 'completed'
 				? { state: 'completed', resultJson: terminal.resultJson }
@@ -187,7 +192,9 @@ export class OperationModel {
 					? { state: 'failed', failureCode: terminal.failureCode }
 					: { state: terminal.state };
 		const result = await this.changes.after(value.scope, () =>
-			agentStorage(() => this.storage.finish(scope(value.scope), value.id, value.revision, finish, Date.now())),
+			agentStorage(() =>
+				this.storage.finish(scope(value.scope), value.id, value.revision, finish, Date.now(), diagnosticCode),
+			),
 		);
 		return result.status === 'ok'
 			? { status: 'ok', operation: receipt(result.operation) }

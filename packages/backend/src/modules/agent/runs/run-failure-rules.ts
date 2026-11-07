@@ -1,3 +1,4 @@
+import { OperationEffectFailure } from '../operations/model/operation-failure.js';
 import type { AgentRunFailureCode } from '@nexus-terminal/shared/agent/runs/values';
 import {
 	AgentFailure,
@@ -23,6 +24,9 @@ export function runFailureCode(error: unknown, tool = false, timedOut = false): 
 	}
 	if (isAgentStorageStatementFailure(error)) {
 		return 'execution_storage_failed';
+	}
+	if (error instanceof OperationEffectFailure && error.cause !== undefined) {
+		return runFailureCode(error.cause, tool);
 	}
 	if (error instanceof ToolExecutionUnknown) {
 		return 'tool_result_unconfirmed';

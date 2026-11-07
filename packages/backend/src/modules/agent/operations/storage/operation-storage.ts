@@ -1,3 +1,4 @@
+import type { AgentRunFailureCode } from '@nexus-terminal/shared/agent/runs/values';
 import type { AgentCapability } from '@nexus-terminal/shared/agent/governance/values';
 import type { AgentOperationKind, AgentOperationState } from '@nexus-terminal/shared/agent/operations/values';
 import type { AgentOperationErrorCode } from '@nexus-terminal/shared/agent/values';
@@ -136,6 +137,7 @@ export interface OperationStorage {
 		revision: number,
 		terminal: StoredOperationTerminal,
 		now: number,
+		diagnosticCode: AgentRunFailureCode | null,
 	): Promise<StoredOperationMutation>;
 	interrupt(now: number): Promise<void>;
 }

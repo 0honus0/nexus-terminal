@@ -11579,7 +11579,6 @@ async function run(input, context) {
         if (reply.kind === "rejected") {
           if ([
             "host_key_untrusted",
-            "version_conflict",
             "provider_configuration_stale",
             "operation_unknown",
             "storage_unavailable",

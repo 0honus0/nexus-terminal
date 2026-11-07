@@ -560,8 +560,8 @@ test('Agent thread selection stays responsive while earlier history is pending',
 		const hub = agentChatSurface(page, app.id);
 		await openAgentConversations(page);
 		const threads = hub.locator('#agent-thread-sidebar');
-		const firstButton = threads.getByRole('button').filter({ has: page.getByText(first.title, { exact: true }) });
-		const secondButton = threads.getByRole('button').filter({ has: page.getByText(second.title, { exact: true }) });
+		const firstButton = threads.getByRole('button').filter({ has: hub.getByText(first.title, { exact: true }) });
+		const secondButton = threads.getByRole('button').filter({ has: hub.getByText(second.title, { exact: true }) });
 		await secondButton.click();
 		await expect(
 			hub.locator('.agent-conversation-pane > header').getByText(second.title, { exact: true }),
@@ -1089,11 +1089,11 @@ test('Agent tabs own independent local drafts and observe external threads throu
 		await firstHub
 			.locator('#agent-thread-sidebar')
 			.getByRole('button')
-			.filter({ has: page.getByText(initialThread.value.title, { exact: true }) })
+			.filter({ has: firstHub.getByText(initialThread.value.title, { exact: true }) })
 			.click();
 		await secondThreads
 			.getByRole('button')
-			.filter({ has: page.getByText(initialThread.value.title, { exact: true }) })
+			.filter({ has: secondHub.getByText(initialThread.value.title, { exact: true }) })
 			.click();
 		const firstDraft = firstHub.getByRole('textbox', { name: 'Task input', exact: true });
 		const secondDraft = secondHub.getByRole('textbox', { name: 'Task input', exact: true });
@@ -1108,7 +1108,7 @@ test('Agent tabs own independent local drafts and observe external threads throu
 		await openAgentHub(follower);
 		await openAgentConversations(follower);
 		await expect(
-			secondThreads.getByRole('button').filter({ has: page.getByText('External thread', { exact: true }) }),
+			secondThreads.getByRole('button').filter({ has: secondHub.getByText('External thread', { exact: true }) }),
 		).toBeVisible();
 		await expect(secondDraft).toHaveValue('Follower draft');
 		await expect(firstDraft).toHaveValue('Leader draft');
@@ -1246,8 +1246,15 @@ test('Agent App lifecycle uses safe contracts, explicit grants and original stat
 		{ method: 'GET', path: '/app-definitions' },
 		readAgentAppDefinitionListResponse,
 	);
-	expect(installedDefinitions).toEqual([
-		{ id: app.definitionId, version: app.definitionVersion, displayName: app.name, capabilities: app.capabilities },
+	expect(
+		installedDefinitions.map((definition) => ({ ...definition, capabilities: definition.capabilities.toSorted() })),
+	).toEqual([
+		{
+			id: app.definitionId,
+			version: app.definitionVersion,
+			displayName: app.name,
+			capabilities: app.capabilities.toSorted(),
+		},
 	]);
 	const grants = await requestAgentJson(
 		request,

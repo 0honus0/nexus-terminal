@@ -103,8 +103,16 @@ for (const width of [320, 390, 1440]) {
 		expect(await readFile(downloaded, 'utf8')).toBe('# Delivered report\nSaved by the model.\n');
 		const presented = await startNativeTask(task, `E2E_PRESENT_FILE artifact=${record.outputArtifactIds[0]}`);
 		expect((await finishNativeTask(task, presented.id)).run.status).toBe('completed');
-		expect((await tools(task)).find((tool) => tool.runId === presented.id)).toMatchObject({
-			identity: expect.objectContaining({ kind: 'plugin', ...expectedToolIdentity('artifact_present') }),
+		expect(
+			(await tools(task)).find(
+				(tool) => tool.runId === presented.id && hasToolIdentity(tool, 'artifact_present'),
+			),
+		).toMatchObject({
+			identity: expect.objectContaining({
+				kind: 'plugin',
+				packageId: expectedToolIdentity('artifact_present').packageId,
+				name: 'nexus.tools.agent.artifact_present',
+			}),
 			outputArtifactIds: record.outputArtifactIds,
 			mutation: false,
 		});
@@ -136,9 +144,13 @@ for (const file of files) {
 			);
 			runId = created.id;
 			const approval = await waitNativeApproval(task, created.id, 'file_deliver');
+			expect(approval.targetId).toBe(connectionId);
 			expect(JSON.parse(approval.summary)).toEqual({
 				action: 'deliver',
-				paths: ['/file-delivery/' + file.name],
+				command: '/file-delivery/' + file.name,
+				commandTruncated: false,
+				itemCount: 1,
+				sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
 			});
 			await expect(hub.locator('[data-tool-artifact]')).toHaveCount(0);
 			expect(await artifacts(task)).toHaveLength(0);
@@ -251,12 +263,14 @@ for (const missing of ['file.read', 'artifacts.write', 'selected-target', 'appro
 				await resolveNativeApproval(task, approval, 'denied');
 			}
 			const finished = await finishNativeTask(task, run.id);
-			// Deliberately emitting a tool excluded from the offered catalog is an
-			// invalid provider response; it must never reach tool dispatch.
-			expect(finished.run.status).toBe(missing === 'approval' ? 'failed' : 'unknown');
-			if (missing !== 'approval') {
-				expect(finished.run.failure?.code).toBe('model_response_invalid');
-				expect(await tools(task)).toEqual([]);
+			if (missing === 'approval') {
+				expect(finished.run.status).toBe('completed');
+				expect(JSON.parse(finished.text)).toMatchObject({ failure: { code: 'forbidden' } });
+				expect((await tools(task)).find((tool) => hasToolIdentity(tool, 'file_deliver'))?.state).toBe('failed');
+			} else {
+				expect(finished.run.status).toBe('completed');
+				expect(JSON.parse(finished.text)).toMatchObject({ status: 'unavailable', tools: ['file_deliver'] });
+				expect((await tools(task)).some((tool) => hasToolIdentity(tool, 'file_deliver'))).toBe(false);
 			}
 			expect(await artifacts(task)).toHaveLength(0);
 			expect((await tools(task)).every((tool) => tool.outputArtifactIds.length === 0)).toBe(true);
@@ -287,7 +301,8 @@ for (const invalid of ['directory', 'symlink']) {
 				[connectionId],
 			);
 			runId = run.id;
-			expect((await finishNativeTask(task, run.id, ['file_deliver'])).run.status).toBe('unknown');
+			const finished = await finishNativeTask(task, run.id, ['file_deliver']);
+			expect(finished.run.status).toBe('unknown');
 			expect(await artifacts(task)).toHaveLength(0);
 			const rejected = (await tools(task)).find((tool) => hasToolIdentity(tool, 'file_deliver'));
 			expect(rejected?.outputArtifactIds).toEqual([]);
@@ -298,7 +313,8 @@ for (const invalid of ['directory', 'symlink']) {
 				{ method: 'GET', path: `/apps/${task.app.id}/runs/${run.id}/tools/${rejected.id}` },
 				(value) => readAgentToolCallDetails(value, toolPath),
 			);
-			expect(details.failureCode).toBe('tool_invalid_input');
+			expect(details.failureCode).toBeNull();
+			expect(finished.run.failure).toEqual({ code: 'tool_invalid_input', toolName: rejected.toolName });
 			await expect(hub.locator('[data-tool-artifact]')).toHaveCount(0);
 			expect(await readFile(path.join(project, 'sentinel.txt'), 'utf8')).toBe('keep');
 		} finally {

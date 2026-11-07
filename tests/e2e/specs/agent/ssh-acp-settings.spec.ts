@@ -13,7 +13,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { expect, test, resetE2EBaseline, type APIRequestContext } from '../../support/fixtures';
+import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { ensureTestSshConnection } from '../../support/ssh';
 import { selectUiOption } from '../../support/ui-select';
@@ -552,7 +552,7 @@ for (const decision of ['denied', 'cancelled'] as const) {
 			);
 			const tool = tools.items.find((item) => item.runId === runId && hasToolIdentity(item, 'acp_execute'));
 			expect(tool).toBeDefined();
-			expect(tool!.state).toBe(decision === 'cancelled' ? 'unknown' : 'completed');
+			expect(tool!.state).toBe(decision === 'cancelled' ? 'cancelled' : 'completed');
 			expect(tool).not.toHaveProperty('argumentsJson');
 		} finally {
 			const current = await readRun();
@@ -576,11 +576,6 @@ for (const decision of ['denied', 'cancelled'] as const) {
 			const started = recorded?.find((item) => item.event === 'started');
 			if (started) await expect.poll(() => processGone(started.pid)).toBe(true);
 			await rm(directory, { recursive: true, force: true });
-		}
-		if (decision === 'cancelled') {
-			// Confirm the exact uncertainty while preserving its database. Resource
-			// cleanup and storage failures still reject baseline replacement.
-			await resetE2EBaseline('seed', 'execution_unknown');
 		}
 	});
 }

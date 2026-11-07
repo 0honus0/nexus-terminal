@@ -38,8 +38,8 @@ test('A08 denied deployment cannot execute the proposed SSH mutation', async ({ 
 	});
 	await resolveNativeApproval(task, approval, 'denied');
 	const result = await finishNativeTask(task, created.id);
-	expect(result.run.status).toBe('failed');
-	expect(result.text).toBe('');
+	expect(result.run.status).toBe('completed');
+	expect(result.text).toBe('No service was deployed. Mutation denied; partial result is not success evidence.');
 	await expect(readFile(path.resolve(__dirname, '../../.tmp/ssh-root/blocked-deploy.txt'))).rejects.toMatchObject({
 		code: 'ENOENT',
 	});
@@ -98,16 +98,19 @@ test('A07 browser rejects a stale click, then a separate approved Run deploys on
 	await openNativeTask(task);
 	const marker = `E2E_BROWSER_DEPLOY version=${saved.version} url=${E2E_URLS.deploymentPageOrigin}/`;
 	const stale = await startNativeTask(task, marker + ' stale=true');
-	const rejected = await finishNativeTask(task, stale.id, ['browser_open', 'browser_navigate', 'browser_click']);
-	expect(rejected.run.status).toBe('unknown');
+	const rejected = await finishNativeTask(task, stale.id, [
+		'browser_open',
+		'browser_navigate',
+		'browser_click',
+		'browser_close',
+	]);
+	expect(rejected.run.status).toBe('completed');
+	expect(JSON.parse(rejected.text)).toMatchObject({
+		refused: { code: 'version_conflict' },
+		closed: { status: 'closed' },
+	});
 	expect(await state()).toEqual({ deployed: false, deployments: 0, release: 'fixture-v1' });
 	await expect.poll(contexts).toEqual(baseline);
-	// Explicitly release the unknown Run; a new intent must not bypass its active-thread fence.
-	await cancelNativeTask(task, stale.id);
-	// Cancellation above is performed by the separately authenticated API
-	// context. Reopen the Hub and read the newly settled thread before
-	// submitting the next user intent; an already-mounted composer can still
-	// display the prior active-run view until that explicit refresh.
 	await openNativeTask(task);
 	const created = await startNativeTask(task, marker);
 	const result = await finishNativeTask(task, created.id, [
@@ -264,8 +267,8 @@ for (const signedSkill of [false, true]) {
 			expect(report.settled.jobs[0].result.commands[0]).toMatchObject({ status: 'completed', exitCode: 0 });
 			if (signedSkill) {
 				expect(report.skill.name).toBe('operations');
-				expect(report.skill.body).toContain('begin with bounded read-only inspection');
-				expect(report.skill.body).toContain('Re-read authoritative state after a change');
+				expect(report.skill.body).toContain('Start with structured diagnostics and file reads');
+				expect(report.skill.body).toContain('After changes, inspect authoritative state');
 			}
 			await expect.poll(() => tcpPortOpen(port)).toBe(false);
 			await expect.poll(() => processGone(pid!)).toBe(true);

@@ -90,7 +90,7 @@ async function setup(t, native = false) {
 			const descriptor = expectStatus(await f.api('GET', installPath + '/descriptor'), 200);
 			const envelope = {
 				type: 'nexus.plugin.request',
-				protocol: 3,
+				protocol: 4,
 				nonce: randomUUID(),
 				id: randomUUID(),
 				seq: 1,
@@ -109,7 +109,7 @@ async function setup(t, native = false) {
 function assertReply(response, envelope, status, code) {
 	const body = expectStatus(response, status);
 	assert.equal(body.type, 'nexus.plugin.response');
-	assert.equal(body.protocol, 3);
+	assert.equal(body.protocol, 4);
 	assert.equal(body.id, envelope.id);
 	assert.equal(body.nonce, envelope.nonce);
 	assert.equal(body.seq, envelope.seq);

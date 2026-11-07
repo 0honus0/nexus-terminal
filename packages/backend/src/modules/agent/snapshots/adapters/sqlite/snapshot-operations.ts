@@ -1,3 +1,4 @@
+import { AGENT_RUN_FAILURE_CODES } from '@nexus-terminal/shared/agent/runs/values';
 import { createHash } from 'node:crypto';
 import { readAgentPluginContentReference } from '@nexus-terminal/shared/agent/plugins/content';
 import { readAgentPluginAppOutcome } from '@nexus-terminal/shared/agent/plugins/app-outcome';
@@ -54,6 +55,11 @@ export function validateSnapshotOperations(rows: ReadonlyMap<string, readonly Sq
 		}),
 	);
 	assert(operations.size === (rows.get('agent_operations') ?? []).length);
+	for (const row of rows.get('agent_operation_diagnostics') ?? []) {
+		const operation = operations.get(text(row.operation_id));
+		assert(operation && ['failed', 'unknown'].includes(operation.state));
+		assert(AGENT_RUN_FAILURE_CODES.some((code) => code === row.code));
+	}
 	const identities = new Set<string>();
 	const sequences = new Set<number>();
 	const liveExecutions = new Set<string>();

@@ -309,9 +309,18 @@ test('installed Nexus Agent plugin uses the installed chat UI iframe and capture
 				expect(output.commands).toHaveLength(1);
 				expect(output.commands[0]).toMatchObject({ exitCode: 0, stdout: 'approval-e2e' });
 				await expect(article).toHaveCount(0);
+				const tools = await requestAgentJson(
+					request,
+					{ method: 'GET', path: `/apps/${task.app.id}/threads/${task.thread.id}/tools?limit=100` },
+					(value) => readAgentThreadToolsResponse(value, task.app.id, null, 100),
+				);
+				const approvedTool = tools.items.find((tool) =>
+					tool.effects.some((effect) => effect.id === approval.operationId),
+				);
+				expect(approvedTool).toBeDefined();
 				await expect(
 					hub.locator(
-						'article[data-tool-name="' + approval.operationName + '"][data-approval-status="approved"]',
+						'article[data-tool-name="' + approvedTool?.toolName + '"][data-approval-status="approved"]',
 					),
 				).toHaveCount(1);
 			} finally {

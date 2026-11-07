@@ -45,7 +45,7 @@ export function respondFunctionalModel(messages, userText, response, send) {
 		const path = /path=([^\s"\\]+)/.exec(userText)?.[1];
 		if (!path) throw new Error('Missing delivery path');
 		if (!result('deliver')) call('deliver', 'file_deliver', { connectionId, paths: [path] });
-		else send(response, { content: JSON.stringify(result('deliver').items[0].value ?? result('deliver')) });
+		else send(response, { content: JSON.stringify(result('deliver').items?.[0]?.value ?? result('deliver')) });
 		return true;
 	}
 	if (userText.includes('E2E_CREATE_DELIVERY')) {
@@ -362,6 +362,17 @@ export function respondFunctionalModel(messages, userText, response, send) {
 		};
 
 		const stale = userText.includes('stale=true');
+		if (stale && result('browser_click')?.failure) {
+			if (!result('browser_close')) call('browser_close', 'browser_close', { sessionId: session() });
+			else
+				send(response, {
+					content: JSON.stringify({
+						refused: result('browser_click').failure,
+						closed: result('browser_close'),
+					}),
+				});
+			return true;
+		}
 		sequence(
 			[
 				['browser_open', 'browser_open', { targetId: 'e2e-deployment', expectedVersion: Number(browser[1]) }],

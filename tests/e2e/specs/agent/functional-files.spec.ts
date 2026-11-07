@@ -107,7 +107,7 @@ for (const repeat of [false, true]) {
 	});
 }
 
-test('SSH file search rejects excessive depth without changing a deeply nested file', async ({ request, page }) => {
+test('SSH file search traverses deep directories without changing the matching file', async ({ request, page }) => {
 	await loginAsInitialAdmin(request);
 	const connectionId = await ensureTestSshConnection(request);
 	const task = await prepareNativeTask(request, page, ['file.read'], [connectionId]);
@@ -120,7 +120,20 @@ test('SSH file search rejects excessive depth without changing a deeply nested f
 		await openNativeTask(task);
 		const created = await startNativeTask(task, `E2E_SEARCH_SCAN connection=${connectionId}`, [connectionId]);
 		runId = created.id;
-		expect((await finishNativeTask(task, created.id)).run.status).toBe('unknown');
+		const result = await finishNativeTask(task, created.id);
+		expect(result.run.status).toBe('completed');
+		expect(JSON.parse(result.text)).toEqual({
+			matches: [
+				{
+					path: '/search-scan/' + path.relative(project, leaf),
+					line: 1,
+					text: 'SCAN_SENTINEL',
+					column: 1,
+					queryIndex: 0,
+				},
+			],
+			truncated: false,
+		});
 		expect(await readFile(leaf, 'utf8')).toBe('SCAN_SENTINEL\n');
 	} finally {
 		if (runId) {
@@ -130,7 +143,7 @@ test('SSH file search rejects excessive depth without changing a deeply nested f
 	}
 });
 
-test('SSH search enforces file and byte bounds and never follows a symlink to the sentinel', async ({
+test('SSH search traverses complete file content and never follows a symlink to the sentinel', async ({
 	request,
 	page,
 }) => {
@@ -141,16 +154,6 @@ test('SSH search enforces file and byte bounds and never follows a symlink to th
 	await mkdir(project);
 	let runId: string | undefined;
 
-	const cancelAndRefresh = async (id: string) => {
-		await cancelNativeTask(task, id);
-		// Reopen through the real workspace restore path after an external cancellation.
-		await openNativeTask(task);
-		const restored = await readNativeRun(task, id);
-		expect(restored.id).toBe(id);
-		expect(restored.status).toBe('cancelled');
-		await expect(agentChatSurface(page).getByRole('button', { name: 'Send', exact: true })).toBeVisible();
-	};
-
 	try {
 		for (let index = 0; index < 101; index++) {
 			await writeFile(path.join(project, 'a-' + String(index).padStart(3, '0') + '.txt'), 'nothing\n');
@@ -158,16 +161,23 @@ test('SSH search enforces file and byte bounds and never follows a symlink to th
 		await openNativeTask(task);
 		const bounded = await startNativeTask(task, `E2E_SEARCH_SCAN connection=${connectionId}`, [connectionId]);
 		runId = bounded.id;
-		expect((await finishNativeTask(task, bounded.id)).run.status).toBe('unknown');
-		await cancelAndRefresh(bounded.id);
+		const complete = await finishNativeTask(task, bounded.id);
+		expect(complete.run.status).toBe('completed');
+		expect(JSON.parse(complete.text)).toEqual({ matches: [], truncated: false });
 		await rm(project, { recursive: true });
 		await mkdir(project);
-		await writeFile(path.join(project, 'oversized.txt'), 'x'.repeat(32769));
+		await writeFile(path.join(project, 'oversized.txt'), 'x'.repeat(32769) + '\nSCAN_SENTINEL\n');
 		const oversized = await startNativeTask(task, `E2E_SEARCH_SCAN connection=${connectionId}`, [connectionId]);
 		runId = oversized.id;
-		expect((await finishNativeTask(task, oversized.id)).run.status).toBe('unknown');
-		await cancelAndRefresh(oversized.id);
-		expect((await readFile(path.join(project, 'oversized.txt'))).length).toBe(32769);
+		const large = await finishNativeTask(task, oversized.id);
+		expect(large.run.status).toBe('completed');
+		expect(JSON.parse(large.text)).toEqual({
+			matches: [{ path: '/search-scan/oversized.txt', line: 2, column: 1, queryIndex: 0, text: 'SCAN_SENTINEL' }],
+			truncated: false,
+		});
+		expect(await readFile(path.join(project, 'oversized.txt'), 'utf8')).toBe(
+			'x'.repeat(32769) + '\nSCAN_SENTINEL\n',
+		);
 		await rm(path.join(project, 'oversized.txt'));
 		const external = path.join(path.dirname(project), 'external-sentinel.txt');
 		await writeFile(external, 'SCAN_SENTINEL\n');

@@ -1,3 +1,4 @@
+import { AGENT_RUN_FAILURE_CODES } from '@nexus-terminal/shared/agent/runs/values';
 import { AGENT_OPERATION_ERROR_CODES } from '@nexus-terminal/shared/agent/values';
 import { resumeRun, readRunSuspension } from './run-resume-sql.js';
 import type { RunResumeStorage } from '../../storage/run-resume-storage.js';
@@ -432,6 +433,28 @@ export class SqliteRunStorage implements RunStorage {
 		);
 		if (job) {
 			return { kind: 'job_unknown', toolName: stringValue(job.label) };
+		}
+		const diagnostic = await this.db.one(
+			`SELECT d.code,COALESCE((WITH RECURSIVE ancestors(id,parent_id,kind,label,depth) AS (
+ SELECT a.id,a.parent_id,a.kind,a.label,0 FROM agent_operations a WHERE a.id=o.parent_id
+ UNION ALL SELECT a.id,a.parent_id,a.kind,a.label,b.depth+1 FROM agent_operations a JOIN ancestors b ON a.id=b.parent_id)
+ SELECT label FROM ancestors WHERE kind='tool' ORDER BY depth LIMIT 1),CASE WHEN o.kind='model' THEN NULL ELSE o.label END) AS label
+ FROM agent_operation_diagnostics d JOIN agent_operations o ON o.id=d.operation_id
+ JOIN agent_runs r ON r.id=o.run_id WHERE o.user_id=? AND o.app_id=? AND o.run_id=?
+ AND r.status IN ('failed','unknown') AND o.state IN ('failed','unknown')
+ ORDER BY o.sequence DESC LIMIT 1`,
+			[userId, appId, runId],
+		);
+		if (diagnostic) {
+			const code = AGENT_RUN_FAILURE_CODES.find((value) => value === diagnostic.code);
+			if (!code) {
+				throw new Error('Corrupt operation diagnostic');
+			}
+			return {
+				kind: 'diagnostic',
+				code,
+				toolName: diagnostic.label === null ? null : stringValue(diagnostic.label),
+			};
 		}
 		const row = await this.db.one(
 			`SELECT o.label,o.state,o.failure_code FROM agent_operations o JOIN agent_runs r ON r.id=o.run_id

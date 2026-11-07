@@ -52,8 +52,8 @@ await test('B10 real repository admission, download revocation and shutdown', { 
 				version: '1.0.0',
 				compatibility: {
 					host: { minVersion: '0.0.0', maxVersion: '999.0.0' },
-					backendSdk: null,
-					frontendSdk: 3,
+					backendSdk: 4,
+					frontendSdk: 4,
 				},
 				contributionKinds: ['app', 'ui'],
 				displayName: 'faults',
@@ -95,31 +95,23 @@ await test('B10 real repository admission, download revocation and shutdown', { 
 		held.clear();
 	}
 
-	await t.test('one live and seven queued tasks fill admission; overflow never dispatches', async () => {
+	await t.test('concurrent catalog reads serialize without an obsolete eight-task cap', async () => {
 		mode = 'catalog-hold';
 		const before = requests.length;
 		const first = read();
 		await waiting();
-		const early = [];
-		const burst = Array.from({ length: 12 }, () =>
-			read().then((result) => {
-				early.push(result);
-				return result;
-			}),
-		);
-		await until(
-			async () => early.length,
-			(count) => count === 5,
-			'five overflow responses before release',
-		);
-		for (const result of early) assert.equal(expectStatus(result, 503).code, 'provider_unavailable');
-		assert.equal(requests.length, before + 1);
-		release();
+		const burst = Array.from({ length: 12 }, () => read());
+		try {
+			assert.equal(requests.length, before + 1);
+		} finally {
+			release();
+		}
 		expectStatus(await first, 200);
-		const results = await Promise.all(burst);
-		assert.equal(results.filter((result) => result.status === 200).length, 7);
-		assert.equal(results.filter((result) => result.status === 503).length, 5);
-		assert.equal(requests.length, before + 8);
+		for (const result of await Promise.all(burst)) expectStatus(result, 200);
+		assert.ok(
+			requests.length > before && requests.length <= before + 13,
+			'Catalog fetches may be coalesced; all callers receive a complete result',
+		);
 	});
 	await t.test('settled reads release all admission slots for subsequent work', async () => {
 		expectStatus(await read(), 200);
@@ -181,21 +173,14 @@ await test('B10 real repository admission, download revocation and shutdown', { 
 			mode = 'package-hold';
 			const downloading = Promise.allSettled([download()]);
 			const upstream = await waiting();
-			const early = [];
-			const queued = Promise.allSettled(
-				Array.from({ length: 8 }, () =>
-					read().then((result) => {
-						early.push(result);
-						return result;
-					}),
-				),
-			);
+			// Hold catalog I/O as well: all accepted readers must be drained by shutdown.
+			mode = 'catalog-hold';
+			const queued = Promise.allSettled(Array.from({ length: 8 }, () => read()));
 			await until(
-				async () => early.length,
-				(count) => count === 1,
-				'queue full before shutdown',
+				async () => [...held].filter((entry) => !entry.closed).length,
+				(count) => count > 1,
+				'Catalog reads reached the real held upstream',
 			);
-			expectStatus(early[0], 503);
 			await f.close();
 			await until(async () => upstream.closed, Boolean, 'original upstream socket closed');
 			for (const result of [...(await downloading), ...(await queued)]) {

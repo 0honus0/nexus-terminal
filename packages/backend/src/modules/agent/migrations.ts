@@ -1,3 +1,4 @@
+import { initializeOperationDiagnostics } from './operations/adapters/sqlite/operation-diagnostic-schema.js';
 import { initializePluginConnections } from './plugins/adapters/sqlite/plugin-connection-schema.js';
 import { removeHostCompactionPreference } from './execution/adapters/sqlite/execution-plugin-settings-migration.js';
 import { retireSdk3PluginPackages } from './plugins/adapters/sqlite/plugin-sdk4-migration.js';
@@ -155,6 +156,11 @@ export const agentModularMigrations = [
 		version: 59,
 		signature: 'agent-remove-host-compaction-preference-20261107',
 		apply: removeHostCompactionPreference,
+	},
+	{
+		version: 60,
+		signature: 'agent-operation-safe-failure-diagnostics-20261107',
+		apply: initializeOperationDiagnostics,
 	},
 ];
 

@@ -37,7 +37,7 @@ for (const width of [1280, 390, 320]) {
 						await tasks.getByText('Execution details', { exact: true }).click();
 						const resource = tasks.locator('[data-agent-resources] article');
 						await expect(resource).toHaveCount(1);
-						await expect(resource).toHaveAttribute('data-resource-state', 'busy');
+						await expect(resource).toHaveAttribute('data-resource-state', 'idle');
 						await expect(resource.getByText('SSH 1', { exact: true })).toBeVisible();
 						const resourceId = await resource.getAttribute('data-resource-id');
 						expect(resourceId).toBeTruthy();

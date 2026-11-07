@@ -4,8 +4,8 @@
   "files": [
     {
       "path": "backend/index.mjs",
-      "sha256": "681cb7aee829702d6226e24f3513606eb9762dc404a1edeaab4ac89a0cedf550",
-      "sizeBytes": 420496
+      "sha256": "19d6e7332b7d903ffbe5934e3c45d1494e1f3ba7c93453f551f4d9fec4972155",
+      "sizeBytes": 420464
     },
     {
       "path": "docs/settings.md",

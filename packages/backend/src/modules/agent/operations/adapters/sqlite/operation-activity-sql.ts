@@ -37,6 +37,10 @@ async function activity(tx: SqlExecutor, operation: StoredOperation): Promise<St
 		return artifact.artifact_id;
 	});
 	const effects: StoredOperationActivity['effects'] = [];
+	const targets = new Map<string, NonNullable<StoredOperationActivity['target']>>();
+	if (base.target !== null) {
+		targets.set(base.target.id + ':' + base.target.version, base.target);
+	}
 	const riskOrder = ['read', 'control', 'mutate', 'destructive', 'forbidden'];
 	let revision = artifactIds.length;
 	let updatedAt = operation.updatedAt;
@@ -48,6 +52,9 @@ async function activity(tx: SqlExecutor, operation: StoredOperation): Promise<St
 			continue;
 		}
 		const details = operationPresentation(effect);
+		if (details.target !== null) {
+			targets.set(details.target.id + ':' + details.target.version, details.target);
+		}
 		effects.push({ id: effect.id, requestHash: effect.requestHash });
 		if (riskOrder.indexOf(details.risk) > riskOrder.indexOf(base.risk)) {
 			base.risk = details.risk;
@@ -57,6 +64,7 @@ async function activity(tx: SqlExecutor, operation: StoredOperation): Promise<St
 	if (!Number.isSafeInteger(revision)) {
 		throw new Error('Activity revision exhausted');
 	}
+	const target = targets.size === 1 ? targets.values().next().value : null;
 	return {
 		operation,
 		revision,
@@ -68,7 +76,7 @@ async function activity(tx: SqlExecutor, operation: StoredOperation): Promise<St
 		capability: base.capability,
 		risk: base.risk,
 		mutation: base.mutation,
-		target: base.target === null ? null : { id: base.target.id, version: base.target.version },
+		target: target ? { id: target.id, version: target.version } : null,
 		effects,
 		outputArtifactIds: artifactIds,
 	};

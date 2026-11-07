@@ -1,17 +1,17 @@
 {
   "packageId": "nexus.agent",
   "sourceRoot": "nexus-agent-plugins",
-  "baselineCommit": "0bf6cbb019a98cfecff9d194c5d4fa2dc1325c80",
+  "baselineCommit": "550e4e0b4d873dcaedac54fd37f4e34208d5f91f",
   "sourceWorktree": {
     "dirty": false,
-    "releaseTag": "v2.0.1",
+    "releaseTag": "v2.0.2",
     "note": "Official GitHub Actions signed SDK4 release archive; copied verbatim."
   },
   "sourceFiles": [
     {
       "path": "plugins/nexus.agent/backend/index.mjs",
-      "sha256": "681cb7aee829702d6226e24f3513606eb9762dc404a1edeaab4ac89a0cedf550",
-      "sizeBytes": 420496
+      "sha256": "19d6e7332b7d903ffbe5934e3c45d1494e1f3ba7c93453f551f4d9fec4972155",
+      "sizeBytes": 420464
     },
     {
       "path": "plugins/nexus.agent/docs/settings.md",
@@ -20,7 +20,7 @@
     },
     {
       "path": "plugins/nexus.agent/files.json",
-      "sha256": "277cb7c640a45987a3773fbd408ebc8884bf016e91edca43c5603b0a41b26b4c",
+      "sha256": "74eb05d976928b7574ade2409c85d19693ffe11d0225f77ff79208bdd20958e6",
       "sizeBytes": 1285
     },
     {
@@ -40,12 +40,12 @@
     },
     {
       "path": "plugins/nexus.agent/manifest.json",
-      "sha256": "acf09c7c4a2accbdd5cdb4824dbde2c4ffccd1e7d51d5d1f37ca8b69788431ee",
+      "sha256": "29698719accc3fe3431e52c90ac9dab3c0fbdb568a68b2aafb17a93f0f1bac24",
       "sizeBytes": 2025
     },
     {
       "path": "plugins/nexus.agent/signature.ed25519",
-      "sha256": "a03cfc2152d103e8d0e690468a9781f41769bec97535fdea2c3568fda72094be",
+      "sha256": "46284a0d9bb58cc695d79b812d9d7662cb61d70f2df9adf143dc29246663cfba",
       "sizeBytes": 64
     },
     {
@@ -59,9 +59,9 @@
       "sizeBytes": 2252
     }
   ],
-  "sourceFilesSha256": "f5dc000720800fa003702a1ef6d5b7d8238095e59541698cec3a1d138f8c7cb5",
+  "sourceFilesSha256": "58c8ee745ac515fc5cdd56590e7818d6f56fe52ccf15661ed166791c5404273e",
   "upstreamSignedPackage": {
-    "version": "2.0.1",
+    "version": "2.0.2",
     "compatibility": {
       "host": {
         "minVersion": "1.1.0",
@@ -76,7 +76,7 @@
       "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAPw+WXiJPcxqiKjxGCRcm3fWwy+JByAKTKX+iE5pKD/E=\n-----END PUBLIC KEY-----\n"
     },
     "publisherKeyId": "ed25519:617ec64b03cd6ed1a1ddf373e3a47f38666cdcd27753d674e136a4d0a359a1a0",
-    "sha256": "4f0cc4aadafdc88937bae7d1870b282f825efa51b3e0ef4dafd1ffafd4b89957",
+    "sha256": "6f8beaf1db7f04cd1e08daf99b0e8db9c946be8cec2e50ea121bf30d6bb62dd3",
     "sizeBytes": 727040
   }
 }
