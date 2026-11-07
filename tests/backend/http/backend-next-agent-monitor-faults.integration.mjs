@@ -90,7 +90,9 @@ for await (const line of createInterface({input:process.stdin})) {
 				let entered = false;
 				t.mock.method(SqliteGovernanceStorage.prototype, 'toolCatalog', async function (...args) {
 					const result = await authority.apply(this, args);
-					if (pid && !entered) {
+					// Keep the same outage active for every validation until release, including
+					// the command's final authority check after its process exits.
+					if (pid) {
 						assert.ok(result, 'The original durable authority query actually succeeded');
 						entered = true;
 						await gate;

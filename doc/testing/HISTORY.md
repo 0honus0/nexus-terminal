@@ -2018,3 +2018,7 @@ Node 26.13.0/pnpm 12.16.1；`build.log` 与 `browser.log` 包含 Shared、Backen
 首次失败现场显示“Failed to mark session for suspend: operation_unknown”：测试在数据库刚保存挂起记录后立即切断WebSocket，浏览器尚未应用原成功回执，正确保留未知操作围栏。该场景要测的是已成功标记会话的显式重连，因此补充等待标签蓝色状态，即浏览器已应用挂起回执，然后才注入断线；不修改产品UI、不改变未知效果处理、不增加睡眠或放宽断言。原有无新SSH登录、仅一次resume和环境变量保留断言全部保持。
 
 `mobile-reconnect-final.log` 连续5次全部通过（18.9秒），受影响文件ESLint、Prettier及diff检查通过；该专项不代替下一轮完整远程矩阵。
+
+第七轮最终Reporter覆盖全部738项，无遗漏：737项最终通过，权限监控1项失败，手机重连另有1项flaky，因此整轮失败。Backend213项中212通过；其余六个浏览器分片均一次通过。权限故障夹具只阻塞第一次治理查询，之后并发最终校验成功，可在监控失败前正常确认命令并释放机器锁；这与“持续存储故障”预期不一致。改为故障释放点前所有相关查询持续失败，保留真实进程退出、原owner等待、unknown账本及机器锁证据断言。`monitor-final-outage.log` ACP/Job两项通过，无skip/cancel。
+
+最终CDP环境另经真实包更新入口升级至Agent2.0.2/UI2.0.1，MCP/ACP4.0.0及四工具包2.0.0保持；`cdp-release-candidate/installed-packages.json`记录版本与原包摘要，`acceptance.json`记录1440/390/320px聊天、High默认思考、SSH文字/图标、刷新恢复与零pageerror，全部通过。此前CDP验收为Agent2.0.1/UI2.0.0，不将旧结果当作最终签包验收。
