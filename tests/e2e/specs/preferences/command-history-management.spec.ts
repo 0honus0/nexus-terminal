@@ -1,0 +1,161 @@
+import { expect, test } from '../../support/fixtures';
+import { loginAsInitialAdmin } from '../../support/auth';
+import {
+	configureSshE2eSettings,
+	connectTestSshFromConnectionsPage,
+	ensureTestSshConnection,
+	resetTestSshFilesystem,
+} from '../../support/ssh';
+import { slowStep, step } from '../../support/steps';
+import { E2E_URLS } from '../../../support/protocols/test-environment';
+
+import { readCommandHistoryList } from '../../../../packages/shared/src/preferences/history/http-codec';
+
+test.use({ e2eServices: ['ssh'] });
+
+const query = { limit: 50, offset: 0 };
+
+const COMMAND_A = "printf 'HISTORY_MANAGED_A\\n'";
+const COMMAND_B = "printf 'HISTORY_MANAGED_B\\n'";
+
+function markerCount(text: string, marker: string): number {
+	return text.split(marker).length - 1;
+}
+
+test('command history UI searches, copies, re-runs, and deletes real terminal history', async ({ page, context }) => {
+	await loginAsInitialAdmin(context.request);
+	await configureSshE2eSettings(context.request);
+	await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: E2E_URLS.frontendOrigin });
+	await resetTestSshFilesystem();
+	const connectionId = await ensureTestSshConnection(context.request);
+	await connectTestSshFromConnectionsPage(page, connectionId);
+
+	const terminalRows = page.locator('.terminal-inner-container .xterm-rows');
+	const commandInput = page.locator('input.command-bar-input');
+	const historyView = page.locator('.command-history-root').filter({ visible: true }).first();
+	await expect(historyView).toBeVisible({ timeout: 20_000 });
+
+	await slowStep('real terminal commands appear in history', async () => {
+		await commandInput.fill(COMMAND_A);
+		await commandInput.press('Enter');
+		await commandInput.fill(COMMAND_B);
+		await commandInput.press('Enter');
+		await expect.poll(async () => terminalRows.innerText(), { timeout: 15_000 }).toContain('HISTORY_MANAGED_B');
+
+		// Verify persistence first. This distinguishes backend history-write failures
+		// from frontend refresh problems and protects rapid sequential submissions.
+		await expect
+			.poll(
+				async () => {
+					const response = await context.request.get('/api/v1/command-history?limit=50&offset=0');
+					expect(response.ok()).toBe(true);
+					const items = readCommandHistoryList(await response.json(), query).entries;
+					return items.map((item) => item.command).filter((command) => command.includes('HISTORY_MANAGED_'));
+				},
+				{ timeout: 15_000 },
+			)
+			.toEqual(expect.arrayContaining([COMMAND_A, COMMAND_B]));
+
+		await expect(
+			historyView.locator('li[data-history-id]').filter({ hasText: 'HISTORY_MANAGED_A' }).first(),
+		).toBeVisible({ timeout: 15_000 });
+		await expect(
+			historyView.locator('li[data-history-id]').filter({ hasText: 'HISTORY_MANAGED_B' }).first(),
+		).toBeVisible();
+	});
+
+	await step('search filters unrelated history and copy writes the exact command to clipboard', async () => {
+		const search = historyView.locator('.command-history-search input');
+		await search.fill('HISTORY_MANAGED_A');
+		const rowA = historyView.locator('li[data-history-id]').filter({ hasText: 'HISTORY_MANAGED_A' }).first();
+		await expect(rowA).toBeVisible();
+		await expect(historyView.locator('li[data-history-id]').filter({ hasText: 'HISTORY_MANAGED_B' })).toHaveCount(
+			0,
+		);
+
+		await rowA.click({ button: 'right' });
+		await page.getByRole('menu').getByRole('menuitem', { name: 'Copy', exact: true }).click();
+		await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(COMMAND_A);
+	});
+
+	await slowStep('clicking the filtered history entry re-runs it in the same SSH terminal', async () => {
+		const rowA = historyView.locator('li[data-history-id]').filter({ hasText: 'HISTORY_MANAGED_A' }).first();
+		const before = markerCount(await terminalRows.innerText(), 'HISTORY_MANAGED_A');
+		await rowA.locator('.command-history-command').click();
+		await expect
+			.poll(async () => markerCount(await terminalRows.innerText(), 'HISTORY_MANAGED_A'), { timeout: 15_000 })
+			.toBeGreaterThan(before);
+	});
+
+	await step('delete removes the individual history record from UI and backend persistence', async () => {
+		const rowA = historyView.locator('li[data-history-id]').filter({ hasText: 'HISTORY_MANAGED_A' }).first();
+		const historyId = Number(await rowA.getAttribute('data-history-id'));
+		expect(historyId).toBeGreaterThan(0);
+		await rowA.click({ button: 'right' });
+		await page.getByRole('menu').getByRole('menuitem', { name: 'Delete', exact: true }).click();
+		await expect(rowA).toHaveCount(0);
+
+		await expect
+			.poll(async () => {
+				const response = await context.request.get('/api/v1/command-history?limit=50&offset=0');
+				expect(response.ok()).toBe(true);
+				const items = readCommandHistoryList(await response.json(), query).entries;
+				return items.some((item) => item.id === historyId);
+			})
+			.toBeFalsy();
+	});
+});
+
+test('lost history receipt never resends the terminal command and the next save recovers by reading', async ({
+	page,
+	context,
+}) => {
+	await loginAsInitialAdmin(context.request);
+	await configureSshE2eSettings(context.request);
+	const connectionId = await ensureTestSshConnection(context.request);
+	const terminalInputs: string[] = [];
+	page.on('websocket', (socket) => {
+		socket.on('framesent', ({ payload }) => {
+			if (typeof payload !== 'string' || !payload.startsWith('{')) return;
+			const event = JSON.parse(payload);
+			if (event.type === 'terminal.input') terminalInputs.push(event.payload.data);
+		});
+	});
+	await connectTestSshFromConnectionsPage(page, connectionId);
+	const commandA = "printf 'HISTORY_LOST_RECEIPT_A\\n'";
+	const commandB = "printf 'HISTORY_LOST_RECEIPT_B\\n'";
+	const requests: string[] = [];
+	await page.route('**/api/v1/command-history**', async (route) => {
+		const request = route.request();
+		if (request.method() === 'POST') {
+			const command = request.postDataJSON().command;
+			requests.push('POST:' + command);
+			if (command === commandA) {
+				const response = await route.fetch();
+				expect(response.status()).toBe(201);
+				await route.abort('failed');
+				return;
+			}
+		} else if (request.method() === 'GET') requests.push('GET');
+		await route.continue();
+	});
+	const input = page.locator('input.command-bar-input');
+	await input.fill(commandA);
+	await input.press('Enter');
+	const outcome = page
+		.getByRole('alert')
+		.filter({ hasText: 'Command sent; saving to history could not be confirmed:' });
+	await expect(outcome).toContainText('The result is unknown.');
+	await expect(outcome.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
+	await expect(outcome).not.toContainText('Personal data request failed');
+	const offset = requests.length;
+	await input.fill(commandB);
+	await input.press('Enter');
+	const history = page.locator('.command-history-root').filter({ visible: true }).first();
+	await expect(history.locator('li[data-history-id]').filter({ hasText: 'HISTORY_LOST_RECEIPT_A' })).toBeVisible();
+	await expect(history.locator('li[data-history-id]').filter({ hasText: 'HISTORY_LOST_RECEIPT_B' })).toBeVisible();
+	expect(requests.slice(offset)).toEqual(['GET', 'POST:' + commandB, 'GET']);
+	expect(requests.filter((value) => value === 'POST:' + commandA)).toHaveLength(1);
+	expect(terminalInputs.filter((value) => value === commandA + '\r')).toHaveLength(1);
+	expect(terminalInputs.filter((value) => value === commandB + '\r')).toHaveLength(1);
+});

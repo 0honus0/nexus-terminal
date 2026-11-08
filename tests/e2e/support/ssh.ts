@@ -1,5 +1,5 @@
 import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
-import { E2E_PORTS, E2E_URLS } from './test-env';
+import { E2E_PORTS, E2E_URLS } from '../../support/protocols/test-environment';
 import { updateUiPreferences } from './auth';
 import {
 	readConnectionList,

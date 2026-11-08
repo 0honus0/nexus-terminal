@@ -37,7 +37,7 @@ export async function buildNativePluginPackage(directory, name, signingKeyPath, 
 			execFileSync(
 				process.execPath,
 				[
-					fileURLToPath(new URL('../e2e/fixtures/agent/build-plugin-package.mjs', import.meta.url)),
+					fileURLToPath(new URL('./plugins/build-plugin-package.mjs', import.meta.url)),
 					content,
 					output,
 					keyPath,
@@ -127,12 +127,7 @@ async (input, context) => {
 	const metadata = JSON.parse(
 		execFileSync(
 			process.execPath,
-			[
-				fileURLToPath(new URL('../e2e/fixtures/agent/build-plugin-package.mjs', import.meta.url)),
-				content,
-				output,
-				keyPath,
-			],
+			[fileURLToPath(new URL('./plugins/build-plugin-package.mjs', import.meta.url)), content, output, keyPath],
 			{ encoding: 'utf8' },
 		),
 	);

@@ -10,16 +10,16 @@ export async function resolveTimingArtifacts({ github, owner, repo, runId }) {
 	});
 	const sources = new Map();
 	for (const job of jobs) {
-		const match = /^Playwright (backend|browser) shard ([1-9]\d*)$/.exec(job.name);
+		const match = /^Tests shard ([1-9]\d*)$/.exec(job.name);
 		if (!match) continue;
 		if (job.status !== 'completed' || job.conclusion !== 'success') {
 			throw new Error(`Timing source job did not succeed: ${job.name}`);
 		}
-		const prefix = `e2e-timings-${match[1]}-${match[2]}-`;
+		const prefix = `e2e-timings-${match[1]}-`;
 		if (sources.has(prefix)) throw new Error(`Duplicate timing source job: ${job.name}`);
 		sources.set(prefix, job);
 	}
-	if (sources.size === 0) throw new Error('No successful Playwright timing source jobs found');
+	if (sources.size === 0) throw new Error('No successful test shard timing source jobs found');
 	const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
 		owner,
 		repo,

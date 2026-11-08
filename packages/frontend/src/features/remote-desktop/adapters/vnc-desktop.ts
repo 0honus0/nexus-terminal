@@ -132,7 +132,12 @@ export const createVncDesktop: RemoteDesktopPeerFactory = (options) => {
 				connected = true;
 				const canvas = element.querySelector('canvas');
 				if (canvas && options.hasTouch) {
-					touch = attachDesktopTouch(element, canvas, touchMode);
+					touch = attachDesktopTouch(element, canvas, touchMode, undefined, (event) => {
+						// Release through noVNC's window proxy; its canvas handler stops propagation.
+						const captured = Reflect.get(document, 'captureElement') === canvas;
+						const target = event.type === 'mouseup' && captured ? window : canvas;
+						target.dispatchEvent(event);
+					});
 				}
 				options.onState('connected');
 			});
@@ -141,6 +146,8 @@ export const createVncDesktop: RemoteDesktopPeerFactory = (options) => {
 					return;
 				}
 				connected = false;
+				touch?.close();
+				touch = null;
 				const detail: unknown = event instanceof CustomEvent ? event.detail : null;
 				if (detail && typeof detail === 'object' && 'clean' in detail && detail.clean === true) {
 					options.onState('disconnected');

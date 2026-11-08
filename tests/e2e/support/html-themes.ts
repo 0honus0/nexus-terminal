@@ -8,7 +8,7 @@ import type {
 	HtmlThemeSummary,
 	HtmlThemeRepositoryView,
 } from '../../../packages/shared/src/preferences/html-themes/model';
-import { E2E_URLS } from './test-env';
+import { E2E_URLS } from '../../support/protocols/test-environment';
 
 const path = '/api/v1/appearance/html-presets';
 const headers = { Origin: E2E_URLS.frontendOrigin };

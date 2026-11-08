@@ -3,7 +3,6 @@ import { defineStore } from 'pinia';
 import { registerAuthenticatedSessionReset } from '@/shared/session/public';
 import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
 import { PreferenceRequestFailure } from '@/client/preferences/preference-request';
-import { COMMAND_BATCH_MAX_ENTRIES } from '@nexus-terminal/shared/preferences/commands/values';
 import { quickCommandsApi } from '../api/quick-commands-api';
 import type {
 	QuickCommandSummary,
@@ -326,10 +325,7 @@ export const useQuickCommandsStore = defineStore('quick-commands', () => {
 		commands: QuickCommandSummary[],
 		permission?: AbortSignal,
 	): Promise<QuickCommandTagAssignment> {
-		if (
-			commands.length > COMMAND_BATCH_MAX_ENTRIES ||
-			new Set(commands.map((value) => value.id)).size !== commands.length
-		) {
+		if (new Set(commands.map((value) => value.id)).size !== commands.length) {
 			throw new PreferenceRequestFailure('invalid_input', 'not_dispatched');
 		}
 		const signal = scope.signal;

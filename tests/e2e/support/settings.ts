@@ -11,7 +11,7 @@ import {
 	readSettingsCaptchaResponse,
 	readSettingsCaptchaUpdate,
 } from '../../../packages/shared/src/preferences/configuration/http-codec';
-import { E2E_URLS } from './test-env';
+import { E2E_URLS } from '../../support/protocols/test-environment';
 
 const headers = { Origin: E2E_URLS.frontendOrigin };
 

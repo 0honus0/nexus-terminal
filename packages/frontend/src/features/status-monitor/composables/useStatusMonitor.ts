@@ -22,6 +22,7 @@ export function createStatusMonitorSession(channel: StatusChannel, maxSamples = 
 	let consumerCount = 0;
 	let workspaceAvailable = false;
 	let sampling = false;
+	let startFailed = false;
 	let disposed = false;
 	let generation = 0;
 	let operation = Promise.resolve();
@@ -77,6 +78,16 @@ export function createStatusMonitorSession(channel: StatusChannel, maxSamples = 
 				if (owner !== generation) {
 					return;
 				}
+				// A failed receipt can still leave the original remote subscription installed.
+				// Drain that owner before retrying; a failed stop must not permit replacement.
+				if (startFailed) {
+					await channel.stop();
+					if (owner !== generation) {
+						return;
+					}
+					startFailed = false;
+					sampling = false;
+				}
 				const desired = desiredSampling();
 				if (desired === sampling) {
 					return;
@@ -91,7 +102,14 @@ export function createStatusMonitorSession(channel: StatusChannel, maxSamples = 
 				// A resumed subscription does not provide samples for the stopped interval.
 				if (current.value) sequence += 1;
 				sampling = true;
-				await channel.start();
+				try {
+					await channel.start();
+				} catch (cause) {
+					if (owner === generation) {
+						startFailed = true;
+					}
+					throw cause;
+				}
 			})
 			.catch((cause) => {
 				const code = cause instanceof StatusFailure ? cause.code : 'remote_unavailable';
@@ -148,6 +166,7 @@ export function createStatusMonitorSession(channel: StatusChannel, maxSamples = 
 		generation += 1;
 		workspaceAvailable = false;
 		sampling = false;
+		startFailed = false;
 		current.value = null;
 		error.value = null;
 		history.value = emptyHistory();

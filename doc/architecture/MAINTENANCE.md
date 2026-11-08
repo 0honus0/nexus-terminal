@@ -8,7 +8,7 @@
 
 ## 2. 子功能与目录
 
-既有 `scripts/maintenance/cleanup-history.mjs` 持有逐包检查、manifest 闭包、Actions 保留和资源删除；同目录 `cleanup-history.test.mjs` 提供隔离 GitHub/GHCR 回归。工作流只装配手动入口、权限和前置检查。
+既有 `scripts/maintenance/cleanup-history.mjs` 持有逐包检查、manifest 闭包、Actions 保留和资源删除；`tests/tooling/maintenance/logic/cleanup-history.native.test.mjs` 提供隔离 GitHub/GHCR 回归。工作流只装配手动入口、权限和前置检查。
 
 ## 3. 依赖方向
 
@@ -36,4 +36,4 @@ GitHub REST 包元数据中的 repository.id 必须与当前仓库 ID 相同；�
 
 ## 8. 当前能力与验收
 
-保护集合和删除流程由同目录维护回归检查，手动清理工作流在删除前执行该回归。历史执行结果见 [验证索引](../testing/HISTORY.md#清理工作流超期空排队与执行日志2026-11-05源码与静态)，尚未覆盖的并发与故障组合见 [PLAN](../PLAN.md#待验与外部依赖)。线上实际删除数量及延后项以手动工作流摘要为准，夹具不能证明线上删除成功。
+保护集合和删除流程由tests workspace的维护回归检查，手动清理工作流在删除前执行该回归。历史执行结果见 [验证索引](../testing/HISTORY.md#清理工作流超期空排队与执行日志2026-11-05源码与静态)，尚未覆盖的并发与故障组合见 [PLAN](../PLAN.md#待验与外部依赖)。线上实际删除数量及延后项以手动工作流摘要为准，夹具不能证明线上删除成功。

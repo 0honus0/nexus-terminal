@@ -1,5 +1,5 @@
 import { expect, type Page, type APIRequestContext } from './fixtures';
-import { E2E_URLS } from './test-env';
+import { E2E_URLS } from '../../support/protocols/test-environment';
 import { readRemoteDesktopFailureResponse } from '../../../packages/shared/src/remote/desktop/http-codec';
 
 /** Explicitly approve the real fixture certificate; never suppress verification in product code. */

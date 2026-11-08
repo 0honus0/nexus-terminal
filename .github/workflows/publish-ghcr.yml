@@ -144,7 +144,7 @@ jobs:
             '[.workflow_runs[] | select(.head_sha == $sha and .head_branch == "main" and .conclusion == "success")] | length' \
             <<< "$runs")"
           if [[ "$successful" -lt 1 ]]; then
-            echo "Current main commit has no successful complete E2E workflow (checks, all Playwright shards, and Docker smoke): $SOURCE_SHA" >&2
+            echo "Current main commit has no successful complete E2E workflow (checks, all module, protocol and browser shards, and Docker smoke): $SOURCE_SHA" >&2
             exit 1
           fi
 

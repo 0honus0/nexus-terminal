@@ -5,7 +5,7 @@ import {
 	readTerminalThemeDeleted,
 } from '../../../packages/shared/src/preferences/themes/http-codec';
 import type { TerminalThemeView } from '../../../packages/shared/src/preferences/themes/model';
-import { E2E_URLS } from './test-env';
+import { E2E_URLS } from '../../support/protocols/test-environment';
 
 export const themeHeaders = { Origin: E2E_URLS.frontendOrigin };
 

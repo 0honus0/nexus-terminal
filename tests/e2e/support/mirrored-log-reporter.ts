@@ -33,9 +33,11 @@ export default class MirroredLogReporter implements Reporter {
 	onBegin(config: FullConfig, suite: Suite) {
 		this.runStartedAt = Date.now();
 		this.testDir = config.projects[0]?.testDir || process.cwd();
-		this.logRoot = path.resolve(this.testDir, '..', 'logs');
-		fs.rmSync(this.logRoot, { recursive: true, force: true });
-		fs.mkdirSync(this.logRoot, { recursive: true });
+		const logBase = process.env.NEXUS_TEST_ARTIFACT_DIR
+			? path.resolve(process.env.NEXUS_TEST_ARTIFACT_DIR, 'logs')
+			: path.resolve(this.testDir, '..', 'logs');
+		fs.mkdirSync(logBase, { recursive: true });
+		this.logRoot = fs.mkdtempSync(path.join(logBase, 'run-'));
 		for (const test of suite.allTests()) {
 			const spec = this.specPath(test);
 			if (!this.specOrder.has(spec)) {

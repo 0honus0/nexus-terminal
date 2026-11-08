@@ -603,7 +603,6 @@ export function readAgentPluginInstallationList(input: unknown): AgentPluginInst
 	const removedIds = new Set(items.filter((item) => item.status === 'removed').map((item) => item.appId));
 	if (
 		new Set(items.map((item) => item.appId)).size !== items.length ||
-		new Set(items.map((item) => item.definitionId)).size !== items.length ||
 		new Set(retainedAppIds).size !== retainedAppIds.length ||
 		retainedAppIds.some((id) => !removedIds.has(id))
 	) {

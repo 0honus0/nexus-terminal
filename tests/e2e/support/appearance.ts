@@ -5,7 +5,7 @@ import {
 } from '../../../packages/shared/src/preferences/appearance/http-codec';
 import type { AppearanceUpdateRequest } from '../../../packages/shared/src/preferences/appearance/http';
 import type { AppearanceView } from '../../../packages/shared/src/preferences/appearance/model';
-import { E2E_URLS } from './test-env';
+import { E2E_URLS } from '../../support/protocols/test-environment';
 
 export async function selectAppearanceSection(surface: Locator, name: string): Promise<void> {
 	// The current mobile navigation is a category picker; desktop tabs are hidden.

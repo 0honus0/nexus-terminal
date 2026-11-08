@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "effectiveVersion": 2,
+  "requiresRestart": false,
+  "effectiveMonitoring": {
+    "statusMonitorIntervalSeconds": 7,
+    "remoteHostRefreshIntervalSeconds": 47
+  },
+  "policy": {
+    "ipWhitelist": "",
+    "ipBlacklistEnabled": true,
+    "maxLoginAttempts": 5,
+    "loginBanDuration": 300,
+    "statusMonitorIntervalSeconds": 7,
+    "remoteHostRefreshIntervalSeconds": 47,
+    "passkeys": []
+  },
+  "captcha": {
+    "enabled": false,
+    "provider": "none",
+    "siteKey": "",
+    "hasSecret": false,
+    "expectedHostname": null
+  }
+}

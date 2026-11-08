@@ -109,6 +109,9 @@ export const useAppearanceStore = defineStore('appearance', () => {
 			}
 			try {
 				const value = await appearanceApi.load(signal);
+				if (signal.aborted) {
+					throw new AppearanceRequestFailure('cancelled', 'not_dispatched');
+				}
 				const results = await Promise.allSettled([
 					themeApi.list(signal),
 					htmlThemeApi.list(signal),
@@ -132,20 +135,20 @@ export const useAppearanceStore = defineStore('appearance', () => {
 				if (signal.aborted) {
 					throw new AppearanceRequestFailure('cancelled', 'not_dispatched');
 				}
+				if (recover && recoveryRevision !== revision) {
+					throw new AppearanceRequestFailure('refresh_required', 'not_dispatched');
+				}
 				snapshot.value = value;
 				preview.value = {};
 				themes.value = themeResult.value;
 				localThemes.value = htmlResult.value;
 				applySettings(value);
-				if (recover && recoveryRevision !== revision) {
-					throw new AppearanceRequestFailure('refresh_required', 'not_dispatched');
-				}
 				if (recover) {
 					blocked.value = false;
 					error.value = null;
 				}
 			} catch (cause) {
-				if (!signal.aborted) {
+				if (!signal.aborted && recoveryRevision === revision) {
 					error.value = cause;
 					blocked.value = true;
 					revision++;

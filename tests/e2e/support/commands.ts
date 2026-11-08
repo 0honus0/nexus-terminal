@@ -5,7 +5,7 @@ import {
 	readCommandTagList,
 } from '../../../packages/shared/src/preferences/commands/http-codec';
 import type { QuickCommand, QuickCommandTag } from '../../../packages/shared/src/preferences/commands/model';
-import { E2E_URLS } from './test-env';
+import { E2E_URLS } from '../../support/protocols/test-environment';
 
 export async function listTestCommands(request: APIRequestContext): Promise<QuickCommand[]> {
 	const entries: QuickCommand[] = [];

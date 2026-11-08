@@ -1,0 +1,43 @@
+import { test, expect, vi, onTestFinished } from 'vitest';
+import { createApp, h, nextTick } from 'vue';
+import { openAppearance } from '../support/fixture.mjs';
+import i18n, { setLocale } from '../../../../packages/frontend/src/app/i18n/index.ts';
+import Panel from '../../../../packages/frontend/src/features/appearance/components/AppearanceSettingsPanel.vue';
+import { appearanceApi } from '../../../../packages/frontend/src/features/appearance/api/appearance-api.ts';
+import { authenticatedSessionLifecycle } from '../../../../packages/frontend/src/shared/session/public.ts';
+import { useSettingsReloadStore } from '../../../../packages/frontend/src/shared/feedback/store/settings-reload.store.ts';
+
+test('appearance editor retains its original CAS and dirty draft, then explicit global reload discards it', async () => {
+	const { store, pinia, identity } = await openAppearance();
+	await setLocale('en-US');
+	expect(identity).not.toBeNull();
+	expect(authenticatedSessionLifecycle.attach(identity.user.id).failures).toHaveLength(0);
+	onTestFinished(() => authenticatedSessionLifecycle.dispose());
+	const node = document.createElement('div');
+	document.body.append(node);
+	const mounted = createApp({ render: () => h(Panel) });
+	onTestFinished(() => {
+		mounted.unmount();
+		node.remove();
+	});
+	mounted.use(pinia).use(i18n).mount(node);
+	await nextTick();
+	const input = node.querySelector('#windowThemeColorInput');
+	expect(input).not.toBeNull();
+	input.value = '#112233';
+	input.dispatchEvent(new Event('input', { bubbles: true }));
+	await nextTick();
+	await appearanceApi.update({ windowThemeColor: '#445566' }, store.version);
+	const save = Array.from(node.querySelectorAll('button')).find((button) => button.textContent.trim() === 'Save');
+	expect(save.disabled).toBe(false);
+	save.click();
+	await vi.waitFor(() => expect(store.blocked).toBe(true), { timeout: 15000 });
+	expect(input.value).toBe('#112233');
+	expect((await appearanceApi.load()).windowThemeColor).toBe('#445566');
+	const reload = useSettingsReloadStore(pinia);
+	expect(reload.pendingCount).toBe(1);
+	expect(await reload.reloadPending()).toEqual({ attempted: 1, failed: 0, remaining: 0 });
+	await nextTick();
+	expect(input.value).toBe('#445566');
+	expect(store.blocked).toBe(false);
+});

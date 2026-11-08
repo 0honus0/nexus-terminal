@@ -146,6 +146,33 @@ export class RegistryModel {
 		}
 		// Compile and validate the whole replacement before invalidating any existing handler.
 		const snapshot = provider(owner);
+		const unchangedProvider =
+			current !== undefined && JSON.stringify(current.provider) === JSON.stringify(snapshot);
+		const previousEntries = new Map(current?.entries.map((item) => [item.description.entry.key, item]));
+		// Share only compiled schemas within this publication. Registrations retain the validators they use;
+		// retired schemas have no process-wide cache or independent lifetime.
+		const validators = new Map<string, JsonSchemaValidator>();
+		for (const item of current?.entries ?? []) {
+			const value = item.description.definition;
+			if (value.kind === 'event') {
+				validators.set(value.payloadSchemaJson, item.result);
+			} else {
+				if (item.input) {
+					validators.set(value.inputSchemaJson, item.input);
+				}
+				validators.set(value.resultSchemaJson, item.result);
+			}
+		}
+
+		const compile = (schema: string): JsonSchemaValidator => {
+			let validator = validators.get(schema);
+			if (!validator) {
+				validator = new JsonSchemaValidator(schema);
+				validators.set(schema, validator);
+			}
+			return validator;
+		};
+
 		const keys = new Set<string>();
 		const prepared = definitions.map((value): Registration => {
 			if (
@@ -160,37 +187,24 @@ export class RegistryModel {
 			if (
 				(value.kind === 'app' && value.key !== snapshot.appEntry) ||
 				(value.kind === 'tool' && !snapshot.tools) ||
-				(value.kind === 'service' && !snapshot.services)
+				(value.kind === 'service' && !snapshot.services) ||
+				(value.kind !== 'event' &&
+					value.capabilities.some((capability) => !snapshot.capabilities.includes(capability)))
 			) {
 				throw new AgentFailure('capability_undeclared');
 			}
-			const previous =
-				current?.provider.generation === owner.generation &&
-				current.provider.configurationRevision === owner.configurationRevision
-					? current.entries.find(
-							(item) =>
-								item.description.entry.key === value.key &&
-								JSON.stringify(item.description.definition) === JSON.stringify(definition(value)),
-						)
-					: undefined;
-			if (previous) {
+			const previous = unchangedProvider ? previousEntries.get(value.key) : undefined;
+			const projectedDefinition = definition(value);
+			if (previous && JSON.stringify(previous.description.definition) === JSON.stringify(projectedDefinition)) {
 				return previous;
-			}
-			if (
-				value.kind !== 'event' &&
-				value.capabilities.some((capability) => !snapshot.capabilities.includes(capability))
-			) {
-				throw new AgentFailure('capability_undeclared');
 			}
 			const schemas =
 				value.kind === 'event' ? [value.payloadSchemaJson] : [value.inputSchemaJson, value.resultSchemaJson];
 			let input: JsonSchemaValidator | null;
 			let result: JsonSchemaValidator;
 			try {
-				input = value.kind === 'event' ? null : new JsonSchemaValidator(value.inputSchemaJson);
-				result = new JsonSchemaValidator(
-					value.kind === 'event' ? value.payloadSchemaJson : value.resultSchemaJson,
-				);
+				input = value.kind === 'event' ? null : compile(value.inputSchemaJson);
+				result = compile(value.kind === 'event' ? value.payloadSchemaJson : value.resultSchemaJson);
 			} catch (cause) {
 				throw new AgentFailure('invalid_input', { cause });
 			}
@@ -211,29 +225,28 @@ export class RegistryModel {
 						summary: value.summary,
 						tags: value.kind === 'event' ? [] : value.tags.map((tag) => tag),
 					},
-					definition: definition(value),
+					definition: projectedDefinition,
 					schemaSha256: createHash('sha256').update(JSON.stringify(schemas)).digest('hex'),
 				},
 			};
 		});
+		const callableKeys = new Set(
+			prepared
+				.filter((item) => item.description.definition.kind !== 'event')
+				.map((item) => item.description.entry.key),
+		);
 		for (const value of prepared) {
 			const def = value.description.definition;
 			if (def.kind === 'event' && def.source.kind !== 'transient') {
-				const sourceKey = def.source.callableKey;
-				if (
-					!prepared.some(
-						(item) =>
-							item.description.definition.kind !== 'event' &&
-							item.description.definition.key === sourceKey,
-					)
-				) {
+				if (!callableKeys.has(def.source.callableKey)) {
 					throw new AgentFailure('invalid_input');
 				}
 			}
 		}
 		if (current) {
+			const retained = new Set(prepared);
 			for (const item of current.entries) {
-				if (!prepared.includes(item)) {
+				if (!retained.has(item)) {
 					this.removeEntry(item);
 				}
 			}

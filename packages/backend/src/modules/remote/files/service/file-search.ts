@@ -1,5 +1,4 @@
 import path from 'node:path';
-import { WORKSPACE_FILES_MAX_SEARCH_ENTRIES } from '@nexus-terminal/shared/remote/files/values';
 import { RemoteFileFailure, type FileEntry, type FileResource, type FileSearchResult } from '../model/file-types.js';
 
 /** Server-owned traversal policy, independent of wire budgets. */
@@ -22,7 +21,7 @@ export async function searchFiles(
 	let nextId = 0;
 	const pending = new Map<number, Promise<ScannedDirectory>>();
 	try {
-		while ((queue.length || pending.size) && items.length < WORKSPACE_FILES_MAX_SEARCH_ENTRIES) {
+		while (queue.length || pending.size) {
 			while (queue.length && pending.size < SEARCH_CONCURRENCY) {
 				const directory = queue.shift();
 				if (directory === undefined) {
@@ -76,10 +75,6 @@ export async function searchFiles(
 						item.longName = entry.longName;
 					}
 					items.push(item);
-					if (items.length >= WORKSPACE_FILES_MAX_SEARCH_ENTRIES) {
-						truncated = true;
-						break;
-					}
 				}
 				if (entry.info.kind === 'directory') {
 					queue.push(fullPath);

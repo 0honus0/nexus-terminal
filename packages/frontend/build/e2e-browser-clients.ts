@@ -39,6 +39,7 @@ export default defineConfig({
 				'browser-diagnostics': fileURLToPath(new URL('./e2e-browser-diagnostics.ts', import.meta.url)),
 				'browser-terminal': fileURLToPath(new URL('./e2e-browser-terminal.ts', import.meta.url)),
 				'browser-rdp': fileURLToPath(new URL('./e2e-browser-rdp.ts', import.meta.url)),
+				'browser-status': fileURLToPath(new URL('./e2e-browser-status.ts', import.meta.url)),
 			},
 			formats: ['es'],
 			cssFileName: 'browser-terminal',

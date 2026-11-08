@@ -13,6 +13,7 @@ import type { WorkspaceSocket, WorkspaceAttachmentRequest } from '../protocol/wo
 interface StatusSubscription {
 	request: WorkspaceAttachmentRequest;
 	started: Promise<void>;
+	stopping?: Promise<void>;
 }
 
 function statusFailure(cause: unknown): StatusFailure {
@@ -53,6 +54,36 @@ export function createStatusChannel(
 	canSend: () => boolean,
 ): StatusChannel & { disconnect(): void } {
 	let subscription: StatusSubscription | undefined;
+
+	const start = async (): Promise<void> => {
+		if (!canSend()) {
+			throw new StatusFailure('remote_unavailable');
+		}
+		if (subscription?.stopping) {
+			await subscription.stopping;
+			return start();
+		}
+		if (subscription) {
+			return subscription.started;
+		}
+		const request = socket.bindRequests();
+		const started = (async () => {
+			let response: unknown;
+			try {
+				response = await request('status.start', {});
+			} catch (cause) {
+				throw statusFailure(cause);
+			}
+			try {
+				readWorkspaceEmptyResponse(response);
+			} catch (cause) {
+				throw new StatusFailure('protocol_failure', { cause });
+			}
+		})();
+		subscription = { request, started };
+		return started;
+	};
+
 	return {
 		subscribe(handler, error) {
 			const offSample = socket.on('status.sample', (sample) => {
@@ -71,18 +102,22 @@ export function createStatusChannel(
 			};
 		},
 
-		async start() {
-			if (!canSend()) {
-				throw new StatusFailure('remote_unavailable');
+		start,
+
+		async stop() {
+			const owner = subscription;
+			if (!owner) {
+				return;
 			}
-			if (subscription) {
-				return subscription.started;
+			if (owner.stopping) {
+				return owner.stopping;
 			}
-			const request = socket.bindRequests();
-			const started = (async () => {
+			const stopping = Promise.resolve().then(async () => {
+				// Even a lost start receipt may have installed the remote subscription.
+				await owner.started.catch(() => undefined);
 				let response: unknown;
 				try {
-					response = await request('status.start', {});
+					response = await owner.request('status.stop', {});
 				} catch (cause) {
 					throw statusFailure(cause);
 				}
@@ -91,29 +126,15 @@ export function createStatusChannel(
 				} catch (cause) {
 					throw new StatusFailure('protocol_failure', { cause });
 				}
-			})();
-			subscription = { request, started };
-			return started;
-		},
-
-		async stop() {
-			const owner = subscription;
-			subscription = undefined;
-			if (!owner) {
-				return;
-			}
-			// Even a lost start receipt may have installed the remote subscription.
-			await owner.started.catch(() => undefined);
-			let response: unknown;
+				if (subscription === owner) {
+					subscription = undefined;
+				}
+			});
+			owner.stopping = stopping;
 			try {
-				response = await owner.request('status.stop', {});
-			} catch (cause) {
-				throw statusFailure(cause);
-			}
-			try {
-				readWorkspaceEmptyResponse(response);
-			} catch (cause) {
-				throw new StatusFailure('protocol_failure', { cause });
+				await stopping;
+			} finally {
+				owner.stopping = undefined;
 			}
 		},
 

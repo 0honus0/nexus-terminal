@@ -57,15 +57,15 @@ export class AuditEventOwner {
 	}
 
 	run(work: () => Promise<void>): Promise<void> {
-		if (!this.acceptingRequests || this.requests.size >= 64) {
+		if (!this.acceptingRequests) {
 			return Promise.reject(new OperationsFailure('shutting_down'));
 		}
 		return this.track(work, this.requests);
 	}
 
 	publish(notice: AuditNotice): Promise<void> {
-		if (this.stopping || this.tasks.size >= 256) {
-			const error = new OperationsFailure(this.stopping ? 'shutting_down' : 'limit_exceeded');
+		if (this.stopping) {
+			const error = new OperationsFailure('shutting_down');
 			this.recordFailure(error);
 			return Promise.reject(error);
 		}

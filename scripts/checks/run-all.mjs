@@ -2,12 +2,19 @@
 
 import { spawnSync } from 'node:child_process';
 
+const layout = spawnSync(process.execPath, ['scripts/checks/test-layout.mjs'], { stdio: 'inherit' });
+if (layout.status !== 0) process.exit(layout.status ?? 1);
+
 const checks = [
 	// Backend check builds Shared declarations before either consumer checks its imports.
 	['Backend type check', ['--filter', '@nexus-terminal/backend', 'check']],
 	[
 		'Typed test storage contracts',
 		['--filter', '@nexus-terminal/backend', 'exec', 'tsc', '-p', '../../tests/tsconfig.contracts.json'],
+	],
+	[
+		'Test source and configuration types',
+		['--filter', '@nexus-terminal/frontend', 'exec', 'vue-tsc', '--noEmit', '-p', '../../tests/tsconfig.json'],
 	],
 	['Frontend ESLint', ['run', 'lint:frontend']],
 	['Backend ESLint', ['run', 'lint:backend']],

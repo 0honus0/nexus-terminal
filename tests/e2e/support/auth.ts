@@ -14,7 +14,7 @@ import { PREFERENCE_LANGUAGES } from '../../../packages/shared/src/preferences/p
 import type { PresentationPreferences } from '../../../packages/shared/src/preferences/presentation/model';
 import type { PreferencesResponse } from '../../../packages/shared/src/preferences/presentation/http';
 import { E2E_ADMIN } from './test-identity';
-import { E2E_URLS } from './test-env';
+import { E2E_URLS } from '../../support/protocols/test-environment';
 
 export { E2E_ADMIN } from './test-identity';
 

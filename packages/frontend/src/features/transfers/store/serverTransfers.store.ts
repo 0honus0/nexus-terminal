@@ -39,7 +39,7 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
 	let refreshOnResume = false;
 	let readFailed = false;
 	const writes = new Set<AbortController>();
-	const mutations = new Map<string, Promise<void>>();
+	const mutations = new Map<string, { operation: 'cancel' | 'remove'; task: Promise<void> }>();
 
 	function notifyTaskFailures(next: readonly ServerTransferTask[]): void {
 		const previous = new Map(items.value.map((task) => [task.taskId, task]));
@@ -237,11 +237,18 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
 	}
 
 	function mutate(taskId: string, operation: 'cancel' | 'remove'): Promise<void> {
+		const currentEpoch = epoch;
 		const existing = mutations.get(taskId);
 		if (existing) {
-			return existing;
+			if (existing.operation === operation) {
+				return existing.task;
+			}
+			return existing.task.then(() => {
+				if (currentEpoch === epoch) {
+					return mutate(taskId, operation);
+				}
+			});
 		}
-		const currentEpoch = epoch;
 		const controller = new AbortController();
 		writes.add(controller);
 		invalidate();
@@ -264,13 +271,13 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
 				}
 			} finally {
 				writes.delete(controller);
-				if (currentEpoch === epoch && mutations.get(taskId) === pending) {
+				if (currentEpoch === epoch && mutations.get(taskId)?.task === pending) {
 					mutations.delete(taskId);
 					schedulePolling();
 				}
 			}
 		});
-		mutations.set(taskId, pending);
+		mutations.set(taskId, { operation, task: pending });
 		return pending;
 	}
 

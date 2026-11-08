@@ -8,7 +8,8 @@ const { default: pRetry, AbortError } = await import(pathToFileURL(requireFromBa
 
 class BuildPending extends Error {}
 
-export async function waitForApplicationBuild({ github, owner, repo, runId, sha }) {
+export async function waitForTestArtifact({ github, owner, repo, runId, sha, kind }) {
+	if (kind !== 'application' && kind !== 'plugin-candidates') throw new Error('Unknown test artifact kind');
 	let lastState = '';
 	return pRetry(
 		async () => {
@@ -25,7 +26,7 @@ export async function waitForApplicationBuild({ github, owner, repo, runId, sha 
 			if (!build) throw new BuildPending('Application build job is not registered yet');
 			// A full rerun selects its new build attempt. Rerunning only a failed shard
 			// can reuse the successful build job from the previous attempt of this run.
-			const namePrefix = `e2e-application-${sha}-`;
+			const namePrefix = `e2e-${kind}-${sha}-`;
 			const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
 				owner,
 				repo,
@@ -38,7 +39,7 @@ export async function waitForApplicationBuild({ github, owner, repo, runId, sha 
 				return String(artifact.id);
 			}
 			if (build.status === 'completed') {
-				throw new AbortError(`Application artifact unavailable after build job concluded: ${build.conclusion}`);
+				throw new AbortError(`${kind} artifact unavailable after build job concluded: ${build.conclusion}`);
 			}
 			const state = `attempt ${build.run_attempt}: ${build.status}`;
 			if (state !== lastState) {

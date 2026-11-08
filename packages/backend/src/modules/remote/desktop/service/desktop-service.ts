@@ -223,9 +223,6 @@ export class DesktopService {
 					}
 					this.validateReservation(reservation, signal);
 					const ticket = this.model.issueTicket();
-					if (this.tickets.size >= REMOTE_DESKTOP_MAX_PENDING_TICKETS) {
-						throw new DesktopFailure('limit_exceeded');
-					}
 					this.tickets.set(ticket, {
 						userId,
 						certificateFingerprint,

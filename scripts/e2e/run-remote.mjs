@@ -78,9 +78,7 @@ const reservePort = async () => {
 try {
 	const build = spawnSync(
 		process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
-		process.env.NEXUS_E2E_SUITE === 'backend'
-			? ['run', 'build:backend']
-			: ['--filter', '@nexus-terminal/e2e', 'build'],
+		['--filter', '@nexus-terminal/tests', 'build'],
 		{
 			cwd: repoRoot,
 			stdio: 'inherit',
@@ -110,7 +108,7 @@ try {
 	if (playwrightArgs[0] === '--') playwrightArgs.shift();
 
 	const runnerCommand = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
-	const runnerArgs = ['--filter', '@nexus-terminal/e2e', 'exec', 'playwright', 'test', ...playwrightArgs];
+	const runnerArgs = ['--filter', '@nexus-terminal/tests', 'exec', 'playwright', 'test', ...playwrightArgs];
 	const child = spawn(runnerCommand, runnerArgs, {
 		cwd: repoRoot,
 		env,

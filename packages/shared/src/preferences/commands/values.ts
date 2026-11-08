@@ -33,5 +33,3 @@ export const COMMAND_ERROR_CODES = [
 export type CommandErrorCode = (typeof COMMAND_ERROR_CODES)[number];
 
 export const COMMAND_VARIABLE_MAX_BYTES = 4096;
-
-export const COMMAND_BATCH_MAX_ENTRIES = 1000;

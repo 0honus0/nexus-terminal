@@ -81,7 +81,7 @@ Workspace 文件 attachment 与独立 HTTP Files 不再按资源数量拒绝创�
 
 旧事件面复查确认只有 `filesystem.ready/error`：保存、新建、删除、重命名、chmod 等 mutation 的完成由对应 request/response 表达，旧 Backend/Protocol 没有独立 `filesystem.changed` / file-modified 事件。不定义独立的修改通知；界面在 mutation 响应后的刷新/失效仍由前端用例负责。
 
-Workspace Files 路径按 POSIX 绝对路径及 NUL 拒绝规则规范化，不套用上表新 HTTP 的 4096-byte 路径产品限制。list/stat 继续返回旧 metadata（含 uid/gid/atime/mtime 与 file/directory/symlink 标识）；search 保留500结果、8并发及子目录消失时跳过并标明截断，不设置扫描目录总数或单目录条目门槛；root或其他目录读取故障明确失败。Workspace列目录不设条目数量门槛，仍校验完整8MiB响应。普通递归remove不限制节点总数或目录深度；已经发生部分删除后失败仍保留operation_unknown，不自动重试。批量删除和上传目录准备由前端等待原1小时后端期限及最终回执，不再在30秒时提前提示失败。普通 remove 对目录做 symlink-safe 递归删除且缺失路径视为 no-op；批量按输入顺序执行；明确 force 的目录依次尝试 `rm -rf`、`sudo rm -rf`，命令使用同一删除任务的剩余期限，不另设5分钟门槛。write/create 保留已知 iconv 编码、未知编码回退 UTF-8、输入 BOM 处理和 UTF-16LE/BE BOM。
+Workspace Files 路径按 POSIX 绝对路径及 NUL 拒绝规则规范化，不套用上表新 HTTP 的 4096-byte 路径产品限制。list/stat 继续返回旧 metadata（含 uid/gid/atime/mtime 与 file/directory/symlink 标识）；search 保留8并发及子目录消失时跳过并标明截断，不设置结果条数、扫描目录总数或单目录条目门槛，完整结果沿8MiB协议预算校验；root或其他目录读取故障明确失败。Workspace列目录不设条目数量门槛，仍校验完整8MiB响应。普通递归remove不限制节点总数或目录深度；已经发生部分删除后失败仍保留operation_unknown，不自动重试。批量删除和上传目录准备由前端等待原1小时后端期限及最终回执，不再在30秒时提前提示失败。普通 remove 对目录做 symlink-safe 递归删除且缺失路径视为 no-op；批量按输入顺序执行；明确 force 的目录依次尝试 `rm -rf`、`sudo rm -rf`，命令使用同一删除任务的剩余期限，不另设5分钟门槛。write/create 保留已知 iconv 编码、未知编码回退 UTF-8、输入 BOM 处理和 UTF-16LE/BE BOM。
 
 旧 `RemoteTextWriter` 的“已有目标 metadata 读取失败也静默继续保存”**不再由后端兼容**：目标不存在仍是正常新文件情况，但目标存在时 stat/metadata 失败直接返回真实失败。正式前端须显式刷新/重新载入并由用户决定再次保存，不依赖后端吞错或自动重放未知写入。
 

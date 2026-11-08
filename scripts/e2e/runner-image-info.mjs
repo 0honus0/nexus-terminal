@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '../..');
 const rootPackage = readJson('package.json');
-const e2ePackage = readJson('tests/e2e/package.json');
+const e2ePackage = readJson('tests/package.json');
 
 const nodeVersion = fs.readFileSync(path.join(repoRoot, '.node-version'), 'utf8').trim();
 
@@ -29,7 +29,7 @@ const definitionFiles = [
 	'packages/backend/package.json',
 	'packages/shared/package.json',
 	'packages/frontend/package.json',
-	'tests/e2e/package.json',
+	'tests/package.json',
 	'tests/e2e/Dockerfile.runner',
 	'scripts/e2e/build-runner-image.sh',
 	'scripts/e2e/runner-image-info.mjs',

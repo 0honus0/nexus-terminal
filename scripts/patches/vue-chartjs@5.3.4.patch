@@ -1,0 +1,26 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 1f24b350e207abed938990360c21907bfc3018d8..7dd5864e8ee722ac7f947bc87816dfd319a982cb 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -197,7 +197,7 @@ const Chart = vue.defineComponent({
+             }
+             if (shouldUpdate) {
+                 vue.nextTick(()=>{
+-                    update(chart);
++                    if (vue.toRaw(chartRef.value) === chart) update(chart);
+                 });
+             }
+         }, {
+diff --git a/dist/index.js b/dist/index.js
+index 18bdb18c69603c9c8fa3f025d86dd6124cce1b87..027b6d8fe7f027f38cc8ebd3964308b180ae5863 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -195,7 +195,7 @@ const Chart = defineComponent({
+             }
+             if (shouldUpdate) {
+                 nextTick(()=>{
+-                    update(chart);
++                    if (toRaw(chartRef.value) === chart) update(chart);
+                 });
+             }
+         }, {

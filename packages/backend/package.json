@@ -6,8 +6,6 @@
   "scripts": {
     "check": "pnpm --filter @nexus-terminal/shared build && tsc --noEmit",
     "build": "pnpm --filter @nexus-terminal/shared build && node --input-type=module -e \"import { rm } from 'node:fs/promises'; await rm('dist', { recursive: true, force: true });\" && tsc && node build/build-plugin-backend-sdk.mjs && node build/copy-plugin-frontend-sdk.mjs",
-    "test": "pnpm --dir ../.. run build:backend && node --test --test-concurrency=1 --test-timeout=60000 ../../tests/backend/storage/backend-next*.integration.mjs ../../tests/backend/http/backend-next*.integration.mjs ../../tests/backend/remote/backend-next*.integration.mjs",
-    "test:natural-access": "pnpm --dir ../.. run build:backend && node ../../tests/backend/http/access-natural-expiry.mjs",
     "start": "node dist/main.js",
     "build:plugin-sdk": "pnpm --filter @nexus-terminal/shared build && node build/build-plugin-backend-sdk.mjs"
   },

@@ -22,8 +22,6 @@ export type SuspendedRemovalDisposition = (typeof SUSPENDED_REMOVAL_DISPOSITIONS
 export const SUSPENDED_SESSION_ID_PATTERN = /^[A-Za-z0-9_-]{8,128}$/u;
 
 /** Full catalog envelope, independent of private task admission quotas. */
-export const SUSPENDED_CATALOG_MAX_ENTRIES = 64;
-
 export const SUSPENDED_CATALOG_MAX_JSON_BYTES = 1024 * 1024;
 
 export const SUSPENDED_MANAGEMENT_MAX_JSON_BYTES = 4096;

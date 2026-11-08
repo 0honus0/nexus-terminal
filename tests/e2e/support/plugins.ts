@@ -1,7 +1,7 @@
 import type { APIRequestContext } from '@playwright/test';
 import { expect } from '@playwright/test';
 import { requestAgentJson } from './agent-request';
-import { E2E_URLS } from './test-env';
+import { E2E_URLS } from '../../support/protocols/test-environment';
 import {
 	readAgentPluginRepositorySettings,
 	readAgentPluginCatalog,
@@ -157,6 +157,8 @@ export async function installTestPlugin(
 		);
 	}
 	const verified = await stageTestPlugin(request, definitionId, version);
+	const manifest = verified.manifest;
+	if (!manifest) throw new Error('Verified plugin stage is missing its manifest');
 	await requestAgentJson(
 		request,
 		{
@@ -174,14 +176,14 @@ export async function installTestPlugin(
 			data: {
 				packageId: definitionId,
 				selectedRootIds:
-					verified.manifest.contributions.app?.uiContract === 'nexus.ui.chat'
+					manifest.contributions.app?.uiContract === 'nexus.ui.chat'
 						? pinnedPackageIds.filter(
 								(id) => id !== 'nexus.agent' && id !== 'nexus.ui.chat' && id !== definitionId,
 							)
 						: [],
-				uiPackageId: verified.manifest.contributions.ui
+				uiPackageId: manifest.contributions.ui
 					? definitionId
-					: verified.manifest.contributions.app?.uiContract === 'nexus.ui.chat'
+					: manifest.contributions.app?.uiContract === 'nexus.ui.chat'
 						? 'nexus.ui.chat'
 						: null,
 			},

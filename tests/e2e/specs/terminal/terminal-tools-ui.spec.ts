@@ -1,0 +1,128 @@
+import { listTestCommands, cleanupTestCommand } from '../../support/commands';
+import { E2E_URLS } from '../../../support/protocols/test-environment';
+import { expect, test, type APIRequestContext } from '../../support/fixtures';
+import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
+import {
+	configureSshE2eSettings,
+	connectTestSshFromConnectionsPage,
+	ensureTestSshConnection,
+	resetTestSshFilesystem,
+} from '../../support/ssh';
+import { step } from '../../support/steps';
+
+test.use({ e2eServices: ['ssh'] });
+
+const QUICK_COMMAND_NAME = 'E2E UI Quick Command';
+
+async function recreateQuickCommand(request: APIRequestContext): Promise<number> {
+	const existing = await listTestCommands(request);
+	for (const command of existing.filter((item) => item.name === QUICK_COMMAND_NAME)) {
+		await cleanupTestCommand(request, command.id);
+	}
+
+	const create = await request.post('/api/v1/quick-commands', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
+		data: {
+			name: QUICK_COMMAND_NAME,
+			command: "printf 'QUICK_UI_E2E\\n'",
+			tagIds: [],
+			variables: {},
+		},
+	});
+	expect(create.status()).toBe(201);
+	const body = (await create.json()) as { command: { id: number } };
+	return body.command.id;
+}
+
+function markerCount(text: string, marker: string): number {
+	return text.split(marker).length - 1;
+}
+
+test('common terminal tools work through the real SSH session', async ({ page, context }) => {
+	await loginAsInitialAdmin(context.request);
+	await configureSshE2eSettings(context.request);
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.commandInputSyncTarget = 'none';
+	});
+
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.showQuickCommandTags = false;
+	});
+
+	await resetTestSshFilesystem();
+	const quickCommandId = await recreateQuickCommand(context.request);
+	const connectionId = await ensureTestSshConnection(context.request);
+	await connectTestSshFromConnectionsPage(page, connectionId);
+
+	const terminal = page.locator('.terminal-inner-container');
+	const rows = terminal.locator('.xterm-rows');
+	const commandInput = page.locator('input.command-bar-input');
+	const commandBar = page.locator('.command-bar-root');
+
+	await expect(terminal).toBeVisible({ timeout: 20_000 });
+	await expect(commandInput).toBeVisible();
+
+	await step('Terminal search finds output and supports previous/next navigation', async () => {
+		const marker = 'TERMINAL_SEARCH_UI_E2E';
+		await commandInput.fill(`printf '${marker}\\n${marker}\\n'`);
+		await commandInput.press('Enter');
+		await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain(marker);
+
+		await commandBar.getByTitle('Open terminal search').click();
+		await expect(commandInput).toHaveAttribute('placeholder', 'Search in terminal...');
+		await commandInput.fill(marker);
+		await commandBar.getByTitle('Find next').click();
+		await commandBar.getByTitle('Find previous').click();
+		await commandBar.getByTitle('Close terminal search').click();
+		await expect(commandInput).toHaveAttribute('aria-label', 'Terminal command');
+		await expect(commandInput).toHaveValue('');
+	});
+
+	await step('Clear Terminal removes output without breaking the live prompt redraw state', async () => {
+		const marker = 'CLEAR_TERMINAL_UI_E2E';
+		const afterClearMarker = 'AFTER_CLEAR_TERMINAL_UI_E2E';
+		await commandInput.fill(`printf '${marker}\\n'`);
+		await commandInput.press('Enter');
+		await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain(marker);
+		await commandBar.getByTitle('Clear Terminal').click();
+		await expect.poll(async () => rows.innerText()).not.toContain(marker);
+
+		await commandInput.fill(`printf '${afterClearMarker}\\n'`);
+		await commandInput.press('Enter');
+		await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain(afterClearMarker);
+		await expect(commandInput).toBeEnabled();
+		await expect(terminal.locator('.xterm-helper-textarea')).toBeAttached();
+	});
+
+	await step('Command History records a command and can execute it again', async () => {
+		const marker = 'HISTORY_UI_E2E';
+		const command = `printf '${marker}\\n'`;
+		await commandInput.fill(command);
+		await commandInput.press('Enter');
+		await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain(marker);
+
+		const historyView = page.locator('.command-history-root:visible').first();
+		const historyItem = historyView.locator('li[data-history-id]').filter({ hasText: marker }).first();
+		await expect(historyItem).toBeVisible({ timeout: 20_000 });
+		const before = markerCount(await rows.innerText(), marker);
+		await historyItem.click();
+		await expect
+			.poll(async () => markerCount(await rows.innerText(), marker), { timeout: 15_000 })
+			.toBeGreaterThan(before);
+	});
+
+	await step('Quick Commands executes a saved command in the active SSH session', async () => {
+		const quickCommandsView = page.locator('.quick-commands-root:visible').first();
+		const commandRow = quickCommandsView.locator(`[data-command-id="${quickCommandId}"]`);
+		await expect(commandRow).toBeVisible({ timeout: 20_000 });
+		await commandRow.getByTitle('Execute', { exact: true }).click();
+		await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain('QUICK_UI_E2E');
+
+		await expect
+			.poll(async () => {
+				const commands = await listTestCommands(context.request);
+				return commands.find((item) => item.id === quickCommandId)?.usageCount ?? 0;
+			})
+			.toBeGreaterThanOrEqual(1);
+	});
+});

@@ -149,7 +149,6 @@ export class NativeSafeHttpConnection implements SafeHttpConnection {
 		}
 		const selected = addresses[0];
 		return new Agent({
-			connections: 4,
 			pipelining: 1,
 			connect: {
 				lookup: (_hostname, options, callback) => {

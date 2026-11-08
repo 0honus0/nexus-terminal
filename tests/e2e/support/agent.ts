@@ -1,11 +1,11 @@
-import { agentChatSurface } from '../fixtures/agent/workbench';
+import { agentChatSurface, agentHost } from './agent-host/workbench';
 import { randomUUID } from 'node:crypto';
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
-import { E2E_URLS } from './test-env';
+import { E2E_URLS } from '../../support/protocols/test-environment';
 import { requestAgentJson } from './agent-request';
 import { installTestPlugin } from './plugins';
-import { readAgentAppResponse } from '../../../packages/shared/src/agent/scope/http-codec';
+import { readAgentAppListResponse, readAgentAppResponse } from '../../../packages/shared/src/agent/scope/http-codec';
 import { readAgentProviderView } from '../../../packages/shared/src/agent/providers/http-codec';
 import { readAgentGrantView } from '../../../packages/shared/src/agent/governance/http-codec';
 import {
@@ -119,26 +119,58 @@ export async function prepareAgentRun(
 	};
 }
 
+export async function selectAgentApp(page: Page, app: { id: string; name: string }): Promise<void> {
+	const enabledApps = (
+		await requestAgentJson(page.request, { method: 'GET', path: '/apps' }, readAgentAppListResponse)
+	).filter((candidate) => candidate.enabled);
+	const index = enabledApps.findIndex((candidate) => candidate.id === app.id);
+	expect(index).toBeGreaterThanOrEqual(0);
+	await agentHost(page).getByRole('button', { name: 'Choose an Agent app', exact: true }).click();
+	const apps = page.locator('[data-agent-hub-portal]');
+	await expect(apps).toBeVisible();
+	if (enabledApps.length > 4) {
+		await apps.getByRole('searchbox', { name: 'Search Agent apps', exact: true }).fill(app.id);
+		const option = apps.getByRole('button').filter({ has: page.getByText(app.name, { exact: true }) });
+		await expect(option).toHaveCount(1);
+		await option.click();
+	} else {
+		// Small menus omit search. Their order is the directory response order;
+		// verify that complete projection before resolving a same-name instance.
+		const options = apps.getByRole('button').filter({ hasText: /\S/u });
+		await expect(options).toHaveCount(enabledApps.length);
+		for (const [position, candidate] of enabledApps.entries()) {
+			await expect(options.nth(position)).toContainText(candidate.name);
+		}
+		await options.nth(index).click();
+	}
+	await expect(agentHost(page).locator('iframe[data-agent-app-id="' + app.id + '"]:visible')).toBeVisible();
+}
+
 export async function createTestAgentApp(
 	request: APIRequestContext,
 	name = 'E2E native Agent ' + randomUUID(),
 ): Promise<AgentAppView> {
-	const response = await fetch(E2E_URLS.pluginRepositoryOrigin + '/native-package', {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ name }),
-	});
-	expect(response.ok).toBe(true);
-	const created: unknown = await response.json();
-	if (
-		typeof created !== 'object' ||
-		created === null ||
-		!('packageId' in created) ||
-		typeof created.packageId !== 'string'
-	) {
-		throw new Error('Invalid native plugin fixture identity');
-	}
-	const installed = await installTestPlugin(request, created.packageId);
+	const packageId = process.env.NEXUS_TEST_PLUGIN_SET
+		? 'nexus.agent'
+		: await (async () => {
+				const response = await fetch(E2E_URLS.pluginRepositoryOrigin + '/native-package', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ name }),
+				});
+				expect(response.ok).toBe(true);
+				const created: unknown = await response.json();
+				if (
+					typeof created !== 'object' ||
+					created === null ||
+					!('packageId' in created) ||
+					typeof created.packageId !== 'string'
+				) {
+					throw new Error('Invalid native plugin fixture identity');
+				}
+				return created.packageId;
+			})();
+	const installed = await installTestPlugin(request, packageId);
 	const app = await requestAgentJson(
 		request,
 		{ method: 'GET', path: '/apps/' + installed.appId },

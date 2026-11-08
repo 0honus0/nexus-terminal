@@ -13,22 +13,6 @@ import {
 
 let nextOwnerId = 0;
 
-function waitForNextHost(signal: AbortSignal): Promise<void> {
-	if (signal.aborted) {
-		return Promise.resolve();
-	}
-	return new Promise((resolve) => {
-		const finish = () => {
-			clearTimeout(timer);
-			signal.removeEventListener('abort', finish);
-			resolve();
-		};
-
-		const timer = setTimeout(finish, 200);
-		signal.addEventListener('abort', finish, { once: true });
-	});
-}
-
 function failureCode(cause: unknown): ResourceFailureCode {
 	return cause instanceof ResourceFailure ? cause.code : 'request_failed';
 }
@@ -157,9 +141,6 @@ export function createSystemOverview(): SystemOverviewController {
 							return;
 						}
 						await loadHost(target);
-						if (pending.length) {
-							await waitForNextHost(request.signal);
-						}
 					}
 				}),
 			);

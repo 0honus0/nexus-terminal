@@ -44,7 +44,7 @@ on:
   workflow_dispatch:
     inputs:
       playwright_runners:
-        description: Number of duration-balanced Playwright runners
+        description: Number of test runners for module, protocol and browser shards
         required: true
         default: '8'
         type: choice
@@ -97,7 +97,7 @@ jobs:
           echo "image=$image" >> "$GITHUB_OUTPUT"
           echo "Using E2E runner image $image"
 
-      - name: Split protocol and browser runners
+      - name: Distribute all test layers across runners
         id: matrix
         env:
           RUNNERS: ${{ github.event_name == 'workflow_dispatch' && inputs.playwright_runners || '8' }}
@@ -105,10 +105,7 @@ jobs:
           node --input-type=module <<'JS'
           import { appendFileSync } from 'node:fs';
           const total = Number(process.env.RUNNERS);
-          const include = [
-            ...Array.from({ length: 1 }, (_, index) => ({ suite: 'backend', shard: index + 1, shards: 1 })),
-            ...Array.from({ length: total - 1 }, (_, index) => ({ suite: 'browser', shard: index + 1, shards: total - 1 })),
-          ];
+          const include = Array.from({ length: total }, (_, index) => ({ shard: index + 1, shards: total }));
           appendFileSync(process.env.GITHUB_OUTPUT, `value=${JSON.stringify({ include })}\n`);
           JS
 
@@ -165,7 +162,34 @@ jobs:
 
       - name: Build test application once
         run: |
-          pnpm --filter @nexus-terminal/e2e build
+          pnpm --filter @nexus-terminal/tests build
+          node scripts/e2e/host-test-artifact.mjs write "$GITHUB_SHA"
+
+      - name: Checkout plugin test owners
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: 0honus0/nexus-agent-plugins
+          path: tests/e2e/.tmp/plugin-source
+          persist-credentials: false
+
+      - name: Build and sign plugin candidates once
+        working-directory: tests/e2e/.tmp/plugin-source
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+          pnpm prepare:interop ../plugin-candidates
+          git rev-parse HEAD > ../plugin-candidates/source.sha
+          tar --exclude=node_modules --exclude=.git -czf ../plugin-test-source.tar.gz .
+
+      - name: Upload exact plugin source and candidates
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: e2e-plugin-candidates-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            tests/e2e/.tmp/plugin-test-source.tar.gz
+            tests/e2e/.tmp/plugin-candidates/
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload tested application build
         uses: actions/upload-artifact@v7.0.2
@@ -177,19 +201,42 @@ jobs:
             packages/backend/dist/
             packages/backend/dist-plugin-sdk/
             packages/frontend/dist/
+            packages/host-test-artifact.json
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 14
 
       - name: Run standard checks serially
+        env:
+          NEXUS_TEST_PLUGIN_SOURCE_ROOT: ${{ github.workspace }}/tests/e2e/.tmp/plugin-source
         run: |
           pnpm run check
-          node --test scripts/e2e/resolve-timing-artifacts.test.mjs
+          pnpm test:fast
 
       - name: Check formatting
         run: pnpm run format:all:check
 
-  playwright:
-    name: Playwright ${{ matrix.suite }} shard ${{ matrix.shard }}
+      - name: Check plugin source and independent package behavior
+        working-directory: tests/e2e/.tmp/plugin-source
+        env:
+          NEXUS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/tests/e2e/.tmp/plugin-quality
+          NEXUS_TEST_HOST_ROOT: ${{ github.workspace }}
+          NEXUS_TEST_PLUGIN_SET: ${{ github.workspace }}/tests/e2e/.tmp/plugin-candidates/staging-1
+        run: |
+          pnpm check
+          pnpm test
+          pnpm check:browser
+
+      - name: Upload plugin source test reports
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: plugin-quality-${{ github.run_attempt }}
+          path: tests/e2e/.tmp/plugin-quality/
+          if-no-files-found: error
+          retention-days: 7
+
+  tests:
+    name: Tests shard ${{ matrix.shard }}
     needs: e2e-runner-image
     permissions:
       contents: read
@@ -202,9 +249,11 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ github.token }}
-      options: --ipc=host ${{ matrix.suite == 'backend' && '--volume=/var/run/docker.sock:/var/run/docker.sock' || '' }}
+      options: --ipc=host ${{ matrix.shard == 1 && '--volume=/var/run/docker.sock:/var/run/docker.sock' || '' }}
     env:
-      NEXUS_E2E_SUITE: ${{ matrix.suite }}
+      NEXUS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/tests/e2e/.tmp/layers
+      NEXUS_AGENT_ACCEPTANCE_ROOT: ${{ github.workspace }}/tests/e2e/.tmp/layers
+      NEXUS_TEST_DOCKER_NATIVE: backend/remote/docker/protocol/docker.native.test.mjs
       NEXUS_E2E_PREBUILT: '1'
       E2E_CAPTURE_SCREENSHOTS: ${{ github.event_name == 'workflow_dispatch' && inputs.refresh_screenshots && '1' || '0' }}
       E2E_SCREENSHOT_OUTPUT_DIR: .tmp/functional-screenshots
@@ -224,7 +273,7 @@ jobs:
           else
             echo "Runner image fingerprint differs from this revision; allowing missing dependencies to download."
             pnpm install --frozen-lockfile --prefer-offline
-            pnpm --filter @nexus-terminal/e2e exec playwright install --only-shell chromium
+            pnpm --filter @nexus-terminal/tests exec playwright install --only-shell chromium
           fi
 
       - name: Wait for this run's application build
@@ -233,16 +282,18 @@ jobs:
         with:
           result-encoding: string
           script: |
-            const { waitForApplicationBuild } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/e2e/wait-for-build.mjs`);
-            return await waitForApplicationBuild({
+            const { waitForTestArtifact } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/e2e/wait-for-build.mjs`);
+            return await waitForTestArtifact({
               github,
               owner: context.repo.owner,
               repo: context.repo.repo,
               runId: context.runId,
               sha: context.sha,
+              kind: 'application',
             });
 
       - name: Download tested application build
+        id: application-download
         uses: actions/download-artifact@v8.0.2
         with:
           github-token: ${{ github.token }}
@@ -250,13 +301,101 @@ jobs:
           path: packages
           merge-multiple: true
 
-      - name: Prepare real Docker fixture
-        if: matrix.suite == 'backend'
+      - name: Resolve this build's exact plugin candidates
+        id: plugin-candidates
+        uses: actions/github-script@v9.0.0
+        with:
+          result-encoding: string
+          script: |
+            const { waitForTestArtifact } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/e2e/wait-for-build.mjs`);
+            return await waitForTestArtifact({
+              github,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              runId: context.runId,
+              sha: context.sha,
+              kind: 'plugin-candidates',
+            });
+
+      - name: Download exact plugin candidates
+        uses: actions/download-artifact@v8.0.2
+        with:
+          github-token: ${{ github.token }}
+          artifact-ids: ${{ steps.plugin-candidates.outputs.result }}
+          path: tests/e2e/.tmp/plugin-validation-artifact
+          merge-multiple: true
+
+      - name: Read pinned plugin revision
+        id: plugin-source
+        shell: bash
         run: |
+          revision="$(cat tests/e2e/.tmp/plugin-validation-artifact/plugin-candidates/source.sha)"
+          [[ "$revision" =~ ^[a-f0-9]{40}$ ]]
+          echo "sha=$revision" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout pinned plugin test owners
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: 0honus0/nexus-agent-plugins
+          ref: ${{ steps.plugin-source.outputs.sha }}
+          path: tests/e2e/.tmp/plugin-source
+          persist-credentials: false
+
+      - name: Restore plugin builds without rebuilding
+        working-directory: tests/e2e/.tmp/plugin-source
+        run: |
+          tar -xzf ../plugin-validation-artifact/plugin-test-source.tar.gz
+          pnpm install --frozen-lockfile --prefer-offline
+          node "$GITHUB_WORKSPACE/scripts/e2e/host-test-artifact.mjs" verify "$GITHUB_SHA"
+
+      - name: Run module shard
+        if: ${{ !cancelled() && steps.application-download.outcome == 'success' }}
+        working-directory: tests
+        shell: bash
+        run: |
+          mkdir -p "$NEXUS_TEST_ARTIFACT_DIR/reports"
+          pnpm run test:modules --shard "${{ matrix.shard }}/${{ matrix.shards }}"
+
+      - name: Run native protocol shard
+        if: ${{ !cancelled() && steps.application-download.outcome == 'success' }}
+        working-directory: tests
+        shell: bash
+        run: |
+          mkdir -p "$NEXUS_TEST_ARTIFACT_DIR/reports"
+          mapfile -d '' native_files < <(find backend tooling -type f -name '*.native.test.mjs' \
+            ! -path "$NEXUS_TEST_DOCKER_NATIVE" -print0 | sort -z)
+          test "${#native_files[@]}" -ge "${{ matrix.shards }}"
+          node --test --test-concurrency=1 --test-shard="${{ matrix.shard }}/${{ matrix.shards }}" \
+            --test-reporter=spec --test-reporter=junit \
+            --test-reporter-destination=stdout \
+            --test-reporter-destination="$NEXUS_TEST_ARTIFACT_DIR/reports/native.xml" "${native_files[@]}"
+
+      - name: Prepare real Docker fixture
+        id: docker-fixture
+        if: ${{ !cancelled() && matrix.shard == 1 && steps.application-download.outcome == 'success' }}
+        shell: bash
+        run: |
+          mkdir -p "$NEXUS_TEST_ARTIFACT_DIR/reports"
           docker version
           docker pull alpine:latest
 
+      - name: Run real Docker protocol tests
+        if: ${{ !cancelled() && steps.docker-fixture.outcome == 'success' }}
+        working-directory: tests
+        run: |
+          node --test --test-reporter=spec --test-reporter=junit \
+            --test-reporter-destination=stdout \
+            --test-reporter-destination="$NEXUS_TEST_ARTIFACT_DIR/reports/docker-native.xml" "$NEXUS_TEST_DOCKER_NATIVE"
+
+      - name: Run real Docker module tests
+        if: ${{ !cancelled() && steps.docker-fixture.outcome == 'success' }}
+        working-directory: tests
+        env:
+          NEXUS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/tests/e2e/.tmp/layers/docker-module
+        run: pnpm run test:docker
+
       - name: Run balanced E2E shard ${{ matrix.shard }}
+        if: ${{ !cancelled() && steps.application-download.outcome == 'success' }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           E2E_SPEC_DURATIONS_PATH: test-results/spec-durations.json
@@ -269,12 +408,50 @@ jobs:
             --shard "${{ matrix.shard }}" \
             2>&1 | tee tests/e2e/.tmp/shard-server.log
 
+      - name: Run plugin interoperability shard
+        if: ${{ !cancelled() && steps.application-download.outcome == 'success' }}
+        working-directory: tests/e2e/.tmp/plugin-source
+        env:
+          NEXUS_TEST_HOST_ROOT: ${{ github.workspace }}
+          NEXUS_TEST_PLUGIN_SET: ${{ github.workspace }}/tests/e2e/.tmp/plugin-validation-artifact/plugin-candidates/staging-1
+          NEXUS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/tests/e2e/.tmp/layers/plugin-interop
+        run: |
+          mkdir -p "$NEXUS_TEST_ARTIFACT_DIR/reports"
+          node --test --test-concurrency=1 --test-shard="${{ matrix.shard }}/${{ matrix.shards }}" \
+            --test-reporter=spec --test-reporter=junit \
+            --test-reporter-destination=stdout \
+            --test-reporter-destination="$NEXUS_TEST_ARTIFACT_DIR/reports/interop.xml" \
+            'tests/interoperability/**/*.native.test.mjs'
+
+      - name: Run plugin browser shard
+        if: ${{ !cancelled() && steps.application-download.outcome == 'success' }}
+        working-directory: tests/e2e/.tmp/plugin-source
+        env:
+          NEXUS_TEST_HOST_ROOT: ${{ github.workspace }}
+          NEXUS_TEST_PLUGIN_SET: ${{ github.workspace }}/tests/e2e/.tmp/plugin-validation-artifact/plugin-candidates/staging-1
+          NEXUS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/tests/e2e/.tmp/layers/plugin-browser
+          NEXUS_E2E_DATA_ROOT: ${{ github.workspace }}/tests/e2e/.tmp/layers/plugin-browser/backend
+        run: |
+          pnpm test:browser --shard "${{ matrix.shard }}/${{ matrix.shards }}"
+
       - name: Upload E2E spec timings
         if: always()
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: e2e-timings-${{ matrix.suite }}-${{ matrix.shard }}-${{ github.run_attempt }}
+          name: e2e-timings-${{ matrix.shard }}-${{ github.run_attempt }}
           path: tests/e2e/test-results/spec-durations.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload module and protocol reports
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: test-layers-${{ matrix.shard }}-${{ github.run_attempt }}
+          path: |
+            tests/e2e/.tmp/layers/**/reports/*
+            tests/e2e/.tmp/layers/**/browser/report.json
+            tests/e2e/.tmp/layers/**/*combination.json
           if-no-files-found: error
           retention-days: 7
 
@@ -282,7 +459,7 @@ jobs:
         if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.refresh_screenshots }}
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: e2e-screenshots-${{ matrix.suite }}-${{ matrix.shard }}-${{ github.run_attempt }}
+          name: e2e-screenshots-${{ matrix.shard }}-${{ github.run_attempt }}
           path: tests/e2e/.tmp/functional-screenshots/*.png
           if-no-files-found: ignore
           retention-days: 7
@@ -291,20 +468,21 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: e2e-shard-${{ matrix.suite }}-${{ matrix.shard }}-${{ github.run_attempt }}
+          name: e2e-shard-${{ matrix.shard }}-${{ github.run_attempt }}
           include-hidden-files: true
           path: |
             tests/e2e/logs/
             tests/e2e/playwright-report/
             tests/e2e/test-results/
             tests/e2e/.tmp/shard-server.log
+            tests/e2e/.tmp/layers/
           if-no-files-found: ignore
           retention-days: 7
 
   update-playwright-balance:
     name: Update Playwright duration balance
-    needs: [quality, playwright, docker-smoke]
-    if: ${{ always() && needs.quality.result == 'success' && needs.playwright.result == 'success' && needs.docker-smoke.result == 'success' }}
+    needs: [quality, tests, docker-smoke]
+    if: ${{ always() && needs.quality.result == 'success' && needs.tests.result == 'success' && needs.docker-smoke.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -375,8 +553,8 @@ jobs:
 
   update-e2e-screenshots:
     name: Update E2E documentation screenshots
-    needs: [quality, playwright, docker-smoke]
-    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.refresh_screenshots && github.ref_type == 'branch' && needs.quality.result == 'success' && needs.playwright.result == 'success' && needs.docker-smoke.result == 'success' }}
+    needs: [quality, tests, docker-smoke]
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.refresh_screenshots && github.ref_type == 'branch' && needs.quality.result == 'success' && needs.tests.result == 'success' && needs.docker-smoke.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -447,7 +625,7 @@ jobs:
           install: false
 
       - name: Install smoke-test dependencies
-        run: pnpm install --frozen-lockfile --filter @nexus-terminal/e2e
+        run: pnpm install --frozen-lockfile --filter @nexus-terminal/tests
 
       - name: Restore Playwright browser cache
         uses: actions/cache@v6.1.0
@@ -456,7 +634,7 @@ jobs:
           key: docker-smoke-playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install Chromium
-        run: pnpm --filter @nexus-terminal/e2e exec playwright install --with-deps chromium
+        run: pnpm --filter @nexus-terminal/tests exec playwright install --with-deps chromium
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4.4.1

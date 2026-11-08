@@ -34,13 +34,19 @@ async function confirmWebSocketClosure(sockets: ReadonlySet<WebSocket>): Promise
 	return true;
 }
 
-/** A returned business handler does not prove its response has finished on the transport. */
+const responseCompletions = new WeakMap<ServerResponse, Promise<void>>();
+
+/** Listener and framework binding share the original response's transport completion. */
 export function waitForResponse(response: ServerResponse, request: IncomingMessage): Promise<void> {
+	const existing = responseCompletions.get(response);
+	if (existing) {
+		return existing;
+	}
 	const socket = response.socket;
 	if (response.writableFinished || response.destroyed || socket?.destroyed || request.aborted) {
 		return Promise.resolve();
 	}
-	return new Promise<void>((resolve) => {
+	const completion = new Promise<void>((resolve) => {
 		const finished = () => {
 			response.off('finish', finished);
 			response.off('close', finished);
@@ -60,6 +66,8 @@ export function waitForResponse(response: ServerResponse, request: IncomingMessa
 		socket?.once('close', finished);
 		request.once('aborted', finished);
 	});
+	responseCompletions.set(response, completion);
+	return completion;
 }
 
 /** The TCP listener and the maintenance owner's response stay alive; every other admitted owner drains. */

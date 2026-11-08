@@ -5,11 +5,15 @@ export interface ArchiveFile {
 	sha256: string;
 }
 
+export interface ArchiveReadLimits {
+	readonly maxArchiveBytes: number;
+	readonly maxEntries: number;
+	readonly maxExpandedBytes: number;
+	readonly maxFileBytes: number;
+}
+
 export interface PackageReader {
-	read(
-		bytes: Uint8Array,
-		limits: { maxEntries: number; maxExpandedBytes: number; maxFileBytes: number },
-	): Promise<ArchiveFile[]>;
+	read(bytes: Uint8Array, limits: ArchiveReadLimits): Promise<ArchiveFile[]>;
 }
 
 export interface SigningKey {

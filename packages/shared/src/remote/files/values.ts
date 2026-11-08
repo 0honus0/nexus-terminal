@@ -55,8 +55,6 @@ export const WORKSPACE_FILES_MAX_BINARY_READS = 4;
 /** A listing may exceed the ordinary 1 MiB WS send queue; keep a separate finite response envelope. */
 export const WORKSPACE_FILES_MAX_LIST_RESPONSE_BYTES = 8 * 1024 * 1024;
 
-export const WORKSPACE_FILES_MAX_SEARCH_ENTRIES = 500;
-
 export type RemoteFileWriteStatus = 'created' | 'replaced';
 
 export type RemoteFileTargetType = 'file' | 'directory' | 'other';

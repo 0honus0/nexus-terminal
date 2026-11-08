@@ -12,3 +12,15 @@ export { serverTransfersApi } from '../../../packages/frontend/src/features/tran
 export { connectionsApi } from '../../../packages/frontend/src/features/connections/api/connections-api';
 
 export { rememberServerTransferDirectory } from '../../../packages/frontend/src/features/transfers/model/server-transfer-directory';
+
+export { appearanceApi } from '../../../packages/frontend/src/features/appearance/api/appearance-api';
+
+export { themeApi } from '../../../packages/frontend/src/features/appearance/api/theme-api';
+
+export { createAccessApi } from '../../../packages/frontend/src/features/auth/api/access-api';
+
+export { createPasskeyCeremony } from '../../../packages/frontend/src/features/auth/adapters/browser-passkey';
+
+export { useAuthStore } from '../../../packages/frontend/src/features/auth/store/auth.store';
+
+export { createPinia } from 'pinia';

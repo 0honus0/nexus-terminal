@@ -1,6 +1,6 @@
 import type { APIRequestContext } from '@playwright/test';
 import { expect } from '@playwright/test';
-import { E2E_URLS } from './test-env';
+import { E2E_URLS } from '../../support/protocols/test-environment';
 
 export async function requestAgentJson<T>(
 	request: APIRequestContext,

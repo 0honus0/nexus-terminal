@@ -26,7 +26,7 @@ jobs:
           node-version-file: .node-version
 
       - name: Verify cleanup retention and failure handling
-        run: node --test scripts/maintenance/cleanup-history.test.mjs
+        run: node --test tests/tooling/maintenance/logic/cleanup-history.native.test.mjs
 
       - name: Clean old versions, runs, artifacts and caches
         uses: actions/github-script@v9.0.0

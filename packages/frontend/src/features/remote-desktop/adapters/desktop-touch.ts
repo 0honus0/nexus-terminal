@@ -5,6 +5,7 @@ export function attachDesktopTouch(
 	canvas: HTMLCanvasElement,
 	initialMode: RemoteTouchMode,
 	onPointer?: (clientX: number, clientY: number) => void,
+	dispatchMouse?: (event: MouseEvent) => void,
 ) {
 	let mode = initialMode;
 	let startX = 0;
@@ -16,6 +17,7 @@ export function attachDesktopTouch(
 	let cursorInitialized = false;
 	let moved = false;
 	let dragging = false;
+	let buttons = 0;
 	let fingers = 0;
 	let lastTap = 0;
 	let held = false;
@@ -24,20 +26,29 @@ export function attachDesktopTouch(
 	element.style.touchAction = 'none';
 
 	const mouse = (type: string, button = 0) => {
+		const mask = button === 2 ? 2 : 1;
+		if (type === 'mousedown') {
+			buttons |= mask;
+		} else if (type === 'mouseup') {
+			buttons &= ~mask;
+		}
 		const rect = canvas.getBoundingClientRect();
 		cursorX = Math.max(0, Math.min(Math.max(0, rect.width - 1), cursorX));
 		cursorY = Math.max(0, Math.min(Math.max(0, rect.height - 1), cursorY));
 		onPointer?.(rect.left + cursorX, rect.top + cursorY);
-		canvas.dispatchEvent(
-			new MouseEvent(type, {
-				bubbles: true,
-				cancelable: true,
-				clientX: rect.left + cursorX,
-				clientY: rect.top + cursorY,
-				button,
-				buttons: dragging ? 1 : 0,
-			}),
-		);
+		const event = new MouseEvent(type, {
+			bubbles: true,
+			cancelable: true,
+			clientX: rect.left + cursorX,
+			clientY: rect.top + cursorY,
+			button,
+			buttons,
+		});
+		if (dispatchMouse) {
+			dispatchMouse(event);
+		} else {
+			canvas.dispatchEvent(event);
+		}
 	};
 
 	const cancel = () => {

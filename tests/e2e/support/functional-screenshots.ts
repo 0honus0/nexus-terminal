@@ -2,7 +2,7 @@ import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import type { Page } from '@playwright/test';
 
-const e2eRoot = path.resolve(__dirname, '..');
+const e2eRoot = path.resolve(import.meta.dirname, '..');
 const defaultOutputDir = path.join(e2eRoot, '.tmp', 'functional-screenshots');
 
 export const functionalScreenshotsEnabled = (): boolean =>

@@ -2,6 +2,8 @@
 
 本文只维护当前验收基线、可复用执行入口与证据判据。逐轮结果见 [历史验证索引](HISTORY.md)，Agent 任务设计见 [场景清单](AGENT_TASK_SCENARIOS.md)，当前未验和实施安排见 [PLAN](../PLAN.md)。产品操作与实现设计分别见 [USAGE](../USAGE.md) 和 [架构](../architecture/BACKEND.md)。
 
+本体与插件已按[测试架构](../architecture/TESTING.md)完成Vitest/Node/Playwright源码迁移和双仓CI接线，最终全量门禁仍待验证。下列发布/远程基线属于迁移前版本，不证明当前工作区全量通过。
+
 ## 当前验收基线
 
 最新完整远程 [E2E42465732392](https://github.com/0honus0/nexus-terminal/actions/runs/42465732392) 验证main/21e36a7b7da73f65470a8b5c4d52a6aca83f4a45：正式矩阵758项全部一次通过（Backend223、Browser535），质量、双端构建、Docker smoke、八个分片及耗时汇总成功。逐项核对原始Reporter记录与正式清单，无失败、重试、flaky、场景跳过或遗漏；本轮覆盖迁移65、插件召回配置、MCP/ACP入口归属、编辑器安全围栏和备份导出导入。首次失败与取消记录见[本轮记录](HISTORY.md#agent-设置归属与插件召回配置2026-11-08)。
@@ -16,27 +18,52 @@
 
 先按 PLAN 决定项核对本批授权和真实受影响调用链，再选择验证；D17 的默认路径为源码审核、静态检查后按明确授权执行远程 GitHub Actions。下列命令是入口说明，不表示本批已经执行或获得额外测试授权。
 
-| 检查              | 入口与范围                                                                                                                                                       |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 静态与构建        | 根目录 `pnpm run check`、`pnpm run build`、`pnpm run format:all:check`、`git diff --check`；纯文档可只运行受影响 Markdown 格式、链接及 diff 检查。               |
-| 完整 E2E          | `pnpm test:e2e` 构建应用与测试客户端后运行 Playwright；依赖和隔离服务以 `tests/e2e` 配置与夹具为准。                                                             |
-| 后端 / 浏览器分组 | `pnpm test:e2e:backend` 只构建后端与 Shared；`pnpm test:e2e:browser` 构建并运行浏览器组。整轮判据包含两组、质量与 Docker smoke。                                 |
-| 动态隔离端口入口  | `pnpm test:e2e:remote -- <Playwright参数>` 调用本地 `scripts/e2e/run-remote.mjs`，为服务分配独立环回端口后运行 Playwright；这个名称不表示会触发 GitHub Actions。 |
-| 远程 Actions      | `.github/workflows/e2e.yml` 及其实际引用脚本；每轮记录 run URL、提交 SHA、分片结果、首次失败与重试，不跳过失败场景换绿。                                         |
+| 检查             | 入口与范围                                                                                                                                                             |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 静态与构建       | 根目录 `pnpm run check`、`pnpm run build`、`pnpm run format:all:check`、`git diff --check`；纯文档可只运行受影响 Markdown 格式、链接及 diff 检查。                     |
+| 快速层           | `pnpm test:fast` 直接运行Shared、后端纯逻辑、前端状态与组件，不需要应用构建。                                                                                          |
+| 模块集成         | `pnpm test:integration` 构建Backend/SDK后直接运行Vitest存储/HTTP、前端真实HTTP集成和Node原生测试。模块按新入口执行，完整原生结果以当前CI为准。                         |
+| 浏览器产品流程   | `pnpm test:e2e` 构建应用与测试客户端后运行Playwright；配置为`tests/playwright.config.ts`，业务用例按功能归`tests/e2e/specs/`。                                         |
+| 定向模块         | `pnpm --filter @nexus-terminal/tests exec vitest run <文件或筛选词>`；Node模块使用`node --test tests/backend/<模块>/<层>/*.native.test.mjs`。先核对构建与fixture要求。 |
+| 动态隔离端口入口 | `pnpm test:e2e:isolated -- <Playwright参数>` 调用本地 `scripts/e2e/run-remote.mjs`，为服务分配独立环回端口后运行 Playwright；这个名称不表示会触发 GitHub Actions。     |
+| 远程 Actions     | `.github/workflows/e2e.yml` 及其实际引用脚本；每轮记录 run URL、提交 SHA、分片结果、首次失败与重试，不跳过失败场景换绿。                                               |
 
 回归覆盖正常流程、授权/身份变化、冲突、取消、未知提交/执行、晚返回及资源关闭；按真实 owner 判断结果，不能从本地等待结束推断远端停止。每项证据注明环境、命令、输出、覆盖和未验范围，实机/外部依赖不能用静态或协议夹具代替。专用环境与产物保留至用户通知清理，凭据不进入文档或日志。
 
 ## 分组、隔离与产物
 
-`pnpm test:e2e:backend` 运行真实后端 API、WebSocket 与 SSH/SFTP 协议测试，不启动前端和浏览器服务；`pnpm test:e2e:browser` 运行浏览器与真实后端的集成测试。`pnpm test:e2e` 运行全部用例。后端独立命令只构建后端与 Shared，不依赖前端构建；浏览器及全量命令构建应用与测试专用客户端。后者仅存在于测试产物，正式发布构建不包含它。
+唯一测试workspace为`tests/package.json`（`@nexus-terminal/tests`）。`*.test.ts/mjs`由Vitest直接发现，`*.native.test.mjs`由Node直接发现，`*.spec.ts/mjs`由Playwright发现，不互相包装。快速层无需浏览器；实际IPC/签包/Worker仍需Backend/SDK成品，浏览器层另需Frontend与测试客户端。根`test:all`当前串接静态、构建和以上三层，只执行本体自动测试，不能代替两仓组合与独立Docker smoke完整门禁。
 
-Actions 默认总共 8 个测试 runner，分为 1 个后端和 7 个浏览器 runner；单个 runner 仍串行，组内继续按实测耗时分片。后端分片带官方 Docker CLI，并只为该分片挂载临时 Actions 主机的 Docker socket，运行真实 Docker/SSH 容器生命周期回归；其它分片不挂载此 socket。 复杂功能使用一个目录下的多份测试文件和共享夹具（如 `ssh/cross-server-transfer/` 和 `agent/plugin/`）；分片器递归发现文件，按上次实测耗时自动均衡，CI通过后更新估计，不需手工登记到某个runner。有执行顺序依赖的步骤保留在同一个测试内。同一提交只集中构建一次再分发；构建在现有质量作业的检查之前完成，测试容器提前准备，构建产物完整上传后才开测，质量与Docker失败仍阻止整轮通过。产物绑定当前运行、SHA与构建attempt，按不可变ID下载；完整重跑使用新构建，单独重跑失败分片复用本轮已有的成功构建。浏览器使用正式前端构建的 Vite preview，HTTP/WS 仍转发真实后端。每轮后端数据根目录使用独立随机子目录，可用 `NEXUS_E2E_DATA_ROOT` 显式指定本轮目录；父进程、Worker 和后端夹具共用该路径，旧证据不参与本轮实例发现。每例保留独立数据库和资源关闭检查，失败保留首次 Trace、截图、录像与日志；重试通过仍阻止 CI 通过。正式验收完整运行两组及 Docker smoke，不以某一组通过代替全部功能验收。测试时机和最新证据见[当前验收基线](#当前验收基线)。
+Actions使用统一8个测试runner：每个分片依次执行Vitest模块、Node原生协议、本体Playwright、插件互操作和插件Playwright，模块/原生按框架原生分片，浏览器按实际发现与历史耗时均衡；不再固定1个Backend与7个Browser。第1分片单独挂Docker socket运行真实Docker协议/模块，其余分片不挂载。快速层、静态及插件独立测试在质量作业执行，成品Docker部署smoke单独执行；全部必需作业成功才算门禁通过。
+
+质量作业构建Host一次、签候选包一次，上传准确插件源码和包。分片复用绑定本次SHA/不可变artifact ID的同批成品，不重建；完整重跑与部分重跑遵循下文产物身份规则。插件独立Validate选择成功Host E2E的准确SHA和构建产物，执行自己的全部分层。两仓首次接线需要先有新Host门禁成功，之后复验插件Validate，不能引用旧harness的绿色结论。
+
+浏览器使用正式Frontend构建的preview及真实Backend，每例独立数据库，外部协议服务按声明启动。`NEXUS_TEST_ARTIFACT_DIR`与`NEXUS_E2E_DATA_ROOT`指定任务证据/数据库；`NEXUS_E2E_SERVICE_ROOT`为受控SSH运行路径，默认使用短临时路径以保持Unix socket名称互不截断，timings记录对应runtime根。首次trace/截图/录像/日志及数据库保留，重试通过仍阻止CI通过。
 
 验证验证码 SDK 过期使用 Playwright 官方虚拟时钟；后端票据和缓存 TTL 使用 Node 内置 MockTimers 仅推进 Date，不改变产品超时或网络定时器。专门弱网回归保留原带宽与延迟；成功传输的进度回归使用真实8MiB文件及至少两个不同UI百分比、完整字节和SHA验证，以较高夹具带宽减少人为等待。SSH 空闲两分钟仍用真实时间，独立场景与拆分后的 Agent 回归按实测耗时分片，保持原功能覆盖。
 
-ACP 取消场景在确认进程退出和工具账本保留 unknown 后，显式要求基线关闭报告 `ToolExecutionUnknown`。夹具只接受该具名类别及仅含此类的聚合，缺少预期失败、清理未确认或存储失败仍阻止重置；原数据库保留为证据，不清除未知围栏。普通场景继续要求关闭成功。
+ACP取消验证工具取消、旧审批拒绝、禁止文件未生成及原进程实际退出；已确认收尾时要求应用正常关闭，不再强行期待旧`execution_unknown`。真实未知副作用仍保留围栏、数据库和具名失败，不能用重置抹掉。
 
-构建等待与耗时汇总均按当前运行对应最新 job 的实际执行时间、产物创建时间及名称前缀定位不可变产物 ID。GitHub 部分重跑会复制成功 job 并重写 ID/run_attempt，但保持原执行时间；因此复用原产物不能只按 attempt 名称匹配，也不允许回退到其它执行周期的产物。仅重跑失败分片或汇总作业时复用其余成功分片的原产物。耗时发现使用 github-script 的只读请求重试，下载使用官方 Action 的 token/REST 路径并保留摘要校验；任一来源失败、产物缺失、过期或重复均阻止汇总。产物选择逻辑回归 `node --test scripts/e2e/resolve-timing-artifacts.test.mjs` 纳入质量作业。
+构建等待与耗时汇总均按当前运行对应最新 job 的实际执行时间、产物创建时间及名称前缀定位不可变产物 ID。GitHub 部分重跑会复制成功 job 并重写 ID/run_attempt，但保持原执行时间；因此复用原产物不能只按 attempt 名称匹配，也不允许回退到其它执行周期的产物。仅重跑失败分片或汇总作业时复用其余成功分片的原产物。耗时发现使用 github-script 的只读请求重试，下载使用官方 Action 的 token/REST 路径并保留摘要校验；任一来源失败、产物缺失、过期或重复均阻止汇总。产物选择逻辑回归 `pnpm test:fast`中的`tests/tooling/ci/logic/timing-artifacts.test.mjs`验证产物选择逻辑。
+
+## 测试重构当前证据（2026-11-08）
+
+源码迁移已完成：`tests/cases/migration.json`记录326份旧来源、86个展开场景及静态资产去向，没有pending来源；来源摘要与替代文件由`pnpm check`核对。完整Agent机制与插件业务浏览器测试归独立插件仓，本体只保留通用Host边界。逐模块实测与首次失败见[历史记录](HISTORY.md#测试重构分模块实测2026-11-08)。映射完整不等于最终门禁通过。
+
+本轮任务证据根为`/home/honus/nexus-task-artifacts/testing-restructure-20261108`；近期运行在`/dev/shm/nexus-testing-20261108`。以下均为本地分组结果，不合并冒充同一轮全量PASS：
+
+| 验证层             | 实际结果与证据目录                                                                                                                                                                                                                     |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 本体快速层         | `fast-final-layout`：111文件268项通过，双worker完整26.41秒；此前内存压力下的2项超时保留在`fast-refactor-final`，隔离及完整复验通过。                                                                                                   |
+| 本体模块层         | `host-modules-final-isolated`：101文件236项通过，双worker357.94秒。                                                                                                                                                                    |
+| 本体浏览器代表链路 | `host-browser-structure-final`：认证、趋势、沙箱SDK、UI独立更新、触屏生命周期共10项通过，1.9分钟；并发内存压力下的测量不作为稳定性能基线。                                                                                             |
+| 本体原生协议       | 各模块结果见历史；`host-native-audit-current`全目录探测曾有12项失败/取消，分别在`native-failures-resume-current`、`upload-enospc-final`、`suspend-lease-cleanup-current`、`modular-protocol-current`修复并复验。最终全量以新CI为准。   |
+| 插件真实Host互操作 | `plugin-interop-complete-current`：54 testcase全部通过，使用准确签包及真实应用、权限与资源收尾。                                                                                                                                       |
+| 插件浏览器         | `plugin-browser-full-after-repairs`：70项中67通过、3失败，12.3分钟；后续`plugin-browser-three-repaired`两项通过、关闭同名App定位失败，`plugin-checkpoint-final`修复后1项通过，13.1秒。保留每轮失败，不把分批结果写成完整70项一次通过。 |
+| MSW协议修正        | `msw-contract-final`：7文件23项通过，3.51秒，使用当前MSW的`onUnhandledFrame`。                                                                                                                                                         |
+| 仓库维护           | `maintenance-final.log`：22项通过，142.8ms；用例已从scripts移入tooling。                                                                                                                                                               |
+
+最终本体`check-final-layout.log`、`build-final-layout.log`和`formatcheck-final-docs.log`通过，插件check/格式、5项Vitest与125项Node测试通过；本体浏览器430项、插件70项发现无错误。仍待同基线远程全量和冷/热耗时回填。3–5分钟是同等8个测试runner下的优化目标，当前未证明达成；自然五分钟认证到期、两分钟SSH空闲和真实弱网/排空不为目标缩短。
 
 ## 数据库迁移验收
 
@@ -50,7 +77,7 @@ ACP 取消场景在确认进程退出和工具账本保留 unknown 后，显式�
 ## 证据与资源管理
 
 - 每轮记录精确源码 SHA、工具链、命令、输出位置、正常与失败范围；首次失败和重试都保留。CI 任务 success 不替代逐项 Reporter 核对，测试 skip 不能算通过。
-- 完整验收包含 Backend、全部 Browser、质量与 Docker smoke；截图更新任务按条件跳过不等于测试场景跳过。仅文档修改执行受影响格式、路径/锚点和 diff 检查，不为文档运行行为测试。
+- 完整验收包含模块、原生协议、两仓浏览器、插件互操作、质量与Docker smoke；截图更新任务按条件跳过不等于测试场景跳过。仅文档修改执行受影响格式、路径/锚点和 diff 检查，不为文档运行行为测试。
 - 真模型效果、真实目标/介质故障、手机真机与模拟 Provider/协议 fixture 分开记录；不能用静态构建或微基准声称端到端通过。
 - 专用环境和精简产物放在明确归属的本地任务目录，保留至用户通知；凭据不进入文档、日志或截图。清理只操作已确认属于本轮的资源，保留数据、未知副作用与收尾证据。
 

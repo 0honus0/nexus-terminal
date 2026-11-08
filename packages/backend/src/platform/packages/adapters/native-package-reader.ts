@@ -1,11 +1,24 @@
 import { createHash } from 'node:crypto';
-import { gunzip } from 'node:zlib';
+import { constants as bufferConstants } from 'node:buffer';
+import { gunzip, zstdDecompress } from 'node:zlib';
 import { promisify } from 'node:util';
 import { Parser } from 'tar';
 import { PackageFailure } from '../package-reader.js';
-import type { PackageReader, ArchiveFile } from '../package-reader.js';
+import type { PackageReader, ArchiveFile, ArchiveReadLimits } from '../package-reader.js';
 
 const inflate = promisify(gunzip);
+
+const inflateZstd = promisify(zstdDecompress);
+
+function compression(bytes: Uint8Array): 'gzip' | 'zstd' | null {
+	if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
+		return 'gzip';
+	}
+	if (bytes[0] === 0x28 && bytes[1] === 0xb5 && bytes[2] === 0x2f && bytes[3] === 0xfd) {
+		return 'zstd';
+	}
+	return null;
+}
 
 function safePath(raw: string, directory: boolean): string {
 	const path = raw.startsWith('./') ? raw.slice(2) : raw;
@@ -18,44 +31,43 @@ function safePath(raw: string, directory: boolean): string {
 		canonical.startsWith('/') ||
 		canonical.includes('\\') ||
 		/[\u0000-\u001f\u007f]/u.test(canonical) ||
-		canonical.length > 4096 ||
 		/^[A-Za-z]:/u.test(canonical)
 	) {
 		throw new PackageFailure('invalid_archive');
 	}
 	const segments = canonical.split('/');
-	if (segments.length > 32 || segments.some((part) => part === '' || part === '.' || part === '..')) {
+	if (segments.some((part) => part === '' || part === '.' || part === '..')) {
 		throw new PackageFailure('invalid_archive');
 	}
 	return canonical;
 }
 
 export class NativePackageReader implements PackageReader {
-	async read(
-		bytes: Uint8Array,
-		limits: { maxEntries: number; maxExpandedBytes: number; maxFileBytes: number },
-	): Promise<ArchiveFile[]> {
+	async read(bytes: Uint8Array, limits: ArchiveReadLimits): Promise<ArchiveFile[]> {
 		if (
-			bytes.byteLength > 50 * 1024 * 1024 ||
+			!Number.isSafeInteger(limits.maxArchiveBytes) ||
+			limits.maxArchiveBytes < 1 ||
+			bytes.byteLength > limits.maxArchiveBytes ||
 			!bytes.byteLength ||
 			!Number.isSafeInteger(limits.maxEntries) ||
 			limits.maxEntries < 1 ||
-			limits.maxEntries > 10000 ||
 			!Number.isSafeInteger(limits.maxExpandedBytes) ||
 			limits.maxExpandedBytes < 1 ||
-			limits.maxExpandedBytes > 200 * 1024 * 1024 ||
 			!Number.isSafeInteger(limits.maxFileBytes) ||
-			limits.maxFileBytes < 1 ||
-			limits.maxFileBytes > 50 * 1024 * 1024
+			limits.maxFileBytes < 1
 		) {
 			throw new PackageFailure('limit_exceeded');
 		}
 		// Bound the entire TAR representation, including metadata and padding, before parsing entries.
 		const ceiling = limits.maxExpandedBytes + limits.maxEntries * 1024 + 1024 * 1024;
+		if (!Number.isSafeInteger(ceiling) || ceiling > bufferConstants.MAX_LENGTH) {
+			throw new PackageFailure('limit_exceeded');
+		}
 		let archive: Uint8Array = bytes;
-		if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
+		const encoding = compression(bytes);
+		if (encoding) {
 			try {
-				archive = await inflate(bytes, { maxOutputLength: ceiling });
+				archive = await (encoding === 'gzip' ? inflate : inflateZstd)(bytes, { maxOutputLength: ceiling });
 			} catch (cause) {
 				const tooLarge =
 					cause !== null &&
@@ -68,8 +80,12 @@ export class NativePackageReader implements PackageReader {
 		if (archive.byteLength > ceiling) {
 			throw new PackageFailure('limit_exceeded');
 		}
+		// TAR may auto-detect another compressed layer; that would bypass the measured container budget.
+		if (compression(archive)) {
+			throw new PackageFailure('invalid_archive');
+		}
 		return new Promise((resolve, reject) => {
-			const parser = new Parser({ strict: true, maxMetaEntrySize: 65536, maxDecompressionRatio: 1000 });
+			const parser = new Parser({ strict: true, maxMetaEntrySize: ceiling, zstd: false, brotli: false });
 			const paths = new Map<string, 'file' | 'directory'>();
 			const ancestors = new Set<string>();
 			const files: ArchiveFile[] = [];

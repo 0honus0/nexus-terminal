@@ -9,7 +9,7 @@ import {
 } from '../../../packages/shared/src/operations/http-codec';
 import type { NotificationCreateRequest } from '../../../packages/shared/src/operations/notifications/http';
 import type { NotificationSettingView } from '../../../packages/shared/src/operations/notifications/model';
-import { E2E_URLS } from './test-env';
+import { E2E_URLS } from '../../support/protocols/test-environment';
 
 export const NOTIFICATIONS_PATH = '/api/v1/settings/notifications';
 

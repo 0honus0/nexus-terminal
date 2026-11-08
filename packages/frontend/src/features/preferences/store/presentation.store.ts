@@ -60,16 +60,16 @@ export const usePresentationStore = defineStore('presentation', () => {
 			try {
 				const value = await presentationApi.load(signal);
 				if (signal.aborted) throw new PreferenceRequestFailure('cancelled', 'not_dispatched');
-				snapshot.value = value;
-				if (recover && blocked.value && recoveryRevision !== failureRevision)
+				if (recover && recoveryRevision !== failureRevision)
 					throw new PreferenceRequestFailure('refresh_required', 'not_dispatched');
+				snapshot.value = value;
 				if (recover && recoveryRevision === failureRevision) {
 					blocked.value = false;
 					error.value = null;
 				}
 				return value;
 			} catch (cause) {
-				if (!signal.aborted) error.value = cause;
+				if (!signal.aborted && recoveryRevision === failureRevision) error.value = cause;
 				throw cause;
 			}
 		});

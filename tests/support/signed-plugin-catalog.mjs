@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { expectStatus } from '../backend/remote/openssh-fixture.mjs';
+import { expectStatus } from './protocols/openssh-fixture.mjs';
 
 /** Serve exact signed test bytes through the ordinary repository and staging path. */
 export async function withSignedPluginCatalog(api, packages, work) {

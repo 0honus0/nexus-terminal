@@ -41,12 +41,11 @@ export function modelSdkFailure(error: unknown, signal: AbortSignal): ModelNetwo
 		return failure('response_invalid');
 	}
 	let cause: unknown = error;
-	for (let depth = 0; depth < 6; depth++) {
+	const seen = new Set<unknown>();
+	while (cause !== null && typeof cause === 'object' && !seen.has(cause)) {
+		seen.add(cause);
 		if (cause instanceof ModelNetworkFailure) {
 			return cause;
-		}
-		if (cause === null || typeof cause !== 'object') {
-			break;
 		}
 		const code = 'code' in cause ? cause.code : undefined;
 		if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') {

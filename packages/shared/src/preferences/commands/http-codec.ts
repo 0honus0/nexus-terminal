@@ -24,7 +24,6 @@ import {
 	COMMAND_MAX_TAGS,
 	COMMAND_MAX_VARIABLES,
 	COMMAND_VARIABLE_MAX_BYTES,
-	COMMAND_BATCH_MAX_ENTRIES,
 	COMMAND_REQUEST_MAX_BYTES,
 	COMMAND_RESPONSE_MAX_BYTES,
 	COMMAND_PAGE_MAX_ENTRIES,
@@ -184,7 +183,7 @@ export function readCommandUntaggedGroupDelete(input: unknown): CommandUntaggedG
 export function readCommandAssign(input: unknown): CommandAssignTagRequest {
 	budget(input, COMMAND_REQUEST_MAX_BYTES);
 	const value = object(input, ['commands', 'tagId']);
-	if (!Array.isArray(value.commands) || !value.commands.length || value.commands.length > COMMAND_BATCH_MAX_ENTRIES) {
+	if (!Array.isArray(value.commands) || !value.commands.length) {
 		throw new InvalidCommandPayload();
 	}
 	const commands = value.commands.map((raw: unknown) => {
@@ -328,7 +327,7 @@ export function readCommandDelete(input: unknown): CommandDeleteResponse {
 
 export function readCommandAssignResponse(input: unknown): CommandAssignTagResponse {
 	const value = object(input, ['count']);
-	return { count: integer(value.count, 0, 1000) };
+	return { count: integer(value.count, 0) };
 }
 
 export function readCommandError(input: unknown): CommandErrorResponse {

@@ -1,8 +1,0 @@
-{
-  "name": "isolated-gateway-502",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "test": "node verify.mjs"
-  }
-}

@@ -4,7 +4,6 @@ import {
 	COMMAND_MAX_TAGS,
 	COMMAND_MAX_VARIABLES,
 	COMMAND_VARIABLE_MAX_BYTES,
-	COMMAND_BATCH_MAX_ENTRIES,
 } from '@nexus-terminal/shared/preferences/commands/values';
 import type { CommandTask, CommandInput } from './model/command-types.js';
 import { CommandFailure } from '../command-failure.js';
@@ -92,11 +91,7 @@ export function validateCommandTask(task: CommandTask): void {
 			break;
 		case 'assign_tag':
 			id(task.tagId);
-			if (
-				!task.commands.length ||
-				task.commands.length > COMMAND_BATCH_MAX_ENTRIES ||
-				new Set(task.commands.map((row) => row.id)).size !== task.commands.length
-			) {
+			if (!task.commands.length || new Set(task.commands.map((row) => row.id)).size !== task.commands.length) {
 				throw new CommandFailure('invalid_input');
 			}
 			for (const row of task.commands) {

@@ -3,6 +3,7 @@ import { mock } from 'node:test';
 import { randomBytes } from 'node:crypto';
 import { mkdtemp, rm, mkdir, rename } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
+import { prepareDatabase as prepareMutationDatabase } from '../../support/http/seed-mutations.mjs';
 
 // Load the built entry; static API types come from its source, not generated JavaScript.
 const applicationEntry = '../../../packages/backend/dist/bootstrap/create-app.js';
@@ -43,6 +44,7 @@ let resetting = null;
 let shutdown = null;
 let failed = false;
 let clockEnabled = false;
+let preserveDirectory = false;
 
 function restoreClock() {
 	if (!clockEnabled) return;
@@ -83,7 +85,8 @@ function failureEvidence(cause, depth = 0) {
 
 /** @param {'execution_unknown' | undefined} expectedShutdown */
 async function closeApplication(expectedShutdown) {
-	let retainEvidence = false;
+	let retainEvidence = preserveDirectory;
+	let executionUnknown = false;
 	if (application) {
 		// Failed cleanup keeps the owner and its files; a new baseline must not hide it.
 		try {
@@ -91,11 +94,12 @@ async function closeApplication(expectedShutdown) {
 		} catch (error) {
 			if (expectedShutdown !== 'execution_unknown' || !onlyExecutionUnknown(error)) throw error;
 			retainEvidence = true;
+			executionUnknown = true;
 			process.stderr.write(
 				'E2E expected execution uncertainty: ' + JSON.stringify(failureEvidence(error)) + '\n',
 			);
 		}
-		if (expectedShutdown && !retainEvidence) throw new Error('Expected execution uncertainty was not reported');
+		if (expectedShutdown && !executionUnknown) throw new Error('Expected execution uncertainty was not reported');
 		application = null;
 	}
 	// Restore only after the original application has successfully released its resources.
@@ -111,6 +115,7 @@ async function closeApplication(expectedShutdown) {
 			await rm(directory, { recursive: true, force: true });
 		}
 		directory = null;
+		preserveDirectory = false;
 	}
 }
 
@@ -121,15 +126,18 @@ function onlyExecutionUnknown(error) {
 	return error instanceof AggregateError && error.errors.length > 0 && error.errors.every(onlyExecutionUnknown);
 }
 
-/** @param {'seed' | 'empty'} mode @param {'execution_unknown' | undefined} expectedShutdown */
+/** @param {'seed' | 'empty' | 'mutation-recovery'} mode @param {'execution_unknown' | undefined} expectedShutdown */
 async function resetApplication(mode, expectedShutdown) {
 	await closeApplication(expectedShutdown);
 	if (shutdown) return;
 	await mkdir(dataRoot, { recursive: true });
 	directory = await mkdtemp(join(dataRoot, 'backend-'));
 	encryptionKey = randomBytes(32);
+	if (mode === 'mutation-recovery') {
+		await prepareMutationDatabase(join(directory, 'nexus-terminal.db'), encryptionKey);
+	}
 	await openApplication();
-	if (mode === 'seed') {
+	if (mode !== 'empty') {
 		const response = await fetch('http://127.0.0.1:' + backendPort + '/api/v1/auth/setup', {
 			method: 'POST',
 			// This loopback request represents the trusted frontend proxy. Fetch may
@@ -189,7 +197,7 @@ async function restartApplication() {
 	if (!shutdown) await openApplication();
 }
 
-/** @param {'seed' | 'empty' | 'restart'} mode @param {'execution_unknown' | undefined} expectedShutdown */
+/** @param {'seed' | 'empty' | 'mutation-recovery' | 'restart'} mode @param {'execution_unknown' | undefined} expectedShutdown */
 function startReset(mode, expectedShutdown) {
 	const task = mode === 'restart' ? restartApplication() : resetApplication(mode, expectedShutdown);
 	resetting = task;
@@ -231,7 +239,10 @@ function resetMode(value) {
 		Object.keys(value).some((key) => key !== 'mode' && key !== 'expectedShutdown') ||
 		!('mode' in value) ||
 		('expectedShutdown' in value && (value.expectedShutdown !== 'execution_unknown' || value.mode === 'restart')) ||
-		(value.mode !== 'empty' && value.mode !== 'seed' && value.mode !== 'restart')
+		(value.mode !== 'empty' &&
+			value.mode !== 'seed' &&
+			value.mode !== 'mutation-recovery' &&
+			value.mode !== 'restart')
 	)
 		return null;
 	return value.mode;
@@ -240,6 +251,7 @@ function resetMode(value) {
 const control = createServer((request, response) => {
 	void handleControl(request, response).catch((cause) => {
 		failed = true;
+		preserveDirectory = true;
 		process.stderr.write('E2E baseline failed: ' + JSON.stringify(failureEvidence(cause)) + '\n');
 		if (!response.headersSent) response.writeHead(500, { 'Content-Type': 'application/json' });
 		response.end(JSON.stringify({ code: 'baseline_failed' }));
@@ -256,12 +268,20 @@ async function handleControl(request, response) {
 		return;
 	}
 	if (
-		(request.url !== '/reset' && request.url !== '/restart' && request.url !== '/clock') ||
+		(request.url !== '/reset' &&
+			request.url !== '/restart' &&
+			request.url !== '/clock' &&
+			request.url !== '/retain') ||
 		request.method !== 'POST' ||
 		request.headers['x-nexus-e2e-control'] !== controlToken ||
 		request.headers.origin !== undefined
 	) {
 		response.writeHead(403).end();
+		return;
+	}
+	if (request.url === '/retain') {
+		preserveDirectory = true;
+		response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ retained: true }));
 		return;
 	}
 	if (shutdown || failed || resetting) {

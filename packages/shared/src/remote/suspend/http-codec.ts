@@ -5,7 +5,6 @@ import {
 	SUSPENDED_OWNERSHIP_STATES,
 	SUSPENDED_REMOVAL_DISPOSITIONS,
 	SUSPENDED_HTTP_ERROR_CODES,
-	SUSPENDED_CATALOG_MAX_ENTRIES,
 	SUSPENDED_CATALOG_MAX_JSON_BYTES,
 	SUSPENDED_MANAGEMENT_MAX_JSON_BYTES,
 	WORKSPACE_SUSPEND_MAX_NAME_CHARACTERS,
@@ -151,7 +150,7 @@ function view(value: unknown): SuspendedSessionView {
 
 export function readSuspendedSessionCatalog(value: unknown): SuspendedSessionView[] {
 	budget(value, SUSPENDED_CATALOG_MAX_JSON_BYTES);
-	if (!Array.isArray(value) || value.length > SUSPENDED_CATALOG_MAX_ENTRIES) {
+	if (!Array.isArray(value)) {
 		return reject();
 	}
 	const result = value.map(view);

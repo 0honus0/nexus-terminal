@@ -1,4 +1,5 @@
 import {
+	AGENT_PLUGIN_MAX_ARCHIVE_BYTES,
 	AGENT_PLUGIN_MAX_MANIFEST_BYTES,
 	AGENT_PLUGIN_MAX_FILE_LIST_BYTES,
 	AGENT_PLUGIN_MAX_PACKAGE_ENTRIES,
@@ -35,6 +36,7 @@ export class NativePluginPackageDecoder implements PluginPackageDecoder {
 	async decode(bytes: Uint8Array, resolveKey: (id: string) => string | null): Promise<DecodedPluginPackage> {
 		try {
 			const files = await this.reader.read(bytes, {
+				maxArchiveBytes: AGENT_PLUGIN_MAX_ARCHIVE_BYTES,
 				maxEntries: AGENT_PLUGIN_MAX_PACKAGE_ENTRIES,
 				maxExpandedBytes: AGENT_PLUGIN_MAX_EXPANDED_BYTES,
 				maxFileBytes: AGENT_PLUGIN_MAX_PACKAGE_FILE_BYTES,

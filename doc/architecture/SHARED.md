@@ -334,7 +334,7 @@ remote/transfers/server-values唯一持有输入方法auto/rsync/scp、实际方
 
 `remote/suspend/events` 唯一拥有独立目录流的 snapshot/heartbeat 完整联合、严格 unknown 解码和完整帧预算（目录 1 MiB + 1 KiB）。snapshot 含连接内单调安全整数 revision，sessions 复用原目录严格解码；后端 WS 与前端 stream 共同消费并逐字段转换，不包含 SSH 字节、凭据或订阅者身份。重连版本基线只归当前 socket，不跨连接比较。
 
-remote/suspend的http/http-codec由Backend五管理HTTP与正式Frontend API共同消费，完整目录/命名/固定成功回执与有限安全失败均从unknown严格解码。values持64项/1MiB目录、4KiB管理正文及128MiB渲染后日志预算，私有32/64准入和日志窗口仍归Backend owner。目录ISO日期、Unix毫秒租约与attachment关联分别验证；输入名称规范化，响应名称必须已规范。WS请求/响应maps、严格workspace-result-codec和有限autoTerminated/revoked原因由Backend与正式WorkspaceSocket/Session/terminal消费者共同消费；原始snapshot 4MiB、完整JSON 24MiB+16KiB、history页256KiB分别校验。挂起回执复用基础附件字段，不虚构普通回放replayedBytes；Unix秒连接时间只在前端mapper转毫秒。独立ACK/串行续租、unknown与实际资源owner归Frontend/Backend，Shared不拥有socket或恢复政策。
+remote/suspend的http/http-codec由Backend五管理HTTP与正式Frontend API共同消费，完整目录/命名/固定成功回执与有限安全失败均从unknown严格解码。values持1MiB完整目录、4KiB管理正文及128MiB渲染后日志预算；目录不另设64项数量门槛，私有32/64准入和日志窗口仍归Backend owner。目录ISO日期、Unix毫秒租约与attachment关联分别验证；输入名称规范化，响应名称必须已规范。WS请求/响应maps、严格workspace-result-codec和有限autoTerminated/revoked原因由Backend与正式WorkspaceSocket/Session/terminal消费者共同消费；原始snapshot 4MiB、完整JSON 24MiB+16KiB、history页256KiB分别校验。挂起回执复用基础附件字段，不虚构普通回放replayedBytes；Unix秒连接时间只在前端mapper转毫秒。独立ACK/串行续租、unknown与实际资源owner归Frontend/Backend，Shared不拥有socket或恢复政策。
 
 ### Provider 管理消费者
 

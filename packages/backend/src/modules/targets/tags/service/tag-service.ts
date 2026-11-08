@@ -1,5 +1,4 @@
 import { validateTagName } from '../tag-rules.js';
-import { TARGET_TAG_CONNECTION_MAX_ITEMS } from '@nexus-terminal/shared/targets/tags/values';
 import { TargetFailure } from '../../target-failure.js';
 import { validateTargetId as validateId } from '../../target-validation.js';
 import type { TagModel } from '../model/tag-model.js';
@@ -7,11 +6,7 @@ import type { TagConnections, TagSnapshot, TagMutation } from '../model/tag-type
 
 function normalizeConnections(command: TagConnections, allowEmpty: boolean): TagConnections {
 	validateId(command.tagId);
-	if (
-		!Array.isArray(command.connectionIds) ||
-		command.connectionIds.length > TARGET_TAG_CONNECTION_MAX_ITEMS ||
-		(!allowEmpty && command.connectionIds.length === 0)
-	) {
+	if (!Array.isArray(command.connectionIds) || (!allowEmpty && command.connectionIds.length === 0)) {
 		throw new TargetFailure('invalid_input');
 	}
 	command.connectionIds.forEach(validateId);

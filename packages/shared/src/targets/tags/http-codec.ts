@@ -2,7 +2,7 @@ import type { TargetTagView, TargetTagMutation } from './model.js';
 import type { TargetTagCreateRequest, TargetTagRenameRequest } from './http.js';
 import { targetObject, targetText, targetNumber, readTargetMutation } from '../http.js';
 import { targetArray, InvalidTargetPayload } from '../http.js';
-import { TARGET_TAG_CONNECTION_MAX_ITEMS, TARGET_TAG_NAME_MAX_BYTES } from './values.js';
+import { TARGET_TAG_NAME_MAX_BYTES } from './values.js';
 import type { TargetTagConnectionsRequest, TargetTagConnectionsResponse } from './http.js';
 import { TARGET_MANAGEMENT_MAX_ITEMS } from '../values.js';
 
@@ -44,7 +44,10 @@ export function readTagMutation(input: unknown): TargetTagMutation {
 
 /** Duplicates are valid; the application owns set normalization. */
 export function readTagConnectionIds(input: unknown): number[] {
-	return targetArray(input, (id) => targetNumber(id), TARGET_TAG_CONNECTION_MAX_ITEMS);
+	if (!Array.isArray(input)) {
+		throw new InvalidTargetPayload();
+	}
+	return input.map((id: unknown) => targetNumber(id));
 }
 
 export function readTagConnectionsRequest(input: unknown): TargetTagConnectionsRequest {

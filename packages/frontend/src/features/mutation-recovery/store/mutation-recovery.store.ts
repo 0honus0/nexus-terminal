@@ -100,7 +100,7 @@ export const useMutationRecoveryStore = defineStore('mutation-recovery', () => {
 					error.value = null;
 				}
 			} catch (cause) {
-				if (!owner.aborted && !active.aborted) {
+				if (!owner.aborted && !active.aborted && recoveryRevision === failureRevision) {
 					error.value = cause;
 					blocked.value = true;
 					failureRevision++;
@@ -121,11 +121,14 @@ export const useMutationRecoveryStore = defineStore('mutation-recovery', () => {
 			busy.value = true;
 			try {
 				const value = await mutationApi.get(id, active);
-				if (!active.aborted && generation === selection) {
+				if (active.aborted) {
+					throw new MutationRequestFailure('cancelled', 'not_dispatched');
+				}
+				if (generation === selection) {
 					selected.value = value;
 				}
 			} catch (cause) {
-				if (!active.aborted) {
+				if (!active.aborted && generation === selection) {
 					error.value = cause;
 				}
 				throw cause;

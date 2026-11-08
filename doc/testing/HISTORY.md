@@ -1377,7 +1377,7 @@ Node 26.13.0 / pnpm 12.16.1：`pnpm check`、`pnpm build`、E2E 测试客户端�
 | 静态与构建           | 最终根 `pnpm run check` 通过（`check-delivery.log`），补充回归入口重新完成双端生产构建和 E2E clients 构建（`e2e-browser.log`）；`pnpm run format:all:check` 通过（`format-delivery.log`），`git diff --check` 通过；最后仅改文档并复查受影响 Markdown。 |
 | 未验范围             | 尚未提交推送，未触发本轮 GitHub Actions、全部浏览器分片或 Docker smoke；不替代真实手机、外网及生产升级验收。                                                                                                                                            |
 
-补充真实浏览器远程桌面专项 `specs/ui/rdp-remoteapp-fullscreen.spec.ts` 5/5 通过，无重试，26.2 秒；证据 `e2e-desktop.log` 和独立 report/results。覆盖 RDP 设置、剪贴板、全屏、120 DPI、窗口交互、重连时文件批次/音频资源清理，以及 VNC 连接、输入、剪贴板与窗口交互。该正式流程通过不替代独立旧 VNC 夹具失败的根因定位。
+补充真实浏览器远程桌面专项 `specs/remote-desktop/rdp-remoteapp-fullscreen.spec.ts` 5/5 通过，无重试，26.2 秒；证据 `e2e-desktop.log` 和独立 report/results。覆盖 RDP 设置、剪贴板、全屏、120 DPI、窗口交互、重连时文件批次/音频资源清理，以及 VNC 连接、输入、剪贴板与窗口交互。该正式流程通过不替代独立旧 VNC 夹具失败的根因定位。
 
 首轮正式后端组为 143/146：Agent 文件迁移测试在活跃数据库上准备旧数据导致锁冲突；RDP 用户夹具和挂起日志夹具发现历史实例目录。均保留首次日志 `e2e-backend.log`，修复离线种子与运行目录隔离后完整重跑通过。旧工具图片发现、批量文件参数、Job 故障注入、Passkey 数据库路径及备份表数等消费者同步当前契约；既有有效断言保留。初始全目录 Node 探测包含未更新的独立夹具和缺少正式 runner 配置的测试，其失败日志 `backend-regression.log` 不属于通过证据；正式后端通过不能宣称所有独立 Node 测试均通过。
 
@@ -2167,3 +2167,269 @@ Node 26.13.0/pnpm 12.16.1；`build.log` 与 `browser.log` 包含 Shared、Backen
 [发布42450721459](https://github.com/0honus0/nexus-terminal/actions/runs/42450721459)成功，来源`0cb0c252e13540517802a369dacc845f2258b389`。相对被测545b2e47只增加CI自动更新的`scripts/e2e/duration-estimates.json`；生产依赖审计与镜像构建推送成功。`ghcr.io/0honus0/nexus-terminal:dev`与`sha-0cb0c252e135`同为`sha256:c39e574678c3139a0cf71b0fea9863efa2c72cf68a3357c7cde28b8c18b54fa1`。唯一产品平台linux/amd64的manifest为`sha256:d4af10db9a17eda469a3cce43debd845844efae2c3296b1f742ea76e8e1230e6`，config为`sha256:1d81fa766798593d4308a4323d4d0dbcd019b73e94424b14b69243a48c1c7239`；只读验证真实字节摘要、平台与OCI revision/source，未拉取完整镜像。证据在本轮delivery-20261108/publication的image-publish-run.json、image-verification.json及日志。
 
 最终代码、迁移、正式消费者及文档已同步，源码与架构边界审核已完成。官方插件源码550e4e0b的Validate42394503906与v2.0.2发布再次只读确认；本批没有公开SDK或插件实现变更，不重复发布插件。当前SDK4与非Agent数据保留，旧Agent历史按用户授权在升级迁移时清除；正常UI不变。首次失败、取消记录和指定CDP现场均保留，未部署生产；真实设备、模型效果及介质/负载等未验边界仍按PLAN维护。
+
+## 测试重构分模块实测（2026-11-08）
+
+本体基线`9788baa2`及插件仓`31173d70`上的未提交工作区，Node26.13.0/pnpm12.16.1；原生完整报告集中`/home/honus/nexus-task-artifacts/testing-restructure-20261108`。每次生产修复保留修前失败，修后仅声明实际选定范围。
+
+| 范围                     | 实际结果与原生证据                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 新快速层首批             | `fast-after-peer.log`：24文件80项，3.68秒，含Shared、Registry、HTTP client、状态/组件及真实Workspace WS；后续新增模块需最终再跑。                                                                                                                                                                                                                                                                |
+| 插件仓新入口             | `plugins-complete.log`：108项、无取消/跳过，3.09秒；`plugins-check-after.log`完整lint/格式/类型检查通过。旧框架命名/入口已按包归位，完整候选Host互操作尚未接通。                                                                                                                                                                                                                                 |
+| 监控生命周期             | `status-before`保留启动失败后不能重试的失败；`status-after-2`：3文件7项，0.64秒。虚拟时钟验证30秒宽限及迟到启动，真实WS验证原绑定、失败停止与显式重试。                                                                                                                                                                                                                                          |
+| 传输状态与操作           | `server-transfers`保留原API/Store断言；`transfer-mutations-before`复现取消期间移除被吞；`transfer-mutations-after`：2文件3项，1.06秒，含认证重置后的禁止派发。                                                                                                                                                                                                                                   |
+| Settings Surface错误矩阵 | `host-bridge`：4项、1.04秒，真实生产bridge/MessagePort与MSW HTTP，保留原键和unknown围栏；浏览器iframe隔离仍由signed sandbox专项负责。                                                                                                                                                                                                                                                            |
+| 当前Backend签包安全      | `backend-build.log`完成当前源码构建，`package-security.xml`：8项，3.21秒，覆盖验签、篡改、归档、不可变版本、资产授权与撤销。后续归档代码变更需要重建并重新运行。                                                                                                                                                                                                                                 |
+| 归档限制/容器            | `package-container-before`保留无依据路径/元数据门槛及嵌套压缩失败，`package-container-after`：5项、约0.22秒，保留调用方预算、完整容器计量和路径安全。                                                                                                                                                                                                                                            |
+| Host设置编辑器           | `settings-editors-worker-2`：执行与Provider两文件2项共4.10秒，保留真实HTTP/SQLite、CAS/凭据意图、模型发现与SSE、未知写入/身份围栏及组件断言。后端在独立Node Worker；此前同进程jsdom污染SDK的失败保留，不改生产安全策略。Registry组件`registry-editor-after`1项2.01秒，真实HTTP另归`current-registry-package.xml`。                                                                               |
+| 文档快捷键               | `document-keyboard-2`：1项、13个独有断言，1.29秒；jsdom仅供可见表面和事件归属，真实几何、原生快捷键与编辑器引擎仍由文件浏览器用例负责。                                                                                                                                                                                                                                                          |
+| 前端SDK请求与流          | `sdk-port-2`：6项、0.25秒；取消前后、乱序48请求、16独立订阅、应用后ACK及终态退订保留，源码直接测试不重复esbuild。签包与真实MessagePort隔离另有原生专项。                                                                                                                                                                                                                                         |
+| 挂起目录与面板           | `suspended-catalog-final`：Shared及组件两文件4项，1.26秒；原35余项API/状态/WS/KeepAlive确认、注销和日志取消断言保留，目录只受完整编码预算约束。                                                                                                                                                                                                                                                  |
+| 工作区挂起协议           | `workspace-suspend-first`：Shared与真实WS两文件2项，2.06秒；保留全部ACK、身份/基线、租约、历史、未知提交和producer断言，不启动Chromium。                                                                                                                                                                                                                                                         |
+| 服务器概览               | `overview-after`：3文件3项，2.80秒，含原18组Shared向量、实际HTTP授权/采样/注销和全部controller/语言断言。`overview-worker-before`复现空闲worker额外等待200ms，已删除该人为间隔；并发调度、完整目标与取消围栏保留。                                                                                                                                                                               |
+| 文件真实I/O              | `workspace-files-second`：1项6.54秒，保留所有上传/冲突、三种归档、密码ZIP、跨工作区复制、下载Range/HEAD/ZIP、搜索/元数据、编码编辑和关闭断言，以及14组独立磁盘/ZIP核验。首次失败发现APIRequestContext会把畸形JSON自动转成字符串，夹具现按原字节派发；未改产品错误契约。                                                                                                                          |
+| 工作区与编辑器状态       | `workspace-session-first`：4文件4项1.51秒；真实WS状态/Registry与全部producer断言、Shared向量、文档/预览迟到读写、逐视图确认及KeepAlive/注销取消全部保留。                                                                                                                                                                                                                                        |
+| 真实SSH工作区            | `workspace-ssh-first`：两文件2项6.26秒，普通PTY重连与挂起/接管均保留原断言，包括同PID、目录、离线输出、实际尺寸、NXW1历史及真实关闭。独立Node应用/SQLite＋HTTP/WS＋OpenSSH，不用Chromium；自然离线输出时序保持。                                                                                                                                                                                 |
+| RDP证书真实探测          | `certificate-service-startup.xml`：1项1.06秒，实际xrdp、3次证书一致性、取消、独立进程正常退出和服务正常关闭；正式用例复用既有桌面集成服务，不再由Playwright包装。                                                                                                                                                                                                                                |
+| 早期快速层               | `fast-current`：40文件117项全部通过，4.72秒；此为早期迁移基线。                                                                                                                                                                                                                                                                                                                                  |
+| 桌面应用owner            | `desktop-owner`：3项、0.34秒；真实Service/Model和受控技术peer，使用Vitest时钟验证原15/30秒期限前1ms与到期、晚完成、清理及准入。无真实网络，原真实票据过期专项仍保留。                                                                                                                                                                                                                            |
+| 模型失败归因             | `model-failure-before/after`：40层cause复现原6层门槛导致结构化故障、DNS/TLS/超时误分类；去掉固定层数并以已访问集合停止环。5项修后通过，0.26秒。                                                                                                                                                                                                                                                  |
+| 较早切片快速层           | `fast-current-slice`：56文件139项通过，6.95秒；包含Pinia4、桌面协议/客户端/控制器/剪贴板及监控设置矩阵。                                                                                                                                                                                                                                                                                         |
+| 较早切片前端真实集成     | `frontend-integration-current-slice`：9文件9项通过，20.42秒；实际HTTP/SQLite、普通/挂起/文件SSH、Docker观测及设置/重启全部通过，含框架准备与收尾。                                                                                                                                                                                                                                               |
+| SSH/Docker观测           | `observation-ssh-after`：1项17.98秒，真实同主机身份回退/缓存/采样、Docker列表/标签/统计与四动作及独立Daemon移除确认。原即时停采断言与已确认30秒宽限不符；保留宽限内真实采样，并在销毁后验证原3.5秒停止交付，精确宽限边界仍归虚拟时钟用例。                                                                                                                                                       |
+| 桌面低层拆分             | `desktop-split-msw`：4文件8项，0.668秒，原8个严格协议向量、5组客户端回执/流损坏与未知结果、5个控制器代次断言及2个剪贴板断言全部保留；原生触摸/画布/实际RDP/VNC与Modal仍待归位。                                                                                                                                                                                                                  |
+| 监控配置与重启           | `monitoring-split-attached`：4文件4项3.70秒；原9组Shared向量、22个控制器断言、21个三入口DOM/Toast/语言断言和真实CAS/无关政策保持/SQLite重启全部保留。夹具真实登录后显式接入认证生命周期；旧广域fetch替身不再向无关偏好/日志请求返回错误配置结构。                                                                                                                                                |
+| 原生图表与销毁回归       | `status-chart-browser`/`status-chart-diagnostic`首次复现vue-chartjs销毁后排队更新访问空画布；`status-chart-fixed`：1项0.953秒（正文153ms），真实Canvas保留时间戳、零值和非零尺寸、正常销毁且零pageerror。npm最新版5.3.4及当日上游main仍有问题，ESM/CJS补丁只在更新前复核原实例，退役条件见DEPLOYMENT。                                                                                           |
+| 新协议服务位置           | `model-repository-services-after.xml`：3项0.645秒，实际模型鉴权/模型目录/SSE、重建签包/目录/下载摘要、部署/重置和全部正常信号退出；初次模型探测缺失夹具必需参数的422保留，不放宽模型端契约。                                                                                                                                                                                                     |
+| 通知状态与组件           | `notifications-after`：4文件6项4.95秒，保留三通道秘密存在性/keep/clear、原CAS、真实已提交但回执丢失、早恢复围栏、排队取消、Webhook投递与分页、表单/Toast/三语及身份缓存清空。首次组件失败为夹具误用登录API结果，已改用真实AuthStore。                                                                                                                                                            |
+| 通知真实协议             | `notifications-native-first.xml`：22项2.49秒，实际HTTP/Telegram/SMTP、重启、凭据与未知投递/关闭通过；未改产品投递期限或重试政策。                                                                                                                                                                                                                                                                |
+| 外观状态与故障           | `appearance-first`保留早恢复覆盖快照/草稿和取消后继续派发读取的生产失败；`appearance-buffered-fixed`：两文件5项7.91秒，实际HTTP/SQLite、默认值/预览/主题与Unicode空HTML/CAS、丢回执与显式恢复、异常协议和身份重置通过。夹具首次错误使用Request URL、把空200变成无正文均已修正；不是产品HTML数据错误。                                                                                            |
+| 外观冲突组件             | `appearance-components`：1项3.55秒，实际面板保留脏草稿及原CAS，拒绝覆盖后由全局已注册重新读取源核对并丢弃旧草稿；普通冲突矩阵不留在浏览器层重复。                                                                                                                                                                                                                                                |
+| 外观后端协议             | `appearance-native-first.xml`：20项2.55秒，真实外观/背景字节、媒体拒绝、HTML/主题库、事务引用与二次重启通过。                                                                                                                                                                                                                                                                                    |
+| 当前签包安全复验         | `package-security-current.xml`：8项2.86秒，当前成品签包/篡改/资产授权与撤销通过；不是全部旧原生后端通过证据。                                                                                                                                                                                                                                                                                    |
+| 恢复声明与故障矩阵       | `mutation-recovery-complete`：4文件6项4.26秒，22条真实Adapter声明、20+2分页、原CAS/独立释放、真实提交丢回执与一次写、早读围栏、私有字段/错身份拒绝、三语与重置取消均保留。独立Node Worker在原应用完全关闭后读SQLite核对单份证据；首次生产故障与夹具URL失败保留。                                                                                                                                 |
+| 外观/恢复原生浏览器      | `frontend-new-ui-current`：4项15.69秒（含官方服务准备/关闭），外观设置与实际文件/字节、正常证据/独立解除及实际后端重启、原生Canvas时间戳与零值全过。正文分别1.325/6.409/3.153/0.165秒；异常输入矩阵下沉，页面错误检查保留。                                                                                                                                                                      |
+| 共享HTTP夹具后复验       | `fast-current-recovery`：58文件142项5.86秒；`frontend-integration-recovery-current`：18文件23项20.83秒，覆盖当前所有前端集成，含真实SSH/Docker/文件与设置恢复。系统管理新迁移随后另测，以上不是最终全量结果。                                                                                                                                                                                    |
+| 系统管理分层             | `system-management-first`：5文件7项3.82秒，输入不派发/不读文件、实际响应流取消、秘密草稿清理、错误密码反馈、真实恢复提交丢回执且仅一次、全局unknown跨身份及真实重启、8模块诊断及坏协议均通过。前端Worker夹具缓冲边界仍适用。                                                                                                                                                                     |
+| 系统正常浏览器           | `system-management-browser-current`：1项7.6秒（正文2.969秒），实际下载完整加密文件、原生multipart恢复、全局inert及显式重载/保留会话通过。首轮漏开高级折叠入口的测试失败保留，按当前UI修正步骤。                                                                                                                                                                                                  |
+| 跨实例备份原生           | `backup-native-current.xml`：19项9.05秒，实际秘密重加密/SSH/模型/Artifact、撤权/取消、重启和恢复后初始化失败收敛通过。首次固定103张表断言与现有102张表不符；改为真实解密档案的表集合/关键资源核对并验证回执，不放宽为非零。                                                                                                                                                                      |
+| 认证/安全分层            | `auth-split-current`：8文件8项4.43秒，保留原73组子断言的负责侧部分；密码/TOTP与Cookie、实际CAS/凭据意图/黑名单、组件生命周期/导航、协议失败及不重放均通过。首轮缺直接Router依赖、重复peer注入实例与过时控件入口的失败保留；修复测试装配与步骤，不改UI。                                                                                                                                          |
+| 原生Passkey浏览器        | `passkey-client-browser-first`：1项8.3秒（正文2.161秒），真实WebAuthn虚拟认证器签名、注册/命名/登录/移除、29天以上HttpOnly Cookie与实际设置面板注册/删除通过；不是模拟凭据成功。                                                                                                                                                                                                                 |
+| 认证完成后共用夹具复验   | `fast-auth-reviewed`：64文件150项7.79秒；`frontend-integration-auth-reviewed`：25文件30项24.10秒，当前Shared/逻辑/组件及前端真实HTTP/SSH/Docker等通过，监控页面新迁移随后单测。`check-auth-current.log`根检查通过；后续新增用例仍须复查。                                                                                                                                                        |
+| Dashboard缺测与零值      | `dashboard-projection-first`：1项8.64秒，真实页面/控制器/HTTP其余消费者、正式codec和mapper保留，仅远端生产者受控；三个仪表缺测显示破折号、实际零显示0%，刷新时间虚拟推进。                                                                                                                                                                                                                       |
+| 工作区正常监控浏览器     | `workspace-monitoring-browser-first`：1项19.9秒（正文15.241秒），正式成品与独立OpenSSH、至少三次真实1秒采样及≥800ms间隔、CPU组件、缓存同checkedAt和5秒自然TTL、短暂切页仍采样/同一会话恢复通过，零页面错误。旧立即停采预期已过时；30秒宽限精确边界仍归session逻辑测试，不修改产品期限。                                                                                                          |
+| 认证响应交付拆层         | `access-delivery-logic-first`：3项0.129秒，原send/close/late_issue失败聚合、原凭据撤销和全部监听释放断言直接调用源码；真实Fastify onSend失败及六类HTTP断连仍由原生协议层负责。                                                                                                                                                                                                                   |
+| 认证竞态/交付/因子确认   | `access-native-current.xml`：3文件19项14.07秒，实际密码派生/并发撤销/封禁、响应断连后SQLite撤销，以及真实已提交/确认丢失/撤销失败因果均通过。未知提交和撤销证据即使测试通过也保留；确认收敛的成功现场才清理，失败不删除。该时点自然过期尚未复验，后续真实五分钟证据见自然认证到期条目；主Access综合的后续实测单列，不以此结果覆盖。                                                              |
+| 个人数据与审计分层       | `personal-split-first`：8文件11项8.16秒，原App脚本28组API断言迁到收藏/历史/快捷命令/展示/审计owner。保留102条路径和命令历史、51条快捷命令全页、真实CAS/触碰/级联标签/使用次数、已提交但回执丢失、早读不能解除unknown、排队取消不派发及旧协议拒绝；受控HTTP夹具仍不证明原生流取消。App页面/SSH剩余入口继续待迁/待验。                                                                             |
+| 个人展示早恢复回归       | `presentation-early-recovery-before`保留真实故障：较早排队读取将snapshot从修订0换成1，尽管自己报refresh_required；原失败也会被覆盖。`presentation-early-recovery-after`：8文件11项8.20秒，现先复核故障修订再发布，保持原快照和unknown因果，之后明确恢复读取到实际提交的修订1。                                                                                                                   |
+| 目标管理集合接口         | `targets-collections-cookie`：1文件1项0.571秒（测试正文0.412秒），原代理/密钥/标签/主机密钥/连接十组数量、完整JSON与最大有效转义集合断言保留，直接源码路由和Fastify inject执行。首轮暴露旧夹具未装Cookie插件/正式绑定钩子，导致500；现补齐实际插件与绑定，身份仍是明确的模块窄替身，不声称真实认证或外层Origin/传输通过。该时点剩余Targets页面与真实SSH脚本待迁，后续完成证据见下列Targets条目。 |
+| 中途合并回归             | `fast-continuation`：66文件154项7.02秒；`integration-continuation`：前端集成与后端HTTP共35文件48项30.53秒。这是新增Targets拆分前的工作区，后续新增用例另行合并复验。                                                                                                                                                                                                                             |
+| 主Access安全复验         | `access-security-current/report.xml`：17项7.645秒，实际TOTP故障/单次消费、转发源/封禁、CAPTCHA真实编码/拒绝、原生Chromium Passkey签名及供应商故障、提交确认未知/撤销失败和实际HTTP中断全部通过。现场含未知事实，即使PASS也保留SQLite；该时点自然到期未复验，后续证据见自然认证到期条目。                                                                                                         |
+| 标签与主机信任面板       | `target-panels-locale`：2文件2项4.03秒，保留原28+18组断言：真实CAS/原子关联、部分创建/回执丢失/只读恢复、选择保持/晚返回、信任身份/确认取消/KeepAlive、三语。首轮失效定位和未加载语言包的夹具问题保留，按现有控件修正，不改UI。                                                                                                                                                                  |
+| 连接与通用Target快速层   | `connections-script-first`：5项0.150秒；`connection-protocol-first`：6项0.644秒；`target-protocol-dialog-first`：2文件10项0.664秒。原IPv6/引号/秘密/范围/无副作用、错误身份/修订/私有字段/时间/HTTP状态、实际Response流取消/派发前取消及对话框替换断言下沉；另加正向结构基线，防止所有响应都被拒仍误报通过。                                                                                     |
+| 历史命令排队取消         | `history-cancellation-current`：1项2.91秒。保留实际读取后撤销排队写入的not_dispatched与零POST，另核对真实数据库只含原记录及实际clear；首轮误将API数组当页对象的测试错误保留。                                                                                                                                                                                                                    |
+| 目标凭据与引用           | `target-secrets-first`：1项3.12秒，原11组CRUD/精确空格/保留与清除/CAS/引用保护及删除读回通过，并新增正常重启后的实际加密存储核对。只在测试Worker安装时传明确密钥，生产装配与默认随机密钥不变。                                                                                                                                                                                                   |
+| Target面板故障           | `target-recovery-panels-first`：1项3.90秒，原12组确认取消、真实提交丢回执/只读恢复、过早列表不覆盖写入、密钥选择保持、KeepAlive停止后未知围栏、秘密草稿清理与三语全部保留。                                                                                                                                                                                                                      |
+| 连接事务与真实SSH        | `connection-lifecycle-ssh-first`：2文件2项3.25秒，原10组原子凭据/标签创建、CAS、克隆、回滚、凭据回执丢失不重放；另3组未知信任挑战、保存/未保存配置均完成真实OpenSSH握手，并核对未保存测试不创建记录。新例显式关闭应用后再关闭sshd；剩余UI脚本不再启动无关SSH服务。                                                                                                                               |
+
+| Targets合并复验 | `fast-targets-final`：70文件175项7.31秒；`integration-targets-final`：前端集成与后端HTTP共42文件55项40.76秒。`check-targets-final.log`与`formatcheck-targets-current.log`通过；673项浏览器发现、324旧来源映射与diff通过。随后新增的注销/批量/表单与原生文件用例另列，不将这些数字当最终全量。 |
+| Targets批量与注销 | `target-panels-final-current`：5文件5项6.42秒，包含实际注销/非空缓存及晚列表围栏、批量真实提交后回执丢失只写首条/恢复前不重放、正常串行写/加标签/确认删除/取消、正式列表与树及三语。首轮的过时appendTag、未读列表就克隆、排序假设和未打开更多菜单定位失败均保留，修测试不补旧接口、不改UI。 |
+| Targets正常表单 | `target-forms-first`：连接与代理2文件2项3.82秒；`key-form-first`：1项3.42秒。保留原子凭据/编辑CAS/脚本和地址范围导入/标签缓存，以及密钥替换时保留密码短语和显式清除的真实SQLite密文核对。合并复验另加强代理双提交实际只有一次POST。 |
+| Targets原生文件与下载 | `targets-native-browser-receipts`：2项9.14秒（正文2.779/1.754秒），真实产品页面/原生chooser、UTF-8与大小拒绝零POST、合法文件创建、JSON部分成功顺序及实际持久化、完整配置下载且无凭据通过，零pageerror。首轮误给HTTP回执添加不存在index的失败保留；当前HTTP数组顺序、真实ID与当前失败提示分别核对，不恢复已删除的旧编号DOM。旧Targets自行启动Vite/Chromium入口在全部替代通过后移除。 |
+| 自然认证到期 | `access-natural-current/report.xml`：1项通过、零跳过/取消/失败，完整303.174秒、正文4.450秒。保留真实五分钟，实际TOTP设置读取后到期、待确认TOTP提交前到期、Passkey签名后提交前到期均拒绝，未增会话/未改counter。SQLite及收尾证据保留，不以局部测试替代自然期限。 |
+| App单侧生命周期 | `audit-settings-refined`：设置CAS、审计KeepAlive、审计毫秒时间共3文件3项3.81秒；`authentication-replacement-first`：认证owner事件顺序1项0.155秒。实际409保留脏草稿/只读恢复，旧审计读取撤销且等待原Promise后不能覆盖新数据；Dashboard旧审计已移除，时间断言归当前AuditLogRow。 |
+| App正式浏览器 | `app-lifecycle-browser-history-current/report.json`：1项8.470秒（正文3.297秒），真实SSH/同一session与单socket、切页晚metadata零连接/命令零旧历史、正常历史201及实际Pinia缓存、审计搜索、接管确认跨路由撤销、同tick同用户身份替换清缓存/原session确认关闭，零pageerror。`app-lifecycle-browser-first`另复验正式设置正常流程，共3项15.276秒。全部替代成立后移除旧App隐藏浏览器入口，原源码快照与首次失败保留。 |
+
+| 正式文件页面 | `workspace-files-browser-folder-current/report.json`：1项17.163秒（正文12.490秒），原17组真实OpenSSH/SFTP、创建/Monaco编辑/Markdown预览、原生上传/完整下载、重命名/复制/剪切、实际ZIP压解、删除确认/切页撤销、晚chooser/Clipboard零上传、同PTY挂起恢复与文件独立恢复、晚PASSWORD_REQUIRED不弹旧提示全部保留，零pageerror。首轮旧编辑器遮罩/大小写/菜单类名/目录双击假设失败均保留；测试改用当前可见弹窗、menuitem及单击目录，不修改UI。全部替代通过后删除旧文件页面隐藏浏览器入口。 |
+| 远桌输入资源清理 | `desktop-input-current`：1文件1项0.755秒（正文27ms），实际RDP/VNC适配器各5次创建/切模式/关闭，全部input/blur监听与ResizeObserver断开。仅ResizeObserver和无像素Canvas采用窄DOM替身，未连接协议、不证明实际布局绘制；jsdom缺观察器的首次失败保留。该时点其余两份远桌旧入口仍pending，后续完整替代见下列条目。 |
+
+| 桌面阶段快速合并 | `fast-desktop-stage`：75文件181项7.92秒；`check-desktop-stage.log`和`formatcheck-desktop-stage.log`通过。这是后续受控桌面进程夹具修改前的阶段检查。 |
+| App阶段合并回归 | `fast-app-final`：72文件177项7.56秒；`integration-app-final`：前端集成与后端HTTP共49文件62项43.04秒，全部通过。这是新增本轮桌面组件/证书用例之前的工作区，不代表最终全量。 |
+| 远桌Modal组件 | `desktop-modal-first`：2文件2项1.66秒，除适配器资源清理外，真实Modal与Controller验证成功前零通知、成功后仅对应目标ID、三语已加载文案、身份disposal移除原展示、keydown退订；peer替身不证明真实协议或像素。 |
+| 远桌正式浏览器 | `desktop-workspace-browser-final/report.json`：3项17.9秒，零失败/跳过/flaky。真实VNC/RDP画面与连接数、尺寸保存门控/900×700/最小化/原生全屏同socket、远端指针与二进制发送、实际Clipboard及CDP拒绝、软键盘/组合输入仅一次、显式新ticket重连、关闭与正常logout实际排空；另原生Touch两模式掩码/取消/退出零晚事件。原两份前端旧入口已在逐项替代通过后移除。 |
+| VNC触摸缺陷修复 | 首轮实际Canvas合成mouseup被noVNC停止传播，其window代理收不到释放，捕获层一直遮挡按钮；轻点buttons也错误为0。现按实际按键更新掩码，VNC仅在原Canvas持有捕获时把mouseup交库的window代理，实际轻点后及拖动cancel后捕获释放。首次失败、未公开模块导入构建失败及旧RDP菜单/全屏状态未稳定/Clipboard未换焦点/工具栏覆盖软键盘的测试定位失败均保留；不强制点击、不删除捕获层、不改变UI。RDP原生WebSocket观察复用现有helper，避免CDP漏报二进制发送。 |
+| 桌面证书分层 | `desktop-certificates-split-current`：3文件7项通过、完整0.280秒，含原owner3项与新证书逻辑/存储4项。真实SQLite CAS、事务内身份撤销和准入回滚、commit_unknown/rollback_failed、证书轮转/失配/过期、16个取消探测保留容量到真实技术结束与零晚票据。首轮源码SQLite Worker定位不到worker.js保留，存储改用同批真实Backend成品，逻辑直接源码；旧原生证书入口移除。 |
+
+| 原生桌面协议与故障 | `desktop-native-websocket-current/report.xml`：25项（24子场景），零失败/取消/跳过，完整12.073秒、正文10.661秒。实际VNC/RDP像素与键鼠、空用户名二进制、匿名/Origin/Host/cookie/协议拒绝、metadata时点、票据单次及竞抢、配置/凭据/删除失效、16活跃与第17拒绝后容量回收、错误密码、服务停止/恢复和日志秘密检查全部保留。采用同一受控服务脚本，独立端口/目录/X display，真实浏览器SDK延迟到需要时才加载；不再构建/运行桌面Docker，旧静态镜像资源已移除。原首失败与取消保留；旧WebSocket子类导致noVNC检查不到原生通道属性，改为Proxy观察原生对象；原30秒盲等改为实际失败立即退出，产品期限未改。后续关闭共享Promise强化后的协议合并另验。 |
+
+| 桌面授权与自然票据期限 | `desktop-native-authority-tickets-current/report.xml`：7项（含2父项），零失败/取消/跳过，完整77.516秒。实际配置变更轮询16.895秒、真实注销轮询15.202秒，双协议重启失效1.390秒；1024票据满容量及1025拒绝6.339秒，真实30秒到期拒绝旧票据并可新建连接32.117秒。未修改产品时序。 |
+| 桌面收尾最终复验 | `desktop-native-termination-current/report.xml`：25项全过，完整11.853秒、正文10.474秒；`desktop-workspace-browser-service-final/report.json`：3项17.211秒，零失败/跳过/flaky。`desktop-native-final`保留首次父超时：模拟销毁浏览器context后，页面不能再向Node回报WebSocket关闭；现等待context真实关闭后完成夹具异常断开通知，服务端TCP仍单独核对排空。独立服务关闭共享Promise、进程close和日志流排空均参与通过判据。 |
+| MCP输入矩阵归包 | 插件仓`mcp-plugin-final.xml`：2文件42项全过，0.314秒。3方法完整request-id map、3×6状态map归一、原11项畸形嵌套请求拒绝均经过实际官方SDK；保留正常续接、不隐式重放、超大完整输入/结果、取消及关闭失败因果。删除被新矩阵完整替代的旧5形状重复测试。`mcp-rpc-logic-current`：Shared 1文件2项0.231秒，正常读取/伪造身份与旧单体方法拒绝。 |
+| MCP真实Host代表链路 | `mcp-host-current/report.xml`：3项20.819秒全过，实际5次Agent任务（3种正常map、1次状态map、1次畸形map投影），保留真实签包安装、HTTP受管传输、独立批准和Run终态。原32次完整任务中的普通SDK输入排列由上述插件用例替代；迁移索引记录跨仓owner。完整Agent跨仓入口尚未完成，当前代表测试仍在本体，不将此视为完整互操作迁移完成。 |
+
+| 正式终端失败与重试 | `terminal-recovery-browser-observer-current/report.json`：1项7.746秒，正文2.199秒，零失败/跳过/flaky。真实TCP失败、两次打开/失败/按钮及Enter重连/关闭；保留一个原xterm、重试不增Observer、关闭回到原Observer基线及所有WS/TCP实际退出、安全文案与零runtime boundary。旧脚本引用已删除测试页，且旧“失败即销毁”预期与现有保留恢复入口冲突，现按当前正式UI验证并移除旧入口；首次注入脚本私有字段被Playwright编译为外部helper缺失保留，改闭包WeakMap，未改产品UI。 |
+| 文件与ACP资源单侧逻辑 | `file-acp-logic-first`：2文件13项0.266秒。源码直接验证晚机器/SFTP交付、取消、实际同步/异步双失败、关闭共享Promise、健康资源独立性，以及受管ACP取消中的晚permission/read/writer和全部清理因果；真实协议不在这层宣称通过。旧两个native入口替代后移除。 |
+| 文件队列与独立传输SQLite | `file-storage-owner-current`：2文件21项0.702秒。真实SQLite突变账本、事务排队、身份/指纹/Workspace撤销、取消/晚收尾、关闭失败unknown围栏、混合任务与不提前获取资源通过。首次21项中9失败保留，根因是旧64会话/16任务限制已被生产移除、下载已使用独立资源；现验证超过旧门槛仍准入、同身份围栏不释放、专属下载与Workspace分别关闭。不是恢复旧配额或删除未知断言；两个旧native入口替代后移除，所有SQLite现场保留。 |
+
+根check曾与Backend构建并发重建Shared导致中间声明缺失，该次失败保留，必须按顺序重跑；它不证明业务缺陷。旧前端自行启动Chromium入口已全部完成替代并移除；只搬目录的其余后端文件、完整Agent流程归属、剩余包装及8runner调度仍待收口。本批真实集成曾被Vitest默认5秒预算中断，首次失败保留；现沿用原浏览器套件120秒单例测试预算并注册框架收尾，不改产品期限。当前未触发远程Actions、未提交或发布，不引用历史758项为本轮通过。
+
+磁盘清理保留旧失败和未知现场：已核对无活跃持有的旧测试目录先归档、GNU tar逐字节比较并记录SHA256，再移除展开副本。归档及清单见`cleanup/archives.jsonl`；原`/tmp/nxt1107`位于tmpfs，其归档仍在`/tmp/nxt1107-retained-archives`并由任务目录链接，不能当作磁盘释放。根分区本轮已用从约29G降到约25G，可用约4.3G，尚未降到用户记忆中的20G；仅删除明确可重建缓存及测试桌面Docker资源，无关镜像、当前CDP环境和业务数据保留。
+
+本轮继续复审（同一未提交工作区，以下结果不替代最终全量门禁）：
+
+| 范围                  | 实际结果与原生证据                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 机器/归档拆层         | `machine-archive-split-first`：4文件7项0.239秒，SQLite突变原子准入、长命令预算与握手预算分别核对；取消握手的晚资源、全部清理因果、在途借用隔离及归档信号直接测试生产源码。`machine-reuse-protocol-current/report.xml`：7项8.457秒，真实SSH/SFTP复用、并发大输出与交互过程互不串联背压、撤权/信任变化、Run排空保留。                                                                                                                                                                                   |
+| Browser/插件owner拆层 | `browser-plugin-logic-first`：2文件4项0.329秒，实例/修订隔离、独立会话、退役排空和同步协议失败后的全部资源收尾。真实CDP保留7项，`browser-cdp-short-socket-current/report.xml`：1.024秒，无失败/取消/跳过。首轮Chromium临时目录过深超出Unix socket长度失败保留；明确短TMPDIR后通过。真实配置SQL排队撤权、提交未知且不重放、CAS与禁用/重启3项分别2.411/2.074/2.125秒，见`browser-config-native-split-current/report.xml`；该原报告还含上述CDP环境失败，不能将整份报告报全过。                           |
+| HTTP持续流并发缺陷    | `safe-http-stream-concurrency-first`复现固定4连接池阻塞第5/6请求；移除无依据固定池数，改Undici按需连接。原DNS/来源/凭据隔离和响应字节预算保留；`safe-http-pool-current/report.xml`：8项0.493秒，6个持续响应未结束时第7独立请求可用，全部真实socket排空及响应/dispatcher清理失败因果均过。此技术测试归Platform Network，移除旧MCP专属路径。                                                                                                                                                            |
+| 文件写入旧入口复审    | `files-write-logic-first`：3文件6项0.481秒，满容量UTF-8/转义JSON/Unicode、SFTP未派发/拒绝/未知以及晚资源清理。旧8资源配额拒绝改为独立资源继续准入；不恢复已删除政策。原HTTP/SQLite写入链拆成`file-mutations.native.test.mjs`，保留字节/权限/独占创建/竞态/坏UTF-8/取消/未知效果；补实际编码Model，拒绝删除按现有具名403 forbidden校验。修正前依赖缺失与旧503预期的失败保留；`file-mutations-http-owned-current/report.xml`：1项0.382秒通过，框架关闭同时核对HTTP与文件owner，再关SQLite，现场不删除。 |
+| 更新后快速合并        | `fast-machine-browser-current`：83文件206项8.21秒全过，包含新增MCP、文件/ACP和机器/Browser拆层；后加文件写入6项另见上行，不把206项报告当作212项合并结果。                                                                                                                                                                                                                                                                                                                                             |
+| Playwright发现与分片  | `playwright-discovery-stable.json`：165文件681个测试条目，每个文件唯一project，终端恢复仅在terminal。修复`terminal/`正则命中仓库名导致全套重复，以及旧固定项目清单遗漏新目录；分片直接使用Playwright原生JSON发现，`playwright-shard-plan-native-current.log`计划成功。Shared构建与发现并发造成的缺文件失败单独保留，后续严格先构建/检查、再发现与执行。这是发现证据，不是681项执行通过。                                                                                                              |
+| 当前静态与清理        | `check-discovery-current.log`根检查通过（发生在后加文件拆层前）；`formatcheck-followup-current.log`全格式通过（后续变更需再验）。插件`plugin-lint-current.log`及`plugin-format-current.log`通过。只删除7份可重建Vite缓存，约475MiB；清单`cleanup-vite-cache-followup.json`，原日志/SQLite/截图及未知现场保留。                                                                                                                                                                                        |
+
+| Targets白名单与持久层 | `targets-split-current/reports/vitest.json`：4文件4项通过，报告首启至末项结束4.443秒，包含真实App/SQLite启动；纯投影和Access错误codec不再启动数据库。其余两项保留真实SQLite隔离、同文件锁、CAS、导入部分结果/回滚、秘密安全出口和重启，替代通过后移除旧两个入口。 |
+| 终端传输与关闭 | `session-release-logic-first`：1文件2项0.163秒，保留共享关闭失败、鉴权/已释放结果；`terminal-ws-native-first/report.xml`：5项0.240秒，真实WS队列、最终顺序和EOF消费ACK。`ssh-close-protocol-first/report.xml`：5个真实SSH子场景（含父共6项），完整6.960秒，直连/HTTP/SOCKS5/跳板半关闭与健康关闭，清理失败全部聚合；旧会话目录关闭入口移到Platform SSH。`real-ssh-cases-first/report.xml`：3子场景（含父共4项）完整2.433秒，真实PTY尾字节/ACK后EOF、异常断连、实际hostVerifier及凭据错误分类，零失败/取消/跳过。 |
+| 混合phase2按owner拆分 | `phase2-owners-first`：5文件5项2.60秒，连续生产迁移/重复启动/失败回滚/旧原型拒绝、凭据密文/机器指纹/图回滚/克隆/标签关联版本、并发登录失败与精确封禁边界、SSH拒绝RDP字段分别归SQLite/Targets/Access/Shared。`run-intents-first/report.xml`：1项2.218秒，真实已派发模型请求后准入、幂等/内容冲突/活跃冲突、取消CAS/重放、用户隔离与事件分页，且仅派发一次模型请求。原备份目录phase2整份脚本替代后移除，未删独有断言。 |
+| 按需受控服务首验 | `services-none-first/report.json`：正式终端恢复1项5.193秒，`services/0/timings.json`为空，确认不启动任何外部服务。`services-mixed-first/report.json`的8项业务全过，但worker SSH收尾失败，整组失败；`services-cleanup-trace-current`两项业务通过但SSH收尾仍失败，均保留原日志和计时，不作为绿色验收。已确认交互Bash等待stdin忽略TERM及夹具连接归属不全；修复后`services-http-owner-final/report.json`两项完整30.893秒，包含实际Agent/CDP/部署/文件交付及SSH连接，全部服务exit0且SSH关闭13.712ms，零全局错误/跳过/flaky。桌面业务在首轮混合组已过，当前SSH修复不改桌面脚本。 |
+| HTTP完成等待复用 | `http-response-owner-current`：1文件4项0.152秒，监听/框架共享同一响应Promise，finish/close/aborted/原socket关闭后全部监听回到基线；同批Backend重新构建后，上述两项浏览器定向开启trace-warnings全过，原ServerResponse MaxListeners告警不再出现；`http-transport-owner-current/report.xml`37项真实HTTP/流/维护/审计/拒绝/取消通过，完整0.443秒。首次报告暴露Vitest把Platform HTTP内的logic同时算入HTTP project，修正各层只发现直属测试文件后唯一发现，不把首次8项重复结果当作8个独立场景。 |
+
+| 测试夹具自身回归 | `controlled-service-contract-first`：1项0.311秒，真实子进程按需/重复ensure复用/共享close/正常exit0/启动失败非零及日志保留。`backend-fixture-evidence-first/report.xml`：1项2.407秒，真实Backend进程验证匿名保留拒绝、鉴权保留、重置后原SQLite存在、后续正常基线移除且失败库仍在、正常关停。不是用模拟状态证明现场保留。 |
+| 本批快速合并 | `fast-service-owner-current`：93文件223项10.43秒，含本批新增文件写入/终端关闭/Targets纯逻辑/Access/HTTP完成owner及tooling；不含真实SQLite/原生/浏览器全量，未替代完整门禁。 |
+
+本批补充证据（产物根同上）：
+
+| 模块                   | 范围与实际结果                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 上批静态收口           | `check-service-owner-final.log`与`formatcheck-service-owner-final.log`均通过，diff通过；发生在以下新增模块前。                                                                                                                                                                                                                                                                                                                                                               |
+| 准确候选跨仓互操作基础 | 插件仓`tests/interoperability/agent/candidate.native.test.mjs`首轮`plugin-host-interop-first/report.xml`：3项9.825秒通过，无跳过或清理失败。两种模型协议均实际安装八份准确候选签包、发现工具、审批、真实SSH非零命令及Unicode/stdout/stderr持久结果；另验证静默流前缀、取消关闭原transport与不重放。不是八包全部运行逻辑或浏览器验收。`combination.json`记录双仓源码指纹、Host编译摘要、SDK及包hash；准备/执行/关闭各自保留。首报文件后缀随后统一为native，最终基线需另复验。 |
+| 跨仓准备成本           | `plugin-build-host-current.log`构建10.424秒；`plugin-host-candidates-first.log`签包3.591秒，均未藏入测试外耗时。初次尝试本机不存在的`/usr/bin/time`未启动构建，改用Bash内置time，原失败日志保留。`pinned-installer-first/report.xml`确认既有签包安装/Run意图1项2.183秒。                                                                                                                                                                                                     |
+| 审计生命周期           | `audit-lifecycle-first`：1文件3项0.142秒；65个请求、257个待发布事件均完整追踪至关闭，独立记录/通知/清理失败保留。`audit-lifecycle-old-cap-current`复放原门槛，2失败/1通过，0.140秒，证实回归能暴露旧拒绝；产品源码随后恢复修复版。删除的只是独立请求/发布数量门槛，SQLite与审计保留政策不变。                                                                                                                                                                                |
+| 通知真实协议/现场      | `notification-lifecycle-first/report.xml`：21个子场景，含父共22项2.473秒；真实HTTP、Telegram、SMTP、秘密keep/clear、认证、CAS、重启、分页、fanout、取消后unknown及不重放均保留。setup577ms/execute820ms/drain3ms。用框架收尾聚合失败，不再成功后删除目录，数据库及timings保留在所属运行根。                                                                                                                                                                                  |
+
+Webhook秘密契约已下沉到真实原生HTTP/SQLite/投递层：`webhook-owner-first/report.xml`10个原独有场景完整保留，含父共11项2.667秒；所有拒绝均核对持久原值和真实原凭据投递，增加创建拒绝零派发及keep后重启。替代通过后移除原Playwright HTTP文件及调度/耗时条目，正常通知页面流程仍保留在浏览器。当前快速合并`fast-agent-audit-current`94文件226项11.50秒全过；准确候选最终入口`plugin-host-interop-current/report.xml`3项14.225秒全过，该次与快速层/HTTP同时运行，不能用并发资源竞争结果和首次独跑9.825秒直接推导退化或提速。
+
+上述跨仓入口为新增基础能力，完整旧Agent流程迁移、插件CI对不可变Host产物的门禁仍未完成；现有插件`pnpm test`执行包内/仓库/模板测试，`pnpm test:interop`单独要求真实Host与候选路径，`pnpm test:all`执行两层。不能以局部3项宣称完整Agent已从本体移除或全仓通过。
+
+本轮模型与审计后续复核：
+
+- `model-outcomes-first/report.xml`：17个实际OpenAI SDK/TCP场景，含父共18项0.327秒。完整15种HTTP拒绝/未知及允许重试次数、断线不重放、429恢复均验证；复用一个受控HTTP端，不启动App/SQLite/SSH。
+- `agent-flow-outcomes-first/report.xml`：15个真实Host子场景，含父共17项35.532秒全过。保留双Provider指令/Skill摘要、准确Skill读取、401/429/503持久结果与重启、429恢复仅一个model账本、Unicode前缀、取消/中断及原隔离RPC/审批/撤权/已确认效果。下沉12组重复完整App装配；没有用低层测试替代这些跨边界断言。首轮35.532秒仍包含真实安装/SSH/收尾，不宣称整组只需0.327秒。
+- 审计最终逻辑`audit-lifecycle-final`4项0.126秒通过，补上停止接纳后拒绝publication在关闭结果中可见；旧HTTP测试里的固定256拒绝已移到新owner并更新为实际停机拒绝。`http-audit-owner-final/report.xml`36项0.429秒通过，少1项来自owner下沉，不是漏跑。
+- `fast-audit-final`94文件227项8.76秒；插件普通包/仓库/模板`plugin-native-host-current/report.xml`130项2.668秒全部通过。两仓`check-agent-audit-current.log`/`plugin-check-host-current.log`通过；随后新增的Webhook与模型原生文件另做发现/格式检查。删除耗时表中已不存在的execution-flow/mutation-capacity条目，原历史证据不变。
+
+来源与认证模块：`mutation-source-first/report.xml`10子场景，含父11项1.795秒全过，真实App/Access/SQLite验证Origin/Fetch Metadata/Host的9种输入和完整偏好值/version原子性；另保留注销后畸形JSON先认证401及匿名失败审计、连接列表不变。夹具可显式发送原始来源headers，真正缺省Origin与Metadata，不用空字符串冒充。通过后移除`mutation-origin.spec.ts`、`fastify-transport.spec.ts`并更新分片与索引；浏览器实际Cookie/WS/页面流程不受替代。
+
+本批最终检查：`check-access-owners-final.log`、`formatcheck-access-owners-final.log`及双仓diff均通过；`discovery-access-owners-final`验证324来源映射和2个外部插件owner存在，Playwright发现162文件661条目、零发现错误。发现数量减少来自已迁移的3份接口文件，不代表削减独有断言；其余浏览器仍待逐项审核和全量执行。该轮没有新建Docker容器，原失败/数据库/签包现场保留在任务根，未提交推送或发布。
+
+本轮后续 HTTP/真实协议下沉的证据另存 `/dev/shm/nexus-testing-20261108/`，使用同一 Node 26.13.0/pnpm 12.16.1 和当前未提交工作区：
+
+- `oidc-http-first/reports/vitest.json`：14项8.78秒；`totp-http-current/reports/vitest.json`：1项2.39秒。保留真实签名IdP、PKCE/JWT/client-auth矩阵、Cookie与撤销竞态；浏览器继续验证实际登录与设置。
+- `target-import-http-first/reports/vitest.json`：真实SSH凭据/JSON/multipart导入1项2.56秒。纯接口旧入口在替代通过后移除。
+- `plugin-images-first/report.xml`：准确候选签包的6项图片互操作4.704秒；Host独立文件交付安全测试 `artifact-delivery-first/report.xml` 1项1.915秒。正常图片流程归插件仓，Host仍验证签名夹具App的归属、Range、HTML inline拒绝、CAS和清除。
+- `ssh-protocol-host-header`：终端背压与目录4项通过；`binary-read-poll-budget/reports/vitest.json`：SFTP读取8项21.54秒，含真实3秒延迟OPEN/READ、取消、超额准入、增长文件及断线晚句柄释放。首轮暴露夹具Host头、Vitest轮询默认值与浏览器不同，已按实际部署来源和原10秒观察预算对齐，未改产品时限。
+- `ssh-files-transfers-batch`：24项中21项通过，58.03秒；真实搜索延迟、两万余项目录、70层树、65来源、多任务、下载和稀疏TAR断言保留。首次失败为迁移遗漏的fixture参数和Unix socket路径过长；`archive-short-runtime`补验两个TAR进度场景通过，归档特殊文件路径拼写另经`ssh-upload-batch`通过。
+- `ssh-upload-batch`：15项中13项通过，22.28秒；准备目录三场景、全部6项归档与小文件上传通过。上传剩余两个夹具旧调用已修，`ssh-download-upload-current`中5项上传全部通过。
+- `download-ownership-raw-current/reports/vitest.json`：4项17.45秒全过，覆盖票据绑定来源/Range、精确ZIP、停止下游读取及9个延迟OPEN取消回收。显式复用原loopback代理信任；原生HTTP保留Host，未放宽来源校验。
+- `workspace-identity-revocation/reports/vitest.json`：2项9.56秒，改密与注销真实撤销已建立WS和旧Cookie。
+- `controlled-peer-isolation-corrected/report.xml`：1项2.282秒，两个真实SSH/SFTP实例并行、文件/端口隔离、offline/online重用端口、并发close共享结果及另一实例继续可用。受控文件使用任务TMPDIR中的短路径，日志保留runtime根索引；应用与socket先排空、SSH进程最后关闭。
+
+上述为逐模块证据，首次失败均保留。最新类型检查 `types-lifecycle-corrected.log` 通过；根检查/格式、浏览器发现与最终完整门禁尚需针对最终工作区统一执行。当前仍未提交推送，不把分批通过视作完整重构完成。
+
+## Agent插件化已完成阶段与审核快照（2026-11-08归档）
+
+以下从PLAN移入，只对应原记录版本；当前源码与新测试门禁见E2E，不继承历史指令或PASS。
+
+## D30：集中验收、每包测试与双仓发布（2026-11-07）
+
+用户明确授权完成本轮Agent/SDK/插件重构的全部验收，补齐每个插件的测试部分，提交推送两仓，修复全部正式E2E后发布插件与本体main amd64 dev；不自动更新生产主机。D19的未授权发布说明由本次授权取代，其余范围与不保留旧运行兼容、现有UI、正式迁移、完整数据及资源关闭要求继续执行。主代理独立完成，不启动子代理。保留既有现场与首次失败证据；已明确授权清理的可重建测试Docker与缓存按清单处理。
+
+| 审核表   | 结论与证据                                                                                                                                                                               |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 八包均有独立行为测试，82项插件与16项仓库测试通过；正式矩阵738项全部一次通过，无失败、重试、flaky、跳过或遗漏；最终签包CDP宽窄屏及刷新恢复通过。                                          |
+| 职责归属 | 插件仓完成独立包算法/协议/UI测试与发布；本体完成Host、SDK、正式E2E、真实安装/更新和浏览器验收。运行、授权、账本及资源关闭仍归Host。                                                      |
+| 类型归属 | Shared/SDK4是唯一协议owner；正式fixture、发布/安装/运行/前端消费者同步，无旧运行兼容。公开目录及全部11个不可变版本的签名、文件hash、归档摘要已核对。                                     |
+| 完成证据 | E2E42399935928验证13017e0d；插件v2.0.2已发布；main amd64 dev42401471984来源f984034c（仅增加耗时估算），镜像摘要/平台/revision已核对。完整证据见[最新基线](testing/E2E.md#当前验收基线)。 |
+
+## D31：SDK4交付后逐文件复审与清理（2026-11-07）
+
+用户授权复审本轮重构、纠正架构偏移、清除无消费者文件与过时用例，同步文档后推送、完整远程E2E通过并发布main amd64 dev。主代理独立执行，保持UI与现有功能、安全断言；该轮保留旧迁移与历史证据；随后D32明确授权删除旧SDK历史，已发布迁移仍不改写。
+
+| 审核表   | 范围与完成判据                                                                                                                                                                                                                                                          |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 以9fd223a3→当前main及独立插件仓为文件清单，区分源码、不可变签包、迁移/审计和测试；旧用例须核对真实行为是否保留或已被新组合覆盖后才删除。                                                                                                                                |
+| 职责归属 | 核对App/工具/服务/UI插件与Host边界，实际装配、调用/关闭链和跨模块依赖；清理无运行/构建/测试消费者的遗留实现。                                                                                                                                                           |
+| 类型归属 | 核对Shared、SDK、内部Model/storage/Platform、公开出口及双端消费者；禁止旧协议回退、跨层透传和本体硬编码插件策略。                                                                                                                                                       |
+| 完成证据 | 源码复核、清理和文档已完成；110项专项、19项备份、当前宿主设置/公开边界4项及纠正环境后的Browser 9项/ENOSPC 5项通过。清理前bed7cd0a完整749项远程E2E通过；原发布因D32追加清理取消，最终交付已由D32收口，见[本轮记录](testing/HISTORY.md#sdk4-架构与旧用例复审2026-11-07)。 |
+
+产物集中`/home/honus/nexus-task-artifacts/agent-sdk4-review-20261107`；原验收现场与失败证据保留，不以本轮清理删除未知副作用证据。
+
+## D32：删除旧 Agent 数据与兼容结构（2026-11-08）
+
+用户明确选择第2项，允许清空旧Agent历史，不做旧结构转换或运行兼容。D31保留旧历史的范围约束由本项取代；已发布迁移链及非Agent数据保持。主代理独立实施，完成新SHA完整远程E2E后发布main amd64 dev，不部署生产。
+
+| 审核表   | 范围与判据                                                                                                                                                                                                                                                                                                             |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 删除SDK1–3档案、旧五阶段Run/工具/审批/集成表及旧快照解码；SDK4插件、聊天、审批、子Run、配置与备份恢复功能保留，UI不变。                                                                                                                                                                                                |
+| 职责归属 | 删除SQL由Agent SQLite Adapter持有，正式迁移顺序编排；当前包/资源生命周期与权限仍归原Host owner。                                                                                                                                                                                                                       |
+| 类型归属 | Run来源只接受SDK4插件结构，移除retired/archivedChild与历史decoder；核对迁移私有依赖，已发布迁移保持可执行。                                                                                                                                                                                                            |
+| 完成证据 | 双端构建、根检查通过；迁移/存储51项、运行/更新/生命周期/只读子Run/备份45项通过。新增迁移最终八项通过，覆盖活Artifact围栏及旧子运行整组清理；545b2e47完整750项远程E2E首次全绿，发布42450721459成功；amd64 dev摘要与源码已核对，未部署生产，详见[本轮记录](testing/HISTORY.md#旧-agent-数据删除与-sdk4-收口2026-11-08)。 |
+
+## D33：插件CDP配置、市场移动布局与本地化（2026-11-08）
+
+用户要求CDP配置跟随浏览器插件、优化设置内插件市场的手机布局，插件描述跟随本体语言。本批主代理独立实现；保持市场以外既有UI，插件设置沿用现有Surface与语言环境，工具调用、目标权限和真实关闭继续归Host。不新增无依据容量或工具门槛，SQL变更追加迁移，不修改已发布1–63。
+
+| 审核表   | 实施范围与判据                                                                                                                                                                                                                                                                            |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | Browser工具包贡献实例设置，移除本体独立CDP设置；市场在320/390px无横向溢出且操作分组清晰；官方及第三方描述通过统一目录元数据随语言切换。                                                                                                                                                   |
+| 职责归属 | 插件持端点配置schema和设置UI；Host从真实调用实例取得配置并复核修订、权限、资源归属，旧全局配置通过正式迁移处理。市场只做本地化投影，不按官方包ID补文案。                                                                                                                                  |
+| 类型归属 | 目录本地化契约归Shared，边界逐字段转换；现有SDK环境已传locale，只有真实缺口才新增SDK能力。                                                                                                                                                                                                |
+| 完成证据 | 源码审核、双仓检查/构建/格式、迁移/快照11项、真实CDP/文件19项、本地市场/设置7项已过；Browser2.1.1与最新目录已发，指定CDP三语宽窄及设置保存/零pageerror通过；871a0516完整756项远程E2E一次全绿，42462199531发布main amd64 dev，摘要/平台/源码已核对。产物归agent-plugin-settings-20261108。 |
+
+## D34：Agent设置归属复审（2026-11-08）
+
+用户要求逐项审核Agent设置，将插件业务选项迁入对应插件并移除本体入口。主代理独立实施，沿用已有主题与插件设置Surface。Provider/模型凭据、权限、执行总预算、并发和真实资源保留仍归Host；移除独立MCP/ACP设置页，记忆召回条数/字节偏好迁入Agent工具插件，不保留Host运行兼容或重复上限。迁移65一次性转换已有官方未配置实例的实际偏好，并清除全局、App覆盖、冻结运行与硬限确认中的旧字段。召回超过单帧容量时分批重新校验并完整汇总，不能把传输分页变成总量限制。
+
+| 审核表   | 范围与判据                                                                                                                                                                                                                                                                                                                                              |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 全量设置入口及实际消费者盘点；MCP/ACP统一从已安装插件设置进入；记忆召回偏好可按App/实例保存并实际生效；原权限、预算和失败恢复保留。                                                                                                                                                                                                                     |
+| 职责归属 | 插件持召回排序、条数与JSON总字节预算及设置UI；Host持已发布/未过期/来源核验、准确版本、传输容量与真实资源，不解释插件业务偏好。                                                                                                                                                                                                                          |
+| 类型归属 | 移除Shared及双端执行/治理中的召回偏好字段；现有memory.retrieve保留调用方请求数与单帧容量事实，独立插件和实际消费者同步，不新增同义协议。                                                                                                                                                                                                                |
+| 完成证据 | 源码归属审核、双仓check/build/格式、每包独立测试、迁移/重启/回滚、跨帧召回、设置及备份浏览器回归通过；Agent工具2.1.0和14项公开目录已发布；指定CDP三语宽窄设置保存、无溢出和零pageerror通过。21e36a7b完整远程758项一次全绿，42467733089已发布main amd64 dev并核对镜像摘要、平台和源码；产物归agent-settings-ownership-20261108，保留既有环境和首次失败。 |
+
+### 功能对应审核表
+
+| 主要功能                              | 当前owner与验收范围                                                                                                      |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| 聊天/图片、思考等级、上下文/标题/压缩 | nexus.agent完整循环与nexus.ui.chat；原请求恢复、摘要/尾组、标题/私有状态、宽窄屏聊天及刷新恢复已回归。                   |
+| 模型工具、发现与详情加载              | 四个工具包注册→目录→准确绑定→Operation；按需发现、真实I/O、完整结果续读、产物来源及权限回归通过。                        |
+| 运行、子Agent、日志、文件             | 通用Run/Operation/内容与真实子效果；旧账本断言迁移，取消/未知/确认丢失与父子收敛纳入正式矩阵。                           |
+| MCP/ACP与共享服务                     | 独立服务包持官方协议SDK；Host持可信传输、权限与资源；真实HTTP/SSH、续接、内层批准/取消与排空通过。                       |
+| 设置、选择、授权与市场                | 人工/Agent共用实例配置owner；停用读取、CAS/幂等、安装升级卸载、保留数据/清理、独立App/UI更新已回归；正式目录已公开验证。 |
+| UI/事件、历史/提醒/资源               | 独立UI与通用Surface；MessagePort/WS、历史/会话切换及关闭已回归，移动真机与其它故障组合仍按下方待验表推进。               |
+| 无模型App与多实例                     | 无模型ACP App、多实例Registry及隔离回归通过；多角色仅为确定性扩展判据，不交付酒馆产品。                                  |
+
+### 职责归属审核表
+
+| 判断/资源                         | 唯一 owner                                         | 必须核对的调用链                                                                                                       |
+| --------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| 应用循环、模型/工具选择、结束意图 | App 后端插件                                       | run(ctx)→受管调用→真实回执→展示/检查点；无本体默认循环                                                                 |
+| 包、选择、依赖与注册              | packages/composition/registry                      | 验签→逻辑实例→原子注册；依赖不会自动曝光全部工具                                                                       |
+| 实际权限、批准与预算              | Host governance/真实领域 owner                     | 原 principal/父上界→事务消费批准与派发→每次敏感 I/O 复核                                                               |
+| 运行状态、操作与真实效果          | runs/operations                                    | 调用结果和效果证据分开，父完成等待关联资源，无两套事实账本                                                             |
+| 配置与秘密                        | settings 用例 + 连接/SecretBox owner               | 两入口同一校验/CAS/schema 修订；保存与生效分开                                                                         |
+| 连接/协议/资源                    | Host I/O owner + 服务插件协议 owner                | execution-owned session、当前调用授权、准确回调及真实关闭                                                              |
+| 界面与安全交互                    | Surface/App UI + Host 可信入口                     | purpose 限权；失败仍可管理，UI 更新不取消无关后台 Run                                                                  |
+| callable 与字节通道收尾           | 隔离 adapter、Platform 通道和 Host transport owner | handler 结束仍等待原调用；关闭报错不跳过真实 writer；协议 SDK 清理错误与原失败聚合；成功关闭的 HTTP 响应从活跃集合移除 |
+| 历史与摘要恢复                    | RunAppState存储 + App私有状态/压缩策略             | 读取与来源均限定Root；Host只校验封存内容与回执，App固定准确请求/来源/尾组；不再使用旧Host摘要包装证明                  |
+
+### 类型归属审核表
+
+| 类型/事实                                | 唯一 owner                                               | 转换与消费者                                                                                   |
+| ---------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| 包协议/Registry/Binding/Surface envelope | Shared agent/plugins                                     | 包/IPC/HTTP/MessagePort 严格解码，Backend/Frontend 白名单 mapper                               |
+| 插件业务 contract、schema 与说明         | 提供插件的公开纯契约/签名资产；动态内容注明来源          | 绑定时固定 schema digest，调用/结果校验；不进入 Host 功能大联合                                |
+| Run/Operation 安全协议                   | Shared agent/runs、agent/operations                      | 内部 model 与 storage 独立；HTTP/WS/SDK/测试同步                                               |
+| 配置 envelope、schema 修订、CAS          | Shared 协议 + settings/model/storage                     | UI/Agent 只转换真实身份和意图，同一配置用例消费                                                |
+| Host 领域能力与秘密/技术对象             | 对应模块 public、model、storage、Platform                | Model 显式转换；插件只得授权引用，不传 cookie/句柄/存储行                                      |
+| 服务调用与字节流错误                     | Shared RPC envelope、独立插件 SDK、Platform/应用具名错误 | MCP/ACP 客户端归插件；Host 的安全错误与内部 cause 分离；历史关系只作审计，不恢复 SDK3 运行接口 |
+| 分块页/检查点/历史预算                   | Shared plugins/content、run-context与values              | Host入口和SDK按现有IPC预算解码；私有持久状态不套HTTP控制响应预算；完整内容由原owner校验hash    |
+
+### 完成证据审核表
+
+| 项目           | 当前结论与证据                                                                                                              |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| 本体与SDK4     | 根check、双端build、全仓format通过；正式远程质量、构建、Docker smoke及八分片成功，738条Reporter与测试清单完全匹配。         |
+| 独立插件       | main/550e4e0b，Validate42394503906的98项通过；Agent2.0.2/UI2.0.1、MCP/ACP4.0.0、四工具包2.0.0全部已发布。                   |
+| 最终浏览器     | 指定CDP经真实prepare-update/update安装准确版本；1440/390/320px聊天、High默认思考、SSH文字/图标、刷新恢复与零pageerror通过。 |
+| 签名与交付     | 公开latest目录、全部11个版本的签名/文件hash/归档摘要与真实Host读取通过；dev与sha-f984034c6b67同摘要且OCI revision匹配。     |
+| 首次失败与证据 | 前七轮及本地首次失败均保留；不放宽断言、不跳过场景。正式矩阵之外的独立Node旧夹具和实机/性能范围不混作通过。                 |

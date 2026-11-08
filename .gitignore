@@ -184,7 +184,6 @@ electron-app/node_modules/
 electron-app/dist_electron/
 
 # Playwright E2E runtime artifacts
-/tests/e2e/node_modules/
 /tests/e2e/.tmp/
 /tests/e2e/.cache/
 /tests/e2e/.auth/
@@ -201,3 +200,6 @@ electron-app/dist_electron/
 /tests/e2e/**/*.db-wal
 
 # Agent plugin source/build tooling (generated signed packages stay outside the repo)
+
+# Generated immutable Host validation build descriptor.
+/packages/host-test-artifact.json

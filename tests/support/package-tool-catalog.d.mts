@@ -27,7 +27,8 @@ export function toolIdentityOf(
 ): AgentToolIdentity;
 export function pluginToolRows<T extends { identity_json: string }>(rows: T[]): T[];
 
+export function hasApprovalIdentity(value: { operationName: string }, expected: string): boolean;
 export function hasApprovalIdentity(
 	value: Parameters<typeof hasToolIdentity>[0],
-	expected: string | ExpectedToolIdentity,
+	expected: ExpectedToolIdentity,
 ): boolean;
