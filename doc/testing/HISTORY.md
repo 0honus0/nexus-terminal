@@ -2474,3 +2474,13 @@ Webhook秘密契约已下沉到真实原生HTTP/SQLite/投递层：`webhook-owne
 `file-manager-resize.spec.ts`在点击第一标签后立即读取全局活动surface，偶发捕获尚未完成Vue切换的第二会话ID；首次trace证明第一会话编辑器已经打开，但断言等待第二会话位置。改从目标标签既有`data-session-id`读取稳定身份，并等待对应surface激活；保留文件打开、切换取消拖动、迟到pointerup不写尺寸和偏好等全部断言，无新增sleep、产品UI或期限变更。`resize-identity-repeat`原场景连续5次通过，35.34秒，无skip/flaky或重试。此前`resize-identity-final`未能启动webServer，未执行任何场景，单独保留为启动错误。
 
 `check-resize-identity-final.log`和受影响Prettier、diff检查通过。第三轮精确作业结果、日志与第6分片首次trace保留在任务证据根；新的全量门禁与插件独立Validate仍待完成，定向5次成功不能代替完整通过。
+
+## 测试重构远程第四轮收敛（2026-11-08）
+
+本体`4caaa05d100d5dfbaec36c20b8c24711a78bc99a`的[第四轮42524550150](https://github.com/0honus0/nexus-terminal/actions/runs/42524550150)在21:18:40–21:33:22 UTC完整结束，约14分42秒。质量、Runner、Docker smoke和7分片成功，第5分片有1项flaky；第3轮会话身份竞态未再出现。首次失败为App工作区生命周期测试读取审计响应时，Chromium正文句柄已失效；服务端成功回执与重试通过不能覆盖首次失败。诊断归`remote-fourth5.log`与`remote-fourth5.zip`。
+
+审计过滤改为Playwright route.fetch仅转发原请求一次，先严格解码真实字节，再原样fulfill并核对原业务断言；不重放副作用。`audit-receipt-repaired`原场景连续5次通过，22.49秒。按实际TypeScript类型复核浏览器正文读取点，另将连接导入的唯一同类迟读改为原回执字节观测；其它候选为Node fetch、APIRequestContext或已经使用route.fetch，并非Chromium响应句柄。`native-file-receipt-final`两项通过，7.32秒，保留部分成功回执、唯一写入与完整导出断言。
+
+另发现5组不同describe下同名用例共用镜像日志文件；Reporter文件名加入Playwright唯一ID摘要，重试继续独立保存。`log-identity-repaired`两项通过，0.115秒；`log-identity-browser-repaired`真实SDK浏览器1项通过，7.6秒，并核对实际落盘文件；`fast-log-identity`全量快速层111文件272项通过，9.46秒，使用Vitest默认worker配置，与此前双worker26.41秒不作为同条件性能对比。完整check和格式通过；缺失报告父目录、定向路径错误与首次spacing检查失败均独立保留，未计为产品测试结果。
+
+新完整门禁与插件独立Validate仍待完成；首次失败、未知效果及未覆盖实机/负载边界保持原判据，不把分批结果或重试合并称全绿。

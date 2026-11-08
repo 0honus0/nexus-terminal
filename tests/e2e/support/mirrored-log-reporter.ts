@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type {
@@ -181,7 +182,10 @@ export default class MirroredLogReporter implements Reporter {
 		const parsed = path.parse(relativeSpec);
 		const testFolder = path.join(this.logRoot, parsed.dir, parsed.name);
 		const retrySuffix = retry > 0 ? `-retry-${retry}` : '';
-		return path.join(testFolder, `${safeName(test.title)}${retrySuffix}.log`);
+		return path.join(
+			testFolder,
+			`${safeName(test.title)}-${createHash('sha256').update(test.id).digest('hex')}${retrySuffix}.log`,
+		);
 	}
 
 	private append(test: TestCase, value: string) {

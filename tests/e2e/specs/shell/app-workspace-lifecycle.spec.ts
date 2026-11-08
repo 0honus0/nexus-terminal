@@ -273,14 +273,27 @@ test('formal App retains one real SSH session, fences old page effects and revok
 		await expect(page.locator('[data-session-id]')).toHaveAttribute('data-session-id', workspaceId ?? '');
 		await nav.locator('a[href="/audit-logs"]').click();
 		await expect(page.locator('[data-audit-id]').first()).toBeVisible();
-		const filtering = page.waitForResponse((response) => {
-			const url = new URL(response.url());
-			return url.pathname === '/api/v1/settings/audit-logs' && url.searchParams.get('q') === 'HTTP_MUTATION';
-		});
+		const filteredAudit: ReturnType<typeof readAuditResponse>[] = [];
+		// Retain the original bytes before Chromium can retire its response handle.
+		await page.route(
+			(url) => url.pathname === '/api/v1/settings/audit-logs' && url.searchParams.get('q') === 'HTTP_MUTATION',
+			async (route) => {
+				const response = await route.fetch({ maxRetries: 0, maxRedirects: 0 });
+				try {
+					expect(response.status()).toBe(200);
+					const bytes = await response.body();
+					const audit = readAuditResponse(JSON.parse(bytes.toString('utf8')));
+					await route.fulfill({ response, body: bytes });
+					filteredAudit.push(audit);
+				} finally {
+					await response.dispose();
+				}
+			},
+			{ times: 1 },
+		);
 		await page.getByRole('searchbox', { name: 'Search', exact: true }).fill('HTTP_MUTATION');
-		const filtered = await filtering;
-		expect(filtered.status()).toBe(200);
-		const activities = readAuditResponse(await filtered.json()).items;
+		await expect.poll(() => filteredAudit.length).toBe(1);
+		const activities = filteredAudit[0].items;
 		expect(activities.length).toBeGreaterThan(0);
 		expect(activities.every((entry) => entry.event.includes('HTTP_MUTATION'))).toBe(true);
 		await expect(page.locator('[data-runtime-boundary]')).toHaveCount(0);

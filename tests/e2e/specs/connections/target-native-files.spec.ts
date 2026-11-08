@@ -112,14 +112,27 @@ test('native connection JSON import retains partial receipts and configuration d
 	await expect(modal.getByText('Loaded connections.json', { exact: true })).toBeVisible();
 	await modal.getByRole('button', { name: 'Paste JSON', exact: true }).click();
 	await expect(modal.locator('textarea')).toHaveValue(/native import good/);
-	const importing = page.waitForResponse(
-		(response) =>
-			response.request().method() === 'POST' && response.url().endsWith('/api/v1/targets/connections/import'),
+	const importedResults: ReturnType<typeof readConnectionImportResponse>[] = [];
+	await page.route(
+		'**/api/v1/targets/connections/import',
+		async (route) => {
+			const response = await route.fetch({ maxRetries: 0, maxRedirects: 0 });
+			try {
+				expect(route.request().method()).toBe('POST');
+				expect(response.status()).toBe(200);
+				const bytes = await response.body();
+				const result = readConnectionImportResponse(JSON.parse(bytes.toString('utf8')));
+				await route.fulfill({ response, body: bytes });
+				importedResults.push(result);
+			} finally {
+				await response.dispose();
+			}
+		},
+		{ times: 1 },
 	);
 	await modal.getByRole('button', { name: 'Import connections', exact: true }).click();
-	const imported = await importing;
-	expect(imported.status()).toBe(200);
-	const receipts = readConnectionImportResponse(await imported.json()).items;
+	await expect.poll(() => importedResults.length).toBe(1);
+	const receipts = importedResults[0].items;
 	expect(receipts).toHaveLength(2);
 	expect(receipts[0]).toMatchObject({ status: 'ok' });
 	expect(receipts[1]).toMatchObject({ status: 'error', code: 'reference_not_found' });
