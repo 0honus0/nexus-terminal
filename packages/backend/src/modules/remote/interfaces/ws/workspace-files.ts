@@ -205,6 +205,7 @@ class WorkspaceFilesSession {
 	private resumeToken = '';
 	private attachmentGeneration = 0;
 	private attachmentId: string | null = null;
+	private closingAttachmentId: string | null = null;
 	private connecting = false;
 	private terminalOff: Array<() => void> = [];
 	private terminalQueue: Uint8Array[] = [];
@@ -222,6 +223,7 @@ class WorkspaceFilesSession {
 	constructor(
 		private readonly channel: HttpWebSocketChannel,
 		private readonly token: string | null,
+		private readonly access: AccessPublicApi,
 		private readonly files: RemoteFileService,
 		private readonly workspaces: WorkspaceService,
 		private readonly observations: RemoteObservationService,
@@ -1375,8 +1377,7 @@ class WorkspaceFilesSession {
 			if (this.lifetime.signal.aborted) {
 				return;
 			}
-			void this.workspaces
-				.allowed(this.token, id, attachmentId)
+			void this.attachmentAuthorized(id, attachmentId)
 				.then((valid) => {
 					if (!valid && this.workspaceId === id && this.attachmentId === attachmentId) {
 						this.channel.close(1008, 'Workspace owner no longer authorized');
@@ -1385,6 +1386,20 @@ class WorkspaceFilesSession {
 				.catch(() => this.channel.close(1011, 'Workspace authorization unavailable'));
 		}, WORKSPACE_AUTH_RECHECK_MS);
 		this.identityPoll.unref();
+	}
+
+	private async attachmentAuthorized(id: string, attachmentId: string): Promise<boolean> {
+		if (await this.workspaces.allowed(this.token, id, attachmentId)) {
+			return true;
+		}
+		// Explicit close retires the attachment before SSH/SFTP drain completes.
+		// Keep its response channel while still enforcing actual cookie revocation;
+		// this does not authorize any further Workspace operation.
+		return (
+			this.closingAttachmentId === attachmentId &&
+			this.token !== null &&
+			(await this.access.authenticate(this.token))?.userId === 1
+		);
 	}
 
 	private queueTerminal(value: Uint8Array): void {
@@ -1544,6 +1559,7 @@ class WorkspaceFilesSession {
 			throw new RemoteFileFailure('not_found');
 		}
 		const attachmentId = this.requireAttachmentId();
+		this.closingAttachmentId = attachmentId;
 		try {
 			await this.workspaces.closeAuthorized(
 				this.token,
@@ -1936,6 +1952,7 @@ class WorkspaceFilesSession {
 		this.suspendedDeliveredBytes = 0;
 		this.suspendedViewport = null;
 		this.attachmentId = null;
+		this.closingAttachmentId = null;
 		this.attachment = null;
 		this.workspaceId = null;
 		this.connectionId = null;
@@ -1973,6 +1990,7 @@ export function createWorkspaceFilesRoute(
 			new WorkspaceFilesSession(
 				channel,
 				readRequestCookie(request, ACCESS_SESSION_COOKIE_NAME),
+				access,
 				files,
 				workspaces,
 				observations,

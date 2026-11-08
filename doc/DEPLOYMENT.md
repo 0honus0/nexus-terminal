@@ -122,7 +122,7 @@ pnpm run format:all:check
 
 传递依赖的安全 override 按真实消费者限定：readdir-glob、ESLint、@eslint/config-array 和 @typescript-eslint/typescript-estree 使用 minimatch 11，避免继续解析受影响的旧版本；升级这些上游包时需同步核对其导出、glob 匹配和审计结果。jschardet 4 沿文件编辑器原动态导入使用，支持现有编码识别接口。现有 xterm、Monaco 与 splitpanes 补丁保留；Monaco 补丁使用 pnpm 12 支持的标准 Git diff 头。ssh2 1.17.0 额外应用上游 [Isolate 修复](https://github.com/mscdex/ssh2/commit/45522bb8723d8ecf459a1d222086e56074c11682) 和 [Nan ObjectWrap 修复](https://github.com/mscdex/ssh2/commit/a3a39d795a8d7ff43d5f33aafadccfc03466d044)，确保 Node 26 下原生加密模块能够编译和加载；此项为临时补丁，后续每次依赖升级都须检查：ssh2 新正式版包含上述修复时，同次删除补丁文件、`patchedDependencies` 注册及锁文件引用，再确认 Node 26 下原生加密模块编译、加载成功；不能只更新版本而遗留补丁。OpenAI 7.51.0 使用稳定版本，仅该精确版本列入 pnpm 默认发布等待期的例外，不关闭整体供应链校验。
 
-vue-chartjs 5.3.4临时补丁在已排队的 `nextTick` 更新前复核原图表实例，阻止快速关闭后访问已销毁画布；ESM/CJS两条入口同步。2026-11-08核对npm正式最新版和上游main均仍含此竞态。后续升级该依赖时检查上游是否已修复；修复后同次删除补丁、workspace注册和锁文件引用，并运行 `ui/status-chart-samples.spec.ts` 的真实浏览器回归。
+vue-chartjs 5.3.4临时补丁在已排队的 `nextTick` 更新前复核原图表实例，阻止快速关闭后访问已销毁画布；ESM/CJS两条入口同步。2026-11-08核对npm正式最新版和上游main均仍含此竞态。后续升级该依赖时检查上游是否已修复；修复后同次删除补丁、workspace注册和锁文件引用，并运行 `tests/e2e/specs/status-monitor/status-chart-samples.spec.ts` 的真实浏览器回归。
 
 单包用 `build:backend` / `build:frontend`。直接启动后端须提供 `NEXUS_DB_PATH`、`NEXUS_ENCRYPTION_KEY`、`NEXUS_PUBLIC_ORIGIN`；默认绑定 `127.0.0.1:3001`。
 

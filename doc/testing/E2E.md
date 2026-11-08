@@ -34,7 +34,7 @@
 
 唯一测试workspace为`tests/package.json`（`@nexus-terminal/tests`）。`*.test.ts/mjs`由Vitest直接发现，`*.native.test.mjs`由Node直接发现，`*.spec.ts/mjs`由Playwright发现，不互相包装。快速层无需浏览器；实际IPC/签包/Worker仍需Backend/SDK成品，浏览器层另需Frontend与测试客户端。根`test:all`当前串接静态、构建和以上三层，只执行本体自动测试，不能代替两仓组合与独立Docker smoke完整门禁。
 
-Actions使用统一8个测试runner：每个分片依次执行Vitest模块、Node原生协议、本体Playwright、插件互操作和插件Playwright，模块/原生按框架原生分片，浏览器按实际发现与历史耗时均衡；不再固定1个Backend与7个Browser。第1分片单独挂Docker socket运行真实Docker协议/模块，其余分片不挂载。快速层、静态及插件独立测试在质量作业执行，成品Docker部署smoke单独执行；全部必需作业成功才算门禁通过。
+Actions使用统一8个测试runner：每个分片依次执行Vitest模块、Node原生协议、本体Playwright、插件互操作和插件Playwright，模块/原生按框架原生分片，浏览器按实际发现与历史耗时均衡；不再固定1个Backend与7个Browser。所有测试容器启用init回收孤儿进程，并以SYS_PTRACE检查真实OpenSSH句柄。第1分片单独挂Docker socket运行真实Docker协议/模块，同时持有限定的挂载能力，在私有mount namespace执行真实有限tmpfs的ENOSPC测试；其余分片不挂Docker socket或授予挂载能力。ENOSPC文件显式归第1分片，不依赖原生文件排序后的偶然分配。快速层、静态及插件独立测试在质量作业执行，成品Docker部署smoke单独执行；全部必需作业成功才算门禁通过。
 
 质量作业构建Host一次、签候选包一次，上传准确插件源码和包。分片复用绑定本次SHA/不可变artifact ID的同批成品，不重建；完整重跑与部分重跑遵循下文产物身份规则。插件独立Validate选择成功Host E2E的准确SHA和构建产物，执行自己的全部分层。两仓首次接线需要先有新Host门禁成功，之后复验插件Validate，不能引用旧harness的绿色结论。
 
@@ -62,6 +62,8 @@ ACP取消验证工具取消、旧审批拒绝、禁止文件未生成及原进�
 | 插件浏览器         | `plugin-browser-full-after-repairs`：70项中67通过、3失败，12.3分钟；后续`plugin-browser-three-repaired`两项通过、关闭同名App定位失败，`plugin-checkpoint-final`修复后1项通过，13.1秒。保留每轮失败，不把分批结果写成完整70项一次通过。 |
 | MSW协议修正        | `msw-contract-final`：7文件23项通过，3.51秒，使用当前MSW的`onUnhandledFrame`。                                                                                                                                                         |
 | 仓库维护           | `maintenance-final.log`：22项通过，142.8ms；用例已从scripts移入tooling。                                                                                                                                                               |
+
+> 首轮新CI[42518923481](https://github.com/0honus0/nexus-terminal/actions/runs/42518923481)失败，不能作为新架构完整通过证据。已定位容器Git真实路径信任、进程回收/句柄观测/挂载条件、受控SSH关闭后写入、监控响应正文读取时序，以及生产Workspace正常关闭被授权扫描提前断开的缺陷；修复与实测见[远程首轮收敛](HISTORY.md#测试重构远程首轮收敛2026-11-08)。
 
 最终本体`check-final-layout.log`、`build-final-layout.log`和`formatcheck-final-docs.log`通过，插件check/格式、5项Vitest与125项Node测试通过；本体浏览器430项、插件70项发现无错误。仍待同基线远程全量和冷/热耗时回填。3–5分钟是同等8个测试runner下的优化目标，当前未证明达成；自然五分钟认证到期、两分钟SSH空闲和真实弱网/排空不为目标缩短。
 

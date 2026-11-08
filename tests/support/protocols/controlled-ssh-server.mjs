@@ -1537,10 +1537,11 @@ function runRemoteCommand(command, stream, session, pty = false) {
 	if (isArchiveCommand) archiveCommandsStarted += 1;
 	if (isArchivePreflightCommand) archivePreflightsStarted += 1;
 	session.on('signal', onSignal);
-	child.stdout.on('data', (chunk) => stream.write(chunk));
-	child.stderr.on('data', (chunk) => stream.stderr.write(chunk));
+	// pipe owns backpressure and unpipes on destination finish/close; late child
+	// diagnostics must not write into an SSH channel that already sent EOF.
+	child.stdout.pipe(stream, { end: false });
+	child.stderr.pipe(stream.stderr, { end: false });
 	stream.on('data', (chunk) => {
-		if (command.includes('acp-process.mjs')) console.error('ACP_FIXTURE_BYTES', chunk.toString());
 		child.stdin.write(chunk);
 	});
 	// sshd forwards channel EOF to the executed program's stdin. In particular,
@@ -1594,8 +1595,8 @@ function attachShell(session, accept) {
 			stdio: ['pipe', 'pipe', 'pipe'],
 		}),
 	);
-	child.stdout.on('data', (data) => stream.write(data));
-	child.stderr.on('data', (data) => stream.stderr.write(data));
+	child.stdout.pipe(stream, { end: false });
+	child.stderr.pipe(stream.stderr, { end: false });
 	stream.on('data', (data) => child.stdin.write(data));
 	stream.on('close', () => child.kill('SIGTERM'));
 	child.on('close', (code) => {

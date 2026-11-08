@@ -249,11 +249,17 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ github.token }}
-      options: --ipc=host ${{ matrix.shard == 1 && '--volume=/var/run/docker.sock:/var/run/docker.sock' || '' }}
+      # Reap orphaned SSH children and inspect their real file handles.
+      # Only the first shard owns private finite tmpfs and Docker fixtures.
+      options: >-
+        --init --ipc=host --cap-add=SYS_PTRACE
+        ${{ matrix.shard == 1 && '--cap-add=SYS_ADMIN --security-opt=apparmor=unconfined' || '' }}
+        ${{ matrix.shard == 1 && '--volume=/var/run/docker.sock:/var/run/docker.sock' || '' }}
     env:
       NEXUS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/tests/e2e/.tmp/layers
       NEXUS_AGENT_ACCEPTANCE_ROOT: ${{ github.workspace }}/tests/e2e/.tmp/layers
       NEXUS_TEST_DOCKER_NATIVE: backend/remote/docker/protocol/docker.native.test.mjs
+      NEXUS_TEST_FINITE_FS_NATIVE: backend/remote/sessions/suspend/storage/suspended-log-enospc.native.test.mjs
       NEXUS_E2E_PREBUILT: '1'
       E2E_CAPTURE_SCREENSHOTS: ${{ github.event_name == 'workflow_dispatch' && inputs.refresh_screenshots && '1' || '0' }}
       E2E_SCREENSHOT_OUTPUT_DIR: .tmp/functional-screenshots
@@ -344,6 +350,9 @@ jobs:
       - name: Restore plugin builds without rebuilding
         working-directory: tests/e2e/.tmp/plugin-source
         run: |
+          # Container mounts can resolve the checkout alias to /__w. Git checks the canonical owner path.
+          git config --global --add safe.directory "$(realpath "$GITHUB_WORKSPACE")"
+          git config --global --add safe.directory "$(pwd -P)"
           tar -xzf ../plugin-validation-artifact/plugin-test-source.tar.gz
           pnpm install --frozen-lockfile --prefer-offline
           node "$GITHUB_WORKSPACE/scripts/e2e/host-test-artifact.mjs" verify "$GITHUB_SHA"
@@ -363,12 +372,21 @@ jobs:
         run: |
           mkdir -p "$NEXUS_TEST_ARTIFACT_DIR/reports"
           mapfile -d '' native_files < <(find backend tooling -type f -name '*.native.test.mjs' \
-            ! -path "$NEXUS_TEST_DOCKER_NATIVE" -print0 | sort -z)
+            ! -path "$NEXUS_TEST_DOCKER_NATIVE" ! -path "$NEXUS_TEST_FINITE_FS_NATIVE" -print0 | sort -z)
           test "${#native_files[@]}" -ge "${{ matrix.shards }}"
           node --test --test-concurrency=1 --test-shard="${{ matrix.shard }}/${{ matrix.shards }}" \
             --test-reporter=spec --test-reporter=junit \
             --test-reporter-destination=stdout \
             --test-reporter-destination="$NEXUS_TEST_ARTIFACT_DIR/reports/native.xml" "${native_files[@]}"
+
+      - name: Run finite filesystem faults
+        if: ${{ !cancelled() && matrix.shard == 1 && steps.application-download.outcome == 'success' }}
+        working-directory: tests
+        run: |
+          node --test --test-reporter=spec --test-reporter=junit \
+            --test-reporter-destination=stdout \
+            --test-reporter-destination="$NEXUS_TEST_ARTIFACT_DIR/reports/native-filesystem.xml" \
+            "$NEXUS_TEST_FINITE_FS_NATIVE"
 
       - name: Prepare real Docker fixture
         id: docker-fixture

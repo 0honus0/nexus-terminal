@@ -2433,3 +2433,21 @@ Webhook秘密契约已下沉到真实原生HTTP/SQLite/投递层：`webhook-owne
 | 最终浏览器     | 指定CDP经真实prepare-update/update安装准确版本；1440/390/320px聊天、High默认思考、SSH文字/图标、刷新恢复与零pageerror通过。 |
 | 签名与交付     | 公开latest目录、全部11个版本的签名/文件hash/归档摘要与真实Host读取通过；dev与sha-f984034c6b67同摘要且OCI revision匹配。     |
 | 首次失败与证据 | 前七轮及本地首次失败均保留；不放宽断言、不跳过场景。正式矩阵之外的独立Node旧夹具和实机/性能范围不混作通过。                 |
+
+## 测试重构远程首轮收敛（2026-11-08）
+
+本体`8a320314b06ae8b11be990679aa5b027a50c6295`的[首轮42518923481](https://github.com/0honus0/nexus-terminal/actions/runs/42518923481)质量、Runner准备和Docker部署smoke成功，8个测试分片失败。首次日志分别保留在任务运行根的`remote-shard1.log`至`remote-shard8.log`，分片7完整诊断为`remote7.zip`。不把后续定向通过合并称首轮成功。
+
+| 失败原因                                                                                    | 修复及验证边界                                                                                                                                                                                                  |
+| ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 容器workspace别名与真实`/__w`路径不同，Git拒绝插件组合源码身份检查                          | 仅登记本体和插件checkout的canonical safe.directory，不开放通配信任；新门禁继续验证                                                                                                                              |
+| 容器PID1不回收孤儿，`kill(pid,0)`把已退出僵尸当作存活                                       | Alpine实测无init时原进程为Z、加init后`/proc`条目消失；测试容器加init，保留原PTY退出断言                                                                                                                         |
+| 容器缺SYS_PTRACE，无法读取OpenSSH子进程的fd                                                 | Alpine以切换用户的真实fd实测，无能力无法readlink，增加后得到真实路径；统一实际句柄观测并规范化路径，包含已unlink但仍打开的句柄                                                                                  |
+| 私有有限tmpfs被容器mount/user namespace权限阻止                                             | 仅第1分片授予SYS_ADMIN及关闭对应AppArmor限制，root使用独立mount namespace；本地三组权限实测证明缺省unshare拒绝、仅SYS_ADMIN仍被AppArmor拒绝、限定能力与解除该限制后可实际挂载8MiB tmpfs；五项真实ENOSPC断言保留 |
+| 受控SSH的Shell在输出目的通道结束后仍手动write stderr，触发ERR_STREAM_WRITE_AFTER_END        | 使用Node pipe持有背压及目的端结束自动退订；`controlled-ssh-repair`4项通过，5.63秒                                                                                                                               |
+| 监控导航完成后才读取响应正文，偶发Chromium正文句柄失效                                      | 响应匹配时立即消费JSON；`monitoring-response-final`1项通过，18.37秒，全部采样/缓存/单session断言保留                                                                                                            |
+| 实际归档收尾超过3秒，Workspace正常closing被周期操作授权扫描误判撤权，提前1008关闭而丢失回执 | Interface区分正在关闭的原attachment与操作权；期间仍通过真实Access复验Cookie，其他操作继续拒绝。新增原生正常关闭/注销期间关闭两项回归；自然扫描期限与产品关闭预算未改                                            |
+
+`remote-native-repairs`首次定向24项中23通过、1失败，24.22秒；失败为新增回归误以为closing期间ping仍可用，实际安全行为应拒绝not_found，已纠正测试预期。归档/复制/上传和五种真实磁盘满场景全部通过，不据此声称远程同基线已通过。`close-response-final`新增两项正常关闭/撤销回归全部通过，8.31秒；后续完整结论与耗时回填当前测试入口。
+
+插件`9c1681e438bf01cc726f1cdefa5f2e078e55ec8e`[首轮Validate42518843555](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42518843555)选到旧Host成功成品，缺新tests workspace而在Playwright启动前失败。新Host门禁成功后须绑定准确run ID重新验证，不能将其归因于插件业务通过或失败。

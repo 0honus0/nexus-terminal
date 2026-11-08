@@ -42,8 +42,9 @@ await test('Isolated finite filesystem preserves confirmed suspended history', a
 					const { stdout } = await execute(
 						'unshare',
 						[
-							'--user',
-							'--map-root-user',
+							// Container root already has the scoped mount capability. Avoid
+							// Ubuntu's separate unprivileged user-namespace restriction there.
+							...(process.getuid() === 0 ? [] : ['--user', '--map-root-user']),
 							'--mount',
 							'--fork',
 							'--kill-child=SIGKILL',

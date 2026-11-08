@@ -80,6 +80,8 @@ Workspace的copy/move/archive已归Remote Files，按原附件准入和原任务
 
 ### Workspace 当前边界
 
+WorkspaceFilesSession显式关闭绑定原attachment，WorkspaceService先撤销操作权再等待真实资源排空。周期检查在此阶段继续通过Access复验Cookie，不能把正常closing误判为身份撤销并丢失关闭回执；该通道保留只用于原关闭结果，其他操作仍由allowed拒绝。释放原attachment同时清除关闭标记，迟到结果不得授权后继attachment。
+
 挂起目录通过独立 `/ws/suspended-sessions` 提供首次/变化完整快照，不创建 SSH Workspace。WorkspaceService 持按用户变化事件，覆盖标记、恢复预约/ACK/回滚、续租、detach、改名、终止、自然断线及日志过期；WS Interface 持连接内 revision、合并串行快照读取、发送前身份复查和背压失败关闭。订阅先登记再初读，读取期间变化使旧快照失效；3秒串行身份复查、15秒心跳，不定期重读目录。关闭先退订和清 timer，再等待原快照/授权任务；客户端隐藏或断线重连后重新取得完整快照，HTTP 写入及显式读回保持原 owner 与未知围栏。Shared events 负责严格协议，接口复用 suspend-view 白名单；不按单个终端复用控制 socket。
 
 Remote 的普通 SSH Workspace 是一条持续存在的交互式 shell，而非 Files attachment 或一次性 HTTP PTY。一个 Workspace ID 对应唯一应用会话 owner，涵盖 pending/open/离线宽限/挂起/恢复交付/closing/清理待确认；外部 WS 仅持有可撤销 attachment。Access 注销令当前 Cookie 失效，附着 WS 在身份复查时关闭；这与终止原 Workspace 是不同操作，断开后按普通宽限/挂起保留策略管理原 PTY。同用户以新有效登录和原 Workspace 凭据续接，显式 ACK 后关联 Files 按新会话重新取得资源，不复用旧会话文件权限。已有独立 Remote HTTP/PTY 保留其实际消费者与关闭语义，不冒充可恢复 Workspace。Agent 仍仅复用 Platform SSH/字节通道，不继承普通 Workspace 的令牌、用户权限或资源额度。WorkspaceService 向 Files 显式提供原实例与会话摘要绑定的 WorkspaceFileAuthority（Files Model 应用契约），统一检查生命周期和挂起租约；独立上传、下载交付及多步骤传输通过该能力复查，不依赖扫描先撤销控制 WS。Files 不反向引用 Workspace Service，Platform/Shared 不承载该后端私有政策。跨 Workspace 复制同时绑定原源和目标 owner；普通离线宽限与独立 Files 保持各自政策。检查只限制后续应用派发/交付，不承诺撤回已派发技术调用；授权失效不免除清理责任，远端清理未知保留原因及现场。

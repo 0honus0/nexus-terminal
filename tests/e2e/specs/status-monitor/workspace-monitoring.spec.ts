@@ -149,9 +149,13 @@ test('Workspace and Dashboard consume real Linux samples, natural cache expiry a
 		await expect(page.getByRole('button', { name: /^CPU / }).first()).toBeVisible();
 		await expect(page.locator('[data-runtime-boundary]')).toHaveCount(0);
 		const resourcePath = '/api/v1/system/ssh-resources/' + target.id;
-		const firstResponse = page.waitForResponse((response) => response.url().endsWith(resourcePath));
+		// Consume the response at delivery, before the navigation action has finished.
+		// Chromium can retire the previous document's response body while click is still awaiting navigation.
+		const firstResponse = page
+			.waitForResponse((response) => response.url().endsWith(resourcePath))
+			.then(async (response) => readSshResourceStatus(await response.json()));
 		await page.locator('.app-nav-links').getByRole('link', { name: 'Dashboard', exact: true }).click();
-		const first = readSshResourceStatus(await (await firstResponse).json());
+		const first = await firstResponse;
 		expect(first.status?.memTotal).toBeGreaterThan(0);
 		const card = page.locator('.dashboard-connection-card').filter({ hasText: target.name ?? '' });
 		await expect(card).toContainText('CPU');

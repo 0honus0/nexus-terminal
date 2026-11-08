@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { mkdtemp, mkdir, readdir, readlink, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, readlink, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { createApp } from '../../../../../packages/backend/dist/bootstrap/create-app.js';
 import { RemoteFileFailure } from '../../../../../packages/backend/dist/modules/remote/files/model/file-types.js';
 import {
@@ -15,12 +15,19 @@ import {
 } from '../../../../support/protocols/openssh-fixture.mjs';
 
 export async function fileHandles(path) {
+	// /proc exposes the canonical mount path, including after unlink. CI's
+	// workspace alias must not make a live remote writer appear closed.
+	const canonical = await realpath(path).catch(async (error) => {
+		if (error.code !== 'ENOENT') throw error;
+		return join(await realpath(dirname(path)), basename(path));
+	});
 	const holders = [];
 	for (const pid of (await readdir('/proc')).filter((name) => /^\d+$/u.test(name))) {
 		try {
 			for (const fd of await readdir(`/proc/${pid}/fd`)) {
 				try {
-					if ((await readlink(`/proc/${pid}/fd/${fd}`)) === path) {
+					const target = await readlink(`/proc/${pid}/fd/${fd}`);
+					if (target === canonical || target === canonical + ' (deleted)') {
 						holders.push({ pid: Number(pid), fd });
 					}
 				} catch (error) {

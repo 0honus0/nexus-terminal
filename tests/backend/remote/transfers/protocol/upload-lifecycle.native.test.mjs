@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { mkdtemp, mkdir, readFile, writeFile, readdir, readlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import WebSocket from '../../../../../packages/backend/node_modules/ws/index.js';
@@ -11,6 +11,7 @@ import { SshSftpLease } from '../../../../../packages/backend/dist/platform/ssh/
 import { MachineSftpFailure } from '../../../../../packages/backend/dist/platform/ssh/ssh-port.js';
 import { RemoteResourceCleanupFailure } from '../../../../../packages/backend/dist/modules/remote/resource-errors.js';
 import { RemoteFileFailure } from '../../../../../packages/backend/dist/modules/remote/files/model/file-types.js';
+import { fileHandles as openFileHandles } from '../support/file-transfer-fixture.mjs';
 import {
 	origin,
 	until,
@@ -19,30 +20,6 @@ import {
 	openSshd,
 	openWorkspace,
 } from '../../../../support/protocols/openssh-fixture.mjs';
-
-async function openFileHandles(path) {
-	const holders = [];
-	for (const pid of (await readdir('/proc')).filter((name) => /^\d+$/u.test(name))) {
-		try {
-			for (const fd of await readdir(`/proc/${pid}/fd`)) {
-				try {
-					if ((await readlink(`/proc/${pid}/fd/${fd}`)) === path) {
-						holders.push({ pid: Number(pid), fd });
-					}
-				} catch (error) {
-					if (!['ENOENT', 'EACCES'].includes(error.code)) {
-						throw error;
-					}
-				}
-			}
-		} catch (error) {
-			if (!['ENOENT', 'EACCES'].includes(error.code)) {
-				throw error;
-			}
-		}
-	}
-	return holders;
-}
 
 function hasCleanupFailure(error) {
 	return (
