@@ -18,7 +18,7 @@ Vitest 的报告可用 `NEXUS_TEST_ARTIFACT_DIR` 指定；缓存使用 `NEXUS_TE
 
 Linux 的 Chromium 临时目录须容纳实际 Unix socket 路径长度；任务产物目录较深时，为 `TMPDIR` 指定本轮独享的短目录，报告与数据库仍放明确产物根。路径限制来自底层 socket，不额外限制产品文件路径。
 
-`cases/migration.json` 保留原测试源文件摘要、断言和场景去向。`framework-native` 仅表示已接入直接执行，`framework-vitest` 表示框架迁移，均不表示运行通过；本轮实测另见测试入口。当前326份旧来源及86个展开场景均有新owner，清单没有pending；仍需最终远程全量验收。
+`cases/migration.json` 保留原测试源文件摘要、断言和场景去向。`framework-native` 仅表示已接入直接执行，`framework-vitest` 表示框架迁移，均不表示运行通过；本轮实测另见测试入口。当前326份旧来源及86个展开场景均有新owner，清单没有pending；两仓完整远程门禁已通过，准确身份与逐层结果见[测试基线](../doc/testing/E2E.md#当前验收基线)。
 
 跨模块受控服务归 `support/protocols/`：`controlled-ssh-server.mjs`（ssh2故障控制）、`openssh-fixture.mjs`（真实sshd）、`desktop-server.mjs`（xrdp/TigerVNC）、`browser-server.mjs`（Chromium/CDP）。模型响应、插件仓库、部署页与ACP进程等可执行协议端也归此处；签包构建器归`support/plugins/`。桌面回归复用runner或本机预装的xrdp/TigerVNC，不再构建独立桌面Docker；`desktop-service-fixture.mjs`按需分配端口、X display和本轮目录，动态配置由服务脚本生成并保留日志/数据库；浏览器步骤仍归 `e2e/support/`。Actions提供运行机器和预装依赖的runner镜像，服务由这些脚本启动，常规回归不依赖公网测试主机。Playwright的`e2eServices`用例选项显式声明`ssh/desktop/browser/provider/plugins/deployment`；worker fixture按需启动并复用，先排空应用再关闭原服务。普通页面默认不启动外部服务。每个worker保留服务日志、启动与关闭耗时和退出状态；强制结束记为失败，失败数据库在下一次重置前归档保留。
 
@@ -28,6 +28,8 @@ Linux 的 Chromium 临时目录须容纳实际 Unix socket 路径长度；任务
 
 应用集成夹具沿用浏览器套件的120秒单例测试预算；5秒默认值已在合并运行中实际中断约6–7秒的SSH/文件场景。此预算不改变产品期限，不是等待固定时长。夹具注册框架收尾，超时也关闭原应用与sshd；`restart()`先正常关闭原应用，再使用同一SQLite文件和内存密钥重新装配，不复制活库或重置数据。
 
-插件仓候选互操作通过`support/plugins/host-harness.mjs`作为本体test-artifact入口，共用真实应用/OpenSSH夹具，复用单独的`install-signed-app.mjs`普通签包安装流程。准确候选入口接收完整签包字节与身份，不复制App源码重签；复用安装需核对版本、发布者与归档hash。普通本体专项继续可用固定正式包，不将其结果当作新候选通过。完整Agent互操作测试归插件仓`tests/interoperability/agent/`，完整互操作已迁入插件仓，真实Host本地54项通过；插件业务浏览器70项与独立CI门禁已经接线，最终同基线远程结果另行核对。
+插件仓候选互操作通过`support/plugins/host-harness.mjs`作为本体test-artifact入口，共用真实应用/OpenSSH夹具，复用单独的`install-signed-app.mjs`普通签包安装流程。准确候选入口接收完整签包字节与身份，不复制App源码重签；复用安装需核对版本、发布者与归档hash。普通本体专项继续可用固定正式包，不将其结果当作新候选通过。完整Agent互操作测试归插件仓`tests/interoperability/agent/`，完整互操作及70项业务浏览器均归插件仓，已通过准确Host成品组合的完整远程门禁；Host不维护第二份插件业务用例。
 
 CI以统一8个runner执行模块/协议/本体浏览器/插件互操作/插件浏览器，第1分片额外运行真实Docker。质量作业只构建及签候选一次，分片复用准确成品；根`test:all`仅串接本体检查，不包括插件仓及独立Docker部署smoke。插件业务浏览器通过公开`support/plugins/browser-config.ts`复用Host测试成品，页面helper在`e2e/support/agent-host/`，任务工程唯一归插件仓。
+
+插件独立CI同样构建签包一次，再由八个容器执行Node互操作和Playwright原生分片，复用成功Host E2E的准确源码及不可变产物。逐片核对原生报告与组合，不能将发现、无场景分片或局部重跑当作完整覆盖。当前耗时及未达性能目标见测试基线。

@@ -2,17 +2,21 @@
 
 本文只维护当前验收基线、可复用执行入口与证据判据。逐轮结果见 [历史验证索引](HISTORY.md)，Agent 任务设计见 [场景清单](AGENT_TASK_SCENARIOS.md)，当前未验和实施安排见 [PLAN](../PLAN.md)。产品操作与实现设计分别见 [USAGE](../USAGE.md) 和 [架构](../architecture/BACKEND.md)。
 
-本体与插件已按[测试架构](../architecture/TESTING.md)完成Vitest/Node/Playwright源码迁移和双仓CI接线，最终全量门禁仍待验证。下列发布/远程基线属于迁移前版本，不证明当前工作区全量通过。
+本体与插件已按[测试架构](../architecture/TESTING.md)完成Vitest/Node/Playwright分层迁移和两仓完整门禁。当前自动验收与既有实机证据分别记录，耗时目标未达及未验范围继续保留。
 
 ## 当前验收基线
 
-最新完整远程 [E2E42465732392](https://github.com/0honus0/nexus-terminal/actions/runs/42465732392) 验证main/21e36a7b7da73f65470a8b5c4d52a6aca83f4a45：正式矩阵758项全部一次通过（Backend223、Browser535），质量、双端构建、Docker smoke、八个分片及耗时汇总成功。逐项核对原始Reporter记录与正式清单，无失败、重试、flaky、场景跳过或遗漏；本轮覆盖迁移65、插件召回配置、MCP/ACP入口归属、编辑器安全围栏和备份导出导入。首次失败与取消记录见[本轮记录](HISTORY.md#agent-设置归属与插件召回配置2026-11-08)。
+本体[完整E2E42529604782](https://github.com/0honus0/nexus-terminal/actions/runs/42529604782)验证`ccd612d953ac725a04f087817493fdc5be332ae3`：质量、Docker部署smoke、八个测试分片及耗时汇总全部成功。原始报告核对模块236、原生协议848、ENOSPC5、Docker模块1及原生9、本体浏览器430、插件互操作54、插件浏览器70，全部一次通过，无测试跳过、重试、flaky或遗漏。快速层112文件275项，31.72秒。不同层不相加作为独立产品功能总数。
 
-最新[main amd64 dev发布42467733089](https://github.com/0honus0/nexus-terminal/actions/runs/42467733089)来源1a32d09771d31365072b986ab83c7957c18c3ce2，相对被测提交只增加CI自动更新的测试耗时估算。`dev`与`sha-1a32d09771d3`摘要均为`sha256:127e73e3cd5e679dabc01438e48c9c2baf4f2a685fa594b0ac5751855e0d95f1`；已只读核对唯一产品平台linux/amd64、manifest/config摘要及OCI revision/source，未拉取完整镜像。完整[发布记录](HISTORY.md#agent-设置归属与插件召回配置2026-11-08)保留；本轮文档收口另行提交，无行为变化。未更新生产主机。
+插件[独立Validate42533036672](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42533036672)验证`0ef2c76c7f35dc892e38fdb9510cc1059146534a`，绑定上述Host源码与不可变构建，质量及八分片全部成功。原生包报告有122个叶case和3个父测试组，Node计数125，另有Vitest5项；互操作54个叶case、浏览器70项全部一次通过。17份组合记录一致，准确绑定源码、Host成品、SDK及八签包。相对本体门禁使用的插件`9c1681e4`，新提交仅修改独立CI和测试说明，运行包源码与SDK不变；新候选仍完成独立组合验收。
 
-官方Agent工具已发布 [2.1.0](https://github.com/0honus0/nexus-agent-plugins/releases/tag/tools-agent-v2.1.0)，签包源码40515740606254ed9398d15830cce150a4e1c8a8；插件仓最新main为31173d7064d7d5a6a7aba5ee752b91230ae5bbc3，[Validate42464714350](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42464714350)成功。本地完整check/build/格式通过，八包85项独立测试和最终22项仓库测试全过。其余组合保持Browser2.1.1、Agent2.0.2、ChatUI2.0.1、MCP/ACP服务4.0.0及Remote/Integrations工具2.0.0。公开latest目录[catalog-20261108-3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/catalog-20261108-3)保留全部14个不可变版本及三语元数据，旧13条逐项保持不变。Shared4.0.4同步移除Host召回偏好，SDK4沿用现有配置与locale能力，未新增语言RPC。
+本体整轮墙钟16分9秒，插件独立门禁5分53秒。3–5分钟整轮目标尚未达到；冷/热缓存同基线对照、CPU分钟及峰值RSS尚未完成。自然五分钟认证到期、两分钟SSH空闲、弱网与真实排空均保持。完整身份、首次失败及统计口径见[最终验收](HISTORY.md#测试重构最终验收与独立插件分片2026-11-08)。
 
-指定CDP `172.30.30.11:9223`、`https://api.honus.top`与本地9998前端完成正式Agent工具2.1.0的英文1440px、中文320px和日文390px设置保存、800/320/390条及1048576字节读回、无横向溢出和零pageerror验收。公开下载曾返回503，CDP安装改用同一正式签包的本地测试源，归档字节/签名/摘要不变；公开网关可用性不属于该安装证据。此前正式Browser2.1.1安装、三语市场、实例设置及SDK4聊天的证据仍见[历史索引](HISTORY.md)。首次全目录独立Node探测889项的173失败、8取消不作为正式矩阵通过证据。手机真机、真实模型效果、物理音画、介质故障及负载性能等未验边界仍见[待验与外部依赖](../PLAN.md#待验与外部依赖)；受控协议和浏览器回归不代替这些实测。
+当前正式插件组合保持Agent2.0.2、ChatUI2.0.1、Browser2.1.1、Agent工具2.1.0、MCP/ACP服务4.0.0及Remote/Integrations工具2.0.0；公开目录为[catalog-20261108-3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/catalog-20261108-3)。本轮测试/CI重构未修改正式包运行源码，不重新发布相同不可变版本。Shared4.0.4与SDK4保持。
+
+已有指定CDP `172.30.30.11:9223`、`https://api.honus.top`及本地9998前端的SDK4聊天、刷新恢复、三语市场和正式Agent工具设置验收继续作为对应产品版本的实机证据，见[历史记录](HISTORY.md#agent-设置归属与插件召回配置2026-11-08)。手机真机、真实模型效果、物理音画、介质故障与负载性能等未验范围见[PLAN](../PLAN.md#待验与外部依赖)。本轮不更新生产主机。
+
+本轮main amd64 dev镜像发布结果将在发布验收后回填；上一发布身份保留在[历史记录](HISTORY.md#agent-设置归属与插件召回配置2026-11-08)，不能作为本轮镜像通过证据。
 
 ## 阶段逻辑回归
 
@@ -36,7 +40,7 @@
 
 Actions使用统一8个测试runner：每个分片依次执行Vitest模块、Node原生协议、本体Playwright、插件互操作和插件Playwright，模块/原生按框架原生分片，浏览器按实际发现与历史耗时均衡；不再固定1个Backend与7个Browser。所有测试容器启用init回收孤儿进程，并以SYS_PTRACE检查真实OpenSSH句柄。第1分片单独挂Docker socket运行真实Docker协议/模块，同时持有限定的挂载能力，在私有mount namespace执行真实有限tmpfs的ENOSPC测试；其余分片不挂Docker socket或授予挂载能力。ENOSPC文件显式归第1分片，不依赖原生文件排序后的偶然分配。快速层、静态及插件独立测试在质量作业执行，成品Docker部署smoke单独执行；全部必需作业成功才算门禁通过。
 
-质量作业构建Host一次、签候选包一次，上传准确插件源码和包。分片复用绑定本次SHA/不可变artifact ID的同批成品，不重建；完整重跑与部分重跑遵循下文产物身份规则。插件独立Validate选择成功Host E2E的准确SHA和构建产物，执行自己的全部分层。两仓首次接线需要先有新Host门禁成功，之后复验插件Validate，不能引用旧harness的绿色结论。
+质量作业构建Host一次、签候选包一次，上传准确插件源码和包。分片复用绑定本次SHA/不可变artifact ID的同批成品，不重建；完整重跑与部分重跑遵循下文产物身份规则。插件独立Validate选择成功Host E2E的准确SHA和不可变构建产物；质量作业构建签包一次并执行包测试、浏览器发现与类型检查，八个容器分片恢复同批产物执行Node互操作与Playwright。开发签名私钥不分发给测试分片。两仓组合记录须绑定真实源码、成品和包摘要，不能引用旧harness的绿色结论。
 
 浏览器使用正式Frontend构建的preview及真实Backend，每例独立数据库，外部协议服务按声明启动。`NEXUS_TEST_ARTIFACT_DIR`与`NEXUS_E2E_DATA_ROOT`指定任务证据/数据库；`NEXUS_E2E_SERVICE_ROOT`为受控SSH运行路径，默认使用短临时路径以保持Unix socket名称互不截断，timings记录对应runtime根。首次trace/截图/录像/日志及数据库保留，重试通过仍阻止CI通过。
 
@@ -48,26 +52,11 @@ ACP取消验证工具取消、旧审批拒绝、禁止文件未生成及原进�
 
 ## 测试重构当前证据（2026-11-08）
 
-源码迁移已完成：`tests/cases/migration.json`记录326份旧来源、86个展开场景及静态资产去向，没有pending来源；来源摘要与替代文件由`pnpm check`核对。完整Agent机制与插件业务浏览器测试归独立插件仓，本体只保留通用Host边界。逐模块实测与首次失败见[历史记录](HISTORY.md#测试重构分模块实测2026-11-08)。映射完整不等于最终门禁通过。
+`tests/cases/migration.json`记录326份旧来源、86个展开场景及38份资产的去向，没有pending；55处外仓替代owner已逐文件核对。旧入口、Playwright→Node包装和重复任务工程已移除，固定签包及来源锁定仍由真实消费者使用。迁移索引证明归属，完整报告证明执行；二者均需核对。
 
-本轮任务证据根为`/home/honus/nexus-task-artifacts/testing-restructure-20261108`；近期运行在`/dev/shm/nexus-testing-20261108`。以下均为本地分组结果，不合并冒充同一轮全量PASS：
+当前两仓完整门禁与耗时见上方基线。逐模块本地实测、生产缺陷修复、首次失败与逐轮远程结果统一见[分模块记录](HISTORY.md#测试重构分模块实测2026-11-08)及[最终验收](HISTORY.md#测试重构最终验收与独立插件分片2026-11-08)，不再在当前入口重复旧的待验表。
 
-| 验证层             | 实际结果与证据目录                                                                                                                                                                                                                     |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 本体快速层         | `fast-final-layout`：111文件268项通过，双worker完整26.41秒；此前内存压力下的2项超时保留在`fast-refactor-final`，隔离及完整复验通过。                                                                                                   |
-| 本体模块层         | `host-modules-final-isolated`：101文件236项通过，双worker357.94秒。                                                                                                                                                                    |
-| 本体浏览器代表链路 | `host-browser-structure-final`：认证、趋势、沙箱SDK、UI独立更新、触屏生命周期共10项通过，1.9分钟；并发内存压力下的测量不作为稳定性能基线。                                                                                             |
-| 本体原生协议       | 各模块结果见历史；`host-native-audit-current`全目录探测曾有12项失败/取消，分别在`native-failures-resume-current`、`upload-enospc-final`、`suspend-lease-cleanup-current`、`modular-protocol-current`修复并复验。最终全量以新CI为准。   |
-| 插件真实Host互操作 | `plugin-interop-complete-current`：54 testcase全部通过，使用准确签包及真实应用、权限与资源收尾。                                                                                                                                       |
-| 插件浏览器         | `plugin-browser-full-after-repairs`：70项中67通过、3失败，12.3分钟；后续`plugin-browser-three-repaired`两项通过、关闭同名App定位失败，`plugin-checkpoint-final`修复后1项通过，13.1秒。保留每轮失败，不把分批结果写成完整70项一次通过。 |
-| MSW协议修正        | `msw-contract-final`：7文件23项通过，3.51秒，使用当前MSW的`onUnhandledFrame`。                                                                                                                                                         |
-| 仓库维护           | `maintenance-final.log`：22项通过，142.8ms；用例已从scripts移入tooling。                                                                                                                                                               |
-
-> 首轮新CI[42518923481](https://github.com/0honus0/nexus-terminal/actions/runs/42518923481)失败，不能作为新架构完整通过证据。已定位容器Git真实路径信任、进程回收/句柄观测/挂载条件、受控SSH关闭后写入、监控响应正文读取时序，以及生产Workspace正常关闭被授权扫描提前断开的缺陷；修复与实测见[远程首轮收敛](HISTORY.md#测试重构远程首轮收敛2026-11-08)。
-
-第二轮仍有SDK连续页处理、受控SSH关闭写入与监控响应观测失败，定位与定向结果见[第二轮收敛](HISTORY.md#测试重构远程第二轮收敛2026-11-08)；完整门禁未通过。
-
-最终本体`check-final-layout.log`、`build-final-layout.log`和`formatcheck-final-docs.log`通过，插件check/格式、5项Vitest与125项Node测试通过；本体浏览器430项、插件70项发现无错误。仍待同基线远程全量和冷/热耗时回填。3–5分钟是同等8个测试runner下的优化目标，当前未证明达成；自然五分钟认证到期、两分钟SSH空闲和真实弱网/排空不为目标缩短。
+证据根为`/home/honus/nexus-task-artifacts/testing-restructure-20261108`：`delivery/`保留最终报告摘要和组合，`cleanup/archives.jsonl`登记归档路径、SHA256及完整tar比较结果。首次失败、数据库和未知效果证据已校验归档后移除展开副本；早期记录中的`/dev/shm/nexus-testing-20261108`和短临时路径通过此索引追溯。活动开发环境及无关资源不在清理范围。
 
 ## 数据库迁移验收
 

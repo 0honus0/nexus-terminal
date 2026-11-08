@@ -17,7 +17,7 @@
 | 双端契约设计         | [Shared](architecture/SHARED.md)                                             | 取值、请求/响应、解码与真实消费者的归属。                            |
 | 远程桌面             | [Remote Desktop](architecture/REMOTE_DESKTOP.md)                             | RDP/VNC SDK、信任、输入、绘制、音频和资源边界。                      |
 | 仓库清理设计         | [Maintenance](architecture/MAINTENANCE.md)                                   | 两包保留集合、并发窗口与删除结果。                                   |
-| 测试体系重设计       | [本体与插件测试体系](architecture/TESTING.md)                                | 当前分层、框架入口、双仓互操作、覆盖归属及尚待实测的耗时目标。       |
+| 测试体系             | [本体与插件测试体系](architecture/TESTING.md)                                | 当前分层、框架入口、双仓互操作、覆盖归属及尚待实测的耗时目标。       |
 | 当前工作             | [实施计划](PLAN.md)                                                          | 已确定安排、尚未完成事项和验收判据；完成阶段清理。                   |
 | 执行验证             | [测试入口](testing/E2E.md)、[Agent任务场景](testing/AGENT_TASK_SCENARIOS.md) | 当前基线、命令、覆盖与独立判据。                                     |
 | 查旧验证             | [历史验证索引](testing/HISTORY.md)                                           | 固定提交的结果、测量与日志来源；不继承旧任务指令。                   |
