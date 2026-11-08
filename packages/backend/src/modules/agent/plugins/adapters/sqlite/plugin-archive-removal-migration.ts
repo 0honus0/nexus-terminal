@@ -45,10 +45,12 @@ export async function removeArchivedPluginData(tx: SqlExecutor): Promise<void> {
 	 DELETE FROM agent_runs WHERE (user_id,app_id) IN agent_removed_apps;
 	 DELETE FROM agent_thread_commands WHERE (user_id,app_id) IN agent_removed_apps;
 	 DELETE FROM agent_apps WHERE (user_id,id) IN agent_removed_apps;
-	 DELETE FROM agent_app_definitions WHERE (id,version) IN
+	 DELETE FROM agent_app_definitions WHERE ((id,version) IN
 	 (SELECT ref.definition_id,ref.definition_version FROM agent_app_definition_packages ref
 	 JOIN agent_plugin_versions v ON v.user_id=ref.user_id AND v.definition_id=ref.package_id AND v.version=ref.version
-	 WHERE COALESCE(json_extract(v.manifest_json,'$.schemaVersion'),0)<>4) AND NOT EXISTS
+	 WHERE COALESCE(json_extract(v.manifest_json,'$.schemaVersion'),0)<>4) OR NOT EXISTS
+	 (SELECT 1 FROM agent_app_definition_packages ref WHERE ref.definition_id=agent_app_definitions.id
+	 AND ref.definition_version=agent_app_definitions.version)) AND NOT EXISTS
 	 (SELECT 1 FROM agent_apps a WHERE a.definition_id=agent_app_definitions.id AND a.definition_version=agent_app_definitions.version);
 	 DELETE FROM agent_plugin_package_updates WHERE (user_id,package_id) IN agent_removed_packages
 	 OR stage_id IN (SELECT id FROM agent_plugin_stages WHERE manifest_json IS NOT NULL

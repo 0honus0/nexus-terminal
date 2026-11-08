@@ -210,7 +210,7 @@ for (const [name, file, pattern] of [
 		'',
 	],
 	[
-		'user-scoped package migrations, retained legacy data and snapshot coverage',
+		'user-scoped package migrations, SDK4 retention and obsolete data removal',
 		'storage/backend-next-plugin-package-migrations.integration.mjs',
 		'Plugin package migration:',
 	],
@@ -220,7 +220,7 @@ for (const [name, file, pattern] of [
 		'Schema migration',
 	],
 	[
-		'context profile removal migration, immutable package facts and strict restored decoding',
+		'context preference migrations, staged provenance and final archive removal',
 		'storage/backend-next-context-profile-migration.integration.mjs',
 		'',
 	],

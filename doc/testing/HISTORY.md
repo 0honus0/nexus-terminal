@@ -2102,3 +2102,7 @@ Node 26.13.0/pnpm 12.16.1；`build.log` 与 `browser.log` 包含 Shared、Backen
 本地迁移/存储组cleanup-storage-final.tap共51项通过；新增迁移最终八项覆盖v60升级、重复启动、真实DROP/插件删除后故障回滚、当前完整快照校验与行往返、旧SDK拒绝、真实附件故障重试、当前Provider占用及旧代码依赖/来源记忆删除。最后补入活Artifact误入队列拒绝与旧子运行整组关系清理断言，最终cleanup-family-final.tap八项全部通过。双端构建cleanup-build-final.log与根检查cleanup-check-final.log通过。首轮完整格式检查缺一处函数空行，已纠正并保留cleanup-format-final.log。早期容量测试旧decoder/index、Provider空模型fixture等首次失败与后续修复均保留在同任务目录，不算首次全部通过。
 
 运行/更新/生命周期、只读子Run与完整跨实例备份的cleanup-runtime-final.tap共45项通过（包含备份子场景，不另行相加）。活Artifact断言首次直接比较SQLite无原型行与普通对象而失败，改为严格比对ID集合，保留原失败记录；完整格式又发现原容量用例残留排版，已纠正。远程750项矩阵、发布结果继续按实际执行回填；本节不以旧749项通过代替新SHA。产物均位于/home/honus/nexus-task-artifacts/agent-sdk4-review-20261107，原CDP现场及失败证据继续保留。
+
+追加消费者扫描发现两处正式测试残留：context preference用例直接升级到最新后仍要求已授权删除的旧Run保留；Job故障用例与fixture仍查询旧工具表。前者先验证32/59至v60的原始事实和设置转换，再验证61–63清除旧App/历史，保留Provider与全局设置；后者改为检查真实Operation不存在accepted/dispatched残留，移除旧p_工具名分支和废弃table白名单。cleanup-context-first.tap保留首次失败，cleanup-consumers-final.tap的12项全部通过。
+
+原[E2E42446129564](https://github.com/0honus0/nexus-terminal/actions/runs/42446129564)因上述用例修正主动取消，不计为完整通过。补齐无安装记录的旧App定义清理：只删除引用旧包或缺少准确包ledger且已无App使用的定义，保留仍使用或有SDK4来源的定义；该SQL仍在尚未发布的迁移63中。新增fixture同时覆盖此类旧App以及完整当前快照。后续从新提交重跑完整矩阵，原失败及取消证据均保留。

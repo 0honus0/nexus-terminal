@@ -261,9 +261,7 @@ await test('Job failures stop the owning Run and its waits', { timeout: 60000 },
 				assert.equal(await readFile(process.effect, 'utf8'), 'x');
 				assert.equal(f.rows('agent_tool_jobs', run).length, 1);
 				assert.equal(f.rows('agent_tool_jobs', run)[0].state, 'unknown');
-				assert.ok(
-					f.rows('agent_run_tools', run).every((row) => !['inspected', 'dispatched'].includes(row.state)),
-				);
+				assert.ok(f.operations(run).every((row) => !['accepted', 'dispatched'].includes(row.state)));
 				assert.equal(
 					expectStatus(await f.api('GET', '/api/v1/remote/mutations'), 200).items[0].state,
 					'blocked',

@@ -1,9 +1,4 @@
-import {
-	fixtureToolName,
-	hasToolIdentity,
-	hasApprovalIdentity,
-	toolIdentityOf,
-} from '../../support/package-tool-catalog.mjs';
+import { fixtureToolName, hasToolIdentity, hasApprovalIdentity } from '../../support/package-tool-catalog.mjs';
 import { createTestAgentApp } from './native-agent-fixture.mjs';
 import { listAgentApprovalHistory } from './agent-approval-fixture.mjs';
 import assert from 'node:assert/strict';
@@ -468,11 +463,6 @@ export async function openAgentExecution(directory, sshd, options = {}) {
 
 		async approval(run, name) {
 			const matches = (value) => {
-				if (typeof name === 'string' && /^p_[a-f0-9]{62}$/u.test(name)) {
-					const row = this.rows('agent_run_tools', run).find((row) => row.tool_name === name);
-					assert.ok(row, 'General approval expectation requires an actual persisted package call');
-					return hasApprovalIdentity(value, toolIdentityOf(row));
-				}
 				return hasApprovalIdentity(value, name);
 			};
 
@@ -589,15 +579,7 @@ export async function openAgentExecution(directory, sshd, options = {}) {
 		},
 
 		rows(table, run) {
-			assert.ok(
-				[
-					'agent_runs',
-					'agent_run_tools',
-					'agent_tool_jobs',
-					'agent_run_model_steps',
-					'agent_run_children',
-				].includes(table),
-			);
+			assert.ok(['agent_runs', 'agent_tool_jobs', 'agent_run_children'].includes(table));
 			const db = new DatabaseSync(database, { readOnly: true });
 			try {
 				const order = table === 'agent_run_children' ? 'rowid' : 'created_at';

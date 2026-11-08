@@ -16,7 +16,7 @@ import { validateAgentSnapshotDocuments } from '../../../packages/backend/dist/m
 import { readAgentExecutionPolicyReplaceRequest } from '../../../packages/shared/dist/agent/governance/http-codec.js';
 import { InvalidAgentPayload } from '../../../packages/shared/dist/agent/http-codec.js';
 
-await test('Context preference migrations 32 and 59 remove unused Host settings and preserves frozen provenance, journal hashes and restart state', async (t) => {
+await test('Context preference migrations preserve original facts through v60, then archive removal deletes the obsolete App history', async (t) => {
 	const directory = await mkdtemp(join(tmpdir(), 'nexus-context-profile-'));
 	const path = join(directory, 'state.db');
 	let db = SqliteRuntime.open(path);
@@ -89,7 +89,10 @@ await test('Context preference migrations 32 and 59 remove unused Host settings 
 	const originals = new Map();
 	for (const table of immutableTables) originals.set(table, await db.all('SELECT * FROM ' + table));
 
-	await initializeSchema(db, applicationMigrations);
+	await initializeSchema(
+		db,
+		applicationMigrations.filter((migration) => migration.version <= 60),
+	);
 	assert.deepEqual(await executionSettings(db, 1), settings);
 	assert.deepEqual(await frozenExecution(db, runId), settings);
 	const policy = await db.one('SELECT * FROM agent_governance_policies WHERE user_id=1 AND app_id=?', [appId]);
@@ -115,11 +118,31 @@ await test('Context preference migrations 32 and 59 remove unused Host settings 
 		migrated.set(table, await db.all('SELECT * FROM ' + table));
 	await db.close();
 	db = SqliteRuntime.open(path);
-	await initializeSchema(db, applicationMigrations);
+	await initializeSchema(
+		db,
+		applicationMigrations.filter((migration) => migration.version <= 60),
+	);
 	for (const [table, rows] of migrated)
 		assert.deepEqual(await db.all('SELECT * FROM ' + table), rows, table + ' is unchanged after restart');
 	for (const table of immutableTables)
 		assert.deepEqual(await db.all('SELECT * FROM ' + table), originals.get(table), table);
+	const provider = await db.one('SELECT * FROM agent_providers WHERE id=?', [providerId]);
+	await initializeSchema(db, applicationMigrations);
+	assert.deepEqual(await executionSettings(db, 1), settings);
+	assert.deepEqual(await db.one('SELECT * FROM agent_providers WHERE id=?', [providerId]), provider);
+	assert.equal(await db.one('SELECT * FROM agent_runs WHERE id=?', [runId]), null);
+	assert.equal(await db.one('SELECT * FROM agent_apps WHERE id=?', [appId]), null);
+	assert.equal(await db.one("SELECT * FROM agent_app_definitions WHERE id='fixture.policy'"), null);
+	for (const table of immutableTables.slice(1)) {
+		assert.equal(await db.one('SELECT name FROM sqlite_master WHERE name=?', [table]), null);
+	}
+	assert.deepEqual((await db.all('SELECT * FROM schema_version ORDER BY version')).slice(0, 31), priorMarkers);
+	const currentMarkers = await db.all('SELECT * FROM schema_version ORDER BY version');
+	await db.close();
+	db = SqliteRuntime.open(path);
+	await initializeSchema(db, applicationMigrations);
+	assert.deepEqual(await db.all('SELECT * FROM schema_version ORDER BY version'), currentMarkers);
+	assert.deepEqual(await executionSettings(db, 1), settings);
 	assert.deepEqual(await db.all('PRAGMA foreign_key_check'), []);
 });
 

@@ -41,6 +41,14 @@ async function fixture(t) {
 		publisher,
 		publicKey.export({ type: 'spki', format: 'pem' }).toString(),
 	]);
+	const unbound = randomUUID();
+	await db.run("INSERT INTO agent_app_definitions VALUES('fixture.unbound','1.0.0','Unbound legacy App',?)", [
+		'a'.repeat(64),
+	]);
+	await db.run(
+		"INSERT INTO agent_apps(id,user_id,name,definition_id,definition_version,enabled,created_at,updated_at) VALUES(?,1,'Unbound legacy App','fixture.unbound','1.0.0',0,1,1)",
+		[unbound],
+	);
 	const identities = [];
 	for (const sdk of [4, 3]) {
 		const app = randomUUID(),
@@ -176,6 +184,7 @@ async function fixture(t) {
 		},
 
 		identities,
+		unbound,
 
 		async restart() {
 			await db.close();
@@ -219,6 +228,8 @@ await test('Archive removal: v60 upgrade deletes old Agent history while preserv
 		);
 	}
 	assert.deepEqual(await f.db.one('SELECT * FROM access_accounts WHERE id=1'), account);
+	assert.equal(await f.db.one('SELECT * FROM agent_apps WHERE id=?', [f.unbound]), null);
+	assert.equal(await f.db.one("SELECT * FROM agent_app_definitions WHERE id='fixture.unbound'"), null);
 	assert.deepEqual((await f.db.all('SELECT * FROM schema_version ORDER BY version')).slice(0, 60), oldVersions);
 	assert.deepEqual(
 		readRunAppExecution(
