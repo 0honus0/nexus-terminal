@@ -74,7 +74,7 @@ Shared `agent/plugins` 持 manifest4、SDK4、Registry/Binding/Surface、配置�
 
 App 和 Settings 共用 iframe/MessagePort SDK 生命周期，按 purpose 派生权限；Host 保留可信批准、秘密输入、文件选择、资源关闭和取消入口。UI contract 由 App 声明、组合选择兼容 provider，不写死官方包名。
 
-物理边界只有 iframe↔Host MessagePort、浏览器↔Backend 认证 HTTP/复用 WS、Backend↔隔离插件 IPC。取消/关闭走独立控制，不排在数据队列末尾。订阅先监听再取快照，按 scope、revision、cursor、generation 补读；ACK 表示已校验并应用，旧代 ACK 不确认新帧。插件事件沿注册 namespace/schema 交付，不开放跨实例广播，不为目录增加轮询。
+物理边界只有 iframe↔Host MessagePort、浏览器↔Backend 认证 HTTP/复用 WS、Backend↔隔离插件 IPC。取消/关闭走独立控制，不排在数据队列末尾。订阅先监听再取快照，按 scope、revision、cursor、generation 补读；ACK 表示已校验并应用，旧代 ACK 不确认新帧。插件事件沿注册 namespace/schema 交付，不开放跨实例广播，不为目录增加轮询。前端SDK按接收游标验证连续事件页，并按顺序等待异步消费者；ACK只确认实际消费完成的页，退订等待正在处理的回调并撤下尚未处理的队列。多页在途不构成协议错误，重复游标、错误修订和身份不符仍关闭连接。
 
 ## 6. 数据、事务与并发
 

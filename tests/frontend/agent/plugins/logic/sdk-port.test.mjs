@@ -344,3 +344,199 @@ test('A completed native Run can unsubscribe during page application without clo
 	assert.deepEqual(await request, { kind: 'window.open', accepted: true });
 	memory.close();
 });
+
+test('Run event pages queue behind an asynchronous consumer and acknowledge in delivery order', async () => {
+	const owner = await connected();
+	const runId = crypto.randomUUID();
+	let release;
+	let entered;
+	const started = new Promise((resolve) => {
+		entered = resolve;
+	});
+	const gate = new Promise((resolve) => {
+		release = resolve;
+	});
+	const delivered = [];
+	const failures = [];
+	const sub = owner.sdk.agent.runs.subscribe(
+		runId,
+		0,
+		async (page) => {
+			delivered.push(page.nextCursor);
+			if (page.nextCursor === 1) {
+				entered();
+				await gate;
+			}
+		},
+		(error) => {
+			failures.push(error);
+		},
+	);
+	try {
+		const command = owner.messages.find((message) => message.command === 'subscribe');
+
+		const send = (revision, sequence, empty = false) =>
+			owner.receive({
+				type: 'nexus.plugin.stream-event',
+				protocol: 4,
+				nonce: command.nonce,
+				subscriptionId: sub.id,
+				generation: 1,
+				ok: true,
+				revision,
+				value: {
+					items: empty ? [] : [{ runId, sequence, type: 'run.started', runVersion: sequence, createdAt: 1 }],
+					nextCursor: sequence,
+				},
+			});
+
+		send(1, 1);
+		await started;
+		send(2, 2);
+		send(3, 2, true);
+		assert.deepEqual(delivered, [1]);
+		assert.equal(owner.closed(), false);
+		assert.deepEqual(
+			owner.messages.filter((message) => message.command === 'ack'),
+			[],
+		);
+		release();
+		await vi.waitFor(() =>
+			assert.deepEqual(
+				owner.messages.filter((message) => message.command === 'ack').map((message) => message.revision),
+				[1, 2, 3],
+			),
+		);
+		assert.deepEqual(delivered, [1, 2]);
+		assert.deepEqual(failures, []);
+	} finally {
+		release();
+		await owner.sdk.agent.runs.unsubscribe(sub.id);
+	}
+});
+
+test('Run unsubscribe waits its active consumer and discards queued pages without acknowledgements', async () => {
+	const owner = await connected();
+	const runId = crypto.randomUUID();
+	let release;
+	let entered;
+	const started = new Promise((resolve) => {
+		entered = resolve;
+	});
+	const gate = new Promise((resolve) => {
+		release = resolve;
+	});
+	const delivered = [];
+	const sub = owner.sdk.agent.runs.subscribe(
+		runId,
+		0,
+		async (page) => {
+			delivered.push(page.nextCursor);
+			entered();
+			await gate;
+		},
+		(error) => {
+			throw error;
+		},
+	);
+	let stopped = false;
+	let stopping;
+	try {
+		const command = owner.messages.find((message) => message.command === 'subscribe');
+		for (const sequence of [1, 2]) {
+			owner.receive({
+				type: 'nexus.plugin.stream-event',
+				protocol: 4,
+				nonce: command.nonce,
+				subscriptionId: sub.id,
+				generation: 1,
+				ok: true,
+				revision: sequence,
+				value: {
+					items: [{ runId, sequence, type: 'run.started', runVersion: sequence, createdAt: 1 }],
+					nextCursor: sequence,
+				},
+			});
+		}
+		await started;
+		stopping = owner.sdk.agent.runs.unsubscribe(sub.id).then(() => {
+			stopped = true;
+		});
+		await Promise.resolve();
+		assert.equal(stopped, false);
+		assert.equal(owner.closed(), false);
+		release();
+		await stopping;
+		await sub.closed;
+		assert.equal(stopped, true);
+		assert.deepEqual(delivered, [1]);
+		assert.deepEqual(
+			owner.messages.filter((message) => message.command === 'ack'),
+			[],
+		);
+	} finally {
+		release();
+		await stopping;
+		await owner.sdk.agent.runs.unsubscribe(sub.id);
+	}
+});
+
+test('Queued Run pages still reject a repeated event cursor and drain the active consumer on close', async () => {
+	const owner = await connected();
+	const runId = crypto.randomUUID();
+	let release;
+	let entered;
+	const started = new Promise((resolve) => {
+		entered = resolve;
+	});
+	const gate = new Promise((resolve) => {
+		release = resolve;
+	});
+	let delivered = 0;
+	const sub = owner.sdk.agent.runs.subscribe(
+		runId,
+		0,
+		async () => {
+			delivered++;
+			entered();
+			await gate;
+		},
+		(error) => {
+			throw error;
+		},
+	);
+	try {
+		const command = owner.messages.find((message) => message.command === 'subscribe');
+		const event = {
+			type: 'nexus.plugin.stream-event',
+			protocol: 4,
+			nonce: command.nonce,
+			subscriptionId: sub.id,
+			generation: 1,
+			ok: true,
+			revision: 1,
+			value: { items: [{ runId, sequence: 1, type: 'run.started', runVersion: 1, createdAt: 1 }], nextCursor: 1 },
+		};
+		owner.receive(event);
+		await started;
+		owner.receive({ ...event, revision: 2 });
+		assert.equal(owner.closed(), true);
+		let stopped = false;
+		const closing = owner.sdk.close().then(() => {
+			stopped = true;
+		});
+		await Promise.resolve();
+		assert.equal(stopped, false);
+		release();
+		await closing;
+		await sub.closed;
+		assert.equal(delivered, 1);
+		assert.deepEqual(
+			owner.messages.filter((message) => message.command === 'ack'),
+			[],
+		);
+	} finally {
+		release();
+		await owner.sdk.close();
+	}
+});

@@ -16,13 +16,13 @@ for (const revoke of [false, true]) {
 			const f = await remoteFilesFixture(t);
 			const owner = await f.endpoint('close-drain');
 			const drain = Promise.withResolvers();
-			const entered = Promise.withResolvers();
+			let entered = false;
 			const closeSession = RemoteSessionService.prototype.closeSession;
 			t.mock.method(RemoteSessionService.prototype, 'closeSession', async function (...args) {
 				await closeSession.apply(this, args);
 				// The real SSH release completes; hold only its completion delivery so
 				// the actual Workspace remains closing across its unchanged 3s recheck.
-				entered.resolve();
+				entered = true;
 				await drain.promise;
 			});
 			let closingChecks = 0;
@@ -33,12 +33,12 @@ for (const revoke of [false, true]) {
 				return result;
 			});
 			const requestId = randomUUID();
-			const response = Promise.withResolvers();
+			let response;
 
 			const onMessage = (bytes, binary) => {
 				if (binary) return;
 				const message = JSON.parse(bytes.toString());
-				if (message.type === 'response' && message.requestId === requestId) response.resolve(message.payload);
+				if (message.type === 'response' && message.requestId === requestId) response = message.payload;
 			};
 
 			owner.workspace.socket.on('message', onMessage);
@@ -56,9 +56,14 @@ for (const revoke of [false, true]) {
 						},
 					}),
 				);
-				await entered.promise;
+				await until(() => entered, Boolean, 'Real SSH release reaches close drain');
 				if (revoke) {
 					expectStatus(await send(f.address, f.cookie, 'POST', '/api/v1/auth/logout', {}), 200);
+					await until(
+						() => owner.workspace.socket.readyState,
+						(state) => state === owner.workspace.socket.CLOSED,
+						'Revoked cookie closes the draining attachment',
+					);
 					assert.equal((await owner.workspace.closed)[0], 1008);
 				} else {
 					await until(
@@ -71,7 +76,10 @@ for (const revoke of [false, true]) {
 						error: 'not_found',
 					});
 					drain.resolve();
-					assert.deepEqual(await response.promise, { ok: true, data: null });
+					assert.deepEqual(await until(() => response, Boolean, 'Original explicit close receipt'), {
+						ok: true,
+						data: null,
+					});
 					assert.equal(owner.workspace.socket.readyState, owner.workspace.socket.OPEN);
 				}
 			} finally {

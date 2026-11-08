@@ -2451,3 +2451,18 @@ Webhook秘密契约已下沉到真实原生HTTP/SQLite/投递层：`webhook-owne
 `remote-native-repairs`首次定向24项中23通过、1失败，24.22秒；失败为新增回归误以为closing期间ping仍可用，实际安全行为应拒绝not_found，已纠正测试预期。归档/复制/上传和五种真实磁盘满场景全部通过，不据此声称远程同基线已通过。`close-response-final`新增两项正常关闭/撤销回归全部通过，8.31秒；后续完整结论与耗时回填当前测试入口。
 
 插件`9c1681e438bf01cc726f1cdefa5f2e078e55ec8e`[首轮Validate42518843555](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42518843555)选到旧Host成功成品，缺新tests workspace而在Playwright启动前失败。新Host门禁成功后须绑定准确run ID重新验证，不能将其归因于插件业务通过或失败。
+
+## 测试重构远程第二轮收敛（2026-11-08）
+
+本体`e587ff7e84e8cc32d0c6e609b002bd49edc7a769`的[第二轮42521021428](https://github.com/0honus0/nexus-terminal/actions/runs/42521021428)已完整结束：质量、Runner与Docker smoke通过；分片2/3/4/5成功，1/6/7/8失败。8分片原生协议、第1分片真实有限文件系统故障、Docker协议和模块均已通过；逐分片读取原始JUnit与Playwright JSON，插件互操作54项、插件浏览器70项全部通过，无skip/flaky/失败；汇总存于`remote-second-plugin-layer-summary.json`，不能将这些局部成功合并称整轮通过。运行从20:36:51至20:52:45 UTC，约15分54秒，未达到3–5分钟目标；第7分片原生组包含自然五分钟认证到期，计时不能只看其warmup之后的testcase正文。
+
+| 原因                                                                                                              | 修复与本地结果                                                                                                                                                                                                                                                                                                                                          |
+| ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SDK只允许上一页消费完成后接收下一页，服务端实际支持多页在途；慢回调期间收到下一页会提前关闭连接，退订于是提前返回 | SDK沿接收游标与修订验证后续页，回调仍串行，ACK在实际消费后发出；退订排空正在处理的回调，撤下排队页。新增顺序ACK、退订排空与重复游标拒绝3项逻辑回归；`sdk-queue-guard-final`9项通过，0.365秒。重建实际Backend交付SDK后，`sdk-browser-built-final`原浏览器完整场景连续5次全部通过，27.25秒，无skip/flaky；此前误用旧构建的4/5通过仍保留，不当作新实现结果 |
+| Node pipe在ssh2先结束stderr、延后触发channel close的间隙仍可写入，分片6浏览器worker和分片7背压模块收尾退出1       | 受控服务在每次转发前检查真实目标可写状态，保留drain背压；关闭解除转发并继续排空子进程stdout/stderr、关闭stdin、等待原child close。`ssh-output-guard-repaired`背压/目录4项通过，5.41秒；`ssh-output-native-both-final`真实Shell/exec双路大输出期间关闭通道、隔离与并发收尾通过，2.91秒                                                                   |
+| 监控第二次采样仍丢失Chromium response body句柄，首轮提前json读取不能完全解决                                      | Playwright route.fetch读取真实服务端字节并原样fulfill，再观察交付采样；不伪造数据。`monitoring-bytes-final`1项通过，18.53秒；自然缓存到期、采样间隔、单会话与UI断言全部保留                                                                                                                                                                             |
+| 模块失败要等长原生/浏览器组全部完成才拿到夹具栈                                                                   | 模块步骤失败后立即用官方upload-artifact保留Vitest报告、SSH日志和计时，后继测试仍完整执行；原最终诊断产物继续保留                                                                                                                                                                                                                                        |
+
+本地新增关闭回归使用有界状态观测，使负面失败也能进入finally释放真实completion gate，不变更产品扫描期限；`ssh-lifecycle-final`3项通过，10.88秒。首次缺少报告父目录的ENOENT与Playwright命令参数错误均保留为执行错误；修正命令后的结果分别记录，不算产品失败或通过。两轮远程zip、日志和本地失败均保留在任务证据根。新完整门禁及插件独立Validate仍待完成。
+
+`browser-remaining-final`监控、手机文件预览与Pad挂起输出10项全部通过，92.11秒，无worker收尾错误、skip/flaky或重试；`check-queue-final.log`、`sdk-backend-build-final.log`与`format-queue-final.log`通过。

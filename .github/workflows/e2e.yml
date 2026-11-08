@@ -358,12 +358,26 @@ jobs:
           node "$GITHUB_WORKSPACE/scripts/e2e/host-test-artifact.mjs" verify "$GITHUB_SHA"
 
       - name: Run module shard
+        id: module-shard
         if: ${{ !cancelled() && steps.application-download.outcome == 'success' }}
         working-directory: tests
         shell: bash
         run: |
           mkdir -p "$NEXUS_TEST_ARTIFACT_DIR/reports"
           pnpm run test:modules --shard "${{ matrix.shard }}/${{ matrix.shards }}"
+
+      - name: Retain module failure before long protocol tests
+        if: ${{ !cancelled() && steps.module-shard.outcome == 'failure' }}
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: module-failure-${{ matrix.shard }}-${{ github.run_attempt }}
+          include-hidden-files: true
+          path: |
+            tests/e2e/.tmp/layers/reports/vitest.json
+            tests/e2e/.tmp/layers/**/ssh.log
+            tests/e2e/.tmp/layers/**/timings.json
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Run native protocol shard
         if: ${{ !cancelled() && steps.application-download.outcome == 'success' }}

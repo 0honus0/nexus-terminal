@@ -168,7 +168,6 @@ export async function connectNexusPlugin(): ReturnType<AgentPluginFrontendModule
 			after: number;
 			revision: number;
 			generation: number;
-			receiving: boolean;
 			resolve(): void;
 			reject(error: unknown): void;
 			onEvents(page: AgentRunEventsResponse): void | Promise<void>;
@@ -472,9 +471,6 @@ export async function connectNexusPlugin(): ReturnType<AgentPluginFrontendModule
 				return;
 			}
 			try {
-				if (owner.receiving) {
-					throw new Error('Unacknowledged plugin stream page');
-				}
 				const value = readAgentPluginStreamEvent(event.data, {
 					nonce: connection.nonce,
 					subscriptionId: id,
@@ -486,8 +482,10 @@ export async function connectNexusPlugin(): ReturnType<AgentPluginFrontendModule
 					throw new Error('Invalid subscription sequence');
 				}
 				if (value.ok) {
+					// Validate following pages against the received cursor. Consumption
+					// stays serialized below and ACK follows the actual callback.
 					owner.revision = value.revision;
-					owner.receiving = true;
+					owner.after = value.value.nextCursor;
 				}
 				owner.delivery = owner.delivery
 					.then(async () => {
@@ -503,8 +501,6 @@ export async function connectNexusPlugin(): ReturnType<AgentPluginFrontendModule
 						if (owner.stop.signal.aborted || closed || subscriptions.get(id) !== owner) {
 							return;
 						}
-						owner.after = value.value.nextCursor;
-						owner.receiving = false;
 						streamCommand({
 							command: 'ack',
 							subscriptionId: id,
@@ -641,7 +637,6 @@ export async function connectNexusPlugin(): ReturnType<AgentPluginFrontendModule
 			after: input.params.after,
 			generation: 1,
 			revision: 0,
-			receiving: false,
 			resolve,
 			reject,
 			onEvents,

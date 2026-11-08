@@ -14,6 +14,7 @@ import {
 	readCredentialMutation,
 } from '../../../../packages/shared/src/targets/connections/http-codec';
 import { readSshResourceStatus } from '../../../../packages/shared/src/remote/monitoring/http-codec';
+import type { SshResourceStatusResponse } from '../../../../packages/shared/src/remote/monitoring/http';
 
 test.use({ e2eServices: ['ssh'] });
 
@@ -149,13 +150,27 @@ test('Workspace and Dashboard consume real Linux samples, natural cache expiry a
 		await expect(page.getByRole('button', { name: /^CPU / }).first()).toBeVisible();
 		await expect(page.locator('[data-runtime-boundary]')).toHaveCount(0);
 		const resourcePath = '/api/v1/system/ssh-resources/' + target.id;
-		// Consume the response at delivery, before the navigation action has finished.
-		// Chromium can retire the previous document's response body while click is still awaiting navigation.
-		const firstResponse = page
-			.waitForResponse((response) => response.url().endsWith(resourcePath))
-			.then(async (response) => readSshResourceStatus(await response.json()));
+		const samples: SshResourceStatusResponse[] = [];
+		// Observe the actual server bytes before forwarding them unchanged. CDP can
+		// retire a response body even when eagerly read from the response event.
+		await page.route(
+			(url) => url.pathname === resourcePath,
+			async (route) => {
+				const response = await route.fetch();
+				try {
+					expect(response.status()).toBe(200);
+					const bytes = await response.body();
+					const sample = readSshResourceStatus(JSON.parse(bytes.toString('utf8')));
+					await route.fulfill({ response, body: bytes });
+					samples.push(sample);
+				} finally {
+					await response.dispose();
+				}
+			},
+		);
 		await page.locator('.app-nav-links').getByRole('link', { name: 'Dashboard', exact: true }).click();
-		const first = await firstResponse;
+		await expect.poll(() => samples.length).toBeGreaterThan(0);
+		const first = samples[0];
 		expect(first.status?.memTotal).toBeGreaterThan(0);
 		const card = page.locator('.dashboard-connection-card').filter({ hasText: target.name ?? '' });
 		await expect(card).toContainText('CPU');
@@ -175,10 +190,8 @@ test('Workspace and Dashboard consume real Linux samples, natural cache expiry a
 				(item) => typeof item === 'object' && item !== null && Reflect.get(item, 'type') === 'status.stop',
 			),
 		).toHaveLength(0);
-		const recollectedResponse = await page.waitForResponse((response) => response.url().endsWith(resourcePath), {
-			timeout: 15_000,
-		});
-		const recollected = readSshResourceStatus(await recollectedResponse.json());
+		await expect.poll(() => samples.at(-1)?.checkedAt ?? 0, { timeout: 15_000 }).toBeGreaterThan(first.checkedAt);
+		const recollected = samples[samples.length - 1];
 		expect(recollected.status?.memTotal).toBeGreaterThan(0);
 		expect(recollected.checkedAt).toBeGreaterThan(first.checkedAt);
 		await page.locator('.app-nav-links').getByRole('link', { name: 'Terminal', exact: true }).click();

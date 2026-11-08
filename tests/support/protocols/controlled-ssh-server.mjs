@@ -1537,10 +1537,7 @@ function runRemoteCommand(command, stream, session, pty = false) {
 	if (isArchiveCommand) archiveCommandsStarted += 1;
 	if (isArchivePreflightCommand) archivePreflightsStarted += 1;
 	session.on('signal', onSignal);
-	// pipe owns backpressure and unpipes on destination finish/close; late child
-	// diagnostics must not write into an SSH channel that already sent EOF.
-	child.stdout.pipe(stream, { end: false });
-	child.stderr.pipe(stream.stderr, { end: false });
+	pipeChildOutput(child, stream);
 	stream.on('data', (chunk) => {
 		child.stdin.write(chunk);
 	});
@@ -1548,7 +1545,6 @@ function runRemoteCommand(command, stream, session, pty = false) {
 	// legacy SCP's sink waits for EOF after acknowledging the final file; leaving
 	// its stdin open transfers all bytes but deadlocks both peers at completion.
 	stream.once('end', () => child.stdin.end());
-	stream.on('close', () => child.kill('SIGTERM'));
 	child.on('close', (code, signal) => {
 		if (nativeTransfer) nativeTransfersExited++;
 		if (isArchiveCommand) archiveCommandsExited += 1;
@@ -1565,6 +1561,35 @@ function runRemoteCommand(command, stream, session, pty = false) {
 			// when the client still holds stdin open to send its cancellation.
 			stream.close();
 		}
+	});
+}
+
+// ssh2 ends stderr before it emits channel close. Node pipe may still deliver
+// child data in that interval, so check the destination on each write while
+// preserving its ordinary drain/backpressure and the child's close owner.
+function pipeChildOutput(child, stream) {
+	for (const [source, destination] of [
+		[child.stdout, stream],
+		[child.stderr, stream.stderr],
+	]) {
+		const forward = (bytes) => {
+			if (destination.writableEnded || destination.destroyed || stream.outgoing.state !== 'open') return;
+			if (!destination.write(bytes)) source.pause();
+		};
+
+		const resume = () => source.resume();
+
+		source.on('data', forward);
+		destination.on('drain', resume);
+		stream.once('close', () => {
+			source.off('data', forward);
+			destination.off('drain', resume);
+			source.resume();
+		});
+	}
+	stream.once('close', () => {
+		child.stdin.end();
+		child.kill('SIGTERM');
 	});
 }
 
@@ -1595,10 +1620,8 @@ function attachShell(session, accept) {
 			stdio: ['pipe', 'pipe', 'pipe'],
 		}),
 	);
-	child.stdout.pipe(stream, { end: false });
-	child.stderr.pipe(stream.stderr, { end: false });
+	pipeChildOutput(child, stream);
 	stream.on('data', (data) => child.stdin.write(data));
-	stream.on('close', () => child.kill('SIGTERM'));
 	child.on('close', (code) => {
 		stream.exit(code ?? 0);
 		stream.end();
