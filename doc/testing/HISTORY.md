@@ -4,6 +4,29 @@
 
 已退役 Runner/Guacamole 的证据仅用于追溯，不能证明当前 SSH/CDP/浏览器 SDK 的行为。静态、受控 fixture、真实服务与真机结论分别判断。
 
+## Agent 设置归属与插件召回配置（2026-11-08）
+
+主代理独立完成本体与 `0honus0/nexus-agent-plugins` 两仓修改，环境为 Node26.13.0、pnpm12.16.1。本轮产物归 `/home/honus/nexus-task-artifacts/agent-settings-ownership-20261108`，保留测试现场和首次失败；不更新生产主机。
+
+| 审核表   | 本轮结论                                                                                                                                                                 |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 功能对应 | 移除独立MCP/ACP设置页，协议连接从对应已安装插件的设置进入；召回条数、字节偏好迁入Agent工具插件，每个App/实例独立保存。模型、权限、执行预算、并发和宿主资源保留仍归Host。 |
+| 职责归属 | 插件持排序、召回预算、schema与三语设置Surface；Host只核验来源、权限、版本及实际编码容量。跨帧结果分批核验后完整汇总，任何一批变化或取消均不返回部分成功。                |
+| 类型归属 | Shared4.0.4及双端移除重复召回字段；Host memory不依赖ExecutionService。迁移65转换官方未配置实例并清理旧字段，不覆盖已编辑实例或第三方同名包，迁移1–64和签名保持不变。     |
+| 完成证据 | 本地检查、构建、格式、插件独立测试、专项迁移和指定CDP通过；正式签包与目录已发布。完整远程758项一次通过，main amd64 dev发布及镜像平台、摘要、源码核对成功。               |
+
+- 本体产品提交 `1290b62f17be380375971de5245c2f9daf36cc7f`，修正提交 `21e36a7b7da73f65470a8b5c4d52a6aca83f4a45`。根check、完整build、format和diff检查通过，见 `final-fixes-check-sequential.log`、`local-browser-final.log`、`final-fixes-format-all.log`。首次并行重建Shared时check遇到dist暂缺，改为重建完成后顺序检查通过，未放宽类型。
+- `migration-order-final.log`的2项覆盖偏好转换、App覆盖、未配置实例、第三方隔离、不覆盖已编辑配置、重复启动、完整性、外键和失败回滚。`host-memory-final.log`覆盖Host无重复策略上限、100条完整选择和超帧明确拒绝；插件20项Agent工具专项覆盖跨帧、编码容量、可信配置、缺项、变更与取消。首轮新增迁移夹具的实例列顺序错误触发enabled约束，修正seed后通过，原失败保留；已有Browser迁移消费者的末版本断言同步更新至65。
+- `local-browser-first.log`3项覆盖窄屏召回配置、实例隔离和MCP/ACP设置；`local-browser-final.log`3项覆盖预算单位/非法输入、凭据保留/清除与App隔离、真实备份导出导入。`frontend-execution-fixed.log`保留真实编辑器的未知写入围栏、身份撤销、冲突和重新读取断言，按当前Shared字段数核对控件，未删除功能验证。
+- 指定CDP `172.30.30.11:9223`、`https://api.honus.top`和9998前端完成正式Agent工具2.1.0设置验收：英文1440px、中文320px、日文390px，保存800/320/390条及1048576字节，API读回一致，无横向溢出、零pageerror，见 `cdp-acceptance.json`及`recall-settings-*.png`。首次脚本按未显示的包ID定位安装行失败，改按实际manifest名称定位后通过，保留首次日志和截图，未为测试改产品UI。
+- CDP安装时公开下载入口曾返回503；改从本轮本地测试源交付同一正式签包，原归档字节、签名和SHA保持一致。该验收证明真实宿主安装与设置链路，不表示当时公开网关可用；原失败和镜像源回执分别见 `cdp-plugin-install.log`、`cdp-install-mirror-receipt.json`。
+- 插件源码 `40515740606254ed9398d15830cce150a4e1c8a8` 的Validate42463914462及签包42464033527通过，正式发布[Agent工具2.1.0](https://github.com/0honus0/nexus-agent-plugins/releases/tag/tools-agent-v2.1.0)，归档SHA256为 `3fc4c00503f53031db02a1028a31d837dcaaedd62b2831e6d4482122349858eb`。正式fixture按原字节固定并验证签名、逐文件摘要及tar重建，见 `pin-agent-release.log`。8包85项独立测试通过，最终仓库22项通过。
+- 公开目录下载多次遇到GitHub504；失败42464115421、42464563735及首次下载脚本测试日志保留。只读下载增加瞬态重试，仍失败时用官方CLI/API读取规范release asset，保留完整容量、摘要和签名核验。插件仓最终 `31173d7064d7d5a6a7aba5ee752b91230ae5bbc3` 的Validate42464714350通过；[目录42464734376](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42464734376)发布latest [catalog-20261108-3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/catalog-20261108-3)，14条中旧13条完整保留，新条目三语齐全，见 `catalog-verification.json`。
+- Shared4.0.4归档SHA256为 `766f73efa5e8a0afc1d89d2d24f3a97cb32506f62711d8ed43c0de1167c7d1f6`。导出后源码空行格式变化使再次导出指纹不同，未改写不可变归档或origin；506个编译文件逐一与最终dist比对一致，见 `sdk-byte-verification.json`，原失败日志保留。
+- 首次完整远程[42464335199](https://github.com/0honus0/nexus-terminal/actions/runs/42464335199)发现旧召回控件、编辑器固定控件数、市场已缓存不重新加载的测试消费者，以及新增迁移声明顺序导致备份签名校验失败。修正入口和迁移顺序，新增迁移链有序断言，保留既有单位校验、凭据与未知围栏断言；本地回归通过。原轮在后端未结束时随新提交取消，不计通过；首次分片原日志和Reporter汇总保留。
+- 最终本体 `21e36a7b7da73f65470a8b5c4d52a6aca83f4a45` 的完整远程[E2E42465732392](https://github.com/0honus0/nexus-terminal/actions/runs/42465732392)成功，正式758项（Backend223、Browser535）全部一次通过；八分片、质量/格式/双端构建、Docker smoke及耗时汇总成功。`remote-final-reporter-verified.log`逐项核对758个唯一passed记录，零失败、重试、跳过、遗漏或额外场景。
+- [main amd64 dev发布42467733089](https://github.com/0honus0/nexus-terminal/actions/runs/42467733089)成功，来源 `1a32d09771d31365072b986ab83c7957c18c3ce2`；相对被测提交只有CI自动更新的`scripts/e2e/duration-estimates.json`，产品源码一致。`dev`与`sha-1a32d09771d3`摘要均为`sha256:127e73e3cd5e679dabc01438e48c9c2baf4f2a685fa594b0ac5751855e0d95f1`，已只读核对唯一产品平台linux/amd64、manifest/config摘要及OCI revision/source，见`publication/image-verification.json`。未拉取完整镜像或更新生产主机；本轮随后只提交验收文档，无行为变化，测试现场及首次失败继续保留。
+
 ## 插件 CDP 配置、市场移动布局与语言（2026-11-08）
 
 基于本体 `main/801b518b`，主代理独立完成；插件正式源码归 `0honus0/nexus-agent-plugins`。Node26.13.0、pnpm12.16.1，产物集中 `/home/honus/nexus-task-artifacts/agent-plugin-settings-20261108`，指定CDP为 `172.30.30.11:9223`，访问 `https://api.honus.top`，前端9998、隔离后端3002。不更新生产主机，保留原数据库和首次失败。

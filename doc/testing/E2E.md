@@ -4,13 +4,13 @@
 
 ## 当前验收基线
 
-最新完整远程 [E2E42460337738](https://github.com/0honus0/nexus-terminal/actions/runs/42460337738) 验证main/871a0516d08f21445af766b28cb8df12f11050b6：正式矩阵756项全部一次通过（Backend222、Browser534），质量、双端构建、Docker smoke、八个分片及耗时汇总成功。逐项核对原始Reporter记录与正式清单，无失败、重试、flaky、场景跳过或遗漏；本轮覆盖迁移64、插件实例CDP配置、三语市场、移动设置及旧入口移除。首次失败与取消记录见[本轮记录](HISTORY.md#插件-cdp-配置市场移动布局与语言2026-11-08)。
+最新完整远程 [E2E42465732392](https://github.com/0honus0/nexus-terminal/actions/runs/42465732392) 验证main/21e36a7b7da73f65470a8b5c4d52a6aca83f4a45：正式矩阵758项全部一次通过（Backend223、Browser535），质量、双端构建、Docker smoke、八个分片及耗时汇总成功。逐项核对原始Reporter记录与正式清单，无失败、重试、flaky、场景跳过或遗漏；本轮覆盖迁移65、插件召回配置、MCP/ACP入口归属、编辑器安全围栏和备份导出导入。首次失败与取消记录见[本轮记录](HISTORY.md#agent-设置归属与插件召回配置2026-11-08)。
 
-最新[main amd64 dev发布42462199531](https://github.com/0honus0/nexus-terminal/actions/runs/42462199531)来源fc73c8f6e58c987feb0b270037c091f8c258ff6a，相对被测提交只增加CI自动更新的测试耗时估算。`dev`与`sha-fc73c8f6e58c`摘要均为`sha256:1428fd0138dc2b7eff1511c5eb84d5733fb9219ebe5786a1b54ac98c0d2d8232`；已只读核对唯一产品平台linux/amd64、manifest/config摘要及OCI revision/source，未拉取完整镜像。完整[发布记录](HISTORY.md#插件-cdp-配置市场移动布局与语言2026-11-08)保留；本轮文档收口另行提交，无行为变化。未更新生产主机。
+最新[main amd64 dev发布42467733089](https://github.com/0honus0/nexus-terminal/actions/runs/42467733089)来源1a32d09771d31365072b986ab83c7957c18c3ce2，相对被测提交只增加CI自动更新的测试耗时估算。`dev`与`sha-1a32d09771d3`摘要均为`sha256:127e73e3cd5e679dabc01438e48c9c2baf4f2a685fa594b0ac5751855e0d95f1`；已只读核对唯一产品平台linux/amd64、manifest/config摘要及OCI revision/source，未拉取完整镜像。完整[发布记录](HISTORY.md#agent-设置归属与插件召回配置2026-11-08)保留；本轮文档收口另行提交，无行为变化。未更新生产主机。
 
-官方浏览器插件已发布 [v2.1.1](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v2.1.1)，签包源码478b31c228f6003e5eee8ba6b1a4e0f2cec70f70；插件仓最新main为4dee500a4c5165e909f01bb8939333c8a6c6d087。[Validate42459303193](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42459303193)及本地完整check/build/test通过，83项插件与17项仓库测试全过，八包各有独立测试入口。其余组合保持Agent2.0.2、ChatUI2.0.1、MCP/ACP服务4.0.0及Remote/Agent/Integrations工具2.0.0。公开latest目录[catalog-20261108-2](https://github.com/0honus0/nexus-agent-plugins/releases/tag/catalog-20261108-2)保留全部13个不可变版本及三语元数据，连续聚合与真实旧目录续发已回归。Shared/SDK4.0.3同步目录契约，插件UI继续使用既有locale环境。
+官方Agent工具已发布 [2.1.0](https://github.com/0honus0/nexus-agent-plugins/releases/tag/tools-agent-v2.1.0)，签包源码40515740606254ed9398d15830cce150a4e1c8a8；插件仓最新main为31173d7064d7d5a6a7aba5ee752b91230ae5bbc3，[Validate42464714350](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42464714350)成功。本地完整check/build/格式通过，八包85项独立测试和最终22项仓库测试全过。其余组合保持Browser2.1.1、Agent2.0.2、ChatUI2.0.1、MCP/ACP服务4.0.0及Remote/Integrations工具2.0.0。公开latest目录[catalog-20261108-3](https://github.com/0honus0/nexus-agent-plugins/releases/tag/catalog-20261108-3)保留全部14个不可变版本及三语元数据，旧13条逐项保持不变。Shared4.0.4同步移除Host召回偏好，SDK4沿用现有配置与locale能力，未新增语言RPC。
 
-指定CDP `172.30.30.11:9223`、`https://api.honus.top`与本地9998前端完成正式Browser2.1.1真实安装、三语市场1440/390/320px及320px实例设置保存、优先级800、说明/选项文字、无横向溢出和零pageerror验收。此前正式组合的聊天、默认High思考等级、宽屏SSH文字/窄屏图标及刷新恢复证据仍见[SDK4完整验收](HISTORY.md#sdk4-完整验收与发布2026-11-07)。首次全目录独立Node探测889项的173失败、8取消不作为正式矩阵通过证据。手机真机、真实模型效果、物理音画、介质故障及负载性能等未验边界仍见[待验与外部依赖](../PLAN.md#待验与外部依赖)；受控协议和浏览器回归不代替这些实测。
+指定CDP `172.30.30.11:9223`、`https://api.honus.top`与本地9998前端完成正式Agent工具2.1.0的英文1440px、中文320px和日文390px设置保存、800/320/390条及1048576字节读回、无横向溢出和零pageerror验收。公开下载曾返回503，CDP安装改用同一正式签包的本地测试源，归档字节/签名/摘要不变；公开网关可用性不属于该安装证据。此前正式Browser2.1.1安装、三语市场、实例设置及SDK4聊天的证据仍见[历史索引](HISTORY.md)。首次全目录独立Node探测889项的173失败、8取消不作为正式矩阵通过证据。手机真机、真实模型效果、物理音画、介质故障及负载性能等未验边界仍见[待验与外部依赖](../PLAN.md#待验与外部依赖)；受控协议和浏览器回归不代替这些实测。
 
 ## 阶段逻辑回归
 
