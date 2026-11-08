@@ -82,7 +82,6 @@ export const agentPerformanceMigrations = [
 	{ version: 7, signature: 'agent-approval-tool-index-20261106', apply: indexApprovalTool },
 	{ version: 8, signature: 'agent-resolution-approval-index-20261106', apply: indexApprovalResolution },
 	{ version: 9, signature: 'agent-compaction-run-index-20261106', apply: indexCompactionRun },
-	{ version: 65, signature: 'agent-memory-plugin-configuration-20261108', apply: moveMemoryConfigurationToInstances },
 ];
 
 export const agentModularMigrations = [
@@ -176,6 +175,7 @@ export const agentModularMigrations = [
 		signature: 'agent-browser-plugin-configuration-20261108',
 		apply: moveBrowserConfigurationToInstances,
 	},
+	{ version: 65, signature: 'agent-memory-plugin-configuration-20261108', apply: moveMemoryConfigurationToInstances },
 ];
 
 export async function migrateAgentToolBatches(tx: SqlExecutor): Promise<void> {

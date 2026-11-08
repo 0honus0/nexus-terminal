@@ -229,7 +229,7 @@ try {
 				.use(pinia)
 				.use(i18n);
 			mounted.mount(node);
-			await until(() => node.querySelectorAll('input').length === 30);
+			await until(() => node.querySelectorAll('input').length === Object.keys(current.limits).length * 2);
 			check(
 				node.querySelectorAll('textarea').length === 0 && node.querySelectorAll('select').length === 0,
 				'actual components render shared budgets and hard limits without child overrides',
@@ -344,7 +344,7 @@ try {
 				.use(pinia)
 				.use(i18n);
 			mounted.mount(node);
-			await until(() => node.querySelectorAll('input').length === 30);
+			await until(() => node.querySelectorAll('input').length === Object.keys(current.limits).length * 2);
 			check(modelReads === 0, 'inherited Subagent settings do not load a separate model directory');
 			window.fetch = nativeFetch;
 			hardInput = node.querySelector('details input');

@@ -98,6 +98,11 @@ async function seed(db) {
 }
 
 test('Recall migration preserves effective App policy only in unconfigured official instances and is restart safe', async (t) => {
+	assert.deepEqual(
+		applicationMigrations.map((migration) => migration.version),
+		Array.from({ length: applicationMigrations.length }, (_, index) => index + 1),
+		'bootstrap migration order must match the persistent sequence used by backup signatures',
+	);
 	const directory = await mkdtemp(join(tmpdir(), 'nexus-recall-migration-'));
 	const path = join(directory, 'state.db');
 	let db = SqliteRuntime.open(path);

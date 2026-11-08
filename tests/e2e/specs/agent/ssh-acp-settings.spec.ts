@@ -190,6 +190,7 @@ test('instance settings preserve credentials, isolate Apps and persist compactio
 		route.fulfill({ status: 503, json: { code: 'provider_unavailable' } }),
 	);
 	await selectAgentExtensionsSection(page, 'market');
+	await page.getByRole('button', { name: 'Refresh repositories', exact: true }).click();
 	const row = page
 		.locator('div.border-b')
 		.filter({ has: page.getByText(app.name, { exact: true }) })

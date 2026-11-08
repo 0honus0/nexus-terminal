@@ -114,25 +114,25 @@ test('Agent feature master switch remains visible when execution settings cannot
 	await expect(page.getByRole('button', { name: 'Reload settings', exact: true })).toBeVisible();
 });
 
-test('Recall byte quantities distinguish range errors from invalid syntax', async ({ page, context }) => {
+test('Host byte budgets distinguish range errors from invalid syntax', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
 	await setUiLanguage(context.request);
 	await page.goto('/settings?tab=agent');
 	await selectAgentSettingsGroup(page, 'models');
 	const budget = page.getByRole('region', { name: 'Budget and context', exact: true });
-	const recall = budget.getByRole('textbox', { name: 'Recall total (bytes)', exact: true }).first();
-	const original = await recall.inputValue();
+	const output = budget.getByRole('textbox', { name: 'Tool output (bytes)', exact: true }).first();
+	const original = await output.inputValue();
 
-	await recall.fill('1G');
-	await expect(budget.getByText('Out of range; maximum 32K', { exact: true })).toBeVisible();
+	await output.fill('1G');
+	await expect(budget.getByText('Out of range; maximum 256K', { exact: true })).toBeVisible();
 	await expect(
 		budget.getByText('Invalid format; use a number with an optional unit', { exact: true }),
 	).not.toBeVisible();
 
-	await recall.fill('not-a-size');
+	await output.fill('not-a-size');
 	await expect(budget.getByText('Invalid format; use a number with an optional unit', { exact: true })).toBeVisible();
 
-	await recall.fill(original);
+	await output.fill(original);
 });
 
 test('hard-limit editing saves 800 model requests and then allows an 800-request budget', async ({ page, context }) => {
