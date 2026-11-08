@@ -2466,3 +2466,11 @@ Webhook秘密契约已下沉到真实原生HTTP/SQLite/投递层：`webhook-owne
 本地新增关闭回归使用有界状态观测，使负面失败也能进入finally释放真实completion gate，不变更产品扫描期限；`ssh-lifecycle-final`3项通过，10.88秒。首次缺少报告父目录的ENOENT与Playwright命令参数错误均保留为执行错误；修正命令后的结果分别记录，不算产品失败或通过。两轮远程zip、日志和本地失败均保留在任务证据根。新完整门禁及插件独立Validate仍待完成。
 
 `browser-remaining-final`监控、手机文件预览与Pad挂起输出10项全部通过，92.11秒，无worker收尾错误、skip/flaky或重试；`check-queue-final.log`、`sdk-backend-build-final.log`与`format-queue-final.log`通过。
+
+## 测试重构远程第三轮收敛（2026-11-08）
+
+本体`313dc83fe7e47d1e47f60987db34d7099149a188`的[第三轮42523103326](https://github.com/0honus0/nexus-terminal/actions/runs/42523103326)在21:02:01–21:17:43 UTC完整结束，约15分42秒。质量、Runner、Docker smoke和7个测试分片成功，仅第6分片有1项浏览器flaky；首次失败与重试保留，整轮仍判失败。前轮SDK连续页、受控SSH关闭输出和监控响应读取问题未再出现。
+
+`file-manager-resize.spec.ts`在点击第一标签后立即读取全局活动surface，偶发捕获尚未完成Vue切换的第二会话ID；首次trace证明第一会话编辑器已经打开，但断言等待第二会话位置。改从目标标签既有`data-session-id`读取稳定身份，并等待对应surface激活；保留文件打开、切换取消拖动、迟到pointerup不写尺寸和偏好等全部断言，无新增sleep、产品UI或期限变更。`resize-identity-repeat`原场景连续5次通过，35.34秒，无skip/flaky或重试。此前`resize-identity-final`未能启动webServer，未执行任何场景，单独保留为启动错误。
+
+`check-resize-identity-final.log`和受影响Prettier、diff检查通过。第三轮精确作业结果、日志与第6分片首次trace保留在任务证据根；新的全量门禁与插件独立Validate仍待完成，定向5次成功不能代替完整通过。

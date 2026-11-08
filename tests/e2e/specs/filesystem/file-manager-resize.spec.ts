@@ -211,11 +211,12 @@ test('switching sessions cancels popup and sidebar resizing before a late pointe
 		const secondTab = tabs.nth(1);
 		await expect(secondTab).toHaveAttribute('data-session-state', 'connected', { timeout: 20_000 });
 		await firstTab.click();
-		const workspaceId = await page
-			.locator('[data-workspace-surface][data-workspace-active="true"]')
-			.getAttribute('data-workspace-id');
+		await expect(firstTab).toHaveAttribute('aria-selected', 'true');
+		// Tab identity is stable while Vue commits the cached surface activation.
+		const workspaceId = await firstTab.getAttribute('data-session-id');
 		if (!workspaceId) throw new Error('Active workspace identity is missing');
 		const surface = page.locator(`[data-workspace-surface][data-workspace-id="${workspaceId}"]`);
+		await expect(surface).toHaveAttribute('data-workspace-active', 'true');
 
 		const popupStorage = () =>
 			page.evaluate(() =>
@@ -253,6 +254,7 @@ test('switching sessions cancels popup and sidebar resizing before a late pointe
 			expect(preferenceWrites).toEqual([]);
 			await firstTab.dispatchEvent('click');
 			await expect(firstTab).toHaveAttribute('aria-selected', 'true');
+			await expect(surface).toHaveAttribute('data-workspace-active', 'true');
 		};
 
 		await openConnectedFileManager(page);
