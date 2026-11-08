@@ -8,12 +8,12 @@
 
 基于本体 `main/801b518b`，主代理独立完成；插件正式源码归 `0honus0/nexus-agent-plugins`。Node26.13.0、pnpm12.16.1，产物集中 `/home/honus/nexus-task-artifacts/agent-plugin-settings-20261108`，指定CDP为 `172.30.30.11:9223`，访问 `https://api.honus.top`，前端9998、隔离后端3002。不更新生产主机，保留原数据库和首次失败。
 
-| 审核表   | 本轮结论                                                                                                                                                                  |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 功能对应 | 移除宿主全局Browser设置，浏览器插件持每实例CDP目标、端点信任与页面规则；市场名称/介绍/搜索随本体语言，手机标题、版本、来源及操作分区；新增三语市场和配置保存E2E。         |
-| 职责归属 | 插件持工具定义、设置schema/UI；Host保留可信连接、安全URL执行及资源关闭，从实际调用source注入只读配置，不接受模型自报实例或端点。配置与退役按准确实例/代次隔离。           |
-| 类型归属 | Shared4.0.3新增目录localizations与实例配置解码，双端/HTTP/目录适配器逐字段投影；沿用SDK4既有locale环境事件，不新增语言RPC。迁移64由SQLite Adapter执行，旧值不留运行兼容。 |
-| 完成证据 | 本地根check、双端build、全仓format通过；下列专项和指定浏览器验收分别记录。Browser2.1.1签名和本地7项浏览器E2E已通过，完整远程E2E与本体amd64 dev发布仍待最终回填。          |
+| 审核表   | 本轮结论                                                                                                                                                                                                          |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 移除宿主全局Browser设置，浏览器插件持每实例CDP目标、端点信任与页面规则；市场名称/介绍/搜索随本体语言，手机标题、版本、来源及操作分区；新增三语市场和配置保存E2E。                                                 |
+| 职责归属 | 插件持工具定义、设置schema/UI；Host保留可信连接、安全URL执行及资源关闭，从实际调用source注入只读配置，不接受模型自报实例或端点。配置与退役按准确实例/代次隔离。                                                   |
+| 类型归属 | Shared4.0.3新增目录localizations与实例配置解码，双端/HTTP/目录适配器逐字段投影；沿用SDK4既有locale环境事件，不新增语言RPC。迁移64由SQLite Adapter执行，旧值不留运行兼容。                                         |
+| 完成证据 | 本地根check、双端build、全仓format通过；下列专项和指定浏览器验收分别记录。Browser2.1.1与最新目录已发，本地浏览器与指定CDP验收通过，完整远程756项一次全绿，main amd64 dev42462199531发布及摘要/平台/源码核对成功。 |
 
 - `main-targeted-final-first.log`：41项40通过；序列化测试误用非UUID操作键，修正夹具后 `serializer-second.log` 7项全部通过，保留写入后序列化超预算仍为operation_unknown断言。`main-targeted-third.log`迁移/本地化3项通过。
 - `browser-functional-first.log`：真实CDP浏览器与文件HTTP专项19项全过，含URL拒绝、准确Run/实例、节点操作、附件与关闭；`migration-snapshot-first.log`11项全过，覆盖迁移61–64、快照列注册、旧官方目标迁移/第三方隔离/不覆盖已编辑配置、重复启动、完整性和外键。
@@ -22,10 +22,13 @@
 - 插件首批 `1843c3df` 的完整check/build与100项测试通过，正式Validate42458001647成功；Browser2.1.0及catalog-20261108已发布并真实验签。指定CDP发现320px设置fieldset的min-content默认宽度造成溢出，另发现复选框不支持文字插槽、表单说明应使用description；在源码修正并以新版本2.1.1交付，原2.1.0签名产物不改写。
 - 插件源码 `478b31c2` 的Validate42458902661与签名发布42459026198成功；Browser2.1.1归档摘要 `480063dac69b232cec8b5e4e0cb5ae21f40b7f798a6be140027634488c15dac8`，正式fixture原字节复制且签名/逐文件hash/完整tar重建均通过，见 `pin-2.1.1.log`。`local-e2e-mobile-first.log`正式Playwright入口7项一次全过，含三语市场、缺译回退、移动设置的非法明文拒绝、优先级800保存/重开、可见说明/标签与无横向溢出。
 - 插件源码 `4dee500a` 的Validate42459303193及Aggregate catalog42459302603成功；公开latest `catalog-20261108-2`保留此前全部12项并新增Browser2.1.1，13项均有三语说明。`catalog-reaggregation-tests.log`17项通过，`catalog-reaggregation-live.log`使用真实公开旧目录和新签包连续链聚合成功，原摘要与版本保留。
-- 截图复核发现宿主插件启用、未知操作确认和卸载清数据选项同样误用UiCheckbox插槽，已改为可见且关联控件的标签；通用配置布尔项沿已有表单标签并补可访问名称。`check-host-labels.log`、`build-host-labels.log`通过，`local-e2e-host-label-text.log`一项通过，覆盖点击清理文字切换勾选、取消卸载及设置保存重开。19a76674的首次本体远程42459304789因追加此UI缺陷修复而主动取消，不计通过；最终完整远程待后续SHA回填。
+- 截图复核发现宿主插件启用、未知操作确认和卸载清数据选项同样误用UiCheckbox插槽，已改为可见且关联控件的标签；通用配置布尔项沿已有表单标签并补可访问名称。`check-host-labels.log`、`build-host-labels.log`通过，`local-e2e-host-label-text.log`一项通过，覆盖点击清理文字切换勾选、取消卸载及设置保存重开。19a76674的首次本体远程42459304789因追加此UI缺陷修复而主动取消，不计通过；最终完整远程见下方871a0516记录。
 - 新目录首次聚合42459106697失败，旧目录翻译文案被误按签名发行元数据作整项比较；修复为独立投影可执行身份和展示文案，继续核对原签名/摘要/兼容声明，不修改已发布归档。新增连续两次聚合翻译的回归，并保留首次失败日志 `catalog-mobile-first-failed.log`。
-- 本体a5095c69的完整远程42459675080发现两条旧宿主设置用例仍要求全局CDP面板；按本轮归属改为核对旧面板不存在、旧全局配置和Runner请求均未发起，Provider及运行设置断言保留。插件配置保存由新增正式场景承接。首次分片原日志保留 `remote-shard4-first.log`，本地两条受影响场景通过，最终远程另行记录。
+- 本体a5095c69的完整远程42459675080发现两条旧宿主设置用例仍要求全局CDP面板；按本轮归属改为核对旧面板不存在、旧全局配置和Runner请求均未发起，Provider及运行设置断言保留。插件配置保存由新增正式场景承接。首次分片原日志保留 `remote-shard4-first.log`，本地两条受影响场景通过，见 `local-e2e-host-ownership-final.log`。推送修正后原轮取消，后端未完成，不计通过。
 - 三语市场1440px英文、320px中文和390px日文已通过真实偏好及公开目录显示、卡片/标签/页面宽度检查，截图为 `market-final-*.png`。首次设置页失败保留 `cdp-acceptance-first.log`、`browser-overflow-first.png`；最终正式2.1.1经真实prepare-update/update安装后，三语市场与320px设置保存、优先级800、说明与选项文字、无溢出和零pageerror通过，见 `cdp-acceptance.json`、`cdp-acceptance-final-second.log` 与 `browser-settings-final-320.png`。第二次脚本误用三击选中导致输入追加、首次宿主标签断言早于设置读取完成，均修正验收脚本后通过，首次日志保留；不将这些自动化操作问题计为产品缺陷。
+
+- 最终本体 `871a0516d08f21445af766b28cb8df12f11050b6` 的完整远程[E2E42460337738](https://github.com/0honus0/nexus-terminal/actions/runs/42460337738)成功；正式756项（Backend222、Browser534）全部一次通过，八分片、质量/格式/双端构建、Docker smoke及耗时汇总均成功。`remote-final-reporter-verified.log`与`e2e-42460337738/reporter-summary.json`逐项核对756个唯一passed记录，零重试、失败、跳过、遗漏或额外场景。
+- 发布[42462199531](https://github.com/0honus0/nexus-terminal/actions/runs/42462199531)成功，来源`fc73c8f6e58c987feb0b270037c091f8c258ff6a`；相对被测提交只有CI自动更新的`scripts/e2e/duration-estimates.json`，产品源码一致。`dev`与`sha-fc73c8f6e58c`摘要均为`sha256:1428fd0138dc2b7eff1511c5eb84d5733fb9219ebe5786a1b54ac98c0d2d8232`，只读核对唯一产品平台linux/amd64、manifest/config摘要和OCI revision/source，证据见`publication/image-verification.json`。未拉取完整镜像或更新生产主机；本轮只读核对后补交付文档，不另跑行为测试，测试现场和首次失败保留。
 
 ## Agent 限制复审与容量回归（2026-11-07）
 
