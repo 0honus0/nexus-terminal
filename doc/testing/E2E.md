@@ -16,7 +16,7 @@
 
 已有指定CDP `172.30.30.11:9223`、`https://api.honus.top`及本地9998前端的SDK4聊天、刷新恢复、三语市场和正式Agent工具设置验收继续作为对应产品版本的实机证据，见[历史记录](HISTORY.md#agent-设置归属与插件召回配置2026-11-08)。手机真机、真实模型效果、物理音画、介质故障与负载性能等未验范围见[PLAN](../PLAN.md#待验与外部依赖)。本轮不更新生产主机。
 
-本轮main amd64 dev镜像发布结果将在发布验收后回填；上一发布身份保留在[历史记录](HISTORY.md#agent-设置归属与插件召回配置2026-11-08)，不能作为本轮镜像通过证据。
+本轮[main amd64 dev发布42534310922](https://github.com/0honus0/nexus-terminal/actions/runs/42534310922)成功，来源`b527057ce80629627412a212e437f509cee97866`；相对被测提交仅增加CI耗时估算及文档/测试说明。`dev`与`sha-b527057ce806`摘要同为`sha256:05f9dd3ae7b49482447fc691aa1ca493f61d89d521d90ace6cf1bd48b6f7fc6f`。已只读核对唯一产品平台linux/amd64、manifest/config摘要及OCI revision/source，未拉取镜像层、未更新生产；最终发布记录补充提交只改文档。
 
 ## 阶段逻辑回归
 

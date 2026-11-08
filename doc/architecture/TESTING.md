@@ -23,7 +23,7 @@
 | [Grafana插件CI模板](https://github.com/grafana/plugin-tools/blob/c238e79daffbbcb348c28298a1181a374f0c6dcc/packages/create-plugin/templates/github/workflows/ci.yml)、[API夹具](https://github.com/grafana/plugin-tools/blob/c238e79daffbbcb348c28298a1181a374f0c6dcc/packages/plugin-e2e/src/fixtures/commands/createDataSource.ts)与[Vitest project](https://github.com/grafana/plugin-tools/blob/c238e79daffbbcb348c28298a1181a374f0c6dcc/packages/plugin-e2e/vitest.config.ts) | 插件单测/构建与浏览器验收分开；UI测试通过API准备数据                         | 每包独立项目，候选签包对真实宿主验收；借鉴fixture方式，不引入绑定Grafana的`@grafana/plugin-e2e` |
 | [VS Code普通测试](https://github.com/microsoft/vscode/blob/425edb2f1285509174564beba978bf18069ecaa8/test/unit/README.md)与[产品Smoke](https://github.com/microsoft/vscode/blob/425edb2f1285509174564beba978bf18069ecaa8/test/smoke/README.md)                                                                                                                                                                                                                                     | Node、浏览器及产品验收分工，产品测试匹配实际构建                             | 终端解析/状态下沉；真实布局、IME、焦点和成品交付独立验证，不复制其自定义runner或过时环境说明    |
 
-框架选择如下；版本是2026-11-08核验的候选，实施时锁定同批版本并验证实际工具链，不在配置中使用浮动`latest`。
+以下为2026-11-08实际锁定并完成验收的框架版本；后续升级仍需同批验证真实工具链，不使用浮动框架版本。
 
 | 能力                                              | 选型与边界                                                                                                                                     |
 | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -256,7 +256,7 @@ Playwright仅由全局webServer提供基础后端和Frontend preview；用例通
 
 本体CI验证本体全部必需场景、通用测试插件和固定的官方插件组合。本体通用能力不得因某个官方插件测试包未安装而丧失自身契约覆盖。
 
-插件CI按包发现测试：全部静态与低成本契约先跑，按依赖闭包构建候选包及依赖一次，执行各包的完整逻辑/协议/UI测试，再对兼容声明对应的当前发布Host做真实互操作。默认覆盖全包，只有依赖选择经过验证后才为PR缩减范围。最终整仓与发布门禁覆盖全部官方包；App、工具、服务、UI更新均有真实宿主验收，不能只通过内存Host替身就发布。协议或SDK改变同时验证本体候选构建与新插件组合；旧签包通过不能证明新契约通过。
+插件CI按包发现测试：全部静态与低成本契约先跑，按依赖闭包构建候选包及依赖一次，执行各包的完整逻辑/协议/UI测试，再对兼容声明及成功Host E2E固定的准确源码与成品做真实互操作。默认覆盖全包，只有依赖选择经过验证后才为PR缩减范围。最终整仓与发布门禁覆盖全部官方包；App、工具、服务、UI更新均有真实宿主验收，不能只通过内存Host替身就发布。协议或SDK改变同时验证本体候选构建与新插件组合；旧签包通过不能证明新契约通过。
 
 独立Validate的质量作业构建签包一次，执行源码与包测试及浏览器发现/类型检查；八个测试容器从同一不可变artifact ID恢复编译源码与候选，按Node/Playwright原生分片执行互操作及业务浏览器。分片不重建、不重签，也不接收开发签名私钥。环境使用现有Host runner镜像及其协议服务，依赖指纹不符时允许下载缺失项。此前70项串行继承单片15分钟预算的配置已移除，不靠加长总期限解决重复等待。
 
@@ -278,7 +278,7 @@ Host/SDK/插件依赖闭包写入同一测试组合记录。不跑所有包版�
 
 继续使用现有GitHub Actions，不搭建调度服务。Vitest/Node/Playwright负责worker、隔离与分片；现有耗时分配脚本收敛为薄的文件/独立场景批次规划，只决定分配，不能重写框架测试状态或依赖顺序。
 
-先完成低层迁移，再用真实测量确定每类worker和runner数量。初版以当前8个测试runner的总预算比较，分为无浏览器快速层、真实协议层、浏览器层；共享构建/质量和Docker smoke单独记录。长故障组拆成按owner独立的文件，保持同一场景的前置/执行/收尾在一个测试中，不将依赖步骤分配到不同runner。
+worker与runner数量按真实测量调整。当前本体8个测试runner各执行模块、原生协议、本体浏览器、插件互操作及插件浏览器，快速层归质量作业；共享构建/质量和Docker smoke单独记录。长故障组拆成按owner独立的文件，保持同一场景的前置/执行/收尾在一个测试中，不将依赖步骤分配到不同runner。
 
 独立库、随机端口与每例远端目录先落实，随后开启文件并行。SSH root、CDP context、共享Docker daemon和故障注入分别检查冲突：只读基础设施可以复用，可变环境独享或按实际冲突串行；需要Docker socket的用例进入相应受限作业，其它作业不挂载。并发由CI资源与实测CPU/RSS/I/O确定，先配置再测量，不修改产品并发限制或承诺物理负载互不影响。
 

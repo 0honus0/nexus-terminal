@@ -2582,3 +2582,11 @@ Webhook秘密契约已下沉到真实原生HTTP/SQLite/投递层：`webhook-owne
 | 仓库维护           | `maintenance-final.log`：22项通过，142.8ms；用例已从scripts移入tooling。                                                                                                                                                               |
 
 最终本体`check-final-layout.log`、`build-final-layout.log`和`formatcheck-final-docs.log`通过，插件check/格式、5项Vitest与125项Node测试通过；本体浏览器430项、插件70项发现无错误。仍待同基线远程全量和冷/热耗时回填。3–5分钟是同等8个测试runner下的优化目标，当前未证明达成；自然五分钟认证到期、两分钟SSH空闲和真实弱网/排空不为目标缩短。
+
+## 测试重构 main amd64 dev 发布（2026-11-08）
+
+[发布42534310922](https://github.com/0honus0/nexus-terminal/actions/runs/42534310922)成功，来源`b527057ce80629627412a212e437f509cee97866`；相对完整被测Host提交`ccd612d953ac725a04f087817493fdc5be332ae3`仅有CI自动耗时估算及文档/测试README修改，逐路径已核对，无产品行为变化。插件9c1681e4到0ef2c76c仅有独立CI及测试README变化，运行包与SDK未改；独立门禁仍绑定准确新插件源码与第七轮Host成品完成。
+
+`ghcr.io/0honus0/nexus-terminal:dev`与`sha-b527057ce806`索引摘要均为`sha256:05f9dd3ae7b49482447fc691aa1ca493f61d89d521d90ace6cf1bd48b6f7fc6f`；唯一产品平台linux/amd64，平台manifest为`sha256:8f23c0eda15bb9ca3a9e6406991567ff81fd7cc166f1a7517ba1bdd5f9bd42be`，config为`sha256:dc5107ab6a91d1fbfec316b52d63e3033726e335d6ff737113b99d71fcac56e9`。实际读取并核对各层摘要、OCI revision/source；未下载镜像层或更新生产。发布前两仓工作区与远程同步；最终发布记录补充只修改文档，不重跑已通过的行为门禁。
+
+最终清理索引1334条归档均存在且没有未完成partial；本轮597份归档经过完整tar比较及SHA256登记。测试源码目录的`.tmp`、`test-results`和`playwright-report`展开产物已移除，Docker无测试容器，本轮Alpine镜像已删除；活动9998预览、既有插件验收服务、正式源码/依赖及无关镜像保留。临时/tmp与RAM展开产物已释放。精简摘要、准确组合、发布manifest/config和源码差异核对保留在任务目录`delivery/`，归档索引在`cleanup/archives.jsonl`。
