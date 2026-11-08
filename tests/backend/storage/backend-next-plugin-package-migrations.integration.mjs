@@ -8,9 +8,8 @@ import { SqliteRuntime } from '../../../packages/backend/dist/platform/storage/s
 import { initializeSchema } from '../../../packages/backend/dist/platform/storage/sqlite/schema.js';
 import { applicationMigrations } from '../../../packages/backend/dist/bootstrap/schema.js';
 import { SqlitePluginStorage } from '../../../packages/backend/dist/modules/agent/plugins/adapters/sqlite/plugin-sql.js';
-import { registerAgentSnapshot } from '../../../packages/backend/dist/modules/agent/snapshots/adapters/sqlite/snapshot-registration.js';
 
-await test('Plugin package migration: shared global version becomes user-owned stages and legacy data stays manageable', async (t) => {
+await test('Plugin package migration: immutable v11–60 history is applied before obsolete package data is removed', async (t) => {
 	const directory = await mkdtemp(join(tmpdir(), 'nexus-plugin-migration-'));
 	const db = SqliteRuntime.open(join(directory, 'migration.db'));
 	t.after(async () => {
@@ -106,7 +105,10 @@ await test('Plugin package migration: shared global version becomes user-owned s
 		owners.map(({ userId, stageId }) => ({ user_id: userId, stage_id: stageId })),
 		'each user keeps their own verified stage rather than borrowing another tenant source',
 	);
-	await initializeSchema(db, applicationMigrations);
+	await initializeSchema(
+		db,
+		applicationMigrations.filter((migration) => migration.version <= 60),
+	);
 	assert.deepEqual(
 		(await db.all('SELECT enabled FROM agent_apps ORDER BY user_id')).map((row) => row.enabled),
 		[0, 0],
@@ -177,22 +179,16 @@ await test('Plugin package migration: shared global version becomes user-owned s
 		'clearing one owner never clears the other user',
 	);
 	assert.deepEqual(cleared, [{ userId: 1, appId: owners[0].appId }]);
-	const registration = registerAgentSnapshot(null, () => {});
-	const tables = await db.all("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'agent_plugin_%'");
-	for (const { name } of tables) {
-		const declared = registration.tables.find((table) => table.name === name);
-		assert.ok(declared, 'snapshot registration covers migrated table ' + name);
-		const columns = (await db.all('PRAGMA table_info(' + name + ')')).map((row) => row.name).sort();
-		assert.deepEqual(
-			[...declared.columns].sort(),
-			columns,
-			'snapshot registration preserves every column of ' + name,
-		);
+	await initializeSchema(db, applicationMigrations);
+	for (const name of [
+		'agent_apps',
+		'agent_plugin_versions',
+		'agent_plugin_packages',
+		'agent_plugin_installations',
+		'agent_plugin_data',
+	]) {
+		assert.deepEqual(await db.all('SELECT * FROM ' + name), [], 'legacy rows are deleted from ' + name);
 	}
-	const dataTable = registration.tables.find((table) => table.name === 'agent_plugin_data');
-	const original = await db.one('SELECT * FROM agent_plugin_data WHERE user_id=2');
-	assert.deepEqual(
-		Object.entries(registration.restore(dataTable, registration.transfer(dataTable, original))),
-		Object.entries(original),
-	);
+	assert.equal((await db.one('SELECT COUNT(*) AS count FROM access_accounts')).count, 2);
+	assert.deepEqual(await db.all('PRAGMA foreign_key_check'), []);
 });

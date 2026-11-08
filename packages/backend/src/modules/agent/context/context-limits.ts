@@ -1,4 +1,2 @@
-/** Private bounded journal representation; no public protocol or execution grant. */
-export const CONTEXT_MAX_BYTES = 4 * 1024 * 1024;
-
+/** Immutable v1 migration capacity; no current runtime journal or execution grant. */
 export const CONTEXT_SNAPSHOT_MAX_BYTES = 5 * 1024 * 1024;

@@ -87,6 +87,8 @@ export class ArtifactStorageRefusal extends Error {
 }
 
 export interface ArtifactStorage {
+	pendingBlobRemovals(): Promise<string[]>;
+	finishBlobRemoval(id: string): Promise<void>;
 	recovery(): Promise<{ userId: number; record: StoredArtifact }[]>;
 	getAccessible(
 		scope: StoredArtifactScope,

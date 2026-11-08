@@ -119,8 +119,22 @@ export class ArtifactService {
 	private readonly activeLeases = new Set<Promise<void>>();
 
 	async initialize(): Promise<void> {
-		const values = await this.model.recovery();
 		const summary = new FailureSummary();
+		for (const id of await this.model.pendingBlobRemovals().catch((error: unknown) => {
+			summary.record(error);
+			return [];
+		})) {
+			try {
+				await this.model.remove(id);
+				await this.model.finishBlobRemoval(id);
+			} catch (error) {
+				summary.record(error);
+			}
+		}
+		const values = await this.model.recovery().catch((error: unknown) => {
+			summary.record(error);
+			return [];
+		});
 		for (const value of values) {
 			try {
 				await this.removeClaimed(value.userId, value.record);

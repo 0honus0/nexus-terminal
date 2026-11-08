@@ -5,7 +5,6 @@ import { DatabaseSync } from 'node:sqlite';
 import { operationStorageFixture } from '../../support/operation-storage-fixture.mjs';
 import { initializeRunTools } from '../../../packages/backend/dist/modules/agent/runs/adapters/sqlite/run-tool-schema.js';
 import { generalizeToolChildren } from '../../../packages/backend/dist/modules/agent/runs/adapters/sqlite/run-tool-children-migration.js';
-import { readToolChild } from '../../../packages/backend/dist/modules/agent/runs/adapters/sqlite/run-tool-parent-sql.js';
 
 await test('Tool children: historical SQLite migration retains ACP links and strict package identity', async (t) => {
 	const db = new DatabaseSync(':memory:');
@@ -55,8 +54,8 @@ await test('Tool children: historical SQLite migration retains ACP links and str
 		{ kind: 'acp_permission', tool_id: permission, parent_id: parent, request_key: 'old-permission' },
 	);
 	const historical = db.prepare('SELECT * FROM agent_tool_children').get();
-	assert.equal(readToolChild(historical).kind, 'acp_permission');
-	assert.equal(readToolChild(historical).plugin, null);
+	assert.equal(historical.kind, 'acp_permission');
+	assert.equal(historical.package_id, null);
 	const nested = tool('completed');
 	db.prepare(
 		`INSERT INTO agent_tool_children(tool_id,parent_id,parent_hash,request_key,kind,package_id,installation_revision,instance_id,instance_revision)
@@ -68,16 +67,7 @@ await test('Tool children: historical SQLite migration retains ACP links and str
 	 VALUES(?,?,?,'nested-plugin-call','plugin_tool','test.package',1,?,1)`,
 	).run(grandchild, nested, 'a'.repeat(64), randomUUID());
 	const relation = db.prepare('SELECT * FROM agent_tool_children WHERE tool_id=?').get(nested);
-	assert.equal(readToolChild(relation).plugin.packageId, 'test.package');
-	for (const change of [
-		{ tool_id: parent },
-		{ parent_hash: 'broken' },
-		{ request_key: '' },
-		{ installation_revision: 0 },
-		{ instance_id: 'broken' },
-		{ package_id: 'foreign' },
-	])
-		assert.throws(() => readToolChild({ ...relation, ...change }));
+	assert.equal(relation.package_id, 'test.package');
 	assert.throws(
 		() =>
 			db

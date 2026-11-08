@@ -10,7 +10,6 @@ import { persistToolIdentities } from '../../../packages/backend/dist/modules/ag
 import { retirePreviousPluginToolContract } from '../../../packages/backend/dist/modules/agent/plugins/adapters/sqlite/plugin-tool-contract-migration.js';
 import { pluginToolName } from '../../../packages/backend/dist/modules/agent/plugins/plugin-tool-authority-rules.js';
 import { snapshotPluginVersion } from '../../../packages/backend/dist/modules/agent/snapshots/adapters/sqlite/snapshot-plugin-versions.js';
-import { readToolOperation } from '../../../packages/backend/dist/modules/agent/runs/adapters/sqlite/run-tool-row.js';
 import { readAgentToolIdentity } from '../../../packages/shared/dist/agent/tools/identity-codec.js';
 
 function sqlite(t) {
@@ -161,22 +160,12 @@ await test('All tools migration: 26-28 preserve historical hashes while adding e
 		packageSha256: packageHash,
 		name: local,
 	});
-	// Migrations 26–28 preserve archived rows. Current HTTP activities use
-	// Operations, so assert the actual historical decoder rather than feeding an
-	// obsolete storage object into the new application projection.
+	// These immutable migration steps still execute before v61 deletes the archive.
 	for (const id of [fake, parent]) {
 		const row = db.prepare('SELECT * FROM agent_run_tools WHERE id=?').get(id);
-		const value = readToolOperation(row);
-		assert.equal(value.toolName, signedName);
-		assert.deepEqual(value.identity, identity(id));
-		assert.deepEqual(value.outputArtifactIds, id === parent ? [artifact] : []);
-		for (const changed of [
-			{ ...row, identity_json: '{}' },
-			{ ...row, output_artifact_ids_json: JSON.stringify([artifact, artifact]) },
-			{ ...row, state: 'inspected', result_text: null, output_artifact_ids_json: JSON.stringify([artifact]) },
-		]) {
-			assert.throws(() => readToolOperation(changed));
-		}
+		assert.equal(row.tool_name, signedName);
+		assert.deepEqual(JSON.parse(row.identity_json), identity(id));
+		assert.deepEqual(JSON.parse(row.output_artifact_ids_json), id === parent ? [artifact] : []);
 	}
 	assert.deepEqual(identity(delivered), { kind: 'host', operation: 'remote.deliver' });
 	assert.deepEqual(identity(permission), { kind: 'host', operation: 'plugins.invoke' });
@@ -477,16 +466,7 @@ await test('All tools migration: 29 retires old current and pending contracts ac
 				createHash('sha256').update(original.manifest).digest('hex'),
 			);
 			assert.equal(JSON.parse(version.manifest_json).format, 'legacy-archive');
-			const historical = snapshotPluginVersion(version, archive);
-			assert.equal(historical.manifest, null, 'historical proof never recreates an executable manifest');
-			assert.deepEqual(historical.kinds, { app: false, tool: true, ui: false });
-			assert.deepEqual(historical.toolNames, ['file_read']);
-			for (const changed of [
-				{ ...archive, package_hash: 'e'.repeat(64) },
-				{ ...archive, version: '9.0.0' },
-				{ ...archive, publisher_key_id: 'ed25519:' + 'e'.repeat(64) },
-			])
-				assert.throws(() => snapshotPluginVersion(version, changed));
+			assert.throws(() => snapshotPluginVersion(version), 'current snapshots reject archived manifests');
 			assert.equal(stage.status, 'failed');
 			assert.equal(stage.manifest_json, null);
 			assert.equal(stage.publisher_key_id, null);

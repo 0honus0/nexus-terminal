@@ -12,30 +12,14 @@ import type {
 	AgentCreateRunOutcome,
 	AgentCancelRunOutcome,
 } from '@nexus-terminal/shared/agent/runs/values';
-import type { StoredProviderModel } from '../../providers/storage/provider-storage.js';
-import type { AgentProviderProtocol } from '@nexus-terminal/shared/agent/providers/values';
 import type { RunResumeStorage } from './run-resume-storage.js';
 
-/** Storage projection; RunModel converts persisted capability text to an application value. */
-export interface StoredFrozenModelInput {
-	providerId: string;
-	providerVersion: number;
-	credentialRevision: number;
-	modelId: string;
-	baseUrl: string;
-	protocol: AgentProviderProtocol;
-	capabilities: StoredProviderModel;
-	executionPolicy: 'governed';
+export interface StoredRunAppExecution {
+	kind: 'plugin';
+	package: { packageId: string; version: string; packageHash: string; publisherKeyId: string };
+	codeDependencies: { packageId: string; version: string; packageHash: string; publisherKeyId: string }[];
+	handler: string;
 }
-
-export type StoredRunAppExecution =
-	| {
-			kind: 'plugin';
-			package: { packageId: string; version: string; packageHash: string; publisherKeyId: string };
-			codeDependencies: { packageId: string; version: string; packageHash: string; publisherKeyId: string }[];
-			handler: string;
-	  }
-	| { kind: 'retired' };
 
 export interface StoredFrozenInput {
 	appExecution: StoredRunAppExecution;

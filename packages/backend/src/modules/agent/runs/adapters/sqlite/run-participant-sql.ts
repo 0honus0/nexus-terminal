@@ -79,9 +79,6 @@ export async function participant(tx: SqlReader, scope: StoredParticipantScope):
 			dependencyMode: 'success',
 		};
 	}
-	if (row.run_kind === 'child' && row.parent_id === null) {
-		return archivedChild(tx, scope, row, status);
-	}
 	if (
 		row.run_kind !== 'child' ||
 		typeof row.parent_id !== 'string' ||
@@ -116,44 +113,6 @@ export async function participant(tx: SqlReader, scope: StoredParticipantScope):
 	};
 }
 
-/** Read-only audit projection. Archived relations never become current executable participants. */
-async function archivedChild(
-	tx: SqlReader,
-	scope: StoredParticipantScope,
-	run: Record<string, unknown>,
-	status: StoredParticipant['status'],
-): Promise<StoredParticipant | null> {
-	const row = await tx.one(
-		`SELECT c.parent_id,c.profile,c.output_text,c.tools_json,c.max_requests,c.dependencies_json,c.dependency_mode
-		 FROM agent_legacy_run_children c JOIN agent_run_inputs i ON i.run_id=c.run_id
-		 WHERE c.run_id=? AND json_extract(i.app_execution_json,'$.kind')='retired'`,
-		[scope.runId],
-	);
-	if (!row) {
-		return null;
-	}
-	const profile = AGENT_CHILD_PROFILES.find((value) => value === row.profile);
-	if (!profile || (row.dependency_mode !== 'success' && row.dependency_mode !== 'settled')) {
-		throw new Error('Corrupt archived participant relation');
-	}
-	const output = row.output_text === null ? null : storedText(row.output_text);
-	return {
-		id: scope.runId,
-		version: storedInteger(run.version, 1),
-		rootId: storedText(row.parent_id),
-		parentId: storedText(row.parent_id),
-		status,
-		profile,
-		output: output === null ? null : Array.from(output).slice(0, 1024).join(''),
-		outputBytes: output === null ? 0 : Buffer.byteLength(output),
-		tools: storedStrings(row.tools_json),
-		maxRequests: storedInteger(row.max_requests, 1),
-		deadline: storedInteger(run.deadline_at, 1),
-		dependencies: storedStrings(row.dependencies_json),
-		dependencyMode: row.dependency_mode,
-	};
-}
-
 /** A persisted restriction is intersected with live Root authority, never substituted for it. */
 export async function currentParticipant(
 	tx: SqlExecutor,
@@ -164,9 +123,10 @@ export async function currentParticipant(
 	allowExpired = false,
 ): Promise<boolean> {
 	const input = await tx.one('SELECT app_execution_json FROM agent_run_inputs WHERE run_id=?', [scope.runId]);
-	if (!input || readRunAppExecution(input.app_execution_json).kind === 'retired') {
+	if (!input) {
 		return false;
 	}
+	readRunAppExecution(input.app_execution_json);
 	const current = await participant(tx, scope);
 	if (!current || (current.status !== 'pending' && current.status !== 'running')) {
 		return false;

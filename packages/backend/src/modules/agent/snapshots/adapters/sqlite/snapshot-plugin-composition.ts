@@ -7,7 +7,6 @@ import { pluginRuntimeRow } from '../../../plugins/adapters/sqlite/plugin-runtim
 import { stageRow } from '../../../plugins/adapters/sqlite/plugin-row.js';
 import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
 import { snapshotVersionKey, snapshotPluginVersion } from './snapshot-plugin-versions.js';
-import { snapshotLegacyManifest } from './snapshot-legacy-package.js';
 import { matchesAppExecutionDependency } from '../../../plugins/plugin-app-execution-rules.js';
 
 function scope(row: SqlRow): string {
@@ -31,9 +30,6 @@ function positive(value: unknown): void {
 
 export function validateSnapshotPluginComposition(rows: ReadonlyMap<string, readonly SqlRow[]>): void {
 	const versions = new Map((rows.get('agent_plugin_versions') ?? []).map((row) => [snapshotVersionKey(row), row]));
-	const archives = new Map(
-		(rows.get('agent_plugin_legacy_versions') ?? []).map((row) => [snapshotVersionKey(row), row]),
-	);
 	const packages = new Map<string, SqlRow>();
 
 	const packageKey = (row: SqlRow) => JSON.stringify([row.user_id, row.package_id]);
@@ -48,7 +44,7 @@ export function validateSnapshotPluginComposition(rows: ReadonlyMap<string, read
 		) {
 			throw new SnapshotFailure('unavailable');
 		}
-		return snapshotPluginVersion(version, archives.get(snapshotVersionKey(version)));
+		return snapshotPluginVersion(version);
 	};
 
 	for (const row of rows.get('agent_plugin_packages') ?? []) {
@@ -242,26 +238,6 @@ export function validateSnapshotPluginComposition(rows: ReadonlyMap<string, read
 			throw new SnapshotFailure('unavailable');
 		}
 		const candidate = stageRow(raw);
-		const quarantined =
-			installation.status === 'incompatible' && row.data_migrated === 1 && candidate.status === 'failed';
-		if (quarantined) {
-			if (
-				typeof raw.manifest_json !== 'string' ||
-				typeof raw.publisher_key_id !== 'string' ||
-				candidate.version < Number(row.stage_version)
-			) {
-				throw new SnapshotFailure('unavailable');
-			}
-			const original = snapshotLegacyManifest(JSON.parse(raw.manifest_json));
-			if (
-				(original.schemaVersion !== 2 && original.schemaVersion !== 3) ||
-				original.summary.packageId !== row.package_id
-			) {
-				throw new SnapshotFailure('unavailable');
-			}
-			updates.add(key);
-			continue;
-		}
 		if (
 			(candidate.status !== 'verified' && candidate.status !== 'installed') ||
 			candidate.version < Number(row.stage_version) ||

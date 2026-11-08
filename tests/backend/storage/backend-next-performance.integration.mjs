@@ -66,11 +66,9 @@ test('Performance: v4 upgrade preserves notification membership and independent 
 	await initializeSchema(db, applicationMigrations);
 	assert.deepEqual(await db.all('SELECT * FROM schema_version ORDER BY version'), ledger);
 	for (const [table, column, index] of [
-		['agent_run_budget_reservations', 'root_id', 'agent_budget_reservation_root'],
-		['agent_governance_approvals', 'run_id', 'agent_approval_run_lookup'],
-		['agent_governance_approvals', 'tool_call_id', 'agent_approval_tool_lookup'],
-		['agent_governance_resolution_keys', 'approval_id', 'agent_resolution_approval_lookup'],
-		['agent_context_compactions', 'run_id', 'agent_compaction_run_lookup'],
+		['agent_operation_model_reservations', 'root_id', 'agent_operation_model_reservations_root'],
+		['agent_operations', 'run_id', 'agent_operations_run_state'],
+		['agent_operation_approvals', 'status', 'agent_operation_approvals_requested'],
 	]) {
 		const plan = await db.all(`EXPLAIN QUERY PLAN SELECT * FROM ${table} WHERE ${column}=?`, ['fixture']);
 		assert.ok(

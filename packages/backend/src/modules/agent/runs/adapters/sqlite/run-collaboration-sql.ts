@@ -26,12 +26,9 @@ export async function children(tx: SqlExecutor, scope: StoredParticipantScope): 
 	if (!owner) {
 		return [];
 	}
-	const rows = await tx.all(
-		`SELECT run_id FROM agent_run_children WHERE parent_id=? UNION
-		 SELECT c.run_id FROM agent_legacy_run_children c JOIN agent_run_inputs i ON i.run_id=c.run_id
-		 WHERE c.parent_id=? AND json_extract(i.app_execution_json,'$.kind')='retired' ORDER BY run_id`,
-		[owner.rootId, owner.rootId],
-	);
+	const rows = await tx.all('SELECT run_id FROM agent_run_children WHERE parent_id=? ORDER BY run_id', [
+		owner.rootId,
+	]);
 	const result: StoredParticipant[] = [];
 	for (const row of rows) {
 		const child = await participant(tx, {
@@ -57,11 +54,8 @@ export class SqliteRunCollaborationStorage extends CollaborationDataSql implemen
 			const rows = await tx.all(
 				`SELECT sequence,sender_id,length(CAST(body_text AS BLOB)) AS body_bytes,expires_at FROM agent_run_mailbox
 				 WHERE root_id=? AND recipient_id=? AND sequence>?
-				 UNION ALL SELECT m.sequence,m.sender_id,length(CAST(m.body_text AS BLOB)),m.expires_at
-				 FROM agent_legacy_run_mailbox m JOIN agent_run_inputs i ON i.run_id=m.recipient_id
-				 WHERE m.root_id=? AND m.recipient_id=? AND m.sequence>? AND json_extract(i.app_execution_json,'$.kind')='retired'
 				 ORDER BY sequence LIMIT ?`,
-				[owner.rootId, owner.id, after, owner.rootId, owner.id, after, limit],
+				[owner.rootId, owner.id, after, limit],
 			);
 			const items = rows.map((row) => ({
 				sequence: storedInteger(row.sequence, 1),

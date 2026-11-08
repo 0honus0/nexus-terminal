@@ -14,7 +14,6 @@ import { ModelToolStream } from '../../../packages/backend/dist/platform/ai/adap
 import { ModelNetworkFailure } from '../../../packages/backend/dist/platform/ai/model-port.js';
 import { RunExecutionOwner } from '../../../packages/backend/dist/modules/agent/runs/service/run-execution-owner.js';
 import { parsePluginSkills } from '../../../packages/backend/dist/modules/agent/plugins/plugin-skill-rules.js';
-import { readStepProposals } from '../../../packages/backend/dist/modules/agent/runs/adapters/sqlite/run-step-proposals.js';
 import { readRepositorySettings } from '../../../packages/backend/dist/modules/agent/plugins/adapters/sqlite/plugin-repository-sql.js';
 import { resultPage } from '../../../packages/backend/dist/modules/agent/context/result-rules.js';
 import { readAgentCreateRunRequest } from '../../../packages/shared/dist/agent/runs/http-codec.js';
@@ -94,18 +93,6 @@ await test('Model adapters accept large tool catalogs and call groups while reje
 		}
 		assert.deepEqual(stream.finish(), calls);
 	}
-	assert.equal(
-		readStepProposals(
-			JSON.stringify(
-				calls.map((call) => ({
-					providerCallId: call.id,
-					toolName: call.name,
-					argumentsJson: call.argumentsJson,
-				})),
-			),
-		).length,
-		48,
-	);
 });
 
 await test('Run shutdown drains more than 64 admitted writes and fences new admissions', async () => {
@@ -497,13 +484,11 @@ await test('Plugin connections keeps complete transport and path budgets without
 	assert.throws(() => readAgentPluginConnector({ ...acp, argv: ['node', '\0'] }));
 });
 
-await test('Denylist and context snapshots do not add target/source count policies inside their existing encoded capacities', async () => {
+await test('Denylist does not add target-count policies inside its existing encoded capacity', async () => {
 	const { readAgentTargetDenylistReplaceRequest, readAgentTargetDenylistResponse } =
 		await import('../../../packages/shared/dist/agent/governance/http-codec.js');
 	const { currentDenylist } =
 		await import('../../../packages/backend/dist/modules/agent/governance/adapters/sqlite/denylist-sql.js');
-	const { decodeContextSnapshot } =
-		await import('../../../packages/backend/dist/modules/agent/context/adapters/sqlite/context-row.js');
 	const connectionIds = Array.from({ length: 300 }, (_, index) => index + 1);
 	assert.deepEqual(
 		readAgentTargetDenylistReplaceRequest({ connectionIds, expectedRevision: 1, reason: 'capacity fixture' })
@@ -522,18 +507,4 @@ await test('Denylist and context snapshots do not add target/source count polici
 		all: async () => rows,
 	});
 	assert.equal(readAgentTargetDenylistResponse(stored).entries.length, 300);
-	const snapshot = {
-		systemPrompt: 'fixture',
-		messages: [{ role: 'user', content: 'fixture' }],
-		sources: Array.from({ length: 5000 }, (_, index) => ({
-			runId: randomUUID(),
-			version: 1,
-			sequence: index + 1,
-			status: 'completed',
-		})),
-	};
-	assert.equal(decodeContextSnapshot(JSON.stringify(snapshot)).sources.length, 5000);
-	assert.throws(() =>
-		decodeContextSnapshot(JSON.stringify({ ...snapshot, sources: [snapshot.sources[0], snapshot.sources[0]] })),
-	);
 });

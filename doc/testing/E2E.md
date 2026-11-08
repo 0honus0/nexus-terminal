@@ -4,13 +4,13 @@
 
 ## 当前验收基线
 
-最新完整远程 [E2E 42399935928](https://github.com/0honus0/nexus-terminal/actions/runs/42399935928) 验证 `main/13017e0d1e7b76bed184208048e6224c83fc15d3`：正式矩阵 **738 项全部一次通过**，质量检查、双端构建、Docker smoke、八个测试分片及耗时汇总全部成功。Backend 213项，Browser1–7分别49/56/103/69/74/88/86项。正式Reporter与当前测试清单逐项匹配，无失败、重试、flaky、场景跳过或遗漏；截图更新任务按条件跳过，不是场景跳过。本轮覆盖SDK4宿主、动态插件、前后端SDK、八包组合及既有非Agent功能；首次失败、修复与最终证据见[SDK4完整验收与发布](HISTORY.md#sdk4-完整验收与发布2026-11-07)。旧680项基线仅作历史记录。
+清理前最新完整远程 [E2E42406049103](https://github.com/0honus0/nexus-terminal/actions/runs/42406049103) 验证main/bed7cd0a4b984e55fd05f0ac777d913805bf7a8b：正式矩阵749项全部一次通过，质量、双端构建、Docker smoke、八个分片及耗时汇总成功，无失败、重试、flaky、场景跳过或遗漏。原[发布42444183561](https://github.com/0honus0/nexus-terminal/actions/runs/42444183561)因追加旧Agent数据清理已取消。当前清理增加独立迁移回归，正式清单750项，待新SHA完整远程验收后发布；旧749项不作为新清理通过证据，详见[本轮记录](HISTORY.md#旧-agent-数据删除与-sdk4-收口2026-11-08)。
 
-最新 [main amd64 dev发布42401471984](https://github.com/0honus0/nexus-terminal/actions/runs/42401471984) 已成功，来源为 `f984034c6b672e0ff51ce5acd41d03667b5b9748`，与上述被测提交仅差CI自动更新的测试耗时估算文件。`ghcr.io/0honus0/nexus-terminal:dev`与`sha-f984034c6b67`摘要一致，linux/amd64平台、manifest/config摘要及OCI revision均已核对；完整摘要见上述发布记录。后续文档提交不改变本轮被测或发布源码。未更新生产主机。
+上一已核验的[main amd64 dev发布42401471984](https://github.com/0honus0/nexus-terminal/actions/runs/42401471984)来源f984034c6b672e0ff51ce5acd41d03667b5b9748，摘要、平台及OCI revision见[发布记录](HISTORY.md#sdk4-完整验收与发布2026-11-07)。不据取消任务推断远程dev标签当前指向；本轮发布后重新只读核验。未更新生产主机。
 
 官方插件已发布 [v2.0.2](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v2.0.2)，源码 `550e4e0b4d873dcaedac54fd37f4e34208d5f91f`。[Validate 42394503906](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42394503906) 的82项插件测试和16项仓库测试全部通过，8个插件各有独立测试入口。当前组合为Agent2.0.2、ChatUI2.0.1、MCP/ACP服务4.0.0与四个工具包2.0.0；v2.0.0、v2.0.1保留不可变初始包。公开latest目录、全部11个版本的签名/文件hash/归档摘要及本体官方目录读取均已验证。
 
-最终签名组合经真实更新入口安装后，在指定CDP `172.30.30.11:9223`、`https://api.honus.top`与本地9998生产前端预览完成1440/390/320px聊天、默认High思考等级、宽屏SSH文字/窄屏图标及刷新恢复验收，无横向溢出或pageerror。首次全目录独立Node探测的889项曾有173失败、8取消，未作为通过证据，也不计入正式738矩阵。手机真机、真实模型效果、物理音画、介质故障及负载性能等未验边界仍见[待验与外部依赖](../PLAN.md#待验与外部依赖)；受控协议和浏览器回归不代替这些实测。
+最终签名组合经真实更新入口安装后，在指定CDP `172.30.30.11:9223`、`https://api.honus.top`与本地9998生产前端预览完成1440/390/320px聊天、默认High思考等级、宽屏SSH文字/窄屏图标及刷新恢复验收，无横向溢出或pageerror。首次全目录独立Node探测的889项曾有173失败、8取消，未作为通过证据，也不计入正式矩阵。手机真机、真实模型效果、物理音画、介质故障及负载性能等未验边界仍见[待验与外部依赖](../PLAN.md#待验与外部依赖)；受控协议和浏览器回归不代替这些实测。
 
 ## 阶段逻辑回归
 

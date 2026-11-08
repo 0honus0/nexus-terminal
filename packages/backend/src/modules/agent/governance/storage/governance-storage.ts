@@ -1,12 +1,6 @@
-import type { AgentToolIdentity } from '@nexus-terminal/shared/agent/tools/identity';
 import type { StoredExecutionSettings } from '../../execution/storage/execution-storage.js';
 
-import type {
-	AgentCapability,
-	AgentApprovalStatus,
-	AgentApprovalKind,
-	AgentApprovalRisk,
-} from '@nexus-terminal/shared/agent/governance/values';
+import type { AgentCapability } from '@nexus-terminal/shared/agent/governance/values';
 
 export type StoredScope =
 	| { kind: 'global' }
@@ -40,37 +34,6 @@ export interface StoredPolicy {
 	executionVersion: number;
 	overrides: StoredPolicyOverrides;
 	grants: StoredGrant[];
-}
-
-export interface StoredApproval {
-	targetVersion: number | null;
-	capability: AgentCapability;
-	id: string;
-	userId: number;
-	appId: string;
-	runId: string;
-	toolCallId: string;
-	operationHash: string;
-	kind: AgentApprovalKind;
-	status: AgentApprovalStatus;
-	policyRevision: number;
-	inputRevision: number;
-	version: number;
-	requestedAt: number;
-	expiresAt: number;
-	decidedAt: number | null;
-	decidedByUserId: number | null;
-	consumedAt: number | null;
-	feedback: string | null;
-	inspection: {
-		toolName: string;
-		toolVersion: string;
-		identity: AgentToolIdentity;
-		risk: AgentApprovalRisk;
-		mutation: boolean;
-		targetConnectionId: number | null;
-		summary: string;
-	};
 }
 
 export type GrantReplaceResult = { status: 'ok'; policy: StoredPolicy } | { status: 'not_found' | 'version_conflict' };

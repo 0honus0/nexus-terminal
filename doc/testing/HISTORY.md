@@ -2090,3 +2090,15 @@ Node 26.13.0/pnpm 12.16.1；`build.log` 与 `browser.log` 包含 Shared、Backen
 宿主设置与公开边界最终组合 `inventory-repairs-final.tap` 四项全部通过；六轮旧 Provider 夹具定位保留，最后补齐当前 UI 所需凭据并等待真实目录匹配完成，未放宽模型来源/秘密/CAS/未知写入等断言。`frontend-repairs-3.tap` execution已通过、`frontend-repairs-2.tap` registry已通过；以最终组合为本批结论。设计文档的目录表同步实际Service/Model/Adapter与前端host布局，移除尚待搬迁的旧目标路径表述。
 
 最终 `check-closeout.log` 根检查、`format-closeout.log` 全仓格式及 `host-browser-wrapper.log` 双端生产构建通过；正式浏览器入口五项全部通过（29.6秒），覆盖真实签名 sandbox、Host bridge和三份设置回归。正式清单已生成749项，待最终提交的完整远程矩阵通过后发布。
+
+## 旧 Agent 数据删除与 SDK4 收口（2026-11-08）
+
+用户选择清空旧Agent历史并允许破坏性更新。追加迁移61（附件文件删除意图）、62（旧运行及执行表）、63（旧App/插件档案）；已发布1–60的SQL、签名和执行记录不改写。删除旧运行家族、引用旧代码依赖的运行与关联记忆，不转换旧执行状态。SDK4历史、配置、当前未知效果围栏与非Agent账户保留；当前仍使用的input_text保留。移除旧行解码、快照注册、集中集成及固定模型步骤类型；历史迁移实际依赖的SQL/helper继续保留。
+
+清理前完整[E2E42406049103](https://github.com/0honus0/nexus-terminal/actions/runs/42406049103)验证bed7cd0a共749项，一次全部通过，无失败、重试、flaky、场景跳过或遗漏。原[发布42444183561](https://github.com/0honus0/nexus-terminal/actions/runs/42444183561)因追加清理已取消，不作为本轮发布证据。
+
+附件真实文件由Artifact owner启动清理，先持久登记删除意图；一项删除失败仍处理其它文件，失败项重启重试，队列引用活Artifact或无效ID时拒绝删除，队列未收敛拒绝快照。不会因数据库行已删除而遗留无人追踪文件。
+
+本地迁移/存储组cleanup-storage-final.tap共51项通过；新增迁移最终八项覆盖v60升级、重复启动、真实DROP/插件删除后故障回滚、当前完整快照校验与行往返、旧SDK拒绝、真实附件故障重试、当前Provider占用及旧代码依赖/来源记忆删除。最后补入活Artifact误入队列拒绝与旧子运行整组关系清理断言，最终cleanup-family-final.tap八项全部通过。双端构建cleanup-build-final.log与根检查cleanup-check-final.log通过。首轮完整格式检查缺一处函数空行，已纠正并保留cleanup-format-final.log。早期容量测试旧decoder/index、Provider空模型fixture等首次失败与后续修复均保留在同任务目录，不算首次全部通过。
+
+运行/更新/生命周期、只读子Run与完整跨实例备份的cleanup-runtime-final.tap共45项通过（包含备份子场景，不另行相加）。活Artifact断言首次直接比较SQLite无原型行与普通对象而失败，改为严格比对ID集合，保留原失败记录；完整格式又发现原容量用例残留排版，已纠正。远程750项矩阵、发布结果继续按实际执行回填；本节不以旧749项通过代替新SHA。产物均位于/home/honus/nexus-task-artifacts/agent-sdk4-review-20261107，原CDP现场及失败证据继续保留。

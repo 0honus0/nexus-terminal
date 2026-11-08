@@ -150,9 +150,14 @@ for (const [name, file, pattern] of [
 		'',
 	],
 	[
+		'archive removal upgrades, rollback, SDK4 preservation and obsolete snapshot rejection',
+		'storage/backend-next-agent-archive-removal.integration.mjs',
+		'',
+	],
+	[
 		'all-tools migration chain and snapshot registration',
 		'storage/backend-next-all-tools-snapshot-registration.integration.mjs',
-		'All tools',
+		'',
 	],
 	[
 		'all-tools mutation whole-batch preflight',

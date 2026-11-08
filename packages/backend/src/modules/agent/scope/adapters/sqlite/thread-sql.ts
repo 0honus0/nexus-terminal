@@ -290,22 +290,17 @@ export class SqliteThreadStorage implements ThreadStorage {
 				 AND (thread_id=? OR run_id IN (${runScope}))`,
 				[access.userId, access.appId, input.threadId, ...runParams],
 			);
-			const toolScope = `SELECT id FROM agent_run_tools WHERE run_id IN (${runScope})`;
-			await tx.run(
-				`DELETE FROM agent_run_children WHERE run_id IN (${runScope}) OR parent_id IN (${runScope}) OR operation_id IN (${toolScope})`,
-				[...runParams, ...runParams, ...runParams],
-			);
+			await tx.run(`DELETE FROM agent_run_children WHERE run_id IN (${runScope}) OR parent_id IN (${runScope})`, [
+				...runParams,
+				...runParams,
+			]);
 			await tx.run(`DELETE FROM agent_run_facts WHERE root_id IN (${runScope}) OR author_id IN (${runScope})`, [
 				...runParams,
 				...runParams,
 			]);
 			await tx.run(
-				`DELETE FROM agent_run_mailbox WHERE root_id IN (${runScope}) OR recipient_id IN (${runScope}) OR sender_id IN (${runScope}) OR message_id IN (${toolScope})`,
-				[...runParams, ...runParams, ...runParams, ...runParams],
-			);
-			await tx.run(
-				`DELETE FROM agent_run_budget_reservations WHERE root_id IN (${runScope}) OR run_id IN (${runScope})`,
-				[...runParams, ...runParams],
+				`DELETE FROM agent_run_mailbox WHERE root_id IN (${runScope}) OR recipient_id IN (${runScope}) OR sender_id IN (${runScope})`,
+				[...runParams, ...runParams, ...runParams],
 			);
 			await tx.run('DELETE FROM agent_runs WHERE user_id=? AND app_id=? AND thread_id=?', runParams);
 			await tx.run('DELETE FROM agent_thread_commands WHERE user_id=? AND app_id=? AND thread_id=?', [

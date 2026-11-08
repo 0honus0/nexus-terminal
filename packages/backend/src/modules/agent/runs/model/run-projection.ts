@@ -28,24 +28,22 @@ export function fromStoredEvent(value: StoredRunEvent): AgentRunEvent {
 }
 
 export function fromStoredAppExecution(value: StoredRunAppExecution): RunAppExecution {
-	return value.kind === 'retired'
-		? { kind: 'retired' }
-		: {
-				kind: 'plugin',
-				package: {
-					packageId: value.package.packageId,
-					version: value.package.version,
-					packageHash: value.package.packageHash,
-					publisherKeyId: value.package.publisherKeyId,
-				},
-				codeDependencies: value.codeDependencies.map((dependency) => ({
-					packageId: dependency.packageId,
-					version: dependency.version,
-					packageHash: dependency.packageHash,
-					publisherKeyId: dependency.publisherKeyId,
-				})),
-				handler: value.handler,
-			};
+	return {
+		kind: 'plugin',
+		package: {
+			packageId: value.package.packageId,
+			version: value.package.version,
+			packageHash: value.package.packageHash,
+			publisherKeyId: value.package.publisherKeyId,
+		},
+		codeDependencies: value.codeDependencies.map((dependency) => ({
+			packageId: dependency.packageId,
+			version: dependency.version,
+			packageHash: dependency.packageHash,
+			publisherKeyId: dependency.publisherKeyId,
+		})),
+		handler: value.handler,
+	};
 }
 
 export function fromStoredFrozen(value: StoredFrozenInput): RunFrozenInput {

@@ -17,9 +17,6 @@ function definitionKey(id: unknown, version: unknown): string {
 /** Every historical declaration is proved by its retained exact package ledger, not current dependencies. */
 export function validateSnapshotDeclarations(rows: ReadonlyMap<string, readonly SqlRow[]>): void {
 	const versions = new Map((rows.get('agent_plugin_versions') ?? []).map((row) => [snapshotVersionKey(row), row]));
-	const archives = new Map(
-		(rows.get('agent_plugin_legacy_versions') ?? []).map((row) => [snapshotVersionKey(row), row]),
-	);
 	const packages = new Map<string, SqlRow[]>();
 	for (const row of rows.get('agent_app_definition_packages') ?? []) {
 		readDefinitionPackage(row);
@@ -68,7 +65,7 @@ export function validateSnapshotDeclarations(rows: ReadonlyMap<string, readonly 
 			) {
 				throw new SnapshotFailure('unavailable');
 			}
-			const facts = snapshotPluginVersion(version, archives.get(snapshotVersionKey(version)));
+			const facts = snapshotPluginVersion(version);
 			if (
 				reference.kind === 'app' &&
 				(facts.summary.version !== row.version ||

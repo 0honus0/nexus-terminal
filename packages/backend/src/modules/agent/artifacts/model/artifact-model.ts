@@ -98,6 +98,14 @@ function blobFailure(error: unknown): AgentFailure {
 }
 
 export class ArtifactModel {
+	pendingBlobRemovals(): Promise<string[]> {
+		return storage(() => this.storage.pendingBlobRemovals());
+	}
+
+	async finishBlobRemoval(id: string): Promise<void> {
+		await storage(() => this.storage.finishBlobRemoval(id));
+	}
+
 	async recovery(): Promise<{ userId: number; record: ArtifactRecord }[]> {
 		return (await storage(() => this.storage.recovery())).map((value) => ({
 			userId: value.userId,

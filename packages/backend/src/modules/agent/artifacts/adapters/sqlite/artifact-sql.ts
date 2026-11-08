@@ -17,6 +17,7 @@ import type {
 } from '../../storage/artifact-storage.js';
 import { ArtifactStorageRefusal } from '../../storage/artifact-storage.js';
 import { artifactRow, artifactInteger } from './artifact-row.js';
+import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
 
 async function record(tx: SqlExecutor, scope: StoredArtifactScope, id: string): Promise<StoredArtifact | null> {
 	const row = await tx.one('SELECT * FROM agent_artifacts WHERE user_id=? AND app_id=? AND id=?', [
@@ -69,6 +70,21 @@ function requireVersionCapacity(version: number, increments = 1): void {
 }
 
 export class SqliteArtifactStorage implements ArtifactStorage {
+	async pendingBlobRemovals(): Promise<string[]> {
+		const rows = await this.db.all(`SELECT q.id,a.id AS live_id FROM agent_artifact_blob_removals q
+		 LEFT JOIN agent_artifacts a ON a.id=q.id ORDER BY q.id`);
+		return rows.map((row) => {
+			if (typeof row.id !== 'string' || !AGENT_ID_PATTERN.test(row.id) || row.live_id !== null) {
+				throw new Error('Corrupt Artifact blob removal');
+			}
+			return row.id;
+		});
+	}
+
+	async finishBlobRemoval(id: string): Promise<void> {
+		await this.db.run('DELETE FROM agent_artifact_blob_removals WHERE id=?', [id]);
+	}
+
 	recovery(): Promise<{ userId: number; record: StoredArtifact }[]> {
 		return this.db.transaction(async (tx) => {
 			const rows = await tx.all(

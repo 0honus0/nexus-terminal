@@ -17,9 +17,6 @@ function samePackage(
 }
 
 export function sameRunAppExecution(left: StoredRunAppExecution, right: StoredRunAppExecution): boolean {
-	if (left.kind === 'retired' || right.kind === 'retired') {
-		return left.kind === right.kind;
-	}
 	return (
 		samePackage(left.package, right.package) &&
 		left.handler === right.handler &&
@@ -39,9 +36,6 @@ export async function currentRunAppExecution(tx: SqlExecutor, scope: StoredParti
 		return false;
 	}
 	const frozen = readRunAppExecution(row.app_execution_json);
-	if (frozen.kind === 'retired') {
-		return false;
-	}
 	const current = await appExecutionBinding(tx, scope.userId, scope.appId, true);
 	return (
 		current !== null &&

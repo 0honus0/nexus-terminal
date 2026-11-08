@@ -89,10 +89,7 @@ import { SqliteBrowserStorage } from './integrations/adapters/sqlite/browser-sql
 import { BrowserModel } from './integrations/model/browser-model.js';
 import { BrowserService } from './integrations/service/browser-service.js';
 import { createBrowserHttpRoutes } from './interfaces/http/browser-http.js';
-import {
-	appsWithIntegrationSettings,
-	clearAppIntegrationSettings,
-} from './integrations/adapters/sqlite/integration-sql.js';
+
 import { appsWithPolicySettings, clearAppPolicySettings } from './governance/adapters/sqlite/policy-write.js';
 import type { HostDiagnostics } from '../system/public.js';
 import type { OperationsEvents } from '../operations/public.js';
@@ -282,13 +279,11 @@ export function registerAgent(
 	pluginStorage.installConfigurationLifecycle({
 		async retainedApps(tx, userId) {
 			const policies = await appsWithPolicySettings(tx, userId);
-			const integrations = await appsWithIntegrationSettings(tx, userId);
-			return [...policies, ...integrations, ...(await appsWithPluginInstanceSettings(tx, userId))];
+			return [...policies, ...(await appsWithPluginInstanceSettings(tx, userId))];
 		},
 
 		async clear(tx, userId, appId) {
 			await clearAppPolicySettings(tx, userId, appId);
-			await clearAppIntegrationSettings(tx, userId, appId);
 		},
 	});
 	pluginStorage.installScopeLifecycle(

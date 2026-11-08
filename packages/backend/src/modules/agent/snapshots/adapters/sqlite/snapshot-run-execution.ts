@@ -18,9 +18,6 @@ export function validateSnapshotRunExecution(rows: ReadonlyMap<string, readonly 
 		}
 		JSON.parse(input.input_json);
 		const execution = readRunAppExecution(input.app_execution_json);
-		if (execution.kind === 'retired') {
-			continue;
-		}
 		const manifests = new Map(
 			execution.codeDependencies.concat(execution.package).map((reference) => {
 				const version = versions.find(

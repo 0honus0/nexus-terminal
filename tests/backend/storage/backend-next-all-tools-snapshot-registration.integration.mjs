@@ -8,7 +8,6 @@ import { applicationMigrations } from '../../../packages/backend/dist/bootstrap/
 import { initializeSchema } from '../../../packages/backend/dist/platform/storage/sqlite/schema.js';
 import { SqliteRuntime } from '../../../packages/backend/dist/platform/storage/sqlite/sqlite-runtime.js';
 import { registerAgentSnapshot } from '../../../packages/backend/dist/modules/agent/snapshots/adapters/sqlite/snapshot-registration.js';
-import { readToolOperation } from '../../../packages/backend/dist/modules/agent/runs/adapters/sqlite/run-tool-row.js';
 import { SqlitePluginStorage } from '../../../packages/backend/dist/modules/agent/plugins/adapters/sqlite/plugin-sql.js';
 
 await test('All tools snapshots: production migrations from 25 through current survive reopening and register every actual Agent table column', async (t) => {
@@ -98,16 +97,16 @@ await test('All tools snapshots: production migrations from 25 through current s
 		'agent_plugin_packages',
 		'agent_plugin_package_updates',
 		'agent_plugin_versions',
-		'agent_plugin_legacy_versions',
 		'agent_plugin_stages',
 	];
 	const quarantined = await Promise.all(
 		quarantineTables.map((name) => db.all('SELECT * FROM ' + name + ' ORDER BY 1,2')),
 	);
-	assert.equal(quarantined[0][0].status, 'incompatible');
-	assert.equal(quarantined[0][0].revision, 4);
-	assert.equal(quarantined[1][0].data_migrated, 1);
-	assert.equal(quarantined[1][0].stage_id, candidateStage);
+	assert.deepEqual(
+		quarantined.slice(0, 3),
+		[[], [], []],
+		'obsolete packages, pending candidates and versions are deleted',
+	);
 	const applied = await db.all('SELECT * FROM schema_version ORDER BY version');
 	assert.deepEqual(
 		applied.slice(0, 25),
@@ -131,7 +130,7 @@ await test('All tools snapshots: production migrations from 25 through current s
 	assert.deepEqual(
 		await Promise.all(quarantineTables.map((name) => db.all('SELECT * FROM ' + name + ' ORDER BY 1,2'))),
 		quarantined,
-		'reopening retains the migrated-data fence and immutable historical proof exactly',
+		'reopening preserves the cleared current state exactly',
 	);
 	const plugins = new SqlitePluginStorage(db);
 	assert.deepEqual(await plugins.recovery(), [], 'startup stage recovery cannot reactivate retired candidates');
@@ -162,42 +161,22 @@ await test('All tools snapshots: production migrations from 25 through current s
 	assert.equal((await db.one('PRAGMA integrity_check')).integrity_check, 'ok');
 });
 
-await test('All tools snapshots: actual transfer and restore preserve exact identity, extra authority and confirmed output references', () => {
+await test('SDK4 snapshots: transfer and restore preserve exact Operation and confirmed Artifact ownership fields', () => {
 	const registration = registerAgentSnapshot(null, () => {});
-	const table = registration.tables.find((table) => table.name === 'agent_run_tools');
-	const artifactId = randomUUID();
 	const row = {
-		id: randomUUID(),
-		user_id: 1,
-		app_id: randomUUID(),
-		run_id: randomUUID(),
-		model_step_index: 1,
-		provider_call_id: 'retained-output',
-		tool_name: 'remote.deliver',
-		tool_version: '1',
-		identity_json: JSON.stringify({ kind: 'host', operation: 'remote.deliver' }),
-		capability: 'file.read',
-		required_capabilities_json: '["artifacts.write"]',
-		target_id: 1,
-		target_version: 2,
-		risk: 'mutate',
-		mutation: 1,
-		summary: 'Retained confirmed delivery',
-		arguments_json: '{}',
-		operation_hash: 'a'.repeat(64),
-		operation_revision: 1,
-		revision: 2,
-		state: 'completed',
-		result_text: '{"confirmed":true}',
-		output_artifact_ids_json: JSON.stringify([artifactId]),
-		created_at: 1,
-		updated_at: 2,
+		operation_id: randomUUID(),
+		artifact_id: randomUUID(),
+		artifact_version: 3,
+		sha256: 'a'.repeat(64),
+		size_bytes: 1024,
 	};
-	const operation = readToolOperation(row);
-	const restored = registration.restore(table, registration.transfer(table, row));
-	assert.deepEqual(restored, row);
-	assert.deepEqual(readToolOperation(restored), operation);
-	assert.deepEqual(operation.requiredCapabilities, ['artifacts.write']);
-	assert.deepEqual(operation.outputArtifactIds, [artifactId]);
-	assert.deepEqual(operation.identity, { kind: 'host', operation: 'remote.deliver' });
+	const table = registration.tables.find((table) => table.name === 'agent_operation_artifacts');
+	assert.ok(table);
+	assert.deepEqual(registration.restore(table, registration.transfer(table, row)), row);
+	for (const name of ['agent_run_tools', 'agent_run_model_steps', 'agent_plugin_legacy_versions']) {
+		assert.equal(
+			registration.tables.find((table) => table.name === name),
+			undefined,
+		);
+	}
 });

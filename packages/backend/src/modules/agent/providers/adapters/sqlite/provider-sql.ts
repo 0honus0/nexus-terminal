@@ -189,7 +189,7 @@ export class SqliteProviderStorage implements ProviderStorage {
 				return { status: 'version_conflict' };
 			}
 			const references = await tx.all(
-				`SELECT DISTINCT r.status FROM agent_run_frozen_inputs f JOIN agent_runs r ON f.run_id=r.id
+				`SELECT DISTINCT r.status FROM agent_operation_model_reservations f JOIN agent_operations o ON o.id=f.operation_id JOIN agent_runs r ON r.id=o.run_id
 				 WHERE f.provider_id=? AND r.user_id=?`,
 				[id, userId],
 			);

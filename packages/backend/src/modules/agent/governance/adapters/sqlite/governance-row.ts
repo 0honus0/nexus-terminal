@@ -1,23 +1,12 @@
-import { readAgentToolIdentity } from '@nexus-terminal/shared/agent/tools/identity-codec';
-import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
 import { AGENT_RUN_STATUSES } from '@nexus-terminal/shared/agent/runs/values';
 import type { AgentRunStatus } from '@nexus-terminal/shared/agent/runs/values';
 import {
 	AGENT_CAPABILITIES,
-	AGENT_APPROVAL_STATUSES,
-	AGENT_APPROVAL_KINDS,
-	AGENT_APPROVAL_RISKS,
-	AGENT_APPROVAL_OPERATION_HASH_PATTERN,
-	AGENT_APPROVAL_MAX_TOOL_NAME_BYTES,
-	AGENT_APPROVAL_MAX_TOOL_VERSION_BYTES,
-	AGENT_APPROVAL_MAX_SUMMARY_BYTES,
-	AGENT_APPROVAL_MAX_FEEDBACK_BYTES,
 	AGENT_EXECUTION_INTEGER_KEYS,
 	AGENT_TARGET_CAPABILITIES,
 	AGENT_GRANT_MAX_ID_BYTES,
 } from '@nexus-terminal/shared/agent/governance/values';
 import type {
-	StoredApproval,
 	StoredGrant,
 	StoredPolicy,
 	StoredScope,
@@ -39,8 +28,6 @@ export function assertRevisionAvailable(value: unknown, minimum = 0, increments 
 }
 
 export const string = (v: unknown): string => (typeof v === 'string' ? v : invalid());
-
-const nullableNumber = (v: unknown): number | null => (v === null ? null : integer(v));
 
 function isRecord(v: unknown): v is Record<string, unknown> {
 	return v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -154,115 +141,6 @@ export function readPolicy(
 		grants: grants.map(readGrant),
 	};
 	return policy;
-}
-
-function readInspection(value: unknown): StoredApproval['inspection'] {
-	const row = record(parse(value));
-	exact(row, ['toolName', 'toolVersion', 'identity', 'risk', 'mutation', 'targetConnectionId', 'summary']);
-	const risk = AGENT_APPROVAL_RISKS.find((r) => r === row.risk);
-	const toolName = string(row.toolName);
-	const toolVersion = string(row.toolVersion);
-	const summary = string(row.summary);
-	const mutation = row.mutation;
-	if (
-		!risk ||
-		!toolName.trim() ||
-		new TextEncoder().encode(toolName).length > AGENT_APPROVAL_MAX_TOOL_NAME_BYTES ||
-		!toolVersion.trim() ||
-		new TextEncoder().encode(toolVersion).length > AGENT_APPROVAL_MAX_TOOL_VERSION_BYTES ||
-		!summary.trim() ||
-		new TextEncoder().encode(summary).length > AGENT_APPROVAL_MAX_SUMMARY_BYTES ||
-		typeof mutation !== 'boolean' ||
-		(row.targetConnectionId !== null &&
-			!(
-				typeof row.targetConnectionId === 'number' &&
-				Number.isSafeInteger(row.targetConnectionId) &&
-				row.targetConnectionId > 0
-			))
-	) {
-		return invalid();
-	}
-	return {
-		toolName,
-		toolVersion,
-		identity: readAgentToolIdentity(row.identity),
-		risk,
-		mutation,
-		targetConnectionId: row.targetConnectionId === null ? null : integer(row.targetConnectionId, 1),
-		summary,
-	};
-}
-
-function id(value: unknown): string {
-	const result = string(value);
-	return AGENT_ID_PATTERN.test(result) ? result : invalid();
-}
-
-export function readApproval(row: Record<string, unknown>): StoredApproval {
-	const status = AGENT_APPROVAL_STATUSES.find((s) => s === row.status);
-	const kind = AGENT_APPROVAL_KINDS.find((s) => s === row.kind);
-	if (
-		status === undefined ||
-		kind === undefined ||
-		!AGENT_APPROVAL_OPERATION_HASH_PATTERN.test(string(row.operation_hash))
-	) {
-		return invalid();
-	}
-	if (
-		row.feedback !== null &&
-		(!string(row.feedback).trim() ||
-			new TextEncoder().encode(string(row.feedback)).length > AGENT_APPROVAL_MAX_FEEDBACK_BYTES)
-	) {
-		return invalid();
-	}
-	const capability = AGENT_CAPABILITIES.find((item) => item === row.capability);
-	if (capability === undefined) {
-		return invalid();
-	}
-	const result: StoredApproval = {
-		capability,
-		targetVersion: row.target_version === null ? null : integer(row.target_version, 1),
-		id: id(row.id),
-		userId: integer(row.user_id, 1),
-		appId: id(row.app_id),
-		runId: id(row.run_id),
-		toolCallId: id(row.tool_call_id),
-		operationHash: string(row.operation_hash),
-		kind,
-		status,
-		policyRevision: integer(row.policy_revision),
-		inputRevision: integer(row.input_revision, 1),
-		version: integer(row.version, 1),
-		requestedAt: integer(row.requested_at),
-		expiresAt: integer(row.expires_at),
-		decidedAt: nullableNumber(row.decided_at),
-		decidedByUserId: row.decided_by_user_id === null ? null : integer(row.decided_by_user_id, 1),
-		consumedAt: nullableNumber(row.consumed_at),
-		feedback: row.feedback === null ? null : string(row.feedback),
-		inspection: readInspection(row.inspection_json),
-	};
-
-	if ((result.targetVersion === null) !== (result.inspection.targetConnectionId === null)) {
-		return invalid();
-	}
-	const decided = result.status === 'approved' || result.status === 'denied';
-	if (
-		result.expiresAt <= result.requestedAt ||
-		result.inputRevision < 1 ||
-		(decided
-			? result.decidedAt === null || result.decidedByUserId === null
-			: result.decidedAt !== null || result.decidedByUserId !== null) ||
-		(result.decidedAt !== null &&
-			(result.decidedAt < result.requestedAt || result.decidedAt >= result.expiresAt)) ||
-		(result.consumedAt !== null &&
-			(result.status !== 'approved' ||
-				result.decidedAt === null ||
-				result.consumedAt < result.decidedAt ||
-				result.consumedAt >= result.expiresAt))
-	) {
-		return invalid();
-	}
-	return result;
 }
 
 export function readRunStatus(value: unknown): AgentRunStatus {

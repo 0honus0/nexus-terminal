@@ -1,4 +1,7 @@
 import { initializeOperationDiagnostics } from './operations/adapters/sqlite/operation-diagnostic-schema.js';
+import { removeArchivedRunData } from './runs/adapters/sqlite/run-archive-removal-migration.js';
+import { removeArchivedPluginData } from './plugins/adapters/sqlite/plugin-archive-removal-migration.js';
+import { initializeArtifactBlobRemovals } from './artifacts/adapters/sqlite/artifact-removal-schema.js';
 import { initializePluginConnections } from './plugins/adapters/sqlite/plugin-connection-schema.js';
 import { removeHostCompactionPreference } from './execution/adapters/sqlite/execution-plugin-settings-migration.js';
 import { retireSdk3PluginPackages } from './plugins/adapters/sqlite/plugin-sdk4-migration.js';
@@ -162,6 +165,9 @@ export const agentModularMigrations = [
 		signature: 'agent-operation-safe-failure-diagnostics-20261107',
 		apply: initializeOperationDiagnostics,
 	},
+	{ version: 61, signature: 'agent-artifact-blob-removals-20261108', apply: initializeArtifactBlobRemovals },
+	{ version: 62, signature: 'agent-remove-archived-execution-20261108', apply: removeArchivedRunData },
+	{ version: 63, signature: 'agent-remove-archived-plugin-data-20261108', apply: removeArchivedPluginData },
 ];
 
 export async function migrateAgentToolBatches(tx: SqlExecutor): Promise<void> {
