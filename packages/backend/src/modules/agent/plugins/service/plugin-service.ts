@@ -2092,6 +2092,29 @@ export class PluginService {
 		return this.runtime.assertSource(scope, source.instanceId, source.generation);
 	}
 
+	async runSourceConfiguration(
+		scope: { userId: number; appId: string },
+		source: PluginCapabilitySource,
+	): Promise<{ revision: number; documentJson: string }> {
+		await this.assertRunSource(scope, source);
+		const current = await this.instances.source(scope.userId, scope.appId, source.instanceId);
+		await this.assertRunSource(scope, source);
+		if (
+			current.packageRevision !== source.packageRevision ||
+			current.instance.packageId !== source.packageId ||
+			current.configuration.revision !== source.configurationRevision
+		) {
+			throw new AgentFailure('version_conflict');
+		}
+		return {
+			revision: current.configuration.revision,
+			documentJson:
+				current.configuration.revision === 0
+					? (current.manifest.contributions.settings?.defaultsJson ?? '{}')
+					: current.configuration.documentJson,
+		};
+	}
+
 	async modelToolBindings(
 		scope: { userId: number; appId: string; runId: string },
 		source: PluginCapabilitySource,

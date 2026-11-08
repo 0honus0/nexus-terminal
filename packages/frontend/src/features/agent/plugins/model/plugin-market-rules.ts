@@ -43,3 +43,19 @@ export function recommendedCatalogEntries(
 		return candidate ? [candidate] : [];
 	});
 }
+
+/** Catalog translations are publisher data; use the original text when no language matches. */
+export function localizeCatalogEntry(
+	entry: PluginCatalogEntry,
+	locale: string,
+): { displayName: string; description: string } {
+	const language = new Intl.Locale(locale).language;
+	const translation =
+		entry.localizations?.find((item) => item.locale === locale) ??
+		entry.localizations?.find((item) => item.locale === language) ??
+		entry.localizations?.find((item) => new Intl.Locale(item.locale).language === language);
+	return {
+		displayName: translation?.displayName ?? entry.displayName,
+		description: translation?.description ?? entry.description,
+	};
+}

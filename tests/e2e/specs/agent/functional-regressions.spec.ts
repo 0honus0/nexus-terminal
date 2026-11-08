@@ -21,7 +21,7 @@ import { installTestPlugin } from '../../support/plugins';
 import { E2E_URLS } from '../../support/test-env';
 import { readAgentAppResponse } from '../../../../packages/shared/src/agent/scope/http-codec';
 import { readAgentErrorResponse, readAgentId } from '../../../../packages/shared/src/agent/http-codec';
-import { readAgentBrowserConfiguration } from '../../../../packages/shared/src/agent/integrations/browser-http-codec';
+import { configureBrowserTargets } from '../../support/plugin-settings';
 import { digest, tcpPortOpen, processGone, listenerPid } from './functional-regressions.helpers';
 
 test.use({ actionTimeout: 10_000 });
@@ -55,39 +55,17 @@ test('A07 browser rejects a stale click, then a separate approved Run deploys on
 		'artifacts.read',
 		'artifacts.write',
 	]);
-	const configuration = await requestAgentJson(
-		request,
-		{ method: 'GET', path: '/browser/configuration' },
-		readAgentBrowserConfiguration,
-	);
-	const saved = await requestAgentJson(
-		request,
+	const saved = await configureBrowserTargets(request, task.app.id, [
 		{
-			method: 'PUT',
-			path: '/browser/configuration',
-			data: {
-				expectedVersion: configuration.version,
-				targets: [
-					{
-						id: 'e2e-deployment',
-						endpoints: [
-							{ url: E2E_URLS.browserCdpEndpoint, priority: 1, allowPlaintext: true, verifyTls: true },
-						],
-						// Browser's URL gate is exact-path by default. The fixture page
-						// loads /state and its approved button POSTs /deploy; without
-						// explicit paths CDP blocks both while a script-text snapshot can
-						// misleadingly contain the expected words.
-						allowedUrlPatterns: [
-							E2E_URLS.deploymentPageOrigin + '/',
-							E2E_URLS.deploymentPageOrigin + '/state',
-							E2E_URLS.deploymentPageOrigin + '/deploy',
-						],
-					},
-				],
-			},
+			id: 'e2e-deployment',
+			endpoints: [{ url: E2E_URLS.browserCdpEndpoint, priority: 1, allowPlaintext: true, verifyTls: true }],
+			allowedUrlPatterns: [
+				E2E_URLS.deploymentPageOrigin + '/',
+				E2E_URLS.deploymentPageOrigin + '/state',
+				E2E_URLS.deploymentPageOrigin + '/deploy',
+			],
 		},
-		readAgentBrowserConfiguration,
-	);
+	]);
 
 	const contexts = async () =>
 		(await (await fetch(E2E_URLS.browserControlOrigin + '/contexts')).json()).browserContextIds;

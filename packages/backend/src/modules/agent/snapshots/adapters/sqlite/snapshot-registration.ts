@@ -24,7 +24,6 @@ import { executionSettings } from '../../../execution/adapters/sqlite/execution-
 import { frozenExecution } from '../../../execution/adapters/sqlite/execution-budget-sql.js';
 
 import { frozenFromRun } from '../../../runs/adapters/sqlite/run-sql.js';
-import { readBrowserConfiguration } from '../../../integrations/adapters/sqlite/browser-sql.js';
 import { validateSnapshotDeclarations } from './snapshot-declarations.js';
 import { validateSnapshotHistory } from './snapshot-history.js';
 import { validateSnapshotRunExecution } from './snapshot-run-execution.js';
@@ -127,7 +126,6 @@ export function registerAgentSnapshot(
 			name: 'agent_governance_grants',
 			columns: ['user_id', 'app_id', 'capability', 'schema_version', 'scope_json', 'granted_at'],
 		},
-		{ name: 'agent_browser_configuration', columns: ['user_id', 'version', 'targets_json'] },
 		{
 			name: 'agent_memories',
 			columns: [
@@ -704,13 +702,6 @@ export function registerAgentSnapshot(
 				if (typeof row.user_id !== 'number' || !(await executionSettings(reader, row.user_id))) {
 					throw new SnapshotFailure('unavailable');
 				}
-			}
-			for (const row of rows.get('agent_browser_configuration') ?? []) {
-				signal.throwIfAborted();
-				if (typeof row.user_id !== 'number') {
-					throw new SnapshotFailure('unavailable');
-				}
-				await readBrowserConfiguration(reader, row.user_id);
 			}
 			for (const row of rows.get('agent_runs') ?? []) {
 				signal.throwIfAborted();

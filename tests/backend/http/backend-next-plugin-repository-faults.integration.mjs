@@ -58,6 +58,7 @@ await test('B10 real repository admission, download revocation and shutdown', { 
 				contributionKinds: ['app', 'ui'],
 				displayName: 'faults',
 				description: 'isolated streaming source',
+				localizations: [{ locale: 'zh-CN', displayName: '第三方插件', description: '第三方插件说明' }],
 				packageUrl: './package.tar',
 				sha256: createHash('sha256').update(bytes).digest('hex'),
 				sizeBytes: bytes.length,
@@ -72,6 +73,8 @@ await test('B10 real repository admission, download revocation and shutdown', { 
 	);
 
 	const read = () => f.api('GET', base + '/remote/catalog?repositoryUrl=' + encodeURIComponent(url));
+
+	assert.deepEqual(expectStatus(await read(), 200).packages[0].localizations, catalog.packages[0].localizations);
 
 	const initialStages = expectStatus(await f.api('GET', base + '/stages'), 200).items;
 

@@ -85,10 +85,8 @@ import { parsePluginSkills } from './plugins/plugin-skill-rules.js';
 import { PluginService } from './plugins/service/plugin-service.js';
 import { createPluginHttpRoutes, createPluginContentRoutes } from './interfaces/http/plugin-http.js';
 import { NativeBrowserClient } from '../../platform/browser/adapters/native-browser-client.js';
-import { SqliteBrowserStorage } from './integrations/adapters/sqlite/browser-sql.js';
 import { BrowserModel } from './integrations/model/browser-model.js';
 import { BrowserService } from './integrations/service/browser-service.js';
-import { createBrowserHttpRoutes } from './interfaces/http/browser-http.js';
 
 import { appsWithPolicySettings, clearAppPolicySettings } from './governance/adapters/sqlite/policy-write.js';
 import type { HostDiagnostics } from '../system/public.js';
@@ -239,7 +237,6 @@ export function registerAgent(
 	productVersion: string,
 	logger?: Logger,
 ): AgentRegistration {
-	const browserStorage = new SqliteBrowserStorage(sqlite);
 	const executionStorage = new SqliteExecutionStorage(sqlite);
 	const executionSettings = new ExecutionService(
 		new ExecutionModel(executionStorage, new SecureSessionTokens()),
@@ -261,10 +258,7 @@ export function registerAgent(
 		new PluginIntentModel(pluginIntentStorage, new SecureSessionTokens()),
 		artifacts,
 	);
-	const browser = new BrowserService(
-		new BrowserModel(browserStorage, new SecureSessionTokens(), new NativeBrowserClient()),
-		artifacts,
-	);
+	const browser = new BrowserService(new BrowserModel(new NativeBrowserClient()), artifacts);
 	const pluginStorage = new SqlitePluginStorage(sqlite);
 	const pluginInstanceStorage = new SqlitePluginInstanceStorage(sqlite);
 	const pluginConnectionStorage = new SqlitePluginConnectionStorage(sqlite);
@@ -337,6 +331,7 @@ export function registerAgent(
 		},
 		logger,
 	);
+	plugins.subscribeRuntimeRetirement((scope) => browser.retireInstance(scope));
 	const pluginRepositoryStorage = new SqlitePluginRepositoryStorage(sqlite);
 	const pluginRepositories = new PluginRepositoryService(
 		new PluginRepositoryModel(
@@ -809,7 +804,6 @@ export function registerAgent(
 			pluginConnectionStorage.installIdentityReader(read);
 			pluginRepositoryStorage.installIdentityReader(read);
 			pluginIntentStorage.installIdentityReader(read);
-			browserStorage.installTransactionIdentityReader(read);
 			memoryStorage.installTransactionIdentityReader(read);
 			artifactStorage.installTransactionIdentityReader(read);
 			executionStorage.installTransactionIdentityReader(read);
@@ -846,7 +840,6 @@ export function registerAgent(
 			...createMemoryHttpRoutes(access, memory, boundary),
 			...createArtifactHttpRoutes(access, artifacts, boundary),
 			...createExecutionHttpRoutes(access, executionSettings, boundary),
-			...createBrowserHttpRoutes(access, browser, boundary),
 			...createPluginHttpRoutes(
 				access,
 				plugins,

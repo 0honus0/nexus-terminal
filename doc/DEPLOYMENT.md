@@ -41,7 +41,7 @@ docker compose logs --tail=100 backend
 
 数据库文件的父目录即实例数据目录；每个实例使用独立目录。资源目录使用 `appearance/`、`artifacts/`、`plugins/`，实例数据与密钥一起保留。Compose 的数据库固定为容器内 `/app/data/nexus-terminal.db`，通过 `.env` 的 `NEXUS_DATA_DIR` 配置宿主目录，默认仍为 `./data`。运行中可能出现 SQLite WAL/SHM、恢复日志和临时目录，勿手动清除正在使用的恢复文件。
 
-当前迁移链从 v1 初始结构连续追加至 v60，包含 v4 Access OIDC、SDK4 插件/Run/Operation 数据升级、v59 移除宿主压缩偏好及 v60 持久安全故障原因；每条迁移的顺序、签名与安装入口见 `packages/backend/src/bootstrap/schema.ts`。更新启动时自动顺序迁移，重复启动跳过已执行记录；业务代码只读取迁移后的格式。
+当前迁移链从 v1 初始结构连续追加至 v64，包含 v4 Access OIDC、SDK4 插件/Run/Operation 数据升级、v59 移除宿主压缩偏好及 v60 持久安全故障原因；每条迁移的顺序、签名与安装入口见 `packages/backend/src/bootstrap/schema.ts`。更新启动时自动顺序迁移，重复启动跳过已执行记录；业务代码只读取迁移后的格式。
 
 首次 Passkey 站点从公开 Origin 推导；多站点可用 `NEXUS_PASSKEY_SITES` JSON 初始化。CAPTCHA 和 Passkey 站点配置在设置页维护，按界面提示重启激活；IP 白名单、登录封禁策略、监控周期和资源缓存 TTL 保存后热更新。白名单保存前确认当前来源仍被允许，保留部署恢复入口。插件仓库与信任 Publisher 由管理接口配置，不使用旧 catalog 环境变量。写操作依赖当前会话、同源 Origin/Fetch Metadata，不使用旧 CSRF token 端点。
 
@@ -90,7 +90,7 @@ location / {
 
 旧数值、单位、JSON 字段和约束通过 SQL 或迁移脚本转换，业务代码及持久解码只接受新格式。真实 SQL 仍由所属 SQLite Adapter 持有，模块 migrations 与 Bootstrap 负责顺序编排，复用现有 `SchemaMigration` 与 `schema_version`。脚本只在对应迁移应用时执行；迁移和版本记录同事务提交，失败不写入成功标记，未知提交先核对持久结果，不盲目重放。重复启动校验已应用版本和签名，只执行尚未应用的迁移。
 
-v4 创建 Access OIDC 配置/绑定、流程及会话归属；后续 SDK4 迁移由各数据 owner 安装，v59 删除宿主执行偏好中的旧压缩字段，App 插件独立配置保持。v60 新增 Operation 安全诊断表，与操作终态同事务记录有限原因码；不保存供应商错误正文，也不修改未知效果围栏。v61创建附件文件删除队列；v62按已确认的破坏性策略删除SDK1–3运行历史及旧执行表；v63删除旧App/包档案并登记附件清理。当前SDK4与非Agent数据保留，旧快照不兼容；启动恢复失败保留删除意图，排除故障后重启继续。完整链以 `packages/backend/src/bootstrap/schema.ts` 为准；升级和重复启动均由同一迁移机制负责。
+v4 创建 Access OIDC 配置/绑定、流程及会话归属；后续 SDK4 迁移由各数据 owner 安装，v59 删除宿主执行偏好中的旧压缩字段，App 插件独立配置保持。v60 新增 Operation 安全诊断表，与操作终态同事务记录有限原因码；不保存供应商错误正文，也不修改未知效果围栏。v61创建附件文件删除队列；v62按已确认的破坏性策略删除SDK1–3运行历史及旧执行表；v63删除旧App/包档案并登记附件清理；v64将旧官方Browser全局目标复制到未配置的已有插件实例并删除旧配置表。没有对应实例的旧全局配置随表删除，新实例从插件默认配置开始。当前SDK4与非Agent数据保留，旧快照不兼容；启动恢复失败保留删除意图，排除故障后重启继续。完整链以 `packages/backend/src/bootstrap/schema.ts` 为准；升级和重复启动均由同一迁移机制负责。
 
 交付前验证上一发布基线升级、多条迁移顺序执行、连续 dev 升级、重复启动跳过、空库安装、数据保留、完整性/外键、失败回滚及快照恢复边界。后续功能文档记录对应迁移版本、转换内容与验证结果，升级流程由版本内迁移承担。
 

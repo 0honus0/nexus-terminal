@@ -77,6 +77,15 @@ const packages = [
 	{
 		...buildPackage('nexus.custom-surface', '1.0.0'),
 		description: 'E2E-only focused Custom App Surface SDK fixture.',
+		localizations: [
+			{
+				locale: 'en-US',
+				displayName: 'Custom Surface',
+				description: 'Localized marketplace acceptance fixture.',
+			},
+			{ locale: 'zh-CN', displayName: '自定义界面', description: '插件市场本地化验收说明。' },
+			{ locale: 'ja-JP', displayName: 'カスタム画面', description: 'プラグイン市場の翻訳検証。' },
+		],
 	},
 	{ ...buildPackage('nexus.intent-peer', '1.0.0'), description: 'E2E-only AppIntent receiver fixture.' },
 	{
@@ -118,13 +127,14 @@ const catalog = {
 	schemaVersion: 2,
 	publishers: packagePublishers,
 	packages: [
-		...packages.map(({ metadata, packageName, description }) => ({
+		...packages.map(({ metadata, packageName, description, localizations }) => ({
 			packageId: metadata.packageId,
 			version: metadata.version,
 			compatibility: metadata.compatibility,
 			contributionKinds: metadata.contributionKinds,
 			displayName: metadata.displayName,
 			description,
+			localizations,
 			packageUrl: `${publicBaseUrl}/packages/${packageName}`,
 			sha256: metadata.sha256,
 			sizeBytes: metadata.sizeBytes,

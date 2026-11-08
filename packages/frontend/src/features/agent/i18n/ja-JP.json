@@ -302,8 +302,6 @@
         "unknownPlugin": "不明なプラグイン",
         "intentCount": "Intent {count} 件",
         "prepareUpgrade": "更新パッケージを検証",
-        "summaryNexusAgent": "公式の汎用エージェントコア。運用診断とエンジニアリング協業に対応し、制御されたサンドボックス内で安全に実行します。",
-        "summaryNexusFullstack": "フルスタック納品スイート。マイクロサービス運用、複雑な依存関係の結合検証、デプロイ検証に対応します。",
         "compatibilityShort": "(要件: Nexus {min}〜{max})",
         "reverifyPackage": "パッケージを再検証",
         "publisherCount": "{count} 件の鍵",
@@ -372,7 +370,8 @@
           "enabled": "このインスタンスを有効にする",
           "connection": "接続設定",
           "noConnection": "接続なし"
-        }
+        },
+        "managedPackages": "インストール済み・保持データ"
       },
       "hardLimits": {
         "title": "ハードリミット",

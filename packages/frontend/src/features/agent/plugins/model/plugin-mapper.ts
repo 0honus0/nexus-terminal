@@ -153,6 +153,11 @@ export function fromPluginCatalogEntry(value: AgentPluginCatalogEntry): PluginCa
 		compatibilityReason: value.compatibilityReason,
 		displayName: value.displayName,
 		description: value.description,
+		localizations: value.localizations?.map((item) => ({
+			locale: item.locale,
+			displayName: item.displayName,
+			description: item.description,
+		})),
 		packageUrl: value.packageUrl,
 		sha256: value.sha256,
 		sizeBytes: value.sizeBytes,

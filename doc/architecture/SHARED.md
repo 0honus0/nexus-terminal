@@ -262,7 +262,7 @@ Agent file_inspect/patch/move/delete 的模型私有命令、树节点及内容�
 
 preferences/{appearance,themes,html-themes} 的真实主题、设置和图片协议已由正式前端API/mapper/Store及面板消费；终端主题multipart总预算归themes/values，双端读取与route元数据共同引用。agent/{integrations,plugins}已接入配置、工具与SDK后端消费者；system/backups已有正式前端备份导入/导出与全局恢复消费者。源码及专项验证范围见测试入口，外部依赖见 PLAN。每个子域仍按 values/model/http/http-codec 组织；有实际 SDK/RPC 或流协议才增加对应文件，不提前建立空 events。完整任务与消费者盘点见实施方案，只有下述已接线范围存在目录及精确 exports。
 
-Browser targets/端点政策和插件 repositories 原来由 Agent settings 消费；与 MCP/ACP integration 配置按语义区分，不能因它们都属于配置就放进同一宽泛对象。插件还须覆盖 publisher/catalog/stage/verify/install/upgrade/uninstall、前端 descriptor/SDK/RPC、跨 App intents 和有限 Artifact 授权；同 Run collaboration mailbox 不替代跨 App 通信。
+Browser targets/端点政策由浏览器插件实例设置消费，repositories由宿主市场消费；与 MCP/ACP integration 配置按语义区分，不能因它们都属于配置就放进同一宽泛对象。插件还须覆盖 publisher/catalog/stage/verify/install/upgrade/uninstall、前端 descriptor/SDK/RPC、跨 App intents 和有限 Artifact 授权；同 Run collaboration mailbox 不替代跨 App 通信。
 
 前后端共享安全对象、完整输入/成功/失败、path/header/query、媒体类型和真实容量；内部声明校验、包句柄、密钥、存储行、恢复日志和运行态授权留 Backend。备份下载是加密载荷，Shared 不定义其明文表集合或密文存储行；普通导入/导出协议与备份格式是不同边界。
 
@@ -346,7 +346,7 @@ scope/http-codec的实例/定义集合与状态更新已由正式App管理消费
 
 ### 集成、Browser与Memory管理边界
 
-Browser的目标/端点/URL规则容量统一归browser-values，由Shared codec、持久Adapter及正式编辑器共同消费。integrations/http新增创建头和固定删除响应，由真实Backend入口与前端transport消费；集合引用唯一MAX_ITEMS，视图校验时间先后。MCP/ACP配置、完整目录及凭据写意图在前端逐字段转为独立应用对象，UUID创建键与原配置版本分别保留，不拼旧DTO。
+Browser 目标/端点/URL规则的基础容量归 browser-values，browser-codec 严格解码插件配置 `{targets}`；完整文档沿 plugins 消息预算，目标/端点/规则不叠加数量限制。旧 Browser HTTP 契约移除；插件实例 settings 协议持有配置 CAS/幂等，MCP/ACP 私有配置由各服务包消费。
 
 Memory/Artifact的分页offset与nextOffset采用各自values的安全整数预算，给每页容量预留加法空间，不再把10,000有效资源数当作历史分页终点；Backend准入与双端codec/transport共用。
 
@@ -552,3 +552,7 @@ AgentResourceSessionView 增加 waitingOutputJobs 非负整数，严格 codec、
 6. **数据、事务与并发**：不持有数据库或请求状态；新增 SQLite 指标由原 System 模块读取，不改变原采样节奏。
 7. **生命周期与失败**：未知字段、缺失字段、类型错误及跨字段不一致统一拒绝；不做强制类型转换，不扩大公开错误正文。JSON Schema 只表达结构条件，细化规则仍由 shared decoder 执行。
 8. **当前能力与验收**：诊断双端和真实路由已接线，类型、构建及新增契约场景按 testing 记录。全库 OpenAPI/AsyncAPI 生成仍是 PLAN 中的独立待办。
+
+### 插件市场本地化目录
+
+plugins/repository-model 的目录包新增可选 localizations 数组，条目为 locale/displayName/description。repository-http-codec 严格校验嵌套字段、规范 BCP47 标签并拒重复；原始 name/description 作为缺译回退。Backend catalog Adapter、Model、HTTP 与 Frontend mapper 逐字段投影，市场随本体 locale 响应式展示和搜索。翻译属于目录发布者，不进入宿主按官方包名维护的分支，也不改写不可变签名归档。已有插件 UI environment 会推送 locale，沿用 SDK4 环境接口，无新增语言 RPC；Shared 本次导出4.0.3契约。

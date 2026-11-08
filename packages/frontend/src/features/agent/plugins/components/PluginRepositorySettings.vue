@@ -8,7 +8,6 @@
 		UiCheckbox,
 		UiConfirmationPanel,
 		UiEmptyState,
-		UiInfoHint,
 		UiInlineNotice,
 		UiInput,
 		UiSearchInput,
@@ -27,7 +26,12 @@
 		PluginVersion,
 	} from '../model/plugin-types';
 	import { useOperationFeedback } from '@/shared/feedback/public';
-	import { isPluginUpgrade, recommendedCatalogEntries, satisfiesAppRequirements } from '../model/plugin-market-rules';
+	import {
+		isPluginUpgrade,
+		localizeCatalogEntry,
+		recommendedCatalogEntries,
+		satisfiesAppRequirements,
+	} from '../model/plugin-market-rules';
 	import { AgentManagementFailure } from '../../model/management-failure';
 	import type { ManagedApp } from '../../model/app-management-types';
 
@@ -58,7 +62,10 @@
 		cancelPackageUpdate: [installation: PluginPackageInstallation];
 		settings: [installation: PluginPackageInstallation];
 	}>();
-	const { t } = useI18n();
+	const { t, locale } = useI18n();
+
+	const catalogText = (entry: PluginCatalogEntry) => localizeCatalogEntry(entry, locale.value);
+
 	const feedback = useOperationFeedback('agent.settings.plugin-market');
 	const collapsedSources = ref(new Set<string>());
 	const copiedSourceUrl = ref('');
@@ -234,9 +241,11 @@
 						.filter(
 							(entry) =>
 								!query ||
-								[entry.displayName, entry.definitionId, entry.description].some((value) =>
-									value.toLowerCase().includes(query),
-								),
+								[
+									catalogText(entry).displayName,
+									entry.definitionId,
+									catalogText(entry).description,
+								].some((value) => value.toLowerCase().includes(query)),
 						)
 						.map((entry) => ({ package: entry, catalog, source, official: source === null })),
 				};
@@ -336,7 +345,7 @@
 	function requestClearData(entry: PluginCatalogEntry): void {
 		const installation = retainedFor(entry);
 		if (locked.value || !installation) return;
-		requestClearRetained(installation, entry.displayName);
+		requestClearRetained(installation, catalogText(entry).displayName);
 	}
 
 	function requestClearRetained(installation: PluginInstallation, name: string): void {
@@ -603,19 +612,18 @@
 					</template>
 				</UiInput>
 				<div class="flex items-center justify-end gap-2">
-					<UiInfoHint
-						v-if="!repositoryUrl.trim()"
-						:text="t('agent.settings.disabledReason.repositoryRequired')"
-					/>
 					<UiButton
 						appearance="solid"
 						tone="primary"
 						density="compact"
 						type="button"
 						:disabled="locked || !repositoryUrl.trim()"
+						:aria-label="t('agent.settings.plugins.addRepository')"
+						:title="t('agent.settings.plugins.addRepository')"
 						@click="addRepository"
 					>
-						{{ t('agent.settings.plugins.addRepository') }}
+						<i class="fa-solid fa-plus" aria-hidden="true"></i>
+						<span class="plugin-market__add-label">{{ t('agent.settings.plugins.addRepository') }}</span>
 					</UiButton>
 				</div>
 			</div>
@@ -674,7 +682,7 @@
 						@click="toggleGroup(group.key)"
 						@keydown.enter.space.prevent="toggleGroup(group.key)"
 					>
-						<div class="flex flex-wrap items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
+						<div class="plugin-market__repository-heading">
 							<i
 								:class="
 									isGroupExpanded(group.key)
@@ -689,10 +697,7 @@
 							>
 								<i class="fa-brands fa-github text-xs" aria-hidden="true"></i>
 							</div>
-							<div class="flex min-w-0 items-baseline gap-1.5">
-								<span class="text-xs text-text-secondary shrink-0"
-									>{{ t('agent.settings.plugins.repositorySource') }}:</span
-								>
+							<div class="plugin-market__repository-owner">
 								<span
 									class="ui-catalog-group-label min-w-0 break-all text-xs sm:text-sm font-bold text-foreground font-mono"
 									>{{ group.owner }}</span
@@ -712,7 +717,7 @@
 								<span>{{ t('agent.settings.plugins.thirdPartyRepository') }}</span>
 							</UiBadge>
 							<UiBadge
-								class="hidden shrink-0 font-mono xs:inline-flex"
+								class="plugin-market__repository-count shrink-0 font-mono"
 								appearance="ghost"
 								density="compact"
 							>
@@ -777,7 +782,7 @@
 									</div>
 
 									<div class="min-w-0 flex-1">
-										<div class="flex flex-wrap items-center gap-2">
+										<div class="plugin-market__entry-heading">
 											<span
 												:title="
 													entry.contributionKinds
@@ -787,9 +792,11 @@
 														.join(', ')
 												"
 												class="plugin-market__name ui-catalog-name text-xs sm:text-sm font-bold text-foreground"
-												>{{ entry.displayName }}</span
+												>{{ catalogText(entry).displayName }}</span
 											>
 											<UiSelect
+												fit-content
+												class="plugin-market__version"
 												:aria-label="t('agent.settings.plugins.selectVersion')"
 												:model-value="needsVersionChoice(source, entry) ? '' : entry.version"
 												:disabled="locked"
@@ -829,23 +836,8 @@
 										</div>
 
 										<div class="mt-1 space-y-1 text-xs text-text-secondary">
-											<p
-												class="plugin-market__description text-xs leading-relaxed"
-												:title="
-													entry.definitionId === 'nexus.agent'
-														? t('agent.settings.plugins.summaryNexusAgent')
-														: entry.definitionId === 'nexus.fullstack'
-															? t('agent.settings.plugins.summaryNexusFullstack')
-															: entry.description
-												"
-											>
-												{{
-													entry.definitionId === 'nexus.agent'
-														? t('agent.settings.plugins.summaryNexusAgent')
-														: entry.definitionId === 'nexus.fullstack'
-															? t('agent.settings.plugins.summaryNexusFullstack')
-															: entry.description
-												}}
+											<p class="plugin-market__description text-xs leading-relaxed">
+												{{ catalogText(entry).description }}
 											</p>
 											<span
 												v-if="!entry.compatible"
@@ -924,6 +916,12 @@
 				</div>
 			</div>
 
+			<h4
+				v-if="managedPackages.length || retainedOutsideCatalog.length"
+				class="mt-5 border-t border-border pt-4 text-xs font-semibold text-foreground"
+			>
+				{{ t('agent.settings.plugins.managedPackages') }}
+			</h4>
 			<div
 				v-for="item in managedPackages"
 				:key="item.installation.packageId"
@@ -1127,6 +1125,24 @@
 		gap: 8px;
 	}
 
+	.plugin-market__repository-heading {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
+		flex: 1;
+	}
+
+	.plugin-market__repository-owner {
+		min-width: 0;
+		flex: 1;
+	}
+
+	.plugin-market__version {
+		max-width: 100%;
+	}
+
 	.plugin-market__source {
 		flex-basis: 100%;
 		min-width: 0;
@@ -1138,6 +1154,13 @@
 		display: grid;
 		min-width: 0;
 		gap: 12px;
+	}
+
+	.plugin-market__entry-heading {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
 	}
 
 	.plugin-market__name,
@@ -1162,8 +1185,17 @@
 	}
 
 	@container plugin-market (max-width: 24rem) {
-		.plugin-market__add {
-			grid-template-columns: minmax(0, 1fr);
+		.plugin-market__name {
+			flex-basis: 100%;
+		}
+
+		.plugin-market__actions {
+			justify-content: flex-start;
+		}
+
+		.plugin-market__add-label,
+		.plugin-market__repository-count {
+			display: none;
 		}
 
 		.plugin-market__refresh-label {

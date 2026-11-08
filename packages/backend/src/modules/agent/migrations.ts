@@ -1,3 +1,4 @@
+import { moveBrowserConfigurationToInstances } from './plugins/adapters/sqlite/plugin-browser-configuration-migration.js';
 import { initializeOperationDiagnostics } from './operations/adapters/sqlite/operation-diagnostic-schema.js';
 import { removeArchivedRunData } from './runs/adapters/sqlite/run-archive-removal-migration.js';
 import { removeArchivedPluginData } from './plugins/adapters/sqlite/plugin-archive-removal-migration.js';
@@ -168,6 +169,11 @@ export const agentModularMigrations = [
 	{ version: 61, signature: 'agent-artifact-blob-removals-20261108', apply: initializeArtifactBlobRemovals },
 	{ version: 62, signature: 'agent-remove-archived-execution-20261108', apply: removeArchivedRunData },
 	{ version: 63, signature: 'agent-remove-archived-plugin-data-20261108', apply: removeArchivedPluginData },
+	{
+		version: 64,
+		signature: 'agent-browser-plugin-configuration-20261108',
+		apply: moveBrowserConfigurationToInstances,
+	},
 ];
 
 export async function migrateAgentToolBatches(tx: SqlExecutor): Promise<void> {

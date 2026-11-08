@@ -118,6 +118,20 @@
 </template>
 
 <style scoped>
+	@media (max-width: 639px) {
+		.extensions-tabs {
+			display: flex;
+			overflow-x: auto;
+			overscroll-behavior-x: contain;
+		}
+
+		.extensions-tabs > button {
+			width: auto;
+			flex: 0 0 auto;
+			padding-inline: 10px;
+		}
+	}
+
 	.extensions-tabs {
 		scrollbar-width: none;
 	}

@@ -1,44 +1,64 @@
 {
   "packageId": "nexus.tools.browser",
   "sourceRoot": "nexus-agent-plugins",
-  "baselineCommit": "e19e7049d81b3aa0d7ec533dce24ce4a726668dc",
+  "baselineCommit": "478b31c228f6003e5eee8ba6b1a4e0f2cec70f70",
   "sourceWorktree": {
     "dirty": false,
-    "releaseTag": "v2.0.0",
+    "releaseTag": "v2.1.1",
     "note": "Official GitHub Actions signed SDK4 release archive; copied verbatim."
   },
   "sourceFiles": [
     {
       "path": "plugins/nexus.tools.browser/backend/index.mjs",
-      "sha256": "e3777152af7485136116ff17a79a006735ac71c38f6eff1eb98622e23586f638",
-      "sizeBytes": 386490
+      "sha256": "b6a3744e540fb3268bcbdc6f9d06c27719c8ddca6856aac8e823e13e638f1f2f",
+      "sizeBytes": 386443
+    },
+    {
+      "path": "plugins/nexus.tools.browser/docs/settings.md",
+      "sha256": "f4b3efa52c4542abe4c978d690dc74d3d31de955d05f687e1919990e61576e02",
+      "sizeBytes": 487
     },
     {
       "path": "plugins/nexus.tools.browser/files.json",
-      "sha256": "acd9f008d33b09b095918824c2737950107c7e1c9fb3173395db16dbf8d317be",
-      "sizeBytes": 296
+      "sha256": "0c3a11d2cc0702f68a40022d46f6767ba11f9e8f4533d35d75670315f790ffe6",
+      "sizeBytes": 956
+    },
+    {
+      "path": "plugins/nexus.tools.browser/frontend/assets/index-BbkLsso_.css",
+      "sha256": "3327658bb8584438efd45d2c3bd48236ccbb7f1970055b9887fb22e447c7c740",
+      "sizeBytes": 112051
+    },
+    {
+      "path": "plugins/nexus.tools.browser/frontend/assets/index-cURYnajs.js",
+      "sha256": "65fa1a58da9a498e8080e2ae390f38f59c77f165638e66b2ebd907e52a1661f0",
+      "sizeBytes": 141522
+    },
+    {
+      "path": "plugins/nexus.tools.browser/frontend/index.html",
+      "sha256": "def4298a06c689054ab7b63208c892b1b4f55c2fba6d7ce1fa234db205b32c78",
+      "sizeBytes": 385
     },
     {
       "path": "plugins/nexus.tools.browser/manifest.json",
-      "sha256": "f1099535e4a408db4300e39b958207707dcb29cfa4690700e45297602748a6ab",
-      "sizeBytes": 675
+      "sha256": "2c6b61aace8235e8f52defa80ed9d5ca90dfd2ef13557dd718efb88465d00b3d",
+      "sizeBytes": 1749
     },
     {
       "path": "plugins/nexus.tools.browser/signature.ed25519",
-      "sha256": "c1500bc1d3e18efb13fc8593c100cd2b256c834dbe856acb33bdad4a02c0d108",
+      "sha256": "ccb7f321ff652312c16d8f0ef34d0c389752aa2c01778ae0e4d3dd072fb91b1e",
       "sizeBytes": 64
     }
   ],
-  "sourceFilesSha256": "3f7bebf8935418c8ea96c4bc2c4b18130ed19c7215d48e658a38f258d3bd4c20",
+  "sourceFilesSha256": "7d5a156c877d7f7eabf846b1d8dc675d28cc9a7ee9cfa7a8449b59b4f26d2a59",
   "upstreamSignedPackage": {
-    "version": "2.0.0",
+    "version": "2.1.1",
     "compatibility": {
       "host": {
         "minVersion": "1.1.0",
         "maxVersion": "1.1.0"
       },
       "backendSdk": 4,
-      "frontendSdk": null
+      "frontendSdk": 4
     },
     "publisher": {
       "keyId": "ed25519:617ec64b03cd6ed1a1ddf373e3a47f38666cdcd27753d674e136a4d0a359a1a0",
@@ -46,7 +66,7 @@
       "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAPw+WXiJPcxqiKjxGCRcm3fWwy+JByAKTKX+iE5pKD/E=\n-----END PUBLIC KEY-----\n"
     },
     "publisherKeyId": "ed25519:617ec64b03cd6ed1a1ddf373e3a47f38666cdcd27753d674e136a4d0a359a1a0",
-    "sha256": "cc9ea642b667cdba063f48bf2d151f504752a3bdd11d0170352097137d027d33",
-    "sizeBytes": 399360
+    "sha256": "480063dac69b232cec8b5e4e0cb5ae21f40b7f798a6be140027634488c15dac8",
+    "sizeBytes": 655360
   }
 }

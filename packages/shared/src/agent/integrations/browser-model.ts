@@ -11,8 +11,7 @@ export interface AgentBrowserTarget {
 	allowedUrlPatterns: string[];
 }
 
-export interface AgentBrowserConfiguration {
-	version: number;
+export interface AgentBrowserPluginConfiguration {
 	targets: AgentBrowserTarget[];
 }
 

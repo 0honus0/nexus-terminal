@@ -424,9 +424,9 @@ await test('App, model, grant and intent capacities follow encoded envelopes wit
 
 await test('Browser configuration accepts larger target, endpoint and pattern sets while preserving URL policy', async () => {
 	const { readAgentBrowserTargets } =
-		await import('../../../packages/shared/dist/agent/integrations/browser-http-codec.js');
-	const { readBrowserConfiguration } =
-		await import('../../../packages/backend/dist/modules/agent/integrations/adapters/sqlite/browser-sql.js');
+		await import('../../../packages/shared/dist/agent/integrations/browser-codec.js');
+	const { BrowserModel } =
+		await import('../../../packages/backend/dist/modules/agent/integrations/model/browser-model.js');
 	const endpoint = {
 		url: 'wss://browser.example.test/devtools/browser/fixture',
 		priority: 0,
@@ -451,8 +451,13 @@ await test('Browser configuration accepts larger target, endpoint and pattern se
 		],
 	]) {
 		const decoded = readAgentBrowserTargets(targets);
-		const reader = { one: async () => ({ version: 1, targets_json: JSON.stringify(decoded) }) };
-		assert.deepEqual((await readBrowserConfiguration(reader, 1)).targets, decoded);
+		const source = {
+			instanceId: 'instance',
+			generation: 'generation',
+
+			read: async () => ({ revision: 1, documentJson: JSON.stringify({ targets: decoded }) }),
+		};
+		assert.deepEqual((await new BrowserModel(null).configuration(source)).targets, decoded);
 	}
 	assert.throws(() =>
 		readAgentBrowserTargets([
@@ -507,4 +512,33 @@ await test('Denylist does not add target-count policies inside its existing enco
 		all: async () => rows,
 	});
 	assert.equal(readAgentTargetDenylistResponse(stored).entries.length, 300);
+});
+
+await test('Browser plugin configuration maps invalid documents without hiding real source failures', async () => {
+	const { BrowserModel } =
+		await import('../../../packages/backend/dist/modules/agent/integrations/model/browser-model.js');
+	const model = new BrowserModel(null);
+	for (const documentJson of ['{', '{}', '{"targets":[{"id":"bypass"}]}']) {
+		await assert.rejects(
+			model.configuration({
+				instanceId: 'instance',
+				generation: 'generation',
+
+				read: async () => ({ revision: 1, documentJson }),
+			}),
+			(error) => error.code === 'invalid_input',
+		);
+	}
+	const failure = new Error('Controlled configuration storage failure');
+	await assert.rejects(
+		model.configuration({
+			instanceId: 'instance',
+			generation: 'generation',
+
+			read: async () => {
+				throw failure;
+			},
+		}),
+		(error) => error === failure,
+	);
 });

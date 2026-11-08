@@ -43,7 +43,7 @@ test('Nexus Agent Browser lifecycle cases reclaim contexts across cancellation a
 		[connectionId],
 		app,
 	);
-	const browser = await configureLifecycleBrowser(request);
+	const browser = await configureLifecycleBrowser(request, task.app.id);
 	await openNativeTask(task);
 	for (const phase of ['cancel-creating', 'complete', 'cancel-live', 'repeat', 'cancel-approval', 'approve']) {
 		await step(`Root Browser cleanup: ${phase}`, async () => {

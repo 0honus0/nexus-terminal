@@ -564,7 +564,7 @@ Preferences 拥有终端主题、外观偏好、HTML 主题与背景引用。Age
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | preferences/themes           | 终端 preset/用户主题、导入导出、名称及版本规则；真实 preset 内容归应用，不放 Platform。                                                                                    |
 | preferences/appearance       | 完整字体/颜色/描边/阴影/UI 及活动主题、HTML 副本、背景引用；内容技术调用由 Model 封装。与 presentation 的布局/一般偏好分工明确，同义字段只有一个 owner。                   |
-| agent/integrations           | MCP/ACP 配置与刷新，Browser 配置/会话/操作；确有独立生命周期时在该子功能内拆分，不新增平行一级模块。                                                                       |
+| agent/integrations           | Browser 可信连接、会话和操作；MCP/ACP 协议及业务设置归独立插件，实例配置归 plugins。                                                                                       |
 | agent/plugins                | Publisher、仓库/catalog、stage、安装/升级/卸载、数据、SDK/RPC及 intents；内部按真实独立职责拆分，不按每条路由建目录。                                                      |
 | system/backups               | 密码证明消费、覆盖集、维护准入、验证/导出/恢复政策和恢复状态；跨模块技术快照经明确注册能力取得。                                                                           |
 | platform 的实际协议/内容能力 | 通用有界文件、加密封装、包解析、网络、MCP/CDP 技术与具名失败；可复用时扩展已有 blobs/acp/http/security/storage，不把 manifest、App、背景类型或 restore 政策移入 Platform。 |
@@ -577,7 +577,7 @@ Preferences 拥有终端主题、外观偏好、HTML 主题与背景引用。Age
 
 业务 Service → Model → 独立 storage/Platform → Adapter。Preferences 子功能直接消费同模块应用能力，themes/appearance 的当前引用判断通过同事务事实回调协调。Agent plugins 通过 Scope/Governance/Run/Artifact 的内部应用能力安装声明、排空与管理引用，不能让插件 SQLite Adapter import 这些 Service/Model 或跨 owner 直接改表。
 
-MCP/ACP 由独立服务插件通过 Registry 提供，App/工具插件绑定服务能力，Host 只持当前授权、秘密、HTTP 字节与 SSH 进程传输。Browser 可信连接仍由宿主实现，目标由服务器配置，模型不能自报 CDP endpoint 取得权限。通用 Run owner 不持模型历史、工具策略或集成协议，完整边界见 [Agent 架构](AGENT.md)。
+MCP/ACP 由独立服务插件通过 Registry 提供，App/工具插件绑定服务能力，Host 只持当前授权、秘密、HTTP 字节与 SSH 进程传输。Browser 可信连接仍由宿主实现，目标由当前浏览器插件实例配置，模型不能自报 CDP endpoint 取得权限。通用 Run owner 不持模型历史、工具策略或集成协议，完整边界见 [Agent 架构](AGENT.md)。
 
 System backups 通过 Access public 消费窄密码证明，通过安装契约取得应用维护/重建能力；不深层读取账户 hash 或直接访问私有 Model。模块 SQL Adapter 可向通用快照机制登记固定表列、顺序、存储校验和秘密转换任务，签名只使用存储/技术类型；register/Bootstrap 仅安装注册，不在通用层定义业务对象。备份 Service 不取得原始 SqlRow、文件句柄或万能执行器。实现前核对这些注册能力的真实消费者，不为测试或预留扩大 public。
 
@@ -598,7 +598,7 @@ System backups 通过 Access public 消费窄密码证明，通过安装契约�
 | 应用↔数据/协议/文件         | 子功能 model/*-types、storage、Platform 各自独立                               | 每个 Model 负责字段/单位/能力/失败转换，Adapter 解码 SQL、manifest、CDP/MCP 和包内容。                          |
 | 跨模块密码证明/维护能力     | Access/System 或安装 owner 的 public/register 独立契约                         | 模块入口/出口逐字段转换成功与拒绝；私有 cause、ReturnType 和技术句柄不穿透。                                    |
 
-Browser 配置原来在 Agent settings；不能因名字相似把它塞进 MCP/ACP configuration 联合。同 Run collaboration 消息与跨 App plugin-intents 是不同范围和授权语义，不共用一个泛化消息对象。存储密文与可导出的受保护载荷不同，跨实例恢复须真实重新保护秘密；直接复制旧实例密文不构成可用备份。
+Browser 配置通过插件实例配置 owner 保存，BrowserModel 从可信来源读取并严格转换；没有全局配置 HTTP 或旧存储回退。同 Run collaboration 消息与跨 App plugin-intents 是不同范围和授权语义，不共用一个泛化消息对象。存储密文与可导出的受保护载荷不同，跨实例恢复须真实重新保护秘密；直接复制旧实例密文不构成可用备份。
 
 ### 5. 入口与安装
 
@@ -622,7 +622,7 @@ Artifact普通下载和插件包暂存复用ArtifactService的readGranted lease�
 
 插件包同身份/版本内容不可变；包安装、App 组合、升级排空→版本切换和卸载→数据删除各有独立持久事实。prepare 返回完整依赖闭包及精确包/stage/仓库/安装 revision，install-plan 提交时逐项复验；预览不建立持久工作流、流程 ID 或服务端继续令牌。依赖按序安装可部分提交，失败后读取原包/App 事实并重新准备，不假定整段回滚。Scope 只为显式 app 贡献建立 App，UI/工具/Skills 包本身不创建 App；组合必须绑定所选包和唯一 UI。普通安装不自动赋予 grants，推荐引导仅在新 App 初始化时按声明授权；撤销 publisher、App 禁用或升级围栏旧 Run/工具。intents 固定原用户、发送/接收 App 和意图内容，Artifact 引用/授予与消息创建同事务，不把收到消息解释为通用文件权限。
 
-当前导出登记90张产品表，逐次核对实际表集、声明列顺序及目标结构签名；认证七表、模型缓存及技术schema记录明确排除，新增表或列但未登记会拒绝导出。固定表列按技术白名单投影，秘密在所属Adapter解密为受载荷保护的传递表示，System只取得字节。背景ready、Artifact ready和插件staged/verified/installed原包按真实引用采集；实际大小在读取前后核对，内容hash及插件manifest/files/entry/signature复用原解码owner验证；文件预算先包含base64膨胀及完整JSON。SQL前后快照内容hash必须相同，内容发布中或变化拒绝；这不是全应用物理一致快照。
+当前导出登记完整产品表集，逐次核对实际表集、声明列顺序及目标结构签名；认证七表、模型缓存及技术schema记录明确排除，新增表或列但未登记会拒绝导出。固定表列按技术白名单投影，秘密在所属Adapter解密为受载荷保护的传递表示，System只取得字节。背景ready、Artifact ready和插件staged/verified/installed原包按真实引用采集；实际大小在读取前后核对，内容hash及插件manifest/files/entry/signature复用原解码owner验证；文件预算先包含base64膨胀及完整JSON。SQL前后快照内容hash必须相同，内容发布中或变化拒绝；这不是全应用物理一致快照。
 
 备份覆盖集在全部本阶段 owner 确定后冻结，登记允许的表/列/文件根/敏感字段和恢复顺序，拒绝未知或缺失的必需组成，不使用过滤字段/跳过未知表兼容。数据库快照与文件不是同一物理事务；采集前后核对源版本、实际引用、大小/hash 与包内容，有限重采集仍不能宣称全系统物理快照。
 
@@ -664,7 +664,7 @@ HTML 库保持在 appearance 子功能：service/html-theme-service 管理来源
 
 ### 在线恢复持久边界
 
-NativeSnapshotRestoreFiles 只处理已安装的 opaque 根、暂存文件、目录切换日志及清理；SqliteSnapshotRestore 只处理技术表恢复和提交证据。所有真实 SQL/DDL 仍在 Adapter；snapshot_restore_state 是本机技术事实，排除于可携备份。90张产品表不包含认证、模型目录缓存或恢复标记。Preferences 预检除引用存在外，核对活动主题的用户或内置归属、背景的用户/用途/ready 状态；批量索引避免逐条扫描全集。
+NativeSnapshotRestoreFiles 只处理已安装的 opaque 根、暂存文件、目录切换日志及清理；SqliteSnapshotRestore 只处理技术表恢复和提交证据。所有真实 SQL/DDL 仍在 Adapter；snapshot_restore_state 是本机技术事实，排除于可携备份。产品表集不包含认证、模型目录缓存或恢复标记。Preferences 预检除引用存在外，核对活动主题的用户或内置归属、背景的用户/用途/ready 状态；批量索引避免逐条扫描全集。
 
 文件及日志写入同步后才发布；日志在每次 rename 前保存意图，rename 后同步相关目录。删除按目标 schema 的 FK 依赖先子后父，插入使用延迟 FK；恢复数据和 restore_id/initialized 标记在同一事务提交，SQLite 明确使用 FULL 同步。提交失败后读取标记，不能用异常或断连推断回滚；标记不可读时保留现场并停止准入。仅旧内容清理失败、而当前数据与文件已确认一致时，可返回 cleanupPending 并由日志在后续启动/导入前继续清理。
 

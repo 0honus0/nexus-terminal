@@ -4,8 +4,28 @@
   "files": [
     {
       "path": "backend/index.mjs",
-      "sha256": "e3777152af7485136116ff17a79a006735ac71c38f6eff1eb98622e23586f638",
-      "sizeBytes": 386490
+      "sha256": "b6a3744e540fb3268bcbdc6f9d06c27719c8ddca6856aac8e823e13e638f1f2f",
+      "sizeBytes": 386443
+    },
+    {
+      "path": "docs/settings.md",
+      "sha256": "f4b3efa52c4542abe4c978d690dc74d3d31de955d05f687e1919990e61576e02",
+      "sizeBytes": 487
+    },
+    {
+      "path": "frontend/assets/index-BbkLsso_.css",
+      "sha256": "3327658bb8584438efd45d2c3bd48236ccbb7f1970055b9887fb22e447c7c740",
+      "sizeBytes": 112051
+    },
+    {
+      "path": "frontend/assets/index-cURYnajs.js",
+      "sha256": "65fa1a58da9a498e8080e2ae390f38f59c77f165638e66b2ebd907e52a1661f0",
+      "sizeBytes": 141522
+    },
+    {
+      "path": "frontend/index.html",
+      "sha256": "def4298a06c689054ab7b63208c892b1b4f55c2fba6d7ce1fa234db205b32c78",
+      "sizeBytes": 385
     }
   ]
 }

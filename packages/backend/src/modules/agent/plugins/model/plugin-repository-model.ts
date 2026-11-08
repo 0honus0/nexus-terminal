@@ -107,6 +107,11 @@ export class PluginRepositoryModel {
 					contributionKinds: item.contributionKinds.map((kind) => kind),
 					displayName: item.displayName,
 					description: item.description,
+					localizations: item.localizations?.map((item) => ({
+						locale: item.locale,
+						displayName: item.displayName,
+						description: item.description,
+					})),
 					packageUrl: item.packageUrl,
 					sha256: item.sha256,
 					sizeBytes: item.sizeBytes,

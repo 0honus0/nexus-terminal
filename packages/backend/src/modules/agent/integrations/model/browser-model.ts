@@ -1,49 +1,17 @@
+import { InvalidAgentPayload } from '@nexus-terminal/shared/agent/http-codec';
 import { AGENT_PLUGIN_APP_PAYLOAD_MAX_BYTES } from '@nexus-terminal/shared/agent/plugins/values';
 import type { BrowserClient, BrowserSession } from '../../../../platform/browser/browser-client.js';
 import { BrowserFailure } from '../../../../platform/browser/browser-client.js';
-import type { SessionTokens } from '../../../../platform/security/session-tokens.js';
 import { AgentFailure, ToolCleanupFailure, ToolExecutionUnknown, ToolOperationRefusal } from '../../agent-failure.js';
-import { agentStorage } from '../../agent-storage-failure.js';
-import type { BrowserStorage, StoredBrowserTarget, StoredBrowserConfiguration } from '../storage/browser-storage.js';
-import { BrowserStorageRefusal } from '../storage/browser-storage.js';
+import { readAgentBrowserPluginConfiguration } from '@nexus-terminal/shared/agent/integrations/browser-codec';
 import type {
-	BrowserActor,
-	BrowserTarget,
+	BrowserConfigurationSource,
 	BrowserConfiguration,
 	BrowserSnapshot,
 	BrowserSessionAction,
 	BrowserReply,
 	BrowserApplicationSession,
 } from './browser-types.js';
-
-function toStored(value: BrowserTarget): StoredBrowserTarget {
-	return {
-		id: value.id,
-		endpoints: value.endpoints.map((endpoint) => ({
-			url: endpoint.url,
-			priority: endpoint.priority,
-			allowPlaintext: endpoint.allowPlaintext,
-			verifyTls: endpoint.verifyTls,
-		})),
-		allowedUrlPatterns: value.allowedUrlPatterns.map((pattern) => pattern),
-	};
-}
-
-function fromStored(value: StoredBrowserConfiguration): BrowserConfiguration {
-	return {
-		version: value.version,
-		targets: value.targets.map((target) => ({
-			id: target.id,
-			endpoints: target.endpoints.map((endpoint) => ({
-				url: endpoint.url,
-				priority: endpoint.priority,
-				allowPlaintext: endpoint.allowPlaintext,
-				verifyTls: endpoint.verifyTls,
-			})),
-			allowedUrlPatterns: target.allowedUrlPatterns.map((pattern) => pattern),
-		})),
-	};
-}
 
 function failure(error: unknown, mutation = false): never {
 	if (error instanceof BrowserFailure) {
@@ -153,40 +121,34 @@ class ApplicationBrowserSession implements BrowserApplicationSession {
 }
 
 export class BrowserModel {
-	constructor(
-		private readonly storage: BrowserStorage,
-		private readonly tokens: SessionTokens,
-		private readonly client: BrowserClient,
-	) {}
+	constructor(private readonly client: BrowserClient) {}
 
-	async configuration(userId: number): Promise<BrowserConfiguration> {
-		return fromStored(await agentStorage(() => this.storage.get(userId)));
-	}
-
-	async update(
-		actor: BrowserActor,
-		version: number,
-		targets: BrowserTarget[],
-		admit: (userId: number | null) => void,
-	): Promise<BrowserConfiguration> {
-		return fromStored(
-			await agentStorage(async () => {
-				try {
-					return await this.storage.update(
-						actor.userId,
-						this.tokens.digest(actor.token),
-						version,
-						targets.map(toStored),
-						admit,
-					);
-				} catch (error) {
-					if (error instanceof BrowserStorageRefusal) {
-						throw new AgentFailure(error.code, { cause: error });
-					}
-					throw error;
-				}
-			}),
-		);
+	async configuration(source: BrowserConfigurationSource): Promise<BrowserConfiguration> {
+		const current = await source.read();
+		let configuration;
+		try {
+			const raw: unknown = JSON.parse(current.documentJson);
+			configuration = readAgentBrowserPluginConfiguration(raw);
+		} catch (error) {
+			if (error instanceof SyntaxError || error instanceof InvalidAgentPayload) {
+				throw new AgentFailure('invalid_input', { cause: error });
+			}
+			throw error;
+		}
+		const { targets } = configuration;
+		return {
+			version: current.revision,
+			targets: targets.map((target) => ({
+				id: target.id,
+				endpoints: target.endpoints.map((endpoint) => ({
+					url: endpoint.url,
+					priority: endpoint.priority,
+					allowPlaintext: endpoint.allowPlaintext,
+					verifyTls: endpoint.verifyTls,
+				})),
+				allowedUrlPatterns: target.allowedUrlPatterns.map((pattern) => pattern),
+			})),
+		};
 	}
 
 	async connect(

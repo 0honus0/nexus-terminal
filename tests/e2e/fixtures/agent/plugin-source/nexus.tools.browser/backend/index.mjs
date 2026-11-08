@@ -2453,7 +2453,7 @@ var definitions = [
   }
 ];
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/agent/values.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.3.tgz/node_modules/@nexus-terminal/shared/dist/agent/values.js
 var AGENT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 var AGENT_OPERATION_ERROR_CODES = [
   "invalid_input",
@@ -2497,7 +2497,7 @@ var AGENT_HTTP_ERROR_CODES = [
 var AGENT_MAX_JSON_BODY_BYTES = 16 * 1024;
 var AGENT_MAX_RESPONSE_BYTES = 32 * 1024;
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/agent/http-codec.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.3.tgz/node_modules/@nexus-terminal/shared/dist/agent/http-codec.js
 var InvalidAgentPayload = class extends Error {
   constructor() {
     super("invalid_agent_payload");
@@ -2538,27 +2538,27 @@ function agentInteger(input, min = 0, max = Number.MAX_SAFE_INTEGER) {
   return input;
 }
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/common/version.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.3.tgz/node_modules/@nexus-terminal/shared/dist/common/version.js
 var import_semver = __toESM(require_semver2(), 1);
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/agent/scope/values.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.3.tgz/node_modules/@nexus-terminal/shared/dist/agent/scope/values.js
 var AGENT_THREAD_ENTRY_MAX_TEXT_BYTES = 16 * 1024;
 var AGENT_THREAD_ENTRIES_MAX_RESPONSE_BYTES = 512 * 1024;
 var AGENT_APP_MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 var AGENT_WORKSPACE_MAX_RESPONSE_BYTES = 8 * 1024 * 1024 + 1024;
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/agent/plugins/package-values.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.3.tgz/node_modules/@nexus-terminal/shared/dist/agent/plugins/package-values.js
 var AGENT_PLUGIN_MAX_PACKAGE_ID_BYTES = 128;
 var AGENT_PLUGIN_MAX_VERSION_BYTES = 64;
 var AGENT_PLUGIN_PACKAGE_HASH_LENGTH = 64;
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/agent/governance/values.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.3.tgz/node_modules/@nexus-terminal/shared/dist/agent/governance/values.js
 var AGENT_GOVERNANCE_MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 var AGENT_GOVERNANCE_MAX_BODY_BYTES = 16 * 1024;
 var AGENT_GOVERNANCE_MAX_GRANT_BODY_BYTES = 512 * 1024;
 var AGENT_APPROVAL_MAX_TOOL_VERSION_BYTES = AGENT_PLUGIN_MAX_PACKAGE_ID_BYTES + 1 + AGENT_PLUGIN_MAX_VERSION_BYTES + 1 + AGENT_PLUGIN_PACKAGE_HASH_LENGTH;
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/agent/plugins/values.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.3.tgz/node_modules/@nexus-terminal/shared/dist/agent/plugins/values.js
 var AGENT_PLUGIN_MAX_BODY_BYTES = 256 * 1024;
 var AGENT_PLUGIN_MAX_RESPONSE_BYTES = 32 * 1024 * 1024;
 var AGENT_PLUGIN_MAX_ARCHIVE_BYTES = 50 * 1024 * 1024;
@@ -2651,7 +2651,7 @@ var AGENT_PLUGIN_MAX_FRONTEND_MESSAGE_BYTES = Math.max(AGENT_APP_MAX_RESPONSE_BY
 var AGENT_PLUGIN_MAX_MIGRATION_BYTES = 52 * 1024 * 1024;
 var AGENT_PLUGIN_MAX_CATALOG_BYTES = 8 * 1024 * 1024;
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/remote/files/text-codec.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.3.tgz/node_modules/@nexus-terminal/shared/dist/remote/files/text-codec.js
 function isWellFormedFileText(value) {
   for (let index = 0; index < value.length; index += 1) {
     const code = value.charCodeAt(index);
@@ -2670,7 +2670,7 @@ function isWellFormedFileText(value) {
   return true;
 }
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/agent/plugins/content.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.3.tgz/node_modules/@nexus-terminal/shared/dist/agent/plugins/content.js
 var AGENT_PLUGIN_CONTENT_CHUNK_BYTES = 64 * 1024;
 function readAgentPluginContentReference(input) {
   const row = agentRecord(input, ["id", "sha256", "sizeBytes", "mediaType"]);
@@ -10050,7 +10050,7 @@ var input_definitions_default = [
   }
 ];
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/agent/execution/values.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.3.tgz/node_modules/@nexus-terminal/shared/dist/agent/execution/values.js
 var AGENT_EXECUTION_MAX_TIMER_SECONDS2 = Math.floor((2 ** 31 - 1) / 1e3);
 var AGENT_EXECUTION_MAX_EXPIRY_MS2 = 864e13;
 var AGENT_EXECUTION_LIMIT_MAXIMA2 = {
@@ -10072,15 +10072,14 @@ var AGENT_EXECUTION_LIMIT_MAXIMA2 = {
 };
 var AGENT_EXECUTION_SETTINGS_MAX_BYTES2 = 128 * 1024;
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/agent/artifacts/values.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.3.tgz/node_modules/@nexus-terminal/shared/dist/agent/artifacts/values.js
 var AGENT_ARTIFACT_MAX_BYTES2 = AGENT_EXECUTION_LIMIT_MAXIMA2.maxArtifactBytes;
 var AGENT_ARTIFACT_MAX_PAGE2 = 50;
 var AGENT_ARTIFACT_MAX_OFFSET2 = Number.MAX_SAFE_INTEGER - AGENT_ARTIFACT_MAX_PAGE2;
 var AGENT_ARTIFACT_MAX_BODY_BYTES2 = 16 * 1024;
 var AGENT_ARTIFACT_MAX_RESPONSE_BYTES2 = 128 * 1024;
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/agent/integrations/browser-values.js
-var AGENT_BROWSER_MAX_BODY_BYTES2 = 32 * 1024;
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.3.tgz/node_modules/@nexus-terminal/shared/dist/agent/integrations/browser-values.js
 var AGENT_BROWSER_MAX_SETTLE_MS2 = 2e3;
 
 // ../../lib/model-tools/browser-input.mjs
@@ -10251,7 +10250,7 @@ function browserInput(name2, value) {
   throw new AgentFailure("invalid_input");
 }
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/agent/tools/values.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.3.tgz/node_modules/@nexus-terminal/shared/dist/agent/tools/values.js
 var AGENT_TOOL_ARGUMENT_MAX_BYTES2 = AGENT_PLUGIN_APP_PAYLOAD_MAX_BYTES;
 var AGENT_TOOL_MAX_RESPONSE_BYTES2 = AGENT_TOOL_ARGUMENT_MAX_BYTES2 * 6 + 128 * 1024;
 var AGENT_TOOL_RESULT_MAX_BYTES2 = 256 * 1024;

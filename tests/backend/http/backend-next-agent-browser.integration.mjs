@@ -1,3 +1,4 @@
+import { writePluginConfiguration } from './plugin-configuration-fixture.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createHash } from 'node:crypto';
@@ -55,23 +56,17 @@ await test('B10 actual CDP Browser ownership and governed operations', { timeout
 				await contexts(2);
 			});
 			await f.grants(['browser.read', 'browser.interact', 'artifacts.read', 'artifacts.write']);
-			const path = '/api/v1/agent/browser/configuration';
-			const current = expectStatus(await f.api('GET', path), 200);
-			const updated = expectStatus(
-				await f.api('PUT', path, {
-					expectedVersion: current.version,
-					targets: [
-						{
-							id: 'fixture',
-							endpoints: [
-								{ url: browser.wsEndpoint(), priority: 0, allowPlaintext: true, verifyTls: true },
-							],
-							allowedUrlPatterns: [pageOrigin + '/allowed/*'],
-						},
-					],
-				}),
-				200,
-			);
+			const configuration = await writePluginConfiguration(f.api, f.appId, 'nexus.tools.browser', {
+				targets: [
+					{
+						id: 'fixture',
+						endpoints: [{ url: browser.wsEndpoint(), priority: 0, allowPlaintext: true, verifyTls: true }],
+						allowedUrlPatterns: [pageOrigin + '/allowed/*'],
+					},
+				],
+			});
+			const updated = { version: configuration.revision };
+
 			await work(f, updated);
 		});
 	}

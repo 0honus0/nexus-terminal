@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import type { AgentBrowserTarget } from '../../../packages/shared/src/agent/integrations/browser-model';
+import { readAgentPluginConfigurationView } from '../../../packages/shared/src/agent/plugins/settings-codec';
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 import { agentRecord } from '../../../packages/shared/src/agent/http-codec';
@@ -63,4 +66,33 @@ export async function openProtocolSettings(page: Page, appId: string, instanceNa
 		appId,
 	);
 	return dialog;
+}
+
+export async function configureBrowserTargets(
+	request: APIRequestContext,
+	appId: string,
+	targets: AgentBrowserTarget[],
+) {
+	const instance = await pluginInstance(request, appId, 'nexus.tools.browser');
+	const current = await pluginSettings(request, appId, instance.id);
+	if (!current.settings) throw new Error('Browser settings contribution missing');
+	const saved = await requestAgentJson(
+		request,
+		{
+			method: 'PUT',
+			path: pluginInstancePath(appId, instance.id) + '/configuration',
+			data: {
+				operationKey: randomUUID(),
+				expectedPackageRevision: current.packageRevision,
+				expectedRevision: current.configuration.revision,
+				schemaRevision: current.settings.schemaRevision,
+				documentJson: JSON.stringify({ targets }),
+			},
+		},
+		(value) => {
+			const row = agentRecord(value, ['configuration', 'changed']);
+			return readAgentPluginConfigurationView(row.configuration);
+		},
+	);
+	return { version: saved.revision, targets };
 }

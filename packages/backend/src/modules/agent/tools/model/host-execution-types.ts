@@ -21,7 +21,14 @@ export interface HostEffectResult {
 	outputArtifactIds?: string[];
 }
 
+export interface HostPluginConfiguration {
+	instanceId: string;
+	generation: string;
+	read(): Promise<{ revision: number; documentJson: string }>;
+}
+
 export interface HostEffectContext {
+	pluginConfiguration: HostPluginConfiguration;
 	operation: HostEffect;
 	revision: number;
 	signal: AbortSignal;
@@ -46,6 +53,7 @@ export interface HostPreparationScope {
 
 /** Scope for metadata reads: no effect identity is created for a catalogue lookup. */
 export interface HostMetadataContext {
+	pluginConfiguration: HostPluginConfiguration;
 	userId: number;
 	appId: string;
 	signal: AbortSignal;

@@ -100,6 +100,12 @@ export class RunNativeCapabilities implements PluginRunCapabilityExtensions {
 				const command = readAgentPluginHostOperationRequest(row.request);
 				const operationKey = pluginContractText(row.operationKey);
 				const argumentsJson = JSON.stringify(command);
+				const pluginConfiguration = {
+					instanceId: source.instanceId,
+					generation: source.generation,
+
+					read: () => this.plugins.runSourceConfiguration(input.scope, source),
+				};
 				if (this.host.isMetadata(command.operation)) {
 					const policy = effectiveHostOperationPolicy(command.operation, argumentsJson);
 					if (!policy) {
@@ -132,6 +138,7 @@ export class RunNativeCapabilities implements PluginRunCapabilityExtensions {
 					};
 
 					const value = await this.host.metadata(command, {
+						pluginConfiguration,
 						userId: input.scope.userId,
 						appId: input.scope.appId,
 						signal,
@@ -300,6 +307,7 @@ export class RunNativeCapabilities implements PluginRunCapabilityExtensions {
 
 								try {
 									const result = await selected.execute({
+										pluginConfiguration,
 										operation: effect,
 										revision: (await facts(childSignal)).policy.revision,
 										signal: childSignal,

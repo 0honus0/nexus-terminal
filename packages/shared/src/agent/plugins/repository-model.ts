@@ -13,6 +13,7 @@ export interface AgentPluginCatalogPackage {
 	contributionKinds: AgentPluginContributionKind[];
 	displayName: string;
 	description: string;
+	localizations?: { locale: string; displayName: string; description: string }[];
 	packageUrl: string;
 	sha256: string;
 	sizeBytes: number;

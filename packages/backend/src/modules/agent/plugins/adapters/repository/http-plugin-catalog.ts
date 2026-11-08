@@ -80,6 +80,11 @@ export class HttpPluginCatalog implements PluginRepositoryCatalog {
 						contributionKinds: entry.contributionKinds.map((kind) => kind),
 						displayName: entry.displayName,
 						description: entry.description,
+						localizations: entry.localizations?.map((item) => ({
+							locale: item.locale,
+							displayName: item.displayName,
+							description: item.description,
+						})),
 						packageUrl,
 						sha256: entry.sha256,
 						sizeBytes: entry.sizeBytes,

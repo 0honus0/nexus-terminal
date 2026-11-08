@@ -1,5 +1,5 @@
 import { hasApprovalIdentity } from '../../../../support/package-tool-catalog.mjs';
-import { readAgentBrowserConfiguration } from '../../../../../packages/shared/src/agent/integrations/browser-http-codec';
+import { configureBrowserTargets } from '../../../support/plugin-settings';
 import { resolveNativeApproval, type NativeTask } from '../../../fixtures/agent/native-task';
 import { requestAgentJson } from '../../../support/agent-request';
 import { requestAgentWorkspace } from '../../../support/agent';
@@ -55,32 +55,14 @@ export async function cancelBrowserPhase<T>(
 	return result.value;
 }
 
-export async function configureLifecycleBrowser(request: APIRequestContext) {
-	const current = await requestAgentJson(
-		request,
-		{ method: 'GET', path: '/browser/configuration' },
-		readAgentBrowserConfiguration,
-	);
-	return requestAgentJson(
-		request,
+export async function configureLifecycleBrowser(request: APIRequestContext, appId: string) {
+	return configureBrowserTargets(request, appId, [
 		{
-			method: 'PUT',
-			path: '/browser/configuration',
-			data: {
-				expectedVersion: current.version,
-				targets: [
-					{
-						id: 'e2e-lifecycle',
-						endpoints: [
-							{ url: E2E_URLS.browserCdpEndpoint, priority: 1, allowPlaintext: true, verifyTls: true },
-						],
-						allowedUrlPatterns: [E2E_URLS.browserControlOrigin],
-					},
-				],
-			},
+			id: 'e2e-lifecycle',
+			endpoints: [{ url: E2E_URLS.browserCdpEndpoint, priority: 1, allowPlaintext: true, verifyTls: true }],
+			allowedUrlPatterns: [E2E_URLS.browserControlOrigin],
 		},
-		readAgentBrowserConfiguration,
-	);
+	]);
 }
 
 export async function browserControl(path: string, method: 'GET' | 'POST' = 'GET') {

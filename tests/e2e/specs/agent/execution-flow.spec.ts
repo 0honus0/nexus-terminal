@@ -26,6 +26,12 @@ for (const [name, file, pattern] of [
 		'../frontend/agent-tool-summary.integration.mjs',
 		'',
 	],
+	['catalog locale decoding and publisher text fallbacks', '../frontend/agent-market-locale.integration.mjs', ''],
+	[
+		'Browser plugin configuration migration and publisher isolation',
+		'storage/backend-next-browser-plugin-migration.integration.mjs',
+		'',
+	],
 	['subscriber asynchronous authority isolation', 'storage/backend-next-run-changes.integration.mjs', ''],
 	[
 		'streamed Artifact cancellation, revoked intents and package upgrade fences',

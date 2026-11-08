@@ -12,7 +12,6 @@
 	import { useAgentOnboarding } from '../composables/use-agent-onboarding';
 
 	const AgentExtensionsSettings = defineAsyncComponent(() => import('./AgentExtensionsSettings.vue'));
-	const BrowserRuntimeSettings = defineAsyncComponent(() => import('./BrowserRuntimeSettings.vue'));
 	const SafetyNetworkSettings = defineAsyncComponent(() => import('./SafetyNetworkSettings.vue'));
 
 	const { t } = useI18n();
@@ -181,7 +180,6 @@
 		</div>
 		<div v-if="visitedGroups.has('runtime')" v-show="activeGroup === 'runtime'" class="space-y-5">
 			<ExecutionSettings :editor="execution" section="runtime" />
-			<BrowserRuntimeSettings :active="props.active && activeGroup === 'runtime'" />
 			<ExecutionSettings :editor="execution" section="storage" />
 		</div>
 		<div v-if="visitedGroups.has('safety')" v-show="activeGroup === 'safety'" class="space-y-5">

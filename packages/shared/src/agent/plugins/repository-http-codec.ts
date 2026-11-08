@@ -2,7 +2,7 @@ import { AGENT_PLUGIN_MAX_VERSION_BYTES, AGENT_PLUGIN_PACKAGE_HASH_LENGTH } from
 import { isAgentPluginVersion } from './values.js';
 import { readAgentPluginInstallation, readAgentPluginCompatibility, readAgentPluginPackageId } from './http-codec.js';
 import type { AgentPluginRecommended } from './repository-model.js';
-import { agentRecord, agentText, agentInteger, InvalidAgentPayload } from '../http-codec.js';
+import { agentRecord, agentText, agentInteger, isAgentRecord, InvalidAgentPayload } from '../http-codec.js';
 import type {
 	AgentPluginRepositoryUpdate,
 	AgentPluginRepositoryStage,
@@ -152,6 +152,46 @@ const catalogPackageKeys = [
 	'publisherKeyId',
 ];
 
+function catalogRecord(input: unknown, additionalKeys: readonly string[] = []): Record<string, unknown> {
+	return agentRecord(
+		input,
+		[
+			...catalogPackageKeys,
+			...additionalKeys,
+			...(isAgentRecord(input) && Object.hasOwn(input, 'localizations') ? ['localizations'] : []),
+		],
+		AGENT_PLUGIN_MAX_CATALOG_BYTES,
+	);
+}
+
+function catalogLocalizations(input: unknown): AgentPluginCatalogPackage['localizations'] {
+	if (input === undefined) {
+		return undefined;
+	}
+	if (!Array.isArray(input)) {
+		throw new InvalidAgentPayload();
+	}
+	const locales = new Set<string>();
+	return input.map((value) => {
+		const row = agentRecord(value, ['locale', 'displayName', 'description'], AGENT_PLUGIN_MAX_CATALOG_BYTES);
+		let locale: string;
+		try {
+			locale = Intl.getCanonicalLocales(catalogText(row.locale, AGENT_PLUGIN_MAX_CATALOG_BYTES))[0] ?? '';
+		} catch {
+			throw new InvalidAgentPayload();
+		}
+		if (!locale || locales.has(locale)) {
+			throw new InvalidAgentPayload();
+		}
+		locales.add(locale);
+		return {
+			locale,
+			displayName: catalogText(row.displayName, 256),
+			description: catalogText(row.description, 2048),
+		};
+	});
+}
+
 function catalogPackage(row: Record<string, unknown>, source?: string): AgentPluginCatalogPackage {
 	const compatibility = readAgentPluginCompatibility(row.compatibility);
 	if (!Array.isArray(row.contributionKinds) || row.contributionKinds.length === 0) {
@@ -180,6 +220,7 @@ function catalogPackage(row: Record<string, unknown>, source?: string): AgentPlu
 		contributionKinds,
 		displayName: catalogText(row.displayName, 256),
 		description: catalogText(row.description, 2048),
+		localizations: catalogLocalizations(row.localizations),
 		packageUrl: catalogPackageUrl(row.packageUrl, source),
 		sha256,
 		sizeBytes: agentInteger(row.sizeBytes, 1, AGENT_PLUGIN_MAX_ARCHIVE_BYTES),
@@ -188,15 +229,11 @@ function catalogPackage(row: Record<string, unknown>, source?: string): AgentPlu
 }
 
 export function readAgentPluginCatalogPackage(input: unknown): AgentPluginCatalogPackage {
-	return catalogPackage(agentRecord(input, catalogPackageKeys, AGENT_PLUGIN_MAX_CATALOG_BYTES));
+	return catalogPackage(catalogRecord(input));
 }
 
 export function readAgentPluginCatalogEntry(input: unknown): AgentPluginCatalogEntry {
-	const row = agentRecord(
-		input,
-		[...catalogPackageKeys, 'compatible', 'compatibilityReason'],
-		AGENT_PLUGIN_MAX_CATALOG_BYTES,
-	);
+	const row = catalogRecord(input, ['compatible', 'compatibilityReason']);
 	const value = catalogPackage(row);
 	readAgentPluginRepositoryUrl(value.packageUrl);
 	const compatibilityReason =
@@ -217,6 +254,11 @@ export function readAgentPluginCatalogEntry(input: unknown): AgentPluginCatalogE
 		contributionKinds: value.contributionKinds.map((kind) => kind),
 		displayName: value.displayName,
 		description: value.description,
+		localizations: value.localizations?.map((item) => ({
+			locale: item.locale,
+			displayName: item.displayName,
+			description: item.description,
+		})),
 		packageUrl: value.packageUrl,
 		sha256: value.sha256,
 		sizeBytes: value.sizeBytes,
@@ -256,9 +298,7 @@ function catalogContents<T extends AgentPluginCatalogPackage>(
 
 export function readAgentPluginCatalogIndex(input: unknown, source?: string): AgentPluginCatalogIndex {
 	const row = agentRecord(input, ['schemaVersion', 'publishers', 'packages'], AGENT_PLUGIN_MAX_CATALOG_BYTES);
-	const { publishers, packages } = catalogContents(row, (value) =>
-		catalogPackage(agentRecord(value, catalogPackageKeys, AGENT_PLUGIN_MAX_CATALOG_BYTES), source),
-	);
+	const { publishers, packages } = catalogContents(row, (value) => catalogPackage(catalogRecord(value), source));
 	return { schemaVersion: 2, publishers, packages };
 }
 

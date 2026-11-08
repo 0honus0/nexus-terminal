@@ -62,7 +62,7 @@ Shared `agent/plugins` 持 manifest4、SDK4、Registry/Binding/Surface、配置�
 
 `PluginInstanceService/Model` 是人工与 Agent 配置共同 owner；schema、默认值、说明及 Agent 可改路径来自签名资产，停用/未配置/启动失败时仍可读取。写入绑定 schema/包/旧 revision 与稳定 operation key，同事务 CAS 及回执；配置提交成功与资源生效分开。SecretBox 与 `PluginConnectionService` 单独管理凭据、HTTP endpoint、SSH target/argv，不能藏入普通业务 JSON。
 
-已安装插件设置可管理真实 App/实例。MCP/ACP 表单由服务包交付；模型 Provider、执行预算、权限、Browser 可信配置仍由宿主管理。
+已安装插件设置可管理真实 App/实例。MCP/ACP 表单及 Browser/CDP 目标设置由各插件交付；模型 Provider、执行预算、权限和可信 I/O 校验仍由宿主管理。
 
 ### 注册与生命周期
 
@@ -133,3 +133,14 @@ Browser 技术层按调用者的节点数和字节预算投影完整 DOM，不�
 SDK4 的 Run 信息、模型请求、插件数据与配置、受管原生调用及传输外壳显式使用所属插件 RPC 容量，不继承普通状态响应的 32 KiB 默认值。模型供应商事件使用完整模型流预算，文本下游合批大小只决定批次交付，不构成输入事件拒绝门槛。
 
 消息、候选目录与单篇 Skill 交付按实际 `ok/valueJson` RPC 外壳计量，包含结果字符串的再次 JSON 编码；消息读取水位只推进最终单页可交付的连续前缀，未入页的有效消息保持未读。模型数、App数、授权目标与意图附件不在入口、存储或界面另设重复数量门槛，完整编码容量由各协议 owner 校验。意图敏感字段检查采用迭代遍历，不依赖固定嵌套深度。
+
+## 浏览器实例配置与市场语言
+
+1. **职责与范围**：浏览器工具和CDP目标设置归浏览器插件；宿主只提供可信浏览器连接、URL权限、安全执行与真实资源关闭。目录本地化由发布者提供，宿主不按官方包ID注入产品介绍。
+2. **子功能与目录**：插件仓浏览器包贡献 settings/schema/UI；Host integrations/browser Model转换实例配置并持技术能力，Service持会话；plugins持配置CAS、运行代及目录，前端市场只投影当前语言。
+3. **依赖方向**：插件调用公开SDK；run-native边界从实际source绑定只读配置能力，不接受工具自报端点或instance身份。市场消费Shared目录，不引用插件私有源码。
+4. **类型与转换**：Shared browser-codec严格解码目标；PluginInstanceSource→可信配置引用→BrowserModel逐字段转换；目录localizations为locale/displayName/description数组，仓库、HTTP及前端各自白名单投影。现有UI环境的locale事件继续复用，不增加语言RPC。
+5. **入口与安装**：已安装插件的设置按钮挂载签名设置Surface；删除本体全局Browser配置HTTP及设置面板。任何声明browser能力的插件都消费自身实例配置，Host不按包名选取运行配置。
+6. **数据、事务与并发**：配置沿原实例表、schema、CAS及幂等用例保存。迁移64将旧官方浏览器全局目标复制到其未配置的已有实例，再删除旧表；没有对应实例的旧全局配置随旧表移除。迁移1–63不改写，运行路径无旧值兼容。新实例从插件defaults开始。
+7. **生命周期与失败**：读取配置前后复查source及package/config修订；会话绑定user/App/Run/instance/generation，配置变化使旧绑定失效，退役只关闭准确旧代会话，等待在途任务并保留清理失败；全局关闭仍排空所有真实资源。
+8. **当前能力与验收**：本批实现与回归状态见PLAN D33；须覆盖实例隔离、修订变化、URL策略、关闭失败、语言切换/缺译回退及320/390px市场，不以类型检查代替浏览器证据。语言优先精确标签，其次同语言，未提供翻译使用原文；切换语言只影响展示与搜索，不改变包身份或签名。

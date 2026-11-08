@@ -1,6 +1,6 @@
 {
   "name": "@nexus-terminal/shared",
-  "version": "4.0.2",
+  "version": "4.0.3",
   "private": true,
   "type": "module",
   "scripts": {
@@ -672,14 +672,6 @@
       "types": "./dist/agent/integrations/browser-model.d.ts",
       "default": "./dist/agent/integrations/browser-model.js"
     },
-    "./agent/integrations/browser-http": {
-      "types": "./dist/agent/integrations/browser-http.d.ts",
-      "default": "./dist/agent/integrations/browser-http.js"
-    },
-    "./agent/integrations/browser-http-codec": {
-      "types": "./dist/agent/integrations/browser-http-codec.d.ts",
-      "default": "./dist/agent/integrations/browser-http-codec.js"
-    },
     "./agent/plugins/values": {
       "types": "./dist/agent/plugins/values.d.ts",
       "default": "./dist/agent/plugins/values.js"
@@ -1011,6 +1003,10 @@
     "./agent/plugins/app-outcome": {
       "types": "./dist/agent/plugins/app-outcome.d.ts",
       "default": "./dist/agent/plugins/app-outcome.js"
+    },
+    "./agent/integrations/browser-codec": {
+      "types": "./dist/agent/integrations/browser-codec.d.ts",
+      "default": "./dist/agent/integrations/browser-codec.js"
     }
   },
   "devDependencies": {

@@ -43,7 +43,7 @@ test('Nexus Agent subagent lifecycle preserves tool batches and reclaims child B
 		[],
 		app,
 	);
-	const browser = await configureLifecycleBrowser(request);
+	const browser = await configureLifecycleBrowser(request, task.app.id);
 	const configured = await requestAgentJson(
 		request,
 		{ method: 'GET', path: '/execution-settings' },

@@ -8,10 +8,11 @@ import {
 	AgentHttpSerializationFailure,
 	AgentRpcHttpSerializationFailure,
 } from '../../../packages/backend/dist/modules/agent/interfaces/http/agent-http-response.js';
-import { createBrowserHttpRoutes } from '../../../packages/backend/dist/modules/agent/interfaces/http/browser-http.js';
+import { createPluginHttpRoutes } from '../../../packages/backend/dist/modules/agent/interfaces/http/plugin-http.js';
 import { createArtifactHttpRoutes } from '../../../packages/backend/dist/modules/agent/interfaces/http/artifact-http.js';
 import { openHttpListener } from '../../../packages/backend/dist/platform/http/http-server.js';
 import { bindRequestCookies } from '../../../packages/backend/dist/platform/http/http-request.js';
+import { AGENT_PLUGIN_MAX_RESPONSE_BYTES } from '../../../packages/shared/dist/agent/plugins/values.js';
 import { AGENT_ARTIFACT_MAX_RESPONSE_BYTES } from '../../../packages/shared/dist/agent/artifacts/values.js';
 
 const require = createRequire(new URL('../../../packages/backend/package.json', import.meta.url));
@@ -190,22 +191,31 @@ test('Agent serializer preserves a real serialization exception as its cause', a
 	}
 });
 
-test('Agent browser write keeps operation_unknown when a post-hook response exceeds its budget', async () => {
+test('Agent plugin configuration write keeps operation_unknown when a post-hook response exceeds its budget', async () => {
 	const app = Fastify({ routerOptions: { querystringParser: (query) => new URLSearchParams(query) } });
 	await app.register(require('@fastify/cookie'));
 	app.addHook('onRequest', async (request) => bindRequestCookies(request.raw, request.cookies));
 	let writes = 0;
 	const access = { authenticate: async () => ({ userId: 1 }) };
 	const service = {
-		update: async () => {
+		write: async () => {
 			writes++;
-			return { version: 2, targets: [] };
+			return {
+				changed: true,
+				configuration: {
+					instanceId: '00000000-0000-4000-8000-000000000002',
+					packageId: 'test.browser',
+					revision: 2,
+					schemaRevision: 1,
+					documentJson: '{}',
+				},
+			};
 		},
 	};
 	app.addHook('preSerialization', async (_request, _reply, payload) =>
-		payload.code ? payload : { expanded: 'x'.repeat(32768) },
+		payload.code ? payload : { expanded: 'x'.repeat(AGENT_PLUGIN_MAX_RESPONSE_BYTES) },
 	);
-	for (const route of createBrowserHttpRoutes(access, service, (work) => work())) {
+	for (const route of createPluginHttpRoutes(access, null, null, service, null, (work) => work())) {
 		// The installed Platform handler awaits the native reply while asynchronous hooks finish.
 		app.route({
 			...route,
@@ -219,9 +229,15 @@ test('Agent browser write keeps operation_unknown when a post-hook response exce
 	try {
 		const response = await app.inject({
 			method: 'PUT',
-			url: '/api/v1/agent/browser/configuration',
+			url: '/api/v1/agent/plugins/apps/00000000-0000-4000-8000-000000000001/instances/00000000-0000-4000-8000-000000000002/configuration',
 			headers: { cookie: 'nexus_session=test' },
-			payload: { expectedVersion: 1, targets: [] },
+			payload: {
+				operationKey: '00000000-0000-4000-8000-000000000003',
+				expectedPackageRevision: 1,
+				expectedRevision: 1,
+				schemaRevision: 1,
+				documentJson: '{}',
+			},
 		});
 		assert.equal(writes, 1);
 		assert.equal(response.statusCode, 503);

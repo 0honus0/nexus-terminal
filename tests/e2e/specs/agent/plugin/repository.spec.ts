@@ -203,3 +203,59 @@ test('uninstalled plugin retained AppStorage can be permanently deleted', async 
 	);
 	expect(empty.deletedKeys).toBe(0);
 });
+
+for (const [locale, width, groupLabel, marketLabel, name, description] of [
+	[
+		'en-US',
+		1440,
+		'Apps and extensions',
+		'Plugin market',
+		'Custom Surface',
+		'Localized marketplace acceptance fixture.',
+	],
+	['zh-CN', 320, 'App 与扩展', '插件市场', '自定义界面', '插件市场本地化验收说明。'],
+	['ja-JP', 390, 'App と拡張', 'プラグインマーケット', 'カスタム画面', 'プラグイン市場の翻訳検証。'],
+] as const) {
+	test(`plugin market follows ${locale} and fits ${width}px`, async ({ page, request }) => {
+		await loginAsInitialAdmin(request);
+		await loginAsInitialAdmin(page.request);
+		await setUiLanguage(page.request, locale);
+		await configureTestPluginRepository(request);
+		await page.route('**/api/v1/agent/plugins/official/catalog', (route) =>
+			route.fulfill({
+				json: {
+					schemaVersion: 2,
+					repositoryUrl: 'https://github.com/0honus0/nexus-agent-plugins',
+					publishers: [],
+					packages: [],
+				},
+			}),
+		);
+		await page.setViewportSize({ width, height: 900 });
+		await page.goto('/settings?tab=agent');
+		await page.getByRole('button', { name: groupLabel, exact: true }).click();
+		await page.getByRole('tab', { name: marketLabel, exact: true }).click();
+		const market = page.locator('.plugin-market');
+		await expect(market.getByText(name, { exact: true })).toBeVisible();
+		await expect(market.getByText(description, { exact: true })).toBeVisible();
+		await expect
+			.poll(() =>
+				page.evaluate(() => ({
+					document: document.documentElement.scrollWidth <= innerWidth,
+					tabs: [...document.querySelectorAll('.extensions-tabs button')].every(
+						(tab) => tab.scrollWidth <= tab.clientWidth + 1,
+					),
+					entries: [...document.querySelectorAll('.plugin-market__entry')].every(
+						(entry) => entry.scrollWidth <= entry.clientWidth + 1,
+					),
+				})),
+			)
+			.toEqual({ document: true, tabs: true, entries: true });
+		await market.getByRole('searchbox').fill(description);
+		await expect(market.locator('.plugin-market__entry')).toHaveCount(1);
+		await expect(market.getByText(name, { exact: true })).toBeVisible();
+		await market.getByRole('searchbox').fill('E2E-only AppIntent receiver fixture.');
+		await expect(market.locator('.plugin-market__entry')).toHaveCount(1);
+		await expect(market.getByText('E2E-only AppIntent receiver fixture.', { exact: true })).toBeVisible();
+	});
+}

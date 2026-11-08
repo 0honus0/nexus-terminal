@@ -1,3 +1,4 @@
+import { pluginConfiguration } from './plugin-configuration-fixture.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
@@ -42,7 +43,7 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 1
 			const app = '/api/v1/agent/apps/' + f.appId;
 			const grants = expectStatus(await f.api('GET', app + '/grants'), 200);
 			const settings = expectStatus(await f.api('GET', '/api/v1/agent/execution-settings'), 200);
-			const browser = expectStatus(await f.api('GET', '/api/v1/agent/browser/configuration'), 200);
+			const browser = await pluginConfiguration(f.api, f.appId, 'nexus.tools.browser');
 			const routes = [
 				[
 					'PUT',
@@ -53,7 +54,7 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 1
 					},
 				],
 				['PUT', '/api/v1/agent/execution-settings', {}],
-				['PUT', '/api/v1/agent/browser/configuration', {}],
+				['PUT', browser.path, {}],
 				['POST', app + '/memories', {}],
 				['PUT', '/api/v1/agent/plugins/apps/' + f.appId + '/composition', {}],
 				['POST', app + '/artifacts', {}],
@@ -69,7 +70,7 @@ await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 1
 			);
 			assert.deepEqual(expectStatus(await f.api('GET', app + '/grants'), 200), grants);
 			assert.deepEqual(expectStatus(await f.api('GET', '/api/v1/agent/execution-settings'), 200), settings);
-			assert.deepEqual(expectStatus(await f.api('GET', '/api/v1/agent/browser/configuration'), 200), browser);
+			assert.deepEqual(expectStatus(await f.api('GET', browser.path), 200), browser.current);
 			assert.equal(expectStatus(await f.api('GET', app + '/memories'), 200).items.length, 0);
 			assert.equal(expectStatus(await f.api('GET', app + '/artifacts'), 200).items.length, 0);
 		});

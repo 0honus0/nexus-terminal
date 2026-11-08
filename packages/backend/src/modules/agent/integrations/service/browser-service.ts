@@ -11,9 +11,8 @@ import type { ArtifactService } from '../../artifacts/service/artifact-service.j
 import type { ArtifactActor, ArtifactRecord } from '../../artifacts/model/artifact-types.js';
 import type {
 	BrowserApplicationSession,
-	BrowserActor,
+	BrowserConfigurationSource,
 	BrowserTarget,
-	BrowserConfiguration,
 	BrowserOwner,
 	BrowserToolOwner,
 	BrowserInput,
@@ -49,6 +48,8 @@ function allowUrl(target: BrowserTarget, url: string): boolean {
 
 interface ActiveBrowserSession {
 	owner: BrowserOwner;
+	instanceId: string;
+	generation: string;
 	record: BrowserSessionRecord;
 	capability: BrowserApplicationSession;
 }
@@ -58,8 +59,8 @@ export class BrowserService {
 	private readonly pending = new Set<Promise<unknown>>();
 	private readonly stop = new AbortController();
 	private readonly failures: unknown[] = [];
-	private barrier: Promise<unknown> = Promise.resolve();
-	private readonly lanes = new Map<string, Promise<unknown>>();
+	private readonly barriers = new Map<string, Promise<unknown>>();
+	private readonly lanes = new Map<string, { group: string; settled: Promise<unknown> }>();
 	private closing = false;
 	private closePromise: Promise<void> | null = null;
 
@@ -137,13 +138,25 @@ export class BrowserService {
 		});
 	}
 
-	private task<T>(work: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal, lane?: string): Promise<T> {
+	private task<T>(
+		source: { instanceId: string; generation: string },
+		work: (signal: AbortSignal) => Promise<T>,
+		signal?: AbortSignal,
+		lane?: string,
+	): Promise<T> {
 		if (this.closing) {
 			return Promise.reject(new AgentFailure('provider_unavailable'));
 		}
 		// Tool calls inherit the configured Run/tool signal, including time spent queued.
-		const deadline = AbortSignal.any([this.stop.signal, signal ?? AbortSignal.timeout(60000)]);
-		const previous = lane ? [this.barrier, this.lanes.get(lane)] : [this.barrier, ...this.lanes.values()];
+		const deadline = signal ? AbortSignal.any([this.stop.signal, signal]) : this.stop.signal;
+		const group = JSON.stringify([source.instanceId, source.generation]);
+		const laneKey = lane ? JSON.stringify([group, lane]) : null;
+		const previous = laneKey
+			? [this.barriers.get(group), this.lanes.get(laneKey)?.settled]
+			: [
+					this.barriers.get(group),
+					...[...this.lanes.values()].filter((item) => item.group === group).map((item) => item.settled),
+				];
 		const task = Promise.all(previous).then(async () => {
 			if (this.closing || deadline.aborted) {
 				throw new AgentFailure('provider_unavailable');
@@ -162,15 +175,20 @@ export class BrowserService {
 			() => undefined,
 			() => undefined,
 		);
-		if (lane) {
-			this.lanes.set(lane, settled);
+		if (laneKey) {
+			this.lanes.set(laneKey, { group, settled });
 			void settled.then(() => {
-				if (this.lanes.get(lane) === settled) {
-					this.lanes.delete(lane);
+				if (this.lanes.get(laneKey)?.settled === settled) {
+					this.lanes.delete(laneKey);
 				}
 			});
 		} else {
-			this.barrier = settled;
+			this.barriers.set(group, settled);
+			void settled.then(() => {
+				if (this.barriers.get(group) === settled) {
+					this.barriers.delete(group);
+				}
+			});
 		}
 		this.pending.add(task);
 		void task.then(
@@ -189,68 +207,48 @@ export class BrowserService {
 		return task;
 	}
 
-	configuration(actor: BrowserActor): Promise<BrowserConfiguration> {
-		return this.task(() => this.model.configuration(actor.userId));
-	}
-
-	update(actor: BrowserActor, version: number, targets: BrowserTarget[]): Promise<BrowserConfiguration> {
-		return this.task(async () => {
-			const result = await this.model.update(actor, version, targets, (userId) => {
-				if (userId !== actor.userId) {
-					throw new AgentFailure('unauthenticated');
-				}
-			});
-			const sessions = [...this.sessions.entries()].filter(
-				([, session]) => session.owner.userId === actor.userId,
-			);
-			const released = await Promise.allSettled(
-				sessions.map(async ([id, session]) => {
-					await session.capability.close();
-					this.sessions.delete(id);
-				}),
-			);
-			const failures = released.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
-			if (failures.length) {
-				throw new ToolCleanupFailure({
-					cause: new AggregateError(failures, 'Browser configuration committed but retirement failed'),
-				});
-			}
-			return result;
-		});
-	}
-
-	catalog(userId: number, signal: AbortSignal, validate: () => Promise<void>): Promise<BrowserCatalog> {
-		return this.task(async (deadline) => {
-			const combined = AbortSignal.any([deadline, signal]);
-			await validate();
-			combined.throwIfAborted();
-			const configuration = await this.model.configuration(userId);
-			await validate();
-			combined.throwIfAborted();
-			return {
-				targets: configuration.targets.map((target) => ({
-					targetId: target.id,
-					expectedVersion: configuration.version,
-					allowedUrlPatterns: target.allowedUrlPatterns.map((pattern) => pattern),
-				})),
-			};
-		}, signal);
+	catalog(
+		source: BrowserConfigurationSource,
+		signal: AbortSignal,
+		validate: () => Promise<void>,
+	): Promise<BrowserCatalog> {
+		return this.task(
+			source,
+			async (deadline) => {
+				const combined = AbortSignal.any([deadline, signal]);
+				await validate();
+				combined.throwIfAborted();
+				const configuration = await this.model.configuration(source);
+				await validate();
+				combined.throwIfAborted();
+				return {
+					targets: configuration.targets.map((target) => ({
+						targetId: target.id,
+						expectedVersion: configuration.version,
+						allowedUrlPatterns: target.allowedUrlPatterns.map((pattern) => pattern),
+					})),
+				};
+			},
+			signal,
+		);
 	}
 
 	perform(
 		owner: BrowserToolOwner,
+		source: BrowserConfigurationSource,
 		input: BrowserInput,
 		signal: AbortSignal,
 		validate: () => Promise<void>,
 		recordOutputArtifacts: (ids: readonly string[]) => void,
 	): Promise<BrowserOperationResult> {
 		return this.task(
+			source,
 			async (deadline): Promise<BrowserOperationResult> => {
 				const combined = AbortSignal.any([deadline, signal]);
 				await validate();
 				combined.throwIfAborted();
 				if (input.action === 'open') {
-					const config = await this.model.configuration(owner.userId);
+					const config = await this.model.configuration(source);
 					const target = config.targets.find((item) => item.id === input.targetId);
 					if (!target) {
 						throw new ToolOperationRefusal('not_found');
@@ -260,7 +258,7 @@ export class BrowserService {
 					}
 					const capability = await this.connectTarget(target, combined);
 					try {
-						const current = await this.model.configuration(owner.userId);
+						const current = await this.model.configuration(source);
 						await validate();
 						combined.throwIfAborted();
 						if (current.version !== config.version) {
@@ -275,6 +273,8 @@ export class BrowserService {
 						};
 						this.sessions.set(record.sessionId, {
 							owner: { userId: owner.userId, appId: owner.appId, runId: owner.runId },
+							instanceId: source.instanceId,
+							generation: source.generation,
 							record,
 							capability,
 						});
@@ -304,7 +304,9 @@ export class BrowserService {
 					!session ||
 					session.owner.userId !== owner.userId ||
 					session.owner.appId !== owner.appId ||
-					session.owner.runId !== owner.runId
+					session.owner.runId !== owner.runId ||
+					session.instanceId !== source.instanceId ||
+					session.generation !== source.generation
 				) {
 					throw new ToolOperationRefusal('not_found');
 				}
@@ -313,7 +315,7 @@ export class BrowserService {
 					this.sessions.delete(input.sessionId);
 					return { action: 'close', value: { status: 'closed' } };
 				}
-				if ((await this.model.configuration(owner.userId)).version !== session.record.targetVersion) {
+				if ((await this.model.configuration(source)).version !== session.record.targetVersion) {
 					throw new ToolOperationRefusal('version_conflict');
 				}
 				let result: BrowserOperationResult;
@@ -466,6 +468,31 @@ export class BrowserService {
 		if (failures.length) {
 			throw new ToolCleanupFailure({ cause: new AggregateError(failures, 'Run browser release failed') });
 		}
+	}
+
+	retireInstance(scope: { userId: number; appId: string; instanceId: string; generation: string }): Promise<void> {
+		if (this.closing) {
+			return this.close();
+		}
+		return this.task(scope, async () => {
+			const sessions = [...this.sessions.entries()].filter(
+				([, session]) =>
+					session.owner.userId === scope.userId &&
+					session.owner.appId === scope.appId &&
+					session.instanceId === scope.instanceId &&
+					session.generation === scope.generation,
+			);
+			const results = await Promise.allSettled(
+				sessions.map(async ([id, session]) => {
+					await session.capability.close();
+					this.sessions.delete(id);
+				}),
+			);
+			const failures = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+			if (failures.length) {
+				throw new ToolCleanupFailure({ cause: new AggregateError(failures, 'Plugin browser release failed') });
+			}
+		});
 	}
 
 	quiesce(): void {

@@ -1,13 +1,11 @@
 import { agentRecord, agentText, agentInteger, InvalidAgentPayload } from '../http-codec.js';
 import {
-	AGENT_BROWSER_MAX_BODY_BYTES,
 	AGENT_BROWSER_ENDPOINT_MAX_BYTES,
 	AGENT_BROWSER_PATTERN_MAX_BYTES,
-	AGENT_BROWSER_MAX_PRIORITY,
 	AGENT_BROWSER_TARGET_ID_MAX_BYTES,
 } from './browser-values.js';
-import type { AgentBrowserTarget, AgentBrowserConfiguration } from './browser-model.js';
-import type { AgentBrowserUpdateRequest } from './browser-http.js';
+import type { AgentBrowserTarget, AgentBrowserPluginConfiguration } from './browser-model.js';
+import { AGENT_PLUGIN_MAX_MESSAGE_BYTES } from '../plugins/values.js';
 
 function boolean(input: unknown): boolean {
 	if (typeof input !== 'boolean') {
@@ -21,7 +19,7 @@ export function readAgentBrowserTargets(input: unknown): AgentBrowserTarget[] {
 		throw new InvalidAgentPayload();
 	}
 	const targets = input.map((value) => {
-		const row = agentRecord(value, ['id', 'endpoints', 'allowedUrlPatterns'], AGENT_BROWSER_MAX_BODY_BYTES);
+		const row = agentRecord(value, ['id', 'endpoints', 'allowedUrlPatterns'], AGENT_PLUGIN_MAX_MESSAGE_BYTES);
 		const id = agentText(row.id, AGENT_BROWSER_TARGET_ID_MAX_BYTES);
 		if (!/^[a-z][a-z0-9_-]*$/u.test(id)) {
 			throw new InvalidAgentPayload();
@@ -55,7 +53,7 @@ export function readAgentBrowserTargets(input: unknown): AgentBrowserTarget[] {
 			}
 			return {
 				url: parsed.toString(),
-				priority: agentInteger(endpoint.priority, 0, AGENT_BROWSER_MAX_PRIORITY),
+				priority: agentInteger(endpoint.priority, 0),
 				allowPlaintext,
 				verifyTls: boolean(endpoint.verifyTls),
 			};
@@ -90,12 +88,7 @@ export function readAgentBrowserTargets(input: unknown): AgentBrowserTarget[] {
 	return targets;
 }
 
-export function readAgentBrowserUpdate(input: unknown): AgentBrowserUpdateRequest {
-	const row = agentRecord(input, ['expectedVersion', 'targets'], AGENT_BROWSER_MAX_BODY_BYTES);
-	return { expectedVersion: agentInteger(row.expectedVersion, 1), targets: readAgentBrowserTargets(row.targets) };
-}
-
-export function readAgentBrowserConfiguration(input: unknown): AgentBrowserConfiguration {
-	const row = agentRecord(input, ['version', 'targets'], AGENT_BROWSER_MAX_BODY_BYTES);
-	return { version: agentInteger(row.version, 1), targets: readAgentBrowserTargets(row.targets) };
+export function readAgentBrowserPluginConfiguration(input: unknown): AgentBrowserPluginConfiguration {
+	const row = agentRecord(input, ['targets'], AGENT_PLUGIN_MAX_MESSAGE_BYTES);
+	return { targets: readAgentBrowserTargets(row.targets) };
 }

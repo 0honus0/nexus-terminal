@@ -16,9 +16,10 @@ export interface BrowserConfiguration {
 	targets: BrowserTarget[];
 }
 
-export interface BrowserActor {
-	userId: number;
-	token: string;
+export interface BrowserConfigurationSource {
+	instanceId: string;
+	generation: string;
+	read(): Promise<{ revision: number; documentJson: string }>;
 }
 
 export interface BrowserOwner {

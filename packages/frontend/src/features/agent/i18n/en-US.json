@@ -302,8 +302,6 @@
         "unknownPlugin": "Unknown plugin",
         "intentCount": "Intents: {count}",
         "prepareUpgrade": "Verify upgrade package",
-        "summaryNexusAgent": "Official general-purpose agent core for operations diagnostics and engineering collaboration, executed inside a controlled sandbox.",
-        "summaryNexusFullstack": "Full-stack delivery suite covering microservice governance, complex dependency integration and deployment verification.",
         "compatibilityShort": "(requires Nexus {min}–{max})",
         "reverifyPackage": "Verify package again",
         "publisherCount": "{count} keys",
@@ -372,7 +370,8 @@
           "enabled": "Enable this instance",
           "connection": "Connection settings",
           "noConnection": "No connection"
-        }
+        },
+        "managedPackages": "Installed packages and retained data"
       },
       "hardLimits": {
         "title": "Hard Limits",

@@ -302,8 +302,6 @@
         "unknownPlugin": "未知插件",
         "intentCount": "Intents {count} 个",
         "prepareUpgrade": "校验升级包",
-        "summaryNexusAgent": "官方通用智能体核心，支持运维诊断与工程协作，在受控沙箱内安全执行。",
-        "summaryNexusFullstack": "全栈应用交付套件，支持微服务治理、复杂依赖联调与部署验证。",
         "compatibilityShort": "(兼容要求: Nexus {min}~{max})",
         "reverifyPackage": "重新校验包",
         "publisherCount": "{count} 个密钥",
@@ -372,7 +370,8 @@
           "enabled": "启用此实例",
           "connection": "连接设置",
           "noConnection": "未配置连接"
-        }
+        },
+        "managedPackages": "已安装与保留数据"
       },
       "hardLimits": {
         "title": "硬性限制",

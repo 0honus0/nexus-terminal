@@ -98,7 +98,7 @@ export class HostToolContributions {
 
 			browser_targets: async (_input, _target, context) => ({
 				operation: 'browser.catalog',
-				value: await browser.catalog(context.operation.userId, context.signal, context.validate),
+				value: await browser.catalog(context.pluginConfiguration, context.signal, context.validate),
 
 				targets: [],
 			}),
@@ -132,6 +132,7 @@ export class HostToolContributions {
 						operationId: operation.id,
 						operationHash: operation.operationHash,
 					},
+					context.pluginConfiguration,
 					input.input,
 					context.signal,
 					context.validate,
@@ -267,7 +268,7 @@ export class HostToolContributions {
 			case 'browser.catalog':
 				result = {
 					operation: command.operation,
-					value: await this.browser.catalog(context.userId, context.signal, async () => {
+					value: await this.browser.catalog(context.pluginConfiguration, context.signal, async () => {
 						await context.verify();
 					}),
 				};

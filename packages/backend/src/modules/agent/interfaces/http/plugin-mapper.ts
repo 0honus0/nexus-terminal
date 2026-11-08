@@ -362,6 +362,11 @@ export function toPluginCatalog(value: PluginCatalog): AgentPluginCatalog {
 
 			displayName: item.displayName,
 			description: item.description,
+			localizations: item.localizations?.map((item) => ({
+				locale: item.locale,
+				displayName: item.displayName,
+				description: item.description,
+			})),
 			packageUrl: item.packageUrl,
 			sha256: item.sha256,
 			sizeBytes: item.sizeBytes,
@@ -394,6 +399,11 @@ export function toPluginRecommended(value: PluginRecommended): AgentPluginRecomm
 
 						displayName: entry.displayName,
 						description: entry.description,
+						localizations: entry.localizations?.map((item) => ({
+							locale: item.locale,
+							displayName: item.displayName,
+							description: item.description,
+						})),
 						packageUrl: entry.packageUrl,
 						sha256: entry.sha256,
 						sizeBytes: entry.sizeBytes,
