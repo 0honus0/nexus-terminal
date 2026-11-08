@@ -21,14 +21,16 @@ function contains(error, target) {
 
 // Uses real SSH executables and transport loss. No Run cancellation, model
 // response, deadline or restart wakes the failure scenarios.
-await test('Job failures stop the owning Run and its waits', { timeout: 60000 }, async (t) => {
+await test('Job failures stop the owning Run and its waits', async (t) => {
 	const root = await mkdtemp(join(tmpdir(), 'nexus-agent-job-failure-'));
 	const sshd = await openSshd(root);
 	t.after(() => sshd.close());
 	let sequence = 0;
 
 	async function scenario(name, work, endpoint = sshd) {
-		await t.test(name, async (subtest) => {
+		// Each independent scenario retains the original operation/cleanup budget.
+		// An aggregate file deadline cancelled later scenarios under concurrent load.
+		await t.test(name, { timeout: 60000 }, async (subtest) => {
 			const directory = join(root, String(++sequence));
 			await mkdir(directory);
 			const f = await openAgentExecution(

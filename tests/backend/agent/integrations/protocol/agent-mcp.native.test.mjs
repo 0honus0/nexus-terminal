@@ -71,13 +71,13 @@ async function settle(f, run, status = 'completed') {
 	return final;
 }
 
-await test('B10 actual MCP integration negotiation and governed execution', { timeout: 90000 }, async (t) => {
+await test('B10 actual MCP integration negotiation and governed execution', async (t) => {
 	const root = await mkdtemp(join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-b10-mcp-'));
 	let sshd;
 	let sequence = 0;
 
 	async function scenario(name, work) {
-		await t.test(name, async (scenario) => {
+		await t.test(name, { timeout: 90000 }, async (scenario) => {
 			const directory = join(root, String(++sequence));
 			await mkdir(directory);
 			const external = await openMcp();

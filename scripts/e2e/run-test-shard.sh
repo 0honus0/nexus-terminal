@@ -70,7 +70,7 @@ if [[ "$shard" == 1 ]]; then
 fi
 
 cd "$repo_root"
-measure host-browser node scripts/e2e/balanced-shards.mjs run --shards "$shards" --shard "$shard" \
+measure host-browser env -u NEXUS_TEST_PLUGIN_SET node scripts/e2e/balanced-shards.mjs run --shards "$shards" --shard "$shard" \
   > >(tee "$repo_root/tests/e2e/.tmp/shard-server.log") 2>&1 || failed=1
 
 cd "$plugin_root"

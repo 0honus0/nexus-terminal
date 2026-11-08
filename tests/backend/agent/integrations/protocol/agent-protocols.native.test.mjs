@@ -38,7 +38,7 @@ async function configureMcp(f, external) {
 	return instance;
 }
 
-async function settle(f, run, timeoutMs = 10000) {
+async function settle(f, run, signal) {
 	const approved = [];
 	const final = await until(
 		async () => {
@@ -51,7 +51,7 @@ async function settle(f, run, timeoutMs = 10000) {
 		},
 		(value) => ['completed', 'cancelled', 'failed', 'unknown'].includes(value.status),
 		'Protocol Run settles',
-		timeoutMs,
+		signal,
 	);
 	assert.equal(final.status, 'completed', JSON.stringify(final));
 	return approved;
@@ -119,7 +119,7 @@ for (const continuation of [false, true]) {
 				assert.match(results.at(-1).resultJson, continuation ? /resumed exactly/ : /external-result/);
 				return { text: 'Protocol complete' };
 			});
-			const approved = await settle(f, run);
+			const approved = await settle(f, run, t.signal);
 			assert.ok(approved.length > 0, 'Runtime byte requests require their own approval');
 			assert.ok(external.requests.every((item) => item.authorization === 'Bearer mcp-fixture-secret'));
 			const actual = external.requests.filter((item) => item.body.method === 'tools/call');
@@ -229,7 +229,7 @@ for (const mode of ['permission', 'direct', 'large']) {
 				);
 				return { text: 'ACP settled' };
 			});
-			const approved = await settle(f, run, mode === 'large' ? 45000 : 10000);
+			const approved = await settle(f, run, t.signal);
 			assert.ok(approved.some((item) => item.operationName === 'transport.session'));
 			const messages = (await readFile(log, 'utf8'))
 				.trim()

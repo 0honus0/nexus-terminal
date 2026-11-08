@@ -52,14 +52,14 @@ await test(
 );
 
 // Only model responses are scripted. HTTP, governance, SQLite, Job/Run owners and SSH are real.
-await test('Shell yield policy and mutation admission', { timeout: 120000 }, async (t) => {
+await test('Shell yield policy and mutation admission', async (t) => {
 	const root = await mkdtemp(join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-agent-shell-yield-'));
 	const sshd = await openSshd(root);
 	t.after(() => sshd.close());
 	let sequence = 0;
 
 	async function scenario(name, work) {
-		await t.test(name, async (subtest) => {
+		await t.test(name, { timeout: 120000 }, async (subtest) => {
 			const directory = join(root, String(++sequence));
 			await mkdir(directory);
 			const fixture = await openAgentExecution(directory, sshd, {

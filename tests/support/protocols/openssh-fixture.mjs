@@ -13,15 +13,20 @@ import { decodeWorkspaceBinaryFrame } from '../../../packages/shared/dist/remote
 
 const origin = 'http://127.0.0.1:0';
 
-async function until(read, accept, description, timeoutMs = 10000) {
-	const deadline = performance.now() + timeoutMs;
+async function until(read, accept, description, budget = 10000) {
+	// A framework signal already owns the scenario deadline. Do not stack a
+	// second arbitrary wait limit on multi-step model/protocol work.
+	const signal = typeof budget === 'number' ? undefined : budget;
+	const deadline = typeof budget === 'number' ? performance.now() + budget : Infinity;
 	let value;
 	do {
+		signal?.throwIfAborted();
 		value = await read();
+		signal?.throwIfAborted();
 		if (accept(value)) {
 			return value;
 		}
-		await delay(20);
+		await delay(20, undefined, { signal });
 	} while (performance.now() < deadline);
 	assert.fail(description + ': ' + JSON.stringify(value));
 }

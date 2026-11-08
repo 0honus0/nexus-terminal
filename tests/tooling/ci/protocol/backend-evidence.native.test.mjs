@@ -10,6 +10,33 @@ import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
+import { until } from '../../../support/protocols/openssh-fixture.mjs';
+
+await test('Fixture waits obey the scenario signal and reject late successful reads after cancellation', async () => {
+	const controller = new AbortController();
+	const entered = Promise.withResolvers();
+	const release = Promise.withResolvers();
+	const reason = new Error('scenario cancelled');
+	const waiting = until(
+		async () => {
+			entered.resolve();
+			await release.promise;
+			return 'late-success';
+		},
+		(value) => value === 'late-success',
+		'framework-owned wait',
+		controller.signal,
+	);
+	await entered.promise;
+	controller.abort(reason);
+	release.resolve();
+	await assert.rejects(waiting, (error) => error === reason);
+	await assert.rejects(
+		until(() => assert.fail('must not dispatch'), Boolean, 'already cancelled', controller.signal),
+		(error) => error === reason,
+	);
+	assert.equal(await until(() => 'ready', Boolean, 'numeric budget remains supported', 1000), 'ready');
+});
 
 async function allocatePort() {
 	const server = createServer();

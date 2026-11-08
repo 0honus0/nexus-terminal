@@ -30,6 +30,8 @@ const phase = args.includes('--test-concurrency=2') ? 'native'
   : args.includes('--test') ? 'interop' : 'host-browser';
 const record = (event) => fs.appendFileSync(root + '/events', phase + ':' + event + '\\n');
 record('start');
+if (phase === 'host-browser' && process.env.NEXUS_TEST_PLUGIN_SET !== undefined) throw Error('Candidate environment leaked into generic Host tests');
+if (['interop', 'plugin-browser'].includes(phase) && process.env.NEXUS_TEST_PLUGIN_SET !== 'exact-candidate') throw Error('Plugin tests lost their pinned candidate');
 if (phase === 'native' || phase === 'modules') {
   process.on('SIGTERM', () => { record('terminated'); process.exit(143); });
   fs.writeFileSync(root + '/' + phase + '-ready', String(process.pid));
@@ -68,6 +70,7 @@ if (phase === 'native' && process.env.TEST_SHARD_MODE === 'failure') process.exi
 			TEST_SHARD_MODE: mode,
 			NEXUS_TEST_ARTIFACT_DIR: join(root, 'artifacts'),
 			NEXUS_TEST_PLUGIN_SOURCE_ROOT: join(root, 'plugins'),
+			NEXUS_TEST_PLUGIN_SET: 'exact-candidate',
 			NEXUS_TEST_DOCKER_NATIVE: 'excluded-docker',
 			NEXUS_TEST_FINITE_FS_NATIVE: 'excluded-filesystem',
 		},
