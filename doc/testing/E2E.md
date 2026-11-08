@@ -4,9 +4,9 @@
 
 ## 当前验收基线
 
-清理前最新完整远程 [E2E42406049103](https://github.com/0honus0/nexus-terminal/actions/runs/42406049103) 验证main/bed7cd0a4b984e55fd05f0ac777d913805bf7a8b：正式矩阵749项全部一次通过，质量、双端构建、Docker smoke、八个分片及耗时汇总成功，无失败、重试、flaky、场景跳过或遗漏。原[发布42444183561](https://github.com/0honus0/nexus-terminal/actions/runs/42444183561)因追加旧Agent数据清理已取消。当前清理增加独立迁移回归，正式清单750项，待新SHA完整远程验收后发布；旧749项不作为新清理通过证据，详见[本轮记录](HISTORY.md#旧-agent-数据删除与-sdk4-收口2026-11-08)。
+最新完整远程 [E2E42448869600](https://github.com/0honus0/nexus-terminal/actions/runs/42448869600) 验证main/545b2e474058cdcd6b7c6fb3b5f406bde6c0345c：正式矩阵750项全部一次通过（Backend 220、Browser 530），质量、双端构建、Docker smoke、八个分片及耗时汇总成功，无失败、重试、flaky、场景跳过或遗漏。逐项核对实际Reporter记录与正式清单，包含迁移61–63、SDK4检查点严格解码及真实CAPTCHA回归。此前失败与取消记录见[本轮记录](HISTORY.md#旧-agent-数据删除与-sdk4-收口2026-11-08)。
 
-上一已核验的[main amd64 dev发布42401471984](https://github.com/0honus0/nexus-terminal/actions/runs/42401471984)来源f984034c6b672e0ff51ce5acd41d03667b5b9748，摘要、平台及OCI revision见[发布记录](HISTORY.md#sdk4-完整验收与发布2026-11-07)。不据取消任务推断远程dev标签当前指向；本轮发布后重新只读核验。未更新生产主机。
+最新[main amd64 dev发布42450721459](https://github.com/0honus0/nexus-terminal/actions/runs/42450721459)来源0cb0c252e13540517802a369dacc845f2258b389，相对被测提交只增加CI自动更新的测试耗时估算。`dev`与`sha-0cb0c252e135`摘要均为`sha256:c39e574678c3139a0cf71b0fea9863efa2c72cf68a3357c7cde28b8c18b54fa1`；已只读核对唯一产品平台linux/amd64、manifest/config摘要及OCI revision/source，未拉取完整镜像。完整[发布记录](HISTORY.md#旧-agent-数据删除与-sdk4-收口2026-11-08)保留；本轮只清理本体旧实现与数据，无插件协议变更，无需重新发布插件。未更新生产主机。
 
 官方插件已发布 [v2.0.2](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v2.0.2)，源码 `550e4e0b4d873dcaedac54fd37f4e34208d5f91f`。[Validate 42394503906](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42394503906) 的82项插件测试和16项仓库测试全部通过，8个插件各有独立测试入口。当前组合为Agent2.0.2、ChatUI2.0.1、MCP/ACP服务4.0.0与四个工具包2.0.0；v2.0.0、v2.0.1保留不可变初始包。公开latest目录、全部11个版本的签名/文件hash/归档摘要及本体官方目录读取均已验证。
 

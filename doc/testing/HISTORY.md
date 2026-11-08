@@ -2093,8 +2093,6 @@ Node 26.13.0/pnpm 12.16.1；`build.log` 与 `browser.log` 包含 Shared、Backen
 
 ## 旧 Agent 数据删除与 SDK4 收口（2026-11-08）
 
-后续[E2E42448031357](https://github.com/0honus0/nexus-terminal/actions/runs/42448031357)验证4fc39adb，Browser 1的无token CAPTCHA用例首次失败、重试通过，该轮不能作为全绿验收。首次trace记录点击坐标y=476.21；定位后真实hCaptcha iframe异步插入，占据y=401.22–477.22，点击实际落在iframe且焦点进入验证码，表单没有提交。用例增加真实iframe内未勾选checkbox就绪断言后再点击；保留无token不发送凭据、唯一提示与文案断言，不用sleep、强制派发、重试点击或修改产品UI换绿。首次trace、截图、录像与日志保存在本轮e2e-42448031357目录，完整新SHA矩阵仍需重新运行。
-
 用户选择清空旧Agent历史并允许破坏性更新。追加迁移61（附件文件删除意图）、62（旧运行及执行表）、63（旧App/插件档案）；已发布1–60的SQL、签名和执行记录不改写。删除旧运行家族、引用旧代码依赖的运行与关联记忆，不转换旧执行状态。SDK4历史、配置、当前未知效果围栏与非Agent账户保留；当前仍使用的input_text保留。移除旧行解码、快照注册、集中集成及固定模型步骤类型；历史迁移实际依赖的SQL/helper继续保留。
 
 清理前完整[E2E42406049103](https://github.com/0honus0/nexus-terminal/actions/runs/42406049103)验证bed7cd0a共749项，一次全部通过，无失败、重试、flaky、场景跳过或遗漏。原[发布42444183561](https://github.com/0honus0/nexus-terminal/actions/runs/42444183561)因追加清理已取消，不作为本轮发布证据。
@@ -2103,12 +2101,20 @@ Node 26.13.0/pnpm 12.16.1；`build.log` 与 `browser.log` 包含 Shared、Backen
 
 本地迁移/存储组cleanup-storage-final.tap共51项通过；新增迁移最终八项覆盖v60升级、重复启动、真实DROP/插件删除后故障回滚、当前完整快照校验与行往返、旧SDK拒绝、真实附件故障重试、当前Provider占用及旧代码依赖/来源记忆删除。最后补入活Artifact误入队列拒绝与旧子运行整组关系清理断言，最终cleanup-family-final.tap八项全部通过。双端构建cleanup-build-final.log与根检查cleanup-check-final.log通过。首轮完整格式检查缺一处函数空行，已纠正并保留cleanup-format-final.log。早期容量测试旧decoder/index、Provider空模型fixture等首次失败与后续修复均保留在同任务目录，不算首次全部通过。
 
-运行/更新/生命周期、只读子Run与完整跨实例备份的cleanup-runtime-final.tap共45项通过（包含备份子场景，不另行相加）。活Artifact断言首次直接比较SQLite无原型行与普通对象而失败，改为严格比对ID集合，保留原失败记录；完整格式又发现原容量用例残留排版，已纠正。远程750项矩阵、发布结果继续按实际执行回填；本节不以旧749项通过代替新SHA。产物均位于/home/honus/nexus-task-artifacts/agent-sdk4-review-20261107，原CDP现场及失败证据继续保留。
+运行/更新/生命周期、只读子Run与完整跨实例备份的cleanup-runtime-final.tap共45项通过（包含备份子场景，不另行相加）。活Artifact断言首次直接比较SQLite无原型行与普通对象而失败，改为严格比对ID集合，保留原失败记录；完整格式又发现原容量用例残留排版，已纠正。最终远程750项矩阵与发布结果见下文；本节不以旧749项通过代替新SHA。产物均位于/home/honus/nexus-task-artifacts/agent-sdk4-review-20261107，原CDP现场及失败证据继续保留。
 
 追加消费者扫描发现两处正式测试残留：context preference用例直接升级到最新后仍要求已授权删除的旧Run保留；Job故障用例与fixture仍查询旧工具表。前者先验证32/59至v60的原始事实和设置转换，再验证61–63清除旧App/历史，保留Provider与全局设置；后者改为检查真实Operation不存在accepted/dispatched残留，移除旧p_工具名分支和废弃table白名单。cleanup-context-first.tap保留首次失败，cleanup-consumers-final.tap的12项全部通过。
 
-原[E2E42446129564](https://github.com/0honus0/nexus-terminal/actions/runs/42446129564)因上述用例修正主动取消，不计为完整通过。补齐无安装记录的旧App定义清理：只删除引用旧包或缺少准确包ledger且已无App使用的定义，保留仍使用或有SDK4来源的定义；该SQL仍在尚未发布的迁移63中。新增fixture同时覆盖此类旧App以及完整当前快照。后续从新提交重跑完整矩阵，原失败及取消证据均保留。
+原[E2E42446129564](https://github.com/0honus0/nexus-terminal/actions/runs/42446129564)因上述用例修正主动取消，不计为完整通过。补齐无安装记录的旧App定义清理：只删除引用旧包或缺少准确包ledger且已无App使用的定义，保留仍使用或有SDK4来源的定义；该SQL在当时尚未发布的迁移63中。新增fixture同时覆盖此类旧App以及完整当前快照。后续从新提交重跑完整矩阵，原失败及取消证据均保留。
 
 完整[E2E42446441838](https://github.com/0honus0/nexus-terminal/actions/runs/42446441838)验证19d26dcd：质量、Docker smoke与七个Browser分片成功，530项浏览器记录逐项核对；全矩阵750项中749通过，唯一失败的App phase ledger wrapper重试仍失败，不能算通过。原因是底层run-app-storage-fixture仍写retired来源，旧断言仍要求解码成功；本轮严格解码已拒绝该结构。夹具改为当前SDK4来源，保留全部41项检查点/回执/历史隔离/子效果/模型推理断言，将旧断言改为损坏来源拒绝派发且原检查点字节不被修改；cleanup-ledger-corrected.tap共41项通过。生产源码没有因此修改或放宽。
 
-最终消费者补扫的cleanup-upgrade-closeout.tap共32项通过，包含最新迁移、无安装旧App定义、精确快照和完整备份；cleanup-check-consumers.log及cleanup-format-consumers.log通过。前述不同组合存在交集，不将总数相加作唯一场景数。将从下一提交重新运行完整750项，不复用旧530项替代新提交验收。
+后续[E2E42448031357](https://github.com/0honus0/nexus-terminal/actions/runs/42448031357)验证4fc39adb，Browser 1的无token CAPTCHA用例首次失败、重试通过，后端随后因新提交触发并发取消，该轮不能作为全绿验收。首次trace记录点击坐标y=476.21；定位后真实hCaptcha iframe异步插入，占据y=401.22–477.22，点击实际落在iframe且焦点进入验证码，表单没有提交。用例增加真实iframe内未勾选checkbox就绪断言后再点击；保留无token不发送凭据、唯一提示与文案断言，不用sleep、强制派发、重试点击或修改产品UI换绿。首次trace、截图、录像与日志保存在本轮e2e-42448031357目录，新SHA完整矩阵结果见下文。
+
+最终消费者补扫的cleanup-upgrade-closeout.tap共32项通过，包含最新迁移、无安装旧App定义、精确快照和完整备份；cleanup-check-consumers.log及cleanup-format-consumers.log通过。前述不同组合存在交集，不将总数相加作唯一场景数。最终完整750项结果见下文，不以此前530项替代新提交验收。
+
+最终[E2E42448869600](https://github.com/0honus0/nexus-terminal/actions/runs/42448869600)验证545b2e474058cdcd6b7c6fb3b5f406bde6c0345c：Backend 220项、Browser 530项，共750项全部首次通过；质量、双端构建、Docker smoke、八个分片和耗时汇总成功。e2e-final-42448869600.log及Reporter清单逐项核对750个唯一场景，零失败、重试、flaky、跳过或遗漏。CAPTCHA用例仅修正真实控件异步加载的同步条件，产品代码与UI没有因此改动；captcha-sync-check.log、captcha-sync-format.log及git diff --check通过。
+
+[发布42450721459](https://github.com/0honus0/nexus-terminal/actions/runs/42450721459)成功，来源`0cb0c252e13540517802a369dacc845f2258b389`。相对被测545b2e47只增加CI自动更新的`scripts/e2e/duration-estimates.json`；生产依赖审计与镜像构建推送成功。`ghcr.io/0honus0/nexus-terminal:dev`与`sha-0cb0c252e135`同为`sha256:c39e574678c3139a0cf71b0fea9863efa2c72cf68a3357c7cde28b8c18b54fa1`。唯一产品平台linux/amd64的manifest为`sha256:d4af10db9a17eda469a3cce43debd845844efae2c3296b1f742ea76e8e1230e6`，config为`sha256:1d81fa766798593d4308a4323d4d0dbcd019b73e94424b14b69243a48c1c7239`；只读验证真实字节摘要、平台与OCI revision/source，未拉取完整镜像。证据在本轮delivery-20261108/publication的image-publish-run.json、image-verification.json及日志。
+
+最终代码、迁移、正式消费者及文档已同步，源码与架构边界审核已完成。官方插件源码550e4e0b的Validate42394503906与v2.0.2发布再次只读确认；本批没有公开SDK或插件实现变更，不重复发布插件。当前SDK4与非Agent数据保留，旧Agent历史按用户授权在升级迁移时清除；正常UI不变。首次失败、取消记录和指定CDP现场均保留，未部署生产；真实设备、模型效果及介质/负载等未验边界仍按PLAN维护。
