@@ -254,6 +254,11 @@ test('login CAPTCHA requires a token before sending first-factor credentials', a
 			await loadLoginWithCaptcha(page, { enabled: true, provider: 'hcaptcha' });
 			await expect(page.getByRole('heading', { name: 'Welcome back', exact: true })).toBeVisible();
 			await expect(page.getByText('Please complete the verification below:', { exact: true })).toBeVisible();
+			// The provider inserts its iframe asynchronously and moves the submit button.
+			// Wait for the real unchecked widget before choosing the click coordinates.
+			const checkbox = page.frameLocator('iframe[title*="hCaptcha security challenge"]').locator('#checkbox');
+			await expect(checkbox).toBeVisible();
+			await expect(checkbox).not.toBeChecked();
 			await expect(page.getByRole('button', { name: 'Login', exact: true })).toBeEnabled();
 		});
 

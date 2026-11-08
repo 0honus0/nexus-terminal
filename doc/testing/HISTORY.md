@@ -2093,6 +2093,8 @@ Node 26.13.0/pnpm 12.16.1；`build.log` 与 `browser.log` 包含 Shared、Backen
 
 ## 旧 Agent 数据删除与 SDK4 收口（2026-11-08）
 
+后续[E2E42448031357](https://github.com/0honus0/nexus-terminal/actions/runs/42448031357)验证4fc39adb，Browser 1的无token CAPTCHA用例首次失败、重试通过，该轮不能作为全绿验收。首次trace记录点击坐标y=476.21；定位后真实hCaptcha iframe异步插入，占据y=401.22–477.22，点击实际落在iframe且焦点进入验证码，表单没有提交。用例增加真实iframe内未勾选checkbox就绪断言后再点击；保留无token不发送凭据、唯一提示与文案断言，不用sleep、强制派发、重试点击或修改产品UI换绿。首次trace、截图、录像与日志保存在本轮e2e-42448031357目录，完整新SHA矩阵仍需重新运行。
+
 用户选择清空旧Agent历史并允许破坏性更新。追加迁移61（附件文件删除意图）、62（旧运行及执行表）、63（旧App/插件档案）；已发布1–60的SQL、签名和执行记录不改写。删除旧运行家族、引用旧代码依赖的运行与关联记忆，不转换旧执行状态。SDK4历史、配置、当前未知效果围栏与非Agent账户保留；当前仍使用的input_text保留。移除旧行解码、快照注册、集中集成及固定模型步骤类型；历史迁移实际依赖的SQL/helper继续保留。
 
 清理前完整[E2E42406049103](https://github.com/0honus0/nexus-terminal/actions/runs/42406049103)验证bed7cd0a共749项，一次全部通过，无失败、重试、flaky、场景跳过或遗漏。原[发布42444183561](https://github.com/0honus0/nexus-terminal/actions/runs/42444183561)因追加清理已取消，不作为本轮发布证据。
