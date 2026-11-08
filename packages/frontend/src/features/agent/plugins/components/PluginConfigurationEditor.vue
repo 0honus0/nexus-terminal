@@ -63,11 +63,11 @@
 		<UiFormField v-for="field in fields" :key="field.key" :label="field.label" :description="field.description">
 			<UiCheckbox
 				v-if="field.type === 'boolean'"
+				:aria-label="field.label"
 				:model-value="document[field.key] === true"
 				:disabled="disabled"
 				@update:model-value="update(field.key, $event)"
-				>{{ field.label }}</UiCheckbox
-			>
+			/>
 			<UiSelect
 				v-else-if="field.options.length"
 				:model-value="text(field.key, false)"

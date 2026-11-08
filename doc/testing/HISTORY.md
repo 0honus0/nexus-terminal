@@ -21,8 +21,10 @@
 - `check-final-third.log`、`format-all-final-second.log`与双端build通过。此前两次在Shared重建删除dist时并行执行另一消费者导致环境失败，改为顺序执行后通过，未放宽类型或改产品构建契约。
 - 插件首批 `1843c3df` 的完整check/build与100项测试通过，正式Validate42458001647成功；Browser2.1.0及catalog-20261108已发布并真实验签。指定CDP发现320px设置fieldset的min-content默认宽度造成溢出，另发现复选框不支持文字插槽、表单说明应使用description；在源码修正并以新版本2.1.1交付，原2.1.0签名产物不改写。
 - 插件源码 `478b31c2` 的Validate42458902661与签名发布42459026198成功；Browser2.1.1归档摘要 `480063dac69b232cec8b5e4e0cb5ae21f40b7f798a6be140027634488c15dac8`，正式fixture原字节复制且签名/逐文件hash/完整tar重建均通过，见 `pin-2.1.1.log`。`local-e2e-mobile-first.log`正式Playwright入口7项一次全过，含三语市场、缺译回退、移动设置的非法明文拒绝、优先级800保存/重开、可见说明/标签与无横向溢出。
+- 插件源码 `4dee500a` 的Validate42459303193及Aggregate catalog42459302603成功；公开latest `catalog-20261108-2`保留此前全部12项并新增Browser2.1.1，13项均有三语说明。`catalog-reaggregation-tests.log`17项通过，`catalog-reaggregation-live.log`使用真实公开旧目录和新签包连续链聚合成功，原摘要与版本保留。
+- 截图复核发现宿主插件启用、未知操作确认和卸载清数据选项同样误用UiCheckbox插槽，已改为可见且关联控件的标签；通用配置布尔项沿已有表单标签并补可访问名称。`check-host-labels.log`、`build-host-labels.log`通过，`local-e2e-host-label-text.log`一项通过，覆盖点击清理文字切换勾选、取消卸载及设置保存重开。19a76674的首次本体远程42459304789因追加此UI缺陷修复而主动取消，不计通过；最终完整远程待后续SHA回填。
 - 新目录首次聚合42459106697失败，旧目录翻译文案被误按签名发行元数据作整项比较；修复为独立投影可执行身份和展示文案，继续核对原签名/摘要/兼容声明，不修改已发布归档。新增连续两次聚合翻译的回归，并保留首次失败日志 `catalog-mobile-first-failed.log`。
-- 三语市场1440px英文、320px中文和390px日文已通过真实偏好及公开目录显示、卡片/标签/页面宽度检查，截图为 `market-final-*.png`。首次设置页失败保留 `cdp-acceptance-first.log`、`browser-overflow-first.png`；修复后签名安装、保存重开及无溢出结果另行回填，不能把浏览器临时样式探测当作正式修复验收。
+- 三语市场1440px英文、320px中文和390px日文已通过真实偏好及公开目录显示、卡片/标签/页面宽度检查，截图为 `market-final-*.png`。首次设置页失败保留 `cdp-acceptance-first.log`、`browser-overflow-first.png`；最终正式2.1.1经真实prepare-update/update安装后，三语市场与320px设置保存、优先级800、说明与选项文字、无溢出和零pageerror通过，见 `cdp-acceptance.json`、`cdp-acceptance-final-second.log` 与 `browser-settings-final-320.png`。第二次脚本误用三击选中导致输入追加、首次宿主标签断言早于设置读取完成，均修正验收脚本后通过，首次日志保留；不将这些自动化操作问题计为产品缺陷。
 
 ## Agent 限制复审与容量回归（2026-11-07）
 

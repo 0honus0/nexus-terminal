@@ -1032,7 +1032,14 @@
 		</UiInlineNotice>
 		<UiInlineNotice v-if="unknown" tone="warning">
 			<p>{{ t('agent.pluginManagement.unknown') }}</p>
-			<UiCheckbox v-model="acknowledged">{{ t('agent.pluginManagement.acknowledge') }}</UiCheckbox>
+			<label class="inline-flex min-w-0 items-start gap-2 text-sm text-foreground">
+				<UiCheckbox
+					v-model="acknowledged"
+					class="shrink-0"
+					:aria-label="t('agent.pluginManagement.acknowledge')"
+				/>
+				<span class="min-w-0">{{ t('agent.pluginManagement.acknowledge') }}</span>
+			</label>
 			<UiButton
 				type="button"
 				:disabled="operation.busy.value || operation.refreshRequired.value || !acknowledged"
@@ -1055,9 +1062,18 @@
 			:close-on-escape="!clearing"
 			@close="packageRemoval = null"
 		>
-			<UiCheckbox v-if="removalPackage?.status !== 'removed'" v-model="clearPackageData" :disabled="clearing">{{
-				t('agent.settings.plugins.clearPackageData')
-			}}</UiCheckbox>
+			<label
+				v-if="removalPackage?.status !== 'removed'"
+				class="inline-flex min-w-0 items-start gap-2 text-sm text-foreground"
+			>
+				<UiCheckbox
+					v-model="clearPackageData"
+					class="shrink-0"
+					:aria-label="t('agent.settings.plugins.clearPackageData')"
+					:disabled="clearing"
+				/>
+				<span class="min-w-0">{{ t('agent.settings.plugins.clearPackageData') }}</span>
+			</label>
 			<p class="text-sm leading-relaxed text-text-secondary">
 				{{ t('agent.settings.plugins.packageDataScope') }}
 			</p>

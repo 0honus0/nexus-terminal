@@ -244,14 +244,16 @@
 					t('agent.settings.plugins.settings.addInstance')
 				}}</UiButton>
 			</div>
-			<UiCheckbox
-				v-if="source"
-				:aria-label="t('agent.settings.plugins.settings.enabled')"
-				:model-value="source.instance.enabled"
-				:disabled="busy || uncertain"
-				@update:model-value="enabled"
-				>{{ t('agent.settings.plugins.settings.enabled') }}</UiCheckbox
-			>
+			<label v-if="source" class="inline-flex min-w-0 items-start gap-2 text-sm text-foreground">
+				<UiCheckbox
+					class="shrink-0"
+					:aria-label="t('agent.settings.plugins.settings.enabled')"
+					:model-value="source.instance.enabled"
+					:disabled="busy || uncertain"
+					@update:model-value="enabled"
+				/>
+				<span class="min-w-0">{{ t('agent.settings.plugins.settings.enabled') }}</span>
+			</label>
 			<PluginConnectionEditor
 				v-if="source?.connectionKinds.length"
 				:key="source.instance.id"

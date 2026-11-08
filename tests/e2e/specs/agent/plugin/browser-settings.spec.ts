@@ -36,6 +36,8 @@ test('Browser plugin owns mobile CDP settings and persists only valid instance c
 	const selector = dialog.getByRole('combobox', { name: 'App using this plugin', exact: true });
 	if ((await selector.getAttribute('data-value')) !== installed.appId)
 		await selectUiOption(selector, installed.appId);
+	await expect(dialog.getByText('Enable this instance', { exact: true })).toBeVisible();
+	await expect(dialog.getByRole('checkbox', { name: 'Enable this instance', exact: true })).toBeChecked();
 	const frame = dialog.frameLocator('iframe[title="Plugin settings"]');
 	await frame.getByRole('button', { name: 'Add target', exact: true }).click();
 	await frame.getByRole('textbox', { name: 'Target ID', exact: true }).fill('review');
@@ -74,4 +76,12 @@ test('Browser plugin owns mobile CDP settings and persists only valid instance c
 	await row.getByRole('button', { name: 'Settings', exact: true }).click();
 	await expect(frame.getByRole('textbox', { name: 'Target ID', exact: true })).toHaveValue('review');
 	await expect(frame.getByRole('spinbutton', { name: 'Priority', exact: true })).toHaveValue('800');
+	await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+	await row.getByRole('button', { name: 'Uninstall package', exact: true }).click();
+	await expect(page.getByText('Also clear retained data for this package', { exact: true })).toBeVisible();
+	await page.getByText('Also clear retained data for this package', { exact: true }).click();
+	await expect(
+		page.getByRole('checkbox', { name: 'Also clear retained data for this package', exact: true }),
+	).toBeChecked();
+	await page.getByRole('button', { name: 'Cancel', exact: true }).click();
 });

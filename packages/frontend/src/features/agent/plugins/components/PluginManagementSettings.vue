@@ -146,7 +146,14 @@
 
 			<UiInlineNotice v-if="!candidate && mutationUnknown" tone="warning">
 				<p>{{ t('agent.pluginManagement.unknown') }}</p>
-				<UiCheckbox v-model="acknowledged">{{ t('agent.pluginManagement.acknowledge') }}</UiCheckbox>
+				<label class="inline-flex min-w-0 items-start gap-2 text-sm text-foreground">
+					<UiCheckbox
+						v-model="acknowledged"
+						class="shrink-0"
+						:aria-label="t('agent.pluginManagement.acknowledge')"
+					/>
+					<span class="min-w-0">{{ t('agent.pluginManagement.acknowledge') }}</span>
+				</label>
 				<UiButton
 					type="button"
 					:disabled="operation.busy.value || operation.refreshRequired.value || !acknowledged"
@@ -294,7 +301,14 @@
 
 				<UiInlineNotice v-if="mutationUnknown" tone="warning">
 					<p>{{ t('agent.pluginManagement.unknown') }}</p>
-					<UiCheckbox v-model="acknowledged">{{ t('agent.pluginManagement.acknowledge') }}</UiCheckbox>
+					<label class="inline-flex min-w-0 items-start gap-2 text-sm text-foreground">
+						<UiCheckbox
+							v-model="acknowledged"
+							class="shrink-0"
+							:aria-label="t('agent.pluginManagement.acknowledge')"
+						/>
+						<span class="min-w-0">{{ t('agent.pluginManagement.acknowledge') }}</span>
+					</label>
 					<UiButton
 						type="button"
 						:disabled="operation.busy.value || operation.refreshRequired.value || !acknowledged"
