@@ -33,3 +33,7 @@ Linux 的 Chromium 临时目录须容纳实际 Unix socket 路径长度；任务
 CI以统一8个runner执行模块/协议/本体浏览器/插件互操作/插件浏览器，第1分片额外运行真实Docker。质量作业只构建及签候选一次，分片复用准确成品；根`test:all`仅串接本体检查，不包括插件仓及独立Docker部署smoke。插件业务浏览器通过公开`support/plugins/browser-config.ts`复用Host测试成品，页面helper在`e2e/support/agent-host/`，任务工程唯一归插件仓。
 
 插件独立CI同样构建签包一次，再由八个容器执行Node互操作和Playwright原生分片，复用成功Host E2E的准确源码及不可变产物。逐片核对原生报告与组合，不能将发现、无场景分片或局部重跑当作完整覆盖。当前耗时及未达性能目标见测试基线。
+
+CI的原生协议与模块/浏览器链重叠执行，浏览器两仓仍顺序启动；`scripts/e2e/run-test-shard.sh`只装配这两条链，框架继续负责发现、分片和断言。`metrics/`保留GNU time的CPU、墙钟与最大单进程RSS，外层shard和分层数据不能重复求和；cgroup内存峰值不等于聚合RSS。运行这些Linux CI脚本的本地回归需GNU time（默认`/usr/bin/time`，可用`NEXUS_TEST_TIME_COMMAND`指定）。
+
+手动门禁的`dependency_cache=cold`只关闭质量作业的pnpm依赖缓存恢复；`warm`恢复正常缓存。两种模式都重跑全部测试，保留相同的预装runner镜像依赖；这不是清空OS页缓存、镜像层或公网服务缓存。严格对照必须核对同一源码、插件SHA、不可变runner digest及实际资源。

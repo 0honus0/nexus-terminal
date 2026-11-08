@@ -54,6 +54,12 @@ on:
           - '8'
           - '9'
           - '10'
+      dependency_cache:
+        description: Quality job dependency cache (runner image remains identical)
+        required: true
+        default: warm
+        type: choice
+        options: [warm, cold]
       refresh_screenshots:
         description: Capture and update documentation screenshots
         required: true
@@ -77,7 +83,7 @@ jobs:
       contents: read
       packages: write
     outputs:
-      image: ${{ steps.image.outputs.image }}
+      image: ${{ steps.pinned-image.outputs.image }}
       matrix: ${{ steps.matrix.outputs.value }}
     steps:
       - name: Checkout repository
@@ -142,10 +148,21 @@ jobs:
           E2E_RUNNER_REPOSITORY: ghcr.io/${{ github.repository_owner }}/nexus-terminal-e2e-runner
         run: scripts/e2e/build-runner-image.sh
 
+      - name: Pin the immutable runner image for every shard
+        id: pinned-image
+        env:
+          RUNNER_IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          digest="$(docker buildx imagetools inspect "$RUNNER_IMAGE" --format '{{json .Manifest}}' | node -e 'let s=""; for await (const c of process.stdin) s+=c; const d=JSON.parse(s).digest; if (!/^sha256:[a-f0-9]{64}$/.test(d)) throw Error("Invalid image digest"); process.stdout.write(d)' --input-type=module)"
+          echo "image=${RUNNER_IMAGE%:*}@$digest" >> "$GITHUB_OUTPUT"
+          echo "Pinned runner $RUNNER_IMAGE@$digest"
+
   quality:
     name: Checks and format
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      NEXUS_TEST_METRICS: ${{ github.workspace }}/tests/e2e/.tmp/quality-metrics
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
@@ -154,15 +171,15 @@ jobs:
         uses: pnpm/setup@v3.1.2
         with:
           node-version-file: .node-version
-          cache: true
+          cache: ${{ github.event_name != 'workflow_dispatch' || inputs.dependency_cache != 'cold' }}
           install: false
 
       - name: Install workspace dependencies
-        run: pnpm install --frozen-lockfile
+        run: bash scripts/e2e/measure-command.sh "$NEXUS_TEST_METRICS/install.json" pnpm install --frozen-lockfile
 
       - name: Build test application once
         run: |
-          pnpm --filter @nexus-terminal/tests build
+          bash scripts/e2e/measure-command.sh "$NEXUS_TEST_METRICS/build.json" pnpm --filter @nexus-terminal/tests build
           node scripts/e2e/host-test-artifact.mjs write "$GITHUB_SHA"
 
       - name: Checkout plugin test owners
@@ -175,9 +192,9 @@ jobs:
       - name: Build and sign plugin candidates once
         working-directory: tests/e2e/.tmp/plugin-source
         run: |
-          pnpm install --frozen-lockfile
-          pnpm build
-          pnpm prepare:interop ../plugin-candidates
+          bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-install.json" pnpm install --frozen-lockfile
+          bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-build.json" pnpm build
+          bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-sign.json" pnpm prepare:interop ../plugin-candidates
           git rev-parse HEAD > ../plugin-candidates/source.sha
           tar --exclude=node_modules --exclude=.git -czf ../plugin-test-source.tar.gz .
 
@@ -209,11 +226,11 @@ jobs:
         env:
           NEXUS_TEST_PLUGIN_SOURCE_ROOT: ${{ github.workspace }}/tests/e2e/.tmp/plugin-source
         run: |
-          pnpm run check
-          pnpm test:fast
+          bash scripts/e2e/measure-command.sh "$NEXUS_TEST_METRICS/check.json" pnpm run check
+          bash scripts/e2e/measure-command.sh "$NEXUS_TEST_METRICS/fast.json" pnpm test:fast
 
       - name: Check formatting
-        run: pnpm run format:all:check
+        run: bash scripts/e2e/measure-command.sh "$NEXUS_TEST_METRICS/format.json" pnpm run format:all:check
 
       - name: Check plugin source and independent package behavior
         working-directory: tests/e2e/.tmp/plugin-source
@@ -222,9 +239,9 @@ jobs:
           NEXUS_TEST_HOST_ROOT: ${{ github.workspace }}
           NEXUS_TEST_PLUGIN_SET: ${{ github.workspace }}/tests/e2e/.tmp/plugin-candidates/staging-1
         run: |
-          pnpm check
-          pnpm test
-          pnpm check:browser
+          bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-check.json" pnpm check
+          bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-test.json" pnpm test
+          bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-browser-check.json" pnpm check:browser
 
       - name: Upload plugin source test reports
         if: always()
@@ -234,6 +251,15 @@ jobs:
           path: tests/e2e/.tmp/plugin-quality/
           if-no-files-found: error
           retention-days: 7
+
+      - name: Upload quality resource measurements
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: quality-metrics-${{ github.run_attempt }}
+          path: tests/e2e/.tmp/quality-metrics/
+          if-no-files-found: error
+          retention-days: 14
 
   tests:
     name: Tests shard ${{ matrix.shard }}
@@ -260,6 +286,9 @@ jobs:
       NEXUS_AGENT_ACCEPTANCE_ROOT: ${{ github.workspace }}/tests/e2e/.tmp/layers
       NEXUS_TEST_DOCKER_NATIVE: backend/remote/docker/protocol/docker.native.test.mjs
       NEXUS_TEST_FINITE_FS_NATIVE: backend/remote/sessions/suspend/storage/suspended-log-enospc.native.test.mjs
+      NEXUS_TEST_HOST_ROOT: ${{ github.workspace }}
+      NEXUS_TEST_PLUGIN_SOURCE_ROOT: ${{ github.workspace }}/tests/e2e/.tmp/plugin-source
+      NEXUS_TEST_PLUGIN_SET: ${{ github.workspace }}/tests/e2e/.tmp/plugin-validation-artifact/plugin-candidates/staging-1
       NEXUS_E2E_PREBUILT: '1'
       E2E_CAPTURE_SCREENSHOTS: ${{ github.event_name == 'workflow_dispatch' && inputs.refresh_screenshots && '1' || '0' }}
       E2E_SCREENSHOT_OUTPUT_DIR: .tmp/functional-screenshots
@@ -357,114 +386,34 @@ jobs:
           pnpm install --frozen-lockfile --prefer-offline
           node "$GITHUB_WORKSPACE/scripts/e2e/host-test-artifact.mjs" verify "$GITHUB_SHA"
 
-      - name: Run module shard
-        id: module-shard
+      - name: Run independent protocol and module-browser lanes
         if: ${{ !cancelled() && steps.application-download.outcome == 'success' }}
-        working-directory: tests
         shell: bash
         run: |
-          mkdir -p "$NEXUS_TEST_ARTIFACT_DIR/reports"
-          pnpm run test:modules --shard "${{ matrix.shard }}/${{ matrix.shards }}"
+          bash scripts/e2e/measure-command.sh "$NEXUS_TEST_ARTIFACT_DIR/metrics/shard.json" \
+            bash scripts/e2e/run-test-shard.sh "${{ matrix.shard }}" "${{ matrix.shards }}"
 
-      - name: Retain module failure before long protocol tests
-        if: ${{ !cancelled() && steps.module-shard.outcome == 'failure' }}
-        uses: actions/upload-artifact@v7.0.2
-        with:
-          name: module-failure-${{ matrix.shard }}-${{ github.run_attempt }}
-          include-hidden-files: true
-          path: |
-            tests/e2e/.tmp/layers/reports/vitest.json
-            tests/e2e/.tmp/layers/**/ssh.log
-            tests/e2e/.tmp/layers/**/timings.json
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Run native protocol shard
-        if: ${{ !cancelled() && steps.application-download.outcome == 'success' }}
-        working-directory: tests
-        shell: bash
-        run: |
-          mkdir -p "$NEXUS_TEST_ARTIFACT_DIR/reports"
-          mapfile -d '' native_files < <(find backend tooling -type f -name '*.native.test.mjs' \
-            ! -path "$NEXUS_TEST_DOCKER_NATIVE" ! -path "$NEXUS_TEST_FINITE_FS_NATIVE" -print0 | sort -z)
-          test "${#native_files[@]}" -ge "${{ matrix.shards }}"
-          node --test --test-concurrency=1 --test-shard="${{ matrix.shard }}/${{ matrix.shards }}" \
-            --test-reporter=spec --test-reporter=junit \
-            --test-reporter-destination=stdout \
-            --test-reporter-destination="$NEXUS_TEST_ARTIFACT_DIR/reports/native.xml" "${native_files[@]}"
-
-      - name: Run finite filesystem faults
-        if: ${{ !cancelled() && matrix.shard == 1 && steps.application-download.outcome == 'success' }}
-        working-directory: tests
-        run: |
-          node --test --test-reporter=spec --test-reporter=junit \
-            --test-reporter-destination=stdout \
-            --test-reporter-destination="$NEXUS_TEST_ARTIFACT_DIR/reports/native-filesystem.xml" \
-            "$NEXUS_TEST_FINITE_FS_NATIVE"
-
-      - name: Prepare real Docker fixture
-        id: docker-fixture
-        if: ${{ !cancelled() && matrix.shard == 1 && steps.application-download.outcome == 'success' }}
-        shell: bash
-        run: |
-          mkdir -p "$NEXUS_TEST_ARTIFACT_DIR/reports"
-          docker version
-          docker pull alpine:latest
-
-      - name: Run real Docker protocol tests
-        if: ${{ !cancelled() && steps.docker-fixture.outcome == 'success' }}
-        working-directory: tests
-        run: |
-          node --test --test-reporter=spec --test-reporter=junit \
-            --test-reporter-destination=stdout \
-            --test-reporter-destination="$NEXUS_TEST_ARTIFACT_DIR/reports/docker-native.xml" "$NEXUS_TEST_DOCKER_NATIVE"
-
-      - name: Run real Docker module tests
-        if: ${{ !cancelled() && steps.docker-fixture.outcome == 'success' }}
-        working-directory: tests
+      - name: Record shard resource environment
+        if: always()
         env:
-          NEXUS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/tests/e2e/.tmp/layers/docker-module
-        run: pnpm run test:docker
-
-      - name: Run balanced E2E shard ${{ matrix.shard }}
-        if: ${{ !cancelled() && steps.application-download.outcome == 'success' }}
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          E2E_SPEC_DURATIONS_PATH: test-results/spec-durations.json
-        shell: bash
+          PINNED_RUNNER_IMAGE: ${{ needs.e2e-runner-image.outputs.image }}
+          DEPENDENCY_CACHE: ${{ inputs.dependency_cache || 'warm' }}
         run: |
-          set -o pipefail
-          mkdir -p tests/e2e/.tmp
-          node scripts/e2e/balanced-shards.mjs run \
-            --shards "${{ matrix.shards }}" \
-            --shard "${{ matrix.shard }}" \
-            2>&1 | tee tests/e2e/.tmp/shard-server.log
-
-      - name: Run plugin interoperability shard
-        if: ${{ !cancelled() && steps.application-download.outcome == 'success' }}
-        working-directory: tests/e2e/.tmp/plugin-source
-        env:
-          NEXUS_TEST_HOST_ROOT: ${{ github.workspace }}
-          NEXUS_TEST_PLUGIN_SET: ${{ github.workspace }}/tests/e2e/.tmp/plugin-validation-artifact/plugin-candidates/staging-1
-          NEXUS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/tests/e2e/.tmp/layers/plugin-interop
-        run: |
-          mkdir -p "$NEXUS_TEST_ARTIFACT_DIR/reports"
-          node --test --test-concurrency=1 --test-shard="${{ matrix.shard }}/${{ matrix.shards }}" \
-            --test-reporter=spec --test-reporter=junit \
-            --test-reporter-destination=stdout \
-            --test-reporter-destination="$NEXUS_TEST_ARTIFACT_DIR/reports/interop.xml" \
-            'tests/interoperability/**/*.native.test.mjs'
-
-      - name: Run plugin browser shard
-        if: ${{ !cancelled() && steps.application-download.outcome == 'success' }}
-        working-directory: tests/e2e/.tmp/plugin-source
-        env:
-          NEXUS_TEST_HOST_ROOT: ${{ github.workspace }}
-          NEXUS_TEST_PLUGIN_SET: ${{ github.workspace }}/tests/e2e/.tmp/plugin-validation-artifact/plugin-candidates/staging-1
-          NEXUS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/tests/e2e/.tmp/layers/plugin-browser
-          NEXUS_E2E_DATA_ROOT: ${{ github.workspace }}/tests/e2e/.tmp/layers/plugin-browser/backend
-        run: |
-          pnpm test:browser --shard "${{ matrix.shard }}/${{ matrix.shards }}"
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import os from 'node:os';
+          const read = (path) => fs.existsSync(path) ? fs.readFileSync(path, 'utf8').trim() : null;
+          const root = process.env.NEXUS_TEST_ARTIFACT_DIR + '/metrics';
+          fs.mkdirSync(root, { recursive: true });
+          fs.writeFileSync(root + '/environment.json', JSON.stringify({
+            sha: process.env.GITHUB_SHA, runnerImage: process.env.PINNED_RUNNER_IMAGE,
+            fingerprint: process.env.E2E_RUNNER_FINGERPRINT, dependencyCache: process.env.DEPENDENCY_CACHE,
+            node: process.version, cpus: os.availableParallelism(), memoryBytes: os.totalmem(),
+            cgroupMemoryPeakBytes: read('/sys/fs/cgroup/memory.peak') ?? read('/sys/fs/cgroup/memory/memory.max_usage_in_bytes'),
+            cgroupMemoryLimitBytes: read('/sys/fs/cgroup/memory.max'),
+            cgroupCpuMax: read('/sys/fs/cgroup/cpu.max'),
+          }, null, 2));
+          JS
 
       - name: Upload E2E spec timings
         if: always()
@@ -481,6 +430,7 @@ jobs:
         with:
           name: test-layers-${{ matrix.shard }}-${{ github.run_attempt }}
           path: |
+            tests/e2e/.tmp/layers/metrics/*
             tests/e2e/.tmp/layers/**/reports/*
             tests/e2e/.tmp/layers/**/browser/report.json
             tests/e2e/.tmp/layers/**/*combination.json
