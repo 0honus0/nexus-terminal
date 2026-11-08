@@ -22,7 +22,7 @@ export function createStatusMonitorSession(channel: StatusChannel, maxSamples = 
 	let consumerCount = 0;
 	let workspaceAvailable = false;
 	let sampling = false;
-	let startFailed = false;
+	let needsReconciliation = false;
 	let disposed = false;
 	let generation = 0;
 	let operation = Promise.resolve();
@@ -78,14 +78,14 @@ export function createStatusMonitorSession(channel: StatusChannel, maxSamples = 
 				if (owner !== generation) {
 					return;
 				}
-				// A failed receipt can still leave the original remote subscription installed.
+				// Either receipt can fail after the remote subscription changed.
 				// Drain that owner before retrying; a failed stop must not permit replacement.
-				if (startFailed) {
+				if (needsReconciliation) {
 					await channel.stop();
 					if (owner !== generation) {
 						return;
 					}
-					startFailed = false;
+					needsReconciliation = false;
 					sampling = false;
 				}
 				const desired = desiredSampling();
@@ -93,9 +93,18 @@ export function createStatusMonitorSession(channel: StatusChannel, maxSamples = 
 					return;
 				}
 				if (!desired) {
-					sampling = false;
 					if (workspaceAvailable) {
-						await channel.stop();
+						try {
+							await channel.stop();
+						} catch (cause) {
+							if (owner === generation) {
+								needsReconciliation = true;
+							}
+							throw cause;
+						}
+					}
+					if (owner === generation) {
+						sampling = false;
 					}
 					return;
 				}
@@ -106,7 +115,7 @@ export function createStatusMonitorSession(channel: StatusChannel, maxSamples = 
 					await channel.start();
 				} catch (cause) {
 					if (owner === generation) {
-						startFailed = true;
+						needsReconciliation = true;
 					}
 					throw cause;
 				}
@@ -166,7 +175,7 @@ export function createStatusMonitorSession(channel: StatusChannel, maxSamples = 
 		generation += 1;
 		workspaceAvailable = false;
 		sampling = false;
-		startFailed = false;
+		needsReconciliation = false;
 		current.value = null;
 		error.value = null;
 		history.value = emptyHistory();

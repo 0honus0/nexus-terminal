@@ -136,3 +136,36 @@ test('failed cleanup prevents replacement, while explicit later retry first drai
 	expect(channel.start).toHaveBeenCalledTimes(2);
 	expect(calls).toEqual(['failed-stop', 'stop']);
 });
+
+test('a lost normal stop receipt is reconciled before reactivation starts a new subscription', async () => {
+	const calls = [];
+	let remoteActive = false;
+	const { channel, controller } = fixture({
+		start: vi.fn(async () => {
+			calls.push('start');
+			remoteActive = true;
+		}),
+		stop: vi
+			.fn()
+			.mockImplementationOnce(async () => {
+				remoteActive = false;
+				calls.push('lost-stop');
+				throw new StatusFailure('remote_unavailable');
+			})
+			.mockImplementation(async () => {
+				remoteActive = false;
+				calls.push('stop');
+			}),
+	});
+	controller.activate();
+	await controller.workspaceConnected();
+	controller.deactivate();
+	await vi.advanceTimersByTimeAsync(30_000);
+	expect(controller.error.value).toBe('remote_unavailable');
+	expect(remoteActive).toBe(false);
+	controller.activate();
+	await controller.workspaceConnected();
+	expect(channel.start).toHaveBeenCalledTimes(2);
+	expect(calls).toEqual(['start', 'lost-stop', 'stop', 'start']);
+	expect(remoteActive).toBe(true);
+});
