@@ -2484,3 +2484,9 @@ Webhook秘密契约已下沉到真实原生HTTP/SQLite/投递层：`webhook-owne
 另发现5组不同describe下同名用例共用镜像日志文件；Reporter文件名加入Playwright唯一ID摘要，重试继续独立保存。`log-identity-repaired`两项通过，0.115秒；`log-identity-browser-repaired`真实SDK浏览器1项通过，7.6秒，并核对实际落盘文件；`fast-log-identity`全量快速层111文件272项通过，9.46秒，使用Vitest默认worker配置，与此前双worker26.41秒不作为同条件性能对比。完整check和格式通过；缺失报告父目录、定向路径错误与首次spacing检查失败均独立保留，未计为产品测试结果。
 
 新完整门禁与插件独立Validate仍待完成；首次失败、未知效果及未覆盖实机/负载边界保持原判据，不把分批结果或重试合并称全绿。
+
+## 测试重构远程第五轮收敛（2026-11-08）
+
+本体`52b94c06deec9cf3cd8d31aacd6f32b457dfd56e`的[第五轮42525888579](https://github.com/0honus0/nexus-terminal/actions/runs/42525888579)质量、Runner、Docker smoke与八个测试分片全部成功，但最后耗时汇总失败，整轮仍判失败。逐一下载八片原始报告，确认模块236项、Docker模块1项、原生848项、真实文件系统故障5项、Docker原生9项、本体浏览器430项、插件互操作54项及插件浏览器70项全部一次通过，无skip/flaky、重试或重复；该结论只覆盖测试层，不能代替完整门禁。质量作业本体快速层111文件272项通过，19.34秒；插件5项Vitest和125项Node测试通过。
+
+汇总脚本仍只枚举`.spec.ts`，因此将真实发现的`specs/agent-host/sandbox-sdk.spec.mjs`拒为未知文件。枚举同步支持两种正式后缀，未知文件检查保持严格；新增真实CLI回归运行原脚本字节，验证两种后缀、普通测试排除、过时估算移除及未知回执拒绝且不改文件。`duration-cli-final`1项通过，0.176秒；`fast-duration-final`完整快速层112文件273项通过，12.64秒。第五轮原始报告与首次汇总日志保留在任务运行根；仍需修复后完整门禁和准确Host成品的插件独立Validate。

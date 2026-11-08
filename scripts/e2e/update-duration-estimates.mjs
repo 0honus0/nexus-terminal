@@ -48,7 +48,7 @@ function existingSpecs() {
 		for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
 			const absolute = path.join(current, entry.name);
 			if (entry.isDirectory()) stack.push(absolute);
-			else if (entry.isFile() && entry.name.endsWith('.spec.ts')) {
+			else if (entry.isFile() && /\.spec\.(?:ts|mjs)$/u.test(entry.name)) {
 				specs.add(path.relative(path.join(repoRoot, 'tests/e2e'), absolute).split(path.sep).join('/'));
 			}
 		}
