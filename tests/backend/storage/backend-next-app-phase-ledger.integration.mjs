@@ -262,14 +262,20 @@ await test('App phase ledger: Root history pages retain failed/cancelled checkpo
 	await assert.rejects(f.states.history({ ...scope, userId: 2 }, null, 65536), failure('not_found'));
 });
 
-await test('App phase ledger: retired execution cannot dispatch anew while exact private checkpoint remains readable', async (t) => {
+await test('App phase ledger: corrupt frozen provenance rejects dispatch without mutating saved checkpoint content', async (t) => {
 	const f = await runAppStorageFixture(t);
 	const scope = await f.create();
 	const reference = await f.put(scope, JSON.stringify({ messages: [{ role: 'assistant', reasoning }] }));
 	const checkpoint = await f.states.checkpoint(scope, 0, checkpointInput(reference));
+	const current = await f.db.one('SELECT app_execution_json FROM agent_run_inputs WHERE run_id=?', [scope.runId]);
+	assert.equal(readRunAppExecution(current.app_execution_json).kind, 'plugin');
 	const retired = JSON.stringify({ kind: 'retired' });
-	assert.deepEqual(readRunAppExecution(retired), { kind: 'retired' });
-	assert.equal(await f.db.transaction((tx) => currentRunAppExecution(tx, scope)), false);
+	await f.db.run('UPDATE agent_run_inputs SET app_execution_json=? WHERE run_id=?', [retired, scope.runId]);
+	assert.throws(() => readRunAppExecution(retired), /Corrupt frozen App execution/u);
+	await assert.rejects(
+		f.db.transaction((tx) => currentRunAppExecution(tx, scope)),
+		/Corrupt frozen App execution/u,
+	);
 	assert.deepEqual(await f.states.read(scope), checkpoint);
 	assert.deepEqual(
 		JSON.parse(await f.contents.text(scope, reference, new AbortController().signal)).messages[0].reasoning,

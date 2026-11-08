@@ -2106,3 +2106,7 @@ Node 26.13.0/pnpm 12.16.1；`build.log` 与 `browser.log` 包含 Shared、Backen
 追加消费者扫描发现两处正式测试残留：context preference用例直接升级到最新后仍要求已授权删除的旧Run保留；Job故障用例与fixture仍查询旧工具表。前者先验证32/59至v60的原始事实和设置转换，再验证61–63清除旧App/历史，保留Provider与全局设置；后者改为检查真实Operation不存在accepted/dispatched残留，移除旧p_工具名分支和废弃table白名单。cleanup-context-first.tap保留首次失败，cleanup-consumers-final.tap的12项全部通过。
 
 原[E2E42446129564](https://github.com/0honus0/nexus-terminal/actions/runs/42446129564)因上述用例修正主动取消，不计为完整通过。补齐无安装记录的旧App定义清理：只删除引用旧包或缺少准确包ledger且已无App使用的定义，保留仍使用或有SDK4来源的定义；该SQL仍在尚未发布的迁移63中。新增fixture同时覆盖此类旧App以及完整当前快照。后续从新提交重跑完整矩阵，原失败及取消证据均保留。
+
+完整[E2E42446441838](https://github.com/0honus0/nexus-terminal/actions/runs/42446441838)验证19d26dcd：质量、Docker smoke与七个Browser分片成功，530项浏览器记录逐项核对；全矩阵750项中749通过，唯一失败的App phase ledger wrapper重试仍失败，不能算通过。原因是底层run-app-storage-fixture仍写retired来源，旧断言仍要求解码成功；本轮严格解码已拒绝该结构。夹具改为当前SDK4来源，保留全部41项检查点/回执/历史隔离/子效果/模型推理断言，将旧断言改为损坏来源拒绝派发且原检查点字节不被修改；cleanup-ledger-corrected.tap共41项通过。生产源码没有因此修改或放宽。
+
+最终消费者补扫的cleanup-upgrade-closeout.tap共32项通过，包含最新迁移、无安装旧App定义、精确快照和完整备份；cleanup-check-consumers.log及cleanup-format-consumers.log通过。前述不同组合存在交集，不将总数相加作唯一场景数。将从下一提交重新运行完整750项，不复用旧530项替代新提交验收。

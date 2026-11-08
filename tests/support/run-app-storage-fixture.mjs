@@ -84,7 +84,17 @@ export async function runAppStorageFixture(t) {
 		]);
 		await db.run('INSERT INTO agent_run_inputs VALUES(?,?,?,NULL)', [
 			scope.runId,
-			JSON.stringify({ kind: 'retired' }),
+			JSON.stringify({
+				kind: 'plugin',
+				package: {
+					packageId: 'fixture.app',
+					version: '1.0.0',
+					packageHash: 'a'.repeat(64),
+					publisherKeyId: 'ed25519:' + 'b'.repeat(64),
+				},
+				codeDependencies: [],
+				handler: 'fixture.app.run',
+			}),
 			JSON.stringify({ message: 'Current prompt' }),
 		]);
 		if (parentId === null) {
