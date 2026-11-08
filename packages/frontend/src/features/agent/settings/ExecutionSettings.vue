@@ -25,8 +25,6 @@
 			'toolTimeoutSeconds',
 			'maxToolOutputBytes',
 			'maxTokenReservations',
-			'maxRecallItems',
-			'maxRecallBytes',
 		],
 		runtime: ['maxConcurrentRuns', 'maxConcurrentModelCalls'],
 		storage: ['maxArtifactBytes', 'artifactTtlSeconds'],

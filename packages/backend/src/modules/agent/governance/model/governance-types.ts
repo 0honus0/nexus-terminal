@@ -49,8 +49,6 @@ export type PolicyOverrides = {
 	maxActiveExecutionSeconds?: number;
 	toolTimeoutSeconds?: number;
 	maxToolOutputBytes?: number;
-	maxRecallItems?: number;
-	maxRecallBytes?: number;
 	maxSubagentMessages?: number;
 	maxSubagentMessageBytes?: number;
 };

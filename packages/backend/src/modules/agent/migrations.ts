@@ -1,3 +1,4 @@
+import { moveMemoryConfigurationToInstances } from './plugins/adapters/sqlite/plugin-memory-configuration-migration.js';
 import { moveBrowserConfigurationToInstances } from './plugins/adapters/sqlite/plugin-browser-configuration-migration.js';
 import { initializeOperationDiagnostics } from './operations/adapters/sqlite/operation-diagnostic-schema.js';
 import { removeArchivedRunData } from './runs/adapters/sqlite/run-archive-removal-migration.js';
@@ -81,6 +82,7 @@ export const agentPerformanceMigrations = [
 	{ version: 7, signature: 'agent-approval-tool-index-20261106', apply: indexApprovalTool },
 	{ version: 8, signature: 'agent-resolution-approval-index-20261106', apply: indexApprovalResolution },
 	{ version: 9, signature: 'agent-compaction-run-index-20261106', apply: indexCompactionRun },
+	{ version: 65, signature: 'agent-memory-plugin-configuration-20261108', apply: moveMemoryConfigurationToInstances },
 ];
 
 export const agentModularMigrations = [

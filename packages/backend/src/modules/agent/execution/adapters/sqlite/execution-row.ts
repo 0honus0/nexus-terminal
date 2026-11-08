@@ -53,8 +53,6 @@ export function executionLimits(value: unknown): StoredExecutionLimits {
 		maxChildren: executionInteger(r.maxChildren, 1, AGENT_EXECUTION_LIMIT_MAXIMA.maxChildren),
 		maxMessages: executionInteger(r.maxMessages, 1, AGENT_EXECUTION_LIMIT_MAXIMA.maxMessages),
 		maxMessageBytes: executionInteger(r.maxMessageBytes, 1, AGENT_EXECUTION_LIMIT_MAXIMA.maxMessageBytes),
-		maxRecallItems: executionInteger(r.maxRecallItems, 1, AGENT_EXECUTION_LIMIT_MAXIMA.maxRecallItems),
-		maxRecallBytes: executionInteger(r.maxRecallBytes, 1, AGENT_EXECUTION_LIMIT_MAXIMA.maxRecallBytes),
 		maxArtifactBytes: executionInteger(r.maxArtifactBytes, 1, AGENT_EXECUTION_LIMIT_MAXIMA.maxArtifactBytes),
 		artifactTtlSeconds: executionInteger(r.artifactTtlSeconds, 1, AGENT_EXECUTION_LIMIT_MAXIMA.artifactTtlSeconds),
 	};

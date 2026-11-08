@@ -133,8 +133,6 @@ await test('Memory candidates: complete published catalog, long rankings and nor
 	const { MemoryModel } = await import('../../../packages/backend/dist/modules/agent/memory/model/memory-model.js');
 	const { MemoryService } =
 		await import('../../../packages/backend/dist/modules/agent/memory/service/memory-service.js');
-	const { defaultExecutionSettings } =
-		await import('../../../packages/backend/dist/modules/agent/execution/service/execution-service.js');
 	const db = SqliteRuntime.openMemory();
 	t.after(() => db.close());
 	await initializeSchema(db, applicationMigrations);
@@ -162,16 +160,7 @@ await test('Memory candidates: complete published catalog, long rankings and nor
 	});
 	const storage = new SqliteMemoryStorage(db);
 	storage.installTransactionIdentityReader(async (_tx, digest) => (digest === hash(token) ? 1 : null));
-	const configuration = defaultExecutionSettings();
-	const service = new MemoryService(
-		new MemoryModel(storage, { digest: hash }),
-		{
-			async get() {
-				return configuration;
-			},
-		},
-		{ async publish() {} },
-	);
+	const service = new MemoryService(new MemoryModel(storage, { digest: hash }), { async publish() {} });
 	const actor = { kind: 'session', userId: 1, appId, token };
 	const proposed = await service.propose(actor, {
 		content: 'normal write after 10000 notes '.repeat(3000),
@@ -212,6 +201,22 @@ await test('Memory candidates: complete published catalog, long rankings and nor
 	assert.equal(selected.length, 1);
 	assert.equal(selected[0].id, earliest);
 	assert.equal(selected[0].score, 80);
+	const page = await service.candidates(actor, { offset: 0, limit: 100 });
+	assert.equal(page.maxItems, 100);
+	const references = candidates.slice(0, 100).map((item) => ({ id: item.id, version: item.version, score: 1 }));
+	const complete = await service.select(actor, {
+		limit: 100,
+		candidatesSha256: page.candidatesSha256,
+		items: references,
+	});
+	assert.equal(complete.length, 100, 'Host imposes no second recall policy over plugin settings');
+	assert.ok(Buffer.byteLength(JSON.stringify(complete)) > 8192);
+	const oversized = candidates.map((item) => ({ id: item.id, version: item.version, score: 1 }));
+	await assert.rejects(
+		service.select(actor, { limit: oversized.length, candidatesSha256: page.candidatesSha256, items: oversized }),
+		(error) => error.code === 'limit_exceeded',
+	);
+
 	await assert.rejects(
 		service.candidates({ ...actor, token: 'wrong' }, { offset: 0, limit: 1 }),
 		(error) => error.code === 'unauthenticated',

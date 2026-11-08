@@ -2,7 +2,6 @@ import { agentPluginCapabilityReplyBytes } from '@nexus-terminal/shared/agent/pl
 import { MemoryChanges } from './memory-changes.js';
 import type { OperationsEvents } from '../../../operations/public.js';
 import type { OperationEvent } from '@nexus-terminal/shared/operations/values';
-import type { ExecutionService } from '../../execution/service/execution-service.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { AGENT_PLUGIN_APP_PAYLOAD_MAX_BYTES } from '@nexus-terminal/shared/agent/plugins/values';
 import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
@@ -82,7 +81,6 @@ export class MemoryService {
 
 	constructor(
 		private readonly model: MemoryModel,
-		private readonly settings: ExecutionService,
 		private readonly events: OperationsEvents,
 	) {}
 
@@ -228,12 +226,9 @@ export class MemoryService {
 		if (!Number.isSafeInteger(limit) || limit < 1) {
 			throw new AgentFailure('invalid_input');
 		}
-		const configuration =
-			actor.kind === 'tool'
-				? await this.settings.frozen(actor.userId, actor.appId, actor.runId)
-				: await this.settings.get(actor.userId);
-		const maxItems = Math.min(limit, configuration.limits.maxRecallItems);
-		const maxBytes = configuration.limits.maxRecallBytes;
+		// These describe this request and its encoded reply page, not a Host recall policy.
+		const maxItems = limit;
+		const maxBytes = AGENT_PLUGIN_APP_PAYLOAD_MAX_BYTES;
 		const records = await this.model.recall(actor, Date.now, admit(actor));
 		const candidates = records.map((memory): MemoryCandidate => ({
 			id: memory.id,
@@ -283,10 +278,11 @@ export class MemoryService {
 		};
 	}
 
-	/** Re-read the original published candidate set and enforce the frozen model-result budget. */
+	/** Re-read and validate every requested selection; package policy owns ranking and totals. */
 	async select(actor: MemoryActor, input: MemorySelectionInput): Promise<MemorySelectedItem[]> {
 		if (
 			!/^[a-f0-9]{64}$/u.test(input.candidatesSha256) ||
+			input.items.length > input.limit ||
 			new Set(input.items.map((item) => item.id)).size !== input.items.length ||
 			input.items.some(
 				(item) =>
@@ -299,7 +295,7 @@ export class MemoryService {
 		) {
 			throw new AgentFailure('invalid_input');
 		}
-		const { candidates, candidatesSha256, maxItems, maxBytes } = await this.candidateSet(actor, input.limit);
+		const { candidates, candidatesSha256 } = await this.candidateSet(actor, input.limit);
 		if (input.candidatesSha256 !== candidatesSha256) {
 			throw new AgentFailure('version_conflict');
 		}
@@ -317,16 +313,14 @@ export class MemoryService {
 				score: item.score,
 			};
 		});
-		const items: MemorySelectedItem[] = [];
-		let bytes = 2;
-		for (const item of selected.slice(0, maxItems)) {
-			const size = Buffer.byteLength(JSON.stringify(item), 'utf8');
-			if (bytes + size + 1 > maxBytes) {
-				break;
-			}
-			items.push(item);
-			bytes += size + 1;
+		if (
+			agentPluginCapabilityReplyBytes({
+				operation: 'memory.retrieve',
+				value: { action: 'select', items: selected },
+			}) > AGENT_PLUGIN_APP_PAYLOAD_MAX_BYTES
+		) {
+			throw new AgentFailure('limit_exceeded');
 		}
-		return items;
+		return selected;
 	}
 }

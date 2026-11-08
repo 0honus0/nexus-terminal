@@ -20,8 +20,6 @@ export function fromExecutionLimits(value: AgentExecutionLimits): ExecutionLimit
 		maxChildren: value.maxChildren,
 		maxMessages: value.maxMessages,
 		maxMessageBytes: value.maxMessageBytes,
-		maxRecallItems: value.maxRecallItems,
-		maxRecallBytes: value.maxRecallBytes,
 		maxArtifactBytes: value.maxArtifactBytes,
 		artifactTtlSeconds: value.artifactTtlSeconds,
 	};
@@ -40,8 +38,6 @@ export function toExecutionLimits(value: ExecutionLimits): AgentExecutionLimits 
 		maxChildren: value.maxChildren,
 		maxMessages: value.maxMessages,
 		maxMessageBytes: value.maxMessageBytes,
-		maxRecallItems: value.maxRecallItems,
-		maxRecallBytes: value.maxRecallBytes,
 		maxArtifactBytes: value.maxArtifactBytes,
 		artifactTtlSeconds: value.artifactTtlSeconds,
 	};

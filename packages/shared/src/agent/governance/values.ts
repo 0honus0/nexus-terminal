@@ -74,17 +74,11 @@ export const AGENT_GOVERNANCE_MAX_BODY_BYTES = 16 * 1024;
 
 export const AGENT_GOVERNANCE_MAX_GRANT_BODY_BYTES = 512 * 1024;
 
-export const AGENT_EXECUTION_COMPACTION_MODES = ['aggressive', 'balanced', 'conservative'] as const;
-
-export type AgentCompactionMode = (typeof AGENT_EXECUTION_COMPACTION_MODES)[number];
-
 export const AGENT_EXECUTION_INTEGER_KEYS = [
 	'maxModelRequests',
 	'maxActiveExecutionSeconds',
 	'toolTimeoutSeconds',
 	'maxToolOutputBytes',
-	'maxRecallItems',
-	'maxRecallBytes',
 	'maxSubagentMessages',
 	'maxSubagentMessageBytes',
 ] as const;

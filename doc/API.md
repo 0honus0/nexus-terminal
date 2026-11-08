@@ -559,3 +559,9 @@ Cookie 解析与序列化分别使用已注册的 `@fastify/cookie` 实例；HTT
 ### 宿主诊断契约来源
 
 `GET /api/v1/system/diagnostics` 的路径、响应与错误 schema 来自 Shared `system/diagnostics/http`，Fastify 安装同一 schema 的 JSON Schema 投影；双端使用 `readHostDiagnosticResponse` 严格解码。指标含 SQLite 排队、执行和提交的累计计数与总/最大毫秒耗时，名字和单位归 `diagnostics/values`，不输出 SQL 或参数。结构 schema 与跨字段细化共同校验，完整响应预算仍为16KiB；其它端点继续沿各自 codec，完整 OpenAPI/AsyncAPI 生成尚未接入。
+
+### 记忆召回策略归属
+
+执行设置与 App 执行覆盖不再接受 `maxRecallItems`、`maxRecallBytes`；这两个选项归 `nexus.tools.agent` 实例的签名设置 schema，通过既有插件 configuration 接口和公开 SDK 读写。默认5条/8192字节，整数只受安全表示范围约束，不叠加 Host 召回政策。迁移65一次性清除旧字段并保留已有官方未配置实例的有效偏好。
+
+`memory.retrieve/candidates` 的 `maxItems` 是请求的 limit，`maxBytes` 是当前完整编码回复帧容量，不是整次召回配额。候选沿 `nextOffset` 遍历，所有页必须保持同一摘要。`select` 每批核对当前已发布集合摘要、身份和版本，完整返回全部准确引用或明确拒绝；超帧返回 limit_exceeded，不静默截断。插件按双层 JSON 编码容量分批调用、完整汇总为受管内容，任一批失败或取消不返回部分成功。

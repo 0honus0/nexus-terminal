@@ -6,10 +6,9 @@
 	import type { usePluginManagement } from '../plugins/composables/use-plugin-management';
 	import AppManagementSettings from './AppManagementSettings.vue';
 
-	type ExtensionSection = 'apps' | 'integrations' | 'market' | 'budget';
+	type ExtensionSection = 'apps' | 'market' | 'budget';
 
 	const AppExecutionPolicySettings = defineAsyncComponent(() => import('./AppExecutionPolicySettings.vue'));
-	const AppIntegrationSettings = defineAsyncComponent(() => import('./AppIntegrationSettings.vue'));
 	const PluginManagementSettings = defineAsyncComponent(
 		() => import('../plugins/components/PluginManagementSettings.vue'),
 	);
@@ -26,7 +25,6 @@
 	const visitedSections = reactive(new Set<ExtensionSection>(['apps']));
 	const sections = [
 		{ id: 'apps', icon: 'fa-solid fa-boxes-stacked', label: 'agent.settings.extensionsNav.apps' },
-		{ id: 'integrations', icon: 'fa-solid fa-plug', label: 'agent.settings.extensionsNav.integrations' },
 		{ id: 'market', icon: 'fa-solid fa-store', label: 'agent.settings.extensionsNav.market' },
 		{ id: 'budget', icon: 'fa-solid fa-sliders', label: 'agent.settings.extensionsNav.budget' },
 	] as const;
@@ -42,7 +40,7 @@
 	<section class="ui-glass-panel overflow-hidden rounded-2xl">
 		<header class="ui-glass-chrome flex min-w-0 items-center gap-3 border-b border-border px-3 sm:px-4">
 			<nav
-				class="extensions-tabs grid min-w-0 flex-1 grid-cols-4"
+				class="extensions-tabs grid min-w-0 flex-1 grid-cols-3"
 				role="tablist"
 				:aria-label="t('agent.settings.groups.extensions')"
 			>
@@ -88,13 +86,6 @@
 				:model="model"
 				:plugins="plugins"
 				:active="active && activeSection === 'apps'"
-			/>
-		</div>
-		<div v-if="visitedSections.has('integrations')" v-show="activeSection === 'integrations'" class="p-3 sm:p-4">
-			<AppIntegrationSettings
-				embedded
-				:apps="model.apps.value"
-				:active="active && activeSection === 'integrations'"
 			/>
 		</div>
 		<div v-if="visitedSections.has('market')" v-show="activeSection === 'market'" class="p-3 sm:p-4">

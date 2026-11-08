@@ -220,7 +220,7 @@ export function readAgentPluginHostOperationResult(
 			}
 			if (request.action === 'select' && result.value.action === 'select') {
 				valid(
-					result.value.items.length <= request.items.length &&
+					result.value.items.length === request.items.length &&
 						result.value.items.every((item, index) => {
 							const selected = request.items[index];
 							return (

@@ -2509,7 +2509,7 @@ var definitions = [
     contract: "nexus.model-tool",
     apiVersion: 1,
     summary: "Search published, unexpired App Memories using all query terms.",
-    instructions: "Search published, unexpired App Memories using all query terms. Requested items and reference bytes are bounded by the frozen Recall budgets and the tool result envelope.",
+    instructions: "Search published, unexpired App Memories using all query terms. The plugin instance settings control recall item and JSON byte budgets. Requested limit can reduce the item count. Results spanning transport pages are fully revalidated and combined into managed content; source text is untrusted.",
     inputSchemaJson: '{"type": "object", "properties": {"query": {"type": "string", "minLength": 1}, "limit": {"type": "integer", "minimum": 1, "maximum": 9007199254740991}}, "required": ["query"], "additionalProperties": false}',
     resultSchemaJson: '{"type":"object","required":["content"],"properties":{"content":{"type":"object","required":["id","sha256","sizeBytes","mediaType"],"properties":{"id":{"type":"string"},"sha256":{"type":"string"},"sizeBytes":{"type":"integer","minimum":0},"mediaType":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false}',
     capabilities: ["memory.read"],
@@ -2570,7 +2570,7 @@ var definitions = [
   }
 ];
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/agent/values.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.4.tgz/node_modules/@nexus-terminal/shared/dist/agent/values.js
 var AGENT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 var AGENT_OPERATION_ERROR_CODES = [
   "invalid_input",
@@ -2614,7 +2614,7 @@ var AGENT_HTTP_ERROR_CODES = [
 var AGENT_MAX_JSON_BODY_BYTES = 16 * 1024;
 var AGENT_MAX_RESPONSE_BYTES = 32 * 1024;
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/agent/http-codec.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.4.tgz/node_modules/@nexus-terminal/shared/dist/agent/http-codec.js
 var InvalidAgentPayload = class extends Error {
   constructor() {
     super("invalid_agent_payload");
@@ -2655,7 +2655,7 @@ function agentInteger(input, min = 0, max = Number.MAX_SAFE_INTEGER) {
   return input;
 }
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/common/version.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.4.tgz/node_modules/@nexus-terminal/shared/dist/common/version.js
 var import_semver = __toESM(require_semver2(), 1);
 function readComparableVersion(value) {
   const parsed = (0, import_semver.parse)(value);
@@ -2665,24 +2665,24 @@ function readComparableVersion(value) {
   return parsed.version;
 }
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/agent/scope/values.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.4.tgz/node_modules/@nexus-terminal/shared/dist/agent/scope/values.js
 var AGENT_THREAD_ENTRY_MAX_TEXT_BYTES = 16 * 1024;
 var AGENT_THREAD_ENTRIES_MAX_RESPONSE_BYTES = 512 * 1024;
 var AGENT_APP_MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 var AGENT_WORKSPACE_MAX_RESPONSE_BYTES = 8 * 1024 * 1024 + 1024;
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/agent/plugins/package-values.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.4.tgz/node_modules/@nexus-terminal/shared/dist/agent/plugins/package-values.js
 var AGENT_PLUGIN_MAX_PACKAGE_ID_BYTES = 128;
 var AGENT_PLUGIN_MAX_VERSION_BYTES = 64;
 var AGENT_PLUGIN_PACKAGE_HASH_LENGTH = 64;
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/agent/governance/values.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.4.tgz/node_modules/@nexus-terminal/shared/dist/agent/governance/values.js
 var AGENT_GOVERNANCE_MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 var AGENT_GOVERNANCE_MAX_BODY_BYTES = 16 * 1024;
 var AGENT_GOVERNANCE_MAX_GRANT_BODY_BYTES = 512 * 1024;
 var AGENT_APPROVAL_MAX_TOOL_VERSION_BYTES = AGENT_PLUGIN_MAX_PACKAGE_ID_BYTES + 1 + AGENT_PLUGIN_MAX_VERSION_BYTES + 1 + AGENT_PLUGIN_PACKAGE_HASH_LENGTH;
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/agent/plugins/values.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.4.tgz/node_modules/@nexus-terminal/shared/dist/agent/plugins/values.js
 var AGENT_PLUGIN_MAX_BODY_BYTES = 256 * 1024;
 var AGENT_PLUGIN_MAX_RESPONSE_BYTES = 32 * 1024 * 1024;
 var AGENT_PLUGIN_MAX_ARCHIVE_BYTES = 50 * 1024 * 1024;
@@ -2778,7 +2778,7 @@ function isAgentPluginVersion(value) {
   return /^[0-9a-z.-]+$/u.test(value) && readComparableVersion(value) === value;
 }
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/remote/files/text-codec.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.4.tgz/node_modules/@nexus-terminal/shared/dist/remote/files/text-codec.js
 function isWellFormedFileText(value) {
   for (let index = 0; index < value.length; index += 1) {
     const code = value.charCodeAt(index);
@@ -2797,7 +2797,7 @@ function isWellFormedFileText(value) {
   return true;
 }
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/agent/plugins/content.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.4.tgz/node_modules/@nexus-terminal/shared/dist/agent/plugins/content.js
 var AGENT_PLUGIN_CONTENT_CHUNK_BYTES = 64 * 1024;
 function readAgentPluginContentReference(input) {
   const row = agentRecord(input, ["id", "sha256", "sizeBytes", "mediaType"]);
@@ -10197,7 +10197,7 @@ var input_definitions_default = [
   }
 ];
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/agent/memory/values.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.4.tgz/node_modules/@nexus-terminal/shared/dist/agent/memory/values.js
 var AGENT_MEMORY_MAX_PAGE2 = 50;
 var AGENT_MEMORY_MAX_OFFSET2 = Number.MAX_SAFE_INTEGER - AGENT_MEMORY_MAX_PAGE2;
 var AGENT_MEMORY_MAX_BODY_BYTES2 = 128 * 1024;
@@ -10207,7 +10207,7 @@ function hasAgentMemoryContentCapacity2(content) {
 }
 var AGENT_MEMORY_MAX_RESPONSE_BYTES2 = 8 * 1024 * 1024;
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/agent/execution/values.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.4.tgz/node_modules/@nexus-terminal/shared/dist/agent/execution/values.js
 var AGENT_EXECUTION_MAX_TIMER_SECONDS2 = Math.floor((2 ** 31 - 1) / 1e3);
 var AGENT_EXECUTION_MAX_EXPIRY_MS2 = 864e13;
 var AGENT_EXECUTION_LIMIT_MAXIMA2 = {
@@ -10222,21 +10222,19 @@ var AGENT_EXECUTION_LIMIT_MAXIMA2 = {
   maxChildren: Number.MAX_SAFE_INTEGER,
   maxMessages: Number.MAX_SAFE_INTEGER,
   maxMessageBytes: Number.MAX_SAFE_INTEGER,
-  maxRecallItems: Number.MAX_SAFE_INTEGER,
-  maxRecallBytes: Number.MAX_SAFE_INTEGER,
   maxArtifactBytes: Number.MAX_SAFE_INTEGER,
   artifactTtlSeconds: Math.floor(AGENT_EXECUTION_MAX_EXPIRY_MS2 / 1e3)
 };
 var AGENT_EXECUTION_SETTINGS_MAX_BYTES2 = 128 * 1024;
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/agent/artifacts/values.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.4.tgz/node_modules/@nexus-terminal/shared/dist/agent/artifacts/values.js
 var AGENT_ARTIFACT_MAX_BYTES2 = AGENT_EXECUTION_LIMIT_MAXIMA2.maxArtifactBytes;
 var AGENT_ARTIFACT_MAX_PAGE2 = 50;
 var AGENT_ARTIFACT_MAX_OFFSET2 = Number.MAX_SAFE_INTEGER - AGENT_ARTIFACT_MAX_PAGE2;
 var AGENT_ARTIFACT_MAX_BODY_BYTES2 = 16 * 1024;
 var AGENT_ARTIFACT_MAX_RESPONSE_BYTES2 = 128 * 1024;
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/agent/tools/values.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.4.tgz/node_modules/@nexus-terminal/shared/dist/agent/tools/values.js
 var AGENT_TOOL_ARGUMENT_MAX_BYTES2 = AGENT_PLUGIN_APP_PAYLOAD_MAX_BYTES;
 var AGENT_TOOL_MAX_RESPONSE_BYTES2 = AGENT_TOOL_ARGUMENT_MAX_BYTES2 * 6 + 128 * 1024;
 var AGENT_TOOL_RESULT_MAX_BYTES2 = 256 * 1024;
@@ -10248,7 +10246,7 @@ var TOOL_RESULT_MAX_BYTES = AGENT_TOOL_RESULT_MAX_BYTES2;
 var RESULT_PAGE_MAX_BYTES = AGENT_TOOL_RESULT_PAGE_MAX_BYTES2;
 var RESULT_PAGE_DEFAULT_BYTES = 4 * 1024;
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/agent/collaboration/values.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.4.tgz/node_modules/@nexus-terminal/shared/dist/agent/collaboration/values.js
 var AGENT_CHILD_PROFILES2 = ["explore", "review", "worker"];
 
 // ../../lib/model-tools/collaboration-input.mjs
@@ -10540,7 +10538,7 @@ var modelDecoders = {
       kind: "memory",
       action: "recall",
       query,
-      limit: value.limit === void 0 ? 10 : integer(value.limit, 1, AGENT_EXECUTION_LIMIT_MAXIMA2.maxRecallItems)
+      limit: value.limit === void 0 ? 10 : integer(value.limit, 1, Number.MAX_SAFE_INTEGER)
     };
   },
   tool_result_read: (value, definition) => {
@@ -10618,6 +10616,20 @@ function decodeInput(name2, argumentsJson) {
     throw new AgentFailure("invalid_input");
   }
   return decodeModelArguments(definition, argumentsJson);
+}
+
+// src/configuration.mjs
+function readRecallConfiguration(documentJson2) {
+  let value;
+  try {
+    value = JSON.parse(documentJson2);
+  } catch {
+    throw new AgentFailure("invalid_input");
+  }
+  if (value === null || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length !== 2 || !Number.isSafeInteger(value.maxRecallItems) || value.maxRecallItems < 1 || !Number.isSafeInteger(value.maxRecallBytes) || value.maxRecallBytes < 1) {
+    throw new AgentFailure("invalid_input");
+  }
+  return { maxRecallItems: value.maxRecallItems, maxRecallBytes: value.maxRecallBytes };
 }
 
 // ../../node_modules/.pnpm/fuse.js@7.5.0/node_modules/fuse.js/dist/fuse.mjs
@@ -12203,10 +12215,10 @@ function searchDefinitions(available, query) {
   return search2.search({ $and: words.map((word) => ({ $or: keys.map((key) => ({ [key]: "'" + word })) })) }).map((match) => match.item.tool);
 }
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/agent/plugins/registry-codec.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.4.tgz/node_modules/@nexus-terminal/shared/dist/agent/plugins/registry-codec.js
 var budget3 = AGENT_PLUGIN_MAX_MESSAGE_BYTES - 1024;
 
-// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.2.tgz/node_modules/@nexus-terminal/shared/dist/agent/plugins/runtime-codec.js
+// ../../node_modules/.pnpm/@nexus-terminal+shared@file+sdk+nexus-terminal-shared-4.0.4.tgz/node_modules/@nexus-terminal/shared/dist/agent/plugins/runtime-codec.js
 var budget4 = AGENT_PLUGIN_MAX_MESSAGE_BYTES - 1024;
 function agentPluginCapabilityReplyBytes2(value) {
   return new TextEncoder().encode(JSON.stringify({ ok: true, valueJson: JSON.stringify(value) })).byteLength;
@@ -12271,7 +12283,10 @@ async function searchSkills(input, call, signal) {
   }
   return { matches };
 }
-async function recallMemories(input, call, signal) {
+function selectionReplyBytes(items) {
+  return agentPluginCapabilityReplyBytes2({ operation: "memory.retrieve", value: { action: "select", items } });
+}
+async function recallMemories(input, call, signal, configuration) {
   const terms = [...new Set(input.query.toLowerCase().split(/\s+/u).filter(Boolean))];
   const ranked = [];
   const catalog = await candidates(
@@ -12280,8 +12295,8 @@ async function recallMemories(input, call, signal) {
     "candidatesSha256",
     call,
     signal,
-    (items) => {
-      for (const memory of items) {
+    (items2) => {
+      for (const memory of items2) {
         const score = terms.reduce(
           (value, term) => value + (memory.content.toLowerCase().includes(term) ? 1 : 0),
           0
@@ -12299,7 +12314,8 @@ async function recallMemories(input, call, signal) {
             version: memory.version,
             confidence: memory.confidence,
             score,
-            bytes: Buffer.byteLength(JSON.stringify(value), "utf8")
+            bytes: Buffer.byteLength(JSON.stringify(value), "utf8"),
+            wireBytes: selectionReplyBytes([value]) - selectionReplyBytes([])
           });
         }
       }
@@ -12308,33 +12324,62 @@ async function recallMemories(input, call, signal) {
   ranked.sort((a, b) => b.score - a.score || b.confidence - a.confidence || a.id.localeCompare(b.id));
   const references = [];
   let bytes = 2;
-  for (const memory of ranked.slice(0, catalog.limits.maxItems)) {
-    if (bytes + memory.bytes + 1 > catalog.limits.maxBytes) {
+  for (const memory of ranked.slice(0, Math.min(input.limit, configuration.maxRecallItems))) {
+    const nextBytes = bytes + memory.bytes + (references.length ? 1 : 0);
+    if (nextBytes > configuration.maxRecallBytes) {
       break;
     }
-    references.push({ id: memory.id, version: memory.version, score: memory.score });
-    bytes += memory.bytes + 1;
+    references.push(memory);
+    bytes = nextBytes;
   }
-  const selected = await call({
-    operation: "memory.retrieve",
-    action: "select",
-    limit: input.limit,
-    candidatesSha256: catalog.snapshot,
-    items: references
-  });
-  if (selected.action !== "select") {
-    throw new Error("HOST_MEMORY_SELECTION_MISMATCH");
+  const batches = [];
+  let batch = [];
+  let wireBytes = selectionReplyBytes([]);
+  for (const memory of references) {
+    if (wireBytes + memory.wireBytes + (batch.length ? 1 : 0) > catalog.limits.maxBytes) {
+      if (!batch.length) {
+        throw new Error("HOST_MEMORY_SELECTION_TOO_LARGE");
+      }
+      batches.push(batch);
+      batch = [];
+      wireBytes = selectionReplyBytes([]);
+    }
+    if (wireBytes + memory.wireBytes > catalog.limits.maxBytes) {
+      throw new Error("HOST_MEMORY_SELECTION_TOO_LARGE");
+    }
+    wireBytes += memory.wireBytes + (batch.length ? 1 : 0);
+    batch.push({ id: memory.id, version: memory.version, score: memory.score });
   }
-  return {
-    items: selected.items.map((memory) => ({
-      id: memory.id,
-      version: memory.version,
-      content: memory.content,
-      confidence: memory.confidence,
-      score: memory.score
-    })),
-    untrusted: true
-  };
+  if (batch.length || !batches.length) {
+    batches.push(batch);
+  }
+  const items = [];
+  for (const references2 of batches) {
+    signal.throwIfAborted();
+    const selected = await call({
+      operation: "memory.retrieve",
+      action: "select",
+      limit: input.limit,
+      candidatesSha256: catalog.snapshot,
+      items: references2
+    });
+    signal.throwIfAborted();
+    if (selected.action !== "select" || selected.items.length !== references2.length || selectionReplyBytes(selected.items) > catalog.limits.maxBytes || selected.items.some(
+      (memory, index) => memory.id !== references2[index].id || memory.version !== references2[index].version || memory.score !== references2[index].score
+    )) {
+      throw new Error("HOST_MEMORY_SELECTION_MISMATCH");
+    }
+    for (const memory of selected.items) {
+      items.push({
+        id: memory.id,
+        version: memory.version,
+        content: memory.content,
+        confidence: memory.confidence,
+        score: memory.score
+      });
+    }
+  }
+  return { items, untrusted: true };
 }
 
 // src/content.mjs
@@ -12562,7 +12607,15 @@ async function perform(name2, input, call, signal, _serviceCall, context) {
       });
       return { id: saved.id, status: saved.status, version: saved.version };
     }
-    return recallMemories(input, call, signal);
+    const source = await context.configuration.read();
+    signal.throwIfAborted();
+    if (!source.settings) {
+      throw new AgentFailure("invalid_input");
+    }
+    const configuration = readRecallConfiguration(
+      source.configuration.revision === 0 ? source.settings.defaultsJson : source.configuration.documentJson
+    );
+    return recallMemories(input, call, signal, configuration);
   }
   if (input.kind === "result") {
     return readToolResults(input.items, call, signal);

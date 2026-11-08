@@ -344,11 +344,7 @@ export function registerAgent(
 	);
 
 	const memoryStorage = new SqliteMemoryStorage(sqlite);
-	const memory = new MemoryService(
-		new MemoryModel(memoryStorage, new SecureSessionTokens()),
-		executionSettings,
-		events,
-	);
+	const memory = new MemoryService(new MemoryModel(memoryStorage, new SecureSessionTokens()), events);
 	const providerStorage = new SqliteProviderStorage(sqlite);
 	const network = new OpenAiCompatibleAdapter(logger);
 	const providerModel = new ProviderModel(providerStorage, secrets, network);

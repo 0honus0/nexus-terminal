@@ -434,14 +434,6 @@
             "label": "全局产物总磁盘配额",
             "hint": "全系统所有 Agent 产物累计占用的磁盘上限"
           },
-          "maxRecallItems": {
-            "label": "记忆检索条目上限",
-            "hint": "单次对话历史与记忆回溯允许提取的最大项数"
-          },
-          "maxRecallBytes": {
-            "label": "记忆检索数据上限",
-            "hint": "单次对话记忆回溯提取的数据总字节上限"
-          },
           "maxConcurrentRuntimes": {
             "label": "最大 Agent 执行并发",
             "hint": "同一用户同时执行的 Root Agent 与 Subagent Runtime 总数上限；两者共用执行槽位"
@@ -503,11 +495,7 @@
           "toolTimeoutSeconds": "单工具超时 (秒)",
           "toolTimeoutSecondsHint": "单个工具调用的执行超时时限",
           "maxToolOutputBytes": "工具输出截断 (字节)",
-          "maxToolOutputBytesHint": "模型接收的工具单次输出截断上限",
-          "maxRecallItems": "记忆召回条数",
-          "maxRecallItemsHint": "记忆检索时最多召回的参考条目数",
-          "maxRecallBytes": "记忆召回字节上限",
-          "maxRecallBytesHint": "记忆检索内容的最大字节限制"
+          "maxToolOutputBytesHint": "模型接收的工具单次输出截断上限"
         },
         "readyNotice": "当前配置已就绪，将在下一次 Run 执行时生效",
         "modelCapabilityNotice": "模型单次上下文与最大输出直接使用 Provider/Registry 声明的物理能力；这里仅控制整个 Run 的总预算与工具资源。",
@@ -797,7 +785,6 @@
       },
       "extensionsNav": {
         "apps": "Agent App",
-        "integrations": "MCP / ACP",
         "market": "插件市场",
         "budget": "执行预算"
       },
@@ -816,25 +803,16 @@
       },
       "executionPolicy": {
         "title": "Plugin / App 独立执行预算",
-        "description": "每个 Agent App 可覆盖 Host 的运行、工具、召回与协作预算，并向执行插件提供压缩偏好；未覆盖字段继承全局默认。",
+        "description": "每个 Agent App 可覆盖宿主的运行、工具与协作预算。未覆盖项继承全局默认值；上下文压缩和记忆召回在对应插件设置中配置。",
         "app": "选择 Plugin / App",
         "override": "覆盖",
         "inherited": "继承全局默认",
         "effective": "当前有效值：{value}",
-        "compactionHint": "此偏好传给 App 执行插件，由插件决定历史压缩方式；Host 的容量与执行限制继续生效。",
-        "compactionInherited": "继承：{value}",
-        "compaction": {
-          "aggressive": "积极压缩",
-          "balanced": "平衡",
-          "conservative": "保守压缩"
-        },
         "fields": {
           "maxModelRequests": "初始模型请求额度",
           "maxActiveExecutionSeconds": "初始活动执行额度",
           "toolTimeoutSeconds": "单工具超时",
           "maxToolOutputBytes": "模型可见工具输出",
-          "maxRecallItems": "Recall 条目数",
-          "maxRecallBytes": "Recall 容量",
           "maxSubagentMessages": "Subagent 消息总数",
           "maxSubagentMessageBytes": "Subagent 消息总容量",
           "contextCompactionMode": "上下文压缩偏好",
@@ -883,8 +861,6 @@
           "maxChildren": "直接子任务数",
           "maxMessages": "协作消息数",
           "maxMessageBytes": "消息累计容量（字节）",
-          "maxRecallItems": "Recall 条数",
-          "maxRecallBytes": "Recall 容量（字节）",
           "maxArtifactBytes": "Artifact 总量（字节）",
           "artifactTtlSeconds": "Artifact 有效期（秒）"
         }
@@ -1010,19 +986,8 @@
         "unavailableGrant": "能力 {capability} 当前不在应用声明中。原选择保留，可明确移除后保存。"
       },
       "integrationManagement": {
-        "title": "MCP / ACP 集成",
-        "pending": "创建结果未知。先重新读取列表，再明确重试同一创建。暂时隐藏当前视图会保留原输入；切换App、退出登录或关闭编辑器所在页面会清除原意图。重新创建前请核对已有记录。",
         "reload": "重新读取列表并放弃编辑草稿",
-        "empty": "此应用尚未选择提供连接能力的服务插件。",
-        "cleanupOnly": "当前 App 未声明 MCP 或 ACP 能力，仅可查看、停用或删除已有连接，不能新建连接。",
-        "undeclaredKind": "当前 App 已不再声明此类集成能力，可停用或删除保留的连接。",
-        "credentialState": "凭据存在：{present}；凭据修订：{revision}",
-        "schemaHash": "目录哈希",
-        "discover": "发现并保存目录",
-        "confirmDelete": "确认删除",
-        "create": "创建集成",
         "kind": "类型",
-        "enabled": "启用集成",
         "endpoint": "MCP HTTP/HTTPS URL",
         "privateHosts": "私网例外host:port（每行一项）",
         "credential": "MCP凭据",
@@ -1031,19 +996,8 @@
         "replace": "替换",
         "connection": "SSH连接",
         "chooseConnection": "选择SSH连接",
-        "unavailableConnection": "不可用连接（选择仍保留）",
         "argv": "argv（JSON字符串数组，首项为程序）",
-        "cwd": "绝对工作目录",
-        "retryCreation": "使用原键重试同一创建",
-        "newDraft": "放弃编辑并新建草稿",
-        "tools": "工具",
-        "resources": "资源",
-        "prompts": "提示",
-        "description": "在插件设置中配置所选服务实例；保存连接不会授予执行权限。",
-        "sectionBasic": "基本信息",
-        "sectionMcp": "MCP 服务",
-        "sectionAcp": "ACP 连接",
-        "deletePrompt": "确定删除集成“{name}”吗？该操作不可撤销。"
+        "cwd": "绝对工作目录"
       }
     },
     "launcher": {

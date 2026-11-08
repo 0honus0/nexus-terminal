@@ -83,8 +83,6 @@ export const HARD_EXECUTION_LIMITS: Readonly<Record<keyof PolicyOverrides, numbe
 	maxActiveExecutionSeconds: AGENT_EXECUTION_LIMIT_MAXIMA.maxActiveSeconds,
 	toolTimeoutSeconds: AGENT_EXECUTION_LIMIT_MAXIMA.toolTimeoutSeconds,
 	maxToolOutputBytes: AGENT_EXECUTION_LIMIT_MAXIMA.maxToolOutputBytes,
-	maxRecallItems: AGENT_EXECUTION_LIMIT_MAXIMA.maxRecallItems,
-	maxRecallBytes: AGENT_EXECUTION_LIMIT_MAXIMA.maxRecallBytes,
 	maxSubagentMessages: AGENT_EXECUTION_LIMIT_MAXIMA.maxMessages,
 	maxSubagentMessageBytes: AGENT_EXECUTION_LIMIT_MAXIMA.maxMessageBytes,
 };

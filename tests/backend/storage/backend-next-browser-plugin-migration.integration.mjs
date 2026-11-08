@@ -86,7 +86,11 @@ await test('Browser configuration migration transfers only unconfigured official
 	assert.equal(await db.one("SELECT name FROM sqlite_schema WHERE name='agent_browser_configuration'"), null);
 	const committed = await db.all('SELECT * FROM schema_version ORDER BY version');
 	assert.deepEqual(committed.slice(0, 63), markers);
-	assert.equal(committed.at(-1).version, 64);
+	assert.equal(
+		committed.find((entry) => entry.version === 64).signature,
+		'agent-browser-plugin-configuration-20261108',
+	);
+	assert.equal(committed.at(-1).version, 65);
 	assert.deepEqual(await db.all('PRAGMA foreign_key_check'), []);
 	assert.equal((await db.one('PRAGMA integrity_check')).integrity_check, 'ok');
 	const before = await db.all('SELECT * FROM agent_plugin_instances ORDER BY id');

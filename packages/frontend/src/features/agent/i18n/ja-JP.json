@@ -434,14 +434,6 @@
             "label": "全体成果物ディスククォータ",
             "hint": "システム全体のエージェント成果物が占有可能な最大ディスク容量"
           },
-          "maxRecallItems": {
-            "label": "記憶回想件数上限",
-            "hint": "1 回のリクエストで取得可能な会話履歴・記憶の最大件数"
-          },
-          "maxRecallBytes": {
-            "label": "記憶回想バイト上限",
-            "hint": "記憶回想で取得されるデータの最大バイト数"
-          },
           "maxConcurrentRuntimes": {
             "label": "最大 Agent 実行並列数",
             "hint": "1 ユーザーで同時実行できる Root Agent と Subagent Runtime の合計上限。両者は同じ実行スロットを共有します"
@@ -503,11 +495,7 @@
           "toolTimeoutSeconds": "単一ツールタイムアウト (秒)",
           "toolTimeoutSecondsHint": "個別ツール実行のタイムアウト制限",
           "maxToolOutputBytes": "ツール出力切り詰め (バイト)",
-          "maxToolOutputBytesHint": "モデルに返されるツール出力の切り詰め上限",
-          "maxRecallItems": "記憶想起件数",
-          "maxRecallItemsHint": "検索時に想起する最大リファレンス件数",
-          "maxRecallBytes": "記憶想起バイト上限",
-          "maxRecallBytesHint": "想起テキストの最大バイト数制限"
+          "maxToolOutputBytesHint": "モデルに返されるツール出力の切り詰め上限"
         },
         "readyNotice": "現在の設定は準備済みで、次回の Run から適用されます。",
         "modelCapabilityNotice": "1 回のコンテキストと最大出力は Provider/Registry の物理モデル能力をそのまま使用します。ここでは Run 全体とツール資源の予算だけを制御します。",
@@ -797,7 +785,6 @@
       },
       "extensionsNav": {
         "apps": "Agent App",
-        "integrations": "MCP / ACP",
         "market": "プラグインマーケット",
         "budget": "実行予算"
       },
@@ -816,25 +803,16 @@
       },
       "executionPolicy": {
         "title": "Plugin / App 個別実行予算",
-        "description": "各 Agent App は Host の実行・ツール・検索・協調予算を上書きし、実行プラグインに圧縮の希望を渡せます。未設定項目はグローバル既定値を継承します。",
+        "description": "Agent App ごとにホストの実行・ツール・協作予算を上書きできます。未設定の項目は全体の既定値を継承します。文脈圧縮とメモリ想起は対応するプラグインで設定します。",
         "app": "Plugin / App を選択",
         "override": "上書き",
         "inherited": "グローバル既定値を継承",
         "effective": "現在の有効値: {value}",
-        "compactionHint": "この希望は App の実行プラグインに渡され、履歴の圧縮方法はプラグインが決定します。Host の容量と実行制限は引き続き適用されます。",
-        "compactionInherited": "継承: {value}",
-        "compaction": {
-          "aggressive": "積極的",
-          "balanced": "バランス",
-          "conservative": "保守的"
-        },
         "fields": {
           "maxModelRequests": "初期モデルリクエスト枠",
           "maxActiveExecutionSeconds": "初期実行時間枠",
           "toolTimeoutSeconds": "ツールタイムアウト",
           "maxToolOutputBytes": "モデル可視ツール出力",
-          "maxRecallItems": "Recall 件数",
-          "maxRecallBytes": "Recall 容量",
           "maxSubagentMessages": "Subagent メッセージ数",
           "maxSubagentMessageBytes": "Subagent メッセージ容量",
           "contextCompactionMode": "コンテキスト圧縮の希望",
@@ -883,8 +861,6 @@
           "maxChildren": "直接子タスク数",
           "maxMessages": "協調メッセージ数",
           "maxMessageBytes": "メッセージ総量（バイト）",
-          "maxRecallItems": "Recall 件数",
-          "maxRecallBytes": "Recall 容量（バイト）",
           "maxArtifactBytes": "Artifact 総量（バイト）",
           "artifactTtlSeconds": "Artifact 有効期間（秒）"
         }
@@ -1010,19 +986,8 @@
         "unavailableGrant": "機能 {capability} は現在宣言されていません。既存の権限は保持します。保存前に明示的に削除できます。"
       },
       "integrationManagement": {
-        "title": "MCP / ACP連携",
-        "pending": "作成結果が不明です。一覧を再読込してから同じ作成を明示的に再試行してください。一時的に非表示にしても元の入力は保持します。App切替、ログアウト、エディターのページを閉じると消去するため、再作成前に既存記録を確認してください。",
         "reload": "一覧を再読込して編集下書きを破棄",
-        "empty": "この App に接続を提供するサービスプラグインが選択されていません。",
-        "cleanupOnly": "この App は MCP または ACP 機能を宣言していません。既存の接続の表示、無効化、削除のみが可能で、新しい接続は作成できません。",
-        "undeclaredKind": "この App はこの種類の連携機能を宣言していません。保持された接続は無効化または削除できます。",
-        "credentialState": "認証情報あり：{present}、認証情報リビジョン：{revision}",
-        "schemaHash": "カタログハッシュ",
-        "discover": "カタログを検出・保存",
-        "confirmDelete": "削除を確認",
-        "create": "連携を作成",
         "kind": "種類",
-        "enabled": "連携を有効化",
         "endpoint": "MCP HTTP/HTTPS URL",
         "privateHosts": "プライベート接続例外host:port（1行1件）",
         "credential": "MCP認証情報",
@@ -1031,19 +996,8 @@
         "replace": "置換",
         "connection": "SSH接続",
         "chooseConnection": "SSH接続を選択",
-        "unavailableConnection": "利用できない接続（選択を保持）",
         "argv": "argv（JSON文字列配列、先頭はプログラム）",
-        "cwd": "絶対作業ディレクトリ",
-        "retryCreation": "元のキーで同じ作成を再試行",
-        "newDraft": "編集を破棄して新規下書き",
-        "tools": "ツール",
-        "resources": "リソース",
-        "prompts": "プロンプト",
-        "description": "選択したサービスの接続はプラグイン設定で管理します。接続の保存は実行権限を付与しません。",
-        "sectionBasic": "基本情報",
-        "sectionMcp": "MCP サービス",
-        "sectionAcp": "ACP 接続",
-        "deletePrompt": "連携「{name}」を削除しますか？この操作は取り消せません。"
+        "cwd": "絶対作業ディレクトリ"
       }
     },
     "launcher": {

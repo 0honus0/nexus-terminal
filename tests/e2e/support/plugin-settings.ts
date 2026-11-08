@@ -51,20 +51,26 @@ export async function pluginConnection(request: APIRequestContext, appId: string
 
 export async function openProtocolSettings(page: Page, appId: string, instanceName: string) {
 	await page.goto('/settings?tab=agent');
-	await selectAgentExtensionsSection(page, 'integrations');
-	const section = page.getByRole('region', { name: 'MCP / ACP integrations', exact: true });
-	const selector = section.getByRole('combobox', { name: 'Choose an App instance', exact: true });
-	if (await selector.count()) await selectUiOption(selector, appId);
-	const card = section
-		.getByRole('article')
-		.filter({ has: page.getByRole('heading', { name: instanceName, exact: true }) });
-	await expect(card).toBeVisible();
-	await card.getByRole('button', { name: 'Settings', exact: true }).click();
+	await selectAgentExtensionsSection(page, 'market');
+	const instance = (await pluginInstances(page.request, appId)).find((entry) => entry.name === instanceName);
+	if (!instance) throw new Error('Plugin settings instance missing: ' + instanceName);
+	const names: Record<string, string> = { 'nexus.services.mcp': 'MCP Service', 'nexus.services.acp': 'ACP Service' };
+	const packageName = names[instance.packageId];
+	if (!packageName) throw new Error('Unknown protocol package: ' + instance.packageId);
+	const row = page
+		.locator('div.border-b')
+		.filter({ has: page.getByText(packageName, { exact: true }) })
+		.filter({ has: page.getByRole('button', { name: 'Settings', exact: true }) });
+	await row.getByRole('button', { name: 'Settings', exact: true }).click();
 	const dialog = page.getByRole('dialog', { name: 'Plugin settings', exact: true });
-	await expect(dialog.getByRole('combobox', { name: 'App using this plugin', exact: true })).toHaveAttribute(
-		'data-value',
-		appId,
-	);
+	const appSelector = dialog.getByRole('combobox', { name: 'App using this plugin', exact: true });
+	if ((await appSelector.getAttribute('data-value')) !== appId) await selectUiOption(appSelector, appId);
+	const instanceSelector = dialog.locator('[id="' + instance.packageId + '-instance"]');
+	await expect(instanceSelector).toBeVisible();
+	if ((await instanceSelector.getAttribute('data-value')) !== instance.id)
+		await selectUiOption(instanceSelector, instance.id);
+	await expect(appSelector).toHaveAttribute('data-value', appId);
+
 	return dialog;
 }
 

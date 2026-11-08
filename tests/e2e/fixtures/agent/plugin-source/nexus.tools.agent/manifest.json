@@ -1,7 +1,7 @@
 {
   "schemaVersion": 4,
   "id": "nexus.tools.agent",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "displayName": "Agent Collaboration and Content Tools",
   "compatibility": {
     "host": {
@@ -9,7 +9,7 @@
       "maxVersion": "1.1.0"
     },
     "backendSdk": 4,
-    "frontendSdk": null
+    "frontendSdk": 4
   },
   "capabilities": [
     "app.intents.exchange",
@@ -30,7 +30,14 @@
     "tools": true,
     "services": false,
     "ui": null,
-    "settings": null,
+    "settings": {
+      "frontendEntry": "frontend/index.html",
+      "instructions": "docs/settings.md",
+      "schemaRevision": 1,
+      "schemaJson": "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"maxRecallItems\",\"maxRecallBytes\"],\"properties\":{\"maxRecallItems\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":9007199254740991},\"maxRecallBytes\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":9007199254740991}}}",
+      "defaultsJson": "{\"maxRecallItems\":5,\"maxRecallBytes\":8192}",
+      "agentEditablePaths": []
+    },
     "skills": []
   },
   "dependencies": [],

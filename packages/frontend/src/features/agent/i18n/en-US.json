@@ -434,14 +434,6 @@
             "label": "Global Artifact Disk Quota",
             "hint": "System-wide disk quota for all agent artifacts combined"
           },
-          "maxRecallItems": {
-            "label": "Max Recall Items",
-            "hint": "Maximum number of history/memory items retrieved per request"
-          },
-          "maxRecallBytes": {
-            "label": "Max Recall Payload Size",
-            "hint": "Maximum byte payload for retrieved memory items"
-          },
           "maxConcurrentRuntimes": {
             "label": "Max Agent execution concurrency",
             "hint": "Maximum total Root Agent and Subagent Runtimes executing concurrently for one user; both share the same slots"
@@ -503,11 +495,7 @@
           "toolTimeoutSeconds": "Tool Timeout (sec)",
           "toolTimeoutSecondsHint": "Timeout for individual tool executions",
           "maxToolOutputBytes": "Tool Output Truncation (Bytes)",
-          "maxToolOutputBytesHint": "Maximum output bytes returned to model",
-          "maxRecallItems": "Memory Recall Items",
-          "maxRecallItemsHint": "Maximum relevant memory snippets to recall",
-          "maxRecallBytes": "Memory Recall Bytes",
-          "maxRecallBytesHint": "Maximum total bytes for recalled memories"
+          "maxToolOutputBytesHint": "Maximum output bytes returned to model"
         },
         "readyNotice": "The current configuration is ready and will apply to the next Run.",
         "modelCapabilityNotice": "Per-call context and output limits come directly from the Provider/Registry model capabilities. These settings only govern total Run and tool-resource budgets.",
@@ -797,7 +785,6 @@
       },
       "extensionsNav": {
         "apps": "Agent apps",
-        "integrations": "MCP / ACP",
         "market": "Plugin market",
         "budget": "Execution budget"
       },
@@ -816,25 +803,16 @@
       },
       "executionPolicy": {
         "title": "Plugin / App execution budget",
-        "description": "Each Agent App can override Host run, tool, recall and collaboration budgets, and provide a compaction preference to its execution plugin. Unset fields inherit global defaults.",
+        "description": "Each Agent App can override Host run, tool and collaboration budgets. Unset fields inherit global defaults. Configure context compaction and memory recall in the corresponding plugin settings.",
         "app": "Select Plugin / App",
         "override": "Override",
         "inherited": "Inherit global default",
         "effective": "Effective: {value}",
-        "compactionHint": "This preference is passed to the App execution plugin, which decides how to compact history. Host limits continue to apply.",
-        "compactionInherited": "Inherited: {value}",
-        "compaction": {
-          "aggressive": "Aggressive",
-          "balanced": "Balanced",
-          "conservative": "Conservative"
-        },
         "fields": {
           "maxModelRequests": "Initial model request allowance",
           "maxActiveExecutionSeconds": "Initial active execution allowance",
           "toolTimeoutSeconds": "Tool timeout",
           "maxToolOutputBytes": "Model-visible tool output",
-          "maxRecallItems": "Recall items",
-          "maxRecallBytes": "Recall bytes",
           "maxSubagentMessages": "Subagent messages",
           "maxSubagentMessageBytes": "Subagent message bytes",
           "contextCompactionMode": "Context compaction preference",
@@ -883,8 +861,6 @@
           "maxChildren": "Direct children",
           "maxMessages": "Collaboration messages",
           "maxMessageBytes": "Message total (bytes)",
-          "maxRecallItems": "Recall items",
-          "maxRecallBytes": "Recall total (bytes)",
           "maxArtifactBytes": "Artifact total (bytes)",
           "artifactTtlSeconds": "Artifact lifetime (seconds)"
         }
@@ -1010,19 +986,8 @@
         "unavailableGrant": "Capability {capability} is no longer declared. The existing grant is retained; remove it explicitly before saving."
       },
       "integrationManagement": {
-        "title": "MCP / ACP integrations",
-        "pending": "Creation outcome is unknown. Reload the list before explicitly retrying the same creation. Hiding this view retains its original input; switching Apps, signing out or closing the editor’s page clears it. Inspect existing records before creating again.",
         "reload": "Reload list and discard edit draft",
-        "empty": "No selected service plugin provides a connection for this App.",
-        "cleanupOnly": "This App declares no MCP or ACP capabilities. Existing connections can be viewed, disabled or deleted; new connections cannot be created.",
-        "undeclaredKind": "This App no longer declares this integration type. You can disable or delete the retained connection.",
-        "credentialState": "Credential present: {present}; credential revision: {revision}",
-        "schemaHash": "Catalog hash",
-        "discover": "Discover and save catalog",
-        "confirmDelete": "Confirm deletion",
-        "create": "Create integration",
         "kind": "Kind",
-        "enabled": "Enable integration",
         "endpoint": "MCP HTTP/HTTPS URL",
         "privateHosts": "Private exceptions, host:port (one per line)",
         "credential": "MCP credential",
@@ -1031,19 +996,8 @@
         "replace": "Replace",
         "connection": "SSH connection",
         "chooseConnection": "Choose an SSH connection",
-        "unavailableConnection": "Unavailable connection (selection retained)",
         "argv": "argv (JSON string array, executable first)",
-        "cwd": "Absolute working directory",
-        "retryCreation": "Retry same creation with original key",
-        "newDraft": "Discard edit and start a new draft",
-        "tools": "Tools",
-        "resources": "Resources",
-        "prompts": "Prompts",
-        "description": "Configure each selected service instance in Plugin settings. Connections do not grant execution privileges.",
-        "sectionBasic": "Basic details",
-        "sectionMcp": "MCP service",
-        "sectionAcp": "ACP connection",
-        "deletePrompt": "Delete integration “{name}”? This cannot be undone."
+        "cwd": "Absolute working directory"
       }
     },
     "launcher": {

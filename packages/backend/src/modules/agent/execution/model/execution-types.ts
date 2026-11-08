@@ -12,8 +12,6 @@ export interface ExecutionLimits {
 	maxChildren: number;
 	maxMessages: number;
 	maxMessageBytes: number;
-	maxRecallItems: number;
-	maxRecallBytes: number;
 	maxArtifactBytes: number;
 	artifactTtlSeconds: number;
 }
@@ -69,8 +67,6 @@ export function copyExecutionLimits(value: ExecutionLimits): ExecutionLimits {
 		maxChildren: value.maxChildren,
 		maxMessages: value.maxMessages,
 		maxMessageBytes: value.maxMessageBytes,
-		maxRecallItems: value.maxRecallItems,
-		maxRecallBytes: value.maxRecallBytes,
 		maxArtifactBytes: value.maxArtifactBytes,
 		artifactTtlSeconds: value.artifactTtlSeconds,
 	};

@@ -110,12 +110,6 @@ function fromPublicPolicy(value: AgentExecutionPolicyOverrides): PolicyOverrides
 	if (value.maxToolOutputBytes !== undefined) {
 		result.maxToolOutputBytes = value.maxToolOutputBytes;
 	}
-	if (value.maxRecallItems !== undefined) {
-		result.maxRecallItems = value.maxRecallItems;
-	}
-	if (value.maxRecallBytes !== undefined) {
-		result.maxRecallBytes = value.maxRecallBytes;
-	}
 	if (value.maxSubagentMessages !== undefined) {
 		result.maxSubagentMessages = value.maxSubagentMessages;
 	}
@@ -138,12 +132,6 @@ function toPublicPolicy(value: PolicyOverrides): AgentExecutionPolicyOverrides {
 	}
 	if (value.maxToolOutputBytes !== undefined) {
 		result.maxToolOutputBytes = value.maxToolOutputBytes;
-	}
-	if (value.maxRecallItems !== undefined) {
-		result.maxRecallItems = value.maxRecallItems;
-	}
-	if (value.maxRecallBytes !== undefined) {
-		result.maxRecallBytes = value.maxRecallBytes;
 	}
 	if (value.maxSubagentMessages !== undefined) {
 		result.maxSubagentMessages = value.maxSubagentMessages;
@@ -176,8 +164,6 @@ const toPolicy = (v: ExecutionPolicy): AgentExecutionPolicyView => ({
 		maxActiveExecutionSeconds: v.effective.maxActiveExecutionSeconds,
 		toolTimeoutSeconds: v.effective.toolTimeoutSeconds,
 		maxToolOutputBytes: v.effective.maxToolOutputBytes,
-		maxRecallItems: v.effective.maxRecallItems,
-		maxRecallBytes: v.effective.maxRecallBytes,
 		maxSubagentMessages: v.effective.maxSubagentMessages,
 		maxSubagentMessageBytes: v.effective.maxSubagentMessageBytes,
 	},

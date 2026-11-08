@@ -80,12 +80,6 @@ export function toPolicyOverrides(row: StoredPolicyOverrides): PolicyOverrides {
 	if (row.maxToolOutputBytes !== undefined) {
 		result.maxToolOutputBytes = row.maxToolOutputBytes;
 	}
-	if (row.maxRecallItems !== undefined) {
-		result.maxRecallItems = row.maxRecallItems;
-	}
-	if (row.maxRecallBytes !== undefined) {
-		result.maxRecallBytes = row.maxRecallBytes;
-	}
 	if (row.maxSubagentMessages !== undefined) {
 		result.maxSubagentMessages = row.maxSubagentMessages;
 	}
@@ -108,12 +102,6 @@ function fromOverrides(row: PolicyOverrides): StoredPolicyOverrides {
 	}
 	if (row.maxToolOutputBytes !== undefined) {
 		result.maxToolOutputBytes = row.maxToolOutputBytes;
-	}
-	if (row.maxRecallItems !== undefined) {
-		result.maxRecallItems = row.maxRecallItems;
-	}
-	if (row.maxRecallBytes !== undefined) {
-		result.maxRecallBytes = row.maxRecallBytes;
 	}
 	if (row.maxSubagentMessages !== undefined) {
 		result.maxSubagentMessages = row.maxSubagentMessages;

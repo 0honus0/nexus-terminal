@@ -252,8 +252,6 @@ export function readAgentExecutionPolicyView(value: unknown): AgentExecutionPoli
 		maxActiveExecutionSeconds: agentInteger(effective.maxActiveExecutionSeconds, 1),
 		toolTimeoutSeconds: agentInteger(effective.toolTimeoutSeconds, 1),
 		maxToolOutputBytes: agentInteger(effective.maxToolOutputBytes, 1),
-		maxRecallItems: agentInteger(effective.maxRecallItems, 1),
-		maxRecallBytes: agentInteger(effective.maxRecallBytes, 1),
 		maxSubagentMessages: agentInteger(effective.maxSubagentMessages, 1),
 		maxSubagentMessageBytes: agentInteger(effective.maxSubagentMessageBytes, 1),
 	};

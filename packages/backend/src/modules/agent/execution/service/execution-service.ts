@@ -33,8 +33,6 @@ export function defaultExecutionSettings(): ExecutionSettings {
 		maxChildren: 4,
 		maxMessages: 256,
 		maxMessageBytes: 524288,
-		maxRecallItems: 5,
-		maxRecallBytes: 8192,
 		maxArtifactBytes: 536870912,
 		artifactTtlSeconds: 604800,
 	};
@@ -50,8 +48,6 @@ export function defaultExecutionSettings(): ExecutionSettings {
 		maxChildren: 4,
 		maxMessages: 5000,
 		maxMessageBytes: 8388608,
-		maxRecallItems: 20,
-		maxRecallBytes: 32768,
 		maxArtifactBytes: 10737418240,
 		artifactTtlSeconds: 2592000,
 	};
@@ -206,14 +202,6 @@ export class ExecutionService {
 		settings.limits.maxToolOutputBytes = Math.min(
 			settings.limits.maxToolOutputBytes,
 			overrides.maxToolOutputBytes ?? settings.limits.maxToolOutputBytes,
-		);
-		settings.limits.maxRecallItems = Math.min(
-			settings.limits.maxRecallItems,
-			overrides.maxRecallItems ?? settings.limits.maxRecallItems,
-		);
-		settings.limits.maxRecallBytes = Math.min(
-			settings.limits.maxRecallBytes,
-			overrides.maxRecallBytes ?? settings.limits.maxRecallBytes,
 		);
 		settings.limits.maxMessages = Math.min(
 			settings.limits.maxMessages,

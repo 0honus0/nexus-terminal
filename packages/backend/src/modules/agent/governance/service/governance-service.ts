@@ -175,8 +175,6 @@ export class GovernanceService {
 						(overrides.maxActiveExecutionSeconds ?? 1) > global.hardLimits.maxActiveSeconds ||
 						(overrides.toolTimeoutSeconds ?? 1) > global.hardLimits.toolTimeoutSeconds ||
 						(overrides.maxToolOutputBytes ?? 1) > global.hardLimits.maxToolOutputBytes ||
-						(overrides.maxRecallItems ?? 1) > global.hardLimits.maxRecallItems ||
-						(overrides.maxRecallBytes ?? 1) > global.hardLimits.maxRecallBytes ||
 						(overrides.maxSubagentMessages ?? 1) > global.hardLimits.maxMessages ||
 						(overrides.maxSubagentMessageBytes ?? 1) > global.hardLimits.maxMessageBytes
 					) {
@@ -298,8 +296,6 @@ export class GovernanceService {
 				maxActiveExecutionSeconds: value.limits.maxActiveSeconds,
 				toolTimeoutSeconds: value.limits.toolTimeoutSeconds,
 				maxToolOutputBytes: value.limits.maxToolOutputBytes,
-				maxRecallItems: value.limits.maxRecallItems,
-				maxRecallBytes: value.limits.maxRecallBytes,
 				maxSubagentMessages: value.limits.maxMessages,
 				maxSubagentMessageBytes: value.limits.maxMessageBytes,
 			},

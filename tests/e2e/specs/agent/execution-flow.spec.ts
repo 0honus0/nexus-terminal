@@ -32,6 +32,11 @@ for (const [name, file, pattern] of [
 		'storage/backend-next-browser-plugin-migration.integration.mjs',
 		'',
 	],
+	[
+		'Memory recall settings migration, publisher isolation and atomic rollback',
+		'storage/backend-next-memory-plugin-migration.integration.mjs',
+		'',
+	],
 	['subscriber asynchronous authority isolation', 'storage/backend-next-run-changes.integration.mjs', ''],
 	[
 		'streamed Artifact cancellation, revoked intents and package upgrade fences',

@@ -137,8 +137,6 @@ test('editable hard limits persist above defaults while budgets and App policy r
 		maxChildren: 12,
 		maxMessages: 10000,
 		maxMessageBytes: 16777216,
-		maxRecallItems: 100,
-		maxRecallBytes: 1048576,
 		maxArtifactBytes: 21474836480,
 		artifactTtlSeconds: 5184000,
 	};
@@ -185,8 +183,6 @@ test('editable hard limits persist above defaults while budgets and App policy r
 		maxActiveExecutionSeconds: 86400,
 		toolTimeoutSeconds: 600,
 		maxToolOutputBytes: 1048576,
-		maxRecallItems: 100,
-		maxRecallBytes: 1048576,
 		maxSubagentMessages: 10000,
 		maxSubagentMessageBytes: 16777216,
 	};

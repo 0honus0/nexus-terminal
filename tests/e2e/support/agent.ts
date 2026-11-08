@@ -228,14 +228,10 @@ export async function selectAgentSettingsGroup(
 		.click();
 }
 
-export async function selectAgentExtensionsSection(
-	page: Page,
-	section: 'apps' | 'integrations' | 'market' | 'budget',
-): Promise<void> {
+export async function selectAgentExtensionsSection(page: Page, section: 'apps' | 'market' | 'budget'): Promise<void> {
 	await selectAgentSettingsGroup(page, 'tools');
 	const labels = {
 		apps: 'Agent apps',
-		integrations: 'MCP / ACP',
 		market: 'Plugin market',
 		budget: 'Execution budget',
 	};

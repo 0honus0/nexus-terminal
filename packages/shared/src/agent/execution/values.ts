@@ -10,8 +10,6 @@ export const AGENT_EXECUTION_LIMIT_KEYS = [
 	'maxChildren',
 	'maxMessages',
 	'maxMessageBytes',
-	'maxRecallItems',
-	'maxRecallBytes',
 	'maxArtifactBytes',
 	'artifactTtlSeconds',
 ] as const;
@@ -37,8 +35,6 @@ export const AGENT_EXECUTION_LIMIT_MAXIMA = {
 	maxChildren: Number.MAX_SAFE_INTEGER,
 	maxMessages: Number.MAX_SAFE_INTEGER,
 	maxMessageBytes: Number.MAX_SAFE_INTEGER,
-	maxRecallItems: Number.MAX_SAFE_INTEGER,
-	maxRecallBytes: Number.MAX_SAFE_INTEGER,
 	maxArtifactBytes: Number.MAX_SAFE_INTEGER,
 	artifactTtlSeconds: Math.floor(AGENT_EXECUTION_MAX_EXPIRY_MS / 1000),
 } as const;

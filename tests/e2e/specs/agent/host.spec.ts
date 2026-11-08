@@ -779,8 +779,9 @@ test('Agent settings load independently of retired Runner endpoints and leave Br
 		await selectAgentSettingsGroup(page, group);
 		await expect(panel.getByRole('region', { name, exact: true })).toBeVisible();
 	}
-	await selectAgentExtensionsSection(page, 'integrations');
-	await expect(panel.getByRole('region', { name: 'MCP / ACP integrations', exact: true })).toBeVisible();
+	await selectAgentExtensionsSection(page, 'market');
+	await expect(panel.getByRole('tab', { name: 'MCP / ACP', exact: true })).toHaveCount(0);
+	await expect(panel.getByRole('region', { name: 'MCP / ACP integrations', exact: true })).toHaveCount(0);
 	await selectAgentSettingsGroup(page, 'runtime');
 	await expect(panel.getByRole('region', { name: 'CDP', exact: true })).toHaveCount(0);
 	await expect(panel.getByRole('heading', { name: 'Workspace dev environment', exact: true })).toHaveCount(0);
@@ -805,8 +806,9 @@ test('Agent settings surface exposes the current control plane and saves explici
 	}
 	await selectAgentExtensionsSection(page, 'apps');
 	await expect(panel.getByRole('region', { name: 'Agent apps', exact: true })).toBeVisible();
-	await selectAgentExtensionsSection(page, 'integrations');
-	await expect(panel.getByRole('region', { name: 'MCP / ACP integrations', exact: true })).toBeVisible();
+	await selectAgentExtensionsSection(page, 'market');
+	await expect(panel.getByRole('tab', { name: 'MCP / ACP', exact: true })).toHaveCount(0);
+	await expect(panel.getByRole('region', { name: 'MCP / ACP integrations', exact: true })).toHaveCount(0);
 	await selectAgentSettingsGroup(page, 'safety');
 	await expect(panel.getByRole('region', { name: 'Agent global target denylist', exact: true })).toBeVisible();
 	await expect(panel.getByRole('region', { name: 'Memory management', exact: true })).toHaveCount(0);
