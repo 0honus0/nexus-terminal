@@ -759,14 +759,14 @@ test('Agent execution setting gates the launcher and its global window', async (
 	await expect(hub).toHaveCount(0);
 });
 
-test('Agent settings load independently of retired Runner endpoints and expose current Browser and ACP owners', async ({
+test('Agent settings load independently of retired Runner endpoints and leave Browser configuration to plugins', async ({
 	page,
 	context,
 }) => {
 	await loginAsInitialAdmin(context.request);
 	await setUiLanguage(context.request);
 	const obsoleteRequests: string[] = [];
-	await page.route('**/api/v1/agent/workspace-runtime/**', (route) => {
+	await page.route(/\/api\/v1\/agent\/(?:workspace-runtime(?:\/|$)|browser\/configuration(?:\?|$))/, (route) => {
 		obsoleteRequests.push(route.request().url());
 		return route.abort();
 	});
@@ -782,7 +782,7 @@ test('Agent settings load independently of retired Runner endpoints and expose c
 	await selectAgentExtensionsSection(page, 'integrations');
 	await expect(panel.getByRole('region', { name: 'MCP / ACP integrations', exact: true })).toBeVisible();
 	await selectAgentSettingsGroup(page, 'runtime');
-	await expect(panel.getByRole('region', { name: 'CDP', exact: true })).toBeVisible();
+	await expect(panel.getByRole('region', { name: 'CDP', exact: true })).toHaveCount(0);
 	await expect(panel.getByRole('heading', { name: 'Workspace dev environment', exact: true })).toHaveCount(0);
 	expect(obsoleteRequests).toEqual([]);
 });
@@ -799,7 +799,6 @@ test('Agent settings surface exposes the current control plane and saves explici
 	for (const [group, name] of [
 		['models', 'Model providers'],
 		['runtime', 'Execution and performance'],
-		['runtime', 'CDP'],
 	] as const) {
 		await selectAgentSettingsGroup(page, group);
 		await expect(panel.getByRole('region', { name, exact: true })).toBeVisible();

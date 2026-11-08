@@ -24,6 +24,7 @@
 - 插件源码 `4dee500a` 的Validate42459303193及Aggregate catalog42459302603成功；公开latest `catalog-20261108-2`保留此前全部12项并新增Browser2.1.1，13项均有三语说明。`catalog-reaggregation-tests.log`17项通过，`catalog-reaggregation-live.log`使用真实公开旧目录和新签包连续链聚合成功，原摘要与版本保留。
 - 截图复核发现宿主插件启用、未知操作确认和卸载清数据选项同样误用UiCheckbox插槽，已改为可见且关联控件的标签；通用配置布尔项沿已有表单标签并补可访问名称。`check-host-labels.log`、`build-host-labels.log`通过，`local-e2e-host-label-text.log`一项通过，覆盖点击清理文字切换勾选、取消卸载及设置保存重开。19a76674的首次本体远程42459304789因追加此UI缺陷修复而主动取消，不计通过；最终完整远程待后续SHA回填。
 - 新目录首次聚合42459106697失败，旧目录翻译文案被误按签名发行元数据作整项比较；修复为独立投影可执行身份和展示文案，继续核对原签名/摘要/兼容声明，不修改已发布归档。新增连续两次聚合翻译的回归，并保留首次失败日志 `catalog-mobile-first-failed.log`。
+- 本体a5095c69的完整远程42459675080发现两条旧宿主设置用例仍要求全局CDP面板；按本轮归属改为核对旧面板不存在、旧全局配置和Runner请求均未发起，Provider及运行设置断言保留。插件配置保存由新增正式场景承接。首次分片原日志保留 `remote-shard4-first.log`，本地两条受影响场景通过，最终远程另行记录。
 - 三语市场1440px英文、320px中文和390px日文已通过真实偏好及公开目录显示、卡片/标签/页面宽度检查，截图为 `market-final-*.png`。首次设置页失败保留 `cdp-acceptance-first.log`、`browser-overflow-first.png`；最终正式2.1.1经真实prepare-update/update安装后，三语市场与320px设置保存、优先级800、说明与选项文字、无溢出和零pageerror通过，见 `cdp-acceptance.json`、`cdp-acceptance-final-second.log` 与 `browser-settings-final-320.png`。第二次脚本误用三击选中导致输入追加、首次宿主标签断言早于设置读取完成，均修正验收脚本后通过，首次日志保留；不将这些自动化操作问题计为产品缺陷。
 
 ## Agent 限制复审与容量回归（2026-11-07）
