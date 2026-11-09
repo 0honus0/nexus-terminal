@@ -280,21 +280,35 @@ test('terminal coalesces continuous resizing while output and keyboard input rem
 	await page.locator('input.command-bar-input').press('Enter');
 	await expect(terminal).toContainText('RESIZE_OUTPUT_1');
 	await input.focus();
+	await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
 	resizeFrames.length = 0;
-	const drag = terminal.evaluate(async (element) => {
-		const startWidth = element.getBoundingClientRect().width;
-		for (let frame = 0; frame < 24; frame++) {
-			element.style.width = `${startWidth - (frame + 1) * 5}px`;
-			await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-		}
-	});
-	await page.keyboard.type("printf 'RESIZE_INPUT_OK\\n'", { delay: 5 });
-	await drag;
+	const startWidth = await terminal.evaluate((element) => element.getBoundingClientRect().width);
+	for (let frame = 0; frame < 24; frame++) {
+		// Deliver every real layout change before advancing the virtual debounce.
+		// A slow CI rendering frame must not become a user pause longer than 100ms.
+		await terminal.evaluate(
+			(element, width) =>
+				new Promise<void>((resolve) => {
+					const observer = new ResizeObserver(() => {
+						observer.disconnect();
+						resolve();
+					});
+					observer.observe(element);
+					element.style.width = `${width}px`;
+				}),
+			startWidth - (frame + 1) * 5,
+		);
+		if (frame === 11) await page.keyboard.type("printf 'RESIZE_INPUT_OK\\n'");
+		await page.clock.runFor(16);
+	}
+	await page.clock.runFor(100);
 	await expect.poll(() => resizeFrames.length).toBe(1);
 	const countAfterResize = resizeFrames.length;
 	await page.clock.runFor(350);
 	expect(resizeFrames.length).toBe(countAfterResize);
 	await expect(input).toBeFocused();
+	// Remote output arrives on the real SSH clock and needs browser RAF to render.
+	await page.clock.resume();
 	await page.keyboard.press('Enter');
 	await expect(terminal).toContainText('RESIZE_OUTPUT_30');
 	await expect(terminal).toContainText('RESIZE_INPUT_OK');

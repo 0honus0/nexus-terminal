@@ -24,11 +24,18 @@ export async function openPuppeteerBrowser() {
 			browser,
 
 			async close() {
+				const failures = [];
 				try {
 					await browser.disconnect();
-				} finally {
-					await process.close();
+				} catch (error) {
+					failures.push(error);
 				}
+				try {
+					await process.close();
+				} catch (error) {
+					failures.push(error);
+				}
+				if (failures.length) throw new AggregateError(failures, 'Test browser cleanup failed');
 			},
 		};
 	} catch (cause) {

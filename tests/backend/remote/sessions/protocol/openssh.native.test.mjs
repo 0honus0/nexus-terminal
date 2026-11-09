@@ -9,7 +9,6 @@ import {
 	readFile,
 	writeFile,
 	readdir,
-	rm,
 	chmod,
 	utimes,
 	symlink,
@@ -35,7 +34,7 @@ await test(
 	'B10 installed backend-next with OS OpenSSH, real SFTP, PTY and native archives',
 	{ timeout: 60000 },
 	async (t) => {
-		const directory = await mkdtemp(join(tmpdir(), 'nexus-b10-openssh-'));
+		const directory = await mkdtemp(join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'nexus-b10-openssh-'));
 		let sshd;
 		let app;
 		let workspace;
@@ -231,7 +230,7 @@ await test(
 						password: 'incorrect',
 					});
 					assert.equal(refused.payload.type, 'failed', JSON.stringify(refused));
-					assert.equal(refused.payload.code, 'INVALID_PASSWORD');
+					assert.equal(refused.payload.code, 'INVALID_PASSWORD', JSON.stringify(refused));
 					assert.deepEqual(await readdir(root), ['encrypted.zip']);
 					const extracted = await workspace.archive('transfer.decompress', { source: archive, password });
 					assert.equal(extracted.payload.type, 'completed', JSON.stringify(extracted));
@@ -475,11 +474,7 @@ await test(
 				Promise.resolve().then(() => workspace?.close()),
 				Promise.resolve().then(() => app?.close()),
 			]);
-			try {
-				await sshd?.close();
-			} finally {
-				await rm(directory, { recursive: true, force: true });
-			}
+			cleanup.push(...(await Promise.allSettled([Promise.resolve().then(() => sshd?.close())])));
 			const failures = cleanup.filter((result) => result.status === 'rejected').map((result) => result.reason);
 			if (failures.length) {
 				throw new AggregateError(failures, 'OpenSSH integration cleanup failed');

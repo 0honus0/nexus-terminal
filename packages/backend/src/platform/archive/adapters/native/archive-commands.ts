@@ -419,12 +419,20 @@ export class NativeArchiveCommands implements ArchiveCommands {
 										"printf 'NEXUS_ARCHIVE_ERROR:PASSWORD_REQUIRED\\n'; exit 82; fi",
 								]
 							: [
+									// ZipCrypto checks only one password-header byte. A wrong
+									// password can pass that check and then fail payload CRC or
+									// inflate with exit 2 instead of 82. Both reject password
+									// validation before an extraction directory is created.
+									'encrypted=0; if zipinfo -v -- ' +
+										quote(snapshot) +
+										" | grep -Eq 'file security status:[[:space:]]*encrypted'; then encrypted=1; fi",
 									'unzip -tq -P ' +
 										quote(password) +
 										' -- ' +
 										quote(snapshot) +
 										' >/dev/null 2>&1 || { code=$?; ' +
-										'if [ "$code" -eq 82 ]; then printf \'NEXUS_ARCHIVE_ERROR:INVALID_PASSWORD\\n\'; exit 82; fi; ' +
+										'if [ "$code" -eq 82 ] || { [ "$code" -eq 2 ] && [ "$encrypted" -eq 1 ]; }; then ' +
+										"printf 'NEXUS_ARCHIVE_ERROR:INVALID_PASSWORD\\n'; exit 82; fi; " +
 										'exit 78; }',
 								]),
 					]
