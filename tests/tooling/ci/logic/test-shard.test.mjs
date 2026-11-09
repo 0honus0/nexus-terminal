@@ -30,6 +30,8 @@ const phase = args.includes('--test-concurrency=2') ? 'native'
   : args.includes('--test') ? 'interop' : 'host-browser';
 const record = (event) => fs.appendFileSync(root + '/events', phase + ':' + event + '\\n');
 record('start');
+console.log(phase + ' diagnostic stdout');
+console.error(phase + ' diagnostic stderr');
 if (phase === 'host-browser' && process.env.NEXUS_TEST_PLUGIN_SET !== undefined) throw Error('Candidate environment leaked into generic Host tests');
 if (['interop', 'plugin-browser'].includes(phase) && process.env.NEXUS_TEST_PLUGIN_SET !== 'exact-candidate') throw Error('Plugin tests lost their pinned candidate');
 if (phase === 'native' || phase === 'modules') {
@@ -93,6 +95,13 @@ test.each(['success', 'failure'])('independent test lanes retain every layer and
 	const events = (await readFile(join(f.root, 'events'), 'utf8')).trim().split('\n');
 	for (const phase of ['native', 'modules', 'host-browser', 'interop', 'plugin-browser']) {
 		assert.ok(events.includes(phase + ':end'), phase);
+		assert.ok(!result.output.includes(phase + ' diagnostic stdout'));
+		assert.ok(!result.output.includes(phase + ' diagnostic stderr'));
+		const logName = phase === 'interop' ? 'plugin-interop' : phase;
+		const log = await readFile(join(f.root, 'artifacts/logs', logName + '.log'), 'utf8');
+		assert.ok(log.includes(phase + ' diagnostic stdout'));
+		assert.ok(log.includes(phase + ' diagnostic stderr'));
+		assert.match(result.output, new RegExp('\\[Tests\\] ' + logName + ': (passed|failed)'));
 	}
 	assert.ok(events.indexOf('native:start') < events.indexOf('modules:end'));
 	assert.ok(events.indexOf('modules:start') < events.indexOf('native:end'));

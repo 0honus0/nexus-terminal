@@ -9,7 +9,7 @@ plugin_root="${NEXUS_TEST_PLUGIN_SOURCE_ROOT:?Pinned plugin source is required}"
 mkdir -p "$artifacts/reports" "$artifacts/metrics" "$artifacts/plugin-interop/reports"
 
 measure() {
-  bash "$repo_root/scripts/e2e/measure-command.sh" "$artifacts/metrics/$1.json" "${@:2}"
+  NEXUS_TEST_LOG_DIR="$artifacts/logs" bash "$repo_root/scripts/e2e/measure-command.sh" "$artifacts/metrics/$1.json" "${@:2}"
 }
 
 if [[ "${3:-}" == native ]]; then
@@ -70,8 +70,7 @@ if [[ "$shard" == 1 ]]; then
 fi
 
 cd "$repo_root"
-measure host-browser env -u NEXUS_TEST_PLUGIN_SET node scripts/e2e/balanced-shards.mjs run --shards "$shards" --shard "$shard" \
-  > >(tee "$artifacts/host-browser.log") 2>&1 || failed=1
+measure host-browser env -u NEXUS_TEST_PLUGIN_SET node scripts/e2e/balanced-shards.mjs run --shards "$shards" --shard "$shard" || failed=1
 
 cd "$plugin_root"
 NEXUS_TEST_ARTIFACT_DIR="$artifacts/plugin-interop" measure plugin-interop \

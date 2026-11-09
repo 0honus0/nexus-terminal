@@ -41,3 +41,5 @@ CI的原生协议与模块/浏览器链重叠执行，浏览器两仓仍顺序�
 所有可替代的长短等待使用框架虚拟时钟，按H-22.1控制实际时钟owner。共享CI环境定义归`fixtures/runner/Dockerfile`；分层产物默认归`tests/.artifacts/`，模块与浏览器分别使用`modules/`和`browser/`；发现时创建产物根目录。Vitest缓存归`tests/.cache/vitest/`，不再沿用浏览器专用运行目录。独立插件门禁消费成功Host发布的不可变test-environment产物，沿用同一runner digest与指纹。
 
 Playwright WebServer的完整stdout/stderr保存到本轮产物`webserver/{backend,frontend}/run-*/output.log`，成功/失败均随现有分片报告上传；进程组、健康检查和失败状态仍由Playwright持有。控制台仅保留测试步骤/结果及框架失败摘要，排查服务启动、重置与收尾时读取对应WebServer日志。
+
+分片执行各阶段时，控制台仅显示阶段开始、结束、实际耗时、退出结果和日志位置；模块/协议/本体浏览器/插件互操作/插件浏览器的完整双流追加保存为本轮`logs/<phase>.log`，复用原报告上传。逐用例结果仍在原框架JSON/JUnit/HTML，失败、未知结果和取消状态不变；日志不截断，不再把两条链的全部输出tee到控制台。质量作业的报告器模拟失败单测输出按用户要求保留。

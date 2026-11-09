@@ -448,6 +448,7 @@ jobs:
           name: test-layers-${{ matrix.shard }}-${{ github.run_attempt }}
           path: |
             tests/.artifacts/layers/metrics/*
+            tests/.artifacts/layers/logs/*.log
             tests/.artifacts/layers/**/reports/*
             tests/.artifacts/layers/**/browser/report.json
             tests/.artifacts/layers/**/*combination.json
@@ -554,7 +555,7 @@ jobs:
           echo "Staged ${#screenshots[@]} E2E screenshots under doc/imgs/e2e."
 
       - name: Push updated timings and requested screenshots
-        if: github.ref_type == 'branch' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.refresh_screenshots))
+        if: github.ref_type == 'branch' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         env:
           TESTED_SHA: ${{ github.sha }}
           TARGET_BRANCH: ${{ github.ref_name }}
