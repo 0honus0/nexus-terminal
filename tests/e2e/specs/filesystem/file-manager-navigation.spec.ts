@@ -29,6 +29,10 @@ import {
 	waitForBinaryText,
 } from '../../../support/protocols/workspace-client';
 
+test.beforeEach(async ({ page }) => {
+	await page.clock.install();
+});
+
 test.use({ e2eServices: ['ssh'] });
 
 const FAVORITE_NAME = 'E2E Folder Seed';
@@ -921,7 +925,7 @@ test.describe('remote drag move on touch-capable desktop', () => {
 				await moveTo(row(page, 'hover-target'));
 				await expect(row(page, 'hover-target')).toHaveClass(/\bis-drop-target\b/);
 				await cancel();
-				await page.waitForTimeout(2200);
+				await page.clock.runFor(2200);
 				await expect(pathInput(page)).toHaveValue('/');
 				await expect(row(page, 'hover-one.txt')).toBeVisible();
 				await expect(row(page, 'hover-source')).toBeVisible();

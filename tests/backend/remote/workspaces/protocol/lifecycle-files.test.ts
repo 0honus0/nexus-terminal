@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { generateKeyPairSync } from 'node:crypto';
 import { expect, test, HTTP_TEST_ORIGIN } from '../../../../support/http/ssh-protocol-fixture.mjs';
 import { loginAsAdmin } from '../../../../support/http/ssh-protocol-fixture.mjs';
@@ -167,8 +169,9 @@ test('detached workspace resumes only with its credential and replays missed ter
 	await loginAsAdmin(request);
 	const connectionId = await createSshConnection(request, ssh);
 	const workspace = await httpClients.openWorkspace(connectionId, `resume-${crypto.randomUUID()}`);
+	const completedPath = join(ssh.root, `detached-replay-${crypto.randomUUID()}`);
 	await requestWorkspace(workspace.socket, 'terminal.input', {
-		data: "sleep 1; printf 'NEXUS_DETACHED_REPLAY\\n'\n",
+		data: `sleep 1; printf '%s%s\\n' 'NEXUS_DETACHED_' 'REPLAY'; printf done > '${completedPath}'\n`,
 	});
 	workspace.socket.terminate();
 	const replacement = await httpClients.openSocket();
@@ -197,7 +200,16 @@ test('detached workspace resumes only with its credential and replays missed ter
 	} finally {
 		await closeWebSocket(rejected);
 	}
-	await new Promise((resolve) => setTimeout(resolve, 1300));
+	await expect
+		.poll(async () => {
+			try {
+				return await readFile(completedPath, 'utf8');
+			} catch (cause) {
+				if (!(cause instanceof Error) || !('code' in cause) || cause.code !== 'ENOENT') throw cause;
+				return '';
+			}
+		})
+		.toBe('done');
 	const resumed = await httpClients.openSocket();
 	try {
 		const replay = waitForBinaryText(resumed, 'NEXUS_DETACHED_REPLAY', 10000);
@@ -260,7 +272,16 @@ test('detached workspace keeps archive work running and publishes its verified r
 			requestId,
 		);
 		workspace.socket.terminate();
-		await new Promise((resolve) => setTimeout(resolve, 1300));
+		await expect
+			.poll(async () => {
+				try {
+					return (await readFile(join(ssh.root, destination))).length;
+				} catch (cause) {
+					if (!(cause instanceof Error) || !('code' in cause) || cause.code !== 'ENOENT') throw cause;
+					return 0;
+				}
+			})
+			.toBeGreaterThan(0);
 		const resumed = await httpClients.openSocket();
 		try {
 			const result = await resumeWorkspaceSession(resumed, {

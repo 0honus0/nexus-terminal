@@ -1,5 +1,10 @@
 import { expect, test, type Page } from '../../support/fixtures';
 
+test.beforeEach(async ({ page }) => {
+	await page.clock.install();
+	await page.exposeFunction('__advanceTerminalTestClock', (milliseconds: number) => page.clock.runFor(milliseconds));
+});
+
 interface TerminalLifecycleHarness {
 	mount(): Promise<void>;
 	unmount(): void;
@@ -32,6 +37,7 @@ interface TerminalLifecycleHarness {
 declare global {
 	interface Window {
 		__terminalLifecycle: TerminalLifecycleHarness;
+		__advanceTerminalTestClock(milliseconds: number): Promise<void>;
 	}
 }
 
@@ -389,7 +395,7 @@ test('a composition that ends after leaving the terminal cannot send stale text 
 	});
 	await expect(page.locator('#terminal-lifecycle-host .composition-view')).not.toHaveClass(/active/);
 	await page.evaluate(async () => {
-		await new Promise((resolve) => setTimeout(resolve, 0));
+		await window.__advanceTerminalTestClock(0);
 		await window.__terminalLifecycle.active(true);
 	});
 	expect(await page.evaluate(() => window.__terminalLifecycle.inputs)).toEqual([]);
@@ -415,7 +421,7 @@ for (const delivery of ['input-before-timer', 'timer-before-input', 'keyup-befor
 				input.dispatchEvent(
 					new KeyboardEvent('keydown', { key: ' ', code: 'Space', keyCode: 229, bubbles: true }),
 				);
-				if (delivery === 'timer-before-input') await new Promise((resolve) => setTimeout(resolve, 0));
+				if (delivery === 'timer-before-input') await window.__advanceTerminalTestClock(0);
 				if (delivery === 'keyup-before-input')
 					input.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', keyCode: 32, bubbles: true }));
 				input.dispatchEvent(
@@ -436,11 +442,11 @@ for (const delivery of ['input-before-timer', 'timer-before-input', 'keyup-befor
 							composed: true,
 						}),
 					);
-				await new Promise((resolve) => setTimeout(resolve, 0));
+				await window.__advanceTerminalTestClock(0);
 				if (delivery !== 'keyup-before-input')
 					input.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', keyCode: 32, bubbles: true }));
 			}
-			await new Promise((resolve) => setTimeout(resolve, 0));
+			await window.__advanceTerminalTestClock(0);
 			return window.__terminalLifecycle.inputs;
 		}, delivery);
 		expect(inputs).toEqual([' ', ' ', ' ']);
@@ -459,7 +465,7 @@ test('terminal IME replacements send only the changed suffix and preserve comple
 		]) {
 			input.value = before ?? '';
 			input.dispatchEvent(new KeyboardEvent('keydown', { keyCode: 229, bubbles: true }));
-			await new Promise((resolve) => setTimeout(resolve, 0));
+			await window.__advanceTerminalTestClock(0);
 			input.value = after ?? '';
 			input.dispatchEvent(
 				new InputEvent('input', {
@@ -471,7 +477,7 @@ test('terminal IME replacements send only the changed suffix and preserve comple
 			);
 			input.dispatchEvent(new KeyboardEvent('keyup', { keyCode: 229, bubbles: true }));
 		}
-		await new Promise((resolve) => setTimeout(resolve, 0));
+		await window.__advanceTerminalTestClock(0);
 		return window.__terminalLifecycle.inputs;
 	});
 	expect(inputs).toEqual(['\x7f。', '\x7f🙃', '\x7f\x7f']);
@@ -486,20 +492,20 @@ test('terminal IME fallback preserves composition, direct emoji and desktop spac
 		if (!input) throw new Error('Terminal textarea is missing.');
 		input.focus();
 		input.dispatchEvent(new KeyboardEvent('keydown', { keyCode: 229, bubbles: true }));
-		await new Promise((resolve) => setTimeout(resolve, 0));
+		await window.__advanceTerminalTestClock(0);
 		input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
 		input.value = '中文🙂';
 		input.dispatchEvent(new CompositionEvent('compositionupdate', { data: input.value, bubbles: true }));
 		input.dispatchEvent(new CompositionEvent('compositionend', { data: input.value, bubbles: true }));
 		input.dispatchEvent(new KeyboardEvent('keyup', { keyCode: 229, bubbles: true }));
-		await new Promise((resolve) => setTimeout(resolve, 0));
+		await window.__advanceTerminalTestClock(0);
 		input.value += '😄';
 		input.dispatchEvent(
 			new InputEvent('input', { inputType: 'insertText', data: '😄', bubbles: true, composed: true }),
 		);
 		input.dispatchEvent(new KeyboardEvent('keydown', { key: '!', keyCode: 229, bubbles: true }));
 		input.value += '!';
-		await new Promise((resolve) => setTimeout(resolve, 0));
+		await window.__advanceTerminalTestClock(0);
 		input.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: '!', bubbles: true }));
 		input.dispatchEvent(new KeyboardEvent('keyup', { key: '!', keyCode: 229, bubbles: true }));
 	});
@@ -513,14 +519,14 @@ test('terminal cannot deliver a delayed iOS space after leaving its pane', async
 		const input = document.querySelector<HTMLTextAreaElement>('#terminal-lifecycle-host textarea');
 		if (!input) throw new Error('Terminal textarea is missing.');
 		input.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', keyCode: 229, bubbles: true }));
-		await new Promise((resolve) => setTimeout(resolve, 0));
+		await window.__advanceTerminalTestClock(0);
 		await window.__terminalLifecycle.active(false);
 		input.value = ' ';
 		input.dispatchEvent(
 			new InputEvent('input', { inputType: 'insertText', data: ' ', bubbles: true, composed: true }),
 		);
 		input.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', keyCode: 32, bubbles: true }));
-		await new Promise((resolve) => setTimeout(resolve, 0));
+		await window.__advanceTerminalTestClock(0);
 		await window.__terminalLifecycle.active(true);
 		input.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', keyCode: 32, bubbles: true }));
 	});
@@ -538,14 +544,14 @@ test('terminal clears pending IME baselines on blur and input disable before ret
 			input.focus();
 			input.value = 'previously sent text';
 			input.dispatchEvent(new KeyboardEvent('keydown', { keyCode: 229, bubbles: true }));
-			await new Promise((resolve) => setTimeout(resolve, 0));
+			await window.__advanceTerminalTestClock(0);
 			if (blur) input.blur();
 			else await window.__terminalLifecycle.active(false);
 			input.value = '';
 			await window.__terminalLifecycle.active(true);
 			input.focus();
 			input.dispatchEvent(new KeyboardEvent('keyup', { keyCode: 229, bubbles: true }));
-			await new Promise((resolve) => setTimeout(resolve, 0));
+			await window.__advanceTerminalTestClock(0);
 			results.push([...window.__terminalLifecycle.inputs]);
 			input.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', keyCode: 229, bubbles: true }));
 			input.value = ' ';
@@ -553,7 +559,7 @@ test('terminal clears pending IME baselines on blur and input disable before ret
 				new InputEvent('input', { inputType: 'insertText', data: ' ', bubbles: true, composed: true }),
 			);
 			input.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', keyCode: 32, bubbles: true }));
-			await new Promise((resolve) => setTimeout(resolve, 0));
+			await window.__advanceTerminalTestClock(0);
 			results.push([...window.__terminalLifecycle.inputs]);
 		}
 		return results;
@@ -826,7 +832,7 @@ test('synchronized TUI updates remain atomic without animation frames', async ({
 		harness.output('\x1b[?2026h\x1b[2J\x1b[HNEW_COMPLETE_FRAME');
 		await harness.serialize();
 	});
-	await page.waitForTimeout(150);
+	await page.clock.runFor(150);
 	await expect(rows).not.toContainText('NEW_COMPLETE_FRAME');
 	await page.evaluate(() => window.__terminalLifecycle.output('\x1b[?2026l'));
 	await expect(rows).toContainText('NEW_COMPLETE_FRAME');
@@ -839,7 +845,7 @@ test('terminal output and viewport recover while animation frames are deferred',
 		await window.__terminalLifecycle.serialize();
 	});
 	await expect(page.locator('#terminal-lifecycle-host .xterm-rows')).toContainText('INITIAL_OUTPUT');
-	await page.waitForTimeout(100);
+	await page.clock.runFor(100);
 	await page.evaluate(async () => {
 		const harness = window.__terminalLifecycle;
 		harness.deferAnimationFrames();
@@ -879,14 +885,15 @@ async function trainTerminalEcho(page: Page): Promise<void> {
 	await mountTerminalHarness(page);
 	await page.evaluate(() => window.__terminalLifecycle.output('$ '));
 	await expect(page.locator('#terminal-lifecycle-host .xterm-rows')).toContainText('$ ');
-	// Each sample represents a genuine transport delay, not a forced predictor flag.
+	// Advance the same controlled transport-delay samples through the framework clock.
+	// Input, remote echo and predictor deadlines keep their original relative timing.
 	await page.evaluate(async () => {
 		const harness = window.__terminalLifecycle;
 		for (const char of 'abcdefgh') {
 			harness.input(char);
-			await new Promise((resolve) => setTimeout(resolve, char === 'a' ? 650 : 70));
+			await window.__advanceTerminalTestClock(char === 'a' ? 650 : 70);
 			harness.output(char);
-			await new Promise((resolve) => setTimeout(resolve, 30));
+			await window.__advanceTerminalTestClock(30);
 		}
 	});
 	await expect(page.locator('#terminal-lifecycle-host .xterm-rows')).toContainText('$ abcdefgh');
@@ -918,15 +925,14 @@ test('terminal jitter keeps visible input until remote echo confirms or corrects
 	await page.evaluate(() => window.__terminalLifecycle.input('i'));
 	await expect(rows).toContainText('$ abcdefghi');
 	// Model an RTT spike beyond the learned cleanup deadline, without a wall-clock sleep.
-	await page.clock.install();
-	await page.clock.fastForward(2000);
+	await page.clock.runFor(2000);
 	await expect(rows).toContainText('$ abcdefghi');
 	await page.evaluate(() => window.__terminalLifecycle.output('i'));
 	await waitForEchoFrame(page, 10);
 	await expect(rows).toContainText('$ abcdefghi');
 	await page.evaluate(() => window.__terminalLifecycle.input('\x7f'));
 	await expect(rows).not.toContainText('abcdefghi');
-	await page.clock.fastForward(4000);
+	await page.clock.runFor(4000);
 	await expect(rows).not.toContainText('abcdefghi');
 	await page.evaluate(() => window.__terminalLifecycle.output('\b \b'));
 	await waitForEchoFrame(page, 11);
@@ -1086,7 +1092,7 @@ test('terminal line edge keeps accepted predictions and permits deletion toward 
 	await page.evaluate(async (fill) => {
 		// Keep this bulk sample on the same delayed link as training. An immediate
 		// echo legitimately disables prediction once it replaces the latency window.
-		await new Promise((resolve) => setTimeout(resolve, 70));
+		await window.__advanceTerminalTestClock(70);
 		window.__terminalLifecycle.output(fill);
 	}, fill);
 	await waitForEchoFrame(page, 10);

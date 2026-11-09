@@ -13,12 +13,15 @@ import {
 import { captureFunctionalScreenshot, functionalScreenshotsEnabled } from '../../support/functional-screenshots';
 import { step, slowStep } from '../../support/steps';
 
+test.beforeEach(async ({ page }) => {
+	await page.clock.install();
+});
+
 test.use({ e2eServices: ['ssh'] });
 
 const MOBILE_LONG_FILENAME = `mobile-long-name-${'x'.repeat(180)}.txt`;
 
 test('mobile SSH workspace keeps terminal space and exposes touch-only tools', async ({ page, context }) => {
-	await page.clock.install();
 	const sentFrames: string[] = [];
 	page.on('websocket', (socket) => {
 		socket.on('framesent', (event) => {
@@ -89,7 +92,7 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
 			timeout: 15_000,
 		});
 		await monitor.getByRole('button', { name: /^CPU / }).hover();
-		await page.waitForTimeout(350);
+		await page.clock.runFor(350);
 		await expect(page.locator('[data-ui="tooltip-panel"]')).toHaveCount(0);
 		await expect(monitor).toContainText('CPU');
 		await expect(monitor.getByText('Online', { exact: true })).toBeVisible();
@@ -202,7 +205,7 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
 			clientX: point.x,
 			clientY: point.y,
 		});
-		await page.waitForTimeout(620);
+		await page.clock.runFor(620);
 		await file.dispatchEvent('pointerup', {
 			pointerId: 1,
 			pointerType: 'touch',

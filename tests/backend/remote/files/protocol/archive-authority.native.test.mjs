@@ -3,7 +3,6 @@ import { test } from 'node:test';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
-import { setTimeout as delay } from 'node:timers/promises';
 import { openWorkspace, until } from '../../../../support/protocols/openssh-fixture.mjs';
 import { remoteFilesFixture, transferEvent } from '../../transfers/support/file-transfer-fixture.mjs';
 import { WorkspaceService } from '../../../../../packages/backend/dist/modules/remote/sessions/service/workspace-service.js';
@@ -19,6 +18,12 @@ await test(
 	'Real archive prepare, dispatch and publication cannot cross a suspended owner lease',
 	{ timeout: 60000 },
 	async (t) => {
+		t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
+		let release;
+		const boundary = new Promise((resolve) => {
+			release = resolve;
+		});
+		t.after(() => release());
 		const f = await remoteFilesFixture(t);
 		f.state.allowUnknownShutdown = true;
 		const cases = [];
@@ -81,7 +86,7 @@ await test(
 		async function hold(value) {
 			assert.ok(value.expiresAt > Date.now(), 'operation reached its real boundary while authorized');
 			value.held = true;
-			await delay(Math.max(1, value.expiresAt - Date.now() + 20));
+			await boundary;
 		}
 
 		t.mock.method(SftpFileResource.prototype, 'stat', async function (request) {
@@ -116,7 +121,8 @@ await test(
 			}),
 		);
 		await until(() => cases.every((value) => value.held), Boolean, 'all three real archive boundaries reached');
-		await delay(Math.max(0, Math.max(...cases.map((value) => value.expiresAt)) - Date.now() + 50));
+		t.mock.timers.tick(Math.max(0, Math.max(...cases.map((value) => value.expiresAt)) - Date.now() + 50));
+		release();
 		await Promise.all(
 			cases.map(async (value) => {
 				const event = await transferEvent(value.workspace, 'transfer.archive', value.requestId, [

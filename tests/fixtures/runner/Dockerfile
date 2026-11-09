@@ -16,7 +16,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/opt/pnpm:${PATH}
 
 RUN npm install --global --allow-scripts=pnpm "pnpm@${PNPM_VERSION}" \
-  && pnpm dlx "playwright@${PLAYWRIGHT_VERSION}" install --with-deps chromium \
+  && pnpm dlx "playwright@${PLAYWRIGHT_VERSION}" install --with-deps --only-shell chromium \
   && apt-get update \
   && apt-get upgrade -y \
   && apt-get install -y --no-install-recommends time bzip2 ca-certificates git openssh-client openssh-server rsync sshpass unzip zip xrdp tigervnc-standalone-server tigervnc-tools xterm xdotool xclip fonts-dejavu-core openssl \

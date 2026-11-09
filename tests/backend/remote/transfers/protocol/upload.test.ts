@@ -1,3 +1,4 @@
+import { once } from 'node:events';
 import { expect, test, HTTP_TEST_ORIGIN } from '../../../../support/http/ssh-protocol-fixture.mjs';
 import { createHash } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
@@ -433,17 +434,21 @@ test('stale upload data after workspace close cannot terminate the backend', asy
 			`/ws/uploads?workspaceId=${encodeURIComponent(workspace.workspaceId)}&uploadId=${encodeURIComponent(uploadId)}&size=${payload.length * 2}`,
 		);
 
-		// Keep the dedicated upload socket idle until the owning Workspace has been fully cleaned up.
-		// This reproduces the browser race where upload.start/WS upgrade won, but its first file chunk
-		// arrives only after the Workspace control socket has gone away.
+		// Close the actual owner: dropping only its control socket retains the Workspace
+		// and intentionally allows detached uploads to continue.
+		await requestWorkspace(workspace.socket, 'workspace.close', {
+			workspaceId: workspace.workspaceId,
+			connectionId,
+			resumeToken: workspace.resumeToken,
+			attachmentGeneration: workspace.attachmentGeneration,
+		});
 		await closeWebSocket(workspace.socket);
-		await new Promise((resolve) => setTimeout(resolve, 350));
 		expect(uploadSocket.readyState).toBe(1);
 
-		// The stale socket must be contained locally. Current broken code lets WorkspaceSessionRegistry
-		// throw synchronously out of the ws "message" callback, which the backend treats as fatal.
+		// Observe the actual stale append refusal before checking process health.
+		const rejected = once(uploadSocket, 'close');
 		uploadSocket.send(payload);
-		await new Promise((resolve) => setTimeout(resolve, 250));
+		expect((await rejected)[0]).toBe(1011);
 
 		// A fatal uncaughtException kills the backend here. Prove the process stayed healthy by opening
 		// a completely new Workspace and reaching its filesystem over the same backend process.

@@ -219,66 +219,79 @@ test('invalid password login stays anonymous and surfaces the real form error', 
 });
 
 test('logs in, establishes a server session, and opens the dashboard', async ({ page, context }) => {
-	await page.goto('/login');
-	await expect(page).toHaveURL(/\/login$/);
-	await expect(page.getByRole('banner')).toHaveCount(0);
-
-	await page.locator('#username').fill(E2E_ADMIN.username);
-	await page.locator('#password').fill(E2E_ADMIN.password);
-	// Authentication state commits before this lazy route finishes loading.
-	await page.route(/\/pages\/dashboard\/DashboardPage\.vue(?:\?|$)/, async (route) => {
-		await new Promise((resolve) => setTimeout(resolve, 500));
+	const dashboardRequested = Promise.withResolvers<void>();
+	const dashboardRelease = Promise.withResolvers<void>();
+	// Hold the actual compiled lazy module; source .vue URLs are absent from the built product.
+	await page.route(/\/assets\/DashboardPage-[^/]+\.js(?:\?|$)/, async (route) => {
+		dashboardRequested.resolve();
+		await dashboardRelease.promise;
 		await route.continue();
 	});
-	await page.evaluate(() => {
-		const samples: LoginTransitionSample[] = [];
-		const state = window as Window & {
-			__loginTransitionSamples?: LoginTransitionSample[];
-			__loginTransitionStopped?: boolean;
-		};
-		state.__loginTransitionSamples = samples;
-		state.__loginTransitionStopped = false;
+	try {
+		await page.goto('/login');
+		await expect(page).toHaveURL(/\/login$/);
+		await expect(page.getByRole('banner')).toHaveCount(0);
 
-		const sample = () => {
-			samples.push({
-				pathname: location.pathname,
-				header: Boolean(document.querySelector('header.app-header')),
-				login: Boolean(document.querySelector('.auth-page')),
-			});
-			if (!state.__loginTransitionStopped) requestAnimationFrame(sample);
-		};
+		await page.locator('#username').fill(E2E_ADMIN.username);
+		await page.locator('#password').fill(E2E_ADMIN.password);
 
-		requestAnimationFrame(sample);
-	});
+		await page.evaluate(() => {
+			const samples: LoginTransitionSample[] = [];
+			const state = window as Window & {
+				__loginTransitionSamples?: LoginTransitionSample[];
+				__loginTransitionStopped?: boolean;
+			};
+			state.__loginTransitionSamples = samples;
+			state.__loginTransitionStopped = false;
 
-	const loginResponsePromise = page.waitForResponse(
-		(response) => response.url().endsWith('/api/v1/auth/login') && response.request().method() === 'POST',
-	);
-	await page.locator('form button[type="submit"]').click();
+			const sample = () => {
+				samples.push({
+					pathname: location.pathname,
+					header: Boolean(document.querySelector('header.app-header')),
+					login: Boolean(document.querySelector('.auth-page')),
+				});
+				if (!state.__loginTransitionStopped) requestAnimationFrame(sample);
+			};
 
-	const loginResponse = await loginResponsePromise;
-	expect(loginResponse.status()).toBe(200);
-	await expect(page).toHaveURL(/\/$/);
-	await expect(page.getByRole('banner')).toBeVisible();
-	await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
-	const transitionSamples = await page.evaluate(() => {
-		const state = window as Window & {
-			__loginTransitionSamples?: LoginTransitionSample[];
-			__loginTransitionStopped?: boolean;
-		};
-		state.__loginTransitionStopped = true;
-		return state.__loginTransitionSamples ?? [];
-	});
-	expect(
-		transitionSamples.some((sample) => sample.pathname === '/login' && sample.login && !sample.header),
-	).toBeTruthy();
-	expect(transitionSamples.filter((sample) => sample.header && sample.login)).toHaveLength(0);
-	expect(transitionSamples.some((sample) => sample.pathname === '/' && sample.header && !sample.login)).toBeTruthy();
+			requestAnimationFrame(sample);
+		});
 
-	const authStatus = await context.request.get('/api/v1/auth/status');
-	expect(authStatus.ok()).toBeTruthy();
-	await expect(authStatus.json()).resolves.toMatchObject({
-		isAuthenticated: true,
-		user: { username: E2E_ADMIN.username },
-	});
+		const loginResponsePromise = page.waitForResponse(
+			(response) => response.url().endsWith('/api/v1/auth/login') && response.request().method() === 'POST',
+		);
+		await page.locator('form button[type="submit"]').click();
+
+		const loginResponse = await loginResponsePromise;
+		expect(loginResponse.status()).toBe(200);
+		await dashboardRequested.promise;
+		await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+		dashboardRelease.resolve();
+		await expect(page).toHaveURL(/\/$/);
+		await expect(page.getByRole('banner')).toBeVisible();
+		await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+		const transitionSamples = await page.evaluate(() => {
+			const state = window as Window & {
+				__loginTransitionSamples?: LoginTransitionSample[];
+				__loginTransitionStopped?: boolean;
+			};
+			state.__loginTransitionStopped = true;
+			return state.__loginTransitionSamples ?? [];
+		});
+		expect(
+			transitionSamples.some((sample) => sample.pathname === '/login' && sample.login && !sample.header),
+		).toBeTruthy();
+		expect(transitionSamples.filter((sample) => sample.header && sample.login)).toHaveLength(0);
+		expect(
+			transitionSamples.some((sample) => sample.pathname === '/' && sample.header && !sample.login),
+		).toBeTruthy();
+
+		const authStatus = await context.request.get('/api/v1/auth/status');
+		expect(authStatus.ok()).toBeTruthy();
+		await expect(authStatus.json()).resolves.toMatchObject({
+			isAuthenticated: true,
+			user: { username: E2E_ADMIN.username },
+		});
+	} finally {
+		dashboardRelease.resolve();
+	}
 });

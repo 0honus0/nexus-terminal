@@ -17,6 +17,10 @@ import {
 import { captureFunctionalScreenshot, functionalScreenshotsEnabled } from '../../support/functional-screenshots';
 import { step, slowStep } from '../../support/steps';
 
+test.beforeEach(async ({ page }) => {
+	await page.clock.install();
+});
+
 test.use({ e2eServices: ['ssh'] });
 
 for (const changedKey of [false, true]) {
@@ -107,7 +111,7 @@ for (const changedKey of [false, true]) {
 		await expect(tabs).toHaveAttribute('data-session-status', 'host_key_untrusted');
 		expect((await readPin())?.fingerprint ?? null).toBe(changedKey ? previousFingerprint : null);
 		// Observe longer than the first reconnect backoff: cancellation must not reopen trust.
-		await page.waitForTimeout(3_000);
+		await page.clock.runFor(3_000);
 		expect(connectRequests).toBe(1);
 		expect(trustWrites).toBe(0);
 		await expect(tabs).toHaveCount(1);
@@ -309,7 +313,9 @@ test('Connect All waits for each Workspace binding before mounted file managers 
 		await expect(commandInput).toBeEnabled();
 		await commandInput.fill('for i in $(seq 1 80); do echo NEXUS_BACKGROUND_BATCH_$i; sleep 0.03; done');
 		await commandInput.press('Enter');
-		await page.waitForTimeout(120);
+		await expect(page.locator('.terminal-inner-container:visible .xterm-rows')).toContainText(
+			'NEXUS_BACKGROUND_BATCH_1',
+		);
 		await secondTab.click();
 		await expect(secondTab).toHaveAttribute('aria-selected', 'true');
 		await expect(visibleSurfaces).toHaveCount(1);
@@ -317,7 +323,9 @@ test('Connect All waits for each Workspace binding before mounted file managers 
 			'data-workspace-id',
 			(await secondTab.getAttribute('data-session-id')) ?? '',
 		);
-		await page.waitForTimeout(2_800);
+		await expect
+			.poll(() => page.locator('.terminal-inner-container .xterm-rows').allTextContents())
+			.toEqual(expect.arrayContaining([expect.stringContaining('NEXUS_BACKGROUND_BATCH_80')]));
 		await firstTab.click();
 		await expect(firstTab).toHaveAttribute('aria-selected', 'true');
 		await expect

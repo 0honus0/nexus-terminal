@@ -1,3 +1,4 @@
+import { flushPromises } from '@vue/test-utils';
 import { test, vi, afterEach } from 'vitest';
 import { openFrontendApplication } from '../../../../support/http/frontend-application.mjs';
 afterEach(() => vi.unstubAllGlobals());
@@ -326,7 +327,7 @@ test('execution settings editor preserves actual HTTP budgets, CAS, unknown writ
 			authenticatedSessionLifecycle.logout();
 			await nextTick();
 			for (const release of pendingReads) release();
-			await new Promise((resolve) => setTimeout(resolve, 30));
+			await flushPromises();
 			check(
 				node.querySelectorAll('input').length === 0 && !node.querySelector('[role=alert]'),
 				'revoked view rejects late settings and clears private drafts',

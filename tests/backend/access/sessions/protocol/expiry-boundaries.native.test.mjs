@@ -8,13 +8,13 @@ import { mkdtemp, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { setTimeout as delay } from 'node:timers/promises';
 import { openManagement } from '../../../../support/http/management-fixture.mjs';
-import { expectStatus } from '../../../../support/protocols/openssh-fixture.mjs';
+import { expectStatus, until } from '../../../../support/protocols/openssh-fixture.mjs';
 import { SqliteFactorStorage } from '../../../../../packages/backend/dist/modules/access/factors/adapters/sqlite/factor-sql.js';
 import { ACCESS_PARTIAL_SECONDS } from '../../../../../packages/shared/dist/access/values.js';
 
-// Keep the real five-minute warmup: fake time cannot prove expiry across protocol and transaction boundaries.
+// Advance only Date at real read/commit barriers. HTTP, signature verification,
+// SQLite transactions and resource cleanup remain real; the production TTL is unchanged.
 const root = process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir();
 await mkdir(root, { recursive: true });
 const directory = await mkdtemp(join(root, 'natural-access-'));
@@ -55,10 +55,7 @@ async function open(name, options, transport) {
 	return { ...f, full: cookie(login) };
 }
 
-async function untilExpiry(expiresAt) {
-	while (Date.now() <= expiresAt) await delay(Math.min(1000, expiresAt - Date.now() + 1));
-}
-
+mock.timers.enable({ apis: ['Date'], now: Date.now() });
 try {
 	const setup = await open('setup');
 	const setupResponse = await setup.api('POST', '/api/v1/auth/2fa/setup', {}, { Cookie: setup.full });
@@ -169,11 +166,9 @@ try {
 	);
 	const beforeCounter = row(passkey, 'SELECT counter FROM access_passkeys').counter;
 	const beforeSessions = row(passkey, 'SELECT count(*) AS count FROM access_sessions').count;
-	console.log('Real five-minute challenges issued; warming without clock or TTL changes.');
-	const firstExpiry = Math.min(challenge.expires_at, pendingRow.expires_at, passkeyRow.expires_at);
-	while (Date.now() < firstExpiry - 3000) await delay(Math.min(1000, firstExpiry - 3000 - Date.now()));
+
 	await test(
-		'Natural challenge expiry after actual read, and TOTP/Passkey expiry before original commit',
+		'Challenge expires after actual read, and TOTP/Passkey expire before original commit',
 		{ timeout: 60000 },
 		async (t) => {
 			const find = SqliteFactorStorage.prototype.findChallenge;
@@ -182,17 +177,22 @@ try {
 			let reads = 0;
 			let totpCommits = 0;
 			let passkeyCommits = 0;
+			let release;
+			const boundary = new Promise((resolve) => {
+				release = resolve;
+			});
+			t.after(() => release());
 			t.mock.method(SqliteFactorStorage.prototype, 'findChallenge', async function (...args) {
 				const record = await find.apply(this, args);
 				assert.ok(record && record.expiresAt > Date.now(), 'the real challenge was live when read');
 				reads++;
-				if (record.kind === 'totp_setup') await untilExpiry(record.expiresAt);
+				if (record.kind === 'totp_setup') await boundary;
 				return record;
 			});
 			t.mock.method(SqliteFactorStorage.prototype, 'completeTotp', async function (command) {
 				totpCommits++;
 				assert.ok(pendingRow.expires_at > Date.now());
-				await untilExpiry(pendingRow.expires_at);
+				await boundary;
 				return completeTotp.call(this, command);
 			});
 			t.mock.method(SqliteFactorStorage.prototype, 'completePasskeyLogin', async function (command) {
@@ -201,10 +201,10 @@ try {
 					passkeyRow.expires_at > Date.now(),
 					'signature verified before the original challenge expired',
 				);
-				await untilExpiry(passkeyRow.expires_at);
+				await boundary;
 				return completePasskey.call(this, command);
 			});
-			const results = await Promise.all([
+			const results = Promise.all([
 				setup.api('POST', '/api/v1/auth/2fa/verify', { token: totp(setupSecret) }, { Cookie: setupCookie }),
 				pending.anonymous(
 					'POST',
@@ -219,7 +219,21 @@ try {
 					{ Cookie: cookie(authOptions) },
 				),
 			]);
-			for (const result of results) assert.equal(result.status, 401, JSON.stringify(result.body));
+			// Reach all three genuine boundaries before moving the shared backend clock.
+			await Promise.race([
+				until(
+					() => [reads, totpCommits, passkeyCommits],
+					(value) => value[0] === 2 && value[1] === 1 && value[2] === 1,
+					'All live authentication read/commit boundaries reached',
+					t.signal,
+				),
+				results.then(() => assert.fail('Authentication completed before the expiry barrier')),
+			]);
+			mock.timers.tick(
+				Math.max(challenge.expires_at, pendingRow.expires_at, passkeyRow.expires_at) - Date.now() + 1,
+			);
+			release();
+			for (const result of await results) assert.equal(result.status, 401, JSON.stringify(result.body));
 			assert.equal(reads, 2);
 			assert.equal(totpCommits, 1);
 			assert.equal(passkeyCommits, 1);
@@ -230,7 +244,7 @@ try {
 		},
 	);
 	console.log(
-		'Natural expiry elapsed including real challenge warmup: ' + Math.round(performance.now() - started) + 'ms',
+		'Authentication expiry real elapsed with virtual Date: ' + Math.round(performance.now() - started) + 'ms',
 	);
 } finally {
 	mock.restoreAll();
@@ -240,5 +254,6 @@ try {
 	]);
 	// Retain SQLite evidence, including when assertions or resource cleanup fail.
 	const failures = outcomes.filter((result) => result.status === 'rejected').map((result) => result.reason);
-	if (failures.length) throw new AggregateError(failures, 'Natural expiry fixture cleanup failed');
+	mock.timers.reset();
+	if (failures.length) throw new AggregateError(failures, 'Authentication expiry fixture cleanup failed');
 }

@@ -11,7 +11,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
-const runtimeRoot = process.env.NEXUS_E2E_SERVICE_ROOT ?? path.join(repoRoot, 'tests/e2e/.tmp');
+const runtimeRoot = process.env.NEXUS_E2E_SERVICE_ROOT ?? path.join(repoRoot, 'tests/.artifacts/services');
 const rootDir = path.join(runtimeRoot, 'ssh-root');
 const templateDir = path.join(runtimeRoot, 'ssh-root-template');
 let templateReady = false;

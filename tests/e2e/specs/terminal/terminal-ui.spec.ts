@@ -17,6 +17,10 @@ import { closeProgressDisplay } from '../../support/transfers/progress';
 import { step } from '../../support/steps';
 import { E2E_URLS } from '../../../support/protocols/test-environment';
 
+test.beforeEach(async ({ page }) => {
+	await page.clock.install();
+});
+
 test.use({ e2eServices: ['ssh'] });
 
 test('terminal theme fills the whole mobile surface beyond the fixed xterm rows', async ({ page, context }) => {
@@ -269,7 +273,7 @@ test('terminal coalesces continuous resizing while output and keyboard input rem
 	const input = terminal.locator('.xterm-helper-textarea');
 	await expect(terminal.locator('.xterm-screen')).toBeVisible();
 	await expect.poll(() => resizeFrames.length).toBeGreaterThan(0);
-	await page.waitForTimeout(250);
+	await page.clock.runFor(250);
 	await page
 		.locator('input.command-bar-input')
 		.fill('for i in $(seq 1 30); do printf \'RESIZE_OUTPUT_%s\\n\' "$i"; sleep 0.02; done');
@@ -288,7 +292,7 @@ test('terminal coalesces continuous resizing while output and keyboard input rem
 	await drag;
 	await expect.poll(() => resizeFrames.length).toBe(1);
 	const countAfterResize = resizeFrames.length;
-	await page.waitForTimeout(350);
+	await page.clock.runFor(350);
 	expect(resizeFrames.length).toBe(countAfterResize);
 	await expect(input).toBeFocused();
 	await page.keyboard.press('Enter');
@@ -296,7 +300,7 @@ test('terminal coalesces continuous resizing while output and keyboard input rem
 	await expect(terminal).toContainText('RESIZE_INPUT_OK');
 	// Repeating a measurement with unchanged geometry must not trigger another PTY redraw.
 	await page.evaluate(() => window.dispatchEvent(new Event('resize')));
-	await page.waitForTimeout(200);
+	await page.clock.runFor(200);
 	expect(resizeFrames.length).toBe(countAfterResize);
 });
 
@@ -720,7 +724,7 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
 		await inner.dispatchEvent('wheel', { ctrlKey: true, deltaY: -80, deltaMode: 0 });
 		await expect.poll(async () => Number(await terminal.getAttribute('data-font-size'))).toBe(initial + 1);
 		await inner.dispatchEvent('wheel', { ctrlKey: true, deltaY: 20, deltaMode: 0 });
-		await page.waitForTimeout(80);
+		await page.clock.runFor(80);
 		expect(Number(await terminal.getAttribute('data-font-size'))).toBe(initial + 1);
 	});
 
@@ -961,7 +965,7 @@ test('desktop terminal only uses Ctrl+Shift+C/V for keyboard clipboard actions',
 	await page.keyboard.press('Control+V');
 	await page.keyboard.press('Meta+V');
 	await page.keyboard.press('Meta+Shift+V');
-	await page.waitForTimeout(150);
+	await page.clock.runFor(150);
 	expect(sentInput).toHaveLength(inputCount);
 	await expect(rows).not.toContainText(pasteMarker);
 	await page.keyboard.press('Control+Shift+V');
@@ -1138,7 +1142,7 @@ test('rapid terminal Ctrl+wheel keeps the newest rendered size while older appea
 
 		held.releaseFirst();
 		await held.secondStarted;
-		await page.waitForTimeout(350);
+		await page.clock.runFor(350);
 		await expect(terminal).toHaveAttribute('data-font-size', '16');
 
 		held.releaseSecond();

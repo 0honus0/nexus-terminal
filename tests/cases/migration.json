@@ -5056,19 +5056,19 @@
     {
       "source": "tests/backend/remote/desktop/Dockerfile",
       "sourceSha256": "6d37a1a6d6552fb09f4505f67afb332fee7246fff989058ec23fa7b825096766",
-      "targets": ["tests/e2e/Dockerfile.runner", "tests/support/protocols/desktop-server.mjs"],
+      "targets": ["tests/fixtures/runner/Dockerfile", "tests/support/protocols/desktop-server.mjs"],
       "notes": "独立桌面镜像已移除；复用runner预装xrdp/TigerVNC，在本轮目录动态生成独立配置/端口/X display并由服务脚本控制。"
     },
     {
       "source": "tests/backend/remote/desktop/start.sh",
       "sourceSha256": "e6264880a48accd77fc8b39692911babfc69d1d41cce89ca6edcc501e6026794",
-      "targets": ["tests/e2e/Dockerfile.runner", "tests/support/protocols/desktop-server.mjs"],
+      "targets": ["tests/fixtures/runner/Dockerfile", "tests/support/protocols/desktop-server.mjs"],
       "notes": "独立桌面镜像已移除；复用runner预装xrdp/TigerVNC，在本轮目录动态生成独立配置/端口/X display并由服务脚本控制。"
     },
     {
       "source": "tests/backend/remote/desktop/xrdp.ini",
       "sourceSha256": "cda5eafd92eb1982a9b70bdb067b06711b86ff4fc555ac1ac00b8524bf9ee01b",
-      "targets": ["tests/e2e/Dockerfile.runner", "tests/support/protocols/desktop-server.mjs"],
+      "targets": ["tests/fixtures/runner/Dockerfile", "tests/support/protocols/desktop-server.mjs"],
       "notes": "独立桌面镜像已移除；复用runner预装xrdp/TigerVNC，在本轮目录动态生成独立配置/端口/X display并由服务脚本控制。"
     },
     {

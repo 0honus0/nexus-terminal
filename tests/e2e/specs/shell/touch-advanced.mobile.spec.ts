@@ -13,6 +13,10 @@ import {
 import { captureFunctionalScreenshot, functionalScreenshotsEnabled } from '../../support/functional-screenshots';
 import { slowStep, step } from '../../support/steps';
 
+test.beforeEach(async ({ page }) => {
+	await page.clock.install();
+});
+
 test.use({ e2eServices: ['ssh'] });
 
 const M11_04A_EVIDENCE_DIR = process.env.M11_04A_EVIDENCE_DIR || '/tmp/nexus-m11-04a';
@@ -51,7 +55,7 @@ async function longPressFile(page: Page, filename: string): Promise<Locator> {
 		clientX: point.x,
 		clientY: point.y,
 	});
-	await page.waitForTimeout(620);
+	await page.clock.runFor(620);
 	await row.dispatchEvent('pointerup', {
 		pointerId: 1,
 		pointerType: 'touch',

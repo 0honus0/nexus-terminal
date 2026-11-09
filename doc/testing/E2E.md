@@ -40,11 +40,11 @@
 
 Actions使用统一8个测试runner：每个分片将Node原生协议与“Vitest模块→本体Playwright→插件互操作→插件Playwright”链重叠执行，模块/原生按框架原生分片，浏览器按实际发现与历史耗时均衡；不再固定1个Backend与7个Browser。所有测试容器启用init回收孤儿进程，并以SYS_PTRACE检查真实OpenSSH句柄。第1分片单独挂Docker socket运行真实Docker协议/模块，同时持有限定的挂载能力，在私有mount namespace执行真实有限tmpfs的ENOSPC测试；其余分片不挂Docker socket或授予挂载能力。ENOSPC文件显式归第1分片，不依赖原生文件排序后的偶然分配。快速层、静态及插件独立测试在质量作业执行，成品Docker部署smoke单独执行；全部必需作业成功才算门禁通过。
 
-质量作业构建Host一次、签候选包一次，上传准确插件源码和包。分片复用绑定本次SHA/不可变artifact ID的同批成品，不重建；完整重跑与部分重跑遵循下文产物身份规则。插件独立Validate选择成功Host E2E的准确SHA和不可变构建产物；质量作业构建签包一次并执行包测试、浏览器发现与类型检查，八个容器分片恢复同批产物执行Node互操作与Playwright。开发签名私钥不分发给测试分片。两仓组合记录须绑定真实源码、成品和包摘要，不能引用旧harness的绿色结论。
+质量作业构建Host一次、签候选包一次，上传准确插件源码和包。分片复用绑定本次SHA/不可变artifact ID的同批成品，不重建；完整重跑与部分重跑遵循下文产物身份规则。插件独立Validate选择成功Host E2E的准确SHA和不可变构建产物；质量作业构建签包一次并执行包测试、浏览器发现与类型检查，八个容器分片恢复同批产物执行Node互操作与Playwright。开发签名私钥不分发给测试分片。测试环境归`tests/fixtures/runner/Dockerfile`，只预装Chromium headless shell及协议工具；成功Host发布准确SHA、镜像digest与依赖指纹，插件独立门禁消费同一不可变环境。分片离线链接匹配依赖，不回退旧镜像。Docker部署smoke仅构建生产镜像、等待Compose健康及读取真实HTTP契约，不装测试工作区或浏览器。两仓组合记录须绑定真实源码、成品和包摘要，不能引用旧harness的绿色结论。
 
 浏览器使用正式Frontend构建的preview及真实Backend，每例独立数据库，外部协议服务按声明启动。`NEXUS_TEST_ARTIFACT_DIR`与`NEXUS_E2E_DATA_ROOT`指定任务证据/数据库；`NEXUS_E2E_SERVICE_ROOT`为受控SSH运行路径，默认使用短临时路径以保持Unix socket名称互不截断，timings记录对应runtime根。首次trace/截图/录像/日志及数据库保留，重试通过仍阻止CI通过。
 
-验证验证码 SDK 过期使用 Playwright 官方虚拟时钟；后端票据和缓存 TTL 使用 Node 内置 MockTimers 仅推进 Date，不改变产品超时或网络定时器。专门弱网回归保留原带宽与延迟；成功传输的进度回归使用真实8MiB文件及至少两个不同UI百分比、完整字节和SHA验证，以较高夹具带宽减少人为等待。SSH 空闲两分钟仍用真实时间，独立场景与拆分后的 Agent 回归按实测耗时分片，保持原功能覆盖。
+按H-22.1，所有可替代的长短等待均使用所属进程的框架虚拟时钟：浏览器使用Playwright clock；后端认证、票据和租约推进Node MockTimers的Date；Workspace两分钟空闲推进实际回收定时器。产品期限与原断言保持，不能以页面快进代替后端或SSH完成。WS消息排序、真实SSH/传输及关闭等待明确回执、输出或资源状态；CPU/绘制性能、原生timer溢出和真实背压保留物理时序。专门弱网回归保留原带宽与延迟；进度回归使用真实8MiB文件、至少两个不同UI百分比及完整字节/SHA验证。
 
 ACP取消验证工具取消、旧审批拒绝、禁止文件未生成及原进程实际退出；已确认收尾时要求应用正常关闭，不再强行期待旧`execution_unknown`。真实未知副作用仍保留围栏、数据库和具名失败，不能用重置抹掉。
 

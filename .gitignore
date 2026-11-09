@@ -183,21 +183,9 @@ dist-scripts/
 electron-app/node_modules/
 electron-app/dist_electron/
 
-# Playwright E2E runtime artifacts
-/tests/e2e/.tmp/
-/tests/e2e/.cache/
-/tests/e2e/.auth/
-/tests/e2e/playwright-report/
-/tests/e2e/blob-report/
-/tests/e2e/test-results/
-/tests/e2e/logs/
-/tests/e2e/*.log
-/tests/e2e/*.pid
-/tests/e2e/*.db
-/tests/e2e/*.sqlite
-/tests/e2e/*.sqlite3
-/tests/e2e/**/*.db-shm
-/tests/e2e/**/*.db-wal
+# Framework reports, databases and generated test environments
+/tests/.artifacts/
+/tests/.cache/
 
 # Agent plugin source/build tooling (generated signed packages stay outside the repo)
 

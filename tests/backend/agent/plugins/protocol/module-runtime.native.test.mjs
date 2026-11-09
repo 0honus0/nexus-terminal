@@ -12,6 +12,7 @@ import {
 import { processIdentity } from '../../../../../packages/backend/dist/platform/isolation/adapters/module-recovery.js';
 import { NativePluginBackendRuntime } from '../../../../../packages/backend/dist/modules/agent/plugins/adapters/runtime/plugin-backend-runtime.js';
 import { PluginCallableRefusal } from '../../../../../packages/backend/dist/modules/agent/plugins/storage/plugin-runtime.js';
+import { AgentFailure, ToolCleanupFailure } from '../../../../../packages/backend/dist/modules/agent/agent-failure.js';
 import { PluginRuntimeService } from '../../../../../packages/backend/dist/modules/agent/plugins/service/plugin-runtime-service.js';
 import { until } from '../../../../support/protocols/openssh-fixture.mjs';
 
@@ -945,10 +946,14 @@ await test(
 		const f = await fixture(t);
 		const gates = Array.from({ length: 33 }, () => f.gate());
 		let reads = 0;
+		const admitted = f.gate();
 		const instance = await f.open(
-			`export async function execution(input, source) {
+			`import { mock } from 'node:test';
+export async function execution(input, source) {
+ mock.timers.enable({apis:['Date','setTimeout'],now:Date.now()});
  const tasks = Array.from({length:32}, (_,id) => source.read({id}));
- await new Promise((resolve) => setTimeout(resolve, 31000));
+ await source.read({advance:true});
+ mock.timers.tick(31000);
  tasks.push(source.read({id:32}));
  const values = await Promise.all(tasks);
  return {values};
@@ -956,24 +961,26 @@ await test(
 			async () => assert.fail('source must not enter global Host'),
 		);
 		await instance.activate();
+		t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: Date.now() });
 		const result = instance.invoke('{}', new AbortController().signal, 45000, {
 			exportName: 'execution',
 			methods: ['read'],
 
 			read: ({ input }) => {
+				if (input.advance) {
+					assert.equal(reads, 32, 'All original IPC requests precede the clock barrier');
+					t.mock.timers.tick(32000);
+					return null;
+				}
 				assert.ok(Number.isSafeInteger(input.id), 'source identity stays intact');
 				reads++;
+				if (reads === 33) admitted.resolve();
 				return gates[input.id].promise;
 			},
 		});
 		const observed = Promise.allSettled([result]);
-		await until(
-			() => reads,
-			(value) => value === 32,
-			'all actual source reads admitted',
-		);
-		// Cross the former worker timeout while every real source task remains pending.
-		await new Promise((resolve) => setTimeout(resolve, 32000));
+		// Cross the former timeout in both owning processes while real IPC calls remain pending.
+		await admitted.promise;
 		assert.equal(reads, 33);
 		for (let i = 0; i < 33; i++) gates[i].resolve(i);
 		assert.deepEqual(await observed, [
@@ -987,6 +994,7 @@ await test('Source control preserves a deadline beyond the Node timer maximum', 
 	const f = await fixture(t);
 	const instance = await f.open(
 		`export async function execution(input, source) {
+ // Real timer turn is required here to expose native overflow/clamping of the invocation deadline.
  await new Promise((resolve) => setTimeout(resolve, 25));
  return source.read({deadline:'original'});
 }`,
@@ -1206,3 +1214,81 @@ await test(
 		});
 	},
 );
+
+for (const failedCleanup of [false, true]) {
+	await test(
+		'Start during configuration replacement ' +
+			(failedCleanup
+				? 'preserves unknown cleanup without opening a replacement'
+				: 'awaits retirement and starts the current instance'),
+		async (t) => {
+			const entered = Promise.withResolvers();
+			const release = Promise.withResolvers();
+			const closingEntered = Promise.withResolvers();
+			const closeRelease = Promise.withResolvers();
+			const appId = randomUUID();
+			const logical = { id: appId, packageId: 'test.replacement', enabled: true };
+			const service = new PluginRuntimeService(
+				{},
+				{
+					subscribe: () => () => {},
+
+					list: async () => [logical],
+				},
+			);
+			let openings = 0;
+			const cleanupFailure = new ToolCleanupFailure({
+				cause: new Error('Controlled original construction cleanup failure'),
+			});
+			t.mock.method(service, 'closeBoundOwner', async () => {
+				closingEntered.resolve();
+				await closeRelease.promise;
+				if (failedCleanup) throw cleanupFailure;
+			});
+			t.mock.method(service, 'startInstance', async (_user, _app, signal, binding) => {
+				openings++;
+				if (openings > 1) return;
+				binding.owner = { instanceId: randomUUID() };
+				entered.resolve();
+				await release.promise;
+				assert.equal(signal.aborted, true);
+				throw new AgentFailure('provider_unavailable');
+			});
+			const signal = new AbortController().signal;
+			const original = Promise.allSettled([service.start(1, appId, signal, logical.packageId, appId)]);
+			await entered.promise;
+			const shutdown = Promise.allSettled([service.stopInstance(1, appId, appId)]);
+			const replacement = service.start(1, appId, signal, logical.packageId, appId);
+			const result = Promise.allSettled([replacement]);
+			let settled = false;
+			void result.then(() => (settled = true));
+			await Promise.resolve();
+			assert.equal(settled, false, 'a replacement cannot bypass original pending cleanup');
+			assert.equal(openings, 1);
+			release.resolve();
+			assert.equal((await original)[0].status, 'rejected');
+			await closingEntered.promise;
+			const late = Promise.allSettled([service.start(1, appId, signal, logical.packageId, appId)]);
+			await Promise.resolve();
+			assert.equal(openings, 1, 'settled construction retains its pending retirement owner');
+			closeRelease.resolve();
+			if (failedCleanup) {
+				assert.equal((await shutdown)[0].status, 'rejected');
+				const [outcome] = await result;
+				assert.equal(outcome.status, 'rejected');
+				assert.equal(outcome.reason.code, 'operation_unknown');
+				assert.equal(openings, 1);
+				assert.equal((await late)[0].reason.code, 'operation_unknown');
+				await assert.rejects(service.start(1, appId, signal, logical.packageId, appId), {
+					code: 'operation_unknown',
+				});
+				assert.equal(openings, 1, 'unknown retirement cannot be bypassed by a later start');
+			} else {
+				assert.equal((await shutdown)[0].status, 'fulfilled');
+				assert.equal((await result)[0].status, 'fulfilled');
+				assert.equal((await late)[0].status, 'fulfilled');
+				assert.equal(openings, 2);
+			}
+		},
+	);
+}

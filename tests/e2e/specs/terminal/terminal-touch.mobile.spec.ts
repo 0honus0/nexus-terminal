@@ -12,6 +12,10 @@ import {
 import { slowStep, step } from '../../support/steps';
 import { E2E_URLS } from '../../../support/protocols/test-environment';
 
+test.beforeEach(async ({ page }) => {
+	await page.clock.install();
+});
+
 test.use({ e2eServices: ['ssh'] });
 
 async function enableClipboard(context: BrowserContext): Promise<void> {
@@ -171,9 +175,9 @@ async function longPressTerminal(
 			}),
 		);
 	}, point);
-	await page.waitForTimeout(120);
+	await page.clock.runFor(120);
 	if (duringHold) await duringHold();
-	await page.waitForTimeout(500);
+	await page.clock.runFor(500);
 	await terminal.evaluate((element, position) => {
 		const target = element as HTMLElement;
 		const touch = new Touch({
@@ -388,7 +392,7 @@ test('mobile terminal long press selects a word, exposes selection handles, and 
 			await expect(page.locator('.mobile-terminal-selection-handle')).toHaveCount(0);
 			await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(marker);
 			expect(originalTextareaState).not.toBeNull();
-			await page.waitForTimeout(200);
+			await page.clock.runFor(200);
 			const restored = await terminalTextareaState(page);
 			expect(restored.readOnly).toBe(originalTextareaState!.readOnly);
 			expect(restored.inputMode).toBe(originalTextareaState!.inputMode);

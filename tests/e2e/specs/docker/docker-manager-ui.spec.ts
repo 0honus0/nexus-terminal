@@ -18,6 +18,10 @@ import {
 import { closeWebSocket, openWorkspaceSession, requestWorkspace } from '../../../support/protocols/workspace-client';
 import { slowStep, step } from '../../support/steps';
 
+test.beforeEach(async ({ page }) => {
+	await page.clock.install();
+});
+
 test.use({ e2eServices: ['ssh'] });
 
 const CONTAINER_ID = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
@@ -693,6 +697,7 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
 			await page.mouse.move(currentSplitter!.x + currentSplitter!.width / 2, resizeY);
 			await page.mouse.down();
 			await page.mouse.move(originalRight, resizeY, { steps: 10 });
+			await page.clock.runFor(16);
 			await page.mouse.up();
 			await expect
 				.poll(async () => Math.abs(((await centerPane.boundingBox())?.width ?? 0) - beforePane!.width))
@@ -806,7 +811,7 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
 			await page.mouse.down();
 			await page.mouse.move(splitterBox!.x + 80, splitterBox!.y + splitterBox!.height / 2, { steps: 8 });
 			await page.mouse.up();
-			await page.waitForTimeout(200);
+			await page.clock.runFor(200);
 			const after = await firstPane.boundingBox();
 			expect(after).toBeTruthy();
 			expect(Math.abs(after!.width - before!.width)).toBeLessThan(2);

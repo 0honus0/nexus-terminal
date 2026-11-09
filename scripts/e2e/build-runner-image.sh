@@ -31,7 +31,7 @@ docker build \
   --build-arg "PLAYWRIGHT_VERSION=$playwright_version" \
   --build-arg "PNPM_VERSION=$pnpm_version" \
   --build-arg "E2E_RUNNER_FINGERPRINT=$fingerprint" \
-  -f "$repo_root/tests/e2e/Dockerfile.runner" \
+  -f "$repo_root/tests/fixtures/runner/Dockerfile" \
   -t "$full_image" \
   "$repo_root"
 

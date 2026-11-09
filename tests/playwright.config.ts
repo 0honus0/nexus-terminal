@@ -7,14 +7,15 @@ import { E2E_ADMIN } from './e2e/support/test-identity';
 
 const e2eRoot = path.join(import.meta.dirname, 'e2e');
 const repoRoot = path.resolve(e2eRoot, '../..');
-const artifactRoot = process.env.NEXUS_TEST_ARTIFACT_DIR;
+const artifactRoot = path.resolve(
+	process.env.NEXUS_TEST_ARTIFACT_DIR ?? path.join(import.meta.dirname, '.artifacts/browser'),
+);
+process.env.NEXUS_TEST_ARTIFACT_DIR = artifactRoot;
 const htmlReport = {
 	open: 'never',
-	outputFolder: artifactRoot
-		? path.resolve(artifactRoot, 'reports/playwright')
-		: path.join(e2eRoot, 'playwright-report'),
+	outputFolder: path.join(artifactRoot, 'reports/playwright'),
 };
-process.env.NEXUS_E2E_DATA_ROOT ??= path.join(e2eRoot, '.tmp', 'backend-data', randomBytes(16).toString('hex'));
+process.env.NEXUS_E2E_DATA_ROOT ??= path.join(artifactRoot, 'backend', randomBytes(16).toString('hex'));
 const testDataDir = path.resolve(process.env.NEXUS_E2E_DATA_ROOT);
 process.env.NEXUS_E2E_DATA_ROOT = testDataDir;
 // Unix sockets in remote process fixtures must remain distinct below sockaddr_un's
@@ -46,7 +47,7 @@ const backendEnv: Record<string, string> = {
 export default defineConfig({
 	testDir: './e2e/specs',
 	testIgnore: ['**/ingress/**'],
-	outputDir: artifactRoot ? path.resolve(artifactRoot, 'results') : path.join(e2eRoot, 'test-results'),
+	outputDir: path.join(artifactRoot, 'results'),
 	fullyParallel: false,
 	forbidOnly: isCI,
 	// Run the full selected suite even when earlier tests fail; CI reports failure only after all results are collected.

@@ -15,6 +15,10 @@ import {
 } from '../../support/ssh';
 import { slowStep, step } from '../../support/steps';
 
+test.beforeEach(async ({ page }) => {
+	await page.clock.install();
+});
+
 test.use({ e2eServices: ['ssh'] });
 
 const QUICK_COMMAND_NAME = 'E2E Wheel Scale Command';
@@ -235,7 +239,7 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
 		await ctrlWheel(monitor, 100, 20);
 		await expect.poll(() => readScale(monitor, 'data-status-scale')).toBe(0.65);
 
-		await page.waitForTimeout(550);
+		await page.clock.runFor(550);
 		await expect(monitor).toHaveAttribute('data-status-scale', '0.65');
 	});
 
@@ -261,7 +265,7 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
 				.toBeGreaterThan(1);
 
 			const scaleAfterWheel = await readScale(list, 'data-row-scale');
-			await page.waitForTimeout(550);
+			await page.clock.runFor(550);
 			expect(await readScale(list, 'data-row-scale')).toBe(scaleAfterWheel);
 		},
 	);
@@ -309,7 +313,7 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
 		expect(finalHeaderLayout.scrollHeight).toBeLessThanOrEqual(finalHeaderLayout.clientHeight + 1);
 
 		const scaleAfterWheel = await readScale(list, 'data-row-scale');
-		await page.waitForTimeout(600);
+		await page.clock.runFor(600);
 		expect(await readScale(list, 'data-row-scale')).toBe(scaleAfterWheel);
 	});
 
@@ -359,7 +363,7 @@ test('large Ctrl+wheel delta does not leak unused zoom steps into the next event
 	await ctrlWheel(list, 640);
 	await expect.poll(() => readScale(list, 'data-row-scale')).toBe(0.64);
 	await ctrlWheel(list, 1);
-	await page.waitForTimeout(100);
+	await page.clock.runFor(100);
 	expect(await readScale(list, 'data-row-scale')).toBe(0.64);
 });
 
@@ -465,10 +469,10 @@ test('rapid panel scaling persists the newest value when save responses arrive o
 			expect(latestScale).toBeLessThan(firstScale);
 			// Give the second debounce enough time to fire. Old code sends it concurrently;
 			// the fixed saver intentionally keeps it queued until the first request settles.
-			await page.waitForTimeout(350);
+			await page.clock.runFor(350);
 			race.releaseFirst();
 			await race.secondStarted;
-			await page.waitForTimeout(220);
+			await page.clock.runFor(220);
 			expect(await readScale(list, 'data-row-scale')).toBe(latestScale);
 		} finally {
 			await race.dispose();
@@ -488,10 +492,10 @@ test('rapid panel scaling persists the newest value when save responses arrive o
 			await ctrlWheel(monitor, -100);
 			const latestScale = await readScale(monitor, 'data-status-scale');
 			expect(latestScale).toBeGreaterThan(firstScale);
-			await page.waitForTimeout(350);
+			await page.clock.runFor(350);
 			race.releaseFirst();
 			await race.secondStarted;
-			await page.waitForTimeout(220);
+			await page.clock.runFor(220);
 			expect(await readScale(monitor, 'data-status-scale')).toBe(latestScale);
 		} finally {
 			await race.dispose();
@@ -521,12 +525,12 @@ test('rapid panel scaling persists the newest value when save responses arrive o
 				}
 
 				const latestScale = observed.at(-1)!;
-				await page.waitForTimeout(350);
+				await page.clock.runFor(350);
 				expect(await readScale(list, 'data-row-scale')).toBe(latestScale);
 
 				race.releaseFirst();
 				await race.secondStarted;
-				await page.waitForTimeout(220);
+				await page.clock.runFor(220);
 				expect(await readScale(list, 'data-row-scale')).toBe(latestScale);
 			} finally {
 				await race.dispose();

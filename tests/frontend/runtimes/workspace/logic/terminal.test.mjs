@@ -10,6 +10,7 @@ test('workspace terminal adapters preserve wire ordering, refusal and ownership 
 	const peer = await openWorkspacePeer();
 	const producer = peer.server;
 	const calls = [];
+	const held = new Map();
 	producer.on('connection', (socket) => {
 		socket.on('message', (raw) => {
 			const request = JSON.parse(raw.toString());
@@ -47,9 +48,13 @@ test('workspace terminal adapters preserve wire ordering, refusal and ownership 
 				} else {
 					event('terminal.directoryChanged', { requestId: 'foreign-request', path: '/foreign' });
 					event('terminal.directoryChanged', { requestId, path: '/resolved' });
-					setTimeout(() => {
+
+					const deliver = () => {
 						if (socket.readyState === WebSocket.OPEN) reply({ queued: payload.path !== '/bad-ack' });
-					}, 80);
+					};
+
+					if (payload.path === '/normal') held.set(payload.path, deliver);
+					else deliver();
 				}
 			} else if (request.type === 'fixture.error') {
 				socket.send(
@@ -122,8 +127,10 @@ test('workspace terminal adapters preserve wire ordering, refusal and ownership 
 						completed = true;
 						return value;
 					});
-				await new Promise((resolve) => setTimeout(resolve, 30));
+				await vi.waitUntil(() => queued !== undefined, { timeout: 3000, interval: 10 });
+				await socket.requestConnected('workspace.ping');
 				expect(!completed, 'early completion event waits for request acknowledgement');
+				held.get('/normal')();
 				expect((await changing).path === '/resolved', 'resolved path accepted and foreign request ignored');
 				expect(
 					JSON.stringify(queued) === JSON.stringify({ path: '/normal', waitingForPrompt: true }),
@@ -161,7 +168,7 @@ test('workspace terminal adapters preserve wire ordering, refusal and ownership 
 				const waiting = createTerminalDirectoryPort(localClose)
 					.changeDirectory('/local-close')
 					.catch((error) => error);
-				await new Promise((resolve) => setTimeout(resolve, 50));
+				await localClose.requestConnected('workspace.ping');
 				localClose.close();
 				const localFailure = await waiting;
 				localClose.close();

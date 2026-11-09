@@ -13,6 +13,10 @@ import {
 	readPresentationUpdateResponse,
 } from '../../../../packages/shared/src/preferences/presentation/http-codec';
 
+test.beforeEach(async ({ page }) => {
+	await page.clock.install();
+});
+
 test.use({ e2eServices: ['ssh'] });
 
 test('workspace keeps the live terminal and draft cached across page navigation', async ({ page, context }) => {
@@ -83,7 +87,7 @@ test('workspace keeps the live terminal and draft cached across page navigation'
 		await page.locator(`a[href="/${destination}"]`).first().click();
 		await expect(page).toHaveURL(new RegExp(`/${destination}`));
 		await expect(terminal).toHaveCount(0);
-		await page.waitForTimeout(700);
+		await page.clock.runFor(700);
 		expect(geometry).toEqual([]);
 		await page.locator('a[href="/workspace"]').first().click();
 		await expect(terminal).toContainText(`CACHE_BACKGROUND_${destination}`);
@@ -98,7 +102,7 @@ test('workspace keeps the live terminal and draft cached across page navigation'
 		const restoredBox = (await terminal.boundingBox())!;
 		expect(Math.abs(restoredBox.width - savedBox.width)).toBeLessThan(1);
 		expect(Math.abs(restoredBox.height - savedBox.height)).toBeLessThan(1);
-		await page.waitForTimeout(250);
+		await page.clock.runFor(250);
 		expect(
 			geometry.every(
 				(viewport) => viewport.columns === savedGeometry.columns && viewport.rows === savedGeometry.rows,

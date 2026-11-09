@@ -6,12 +6,16 @@ import WebSocket from '../../../../../packages/backend/node_modules/ws/index.js'
 import { openWorkspacePeer } from '../../../../support/protocols/workspace-peer.mjs';
 import { encodeWorkspaceBinaryFrame } from '@nexus-terminal/shared/remote/workspace/workspace-binary';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+	vi.useRealTimers();
+	vi.unstubAllGlobals();
+});
 
 test('suspended workspace preserves real wire ACK, ownership, history and unknown-effect fences', async () => {
 	const peer = await openWorkspacePeer();
 	const producer = peer.server;
 	const calls = [];
+	const held = new Map();
 	producer.on('connection', (socket) => {
 		let owner;
 		socket.on('message', (raw) => {
@@ -50,17 +54,16 @@ test('suspended workspace preserves real wire ACK, ownership, history and unknow
 					});
 				};
 
-				if (owner === 6) setTimeout(deliver, 100);
+				if (owner === 6) held.set(6, deliver);
 				else deliver();
 			} else if (request.type === 'suspend.resumeAck') {
 				if (owner === 2) socket.close(4000, 'ACK receipt lost');
-				else
-					setTimeout(() => {
-						if (socket.readyState === WebSocket.OPEN) {
-							output(2);
-							reply(null);
-						}
-					}, 60);
+				else {
+					if (socket.readyState === WebSocket.OPEN) {
+						output(2);
+						reply(null);
+					}
+				}
 			} else if (request.type === 'suspend.owner.renew') {
 				reply({ generation: owner === 7 ? 8 : 7, leaseExpiresAt: Date.now() + 45_000 });
 			} else if (request.type === 'suspend.history.previous') {
@@ -121,13 +124,7 @@ test('suspended workspace preserves real wire ACK, ownership, history and unknow
 					() => true,
 				);
 
-			const wait = async (check) => {
-				const end = performance.now() + 3000;
-				while (!check()) {
-					if (performance.now() > end) throw Error('condition timed out');
-					await new Promise((resolve) => setTimeout(resolve, 10));
-				}
-			};
+			const wait = (check) => vi.waitUntil(check, { timeout: 3000, interval: 10 });
 
 			const make = (id) => {
 				const session = new WorkspaceRuntimeSession(
@@ -199,8 +196,9 @@ test('suspended workspace preserves real wire ACK, ownership, history and unknow
 				}
 				const late = make(6);
 				const pending = rejects(late.resume('suspend-6'));
-				await new Promise((resolve) => setTimeout(resolve, 20));
+				await wait(() => held.has(6));
 				const close = late.close();
+				held.get(6)();
 				expect(await pending, 'close interrupts waiting restore');
 				expect(
 					(await close) === 'unknown' && late.state.value !== 'connected',
@@ -263,7 +261,9 @@ test('suspended workspace preserves real wire ACK, ownership, history and unknow
 					closed = true;
 					return result;
 				});
-				await new Promise((resolve) => setTimeout(resolve, 20));
+				vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+				await vi.advanceTimersByTimeAsync(20);
+				vi.useRealTimers();
 				expect(!closed, 'close tracks an in-flight snapshot until its real task settles');
 				releaseSnapshot('late snapshot');
 				expect(

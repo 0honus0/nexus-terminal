@@ -1,3 +1,4 @@
+import { flushPromises } from '@vue/test-utils';
 import { test, vi, afterEach } from 'vitest';
 afterEach(() => vi.unstubAllGlobals());
 
@@ -197,7 +198,7 @@ test('registry editor preserves projection, unknown refresh and revoked identity
 		authenticatedSessionLifecycle.logout();
 		await nextTick();
 		release();
-		await new Promise((resolve) => setTimeout(resolve, 30));
+		await flushPromises();
 		check(
 			!node.textContent.includes('99 models') &&
 				!node.textContent.includes('3 models') &&

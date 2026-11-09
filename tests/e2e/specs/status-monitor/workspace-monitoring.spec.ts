@@ -1,7 +1,6 @@
 import { mkdir, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
 import { test, expect } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { configureSshE2eSettings } from '../../support/ssh';
@@ -178,10 +177,11 @@ test('Workspace and Dashboard consume real Linux samples, natural cache expiry a
 		expect(cachedResponse.status()).toBe(200);
 		const cached = readSshResourceStatus(await cachedResponse.json());
 		expect(cached.checkedAt).toBe(first.checkedAt);
-		// This is natural application/SSH time, deliberately not a fake clock or
-		// a longer product timeout. Exact idle-stop boundaries are tested below UI.
+		// Wait for a real SSH sample; the subscription grace deadline itself is tested with a virtual clock below UI.
 		const paused = await page.evaluate(() => window.__readMonitoringSnapshot());
-		await delay(2200);
+		await expect
+			.poll(() => page.evaluate(() => window.__readMonitoringSnapshot().history.length))
+			.toBeGreaterThan(paused.history.length);
 		const grace = await page.evaluate(() => window.__readMonitoringSnapshot());
 		expect(grace.sessionId).toBe(paused.sessionId);
 		expect(grace.history.length).toBeGreaterThan(paused.history.length);

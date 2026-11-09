@@ -1,3 +1,4 @@
+import { advanceTestBackendClock } from '../../support/settings';
 import {
 	authenticateTestRdp,
 	createTestRdpSession,
@@ -256,7 +257,7 @@ test('RDP browser client preserves settings, clipboard and browser fullscreen', 
 				.filter({ has: page.getByText(CONNECTION_NAME, { exact: true }) });
 			await expect(connectionRow).toBeVisible({ timeout: 20_000 });
 			const previousLastConnectedAt = Number(await connectionRow.getAttribute('data-last-connected-at'));
-			await page.waitForTimeout(1_100);
+			await advanceTestBackendClock(1_100);
 			await connectionRow.getByRole('button', { name: `Connect ${CONNECTION_NAME}`, exact: true }).click();
 			await expect(page).toHaveURL(/\/$/);
 			const modal = remoteWindow(page);

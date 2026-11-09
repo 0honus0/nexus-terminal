@@ -6,7 +6,10 @@ import { WorkspaceRuntimeSession } from '../../../../../packages/frontend/src/ru
 import { systemOverviewApi } from '../../../../../packages/frontend/src/features/system-overview/api/system-overview-api.ts';
 import { connectionsApi } from '../../../../../packages/frontend/src/features/connections/api/connections-api.ts';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+	vi.restoreAllMocks();
+	vi.unstubAllGlobals();
+});
 
 test('real SSH observation preserves host fallback, metrics, Docker actions and subscription retirement', async () => {
 	const container = await openDockerContainer();
@@ -45,15 +48,7 @@ test('real SSH observation preserves host fallback, metrics, Docker actions and 
 			checks.push(name);
 		};
 
-		const wait = async (check) => {
-			const end = performance.now() + 60000;
-			while (!check()) {
-				if (performance.now() > end) {
-					throw Error('Real observation condition timeout');
-				}
-				await new Promise((resolve) => setTimeout(resolve, 30));
-			}
-		};
+		const wait = (check) => vi.waitUntil(check, { timeout: 60000, interval: 30 });
 
 		const find = () => session.dockerController.containers.value.find((row) => row.id === containerId);
 
@@ -118,10 +113,9 @@ test('real SSH observation preserves host fallback, metrics, Docker actions and 
 			expect(find()?.state === 'exited', 'real stop confirmed');
 			await session.dockerController.command(containerId, 'remove');
 			expect(!find() && !session.dockerController.commandBlocked.value, 'real remove confirmed without unknown');
-			session.statusController.deactivate();
-			await new Promise((resolve) => setTimeout(resolve, 100));
 			const sequence = session.statusController.history.value.cpu.length;
-			await new Promise((resolve) => setTimeout(resolve, 3500));
+			session.statusController.deactivate();
+			await wait(() => session.statusController.history.value.cpu.length > sequence);
 			expect(
 				session.statusController.history.value.cpu.length > sequence,
 				'short deactivation preserves the documented subscription grace period',
@@ -129,9 +123,17 @@ test('real SSH observation preserves host fallback, metrics, Docker actions and 
 			// The old script expected immediate deactivation, predating the documented
 			// 30s tab-switch grace. Its actual stop-delivery assertion belongs to disposal;
 			// the grace boundary itself is covered with the controller's virtual clock.
+			const stopped = Promise.withResolvers();
+			const stop = session.adapters.status.stop.bind(session.adapters.status);
+			vi.spyOn(session.adapters.status, 'stop').mockImplementation(() => {
+				const task = stop();
+				task.then(stopped.resolve, stopped.reject);
+				return task;
+			});
 			session.statusController.dispose();
 			const retiredSequence = session.statusController.history.value.cpu.length;
-			await new Promise((resolve) => setTimeout(resolve, 3500));
+			await stopped.promise;
+			await session.socket.requestConnected('workspace.ping');
 			expect(
 				session.statusController.history.value.cpu.length === retiredSequence,
 				'disposal stops original real status delivery',

@@ -1,3 +1,4 @@
+import { flushPromises } from '@vue/test-utils';
 // @vitest-environment jsdom
 import { test } from 'vitest';
 
@@ -165,7 +166,7 @@ test('server transfer API and store preserve identity, pagination, stale results
 						releaseRead = resolve;
 					});
 		const oldRead = store.load();
-		await new Promise((resolve) => setTimeout(resolve, 0));
+		await flushPromises();
 		await store.send(command);
 		releaseRead(json({ items: [make(1)], nextCursor: null }));
 		await oldRead;
@@ -226,7 +227,7 @@ test('server transfer API and store preserve identity, pagination, stale results
 				: json({ items: [make(5, 'cancelling')], nextCursor: null });
 		const first = store.cancel(uuid(5));
 		const second = store.cancel(uuid(5));
-		await new Promise((resolve) => setTimeout(resolve, 0));
+		await flushPromises();
 		expect(
 			calls.filter((call) => call.url === '/api/v1/transfers/cancel/' + uuid(5)).length === 1,
 			'concurrent cancellation shares the actual request',

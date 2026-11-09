@@ -44,7 +44,7 @@ for (const mode of ['provider', 'ui', 'ui-service', 'session']) {
 			const directory = await mkdtemp(join(artifactRoot, 'sdk4-update-'));
 			const sshd = await openSshd(directory);
 			t.after(() => sshd.close());
-			const f = await openAgentExecution(directory, sshd);
+			const f = await openAgentExecution(directory, sshd, { signal: t.signal });
 			t.after(() => f.close());
 			const packageId = ui ? 'test.live-ui' : 'test.live-provider';
 			const appPath = '/api/v1/agent/apps/' + f.appId;
@@ -167,10 +167,12 @@ export default definePlugin((plugin)=>plugin.register({kind:'tool',key:'test.liv
 						if (withTransport)
 							for (const approval of await listAgentApprovalHistory(f.api, f.appId, run.id))
 								if (approval.status === 'requested') await f.approve(approval);
+						await f.wait(run, 'running', t.signal);
 						return f.heldModelCount;
 					},
 					(count) => count === 1,
 					'Model is actually executing',
+					t.signal,
 				);
 				const db = new DatabaseSync(f.database, { readOnly: true });
 

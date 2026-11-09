@@ -48,7 +48,7 @@ if [[ "${3:-}" != foreground ]]; then
 fi
 
 # Node's process-isolated files own random ports and independent writable data.
-# Overlap real expiry waits; browser suites retain sequential fixed-port use.
+# Overlap independent protocol work; browser suites retain sequential fixed-port use.
 
 failed=0
 cd "$repo_root/tests"
@@ -71,7 +71,7 @@ fi
 
 cd "$repo_root"
 measure host-browser env -u NEXUS_TEST_PLUGIN_SET node scripts/e2e/balanced-shards.mjs run --shards "$shards" --shard "$shard" \
-  > >(tee "$repo_root/tests/e2e/.tmp/shard-server.log") 2>&1 || failed=1
+  > >(tee "$artifacts/host-browser.log") 2>&1 || failed=1
 
 cd "$plugin_root"
 NEXUS_TEST_ARTIFACT_DIR="$artifacts/plugin-interop" measure plugin-interop \

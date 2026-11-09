@@ -46,6 +46,8 @@ async function tapFileManagerRow(
 }
 
 test('remote touch supports switchable native direct and touchpad input', async ({ page }) => {
+	await page.clock.install();
+	await page.exposeFunction('__advanceTouchTestClock', (milliseconds: number) => page.clock.runFor(milliseconds));
 	await page.goto('/login');
 
 	const result = await page.evaluate(async () => {
@@ -128,7 +130,10 @@ test('remote touch supports switchable native direct and touchpad input', async 
 			);
 		};
 
-		const wait = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+		const wait = (milliseconds: number) =>
+			(
+				window as typeof window & { __advanceTouchTestClock(milliseconds: number): Promise<void> }
+			).__advanceTouchTestClock(milliseconds);
 
 		const tapTouch = touch(1, 80, 90, 0.5);
 		dispatch('touchstart', [tapTouch], [tapTouch]);

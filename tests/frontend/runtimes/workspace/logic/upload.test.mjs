@@ -1,3 +1,4 @@
+import { flushPromises } from '@vue/test-utils';
 // @vitest-environment jsdom
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
@@ -57,7 +58,7 @@ test('workspace upload boundaries preserve lifecycle and complete controlled I/O
 		assert.ok(condition, label);
 	};
 
-	const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+	const tick = flushPromises;
 
 	const until = async (condition) => {
 		const deadline = Date.now() + 3000;

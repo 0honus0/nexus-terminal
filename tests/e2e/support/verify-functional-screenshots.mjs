@@ -7,9 +7,9 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const e2eRoot = path.resolve(__dirname, '..');
 const repoRoot = path.resolve(e2eRoot, '../..');
-const screenshotRoot = path.resolve(process.argv[2] || path.join(e2eRoot, '.tmp', 'functional-screenshots'));
+const screenshotRoot = path.resolve(process.argv[2] || path.join(e2eRoot, '../.artifacts', 'functional-screenshots'));
 const reportPath = path.resolve(
-	process.argv[3] || path.join(e2eRoot, '.tmp', 'functional-screenshot-verification.json'),
+	process.argv[3] || path.join(e2eRoot, '../.artifacts', 'functional-screenshot-verification.json'),
 );
 const canonicalRoot = path.resolve(process.argv[4] || path.join(repoRoot, 'doc', 'imgs', 'e2e'));
 

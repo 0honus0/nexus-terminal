@@ -33,6 +33,10 @@ import {
 	waitForJson,
 } from '../../../support/protocols/workspace-client';
 
+test.beforeEach(async ({ page }) => {
+	await page.clock.install();
+});
+
 test.use({ e2eServices: ['ssh'] });
 
 test('marking suspend keeps the UI tab interactive and unmarking keeps the shell alive', async ({ page, context }) => {
@@ -432,7 +436,7 @@ test('resumed terminal pages older history through a bounded window and restores
 		// xterm 6 uses a custom scrollable element; the legacy .xterm-viewport no longer exposes
 		// the terminal's actual scrollTop/scrollHeight. Assert lazy paging at the protocol boundary
 		// instead of reading obsolete DOM scroll metrics.
-		await page.waitForTimeout(350);
+		await page.clock.runFor(350);
 		expect(historyRequestCount).toBe(0);
 
 		const scrollable = terminal.locator('.xterm-scrollable-element').first();
@@ -508,7 +512,7 @@ test('resumed terminal pages older history through a bounded window and restores
 			for (let attempt = 0; attempt < 30; attempt += 1) {
 				if (await predicate()) return;
 				await page.mouse.wheel(0, deltaY);
-				await page.waitForTimeout(75);
+				await page.clock.runFor(75);
 			}
 			expect(await predicate(), failureMessage).toBe(true);
 		};
@@ -527,7 +531,7 @@ test('resumed terminal pages older history through a bounded window and restores
 				scrollableBox!.y + scrollableBox!.height / 2,
 			);
 			await page.mouse.wheel(0, -6_000);
-			await page.waitForTimeout(100);
+			await page.clock.runFor(100);
 			console.log('[history page]', {
 				pageIndex,
 				historyRequestCount,

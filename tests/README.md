@@ -3,7 +3,7 @@
 测试按真实代码模块和验证层归档。完整设计见 [测试架构](../doc/architecture/TESTING.md)，当前迁移状态与未验范围见 [PLAN D35](../doc/PLAN.md#d35本体与插件测试体系重设计2026-11-08)。
 
 - `pnpm test:fast`：Vitest 的 Shared、后端纯逻辑、前端状态与组件；通常无需构建应用或启动浏览器。
-- `pnpm test:integration`：构建后端后运行存储、HTTP、前端真实HTTP集成与 Node 原生集成。完整原生协议及必需自然时序通过该入口直接执行；全绿结论须核对当前报告。
+- `pnpm test:integration`：构建后端后运行存储、HTTP、前端真实HTTP集成与 Node 原生集成。完整原生协议及必需真实I/O时序通过该入口直接执行；全绿结论须核对当前报告。
 - `pnpm test:e2e`：构建应用及测试客户端，再运行 Playwright 产品流程。
 - `pnpm test:e2e:isolated -- <参数>`：为 Playwright 服务分配独立本地端口；该命令不触发远程 Actions。
 - `pnpm --filter @nexus-terminal/tests exec vitest run <文件或筛选词>`：直接验证一个迁移模块。
@@ -37,3 +37,5 @@ CI以统一8个runner执行模块/协议/本体浏览器/插件互操作/插件�
 CI的原生协议与模块/浏览器链重叠执行，浏览器两仓仍顺序启动，本体通用浏览器清除只属于插件候选的`NEXUS_TEST_PLUGIN_SET`；`scripts/e2e/run-test-shard.sh`只装配这两条链，框架继续负责发现、分片和断言。`metrics/`保留GNU time的CPU、墙钟与最大单进程RSS，外层shard和分层数据不能重复求和；cgroup内存峰值不等于聚合RSS。运行这些Linux CI脚本的本地回归需GNU time（默认`/usr/bin/time`，可用`NEXUS_TEST_TIME_COMMAND`指定）。
 
 手动门禁的`dependency_cache=cold`只关闭质量作业的pnpm依赖缓存恢复；`warm`恢复正常缓存。两种模式都重跑全部测试，保留相同的预装runner镜像依赖；这不是清空OS页缓存、镜像层或公网服务缓存。严格对照必须核对同一源码、插件SHA、不可变runner digest及实际资源。
+
+所有可替代的长短等待使用框架虚拟时钟，按H-22.1控制实际时钟owner。共享CI环境定义归`fixtures/runner/Dockerfile`；分层产物默认归`tests/.artifacts/`，模块与浏览器分别使用`modules/`和`browser/`；发现时创建产物根目录。Vitest缓存归`tests/.cache/vitest/`，不再沿用浏览器专用运行目录。独立插件门禁消费成功Host发布的不可变test-environment产物，沿用同一runner digest与指纹。

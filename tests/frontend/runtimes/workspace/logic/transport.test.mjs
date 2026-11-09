@@ -4,7 +4,10 @@ import { test, vi, afterEach } from 'vitest';
 import { encodeWorkspaceBinaryFrame } from '@nexus-terminal/shared/remote/workspace/workspace-binary';
 import { openWorkspacePeer } from '../../../../support/protocols/workspace-peer.mjs';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+	vi.useRealTimers();
+	vi.unstubAllGlobals();
+});
 
 test('workspace socket preserves response ordering, backpressure and attachment ownership over real WS', async () => {
 	const peer = await openWorkspacePeer();
@@ -192,16 +195,22 @@ test('workspace socket preserves response ordering, backpressure and attachment 
 			});
 			await output.request('workspace.ping', { path: '/terminal' });
 			expect(typeof consume === 'function', 'terminal output has consumer callback');
+			vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 			consume();
 			consume();
-			await new Promise((resolve) => setTimeout(resolve, 80));
+			await vi.advanceTimersByTimeAsync(80);
+			vi.useRealTimers();
+			await output.request('workspace.ping');
 			// Keep a second output unconsumed to check attachment identity, rather
 			// than merely calling an already acknowledged callback after reconnect.
 			await output.request('workspace.ping', { path: '/terminal' });
 			output.close();
 			await output.open();
+			vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 			consume();
-			await new Promise((resolve) => setTimeout(resolve, 80));
+			await vi.advanceTimersByTimeAsync(80);
+			vi.useRealTimers();
+			await output.request('workspace.ping');
 			expect(output.connected, 'late consumption cannot close replacement attachment');
 			output.close();
 			const failed = make();

@@ -524,7 +524,6 @@ test('multi-file upload uses all configured streams instead of size-capacity thr
 		// Each file needs four delayed SFTP WRITE acknowledgements, so no first-wave stream can
 		// complete for ~3.6s. Observe the first wave directly at the browser transport boundary.
 		await expect.poll(() => maxOpenUploadStreams, { timeout: 2_500 }).toBeGreaterThanOrEqual(4);
-		await page.waitForTimeout(400);
 	} finally {
 		const progressPopup = visibleProgressCenter(page);
 		if (await progressPopup.isVisible().catch(() => false)) {

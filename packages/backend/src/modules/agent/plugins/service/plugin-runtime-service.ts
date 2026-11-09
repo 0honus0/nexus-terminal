@@ -534,14 +534,24 @@ export class PluginRuntimeService {
 		const key = userId + ':' + appId + ':' + logicalInstanceId;
 		const existing = this.starts.get(key);
 		if (existing) {
-			if (existing.shutdown || existing.stop.signal.aborted) {
-				return Promise.reject(new AgentFailure('provider_unavailable'));
-			}
-			return existing.promise.then(() => {
-				if (signal.aborted) {
-					throw new AgentFailure('provider_unavailable');
+			try {
+				await existing.promise;
+			} catch (error) {
+				if (!existing.shutdown) {
+					throw error;
 				}
-			});
+			}
+			if (existing.shutdown) {
+				// Configuration replacement retires the captured construction. A new caller
+				// must await its actual cleanup and reread current authority before opening.
+				// Unknown cleanup rejects here; no execution or failed construction is replayed.
+				await existing.shutdown;
+				return this.start(userId, appId, signal, packageId, logicalInstanceId);
+			}
+			if (signal.aborted) {
+				throw new AgentFailure('provider_unavailable');
+			}
+			return;
 		}
 		const stop = new AbortController();
 		const lifetime = AbortSignal.any([this.stopSignal.signal, stop.signal, AbortSignal.timeout(60000)]);
@@ -562,12 +572,12 @@ export class PluginRuntimeService {
 		this.starts.set(key, construction);
 		void promise.then(
 			() => {
-				if (this.starts.get(key) === construction) {
+				if (!construction.shutdown && this.starts.get(key) === construction) {
 					this.starts.delete(key);
 				}
 			},
 			() => {
-				if (this.starts.get(key) === construction) {
+				if (!construction.shutdown && this.starts.get(key) === construction) {
 					this.starts.delete(key);
 				}
 			},
@@ -1001,6 +1011,9 @@ export class PluginRuntimeService {
 				throw new AgentFailure('operation_unknown', {
 					cause: new AggregateError(failures, 'Plugin construction and retirement failed'),
 				});
+			}
+			if (this.starts.get(key) === construction) {
+				this.starts.delete(key);
 			}
 		});
 		return construction.shutdown;

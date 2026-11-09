@@ -173,9 +173,8 @@ export default [
 	{
 		name: 'nexus/ignores',
 		ignores: [
-			'tests/e2e/.tmp/**',
-			'tests/e2e/playwright-report/**',
-			'tests/e2e/test-results/**',
+			'tests/.artifacts/**',
+			'tests/.cache/**',
 			'**/dist/**',
 			'**/node_modules/**',
 			'**/data/**',

@@ -12,6 +12,7 @@ test('workspace session and registry correlate real wire generations and track o
 	const peer = await openWorkspacePeer();
 	const producer = peer.server;
 	const calls = [];
+	const held = new Map();
 	let attachments = 0;
 	producer.on('connection', (socket) => {
 		const attachment = ++attachments;
@@ -55,7 +56,7 @@ test('workspace session and registry correlate real wire generations and track o
 					output(2);
 				};
 
-				if (owner === 3) setTimeout(deliver, 80);
+				if (owner === 3) held.set(3, deliver);
 				else if (owner === 6) socket.close(4000, 'lost creation receipt');
 				else deliver();
 			} else if (request.type === 'workspace.resume') {
@@ -74,7 +75,7 @@ test('workspace session and registry correlate real wire generations and track o
 			} else if (request.type === 'workspace.close') {
 				assert.ok(owner, 'close must use an attached transport');
 				if (owner === 7 || owner === 27) socket.close(4000, 'close receipt lost');
-				else if (owner === 21) setTimeout(() => socket.readyState === WebSocket.OPEN && reply(null), 100);
+				else if (owner === 21) held.set(21, () => socket.readyState === WebSocket.OPEN && reply(null));
 				else reply(null);
 			} else if (request.type === 'fixture.drop') {
 				reply(null);
@@ -101,13 +102,7 @@ test('workspace session and registry correlate real wire generations and track o
 				results.push(name);
 			};
 
-			const wait = async (check) => {
-				const end = performance.now() + 3000;
-				while (!check()) {
-					if (performance.now() > end) throw Error('condition timed out');
-					await new Promise((resolve) => setTimeout(resolve, 10));
-				}
-			};
+			const wait = (check) => vi.waitUntil(check, { timeout: 3000, interval: 10 });
 
 			const make = (id) => {
 				const session = new WorkspaceRuntimeSession(
@@ -130,7 +125,7 @@ test('workspace session and registry correlate real wire generations and track o
 				const first = normal.connect({ columns: 80, rows: 24 });
 				expect(normal.connect() === first, 'concurrent connects share one operation');
 				const receipt = await first;
-				await new Promise((resolve) => setTimeout(resolve, 30));
+				await normal.socket.requestConnected('workspace.ping');
 				expect(receipt.lastConnectedAt === 1700000000000, 'wire seconds mapped to application milliseconds');
 				const originalAttachment = normal.socket.bindRequests();
 				await detach(normal);
@@ -176,8 +171,9 @@ test('workspace session and registry correlate real wire generations and track o
 					() => false,
 					() => true,
 				);
-				await new Promise((resolve) => setTimeout(resolve, 20));
+				await wait(() => held.has(3));
 				const lateClose = late.close();
+				held.get(3)();
 				expect(await lateConnect, 'close during acquisition rejects late activation');
 				expect(
 					(await lateClose) === 'closed' && late.state.value === 'disconnected',
@@ -279,6 +275,8 @@ test('workspace session and registry correlate real wire generations and track o
 				);
 				check(!finished, 'batch close waits for original attachment completion');
 				const current = await registry.open(connection(22));
+				await vi.waitUntil(() => held.has(21), { timeout: 3000, interval: 10 });
+				held.get(21)();
 				await retiring;
 				check(
 					registry.sessions.get(current.id) === current,

@@ -36,7 +36,7 @@ export default class MirroredLogReporter implements Reporter {
 		this.testDir = config.projects[0]?.testDir || process.cwd();
 		const logBase = process.env.NEXUS_TEST_ARTIFACT_DIR
 			? path.resolve(process.env.NEXUS_TEST_ARTIFACT_DIR, 'logs')
-			: path.resolve(this.testDir, '..', 'logs');
+			: path.resolve(this.testDir, '../../.artifacts/browser/logs');
 		fs.mkdirSync(logBase, { recursive: true });
 		this.logRoot = fs.mkdtempSync(path.join(logBase, 'run-'));
 		for (const test of suite.allTests()) {
@@ -168,7 +168,10 @@ export default class MirroredLogReporter implements Reporter {
 		const configuredPath = process.env.E2E_SPEC_DURATIONS_PATH;
 		const outputPath = configuredPath
 			? path.resolve(e2eRoot, configuredPath)
-			: path.join(e2eRoot, 'test-results', 'spec-durations.json');
+			: path.resolve(
+					process.env.NEXUS_TEST_ARTIFACT_DIR ?? path.join(e2eRoot, '../.artifacts/browser'),
+					'reports/spec-durations.json',
+				);
 		fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 		fs.writeFileSync(
 			outputPath,

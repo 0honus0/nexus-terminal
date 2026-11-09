@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { test, vi, afterEach } from 'vitest';
 import { openWorkspaceApplication } from '../../../../support/protocols/frontend-workspace.mjs';
 import { WorkspaceRuntimeSession } from '../../../../../packages/frontend/src/runtimes/workspace/session/workspaceRuntimeSession.ts';
@@ -23,14 +25,7 @@ test('real SSH workspace preserves PTY state, directory, offline output, resize 
 			result.push(name);
 		};
 
-		const until = async (check, name) => {
-			const deadline = performance.now() + 12000;
-			while (!check()) {
-				if (performance.now() > deadline)
-					throw Error(name + ': ' + session.state.value + ' ' + session.statusMessage.value);
-				await new Promise((resolve) => setTimeout(resolve, 20));
-			}
-		};
+		const until = (check) => vi.waitUntil(check, { timeout: 12000, interval: 20 });
 
 		try {
 			await session.adapters.terminal.resize({ columns: 100, rows: 30 });
@@ -39,8 +34,9 @@ test('real SSH workspace preserves PTY state, directory, offline output, resize 
 				session.state.value === 'connected' && first.lastConnectedAt > 1700000000000,
 				'formal connect with real SSH and seconds mapping',
 			);
-			// Wait for shell initialization, then record a shell-local value and PID.
-			await new Promise((resolve) => setTimeout(resolve, 700));
+			// Confirm actual shell initialization before exercising the directory integration.
+			await session.adapters.terminal.sendInput("printf '\\n%s%s\\n' 'C2_' 'SHELL_READY'\n");
+			await until(() => output.includes('C2_SHELL_READY'));
 			const previousDirectory = await session.adapters.terminalDirectory.readCurrentDirectory();
 			expect(previousDirectory.startsWith('/'), 'formal current directory reads real interactive shell');
 			let directoryTimer;
@@ -66,14 +62,26 @@ test('real SSH workspace preserves PTY state, directory, offline output, resize 
 			const pid = output.match(/C2_INITIAL_([0-9]+)/)[1];
 			const before = output.length;
 			await session.adapters.terminal.sendInput(
-				"(sleep 1; printf '\\nC2_OFFLINE_%s\\n' \"$C2_OWNER_PID\") & printf '\\n%s%s\\n' 'C2_' 'BACKGROUND_READY'\n",
+				"(sleep 1; printf '\\nC2_OFFLINE_%s\\n' \"$C2_OWNER_PID\"; printf '%s' \"$C2_OWNER_PID\" > '" +
+					join(fixture.root, 'offline-complete') +
+					"') & printf '\\n%s%s\\n' 'C2_' 'BACKGROUND_READY'\n",
 			);
 			await until(
 				() => output.slice(before).includes('C2_BACKGROUND_READY'),
 				'background command accepted before detach',
 			);
 			session.socket.close('controlled browser transport detach');
-			await new Promise((resolve) => setTimeout(resolve, 1500));
+			await vi.waitUntil(
+				async () => {
+					try {
+						return (await readFile(join(fixture.root, 'offline-complete'), 'utf8')).trim() === pid;
+					} catch (cause) {
+						if (cause.code !== 'ENOENT') throw cause;
+						return false;
+					}
+				},
+				{ timeout: 12000, interval: 20 },
+			);
 			const resumed = await session.connect();
 			expect(
 				resumed.attachmentGeneration === first.attachmentGeneration + 1 &&

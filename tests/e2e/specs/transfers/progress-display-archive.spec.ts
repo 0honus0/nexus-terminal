@@ -119,7 +119,16 @@ test('registered archive progress supports hide, restore, and real cancel for co
 				await closeProgressDisplay(modal);
 				await reopenConnectedFileManager(page);
 
-				await page.waitForTimeout(800);
+				// The held preflight must actually exit; page time cannot complete remote I/O.
+				await expect
+					.poll(async () => {
+						const response = await fetch(E2E_SSH.controlUrl + '/archive/preflight-processes');
+						expect(response.ok).toBe(true);
+						const processes = await response.json();
+						return processes.started === processes.exited;
+					})
+					.toBe(true);
+				await refreshFileManager(page);
 				await expect(row(page, 'archive-source.txt')).toHaveCount(0);
 			},
 		);
@@ -147,7 +156,7 @@ test('overlapping archive requests keep independent task ownership', async ({ pa
 	await refreshFileManager(page);
 	await expect(row(page, secondSource)).toBeVisible();
 
-	await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=2200`, { method: 'POST' });
+	await fetch(`${E2E_SSH.controlUrl}/archive/exec-hold?enabled=1`, { method: 'POST' });
 	try {
 		await slowStep('second archive request keeps separate task ownership', async () => {
 			await startZipCompression(page, 'archive-source.txt');
@@ -157,7 +166,13 @@ test('overlapping archive requests keep independent task ownership', async ({ pa
 			const activeTask = visibleProgressTask(page, 'archive-source.zip');
 			await expect(activeTask).toHaveAttribute('data-task-kind', 'compress');
 
-			await page.waitForTimeout(700);
+			await expect
+				.poll(async () => {
+					const response = await fetch(E2E_SSH.controlUrl + '/archive/processes');
+					expect(response.ok).toBe(true);
+					return (await response.json()).started;
+				})
+				.toBe(1);
 			await startZipCompression(page, secondSource);
 
 			const secondTask = visibleProgressTask(page, 'archive-second.zip');
@@ -167,12 +182,21 @@ test('overlapping archive requests keep independent task ownership', async ({ pa
 			await expect(activeTask).toContainText('archive-source.zip');
 			await expect(secondTask).toContainText('archive-second.zip');
 
+			await expect
+				.poll(async () => {
+					const response = await fetch(E2E_SSH.controlUrl + '/archive/processes');
+					expect(response.ok).toBe(true);
+					return (await response.json()).started;
+				})
+				.toBe(2);
+			await fetch(`${E2E_SSH.controlUrl}/archive/exec-hold?enabled=0`, { method: 'POST' });
 			await refreshFileManager(page);
 			await expect(row(page, 'archive-source.zip')).toBeVisible({ timeout: 15_000 });
 			await expect(row(page, 'archive-second.zip')).toBeVisible({ timeout: 15_000 });
 			await expect(popup).toBeHidden({ timeout: 4_000 });
 		});
 	} finally {
+		await fetch(`${E2E_SSH.controlUrl}/archive/exec-hold?enabled=0`, { method: 'POST' });
 		await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });
 	}
 });
@@ -206,6 +230,7 @@ test('closing and reopening the file manager preserves an in-flight archive task
 		await refreshFileManager(page);
 		await expect(row(page, 'archive-source.zip')).toBeVisible();
 	} finally {
+		await fetch(`${E2E_SSH.controlUrl}/archive/exec-hold?enabled=0`, { method: 'POST' });
 		await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });
 	}
 });
@@ -256,6 +281,7 @@ test('a sidebar FileManager can unmount without orphaning its hidden archive tas
 		await sidebar.getByRole('button', { name: 'Refresh', exact: true }).click();
 		await expect(sidebarList.locator('tr[data-filename="archive-source.zip"]')).toHaveCount(0);
 	} finally {
+		await fetch(`${E2E_SSH.controlUrl}/archive/exec-hold?enabled=0`, { method: 'POST' });
 		await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });
 		await updateTestSidebar(context.request, originalSidebar);
 	}

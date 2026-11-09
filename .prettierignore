@@ -7,7 +7,6 @@ build
 coverage
 test-results
 playwright-report
-tests/e2e/.tmp/
 uploads
 temp-uploads
 *.min.js
@@ -17,4 +16,5 @@ pnpm-lock.yaml
 # Verbatim independent plugin build snapshots; integrity is verified against provenance.
 tests/e2e/fixtures/agent/plugin-source/
 
-# Generated E2E scheduling state; these files are rewritten by the timing/rebalance job.
+tests/.artifacts/
+tests/.cache/

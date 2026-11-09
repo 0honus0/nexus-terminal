@@ -43,7 +43,7 @@ on:
       - '.github/workflows/publish-ghcr.yml'
   workflow_dispatch:
     inputs:
-      playwright_runners:
+      test_runners:
         description: Number of test runners for module, protocol and browser shards
         required: true
         default: '8'
@@ -75,8 +75,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  e2e-runner-image:
-    name: Prepare E2E runner image
+  test-runner-image:
+    name: Prepare shared test runner image
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -106,7 +106,7 @@ jobs:
       - name: Distribute all test layers across runners
         id: matrix
         env:
-          RUNNERS: ${{ github.event_name == 'workflow_dispatch' && inputs.playwright_runners || '8' }}
+          RUNNERS: ${{ github.event_name == 'workflow_dispatch' && inputs.test_runners || '8' }}
         run: |
           node --input-type=module <<'JS'
           import { appendFileSync } from 'node:fs';
@@ -128,7 +128,8 @@ jobs:
             echo "E2E runner image metadata matches; skipping pull and build."
           elif [ "$CAN_UPDATE_RUNNER_IMAGE" != "true" ]; then
             echo "build=false" >> "$GITHUB_OUTPUT"
-            echo "A fork pull request cannot update GHCR; using latest and allowing dependency downloads."
+            echo "The current test runner is unavailable for this fork; a matching runner must be published." >&2
+            exit 1
           else
             echo "build=true" >> "$GITHUB_OUTPUT"
             echo "E2E runner image is missing or outdated; building latest now."
@@ -157,12 +158,34 @@ jobs:
           echo "image=${RUNNER_IMAGE%:*}@$digest" >> "$GITHUB_OUTPUT"
           echo "Pinned runner $RUNNER_IMAGE@$digest"
 
+      - name: Record exact test environment
+        env:
+          PINNED_RUNNER_IMAGE: ${{ steps.pinned-image.outputs.image }}
+        run: |
+          mkdir -p tests/.artifacts/environment
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const fingerprint = execFileSync(process.execPath, ['scripts/e2e/runner-image-info.mjs', 'fingerprint'], { encoding: 'utf8' }).trim();
+          fs.writeFileSync('tests/.artifacts/environment/environment.json', JSON.stringify({
+            sha: process.env.GITHUB_SHA, image: process.env.PINNED_RUNNER_IMAGE, fingerprint,
+          }, null, 2));
+          JS
+
+      - name: Upload immutable test environment
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: test-environment-${{ github.sha }}-${{ github.run_attempt }}
+          path: tests/.artifacts/environment/environment.json
+          if-no-files-found: error
+          retention-days: 14
+
   quality:
     name: Checks and format
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      NEXUS_TEST_METRICS: ${{ github.workspace }}/tests/e2e/.tmp/quality-metrics
+      NEXUS_TEST_METRICS: ${{ github.workspace }}/tests/.artifacts/quality-metrics
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
@@ -186,11 +209,11 @@ jobs:
         uses: actions/checkout@v7.0.1
         with:
           repository: 0honus0/nexus-agent-plugins
-          path: tests/e2e/.tmp/plugin-source
+          path: tests/.artifacts/plugin-source
           persist-credentials: false
 
       - name: Build and sign plugin candidates once
-        working-directory: tests/e2e/.tmp/plugin-source
+        working-directory: tests/.artifacts/plugin-source
         run: |
           bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-install.json" pnpm install --frozen-lockfile
           bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-build.json" pnpm build
@@ -203,8 +226,9 @@ jobs:
         with:
           name: e2e-plugin-candidates-${{ github.sha }}-${{ github.run_attempt }}
           path: |
-            tests/e2e/.tmp/plugin-test-source.tar.gz
-            tests/e2e/.tmp/plugin-candidates/
+            tests/.artifacts/plugin-test-source.tar.gz
+            tests/.artifacts/plugin-candidates/staging-1/
+            tests/.artifacts/plugin-candidates/source.sha
           if-no-files-found: error
           retention-days: 14
 
@@ -224,7 +248,7 @@ jobs:
 
       - name: Run standard checks serially
         env:
-          NEXUS_TEST_PLUGIN_SOURCE_ROOT: ${{ github.workspace }}/tests/e2e/.tmp/plugin-source
+          NEXUS_TEST_PLUGIN_SOURCE_ROOT: ${{ github.workspace }}/tests/.artifacts/plugin-source
         run: |
           bash scripts/e2e/measure-command.sh "$NEXUS_TEST_METRICS/check.json" pnpm run check
           bash scripts/e2e/measure-command.sh "$NEXUS_TEST_METRICS/fast.json" pnpm test:fast
@@ -233,11 +257,11 @@ jobs:
         run: bash scripts/e2e/measure-command.sh "$NEXUS_TEST_METRICS/format.json" pnpm run format:all:check
 
       - name: Check plugin source and independent package behavior
-        working-directory: tests/e2e/.tmp/plugin-source
+        working-directory: tests/.artifacts/plugin-source
         env:
-          NEXUS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/tests/e2e/.tmp/plugin-quality
+          NEXUS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/tests/.artifacts/plugin-quality
           NEXUS_TEST_HOST_ROOT: ${{ github.workspace }}
-          NEXUS_TEST_PLUGIN_SET: ${{ github.workspace }}/tests/e2e/.tmp/plugin-candidates/staging-1
+          NEXUS_TEST_PLUGIN_SET: ${{ github.workspace }}/tests/.artifacts/plugin-candidates/staging-1
         run: |
           bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-check.json" pnpm check
           bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-test.json" pnpm test
@@ -248,7 +272,7 @@ jobs:
         uses: actions/upload-artifact@v7.0.2
         with:
           name: plugin-quality-${{ github.run_attempt }}
-          path: tests/e2e/.tmp/plugin-quality/
+          path: tests/.artifacts/plugin-quality/
           if-no-files-found: error
           retention-days: 7
 
@@ -257,13 +281,13 @@ jobs:
         uses: actions/upload-artifact@v7.0.2
         with:
           name: quality-metrics-${{ github.run_attempt }}
-          path: tests/e2e/.tmp/quality-metrics/
+          path: tests/.artifacts/quality-metrics/
           if-no-files-found: error
           retention-days: 14
 
   tests:
     name: Tests shard ${{ matrix.shard }}
-    needs: e2e-runner-image
+    needs: test-runner-image
     permissions:
       contents: read
       packages: read
@@ -271,7 +295,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     container:
-      image: ${{ needs.e2e-runner-image.outputs.image }}
+      image: ${{ needs.test-runner-image.outputs.image }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ github.token }}
@@ -282,19 +306,19 @@ jobs:
         ${{ matrix.shard == 1 && '--cap-add=SYS_ADMIN --security-opt=apparmor=unconfined' || '' }}
         ${{ matrix.shard == 1 && '--volume=/var/run/docker.sock:/var/run/docker.sock' || '' }}
     env:
-      NEXUS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/tests/e2e/.tmp/layers
-      NEXUS_AGENT_ACCEPTANCE_ROOT: ${{ github.workspace }}/tests/e2e/.tmp/layers
+      NEXUS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/tests/.artifacts/layers
+      NEXUS_AGENT_ACCEPTANCE_ROOT: ${{ github.workspace }}/tests/.artifacts/layers
       NEXUS_TEST_DOCKER_NATIVE: backend/remote/docker/protocol/docker.native.test.mjs
       NEXUS_TEST_FINITE_FS_NATIVE: backend/remote/sessions/suspend/storage/suspended-log-enospc.native.test.mjs
       NEXUS_TEST_HOST_ROOT: ${{ github.workspace }}
-      NEXUS_TEST_PLUGIN_SOURCE_ROOT: ${{ github.workspace }}/tests/e2e/.tmp/plugin-source
-      NEXUS_TEST_PLUGIN_SET: ${{ github.workspace }}/tests/e2e/.tmp/plugin-validation-artifact/plugin-candidates/staging-1
+      NEXUS_TEST_PLUGIN_SOURCE_ROOT: ${{ github.workspace }}/tests/.artifacts/plugin-source
+      NEXUS_TEST_PLUGIN_SET: ${{ github.workspace }}/tests/.artifacts/plugin-validation-artifact/plugin-candidates/staging-1
       NEXUS_E2E_PREBUILT: '1'
       E2E_CAPTURE_SCREENSHOTS: ${{ github.event_name == 'workflow_dispatch' && inputs.refresh_screenshots && '1' || '0' }}
-      E2E_SCREENSHOT_OUTPUT_DIR: .tmp/functional-screenshots
+      E2E_SCREENSHOT_OUTPUT_DIR: ${{ github.workspace }}/tests/.artifacts/functional-screenshots
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.e2e-runner-image.outputs.matrix) }}
+      matrix: ${{ fromJSON(needs.test-runner-image.outputs.matrix) }}
 
     steps:
       - name: Checkout repository
@@ -303,13 +327,8 @@ jobs:
       - name: Link workspace dependencies from runner cache
         run: |
           expected="$(node scripts/e2e/runner-image-info.mjs fingerprint)"
-          if [ "${E2E_RUNNER_FINGERPRINT:-}" = "$expected" ]; then
-            pnpm install --frozen-lockfile --offline
-          else
-            echo "Runner image fingerprint differs from this revision; allowing missing dependencies to download."
-            pnpm install --frozen-lockfile --prefer-offline
-            pnpm --filter @nexus-terminal/tests exec playwright install --only-shell chromium
-          fi
+          test "${E2E_RUNNER_FINGERPRINT:-}" = "$expected"
+          pnpm install --frozen-lockfile --offline
 
       - name: Wait for this run's application build
         id: application
@@ -357,14 +376,14 @@ jobs:
         with:
           github-token: ${{ github.token }}
           artifact-ids: ${{ steps.plugin-candidates.outputs.result }}
-          path: tests/e2e/.tmp/plugin-validation-artifact
+          path: tests/.artifacts/plugin-validation-artifact
           merge-multiple: true
 
       - name: Read pinned plugin revision
         id: plugin-source
         shell: bash
         run: |
-          revision="$(cat tests/e2e/.tmp/plugin-validation-artifact/plugin-candidates/source.sha)"
+          revision="$(cat tests/.artifacts/plugin-validation-artifact/plugin-candidates/source.sha)"
           [[ "$revision" =~ ^[a-f0-9]{40}$ ]]
           echo "sha=$revision" >> "$GITHUB_OUTPUT"
 
@@ -373,11 +392,11 @@ jobs:
         with:
           repository: 0honus0/nexus-agent-plugins
           ref: ${{ steps.plugin-source.outputs.sha }}
-          path: tests/e2e/.tmp/plugin-source
+          path: tests/.artifacts/plugin-source
           persist-credentials: false
 
       - name: Restore plugin builds without rebuilding
-        working-directory: tests/e2e/.tmp/plugin-source
+        working-directory: tests/.artifacts/plugin-source
         run: |
           # Container mounts can resolve the checkout alias to /__w. Git checks the canonical owner path.
           git config --global --add safe.directory "$(realpath "$GITHUB_WORKSPACE")"
@@ -396,7 +415,7 @@ jobs:
       - name: Record shard resource environment
         if: always()
         env:
-          PINNED_RUNNER_IMAGE: ${{ needs.e2e-runner-image.outputs.image }}
+          PINNED_RUNNER_IMAGE: ${{ needs.test-runner-image.outputs.image }}
           DEPENDENCY_CACHE: ${{ inputs.dependency_cache || 'warm' }}
         run: |
           node --input-type=module <<'JS'
@@ -420,7 +439,7 @@ jobs:
         uses: actions/upload-artifact@v7.0.2
         with:
           name: e2e-timings-${{ matrix.shard }}-${{ github.run_attempt }}
-          path: tests/e2e/test-results/spec-durations.json
+          path: tests/.artifacts/layers/reports/spec-durations.json
           if-no-files-found: error
           retention-days: 7
 
@@ -430,10 +449,10 @@ jobs:
         with:
           name: test-layers-${{ matrix.shard }}-${{ github.run_attempt }}
           path: |
-            tests/e2e/.tmp/layers/metrics/*
-            tests/e2e/.tmp/layers/**/reports/*
-            tests/e2e/.tmp/layers/**/browser/report.json
-            tests/e2e/.tmp/layers/**/*combination.json
+            tests/.artifacts/layers/metrics/*
+            tests/.artifacts/layers/**/reports/*
+            tests/.artifacts/layers/**/browser/report.json
+            tests/.artifacts/layers/**/*combination.json
           if-no-files-found: error
           retention-days: 7
 
@@ -442,7 +461,7 @@ jobs:
         uses: actions/upload-artifact@v7.0.2
         with:
           name: e2e-screenshots-${{ matrix.shard }}-${{ github.run_attempt }}
-          path: tests/e2e/.tmp/functional-screenshots/*.png
+          path: tests/.artifacts/functional-screenshots/*.png
           if-no-files-found: ignore
           retention-days: 7
 
@@ -453,11 +472,8 @@ jobs:
           name: e2e-shard-${{ matrix.shard }}-${{ github.run_attempt }}
           include-hidden-files: true
           path: |
-            tests/e2e/logs/
-            tests/e2e/playwright-report/
-            tests/e2e/test-results/
-            tests/e2e/.tmp/shard-server.log
-            tests/e2e/.tmp/layers/
+            tests/.artifacts/shard-server.log
+            tests/.artifacts/layers/
           if-no-files-found: ignore
           retention-days: 7
 
@@ -599,24 +615,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
 
-      - name: Set up pnpm and Node.js
-        uses: pnpm/setup@v3.1.2
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.1.0
         with:
           node-version-file: .node-version
-          cache: true
-          install: false
-
-      - name: Install smoke-test dependencies
-        run: pnpm install --frozen-lockfile --filter @nexus-terminal/tests
-
-      - name: Restore Playwright browser cache
-        uses: actions/cache@v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: docker-smoke-playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install Chromium
-        run: pnpm --filter @nexus-terminal/tests exec playwright install --with-deps chromium
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4.4.1
@@ -638,5 +640,5 @@ jobs:
           cache-from: type=gha,scope=unified-e2e-smoke
           cache-to: type=gha,mode=max,scope=unified-e2e-smoke
 
-      - name: Run core no-Runner smoke
-        run: scripts/e2e/docker-core-no-runner-smoke.sh nexus-terminal:e2e-smoke
+      - name: Run deployment health smoke
+        run: scripts/e2e/docker-deployment-smoke.sh nexus-terminal:e2e-smoke

@@ -21,6 +21,10 @@ import {
 import { step } from '../../support/steps';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 
+test.beforeEach(async ({ page }) => {
+	await page.clock.install();
+});
+
 test.use({ e2eServices: ['ssh'] });
 
 const MULTI_SESSION_NAMES = [
@@ -262,7 +266,7 @@ for (const mobile of [false, true]) {
 				).toBe(1);
 
 				const failedWorkspaceId = workspaceConnectIds[0]!;
-				await page.waitForTimeout(3_000);
+				await page.clock.runFor(3_000);
 				expect(workspaceConnectIds).toEqual([failedWorkspaceId]);
 				// Retry must work without focusing xterm's hidden textarea first.
 				await page.locator('input.command-bar-input').focus();
@@ -686,7 +690,7 @@ test('a failed SSH reconnect waits for a key and then reconnects immediately', a
 				)
 				.toBeTruthy();
 			await expect(page.locator('.terminal-reconnect-notice')).toContainText('Unable to establish SSH');
-			await page.waitForTimeout(4500);
+			await page.clock.runFor(4500);
 			expect(workspaceConnectRequests).toBe(initialConnectRequestCount + 1);
 		});
 
@@ -763,7 +767,7 @@ test('hidden desktop terminal keeps its fitted geometry while switching sessions
 		await expect(terminals).toHaveCount(2);
 		// Allow the ResizeObserver callback caused by v-show/display:none to run. A hidden terminal
 		// must retain its last valid fitted geometry instead of being refit against a zero-size ancestor.
-		await page.waitForTimeout(100);
+		await page.clock.runFor(100);
 		const hiddenGeometry = await xtermGeometry(terminals.nth(0));
 		expect(hiddenGeometry).toEqual(activeGeometry);
 
@@ -1231,7 +1235,7 @@ test.describe('M08.03-a mobile Workspace session lifecycle', () => {
 					clientX: point.x,
 					clientY: point.y,
 				});
-				await page.waitForTimeout(650);
+				await page.clock.runFor(650);
 				await targetTab.dispatchEvent('pointerup', {
 					pointerId: 1,
 					pointerType: 'touch',

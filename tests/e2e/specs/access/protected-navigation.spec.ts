@@ -1,6 +1,10 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 
+test.beforeEach(async ({ page }) => {
+	await page.clock.install();
+});
+
 test('an authenticated browser can open a protected settings page', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
 
@@ -58,6 +62,6 @@ test('stale dynamically imported components trigger one automatic page recovery'
 		});
 		window.dispatchEvent(event);
 	});
-	await page.waitForTimeout(500);
+	await page.clock.runFor(500);
 	expect(documentNavigations).toBe(initialNavigations + 1);
 });

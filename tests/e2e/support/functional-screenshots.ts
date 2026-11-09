@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { Page } from '@playwright/test';
 
 const e2eRoot = path.resolve(import.meta.dirname, '..');
-const defaultOutputDir = path.join(e2eRoot, '.tmp', 'functional-screenshots');
+const defaultOutputDir = path.join(e2eRoot, '../.artifacts', 'functional-screenshots');
 
 export const functionalScreenshotsEnabled = (): boolean =>
 	/^(1|true|yes)$/i.test(process.env.E2E_CAPTURE_SCREENSHOTS ?? '');

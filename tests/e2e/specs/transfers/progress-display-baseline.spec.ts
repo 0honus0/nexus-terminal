@@ -33,6 +33,10 @@ import {
 	cancelProgressPointer,
 } from '../../support/transfers/progress';
 
+test.beforeEach(async ({ page }) => {
+	await page.clock.install();
+});
+
 test.use({ e2eServices: ['ssh'] });
 
 const row = (page: Page, filename: string): Locator => fileManagerRow(page, filename);
@@ -190,7 +194,7 @@ test('desktop Progress Display floats above the workspace without resizing the t
 				display.getByText('There are no active transfer tasks currently.', { exact: true }),
 			).toBeVisible();
 			const readsBeforeIdle = serverStatusReads;
-			await page.waitForTimeout(2500);
+			await page.clock.runFor(2500);
 			expect(serverStatusReads).toBe(readsBeforeIdle);
 			await expect(display.getByText('Loading transfer tasks...', { exact: true })).toBeHidden();
 			await expect(

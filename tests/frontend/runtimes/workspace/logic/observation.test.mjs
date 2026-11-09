@@ -4,13 +4,16 @@ import { test, vi, afterEach } from 'vitest';
 import WebSocket from '../../../../../packages/backend/node_modules/ws/index.js';
 import { openWorkspacePeer } from '../../../../support/protocols/workspace-peer.mjs';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+	vi.useRealTimers();
+	vi.unstubAllGlobals();
+});
 
 test('observation adapters and controllers preserve lifecycle, sample history and unknown Docker writes', async () => {
 	const peer = await openWorkspacePeer();
 	const producer = peer.server;
 	const calls = [];
-	const timers = new Set();
+	const lateStart = Promise.withResolvers();
 	const stats = {
 		id: 'abcdef012345',
 		name: 'fixture',
@@ -63,15 +66,8 @@ test('observation adapters and controllers preserve lifecycle, sample history an
 					reply(null);
 				};
 
-				if (mode === 'late-start') {
-					const timer = setTimeout(() => {
-						timers.delete(timer);
-						task();
-					}, 80);
-					timers.add(timer);
-				} else {
-					task();
-				}
+				if (mode === 'late-start') lateStart.resolve(task);
+				else task();
 			} else if (request.type === 'fixture.sample') {
 				emit('status.sample', request.payload);
 				reply(null);
@@ -118,15 +114,7 @@ test('observation adapters and controllers preserve lifecycle, sample history an
 			results.push(name);
 		};
 
-		const wait = async (check) => {
-			const end = performance.now() + 5000;
-			while (!check()) {
-				if (performance.now() > end) {
-					throw Error('Observation condition timeout');
-				}
-				await new Promise((resolve) => setTimeout(resolve, 10));
-			}
-		};
+		const wait = (check) => vi.waitUntil(check, { timeout: 5000, interval: 10 });
 
 		const deferred = () => {
 			let resolve, reject;
@@ -208,14 +196,17 @@ test('observation adapters and controllers preserve lifecycle, sample history an
 				formatStatusRate() === '—' && formatStatusRate(0) === '0 B/s',
 				'missing rate differs from actual zero',
 			);
+			vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 			monitor.deactivate();
-			await new Promise((resolve) => setTimeout(resolve, 30));
+			await vi.advanceTimersByTimeAsync(30);
 			const count = monitor.history.value.cpu.length;
 			await statusSocket.requestConnected('fixture.sample', { timestamp: 1700000001000, cpuPercent: 15 });
 			expect(
 				monitor.history.value.cpu.length === count + 1,
 				'short tab switches retain the live sample baseline',
 			);
+			monitor.activate();
+			vi.useRealTimers();
 			live = false;
 			statusAdapter.disconnect();
 			monitor.workspaceDisconnected();
@@ -233,8 +224,10 @@ test('observation adapters and controllers preserve lifecycle, sample history an
 			const binding = createStatusChannel(statusSocket, () => true);
 			await statusSocket.requestConnected('fixture.mode', { mode: 'late-start' });
 			const starting = rejection(binding.start());
+			const deliverLateStart = await lateStart.promise;
 			statusSocket.close();
 			await statusSocket.open();
+			deliverLateStart();
 			await starting;
 			expect(
 				(await rejection(binding.stop()))?.code === 'remote_unavailable',
@@ -339,7 +332,6 @@ test('observation adapters and controllers preserve lifecycle, sample history an
 			'late stop never sent on replacement connection',
 		);
 	} finally {
-		for (const timer of timers) clearTimeout(timer);
 		await peer.close();
 	}
 });

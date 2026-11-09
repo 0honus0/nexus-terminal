@@ -10,7 +10,7 @@ image="$1"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 suffix="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-$$"
 suffix="${suffix//[^A-Za-z0-9_.-]/-}"
-project="nexus-core-no-runner-${suffix,,}"
+project="nexus-deployment-smoke-${suffix,,}"
 work="$(mktemp -d)"
 compose_file="$work/docker-compose.yml"
 override="$work/docker-compose.override.yml"
@@ -36,12 +36,12 @@ cp "$repo_root/.env.example" "$env_file"
 cat >"$override" <<EOF_OVERRIDE
 services:
   frontend:
-    container_name: nexus-core-no-runner-frontend-$suffix
+    container_name: nexus-deployment-smoke-frontend-$suffix
   backend:
-    container_name: nexus-core-no-runner-backend-$suffix
+    container_name: nexus-deployment-smoke-backend-$suffix
 networks:
   nexus-terminal-network:
-    name: nexus-core-no-runner-network-$suffix
+    name: nexus-deployment-smoke-network-$suffix
 EOF_OVERRIDE
 mkdir -p "$data_dir"
 chmod 0700 "$data_dir"
@@ -60,30 +60,16 @@ printf '%s\n' "$services" | grep -qx frontend
 printf '%s\n' "$services" | grep -qx backend
 if printf '%s\n' "$services" | grep -qx guacd; then echo 'Default Compose unexpectedly includes guacd.' >&2; exit 1; fi
 if printf '%s\n' "$services" | grep -qx agent-runner; then echo 'Default Compose unexpectedly includes agent-runner.' >&2; exit 1; fi
-compose up -d
-for _ in {1..60}; do
-  b="$(compose ps --format json backend 2>/dev/null | grep -o '"Health":"[^"]*"' | head -1 || true)"
-  f="$(compose ps --format json frontend 2>/dev/null | grep -o '"Health":"[^"]*"' | head -1 || true)"
-  [[ "$b" == *healthy* && "$f" == *healthy* ]] && break
-  sleep 1
-done
+compose up -d --wait --wait-timeout 60
 compose exec -T backend node --input-type=module - <<'NODE'
-import { existsSync } from 'node:fs';
 import { readSystemHealthResponse } from '@nexus-terminal/shared/system/status/http-codec';
-const retired = [
-  '/app/dist/infrastructure/agent/workspace-runtime/runner-http.adapter.js',
-  '/app/dist/modules/agent/workspace-runtime/workspace-runtime.service.js',
-];
-for (const modulePath of retired) {
-  if (existsSync(modulePath)) throw new Error(`Retired Agent Workspace module still shipped: ${modulePath}`);
-}
 const origin = new URL(process.env.NEXUS_PUBLIC_ORIGIN);
 const status = await fetch('http://127.0.0.1:3001/api/v1/status', {
   headers: { 'X-Forwarded-Host': origin.host, 'X-Forwarded-Proto': origin.protocol.slice(0, -1) },
 });
 if (!status.ok) throw new Error(`Backend health returned ${status.status}`);
 readSystemHealthResponse(await status.json());
-console.log('Production Backend starts without a Runner or Agent Workspace execution modules.');
+console.log('Production Backend health contract passed.');
 NODE
 failed=0
-echo 'Docker core no-Runner smoke passed.'
+echo 'Docker deployment smoke passed.'

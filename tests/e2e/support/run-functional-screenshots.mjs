@@ -7,7 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const e2eRoot = path.resolve(__dirname, '..');
 const testsRoot = path.resolve(e2eRoot, '..');
 const repoRoot = path.resolve(e2eRoot, '../..');
-const stagingDir = path.join(e2eRoot, '.tmp', 'manual-functional-screenshots');
+const stagingDir = path.join(e2eRoot, '../.artifacts', 'manual-functional-screenshots');
 const targetDir = path.join(repoRoot, 'doc', 'imgs', 'e2e');
 
 fs.rmSync(stagingDir, { recursive: true, force: true });

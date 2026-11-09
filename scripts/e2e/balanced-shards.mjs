@@ -170,10 +170,13 @@ function run(plan, rawShard) {
 	);
 	// Each test owns its application's normal or explicitly asserted unknown
 	// shutdown through the fixture. No product-specific process lifetimes here.
-	const timingsPath = path.join(e2eRoot, 'test-results', 'spec-durations.json');
+	const timingsPath = path.resolve(
+		process.env.NEXUS_TEST_ARTIFACT_DIR ?? path.join(repoRoot, 'tests/.artifacts/browser'),
+		'reports/spec-durations.json',
+	);
 	const result = spawnSync(playwright, ['test', '--config', '../playwright.config.ts', ...shard.specs], {
 		cwd: e2eRoot,
-		env: { ...process.env, E2E_SPEC_DURATIONS_PATH: 'test-results/spec-durations.json' },
+		env: { ...process.env, E2E_SPEC_DURATIONS_PATH: timingsPath },
 		stdio: 'inherit',
 	});
 	if (result.error) throw result.error;

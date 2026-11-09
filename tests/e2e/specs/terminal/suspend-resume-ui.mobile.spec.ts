@@ -11,6 +11,10 @@ import {
 import { closeWebSocket, openWorkspaceSession, requestWorkspace } from '../../../support/protocols/workspace-client';
 import { slowStep, step } from '../../support/steps';
 
+test.beforeEach(async ({ page }) => {
+	await page.clock.install();
+});
+
 test.use({ e2eServices: ['ssh'] });
 
 type SuspendedSession = {
@@ -708,14 +712,14 @@ test('mobile resumed terminal loads older suspended output when dragged downward
 	// following downward gesture is what navigates into the newly inserted rows.
 	for (let attempt = 0; attempt < 6 && historyRequests === 0; attempt += 1) {
 		await dragTerminalDown(page);
-		await page.waitForTimeout(250);
+		await page.clock.runFor(250);
 	}
 	expect(historyRequests).toBeGreaterThan(0);
 	await expect(rows).not.toContainText(earlyMarker);
 
 	for (let attempt = 0; attempt < 30 && !(await rows.innerText()).includes(earlyMarker); attempt += 1) {
 		await dragTerminalDown(page);
-		await page.waitForTimeout(250);
+		await page.clock.runFor(250);
 	}
 	await expect.poll(async () => rows.innerText(), { timeout: 20_000 }).toContain(earlyMarker);
 

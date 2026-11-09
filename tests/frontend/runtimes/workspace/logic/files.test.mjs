@@ -143,7 +143,7 @@ test('workspace files adapters preserve wire ordering, refusal and ownership wit
 				expect(binary.bytes.join(',') === '0,1,2,255', 'binary data is not coerced to text');
 				const controller = new AbortController();
 				const read = fs.readBinary('/wait', 100, controller.signal);
-				await new Promise((resolve) => setTimeout(resolve, 30));
+				await socket.requestConnected('workspace.ping');
 				controller.abort();
 				await read.then(
 					() => {
@@ -153,7 +153,7 @@ test('workspace files adapters preserve wire ordering, refusal and ownership wit
 				);
 				const previewController = new AbortController();
 				const preview = createFilePreviewSource(fs).read('/wait', { signal: previewController.signal });
-				await new Promise((resolve) => setTimeout(resolve, 30));
+				await socket.requestConnected('workspace.ping');
 				previewController.abort();
 				await preview.then(
 					() => {

@@ -9,6 +9,10 @@ import {
 	resetTestSshFilesystem,
 } from '../../support/ssh';
 
+test.beforeEach(async ({ page }) => {
+	await page.clock.install();
+});
+
 test.use({ e2eServices: ['ssh'] });
 
 test('status history preserves the full selected time range with fresh samples and keeps controls sharp while zooming', async ({
@@ -43,7 +47,7 @@ test('status history preserves the full selected time range with fresh samples a
 	await expect(monitor).toBeVisible({ timeout: 20_000 });
 	await expect(monitor.getByRole('button', { name: /^CPU / })).toBeVisible({ timeout: 20_000 });
 	await monitor.getByRole('button', { name: /^CPU / }).hover();
-	await page.waitForTimeout(350);
+	await page.clock.runFor(350);
 	await expect(page.getByRole('tooltip')).toHaveCount(0);
 	await monitor.getByRole('button', { name: /^CPU / }).click();
 

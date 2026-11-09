@@ -1,4 +1,6 @@
 import { fileURLToPath } from 'node:url';
+import { mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { defineConfig } from 'vitest/config';
 import vue from '@vitejs/plugin-vue';
 import { localeMessages } from '../packages/frontend/build/locale-messages.ts';
@@ -8,12 +10,16 @@ const source = (path: string): string => fileURLToPath(new URL('../packages/' + 
 const exclude = ['**/node_modules/**', '**/support/**', '**/fixtures/**', '**/*.native.test.mjs'];
 const testFiles = '**/*.test.{ts,mjs}';
 const layerFiles = '*.test.{ts,mjs}';
-const artifactRoot = process.env.NEXUS_TEST_ARTIFACT_DIR;
+const artifactRoot = resolve(
+	process.env.NEXUS_TEST_ARTIFACT_DIR ?? fileURLToPath(new URL('./.artifacts/modules', import.meta.url)),
+);
+process.env.NEXUS_TEST_ARTIFACT_DIR = artifactRoot;
+mkdirSync(artifactRoot, { recursive: true });
 const dockerModuleFile = 'frontend/runtimes/workspace/integration/observation-ssh.test.mjs';
 
 export default defineConfig({
 	root: import.meta.dirname,
-	cacheDir: process.env.NEXUS_TEST_CACHE_DIR,
+	cacheDir: process.env.NEXUS_TEST_CACHE_DIR ?? fileURLToPath(new URL('./.cache/vitest', import.meta.url)),
 	plugins: [localeMessages(), vue()],
 	resolve: {
 		alias: [
@@ -25,13 +31,11 @@ export default defineConfig({
 	test: {
 		allowOnly: !process.env.CI,
 		retry: 0,
-		reporters: artifactRoot
-			? ['default', ['json', { outputFile: artifactRoot + '/reports/vitest.json' }]]
-			: ['default'],
+		reporters: ['default', ['json', { outputFile: artifactRoot + '/reports/vitest.json' }]],
 		coverage: {
 			provider: 'v8',
 			include: ['../packages/{shared,backend,frontend}/src/**/*.{ts,vue}'],
-			...(artifactRoot ? { reportsDirectory: artifactRoot + '/reports/coverage' } : {}),
+			reportsDirectory: artifactRoot + '/reports/coverage',
 		},
 		projects: [
 			{

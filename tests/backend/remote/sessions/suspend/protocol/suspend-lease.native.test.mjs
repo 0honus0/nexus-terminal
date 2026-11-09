@@ -4,7 +4,6 @@ import { readFile, stat, readdir, writeFile } from 'node:fs/promises';
 import { once } from 'node:events';
 import WebSocket from '../../../../../../packages/backend/node_modules/ws/index.js';
 import { join } from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
 import { test } from 'node:test';
 import { openWorkspace, until, send, expectStatus, origin } from '../../../../../support/protocols/openssh-fixture.mjs';
 import { remoteFilesFixture, fileHandles } from '../../../transfers/support/file-transfer-fixture.mjs';
@@ -46,6 +45,7 @@ await test('A suspended owner expires at its actual lease deadline and a new own
 			sweep.call(this);
 		}
 	});
+	t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
 	const f = await remoteFilesFixture(t);
 	const original = await f.endpoint('lease');
 	const pidPath = join(original.root, 'shell.pid');
@@ -76,7 +76,7 @@ await test('A suspended owner expires at its actual lease deadline and a new own
 	const renewed = success(await owner.call('suspend.owner.renew', {}));
 	assert.ok(
 		renewed.leaseExpiresAt - Date.now() >= 44000,
-		'use the actual 45-second lease, without changing clocks or TTL',
+		'use the configured 45-second lease without changing its TTL',
 	);
 	const next = await openWorkspace(f.address, f.cookie);
 	t.after(() => next.close());
@@ -89,7 +89,7 @@ await test('A suspended owner expires at its actual lease deadline and a new own
 	// Hold only the scanner, not the actual lease clock or per-operation checks.
 	// Expired operations must be fenced even before the next two-second sweep.
 	delaySweep = true;
-	await delay(Math.max(0, renewed.leaseExpiresAt - Date.now() - 3000));
+	t.mock.timers.tick(Math.max(0, renewed.leaseExpiresAt - Date.now() - 3000));
 	const destinationPath = join(original.root, 'lease-upload');
 	const existingBytes = Buffer.from('original destination');
 	await writeFile(destinationPath, existingBytes);
@@ -123,7 +123,7 @@ await test('A suspended owner expires at its actual lease deadline and a new own
 	assert.ok(stageName);
 	assert.deepEqual(await readFile(join(original.root, stageName)), chunk);
 	assert.ok(Date.now() < renewed.leaseExpiresAt, 'first real write precedes natural lease expiry');
-	await delay(Math.max(0, renewed.leaseExpiresAt - Date.now() + 20));
+	t.mock.timers.tick(Math.max(0, renewed.leaseExpiresAt - Date.now() + 20));
 	assert.equal(owner.socket.readyState, owner.socket.OPEN);
 	assert.equal(
 		owner.events.some((event) => event.type === 'suspend.revoked'),

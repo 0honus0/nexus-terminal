@@ -20,6 +20,10 @@ import { captureFunctionalScreenshot } from '../../support/functional-screenshot
 import { step, slowStep } from '../../support/steps';
 import { expectUiSelectValue, selectUiOption } from '../../support/ui-select';
 
+test.beforeEach(async ({ page }) => {
+	await page.clock.install();
+});
+
 test.use({ e2eServices: ['ssh'] });
 
 const row = (page: Page, filename: string) => fileManagerRow(page, filename);
@@ -178,11 +182,7 @@ for (const shared of [true, false] as const) {
 		const peerName = `E2E Editor ${shared ? 'Shared' : 'Scoped'} Peer`;
 
 		const removePeer = async (): Promise<void> => {
-			let list = await context.request.get('/api/v1/targets/connections');
-			for (let attempt = 0; attempt < 2 && !list.ok(); attempt += 1) {
-				await new Promise((resolve) => setTimeout(resolve, 200));
-				list = await context.request.get('/api/v1/targets/connections');
-			}
+			const list = await context.request.get('/api/v1/targets/connections');
 			expect(list.ok()).toBeTruthy();
 			const connections = readConnectionList(await list.json());
 			for (const connection of connections.filter((item) => item.name === peerName)) {
@@ -461,7 +461,7 @@ test('file previews and text editor protect historical file-opening regressions'
 		expect(increased).toBeGreaterThan(initialFontSize);
 
 		await ctrlWheel(monaco, 20);
-		await page.waitForTimeout(80);
+		await page.clock.runFor(80);
 		expect(await renderedFontSize()).toBe(increased);
 	});
 
@@ -486,7 +486,7 @@ test('file previews and text editor protect historical file-opening regressions'
 			expect(observed[2]).toBeGreaterThan(observed[1]!);
 
 			const latest = observed[2]!;
-			await page.waitForTimeout(500);
+			await page.clock.runFor(500);
 			expect(await renderedFontSize()).toBe(latest);
 		},
 	);
@@ -985,7 +985,7 @@ test('desktop editor rapid zoom does not replay stale scroll state while font me
 	await monaco.hover();
 	for (let index = 0; index < 10; index += 1) {
 		await page.mouse.wheel(0, 1200);
-		await page.waitForTimeout(15);
+		await page.clock.runFor(15);
 	}
 	await expect.poll(firstRenderedLine, { timeout: 10_000 }).toBeGreaterThan(8);
 
@@ -993,7 +993,7 @@ test('desktop editor rapid zoom does not replay stale scroll state while font me
 	const fontSamples: number[] = [await renderedFontSize()];
 	for (let index = 0; index < 4; index += 1) {
 		await ctrlWheel(monaco, -80);
-		await page.waitForTimeout(20);
+		await page.clock.runFor(20);
 		lineSamples.push(await firstRenderedLine());
 		fontSamples.push(await renderedFontSize());
 	}
@@ -1003,9 +1003,9 @@ test('desktop editor rapid zoom does not replay stale scroll state while font me
 		expect(Math.abs(lineSamples[index]! - lineSamples[index - 1]!)).toBeLessThanOrEqual(2);
 	}
 
-	await page.waitForTimeout(120);
+	await page.clock.runFor(120);
 	const settledLine = await firstRenderedLine();
-	await page.waitForTimeout(500);
+	await page.clock.runFor(500);
 	expect(await firstRenderedLine()).toBe(settledLine);
 });
 

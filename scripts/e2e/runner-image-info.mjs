@@ -30,7 +30,7 @@ const definitionFiles = [
 	'packages/shared/package.json',
 	'packages/frontend/package.json',
 	'tests/package.json',
-	'tests/e2e/Dockerfile.runner',
+	'tests/fixtures/runner/Dockerfile',
 	'scripts/e2e/build-runner-image.sh',
 	'scripts/e2e/runner-image-info.mjs',
 	...fs
