@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { bindRequestCookies } from '../../../../../packages/backend/src/platform/http/http-request.ts';
-import { test, onTestFinished } from 'vitest';
-import { setTimeout as delay } from 'node:timers/promises';
+import { test, onTestFinished, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { createWorkspaceFilesRoute } from '../../../../../packages/backend/src/modules/remote/interfaces/ws/workspace-files.ts';
 import {
@@ -10,15 +9,9 @@ import {
 	WORKSPACE_TERMINAL_MAX_IN_FLIGHT_BYTES,
 } from '../../../../../packages/shared/src/remote/workspace/values.ts';
 
-async function until(check) {
-	for (let attempt = 0; attempt < 100; attempt++) {
-		if (check()) return;
-		await delay(10);
-	}
-	assert.fail('Protocol owner did not settle');
-}
-
 async function fixture(bypassAfterFirst = false) {
+	vi.useFakeTimers();
+	onTestFinished(() => vi.useRealTimers());
 	let receive;
 	let onClose;
 	let release;
@@ -113,13 +106,13 @@ async function fixture(bypassAfterFirst = false) {
 	await receive(
 		JSON.stringify({ type: 'workspace.connect', requestId: 'connect', payload: { workspaceId, connectionId: 1 } }),
 	);
-	await until(() => messages.some((message) => message.requestId === 'connect'));
+	await vi.waitUntil(() => messages.some((message) => message.requestId === 'connect'));
 	assert.equal(messages.find((message) => message.requestId === 'connect').payload.ok, true);
 
 	const call = async (type, payload) => {
 		const requestId = randomUUID();
 		await receive(JSON.stringify({ type, requestId, payload }));
-		await until(() => messages.some((message) => message.requestId === requestId));
+		await vi.waitUntil(() => messages.some((message) => message.requestId === requestId));
 		const result = messages.find((message) => message.requestId === requestId).payload;
 		assert.equal(result.ok, true, JSON.stringify(result));
 	};
@@ -161,7 +154,7 @@ test('burst notifications coalesce in order while authorization is pending', asy
 	assert.equal(f.writes.length, 0);
 	assert.equal(f.checks, 1);
 	f.release();
-	await until(() => f.writes.map((item) => item.text).join('') === text);
+	await vi.waitUntil(() => f.writes.map((item) => item.text).join('') === text);
 	assert.ok(f.checks <= 2);
 	assert.deepEqual(
 		f.messages.filter((message) => message.type === 'protocol.error'),
@@ -180,10 +173,10 @@ test('active authorization and pending input share the existing wire byte budget
 		['limit_exceeded'],
 	);
 	f.release();
-	await until(() => f.writes.reduce((sum, item) => sum + item.text.length, 0) === admitted * data.length);
+	await vi.waitUntil(() => f.writes.reduce((sum, item) => sum + item.text.length, 0) === admitted * data.length);
 	assert.ok(f.writes.every((item) => Buffer.byteLength(item.text) <= WORKSPACE_TERMINAL_MAX_INPUT_BYTES));
 	await f.input('after-budget-release');
-	await until(() => f.writes.at(-1)?.text === 'after-budget-release');
+	await vi.waitUntil(() => f.writes.at(-1)?.text === 'after-budget-release');
 });
 
 test('authorization revoked while queued does not dispatch or replay input', async () => {
@@ -192,7 +185,7 @@ test('authorization revoked while queued does not dispatch or replay input', asy
 	await f.input('queued');
 	f.revoke();
 	f.release();
-	await until(() => f.messages.filter((message) => message.type === 'protocol.error').length === 2);
+	await vi.waitUntil(() => f.messages.filter((message) => message.type === 'protocol.error').length === 2);
 	assert.deepEqual(f.writes, []);
 	assert.ok(
 		f.messages
@@ -209,7 +202,7 @@ test('close drains original authorization and discards queued input', async () =
 	const closing = f.close().then(() => {
 		closed = true;
 	});
-	await delay(0);
+	await vi.advanceTimersByTimeAsync(0);
 	assert.equal(closed, false);
 	assert.equal(f.detached, 1);
 	f.release();
@@ -229,7 +222,7 @@ test('a message arriving between worker completion and its observer is not stran
 	});
 	await f.input('first');
 	f.release();
-	await until(() => f.writes.map((item) => item.text).join('') === 'firstlate');
+	await vi.waitUntil(() => f.writes.map((item) => item.text).join('') === 'firstlate');
 	assert.deepEqual(
 		f.messages.filter((message) => message.type === 'protocol.error'),
 		[],
@@ -246,10 +239,10 @@ test('empty notifications consume envelope bytes and release the same budget', a
 		['limit_exceeded'],
 	);
 	f.release();
-	await until(() => f.writes.length === 2);
+	await vi.waitUntil(() => f.writes.length === 2);
 	assert.ok(f.writes.every((item) => item.text === ''));
 	await f.input('after-empty-burst');
-	await until(() => f.writes.at(-1)?.text === 'after-empty-burst');
+	await vi.waitUntil(() => f.writes.at(-1)?.text === 'after-empty-burst');
 });
 
 test('multibyte input keeps exact text and the original per-write byte bound', async () => {
@@ -257,7 +250,7 @@ test('multibyte input keeps exact text and the original per-write byte bound', a
 	const data = '终端😀'.repeat(8192);
 	for (let index = 0; index < 5; index++) await f.input(data);
 	f.release();
-	await until(() => f.writes.map((item) => item.text).join('') === data.repeat(5));
+	await vi.waitUntil(() => f.writes.map((item) => item.text).join('') === data.repeat(5));
 	assert.ok(f.writes.every((item) => Buffer.byteLength(item.text) <= WORKSPACE_TERMINAL_MAX_INPUT_BYTES));
 	assert.deepEqual(
 		f.messages.filter((message) => message.type === 'protocol.error'),
@@ -278,7 +271,7 @@ test('a late authorization cannot route old input into a successor attachment', 
 	await f.call('workspace.connect', { workspaceId: successor, connectionId: 1 });
 	await f.input('new-input');
 	f.release();
-	await until(() => f.writes.length === 1);
+	await vi.waitUntil(() => f.writes.length === 1);
 	assert.equal(f.writes[0].workspaceId, successor);
 	assert.equal(f.writes[0].text, 'new-input');
 	assert.deepEqual(

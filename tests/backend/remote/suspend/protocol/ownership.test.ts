@@ -333,15 +333,7 @@ test('closing a resume request rolls the handoff back to the original suspended 
 			workspaceId: interruptedWorkspaceId,
 		},
 	});
-	recoverySocket.close();
-	await new Promise<void>((resolve) => {
-		if (recoverySocket.readyState >= 3) return resolve();
-		const timeout = setTimeout(resolve, 2_000);
-		recoverySocket.once('close', () => {
-			clearTimeout(timeout);
-			resolve();
-		});
-	});
+	await closeWebSocket(recoverySocket);
 
 	const verifier = await httpClients.openSocket();
 	try {

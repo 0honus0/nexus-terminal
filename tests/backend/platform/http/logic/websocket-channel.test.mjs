@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { EventEmitter } from 'node:events';
-import { setTimeout as delay } from 'node:timers/promises';
 import { createWebSocketChannel } from '../../../../../packages/backend/src/platform/http/websocket-channel.ts';
 import { MAX_WEBSOCKET_INPUT_MESSAGES } from '../../../../../packages/backend/src/platform/http/http-limits.ts';
 
@@ -102,8 +101,7 @@ test('asynchronous handlers still serialize text and binary input and retain the
 	f.text('third');
 	assert.deepEqual(received, ['first']);
 	pending.release();
-	await delay(0);
-	await Promise.all(f.tasks);
+	for (const task of f.tasks) await task;
 	assert.deepEqual(received, ['first', 'second', 'third']);
 	assert.equal(f.terminated, 0);
 });
@@ -120,8 +118,7 @@ test('real asynchronous queue occupancy still enforces the original message budg
 	assert.equal(dispatched, 1);
 	assert.equal(f.terminated, 1);
 	pending.release();
-	await delay(0);
-	await Promise.all(f.tasks);
+	for (const task of f.tasks) await task;
 	assert.equal(dispatched, 1);
 });
 
@@ -137,8 +134,7 @@ test('async rejection closes before any queued message can start', async () => {
 	f.text('first');
 	f.text('must-not-run');
 	pending.release();
-	await delay(0);
-	await Promise.all(f.tasks);
+	for (const task of f.tasks) await task;
 	assert.deepEqual(received, ['first']);
 	assert.equal(f.terminated, 1);
 });
