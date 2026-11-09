@@ -1,3 +1,4 @@
+import { pausePageClock } from '../../support/clock';
 import { networkFailureToast } from '../../support/feedback';
 import { getTestFocus, updateTestFocus } from '../../support/presentation';
 import { readAppearanceView } from '../../../../packages/shared/src/preferences/appearance/http-codec';
@@ -280,7 +281,7 @@ test('terminal coalesces continuous resizing while output and keyboard input rem
 	await page.locator('input.command-bar-input').press('Enter');
 	await expect(terminal).toContainText('RESIZE_OUTPUT_1');
 	await input.focus();
-	await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+	await pausePageClock(page);
 	resizeFrames.length = 0;
 	const startWidth = await terminal.evaluate((element) => element.getBoundingClientRect().width);
 	for (let frame = 0; frame < 24; frame++) {

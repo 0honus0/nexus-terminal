@@ -1,3 +1,4 @@
+import { pausePageClock } from '../../support/clock';
 import { expectReadRecoveryFeedback, waitForFailedRead } from '../../support/feedback';
 import { generateKeyPairSync } from 'node:crypto';
 import { expect, test, type APIRequestContext, type Page } from '../../support/fixtures';
@@ -292,7 +293,7 @@ test('SSH key selector and manager surface key-list loading failures without ove
 	context,
 }) => {
 	await page.clock.install();
-	await page.clock.pauseAt(new Date());
+	await pausePageClock(page);
 	const failedRead = waitForFailedRead(page, '/api/v1/targets/ssh-keys');
 	await loginAsInitialAdmin(context.request);
 	await page.setViewportSize({ width: 320, height: 667 });

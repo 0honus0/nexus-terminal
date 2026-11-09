@@ -1,3 +1,4 @@
+import { pausePageClock } from '../../support/clock';
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
@@ -41,7 +42,7 @@ test('wide desktop-UA touch Pad cancels moved file holds and preserves touch and
 	};
 	// Advance the real gesture timer deterministically; no wall-clock sleep.
 	await page.clock.install();
-	await page.clock.pauseAt(new Date());
+	await pausePageClock(page);
 	for (const cancel of ['move', 'pointercancel'] as const) {
 		await row.dispatchEvent('pointerdown', pointer);
 		if (cancel === 'move') await row.dispatchEvent('pointermove', { ...pointer, clientY: pointer.clientY + 60 });

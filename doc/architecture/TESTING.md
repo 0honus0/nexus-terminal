@@ -265,7 +265,9 @@ Playwright仅由全局webServer提供基础后端和Frontend preview；用例通
 
 质量检查复用工具原生缓存：根check统一执行覆盖生产、Shared、tests、scripts的全仓ESLint，随后format使用同范围、按内容失效的ESLint缓存；Prettier仍按完整来源范围检查并使用自身内容缓存。前端和插件ChatUI的build/check调用同一vue-tsc增量检查，缓存位于各包node_modules，类型、依赖和编译配置仍由编译器校验。Host通过官方Actions cache保存静态工具缓存，key包含Node、锁文件、规则、格式与前端配置，源码变化由工具自身内容失效处理；不缓存测试通过状态、数据库、签包或构建成品。cold关闭pnpm及静态缓存恢复，warm允许恢复。测试分片仍完整运行，不将缓存命中当作跳过功能门禁。
 
-独立Validate的质量作业构建签包一次，执行源码与包测试及浏览器发现/类型检查；八个测试容器从同一不可变artifact ID恢复编译源码与候选，按Node/Playwright原生分片执行互操作及业务浏览器。插件浏览器启用Playwright的`fullyParallel`，按独立用例原生分片；每个runner仍为一个worker，固定端口不并发复用。分片不重建、不重签，也不接收开发签名私钥。环境消费成功Host门禁的不可变test-environment产物，包含源码SHA、runner digest和依赖指纹；插件分片复用同一镜像并离线链接Host依赖，不重新解析latest或回退旧环境。环境与构建产物均按成功来源job的实际执行周期定位，部分重跑不将复制job的新attempt编号误作重新上传。此前70项串行继承单片15分钟预算的配置已移除，不靠加长总期限解决重复等待。
+本体质量作业将相邻的构建/签包、检查/格式/独立行为分别合并为命令步骤，使用日志分组与逐命令指标保留定位能力；应用与候选包仍独立上传供准确消费者使用。质量报告合为`quality-reports-<attempt>`，保留`quality-metrics/`及`plugin-quality/`子目录。每片的`test-layers-<shard>-<attempt>`已包含`reports/spec-durations.json`，不再重复上传单独timings；耗时汇总按成功来源job的实际执行周期选择该产物。耗时汇总与可选截图更新共用一个验收后作业，默认仅提出耗时估算，push或明确请求截图刷新时在源码未前进条件下一次提交；截图仍校验非空与PNG签名。质量、共享环境及Docker smoke保持并行，八分片的门禁依赖不变。
+
+独立Validate同样将相邻安装/构建/源码及包检查合并，将Host准备/候选签包/浏览器检查合并；分片共用依赖链接与成品恢复步骤。互操作与浏览器仍分别运行，保留前者失败后继续获取浏览器诊断的行为。质量作业构建签包一次，执行源码与包测试及浏览器发现/类型检查；八个测试容器从同一不可变artifact ID恢复编译源码与候选，按Node/Playwright原生分片执行互操作及业务浏览器。插件浏览器启用Playwright的`fullyParallel`，按独立用例原生分片；每个runner仍为一个worker，固定端口不并发复用。分片不重建、不重签，也不接收开发签名私钥。环境消费成功Host门禁的不可变test-environment产物，包含源码SHA、runner digest和依赖指纹；插件分片复用同一镜像并离线链接Host依赖，不重新解析latest或回退旧环境。环境与构建产物均按成功来源job的实际执行周期定位，部分重跑不将复制job的新attempt编号误作重新上传。此前70项串行继承单片15分钟预算的配置已移除，不靠加长总期限解决重复等待。
 
 跨仓传递使用现有GitHub Actions产物，人工或受控触发；使用不可变artifact ID、源码与摘要，失败保留首次证据。初版不增加常驻协调服务。未公开候选包可以使用CI测试签名与本地仓库，但必须按普通验证、安装和授权路径进入，发布阶段再核对正式签包身份。禁止以测试源签名通过冒充正式签包验收。
 

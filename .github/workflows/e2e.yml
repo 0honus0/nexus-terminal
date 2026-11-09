@@ -213,11 +213,6 @@ jobs:
           restore-keys: |
             quality-checks-${{ runner.os }}-${{ hashFiles('.node-version', 'pnpm-lock.yaml', 'package.json', 'eslint.config.mjs', '.prettierrc', '.prettierignore', 'packages/frontend/package.json', 'packages/frontend/tsconfig.json') }}-
 
-      - name: Build test application once
-        run: |
-          bash scripts/e2e/measure-command.sh "$NEXUS_TEST_METRICS/build.json" pnpm --filter @nexus-terminal/tests build
-          node scripts/e2e/host-test-artifact.mjs write "$GITHUB_SHA"
-
       - name: Checkout plugin test owners
         uses: actions/checkout@v7.0.1
         with:
@@ -225,14 +220,22 @@ jobs:
           path: tests/.artifacts/plugin-source
           persist-credentials: false
 
-      - name: Build and sign plugin candidates once
-        working-directory: tests/.artifacts/plugin-source
+      - name: Build application and sign plugin candidates once
         run: |
-          bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-install.json" pnpm install --frozen-lockfile
-          bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-build.json" pnpm build
-          bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-sign.json" pnpm prepare:interop ../plugin-candidates
-          git rev-parse HEAD > ../plugin-candidates/source.sha
-          tar --exclude=node_modules --exclude=.git -czf ../plugin-test-source.tar.gz .
+          echo "::group::Build host application"
+          bash scripts/e2e/measure-command.sh "$NEXUS_TEST_METRICS/build.json" pnpm --filter @nexus-terminal/tests build
+          node scripts/e2e/host-test-artifact.mjs write "$GITHUB_SHA"
+          echo "::endgroup::"
+          echo "::group::Build and sign plugin candidates"
+          (
+            cd tests/.artifacts/plugin-source
+            bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-install.json" pnpm install --frozen-lockfile
+            bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-build.json" pnpm build
+            bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-sign.json" pnpm prepare:interop ../plugin-candidates
+            git rev-parse HEAD > ../plugin-candidates/source.sha
+            tar --exclude=node_modules --exclude=.git -czf ../plugin-test-source.tar.gz .
+          )
+          echo "::endgroup::"
 
       - name: Upload exact plugin source and candidates
         uses: actions/upload-artifact@v7.0.2
@@ -259,48 +262,43 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Run standard checks serially
+      - name: Check host and plugin source, formatting and independent behavior
         env:
           NEXUS_TEST_PLUGIN_SOURCE_ROOT: ${{ github.workspace }}/tests/.artifacts/plugin-source
-        run: |
-          bash scripts/e2e/measure-command.sh "$NEXUS_TEST_METRICS/check.json" pnpm run check
-          NEXUS_TEST_ARTIFACT_DIR="$NEXUS_TEST_METRICS/fast" \
-            bash scripts/e2e/measure-command.sh "$NEXUS_TEST_METRICS/fast.json" pnpm test:fast
-
-      - name: Check formatting
-        run: bash scripts/e2e/measure-command.sh "$NEXUS_TEST_METRICS/format.json" pnpm run format:all:check
-
-      - name: Check plugin source and independent package behavior
-        working-directory: tests/.artifacts/plugin-source
-        env:
-          NEXUS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/tests/.artifacts/plugin-quality
           NEXUS_TEST_HOST_ROOT: ${{ github.workspace }}
           NEXUS_TEST_PLUGIN_SET: ${{ github.workspace }}/tests/.artifacts/plugin-candidates/staging-1
         run: |
-          bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-check.json" pnpm check
-          bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-fast.json" pnpm test:fast
-          bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-test.json" \
-            node --test --test-reporter=spec --test-reporter=junit \
-            --test-reporter-destination=stdout \
-            --test-reporter-destination="$NEXUS_TEST_ARTIFACT_DIR/packages.xml" \
-            'plugins/*/tests/**/*.native.test.mjs' 'tests/{repository,templates}/**/*.native.test.mjs'
-          bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-browser-check.json" pnpm check:browser
+          echo "::group::Host checks and fast tests"
+          bash scripts/e2e/measure-command.sh "$NEXUS_TEST_METRICS/check.json" pnpm run check
+          NEXUS_TEST_ARTIFACT_DIR="$NEXUS_TEST_METRICS/fast" \
+            bash scripts/e2e/measure-command.sh "$NEXUS_TEST_METRICS/fast.json" pnpm test:fast
+          echo "::endgroup::"
+          echo "::group::Full repository formatting"
+          bash scripts/e2e/measure-command.sh "$NEXUS_TEST_METRICS/format.json" pnpm run format:all:check
+          echo "::endgroup::"
+          echo "::group::Plugin checks and independent tests"
+          (
+            cd tests/.artifacts/plugin-source
+            export NEXUS_TEST_ARTIFACT_DIR="$GITHUB_WORKSPACE/tests/.artifacts/plugin-quality"
+            bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-check.json" pnpm check
+            bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-fast.json" pnpm test:fast
+            bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-test.json" \
+              node --test --test-reporter=spec --test-reporter=junit \
+              --test-reporter-destination=stdout \
+              --test-reporter-destination="$NEXUS_TEST_ARTIFACT_DIR/packages.xml" \
+              'plugins/*/tests/**/*.native.test.mjs' 'tests/{repository,templates}/**/*.native.test.mjs'
+            bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-browser-check.json" pnpm check:browser
+          )
+          echo "::endgroup::"
 
-      - name: Upload plugin source test reports
+      - name: Upload quality reports and resource measurements
         if: always()
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: plugin-quality-${{ github.run_attempt }}
-          path: tests/.artifacts/plugin-quality/
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Upload quality resource measurements
-        if: always()
-        uses: actions/upload-artifact@v7.0.2
-        with:
-          name: quality-metrics-${{ github.run_attempt }}
-          path: tests/.artifacts/quality-metrics/
+          name: quality-reports-${{ github.run_attempt }}
+          path: |
+            tests/.artifacts/plugin-quality/
+            tests/.artifacts/quality-metrics/
           if-no-files-found: error
           retention-days: 14
 
@@ -353,65 +351,45 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
 
-      - name: Link workspace dependencies from runner cache
-        run: |
-          expected="$(node scripts/e2e/runner-image-info.mjs fingerprint)"
-          test "${E2E_RUNNER_FINGERPRINT:-}" = "$expected"
-          pnpm install --frozen-lockfile --offline
-
-      - name: Resolve this run's application build
-        id: application
+      - name: Resolve this run's application and plugin builds
+        id: builds
         uses: actions/github-script@v9.0.0
         with:
-          result-encoding: string
+          retries: 3
           script: |
             const { resolveBuildArtifact } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/e2e/resolve-build-artifact.mjs`);
-            return await resolveBuildArtifact({
-              github,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              runId: context.runId,
-              sha: context.sha,
-              kind: 'application',
-            });
+            const source = { github, owner: context.repo.owner, repo: context.repo.repo, runId: context.runId, sha: context.sha };
+            const [application, plugins] = await Promise.all([
+              resolveBuildArtifact({ ...source, kind: 'application' }),
+              resolveBuildArtifact({ ...source, kind: 'plugin-candidates' }),
+            ]);
+            core.setOutput('application', application);
+            core.setOutput('plugins', plugins);
 
       - name: Download tested application build
         id: application-download
         uses: actions/download-artifact@v8.0.2
         with:
           github-token: ${{ github.token }}
-          artifact-ids: ${{ steps.application.outputs.result }}
+          artifact-ids: ${{ steps.builds.outputs.application }}
           path: packages
           merge-multiple: true
-
-      - name: Resolve this build's exact plugin candidates
-        id: plugin-candidates
-        uses: actions/github-script@v9.0.0
-        with:
-          result-encoding: string
-          script: |
-            const { resolveBuildArtifact } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/e2e/resolve-build-artifact.mjs`);
-            return await resolveBuildArtifact({
-              github,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              runId: context.runId,
-              sha: context.sha,
-              kind: 'plugin-candidates',
-            });
 
       - name: Download exact plugin candidates
         uses: actions/download-artifact@v8.0.2
         with:
           github-token: ${{ github.token }}
-          artifact-ids: ${{ steps.plugin-candidates.outputs.result }}
+          artifact-ids: ${{ steps.builds.outputs.plugins }}
           path: tests/.artifacts/plugin-validation-artifact
           merge-multiple: true
 
-      - name: Read pinned plugin revision
+      - name: Link cached workspace and read pinned plugin revision
         id: plugin-source
         shell: bash
         run: |
+          expected="$(node scripts/e2e/runner-image-info.mjs fingerprint)"
+          test "${E2E_RUNNER_FINGERPRINT:-}" = "$expected"
+          pnpm install --frozen-lockfile --offline
           revision="$(cat tests/.artifacts/plugin-validation-artifact/plugin-candidates/source.sha)"
           [[ "$revision" =~ ^[a-f0-9]{40}$ ]]
           echo "sha=$revision" >> "$GITHUB_OUTPUT"
@@ -463,16 +441,7 @@ jobs:
           }, null, 2));
           JS
 
-      - name: Upload E2E spec timings
-        if: always()
-        uses: actions/upload-artifact@v7.0.2
-        with:
-          name: e2e-timings-${{ matrix.shard }}-${{ github.run_attempt }}
-          path: tests/.artifacts/layers/reports/spec-durations.json
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Upload module and protocol reports
+      - name: Upload timings, module and protocol reports
         if: always()
         uses: actions/upload-artifact@v7.0.2
         with:
@@ -506,12 +475,12 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  update-playwright-balance:
-    name: Update Playwright duration balance
+  finalize-reports:
+    name: Finalize test reports
     needs: [quality, tests, docker-smoke]
     if: ${{ always() && needs.quality.result == 'success' && needs.tests.result == 'success' && needs.docker-smoke.result == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: write
       actions: read
@@ -539,7 +508,7 @@ jobs:
               runId: context.runId,
             });
 
-      - name: Download E2E spec timings
+      - name: Download successful shard reports
         uses: actions/download-artifact@v8.0.2
         with:
           # Use the REST API instead of the internal ListArtifacts endpoint.
@@ -557,42 +526,8 @@ jobs:
           path: scripts/e2e/duration-estimates.json
           retention-days: 14
 
-      - name: Push updated duration estimates
-        if: ${{ github.event_name == 'push' && github.ref_type == 'branch' }}
-        env:
-          TESTED_SHA: ${{ github.sha }}
-          TARGET_BRANCH: ${{ github.ref_name }}
-        run: |
-          if git diff --quiet -- scripts/e2e/duration-estimates.json; then
-            echo "Duration estimates are already current."
-            exit 0
-          fi
-          git fetch origin "$TARGET_BRANCH"
-          if [ "$(git rev-parse FETCH_HEAD)" != "$TESTED_SHA" ]; then
-            echo "origin/$TARGET_BRANCH advanced after this E2E run; skipping stale timing update."
-            exit 0
-          fi
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add scripts/e2e/duration-estimates.json
-          git commit -m "ci(e2e): refresh duration estimates [skip ci]"
-          git push origin "HEAD:$TARGET_BRANCH"
-
-  update-e2e-screenshots:
-    name: Update E2E documentation screenshots
-    needs: [quality, tests, docker-smoke]
-    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.refresh_screenshots && github.ref_type == 'branch' && needs.quality.result == 'success' && needs.tests.result == 'success' && needs.docker-smoke.result == 'success' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout tested revision
-        uses: actions/checkout@v7.0.1
-        with:
-          fetch-depth: 0
-
       - name: Download E2E screenshots
+        if: github.event_name == 'workflow_dispatch' && inputs.refresh_screenshots && github.ref_type == 'branch'
         uses: actions/download-artifact@v8.0.2
         with:
           pattern: e2e-screenshots-*-${{ github.run_attempt }}
@@ -600,6 +535,7 @@ jobs:
           merge-multiple: true
 
       - name: Stage E2E documentation screenshots
+        if: github.event_name == 'workflow_dispatch' && inputs.refresh_screenshots && github.ref_type == 'branch'
         run: |
           mapfile -t screenshots < <(find e2e-screenshots -maxdepth 1 -type f -name '*.png' -printf '%f\n' | sort)
           if [ "${#screenshots[@]}" -eq 0 ]; then
@@ -616,24 +552,25 @@ jobs:
           done
           echo "Staged ${#screenshots[@]} E2E screenshots under doc/imgs/e2e."
 
-      - name: Commit updated screenshots
+      - name: Push updated timings and requested screenshots
+        if: github.ref_type == 'branch' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.refresh_screenshots))
         env:
           TESTED_SHA: ${{ github.sha }}
           TARGET_BRANCH: ${{ github.ref_name }}
         run: |
-          if git diff --quiet -- doc/imgs/e2e; then
-            echo "E2E documentation screenshots are already current."
-            exit 0
-          fi
           git fetch origin "$TARGET_BRANCH"
           if [ "$(git rev-parse FETCH_HEAD)" != "$TESTED_SHA" ]; then
-            echo "origin/$TARGET_BRANCH advanced after this E2E run; skipping stale screenshot update."
+            echo "origin/$TARGET_BRANCH advanced after this E2E run; skipping stale report update."
             exit 0
           fi
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add -A doc/imgs/e2e
-          git commit -m "docs(e2e): refresh screenshots [skip ci]"
+          git add -A scripts/e2e/duration-estimates.json doc/imgs/e2e
+          if git diff --cached --quiet; then
+            echo "Test reports are already current."
+            exit 0
+          fi
+          git commit -m "ci(e2e): refresh timings and requested screenshots [skip ci]"
           git push origin "HEAD:$TARGET_BRANCH"
 
   docker-smoke:

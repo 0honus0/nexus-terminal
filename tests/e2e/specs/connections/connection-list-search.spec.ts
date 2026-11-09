@@ -1,3 +1,4 @@
+import { pausePageClock } from '../../support/clock';
 import { expectReadRecoveryFeedback, waitForFailedRead } from '../../support/feedback';
 import { readTagList } from '../../../../packages/shared/src/targets/tags/http-codec';
 import { readConnectionList, readConnectionView } from '../../../../packages/shared/src/targets/connections/http-codec';
@@ -125,7 +126,7 @@ test('workspace connection search filters by name and host and restores the full
 
 test('workspace connection list remains usable when connection tags fail to load', async ({ page, context }) => {
 	await page.clock.install();
-	await page.clock.pauseAt(new Date());
+	await pausePageClock(page);
 	const failedRead = waitForFailedRead(page, '/api/v1/targets/tags');
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);

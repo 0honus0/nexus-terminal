@@ -46,7 +46,7 @@ function job(shard, attempt) {
 function artifact(id, shard, attempt) {
 	return {
 		id,
-		name: `e2e-timings-${shard}-${attempt}`,
+		name: `test-layers-${shard}-${attempt}`,
 		expired: false,
 		created_at: timestamp(attempt, 5),
 	};
@@ -64,7 +64,7 @@ test('rerunning only the updater reuses successful earlier shard artifacts', asy
 	const input = source(
 		[
 			{ ...job(1, 1), run_attempt: 2 },
-			{ name: 'Update Playwright duration balance', run_attempt: 2 },
+			{ name: 'Finalize test reports', run_attempt: 2 },
 		],
 		[artifact(11, 1, 1)],
 	);

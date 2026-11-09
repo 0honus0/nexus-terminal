@@ -1,3 +1,4 @@
+import { pausePageClock } from '../../support/clock';
 import { controlledSshRoot } from '../../support/service-paths';
 import { E2E_URLS } from '../../../support/protocols/test-environment';
 import { expect, test, type APIRequestContext, type Locator, type Page } from '../../support/fixtures';
@@ -925,7 +926,7 @@ test.describe('remote drag move on touch-capable desktop', () => {
 		};
 
 		try {
-			await page.clock.pauseAt(new Date());
+			await pausePageClock(page);
 			await step('right click clears selection and cancels pending hover navigation', async () => {
 				await begin();
 				await moveTo(row(page, 'hover-target'));

@@ -2727,3 +2727,21 @@ Send Files进度例实测9.181秒，无人为传输延迟；两真实目标（�
 本地原format44.67秒，首次内容缓存28.64秒，真正warm5.77秒，全通过；前端增量首次15.02秒、warm5.98秒。根check44.25→38.29秒，但旧轮曾并发运行一次独立前端检查，因此不能用作严格同条件提升比例。该独立检查恰遇Shared声明重建而失败，现场保留，不记作产品缺陷；后续消费者检查与重建顺序执行。另一次warm格式检查正确拒绝尚未格式化的新文档；不带cache的Prettier写入会删除默认缓存，解释了再次测得28.23秒，稳定缓存后再测为5.77秒。依据已核对当前Prettier CLI实现，不能把失败或重建缓存的耗时当作稳定warm收益。
 
 插件最终完整build8.32秒、fast及原生包测试2.87秒全部通过（Vitest5项、Node125计数，含3个父组）；workflow通过actionlint。原始测量归`quality-duplicate-before/after/final`、`quality-build-final`及`plugin-quality-cache-final`。以上为本地证据，远程收益必须以同一Host/插件SHA及runner digest的完整冷/热轮判断，不预报五分钟已解决。
+
+## 慢例收尾与workflow合并（2026-11-09）
+
+完整冷轮[42566733791](https://github.com/0honus0/nexus-terminal/actions/runs/42566733791)绑定Host `826dece95390452b54ab35378d066c64fe4ffbaa`及插件`89cf3e0`，质量、共享环境、Docker smoke及7片成功，第1片终端恢复页面时钟首次失败、重试通过仍按失败门禁。原MCP问题已在第5片通过。质量作业4分11秒，上一轮4分46秒；安装10.28、应用构建38.91、根check50.99、fast32.98、format37.03秒；插件build14.02、check25.16及浏览器类型11.98秒。冷轮差异不是同源码热缓存收益证据。
+
+新完整排序含质量层，共2083条记录、925条超过1秒；旧1658/956仅含分片。全部attempt保留。原始zip、降序JSON/CSV、质量指标与首次失败根为`/dev/shm/nexus-performance-ci-20261108/run-42566733791`。
+
+剪贴板skip-rsync原例每次8MiB均人为限制1MiB/s。首轮保留原速、至少两个不同UI百分比、方法、完整字节及SHA；后续记住选择/安装后发现仍传完整8MiB，仅取消重复传输的人为限速。本地同例34.906→18.314秒通过。提高首轮速率的尝试曾使direct进度观察失败，已撤回并保留`clipboard-native-progress-after`，不能作为成功收益；最终证据`clipboard-native-progress-fixed`。
+
+Playwright原`pauseAt(new Date())`将控制进程当前时间送往浏览器时可能已过期，远程报Cannot fast-forward to the past。统一helper先`setFixedTime`冻结wall time，再`pauseAt`同一时间，最后`setSystemTime`恢复Date随虚拟计时推进；不增加任意未来余量，不推进业务计时器。8个真实消费者同步。`clock-race-fixed`7项通过，`clock-race-repeat`两个场景各3轮、共6项通过（CLI24.2秒）。本轮定向证据均在`/dev/shm/nexus-performance-20261109-optimization`。
+
+workflow合并相邻质量构建/检查、质量报告上传、分片成品解析与准备步骤；timings直接消费已有test-layers报告，删除每片重复上传；耗时汇总与可选截图更新共用最终作业和一次受源码版本保护的提交。所有原检查与8分片覆盖保留，质量/共享环境/Docker并行关系保持。减少Action调用与重复runner准备，不将普通步骤减少等同于已实测的墙钟收益。完整远程同源码cold/warm及插件独立门禁仍待验。
+
+合并计数：本体质量15→11步，每片15→12步，job定义6→5；插件独立质量23→15步，每片12→10步。普通运行原截图job已条件跳过，实际节省独立runner仅在截图刷新轮发生；重复上传/Action调用减少适用于普通轮。本地首轮快速层因原测试工具目录缺失、GNU time不可用失败，保留`workflow-fast.log`；在明确任务目录恢复匹配Node/pnpm/GNU time后，297项全部通过（CLI10.00秒）。不是产品失败，不改源码规避环境要求。
+
+用户最新决定为本批完成后推送发布，耗时优化先停止；后续不再扩展慢例修改或额外cold/warm性能对照。保留当前目标未达及未测边界，仅完成必要远程完整验收和amd64 dev发布。
+
+提交前复审确认：页面时钟由Playwright持有，传输限速只在非弱网专项的重复分支解除；测试覆盖与产品期限不变。根check、297项fast、全仓格式、完整应用及浏览器客户端构建通过（最终本地墙钟10.51/28.92/20.23秒分别为fast/format/build），两仓actionlint及diff检查通过。产物解析9项覆盖部分重跑、失败/过期/重复来源和API失败。两仓仅测试/CI及文档变化，SQL、运行时包与产品UI不变。

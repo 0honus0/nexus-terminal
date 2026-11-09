@@ -15,7 +15,7 @@ export async function resolveTimingArtifacts({ github, owner, repo, runId }) {
 		if (job.status !== 'completed' || job.conclusion !== 'success') {
 			throw new Error(`Timing source job did not succeed: ${job.name}`);
 		}
-		const prefix = `e2e-timings-${match[1]}-`;
+		const prefix = `test-layers-${match[1]}-`;
 		if (sources.has(prefix)) throw new Error(`Duplicate timing source job: ${job.name}`);
 		sources.set(prefix, job);
 	}

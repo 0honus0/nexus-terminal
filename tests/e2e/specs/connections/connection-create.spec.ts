@@ -1,3 +1,4 @@
+import { pausePageClock } from '../../support/clock';
 import { expectReadRecoveryFeedback, waitForFailedRead } from '../../support/feedback';
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import type { Response } from '@playwright/test';
@@ -62,7 +63,7 @@ test.afterEach(async ({ context }) => {
 
 test('connections page remains usable when connection tags fail to load', async ({ page, context }) => {
 	await page.clock.install();
-	await page.clock.pauseAt(new Date());
+	await pausePageClock(page);
 	const failedRead = waitForFailedRead(page, '/api/v1/targets/tags');
 	await ensureTestSshConnection(context.request);
 	await page.route('**/api/v1/targets/tags', (route) => route.abort('failed'));

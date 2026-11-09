@@ -220,6 +220,15 @@ for (const scenario of ['direct', 'relay', 'install-rsync', 'skip-rsync', 'skip-
 				expect(peer.nativeTransfersStarted).toBe(blocked ? 0 : 1);
 				expect(reads.sftpReadResponseBytes).toBe(blocked ? bytes.length : 0);
 				if (scenario === 'skip-rsync' || scenario === 'skip-all') {
+					// The first full transfer already proved live UI progress at the original rate.
+					// Repeated transfers verify the remembered decision and tool rediscovery, with exact bytes.
+					expect(
+						(
+							await fetch(`${E2E_SSH.controlUrl}/transfer-peer?blocked=${blocked ? 1 : 0}&bandwidth=0`, {
+								method: 'POST',
+							})
+						).ok,
+					).toBe(true);
 					// Reuse the clipboard for a second operation. A declined install must not reappear.
 					const install = page.getByRole('dialog', { name: 'Install required tools', exact: true });
 					let reopened = false;

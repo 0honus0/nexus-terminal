@@ -1,3 +1,4 @@
+import { pausePageClock } from '../../support/clock';
 import { expectReadRecoveryFeedback, waitForFailedRead } from '../../support/feedback';
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
@@ -238,7 +239,7 @@ test('notification settings keep long provider and event content readable on a n
 
 test('notification settings empty and error states stay within a narrow viewport', async ({ page, context }) => {
 	await page.clock.install();
-	await page.clock.pauseAt(new Date());
+	await pausePageClock(page);
 	const failedRead = waitForFailedRead(page, '/api/v1/settings/notifications');
 	await loginAsInitialAdmin(context.request);
 	await setUiLanguage(context.request);

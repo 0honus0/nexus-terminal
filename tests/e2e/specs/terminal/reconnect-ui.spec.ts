@@ -1,3 +1,4 @@
+import { pausePageClock } from '../../support/clock';
 import { readConnectionList } from '../../../../packages/shared/src/targets/connections/http-codec';
 import { readTestConnectionImportId } from '../../../support/http/target-import';
 import { E2E_URLS } from '../../../support/protocols/test-environment';
@@ -430,7 +431,7 @@ test('transport resume retries failed handshakes and retains terminal output and
 	await input.focus();
 	await page.keyboard.type("printf 'RESUMED_SSH_INPUT");
 	await expect(rows).toContainText("printf 'RESUMED_SSH_INPUT");
-	await page.clock.pauseAt(new Date());
+	await pausePageClock(page);
 	await page.evaluate(() => {
 		const state = window as typeof window & {
 			__resumeTestSockets: WebSocket[];
