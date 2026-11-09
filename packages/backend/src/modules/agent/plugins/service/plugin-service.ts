@@ -36,6 +36,7 @@ import type {
 	PluginPackageUpdateFacts,
 	PluginPackageUpdateDecision,
 	PluginPackageUpdatePreparation,
+	PluginPackageUpdateResult,
 	PluginPackageUpdateDependency,
 } from '../model/plugin-composition-types.js';
 import semver from 'semver';
@@ -353,7 +354,7 @@ export class PluginService {
 		stageId: string,
 		stageVersion: number,
 		expectedDependencies: PluginPackageUpdateDependency[],
-	): Promise<PluginPackageInstallation> {
+	): Promise<PluginPackageUpdateResult> {
 		return this.task(async () => {
 			const admit = (userId: number | null, facts: PluginPackageUpdateFacts) => {
 				const decision = this.admitPackageUpdate(actor, packageId, userId, facts);
@@ -400,7 +401,7 @@ export class PluginService {
 						await this.runtime.reconcile(actor.userId, appId);
 					}
 				}
-				return committed.installation;
+				return committed;
 			} finally {
 				// A lost commit acknowledgement triggers re-authorization, never a fabricated successful update.
 				for (const [id, grant] of this.contentGrants) {

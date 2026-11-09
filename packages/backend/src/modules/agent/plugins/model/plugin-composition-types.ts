@@ -71,7 +71,14 @@ export interface PluginPackageUpdateFacts {
 	references: { binding: PluginAppBinding; manifest: PluginManifest }[];
 }
 
+export interface PluginAppBindingUpdate {
+	appId: string;
+	before: { executionRevision: number; uiRevision: number };
+	after: { executionRevision: number; uiRevision: number };
+}
+
 export interface PluginPackageUpdateResult {
+	bindingUpdates: PluginAppBindingUpdate[];
 	dependencies: PluginPackageUpdateDependency[];
 	installation: PluginPackageInstallation;
 	uiOnly: boolean;

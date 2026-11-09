@@ -29,6 +29,7 @@ export async function withSignedPluginCatalog(api, packages, work) {
 						version: metadata.version,
 						compatibility: metadata.compatibility,
 						contributionKinds: metadata.contributionKinds,
+						requiredOnEnable: metadata.requiredOnEnable,
 						displayName: metadata.displayName,
 						description: 'Signed SDK4 fixture',
 						packageUrl: address + '/' + metadata.packageId + '-' + metadata.version + '.tar',

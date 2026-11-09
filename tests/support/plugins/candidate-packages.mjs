@@ -32,6 +32,7 @@ export async function loadCandidatePackages(directory) {
 				version,
 				compatibility: entry.compatibility,
 				contributionKinds: entry.contributionKinds,
+				requiredOnEnable: entry.requiredOnEnable,
 				displayName: entry.displayName,
 				publisherKeyId: entry.publisherKeyId,
 				publicKeyPem: publisher.publicKeyPem,

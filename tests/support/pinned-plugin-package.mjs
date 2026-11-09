@@ -131,6 +131,7 @@ export async function buildPinnedPluginPackage(directory, packageId) {
 		packageId: manifest.id,
 		version: manifest.version,
 		compatibility: manifest.compatibility,
+		requiredOnEnable: manifest.requiredOnEnable,
 		contributionKinds: [
 			...(manifest.contributions.app ? ['app'] : []),
 			...(manifest.contributions.tools ? ['tools'] : []),

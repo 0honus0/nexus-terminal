@@ -33,6 +33,7 @@ export async function installSignedAgentApp(api, packages, { packageId, selected
 						version: metadata.version,
 						compatibility: metadata.compatibility,
 						contributionKinds: metadata.contributionKinds,
+						requiredOnEnable: metadata.requiredOnEnable,
 						displayName: metadata.displayName,
 						description: 'Signed native integration fixture',
 						packageUrl: baseUrl + '/' + metadata.packageId + '.tar',

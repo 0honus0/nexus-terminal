@@ -281,3 +281,90 @@ test('failure after one confirmed package keeps it for retry without creating an
 	assert.equal(result.bindings[0].ui.packageId, f.uiId);
 	assert.equal((await f.prepare()).ready, true);
 });
+
+async function installOptionalApp(f) {
+	const manifests = (await f.prepare()).packages.map((item) => item.plan.target.stage.manifest);
+	const uiManifest = manifests.find((item) => item.id === f.uiId);
+	const appManifest = manifests.find((item) => item.id === f.appId);
+	const ui = await f.stage('old-ui', {
+		definitionId: f.uiId,
+		version: '0.9.0',
+		requiredOnEnable: false,
+		capabilities: uiManifest.capabilities,
+		contributions: uiManifest.contributions,
+	});
+	expectStatus(await f.api('POST', base + '/packages/install', { stageId: ui.id, expectedVersion: ui.version }), 200);
+	return f.install('old-app', {
+		definitionId: f.appId,
+		version: '0.9.0',
+		requiredOnEnable: false,
+		frontend: false,
+		enabled: false,
+		capabilities: appManifest.capabilities,
+		contributions: appManifest.contributions,
+		uiPackageId: f.uiId,
+	});
+}
+
+test('upgrading previously optional App and UI completes required onboarding without resetting grants or enabled state', async (t) => {
+	const f = await fixture(t);
+	const old = await installOptionalApp(f);
+	const plan = await f.prepare();
+	assert.equal(plan.ready, false);
+	assert.equal(plan.bindings[0].appId, old.appId);
+	const result = readAgentPluginEnableResponse(
+		expectStatus(await f.api('POST', onboarding + '/install', command(plan)), 200),
+	);
+	assert.equal(result.bindings[0].appId, old.appId);
+	assert.equal(result.bindings[0].app.version, '1.0.0');
+	assert.equal(result.bindings[0].ui.version, '1.0.0');
+	assert.equal(expectStatus(await f.api('GET', old.appPath), 200).enabled, false);
+	assert.deepEqual(expectStatus(await f.api('GET', old.appPath + '/grants'), 200).grants, []);
+	assert.equal((await f.prepare()).ready, true);
+});
+
+test('required upgrade receipts cannot adopt a concurrent composition change', async (t) => {
+	const f = await fixture(t);
+	const old = await installOptionalApp(f);
+	const tool = await f.stage('concurrent-tool', {
+		frontend: false,
+		backend: "import { definePlugin } from './sdk.mjs'; export default definePlugin(() => {});",
+		capabilities: ['context.read'],
+		contributions: { app: null, tools: true, services: false, ui: null, settings: null, skills: [] },
+	});
+	expectStatus(
+		await f.api('POST', base + '/packages/install', { stageId: tool.id, expectedVersion: tool.version }),
+		200,
+	);
+	const plan = await f.prepare();
+	const update = PluginService.prototype.updatePackage;
+	let changed = false;
+	t.mock.method(PluginService.prototype, 'updatePackage', async function (...args) {
+		const result = await update.apply(this, args);
+		if (!changed) {
+			changed = true;
+			const current = expectStatus(await f.api('GET', base + '/apps/bindings'), 200).bindings.find(
+				(item) => item.appId === old.appId,
+			);
+			expectStatus(
+				await f.api('PUT', base + '/apps/' + old.appId + '/composition', {
+					packageId: f.appId,
+					expectedExecutionRevision: current.executionRevision,
+					expectedUiRevision: current.uiRevision,
+					selectedRootIds: [tool.manifest.id],
+					uiPackageId: f.uiId,
+				}),
+				200,
+			);
+		}
+		return result;
+	});
+	expectStatus(await f.api('POST', onboarding + '/install', command(plan)), 409);
+	assert.equal(changed, true);
+	const current = expectStatus(await f.api('GET', base + '/apps/bindings'), 200).bindings.find(
+		(item) => item.appId === old.appId,
+	);
+	assert.deepEqual(current.selectedRootIds, [tool.manifest.id]);
+	assert.equal(expectStatus(await f.api('GET', old.appPath), 200).enabled, false);
+	assert.deepEqual(expectStatus(await f.api('GET', old.appPath + '/grants'), 200).grants, []);
+});

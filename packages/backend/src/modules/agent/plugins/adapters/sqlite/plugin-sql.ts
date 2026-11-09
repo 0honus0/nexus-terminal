@@ -561,7 +561,25 @@ export class SqlitePluginStorage implements PluginStorage {
 			if (!result) {
 				throw new Error('Updated package missing');
 			}
+			const bindingUpdates: Awaited<ReturnType<PluginStorage['updatePackage']>>['bindingUpdates'] = [];
+			if (phase === 'commit') {
+				for (const reference of references) {
+					const after = await readAppBinding(tx, userId, reference.binding.appId);
+					if (!after) {
+						throw new Error('Updated App binding missing');
+					}
+					bindingUpdates.push({
+						appId: after.appId,
+						before: {
+							executionRevision: reference.binding.executionRevision,
+							uiRevision: reference.binding.uiRevision,
+						},
+						after: { executionRevision: after.executionRevision, uiRevision: after.uiRevision },
+					});
+				}
+			}
 			return {
+				bindingUpdates,
 				installation: packageInstallation(result),
 				dependencies: decision.dependencies,
 				uiOnly,

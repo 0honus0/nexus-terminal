@@ -2,6 +2,7 @@ import type {
 	PluginPackageReference,
 	PluginPackageInstallation,
 	PluginAppBinding,
+	PluginAppBindingUpdate,
 } from './plugin-composition-types.js';
 
 export interface PluginInstallPlanStagedCommand {
@@ -31,6 +32,7 @@ export interface PluginInstallPlanCommand {
 }
 
 export interface PluginInstallPlanResult {
+	bindingUpdates: PluginAppBindingUpdate[];
 	installation: PluginPackageInstallation;
 	binding: PluginAppBinding | null;
 }

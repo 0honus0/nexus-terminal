@@ -147,6 +147,11 @@ export interface StoredPluginPackageUpdateFacts {
 }
 
 export interface StoredPluginPackageUpdateResult {
+	bindingUpdates: {
+		appId: string;
+		before: { executionRevision: number; uiRevision: number };
+		after: { executionRevision: number; uiRevision: number };
+	}[];
 	dependencies: StoredPluginPackageUpdateDependency[];
 	installation: StoredPluginPackageInstallation;
 	uiOnly: boolean;

@@ -212,18 +212,15 @@ export function createPluginHttpRoutes(
 	});
 	add('POST', '/packages/:packageId/update', async (request, actor, reader) => {
 		const input = await reader.read(readAgentPluginPackageUpdate);
-		return {
-			installation: toPluginPackageInstallation(
-				await service.updatePackage(
-					actor,
-					request.params.packageId ?? '',
-					input.expectedRevision,
-					input.stageId,
-					input.expectedStageVersion,
-					fromPluginPackageUpdateDependencies(input.dependencies),
-				),
-			),
-		};
+		const result = await service.updatePackage(
+			actor,
+			request.params.packageId ?? '',
+			input.expectedRevision,
+			input.stageId,
+			input.expectedStageVersion,
+			fromPluginPackageUpdateDependencies(input.dependencies),
+		);
+		return { installation: toPluginPackageInstallation(result.installation) };
 	});
 	add('POST', '/packages/:packageId/cancel-update', async (request, actor, reader) => {
 		const input = await reader.read(readAgentPluginPackageUpdateCancellation);

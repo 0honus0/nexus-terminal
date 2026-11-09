@@ -253,6 +253,11 @@ export class PluginModel {
 			),
 		);
 		return {
+			bindingUpdates: value.bindingUpdates.map((update) => ({
+				appId: update.appId,
+				before: { executionRevision: update.before.executionRevision, uiRevision: update.before.uiRevision },
+				after: { executionRevision: update.after.executionRevision, uiRevision: update.after.uiRevision },
+			})),
 			dependencies: value.dependencies.map((item) => ({
 				package: {
 					packageId: item.package.packageId,

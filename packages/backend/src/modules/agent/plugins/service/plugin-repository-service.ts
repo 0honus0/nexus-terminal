@@ -640,6 +640,7 @@ export class PluginRepositoryService {
 		}
 		const current = packages.find((item) => item.package.packageId === command.target.package.packageId);
 		let installation: PluginPackageInstallation;
+		let bindingUpdates: PluginInstallPlanResult['bindingUpdates'] = [];
 		if (
 			(current?.status === 'installed' || current?.status === 'draining') &&
 			!this.samePackage(current.package, command.target.package)
@@ -683,7 +684,7 @@ export class PluginRepositoryService {
 			) {
 				throw new AgentFailure('version_conflict');
 			}
-			installation = await this.plugins.updatePackage(
+			const updated = await this.plugins.updatePackage(
 				actor,
 				current.package.packageId,
 				prepared.installation.revision,
@@ -691,13 +692,15 @@ export class PluginRepositoryService {
 				target.stage.version,
 				prepared.dependencies,
 			);
+			installation = updated.installation;
+			bindingUpdates = updated.bindingUpdates;
 		} else {
 			installation = await this.plugins.installPackage(actor, target.stage.id, target.stage.version, {
 				expectedRevision: command.target.expectedInstallationRevision,
 			});
 		}
 		if (!compose || target.manifest.contributions.app === null) {
-			return { installation, binding: null };
+			return { installation, binding: null, bindingUpdates };
 		}
 		if (signal.aborted) {
 			throw new AgentFailure('provider_unavailable');
@@ -727,7 +730,7 @@ export class PluginRepositoryService {
 					...(historical ? { appId: historical.appId } : {}),
 					expectedPackages,
 				});
-		return { installation, binding };
+		return { installation, binding, bindingUpdates };
 	}
 
 	installPlan(
@@ -1063,6 +1066,25 @@ export class PluginRepositoryService {
 					signal,
 					false,
 				);
+				// Advance consented CAS only with this batch's exact committed transitions.
+				for (const update of result.bindingUpdates) {
+					const composition = compositions.find((item) => item.appId === update.appId);
+					if (!composition) {
+						continue;
+					}
+					const expected = composition.expectedBinding;
+					if (
+						!expected ||
+						expected.executionRevision !== update.before.executionRevision ||
+						expected.uiRevision !== update.before.uiRevision
+					) {
+						throw new AgentFailure('version_conflict');
+					}
+					composition.expectedBinding = {
+						executionRevision: update.after.executionRevision,
+						uiRevision: update.after.uiRevision,
+					};
+				}
 				confirmed.set(result.installation.package.packageId, result.installation);
 				for (const installed of await this.plugins.packageInstallations(actor)) {
 					if (

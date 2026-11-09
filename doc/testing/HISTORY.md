@@ -39,6 +39,10 @@
 
 第二轮[Host42614414918](https://github.com/0honus0/nexus-terminal/actions/runs/42614414918)质量/smoke及7个分片通过，第6片performance-settings旧用例在只安装App后期待直接启用，实际进入新必需集合引导，首次和重试均失败。该用例改用真实Host先启用，验证关闭总开关的原CAS/持久设置；所有原校验、写入次数、刷新及弃用字段拒绝断言保留，首次启用仍由独立onboarding/host用例覆盖，不修改产品UI或旁路权限。本地整份performance-settings四项首次通过（13.9秒），格式/ESLint/diff通过。首败日志及原始ZIP为publication/host-second-failed.log、host-second-shard6.zip。
 
+发布前追加升级回归复现：已有非必需App/UI升级时，两次包更新会推进绑定修订，最终组合仍用原修订导致409。包更新Adapter现于同事务返回真实before/after修订，Model逐字段转换，Repository只在before匹配本批已确认值时推进原CAS；不重新采纳任意当前版本，不重放未知提交。修复前真实签包/HTTP/SQLite升级1项确定失败，修复后升级保留停用/空授权；另补并发修改组合仍拒绝并保留人工选择的回归。无新表、迁移或Shared/SDK变动。修复后6项原生回归全部通过（7.98秒）；并发夹具初轮未声明工具backend导致400，补齐真实backend后通过，不放宽manifest校验。原包更新/仓库/组合生命周期47项通过（36.38秒），根check、Backend构建、全仓格式及diff通过；本次补齐候选/原签包两种目录夹具的全部元数据投影。对应证据为publication/upgrade-before.log、upgrade-concurrent-fixed.log及package-update-regressions.log。
+
+首次独立[Plugin42617924471](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42617924471)质量成功，互操作/浏览器安装返回403：本体candidate loader、签包HTTP夹具及插件candidate host漏投影requiredOnEnable，新宿主正确拒绝签名/目录元数据不一致。两仓测试边界补齐字段，保留生产验签/信任及一致性拒绝；本地重新签发完整候选后，真实Host互操作3项通过（10.10秒）。首败为publication/plugin-first-shard7.log与原始ZIP；修正后准确Host与插件完整门禁待最终轮回填。插件包内版本同步2.0.3，测试组合改从实际Shared依赖读取归档名，不再记旧4.0.4。
+
 公共官方目录尚未交付本轮required声明；上线此引导需随后续授权发布插件及更新目录。本轮CDP使用本地开发签名，不冒称官方发布签名通过；真实手机键盘、供应商模型效果和完整远程门禁仍不由本轮专项代替。
 
 ## Agent扩展与插件市场布局验收（2026-11-09）
