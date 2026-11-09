@@ -103,7 +103,14 @@ export class PluginRuntimeService {
 						)) {
 							throw error;
 						}
-						await this.closeBoundOwner(owner);
+						const construction = this.starts.get(owner.runtimeKey);
+						if (construction?.binding.owner === owner) {
+							// Concurrent Run startup must await this captured construction's
+							// replacement instead of inheriting its activation refusal.
+							await this.stopInstance(scope.userId, scope.appId, scope.instanceId);
+						} else {
+							await this.closeBoundOwner(owner);
+						}
 					}
 				}
 				let logical;
@@ -534,24 +541,7 @@ export class PluginRuntimeService {
 		const key = userId + ':' + appId + ':' + logicalInstanceId;
 		const existing = this.starts.get(key);
 		if (existing) {
-			try {
-				await existing.promise;
-			} catch (error) {
-				if (!existing.shutdown) {
-					throw error;
-				}
-			}
-			if (existing.shutdown) {
-				// Configuration replacement retires the captured construction. A new caller
-				// must await its actual cleanup and reread current authority before opening.
-				// Unknown cleanup rejects here; no execution or failed construction is replayed.
-				await existing.shutdown;
-				return this.start(userId, appId, signal, packageId, logicalInstanceId);
-			}
-			if (signal.aborted) {
-				throw new AgentFailure('provider_unavailable');
-			}
-			return;
+			return this.awaitConstruction(existing, signal);
 		}
 		const stop = new AbortController();
 		const lifetime = AbortSignal.any([this.stopSignal.signal, stop.signal, AbortSignal.timeout(60000)]);
@@ -582,12 +572,34 @@ export class PluginRuntimeService {
 				}
 			},
 		);
-		// Caller cancellation never tears down a shared construction. The owner still waits for its actual settlement.
-		return promise.then(() => {
-			if (signal.aborted) {
-				throw new AgentFailure('provider_unavailable');
+		return this.awaitConstruction(construction, signal);
+	}
+
+	private async awaitConstruction(construction: RuntimeConstruction, signal: AbortSignal): Promise<void> {
+		// Caller cancellation never tears down a shared construction. The original
+		// caller and later joiners both await its actual settlement and retirement.
+		try {
+			await construction.promise;
+		} catch (error) {
+			if (!construction.shutdown) {
+				throw error;
 			}
-		});
+		}
+		if (construction.shutdown) {
+			// Only a confirmed replacement can reopen under freshly read authority;
+			// unknown cleanup rejects here before any new activation or invocation.
+			await construction.shutdown;
+			return this.start(
+				construction.userId,
+				construction.appId,
+				signal,
+				construction.packageId,
+				construction.logicalInstanceId,
+			);
+		}
+		if (signal.aborted) {
+			throw new AgentFailure('provider_unavailable');
+		}
 	}
 
 	private async startInstance(

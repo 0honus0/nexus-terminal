@@ -2637,3 +2637,13 @@ workflow环境同步按分层架构收口：移除旧runner定义/输入、Docke
 证据根为`/home/honus/nexus-task-artifacts/testing-restructure-20261108`，最终摘要在`delivery/`，首次失败/数据库/未知结果的归档在`cleanup/archives.jsonl`登记。用户要求先完成测试再清理和文档收口；主代理独立执行，不启动子代理。
 
 后续完整冷轮`42549700937`质量、Docker smoke、本体浏览器430及插件54/70均通过；模块234/236，原生852/853。两个签包HTTP场景迁入Vitest后继承5秒默认期限，在CI实际5.12/5.00秒中断，恢复原浏览器场景120秒框架预算，产品期限与断言不变。挂起租约场景在resumeAck后尚未等待独立SFTP就绪便推进42秒，上传准入收到not_found；生产链确认SFTP初始化是异步且有独立期限。夹具增加真实filesystem.ready/error屏障，随后续租和快进；原完整字节、拒绝、接管和同PTY断言不变。本地租约1项2.35秒、HTTP3项6.44秒全部通过；该轮终端连续resize及ZIP新向量均远程通过。旧传输夹具finally删除了native原目录，原租约DB未能回取；完整日志、原生报告及两片诊断ZIP均保留。统一传输夹具现将目录放入任务产物根，仅排空真实资源，保留现场待校验归档，避免再次丢失首次失败证据。本轮无生产代码、UI、Shared或数据库变更。
+
+### 同基线冷轮与配置启动竞态（2026-11-09）
+
+本体`9c60ad71744048d304611f5baf92315dd6573aea`冷轮[42551650171](https://github.com/0honus0/nexus-terminal/actions/runs/42551650171)所有功能测试通过：快速114文件287项、模块236、Docker模块1、原生853、ENOSPC5、Docker原生9、本体浏览器430、插件互操作54/浏览器70，插件Vitest5、Node125（122叶case与3父组），无失败、skip、retry或flaky。质量02:39:10Z结束，八片02:39:12Z启动。墙钟869秒，已测命令CPU73.048分钟，最大单进程RSS2108172KiB，最大容器cgroup峰值7337013248B；RSS与cgroup口径不同，未达3–5分钟。16份组合报告的Host成品、SDK和签包一致，但第5片的Host源码聚合指纹与其余七片不同；只有聚合值不能恢复文件差异，因此此轮不计为组合验收通过。
+
+同本体及插件`7c5ed3e07d9f9016b201664a73a8e0d0a4b7b36f`热轮[42552975763](https://github.com/0honus0/nexus-terminal/actions/runs/42552975763)质量02:53:21Z结束、八片02:53:23Z启动；原生852/853，SDK4独立provider带活动协议session的更新场景失败。原日志显示配置写入与Run并发时，旧instance在activate完成前被直接关闭，construction未标记shutdown；Run继承旧activation拒绝，脚本Provider断言应有工具未出现在真实catalog，Run记录为model_network_failed。第5片源码指纹仍不同，不能将两项问题混为同一原因。原生日志、报告、188226029字节失败artifact和四份sdk4-update数据库已完整保留于本轮证据，未删除现场。
+
+修补在变更通知入口将确属原owner的construction一并退休，已替换的generation仍仅绑定原owner收尾；首发与后续加入者统一等待清理，成功后重读当前配置启动，未知清理不新建。两条原定向用例现在触发实际变更订阅，核对原/加入/迟到调用共享成功或unknown、最后未知故障保留到关闭；修复前两条均确定失败，未靠重试。第一次修补回归还验证到listener的unknown会主动停止准入，故新请求返回provider_unavailable，而原在途请求和最终close保留operation_unknown及原cleanup cause；断言按这一真实语义完善，首次报告保留。最终Backend/SDK构建及根check通过；Module runtime与真实SDK4更新31项全部通过，进程墙钟12.34秒、CPU17.06秒、最大单进程RSS496876KiB。首轮文档格式检查定位PLAN/HISTORY排版，格式修正后复查；远程最终冷/热仍待验。
+
+插件`65ed8c9`仅扩展测试组合报告及README：同时保存参与聚合的全部文件/hash，未改变哈希算法、来源范围、SDK或正式运行包。格式、diff及实际候选加载验证通过；不能用这个变更推断旧指纹差异无害，后续完整轮仍须定位并修复实际owner。独立插件冷轮[42552975559](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42552975559)功能通过，因Host组合待核对不作为最终联合PASS。

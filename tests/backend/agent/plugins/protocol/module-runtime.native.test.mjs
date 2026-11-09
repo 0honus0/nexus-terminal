@@ -1224,31 +1224,67 @@ for (const failedCleanup of [false, true]) {
 		async (t) => {
 			const entered = Promise.withResolvers();
 			const release = Promise.withResolvers();
+			const retirementEntered = Promise.withResolvers();
 			const closingEntered = Promise.withResolvers();
 			const closeRelease = Promise.withResolvers();
 			const appId = randomUUID();
+			const key = '1:' + appId + ':' + appId;
 			const logical = { id: appId, packageId: 'test.replacement', enabled: true };
+			let changed;
+			let configurationRevision = 1;
 			const service = new PluginRuntimeService(
 				{},
 				{
-					subscribe: () => () => {},
+					subscribe(listener) {
+						changed = listener;
+						return () => {};
+					},
 
 					list: async () => [logical],
+
+					source: async () => ({
+						instance: logical,
+						packageRevision: 1,
+						configuration: { revision: configurationRevision },
+					}),
 				},
 			);
+			t.after(async () => {
+				release.resolve();
+				closeRelease.resolve();
+				await Promise.allSettled([...service.pending]);
+			});
 			let openings = 0;
+			let shutdown;
 			const cleanupFailure = new ToolCleanupFailure({
 				cause: new Error('Controlled original construction cleanup failure'),
 			});
-			t.mock.method(service, 'closeBoundOwner', async () => {
+			const stopInstance = service.stopInstance.bind(service);
+			t.mock.method(service, 'stopInstance', (...args) => {
+				const task = stopInstance(...args);
+				shutdown = Promise.allSettled([task]);
+				retirementEntered.resolve();
+				return task;
+			});
+			t.mock.method(service, 'closeBoundOwner', async (owner) => {
 				closingEntered.resolve();
 				await closeRelease.promise;
 				if (failedCleanup) throw cleanupFailure;
+				if (service.owners.get(key) === owner) service.owners.delete(key);
 			});
 			t.mock.method(service, 'startInstance', async (_user, _app, signal, binding) => {
 				openings++;
 				if (openings > 1) return;
-				binding.owner = { instanceId: randomUUID() };
+				binding.owner = {
+					instanceId: randomUUID(),
+					runtimeKey: key,
+					userId: 1,
+					appId,
+					logicalInstanceId: appId,
+					revision: 1,
+					configurationRevision,
+				};
+				service.owners.set(key, binding.owner);
 				entered.resolve();
 				await release.promise;
 				assert.equal(signal.aborted, true);
@@ -1257,7 +1293,16 @@ for (const failedCleanup of [false, true]) {
 			const signal = new AbortController().signal;
 			const original = Promise.allSettled([service.start(1, appId, signal, logical.packageId, appId)]);
 			await entered.promise;
-			const shutdown = Promise.allSettled([service.stopInstance(1, appId, appId)]);
+			configurationRevision++;
+			changed({ userId: 1, appId, instanceId: appId });
+			assert.equal(
+				await Promise.race([
+					retirementEntered.promise.then(() => 'construction'),
+					closingEntered.promise.then(() => 'owner'),
+				]),
+				'construction',
+				'a configuration event retires the pending construction before closing its owner',
+			);
 			const replacement = service.start(1, appId, signal, logical.packageId, appId);
 			const result = Promise.allSettled([replacement]);
 			let settled = false;
@@ -1266,7 +1311,6 @@ for (const failedCleanup of [false, true]) {
 			assert.equal(settled, false, 'a replacement cannot bypass original pending cleanup');
 			assert.equal(openings, 1);
 			release.resolve();
-			assert.equal((await original)[0].status, 'rejected');
 			await closingEntered.promise;
 			const late = Promise.allSettled([service.start(1, appId, signal, logical.packageId, appId)]);
 			await Promise.resolve();
@@ -1277,15 +1321,22 @@ for (const failedCleanup of [false, true]) {
 				const [outcome] = await result;
 				assert.equal(outcome.status, 'rejected');
 				assert.equal(outcome.reason.code, 'operation_unknown');
+				assert.equal((await original)[0].reason.code, 'operation_unknown');
 				assert.equal(openings, 1);
 				assert.equal((await late)[0].reason.code, 'operation_unknown');
+				assert.equal(service.stopSignal.signal.aborted, true, 'unknown reconciliation stops new admission');
 				await assert.rejects(service.start(1, appId, signal, logical.packageId, appId), {
-					code: 'operation_unknown',
+					code: 'provider_unavailable',
 				});
+				await assert.rejects(
+					service.close(),
+					(error) => error.code === 'operation_unknown' && contains(error, cleanupFailure),
+				);
 				assert.equal(openings, 1, 'unknown retirement cannot be bypassed by a later start');
 			} else {
 				assert.equal((await shutdown)[0].status, 'fulfilled');
 				assert.equal((await result)[0].status, 'fulfilled');
+				assert.equal((await original)[0].status, 'fulfilled');
 				assert.equal((await late)[0].status, 'fulfilled');
 				assert.equal(openings, 2);
 			}
