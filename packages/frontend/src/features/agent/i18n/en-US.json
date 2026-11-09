@@ -307,7 +307,7 @@
         "repositorySource": "Source",
         "repositoryPlugins": "Repository Plugins",
         "pluginCount": "{count} plugins",
-        "searchPlaceholder": "Search plugin by name, description, or ID...",
+        "searchPlaceholder": "Search plugins or repositories...",
         "searchEmpty": "No matching plugins found",
         "clearSearch": "Clear search",
         "copied": "Copied",
@@ -330,6 +330,8 @@
           "host_version": "Host version is incompatible"
         },
         "contributionKinds": {
+          "services": "Services",
+          "settings": "Settings",
           "app": "App",
           "tools": "Tools",
           "ui": "UI",
@@ -347,7 +349,6 @@
         "packageDataScope": "Cleanup removes this package’s configuration and KV data across apps. Packages still referenced by apps cannot be uninstalled.",
         "packageReferenced": "Referenced by apps. Remove the binding or uninstall the referencing apps first.",
         "packageStates": {
-          "installed": "Package installed",
           "draining": "Package draining",
           "incompatible": "Package incompatible"
         },
@@ -1701,6 +1702,8 @@
       "acknowledge": "I checked current facts and understand a new intent may duplicate an operation.",
       "newIntent": "Start a new intent",
       "publishers": "Trusted publishers",
+      "addPublisher": "Add publisher",
+      "noTrustedPublishers": "No trusted publishers yet",
       "trust": "Trust publisher",
       "revoke": "Revoke trust",
       "technicalDetails": "Technical details",

@@ -307,7 +307,7 @@
         "repositorySource": "リポジトリソース",
         "repositoryPlugins": "リポジトリプラグイン",
         "pluginCount": "{count} 個のプラグイン",
-        "searchPlaceholder": "プラグイン名、説明、または ID を検索...",
+        "searchPlaceholder": "プラグインやリポジトリを検索...",
         "searchEmpty": "一致するプラグインが見つかりません",
         "clearSearch": "検索をクリア",
         "copied": "コピーしました",
@@ -330,6 +330,8 @@
           "host_version": "ホストのバージョンに互換性がありません"
         },
         "contributionKinds": {
+          "services": "サービス",
+          "settings": "設定",
           "app": "アプリ",
           "tools": "ツール",
           "ui": "UI",
@@ -347,7 +349,6 @@
         "packageDataScope": "このパッケージの各アプリ内の設定と KV データを削除します。アプリが参照中のパッケージはアンインストールできません。",
         "packageReferenced": "アプリが参照中です。先にバインドを解除するか、参照アプリをアンインストールしてください。",
         "packageStates": {
-          "installed": "パッケージはインストール済み",
           "draining": "パッケージを停止処理中",
           "incompatible": "パッケージに互換性がありません"
         },
@@ -1701,6 +1702,8 @@
       "acknowledge": "現在の状態を確認し、新しい操作が重複する可能性を理解しました。",
       "newIntent": "新しい操作を開始",
       "publishers": "信頼する発行者",
+      "addPublisher": "発行者を追加",
+      "noTrustedPublishers": "信頼済みの発行者はありません",
       "trust": "発行者を信頼",
       "revoke": "信頼を取り消す",
       "technicalDetails": "技術詳細",

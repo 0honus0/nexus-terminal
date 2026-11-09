@@ -1,6 +1,6 @@
 <script setup lang="ts">
 	import PluginInstallPlanPreview from './PluginInstallPlanPreview.vue';
-	import { computed, ref, watch } from 'vue';
+	import { computed, ref, useId, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import {
 		UiBadge,
@@ -68,6 +68,10 @@
 		newIntent,
 	} = props.model;
 	const showPublishers = ref(false);
+	const addingPublisher = ref(false);
+	const publisherFormId = useId();
+	const activePublishers = computed(() => publishers.value.filter((publisher) => publisher.revokedAt === null));
+	let publisherDialogGeneration = 0;
 	const settingsPackage = ref<PluginPackageInstallation | null>(null);
 	const settingsName = computed(
 		() =>
@@ -100,6 +104,39 @@
 		},
 		{ immediate: true },
 	);
+
+	watch(
+		() => props.active,
+		(active) => {
+			if (!active) resetPublisherDialog();
+		},
+	);
+
+	function resetPublisherDialog(): void {
+		publisherDialogGeneration += 1;
+		addingPublisher.value = false;
+		label.value = '';
+		publicKeyPem.value = '';
+	}
+
+	function openPublisherDialog(): void {
+		if (blocked.value || candidate.value) return;
+		resetPublisherDialog();
+		addingPublisher.value = true;
+	}
+
+	function closePublisherDialog(): void {
+		if (!operation.busy.value) resetPublisherDialog();
+	}
+
+	async function submitPublisher(): Promise<void> {
+		if (blocked.value || !addingPublisher.value || !label.value.trim() || !publicKeyPem.value.trim()) return;
+		const generation = publisherDialogGeneration;
+		const confirmed = await trust();
+		if (!confirmed || !props.active || generation !== publisherDialogGeneration) return;
+		resetPublisherDialog();
+		showPublishers.value = true;
+	}
 
 	async function prepareCandidate(entry: PluginCatalogEntry, source: string | null): Promise<void> {
 		// Preparing disables the source button before the modal can capture its focus.
@@ -188,83 +225,126 @@
 			/>
 
 			<div class="overflow-hidden rounded-xl bg-header/25">
-				<button
-					type="button"
-					class="flex w-full cursor-pointer items-center justify-between px-4 py-3 text-left select-none hover:bg-header/30"
-					:aria-expanded="showPublishers"
-					@click="showPublishers = !showPublishers"
-				>
-					<span class="flex items-center gap-2 text-xs font-medium text-foreground"
-						><i class="fa-solid fa-key text-xs text-primary" aria-hidden="true"></i
-						>{{ t('agent.pluginManagement.publishers')
-						}}<UiBadge class="font-mono" appearance="ghost" density="compact">{{
-							publishers.length
-						}}</UiBadge></span
-					><i
-						:class="showPublishers ? 'fa-solid fa-chevron-up' : 'fa-solid fa-chevron-down'"
-						class="text-[11px] text-text-secondary"
-						aria-hidden="true"
-					></i>
-				</button>
-
-				<form
-					v-if="showPublishers"
-					class="space-y-4 border-t border-border bg-background/60 p-4"
-					@submit.prevent="trust"
-				>
-					<p class="text-[11px] leading-relaxed text-text-secondary">
-						{{ t('agent.settings.plugins.publisherHint') }}
-					</p>
-					<fieldset :disabled="blocked" class="space-y-2.5">
-						<UiInput
-							v-model="label"
-							:placeholder="t('agent.settings.plugins.publisherLabel')"
-							:aria-label="t('agent.settings.plugins.publisherLabel')"
-						/>
-						<UiTextarea
-							v-model="publicKeyPem"
-							:placeholder="t('agent.settings.plugins.publisherPem')"
-							:aria-label="t('agent.settings.plugins.publisherPem')"
-							:min-rows="4"
-							class="font-mono"
-						/>
-						<div class="flex justify-end">
-							<UiButton
-								type="submit"
-								appearance="solid"
-								tone="primary"
-								:disabled="!label.trim() || !publicKeyPem.trim()"
-								>{{ t('agent.pluginManagement.trust') }}</UiButton
-							>
-						</div>
-					</fieldset>
-					<div class="space-y-2 border-t border-border pt-3">
-						<div v-for="publisher in publishers" :key="publisher.keyId" class="rounded-lg bg-header/25 p-3">
-							<div class="flex items-center justify-between gap-2">
-								<span class="min-w-0 truncate text-xs font-semibold text-foreground">{{
-									publisher.label
-								}}</span>
-								<UiButton
-									v-if="publisher.revokedAt === null"
-									type="button"
-									appearance="soft"
-									tone="danger"
-									:disabled="blocked"
-									@click="revoke(publisher)"
-									>{{ t('agent.pluginManagement.revoke') }}</UiButton
-								>
-							</div>
-							<p class="mt-1 break-all font-mono text-[11px] text-text-secondary">
+				<div class="flex min-w-0 items-center gap-2 px-4 py-3">
+					<button
+						type="button"
+						class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left text-xs font-medium text-foreground"
+						:aria-expanded="showPublishers"
+						@click="showPublishers = !showPublishers"
+					>
+						<i class="fa-solid fa-key text-xs text-primary" aria-hidden="true"></i>
+						<span class="min-w-0">{{ t('agent.pluginManagement.publishers') }}</span>
+						<UiBadge class="font-mono" appearance="ghost" density="compact">{{
+							activePublishers.length
+						}}</UiBadge>
+						<i
+							:class="showPublishers ? 'fa-solid fa-chevron-up' : 'fa-solid fa-chevron-down'"
+							class="text-[11px] text-text-secondary"
+							aria-hidden="true"
+						></i>
+					</button>
+					<UiButton
+						type="button"
+						appearance="ghost"
+						density="compact"
+						:disabled="blocked || candidate !== null"
+						@click="openPublisherDialog"
+					>
+						<i class="fa-solid fa-plus text-[11px]" aria-hidden="true"></i
+						>{{ t('agent.pluginManagement.addPublisher') }}
+					</UiButton>
+				</div>
+				<div v-if="showPublishers" class="space-y-2 px-4 pb-4">
+					<div
+						v-for="publisher in activePublishers"
+						:key="publisher.keyId"
+						class="plugin-publishers__entry flex min-w-0 items-center gap-3 rounded-lg bg-card/30 px-3 py-2.5"
+					>
+						<div class="min-w-0 flex-1 space-y-1">
+							<p class="truncate text-xs font-semibold text-foreground" :title="publisher.label">
+								{{ publisher.label }}
+							</p>
+							<p class="truncate font-mono text-[10px] text-text-secondary" :title="publisher.keyId">
 								{{ publisher.keyId }}
 							</p>
-							<p v-if="publisher.revokedAt !== null" class="mt-1 text-[11px] text-error">
-								{{ t('agent.settings.plugins.revoked') }}
-							</p>
 						</div>
+						<UiButton
+							type="button"
+							appearance="ghost"
+							tone="danger"
+							density="compact"
+							icon-only
+							:aria-label="t('agent.pluginManagement.revoke')"
+							:title="t('agent.pluginManagement.revoke')"
+							:disabled="blocked"
+							@click="revoke(publisher)"
+						>
+							<i class="fa-solid fa-ban text-[11px]" aria-hidden="true"></i>
+						</UiButton>
 					</div>
-				</form>
+					<p v-if="!activePublishers.length" class="py-3 text-center text-xs text-text-secondary">
+						{{ t('agent.pluginManagement.noTrustedPublishers') }}
+					</p>
+				</div>
 			</div>
 		</div>
+		<UiModal
+			v-if="addingPublisher"
+			:visible="active"
+			:title="t('agent.pluginManagement.addPublisher')"
+			:close-on-backdrop="!operation.busy.value"
+			:close-on-escape="!operation.busy.value"
+			:focus-on-open="true"
+			:restore-focus="true"
+			@close="closePublisherDialog"
+		>
+			<form :id="publisherFormId" class="space-y-4" @submit.prevent="submitPublisher">
+				<p class="text-xs leading-relaxed text-text-secondary">
+					{{ t('agent.settings.plugins.publisherHint') }}
+				</p>
+				<label class="block space-y-2">
+					<span class="text-xs font-medium text-foreground">{{
+						t('agent.settings.plugins.publisherLabel')
+					}}</span>
+					<UiInput
+						v-model="label"
+						:aria-label="t('agent.settings.plugins.publisherLabel')"
+						:disabled="blocked"
+					/>
+				</label>
+				<label class="block space-y-2">
+					<span class="text-xs font-medium text-foreground">{{
+						t('agent.settings.plugins.publisherPem')
+					}}</span>
+					<UiTextarea
+						v-model="publicKeyPem"
+						:aria-label="t('agent.settings.plugins.publisherPem')"
+						:min-rows="4"
+						class="font-mono text-xs"
+						:disabled="blocked"
+					/>
+				</label>
+				<UiInlineNotice v-if="operation.refreshRequired.value || mutationUnknown" tone="warning" compact>{{
+					t('agent.settings.appManagement.refreshRequired')
+				}}</UiInlineNotice>
+			</form>
+			<template #footer>
+				<div class="flex flex-wrap items-center justify-end gap-2">
+					<UiButton type="button" :disabled="operation.busy.value" @click="closePublisherDialog">{{
+						t('common.cancel')
+					}}</UiButton>
+					<UiButton
+						type="submit"
+						:form="publisherFormId"
+						appearance="solid"
+						tone="primary"
+						:loading="operation.busy.value"
+						:disabled="blocked || !label.trim() || !publicKeyPem.trim()"
+						>{{ t('agent.pluginManagement.trust') }}</UiButton
+					>
+				</div>
+			</template>
+		</UiModal>
 		<UiModal
 			v-if="candidate"
 			:visible="active"

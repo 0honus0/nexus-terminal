@@ -161,16 +161,19 @@ export function usePluginManagement(available: () => boolean = () => true) {
 		}
 	}
 
-	async function trust(): Promise<void> {
+	async function trust(): Promise<boolean> {
 		const name = label.value;
 		const pem = publicKeyPem.value;
+		let confirmed = false;
 		await write(
 			(signal) => trustPluginPublisher(name, pem, signal),
 			() => {
+				confirmed = true;
 				label.value = '';
 				publicKeyPem.value = '';
 			},
 		);
+		return confirmed;
 	}
 
 	async function revoke(value: PluginPublisher): Promise<void> {

@@ -77,15 +77,62 @@ test('official plugin source cannot be overridden by a configured third-party re
 	await selectAgentExtensionsSection(page, 'market');
 	expect(new URL((await officialRead).url()).search).toBe('');
 	const section = page.getByRole('region', { name: 'Plugin management', exact: true });
-	await expect(
-		section.getByRole('button', { name: 'Copy', exact: true }).filter({ hasText: repositoryUrl }),
-	).toBeVisible();
+	const copySource = section.getByRole('button', { name: 'Third-party repository · Copy', exact: true });
+	await expect(copySource).toBeVisible();
+	await expect(copySource).toHaveAttribute('title', repositoryUrl);
 	await expect(section.getByRole('button', { name: 'Read official catalog', exact: true })).toHaveCount(0);
 	const localGroup = section
-		.locator('[role="button"][aria-expanded]')
-		.filter({ has: page.getByRole('button', { name: 'Copy', exact: true }).filter({ hasText: repositoryUrl }) });
+		.locator('.plugin-market__group-heading')
+		.filter({ has: page.getByTitle(repositoryUrl, { exact: true }) });
 	await expectReadableCatalogText(localGroup.locator('.ui-catalog-group-label'));
 	await expectReadableCatalogText(localGroup.locator('.ui-catalog-type-badge').first());
+	await expect(localGroup.locator('.ui-catalog-group-label')).toHaveText(new URL(repositoryUrl).host);
+	await expect(localGroup.locator('.fa-server')).toBeVisible();
+	await copySource.click();
+	await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(repositoryUrl);
+	await expect(localGroup).toHaveAttribute('aria-expanded', 'true');
+	await expect(localGroup.getByRole('button', { name: 'Remove', exact: true })).toBeVisible();
+	const unavailableUrl = new URL('/missing-repository.json', repositoryUrl).href;
+	await section.getByRole('button', { name: 'Add repository', exact: true }).click();
+	const addForm = section.getByRole('form', { name: 'Add repository', exact: true });
+	await addForm.getByRole('textbox').fill(unavailableUrl);
+	const unavailableRead = page.waitForResponse(
+		(response) =>
+			new URL(response.url()).pathname === '/api/v1/agent/plugins/remote/catalog' &&
+			new URL(response.url()).searchParams.get('repositoryUrl') === unavailableUrl,
+	);
+	await addForm.getByRole('button', { name: 'Add repository', exact: true }).click();
+	await expect(addForm).toHaveCount(0);
+	expect((await unavailableRead).ok()).toBe(false);
+	await expect(section.getByText(unavailableUrl, { exact: false })).toBeVisible();
+	const unavailableGroup = section
+		.locator('.plugin-market__group-heading')
+		.filter({ has: page.getByTitle(unavailableUrl, { exact: true }) });
+	await expect(unavailableGroup).toBeVisible();
+	await unavailableGroup.getByRole('button', { name: 'Remove', exact: true }).click();
+	await expect(unavailableGroup).toHaveCount(0);
+	await expect(localGroup).toBeVisible();
+	const saved = await requestAgentJson(
+		request,
+		{ method: 'GET', path: '/plugins/repositories' },
+		readAgentPluginRepositorySettings,
+	);
+	expect(saved.repositories).toEqual([{ url: repositoryUrl }]);
+	await section.getByRole('button', { name: /^Trusted publishers/ }).click();
+	await expect(section.getByRole('textbox', { name: 'Publisher label', exact: true })).toHaveCount(0);
+	const addPublisher = section.getByRole('button', { name: 'Add publisher', exact: true });
+	await addPublisher.click();
+	const publisherDialog = page.getByRole('dialog', { name: 'Add publisher', exact: true });
+	await expect(publisherDialog).toBeVisible();
+	await expect(publisherDialog.getByRole('button', { name: 'Trust publisher', exact: true })).toBeDisabled();
+	await publisherDialog.getByRole('textbox', { name: 'Publisher label', exact: true }).fill('Cancelled publisher');
+	await publisherDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+	await expect(publisherDialog).toHaveCount(0);
+	await expect(addPublisher).toBeFocused();
+	await addPublisher.click();
+	await expect(publisherDialog.getByRole('textbox', { name: 'Publisher label', exact: true })).toHaveValue('');
+	await page.keyboard.press('Escape');
+	await expect(publisherDialog).toHaveCount(0);
 	// D16: actual first-party catalog, pinned publisher and signed download require external acceptance.
 });
 

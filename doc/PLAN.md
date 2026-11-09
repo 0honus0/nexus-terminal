@@ -119,3 +119,7 @@ GIF/Markdown 图片、文件卡分组及聊天既有操作的正式回归已通�
 
 - [ ] **OpenAPI/AsyncAPI 自动生成**：为 Shared 协议建立统一 schema 来源，绑定真实安装的 HTTP 路由并汇总生成 OpenAPI；WebSocket 契约按 AsyncAPI 汇总。设计入口见 [Backend](architecture/BACKEND.md) 和 [Shared](architecture/SHARED.md)。
 - [ ] **ssh2 临时补丁退役**：后续依赖升级时检查正式版；上游包含当前 Node 26 原生编译修复后，同次删除补丁文件、workspace 注册及锁文件引用，重新验证原生编译与加载，按 [DEPLOYMENT](DEPLOYMENT.md) 执行。
+
+## 插件仓库工具栏后续交付
+
+本轮用户授权的来源标题、添加/搜索工具栏、按仓库移除、分界线/对齐、紧凑安装管理行及受信发布者添加弹窗已实现，静态、构建和指定CDP专项通过，四表、首次失败与证据见[验收记录](testing/HISTORY.md#插件仓库工具栏与来源管理2026-11-09)。本地验收后获用户授权提交推送；原来源隔离E2E已补齐新入口及失败来源移除断言，本批远程门禁结果待核对，不以CDP专项替代。未发布镜像或部署。保留测试环境与证据，其他真机及故障专项不扩大为本轮通过。
