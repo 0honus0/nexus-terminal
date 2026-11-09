@@ -295,7 +295,10 @@
         "Shell yield: an unknown channel outcome releases a readable that never ends",
         "Shell yield policy and mutation admission"
       ],
-      "targets": ["tests/backend/agent/tools/protocol/agent-shell-yield.native.test.mjs"],
+      "targets": [
+        "tests/backend/agent/tools/protocol/agent-shell-yield.native.test.mjs",
+        "tests/backend/agent/tools/protocol/agent-shell-deadline.native.test.mjs"
+      ],
       "status": "framework-native"
     },
     {
@@ -1989,6 +1992,7 @@
         "tests/backend/agent/tools/protocol/agent-monitor-faults.native.test.mjs",
         "tests/backend/agent/tools/protocol/agent-resources.native.test.mjs",
         "tests/backend/agent/tools/protocol/agent-shell-yield.native.test.mjs",
+        "tests/backend/agent/tools/protocol/agent-shell-deadline.native.test.mjs",
         "tests/backend/agent/tools/protocol/agent-tools.native.test.mjs",
         "tests/backend/agent/tools/protocol/authority-monitor.native.test.mjs",
         "tests/backend/agent/tools/protocol/readonly-tool-participant.native.test.mjs",
@@ -4906,7 +4910,10 @@
       "name": "live Job output, yielding and mutation admission",
       "source": "tests/backend/http/backend-next-agent-shell-yield.integration.mjs",
       "pattern": "Shell yield",
-      "target": "tests/backend/agent/tools/protocol/agent-shell-yield.native.test.mjs"
+      "targets": [
+        "tests/backend/agent/tools/protocol/agent-shell-yield.native.test.mjs",
+        "tests/backend/agent/tools/protocol/agent-shell-deadline.native.test.mjs"
+      ]
     },
     {
       "name": "collaboration authorization and event-driven joins",

@@ -31,6 +31,8 @@ Access 的双端范围是管理员初始化、密码登录、明确的认证状�
 
 核心设置的 GET/PUT、CAPTCHA 专项 PUT、安全视图、secret keep/clear/replace、CAS 与 saved/effective 激活状态归 Shared preferences/configuration；公开 CAPTCHA 读取复用 Access 契约。后端生产者及正式CAPTCHA/IP/采样配置面板的Preferences transport/mapper已消费；Dashboard消费启动生效监控投影。公开CAPTCHA读取不替代管理快照，其他Preferences正式消费者已接Shared，本轮完整行为仍待远程回归。
 
+审批线协议的时间为整Unix秒，HTTP mapper从毫秒向下取整。同秒内的请求、决定、消费及到期可以投影为相等，codec只拒绝整秒倒序与不一致状态；真正批准/派发的严格毫秒有效期仍由Backend原事务核对，不能把展示精度当作授权期限。
+
 ## 2. 子功能与目录
 
 ### 单连接更新的凭据意图

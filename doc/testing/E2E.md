@@ -38,7 +38,7 @@
 
 唯一测试workspace为`tests/package.json`（`@nexus-terminal/tests`）。`*.test.ts/mjs`由Vitest直接发现，`*.native.test.mjs`由Node直接发现，`*.spec.ts/mjs`由Playwright发现，不互相包装。快速层无需浏览器；实际IPC/签包/Worker仍需Backend/SDK成品，浏览器层另需Frontend与测试客户端。根`test:all`当前串接静态、构建和以上三层，只执行本体自动测试，不能代替两仓组合与独立Docker smoke完整门禁。
 
-Actions使用统一8个测试runner：每个分片依次执行Vitest模块、Node原生协议、本体Playwright、插件互操作和插件Playwright，模块/原生按框架原生分片，浏览器按实际发现与历史耗时均衡；不再固定1个Backend与7个Browser。所有测试容器启用init回收孤儿进程，并以SYS_PTRACE检查真实OpenSSH句柄。第1分片单独挂Docker socket运行真实Docker协议/模块，同时持有限定的挂载能力，在私有mount namespace执行真实有限tmpfs的ENOSPC测试；其余分片不挂Docker socket或授予挂载能力。ENOSPC文件显式归第1分片，不依赖原生文件排序后的偶然分配。快速层、静态及插件独立测试在质量作业执行，成品Docker部署smoke单独执行；全部必需作业成功才算门禁通过。
+Actions使用统一8个测试runner：每个分片将Node原生协议与“Vitest模块→本体Playwright→插件互操作→插件Playwright”链重叠执行，模块/原生按框架原生分片，浏览器按实际发现与历史耗时均衡；不再固定1个Backend与7个Browser。所有测试容器启用init回收孤儿进程，并以SYS_PTRACE检查真实OpenSSH句柄。第1分片单独挂Docker socket运行真实Docker协议/模块，同时持有限定的挂载能力，在私有mount namespace执行真实有限tmpfs的ENOSPC测试；其余分片不挂Docker socket或授予挂载能力。ENOSPC文件显式归第1分片，不依赖原生文件排序后的偶然分配。快速层、静态及插件独立测试在质量作业执行，成品Docker部署smoke单独执行；全部必需作业成功才算门禁通过。
 
 质量作业构建Host一次、签候选包一次，上传准确插件源码和包。分片复用绑定本次SHA/不可变artifact ID的同批成品，不重建；完整重跑与部分重跑遵循下文产物身份规则。插件独立Validate选择成功Host E2E的准确SHA和不可变构建产物；质量作业构建签包一次并执行包测试、浏览器发现与类型检查，八个容器分片恢复同批产物执行Node互操作与Playwright。开发签名私钥不分发给测试分片。两仓组合记录须绑定真实源码、成品和包摘要，不能引用旧harness的绿色结论。
 

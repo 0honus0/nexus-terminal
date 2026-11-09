@@ -64,6 +64,7 @@ await test('Shell yield policy and mutation admission', async (t) => {
 			await mkdir(directory);
 			const fixture = await openAgentExecution(directory, sshd, {
 				discover: 'shell_execute shell_job_control tool_result_read',
+				signal: subtest.signal,
 			});
 			const cleanup = { unknown: false };
 			subtest.after(() => fixture.close(cleanup));
@@ -482,48 +483,6 @@ await test('Shell yield policy and mutation admission', async (t) => {
 					'Revocation fixture process independently ended',
 				);
 			}
-		},
-	);
-
-	await scenario(
-		'original Run deadline still stops yielded execution and preserves unknown',
-		async (f, directory, cleanup) => {
-			await settings(f, { maxActiveSeconds: 3, toolTimeoutSeconds: 1 });
-			const effect = join(directory, 'deadline-started');
-			const finished = join(directory, 'deadline-finished');
-			const run = await f.start('hard Run deadline', (results) =>
-				!results.length
-					? shell(f, {
-							yieldSeconds: 0,
-							commands: [
-								`trap '' HUP TERM; printf x > '${effect}'; sleep 4; printf done > '${finished}'`,
-							],
-						})
-					: wait(f, results[0].jobId),
-			);
-			await f.approve(await f.approval(run, 'shell_execute'));
-			await until(
-				() => f.rows('agent_tool_jobs', run)[0]?.state,
-				(state) => state === 'unknown',
-				'Execution budget preserves unknown',
-			);
-			cleanup.unknown = true;
-			assert.equal(await readFile(effect, 'utf8'), 'x');
-			assert.equal(expectStatus(await f.api('GET', '/api/v1/remote/mutations'), 200).items[0].state, 'blocked');
-			await until(
-				async () => {
-					try {
-						return await readFile(finished, 'utf8');
-					} catch (error) {
-						if (error.code === 'ENOENT') {
-							return null;
-						}
-						throw error;
-					}
-				},
-				(value) => value === 'done',
-				'Deadline fixture process independently ended',
-			);
 		},
 	);
 });

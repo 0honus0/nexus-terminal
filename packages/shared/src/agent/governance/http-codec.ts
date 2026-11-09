@@ -318,19 +318,20 @@ export function readAgentApprovalView(value: unknown): AgentApprovalView {
 		consumedAt: row.consumedAt === null ? null : agentInteger(row.consumedAt),
 	};
 	const decided = result.status === 'approved' || result.status === 'denied';
+	// Wire timestamps are whole Unix seconds. Distinct millisecond events may project
+	// to the same second; strict expiry authorization stays in the storage transaction.
 	// Automatic full-access approval has no human decider. Expiration and supersession retain prior decisions.
 	if (
-		result.expiresAt <= result.requestedAt ||
+		result.expiresAt < result.requestedAt ||
 		(decided && result.decidedAt === null) ||
 		(result.status === 'requested' && (result.decidedAt !== null || result.decidedByUserId !== null)) ||
 		(result.decidedByUserId !== null && result.decidedAt === null) ||
-		(result.decidedAt !== null &&
-			(result.decidedAt < result.requestedAt || result.decidedAt >= result.expiresAt)) ||
+		(result.decidedAt !== null && (result.decidedAt < result.requestedAt || result.decidedAt > result.expiresAt)) ||
 		(result.consumedAt !== null &&
 			(result.status !== 'approved' ||
 				result.decidedAt === null ||
 				result.consumedAt < result.decidedAt ||
-				result.consumedAt >= result.expiresAt))
+				result.consumedAt > result.expiresAt))
 	) {
 		throw new InvalidAgentPayload();
 	}

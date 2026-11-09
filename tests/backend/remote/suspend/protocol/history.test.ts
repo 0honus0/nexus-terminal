@@ -23,6 +23,7 @@ test('resizing a suspended fullscreen terminal is ordered after its checkpoint',
 	httpClients,
 }) => {
 	await loginAsAdmin(request);
+	expect((await request.post(ssh.controlUrl + '/shell/startup-pty?echo=off')).status()).toBe(204);
 
 	const connectionId = await createSshConnection(request, ssh);
 	const original = await httpClients.openWorkspace(connectionId, `suspend-resize-${crypto.randomUUID()}`);
@@ -35,8 +36,12 @@ test('resizing a suspended fullscreen terminal is ordered after its checkpoint',
 	// workspace.connect acknowledges attachment before the remote shell finishes startup.
 	// Drain startup output through a real shell round trip before freezing the fullscreen image.
 	const readyMarker = `RESIZE_READY_${crypto.randomUUID().replaceAll('-', '')}`;
-	const ready = waitForBinaryText(original.socket, readyMarker);
-	await requestWorkspace(original.socket, 'terminal.input', { data: `printf '${readyMarker}\\n'\n` });
+	// A real PTY preserves startup/output ordering. Replace the interactive shell
+	// with a quiet foreground reader so a late prompt cannot overwrite the checkpoint.
+	const ready = waitForBinaryText(original.socket, `${readyMarker}\r\n`);
+	await requestWorkspace(original.socket, 'terminal.input', {
+		data: `printf '%s\\n' '${readyMarker.slice(0, 12)}''${readyMarker.slice(12)}'; exec cat\n`,
+	});
 	await ready;
 	await requestWorkspace(original.socket, 'suspend.mark', { terminalSnapshot: snapshot });
 	await closeWebSocket(original.socket);

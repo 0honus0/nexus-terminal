@@ -412,7 +412,7 @@ export async function openAgentExecution(directory, sshd, options = {}) {
 			}
 		},
 
-		async start(name, program, { connectionIds = [connectionId] } = {}) {
+		async start(name, program, { connectionIds = [connectionId], inputJson } = {}) {
 			const key = name + ':' + randomUUID();
 			programs.set(key, options.discover ? discoverTools(options.discover, program) : program);
 			const thread = expectStatus(await api('POST', base() + '/threads', { title: name }), 201);
@@ -424,15 +424,17 @@ export async function openAgentExecution(directory, sshd, options = {}) {
 						prompt: key,
 						approvalMode: 'ask',
 						connectionIds,
-						inputJson: JSON.stringify({
-							model: {
-								providerId: provider.id,
-								modelId: 'fixture',
-								configurationVersion: provider.version,
-								reasoningEffort: null,
-							},
-							artifacts: [],
-						}),
+						inputJson:
+							inputJson ??
+							JSON.stringify({
+								model: {
+									providerId: provider.id,
+									modelId: 'fixture',
+									configurationVersion: provider.version,
+									reasoningEffort: null,
+								},
+								artifacts: [],
+							}),
 					},
 					{ 'Idempotency-Key': randomUUID() },
 				),
@@ -440,13 +442,13 @@ export async function openAgentExecution(directory, sshd, options = {}) {
 			).run;
 		},
 
-		async wait(run, status, timeoutMs = 10000) {
+		async wait(run, status, budget = options.signal ?? 10000) {
 			const settled = await until(
 				async () => expectStatus(await api('GET', runPath(run)), 200),
 				(value) =>
 					value.status === status || ['completed', 'failed', 'cancelled', 'unknown'].includes(value.status),
 				'Run ' + status,
-				timeoutMs,
+				budget,
 			);
 			if (settled.status !== status && fixtureFailures.length) {
 				throw new AggregateError(
@@ -470,6 +472,7 @@ export async function openAgentExecution(directory, sshd, options = {}) {
 				async () => await listAgentApprovalHistory(api, agentApp.id, run.id),
 				(values) => values.some((value) => value.status === 'requested' && matches(value)),
 				'Approval ' + name,
+				options.signal ?? 10000,
 			);
 			return items.find((value) => value.status === 'requested' && matches(value));
 		},

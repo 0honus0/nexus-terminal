@@ -55,6 +55,7 @@ export interface AgentApprovalView {
 	risk: AgentApprovalRisk;
 	summary: string;
 	targetId: number | null;
+	/** Approval timestamps are whole Unix seconds; persistence and authorization use milliseconds. */
 	requestedAt: number;
 	expiresAt: number;
 	decidedAt: number | null;

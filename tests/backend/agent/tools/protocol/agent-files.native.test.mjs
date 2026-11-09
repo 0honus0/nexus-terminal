@@ -12,16 +12,17 @@ import { migrateToolJobBatchResults } from '../../../../../packages/backend/dist
 import { openAgentExecution } from '../../runs/support/agent-execution-fixture.mjs';
 import { openSshd, expectStatus } from '../../../../support/protocols/openssh-fixture.mjs';
 
-await test('B10 Agent file operations and HTTP refusal boundaries', { timeout: 120000 }, async (t) => {
+await test('B10 Agent file operations and HTTP refusal boundaries', async (t) => {
 	const root = await mkdtemp(join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-b10-agent-files-'));
 	let sshd;
 	let sequence = 0;
 
 	async function scenario(name, work) {
-		await t.test(name, async (scenario) => {
+		await t.test(name, { timeout: 120000 }, async (scenario) => {
 			const directory = join(root, String(++sequence));
 			await mkdir(directory);
 			const fixture = await openAgentExecution(directory, sshd, {
+				signal: scenario.signal,
 				discover:
 					'file_write file_read file_patch file_inspect file_move file_delete file_list file_search file_deliver artifact_present artifact_read shell_execute tool_result_read',
 			});
