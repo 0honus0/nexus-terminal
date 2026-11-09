@@ -42,7 +42,7 @@
     "@noble/hashes": "^2.4.0",
     "@novnc/novnc": "1.7.0",
     "@simplewebauthn/browser": "^14.0.0",
-    "@tailwindcss/vite": "^4.3.4",
+    "@tailwindcss/vite": "^4.3.5",
     "@uiw/codemirror-theme-vscode": "^4.25.12",
     "@vscode/iconv-lite-umd": "^0.7.1",
     "@vueuse/core": "15.0.0",
@@ -68,8 +68,8 @@
     "semver": "7.8.6",
     "splitpanes": "^4.1.2",
     "sql.js": "^1.15.2",
-    "tailwindcss": "^4.3.4",
-    "vue": "^3.5.44",
+    "tailwindcss": "^4.3.5",
+    "vue": "^3.5.45",
     "vue-chartjs": "^5.3.4",
     "vue-i18n": "^11.4.18",
     "vue-router": "^5.4.0",
@@ -83,10 +83,10 @@
     "@types/semver": "^7.8.0",
     "@types/sql.js": "^1.4.11",
     "@vitejs/plugin-vue": "^6.0.10",
-    "@vue/compiler-sfc": "^3.5.44",
+    "@vue/compiler-sfc": "^3.5.45",
     "esbuild": "0.28.2",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
-    "vite": "^8.3.5",
+    "vite": "^8.3.6",
     "vue-tsc": "^3.3.14"
   }
 }
