@@ -1,5 +1,48 @@
 import { compare, prerelease, satisfies } from 'semver';
-import type { PluginCatalogEntry, PluginManifest } from './plugin-types';
+import type { PluginCatalogEntry, PluginManifest, PluginPackageInstallation } from './plugin-types';
+import type { PluginCatalogGroup, PluginCatalogOption, PluginCatalogSource } from './plugin-market-types';
+
+/** Merge presentation by package ID while retaining the exact source, signer and archive of every choice. */
+export function mergePluginCatalogs(
+	sources: PluginCatalogSource[],
+	installations: PluginPackageInstallation[],
+	requirements: Dependency[],
+	selections: ReadonlyMap<string, string>,
+): PluginCatalogGroup[] {
+	const groups = new Map<string, PluginCatalogOption[]>();
+	for (const { source, catalog } of sources) {
+		for (const entry of catalog.packages) {
+			const options = groups.get(entry.definitionId) ?? [];
+			options.push({
+				source,
+				catalog,
+				entry,
+				key: JSON.stringify([source, entry.publisherKeyId, entry.definitionId, entry.version, entry.sha256]),
+			});
+			groups.set(entry.definitionId, options);
+		}
+	}
+	return [...groups].flatMap(([id, entries]) => {
+		const options = entries.toSorted((left, right) => compare(right.entry.version, left.entry.version));
+		const installation = installations.find((item) => item.packageId === id && item.status !== 'removed');
+		const samePublisher = options.filter((item) => item.entry.publisherKeyId === installation?.publisherKeyId);
+		const preferred = samePublisher.length ? samePublisher : options;
+		const eligible = preferred.filter(
+			(item) =>
+				item.entry.compatible &&
+				satisfiesAppRequirements(item.entry, requirements) &&
+				prerelease(item.entry.version) === null,
+		);
+		const candidates = eligible.length ? eligible : preferred;
+		const explicit = options.find((item) => item.key === selections.get(id));
+		const preferredSource = sources.find((source) => candidates.some((item) => item.source === source.source));
+		const selected =
+			explicit ?? candidates.find((item) => item.source === preferredSource?.source) ?? candidates[0];
+		return selected
+			? [{ id, options, selected, needsVersionChoice: !explicit && prerelease(selected.entry.version) !== null }]
+			: [];
+	});
+}
 
 /** A candidate older than the installed version never represents an upgrade. */
 export function isPluginUpgrade(installedVersion: string, candidateVersion: string): boolean {
@@ -16,32 +59,6 @@ export function satisfiesAppRequirements(entry: PluginCatalogEntry, requirements
 			requirement.publisherKeyId !== entry.publisherKeyId ||
 			satisfies(entry.version, '>=' + requirement.minVersion + ' <=' + requirement.maxVersion),
 	);
-}
-
-export function recommendedCatalogEntries(
-	entries: PluginCatalogEntry[],
-	requirements: Dependency[],
-): PluginCatalogEntry[] {
-	const groups = new Map<string, PluginCatalogEntry[]>();
-	for (const entry of entries) {
-		const key = JSON.stringify([entry.publisherKeyId, entry.definitionId]);
-		const versions = groups.get(key) ?? [];
-		versions.push(entry);
-		groups.set(key, versions);
-	}
-	return [...groups.values()].flatMap((versions) => {
-		const sorted = versions.toSorted((left, right) => compare(right.version, left.version));
-		const candidate =
-			sorted.find(
-				(entry) =>
-					entry.compatible &&
-					satisfiesAppRequirements(entry, requirements) &&
-					prerelease(entry.version) === null,
-			) ??
-			sorted.find((entry) => prerelease(entry.version) === null) ??
-			sorted[0];
-		return candidate ? [candidate] : [];
-	});
 }
 
 /** Catalog translations are publisher data; use the original text when no language matches. */

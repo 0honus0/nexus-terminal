@@ -1,30 +1,21 @@
 <script setup lang="ts">
 	import { computed, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import {
-		UiBadge,
-		UiButton,
-		UiCheckbox,
-		UiConfirmationPanel,
-		UiEmptyState,
-		UiInfoHint,
-		UiInlineNotice,
-	} from '@/foundation/ui';
+	import { UiButton, UiCheckbox, UiConfirmationPanel, UiEmptyState, UiInlineNotice } from '@/foundation/ui';
 	import type { useAppManagement } from '../composables/use-app-management';
 	import type { usePluginManagement } from '../plugins/composables/use-plugin-management';
+	import type { PluginPackageInstallation } from '../plugins/model/plugin-types';
 	import type { ManagedApp } from '../model/app-management-types';
+	import InstalledPluginRow from '../plugins/components/InstalledPluginRow.vue';
 	import AppGovernanceEditor from './AppGovernanceEditor.vue';
 	const { t } = useI18n();
-	const props = withDefaults(
-		defineProps<{
-			model: ReturnType<typeof useAppManagement>;
-			plugins: ReturnType<typeof usePluginManagement>;
-			active: boolean;
-			embedded?: boolean;
-		}>(),
-		{ embedded: false },
-	);
-	const { apps, definitions, selectedId, appOperation, loadApps, toggle } = props.model;
+	const props = defineProps<{
+		model: ReturnType<typeof useAppManagement>;
+		plugins: ReturnType<typeof usePluginManagement>;
+		active: boolean;
+	}>();
+	const emit = defineEmits<{ settings: [installation: PluginPackageInstallation, appId: string] }>();
+	const { apps, selectedId, appOperation, loadApps, toggle } = props.model;
 	const uninstallAppId = ref('');
 	const clearOnUninstall = ref(false);
 	watch(uninstallAppId, () => {
@@ -46,48 +37,39 @@
 			),
 	);
 	const uninstallInstallation = computed(() => installationsByApp.value.get(uninstallAppId.value));
-	const officialPublishers = computed(() => new Set(props.plugins.officialPublisherIds.value));
-	const enabledCount = computed(() => apps.value.filter((app) => app.enabled).length);
 	const blocked = computed(
 		() =>
 			appOperation.busy.value || appOperation.refreshRequired.value || !props.active || !props.plugins.canWrite(),
 	);
-	const definitionNames = computed(
-		() => new Map(definitions.value.map((definition) => [definition.id, definition.name])),
-	);
-
-	function appVisuals(definitionId: string) {
-		if (definitionId === 'nexus.agent') {
-			return {
-				icon: 'fa-solid fa-wand-magic-sparkles',
-				iconBg: 'bg-gradient-to-br from-primary/20 via-primary/15 to-transparent text-primary ring-1 ring-primary/25',
-				badge: 'agent.settings.apps.coreOfficial',
-				summary: 'agent.settings.apps.summaries.nexusAgent',
-			};
-		}
-		if (definitionId === 'nexus.fullstack') {
-			return {
-				icon: 'fa-solid fa-layer-group',
-				iconBg: 'bg-gradient-to-br from-success/20 via-success/15 to-transparent text-success ring-1 ring-success/25',
-				badge: 'agent.settings.apps.badges.officialExtension',
-				summary: 'agent.settings.apps.summaries.nexusFullstack',
-			};
-		}
-		return {
-			icon: 'fa-solid fa-puzzle-piece',
-			iconBg: 'bg-primary/10 text-primary ring-1 ring-primary/20',
-			badge: 'agent.settings.apps.badges.thirdParty',
-			summary: 'agent.settings.apps.summaries.default',
-		};
-	}
 
 	function installationFor(app: ManagedApp) {
 		return installationsByApp.value.get(app.id);
 	}
 
-	function isOfficial(app: ManagedApp): boolean {
-		const installation = installationFor(app);
-		return installation !== undefined && officialPublishers.value.has(installation.publisherKeyId);
+	function settingsPackageFor(app: ManagedApp): PluginPackageInstallation | undefined {
+		const binding = installationFor(app);
+		if (!binding) return undefined;
+		const installation = props.plugins.packageInstallations.value.find(
+			(item) =>
+				item.packageId === app.definitionId &&
+				item.packageHash === binding.packageHash &&
+				item.publisherKeyId === binding.publisherKeyId &&
+				item.status === 'installed',
+		);
+		if (!installation) return undefined;
+		const version = props.plugins.versions.value.find(
+			(item) =>
+				item.packageHash === installation.packageHash &&
+				item.publisherKeyId === installation.publisherKeyId &&
+				item.manifest.id === installation.packageId &&
+				item.manifest.version === installation.version,
+		);
+		return version?.manifest.settings ? installation : undefined;
+	}
+
+	function openSettings(app: ManagedApp): void {
+		const installation = settingsPackageFor(app);
+		if (props.active && installation) emit('settings', installation, app.id);
 	}
 
 	async function confirmUninstall(cancel = false): Promise<void> {
@@ -96,35 +78,10 @@
 		await props.plugins.retire(installation, cancel, !cancel && clearOnUninstall.value);
 		if (!uninstallInstallation.value || cancel) uninstallAppId.value = '';
 	}
-
-	function definitionName(definitionId: string): string {
-		return definitionNames.value.get(definitionId) ?? t('agent.settings.apps.unknownDefinition');
-	}
 </script>
 <template>
-	<section
-		:class="embedded ? 'min-w-0' : 'ui-glass-panel overflow-hidden rounded-2xl'"
-		:aria-label="t('agent.settings.apps.title')"
-	>
-		<div
-			v-if="!embedded"
-			class="agent-settings-head ui-glass-chrome flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3.5 sm:px-5 sm:py-4"
-		>
-			<div class="flex items-center gap-2.5">
-				<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-					<i class="fa-solid fa-puzzle-piece text-sm" aria-hidden="true"></i>
-				</div>
-				<div class="flex items-center gap-1.5">
-					<h3 class="text-sm font-bold text-foreground">{{ t('agent.settings.apps.title') }}</h3>
-					<UiInfoHint :text="t('agent.settings.apps.description')" />
-				</div>
-			</div>
-			<UiBadge appearance="ghost">
-				<span class="h-1.5 w-1.5 rounded-full bg-success"></span>
-				{{ t('agent.settings.apps.enabledCount', { enabled: enabledCount, total: apps.length }) }}
-			</UiBadge>
-		</div>
-		<div :class="embedded ? 'space-y-1' : 'space-y-4 p-4 sm:p-5'">
+	<section class="min-w-0" :aria-label="t('agent.settings.apps.title')">
+		<div class="space-y-2">
 			<UiButton
 				v-if="appOperation.refreshRequired.value || appOperation.notice.value === 'failed'"
 				type="button"
@@ -132,134 +89,108 @@
 				@click="loadApps"
 				>{{ t('agent.settings.appManagement.readApps') }}</UiButton
 			>
-			<article
+			<InstalledPluginRow
 				v-for="app in apps"
 				:key="app.id"
 				:data-app-id="app.id"
-				class="border-b border-border/35 transition-colors duration-200 last:border-b-0"
-				:class="[
-					embedded ? 'px-1 py-3.5' : 'overflow-hidden rounded-xl bg-header/20 p-4 sm:p-5',
-					app.enabled ? 'hover:bg-header/20' : 'opacity-80',
-				]"
+				:name="app.name"
+				:version="app.definitionVersion"
+				icon="fa-solid fa-wand-magic-sparkles"
+				:status-label="
+					t(app.enabled ? 'agent.settings.apps.statusEnabled' : 'agent.settings.apps.statusDisabled')
+				"
+				:status-tone="app.enabled ? 'success' : 'neutral'"
 			>
-				<div :class="embedded ? '' : 'p-0'">
-					<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-						<div class="flex min-w-0 items-start gap-3.5">
-							<div
-								class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl shadow-xs"
-								:class="appVisuals(app.definitionId).iconBg"
-							>
-								<i :class="appVisuals(app.definitionId).icon" class="text-lg" aria-hidden="true"></i>
-							</div>
-							<div class="min-w-0 flex-1">
-								<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-									<span class="text-sm font-semibold tracking-tight text-foreground">{{
-										app.name
-									}}</span>
-									<span class="font-mono text-[11px] text-text-secondary"
-										>v{{ app.definitionVersion }}</span
-									>
-									<span
-										class="inline-flex items-center gap-1 text-[11px] font-medium"
-										:class="app.enabled ? 'text-success' : 'text-text-secondary'"
-									>
-										<span
-											class="h-1.5 w-1.5 rounded-full"
-											:class="app.enabled ? 'bg-success' : 'bg-text-secondary/50'"
-										></span>
-										{{
-											t(
-												app.enabled
-													? 'agent.settings.apps.statusEnabled'
-													: 'agent.settings.apps.statusDisabled',
-											)
-										}}
-									</span>
-								</div>
-								<p class="mt-1 line-clamp-1 text-xs leading-relaxed text-text-secondary">
-									{{ t(appVisuals(app.definitionId).summary) }}
-								</p>
-								<div
-									class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-text-secondary"
-								>
-									<span>{{ definitionName(app.definitionId) }}</span>
-									<span aria-hidden="true">·</span>
-									<span
-										>{{ t('agent.settings.apps.declaredCapabilities') }}
-										{{ app.capabilities.length }}</span
-									>
-									<template v-if="installationFor(app)">
-										<span aria-hidden="true">·</span>
-										<span class="text-primary">{{
-											t(
-												isOfficial(app)
-													? appVisuals(app.definitionId).badge
-													: 'agent.settings.plugins.signatureVerified',
-											)
-										}}</span>
-									</template>
-								</div>
-							</div>
-						</div>
-						<div class="agent-app-actions flex shrink-0 flex-wrap items-center justify-end gap-2">
-							<UiButton
-								appearance="soft"
-								tone="neutral"
-								type="button"
-								:aria-expanded="selectedId === app.id"
-								@click="selectedId = selectedId === app.id ? '' : app.id"
-								><i class="fa-solid fa-shield-halved text-xs text-primary" aria-hidden="true"></i>
-								<span>{{ t('agent.settings.apps.configPermissions') }}</span>
-								<i
-									class="fa-solid fa-chevron-down text-[10px] transition-transform"
-									:class="{ 'rotate-180': selectedId === app.id }"
-									aria-hidden="true"
-								></i
-							></UiButton>
-							<UiButton
-								type="button"
-								:appearance="app.enabled ? 'soft' : 'solid'"
-								:tone="app.enabled ? 'neutral' : 'primary'"
-								:disabled="blocked"
-								@click="toggle(app)"
-								><span
-									class="h-1.5 w-1.5 rounded-full"
-									:class="app.enabled ? 'bg-success' : 'bg-white/70'"
-								></span>
-								{{
-									t(
-										app.enabled
-											? 'agent.settings.appManagement.disable'
-											: 'agent.settings.appManagement.enable',
-									)
-								}}</UiButton
-							>
-							<UiButton
-								type="button"
-								appearance="soft"
-								:tone="app.enabled || !installationFor(app) ? 'neutral' : 'danger'"
-								:disabled="blocked || app.enabled || !installationFor(app)"
-								:title="
-									t(
-										!installationFor(app)
-											? 'agent.settings.apps.installationUnavailable'
-											: app.enabled
-												? 'agent.settings.apps.uninstallDisabledHint'
-												: 'agent.settings.apps.uninstall',
-									)
-								"
-								@click="uninstallAppId = app.id"
-							>
-								<i class="fa-regular fa-trash-can text-xs" aria-hidden="true"></i>
-								{{ t('agent.settings.apps.uninstall') }}
-							</UiButton>
-						</div>
-					</div>
-				</div>
+				<template #actions>
+					<UiButton
+						v-if="settingsPackageFor(app)"
+						type="button"
+						appearance="ghost"
+						density="compact"
+						class="agent-app-action--settings"
+						:aria-label="t('agent.settings.plugins.settings.open')"
+						:title="t('agent.settings.plugins.settings.open')"
+						:disabled="!active || !props.plugins.canWrite()"
+						@click="openSettings(app)"
+						><i class="fa-solid fa-sliders text-[11px]" aria-hidden="true"></i
+						><span data-installed-action-label>{{
+							t('agent.settings.plugins.settings.open')
+						}}</span></UiButton
+					>
+					<UiButton
+						type="button"
+						:appearance="selectedId === app.id ? 'soft' : 'ghost'"
+						density="compact"
+						class="agent-app-action--security"
+						:aria-label="t('agent.settings.apps.configPermissions')"
+						:title="t('agent.settings.apps.configPermissions')"
+						:aria-expanded="selectedId === app.id"
+						@click="selectedId = selectedId === app.id ? '' : app.id"
+						><i class="fa-solid fa-shield-halved text-[11px]" aria-hidden="true"></i
+						><span data-installed-action-label>{{ t('agent.settings.apps.configPermissions') }}</span
+						><i
+							data-installed-action-label
+							class="fa-solid fa-chevron-down text-[9px] transition-transform"
+							:class="{ 'rotate-180': selectedId === app.id }"
+							aria-hidden="true"
+						></i
+					></UiButton>
+					<UiButton
+						type="button"
+						appearance="ghost"
+						density="compact"
+						:tone="app.enabled ? 'warning' : 'success'"
+						:class="{ 'agent-app-action--disable': app.enabled }"
+						:aria-label="
+							t(
+								app.enabled
+									? 'agent.settings.appManagement.disable'
+									: 'agent.settings.appManagement.enable',
+							)
+						"
+						:title="
+							t(
+								app.enabled
+									? 'agent.settings.appManagement.disable'
+									: 'agent.settings.appManagement.enable',
+							)
+						"
+						:disabled="blocked"
+						@click="toggle(app)"
+						><i class="fa-solid fa-power-off text-[11px]" aria-hidden="true"></i
+						><span data-installed-action-label>{{
+							t(
+								app.enabled
+									? 'agent.settings.appManagement.disable'
+									: 'agent.settings.appManagement.enable',
+							)
+						}}</span></UiButton
+					>
+					<UiButton
+						type="button"
+						appearance="ghost"
+						tone="danger"
+						density="compact"
+						:aria-label="t('agent.settings.apps.uninstall')"
+						:title="
+							t(
+								!installationFor(app)
+									? 'agent.settings.apps.installationUnavailable'
+									: app.enabled
+										? 'agent.settings.apps.uninstallDisabledHint'
+										: 'agent.settings.apps.uninstall',
+							)
+						"
+						:disabled="blocked || app.enabled || !installationFor(app)"
+						@click="uninstallAppId = app.id"
+						><i class="fa-regular fa-trash-can text-[11px]" aria-hidden="true"></i
+						><span data-installed-action-label>{{ t('agent.settings.apps.uninstall') }}</span></UiButton
+					>
+				</template>
 				<div v-if="selectedId === app.id" class="mt-3 border-t border-border/40 pt-4">
 					<AppGovernanceEditor :key="app.id" :app="app" :active="active" />
 				</div>
-			</article>
+			</InstalledPluginRow>
 			<UiEmptyState
 				v-if="apps.length === 0"
 				icon="fa-solid fa-box-open"
@@ -344,31 +275,13 @@
 </template>
 
 <style scoped>
-	@media (max-width: 639px) {
-		.agent-app-actions {
-			display: grid;
-			width: 100%;
-			grid-template-columns: minmax(0, 1.35fr) repeat(2, minmax(0, 1fr));
-			gap: 6px;
-		}
-
-		.agent-app-actions :deep([data-ui='button']) {
-			width: 100%;
-			min-width: 0;
-			white-space: nowrap;
-			--ui-control-padding-inline: 6px;
-			--ui-control-gap: 4px;
-			--ui-control-font-size: 10px;
-		}
-
-		.agent-app-actions :deep(.fa-chevron-down) {
-			display: none;
-		}
+	.agent-app-action--settings {
+		color: var(--link-color);
 	}
-
-	@media (max-width: 359px) {
-		.agent-app-actions :deep(.fa-shield-halved) {
-			display: none;
-		}
+	.agent-app-action--security {
+		color: color-mix(in srgb, var(--status-info-color) 70%, var(--text-color));
+	}
+	.agent-app-action--disable {
+		color: color-mix(in srgb, var(--status-warning-color) 45%, var(--text-color));
 	}
 </style>

@@ -39,10 +39,17 @@ export function toPluginInstanceSettings(value: PluginInstanceSource): AgentPlug
 		instance: toPluginInstance(value.instance),
 		packageRevision: value.packageRevision,
 		configuration: toPluginConfiguration(value.configuration),
-		connectionKinds: [
-			...(value.manifest.capabilities.includes('service.transport.http') ? ['http' as const] : []),
-			...(value.manifest.capabilities.includes('service.transport.process') ? ['remoteProcess' as const] : []),
-		],
+		connectionKinds:
+			value.manifest.contributions.app !== null &&
+			!value.manifest.contributions.services &&
+			!value.manifest.contributions.tools
+				? []
+				: [
+						...(value.manifest.capabilities.includes('service.transport.http') ? ['http' as const] : []),
+						...(value.manifest.capabilities.includes('service.transport.process')
+							? ['remoteProcess' as const]
+							: []),
+					],
 		settings:
 			settings === null
 				? null

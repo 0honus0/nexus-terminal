@@ -135,7 +135,7 @@ test('frontend target owns a full Custom App Surface and connects through the is
 
 	const appsSection = page.getByRole('region', { name: 'Agent apps', exact: true });
 	await selectAgentExtensionsSection(page, 'market');
-	await expect(section.getByRole('button', { name: 'Refresh repositories', exact: true })).toBeVisible();
+	await expect(section.getByRole('button', { name: 'Manage repositories', exact: true })).toBeVisible();
 	await expect(section.locator('input[type="file"]')).toHaveCount(0);
 	await expect(section.getByRole('button', { name: 'Choose signed package', exact: true })).toHaveCount(0);
 	for (const installed of [custom, agent, fullstack]) {
@@ -147,11 +147,23 @@ test('frontend target owns a full Custom App Surface and connects through the is
 		await expect(card.getByRole('button', { name: 'Configure Policies', exact: true })).toBeVisible();
 	}
 
+	await expect(page.getByRole('heading', { name: 'Installed Agents', exact: true })).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Installed plugins', exact: true })).toBeVisible();
+	const policyCard = appsSection.locator('article[data-app-id="' + agent.appId + '"]');
+	const policyToggle = policyCard.getByRole('button', { name: 'Configure Policies', exact: true });
+	await policyToggle.click();
+	await expect(policyToggle).toHaveAttribute('aria-expanded', 'true');
+	await expect(policyCard.locator('section').first()).toBeVisible();
+	await policyToggle.click();
+	await expect(policyToggle).toHaveAttribute('aria-expanded', 'false');
+
 	await captureFunctionalScreenshot(page, 'agent-plugins-multiple-installed.png', {
 		viewport: { width: 1440, height: 900 },
 	});
 	await selectAgentExtensionsSection(page, 'market');
 	await expect(section.getByText('Runtime observations', { exact: true })).toHaveCount(0);
+	await expect(section.getByRole('button', { name: 'Settings', exact: true })).toHaveCount(0);
+	await expect(section.getByRole('heading', { name: 'Installed and retained data', exact: true })).toHaveCount(0);
 	await page.goto('/settings?tab=data');
 	const maintenance = page.locator('details').filter({
 		has: page.locator('summary').filter({ hasText: /^Diagnostics and recovery \(advanced\)$/ }),

@@ -14,13 +14,6 @@ export interface ManagedApp {
 	updatedAt: number;
 }
 
-export interface AppDefinition {
-	id: string;
-	version: string;
-	name: string;
-	capabilities: AgentCapability[];
-}
-
 export type AppGrantScope =
 	{ kind: 'global' } | { kind: 'targets'; ssh: null | { mode: 'all' } | { mode: 'ids'; ids: string[] } };
 

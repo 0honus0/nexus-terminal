@@ -16,6 +16,7 @@ import { agentRecord, readAgentErrorResponse } from '../../../../../packages/sha
 import { expect, test } from '../../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../../support/auth';
 import { enablePluginApp, repositoryUrl } from '../../../support/agent-host/plugin-fixture';
+import { selectUiOption } from '../../../support/ui-select';
 import { expectReadableCatalogText } from '../../../support/catalog-colors';
 
 test.use({ e2eServices: ['plugins', 'provider'] });
@@ -77,12 +78,14 @@ test('official plugin source cannot be overridden by a configured third-party re
 	await selectAgentExtensionsSection(page, 'market');
 	expect(new URL((await officialRead).url()).search).toBe('');
 	const section = page.getByRole('region', { name: 'Plugin management', exact: true });
-	const copySource = section.getByRole('button', { name: 'Third-party repository · Copy', exact: true });
+	await section.getByRole('button', { name: 'Manage repositories', exact: true }).click();
+	const repositoryDialog = page.getByRole('dialog', { name: 'Manage repositories', exact: true });
+	const copySource = repositoryDialog.getByRole('button', { name: 'Third-party repository · Copy', exact: true });
 	await expect(copySource).toBeVisible();
 	await expect(copySource).toHaveAttribute('title', repositoryUrl);
 	await expect(section.getByRole('button', { name: 'Read official catalog', exact: true })).toHaveCount(0);
-	const localGroup = section
-		.locator('.plugin-market__group-heading')
+	const localGroup = repositoryDialog
+		.locator('.plugin-market__source')
 		.filter({ has: page.getByTitle(repositoryUrl, { exact: true }) });
 	await expectReadableCatalogText(localGroup.locator('.ui-catalog-group-label'));
 	await expectReadableCatalogText(localGroup.locator('.ui-catalog-type-badge').first());
@@ -90,11 +93,9 @@ test('official plugin source cannot be overridden by a configured third-party re
 	await expect(localGroup.locator('.fa-server')).toBeVisible();
 	await copySource.click();
 	await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(repositoryUrl);
-	await expect(localGroup).toHaveAttribute('aria-expanded', 'true');
-	await expect(localGroup.getByRole('button', { name: 'Remove', exact: true })).toBeVisible();
+	await expect(localGroup.getByRole('button', { name: /^Remove · / })).toBeVisible();
 	const unavailableUrl = new URL('/missing-repository.json', repositoryUrl).href;
-	await section.getByRole('button', { name: 'Add repository', exact: true }).click();
-	const addForm = section.getByRole('form', { name: 'Add repository', exact: true });
+	const addForm = repositoryDialog.getByRole('form', { name: 'Add repository', exact: true });
 	await addForm.getByRole('textbox').fill(unavailableUrl);
 	const unavailableRead = page.waitForResponse(
 		(response) =>
@@ -102,14 +103,14 @@ test('official plugin source cannot be overridden by a configured third-party re
 			new URL(response.url()).searchParams.get('repositoryUrl') === unavailableUrl,
 	);
 	await addForm.getByRole('button', { name: 'Add repository', exact: true }).click();
-	await expect(addForm).toHaveCount(0);
+	await expect(addForm.getByRole('textbox')).toHaveValue('');
 	expect((await unavailableRead).ok()).toBe(false);
 	await expect(section.getByText(unavailableUrl, { exact: false })).toBeVisible();
-	const unavailableGroup = section
-		.locator('.plugin-market__group-heading')
+	const unavailableGroup = repositoryDialog
+		.locator('.plugin-market__source')
 		.filter({ has: page.getByTitle(unavailableUrl, { exact: true }) });
 	await expect(unavailableGroup).toBeVisible();
-	await unavailableGroup.getByRole('button', { name: 'Remove', exact: true }).click();
+	await unavailableGroup.getByRole('button', { name: /^Remove · / }).click();
 	await expect(unavailableGroup).toHaveCount(0);
 	await expect(localGroup).toBeVisible();
 	const saved = await requestAgentJson(
@@ -118,6 +119,8 @@ test('official plugin source cannot be overridden by a configured third-party re
 		readAgentPluginRepositorySettings,
 	);
 	expect(saved.repositories).toEqual([{ url: repositoryUrl }]);
+	await repositoryDialog.getByRole('button', { name: 'Close', exact: true }).click();
+	await expect(repositoryDialog).toHaveCount(0);
 	await section.getByRole('button', { name: /^Trusted publishers/ }).click();
 	await expect(section.getByRole('textbox', { name: 'Publisher label', exact: true })).toHaveCount(0);
 	const addPublisher = section.getByRole('button', { name: 'Add publisher', exact: true });
@@ -204,3 +207,47 @@ for (const [locale, width, groupLabel, marketLabel, name, description] of [
 		await expect(market.getByText('E2E-only AppIntent receiver fixture.', { exact: true })).toBeVisible();
 	});
 }
+
+test('same package is merged across sources and version selection preserves the exact repository', async ({
+	page,
+	request,
+}) => {
+	await loginAsInitialAdmin(request);
+	await loginAsInitialAdmin(page.request);
+	await setUiLanguage(page.request);
+	const catalog = await configureTestPluginRepository(request);
+	const entry = catalog.packages.find((item) => item.packageId === 'nexus.custom-surface');
+	if (!entry) throw new Error('Missing controlled catalog entry');
+	const officialUrl = 'https://github.com/0honus0/nexus-agent-plugins/releases/latest/download/catalog.json';
+	await page.route('**/api/v1/agent/plugins/official/catalog', (route) =>
+		route.fulfill({ json: { ...catalog, repositoryUrl: officialUrl, packages: [entry] } }),
+	);
+	await page.goto('/settings?tab=agent');
+	await selectAgentExtensionsSection(page, 'market');
+	const market = page.locator('.plugin-market');
+	const card = market
+		.locator('.plugin-market__entry')
+		.filter({ has: page.getByText(entry.packageId, { exact: true }) });
+	await expect(card).toHaveCount(1);
+	const selector = card.getByRole('combobox', { name: 'Choose a version', exact: true });
+	const officialKey = JSON.stringify([null, entry.publisherKeyId, entry.packageId, entry.version, entry.sha256]);
+	const remoteKey = JSON.stringify([
+		repositoryUrl,
+		entry.publisherKeyId,
+		entry.packageId,
+		entry.version,
+		entry.sha256,
+	]);
+	await expect(selector).toHaveAttribute('data-value', officialKey);
+	await selector.click();
+	await expect(page.getByRole('option', { name: /Official repository/ })).toBeVisible();
+	await expect(page.getByRole('option', { name: /Third-party repository/ })).toBeVisible();
+	await page.getByRole('option', { name: /Third-party repository/ }).click();
+	await expect(selector).toHaveAttribute('data-value', remoteKey);
+	await expect(card).toHaveCount(1);
+	await market.getByRole('searchbox').fill(new URL(repositoryUrl).host);
+	await expect(card).toBeVisible();
+	await selectUiOption(selector, officialKey);
+	await expect(selector).toHaveAttribute('data-value', officialKey);
+	await expect(card).toHaveCount(1);
+});

@@ -60,7 +60,7 @@ Shared `agent/plugins` 持 manifest4、SDK4、Registry/Binding/Surface、配置�
 
 安装只保存实际包事实；组合生成独立 App 和逻辑实例，选择与授权分离。安装计划及下载进度不持久化，失败重读实际事实再准备。包更新先完整校验候选，再关闭受影响准入、排空并发布新代；UI-only 更新只替换对应 Surface，不能取消无关 Run。
 
-`PluginInstanceService/Model` 是人工与 Agent 配置共同 owner；schema、默认值、说明及 Agent 可改路径来自签名资产，停用/未配置/启动失败时仍可读取。写入绑定 schema/包/旧 revision 与稳定 operation key，同事务 CAS 及回执；配置提交成功与资源生效分开。SecretBox 与 `PluginConnectionService` 单独管理凭据、HTTP endpoint、SSH target/argv，不能藏入普通业务 JSON。
+`PluginInstanceService/Model` 是人工与 Agent 配置共同 owner；schema、默认值、说明及 Agent 可改路径来自签名资产，停用/未配置/启动失败时仍可读取。写入绑定 schema/包/旧 revision 与稳定 operation key，同事务 CAS 及回执；配置提交成功与资源生效分开。SecretBox 与 `PluginConnectionService` 单独管理凭据、HTTP endpoint、SSH target/argv，不能藏入普通业务 JSON。设置接口不从仅提供 App 的传输能力上限推导连接表单；兼具服务贡献的 App 以及直接使用传输的工具/服务仍按声明能力投影 connectionKinds，运行授权不受呈现判断影响。
 
 已安装插件设置可管理真实 App/实例。MCP/ACP 表单及 Browser/CDP 目标设置由各插件交付；模型 Provider、执行预算、权限和可信 I/O 校验仍由宿主管理。
 
@@ -153,7 +153,7 @@ SDK4 的 Run 信息、模型请求、插件数据与配置、受管原生调用�
 2. **子功能与目录**：Host `settings` 保留管理入口与通用插件设置容器，移除独立集中协议页；`nexus.tools.agent` 持配置 schema、默认值、设置 Surface 和召回算法。
 3. **依赖方向**：插件通过 SDK 配置能力读取自身实例及受管记忆，不导入 Host execution 政策；Host memory 不依赖 ExecutionService。
 4. **类型与转换**：执行/治理协议不再含召回字段；memory.retrieve 的 maxItems 表示本次请求数、maxBytes 表示真实编码帧容量。插件持唯一业务偏好，Host 逐项核验来源与版本，不静默删除选项。
-5. **入口与安装**：已安装插件行的“设置”选择 App/实例，MCP/ACP 不另设宿主页；Agent 工具设置沿公开 Settings Surface、主题和三语 locale 环境。
+5. **入口与安装**：Agent App 页上部应用行和下部已安装扩展插件行的“设置”选择 App/实例；从应用行打开默认选择该App，安全策略仍原位展开，MCP/ACP 不另设宿主页；Agent 工具设置沿公开 Settings Surface、主题和三语 locale 环境。
 6. **数据、事务与并发**：迁移65在同一事务转换官方未配置实例的有效偏好，并清理全局、App覆盖、冻结任务和硬限确认的旧字段；已编辑实例及第三方同名包不覆盖，迁移1–64不变。
 7. **生命周期与失败**：设置沿原 schema/CAS/幂等和实例代失效；召回大结果按真实编码帧分批，逐批复核同一候选摘要与准确引用，任一批失败不交付部分汇总，取消停止后续读取。
 8. **当前能力与验收**：实现与最终证据见[历史D34](../testing/HISTORY.md#d34agent设置归属复审2026-11-08)及当前测试基线；正式回归覆盖迁移/回滚、单帧以上完整召回、插件实例预算与移动设置入口。
@@ -172,7 +172,7 @@ Registry 在同一次发布中按完整 schema 文本复用技术编译结果，
 2. **子功能与目录**：Shared `plugins/onboarding{,-codec}`；Backend `plugin-onboarding-types/rules` 和 RepositoryService；HTTP onboarding mapper；Frontend onboarding API/model/composable、Modal 和共用 PluginCapabilities。
 3. **依赖方向**：目录只作发现，签名包确认声明；Service 复用原 PluginService、Model、SQLite Adapter，纯规则仅消费应用事实，不增加 DI、安装工作流或包名策略。
 4. **类型与转换**：可选 requiredOnEnable 是新 opt-in 元数据；缺省表示不要求，非旧版本兼容转换。manifest、目录、存储表示、应用、HTTP 与前端分别白名单映射。安装命令携带真实 ExactRef/CAS，展示组件只接收能力 ID 与受控编辑事件。
-5. **入口与安装**：设置总开关调用 POST onboarding/prepare 与 install；逐一准备全部可信稳定必需包，已有包复用。UI 按 contract/API 匹配，保留已有相容选择，多个候选无唯一解时拒绝。
+5. **入口与安装**：设置总开关调用 POST onboarding/prepare 与 install；按包ID合并官方及可信来源的稳定必需包；优先当前已安装发布者，再优先兼容官方来源，其他来源按配置顺序选取，同来源内取最新兼容版本。准备与确认使用同一来源政策，原准确引用、信任及CAS继续生效；同名不同发布者不再直接拒绝启动，已有包复用。UI 按 contract/API 匹配，保留已有相容选择，多个候选无唯一解时拒绝。
 6. **数据、事务与并发**：无新表、迁移或完成标记；声明在不可变签名版本中，目录输出必须匹配。首个安装前验证全批和组合，安装期间仅用本批已确认修订替代自身改变的前置条件；包升级事务交付绑定before/after修订回执，经Model白名单转换，批次只在before匹配原确认版本时推进CAS。最终组合仍核对准确包集合及已确认修订，不把并发选择变化当成本批写入。包/组合与总开关为独立提交，不能声称原子回滚。
 7. **生命周期与失败**：复用仓库任务 lane、停机 signal 与 pending 追踪；新 App 按声明授予执行能力，已有 App 保留选择。失败不继续启用，未知结果重新读取事实，页面失效不发布晚结果。权限折叠不改变草稿/保存 CAS 或失效授权的撤销入口。
 8. **当前能力与验收**：按 USAGE 操作；两仓 SDK、签包元数据、协议及组件回归和指定 CDP 证据归 PLAN/testing。正式目录使用新声明须随插件发布交付；本体与插件完整远程门禁及正式签名发布状态见测试入口。

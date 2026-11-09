@@ -1,8 +1,11 @@
 <script setup lang="ts">
-	import { defineAsyncComponent, reactive, ref } from 'vue';
+	import { computed, defineAsyncComponent, reactive, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import type { useAppManagement } from '../composables/use-app-management';
 	import type { usePluginManagement } from '../plugins/composables/use-plugin-management';
+	import InstalledPluginsSettings from '../plugins/components/InstalledPluginsSettings.vue';
+	import PluginInstanceSettings from '../plugins/components/PluginInstanceSettings.vue';
+	import type { PluginPackageInstallation } from '../plugins/model/plugin-types';
 	import AppManagementSettings from './AppManagementSettings.vue';
 
 	type ExtensionSection = 'apps' | 'market' | 'budget';
@@ -12,7 +15,7 @@
 		() => import('../plugins/components/PluginManagementSettings.vue'),
 	);
 
-	defineProps<{
+	const props = defineProps<{
 		active: boolean;
 		model: ReturnType<typeof useAppManagement>;
 		plugins: ReturnType<typeof usePluginManagement>;
@@ -27,6 +30,28 @@
 		{ id: 'market', icon: 'fa-solid fa-store', label: 'agent.settings.extensionsNav.market' },
 		{ id: 'budget', icon: 'fa-solid fa-sliders', label: 'agent.settings.extensionsNav.budget' },
 	] as const;
+
+	const settingsPackage = ref<PluginPackageInstallation | null>(null);
+	const settingsAppId = ref('');
+	const settingsName = computed(
+		() =>
+			props.plugins.versions.value.find((version) => version.packageHash === settingsPackage.value?.packageHash)
+				?.manifest.displayName ??
+			settingsPackage.value?.packageId ??
+			'',
+	);
+
+	function openSettings(installation: PluginPackageInstallation, appId = ''): void {
+		settingsAppId.value = appId;
+		settingsPackage.value = installation;
+	}
+
+	watch(
+		() => props.active && activeSection.value === 'apps',
+		(active) => {
+			if (!active) settingsPackage.value = null;
+		},
+	);
 
 	function selectSection(section: ExtensionSection): void {
 		activeSection.value = section;
@@ -72,12 +97,23 @@
 			</nav>
 		</header>
 
-		<div v-if="visitedSections.has('apps')" v-show="activeSection === 'apps'" class="p-3 sm:p-4">
-			<AppManagementSettings
-				embedded
-				:model="model"
-				:plugins="plugins"
+		<div v-if="visitedSections.has('apps')" v-show="activeSection === 'apps'" class="space-y-6 p-3 sm:p-4">
+			<div class="min-w-0 space-y-2">
+				<h3 class="flex items-center gap-2 text-sm font-semibold text-foreground">
+					<i class="fa-solid fa-wand-magic-sparkles text-xs text-primary" aria-hidden="true"></i
+					>{{ t('agent.settings.plugins.installedAgents') }}
+				</h3>
+				<AppManagementSettings
+					:model="model"
+					:plugins="plugins"
+					:active="active && activeSection === 'apps'"
+					@settings="openSettings"
+				/>
+			</div>
+			<InstalledPluginsSettings
+				:model="plugins"
 				:active="active && activeSection === 'apps'"
+				@settings="openSettings"
 			/>
 		</div>
 		<div v-if="visitedSections.has('market')" v-show="activeSection === 'market'" class="p-3 sm:p-4">
@@ -97,5 +133,14 @@
 				:active="active && activeSection === 'budget'"
 			/>
 		</div>
+		<PluginInstanceSettings
+			v-if="active && activeSection === 'apps' && settingsPackage"
+			:key="settingsPackage.packageHash + settingsAppId"
+			:installation="settingsPackage"
+			:name="settingsName"
+			:apps="model.apps.value"
+			:initial-app-id="settingsAppId"
+			@close="settingsPackage = null"
+		/>
 	</section>
 </template>

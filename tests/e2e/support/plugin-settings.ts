@@ -51,16 +51,13 @@ export async function pluginConnection(request: APIRequestContext, appId: string
 
 export async function openProtocolSettings(page: Page, appId: string, instanceName: string) {
 	await page.goto('/settings?tab=agent');
-	await selectAgentExtensionsSection(page, 'market');
+	await selectAgentExtensionsSection(page, 'apps');
 	const instance = (await pluginInstances(page.request, appId)).find((entry) => entry.name === instanceName);
 	if (!instance) throw new Error('Plugin settings instance missing: ' + instanceName);
 	const names: Record<string, string> = { 'nexus.services.mcp': 'MCP Service', 'nexus.services.acp': 'ACP Service' };
 	const packageName = names[instance.packageId];
 	if (!packageName) throw new Error('Unknown protocol package: ' + instance.packageId);
-	const row = page
-		.locator('div.border-b')
-		.filter({ has: page.getByText(packageName, { exact: true }) })
-		.filter({ has: page.getByRole('button', { name: 'Settings', exact: true }) });
+	const row = page.getByRole('article', { name: packageName, exact: true });
 	await row.getByRole('button', { name: 'Settings', exact: true }).click();
 	const dialog = page.getByRole('dialog', { name: 'Plugin settings', exact: true });
 	const appSelector = dialog.getByRole('combobox', { name: 'App using this plugin', exact: true });

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-	import { prerelease, compare } from 'semver';
 	import { nextTick, computed, onActivated, onMounted, ref, toRaw, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import {
@@ -10,6 +9,7 @@
 		UiEmptyState,
 		UiInlineNotice,
 		UiInput,
+		UiModal,
 		UiPopover,
 		UiSearchInput,
 		UiSelect,
@@ -30,16 +30,13 @@
 	import {
 		isPluginUpgrade,
 		localizeCatalogEntry,
-		recommendedCatalogEntries,
+		mergePluginCatalogs,
 		satisfiesAppRequirements,
 	} from '../model/plugin-market-rules';
+	import { installedPluginRequirements, isPluginPackageReferenced } from '../model/plugin-package-rules';
 	import { AgentManagementFailure } from '../../model/management-failure';
 	import type { ManagedApp } from '../../model/app-management-types';
-
-	interface CatalogSource {
-		source: string | null;
-		catalog: PluginCatalog;
-	}
+	import type { PluginCatalogSource, PluginCatalogOption } from '../model/plugin-market-types';
 
 	const props = defineProps<{
 		blocked: boolean;
@@ -60,22 +57,18 @@
 		officialPublishers: [keyIds: string[]];
 		clearData: [installation: PluginInstallation];
 		retirePackage: [installation: PluginPackageInstallation, clearData: boolean];
-		cancelPackageUpdate: [installation: PluginPackageInstallation];
-		settings: [installation: PluginPackageInstallation];
 	}>();
 	const { t, locale } = useI18n();
 
 	const catalogText = (entry: PluginCatalogEntry) => localizeCatalogEntry(entry, locale.value);
 
 	const feedback = useOperationFeedback('agent.settings.plugin-market');
-	const collapsedSources = ref(new Set<string>());
 	const copiedSourceUrl = ref('');
 	const repositories = ref<PluginRepositories | null>(null);
 	const repositoryUrl = ref('');
-	const addingRepository = ref(false);
-	const repositoryInput = ref<InstanceType<typeof UiInput> | null>(null);
+	const repositoryManagerOpen = ref(false);
 	const searchQuery = ref('');
-	const catalogs = ref<CatalogSource[]>([]);
+	const catalogs = ref<PluginCatalogSource[]>([]);
 	const catalogLoading = ref(false);
 	let catalogLoadToken: symbol | null = null;
 	const selectedVersions = ref(new Map<string, string>());
@@ -94,14 +87,7 @@
 				]),
 			),
 	);
-	const appRequirements = computed(() => {
-		const installedHashes = new Set(
-			props.packageInstallations.filter((item) => item.status !== 'removed').map((item) => item.packageHash),
-		);
-		return props.versions
-			.filter((version) => installedHashes.has(version.packageHash))
-			.flatMap((version) => version.manifest.dependencies);
-	});
+	const appRequirements = computed(() => installedPluginRequirements(props.packageInstallations, props.versions));
 
 	const packageRemoval = ref<{ packageId: string; revision: number } | null>(null);
 	const clearPackageData = ref(false);
@@ -114,20 +100,24 @@
 				)
 			: undefined;
 	});
-	const managedPackages = computed(() => {
+	const retainedPackagesOutsideCatalog = computed(() => {
 		const versions = new Map(props.versions.map((version) => [version.packageHash, version]));
 		const query = searchQuery.value.trim().toLowerCase();
 		return props.packageInstallations
-			.filter((item) => item.status !== 'removed' || retainedPackages.value.has(item.packageId))
+			.filter(
+				(item) =>
+					item.status === 'removed' &&
+					retainedPackages.value.has(item.packageId) &&
+					!catalogs.value.some(({ catalog }) =>
+						catalog.packages.some(
+							(entry) =>
+								entry.definitionId === item.packageId && entry.publisherKeyId === item.publisherKeyId,
+						),
+					),
+			)
 			.map((installation) => ({
 				installation,
 				name: versions.get(installation.packageHash)?.manifest.displayName ?? installation.packageId,
-				settings:
-					versions.get(installation.packageHash)?.publisherKeyId === installation.publisherKeyId &&
-					versions.get(installation.packageHash)?.manifest.id === installation.packageId &&
-					versions.get(installation.packageHash)?.manifest.version === installation.version &&
-					versions.get(installation.packageHash)?.manifest.settings !== null &&
-					versions.get(installation.packageHash)?.manifest.settings !== undefined,
 			}))
 			.filter(
 				(item) =>
@@ -191,7 +181,7 @@
 		(reason) => {
 			repositories.value = null;
 			repositoryUrl.value = '';
-			addingRepository.value = false;
+			repositoryManagerOpen.value = false;
 			searchQuery.value = '';
 			catalogs.value = [];
 			sourceErrors.value = [];
@@ -210,100 +200,77 @@
 		() => props.blocked || operation.busy.value || operation.refreshRequired.value || unknown.value,
 	);
 
-	const totalPluginCount = computed(() =>
-		catalogs.value.reduce(
-			(total, item) => total + recommendedCatalogEntries(item.catalog.packages, appRequirements.value).length,
-			0,
-		),
+	const mergedPlugins = computed(() =>
+		mergePluginCatalogs(catalogs.value, props.packageInstallations, appRequirements.value, selectedVersions.value),
 	);
-	const filteredCatalogGroups = computed(() => {
+	const totalPluginCount = computed(() => mergedPlugins.value.length);
+	const filteredPlugins = computed(() => {
 		const query = searchQuery.value.trim().toLowerCase();
-		const catalogsBySource = new Map(catalogs.value.map((item) => [item.source, item.catalog]));
-		const official = catalogsBySource.get(null);
-		const sources = [
-			...(official ? [{ source: null, sourceUrl: official.repositoryUrl, catalog: official }] : []),
-			...(repositories.value?.urls ?? []).map((url) => ({
-				source: url,
-				sourceUrl: url,
-				catalog: catalogsBySource.get(url) ?? null,
-			})),
-		];
-		return sources
-			.map(({ source, sourceUrl, catalog }) => {
-				const address = new URL(sourceUrl);
-				const segments = address.pathname.split('/').filter(Boolean);
-				const github = address.hostname === 'github.com' || address.hostname === 'raw.githubusercontent.com';
-				const owner = github ? (segments[0] ?? address.hostname) : address.host;
-				const matchesSource = [owner, sourceUrl].some((value) => value.toLowerCase().includes(query));
-				return {
-					key: source ?? 'official',
-					owner,
-					github,
-					official: source === null,
-					sourceUrl,
-					removalUrl: source,
-					loaded: catalog !== null,
-					matchesSource,
-					packages: catalog
-						? recommendedCatalogEntries(catalog.packages, appRequirements.value)
-								.map(
-									(candidate) =>
-										catalog.packages.find(
-											(entry) =>
-												entry.definitionId === candidate.definitionId &&
-												entry.publisherKeyId === candidate.publisherKeyId &&
-												entry.version ===
-													selectedVersions.value.get(versionKey(source, candidate)),
-										) ?? candidate,
-								)
-								.filter(
-									(entry) =>
-										!query ||
-										matchesSource ||
-										[
-											catalogText(entry).displayName,
-											entry.definitionId,
-											catalogText(entry).description,
-										].some((value) => value.toLowerCase().includes(query)),
-								)
-								.map((entry) => ({ package: entry, catalog, source, official: source === null }))
-						: [],
-				};
-			})
-			.filter((group) => group.packages.length > 0 || !query || group.matchesSource);
+		return mergedPlugins.value.filter(
+			(group) =>
+				!query ||
+				group.options.some(({ entry, source, catalog }) =>
+					[
+						catalogText(entry).displayName,
+						entry.definitionId,
+						catalogText(entry).description,
+						source ?? catalog.repositoryUrl,
+					].some((value) => value.toLowerCase().includes(query)),
+				),
+		);
+	});
+	const catalogSources = computed(() => {
+		const snapshots = new Map(catalogs.value.map((item) => [item.source, item.catalog]));
+		const official = snapshots.get(null);
+		return [
+			...(official ? [{ source: null, sourceUrl: official.repositoryUrl }] : []),
+			...(repositories.value?.urls ?? []).map((url) => ({ source: url, sourceUrl: url })),
+		].map(({ source, sourceUrl }) => {
+			const address = new URL(sourceUrl);
+			const github = address.hostname === 'github.com' || address.hostname === 'raw.githubusercontent.com';
+			return {
+				key: source ?? 'official',
+				owner: github ? (address.pathname.split('/').filter(Boolean)[0] ?? address.host) : address.host,
+				github,
+				official: source === null,
+				sourceUrl,
+				removalUrl: source,
+			};
+		});
 	});
 
-	function versionKey(source: string | null, entry: PluginCatalogEntry): string {
-		return JSON.stringify([source, entry.publisherKeyId, entry.definitionId]);
-	}
-
-	function versionOptions(catalog: PluginCatalog, entry: PluginCatalogEntry): PluginCatalogEntry[] {
-		return catalog.packages
-			.filter(
-				(candidate) =>
-					candidate.definitionId === entry.definitionId && candidate.publisherKeyId === entry.publisherKeyId,
-			)
-			.toSorted((left, right) => compare(right.version, left.version));
-	}
-
-	function selectVersion(source: string | null, entry: PluginCatalogEntry, version: string | number | null): void {
-		if (typeof version === 'string') selectedVersions.value.set(versionKey(source, entry), version);
+	function selectVersion(id: string, value: string | number | null): void {
+		if (typeof value === 'string') selectedVersions.value.set(id, value);
 	}
 
 	function needsVersionChoice(source: string | null, entry: PluginCatalogEntry): boolean {
+		const group = mergedPlugins.value.find((item) => item.id === entry.definitionId);
+		return group?.selected.source === source && group.needsVersionChoice;
+	}
+
+	function sourceLabel(option: PluginCatalogOption): string {
+		const url = new URL(option.source ?? option.catalog.repositoryUrl);
+		const owner =
+			url.hostname === 'github.com' || url.hostname === 'raw.githubusercontent.com'
+				? url.pathname.split('/').filter(Boolean).slice(0, 2).join('/') || url.host
+				: url.host + url.pathname + url.search;
 		return (
-			prerelease(entry.version) !== null &&
-			selectedVersions.value.get(versionKey(source, entry)) !== entry.version
+			t(
+				option.source === null
+					? 'agent.settings.plugins.officialRepository'
+					: 'agent.settings.plugins.thirdPartyRepository',
+			) +
+			' · ' +
+			owner
 		);
 	}
 
-	function isGroupExpanded(key: string): boolean {
-		return !collapsedSources.value.has(key);
-	}
-
-	function toggleGroup(key: string): void {
-		if (collapsedSources.value.has(key)) collapsedSources.value.delete(key);
-		else collapsedSources.value.add(key);
+	function sourceLabelForCopy(official: boolean, url: string): string {
+		return (
+			t(official ? 'agent.settings.plugins.officialRepository' : 'agent.settings.plugins.thirdPartyRepository') +
+			' · ' +
+			(copiedSourceUrl.value === url ? t('common.copied') : t('agent.settings.plugins.copy'))
+		);
 	}
 
 	async function copyCatalogUrl(url: string): Promise<void> {
@@ -362,10 +329,27 @@
 		);
 	}
 
+	function retainedPackageFor(entry: PluginCatalogEntry): PluginPackageInstallation | undefined {
+		const installation = installationsByDefinition.value.get(
+			JSON.stringify([entry.publisherKeyId, entry.definitionId]),
+		);
+		return installation?.status === 'removed' && retainedPackages.value.has(installation.packageId)
+			? installation
+			: undefined;
+	}
+
+	function hasRetainedData(entry: PluginCatalogEntry): boolean {
+		return retainedFor(entry) !== undefined || retainedPackageFor(entry) !== undefined;
+	}
+
 	function requestClearData(entry: PluginCatalogEntry): void {
-		const installation = retainedFor(entry);
-		if (locked.value || !installation) return;
-		requestClearRetained(installation, catalogText(entry).displayName);
+		if (locked.value) return;
+		const app = retainedFor(entry);
+		if (app) requestClearRetained(app, catalogText(entry).displayName);
+		else {
+			const installation = retainedPackageFor(entry);
+			if (installation) requestPackageRemoval(installation);
+		}
 	}
 
 	function requestClearRetained(installation: PluginInstallation, name: string): void {
@@ -379,19 +363,7 @@
 	}
 
 	function packageReferenced(installation: PluginPackageInstallation): boolean {
-		return (
-			props.installations.some(
-				(item) =>
-					item.status !== 'removed' &&
-					item.definitionId === installation.packageId &&
-					item.publisherKeyId === installation.publisherKeyId,
-			) ||
-			appRequirements.value.some(
-				(requirement) =>
-					requirement.packageId === installation.packageId &&
-					requirement.publisherKeyId === installation.publisherKeyId,
-			)
-		);
+		return isPluginPackageReferenced(installation, props.installations, appRequirements.value);
 	}
 
 	function requestPackageRemoval(installation: PluginPackageInstallation): void {
@@ -446,7 +418,7 @@
 	function catalogEntryAction(entry: PluginCatalogEntry): string {
 		const installation = installedFor(entry);
 		if (hasNewerInstalled(entry)) return t('agent.settings.plugins.installedNewer');
-		if (retainedFor(entry)) return t('agent.settings.plugins.reinstall');
+		if (hasRetainedData(entry)) return t('agent.settings.plugins.reinstall');
 		if (!installation) return t('agent.settings.plugins.prepareRemote');
 		if (isPluginUpgrade(installation.version, entry.version)) return t('agent.settings.plugins.prepareUpgrade');
 		return t('agent.settings.plugins.reverifyPackage');
@@ -530,7 +502,6 @@
 			(value) => {
 				repositories.value = value;
 				repositoryUrl.value = '';
-				addingRepository.value = false;
 			},
 			{
 				write: true,
@@ -545,13 +516,10 @@
 		if (operation.notice.value === 'saved') await load();
 	}
 
-	async function toggleRepositoryForm(): Promise<void> {
-		if (locked.value) return;
-		addingRepository.value = !addingRepository.value;
-		if (addingRepository.value) {
-			await nextTick();
-			if (addingRepository.value && props.active) repositoryInput.value?.focus();
-		} else repositoryUrl.value = '';
+	function closeRepositoryManager(): void {
+		if (operation.busy.value) return;
+		repositoryManagerOpen.value = false;
+		repositoryUrl.value = '';
 	}
 
 	async function addRepository(): Promise<void> {
@@ -620,154 +588,114 @@
 					type="button"
 					appearance="ghost"
 					density="compact"
-					:disabled="locked"
-					:aria-expanded="addingRepository"
-					:aria-label="addingRepository ? t('common.cancel') : t('agent.settings.plugins.addRepository')"
-					:title="addingRepository ? t('common.cancel') : t('agent.settings.plugins.addRepository')"
-					@click="toggleRepositoryForm"
+					:aria-label="t('agent.settings.plugins.manageRepositories')"
+					:title="t('agent.settings.plugins.manageRepositories')"
+					@click="repositoryManagerOpen = true"
+					><i class="fa-solid fa-database" aria-hidden="true"></i
+					><span class="plugin-market__add-label">{{
+						t('agent.settings.plugins.manageRepositories')
+					}}</span></UiButton
 				>
-					<i :class="addingRepository ? 'fa-solid fa-xmark' : 'fa-solid fa-plus'" aria-hidden="true"></i>
-					<span class="plugin-market__add-label">{{
-						addingRepository ? t('common.cancel') : t('agent.settings.plugins.addRepository')
-					}}</span>
-				</UiButton>
-				<UiButton
-					type="button"
-					appearance="ghost"
-					tone="neutral"
-					density="compact"
-					:loading="operation.busy.value || catalogLoading"
-					:disabled="locked"
-					:aria-label="t('agent.settings.plugins.refreshRemote')"
-					:title="t('agent.settings.plugins.refreshRemote')"
-					@click="reload"
-				>
-					<i
-						v-if="!operation.busy.value && !catalogLoading"
-						class="fa-solid fa-arrows-rotate text-xs"
-						aria-hidden="true"
-					></i>
-					<span class="plugin-market__refresh-label">{{ t('agent.settings.plugins.refreshRemote') }}</span>
-				</UiButton>
 			</div>
-
-			<form
-				v-if="addingRepository"
-				class="plugin-market__add mt-2"
-				:aria-label="t('agent.settings.plugins.addRepository')"
-				@submit.prevent="addRepository"
+			<UiModal
+				:visible="active && repositoryManagerOpen"
+				:title="t('agent.settings.plugins.manageRepositories')"
+				:aria-label="t('agent.settings.plugins.manageRepositories')"
+				panel-class="max-w-xl rounded-2xl p-4 sm:p-6"
+				:close-on-backdrop="!operation.busy.value"
+				:close-on-escape="!operation.busy.value"
+				:restore-focus="true"
+				@close="closeRepositoryManager"
 			>
-				<UiInput
-					ref="repositoryInput"
-					v-model="repositoryUrl"
-					:aria-label="t('agent.settings.plugins.repositoryUrl')"
-					density="compact"
-					class="min-w-0 w-full"
-					:placeholder="t('agent.settings.plugins.repositoryUrl')"
-					:disabled="locked"
-				>
-					<template #leading>
-						<i class="fa-solid fa-link" aria-hidden="true"></i>
-					</template>
-				</UiInput>
-				<UiButton
-					appearance="solid"
-					tone="primary"
-					density="compact"
-					type="submit"
-					:disabled="locked || !repositoryUrl.trim()"
-					:aria-label="t('agent.settings.plugins.addRepository')"
-					:title="t('agent.settings.plugins.addRepository')"
-				>
-					<i class="fa-solid fa-plus" aria-hidden="true"></i>
-					<span class="plugin-market__add-label">{{ t('agent.settings.plugins.addRepository') }}</span>
-				</UiButton>
-			</form>
+				<template #header-actions>
+					<UiButton
+						type="button"
+						appearance="ghost"
+						density="compact"
+						icon-only
+						:aria-label="t('common.close')"
+						:title="t('common.close')"
+						:disabled="operation.busy.value"
+						@click="closeRepositoryManager"
+						><i class="fa-solid fa-xmark" aria-hidden="true"></i
+					></UiButton>
+				</template>
 
-			<div v-if="filteredCatalogGroups.length" class="mt-3 space-y-3">
-				<div v-for="group in filteredCatalogGroups" :key="group.key" class="min-w-0">
-					<div
-						role="button"
-						tabindex="0"
-						:aria-expanded="isGroupExpanded(group.key)"
-						class="plugin-market__group-heading w-full flex flex-wrap items-center justify-between gap-2.5 py-2.5 sm:py-3 hover:bg-header/30 transition-colors select-none cursor-pointer"
-						@click="toggleGroup(group.key)"
-						@keydown.enter.space.prevent="toggleGroup(group.key)"
+				<div class="space-y-3">
+					<form
+						class="plugin-market__add"
+						:aria-label="t('agent.settings.plugins.addRepository')"
+						@submit.prevent="addRepository"
 					>
-						<div class="plugin-market__repository-heading">
-							<i
-								:class="
-									isGroupExpanded(group.key)
-										? 'fa-solid fa-chevron-down'
-										: 'fa-solid fa-chevron-right'
-								"
-								class="text-[11px] text-text-secondary w-3 text-center transition-transform shrink-0"
+						<UiInput
+							v-model="repositoryUrl"
+							:aria-label="t('agent.settings.plugins.repositoryUrl')"
+							density="compact"
+							class="min-w-0 w-full"
+							:placeholder="t('agent.settings.plugins.repositoryUrl')"
+							:disabled="locked"
+							><template #leading><i class="fa-solid fa-link" aria-hidden="true"></i></template
+						></UiInput>
+						<UiButton
+							appearance="solid"
+							tone="primary"
+							density="compact"
+							type="submit"
+							:disabled="locked || !repositoryUrl.trim()"
+							:aria-label="t('agent.settings.plugins.addRepository')"
+							:title="t('agent.settings.plugins.addRepository')"
+							><i class="fa-solid fa-plus" aria-hidden="true"></i
+							><span class="plugin-market__dialog-action-label">{{
+								t('agent.settings.plugins.addRepository')
+							}}</span></UiButton
+						>
+						<UiButton
+							type="button"
+							appearance="ghost"
+							density="compact"
+							:loading="operation.busy.value || catalogLoading"
+							:disabled="locked"
+							:aria-label="t('agent.settings.plugins.refreshRemote')"
+							:title="t('agent.settings.plugins.refreshRemote')"
+							@click="reload"
+							><i
+								v-if="!operation.busy.value && !catalogLoading"
+								class="fa-solid fa-arrows-rotate"
 								aria-hidden="true"
-							></i>
-							<div
-								class="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-header/80 text-foreground/80 border border-border/60"
+							></i
+							><span class="plugin-market__dialog-action-label">{{
+								t('agent.settings.plugins.refreshRemote')
+							}}</span></UiButton
+						>
+					</form>
+
+					<div v-if="catalogSources.length" class="plugin-market__sources">
+						<div v-for="group in catalogSources" :key="group.key" class="plugin-market__source">
+							<button
+								type="button"
+								class="inline-flex min-w-0 cursor-pointer items-center gap-1.5 text-xs text-text-secondary"
+								:title="group.sourceUrl"
+								:aria-label="sourceLabelForCopy(group.official, group.sourceUrl)"
+								@click="copyCatalogUrl(group.sourceUrl)"
 							>
 								<i
 									:class="group.github ? 'fa-brands fa-github' : 'fa-solid fa-server'"
-									class="text-xs"
 									aria-hidden="true"
 								></i>
-							</div>
-							<div class="plugin-market__repository-owner">
-								<span
-									class="ui-catalog-group-label block min-w-0 truncate text-xs sm:text-sm font-bold text-foreground font-mono"
-									:title="group.owner"
-									>{{ group.owner }}</span
-								>
-							</div>
-							<button
-								type="button"
-								class="inline-flex shrink-0 cursor-pointer items-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-								:title="group.sourceUrl"
-								:aria-label="
-									t(
-										group.official
-											? 'agent.settings.plugins.officialRepository'
-											: 'agent.settings.plugins.thirdPartyRepository',
-									) +
-									' · ' +
-									(copiedSourceUrl === group.sourceUrl
-										? t('common.copied')
-										: t('agent.settings.plugins.copy'))
-								"
-								@click.stop="copyCatalogUrl(group.sourceUrl)"
-								@keydown.stop
-							>
+								<span class="ui-catalog-group-label min-w-0 truncate">{{ group.owner }}</span>
 								<UiBadge
 									:class="group.official ? 'ui-catalog-tag-badge' : 'ui-catalog-type-badge'"
 									:tone="group.official ? 'primary' : 'neutral'"
-									:appearance="group.official ? 'soft' : 'ghost'"
 									density="compact"
-								>
-									<i
-										:class="
-											group.official ? 'fa-solid fa-certificate' : 'fa-solid fa-network-wired'
-										"
-										class="text-[8px]"
-										aria-hidden="true"
-									></i>
-									<span>{{
+									>{{
 										t(
 											group.official
 												? 'agent.settings.plugins.officialRepository'
 												: 'agent.settings.plugins.thirdPartyRepository',
 										)
-									}}</span>
-								</UiBadge>
+									}}</UiBadge
+								>
 							</button>
-							<UiBadge
-								v-if="group.loaded"
-								class="plugin-market__repository-count shrink-0 font-mono"
-								appearance="ghost"
-								density="compact"
-							>
-								{{ t('agent.settings.plugins.pluginCount', { count: group.packages.length }) }}
-							</UiBadge>
 							<UiButton
 								v-if="group.removalUrl !== null"
 								type="button"
@@ -775,398 +703,331 @@
 								tone="danger"
 								density="compact"
 								icon-only
-								:aria-label="t('agent.settings.plugins.removeRepository')"
+								:aria-label="t('agent.settings.plugins.removeRepository') + ' · ' + group.owner"
 								:title="t('agent.settings.plugins.removeRepository')"
 								:disabled="locked"
-								@click.stop="removeRepository(group.removalUrl)"
-								@keydown.stop
-							>
-								<i class="fa-regular fa-trash-can text-[11px]" aria-hidden="true"></i>
-							</UiButton>
+								@click="removeRepository(group.removalUrl)"
+								><i class="fa-regular fa-trash-can text-[11px]" aria-hidden="true"></i
+							></UiButton>
 						</div>
 					</div>
+				</div>
+			</UiModal>
 
-					<div
-						v-if="isGroupExpanded(group.key) && group.loaded"
-						class="plugin-market__group-content space-y-1 pb-1"
-					>
-						<div class="plugin-market__entries">
-							<div
-								v-for="{ package: entry, catalog, official, source } in group.packages"
-								:key="`${entry.publisherKeyId}/${entry.definitionId}`"
-								class="plugin-market__entry rounded-xl border border-border/60 bg-card/20 p-3"
+			<div v-if="filteredPlugins.length" class="plugin-market__entries">
+				<div
+					v-for="{ id, selected: { entry, catalog, source, key: selectedKey }, options } in filteredPlugins"
+					:key="id"
+					class="plugin-market__entry rounded-xl border border-border/60 bg-card/20 p-3"
+				>
+					<div class="plugin-market__entry-heading">
+						<div
+							class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm shadow-2xs transition-transform"
+							:class="
+								entry.definitionId === 'nexus.agent'
+									? 'bg-primary/15 text-primary ring-1 ring-primary/25'
+									: entry.definitionId === 'nexus.fullstack'
+										? 'bg-success/15 text-success ring-1 ring-success/25'
+										: 'bg-primary/10 text-primary ring-1 ring-primary/20'
+							"
+						>
+							<i
+								:class="
+									entry.definitionId === 'nexus.agent'
+										? 'fa-solid fa-wand-magic-sparkles'
+										: entry.definitionId === 'nexus.fullstack'
+											? 'fa-solid fa-layer-group'
+											: 'fa-solid fa-puzzle-piece'
+								"
+								aria-hidden="true"
+							></i>
+						</div>
+						<span
+							:title="
+								entry.contributionKinds
+									.map((kind) => t(`agent.settings.plugins.contributionKinds.${kind}`))
+									.join(', ')
+							"
+							class="plugin-market__name ui-catalog-name text-xs sm:text-sm font-bold text-foreground"
+							>{{ catalogText(entry).displayName }}</span
+						>
+						<div class="plugin-market__entry-status">
+							<UiBadge
+								class="ui-catalog-status-badge"
+								:tone="catalogEntryState(entry).tone"
+								density="compact"
+								>{{ catalogEntryState(entry).label }}</UiBadge
 							>
-								<div class="plugin-market__entry-heading">
-									<div
-										class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm shadow-2xs transition-transform"
-										:class="
-											entry.definitionId === 'nexus.agent'
-												? 'bg-primary/15 text-primary ring-1 ring-primary/25'
-												: entry.definitionId === 'nexus.fullstack'
-													? 'bg-success/15 text-success ring-1 ring-success/25'
-													: 'bg-primary/10 text-primary ring-1 ring-primary/20'
-										"
-									>
-										<i
-											:class="
-												entry.definitionId === 'nexus.agent'
-													? 'fa-solid fa-wand-magic-sparkles'
-													: entry.definitionId === 'nexus.fullstack'
-														? 'fa-solid fa-layer-group'
-														: 'fa-solid fa-puzzle-piece'
-											"
-											aria-hidden="true"
-										></i>
-									</div>
-									<span
-										:title="
-											entry.contributionKinds
-												.map((kind) => t(`agent.settings.plugins.contributionKinds.${kind}`))
-												.join(', ')
-										"
-										class="plugin-market__name ui-catalog-name text-xs sm:text-sm font-bold text-foreground"
-										>{{ catalogText(entry).displayName }}</span
-									>
-									<div class="plugin-market__entry-status">
-										<UiBadge
-											class="ui-catalog-status-badge"
-											:tone="catalogEntryState(entry).tone"
-											density="compact"
-											>{{ catalogEntryState(entry).label }}</UiBadge
-										>
-										<UiBadge
-											v-if="retainedFor(entry)"
-											class="ui-catalog-status-badge"
-											tone="warning"
-											density="compact"
-										>
-											{{ t('agent.settings.plugins.hasRetainedData') }}
-										</UiBadge>
-									</div>
-								</div>
-								<div class="plugin-market__entry-body text-text-secondary">
-									<p class="plugin-market__description text-xs leading-relaxed">
-										{{ catalogText(entry).description }}
-									</p>
-									<span
-										v-if="!entry.compatible"
-										class="block break-all text-[11px] text-warning font-mono"
-									>
-										{{
-											entry.compatibilityReason === 'host_version'
-												? t('agent.settings.plugins.compatibilityShort', {
-														min: entry.compatibility.host.minVersion,
-														max: entry.compatibility.host.maxVersion,
-													})
-												: t(
-														`agent.settings.plugins.compatibilityReasons.${entry.compatibilityReason}`,
-													)
-										}}
-									</span>
-									<span class="plugin-market__definition font-mono text-[11px] text-text-secondary">
-										{{ entry.definitionId }}
-									</span>
-								</div>
-								<div class="plugin-market__entry-footer">
-									<UiSelect
-										density="comfortable"
-										fit-content
-										class="plugin-market__version"
-										:aria-label="t('agent.settings.plugins.selectVersion')"
-										:model-value="needsVersionChoice(source, entry) ? '' : entry.version"
-										:disabled="locked"
-										@update:model-value="selectVersion(source, entry, $event)"
-									>
-										<option v-if="needsVersionChoice(source, entry)" value="">
-											{{ t('agent.settings.plugins.selectVersion') }}
-										</option>
-										<option
-											v-for="version in versionOptions(catalog, entry)"
-											:key="version.version"
-											:value="version.version"
-										>
-											v{{ version.version }}
-										</option>
-									</UiSelect>
+							<UiBadge
+								v-if="hasRetainedData(entry)"
+								class="ui-catalog-status-badge"
+								tone="warning"
+								density="compact"
+							>
+								{{ t('agent.settings.plugins.hasRetainedData') }}
+							</UiBadge>
+						</div>
+					</div>
+					<div class="plugin-market__entry-body text-text-secondary">
+						<p class="plugin-market__description text-xs leading-relaxed">
+							{{ catalogText(entry).description }}
+						</p>
+						<span v-if="!entry.compatible" class="block break-all text-[11px] text-warning font-mono">
+							{{
+								entry.compatibilityReason === 'host_version'
+									? t('agent.settings.plugins.compatibilityShort', {
+											min: entry.compatibility.host.minVersion,
+											max: entry.compatibility.host.maxVersion,
+										})
+									: t(`agent.settings.plugins.compatibilityReasons.${entry.compatibilityReason}`)
+							}}
+						</span>
+						<span class="plugin-market__definition font-mono text-[11px] text-text-secondary">
+							{{ entry.definitionId }}
+						</span>
+					</div>
+					<div class="plugin-market__entry-footer">
+						<UiSelect
+							density="comfortable"
+							class="plugin-market__version"
+							:aria-label="t('agent.settings.plugins.selectVersion')"
+							:model-value="needsVersionChoice(source, entry) ? '' : selectedKey"
+							:disabled="locked"
+							@update:model-value="selectVersion(id, $event)"
+						>
+							<option v-if="needsVersionChoice(source, entry)" value="">
+								{{ t('agent.settings.plugins.selectVersion') }}
+							</option>
+							<option v-for="option in options" :key="option.key" :value="option.key">
+								v{{ option.entry.version }} · {{ sourceLabel(option) }}
+							</option>
+						</UiSelect>
 
-									<div class="plugin-market__actions">
-										<UiButton
-											density="comfortable"
-											v-if="retainedFor(entry)"
-											type="button"
-											appearance="soft"
-											tone="danger"
-											:disabled="locked"
-											@click="requestClearData(entry)"
-										>
-											{{ t('agent.settings.plugins.deleteData') }}
-										</UiButton>
-										<UiButton
-											density="comfortable"
-											appearance="soft"
-											tone="neutral"
-											v-if="!official && !publisherTrusted(entry.publisherKeyId)"
-											type="button"
-											:disabled="
-												locked ||
-												!catalog.publishers.some(
-													(publisher) => publisher.keyId === entry.publisherKeyId,
-												)
-											"
-											@click="trustRemotePublisher(catalog, entry.publisherKeyId)"
-										>
-											{{ t('agent.settings.plugins.trustRemotePublisher') }}
-										</UiButton>
+						<div class="plugin-market__actions">
+							<UiButton
+								density="comfortable"
+								v-if="hasRetainedData(entry)"
+								type="button"
+								appearance="soft"
+								tone="danger"
+								:disabled="locked"
+								@click="requestClearData(entry)"
+							>
+								{{ t('agent.settings.plugins.deleteData') }}
+							</UiButton>
+							<UiButton
+								density="comfortable"
+								appearance="soft"
+								tone="neutral"
+								v-if="source !== null && !publisherTrusted(entry.publisherKeyId)"
+								type="button"
+								:disabled="
+									locked ||
+									!catalog.publishers.some((publisher) => publisher.keyId === entry.publisherKeyId)
+								"
+								@click="trustRemotePublisher(catalog, entry.publisherKeyId)"
+							>
+								{{ t('agent.settings.plugins.trustRemotePublisher') }}
+							</UiButton>
 
-										<UiButton
-											density="comfortable"
-											type="button"
-											:appearance="installedFor(entry) ? 'soft' : 'solid'"
-											:tone="installedFor(entry) ? 'neutral' : 'primary'"
-											:disabled="
-												locked ||
-												!entry.compatible ||
-												!satisfiesAppRequirements(entry, appRequirements) ||
-												hasNewerInstalled(entry) ||
-												needsVersionChoice(source, entry) ||
-												(!official && !publisherTrusted(entry.publisherKeyId))
-											"
-											@click="prepare(entry, source)"
-										>
-											<i
-												:class="
-													installedFor(entry)
-														? 'fa-solid fa-arrows-rotate text-[11px]'
-														: 'fa-solid fa-download text-[11px]'
-												"
-												aria-hidden="true"
-											></i>
-											<span>{{ catalogEntryAction(entry) }}</span>
-										</UiButton>
-									</div>
-								</div>
-							</div>
+							<UiButton
+								density="comfortable"
+								type="button"
+								:appearance="installedFor(entry) ? 'soft' : 'solid'"
+								:tone="installedFor(entry) ? 'neutral' : 'primary'"
+								:disabled="
+									locked ||
+									!entry.compatible ||
+									!satisfiesAppRequirements(entry, appRequirements) ||
+									hasNewerInstalled(entry) ||
+									needsVersionChoice(source, entry) ||
+									(source !== null && !publisherTrusted(entry.publisherKeyId))
+								"
+								@click="prepare(entry, source)"
+							>
+								<i
+									:class="
+										installedFor(entry)
+											? 'fa-solid fa-arrows-rotate text-[11px]'
+											: 'fa-solid fa-download text-[11px]'
+									"
+									aria-hidden="true"
+								></i>
+								<span>{{ catalogEntryAction(entry) }}</span>
+							</UiButton>
 						</div>
 					</div>
 				</div>
 			</div>
 
-			<section
-				v-if="managedPackages.length || retainedOutsideCatalog.length"
-				class="plugin-market__managed mt-6"
-				:aria-label="t('agent.settings.plugins.managedPackages')"
+			<div
+				v-if="retainedPackagesOutsideCatalog.length || retainedOutsideCatalog.length"
+				class="plugin-market__managed-list mt-3"
 			>
-				<div class="flex min-w-0 items-center gap-2">
-					<i class="fa-solid fa-box-archive text-xs text-primary" aria-hidden="true"></i>
-					<h4 class="min-w-0 text-xs font-semibold text-foreground">
-						{{ t('agent.settings.plugins.managedPackages') }}
-					</h4>
-					<UiBadge appearance="ghost" density="compact">{{
-						managedPackages.length + retainedOutsideCatalog.length
-					}}</UiBadge>
-				</div>
-				<div class="plugin-market__managed-list mt-3">
-					<article
-						v-for="item in managedPackages"
-						:key="item.installation.packageId"
-						:aria-label="item.name"
-						class="plugin-market__managed-entry rounded-xl border border-border/60 bg-card/20 px-3 py-2.5"
-					>
-						<div class="plugin-market__managed-identity">
-							<div
-								class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs"
+				<article
+					v-for="item in retainedPackagesOutsideCatalog"
+					:key="item.installation.packageId"
+					:aria-label="item.name"
+					class="plugin-market__managed-entry rounded-xl border border-border/60 bg-card/20 px-3 py-2.5"
+				>
+					<div class="plugin-market__managed-identity">
+						<div
+							class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs"
+							:class="
+								item.installation.status === 'removed'
+									? 'bg-warning/10 text-warning'
+									: 'bg-primary/10 text-primary'
+							"
+						>
+							<i
 								:class="
 									item.installation.status === 'removed'
-										? 'bg-warning/10 text-warning'
-										: 'bg-primary/10 text-primary'
+										? 'fa-solid fa-box-archive'
+										: 'fa-solid fa-puzzle-piece'
 								"
+								aria-hidden="true"
+							></i>
+						</div>
+						<div class="plugin-market__managed-labels">
+							<h5 class="ui-catalog-name max-w-full truncate text-xs font-semibold" :title="item.name">
+								{{ item.name }}
+							</h5>
+							<span class="font-mono text-[11px] text-text-secondary"
+								>v{{ item.installation.version }}</span
 							>
-								<i
-									:class="
-										item.installation.status === 'removed'
-											? 'fa-solid fa-box-archive'
-											: 'fa-solid fa-puzzle-piece'
-									"
+							<UiBadge
+								v-if="item.installation.status !== 'installed'"
+								class="ui-catalog-status-badge"
+								tone="warning"
+								density="compact"
+								>{{
+									item.installation.status === 'removed'
+										? t('agent.settings.plugins.hasRetainedData')
+										: t(`agent.settings.plugins.packageStates.${item.installation.status}`)
+								}}</UiBadge
+							>
+						</div>
+					</div>
+					<div class="plugin-market__managed-actions">
+						<UiPopover
+							v-if="active && packageReferenced(item.installation)"
+							:ariaLabel="t('agent.settings.plugins.packageReferenced')"
+							:title="t('agent.settings.plugins.packageReferenced')"
+							trigger-appearance="ghost"
+							density="compact"
+							icon-only
+							align="end"
+						>
+							<template #trigger
+								><i class="fa-solid fa-link text-[11px] text-text-secondary" aria-hidden="true"></i
+							></template>
+							<template #panel>
+								<p class="max-w-64 text-xs leading-relaxed text-text-secondary">
+									{{ t('agent.settings.plugins.packageReferenced') }}
+								</p>
+							</template>
+						</UiPopover>
+						<UiButton
+							type="button"
+							appearance="ghost"
+							tone="danger"
+							density="compact"
+							:title="
+								t(
+									item.installation.status === 'removed'
+										? 'agent.settings.plugins.deleteData'
+										: 'agent.settings.plugins.uninstallPackage',
+								)
+							"
+							:aria-label="
+								t(
+									item.installation.status === 'removed'
+										? 'agent.settings.plugins.deleteData'
+										: 'agent.settings.plugins.uninstallPackage',
+								)
+							"
+							:disabled="blocked || packageReferenced(item.installation)"
+							@click="requestPackageRemoval(item.installation)"
+						>
+							<i class="fa-regular fa-trash-can text-[11px]" aria-hidden="true"></i
+							><span class="plugin-market__managed-action-label">{{
+								t(
+									item.installation.status === 'removed'
+										? 'agent.settings.plugins.deleteData'
+										: 'agent.settings.plugins.uninstallPackage',
+								)
+							}}</span>
+						</UiButton>
+					</div>
+				</article>
+				<article
+					v-for="item in retainedOutsideCatalog"
+					:key="item.installation.appId"
+					:aria-label="item.name"
+					class="plugin-market__managed-entry rounded-xl border border-border/60 bg-card/20 px-3 py-2.5"
+				>
+					<div class="plugin-market__managed-identity">
+						<div
+							class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-warning/10 text-xs text-warning"
+						>
+							<i class="fa-solid fa-box-archive" aria-hidden="true"></i>
+						</div>
+						<div class="plugin-market__managed-labels">
+							<h5 class="ui-catalog-name max-w-full truncate text-xs font-semibold" :title="item.name">
+								{{ item.name }}
+							</h5>
+							<UiBadge class="ui-catalog-status-badge" tone="warning" density="compact">{{
+								t('agent.settings.plugins.hasRetainedData')
+							}}</UiBadge>
+						</div>
+					</div>
+					<div class="plugin-market__managed-actions">
+						<UiPopover
+							v-if="active"
+							:ariaLabel="t('agent.settings.plugins.retainedSourceUnavailable')"
+							:title="t('agent.settings.plugins.retainedSourceUnavailable')"
+							trigger-appearance="ghost"
+							density="compact"
+							icon-only
+							align="end"
+						>
+							<template #trigger
+								><i
+									class="fa-solid fa-circle-info text-[11px] text-text-secondary"
 									aria-hidden="true"
-								></i>
-							</div>
-							<div class="plugin-market__managed-labels">
-								<h5
-									class="ui-catalog-name max-w-full truncate text-xs font-semibold"
-									:title="item.name"
-								>
-									{{ item.name }}
-								</h5>
-								<span class="font-mono text-[11px] text-text-secondary"
-									>v{{ item.installation.version }}</span
-								>
-								<UiBadge
-									v-if="item.installation.status !== 'installed'"
-									class="ui-catalog-status-badge"
-									tone="warning"
-									density="compact"
-									>{{
-										item.installation.status === 'removed'
-											? t('agent.settings.plugins.hasRetainedData')
-											: t(`agent.settings.plugins.packageStates.${item.installation.status}`)
-									}}</UiBadge
-								>
-							</div>
-						</div>
-						<div class="plugin-market__managed-actions">
-							<UiPopover
-								v-if="active && packageReferenced(item.installation)"
-								:ariaLabel="t('agent.settings.plugins.packageReferenced')"
-								:title="t('agent.settings.plugins.packageReferenced')"
-								trigger-appearance="ghost"
-								density="compact"
-								icon-only
-								align="end"
-							>
-								<template #trigger
-									><i class="fa-solid fa-link text-[11px] text-text-secondary" aria-hidden="true"></i
-								></template>
-								<template #panel>
-									<p class="max-w-64 text-xs leading-relaxed text-text-secondary">
-										{{ t('agent.settings.plugins.packageReferenced') }}
-									</p>
-								</template>
-							</UiPopover>
-							<UiButton
-								v-if="item.settings"
-								type="button"
-								appearance="ghost"
-								density="compact"
-								:title="t('agent.settings.plugins.settings.open')"
-								:aria-label="t('agent.settings.plugins.settings.open')"
-								:disabled="!active || locked || item.installation.status !== 'installed'"
-								@click="emit('settings', item.installation)"
-							>
-								<i class="fa-solid fa-sliders text-[11px]" aria-hidden="true"></i
-								><span class="plugin-market__managed-action-label">{{
-									t('agent.settings.plugins.settings.open')
-								}}</span>
-							</UiButton>
-							<UiButton
-								v-if="item.installation.status === 'draining'"
-								type="button"
-								appearance="ghost"
-								density="compact"
-								:title="t('agent.settings.plugins.cancelUpgrade')"
-								:aria-label="t('agent.settings.plugins.cancelUpgrade')"
-								:disabled="blocked"
-								@click="emit('cancelPackageUpdate', item.installation)"
-							>
-								<i class="fa-solid fa-rotate-left text-[11px]" aria-hidden="true"></i
-								><span class="plugin-market__managed-action-label">{{
-									t('agent.settings.plugins.cancelUpgrade')
-								}}</span>
-							</UiButton>
-							<UiButton
-								type="button"
-								appearance="ghost"
-								tone="danger"
-								density="compact"
-								:title="
-									t(
-										item.installation.status === 'removed'
-											? 'agent.settings.plugins.deleteData'
-											: 'agent.settings.plugins.uninstallPackage',
-									)
-								"
-								:aria-label="
-									t(
-										item.installation.status === 'removed'
-											? 'agent.settings.plugins.deleteData'
-											: 'agent.settings.plugins.uninstallPackage',
-									)
-								"
-								:disabled="blocked || packageReferenced(item.installation)"
-								@click="requestPackageRemoval(item.installation)"
-							>
-								<i class="fa-regular fa-trash-can text-[11px]" aria-hidden="true"></i
-								><span class="plugin-market__managed-action-label">{{
-									t(
-										item.installation.status === 'removed'
-											? 'agent.settings.plugins.deleteData'
-											: 'agent.settings.plugins.uninstallPackage',
-									)
-								}}</span>
-							</UiButton>
-						</div>
-					</article>
-					<article
-						v-for="item in retainedOutsideCatalog"
-						:key="item.installation.appId"
-						:aria-label="item.name"
-						class="plugin-market__managed-entry rounded-xl border border-border/60 bg-card/20 px-3 py-2.5"
-					>
-						<div class="plugin-market__managed-identity">
-							<div
-								class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-warning/10 text-xs text-warning"
-							>
-								<i class="fa-solid fa-box-archive" aria-hidden="true"></i>
-							</div>
-							<div class="plugin-market__managed-labels">
-								<h5
-									class="ui-catalog-name max-w-full truncate text-xs font-semibold"
-									:title="item.name"
-								>
-									{{ item.name }}
-								</h5>
-								<UiBadge class="ui-catalog-status-badge" tone="warning" density="compact">{{
-									t('agent.settings.plugins.hasRetainedData')
-								}}</UiBadge>
-							</div>
-						</div>
-						<div class="plugin-market__managed-actions">
-							<UiPopover
-								v-if="active"
-								:ariaLabel="t('agent.settings.plugins.retainedSourceUnavailable')"
-								:title="t('agent.settings.plugins.retainedSourceUnavailable')"
-								trigger-appearance="ghost"
-								density="compact"
-								icon-only
-								align="end"
-							>
-								<template #trigger
-									><i
-										class="fa-solid fa-circle-info text-[11px] text-text-secondary"
-										aria-hidden="true"
-									></i
-								></template>
-								<template #panel>
-									<p class="max-w-64 text-xs leading-relaxed text-text-secondary">
-										{{ t('agent.settings.plugins.retainedSourceUnavailable') }}
-									</p>
-								</template>
-							</UiPopover>
-							<UiButton
-								type="button"
-								appearance="ghost"
-								tone="danger"
-								density="compact"
-								:aria-label="t('agent.settings.plugins.deleteData')"
-								:title="t('agent.settings.plugins.deleteData')"
-								:disabled="blocked"
-								@click="requestClearRetained(item.installation, item.name)"
-							>
-								<i class="fa-regular fa-trash-can text-[11px]" aria-hidden="true"></i
-								><span class="plugin-market__managed-action-label">{{
-									t('agent.settings.plugins.deleteData')
-								}}</span>
-							</UiButton>
-						</div>
-					</article>
-				</div>
-			</section>
+								></i
+							></template>
+							<template #panel>
+								<p class="max-w-64 text-xs leading-relaxed text-text-secondary">
+									{{ t('agent.settings.plugins.retainedSourceUnavailable') }}
+								</p>
+							</template>
+						</UiPopover>
+						<UiButton
+							type="button"
+							appearance="ghost"
+							tone="danger"
+							density="compact"
+							:aria-label="t('agent.settings.plugins.deleteData')"
+							:title="t('agent.settings.plugins.deleteData')"
+							:disabled="blocked"
+							@click="requestClearRetained(item.installation, item.name)"
+						>
+							<i class="fa-regular fa-trash-can text-[11px]" aria-hidden="true"></i
+							><span class="plugin-market__managed-action-label">{{
+								t('agent.settings.plugins.deleteData')
+							}}</span>
+						</UiButton>
+					</div>
+				</article>
+			</div>
 			<UiEmptyState
 				v-if="
 					catalogs.length > 0 &&
 					searchQuery &&
-					!filteredCatalogGroups.length &&
+					!filteredPlugins.length &&
 					!retainedOutsideCatalog.length &&
-					!managedPackages.length
+					!retainedPackagesOutsideCatalog.length
 				"
 				class="mt-3.5 border-t border-border pt-4 pb-4"
 				compact
@@ -1291,14 +1152,14 @@
 
 	.plugin-market__tools {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) auto auto;
+		grid-template-columns: minmax(0, 1fr) auto;
 		align-items: center;
 		gap: 8px;
 	}
 
 	.plugin-market__add {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) auto;
+		grid-template-columns: minmax(0, 1fr) auto auto;
 		align-items: center;
 		gap: 8px;
 	}
@@ -1307,32 +1168,26 @@
 		padding: 1rem;
 	}
 
-	.plugin-market__group-heading {
-		padding-inline: 0;
+	.plugin-market__sources {
+		display: grid;
+		gap: 0.5rem;
 	}
-
-	.plugin-market__group-content {
-		padding-inline: 1rem;
-	}
-
-	.plugin-market__repository-heading {
+	.plugin-market__source {
 		display: flex;
-		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px;
+		gap: 0.25rem;
 		min-width: 0;
-		flex: 1;
-	}
-
-	.plugin-market__repository-owner {
-		min-width: 0;
-		flex: 1;
+		max-width: 100%;
+		justify-content: space-between;
+		padding: 0.75rem;
+		border: 1px solid var(--color-border);
+		border-radius: 0.75rem;
 	}
 
 	.plugin-market__version {
 		min-width: 0;
 		max-width: 100%;
-		flex-shrink: 0;
+		flex-shrink: 1;
 	}
 
 	.plugin-market__entries {
@@ -1380,11 +1235,10 @@
 	}
 
 	.plugin-market__entry-footer {
-		display: flex;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
 		min-width: 0;
-		flex-wrap: wrap;
 		align-items: center;
-		justify-content: space-between;
 		gap: 0.5rem;
 		border-top: 1px solid var(--color-border);
 		padding-top: 0.75rem;
@@ -1432,7 +1286,6 @@
 	.plugin-market__actions {
 		display: flex;
 		min-width: 0;
-		flex: 1;
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: flex-end;
@@ -1440,17 +1293,20 @@
 	}
 
 	@container plugin-market (max-width: 24rem) {
+		.plugin-market__entry-footer {
+			grid-template-columns: minmax(0, 1fr);
+		}
 		.plugin-market__content {
 			padding: 0;
 		}
 
-		.plugin-market__group-content {
-			padding-inline: 0;
+		.plugin-market__add-label {
+			display: none;
 		}
+	}
 
-		.plugin-market__add-label,
-		.plugin-market__repository-count,
-		.plugin-market__refresh-label {
+	@media (max-width: 639px) {
+		.plugin-market__dialog-action-label {
 			display: none;
 		}
 	}

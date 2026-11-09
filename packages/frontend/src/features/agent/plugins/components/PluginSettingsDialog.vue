@@ -103,10 +103,10 @@
 		/>
 		<template #footer>
 			<UiFormActions>
-				<slot name="actions" />
 				<UiButton type="button" appearance="soft" tone="neutral" :disabled="busy" @click="emit('close')">
 					{{ t('common.close') }}
 				</UiButton>
+				<slot name="actions" />
 			</UiFormActions>
 		</template>
 	</UiModal>

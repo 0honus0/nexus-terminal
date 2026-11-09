@@ -46,7 +46,6 @@
       },
       "apps": {
         "title": "Agent App",
-        "description": "分别启用或停用每个 Agent App。停用一个 App 不会停止其他 App。",
         "activity": "运行中 {runs} · 待审批 {approvals} · 预算请求 {budget}",
         "disable": "停用",
         "enable": "启用",
@@ -69,13 +68,11 @@
         "statusEnabled": "已启用",
         "statusDisabled": "已停用",
         "declaredCapabilities": "已声明能力",
-        "unknownDefinition": "未知应用",
         "capabilityUnknownName": "扩展能力",
         "technicalDetails": "实例详情",
         "runsMetric": "运行中",
         "approvalsMetric": "待审批",
         "grantsMetric": "已授权能力",
-        "coreOfficial": "官方核心",
         "configPermissions": "安全策略配置",
         "uninstall": "卸载",
         "uninstallDisabledHint": "请先停用该 App 后再进行卸载",
@@ -96,16 +93,6 @@
         "enableAllCapabilities": "启用全部能力",
         "disableAllCapabilities": "禁用全部能力",
         "capabilityUnknownDesc": "系统底层能力声明",
-        "badges": {
-          "officialExtension": "官方扩展",
-          "thirdParty": "三方扩展"
-        },
-        "summaries": {
-          "nexusAgent": "官方通用智能体核心，内置自动化运维诊断与全栈工程协同技能",
-          "nexusFullstack": "全栈应用交付套件，支持微服务治理、复杂依赖联调与部署验证",
-          "default": "已安装并校验签名的 Agent 插件应用"
-        },
-        "enabledCount": "已启用 {enabled}/{total}",
         "grantedCount": "{granted}/{total} 项已授权",
         "deleteDataOnUninstall": "同时彻底删除此插件专属的独立持久化数据空间",
         "capabilities": {
@@ -277,7 +264,8 @@
           "pluginUninstalledDataRetained": "插件代码已卸载，App 数据仍保留。",
           "pluginDataDeleted": "保留的 AppStorage 数据已删除。"
         },
-        "remoteRepositories": "插件仓库",
+        "manageRepositories": "仓库管理",
+        "remoteRepositories": "可用插件",
         "remoteRepositoriesHint": "Nexus 第一方 catalog 由 Host 固定发布者身份；额外仓库只负责插件发现，安装前仍必须显式信任其 Ed25519 发布者。",
         "officialRepository": "官方仓库",
         "refreshRemote": "刷新仓库",
@@ -371,7 +359,9 @@
           "connection": "连接设置",
           "noConnection": "未配置连接"
         },
-        "managedPackages": "已安装与保留数据"
+        "installedAgents": "已安装的 Agent",
+        "installedPlugins": "已安装的插件",
+        "installedPluginsEmpty": "暂无已安装的插件"
       },
       "hardLimits": {
         "title": "硬性限制",
@@ -796,7 +786,6 @@
         "storage": "Artifact 存储",
         "storageLimit": "上限 {value}",
         "defaultModel": "默认模型",
-        "activeApps": "活跃 App",
         "sandbox": "沙箱",
         "ready": "就绪",
         "notReady": "未就绪"

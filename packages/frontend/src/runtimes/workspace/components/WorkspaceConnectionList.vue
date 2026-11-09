@@ -465,13 +465,7 @@
 				icon="fas fa-plug"
 				:title="t('connections.noConnections')"
 				:bordered="false"
-			>
-				<template #action>
-					<UiButton type="button" appearance="solid" tone="primary" density="compact" @click="addConnection">
-						{{ t('connections.addFirstConnection') }}
-					</UiButton>
-				</template>
-			</UiEmptyState>
+			/>
 
 			<template v-else-if="showTags">
 				<section v-for="group in groups" :key="group.key" class="workspace-connection-section mb-1 last:mb-0">

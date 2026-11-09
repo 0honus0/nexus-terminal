@@ -85,6 +85,8 @@ function command(plan) {
 }
 
 async function fixture(t, { signedRequired = true } = {}) {
+	let catalog;
+	let conflictingPublisher = false;
 	const f = await openPlugins((close) => t.after(close));
 	const { MockAgent, getGlobalDispatcher, setGlobalDispatcher } = createRequire(
 		new URL('../../../../../packages/backend/package.json', import.meta.url),
@@ -96,17 +98,25 @@ async function fixture(t, { signedRequired = true } = {}) {
 	const official = new URL(OFFICIAL_PLUGIN_SOURCE.catalogUrl);
 	mock.get(official.origin)
 		.intercept({ path: official.pathname })
-		.reply(200, {
-			schemaVersion: 2,
-			publishers: [
-				{
-					keyId: OFFICIAL_PLUGIN_SOURCE.publisherKeyId,
-					label: 'official',
-					publicKeyPem: OFFICIAL_PLUGIN_SOURCE.publisherPublicKeyPem,
-				},
-			],
-			packages: [],
-		})
+		.reply(() => ({
+			statusCode: 200,
+			data: {
+				schemaVersion: 2,
+				publishers: [
+					{
+						keyId: OFFICIAL_PLUGIN_SOURCE.publisherKeyId,
+						label: 'official',
+						publicKeyPem: OFFICIAL_PLUGIN_SOURCE.publisherPublicKeyPem,
+					},
+				],
+				packages: conflictingPublisher
+					? catalog.packages.map((entry) => ({
+							...entry,
+							publisherKeyId: OFFICIAL_PLUGIN_SOURCE.publisherKeyId,
+						}))
+					: [],
+			},
+		}))
 		.persist();
 	setGlobalDispatcher(mock);
 	t.after(async () => {
@@ -146,7 +156,6 @@ async function fixture(t, { signedRequired = true } = {}) {
 		['/app.tar', app],
 		['/ui.tar', ui],
 	]);
-	let catalog;
 	const server = createServer((req, res) => {
 		const body = archives.get(req.url) ?? Buffer.from(JSON.stringify(catalog));
 		res.end(body);
@@ -189,6 +198,10 @@ async function fixture(t, { signedRequired = true } = {}) {
 		appId,
 		uiId,
 		catalog,
+
+		exposeSameNameOfficialPackages() {
+			conflictingPublisher = true;
+		},
 
 		prepare: async () => readAgentPluginEnablePlan(expectStatus(await f.api('POST', onboarding + '/prepare'), 200)),
 	};
@@ -367,4 +380,26 @@ test('required upgrade receipts cannot adopt a concurrent composition change', a
 	assert.deepEqual(current.selectedRootIds, [tool.manifest.id]);
 	assert.equal(expectStatus(await f.api('GET', old.appPath), 200).enabled, false);
 	assert.deepEqual(expectStatus(await f.api('GET', old.appPath + '/grants'), 200).grants, []);
+});
+
+test('required onboarding reuses installed trusted publisher when another source has the same package IDs', async (t) => {
+	const f = await fixture(t);
+	const initial = await f.prepare();
+	const result = readAgentPluginEnableResponse(
+		expectStatus(await f.api('POST', onboarding + '/install', command(initial)), 200),
+	);
+	f.exposeSameNameOfficialPackages();
+	const again = await f.prepare();
+	assert.equal(again.ready, true);
+	assert.equal(again.packages.length, 2);
+	assert(
+		again.packages.every(
+			(item) => item.kind === 'installed' && item.installation.publisherKeyId === f.publisher.keyId,
+		),
+	);
+	const confirmed = readAgentPluginEnableResponse(
+		expectStatus(await f.api('POST', onboarding + '/install', command(again)), 200),
+	);
+	assert.equal(confirmed.bindings[0].appId, result.bindings[0].appId);
+	assert.equal(confirmed.bindings[0].app.publisherKeyId, f.publisher.keyId);
 });

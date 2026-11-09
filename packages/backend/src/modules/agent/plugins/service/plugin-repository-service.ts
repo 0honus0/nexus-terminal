@@ -752,6 +752,7 @@ export class PluginRepositoryService {
 	): Promise<{ repositoryUrl: string; entry: PluginCatalog['packages'][number] }[]> {
 		const settings = await this.model.get(actor, (userId) => identity(actor, userId));
 		const publishers = await this.plugins.publishers(actor);
+		const installed = await this.plugins.packageInstallations(actor);
 		const selected = new Map<string, { repositoryUrl: string; entry: PluginCatalog['packages'][number] }>();
 		for (const repositoryUrl of new Set([
 			OFFICIAL_PLUGIN_SOURCE.catalogUrl,
@@ -778,14 +779,21 @@ export class PluginRepositoryService {
 					continue;
 				}
 				const previous = selected.get(entry.packageId);
-				if (previous && previous.entry.publisherKeyId !== entry.publisherKeyId) {
-					throw new AgentFailure('version_conflict');
-				}
+				const installation = installed.find(
+					(item) => item.package.packageId === entry.packageId && item.status !== 'removed',
+				);
+				const matchesInstalled = installation?.package.publisherKeyId === entry.publisherKeyId;
+				const previousMatchesInstalled =
+					installation?.package.publisherKeyId === previous?.entry.publisherKeyId;
 				if (
 					!previous ||
-					(entry.compatible &&
-						(!previous.entry.compatible ||
-							comparePluginVersions(entry.version, previous.entry.version) > 0))
+					(matchesInstalled && !previousMatchesInstalled) ||
+					(matchesInstalled === previousMatchesInstalled &&
+						((entry.compatible && !previous.entry.compatible) ||
+							(repositoryUrl === previous.repositoryUrl &&
+								entry.publisherKeyId === previous.entry.publisherKeyId &&
+								entry.compatible === previous.entry.compatible &&
+								comparePluginVersions(entry.version, previous.entry.version) > 0)))
 				) {
 					selected.set(entry.packageId, { repositoryUrl, entry });
 				}

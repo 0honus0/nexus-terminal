@@ -14,9 +14,8 @@
 	} from '@/foundation/ui';
 	import type { usePluginManagement } from '../composables/use-plugin-management';
 	import PluginRepositorySettings from './PluginRepositorySettings.vue';
-	import PluginInstanceSettings from './PluginInstanceSettings.vue';
 	import type { ManagedApp } from '../../model/app-management-types';
-	import type { PluginCatalogEntry, PluginPackageInstallation } from '../model/plugin-types';
+	import type { PluginCatalogEntry } from '../model/plugin-types';
 	import type { AgentCapability } from '@nexus-terminal/shared/agent/governance/values';
 
 	const { t, te } = useI18n();
@@ -46,7 +45,6 @@
 		packageInstallations,
 		retainedPackageIds,
 		retirePackage,
-		cancelPackageUpdate,
 		versions,
 		candidate,
 		candidatePlan,
@@ -72,14 +70,7 @@
 	const publisherFormId = useId();
 	const activePublishers = computed(() => publishers.value.filter((publisher) => publisher.revokedAt === null));
 	let publisherDialogGeneration = 0;
-	const settingsPackage = ref<PluginPackageInstallation | null>(null);
-	const settingsName = computed(
-		() =>
-			versions.value.find((version) => version.packageHash === settingsPackage.value?.packageHash)?.manifest
-				.displayName ??
-			settingsPackage.value?.packageId ??
-			'',
-	);
+
 	const blocked = computed(() => !props.active || !canWrite());
 	let candidateTrigger: HTMLElement | null = null;
 	watch(
@@ -172,7 +163,7 @@
 			</div>
 		</div>
 		<div :class="embedded ? 'space-y-4' : 'space-y-5 p-4 sm:p-5'">
-			<UiInlineNotice v-if="!candidate && operation.refreshRequired.value" tone="warning" compact>
+			<UiInlineNotice v-if="!candidate && operation.recoveryRequired.value" tone="warning" compact>
 				{{ t('agent.settings.appManagement.refreshRequired') }}
 				<template #actions>
 					<UiButton type="button" density="compact" :disabled="operation.busy.value" @click="load">{{
@@ -209,7 +200,6 @@
 				:package-installations="packageInstallations"
 				:retained-package-ids="retainedPackageIds"
 				@retire-package="retirePackage"
-				@cancel-package-update="cancelPackageUpdate"
 				:versions="versions"
 				:retained-app-ids="model.retainedAppIds.value"
 				:clearing="operation.busy.value"
@@ -221,7 +211,6 @@
 				@recommend="emit('recommend')"
 				@official-publishers="officialPublisherIds = $event"
 				@clear-data="model.clearData"
-				@settings="settingsPackage = $event"
 			/>
 
 			<div class="overflow-hidden rounded-xl bg-header/25">
@@ -324,7 +313,7 @@
 						:disabled="blocked"
 					/>
 				</label>
-				<UiInlineNotice v-if="operation.refreshRequired.value || mutationUnknown" tone="warning" compact>{{
+				<UiInlineNotice v-if="operation.recoveryRequired.value || mutationUnknown" tone="warning" compact>{{
 					t('agent.settings.appManagement.refreshRequired')
 				}}</UiInlineNotice>
 			</form>
@@ -370,7 +359,7 @@
 				</div>
 			</template>
 			<template v-if="candidate">
-				<UiInlineNotice v-if="operation.refreshRequired.value" tone="warning" compact>
+				<UiInlineNotice v-if="operation.recoveryRequired.value" tone="warning" compact>
 					{{ t('agent.settings.appManagement.refreshRequired') }}
 					<template #actions>
 						<UiButton type="button" density="compact" :disabled="operation.busy.value" @click="load">{{
@@ -494,13 +483,5 @@
 				</div>
 			</template>
 		</UiModal>
-		<PluginInstanceSettings
-			v-if="active && settingsPackage"
-			:key="settingsPackage.packageHash"
-			:installation="settingsPackage"
-			:name="settingsName"
-			:apps="apps"
-			@close="settingsPackage = null"
-		/>
 	</section>
 </template>

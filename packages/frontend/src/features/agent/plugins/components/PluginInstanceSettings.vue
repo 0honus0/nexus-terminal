@@ -19,7 +19,12 @@
 	import { useAuthenticatedViewScope } from '@/shared/session/use-authenticated-view-scope';
 	import { pendingPluginConfiguration, savePluginConfiguration } from '../api/plugin-configuration-writes';
 
-	const props = defineProps<{ installation: PluginPackageInstallation; name: string; apps: ManagedApp[] }>();
+	const props = defineProps<{
+		installation: PluginPackageInstallation;
+		name: string;
+		apps: ManagedApp[];
+		initialAppId?: string;
+	}>();
 	const emit = defineEmits<{ close: [] }>();
 	const { t } = useI18n();
 	const appId = ref('');
@@ -192,7 +197,8 @@
 	watch(
 		() => props.apps,
 		(apps) => {
-			if (!apps.some((app) => app.id === appId.value)) appId.value = apps[0]?.id ?? '';
+			if (!apps.some((app) => app.id === appId.value))
+				appId.value = apps.find((app) => app.id === props.initialAppId)?.id ?? apps[0]?.id ?? '';
 		},
 		{ immediate: true },
 	);

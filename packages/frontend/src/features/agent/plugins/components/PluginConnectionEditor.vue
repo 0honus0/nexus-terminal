@@ -111,7 +111,7 @@
 <template>
 	<form class="ui-form-section space-y-4" @submit.prevent="save">
 		<h4>{{ t('agent.settings.plugins.settings.connection') }}</h4>
-		<UiInlineNotice v-if="operation.refreshRequired.value" tone="warning" compact>
+		<UiInlineNotice v-if="operation.recoveryRequired.value" tone="warning" compact>
 			{{ t('agent.settings.integrationManagement.reload') }}
 			<template #actions
 				><UiButton :disabled="operation.busy.value" @click="load">{{
@@ -173,7 +173,9 @@
 					><UiTextarea :id="`${instanceId}-argv`" v-model="argv" :min-rows="3" class="font-mono"
 				/></UiFormField>
 			</template>
-			<UiButton type="submit" :loading="operation.busy.value">{{ t('common.save') }}</UiButton>
+			<div class="flex justify-end">
+				<UiButton type="submit" :loading="operation.busy.value">{{ t('common.save') }}</UiButton>
+			</div>
 		</fieldset>
 	</form>
 </template>

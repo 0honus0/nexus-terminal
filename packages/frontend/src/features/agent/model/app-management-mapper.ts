@@ -1,4 +1,4 @@
-import type { AgentAppView, AgentAppDefinitionView } from '@nexus-terminal/shared/agent/scope/model';
+import type { AgentAppView } from '@nexus-terminal/shared/agent/scope/model';
 import type {
 	AgentExecutionPolicyOverrides,
 	AgentExecutionPolicyView,
@@ -9,7 +9,6 @@ import type {
 import type { AgentGrantReplaceRequest } from '@nexus-terminal/shared/agent/governance/http';
 import type {
 	AgentDenylist,
-	AppDefinition,
 	AppExecutionPolicy,
 	AppGrantInput,
 	AppGrants,
@@ -31,15 +30,6 @@ export function fromManagedApp(value: AgentAppView): ManagedApp {
 		executionState: value.executionState,
 		createdAt: value.createdAt,
 		updatedAt: value.updatedAt,
-	};
-}
-
-export function fromAppDefinition(value: AgentAppDefinitionView): AppDefinition {
-	return {
-		id: value.id,
-		version: value.version,
-		name: value.displayName,
-		capabilities: value.capabilities.map((capability) => capability),
 	};
 }
 

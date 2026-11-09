@@ -5,13 +5,44 @@ export const CAPABILITY_GROUPS: readonly {
 	id: CapabilityCategory;
 	label: string;
 	icon: string;
+	accent: string;
 }[] = [
-	{ id: 'files', label: 'agent.settings.apps.categoryFiles', icon: 'fa-solid fa-folder-tree' },
-	{ id: 'execution', label: 'agent.settings.apps.categoryExecution', icon: 'fa-solid fa-terminal' },
-	{ id: 'machine', label: 'agent.settings.apps.categoryMachine', icon: 'fa-solid fa-server' },
-	{ id: 'browser', label: 'agent.settings.apps.categoryBrowser', icon: 'fa-solid fa-globe' },
-	{ id: 'integration', label: 'agent.settings.apps.categoryIntegration', icon: 'fa-solid fa-plug' },
-	{ id: 'data', label: 'agent.settings.apps.categoryData', icon: 'fa-solid fa-box-archive' },
+	{
+		id: 'files',
+		label: 'agent.settings.apps.categoryFiles',
+		icon: 'fa-solid fa-folder-tree',
+		accent: 'var(--status-warning-color)',
+	},
+	{
+		id: 'execution',
+		label: 'agent.settings.apps.categoryExecution',
+		icon: 'fa-solid fa-terminal',
+		accent: 'var(--status-success-color)',
+	},
+	{
+		id: 'machine',
+		label: 'agent.settings.apps.categoryMachine',
+		icon: 'fa-solid fa-server',
+		accent: 'var(--status-info-color)',
+	},
+	{
+		id: 'browser',
+		label: 'agent.settings.apps.categoryBrowser',
+		icon: 'fa-solid fa-globe',
+		accent: 'var(--status-info-color)',
+	},
+	{
+		id: 'integration',
+		label: 'agent.settings.apps.categoryIntegration',
+		icon: 'fa-solid fa-plug',
+		accent: 'var(--link-color)',
+	},
+	{
+		id: 'data',
+		label: 'agent.settings.apps.categoryData',
+		icon: 'fa-solid fa-box-archive',
+		accent: 'var(--link-color)',
+	},
 ];
 
 export const CAPABILITY_CATEGORIES: Record<AgentCapability, CapabilityCategory> = {

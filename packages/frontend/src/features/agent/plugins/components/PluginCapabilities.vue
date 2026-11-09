@@ -22,6 +22,7 @@
 			id: group.id,
 			label: group.label,
 			icon: group.icon,
+			accent: group.accent,
 			capabilities: [...new Set(props.capabilities)].filter(
 				(capability) => CAPABILITY_CATEGORIES[capability] === group.id,
 			),
@@ -37,14 +38,19 @@
 		<details
 			v-for="group in groups"
 			:key="group.id"
-			class="group/capability border-t border-border/40 first:border-t-0"
+			:style="{ '--capability-accent': group.accent }"
+			class="plugin-capabilities__group group/capability border-t border-border/40 first:border-t-0"
 		>
 			<summary
 				class="flex min-h-11 cursor-pointer list-none items-center gap-2.5 px-3 py-2 hover:bg-header/30 focus-visible:outline-primary"
 			>
-				<i :class="group.icon" class="w-4 shrink-0 text-center text-primary" aria-hidden="true"></i>
+				<i
+					:class="group.icon"
+					class="plugin-capabilities__accent w-4 shrink-0 text-center"
+					aria-hidden="true"
+				></i>
 				<span class="min-w-0 flex-1 font-medium text-foreground">{{ t(group.label) }}</span>
-				<span class="shrink-0 font-mono tabular-nums text-text-secondary"
+				<span class="plugin-capabilities__accent shrink-0 font-mono tabular-nums"
 					>{{
 						editable
 							? `${group.capabilities.filter((capability) => granted?.includes(capability)).length} / `
@@ -98,6 +104,13 @@
 	</div>
 </template>
 <style scoped>
+	.plugin-capabilities__accent {
+		color: color-mix(in srgb, var(--capability-accent) 65%, var(--text-color));
+	}
+	.plugin-capabilities__group[open] > summary {
+		background: color-mix(in srgb, var(--capability-accent) 7%, transparent);
+	}
+
 	summary::-webkit-details-marker {
 		display: none;
 	}

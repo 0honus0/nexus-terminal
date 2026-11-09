@@ -69,18 +69,16 @@
 	<div class="space-y-4">
 		<section class="overflow-hidden rounded-xl bg-header/20">
 			<header
-				class="flex flex-col gap-3 border-b border-border/50 px-4 py-4 sm:px-5 md:flex-row md:items-center md:justify-between"
+				class="flex flex-col gap-3 border-b border-info/20 bg-info/5 px-4 py-4 sm:px-5 md:flex-row md:items-center md:justify-between"
 			>
 				<div class="flex min-w-0 flex-wrap items-center gap-2">
-					<span
-						class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
-					>
+					<span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-info/10 text-info">
 						<i class="fa-solid fa-shield-halved text-[11px]" aria-hidden="true"></i>
 					</span>
 					<h4 class="text-xs font-bold text-foreground">
 						{{ t('agent.settings.apps.capabilitiesHeader') }}
 					</h4>
-					<UiBadge appearance="ghost" density="compact" class="font-mono"
+					<UiBadge :tone="grantedCount ? 'success' : 'neutral'" density="compact" class="font-mono"
 						>{{ grantedCount }} / {{ definitions.length }}</UiBadge
 					>
 					<UiInfoHint :text="t('agent.settings.apps.capabilitiesSubtitle')" />
@@ -97,7 +95,7 @@
 					<UiButton
 						v-if="definitions.length"
 						appearance="soft"
-						tone="neutral"
+						:tone="grantedCount === definitions.length ? 'danger' : 'success'"
 						type="button"
 						class="justify-center"
 						:disabled="grantBlocked"

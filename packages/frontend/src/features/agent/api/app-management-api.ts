@@ -1,5 +1,4 @@
 import {
-	readAgentAppDefinitionListResponse,
 	readAgentAppListResponse,
 	readAgentAppPath,
 	readAgentAppResponse,
@@ -28,7 +27,6 @@ import type {
 } from '@nexus-terminal/shared/agent/governance/http';
 import {
 	fromAgentDenylist,
-	fromAppDefinition,
 	fromAppGrants,
 	fromAppPolicy,
 	fromManagedApp,
@@ -38,7 +36,6 @@ import {
 import type {
 	AgentDenylist,
 	AgentDenylistDraft,
-	AppDefinition,
 	AppExecutionPolicy,
 	AppGrantInput,
 	AppGrants,
@@ -66,18 +63,6 @@ export async function listManagedApps(signal?: AbortSignal): Promise<ManagedApp[
 		signal,
 	});
 	return result.map(fromManagedApp);
-}
-
-export async function listAppDefinitions(signal?: AbortSignal): Promise<AppDefinition[]> {
-	const result = await requestAgentManagement({
-		method: 'GET',
-		path: '/app-definitions',
-		maxRequestBytes: AGENT_MAX_JSON_BODY_BYTES,
-		maxResponseBytes: AGENT_APP_MAX_RESPONSE_BYTES,
-		decode: readAgentAppDefinitionListResponse,
-		signal,
-	});
-	return result.map(fromAppDefinition);
 }
 
 export async function setManagedAppEnabled(

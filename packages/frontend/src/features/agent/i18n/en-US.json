@@ -46,7 +46,6 @@
       },
       "apps": {
         "title": "Agent apps",
-        "description": "Enable or disable each Agent app independently. Disabling one app does not stop other apps.",
         "activity": "Runs {runs} · approvals {approvals} · budget requests {budget}",
         "disable": "Disable",
         "enable": "Enable",
@@ -69,13 +68,11 @@
         "statusEnabled": "Enabled",
         "statusDisabled": "Disabled",
         "declaredCapabilities": "Declared capabilities",
-        "unknownDefinition": "Unknown app",
         "capabilityUnknownName": "Extension capability",
         "technicalDetails": "Instance details",
         "runsMetric": "Active Runs",
         "approvalsMetric": "Approvals",
         "grantsMetric": "Granted Capabilities",
-        "coreOfficial": "Official Core",
         "configPermissions": "Configure Policies",
         "uninstall": "Uninstall",
         "uninstallDisabledHint": "Disable this app before uninstalling",
@@ -96,16 +93,6 @@
         "enableAllCapabilities": "Enable all capabilities",
         "disableAllCapabilities": "Disable all capabilities",
         "capabilityUnknownDesc": "Host-level capability declaration",
-        "badges": {
-          "officialExtension": "Official Extension",
-          "thirdParty": "Third-party Extension"
-        },
-        "summaries": {
-          "nexusAgent": "Official general-purpose agent core with built-in automation, diagnostics and full-stack engineering skills",
-          "nexusFullstack": "Full-stack delivery suite covering microservice governance, complex dependency integration and deployment verification",
-          "default": "Installed Agent plugin app with a verified signature"
-        },
-        "enabledCount": "Enabled {enabled}/{total}",
         "grantedCount": "{granted}/{total} granted",
         "deleteDataOnUninstall": "Also permanently delete this plugin’s dedicated persisted data space",
         "capabilities": {
@@ -277,7 +264,8 @@
           "pluginUninstalledDataRetained": "Plugin code uninstalled. App data was retained.",
           "pluginDataDeleted": "Retained AppStorage data deleted."
         },
-        "remoteRepositories": "Plugin repositories",
+        "manageRepositories": "Manage repositories",
+        "remoteRepositories": "Available plugins",
         "remoteRepositoriesHint": "The Nexus first-party catalog is pinned by the Host. Additional repositories provide discovery only and require an explicitly trusted Ed25519 publisher before installation.",
         "officialRepository": "Official repository",
         "refreshRemote": "Refresh repositories",
@@ -371,7 +359,9 @@
           "connection": "Connection settings",
           "noConnection": "No connection"
         },
-        "managedPackages": "Installed packages and retained data"
+        "installedAgents": "Installed Agents",
+        "installedPlugins": "Installed plugins",
+        "installedPluginsEmpty": "No installed plugins"
       },
       "hardLimits": {
         "title": "Hard Limits",
@@ -796,7 +786,6 @@
         "storage": "Artifact storage",
         "storageLimit": "Limit {value}",
         "defaultModel": "Default model",
-        "activeApps": "Active apps",
         "sandbox": "Sandbox",
         "ready": "Ready",
         "notReady": "Not ready"

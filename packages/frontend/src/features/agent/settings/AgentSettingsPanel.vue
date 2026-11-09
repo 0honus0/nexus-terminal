@@ -41,7 +41,6 @@
 		if (props.active && activeGroup.value === 'tools' && !plugins.operation.refreshRequired.value)
 			management.reload();
 	});
-	const enabledApps = computed(() => management.apps.value.filter((app) => app.enabled).length);
 	const visitedGroups = reactive(new Set<SettingsGroup>(['models']));
 	const pluginRevision = ref(0);
 	const onboarding = useAgentOnboarding({
@@ -103,14 +102,6 @@
 					{{ t('agent.settings.feature.title') }}
 				</h2>
 				<UiInfoHint :text="featureHelp" />
-				<span
-					class="agent-settings-master__apps inline-flex items-center justify-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-xs text-text-secondary"
-				>
-					<span>{{ t('agent.settings.summary.activeApps') }}</span>
-					<span class="font-mono font-medium text-foreground">
-						{{ enabledApps }} / {{ management.apps.value.length }}
-					</span>
-				</span>
 			</div>
 			<UiSwitch
 				id="agent-feature-enabled"
@@ -208,12 +199,6 @@
 		gap: 0.5rem;
 	}
 
-	.agent-settings-master__apps {
-		min-width: 0;
-		max-width: 100%;
-		white-space: nowrap;
-	}
-
 	@container (max-width: 480px) {
 		.agent-settings-master {
 			align-items: flex-start;
@@ -236,10 +221,6 @@
 
 		.agent-settings-master__heading {
 			gap: 0.375rem;
-		}
-
-		.agent-settings-master__apps {
-			padding-inline: 0.5rem;
 		}
 	}
 

@@ -53,6 +53,13 @@ export function useAgentManagementOperation(
 		return t('agent.settings.appManagement.' + notice.value);
 	});
 	const failureMessage = computed(() => (notice.value === 'saved' ? '' : message.value));
+	// Initial reads also block writes, but only an actual failure needs recovery UI.
+	const recoveryRequired = computed(
+		() =>
+			refreshRequired.value &&
+			!busy.value &&
+			(failureCause.value !== undefined || (notice.value !== '' && notice.value !== 'saved')),
+	);
 	useFeedbackMessage(
 		() => {
 			if (notice.value === 'saved' ? options.notifySuccess === false : options.notifyFailure === false) return '';
@@ -151,6 +158,7 @@ export function useAgentManagementOperation(
 	return {
 		busy,
 		refreshRequired,
+		recoveryRequired,
 		notice,
 		failureMessage,
 		execute,

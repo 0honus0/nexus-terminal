@@ -103,7 +103,7 @@
 				</form>
 			</UiSettingsGroup>
 
-			<UiSettingsGroup :title="t('settings.ipBlacklist.title')" icon="fa-solid fa-shield-slash" tone="warning">
+			<UiSettingsGroup :title="t('settings.ipBlacklist.title')" icon="fa-solid fa-ban" tone="warning">
 				<template #actions>
 					<label class="flex items-center gap-2 text-xs font-medium text-text-secondary">
 						<span>{{ policy.blacklistEnabled ? t('common.enabled') : t('common.disabled') }}</span>

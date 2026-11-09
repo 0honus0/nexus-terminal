@@ -46,7 +46,6 @@
       },
       "apps": {
         "title": "Agent App",
-        "description": "Agent App ごとに個別に有効・無効を切り替えます。1 つの App を無効にしても他の App は停止しません。",
         "activity": "実行中 {runs} · 承認待ち {approvals} · 予算要求 {budget}",
         "disable": "無効化",
         "enable": "有効化",
@@ -69,13 +68,11 @@
         "statusEnabled": "有効",
         "statusDisabled": "停止中",
         "declaredCapabilities": "宣言済み能力",
-        "unknownDefinition": "不明なアプリ",
         "capabilityUnknownName": "拡張能力",
         "technicalDetails": "インスタンス詳細",
         "runsMetric": "実行中",
         "approvalsMetric": "承認待ち",
         "grantsMetric": "付与済み権限",
-        "coreOfficial": "公式コア",
         "configPermissions": "セキュリティ設定",
         "uninstall": "アンインストール",
         "uninstallDisabledHint": "アンインストールする前にこのアプリを無効化してください",
@@ -96,16 +93,6 @@
         "enableAllCapabilities": "すべての権限を有効化",
         "disableAllCapabilities": "すべての権限を無効化",
         "capabilityUnknownDesc": "ホスト基盤レベルの能力宣言",
-        "badges": {
-          "officialExtension": "公式拡張",
-          "thirdParty": "サードパーティ拡張"
-        },
-        "summaries": {
-          "nexusAgent": "公式の汎用エージェントコア。自動運用診断とフルスタック協業スキルを内蔵",
-          "nexusFullstack": "フルスタック納品スイート。マイクロサービス運用、複雑な依存関係の結合検証、デプロイ検証に対応",
-          "default": "署名検証済みのインストール済み Agent プラグイン App"
-        },
-        "enabledCount": "有効 {enabled}/{total}",
         "grantedCount": "{granted}/{total} 件許可済み",
         "deleteDataOnUninstall": "このプラグイン専用の永続データ領域も完全に削除する",
         "capabilities": {
@@ -277,7 +264,8 @@
           "pluginUninstalledDataRetained": "プラグインコードをアンインストールしました。App データは保持されています。",
           "pluginDataDeleted": "保持されていた AppStorage データを削除しました。"
         },
-        "remoteRepositories": "プラグインリポジトリ",
+        "manageRepositories": "リポジトリ管理",
+        "remoteRepositories": "利用可能なプラグイン",
         "remoteRepositoriesHint": "Nexus の first-party catalog は Host が発行者を固定します。追加リポジトリは検出のみを提供し、インストール前に Ed25519 発行者を明示的に信頼する必要があります。",
         "officialRepository": "公式リポジトリ",
         "refreshRemote": "リポジトリを更新",
@@ -371,7 +359,9 @@
           "connection": "接続設定",
           "noConnection": "接続なし"
         },
-        "managedPackages": "インストール済み・保持データ"
+        "installedAgents": "インストール済み Agent",
+        "installedPlugins": "インストール済みプラグイン",
+        "installedPluginsEmpty": "インストール済みプラグインはありません"
       },
       "hardLimits": {
         "title": "ハードリミット",
@@ -796,7 +786,6 @@
         "storage": "Artifact ストレージ",
         "storageLimit": "上限 {value}",
         "defaultModel": "既定モデル",
-        "activeApps": "アクティブ App",
         "sandbox": "サンドボックス",
         "ready": "準備完了",
         "notReady": "未準備"

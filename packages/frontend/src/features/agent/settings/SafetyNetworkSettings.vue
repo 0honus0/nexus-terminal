@@ -162,7 +162,7 @@
 <template>
 	<section class="ui-glass-panel rounded-2xl transition-all" :aria-label="t('agent.settings.appManagement.denylist')">
 		<div
-			class="agent-settings-head ui-glass-chrome flex flex-wrap items-center justify-between gap-3 rounded-t-2xl border-b border-border px-4 py-3 sm:px-5 sm:py-3.5"
+			class="agent-settings-head ui-glass-chrome flex flex-wrap items-center justify-between gap-3 rounded-t-2xl px-4 py-3 sm:px-5 sm:py-3.5"
 		>
 			<div>
 				<div class="flex flex-wrap items-center gap-2.5">
@@ -203,7 +203,7 @@
 		</div>
 
 		<div v-if="expanded" class="space-y-4 border-t border-border p-4 sm:p-5">
-			<UiInlineNotice v-if="operation.refreshRequired.value" tone="warning" compact>
+			<UiInlineNotice v-if="operation.recoveryRequired.value" tone="warning" compact>
 				{{ t('agent.settings.appManagement.refreshRequired') }}
 				<template #actions>
 					<UiButton
@@ -257,7 +257,7 @@
 				:title="t('agent.settings.safety.loadingConnections')"
 			/>
 			<UiInlineNotice
-				v-else-if="directoryOperation.notice.value || directoryOperation.refreshRequired.value"
+				v-else-if="directoryOperation.recoveryRequired.value || directoryOperation.failureMessage.value"
 				tone="warning"
 				compact
 			>
