@@ -35,33 +35,14 @@
         "schedulerHint": "スケジューラはアプリ間委譲と動的な予算管理に対応します"
       },
       "onboarding": {
-        "title": "Nexus Agent をインストールして Agent を有効化",
-        "description": "署名済み公式カタログから Nexus Agent をインストールし、宣言されたすべての機能を許可してプラグインを有効化した後、Agent 全体を有効にします。",
-        "verifiedPublisher": "固定された Nexus 公式 Publisher",
-        "installAndEnable": "Nexus Agent をインストールして有効化",
-        "installing": "インストール中...",
+        "title": "Agent を有効化",
+        "description": "Agent を有効にするには、次の必須プラグインが必要です。インストール済みのものを再利用し、すべての準備ができてから有効にします。",
+        "installAndEnable": "インストールして有効化",
+        "subtitle": "新しいアプリは宣言された権限で有効化されます。対象範囲と承認ポリシーは引き続き適用され、既存アプリの権限と有効状態は維持されます。",
+        "installing": "インストール中…",
         "cancel": "キャンセル",
-        "subtitle": "インストール後はプラグインが有効になり、宣言された全機能が許可されます。対象の制限と承認ポリシーは引き続き適用されます。",
-        "badge": "公式コアプラグイン",
-        "featureSkillsTitle": "デュアルコアスキル",
-        "featureSkillsDesc": "署名済みの Operations と Developer 運用・開発スキルを内包",
-        "featureSandboxTitle": "SSH の許可に基づく実行",
-        "featureSandboxDesc": "明示的に許可された SSH 接続を通じて実行し、Host の権限・ポリシー・承認を適用します。ローカル Workspace サンドボックスは使用しません。",
-        "featureDecoupledTitle": "疎結合アーキテクチャ",
-        "featureDecoupledDesc": "本体を改変せず独立してホットアップグレードやアンインストールが可能",
-        "publisherVerified": "検証済み署名",
-        "detailsToggle": "認証情報",
-        "hideDetails": "折りたたむ",
-        "copyKey": "Key をコピー",
-        "keyCopied": "コピー完了",
-        "fullKeyId": "完全な公開鍵フィンガープリント (Ed25519)",
-        "catalogSource": "カタログ配布元 (Catalog URL)",
-        "installingTitle": "エージェントを安全に配備中...",
-        "installStep1": "公式 Ed25519 署名と完全性の検証中...",
-        "installStep2": "Operations / Developer スキルの登録中...",
-        "installStep3": "権限を登録し、SSH の承認に基づく Agent を有効化しています...",
-        "sandboxProtected": "Host の権限・承認・SSH ターゲット境界で保護",
-        "defaultPluginSummary": "許可された SSH 接続を通じてリモート診断と開発を行う公式汎用 Agent。"
+        "ready": "準備完了",
+        "required": "必須"
       },
       "apps": {
         "title": "Agent App",
@@ -232,9 +213,27 @@
               }
             }
           },
-          "plugin.invoke": {
-            "name": "プラグインツール",
-            "desc": "現在のアプリが宣言した隔離バックエンドツールを呼び出します。権限と呼び出しごとの承認が必要です。"
+          "service": {
+            "transport": {
+              "http": {
+                "name": "HTTP サービス接続",
+                "desc": "管理された HTTP 接続で設定済み外部サービスにアクセス"
+              },
+              "process": {
+                "name": "リモートプロセス接続",
+                "desc": "許可された SSH 接続先で管理されたプロトコルプロセスを起動"
+              }
+            }
+          },
+          "plugin": {
+            "invoke": {
+              "name": "プラグインツール",
+              "desc": "現在のアプリが宣言した隔離バックエンドツールを呼び出します。権限と呼び出しごとの承認が必要です。"
+            },
+            "configure": {
+              "name": "プラグイン設定",
+              "desc": "このアプリで許可されたプラグイン設定の読み取りと変更"
+            }
           }
         },
         "installationUnavailable": "プラグインのインストール情報を取得できません。再読み込みしてください。"

@@ -4,12 +4,7 @@ import {
 	readAgentPluginPackageUpdateCancellation,
 } from '@nexus-terminal/shared/agent/plugins/package-update-http-codec';
 import {
-	readAgentPluginRecommendedInstallRequest,
-	readAgentPluginRecommendedInstallResponse,
-} from '@nexus-terminal/shared/agent/plugins/recommended-install-codec';
-import {
 	readAgentPluginInstallPlan,
-	readAgentPluginInstallPlanRequest,
 	readAgentPluginInstallPlanResponse,
 } from '@nexus-terminal/shared/agent/plugins/install-plan-codec';
 import type {
@@ -17,7 +12,11 @@ import type {
 	PluginInstallPlanResult,
 	PluginPreparedStage,
 } from '../model/plugin-install-plan-types';
-import { fromPluginInstallPlan, fromPluginInstallPlanResult } from '../model/plugin-install-plan-mapper';
+import {
+	fromPluginInstallPlan,
+	fromPluginInstallPlanResult,
+	toPluginInstallPlanRequest,
+} from '../model/plugin-install-plan-mapper';
 import { readAgentId } from '@nexus-terminal/shared/agent/http-codec';
 import {
 	readAgentPluginPackageInstallationList,
@@ -37,7 +36,6 @@ import {
 import {
 	readAgentPluginCatalog,
 	readAgentPluginOfficialStage,
-	readAgentPluginRecommended,
 	readAgentPluginRepositorySettings,
 	readAgentPluginRepositoryStage,
 	readAgentPluginRepositoryUpdate,
@@ -57,7 +55,6 @@ import type {
 	PluginInstallation,
 	PluginInstallationDirectory,
 	PluginPublisher,
-	PluginRecommendation,
 	PluginRepositories,
 	PluginVersion,
 } from '../model/plugin-types';
@@ -68,7 +65,6 @@ import {
 	fromPluginAppBinding,
 	fromPluginInstallation,
 	fromPluginPublisher,
-	fromPluginRecommendation,
 	fromPluginRepositories,
 	fromPluginVersion,
 } from '../model/plugin-mapper';
@@ -409,18 +405,6 @@ export async function getPluginCatalog(repositoryUrl: string | null, signal?: Ab
 	return fromPluginCatalog(value);
 }
 
-export async function getPluginRecommendation(signal?: AbortSignal): Promise<PluginRecommendation> {
-	return fromPluginRecommendation(
-		await requestAgentManagement({
-			...budgets,
-			method: 'GET',
-			path: '/onboarding/recommended-plugin',
-			decode: readAgentPluginRecommended,
-			signal,
-		}),
-	);
-}
-
 export async function listPluginAppBindings(signal?: AbortSignal): Promise<PluginAppBinding[]> {
 	const value = await requestAgentManagement({
 		...budgets,
@@ -508,72 +492,18 @@ export async function preparePluginInstallPlan(
 export async function executePluginInstallPlan(
 	plan: PluginInstallPlan,
 	signal?: AbortSignal,
-	initialization: 'disabled' | 'declared_grants' = 'disabled',
 ): Promise<PluginInstallPlanResult> {
-	const target = plan.target.stage;
-	const input = readAgentPluginInstallPlanRequest({
-		initialization,
-		repositoryVersion: plan.repositoryVersion,
-		target: {
-			repositoryUrl: plan.target.repositoryUrl,
-			stageId: target.id,
-			expectedVersion: target.version,
-			expectedInstallationRevision: plan.target.expectedInstallationRevision,
-			package: {
-				packageId: target.manifest.id,
-				version: target.manifest.version,
-				packageHash: target.packageHash,
-				publisherKeyId: target.publisherKeyId,
-			},
-		},
-		dependencies: plan.dependencies.map((dependency) =>
-			dependency.kind === 'installed'
-				? {
-						kind: 'installed',
-						expectedRevision: dependency.installation.revision,
-						package: {
-							packageId: dependency.installation.packageId,
-							version: dependency.installation.version,
-							packageHash: dependency.installation.packageHash,
-							publisherKeyId: dependency.installation.publisherKeyId,
-						},
-					}
-				: {
-						kind: 'staged',
-						repositoryUrl: dependency.repositoryUrl,
-						stageId: dependency.stage.id,
-						expectedVersion: dependency.stage.version,
-						expectedInstallationRevision: dependency.expectedInstallationRevision,
-						package: {
-							packageId: dependency.stage.manifest.id,
-							version: dependency.stage.manifest.version,
-							packageHash: dependency.stage.packageHash,
-							publisherKeyId: dependency.stage.publisherKeyId,
-						},
-					},
-		),
-	});
+	const input = toPluginInstallPlanRequest(plan, 'disabled');
 	const value = await requestAgentManagement({
 		...budgets,
 		method: 'POST',
-		path: initialization === 'declared_grants' ? '/onboarding/recommended-plugin/install' : '/plugins/install-plan',
+		path: '/plugins/install-plan',
 		signal,
 
-		input: () =>
-			initialization === 'declared_grants'
-				? readAgentPluginRecommendedInstallRequest({ kind: 'plan', plan: input })
-				: input,
+		input: () => input,
 
 		decode(raw) {
-			const result =
-				initialization === 'declared_grants'
-					? (() => {
-							const response = readAgentPluginRecommendedInstallResponse(raw);
-							if (response.kind !== 'installed')
-								throw new Error('Recommended installation result mismatch');
-							return response.result;
-						})()
-					: readAgentPluginInstallPlanResponse(raw);
+			const result = readAgentPluginInstallPlanResponse(raw, input);
 			const installed = result.installation;
 			if (
 				installed.packageId !== input.target.package.packageId ||

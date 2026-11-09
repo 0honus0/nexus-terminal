@@ -35,33 +35,14 @@
         "schedulerHint": "调度器支持多应用委派与动态预算管控"
       },
       "onboarding": {
-        "title": "安装 Nexus Agent 并启用 Agent",
-        "description": "从官方签名目录安装 Nexus Agent，默认启用插件并授予其声明的全部能力，随后开启 Agent 总开关。",
-        "verifiedPublisher": "Nexus 固定官方发布者",
-        "installAndEnable": "安装 Nexus Agent 并启用 Agent",
-        "installing": "正在安装...",
+        "title": "启用 Agent",
+        "description": "启用前需要安装以下必需插件。已安装的插件会直接复用，全部就绪后开启 Agent。",
+        "installAndEnable": "安装并启用",
+        "subtitle": "新建应用默认启用并授予声明的权限，仍受目标范围与审批策略约束；已有应用的权限和启停设置保持不变。",
+        "installing": "正在安装…",
         "cancel": "取消",
-        "subtitle": "安装后默认启用插件并授予全部声明能力，仍受目标禁用名单与审批策略约束。",
-        "badge": "官方核心插件",
-        "featureSkillsTitle": "双核心技能包",
-        "featureSkillsDesc": "内置签名认证的 Operations 与 Developer 运维及代码工程能力",
-        "featureSandboxTitle": "SSH 授权执行",
-        "featureSandboxDesc": "远端操作仅通过明确授权的 SSH 目标，并受 Host 权限、策略与审批约束；不提供本地 Workspace 沙箱。",
-        "featureDecoupledTitle": "热插拔架构",
-        "featureDecoupledDesc": "支持随时独立热升级或卸载停用，不侵入系统内核",
-        "publisherVerified": "官方签名通过",
-        "detailsToggle": "技术凭据",
-        "hideDetails": "收起凭据",
-        "copyKey": "复制 Key",
-        "keyCopied": "已复制",
-        "fullKeyId": "完整公钥指纹 (Ed25519)",
-        "catalogSource": "官方分发源 (Catalog URL)",
-        "installingTitle": "正在安全部署与挂载 Agent...",
-        "installStep1": "正在下载并校验 Ed25519 官方签名与完整性...",
-        "installStep2": "正在注册并装载 Operations 与 Developer 技能包...",
-        "installStep3": "注册权限并启用通过 SSH 授权执行的 Agent...",
-        "sandboxProtected": "受 Host 权限、审批和 SSH 目标边界保护",
-        "defaultPluginSummary": "官方通用 Agent，通过已授权 SSH 连接执行远端诊断与开发任务。"
+        "ready": "已就绪",
+        "required": "必需安装"
       },
       "apps": {
         "title": "Agent App",
@@ -232,9 +213,27 @@
               }
             }
           },
-          "plugin.invoke": {
-            "name": "插件工具",
-            "desc": "调用当前应用声明的隔离后端工具；仍需当前授权和单次审批。"
+          "service": {
+            "transport": {
+              "http": {
+                "name": "HTTP 协议连接",
+                "desc": "使用受管 HTTP 连接访问已配置的外部服务"
+              },
+              "process": {
+                "name": "远端进程连接",
+                "desc": "在已授权 SSH 目标启动受管协议进程"
+              }
+            }
+          },
+          "plugin": {
+            "invoke": {
+              "name": "插件工具",
+              "desc": "调用当前应用声明的隔离后端工具；仍需当前授权和单次审批。"
+            },
+            "configure": {
+              "name": "配置插件",
+              "desc": "读取和修改当前应用允许管理的插件配置"
+            }
           }
         },
         "installationUnavailable": "插件安装信息不可用，请重新读取"

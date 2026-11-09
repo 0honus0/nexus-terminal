@@ -25,6 +25,7 @@ export async function buildNativePluginPackage(directory, name, signingKeyPath, 
 		manifest.id = id;
 		manifest.version = version;
 		manifest.displayName = name;
+		if (extension.requiredOnEnable !== undefined) manifest.requiredOnEnable = extension.requiredOnEnable;
 		manifest.dependencies = extension.dependencies ?? [];
 		manifest.contributions.skills = manifest.contributions.skills.map((skill) => ({
 			id: id + '.' + skill.path.split('/')[1],
@@ -76,6 +77,7 @@ async (input, context) => {
 			id,
 			version,
 			displayName: name,
+			requiredOnEnable: extension.requiredOnEnable,
 			compatibility: {
 				host: { minVersion: '1.0.0', maxVersion: '1.99.99' },
 				backendSdk: backend ? 4 : null,

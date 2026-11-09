@@ -122,8 +122,7 @@
 			/>
 		</div>
 		<AgentOnboardingModal
-			v-if="onboarding.entry.value"
-			:entry="onboarding.entry.value"
+			v-if="onboarding.visible.value"
 			:visible="onboarding.visible.value"
 			:busy="onboarding.operation.busy.value"
 			:plan="onboarding.plan.value"
@@ -132,7 +131,6 @@
 			:confirm-disabled="
 				!onboarding.plan.value ||
 				onboarding.operation.refreshRequired.value ||
-				!onboarding.entry.value.compatible ||
 				execution.blocked.value ||
 				execution.dirty.value ||
 				execution.hardChanged.value

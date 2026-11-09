@@ -31,6 +31,7 @@ export interface StoredPluginManifest {
 	id: string;
 	version: string;
 	displayName: string;
+	requiredOnEnable?: boolean;
 	compatibility: {
 		host: { minVersion: string; maxVersion: string };
 		backendSdk: number | null;

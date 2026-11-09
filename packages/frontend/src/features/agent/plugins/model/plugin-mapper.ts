@@ -15,7 +15,6 @@ import type {
 import type {
 	AgentPluginCatalog,
 	AgentPluginCatalogEntry,
-	AgentPluginRecommended,
 	AgentPluginRepositorySettings,
 } from '@nexus-terminal/shared/agent/plugins/repository-model';
 import type {
@@ -29,7 +28,6 @@ import type {
 	PluginVersion,
 	PluginCatalog,
 	PluginCatalogEntry,
-	PluginRecommendation,
 	PluginRepositories,
 	PluginDataPurge,
 	PluginPackageUpdatePreparation,
@@ -51,6 +49,7 @@ export function fromPluginManifest(value: AgentPluginManifest): PluginManifest {
 		id: value.id,
 		version: value.version,
 		displayName: value.displayName,
+		requiredOnEnable: value.requiredOnEnable,
 		compatibility: {
 			host: { minVersion: value.compatibility.host.minVersion, maxVersion: value.compatibility.host.maxVersion },
 			backendSdk: value.compatibility.backendSdk,
@@ -152,6 +151,7 @@ export function fromPluginCatalogEntry(value: AgentPluginCatalogEntry): PluginCa
 		contributionKinds: value.contributionKinds.map((kind) => kind),
 		compatibilityReason: value.compatibilityReason,
 		displayName: value.displayName,
+		requiredOnEnable: value.requiredOnEnable,
 		description: value.description,
 		localizations: value.localizations?.map((item) => ({
 			locale: item.locale,
@@ -175,13 +175,6 @@ export function fromPluginCatalog(value: AgentPluginCatalog): PluginCatalog {
 			publicKeyPem: item.publicKeyPem,
 		})),
 		packages: value.packages.map(fromPluginCatalogEntry),
-	};
-}
-
-export function fromPluginRecommendation(value: AgentPluginRecommended): PluginRecommendation {
-	return {
-		entry: value.entry === null ? null : fromPluginCatalogEntry(value.entry),
-		installation: value.installation === null ? null : fromPluginInstallation(value.installation),
 	};
 }
 

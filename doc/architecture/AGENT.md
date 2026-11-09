@@ -165,3 +165,14 @@ Registry 在同一次发布中按完整 schema 文本复用技术编译结果，
 归档容量由插件契约 owner 传给通用 PackageReader；技术 Adapter 消费该配额，不重复硬编码另一套业务上限。完整 TAR 表示、展开及单文件计量和路径安全在读取边界执行，计算预算还需满足 Node Buffer 的真实表示上限。不以固定目录层数替代合法路径及字节预算。通用读取器不叠加4096字符路径或64KiB元数据上限，插件路径声明仍在包契约边界校验。gzip/Zstandard在明确的完整容器预算内只展开一次，禁用TAR后续隐式解压，避免嵌套压缩绕过计量。
 
 测试归属见[测试架构](TESTING.md)：Host通用安全与生命周期在本体；官方App、工具、MCP/ACP和ChatUI业务在插件仓各包`tests/`；完整Agent真实Host链路归插件`tests/interoperability/`，业务浏览器归`tests/e2e/specs/<packageId>/`。本体通过准确源码/签包产物调用外仓用例，不维护第二套官方业务测试或Playwright→Node包装。历史发布通过与本轮测试框架重构验收分别见[测试入口](../testing/E2E.md)。
+
+## 必需插件启用引导与权限呈现
+
+1. **职责与范围**：必需性来自包声明，RepositoryService 编排发现、验证、安装与组合，Host 不内置必需包 ID。权限分类属于前端呈现，真实 grants、目标范围与批准继续归治理 owner。
+2. **子功能与目录**：Shared `plugins/onboarding{,-codec}`；Backend `plugin-onboarding-types/rules` 和 RepositoryService；HTTP onboarding mapper；Frontend onboarding API/model/composable、Modal 和共用 PluginCapabilities。
+3. **依赖方向**：目录只作发现，签名包确认声明；Service 复用原 PluginService、Model、SQLite Adapter，纯规则仅消费应用事实，不增加 DI、安装工作流或包名策略。
+4. **类型与转换**：可选 requiredOnEnable 是新 opt-in 元数据；缺省表示不要求，非旧版本兼容转换。manifest、目录、存储表示、应用、HTTP 与前端分别白名单映射。安装命令携带真实 ExactRef/CAS，展示组件只接收能力 ID 与受控编辑事件。
+5. **入口与安装**：设置总开关调用 POST onboarding/prepare 与 install；逐一准备全部可信稳定必需包，已有包复用。UI 按 contract/API 匹配，保留已有相容选择，多个候选无唯一解时拒绝。
+6. **数据、事务与并发**：无新表、迁移或完成标记；声明在不可变签名版本中，目录输出必须匹配。首个安装前验证全批和组合，安装期间仅用本批已确认修订替代自身改变的前置条件，最终组合仍校验原绑定与准确包集合。包/组合与总开关为独立提交，不能声称原子回滚。
+7. **生命周期与失败**：复用仓库任务 lane、停机 signal 与 pending 追踪；新 App 按声明授予执行能力，已有 App 保留选择。失败不继续启用，未知结果重新读取事实，页面失效不发布晚结果。权限折叠不改变草稿/保存 CAS 或失效授权的撤销入口。
+8. **当前能力与验收**：按 USAGE 操作；两仓 SDK、签包元数据、协议及组件回归和指定 CDP 证据归 PLAN/testing。正式目录使用新声明须随插件发布交付；本体与插件完整远程门禁及正式签名发布状态见测试入口。

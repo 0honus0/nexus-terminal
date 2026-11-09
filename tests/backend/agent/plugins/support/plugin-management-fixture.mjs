@@ -95,6 +95,7 @@ window.connectTask.catch((error) => { window.connectionError = error.message; })
 			...execution,
 			packageId: id,
 			version: options.version ?? '1.0.0',
+			requiredOnEnable: options.requiredOnEnable,
 			contribution: contributions,
 			capabilities: options.capabilities ?? ['plugin.invoke'],
 			dependencies: options.dependencies ?? [],

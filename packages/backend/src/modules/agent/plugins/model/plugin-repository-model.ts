@@ -106,6 +106,7 @@ export class PluginRepositoryModel {
 					},
 					contributionKinds: item.contributionKinds.map((kind) => kind),
 					displayName: item.displayName,
+					requiredOnEnable: item.requiredOnEnable,
 					description: item.description,
 					localizations: item.localizations?.map((item) => ({
 						locale: item.locale,

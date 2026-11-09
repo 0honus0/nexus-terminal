@@ -1,6 +1,11 @@
 import { agentChatSurface, agentHost } from '../../support/agent-host/workbench';
 
-import { installTestPlugin } from '../../support/plugins';
+import { installTestPlugin, stageTestPlugin } from '../../support/plugins';
+import {
+	readAgentPluginPackageInstallationList,
+	readAgentPluginAppBindingList,
+} from '../../../../packages/shared/src/agent/plugins/http-codec';
+import { readAgentPluginEnablePlan } from '../../../../packages/shared/src/agent/plugins/onboarding-codec';
 import { dismissToasts } from '../../support/feedback';
 import {
 	readAgentProviderView,
@@ -15,7 +20,6 @@ import {
 } from '../../../../packages/shared/src/agent/scope/http-codec';
 import { readAgentGrantView } from '../../../../packages/shared/src/agent/governance/http-codec';
 import { readAgentErrorResponse } from '../../../../packages/shared/src/agent/http-codec';
-import { readAgentPluginRecommended } from '../../../../packages/shared/src/agent/plugins/repository-http-codec';
 
 import { requestAgentJson } from '../../support/agent-request';
 import {
@@ -513,9 +517,50 @@ test('Agent layout preferences use the authenticated user namespace and reject o
 
 test('Agent execution setting gates the launcher and its global window', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
-	await installTestPlugin(context.request, 'nexus.agent');
 	await setUiLanguage(context.request);
-	const app = await createTestAgentApp(context.request);
+	const created = await context.request.post(E2E_URLS.pluginRepositoryOrigin + '/native-package', {
+		data: { name: 'Required launcher App', requiredOnEnable: true },
+	});
+	expect(created.status()).toBe(201);
+	const { packageId } = await created.json();
+	const installed = await installTestPlugin(context.request, packageId);
+	const initialApp = await requestAgentJson(
+		context.request,
+		{ method: 'GET', path: '/apps/' + installed.appId },
+		readAgentAppResponse,
+	);
+	const app = await requestAgentJson(
+		context.request,
+		{
+			method: 'PATCH',
+			path: '/apps/' + initialApp.id,
+			data: { expectedVersion: initialApp.version, enabled: true },
+		},
+		readAgentAppResponse,
+	);
+	const stage = await stageTestPlugin(context.request, packageId);
+	// This Host test isolates the ready response from catalog availability. Its
+	// installation, signed requirement and composition are actual backend facts.
+	await page.route('**/api/v1/agent/onboarding/prepare', async (route) => {
+		const packages = await requestAgentJson(
+			context.request,
+			{ method: 'GET', path: '/plugins/packages' },
+			readAgentPluginPackageInstallationList,
+		);
+		const bindings = await requestAgentJson(
+			context.request,
+			{ method: 'GET', path: '/plugins/apps/bindings' },
+			readAgentPluginAppBindingList,
+		);
+		const installation = packages.installations.find((item) => item.packageId === packageId);
+		await route.fulfill({
+			json: readAgentPluginEnablePlan({
+				packages: [{ kind: 'installed', installation, manifest: stage.manifest }],
+				bindings: bindings.bindings.filter((item) => item.appId === app.id),
+				ready: true,
+			}),
+		});
+	});
 	const original = await requestAgentJson(
 		context.request,
 		{ method: 'GET', path: '/execution-settings' },
@@ -1042,10 +1087,4 @@ test('Agent App lifecycle uses safe contracts, explicit grants and original stat
 		const retired = await request.get('/api/v1/agent' + path);
 		expect(retired.status(), path).toBe(404);
 	}
-	// Exercise the real endpoint with a signed local installation. Catalog success
-	// and unavailability are separately controlled in the onboarding contract test.
-	const installed = await installTestPlugin(request, 'nexus.agent');
-	const recommended = await request.get('/api/v1/agent/onboarding/recommended-plugin');
-	expect(recommended.status()).toBe(200);
-	expect(readAgentPluginRecommended(await recommended.json())).toEqual({ entry: null, installation: installed });
 });

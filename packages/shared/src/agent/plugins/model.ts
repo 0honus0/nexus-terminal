@@ -26,6 +26,7 @@ export interface AgentPluginManifest {
 	id: string;
 	version: string;
 	displayName: string;
+	requiredOnEnable?: boolean;
 	compatibility: AgentPluginCompatibility;
 	capabilities: AgentCapability[];
 	intents: { id: string; schemaVersion: number }[];

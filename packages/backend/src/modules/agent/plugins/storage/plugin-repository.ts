@@ -16,6 +16,7 @@ export interface StoredPluginCatalogEntry {
 	};
 	contributionKinds: AgentPluginContributionKind[];
 	displayName: string;
+	requiredOnEnable?: boolean;
 	description: string;
 	localizations?: { locale: string; displayName: string; description: string }[];
 	packageUrl: string;

@@ -6,7 +6,6 @@ export const OFFICIAL_PLUGIN_SOURCE = Object.freeze({
 	publisherPublicKeyPem:
 		'-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAPw+WXiJPcxqiKjxGCRcm3fWwy+JByAKTKX+iE5pKD/E=\n-----END PUBLIC KEY-----\n',
 	publisherLabel: 'Nexus first-party plugins',
-	recommendedAppId: 'nexus.agent',
 });
 
 /** Versions are admitted by the shared SemVer contract before comparison. */

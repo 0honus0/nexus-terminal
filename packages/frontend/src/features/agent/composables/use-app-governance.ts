@@ -1,8 +1,31 @@
 import { nextTick, onActivated, onMounted, ref, toRaw, watch } from 'vue';
 import { getAppExecutionPolicy, getAppGrants, saveAppExecutionPolicy, saveAppGrants } from '../api/app-management-api';
-import type { AppExecutionPolicy, AppGrantInput, AppGrants, AppPolicyOverrides } from '../model/app-management-types';
+import type {
+	AppExecutionPolicy,
+	AppGrantInput,
+	AppGrantScope,
+	AppGrants,
+	AppPolicyOverrides,
+} from '../model/app-management-types';
 import { useAgentManagementOperation } from './use-agent-management-operation';
 import { agentHostEvents } from '../events/agent-host-events';
+
+function snapshotGrantScope(scope: AppGrantScope): AppGrantScope {
+	if (scope.kind === 'global') return { kind: 'global' };
+	return {
+		kind: 'targets',
+		ssh:
+			scope.ssh === null
+				? null
+				: scope.ssh.mode === 'all'
+					? { mode: 'all' }
+					: { mode: 'ids', ids: scope.ssh.ids.map((id) => id) },
+	};
+}
+
+function snapshotGrants(grants: readonly AppGrantInput[]): AppGrantInput[] {
+	return grants.map((grant) => ({ capability: grant.capability, scope: snapshotGrantScope(grant.scope) }));
+}
 
 /** The keyed App editor owns one instance; switching apps destroys its old request scope. */
 export function useAppGovernance(appId: string, section: 'grants' | 'policy', available: () => boolean = () => true) {
@@ -21,10 +44,7 @@ export function useAppGovernance(appId: string, section: 'grants' | 'policy', av
 
 	function acceptGrants(value: AppGrants): void {
 		grants.value = value;
-		grantDraft.value = value.grants.map((grant) => ({
-			capability: grant.capability,
-			scope: structuredClone(toRaw(grant.scope)),
-		}));
+		grantDraft.value = snapshotGrants(value.grants);
 	}
 
 	function acceptPolicy(value: AppExecutionPolicy): void {
@@ -45,7 +65,7 @@ export function useAppGovernance(appId: string, section: 'grants' | 'policy', av
 			return;
 		}
 		const revision = grants.value.revision;
-		const input = structuredClone(toRaw(grantDraft.value));
+		const input = snapshotGrants(grantDraft.value);
 		await grantOperation.execute(
 			(signal) => saveAppGrants(appId, revision, input, signal),
 			(value) => {

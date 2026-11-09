@@ -10,12 +10,11 @@ import { OFFICIAL_PLUGIN_SOURCE } from '../../../../../packages/backend/dist/mod
 import { PluginService } from '../../../../../packages/backend/dist/modules/agent/plugins/service/plugin-service.js';
 import {
 	readAgentPluginCatalog,
-	readAgentPluginRecommended,
 	readAgentPluginRepositorySettings,
 } from '../../../../../packages/shared/dist/agent/plugins/repository-http-codec.js';
 
 const base = '/api/v1/agent/plugins';
-const recommendedPath = '/api/v1/agent/onboarding/recommended-plugin';
+const prepareEnablePath = '/api/v1/agent/onboarding/prepare';
 const product = createRequire(new URL('../../../../../package.json', import.meta.url))('./package.json');
 
 await test('B10 onboarding initialization commits enabled App and full declared grants without restoring revoked grants', async (t) => {
@@ -392,7 +391,7 @@ await test('B10 actual repository HTTP, signed downloads and configuration order
 });
 
 await test(
-	'B10 official pinned catalog and offline recommendation through real HTTP',
+	'B10 official pinned catalog and required-plugin source failures through real HTTP',
 	{ timeout: 60000 },
 	async (t) => {
 		const f = await openPlugins((close) => t.after(close));
@@ -424,20 +423,6 @@ await test(
 			.reply(() => ({ statusCode: 200, data: JSON.stringify(catalog) }))
 			.persist();
 
-		const entry = (version, changes = {}) => ({
-			packageId: OFFICIAL_PLUGIN_SOURCE.recommendedAppId,
-			version,
-			compatibility: { host: { minVersion: '0.0.0', maxVersion: '999.0.0' }, backendSdk: null, frontendSdk: 4 },
-			contributionKinds: ['app', 'ui'],
-			displayName: 'official metadata',
-			description: 'catalog only',
-			packageUrl: 'https://example.invalid/package.tar',
-			sha256: 'a'.repeat(64),
-			sizeBytes: 1,
-			publisherKeyId: OFFICIAL_PLUGIN_SOURCE.publisherKeyId,
-			...changes,
-		});
-
 		await t.test('LF and CRLF public key use the same actual pinned identity', async () => {
 			for (const pem of [
 				OFFICIAL_PLUGIN_SOURCE.publisherPublicKeyPem,
@@ -452,47 +437,20 @@ await test(
 			expectStatus(await f.api('GET', base + '/official/catalog'), 403);
 			catalog.publishers[0].publicKeyPem = OFFICIAL_PLUGIN_SOURCE.publisherPublicKeyPem;
 		});
-		await t.test('recommendation chooses latest compatible semantic version, not lexical order', async () => {
-			catalog.packages = [
-				entry('1.9.0'),
-				entry('1.10.0-beta.2'),
-				entry('1.10.0-beta.11'),
-				entry('1.10.0'),
-				entry('2.0.0', { compatibility: { ...entry('2.0.0').compatibility, frontendSdk: 2 } }),
-			];
-			const result = readAgentPluginRecommended(expectStatus(await f.api('GET', recommendedPath), 200));
-			assert.equal(result.entry.version, '1.10.0');
-			assert.equal(result.installation, null);
+		await t.test('empty required catalog and malformed installation cannot enable Agent', async () => {
+			expectStatus(await f.api('POST', prepareEnablePath), 503);
+			expectStatus(await f.api('POST', '/api/v1/agent/onboarding/install', {}), 400);
+			expectStatus(
+				await f.api('POST', '/api/v1/agent/onboarding/install', { operationId: randomUUID(), grantAll: true }),
+				400,
+			);
 		});
-		await t.test(
-			'no compatible recommendation gives explicit not-found and malformed install is rejected',
-			async () => {
-				catalog.packages = [];
-				assert.deepEqual(expectStatus(await f.api('GET', recommendedPath), 200), {
-					entry: null,
-					installation: null,
-				});
-				expectStatus(
-					await f.api('POST', base + '/official/prepare', {
-						packageId: OFFICIAL_PLUGIN_SOURCE.recommendedAppId,
-						publisherKeyId: OFFICIAL_PLUGIN_SOURCE.publisherKeyId,
-						version: '9.9.9',
-					}),
-					404,
-				);
-				expectStatus(await f.api('POST', recommendedPath + '/install', {}), 400);
-				expectStatus(
-					await f.api('POST', recommendedPath + '/install', { operationId: randomUUID(), grantAll: true }),
-					400,
-				);
-			},
-		);
-		await t.test('uninstalled recommendation reports provider unavailable when catalog is offline', async () => {
+		await t.test('unavailable required catalog reports a source failure', async () => {
 			const unavailable = new MockAgent();
 			unavailable.disableNetConnect();
 			setGlobalDispatcher(unavailable);
 			try {
-				assert.deepEqual(expectStatus(await f.api('GET', recommendedPath), 503), {
+				assert.deepEqual(expectStatus(await f.api('POST', prepareEnablePath), 503), {
 					code: 'provider_unavailable',
 				});
 			} finally {
@@ -500,62 +458,5 @@ await test(
 				await unavailable.close();
 			}
 		});
-		await t.test(
-			'installed recommendation is returned offline without fetching or enabling it (read-only installation fact fixture)',
-			async (t) => {
-				const plugin = await f.install('offline-recommended', { enabled: false });
-				// Only the read boundary supplies the already-verified official identity here.
-				// The real custom-signed install above is not an official signed-package installation.
-				const installation = {
-					appId: plugin.installation.appId,
-					definitionId: OFFICIAL_PLUGIN_SOURCE.recommendedAppId,
-					version: plugin.installation.version,
-					packageHash: plugin.installation.packageHash,
-					publisherKeyId: OFFICIAL_PLUGIN_SOURCE.publisherKeyId,
-					status: plugin.installation.status,
-					revision: plugin.installation.revision,
-					createdAt: plugin.installation.createdAt,
-					updatedAt: plugin.installation.updatedAt,
-				};
-				const listInstallations = PluginService.prototype.installations;
-				t.mock.method(PluginService.prototype, 'installations', async function (actor) {
-					return (await listInstallations.call(this, actor)).map((item) =>
-						item.appId === installation.appId ? installation : item,
-					);
-				});
-				const unavailable = new MockAgent();
-				unavailable.disableNetConnect();
-				setGlobalDispatcher(unavailable);
-				try {
-					const result = readAgentPluginRecommended(expectStatus(await f.api('GET', recommendedPath), 200));
-					assert.equal(result.entry, null);
-					assert.deepEqual(result.installation, installation);
-					assert.deepEqual(
-						expectStatus(
-							await f.api('POST', recommendedPath + '/install', {
-								kind: 'existing',
-								appId: plugin.appId,
-								expectedRevision: plugin.installation.revision,
-							}),
-							200,
-						),
-						{ kind: 'existing', installation },
-					);
-					expectStatus(
-						await f.api('POST', recommendedPath + '/install', {
-							kind: 'existing',
-							appId: plugin.appId,
-							expectedRevision: installation.revision + 1,
-						}),
-						409,
-					);
-					assert.equal(expectStatus(await f.api('GET', plugin.appPath), 200).enabled, false);
-					assert.deepEqual(expectStatus(await f.api('GET', plugin.appPath + '/grants'), 200).grants, []);
-				} finally {
-					setGlobalDispatcher(mock);
-					await unavailable.close();
-				}
-			},
-		);
 	},
 );

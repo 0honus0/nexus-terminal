@@ -19,6 +19,7 @@ export interface PluginManifest {
 	id: string;
 	version: string;
 	displayName: string;
+	requiredOnEnable?: boolean;
 	compatibility: PluginCompatibility;
 	appContribution: {
 		entry: string;
@@ -89,6 +90,7 @@ export interface PluginCatalogEntry {
 	contributionKinds: AgentPluginContributionKind[];
 	compatibilityReason: AgentPluginCompatibilityReason | null;
 	displayName: string;
+	requiredOnEnable?: boolean;
 	description: string;
 	localizations?: { locale: string; displayName: string; description: string }[];
 	packageUrl: string;
@@ -102,11 +104,6 @@ export interface PluginCatalog {
 	repositoryUrl: string;
 	publishers: { keyId: string; label: string; publicKeyPem: string }[];
 	packages: PluginCatalogEntry[];
-}
-
-export interface PluginRecommendation {
-	entry: PluginCatalogEntry | null;
-	installation: PluginInstallation | null;
 }
 
 export interface PluginDataPurge {

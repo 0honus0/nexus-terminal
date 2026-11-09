@@ -5,7 +5,8 @@ import {
 	readAgentPluginPackageUpdateCancellation,
 } from '@nexus-terminal/shared/agent/plugins/package-update-http-codec';
 import { fromPluginPackageUpdateDependencies, toPluginPackageUpdatePreparation } from './plugin-mapper.js';
-import { readAgentPluginRecommendedInstallRequest } from '@nexus-terminal/shared/agent/plugins/recommended-install-codec';
+import { readAgentPluginEnableRequest } from '@nexus-terminal/shared/agent/plugins/onboarding-codec';
+import { fromPluginEnableRequest, toPluginEnablePlan } from './plugin-onboarding-mapper.js';
 import { readAgentPluginInstallPlanRequest } from '@nexus-terminal/shared/agent/plugins/install-plan-codec';
 import {
 	fromPluginInstallPlanRequest,
@@ -40,7 +41,7 @@ import {
 } from '@nexus-terminal/shared/agent/plugins/repository-http-codec';
 import { AGENT_PLUGIN_MAX_CATALOG_BYTES } from '@nexus-terminal/shared/agent/plugins/values';
 
-import { toPluginCatalog, toPluginRepositorySettings, toPluginRecommended } from './plugin-mapper.js';
+import { toPluginCatalog, toPluginRepositorySettings } from './plugin-mapper.js';
 import { AgentFailure } from '../../agent-failure.js';
 import type { PluginConnectionService } from '../../plugins/service/plugin-connection-service.js';
 import { readAgentPluginConnectionWrite } from '@nexus-terminal/shared/agent/plugins/connection-codec';
@@ -549,26 +550,16 @@ export function createPluginHttpRoutes(
 			),
 		),
 	);
-	add('GET', '/onboarding/recommended-plugin', async (_ctx, actor) =>
-		toPluginRecommended(await repositories.recommended(actor)),
+	add('POST', '/onboarding/prepare', async (_ctx, actor) =>
+		toPluginEnablePlan(await repositories.prepareEnable(actor)),
 	);
-	add('POST', '/onboarding/recommended-plugin/install', async (_request, actor, reader) => {
-		const input = await reader.read(readAgentPluginRecommendedInstallRequest);
-		if (input.kind === 'existing') {
-			return {
-				kind: 'existing',
-				installation: toPluginInstallation(
-					await repositories.existingRecommended(actor, input.appId, input.expectedRevision),
-				),
-			};
-		}
-		return {
-			kind: 'installed',
-			result: toPluginInstallPlanResult(
-				await repositories.installPlan(actor, async () => fromPluginInstallPlanRequest(input.plan), true),
-			),
-		};
-	});
+	add('POST', '/onboarding/install', async (_request, actor, reader) => ({
+		bindings: (
+			await repositories.installEnable(actor, async (signal) =>
+				fromPluginEnableRequest(await reader.read(readAgentPluginEnableRequest, signal)),
+			)
+		).map(toPluginAppBinding),
+	}));
 
 	add('GET', '/versions', async (_ctx, actor) => ({
 		items: (await service.versions(actor)).map(toPluginVersion),

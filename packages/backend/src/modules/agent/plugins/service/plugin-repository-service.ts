@@ -4,7 +4,11 @@ import type {
 	PluginInstallPlanResult,
 	PluginInstallPlanStagedCommand,
 } from '../model/plugin-install-plan-types.js';
-import type { PluginPackageReference, PluginPackageInstallation } from '../model/plugin-composition-types.js';
+import type {
+	PluginPackageReference,
+	PluginPackageInstallation,
+	PluginAppBinding,
+} from '../model/plugin-composition-types.js';
 import { isPluginInstallPlanStage } from '../model/plugin-repository-types.js';
 import type { PluginInstallPlan, PluginInstallPlanDependency } from '../model/plugin-repository-types.js';
 import { prerelease, satisfies } from 'semver';
@@ -15,14 +19,21 @@ import type { PluginRepositoryModel } from '../model/plugin-repository-model.js'
 import type { PluginService } from './plugin-service.js';
 import type {
 	PluginActor,
+	PluginManifest,
 	PluginCatalog,
 	PluginCatalogStage,
 	PluginStage,
 	PluginInstallation,
 	PluginRepositorySettings,
-	PluginRecommended,
 } from '../model/plugin-types.js';
 import { OFFICIAL_PLUGIN_SOURCE, comparePluginVersions } from './plugin-source.js';
+import type {
+	PluginEnablePlan,
+	PluginEnableCommand,
+	PluginEnablePackage,
+	PluginEnableCandidate,
+} from '../model/plugin-onboarding-types.js';
+import { requiredPluginSelection, requiredPluginCompositions } from '../plugin-onboarding-rules.js';
 import { assertPluginExecutionComposition } from '../plugin-app-composition-rules.js';
 
 function identity(actor: PluginActor, userId: number | null): void {
@@ -187,7 +198,7 @@ export class PluginRepositoryService {
 				);
 			}
 		}
-		return this.plugins.stagePackage(
+		const stage = await this.plugins.stagePackage(
 			actor,
 			{ packageId: entry.packageId, version: entry.version, publisherKeyId: entry.publisherKeyId },
 			async (taskSignal) => {
@@ -203,6 +214,10 @@ export class PluginRepositoryService {
 				return bytes;
 			},
 		);
+		if ((stage.manifest?.requiredOnEnable === true) !== (entry.requiredOnEnable === true)) {
+			throw new AgentFailure('forbidden');
+		}
+		return stage;
 	}
 
 	stage(actor: PluginActor, produce: (signal: AbortSignal) => Promise<PluginCatalogStage>): Promise<PluginStage> {
@@ -456,11 +471,19 @@ export class PluginRepositoryService {
 		);
 	}
 
-	private async applyInstallation(
-		actor: PluginActor,
-		command: PluginInstallPlanCommand,
-		signal: AbortSignal,
-	): Promise<PluginInstallPlanResult> {
+	private assertCompatibleManifest(manifest: PluginManifest): void {
+		const compatibility = manifest.compatibility;
+		if (
+			(compatibility.backendSdk !== null && compatibility.backendSdk !== Number(AGENT_PLUGIN_SDK_VERSION)) ||
+			(compatibility.frontendSdk !== null && compatibility.frontendSdk !== Number(AGENT_PLUGIN_SDK_VERSION)) ||
+			comparePluginVersions(this.productVersion, compatibility.host.minVersion) < 0 ||
+			comparePluginVersions(this.productVersion, compatibility.host.maxVersion) > 0
+		) {
+			throw new AgentFailure('version_conflict');
+		}
+	}
+
+	private async validateInstallation(actor: PluginActor, command: PluginInstallPlanCommand, signal: AbortSignal) {
 		const packages = await this.plugins.packageInstallations(actor);
 		const publishers = await this.plugins.publishers(actor);
 		const versions = await this.plugins.versions(actor);
@@ -576,20 +599,21 @@ export class PluginRepositoryService {
 			) {
 				throw new AgentFailure('forbidden');
 			}
-			const compatibility = selected.manifest.compatibility;
-			if (
-				(compatibility.backendSdk !== null && compatibility.backendSdk !== Number(AGENT_PLUGIN_SDK_VERSION)) ||
-				(compatibility.frontendSdk !== null &&
-					compatibility.frontendSdk !== Number(AGENT_PLUGIN_SDK_VERSION)) ||
-				comparePluginVersions(this.productVersion, compatibility.host.minVersion) < 0 ||
-				comparePluginVersions(this.productVersion, compatibility.host.maxVersion) > 0
-			) {
-				throw new AgentFailure('version_conflict');
-			}
+			this.assertCompatibleManifest(selected.manifest);
 		}
 		if (signal.aborted) {
 			throw new AgentFailure('provider_unavailable');
 		}
+		return { packages, stages, target, dependencies };
+	}
+
+	private async applyInstallation(
+		actor: PluginActor,
+		command: PluginInstallPlanCommand,
+		signal: AbortSignal,
+		compose = true,
+	): Promise<PluginInstallPlanResult> {
+		const { packages, stages, target, dependencies } = await this.validateInstallation(actor, command, signal);
 		const dependencyRevisions = new Map(
 			command.dependencies.flatMap((dependency) =>
 				dependency.kind === 'installed'
@@ -672,7 +696,7 @@ export class PluginRepositoryService {
 				expectedRevision: command.target.expectedInstallationRevision,
 			});
 		}
-		if (target.manifest.contributions.app === null) {
+		if (!compose || target.manifest.contributions.app === null) {
 			return { installation, binding: null };
 		}
 		if (signal.aborted) {
@@ -709,73 +733,368 @@ export class PluginRepositoryService {
 	installPlan(
 		actor: PluginActor,
 		produce: (signal: AbortSignal) => Promise<PluginInstallPlanCommand>,
-		recommended = false,
 	): Promise<PluginInstallPlanResult> {
 		return this.task(async (signal) => {
 			const command = await produce(signal);
-			if (recommended) {
-				if (
-					command.initialization !== 'declared_grants' ||
-					command.target.repositoryUrl !== OFFICIAL_PLUGIN_SOURCE.catalogUrl ||
-					command.target.package.packageId !== OFFICIAL_PLUGIN_SOURCE.recommendedAppId ||
-					command.target.package.publisherKeyId !== OFFICIAL_PLUGIN_SOURCE.publisherKeyId
-				) {
-					throw new AgentFailure('forbidden');
-				}
-			} else if (command.initialization !== 'disabled') {
+			if (command.initialization !== 'disabled') {
 				throw new AgentFailure('forbidden');
 			}
 			return this.applyInstallation(actor, command, signal);
 		});
 	}
 
-	private async recommendation(actor: PluginActor, signal: AbortSignal): Promise<PluginRecommended> {
-		const installation =
-			(await this.plugins.installations(actor)).find(
-				(item) =>
-					item.definitionId === OFFICIAL_PLUGIN_SOURCE.recommendedAppId &&
-					item.publisherKeyId === OFFICIAL_PLUGIN_SOURCE.publisherKeyId &&
-					item.status === 'installed',
-			) ?? null;
-		if (installation) {
-			// An installed App remains inspectable when the external catalog is unavailable.
-			return { entry: null, installation };
-		}
-		const { catalog } = await this.readCatalog(actor, OFFICIAL_PLUGIN_SOURCE.catalogUrl, signal);
-		const entry =
-			catalog.packages
-				.filter(
-					(item) =>
-						item.packageId === OFFICIAL_PLUGIN_SOURCE.recommendedAppId &&
-						item.compatible &&
-						item.contributionKinds.includes('app') &&
-						prerelease(item.version) === null,
-				)
-				.sort((left, right) => comparePluginVersions(right.version, left.version))[0] ?? null;
-		return { entry, installation: null };
-	}
-
-	recommended(actor: PluginActor): Promise<PluginRecommended> {
-		return this.task((signal) => this.recommendation(actor, signal), false);
-	}
-
-	existingRecommended(actor: PluginActor, appId: string, expectedRevision: number): Promise<PluginInstallation> {
-		return this.task(async () => {
-			const installation = (await this.plugins.installations(actor)).find(
-				(item) =>
-					item.appId === appId &&
-					item.definitionId === OFFICIAL_PLUGIN_SOURCE.recommendedAppId &&
-					item.publisherKeyId === OFFICIAL_PLUGIN_SOURCE.publisherKeyId &&
-					item.status === 'installed',
-			);
-			if (!installation) {
-				throw new AgentFailure('not_found');
+	private async requiredEntries(
+		actor: PluginActor,
+		signal: AbortSignal,
+	): Promise<{ repositoryUrl: string; entry: PluginCatalog['packages'][number] }[]> {
+		const settings = await this.model.get(actor, (userId) => identity(actor, userId));
+		const publishers = await this.plugins.publishers(actor);
+		const selected = new Map<string, { repositoryUrl: string; entry: PluginCatalog['packages'][number] }>();
+		for (const repositoryUrl of new Set([
+			OFFICIAL_PLUGIN_SOURCE.catalogUrl,
+			...settings.repositories.map((item) => item.url),
+		])) {
+			const { catalog } = await this.readCatalog(actor, repositoryUrl, signal);
+			for (const entry of catalog.packages) {
+				if (entry.requiredOnEnable !== true || prerelease(entry.version) !== null) {
+					continue;
+				}
+				const publisher = publishers.find((item) => item.keyId === entry.publisherKeyId);
+				if (publisher?.revokedAt !== null && publisher !== undefined) {
+					throw new AgentFailure('forbidden');
+				}
+				if (
+					repositoryUrl !== OFFICIAL_PLUGIN_SOURCE.catalogUrl &&
+					(!publisher ||
+						!catalog.publishers.some(
+							(item) =>
+								item.keyId === publisher.keyId &&
+								item.publicKeyPem.trim() === publisher.publicKeyPem.trim(),
+						))
+				) {
+					continue;
+				}
+				const previous = selected.get(entry.packageId);
+				if (previous && previous.entry.publisherKeyId !== entry.publisherKeyId) {
+					throw new AgentFailure('version_conflict');
+				}
+				if (
+					!previous ||
+					(entry.compatible &&
+						(!previous.entry.compatible ||
+							comparePluginVersions(entry.version, previous.entry.version) > 0))
+				) {
+					selected.set(entry.packageId, { repositoryUrl, entry });
+				}
 			}
-			if (installation.revision !== expectedRevision) {
+		}
+		const entries = [...selected.values()];
+		if (
+			!entries.some((item) => item.entry.contributionKinds.includes('app')) ||
+			entries.some((item) => !item.entry.compatible)
+		) {
+			throw new AgentFailure('provider_unavailable');
+		}
+		return entries;
+	}
+
+	prepareEnable(actor: PluginActor): Promise<PluginEnablePlan> {
+		return this.task(async (signal) => {
+			const entries = await this.requiredEntries(actor, signal);
+			const installed = await this.plugins.packageInstallations(actor);
+			const versions = await this.plugins.versions(actor);
+			const packages: PluginEnablePackage[] = [];
+			for (const { repositoryUrl, entry } of entries) {
+				const installation = installed.find(
+					(item) =>
+						item.package.packageId === entry.packageId &&
+						item.package.publisherKeyId === entry.publisherKeyId &&
+						item.status === 'installed',
+				);
+				const manifest = versions.find(
+					(item) =>
+						item.packageHash === installation?.package.packageHash &&
+						item.publisherKeyId === entry.publisherKeyId,
+				)?.manifest;
+				if (installation && manifest?.requiredOnEnable === true) {
+					this.assertCompatibleManifest(manifest);
+					packages.push({ kind: 'installed', installation, manifest });
+				} else {
+					const plan = await this.prepareInstallation(
+						actor,
+						{
+							repositoryUrl,
+							packageId: entry.packageId,
+							version: entry.version,
+							publisherKeyId: entry.publisherKeyId,
+						},
+						signal,
+					);
+					if (plan.target.stage.manifest.requiredOnEnable !== true) {
+						throw new AgentFailure('forbidden');
+					}
+					packages.push({ kind: 'plan', plan });
+				}
+			}
+			const manifests = packages.map((item) =>
+				item.kind === 'installed' ? item.manifest : item.plan.target.stage.manifest,
+			);
+			const bindings = (await this.plugins.appBindings(actor)).filter((item) =>
+				manifests.some((manifest) => manifest.contributions.app !== null && manifest.id === item.app.packageId),
+			);
+			const available = installed
+				.filter((item) => item.status === 'installed')
+				.flatMap((installation) => {
+					const version = versions.find(
+						(item) =>
+							item.packageHash === installation.package.packageHash &&
+							item.publisherKeyId === installation.package.publisherKeyId,
+					);
+					return version ? [version.manifest] : [];
+				});
+			let ready = packages.every((item) => item.kind === 'installed');
+			for (const manifest of manifests.filter((item) => item.contributions.app !== null)) {
+				const current = bindings.filter((item) => item.app.packageId === manifest.id);
+				if (current.length === 0) {
+					requiredPluginSelection(manifest, manifests, available, null);
+					ready = false;
+				}
+				for (const binding of current) {
+					const selection = requiredPluginSelection(manifest, manifests, available, binding);
+					const installation = installed.find((item) => item.package.packageId === manifest.id);
+					if (
+						!installation ||
+						!this.samePackage(binding.app, installation.package) ||
+						selection.uiPackageId !== (binding.ui?.packageId ?? null) ||
+						selection.selectedRootIds.some((id) => !binding.selectedRootIds.includes(id))
+					) {
+						ready = false;
+					}
+				}
+			}
+			if (ready) {
+				const candidates = installed
+					.filter((item) => item.status === 'installed')
+					.flatMap((installation) => {
+						const manifest = available.find((item) => item.id === installation.package.packageId);
+						return manifest ? [{ manifest, package: installation.package }] : [];
+					});
+				const publishers = await this.plugins.publishers(actor);
+				for (const composition of requiredPluginCompositions(manifests, candidates, bindings)) {
+					const binding = bindings.find((item) => item.appId === composition.appId);
+					const boundPackages = binding
+						? [binding.app, ...binding.dependencies, ...(binding.ui ? [binding.ui] : [])]
+						: [];
+					for (const reference of composition.expectedPackages) {
+						const candidate = candidates.find((item) => this.samePackage(item.package, reference));
+						if (
+							!candidate ||
+							!publishers.some(
+								(item) => item.keyId === reference.publisherKeyId && item.revokedAt === null,
+							)
+						) {
+							throw new AgentFailure('forbidden');
+						}
+						this.assertCompatibleManifest(candidate.manifest);
+						if (!boundPackages.some((item) => this.samePackage(item, reference))) {
+							ready = false;
+						}
+					}
+				}
+			}
+			return { packages, bindings, ready };
+		});
+	}
+
+	installEnable(
+		actor: PluginActor,
+		produce: (signal: AbortSignal) => Promise<PluginEnableCommand>,
+	): Promise<PluginAppBinding[]> {
+		return this.task(async (signal) => {
+			const command = await produce(signal);
+			const entries = await this.requiredEntries(actor, signal);
+			const ids = command.packages.map((item) =>
+				item.kind === 'installed' ? item.package.packageId : item.plan.target.package.packageId,
+			);
+			if (ids.length !== entries.length || entries.some((item) => !ids.includes(item.entry.packageId))) {
 				throw new AgentFailure('version_conflict');
 			}
-			return installation;
-		}, false);
+			const packages = await this.plugins.packageInstallations(actor);
+			const versions = await this.plugins.versions(actor);
+			const originalBindings = await this.plugins.appBindings(actor);
+			const manifests: PluginManifest[] = [];
+			// Validate every selected signed requirement and original composition before any installation.
+			for (const item of command.packages) {
+				const reference = item.kind === 'installed' ? item.package : item.plan.target.package;
+				const source = entries.find((entry) => entry.entry.packageId === reference.packageId);
+				if (!source || source.entry.publisherKeyId !== reference.publisherKeyId) {
+					throw new AgentFailure('forbidden');
+				}
+				let manifest;
+				if (item.kind === 'installed') {
+					const installed = packages.find(
+						(value) =>
+							this.samePackage(value.package, reference) &&
+							value.status === 'installed' &&
+							value.revision === item.expectedRevision,
+					);
+					if (!installed) {
+						throw new AgentFailure('version_conflict');
+					}
+					manifest = versions.find(
+						(value) =>
+							value.packageHash === reference.packageHash &&
+							value.publisherKeyId === reference.publisherKeyId,
+					)?.manifest;
+				} else {
+					if (
+						item.plan.initialization !== 'declared_grants' ||
+						item.plan.target.repositoryUrl !== source.repositoryUrl
+					) {
+						throw new AgentFailure('forbidden');
+					}
+					const stage = await this.plugins.getStage(actor, item.plan.target.stageId);
+					if (
+						!isPluginInstallPlanStage(stage) ||
+						stage.version !== item.plan.target.expectedVersion ||
+						!this.samePackage(reference, {
+							packageId: stage.manifest.id,
+							version: stage.manifest.version,
+							packageHash: stage.packageHash,
+							publisherKeyId: stage.publisherKeyId,
+						})
+					) {
+						throw new AgentFailure('version_conflict');
+					}
+					manifest = stage.manifest;
+				}
+				if (manifest?.requiredOnEnable !== true) {
+					throw new AgentFailure('forbidden');
+				}
+				manifests.push(manifest);
+			}
+			const candidates = new Map(
+				packages
+					.filter((item) => item.status === 'installed')
+					.flatMap((installation) => {
+						const version = versions.find(
+							(item) =>
+								item.packageHash === installation.package.packageHash &&
+								item.publisherKeyId === installation.package.publisherKeyId,
+						);
+						return version
+							? [
+									[
+										installation.package.packageId,
+										{ package: installation.package, manifest: version.manifest },
+									] as const,
+								]
+							: [];
+					}),
+			);
+			const planned = new Map<string, PluginEnableCandidate>();
+			for (const item of command.packages) {
+				if (item.kind !== 'plan') {
+					continue;
+				}
+				const validated = await this.validateInstallation(actor, item.plan, signal);
+				for (const candidate of [
+					{ package: item.plan.target.package, manifest: validated.target.manifest },
+					...validated.dependencies,
+				]) {
+					const previous = planned.get(candidate.package.packageId);
+					if (previous && !this.samePackage(previous.package, candidate.package)) {
+						throw new AgentFailure('version_conflict');
+					}
+					planned.set(candidate.package.packageId, candidate);
+				}
+			}
+			for (const [id, candidate] of planned) {
+				candidates.set(id, candidate);
+			}
+			const requiredApps = manifests.filter((item) => item.contributions.app !== null);
+			const existing = originalBindings.filter((item) =>
+				requiredApps.some((app) => app.id === item.app.packageId),
+			);
+			if (
+				command.bindings.length !== existing.length ||
+				existing.some(
+					(binding) =>
+						!command.bindings.some(
+							(item) =>
+								item.appId === binding.appId &&
+								item.executionRevision === binding.executionRevision &&
+								item.uiRevision === binding.uiRevision,
+						),
+				)
+			) {
+				throw new AgentFailure('version_conflict');
+			}
+			const compositions = requiredPluginCompositions(manifests, [...candidates.values()], existing);
+			// Only revisions confirmed by this batch may replace the original plan's preconditions.
+			const confirmed = new Map<string, PluginPackageInstallation>();
+			for (const item of command.packages) {
+				if (item.kind === 'installed') {
+					continue;
+				}
+				const plan = item.plan;
+				const ownTarget = confirmed.get(plan.target.package.packageId);
+				if (ownTarget && this.samePackage(ownTarget.package, plan.target.package)) {
+					continue;
+				}
+				const dependencies = plan.dependencies.map((dependency) => {
+					const own = confirmed.get(dependency.package.packageId);
+					if (!own) {
+						return dependency;
+					}
+					if (!this.samePackage(own.package, dependency.package)) {
+						throw new AgentFailure('version_conflict');
+					}
+					return { kind: 'installed' as const, expectedRevision: own.revision, package: own.package };
+				});
+				const result = await this.applyInstallation(
+					actor,
+					{
+						initialization: 'declared_grants',
+						repositoryVersion: plan.repositoryVersion,
+						target: plan.target,
+						dependencies,
+					},
+					signal,
+					false,
+				);
+				confirmed.set(result.installation.package.packageId, result.installation);
+				for (const installed of await this.plugins.packageInstallations(actor)) {
+					if (
+						installed.status === 'installed' &&
+						dependencies.some(
+							(dependency) =>
+								dependency.kind === 'staged' && this.samePackage(dependency.package, installed.package),
+						)
+					) {
+						confirmed.set(installed.package.packageId, installed);
+					}
+				}
+			}
+			const bindings: PluginAppBinding[] = [];
+			for (const composition of compositions) {
+				if (signal.aborted) {
+					throw new AgentFailure('provider_unavailable');
+				}
+				bindings.push(
+					await this.plugins.composeApp(actor, composition.packageId, {
+						enableWithDeclaredGrants: composition.appId === null,
+						...(composition.appId && composition.expectedBinding
+							? { appId: composition.appId, expectedBinding: composition.expectedBinding }
+							: {}),
+						selectedRootIds: composition.selectedRootIds,
+						uiPackageId: composition.uiPackageId,
+						expectedPackages: composition.expectedPackages,
+					}),
+				);
+			}
+			return bindings;
+		});
 	}
 
 	private async networkRead<T>(signal: AbortSignal, work: () => Promise<T>): Promise<T> {

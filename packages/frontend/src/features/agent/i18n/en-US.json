@@ -35,33 +35,14 @@
         "schedulerHint": "Scheduler delegates across apps with dynamic budget control"
       },
       "onboarding": {
-        "title": "Enable Agent with Nexus Agent",
-        "description": "Install Nexus Agent from the signed official catalog, enable the plugin with all its declared capabilities, then enable Agent execution.",
-        "verifiedPublisher": "Pinned Nexus publisher",
-        "installAndEnable": "Install Nexus Agent & enable Agent",
-        "installing": "Installing...",
+        "title": "Enable Agent",
+        "description": "These required plugins must be installed before enabling Agent. Installed plugins are reused; Agent is enabled when everything is ready.",
+        "installAndEnable": "Install & enable",
+        "subtitle": "New apps start enabled with their declared permissions, subject to target scopes and approval policies. Existing app permissions and enabled states are preserved.",
+        "installing": "Installing…",
         "cancel": "Cancel",
-        "subtitle": "Installation enables the plugin and grants all declared capabilities. Target restrictions and approval policies still apply.",
-        "badge": "Official Core",
-        "featureSkillsTitle": "Dual Core Skills",
-        "featureSkillsDesc": "Includes signed Operations and Developer skills for operations and coding",
-        "featureSandboxTitle": "SSH-governed execution",
-        "featureSandboxDesc": "Operations use explicitly authorized SSH targets, Host policy, and approvals—not a local Workspace sandbox.",
-        "featureDecoupledTitle": "Decoupled Architecture",
-        "featureDecoupledDesc": "Independently upgradable or removable without mutating core images",
-        "publisherVerified": "Verified Signature",
-        "detailsToggle": "Technical details",
-        "hideDetails": "Hide details",
-        "copyKey": "Copy Key",
-        "keyCopied": "Copied",
-        "fullKeyId": "Full Public Key Fingerprint (Ed25519)",
-        "catalogSource": "Catalog Source URL",
-        "installingTitle": "Deploying and enabling Agent safely...",
-        "installStep1": "Downloading and verifying Ed25519 signature & integrity...",
-        "installStep2": "Registering and loading Operations & Developer skills...",
-        "installStep3": "Registering permissions and enabling the SSH-governed Agent instance...",
-        "sandboxProtected": "Protected by Host grants, approvals, and SSH target boundaries",
-        "defaultPluginSummary": "Official general-purpose agent for remote diagnostics and development over authorized SSH connections."
+        "ready": "Ready",
+        "required": "Required"
       },
       "apps": {
         "title": "Agent apps",
@@ -232,9 +213,27 @@
               }
             }
           },
-          "plugin.invoke": {
-            "name": "Plugin tools",
-            "desc": "Invoke isolated backend tools declared by this App, subject to current grants and per-call approval."
+          "service": {
+            "transport": {
+              "http": {
+                "name": "HTTP service connections",
+                "desc": "Access configured external services through managed HTTP connections"
+              },
+              "process": {
+                "name": "Remote process connections",
+                "desc": "Start managed protocol processes on authorized SSH targets"
+              }
+            }
+          },
+          "plugin": {
+            "invoke": {
+              "name": "Plugin tools",
+              "desc": "Invoke isolated backend tools declared by this App, subject to current grants and per-call approval."
+            },
+            "configure": {
+              "name": "Configure plugins",
+              "desc": "Read and update permitted plugin configurations for this app"
+            }
           }
         },
         "installationUnavailable": "Plugin installation is unavailable. Reload before continuing."

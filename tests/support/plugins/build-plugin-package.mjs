@@ -100,6 +100,7 @@ try {
 					...(manifest.contributions.settings ? ['settings'] : []),
 				],
 				displayName: manifest.displayName,
+				requiredOnEnable: manifest.requiredOnEnable,
 				publisherKeyId,
 				publicKeyPem: publicKey.export({ type: 'spki', format: 'pem' }).toString(),
 				sha256: createHash('sha256').update(packageBytes).digest('hex'),

@@ -58,6 +58,7 @@ export function fromStoredPluginManifest(value: StoredPluginManifest): PluginMan
 		id: value.id,
 		version: value.version,
 		displayName: value.displayName,
+		requiredOnEnable: value.requiredOnEnable,
 		compatibility: {
 			host: { minVersion: value.compatibility.host.minVersion, maxVersion: value.compatibility.host.maxVersion },
 			backendSdk: value.compatibility.backendSdk,
@@ -84,6 +85,7 @@ export function toStoredPluginManifest(value: PluginManifest): StoredPluginManif
 		id: value.id,
 		version: value.version,
 		displayName: value.displayName,
+		requiredOnEnable: value.requiredOnEnable,
 		compatibility: {
 			host: { minVersion: value.compatibility.host.minVersion, maxVersion: value.compatibility.host.maxVersion },
 			backendSdk: value.compatibility.backendSdk,

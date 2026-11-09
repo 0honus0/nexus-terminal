@@ -78,6 +78,7 @@ export interface PluginManifest {
 	id: string;
 	version: string;
 	displayName: string;
+	requiredOnEnable?: boolean;
 	compatibility: {
 		host: { minVersion: string; maxVersion: string };
 		backendSdk: number | null;
@@ -235,6 +236,7 @@ export interface PluginCatalogEntry {
 	};
 	contributionKinds: AgentPluginContributionKind[];
 	displayName: string;
+	requiredOnEnable?: boolean;
 	description: string;
 	localizations?: { locale: string; displayName: string; description: string }[];
 	packageUrl: string;
@@ -256,11 +258,6 @@ export interface PluginCatalogStage {
 	publisherKeyId: string;
 	packageId: string;
 	version: string;
-}
-
-export interface PluginRecommended {
-	entry: PluginCatalogEntry | null;
-	installation: PluginInstallation | null;
 }
 
 export interface PluginRuntimeObservation {

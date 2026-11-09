@@ -17,39 +17,43 @@ test('first enable requires installation confirmation and cancellation or confir
 	expect(await requestAgentJson(context.request, { method: 'GET', path: '/apps' }, readAgentAppListResponse)).toEqual(
 		[],
 	);
-	expect(
-		(await context.request.post(E2E_URLS.pluginRepositoryOrigin + '/control/official-catalog/enable')).status(),
-	).toBe(204);
+	const created = await context.request.post(E2E_URLS.pluginRepositoryOrigin + '/native-package', {
+		data: { name: 'Required onboarding App', settingsKind: 'none', requiredOnEnable: true },
+	});
+	expect(created.status()).toBe(201);
+	const { packageId } = await created.json();
 	const catalog = await configureTestPluginRepository(context.request);
-	const entry = catalog.packages.find((item) => item.packageId === 'nexus.agent' && item.compatible);
+	const entry = catalog.packages.find((item) => item.packageId === packageId && item.compatible);
 	expect(entry).toBeDefined();
-	// The controlled remote source requires explicit publisher trust, unlike the pinned official source.
-	await stageTestPlugin(context.request, 'nexus.agent');
-	// Route the official lookup to the controlled signed repository; package preparation remains real.
-	await page.route('**/api/v1/agent/plugins/official/prepare', async (route) => {
+	await stageTestPlugin(context.request, packageId);
+	// Prepare actual signed bytes; only the later installation is rejected by the fixture.
+	await page.route('**/api/v1/agent/onboarding/prepare', async (route) => {
 		const response = await context.request.post('/api/v1/agent/plugins/remote/prepare', {
 			headers: { Origin: E2E_URLS.frontendOrigin },
-			data: { ...route.request().postDataJSON(), repositoryUrl: testPluginRepositoryUrl },
+			data: {
+				packageId,
+				publisherKeyId: entry!.publisherKeyId,
+				version: entry!.version,
+				repositoryUrl: testPluginRepositoryUrl,
+			},
 		});
 		expect(response.status()).toBe(200);
-		await route.fulfill({ response });
+		await route.fulfill({
+			json: { packages: [{ kind: 'plan', plan: await response.json() }], bindings: [], ready: false },
+		});
 	});
-	// Control only the recommendation response; the separate install remains a rejected write.
-	await page.route('**/api/v1/agent/onboarding/recommended-plugin', (route) =>
-		route.fulfill({ json: { entry, installation: null } }),
-	);
 	const writes: string[] = [];
 	page.on('request', (request) => {
 		const path = new URL(request.url()).pathname;
 		if (
 			request.method() !== 'GET' &&
-			(path.endsWith('/execution-settings') || path.endsWith('/recommended-plugin/install'))
+			(path.endsWith('/execution-settings') || path.endsWith('/onboarding/install'))
 		)
 			writes.push(path);
 	});
 	await page.goto('/settings?tab=agent');
 	const toggle = page.getByRole('switch', { name: 'Agent feature', exact: true });
-	const modal = page.getByRole('dialog', { name: 'Enable Agent with Nexus Agent', exact: true });
+	const modal = page.getByRole('dialog', { name: 'Enable Agent', exact: true });
 	await expect(toggle).toBeEnabled();
 	await expect(toggle).not.toBeChecked();
 	await toggle.click();
@@ -58,19 +62,19 @@ test('first enable requires installation confirmation and cancellation or confir
 	await expect(modal).toBeHidden();
 	await expect(toggle).not.toBeChecked();
 	expect(writes).toEqual([]);
-	await page.route('**/api/v1/agent/onboarding/recommended-plugin/install', (route) =>
+	await page.route('**/api/v1/agent/onboarding/install', (route) =>
 		route.fulfill({ status: 400, json: { code: 'invalid_input' } }),
 	);
 	await toggle.click();
 	await expect(modal).toBeVisible();
 	const rejected = page.waitForResponse(
-		(response) => response.url().endsWith('/recommended-plugin/install') && response.status() === 400,
+		(response) => response.url().endsWith('/onboarding/install') && response.status() === 400,
 	);
-	await modal.getByRole('button', { name: 'Install Nexus Agent & enable Agent', exact: true }).click();
+	await modal.getByRole('button', { name: 'Install & enable', exact: true }).click();
 	await rejected;
 	await expect(modal.getByRole('button', { name: 'Cancel', exact: true })).toBeEnabled();
 	await expect(toggle).not.toBeChecked();
-	expect(writes).toEqual(['/api/v1/agent/onboarding/recommended-plugin/install']);
+	expect(writes).toEqual(['/api/v1/agent/onboarding/install']);
 	expect(await requestAgentJson(context.request, { method: 'GET', path: '/apps' }, readAgentAppListResponse)).toEqual(
 		[],
 	);
@@ -82,27 +86,31 @@ test('first enable requires installation confirmation and cancellation or confir
 	expect(settings.settings.enabled).toBe(false);
 });
 
-test('unavailable recommendation does not install or enable Agent', async ({ page, context }) => {
+test('unavailable required-plugin plan does not install or enable Agent', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
 	await setUiLanguage(context.request);
-	await page.route('**/api/v1/agent/onboarding/recommended-plugin', (route) =>
+	await page.route('**/api/v1/agent/onboarding/prepare', (route) =>
 		route.fulfill({ status: 503, json: { code: 'provider_unavailable' } }),
 	);
 	const writes: string[] = [];
 	page.on('request', (request) => {
-		if (request.method() !== 'GET' && request.url().includes('/api/v1/agent/')) writes.push(request.url());
+		if (
+			request.method() !== 'GET' &&
+			(request.url().endsWith('/execution-settings') || request.url().endsWith('/onboarding/install'))
+		)
+			writes.push(request.url());
 	});
 	await page.goto('/settings?tab=agent');
 	const toggle = page.getByRole('switch', { name: 'Agent feature', exact: true });
 	await expect(toggle).toBeEnabled();
 	const failed = page.waitForResponse(
-		(response) => response.url().endsWith('/recommended-plugin') && response.status() === 503,
+		(response) => response.url().endsWith('/onboarding/prepare') && response.status() === 503,
 	);
 	await toggle.click();
 	await failed;
 	await expect(toggle).toBeEnabled();
 	await expect(toggle).not.toBeChecked();
-	await expect(page.getByRole('dialog', { name: 'Enable Agent with Nexus Agent', exact: true })).toHaveCount(0);
+	await expect(page.getByRole('dialog', { name: 'Enable Agent', exact: true })).toHaveCount(0);
 	expect(writes).toEqual([]);
 	expect(await requestAgentJson(context.request, { method: 'GET', path: '/apps' }, readAgentAppListResponse)).toEqual(
 		[],

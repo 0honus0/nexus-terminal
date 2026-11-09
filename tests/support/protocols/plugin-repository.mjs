@@ -136,6 +136,7 @@ const catalog = {
 			version: metadata.version,
 			compatibility: metadata.compatibility,
 			contributionKinds: metadata.contributionKinds,
+			requiredOnEnable: metadata.requiredOnEnable,
 			displayName: metadata.displayName,
 			description,
 			localizations,
@@ -206,8 +207,14 @@ const server = http.createServer(async (request, response) => {
 		try {
 			const chunks = [];
 			for await (const chunk of request) chunks.push(chunk);
-			const { name, settingsKind, upgradePackageId } = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-			if (typeof name !== 'string' || !name.trim()) {
+			const { name, settingsKind, upgradePackageId, requiredOnEnable } = JSON.parse(
+				Buffer.concat(chunks).toString('utf8'),
+			);
+			if (
+				typeof name !== 'string' ||
+				!name.trim() ||
+				(requiredOnEnable !== undefined && typeof requiredOnEnable !== 'boolean')
+			) {
 				response.writeHead(400).end();
 				return;
 			}
@@ -227,12 +234,14 @@ const server = http.createServer(async (request, response) => {
 				settingsKind === undefined
 					? {
 							sourcePackage: path.join(current, 'plugin-source/nexus.agent'),
+							requiredOnEnable,
 							dependencies: [],
 						}
 					: {
 							...(upgradePackageId === undefined
 								? {}
 								: { packageId: upgradePackageId, version: '2.0.0' }),
+							requiredOnEnable,
 							capabilities:
 								settingsKind === 'mcp-read'
 									? ['integration.mcp.read']
@@ -249,6 +258,7 @@ const server = http.createServer(async (request, response) => {
 				version: metadata.version,
 				compatibility: metadata.compatibility,
 				contributionKinds: metadata.contributionKinds,
+				requiredOnEnable: metadata.requiredOnEnable,
 				displayName: metadata.displayName,
 				description: 'Signed isolated native Agent fixture',
 				packageUrl: publicBaseUrl + packageUrl,

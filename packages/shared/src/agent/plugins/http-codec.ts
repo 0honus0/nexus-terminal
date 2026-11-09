@@ -265,6 +265,7 @@ export function readAgentPluginManifest(input: unknown): AgentPluginManifest {
 			'id',
 			'version',
 			'displayName',
+			...(input !== null && typeof input === 'object' && 'requiredOnEnable' in input ? ['requiredOnEnable'] : []),
 			'compatibility',
 			'capabilities',
 			'intents',
@@ -283,6 +284,9 @@ export function readAgentPluginManifest(input: unknown): AgentPluginManifest {
 		!Array.isArray(row.dependencies) ||
 		!Array.isArray(row.namespaces)
 	) {
+		throw new InvalidAgentPayload();
+	}
+	if (row.requiredOnEnable !== undefined && typeof row.requiredOnEnable !== 'boolean') {
 		throw new InvalidAgentPayload();
 	}
 	const id = readAgentPluginPackageId(row.id);
@@ -339,6 +343,7 @@ export function readAgentPluginManifest(input: unknown): AgentPluginManifest {
 		id,
 		version: version(row.version),
 		displayName: agentText(row.displayName, 128),
+		requiredOnEnable: row.requiredOnEnable,
 		compatibility,
 		capabilities,
 		intents,

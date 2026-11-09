@@ -31,6 +31,7 @@ export function pluginManifest(value: unknown): StoredPluginManifest {
 		id: manifest.id,
 		version: manifest.version,
 		displayName: manifest.displayName,
+		requiredOnEnable: manifest.requiredOnEnable,
 		compatibility: {
 			host: {
 				minVersion: manifest.compatibility.host.minVersion,

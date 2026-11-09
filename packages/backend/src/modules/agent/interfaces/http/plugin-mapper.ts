@@ -36,9 +36,8 @@ import { toArtifactView } from './artifact-mapper.js';
 import type {
 	AgentPluginCatalog,
 	AgentPluginRepositorySettings,
-	AgentPluginRecommended,
 } from '@nexus-terminal/shared/agent/plugins/repository-model';
-import type { PluginCatalog, PluginRepositorySettings, PluginRecommended } from '../../plugins/model/plugin-types.js';
+import type { PluginCatalog, PluginRepositorySettings } from '../../plugins/model/plugin-types.js';
 
 import type {
 	AgentPluginFrontendInput,
@@ -81,6 +80,7 @@ export function toManifest(value: PluginManifest): AgentPluginManifest {
 		id: value.id,
 		version: value.version,
 		displayName: value.displayName,
+		requiredOnEnable: value.requiredOnEnable,
 		compatibility: {
 			host: { minVersion: value.compatibility.host.minVersion, maxVersion: value.compatibility.host.maxVersion },
 			backendSdk: value.compatibility.backendSdk,
@@ -361,6 +361,7 @@ export function toPluginCatalog(value: PluginCatalog): AgentPluginCatalog {
 			contributionKinds: item.contributionKinds.map((kind) => kind),
 
 			displayName: item.displayName,
+			requiredOnEnable: item.requiredOnEnable,
 			description: item.description,
 			localizations: item.localizations?.map((item) => ({
 				locale: item.locale,
@@ -374,43 +375,6 @@ export function toPluginCatalog(value: PluginCatalog): AgentPluginCatalog {
 			compatible: item.compatible,
 			compatibilityReason: item.compatibilityReason,
 		})),
-	};
-}
-
-export function toPluginRecommended(value: PluginRecommended): AgentPluginRecommended {
-	const entry = value.entry;
-	return {
-		installation: value.installation === null ? null : toPluginInstallation(value.installation),
-		entry:
-			entry === null
-				? null
-				: {
-						packageId: entry.packageId,
-						version: entry.version,
-						compatibility: {
-							host: {
-								minVersion: entry.compatibility.host.minVersion,
-								maxVersion: entry.compatibility.host.maxVersion,
-							},
-							backendSdk: entry.compatibility.backendSdk,
-							frontendSdk: entry.compatibility.frontendSdk,
-						},
-						contributionKinds: entry.contributionKinds.map((kind) => kind),
-
-						displayName: entry.displayName,
-						description: entry.description,
-						localizations: entry.localizations?.map((item) => ({
-							locale: item.locale,
-							displayName: item.displayName,
-							description: item.description,
-						})),
-						packageUrl: entry.packageUrl,
-						sha256: entry.sha256,
-						sizeBytes: entry.sizeBytes,
-						publisherKeyId: entry.publisherKeyId,
-						compatible: entry.compatible,
-						compatibilityReason: entry.compatibilityReason,
-					},
 	};
 }
 

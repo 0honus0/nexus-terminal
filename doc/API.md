@@ -158,7 +158,7 @@ MCP/ACP 业务配置和 Browser/CDP 目标由对应插件的实例设置页提�
 
 ### 签名包与来源
 
-manifest 必须为 schemaVersion=4，含 id/version/displayName、compatibility、capabilities、intents、可空 frontendEntry/backendEntry，以及内嵌 contributions：
+manifest 必须为 schemaVersion=4，可选 `requiredOnEnable:boolean` 参与原字节签名，含 id/version/displayName、compatibility、capabilities、intents、可空 frontendEntry/backendEntry，以及内嵌 contributions：
 
 - app 为 null 或 {entry,uiContract,uiApiVersion}；完整 run 调度由 App 后端注册，依赖逐项绑定 packageId/publisherKeyId/minVersion/maxVersion。Run 固定准确实现，运行时能力经过 Registry 发现和绑定。
 - tools/services 为布尔贡献，真实方法、schema 和说明由 setup 原子注册；ui 为 null 或版本化 contract/apiVersion 声明。settings 为 null 或签名 frontendEntry/instructions/schemaRevision/schemaJson/defaultsJson/agentEditablePaths；skills 每项为 {id,path}。
@@ -189,9 +189,11 @@ ExactRef 为 {packageId,version,packageHash,publisherKeyId}。prepare 的 depend
 
 prepare 解析目标签名 App 声明的全部依赖，优先原来源，再查配置源；符合发布者/版本区间的已安装可信依赖可以离线复用。执行先核对全部 stage、包修订、来源配置版本、信任与兼容，再安装依赖、目标，最后创建/复用 App 绑定。没有持久安装计划、操作键、状态查询或刷新恢复账本；失败丢弃计划并重新 prepare。此前成功安装的真实包保留，不能将多个包提交解释成原子回滚。
 
-AppBinding 为 {appId,executionRevision,uiRevision,app:ExactRef,tools:ExactRef[],ui:ExactRef|null}。同一包可贡献多个角色，同一工具包可供多个 App 引用；每个执行实例和数据 namespace 仍按 user/App/package 隔离。公共 App.definitionId/definitionVersion 是真实签名 App 包 ID/SemVer；内部执行声明绑定用户与全部精确 app/tool 引用，不用虚构版本表示组合。公共声明目录每个当前 App 来源包只返回一项，App.capabilities 则为其实际执行组合的能力并集。
+AppBinding 为 {appId,executionRevision,uiRevision,app:ExactRef,dependencies:ExactRef[],selectedRootIds:string[],ui:ExactRef|null}。同一包可贡献多个角色，同一工具包可供多个 App 引用；每个执行实例和数据 namespace 仍按 user/App/package 隔离。公共 App.definitionId/definitionVersion 是真实签名 App 包 ID/SemVer；内部执行声明绑定用户与全部精确 app/tool 引用，不用虚构版本表示组合。公共声明目录每个当前 App 来源包只返回一项，App.capabilities 则为其实际执行组合的能力并集。
 
-`GET /onboarding/recommended-plugin` 离线返回已有安装，或读取官方候选。`POST /onboarding/recommended-plugin/install` 接受 {kind:'existing',appId,expectedRevision}，仅返回 {kind:'existing',installation}；或 {kind:'plan',plan}，plan.initialization 必须 declared_grants 且目标为固定官方来源/ID/发布者，返回 {kind:'installed',result:{installation,binding}}。推荐确认可初始化执行包的声明授权，UI-only 包能力不扩大执行权限；已有绑定复用不重新启用或恢复 grant。失败重新 prepare，不能提交旧计划或自动恢复权限。
+`POST /onboarding/prepare` 返回 `{packages,bindings,ready}`：packages 为已安装的 `{kind:'installed',installation,manifest}` 或 `{kind:'plan',plan:InstallPlan}`。来源限官方固定发布者与已配置、明确受信的发布者；按目录 `requiredOnEnable: true` 发现全部兼容稳定包，再核对签名 manifest 同名声明。此字段为可选 opt-in 元数据，未声明或 false 表示非必需，不按旧包 ID 补推断；无可用必需 App、来源失败或组合歧义明确拒绝。已安装且声明匹配的版本复用，不为引导强制升级。bindings 为相关 App 当前准确组合，ready 只表示全部包与关联就绪，不是授权或持久 onboarding 标记。
+
+`POST /onboarding/install` 接受 `{packages,bindings}`；packages 每项为 `{kind:'installed',expectedRevision,package:ExactRef}` 或 `{kind:'plan',plan}`，plan.initialization 必须 declared_grants；bindings 每项为 `{appId,executionRevision,uiRevision}`。首个安装前校验完整必需集合、精确 stage/包/依赖、签名声明、来源/信任及组合修订；随后安装包，最后按 App 的 UI contract 选择唯一匹配 UI，将必需工具/服务/Skills 作为所选 roots 组合。已有相容 UI 与显式 roots 保留，歧义不擅自选择。返回 `{bindings:AppBinding[]}`，前端核对回执后才保存执行总开关。新 App 按执行包声明初始化启用及 grants；已有 App 不重授或重新启用。多个包/组合分别提交，失败保留已确认事实，重新 prepare，不把部分成功解释成整批回滚。旧单推荐 App 入口移除。
 
 ### 更新、卸载与运行实例
 

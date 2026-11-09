@@ -79,6 +79,7 @@ export class HttpPluginCatalog implements PluginRepositoryCatalog {
 						},
 						contributionKinds: entry.contributionKinds.map((kind) => kind),
 						displayName: entry.displayName,
+						requiredOnEnable: entry.requiredOnEnable,
 						description: entry.description,
 						localizations: entry.localizations?.map((item) => ({
 							locale: item.locale,

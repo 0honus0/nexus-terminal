@@ -12,6 +12,7 @@ export interface AgentPluginCatalogPackage {
 	compatibility: import('./model.js').AgentPluginCompatibility;
 	contributionKinds: AgentPluginContributionKind[];
 	displayName: string;
+	requiredOnEnable?: boolean;
 	description: string;
 	localizations?: { locale: string; displayName: string; description: string }[];
 	packageUrl: string;
@@ -36,9 +37,4 @@ export interface AgentPluginCatalog {
 	repositoryUrl: string;
 	publishers: { keyId: string; label: string; publicKeyPem: string }[];
 	packages: AgentPluginCatalogEntry[];
-}
-
-export interface AgentPluginRecommended {
-	entry: AgentPluginCatalogEntry | null;
-	installation: import('./model.js').AgentPluginInstallation | null;
 }

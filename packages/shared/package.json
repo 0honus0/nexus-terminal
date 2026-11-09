@@ -1,6 +1,6 @@
 {
   "name": "@nexus-terminal/shared",
-  "version": "4.0.4",
+  "version": "4.0.5",
   "private": true,
   "type": "module",
   "scripts": {
@@ -35,10 +35,6 @@
     "./agent/plugins/remote-files-codec": {
       "types": "./dist/agent/plugins/remote-files-codec.d.ts",
       "default": "./dist/agent/plugins/remote-files-codec.js"
-    },
-    "./agent/plugins/recommended-install-codec": {
-      "types": "./dist/agent/plugins/recommended-install-codec.d.ts",
-      "default": "./dist/agent/plugins/recommended-install-codec.js"
     },
     "./remote/tools/values": {
       "types": "./dist/remote/tools/values.d.ts",
@@ -1007,6 +1003,14 @@
     "./agent/integrations/browser-codec": {
       "types": "./dist/agent/integrations/browser-codec.d.ts",
       "default": "./dist/agent/integrations/browser-codec.js"
+    },
+    "./agent/plugins/onboarding": {
+      "types": "./dist/agent/plugins/onboarding.d.ts",
+      "default": "./dist/agent/plugins/onboarding.js"
+    },
+    "./agent/plugins/onboarding-codec": {
+      "types": "./dist/agent/plugins/onboarding-codec.d.ts",
+      "default": "./dist/agent/plugins/onboarding-codec.js"
     }
   },
   "devDependencies": {
