@@ -39,3 +39,5 @@ CI的原生协议与模块/浏览器链重叠执行，浏览器两仓仍顺序�
 手动门禁的`dependency_cache=cold`只关闭质量作业的pnpm依赖缓存恢复；`warm`恢复正常缓存。两种模式都重跑全部测试，保留相同的预装runner镜像依赖；这不是清空OS页缓存、镜像层或公网服务缓存。严格对照必须核对同一源码、插件SHA、不可变runner digest及实际资源。
 
 所有可替代的长短等待使用框架虚拟时钟，按H-22.1控制实际时钟owner。共享CI环境定义归`fixtures/runner/Dockerfile`；分层产物默认归`tests/.artifacts/`，模块与浏览器分别使用`modules/`和`browser/`；发现时创建产物根目录。Vitest缓存归`tests/.cache/vitest/`，不再沿用浏览器专用运行目录。独立插件门禁消费成功Host发布的不可变test-environment产物，沿用同一runner digest与指纹。
+
+Playwright WebServer的完整stdout/stderr保存到本轮产物`webserver/{backend,frontend}/run-*/output.log`，成功/失败均随现有分片报告上传；进程组、健康检查和失败状态仍由Playwright持有。控制台仅保留测试步骤/结果及框架失败摘要，排查服务启动、重置与收尾时读取对应WebServer日志。

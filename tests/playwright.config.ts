@@ -4,6 +4,7 @@ import { defineConfig, devices, type PlaywrightTestConfig } from '@playwright/te
 import path from 'node:path';
 import { E2E_PORTS, E2E_URLS } from './support/protocols/test-environment';
 import { E2E_ADMIN } from './e2e/support/test-identity';
+import { captureWebServerOutput } from './support/protocols/web-server-logs';
 
 const e2eRoot = path.join(import.meta.dirname, 'e2e');
 const repoRoot = path.resolve(e2eRoot, '../..');
@@ -31,6 +32,7 @@ const inheritedEnv = Object.fromEntries(
 	Object.entries(process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
 );
 const pnpmCommand = process.env.NEXUS_E2E_PNPM_COMMAND ?? 'pnpm';
+const webServerLogs = path.join(artifactRoot, 'webserver');
 
 const backendEnv: Record<string, string> = {
 	...inheritedEnv,
@@ -85,7 +87,7 @@ export default defineConfig({
 	],
 	webServer: [
 		{
-			command: 'node support/backend-server.mjs',
+			command: captureWebServerOutput('node support/backend-server.mjs', path.join(webServerLogs, 'backend')),
 			cwd: e2eRoot,
 			env: backendEnv,
 			url: `${E2E_URLS.backendControlOrigin}/health`,
@@ -95,7 +97,10 @@ export default defineConfig({
 			stderr: 'pipe',
 		},
 		{
-			command: `${pnpmCommand} run preview --host 127.0.0.1 --port ${E2E_PORTS.frontend} --strictPort`,
+			command: captureWebServerOutput(
+				`${pnpmCommand} run preview --host 127.0.0.1 --port ${E2E_PORTS.frontend} --strictPort`,
+				path.join(webServerLogs, 'frontend'),
+			),
 			cwd: path.join(repoRoot, 'packages/frontend'),
 			env: {
 				...backendEnv,

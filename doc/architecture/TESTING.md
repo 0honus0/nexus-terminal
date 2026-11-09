@@ -253,6 +253,8 @@ HTTP注入fixture安装生产实际使用的route、parser、serializer、安全
 
 Playwright仅由全局webServer提供基础后端和Frontend preview；用例通过`e2eServices`明确声明受控SSH、CDP、Provider、插件仓库、部署页或桌面服务，由worker fixture首次需要时启动并复用，不再无差别启动全部外部服务。用官方worker-scoped fixture复用Chromium、Vite/preview和具备隔离能力的受控协议服务；每例新BrowserContext，保留实际数据与资源隔离。不需要浏览器的WS/HTTP用例直接进入协议层。
 
+浏览器WebServer沿用Playwright原有进程组与健康检查，命令用POSIX `exec`把完整stdout/stderr重定向到本轮产物`webserver/{backend,frontend}/run-*/output.log`；不替换应用logger、不降日志等级、不截断内容。每次配置创建独立文件，避免再次运行覆盖旧现场。成功/失败日志均随现有分片报告上传，失败诊断保留完整目录；控制台主要显示测试步骤、结果和框架失败摘要。重定向的路径按shell单引号规则处理，退出码和信号由原进程直接保留；Host与插件浏览器消费同一配置。
+
 浏览器测试通过API准备与被测交互无关的数据，使用真实codec核对状态。例如测试文件拖放无需再逐个点击创建连接、标签和目录；但测试连接创建表单、安装引导或登录本身时必须走实际UI，不绕过所测流程。图片/GIF、CSS断点、终端绘制、焦点/IME和跨源iframe边界保留真实浏览器测试。
 
 ### 双仓独立门禁
