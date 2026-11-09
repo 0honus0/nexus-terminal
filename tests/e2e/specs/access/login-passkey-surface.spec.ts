@@ -7,6 +7,7 @@ import { step } from '../../support/steps';
 import { E2E_URLS } from '../../../support/protocols/test-environment';
 
 const BASE_URL = E2E_URLS.frontendOrigin;
+const headers = { Origin: BASE_URL };
 const LOGIN_VIEWPORTS = [
 	{ label: '1280x800', width: 1280, height: 800 },
 	{ label: '320x667', width: 320, height: 667 },
@@ -357,10 +358,12 @@ test('Login passkey succeeds, reports credential failure, and falls back to pass
 			});
 			const deletion = await failureContext.request.delete(
 				`/api/v1/auth/user/passkeys/${encodeURIComponent(credentialId)}`,
+				{ headers },
 			);
 			expect(deletion.status()).toBe(200);
 			credentialId = '';
-			await failureContext.request.post('/api/v1/auth/logout');
+			const logout = await failureContext.request.post('/api/v1/auth/logout', { headers });
+			expect(logout.status()).toBe(200);
 			await failurePage.goto(`${BASE_URL}/login`);
 			await expect(failurePage.getByRole('button', { name: 'Login with Passkey', exact: true })).toHaveCount(0);
 			passwordFallbackObserved = true;
@@ -369,15 +372,15 @@ test('Login passkey succeeds, reports credential failure, and falls back to pass
 	} finally {
 		await removeVirtualAuthenticator(authenticatorB);
 		if (failureContext) {
-			await failureContext.request.post('/api/v1/auth/logout').catch(() => undefined);
+			await failureContext.request.post('/api/v1/auth/logout', { headers }).catch(() => undefined);
 			await failureContext.close().catch(() => undefined);
 		}
 		if (credentialId) {
 			await loginAsInitialAdmin(context.request).catch(() => undefined);
 			await context.request
-				.delete(`/api/v1/auth/user/passkeys/${encodeURIComponent(credentialId)}`)
+				.delete(`/api/v1/auth/user/passkeys/${encodeURIComponent(credentialId)}`, { headers })
 				.catch(() => undefined);
-			await context.request.post('/api/v1/auth/logout').catch(() => undefined);
+			await context.request.post('/api/v1/auth/logout', { headers }).catch(() => undefined);
 		}
 		await removeVirtualAuthenticator(authenticatorA);
 
