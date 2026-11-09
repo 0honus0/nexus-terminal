@@ -9,9 +9,22 @@ import { useHttpProtocol } from '../../../../support/http/protocol-fixture.mjs';
 
 const test = baseTest.extend<{ httpClients: HttpClients }>({
 	httpClients: async ({ ssh }, use) => {
-		vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+		const transportInterval = globalThis.setInterval;
+		vi.useFakeTimers({
+			toFake: ['Date', 'setInterval', 'clearInterval'],
+			shouldClearNativeTimers: true,
+		});
 		try {
-			await useHttpProtocol(use);
+			await useHttpProtocol(async (clients) => {
+				// Startup installs the actual file reaper on the virtual clock. SSH
+				// is opened below: its keepalives need real peer I/O between ticks.
+				const networkIntervals = vi.spyOn(globalThis, 'setInterval').mockImplementation(transportInterval);
+				try {
+					await use(clients);
+				} finally {
+					networkIntervals.mockRestore();
+				}
+			});
 		} finally {
 			vi.useRealTimers();
 		}
