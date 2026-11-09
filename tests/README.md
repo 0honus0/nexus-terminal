@@ -32,19 +32,19 @@ Linux 的 Chromium 临时目录须容纳实际 Unix socket 路径长度；任务
 
 CI以统一8个runner执行模块/协议/本体浏览器/插件互操作/插件浏览器，第1分片额外运行真实Docker及私有mount namespace的有限tmpfs/ENOSPC；仅该分片挂载Docker socket并授予必要挂载能力，其余分片不获取这些权限。质量作业只构建及签候选一次，质量和环境准备成功后才启动八个分片，直接复用准确成品，不轮询等待构建；根`test:all`仅串接本体检查，不包括插件仓及独立Docker部署smoke。插件业务浏览器通过公开`support/plugins/browser-config.ts`复用Host测试成品，页面helper在`e2e/support/agent-host/`，任务工程唯一归插件仓。
 
-插件独立CI同样构建签包一次，再由八个容器执行Node互操作和Playwright原生分片，复用成功Host E2E的准确源码及不可变产物。逐片核对原生报告与组合，不能将发现、无场景分片或局部重跑当作完整覆盖。当前耗时及未达性能目标见测试基线。
+插件独立CI同样构建签包一次，再由八个容器执行Node互操作和Playwright原生分片，复用成功Host E2E的准确源码及不可变应用/插件产物。逐片核对原生报告与组合，不能将发现、无场景分片或局部重跑当作完整覆盖。当前耗时及未达性能目标见测试基线。
 
 CI的原生协议与模块/浏览器链重叠执行，浏览器两仓仍顺序启动，本体通用浏览器清除只属于插件候选的`NEXUS_TEST_PLUGIN_SET`；`scripts/e2e/run-test-shard.sh`只装配这两条链，框架继续负责发现、分片和断言。`metrics/`保留GNU time的CPU、墙钟与最大单进程RSS，外层shard和分层数据不能重复求和；cgroup内存峰值不等于聚合RSS。运行这些Linux CI脚本的本地回归需GNU time（默认`/usr/bin/time`，可用`NEXUS_TEST_TIME_COMMAND`指定）。
 
-手动门禁的`dependency_cache=cold`关闭质量作业的pnpm依赖与静态检查缓存恢复；`warm`恢复正常缓存。两种模式都重跑全部测试，保留相同的预装runner镜像依赖；这不是清空OS页缓存、镜像层或公网服务缓存。严格对照必须核对同一源码、插件SHA、不可变runner digest及实际资源。
+手动门禁的`dependency_cache=cold`关闭质量作业的pnpm依赖与静态检查缓存恢复；`warm`恢复正常缓存。两种模式都重跑全部测试，校验预装runner依赖指纹；这不是清空OS页缓存、镜像层或公网服务缓存。严格对照必须核对同一源码、插件SHA、实际拉取digest及资源。
 
-所有可替代的长短等待使用框架虚拟时钟，按H-22.1控制实际时钟owner。共享CI环境定义归`fixtures/runner/Dockerfile`；分层产物默认归`tests/.artifacts/`，模块与浏览器分别使用`modules/`和`browser/`；发现时创建产物根目录。Vitest缓存归`tests/.cache/vitest/`，不再沿用浏览器专用运行目录。独立插件门禁消费成功Host发布的不可变test-environment产物，沿用同一runner digest与指纹。
+所有可替代的长短等待使用框架虚拟时钟，按H-22.1控制实际时钟owner。共享CI环境定义归`fixtures/runner/Dockerfile`；分层产物默认归`tests/.artifacts/`，模块与浏览器分别使用`modules/`和`browser/`；发现时创建产物根目录。Vitest缓存归`tests/.cache/vitest/`，不再沿用浏览器专用运行目录。独立插件门禁消费成功Host发布的不可变test-environment产物，统一使用latest并校验相同依赖指纹，记录准备时观测digest。
 
 Playwright WebServer的完整stdout/stderr保存到本轮产物`webserver/{backend,frontend}/run-*/output.log`，成功/失败均随现有分片报告上传；进程组、健康检查和失败状态仍由Playwright持有。控制台仅保留测试步骤/结果及框架失败摘要，排查服务启动、重置与收尾时读取对应WebServer日志。
 
 分片执行各阶段时，控制台仅显示阶段开始、结束、实际耗时、退出结果和日志位置；模块/协议/本体浏览器/插件互操作/插件浏览器的完整双流追加保存为本轮`logs/<phase>.log`，复用原报告上传。逐用例结果仍在原框架JSON/JUnit/HTML，失败、未知结果和取消状态不变；日志不截断，不再把两条链的全部输出tee到控制台。质量作业的报告器模拟失败单测输出按用户要求保留。
 
-Runner的完整依赖定义见`fixtures/runner/Dockerfile`，内容指纹由`scripts/e2e/runner-image-info.mjs`计算；周标签和digest在每轮准备阶段固定，`latest`仅为便利别名。工作流清理必须保留成功main的Host构建、环境产物和runner闭包，策略见[维护架构](../doc/architecture/MAINTENANCE.md)。两仓Node版本固定且在互操作准备时核对。
+Runner完整定义见`fixtures/runner/Dockerfile`，内容指纹由`scripts/e2e/runner-image-info.mjs`计算。两仓容器均使用`:latest`，按周元数据刷新并校验依赖指纹，不固定digest或发布独立缓存标签；环境产物的digest只记录准备时观测事实，latest变化后不能据此承诺每片OS字节相同。维护保留成功main的Host构建、环境产物与观测runner闭包，策略见[维护架构](../doc/architecture/MAINTENANCE.md)。两仓Node固定并在互操作准备时核对。
 
 `pnpm --filter @nexus-terminal/tests test:ingress`独立执行真实入口验证，须明确设置`NEXUS_PRODUCTION_BASE_URL`；报告默认归`tests/.artifacts/ingress/`，可用统一产物变量覆盖。发现用例不等于通过公网或生产验收。
 

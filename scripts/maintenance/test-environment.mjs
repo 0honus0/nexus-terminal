@@ -39,11 +39,13 @@ export async function readTestEnvironment({ github, owner, repo, run }) {
 		assert.ok(environment && typeof environment === 'object' && !Array.isArray(environment));
 		assert.equal(environment.sha, run.head_sha, 'Test environment source differs from successful E2E');
 		assert.match(environment.fingerprint, /^[a-f0-9]{64}$/, 'Invalid test environment fingerprint');
-		const prefix = `ghcr.io/${owner.toLowerCase()}/nexus-terminal-e2e-runner@`;
-		assert.equal(typeof environment.image, 'string', 'Invalid test environment image');
-		assert.ok(environment.image.startsWith(prefix), 'Test environment image belongs to another package');
-		const digest = environment.image.slice(prefix.length);
-		assert.match(digest, /^sha256:[a-f0-9]{64}$/, 'Invalid test environment image digest');
+		assert.equal(
+			environment.image,
+			`ghcr.io/${owner.toLowerCase()}/nexus-terminal-e2e-runner:latest`,
+			'Test environment image belongs to another package or tag',
+		);
+		const digest = environment.observedDigest;
+		assert.match(digest, /^sha256:[a-f0-9]{64}$/, 'Invalid observed test environment image digest');
 		return { sha: environment.sha, image: environment.image, fingerprint: environment.fingerprint, digest };
 	} catch (error) {
 		failure = error;

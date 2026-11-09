@@ -44,17 +44,17 @@ async function fixture() {
 	return root;
 }
 
-test('runner content identity survives weekly refresh while the cache tag changes', async () => {
+test('runner content identity survives weekly refresh while its refresh metadata changes', async () => {
 	const root = await fixture();
 	const week = 7 * 24 * 60 * 60 * 1000;
 	const before = getRunnerImageInfo({ root, now: week - 1 });
 	const after = getRunnerImageInfo({ root, now: week });
 	assert.equal(before.fingerprint, after.fingerprint);
-	assert.notEqual(before.tag, after.tag);
+	assert.notEqual(before.refreshWeek, after.refreshWeek);
 	assert.equal(before.node, '26.0.0');
 	assert.equal(before.pnpm, '12.0.0');
 	assert.equal(before.playwright, '1.60.0');
-	assert.match(before.tag, new RegExp('^cache-0-' + before.fingerprint + '$'));
+	assert.equal(before.refreshWeek, 0);
 });
 
 test('every copied input, nested patch and vendored SDK invalidates the runner cache', async () => {
@@ -76,7 +76,7 @@ test('every copied input, nested patch and vendored SDK invalidates the runner c
 	assert.deepEqual(getRunnerImageInfo({ root, now: 0 }), original);
 });
 
-test('the real build script retains the resolved tag and publishes latest only as an alias', async () => {
+test('the real build script builds, verifies and publishes only latest', async () => {
 	const root = await fixture();
 	for (const name of ['build-runner-image.sh', 'runner-image-info.mjs']) {
 		await copyFile(new URL('../../../../scripts/e2e/' + name, import.meta.url), join(root, 'scripts/e2e', name));
@@ -105,27 +105,25 @@ fs.appendFileSync(process.env.RUNNER_DOCKER_CALLS, JSON.stringify(process.argv.s
 		'-m',
 		'fixture',
 	]);
-	const frozenTag = getRunnerImageInfo({ root, now: 0 }).tag;
+	const refreshWeek = getRunnerImageInfo({ root, now: 0 }).refreshWeek;
 	const image = 'ghcr.io/fixture/nexus-terminal-e2e-runner';
 	await execute('bash', [join(root, 'scripts/e2e/build-runner-image.sh'), '--image', image], {
 		env: {
 			...process.env,
 			PATH: join(root, 'bin') + ':' + process.env.PATH,
 			RUNNER_DOCKER_CALLS: calls,
-			E2E_RUNNER_TAG: frozenTag,
+			E2E_RUNNER_REFRESH_WEEK: String(refreshWeek),
 		},
 	});
 	const commands = (await readFile(calls, 'utf8'))
 		.trim()
 		.split('\n')
 		.map((line) => JSON.parse(line));
-	assert.ok(commands[0].includes(image + ':' + frozenTag));
 	assert.ok(commands[0].includes(image + ':latest'));
+	assert.ok(commands[0].includes('E2E_RUNNER_REFRESH_WEEK=0'));
+	assert.equal(commands[0].filter((arg) => arg === '-t').length, 1);
 	assert.deepEqual(
 		commands.filter((args) => args[0] === 'push'),
-		[
-			['push', image + ':' + frozenTag],
-			['push', image + ':latest'],
-		],
+		[['push', image + ':latest']],
 	);
 });

@@ -111,7 +111,7 @@ docker compose up -d --remove-orphans
 
 ## 构建与开发
 
-使用 `.node-version` 指定的 Node.js 26.13.0 LTS 和根 `packageManager` 指定的 pnpm 12.16.1；本地开发、workflow 与 Docker 构建使用相同版本。依赖安装使用 `--frozen-lockfile`；pnpm 12 生成的锁文件包含环境与应用两个 YAML 文档，使用该版本 pnpm 读取，不手工拆分。Playwright 固定1.64.1，手工环境按锁定版本安装浏览器；CI runner内容指纹覆盖`.node-version`、清单、锁文件、Dockerfile、构建/指纹脚本、`.dockerignore`、递归补丁及vendor输入；变化自动重建。每周通过`cache-<UTC epoch week>-<fingerprint>`刷新基础镜像与OS包，单轮固定标签/指纹/digest，`latest`仅为便利别名。
+使用 `.node-version` 指定的 Node.js 26.13.0 LTS 和根 `packageManager` 指定的 pnpm 12.16.1；本地开发、workflow 与 Docker 构建使用相同版本。依赖安装使用 `--frozen-lockfile`；pnpm 12 生成的锁文件包含环境与应用两个 YAML 文档，使用该版本 pnpm 读取，不手工拆分。Playwright 固定1.64.1，手工环境按锁定版本安装浏览器；CI runner内容指纹覆盖`.node-version`、清单、锁文件、Dockerfile、构建/指纹脚本、`.dockerignore`、递归补丁及vendor输入；变化自动重建。两仓容器统一使用`:latest`，以独立周元数据刷新基础镜像与OS包；准备阶段确定期望依赖指纹，分片核对实际指纹，不固定digest或另发缓存标签。digest仅记录准备时观测事实供追查/保留，latest移动后不能承诺各片OS字节完全相同。
 
 ```bash
 pnpm install --frozen-lockfile
@@ -135,9 +135,9 @@ scripts/build/build.sh docker
 
 ## 仓库手动清理
 
-GitHub Actions 的 `Clean old Actions and container versions`（`.github/workflows/cleanup-history.yml`） 仅支持手动 Run workflow，不随推送、发布或定时任务执行。镜像清理仅限当前仓库关联的 `nexus-terminal` 和 `nexus-terminal-e2e-runner` 两个 GHCR 包；逐包核对仓库归属，分别保留现有 `main`、`dev`、`latest` 标签对应版本及其递归引用的平台和证明 manifest。其余旧发布版本、sha 标签版本和无标签版本均为清理候选；与保留版本共用 digest 的其它标签随版本保留。允许部分保护标签尚未发布（runner同时发布周/内容标签与`latest`便利别名）；有版本却没有任何保护标签的包会使清理停止，不整包盲删。
+GitHub Actions 的 `Clean old Actions and container versions`（`.github/workflows/cleanup-history.yml`） 仅支持手动 Run workflow，不随推送、发布或定时任务执行。镜像清理仅限当前仓库关联的 `nexus-terminal` 和 `nexus-terminal-e2e-runner` 两个 GHCR 包；逐包核对仓库归属，分别保留现有 `main`、`dev`、`latest` 标签对应版本及其递归引用的平台和证明 manifest。其余旧发布版本、sha 标签版本和无标签版本均为清理候选；与保留版本共用 digest 的其它标签随版本保留。允许部分保护标签尚未发布（runner只发布`latest`）；有版本却没有任何保护标签的包会使清理停止，不整包盲删。
 
-同时清理旧 Actions 运行及产物、全部 Actions 缓存；保留上述镜像源码对应的成功记录、最近任意分支成功E2E、默认分支成功完整E2E及本次清理记录；同时保留成功main的Host构建、环境产物和准确runner manifest闭包，避免latest变化破坏插件独立验收。环境ZIP摘要、来源或manifest无法确认时停止，先重跑main完整E2E。其它包、GitHub Releases、Git 标签、运行中的服务和实例数据不在镜像清理范围内。清理时保留排队、运行中及重新启动的 Actions 和所属产物；有其它活跃任务时，本次保留镜像版本及 Actions 缓存，待任务结束后手动重跑。
+同时清理旧 Actions 运行及产物、全部 Actions 缓存；保留上述镜像源码对应的成功记录、最近任意分支成功E2E、默认分支成功完整E2E及本次清理记录；同时保留成功main的Host构建、环境产物和环境中观测的runner manifest闭包，避免latest变化破坏插件独立验收。环境ZIP摘要、来源或manifest无法确认时停止，先重跑main完整E2E。其它包、GitHub Releases、Git 标签、运行中的服务和实例数据不在镜像清理范围内。清理时保留排队、运行中及重新启动的 Actions 和所属产物；有其它活跃任务时，本次保留镜像版本及 Actions 缓存，待任务结束后手动重跑。
 
 超期空排队记录不会一直阻挡清理：只有仍为 queued、没有结论、创建/开始/更新时间均超过 GitHub 官方 workflow 总期限35天、所有尝试均没有 job，并在读取 job 前后确认尝试号与时间未变化，才忽略其阻挡。该记录及产物仍保留，不尝试强删；近期重跑、有 job 或无法完整核实的记录继续保护。
 

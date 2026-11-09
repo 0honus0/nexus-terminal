@@ -21,7 +21,7 @@ mapfile -t image_info < <(node --input-type=module - "$repo_root" <<'JS'
 import { pathToFileURL } from 'node:url';
 const { getRunnerImageInfo } = await import(pathToFileURL(process.argv[2] + '/scripts/e2e/runner-image-info.mjs'));
 const info = getRunnerImageInfo();
-for (const field of ['node', 'playwright', 'pnpm', 'fingerprint', 'tag']) console.log(info[field]);
+for (const field of ['node', 'playwright', 'pnpm', 'fingerprint', 'refreshWeek']) console.log(info[field]);
 JS
 )
 test "${#image_info[@]}" = 5
@@ -29,10 +29,10 @@ node_version="${image_info[0]}"
 playwright_version="${image_info[1]}"
 pnpm_version="${image_info[2]}"
 fingerprint="${image_info[3]}"
-# CI captures the tag before preparing the image; do not choose a new week midway through a run.
-tag="${E2E_RUNNER_TAG:-${image_info[4]}}"
-[[ "$tag" =~ ^cache-[0-9]+-$fingerprint$ ]]
-full_image="$image:$tag"
+# Preserve the preparation job's refresh period across a UTC week boundary.
+refresh_week="${E2E_RUNNER_REFRESH_WEEK:-${image_info[4]}}"
+[[ "$refresh_week" =~ ^[0-9]+$ ]]
+full_image="$image:latest"
 
 echo "[E2E runner] building $full_image"
 docker build \
@@ -42,9 +42,9 @@ docker build \
   --build-arg "PLAYWRIGHT_VERSION=$playwright_version" \
   --build-arg "PNPM_VERSION=$pnpm_version" \
   --build-arg "E2E_RUNNER_FINGERPRINT=$fingerprint" \
+  --build-arg "E2E_RUNNER_REFRESH_WEEK=$refresh_week" \
   -f "$repo_root/tests/fixtures/runner/Dockerfile" \
   -t "$full_image" \
-  -t "$image:latest" \
   "$repo_root"
 
 echo "[E2E runner] verifying $full_image"
@@ -67,4 +67,3 @@ trap - EXIT
 
 echo "[E2E runner] pushing $full_image"
 docker push "$full_image"
-docker push "$image:latest"

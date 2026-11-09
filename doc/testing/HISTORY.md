@@ -2791,7 +2791,7 @@ push与手动workflow_dispatch完整通过后均自动回写耗时估算，不�
 修正的遗漏：
 
 - E2E触发补齐scripts、补丁、assets和workflow/格式配置；删除无生产者的旧诊断路径。
-- Runner指纹补齐dockerignore、递归补丁与vendor；内容身份跨周稳定，准备阶段固定周标签、指纹和digest，latest仅为便利别名，避免跨分支或跨周误用。
+- Runner指纹补齐dockerignore、递归补丁与vendor，内容身份跨周稳定。最初实现固定digest/周标签，用户随后要求两仓全部latest，已移除固定与独立缓存标签；周刷新改用独立元数据，保留依赖指纹校验，digest只记录观测事实。移动latest不保证同一轮OS字节相同。
 - 清理保留默认分支成功完整E2E及准确Host环境/runner闭包；按真实job读取ZIP并核对摘要，缺失/过期/来源错误即停止。删除前复查main身份；不把其它分支latest替代成功main。
 - Compose smoke覆盖宿主同名环境变量，固定自身数据目录；清理错误使作业失败，测试失败保留数据库/日志/退出事实。上传仅限诊断和失败数据，不上传临时`.env`密钥。
 - 31个测试/辅助文件统一`NEXUS_TEST_ARTIFACT_DIR`，移除旧Agent/复数别名；ingress使用独立报告目录并在CI拒绝only与flaky通过。
@@ -2799,15 +2799,15 @@ push与手动workflow_dispatch完整通过后均自动回写耗时估算，不�
 - 移除gitignore旧scripts总屏蔽、失效allowlist与重复条目；插件Node从浮动node改为精确26.13.0，检查与发布同版本，Host准备核对版本并复用环境resolver。
 - 更新测试/维护/部署架构、本体与插件README及过时SQLite测试路径；性能目标未达与暂停决定如实保留，资源采集已实现的内容不再误写为未完成。
 
-| 本地验证     | 实测与证据                                                                          |
-| ------------ | ----------------------------------------------------------------------------------- |
-| 根check      | 38.66秒通过，含布局索引、Backend/Frontend/测试类型和全仓ESLint。                    |
-| fast         | 120文件307项通过，14.52秒；含新增runner3项、smoke4项及环境resolver回归。            |
-| 维护脚本     | 36项通过，0.42秒；覆盖超期空queued、主分支环境闭包、损坏/失效来源及维护中main变化。 |
-| 全仓格式     | 35.57秒通过；两仓workflow actionlint与bash语法通过。                                |
-| 文档链接     | 本体doc/README及两仓测试README共26文件、293个本地路径/锚点，无失效。                |
-| 真实环境只读 | 新解析器成功核对Host42572220179的真实ZIP及runner digest；只读，不执行删除。         |
+| 本地验证     | 实测与证据                                                                                              |
+| ------------ | ------------------------------------------------------------------------------------------------------- |
+| 根check      | 初轮38.66秒、去重ingress后38.34秒通过，含布局索引、双端/测试类型与全仓ESLint。                          |
+| fast         | 初轮120文件307项14.52秒通过；手动截图2项0.66秒、latest构建3项0.72秒通过。最终完整快速层以远程报告核对。 |
+| 维护脚本     | 初版36项0.42秒；latest调整后补非latest标签/无效观测digest拒绝，38项0.43秒通过。                         |
+| 全仓格式     | 初轮35.57秒、latest调整后45.73秒通过；两仓workflow actionlint与bash语法通过。                           |
+| 文档链接     | 本体doc/README及两仓测试README共26文件、293个本地路径/锚点，无失效。                                    |
+| 真实环境只读 | 初版解析器核对Host42572220179真实ZIP与runner digest；latest新协议待最终新Host复验，未执行删除。         |
 
 首次维护回归31项中1项失败：旧main-only fixture把成功main环境指向已删除候选，暴露旧预期与新保护规则冲突；修正来源fixture后原删除断言保留，31项通过，再补5项queued回归至36项。首次插件check因本地已清除可重建backend/index.mjs而失败，保留原日志；按正式入口先构建，再执行检查，不能将缺构建误判为代码通过。
 
-证据根：`/home/honus/nexus-task-artifacts/workflow-consolidation-20261109/maintenance-audit-20261109`，保留首次失败、原始报告、资源指标、发现盘点及文档链接结果。首次Host42577885856的质量检查发现最后补ingress配置时重复已有`failOnFlakyTests`字段；本地完整check此前通过后又修改配置导致漏检，已去重并重新执行受影响静态/回归，原始日志保留。该轮真实Docker smoke已通过；最终远程门禁待回填。
+证据根：`/home/honus/nexus-task-artifacts/workflow-consolidation-20261109/maintenance-audit-20261109`，保留首次失败、原始报告、资源指标、发现盘点及文档链接结果。首次Host42577885856的质量检查发现最后补ingress配置时重复已有`failOnFlakyTests`字段；本地完整check此前通过后又修改配置导致漏检，已去重并重新执行受影响静态/回归，原始日志保留。该轮真实Docker smoke已通过；修正后的42578371034因用户改为latest的最新要求主动取消，不计通过。最终新源码完整门禁待回填。

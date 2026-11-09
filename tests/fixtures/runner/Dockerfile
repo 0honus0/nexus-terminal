@@ -2,6 +2,7 @@ ARG NODE_VERSION=26.13.0
 FROM node:${NODE_VERSION}-bookworm-slim
 
 ARG E2E_RUNNER_FINGERPRINT
+ARG E2E_RUNNER_REFRESH_WEEK
 ARG PLAYWRIGHT_VERSION
 ARG PNPM_VERSION
 
@@ -13,6 +14,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     XDG_CACHE_HOME=/opt/pnpm/cache \
     npm_config_nodedir=/usr/local \
     E2E_RUNNER_FINGERPRINT=${E2E_RUNNER_FINGERPRINT} \
+    E2E_RUNNER_REFRESH_WEEK=${E2E_RUNNER_REFRESH_WEEK} \
     PATH=/opt/pnpm:${PATH}
 
 RUN npm install --global --allow-scripts=pnpm "pnpm@${PNPM_VERSION}" \

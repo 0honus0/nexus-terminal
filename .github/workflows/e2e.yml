@@ -79,7 +79,7 @@ jobs:
       contents: read
       packages: write
     outputs:
-      image: ${{ steps.pinned-image.outputs.image }}
+      image: ${{ steps.image.outputs.image }}
       fingerprint: ${{ steps.image.outputs.fingerprint }}
       matrix: ${{ steps.matrix.outputs.value }}
     steps:
@@ -99,9 +99,9 @@ jobs:
           node --input-type=module <<'JS'
           import fs from 'node:fs';
           import { getRunnerImageInfo } from './scripts/e2e/runner-image-info.mjs';
-          const { fingerprint, tag } = getRunnerImageInfo();
-          const image = `${process.env.E2E_RUNNER_REPOSITORY}:${tag}`;
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, `image=${image}\ntag=${tag}\nfingerprint=${fingerprint}\n`);
+          const { fingerprint, refreshWeek } = getRunnerImageInfo();
+          const image = `${process.env.E2E_RUNNER_REPOSITORY}:latest`;
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `image=${image}\nrefresh-week=${refreshWeek}\nfingerprint=${fingerprint}\n`);
           console.log(`Using E2E runner image ${image}`);
           JS
 
@@ -122,11 +122,14 @@ jobs:
         env:
           E2E_RUNNER_IMAGE: ${{ steps.image.outputs.image }}
           EXPECTED_FINGERPRINT: ${{ steps.image.outputs.fingerprint }}
+          EXPECTED_REFRESH_WEEK: ${{ steps.image.outputs.refresh-week }}
           CAN_UPDATE_RUNNER_IMAGE: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
         run: |
           expected="$EXPECTED_FINGERPRINT"
-          current="$(docker buildx imagetools inspect "$E2E_RUNNER_IMAGE" --format '{{range .Image.Config.Env}}{{println .}}{{end}}' 2>/dev/null | sed -n 's/^E2E_RUNNER_FINGERPRINT=//p' || true)"
-          if [ "$current" = "$expected" ]; then
+          metadata="$(docker buildx imagetools inspect "$E2E_RUNNER_IMAGE" --format '{{range .Image.Config.Env}}{{println .}}{{end}}' 2>/dev/null || true)"
+          current="$(printf '%s\n' "$metadata" | sed -n 's/^E2E_RUNNER_FINGERPRINT=//p')"
+          refresh_week="$(printf '%s\n' "$metadata" | sed -n 's/^E2E_RUNNER_REFRESH_WEEK=//p')"
+          if [ "$current" = "$expected" ] && [ "$refresh_week" = "$EXPECTED_REFRESH_WEEK" ]; then
             echo "build=false" >> "$GITHUB_OUTPUT"
             echo "E2E runner image metadata matches; skipping pull and build."
           elif [ "$CAN_UPDATE_RUNNER_IMAGE" != "true" ]; then
@@ -135,7 +138,7 @@ jobs:
             exit 1
           else
             echo "build=true" >> "$GITHUB_OUTPUT"
-            echo "E2E runner image is missing or outdated; building this input/week tag now."
+            echo "E2E runner image is missing or outdated; building latest now."
           fi
 
       - name: Log in to GHCR
@@ -150,11 +153,11 @@ jobs:
         if: steps.check.outputs.build == 'true'
         env:
           E2E_RUNNER_REPOSITORY: ghcr.io/${{ github.repository_owner }}/nexus-terminal-e2e-runner
-          E2E_RUNNER_TAG: ${{ steps.image.outputs.tag }}
+          E2E_RUNNER_REFRESH_WEEK: ${{ steps.image.outputs.refresh-week }}
         run: scripts/e2e/build-runner-image.sh
 
-      - name: Pin the immutable runner image for every shard
-        id: pinned-image
+      - name: Inspect latest runner for environment evidence
+        id: observed-image
         env:
           RUNNER_IMAGE: ${{ steps.image.outputs.image }}
           EXPECTED_FINGERPRINT: ${{ steps.image.outputs.fingerprint }}
@@ -162,12 +165,13 @@ jobs:
           digest="$(docker buildx imagetools inspect "$RUNNER_IMAGE" --format '{{json .Manifest}}' | node -e 'let s=""; for await (const c of process.stdin) s+=c; const d=JSON.parse(s).digest; if (!/^sha256:[a-f0-9]{64}$/.test(d)) throw Error("Invalid image digest"); process.stdout.write(d)' --input-type=module)"
           current="$(docker buildx imagetools inspect "${RUNNER_IMAGE%:*}@$digest" --format '{{range .Image.Config.Env}}{{println .}}{{end}}' | sed -n 's/^E2E_RUNNER_FINGERPRINT=//p')"
           test "$current" = "$EXPECTED_FINGERPRINT"
-          echo "image=${RUNNER_IMAGE%:*}@$digest" >> "$GITHUB_OUTPUT"
-          echo "Pinned runner $RUNNER_IMAGE@$digest"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "Observed $RUNNER_IMAGE at $digest; shards use latest."
 
       - name: Record exact test environment
         env:
-          PINNED_RUNNER_IMAGE: ${{ steps.pinned-image.outputs.image }}
+          RUNNER_IMAGE: ${{ steps.image.outputs.image }}
+          OBSERVED_RUNNER_DIGEST: ${{ steps.observed-image.outputs.digest }}
           EXPECTED_FINGERPRINT: ${{ steps.image.outputs.fingerprint }}
         run: |
           mkdir -p tests/.artifacts/environment
@@ -175,7 +179,7 @@ jobs:
           import fs from 'node:fs';
           const fingerprint = process.env.EXPECTED_FINGERPRINT;
           fs.writeFileSync('tests/.artifacts/environment/environment.json', JSON.stringify({
-            sha: process.env.GITHUB_SHA, image: process.env.PINNED_RUNNER_IMAGE, fingerprint,
+            sha: process.env.GITHUB_SHA, image: process.env.RUNNER_IMAGE, observedDigest: process.env.OBSERVED_RUNNER_DIGEST, fingerprint,
           }, null, 2));
           JS
 
@@ -340,7 +344,7 @@ jobs:
         ${{ matrix.shard == 1 && '--cap-add=SYS_ADMIN --security-opt=apparmor=unconfined' || '' }}
         ${{ matrix.shard == 1 && '--volume=/var/run/docker.sock:/var/run/docker.sock' || '' }}
     env:
-      PINNED_RUNNER_FINGERPRINT: ${{ needs.test-runner-image.outputs.fingerprint }}
+      EXPECTED_RUNNER_FINGERPRINT: ${{ needs.test-runner-image.outputs.fingerprint }}
       NEXUS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/tests/.artifacts/layers
       NEXUS_TEST_DOCKER_NATIVE: backend/remote/docker/protocol/docker.native.test.mjs
       NEXUS_TEST_FINITE_FS_NATIVE: backend/remote/sessions/suspend/storage/suspended-log-enospc.native.test.mjs
@@ -394,7 +398,7 @@ jobs:
         id: plugin-source
         shell: bash
         run: |
-          test "${E2E_RUNNER_FINGERPRINT:-}" = "$PINNED_RUNNER_FINGERPRINT"
+          test "${E2E_RUNNER_FINGERPRINT:-}" = "$EXPECTED_RUNNER_FINGERPRINT"
           pnpm install --frozen-lockfile --offline
           revision="$(cat tests/.artifacts/plugin-validation-artifact/plugin-candidates/source.sha)"
           [[ "$revision" =~ ^[a-f0-9]{40}$ ]]
@@ -428,7 +432,7 @@ jobs:
       - name: Record shard resource environment
         if: always()
         env:
-          PINNED_RUNNER_IMAGE: ${{ needs.test-runner-image.outputs.image }}
+          RUNNER_IMAGE: ${{ needs.test-runner-image.outputs.image }}
           DEPENDENCY_CACHE: ${{ inputs.dependency_cache || 'warm' }}
         run: |
           node --input-type=module <<'JS'
@@ -438,8 +442,8 @@ jobs:
           const root = process.env.NEXUS_TEST_ARTIFACT_DIR + '/metrics';
           fs.mkdirSync(root, { recursive: true });
           fs.writeFileSync(root + '/environment.json', JSON.stringify({
-            sha: process.env.GITHUB_SHA, runnerImage: process.env.PINNED_RUNNER_IMAGE,
-            fingerprint: process.env.E2E_RUNNER_FINGERPRINT, dependencyCache: process.env.DEPENDENCY_CACHE,
+            sha: process.env.GITHUB_SHA, runnerImage: process.env.RUNNER_IMAGE,
+            fingerprint: process.env.E2E_RUNNER_FINGERPRINT, refreshWeek: process.env.E2E_RUNNER_REFRESH_WEEK, dependencyCache: process.env.DEPENDENCY_CACHE,
             node: process.version, cpus: os.availableParallelism(), memoryBytes: os.totalmem(),
             cgroupMemoryPeakBytes: read('/sys/fs/cgroup/memory.peak') ?? read('/sys/fs/cgroup/memory/memory.max_usage_in_bytes'),
             cgroupMemoryLimitBytes: read('/sys/fs/cgroup/memory.max'),

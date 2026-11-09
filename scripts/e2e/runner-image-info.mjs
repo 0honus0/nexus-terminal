@@ -58,7 +58,7 @@ export function getRunnerImageInfo({ root = path.resolve(import.meta.dirname, '.
 		playwright: playwrightVersion,
 		pnpm: pnpmVersion,
 		fingerprint,
-		tag: `cache-${refreshWeek}-${fingerprint}`,
+		refreshWeek,
 	};
 }
 

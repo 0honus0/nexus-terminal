@@ -30,7 +30,7 @@ GitHub REST 包元数据中的 repository.id 必须与当前仓库 ID 相同；�
 
 ## 7. 生命周期与失败
 
-当前/活跃运行、保留revision的成功运行、最近任意分支成功E2E及默认分支成功完整E2E均留存；后者保留准确Host构建、环境产物及runner manifest闭包，不能由其它分支更新的latest替代。环境产物按实际成功job执行时间选取，核对ZIP SHA256、来源SHA、fingerprint与本仓固定runner digest；过期、缺失、损坏或缺少对应manifest均停止清理，先重跑main完整E2E再维护。临时ZIP目录在成功/失败时清理，清理错误保留原因。
+当前/活跃运行、保留revision的成功运行、最近任意分支成功E2E及默认分支成功完整E2E均留存；后者保留准确Host构建、环境产物及记录的runner manifest闭包，不能由其它分支更新的latest替代。环境产物按实际成功job执行时间选取，核对ZIP SHA256、来源SHA、fingerprint与本仓latest引用及观测runner digest；digest仅作保留依据，不用于容器启动；两仓测试使用latest并检查依赖指纹。过期、缺失、损坏或缺少对应manifest均停止清理，先重跑main完整E2E再维护。临时ZIP目录在成功/失败时清理，清理错误保留原因。
 
 删除artifact/run前、每次镜像删除及结束时复查最新成功main的id/attempt，变化立即停止旧计划；该复查与DELETE仍非事务。旧运行和产物删除前重新确认其运行状态。只有精确 DELETE 的404计为已不存在，其他失败传播；无法确认所属运行的产物保留。包版本删除禁用隐式重试，重跑必须重新检查渠道和计划。失败后按日志核对已删资源，不能把请求失败当作删除未发生。
 

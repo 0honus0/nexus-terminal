@@ -42,7 +42,8 @@ function fixture(
 	];
 	const environment = {
 		sha: 'b'.repeat(40),
-		image: 'ghcr.io/fixture/nexus-terminal-e2e-runner@' + digest('a'),
+		image: 'ghcr.io/fixture/nexus-terminal-e2e-runner:latest',
+		observedDigest: digest('a'),
 		fingerprint: '1'.repeat(64),
 	};
 	const environmentArtifact = {
@@ -385,7 +386,7 @@ test('an optional protected tag need not have been published in either package',
 test('a main-only package keeps its current image while other old versions remain eligible', async (t) => {
 	const f = fixture(t);
 	const name = 'nexus-terminal-e2e-runner';
-	f.environment.image = 'ghcr.io/fixture/nexus-terminal-e2e-runner@' + digest('b');
+	f.environment.observedDigest = digest('b');
 	for (const version of f.catalogs[name]) {
 		version.metadata.container.tags = version.metadata.container.tags.filter((tag) => tag === 'main');
 	}
@@ -477,9 +478,9 @@ test('failure to inspect a retained runner manifest stops all deletion', async (
 	assert.deepEqual(f.calls, []);
 });
 
-test('successful main retains its exact untagged runner and child manifests after latest moves', async (t) => {
+test('successful main retains its observed untagged runner and child manifests after latest moves', async (t) => {
 	const f = fixture(t);
-	f.environment.image = 'ghcr.io/fixture/nexus-terminal-e2e-runner@' + digest('0');
+	f.environment.observedDigest = digest('0');
 	f.catalogs['nexus-terminal-e2e-runner'].push({ id: 26, name: digest('f'), metadata: { container: { tags: [] } } });
 	await cleanup(f.args);
 	assert.deepEqual(f.calls, ['artifact:30', 'run:3', 'cache:40', 'image:14']);
@@ -518,7 +519,19 @@ for (const [name, change] of [
 	[
 		'wrong package',
 		(f) => {
-			f.environment.image = 'ghcr.io/fixture/unrelated@' + digest('a');
+			f.environment.image = 'ghcr.io/fixture/unrelated:latest';
+		},
+	],
+	[
+		'non-latest tag',
+		(f) => {
+			f.environment.image = 'ghcr.io/fixture/nexus-terminal-e2e-runner:main';
+		},
+	],
+	[
+		'invalid observed digest',
+		(f) => {
+			f.environment.observedDigest = 'invalid';
 		},
 	],
 	[
@@ -530,7 +543,7 @@ for (const [name, change] of [
 	[
 		'missing runner manifest',
 		(f) => {
-			f.environment.image = 'ghcr.io/fixture/nexus-terminal-e2e-runner@' + digest('f');
+			f.environment.observedDigest = digest('f');
 		},
 	],
 ]) {
