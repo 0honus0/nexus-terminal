@@ -40,7 +40,7 @@
 
 Actions使用统一8个测试runner：每个分片将Node原生协议与“Vitest模块→本体Playwright→插件互操作→插件Playwright”链重叠执行，模块/原生按框架原生分片，浏览器按实际发现与历史耗时均衡；不再固定1个Backend与7个Browser。所有测试容器启用init回收孤儿进程，并以SYS_PTRACE检查真实OpenSSH句柄。第1分片单独挂Docker socket运行真实Docker协议/模块，同时持有限定的挂载能力，在私有mount namespace执行真实有限tmpfs的ENOSPC测试；其余分片不挂Docker socket或授予挂载能力。ENOSPC文件显式归第1分片，不依赖原生文件排序后的偶然分配。快速层、静态及插件独立测试在质量作业执行，成品Docker部署smoke单独执行；全部必需作业成功才算门禁通过。
 
-质量作业构建Host一次、签候选包一次，上传准确插件源码和包。分片复用绑定本次SHA/不可变artifact ID的同批成品，不重建；完整重跑与部分重跑遵循下文产物身份规则。插件独立Validate选择成功Host E2E的准确SHA和不可变构建产物；质量作业构建签包一次并执行包测试、浏览器发现与类型检查，八个容器分片恢复同批产物执行Node互操作与Playwright。开发签名私钥不分发给测试分片。测试环境归`tests/fixtures/runner/Dockerfile`，只预装Chromium headless shell及协议工具；成功Host发布准确SHA、镜像digest与依赖指纹，插件独立门禁消费同一不可变环境。分片离线链接匹配依赖，不回退旧镜像。Docker部署smoke仅构建生产镜像、等待Compose健康及读取真实HTTP契约，不装测试工作区或浏览器。两仓组合记录须绑定真实源码、成品和包摘要，不能引用旧harness的绿色结论。
+八个测试runner仅在质量检查和共享环境准备都成功后启动；构建或检查失败不启动分片。产物直接解析并下载，无构建等待轮询。质量作业构建Host一次、签候选包一次，上传准确插件源码和包。分片复用绑定本次SHA/不可变artifact ID的同批成品，不重建；完整重跑与部分重跑遵循下文产物身份规则。插件独立Validate选择成功Host E2E的准确SHA和不可变构建产物；质量作业构建签包一次并执行包测试、浏览器发现与类型检查，八个容器分片恢复同批产物执行Node互操作与Playwright。开发签名私钥不分发给测试分片。测试环境归`tests/fixtures/runner/Dockerfile`，只预装Chromium headless shell及协议工具；成功Host发布准确SHA、镜像digest与依赖指纹，插件独立门禁消费同一不可变环境。分片离线链接匹配依赖，不回退旧镜像。Docker部署smoke仅构建生产镜像、等待Compose健康及读取真实HTTP契约，不装测试工作区或浏览器。两仓组合记录须绑定真实源码、成品和包摘要，不能引用旧harness的绿色结论。
 
 浏览器使用正式Frontend构建的preview及真实Backend，每例独立数据库，外部协议服务按声明启动。`NEXUS_TEST_ARTIFACT_DIR`与`NEXUS_E2E_DATA_ROOT`指定任务证据/数据库；`NEXUS_E2E_SERVICE_ROOT`为受控SSH运行路径，默认使用短临时路径以保持Unix socket名称互不截断，timings记录对应runtime根。首次trace/截图/录像/日志及数据库保留，重试通过仍阻止CI通过。
 
@@ -48,7 +48,7 @@ Actions使用统一8个测试runner：每个分片将Node原生协议与“Vites
 
 ACP取消验证工具取消、旧审批拒绝、禁止文件未生成及原进程实际退出；已确认收尾时要求应用正常关闭，不再强行期待旧`execution_unknown`。真实未知副作用仍保留围栏、数据库和具名失败，不能用重置抹掉。
 
-应用构建等待、插件消费成功Host测试环境与耗时汇总均按当前运行对应最新 job 的实际执行时间、产物创建时间及名称前缀定位不可变产物 ID。GitHub 部分重跑会复制成功 job 并重写 ID/run_attempt，但保持原执行时间；因此复用原产物不能只按 attempt 名称匹配，也不允许回退到其它执行周期的产物。仅重跑失败分片或汇总作业时复用其余成功分片的原产物。耗时发现使用 github-script 的只读请求重试，下载使用官方 Action 的 token/REST 路径并保留摘要校验；任一来源失败、产物缺失、过期或重复均阻止汇总。产物选择逻辑回归 `pnpm test:fast`中的`tests/tooling/ci/logic/timing-artifacts.test.mjs`验证产物选择逻辑。
+应用成品解析、插件消费成功Host测试环境与耗时汇总均按当前运行对应最新 job 的实际执行时间、产物创建时间及名称前缀定位不可变产物 ID。GitHub 部分重跑会复制成功 job 并重写 ID/run_attempt，但保持原执行时间；因此复用原产物不能只按 attempt 名称匹配，也不允许回退到其它执行周期的产物。仅重跑失败分片或汇总作业时复用其余成功分片的原产物。耗时发现使用 github-script 的只读请求重试，下载使用官方 Action 的 token/REST 路径并保留摘要校验；任一来源失败、产物缺失、过期或重复均阻止汇总。产物选择逻辑回归 `pnpm test:fast`中的`tests/tooling/ci/logic/timing-artifacts.test.mjs`验证产物选择逻辑。
 
 ## 测试重构当前证据（2026-11-08）
 

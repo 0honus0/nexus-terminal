@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { resolveTimingArtifacts } from '../../../../scripts/e2e/resolve-timing-artifacts.mjs';
-import { waitForTestArtifact } from '../../../../scripts/e2e/wait-for-build.mjs';
+import { resolveBuildArtifact } from '../../../../scripts/e2e/resolve-build-artifact.mjs';
 
 function timestamp(attempt, minute) {
 	return new Date(Date.UTC(2026, 10, 5, attempt, minute)).toISOString();
@@ -100,7 +100,7 @@ test('a failed shard rerun reuses the copied successful build without trusting i
 			{ ...artifact(12, 1, 2), name: 'e2e-application-test-sha-2' },
 		],
 	);
-	assert.equal(await waitForTestArtifact({ ...input, sha: 'test-sha', kind: 'application' }), '11');
+	assert.equal(await resolveBuildArtifact({ ...input, sha: 'test-sha', kind: 'application' }), '11');
 });
 
 test('a full build rerun cannot use an earlier build artifact', async () => {
@@ -109,7 +109,7 @@ test('a full build rerun cannot use an earlier build artifact', async () => {
 		[{ ...artifact(11, 1, 1), name: 'e2e-application-test-sha-1' }],
 	);
 	await assert.rejects(
-		waitForTestArtifact({ ...input, sha: 'test-sha', kind: 'application' }),
+		resolveBuildArtifact({ ...input, sha: 'test-sha', kind: 'application' }),
 		/application artifact unavailable/,
 	);
 });
@@ -120,9 +120,9 @@ test('plugin candidates follow the original build lifetime on partial reruns and
 		{ ...artifact(22, 1, 2), name: 'e2e-plugin-candidates-test-sha-2' },
 	];
 	const input = source([{ ...job(1, 1), name: 'Checks and format', run_attempt: 2 }], artifacts);
-	assert.equal(await waitForTestArtifact({ ...input, sha: 'test-sha', kind: 'plugin-candidates' }), '21');
+	assert.equal(await resolveBuildArtifact({ ...input, sha: 'test-sha', kind: 'plugin-candidates' }), '21');
 	await assert.rejects(
-		waitForTestArtifact({
+		resolveBuildArtifact({
 			...source([{ ...job(1, 2), name: 'Checks and format' }], artifacts.slice(0, 1)),
 			sha: 'test-sha',
 			kind: 'plugin-candidates',
@@ -138,4 +138,24 @@ test('API failures propagate without publishing partial IDs', async () => {
 		throw failure;
 	};
 	await assert.rejects(resolveTimingArtifacts(input), (error) => error === failure);
+	await assert.rejects(
+		resolveBuildArtifact({ ...input, sha: 'test-sha', kind: 'application' }),
+		(error) => error === failure,
+	);
+});
+
+// Job dependencies replace readiness polling; source failure must not start shard work.
+test('artifact resolution rejects missing, pending, failed or ambiguous build jobs immediately', async () => {
+	const build = { ...job(1, 1), name: 'Checks and format' };
+	for (const jobs of [
+		[],
+		[{ ...build, status: 'in_progress' }],
+		[{ ...build, conclusion: 'failure' }],
+		[build, build],
+	]) {
+		await assert.rejects(
+			resolveBuildArtifact({ ...source(jobs, []), sha: 'test-sha', kind: 'application' }),
+			/One successful application build job is required/,
+		);
+	}
 });

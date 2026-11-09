@@ -30,7 +30,7 @@ Linux 的 Chromium 临时目录须容纳实际 Unix socket 路径长度；任务
 
 插件仓候选互操作通过`support/plugins/host-harness.mjs`作为本体test-artifact入口，共用真实应用/OpenSSH夹具，复用单独的`install-signed-app.mjs`普通签包安装流程。准确候选入口接收完整签包字节与身份，不复制App源码重签；复用安装需核对版本、发布者与归档hash。普通本体专项继续可用固定正式包，不将其结果当作新候选通过。完整Agent互操作测试归插件仓`tests/interoperability/agent/`，完整互操作及70项业务浏览器均归插件仓，已通过准确Host成品组合的完整远程门禁；Host不维护第二份插件业务用例。
 
-CI以统一8个runner执行模块/协议/本体浏览器/插件互操作/插件浏览器，第1分片额外运行真实Docker。质量作业只构建及签候选一次，分片复用准确成品；根`test:all`仅串接本体检查，不包括插件仓及独立Docker部署smoke。插件业务浏览器通过公开`support/plugins/browser-config.ts`复用Host测试成品，页面helper在`e2e/support/agent-host/`，任务工程唯一归插件仓。
+CI以统一8个runner执行模块/协议/本体浏览器/插件互操作/插件浏览器，第1分片额外运行真实Docker。质量作业只构建及签候选一次，质量和环境准备成功后才启动八个分片，直接复用准确成品，不轮询等待构建；根`test:all`仅串接本体检查，不包括插件仓及独立Docker部署smoke。插件业务浏览器通过公开`support/plugins/browser-config.ts`复用Host测试成品，页面helper在`e2e/support/agent-host/`，任务工程唯一归插件仓。
 
 插件独立CI同样构建签包一次，再由八个容器执行Node互操作和Playwright原生分片，复用成功Host E2E的准确源码及不可变产物。逐片核对原生报告与组合，不能将发现、无场景分片或局部重跑当作完整覆盖。当前耗时及未达性能目标见测试基线。
 
