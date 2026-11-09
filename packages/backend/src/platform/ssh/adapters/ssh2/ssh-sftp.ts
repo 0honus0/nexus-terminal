@@ -303,10 +303,8 @@ export class SshSftpLease implements MachineSftpLease {
 		if (
 			!Number.isSafeInteger(options.maxEntries) ||
 			options.maxEntries < 1 ||
-			options.maxEntries > 10000 ||
 			!Number.isSafeInteger(options.maxMetadataBytes) ||
-			options.maxMetadataBytes < 1 ||
-			options.maxMetadataBytes > 2 * 1024 * 1024
+			options.maxMetadataBytes < 1
 		) {
 			throw new RangeError('Invalid SFTP directory budget');
 		}

@@ -1,3 +1,4 @@
+import { profileSampleCount } from '../../../../support/profile-samples';
 import { expect, test } from '../../../../support/http/ssh-protocol-fixture.mjs';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -21,7 +22,7 @@ test('profile text saves with exact bytes and temporary-file cleanup', async ({ 
 		await waitForFilesystemReady(workspace.socket);
 		for (const delayMs of [0, 60]) {
 			expect((await fetch(`${control}?ms=${delayMs}&prefix=${remotePath}`, { method: 'POST' })).ok).toBe(true);
-			for (let sample = 0; sample < 10; sample++) {
+			for (let sample = 0; sample < profileSampleCount; sample++) {
 				const content = `save ${delayMs}/${sample}: 中文\n${'editor content\n'.repeat(1024)}`;
 				const started = performance.now();
 				expect(

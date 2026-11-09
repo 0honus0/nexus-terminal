@@ -400,7 +400,9 @@ export async function finishNativeTask(task: NativeTask, runId: string, approved
 				}
 				return (await readNativeRun(task, runId)).status;
 			},
-			{ timeout: 45_000 },
+			// Each poll may approve the next governed operation. The default
+			// escalating 1s interval adds latency to every approval/model turn.
+			{ timeout: 45_000, intervals: [20, 50, 100] },
 		)
 		.toMatch(/^(completed|failed|unknown|cancelled)$/);
 	const run = await readNativeRun(task, runId);
@@ -434,11 +436,14 @@ export async function finishNativeTask(task: NativeTask, runId: string, approved
 export async function waitNativeApproval(task: NativeTask, runId: string, toolName: string) {
 	let found: import('../../../../packages/shared/src/agent/governance/model').AgentApprovalView | undefined;
 	await expect
-		.poll(async () => {
-			const result = await listNativeApprovalHistory(task, runId);
-			found = result.find((item) => item.status === 'requested' && hasApprovalIdentity(item, toolName));
-			return !!found;
-		})
+		.poll(
+			async () => {
+				const result = await listNativeApprovalHistory(task, runId);
+				found = result.find((item) => item.status === 'requested' && hasApprovalIdentity(item, toolName));
+				return !!found;
+			},
+			{ intervals: [20, 50, 100] },
+		)
 		.toBe(true);
 	if (!found) {
 		throw new Error('Approval not found');

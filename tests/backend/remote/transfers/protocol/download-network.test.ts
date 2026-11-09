@@ -1,3 +1,4 @@
+import { profileSampleCount } from '../../../../support/profile-samples';
 import { writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
@@ -30,7 +31,7 @@ for (const profile of [
 		const measurements = [];
 		try {
 			await waitForFilesystemReady(workspace.socket);
-			for (let sample = 0; sample < 3; sample++) {
+			for (let sample = 0; sample < profileSampleCount; sample++) {
 				expect(
 					(await fetch(`${control}?ms=${profile.delay}&bytesPerSecond=${profile.rate}`, { method: 'POST' }))
 						.ok,

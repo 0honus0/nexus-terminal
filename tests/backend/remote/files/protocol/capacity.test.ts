@@ -40,11 +40,28 @@ test(
 		const name = 'capacity-' + crypto.randomUUID().slice(0, 8);
 		const root = path.join(ssh.root, name);
 		const count = 20_005;
+		const phases: Record<string, number> = {};
+		let phaseStarted = performance.now();
+
+		const completePhase = (name: string) => {
+			const now = performance.now();
+			phases[name] = now - phaseStarted;
+			phaseStarted = now;
+		};
+
 		try {
 			await mkdir(root);
-			for (let index = 0; index < count; index++) {
-				await writeFile(path.join(root, String(index)), index === count - 1 ? 'last entry\n' : '');
+			// Only fixture construction is batched. Every real remote entry still
+			// participates in listing, ZIP streaming and recursive deletion below.
+			for (let start = 0; start < count; start += 32) {
+				await Promise.all(
+					Array.from({ length: Math.min(32, count - start) }, (_, offset) => {
+						const index = start + offset;
+						return writeFile(path.join(root, String(index)), index === count - 1 ? 'last entry\n' : '');
+					}),
+				);
 			}
+			completePhase('prepare');
 			await waitForFilesystemReady(workspace.socket);
 			const listing = readWorkspaceFileListResponse(
 				await requestWorkspace(workspace.socket, 'filesystem.list', { path: '/' + name }, undefined, 60_000),
@@ -54,6 +71,7 @@ test(
 				size: 11,
 				isFile: true,
 			});
+			completePhase('list');
 			const query = new URLSearchParams({
 				connectionId: String(connectionId),
 				sessionId: workspace.workspaceId,
@@ -71,8 +89,11 @@ test(
 			} finally {
 				await response.dispose();
 			}
+			completePhase('downloadAndVerifyZip');
 			await requestWorkspace(workspace.socket, 'filesystem.remove', { paths: ['/' + name] }, undefined, 120_000);
 			await expect(stat(root)).rejects.toMatchObject({ code: 'ENOENT' });
+			completePhase('remove');
+			await writeFile(path.join(ssh.directory, 'large-directory-phases.json'), JSON.stringify(phases, null, 2));
 		} finally {
 			await closeWebSocket(workspace.socket);
 		}

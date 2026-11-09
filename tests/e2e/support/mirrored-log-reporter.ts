@@ -30,6 +30,15 @@ export default class MirroredLogReporter implements Reporter {
 	private consoleEnabled = process.env.GITHUB_ACTIONS === 'true' || process.env.E2E_CONSOLE_LOGS === '1';
 	private runStartedAt = 0;
 	private latestResultByTestId = new Map<string, { spec: string; status: TestResult['status']; duration: number }>();
+	private caseDurations: Array<{
+		id: string;
+		spec: string;
+		project: string;
+		title: string[];
+		retry: number;
+		status: TestResult['status'];
+		durationMs: number;
+	}> = [];
 
 	onBegin(config: FullConfig, suite: Suite) {
 		this.runStartedAt = Date.now();
@@ -113,6 +122,15 @@ export default class MirroredLogReporter implements Reporter {
 	}
 
 	onTestEnd(test: TestCase, result: TestResult) {
+		this.caseDurations.push({
+			id: test.id,
+			spec: this.specPath(test),
+			project: test.parent.project()?.name ?? '',
+			title: test.titlePath(),
+			retry: result.retry,
+			status: result.status,
+			durationMs: result.duration,
+		});
 		this.latestResultByTestId.set(test.id, {
 			spec: this.specPath(test),
 			status: result.status,
@@ -175,7 +193,16 @@ export default class MirroredLogReporter implements Reporter {
 		fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 		fs.writeFileSync(
 			outputPath,
-			`${JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), specs }, null, 2)}\n`,
+			`${JSON.stringify(
+				{
+					version: 1,
+					generatedAt: new Date().toISOString(),
+					specs,
+					cases: this.caseDurations.slice().sort((left, right) => right.durationMs - left.durationMs),
+				},
+				null,
+				2,
+			)}\n`,
 			'utf8',
 		);
 	}

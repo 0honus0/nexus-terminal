@@ -53,10 +53,29 @@ test('same-title cases in separate browser groups retain separate logs and retri
 	reporter.onBegin({ projects: [{ testDir }], workers: 1 }, { allTests: () => [desktop, mobile] });
 	reporter.onTestBegin(desktop, { retry: 0 });
 	reporter.onStdOut('original desktop failure', desktop);
+	reporter.onTestEnd(desktop, { retry: 0, status: 'failed', duration: 5000, attachments: [] });
 	reporter.onTestBegin(mobile, { retry: 0 });
 	reporter.onStdOut('mobile result', mobile);
+	reporter.onTestEnd(mobile, { retry: 0, status: 'passed', duration: 2000, attachments: [] });
 	reporter.onTestBegin(desktop, { retry: 1 });
 	reporter.onStdOut('desktop diagnostic retry', desktop);
+	reporter.onTestEnd(desktop, { retry: 1, status: 'passed', duration: 1000, attachments: [] });
+	await reporter.onEnd({ status: 'passed', duration: 8000 });
+	const timings = JSON.parse(await readFile(join(root, 'reports/spec-durations.json'), 'utf8'));
+	assert.deepEqual(
+		timings.cases.map(({ durationMs }) => durationMs),
+		[5000, 2000, 1000],
+	);
+	assert.deepEqual(
+		timings.cases.map(({ id, retry, status }) => ({ id, retry, status })),
+		[
+			{ id: 'desktop-case', retry: 0, status: 'failed' },
+			{ id: 'mobile-case', retry: 0, status: 'passed' },
+			{ id: 'desktop-case', retry: 1, status: 'passed' },
+		],
+	);
+	assert.notDeepEqual(timings.cases[0].title, timings.cases[1].title);
+	assert.deepEqual(timings.specs, { 'specs/connections.spec.ts': 3000 });
 	const [run] = await readdir(join(root, 'logs'));
 	const caseRoot = join(root, 'logs', run, 'connections.spec');
 	const files = await readdir(caseRoot);

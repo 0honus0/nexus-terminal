@@ -63,6 +63,7 @@ await test('B10 actual Agent Shell and background Job lifecycles', { timeout: 12
 			await mkdir(directory);
 			const fixture = await openAgentExecution(directory, sshd, {
 				discover: 'shell_execute shell_job_control file_read',
+				plugin: { selectedRootIds: ['nexus.tools.remote', 'nexus.tools.agent'], uiPackageId: null },
 			});
 			const cleanup = { unknown: false };
 			scenario.after(() => fixture.close(cleanup));

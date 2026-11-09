@@ -1,5 +1,6 @@
 import { test, expect, loginAsAdmin, HTTP_TEST_ORIGIN } from '../../../../support/http/ssh-protocol-fixture.mjs';
 import { createSshConnection } from '../../../../support/http/ssh-targets';
+import { once } from 'node:events';
 import type { SuspendedSessionView as SuspendedSession } from '../../../../../packages/shared/src/remote/suspend/http';
 import { readSuspendedSessionCatalog } from '../../../../../packages/shared/src/remote/suspend/http-codec';
 import { readWorkspaceSuspendViewport } from '../../../../../packages/shared/src/remote/suspend/workspace-result-codec';
@@ -55,16 +56,22 @@ test('marked attached workspace stays usable and another authorized socket can t
 				suspendedSessionId: marked.suspendedSessionId,
 				workspaceId: `no-takeover-${crypto.randomUUID()}`,
 			}),
-		).rejects.toThrow();
+		).rejects.toMatchObject({ code: 'conflict' });
+		const revoked = waitForJson(original.socket, (message) => message.type === 'suspend.revoked');
+		const closed = once(original.socket, 'close', { signal: AbortSignal.timeout(20_000) });
 		await resumeSuspendedWorkspace(other, {
 			suspendedSessionId: marked.suspendedSessionId,
 			workspaceId: `takeover-${crypto.randomUUID()}`,
 			takeover: true,
 		});
+		await expect(revoked).resolves.toMatchObject({ payload: { reason: 'takeover', generation: 1 } });
+		const [code, reason] = await closed;
+		expect(code).toBe(1008);
+		expect(reason.toString()).toBe('Suspended owner revoked');
 		await expect(requestWorkspace(other, 'terminal.currentDirectory')).resolves.toEqual('/');
-		await expect(
-			requestWorkspace(original.socket, 'terminal.input', { data: 'echo forbidden\r' }),
-		).rejects.toThrow();
+		await expect(requestWorkspace(original.socket, 'terminal.input', { data: 'echo forbidden\r' })).rejects.toThrow(
+			'WebSocket is not open',
+		);
 		await requestWorkspace(other, 'suspend.unmark');
 	} finally {
 		await closeWebSocket(original.socket);

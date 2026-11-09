@@ -1,3 +1,4 @@
+import { profileSampleCount } from '../../../../support/profile-samples';
 import { expect, test as sshTest, HTTP_TEST_ORIGIN } from '../../../../support/http/ssh-protocol-fixture.mjs';
 import { useHttpProtocol } from '../../../../support/http/protocol-fixture.mjs';
 import type { HttpClients } from '../../../../support/http/protocol-fixture.mjs';
@@ -43,7 +44,7 @@ test('profile streamed directory ZIP with exact extracted files under READ delay
 	try {
 		await waitForFilesystemReady(workspace.socket);
 		for (const delayMs of [0, 20]) {
-			for (let sample = 0; sample < 3; sample++) {
+			for (let sample = 0; sample < profileSampleCount; sample++) {
 				expect((await fetch(`${control}?ms=${delayMs}&bytesPerSecond=0`, { method: 'POST' })).ok).toBe(true);
 				const start = performance.now();
 				const response = await request.get(

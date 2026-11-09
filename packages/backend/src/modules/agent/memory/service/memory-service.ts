@@ -249,24 +249,31 @@ export class MemoryService {
 			throw new AgentFailure('invalid_input');
 		}
 		const items: MemoryCandidate[] = [];
+		let itemsBytes = 0;
 		for (const candidate of candidates.slice(input.offset)) {
 			const nextOffset =
 				input.offset + items.length + 1 < candidates.length ? input.offset + items.length + 1 : null;
 			const value = {
 				action: 'candidates',
-				items: [...items, candidate],
+				items: [],
 				nextOffset,
 				candidatesSha256,
 				maxItems,
 				maxBytes,
 			};
 			const response = { operation: 'memory.retrieve', value };
-			if (agentPluginCapabilityReplyBytes(response) > AGENT_PLUGIN_APP_PAYLOAD_MAX_BYTES) {
+			// The native reply contains JSON inside valueJson. Count each item's
+			// doubly escaped representation once, including its array separator;
+			// recompute only the empty envelope as the numeric cursor changes.
+			const nextItemsBytes =
+				itemsBytes + Buffer.byteLength(JSON.stringify(JSON.stringify(candidate))) - 2 + (items.length ? 1 : 0);
+			if (agentPluginCapabilityReplyBytes(response) + nextItemsBytes > AGENT_PLUGIN_APP_PAYLOAD_MAX_BYTES) {
 				if (items.length === 0) {
 					throw new AgentFailure('limit_exceeded');
 				}
 				break;
 			}
+			itemsBytes = nextItemsBytes;
 			items.push(candidate);
 		}
 		return {

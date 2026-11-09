@@ -295,6 +295,9 @@ export function requestWorkspaceBinary<T = unknown>(
 	requestId: string = crypto.randomUUID(),
 	timeoutMs = 20_000,
 ): Promise<{ data: T; bytes: Buffer }> {
+	if (socket.readyState !== WebSocket.OPEN) {
+		return Promise.reject(new Error(`WebSocket is not open for Workspace binary request: ${type}`));
+	}
 	return new Promise((resolve, reject) => {
 		const chunks: Buffer[] = [];
 		let response: JsonWsMessage | undefined;
@@ -367,6 +370,9 @@ export async function requestWorkspace<T = unknown>(
 	requestId: string = crypto.randomUUID(),
 	timeoutMs = 20_000,
 ): Promise<T> {
+	if (socket.readyState !== WebSocket.OPEN) {
+		throw new Error(`WebSocket is not open for Workspace request: ${type}`);
+	}
 	const responsePromise = waitForJson(
 		socket,
 		(message) => message.type === 'response' && message.requestId === requestId,

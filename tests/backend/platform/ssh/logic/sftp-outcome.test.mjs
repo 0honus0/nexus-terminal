@@ -51,3 +51,61 @@ test('SFTP outcome: post-dispatch cancellation remains unknown', async (t) => {
 	queueMicrotask(() => controller.abort());
 	await assert.rejects(pending, (error) => error instanceof MachineSftpFailure && error.outcome === 'unknown');
 });
+
+test('SFTP listing honors caller budgets beyond the former adapter ceilings and still closes every handle', async (t) => {
+	const attrs = {
+		size: 0,
+		uid: 0,
+		gid: 0,
+		mode: 0o100644,
+		atime: 1,
+		mtime: 1,
+
+		isDirectory: () => false,
+
+		isFile: () => true,
+
+		isSymbolicLink: () => false,
+	};
+	const rows = Array.from({ length: 10001 }, (_, index) => ({
+		filename: String(index),
+		longname: 'metadata '.repeat(32) + index,
+		attrs,
+	}));
+	const sftp = callbackSftp(() => undefined);
+	let offset = 0;
+	let closes = 0;
+	sftp.opendir = (_path, callback) => {
+		offset = 0;
+		queueMicrotask(() => callback(null, Buffer.from('directory')));
+	};
+	sftp.readdir = (_handle, callback) => {
+		const packet = rows.slice(offset, offset + 512);
+		offset += packet.length;
+		queueMicrotask(() => callback(packet.length ? null : sftpError(1, 'EOF'), packet));
+	};
+	sftp.close = (_handle, callback) => {
+		closes++;
+		queueMicrotask(() => callback(null));
+	};
+	const lease = new SshSftpLease(sftp, () => undefined);
+	t.onTestFinished(() => lease.close());
+	const budget = { maxEntries: rows.length, maxMetadataBytes: 8 * 1024 * 1024 };
+	const result = await lease.list('/large', budget);
+	assert.deepEqual(
+		result.map((entry) => entry.name),
+		rows.map((entry) => entry.filename),
+	);
+	assert.ok(Buffer.byteLength(JSON.stringify(result)) > 2 * 1024 * 1024);
+	assert.equal(closes, 1);
+	for (const limited of [
+		{ ...budget, maxEntries: rows.length - 1 },
+		{ ...budget, maxMetadataBytes: 1024 },
+	]) {
+		await assert.rejects(
+			lease.list('/large', limited),
+			(error) => error instanceof MachineSftpFailure && error.reason === 'limit_exceeded',
+		);
+	}
+	assert.equal(closes, 3);
+});

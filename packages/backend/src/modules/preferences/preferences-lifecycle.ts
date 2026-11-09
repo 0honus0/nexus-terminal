@@ -28,10 +28,6 @@ export class PreferencesTasks {
 	private readonly pending = new Set<Promise<void>>();
 	private readonly failures = new FailureSummary();
 
-	get size(): number {
-		return this.pending.size;
-	}
-
 	run<T>(work: () => Promise<T>): Promise<T> {
 		const task = Promise.resolve().then(work);
 		const observed = task

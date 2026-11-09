@@ -1,3 +1,4 @@
+import { profileSampleCount } from '../../../../support/profile-samples';
 import { expect, test } from '../../../../support/http/ssh-protocol-fixture.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -29,7 +30,7 @@ test('profile ZIP completion under remote command delay with exact extracted con
 			expect((await fetch(`${ssh.controlUrl}/archive/exec-delay?ms=${delayMs}`, { method: 'POST' })).ok).toBe(
 				true,
 			);
-			for (let sample = 0; sample < 3; sample++) {
+			for (let sample = 0; sample < profileSampleCount; sample++) {
 				const id = crypto.randomUUID();
 				const destination = `/zip-profile-${id}.zip`;
 				const beforeResponse = await fetch(`${ssh.controlUrl}/archive/processes`);

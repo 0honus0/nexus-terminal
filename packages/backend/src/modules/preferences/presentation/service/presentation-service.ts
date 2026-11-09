@@ -37,7 +37,7 @@ export class PresentationService {
 	constructor(private readonly model: PresentationModel) {}
 
 	private run<T>(actor: PresentationActor, work: () => Promise<T>): Promise<T> {
-		if (!this.accepting || this.tasks.size >= 16) {
+		if (!this.accepting) {
 			return Promise.reject(new PresentationFailure('unavailable'));
 		}
 		if (!Number.isSafeInteger(actor.userId) || actor.userId < 1 || !actor.token) {

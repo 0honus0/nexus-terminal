@@ -17,12 +17,13 @@ await test('B10 Agent file operations and HTTP refusal boundaries', async (t) =>
 	let sshd;
 	let sequence = 0;
 
-	async function scenario(name, work) {
+	async function scenario(name, work, selectedRootIds = ['nexus.tools.remote', 'nexus.tools.agent']) {
 		await t.test(name, { timeout: 120000 }, async (scenario) => {
 			const directory = join(root, String(++sequence));
 			await mkdir(directory);
 			const fixture = await openAgentExecution(directory, sshd, {
 				signal: scenario.signal,
+				plugin: { selectedRootIds, uiPackageId: null },
 				discover:
 					'file_write file_read file_patch file_inspect file_move file_delete file_list file_search file_deliver artifact_present artifact_read shell_execute tool_result_read',
 			});
@@ -40,41 +41,45 @@ await test('B10 Agent file operations and HTTP refusal boundaries', async (t) =>
 
 	try {
 		sshd = await openSshd(root);
-		await scenario('invalid protocol inputs retain 400/413 and never mutate durable state', async (f) => {
-			const app = '/api/v1/agent/apps/' + f.appId;
-			const grants = expectStatus(await f.api('GET', app + '/grants'), 200);
-			const settings = expectStatus(await f.api('GET', '/api/v1/agent/execution-settings'), 200);
-			const browser = await pluginConfiguration(f.api, f.appId, 'nexus.tools.browser');
-			const routes = [
-				[
-					'PUT',
-					app + '/grants',
-					{
-						expectedPolicyRevision: grants.policyRevision,
-						grants: [{ capability: 'machine.inspect', scope: { kind: 'targets', targets: {} } }],
-					},
-				],
-				['PUT', '/api/v1/agent/execution-settings', {}],
-				['PUT', browser.path, {}],
-				['POST', app + '/memories', {}],
-				['PUT', '/api/v1/agent/plugins/apps/' + f.appId + '/composition', {}],
-				['POST', app + '/artifacts', {}],
-				['GET', app + '/memories?limit=wrong', undefined],
-				['GET', '/api/v1/agent/files?limit=wrong', undefined],
-			];
-			for (const [method, path, input] of routes) {
-				assert.deepEqual(expectStatus(await f.api(method, path, input), 400), { code: 'invalid_input' });
-			}
-			expectStatus(
-				await f.api('PUT', '/api/v1/agent/execution-settings', { unexpected: 'x'.repeat(2 * 1024 * 1024) }),
-				413,
-			);
-			assert.deepEqual(expectStatus(await f.api('GET', app + '/grants'), 200), grants);
-			assert.deepEqual(expectStatus(await f.api('GET', '/api/v1/agent/execution-settings'), 200), settings);
-			assert.deepEqual(expectStatus(await f.api('GET', browser.path), 200), browser.current);
-			assert.equal(expectStatus(await f.api('GET', app + '/memories'), 200).items.length, 0);
-			assert.equal(expectStatus(await f.api('GET', app + '/artifacts'), 200).items.length, 0);
-		});
+		await scenario(
+			'invalid protocol inputs retain 400/413 and never mutate durable state',
+			async (f) => {
+				const app = '/api/v1/agent/apps/' + f.appId;
+				const grants = expectStatus(await f.api('GET', app + '/grants'), 200);
+				const settings = expectStatus(await f.api('GET', '/api/v1/agent/execution-settings'), 200);
+				const browser = await pluginConfiguration(f.api, f.appId, 'nexus.tools.browser');
+				const routes = [
+					[
+						'PUT',
+						app + '/grants',
+						{
+							expectedPolicyRevision: grants.policyRevision,
+							grants: [{ capability: 'machine.inspect', scope: { kind: 'targets', targets: {} } }],
+						},
+					],
+					['PUT', '/api/v1/agent/execution-settings', {}],
+					['PUT', browser.path, {}],
+					['POST', app + '/memories', {}],
+					['PUT', '/api/v1/agent/plugins/apps/' + f.appId + '/composition', {}],
+					['POST', app + '/artifacts', {}],
+					['GET', app + '/memories?limit=wrong', undefined],
+					['GET', '/api/v1/agent/files?limit=wrong', undefined],
+				];
+				for (const [method, path, input] of routes) {
+					assert.deepEqual(expectStatus(await f.api(method, path, input), 400), { code: 'invalid_input' });
+				}
+				expectStatus(
+					await f.api('PUT', '/api/v1/agent/execution-settings', { unexpected: 'x'.repeat(2 * 1024 * 1024) }),
+					413,
+				);
+				assert.deepEqual(expectStatus(await f.api('GET', app + '/grants'), 200), grants);
+				assert.deepEqual(expectStatus(await f.api('GET', '/api/v1/agent/execution-settings'), 200), settings);
+				assert.deepEqual(expectStatus(await f.api('GET', browser.path), 200), browser.current);
+				assert.equal(expectStatus(await f.api('GET', app + '/memories'), 200).items.length, 0);
+				assert.equal(expectStatus(await f.api('GET', app + '/artifacts'), 200).items.length, 0);
+			},
+			['nexus.tools.remote', 'nexus.tools.agent', 'nexus.tools.browser'],
+		);
 		await scenario(
 			'write/read/patch/inspect/move/delete use captured hashes and separate approvals',
 			async (f, directory) => {

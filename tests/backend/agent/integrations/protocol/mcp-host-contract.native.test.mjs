@@ -24,7 +24,10 @@ async function fixture(t) {
 	t.after(() => external.close());
 	const f = await openAgentExecution(root, sshd, {
 		discover: 'mcp_discover mcp_tool mcp_resource mcp_prompt',
-		plugin: { selectedRootIds: ['nexus.tools.integrations', 'nexus.tools.agent', 'nexus.services.mcp'] },
+		plugin: {
+			uiPackageId: null,
+			selectedRootIds: ['nexus.tools.integrations', 'nexus.tools.agent', 'nexus.services.mcp'],
+		},
 	});
 	t.after(() => f.close());
 	await f.grants(['integration.mcp.read', 'integration.mcp.invoke', 'service.transport.http']);
@@ -34,27 +37,35 @@ async function fixture(t) {
 		privateAuthorities: external.configuration.privateHostExceptions,
 	});
 
-	async function invoke(kind, response, inspect) {
+	async function invoke(kinds, response, inspect) {
+		const selected = Array.isArray(kinds) ? kinds : [kinds];
+
 		const work = () => response;
 
-		if (kind === 'tool') external.setTool(work);
-		else if (kind === 'resource') external.setResource(work);
-		else external.setPrompt(work);
-		const run = await f.start('MCP contract ' + kind, (results) => {
+		for (const kind of selected) {
+			if (kind === 'tool') external.setTool(work);
+			else if (kind === 'resource') external.setResource(work);
+			else external.setPrompt(work);
+		}
+		const requestStart = external.requests.length;
+		const run = await f.start('MCP contract ' + selected.join(','), (results) => {
 			if (!results.length) return { name: 'mcp_discover', input: { instanceId: instance.id } };
 			if (results.length === 1)
 				return {
-					name: 'mcp_' + kind,
-					input: {
-						instanceId: instance.id,
-						schemaHash: results[0].schemaHash,
-						name: kind === 'tool' ? 'echo' : kind === 'resource' ? 'fixture://document' : 'greeting',
-						argumentsJson: '{}',
-						resume: null,
-						continuation: null,
-					},
+					calls: selected.map((kind) => ({
+						name: 'mcp_' + kind,
+						input: {
+							instanceId: instance.id,
+							schemaHash: results[0].schemaHash,
+							name: kind === 'tool' ? 'echo' : kind === 'resource' ? 'fixture://document' : 'greeting',
+							argumentsJson: '{}',
+							resume: null,
+							continuation: null,
+						},
+					})),
 				};
-			inspect(results[1]);
+			assert.equal(results.length, selected.length + 1);
+			for (const result of results.slice(1)) inspect(result);
 			return { text: 'Contract inspected' };
 		});
 		const final = await until(
@@ -68,6 +79,13 @@ async function fixture(t) {
 		);
 		await f.wait(run, 'completed');
 		assert.equal(final.status, 'completed', JSON.stringify(final));
+		for (const kind of selected) {
+			const method = kind === 'tool' ? 'tools/call' : kind === 'resource' ? 'resources/read' : 'prompts/get';
+			assert.equal(
+				external.requests.slice(requestStart).filter((entry) => entry.body.method === method).length,
+				1,
+			);
+		}
 	}
 
 	return { invoke };
@@ -93,17 +111,18 @@ await test(
 			roots: { method: 'roots/list' },
 			rootsWithMeta: { method: 'roots/list', params: { _meta: { fixture: 'remote-value' } } },
 		};
-		for (const kind of methods)
-			await f.invoke(
-				kind,
-				{ resultType: 'input_required', requestState: 'local-scoped-continuation', inputRequests: requests },
-				(result) => {
-					assert.equal(result.kind, 'input_required', JSON.stringify(result));
-					assert.equal(result.requestState, 'local-scoped-continuation');
-					assert.deepEqual(JSON.parse(result.inputRequestsJson), requests);
-					assert.match(result.continuation, /^[a-f0-9-]{36}$/u);
-				},
-			);
+		// Discover once, then execute every method through the real Host batch.
+		// Each call still uses governed transport and its own result projection.
+		await f.invoke(
+			methods,
+			{ resultType: 'input_required', requestState: 'local-scoped-continuation', inputRequests: requests },
+			(result) => {
+				assert.equal(result.kind, 'input_required', JSON.stringify(result));
+				assert.equal(result.requestState, 'local-scoped-continuation');
+				assert.deepEqual(JSON.parse(result.inputRequestsJson), requests);
+				assert.match(result.continuation, /^[a-f0-9-]{36}$/u);
+			},
+		);
 	},
 );
 

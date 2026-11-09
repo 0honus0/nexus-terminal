@@ -37,7 +37,7 @@ export class CommandService {
 	constructor(private readonly model: CommandModel) {}
 
 	private run<T>(actor: CommandActor, work: () => Promise<T>): Promise<T> {
-		if (!this.accepting || this.tasks.size >= 16) {
+		if (!this.accepting) {
 			return Promise.reject(new CommandFailure('unavailable'));
 		}
 		if (!Number.isSafeInteger(actor.userId) || actor.userId < 1 || !actor.token) {

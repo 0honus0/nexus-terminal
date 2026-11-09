@@ -1,3 +1,4 @@
+import { profileSampleCount } from '../../../../support/profile-samples';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { expect, test } from '../../../../support/http/ssh-protocol-fixture.mjs';
@@ -43,7 +44,7 @@ test('profile small uploads by ready, transfer and commit phases with exact remo
 			expect((await fetch(`${ssh.controlUrl}/sftp/write-delay?ms=${writeDelayMs}`, { method: 'POST' })).ok).toBe(
 				true,
 			);
-			for (let sample = 0; sample < 3; sample++) {
+			for (let sample = 0; sample < profileSampleCount; sample++) {
 				const uploadId = `small-${crypto.randomUUID()}`;
 				const destinationPath = `/small-${uploadId}.bin`;
 				const payload = Buffer.alloc(4096, sample + 1);
@@ -111,7 +112,7 @@ test('profile small uploads by ready, transfer and commit phases with exact remo
 		const statResponse = await fetch(`${ssh.controlUrl}/sftp/stat-delay`);
 		expect(statResponse.ok).toBe(true);
 		const statStats = await statResponse.json();
-		if (commitProfile) expect(statStats.sftpDelayedStatCount).toBeGreaterThanOrEqual(3);
+		if (commitProfile) expect(statStats.sftpDelayedStatCount).toBeGreaterThanOrEqual(profileSampleCount);
 		console.log('UPLOAD_STAT_PROFILE', JSON.stringify(statStats));
 		console.log('SMALL_UPLOAD_RESULT', JSON.stringify(results));
 		await writeFile(path.join(ssh.directory, 'small-upload-profile.json'), JSON.stringify(results, null, 2));

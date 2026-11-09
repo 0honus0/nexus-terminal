@@ -33,7 +33,7 @@ export async function cancelBrowserPhase<T>(
 	let pollingFailure: unknown = null;
 	try {
 		if (creating) {
-			await expect.poll(stopped).toBe(true);
+			await expect.poll(stopped, { intervals: [20, 50, 100] }).toBe(true);
 		}
 	} catch (error) {
 		pollingFailure = error;

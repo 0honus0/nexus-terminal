@@ -23,7 +23,10 @@ import {
 
 test.use({ e2eServices: ['ssh'] });
 
-test('registered upload progress can hide, restore, and cancel from Progress Display', async ({ page, context }) => {
+test('registered upload progress can hide, restore, and cancel from Progress Display', async ({
+	page,
+	context,
+}, testInfo) => {
 	await openFileManager(page, context);
 	const filename = 'progress-center-upload.bin';
 	await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=220`, { method: 'POST' });
@@ -69,7 +72,10 @@ test('registered upload progress can hide, restore, and cancel from Progress Dis
 			expect(Math.abs(moved!.x - before!.x)).toBeGreaterThan(180);
 			expect(Math.abs(moved!.y - before!.y)).toBeGreaterThan(120);
 			await expect(visibleProgressCenter(page)).toBeHidden();
-			await page.screenshot({ path: '.tmp/progress-display-small-button-moved.png', fullPage: true });
+			await page.screenshot({
+				path: testInfo.outputPath('progress-display-small-button-moved.png'),
+				fullPage: true,
+			});
 
 			await button.click();
 			await expect(visibleProgressCenter(page)).toBeVisible();

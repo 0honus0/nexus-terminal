@@ -38,6 +38,10 @@ export async function createPluginBrowserConfig(pluginRoot: string): Promise<Pla
 	);
 	return {
 		...hostConfig,
+		// Cases reset their own Host/peer baseline. Native case-level sharding
+		// avoids assigning a whole large spec to one runner; workers stays 1
+		// because each runner owns one fixed-port browser environment.
+		fullyParallel: true,
 		testDir: path.join(pluginRoot, 'tests/e2e/specs'),
 		tsconfig,
 		outputDir: path.join(root, 'results'),

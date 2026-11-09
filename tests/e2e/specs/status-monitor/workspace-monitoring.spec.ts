@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { test, expect } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { configureSshE2eSettings } from '../../support/ssh';
-import { updateTestSettings, restartTestBackend } from '../../support/settings';
+import { updateTestSettings, restartTestBackend, advanceTestBackendClock } from '../../support/settings';
 import { E2E_URLS } from '../../../support/protocols/test-environment';
 import { openSshd } from '../../../support/protocols/openssh-fixture.mjs';
 import { readSshKeyView } from '../../../../packages/shared/src/targets/ssh-keys/http-codec';
@@ -17,13 +17,17 @@ import type { SshResourceStatusResponse } from '../../../../packages/shared/src/
 
 test.use({ e2eServices: ['ssh'] });
 
+test.beforeEach(async ({ page }) => {
+	await page.clock.install();
+});
+
 declare global {
 	interface Window {
 		__readMonitoringSnapshot(): { sessionId: string; history: { time: number; value: number }[] };
 	}
 }
 
-test('Workspace and Dashboard consume real Linux samples, natural cache expiry and retain one session across a short page switch', async ({
+test('Workspace and Dashboard consume real Linux samples, cache expiry with owner clocks and retain one session across a short page switch', async ({
 	page,
 	context,
 }) => {
@@ -190,6 +194,10 @@ test('Workspace and Dashboard consume real Linux samples, natural cache expiry a
 				(item) => typeof item === 'object' && item !== null && Reflect.get(item, 'type') === 'status.stop',
 			),
 		).toHaveLength(0);
+		// Cache expiry belongs to backend Date, refresh scheduling to the browser.
+		// Advance both owners while preserving the real OpenSSH collection.
+		await advanceTestBackendClock(5_000);
+		await page.clock.fastForward(5_000);
 		await expect.poll(() => samples.at(-1)?.checkedAt ?? 0, { timeout: 15_000 }).toBeGreaterThan(first.checkedAt);
 		const recollected = samples[samples.length - 1];
 		expect(recollected.status?.memTotal).toBeGreaterThan(0);

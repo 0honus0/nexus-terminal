@@ -1,3 +1,4 @@
+import { profileSampleCount } from '../../../support/profile-samples';
 import { controlledSshRoot } from '../../support/service-paths';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -50,7 +51,7 @@ test('compare single and repeated refresh requests while retaining new remote en
 	try {
 		expect((await fetch(`${E2E_SSH.controlUrl}/sftp/readdir-delay?ms=300`, { method: 'POST' })).ok).toBe(true);
 		for (const clicks of [1, 5]) {
-			for (let sample = 0; sample < 3; sample++) {
+			for (let sample = 0; sample < profileSampleCount; sample++) {
 				const filename = `refresh-profile-${clicks}-${sample}.txt`;
 				await writeFile(path.join(controlledSshRoot, filename), 'refresh fixture');
 				const baseline = requests;
@@ -104,8 +105,8 @@ test('profiles real large-directory navigation and sort while retaining bounded 
 	page,
 	context,
 }) => {
-	// This deliberately performs six full SFTP directory scans, including
-	// three 5,000-entry metadata reads, before measuring each real render.
+	// Keep both real directory sizes and every render/ordering assertion.
+	// Repeat identical scans only when explicitly collecting a profile.
 	test.setTimeout(240_000);
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
@@ -158,7 +159,7 @@ test('profiles real large-directory navigation and sort while retaining bounded 
 	expect(delayResponse.ok).toBe(true);
 	try {
 		for (const count of [1000, 5000]) {
-			for (let sample = 0; sample < 3; sample++) {
+			for (let sample = 0; sample < profileSampleCount; sample++) {
 				const rootRequests = listingRequests.get('/') ?? 0;
 				await manager.getByTitle('Refresh', { exact: true }).click();
 				await input.hover();
@@ -210,9 +211,9 @@ test('profiles real large-directory navigation and sort while retaining bounded 
 			}
 		}
 		console.log('[file-list end-to-end profile]', JSON.stringify(samples));
-		expect(listingRequests.get('/list-profile-1000')).toBe(3);
-		expect(listingRequests.get('/list-profile-5000')).toBe(3);
-		expect(listingRequests.get('/')).toBeGreaterThanOrEqual(6);
+		expect(listingRequests.get('/list-profile-1000')).toBe(profileSampleCount);
+		expect(listingRequests.get('/list-profile-5000')).toBe(profileSampleCount);
+		expect(listingRequests.get('/')).toBeGreaterThanOrEqual(2 * profileSampleCount);
 		expect(pendingListings.size).toBe(0);
 		const metricsResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/readdir-delay`);
 		expect(metricsResponse.ok).toBe(true);

@@ -60,7 +60,7 @@ export class FavoriteService {
 	constructor(private readonly model: FavoriteModel) {}
 
 	private run<T>(actor: FavoriteActor, work: () => Promise<T>): Promise<T> {
-		if (!this.accepting || this.tasks.size >= 16) {
+		if (!this.accepting) {
 			return Promise.reject(new FavoriteFailure('unavailable'));
 		}
 		if (!Number.isSafeInteger(actor.userId) || actor.userId < 1 || !actor.token) {

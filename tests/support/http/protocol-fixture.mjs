@@ -15,7 +15,10 @@ export const HTTP_TEST_ADMIN = { username: 'admin', password: 'isolated-manageme
 export async function useHttpProtocol(use, transport = undefined) {
 	const directory = await mkdtemp(join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'http-protocol-'));
 	const started = performance.now();
-	const application = await openManagement(directory, {}, transport);
+	// APIRequestContext owns authentication in these tests. Logging in the
+	// management client's unused cookie jar creates an unrelated session and
+	// repeats password verification before the scenario's actual login.
+	const application = await openManagement(directory, {}, transport, { authenticated: false });
 	const timing = { setupMs: null, executeMs: null, drainMs: null };
 	const contexts = new Set();
 	const sockets = new Set();

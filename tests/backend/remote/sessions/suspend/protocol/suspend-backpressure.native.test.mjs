@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { setImmediate as nextTurn } from 'node:timers/promises';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -147,7 +148,7 @@ await test('Suspended ownership ACK cannot bypass outstanding terminal consumpti
 	);
 });
 
-await test('Natural prepare expiry releases only the prepared pause while consumer backpressure remains', async (t) => {
+await test('Prepare expiry releases only the prepared pause while consumer backpressure remains', async (t) => {
 	const f = await remoteFilesFixture(t);
 	const original = await f.endpoint('prepare-expiry');
 	await original.workspace.close();
@@ -185,12 +186,14 @@ await test('Natural prepare expiry releases only the prepared pause while consum
 		'Original consumer window pauses the actual SSH readable',
 	);
 	const requestId = randomUUID();
+	let responded = false;
 	const response = new Promise((resolve) => {
 		const listener = (bytes, binary) => {
 			if (!binary) {
 				const message = JSON.parse(bytes.toString());
 				if (message.type === 'response' && message.requestId === requestId) {
 					workspace.socket.off('message', listener);
+					responded = true;
 					resolve(message.payload);
 				}
 			}
@@ -199,12 +202,26 @@ await test('Natural prepare expiry releases only the prepared pause while consum
 		workspace.socket.on('message', listener);
 		t.after(() => workspace.socket.off('message', listener));
 	});
-	const started = Date.now();
+	const prepared = Promise.withResolvers();
+	const prepare = WorkspaceService.prototype.prepareSuspend;
+	t.mock.method(WorkspaceService.prototype, 'prepareSuspend', async function (...args) {
+		await prepare.apply(this, args);
+		prepared.resolve();
+	});
+	// Only the application's deadline clock advances. Existing SSH keepalives,
+	// WS delivery and the real consumer pause continue to use native timers.
+	t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
 	workspace.socket.send(JSON.stringify({ type: 'suspend.prepare', requestId, payload: {} }));
+	await prepared.promise;
+	await nextTurn();
+	t.mock.timers.tick(14_999);
+	success(await workspace.call('workspace.ping'));
+	assert.equal(responded, false, 'Prepare stays pending before the original deadline');
+	t.mock.timers.tick(1);
 	const failed = await response;
 	assert.equal(failed.ok, false);
 	assert.equal(failed.error, 'remote_unavailable');
-	assert.ok(Date.now() - started >= 15000, 'The original 15-second product deadline elapsed');
+	t.mock.timers.reset();
 	assert.equal(shell.readable.isPaused(), true, 'Prepare failure does not release the independent consumer pause');
 	workspace.acknowledgeTerminal();
 	const all = await until(

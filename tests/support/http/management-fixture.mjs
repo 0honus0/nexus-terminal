@@ -9,7 +9,12 @@ const origin = 'http://127.0.0.1:0';
 const password = 'isolated-management-b10-password-123';
 
 /** Only the installed HTTP listener is used to change application state. */
-export async function openManagement(directory, options = {}, transport = { origin, port: 0 }) {
+export async function openManagement(
+	directory,
+	options = {},
+	transport = { origin, port: 0 },
+	{ authenticated = true } = {},
+) {
 	const origin = transport.origin;
 	const database = join(directory, 'management.db');
 	const encryptionKey = randomBytes(32);
@@ -44,7 +49,7 @@ export async function openManagement(directory, options = {}, transport = { orig
 			await api('POST', '/api/v1/auth/setup', { username: 'admin', password, confirmPassword: password }),
 			201,
 		);
-		await login();
+		if (authenticated) await login();
 	} catch (error) {
 		if (app) {
 			try {

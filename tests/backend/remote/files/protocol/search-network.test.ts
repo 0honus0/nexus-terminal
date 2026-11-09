@@ -1,3 +1,4 @@
+import { profileSampleCount } from '../../../../support/profile-samples';
 import { readWorkspaceFileSearchResponse } from '../../../../../packages/shared/src/remote/files/workspace-codec';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -46,7 +47,7 @@ test('measure recursive search on wide and deep trees under remote directory lat
 						)
 					).ok,
 				).toBeTruthy();
-				for (let sample = 0; sample < 3; sample++) {
+				for (let sample = 0; sample < profileSampleCount; sample++) {
 					const beforeResponse = await fetch(`${ssh.controlUrl}/sftp/readdir-delay`);
 					expect(beforeResponse.ok).toBe(true);
 					const before = await beforeResponse.json();

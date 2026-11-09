@@ -69,7 +69,10 @@ for (const continuation of [false, true]) {
 			const external = await openMcp();
 			t.after(() => external.close());
 			const f = await openAgentExecution(directory, sshd, {
-				plugin: { selectedRootIds: ['nexus.tools.integrations', 'nexus.tools.agent', 'nexus.services.mcp'] },
+				plugin: {
+					uiPackageId: null,
+					selectedRootIds: ['nexus.tools.integrations', 'nexus.tools.agent', 'nexus.services.mcp'],
+				},
 			});
 			t.after(() => f.close());
 			const instance = await configureMcp(f, external);
@@ -138,7 +141,10 @@ for (const mode of ['permission', 'direct', 'large']) {
 			const sshd = await openSshd(directory);
 			t.after(() => sshd.close());
 			const f = await openAgentExecution(directory, sshd, {
-				plugin: { selectedRootIds: ['nexus.tools.integrations', 'nexus.tools.agent', 'nexus.services.acp'] },
+				plugin: {
+					uiPackageId: null,
+					selectedRootIds: ['nexus.tools.integrations', 'nexus.tools.agent', 'nexus.services.acp'],
+				},
 			});
 			t.after(() => f.close());
 			const script = join(directory, 'external.mjs');
@@ -181,7 +187,7 @@ for (const mode of ['permission', 'direct', 'large']) {
 					assert.equal(projection.offset, 0);
 					assert.equal(Array.from(projection.text).length, offset);
 					assert.ok(Buffer.byteLength(projection.text) < projection.originalBytes);
-					for (const page of results.slice(2)) {
+					for (const [pageIndex, page] of results.slice(2).entries()) {
 						assert.equal(page.items.length, 1);
 						assert.equal(page.nextIndex, null);
 						const item = page.items[0];
@@ -190,7 +196,7 @@ for (const mode of ['permission', 'direct', 'large']) {
 						assert.equal(item.originalBytes, projection.originalBytes);
 						assert.equal(item.offset, offset);
 						assert.ok(item.text.length > 0);
-						assert.ok(Buffer.byteLength(JSON.stringify(item.text)) <= 4096);
+						assert.ok(Buffer.byteLength(JSON.stringify(item.text)) <= (pageIndex === 0 ? 4096 : 65536));
 						if (item.nextOffset !== null) {
 							assert.equal(item.nextOffset, offset + Array.from(item.text).length);
 						}
@@ -206,7 +212,9 @@ for (const mode of ['permission', 'direct', 'large']) {
 										toolCallId: projection.toolCallId,
 										sha256: projection.sha256,
 										offset,
-										maxBytes: 4096,
+										// Keep a small first page, then prove the same complete
+										// result can continue with larger caller-selected pages.
+										maxBytes: results.length === 2 ? 4096 : 65536,
 									},
 								],
 							},

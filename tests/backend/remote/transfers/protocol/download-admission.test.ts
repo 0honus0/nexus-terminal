@@ -1,3 +1,4 @@
+import { profileSampleCount } from '../../../../support/profile-samples';
 import { expect, test, HTTP_TEST_ORIGIN } from '../../../../support/http/ssh-protocol-fixture.mjs';
 import { get } from 'node:http';
 import { createHash } from 'node:crypto';
@@ -44,7 +45,7 @@ test('paused HTTP download resumes with exact bytes and releases remote handles'
 	try {
 		await waitForFilesystemReady(workspace.socket);
 		for (const paused of [false, true]) {
-			for (let sample = 0; sample < 3; sample++) {
+			for (let sample = 0; sample < profileSampleCount; sample++) {
 				expect((await fetch(`${control}?ms=20&bytesPerSecond=0`, { method: 'POST' })).ok).toBe(true);
 				const start = performance.now();
 				let pausedReadBytes: number | undefined;

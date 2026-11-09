@@ -1,3 +1,4 @@
+import { profileSampleCount } from '../../../support/profile-samples';
 import { controlledSshRoot } from '../../support/service-paths';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -63,12 +64,12 @@ test('remote file list preserves natural multilingual ordering and directory pre
 	await expect.poll(async () => normalize(await readNames())).toEqual(normalize(expected.ascending));
 	await nameSortButton.click();
 	await expect.poll(async () => normalize(await readNames())).toEqual(normalize(expected.descending));
-	const profile = await page.evaluate(() => {
+	const profile = await page.evaluate((sampleCount) => {
 		const samples = [];
 		const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 		for (const count of [1000, 10000]) {
 			const names = Array.from({ length: count }, (_, index) => `文件-${(index * 7919) % count}.txt`);
-			for (let sample = 0; sample < 3; sample++) {
+			for (let sample = 0; sample < sampleCount; sample++) {
 				const baseline = [...names];
 				let start = performance.now();
 				baseline.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
@@ -86,7 +87,7 @@ test('remote file list preserves natural multilingual ordering and directory pre
 			}
 		}
 		return samples;
-	});
+	}, profileSampleCount);
 	expect(profile.every((sample) => sample.identical)).toBe(true);
 	console.log('[file-list-sort comparator profile]', JSON.stringify(profile));
 });

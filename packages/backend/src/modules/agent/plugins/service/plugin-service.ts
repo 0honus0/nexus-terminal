@@ -2375,17 +2375,24 @@ export class PluginService {
 			}));
 			const catalogSha256 = createHash('sha256').update(JSON.stringify(candidates)).digest('hex');
 			const items: typeof candidates = [];
+			let itemsBytes = 0;
 			for (const candidate of candidates.slice(input.offset)) {
 				const nextOffset =
 					input.offset + items.length + 1 < candidates.length ? input.offset + items.length + 1 : null;
-				const page = { items: [...items, candidate], nextOffset, catalogSha256 };
+				const page = { items: [], nextOffset, catalogSha256 };
 				const response = { operation: 'skills.catalog', value: page };
-				if (agentPluginCapabilityReplyBytes(response) > AGENT_PLUGIN_APP_PAYLOAD_MAX_BYTES) {
+				const nextItemsBytes =
+					itemsBytes +
+					Buffer.byteLength(JSON.stringify(JSON.stringify(candidate))) -
+					2 +
+					(items.length ? 1 : 0);
+				if (agentPluginCapabilityReplyBytes(response) + nextItemsBytes > AGENT_PLUGIN_APP_PAYLOAD_MAX_BYTES) {
 					if (items.length === 0) {
 						throw new AgentFailure('limit_exceeded');
 					}
 					break;
 				}
+				itemsBytes = nextItemsBytes;
 				items.push(candidate);
 			}
 			return {

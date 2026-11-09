@@ -1,3 +1,4 @@
+import { profileSampleCount } from '../../../../support/profile-samples';
 import { readConnectionImportResponse } from '../../../../../packages/shared/src/targets/connections/http-codec';
 import { readWorkspaceUploadEvent } from '../../../../../packages/shared/src/remote/transfers/workspace-codec';
 import { readMutationList } from '../../../../../packages/shared/src/remote/mutations/http-codec';
@@ -26,7 +27,7 @@ test('profile upload directory preparation and verify every requested directory'
 		await waitForFilesystemReady(workspace.socket);
 		for (const delayMs of [0, 80]) {
 			for (const shape of ['existing', 'siblings', 'nested', 'nested-parents']) {
-				for (let sample = 0; sample < 3; sample++) {
+				for (let sample = 0; sample < profileSampleCount; sample++) {
 					const basePath = `/prepare-profile-${delayMs}-${shape}-${sample}`;
 					const directories = Array.from({ length: 32 }, (_, index) =>
 						shape.startsWith('nested')

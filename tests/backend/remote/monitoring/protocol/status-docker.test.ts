@@ -5,6 +5,8 @@ import { closeWebSocket, requestWorkspace, waitForJson } from '../../../../suppo
 import { readSettingsResponse } from '../../../../../packages/shared/src/preferences/configuration/http-codec';
 import { readRemoteStatusSample } from '../../../../../packages/shared/src/remote/monitoring/http-codec';
 import { readWorkspaceDockerStatusResponse } from '../../../../../packages/shared/src/remote/docker/workspace-codec';
+import { vi } from 'vitest';
+import { setImmediate as nextTurn } from 'node:timers/promises';
 
 test('status monitor and Docker protocols work through the live SSH session', async ({ request, ssh, httpClients }) => {
 	await loginAsAdmin(request);
@@ -16,18 +18,31 @@ test('status monitor and Docker protocols work through the live SSH session', as
 	const workspace = await httpClients.openWorkspace(connectionId, `status-${crypto.randomUUID()}`);
 
 	try {
+		// The controlled SSH peer is a separate process. Only the application's
+		// scheduling clock advances; samples still cross the real SSH and WS links.
+		vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'], shouldClearNativeTimers: true });
 		const startedAt = Date.now();
 		const firstStatusPromise = waitForJson(workspace.socket, (message) => message.type === 'status.sample');
 		await requestWorkspace(workspace.socket, 'status.start');
 		const firstStatus = await firstStatusPromise;
 		const firstTimestamp = firstStatus.payload?.timestamp;
-		const secondStatus = await waitForJson(
+		let receivedSecond = false;
+		const secondStatusPromise = waitForJson(
 			workspace.socket,
 			(message) => message.type === 'status.sample' && message.payload?.timestamp !== firstTimestamp,
 			10_000,
-		);
+		).then((sample) => {
+			receivedSecond = true;
+			return sample;
+		});
+		await nextTurn();
+		await vi.advanceTimersByTimeAsync(intervalMs - 1);
+		expect(Date.now() - startedAt).toBe(intervalMs - 1);
+		expect(receivedSecond).toBe(false);
+		await vi.advanceTimersByTimeAsync(1);
+		const secondStatus = await secondStatusPromise;
 		const secondTimestamp = secondStatus.payload?.timestamp;
-		const thirdStatus = await waitForJson(
+		const thirdStatusPromise = waitForJson(
 			workspace.socket,
 			(message) =>
 				message.type === 'status.sample' &&
@@ -35,8 +50,12 @@ test('status monitor and Docker protocols work through the live SSH session', as
 				message.payload?.timestamp !== secondTimestamp,
 			10_000,
 		);
-		expect(Date.now() - startedAt).toBeGreaterThanOrEqual(2 * intervalMs);
-		expect(Date.now() - startedAt).toBeLessThan(2 * intervalMs + 5000);
+		await nextTurn();
+		await vi.advanceTimersByTimeAsync(intervalMs);
+		const thirdStatus = await thirdStatusPromise;
+		expect(Date.now() - startedAt).toBe(2 * intervalMs);
+		expect(secondTimestamp - firstTimestamp).toBe(intervalMs);
+		expect(thirdStatus.payload?.timestamp - secondTimestamp).toBe(intervalMs);
 
 		const docker = readWorkspaceDockerStatusResponse(await requestWorkspace(workspace.socket, 'docker.status'));
 		await requestWorkspace(workspace.socket, 'status.stop');
@@ -61,6 +80,10 @@ test('status monitor and Docker protocols work through the live SSH session', as
 		});
 		expect(docker.containers[0].stats).toMatchObject({ cpuPercent: '12.34%' });
 	} finally {
-		await closeWebSocket(workspace.socket);
+		try {
+			await closeWebSocket(workspace.socket);
+		} finally {
+			vi.useRealTimers();
+		}
 	}
 });

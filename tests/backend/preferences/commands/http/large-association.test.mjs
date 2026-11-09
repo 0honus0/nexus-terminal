@@ -11,14 +11,24 @@ test('an atomic association accepts more than 1000 distinct real commands and re
 }) => {
 	await loginAsAdmin(request);
 	const commands = [];
-	// Exercise durable writes and the public HTTP boundary; no copied rows or mocked transaction engine.
-	for (let index = 0; index < 1001; index++) {
-		const response = await request.post('/api/v1/quick-commands', {
-			data: { name: 'Large batch ' + index, command: 'printf ' + index, variables: {}, tagIds: [] },
-		});
-		expect(response.status()).toBe(201);
-		const command = readCommandMutation(await response.json()).command;
-		commands.push({ id: command.id, expectedVersion: command.version });
+	// Keep every durable HTTP write. A bounded fixture batch overlaps client
+	// round-trips without creating 1001 simultaneous request/socket buffers.
+	const count = 1001;
+	const batchSize = 32;
+	for (let offset = 0; offset < count; offset += batchSize) {
+		commands.push(
+			...(await Promise.all(
+				Array.from({ length: Math.min(batchSize, count - offset) }, async (_, localIndex) => {
+					const index = offset + localIndex;
+					const response = await request.post('/api/v1/quick-commands', {
+						data: { name: 'Large batch ' + index, command: 'printf ' + index, variables: {}, tagIds: [] },
+					});
+					expect(response.status()).toBe(201);
+					const command = readCommandMutation(await response.json()).command;
+					return { id: command.id, expectedVersion: command.version };
+				}),
+			)),
+		);
 	}
 	const created = await request.post('/api/v1/quick-command-tags', { data: { name: 'Large association' } });
 	expect(created.status()).toBe(201);
@@ -38,6 +48,6 @@ test('an atomic association accepts more than 1000 distinct real commands and re
 		expect(response.status()).toBe(200);
 		pages.push(...readCommandList(await response.json(), query).entries);
 	}
-	expect(pages.map((c) => c.id).sort((a, b) => a - b)).toEqual(commands.map((c) => c.id));
+	expect(pages.map((c) => c.id).sort((a, b) => a - b)).toEqual(commands.map((c) => c.id).sort((a, b) => a - b));
 	expect(pages.every((c) => c.version === 2 && c.tagIds.length === 1 && c.tagIds[0] === tag.id)).toBe(true);
 }, 30_000);

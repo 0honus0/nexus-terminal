@@ -95,7 +95,10 @@ await test('B10 actual MCP integration negotiation and governed execution', asyn
 			});
 			f = await openAgentExecution(directory, sshd, {
 				discover: 'mcp_discover mcp_tool mcp_resource mcp_prompt',
-				plugin: { selectedRootIds: ['nexus.tools.integrations', 'nexus.tools.agent', 'nexus.services.mcp'] },
+				plugin: {
+					uiPackageId: null,
+					selectedRootIds: ['nexus.tools.integrations', 'nexus.tools.agent', 'nexus.services.mcp'],
+				},
 			});
 			await f.grants(['integration.mcp.read', 'integration.mcp.invoke', 'service.transport.http']);
 			const { instance } = await configureProtocol(

@@ -45,6 +45,7 @@ await test('B10 actual CDP Browser ownership and governed operations', { timeout
 			const directory = join(root, String(++sequence));
 			await mkdir(directory);
 			const f = await openAgentExecution(directory, sshd, {
+				plugin: { selectedRootIds: ['nexus.tools.browser', 'nexus.tools.agent'], uiPackageId: null },
 				discover:
 					'browser_open browser_navigate browser_snapshot browser_console browser_screenshot browser_click',
 			});

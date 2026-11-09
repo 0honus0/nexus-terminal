@@ -64,6 +64,7 @@ await test('Shell yield policy and mutation admission', async (t) => {
 			await mkdir(directory);
 			const fixture = await openAgentExecution(directory, sshd, {
 				discover: 'shell_execute shell_job_control tool_result_read',
+				plugin: { selectedRootIds: ['nexus.tools.remote', 'nexus.tools.agent'], uiPackageId: null },
 				signal: subtest.signal,
 			});
 			const cleanup = { unknown: false };

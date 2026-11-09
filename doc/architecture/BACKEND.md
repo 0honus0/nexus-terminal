@@ -238,7 +238,7 @@ Model 逐字段转换应用与存储/技术输入结果；模块入口/出口 ma
 
 Files 的 `FileResource` 只提供应用身份、可用状态、metadata/字节读取、staged write、基础 SFTP mutation、realpath/chmod 及受约束 command 结果；Machine/SFTP lease/Node Stream 私有持有于 Model 的 `SftpFileResource`。Model 负责技术 metadata/byte source、同目录临时项和技术 commit/discard 转换；Service 持有 UTF-8/hash/文件类型、覆盖、编码、search、递归/force 删除、批量顺序和写后确认等业务政策；目录搜索流程归 `files/service/file-search.ts`，资源准入与整项期限由主 Service 统一管理，不取得技术句柄。Files 内部失败码归 model，HTTP/WS 分别白名单投影公开契约。
 
-HTTP 流式下载的身份、Workspace owner、原附件期限及下载票据绑定维持不变；HEAD 只读元数据复用 owner 的 FileResource，GET 的实际 byte body 由 FileService 准入一个 fingerprint 一致的独立 SFTP 技术资源，避免浏览器取消导致主 Workspace lease 同时退场。该临时技术资源关闭结果仍记录在原 owner cleanup ledger，失败或未知不可推断为已清理。Platform SFTP Adapter 针对 RTT 较大的 4MiB+ 下载使用有限 8×32KiB 并行 READ、按 offset 严格有序输出、关闭前结算全部已派发读取；取消时必须确认整条 lease 关闭。写入端用户明确 Cancel 在 stage 未提交且通道仍可用时等待已有 WRITE 结算，确认私有暂存删除后再返回，不提前 abort SFTP 去制造伪 unknown；完成阶段或断流时仍保留未知状态。以上只是源码候选，远程 admission/backpressure/字节 hash/Handle 计数/复原必须独立验收。
+HTTP 流式下载的身份、Workspace owner、原附件期限及下载票据绑定维持不变；HEAD 只读元数据复用 owner 的 FileResource，GET 的实际 byte body 由 FileService 准入一个 fingerprint 一致的独立 SFTP 技术资源，避免浏览器取消导致主 Workspace lease 同时退场。该临时技术资源关闭结果仍记录在原 owner cleanup ledger，失败或未知不可推断为已清理。Platform SFTP Adapter 的有限列表按调用方明确的条目与元数据预算执行，不再叠加固定的 10,000 项或 2 MiB 上限；公开接口的页面/响应容量仍归原业务 owner。Platform SFTP Adapter 针对 RTT 较大的 4MiB+ 下载使用有限 8×32KiB 并行 READ、按 offset 严格有序输出、关闭前结算全部已派发读取；取消时必须确认整条 lease 关闭。写入端用户明确 Cancel 在 stage 未提交且通道仍可用时等待已有 WRITE 结算，确认私有暂存删除后再返回，不提前 abort SFTP 去制造伪 unknown；完成阶段或断流时仍保留未知状态。以上只是源码候选，远程 admission/backpressure/字节 hash/Handle 计数/复原必须独立验收。
 
 第八轮进一步确认 `/ws/uploads` **丢失客户端 binary transport 不等于专属 SFTP 失效**：过去 onClose 立即 abort 复合 signal，先前已 ACK 的写入也无法经过 `stage.discard()` 的确认流程，进而在 reset 留下 RemoteResourceCleanupFailure。新的未提交 owner 候选只对尚未 terminal、SFTP stage 仍在且 signal 有效的任务停止接受新帧、令上传 worker drain 已派发队列后做正常关闭及删除；仍向调用方投影不确定操作结果，不能擅自标为 `cancelled` 或 `completed`。已进入 commit、SFTP 真正失效、无法确认的并行写入及 discard 不确定时仍保留未知和原 Root ledger，不尝试重复提交。
 
@@ -377,7 +377,7 @@ R2 二次审核：Workspace `connect` 的 Targets `get` 不再由 Interface 在�
 
 关闭先保存共享 Promise，再执行可能重入的清理；取消订阅也属于可能失败的清理步骤，一项失败仍继续其余退订、资源关闭和终态通知，保留全部因果并聚合。停机停止新准入、关闭 HTTP/WS 并等待已接纳任务、取消并 drain 模块资源，最后关闭 SQLite。当前动态资源由 Remote 持有，后续 Agent 调度/执行必须提供自己的生命周期。
 
-普通 PTY、Files 和 Agent 使用共同 SSH/SFTP Platform 工厂，三者不共用授权或活跃资源；Agent 仅在同一 Run 作用域内复用空闲连接与独占 SFTP，并发操作按需独立建连，Run 与全局 Remote 关闭均追踪晚到握手及全部清理失败，设计见 [Run 工具资源复用](AGENT.md#run-工具资源复用)。Remote sessions/files 共用的可信目标建连转换由本模块 `machines/model` 持有，Agent 不深层导入它。PTY 协议 owner 管 ACK/背压/EOF；Files Service 管身份/指纹复查、准入/期限和文件业务流程，Files Model 管 SFTP lease、byte source、metadata 转换与 staged temp/commit。新建文件使用标准 SFTP rename，不调用可覆盖目标的 POSIX replace；覆盖已有文件才使用 replace。`ssh2` POSIX rename 扩展仅在协商声明可用时调用；无声明视为本地尚未派发，使用有备份恢复的标准 rename 路径；已派发操作仅明确 unsupported 可回退，超时、远端未知与备份清理失败保留 unknown，不冒充已提交成功。此协商修正仍待第五轮后续远程 E2E 复验。实际 SFTP 目录扫描以 opendir/readdir(handle)/close 收敛，文件读取经 Adapter `readChunks` 将异步 ssh2 error 归一后再交 Model。
+普通 PTY、Files 和 Agent 使用共同 SSH/SFTP Platform 工厂，三者不共用授权或活跃资源；Agent 仅在同一 Run 作用域内复用空闲连接与独占 SFTP，并发操作按需独立建连，Run 与全局 Remote 关闭均追踪晚到握手及全部清理失败，设计见 [Run 工具资源复用](AGENT.md#7-生命周期与失败)。Remote sessions/files 共用的可信目标建连转换由本模块 `machines/model` 持有，Agent 不深层导入它。PTY 协议 owner 管 ACK/背压/EOF；Files Service 管身份/指纹复查、准入/期限和文件业务流程，Files Model 管 SFTP lease、byte source、metadata 转换与 staged temp/commit。新建文件使用标准 SFTP rename，不调用可覆盖目标的 POSIX replace；覆盖已有文件才使用 replace。`ssh2` POSIX rename 扩展仅在协商声明可用时调用；无声明视为本地尚未派发，使用有备份恢复的标准 rename 路径；已派发操作仅明确 unsupported 可回退，超时、远端未知与备份清理失败保留 unknown，不冒充已提交成功。此协商修正仍待第五轮后续远程 E2E 复验。实际 SFTP 目录扫描以 opendir/readdir(handle)/close 收敛，文件读取经 Adapter `readChunks` 将异步 ssh2 error 归一后再交 Model。
 
 下载HTTP Interface保留GET/HEAD、单段/suffix Range、inline和目录ZIP；票据POST显式使用Shared 32KiB预算，JSON/容量等HttpInputFailure交还Platform，不包装成500。安全失败由Shared有限message/code契约约束，真实状态码保持对应。HTTP sink只保留最后1字节，源迭代与最后授权复查后随response.end交付，避免Content-Length已满足但应用还在等待时代理提前断开并退役健康Files资源；空文件不生成额外字节。票据300秒TTL的协议值与Service实际期限同源，活跃流/原实例/IP/会话绑定政策仍归Files owner。服务端finish仍不证明浏览器保存成功。
 
@@ -509,7 +509,7 @@ Shared preferences 子域持有双端请求、完整成功/失败、基础值及
 
 #### 7. 生命周期与失败
 
-Service 停止准入后等待已接纳真实工作，关闭不取消已提交结果；限制排队数量。协议严格解码和预算在副作用之前，事务后转换/认证/交付失败为 operation_unknown，客户端只读核对，不自动重放。普通历史记录与 Agent 执行权限独立。configuration/presentation/commands/history/favorites 复用模块内部 PreferencesTasks 观察已接纳任务，Service 仍拥有准入与配额；已结束真实故障保留最多16个诊断样本及额外数量，关闭排空并汇总，预期用例拒绝不算存储故障。
+Service 停止准入后等待已接纳真实工作，关闭不取消已提交结果；不以固定在途或排队数量拒绝请求。协议严格解码和预算在副作用之前，事务后转换/认证/交付失败为 operation_unknown，客户端只读核对，不自动重放。普通历史记录与 Agent 执行权限独立。configuration/presentation/commands/history/favorites 复用模块内部 PreferencesTasks 动态观察已接纳任务，Service 仍拥有鉴权、版本与停止准入；核心配置沿原 tail 串行，已接纳的排队工作不在关闭时再次因停止准入而拒绝；已结束真实故障保留最多16个诊断样本及额外数量，关闭排空并汇总，预期用例拒绝不算存储故障。
 
 #### 8. 当前能力与验收
 
@@ -995,7 +995,7 @@ Passkey 名称、登录布局与 OIDC 已实现；协议、存储与浏览器专
 
 ### Agent 命令输出存储
 
-Job 日志与模型预览分离，沿 Agent Model 调用 Platform TextLogStore。Native 实现使用 Node 文件能力、UTF-8 数据文件和定长索引，支持有界追加、字节分页和真实空间不足等待；技术层不持 Agent 身份或业务保留期。装配在数据库同级 `tool-logs`，Job Service 决定何时回收，未知执行不重放。完整 owner、协议及生命周期见 [Agent 完整 Shell 输出存储](AGENT.md#完整-shell-输出存储)。本轮无新增数据库迁移；当前 JSON 备份不含完整日志，数据卷迁移需保留该目录。
+Job 日志与模型预览分离，沿 Agent Model 调用 Platform TextLogStore。Native 实现使用 Node 文件能力、UTF-8 数据文件和定长索引，支持有界追加、字节分页和真实空间不足等待；技术层不持 Agent 身份或业务保留期。装配在数据库同级 `tool-logs`，Job Service 决定何时回收，未知执行不重放。完整 owner、协议及生命周期见 [Agent 完整 Shell 输出存储](AGENT.md#内容迁移与快照)。本轮无新增数据库迁移；当前 JSON 备份不含完整日志，数据卷迁移需保留该目录。
 
 ## SQLite 状态组合与写入观测
 

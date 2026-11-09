@@ -34,7 +34,7 @@ export class HistoryService {
 	constructor(private readonly model: HistoryModel) {}
 
 	private run<T>(actor: HistoryActor, work: () => Promise<T>): Promise<T> {
-		if (!this.accepting || this.tasks.size >= 16) {
+		if (!this.accepting) {
 			return Promise.reject(new HistoryFailure('unavailable'));
 		}
 		if (!Number.isSafeInteger(actor.userId) || actor.userId < 1 || !actor.token) {

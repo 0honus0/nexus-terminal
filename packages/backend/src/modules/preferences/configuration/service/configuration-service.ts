@@ -95,13 +95,7 @@ export class ConfigurationService {
 		if (!this.accepting || !this.effective) {
 			return Promise.reject(new PreferencesFailure('unavailable'));
 		}
-		if (this.tasks.size >= 8) {
-			return Promise.reject(new PreferencesFailure('unavailable'));
-		}
 		const pending = this.tail.then(() => {
-			if (!this.accepting) {
-				throw new PreferencesFailure('unavailable');
-			}
 			return work();
 		});
 		this.tail = pending.then(
