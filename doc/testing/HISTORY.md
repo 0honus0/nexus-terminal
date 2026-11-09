@@ -2854,3 +2854,38 @@ push与手动workflow_dispatch完整通过后均自动回写耗时估算，不�
 | 墙钟与回写                                                                                   | Host13分20秒，质量3分22秒、runner重建3分22秒、smoke1分20秒、分片6分48秒–9分24秒；Plugin6分5秒，质量2分24秒。目标仍未达，继续性能优化按用户决定暂停。Host自动回写`7e22b1b4`仅更新5项耗时估算，不改变运行包。                                                                                                   |
 
 插件仓另完成本地构建10.79秒和check18.34秒；补充手动截图入口2项0.66秒、latest构建3项0.72秒及38项维护0.43秒通过。两仓正式运行源码和包版本未变，不重发相同不可变版本或应用镜像。证据、首次失败及活动环境保留；只删除确认无消费者的三份旧脚本、旧产物变量/诊断路径和冗余忽略项。
+
+## 登录缓存与认证入口发布回归（2026-11-09）
+
+本批提交`05f98cde497821f1abb5da2eab1ffaaa0181e367`交付聚合登录选项、通用常驻缓存与事件失效、OIDC绑定显示和Passkey注册显示、迁移v66移除独立显示字段，以及前批Dashboard入口移除和RDP/VNC窗口按钮顺序。未改变其余登录布局；USAGE、API、架构与部署说明已同步。用户授权提交推送及main amd64 dev发布，不部署生产。
+
+首次失败保留：
+
+- [Host42589016393](https://github.com/0honus0/nexus-terminal/actions/runs/42589016393)：新增Passkey删除API测试遗漏同源Origin，实际403拒绝正确。提交`c892d00ca372ff3dc4b67252dc4a5119f5252fde`补齐删除/退出及清理请求的Origin，并断言正常退出200，不放宽安全策略或产品断言。
+- [Host42590883660](https://github.com/0honus0/nexus-terminal/actions/runs/42590883660)：工具详情和Run已为unknown，聊天卡片停在dispatched；重试通过仍为flaky，整轮失败。独立Chat UI读取工具页后再读取Run状态，可能跨过终态提交；相同终态订阅不会再次刷新工具。插件`d8f40712f64d05ae93a5098a019cb59326291c1e`在观察终态后并行重读正文/工具页，工具读取绑定线程选择生命周期，正常停止订阅不再误丢在途结果；切换/移除线程仍拒绝晚结果。无CSS、布局或控件变化。
+- [Plugin42593521353](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42593521353)：质量成功，8片在功能执行前因旧成功Host的依赖指纹与当前latest runner不一致而拒绝。预期指纹`274e9da7b58e9ac1db442ba824fd9ca44ae876025a5f0f2cf496ef625c19191e`，实际`a445f8075673017708790f6eb35776af0717084a564feeef1f76729dcb8e5d60`；保留检查，后续改用本轮成功Host验证，不固定digest或旁路准入。
+
+插件新增4项真实composable回归，使用Vue renderer、真实管理请求owner、deferred读取和Vitest虚拟时钟；修复前2项确定失败，修复后4项通过，整个fast层由5增至9项。本地完整插件check、Chat UI构建及diff检查通过；定向4项耗时19ms，完整9项CLI约0.35–0.45秒。初次修复前探测暴露mock一次性队列跨用例残留，改用resetAllMocks隔离后重新核对：旧代码2失败/2通过，新代码全部通过，不把该测试隔离错误算作生产缺陷。
+
+证据根为`/home/honus/nexus-task-artifacts/workflow-consolidation-20261109/login-release-20261109`，保留首次日志、ZIP、trace、截图、数据库、失败与最终报告及发布身份。原始失败不由后续通过覆盖；源码仓不放生成产物。
+
+| 审核表   | 本轮结论                                                                                                                                                                                                          |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | OIDC绑定/解绑、Passkey注册/最后删除、单次聚合读取及原六视口主题几何通过；RDP/VNC控件DOM/Tab顺序和Dashboard保留目录能力的原浏览器断言通过。                                                                        |
+| 职责归属 | Platform持ResidentCache资源与排空，Access持选项投影和事件失效，插件持聊天工具状态；宿主不内置插件业务，流关闭与线程选择各自持生命周期。                                                                           |
+| 类型归属 | Shared聚合请求/响应与两端消费者同步；旧公开接口及OIDC显示字段移除，迁移66在正式SQL owner执行，无旧值兼容运行分支。插件SDK4不变。                                                                                  |
+| 完成证据 | [Host42593547923](https://github.com/0honus0/nexus-terminal/actions/runs/42593547923)全部12个作业成功，原始JSON/XML核对无失败、跳过、重试或flaky；独立插件42595223641/42596591510及正式发布结果见下方，均已完成。 |
+
+本体最终门禁准确源码`c892d00ca372ff3dc4b67252dc4a5119f5252fde`，绑定插件`d8f40712f64d05ae93a5098a019cb59326291c1e`。快速341、模块245、原生869、有限文件系统5、Docker模块1/原生9、本体浏览器430、插件fast9/包122叶case/互操作54/浏览器70全部首次通过。17份组合的源码/构建/SDK/签包摘要一致，保留32份非空WebServer日志及44份完整阶段日志。不同层不相加作为独立功能数。
+
+本体作业墙钟12分34秒，质量2分37秒，分片含准备/排空5分21秒–9分32秒；每片2分钟及整轮3–5分钟目标仍未达，按用户决定暂停进一步耗时优化。自动回写`590246eaa447fee71361db18b1150f61605b2dda`仅更新7项测试耗时估算，已核对与被测版本的完整文件差异，产品运行源码未变。
+
+[main amd64 dev发布42595253170](https://github.com/0honus0/nexus-terminal/actions/runs/42595253170)成功，来源`590246eaa447fee71361db18b1150f61605b2dda`。匿名只读核验`dev`与`sha-590246eaa447`同摘要`sha256:c6041e3bf28c2ff72b1991edb637601ae0af12b9a150958c1714030f1599b688`，唯一产品平台linux/amd64，manifest/config摘要及OCI revision/source/version均匹配。未下载镜像层或部署生产，依赖审计无生产漏洞。
+
+[插件Validate42595223641](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42595223641)绑定本轮成功Host后，fast9、原生包122叶case、互操作54及浏览器70全部首次通过，无skip/retry/flaky；17份组合、16份非空WebServer日志和16份阶段日志一致。作业墙钟5分39秒、质量1分45秒。
+
+[Chat UI发布42596116833](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42596116833)首次被GitHub结论筛选索引拒绝：直接查询与未按状态筛选的列表均显示42595223641成功，`status=success`查询暂时遗漏该运行。保留原失败日志；提交`abbccb63d1a51059ba6c125932eee76401cd4a63`将发布门禁改为按准确SHA分页、逐项核对工作流路径/完成/成功，不依赖该结论索引，不放宽同源码完整验证要求。2项回归约56ms通过，仓库17项1.74秒通过，ESLint/Prettier/actionlint/diff通过。索引随后同步，原已验源码d8f4071的发布第2次执行成功；最终门禁实现的真实远程执行仍待下次实际发布，不将原工作流重试写成新helper的线上验证。
+
+[最终插件Validate42596591510](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42596591510)验证abbccb6及同一成功Host：质量和8片成功，fast9、原生包124叶case、互操作54、浏览器70全部首次通过；17份组合/SDK/包摘要一致，16/16份服务与阶段日志齐全。相对已验d8f4071只增加CI门禁、2项仓库测试与测试说明，插件运行源码不变。两轮分别保留原始报告，不将重复执行相加为产品覆盖数。
+
+[Nexus Chat2.0.2](https://github.com/0honus0/nexus-agent-plugins/releases/tag/chat-ui-v2.0.2)已从d8f4071正式签名发布，官方Publisher签名、manifest、大小4894720字节与SHA256 `2276a7d014f23b79ed6da95bd8bfcf4b4268ab9fc38b736a3118c841cf28cbc6`核验通过。[目录聚合42596913919](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42596913919)成功并发布[catalog-20261109](https://github.com/0honus0/nexus-agent-plugins/releases/tag/catalog-20261109)为最新目录；原14个包条目逐字段保留，仅追加ChatUI2.0.2，共15项，未重签或覆盖旧包。镜像、独立插件和目录均已交付；本轮没有部署生产或手工维护远端数据。真实Pocket ID、手机Passkey/软键盘及介质/备份故障交错继续归PLAN外部边界。
