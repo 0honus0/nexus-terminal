@@ -308,14 +308,6 @@ export class FactorService {
 		return this.completeLogin(result);
 	}
 
-	async hasPasskeys(username: string | undefined): Promise<boolean> {
-		if (username !== undefined && (typeof username !== 'string' || username.length > 64)) {
-			throw new AccessFailure('invalid_input');
-		}
-		const account = username === undefined ? null : await this.accounts.getByUsername(username);
-		return this.factors.hasPasskeys(username === undefined ? null : (account?.id ?? 0));
-	}
-
 	async listPasskeys(cookie: string | null): Promise<FactorPasskeySummary[]> {
 		const session = validCookie(cookie);
 		const account = await this.identity(session);

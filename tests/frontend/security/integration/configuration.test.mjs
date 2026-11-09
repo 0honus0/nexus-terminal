@@ -75,7 +75,7 @@ test('actual security settings retain CAS, secret intents, effective revision an
 	draft.secretAction = 'clear';
 	await configurationApi.saveCaptcha(kept.revision, draft);
 	check(!(await configurationApi.get()).captcha.hasSecret, 'real explicit CAPTCHA secret clear');
-	check((await api.captchaConfig()).provider === 'none', 'real public CAPTCHA remains installation snapshot');
+	check((await api.loginOptions()).captcha.provider === 'none', 'real public CAPTCHA remains installation snapshot');
 	for (let attempt = 0; attempt < 5; attempt++) {
 		await fetch('/api/v1/auth/login', {
 			method: 'POST',

@@ -7,7 +7,7 @@ import { step } from '../../support/steps';
 import { E2E_URLS } from '../../../support/protocols/test-environment';
 import { getTestSettings, updateTestCaptcha, restartTestBackend } from '../../support/settings';
 import type { SettingsCaptchaCommand } from '../../../../packages/shared/src/preferences/configuration/http';
-import { readAccessCaptchaConfig, readAccessStatus } from '../../../../packages/shared/src/access/http';
+import { readAccessLoginOptions, readAccessStatus } from '../../../../packages/shared/src/access/http';
 
 const HCAPTCHA_SITE_KEY = '10000000-ffff-ffff-ffff-000000000001';
 const HCAPTCHA_TEST_SECRET = `0x${'0'.repeat(40)}`;
@@ -115,7 +115,7 @@ async function loadLoginWithCaptcha(
 	options: { intercepted?: boolean } = {},
 ): Promise<void> {
 	const captchaResponsePromise = page.waitForResponse(
-		(response) => response.url().endsWith('/api/v1/auth/captcha/config') && response.request().method() === 'GET',
+		(response) => response.url().endsWith('/api/v1/auth/login/options') && response.request().method() === 'GET',
 	);
 	await page.goto('/login');
 	const captchaResponse = await captchaResponsePromise;
@@ -124,9 +124,9 @@ async function loadLoginWithCaptcha(
 	// The separate APIRequestContext deliberately bypasses Playwright's route,
 	// so reading it would incorrectly assert the persisted valid configuration.
 	if (!options.intercepted) {
-		const actual = await page.context().request.get('/api/v1/auth/captcha/config');
+		const actual = await page.context().request.get('/api/v1/auth/login/options');
 		expect(actual.status()).toBe(200);
-		expect(readAccessCaptchaConfig(await actual.json())).toMatchObject(expectedConfig);
+		expect(readAccessLoginOptions(await actual.json()).captcha).toMatchObject(expectedConfig);
 	}
 }
 
@@ -224,13 +224,12 @@ test('login CAPTCHA fails closed for invalid configuration', async ({ page, requ
 	expect(await rejected.json()).toEqual({ code: 'invalid_input' });
 	expect(await getTestSettings(request)).toEqual(before);
 	// Invalid settings cannot be persisted. Exercise the browser's independent fail-closed boundary explicitly.
-	await page.route('**/api/v1/auth/captcha/config', (route) =>
+	await page.route('**/api/v1/auth/login/options', (route) =>
 		route.fulfill({
 			json: {
-				enabled: true,
-				provider: 'none',
-				hcaptchaSiteKey: '',
-				recaptchaSiteKey: '',
+				captcha: { enabled: true, provider: 'none', hcaptchaSiteKey: '', recaptchaSiteKey: '' },
+				oidc: null,
+				hasPasskeys: false,
 			},
 		}),
 	);

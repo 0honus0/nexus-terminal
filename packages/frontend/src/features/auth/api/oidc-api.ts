@@ -2,7 +2,6 @@ import {
 	readOidcSettingsRequest,
 	readOidcSettingsResponse,
 	readOidcBindingRequest,
-	readOidcProviderResponse,
 	readOidcStartRequest,
 	readOidcStartResponse,
 	readOidcFinishRequest,
@@ -19,20 +18,6 @@ function changed(value: unknown): void {
 export function createOidcApi() {
 	const send = createAccessRequest('/api/v1/auth');
 	return {
-		async provider(signal: AbortSignal): Promise<string | null> {
-			return (
-				(
-					await send({
-						method: 'GET',
-						path: '/oidc/provider',
-						status: 200,
-						decode: readOidcProviderResponse,
-						signal,
-					})
-				).provider?.label ?? null
-			);
-		},
-
 		async settings(signal: AbortSignal): Promise<OidcSettings> {
 			const c = await send({
 				method: 'GET',
@@ -43,7 +28,6 @@ export function createOidcApi() {
 			});
 			return {
 				revision: c.revision,
-				enabled: c.enabled,
 				label: c.label,
 				issuer: c.issuer,
 				clientId: c.clientId,
@@ -64,7 +48,6 @@ export function createOidcApi() {
 				input: () =>
 					readOidcSettingsRequest({
 						revision: input.revision,
-						enabled: input.enabled,
 						label: input.label,
 						issuer: input.issuer,
 						clientId: input.clientId,

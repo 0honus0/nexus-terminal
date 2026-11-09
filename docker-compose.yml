@@ -37,6 +37,13 @@ services:
       NEXUS_ENCRYPTION_KEY: ${NEXUS_ENCRYPTION_KEY:?Set a persistent base64 32-byte key in .env}
       NEXUS_PUBLIC_ORIGIN: ${NEXUS_PUBLIC_ORIGIN:-http://localhost:18111}
       NEXUS_TRUSTED_PROXIES: loopback,${NEXUS_TRUSTED_PROXIES:-uniquelocal}
+      # Optional OIDC deployment configuration; empty values keep UI-managed settings.
+      NEXUS_OIDC_ISSUER: ${NEXUS_OIDC_ISSUER:-}
+      NEXUS_OIDC_CLIENT_ID: ${NEXUS_OIDC_CLIENT_ID:-}
+      NEXUS_OIDC_CLIENT_SECRET: ${NEXUS_OIDC_CLIENT_SECRET:-}
+      NEXUS_OIDC_CLIENT_AUTHENTICATION: ${NEXUS_OIDC_CLIENT_AUTHENTICATION:-}
+      NEXUS_OIDC_LABEL: ${NEXUS_OIDC_LABEL:-}
+      NEXUS_OIDC_SUBJECT: ${NEXUS_OIDC_SUBJECT:-}
     volumes:
       - ${NEXUS_DATA_DIR:-./data}:/app/data
     healthcheck:

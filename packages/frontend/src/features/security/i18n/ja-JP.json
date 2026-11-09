@@ -163,7 +163,6 @@
     "oidc": {
       "title": "シングルサインオン（OIDC）",
       "description": "Pocket ID または OpenID Connect プロバイダーを現在のアカウントにリンクします。",
-      "enabled": "ログインページに表示",
       "label": "プロバイダー名",
       "authentication": "クライアント認証",
       "publicClient": "パブリッククライアント（PKCE）",

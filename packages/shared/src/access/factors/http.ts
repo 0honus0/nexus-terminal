@@ -103,14 +103,6 @@ export function readPasskeyAuthenticationOptions(value: unknown): string | undef
 	return row.username === undefined ? undefined : bounded(row.username, 256);
 }
 
-export function readPasskeyHasConfigured(query: URLSearchParams): string | undefined {
-	if ([...query.keys()].some((key) => key !== 'username') || query.getAll('username').length > 1) {
-		throw new InvalidFactorPayload();
-	}
-	const username = query.get('username');
-	return username === null ? undefined : bounded(username, 256);
-}
-
 export function readPasskeyCredential(
 	value: unknown,
 	kind: 'registration' | 'authentication',
@@ -252,10 +244,6 @@ export interface AccessTotpChangedResponse {
 
 export interface AccessPasskeyVerifiedResponse {
 	verified: boolean;
-}
-
-export interface AccessPasskeyHasConfiguredResponse {
-	hasPasskeys: boolean;
 }
 
 export interface AccessPasskeySummary {

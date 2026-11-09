@@ -54,6 +54,9 @@ export const ACCESS_AUTH_REQUEST_MAX_BYTES = 16 * 1024;
 
 export const ACCESS_AUTH_RESPONSE_MAX_BYTES = 16 * 1024;
 
+/** Combines the existing OIDC metadata and CAPTCHA payloads, including JSON escaping. */
+export const ACCESS_LOGIN_OPTIONS_RESPONSE_MAX_BYTES = ACCESS_AUTH_RESPONSE_MAX_BYTES * 2;
+
 /** Complete TOTP setup JSON, including the inline PNG QR code. */
 export const ACCESS_TOTP_SETUP_RESPONSE_MAX_BYTES = 64 * 1024;
 

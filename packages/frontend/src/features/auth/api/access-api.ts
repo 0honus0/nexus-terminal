@@ -6,7 +6,7 @@ import {
 	readAccessStatus,
 	readAccessSetupRequest,
 	readAccessLoginRequest,
-	readAccessCaptchaConfig,
+	readAccessLoginOptions,
 	readAccessPasswordRequest,
 	readAccessPassword,
 	type AccessPasswordRequest,
@@ -17,9 +17,12 @@ import {
 	type AccessPasswordLoginResponse,
 	type AccessStatusResponse,
 	type AccessLogoutResponse,
-	type AccessCaptchaConfigResponse,
+	type AccessLoginOptionsResponse,
 } from '@nexus-terminal/shared/access/http';
-import { ACCESS_TOTP_SETUP_RESPONSE_MAX_BYTES } from '@nexus-terminal/shared/access/values';
+import {
+	ACCESS_TOTP_SETUP_RESPONSE_MAX_BYTES,
+	ACCESS_LOGIN_OPTIONS_RESPONSE_MAX_BYTES,
+} from '@nexus-terminal/shared/access/values';
 import {
 	readTotpToken,
 	readTotpDisable,
@@ -48,7 +51,7 @@ export interface AccessApi {
 	status(signal?: AbortSignal): Promise<AccessStatusResponse | null>;
 	logout(signal?: AbortSignal): Promise<AccessLogoutResponse>;
 	verifyTwoFactor(token: string, signal?: AbortSignal): Promise<AccessTotpLoginResponse>;
-	captchaConfig(signal?: AbortSignal): Promise<AccessCaptchaConfigResponse>;
+	loginOptions(signal?: AbortSignal): Promise<AccessLoginOptionsResponse>;
 }
 
 /** Shared wire owner for the formal application and isolated DEV consumers. */
@@ -184,7 +187,14 @@ export function createAccessApi(basePath = '/api/v1/auth'): AccessApi {
 				signal,
 			}),
 
-		captchaConfig: (signal) =>
-			send({ method: 'GET', path: '/captcha/config', status: 200, decode: readAccessCaptchaConfig, signal }),
+		loginOptions: (signal) =>
+			send({
+				method: 'GET',
+				path: '/login/options',
+				status: 200,
+				decode: readAccessLoginOptions,
+				signal,
+				maxResponseBytes: ACCESS_LOGIN_OPTIONS_RESPONSE_MAX_BYTES,
+			}),
 	};
 }

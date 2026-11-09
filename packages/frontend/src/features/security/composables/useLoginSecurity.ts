@@ -21,6 +21,8 @@ const hasConfiguredCaptchaWidget = (config: LoginCaptchaConfig): boolean => {
 
 export function useLoginSecurity(): LoginSecurityController {
 	const captchaConfig = ref<LoginCaptchaConfig>(DEFAULT_CAPTCHA_CONFIG);
+	const oidcLabel = ref<string | null>(null);
+	const hasPasskeys = ref(false);
 	const captchaLoading = ref(true);
 	const captchaLoadError = ref(false);
 	let refreshController: AbortController | null = null;
@@ -46,12 +48,15 @@ export function useLoginSecurity(): LoginSecurityController {
 		const signal = refreshController.signal;
 		captchaLoading.value = true;
 		captchaLoadError.value = false;
-		const captcha = createAccessApi()
-			.captchaConfig(signal)
-			.then((config) => {
+		const options = createAccessApi()
+			.loginOptions(signal)
+			.then((options) => {
 				if (current !== generation) {
 					return;
 				}
+				const config = options.captcha;
+				oidcLabel.value = options.oidc?.label ?? null;
+				hasPasskeys.value = options.hasPasskeys;
 				captchaConfig.value = {
 					enabled: config.enabled,
 					provider: config.provider,
@@ -62,6 +67,8 @@ export function useLoginSecurity(): LoginSecurityController {
 				if (current !== generation) {
 					return;
 				}
+				oidcLabel.value = null;
+				hasPasskeys.value = false;
 				captchaConfig.value = DEFAULT_CAPTCHA_CONFIG;
 				captchaLoadError.value = true;
 			})
@@ -70,7 +77,7 @@ export function useLoginSecurity(): LoginSecurityController {
 					captchaLoading.value = false;
 				}
 			});
-		await captcha;
+		await options;
 	};
 
 	const loginWithPasskey = async (input: PasskeyLoginInput): Promise<void> => {
@@ -94,6 +101,8 @@ export function useLoginSecurity(): LoginSecurityController {
 	};
 
 	return {
+		oidcLabel: computed(() => oidcLabel.value),
+		hasPasskeys: computed(() => hasPasskeys.value),
 		captchaConfig: computed(() => captchaConfig.value),
 		captchaStatus: computed<CaptchaStatus>(() => {
 			if (captchaLoading.value) {

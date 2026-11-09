@@ -58,7 +58,7 @@ Access 的双端范围是管理员初始化、密码登录、明确的认证状�
 
 `access/factors/http.ts` 定义因素请求的 unknown 解码、有限 token/名称/credential 字段、公开 TOTP setup 与 Passkey 摘要；`access/values.ts` 新增 HttpOnly partial/challenge/TOTP setup Cookie 名和 300 秒临时生命周期、`limit_exceeded` 等具名错误；`access/http.ts` 将密码登录结果扩充为成功用户或 `requiresTwoFactor:true` 的判别联合。标准 WebAuthn OPTIONS 的 RP、user、algorithm、credential descriptor 先由后端 Model 投影为具名应用类型，再经 Interface 白名单转为 Shared `access/factors/http.ts` 响应类型；已验证的 browser credential JSON 先由 Shared unknown codec 严格校验必要字段，再经 Interface 转为 Factors 应用证据，由 Model 显式转回技术 Port 所需表示。Provider 对象与存储公钥不进入 Service/Shared。
 
-`access/values.ts` 统一持有后端会话 Cookie 名 `nexus_session`、rememberMe 30 天 Max-Age、CAPTCHA token 4096 UTF-8 bytes、黑名单分页最多 200、CAPTCHA provider 有限值以及登录/来源/供应商的具名安全错误。`access/http.ts` 为 setup/login（可选 captchaToken）/status（成功 200 `isAuthenticated:true/user`；未认证 401 安全码）/改密/logout/公开 CAPTCHA config/黑名单管理提供请求、响应和 unknown 严格取值；`access/model.ts` 只保留前端可见用户名/id/双因素标志。秘密、SQL 行、封禁策略快照和会话 digest 不属于 Shared；验证码供应商技术参数不进 wire。正式 Auth基础认证与DEV现共用Shared传输，`access/factors/http-codec.ts`持有TOTP登录、setup与changed成功的严格投影，setup完整JSON预算64KiB（含PNG QR）归values；基础认证完整JSON请求/响应各16KiB归values，排除Passkey管理。Passkey与CAPTCHA/IP安全配置的正式消费者已接Shared；其他Settings和业务源码已接Shared，完整行为验收仍独立记录。
+`access/values.ts` 统一持有后端会话 Cookie 名 `nexus_session`、rememberMe 30 天 Max-Age、CAPTCHA token 4096 UTF-8 bytes、黑名单分页最多 200、CAPTCHA provider 有限值以及登录/来源/供应商的具名安全错误。`access/http.ts` 为 setup/login（可选 captchaToken）/status（成功 200 `isAuthenticated:true/user`；未认证 401 安全码）/改密/logout/公开登录选项（CAPTCHA、OIDC名称、Passkey可用性）/黑名单管理提供请求、响应和 unknown 严格取值；`access/model.ts` 只保留前端可见用户名/id/双因素标志。秘密、SQL 行、封禁策略快照和会话 digest 不属于 Shared；验证码供应商技术参数不进 wire。正式 Auth基础认证与DEV现共用Shared传输，`access/factors/http-codec.ts`持有TOTP登录、setup与changed成功的严格投影，setup完整JSON预算64KiB（含PNG QR）归values；基础认证完整JSON请求/响应通常各16KiB，聚合公开登录选项响应32KiB，预算均归values；Passkey管理沿独立契约。Passkey与CAPTCHA/IP安全配置的正式消费者已接Shared；其他Settings和业务源码已接Shared，完整行为验收仍独立记录。
 
 system/status 同时拥有 SystemHealthResponse、固定健康取值及 readSystemHealthResponse 严格解码；后端 /api/v1/status 为生产者，现有 Docker/smoke 是路径与对象的真实消费者，尚未迁移为 Shared codec 消费者。内部 SystemHealth 独立定义并在 HTTP 白名单投影，不公开采集句柄或数据库事实。
 
@@ -157,7 +157,7 @@ codec检查完整metadata、计数、路径、有限联合及crossSession/source
 
 新增 GET/POST/DELETE/PUT HTTP 路由及已安装 path 见 Backend 第 5 节。密码登录正确但要求 TOTP 时返回 200 `{requiresTwoFactor:true}` 和五分钟独立 HttpOnly Cookie；`POST /login/2fa` 需该 Cookie 而不接纳完整 session 伪装部分授权。Passkey 认证 options 用独立 challenge Cookie，同一浏览器调用替换旧挑战；完成后签普通 `nexus_session`。HTTP URI 和 Schema 注册自动化仍属规划，Shared 当前为手写严格 codec。
 
-Access 的 `GET /api/v1/auth/captcha/config` 与 `GET/DELETE /api/v1/settings/ip-blacklist` 是实际入口；其它初始化、登录、status、logout、密码修改沿真实路由关联本 Shared 协议。全局 IP 来源政策在后端 HTTP/WS 安装处，不是 Shared codec 或 Platform 身份判断。正式Auth Store/刷新及公开CAPTCHA读取已消费Shared，Widget设置与黑名单管理已接Shared；请求、失败联合和恢复路径分别随真实消费者迁移。
+Access 的 `GET /api/v1/auth/login/options` 与 `GET/DELETE /api/v1/settings/ip-blacklist` 是实际入口；其它初始化、登录、status、logout、密码修改沿真实路由关联本 Shared 协议。全局 IP 来源政策在后端 HTTP/WS 安装处，不是 Shared codec 或 Platform 身份判断。正式Auth Store/刷新及公开CAPTCHA读取已消费Shared，Widget设置与黑名单管理已接Shared；请求、失败联合和恢复路径分别随真实消费者迁移。
 
 真实消费者为后端 Workspace status/Docker 和 system 三条 HTTP。Shared codec 解码 Docker 请求、HTTP path 及完整响应，出口是精确 package exports；正式前端Workspace监控/Docker已消费Shared maps和严格codec，再由各自mapper投影为独立应用对象；正式system-overview HTTP已消费system/status及remote/monitoring严格codec；安全错误对象仅含有限code，额外字段拒绝。Frontend transport另核对HTTP状态及原主机，应用等待状态不进入Shared；采样配置消费者已接Preferences核心配置。
 

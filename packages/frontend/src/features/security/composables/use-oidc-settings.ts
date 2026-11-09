@@ -124,7 +124,6 @@ export function useOidcSettings() {
 			await api.save(
 				{
 					revision: c.revision,
-					enabled: c.enabled,
 					label: c.label,
 					issuer: c.issuer,
 					clientId: c.clientId,

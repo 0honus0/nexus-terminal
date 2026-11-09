@@ -20,9 +20,16 @@ for (const viewport of [
 			await setUiLanguage(page.request, 'en-US');
 			await createOidcClient(page.request, E2E_ADMIN, E2E_URLS.frontendOrigin).bind(provider, c.revision);
 			await page.request.post('/api/v1/auth/logout', { headers: oidcHeaders, data: {} });
+			const optionsRequests: string[] = [];
+			page.on('request', (request) => {
+				if (/\/auth\/(login\/options|captcha\/config|oidc\/provider)$/u.test(request.url())) {
+					optionsRequests.push(new URL(request.url()).pathname);
+				}
+			});
 			await page.goto('/login');
 			const login = page.locator('.login-oidc');
 			await expect(login).toContainText('Pocket ID');
+			expect(optionsRequests).toEqual(['/api/v1/auth/login/options']);
 			await login.evaluate((element) => element.scrollIntoView({ block: 'center', behavior: 'instant' }));
 			await login.click({ trial: true });
 			await captureFunctionalScreenshot(page, `oidc-login-${viewport.width}x${viewport.height}.png`);
@@ -55,7 +62,7 @@ for (const viewport of [
 	});
 }
 
-test('OIDC configuration saves through the UI and disabling signs out the current OIDC session', async ({ page }) => {
+test('OIDC configuration saves through the UI and unlinking signs out the current OIDC session', async ({ page }) => {
 	const provider = await openOidcProvider();
 	try {
 		await loginAsInitialAdmin(page.request);
@@ -65,7 +72,7 @@ test('OIDC configuration saves through the UI and disabling signs out the curren
 		await page.locator('#oidc-client').fill('nexus-client');
 		await page.locator('#oidc-secret').fill('oidc-test-secret');
 		await page.locator('#oidc-password').fill(E2E_ADMIN.password);
-		await page.getByLabel('Show on the login page', { exact: true }).check();
+		await expect(page.getByRole('checkbox', { name: 'Show on the login page', exact: true })).toHaveCount(0);
 		await page.locator('button[form="oidc-settings-form"]').click();
 		await expect(page.locator('#oidc-secret')).toHaveValue('');
 		await page.locator('#oidc-password').fill(E2E_ADMIN.password);
@@ -76,9 +83,8 @@ test('OIDC configuration saves through the UI and disabling signs out the curren
 		await page.locator('.login-oidc').click();
 		await expect(page).toHaveURL(/\/$/u);
 		await page.goto('/settings?tab=security');
-		await page.getByLabel('Show on the login page', { exact: true }).uncheck();
 		await page.locator('#oidc-password').fill(E2E_ADMIN.password);
-		await page.locator('button[form="oidc-settings-form"]').click();
+		await page.getByRole('button', { name: 'Unlink account', exact: true }).click();
 		await expect(page).toHaveURL(/\/login$/u);
 		await expect(page.locator('.login-oidc')).toHaveCount(0);
 		expect((await page.request.get('/api/v1/auth/status')).status()).toBe(401);

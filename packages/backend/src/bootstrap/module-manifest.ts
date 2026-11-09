@@ -26,7 +26,11 @@ import type { SecretBox } from '../platform/security/secret-box.js';
 import type { MachineConnectOptions } from '../platform/ssh/ssh-port.js';
 import type { TargetsPublicApi, TrustedSshTargetResolver } from '../modules/targets/public.js';
 import type { RemoteSessions } from '../modules/remote/public.js';
-import { registerAccess, registerAccessBackupExclusions } from '../modules/access/register.js';
+import {
+	registerAccess,
+	registerAccessBackupExclusions,
+	type AccessRegistrationOptions,
+} from '../modules/access/register.js';
 import type { AccessPublicApi } from '../modules/access/public.js';
 import type { HttpRoute, HttpWebSocketRoute } from '../platform/http/http-types.js';
 import { registerAgent, registerAgentBackup } from '../modules/agent/register.js';
@@ -58,6 +62,7 @@ export interface RegisteredModules {
 }
 
 interface ModuleRegistrationOptions {
+	oidc?: AccessRegistrationOptions['oidc'];
 	logger: Logger;
 	sqlite: SqliteRuntime;
 	secrets: SecretBox | null;
@@ -125,6 +130,7 @@ export async function registerModules({
 	secrets,
 	verifyHostKey,
 	configuration,
+	oidc: oidcConfiguration,
 	maintenance,
 }: ModuleRegistrationOptions): Promise<RegisteredModules> {
 	const paths = resolveDataPaths(sqlite.path);
@@ -161,6 +167,7 @@ export async function registerModules({
 		operationOwner = operations;
 		const access = registerAccess({
 			sqlite,
+			oidc: oidcConfiguration,
 			secrets,
 			passkeys: installed.passkeys.map((site) => ({ origin: site.origin, rpId: site.rpId })),
 			loginFailurePolicy: {
@@ -177,6 +184,7 @@ export async function registerModules({
 				expectedHostname: installed.captcha.expectedHostname ?? undefined,
 			},
 		});
+		owners.set('access', access);
 		preferences.installTransactionIdentityReader(access.readTransactionIdentity);
 		operations.installTransactionIdentityReader(access.readTransactionIdentity);
 		const targets = registerTargets({ sqlite, secrets });
@@ -273,7 +281,6 @@ export async function registerModules({
 								route.url === '/api/v1/auth/login/2fa' ||
 								route.url === '/api/v1/auth/passkey/authentication-options' ||
 								route.url === '/api/v1/auth/passkey/authenticate' ||
-								route.url === '/api/v1/auth/passkey/has-configured' ||
 								route.url === '/api/v1/auth/status' ||
 								route.url === '/api/v1/auth/logout' ||
 								route.url === '/api/v1/settings/ip-blacklist';
@@ -356,6 +363,7 @@ export async function registerModules({
 			admitUnmatchedHttp: (sourceIp) => access.publicApi.admitSource(sourceIp),
 
 			initialize: async (mode) => {
+				await access.initialize();
 				logDiagnostic(logger, 'info', 'MODULE_INITIALIZING', { module: 'operations', mode });
 				await operations.initialize(mode);
 				logDiagnostic(logger, 'info', 'MODULE_READY', { module: 'operations', mode });
@@ -395,6 +403,7 @@ export async function registerModules({
 			quiesce: () => {
 				quiesceModuleOwners(
 					new Map<string, ModuleLifecycle>([
+						['access', access],
 						['operations', operations],
 						['preferences', preferences],
 						['agent', agent],

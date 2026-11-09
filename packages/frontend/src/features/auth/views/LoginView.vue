@@ -15,6 +15,7 @@
 			captchaToken?: string | null;
 			captchaStatus?: CaptchaStatus;
 			passkeyLoading?: boolean;
+			hasPasskeys?: boolean;
 			oidcLabel?: string | null;
 			oidcLoading?: boolean;
 		}>(),
@@ -23,6 +24,7 @@
 			captchaToken: null,
 			captchaStatus: 'ready',
 			passkeyLoading: false,
+			hasPasskeys: false,
 			oidcLabel: null,
 			oidcLoading: false,
 		},
@@ -353,11 +355,15 @@
 							}}</span>
 						</UiButton>
 
-						<div v-if="!pendingSecondFactor" class="login-alternatives">
+						<div
+							v-if="!pendingSecondFactor && (props.hasPasskeys || props.oidcLabel)"
+							class="login-alternatives"
+						>
 							<div class="login-divider">
 								<span>{{ t('auth.login.or') }}</span>
 							</div>
 							<UiButton
+								v-if="props.hasPasskeys"
 								class="login-passkey"
 								:loading="props.passkeyLoading"
 								type="button"

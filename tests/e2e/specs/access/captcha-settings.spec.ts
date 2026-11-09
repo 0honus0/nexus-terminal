@@ -4,7 +4,7 @@ import { captureFunctionalScreenshot } from '../../support/functional-screenshot
 import { step } from '../../support/steps';
 import { expectUiSelectValue, selectUiOption } from '../../support/ui-select';
 import { getTestSettings, updateTestCaptcha } from '../../support/settings';
-import { readAccessCaptchaConfig } from '../../../../packages/shared/src/access/http';
+import { readAccessLoginOptions } from '../../../../packages/shared/src/access/http';
 
 const HCAPTCHA_SITE_KEY = '10000000-ffff-ffff-ffff-000000000001';
 const RECAPTCHA_SITE_KEY = '10000000-ffff-ffff-ffff-000000000002';
@@ -22,9 +22,9 @@ test('CAPTCHA UI saves provider configuration and explicit secrets without activ
 		expectedHostname: null,
 		secret: { action: 'clear' },
 	});
-	const publicBefore = await context.request.get('/api/v1/auth/captcha/config');
+	const publicBefore = await context.request.get('/api/v1/auth/login/options');
 	expect(publicBefore.ok()).toBe(true);
-	const effective = readAccessCaptchaConfig(await publicBefore.json());
+	const effective = readAccessLoginOptions(await publicBefore.json()).captcha;
 	const baseline = await getTestSettings(context.request);
 	try {
 		await page.goto('/settings');
@@ -53,9 +53,9 @@ test('CAPTCHA UI saves provider configuration and explicit secrets without activ
 			expect(saved.effectiveVersion).toBe(baseline.effectiveVersion);
 			expect(saved.requiresRestart).toBe(true);
 			await expect(captcha.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
-			const config = await context.request.get('/api/v1/auth/captcha/config');
+			const config = await context.request.get('/api/v1/auth/login/options');
 			expect(config.ok()).toBe(true);
-			expect(readAccessCaptchaConfig(await config.json())).toEqual(effective);
+			expect(readAccessLoginOptions(await config.json()).captcha).toEqual(effective);
 		}
 
 		await step('enable hCaptcha through explicit secret replacement', async () => {

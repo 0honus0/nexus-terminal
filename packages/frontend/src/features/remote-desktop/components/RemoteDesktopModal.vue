@@ -667,22 +667,25 @@
 			appearance="ghost"
 			:density="toolbarDensity"
 			icon-only
-			:title="fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')"
-			:aria-label="fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')"
-			@click="toggleFullscreen"
+			:title="t('common.minimize')"
+			:aria-label="t('common.minimize')"
+			@click="minimize"
 		>
-			<i :class="fullscreen ? 'fas fa-compress fa-sm' : 'fas fa-expand fa-sm'" aria-hidden="true"></i>
+			<i class="fas fa-window-minimize fa-sm" aria-hidden="true"></i>
 		</UiButton>
 		<UiButton
 			type="button"
 			appearance="ghost"
 			:density="toolbarDensity"
 			icon-only
-			:title="t('common.minimize')"
-			:aria-label="t('common.minimize')"
-			@click="minimize"
+			:title="fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')"
+			:aria-label="fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')"
+			@click="toggleFullscreen"
 		>
-			<i class="fas fa-window-minimize fa-sm" aria-hidden="true"></i>
+			<i
+				:class="fullscreen ? 'far fa-window-restore fa-sm' : 'far fa-window-maximize fa-sm'"
+				aria-hidden="true"
+			></i>
 		</UiButton>
 		<UiButton
 			type="button"

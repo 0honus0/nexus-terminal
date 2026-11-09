@@ -29,8 +29,8 @@ const RDP_TOOLBAR_TAB_ORDER = [
 	'Decrease value',
 	'Reconnect',
 	'File clipboard',
-	'Browser Fullscreen',
 	'Minimize',
+	'Browser Fullscreen',
 	'Close',
 ];
 
@@ -59,8 +59,8 @@ async function expectRdpToolbarLayout(panel: Locator, touch = false): Promise<vo
 				'Reconnect',
 				'File clipboard',
 				...(touch ? ['Touch'] : []),
-				'Browser Fullscreen',
 				'Minimize',
+				'Browser Fullscreen',
 				'Close',
 			]
 		: RDP_TOOLBAR_TAB_ORDER;
@@ -291,7 +291,7 @@ test('RDP browser client preserves settings, clipboard and browser fullscreen', 
 			);
 			await revealDesktopControls(page);
 			await expect(modal.locator('i.fa-desktop')).toBeVisible();
-			await expect(modal.locator('i.fa-expand')).toBeVisible();
+			await expect(modal.locator('i.far.fa-window-maximize')).toBeVisible();
 			await expect(modal.locator('i.fa-window-minimize')).toBeVisible();
 			await expect(modal.locator('i.fa-times')).toBeVisible();
 			await expect(page.getByRole('dialog', { name: 'Progress Display', exact: true })).toHaveCount(0);

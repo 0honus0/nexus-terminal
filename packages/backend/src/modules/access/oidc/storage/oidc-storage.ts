@@ -3,7 +3,6 @@ import type { OidcClientAuthentication } from '@nexus-terminal/shared/access/oid
 export interface OidcConfigurationRecord {
 	revision: string;
 	userId: number;
-	enabled: boolean;
 	label: string;
 	issuer: string;
 	clientId: string;
@@ -42,9 +41,20 @@ export interface OidcCompletionWrite {
 	expiresAt: number;
 }
 
+export type OidcCompletionDecision = { purpose: 'binding'; subject: string; revision: string } | { purpose: 'login' };
+
+export interface OidcProviderRecord {
+	label: string;
+}
+
 export interface OidcStorage {
+	readProvider(): Promise<OidcProviderRecord | null>;
 	read(sessionDigest: string | null, source: string): Promise<OidcStorageFacts>;
-	configure(sessionDigest: string, decide: (facts: OidcStorageFacts) => OidcConfigurationRecord): Promise<void>;
+	/** Null identity is reserved for trusted installation; null decision leaves all sessions untouched. */
+	configure(
+		sessionDigest: string | null,
+		decide: (facts: OidcStorageFacts) => OidcConfigurationRecord | null,
+	): Promise<void>;
 	begin(
 		flow: OidcFlowRecord,
 		previousCookieDigest: string | null,
@@ -54,10 +64,7 @@ export interface OidcStorage {
 	consume(cookieDigest: string, state: string, redirectUri: string): Promise<OidcFlowRecord | null>;
 	complete(
 		command: OidcCompletionWrite,
-		decide: (
-			facts: OidcStorageFacts,
-			claimedExpiresAt: number | null,
-		) => { subject: string; purpose: 'login' | 'binding' },
+		decide: (facts: OidcStorageFacts, claimedExpiresAt: number | null) => OidcCompletionDecision,
 	): Promise<void>;
 	revokeIssued(tokenDigest: string): Promise<void>;
 	discard(cookieDigest: string): Promise<void>;

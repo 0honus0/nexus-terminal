@@ -2,6 +2,8 @@ import { PinoLogger } from './platform/logging/pino-logger.js';
 import { logDiagnostic } from './platform/logging/diagnostic-log.js';
 
 import { createApp, type AccessHttpOptions } from './bootstrap/create-app.js';
+import { StartupConfigurationFailure } from './bootstrap/startup-configuration-failure.js';
+import { readOidcEnvironment } from './bootstrap/oidc-environment.js';
 
 const logger = new PinoLogger();
 
@@ -9,12 +11,6 @@ const logger = new PinoLogger();
 process.on('uncaughtExceptionMonitor', (error, origin) => {
 	logDiagnostic(logger, 'error', 'UNCAUGHT_PROCESS_FAILURE', { origin }, error);
 });
-
-class StartupConfigurationFailure extends Error {
-	constructor(readonly setting: string) {
-		super('Invalid backend entry configuration');
-	}
-}
 
 function requireSetting(name: string): string {
 	const value = process.env[name]?.trim();
@@ -112,6 +108,7 @@ async function main(): Promise<void> {
 	const app = await createApp(dbPath, {
 		encryptionKey: key,
 		logger,
+		oidc: readOidcEnvironment(process.env),
 
 		configuration: () => ({
 			ipWhitelist: process.env.NEXUS_IP_WHITELIST ?? '',

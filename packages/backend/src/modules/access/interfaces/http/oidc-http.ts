@@ -8,7 +8,6 @@ import {
 import type {
 	OidcSettingsResponse,
 	OidcStartResponse,
-	OidcProviderResponse,
 	OidcFinishResponse,
 	OidcChangedResponse,
 } from '@nexus-terminal/shared/access/oidc/http';
@@ -68,22 +67,12 @@ export function createOidcRoutes(service: OidcService, secure: boolean): HttpRou
 	const routes: HttpRoute[] = [
 		{
 			method: 'GET',
-			url: '/api/v1/auth/oidc/provider',
-
-			handler: async (_request, reply) => {
-				const label = await accessBoundary(() => service.provider());
-				reply.send({ provider: label === null ? null : { label } } satisfies OidcProviderResponse);
-			},
-		},
-		{
-			method: 'GET',
 			url: '/api/v1/auth/oidc/settings',
 
 			handler: async (request, reply) => {
 				const result = await accessBoundary(() => service.settings(session(request)));
 				reply.send({
 					revision: result.revision,
-					enabled: result.enabled,
 					label: result.label,
 					issuer: result.issuer,
 					clientId: result.clientId,
@@ -103,7 +92,6 @@ export function createOidcRoutes(service: OidcService, secure: boolean): HttpRou
 				await accessBoundary(() =>
 					service.save(session(request), input.password, {
 						revision: input.revision,
-						enabled: input.enabled,
 						label: input.label,
 						issuer: input.issuer,
 						clientId: input.clientId,

@@ -3,7 +3,7 @@ import { initializePreferencesSchema } from '../modules/preferences/migrations.j
 import { initializeRemoteSchema } from '../modules/remote/migrations.js';
 import type { SchemaMigration } from '../platform/storage/sqlite/schema-types.js';
 import { initializeTargetsSchema } from '../modules/targets/migrations.js';
-import { initializeAccessSchema, migrateAccessOidc } from '../modules/access/migrations.js';
+import { initializeAccessSchema, migrateAccessOidc, removeOidcVisibilitySwitch } from '../modules/access/migrations.js';
 import {
 	initializeAgentSchema,
 	migrateAgentToolBatches,
@@ -43,4 +43,5 @@ export const applicationMigrations: readonly SchemaMigration[] = [
 		apply: migrateOperationsPendingNotifications,
 	},
 	...agentModularMigrations,
+	{ version: 66, signature: 'access-oidc-binding-visibility-20261109', apply: removeOidcVisibilitySwitch },
 ];

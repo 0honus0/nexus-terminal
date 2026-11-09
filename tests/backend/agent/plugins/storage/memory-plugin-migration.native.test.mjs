@@ -147,7 +147,7 @@ test('Recall migration preserves effective App policy only in unconfigured offic
 	}
 	const committed = await db.all('SELECT * FROM schema_version ORDER BY version');
 	assert.deepEqual(committed.slice(0, 64), markers);
-	assert.equal(committed.at(-1).version, 65);
+	assert.equal(committed.at(-1).version, applicationMigrations.at(-1).version);
 	assert.deepEqual(await db.all('PRAGMA foreign_key_check'), []);
 	assert.equal((await db.one('PRAGMA integrity_check')).integrity_check, 'ok');
 	const before = await db.all('SELECT * FROM agent_plugin_instances ORDER BY id');
@@ -171,5 +171,8 @@ test('Recall migration rolls back configuration and markers when legacy cleanup 
 	assert.equal((await db.one('SELECT max(version) AS version FROM schema_version')).version, 64);
 	await db.exec('DROP TRIGGER reject_recall_cleanup');
 	await initializeSchema(db, applicationMigrations);
-	assert.equal((await db.one('SELECT max(version) AS version FROM schema_version')).version, 65);
+	assert.equal(
+		(await db.one('SELECT max(version) AS version FROM schema_version')).version,
+		applicationMigrations.at(-1).version,
+	);
 });

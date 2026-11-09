@@ -92,6 +92,7 @@ await test('Passkey naming preserves actual registration verification, single us
 			t.diagnostic(JSON.stringify(timing));
 		}
 	});
+	assert.equal(expectStatus(await f.api('GET', '/api/v1/auth/login/options'), 200).hasPasskeys, false);
 	for (const entry of [
 		{ provider: 'Bitwarden', aaguid: 'd548826e-79b4-db40-a3d8-11116f7e8349', name: 'Bitwarden Passkey' },
 		{ provider: 'Apple', aaguid: 'fbfc3007-154e-4ecc-8c0b-6e020557d7bd', name: 'Apple Passwords Passkey' },
@@ -110,6 +111,8 @@ await test('Passkey naming preserves actual registration verification, single us
 				201,
 			);
 
+			assert.equal(expectStatus(await f.api('GET', '/api/v1/auth/login/options'), 200).hasPasskeys, true);
+
 			const read = async () =>
 				readPasskeyList(expectStatus(await f.api('GET', '/api/v1/auth/user/passkeys'), 200)).find(
 					(item) => item.credentialId === credential.id,
@@ -127,8 +130,30 @@ await test('Passkey naming preserves actual registration verification, single us
 				200,
 			);
 			assert.equal((await read()).name, 'My portable key');
+			let remaining;
+			if (entry.provider === 'Bitwarden') {
+				const second = await f.api('POST', '/api/v1/auth/passkey/registration-options', {});
+				remaining = registration(readPasskeyRegistrationResponse(expectStatus(second, 200)), entry.aaguid);
+				const secondCookie = second.headers['set-cookie'].map((value) => value.split(';')[0]).join('; ');
+				expectStatus(
+					await f.api(
+						'POST',
+						'/api/v1/auth/passkey/register',
+						{ registrationResponse: remaining },
+						{
+							Cookie: f.getSessionCookie() + '; ' + secondCookie,
+						},
+					),
+					201,
+				);
+			}
 			expectStatus(await f.api('DELETE', '/api/v1/auth/user/passkeys/' + credential.id), 200);
 			assert.equal(await read(), undefined);
+			if (remaining) {
+				assert.equal(expectStatus(await f.api('GET', '/api/v1/auth/login/options'), 200).hasPasskeys, true);
+				expectStatus(await f.api('DELETE', '/api/v1/auth/user/passkeys/' + remaining.id), 200);
+			}
+			assert.equal(expectStatus(await f.api('GET', '/api/v1/auth/login/options'), 200).hasPasskeys, false);
 		});
 	}
 });

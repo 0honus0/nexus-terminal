@@ -9,6 +9,7 @@ import { initializeSchema } from '../../../../../packages/backend/dist/platform/
 import { applicationMigrations } from '../../../../../packages/backend/dist/bootstrap/schema.js';
 import { registerAccessBackupExclusions } from '../../../../../packages/backend/dist/modules/access/register.js';
 import { SqliteOidcStorage } from '../../../../../packages/backend/dist/modules/access/oidc/adapters/sqlite/oidc-sql.js';
+import { LoginOptionsModel } from '../../../../../packages/backend/dist/modules/access/login-options/model/login-options-model.js';
 import { OidcModel } from '../../../../../packages/backend/dist/modules/access/oidc/model/oidc-model.js';
 import { SecureSessionTokens } from '../../../../../packages/backend/dist/platform/security/adapters/secure-session-tokens.js';
 import { SecretBox } from '../../../../../packages/backend/dist/platform/security/secret-box.js';
@@ -17,6 +18,131 @@ import { SqliteFailure } from '../../../../../packages/backend/dist/platform/sto
 const tokens = new SecureSessionTokens();
 const secrets = new SecretBox(Buffer.alloc(32, 9));
 const redirectUri = 'https://nexus.example/login/oidc/callback';
+
+function installationModel(db, overrides = {}, storage = new SqliteOidcStorage(db), configurationChanged = () => {}) {
+	return new OidcModel(
+		storage,
+		tokens,
+		secrets,
+		{
+			authorize: async () => {
+				throw new Error('Unexpected protocol call');
+			},
+
+			verify: async () => {
+				throw new Error('Unexpected protocol call');
+			},
+		},
+		{
+			issuer: 'https://id.example',
+			clientId: 'nexus',
+			clientAuthentication: 'none',
+			clientSecret: null,
+			label: 'Pocket ID',
+			subject: null,
+			...overrides,
+		},
+		configurationChanged,
+	);
+}
+
+test('resident login options tolerate an empty installation and refresh after delayed environment setup', async () => {
+	const db = SqliteRuntime.openMemory();
+	let options;
+	let changes = 0;
+	try {
+		await initializeSchema(db, applicationMigrations);
+		const model = installationModel(db, { subject: 'bound-account' }, new SqliteOidcStorage(db), () => {
+			changes++;
+			options.invalidate();
+		});
+		options = new LoginOptionsModel(model, { hasPasskeys: async () => false });
+		await model.initialize();
+		assert.deepEqual(await options.read(), { oidcLabel: null, hasPasskeys: false });
+		assert.deepEqual(await options.read(), { oidcLabel: null, hasPasskeys: false });
+		assert.equal(changes, 0);
+		await seed(db);
+		options.invalidate();
+		assert.deepEqual(await options.read(), { oidcLabel: 'Pocket ID', hasPasskeys: false });
+		assert.deepEqual(await options.read(), { oidcLabel: 'Pocket ID', hasPasskeys: false });
+		assert.equal(changes, 1);
+	} finally {
+		await options?.close();
+		await db.close();
+	}
+});
+
+test('OIDC installation waits for administrator setup and never binds the first unauthenticated caller', async () => {
+	const db = SqliteRuntime.openMemory();
+	try {
+		await initializeSchema(db, applicationMigrations);
+		const model = installationModel(db);
+		await model.initialize();
+		assert.equal(await model.provider(), null);
+		assert.equal(await db.one('SELECT * FROM access_oidc_configuration'), null);
+		const token = await seed(db);
+		const settings = await model.settings(token);
+		assert.equal(settings.bound, false);
+		assert.equal(await model.provider(), null);
+		await assert.rejects(
+			model.start({
+				purpose: 'login',
+				token: null,
+				previousCookie: null,
+				revision: null,
+				redirectUri,
+				rememberMe: false,
+				source: '',
+
+				enforceBlock: () => false,
+
+				signal: new AbortController().signal,
+			}),
+			(error) => error.code === 'invalid_credentials',
+		);
+	} finally {
+		await db.close();
+	}
+});
+
+test('OIDC installation retains an existing binding only for the same issuer and client', async () => {
+	const f = await fixture();
+	try {
+		await f.finish(await f.start('binding'), 'binding');
+		const before = await f.model.settings(f.token);
+		const same = installationModel(f.db);
+		await same.initialize();
+		assert.equal((await same.settings(f.token)).revision, before.revision);
+		assert.equal((await same.settings(f.token)).bound, true);
+		const changed = installationModel(f.db, { issuer: 'https://another.example' });
+		await changed.initialize();
+		assert.equal((await changed.settings(f.token)).bound, false);
+		assert.equal(await changed.provider(), null);
+		assert.equal((await f.db.one('SELECT COUNT(*) AS count FROM access_sessions')).count, 1);
+	} finally {
+		await f.db.close();
+	}
+});
+
+test('OIDC installation keeps unknown write evidence and does not automatically replay it', async () => {
+	const f = await fixture();
+	try {
+		let calls = 0;
+		const configure = f.storage.configure.bind(f.storage);
+		f.storage.configure = async (...args) => {
+			calls += 1;
+			await configure(...args);
+			throw new SqliteFailure('commit_unknown', null);
+		};
+		const model = installationModel(f.db, { label: 'Deployment' }, f.storage);
+		await assert.rejects(model.initialize(), (error) => error.code === 'operation_unknown');
+		await assert.rejects(model.settings(f.token), (error) => error.code === 'operation_unknown');
+		assert.equal(calls, 1);
+		assert.equal((await f.db.one('SELECT label FROM access_oidc_configuration')).label, 'Deployment');
+	} finally {
+		await f.db.close();
+	}
+});
 
 async function seed(db) {
 	const token = tokens.issue();
@@ -38,7 +164,7 @@ async function seed(db) {
 	return token;
 }
 
-async function fixture() {
+async function fixture(configurationChanged = () => {}) {
 	const db = SqliteRuntime.openMemory();
 	await initializeSchema(db, applicationMigrations);
 	const token = await seed(db);
@@ -48,21 +174,27 @@ async function fixture() {
 
 	let verificationReached = () => {};
 
-	const model = new OidcModel(storage, tokens, secrets, {
-		async authorize(_configuration, input) {
-			authorization = input;
-			return 'https://id.example/authorize';
-		},
+	const model = new OidcModel(
+		storage,
+		tokens,
+		secrets,
+		{
+			async authorize(_configuration, input) {
+				authorization = input;
+				return 'https://id.example/authorize';
+			},
 
-		async verify() {
-			verificationReached();
-			if (gate) await gate;
-			return { issuer: 'https://id.example', subject: 'subject-1' };
+			async verify() {
+				verificationReached();
+				if (gate) await gate;
+				return { issuer: 'https://id.example', subject: 'subject-1' };
+			},
 		},
-	});
+		null,
+		configurationChanged,
+	);
 	await model.save(token, {
 		revision: null,
-		enabled: true,
 		label: 'Pocket ID',
 		issuer: 'https://id.example',
 		clientId: 'nexus',
@@ -216,6 +348,110 @@ test('OIDC commit acknowledgement loss revokes the known, unissued bearer', asyn
 		assert.equal((await f.db.one('SELECT COUNT(*) AS count FROM access_oidc_sessions')).count, 0);
 		assert.equal((await f.db.one('SELECT COUNT(*) AS count FROM access_sessions')).count, 1);
 	} finally {
+		await f.db.close();
+	}
+});
+
+test('public OIDC metadata uses one read without a transaction and observes policy changes immediately', async () => {
+	const f = await fixture();
+	try {
+		assert.equal(await f.model.provider(), null);
+		const beforeBinding = await f.model.settings(f.token);
+		await f.finish(await f.start('binding'), 'binding');
+		const bound = await f.model.settings(f.token);
+		assert.notEqual(bound.revision, beforeBinding.revision);
+		const before = f.db.statistics.read();
+		assert.equal(await f.model.provider(), 'Pocket ID');
+		const after = f.db.statistics.read();
+		assert.equal(after.execution.count - before.execution.count, 1);
+		assert.equal(after.commit.count - before.commit.count, 0);
+		await f.db.run('UPDATE access_accounts SET passkey_required=1');
+		assert.equal(await f.model.provider(), null);
+		await f.db.run('UPDATE access_accounts SET passkey_required=0');
+		assert.equal(await f.model.provider(), 'Pocket ID');
+		await f.model.unbind(f.token, bound.revision);
+		assert.equal(await f.model.provider(), null);
+	} finally {
+		await f.db.close();
+	}
+});
+
+test('v66 removes the visibility switch and preserves a previously hidden binding across upgrade and restart', async () => {
+	const base = process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir();
+	await mkdir(base, { recursive: true });
+	const root = await mkdtemp(join(base, 'oidc-visibility-migration-'));
+	const path = join(root, 'upgrade.sqlite');
+	let db = SqliteRuntime.open(path);
+	try {
+		await initializeSchema(
+			db,
+			applicationMigrations.filter((migration) => migration.version < 66),
+		);
+		await seed(db);
+		await db.run(
+			'INSERT INTO access_oidc_configuration(id,revision,user_id,enabled,label,issuer,client_id,client_authentication,secret_cipher,subject) VALUES(1,?,1,0,?,?,?,?,?,?)',
+			[tokens.issue(), 'Pocket ID', 'https://id.example', 'nexus', 'none', null, 'subject-1'],
+		);
+		const before = await db.one(
+			'SELECT id,revision,user_id,label,issuer,client_id,client_authentication,secret_cipher,subject FROM access_oidc_configuration',
+		);
+		const sessions = await db.all('SELECT * FROM access_sessions');
+		const markers = await db.all('SELECT * FROM schema_version ORDER BY version');
+		await initializeSchema(db, applicationMigrations);
+		assert.deepEqual(await db.one('SELECT * FROM access_oidc_configuration'), before);
+		assert.deepEqual(await db.all('SELECT * FROM access_sessions'), sessions);
+		assert.equal((await new SqliteOidcStorage(db).readProvider()).label, 'Pocket ID');
+		const committed = await db.all('SELECT * FROM schema_version ORDER BY version');
+		assert.deepEqual(committed.slice(0, markers.length), markers);
+		assert.equal(committed.at(-1).signature, 'access-oidc-binding-visibility-20261109');
+		await db.close();
+		db = SqliteRuntime.open(path);
+		await initializeSchema(db, applicationMigrations);
+		assert.deepEqual(await db.all('SELECT * FROM schema_version ORDER BY version'), committed);
+		assert.deepEqual(await db.one('SELECT * FROM access_oidc_configuration'), before);
+		assert.equal((await db.one('PRAGMA integrity_check')).integrity_check, 'ok');
+		assert.deepEqual(await db.all('PRAGMA foreign_key_check'), []);
+	} finally {
+		await db.close();
+	}
+});
+
+test('unknown binding and configuration commits invalidate public login metadata without replaying writes', async () => {
+	let methods;
+	const f = await fixture(() => methods?.invalidate());
+	methods = new LoginOptionsModel(f.model, { hasPasskeys: async () => false });
+	try {
+		assert.equal((await methods.read()).oidcLabel, null);
+		const complete = f.storage.complete.bind(f.storage);
+		f.storage.complete = async (...args) => {
+			await complete(...args);
+			throw new SqliteFailure('commit_unknown', null);
+		};
+		await assert.rejects(
+			f.finish(await f.start('binding'), 'binding'),
+			(error) => error.code === 'operation_unknown',
+		);
+		assert.equal((await methods.read()).oidcLabel, 'Pocket ID');
+		const c = await f.model.settings(f.token);
+		const configure = f.storage.configure.bind(f.storage);
+		f.storage.configure = async (...args) => {
+			await configure(...args);
+			throw new SqliteFailure('commit_unknown', null);
+		};
+		await assert.rejects(
+			f.model.save(f.token, {
+				revision: c.revision,
+				label: 'Updated SSO',
+				issuer: c.issuer,
+				clientId: c.clientId,
+				clientAuthentication: c.clientAuthentication,
+				secret: { action: 'clear' },
+			}),
+			(error) => error.code === 'operation_unknown',
+		);
+		assert.equal((await methods.read()).oidcLabel, 'Updated SSO');
+	} finally {
+		await methods.close();
 		await f.db.close();
 	}
 });

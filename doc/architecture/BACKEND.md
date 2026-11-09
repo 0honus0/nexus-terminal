@@ -267,11 +267,11 @@ Workspace复制失败message收窄为Shared RemoteFileErrorCode；归档失败�
 
 `registerAccess({sqlite,secrets,passkeys})` 装配 Factors，`createApp.configuration` 首次初始化持久 Preferences 的 passkeys 站点列表，每项为 `{origin,rpId}`，后续启动从持久安装快照装配，独立入口从 `NEXUS_PUBLIC_ORIGIN` 推断并允许 `NEXUS_PASSKEY_RP_ID` 收窄。RP 必须与公开来源 hostname 一致或是其合法父域；非 localhost 的 HTTP Origin 禁止启用。
 
-因素路由：`POST /api/v1/auth/login/2fa`、`POST /api/v1/auth/2fa/{setup,verify}`、`DELETE /api/v1/auth/2fa`、`POST /api/v1/auth/passkey/{registration-options,register,authentication-options,authenticate}`、`GET /api/v1/auth/passkey/has-configured`、`GET /api/v1/auth/user/passkeys`、`DELETE /api/v1/auth/user/passkeys/:credentialID`、`PUT /api/v1/auth/user/passkeys/:credentialID/name`。Auth HTTP 仅签 HttpOnly/SameSite/Lax 受控 cookie；FactorService 始终通过完整 SessionModel 验证管理权限。
+因素路由：`POST /api/v1/auth/login/2fa`、`POST /api/v1/auth/2fa/{setup,verify}`、`DELETE /api/v1/auth/2fa`、`POST /api/v1/auth/passkey/{registration-options,register,authentication-options,authenticate}`、`GET /api/v1/auth/user/passkeys`、`DELETE /api/v1/auth/user/passkeys/:credentialID`、`PUT /api/v1/auth/user/passkeys/:credentialID/name`。Auth HTTP 仅签 HttpOnly/SameSite/Lax 受控 cookie；FactorService 始终通过完整 SessionModel 验证管理权限。
 
 ### Access 安装与入口
 
-`createApp` 先读取 Preferences 持久快照；`AppOptions.configuration` 是仅首次创建时调用的初始化工厂。独立 `main.ts` 提供 `NEXUS_IP_WHITELIST`（逗号/换行分隔 CIDR）、`NEXUS_IP_BLACKLIST_ENABLED`（默认 true）、`NEXUS_MAX_LOGIN_ATTEMPTS`（默认 5）、`NEXUS_LOGIN_BAN_SECONDS`（默认 300）、`NEXUS_CAPTCHA_ENABLED/PROVIDER/SITE_KEY/SECRET_KEY`（默认关闭）并在开放监听前检查值。实际 Access HTTP：`GET /api/v1/auth/{needs-setup,status,captcha/config}`、`POST /api/v1/auth/{setup,login,logout}`、`PUT /api/v1/auth/password`；认证的黑名单 `GET/DELETE /api/v1/settings/ip-blacklist`；其它 Targets/Remote/Agent/System 路由经全局完整来源准入，未知路径同样检查来源；仅状态、登出、登录及管理员黑名单恢复保留白名单级入场（后者须 Access Service 验证 userId=1）。CAPTCHA 成功绑定公共 Origin hostname；安装时从公共 Origin 推导，未绑定拒绝启用。Preferences 在 Access 注册前提供经过校验的版本化快照；保存与生效版本分开，IP/监控经唯一安装回调热更新，CAPTCHA/站点重启激活，不使用 Platform 注册槽。SourceAdmissionService 在封禁查询返回后复查当前白名单和黑名单启用策略，旧异步准入不能穿透已收紧的来源策略。
+`createApp` 先读取 Preferences 持久快照；`AppOptions.configuration` 是仅首次创建时调用的初始化工厂。独立 `main.ts` 提供 `NEXUS_IP_WHITELIST`（逗号/换行分隔 CIDR）、`NEXUS_IP_BLACKLIST_ENABLED`（默认 true）、`NEXUS_MAX_LOGIN_ATTEMPTS`（默认 5）、`NEXUS_LOGIN_BAN_SECONDS`（默认 300）、`NEXUS_CAPTCHA_ENABLED/PROVIDER/SITE_KEY/SECRET_KEY`（默认关闭）并在开放监听前检查值。实际 Access HTTP：`GET /api/v1/auth/{needs-setup,status,login/options}`、`POST /api/v1/auth/{setup,login,logout}`、`PUT /api/v1/auth/password`；认证的黑名单 `GET/DELETE /api/v1/settings/ip-blacklist`；其它 Targets/Remote/Agent/System 路由经全局完整来源准入，未知路径同样检查来源；仅状态、登出、登录及管理员黑名单恢复保留白名单级入场（后者须 Access Service 验证 userId=1）。CAPTCHA 成功绑定公共 Origin hostname；安装时从公共 Origin 推导，未绑定拒绝启用。Preferences 在 Access 注册前提供经过校验的版本化快照；保存与生效版本分开，IP/监控经唯一安装回调热更新，CAPTCHA/站点重启激活，不使用 Platform 注册槽。SourceAdmissionService 在封禁查询返回后复查当前白名单和黑名单启用策略，旧异步准入不能穿透已收紧的来源策略。
 
 基础认证setup/login/password及TOTP二阶段登录路由显式引用Shared `ACCESS_AUTH_REQUEST_MAX_BYTES`，保持原16KiB传输预算；前端同一常量约束完整编码输入，不用字段长度替代路由预算。
 
@@ -975,15 +975,17 @@ HTTP → Service → Model → storage/Platform；SQLite Adapter 仅消费 stora
 
 ### 4. 类型与转换
 
-Shared access/oidc 归属设置、启动、完成与状态协议。Interface 逐字段映射应用类型；Model 转换存储事实、秘密及技术请求；库配置和令牌只留技术边界，不回传浏览器。
+Shared access/oidc归属设置、启动和完成协议，不含旧显示开关；公开登录选项归Shared access/http。Interface 逐字段映射应用类型；Model 转换存储事实、秘密及技术请求；库配置和令牌只留技术边界，不回传浏览器。
 
 ### 5. 入口与安装
+
+Bootstrap的`oidc-environment.ts`严格读取部署变量，经Access register安装契约逐字段转换为OidcInstallation；不把环境变量解析放入Service或SQLite。OidcModel在模块启动时应用可信部署配置，空库延后到管理员存在后的首次OIDC事实读取；同一owner共用初始化Promise，无定时轮询。缺少主体时只保留同一Issuer/Client已有绑定，绝不绑定首个未认证用户。相同配置不写入，变化在原configure事务内更新revision并撤销OIDC会话/流程；未知初始化提交保留拒绝，不自动重放。本次无schema变更。
 
 Access register 安装 OIDC；认证入口含公开提供方状态、登录启动/完成，管理入口含设置读取/保存、绑定启动/完成和解绑。固定同源 `/login/oidc/callback` 返回 SPA，立即移除敏感查询后同源 POST，保持现有 CSRF/Origin 检查。
 
 ### 6. 数据、事务与并发
 
-追加迁移 v4 建配置、流程和 OIDC 会话归属表；不改已执行迁移。配置 CAS、会话及密码版本、来源封禁、绑定、到期在实际提交事务复查。独立 HttpOnly Lax Cookie 绑定浏览器；PKCE、nonce、state、配置版本及固定回调绑定流程，回调先以 consumed 标记单次认领，事务最终提交前仍须存在且有效；退出/新流程能删除已经认领的流程，阻止迟到签发。变更配置/解绑清理流程并撤销关联 OIDC 会话，普通登录不受影响。秘密使用现有 SecretBox；认证表排除快照导入。
+迁移v4建配置、流程和OIDC会话归属表；v66删除独立enabled列，已验证绑定直接决定入口显示，配置/秘密/会话保留；不改已执行迁移。配置 CAS、会话及密码版本、来源封禁、绑定、到期在实际提交事务复查。独立 HttpOnly Lax Cookie 绑定浏览器；PKCE、nonce、state、配置版本及固定回调绑定流程，回调先以 consumed 标记单次认领，事务最终提交前仍须存在且有效；退出/新流程能删除已经认领的流程，阻止迟到签发。变更配置/解绑清理流程并撤销关联 OIDC 会话，普通登录不受影响。秘密使用现有 SecretBox；认证表排除快照导入。
 
 ### 7. 生命周期与失败
 
@@ -992,6 +994,17 @@ Access register 安装 OIDC；认证入口含公开提供方状态、登录启�
 ### 8. 当前能力与验收
 
 Passkey 名称、登录布局与 OIDC 已实现；协议、存储与浏览器专项通过，具体范围以 testing/HISTORY 为准。验证真实签名、PKCE、nonce/state、浏览器绑定、未绑定身份拒绝、过期/重放/配置变更、撤销及迁移，不用单独 mock 库验证替代协议链。
+
+## 常驻缓存与公开登录选项
+
+1. **职责与范围**：Platform的`cache/resident-cache.ts`封装已维护的`lru-cache`原生异步fetch/去重/删除取消，每个实例持有一份只读快照，不提供全局无限键注册表。Access的`login-options/model`拥有公开登录方式快照及失效政策；认证、会话和权限仍读取当前存储，不使用展示缓存授权。
+2. **子功能与目录**：ResidentCache提供read、invalidate、quiesce、close。LoginOptionsModel组合OidcModel公开名称与FactorModel注册状态；验证码公开配置仍从CaptchaService的启动生效内存投影。单份快照的一个槽位是对象语义，不是业务数量限制；无需TTL、轮询或新定时器。
+3. **依赖方向**：HTTP→LoginOptionsModel→同模块OIDC/Factors Model；后者仍经原storage/Adapter读取。通用缓存不依赖Access、SQL、Shared或Bootstrap。register装配变化回调，实际写入owner发布失效，不由HTTP路由维护缓存。
+4. **类型与转换**：内部LoginMethods归login-options/model，Model对缓存结果逐字段复制，防止消费者改写保留值；HTTP将其与验证码配置逐字段映射为Shared AccessLoginOptionsResponse。缓存只保留名称/null与布尔状态，不保留会话、密钥、credential ID或认证结果。
+5. **入口与安装**：公开GET `/api/v1/auth/login/options`一次返回验证码、OIDC与Passkey展示信息，旧独立OIDC provider、Passkey discovery和CAPTCHA端点移除。RegisteredAccess加入模块quiesce/close编排，初始化失败、正常退出、快照恢复替换均关闭旧实例。
+6. **数据、事务与并发**：首次并发读取共享同一load，false/null也保留；OIDC公开读取使用单条关联SELECT，Passkey使用既有存在性查询。管理员创建、OIDC部署配置变化/保存/解绑/绑定完成，以及Passkey注册/删除在持久操作结束后使快照失效；提交未知同样失效，下次只读确认，不重放写入。改名不影响注册存在性，无额外失效。后续新增影响入口的政策写入必须接入同一通知；直接绕过应用写SQL不属于热更新接口。
+7. **生命周期与失败**：失效清除值并取消旧fetch，generation阻止旧成功/失败回填；原读者加入当前代。当前读取失败不缓存、不返回旧值，下次访问可恢复。请求不把自身signal传给共享fetch，避免一个访问者中断其他人；模块关停停止新读、清空快照并排空仍在运行的底层读取，close共享Promise。恢复重建新缓存，不跨实例/数据库保留值。
+8. **当前能力与验收**：OIDC绑定即显示，Passkey注册即显示、最后一个删除后隐藏，相关UI行为已授权；其余登录布局保持。通用缓存并发/失效/失败/关停、真实OIDC写入/未知回执、真实WebAuthn注册/删除与HTTP缓存命中覆盖范围及实际耗时见testing。没有同负载端到端测量时不宣称登录QPS提升比例。
 
 ### Agent 命令输出存储
 

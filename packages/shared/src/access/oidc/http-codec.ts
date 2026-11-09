@@ -4,7 +4,6 @@ import type { OidcClientAuthentication } from './values.js';
 import type {
 	OidcSettingsRequest,
 	OidcSettingsResponse,
-	OidcProviderResponse,
 	OidcBindingRequest,
 	OidcStartRequest,
 	OidcStartResponse,
@@ -56,7 +55,7 @@ function revision(value: unknown): string | null {
 export function readOidcSettingsRequest(value: unknown): OidcSettingsRequest {
 	const row = record(
 		value,
-		['revision', 'enabled', 'label', 'issuer', 'clientId', 'clientAuthentication', 'secret', 'password'],
+		['revision', 'label', 'issuer', 'clientId', 'clientAuthentication', 'secret', 'password'],
 		ACCESS_AUTH_REQUEST_MAX_BYTES,
 	);
 	if (row.secret === null || typeof row.secret !== 'object' || !('action' in row.secret)) {
@@ -68,7 +67,6 @@ export function readOidcSettingsRequest(value: unknown): OidcSettingsRequest {
 	}
 	return {
 		revision: revision(row.revision),
-		enabled: bool(row.enabled),
 		label: string(row.label).trim(),
 		issuer: string(row.issuer).trim(),
 		clientId: string(row.clientId),
@@ -84,23 +82,12 @@ export function readOidcSettingsRequest(value: unknown): OidcSettingsRequest {
 export function readOidcSettingsResponse(value: unknown): OidcSettingsResponse {
 	const row = record(
 		value,
-		[
-			'revision',
-			'enabled',
-			'label',
-			'issuer',
-			'clientId',
-			'clientAuthentication',
-			'hasSecret',
-			'bound',
-			'callbackUrl',
-		],
+		['revision', 'label', 'issuer', 'clientId', 'clientAuthentication', 'hasSecret', 'bound', 'callbackUrl'],
 		ACCESS_AUTH_RESPONSE_MAX_BYTES,
 	);
 	const version = revision(row.revision);
 	return {
 		revision: version,
-		enabled: bool(row.enabled),
 		label: string(row.label),
 		issuer: version === null && row.issuer === '' ? '' : string(row.issuer),
 		clientId: version === null && row.clientId === '' ? '' : string(row.clientId),
@@ -118,14 +105,6 @@ export function readOidcBindingRequest(value: unknown): OidcBindingRequest {
 		throw new InvalidPayload();
 	}
 	return { revision: version, password: credential(row.password, ACCESS_PASSWORD_MAX_BYTES) };
-}
-
-export function readOidcProviderResponse(value: unknown): OidcProviderResponse {
-	const row = record(value, ['provider'], ACCESS_AUTH_RESPONSE_MAX_BYTES);
-	if (row.provider === null) {
-		return { provider: null };
-	}
-	return { provider: { label: string(record(row.provider, ['label']).label) } };
 }
 
 export function readOidcStartRequest(value: unknown): OidcStartRequest {

@@ -23,7 +23,28 @@ import type {
 	OidcCallback,
 	OidcCompleted,
 	OidcStart,
+	OidcInstallation,
 } from './oidc-types.js';
+
+function validateIssuer(value: string): void {
+	let issuer: URL;
+	try {
+		issuer = new URL(value);
+	} catch {
+		throw new AccessFailure('invalid_input');
+	}
+	if (
+		(issuer.href !== value && issuer.href !== value + '/') ||
+		issuer.search ||
+		issuer.hash ||
+		issuer.username ||
+		issuer.password ||
+		(issuer.protocol !== 'https:' &&
+			!(issuer.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(issuer.hostname)))
+	) {
+		throw new AccessFailure('invalid_input');
+	}
+}
 
 function fromFacts(facts: OidcStorageFacts): OidcFacts {
 	const c = facts.configuration;
@@ -34,7 +55,6 @@ function fromFacts(facts: OidcStorageFacts): OidcFacts {
 				: {
 						revision: c.revision,
 						userId: c.userId,
-						enabled: c.enabled,
 						label: c.label,
 						issuer: c.issuer,
 						clientId: c.clientId,
@@ -59,7 +79,6 @@ function toConfiguration(c: OidcConfiguration): OidcConfigurationRecord {
 	return {
 		revision: c.revision,
 		userId: c.userId,
-		enabled: c.enabled,
 		label: c.label,
 		issuer: c.issuer,
 		clientId: c.clientId,
@@ -95,19 +114,97 @@ function admitFlow(facts: OidcFacts, flow: OidcFlow, enforceBlock: boolean, sign
 		if (c.subject !== null) {
 			throw new AccessFailure('conflict');
 		}
-	} else if (!c.enabled || c.subject === null || facts.account.passkeyRequired) {
+	} else if (c.subject === null || facts.account.passkeyRequired) {
 		throw new AccessFailure('invalid_credentials');
 	}
 	return c;
 }
 
 export class OidcModel {
+	private initialization: Promise<boolean> | null = null;
+
 	constructor(
 		private readonly storage: OidcStorage,
 		private readonly tokens: SessionTokens,
 		private readonly secrets: SecretBox | null,
 		private readonly protocol: OidcProtocol,
-	) {}
+		private readonly installation: OidcInstallation | null = null,
+		private readonly configurationChanged: () => void = () => {},
+	) {
+		if (installation !== null) {
+			validateIssuer(installation.issuer);
+			this.secretBox();
+			if ((installation.clientAuthentication === 'none') !== (installation.clientSecret === null)) {
+				throw new AccessFailure('invalid_input');
+			}
+		}
+	}
+
+	async initialize(): Promise<void> {
+		if (this.installation === null) {
+			return;
+		}
+		const task = (this.initialization ??= this.install());
+		// An empty instance is retried after administrator setup. Failed/unknown writes
+		// keep their rejection for this owner instead of silently replaying the write.
+		if (!(await task) && this.initialization === task) {
+			this.initialization = null;
+		}
+	}
+
+	private async install(): Promise<boolean> {
+		const input = this.installation;
+		if (input === null) {
+			return true;
+		}
+		let installed = false;
+		let updating = false;
+		try {
+			await accessStorageBoundary(() =>
+				this.storage.configure(null, (raw) => {
+					const facts = fromFacts(raw);
+					if (facts.account === null) {
+						return null;
+					}
+					installed = true;
+					const previous = facts.configuration;
+					const sameIdentity = previous?.issuer === input.issuer && previous.clientId === input.clientId;
+					const subject = input.subject ?? (sameIdentity ? previous.subject : null);
+					const previousSecret = previous?.encryptedSecret
+						? this.secretBox().decrypt(previous.encryptedSecret, 'access:oidc:client-secret')
+						: null;
+					if (
+						sameIdentity &&
+						previous.label === input.label &&
+						previous.clientAuthentication === input.clientAuthentication &&
+						previousSecret === input.clientSecret &&
+						previous.subject === subject
+					) {
+						return null;
+					}
+					updating = true;
+					return toConfiguration({
+						revision: this.tokens.issue(),
+						userId: facts.account.id,
+						label: input.label,
+						issuer: input.issuer,
+						clientId: input.clientId,
+						clientAuthentication: input.clientAuthentication,
+						encryptedSecret:
+							input.clientSecret === null
+								? null
+								: this.secretBox().encrypt(input.clientSecret, 'access:oidc:client-secret'),
+						subject,
+					});
+				}),
+			);
+		} finally {
+			if (updating) {
+				this.configurationChanged();
+			}
+		}
+		return installed;
+	}
 
 	private secretBox(): SecretBox {
 		if (this.secrets === null) {
@@ -121,6 +218,7 @@ export class OidcModel {
 	}
 
 	private async facts(tokenDigest: string | null, source = ''): Promise<OidcFacts> {
+		await this.initialize();
 		return fromFacts(await accessStorageBoundary(() => this.storage.read(tokenDigest, source)));
 	}
 
@@ -131,7 +229,6 @@ export class OidcModel {
 		return c === null
 			? {
 					revision: null,
-					enabled: false,
 					label: 'Pocket ID',
 					issuer: '',
 					clientId: '',
@@ -141,7 +238,6 @@ export class OidcModel {
 				}
 			: {
 					revision: c.revision,
-					enabled: c.enabled,
 					label: c.label,
 					issuer: c.issuer,
 					clientId: c.clientId,
@@ -152,98 +248,87 @@ export class OidcModel {
 	}
 
 	async provider(): Promise<string | null> {
-		const facts = await this.facts(null);
-		const c = facts.configuration;
-		return c?.enabled && c.subject !== null && facts.account !== null && !facts.account.passkeyRequired
-			? c.label
-			: null;
+		await this.initialize();
+		const provider = await accessStorageBoundary(() => this.storage.readProvider());
+		return provider === null ? null : provider.label;
 	}
 
 	async save(token: string, input: OidcSettingsChange): Promise<void> {
-		let issuer: URL;
-		try {
-			issuer = new URL(input.issuer);
-		} catch {
-			throw new AccessFailure('invalid_input');
-		}
-		if (issuer.href !== input.issuer && issuer.href !== input.issuer + '/') {
-			throw new AccessFailure('invalid_input');
-		}
-		if (
-			issuer.search ||
-			issuer.hash ||
-			issuer.username ||
-			issuer.password ||
-			(issuer.protocol !== 'https:' &&
-				!(issuer.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(issuer.hostname)))
-		) {
-			throw new AccessFailure('invalid_input');
-		}
+		await this.initialize();
+		validateIssuer(input.issuer);
 		const cipher =
 			input.secret.action === 'replace'
 				? this.secretBox().encrypt(input.secret.value, 'access:oidc:client-secret')
 				: null;
-		await accessStorageBoundary(() =>
-			this.storage.configure(this.tokens.digest(token), (raw) => {
-				const facts = fromFacts(raw);
-				const userId = requireSession(facts);
-				const previous = facts.configuration;
-				if ((previous?.revision ?? null) !== input.revision) {
-					throw new AccessFailure('conflict');
-				}
-				if (
-					previous !== null &&
-					(previous.issuer !== input.issuer || previous.clientId !== input.clientId) &&
-					input.secret.action === 'keep' &&
-					previous.encryptedSecret !== null
-				) {
-					throw new AccessFailure('invalid_input');
-				}
-				const encryptedSecret = input.secret.action === 'keep' ? (previous?.encryptedSecret ?? null) : cipher;
-				if (input.clientAuthentication !== 'none' && encryptedSecret === null) {
-					throw new AccessFailure('invalid_input');
-				}
-				if (input.clientAuthentication === 'none' && encryptedSecret !== null) {
-					throw new AccessFailure('invalid_input');
-				}
-				const sameIdentity = previous?.issuer === input.issuer && previous.clientId === input.clientId;
-				return toConfiguration({
-					revision: this.tokens.issue(),
-					userId,
-					enabled: input.enabled,
-					label: input.label,
-					issuer: input.issuer,
-					clientId: input.clientId,
-					clientAuthentication: input.clientAuthentication,
-					encryptedSecret,
-					subject: sameIdentity ? previous.subject : null,
-				});
-			}),
-		);
+		try {
+			await accessStorageBoundary(() =>
+				this.storage.configure(this.tokens.digest(token), (raw) => {
+					const facts = fromFacts(raw);
+					const userId = requireSession(facts);
+					const previous = facts.configuration;
+					if ((previous?.revision ?? null) !== input.revision) {
+						throw new AccessFailure('conflict');
+					}
+					if (
+						previous !== null &&
+						(previous.issuer !== input.issuer || previous.clientId !== input.clientId) &&
+						input.secret.action === 'keep' &&
+						previous.encryptedSecret !== null
+					) {
+						throw new AccessFailure('invalid_input');
+					}
+					const encryptedSecret =
+						input.secret.action === 'keep' ? (previous?.encryptedSecret ?? null) : cipher;
+					if (input.clientAuthentication !== 'none' && encryptedSecret === null) {
+						throw new AccessFailure('invalid_input');
+					}
+					if (input.clientAuthentication === 'none' && encryptedSecret !== null) {
+						throw new AccessFailure('invalid_input');
+					}
+					const sameIdentity = previous?.issuer === input.issuer && previous.clientId === input.clientId;
+					return toConfiguration({
+						revision: this.tokens.issue(),
+						userId,
+						label: input.label,
+						issuer: input.issuer,
+						clientId: input.clientId,
+						clientAuthentication: input.clientAuthentication,
+						encryptedSecret,
+						subject: sameIdentity ? previous.subject : null,
+					});
+				}),
+			);
+		} finally {
+			this.configurationChanged();
+		}
 	}
 
 	async unbind(token: string, revision: string): Promise<void> {
-		await accessStorageBoundary(() =>
-			this.storage.configure(this.tokens.digest(token), (raw) => {
-				const facts = fromFacts(raw);
-				requireSession(facts);
-				const c = facts.configuration;
-				if (!c || c.revision !== revision) {
-					throw new AccessFailure('conflict');
-				}
-				return toConfiguration({
-					revision: this.tokens.issue(),
-					userId: c.userId,
-					enabled: c.enabled,
-					label: c.label,
-					issuer: c.issuer,
-					clientId: c.clientId,
-					clientAuthentication: c.clientAuthentication,
-					encryptedSecret: c.encryptedSecret,
-					subject: null,
-				});
-			}),
-		);
+		await this.initialize();
+		try {
+			await accessStorageBoundary(() =>
+				this.storage.configure(this.tokens.digest(token), (raw) => {
+					const facts = fromFacts(raw);
+					requireSession(facts);
+					const c = facts.configuration;
+					if (!c || c.revision !== revision) {
+						throw new AccessFailure('conflict');
+					}
+					return toConfiguration({
+						revision: this.tokens.issue(),
+						userId: c.userId,
+						label: c.label,
+						issuer: c.issuer,
+						clientId: c.clientId,
+						clientAuthentication: c.clientAuthentication,
+						encryptedSecret: c.encryptedSecret,
+						subject: null,
+					});
+				}),
+			);
+		} finally {
+			this.configurationChanged();
+		}
 	}
 
 	private toClient(c: OidcConfiguration): OidcClientConfiguration {
@@ -400,7 +485,9 @@ export class OidcModel {
 						) {
 							throw new AccessFailure('invalid_credentials');
 						}
-						return { subject: identity.subject, purpose: flow.purpose };
+						return flow.purpose === 'binding'
+							? { purpose: 'binding', subject: identity.subject, revision: this.tokens.issue() }
+							: { purpose: 'login' };
 					},
 				),
 			);
@@ -416,6 +503,10 @@ export class OidcModel {
 				}
 			}
 			throw error;
+		} finally {
+			if (flow.purpose === 'binding') {
+				this.configurationChanged();
+			}
 		}
 
 		return flow.purpose === 'binding'

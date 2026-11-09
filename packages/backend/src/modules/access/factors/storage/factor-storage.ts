@@ -125,7 +125,7 @@ export interface FactorStorage {
 
 	listPasskeys(accountId: number): Promise<PasskeyStorageRecord[]>;
 	getPasskey(credentialId: string): Promise<PasskeyStorageRecord | null>;
-	hasPasskeys(accountId: number | null): Promise<boolean>;
+	hasPasskeys(): Promise<boolean>;
 	completeRegistration(command: {
 		challengeDigest: string;
 		sessionDigest: string;

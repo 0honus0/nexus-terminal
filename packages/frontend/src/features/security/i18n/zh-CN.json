@@ -163,7 +163,6 @@
     "oidc": {
       "title": "单点登录（OIDC）",
       "description": "连接 Pocket ID 或其他 OpenID Connect 提供方，绑定当前账号。",
-      "enabled": "在登录页显示",
       "label": "提供方名称",
       "authentication": "客户端认证",
       "publicClient": "公共客户端（PKCE）",

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { computed } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiCheckbox, UiFormField, UiInput, UiSelect, UiSettingsGroup } from '@/foundation/ui';
+	import { UiButton, UiFormField, UiInput, UiSelect, UiSettingsGroup } from '@/foundation/ui';
 	import { useSettingsReloadSource } from '@/shared/feedback/public';
 	import { useOidcSettings } from '../composables/use-oidc-settings';
 
@@ -39,11 +39,6 @@
 		<form v-if="settings" id="oidc-settings-form" class="space-y-4" @submit.prevent="save">
 			<fieldset class="space-y-4 min-w-0" :disabled="busy || needsRefresh">
 				<p class="text-sm text-text-secondary">{{ t('settings.oidc.description') }}</p>
-				<label class="flex items-center gap-2 text-sm"
-					><UiCheckbox v-model="form.enabled" :disabled="busy || needsRefresh" />{{
-						t('settings.oidc.enabled')
-					}}</label
-				>
 				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 					<UiFormField :label="t('settings.oidc.label')" for-id="oidc-label"
 						><UiInput id="oidc-label" v-model="form.label" required

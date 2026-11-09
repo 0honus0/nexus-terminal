@@ -505,12 +505,8 @@ export class SqliteFactorStorage implements FactorStorage {
 		return record ? readCredential(record) : null;
 	}
 
-	async hasPasskeys(accountId: number | null): Promise<boolean> {
-		const query =
-			accountId === null
-				? 'SELECT 1 AS ok FROM access_passkeys LIMIT 1'
-				: 'SELECT 1 AS ok FROM access_passkeys WHERE user_id=? LIMIT 1';
-		return (await this.db.one(query, accountId === null ? [] : [accountId])) !== null;
+	async hasPasskeys(): Promise<boolean> {
+		return (await this.db.one('SELECT 1 AS ok FROM access_passkeys LIMIT 1')) !== null;
 	}
 
 	completeRegistration(command: {

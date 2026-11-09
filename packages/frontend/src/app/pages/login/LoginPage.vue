@@ -20,7 +20,6 @@
 	const captchaChallenge = ref<{ reset: () => void } | null>(null);
 	const passkeyError = ref('');
 	const oidc = createOidcApi();
-	const oidcLabel = ref<string | null>(null);
 	const oidcLoading = ref(false);
 	const oidcController = new AbortController();
 	let disposed = false;
@@ -29,18 +28,6 @@
 		oidcController.abort();
 	});
 	onMounted(() => security.refresh());
-	onMounted(async () => {
-		try {
-			const label = await oidc.provider(oidcController.signal);
-			if (!disposed) {
-				oidcLabel.value = label;
-			}
-		} catch (cause) {
-			if (!disposed) {
-				passkeyError.value = t(authErrorKey(cause));
-			}
-		}
-	});
 
 	async function loginWithOidc(rememberMe: boolean): Promise<void> {
 		if (oidcLoading.value || disposed) {
@@ -96,7 +83,8 @@
 		:captcha-token="captchaToken"
 		:captcha-status="security.captchaStatus.value"
 		:passkey-loading="security.loading.value"
-		:oidc-label="oidcLabel"
+		:has-passkeys="security.hasPasskeys.value"
+		:oidc-label="security.oidcLabel.value"
 		:oidc-loading="oidcLoading"
 		@oidc="loginWithOidc"
 		@passkey="loginWithPasskey"

@@ -13,7 +13,6 @@ import {
 	type AccessPasskeySummary,
 	type AccessPasskeyLoginResponse,
 	type AccessPasskeyVerifiedResponse,
-	type AccessPasskeyHasConfiguredResponse,
 	type AccessPasskeyRemoveResponse,
 	type AccessPasskeyRenameResponse,
 } from './http.js';
@@ -275,14 +274,6 @@ export function readPasskeyVerified(value: unknown): AccessPasskeyVerifiedRespon
 		throw new InvalidFactorPayload();
 	}
 	return { verified: row.verified };
-}
-
-export function readPasskeyConfigured(value: unknown): AccessPasskeyHasConfiguredResponse {
-	const row = record(value, ['hasPasskeys']);
-	if (typeof row.hasPasskeys !== 'boolean') {
-		throw new InvalidFactorPayload();
-	}
-	return { hasPasskeys: row.hasPasskeys };
 }
 
 export function readPasskeyRemoved(value: unknown): AccessPasskeyRemoveResponse {

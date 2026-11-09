@@ -27,7 +27,6 @@
 	import { useSystemOverview } from '@/features/system-overview/public';
 	import { usePreferences, useMonitoringConfiguration } from '@/features/preferences/public';
 	import { remoteDesktopLauncher } from '@/features/remote-desktop/public';
-	import { useSuspendedSessions } from '@/features/ssh-suspend/public';
 
 	const { t, locale } = useI18n();
 	const router = useRouter();
@@ -39,7 +38,6 @@
 	const effectiveMonitoring = computed(() =>
 		monitoring.needsRefresh.value ? null : (monitoring.snapshot.value?.effectiveMonitoring ?? null),
 	);
-	const suspended = useSuspendedSessions();
 	const search = ref('');
 	type DashboardSort = 'lastConnected' | 'name' | 'type' | 'updated' | 'created';
 	type DashboardSortOrder = 'asc' | 'desc';
@@ -161,18 +159,6 @@
 		writeStoredValue(dashboardSectionStorage, next);
 	};
 
-	const activeSuspendedSessions = computed(() =>
-		suspended.sessions.value
-			.filter((session) => session.status === 'active')
-			.sort((a, b) => Date.parse(b.suspendedAt) - Date.parse(a.suspendedAt)),
-	);
-	const suspendedSessionsTitle = computed(() =>
-		activeSuspendedSessions.value
-			.slice(0, 3)
-			.map((session) => session.customName || session.connectionName)
-			.join(' · '),
-	);
-
 	const connect = (item: ConnectionSummary) => {
 		if (item.type === 'RDP' || item.type === 'VNC') {
 			remoteDesktopLauncher.open({ id: item.id, name: item.name || item.host, type: item.type });
@@ -180,8 +166,6 @@
 		}
 		return router.push({ name: 'Workspace', query: { connectionId: String(item.id) } });
 	};
-
-	const openSuspendedSessions = () => router.push({ name: 'Workspace', query: { openSuspended: '1' } });
 
 	const relativeTimeFormatter = computed(() => new Intl.RelativeTimeFormat(locale.value, { numeric: 'auto' }));
 	const refreshTimeFormatter = computed(
@@ -526,23 +510,6 @@
 							}}</span>
 							<span class="h-4 w-px bg-border" aria-hidden="true"></span>
 							<h1 class="truncate text-xl font-semibold tracking-tight">{{ t('nav.dashboard') }}</h1>
-						</div>
-						<div v-if="activeSuspendedSessions.length" class="mt-3 hidden lg:flex">
-							<UiButton
-								density="compact"
-								appearance="soft"
-								tone="neutral"
-								:title="suspendedSessionsTitle || t('dashboard.suspendedSessions')"
-								@click="openSuspendedSessions"
-							>
-								<template #leading
-									><i class="fas fa-pause-circle text-[10px]" aria-hidden="true"></i
-								></template>
-								<span>{{ t('dashboard.suspendedSessions') }}</span>
-								<UiBadge class="tabular-nums" tone="primary" appearance="ghost" density="compact">{{
-									activeSuspendedSessions.length
-								}}</UiBadge>
-							</UiButton>
 						</div>
 					</div>
 

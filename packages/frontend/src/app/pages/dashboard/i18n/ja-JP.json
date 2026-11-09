@@ -36,7 +36,6 @@
     "workspaceLabel": "リモートワークスペース",
     "configured": "設定済み",
     "remoteDesktop": "リモートデスクトップ",
-    "suspendedSessions": "中断セッション",
     "protocolDistribution": "接続タイプ",
     "tagOverview": "タグ概要",
     "noTags": "タグはありません",

@@ -8,7 +8,9 @@ import type {
 	OidcConfigurationRecord,
 	OidcFlowRecord,
 	OidcStorageFacts,
+	OidcProviderRecord,
 	OidcCompletionWrite,
+	OidcCompletionDecision,
 } from '../../storage/oidc-storage.js';
 
 function string(value: unknown): string {
@@ -44,7 +46,6 @@ function readConfiguration(row: Record<string, unknown>): OidcConfigurationRecor
 	return {
 		revision: string(row.revision),
 		userId: number(row.user_id),
-		enabled: boolean(row.enabled),
 		label: string(row.label),
 		issuer: string(row.issuer),
 		clientId: string(row.client_id),
@@ -85,9 +86,11 @@ export class SqliteOidcStorage implements OidcStorage {
 		const configuration = row === null ? null : readConfiguration(row);
 		const session =
 			sessionDigest === null ? null : await this.sessions.validateInTransaction(tx, sessionDigest, Date.now);
-		const accountRow = await tx.one('SELECT * FROM access_accounts WHERE id=?', [
-			configuration?.userId ?? session?.userId ?? 0,
-		]);
+		const userId = configuration?.userId ?? session?.userId;
+		const accountRow =
+			userId === undefined
+				? await tx.one('SELECT * FROM access_accounts ORDER BY id LIMIT 1')
+				: await tx.one('SELECT * FROM access_accounts WHERE id=?', [userId]);
 		const account = accountRow === null ? null : readAccountRow(accountRow);
 		const blocked = await tx.one('SELECT blocked_until FROM access_login_attempts WHERE source=?', [source]);
 		return {
@@ -105,23 +108,35 @@ export class SqliteOidcStorage implements OidcStorage {
 		};
 	}
 
+	async readProvider(): Promise<OidcProviderRecord | null> {
+		const row = await this.db.one(
+			'SELECT c.label FROM access_oidc_configuration c JOIN access_accounts a ON a.id=c.user_id WHERE c.id=1 AND c.subject IS NOT NULL AND a.passkey_required=0',
+		);
+		return row === null ? null : { label: string(row.label) };
+	}
+
 	read(sessionDigest: string | null, source: string): Promise<OidcStorageFacts> {
 		return this.db.transaction((tx) => this.facts(tx, sessionDigest, source));
 	}
 
-	configure(sessionDigest: string, decide: (facts: OidcStorageFacts) => OidcConfigurationRecord): Promise<void> {
+	configure(
+		sessionDigest: string | null,
+		decide: (facts: OidcStorageFacts) => OidcConfigurationRecord | null,
+	): Promise<void> {
 		return this.db.transaction(async (tx) => {
 			const next = decide(await this.facts(tx, sessionDigest, ''));
+			if (next === null) {
+				return;
+			}
 			await tx.run(
 				'DELETE FROM access_sessions WHERE token_digest IN (SELECT token_digest FROM access_oidc_sessions)',
 			);
 			await tx.run('DELETE FROM access_oidc_flows');
 			await tx.run(
-				`INSERT INTO access_oidc_configuration(id,revision,user_id,enabled,label,issuer,client_id,client_authentication,secret_cipher,subject) VALUES(1,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,user_id=excluded.user_id,enabled=excluded.enabled,label=excluded.label,issuer=excluded.issuer,client_id=excluded.client_id,client_authentication=excluded.client_authentication,secret_cipher=excluded.secret_cipher,subject=excluded.subject`,
+				`INSERT INTO access_oidc_configuration(id,revision,user_id,label,issuer,client_id,client_authentication,secret_cipher,subject) VALUES(1,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,user_id=excluded.user_id,label=excluded.label,issuer=excluded.issuer,client_id=excluded.client_id,client_authentication=excluded.client_authentication,secret_cipher=excluded.secret_cipher,subject=excluded.subject`,
 				[
 					next.revision,
 					next.userId,
-					next.enabled ? 1 : 0,
 					next.label,
 					next.issuer,
 					next.clientId,
@@ -177,10 +192,7 @@ export class SqliteOidcStorage implements OidcStorage {
 
 	complete(
 		command: OidcCompletionWrite,
-		decide: (
-			facts: OidcStorageFacts,
-			claimedExpiresAt: number | null,
-		) => { subject: string; purpose: 'login' | 'binding' },
+		decide: (facts: OidcStorageFacts, claimedExpiresAt: number | null) => OidcCompletionDecision,
 	): Promise<void> {
 		return this.db.transaction(async (tx) => {
 			const facts = await this.facts(tx, command.sessionDigest, command.source);
@@ -194,7 +206,10 @@ export class SqliteOidcStorage implements OidcStorage {
 				throw new Error('OIDC admission failed to require account');
 			}
 			if (result.purpose === 'binding') {
-				await tx.run('UPDATE access_oidc_configuration SET subject=? WHERE id=1', [result.subject]);
+				await tx.run('UPDATE access_oidc_configuration SET subject=?,revision=? WHERE id=1', [
+					result.subject,
+					result.revision,
+				]);
 				await tx.run('DELETE FROM access_oidc_flows');
 				return;
 			}

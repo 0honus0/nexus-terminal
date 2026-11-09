@@ -4,6 +4,39 @@
 
 已退役 Runner/Guacamole 的证据仅用于追溯，不能证明当前 SSH/CDP/浏览器 SDK 的行为。静态、受控 fixture、真实服务与真机结论分别判断。
 
+## 登录入口与常驻缓存验收（2026-11-09）
+
+基于`98434f16`后的本地工作区；未提交、推送、发布或部署，不替换上方正式远程基线。Node26.13.0、pnpm12.16.1；证据归`/home/honus/nexus-task-artifacts/workflow-consolidation-20261109/oidc-binding-login-options-20261109`，首次失败、数据库和报告保留至用户通知。
+
+| 审核表         | 结论                                                                                                                                                                                                                        |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应       | 删除OIDC独立显示开关，绑定显示、解绑隐藏；Passkey注册显示、最后删除隐藏；无可用方式隐藏分组。登录页只读取一次聚合公开选项，其余布局/CSS保持。USAGE/API/部署说明同步。                                                       |
+| 职责归属       | Platform ResidentCache复用lru-cache原生异步fetch去重与取消；LoginOptionsModel持展示快照和失效政策，实际写入Model通知；SQL仍归Adapter。正常关闭、初始化失败和恢复替换均纳入原模块生命周期。                                  |
+| 类型与边界     | LoginMethods、存储公开名称记录与Shared聚合响应分别由真实owner持有，边界逐字段投影；双端、严格codec、设置/三语、协议与浏览器用例同步。迁移66独立删除enabled，历史迁移保持原样，无旧协议兼容。                                |
+| 生命周期与证据 | 缓存命中不重复读取OIDC/Passkey元数据；并发冷读合并，false/null/undefined保留。失效拒绝迟到回填；失败可重读；未知提交失效但不重放；关闭拒绝新读并排空当前和已失效loader，重入共享同一Promise。实际认证与来源准入仍实时校验。 |
+
+- `targeted-tests-json-fix.log`：Vitest10文件52项全部通过，总14.83秒；覆盖真实签名OIDC三种认证、设置组件真实HTTP绑定/保存/解绑、10并发缓存命中、空库延迟部署初始化、未知提交、公开codec及正式LoginPage单次请求。新增关闭重入和失效loader排空后，`cache-closure.log`9项通过，case合计10毫秒、进程132毫秒；相对52项增加1个独立case，不将重跑相加冒充覆盖数。缓存测试全部使用Promise屏障，无真实时间等待。
+- `native-tests-json-fix.log`：8项通过，Node总3.10秒。实际WebAuthn none-attestation验证4种AAGUID命名、注册后显示、删除一个但仍有另一个时保持显示、最后删除后隐藏；两个既有Agent迁移专项继续验证数据保留、重启与回滚，不再硬编码整个应用最终迁移版本。
+- `check-complete.log`、Backend `backend-build-json-fix.log`、Frontend `frontend-build-complete.log`及Shared构建通过，全仓`format:all:check`与`git diff --check`通过。本轮不启动Docker、不触发正式远程CI，不声称浏览器或真实Pocket ID已验。
+- 首轮45项中1项因SQLite无原型行与普通对象的深比较夹具失败，已改为同类查询结果比较。后续定向52项首次发现聚合接口自定义serializer未明确JSON类型，已修正并保留成功响应/前端读取断言；两条新增组件用例补齐jsdom缺少的matchMedia。首次原生日志`native-tests-complete.log`中原认证专项的Chromium子场景因本机未安装匹配headless shell失败，其余10个子场景通过；Passkey命名项当时亦被上述响应类型问题阻断，最终独立回归已通过。环境首次调用`/usr/bin/time`不存在，改用shell time记录，不调整测试断言。
+
+正式浏览器用例已同步OIDC绑定即显示、解绑隐藏、Passkey最后删除隐藏、旧端点不再请求，以及无额外登录方式时的既有主题/六视口几何断言；尚未执行。真机、外部提供方、线上负载及完整恢复故障组合继续保留于PLAN，不由本轮静态或模块回归替代。缓存只承诺上述元数据命中不查库，不承诺整页无SQL或未经测量的QPS提升比例。开源选型、Gitea页面参考与原始维护核对文件同目录保留。
+
+## OIDC Compose环境变量验收（2026-11-09）
+
+本轮在`98434f16`后的本地工作区实现；未提交、推送或部署，不改变现有远程基线。Node26.13.0、pnpm12.16.1；证据归`/home/honus/nexus-task-artifacts/workflow-consolidation-20261109/oidc-environment-20261109`，保留至用户通知清理。运行配置沿用v4表，无新增迁移。
+
+| 审核表   | 结论                                                                                                                                                     |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 六个NEXUS_OIDC变量自动配置并启用；显式sub可直接绑定已有管理员，省略时保留同提供方绑定或要求页面绑定，不信任首个SSO用户。USAGE/DEPLOYMENT和.env示例同步。 |
+| 职责归属 | Bootstrap解析环境，register转换安装契约，OidcModel拥有配置与幂等，SQLite Adapter事务更新并撤销关联OIDC会话；无Shared/HTTP/UI变化。                       |
+| 类型归属 | 安装、内部应用、存储配置分别归register、model、storage，逐字段转换；Issuer校验复用原owner，无新增无依据容量限制。                                        |
+| 完成证据 | 定向4文件30项通过，根check、Backend生产构建、全仓格式、Compose静态配置与diff检查通过；本次不启动Docker，不触发正式远程全量或真实Pocket ID验收。          |
+
+定向命令为`pnpm --filter @nexus-terminal/tests exec vitest run backend/platform/bootstrap/logic/oidc-environment.test.mjs backend/access/oidc/storage/transactions.test.mjs backend/access/oidc/http/environment.test.mjs backend/access/oidc/http/flow.test.ts`：总11.81秒；解析8项6毫秒、存储7项1.351秒、部署HTTP1项1.042秒、原协议HTTP14项9.8秒。覆盖三种认证、精确密钥、空变量/缺项、首次管理员、绑定保持/重置、真实签名登录、其他主体拒绝、重启保留登录、密钥轮换撤销及提交未知不重放。无时间等待可替换为虚拟时钟。
+
+初始化共用Promise；无管理员时延后，失败或提交未知保留拒绝，不自动重放。相同配置保留revision/会话，变化才撤销OIDC会话与流程，普通登录保留。环境变量按每次启动应用，页面仍可修改当次配置，删除所有变量后由页面管理，部署文档明确优先关系。静态首次发现5处函数空行问题已修正；Compose首次原始输出比较未归一`config`的`$$`序列化，已校正验证断言，并同时核对插值源保留字面`$`；无产品绕过。首次与最终记录保留在工具记录及证据目录，原30项逻辑均未修改。真实提供方、浏览器组合及远程全量以另行执行结果为准。
+
 ## Agent 设置归属与插件召回配置（2026-11-08）
 
 主代理独立完成本体与 `0honus0/nexus-agent-plugins` 两仓修改，环境为 Node26.13.0、pnpm12.16.1。本轮产物归 `/home/honus/nexus-task-artifacts/agent-settings-ownership-20261108`，保留测试现场和首次失败；不更新生产主机。

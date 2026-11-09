@@ -15,6 +15,10 @@ export class OidcService {
 		private readonly admission: SourceAdmissionService,
 	) {}
 
+	initialize(): Promise<void> {
+		return this.model.initialize();
+	}
+
 	private requireToken(token: string | null): string {
 		if (token === null) {
 			throw new AccessFailure('unauthenticated');
@@ -24,10 +28,6 @@ export class OidcService {
 
 	settings(token: string | null): Promise<OidcSettings> {
 		return this.model.settings(this.requireToken(token));
-	}
-
-	provider(): Promise<string | null> {
-		return this.model.provider();
 	}
 
 	async save(token: string | null, password: string, input: OidcSettingsChange): Promise<void> {

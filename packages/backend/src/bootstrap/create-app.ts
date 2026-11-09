@@ -12,6 +12,7 @@ import type { MachineConnectOptions } from '../platform/ssh/ssh-port.js';
 import type { TargetsPublicApi, TrustedSshTargetResolver } from '../modules/targets/public.js';
 import type { RemoteSessions } from '../modules/remote/public.js';
 import type { AccessPublicApi } from '../modules/access/public.js';
+import type { AccessRegistrationOptions } from '../modules/access/register.js';
 import type { AgentStateApi } from '../modules/agent/public.js';
 import type { PreferencesRegistrationOptions } from '../modules/preferences/register.js';
 import type { BackupMaintenance } from '../modules/system/register.js';
@@ -25,6 +26,8 @@ import { RemoteOperationError } from '../modules/remote/public-errors.js';
 import { resolveDataPaths } from './data-paths.js';
 
 export interface AppOptions {
+	/** OIDC deployment configuration reapplied on startup when supplied. */
+	oidc?: AccessRegistrationOptions['oidc'];
 	logger?: Logger;
 	/** 32-byte application-managed key. Required for storing or resolving credentials. */
 	encryptionKey?: Uint8Array;
@@ -360,6 +363,7 @@ export async function createApp(dbPath: string, options: AppOptions = {}): Promi
 				secrets,
 				verifyHostKey: options.verifyHostKey ?? null,
 				configuration: options.configuration,
+				oidc: options.oidc,
 				maintenance: lifecycle.maintenance,
 			});
 

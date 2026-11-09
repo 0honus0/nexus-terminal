@@ -13,6 +13,7 @@ export class AccountModel {
 		private readonly storage: Readonly<AccountStorage>,
 		private readonly hasher: PasswordHasher,
 		private readonly tokens: SessionTokens,
+		private readonly accountCreated: () => void = () => {},
 	) {}
 
 	async hashPassword(password: string): Promise<string> {
@@ -64,7 +65,7 @@ export class AccountModel {
 				username: command.username,
 				passwordHash: command.passwordHash,
 			}),
-		);
+		).finally(this.accountCreated);
 		return created === null ? null : this.toAccount(created);
 	}
 

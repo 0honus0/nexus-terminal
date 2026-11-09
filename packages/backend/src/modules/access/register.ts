@@ -1,8 +1,10 @@
+import { LoginOptionsModel } from './login-options/model/login-options-model.js';
 import { OidcService } from './oidc/service/oidc-service.js';
 import { OidcModel } from './oidc/model/oidc-model.js';
 import { SqliteOidcStorage } from './oidc/adapters/sqlite/oidc-sql.js';
 import { OpenidClient } from '../../platform/security/adapters/openid-client.js';
 import { createOidcRoutes } from './interfaces/http/oidc-http.js';
+import type { OidcClientAuthentication } from '@nexus-terminal/shared/access/oidc/values';
 import { accessBackupExclusions } from './accounts/adapters/sqlite/backup-exclusions.js';
 import type { SqlExecutor } from '../../platform/storage/sqlite/sql-types.js';
 import type { SqliteRuntime } from '../../platform/storage/sqlite/sqlite-runtime.js';
@@ -38,6 +40,15 @@ import { createFactorRoutes } from './interfaces/http/factor-http.js';
 
 /** Installation contract; Bootstrap does not depend on private Access types. */
 export interface AccessRegistrationOptions {
+	/** Supplied only by trusted deployment configuration, never HTTP input. */
+	oidc?: {
+		issuer: string;
+		clientId: string;
+		clientAuthentication: OidcClientAuthentication;
+		clientSecret: string | null;
+		label: string;
+		subject: string | null;
+	};
 	sqlite: SqliteRuntime;
 	secrets?: SecretBox | null;
 	passkeys?: Array<{ rpId: string; origin: string }>;
@@ -86,6 +97,9 @@ export interface AccessRuntimeConfiguration {
 }
 
 export interface RegisteredAccess {
+	quiesce(): void;
+	close(): Promise<void>;
+	initialize(): Promise<void>;
 	prepareRuntimeConfiguration(configuration: AccessRuntimeConfiguration): () => void;
 	/** Installation-only identity reader; executes through the caller-owned SQLite transaction. */
 	readTransactionIdentity(tx: SqlExecutor, digest: string): Promise<number | null>;
@@ -101,6 +115,7 @@ export function registerAccess({
 	loginFailurePolicy,
 	ipWhitelist,
 	captcha,
+	oidc: oidcConfiguration,
 }: AccessRegistrationOptions): RegisteredAccess {
 	const origins = new Set<string>();
 	for (const site of passkeys ?? []) {
@@ -120,7 +135,15 @@ export function registerAccess({
 	}
 	const tokens = new SecureSessionTokens();
 	const addresses = new SourceAddressModel(new NativeSourceAddresses());
-	const accounts = new AccountModel(new SqliteAccountStorage(sqlite), new ScryptPasswordHasher(), tokens);
+
+	const invalidateLoginMethods = (): void => loginOptions.invalidate();
+
+	const accounts = new AccountModel(
+		new SqliteAccountStorage(sqlite),
+		new ScryptPasswordHasher(),
+		tokens,
+		invalidateLoginMethods,
+	);
 	const sessionStorage = new SqliteSessionStorage(sqlite);
 	const sessions = new SessionModel(sessionStorage, tokens);
 	const failurePolicy = new LoginFailurePolicy(toLoginFailurePolicy(loginFailurePolicy));
@@ -131,6 +154,7 @@ export function registerAccess({
 		new RfcTotp(),
 		new NativeWebauthn(),
 		(passkeys ?? []).map((site) => ({ origin: site.origin, rpId: site.rpId })),
+		invalidateLoginMethods,
 	);
 	const factors = new FactorService(accounts, sessions, factorModel, addresses, failurePolicy);
 	const captchaSettings: CaptchaConfiguration = captcha
@@ -151,13 +175,25 @@ export function registerAccess({
 		factors,
 	);
 	const admission = new SourceAdmissionService(ipWhitelist ?? '', addresses, sessions, failurePolicy);
-	const oidc = new OidcService(
-		new OidcModel(new SqliteOidcStorage(sqlite), tokens, secrets ?? null, new OpenidClient()),
-		service,
-		addresses,
-		failurePolicy,
-		admission,
+	const oidcModel = new OidcModel(
+		new SqliteOidcStorage(sqlite),
+		tokens,
+		secrets ?? null,
+		new OpenidClient(),
+		oidcConfiguration === undefined
+			? null
+			: {
+					issuer: oidcConfiguration.issuer,
+					clientId: oidcConfiguration.clientId,
+					clientAuthentication: oidcConfiguration.clientAuthentication,
+					clientSecret: oidcConfiguration.clientSecret,
+					label: oidcConfiguration.label,
+					subject: oidcConfiguration.subject,
+				},
+		invalidateLoginMethods,
 	);
+	const loginOptions = new LoginOptionsModel(oidcModel, factorModel);
+	const oidc = new OidcService(oidcModel, service, addresses, failurePolicy, admission);
 	const publicApi: AccessPublicApi = {
 		provePassword: (token, password) =>
 			accessBoundary(async () => {
@@ -190,6 +226,12 @@ export function registerAccess({
 	return {
 		publicApi,
 
+		initialize: () => oidc.initialize(),
+
+		quiesce: () => loginOptions.quiesce(),
+
+		close: () => loginOptions.close(),
+
 		prepareRuntimeConfiguration: (configuration) => {
 			const applyNetworks = admission.prepareWhitelist(configuration.ipWhitelist);
 			const applyFailures = failurePolicy.prepare({
@@ -209,7 +251,7 @@ export function registerAccess({
 		},
 
 		routes: (secureCookies) => [
-			...createAccessRoutes(service, factors, secureCookies, oidc),
+			...createAccessRoutes(service, factors, secureCookies, oidc, loginOptions),
 			...createFactorRoutes(factors, secureCookies),
 			...createOidcRoutes(oidc, secureCookies),
 		],

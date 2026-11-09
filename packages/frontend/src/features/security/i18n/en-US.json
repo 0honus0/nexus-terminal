@@ -163,7 +163,6 @@
     "oidc": {
       "title": "Single sign-on (OIDC)",
       "description": "Connect Pocket ID or another OpenID Connect provider to your existing account.",
-      "enabled": "Show on the login page",
       "label": "Provider name",
       "authentication": "Client authentication",
       "publicClient": "Public client (PKCE)",

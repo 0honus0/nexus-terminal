@@ -2,6 +2,8 @@ import {
 	type AccessHttpErrorCode,
 	type AccessCaptchaProvider,
 	ACCESS_CAPTCHA_TOKEN_MAX_BYTES,
+	ACCESS_AUTH_REQUEST_MAX_BYTES,
+	ACCESS_LOGIN_OPTIONS_RESPONSE_MAX_BYTES,
 	ACCESS_PASSWORD_MAX_BYTES,
 	ACCESS_IP_BLACKLIST_MAX_PAGE_SIZE,
 } from './values.js';
@@ -26,6 +28,12 @@ export interface AccessCaptchaConfigResponse {
 	provider: AccessCaptchaProvider;
 	hcaptchaSiteKey: string;
 	recaptchaSiteKey: string;
+}
+
+export interface AccessLoginOptionsResponse {
+	hasPasskeys: boolean;
+	captcha: AccessCaptchaConfigResponse;
+	oidc: { label: string } | null;
 }
 
 export interface AccessIpBlacklistEntry {
@@ -212,7 +220,7 @@ export function readAccessIpBlacklistRemoveRequest(value: unknown): AccessIpBlac
 	return { ip: text(row.ip, 1, 128) };
 }
 
-export function readAccessCaptchaConfig(value: unknown): AccessCaptchaConfigResponse {
+function readCaptchaConfig(value: unknown): AccessCaptchaConfigResponse {
 	const row = record(value, ['enabled', 'provider', 'hcaptchaSiteKey', 'recaptchaSiteKey']);
 	if (row.provider !== 'none' && row.provider !== 'hcaptcha' && row.provider !== 'recaptcha') {
 		throw new InvalidAccessPayload();
@@ -222,6 +230,26 @@ export function readAccessCaptchaConfig(value: unknown): AccessCaptchaConfigResp
 		provider: row.provider,
 		hcaptchaSiteKey: text(row.hcaptchaSiteKey, 0, 1024),
 		recaptchaSiteKey: text(row.recaptchaSiteKey, 0, 1024),
+	};
+}
+
+export function readAccessLoginOptions(value: unknown): AccessLoginOptionsResponse {
+	const row = record(value, ['captcha', 'oidc', 'hasPasskeys']);
+	if (new TextEncoder().encode(JSON.stringify(row)).byteLength > ACCESS_LOGIN_OPTIONS_RESPONSE_MAX_BYTES) {
+		throw new InvalidAccessPayload();
+	}
+	const oidc = row.oidc === null ? null : record(row.oidc, ['label']);
+	const label = oidc === null ? null : text(oidc.label, 1, ACCESS_AUTH_REQUEST_MAX_BYTES);
+	if (
+		label !== null &&
+		(label.trim().length === 0 || new TextDecoder().decode(new TextEncoder().encode(label)) !== label)
+	) {
+		throw new InvalidAccessPayload();
+	}
+	return {
+		hasPasskeys: bool(row.hasPasskeys),
+		captcha: readCaptchaConfig(row.captcha),
+		oidc: label === null ? null : { label },
 	};
 }
 

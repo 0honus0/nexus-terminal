@@ -25,6 +25,7 @@
     "file-type": "22.3.0",
     "iconv-lite": "^0.7.3",
     "ipaddr.js": "^2.5.0",
+    "lru-cache": "11.5.3",
     "nodemailer": "^10.3.1",
     "openai": "7.51.0",
     "openid-client": "6.8.9",
@@ -50,7 +51,7 @@
     "@types/semver": "^7.8.0",
     "@types/ssh2": "^1.15.6",
     "@types/ws": "^8.18.2",
-    "typescript": "catalog:node-build",
-    "esbuild": "0.28.2"
+    "esbuild": "0.28.2",
+    "typescript": "catalog:node-build"
   }
 }

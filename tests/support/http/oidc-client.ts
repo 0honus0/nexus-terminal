@@ -25,7 +25,6 @@ export function createOidcClient(
 			headers,
 			data: {
 				revision: c.revision,
-				enabled: true,
 				label: 'Pocket ID',
 				issuer,
 				clientId: 'nexus-client',
@@ -56,6 +55,7 @@ export function createOidcClient(
 		const response = await request.post('/api/v1/auth/oidc/binding/finish', { headers, data: input });
 		assert.equal(response.status(), 200, (await response.text()) + JSON.stringify(provider.rejection));
 		assert.deepEqual(await response.json(), { completed: 'binding' });
+		return readOidcSettingsResponse(await (await request.get('/api/v1/auth/oidc/settings')).json());
 	}
 
 	return { configure, start, bind };

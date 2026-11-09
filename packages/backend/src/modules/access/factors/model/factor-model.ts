@@ -63,6 +63,7 @@ export class FactorModel {
 		private readonly totp: TotpPort,
 		private readonly webauthn: WebauthnPort,
 		private readonly sites: readonly FactorPasskeySite[],
+		private readonly passkeysChanged: () => void = () => {},
 	) {}
 
 	/** Model-owned application-to-technical credential projection. */
@@ -439,7 +440,7 @@ export class FactorModel {
 					backedUp: credential.backedUp,
 				},
 			}),
-		);
+		).finally(this.passkeysChanged);
 	}
 
 	async passkeyAuthenticationOptions(
@@ -557,8 +558,8 @@ export class FactorModel {
 		);
 	}
 
-	hasPasskeys(accountId: number | null): Promise<boolean> {
-		return accessStorageBoundary(() => this.storage.hasPasskeys(accountId));
+	hasPasskeys(): Promise<boolean> {
+		return accessStorageBoundary(() => this.storage.hasPasskeys());
 	}
 
 	rename(accountId: number, session: string, id: string, name: string): Promise<boolean> {
@@ -579,6 +580,6 @@ export class FactorModel {
 				sessionDigest: this.digest(session),
 				credentialId: id,
 			}),
-		);
+		).finally(this.passkeysChanged);
 	}
 }

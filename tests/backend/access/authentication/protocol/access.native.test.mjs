@@ -600,7 +600,7 @@ await test(
 						};
 						const { guest } = await open('captcha', config);
 						const actor = guest();
-						const visible = expect(await actor.send('GET', '/api/v1/auth/captcha/config'), 200);
+						const visible = expect(await actor.send('GET', '/api/v1/auth/login/options'), 200);
 						assert.equal(JSON.stringify(visible).includes('b10-private-secret'), false);
 						expect(await login(actor), 400, 'invalid_input');
 						const pool = mock.get('https://api.hcaptcha.com');

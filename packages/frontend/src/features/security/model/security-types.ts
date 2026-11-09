@@ -89,6 +89,8 @@ export interface IpBlacklistController {
 export type CaptchaStatus = 'loading' | 'ready' | 'error' | 'invalid';
 
 export interface LoginSecurityController {
+	oidcLabel: ComputedRef<string | null>;
+	hasPasskeys: ComputedRef<boolean>;
 	captchaConfig: ComputedRef<LoginCaptchaConfig>;
 	captchaStatus: ComputedRef<CaptchaStatus>;
 	loading: ComputedRef<boolean>;

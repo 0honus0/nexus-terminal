@@ -34,3 +34,8 @@ export async function initializeOidcSchema(tx: SqlExecutor): Promise<void> {
 		);
 	`);
 }
+
+/** Visibility follows the verified binding; configuration no longer has a second switch. */
+export async function removeOidcVisibilitySwitch(tx: SqlExecutor): Promise<void> {
+	await tx.exec('ALTER TABLE access_oidc_configuration DROP COLUMN enabled');
+}

@@ -603,7 +603,7 @@ OIDC 设置/写入/回调类型在 Auth model；api 逐字段构造 Shared 请�
 
 ### 5. 入口与安装
 
-设置页新增 OIDC 分组；登录页仅显示服务端已启用绑定的提供方；`/login/oidc/callback` 为公开路由，允许已有会话完成绑定。
+设置页新增 OIDC 分组；登录页通过useLoginSecurity一次读取公开登录选项，仅显示已绑定OIDC与已注册Passkey；没有可用方式时隐藏分组，设置页不提供独立OIDC显示开关；`/login/oidc/callback` 为公开路由，允许已有会话完成绑定。
 
 ### 6. 数据、事务与并发
 

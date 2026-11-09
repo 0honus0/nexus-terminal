@@ -2,7 +2,6 @@ import type { OidcClientAuthentication } from './values.js';
 
 export interface OidcSettingsResponse {
 	revision: string | null;
-	enabled: boolean;
 	label: string;
 	issuer: string;
 	clientId: string;
@@ -14,7 +13,6 @@ export interface OidcSettingsResponse {
 
 export interface OidcSettingsRequest {
 	revision: string | null;
-	enabled: boolean;
 	label: string;
 	issuer: string;
 	clientId: string;
@@ -26,10 +24,6 @@ export interface OidcSettingsRequest {
 export interface OidcBindingRequest {
 	revision: string;
 	password: string;
-}
-
-export interface OidcProviderResponse {
-	provider: { label: string } | null;
 }
 
 export interface OidcStartRequest {

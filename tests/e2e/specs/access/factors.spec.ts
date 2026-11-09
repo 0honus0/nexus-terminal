@@ -8,7 +8,7 @@ import { step } from '../../support/steps';
 
 import { E2E_URLS } from '../../../support/protocols/test-environment';
 import { readAccessTotpSetup } from '../../../../packages/shared/src/access/factors/http-codec';
-import { readAccessCaptchaConfig, readAccessHttpError } from '../../../../packages/shared/src/access/http';
+import { readAccessLoginOptions, readAccessHttpError } from '../../../../packages/shared/src/access/http';
 
 const headers = { Origin: E2E_URLS.frontendOrigin };
 
@@ -312,13 +312,13 @@ test('Login 2FA challenge supports invalid-token retry and expired-session recov
 			await page.setViewportSize({ width: viewport.width, height: viewport.height });
 			const captchaConfigPromise = page.waitForResponse(
 				(response) =>
-					response.url().endsWith('/api/v1/auth/captcha/config') && response.request().method() === 'GET',
+					response.url().endsWith('/api/v1/auth/login/options') && response.request().method() === 'GET',
 			);
 			const [, captchaConfigResponse] = await Promise.all([page.goto('/login'), captchaConfigPromise]);
 			expect(captchaConfigResponse.ok()).toBeTruthy();
-			const captchaConfig = await context.request.get('/api/v1/auth/captcha/config');
+			const captchaConfig = await context.request.get('/api/v1/auth/login/options');
 			expect(captchaConfig.ok()).toBeTruthy();
-			expect(readAccessCaptchaConfig(await captchaConfig.json())).toMatchObject({
+			expect(readAccessLoginOptions(await captchaConfig.json()).captcha).toMatchObject({
 				enabled: false,
 				provider: 'none',
 			});

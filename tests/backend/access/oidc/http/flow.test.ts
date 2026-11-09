@@ -30,7 +30,7 @@ for (const authentication of ['client_secret_basic', 'client_secret_post', 'none
 			provider.issuer,
 			authentication,
 		);
-		expect(await (await guest.get('/api/v1/auth/oidc/provider')).json()).toEqual({ provider: null });
+		expect(await (await guest.get('/api/v1/auth/login/options')).json()).toMatchObject({ oidc: null });
 		expect(
 			(
 				await guest.post('/api/v1/auth/oidc/login/start', {
@@ -39,9 +39,9 @@ for (const authentication of ['client_secret_basic', 'client_secret_post', 'none
 				})
 			).status(),
 		).toBe(401);
-		await createOidcClient(request, HTTP_TEST_ADMIN, HTTP_TEST_ORIGIN).bind(provider, c.revision);
-		expect(await (await guest.get('/api/v1/auth/oidc/provider')).json()).toEqual({
-			provider: { label: 'Pocket ID' },
+		const bound = await createOidcClient(request, HTTP_TEST_ADMIN, HTTP_TEST_ORIGIN).bind(provider, c.revision);
+		expect(await (await guest.get('/api/v1/auth/login/options')).json()).toMatchObject({
+			oidc: { label: 'Pocket ID' },
 		});
 		const response = provider.authorize(
 			await createOidcClient(guest, HTTP_TEST_ADMIN, HTTP_TEST_ORIGIN).start('login'),
@@ -56,7 +56,7 @@ for (const authentication of ['client_secret_basic', 'client_secret_post', 'none
 		expect(new Set(provider.seenVerifiers).size).toBe(2);
 		const unlink = await request.delete('/api/v1/auth/oidc/binding', {
 			headers: oidcHeaders,
-			data: { revision: c.revision, password: HTTP_TEST_ADMIN.password },
+			data: { revision: bound.revision, password: HTTP_TEST_ADMIN.password },
 		});
 		expect(unlink.status()).toBe(200);
 		expect((await guest.get('/api/v1/auth/status')).status()).toBe(401);
@@ -119,7 +119,7 @@ test('OIDC binding requires current password, browser cookie, original session a
 	).toBeGreaterThanOrEqual(400);
 	expect(readOidcSettingsResponse(await (await request.get('/api/v1/auth/oidc/settings')).json()).bound).toBe(false);
 });
-test('OIDC settings CAS and disable during token exchange reject stale login', async ({
+test('OIDC settings CAS and configuration change during token exchange reject stale login', async ({
 	request,
 	httpClients,
 	provider,
@@ -131,7 +131,7 @@ test('OIDC settings CAS and disable during token exchange reject stale login', a
 	let pending: Promise<PromiseSettledResult<import('@playwright/test').APIResponse>[]> | undefined;
 	try {
 		const c = await createOidcClient(request, HTTP_TEST_ADMIN, HTTP_TEST_ORIGIN).configure(provider.issuer);
-		await createOidcClient(request, HTTP_TEST_ADMIN, HTTP_TEST_ORIGIN).bind(provider, c.revision);
+		const bound = await createOidcClient(request, HTTP_TEST_ADMIN, HTTP_TEST_ORIGIN).bind(provider, c.revision);
 		provider.setTokenGate(
 			new Promise<void>((resolve) => {
 				release = resolve;
@@ -145,9 +145,8 @@ test('OIDC settings CAS and disable during token exchange reject stale login', a
 		]);
 		await expect.poll(() => provider.tokenCalls).toBe(2);
 		const save = {
-			revision: c.revision,
-			enabled: false,
-			label: c.label,
+			revision: bound.revision,
+			label: 'Updated Pocket ID',
 			issuer: c.issuer,
 			clientId: c.clientId,
 			clientAuthentication: c.clientAuthentication,
@@ -178,7 +177,6 @@ test('OIDC settings never disclose a secret or carry it to a different issuer, a
 	const c = await createOidcClient(request, HTTP_TEST_ADMIN, HTTP_TEST_ORIGIN).configure(provider.issuer);
 	const input = {
 		revision: c.revision,
-		enabled: true,
 		label: c.label,
 		issuer: 'https://another.example',
 		clientId: c.clientId,

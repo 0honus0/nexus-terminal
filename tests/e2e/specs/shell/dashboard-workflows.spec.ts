@@ -175,7 +175,7 @@ const tagFilter = (page: Page) => page.getByRole('combobox', { name: '按标签�
 
 const sortFilter = (page: Page) => page.getByRole('combobox', { name: '排序方式', exact: true });
 
-test('desktop dashboard exposes suspended sessions and connection types in one stable surface', async ({
+test('desktop dashboard shows connection types while suspended sessions remain available in Workspace', async ({
 	page,
 	context,
 }) => {
@@ -239,8 +239,6 @@ test('desktop dashboard exposes suspended sessions and connection types in one s
 		const connections = connectionPanel(page);
 		const sshSection = connectionTypeSection(page, 'SSH');
 		const suspendedEntry = dashboard.getByRole('button', { name: /^Suspended sessions/ });
-		await expect(suspendedEntry).toBeVisible();
-		await expect(suspendedEntry).toContainText('Suspended sessions');
 		await expect(connections).toBeVisible();
 		await expect(sshSection).toBeVisible();
 		await expect(sshSection.getByRole('heading', { name: 'SSH', exact: true })).toBeVisible();
@@ -256,8 +254,12 @@ test('desktop dashboard exposes suspended sessions and connection types in one s
 		await expect.poll(() => pushedIds).toContain(firstSuspendedId);
 		const secondSuspendedId = await createSuspended('second');
 		await expect.poll(() => pushedIds, { timeout: 2500 }).toContain(secondSuspendedId);
+		await expect(suspendedEntry).toHaveCount(0);
 		const requestsBeforeOpen = catalogRequests;
-		await suspendedEntry.click();
+		await page
+			.getByRole('navigation', { name: 'Primary navigation', exact: true })
+			.getByRole('link', { name: 'Terminal', exact: true })
+			.click();
 		await expect(page).toHaveURL(/\/workspace(?:\?|$)/);
 		const dialog = page.getByRole('region', { name: 'Suspended SSH Sessions', exact: true });
 		await expect(dialog).toBeVisible();

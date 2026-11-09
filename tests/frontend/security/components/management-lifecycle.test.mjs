@@ -66,8 +66,12 @@ test('security controllers retain mutation and refresh failures across cached-vi
 			passkeyDiscoveryRequests += 1;
 			throw Error('Passkey discovery must not run from login security');
 		}
-		if (String(url).endsWith('/captcha/config')) {
-			return json({ enabled: false, provider: 'none', hcaptchaSiteKey: '', recaptchaSiteKey: '' });
+		if (String(url).endsWith('/login/options')) {
+			return json({
+				captcha: { enabled: false, provider: 'none', hcaptchaSiteKey: '', recaptchaSiteKey: '' },
+				oidc: null,
+				hasPasskeys: false,
+			});
 		}
 		return json(fixture);
 	};

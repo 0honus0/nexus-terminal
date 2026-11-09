@@ -1,8 +1,16 @@
 import type { OidcClientAuthentication } from '@nexus-terminal/shared/access/oidc/values';
 
+export interface OidcInstallation {
+	issuer: string;
+	clientId: string;
+	clientAuthentication: OidcClientAuthentication;
+	clientSecret: string | null;
+	label: string;
+	subject: string | null;
+}
+
 export interface OidcSettings {
 	revision: string | null;
-	enabled: boolean;
 	label: string;
 	issuer: string;
 	clientId: string;
@@ -13,7 +21,6 @@ export interface OidcSettings {
 
 export interface OidcSettingsChange {
 	revision: string | null;
-	enabled: boolean;
 	label: string;
 	issuer: string;
 	clientId: string;
@@ -45,7 +52,6 @@ export interface OidcFlow {
 export interface OidcConfiguration {
 	revision: string;
 	userId: number;
-	enabled: boolean;
 	label: string;
 	issuer: string;
 	clientId: string;

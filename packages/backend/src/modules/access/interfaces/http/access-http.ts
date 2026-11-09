@@ -1,8 +1,10 @@
+import type { LoginOptionsModel } from '../../login-options/model/login-options-model.js';
 import type { OidcService } from '../../oidc/service/oidc-service.js';
 import { ACCESS_OIDC_FLOW_COOKIE } from '@nexus-terminal/shared/access/oidc/values';
 import { readRequestCookie } from '../../../../platform/http/http-request.js';
 import {
 	ACCESS_AUTH_REQUEST_MAX_BYTES,
+	ACCESS_LOGIN_OPTIONS_RESPONSE_MAX_BYTES,
 	ACCESS_IP_BLACKLIST_RESPONSE_MAX_BYTES,
 } from '@nexus-terminal/shared/access/values';
 import { deliverAccessResult } from './access-delivery.js';
@@ -20,7 +22,7 @@ import {
 	type AccessLogoutResponse,
 	type AccessPasswordResponse,
 	type AccessHttpErrorResponse,
-	type AccessCaptchaConfigResponse,
+	type AccessLoginOptionsResponse,
 	type AccessIpBlacklistResponse,
 	type AccessIpBlacklistRemoveResponse,
 	InvalidAccessPayload,
@@ -74,6 +76,7 @@ function errorResponse(reply: HttpReply, error: unknown): void {
 			status = 403;
 			break;
 		case 'captcha_unavailable':
+		case 'factor_unavailable':
 		case 'operation_unknown':
 		case 'storage_unavailable':
 			status = 503;
@@ -115,21 +118,35 @@ export function createAccessRoutes(
 	factors: FactorService,
 	secureCookies: boolean,
 	oidc: OidcService,
+	loginOptions: LoginOptionsModel,
 ): HttpRoute[] {
 	return [
 		{
 			method: 'GET',
-			url: '/api/v1/auth/captcha/config',
+			url: '/api/v1/auth/login/options',
 
 			handler: (request, reply) =>
 				handle(request, reply, async () => {
+					const methods = await accessBoundary(() => loginOptions.read());
 					const config = access.captchaConfig();
+					reply.type('application/json; charset=utf-8');
+					reply.serializer((payload) => {
+						const encoded = JSON.stringify(payload);
+						if (Buffer.byteLength(encoded, 'utf8') > ACCESS_LOGIN_OPTIONS_RESPONSE_MAX_BYTES) {
+							throw new AccessOperationError('limit_exceeded');
+						}
+						return encoded;
+					});
 					reply.code(200).send({
-						enabled: config.enabled,
-						provider: config.provider,
-						hcaptchaSiteKey: config.hcaptchaSiteKey,
-						recaptchaSiteKey: config.recaptchaSiteKey,
-					} satisfies AccessCaptchaConfigResponse);
+						captcha: {
+							enabled: config.enabled,
+							provider: config.provider,
+							hcaptchaSiteKey: config.hcaptchaSiteKey,
+							recaptchaSiteKey: config.recaptchaSiteKey,
+						},
+						oidc: methods.oidcLabel === null ? null : { label: methods.oidcLabel },
+						hasPasskeys: methods.hasPasskeys,
+					} satisfies AccessLoginOptionsResponse);
 				}),
 		},
 		{

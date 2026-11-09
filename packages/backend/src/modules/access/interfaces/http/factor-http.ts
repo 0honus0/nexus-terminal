@@ -15,7 +15,6 @@ import {
 	readTotpToken,
 	readTotpDisable,
 	readPasskeyAuthenticationOptions,
-	readPasskeyHasConfigured,
 	readPasskeyRegister,
 	readPasskeyAuthenticate,
 	readPasskeyName,
@@ -24,7 +23,6 @@ import {
 	type AccessTotpSetupResponse,
 	type AccessTotpChangedResponse,
 	type AccessPasskeyVerifiedResponse,
-	type AccessPasskeyHasConfiguredResponse,
 	type AccessWebauthnOptions,
 	type AccessPasskeyRegistrationOptionsResponse,
 	type AccessPasskeyAuthenticationOptionsResponse,
@@ -474,23 +472,6 @@ export function createFactorRoutes(factors: FactorService, secure: boolean): Htt
 						true,
 					);
 				}),
-		},
-		{
-			method: 'GET',
-			errorHandler: factorErrorHandler,
-			url: '/api/v1/auth/passkey/has-configured',
-
-			handler: (request, reply) =>
-				handle(
-					request,
-					reply,
-					async () => {
-						const username = readPasskeyHasConfigured(request.query);
-						const hasPasskeys = await accessBoundary(() => factors.hasPasskeys(username));
-						reply.code(200).send({ hasPasskeys } satisfies AccessPasskeyHasConfiguredResponse);
-					},
-					true,
-				),
 		},
 		{
 			method: 'GET',

@@ -6,6 +6,7 @@ for (const theme of ['light', 'dark']) {
 		await page.addInitScript((value) => localStorage.setItem('nexus-login-theme', value), theme);
 		await page.goto('/login');
 		await expect(page.locator('.auth-page')).toHaveAttribute('data-auth-theme', theme);
+		await expect(page.locator('.login-alternatives')).toHaveCount(0);
 		for (const viewport of [
 			{ width: 1440, height: 900 },
 			{ width: 768, height: 600 },
@@ -20,20 +21,14 @@ for (const theme of ['light', 'dark']) {
 				width: document.documentElement.clientWidth,
 				scrollWidth: document.documentElement.scrollWidth,
 				formWidth: document.querySelector('form')?.getBoundingClientRect().width ?? 0,
-				controlHeights: ['.login-input', '.login-submit', '.login-passkey'].map(
+				controlHeights: ['.login-input', '.login-submit'].map(
 					(selector) => document.querySelector(selector)?.getBoundingClientRect().height ?? 0,
 				),
 			}));
 			expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.width);
-			expect(geometry.controlHeights).toEqual(Array(3).fill(viewport.height <= 760 ? 46 : 52));
+			expect(geometry.controlHeights).toEqual(Array(2).fill(viewport.height <= 760 ? 46 : 52));
 			expect(geometry.formWidth).toBeGreaterThanOrEqual(viewport.width > 900 ? 360 : 260);
-			for (const selector of [
-				'#username',
-				'#password',
-				'.login-submit',
-				'.login-passkey',
-				'.auth-theme-toggle',
-			]) {
+			for (const selector of ['#username', '#password', '.login-submit', '.auth-theme-toggle']) {
 				const control = page.locator(selector);
 				await control.evaluate((element) => element.scrollIntoView({ block: 'center', behavior: 'instant' }));
 				await control.click({ trial: true });
