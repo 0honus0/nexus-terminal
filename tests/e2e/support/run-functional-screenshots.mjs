@@ -7,10 +7,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const e2eRoot = path.resolve(__dirname, '..');
 const testsRoot = path.resolve(e2eRoot, '..');
 const repoRoot = path.resolve(e2eRoot, '../..');
-const stagingDir = path.join(e2eRoot, '../.artifacts', 'manual-functional-screenshots');
+const artifactRoot = path.resolve(
+	process.env.NEXUS_TEST_ARTIFACT_DIR ?? path.join(testsRoot, '.artifacts', 'manual-functional-screenshots'),
+);
+fs.mkdirSync(artifactRoot, { recursive: true });
+const runRoot = fs.mkdtempSync(path.join(artifactRoot, 'run-'));
+const stagingDir = path.join(runRoot, 'screenshots');
 const targetDir = path.join(repoRoot, 'doc', 'imgs', 'e2e');
 
-fs.rmSync(stagingDir, { recursive: true, force: true });
 fs.mkdirSync(stagingDir, { recursive: true });
 
 const result = spawnSync(
@@ -20,6 +24,7 @@ const result = spawnSync(
 		cwd: e2eRoot,
 		env: {
 			...process.env,
+			NEXUS_TEST_ARTIFACT_DIR: runRoot,
 			E2E_CAPTURE_SCREENSHOTS: '1',
 			E2E_SCREENSHOT_OUTPUT_DIR: stagingDir,
 		},
@@ -27,7 +32,10 @@ const result = spawnSync(
 	},
 );
 
-if ((result.status ?? 1) !== 0) process.exit(result.status ?? 1);
+if ((result.status ?? 1) !== 0) {
+	console.error(`Functional screenshots failed; retained artifacts: ${runRoot}`);
+	process.exit(result.status ?? 1);
+}
 
 const screenshots = fs
 	.readdirSync(stagingDir)

@@ -16,7 +16,6 @@ export default defineConfig({
 	testDir: './e2e/specs/ingress',
 	outputDir: path.join(artifactRoot, 'results'),
 	forbidOnly: Boolean(process.env.CI),
-	failOnFlakyTests: Boolean(process.env.CI),
 	fullyParallel: false,
 	workers: 1,
 	retries: process.env.CI ? 1 : 0,

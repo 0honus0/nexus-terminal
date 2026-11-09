@@ -49,3 +49,5 @@ Runner的完整依赖定义见`fixtures/runner/Dockerfile`，内容指纹由`scr
 `pnpm --filter @nexus-terminal/tests test:ingress`独立执行真实入口验证，须明确设置`NEXUS_PRODUCTION_BASE_URL`；报告默认归`tests/.artifacts/ingress/`，可用统一产物变量覆盖。发现用例不等于通过公网或生产验收。
 
 Docker部署smoke由现有工作流单独构建生产镜像并验证Compose/健康契约。项目、镜像配置和数据库目录均隔离；失败保留`tests/.artifacts/docker-smoke/`的诊断、数据库及工作目录，清理失败使作业失败。上传仅包含诊断和失败数据，不包含`.env`临时密钥。成功时清除可重建工作目录。普通`test:all`不代替此作业或插件独立门禁。
+
+`pnpm --filter @nexus-terminal/tests test:docs`在既有构建上运行完整本体浏览器并更新正式文档截图；使用统一产物根下独立`run-*`目录，失败保留报告与截图且不替换正式图片，不覆盖前次证据。未使用的旧Nginx profiling原型及重复截图核验脚本已移除，正式受控服务与截图入口继续保留。
