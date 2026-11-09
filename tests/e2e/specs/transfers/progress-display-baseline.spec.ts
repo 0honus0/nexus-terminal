@@ -43,6 +43,24 @@ const row = (page: Page, filename: string): Locator => fileManagerRow(page, file
 
 const menu = (page: Page): Locator => page.getByRole('menu');
 
+async function setTransferHold(kind: 'write' | 'archive', blocked: boolean): Promise<void> {
+	const path = kind === 'write' ? '/sftp/write-hold?blocked=' : '/archive/exec-hold?enabled=';
+	const response = await fetch(`${E2E_SSH.controlUrl}${path}${Number(blocked)}`, { method: 'POST' });
+	expect(response.ok).toBe(true);
+}
+
+async function expectTransferHeld(kind: 'write' | 'archive'): Promise<void> {
+	await expect
+		.poll(async () => {
+			const path = kind === 'write' ? '/sftp/write-hold' : '/archive/processes';
+			const response = await fetch(E2E_SSH.controlUrl + path);
+			expect(response.ok).toBe(true);
+			const state = await response.json();
+			return kind === 'write' ? state.held : state.started - state.exited;
+		})
+		.toBeGreaterThan(0);
+}
+
 async function openFileManager(page: Page, context: BrowserContext): Promise<void> {
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
@@ -117,7 +135,7 @@ test('desktop Progress Display floats above the workspace without resizing the t
 	await page.setViewportSize({ width: 1024, height: 768 });
 	await openFileManager(page, context);
 	expect((await initialServerStatus).status()).toBe(200);
-	await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=3000`, { method: 'POST' });
+	await setTransferHold('write', true);
 	try {
 		await rightClickRow(page, 'copy-source.txt');
 		await clickMenuItem(page, 'Copy');
@@ -203,13 +221,14 @@ test('desktop Progress Display floats above the workspace without resizing the t
 		});
 
 		await closeProgressDisplay(display);
-		// Layout assertions can finish before this deliberately delayed copy.
-		// Confirm the destination rather than aborting a live SFTP stage when the
-		// next spec resets its isolated Backend.
+		// Release only after the layout checks, then confirm real completion
+		// before the next isolated Backend reset.
 		await reopenConnectedFileManager(page);
 		await expect(
 			page.getByRole('dialog', { name: 'File Manager', exact: true }).locator('.file-manager-path-input input'),
 		).toHaveValue('/folder-seed');
+		await expectTransferHeld('write');
+		await setTransferHold('write', false);
 		await expect(row(page, 'copy-source.txt')).toBeVisible({ timeout: 30_000 });
 		// Destination visibility may precede final metadata verification and lease
 		// close. Completed client tasks retire after their server terminal event;
@@ -221,7 +240,7 @@ test('desktop Progress Display floats above the workspace without resizing the t
 		await closeProgressDisplay(settledDisplay);
 	} finally {
 		await page.unroute('**/api/v1/transfers/status');
-		await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+		await setTransferHold('write', false);
 	}
 });
 
@@ -229,19 +248,17 @@ test('existing copy progress popup hides and restores through Progress Display',
 	await openFileManager(page, context);
 
 	const sourceName = 'baseline-copy-progress.bin';
-	// The fixture delays each actual SFTP WRITE by 3 seconds. Four MiB
-	// outlives the UI assertion window; 256 KiB still requires multiple
-	// genuine writes and keeps the popup active for hide/restore.
+	// Preserve the original 256 KiB multi-write transfer. Its real WRITE stays
+	// blocked until the hide/restore assertions have completed.
 	await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(sourceName)}&size=${256 * 1024}`, {
 		method: 'POST',
 	});
 	await refreshFileManager(page);
 	await expect(row(page, sourceName)).toBeVisible();
 
-	// Keep at least one SFTP WRITE round-trip alive while the popup is hidden and
-	// Progress Display is opened. A tiny delay is ineffective when writes are
-	// pipelined and made this assertion depend on runner timing.
-	await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=3000`, { method: 'POST' });
+	// The remote barrier holds the actual WRITE throughout hide/restore,
+	// independently of runner speed.
+	await setTransferHold('write', true);
 	try {
 		await slowStep('copy creates the existing floating progress popup', async () => {
 			await rightClickRow(page, sourceName);
@@ -264,12 +281,14 @@ test('existing copy progress popup hides and restores through Progress Display',
 			await openProgressDisplayAndRestorePopup(page, center, sourceName);
 		});
 
+		await expectTransferHeld('write');
+		await setTransferHold('write', false);
 		await expect(row(page, sourceName)).toBeVisible({ timeout: 30_000 });
 		// The restored popup remains visible. Wait for task retirement, not just
 		// the first directory refresh to observe the destination file.
 		await expect(visibleProgressTask(page, sourceName)).toHaveCount(0, { timeout: 30_000 });
 	} finally {
-		await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+		await setTransferHold('write', false);
 	}
 });
 
@@ -296,7 +315,7 @@ test('progress gestures cancel when their session, popup or cached workspace bec
 		method: 'POST',
 	});
 	await refreshFileManager(page);
-	await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=3000`, { method: 'POST' });
+	await setTransferHold('write', true);
 	try {
 		await rightClickRow(page, sourceName);
 		await clickMenuItem(page, 'Copy');
@@ -441,10 +460,12 @@ test('progress gestures cancel when their session, popup or cached workspace bec
 		);
 		await page.goBack();
 		await reopenConnectedFileManager(page);
+		await expectTransferHeld('write');
+		await setTransferHold('write', false);
 		await expect(row(page, sourceName)).toBeVisible({ timeout: 30_000 });
 		await expect(visibleProgressTask(page, sourceName)).toHaveCount(0, { timeout: 30_000 });
 	} finally {
-		await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+		await setTransferHold('write', false);
 	}
 });
 
@@ -455,8 +476,8 @@ for (const operation of ['upload', 'archive'] as const) {
 	}) => {
 		await openFileManager(page, context);
 		const filename = operation === 'upload' ? 'view-lifecycle-upload.bin' : 'archive-source.zip';
-		const delayPath = operation === 'upload' ? '/sftp/write-delay' : '/archive/exec-delay';
-		await fetch(`${E2E_SSH.controlUrl}${delayPath}?ms=3000`, { method: 'POST' });
+		const holdKind = operation === 'upload' ? 'write' : 'archive';
+		await setTransferHold(holdKind, true);
 		try {
 			if (operation === 'upload') await dragLocalFile(page, filename, 16 * 1024, 0x5a);
 			else await startZipCompression(page, 'archive-source.txt');
@@ -468,13 +489,15 @@ for (const operation of ['upload', 'archive'] as const) {
 				.dispatchEvent('click');
 			await expect(page).toHaveURL(/\/$/);
 			await expect(page.locator('.transfer-progress-window:visible')).toHaveCount(0);
+			await expectTransferHeld(holdKind);
+			await setTransferHold(holdKind, false);
 			await page.goBack();
 			await reopenConnectedFileManager(page);
 			// No manual refresh: the session must publish completion after the old view permission was revoked.
 			await expect(row(page, filename)).toBeVisible({ timeout: 30_000 });
 			await expect(visibleProgressTask(page, filename)).toHaveCount(0, { timeout: 30_000 });
 		} finally {
-			await fetch(`${E2E_SSH.controlUrl}${delayPath}?ms=0`, { method: 'POST' });
+			await setTransferHold(holdKind, false);
 		}
 	});
 }
@@ -483,15 +506,14 @@ test('application modals open above the standalone transfer progress popup', asy
 	await page.setViewportSize({ width: 1024, height: 768 });
 	await openFileManager(page, context);
 	const sourceName = 'modal-layering-progress.bin';
-	// Preserve a bounded multi-write transfer instead of leaving the
-	// modal-layering test's delayed SFTP stage alive across Backend reset.
+	// Preserve the multi-write transfer and release it after the layering assertions.
 	await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(sourceName)}&size=${256 * 1024}`, {
 		method: 'POST',
 	});
 	await refreshFileManager(page);
 	await expect(row(page, sourceName)).toBeVisible();
 
-	await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=3000`, { method: 'POST' });
+	await setTransferHold('write', true);
 	try {
 		await rightClickRow(page, sourceName);
 		await clickMenuItem(page, 'Copy');
@@ -558,16 +580,18 @@ test('application modals open above the standalone transfer progress popup', asy
 		await expect(
 			page.getByRole('dialog', { name: 'File Manager', exact: true }).locator('.file-manager-path-input input'),
 		).toHaveValue('/folder-seed');
+		await expectTransferHeld('write');
+		await setTransferHold('write', false);
 		await expect(row(page, sourceName)).toBeVisible({ timeout: 30_000 });
 		await expect(visibleProgressTask(page, sourceName)).toHaveCount(0, { timeout: 30_000 });
 	} finally {
-		await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+		await setTransferHold('write', false);
 	}
 });
 
 test('existing archive progress popup hides and restores through Progress Display', async ({ page, context }) => {
 	await openFileManager(page, context);
-	await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=1800`, { method: 'POST' });
+	await setTransferHold('archive', true);
 
 	try {
 		await slowStep('compress creates the existing archive progress popup', async () => {
@@ -590,9 +614,11 @@ test('existing archive progress popup hides and restores through Progress Displa
 			await openProgressDisplayAndRestorePopup(page, center, 'archive-source.zip');
 		});
 
+		await expectTransferHeld('archive');
+		await setTransferHold('archive', false);
 		await expect(row(page, 'archive-source.zip')).toBeVisible({ timeout: 30_000 });
 	} finally {
-		await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });
+		await setTransferHold('archive', false);
 	}
 });
 

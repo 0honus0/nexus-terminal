@@ -1,4 +1,4 @@
-import { networkFailureToast } from '../../support/feedback';
+import { expectReadRecoveryFeedback, waitForFailedRead } from '../../support/feedback';
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import type { Response } from '@playwright/test';
 import { loginAsInitialAdmin } from '../../support/auth';
@@ -61,6 +61,9 @@ test.afterEach(async ({ context }) => {
 });
 
 test('connections page remains usable when connection tags fail to load', async ({ page, context }) => {
+	await page.clock.install();
+	await page.clock.pauseAt(new Date());
+	const failedRead = waitForFailedRead(page, '/api/v1/targets/tags');
 	await ensureTestSshConnection(context.request);
 	await page.route('**/api/v1/targets/tags', (route) => route.abort('failed'));
 
@@ -68,8 +71,8 @@ test('connections page remains usable when connection tags fail to load', async 
 	await expect(
 		page.getByRole('listitem').filter({ has: page.getByText(E2E_SSH.name, { exact: true }) }),
 	).toBeVisible();
-	// Read failures notify only after the 10-second foreground recovery grace.
-	await expect(networkFailureToast(page)).toBeVisible({ timeout: 15_000 });
+	await failedRead;
+	await expectReadRecoveryFeedback(page);
 	await expect(page.getByRole('button', { name: 'Add New Connection', exact: true })).toBeEnabled();
 });
 

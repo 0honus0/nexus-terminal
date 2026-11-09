@@ -17,7 +17,7 @@ await test('Resource lifecycle: authenticated HTTP close confirms, durably cance
 			await sshd.close();
 		}
 	});
-	f = await openAgentExecution(root, sshd);
+	f = await openAgentExecution(root, sshd, { plugin: { selectedRootIds: [], uiPackageId: null } });
 	const run = await f.start('close running task', () => ({ hold: true }));
 	await until(
 		() => f.heldModelCount,

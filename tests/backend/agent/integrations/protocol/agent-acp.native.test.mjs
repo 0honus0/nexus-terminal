@@ -29,7 +29,10 @@ await test('B10 actual SSH ACP provider and independent permission lifecycle', {
 			const log = join(directory, 'messages.jsonl');
 			await writeFile(script, program);
 			const f = await openAgentExecution(directory, sshd, {
-				plugin: { selectedRootIds: ['nexus.tools.integrations', 'nexus.tools.agent', 'nexus.services.acp'] },
+				plugin: {
+					selectedRootIds: ['nexus.tools.integrations', 'nexus.tools.agent', 'nexus.services.acp'],
+					uiPackageId: null,
+				},
 			});
 			const cleanup = { unknown: false };
 			scenario.after(() => f.close(cleanup));

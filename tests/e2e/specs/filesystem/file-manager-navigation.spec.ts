@@ -901,6 +901,11 @@ test.describe('remote drag move on touch-capable desktop', () => {
 			try {
 				await moveTo(target);
 				expect(await feedback.evaluate((value) => value.dropEffect)).toBe('move');
+				await expect(target).toHaveClass(/\bis-drop-target\b/);
+				const origin = await pathInput(page).inputValue();
+				await page.clock.runFor(599);
+				await expect(pathInput(page)).toHaveValue(origin);
+				await page.clock.runFor(1);
 				await expect(pathInput(page)).toHaveValue(destination);
 			} finally {
 				try {
@@ -920,6 +925,7 @@ test.describe('remote drag move on touch-capable desktop', () => {
 		};
 
 		try {
+			await page.clock.pauseAt(new Date());
 			await step('right click clears selection and cancels pending hover navigation', async () => {
 				await begin();
 				await moveTo(row(page, 'hover-target'));

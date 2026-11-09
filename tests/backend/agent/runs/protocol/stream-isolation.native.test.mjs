@@ -47,7 +47,10 @@ await test(
 			}
 			if (failures.length) throw new AggregateError(failures, 'Multiplex fixture cleanup failed');
 		});
-		f = await openAgentExecution(directory, sshd);
+		f = await openAgentExecution(directory, sshd, {
+			signal: t.signal,
+			plugin: { selectedRootIds: [], uiPackageId: null },
+		});
 		const first = await f.start('first multiplex run', () => ({ chunks: ['first prefix'], hold: true }));
 		const second = await f.start('second multiplex run', () => ({ chunks: ['second prefix'], hold: true }));
 		await until(

@@ -16,9 +16,9 @@ const checks = [
 		'Test source and configuration types',
 		['--filter', '@nexus-terminal/frontend', 'exec', 'vue-tsc', '--noEmit', '-p', '../../tests/tsconfig.json'],
 	],
-	['Frontend ESLint', ['run', 'lint:frontend']],
-	['Backend ESLint', ['run', 'lint:backend']],
-	['Frontend type check', ['--filter', '@nexus-terminal/frontend', 'exec', 'vue-tsc', '--noEmit']],
+	// The format gate reuses this exact full-source content cache.
+	['Repository ESLint', ['run', 'format:spacing:check']],
+	['Frontend type check', ['--filter', '@nexus-terminal/frontend', 'check']],
 ];
 
 for (const [name, args] of checks) {

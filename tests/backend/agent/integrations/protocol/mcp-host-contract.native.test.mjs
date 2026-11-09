@@ -23,6 +23,7 @@ async function fixture(t) {
 	const external = await openMcp();
 	t.after(() => external.close());
 	const f = await openAgentExecution(root, sshd, {
+		signal: t.signal,
 		discover: 'mcp_discover mcp_tool mcp_resource mcp_prompt',
 		plugin: {
 			uiPackageId: null,
@@ -76,6 +77,7 @@ async function fixture(t) {
 			},
 			(value) => ['completed', 'failed', 'unknown', 'cancelled'].includes(value.status),
 			'MCP contract settles',
+			t.signal,
 		);
 		await f.wait(run, 'completed');
 		assert.equal(final.status, 'completed', JSON.stringify(final));

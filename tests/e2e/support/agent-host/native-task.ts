@@ -13,6 +13,7 @@ import {
 	openAgentConversations,
 	openAgentHub,
 	prepareAgentRun,
+	createTestAgentApp,
 	requestAgentWorkspace,
 	selectAgentModel,
 	selectAgentApp,
@@ -46,24 +47,29 @@ export async function prepareNativeTask(
 	capabilities: AgentCapability[] = [],
 	connectionIds: number[] = [],
 	existingApp?: AgentAppView,
+	selectedRootIds?: string[],
 ) {
 	await loginAsInitialAdmin(request);
 	if (request !== page.request) {
 		await loginAsInitialAdmin(page.request);
 	}
 	await setUiLanguage(page.request);
+	let configuredApp = existingApp;
+	if (!configuredApp && selectedRootIds) {
+		configuredApp = await createTestAgentApp(request, undefined, { selectedRootIds, uiPackageId: 'nexus.ui.chat' });
+	}
 	const activeApp =
-		existingApp && !existingApp.enabled
+		configuredApp && !configuredApp.enabled
 			? await requestAgentJson(
 					request,
 					{
 						method: 'PATCH',
-						path: '/apps/' + existingApp.id,
-						data: { enabled: true, expectedVersion: existingApp.version },
+						path: '/apps/' + configuredApp.id,
+						data: { enabled: true, expectedVersion: configuredApp.version },
 					},
 					readAgentAppResponse,
 				)
-			: existingApp;
+			: configuredApp;
 	const prepared = await prepareAgentRun(request, activeApp);
 	if (capabilities.length) {
 		const path = `/apps/${prepared.app.id}/grants`;

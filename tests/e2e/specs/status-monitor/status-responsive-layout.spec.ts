@@ -96,10 +96,11 @@ test('server status keeps values aligned and contained in narrow, short and zoom
 					zIndex: '1000',
 				});
 			}, size);
-			await expect(resources).toHaveCount(4);
-			for (let index = 0; index < labels.length; index++) {
-				await expect(resources.nth(index)).toHaveAttribute('aria-label', labels[index]);
-			}
+			await expect
+				.poll(() =>
+					resources.evaluateAll((elements) => elements.map((element) => element.getAttribute('aria-label'))),
+				)
+				.toEqual(labels);
 			const layout = await monitor.evaluate((element) => {
 				const rect = (target: Element) => {
 					const { left, right, top, bottom, width, height } = target.getBoundingClientRect();
@@ -161,9 +162,18 @@ test('server status keeps values aligned and contained in narrow, short and zoom
 				await button.click();
 				await expect(button).toHaveAttribute('aria-pressed', 'true');
 				await expect(chart).toHaveAttribute('data-range-minutes', String(range));
-				const box = (await button.boundingBox())!;
-				const pane = (await monitor.boundingBox())!;
-				const controls = (await history.locator('.range-tabs').boundingBox())!;
+				const { box, pane, controls } = await button.evaluate((element) => {
+					const pane = element.closest('.status-monitor');
+					const controls = element.closest('.range-tabs');
+					if (!pane || !controls) throw new Error('History range controls are detached');
+
+					const rect = (target: Element) => {
+						const { x, y, width, height } = target.getBoundingClientRect();
+						return { x, y, width, height };
+					};
+
+					return { box: rect(element), pane: rect(pane), controls: rect(controls) };
+				});
 				expect(box.y).toBeGreaterThanOrEqual(controls.y);
 				expect(box.y + box.height).toBeLessThanOrEqual(controls.y + controls.height);
 				expect(box.x).toBeGreaterThanOrEqual(pane.x);

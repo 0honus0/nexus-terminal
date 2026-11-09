@@ -430,6 +430,7 @@ test('transport resume retries failed handshakes and retains terminal output and
 	await input.focus();
 	await page.keyboard.type("printf 'RESUMED_SSH_INPUT");
 	await expect(rows).toContainText("printf 'RESUMED_SSH_INPUT");
+	await page.clock.pauseAt(new Date());
 	await page.evaluate(() => {
 		const state = window as typeof window & {
 			__resumeTestSockets: WebSocket[];
@@ -439,7 +440,25 @@ test('transport resume retries failed handshakes and retains terminal output and
 		state.__resumeTestSockets.at(-1)!.close(4000, 'E2E transport interruption');
 	});
 	await expect(tab).not.toHaveAttribute('data-session-state', 'connected');
+	for (const attempt of [1, 2]) {
+		await page.clock.runFor(2 ** attempt * 1000);
+		await expect
+			.poll(
+				() =>
+					page.evaluate(() => {
+						const state = window as typeof window & {
+							__resumeTestFailures: { rejected: number };
+						};
+						return state.__resumeTestFailures.rejected;
+					}),
+				{ intervals: [20, 50, 100] },
+			)
+			.toBe(attempt);
+		await expect(tab).toHaveAttribute('data-session-state', 'reconnecting');
+	}
+	await page.clock.runFor(8_000);
 	await expect(tab).toHaveAttribute('data-session-state', 'connected', { timeout: 30_000 });
+	await page.clock.resume();
 	expect(
 		await page.evaluate(() => {
 			const state = window as typeof window & {

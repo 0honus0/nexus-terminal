@@ -41,7 +41,11 @@ await test('Job failures stop the owning Run and its waits', async (t) => {
 					fingerprint: sshd.fingerprint,
 					privateKey: sshd.privateKey,
 				},
-				{ discover: 'shell_execute shell_job_control file_write collaboration_delegate' },
+				{
+					signal: subtest.signal,
+					discover: 'shell_execute shell_job_control file_write collaboration_delegate',
+					plugin: { selectedRootIds: ['nexus.tools.remote', 'nexus.tools.agent'], uiPackageId: null },
+				},
 			);
 			const cleanup = { unknown: true };
 			subtest.after(() => f.close(cleanup));

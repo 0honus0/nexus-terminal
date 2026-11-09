@@ -368,16 +368,24 @@ test('file previews and text editor protect historical file-opening regressions'
 	await openConnectedFileManager(page);
 
 	await step('extensionless text opens with a compact legacy loading state and its real remote content', async () => {
-		const delayResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/read-delay?ms=900`, { method: 'POST' });
-		expect(delayResponse.ok).toBeTruthy();
+		const hold = await fetch(`${E2E_SSH.controlUrl}/sftp/read-hold?blocked=1`, { method: 'POST' });
+		expect(hold.ok).toBe(true);
 		try {
 			await row(page, 'plainfile').dblclick();
 			const loading = page.locator('.editor-loading:visible').first();
 			await expect(loading).toBeVisible();
 			await expect(loading).toContainText(/loading/i);
 			await expect(loading.locator('.animate-spin')).toHaveCount(0);
+			await expect
+				.poll(async () => {
+					const state = await fetch(`${E2E_SSH.controlUrl}/sftp/read-hold`);
+					expect(state.ok).toBe(true);
+					return (await state.json()).pending;
+				})
+				.toBeGreaterThan(0);
 		} finally {
-			await fetch(`${E2E_SSH.controlUrl}/sftp/read-delay?ms=0`, { method: 'POST' });
+			const release = await fetch(`${E2E_SSH.controlUrl}/sftp/read-hold?blocked=0`, { method: 'POST' });
+			expect(release.ok).toBe(true);
 		}
 		const editor = editorView(page);
 		await expect(editor).toBeVisible({ timeout: 20_000 });

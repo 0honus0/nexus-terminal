@@ -128,12 +128,18 @@ export async function getPluginInstallation(
 	return installation;
 }
 
+export type TestPluginComposition = { selectedRootIds: string[]; uiPackageId: string | null };
+
 export async function installTestPlugin(
 	request: APIRequestContext,
 	definitionId: string,
 	version?: string,
+	composition?: TestPluginComposition,
 ): Promise<AgentPluginInstallation> {
-	for (const packageId of pinnedPackageIds) {
+	const requiredPackageIds = composition
+		? [...new Set([...composition.selectedRootIds, ...(composition.uiPackageId ? [composition.uiPackageId] : [])])]
+		: pinnedPackageIds;
+	for (const packageId of requiredPackageIds) {
 		if (packageId === definitionId) continue;
 		const installed = await requestAgentJson(
 			request,
@@ -159,6 +165,17 @@ export async function installTestPlugin(
 	const verified = await stageTestPlugin(request, definitionId, version);
 	const manifest = verified.manifest;
 	if (!manifest) throw new Error('Verified plugin stage is missing its manifest');
+	const usesChat = manifest.contributions.app?.uiContract === 'nexus.ui.chat';
+	const selectedRootIds =
+		composition?.selectedRootIds ??
+		(usesChat
+			? pinnedPackageIds.filter((id) => id !== 'nexus.agent' && id !== 'nexus.ui.chat' && id !== definitionId)
+			: []);
+	let uiPackageId = composition?.uiPackageId ?? null;
+	if (!composition) {
+		if (manifest.contributions.ui) uiPackageId = definitionId;
+		else if (usesChat) uiPackageId = 'nexus.ui.chat';
+	}
 	await requestAgentJson(
 		request,
 		{
@@ -175,17 +192,8 @@ export async function installTestPlugin(
 			path: '/plugins/apps/compose',
 			data: {
 				packageId: definitionId,
-				selectedRootIds:
-					manifest.contributions.app?.uiContract === 'nexus.ui.chat'
-						? pinnedPackageIds.filter(
-								(id) => id !== 'nexus.agent' && id !== 'nexus.ui.chat' && id !== definitionId,
-							)
-						: [],
-				uiPackageId: manifest.contributions.ui
-					? definitionId
-					: manifest.contributions.app?.uiContract === 'nexus.ui.chat'
-						? 'nexus.ui.chat'
-						: null,
+				selectedRootIds,
+				uiPackageId,
 			},
 		},
 		readAgentPluginAppBindingResponse,

@@ -4,7 +4,7 @@ import type { APIRequestContext, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 import { E2E_URLS } from '../../support/protocols/test-environment';
 import { requestAgentJson } from './agent-request';
-import { installTestPlugin } from './plugins';
+import { installTestPlugin, type TestPluginComposition } from './plugins';
 import { readAgentAppListResponse, readAgentAppResponse } from '../../../packages/shared/src/agent/scope/http-codec';
 import { readAgentProviderView } from '../../../packages/shared/src/agent/providers/http-codec';
 import { readAgentGrantView } from '../../../packages/shared/src/agent/governance/http-codec';
@@ -149,6 +149,7 @@ export async function selectAgentApp(page: Page, app: { id: string; name: string
 export async function createTestAgentApp(
 	request: APIRequestContext,
 	name = 'E2E native Agent ' + randomUUID(),
+	composition?: TestPluginComposition,
 ): Promise<AgentAppView> {
 	const packageId = process.env.NEXUS_TEST_PLUGIN_SET
 		? 'nexus.agent'
@@ -170,7 +171,7 @@ export async function createTestAgentApp(
 				}
 				return created.packageId;
 			})();
-	const installed = await installTestPlugin(request, packageId);
+	const installed = await installTestPlugin(request, packageId, undefined, composition);
 	const app = await requestAgentJson(
 		request,
 		{ method: 'GET', path: '/apps/' + installed.appId },

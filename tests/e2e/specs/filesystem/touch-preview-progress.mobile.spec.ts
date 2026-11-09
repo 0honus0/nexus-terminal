@@ -415,8 +415,9 @@ test('mobile upload progress stays inside the viewport and restores from Progres
 	await openConnectedFileManager(page);
 	const filenames = ['mobile-progress-upload-a.bin', 'mobile-progress-upload-b.bin'];
 	// Keep both writes alive across screenshot capture, resize/drag, hide, and restore.
-	// A one-second delay let screenshot-enabled CI finish the uploads before Cancel All.
-	await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=15000`, { method: 'POST' });
+	// An explicit remote WRITE barrier avoids timing the UI against a fixed delay.
+	const writeHold = `${E2E_SSH.controlUrl}/sftp/write-hold`;
+	expect((await fetch(writeHold + '?blocked=1', { method: 'POST' })).ok).toBe(true);
 
 	try {
 		await slowStep(
@@ -569,7 +570,12 @@ test('mobile upload progress stays inside the viewport and restores from Progres
 			await expect(popup).toBeVisible();
 			const uploadTasks = popup.locator('[data-task-kind="upload"]');
 			await expect(uploadTasks).toHaveCount(filenames.length);
+			await expect
+				.poll(async () => (await (await fetch(writeHold)).json()).held, { intervals: [20, 50, 100] })
+				.toBeGreaterThan(0);
 			await popup.getByRole('button', { name: /^Cancel all/ }).click();
+			await expect(popup.locator('[data-task-status="cancelling"]')).not.toHaveCount(0);
+			expect((await fetch(writeHold + '?blocked=0', { method: 'POST' })).ok).toBe(true);
 			// Cancellation is two-phase while an in-flight SFTP WRITE is deliberately stalled.
 			// Terminal rows may be retained as `cancelled` or pruned by the progress center before
 			// this poll samples them, so accept either settled UI representation. The remote-file
@@ -594,6 +600,6 @@ test('mobile upload progress stays inside the viewport and restores from Progres
 			}
 		});
 	} finally {
-		await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+		expect((await fetch(writeHold + '?blocked=0', { method: 'POST' })).ok).toBe(true);
 	}
 });

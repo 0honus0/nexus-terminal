@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host",
-    "build": "vue-tsc --noEmit && vite build",
+    "build": "pnpm run check && vite build",
     "preview": "vite preview",
-    "build:plugin-sdk": "pnpm --filter @nexus-terminal/shared build && node build/build-plugin-frontend-sdk.mjs"
+    "build:plugin-sdk": "pnpm --filter @nexus-terminal/shared build && node build/build-plugin-frontend-sdk.mjs",
+    "check": "vue-tsc --noEmit --incremental --tsBuildInfoFile node_modules/.cache/typecheck.tsbuildinfo"
   },
   "dependencies": {
     "@babel/runtime": "^8.1.0",

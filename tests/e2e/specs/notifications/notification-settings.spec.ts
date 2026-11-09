@@ -1,3 +1,4 @@
+import { expectReadRecoveryFeedback, waitForFailedRead } from '../../support/feedback';
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { step } from '../../support/steps';
@@ -236,6 +237,9 @@ test('notification settings keep long provider and event content readable on a n
 });
 
 test('notification settings empty and error states stay within a narrow viewport', async ({ page, context }) => {
+	await page.clock.install();
+	await page.clock.pauseAt(new Date());
+	const failedRead = waitForFailedRead(page, '/api/v1/settings/notifications');
 	await loginAsInitialAdmin(context.request);
 	await setUiLanguage(context.request);
 	for (const setting of await listTestNotifications(context.request))
@@ -253,11 +257,8 @@ test('notification settings empty and error states stay within a narrow viewport
 
 	await page.route('**/api/v1/settings/notifications', (route) => route.abort('failed'));
 	await page.reload();
-	await expect(
-		page
-			.locator('.ui-notification[data-kind="error"]')
-			.filter({ hasText: 'The connection is unstable or the service is unavailable.' }),
-	).toBeVisible({ timeout: 15_000 });
+	await failedRead;
+	await expectReadRecoveryFeedback(page);
 	await expect(settings.getByRole('button', { name: 'Add Notification Channel', exact: true })).toHaveCount(0);
 	await expect(settings.getByRole('button', { name: 'Refresh and review', exact: true })).toBeEnabled();
 	const errorMetrics = await page.evaluate(() => ({

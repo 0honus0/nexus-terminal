@@ -1,5 +1,6 @@
 import { writeFile } from 'node:fs/promises';
-import { expect, test } from '../../support/fixtures';
+import { expect, test, type Page } from '../../support/fixtures';
+import type { Request } from '@playwright/test';
 import { E2E_ADMIN, loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { step } from '../../support/steps';
@@ -36,6 +37,28 @@ const VALID_HCAPTCHA: SettingsCaptchaCommand = {
 	expectedHostname: 'dummy-key-pass',
 	secret: { action: 'replace', value: HCAPTCHA_TEST_SECRET },
 };
+
+/** Keep the full negative observation window on the page's own clock. */
+async function expectNoLoginRequest(page: Page, submit: () => Promise<void>): Promise<void> {
+	const attempts: string[] = [];
+
+	const record = (request: Request): void => {
+		if (new URL(request.url()).pathname === '/api/v1/auth/login' && request.method() === 'POST') {
+			attempts.push(request.url());
+		}
+	};
+
+	page.on('request', record);
+	try {
+		await submit();
+		await page.clock.runFor(2_000);
+		expect(attempts).toEqual([]);
+	} finally {
+		page.off('request', record);
+		// Later provider tokens must be generated against real wall time.
+		await page.clock.setSystemTime(new Date());
+	}
+}
 
 async function setCaptchaConfig(
 	request: import('@playwright/test').APIRequestContext,
@@ -190,6 +213,7 @@ async function recordCaptchaMetrics(
 }
 
 test('login CAPTCHA fails closed for invalid configuration', async ({ page, request }, testInfo) => {
+	await page.clock.install();
 	await prepareCaptchaLogin(request, DISABLED_CAPTCHA);
 	const before = await getTestSettings(request);
 	const rejected = await request.put('/api/v1/settings/captcha', {
@@ -221,19 +245,9 @@ test('login CAPTCHA fails closed for invalid configuration', async ({ page, requ
 		await step('do not send first-factor credentials while CAPTCHA configuration is invalid', async () => {
 			await page.locator('#username').fill(E2E_ADMIN.username);
 			await page.locator('#password').fill(E2E_ADMIN.password);
-			const loginRequest = page
-				.waitForRequest(
-					(request) => request.url().endsWith('/api/v1/auth/login') && request.method() === 'POST',
-					{
-						timeout: 2_000,
-					},
-				)
-				.catch(() => undefined);
-			await page
-				.getByRole('button', { name: 'Login', exact: true })
-				.click({ force: true })
-				.catch(() => undefined);
-			expect(await loginRequest).toBeUndefined();
+			await expectNoLoginRequest(page, () =>
+				page.getByRole('button', { name: 'Login', exact: true }).click({ force: true }),
+			);
 			await expect(page.getByText(CAPTCHA_INVALID_MESSAGE, { exact: true })).toHaveCount(1);
 			await captureFunctionalScreenshot(page, 'auth-captcha-invalid-configuration.png', {
 				viewport: { width: 1440, height: 900 },
@@ -247,6 +261,7 @@ test('login CAPTCHA fails closed for invalid configuration', async ({ page, requ
 });
 
 test('login CAPTCHA requires a token before sending first-factor credentials', async ({ page, request }, testInfo) => {
+	await page.clock.install();
 	await prepareCaptchaLogin(request, VALID_HCAPTCHA);
 
 	try {
@@ -265,16 +280,7 @@ test('login CAPTCHA requires a token before sending first-factor credentials', a
 		await step('block a no-token first-factor submit without contacting the auth endpoint', async () => {
 			await page.locator('#username').fill(E2E_ADMIN.username);
 			await page.locator('#password').fill(E2E_ADMIN.password);
-			const loginRequest = page
-				.waitForRequest(
-					(request) => request.url().endsWith('/api/v1/auth/login') && request.method() === 'POST',
-					{
-						timeout: 2_000,
-					},
-				)
-				.catch(() => undefined);
-			await page.getByRole('button', { name: 'Login', exact: true }).click();
-			expect(await loginRequest).toBeUndefined();
+			await expectNoLoginRequest(page, () => page.getByRole('button', { name: 'Login', exact: true }).click());
 			await expect(page.getByRole('alert')).toHaveCount(1);
 			await expect(page.getByRole('alert')).toHaveText(CAPTCHA_REQUIRED_MESSAGE);
 			await expect(page.getByText('Login failed. Please try again.', { exact: true })).toHaveCount(0);
@@ -313,16 +319,9 @@ test('login CAPTCHA clears expired/rejected verification and succeeds after a fr
 				// Later real provider tokens must use current wall time. Timer time stays monotonic.
 				await page.clock.setSystemTime(new Date());
 
-				const loginRequest = page
-					.waitForRequest(
-						(candidate) => candidate.url().endsWith('/api/v1/auth/login') && candidate.method() === 'POST',
-						{
-							timeout: 2_000,
-						},
-					)
-					.catch(() => undefined);
-				await page.getByRole('button', { name: 'Login', exact: true }).click();
-				expect(await loginRequest).toBeUndefined();
+				await expectNoLoginRequest(page, () =>
+					page.getByRole('button', { name: 'Login', exact: true }).click(),
+				);
 				await expect(page.getByRole('alert')).toHaveText(CAPTCHA_REQUIRED_MESSAGE);
 				evidence.push({ phase: 'provider-expired', loginRequestSent: false, alert: CAPTCHA_REQUIRED_MESSAGE });
 			},
@@ -378,16 +377,7 @@ test('login CAPTCHA clears expired/rejected verification and succeeds after a fr
 			});
 
 			await setCaptchaConfig(request, VALID_HCAPTCHA);
-			const repeatedLoginRequest = page
-				.waitForRequest(
-					(candidate) => candidate.url().endsWith('/api/v1/auth/login') && candidate.method() === 'POST',
-					{
-						timeout: 2_000,
-					},
-				)
-				.catch(() => undefined);
-			await page.getByRole('button', { name: 'Login', exact: true }).click();
-			expect(await repeatedLoginRequest).toBeUndefined();
+			await expectNoLoginRequest(page, () => page.getByRole('button', { name: 'Login', exact: true }).click());
 			await expect(page.getByRole('alert')).toHaveText(CAPTCHA_REQUIRED_MESSAGE);
 			evidence.push({ phase: 'post-rejection-reset', loginRequestSent: false, alert: CAPTCHA_REQUIRED_MESSAGE });
 

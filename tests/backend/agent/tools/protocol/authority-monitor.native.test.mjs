@@ -36,7 +36,10 @@ await test(
 		const directory = await mkdtemp(join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'effect-authority-'));
 		const sshd = await openSshd(directory);
 		t.after(() => sshd.close());
-		const f = await openAgentExecution(directory, sshd, { discover: 'file_write' });
+		const f = await openAgentExecution(directory, sshd, {
+			discover: 'file_write',
+			plugin: { selectedRootIds: ['nexus.tools.remote', 'nexus.tools.agent'], uiPackageId: null },
+		});
 		t.after(() => f.close());
 		const run = await f.start('Retain the original dispatch authority', (results) =>
 			results.length

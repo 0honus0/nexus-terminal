@@ -19,7 +19,11 @@ await test(
 		);
 		const sshd = await openSshd(directory);
 		t.after(() => sshd.close());
-		const f = await openAgentExecution(directory, sshd, { discover: 'collaboration_delegate file_read file_list' });
+		const f = await openAgentExecution(directory, sshd, {
+			signal: t.signal,
+			discover: 'collaboration_delegate file_read file_list',
+			plugin: { selectedRootIds: ['nexus.tools.remote', 'nexus.tools.agent'], uiPackageId: null },
+		});
 		t.after(() => f.close());
 		await f.grants(['context.read', 'file.read', 'app.intents.exchange']);
 		const path = join(directory, 'readonly.txt');

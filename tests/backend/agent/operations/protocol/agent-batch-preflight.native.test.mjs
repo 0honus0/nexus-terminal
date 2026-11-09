@@ -23,7 +23,10 @@ await test(
 					async (scenario) => {
 						const directory = join(root, action);
 						await mkdir(directory);
-						const fixture = await openAgentExecution(directory, sshd);
+						const fixture = await openAgentExecution(directory, sshd, {
+							signal: scenario.signal,
+							plugin: { selectedRootIds: ['nexus.tools.remote', 'nexus.tools.agent'], uiPackageId: null },
+						});
 						scenario.after(() => fixture.close());
 						const canonical = join(directory, 'canonical');
 						const alias = join(directory, 'alias');

@@ -1,3 +1,4 @@
+import { expectReadRecoveryFeedback, waitForFailedRead } from '../../support/feedback';
 import { generateKeyPairSync } from 'node:crypto';
 import { expect, test, type APIRequestContext, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
@@ -290,6 +291,9 @@ test('SSH key selector and manager surface key-list loading failures without ove
 	page,
 	context,
 }) => {
+	await page.clock.install();
+	await page.clock.pauseAt(new Date());
+	const failedRead = waitForFailedRead(page, '/api/v1/targets/ssh-keys');
 	await loginAsInitialAdmin(context.request);
 	await page.setViewportSize({ width: 320, height: 667 });
 	await page.route('**/api/v1/targets/ssh-keys', async (route) => route.abort('failed'));
@@ -308,11 +312,8 @@ test('SSH key selector and manager surface key-list loading failures without ove
 	await form.getByRole('button', { name: 'Manage SSH Keys', exact: true }).click();
 	const modal = keyManager(page);
 	await expect(modal).toBeVisible();
-	await expect(
-		page
-			.locator('.ui-notification[data-kind="error"]')
-			.filter({ hasText: 'The connection is unstable or the service is unavailable.' }),
-	).toBeVisible({ timeout: 15_000 });
+	await failedRead;
+	await expectReadRecoveryFeedback(page);
 	await expect
 		.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
 		.toBeLessThanOrEqual(1);

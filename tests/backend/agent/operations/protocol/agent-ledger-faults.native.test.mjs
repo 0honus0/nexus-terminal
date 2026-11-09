@@ -39,7 +39,10 @@ for (const phase of ['read-dispatch', 'approval-dispatch', 'completion']) {
 			let primaryFailure;
 			try {
 				sshd = await openSshd(directory);
-				f = await openAgentExecution(directory, sshd, { discover: 'file_inspect file_write' });
+				f = await openAgentExecution(directory, sshd, {
+					discover: 'file_inspect file_write',
+					plugin: { selectedRootIds: ['nexus.tools.remote', 'nexus.tools.agent'], uiPackageId: null },
+				});
 				const path = join(directory, 'effect.txt');
 				let commits = 0;
 				let compensations = 0;

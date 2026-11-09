@@ -2650,7 +2650,7 @@ workflow环境同步按分层架构收口：移除旧runner定义/输入、Docke
 
 ## 秒级慢例排序与定向优化（2026-11-09）
 
-按完整冷轮 [42554962530](https://github.com/0honus0/nexus-terminal/actions/runs/42554962530) 的原始逐用例时间降序处理，Host `0d38587876c6d4332f564ff57379ac107e92b0ca`、插件 `65ed8c9`、8 个测试 runner、依赖缓存冷；镜像固定 `sha256:6d7b805779a0d6d8afaedd2f3a78900ae6623a5b6ce89b1d51b636a789272e41`。所有作业成功，原始报告核对模块236、Docker模块1、原生853、ENOSPC5、Docker原生9、本体浏览器430、插件互操作54、插件浏览器70，无遗漏、skip或retry。合计1657条报告记录，908条超过1秒；父组和叶case不能相加解释为独立功能数。完整降序JSON/CSV归 `/dev/shm/nexus-performance-20261109-optimization/ranked-cases.*`，原始远程资料归 `/dev/shm/nexus-performance-ci-20261108/run-42554962530`。
+按完整冷轮 [42554962530](https://github.com/0honus0/nexus-terminal/actions/runs/42554962530) 的原始逐用例时间降序处理，Host `0d38587876c6d4332f564ff57379ac107e92b0ca`、插件 `65ed8c9`、8 个测试 runner、依赖缓存冷；镜像固定 `sha256:6d7b805779a0d6d8afaedd2f3a78900ae6623a5b6ce89b1d51b636a789272e41`。所有作业成功，原始报告核对模块236、Docker模块1、原生853、ENOSPC5、Docker原生9、本体浏览器430、插件互操作54、插件浏览器70，无遗漏、skip或retry。合计1658条报告记录，909条超过1秒（原排序脚本漏读Docker模块1条，已纠正）；父组和叶case不能相加解释为独立功能数。完整降序JSON/CSV归 `/dev/shm/nexus-performance-20261109-optimization/ranked-cases.*`，原始远程资料归 `/dev/shm/nexus-performance-ci-20261108/run-42554962530`。
 
 该轮墙钟910秒、已测命令CPU69.093分钟、最大单进程RSS2091680KiB、最大容器cgroup峰值7264514048B；不能混为整轮RSS。16份组合报告暴露第5片的成功截图写入源码 `tests/e2e/.tmp`；已定位唯一差异，改为 `testInfo.outputPath`，不排除任何源码来源。虽然功能作业成功，此轮仍不计为严格源码组合通过；修补与最终两仓完整门禁分别记录。
 
@@ -2685,3 +2685,45 @@ workflow环境同步按分层架构收口：移除旧runner定义/输入、Docke
 本体浏览器原有耗时产物新增降序 `cases`，保留完整titlePath/project/id、每次retry的状态与时间；同标题不同组和首次失败的时间不被覆盖。原文件级 `specs`估算仍使用最终通过结果。2项reporter回归通过，既有日志隔离/首次失败证据断言保留。
 
 本轮收口静态：根 `pnpm run check`、Backend/双端SDK重建、完整 `format:all:check`、插件 `pnpm check`、diff与文档链接通过。快速层117文件297项全部通过，CLI9.97秒；首次 `fast-final` 的4项工具用例因本机缺少 `/usr/bin/time` 失败，使用现有 `NEXUS_TEST_TIME_COMMAND` 指定GNU time后通过，未改代码或放宽断言，原失败目录保留。正式远程冷/热完整门禁仍待执行，不将本地定向结果记为远程验收。
+
+## 秒级慢例第二批优化（2026-11-09）
+
+最新完整冷轮[42560694495](https://github.com/0honus0/nexus-terminal/actions/runs/42560694495)绑定Host `b9640fcab6abcaf0bdf1e76186ca3a4b12c381a3`和插件`e7a430e`。质量、Docker smoke和7片成功，第5片的MCP Host批量契约失败；16份源码组合一致。原始报告1658条、956条超过1秒，层数与前轮一致；这些是报告记录，不能解释为独立产品功能总数。第1片627秒，其余约391–489秒，性能目标仍未达到。
+
+失败的Run为`1709573b-df76-4ac8-8c18-898f25d49410`；完整第5片日志、178MB首次失败artifact、三份数据库与时间线保留在`/dev/shm/nexus-performance-ci-20261108/run-42560694495`。原90秒框架期限内，helper额外10秒中止了尚在完成的MCP prompt；改为原用例的signal统一管理，不延长原期限。本地3项CLI14.294秒通过。原绿色基线保持不变，本轮待新的完整门禁。
+
+完整降序列表为该证据目录的`ranked-cases-complete.json/csv`。旧轮42554962530重新统计为1658/909，纠正漏读Docker模块；最新为1658/956。旧报告尚不包含质量快速层完整逐case机器记录，本批CI补Host fast Vitest JSON和插件Node JUnit，保留原全部测试glob及Vitest用例。插件质量的fast/native分别计时，资源统计只读取根层metrics，不把嵌套Vitest报告误当资源指标。
+
+下表为同一本地环境的逐模块实测，不能用远程慢例与本地时间计算提升比例。根为`/dev/shm/nexus-performance-20261109-optimization`；原始报告、首失败、数据库和协议日志保留。CLI表示整组墙钟，叶case总和另行标明。
+
+| 模块           | 保留判据与修改                                                                                                     | 本地时间与证据                                                                                                                                        |
+| -------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MCP Host契约   | 原框架signal统一等待，3种真实SDK方法、请求ID/续接及每方法一次派发不变                                              | 3项14.294秒；`mcp-framework-deadline`                                                                                                                 |
+| 原生故障8文件  | 文件/Shell/Child仅remote＋agent，ACP仅integrations＋agent＋acp，无消费者UI关闭；原审批、故障账本和排空保留         | Node34计数、JUnit32叶case；CLI56.042→44.214秒，叶case总和82.762→62.895秒；`native-fault-setup-before/after`                                           |
+| 读取失败4例    | 等真实client GET失败诊断后，页面推进9999ms无提示、再1ms有提示；布局/可用性不变                                     | Connections tags11.555→1.356、Workspace tags11.218→0.894、SSH keys10.916→1.020、Notification11.222→1.056秒；CLI48.4→7.6秒；`read-grace-before/after`  |
+| 终端resume     | 两次真实失败按2/4/8秒推进页面退避，再真实恢复；输出与继续输入保留                                                  | 单例16.401→2.053秒；`terminal-upload-waits-after`                                                                                                     |
+| 手机上传       | 15秒WRITE延迟改已有屏障；2个8MiB、布局、取消和远端无残余保持                                                       | 单例19.809→5.316秒；与resume组CLI11.3秒；`terminal-upload-waits-after`                                                                                |
+| 状态布局       | 14种尺寸/缩放、每种4趋势范围及真实点击全部保留；同一DOM评估合并边界读取                                            | 单例16.042→14.193、CLI19.4→17.4秒；`status-layout-before/after`                                                                                       |
+| 进度布局7例    | 3秒WRITE/压缩延迟改已有屏障，确认held WRITE/活跃压缩进程后才释放；真实完成、视图退休、恢复及手势取消不变           | CLI42.2→28.0秒；gesture单例6.294→6.424秒，未声称每项都提速；`progress-layout-gates-before/after`                                                      |
+| 插件完整Run    | 首条真实UI和取消后恢复保留；其它算法/Skill/batch通过真实App接口，独立operation ID，最小插件组合                    | 23.727→20.588→16.506秒；`plugin-ranked-second`                                                                                                        |
+| 插件文件/图片  | 真实文件、96层/101文件/32769字符、symlink、GIF字节、刷新恢复、取消与句柄收尾不变；组合最小化，去helper前重复reload | 文件/图片最终20项CLI2.1分钟通过；`plugin-images-delivery-final`，其它7项84.995秒；`plugin-ranked-modules`                                             |
+| 子任务/Browser | 两条首次UI与全部矩阵保留，最小root组合                                                                             | 18.131→15.678、11.260→10.277秒，整组34.1→30.6秒；`plugin-browser-lifecycle-before/after`                                                              |
+| 其余插件准备   | 纯聊天仅agent，SSH remote＋agent；会话文件交接、6宽度动作及物理进程清理保留                                        | 19项CLI2.1分钟通过；抽样A05 11.504→8.883、A01 7.272→5.894、recorded JSON8.323→7.033、桌面连接关闭6.837→5.999秒；`plugin-remaining-setup-before/after` |
+| ACP协议装配    | 仅去无消费者chat UI，真实SSH ACP、Child继承、内层独立权限及收尾均保留                                              | Node7计数（6叶case），CLI22.224→20.697秒；`acp-composition-before/after`                                                                              |
+| 验证码请求观测 | 4处原2秒“未请求”观测推进页面clock，真实token/到期/服务拒绝/最终成功与三宽度截图不变；不再catch任意等待/点击错误    | 3项CLI16.9→9.9秒；`captcha-observation-before/fixed`；首次`after`误用pauseAt当前时间而回退，现场保留，改为runFor自然推进后通过                        |
+| 文件预览       | 900ms READ延迟改真实READ屏障，加载布局断言和后续编辑/保存/格式预览保留                                             | 15.835→15.086秒；`preview-drag-review-before/after`                                                                                                   |
+| 多级拖动导航   | 页面clock验证每级599ms不跳、600ms跳；多源、父目录、右键取消和真实移动不变                                          | 11.015→6.117秒；`preview-drag-review-before/after`                                                                                                    |
+
+Send Files进度例实测9.181秒，无人为传输延迟；两真实目标（一个离线）、完整目录选择及任务清理保留，未为提速删步骤。真实传输、弱网、Pad112MiB及重复取消8循环继续按原规模。956条秒级记录及301个文件尚未全部逐项复审；不能将已测批次称为全部完成。
+
+本批均为测试/CI和文档修改，无生产运行包、Shared、SDK、SQL或UI变更；原产品说明核对仍适用，不重复发布相同不可变插件包。格式检查发现一处函数声明缺空行，已修；最终Host快速层117文件297项10.91秒、完整应用构建22.01秒通过；插件check22.25秒及浏览器发现/类型检查6.70秒通过（70项17文件）。两仓准确提交的完整cold/warm门禁仍待验。
+
+### 质量作业去重与工具缓存
+
+用户要求先完成高收益优化，低收益逐例调整暂缓。上述失败轮的质量作业共4分46秒：安装约13秒、Host构建40秒、插件构建签包21秒、根检查与快速层88秒、全仓格式/ESLint57秒、插件检查与包测试45秒，其余为检出和上传。作业名虽为Checks and format，实际同时负责生成八个分片消费的准确应用及候选包。
+
+根check和format统一扫描原完整ESLint范围，按内容复用官方缓存；Prettier保持原全仓范围并启用内容缓存。前端build/check共享vue-tsc原生增量文件；插件ChatUI同样消除build/check的重复类型分析。CI使用官方actions/cache恢复/保存工具缓存，cold关闭恢复，成功后仍保存以供同SHA的warm对照；测试通过状态、数据库与成品不进入该缓存。
+
+本地原format44.67秒，首次内容缓存28.64秒，真正warm5.77秒，全通过；前端增量首次15.02秒、warm5.98秒。根check44.25→38.29秒，但旧轮曾并发运行一次独立前端检查，因此不能用作严格同条件提升比例。该独立检查恰遇Shared声明重建而失败，现场保留，不记作产品缺陷；后续消费者检查与重建顺序执行。另一次warm格式检查正确拒绝尚未格式化的新文档；不带cache的Prettier写入会删除默认缓存，解释了再次测得28.23秒，稳定缓存后再测为5.77秒。依据已核对当前Prettier CLI实现，不能把失败或重建缓存的耗时当作稳定warm收益。
+
+插件最终完整build8.32秒、fast及原生包测试2.87秒全部通过（Vitest5项、Node125计数，含3个父组）；workflow通过actionlint。原始测量归`quality-duplicate-before/after/final`、`quality-build-final`及`plugin-quality-cache-final`。以上为本地证据，远程收益必须以同一Host/插件SHA及runner digest的完整冷/热轮判断，不预报五分钟已解决。

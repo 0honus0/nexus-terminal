@@ -43,6 +43,7 @@ for (const mode of ['acp', 'job']) {
 						? {
 								discover: 'acp_execute',
 								plugin: {
+									uiPackageId: null,
 									selectedRootIds: [
 										'nexus.tools.agent',
 										'nexus.tools.integrations',
@@ -50,7 +51,13 @@ for (const mode of ['acp', 'job']) {
 									],
 								},
 							}
-						: { discover: 'shell_execute' },
+						: {
+								discover: 'shell_execute',
+								plugin: {
+									selectedRootIds: ['nexus.tools.remote', 'nexus.tools.agent'],
+									uiPackageId: null,
+								},
+							},
 				);
 				if (mode === 'acp') {
 					await f.grants(['integration.acp.invoke', 'service.transport.process', 'context.read']);

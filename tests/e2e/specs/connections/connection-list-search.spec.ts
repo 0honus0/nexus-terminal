@@ -1,4 +1,4 @@
-import { networkFailureToast } from '../../support/feedback';
+import { expectReadRecoveryFeedback, waitForFailedRead } from '../../support/feedback';
 import { readTagList } from '../../../../packages/shared/src/targets/tags/http-codec';
 import { readConnectionList, readConnectionView } from '../../../../packages/shared/src/targets/connections/http-codec';
 import { readTestConnectionImportId } from '../../../support/http/target-import';
@@ -124,6 +124,9 @@ test('workspace connection search filters by name and host and restores the full
 });
 
 test('workspace connection list remains usable when connection tags fail to load', async ({ page, context }) => {
+	await page.clock.install();
+	await page.clock.pauseAt(new Date());
+	const failedRead = waitForFailedRead(page, '/api/v1/targets/tags');
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
 	await updateUiPreferences(context.request, (preferences) => {
@@ -135,8 +138,8 @@ test('workspace connection list remains usable when connection tags fail to load
 	await page.goto('/workspace');
 	const list = await openWorkspaceConnectionPicker(page);
 	await expect(list.locator(`li[data-connection-id="${primaryId}"]`)).toBeVisible();
-	// Read failures notify only after the 10-second foreground recovery grace.
-	await expect(networkFailureToast(page)).toBeVisible({ timeout: 15_000 });
+	await failedRead;
+	await expectReadRecoveryFeedback(page);
 });
 
 test('workspace connection list remains usable when main preferences fail to load', async ({ page, context }) => {
