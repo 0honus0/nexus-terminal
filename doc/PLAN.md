@@ -119,7 +119,3 @@ GIF/Markdown 图片、文件卡分组及聊天既有操作的正式回归已通�
 
 - [ ] **OpenAPI/AsyncAPI 自动生成**：为 Shared 协议建立统一 schema 来源，绑定真实安装的 HTTP 路由并汇总生成 OpenAPI；WebSocket 契约按 AsyncAPI 汇总。设计入口见 [Backend](architecture/BACKEND.md) 和 [Shared](architecture/SHARED.md)。
 - [ ] **ssh2 临时补丁退役**：后续依赖升级时检查正式版；上游包含当前 Node 26 原生编译修复后，同次删除补丁文件、workspace 注册及锁文件引用，重新验证原生编译与加载，按 [DEPLOYMENT](DEPLOYMENT.md) 执行。
-
-## Agent 必需插件引导与紧凑权限（2026-11-09）
-
-本轮授权实现及本地验收已完成，四份审核表、首败、测试耗时、两仓SDK与CDP证据见[验收记录](testing/HISTORY.md#必需插件启用引导与权限折叠验收2026-11-09)。用户已授权提交发布：先推送本体并通过完整远程E2E，再验证与发布Agent/Chat UI 2.0.3及官方目录，最后发布main amd64 dev镜像；不部署生产。Host42616383619完整通过；发布前追加旧包升级CAS修复及两仓候选签包元数据夹具修正，已完成本地真实回归，需以最终准确源码重验两仓完整门禁后发布。远程结果及正式签名资产待本轮完成后回填，未将本地开发签名验收写成正式远程基线。

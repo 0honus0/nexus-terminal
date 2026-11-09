@@ -6,17 +6,17 @@
 
 ## 当前验收基线
 
-[本体完整E2E42593547923](https://github.com/0honus0/nexus-terminal/actions/runs/42593547923)验证`c892d00ca372ff3dc4b67252dc4a5119f5252fde`，绑定插件`d8f40712f64d05ae93a5098a019cb59326291c1e`：质量、Docker部署smoke、8个分片及报告汇总全部成功。原始报告核对快速341、模块245、Node原生869、有限文件系统5、Docker模块1/原生9、本体浏览器430、插件fast9/包122叶case/互操作54/浏览器70，全部首次通过，无跳过、重试或flaky。不同层不相加作为独立产品功能总数。
+[本体完整E2E42619641078](https://github.com/0honus0/nexus-terminal/actions/runs/42619641078)验证`b7f87cb2635c73014528a842e1edd12ff4bdddb6`，绑定插件`c3caa1dd93732a7d81e4a3b37fcca7339be62050`：质量、Docker部署smoke、8个分片及报告汇总全部成功。原始报告核对快速353、模块245、Node原生873、有限文件系统5、Docker模块1/原生9、本体浏览器430、插件fast9/包124/互操作54/浏览器70，全部首次通过，无执行跳过、重试或flaky。不同层不相加作为独立产品功能总数。
 
-[插件独立Validate42595223641](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42595223641)验证同一插件源码及上述准确Host/不可变构建，全部9个作业成功。随后仅发布门禁、仓库测试和说明变更的`abbccb63d1a51059ba6c125932eee76401cd4a63`通过[Validate42596591510](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42596591510)：fast9、包124叶case、互操作54及浏览器70全部首次通过。新增2项仓库测试验证发布门禁分页及拒绝条件，插件运行包与SDK未再变化。
+[插件独立Validate42621361043](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42621361043)验证同一插件源码及上述准确Host/不可变构建，全部9个作业成功：fast9、原生包124、互操作54、浏览器70全部首次通过。质量阶段的`--list`目录发现报告不作为执行报告；实际分片无跳过、重试或flaky。
 
-两仓都使用`:latest`启动runner并核对依赖指纹；本轮观测digest为`sha256:d338e5b4df06005ca15d2515be7980b8f2c8e1d6dab369b7f7058a59a7bdd4b1`，仅为证据，不固定启动。每轮17份组合保持源码/成品/SDK/签包摘要一致，本体32份WebServer及44份阶段日志、插件独立每轮16/16份日志均非空。首次失败、原始报告与四表见[发布回归记录](HISTORY.md#登录缓存与认证入口发布回归2026-11-09)。本体作业墙钟12分34秒、质量2分37秒、分片5分21秒–9分32秒；每片2分钟及整轮3–5分钟目标未达，按用户决定暂停进一步优化，不将不同源码/环境当作严格性能比例比较。
+两仓都使用`:latest`启动runner并核对依赖指纹；Host准备时观测digest为`sha256:762bdb53d9efb2137919ff35757c9d9a0d89d347380f940e34afb46ea681aee2`，仅为证据，不固定启动。每仓17份组合保持源码/成品/SDK/签包摘要一致，本体32份WebServer/44份阶段日志、插件独立16/16份日志均非空。本体作业墙钟12分16秒，质量3分18秒，分片5分03秒–8分34秒；插件墙钟5分36秒、质量1分47秒。每片2分钟及整轮3–5分钟目标未达，按用户决定暂停进一步优化。首次失败、追加修复、四表和发布证据见[本轮记录](HISTORY.md#必需插件启用引导与权限折叠验收2026-11-09)。
 
-[main amd64 dev发布42595253170](https://github.com/0honus0/nexus-terminal/actions/runs/42595253170)成功，来源`590246eaa447fee71361db18b1150f61605b2dda`；与被测版本仅差本轮自动回写的7项测试耗时估算。`dev`与`sha-590246eaa447`同摘要`sha256:c6041e3bf28c2ff72b1991edb637601ae0af12b9a150958c1714030f1599b688`。已核对linux/amd64、manifest/config和OCI revision/source/version，未下载镜像层或部署生产。
+[main amd64 dev发布42622640691](https://github.com/0honus0/nexus-terminal/actions/runs/42622640691)成功，来源`01e9183b81cd9a44368ef40ff0acfea83f620cf7`；与被测`b7f87cb2635c73014528a842e1edd12ff4bdddb6`仅差自动回写的12项测试耗时估算。`dev`与`sha-01e9183b81cd`同摘要`sha256:2fcc3975a2ef3bdef86b5a8e6b4b482fedc27bf29ecf07f8727e91533af4fb46`。已核对唯一产品平台linux/amd64、manifest/config摘要及OCI revision/source/version，未下载镜像层或部署生产。
 
-正式插件组合为Agent2.0.2、ChatUI2.0.2、Browser2.1.1、Agent工具2.1.0、MCP/ACP服务4.0.0及Remote/Integrations工具2.0.0；公开目录为[catalog-20261109](https://github.com/0honus0/nexus-agent-plugins/releases/tag/catalog-20261109)。ChatUI2.0.2从准确已验源码`d8f4071`独立签名发布，目录保留原14个包版本/地址/摘要并追加该版本，官方签名及包摘要已核对；Shared4.0.4与SDK4不变。后续文档提交不改变运行源码。
+正式插件组合为Agent2.0.3、ChatUI2.0.3、Browser2.1.1、Agent工具2.1.0、MCP/ACP服务4.0.0及Remote/Integrations工具2.0.0；公开最新目录为[catalog-20261109-2](https://github.com/0honus0/nexus-agent-plugins/releases/tag/catalog-20261109-2)。Agent/ChatUI从上述准确插件源码正式签名发布，目录逐字段保留原15个版本/地址/摘要并追加两项，共17项；官方签名、requiredOnEnable声明、大小和摘要及公开latest入口均已核对。Shared4.0.5、运行SDK4；后续文档提交不改变运行源码。新声明需配套本轮Host，不修改旧不可变资产。
 
-既有指定CDP `172.30.30.11:9223`、`https://api.honus.top`与本地9998前端的SDK4聊天、刷新恢复、三语市场及Agent工具设置实机证据仍按原验证版本引用，见[历史记录](HISTORY.md#agent-设置归属与插件召回配置2026-11-08)。真机、真实模型、音画、介质故障及负载性能等未验边界见[PLAN](../PLAN.md#待验与外部依赖)。
+指定CDP`172.30.30.11:9223`访问`https://api.honus.top`的9998测试前端，使用真实本地可信签包完成取消/安装/默认授权/编辑保存刷新/再次启用复用及320/390/1440px验收；重启到最终代码后刷新无page error和横向溢出。开发签名与官方资产验签分别记录，不混称。此前SDK4聊天、三语市场及工具设置证据继续按原验证版本引用，见[历史记录](HISTORY.md#agent-设置归属与插件召回配置2026-11-08)。真机、真实模型、音画、介质故障及负载性能等未验边界见[PLAN](../PLAN.md#待验与外部依赖)。
 
 ## 阶段逻辑回归
 
