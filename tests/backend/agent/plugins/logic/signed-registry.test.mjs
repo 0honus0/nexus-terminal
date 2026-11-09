@@ -22,7 +22,7 @@ test('Agent modular: signed namespace bounds and dynamic schemas reject inconsis
 		namespaces: ['test.schema'],
 		contributions: { app: null, tools: true, services: false, ui: null, settings: null, skills: [] },
 	};
-	assert.deepEqual(readAgentPluginManifest(manifest), manifest);
+	assert.deepEqual(readAgentPluginManifest(manifest), { ...manifest, requiredOnEnable: undefined });
 	for (const change of [
 		(value) => {
 			value.schemaVersion = 3;

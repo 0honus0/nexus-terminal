@@ -35,6 +35,8 @@
 
 主要日志为`delivery-check.log`、`delivery-build.log`、`delivery-backend-build.log`、`delivery-fast.log`、`delivery-protocols-retry.log`、`settings-integration.log`、`plugin-check.log`、`plugin-repository.log`、`playwright-final.log`、`playwright-delivery.log`、`playwright-host-fixed.log`及CDP结果JSON。首轮测试端口占用、缺少本地浏览器、未创建原生测试产物父目录与截图脚本错误显示名均保留首败，修正环境/脚本后复验，不放宽产品条件。手动中断整个后台进程组曾同时中断插件进程并产生关闭未知日志；随后正常总开关关闭/重启恢复及协议关停回归通过，不将强制中断记录当作正常关闭成功。
 
+提交发布追加授权后，首次远程[Host42613882980](https://github.com/0honus0/nexus-terminal/actions/runs/42613882980)在快速层353项中1项失败：signed-registry旧断言未包含解码器新增的可选requiredOnEnable字段（undefined）。同步明确输出断言后，原签名/namespace/schema拒绝断言保留，定向1项253ms通过；完整门禁待后续成功轮回填。首败日志为publication/host-first-quality.log。
+
 公共官方目录尚未交付本轮required声明；上线此引导需随后续授权发布插件及更新目录。本轮CDP使用本地开发签名，不冒称官方发布签名通过；真实手机键盘、供应商模型效果和完整远程门禁仍不由本轮专项代替。
 
 ## Agent扩展与插件市场布局验收（2026-11-09）
