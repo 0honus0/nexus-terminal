@@ -1,7 +1,6 @@
 <script setup lang="ts">
-	import { computed, defineAsyncComponent, reactive, ref } from 'vue';
+	import { defineAsyncComponent, reactive, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiInfoHint } from '@/foundation/ui';
 	import type { useAppManagement } from '../composables/use-app-management';
 	import type { usePluginManagement } from '../plugins/composables/use-plugin-management';
 	import AppManagementSettings from './AppManagementSettings.vue';
@@ -13,7 +12,7 @@
 		() => import('../plugins/components/PluginManagementSettings.vue'),
 	);
 
-	const props = defineProps<{
+	defineProps<{
 		active: boolean;
 		model: ReturnType<typeof useAppManagement>;
 		plugins: ReturnType<typeof usePluginManagement>;
@@ -28,7 +27,6 @@
 		{ id: 'market', icon: 'fa-solid fa-store', label: 'agent.settings.extensionsNav.market' },
 		{ id: 'budget', icon: 'fa-solid fa-sliders', label: 'agent.settings.extensionsNav.budget' },
 	] as const;
-	const enabledApps = computed(() => props.model.apps.value.filter((app) => app.enabled).length);
 
 	function selectSection(section: ExtensionSection): void {
 		activeSection.value = section;
@@ -37,10 +35,10 @@
 </script>
 
 <template>
-	<section class="ui-glass-panel overflow-hidden rounded-2xl">
-		<header class="ui-glass-chrome flex min-w-0 items-center gap-3 border-b border-border px-3 sm:px-4">
+	<section class="min-w-0">
+		<header class="ui-glass-chrome min-w-0 overflow-hidden rounded-xl">
 			<nav
-				class="extensions-tabs grid min-w-0 flex-1 grid-cols-3"
+				class="extensions-tabs grid w-full min-w-0 grid-cols-3"
 				role="tablist"
 				:aria-label="t('agent.settings.groups.extensions')"
 			>
@@ -55,6 +53,7 @@
 							? 'border-primary text-foreground'
 							: 'border-transparent text-text-secondary hover:text-foreground'
 					"
+					:title="t(section.label)"
 					:aria-selected="activeSection === section.id"
 					:aria-current="activeSection === section.id ? 'page' : undefined"
 					@click="selectSection(section.id)"
@@ -68,16 +67,9 @@
 							class="text-[11px]"
 						></i>
 					</span>
-					<span>{{ t(section.label) }}</span>
+					<span class="min-w-0 truncate">{{ t(section.label) }}</span>
 				</button>
 			</nav>
-			<div class="hidden shrink-0 items-center gap-1.5 text-[11px] text-text-secondary sm:flex">
-				<span class="h-1.5 w-1.5 rounded-full bg-success"></span>
-				<span>{{
-					t('agent.settings.apps.enabledCount', { enabled: enabledApps, total: model.apps.value.length })
-				}}</span>
-				<UiInfoHint :text="t('agent.settings.groupDescriptions.extensions')" />
-			</div>
 		</header>
 
 		<div v-if="visitedSections.has('apps')" v-show="activeSection === 'apps'" class="p-3 sm:p-4">
@@ -107,27 +99,3 @@
 		</div>
 	</section>
 </template>
-
-<style scoped>
-	@media (max-width: 639px) {
-		.extensions-tabs {
-			display: flex;
-			overflow-x: auto;
-			overscroll-behavior-x: contain;
-		}
-
-		.extensions-tabs > button {
-			width: auto;
-			flex: 0 0 auto;
-			padding-inline: 10px;
-		}
-	}
-
-	.extensions-tabs {
-		scrollbar-width: none;
-	}
-
-	.extensions-tabs::-webkit-scrollbar {
-		display: none;
-	}
-</style>

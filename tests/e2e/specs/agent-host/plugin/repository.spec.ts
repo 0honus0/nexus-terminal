@@ -120,6 +120,19 @@ for (const [locale, width, groupLabel, marketLabel, name, description] of [
 		await page.goto('/settings?tab=agent');
 		await page.getByRole('button', { name: groupLabel, exact: true }).click();
 		await page.getByRole('tab', { name: marketLabel, exact: true }).click();
+		const tabWidths = await page.locator('.extensions-tabs').evaluate((navigation) => {
+			const tabs = [...navigation.querySelectorAll('button')].map((tab) => tab.getBoundingClientRect());
+			return {
+				count: tabs.length,
+				spread: Math.max(...tabs.map((tab) => tab.width)) - Math.min(...tabs.map((tab) => tab.width)),
+				unused: Math.abs(
+					navigation.getBoundingClientRect().width - tabs.reduce((sum, tab) => sum + tab.width, 0),
+				),
+			};
+		});
+		expect(tabWidths.count).toBe(3);
+		expect(tabWidths.spread).toBeLessThanOrEqual(1);
+		expect(tabWidths.unused).toBeLessThanOrEqual(1);
 		const market = page.locator('.plugin-market');
 		await expect(market.getByText(name, { exact: true })).toBeVisible();
 		await expect(market.getByText(description, { exact: true })).toBeVisible();
